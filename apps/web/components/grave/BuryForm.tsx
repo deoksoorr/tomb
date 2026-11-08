@@ -1,12 +1,12 @@
 "use client";
 
 import { useId, useState, type FormEvent } from "react";
-import { graveTier, plotLabel } from "@tomb/protocol";
+import { plotLabel } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { api, errorMessage } from "@/lib/api";
 import { suggestEpitaph } from "@/lib/epitaph";
 import type { GraveCache } from "@/lib/hooks/useGraves";
-import { meStore } from "@/lib/hooks/useMe";
+import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
 import { saveOwnerToken } from "@/lib/storage";
 import { CAUSE_LABELS, CAUSE_TAGS, LIFESPAN_PRESETS, type CauseTag, type LifespanId, type PublicGrave } from "@/lib/types";
@@ -14,15 +14,17 @@ import { pointsText } from "../account/items";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
-import GraveArt, { TIER_LABELS } from "./GraveArt";
+import { DEFAULT_STYLE, spendsTicket, styleName } from "./graveStyles";
+import StyleArt from "./StyleArt";
+import StylePicker from "./StylePicker";
 import {
   charCount,
   LIMITS,
   livedDays,
-  nearestLifespan,
   toEditInput,
   toQuickInput,
   validateQuick,
+  valuesOf,
   type QuickValues,
 } from "./quickRules";
 import styles from "./BuryForm.module.css";
@@ -44,16 +46,21 @@ type Props = {
 export default function BuryForm({ mode, mourner, cache, graveCount, onClose }: Props) {
   const editing = mode.kind === "edit" ? mode.grave : null;
   const uid = useId();
-  const [name, setName] = useState(editing?.name ?? "");
-  const [lived, setLived] = useState<LifespanId | null>(editing ? nearestLifespan(editing.ageDays) : null);
-  const [cause, setCause] = useState<CauseTag | null>(editing?.causes[0] ?? null);
-  const [epitaph, setEpitaph] = useState(editing?.epitaph ?? "");
+  const [initial] = useState<QuickValues>(() =>
+    editing ? valuesOf(editing) : { name: "", lived: null, cause: null, epitaph: "", style: DEFAULT_STYLE },
+  );
+  const [name, setName] = useState(initial.name);
+  const [lived, setLived] = useState<LifespanId | null>(initial.lived);
+  const [cause, setCause] = useState<CauseTag | null>(initial.cause);
+  const [epitaph, setEpitaph] = useState(initial.epitaph);
+  const [style, setStyle] = useState(initial.style);
+  const { me } = useMe();
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
 
-  const values: QuickValues = { name, lived, cause, epitaph };
+  const values: QuickValues = { name, lived, cause, epitaph, style };
   const errors = validateQuick(values);
   const errorFor = (field: keyof typeof errors) => (submitted ? errors[field] : undefined);
   const days = lived ? livedDays(lived) : null;
@@ -63,7 +70,8 @@ export default function BuryForm({ mode, mourner, cache, graveCount, onClose }: 
     : days
       ? suggestEpitaph(days)
       : "향년 N일, 조용히 별세";
-  const tier = graveTier(days ?? 1);
+  const previewAge = days ?? editing?.ageDays ?? 1;
+  const spends = spendsTicket(style, editing?.style);
   const snapshot = JSON.stringify(values);
   const [initialSnapshot] = useState(snapshot);
   const dirty = snapshot !== initialSnapshot;
@@ -92,6 +100,7 @@ export default function BuryForm({ mode, mourner, cache, graveCount, onClose }: 
         cache.upsert(grave);
         meStore.addGrave(grave.id);
         meStore.addEarned(earned);
+        if (spends) void meStore.refresh();
         bridge.emit("grave:buried", { graveId: grave.id });
         const index = cache.getSnapshot().graves.findIndex((g) => g.id === grave.id);
         showToast(index === -1 ? "새 묘비를 세웠어요." : `새 묘비가 ${plotLabel(index)}에 세워졌어요.`, 6_000);
@@ -100,6 +109,7 @@ export default function BuryForm({ mode, mourner, cache, graveCount, onClose }: 
       } else {
         const { grave } = await api.updateGrave(mode.grave.id, mode.ownerToken, toEditInput(mode.grave, values));
         cache.upsert(grave);
+        if (spends) void meStore.refresh();
         bridge.emit("grave:changed", { graveId: grave.id, kind: "updated" });
         showToast("묘비를 고쳤어요.");
       }
@@ -186,6 +196,15 @@ export default function BuryForm({ mode, mourner, cache, graveCount, onClose }: 
           )}
         </fieldset>
 
+        <StylePicker
+          value={style}
+          onChange={setStyle}
+          inventory={me?.inventory ?? {}}
+          current={editing?.style}
+          ageDays={previewAge}
+          verb={mode.kind === "create" ? "세우면" : "바꾸면"}
+        />
+
         <fieldset className={styles.group}>
           <legend className={cx(ui.label, styles.legend)}>
             <span>사인</span>
@@ -231,12 +250,12 @@ export default function BuryForm({ mode, mourner, cache, graveCount, onClose }: 
         <aside className={styles.preview} aria-label="미리보기">
           <div className={styles.stage}>
             <span className={styles.stageName}>{name.trim() || "프로젝트 이름"}</span>
-            <GraveArt tier={tier} scale={4} label={`${TIER_LABELS[tier]} 모양의 묘비`} />
+            <StyleArt style={style} ageDays={previewAge} scale={4} label={`${styleName(style)} 묘비`} />
           </div>
           <div className={styles.previewText}>
             <p className={styles.previewEpitaph}>{epitaph.trim() || suggestion}</p>
             <p className={styles.previewMeta}>
-              {TIER_LABELS[tier]} · 상주 {editing?.mourner ?? mourner}
+              {styleName(style)} · 상주 {editing?.mourner ?? mourner}
             </p>
             {mode.kind === "create" && graveCount !== null && (
               <p className={styles.previewPlot}>세우면 {plotLabel(graveCount)}에 묻혀요.</p>

@@ -74,6 +74,11 @@ export class MemoryStore implements GraveStore {
   }
 
   async put(grave: Grave): Promise<void> {
+    this.putSync(grave);
+  }
+
+  /** MemoryAccounts가 가방 차감과 함께 동기적으로 부른다 (원자적) */
+  putSync(grave: Grave): void {
     this.graves.set(grave.id, { ...grave, hidden: undefined, decor: undefined });
   }
 

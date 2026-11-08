@@ -188,6 +188,35 @@ function contract(make: () => Kit) {
     expect((await graves.list()).some((g) => g.id === gid)).toBe(false);
   });
 
+  it("디자인권 1개로 묘비 2개를 동시에 세우면 하나만 저장된다", async () => {
+    const id = newId();
+    const [a, b] = [`t-${nanoid(8)}`, `t-${nanoid(8)}`];
+    try {
+      await kit.setPoints(id, 100);
+      await accounts.buy(id, "gs_coffee", 100);
+      const results = await Promise.all([a, b].map((gid) => accounts.putGraveUsing(id, "gs_coffee", { ...grave(gid), style: "coffee" })));
+      expect(results.filter(Boolean)).toHaveLength(1);
+      const saved = await Promise.all([a, b].map((gid) => graves.get(gid)));
+      expect(saved.filter(Boolean)).toHaveLength(1);
+      expect(saved.find(Boolean)?.style).toBe("coffee");
+      expect((await accounts.get(id, DAY, 0)).inventory).toEqual({});
+      expect(await accounts.putGraveUsing(id, "gs_coffee", grave(`t-${nanoid(8)}`))).toBe(false);
+    } finally {
+      await Promise.all([a, b].map((gid) => graves.remove(gid)));
+    }
+  });
+
+  it("관리자 포인트 조정: 0~9,999로 자르고 하루 적립 한도와 무관, 없는 계정은 null", async () => {
+    const id = newId();
+    expect(await accounts.adjustPoints(id, 100)).toBeNull();
+    await accounts.earn(id, "flower", DAY);
+    expect(await accounts.adjustPoints(id, 500)).toBe(502);
+    expect(await accounts.adjustPoints(id, -9999)).toBe(0);
+    expect(await accounts.adjustPoints(id, 9999)).toBe(BALANCE_CAP);
+    expect(await accounts.adjustPoints(id, 50)).toBe(BALANCE_CAP);
+    expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(2);
+  });
+
   it("내 묘비 목록", async () => {
     const id = newId();
     await accounts.addGrave(id, "g1");

@@ -55,25 +55,8 @@
 }
 
 .row,
-.graveButton {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 4px 8px;
-  background: var(--bg-deep);
-}
 
-.graveButton {
-  width: 100%;
-  border: 0;
-  color: var(--text);
-  text-align: left;
-}
 
-.graveButton:hover {
-  background: var(--surface);
-}
 
 .rowMain {
   flex: 1;
@@ -138,4 +121,9 @@
   min-height: 1.6em;
   color: var(--candle);
   text-align: center;
+}
+
+.leave {
+  width: 100%;
+  color: var(--muted);
 }

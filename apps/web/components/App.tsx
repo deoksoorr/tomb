@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { bridge, type GameStartOptions } from "@/game/bridge";
-import { chooseTheme, savedTheme } from "@/lib/hooks/theme";
 import { prefetchGraves } from "@/lib/hooks/useGraves";
 import { bgm } from "./bgm/engine";
 import EntryScreen, { type EntryChoice } from "./entry/EntryScreen";
@@ -32,7 +31,6 @@ export default function App({ initialGraveId, debug }: Props) {
   useEffect(() => {
     void bgm.load();
     prefetchGraves();
-    chooseTheme(savedTheme());
   }, []);
 
   useEffect(() => {
@@ -41,14 +39,27 @@ export default function App({ initialGraveId, debug }: Props) {
     return () => clearTimeout(timer);
   }, [options, ready]);
 
+  // 공유 링크의 묘비는 처음 들어갈 때만 찾아간다 (접속 종료 후 다시 들어오면 평소처럼)
+  const [focusGraveId, setFocusGraveId] = useState(initialGraveId);
   const enter = useCallback(
-    (choice: EntryChoice) => setOptions({ ...choice, focusGraveId: initialGraveId, debug }),
-    [initialGraveId, debug],
+    (choice: EntryChoice) => {
+      setOptions({ ...choice, focusGraveId, debug });
+      setFocusGraveId(null);
+    },
+    [focusGraveId, debug],
   );
+
+  /** 접속 종료: 게임을 내려 실시간 연결을 정상 종료(1000)하고 입장 화면으로 */
+  const leave = useCallback(() => {
+    bgm.pause();
+    setOptions(null);
+    setReady(false);
+    setBootStalled(false);
+  }, []);
 
   return (
     <>
-      {options && <GameShell options={options} ready={ready} />}
+      {options && <GameShell options={options} ready={ready} onLeave={leave} />}
       {!ready && <EntryScreen entering={options !== null} stalled={bootStalled} onEnter={enter} />}
     </>
   );

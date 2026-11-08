@@ -12,5 +12,5 @@ export function heartPoint(t: number): { x: number; y: number } {
 /** 내 캐릭터 둘레 빛 반지름 (월드 px). 밤(glow=1)일수록 넓고, 손등불이면 1.5배 */
 export function playerLightRadius(glow: number, lantern: boolean): number {
   const g = Math.max(0, Math.min(1, glow));
-  return (38 + 34 * g) * (lantern ? 1.5 : 1);
+  return (52 + 40 * g) * (lantern ? 1.5 : 1);
 }

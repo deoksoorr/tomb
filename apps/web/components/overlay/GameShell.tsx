@@ -13,7 +13,8 @@ import { useNewVersion } from "@/lib/hooks/useNewVersion";
 import { showToast, useToasts } from "@/lib/hooks/useToasts";
 import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
 import { restoreLook } from "../account/actions";
-import { pointsText } from "../account/items";
+import { myGraveEntries, pointsText } from "../account/items";
+import MyGraves from "../account/MyGraves";
 import MyPanel from "../account/MyPanel";
 import BgmPlayer from "../bgm/BgmPlayer";
 import BuryForm, { type BuryMode } from "../grave/BuryForm";
@@ -21,6 +22,7 @@ import GraveModal from "../grave/GraveModal";
 import RankingPanel from "../grave/RankingPanel";
 import ShopDialog from "../shop/ShopDialog";
 import { cx } from "../ui/cx";
+import Dialog from "../ui/Dialog";
 import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import CameraControls from "./CameraControls";
@@ -73,10 +75,15 @@ function useAccountOnEnter(ready: boolean) {
   }, [ready]);
 }
 
-type Panel = "guide" | "me" | "shop" | "channels";
-type Props = { options: GameStartOptions; ready: boolean };
+type Panel = "guide" | "me" | "shop" | "channels" | "graves";
+type Props = {
+  options: GameStartOptions;
+  ready: boolean;
+  /** 접속 종료: App이 게임을 내린다 (실시간 연결은 GameCanvas 정리에서 1000으로 닫힌다) */
+  onLeave: () => void;
+};
 
-export default function GameShell({ options, ready }: Props) {
+export default function GameShell({ options, ready, onLeave }: Props) {
   const graves = useGraves();
   const { me } = useMe();
   const [openGraveId, setOpenGraveId] = useState<string | null>(null);
@@ -97,6 +104,12 @@ export default function GameShell({ options, ready }: Props) {
   useBridgeEvent("grave:open", ({ graveId }) => setOpenGraveId(graveId));
   useBridgeEvent("shop:open", () => setPanel("shop"));
 
+  // 게임이 맵에 내 묘비를 표시한다 (sticky)
+  const myGraveIds = me?.graves;
+  useEffect(() => {
+    if (myGraveIds) bridge.emit("graves:mine", { ids: myGraveIds });
+  }, [myGraveIds]);
+
   // ?debug=1 QA용: 콘솔·자동화 스크립트에서 브리지 이벤트를 흉내 낼 수 있게
   useEffect(() => {
     if (!options.debug) return;
@@ -111,6 +124,18 @@ export default function GameShell({ options, ready }: Props) {
     bridge.emit("grave:focus", { graveId, teleport: true });
     setPanel(null);
     if (openModal) setOpenGraveId(graveId);
+  }
+
+  /** 내 묘비가 하나뿐이면 바로 그 앞으로, 아니면 목록 */
+  function openMyGraves() {
+    const mine = me ? myGraveEntries(me.graves, graves.graves) : [];
+    if (mine.length === 1) goToGrave(mine[0].grave.id, false);
+    else setPanel("graves");
+  }
+
+  function startBury() {
+    setPanel(null);
+    setBury({ kind: "create" });
   }
 
   function closePanel() {
@@ -168,6 +193,10 @@ export default function GameShell({ options, ready }: Props) {
             {narrow && <Hud onOpenChannels={() => setPanel("channels")} />}
           </div>
           <CameraControls />
+          <button type="button" className={cx(ui.button, styles.myGraves)} onClick={openMyGraves}>
+            <PixelIcon name="grave" />
+            내 묘비{me ? ` (${me.graves.length})` : ""}
+          </button>
           <FireworkButton />
           {!inShop && (
             <button
@@ -202,7 +231,25 @@ export default function GameShell({ options, ready }: Props) {
       )}
       {panel === "channels" && <ChannelMenu onClose={closePanel} />}
       {panel === "guide" && <GuideDialog onClose={closePanel} />}
-      {panel === "me" && <MyPanel graves={graves} onGoToGrave={(id) => goToGrave(id, false)} onClose={closePanel} />}
+      {panel === "me" && (
+        <MyPanel
+          graves={graves}
+          onGoToGrave={(id) => goToGrave(id, false)}
+          onBury={startBury}
+          onLeave={onLeave}
+          onClose={closePanel}
+        />
+      )}
+      {panel === "graves" && (
+        <Dialog title="내 묘비" onClose={closePanel} size="sm">
+          <MyGraves
+            ids={me?.graves ?? []}
+            graves={graves.graves}
+            onGo={(id) => goToGrave(id, false)}
+            onBury={startBury}
+          />
+        </Dialog>
+      )}
       {panel === "shop" && <ShopDialog onClose={closePanel} />}
     </div>
   );

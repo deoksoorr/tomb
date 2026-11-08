@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { DECOR_DURATION_MS, graveTier, itemById, MAX_DECOR_PER_GRAVE } from "@tomb/protocol";
+import { DECOR_DURATION_MS, itemById, MAX_DECOR_PER_GRAVE } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { api, ApiRequestError, errorMessage, isAbortError } from "@/lib/api";
 import { lifespanLabel } from "@/lib/epitaph";
@@ -17,11 +17,16 @@ import { bagEntries, durationLabel, pointsText, remainingLabel } from "../accoun
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
-import GraveArt from "./GraveArt";
+import { DEFAULT_STYLE, spendsTicket, styleName } from "./graveStyles";
 import { graveLocation } from "./location";
+import { toEditInput, valuesOf } from "./quickRules";
+import StyleArt from "./StyleArt";
+import StylePicker from "./StylePicker";
 import styles from "./GraveModal.module.css";
 
-type Action = "flower" | "revive" | "share" | "report" | "remove" | "decorate";
+type Action = "flower" | "revive" | "share" | "report" | "remove" | "decorate" | "restyle";
+/** 내 묘비 손질 도구: 꾸미기 놓기 · 디자인 바꾸기 */
+type OwnerTool = "decor" | "style";
 /** 상세 응답에서 온 "나와의 관계". isMine: 내 계정이 세운 묘비 */
 type Mine = { revived: boolean; floweredToday: boolean; isMine: boolean };
 
@@ -61,7 +66,8 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   const [reportReason, setReportReason] = useState<ReportReason>("other");
   const [notice, setNotice] = useState<string | null>(null);
   const [ownerToken] = useState(() => getOwnerToken(graveId));
-  const [decorating, setDecorating] = useState(false);
+  const [tool, setTool] = useState<OwnerTool | null>(null);
+  const [nextStyle, setNextStyle] = useState<string | null>(null);
   const { me } = useMe();
   const canManage = ownerToken !== null || mine?.isMine === true;
   // 화면에 그릴 때 기준 시각 (남은 기간 표시용, 렌더 중에 시계를 읽지 않게 열 때 한 번)
@@ -167,8 +173,19 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   const decorate = (itemId: string) =>
     run("decorate", async () => {
       await decorateGrave(itemId, graveId, cache);
-      setDecorating(false);
+      setTool(null);
       setNotice(`${itemById(itemId)?.name ?? "꾸미기"}을(를) 놓았어요.`);
+    });
+
+  /** 디자인 바꾸기 = 나머지는 그대로 둔 전체 교체 PATCH. 유료 디자인으로 바꾸면 디자인권 1개 */
+  const restyle = (current: PublicGrave, style: string) =>
+    run("restyle", async () => {
+      const { grave: saved } = await api.updateGrave(graveId, ownerToken, toEditInput(current, { ...valuesOf(current), style }));
+      cache.upsert(saved);
+      bridge.emit("grave:changed", { graveId, kind: "updated" });
+      if (spendsTicket(style, current.style)) void meStore.refresh();
+      setTool(null);
+      setNotice(`${styleName(style)}(으)로 바꿨어요.`);
     });
 
   // 상세를 한 번 받은 뒤 목록에서 사라졌으면(이장·숨김) 더는 보여 줄 것이 없다
@@ -208,7 +225,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
             />
           ) : (
             <div className={styles.noPhoto}>
-              <GraveArt tier={graveTier(grave.ageDays)} flowers={grave.flowers} scale={4} />
+              <StyleArt style={grave.style} ageDays={grave.ageDays} flowers={grave.flowers} scale={4} />
               <figcaption>사진 없음</figcaption>
             </div>
           )}
@@ -366,10 +383,18 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
                 <button
                   type="button"
                   className={cx(ui.button, ui.quiet)}
-                  onClick={() => setDecorating((v) => !v)}
-                  aria-expanded={decorating}
+                  onClick={() => setTool((t) => (t === "decor" ? null : "decor"))}
+                  aria-expanded={tool === "decor"}
                 >
                   꾸미기
+                </button>
+                <button
+                  type="button"
+                  className={cx(ui.button, ui.quiet)}
+                  onClick={() => setTool((t) => (t === "style" ? null : "style"))}
+                  aria-expanded={tool === "style"}
+                >
+                  디자인 바꾸기
                 </button>
                 <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => onEdit(grave, ownerToken)}>
                   수정
@@ -387,7 +412,28 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
           </div>
         )}
 
-        {decorating && !confirming && (
+        {tool === "style" && !confirming && (
+          <div className={styles.toolBox}>
+            <StylePicker
+              value={nextStyle ?? grave.style ?? DEFAULT_STYLE}
+              onChange={setNextStyle}
+              inventory={me?.inventory ?? {}}
+              current={grave.style ?? DEFAULT_STYLE}
+              ageDays={grave.ageDays}
+              verb="바꾸면"
+            />
+            <button
+              type="button"
+              className={cx(ui.button, ui.primary)}
+              onClick={() => restyle(grave, nextStyle ?? grave.style ?? DEFAULT_STYLE)}
+              disabled={pending.restyle || (nextStyle ?? grave.style ?? DEFAULT_STYLE) === (grave.style ?? DEFAULT_STYLE)}
+            >
+              {pending.restyle ? "바꾸는 중…" : "이 디자인으로 바꾸기"}
+            </button>
+          </div>
+        )}
+
+        {tool === "decor" && !confirming && (
           <div className={styles.decorPicker}>
             {decor.length >= MAX_DECOR_PER_GRAVE ? (
               <p>묘비 하나에는 {MAX_DECOR_PER_GRAVE}개까지 놓을 수 있어요. 기간이 끝나면 다시 놓을 수 있어요.</p>

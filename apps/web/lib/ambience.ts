@@ -48,10 +48,11 @@ type Key = Omit<Palette, "skyTop" | "skyBottom" | "worldTint" | "celestial"> & {
   worldTint: number;
 };
 
-const NIGHT: Key = { skyTop: 0x14161a, skyBottom: 0x1e1f1b, worldTint: 0x7a86b0, darkness: 0.42, lightGlow: 1, fireflies: 1 };
-const DAWN: Key = { skyTop: 0x2b2735, skyBottom: 0x4a3a3e, worldTint: 0xc9b4c4, darkness: 0.18, lightGlow: 0.5, fireflies: 0.2 };
+// 밤도 지형·묘비·길이 또렷이 보일 만큼만 어둡게 (분위기는 푸른 틴트와 빛으로 낸다)
+const NIGHT: Key = { skyTop: 0x14161a, skyBottom: 0x1e1f1b, worldTint: 0xa4aecb, darkness: 0.2, lightGlow: 1, fireflies: 1 };
+const DAWN: Key = { skyTop: 0x2b2735, skyBottom: 0x4a3a3e, worldTint: 0xd9cad6, darkness: 0.08, lightGlow: 0.5, fireflies: 0.2 };
 const DAY: Key = { skyTop: 0x39403a, skyBottom: 0x4a5146, worldTint: 0xe8ece0, darkness: 0, lightGlow: 0.1, fireflies: 0 };
-const DUSK: Key = { skyTop: 0x2a1f24, skyBottom: 0x5a3a2c, worldTint: 0xe0a890, darkness: 0.22, lightGlow: 0.7, fireflies: 0.5 };
+const DUSK: Key = { skyTop: 0x2a1f24, skyBottom: 0x5a3a2c, worldTint: 0xeac0aa, darkness: 0.1, lightGlow: 0.7, fireflies: 0.5 };
 
 /** 하루를 도는 키프레임 (KST 시각). 사이 구간은 선형 보간 */
 const KEYFRAMES: readonly [number, Key][] = [
@@ -65,9 +66,9 @@ const KEYFRAMES: readonly [number, Key][] = [
 
 const WEATHER_TINT: Record<Weather, { tint: number; amount: number; dark: number }> = {
   clear: { tint: 0xffffff, amount: 0, dark: 0 },
-  cloudy: { tint: 0xa8acb4, amount: 0.25, dark: 0.06 },
-  fog: { tint: 0xb8bcc0, amount: 0.3, dark: 0.04 },
-  rain: { tint: 0x8c98ac, amount: 0.35, dark: 0.1 },
+  cloudy: { tint: 0xb4b8c0, amount: 0.2, dark: 0.02 },
+  fog: { tint: 0xc0c4c8, amount: 0.25, dark: 0.02 },
+  rain: { tint: 0xa8b2c2, amount: 0.25, dark: 0.04 },
   snow: { tint: 0xdce6f4, amount: 0.3, dark: -0.04 },
 };
 
@@ -179,7 +180,7 @@ export function ambienceAt(now: number = Date.now(), override: AmbienceOverride 
       skyTop: css(mixColor(k.skyTop, mulColor(k.skyTop, w.tint), w.amount)),
       skyBottom: css(mixColor(k.skyBottom, mulColor(k.skyBottom, w.tint), w.amount)),
       worldTint: mixColor(k.worldTint, mulColor(k.worldTint, w.tint), w.amount),
-      darkness: Math.max(0, Math.min(0.6, k.darkness + w.dark * intensity)),
+      darkness: Math.max(0, Math.min(0.3, k.darkness + w.dark * intensity)),
       // 비·눈 오는 날엔 반딧불이 숨는다
       fireflies: weather === "rain" || weather === "snow" ? k.fireflies * 0.2 : k.fireflies,
       lightGlow: k.lightGlow,

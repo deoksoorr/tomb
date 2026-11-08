@@ -40,7 +40,7 @@ export class GraveMarkers {
   ) {}
 
   add(p: GravePlacement, ms: number, label: string | null, now: number): void {
-    const top = p.y - GRAVE_STONE_H[p.tier];
+    const top = p.y - GRAVE_STONE_H[p.shape];
     const s = this.scene;
     const beam = s.add
       .image(p.x, p.y - BEAM_H, TEX.pixel)

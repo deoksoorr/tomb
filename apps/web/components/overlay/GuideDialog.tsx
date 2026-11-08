@@ -5,10 +5,10 @@ import {
   DECOR_DURATION_MS,
   DEFAULT_CHANNEL_CAPACITY,
   DEFAULT_MAX_CHANNELS,
+  GRAVE_STYLES,
   ITEMS,
   MAX_DECOR_PER_GRAVE,
 } from "@tomb/protocol";
-import { THEMES } from "@/game/bridge";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES } from "@/lib/economy";
 import { durationLabel, effectLabel, KIND_LABELS } from "../account/items";
 import Dialog from "../ui/Dialog";
@@ -17,7 +17,7 @@ import styles from "./GuideDialog.module.css";
 const CONTROLS: [string, string, string][] = [
   ["걷기", "WASD · 방향키", "왼쪽 아래 조이스틱"],
   ["달리기", "Shift 누른 채 걷기", "달리기 버튼"],
-  ["앉기·일어서기", "X 또는 C", "앉기 버튼"],
+  ["앉기·일어서기", "X 또는 C (벤치·의자 근처면 그 자리에)", "앉기 버튼 (근처에 자리가 있으면 빛나요)"],
   ["묘비 보기·말 걸기", "E 또는 Space", "상호작용 버튼"],
   ["확대·축소", "마우스 휠 · ＋/－", "＋/－ 버튼"],
   ["둘러보기", "오른쪽 버튼으로 끌기", "—"],
@@ -117,6 +117,7 @@ export default function GuideDialog({ onClose }: { onClose: () => void }) {
               묘비 꾸미기는 내 묘비에 놓는 순간 사라지고 {durationLabel(DECOR_DURATION_MS)} 동안 남아요. 묘비 하나에{" "}
               {MAX_DECOR_PER_GRAVE}개까지 놓을 수 있어요.
             </li>
+            <li>묘비 디자인권은 그 디자인으로 묘비를 세우거나 바꾸는 순간 사라져요.</li>
           </ul>
         </section>
 
@@ -137,14 +138,36 @@ export default function GuideDialog({ onClose }: { onClose: () => void }) {
               누르면 다른 채널로 옮길 수 있어요.
             </li>
             <li>묘지 전체가 꽉 차면 대기열에 줄을 서요. 기다리는 동안에도 혼자 걷고 묘비를 볼 수 있고, 차례가 오면 자동으로 들어가요.</li>
+            <li>다 둘러봤으면 내 정보 → 접속 종료로 자리를 비워 주세요. 기다리던 다음 사람이 바로 들어와요.</li>
           </ul>
         </section>
 
         <section>
-          <h3>묘지 디자인</h3>
+          <h3>묘비 디자인</h3>
+          <ul className={styles.points}>
+            <li>
+              묘비를 세울 때 디자인을 골라요. 무료:{" "}
+              {GRAVE_STYLES.filter((s) => s.free)
+                .map((s) => s.name)
+                .join(" · ")}
+              .
+            </li>
+            <li>
+              나머지는 상점의 디자인권이 있어야 해요(
+              {ITEMS.filter((i) => i.kind === "graveStyle")
+                .map((i) => `${i.name} ${i.price}P`)
+                .join(" · ")}
+              ). 묘비를 세우거나 내 묘비의 디자인을 바꿀 때 1개 써요.
+            </li>
+            <li>세운 뒤에도 내 묘비 상세의 &quot;디자인 바꾸기&quot;로 바꿀 수 있어요.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>내 묘비로 가기</h3>
           <p>
-            입장 화면이나 내 정보 → 묘지 디자인에서 고를 수 있어요 ({THEMES.map((t) => t.label).join(" · ")}). 내 화면에만
-            적용돼요.
+            화면 왼쪽 아래의 [내 묘비] 버튼을 누르면 내가 세운 묘비 목록(자리·헌화·살려주세요 수)이 나오고, 고르면 그
+            앞으로 바로 가요. 하나뿐이면 누르자마자 가요. 지도에도 내 묘비가 표시돼요.
           </p>
         </section>
       </div>

@@ -99,6 +99,26 @@
   box-shadow: 0 0 0 1px var(--line);
 }
 
+.pointsForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.pointsTarget {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.pointsDelta {
+  flex: 0 1 120px;
+  min-width: 90px;
+}
+
 /* ── 도구 막대 ── */
 
 .toolbar {

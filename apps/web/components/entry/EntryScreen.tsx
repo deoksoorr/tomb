@@ -8,7 +8,6 @@ import { isChannelSelectable, useLobby } from "@/lib/hooks/useLobby";
 import { useHydrated } from "@/lib/hooks/useMedia";
 import { readItem, writeItem } from "@/lib/storage";
 import { LS, type Me } from "@/lib/types";
-import ThemePicker from "../account/ThemePicker";
 import { bgm } from "../bgm/engine";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -157,8 +156,6 @@ function EntryForm({ onEnter }: { onEnter: (choice: EntryChoice) => void }) {
       </fieldset>
 
       <ChannelPicker lobby={lobby} value={channel} onChange={setChannel} allowAuto />
-
-      <ThemePicker />
 
       {account ? (
         <p className={styles.account} role="status">

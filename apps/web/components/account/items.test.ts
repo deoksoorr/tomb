@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { COSMETIC_DURATION_MS, DECOR_DURATION_MS, itemById } from "@tomb/protocol";
-import { bagEntries, currentLook, durationLabel, effectLabel, pointsText, remainingLabel } from "./items";
+import { COSMETIC_DURATION_MS, DECOR_DURATION_MS, itemById, plotLabel } from "@tomb/protocol";
+import type { PublicGrave } from "@/lib/types";
+import { bagEntries, currentLook, durationLabel, effectLabel, myGraveEntries, pointsText, remainingLabel } from "./items";
 
 const HOUR = 3_600_000;
 
@@ -38,6 +39,7 @@ describe("지속·남은 시간", () => {
     expect(durationLabel(DECOR_DURATION_MS)).toBe("7일");
     expect(effectLabel(itemById("fw_small")!)).toBe("한 번 쏘면 사라져요");
     expect(effectLabel(itemById("hat_cat")!)).toBe("24시간 유지");
+    expect(effectLabel(itemById("gs_duck")!)).toMatch("1개 써요");
   });
 
   it("남은 시간", () => {
@@ -53,5 +55,17 @@ describe("pointsText", () => {
     expect(pointsText(2)).toBe("+2 포인트");
     expect(pointsText(0)).toBeNull();
     expect(pointsText(undefined)).toBeNull();
+  });
+});
+
+describe("myGraveEntries", () => {
+  const g = (id: string, createdAt: number) => ({ id, createdAt }) as PublicGrave;
+  it("내 묘비만 최근 순으로, 자리는 전체 목록 위치로", () => {
+    const all = [g("a", 1), g("b", 2), g("c", 3), g("d", 4)];
+    expect(myGraveEntries(["b", "d", "x"], all).map((e) => [e.grave.id, e.plot])).toEqual([
+      ["d", plotLabel(3)],
+      ["b", plotLabel(1)],
+    ]);
+    expect(myGraveEntries([], all)).toEqual([]);
   });
 });

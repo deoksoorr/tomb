@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import type { LobbyInfo } from "@tomb/protocol";
 import type { AdminGrave } from "@/lib/admin";
 import { ApiRequestError, errorMessage } from "@/lib/api";
+import { CODE_RE, normalizeCode } from "@/lib/economy";
 import type { AdminAction } from "@/lib/validate";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -180,6 +181,8 @@ export default function AdminApp() {
               <Stat label="신고된 묘비" value={reportedCount} />
               <Channels lobby={lobby} />
             </section>
+
+            <PointsForm toast={toast} onAuthLost={() => setPhase("login")} />
 
             <div className={styles.toolbar}>
               <div className={styles.segmented} role="group" aria-label="보기">
@@ -362,6 +365,62 @@ function Channels({ lobby }: { lobby: LobbyInfo | "error" | null }) {
         </>
       )}
     </div>
+  );
+}
+
+/** 포인트 지급·회수: 개인 코드(XXXX-XXXX-XXXX) 또는 계정 id + 증감 */
+function PointsForm({ toast, onAuthLost }: { toast: (message: string) => void; onAuthLost: () => void }) {
+  const [target, setTarget] = useState("");
+  const [delta, setDelta] = useState("");
+  const [pending, setPending] = useState(false);
+  const amount = Number(delta);
+  const valid = target.trim() !== "" && Number.isInteger(amount) && amount !== 0;
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const code = normalizeCode(target);
+    setPending(true);
+    try {
+      const r = await adminApi.points(CODE_RE.test(code) ? { code } : { accountId: target.trim() }, amount);
+      toast(`${r.accountId.slice(0, 6)}… 계정 잔액 ${r.points}점`);
+      setTarget("");
+      setDelta("");
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.status === 401) onAuthLost();
+      else toast(errorMessage(err));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <form className={styles.pointsForm} onSubmit={(e) => void submit(e)} aria-label="포인트 지급">
+      <span className={styles.statLabel}>포인트 지급</span>
+      <input
+        className={cx(ui.input, styles.pointsTarget)}
+        value={target}
+        onChange={(e) => setTarget(e.target.value)}
+        placeholder="개인 코드 또는 계정 id"
+        aria-label="개인 코드 또는 계정 id"
+        autoComplete="off"
+        spellCheck={false}
+      />
+      <input
+        className={cx(ui.input, styles.pointsDelta)}
+        type="number"
+        inputMode="numeric"
+        min={-9999}
+        max={9999}
+        step={1}
+        value={delta}
+        onChange={(e) => setDelta(e.target.value)}
+        placeholder="+100 / -50"
+        aria-label="지급량 (빼려면 음수)"
+      />
+      <button type="submit" className={ui.button} disabled={pending || !valid}>
+        지급
+      </button>
+    </form>
   );
 }
 

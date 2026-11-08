@@ -1,6 +1,6 @@
 import type { CosmeticSlot } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
-import type { GraveDecor } from "../types";
+import type { Grave, GraveDecor } from "../types";
 import type { MemoryStore } from "./memory";
 import type { AccountRecord, AccountStore, EquippedItem } from "./types";
 
@@ -30,23 +30,25 @@ export class MemoryAccounts implements AccountStore {
 
   constructor(private graves: () => MemoryStore) {}
 
+  private blank(): Acct {
+    return {
+      points: 0,
+      name: null,
+      streak: 0,
+      lastAttend: null,
+      codeHash: null,
+      inv: new Map(),
+      look: new Map(),
+      graves: new Set(),
+      earnDay: null,
+      earned: new Map(),
+    };
+  }
+
+  /** 쓰기에서만 만든다 (조회만 한 계정은 "없는 계정"으로 남는다 → 관리자 지급에서 오타를 잡는다) */
   private acct(id: string): Acct {
     let a = this.accts.get(id);
-    if (!a) {
-      a = {
-        points: 0,
-        name: null,
-        streak: 0,
-        lastAttend: null,
-        codeHash: null,
-        inv: new Map(),
-        look: new Map(),
-        graves: new Set(),
-        earnDay: null,
-        earned: new Map(),
-      };
-      this.accts.set(id, a);
-    }
+    if (!a) this.accts.set(id, (a = this.blank()));
     return a;
   }
 
@@ -76,7 +78,7 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async get(id: string, day: string, now: number): Promise<AccountRecord> {
-    const a = this.acct(id);
+    const a = this.accts.get(id) ?? this.blank();
     return {
       points: a.points,
       name: a.name,
@@ -153,6 +155,19 @@ export class MemoryAccounts implements AccountStore {
     if (!graves.hasGrave(graveId)) return null;
     if (!this.take(this.acct(id), itemId)) return "no_item";
     return graves.applyDecor(graveId, itemId, until, now);
+  }
+
+  async putGraveUsing(id: string, itemId: string, grave: Grave): Promise<boolean> {
+    if (!this.take(this.acct(id), itemId)) return false;
+    this.graves().putSync(grave);
+    return true;
+  }
+
+  async adjustPoints(id: string, delta: number): Promise<number | null> {
+    const a = this.accts.get(id);
+    if (!a) return null;
+    a.points = Math.min(BALANCE_CAP, Math.max(0, a.points + delta));
+    return a.points;
   }
 
   async addGrave(id: string, graveId: string): Promise<void> {

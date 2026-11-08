@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { PublicGrave } from "@/lib/types";
-import { addDays, nearestLifespan, toEditInput, toQuickInput, validateQuick, type QuickValues } from "./quickRules";
+import {
+  addDays,
+  nearestLifespan,
+  toEditInput,
+  toQuickInput,
+  validateQuick,
+  valuesOf,
+  type QuickValues,
+} from "./quickRules";
 
-const base: QuickValues = { name: "할 일 앱", lived: "week", cause: null, epitaph: "" };
+const base: QuickValues = { name: "할 일 앱", lived: "week", cause: null, epitaph: "", style: "auto" };
 
 describe("validateQuick", () => {
   it("이름과 생존 기간만 필수", () => {
@@ -19,14 +27,15 @@ describe("validateQuick", () => {
 });
 
 describe("toQuickInput", () => {
-  it("고르지 않은 사인·빈 묘비명은 빼고 보낸다 (서버가 기본값을 넣는다)", () => {
+  it("고르지 않은 사인·빈 묘비명·자동 디자인은 빼고 보낸다 (서버가 기본값을 넣는다)", () => {
     expect(toQuickInput({ ...base, lived: "week", name: " 앱 " }, "유령")).toEqual({ name: "앱", lived: "week", mourner: "유령" });
-    expect(toQuickInput({ ...base, lived: "day", cause: "time", epitaph: " 잘 가 " }, "유령")).toEqual({
+    expect(toQuickInput({ ...base, lived: "day", cause: "time", epitaph: " 잘 가 ", style: "duck" }, "유령")).toEqual({
       name: "할 일 앱",
       lived: "day",
       mourner: "유령",
       cause: "time",
       epitaph: "잘 가",
+      style: "duck",
     });
   });
 });
@@ -58,13 +67,14 @@ describe("toEditInput", () => {
     links: ["https://a.dev"],
     imageUrl: "https://x.public.blob.vercel-storage.com/a.webp",
     mourner: "원래 상주",
+    style: "gold",
     createdAt: 1,
     flowers: 3,
     revives: 1,
   };
 
   it("손대지 않은 값(날짜·여러 사인·링크·사진·상주)은 그대로", () => {
-    const input = toEditInput(grave, { name: "새 이름", lived: "week", cause: "time", epitaph: "옛 묘비명" });
+    const input = toEditInput(grave, { ...valuesOf(grave), name: "새 이름" });
     expect(input).toEqual({
       name: "새 이름",
       epitaph: "옛 묘비명",
@@ -75,11 +85,18 @@ describe("toEditInput", () => {
       lastTask: "로그인",
       links: ["https://a.dev"],
       imageUrl: "https://x.public.blob.vercel-storage.com/a.webp",
+      style: "gold",
     });
   });
 
+  it("디자인만 바꿔도 나머지는 그대로 (전체 교체), 자동으로 돌리면 style을 뺀다", () => {
+    const restyled = toEditInput(grave, { ...valuesOf(grave), style: "duck" });
+    expect(restyled).toMatchObject({ name: "옛 이름", epitaph: "옛 묘비명", causes: ["time", "interest"], style: "duck" });
+    expect(toEditInput(grave, { ...valuesOf(grave), style: "auto" })).not.toHaveProperty("style");
+  });
+
   it("생존 기간을 바꾸면 사망일 기준으로 탄생일을 다시 셈하고, 사인을 바꾸면 그 하나로", () => {
-    const input = toEditInput(grave, { name: "앱", lived: "month", cause: "server_cost", epitaph: "" });
+    const input = toEditInput(grave, { name: "앱", lived: "month", cause: "server_cost", epitaph: "", style: "auto" });
     expect(input.bornAt).toBe("2026-09-10");
     expect(input.diedAt).toBe("2026-10-09");
     expect(input.causes).toEqual(["server_cost"]);

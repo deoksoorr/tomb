@@ -1,5 +1,5 @@
 import type { LobbyInfo } from "@tomb/protocol";
-import type { AdminBulkResponse, AdminGrave } from "@/lib/admin";
+import type { AdminBulkResponse, AdminGrave, AdminPointsResponse } from "@/lib/admin";
 import { request } from "@/lib/api";
 import type { AdminAction } from "@/lib/validate";
 
@@ -16,6 +16,9 @@ export const adminApi = {
   logout: () => request<{ ok: true }>("/api/admin/session", { method: "DELETE" }),
   graves: () => request<{ graves: AdminGrave[] }>("/api/admin/graves", { cache: "no-store" }),
   channels: () => request<LobbyInfo>("/api/admin/channels", { cache: "no-store" }),
+  /** 개인 코드 또는 계정 id 중 하나 + 증감 (코드는 서버가 해시로만 찾는다) */
+  points: (target: { code: string } | { accountId: string }, delta: number) =>
+    request<AdminPointsResponse>("/api/admin/accounts/points", post({ ...target, delta })),
   /** 하나든 여러 개든 일괄 처리 경로로 보낸다 */
   apply: (ids: string[], action: AdminAction) => request<AdminBulkResponse>("/api/admin/graves/bulk", post({ ids, action })),
 };

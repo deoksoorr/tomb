@@ -1,4 +1,4 @@
-import { checkName, isAvatarColor, itemById } from "@tomb/protocol";
+import { checkName, isAvatarColor, isGraveStyle, itemById } from "@tomb/protocol";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { CODE_RE, normalizeCode } from "./economy";
@@ -40,6 +40,9 @@ const tagList = (item: z.ZodString, max: number, tooMany: string) =>
     .max(max, tooMany)
     .transform((a) => dedupe(a.filter(Boolean)));
 
+/** 묘비 디자인 (GRAVE_STYLES). 유료 디자인의 디자인권 확인·소모는 라우트가 저장과 함께 한다 */
+const graveStyle = z.string().refine((s) => isGraveStyle(s), "알 수 없는 묘비 디자인이에요.").optional();
+
 /** 유저이름 규칙(@tomb/protocol checkName)을 그대로 쓰고, 정규화된 이름을 돌려준다 */
 const userName = z.string().transform((s, ctx) => {
   const r = checkName(s);
@@ -77,6 +80,7 @@ export const GraveInputSchema = z
     ),
     imageUrl: optional(z.string().trim().refine((s) => !s || isAllowedImageUrl(s), "업로드한 이미지만 쓸 수 있어요.")),
     mourner: userName,
+    style: graveStyle,
   })
   .superRefine((v, ctx) => {
     if (v.diedAt < v.bornAt)
@@ -109,11 +113,13 @@ export const QuickGraveInputSchema = z
     cause: z.enum(CAUSE_TAGS, "알 수 없는 사인이에요.").optional(),
     epitaph: optional(z.string().trim().overwrite(oneLine).refine(within(30), "묘비명은 30자까지 적을 수 있어요.")),
     mourner: userName,
+    style: graveStyle,
   })
-  .transform(({ name, lived, cause, epitaph, mourner }): ParsedGraveInput => {
+  .transform(({ name, lived, cause, epitaph, mourner, style }): ParsedGraveInput => {
     const life = quickLifespan(lived);
     const none = { lastTask: undefined, causeDetail: undefined, links: undefined, stack: undefined, imageUrl: undefined };
-    return { ...none, name, mourner, ...life, causes: [cause ?? "other"], epitaph: epitaph ?? suggestEpitaph(life.ageDays) };
+    const epitaphOrDefault = epitaph ?? suggestEpitaph(life.ageDays);
+    return { ...none, name, mourner, style, ...life, causes: [cause ?? "other"], epitaph: epitaphOrDefault };
   });
 
 /** POST /api/graves: `lived`가 있으면 간단 입력, 아니면 전체 입력 */
@@ -162,6 +168,16 @@ export const ShopUseSchema = z.object({
   itemId: shopItem,
   graveId: z.string().refine((id) => isGraveId(id), "묘비 id 형식이 올바르지 않아요.").optional(),
 });
+
+/** 관리자 포인트 조정: 개인 코드 또는 계정 id 중 하나 + 정수 증감 */
+export const AdminPointsSchema = z
+  .object({
+    code: z.string().max(40).transform(normalizeCode).optional(),
+    accountId: z.string().regex(/^[A-Za-z0-9_-]{21}$/, "계정 id 형식이 올바르지 않아요.").optional(),
+    delta: z.number().int("정수로 적어 주세요.").min(-9999).max(9999).refine((d) => d !== 0, "0이 아닌 값을 적어 주세요."),
+  })
+  .refine((v) => !!v.code !== !!v.accountId, "개인 코드와 계정 id 중 하나만 적어 주세요.")
+  .refine((v) => !v.code || CODE_RE.test(v.code), "코드는 XXXX-XXXX-XXXX 모양이에요.");
 
 export const AdminLoginSchema = z.object({ key: z.string().min(1, "관리자 키를 입력해 주세요.").max(500) });
 

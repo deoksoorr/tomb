@@ -8,11 +8,23 @@ import {
   type QuickGraveInput,
 } from "@/lib/types";
 
-// 간단 묘비 세우기: 이름 · 얼마나 살았나 · (사인) · (묘비명). 글자 수는 서버와 같이 코드포인트 기준.
+// 간단 묘비 세우기: 이름 · 얼마나 살았나 · 묘비 디자인 · (사인) · (묘비명). 글자 수는 서버와 같이 코드포인트 기준.
 
 export const LIMITS = { name: 40, epitaph: 30 } as const;
 
-export type QuickValues = { name: string; lived: LifespanId | null; cause: CauseTag | null; epitaph: string };
+export type QuickValues = {
+  name: string;
+  lived: LifespanId | null;
+  cause: CauseTag | null;
+  epitaph: string;
+  /** 묘비 디자인 ("auto" = 생존 기간 규칙) */
+  style: string;
+};
+
+/**
+ * PATCH 입력. 계약의 GraveInput에는 아직 style이 없어서 덧붙인다 (서버는 전체 교체라 빠지면 "auto"가 된다).
+ */
+export type EditInput = GraveInput & { style?: string };
 export type QuickErrors = Partial<Record<"name" | "lived" | "epitaph", string>>;
 
 export const charCount = (s: string) => [...s].length;
@@ -49,6 +61,18 @@ export function toQuickInput(v: QuickValues & { lived: LifespanId }, mourner: st
     mourner,
     ...(v.cause && { cause: v.cause }),
     ...(epitaph && { epitaph }),
+    ...(v.style !== "auto" && { style: v.style }),
+  };
+}
+
+/** 기존 묘비 → 폼 값 (수정 폼의 처음 값, 디자인만 바꿀 때의 나머지 값) */
+export function valuesOf(grave: PublicGrave): QuickValues {
+  return {
+    name: grave.name,
+    lived: nearestLifespan(grave.ageDays),
+    cause: grave.causes[0] ?? null,
+    epitaph: grave.epitaph,
+    style: grave.style ?? "auto",
   };
 }
 
@@ -60,7 +84,7 @@ export const addDays = (ymd: string, days: number) => new Date(parseYmd(ymd) + d
  * 생존 기간을 바꾸지 않았으면 원래 날짜를, 바꿨으면 사망일은 두고 탄생일을 다시 셈한다.
  * 사인을 그대로 두면 원래 사인들(여러 개일 수 있음)을 지킨다.
  */
-export function toEditInput(grave: PublicGrave, v: QuickValues): GraveInput {
+export function toEditInput(grave: PublicGrave, v: QuickValues): EditInput {
   const original = nearestLifespan(grave.ageDays);
   const lived = v.lived ?? original;
   const bornAt = lived === original ? grave.bornAt : addDays(grave.diedAt, -(livedDays(lived) - 1));
@@ -77,5 +101,6 @@ export function toEditInput(grave: PublicGrave, v: QuickValues): GraveInput {
     ...(grave.links?.length && { links: grave.links }),
     ...(grave.stack?.length && { stack: grave.stack }),
     ...(grave.imageUrl && { imageUrl: grave.imageUrl }),
+    ...(v.style !== "auto" && { style: v.style }),
   };
 }

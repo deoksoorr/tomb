@@ -16,6 +16,7 @@ const noItem = () => new HttpError(409, "NO_ITEM", "가방에 그 아이템이 �
  *  - 폭죽: 60초짜리 사용권(grant). 게임이 실시간 서버로 보내면 채널 모두에게 터진다 (nonce는 한 번만 쓸 수 있다)
  *  - 캐릭터 꾸미기: 24시간 착용 (같은 부위는 교체) + 착용 증서(lookGrant)
  *  - 묘비 꾸미기: 내 계정으로 세운 묘비에만, 7일 유지 (묘비당 최대 3개, 넘으면 가장 오래된 것 교체)
+ *  - 묘비 디자인권: 여기서는 쓰지 않는다 (묘비 세우기·수정의 style로 쓴다)
  */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
@@ -43,6 +44,9 @@ export const POST = handler(async (req) => {
     const me = await loadMe(accounts, visitorId, now);
     return json<UseItemResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now) });
   }
+
+  if (item.kind === "graveStyle")
+    throw new HttpError(400, "INVALID_INPUT", "묘비 디자인권은 묘비를 세우거나 고칠 때 디자인으로 골라 써요.");
 
   if (!graveId) throw new HttpError(400, "INVALID_INPUT", "꾸밀 묘비를 골라 주세요.");
   const store = getStore();

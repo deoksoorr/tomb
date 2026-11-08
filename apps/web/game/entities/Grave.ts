@@ -1,13 +1,17 @@
 import * as Phaser from "phaser";
 import { flowersKey, TEX } from "../assets/manifest";
 import { DEPTH, TOOLTIP_EPITAPH, TOOLTIP_NAME } from "../config";
-import { GRAVE_STONE_H, graveOriginY, graveTexKey, type GraveStyle } from "../sprites/graves";
+import { SHAPE_SIZE } from "../graveShape";
+import { GRAVE_STONE_H, graveOriginY, graveTexKey, MONITOR_CURSOR, ROCKET_TIP, SERVER_LEDS } from "../sprites/graves";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import type { GravePlacement } from "../world/graveLayout";
 
 // 묘비 한 기의 화면 표현. 화면에 보이는 행만 풀에서 꺼내 붙인다 (GraveField).
 // 살려주세요가 많을수록 은은한 빛, 아주 많으면 미세한 흔들림 (prefers-reduced-motion이면 흔들림 없음).
 // 부활 대기석 상위 3개에는 촛불, 1위에는 유령불까지. 묘비 꾸미기(촛불·화환·리본·작은 석등·유령 고양이·별빛)도 여기서.
+// 유료 디자인은 저마다 작은 움직임이 있다 (커피 김, 커서 깜빡, LED, 꽃잎, 로켓 불빛, 수정 빛, 금빛 반짝 …).
+// 움직임은 화면에 보이는 묘비만 갱신하고, prefers-reduced-motion이면 멈춘 그림으로 둔다.
+// 내 묘비(graves:mine)에는 금빛 작은 깃발을 꽂아 맵에서 바로 찾게 한다.
 
 const RISE_MS = 1100;
 
@@ -18,6 +22,10 @@ export function reviveLevel(revives: number): number {
 
 type Light = { img: Phaser.GameObjects.Image; base: number; phase: number };
 type Star = { img: Phaser.GameObjects.Image; t0: number };
+type Fx = { img: Phaser.GameObjects.Image; a: number; b: number };
+
+const GREEN = 0x6ae07a;
+const AMBER = 0xf0b040;
 
 export class GraveView {
   p: GravePlacement | null = null;
@@ -30,6 +38,9 @@ export class GraveView {
   private decorObjs: Phaser.GameObjects.GameObject[] = [];
   private cat: Phaser.GameObjects.Sprite | null = null;
   private stars: Star[] = [];
+  private fx: Fx[] = [];
+  private fxGlow: Phaser.GameObjects.Image | null = null;
+  private flag: Phaser.GameObjects.Image | null = null;
   private sway = 0;
   private glowBase = 0;
   private phase = 0;
@@ -47,17 +58,18 @@ export class GraveView {
   }
 
   get height(): number {
-    return this.p ? GRAVE_STONE_H[this.p.tier] : 0;
+    return this.p ? GRAVE_STONE_H[this.p.shape] : 0;
   }
 
-  bind(p: GravePlacement, reduced: boolean, riseAt: number, style: GraveStyle = "temple"): void {
+  bind(p: GravePlacement, reduced: boolean, riseAt: number, mine = false): void {
     this.p = p;
     this.riseAt = riseAt;
     this.reduced = reduced;
     this.phase = (p.index * 1.7) % (Math.PI * 2);
     const s = this.stone;
-    s.setTexture(graveTexKey(p.tier, p.variant, style))
-      .setOrigin(0.5, graveOriginY(p.tier))
+    s.setTexture(graveTexKey(p.shape, p.variant))
+      .setOrigin(0.5, graveOriginY(p.shape))
+      .clearTint()
       .setPosition(p.x, p.y)
       .setDepth(p.y)
       .setRotation(0)
@@ -74,7 +86,7 @@ export class GraveView {
     if (this.glowBase > 0) {
       if (!this.glow)
         this.glow = this.scene.add.image(0, 0, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights).setTint(0xffdf9e);
-      const h = GRAVE_STONE_H[p.tier];
+      const h = GRAVE_STONE_H[p.shape];
       this.glow.setPosition(p.x, p.y - h / 2).setScale((h + 18) / 64).setVisible(true);
     } else this.glow?.setVisible(false);
     this.sway = !reduced && level >= 0.6 ? 0.012 + 0.03 * level : 0;
@@ -89,8 +101,98 @@ export class GraveView {
       }
     }
     this.bindDecor(p);
-    this.spot = (p.rank >= 0 ? 0.45 : 0.3) + (this.decorLit ? 0.2 : 0);
-    this.animated = this.sway > 0 || this.glowBase > 0 || this.lights.length > 0 || riseAt > 0 || !!this.cat || this.stars.length > 0;
+    const bright = this.bindStyle(p);
+    if (mine) {
+      const w = SHAPE_SIZE[p.shape].w;
+      this.flag = this.scene.add
+        .image(p.x + w / 2, p.y - GRAVE_STONE_H[p.shape] + 4, TEX.mineFlag)
+        .setOrigin(0.15, 1)
+        .setDepth(p.y + 0.7);
+    }
+    // 묘비 위 스폿: 기본도 충분히 밝게, 부활 대기석·빛나는 디자인·꾸미기 빛·내 묘비는 더
+    this.spot = 0.5 + (p.rank >= 0 ? 0.15 : 0) + (this.decorLit ? 0.15 : 0) + (bright ? 0.15 : 0) + (mine ? 0.15 : 0);
+    this.animated =
+      this.sway > 0 ||
+      this.glowBase > 0 ||
+      this.lights.length > 0 ||
+      riseAt > 0 ||
+      !!this.cat ||
+      this.stars.length > 0 ||
+      this.fx.length > 0 ||
+      !!this.fxGlow ||
+      !!this.flag ||
+      p.shape === "duck" ||
+      p.shape === "404";
+  }
+
+  /** 텍스처 좌표(tx,ty) → 월드 좌표 */
+  private tw(p: GravePlacement, tx: number, ty: number): { x: number; y: number } {
+    return { x: p.x - SHAPE_SIZE[p.shape].tex / 2 + tx, y: p.y - GRAVE_STONE_H[p.shape] + ty };
+  }
+
+  private dot(x: number, y: number, tint: number, w: number, h: number, depth: number, add = false): Phaser.GameObjects.Image {
+    const img = this.scene.add.image(x, y, TEX.pixel).setOrigin(0, 0).setDisplaySize(w, h).setTint(tint).setDepth(depth);
+    if (add) img.setBlendMode(Phaser.BlendModes.ADD);
+    return img;
+  }
+
+  /** 유료 디자인의 작은 연출. 빛나는 디자인이면 true (조명을 더 밝게) */
+  private bindStyle(p: GravePlacement): boolean {
+    const h = GRAVE_STONE_H[p.shape];
+    const glow = (dx: number, dy: number, scale: number, tint: number) => {
+      this.fxGlow = this.scene.add
+        .image(p.x + dx, p.y + dy, TEX.glow)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setDepth(DEPTH.lights)
+        .setScale(scale)
+        .setTint(tint);
+    };
+    switch (p.shape) {
+      case "coffee":
+        for (let i = 0; i < 3; i++) {
+          const img = this.scene.add.image(p.x, p.y - h, TEX.dot).setDepth(p.y + 0.4).setTint(0xeeeeee).setScale(0.6);
+          this.fx.push({ img, a: i * 0.33, b: i - 1 });
+        }
+        return false;
+      case "monitor": {
+        const c = this.tw(p, MONITOR_CURSOR.x, MONITOR_CURSOR.y);
+        this.fx.push({ img: this.dot(c.x, c.y, 0x9af0b0, 2, 1, p.y + 0.4), a: 0, b: 0 });
+        glow(0, -h * 0.55, 0.35, 0x5ad87a);
+        return true;
+      }
+      case "server":
+        SERVER_LEDS.forEach(([tx, ty], i) => {
+          const c = this.tw(p, tx + (i % 3 === 2 ? 1 : 0), ty);
+          this.fx.push({ img: this.dot(c.x, c.y, i % 3 === 2 ? AMBER : GREEN, 1, 1, p.y + 0.4, true), a: 300 + i * 170, b: i });
+        });
+        return true;
+      case "sakura":
+        for (let i = 0; i < 3; i++) {
+          const img = this.scene.add.image(p.x, p.y - h, TEX.petalPink).setDepth(p.y + 0.5);
+          this.fx.push({ img, a: i * 0.33, b: i });
+        }
+        return false;
+      case "rocket": {
+        const c = this.tw(p, ROCKET_TIP.x, ROCKET_TIP.y - 1);
+        this.fx.push({ img: this.dot(c.x, c.y, 0xff5040, 2, 1, p.y + 0.4, true), a: 0, b: 0 });
+        return false;
+      }
+      case "crystal":
+        glow(0, -h * 0.5, 0.75, 0x9ad8f0);
+        return true;
+      case "gold":
+        glow(0, -h * 0.5, 0.6, 0xffd870);
+        for (let i = 0; i < 2; i++) {
+          const img = this.scene.add.image(p.x, p.y - h, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 1);
+          this.fx.push({ img, a: i * 1300, b: i });
+        }
+        return true;
+      case "angel":
+        glow(0, -h * 0.55, 0.55, 0xf4f0ff);
+        return true;
+      default:
+        return false;
+    }
   }
 
   private addCandles(p: GravePlacement, dl: number, dr: number): void {
@@ -104,7 +206,7 @@ export class GraveView {
 
   private bindDecor(p: GravePlacement): void {
     this.decorLit = false;
-    const h = GRAVE_STONE_H[p.tier];
+    const h = GRAVE_STONE_H[p.shape];
     for (const id of p.decor) {
       switch (id) {
         case "decor_candles":
@@ -157,14 +259,20 @@ export class GraveView {
     for (const l of this.lights) l.img.destroy();
     for (const o of this.decorObjs) o.destroy();
     for (const st of this.stars) st.img.destroy();
+    for (const f of this.fx) f.img.destroy();
     this.wisp?.destroy();
     this.cat?.destroy();
+    this.fxGlow?.destroy();
+    this.flag?.destroy();
     this.candles = [];
     this.lights = [];
     this.decorObjs = [];
     this.stars = [];
+    this.fx = [];
     this.wisp = null;
     this.cat = null;
+    this.fxGlow = null;
+    this.flag = null;
   }
 
   unbind(): void {
@@ -189,8 +297,11 @@ export class GraveView {
     for (const l of this.lights) l.img.setVisible(v);
     for (const o of this.decorObjs) (o as unknown as Phaser.GameObjects.Components.Visible).setVisible(v);
     for (const st of this.stars) st.img.setVisible(v);
+    for (const f of this.fx) f.img.setVisible(v);
     this.wisp?.setVisible(v);
     this.cat?.setVisible(v);
+    this.fxGlow?.setVisible(v);
+    this.flag?.setVisible(v);
   }
 
   /** lightLevel: 시간대 빛 세기 0..1 */
@@ -213,10 +324,12 @@ export class GraveView {
       // 유령불 빛은 촛불 둘 다음 (lights[2])
       if (this.lights.length > 2) this.lights[2].img.setPosition(wx, wy);
     }
-    if (this.cat && !this.reduced) this.cat.setY(p.y - GRAVE_STONE_H[p.tier] + 1 - (Math.sin(now / 900 + this.phase) > 0.6 ? 1 : 0));
+    if (this.cat && !this.reduced) this.cat.setY(p.y - GRAVE_STONE_H[p.shape] + 1 - (Math.sin(now / 900 + this.phase) > 0.6 ? 1 : 0));
+    this.updateStyle(p, now, lightLevel);
+    if (this.flag && !this.reduced) this.flag.setRotation(Math.sin(now / 700 + this.phase) * 0.06);
     if (this.stars.length) {
       // 별가루: 묘비 위에서 천천히 내려오며 깜빡인다
-      const h = GRAVE_STONE_H[p.tier];
+      const h = GRAVE_STONE_H[p.shape];
       for (let i = 0; i < this.stars.length; i++) {
         const st = this.stars[i];
         const period = this.reduced ? 6000 : 3200;
@@ -235,6 +348,69 @@ export class GraveView {
         this.stone.setScale(1);
         this.flowers?.setAlpha(1);
       }
+    }
+  }
+
+  private updateStyle(p: GravePlacement, now: number, lightLevel: number): void {
+    const h = GRAVE_STONE_H[p.shape];
+    const still = this.reduced;
+    if (this.fxGlow) {
+      const pulse = still ? 1 : 0.75 + 0.25 * Math.sin(now / 900 + this.phase);
+      this.fxGlow.setAlpha((p.shape === "crystal" ? 0.55 : 0.35) * pulse * (0.4 + 0.6 * lightLevel));
+    }
+    switch (p.shape) {
+      case "coffee":
+        // 식은 커피에서도 김이 살짝 (위로 피어오르며 흐려진다)
+        for (const f of this.fx) {
+          const t = still ? 0.4 : ((now / 2400 + f.a) % 1);
+          f.img.setPosition(p.x - 1 + f.b * 2 + Math.sin(t * 6 + f.b) * 1.2, p.y - h - 1 - t * 9).setAlpha(still ? 0.35 : 0.55 * Math.sin(t * Math.PI));
+        }
+        break;
+      case "monitor":
+        this.fx[0]?.img.setVisible(this.stone.visible && (still || Math.floor(now / 530) % 2 === 0));
+        break;
+      case "server":
+        for (const f of this.fx) f.img.setAlpha(still ? 0.9 : Math.floor((now + f.b * 97) / f.a) % 3 === 0 ? 0.25 : 1);
+        break;
+      case "sakura":
+        for (const f of this.fx) {
+          const t = still ? 0.5 : ((now / 3800 + f.a) % 1);
+          f.img
+            .setPosition(p.x - 6 + f.b * 6 + Math.sin(t * 5 + f.b) * 3, p.y - h - 2 + t * (h + 4))
+            .setRotation(still ? 0 : t * 4)
+            .setAlpha(Math.sin(t * Math.PI));
+        }
+        break;
+      case "rocket":
+        this.fx[0]?.img.setAlpha(still ? 0.8 : Math.floor(now / 700) % 2 ? 0.15 : 1);
+        break;
+      case "gold":
+        // 금빛 비석 위 이곳저곳에서 반짝
+        for (const f of this.fx) {
+          const cycle = 2600;
+          const t = ((now + f.a) % cycle) / cycle;
+          const k = Math.floor((now + f.a) / cycle) + f.b * 7;
+          f.img
+            .setPosition(p.x - 4 + ((k * 37) % 9), p.y - h + 3 + ((k * 53) % Math.max(4, h - 8)))
+            .setAlpha(still ? 0.6 : Math.max(0, Math.sin(t * Math.PI * 2)))
+            .setScale(still ? 0.8 : 0.5 + 0.5 * Math.max(0, Math.sin(t * Math.PI * 2)));
+        }
+        break;
+      case "duck":
+        if (!still) {
+          const t = (now + this.phase * 1000) % 3200;
+          this.stone.setRotation(t < 400 ? Math.sin((t / 400) * Math.PI * 2) * 0.08 : 0);
+        }
+        break;
+      case "404":
+        if (!still) {
+          const t = (now + this.phase * 1000) % 3700;
+          const glitch = t < 120;
+          this.stone.setX(p.x + (glitch ? (t < 60 ? 1 : -1) : 0));
+          if (glitch) this.stone.setTint(0xb8d0ff);
+          else this.stone.clearTint();
+        }
+        break;
     }
   }
 
@@ -310,14 +486,16 @@ export class GraveTooltip {
     this.hide();
   }
 
-  show(p: GravePlacement, name: string, epitaph: string): void {
-    if (this.shownId !== p.id || this.name.text !== name || this.epitaph.text !== epitaph) {
-      this.atlas.ensure(name + epitaph);
-      this.name.setText(name);
+  /** mine: 내 묘비면 이름 앞에 ★, 금빛 이름 */
+  show(p: GravePlacement, name: string, epitaph: string, mine = false): void {
+    const title = mine ? `★ ${name}` : name;
+    if (this.shownId !== p.id || this.name.text !== title || this.epitaph.text !== epitaph) {
+      this.atlas.ensure(title + epitaph);
+      this.name.setText(title).setTint(mine ? 0xffd75a : TOOLTIP_NAME);
       this.epitaph.setText(epitaph);
       this.shownId = p.id;
     }
-    this.graveTop = p.y - GRAVE_STONE_H[p.tier] - 3;
+    this.graveTop = p.y - GRAVE_STONE_H[p.shape] - 3;
     this.anchor = { x: p.x, y: this.graveTop };
     for (const o of [this.border, this.bg, this.name, this.epitaph]) o.setVisible(true);
   }

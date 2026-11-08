@@ -5,12 +5,16 @@ import { ITEMS, type ItemDef, type ItemKind } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { effectLabel, KIND_LABELS } from "../account/items";
+import StyleArt from "../grave/StyleArt";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import styles from "./ShopDialog.module.css";
 
-const TABS: ItemKind[] = ["firework", "cosmetic", "decor"];
+const TABS: ItemKind[] = ["firework", "cosmetic", "decor", "graveStyle"];
+
+/** 디자인권 "gs_{디자인}" → 디자인 id */
+const styleOfItem = (item: ItemDef) => item.id.replace(/^gs_/, "");
 
 /** 상점 주인장 창. 산 물건은 가방으로 간다 (쓰는 곳: 폭죽 버튼·내 정보·내 묘비 상세) */
 export default function ShopDialog({ onClose }: { onClose: () => void }) {
@@ -72,6 +76,11 @@ export default function ShopDialog({ onClose }: { onClose: () => void }) {
             const short = me !== null && me.points < item.price;
             return (
               <li key={item.id} className={styles.card}>
+                {item.kind === "graveStyle" && (
+                  <div className={styles.preview}>
+                    <StyleArt style={styleOfItem(item)} ageDays={30} scale={3} label={`${item.name} 미리보기`} />
+                  </div>
+                )}
                 <p className={styles.name}>{item.name}</p>
                 <p className={styles.desc}>{item.desc}</p>
                 <p className={styles.meta}>

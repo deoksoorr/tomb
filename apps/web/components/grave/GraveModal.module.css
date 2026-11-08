@@ -169,6 +169,13 @@
   gap: 10px;
 }
 
+.toolBox {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-deep);
+}
+
 .decorPicker {
   display: grid;
   gap: 8px;

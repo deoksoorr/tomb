@@ -2,8 +2,8 @@
  * 오버레이 배치 (게임 캔버스 위). 컨테이너는 pointer-events: none 이라 빈 곳은 캔버스가 입력을 받는다.
  *  윗줄: 좌 BGM · 가운데 채널 HUD(폰 폭이면 아래 안내 줄 맨 아래로) · 우 [안내][내 정보][랭킹]
  *  아래 안내 줄(가운데): 토스트 · 대기열/연결 끊김 · 새 버전
- *  데스크톱 아랫줄: 좌 폭죽 · 가운데 [내 캐릭터로][묘비 세우기] · 우 줌
- *  터치 아랫줄: 좌 조이스틱(+ 위에 줌) · 우 행동 버튼(+ 위에 묘비 세우기, 폭죽) · 가운데 [내 캐릭터로]
+ *  데스크톱 아랫줄: 좌 폭죽(+ 위에 내 묘비) · 가운데 [내 캐릭터로][묘비 세우기] · 우 줌
+ *  터치 아랫줄: 좌 조이스틱(+ 위에 줌, 내 묘비) · 우 행동 버튼(+ 위에 묘비 세우기, 폭죽) · 가운데 [내 캐릭터로]
  * 화면 가운데(내 캐릭터와 이름표)는 비워 둔다.
  */
 
@@ -99,6 +99,14 @@
   pointer-events: auto;
 }
 
+/* [내 묘비] 데스크톱: 왼쪽 아래 폭죽 버튼 위 · 터치: 왼쪽 줌 버튼 위 */
+.myGraves {
+  position: absolute;
+  left: var(--safe-left);
+  bottom: calc(var(--safe-bottom) + 60px);
+  background: var(--panel);
+}
+
 .bury {
   position: absolute;
   left: 50%;
@@ -128,9 +136,13 @@
     transform: translateY(1px);
   }
 
-  /* 터치: 오른쪽 아래 폭죽 버튼(위 끝 ≈ 264px)보다 위 */
+  .myGraves {
+    bottom: calc(var(--safe-bottom) + 246px);
+  }
+
+  /* 터치: 오른쪽 폭죽 버튼(위 끝 ≈ 264px)·왼쪽 [내 묘비](위 끝 ≈ 290px)보다 위 */
   .bottomCenter {
-    bottom: calc(var(--safe-bottom) + 276px);
+    bottom: calc(var(--safe-bottom) + 300px);
   }
 }
 

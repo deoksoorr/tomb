@@ -19,6 +19,7 @@ import type {
   Me,
   UseItemResponse,
 } from "@/lib/types";
+import * as adminPoints from "./admin/accounts/points/route";
 import * as adminGraves from "./admin/graves/route";
 import * as flower from "./graves/[id]/flower/route";
 import * as graveById from "./graves/[id]/route";
@@ -286,5 +287,107 @@ describe("GET /api/version", () => {
       vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "");
       vi.stubEnv("VERCEL_DEPLOYMENT_ID", "");
     }
+  });
+});
+
+describe("묘비 디자인", () => {
+  const items = async (v: Visitor) => (await getMe(v)).inventory;
+  const style = async (id: string) => (await bodyOf<GraveDetailResponse>(graveById.GET(call(`/api/graves/${id}`), ctx(id)))).grave.style;
+
+  it("무료는 그대로, 유료는 디자인권을 쓴다(없으면 409·저장 안 함), 기본은 auto", async () => {
+    const v = await newVisitor();
+    expect((await bodyOf<CreateGraveResponse>(quickBury(v))).grave.style).toBe("auto");
+    const noTicket = await quickBury(v, { style: "coffee" });
+    expect(await errorOf(noTicket)).toEqual({ code: "NO_ITEM", message: "가방에 그 묘비 디자인권이 없어요. 상점에서 먼저 사 주세요." });
+    expect((await getMe(v)).graves).toHaveLength(1);
+    expect((await errorOf(await quickBury(v, { style: "unicorn" }))).code).toBe("INVALID_INPUT");
+
+    setPoints(v, 100);
+    await buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "gs_coffee" } }));
+    expect(await items(v)).toEqual({ gs_coffee: 1 });
+    const { grave } = await bodyOf<CreateGraveResponse>(quickBury(v, { style: "coffee" }));
+    expect(grave.style).toBe("coffee");
+    expect(await items(v)).toEqual({});
+
+    const list = await bodyOf<GraveListResponse>(graves.GET(call("/api/graves")));
+    expect(list.graves.find((g) => g.id === grave.id)?.style).toBe("coffee");
+    const admin = await bodyOf<{ graves: AdminGrave[] }>(adminGraves.GET(call("/api/admin/graves", { headers: { "x-admin-key": "dev-admin" } })));
+    expect(admin.graves.find((g) => g.id === grave.id)?.style).toBe("coffee");
+  });
+
+  it("디자인권 1개로 동시에 묘비 2개를 세우면 하나만 성공한다", async () => {
+    const v = await newVisitor();
+    setPoints(v, 100);
+    await buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "gs_coffee" } }));
+    const statuses = (await Promise.all([1, 2].map(() => quickBury(v, { style: "coffee" })))).map((r) => r.status).sort();
+    expect(statuses).toEqual([201, 409]);
+    expect(await items(v)).toEqual({});
+    expect((await getMe(v)).graves).toHaveLength(1);
+  });
+
+  it("수정: style을 빼면 유지, 같은 디자인이면 소모 없음, 다른 유료 디자인은 디자인권 필요, 무료로는 자유", async () => {
+    const v = await newVisitor();
+    setPoints(v, 1000);
+    await buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "gs_gold" } }));
+    const { grave } = await bodyOf<CreateGraveResponse>(quickBury(v, { style: "gold" }));
+    const full = { name: "고침", epitaph: "e", bornAt: grave.bornAt, diedAt: grave.diedAt, causes: ["time"], mourner: "새벽코더" };
+    const patch = (body: object) => graveById.PATCH(call(`/api/graves/${grave.id}`, { method: "PATCH", visitor: v, body }), ctx(grave.id));
+
+    expect((await patch(full)).status).toBe(200);
+    expect(await style(grave.id)).toBe("gold");
+    expect((await patch({ ...full, style: "gold" })).status).toBe(200);
+    const noTicket = await patch({ ...full, name: "바뀌면 안 됨", style: "crystal" });
+    expect((await errorOf(noTicket)).code).toBe("NO_ITEM");
+    const detail = await bodyOf<GraveDetailResponse>(graveById.GET(call(`/api/graves/${grave.id}`), ctx(grave.id)));
+    expect(detail.grave).toMatchObject({ name: "고침", style: "gold" });
+    expect((await patch({ ...full, style: "cross" })).status).toBe(200);
+    expect(await style(grave.id)).toBe("cross");
+    expect(await items(v)).toEqual({});
+  });
+
+  it("디자인권은 상점에서 사고, 사용(use)으로는 쓸 수 없다", async () => {
+    const v = await newVisitor();
+    setPoints(v, 200);
+    const bought = await bodyOf<{ me: Me }>(buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "gs_duck" } })));
+    expect(bought.me).toMatchObject({ points: 80, inventory: { gs_duck: 1 } });
+    const used = await use.POST(call("/api/shop/use", { visitor: v, body: { itemId: "gs_duck" } }));
+    expect(used.status).toBe(400);
+    expect(await items(v)).toEqual({ gs_duck: 1 });
+  });
+});
+
+describe("관리자 포인트 지급", () => {
+  const admin = (body: object, key = "dev-admin") =>
+    adminPoints.POST(call("/api/admin/accounts/points", { body, headers: { "x-admin-key": key } }));
+
+  it("개인 코드(해시로 조회) 또는 계정 id로 지급·회수, 0~9,999로 자른다", async () => {
+    const v = await newVisitor();
+    await attend.POST(call("/api/me/attend", { visitor: v, body: {} }));
+    const { code: personal } = await bodyOf<CodeResponse>(code.POST(call("/api/me/code", { method: "POST", visitor: v })));
+
+    const byCode = await admin({ code: personal.replaceAll("-", "").toLowerCase(), delta: 500 });
+    const text = await byCode.text();
+    expect(JSON.parse(text)).toEqual({ accountId: v.visitorId, points: 510 });
+    expect(text).not.toContain(personal);
+    expect(await bodyOf(admin({ accountId: v.visitorId, delta: -9999 }))).toEqual({ accountId: v.visitorId, points: 0 });
+    await admin({ accountId: v.visitorId, delta: 9999 });
+    expect(await bodyOf(admin({ accountId: v.visitorId, delta: 9999 }))).toEqual({ accountId: v.visitorId, points: 9999 });
+    expect((await getMe(v)).todayEarned).toBe(10);
+  });
+
+  it("검증·없는 계정·관리자 키", async () => {
+    const v = await newVisitor();
+    for (const body of [
+      { accountId: v.visitorId, delta: 10000 },
+      { accountId: v.visitorId, delta: 1.5 },
+      { accountId: v.visitorId, delta: 0 },
+      { accountId: v.visitorId, code: "2222-2222-2222", delta: 1 },
+      { delta: 1 },
+      { code: "nope", delta: 1 },
+    ])
+      expect((await admin(body)).status, JSON.stringify(body)).toBe(400);
+    expect((await admin({ accountId: v.visitorId, delta: 1 })).status).toBe(404); // 아직 기록이 없는 계정
+    expect((await admin({ code: "2222-2222-2222", delta: 1 })).status).toBe(404);
+    expect((await admin({ accountId: v.visitorId, delta: 1 }, "wrong")).status).toBe(401);
   });
 });

@@ -102,6 +102,13 @@ export interface AccountStore {
    * 묘비가 없으면 null, 가방에 없으면 "no_item". 주인 확인은 호출자가 한다
    */
   placeDecor(id: string, graveId: string, itemId: string, until: number, now: number): Promise<GraveDecor[] | "no_item" | null>;
+  /**
+   * 가방에서 itemId 1개를 쓰면서 묘비를 저장한다 (유료 묘비 디자인). 둘이 한 번에 일어나므로
+   * 디자인권 1개로 묘비 2개를 동시에 세울 수 없다. 가방에 없으면 저장하지 않고 false
+   */
+  putGraveUsing(id: string, itemId: string, grave: Grave): Promise<boolean>;
+  /** 관리자 포인트 조정. 0~BALANCE_CAP으로 자르고 하루 적립 한도와는 무관. 없는 계정이면 null */
+  adjustPoints(id: string, delta: number): Promise<number | null>;
   addGrave(id: string, graveId: string): Promise<void>;
   removeGrave(id: string, graveId: string): Promise<void>;
 }

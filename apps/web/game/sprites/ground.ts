@@ -1,5 +1,4 @@
 import { MAP_COLS, TILE } from "@tomb/protocol";
-import type { ThemeId } from "../bridge";
 import { groundKind, POND, type GroundKind } from "../world/layout";
 import { css, darken, hash2, lighten, makeCanvas, rng, type Color } from "./pixel";
 
@@ -39,61 +38,10 @@ const TEMPLE = {
   decalRate: 0.06,
 };
 
-const PALETTES: Record<ThemeId, GroundPal> = {
-  temple: TEMPLE,
-  // 고딕: 짙고 푸른 풀, 회색 자갈길, 어두운 포석, 검은 돌담
-  gothic: {
-    ...TEMPLE,
-    grass: 0x37443a,
-    grassDark: 0x2f3a31,
-    grassLight: 0x435245,
-    blade: 0x506050,
-    dirt: 0x5f5d58,
-    dirtDark: 0x504f4b,
-    dirtLight: 0x6d6b66,
-    pebble: 0x7d7b75,
-    stone: 0x605f63,
-    stoneAlt: 0x6a696d,
-    mortar: 0x3f3e42,
-    moss: 0x46503f,
-    wall: 0x504e52,
-    wallFace: 0x434147,
-    wallLine: 0x2c2b2f,
-    water: 0x26363e,
-    waterLight: 0x3c5058,
-    waterDark: 0x1c2a30,
-    decal: [0x8a5a32, 0x6a4024, 0x9a9690],
-    decalRate: 0.08,
-  },
-  // 벚꽃: 밝은 풀, 연한 흙길, 밝은 포석, 흰 담, 풀밭에 꽃잎
-  sakura: {
-    ...TEMPLE,
-    grass: 0x5f7448,
-    grassDark: 0x546a3f,
-    grassLight: 0x6c8253,
-    blade: 0x7c925e,
-    dirt: 0x8b7357,
-    dirtDark: 0x7a644b,
-    dirtLight: 0x9a8266,
-    pebble: 0xa79a88,
-    stone: 0x928f86,
-    stoneAlt: 0x9c998f,
-    mortar: 0x6c6a63,
-    moss: 0x7a8a5c,
-    wall: 0xcfc6b4,
-    wallFace: 0xb9b09e,
-    wallLine: 0x8e8676,
-    water: 0x3d6370,
-    waterLight: 0x5a8490,
-    decal: [0xf6c0cf, 0xe08aa2, 0xfad4de],
-    decalRate: 0.16,
-  },
-};
-
-let C: GroundPal = TEMPLE;
+const C: GroundPal = TEMPLE;
 
 type TileCanvas = HTMLCanvasElement;
-const tileCaches = new Map<ThemeId, Map<string, TileCanvas[]>>();
+let tileCache: Map<string, TileCanvas[]> | null = null;
 
 function px(ctx: CanvasRenderingContext2D, x: number, y: number, c: Color, w = 1, h = 1) {
   ctx.fillStyle = css(c);
@@ -191,10 +139,9 @@ const isGrass = (k: GroundKind) => k === "grass";
 const isWall = (k: GroundKind) => k === "wallTop" || k === "wallFace" || k === "wallSide";
 
 /** 덩어리 하나를 그린다. index 0 = 맵 최상단 */
-export function drawGroundChunk(index: number, theme: ThemeId = "temple", width = MAP_COLS * TILE): HTMLCanvasElement {
-  C = PALETTES[theme];
-  let tiles = tileCaches.get(theme);
-  if (!tiles) tileCaches.set(theme, (tiles = buildTiles()));
+export function drawGroundChunk(index: number, width = MAP_COLS * TILE): HTMLCanvasElement {
+  if (!tileCache) tileCache = buildTiles();
+  const tiles = tileCache;
   const { canvas, ctx } = makeCanvas(width, CHUNK_H);
   const cols = Math.ceil(width / TILE);
   const rows = CHUNK_H / TILE;

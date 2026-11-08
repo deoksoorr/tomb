@@ -11,8 +11,9 @@ const KNOB_TRAVEL = 0.55;
 /** 터치 기기 전용: 좌하단 아날로그 조이스틱 + 우하단 [달리기] [앉기] [상호작용] */
 export default function MobileControls() {
   const [running, setRunning] = useState(false);
-  // sticky라 마운트 전에 다가간 묘비도 바로 반영된다
+  // sticky라 마운트 전에 다가간 묘비·좌석도 바로 반영된다
   const nearGrave = useBridgeValue("grave:near") != null;
+  const nearSeat = useBridgeValue("seat:near");
   const inShop = useBridgeValue("scene:changed")?.scene === "shop";
 
   function toggleRun() {
@@ -34,8 +35,14 @@ export default function MobileControls() {
         >
           {inShop ? "말 걸기" : nearGrave ? "살펴보기" : "상호작용"}
         </button>
-        <button type="button" className={styles.action} data-slot="sit" onClick={() => bridge.emit("input:sit")}>
-          앉기
+        <button
+          type="button"
+          className={styles.action}
+          data-slot="sit"
+          data-near={nearSeat != null}
+          onClick={() => bridge.emit("input:sit")}
+        >
+          {nearSeat ? (nearSeat.kind === "bench" ? "벤치에 앉기" : "의자에 앉기") : "앉기"}
         </button>
         <button
           type="button"

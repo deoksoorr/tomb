@@ -79,7 +79,7 @@ function pairs(flat: string[] | null): Map<string, string> {
 const parse = (raw: string) => JSON.parse(raw) as Grave;
 const parseDecor = (raw: string | null | undefined) => (raw ? (JSON.parse(raw) as GraveDecor[]) : undefined);
 /** 압축 JSON: 비어 있는 선택 필드는 빠지고, 숨김·꾸미기는 별도 필드라 넣지 않는다 */
-const encode = (g: Grave) => JSON.stringify({ ...g, hidden: undefined, decor: undefined });
+export const encode = (g: Grave) => JSON.stringify({ ...g, hidden: undefined, decor: undefined });
 const isGraveField = (field: string) => !field.startsWith(HIDDEN) && !field.startsWith(DECOR);
 
 export class RedisStore implements GraveStore {

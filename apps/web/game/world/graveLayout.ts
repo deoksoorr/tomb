@@ -5,9 +5,8 @@ import {
   REVIVE_SLOTS,
   flowerStack,
   graveSlot,
-  graveTier,
-  type GraveTier,
 } from "@tomb/protocol";
+import { graveShape, SHAPE_SIZE, shapeVariants, type GraveShape } from "../graveShape";
 
 // 묘비 배치 계산 (순수). 격자는 등록 순서(index) → graveSlot(index).
 // 살려주세요 상위 10개는 "부활 대기석"(REVIVE_SLOTS)으로 올라가고, 원래 격자 자리는 빈 흙자리(↑)가 된다.
@@ -15,6 +14,8 @@ import {
 export type GraveInfo = {
   id: string;
   ageDays: number;
+  /** 묘비 디자인 (GRAVE_STYLES id, 없으면 auto) */
+  style?: string;
   flowers: number;
   revives: number;
   /** 묘비 꾸미기 (until이 지나면 그리지 않는다) */
@@ -46,7 +47,8 @@ export type GravePlacement = {
   y: number;
   /** 부활 대기석 순위 (0 = 1위). 격자면 -1 */
   rank: number;
-  tier: GraveTier;
+  /** 그릴 모양 (디자인 또는 생존 기간 규칙) */
+  shape: GraveShape;
   /** 쌓이는 꽃 송이 (0..8) */
   flowers: number;
   revives: number;
@@ -70,15 +72,8 @@ export type GraveLayout = {
   decorExpiresAt: number;
 };
 
-/** 외형별 크기 (받침 기준 위로 h, 히트 테스트·툴팁 위치용) */
-export const TIER_SIZE: Record<GraveTier, { w: number; h: number; collider: number }> = {
-  woodSign: { w: 10, h: 17, collider: 4 },
-  smallStone: { w: 12, h: 16, collider: 10 },
-  largeStone: { w: 14, h: 22, collider: 12 },
-  pagoda: { w: 14, h: 28, collider: 12 },
-};
-
-export const VARIANTS = 3;
+/** 모양별 크기 (받침 기준 위로 h, 히트 테스트·툴팁 위치용) */
+export const TIER_SIZE = SHAPE_SIZE;
 
 function hashId(id: string): number {
   let h = 2166136261;
@@ -109,16 +104,17 @@ export function buildLayout(graves: readonly GraveInfo[], reviveTop: readonly st
     decorExpiresAt = Math.min(decorExpiresAt, decor.expiresAt);
     const rank = rankOf.get(g.id) ?? -1;
     const pos = rank >= 0 ? REVIVE_SLOTS[rank] : graveSlot(index);
+    const shape = graveShape(g.style, g.ageDays);
     const p: GravePlacement = {
       index,
       id: g.id,
       x: pos.x,
       y: pos.y,
       rank,
-      tier: graveTier(g.ageDays),
+      shape,
       flowers: flowerStack(g.flowers),
       revives: g.revives,
-      variant: hashId(g.id) % VARIANTS,
+      variant: hashId(g.id) % shapeVariants(shape),
       decor: decor.ids,
     };
     placements.push(p);
@@ -201,7 +197,7 @@ export function nearestGrave(
 
 function hit(p: GravePlacement | null | undefined, wx: number, wy: number): boolean {
   if (!p) return false;
-  const s = TIER_SIZE[p.tier];
+  const s = TIER_SIZE[p.shape];
   const pad = 3;
   return wx >= p.x - s.w / 2 - pad && wx <= p.x + s.w / 2 + pad && wy >= p.y - s.h - pad && wy <= p.y + 6;
 }
@@ -225,6 +221,6 @@ export function graveAt(layout: GraveLayout, wx: number, wy: number): GravePlace
 /** 충돌 박스·격자 배치가 바뀌었는지 판단하는 서명 (꽃·살려주세요 수 변화는 제외) */
 export function layoutSignature(graves: readonly GraveInfo[], reviveTop: readonly string[]): string {
   let s = `${graves.length}|${reviveTop.slice(0, REVIVE_SLOTS.length).join(",")}|`;
-  for (const g of graves) s += `${g.id}:${graveTier(g.ageDays)},`;
+  for (const g of graves) s += `${g.id}:${graveShape(g.style, g.ageDays)},`;
   return s;
 }

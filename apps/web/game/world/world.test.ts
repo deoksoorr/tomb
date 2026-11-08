@@ -45,14 +45,29 @@ describe("static layout", () => {
   });
 
   it("shop hut sits in the left garden away from seats and props; its door is reachable", () => {
-    for (const s of SEATS) expect(Math.hypot(s.x - SHOP.x, s.y - SHOP.y)).toBeGreaterThan(40);
     const hut = shopCollider();
+    // 오두막 앞 벤치는 있어도 되지만 오두막·문 앞을 막으면 안 된다
+    for (const f of FURNITURE) {
+      const c = furnitureCollider(f);
+      expect(c.x + c.w < hut.x || c.x > hut.x + hut.w || c.y + c.h < hut.y || c.y > hut.y + hut.h, f.id).toBe(true);
+      expect(inside(c, SHOP_DOOR.x, SHOP_DOOR.y, 4), f.id).toBe(false);
+    }
+    expect(Math.hypot(SHOP.x - SHOP_DOOR.x, SHOP.y - SHOP_DOOR.y)).toBeLessThan(20);
     for (const p of UPPER_PROPS) {
       const c = propCollider(p);
       if (c) expect(c.x + c.w < hut.x || c.x > hut.x + hut.w || c.y + c.h < hut.y || c.y > hut.y + hut.h, JSON.stringify(p)).toBe(true);
     }
     expect(nearShopDoor(SHOP_DOOR.x, SHOP_DOOR.y)).toBe(true);
     expect(nearShopDoor(SHOP_DOOR.x, SHOP_DOOR.y + 30)).toBe(false);
+  });
+
+  it("there are plenty of seats (40+) with unique ids, all inside the walls", () => {
+    expect(SEATS.length).toBeGreaterThanOrEqual(40);
+    expect(new Set(SEATS.map((s) => s.id)).size).toBe(SEATS.length);
+    for (const s of SEATS) {
+      expect(s.x).toBeGreaterThan(32);
+      expect(s.x).toBeLessThan(MAP_WIDTH - 32);
+    }
   });
 
   it("seat anchors stay reachable (stand point is outside furniture)", () => {

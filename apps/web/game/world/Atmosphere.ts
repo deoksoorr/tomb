@@ -134,7 +134,7 @@ export class Atmosphere {
     this.vignette
       .setPosition(cam.width / 2, cam.height / 2)
       .setDisplaySize(cam.width / cam.zoom + 2, cam.height / cam.zoom + 2)
-      .setAlpha(0.22 + 0.6 * L.darkness);
+      .setAlpha(0.12 + 0.5 * L.darkness);
 
     // ── 빛 ── (밤에 또렷, 낮에는 거의 안 보임)
     const glow = 0.12 + 0.88 * L.glow;
@@ -155,12 +155,12 @@ export class Atmosphere {
       anchor(this.fogNear, ox, oy, 1, s * 7 * drift, -s * 1.2 * drift);
     }
 
-    this.cloud.setAlpha(L.cloud * 0.55).setVisible(L.cloud > 0.01);
+    this.cloud.setAlpha(L.cloud * 0.4).setVisible(L.cloud > 0.01);
     if (L.cloud > 0.01) anchor(this.cloud, ox, oy, 1, -s * 9 * drift, -s * 4 * drift);
 
     const rainSpeed = this.reduced ? 0.35 : 1;
-    this.rainFar.setAlpha(L.rain * (this.reduced ? 0.35 : 0.55)).setVisible(L.rain > 0.01);
-    this.rainNear.setAlpha(this.reduced ? 0 : L.rain * 0.75).setVisible(!this.reduced && L.rain > 0.15);
+    this.rainFar.setAlpha(L.rain * (this.reduced ? 0.3 : 0.45)).setVisible(L.rain > 0.01);
+    this.rainNear.setAlpha(this.reduced ? 0 : L.rain * 0.6).setVisible(!this.reduced && L.rain > 0.15);
     if (L.rain > 0.01) {
       this.rainFar.tilePositionY -= dt * 0.22 * rainSpeed;
       this.rainFar.tilePositionX += dt * 0.073 * rainSpeed;

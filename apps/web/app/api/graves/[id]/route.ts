@@ -6,8 +6,10 @@ import { getVisitorId, isOwner, requireVisitor } from "@/lib/session";
 import {
   deleteGrave,
   findVisible,
+  getAccounts,
   getStore,
   releaseImage,
+  saveGrave,
   toPublicGrave,
   type GraveStore,
 } from "@/lib/store";
@@ -46,7 +48,10 @@ async function requireOwned(req: NextRequest, store: GraveStore, id: string) {
   return { grave, visitorId };
 }
 
-/** 전체 덮어쓰기 (입력 형태는 POST와 같다). 숨김 상태는 저장소가 따로 지킨다 */
+/**
+ * 전체 덮어쓰기 (입력 형태는 POST와 같다). 숨김·꾸미기는 저장소가 따로 지킨다.
+ * style을 빼면 지금 디자인을 유지하고, 다른 유료 디자인으로 바꿀 때만 요청한 계정의 디자인권을 쓴다.
+ */
 export const PATCH = handler<Params>(async (req, { id }) => {
   const store = getStore();
   const { grave: current, visitorId } = await requireOwned(req, store, id);
@@ -59,8 +64,9 @@ export const PATCH = handler<Params>(async (req, { id }) => {
     createdAt: current.createdAt,
     ownerTokenHash: current.ownerTokenHash,
     ownerAccountId: current.ownerAccountId,
+    style: input.style ?? current.style,
   };
-  await store.put(next);
+  await saveGrave(store, getAccounts(), visitorId, next, !!input.style && input.style !== current.style);
   if (current.imageUrl !== next.imageUrl) await releaseImage(store, current.imageUrl);
   return json<UpdateGraveResponse>({
     grave: toPublicGrave({ ...next, flowers: current.flowers, revives: current.revives }),

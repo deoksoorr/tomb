@@ -2,9 +2,10 @@ import * as Phaser from "phaser";
 import { DIR, STATE_NAMES, type DirId, type StateName } from "@tomb/protocol";
 import { AV_ANIM, AV_COLS, AV_H, AV_W, buildAvatarSheet, lookKey } from "../sprites/avatar";
 import * as fx from "../sprites/fx";
-import { flowersCanvas, graveCanvas, graveTexKey, plotCanvas, upMarkerCanvas } from "../sprites/graves";
+import { SHAPE_SIZE, shapeVariants, type GraveShape } from "../graveShape";
+import { flowersCanvas, graveCanvas, graveTexKey, mineFlagCanvas, plotCanvas, upMarkerCanvas } from "../sprites/graves";
 import * as props from "../sprites/props";
-import * as art from "../sprites/themeArt";
+import * as art from "../sprites/extras";
 import { parseHex } from "../sprites/pixel";
 
 // 텍스처 키 → 생성기. 지금은 전부 코드로 그린 플레이스홀더 픽셀아트이고,
@@ -55,10 +56,7 @@ export const TEX = {
   plot: "grave-plot",
   upMarker: "grave-up",
   dot: "fx-dot",
-  crowFly: "fx-crow-fly",
-  crowPerch: "fx-crow-perch",
   petalPink: "fx-petal-pink",
-  leaf: "fx-leaf",
   wreath: "decor-wreath",
   ribbon: "decor-ribbon",
   miniLantern: "decor-lantern",
@@ -72,6 +70,7 @@ export const TEX = {
   shopCounter: "shop-counter",
   shopKeeper: "shop-keeper",
   shopDoor: "shop-door",
+  mineFlag: "grave-mine-flag",
 } as const;
 
 export function flowersKey(n: number): string {
@@ -130,10 +129,7 @@ function buildManifest(): Record<string, TextureSource> {
       ctx.fillRect(0, 0, 2, 2);
       return c;
     }),
-    [TEX.crowFly]: proc(art.crowFly, { frameW: 11, frameH: 7 }),
-    [TEX.crowPerch]: proc(art.crowPerch, { frameW: 7, frameH: 7 }),
     [TEX.petalPink]: proc(art.petalPink),
-    [TEX.leaf]: proc(art.deadLeaf),
     [TEX.wreath]: proc(art.wreath),
     [TEX.ribbon]: proc(art.ribbon),
     [TEX.miniLantern]: proc(art.miniLantern),
@@ -147,9 +143,10 @@ function buildManifest(): Record<string, TextureSource> {
     [TEX.shopCounter]: proc(art.shopCounter),
     [TEX.shopKeeper]: proc(art.shopKeeper, { frameW: 16, frameH: 22 }),
     [TEX.shopDoor]: proc(art.shopDoor),
+    [TEX.mineFlag]: proc(mineFlagCanvas),
   };
-  for (const tier of ["woodSign", "smallStone", "largeStone", "pagoda"] as const)
-    for (let v = 0; v < 3; v++) m[graveTexKey(tier, v)] = proc(() => graveCanvas(tier, v));
+  for (const shape of Object.keys(SHAPE_SIZE) as GraveShape[])
+    for (let v = 0; v < shapeVariants(shape); v++) m[graveTexKey(shape, v)] = proc(() => graveCanvas(shape, v));
   for (let n = 1; n <= 8; n++) m[flowersKey(n)] = proc(() => flowersCanvas(n));
   return m;
 }

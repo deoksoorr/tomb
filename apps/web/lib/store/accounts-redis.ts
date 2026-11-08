@@ -1,8 +1,9 @@
 import { Redis } from "@upstash/redis";
 import { MAX_DECOR_PER_GRAVE, type CosmeticSlot } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
-import type { GraveDecor } from "../types";
+import type { Grave, GraveDecor } from "../types";
 import { DECOR, K } from "./keys";
+import { encode } from "./redis";
 import type { AccountRecord, AccountStore, EquippedItem } from "./types";
 
 // 포인트·가방은 모두 Lua 스크립트 하나로 바꾼다. 스크립트 실행 중에는 다른 명령이 끼어들 수 없으므로
@@ -102,6 +103,24 @@ end
 local json = '[' .. table.concat(parts, ',') .. ']'
 redis.call('HSET', KEYS[1], '${DECOR}' .. ARGV[1], json)
 return json
+`;
+
+// 유료 디자인 묘비 저장: 디자인권 차감과 묘비 저장(RedisStore.put과 같은 두 명령)을 한 번에
+// KEYS: inv, meta, created  ARGV: itemId, graveId, json, createdAt
+const PUT_WITH_ITEM_LUA = `${TAKE_FN}
+if not take(KEYS[1], ARGV[1]) then return 0 end
+redis.call('HSET', KEYS[2], ARGV[2], ARGV[3])
+redis.call('ZADD', KEYS[3], ARGV[4], ARGV[2])
+return 1
+`;
+
+// KEYS: acct  ARGV: delta, balanceCap. 계정 해시가 없으면 -1
+const ADJUST_LUA = `
+if redis.call('EXISTS', KEYS[1]) == 0 then return -1 end
+local bal = tonumber(redis.call('HGET', KEYS[1], 'points') or '0') + tonumber(ARGV[1])
+bal = math.max(0, math.min(tonumber(ARGV[2]), bal))
+redis.call('HSET', KEYS[1], 'points', bal)
+return bal
 `;
 
 // 코드 교체. 읽은 뒤 바뀌었으면(동시에 재발급) 0을 돌려 다시 시도하게 한다 → 옛 코드가 살아남지 않는다.
@@ -235,6 +254,20 @@ export class RedisAccounts implements AccountStore {
     );
     if (r === null) return null;
     return r === "" ? "no_item" : (JSON.parse(r) as GraveDecor[]);
+  }
+
+  async putGraveUsing(id: string, itemId: string, grave: Grave): Promise<boolean> {
+    const r = await this.redis.eval<string[], number>(
+      PUT_WITH_ITEM_LUA,
+      [K.inv(id), K.meta, K.created],
+      [itemId, grave.id, encode(grave), String(grave.createdAt)],
+    );
+    return Number(r) === 1;
+  }
+
+  async adjustPoints(id: string, delta: number): Promise<number | null> {
+    const r = Number(await this.redis.eval<string[], number>(ADJUST_LUA, [K.acct(id)], [String(delta), String(BALANCE_CAP)]));
+    return r < 0 ? null : r;
   }
 
   async addGrave(id: string, graveId: string): Promise<void> {

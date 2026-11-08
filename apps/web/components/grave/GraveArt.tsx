@@ -1,12 +1,6 @@
-import { flowerStack, type GraveTier } from "@tomb/protocol";
+import { flowerStack } from "@tomb/protocol";
 import PixelArt, { type PixelRect } from "../ui/PixelArt";
-
-export const TIER_LABELS: Record<GraveTier, string> = {
-  woodSign: "나무 팻말",
-  smallStone: "작은 비석",
-  largeStone: "큰 비석",
-  pagoda: "석탑",
-};
+import type { ArtShape } from "./graveStyles";
 
 const C = {
   outline: "#1a1b17",
@@ -23,8 +17,8 @@ const C = {
   center: "#c98a4a",
 };
 
-// 24×24 격자. 생존 기간에 따라 나무 팻말 → 작은 비석 → 큰 비석 → 석탑.
-const TIERS: Record<GraveTier, PixelRect[]> = {
+// 24×24 격자. 생존 기간 모양(나무 팻말 → 작은 비석 → 큰 비석 → 석탑) + 무료 디자인 십자 묘비.
+const SHAPES: Record<ArtShape, PixelRect[]> = {
   woodSign: [
     [11, 10, 2, 12, C.woodDark],
     [4, 4, 16, 9, C.outline],
@@ -83,6 +77,18 @@ const TIERS: Record<GraveTier, PixelRect[]> = {
     [5, 19, 14, 1, C.stone],
     [16, 17, 2, 2, C.moss],
   ],
+  cross: [
+    [9, 3, 6, 19, C.outline],
+    [5, 7, 14, 6, C.outline],
+    [10, 4, 4, 18, C.stone],
+    [6, 8, 12, 4, C.stone],
+    [10, 4, 1, 18, C.stoneLight],
+    [13, 4, 1, 18, C.stoneDark],
+    [6, 11, 12, 1, C.stoneDark],
+    [6, 20, 12, 2, C.outline],
+    [7, 20, 10, 1, C.stoneDark],
+    [10, 17, 3, 3, C.moss],
+  ],
 };
 
 const GROUND: PixelRect = [0, 22, 24, 2, C.ground];
@@ -106,9 +112,9 @@ function flowers(count: number): PixelRect[] {
   ]);
 }
 
-type Props = { tier: GraveTier; flowers?: number; scale?: number; className?: string; label?: string };
+type Props = { shape: ArtShape; flowers?: number; scale?: number; className?: string; label?: string };
 
-export default function GraveArt({ tier, flowers: flowerCount = 0, scale = 4, className, label }: Props) {
+export default function GraveArt({ shape, flowers: flowerCount = 0, scale = 4, className, label }: Props) {
   return (
     <PixelArt
       width={24}
@@ -116,7 +122,7 @@ export default function GraveArt({ tier, flowers: flowerCount = 0, scale = 4, cl
       scale={scale}
       className={className}
       label={label}
-      rects={[GROUND, ...TIERS[tier], ...flowers(flowerCount)]}
+      rects={[GROUND, ...SHAPES[shape], ...flowers(flowerCount)]}
     />
   );
 }

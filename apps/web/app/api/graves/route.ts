@@ -3,7 +3,7 @@ import { assertImageUsable } from "@/lib/blob";
 import { handler, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { newOwnerToken, requireVisitor } from "@/lib/session";
-import { getAccounts, getStore, listPublic, toPublicGrave } from "@/lib/store";
+import { getAccounts, getStore, listPublic, saveGrave, toPublicGrave } from "@/lib/store";
 import { kstDay } from "@/lib/store/accounts";
 import type { CreateGraveResponse, Grave, GraveListResponse } from "@/lib/types";
 import { createGraveSchema, parseWith, readJson } from "@/lib/validate";
@@ -23,6 +23,7 @@ export const GET = handler(async () =>
 /**
  * 묘비 세우기. 간단 입력(QuickGraveInput: `lived`가 있음)과 전체 입력(GraveInput)을 모두 받는다.
  * 세운 계정이 주인이 된다(어느 기기에서든 그 계정으로 수정·삭제). ownerToken 원문은 이 응답에서 한 번만 준다.
+ * style이 유료 디자인이면 가방의 디자인권 1개를 저장과 함께 쓴다 (없으면 409 NO_ITEM). 없으면 "auto".
  */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
@@ -38,9 +39,10 @@ export const POST = handler(async (req) => {
     createdAt: Date.now(),
     ownerTokenHash: owner.hash,
     ownerAccountId: visitorId,
+    style: input.style ?? "auto",
   };
   const accounts = getAccounts();
-  await getStore().put(grave);
+  await saveGrave(getStore(), accounts, visitorId, grave, true);
   const [earned] = await Promise.all([
     accounts.earn(visitorId, "bury", kstDay(grave.createdAt)),
     accounts.addGrave(visitorId, grave.id),

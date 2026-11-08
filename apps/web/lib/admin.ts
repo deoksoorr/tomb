@@ -15,6 +15,9 @@ import type { AdminAction } from "./validate";
 /** 관리자 목록 항목: 공개 형태 + 숨김 여부 + 신고 수(지금 세는 IP 수) + 최근 신고 기록(최신 먼저) */
 export type AdminGrave = PublicGrave & { hidden: boolean; reports: number; reportLog: ReportLogEntry[] };
 
+/** POST /api/admin/accounts/points 응답 */
+export type AdminPointsResponse = { accountId: string; points: number };
+
 /** POST /api/admin/graves/bulk 응답 */
 export type AdminBulkResponse = { done: string[]; notFound: string[] };
 

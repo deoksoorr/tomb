@@ -2,7 +2,6 @@ import * as Phaser from "phaser";
 import { GRID_COLS, graveSlot } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 import { GraveView, PlotView } from "../entities/Grave";
-import type { GraveStyle } from "../sprites/graves";
 import {
   buildLayout,
   layoutSignature,
@@ -48,7 +47,6 @@ export class GraveField {
   private reviveZones: Phaser.GameObjects.Zone[] = [];
   private cr0 = 0;
   private cr1 = -1;
-  private style: GraveStyle = "temple";
   private reviveTop: string[] = [];
   /** 지금 화면에 보이는 묘비 (조명용, 컬링할 때 다시 채운다) */
   readonly visibleViews: GraveView[] = [];
@@ -86,11 +84,18 @@ export class GraveField {
     return { layoutChanged, rowsChanged: prevRows !== this.layout.rows };
   }
 
-  /** 테마가 바뀌면 묘비 모양만 다시 붙인다 */
-  setStyle(style: GraveStyle): void {
-    if (style === this.style) return;
-    this.style = style;
+  private mine = new Set<string>();
+
+  /** 내 묘비 (graves:mine) — 표시 깃발을 붙인다 */
+  setMine(ids: readonly string[]): void {
+    const next = new Set(ids);
+    if (next.size === this.mine.size && [...next].every((id) => this.mine.has(id))) return;
+    this.mine = next;
     this.dirty = true;
+  }
+
+  isMine(id: string): boolean {
+    return this.mine.has(id);
   }
 
   /** 흙이 덮이며 묘비가 솟아오르는 연출 */
@@ -100,7 +105,7 @@ export class GraveField {
   }
 
   private makeZone(p: GravePlacement): Phaser.GameObjects.Zone {
-    const w = TIER_SIZE[p.tier].collider;
+    const w = TIER_SIZE[p.shape].collider;
     // 충돌 전용 존은 그릴 게 없으니 디스플레이 리스트에서 뺀다
     const zone = this.scene.add.zone(p.x, p.y - 2.5, w, 5);
     zone.removeFromDisplayList();
@@ -215,7 +220,7 @@ export class GraveField {
       } else if (!this.views.has(i)) {
         const v = this.acquire();
         const p = L.placements[i];
-        v.bind(p, this.reduced, this.riseAt(p.id, now), this.style);
+        v.bind(p, this.reduced, this.riseAt(p.id, now), this.mine.has(p.id));
         this.views.set(i, v);
       }
     }
@@ -232,7 +237,7 @@ export class GraveField {
           continue;
         }
         if (!v) v = this.reviveViews[rank] = this.acquire();
-        v.bind(p, this.reduced, this.riseAt(p.id, now), this.style);
+        v.bind(p, this.reduced, this.riseAt(p.id, now), this.mine.has(p.id));
       }
     }
 

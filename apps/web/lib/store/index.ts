@@ -1,7 +1,8 @@
+import { styleItemId } from "@tomb/protocol";
 import { deleteImage } from "../blob";
 import { env } from "../env";
-import { notFound } from "../http";
-import type { GraveListResponse, PublicGrave } from "../types";
+import { HttpError, notFound } from "../http";
+import type { Grave, GraveListResponse, PublicGrave } from "../types";
 import { isGraveId } from "../validate";
 import { MemoryAccounts } from "./accounts-memory";
 import { RedisAccounts } from "./accounts-redis";
@@ -65,6 +66,23 @@ export async function listPublic(store: GraveStore, now = Date.now()): Promise<G
     .slice(0, 10)
     .map((r) => r.id);
   return { graves: visible.map((r) => toPublicGrave(r, now)), reviveTop, generatedAt: now };
+}
+
+/**
+ * 묘비 저장. 유료 디자인으로 바꾸는 경우(spendStyle)에는 accountId의 가방에서 디자인권 1개를
+ * 저장과 같은 원자적 연산으로 쓴다. 가방에 없으면 저장하지 않고 409 NO_ITEM
+ */
+export async function saveGrave(
+  store: GraveStore,
+  accounts: AccountStore,
+  accountId: string,
+  grave: Grave,
+  spendStyle: boolean,
+): Promise<void> {
+  const itemId = spendStyle && grave.style ? styleItemId(grave.style) : null;
+  if (!itemId) return store.put(grave);
+  if (!(await accounts.putGraveUsing(accountId, itemId, grave)))
+    throw new HttpError(409, "NO_ITEM", "가방에 그 묘비 디자인권이 없어요. 상점에서 먼저 사 주세요.");
 }
 
 /** 공개 조회·반응용. 없거나 숨겨진 묘비는 404 */

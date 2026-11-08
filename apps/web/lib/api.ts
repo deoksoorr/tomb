@@ -80,8 +80,8 @@ export const api = {
   graveDetail: (id: string, signal?: AbortSignal) =>
     request<GraveDetailResponse>(gravePath(id), { cache: "no-store", signal }),
   createGrave: (input: QuickGraveInput) => request<CreateGraveResponse>("/api/graves", jsonInit("POST", input)),
-  /** PATCH는 전체 교체 */
-  updateGrave: (id: string, ownerToken: string | null, input: GraveInput) =>
+  /** PATCH는 전체 교체 (style은 계약의 GraveInput에 아직 없어 덧붙인다) */
+  updateGrave: (id: string, ownerToken: string | null, input: GraveInput & { style?: string }) =>
     request<UpdateGraveResponse>(gravePath(id), jsonInit("PATCH", input, ownerHeaders(ownerToken))),
   deleteGrave: (id: string, ownerToken: string | null) =>
     request<unknown>(gravePath(id), { method: "DELETE", headers: ownerHeaders(ownerToken) }),

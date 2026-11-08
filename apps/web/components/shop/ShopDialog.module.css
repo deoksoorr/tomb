@@ -27,7 +27,7 @@
 .tab {
   flex: 1;
   min-height: 44px;
-  padding: 6px 4px;
+  padding: 6px 2px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -49,13 +49,21 @@
   gap: 10px;
 }
 
+/* 설명 길이가 달라도 [사기] 버튼은 카드 아래에 맞춘다 */
 .card {
-  display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   padding: 12px;
   background: var(--bg-deep);
   box-shadow: var(--px-border);
+}
+
+.preview {
+  display: grid;
+  place-items: center;
+  padding: 4px 0;
+  background: radial-gradient(ellipse at 50% 90%, rgba(85, 112, 79, 0.25), transparent 70%);
 }
 
 .name {
@@ -76,6 +84,7 @@
 
 .buy {
   min-height: 44px;
+  margin-top: auto;
 }
 
 .notice {

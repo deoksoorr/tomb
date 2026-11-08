@@ -4,16 +4,13 @@ import { BootScene } from "./scenes/BootScene";
 import type { GameContext } from "./scenes/context";
 import { ShopScene } from "./scenes/ShopScene";
 import { WorldScene } from "./scenes/WorldScene";
-import { bridge } from "./bridge";
-import { isThemeId } from "./theme";
 
 // Phaser 게임 생성. GameCanvas가 브라우저에서만 동적 import 한다 (Phaser는 이 경로로만 로드된다).
 
 export type GameHandle = { destroy(): void };
 
 export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHandle {
-  const t = bridge.last("theme:set")?.theme;
-  const ctx: GameContext = { opts, disposers: [], disposed: false, theme: isThemeId(t) ? t : "temple" };
+  const ctx: GameContext = { opts, disposers: [], disposed: false };
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent,

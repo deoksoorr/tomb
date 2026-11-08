@@ -129,7 +129,46 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "bD", kind: "bench", x: 920, y: 150, facing: DIR.down, seatOffsets: [-12, 12] },
   { id: "cE", kind: "chair", x: 226, y: 372, facing: DIR.right, seatOffsets: [0] },
   { id: "cF", kind: "chair", x: 266, y: 372, facing: DIR.left, seatOffsets: [0] },
+  // ── 좌석 늘리기 (기존 id 유지, 새 id만 추가) ──
+  // 광장 양옆·입구 앞마당
+  { id: "bE", kind: "bench", x: 330, y: 140, facing: DIR.down, seatOffsets: [-12, 12] },
+  { id: "bF", kind: "bench", x: MAP_WIDTH - 330, y: 140, facing: DIR.down, seatOffsets: [-12, 12] },
+  { id: "bG", kind: "bench", x: CX - 92, y: 92, facing: DIR.down, seatOffsets: [-12, 12] },
+  { id: "bH", kind: "bench", x: CX + 92, y: 92, facing: DIR.down, seatOffsets: [-12, 12] },
+  // 부활 대기석을 바라보는 의자
+  { id: "cG", kind: "chair", x: 330, y: 200, facing: DIR.right, seatOffsets: [0] },
+  { id: "cH", kind: "chair", x: MAP_WIDTH - 330, y: 200, facing: DIR.left, seatOffsets: [0] },
+  // 정원 위쪽
+  { id: "bL", kind: "bench", x: 200, y: 120, facing: DIR.down, seatOffsets: [-12, 12] },
+  { id: "bM", kind: "bench", x: MAP_WIDTH - 200, y: 120, facing: DIR.down, seatOffsets: [-12, 12] },
+  // 연못가 (연못을 바라보는 의자 둘 + 남쪽 벤치)
+  { id: "cI", kind: "chair", x: 60, y: 340, facing: DIR.right, seatOffsets: [0] },
+  { id: "cJ", kind: "chair", x: 236, y: 330, facing: DIR.left, seatOffsets: [0] },
+  { id: "bI", kind: "bench", x: 150, y: 396, facing: DIR.down, seatOffsets: [-12, 12] },
+  // 유령 잡화점 앞
+  { id: "bJ", kind: "bench", x: 196, y: 258, facing: DIR.down, seatOffsets: [-12, 12] },
+  // 오른쪽 정원 남쪽
+  { id: "bK", kind: "bench", x: 900, y: 400, facing: DIR.down, seatOffsets: [-12, 12] },
+  // 묘비 블록 사이 산책로: 길 양쪽 가장자리에 마주 보는 의자 (가운데는 비워 둔다)
+  ...walkwayChairs(),
 ];
+
+function walkwayChairs(): Furniture[] {
+  const out: Furniture[] = [];
+  const walks: [string, number][] = [
+    ["a", 272],
+    ["b", MAP_WIDTH - 272],
+  ];
+  for (const [k, cx] of walks) {
+    for (let i = 0; i < 4; i++) {
+      // 석등이 없는 행(0, 3, 6, 9행) 아래
+      const y = GRID_Y0 + i * 3 * GRID_DY + 40;
+      out.push({ id: `w${k}${i * 2}`, kind: "chair", x: cx - 24, y, facing: DIR.right, seatOffsets: [0] });
+      out.push({ id: `w${k}${i * 2 + 1}`, kind: "chair", x: cx + 24, y, facing: DIR.left, seatOffsets: [0] });
+    }
+  }
+  return out;
+}
 
 export type Seat = { id: string; furnitureId: string; x: number; y: number; facing: DirId };
 

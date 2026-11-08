@@ -11,19 +11,23 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import { fireFirework, wearCosmetic } from "./actions";
 import { bagEntries, KIND_LABELS, remainingLabel } from "./items";
-import ThemePicker from "./ThemePicker";
+import MyGraves from "./MyGraves";
 import styles from "./MyPanel.module.css";
 
 type Props = {
   graves: GravesState;
   onGoToGrave: (graveId: string) => void;
+  onBury: () => void;
+  /** 접속 종료: 게임을 내리고 입장 화면으로 */
+  onLeave: () => void;
   onClose: () => void;
 };
 
-/** 내 정보: 포인트·출석, 가방, 착용 중, 내 묘비, 묘지 디자인, 개인 코드 */
-export default function MyPanel({ graves, onGoToGrave, onClose }: Props) {
+/** 내 정보: 포인트·출석, 가방, 착용 중, 내 묘비, 개인 코드, 접속 종료 */
+export default function MyPanel({ graves, onGoToGrave, onBury, onLeave, onClose }: Props) {
   const { me, error } = useMe();
   const [pending, setPending] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   // 남은 시간은 열 때 시각 기준 (렌더 중에 시계를 읽지 않는다)
   const [openedAt] = useState(() => Date.now());
@@ -51,16 +55,15 @@ export default function MyPanel({ graves, onGoToGrave, onClose }: Props) {
         <p className={styles.state} role="status">
           {error ?? "불러오는 중…"}
         </p>
+        <button type="button" className={cx(ui.button, styles.leave)} onClick={onLeave}>
+          접속 종료
+        </button>
       </Dialog>
     );
   }
 
   const bag = bagEntries(me.inventory);
   const equipped = me.equipped.filter((e) => e.until > openedAt);
-  const myGraves = me.graves.flatMap((id) => {
-    const g = graves.byId.get(id);
-    return g ? [g] : [];
-  });
 
   return (
     <Dialog title="내 정보" onClose={onClose}>
@@ -117,6 +120,7 @@ export default function MyPanel({ graves, onGoToGrave, onClose }: Props) {
                     </button>
                   )}
                   {item.kind === "decor" && <span className={styles.meta}>내 묘비 상세에서 놓아요</span>}
+                  {item.kind === "graveStyle" && <span className={styles.meta}>묘비 세울 때 골라요</span>}
                 </li>
               ))}
             </ul>
@@ -139,26 +143,7 @@ export default function MyPanel({ graves, onGoToGrave, onClose }: Props) {
 
         <section className={styles.section}>
           <h3 className={styles.heading}>내 묘비</h3>
-          {myGraves.length === 0 ? (
-            <p className={styles.empty}>아직 세운 묘비가 없어요.</p>
-          ) : (
-            <ul className={styles.list}>
-              {myGraves.map((g) => (
-                <li key={g.id}>
-                  <button type="button" className={styles.graveButton} onClick={() => onGoToGrave(g.id)}>
-                    <span className={styles.rowMain}>{g.name}</span>
-                    <span className={styles.meta}>
-                      🌼 {g.flowers} · 🙏 {g.revives}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className={styles.section}>
-          <ThemePicker />
+          <MyGraves ids={me.graves} graves={graves.graves} onGo={onGoToGrave} onBury={onBury} />
         </section>
 
         <CodeSection hasCode={me.hasCode} />
@@ -166,6 +151,26 @@ export default function MyPanel({ graves, onGoToGrave, onClose }: Props) {
         <p className={styles.notice} role="status">
           {notice}
         </p>
+
+        <section className={styles.section}>
+          {leaving ? (
+            <div className={styles.confirm}>
+              <p>묘지를 떠날까요?</p>
+              <div className={styles.confirmButtons}>
+                <button type="button" className={cx(ui.button, ui.danger)} onClick={onLeave} autoFocus>
+                  떠나기
+                </button>
+                <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setLeaving(false)}>
+                  머무르기
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className={cx(ui.button, styles.leave)} onClick={() => setLeaving(true)}>
+              접속 종료
+            </button>
+          )}
+        </section>
       </div>
     </Dialog>
   );

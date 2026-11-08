@@ -95,6 +95,8 @@ export type GraveInput = {
   imageUrl?: string;
   /** 상주 = 등록한 유저이름 */
   mourner: string;
+  /** 묘비 디자인 (생략하면 기존 디자인 유지, 유료 디자인으로 바꾸면 디자인권 1개 소모) */
+  style?: string;
 };
 
 export type CreateGraveResponse = { grave: PublicGrave; ownerToken: string; earned: number };

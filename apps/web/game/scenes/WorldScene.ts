@@ -1,20 +1,19 @@
 import * as Phaser from "phaser";
-import { DIR, SHOP_DOOR, SPAWN, STATE, TELEPORT_DIST, type PeerInfo, type Sid } from "@tomb/protocol";
+import { DIR, FURNITURE, SHOP_DOOR, SPAWN, STATE, TELEPORT_DIST, type PeerInfo, type Seat, type Sid } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 import { TEX } from "../assets/manifest";
-import { bridge, type ThemeId } from "../bridge";
+import { bridge } from "../bridge";
 import { DEPTH, GRAVE_NEAR_RADIUS, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { GraveTooltip } from "../entities/Grave";
 import { Player, type SeatRequester } from "../entities/Player";
 import { RemoteAvatar } from "../entities/RemoteAvatar";
+import { SeatHint } from "../entities/SeatHint";
 import { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { pickInteract, pickSeat } from "../logic/sit";
 import { RealtimeClient } from "../net/RealtimeClient";
 import { GlyphAtlas } from "../text/GlyphAtlas";
-import { isThemeId, THEME_DEFS } from "../theme";
-import { Ambient } from "../world/Ambient";
 import { Atmosphere } from "../world/Atmosphere";
 import { CameraRig } from "../world/CameraRig";
 import { Effects } from "../world/Effects";
@@ -42,6 +41,7 @@ const OTHER_GRAVE_MARK_MS = 4000;
 const DUST_MS = 90;
 const EMPTY_SEATS = new Map<string, Sid>();
 const NO_MOVE: MoveInput = { ax: 0, ay: 0, run: false };
+const FURNITURE_KIND = new Map(FURNITURE.map((f) => [f.id, f.kind]));
 
 export class WorldScene extends Phaser.Scene {
   private ctx!: GameContext;
@@ -51,7 +51,6 @@ export class WorldScene extends Phaser.Scene {
   private field!: GraveField;
   private fx!: Effects;
   private atmos!: Atmosphere;
-  private ambient!: Ambient;
   private lighting!: Lighting;
   private fireworks!: Fireworks;
   private sfx!: Sfx;
@@ -75,7 +74,8 @@ export class WorldScene extends Phaser.Scene {
   private netStarted = false;
   private cleaned = false;
   private inShop = false;
-  private theme: ThemeId = "temple";
+  private seatHint!: SeatHint;
+  private nearSeatId: string | null = null;
   private readonly unsubs: (() => void)[] = [];
   /** 이번 프레임 화면 (CameraRig.frameView가 채운다) */
   private readonly view = new Phaser.Geom.Rectangle();
@@ -129,14 +129,15 @@ export class WorldScene extends Phaser.Scene {
     this.rig.setMapHeight(this.map.height);
     this.atmos = new Atmosphere(this, this.reduced, window.location.search);
     this.lighting = new Lighting(this);
-    this.ambient = new Ambient(this, this.reduced);
     this.sfx = new Sfx();
     this.fireworks = new Fireworks(this, this.reduced, this.sfx);
     this.tooltip = new GraveTooltip(this, this.atlas);
     this.markers = new GraveMarkers(this, this.atlas, this.reduced);
+    this.seatHint = new SeatHint(this, this.atlas);
 
-    const startTheme = bridge.last("theme:set")?.theme;
-    this.applyTheme(isThemeId(startTheme) ? startTheme : (this.ctx.theme ?? "temple"), true);
+    this.atmos.setStaticLights(this.map.staticLights);
+    this.atmos.setGridLights(this.map.gridLights);
+    this.field.setMine(bridge.last("graves:mine")?.ids ?? []);
     const audio = bridge.last("audio:settings");
     if (audio) this.sfx.setSettings(audio.volume, audio.muted);
 
@@ -338,7 +339,12 @@ export class WorldScene extends Phaser.Scene {
         this.net.firework(grant);
       }),
     );
-    on.push(bridge.on("theme:set", ({ theme }) => isThemeId(theme) && this.applyTheme(theme, false)));
+    on.push(
+      bridge.on("graves:mine", ({ ids }) => {
+        this.field.setMine(Array.isArray(ids) ? ids : []);
+        this.nearId = null; // 툴팁의 내 묘비 표시도 다시
+      }),
+    );
     on.push(bridge.on("audio:settings", ({ volume, muted }) => this.sfx.setSettings(volume, muted)));
     on.push(bridge.on("shop:closed", () => this.hub.setBlocked(bridge.last("ui:blockKeys")?.blocked ?? false)));
   }
@@ -349,19 +355,6 @@ export class WorldScene extends Phaser.Scene {
     if (grant) this.net.look(grant);
   }
 
-  private applyTheme(theme: ThemeId, first: boolean): void {
-    if (!first && theme === this.theme) return;
-    const t0 = performance.now();
-    this.theme = theme;
-    const def = THEME_DEFS[theme];
-    this.map.setTheme(theme);
-    this.field.setStyle(def.graveStyle);
-    this.atmos.setStaticLights(this.map.staticLights);
-    this.atmos.setGridLights(this.map.gridLights);
-    this.ambient.set(def.ambient, [...this.map.trees, ...this.map.gridTrees]);
-    this.debugMark(`theme:${theme}Ms`, performance.now() - t0);
-  }
-
   private applyGraves(graves: PublicGrave[], reviveTop: string[], live: boolean): void {
     const t0 = performance.now();
     const res = this.field.setData(graves, reviveTop);
@@ -370,7 +363,6 @@ export class WorldScene extends Phaser.Scene {
       if (live) {
         this.rig.setMapHeight(this.map.height);
         this.atmos.setGridLights(this.map.gridLights);
-        this.ambient.set(THEME_DEFS[this.theme].ambient, [...this.map.trees, ...this.map.gridTrees]);
       }
     }
     const now = this.time.now;
@@ -499,7 +491,10 @@ export class WorldScene extends Phaser.Scene {
     if (pl.sitting) pl.stand(this.time.now, this.seatReq);
     this.tooltip.hide();
     if (this.nearId) bridge.emit("grave:near", null);
+    if (this.nearSeatId) bridge.emit("seat:near", null);
     this.nearId = null;
+    this.nearSeatId = null;
+    this.seatHint.update(null, this.player, -1, true, 1);
     this.rig.enabled = false;
     // 월드는 숨기기만 한다: 연결·원격 아바타 보간은 계속, 내 위치는 문 앞에 멈춰 있다
     this.scene.setVisible(false);
@@ -630,13 +625,13 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.updateNear();
+    this.updateSeatHint(now, s);
     this.tooltip.layout(s, pl.y);
     this.markers.update(now, s, this.tooltip);
 
     const longSit = pl.sitting && pl.view.sitSince > 0 && now - pl.view.sitSince > SIT_IDLE_MS;
     this.atmos.gather(longSit ? { x: pl.x, y: pl.y } : null);
     this.atmos.update(now, dt, view);
-    this.ambient.update(now, dt, view);
     this.fireworks.update(now, dt, view);
     this.updateLighting(view);
 
@@ -660,10 +655,10 @@ export class WorldScene extends Phaser.Scene {
       lit.add(pl.x, pl.y - 8, r, 0.92);
       for (const a of this.remotes.values()) {
         if (!a.visible) continue;
-        if (a.view.lantern) lit.add(a.x, a.y - 8, 34, 0.6);
-        else lit.add(a.x, a.y - 8, 18, 0.28);
+        if (a.view.lantern) lit.add(a.x, a.y - 8, 40, 0.65);
+        else lit.add(a.x, a.y - 8, 22, 0.35);
       }
-      const lr = 30 + 18 * L.glow;
+      const lr = 38 + 22 * L.glow;
       for (const sp of this.map.staticLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.3, 0.55);
       for (const sp of this.map.gridLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.3, 0.55);
       const vis = this.field.visibleViews;
@@ -672,7 +667,7 @@ export class WorldScene extends Phaser.Scene {
         const p = v.p;
         if (!p) continue;
         const h = v.height;
-        lit.add(p.x, p.y - h * 0.5, 10 + h * 0.5, v.spot);
+        lit.add(p.x, p.y - h * 0.5, 16 + h * 0.6, v.spot);
         if (v.decorLit) lit.add(p.x, p.y - 2, 26, 0.45);
       }
       this.fireworks.addLights(lit);
@@ -688,9 +683,31 @@ export class WorldScene extends Phaser.Scene {
       this.nearId = id;
       bridge.emit("grave:near", id ? { graveId: id } : null);
       const g = id ? this.field.grave(id) : undefined;
-      if (near && g) this.tooltip.show(near.p, g.name, g.epitaph);
+      if (near && g) this.tooltip.show(near.p, g.name, g.epitaph, this.field.isMine(g.id));
       else this.tooltip.hide();
     }
+  }
+
+  /** 근처 빈 좌석 안내 + seat:near (UI가 모바일 앉기 버튼을 강조) */
+  private updateSeatHint(now: number, labelScale: number): void {
+    const pl = this.player;
+    const occupied = this.net.online ? this.seats : EMPTY_SEATS;
+    const mySid = this.net.online ? this.net.mySid : null;
+    const seat: Seat | null = pl.sitting ? null : pickSeat(pl.x, pl.y, occupied, mySid);
+    const id = seat ? seat.id : null;
+    if (id !== this.nearSeatId) {
+      this.nearSeatId = id;
+      const f = seat ? FURNITURE_KIND.get(seat.furnitureId) : undefined;
+      bridge.emit("seat:near", seat ? { seatId: seat.id, kind: f ?? "bench" } : null);
+    }
+    // 묘비 툴팁이 떠 있고 그 묘비가 좌석보다 가까우면 묘비 쪽이 우선
+    let hidden = false;
+    if (this.nearId && seat) {
+      const g = this.field.placement(this.nearId);
+      if (g && Math.hypot(g.x - pl.x, g.y + 6 - pl.y) <= Math.hypot(seat.x - pl.x, seat.y - pl.y)) hidden = true;
+    }
+    const sittingFor = pl.sitting && pl.view.sitSince > 0 ? now - pl.view.sitSince : -1;
+    this.seatHint.update(seat, pl, sittingFor, hidden, labelScale);
   }
 
   private cleanup(): void {
@@ -705,6 +722,8 @@ export class WorldScene extends Phaser.Scene {
     this.sfx?.destroy();
     this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this);
     if (this.nearId) bridge.emit("grave:near", null);
+    if (this.nearSeatId) bridge.emit("seat:near", null);
     this.nearId = null;
+    this.nearSeatId = null;
   }
 }

@@ -1,4 +1,5 @@
-import { itemById, sanitizeLook, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { itemById, plotLabel, sanitizeLook, type ItemDef, type ItemKind } from "@tomb/protocol";
+import type { PublicGrave } from "@/lib/types";
 
 // 가방·착용·지속시간 표시용 순수 함수
 
@@ -10,6 +11,7 @@ export const KIND_LABELS: Record<ItemKind, string> = {
   firework: "폭죽",
   cosmetic: "캐릭터 꾸미기",
   decor: "묘비 꾸미기",
+  graveStyle: "묘비 디자인",
 };
 
 export type BagEntry = { item: ItemDef; count: number };
@@ -34,9 +36,10 @@ export function durationLabel(ms: number): string {
   return `${Math.max(1, Math.round(ms / MINUTE))}분`;
 }
 
-/** 아이템 한 줄 설명용: 폭죽은 "쏘면 사라져요", 꾸미기는 "24시간 유지" */
+/** 아이템 한 줄 설명: 꾸미기는 "24시간 유지", 폭죽은 "한 번 쏘면 사라져요", 디자인권은 "세울 때 1개 써요" */
 export function effectLabel(item: ItemDef): string {
-  return item.durationMs ? `${durationLabel(item.durationMs)} 유지` : "한 번 쏘면 사라져요";
+  if (item.durationMs) return `${durationLabel(item.durationMs)} 유지`;
+  return item.kind === "graveStyle" ? "묘비를 세우거나 디자인을 바꿀 때 1개 써요" : "한 번 쏘면 사라져요";
 }
 
 /** 남은 시간: "6일 남음" · "13시간 남음" · "40분 남음" */
@@ -51,4 +54,14 @@ export function remainingLabel(until: number, now: number): string {
 /** 반응·세우기 응답의 earned. 한도에 걸려 0이면 null (조용히) */
 export function pointsText(earned: number | undefined): string | null {
   return earned && earned > 0 ? `+${earned} 포인트` : null;
+}
+
+export type MyGraveEntry = { grave: PublicGrave; plot: string };
+
+/** 내 계정이 세운 묘비 (최근 순). 자리 이름은 전체 목록(등록 순 = 격자 순서) 안 위치로 */
+export function myGraveEntries(ids: readonly string[], graves: readonly PublicGrave[]): MyGraveEntry[] {
+  const mine = new Set(ids);
+  return graves
+    .flatMap((grave, index) => (mine.has(grave.id) ? [{ grave, plot: plotLabel(index) }] : []))
+    .sort((a, b) => b.grave.createdAt - a.grave.createdAt);
 }

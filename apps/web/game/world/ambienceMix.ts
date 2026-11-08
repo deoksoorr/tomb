@@ -16,7 +16,7 @@ export type Levels = {
 
 export const TRANSITION_MS = 2500;
 
-const BASE_FOG: Record<TimePhase, number> = { night: 0.16, dawn: 0.24, day: 0.05, dusk: 0.12 };
+const BASE_FOG: Record<TimePhase, number> = { night: 0.1, dawn: 0.16, day: 0.04, dusk: 0.08 };
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
 export function levelsFor(a: Ambience): Levels {
@@ -27,10 +27,10 @@ export function levelsFor(a: Ambience): Levels {
     darkness: clamp01(a.palette.darkness),
     glow: clamp01(a.palette.lightGlow),
     fireflies: clamp01(a.palette.fireflies),
-    fog: clamp01(BASE_FOG[a.phase] + (w === "fog" ? 0.25 + 0.35 * k : w === "rain" ? 0.06 : 0)),
+    fog: clamp01(BASE_FOG[a.phase] + (w === "fog" ? 0.2 + 0.3 * k : w === "rain" ? 0.03 : 0)),
     rain: w === "rain" ? k : 0,
     snow: w === "snow" ? k : 0,
-    cloud: w === "cloudy" ? 0.5 + 0.5 * k : w === "rain" ? 0.35 : 0,
+    cloud: w === "cloudy" ? 0.4 + 0.4 * k : w === "rain" ? 0.25 : 0,
   };
 }
 
