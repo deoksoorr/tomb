@@ -1,0 +1,97 @@
+/*
+ * 오버레이 배치 (게임 캔버스 위). 컨테이너는 pointer-events: none 이라 빈 곳은 캔버스가 입력을 받는다.
+ *  데스크톱: 좌상 BGM · 중앙 상단 채널 HUD · 우상 랭킹 · 하단 중앙 [묘비 세우기] · 우하 줌
+ *  터치:     좌하 조이스틱(+ 위에 줌) · 우하 행동 버튼(+ 위에 묘비 세우기)
+ */
+
+.shell {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow: hidden;
+  pointer-events: none;
+  animation: fadeIn 0.9s ease both;
+}
+
+.overlay :where(button, a, input, select, label) {
+  pointer-events: auto;
+}
+
+/* 펼친 BGM 패널·랭킹 패널이 채널 HUD 위로 오게 */
+.topLeft {
+  position: absolute;
+  z-index: 2;
+  top: var(--safe-top);
+  left: var(--safe-left);
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.topCenter {
+  position: absolute;
+  top: var(--safe-top);
+  left: 50%;
+  width: min(520px, calc(100% - 2 * 160px));
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+}
+
+.topRight {
+  position: absolute;
+  z-index: 2;
+  top: var(--safe-top);
+  right: var(--safe-right);
+}
+
+.bury {
+  position: absolute;
+  left: 50%;
+  bottom: var(--safe-bottom);
+  min-height: 44px;
+  padding-inline: 20px;
+  transform: translateX(-50%);
+  font-family: var(--font-read);
+  font-size: 15px;
+}
+
+.bury:active:not(:disabled) {
+  transform: translateX(-50%) translateY(1px);
+}
+
+/* 좁은 화면: 채널 HUD는 BGM·랭킹 버튼 아래 줄로 */
+@media (max-width: 640px) {
+  .topCenter {
+    top: calc(var(--safe-top) + 48px);
+    width: calc(100% - var(--safe-left) - var(--safe-right));
+  }
+}
+
+@media (pointer: coarse) {
+  .bury {
+    left: auto;
+    right: var(--safe-right);
+    bottom: calc(var(--safe-bottom) + 156px);
+    min-height: 40px;
+    padding-inline: 14px;
+    transform: none;
+    font-size: 12px;
+  }
+
+  .bury:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}

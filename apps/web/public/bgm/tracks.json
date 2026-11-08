@@ -1,0 +1,27 @@
+{
+  "playlists": [
+    {
+      "id": "orgel",
+      "title": "오르골",
+      "tracks": [
+        { "file": "/bgm/orgel/moonlit-orgel.mp3", "title": "달빛 오르골", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 80 },
+        { "file": "/bgm/orgel/unfinished-lullaby.mp3", "title": "끝내지 못한 자장가", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 80 }
+      ]
+    },
+    {
+      "id": "lofi",
+      "title": "로파이",
+      "tracks": [
+        { "file": "/bgm/lofi/late-commit.mp3", "title": "늦은 커밋", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 90 },
+        { "file": "/bgm/lofi/todo-forever.mp3", "title": "영원한 TODO", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 90 }
+      ]
+    },
+    {
+      "id": "rain",
+      "title": "빗소리 앰비언트",
+      "tracks": [
+        { "file": "/bgm/rain/rain-on-stones.mp3", "title": "비석 위의 비", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 120 }
+      ]
+    }
+  ]
+}

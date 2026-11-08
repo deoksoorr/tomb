@@ -1,0 +1,142 @@
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--safe-top) + 24px) var(--safe-right) calc(var(--safe-bottom) + 24px) var(--safe-left);
+  text-align: center;
+}
+
+.title {
+  color: var(--bone);
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  text-shadow:
+    0 0 28px rgba(236, 224, 189, 0.18),
+    0 3px 0 rgba(0, 0, 0, 0.5);
+  animation: appear 2.2s ease both;
+}
+
+.subtitle {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  animation: appear 2.2s 0.5s ease both;
+}
+
+.loading {
+  margin-top: 48px;
+  color: var(--muted);
+  font-size: 12px;
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+.stalled {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin-top: 48px;
+  color: var(--bone);
+}
+
+.form {
+  display: grid;
+  gap: 20px;
+  width: min(100%, 360px);
+  margin-top: 36px;
+  padding: 20px 18px;
+  text-align: left;
+  background: rgba(16, 17, 14, 0.74);
+  box-shadow:
+    var(--px-border),
+    0 0 0 4px rgba(9, 10, 8, 0.35);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  animation: appear 1.6s 0.6s ease both;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.colors {
+  display: grid;
+  gap: 8px;
+}
+
+.colors legend {
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.swatch {
+  width: 30px;
+  height: 30px;
+  background: var(--swatch);
+  cursor: pointer;
+  box-shadow:
+    0 0 0 2px var(--bg-deep),
+    0 0 0 4px var(--line);
+}
+
+.swatch:has(input:checked) {
+  box-shadow:
+    0 0 0 2px var(--bg-deep),
+    0 0 0 4px var(--bone);
+}
+
+.swatch:has(input:focus-visible) {
+  outline: 2px solid var(--candle);
+  outline-offset: 6px;
+}
+
+.enter {
+  min-height: 46px;
+  font-family: var(--font-read);
+  font-size: 15px;
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.45;
+  }
+}

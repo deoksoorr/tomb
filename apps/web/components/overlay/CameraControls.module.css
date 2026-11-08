@@ -1,0 +1,58 @@
+/* 위치는 GameShell.module.css의 배치 규칙과 맞춘다 (묘비 세우기 버튼 위, 모바일 조작 버튼과 겹치지 않게) */
+
+.recenter {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 58px);
+  transform: translateX(-50%);
+  background: var(--panel);
+  animation: rise 0.25s ease-out both;
+}
+
+.recenter:active:not(:disabled) {
+  transform: translateX(-50%) translateY(1px);
+}
+
+.zoom {
+  position: absolute;
+  right: var(--safe-right);
+  bottom: var(--safe-bottom);
+  display: grid;
+  gap: 6px;
+}
+
+.zoomButton {
+  min-height: 32px;
+  min-width: 32px;
+  background: var(--panel);
+  opacity: 0.8;
+}
+
+.zoomButton:hover:not(:disabled),
+.zoomButton:focus-visible {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .recenter {
+    bottom: calc(var(--safe-bottom) + 156px);
+  }
+
+  /* 조이스틱 위 */
+  .zoom {
+    right: auto;
+    left: var(--safe-left);
+    bottom: calc(var(--safe-bottom) + 140px);
+  }
+
+  .zoomButton {
+    min-height: 40px;
+    min-width: 40px;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+  }
+}

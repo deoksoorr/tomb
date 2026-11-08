@@ -1,0 +1,108 @@
+.player {
+  position: relative;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--panel);
+  box-shadow: var(--px-border);
+  pointer-events: auto;
+}
+
+.titleButton {
+  max-width: 200px;
+  gap: 8px;
+}
+
+.title {
+  overflow: hidden;
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  width: min(260px, calc(100vw - var(--safe-left) - var(--safe-right)));
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rowLabel {
+  flex: none;
+  color: var(--muted);
+}
+
+.select {
+  min-height: 36px;
+  padding: 4px 8px;
+}
+
+.volume {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--moss);
+}
+
+.now {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.creditsEmpty {
+  color: var(--muted);
+}
+
+.credits {
+  display: grid;
+  gap: 16px;
+}
+
+.creditsHeading {
+  margin-bottom: 6px;
+  color: var(--bone);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.creditsList {
+  display: grid;
+  gap: 6px;
+}
+
+.creditsList li {
+  display: grid;
+}
+
+.creditsTitle {
+  color: var(--text);
+}
+
+.creditsMeta {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+@media (max-width: 640px) {
+  .title {
+    display: none;
+  }
+}

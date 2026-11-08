@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@jsquash/webp": "^1.5.0",
     "@tomb/protocol": "*",
     "@upstash/ratelimit": "^2.2.0",
     "@upstash/redis": "^1.41.0",

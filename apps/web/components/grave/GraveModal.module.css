@@ -1,0 +1,150 @@
+.grave {
+  display: grid;
+  gap: 14px;
+}
+
+.state {
+  padding: 24px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.photo {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.photoImage {
+  object-fit: cover;
+}
+
+.noPhoto {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  height: 100%;
+  background: radial-gradient(ellipse at 50% 80%, rgba(85, 112, 79, 0.18), transparent 70%);
+  color: var(--faint);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.epitaph {
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.epitaph::before {
+  content: "“";
+}
+
+.epitaph::after {
+  content: "”";
+}
+
+.lifespan {
+  margin-top: -8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.facts {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-deep);
+}
+
+.facts > div {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 8px;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.detail {
+  margin-top: 6px;
+  color: var(--text);
+  white-space: pre-line;
+}
+
+.links {
+  display: grid;
+  gap: 2px;
+}
+
+.reactions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.reaction {
+  min-height: 44px;
+  padding-inline: 8px;
+}
+
+.reaction[aria-pressed="true"] {
+  background: var(--moss-deep);
+  color: var(--bone);
+}
+
+.secondary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+.confirm {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-deep);
+  text-align: center;
+}
+
+.confirmButtons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.notice {
+  min-height: 1.6em;
+  color: var(--candle);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 380px) {
+  .reactions {
+    grid-template-columns: 1fr;
+  }
+
+  .facts > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

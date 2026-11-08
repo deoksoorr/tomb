@@ -1,0 +1,265 @@
+/* 입장 화면 하늘. 시간대가 바뀌면 그라데이션·달/해·반딧불·날씨가 2.5초에 걸쳐 바뀐다 */
+
+/* 입장 화면이 작은 화면에서 스크롤돼도 하늘은 제자리에 */
+.sky {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-bottom) 78%);
+  transition:
+    --sky-top 2.5s ease,
+    --sky-bottom 2.5s ease;
+}
+
+.moon,
+.sun {
+  position: absolute;
+  opacity: 0;
+  transition: opacity 2.5s ease;
+}
+
+.moon {
+  top: max(8vh, 40px);
+  right: 14vw;
+  filter: drop-shadow(0 0 18px rgba(236, 224, 189, 0.35));
+}
+
+.moon[data-on="true"] {
+  opacity: 0.9;
+}
+
+/* 해는 흐릿하고 낮게, 조용하게 */
+.sun {
+  bottom: clamp(140px, 30vh, 300px);
+  left: 12vw;
+  filter: blur(1.5px) drop-shadow(0 0 28px rgba(233, 207, 154, 0.35));
+}
+
+.sun[data-on="true"] {
+  opacity: 0.38;
+}
+
+.clouds {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 60%;
+  opacity: 0;
+  transition: opacity 2.5s ease;
+}
+
+.clouds[data-on="true"] {
+  opacity: var(--clouds);
+}
+
+.clouds span {
+  position: absolute;
+  left: -40vw;
+  width: 70vw;
+  height: 22vh;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(8, 9, 10, 0.75), transparent);
+  filter: blur(12px);
+  animation: cloudDrift 120s linear infinite;
+}
+
+.clouds span:nth-child(1) {
+  top: 2%;
+}
+
+.clouds span:nth-child(2) {
+  top: 18%;
+  animation-duration: 160s;
+  animation-delay: -60s;
+}
+
+.clouds span:nth-child(3) {
+  top: 32%;
+  width: 90vw;
+  animation-duration: 200s;
+  animation-delay: -130s;
+}
+
+.fog {
+  position: absolute;
+  inset: auto 0 0;
+  height: 55%;
+  opacity: var(--fog);
+  transition: opacity 2.5s ease;
+}
+
+.fog span {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 200%;
+  height: 100%;
+  background:
+    radial-gradient(40% 35% at 20% 80%, rgba(196, 202, 196, 0.5), transparent 70%),
+    radial-gradient(35% 30% at 55% 70%, rgba(196, 202, 196, 0.4), transparent 70%),
+    radial-gradient(45% 40% at 85% 85%, rgba(196, 202, 196, 0.5), transparent 70%);
+  animation: fogDrift 80s ease-in-out infinite alternate;
+}
+
+.fog span:nth-child(2) {
+  bottom: -12%;
+  opacity: 0.7;
+  animation-duration: 120s;
+  animation-direction: alternate-reverse;
+}
+
+.fireflies {
+  position: absolute;
+  inset: 0;
+}
+
+.fireflies span {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: #f2e08a;
+  box-shadow: 0 0 6px 2px rgba(242, 224, 138, 0.45);
+  opacity: 0;
+  transition: opacity 2.5s ease;
+  animation-name: firefly;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.fireflies span[data-on="true"] {
+  opacity: 1;
+}
+
+.ground {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: clamp(120px, 22vw, 280px);
+}
+
+.rain,
+.snow {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 2.5s ease,
+    visibility 0s linear 2.5s;
+}
+
+.rain[data-on="true"] {
+  opacity: var(--rain);
+  visibility: visible;
+  transition:
+    opacity 2.5s ease,
+    visibility 0s;
+}
+
+.snow[data-on="true"] {
+  opacity: var(--snow);
+  visibility: visible;
+  transition:
+    opacity 2.5s ease,
+    visibility 0s;
+}
+
+.rain::before,
+.rain::after {
+  content: "";
+  position: absolute;
+  top: -160px;
+  bottom: 0;
+  left: -15%;
+  right: -15%;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='160'><g fill='%23a9b6c8'><rect x='6' y='8' width='1' height='14'/><rect x='34' y='60' width='1' height='12'/><rect x='58' y='22' width='1' height='16'/><rect x='18' y='104' width='1' height='14'/><rect x='70' y='122' width='1' height='12'/><rect x='46' y='136' width='1' height='10'/></g></svg>");
+  background-size: 80px 160px;
+  animation: rainFall 0.5s linear infinite;
+}
+
+.rain::after {
+  background-size: 56px 112px;
+  opacity: 0.55;
+  animation-duration: 0.8s;
+}
+
+.snow span {
+  position: absolute;
+  top: -12px;
+  background: #eef2f7;
+  animation-name: snowFall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes cloudDrift {
+  to {
+    transform: translateX(170vw);
+  }
+}
+
+@keyframes fogDrift {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes firefly {
+  0%,
+  100% {
+    transform: translate(0, 0);
+    filter: brightness(0.4);
+  }
+  40% {
+    filter: brightness(1.2);
+  }
+  50% {
+    transform: translate(var(--drift), -18px);
+  }
+  70% {
+    filter: brightness(0.6);
+  }
+}
+
+@keyframes rainFall {
+  from {
+    transform: skewX(-10deg) translateY(0);
+  }
+  to {
+    transform: skewX(-10deg) translateY(160px);
+  }
+}
+
+@keyframes snowFall {
+  to {
+    transform: translate(var(--sway), 108vh);
+  }
+}
+
+/* 움직임 줄이기: 파티클을 몇 개만 남기고 제자리에 멈춘다 */
+@media (prefers-reduced-motion: reduce) {
+  .fireflies span:nth-child(n + 7),
+  .snow span:nth-child(n + 11),
+  .rain::after,
+  .clouds span:nth-child(n + 2) {
+    display: none;
+  }
+
+  .fireflies span,
+  .fog span,
+  .clouds span,
+  .rain::before {
+    animation: none;
+  }
+
+  .clouds span {
+    left: 10vw;
+  }
+
+  .snow span {
+    top: var(--y);
+    animation: none;
+  }
+}

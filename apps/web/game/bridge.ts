@@ -53,6 +53,8 @@ export type GameEvents = {
   /** 같은 채널의 다른 사람이 묘비를 세움/수정/삭제 → UI가 상세를 받아 목록에 반영 */
   "net:graveEvent": { kind: GraveEventKind; graveId: string };
   toast: { message: string };
+  /** 카메라 상태. detached=true면 우클릭 드래그로 시점을 옮겨서 내 캐릭터를 따라가지 않는 중 (UI가 "내 캐릭터로" 버튼 표시) */
+  "camera:state": { detached: boolean; zoom: number };
 };
 
 /** UI → Game */
@@ -78,12 +80,16 @@ export type UiEvents = {
   "input:interact": undefined;
   /** 모달·폼이 열려 있는 동안 게임 키보드 입력을 막는다 */
   "ui:blockKeys": { blocked: boolean };
+  /** 시점을 내 캐릭터로 되돌리고 다시 따라가기 */
+  "camera:recenter": undefined;
+  /** 줌 버튼(모바일 등). delta>0 확대, <0 축소. 휠과 같은 단계로 움직인다 */
+  "camera:zoom": { delta: number };
 };
 
 type AllEvents = GameEvents & UiEvents;
 type Handler<K extends keyof AllEvents> = (payload: AllEvents[K]) => void;
 
-const STICKY = new Set<keyof AllEvents>(["net:status", "graves:set", "ui:blockKeys", "ready"]);
+const STICKY = new Set<keyof AllEvents>(["net:status", "graves:set", "ui:blockKeys", "ready", "camera:state", "grave:near"]);
 
 class Bridge {
   private handlers = new Map<keyof AllEvents, Set<Handler<never>>>();
@@ -115,6 +121,7 @@ class Bridge {
   resetGameState(): void {
     this.lastValues.delete("net:status");
     this.lastValues.delete("ready");
+    this.lastValues.delete("camera:state");
   }
 }
 

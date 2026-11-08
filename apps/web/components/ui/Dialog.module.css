@@ -1,0 +1,72 @@
+.dialog {
+  --dialog-max-h: calc(100dvh - var(--safe-top) - var(--safe-bottom));
+  width: min(420px, calc(100vw - var(--safe-left) - var(--safe-right)));
+  max-width: none;
+  max-height: var(--dialog-max-h);
+  margin: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  overflow: visible;
+  /* 오버레이(pointer-events: none) 안에서 열려도 스크롤·선택이 되게 */
+  pointer-events: auto;
+}
+
+.dialog[data-size="sm"] {
+  width: min(340px, calc(100vw - var(--safe-left) - var(--safe-right)));
+}
+
+.dialog[data-size="lg"] {
+  width: min(760px, calc(100vw - var(--safe-left) - var(--safe-right)));
+}
+
+.dialog::backdrop {
+  background: rgba(9, 10, 8, 0.62);
+}
+
+.dialog[open] {
+  animation: rise 0.22s ease-out both;
+}
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  max-height: var(--dialog-max-h);
+  background: var(--panel-solid);
+  box-shadow:
+    var(--px-border-strong),
+    0 0 0 6px rgba(9, 10, 8, 0.55),
+    0 24px 48px rgba(0, 0, 0, 0.45);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 10px 10px 16px;
+  border-bottom: 2px solid var(--line);
+}
+
+.title {
+  min-width: 0;
+  color: var(--bone);
+  font-size: 15px;
+  font-family: var(--font-read);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}

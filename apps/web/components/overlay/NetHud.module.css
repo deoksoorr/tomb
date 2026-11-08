@@ -1,0 +1,21 @@
+.netHud {
+  display: grid;
+  gap: 1px;
+  min-width: 132px;
+  padding: 6px 8px;
+  background: rgba(10, 11, 9, 0.8);
+  color: var(--moss);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.row dt {
+  color: var(--muted);
+}

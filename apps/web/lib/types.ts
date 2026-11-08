@@ -110,8 +110,12 @@ export type JoinResponse =
   | { mode: "channel"; channel: number; token: string; wsUrl: string }
   | { mode: "spectator" };
 
-/** GET /api/upload — 업로드 방식 안내 (Blob 토큰이 없으면 로컬 대체 경로) */
-export type UploadModeResponse = { mode: "blob" | "local" };
+/**
+ * GET /api/upload — 업로드 방식 안내 (Blob 토큰이 없으면 로컬 대체 경로).
+ * prefix: 이 방문자 전용 업로드 경로 (`graves/{방문자 해시}/`). blob 모드에서는 반드시 `${prefix}${랜덤}.webp`로 올린다.
+ * 서버는 묘비 생성/수정 때 imageUrl이 요청한 방문자의 prefix 아래에 있는지 확인한다(남의 이미지를 가져다 지우는 것 방지).
+ */
+export type UploadModeResponse = { mode: "blob" | "local"; prefix: string };
 /** POST /api/upload/local (multipart, field "file") 응답 */
 export type LocalUploadResponse = { url: string };
 

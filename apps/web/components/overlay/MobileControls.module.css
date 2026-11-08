@@ -1,0 +1,94 @@
+.joystick {
+  position: absolute;
+  left: var(--safe-left);
+  bottom: var(--safe-bottom);
+  width: 120px;
+  height: 120px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(20, 21, 17, 0.45);
+  box-shadow:
+    inset 0 0 0 2px rgba(93, 97, 79, 0.7),
+    0 0 0 2px rgba(9, 10, 8, 0.35);
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.knob {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(236, 224, 189, 0.22);
+  box-shadow: inset 0 0 0 2px rgba(236, 224, 189, 0.5);
+  pointer-events: none;
+}
+
+/* 엄지가 닿기 쉬운 삼각 배치: 상호작용(크게)을 가장 아래 오른쪽에 */
+.actions {
+  position: absolute;
+  right: var(--safe-right);
+  bottom: var(--safe-bottom);
+  width: 148px;
+  height: 140px;
+}
+
+.action {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(20, 21, 17, 0.6);
+  color: var(--text);
+  font-size: 10px;
+  font-family: var(--font-small);
+  box-shadow: inset 0 0 0 2px rgba(93, 97, 79, 0.8);
+  pointer-events: auto;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.action:active {
+  background: rgba(47, 66, 52, 0.85);
+}
+
+.action[data-slot="interact"] {
+  right: 0;
+  bottom: 0;
+  width: 72px;
+  height: 72px;
+  font-size: 12px;
+  font-family: var(--font-body);
+}
+
+.action[data-slot="interact"][data-near="true"] {
+  color: var(--bone);
+  box-shadow:
+    inset 0 0 0 2px var(--candle),
+    0 0 14px rgba(224, 195, 106, 0.35);
+}
+
+.action[data-slot="sit"] {
+  right: 84px;
+  bottom: 4px;
+}
+
+.action[data-slot="run"] {
+  right: 14px;
+  bottom: 84px;
+}
+
+.action[aria-pressed="true"] {
+  color: var(--bone);
+  background: rgba(47, 66, 52, 0.85);
+  box-shadow: inset 0 0 0 2px var(--moss);
+}
