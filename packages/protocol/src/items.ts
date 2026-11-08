@@ -21,6 +21,8 @@ export type ItemDef = {
   slot?: CosmeticSlot;
   /** 효과 지속 시간 (꾸미기류) */
   durationMs?: number;
+  /** 폭죽 세기 1~5: 비쌀수록 크게, 넓게, 오래 터진다 (게임이 반경·발수·지속을 이 값으로 정한다) */
+  power?: number;
 };
 
 export const COSMETIC_DURATION_MS = DAY;
@@ -28,9 +30,11 @@ export const DECOR_DURATION_MS = 7 * DAY;
 export const MAX_DECOR_PER_GRAVE = 3;
 
 export const ITEMS: readonly ItemDef[] = [
-  { id: "fw_small", kind: "firework", name: "작은 폭죽", desc: "밤하늘에 한 발. 채널 모두가 함께 봐요.", price: 30 },
-  { id: "fw_heart", kind: "firework", name: "하트 폭죽", desc: "하트 모양으로 퍼지는 분홍 불꽃.", price: 60 },
-  { id: "fw_triple", kind: "firework", name: "삼연발 폭죽", desc: "세 발이 연달아 터져요.", price: 90 },
+  { id: "fw_small", kind: "firework", name: "작은 폭죽", desc: "밤하늘에 한 발. 채널 모두가 함께 봐요.", price: 30, power: 1 },
+  { id: "fw_heart", kind: "firework", name: "하트 폭죽", desc: "하트 모양으로 퍼지는 분홍 불꽃.", price: 60, power: 2 },
+  { id: "fw_triple", kind: "firework", name: "삼연발 폭죽", desc: "세 발이 연달아 터져요.", price: 90, power: 3 },
+  { id: "fw_big", kind: "firework", name: "대형 폭죽", desc: "화면을 가득 채우는 커다란 불꽃.", price: 180, power: 4 },
+  { id: "fw_grand", kind: "firework", name: "밤하늘 피날레", desc: "채널 하늘 전체를 몇 초 동안 수놓아요.", price: 350, power: 5 },
 
   { id: "hat_straw", kind: "cosmetic", slot: "head", name: "밀짚모자", desc: "여름날 사이드프로젝트의 추억.", price: 40, durationMs: COSMETIC_DURATION_MS },
   { id: "hat_cat", kind: "cosmetic", slot: "head", name: "고양이 귀", desc: "쫑긋.", price: 50, durationMs: COSMETIC_DURATION_MS },
