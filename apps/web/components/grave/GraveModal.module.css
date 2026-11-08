@@ -49,6 +49,21 @@
   content: "”";
 }
 
+.comment {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  background: var(--bg-deep);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.commentBy {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
 .lifespan {
   margin-top: -8px;
   color: var(--muted);

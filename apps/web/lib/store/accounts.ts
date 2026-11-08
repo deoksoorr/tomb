@@ -16,7 +16,10 @@ export function toMe(accountId: string, a: AccountRecord, day: string): Me {
   return {
     accountId,
     name: a.name,
+    color: a.color,
+    body: a.body,
     points: a.points,
+    lifetimePoints: a.lifetimePoints,
     todayEarned: a.todayEarned,
     attendance: { today: a.lastAttend === day, streak: a.streak },
     hasCode: a.hasCode,

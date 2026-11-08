@@ -206,8 +206,9 @@ class Bot {
     pos = randomPoint(),
     /** 같은 visitorId로 다시 만들면 "두 번째 탭" */
     readonly visitorId = newVisitorId(),
-    /** 입장 토큰에 실을 꾸미기 */
+    /** 입장 토큰에 실을 꾸미기·몸 */
     readonly look: string[] = [],
+    readonly body = "hood",
   ) {
     this.x = pos.x;
     this.y = pos.y;
@@ -219,7 +220,7 @@ class Bot {
 
   /** 새 토큰을 서명해 접속하고 welcome 또는 close/HTTP 오류를 기다린다 */
   async connect(channel: number): Promise<ConnectResult> {
-    const token = await signJoinToken(SECRET, { visitorId: this.visitorId, name: this.name, color: this.color, channel, look: this.look });
+    const token = await signJoinToken(SECRET, { visitorId: this.visitorId, name: this.name, color: this.color, channel, look: this.look, body: this.body });
     this.channel = channel;
     this.welcome = null;
     this.closed = null;
@@ -627,9 +628,17 @@ async function smoke(): Promise<void> {
 
   // v2: 꾸미기(look)·폭죽(firework) 증서, 접속자 목록 다시 받기(sync)
   const exp = Math.floor(Date.now() / 1000) + 60;
-  const lk = new Bot("smokeLook", undefined, undefined, ["hat_cat"]);
+  const lk = new Bot("smokeLook", undefined, undefined, ["hat_cat"], "cat");
   await lk.connect(CHANNEL);
-  check("join carries the token's look", await waitFor(() => a.events.some((e) => e.t === "join" && e.sid === lk.sid && e.look.includes("hat_cat")), 1000));
+  check(
+    "join carries the token's look and body",
+    await waitFor(() => a.events.some((e) => e.t === "join" && e.sid === lk.sid && e.look.includes("hat_cat") && e.body === "cat"), 1000),
+  );
+  lk.send({ t: "act", kind: "bell" });
+  lk.send({ t: "act", kind: "wave" }); // 2초 안 → 무시
+  await sleep(300);
+  const acts = (x: Bot) => x.events.filter((e) => e.t === "act" && e.sid === lk.sid).length;
+  check("act → act{sid,kind,x,y} to everyone, once per 2s", acts(a) === 1 && acts(lk) === 1, `${acts(a)}/${acts(lk)}`);
   a.send({ t: "look", grant: await signGrant(SECRET, { kind: "look", visitorId: a.visitorId, look: ["hat_straw"], exp }) });
   const sawLook = (x: Bot) => x.events.some((e) => e.t === "look" && e.sid === a.sid && e.look[0] === "hat_straw");
   check("look grant → look{sid,look} to everyone (sender included)", await waitFor(() => sawLook(b) && sawLook(a), 1000));
@@ -864,7 +873,7 @@ function bench(): void {
     },
   );
   const pos = conns.map((_, i) => ({ x: 60 + (i % 10) * 50, y: 60 + Math.floor(i / 10) * 80 }));
-  conns.forEach((c, i) => core.join(c, { visitorId: `v${i}`, name: `b${i}`, color: AVATAR_COLORS[0], channel: 1, spawn: pos[i], look: [] }, 0));
+  conns.forEach((c, i) => core.join(c, { visitorId: `v${i}`, name: `b${i}`, color: AVATAR_COLORS[0], channel: 1, spawn: pos[i], look: [], body: "hood" }, 0));
   const tickMs: number[] = [];
   const moveUs: number[] = [];
   let now = 0;

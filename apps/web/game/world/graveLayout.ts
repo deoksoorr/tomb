@@ -24,7 +24,18 @@ export type GraveInfo = {
 };
 
 /** 그릴 수 있는 묘비 꾸미기 */
-export const DECOR_IDS = ["decor_candles", "decor_wreath", "decor_ribbon", "decor_lantern", "decor_ghostcat", "decor_stars"] as const;
+export const DECOR_IDS = [
+  "decor_candles",
+  "decor_wreath",
+  "decor_ribbon",
+  "decor_lantern",
+  "decor_ghostcat",
+  "decor_stars",
+  "decor_rainbow",
+  "decor_butterfly",
+  "decor_snowman",
+  "decor_flowerpot",
+] as const;
 const DECOR_SET = new Set<string>(DECOR_IDS);
 export const MAX_DECOR = 3;
 

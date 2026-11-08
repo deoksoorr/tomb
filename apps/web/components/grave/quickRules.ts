@@ -10,7 +10,7 @@ import {
 
 // 간단 묘비 세우기: 이름 · 얼마나 살았나 · 묘비 디자인 · (사인) · (묘비명). 글자 수는 서버와 같이 코드포인트 기준.
 
-export const LIMITS = { name: 40, epitaph: 30 } as const;
+export const LIMITS = { name: 40, epitaph: 30, comment: 100 } as const;
 
 export type QuickValues = {
   name: string;
@@ -19,13 +19,15 @@ export type QuickValues = {
   epitaph: string;
   /** 묘비 디자인 ("auto" = 생존 기간 규칙) */
   style: string;
+  /** 상주의 한마디 (선택) */
+  comment: string;
 };
 
 /**
  * PATCH 입력. 계약의 GraveInput에는 아직 style이 없어서 덧붙인다 (서버는 전체 교체라 빠지면 "auto"가 된다).
  */
 export type EditInput = GraveInput & { style?: string };
-export type QuickErrors = Partial<Record<"name" | "lived" | "epitaph", string>>;
+export type QuickErrors = Partial<Record<"name" | "lived" | "epitaph" | "comment", string>>;
 
 export const charCount = (s: string) => [...s].length;
 
@@ -48,6 +50,7 @@ export function validateQuick(v: QuickValues): QuickErrors {
         : undefined,
     lived: v.lived ? undefined : "얼마나 살았는지 골라 주세요.",
     epitaph: charCount(v.epitaph.trim()) > LIMITS.epitaph ? `${LIMITS.epitaph}자까지 적을 수 있어요.` : undefined,
+    comment: charCount(v.comment.trim()) > LIMITS.comment ? `${LIMITS.comment}자까지 적을 수 있어요.` : undefined,
   };
   return Object.fromEntries(Object.entries(errors).filter(([, m]) => m)) as QuickErrors;
 }
@@ -55,11 +58,13 @@ export function validateQuick(v: QuickValues): QuickErrors {
 /** 새 묘비 (지금 채널에): 묘비명을 비우면 서버가 `향년 N일, 조용히 별세`를 넣는다 */
 export function toQuickInput(v: QuickValues & { lived: LifespanId }, mourner: string, channel: number): QuickGraveInput {
   const epitaph = v.epitaph.trim();
+  const comment = v.comment.trim();
   return {
     name: v.name.trim(),
     lived: v.lived,
     mourner,
     channel,
+    ...(comment && { comment }),
     ...(v.cause && { cause: v.cause }),
     ...(epitaph && { epitaph }),
     ...(v.style !== "auto" && { style: v.style }),
@@ -74,6 +79,7 @@ export function valuesOf(grave: PublicGrave): QuickValues {
     cause: grave.causes[0] ?? null,
     epitaph: grave.epitaph,
     style: grave.style ?? "auto",
+    comment: grave.comment ?? "",
   };
 }
 
@@ -90,6 +96,7 @@ export function toEditInput(grave: PublicGrave, v: QuickValues): EditInput {
   const lived = v.lived ?? original;
   const bornAt = lived === original ? grave.bornAt : addDays(grave.diedAt, -(livedDays(lived) - 1));
   const causes = v.cause === (grave.causes[0] ?? null) ? grave.causes : [v.cause ?? "other"];
+  const comment = v.comment.trim();
   return {
     name: v.name.trim(),
     epitaph: v.epitaph.trim() || suggestEpitaph(ageDays(bornAt, grave.diedAt), grave.lastTask),
@@ -103,5 +110,6 @@ export function toEditInput(grave: PublicGrave, v: QuickValues): EditInput {
     ...(grave.stack?.length && { stack: grave.stack }),
     ...(grave.imageUrl && { imageUrl: grave.imageUrl }),
     ...(v.style !== "auto" && { style: v.style }),
+    ...(comment && { comment }),
   };
 }

@@ -49,20 +49,21 @@ export default function BuryForm({ mode, mourner, cache, channel, graveCount, on
   const editing = mode.kind === "edit" ? mode.grave : null;
   const uid = useId();
   const [initial] = useState<QuickValues>(() =>
-    editing ? valuesOf(editing) : { name: "", lived: null, cause: null, epitaph: "", style: DEFAULT_STYLE },
+    editing ? valuesOf(editing) : { name: "", lived: null, cause: null, epitaph: "", style: DEFAULT_STYLE, comment: "" },
   );
   const [name, setName] = useState(initial.name);
   const [lived, setLived] = useState<LifespanId | null>(initial.lived);
   const [cause, setCause] = useState<CauseTag | null>(initial.cause);
   const [epitaph, setEpitaph] = useState(initial.epitaph);
   const [style, setStyle] = useState(initial.style);
+  const [comment, setComment] = useState(initial.comment);
   const { me } = useMe();
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
 
-  const values: QuickValues = { name, lived, cause, epitaph, style };
+  const values: QuickValues = { name, lived, cause, epitaph, style, comment };
   const errors = validateQuick(values);
   const errorFor = (field: keyof typeof errors) => (submitted ? errors[field] : undefined);
   const days = lived ? livedDays(lived) : null;
@@ -88,7 +89,7 @@ export default function BuryForm({ mode, mourner, cache, channel, graveCount, on
     e.preventDefault();
     if (saving) return;
     setSubmitted(true);
-    const firstInvalid = (["name", "lived", "epitaph"] as const).find((f) => errors[f]);
+    const firstInvalid = (["name", "lived", "epitaph", "comment"] as const).find((f) => errors[f]);
     if (firstInvalid || !lived) {
       document.getElementById(`${uid}-${firstInvalid ?? "lived"}`)?.focus();
       return;
@@ -247,6 +248,25 @@ export default function BuryForm({ mode, mourner, cache, channel, graveCount, on
           <p id={`${uid}-epitaph-msg`} className={errorFor("epitaph") ? ui.error : ui.hint}>
             {errorFor("epitaph") ?? "비워 두면 회색 글씨처럼 새겨져요."}
           </p>
+        </div>
+
+        <div className={ui.field}>
+          <label htmlFor={`${uid}-comment`} className={ui.label}>
+            <span>상주의 한마디</span>
+            <span className={ui.counter} aria-hidden="true">
+              {charCount(comment)}/{LIMITS.comment}
+            </span>
+          </label>
+          <input
+            id={`${uid}-comment`}
+            className={ui.input}
+            value={comment}
+            maxLength={LIMITS.comment * 2}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="찾아온 사람에게 남기는 말 (선택)"
+            aria-invalid={errorFor("comment") !== undefined}
+          />
+          {errorFor("comment") && <p className={ui.error}>{errorFor("comment")}</p>}
         </div>
 
         <aside className={styles.preview} aria-label="미리보기">

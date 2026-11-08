@@ -1,6 +1,7 @@
 import type { LobbyInfo } from "@tomb/protocol";
 import type { AdminBulkResponse, AdminGrave, AdminPointsResponse } from "@/lib/admin";
 import { request } from "@/lib/api";
+import type { AdminHouse } from "@/lib/housing/types";
 import type { Notice, NoticeInput, NoticeListResponse } from "@/lib/types";
 import type { AdminAction } from "@/lib/validate";
 
@@ -12,6 +13,8 @@ const send = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 const post = (body: unknown) => send("POST", body);
+/** 하우징 집·방명록 관리 작업 */
+export type ModAction = "hide" | "unhide" | "delete";
 const noticePath = (id: string) => `/api/admin/notices/${encodeURIComponent(id)}`;
 
 export const adminApi = {
@@ -26,6 +29,10 @@ export const adminApi = {
   createNotice: (input: NoticeInput) => request<{ notice: Notice }>("/api/admin/notices", post(input)),
   updateNotice: (id: string, patch: Partial<NoticeInput>) => request<{ notice: Notice }>(noticePath(id), send("PATCH", patch)),
   deleteNotice: (id: string) => request<{ ok: true }>(noticePath(id), { method: "DELETE" }),
+  houses: () => request<{ houses: AdminHouse[] }>("/api/admin/housing", { cache: "no-store" }),
+  houseAction: (id: string, action: ModAction) => request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}`, post({ action })),
+  guestAction: (id: string, entryId: string, action: ModAction) =>
+    request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}/guestbook/${encodeURIComponent(entryId)}`, post({ action })),
   /** 하나든 여러 개든 일괄 처리 경로로 보낸다 */
   apply: (ids: string[], action: AdminAction) => request<AdminBulkResponse>("/api/admin/graves/bulk", post({ ids, action })),
 };

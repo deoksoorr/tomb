@@ -33,21 +33,11 @@
   opacity: 1;
 }
 
+/* 터치: 아래는 조이스틱·행동 버튼 자리라 위 가장자리 바 바로 아래에 */
 @media (pointer: coarse) {
   .recenter {
-    bottom: calc(var(--safe-bottom) + 156px);
-  }
-
-  /* 조이스틱 위 */
-  .zoom {
-    right: auto;
-    left: var(--safe-left);
-    bottom: calc(var(--safe-bottom) + 140px);
-  }
-
-  .zoomButton {
-    min-height: 44px;
-    min-width: 44px;
+    top: calc(var(--safe-top) + 52px);
+    bottom: auto;
   }
 }
 

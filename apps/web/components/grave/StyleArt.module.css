@@ -1,5 +1,0 @@
-/* 유료 묘비 디자인 미리보기 (canvas dataURL). 픽셀이 번지지 않게 */
-.art {
-  image-rendering: pixelated;
-  display: block;
-}

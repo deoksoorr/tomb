@@ -28,7 +28,9 @@ describe("admit", () => {
 
   it("verifies the token and builds a ticket", async () => {
     const t = await admit(SECRET, await signJoinToken(SECRET, claims), 3, { x: 1, y: 2 });
-    expect(t).toEqual({ visitorId: claims.visitorId, name: "달빛 산책", color: AVATAR_COLORS[2], channel: 3, spawn: { x: 1, y: 2 }, look: [] });
+    expect(t).toEqual({ visitorId: claims.visitorId, name: "달빛 산책", color: AVATAR_COLORS[2], channel: 3, spawn: { x: 1, y: 2 }, look: [], body: "hood" });
+    const withBody = await admit(SECRET, await signJoinToken(SECRET, { ...claims, body: "cat" }), 3, undefined);
+    expect(withBody?.body).toBe("cat");
     const withLook = await admit(SECRET, await signJoinToken(SECRET, { ...claims, look: ["hat_cat", "bogus", "hat_straw"] }), 3, undefined);
     expect(withLook?.look).toEqual(["hat_cat"]); // 카탈로그에 없는 것·같은 부위 중복은 빠진다
   });
@@ -52,7 +54,7 @@ describe("admit", () => {
   });
 
   it("round-trips the internal ticket header with Korean names", () => {
-    const t = { visitorId: "abc", name: "한때는", color: AVATAR_COLORS[0], channel: 2, look: ["hat_cat"] };
+    const t = { visitorId: "abc", name: "한때는", color: AVATAR_COLORS[0], channel: 2, look: ["hat_cat"], body: "bun" };
     const raw = encodeTicket(t);
     expect(raw).toMatch(/^[\x20-\x7e]+$/); // ByteString
     expect(decodeTicket(raw)).toEqual(t);

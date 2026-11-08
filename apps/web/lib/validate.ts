@@ -1,4 +1,4 @@
-import { checkName, isAvatarColor, isGraveStyle, itemById } from "@tomb/protocol";
+import { checkName, isAvatarBody, isAvatarColor, isGraveStyle, itemById } from "@tomb/protocol";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { CODE_RE, normalizeCode } from "./economy";
@@ -44,6 +44,11 @@ const tagList = (item: z.ZodString, max: number, tooMany: string) =>
 /** 묘비 디자인 (GRAVE_STYLES). 유료 디자인의 디자인권 확인·소모는 라우트가 저장과 함께 한다 */
 const graveStyle = z.string().refine((s) => isGraveStyle(s), "알 수 없는 묘비 디자인이에요.").optional();
 
+/** 상주의 한마디 (선택, 한 줄 100자) */
+const graveComment = optional(z.string().trim().overwrite(oneLine).refine(within(100), "한마디는 100자까지 적을 수 있어요."));
+const avatarColor = z.string().refine(isAvatarColor, "고를 수 있는 색이 아니에요.");
+const avatarBody = z.string().refine(isAvatarBody, "고를 수 있는 모양이 아니에요.");
+
 /** 묘비를 세울 채널 (채널마다 묘지가 따로다) */
 export const graveChannel = z.number("채널 번호가 올바르지 않아요.").int().min(1, `채널은 1~${GRAVE_CHANNELS} 중 하나예요.`).max(GRAVE_CHANNELS, `채널은 1~${GRAVE_CHANNELS} 중 하나예요.`);
 
@@ -85,6 +90,7 @@ export const GraveInputSchema = z
     imageUrl: optional(z.string().trim().refine((s) => !s || isAllowedImageUrl(s), "업로드한 이미지만 쓸 수 있어요.")),
     mourner: userName,
     style: graveStyle,
+    comment: graveComment,
     /** 세울 채널. 수정(PATCH)에서는 무시한다 (묘비는 채널을 옮기지 않는다) */
     channel: graveChannel.optional(),
   })
@@ -120,13 +126,14 @@ export const QuickGraveInputSchema = z
     epitaph: optional(z.string().trim().overwrite(oneLine).refine(within(30), "묘비명은 30자까지 적을 수 있어요.")),
     mourner: userName,
     style: graveStyle,
+    comment: graveComment,
     channel: graveChannel,
   })
-  .transform(({ name, lived, cause, epitaph, mourner, style, channel }): ParsedGraveInput => {
+  .transform(({ name, lived, cause, epitaph, mourner, style, comment, channel }): ParsedGraveInput => {
     const life = quickLifespan(lived);
     const none = { lastTask: undefined, causeDetail: undefined, links: undefined, stack: undefined, imageUrl: undefined };
     const epitaphOrDefault = epitaph ?? suggestEpitaph(life.ageDays);
-    return { ...none, name, mourner, style, channel, ...life, causes: [cause ?? "other"], epitaph: epitaphOrDefault };
+    return { ...none, name, mourner, style, comment, channel, ...life, causes: [cause ?? "other"], epitaph: epitaphOrDefault };
   });
 
 /** POST /api/graves: `lived`가 있으면 간단 입력, 아니면 전체 입력 */
@@ -136,7 +143,9 @@ export const createGraveSchema = (raw: unknown) =>
 export const JoinRequestSchema = z.object({
   channel: z.union([z.literal("auto"), z.number().int().min(1).max(99)], "채널 번호가 올바르지 않아요."),
   name: userName,
-  color: z.string().refine(isAvatarColor, "고를 수 있는 색이 아니에요."),
+  color: avatarColor,
+  /** 없으면 계정에 저장된 몸 모양 */
+  body: avatarBody.optional(),
 });
 
 /** 신고 사유는 선택. 본문이 없거나 사유가 없으면 "other" */
@@ -159,7 +168,8 @@ export const AdminBulkSchema = z.object({
   action: adminAction,
 });
 
-export const AttendSchema = z.object({ name: userName.optional() });
+/** 출석 때 입장 화면의 이름·색·몸 모양을 함께 보낸다 (계정에 값이 없을 때만 저장) */
+export const AttendSchema = z.object({ name: userName.optional(), color: avatarColor.optional(), body: avatarBody.optional() });
 
 /** POST /api/session — fresh면 기존 쿠키를 버리고 새 계정으로 시작 */
 export const SessionSchema = z.object({ fresh: z.boolean().optional() });

@@ -183,6 +183,8 @@ export class ChannelDO extends DurableObject<Env> {
     if (this.reapDueAt !== null && now >= this.reapDueAt) {
       this.reapDueAt = null;
       this.core.reap(now);
+      // 어차피 깨어난 김에 인원을 push한다 → 로비의 5분 재확인이 이 채널을 건너뛴다(유휴 채널을 두 번 깨우지 않게)
+      this.reportNow();
     }
     this.scheduleAlarm();
   }
@@ -232,10 +234,14 @@ export class ChannelDO extends DurableObject<Env> {
     if (this.reportTimer !== null) return;
     this.reportTimer = setTimeout(() => {
       this.reportTimer = null;
-      lobbyStub(this.env)
-        .report(this.channel, this.core.count, this.nextSeq())
-        .catch((e) => console.error("lobby report failed", e));
+      this.reportNow();
     }, LOBBY_DEBOUNCE_MS);
+  }
+
+  private reportNow(): void {
+    lobbyStub(this.env)
+      .report(this.channel, this.core.count, this.nextSeq())
+      .catch((e) => console.error("lobby report failed", e));
   }
 
   private nextSeq(): number {

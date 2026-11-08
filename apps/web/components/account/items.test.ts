@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { COSMETIC_DURATION_MS, DECOR_DURATION_MS, itemById, plotLabel } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
-import { bagEntries, currentLook, durationLabel, effectLabel, myGraveEntries, pointsText, remainingLabel } from "./items";
+import { bagEntries, cosmeticBlock, currentLook, durationLabel, effectLabel, myGraveEntries, pointsText, remainingLabel } from "./items";
 
 const HOUR = 3_600_000;
 
@@ -69,5 +69,15 @@ describe("myGraveEntries", () => {
       ["b", plotLabel(1), true],
     ]);
     expect(myGraveEntries([], current)).toEqual([]);
+  });
+});
+
+describe("cosmeticBlock", () => {
+  it("착용 중·보유 중인 꾸미기는 다시 못 산다", () => {
+    const hat = itemById("hat_cat")!;
+    expect(cosmeticBlock(hat, {}, [{ itemId: "hat_cat", until: 10 }], 5)).toBe("착용 중");
+    expect(cosmeticBlock(hat, { hat_cat: 1 }, [{ itemId: "hat_cat", until: 1 }], 5)).toBe("보유 중");
+    expect(cosmeticBlock(hat, {}, [], 5)).toBeNull();
+    expect(cosmeticBlock(itemById("fw_small")!, { fw_small: 3 }, [], 5)).toBeNull();
   });
 });

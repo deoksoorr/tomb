@@ -40,6 +40,8 @@ export type PeerRecord = {
   seatId: string | null;
   /** 착용 중인 꾸미기 (입장 토큰 → look 증서로 바뀜) */
   look: string[];
+  /** 아바타 몸 모양 (AVATAR_BODIES id, 입장 토큰) */
+  body: string;
   /** 이 연결로 자리를 잡은 시각. 로비의 채널 간 중복 정리(kick)가 더 새 연결을 내보내지 않게 비교한다 */
   joinedAt: number;
 };
@@ -57,6 +59,8 @@ export type JoinTicket = {
   spawn?: Point;
   /** 입장 시점의 꾸미기 (JoinClaims.look) */
   look: string[];
+  /** 아바타 몸 모양 (JoinClaims.body) */
+  body: string;
 };
 
 /** ChannelCore가 바깥(DO)에 맡기는 부수 효과 */
@@ -88,8 +92,11 @@ export type ChannelConfig = { capacity: number; graceMs: number };
 export const CLOSE_NORMAL = 1000;
 /** 서버가 응답 없는(유령) 연결을 닫을 때. 1000이 아니므로 재연결 유예가 적용된다 */
 export const CLOSE_STALE = 4000;
-/** 이 시간 넘게 ping도 메시지도 없으면 유령 연결로 본다 (클라이언트는 2초마다 ping) */
-export const STALE_AFTER_MS = 60_000;
+/**
+ * 이 시간 넘게 ping도 메시지도 없으면 유령 연결로 본다. 클라이언트는 2초마다 ping하지만, 숨겨진 탭은 브라우저가
+ * 타이머를 1분 단위로 묶어(Chrome intensive throttling) 60초 넘게 비기도 한다 → 그 두 배 이상 여유.
+ */
+export const STALE_AFTER_MS = 150_000;
 
 // 이벤트는 받은 사람 모두가 반응한다(graveEvent는 각자 Vercel 상세 API를 다시 부른다). 레이트리밋(20/s)과 별개로
 // 브로드캐스트 증폭(× 인원수)을 막는다.
@@ -105,6 +112,8 @@ export const LOOK_INTERVAL_MS = 10_000;
 export const FIREWORK_INTERVAL_MS = 3_000;
 /** sync(접속자 목록 다시 받기) 연결당 최소 간격. 클라이언트는 PEER_SYNC_MS(60초)마다 보낸다 */
 export const SYNC_INTERVAL_MS = 20_000;
+/** act(종 치기·손 흔들기 등) 연결당 최소 간격 */
+export const ACT_INTERVAL_MS = 2_000;
 /** warp 서버 쿨다운. 클라이언트(WARP_COOLDOWN_MS 1초)보다 짧게 둬서 네트워크 지터로 정상 요청이 버려지지 않게 한다 */
 export const SERVER_WARP_COOLDOWN_MS = 800;
 
@@ -124,6 +133,7 @@ type Peer<C> = PeerRecord & {
   lastLookAt: number;
   lastFireworkAt: number;
   lastSyncAt: number;
+  lastActAt: number;
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
   lastSeenAt: number;
   /** attachment가 최신인지 */
@@ -217,6 +227,7 @@ export class ChannelCore<C extends object> {
       dir: DIR.down,
       seatId: null,
       look: t.look,
+      body: t.body,
       joinedAt: now,
     };
     const p = this.adoptNew(rec, conn, now);
@@ -241,10 +252,11 @@ export class ChannelCore<C extends object> {
     } else {
       this.host.dropReservation(p.sid);
     }
-    const renamed = p.name !== t.name || p.color !== t.color || p.look.join() !== t.look.join();
+    const renamed = p.name !== t.name || p.color !== t.color || p.body !== t.body || p.look.join() !== t.look.join();
     p.name = t.name;
     p.color = t.color;
     p.look = t.look;
+    p.body = t.body;
     p.joinedAt = now;
     // 새 소켓을 붙이기 전에 옮긴다: 좌석 해제 알림은 다른 사람에게만 가고, 본인은 결과가 반영된 welcome을 처음으로 받는다
     if (t.spawn) this.relocate(p, t.spawn);
@@ -255,7 +267,7 @@ export class ChannelCore<C extends object> {
     this.resetConnState(p, now);
     this.save(p);
     this.welcome(p, t.channel, true);
-    // 이름·색·꾸미기는 입장 때 한 번만 보낸다. 바뀌었을 때만 join을 다시 보낸다(클라이언트는 같은 sid의 join을 덮어쓰기로 처리).
+    // 이름·색·몸·꾸미기는 입장 때 한 번만 보낸다. 바뀌었을 때만 join을 다시 보낸다(클라이언트는 같은 sid의 join을 덮어쓰기로 처리).
     if (renamed) this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
     this.host.visitorJoined(p.visitorId, p.joinedAt);
   }
@@ -444,6 +456,10 @@ export class ChannelCore<C extends object> {
         if (now - p.lastSyncAt < SYNC_INTERVAL_MS) return;
         p.lastSyncAt = now;
         return this.sendTo(p, { t: "peers", peers: this.othersOf(p), seats: Object.fromEntries(this.seats) });
+      case "act":
+        if (now - p.lastActAt < ACT_INTERVAL_MS) return;
+        p.lastActAt = now;
+        return this.broadcast(encodeEvent({ t: "act", sid: p.sid, kind: m.kind, x: p.x, y: p.y }));
     }
   }
 
@@ -491,11 +507,21 @@ export class ChannelCore<C extends object> {
     const seat = seatById(seatId);
     const holder = this.seats.get(seatId);
     if (seat && holder === p.sid) return this.sendTo(p, { t: "seat", seatId, sid: p.sid }); // 재요청: 이미 내 자리
+    // 긴 벤치에서 앉은 채 옆자리로: 같은 가구의 다른 좌석이면 거리와 상관없이 옮겨 앉는다
+    const old = p.seatId ? seatById(p.seatId) : undefined;
+    const slide = !!seat && !!old && old.furnitureId === seat.furnitureId;
     // 위치는 클라이언트가 마지막으로 보고한 지점으로 잰다 (서버 위치가 속도 예산 때문에 잠깐 뒤처져 있어도 거절하지 않게)
-    if (!seat || holder !== undefined || dist(seat, { x: p.tx, y: p.ty }) > SEAT_SERVER_RADIUS) {
+    if (!seat || holder !== undefined || (!slide && dist(seat, { x: p.tx, y: p.ty }) > SEAT_SERVER_RADIUS)) {
       return this.sendTo(p, { t: "seatDenied", seatId });
     }
-    if (p.seatId) this.releaseSeat(p); // 한 사람당 한 자리
+    // 한 사람당 한 자리. DO는 한 번에 한 이벤트만 처리하므로 점유와 해제 사이에 다른 요청이 끼어들 수 없다
+    // (같은 빈 자리로 두 명이 동시에 옮기면 먼저 처리된 한 명만 앉고, 다른 한 명은 seatDenied).
+    // 새 자리 점유를 먼저 알리고 옛 자리 해제를 바로 이어 보낸다 — 클라이언트에는 같은 틱에 함께 도착한다.
+    const prevSeat = p.seatId;
+    if (prevSeat) {
+      this.seats.delete(prevSeat);
+      p.seatId = null;
+    }
     this.seats.set(seatId, p.sid);
     p.seatId = seatId;
     p.x = p.tx = seat.x;
@@ -505,6 +531,7 @@ export class ChannelCore<C extends object> {
     this.chasing.delete(p.sid);
     this.markDirty(p);
     this.broadcast(encodeEvent({ t: "seat", seatId, sid: p.sid }));
+    if (prevSeat) this.broadcast(encodeEvent({ t: "seat", seatId: prevSeat, sid: null }));
   }
 
   private onStand(p: Peer<C>): void {
@@ -630,6 +657,7 @@ export class ChannelCore<C extends object> {
       lastLookAt: -Infinity,
       lastFireworkAt: -Infinity,
       lastSyncAt: -Infinity,
+      lastActAt: -Infinity,
       lastSeenAt: now,
       saved: true,
     };
@@ -648,6 +676,7 @@ export class ChannelCore<C extends object> {
     p.lastLookAt = -Infinity;
     p.lastFireworkAt = -Infinity;
     p.lastSyncAt = -Infinity;
+    p.lastActAt = -Infinity;
     p.lastSeenAt = now;
   }
 
@@ -665,12 +694,13 @@ export class ChannelCore<C extends object> {
   }
 
   private info(p: Peer<C>): PeerInfo {
-    return { ...this.state(p), name: p.name, color: p.color, look: p.look };
+    return { ...this.state(p), name: p.name, color: p.color, look: p.look, body: p.body };
   }
 
-  /** 저장 형태로 복사. v1 attachment·예약에는 look/joinedAt이 없으므로 기본값을 채운다 */
+  /** 저장 형태로 복사. 이전 버전 attachment·예약에는 look/body/joinedAt이 없을 수 있어 기본값을 채운다 */
   private record(r: PeerRecord): PeerRecord {
     const { sid, visitorId, name, color, x, y, state, dir, seatId } = r;
-    return { sid, visitorId, name, color, x, y, state, dir, seatId, look: Array.isArray(r.look) ? r.look : [], joinedAt: r.joinedAt ?? 0 };
+    const look = Array.isArray(r.look) ? r.look : [];
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", joinedAt: r.joinedAt ?? 0 };
   }
 }

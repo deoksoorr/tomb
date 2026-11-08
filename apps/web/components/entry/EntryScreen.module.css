@@ -134,14 +134,62 @@
   color: var(--text);
 }
 
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profileText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
 .lockedName {
-  flex: 1;
-  min-height: 40px;
-  padding: 8px 10px;
-  background: var(--bg-deep);
   color: var(--bone);
-  font-size: 16px;
+  font-family: var(--font-read);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.bodies {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.bodyOption {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 8px 4px;
+  background: var(--bg-deep);
   box-shadow: var(--px-border);
+  cursor: pointer;
+  user-select: none;
+}
+
+.bodyOption:has(input:checked) {
+  background: var(--moss-deep);
+  box-shadow:
+    0 -2px 0 0 var(--moss),
+    0 2px 0 0 var(--moss),
+    -2px 0 0 0 var(--moss),
+    2px 0 0 0 var(--moss);
+}
+
+.bodyOption:has(input:focus-visible) {
+  outline: 2px solid var(--candle);
+  outline-offset: 3px;
+}
+
+.bodyLabel {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-align: center;
 }
 
 .shared {
@@ -196,8 +244,9 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 2px;
   background: var(--bg-deep);
   box-shadow: var(--px-border);
 }

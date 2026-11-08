@@ -67,6 +67,29 @@
   gap: 6px;
 }
 
+/* 터치: 위 가장자리 바 (좌 음악 · 가운데 채널·날씨 · 우 메뉴) */
+.touchBar {
+  position: absolute;
+  z-index: 2;
+  top: var(--safe-top);
+  left: var(--safe-left);
+  right: var(--safe-right);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.touchBar > :nth-child(2) {
+  align-self: center;
+  min-width: 0;
+}
+
+.menuButton {
+  position: relative;
+  background: var(--panel);
+}
+
 .topButton {
   background: var(--panel);
 }
@@ -148,27 +171,10 @@
   transform: translateX(-50%) translateY(1px);
 }
 
+/* 터치: 안내 줄은 아래 조이스틱(≈136px)·행동 버튼(≈156px) 위 */
 @media (pointer: coarse) {
-  .bury {
-    left: auto;
-    right: var(--safe-right);
-    bottom: calc(var(--safe-bottom) + 156px);
-    padding-inline: 14px;
-    transform: none;
-    font-size: 12px;
-  }
-
-  .bury:active:not(:disabled) {
-    transform: translateY(1px);
-  }
-
-  .leftRow {
-    bottom: calc(var(--safe-bottom) + 246px);
-  }
-
-  /* 터치: 오른쪽 폭죽 버튼(위 끝 ≈ 264px)·왼쪽 [내 묘비](위 끝 ≈ 290px)보다 위 */
   .bottomCenter {
-    bottom: calc(var(--safe-bottom) + 300px);
+    bottom: calc(var(--safe-bottom) + 168px);
   }
 }
 
@@ -184,4 +190,9 @@
   from {
     opacity: 0;
   }
+}
+
+/* 집·사냥터 안: 월드 HUD를 숨긴다 (마운트는 유지해 BGM이 끊기지 않게) */
+.away {
+  display: none;
 }

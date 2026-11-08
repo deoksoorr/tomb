@@ -9,8 +9,11 @@ import { bgm, currentTrack, INITIAL_BGM_STATE } from "./engine";
 import { needsAttribution, type Playlist } from "./manifest";
 import styles from "./BgmPlayer.module.css";
 
-/** 좌상단 미니 플레이어. 음원이 없으면 무음 자리표시로 동작한다 */
-export default function BgmPlayer() {
+/**
+ * 좌상단 미니 플레이어. 음원이 없으면 무음 자리표시로 동작한다.
+ * compact(터치 화면): 음악 아이콘 하나만 두고, 재생·다음 곡은 펼친 패널 안에.
+ */
+export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
   const state = useSyncExternalStore(bgm.subscribe, bgm.getSnapshot, () => INITIAL_BGM_STATE);
   const [expanded, setExpanded] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
@@ -18,6 +21,28 @@ export default function BgmPlayer() {
   const panelId = useId();
   const track = currentTrack(state);
   const title = track?.title ?? (state.loaded ? "음원 준비 중" : "불러오는 중…");
+
+  const transport = (
+    <>
+      <button
+        type="button"
+        className={cx(ui.button, ui.quiet, ui.icon)}
+        onClick={() => bgm.toggle()}
+        aria-label={state.playing ? "일시정지" : "재생"}
+      >
+        <PixelIcon name={state.playing ? "pause" : "play"} />
+      </button>
+      <button
+        type="button"
+        className={cx(ui.button, ui.quiet, ui.icon)}
+        onClick={() => bgm.next()}
+        disabled={!track}
+        aria-label="다음 곡"
+      >
+        <PixelIcon name="next" />
+      </button>
+    </>
+  );
 
   function collapse() {
     setExpanded(false);
@@ -27,23 +52,7 @@ export default function BgmPlayer() {
   return (
     <section className={styles.player} aria-label="배경 음악">
       <div className={styles.bar}>
-        <button
-          type="button"
-          className={cx(ui.button, ui.quiet, ui.icon)}
-          onClick={() => bgm.toggle()}
-          aria-label={state.playing ? "일시정지" : "재생"}
-        >
-          <PixelIcon name={state.playing ? "pause" : "play"} />
-        </button>
-        <button
-          type="button"
-          className={cx(ui.button, ui.quiet, ui.icon)}
-          onClick={() => bgm.next()}
-          disabled={!track}
-          aria-label="다음 곡"
-        >
-          <PixelIcon name="next" />
-        </button>
+        {!compact && transport}
         <button
           ref={toggleRef}
           type="button"
@@ -54,9 +63,11 @@ export default function BgmPlayer() {
           aria-label={`음악 설정, 지금: ${title}`}
         >
           <PixelIcon name="note" />
-          <span className={styles.title} aria-hidden="true">
-            {title}
-          </span>
+          {!compact && (
+            <span className={styles.title} aria-hidden="true">
+              {title}
+            </span>
+          )}
         </button>
       </div>
 
@@ -68,6 +79,7 @@ export default function BgmPlayer() {
             if (e.key === "Escape") collapse();
           }}
         >
+          {compact && <div className={styles.row}>{transport}</div>}
           <label className={styles.row}>
             <span className={styles.rowLabel}>목록</span>
             <select

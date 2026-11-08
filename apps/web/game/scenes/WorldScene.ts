@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { DIR, FURNITURE, SHOP_DOOR, SPAWN, STATE, TELEPORT_DIST, type PeerInfo, type Seat, type Sid } from "@tomb/protocol";
+import { DIR, FURNITURE, isAvatarBody, SHOP_DOOR, SPAWN, STATE, TELEPORT_DIST, type ActKind, type PeerInfo, type Seat, type Sid } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 import { TEX } from "../assets/manifest";
 import { bridge, type NetStatus } from "../bridge";
@@ -12,7 +12,8 @@ import { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
 import { escape, overlaps, type Box } from "../logic/jump";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
-import { pickInteract, pickSeat } from "../logic/sit";
+import { nearestObject, pickInteraction } from "../logic/interact";
+import { neighborSeat, pickSeat, sideIntent } from "../logic/sit";
 import { RealtimeClient } from "../net/RealtimeClient";
 import { GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
@@ -23,7 +24,8 @@ import { GraveField } from "../world/GraveField";
 import { graveChannelFor } from "../world/graveChannel";
 import { declutter, type LabelBox } from "../world/labels";
 import { graveAt, nearestGrave, standSpot, type GravePlacement, type NearResult } from "../world/graveLayout";
-import { nearShopDoor } from "../world/layout";
+import { inWater, nearShopDoor, nearWater, type Interactable } from "../world/layout";
+import { NearTracker } from "../world/nearTracker";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import { GraveMarkers } from "../world/Markers";
 import { Sfx } from "../world/Sfx";
@@ -44,6 +46,12 @@ const DUST_MS = 90;
 const EMPTY_SEATS = new Map<string, Sid>();
 const NO_MOVE: MoveInput = { ax: 0, ay: 0, run: false };
 const FURNITURE_KIND = new Map(FURNITURE.map((f) => [f.id, f.kind]));
+/** 옆자리로 옮겨 앉을 수 있는 긴 벤치 */
+const MULTI_SEAT = new Set(FURNITURE.filter((f) => f.seatOffsets.length > 1).map((f) => f.id));
+/** 같은 동작을 연달아 보내지 않는 간격 */
+const ACT_COOLDOWN_MS = 700;
+/** 원격 아바타 수와 HUD 인원이 어긋났는지 보는 주기 (어긋나면 sync 1회) */
+const PEER_CHECK_MS = 5000;
 
 export class WorldScene extends Phaser.Scene {
   private ctx!: GameContext;
@@ -67,7 +75,10 @@ export class WorldScene extends Phaser.Scene {
   private readonly remotes = new Map<Sid, RemoteAvatar>();
   private readonly seats = new Map<string, Sid>();
   private readonly move: MoveInput = { ax: 0, ay: 0, run: false };
-  private nearId: string | null = null;
+  private readonly nearT = new NearTracker();
+  private get nearId(): string | null {
+    return this.nearT.id;
+  }
   private pendingFocus: string | null = null;
   private pendingBury: { id: string; at: number } | null = null;
   private readonly remoteBuried = new Map<string, number>();
@@ -78,6 +89,11 @@ export class WorldScene extends Phaser.Scene {
   private inShop = false;
   private seatHint!: SeatHint;
   private graveCollider!: Phaser.Physics.Arcade.Collider;
+  private furnitureCollider!: Phaser.Physics.Arcade.Collider;
+  /** 벤치에서 좌우 입력 (한 번 누를 때 한 칸) */
+  private lastSide: -1 | 0 | 1 = 0;
+  private actAt = -Infinity;
+  private peerCheckAt = 0;
   /** 착지했는데 묘비에 겹쳐 빠져나오지 못했으면, 겹침이 풀릴 때까지 묘비 충돌을 계속 끈다 */
   private graveLock = false;
   /** 지금 보여 주는 묘지의 채널 (채널마다 묘지가 따로) */
@@ -90,6 +106,7 @@ export class WorldScene extends Phaser.Scene {
   private readonly resolveGrave = (id: string) => this.field.placement(id);
   private readonly labelBoxes: (LabelBox & { t: Phaser.GameObjects.BitmapText | null })[] = [];
   private readonly labelOrder: LabelBox[] = [];
+  private readonly hintBuf = { x: 0, y: 0, text: "" };
 
   constructor() {
     super("world");
@@ -131,11 +148,13 @@ export class WorldScene extends Phaser.Scene {
       } else if (!initial) this.pendingFocus = opts.focusGraveId;
     }
 
-    this.player = new Player(this, this.atlas, spawn.x, spawn.y, opts.color, opts.name);
+    this.player = new Player(this, this.atlas, spawn.x, spawn.y, opts.color, opts.name, this.myBody());
+    this.player.water = inWater;
     this.physics.add.collider(this.player.sprite, this.map.colliders);
     this.physics.add.collider(this.player.sprite, this.map.gridColliders);
-    // 묘비 충돌은 점프 중에 끈다 (벽·나무·가구·연못·오두막은 그대로)
+    // 묘비·의자·벤치 충돌은 점프 중에 끈다 (벽·나무·오두막은 그대로)
     this.graveCollider = this.physics.add.collider(this.player.sprite, this.field.colliders);
+    this.furnitureCollider = this.physics.add.collider(this.player.sprite, this.map.furnitureColliders);
     this.player.onLand = () => this.onPlayerLand();
     this.playerGlow = this.add.image(spawn.x, spawn.y, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffe2a8).setDepth(DEPTH.lights);
 
@@ -185,6 +204,12 @@ export class WorldScene extends Phaser.Scene {
     this.debugMark("worldCreateMs", performance.now() - t0);
   }
 
+  /** 입장 화면에서 고른 몸 (GameStartOptions.body가 오면). 없으면 입장 토큰의 값이 오기 전까지 hood */
+  private myBody(): string {
+    const b = this.ctx.opts.body;
+    return isAvatarBody(b) ? b : "hood";
+  }
+
   private debugMark(key: string, ms: number): void {
     if (!this.ctx.opts.debug) return;
     const w = window as unknown as { __tombBoot?: Record<string, unknown> };
@@ -202,7 +227,7 @@ export class WorldScene extends Phaser.Scene {
   private createNet(): RealtimeClient {
     const { opts } = this.ctx;
     return new RealtimeClient(
-      { name: opts.name, color: opts.color, channel: opts.channel, debug: opts.debug },
+      { name: opts.name, color: opts.color, channel: opts.channel, debug: opts.debug, body: isAvatarBody(opts.body) ? opts.body : undefined },
       {
         getPose: (out) => this.player.netPose(out),
         getFps: () => this.game.loop.actualFps,
@@ -239,6 +264,7 @@ export class WorldScene extends Phaser.Scene {
           }
           for (const [id, owner] of this.seats) if (owner === sid) this.seats.delete(id);
           this.seats.set(seatId, sid);
+          if (sid === this.net.mySid) this.player.seatConfirmed(seatId);
           const r = this.remotes.get(sid);
           if (r) r.seatId = seatId;
           // 다른 사람이 먼저 앉았다 → 나는 바닥 앉기
@@ -256,7 +282,11 @@ export class WorldScene extends Phaser.Scene {
         },
         onPeers: (peers, seats) => this.reconcilePeers(peers, seats),
         onLook: (sid, look) => this.remotes.get(sid)?.view.setLook(look ?? []),
-        onFirework: (_sid, item, x, y) => this.fireworks.launch(item, x, y, this.rig.frameView(this.view), false),
+        onFirework: (sid, item, x, y) => this.fireworks.launch(item, x, y, this.rig.frameView(this.view), false, this.remotes.get(sid)?.name ?? ""),
+        onAct: (sid, kind, x, y) => this.playAct(sid, kind, x, y),
+        onSelfBody: (body) => {
+          if (isAvatarBody(body)) this.player.view.setBody(body);
+        },
       },
     );
   }
@@ -275,7 +305,7 @@ export class WorldScene extends Phaser.Scene {
     if (p.sid === this.net.mySid) return;
     const prev = this.remotes.get(p.sid);
     prev?.destroy();
-    const r = new RemoteAvatar(this, this.atlas, p.sid, p.name, p.color, p, performance.now(), p.look ?? []);
+    const r = new RemoteAvatar(this, this.atlas, p.sid, p.name, p.color, p, performance.now(), p.look ?? [], isAvatarBody(p.body) ? p.body : "hood");
     // 같은 sid가 다시 들어오면(이름·색 변경) 앉아 있던 좌석을 이어받는다
     r.seatId = prev?.seatId ?? null;
     if (!r.seatId) for (const [seatId, owner] of this.seats) if (owner === p.sid) r.seatId = seatId;
@@ -290,7 +320,7 @@ export class WorldScene extends Phaser.Scene {
       if (p.sid === this.net.mySid) continue;
       keep.add(p.sid);
       const r = this.remotes.get(p.sid);
-      if (!r || r.name !== p.name || r.color !== p.color) {
+      if (!r || r.name !== p.name || r.color !== p.color || r.body !== (isAvatarBody(p.body) ? p.body : "hood")) {
         this.addRemote(p);
         continue;
       }
@@ -331,7 +361,13 @@ export class WorldScene extends Phaser.Scene {
         this.tryBury();
       }),
     );
-    on.push(bridge.on("grave:changed", ({ graveId, kind }) => this.net.graveEvent(kind, graveId)));
+    on.push(
+      bridge.on("grave:changed", ({ graveId, kind }) => {
+        // 내가 이장/삭제함: 목록 갱신을 기다리지 않고 그 묘비 툴팁·안내를 바로 지운다
+        if (kind === "removed" && this.nearT.drop(graveId)) this.hideNear();
+        this.net.graveEvent(kind, graveId);
+      }),
+    );
     on.push(bridge.on("grave:flowered", ({ graveId }) => this.playMyFlower(graveId)));
     on.push(
       bridge.on("grave:revived", ({ graveId, revived }) => {
@@ -348,6 +384,11 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("input:sit", () => this.hub.dispatch("sit")));
     on.push(bridge.on("input:interact", () => this.hub.dispatch("interact")));
     on.push(bridge.on("input:jump", () => this.hub.dispatch("jump")));
+    on.push(
+      bridge.on("input:act", ({ kind }) => {
+        if (kind === "wave" || kind === "cheer") this.hub.dispatch(kind);
+      }),
+    );
     on.push(bridge.on("ui:blockKeys", ({ blocked }) => this.hub.setBlocked(blocked)));
     on.push(bridge.on("camera:recenter", () => this.rig.recenter()));
     on.push(bridge.on("camera:zoom", ({ delta }) => this.rig.zoomBy(delta)));
@@ -356,14 +397,14 @@ export class WorldScene extends Phaser.Scene {
     on.push(
       bridge.on("firework:fire", ({ item, grant }) => {
         // 누른 순간 내 자리에서 바로 터뜨리고, 서버에는 증서를 보낸다 (서버가 같은 채널에 알린다)
-        this.fireworks.launch(item, this.player.x, this.player.y, this.rig.frameView(this.view), true);
+        this.fireworks.launch(item, this.player.x, this.player.y, this.rig.frameView(this.view), true, this.ctx.opts.name);
         this.net.firework(grant);
       }),
     );
     on.push(
       bridge.on("graves:mine", ({ ids }) => {
         this.field.setMine(Array.isArray(ids) ? ids : []);
-        this.nearId = null; // 툴팁의 내 묘비 표시도 다시
+        this.nearT.touch(); // 툴팁의 내 묘비 표시도 다시
       }),
     );
     on.push(bridge.on("audio:settings", ({ volume, muted }) => this.sfx.setSettings(volume, muted)));
@@ -412,8 +453,8 @@ export class WorldScene extends Phaser.Scene {
     if (live) {
       this.tryBury();
       if (this.pendingFocus) this.resolveFocus();
-      // 목록이 바뀌면 근접 툴팁 내용도 다시
-      this.nearId = null;
+      // 목록이 바뀌면 근접 툴팁 내용도 다시. 대상 묘비가 사라졌으면(이장·삭제) 툴팁·안내를 지금 바로 지운다
+      if (this.nearT.invalidate((id) => !!this.field.grave(id))) this.hideNear();
     }
     this.debugMark("applyGravesMs", performance.now() - t0);
   }
@@ -526,7 +567,7 @@ export class WorldScene extends Phaser.Scene {
     this.tooltip.hide();
     if (this.nearId) bridge.emit("grave:near", null);
     if (this.nearSeatId) bridge.emit("seat:near", null);
-    this.nearId = null;
+    this.nearT.clear();
     this.nearSeatId = null;
     this.seatHint.update(null, this.player, -1, true, 1);
     this.rig.enabled = false;
@@ -575,12 +616,17 @@ export class WorldScene extends Phaser.Scene {
       pl.jump(now, this.seatReq);
       return;
     }
+    if (a === "wave" || a === "cheer") {
+      this.doAct(a);
+      return;
+    }
     if (pl.airborne) return;
     // 이동 입력이 있는 동안에는 앉지 않는다 (걷다가 X를 같이 눌러도 상태가 튀지 않게)
     const moving = Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER;
     if (a === "sit") {
-      if (moving) return;
-      if (pl.sitting) pl.stand(now, this.seatReq);
+      if (moving || pl.inWater) return;
+      if (pl.anchored) pl.leaveAnchor(now);
+      else if (pl.sitting) pl.stand(now, this.seatReq);
       else pl.sit(pickSeat(pl.x, pl.y, occupied, mySid), now, this.seatReq);
       return;
     }
@@ -588,18 +634,137 @@ export class WorldScene extends Phaser.Scene {
       this.enterShop();
       return;
     }
-    const near = nearestGrave(this.field.layout, pl.x, pl.y, GRAVE_NEAR_RADIUS);
-    const seat = pl.sitting || moving ? null : pickSeat(pl.x, pl.y, occupied, mySid);
-    const t = pickInteract(near ? { id: near.p.id, dist: near.dist } : null, seat, pl.x, pl.y);
-    if (t.kind === "grave") bridge.emit("grave:open", { graveId: t.graveId });
-    else if (t.kind === "seat") pl.sit(t.seat, now, this.seatReq);
-    else if (pl.sitting) pl.stand(now, this.seatReq);
+    if (pl.anchored) {
+      pl.leaveAnchor(now);
+      return;
+    }
+    const water = pl.state === "swim" ? "swim" : pl.state === "dive" ? "dive" : null;
+    const near = water ? null : nearestGrave(this.field.layout, pl.x, pl.y, GRAVE_NEAR_RADIUS);
+    const seat = pl.sitting || moving || water ? null : pickSeat(pl.x, pl.y, occupied, mySid);
+    const t = pickInteraction({
+      px: pl.x,
+      py: pl.y,
+      grave: near ? { id: near.p.id, dist: near.dist } : null,
+      seat,
+      objects: pl.sitting ? [] : this.map.interactables,
+      water,
+      nearWater: !pl.sitting && nearWater(pl.x, pl.y),
+    });
+    switch (t.kind) {
+      case "grave":
+        bridge.emit("grave:open", { graveId: t.graveId });
+        break;
+      case "seat":
+        pl.sit(t.seat, now, this.seatReq);
+        break;
+      case "object":
+        this.useObject(t.obj);
+        break;
+      case "dive":
+      case "surface":
+        pl.toggleDive(now);
+        if (t.kind === "dive") this.fx.splash(pl.x, pl.y);
+        break;
+      case "splash":
+        this.doAct("splash");
+        break;
+      default:
+        if (pl.sitting) pl.stand(now, this.seatReq);
+    }
+  }
+
+  /** 나무·그네·종·우물·특별한 장소 */
+  private useObject(o: Interactable): void {
+    const pl = this.player;
+    const now = this.time.now;
+    switch (o.kind) {
+      case "tree":
+        pl.attach("hang", o.ax, o.ay, o.ay + 0.5, now, this.seatReq);
+        break;
+      case "swing":
+        pl.attach("swing", o.ax, o.ay, o.ay + 0.5, now, this.seatReq);
+        break;
+      case "bell":
+        pl.faceTo(o.x, o.y - 8, now);
+        this.doAct("bell", o);
+        break;
+      case "well":
+        pl.faceTo(o.x, o.y - 4, now);
+        this.doAct("splash", o);
+        break;
+      case "water":
+        this.doAct("splash");
+        break;
+      case "portal":
+        if (o.portal) {
+          if (pl.sitting) pl.stand(now, this.seatReq);
+          bridge.emit("portal:open", { kind: o.portal });
+        }
+        break;
+    }
+  }
+
+  /** 내 동작: 바로 보여 주고 같은 채널에 보낸다 (연타는 ACT_COOLDOWN_MS로 묶는다) */
+  private doAct(kind: ActKind, at?: Interactable): void {
+    const now = this.time.now;
+    if (now - this.actAt < ACT_COOLDOWN_MS) return;
+    this.actAt = now;
+    const pl = this.player;
+    this.net.act(kind);
+    this.actFx(kind, pl.x, pl.y, at ?? null, true);
+    pl.view.playAct(kind, now);
+  }
+
+  /** 다른 사람의 동작 (종소리는 맵 어디에 있든 들린다, 멀수록 작게) */
+  private playAct(sid: Sid, kind: ActKind, x: number, y: number): void {
+    const r = this.remotes.get(sid);
+    if (r?.visible) r.view.playAct(kind, performance.now());
+    this.actFx(kind, x, y, null, false);
+  }
+
+  private actFx(kind: ActKind, x: number, y: number, at: Interactable | null, mine: boolean): void {
+    const pl = this.player;
+    const d = Math.hypot(x - pl.x, y - pl.y);
+    const gain = mine ? 1 : Math.max(0.3, 1 - d / 700);
+    if (kind === "bell") {
+      const bell = at ?? this.nearestOf("bell", x, y, 48);
+      this.fx.bellWave(bell ? bell.x : x, bell ? bell.y - 18 : y - 20);
+      this.sfx.bell(gain);
+    } else if (kind === "splash") {
+      const well = at ?? this.nearestOf("well", x, y, 32);
+      if (well) this.fx.splash(well.x, well.y - 6);
+      else this.fx.splash(x, y);
+      if (d < 360 || mine) this.sfx.splash(gain);
+    } else if (d < 400 || mine) {
+      this.fx.actIcon(x, y, kind);
+    }
+  }
+
+  private nearestOf(kind: Interactable["kind"], x: number, y: number, r: number): Interactable | null {
+    let best: Interactable | null = null;
+    let bd = r;
+    for (const o of this.map.interactables) {
+      if (o.kind !== kind) continue;
+      const d = Math.hypot(o.x - x, o.y - y);
+      if (d <= bd) {
+        bd = d;
+        best = o;
+      }
+    }
+    return best;
   }
 
   private onTap(wx: number, wy: number): void {
     if (this.hub.isBlocked || this.cleaned || this.inShop) return;
     const p = graveAt(this.field.layout, wx, wy);
-    if (p) bridge.emit("grave:open", { graveId: p.id });
+    if (p) {
+      bridge.emit("grave:open", { graveId: p.id });
+      return;
+    }
+    // 오브젝트를 탭: 가까이 서 있으면 E와 같다
+    const pl = this.player;
+    const o = nearestObject(this.map.interactables, wx, wy + 6);
+    if (o && o.dist < 16 && Math.hypot(o.obj.x - pl.x, o.obj.y - pl.y) <= o.obj.r * 1.5 && !pl.airborne) this.useObject(o.obj);
   }
 
   private onResize(): void {
@@ -626,9 +791,15 @@ export class WorldScene extends Phaser.Scene {
 
     this.hub.read(this.move);
     if (this.hub.isBlocked) this.move.ax = this.move.ay = 0;
-    const started = pl.update(this.move, now, this.seatReq);
+    const started = pl.update(this.benchInput(now), now, this.seatReq);
     if (this.graveLock && !this.overlappingGrave()) this.graveLock = false;
     this.graveCollider.active = !pl.airborne && !this.graveLock;
+    this.furnitureCollider.active = this.graveCollider.active;
+    if (this.net.online && pnow >= this.peerCheckAt) {
+      // 이상 징후만 확인 (서버는 깨우지 않는다): HUD 인원과 원격 아바타 수가 다르면 목록을 한 번 다시 받는다
+      this.peerCheckAt = pnow + PEER_CHECK_MS;
+      if (this.remotes.size !== this.net.peerCount) this.net.requestSync();
+    }
     if (started && this.rig.detached) {
       this.rig.recenter();
       this.recenterAt = 0;
@@ -718,13 +889,19 @@ export class WorldScene extends Phaser.Scene {
     lit.end();
   }
 
+  /** 근접 묘비 툴팁·grave:near를 지금 바로 지운다 */
+  private hideNear(): void {
+    this.tooltip.hide();
+    bridge.emit("grave:near", null);
+  }
+
   private updateNear(): void {
     const pl = this.player;
-    const near = nearestGrave(this.field.layout, pl.x, pl.y, GRAVE_NEAR_RADIUS, this.near);
+    const near = pl.inWater || pl.anchored ? null : nearestGrave(this.field.layout, pl.x, pl.y, GRAVE_NEAR_RADIUS, this.near);
     const id = near ? near.p.id : null;
-    if (id !== this.nearId) {
-      this.nearId = id;
-      bridge.emit("grave:near", id ? { graveId: id } : null);
+    const prev = this.nearId;
+    if (this.nearT.next(id)) {
+      if (id !== prev || id) bridge.emit("grave:near", id ? { graveId: id } : null);
       const g = id ? this.field.grave(id) : undefined;
       if (near && g) this.tooltip.show(near.p, g.name, g.epitaph, this.field.isMine(g.id));
       else this.tooltip.hide();
@@ -737,13 +914,38 @@ export class WorldScene extends Phaser.Scene {
     return { x: b.x, y: b.y, w: b.width, h: b.height };
   }
 
+  /** 점프로 넘을 수 있는 낮은 장애물: 묘비 + 의자·벤치 */
   private graveBoxes(): Box[] {
     const out: Box[] = [];
-    for (const z of this.field.colliders.getChildren()) {
-      const b = (z as Phaser.GameObjects.Zone).body as Phaser.Physics.Arcade.StaticBody | null;
-      if (b) out.push({ x: b.x, y: b.y, w: b.width, h: b.height });
+    for (const g of [this.field.colliders, this.map.furnitureColliders]) {
+      for (const z of g.getChildren()) {
+        const b = (z as Phaser.GameObjects.Zone).body as Phaser.Physics.Arcade.StaticBody | null;
+        if (b) out.push({ x: b.x, y: b.y, w: b.width, h: b.height });
+      }
     }
     return out;
+  }
+
+  /** 긴 벤치에 앉아 있으면 ←/→는 옆자리로 (한 번 누를 때 한 칸), ↑/↓는 그대로 일어나기 */
+  private benchInput(now: number): MoveInput {
+    const pl = this.player;
+    const seat = pl.state === "sitChair" ? pl.seat : null;
+    if (!seat || !MULTI_SEAT.has(seat.furnitureId)) {
+      this.lastSide = 0;
+      return this.move;
+    }
+    const side = sideIntent(this.move.ax, this.move.ay);
+    if (side === 0) {
+      this.lastSide = 0;
+      return this.move;
+    }
+    if (side !== this.lastSide) {
+      const occupied = this.net.online ? this.seats : EMPTY_SEATS;
+      const n = neighborSeat(seat, side, occupied, this.net.online ? this.net.mySid : null);
+      if (n) pl.moveSeat(n, now, this.seatReq);
+    }
+    this.lastSide = side;
+    return NO_MOVE;
   }
 
   private overlappingGrave(): boolean {
@@ -807,7 +1009,49 @@ export class WorldScene extends Phaser.Scene {
       if (g && Math.hypot(g.x - pl.x, g.y + 6 - pl.y) <= Math.hypot(seat.x - pl.x, seat.y - pl.y)) hidden = true;
     }
     const sittingFor = pl.sitting && pl.view.sitSince > 0 ? now - pl.view.sitSince : -1;
-    this.seatHint.update(seat, pl, sittingFor, hidden, labelScale);
+    const bench = pl.state === "sitChair" && pl.seat && MULTI_SEAT.has(pl.seat.furnitureId);
+    const standText = bench ? (this.seatHint.prefix === "E " ? "←→ 옆자리 · ↑↓ 일어나기" : "좌우로 옆자리 · 위아래로 일어나기") : null;
+    this.seatHint.update(seat, pl, sittingFor, hidden, labelScale, seat || pl.sitting ? null : this.objectHint(), standText);
+  }
+
+  /** 좌석이 없을 때의 안내: 물속·매달리기·그네·근처 오브젝트·물가 */
+  private objectHint(): { x: number; y: number; text: string } | null {
+    const pl = this.player;
+    const pre = this.seatHint.prefix;
+    const h = this.hintBuf;
+    if (pl.airborne) return null;
+    if (pl.state === "swim" || pl.state === "dive") {
+      h.x = pl.x;
+      h.y = pl.y + 2;
+      h.text = pl.state === "swim" ? `${pre}잠수` : `${pre}떠오르기`;
+      return h;
+    }
+    if (pl.anchored) {
+      h.x = pl.x;
+      h.y = pl.y + 2;
+      h.text = pl.state === "hang" ? "이동하면 내려와요" : "이동하면 내려요";
+      return h;
+    }
+    const o = nearestObject(this.map.interactables, pl.x, pl.y);
+    if (o) {
+      // 묘비 툴팁이 더 가까우면 겹치지 않게 숨긴다
+      if (this.nearId) {
+        const g = this.field.placement(this.nearId);
+        if (g && Math.hypot(g.x - pl.x, g.y + 6 - pl.y) <= o.dist) return null;
+      }
+      // 오브젝트 그림을 가리지 않게 내 발밑에
+      h.x = pl.x;
+      h.y = pl.y + 2;
+      h.text = pre + o.obj.label;
+      return h;
+    }
+    if (!this.nearId && nearWater(pl.x, pl.y)) {
+      h.x = pl.x;
+      h.y = pl.y + 2;
+      h.text = `${pre}물 튀기기`;
+      return h;
+    }
+    return null;
   }
 
   private cleanup(): void {
@@ -823,7 +1067,7 @@ export class WorldScene extends Phaser.Scene {
     this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this);
     if (this.nearId) bridge.emit("grave:near", null);
     if (this.nearSeatId) bridge.emit("seat:near", null);
-    this.nearId = null;
+    this.nearT.clear();
     this.nearSeatId = null;
   }
 }

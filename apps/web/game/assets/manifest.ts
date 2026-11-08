@@ -1,10 +1,11 @@
 import * as Phaser from "phaser";
 import { DIR, STATE_NAMES, type DirId, type StateName } from "@tomb/protocol";
-import { AV_ANIM, AV_COLS, AV_H, AV_W, buildAvatarSheet, lookKey } from "../sprites/avatar";
+import { AV_ACT_ANIM, AV_ANIM, AV_COLS, AV_H, AV_W, bodyOf, buildAvatarSheet, lookKey, type AvatarActAnim } from "../sprites/avatar";
 import * as fx from "../sprites/fx";
 import { SHAPE_SIZE, shapeVariants, type GraveShape } from "../graveShape";
 import { flowersCanvas, graveCanvas, graveTexKey, mineFlagCanvas, plotCanvas, upMarkerCanvas } from "../sprites/graves";
 import * as props from "../sprites/props";
+import { WORLD_PROP_ART } from "../sprites/worldProps";
 import * as art from "../sprites/extras";
 import { parseHex } from "../sprites/pixel";
 
@@ -63,6 +64,10 @@ export const TEX = {
   ribbon: "decor-ribbon",
   miniLantern: "decor-lantern",
   ghostCat: "decor-ghostcat",
+  rainbow: "decor-rainbow",
+  butterfly: "decor-butterfly",
+  snowman: "decor-snowman",
+  flowerpot: "decor-flowerpot",
   shopHut: "shop-hut",
   shopFloor: "shop-floor",
   shopWall: "shop-wall",
@@ -73,6 +78,12 @@ export const TEX = {
   shopKeeper: "shop-keeper",
   shopDoor: "shop-door",
   mineFlag: "grave-mine-flag",
+  // 아바타 꾸미기 연출 (AvatarView)
+  avWings: "av-wings",
+  avPetGhost: "av-pet-ghost",
+  avFootFlower: "av-foot-flower",
+  avRipple: "av-ripple",
+  avBubble: "av-bubble",
 } as const;
 
 export function flowersKey(n: number): string {
@@ -138,6 +149,10 @@ function buildManifest(): Record<string, TextureSource> {
     [TEX.ribbon]: proc(art.ribbon),
     [TEX.miniLantern]: proc(art.miniLantern),
     [TEX.ghostCat]: proc(art.ghostCat, { frameW: 12, frameH: 8 }),
+    [TEX.rainbow]: proc(art.rainbow),
+    [TEX.butterfly]: proc(art.butterfly, { frameW: 7, frameH: 5 }),
+    [TEX.snowman]: proc(art.snowman),
+    [TEX.flowerpot]: proc(art.flowerpot),
     [TEX.shopHut]: proc(art.shopHut),
     [TEX.shopFloor]: proc(art.shopFloor),
     [TEX.shopWall]: proc(art.shopWall),
@@ -148,7 +163,14 @@ function buildManifest(): Record<string, TextureSource> {
     [TEX.shopKeeper]: proc(art.shopKeeper, { frameW: 16, frameH: 22 }),
     [TEX.shopDoor]: proc(art.shopDoor),
     [TEX.mineFlag]: proc(mineFlagCanvas),
+    [TEX.avWings]: proc(fx.avatarWings, { frameW: 26, frameH: 12 }),
+    [TEX.avPetGhost]: proc(fx.petGhost),
+    [TEX.avFootFlower]: proc(fx.footFlower, { frameW: 5, frameH: 5 }),
+    [TEX.avRipple]: proc(fx.ripple),
+    [TEX.avBubble]: proc(fx.avBubble),
   };
+  // v3 월드 소품·특별한 장소 (sprites/worldProps.ts)
+  for (const [key, build] of Object.entries(WORLD_PROP_ART)) m[key] = proc(build);
   for (const shape of Object.keys(SHAPE_SIZE) as GraveShape[])
     for (let v = 0; v < shapeVariants(shape); v++) m[graveTexKey(shape, v)] = proc(() => graveCanvas(shape, v));
   for (let n = 1; n <= 8; n++) m[flowersKey(n)] = proc(() => flowersCanvas(n));
@@ -195,11 +217,17 @@ export function installProcedural(scene: Phaser.Scene): Record<string, number> {
 
 const DIR_IDS: readonly DirId[] = [DIR.down, DIR.left, DIR.right, DIR.up];
 
-/** 색 + (스프라이트에 그려지는) 꾸미기 조합마다 시트 하나 */
-export function avatarKey(color: string, look: readonly string[] = []): string {
-  const base = `avatar-${parseHex(color).toString(16).padStart(6, "0")}`;
+/** 색 + (시트에 그려지는) 꾸미기 + 몸 조합마다 시트 하나 */
+export function avatarKey(color: string, look: readonly string[] = [], body: string = "hood"): string {
+  const b = bodyOf(body);
+  const base = `avatar-${parseHex(color).toString(16).padStart(6, "0")}${b === "hood" ? "" : `@${b}`}`;
   const k = lookKey(look);
   return k ? `${base}~${k}` : base;
+}
+
+/** 한 번 하는 동작(손 흔들기·환호) 애니메이션 키 */
+export function avatarActAnimKey(texKey: string, act: AvatarActAnim, dir: DirId): string {
+  return `${texKey}:act-${act}:${dir}`;
 }
 
 export function avatarAnimKey(texKey: string, state: StateName, dir: DirId): string {
@@ -207,10 +235,10 @@ export function avatarAnimKey(texKey: string, state: StateName, dir: DirId): str
 }
 
 /** 아바타 텍스처와 애니메이션을 준비하고 텍스처 키를 돌려준다 */
-export function ensureAvatarTexture(scene: Phaser.Scene, color: string, look: readonly string[] = []): string {
-  const key = avatarKey(color, look);
+export function ensureAvatarTexture(scene: Phaser.Scene, color: string, look: readonly string[] = [], body: string = "hood"): string {
+  const key = avatarKey(color, look, body);
   if (!scene.textures.exists(key)) {
-    addCanvasTexture(scene, key, { canvas: buildAvatarSheet(color, look), frameW: AV_W, frameH: AV_H });
+    addCanvasTexture(scene, key, { canvas: buildAvatarSheet(color, look, body), frameW: AV_W, frameH: AV_H });
   }
   if (!scene.anims.exists(avatarAnimKey(key, "idle", DIR.down))) {
     for (const dir of DIR_IDS) {
@@ -222,6 +250,16 @@ export function ensureAvatarTexture(scene: Phaser.Scene, color: string, look: re
           frames: Array.from({ length: a.frames }, (_, i) => ({ key, frame: start + i })),
           frameRate: a.fps,
           repeat: a.frames > 1 ? -1 : 0,
+        });
+      }
+      for (const act of Object.keys(AV_ACT_ANIM) as AvatarActAnim[]) {
+        const a = AV_ACT_ANIM[act];
+        const start = dir * AV_COLS + a.col;
+        scene.anims.create({
+          key: avatarActAnimKey(key, act, dir),
+          frames: Array.from({ length: a.frames }, (_, i) => ({ key, frame: start + i })),
+          frameRate: a.fps,
+          repeat: -1,
         });
       }
     }

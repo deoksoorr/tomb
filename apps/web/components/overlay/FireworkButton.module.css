@@ -1,16 +1,8 @@
-/* 데스크톱: 좌하단 · 터치: 오른쪽 행동 버튼과 [묘비 세우기] 위 */
-.wrap {
+/* 데스크톱 좌하단 */
+.button {
   position: absolute;
   left: var(--safe-left);
   bottom: var(--safe-bottom);
-  display: grid;
-  justify-items: start;
-  gap: 8px;
-  pointer-events: auto;
-}
-
-.button {
-  position: relative;
   display: grid;
   place-items: center;
   width: 48px;
@@ -18,16 +10,10 @@
   border: 0;
   border-radius: 50%;
   background: rgba(20, 21, 17, 0.75);
-  font-size: 22px;
-  line-height: 1;
   box-shadow:
     inset 0 0 0 2px var(--candle),
     0 0 14px rgba(224, 195, 106, 0.25);
-  touch-action: manipulation;
-}
-
-.button:disabled {
-  opacity: 0.5;
+  pointer-events: auto;
 }
 
 .badge {
@@ -42,47 +28,4 @@
   font-size: 11px;
   line-height: 20px;
   text-align: center;
-}
-
-.menu {
-  display: grid;
-  gap: 4px;
-  padding: 6px;
-  background: var(--panel);
-  box-shadow: var(--px-border);
-}
-
-.choice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 6px 12px;
-  border: 0;
-  background: var(--bg-deep);
-  color: var(--text);
-  text-align: left;
-  white-space: nowrap;
-}
-
-.choice:hover {
-  background: var(--surface);
-}
-
-.count {
-  color: var(--candle);
-}
-
-@media (pointer: coarse) {
-  .wrap {
-    left: auto;
-    right: var(--safe-right);
-    bottom: calc(var(--safe-bottom) + 212px);
-    justify-items: end;
-  }
-
-  .button {
-    width: 52px;
-    height: 52px;
-  }
 }

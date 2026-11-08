@@ -3,6 +3,12 @@ import {
   ALTAR,
   FURNITURE,
   GRID_COLS,
+  GRID_DY,
+  GRID_Y0,
+  HOUSING_DOOR,
+  HOUSING_OFFICE,
+  HUNT_GATE,
+  SHRINE,
   MAP_WIDTH,
   REVIVE_SLOTS,
   SEATS,
@@ -17,7 +23,25 @@ import { LevelBlender, levelsFor, mixColor } from "./ambienceMix";
 import { graveChannelFor } from "./graveChannel";
 import { cameraBounds, clampZoom, parseStoredZoom, pinchZoom, snapZoom, stepZoom, approach } from "./cameraMath";
 import { buildLayout, graveAt, layoutSignature, nearestGrave, standSpot, visibleRows } from "./graveLayout";
-import { UPPER_PROPS, furnitureCollider, gridProps, groundKind, nearShopDoor, pondColliders, propCollider, shopCollider, type Rect } from "./layout";
+import {
+  BRIDGE_DECK,
+  POND,
+  POOL,
+  UPPER_PROPS,
+  WALK_XS,
+  furnitureCollider,
+  gridProps,
+  groundKind,
+  inWater,
+  interactables,
+  isLiveTree,
+  nearShopDoor,
+  nearWater,
+  officeCollider,
+  propCollider,
+  shopCollider,
+  type Rect,
+} from "./layout";
 
 const graves = (n: number) =>
   Array.from({ length: n }, (_, i) => ({ id: `g${i}`, ageDays: (i * 37) % 800, flowers: i % 9, revives: i % 5 }));
@@ -30,18 +54,26 @@ describe("static layout", () => {
     ...UPPER_PROPS.map(propCollider),
     ...gridProps(60).map(propCollider),
     ...FURNITURE.map(furnitureCollider),
-    ...pondColliders(),
     shopCollider(),
+    officeCollider(),
   ].filter((r): r is Rect => !!r);
 
   it("spawn, revive stand spots and grid stand spots are walkable", () => {
-    const spots = [SPAWN, SHOP_DOOR, ...REVIVE_SLOTS.map(standSpot), ...Array.from({ length: 200 }, (_, i) => standSpot(graveSlot(i)))];
+    const spots = [
+      SPAWN,
+      SHOP_DOOR,
+      HOUSING_DOOR,
+      HUNT_GATE,
+      SHRINE,
+      ...REVIVE_SLOTS.map(standSpot),
+      ...Array.from({ length: 960 }, (_, i) => standSpot(graveSlot(i))),
+    ];
     for (const s of spots) for (const c of colliders) expect(inside(c, s.x, s.y, 2), JSON.stringify([s, c])).toBe(false);
   });
 
   it("props do not sit on graves or seats", () => {
     const props = [...UPPER_PROPS, ...gridProps(60)].filter((p) => p.kind !== "altar" && p.kind !== "table");
-    const points = [...REVIVE_SLOTS, ...SEATS, ...Array.from({ length: 600 }, (_, i) => graveSlot(i))];
+    const points = [...REVIVE_SLOTS, ...SEATS, ...Array.from({ length: 960 }, (_, i) => graveSlot(i))];
     for (const p of props) for (const q of points) expect(Math.hypot(p.x - q.x, p.y - q.y), JSON.stringify([p, q])).toBeGreaterThan(14);
   });
 
@@ -85,6 +117,98 @@ describe("static layout", () => {
     expect(groundKind(5, (graveSlot(0).y + 16) / 16)).toBe("dirt");
     expect(groundKind(5, (graveSlot(0).y - 16) / 16)).toBe("grass");
     expect(groundKind(Math.floor(ALTAR.x / 16), Math.floor((ALTAR.y + 8) / 16))).toBe("stone");
+  });
+});
+
+describe("v3 world objects", () => {
+  const grid = (rows: number) => gridProps(rows);
+  const collidersFor = (rows: number) =>
+    [...UPPER_PROPS.map(propCollider), ...grid(rows).map(propCollider), ...FURNITURE.map(furnitureCollider), shopCollider(), officeCollider()].filter(
+      (r): r is Rect => !!r,
+    );
+
+  it("grid props (rows 1/10/40) never block grave stand spots, walkway/aisle centers or row paths", () => {
+    for (const rows of [1, 10, 40]) {
+      const cs = collidersFor(rows);
+      const props = grid(rows);
+      for (let i = 0; i < rows * GRID_COLS; i++) {
+        const st = standSpot(graveSlot(i));
+        for (const c of cs) expect(inside(c, st.x, st.y, 3), JSON.stringify([rows, i, c])).toBe(false);
+      }
+      for (const p of props) {
+        if (p.kind === "lantern") continue; // 석등은 예전부터 통로 가운데 3행마다 (주변으로 돌아갈 수 있다)
+        for (const wx of [...WALK_XS, MAP_WIDTH / 2]) expect(Math.abs(p.x - wx), JSON.stringify(p)).toBeGreaterThan(12);
+      }
+      // 묘비 열 사이 소품은 묘비 자리(받침)와 겹치지 않는다
+      for (const p of props) for (let c = 0; c < GRID_COLS; c++) {
+        const slot = graveSlot(c);
+        const row = Math.round((p.y - GRID_Y0) / GRID_DY);
+        if (row < rows) expect(Math.hypot(p.x - slot.x, p.y - (GRID_Y0 + row * GRID_DY)), JSON.stringify(p)).toBeGreaterThan(14);
+      }
+    }
+  });
+
+  it("lots of trees in the grid area and down to the map bottom", () => {
+    for (const rows of [1, 10, 40]) {
+      const trees = grid(rows).filter((p) => isLiveTree(p.kind) || p.kind === "pine" || p.kind === "deadTree");
+      expect(trees.length).toBeGreaterThanOrEqual(rows * 4);
+      const bottom = Math.max(...trees.map((t) => t.y));
+      expect(bottom).toBeGreaterThan(mapHeight(rows * GRID_COLS) - 200);
+    }
+    // 묘비가 몇 개 없어도 맵 최소 높이까지 공원이 채워진다
+    expect(grid(1).filter((p) => p.y > 1000).length).toBeGreaterThan(30);
+  });
+
+  it("interactables: portals, trees, swing, bell, well — stable ids and reachable spots", () => {
+    for (const rows of [0, 10, 40]) {
+      const items = interactables(rows);
+      const cs = collidersFor(rows);
+      expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
+      for (const k of ["hunt", "housing", "shrine"]) expect(items.some((i) => i.kind === "portal" && i.portal === k)).toBe(true);
+      for (const k of ["tree", "swing", "bell", "well"]) expect(items.some((i) => i.kind === k), k).toBe(true);
+      for (const i of items) {
+        for (const c of cs) expect(inside(c, i.ax, i.ay, 1), JSON.stringify([i, c])).toBe(false);
+        expect(i.label.length).toBeGreaterThan(0);
+        expect(i.r).toBeGreaterThan(0);
+        expect(inWater(i.ax, i.ay), i.id).toBe(false);
+      }
+    }
+    const a = interactables(5).filter((i) => i.y < GRID_Y0).map((i) => i.id);
+    const b = interactables(30).filter((i) => i.y < GRID_Y0).map((i) => i.id);
+    expect(b).toEqual(a);
+    expect(interactables(40).filter((i) => i.kind === "tree").length).toBeGreaterThan(100);
+  });
+
+  it("special places: office mirrors the shop, nothing blocks the doors / gate / shrine spot", () => {
+    expect(HOUSING_OFFICE.x).toBe(MAP_WIDTH - SHOP.x);
+    const cs = collidersFor(10);
+    for (const s of [HOUSING_DOOR, HUNT_GATE, SHRINE])
+      for (const c of cs) expect(inside(c, s.x, s.y, 4), JSON.stringify([s, c])).toBe(false);
+    const office = officeCollider();
+    for (const f of FURNITURE) {
+      const c = furnitureCollider(f);
+      expect(c.x + c.w < office.x || c.x > office.x + office.w || c.y + c.h < office.y || c.y > office.y + office.h, f.id).toBe(true);
+    }
+    for (const p of UPPER_PROPS) {
+      const c = propCollider(p);
+      if (c) expect(c.x + c.w < office.x || c.x > office.x + office.w || c.y + c.h < office.y || c.y > office.y + office.h, JSON.stringify(p)).toBe(true);
+    }
+    for (const s of SEATS) expect(Math.hypot(s.x - HUNT_GATE.x, s.y - HUNT_GATE.y)).toBeGreaterThan(30);
+  });
+
+  it("water: pond/pool/creek are swimmable, the bridge deck and land are not", () => {
+    expect(inWater(POND.x, POND.y)).toBe(true);
+    expect(inWater(POOL.x, POOL.y)).toBe(true);
+    expect(inWater(980, 340)).toBe(true);
+    expect(inWater(BRIDGE_DECK.x + BRIDGE_DECK.w / 2, 340)).toBe(false);
+    expect(inWater(POND.x, POND.y + POND.ry + 6)).toBe(false);
+    expect(nearWater(POND.x, POND.y + POND.ry + 6)).toBe(true);
+    expect(nearWater(POND.x, POND.y)).toBe(false);
+    expect(inWater(SPAWN.x, SPAWN.y)).toBe(false);
+    // 좌석·문 앞·묘비 자리는 물이 아니다
+    for (const s of [...SEATS, SHOP_DOOR, HOUSING_DOOR, ...Array.from({ length: 64 }, (_, i) => standSpot(graveSlot(i)))]) expect(inWater(s.x, s.y + 9)).toBe(false);
+    // 물속에는 충돌 박스가 없다 (헤엄쳐 다닐 수 있게)
+    for (const c of collidersFor(4)) expect(inWater(c.x + c.w / 2, c.y + c.h / 2), JSON.stringify(c)).toBe(false);
   });
 });
 

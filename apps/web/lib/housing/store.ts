@@ -1,0 +1,261 @@
+import { GUEST_KEEP, GUEST_PER_DAY, GUEST_REPORT_HIDE, LIKE_WEIGHT, type HouseSort, type PlotTierId } from "./catalog";
+import { emptyLayout } from "./layout";
+import type { GuestEntry, HouseLayout, PublicHouse } from "./types";
+
+// 하우징 저장소. 포인트는 여기서 다루지 않는다 (공용 spendPoints/earnPoints → lib/housing/points.ts).
+// 집 쪽 상태 변화(가방 개수·배치·좋아요·방명록)는 Redis에서는 Lua 하나, 메모리에서는 await 없는 동기 코드로 원자적이다.
+
+/** 저장소 원본. owner(계정 id)·hidden은 그대로 내보내지 않는다 (toPublicHouse) */
+export type HouseRecord = PublicHouse & { owner: string; hidden: boolean; items: number };
+
+/** 방명록 원본: author(계정 id)는 내보내지 않고 mine 판정에만 쓴다 */
+export type StoredGuest = GuestEntry & { author: string };
+
+export type NewHouse = { id: string; owner: string; name: string; intro: string; ownerName: string; tier: PlotTierId; now: number };
+
+export type SaveResult = "ok" | "no_house" | "tier" | "not_owned";
+
+/** 좋아요 하루 1회 판정 기간 (KST 날짜를 키에 넣으므로 날짜가 바뀌면 다시 누를 수 있다. TTL은 정리용) */
+export const LIKE_TTL_SEC = 2 * 86_400;
+export const GUEST_DAY_TTL_SEC = 2 * 86_400;
+export const GUEST_REPORT_TTL_SEC = 30 * 86_400;
+
+export interface HouseStore {
+  get(id: string): Promise<HouseRecord | null>;
+  /** 가진 물건 (놓은 것 포함) */
+  inventory(id: string): Promise<Record<string, number>>;
+  /** 이미 있으면 false */
+  create(h: NewHouse): Promise<boolean>;
+  /** 집과 딸린 키를 모두 지운다 (분양 결제 실패 보상·관리자 삭제) */
+  remove(id: string): Promise<void>;
+  setProfile(id: string, name: string, intro: string, now: number): Promise<boolean>;
+  /** tier가 from일 때만 to로 바꾼다 */
+  upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number): Promise<boolean>;
+  /** 가방에 1개 (max 초과면 "max") */
+  addItem(id: string, itemId: string, max: number): Promise<"ok" | "max" | "no_house">;
+  /** 놓지 않은 1개를 뺀다 (되팔기). 전부 놓여 있으면 "placed", 없으면 "none" */
+  takeItem(id: string, itemId: string): Promise<"ok" | "placed" | "none">;
+  /** 배치 저장: tier가 그대로이고 counts가 가진 개수 안일 때만 (검증은 호출자가 먼저 한다) */
+  saveLayout(id: string, tier: PlotTierId, layout: HouseLayout, counts: Record<string, number>, placedScore: number, now: number): Promise<SaveResult>;
+  /** 좋아요. 오늘 이미 눌렀으면 "already", 집이 없거나 숨김이면 null */
+  like(id: string, visitorId: string, day: string): Promise<{ likes: number; score: number } | "already" | null>;
+  likedToday(id: string, visitorId: string, day: string): Promise<boolean>;
+  /** 숨기지 않은 집 목록 (정렬, 최대 limit) */
+  list(sort: HouseSort, limit: number): Promise<HouseRecord[]>;
+  /** 관리자: 숨김 포함 전체 (최근 분양 순) */
+  listAll(): Promise<HouseRecord[]>;
+  setHidden(id: string, hidden: boolean): Promise<boolean>;
+  /** 방명록 남기기. 하루 GUEST_PER_DAY개 (모든 집 합계) */
+  addGuest(id: string, entry: StoredGuest, day: string): Promise<"ok" | "no_house" | "limit">;
+  /** 최신 먼저. withHidden=false면 가린 글은 뺀다 */
+  guestbook(id: string, withHidden: boolean): Promise<(StoredGuest & { hidden: boolean })[]>;
+  removeGuest(id: string, entryId: string): Promise<StoredGuest | null>;
+  /** 신고 (IP 해시 단위). GUEST_REPORT_HIDE개 모이면 가린다. 글이 없으면 null */
+  reportGuest(id: string, entryId: string, ipHash: string): Promise<"added" | "duplicate" | null>;
+  setGuestHidden(id: string, entryId: string, hidden: boolean): Promise<boolean>;
+  /** 관리자: 신고가 있는 글 → 신고 수 */
+  guestReports(id: string): Promise<Map<string, number>>;
+}
+
+export const scoreOf = (placed: number, likes: number) => placed + likes * LIKE_WEIGHT;
+
+// ── 메모리 (로컬 개발·테스트) ──
+
+type MemHouse = {
+  rec: Omit<HouseRecord, "score" | "items">;
+  inv: Map<string, number>;
+  placed: Map<string, number>;
+  guests: StoredGuest[];
+  guestHidden: Set<string>;
+  guestReports: Map<string, Set<string>>;
+};
+
+export class MemoryHouseStore implements HouseStore {
+  private houses = new Map<string, MemHouse>();
+  private likes = new Set<string>();
+  private guestDay = new Map<string, number>();
+
+  private view(h: MemHouse): HouseRecord {
+    const r = h.rec;
+    return {
+      ...r,
+      layout: structuredClone(r.layout),
+      score: scoreOf(r.placedScore, r.likes),
+      items: r.layout.items.length,
+    };
+  }
+
+  async get(id: string) {
+    const h = this.houses.get(id);
+    return h ? this.view(h) : null;
+  }
+
+  async inventory(id: string) {
+    return Object.fromEntries(this.houses.get(id)?.inv ?? []);
+  }
+
+  async create(n: NewHouse) {
+    if (this.houses.has(n.id)) return false;
+    this.houses.set(n.id, {
+      rec: {
+        id: n.id,
+        owner: n.owner,
+        name: n.name,
+        intro: n.intro,
+        ownerName: n.ownerName,
+        tier: n.tier,
+        layout: emptyLayout(),
+        likes: 0,
+        placedScore: 0,
+        createdAt: n.now,
+        updatedAt: n.now,
+        hidden: false,
+      },
+      inv: new Map(),
+      placed: new Map(),
+      guests: [],
+      guestHidden: new Set(),
+      guestReports: new Map(),
+    });
+    return true;
+  }
+
+  async remove(id: string) {
+    this.houses.delete(id);
+  }
+
+  async setProfile(id: string, name: string, intro: string, now: number) {
+    const h = this.houses.get(id);
+    if (!h) return false;
+    Object.assign(h.rec, { name, intro, updatedAt: now });
+    return true;
+  }
+
+  async upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number) {
+    const h = this.houses.get(id);
+    if (!h || h.rec.tier !== from) return false;
+    Object.assign(h.rec, { tier: to, updatedAt: now });
+    return true;
+  }
+
+  async addItem(id: string, itemId: string, max: number) {
+    const h = this.houses.get(id);
+    if (!h) return "no_house" as const;
+    const n = h.inv.get(itemId) ?? 0;
+    if (n >= max) return "max" as const;
+    h.inv.set(itemId, n + 1);
+    return "ok" as const;
+  }
+
+  async takeItem(id: string, itemId: string) {
+    const h = this.houses.get(id);
+    const n = h?.inv.get(itemId) ?? 0;
+    if (!h || n < 1) return "none" as const;
+    if (n - (h.placed.get(itemId) ?? 0) < 1) return "placed" as const;
+    if (n === 1) h.inv.delete(itemId);
+    else h.inv.set(itemId, n - 1);
+    return "ok" as const;
+  }
+
+  async saveLayout(id: string, tier: PlotTierId, layout: HouseLayout, counts: Record<string, number>, placedScore: number, now: number) {
+    const h = this.houses.get(id);
+    if (!h) return "no_house" as const;
+    if (h.rec.tier !== tier) return "tier" as const;
+    for (const [item, n] of Object.entries(counts)) if ((h.inv.get(item) ?? 0) < n) return "not_owned" as const;
+    h.placed = new Map(Object.entries(counts));
+    Object.assign(h.rec, { layout: structuredClone(layout), placedScore, updatedAt: now });
+    return "ok" as const;
+  }
+
+  async like(id: string, visitorId: string, day: string) {
+    const h = this.houses.get(id);
+    if (!h || h.rec.hidden) return null;
+    const key = `${id}:${visitorId}:${day}`;
+    if (this.likes.has(key)) return "already" as const;
+    this.likes.add(key);
+    h.rec.likes += 1;
+    return { likes: h.rec.likes, score: scoreOf(h.rec.placedScore, h.rec.likes) };
+  }
+
+  async likedToday(id: string, visitorId: string, day: string) {
+    return this.likes.has(`${id}:${visitorId}:${day}`);
+  }
+
+  async list(sort: HouseSort, limit: number) {
+    const all = [...this.houses.values()].filter((h) => !h.rec.hidden).map((h) => this.view(h));
+    const by: Record<HouseSort, (a: HouseRecord, b: HouseRecord) => number> = {
+      score: (a, b) => b.score - a.score || b.createdAt - a.createdAt,
+      likes: (a, b) => b.likes - a.likes || b.createdAt - a.createdAt,
+      new: (a, b) => b.createdAt - a.createdAt,
+    };
+    return all.sort(by[sort]).slice(0, limit);
+  }
+
+  async listAll() {
+    return [...this.houses.values()].map((h) => this.view(h)).sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  async setHidden(id: string, hidden: boolean) {
+    const h = this.houses.get(id);
+    if (!h) return false;
+    h.rec.hidden = hidden;
+    return true;
+  }
+
+  async addGuest(id: string, entry: StoredGuest, day: string) {
+    const h = this.houses.get(id);
+    if (!h || h.rec.hidden) return "no_house" as const;
+    const key = `${entry.author}:${day}`;
+    const n = (this.guestDay.get(key) ?? 0) + 1;
+    this.guestDay.set(key, n);
+    if (n > GUEST_PER_DAY) return "limit" as const;
+    h.guests.unshift(entry);
+    h.guests.length = Math.min(h.guests.length, GUEST_KEEP);
+    return "ok" as const;
+  }
+
+  async guestbook(id: string, withHidden: boolean) {
+    const h = this.houses.get(id);
+    if (!h) return [];
+    return h.guests
+      .map((g) => ({ ...g, hidden: h.guestHidden.has(g.id) }))
+      .filter((g) => withHidden || !g.hidden);
+  }
+
+  async removeGuest(id: string, entryId: string) {
+    const h = this.houses.get(id);
+    const i = h?.guests.findIndex((g) => g.id === entryId) ?? -1;
+    if (!h || i < 0) return null;
+    const [g] = h.guests.splice(i, 1);
+    h.guestHidden.delete(entryId);
+    h.guestReports.delete(entryId);
+    return g;
+  }
+
+  async reportGuest(id: string, entryId: string, ipHash: string) {
+    const h = this.houses.get(id);
+    if (!h || !h.guests.some((g) => g.id === entryId)) return null;
+    let set = h.guestReports.get(entryId);
+    if (!set) h.guestReports.set(entryId, (set = new Set()));
+    if (set.has(ipHash)) return "duplicate" as const;
+    set.add(ipHash);
+    if (set.size >= GUEST_REPORT_HIDE) h.guestHidden.add(entryId);
+    return "added" as const;
+  }
+
+  async setGuestHidden(id: string, entryId: string, hidden: boolean) {
+    const h = this.houses.get(id);
+    if (!h || !h.guests.some((g) => g.id === entryId)) return false;
+    if (hidden) h.guestHidden.add(entryId);
+    else {
+      h.guestHidden.delete(entryId);
+      h.guestReports.delete(entryId);
+    }
+    return true;
+  }
+
+  async guestReports(id: string) {
+    const h = this.houses.get(id);
+    return new Map([...(h?.guestReports ?? [])].map(([k, v]) => [k, v.size]));
+  }
+}

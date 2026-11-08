@@ -15,6 +15,10 @@ import type {
   LookGrantResponse,
   Me,
   NoticeListResponse,
+  PointRankResponse,
+  PresenceResponse,
+  PublicGrave,
+  ShrineListResponse,
   QuickGraveInput,
   ReportResponse,
   ReviveResponse,
@@ -101,7 +105,9 @@ export const api = {
 
   me: () => request<Me>("/api/me", { cache: "no-store" }),
   /** 출석. name은 계정에 이름이 아직 없을 때만 저장된다(코드로 시작한 기기가 이름을 덮어쓰지 않게) */
-  attend: (name: string) => request<AttendResponse>("/api/me/attend", jsonInit("POST", { name })),
+  /** 출석. 이름·색·몸은 계정에 값이 아직 없을 때만 저장된다(코드로 시작·이어서 들어가기가 덮어쓰지 않게) */
+  attend: (name: string, color: string, body?: string) =>
+    request<AttendResponse>("/api/me/attend", jsonInit("POST", body ? { name, color, body } : { name, color })),
   issueCode: () => request<CodeResponse>("/api/me/code", { method: "POST" }),
   loginWithCode: (code: string) => request<CodeLoginResponse>("/api/me/login", jsonInit("POST", { code })),
   myLook: () => request<LookGrantResponse>("/api/me/look", { cache: "no-store" }),
@@ -113,4 +119,11 @@ export const api = {
   notices: () => request<NoticeListResponse>("/api/notices"),
   inquiryInfo: () => request<InquiryInfoResponse>("/api/inquiry", { cache: "no-store" }),
   inquire: (input: InquiryInput) => request<InquiryResponse>("/api/inquiry", jsonInit("POST", input)),
+  presence: () => request<PresenceResponse>("/api/me/presence", { method: "POST" }),
+  /** me=1: 내 순위까지 (개인화 응답이라 CDN 캐시를 타지 않는다) */
+  pointRank: () => request<PointRankResponse>("/api/rank/points?me=1", { cache: "no-store" }),
+  shrine: () => request<ShrineListResponse>("/api/shrine", { cache: "no-store" }),
+  /** 계약에 응답 형태가 없어 복구된 묘비가 오면 쓰고, 없으면 목록 갱신에 맡긴다 */
+  restoreFromShrine: (id: string) =>
+    request<{ grave?: PublicGrave }>(`/api/shrine/${encodeURIComponent(id)}/restore`, { method: "POST" }),
 };

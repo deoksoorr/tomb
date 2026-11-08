@@ -8,7 +8,7 @@ import type { GravePlacement } from "../world/graveLayout";
 
 // 묘비 한 기의 화면 표현. 화면에 보이는 행만 풀에서 꺼내 붙인다 (GraveField).
 // 살려주세요가 많을수록 은은한 빛, 아주 많으면 미세한 흔들림 (prefers-reduced-motion이면 흔들림 없음).
-// 부활 대기석 상위 3개에는 촛불, 1위에는 유령불까지. 묘비 꾸미기(촛불·화환·리본·작은 석등·유령 고양이·별빛)도 여기서.
+// 부활 대기석 상위 3개에는 촛불, 1위에는 유령불까지. 묘비 꾸미기(촛불·화환·리본·작은 석등·유령 고양이·별빛·무지개·나비·눈사람·화분)도 여기서.
 // 유료 디자인은 저마다 작은 움직임이 있다 (커피 김, 커서 깜빡, LED, 꽃잎, 로켓 불빛, 수정 빛, 금빛 반짝 …).
 // 움직임은 화면에 보이는 묘비만 갱신하고, prefers-reduced-motion이면 멈춘 그림으로 둔다.
 // 내 묘비(graves:mine)에는 금빛 작은 깃발을 꽂아 맵에서 바로 찾게 한다.
@@ -23,6 +23,8 @@ export function reviveLevel(revives: number): number {
 type Light = { img: Phaser.GameObjects.Image; base: number; phase: number };
 type Star = { img: Phaser.GameObjects.Image; t0: number };
 type Fx = { img: Phaser.GameObjects.Image; a: number; b: number };
+/** 움직이는 묘비 꾸미기 (무지개 일렁임·나비·눈 반짝임·화분 흔들림) */
+type Deco = { img: Phaser.GameObjects.Image; kind: "rainbow" | "butterfly" | "snow" | "pot"; a: number; b: number; x: number; y: number };
 
 const GREEN = 0x6ae07a;
 const AMBER = 0xf0b040;
@@ -36,6 +38,7 @@ export class GraveView {
   private wisp: Phaser.GameObjects.Sprite | null = null;
   private lights: Light[] = [];
   private decorObjs: Phaser.GameObjects.GameObject[] = [];
+  private deco: Deco[] = [];
   private cat: Phaser.GameObjects.Sprite | null = null;
   private stars: Star[] = [];
   private fx: Fx[] = [];
@@ -139,6 +142,7 @@ export class GraveView {
       riseAt > 0 ||
       !!this.cat ||
       this.stars.length > 0 ||
+      this.deco.length > 0 ||
       this.fx.length > 0 ||
       !!this.fxGlow ||
       !!this.flag ||
@@ -263,6 +267,84 @@ export class GraveView {
             this.stars.push({ img, t0: i * 700 + this.phase * 300 });
           }
           break;
+        case "decor_rainbow": {
+          // 묘비 뒤로 걸린 작은 무지개 (양 끝 구름이 묘비 옆에 보인다)
+          const y = p.y - h + 7;
+          const img = this.scene.add.image(p.x, y, TEX.rainbow).setOrigin(0.5, 1).setDepth(p.y - 0.5).setAlpha(0.85);
+          this.addDeco(img, "rainbow", 0, 0, p.x, y);
+          break;
+        }
+        case "decor_butterfly": {
+          const tints = [0xffa8d4, 0x9ad4ff, 0xffe07a];
+          for (let i = 0; i < (this.reduced ? 2 : 3); i++) {
+            const img = this.scene.add.image(p.x, p.y - h, TEX.butterfly, 0).setTint(tints[i]).setDepth(p.y + 0.8);
+            this.addDeco(img, "butterfly", (i * Math.PI * 2) / 3 + this.phase, 0.8 + i * 0.23, p.x, p.y - h * 0.6 - 4);
+          }
+          break;
+        }
+        case "decor_snowman": {
+          const sx = p.x - 14;
+          this.decorObjs.push(this.scene.add.image(sx, p.y + 3, TEX.snowman).setOrigin(0.5, 1).setDepth(p.y + 2));
+          // 가끔 눈 결정이 반짝인다
+          for (let i = 0; i < (this.reduced ? 1 : 3); i++) {
+            const img = this.scene.add.image(sx, p.y - 10, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setTint(0xdcecff).setDepth(DEPTH.lights + 1);
+            this.addDeco(img, "snow", i * 1100 + this.phase * 400, i, sx, p.y - 6);
+          }
+          break;
+        }
+        case "decor_flowerpot": {
+          const fx = p.x + (p.decor.includes("decor_snowman") ? 9 : -9);
+          const img = this.scene.add.image(fx, p.y + 6, TEX.flowerpot).setOrigin(0.5, 1).setDepth(p.y + 3);
+          this.addDeco(img, "pot", this.phase, 0, fx, p.y + 6);
+          break;
+        }
+      }
+    }
+  }
+
+  private addDeco(img: Phaser.GameObjects.Image, kind: Deco["kind"], a: number, b: number, x: number, y: number): void {
+    this.decorObjs.push(img);
+    this.deco.push({ img, kind, a, b, x, y });
+  }
+
+  private updateDeco(p: GravePlacement, now: number, lightLevel: number): void {
+    const still = this.reduced;
+    for (let i = 0; i < this.deco.length; i++) {
+      const d = this.deco[i];
+      switch (d.kind) {
+        case "rainbow":
+          d.img.setAlpha(still ? 0.8 : 0.68 + 0.2 * Math.sin(now / 1400 + this.phase));
+          break;
+        case "butterfly": {
+          // 묘비 둘레를 8자로 날며 앞뒤로 오간다
+          if (still) {
+            d.img.setPosition(d.x - 6 + i * 6, d.y + 3).setFrame(0);
+            break;
+          }
+          const t = (now / 1000) * d.b + d.a;
+          const fx = Math.sin(t) * 11;
+          const fy = Math.sin(t * 2) * 4 + Math.sin(t * 0.7) * 2;
+          d.img
+            .setPosition(d.x + fx, d.y + fy)
+            .setFrame(Math.floor(now / 110 + i) % 2)
+            .setFlipX(Math.cos(t) < 0)
+            .setDepth(Math.cos(t) > 0 ? p.y + 0.8 : p.y - 0.8);
+          break;
+        }
+        case "snow": {
+          const cycle = 2600;
+          const t = ((now + d.a) % cycle) / cycle;
+          const k = Math.floor((now + d.a) / cycle) + d.b * 5;
+          const on = still ? 0.5 : Math.max(0, Math.sin(t * Math.PI * 2));
+          d.img
+            .setPosition(d.x - 5 + ((k * 7) % 11), d.y - ((k * 13) % 9) + (still ? 0 : t * 3))
+            .setAlpha(on * (0.5 + 0.5 * lightLevel))
+            .setScale(0.4 + 0.4 * on);
+          break;
+        }
+        case "pot":
+          if (!still) d.img.setRotation(Math.sin(now / 1500 + d.a) * 0.06);
+          break;
       }
     }
   }
@@ -291,6 +373,7 @@ export class GraveView {
     this.candles = [];
     this.lights = [];
     this.decorObjs = [];
+    this.deco = [];
     this.stars = [];
     this.fx = [];
     this.wisp = null;
@@ -354,6 +437,7 @@ export class GraveView {
     }
     if (this.cat && !this.reduced) this.cat.setY(p.y - GRAVE_STONE_H[p.shape] + 1 - (Math.sin(now / 900 + this.phase) > 0.6 ? 1 : 0));
     this.updateStyle(p, now, lightLevel);
+    if (this.deco.length) this.updateDeco(p, now, lightLevel);
     if (this.flag && !this.reduced) this.flag.setRotation(Math.sin(now / 700 + this.phase) * 0.06);
     if (this.mineHalo) {
       // 세운 직후 잠깐 더 밝게, 그 뒤로는 은은하게 계속

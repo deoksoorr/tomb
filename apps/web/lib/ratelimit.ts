@@ -24,6 +24,8 @@ const LIMITS = {
   detail: { visitor: null, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   shop: { visitor: 20, ip: 60, windowSec: MIN, message: "상점 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   inquiry: { visitor: 3, ip: 3, windowSec: DAY, message: "문의는 하루에 3번까지 보낼 수 있어요." },
+  presence: { visitor: 2, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요." },
+  rank: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
 } as const;
 
 /** 관리자 키 대입 방지: IP당 분당 실패 10회 */

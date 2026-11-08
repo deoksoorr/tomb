@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { ITEMS, type ItemDef, type ItemKind } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { meStore, useMe } from "@/lib/hooks/useMe";
-import { effectLabel, KIND_LABELS } from "../account/items";
+import { cosmeticBlock, effectLabel, KIND_LABELS } from "../account/items";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
@@ -20,6 +20,8 @@ export default function ShopDialog({ onClose }: { onClose: () => void }) {
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const baseId = useId();
+  // 착용 남은 시간 판단 기준 (렌더 중에 시계를 읽지 않는다)
+  const [openedAt] = useState(() => Date.now());
 
   useEffect(() => {
     void meStore.refresh();
@@ -71,10 +73,11 @@ export default function ShopDialog({ onClose }: { onClose: () => void }) {
           {ITEMS.filter((item) => item.kind === tab).map((item) => {
             const owned = me?.inventory[item.id] ?? 0;
             const short = me !== null && me.points < item.price;
+            const blocked = me ? cosmeticBlock(item, me.inventory, me.equipped, openedAt) : null;
             return (
               <li key={item.id} className={styles.card}>
                 <div className={styles.preview}>
-                  <ItemIcon itemId={item.id} scale={6} />
+                  <ItemIcon itemId={item.id} size={64} />
                 </div>
                 <p className={styles.name}>{item.name}</p>
                 <p className={styles.desc}>{item.desc}</p>
@@ -86,10 +89,14 @@ export default function ShopDialog({ onClose }: { onClose: () => void }) {
                   type="button"
                   className={cx(ui.button, styles.buy)}
                   onClick={() => buy(item)}
-                  disabled={!me || short || pending !== null}
+                  disabled={!me || short || blocked !== null || pending !== null}
                   aria-label={`${item.name}, ${item.price}포인트에 사기`}
                 >
-                  {pending === item.id ? "사는 중…" : `${item.price}P${short ? " · 모자라요" : " · 사기"}`}
+                  {pending === item.id
+                    ? "사는 중…"
+                    : blocked
+                      ? blocked
+                      : `${item.price}P${short ? " · 모자라요" : " · 사기"}`}
                 </button>
               </li>
             );

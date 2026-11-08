@@ -8,7 +8,7 @@ import { deleteGrave, listPublic, toPublicGrave } from "./index";
 import { MemoryStore } from "./memory";
 import { mockGraves } from "./mock";
 import { RedisStore } from "./redis";
-import type { GraveStore } from "./types";
+import { SHRINE_KEEP_MS, type GraveStore } from "./types";
 
 function grave(over: Partial<Grave> = {}): Grave {
   return {
@@ -205,6 +205,51 @@ function contract(make: () => GraveStore) {
     expect(legacy.channel).toBeUndefined();
     expect((await store.list(1)).some((r) => r.id === legacy.id)).toBe(true);
     expect((await store.get(legacy.id))?.channel).toBe(1);
+  });
+
+  it("성황당: 이장하면 목록·랭킹에서 빠지고, 반응 수·숨김·꾸미기를 보관했다가 채널 맨 뒤로 되돌린다", async () => {
+    const acct = `acct-${nanoid(6)}`;
+    const g = await add({ channel: 2, createdAt: 1000 });
+    await store.flower(g.id, "v1");
+    await store.toggleRevive(g.id, "v1");
+    await store.toggleRevive(g.id, "v2");
+    await store.setHidden(g.id, true);
+    const now = Date.now();
+
+    expect((await store.toShrine(g.id, acct, now))?.id).toBe(g.id);
+    expect(await store.get(g.id)).toBeNull();
+    expect((await store.list(2)).some((r) => r.id === g.id)).toBe(false);
+    expect(await store.toShrine(g.id, acct, now)).toBeNull();
+
+    const [entry] = await store.shrine(acct, now);
+    expect(entry).toMatchObject({ removedAt: now, expiresAt: now + SHRINE_KEEP_MS });
+    expect(entry.record).toMatchObject({ id: g.id, channel: 2, flowers: 1, revives: 2, hidden: true, createdAt: 1000 });
+
+    expect(await store.restore(`acct-${nanoid(6)}`, g.id, now + 1)).toBeNull(); // 남의 성황당
+    const back = await store.restore(acct, g.id, now + 5);
+    expect(back).toMatchObject({ id: g.id, channel: 2, flowers: 1, revives: 2, hidden: true, createdAt: now + 5 });
+    expect(await store.get(g.id)).toMatchObject({ channel: 2, flowers: 1, revives: 2, createdAt: now + 5 });
+    expect((await store.viewer(g.id, "v1")).myRevive).toBe(true); // 살려주세요 한 사람 기록도 그대로
+    expect(await store.shrine(acct, now)).toEqual([]);
+    expect(await store.restore(acct, g.id, now + 6)).toBeNull();
+  });
+
+  it("성황당: 동시에 두 번 되돌려도 한 번만, 30일이 지나면 되돌릴 수 없고 정리된다", async () => {
+    const acct = `acct-${nanoid(6)}`;
+    const g = await add();
+    const now = Date.now();
+    await store.toShrine(g.id, acct, now);
+    const both = await Promise.all([store.restore(acct, g.id, now), store.restore(acct, g.id, now)]);
+    expect(both.filter(Boolean)).toHaveLength(1);
+
+    await store.toShrine(g.id, acct, now);
+    const expired = now + SHRINE_KEEP_MS + 1;
+    expect(await store.shrine(acct, expired)).toEqual([]);
+    expect(await store.restore(acct, g.id, expired)).toBeNull();
+    const purged = await store.purgeShrine(expired, 100);
+    expect(purged.map((p) => p.id)).toContain(g.id);
+    expect(await store.shrine(acct, now)).toEqual([]);
+    expect((await store.purgeShrine(expired, 100)).map((p) => p.id)).not.toContain(g.id);
   });
 
   it("list는 카운트를 붙여 돌려준다 (숨김 포함)", async () => {

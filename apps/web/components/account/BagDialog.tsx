@@ -72,7 +72,7 @@ export default function BagDialog({ cache, myGraves, onClose }: Props) {
               <ul className={styles.list}>
                 {items.map(({ item, count }) => (
                   <li key={item.id} className={styles.row}>
-                    <ItemIcon itemId={item.id} scale={4} />
+                    <ItemIcon itemId={item.id} size={32} />
                     <span className={styles.main}>
                       <span className={styles.name}>
                         {item.name} <span className={styles.count}>×{count}</span>
@@ -120,7 +120,7 @@ export default function BagDialog({ cache, myGraves, onClose }: Props) {
                 ))}
                 {worn.map((e) => (
                   <li key={e.itemId} className={cx(styles.row, styles.worn)}>
-                    <ItemIcon itemId={e.itemId} scale={4} />
+                    <ItemIcon itemId={e.itemId} size={32} />
                     <span className={styles.main}>
                       <span className={styles.name}>{itemById(e.itemId)?.name ?? e.itemId} · 착용 중</span>
                       <span className={styles.meta}>{remainingLabel(e.until, openedAt)}</span>

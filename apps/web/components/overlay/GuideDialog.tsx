@@ -10,6 +10,7 @@ import {
   MAX_DECOR_PER_GRAVE,
 } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES } from "@/lib/economy";
+import { PRESENCE_INTERVAL_MS, SHRINE_KEEP_DAYS } from "@/lib/types";
 import { durationLabel, effectLabel, KIND_LABELS } from "../account/items";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
@@ -22,6 +23,9 @@ const CONTROLS: [string, string, string][] = [
   ["점프 (묘비를 넘어가요)", "Space", "점프 버튼"],
   ["앉기·일어서기", "X 또는 C (벤치·의자 근처면 그 자리에)", "앉기 버튼 (근처에 자리가 있으면 빛나요)"],
   ["묘비 보기·말 걸기", "E", "상호작용 버튼"],
+  ["나무에 매달리기·그네·종 치기·잠수", "가까이 가서 E (화면 안내를 따라)", "상호작용 버튼"],
+  ["수영·잠수", "물에 들어가면 헤엄쳐요 (잠수도 돼요)", "조이스틱으로 물에"],
+  ["감정 표현", "1 손 흔들기 · 2 환호", "메뉴 → 감정 표현"],
   ["확대·축소", "마우스 휠 · ＋/－", "＋/－ 버튼"],
   ["둘러보기", "오른쪽 버튼으로 끌기", "—"],
   ["시점 되돌리기", "내 캐릭터로 버튼", "내 캐릭터로 버튼"],
@@ -81,6 +85,10 @@ export default function GuideDialog({ onClose }: { onClose: () => void }) {
             <li>하루에 모두 합쳐 {DAILY_EARN_CAP} 포인트까지 쌓여요. 날짜는 한국 시간 자정에 바뀌어요.</li>
             <li>지갑에는 {BALANCE_CAP.toLocaleString("ko-KR")} 포인트까지 담겨요.</li>
             <li>한도에 걸리면 알림 없이 조용히 쌓이지 않아요.</li>
+            <li>
+              묘지에 머무르기만 해도 {PRESENCE_INTERVAL_MS / 60_000}분마다 포인트가 쌓여요(다른 창을 보고 있어도 괜찮아요).
+            </li>
+            <li>랭킹의 &quot;포인트&quot; 탭은 지금까지 모은 포인트(써도 줄지 않아요) 순이에요.</li>
             <li>한 곳(같은 IP)에서는 하루 {ATTEND_ACCOUNTS_PER_IP}개 계정까지만 출석 포인트를 받아요.</li>
           </ul>
         </section>
@@ -101,7 +109,7 @@ export default function GuideDialog({ onClose }: { onClose: () => void }) {
                 <tr key={item.id}>
                   <th scope="row">
                     <span className={styles.itemName}>
-                      <ItemIcon itemId={item.id} scale={3} />
+                      <ItemIcon itemId={item.id} size={32} />
                       <span>
                         {item.name}
                         <span className={styles.note}>{KIND_LABELS[item.kind]}</span>
@@ -174,10 +182,23 @@ export default function GuideDialog({ onClose }: { onClose: () => void }) {
         <section>
           <h3>내 묘비로 가기</h3>
           <p>
-            화면 왼쪽 아래의 [내 묘비] 버튼을 누르면 내가 세운 묘비 목록(자리·헌화·살려주세요 수)이 나오고, 고르면 그
+            [내 묘비] 버튼(데스크톱은 왼쪽 아래, 터치 화면은 오른쪽 위 메뉴 안)을 누르면 내가 세운 묘비 목록(자리·헌화·살려주세요 수)이 나오고, 고르면 그
             앞으로 바로 가요. 하나뿐이면 누르자마자 가요. 지도에도 내 묘비가 표시돼요.
           </p>
         </section>
+        <section>
+          <h3>묘지 안의 장소</h3>
+          <ul className={styles.points}>
+            <li>사냥터: 혼자 또는 함께 싸우고 미니게임을 하며 포인트를 모아요.</li>
+            <li>분양 사무소: 나만의 집을 꾸미고 다른 사람의 집에 좋아요를 눌러요.</li>
+            <li>
+              성황당: 이장한 내 묘비가 {SHRINE_KEEP_DAYS}일 동안 머무는 곳이에요. 그 안에 다시 모실 수 있어요(내 정보에서도
+              열 수 있어요).
+            </li>
+            <li>자세한 건 각 장소에서 안내해요.</li>
+          </ul>
+        </section>
+
         <section className={styles.inquiry}>
           <h3>문의</h3>
           <p>버그·제안·계정 문제는 여기로 알려 주세요.</p>

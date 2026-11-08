@@ -1,4 +1,4 @@
-import { SEAT_SEARCH_RADIUS, seatsNear, type Seat, type Sid } from "@tomb/protocol";
+import { SEAT_SEARCH_RADIUS, SEATS, seatsNear, type Seat, type Sid } from "@tomb/protocol";
 
 // 앉기 규칙 (명세 5-3): 반경 24px 안에 "비어 있는" 좌석이 있으면 가장 가까운 좌석, 없으면 바닥 앉기.
 
@@ -36,4 +36,27 @@ export function pickInteract(
   if (grave && grave.dist <= seatDist) return { kind: "grave", graveId: grave.id };
   if (seat) return { kind: "seat", seat };
   return { kind: "none" };
+}
+
+/**
+ * 긴 벤치에 앉은 채 ←/→: 같은 벤치의 바로 옆 좌석 (dx=-1 왼쪽, 1 오른쪽).
+ * 끝자리이거나 옆자리에 다른 사람이 앉아 있으면 null (그대로 앉아 있는다). 의자(1인석)도 null.
+ */
+export function neighborSeat(seat: Pick<Seat, "id" | "furnitureId" | "x">, dx: -1 | 1, occupied: ReadonlyMap<string, Sid>, mySid: Sid | null): Seat | null {
+  let best: Seat | null = null;
+  for (const s of SEATS) {
+    if (s.furnitureId !== seat.furnitureId || s.id === seat.id) continue;
+    const d = (s.x - seat.x) * dx;
+    if (d <= 0) continue;
+    if (!best || d < (best.x - seat.x) * dx) best = s;
+  }
+  if (!best) return null;
+  const owner = occupied.get(best.id);
+  return owner === undefined || (mySid !== null && owner === mySid) ? best : null;
+}
+
+/** 앉은 채 좌우 입력 → -1/0/1 (가로가 세로보다 확실히 클 때만) */
+export function sideIntent(ax: number, ay: number): -1 | 0 | 1 {
+  if (Math.abs(ax) < 0.5 || Math.abs(ax) <= Math.abs(ay) * 1.2) return 0;
+  return ax < 0 ? -1 : 1;
 }

@@ -1,7 +1,7 @@
 import {
+  ACT_KINDS,
   CLOSE,
   MAX_JOIN_RETRIES,
-  PEER_SYNC_MS,
   QUEUE_POLL_MS,
   STATE,
   PING,
@@ -13,6 +13,7 @@ import {
   encodeMove,
   parseS2C,
   pickChannel,
+  type ActKind,
   type C2S,
   type EmoteKind,
   type GraveEventKind,
@@ -28,6 +29,7 @@ import { bridge, type NetMode } from "../bridge";
 import { backoffDelay } from "./backoff";
 import { isPermanentJoinError, JoinLimiter, reusableToken, utf8Bytes, type CachedToken } from "./joinPolicy";
 import { MoveThrottle, type NetPose } from "./sendThrottle";
+import { bodyFromWsUrl, SYNC_EVERY_MS, SyncPolicy } from "./syncPolicy";
 
 // 실시간 연결 (명세 3-2, 4-1).
 //  - (재)연결마다 POST /api/join 으로 새 토큰을 받는다 (토큰 60초 유효). 같은 채널로 돌아가면 서버 유예(20초) 안에서 sid·좌석 유지
@@ -40,7 +42,8 @@ import { MoveThrottle, type NetPose } from "./sendThrottle";
 //  - 클라이언트가 끊는 경우: 의도적 퇴장(stop·채널 이동)만 1000, 타임아웃 등은 4000
 //    (서버는 1000을 "떠남"으로 보고 재연결 유예 없이 자리를 비운다)
 //  - 대기열(/api/join → queue): 혼자 걸으며 queueUrl을 QUEUE_POLL_MS마다 확인, admitted면 그 채널로 입장
-//  - 자가 복구: PEER_SYNC_MS마다(그리고 탭이 다시 보일 때) sync → peers로 원격 아바타 목록을 서버 기준으로 맞춘다
+//  - 자가 복구: 탭이 보이는 동안 3분마다(PEER_SYNC_MS×3), 탭이 다시 보일 때, 이상 징후(모르는 sid의 스냅샷·인원 불일치)일 때만
+//    sync → peers로 원격 아바타 목록을 서버 기준으로 맞춘다 (가만히 있으면 서버를 깨우지 않는다. 숨은 탭은 핑만)
 
 export type NetCallbacks = {
   getPose(out: NetPose): NetPose;
@@ -59,9 +62,13 @@ export type NetCallbacks = {
   onPeers(peers: PeerInfo[], seats: Record<string, Sid>): void;
   onLook(sid: Sid, look: string[]): void;
   onFirework(sid: Sid, item: string, x: number, y: number): void;
+  /** 한 번 하는 동작 (종 치기·물 튀기기·손 흔들기·환호). 내 것은 오지 않는다 */
+  onAct(sid: Sid, kind: ActKind, x: number, y: number): void;
+  /** 입장 토큰에 든 내 아바타 몸 모양 (계정에 저장된 값) */
+  onSelfBody?(body: string): void;
 };
 
-export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean };
+export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean; body?: string };
 
 class JoinError extends Error {
   constructor(
@@ -118,6 +125,7 @@ export class RealtimeClient {
   private queueTimer: ReturnType<typeof setTimeout> | null = null;
   private queueUrl: string | null = null;
   private syncTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly syncPolicy = new SyncPolicy();
   /** 대기열에서 들어온 채널 (welcome 때 안내) */
   private admittedTo: number | null = null;
   /** 마지막 꾸미기 증서. 다시 접속하면 한 번 더 보낸다 (만료됐으면 서버가 무시) */
@@ -251,9 +259,20 @@ export class RealtimeClient {
     this.send({ t: "firework", grant });
   }
 
+  /** 한 번 하는 동작 (종 치기 등). 서버가 같은 채널에 중계한다 */
+  act(kind: ActKind): void {
+    this.send({ t: "act", kind });
+  }
+
   /** 접속자 목록 다시 받기 (자가 복구) */
   sync(): void {
+    this.syncPolicy.mark(performance.now());
     this.send({ t: "sync" });
+  }
+
+  /** 이상 징후(인원 불일치 등): 최소 간격을 지켜 바로 sync */
+  requestSync(): void {
+    if (this.online && this.syncPolicy.urgent(performance.now(), this.hidden)) this.sync();
   }
 
   private send(msg: C2S): void {
@@ -296,6 +315,7 @@ export class RealtimeClient {
     }
     this.joinLimiter.record(Date.now());
     const body: JoinRequest = { channel, name: this.opts.name, color: this.opts.color };
+    if (this.opts.body) body.body = this.opts.body;
     const post = () =>
       fetch("/api/join", {
         method: "POST",
@@ -342,6 +362,8 @@ export class RealtimeClient {
     if (this.ws) this.closeSocket(CLOSE_CLIENT_DROP, "superseded");
     if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
     this.welcomeTimer = null;
+    const mine = bodyFromWsUrl(res.wsUrl);
+    if (mine) this.cb.onSelfBody?.(mine);
     const p = this.cb.getPose(this.pose);
     const sep = res.wsUrl.includes("?") ? "&" : "?";
     const url = `${res.wsUrl}${sep}x=${Math.round(p.x)}&y=${Math.round(p.y)}`;
@@ -408,12 +430,17 @@ export class RealtimeClient {
         case "look":
           if (m.sid !== this.mySid) this.cb.onLook(m.sid, m.look);
           break;
+        case "act":
+          if (m.sid !== this.mySid && (ACT_KINDS as readonly string[]).includes(m.kind) && Number.isFinite(m.x) && Number.isFinite(m.y))
+            this.cb.onAct(m.sid, m.kind, m.x, m.y);
+          break;
         case "firework":
           // 내 폭죽은 누른 순간 이미 터뜨렸다 → 중복 재생하지 않는다
           if (m.sid !== this.mySid) this.cb.onFirework(m.sid, m.item, m.x, m.y);
           break;
         case "peers": {
           this.peers.clear();
+          this.syncPolicy.mark(performance.now());
           for (const p of m.peers) if (p.sid !== this.mySid) this.peers.add(p.sid);
           this.cb.onPeers(
             m.peers.filter((p) => p.sid !== this.mySid),
@@ -430,6 +457,14 @@ export class RealtimeClient {
       const snap = decodeSnapshot(data);
       if (!snap) return;
       this.snapshots++;
+      // 모르는 사람의 스냅샷 = 입장 소식을 놓쳤다 → 목록을 다시 받는다 (최소 간격 유지)
+      for (let i = 0; i < snap.entries.length; i++) {
+        const sid = snap.entries[i].sid;
+        if (sid !== this.mySid && !this.peers.has(sid)) {
+          this.requestSync();
+          break;
+        }
+      }
       this.cb.onSnapshot(snap.entries, performance.now());
     }
   }
@@ -457,6 +492,7 @@ export class RealtimeClient {
     this.throttle.reset();
     this.lastPongAt = performance.now();
     this.startPing();
+    this.syncPolicy.mark(performance.now());
     this.startSync();
     this.setMode("online");
     this.cb.onWelcome({ ...m, peers: m.peers.filter((p) => p.sid !== m.sid) });
@@ -514,9 +550,10 @@ export class RealtimeClient {
 
   private startSync(): void {
     if (this.syncTimer) clearInterval(this.syncTimer);
+    // 타이머는 클라이언트 안에서만 돈다. 보내는 건 보이는 탭에서 3분이 지났을 때뿐
     this.syncTimer = setInterval(() => {
-      if (!this.hidden) this.sync();
-    }, PEER_SYNC_MS);
+      if (this.online && this.syncPolicy.periodic(performance.now(), this.hidden)) this.sync();
+    }, Math.min(SYNC_EVERY_MS, 30_000));
   }
 
   private stopSync(): void {
@@ -753,8 +790,8 @@ export class RealtimeClient {
       this.lastPongAt = performance.now();
       if (this.hiddenIdleTimer) clearTimeout(this.hiddenIdleTimer);
       this.hiddenIdleTimer = null;
-      // 숨어 있는 동안 놓친 입장·퇴장을 서버 기준으로 다시 맞춘다
-      this.sync();
+      // 숨어 있는 동안 놓친 입장·퇴장을 서버 기준으로 다시 맞춘다 (1회, 최소 간격 유지)
+      this.requestSync();
       return;
     }
     // 걷던 중에 탭이 숨으면 게임 루프가 멈춘다 → 다른 사람 화면에서 계속 걷지 않도록 멈춤(idle)을 1회 알리고 쉰다

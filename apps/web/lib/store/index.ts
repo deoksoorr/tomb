@@ -1,8 +1,10 @@
 import { styleItemId } from "@tomb/protocol";
 import { deleteImage } from "../blob";
+import type { EarnSource } from "../economy";
 import { env } from "../env";
 import { HttpError, notFound } from "../http";
-import type { Grave, GraveListResponse, PublicGrave } from "../types";
+import type { Grave, GraveListResponse, Me, PublicGrave } from "../types";
+import { kstDay, loadMe } from "./accounts";
 import { isGraveId } from "../validate";
 import { MemoryAccounts } from "./accounts-memory";
 import { RedisAccounts } from "./accounts-redis";
@@ -47,6 +49,51 @@ export function getAccounts(): AccountStore {
   const fresh = new MemoryAccounts(() => getStore() as MemoryStore);
   g.__tombAccounts = cur ? Object.assign(fresh, cur, { graves: () => getStore() as MemoryStore }) : fresh;
   return g.__tombAccounts;
+}
+
+// ── 계정 포인트 공용 함수 (사냥터·하우징 등 다른 기능이 쓴다) ──
+
+/**
+ * 포인트 적립. 항목별 하루 한도(EARN_RULES)·하루 전체 한도·지갑 한도 안에서만 쌓이고, 한 번에 원자적으로 반영된다.
+ * amount를 주지 않으면 항목 기본 점수. ip(= session.ts ipHash(req))를 주면 같은 IP의 그 항목 하루 합계도
+ * 항목 한도 × ATTEND_ACCOUNTS_PER_IP로 막는다 (계정 여러 개로 농사 방지).
+ * 모은 포인트(lifetimePoints)·포인트 랭킹도 같이 오른다. earned = 실제로 쌓인 점수 (한도면 0).
+ */
+export async function earnPoints(
+  accountId: string,
+  source: EarnSource,
+  amount?: number,
+  ip?: string,
+): Promise<{ earned: number; me: Me }> {
+  const accounts = getAccounts();
+  const now = Date.now();
+  const earned = await accounts.earn(accountId, source, kstDay(now), { amount, ipHash: ip });
+  return { earned, me: await loadMe(accounts, accountId, now) };
+}
+
+/**
+ * 포인트 쓰기 (원자적: 잔액 확인과 차감이 한 번에, 동시에 불러도 음수가 되지 않는다).
+ * 모자라면 409 NOT_ENOUGH_POINTS를 던진다 (라우트 handler가 그대로 응답한다). reason은 계정의 최근 사용 기록에 남는다.
+ */
+export async function spendPoints(accountId: string, amount: number, reason: string): Promise<Me> {
+  if (!Number.isInteger(amount) || amount <= 0) throw new Error(`[points] 잘못된 사용량 ${amount}`);
+  const accounts = getAccounts();
+  const now = Date.now();
+  if ((await accounts.spend(accountId, amount, reason, now)) === null)
+    throw new HttpError(409, "NOT_ENOUGH_POINTS", "포인트가 모자라요.");
+  return loadMe(accounts, accountId, now);
+}
+
+/**
+ * 포인트 돌려주기 (되팔기·결제 뒤 실패 보상). 적립이 아니라서 하루 적립 한도·모은 포인트·랭킹과 무관하고,
+ * 지갑 상한에서 잘린다. reason은 계정의 최근 사용 기록에 남는다.
+ */
+export async function refundPoints(accountId: string, amount: number, reason: string): Promise<Me> {
+  if (!Number.isInteger(amount) || amount <= 0) throw new Error(`[points] 잘못된 환불량 ${amount}`);
+  const accounts = getAccounts();
+  const now = Date.now();
+  await accounts.refund(accountId, amount, reason, now);
+  return loadMe(accounts, accountId, now);
 }
 
 /** 공지사항 저장소 (묘비 저장소와 같은 백엔드) */
@@ -117,6 +164,33 @@ export async function findVisible(store: GraveStore, id: string): Promise<GraveR
 export async function releaseImage(store: GraveStore, url: string | undefined): Promise<void> {
   if (!url || (await store.listAll()).some((g) => g.imageUrl === url)) return;
   await deleteImage(url);
+}
+
+// ── 성황당 (주인의 이장은 30일 보관, 관리자 삭제는 아래 deleteGrave로 완전 삭제) ──
+
+/** 만료된 성황당 묘비를 limit개까지 완전히 지운다 (이미지 포함). 이장·성황당 요청과 관리자 목록에서 조금씩 부른다 */
+export async function sweepShrine(store: GraveStore, now = Date.now(), limit = 20): Promise<number> {
+  const purged = await store.purgeShrine(now, limit);
+  for (const g of purged) await releaseImage(store, g.imageUrl);
+  return purged.length;
+}
+
+/**
+ * 주인의 이장: 목록·채널·랭킹에서 빼고 성황당(이장한 계정 몫)에 SHRINE_KEEP_DAYS 동안 모신다.
+ * 세운 계정이 있으면 그 계정, 없으면(계정 개편 전 묘비) 이장한 사람의 성황당. 없으면 false
+ */
+export async function moveToShrine(
+  store: GraveStore,
+  accounts: AccountStore,
+  grave: Pick<Grave, "id" | "ownerAccountId">,
+  requesterId: string,
+  now = Date.now(),
+): Promise<boolean> {
+  const keeper = grave.ownerAccountId ?? requesterId;
+  if (!(await store.toShrine(grave.id, keeper, now))) return false;
+  if (grave.ownerAccountId) await accounts.removeGrave(grave.ownerAccountId, grave.id);
+  await sweepShrine(store, now);
+  return true;
 }
 
 /** 데이터·이미지(Blob 또는 로컬 업로드)·세운 계정의 묘비 목록을 함께 정리한다 */

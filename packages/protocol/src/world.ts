@@ -105,6 +105,18 @@ export const SHOP = { x: 236, y: 244 } as const;
 /** 문 앞 (들어가는 자리이자 나왔을 때 서는 자리) */
 export const SHOP_DOOR = { x: 236, y: 256 } as const;
 
+// ── 특별한 장소 ── 앞에서 E/탭 → UI에 portal:open {kind}. 좌표는 상호작용하는 자리(입구 앞 발밑)
+/** 사냥터 입구: 오른쪽 윗담에 뚫린 동굴 문 */
+export const HUNT_GATE = { x: 880, y: 44 } as const;
+/** 분양 사무소(하우징): 오른쪽 정원의 작은 사무실 오두막 (잡화점과 좌우 대칭). 바닥 가운데 */
+export const HOUSING_OFFICE = { x: 788, y: 244 } as const;
+/** 분양 사무소 문 앞 */
+export const HOUSING_DOOR = { x: 788, y: 256 } as const;
+/** 성황당: 돌무더기 + 천을 묶은 나무. 돌무더기 앞자리 */
+export const SHRINE = { x: 300, y: 72 } as const;
+/** 특별한 장소 상호작용 반경 */
+export const PORTAL_RADIUS = 18;
+
 // ── 의자와 벤치 ── 좌석 점유는 서버가 판정한다.
 export type FurnitureKind = "bench" | "chair";
 export type Furniture = {

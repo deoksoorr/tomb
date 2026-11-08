@@ -84,7 +84,10 @@ describe("계정·출석", () => {
     expect(await getMe(v)).toEqual({
       accountId: v.visitorId,
       name: null,
+      color: null,
+      body: null,
       points: 0,
+      lifetimePoints: 0,
       todayEarned: 0,
       attendance: { today: false, streak: 0 },
       hasCode: false,

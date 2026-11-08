@@ -1,28 +1,19 @@
-import PixelArt, { type PixelRect } from "../ui/PixelArt";
+"use client";
 
-const OUTLINE = "#141511";
-const FACE = "#1e1f1b";
-const EYE = "#ece0bd";
-const SHADE = "rgba(0, 0, 0, 0.28)";
+/* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트라 next/image 최적화가 필요 없다 */
+import { avatarPreview, avatarPreviewSize } from "@/game/sprites/avatar";
 
-/** 두건 쓴 방랑자. 색만 바뀐다 */
-function rects(color: string): PixelRect[] {
-  return [
-    [2, 0, 6, 1, OUTLINE],
-    [1, 1, 8, 1, OUTLINE],
-    [0, 2, 10, 9, OUTLINE],
-    [2, 1, 6, 1, color],
-    [1, 2, 8, 8, color],
-    [2, 3, 6, 3, FACE],
-    [3, 4, 1, 1, EYE],
-    [6, 4, 1, 1, EYE],
-    [1, 7, 8, 1, SHADE],
-    [7, 2, 2, 8, SHADE],
-    [2, 11, 2, 1, OUTLINE],
-    [6, 11, 2, 1, OUTLINE],
-  ];
-}
-
-export default function AvatarSprite({ color, scale = 4 }: { color: string; scale?: number }) {
-  return <PixelArt width={10} height={12} rects={rects(color)} scale={scale} />;
+/** 아바타 미리보기: 게임 안과 같은 그림 (정면, 정수 배율). 하이드레이션 뒤에만 그린다 (캔버스 사용) */
+export default function AvatarSprite({ color, body, scale = 3 }: { color: string; body?: string; scale?: number }) {
+  const { width, height } = avatarPreviewSize(scale);
+  return (
+    <img
+      src={avatarPreview(body ?? "hood", color, scale)}
+      width={width}
+      height={height}
+      alt=""
+      aria-hidden="true"
+      style={{ imageRendering: "pixelated", flex: "none" }}
+    />
+  );
 }

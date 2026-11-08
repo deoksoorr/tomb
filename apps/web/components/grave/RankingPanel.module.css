@@ -108,6 +108,20 @@ li:nth-child(-n + 3) .rank {
   font-size: 10px;
 }
 
+.pointRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 6px 8px;
+  color: var(--text);
+}
+
+.pointRow[data-me="true"] {
+  background: var(--moss-deep);
+  color: var(--bone);
+}
+
 .empty {
   padding: 16px 8px;
   color: var(--muted);

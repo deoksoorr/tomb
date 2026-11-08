@@ -96,3 +96,58 @@ export function burstSpeed(radius: number, drag: number, seconds: number): numbe
   const d = Math.max(0.01, drag);
   return (radius * d) / Math.max(0.05, 1 - Math.exp(-d * Math.max(0.05, seconds)));
 }
+
+// ── 글자 폭죽 ──
+
+/**
+ * 글자 그림(알파 값 배열, w×h)에서 불꽃이 날아가 설 점들을 고른다.
+ * 격자 간격을 1부터 늘려 가며 maxPoints 이하가 되게 하고, 가운데 기준 좌표(px)로 돌려준다.
+ */
+export function sampleTextMask(alpha: ArrayLike<number>, w: number, h: number, maxPoints: number, threshold = 110): { x: number; y: number }[] {
+  const cap = Math.max(1, Math.floor(maxPoints));
+  const lit = (x: number, y: number) => (alpha[y * w + x] ?? 0) >= threshold;
+  const grid = (step: number): { x: number; y: number }[] => {
+    const out: { x: number; y: number }[] = [];
+    const o = step >> 1;
+    for (let y = o; y < h; y += step) for (let x = o; x < w; x += step) if (lit(x, y)) out.push({ x: x + 0.5 - w / 2, y: y + 0.5 - h / 2 });
+    return out;
+  };
+  const all = grid(1);
+  if (all.length <= cap) return all;
+  // 격자를 성기게 해서 고르게 줄인다 (획이 가늘어 0개가 되면 일정 간격으로 솎아 낸다)
+  for (let step = 2; step <= 6; step++) {
+    const pts = grid(step);
+    if (pts.length === 0) break;
+    if (pts.length <= cap) return pts;
+  }
+  const stride = all.length / cap;
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; i < cap; i++) out.push(all[Math.floor(i * stride)]);
+  return out;
+}
+
+// ── 별똥별 ──
+
+/** 별똥별 하나: at(ms) 뒤에 화면 비율 좌표 (x0,y0)에서 출발해 dur 동안 (dx,dy)만큼 긋고 사라진다 */
+export type MeteorStreak = { at: number; dur: number; x0: number; y0: number; dx: number; dy: number; size: number };
+
+/** 별똥별 비: 오른쪽 위에서 왼쪽 아래로 비스듬히, 시작 시각을 고르게 흩는다 */
+export function meteorShower(n: number, spanMs: number, rand: () => number = Math.random): MeteorStreak[] {
+  const count = Math.max(1, Math.floor(n));
+  const out: MeteorStreak[] = [];
+  for (let i = 0; i < count; i++) {
+    const at = Math.max(0, Math.min(spanMs, (i / count) * spanMs + (rand() - 0.5) * (spanMs / count) * 0.8));
+    const ang = Math.PI * (0.78 + (rand() - 0.5) * 0.1); // 약 140° (왼쪽 아래)
+    const len = 0.35 + rand() * 0.3;
+    out.push({
+      at,
+      dur: 550 + rand() * 450,
+      x0: 0.35 + rand() * 0.7,
+      y0: -0.04 + rand() * 0.3,
+      dx: Math.cos(ang) * len,
+      dy: Math.sin(ang) * len,
+      size: 0.8 + rand() * 0.6,
+    });
+  }
+  return out.sort((a, b) => a.at - b.at);
+}

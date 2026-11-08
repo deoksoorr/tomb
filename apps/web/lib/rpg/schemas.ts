@@ -1,0 +1,45 @@
+import { z } from "zod";
+import { DIFFICULTIES, GAME_KINDS, GEAR_SLOTS, HOTBAR_SIZE, MONSTER_IDS, SKILLS, STAT_KEYS, type SkillId } from "./catalog";
+
+// 사냥터 API 입력 검증 (zod). 메시지는 lib/validate.ts가 켜 둔 한국어 로케일을 따른다.
+
+const count = z.number().int().min(0).max(10_000);
+const skillId = z.enum(SKILLS.map((s) => s.id) as [SkillId, ...SkillId[]]);
+const itemId = z.string().regex(/^[a-z]_[a-z_]{1,30}$/, "아이템 id 형식이 맞지 않아요.");
+
+export const RunStartSchema = z.object({
+  game: z.enum(GAME_KINDS),
+  difficulty: z.enum(DIFFICULTIES),
+});
+
+const duration = z.number().int().min(0).max(30 * 60_000);
+
+export const RunResultSchema = z.discriminatedUnion("game", [
+  z.object({
+    game: z.literal("hunt"),
+    durationMs: duration,
+    kills: z.partialRecord(z.enum(MONSTER_IDS as [string, ...string[]]), count),
+    wavesCleared: z.number().int().min(0).max(20),
+    died: z.boolean(),
+    potionsUsed: z.record(itemId, count).default({}),
+  }),
+  z.object({ game: z.literal("bugs"), durationMs: duration, caught: count, golden: count, wrong: count, maxCombo: count }),
+  z.object({ game: z.literal("deadline"), durationMs: duration, survivedMs: duration, coffees: count, hits: count }),
+]);
+
+export const RunFinishSchema = z.object({
+  ticket: z.string().min(10).max(2000),
+  result: RunResultSchema,
+});
+
+export const CharacterActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("alloc"), stats: z.partialRecord(z.enum(STAT_KEYS), z.number().int().min(0).max(99)) }),
+  z.object({ type: z.literal("learn"), skill: skillId }),
+  z.object({ type: z.literal("hotbar"), slots: z.array(skillId.nullable()).length(HOTBAR_SIZE) }),
+  z.object({ type: z.literal("equip"), slot: z.enum(GEAR_SLOTS), itemId: itemId.nullable() }),
+]);
+
+export const ShopActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("buy"), itemId, qty: z.number().int().min(1).max(20).default(1) }),
+  z.object({ type: z.literal("sell"), itemId }),
+]);

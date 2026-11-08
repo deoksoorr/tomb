@@ -24,6 +24,7 @@ import * as graveById from "./graves/[id]/route";
 import * as graves from "./graves/route";
 import * as join from "./join/route";
 import { issueJoin } from "@/lib/joinToken";
+import { getStore, sweepShrine } from "@/lib/store";
 import * as og from "./og/route";
 import * as session from "./session/route";
 import * as localFile from "./upload/local/[...path]/route";
@@ -522,7 +523,7 @@ describe("POST /api/join", () => {
     vi.stubEnv("REALTIME_INTERNAL_URL", "");
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      const claims = { visitorId: "v", name: "새벽코더", color: "#9fc5a8", look: [] };
+      const claims = { visitorId: "v", name: "새벽코더", color: "#9fc5a8", body: "hood", look: [] };
       await expect(issueJoin(1, claims)).rejects.toThrow(/NEXT_PUBLIC_REALTIME_URL/);
       const v = await newVisitor();
       const res = await join.POST(call("/api/join", { method: "POST", visitor: v, body: { ...body, channel: 1 } }));
@@ -642,7 +643,7 @@ describe("업로드", () => {
     expect((await serve(second)).status).toBe(200);
   });
 
-  it("2차 방어: 다른 묘비가 같은 이미지를 쓰고 있으면 이장해도 지우지 않는다", async () => {
+  it("이장은 성황당 보관이라 이미지를 바로 지우지 않고, 30일 뒤 정리할 때 다른 묘비가 같은 이미지를 쓰면 남긴다", async () => {
     const owner = await newVisitor();
     const url = await uploadLocal(owner);
     const a = await createGrave(owner, { ...input, imageUrl: url });
@@ -652,9 +653,13 @@ describe("업로드", () => {
         call(`/api/graves/${g.grave.id}`, { method: "DELETE", visitor: owner, headers: { "x-owner-token": g.ownerToken } }),
         ctx(g.grave.id),
       );
+    const later = Date.now() + 31 * 86_400_000;
     await del(a);
-    expect((await serve(url)).status).toBe(200);
+    await sweepShrine(getStore(), later);
+    expect((await serve(url)).status).toBe(200); // b가 아직 쓴다
     await del(b);
+    expect((await serve(url)).status).toBe(200); // 성황당에 있는 동안은 그대로
+    await sweepShrine(getStore(), later);
     expect((await serve(url)).status).toBe(404);
   });
 
@@ -741,7 +746,7 @@ describe("업로드 (Blob presigned: OIDC / 읽기쓰기 토큰)", () => {
     expect(vi.mocked(issueSignedToken).mock.calls[0][0].token).toBe(rw);
   });
 
-  it("이장하면 OIDC 모드에서도 토큰 없이 Blob 이미지를 지운다 (BLOB_STORE_ID 스토어 호스트만 허용)", async () => {
+  it("이장한 묘비를 30일 뒤 정리할 때 OIDC 모드에서도 토큰 없이 Blob 이미지를 지운다 (BLOB_STORE_ID 스토어 호스트만 허용)", async () => {
     vi.stubEnv("BLOB_STORE_ID", "store_AbC123");
     const v = await newVisitor();
     const { prefix } = (await (await upload.GET(call("/api/upload", { visitor: v }))).json()) as UploadModeResponse;
@@ -754,6 +759,8 @@ describe("업로드 (Blob presigned: OIDC / 읽기쓰기 토큰)", () => {
       call(`/api/graves/${grave.id}`, { method: "DELETE", visitor: v, headers: { "x-owner-token": ownerToken } }),
       ctx(grave.id),
     );
+    expect(del).not.toHaveBeenCalled(); // 성황당 보관 중
+    await sweepShrine(getStore(), Date.now() + 31 * 86_400_000);
     expect(del).toHaveBeenCalledWith(url, { token: undefined });
   });
 });

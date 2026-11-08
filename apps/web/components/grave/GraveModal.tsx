@@ -11,7 +11,7 @@ import type { GravesState } from "@/lib/hooks/useGraves";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
 import { forgetOwnerToken, getOwnerToken } from "@/lib/storage";
-import { CAUSE_LABELS, type PublicGrave } from "@/lib/types";
+import { CAUSE_LABELS, SHRINE_KEEP_DAYS, type PublicGrave } from "@/lib/types";
 import { decorateGrave } from "../account/actions";
 import { bagEntries, durationLabel, pointsText, remainingLabel } from "../account/items";
 import { cx } from "../ui/cx";
@@ -166,7 +166,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
       forgetOwnerToken(graveId);
       cache.remove(graveId);
       bridge.emit("grave:changed", { graveId, kind: "removed" });
-      showToast("묘비를 이장했어요.");
+      showToast(`묘비를 이장했어요. 성황당에 ${SHRINE_KEEP_DAYS}일 동안 모셔져요.`);
       onClose();
     });
 
@@ -220,13 +220,19 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
             />
           ) : (
             <div className={styles.noPhoto}>
-              <StyleArt style={grave.style} ageDays={grave.ageDays} flowers={grave.flowers} scale={4} />
+              <StyleArt style={grave.style} ageDays={grave.ageDays} scale={4} />
               <figcaption>사진 없음</figcaption>
             </div>
           )}
         </figure>
 
         <p className={styles.epitaph}>{grave.epitaph}</p>
+        {grave.comment && (
+          <p className={styles.comment}>
+            <span className={styles.commentBy}>상주 {grave.mourner}의 한마디</span>
+            {grave.comment}
+          </p>
+        )}
         <p className={styles.lifespan}>{lifespanLabel(grave.bornAt, grave.diedAt, grave.ageDays)}</p>
 
         <dl className={styles.facts}>
@@ -323,7 +329,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
 
         {confirming ? (
           <div className={styles.confirm} role="group" aria-label="확인">
-            <p>{confirming === "report" ? "이 묘비를 신고할까요?" : "이 묘비를 이장(삭제)할까요? 되돌릴 수 없어요."}</p>
+            <p>{confirming === "report" ? "이 묘비를 신고할까요?" : `이 묘비를 이장할까요? 성황당에 ${SHRINE_KEEP_DAYS}일 동안 모셔져요. 그 안에는 다시 모실 수 있어요.`}</p>
             {confirming === "report" && (
               <fieldset className={styles.reasons}>
                 <legend className={ui.hint}>신고 사유</legend>

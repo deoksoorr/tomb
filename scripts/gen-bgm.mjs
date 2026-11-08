@@ -338,22 +338,26 @@ const bank = (rng, count, make) => Array.from({ length: count }, () => make(rng)
 // ITU-R BS.1770 통합 라우드니스(K-가중, 400ms 블록, 절대·상대 게이트)
 function lufs(bus) {
   const n = bus[0].length, hop = Math.round(0.1 * SR), H = Math.floor(n / hop), e = new Float64Array(H);
+  let tail = 0;
   for (const x of bus) {
     const s1 = coefs("hs", 1681.974450955533, 0.7071752369554196, 3.999843853973347);
     const s2 = coefs("hp", 38.13547087602444, 0.5003270373238773);
     let z1 = 0, z2 = 0, w1 = 0, w2 = 0;
-    for (let i = 0; i < H * hop; i++) {
+    for (let i = 0; i < n; i++) {
       const v = x[i], y = s1[0] * v + z1;
       z1 = s1[1] * v - s1[3] * y + z2;
       z2 = s1[2] * v - s1[4] * y;
       const u = s2[0] * y + w1;
       w1 = s2[1] * y - s2[3] * u + w2;
       w2 = s2[2] * y - s2[4] * u;
-      e[Math.floor(i / hop)] += u * u;
+      const b = Math.floor(i / hop);
+      if (b < H) e[b] += u * u;
+      else tail += u * u;
     }
   }
   const blocks = [];
   for (let b = 0; b + 4 <= H; b++) blocks.push((e[b] + e[b + 1] + e[b + 2] + e[b + 3]) / (4 * hop));
+  if (!blocks.length) blocks.push((e.reduce((a, b) => a + b, 0) + tail) / (4 * hop)); // 0.4초보다 짧은 효과음
   const L = (z) => -0.691 + 10 * Math.log10(z);
   let g = blocks.filter((z) => L(z) > -70);
   const rel = L(g.reduce((a, b) => a + b, 0) / g.length) - 10;
@@ -684,8 +688,41 @@ function echo(bus, time, fb, mix) {
   }
   return bus;
 }
+// 기타·하프: Karplus-Strong 뜯는 현(노이즈로 튕긴 뒤 지연선이 스스로 걸러지며 울린다)
+function pluck(bus, t0, m, v, p, dur, rng, bright = 0.5, t60 = 2.5) {
+  const [L, R] = bus, f = mtof(m), s0 = Math.max(0, Math.round(t0 * SR));
+  const len = Math.min(L.length - s0, Math.round(Math.min(dur + 1.8, 6) * SR));
+  if (len <= 0) return;
+  const d = SR / f - 0.5, D = Math.floor(d), fr = d - D, rho = 10 ** (-3 / (t60 * f * (1 + f / 2000))), y = new Float32Array(len);
+  let lp = 0;
+  for (let i = 0; i < len; i++) {
+    let x = 0;
+    if (i < D) x = lp += bright * (rng.bi() - lp);
+    const a = i - D >= 0 ? (1 - fr) * y[i - D] + (i - D - 1 >= 0 ? fr * y[i - D - 1] : 0) : 0;
+    const b = i - D - 1 >= 0 ? (1 - fr) * y[i - D - 1] + (i - D - 2 >= 0 ? fr * y[i - D - 2] : 0) : 0;
+    y[i] = x + rho * 0.5 * (a + b);
+  }
+  const [gl, gr] = panGains(p), fade = Math.round(0.08 * SR);
+  for (let i = 0; i < len; i++) {
+    const e = v * (i > len - fade ? (len - i) / fade : 1);
+    L[s0 + i] += y[i] * e * gl;
+    R[s0 + i] += y[i] * e * gr;
+  }
+}
 // 오르골 엔진에 꽂아 쓰는 악기 세트(lead/soft/bass)
 function instSet(kind, rng) {
+  if (kind === "guitar")
+    return {
+      lead: (bus, t, m, v, p, dur) => pluck(bus, t, m, v * 0.9, p, dur, rng, 0.55, 2.2),
+      soft: (bus, t, m, v, p, dur) => pluck(bus, t, m, v * 1.1, p, dur, rng, 0.35, 2.4),
+      bass: (bus, t, m, v, p, dur) => pluck(bus, t, m, v * 0.9, p, dur, rng, 0.3, 3.5),
+    };
+  if (kind === "retro")
+    return {
+      lead: (bus, t, m, v, p, dur) => pulse(bus, t, m, v * 0.36, p, Math.max(0.1, dur * 0.92), 0.5, { dec: 0.3, sus: 0.6, vib: 0.005 }),
+      soft: (bus, t, m, v, p, dur) => pluck(bus, t, m + 12, v * 1.1, p, dur, rng, 0.4, 1.6),
+      bass: (bus, t, m, v, p, dur) => tri(bus, t, m, v * 0.85, dur * 0.85),
+    };
   if (kind === "piano") {
     const pn = (hold, k = 1) => (bus, t, m, v, p, dur) => piano(bus, t, m, v * k, p, Math.max(hold, dur ?? 0) + 0.25, rng);
     return { lead: pn(1.2), soft: pn(0.9, 1.25), bass: pn(2.2, 0.9) };
@@ -920,6 +957,11 @@ function orgel(o, pl) {
   play(lead, tEnd + 1.1, degMidi(cx, ns + 2 <= cx.hi ? ns + 2 : ns), 0.2, 0.35, 3);
 
   stem("dry", bus);
+  if (o.inst === "guitar") filt(bus, "lp", 6000, 0.7);
+  if (o.inst === "retro") {
+    echo(bus, 3 * e8, 0.22, 0.18);
+    filt(bus, "lp", 7000, 0.7);
+  }
   if (o.inst === "chip") {
     echo(bus, (3 * e8) / 1, 0.28, 0.22);
     filt(bus, "lp", 6500, 0.7);
@@ -1522,6 +1564,35 @@ function rain(o, pl) {
       addBus(bus, bell);
       break;
     }
+    case "dream": {
+      // 몽환 앰비언트: 느린 패드 화음 + 드문드문 반짝이는 종소리(또는 유리 같은 사인) + 옅은 공기
+      const pad = stereo(n), sp = stereo(n), scale = SCALES[o.scale], cxs = { scale, tonic: o.tonic, lo: 0, hi: scale.length * 2 };
+      for (let t = 0.5, k = 0; t < dur - 8; k++) {
+        const d = rng.range(o.chordLen ?? 11, (o.chordLen ?? 11) + 4);
+        o.chords[k % o.chords.length].forEach((m, j) => padNote(pad, t + j * 0.5, d, m, o.padAmp ?? 0.045, (j - 1.5) * 0.35, 4.5, 6.5));
+        t += d - 1.5;
+      }
+      if (o.drone) for (let t = 0; t < dur; t += 20) padNote(pad, t, 26, o.drone, 0.04, 0, 8, 9);
+      filt(pad, "lp", o.padLp ?? 2000, 0.7);
+      let prev = 3;
+      for (let t = rng.range(5, 8); t < dur - 10; t += rng.range(o.gap?.[0] ?? 1.8, o.gap?.[1] ?? 4.5)) {
+        const deg = clamp(prev + rng.pick([-2, -1, 1, 2, 3]), 0, cxs.hi - 1), m = degMidi(cxs, deg), p = rng.range(-0.8, 0.8);
+        prev = deg;
+        if (o.sparkle === "glass") tone(sp, t, rng.range(1.5, 3), mtof(m), 0.05, p, 1.2, 3);
+        else if (o.sparkle === "piano") piano(sp, t, m, 0.3, p, 4, rng);
+        else celesta(sp, t, m, 0.22, p);
+      }
+      filt(sp, "lp", 5000, 0.7);
+      reverb(sp, { room: 0.92, damp: 0.4, wet: 0.5, width: 1, pre: 0.04 });
+      stem("pad", pad);
+      stem("sparkle", sp);
+      addBus(bus, pad);
+      addBus(bus, sp, o.sparkleGain ?? 1);
+      addBus(bus, rainBed(n, rng, { level: o.air ?? 0.03, hp: 150, lp: 1500, width: 0.9, swell: 0.4, period: 10 }));
+      reverb(bus, { room: 0.9, damp: 0.5, wet: 0.35, width: 1, pre: 0.03, lowCut: 100 });
+      master = { lp: 7500, hp: 30 };
+      break;
+    }
     case "fog": {
       const pad = stereo(n), root = 38;
       for (let t = 0; t < dur; t += 22) {
@@ -1629,9 +1700,198 @@ function sfx(o) {
     });
     reverb(bus, { room: 0.8, damp: 0.45, wet: 0.3 });
     master.fadeOut = 0.25;
-  }
+  } else Object.assign(master, SFX2[o.kind](bus, rng, n));
   return { bus, master };
 }
+
+// 짧은 소음 조각(필터·감쇠 적용)
+function noiseHit(rng, sec, type, f, q, decay, atk = 0.001) {
+  const x = new Float32Array(Math.round(sec * SR));
+  for (let i = 0; i < x.length; i++) x[i] = rng.bi() * Math.min(1, i / (atk * SR + 1)) * Math.exp((-i / SR) * decay);
+  return normPeak(biquad(x, type, f, q));
+}
+// 음높이가 미끄러지는 음(펄스/사인). f(t)는 Hz를 돌려준다
+function glide(bus, t0, sec, fOf, amp, p, { duty = 0, atk = 0.005, rel = 0.05 } = {}) {
+  const [L, R] = bus, s0 = Math.round(t0 * SR), len = Math.min(L.length - s0, Math.round(sec * SR)), [gl, gr] = panGains(p);
+  let ph = 0;
+  for (let i = 0; i < len; i++) {
+    const t = i / SR;
+    ph += fOf(t) / SR;
+    const y = duty ? ((ph % 1) < duty ? 1 : -1) - (2 * duty - 1) : Math.sin(TAU * ph);
+    const e = amp * Math.min(1, t / atk) * Math.min(1, (sec - t) / rel);
+    L[s0 + i] += y * e * gl;
+    R[s0 + i] += y * e * gr;
+  }
+}
+const notes = (bus, list, fn) => list.forEach(([t, m, v, d, p = 0]) => fn(bus, t, m, v, d, p));
+const chipNote = (bus, t, m, v, d, p) => pulse(bus, t, m, v * 0.35, p, d, 0.25, { dec: 0.15, sus: 0.6 });
+const bellNote = (bus, t, m, v, d, p) => {
+  const f = mtof(m);
+  partial(bus, t, f, v, 3.2, p, 0.002, d + 1);
+  partial(bus, t, f * 2.01, v * 0.25, 6, p, 0.002, d + 1);
+  partial(bus, t, f * 3.98, v * 0.08, 12, p, 0.002, d + 1);
+};
+const SFX2 = {
+  bell: (bus, rng) => {
+    templeBell(bus, 0.01, 118, 0.5, 0);
+    reverb(bus, { room: 0.9, damp: 0.5, wet: 0.35, width: 1, lowCut: 80 });
+    return { fadeOut: 0.8, hp: 40, lp: 6000 };
+  },
+  splash: (bus, rng, n) => {
+    place(bus, noiseHit(rng, 0.5, "bp", 1400, 0.6, 9, 0.025), 0, 0.5, 0);
+    place(bus, noiseHit(rng, 0.25, "lp", 400, 0.7, 14, 0.02), 0.03, 0.2, 0);
+    for (let k = 0; k < 14; k++) place(bus, plink(rng, 700, 2200), 0.12 + rng.next() ** 1.5 * 0.7, rng.range(0.02, 0.06), rng.range(-0.7, 0.7));
+    reverb(bus, { room: 0.5, damp: 0.5, wet: 0.12 });
+    return { fadeOut: 0.2, target: -16.5 };
+  },
+  swim: (bus, rng) => {
+    // 1.6초 루프: 물장구 4번(끝을 이어 붙여도 튀지 않게 양끝은 조용하다)
+    for (let k = 0; k < 4; k++) {
+      const t = 0.05 + k * 0.4;
+      place(bus, noiseHit(rng, 0.28, "bp", rng.range(900, 1400), 0.7, 14, 0.04), t, 0.4, k % 2 ? 0.3 : -0.3);
+      for (let j = 0; j < 3; j++) place(bus, plink(rng, 600, 1600), t + rng.range(0.03, 0.2), 0.06, rng.range(-0.6, 0.6));
+    }
+    return { fadeIn: 0.01, fadeOut: 0.02 };
+  },
+  bubble: (bus, rng) => {
+    const b = stereo(bus[0].length);
+    for (let k = 0; k < 16; k++) place(b, plink(rng, 250, 900), 0.05 + rng.next() * 1.0, rng.range(0.15, 0.4), rng.range(-0.6, 0.6));
+    place(b, noiseHit(rng, 0.8, "lp", 300, 0.7, 4, 0.08), 0, 0.3, 0);
+    filt(b, "lp", 1800, 0.7);
+    addBus(bus, reverb(b, { room: 0.7, damp: 0.7, wet: 0.3 }));
+    return { fadeOut: 0.2, lp: 4000 };
+  },
+  swing: (bus, rng) => {
+    // 삐걱: 마찰(stick-slip) 펄스열이 나무 공명을 두드린다 — 앞으로, 뒤로 두 번
+    for (const [t0, sec, rate0, rate1] of [[0.02, 0.55, 38, 62], [0.75, 0.6, 58, 34]]) {
+      const x = new Float32Array(Math.round(sec * SR));
+      let ph = 0;
+      for (let i = 0; i < x.length; i++) {
+        const u = i / x.length;
+        ph += (rate0 + (rate1 - rate0) * u) * (1 + 0.15 * rng.bi()) / SR;
+        if (ph >= 1) {
+          ph -= 1;
+          x[i] = rng.range(0.6, 1);
+        }
+      }
+      const y = addBus([Float32Array.from(x), Float32Array.from(x)], [biquad(Float32Array.from(x), "bp", 1250, 12), biquad(Float32Array.from(x), "bp", 1250, 12)]);
+      for (const c of y) {
+        biquad(c, "bp", 640, 8);
+        for (let i = 0; i < c.length; i++) c[i] *= Math.sin((Math.PI * i) / c.length);
+      }
+      place(bus, normPeak(y[0]), t0, 0.5, -0.2);
+    }
+    reverb(bus, { room: 0.4, damp: 0.6, wet: 0.08 });
+    return { fadeOut: 0.1, target: -17.5 };
+  },
+  wave: (bus) => {
+    // 짧은 휘파람 '휘-익'
+    glide(bus, 0.02, 0.28, (t) => 1300 + 500 * (t / 0.28) + 15 * Math.sin(TAU * 6 * t), 0.3, 0, { atk: 0.03, rel: 0.05 });
+    glide(bus, 0.34, 0.4, (t) => 1900 - 700 * (t / 0.4) ** 1.5 + 20 * Math.sin(TAU * 6 * t), 0.3, 0, { atk: 0.02, rel: 0.12 });
+    reverb(bus, { room: 0.5, damp: 0.5, wet: 0.12 });
+    return { fadeOut: 0.05 };
+  },
+  cheer: (bus, rng) => {
+    // 작은 무리의 환호: 모음 포먼트를 지난 목소리들 + 박수
+    for (let v = 0; v < 12; v++) {
+      const f0 = rng.range(170, 330), t0 = rng.range(0, 0.25), sec = rng.range(1.0, 1.6), x = new Float32Array(Math.round(sec * SR));
+      let ph = 0;
+      for (let i = 0; i < x.length; i++) {
+        const t = i / SR;
+        ph += f0 * (1 + 0.25 * Math.sin(Math.min(1, t / 0.2) * Math.PI) - 0.15 * (t / sec) + 0.01 * Math.sin(TAU * 5 * t)) / SR;
+        x[i] = ((ph % 1) * 2 - 1) * Math.min(1, t / 0.06) * Math.min(1, (sec - t) / 0.4);
+      }
+      const a = biquad(Float32Array.from(x), "bp", rng.range(650, 800), 4), b = biquad(Float32Array.from(x), "bp", rng.range(1100, 1300), 5);
+      for (let i = 0; i < x.length; i++) a[i] += 0.6 * b[i];
+      place(bus, normPeak(a), t0, 0.12, rng.range(-0.8, 0.8));
+    }
+    for (let k = 0; k < 60; k++) place(bus, noiseHit(rng, 0.04, "bp", rng.range(1200, 2200), 1, 90), 0.1 + rng.next() * 1.7, rng.range(0.05, 0.14), rng.range(-0.9, 0.9));
+    reverb(bus, { room: 0.6, damp: 0.5, wet: 0.18 });
+    return { fadeOut: 0.5 };
+  },
+  hit: (bus, rng) => {
+    glide(bus, 0, 0.12, (t) => 140 * Math.exp(-t * 14) + 55, 0.7, 0, { atk: 0.001, rel: 0.06 });
+    place(bus, noiseHit(rng, 0.08, "bp", 1500, 0.8, 50), 0, 0.45, 0);
+    return { fadeOut: 0.05 };
+  },
+  crit: (bus, rng) => {
+    glide(bus, 0, 0.16, (t) => 170 * Math.exp(-t * 12) + 55, 0.7, 0, { atk: 0.001, rel: 0.08 });
+    place(bus, noiseHit(rng, 0.12, "bp", 2200, 0.7, 30), 0, 0.5, 0);
+    [1850, 2770, 3700].forEach((f, k) => partial(bus, 0.01, f, 0.12 / (k + 1), 9, (k - 1) * 0.3, 0.001));
+    glide(bus, 0.02, 0.3, (t) => 900 + 2600 * (t / 0.3), 0.06, 0, { duty: 0.5, rel: 0.1 });
+    reverb(bus, { room: 0.5, damp: 0.5, wet: 0.12 });
+    return { fadeOut: 0.1 };
+  },
+  "monster-die": (bus, rng) => {
+    glide(bus, 0, 0.55, (t) => 620 * Math.exp(-t * 4.5) + 70, 0.35, 0, { duty: 0.25, rel: 0.1 });
+    const poof = noiseHit(rng, 0.7, "lp", 1200, 0.7, 6, 0.04);
+    place(bus, poof, 0.15, 0.35, 0);
+    reverb(bus, { room: 0.55, damp: 0.5, wet: 0.15 });
+    return { fadeOut: 0.15 };
+  },
+  levelup: (bus, rng) => {
+    notes(bus, [[0, 72, 0.6, 0.12], [0.1, 76, 0.6, 0.12], [0.2, 79, 0.6, 0.12], [0.3, 84, 0.7, 0.5]], chipNote);
+    notes(bus, [[0.3, 88, 0.25, 0.6, 0.4], [0.32, 91, 0.2, 0.6, -0.4]], bellNote);
+    for (let k = 0; k < 10; k++) partial(bus, 0.35 + k * 0.06, rng.range(3000, 5000), 0.05, 25, rng.range(-0.8, 0.8), 0.001);
+    reverb(bus, { room: 0.6, damp: 0.5, wet: 0.15 });
+    return { fadeOut: 0.25 };
+  },
+  potion: (bus, rng) => {
+    for (const [t, lo] of [[0, 260], [0.13, 320], [0.26, 380]]) place(bus, plink(rng, lo, lo + 60), t, 0.5, 0);
+    notes(bus, [[0.42, 84, 0.25, 0.3, -0.2], [0.48, 91, 0.2, 0.3, 0.2]], bellNote);
+    return { fadeOut: 0.15 };
+  },
+  skill: (bus, rng) => {
+    const n = bus[0].length, x = white(n, rng), fc = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const u = i / n;
+      fc[i] = 500 * 8 ** u;
+      x[i] *= Math.sin(Math.PI * u) ** 1.5;
+    }
+    svf(x, fc, 4, "bp");
+    place(bus, x, 0, 0.5, 0);
+    [76, 83, 88].forEach((m, k) => tone(bus, 0.1 + k * 0.05, 0.35, mtof(m) * (1 + 0.003 * k), 0.06, (k - 1) * 0.5, 0.08, 0.25));
+    reverb(bus, { room: 0.7, damp: 0.4, wet: 0.25 });
+    return { fadeOut: 0.15 };
+  },
+  "coin-drop": (bus, rng) => {
+    // 떨어진 동전이 통통 튀다 멈춘다: 간격과 세기가 점점 줄어든다
+    let t = 0.01, gap = 0.18, a = 0.45;
+    while (t < 0.7 && a > 0.03) {
+      const f = rng.range(2400, 2700);
+      partial(bus, t, f, a, 22, 0.1, 0.001, 0.4);
+      partial(bus, t, f * 1.52, a * 0.4, 30, 0.1, 0.001, 0.4);
+      t += gap;
+      gap *= 0.72;
+      a *= 0.72;
+    }
+    return { fadeOut: 0.05 };
+  },
+  defeat: (bus) => {
+    notes(bus, [[0, 67, 0.6, 0.3], [0.32, 66, 0.6, 0.3], [0.64, 65, 0.6, 0.3], [0.96, 64, 0.7, 0.6]], chipNote);
+    [[0, 43, 0.3], [0.64, 41, 0.3], [0.96, 40, 0.6]].forEach(([t, m, d]) => tri(bus, t, m, 0.3, d));
+    reverb(bus, { room: 0.6, damp: 0.5, wet: 0.15 });
+    return { fadeOut: 0.2 };
+  },
+  victory: (bus) => {
+    notes(bus, [[0, 67, 0.55, 0.1], [0.12, 72, 0.55, 0.1], [0.24, 76, 0.55, 0.1], [0.36, 79, 0.6, 0.18], [0.6, 76, 0.55, 0.12], [0.75, 84, 0.7, 0.6]], chipNote);
+    notes(bus, [[0.75, 79, 0.35, 0.6, -0.4], [0.75, 76, 0.3, 0.6, 0.4]], (b, t, m, v, d, p) => pulse(b, t, m, v * 0.3, p, d, 0.125, { dec: 0.2, sus: 0.5 }));
+    [[0, 48, 0.3], [0.36, 43, 0.3], [0.75, 48, 0.6]].forEach(([t, m, d]) => tri(bus, t, m, 0.3, d));
+    reverb(bus, { room: 0.6, damp: 0.5, wet: 0.15 });
+    return { fadeOut: 0.2 };
+  },
+  tick: (bus, rng) => {
+    // 나무 블록 '똑'
+    partial(bus, 0, 1900, 0.5, 70, 0, 0.0005);
+    partial(bus, 0, 2950, 0.2, 90, 0, 0.0005);
+    place(bus, noiseHit(rng, 0.01, "hp", 3000, 0.7, 400), 0, 0.15, 0);
+    return { fadeIn: 0.0005, fadeOut: 0.02, target: -21 };
+  },
+  miss: (bus) => {
+    notes(bus, [[0, 64, 0.5, 0.12], [0.16, 59, 0.5, 0.22]], (b, t, m, v, d, p) => pulse(b, t, m, v * 0.35, p, d, 0.5, { dec: 0.1, sus: 0.5 }));
+    return { fadeOut: 0.06 };
+  },
+};
 
 // ───────────────────────── 외부 무료 음원 ─────────────────────────
 // 원본 페이지에서 라이선스를 직접 확인한 곡만 넣는다(2026-11 확인). CC BY는 artist·license·sourceUrl로 저작자를 표시한다.
@@ -1662,6 +1922,16 @@ const EXTERNAL = [
   ext("jazz", "once-in-a-while", "Once In a While", "Alex McCulloch (Pro Sensory)", "CC0", OGA_PAGE + "once-in-a-while", OGA + "Once%20In%20A%20while_4.mp3"),
   ext("jazz", "coffee-house-bump", "Coffee House Bump", "OatCog", "CC0", OGA_PAGE + "coffee-house-bump", OGA + "little_cafe_0.wav"),
   ext("jazz", "lobby-time", "Lobby Time", KMA, "CC BY 4.0", KM_PAGE + "USUAN1600054", KM + "Lobby%20Time.mp3"),
+  ext("acoustic", "a-small-fire-will-do", "A Small Fire Will Do", "Cal McEachern (Trex0n)", "CC0", OGA_PAGE + "a-small-fire-will-do-calming-loop", OGA + "a_small_fire_will_do.wav"),
+  ext("acoustic", "just-you-and-me", "Just You and Me (Guitar)", "Alex McCulloch (Pro Sensory)", "CC0", OGA_PAGE + "just-you-and-me-guitar", OGA + "Just%20you%20and%20me_2.mp3"),
+  ext("acoustic", "ladada-guitar", "LaDaDa Guitar", "Alex McCulloch (Pro Sensory)", "CC0", OGA_PAGE + "ladada-guitar", OGA + "LaDaDaGuitar_2.mp3"),
+  ext("ambient", "waking-states", "Waking States", "Tsorthan Grove", "CC0", OGA_PAGE + "waking-states", OGA + "waking_states.mp3"),
+  ext("ambient", "dream-ambience", "Dream (Ambience)", "TokyoGeisha", "CC0", OGA_PAGE + "dream-ambience", OGA + "Dream%20%28Ambience%29_1.mp3"),
+  ext("ambient", "contemplation", "Contemplation", "Joth", "CC0", OGA_PAGE + "contemplation-0", OGA + "Contemplation.mp3"),
+  ext("retro", "welcome-to-the-item-shop", "Welcome to the Item Shop", "congusbongus", "CC0", OGA_PAGE + "welcome-to-the-item-shop", OGA + "welcome_to_the_item_shop_1.ogg"),
+  ext("retro", "quaint-town", "Quaint Town", "neonarkade", "CC0", OGA_PAGE + "quaint-town", OGA + "Quaint%20Town_0.mp3"),
+  ext("retro", "a-new-town", "A New Town", "The Cynic Project (cynicmusic.com)", "CC0", OGA_PAGE + "a-new-town-rpg-theme", OGA + "025_A_New_Town.mp3"),
+  ext("retro", "magic-town", "Magic Town", "controllerhead", "CC0", OGA_PAGE + "magic-town", OGA + "Magic%20Town_0.mp3"),
 ];
 const hashSeed = (str) => [...str].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0, 7);
 function importExternal(s) {
@@ -1689,6 +1959,9 @@ const PLAYLISTS = [
   { id: "piano", title: "잔잔한 피아노" },
   { id: "chiptune", title: "8비트" },
   { id: "jazz", title: "재즈 카페" },
+  { id: "ambient", title: "몽환 앰비언트" },
+  { id: "acoustic", title: "어쿠스틱 기타" },
+  { id: "retro", title: "레트로 RPG 마을" },
 ];
 const M = (r, q) => [r, q];
 const SPECS = [
@@ -1744,16 +2017,43 @@ const SPECS = [
   { pl: "jazz", file: "blue-screen-blues", title: "블루 스크린 블루스", seed: 409, style: "jazz", key: 64, mode: "minor", bpm: 100, prog: [[2, 5, "m7"], [2, 10, "9"], [2, 3, "M7"], [2, 8, "M7"], [2, 2, "m7b5"], [2, 7, "7b9"], [4, 0, "m9"]], comp: "whole", comp2: "stab", snare: "snare", swing: 0.66, bass: "walk", lead: "vibes", dur: 96 },
   { pl: "jazz", file: "closed-startup-cafe", title: "문 닫은 스타트업 카페", seed: 419, style: "jazz", key: 63, mode: "major", bpm: 88, prog: [[4, 0, "M9"], [4, 9, "m9"], [4, 2, "m9"], [4, 7, "13"]], comp: "twoHit", comp2: "charleston", snare: "snare", swing: 0.62, bass: "walk", lead: "keys", dur: 94 },
 
+  // 2차 보강: 기존 장르
+  { pl: "orgel", file: "last-star-on-the-graph", title: "잔디밭의 마지막 별", seed: 111, tonic: 71, scale: "major", bpm: 66, meter: 3, progA: [M(0, "M"), M(9, "m"), M(2, "m"), M(7, "M")], progB: [M(5, "M"), M(4, "m"), M(2, "m"), M(7, "7")], acc: "arp", counter: "echo", timbre: "celesta", dur: 104 },
+  { pl: "lofi", file: "rubber-duck-at-midnight", title: "자정의 러버덕", seed: 113, key: 61, mode: "major", bpm: 78, prog: [[4, 5, "M9"], [4, 7, "13"], [4, 4, "m7"], [4, 9, "m9"]], comp: "charleston", comp2: "push", drums: "lazy", snare: "rim", swing: 0.61, bass: "two", lead: "flute", dur: 112 },
+  { pl: "piano", file: "deprecated-docs", title: "지원 종료된 문서", seed: 219, inst: "piano", tonic: 66, scale: "dorian", bpm: 60, meter: 4, progA: [M(0, "m7"), M(5, "M"), M(0, "m7"), M(5, "M")], progB: [M(3, "M7"), M(10, "M"), M(8, "M7"), M(7, "m")], acc: "arp", counter: "line", dur: 90, wet: 0.32 },
+  { pl: "piano", file: "snow-on-the-server", title: "서버 위에 내린 눈", seed: 223, inst: "piano", tonic: 73, scale: "majPent", bpm: 54, meter: 3, progA: [M(0, "M"), M(5, "M"), M(9, "m"), M(7, "M")], progB: [M(5, "M7"), M(4, "m"), M(2, "m7"), M(7, "M")], acc: "waltz", counter: "echo", dur: 96, wet: 0.34 },
+  { pl: "jazz", file: "pull-request-bossa", title: "풀 리퀘스트 보사", seed: 421, style: "jazz", key: 62, mode: "major", bpm: 120, prog: [[4, 0, "M9"], [4, 2, "m9"], [4, 4, "m7"], [4, 3, "M7"]], comp: "stab", comp2: "charleston", snare: "rim", swing: 0.56, bass: "walk", lead: "vibes", dur: 90 },
+  { pl: "jazz", file: "late-shift-ballad", title: "야간 근무 발라드", seed: 431, style: "jazz", key: 58, mode: "major", bpm: 76, prog: [[4, 0, "M9"], [4, 4, "7b9"], [4, 9, "m9"], [2, 2, "m9"], [2, 7, "13"]], comp: "whole", comp2: "twoHit", snare: "snare", swing: 0.64, bass: "walk", lead: "keys", dur: 98 },
+
+  // 몽환 앰비언트
+  { pl: "ambient", file: "dreaming-in-the-cloud", title: "클라우드 위에서 꾸는 꿈", seed: 601, kind: "dream", tonic: 77, scale: "lydian", chords: [[53, 60, 64, 69], [55, 62, 67, 71], [57, 64, 67, 72], [50, 57, 64, 69]], sparkle: "celesta", dur: 108 },
+  { pl: "ambient", file: "garbage-collected-memories", title: "수거된 기억들", seed: 607, kind: "dream", tonic: 74, scale: "minPent", chords: [[50, 57, 64, 65], [46, 53, 60, 65], [43, 55, 62, 65], [45, 52, 60, 64]], sparkle: "glass", drone: 38, dur: 112, gap: [2.5, 6] },
+  { pl: "ambient", file: "sleep-mode", title: "절전 모드", seed: 613, kind: "dream", tonic: 72, scale: "majPent", chords: [[48, 55, 64, 67], [45, 52, 60, 64], [41, 53, 57, 64], [43, 50, 59, 62]], sparkle: "piano", dur: 104, gap: [3, 7], chordLen: 13 },
+
+  // 어쿠스틱 기타: 오르골 엔진 + 뜯는 현
+  { pl: "acoustic", file: "campfire-standup", title: "모닥불 스탠드업", seed: 701, inst: "guitar", tonic: 64, scale: "majPent", bpm: 76, meter: 4, progA: [M(0, "M"), M(7, "M"), M(9, "m"), M(5, "M")], progB: [M(5, "M"), M(0, "M"), M(2, "m"), M(7, "M")], acc: "arp", counter: "line", dur: 92, wet: 0.22 },
+  { pl: "acoustic", file: "porch-of-the-old-repo", title: "오래된 저장소의 툇마루", seed: 707, inst: "guitar", tonic: 67, scale: "major", bpm: 66, meter: 3, progA: [M(0, "M"), M(5, "M"), M(0, "M"), M(7, "M")], progB: [M(9, "m"), M(4, "m"), M(5, "M"), M(7, "7")], acc: "arp", counter: "thirds", dur: 96, wet: 0.24 },
+  { pl: "acoustic", file: "autumn-backlog", title: "가을의 백로그", seed: 713, inst: "guitar", tonic: 69, scale: "dorian", bpm: 70, meter: 4, progA: [M(0, "m7"), M(5, "M"), M(0, "m7"), M(5, "M")], progB: [M(10, "M"), M(5, "M"), M(3, "M"), M(7, "m")], acc: "pulse", counter: "echo", dur: 90, bass2: true, wet: 0.24 },
+
+  // 레트로 RPG 마을: 오르골 엔진 + 펄스 리드·하프·삼각파
+  { pl: "retro", file: "item-shop-of-unfinished-swords", title: "미완성 검을 파는 상점", seed: 801, inst: "retro", drums: 0.6, tonic: 72, scale: "major", bpm: 100, meter: 4, progA: [M(0, "M"), M(5, "M"), M(2, "m"), M(7, "M")], progB: [M(9, "m"), M(4, "m"), M(5, "M"), M(7, "M")], acc: "arp", counter: "echo", dur: 88, wet: 0.2 },
+  { pl: "retro", file: "inn-at-version-zero", title: "버전 0의 여관", seed: 809, inst: "retro", tonic: 67, scale: "major", bpm: 84, meter: 3, progA: [M(0, "M"), M(9, "m"), M(5, "M"), M(7, "M")], progB: [M(4, "m"), M(9, "m"), M(2, "m"), M(7, "7")], acc: "waltz", counter: "thirds", dur: 92, wet: 0.22 },
+  { pl: "retro", file: "village-of-abandoned-quests", title: "버려진 퀘스트의 마을", seed: 811, inst: "retro", drums: 0.5, tonic: 69, scale: "dorian", bpm: 90, meter: 4, progA: [M(0, "m7"), M(5, "M"), M(0, "m7"), M(10, "M")], progB: [M(3, "M"), M(10, "M"), M(5, "M"), M(7, "m")], acc: "arp", counter: "line", dur: 90, bass2: true, wet: 0.2 },
+
   // 효과음(게임용, tracks.json에는 넣지 않는다)
   { pl: "sfx", file: "firework-launch", kind: "launch", seed: 501, dur: 1.2 },
   { pl: "sfx", file: "firework-burst", kind: "burst", seed: 503, dur: 2.0 },
   { pl: "sfx", file: "coin", kind: "coin", seed: 505, dur: 0.4 },
   { pl: "sfx", file: "flower", kind: "flower", seed: 507, dur: 0.8 },
+  ...[
+    ["bell", 4], ["splash", 1], ["swim", 1.6], ["bubble", 1.3], ["swing", 1.5], ["wave", 0.8], ["cheer", 2], ["hit", 0.25], ["crit", 0.5],
+    ["monster-die", 0.8], ["levelup", 1.2], ["potion", 0.8], ["skill", 0.8], ["coin-drop", 0.8], ["defeat", 1.8], ["victory", 1.6], ["tick", 0.12], ["miss", 0.45],
+  ].map(([kind, dur], k) => ({ pl: "sfx", file: kind, kind, seed: 520 + k, dur })),
   ...EXTERNAL,
 ];
 
 const engineOf = (s) =>
-  s.ext ? "ext" : s.pl === "sfx" ? "sfx" : ["orgel", "piano", "chiptune"].includes(s.pl) ? "melody" : ["lofi", "jazz"].includes(s.pl) ? "band" : "ambient";
+  s.ext ? "ext" : s.pl === "sfx" ? "sfx" : ["orgel", "piano", "chiptune", "acoustic", "retro"].includes(s.pl) ? "melody" : ["lofi", "jazz"].includes(s.pl) ? "band" : "ambient";
 const planOf = (s) => (engineOf(s) === "melody" ? planOrgel(s) : engineOf(s) === "band" ? planLofi(s) : { dur: s.dur });
 const outFile = (s) => (s.pl === "sfx" ? join(SFX_OUT, `${s.file}.mp3`) : join(OUT, s.pl, `${s.file}.mp3`));
 
@@ -1762,7 +2062,7 @@ function render(i) {
   if (eng === "ext") return { i, ...importExternal(s), sec: (Date.now() - t0) / 1000 };
   const pl = planOf(s);
   const { bus, master } = eng === "melody" ? orgel(s, pl) : eng === "band" ? lofi(s, pl) : eng === "sfx" ? sfx(s) : rain(s, pl);
-  const st = finalize(bus, eng === "sfx" ? { ...master, target: SFX_LUFS, ceil: SFX_CEIL } : master);
+  const st = finalize(bus, eng === "sfx" ? { ...master, target: master.target ?? SFX_LUFS, ceil: SFX_CEIL } : master);
   mkdirSync(eng === "sfx" ? SFX_OUT : join(OUT, s.pl), { recursive: true });
   encode(bus, outFile(s), s.seed);
   return { i, dur: pl.dur, bpm: pl.bpm, ...st, sec: (Date.now() - t0) / 1000 };

@@ -10,7 +10,7 @@ import {
   type QuickValues,
 } from "./quickRules";
 
-const base: QuickValues = { name: "할 일 앱", lived: "week", cause: null, epitaph: "", style: "auto" };
+const base: QuickValues = { name: "할 일 앱", lived: "week", cause: null, epitaph: "", style: "auto", comment: "" };
 
 describe("validateQuick", () => {
   it("이름과 생존 기간만 필수", () => {
@@ -34,7 +34,8 @@ describe("toQuickInput", () => {
       mourner: "유령",
       channel: 3,
     });
-    expect(toQuickInput({ ...base, lived: "day", cause: "time", epitaph: " 잘 가 ", style: "duck" }, "유령", 1)).toEqual({
+    expect(validateQuick({ ...base, comment: "가".repeat(101) }).comment).toBeDefined();
+    expect(toQuickInput({ ...base, lived: "day", cause: "time", epitaph: " 잘 가 ", style: "duck", comment: " 고마웠어 " }, "유령", 1)).toEqual({
       name: "할 일 앱",
       lived: "day",
       mourner: "유령",
@@ -42,6 +43,7 @@ describe("toQuickInput", () => {
       cause: "time",
       epitaph: "잘 가",
       style: "duck",
+      comment: "고마웠어",
     });
   });
 });
@@ -74,6 +76,7 @@ describe("toEditInput", () => {
     imageUrl: "https://x.public.blob.vercel-storage.com/a.webp",
     mourner: "원래 상주",
     style: "gold",
+    comment: "다음엔 끝까지",
     channel: 2,
     createdAt: 1,
     flowers: 3,
@@ -93,6 +96,7 @@ describe("toEditInput", () => {
       links: ["https://a.dev"],
       imageUrl: "https://x.public.blob.vercel-storage.com/a.webp",
       style: "gold",
+      comment: "다음엔 끝까지",
     });
   });
 
@@ -103,7 +107,7 @@ describe("toEditInput", () => {
   });
 
   it("생존 기간을 바꾸면 사망일 기준으로 탄생일을 다시 셈하고, 사인을 바꾸면 그 하나로", () => {
-    const input = toEditInput(grave, { name: "앱", lived: "month", cause: "server_cost", epitaph: "", style: "auto" });
+    const input = toEditInput(grave, { name: "앱", lived: "month", cause: "server_cost", epitaph: "", style: "auto", comment: "" });
     expect(input.bornAt).toBe("2026-09-10");
     expect(input.diedAt).toBe("2026-10-09");
     expect(input.causes).toEqual(["server_cost"]);

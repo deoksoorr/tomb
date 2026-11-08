@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useId, useState, type CSSProperties, type FormEvent } from "react";
-import { AVATAR_COLORS, checkName, isAvatarColor, pickChannel } from "@tomb/protocol";
+import {
+  AVATAR_BODIES,
+  AVATAR_COLORS,
+  checkName,
+  isAvatarBody,
+  isAvatarColor,
+  pickChannel,
+  type AvatarBody,
+} from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { useAmbience } from "@/lib/hooks/useAmbience";
 import { prefetchGraves } from "@/lib/hooks/useGraves";
@@ -22,7 +30,8 @@ import CodeStart from "./CodeStart";
 import NightSky from "./NightSky";
 import styles from "./EntryScreen.module.css";
 
-export type EntryChoice = { name: string; color: string; channel: ChannelChoice };
+/** body: 몸 모양 (계정에 저장된 것 또는 새로 시작에서 고른 것) */
+export type EntryChoice = { name: string; color: string; body: string | undefined; channel: ChannelChoice };
 /** 입장 화면 시작점: 처음 고르기 / (접속 종료 뒤) 이 기기 계정으로 이어서 */
 export type EntryStart = "choose" | "continue";
 
@@ -147,6 +156,17 @@ const SUBMIT_LABELS: Record<FormMode["kind"], string> = {
   code: "채널을 선택해서 접속하기",
 };
 
+/** 계정에 저장된 모습 (코드로 시작·이어서 들어가기에서는 바꾸지 않고 채널만 고른다) */
+type Profile = { name: string; color: string; body: string | undefined };
+
+function profileOf(me: Pick<Me, "name" | "color" | "body"> | null, fallbackName: string): Profile | null {
+  const name = me?.name ?? fallbackName;
+  if (!checkName(name).ok) return null;
+  const saved = readItem(LS.color);
+  const color = isAvatarColor(me?.color) ? me.color : isAvatarColor(saved) ? saved : AVATAR_COLORS[0];
+  return { name, color, body: me?.body && isAvatarBody(me.body) ? me.body : undefined };
+}
+
 type FormProps = {
   mode: FormMode;
   initialName: string;
@@ -155,26 +175,26 @@ type FormProps = {
   onEnter: (choice: EntryChoice) => void;
 };
 
-/** 닉네임·색·채널 → 입장. 코드로 시작하면 닉네임은 계정에 저장된 그대로(바꿀 수 없음) */
+/** 새로 시작: 닉네임·색·몸 모양·채널. 코드로 시작·이어서: 저장된 모습 그대로 채널만 */
 function EntryForm({ mode, initialName, sharedChannel, onBack, onEnter }: FormProps) {
-  const lockedName = mode.kind === "code" ? mode.me.name : null;
-  const [name, setName] = useState(lockedName ?? initialName);
+  const [name, setName] = useState(initialName);
   const [color, setColor] = useState<string>(() => {
     const saved = readItem(LS.color);
     return isAvatarColor(saved) ? saved : AVATAR_COLORS[0];
   });
+  const [body, setBody] = useState<AvatarBody>(AVATAR_BODIES[0].id);
   const [channel, setChannel] = useState<ChannelChoice>("auto");
   const [touched, setTouched] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // 새로 시작: 이 기기에 이미 계정이 있으면 새 계정으로 바꾼다. 코드가 없던 계정이면 한 번 묻는다
+  // 이 기기에 이미 있는 계정 (새로 시작: 새 계정으로 바꿀지 판단 / 이어서: 저장된 모습)
   const [existing, setExisting] = useState<Me | null>(null);
   const [confirmFresh, setConfirmFresh] = useState(false);
   const lobby = useLobby();
   const nameId = useId();
 
   useEffect(() => {
-    if (mode.kind !== "new") return;
+    if (mode.kind === "code") return;
     api
       .me()
       .then(setExisting)
@@ -186,9 +206,11 @@ function EntryForm({ mode, initialName, sharedChannel, onBack, onEnter }: FormPr
   // 골라 둔 채널이 그사이 가득 차면 자동 배정으로 되돌린다
   if (typeof channel === "number" && lobby.lobby && !isChannelSelectable(lobby.lobby, channel)) setChannel("auto");
 
-  const check = checkName(name);
+  const profile =
+    mode.kind === "code" ? profileOf(mode.me, initialName) : mode.kind === "continue" ? profileOf(existing, initialName) : null;
+  const check = checkName(profile?.name ?? name);
   // 첫 글자를 치는 중에는 길이 경고를 띄우지 않는다
-  const nameError = !check.ok && (touched || [...name].length >= 2) ? check.reason : null;
+  const nameError = !profile && !check.ok && (touched || [...name].length >= 2) ? check.reason : null;
   const needsFreshConfirm = mode.kind === "new" && existing !== null && !existing.hasCode;
 
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -199,10 +221,11 @@ function EntryForm({ mode, initialName, sharedChannel, onBack, onEnter }: FormPr
       setConfirmFresh(true);
       return;
     }
+    const look = profile ?? { name: check.name, color, body };
     // 입장 클릭이 오디오 재생을 허락받는 사용자 제스처다 (await 전에 불러야 한다)
     bgm.play();
     writeItem(LS.name, check.name);
-    writeItem(LS.color, color);
+    writeItem(LS.color, look.color);
     setPending(true);
     setError(null);
     try {
@@ -212,7 +235,7 @@ function EntryForm({ mode, initialName, sharedChannel, onBack, onEnter }: FormPr
       const target = sharedChannel ?? channel;
       // 들어갈 채널 묘지를 미리 받아 둔다 (자동 배정은 서버와 같은 규칙으로 짐작)
       prefetchGraves(typeof target === "number" ? target : (lobby.lobby && pickChannel(lobby.lobby)) || 1);
-      onEnter({ name: check.name, color, channel: target });
+      onEnter({ name: check.name, color: look.color, body: look.body, channel: target });
     } catch (err) {
       bgm.pause();
       setError(errorMessage(err));
@@ -226,58 +249,85 @@ function EntryForm({ mode, initialName, sharedChannel, onBack, onEnter }: FormPr
         ← 처음으로
       </button>
 
-      <div className={ui.field}>
-        <label htmlFor={nameId} className={ui.label}>
-          이름
-        </label>
-        <div className={styles.nameRow}>
+      {profile ? (
+        <div className={styles.profile}>
           <span className={styles.avatar}>
-            <AvatarSprite color={color} scale={3} />
+            <AvatarSprite color={profile.color} body={profile.body} scale={2} />
           </span>
-          {lockedName ? (
-            <output id={nameId} className={styles.lockedName}>
-              {lockedName}
-            </output>
-          ) : (
-            <input
-              id={nameId}
-              className={ui.input}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onBlur={() => setTouched(true)}
-              placeholder="묘지에서 불릴 이름"
-              autoComplete="nickname"
-              enterKeyHint="go"
-              spellCheck={false}
-              aria-invalid={nameError !== null}
-              aria-describedby={`${nameId}-hint`}
-            />
-          )}
+          <span className={styles.profileText}>
+            <span className={styles.lockedName}>{profile.name}</span>
+            <span className={ui.hint}>계정에 저장된 이름과 모습으로 들어가요.</span>
+          </span>
         </div>
-        <p id={`${nameId}-hint`} className={nameError ? ui.error : ui.hint}>
-          {lockedName
-            ? "코드로 들어온 계정의 이름이에요."
-            : (nameError ?? "2~12자 · 한글, 영문, 숫자, 공백, _")}
-        </p>
-      </div>
-
-      <fieldset className={styles.colors}>
-        <legend className={ui.label}>아바타 색</legend>
-        <div className={styles.swatches}>
-          {AVATAR_COLORS.map((c, i) => (
-            <label key={c} className={styles.swatch} style={{ "--swatch": c } as CSSProperties}>
-              <input
-                type="radio"
-                name="avatar-color"
-                className="visually-hidden"
-                checked={color === c}
-                onChange={() => setColor(c)}
-              />
-              <span className="visually-hidden">{COLOR_NAMES[i] ?? `색 ${i + 1}`}</span>
+      ) : (
+        <>
+          <div className={ui.field}>
+            <label htmlFor={nameId} className={ui.label}>
+              이름
             </label>
-          ))}
-        </div>
-      </fieldset>
+            <div className={styles.nameRow}>
+              <span className={styles.avatar}>
+                <AvatarSprite color={color} body={body} scale={2} />
+              </span>
+              <input
+                id={nameId}
+                className={ui.input}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={() => setTouched(true)}
+                placeholder="묘지에서 불릴 이름"
+                autoComplete="nickname"
+                enterKeyHint="go"
+                spellCheck={false}
+                aria-invalid={nameError !== null}
+                aria-describedby={`${nameId}-hint`}
+              />
+            </div>
+            <p id={`${nameId}-hint`} className={nameError ? ui.error : ui.hint}>
+              {nameError ?? "2~12자 · 한글, 영문, 숫자, 공백, _"}
+            </p>
+          </div>
+
+          {mode.kind === "new" && (
+            <fieldset className={styles.colors}>
+              <legend className={ui.label}>몸 모양</legend>
+              <div className={styles.bodies}>
+                {AVATAR_BODIES.map((b) => (
+                  <label key={b.id} className={styles.bodyOption}>
+                    <input
+                      type="radio"
+                      name="avatar-body"
+                      className="visually-hidden"
+                      checked={body === b.id}
+                      onChange={() => setBody(b.id)}
+                    />
+                    <AvatarSprite color={color} body={b.id} scale={3} />
+                    <span className={styles.bodyLabel}>{b.label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
+          <fieldset className={styles.colors}>
+            <legend className={ui.label}>아바타 색</legend>
+            <div className={styles.swatches}>
+              {AVATAR_COLORS.map((c, i) => (
+                <label key={c} className={styles.swatch} style={{ "--swatch": c } as CSSProperties}>
+                  <input
+                    type="radio"
+                    name="avatar-color"
+                    className="visually-hidden"
+                    checked={color === c}
+                    onChange={() => setColor(c)}
+                  />
+                  <span className="visually-hidden">{COLOR_NAMES[i] ?? `색 ${i + 1}`}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </>
+      )}
 
       {sharedChannel ? (
         <p className={styles.shared}>공유받은 묘비가 있는 {sharedChannel}채널로 들어가요.</p>

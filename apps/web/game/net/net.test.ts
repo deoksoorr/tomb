@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DIR, EXTRAPOLATE_MAX_MS, INTERP_DELAY_MS, SEND_INTERVAL_MS, STATE } from "@tomb/protocol";
+import { DIR, EXTRAPOLATE_MAX_MS, INTERP_DELAY_MS, PEER_SYNC_MS, SEND_INTERVAL_MS, STATE } from "@tomb/protocol";
+import { bodyFromWsUrl, SYNC_EVERY_MS, SYNC_MIN_GAP_MS, SyncPolicy } from "./syncPolicy";
 import { BACKOFF_MAX_MS, backoffDelay } from "./backoff";
 import { Interpolator, type InterpOut } from "./Interpolator";
 import type { DirId } from "@tomb/protocol";
@@ -314,5 +315,31 @@ describe("join policy", () => {
     expect(utf8Bytes("가나")).toBe(6);
     expect(utf8Bytes("é")).toBe(2);
     expect(utf8Bytes("😀")).toBe(4);
+  });
+});
+
+describe("sync policy (idle players don't wake the server)", () => {
+  it("periodic sync only in a visible tab, every 3x PEER_SYNC_MS", () => {
+    const p = new SyncPolicy();
+    p.mark(0);
+    expect(SYNC_EVERY_MS).toBe(PEER_SYNC_MS * 3);
+    expect(p.periodic(PEER_SYNC_MS, false)).toBe(false);
+    expect(p.periodic(SYNC_EVERY_MS, true)).toBe(false);
+    expect(p.periodic(SYNC_EVERY_MS, false)).toBe(true);
+  });
+
+  it("urgent sync (anomaly / tab back) keeps a minimum gap and never when hidden", () => {
+    const p = new SyncPolicy();
+    p.mark(1000);
+    expect(p.urgent(1000 + SYNC_MIN_GAP_MS - 1, false)).toBe(false);
+    expect(p.urgent(1000 + SYNC_MIN_GAP_MS, false)).toBe(true);
+    expect(p.urgent(1000 + SYNC_MIN_GAP_MS, true)).toBe(false);
+  });
+
+  it("reads the avatar body from the join token in the ws url", () => {
+    const payload = Buffer.from(JSON.stringify({ name: "유령", body: "cat" })).toString("base64url");
+    expect(bodyFromWsUrl(`wss://x.test/ch/1?t=${payload}.sig`)).toBe("cat");
+    expect(bodyFromWsUrl("wss://x.test/ch/1")).toBeNull();
+    expect(bodyFromWsUrl("wss://x.test/ch/1?t=%%%")).toBeNull();
   });
 });

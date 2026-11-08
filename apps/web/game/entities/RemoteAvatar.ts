@@ -36,8 +36,9 @@ export class RemoteAvatar {
     init: Pick<PeerInfo, "x" | "y" | "state" | "dir">,
     now: number,
     look: readonly string[] = [],
+    readonly body = "hood",
   ) {
-    this.view = new AvatarView(scene, atlas, init.x, init.y, color, name, false, look);
+    this.view = new AvatarView(scene, atlas, init.x, init.y, color, name, false, look, body);
     this.push(now, init.x, init.y, init.state, init.dir);
     this.update(now, null, 1);
   }

@@ -1,5 +1,7 @@
 import * as Phaser from "phaser";
 import type { GameStartOptions } from "./bridge";
+import { installHousing } from "./housing/install";
+import { RPG_SCENES } from "./rpg";
 import { BootScene } from "./scenes/BootScene";
 import type { GameContext } from "./scenes/context";
 import { ShopScene } from "./scenes/ShopScene";
@@ -34,9 +36,10 @@ export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHan
     // 입력은 직접 받는다 (키보드: window, 포인터: 캔버스 DOM). Phaser 입력을 켜면 오버레이 터치까지 포인터로 잡는다
     input: { keyboard: false, mouse: false, touch: false, gamepad: false, windowEvents: false },
     audio: { noAudio: true },
-    scene: [BootScene, WorldScene, ShopScene],
+    scene: [BootScene, WorldScene, ShopScene, ...RPG_SCENES],
   });
   game.registry.set("ctx", ctx);
+  installHousing(game, ctx); // 하우징: 집 씬 등록 + 월드 ↔ 집 전환 (game/housing)
   // ?debug=1: 콘솔에서 상태를 들여다볼 수 있게 (게임 화면에는 아무것도 그리지 않는다. 수치는 UI의 NetHud가 net:stats로 표시)
   if (opts.debug) (window as unknown as { __tombGame?: Phaser.Game }).__tombGame = game;
 

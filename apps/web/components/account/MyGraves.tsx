@@ -44,7 +44,7 @@ export default function MyGraves({ entries, pending, onGo, onBury }: Props) {
               onClick={() => onGo(entry)}
               aria-label={`${grave.name} 앞으로 가기, ${where}`}
             >
-              <StyleArt style={grave.style} ageDays={grave.ageDays} scale={1.5} />
+              <StyleArt style={grave.style} ageDays={grave.ageDays} scale={1} />
               <span className={styles.main}>
                 <span className={styles.name}>{grave.name}</span>
                 <span className={styles.meta} data-elsewhere={!here}>

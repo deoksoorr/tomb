@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GRAVE_STYLES } from "@tomb/protocol";
-import { spendsTicket, styleChoices, styleShape } from "./graveStyles";
+import { spendsTicket, styleChoices } from "./graveStyles";
 
 describe("styleChoices", () => {
   it("무료는 늘 고를 수 있고, 유료는 디자인권이 있어야 한다", () => {
@@ -25,14 +25,5 @@ describe("spendsTicket", () => {
     expect(spendsTicket("duck")).toBe(true);
     expect(spendsTicket("duck", "duck")).toBe(false);
     expect(spendsTicket("gold", "duck")).toBe(true);
-  });
-});
-
-describe("styleShape", () => {
-  it("자동은 생존 기간 규칙, 그릴 수 없는 유료 디자인은 null", () => {
-    expect(styleShape(undefined, 3)).toBe("woodSign");
-    expect(styleShape("auto", 400)).toBe("pagoda");
-    expect(styleShape("cross", 3)).toBe("cross");
-    expect(styleShape("duck", 3)).toBeNull();
   });
 });

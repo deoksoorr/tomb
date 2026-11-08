@@ -1,7 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { nanoid } from "nanoid";
 import { afterEach, describe, expect, it } from "vitest";
-import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP } from "../economy";
+import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, type EarnSource } from "../economy";
 import { env } from "../env";
 import type { Grave } from "../types";
 import { kstDay, kstYesterday } from "./accounts";
@@ -10,7 +10,7 @@ import { RedisAccounts } from "./accounts-redis";
 import { K } from "./keys";
 import { MemoryStore } from "./memory";
 import { RedisStore } from "./redis";
-import type { AccountStore, GraveStore } from "./types";
+import { PRESENCE_MIN_GAP_MS, type AccountStore, type GraveStore } from "./types";
 
 type Kit = {
   graves: GraveStore;
@@ -61,21 +61,25 @@ function contract(make: () => Kit) {
     expect((await accounts.get(id, "20261109", 0)).todayEarned).toBe(2);
   });
 
-  it("하루 전체 한도: 항목 한도 합(130)보다 작은 100점에서 멈춘다", async () => {
+  it("하루 전체 한도: 항목 한도 합보다 작은 500점에서 멈춘다 (사냥은 점수를 직접 준다)", async () => {
     const id = newId();
     const plan = [
+      ["hunt", 1, 300],
       ["attend", 1],
       ["streak", 1],
       ["flower", 10],
       ["revive", 10],
       ["bury", 1],
+      ["presence", 12],
       ["gotFlower", 20],
       ["gotRevive", 20],
+      ["houseLike", 10],
     ] as const;
     let total = 0;
-    for (const [source, times] of plan) for (let i = 0; i < times; i++) total += await accounts.earn(id, source, DAY);
+    for (const [source, times, amount] of plan as readonly (readonly [EarnSource, number, number?])[])
+      for (let i = 0; i < times; i++) total += await accounts.earn(id, source, DAY, { amount });
     expect(total).toBe(DAILY_EARN_CAP);
-    expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: DAILY_EARN_CAP, todayEarned: DAILY_EARN_CAP });
+    expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: DAILY_EARN_CAP, todayEarned: DAILY_EARN_CAP, lifetimePoints: DAILY_EARN_CAP });
   });
 
   it("지갑 한도: 넘치는 만큼은 쌓이지 않는다", async () => {
@@ -90,7 +94,7 @@ function contract(make: () => Kit) {
     const id = newId();
     await kit.setPoints(id, 100);
     const results = await Promise.all(Array.from({ length: 20 }, () => accounts.buy(id, "fw_small", 30)));
-    expect(results.filter(Boolean)).toHaveLength(3);
+    expect(results.filter((r) => r === "ok")).toHaveLength(3);
     expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: 10, inventory: { fw_small: 3 } });
   });
 
@@ -125,12 +129,12 @@ function contract(make: () => Kit) {
     const ip = `ip-${nanoid(6)}`;
     const d = days(9);
     const earned: number[] = [];
-    for (let i = 0; i < 7; i++) earned.push(await accounts.attend(id, ip + i, i === 0 ? "새벽코더" : null, d[i], d[i - 1] ?? ""));
+    for (let i = 0; i < 7; i++) earned.push(await accounts.attend(id, ip + i, i === 0 ? { name: "새벽코더" } : {}, d[i], d[i - 1] ?? ""));
     expect(earned).toEqual([10, 10, 10, 10, 10, 10, 40]);
-    expect(await accounts.attend(id, ip, null, d[6], d[5])).toBe(0);
+    expect(await accounts.attend(id, ip, {}, d[6], d[5])).toBe(0);
     expect(await accounts.get(id, d[6], 0)).toMatchObject({ streak: 7, name: "새벽코더", lastAttend: d[6] });
     // 하루 건너뛰면 다시 1일째
-    expect(await accounts.attend(id, `${ip}-x`, null, d[8], d[7])).toBe(10);
+    expect(await accounts.attend(id, `${ip}-x`, {}, d[8], d[7])).toBe(10);
     expect((await accounts.get(id, d[8], 0)).streak).toBe(1);
   });
 
@@ -138,7 +142,7 @@ function contract(make: () => Kit) {
     const ip = `ip-${nanoid(6)}`;
     const ids = Array.from({ length: ATTEND_ACCOUNTS_PER_IP + 1 }, newId);
     const earned = [];
-    for (const id of ids) earned.push(await accounts.attend(id, ip, null, DAY, "20261107"));
+    for (const id of ids) earned.push(await accounts.attend(id, ip, {}, DAY, "20261107"));
     expect(earned).toEqual([...Array<number>(ATTEND_ACCOUNTS_PER_IP).fill(10), 0]);
     expect((await accounts.get(ids.at(-1)!, DAY, 0)).lastAttend).toBe(DAY);
   });
@@ -215,6 +219,82 @@ function contract(make: () => Kit) {
     expect(await accounts.adjustPoints(id, 9999)).toBe(BALANCE_CAP);
     expect(await accounts.adjustPoints(id, 50)).toBe(BALANCE_CAP);
     expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(2);
+  });
+
+  it("모은 포인트·랭킹: 적립과 관리자 지급은 올리고, 쓰면 잔액만 준다", async () => {
+    const [a, b] = [newId(), newId()];
+    await accounts.earn(a, "hunt", DAY, { amount: 50 });
+    await accounts.earn(b, "hunt", DAY, { amount: 80 });
+    expect(await accounts.spend(b, 70, "rpg:무기", 1)).toBe(10);
+    expect(await accounts.get(b, DAY, 0)).toMatchObject({ points: 10, lifetimePoints: 80 });
+    await accounts.adjustPoints(a, 100);
+    await accounts.adjustPoints(a, -100);
+    expect(await accounts.get(a, DAY, 0)).toMatchObject({ points: 50, lifetimePoints: 150 });
+
+    const { rows, mine } = await accounts.pointRank(500, b);
+    const order = rows.filter((r) => r.accountId === a || r.accountId === b).map((r) => r.accountId);
+    expect(order).toEqual([a, b]);
+    expect(mine).toMatchObject({ accountId: b, points: 80 });
+    expect(rows.find((r) => r.accountId === b)?.rank).toBe(mine!.rank);
+    expect((await accounts.pointRank(500, `t-${nanoid(10)}`)).mine).toBeNull();
+  });
+
+  it("돌려주기: 잔액만 늘고(지갑 상한에서 잘림) 모은 포인트·랭킹·오늘 적립은 그대로", async () => {
+    const id = newId();
+    await accounts.earn(id, "hunt", DAY, { amount: 100 });
+    await accounts.spend(id, 60, "housing:sofa", 0);
+    expect(await accounts.refund(id, 30, "housing:refund", 0)).toBe(70);
+    expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: 70, lifetimePoints: 100, todayEarned: 100 });
+    expect((await accounts.pointRank(1000, id)).mine?.points).toBe(100);
+    await kit.setPoints(id, BALANCE_CAP - 5);
+    expect(await accounts.refund(id, 50, "housing:refund", 0)).toBe(BALANCE_CAP);
+  });
+
+  it("포인트 쓰기: 20번 동시에 써도 잔액만큼만, 음수가 되지 않는다", async () => {
+    const id = newId();
+    await kit.setPoints(id, 100);
+    const left = await Promise.all(Array.from({ length: 20 }, () => accounts.spend(id, 30, "test", 0)));
+    expect(left.filter((x) => x !== null)).toHaveLength(3);
+    expect((await accounts.get(id, DAY, 0)).points).toBe(10);
+  });
+
+  it("같은 IP 합계는 항목 한도 × 3 (계정 여러 개로 농사 방지), IP를 안 주면 계정 한도만", async () => {
+    const ip = `ip-${nanoid(6)}`;
+    const got = [];
+    for (let i = 0; i < 4; i++) got.push(await accounts.earn(newId(), "hunt", DAY, { amount: 300, ipHash: ip }));
+    expect(got).toEqual([300, 300, 300, 0]);
+    expect(await accounts.earn(newId(), "hunt", DAY, { amount: 300 })).toBe(300);
+  });
+
+  it("머무르기: 9.5분 간격, 하루 60점까지", async () => {
+    const id = newId();
+    const t0 = 1_000_000_000;
+    expect(await accounts.presence(id, DAY, t0)).toBe(5);
+    expect(await accounts.presence(id, DAY, t0 + PRESENCE_MIN_GAP_MS - 1)).toBeNull();
+    let total = 5;
+    for (let i = 1; i <= 13; i++) total += (await accounts.presence(id, DAY, t0 + i * PRESENCE_MIN_GAP_MS)) ?? 0;
+    expect(total).toBe(60);
+  });
+
+  it("캐릭터 꾸미기 중복 구매 금지: 가방에 있거나 착용 중이면 owned (동시에 사도 하나만), 다른 건 여러 개", async () => {
+    const id = newId();
+    await kit.setPoints(id, 1000);
+    const many = await Promise.all(Array.from({ length: 5 }, () => accounts.buy(id, "hat_cat", 50, { unique: true, now: 0 })));
+    expect(many.filter((r) => r === "ok")).toHaveLength(1);
+    expect(many.filter((r) => r === "owned")).toHaveLength(4);
+    await accounts.equip(id, "hat_cat", "head", 5000);
+    expect(await accounts.buy(id, "hat_cat", 50, { unique: true, now: 4999 })).toBe("owned");
+    expect(await accounts.buy(id, "hat_cat", 50, { unique: true, now: 5000 })).toBe("ok");
+    expect(await accounts.buy(id, "fw_small", 30)).toBe("ok");
+    expect(await accounts.buy(id, "fw_small", 30)).toBe("ok");
+    expect((await accounts.get(id, DAY, 0)).points).toBe(1000 - 100 - 60);
+  });
+
+  it("출석의 이름·색·몸 모양은 비어 있을 때만 저장", async () => {
+    const id = newId();
+    await accounts.attend(id, `ip-${nanoid(6)}`, { name: "새벽코더", color: "#9fc5a8", body: "cat" }, DAY, "20261107");
+    await accounts.attend(id, `ip-${nanoid(6)}`, { name: "다른이름", color: "#e0c36a", body: "tall" }, "20261109", DAY);
+    expect(await accounts.get(id, DAY, 0)).toMatchObject({ name: "새벽코더", color: "#9fc5a8", body: "cat" });
   });
 
   it("내 묘비 목록", async () => {

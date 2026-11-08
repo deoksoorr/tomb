@@ -1,5 +1,5 @@
 import { MAP_COLS, TILE } from "@tomb/protocol";
-import { groundKind, POND, type GroundKind } from "../world/layout";
+import { groundKind, POND, WATER, type GroundKind, type WaterBody } from "../world/layout";
 import { css, darken, hash2, lighten, makeCanvas, rng, type Color } from "./pixel";
 
 // 바닥 타일을 캔버스에 미리 구워 둔다. 월드는 세로로 긴 맵이라 CHUNK_H 단위 덩어리 텍스처로 나눠 굽고,
@@ -226,25 +226,49 @@ export function drawGroundChunk(index: number, width = MAP_COLS * TILE): HTMLCan
   return canvas;
 }
 
+/** 물 몸체 안쪽 정도: <=1 이면 안. grow만큼 넓혀 본다 (테두리용) */
+function waterD(b: WaterBody, x: number, y: number, grow: number): { d: number; dy: number } {
+  if (b.kind === "rect") {
+    const inside = x >= b.x - grow && x < b.x + b.w + grow && y >= b.y - grow && y < b.y + b.h + grow;
+    return { d: inside ? 0 : 2, dy: ((y - b.y) / b.h) * 2 - 1 };
+  }
+  const dx = (x - b.x) / (b.rx + grow);
+  const dy = (y - b.y) / (b.ry + grow);
+  return { d: dx * dx + dy * dy, dy };
+}
+
 function drawPond(ctx: CanvasRenderingContext2D, chunkY: number) {
-  const { x: cx, y: cy, rx, ry } = POND;
-  if (cy + ry + 3 < chunkY || cy - ry - 3 > chunkY + CHUNK_H) return;
-  for (let y = Math.floor(cy - ry - 2); y <= Math.ceil(cy + ry + 2); y++) {
-    for (let x = Math.floor(cx - rx - 2); x <= Math.ceil(cx + rx + 2); x++) {
-      const dx = (x + 0.5 - cx) / rx;
-      const dy = (y + 0.5 - cy) / ry;
-      const d = dx * dx + dy * dy;
-      const dRim = ((x + 0.5 - cx) / (rx + 2)) ** 2 + ((y + 0.5 - cy) / (ry + 2)) ** 2;
-      let c: Color | null = null;
-      if (d <= 1) {
-        c = dy < -0.55 ? C.waterLight : dy > 0.5 ? C.waterDark : C.water;
-        if (hash2(x, y, 41) < 0.04) c = C.waterLight;
-      } else if (dRim <= 1) {
-        c = hash2(x, y, 43) < 0.5 ? C.rim : C.rimDark;
+  for (const body of WATER) {
+    const x0 = body.kind === "rect" ? body.x - 3 : body.x - body.rx - 3;
+    const x1 = body.kind === "rect" ? body.x + body.w + 3 : body.x + body.rx + 3;
+    const y0 = body.kind === "rect" ? body.y - 3 : body.y - body.ry - 3;
+    const y1 = body.kind === "rect" ? body.y + body.h + 3 : body.y + body.ry + 3;
+    if (y1 < chunkY || y0 > chunkY + CHUNK_H) continue;
+    for (let y = Math.floor(y0); y <= Math.ceil(y1); y++) {
+      for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) {
+        // 다른 몸체의 물 위에 테두리를 그리지 않도록 전체를 본다
+        let water: { d: number; dy: number } | null = null;
+        let rim = false;
+        for (const b of WATER) {
+          const w = waterD(b, x + 0.5, y + 0.5, 0);
+          if (w.d <= 1) {
+            water = w;
+            break;
+          }
+          if (waterD(b, x + 0.5, y + 0.5, 2).d <= 1) rim = true;
+        }
+        let c: Color | null = null;
+        if (water) {
+          c = water.dy < -0.55 ? C.waterLight : water.dy > 0.5 ? C.waterDark : C.water;
+          if (hash2(x, y, 41) < 0.04) c = C.waterLight;
+        } else if (rim && x < MAP_COLS * TILE - 32) {
+          c = hash2(x, y, 43) < 0.5 ? C.rim : C.rimDark;
+        }
+        if (c !== null) px(ctx, x, y - chunkY, c);
       }
-      if (c !== null) px(ctx, x, y - chunkY, c);
     }
   }
+  const { x: cx, y: cy } = POND;
   // 연잎
   const lily = (lx: number, ly: number) => {
     px(ctx, lx, ly - chunkY, C.lily, 3, 2);

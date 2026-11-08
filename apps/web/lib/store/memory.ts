@@ -7,6 +7,8 @@ import {
   type GraveRecord,
   type GraveStore,
   type ReportSummary,
+  SHRINE_KEEP_MS,
+  type ShrineRecord,
   type ViewerState,
 } from "./types";
 
@@ -24,6 +26,8 @@ export class MemoryStore implements GraveStore {
   private revivers = new Map<string, Set<string>>();
   private reviveEarned = new Map<string, Set<string>>();
   private decor = new Map<string, GraveDecor[]>();
+  /** 성황당: 계정 → (묘비 id → 묘비·옮긴 시각). 반응 수·숨김·꾸미기는 위 맵들에 id로 그대로 남는다 */
+  private shrined = new Map<string, Map<string, { grave: Grave; removedAt: number }>>();
   /** 신고한 IP 해시 (숨김 판정에 세는 집합) */
   private reportIps = new Map<string, Set<string>>();
   /** 신고한 방문자 (재신고 판정용) */
@@ -90,6 +94,12 @@ export class MemoryStore implements GraveStore {
   async remove(id: string): Promise<Grave | null> {
     const g = this.graves.get(id);
     if (!g) return null;
+    this.forget(id);
+    return g;
+  }
+
+  /** 묘비 id에 딸린 모든 상태를 지운다 */
+  private forget(id: string): void {
     for (const m of [
       this.graves,
       this.flowers,
@@ -103,7 +113,46 @@ export class MemoryStore implements GraveStore {
     ])
       m.delete(id);
     this.hidden.delete(id);
+  }
+
+  async toShrine(id: string, accountId: string, now: number): Promise<Grave | null> {
+    const g = this.graves.get(id);
+    if (!g) return null;
+    this.graves.delete(id);
+    let mine = this.shrined.get(accountId);
+    if (!mine) this.shrined.set(accountId, (mine = new Map()));
+    mine.set(id, { grave: g, removedAt: now });
     return g;
+  }
+
+  async shrine(accountId: string, now: number): Promise<ShrineRecord[]> {
+    return [...(this.shrined.get(accountId)?.values() ?? [])]
+      .map((e) => ({ record: this.record(e.grave), removedAt: e.removedAt, expiresAt: e.removedAt + SHRINE_KEEP_MS }))
+      .filter((e) => e.expiresAt > now)
+      .sort((a, b) => b.removedAt - a.removedAt);
+  }
+
+  async restore(accountId: string, id: string, now: number): Promise<GraveRecord | null> {
+    const mine = this.shrined.get(accountId);
+    const e = mine?.get(id);
+    if (!e || e.removedAt + SHRINE_KEEP_MS <= now) return null;
+    mine!.delete(id);
+    const grave = { ...e.grave, createdAt: now };
+    this.graves.set(id, grave);
+    return this.record(grave);
+  }
+
+  async purgeShrine(now: number, limit: number): Promise<Grave[]> {
+    const out: Grave[] = [];
+    for (const mine of this.shrined.values())
+      for (const [id, e] of mine) {
+        if (out.length >= limit) return out;
+        if (e.removedAt + SHRINE_KEEP_MS > now) continue;
+        mine.delete(id);
+        this.forget(id);
+        out.push(e.grave);
+      }
+    return out;
   }
 
   async setHidden(id: string, hidden: boolean): Promise<boolean> {

@@ -15,7 +15,15 @@ export function chKeys(channel: number) {
 export const K = {
   /** HASH 묘비 id → 채널. 없으면 1채널(채널 개편 전 묘비) */
   graveChannel: "graves:ch",
-  reported: "graves:reported", // ZSET 신고 기록이 있는 묘비 → 지금 세는 신고 수 (관리자 목록용)
+  reported: "graves:reported",
+  /** HASH 묘비 id → 성황당 보관 JSON (계정별) */
+  shrine: (accountId: string) => `shrine:${accountId}`,
+  /** ZSET `${accountId}|${묘비 id}` → 만료 시각(ms). 만료된 것을 찾아 이미지·키를 정리하는 색인 */
+  shrineAll: "shrine:all",
+  /** ZSET 계정 id → 모은 포인트 (포인트 랭킹) */
+  rankPoints: "rank:points",
+  ledger: (id: string) => `acct:${id}:ledger`, // LIST 최근 포인트 사용 기록 {at, amount, reason}, 최대 100개
+  earnIp: (ipHash: string, day: string) => `earnip:${ipHash}:${day}`, // HASH source → 그 IP 합계. 2일 TTL // ZSET 신고 기록이 있는 묘비 → 지금 세는 신고 수 (관리자 목록용)
   revivers: (id: string) => `grave:${id}:revivers`, // SET visitorId (지금 살려주세요 중)
   reviveEarned: (id: string) => `grave:${id}:reviveEarned`, // SET visitorId (포인트를 한 번 받은 사람, 취소해도 남김)
   reports: (id: string) => `grave:${id}:reports`, // SET 신고한 IP 해시 (숨김 판정에 센다)

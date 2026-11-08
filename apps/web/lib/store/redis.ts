@@ -9,6 +9,8 @@ import {
   type GraveRecord,
   type GraveStore,
   type ReportSummary,
+  SHRINE_KEEP_MS,
+  type ShrineRecord,
   type ViewerState,
 } from "./types";
 
@@ -67,6 +69,66 @@ redis.call('DEL', KEYS[2], KEYS[3], KEYS[4])
 redis.call('ZREM', KEYS[5], ARGV[1])
 return 1
 `;
+
+// 성황당으로 옮기기: 메타·숨김·꾸미기 필드와 채널 랭킹 점수를 하나의 보관 JSON으로 묶어 계정 성황당에 둔다.
+// 반응한 사람 집합·신고 기록·꾸미기 ZSET 같은 묘비 id 키는 그대로 두었다가 복구 때 그대로 쓴다.
+// KEYS: meta, created, revive, flower, graveCh, shrine, shrineAll  ARGV: id, removedAt, expiresAt, channel, member
+const TO_SHRINE_LUA = `
+local raw = redis.call('HGET', KEYS[1], ARGV[1])
+if not raw then return nil end
+local hidden = redis.call('HEXISTS', KEYS[1], '${HIDDEN}' .. ARGV[1]) == 1 and 'true' or 'false'
+local decor = redis.call('HGET', KEYS[1], '${DECOR}' .. ARGV[1]) or 'null'
+local revives = redis.call('ZSCORE', KEYS[3], ARGV[1]) or '0'
+local flowers = redis.call('ZSCORE', KEYS[4], ARGV[1]) or '0'
+redis.call('HDEL', KEYS[1], ARGV[1], '${HIDDEN}' .. ARGV[1], '${DECOR}' .. ARGV[1])
+redis.call('ZREM', KEYS[2], ARGV[1])
+redis.call('ZREM', KEYS[3], ARGV[1])
+redis.call('ZREM', KEYS[4], ARGV[1])
+redis.call('HDEL', KEYS[5], ARGV[1])
+redis.call('HSET', KEYS[6], ARGV[1], '{"grave":' .. raw .. ',"channel":' .. ARGV[4] .. ',"flowers":' .. flowers .. ',"revives":' .. revives ..
+  ',"hidden":' .. hidden .. ',"decor":' .. decor .. ',"removedAt":' .. ARGV[2] .. '}')
+redis.call('ZADD', KEYS[7], ARGV[3], ARGV[5])
+return raw
+`;
+
+// 성황당에서 되돌리기 (다른 요청이 먼저 되돌렸으면 0)
+// KEYS: shrine, shrineAll, meta, created, revive, flower, graveCh
+// ARGV: id, member, graveJson, createdAt, flowers, revives, hidden('1'|'0'), decorJson(''=없음), channel
+const RESTORE_LUA = `
+if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return 0 end
+redis.call('HDEL', KEYS[1], ARGV[1])
+redis.call('ZREM', KEYS[2], ARGV[2])
+redis.call('HSET', KEYS[3], ARGV[1], ARGV[3])
+redis.call('ZADD', KEYS[4], ARGV[4], ARGV[1])
+if tonumber(ARGV[5]) > 0 then redis.call('ZADD', KEYS[6], ARGV[5], ARGV[1]) end
+if tonumber(ARGV[6]) ~= 0 then redis.call('ZADD', KEYS[5], ARGV[6], ARGV[1]) end
+if ARGV[7] == '1' then redis.call('HSET', KEYS[3], '${HIDDEN}' .. ARGV[1], '1') end
+if ARGV[8] ~= '' then redis.call('HSET', KEYS[3], '${DECOR}' .. ARGV[1], ARGV[8]) end
+redis.call('HSET', KEYS[7], ARGV[1], ARGV[9])
+return 1
+`;
+
+// 만료된 성황당 묘비를 완전히 지운다 (그새 되돌려졌으면 색인만 정리)
+// KEYS: shrine, shrineAll, reported, revivers, reviveEarned, reports, reporters, reportLog, decor  ARGV: id, member
+const PURGE_LUA = `
+redis.call('ZREM', KEYS[2], ARGV[2])
+if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return 0 end
+redis.call('HDEL', KEYS[1], ARGV[1])
+redis.call('ZREM', KEYS[3], ARGV[1])
+redis.call('DEL', KEYS[4], KEYS[5], KEYS[6], KEYS[7], KEYS[8], KEYS[9])
+return 1
+`;
+
+/** 성황당 보관 JSON */
+type ShrineEnvelope = {
+  grave: Grave;
+  channel: number;
+  flowers: number;
+  revives: number;
+  hidden: boolean;
+  decor: GraveDecor[] | null;
+  removedAt: number;
+};
 
 type Raw = string | null;
 
@@ -201,6 +263,84 @@ export class RedisStore implements GraveStore {
       .del(K.revivers(id), K.reviveEarned(id), K.reports(id), K.reporters(id), K.reportLog(id), K.decor(id))
       .exec();
     return { ...parse(raw), channel: k.channel };
+  }
+
+  async toShrine(id: string, accountId: string, now: number): Promise<Grave | null> {
+    const k = await this.keysOf(id);
+    const raw = await this.redis.eval<string[], string | null>(
+      TO_SHRINE_LUA,
+      [k.meta, k.created, k.revive, k.flower, K.graveChannel, K.shrine(accountId), K.shrineAll],
+      [id, String(now), String(now + SHRINE_KEEP_MS), String(k.channel), `${accountId}|${id}`],
+    );
+    this.channels.delete(id);
+    return raw ? { ...parse(raw), channel: k.channel } : null;
+  }
+
+  private static fromEnvelope(e: ShrineEnvelope): ShrineRecord {
+    return {
+      record: {
+        ...e.grave,
+        channel: e.channel,
+        hidden: e.hidden || undefined,
+        decor: e.decor ?? undefined,
+        flowers: Number(e.flowers),
+        revives: Number(e.revives),
+      },
+      removedAt: e.removedAt,
+      expiresAt: e.removedAt + SHRINE_KEEP_MS,
+    };
+  }
+
+  async shrine(accountId: string, now: number): Promise<ShrineRecord[]> {
+    const flat = (await this.redis.hgetall(K.shrine(accountId))) as unknown as string[] | null;
+    return [...pairs(flat).values()]
+      .map((raw) => RedisStore.fromEnvelope(JSON.parse(raw) as ShrineEnvelope))
+      .filter((e) => e.expiresAt > now)
+      .sort((a, b) => b.removedAt - a.removedAt);
+  }
+
+  async restore(accountId: string, id: string, now: number): Promise<GraveRecord | null> {
+    const raw = await this.redis.hget<string>(K.shrine(accountId), id);
+    if (!raw) return null;
+    const e = JSON.parse(raw) as ShrineEnvelope;
+    if (e.removedAt + SHRINE_KEEP_MS <= now) return null;
+    const grave: Grave = { ...e.grave, channel: e.channel, createdAt: now };
+    const k = chKeys(e.channel);
+    const ok = await this.redis.eval<string[], number>(
+      RESTORE_LUA,
+      [K.shrine(accountId), K.shrineAll, k.meta, k.created, k.revive, k.flower, K.graveChannel],
+      [
+        id,
+        `${accountId}|${id}`,
+        encode(grave),
+        String(now),
+        String(e.flowers),
+        String(e.revives),
+        e.hidden ? "1" : "0",
+        e.decor ? JSON.stringify(e.decor) : "",
+        String(e.channel),
+      ],
+    );
+    if (Number(ok) !== 1) return null;
+    this.channels.set(id, e.channel);
+    return RedisStore.fromEnvelope({ ...e, grave }).record;
+  }
+
+  async purgeShrine(now: number, limit: number): Promise<Grave[]> {
+    const members = await this.redis.zrange<string[]>(K.shrineAll, "-inf", now, { byScore: true, offset: 0, count: limit });
+    const out: Grave[] = [];
+    for (const member of members) {
+      const [accountId, id] = member.split("|");
+      const raw = await this.redis.hget<string>(K.shrine(accountId), id);
+      const keys = [K.revivers(id), K.reviveEarned(id), K.reports(id), K.reporters(id), K.reportLog(id), K.decor(id)];
+      const done = await this.redis.eval<string[], number>(
+        PURGE_LUA,
+        [K.shrine(accountId), K.shrineAll, K.reported, ...keys],
+        [id, member],
+      );
+      if (Number(done) === 1 && raw) out.push((JSON.parse(raw) as ShrineEnvelope).grave);
+    }
+    return out;
   }
 
   async setHidden(id: string, hidden: boolean): Promise<boolean> {

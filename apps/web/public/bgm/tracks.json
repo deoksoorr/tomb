@@ -10,13 +10,14 @@
         { "file": "/bgm/orgel/moonlit-lullaby-for-the-lost.mp3", "title": "Moonlit Lullaby for the Lost", "artist": "Tsorthan Grove", "sourceUrl": "https://opengameart.org/content/moonlit-lullaby-for-the-lost", "license": "CC0", "durationSec": 119 },
         { "file": "/bgm/orgel/archived-dreams.mp3", "title": "보관된 꿈", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 117 },
         { "file": "/bgm/orgel/hello-world.mp3", "title": "안녕, 세상", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 105 },
-        { "file": "/bgm/orgel/music-box-sad-tune.mp3", "title": "Sad Tune (Music Box)", "artist": "Aureolus_Omicron", "sourceUrl": "https://opengameart.org/content/4-music-box-tracks", "license": "CC0", "durationSec": 156 },
         { "file": "/bgm/orgel/forgotten-readme.mp3", "title": "잊힌 README", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 113 },
+        { "file": "/bgm/orgel/music-box-sad-tune.mp3", "title": "Sad Tune (Music Box)", "artist": "Aureolus_Omicron", "sourceUrl": "https://opengameart.org/content/4-music-box-tracks", "license": "CC0", "durationSec": 156 },
         { "file": "/bgm/orgel/localhost-lullaby.mp3", "title": "로컬호스트 자장가", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 121 },
         { "file": "/bgm/orgel/sleeping-prototype.mp3", "title": "잠든 프로토타입", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 110 },
-        { "file": "/bgm/orgel/music-box-cute-tune.mp3", "title": "Cute Tune (Music Box)", "artist": "Aureolus_Omicron", "sourceUrl": "https://opengameart.org/content/4-music-box-tracks", "license": "CC0", "durationSec": 137 },
         { "file": "/bgm/orgel/deprecated-star.mp3", "title": "지원 종료된 별", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 108 },
+        { "file": "/bgm/orgel/music-box-cute-tune.mp3", "title": "Cute Tune (Music Box)", "artist": "Aureolus_Omicron", "sourceUrl": "https://opengameart.org/content/4-music-box-tracks", "license": "CC0", "durationSec": 137 },
         { "file": "/bgm/orgel/version-zero-one.mp3", "title": "v0.1의 기억", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 102 },
+        { "file": "/bgm/orgel/last-star-on-the-graph.mp3", "title": "잔디밭의 마지막 별", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 103 },
         { "file": "/bgm/orgel/frost-waltz.mp3", "title": "Frost Waltz", "artist": "Kevin MacLeod (incompetech.com)", "sourceUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100516", "license": "CC BY 4.0", "durationSec": 135 }
       ]
     },
@@ -27,18 +28,19 @@
         { "file": "/bgm/lofi/late-commit.mp3", "title": "늦은 커밋", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 124 },
         { "file": "/bgm/lofi/todo-forever.mp3", "title": "영원한 TODO", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 131 },
         { "file": "/bgm/lofi/debugging-at-3am.mp3", "title": "새벽 3시의 디버깅", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 113 },
-        { "file": "/bgm/lofi/chill-lofi-inspired.mp3", "title": "Chill lofi inspired", "artist": "omfgdude", "sourceUrl": "https://opengameart.org/content/chill-lofi-inspired", "license": "CC0", "durationSec": 125 },
         { "file": "/bgm/lofi/empty-repository.mp3", "title": "빈 레포지토리", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 121 },
+        { "file": "/bgm/lofi/chill-lofi-inspired.mp3", "title": "Chill lofi inspired", "artist": "omfgdude", "sourceUrl": "https://opengameart.org/content/chill-lofi-inspired", "license": "CC0", "durationSec": 125 },
         { "file": "/bgm/lofi/sleeping-server-room.mp3", "title": "잠든 서버실", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 134 },
         { "file": "/bgm/lofi/stale-branch.mp3", "title": "오래된 브랜치", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 108 },
-        { "file": "/bgm/lofi/happy-lofi-day.mp3", "title": "happy lofi day", "artist": "Tarush Singhal", "sourceUrl": "https://opengameart.org/content/happy-lofi-day", "license": "CC0", "durationSec": 116 },
         { "file": "/bgm/lofi/cold-coffee-stack-trace.mp3", "title": "식은 커피와 스택 트레이스", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 127 },
+        { "file": "/bgm/lofi/happy-lofi-day.mp3", "title": "happy lofi day", "artist": "Tarush Singhal", "sourceUrl": "https://opengameart.org/content/happy-lofi-day", "license": "CC0", "durationSec": 116 },
         { "file": "/bgm/lofi/stashed-summer.mp3", "title": "git stash 속의 여름", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 115 },
         { "file": "/bgm/lofi/expired-domain.mp3", "title": "만료된 도메인", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 131 },
-        { "file": "/bgm/lofi/in-the-lobby.mp3", "title": "In the Lobby", "artist": "Umplix", "sourceUrl": "https://opengameart.org/content/in-the-lobby", "license": "CC0", "durationSec": 105 },
         { "file": "/bgm/lofi/sunday-side-project.mp3", "title": "일요일의 사이드 프로젝트", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 105 },
+        { "file": "/bgm/lofi/in-the-lobby.mp3", "title": "In the Lobby", "artist": "Umplix", "sourceUrl": "https://opengameart.org/content/in-the-lobby", "license": "CC0", "durationSec": 105 },
         { "file": "/bgm/lofi/merge-tomorrow.mp3", "title": "충돌은 내일 해결하기로", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 121 },
         { "file": "/bgm/lofi/last-deploy.mp3", "title": "마지막 배포", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 130 },
+        { "file": "/bgm/lofi/rubber-duck-at-midnight.mp3", "title": "자정의 러버덕", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 118 },
         { "file": "/bgm/lofi/dimly-lit.mp3", "title": "Dimly lit", "artist": "iamoneabe", "sourceUrl": "https://opengameart.org/content/dimly-lit", "license": "CC0", "durationSec": 128 }
       ]
     },
@@ -61,10 +63,12 @@
       "title": "잔잔한 피아노",
       "tracks": [
         { "file": "/bgm/piano/after-the-last-commit.mp3", "title": "마지막 커밋 이후", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 90 },
-        { "file": "/bgm/piano/calm-piano-vaporware.mp3", "title": "Calm Piano 1 (Vaporware)", "artist": "The Cynic Project (cynicmusic.com)", "sourceUrl": "https://opengameart.org/content/calm-piano-1-vaporware", "license": "CC0", "durationSec": 165 },
         { "file": "/bgm/piano/closed-issues.mp3", "title": "닫힌 이슈들", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 92 },
-        { "file": "/bgm/piano/calmant.mp3", "title": "Calmant", "artist": "Kevin MacLeod (incompetech.com)", "sourceUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100859", "license": "CC BY 4.0", "durationSec": 204 },
+        { "file": "/bgm/piano/calm-piano-vaporware.mp3", "title": "Calm Piano 1 (Vaporware)", "artist": "The Cynic Project (cynicmusic.com)", "sourceUrl": "https://opengameart.org/content/calm-piano-1-vaporware", "license": "CC0", "durationSec": 165 },
         { "file": "/bgm/piano/commented-out-feelings.mp3", "title": "주석 처리한 마음", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 87 },
+        { "file": "/bgm/piano/deprecated-docs.mp3", "title": "지원 종료된 문서", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 98 },
+        { "file": "/bgm/piano/calmant.mp3", "title": "Calmant", "artist": "Kevin MacLeod (incompetech.com)", "sourceUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100859", "license": "CC BY 4.0", "durationSec": 204 },
+        { "file": "/bgm/piano/snow-on-the-server.mp3", "title": "서버 위에 내린 눈", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 96 },
         { "file": "/bgm/piano/dreamer.mp3", "title": "Dreamer", "artist": "Kevin MacLeod (incompetech.com)", "sourceUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600043", "license": "CC BY 4.0", "durationSec": 204 }
       ]
     },
@@ -89,10 +93,49 @@
         { "file": "/bgm/jazz/mocha-frapp.mp3", "title": "Mocha Frapp", "artist": "Alex McCulloch (Pro Sensory)", "sourceUrl": "https://opengameart.org/content/mocha-frapp", "license": "CC0", "durationSec": 130 },
         { "file": "/bgm/jazz/blue-screen-blues.mp3", "title": "블루 스크린 블루스", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 94 },
         { "file": "/bgm/jazz/blue-rain.mp3", "title": "Blue Rain", "artist": "Alex McCulloch (Pro Sensory)", "sourceUrl": "https://opengameart.org/content/blue-rain", "license": "CC0", "durationSec": 90 },
-        { "file": "/bgm/jazz/once-in-a-while.mp3", "title": "Once In a While", "artist": "Alex McCulloch (Pro Sensory)", "sourceUrl": "https://opengameart.org/content/once-in-a-while", "license": "CC0", "durationSec": 107 },
         { "file": "/bgm/jazz/closed-startup-cafe.mp3", "title": "문 닫은 스타트업 카페", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 95 },
+        { "file": "/bgm/jazz/once-in-a-while.mp3", "title": "Once In a While", "artist": "Alex McCulloch (Pro Sensory)", "sourceUrl": "https://opengameart.org/content/once-in-a-while", "license": "CC0", "durationSec": 107 },
+        { "file": "/bgm/jazz/pull-request-bossa.mp3", "title": "풀 리퀘스트 보사", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 87 },
         { "file": "/bgm/jazz/coffee-house-bump.mp3", "title": "Coffee House Bump", "artist": "OatCog", "sourceUrl": "https://opengameart.org/content/coffee-house-bump", "license": "CC0", "durationSec": 156 },
+        { "file": "/bgm/jazz/late-shift-ballad.mp3", "title": "야간 근무 발라드", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 96 },
         { "file": "/bgm/jazz/lobby-time.mp3", "title": "Lobby Time", "artist": "Kevin MacLeod (incompetech.com)", "sourceUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600054", "license": "CC BY 4.0", "durationSec": 193 }
+      ]
+    },
+    {
+      "id": "ambient",
+      "title": "몽환 앰비언트",
+      "tracks": [
+        { "file": "/bgm/ambient/dreaming-in-the-cloud.mp3", "title": "클라우드 위에서 꾸는 꿈", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 108 },
+        { "file": "/bgm/ambient/waking-states.mp3", "title": "Waking States", "artist": "Tsorthan Grove", "sourceUrl": "https://opengameart.org/content/waking-states", "license": "CC0", "durationSec": 184 },
+        { "file": "/bgm/ambient/garbage-collected-memories.mp3", "title": "수거된 기억들", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 112 },
+        { "file": "/bgm/ambient/dream-ambience.mp3", "title": "Dream (Ambience)", "artist": "TokyoGeisha", "sourceUrl": "https://opengameart.org/content/dream-ambience", "license": "CC0", "durationSec": 124 },
+        { "file": "/bgm/ambient/sleep-mode.mp3", "title": "절전 모드", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 104 },
+        { "file": "/bgm/ambient/contemplation.mp3", "title": "Contemplation", "artist": "Joth", "sourceUrl": "https://opengameart.org/content/contemplation-0", "license": "CC0", "durationSec": 120 }
+      ]
+    },
+    {
+      "id": "acoustic",
+      "title": "어쿠스틱 기타",
+      "tracks": [
+        { "file": "/bgm/acoustic/campfire-standup.mp3", "title": "모닥불 스탠드업", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 92 },
+        { "file": "/bgm/acoustic/a-small-fire-will-do.mp3", "title": "A Small Fire Will Do", "artist": "Cal McEachern (Trex0n)", "sourceUrl": "https://opengameart.org/content/a-small-fire-will-do-calming-loop", "license": "CC0", "durationSec": 64 },
+        { "file": "/bgm/acoustic/porch-of-the-old-repo.mp3", "title": "오래된 저장소의 툇마루", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 92 },
+        { "file": "/bgm/acoustic/just-you-and-me.mp3", "title": "Just You and Me (Guitar)", "artist": "Alex McCulloch (Pro Sensory)", "sourceUrl": "https://opengameart.org/content/just-you-and-me-guitar", "license": "CC0", "durationSec": 99 },
+        { "file": "/bgm/acoustic/autumn-backlog.mp3", "title": "가을의 백로그", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 85 },
+        { "file": "/bgm/acoustic/ladada-guitar.mp3", "title": "LaDaDa Guitar", "artist": "Alex McCulloch (Pro Sensory)", "sourceUrl": "https://opengameart.org/content/ladada-guitar", "license": "CC0", "durationSec": 154 }
+      ]
+    },
+    {
+      "id": "retro",
+      "title": "레트로 RPG 마을",
+      "tracks": [
+        { "file": "/bgm/retro/item-shop-of-unfinished-swords.mp3", "title": "미완성 검을 파는 상점", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 91 },
+        { "file": "/bgm/retro/welcome-to-the-item-shop.mp3", "title": "Welcome to the Item Shop", "artist": "congusbongus", "sourceUrl": "https://opengameart.org/content/welcome-to-the-item-shop", "license": "CC0", "durationSec": 127 },
+        { "file": "/bgm/retro/inn-at-version-zero.mp3", "title": "버전 0의 여관", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 91 },
+        { "file": "/bgm/retro/quaint-town.mp3", "title": "Quaint Town", "artist": "neonarkade", "sourceUrl": "https://opengameart.org/content/quaint-town", "license": "CC0", "durationSec": 130 },
+        { "file": "/bgm/retro/village-of-abandoned-quests.mp3", "title": "버려진 퀘스트의 마을", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 90 },
+        { "file": "/bgm/retro/a-new-town.mp3", "title": "A New Town", "artist": "The Cynic Project (cynicmusic.com)", "sourceUrl": "https://opengameart.org/content/a-new-town-rpg-theme", "license": "CC0", "durationSec": 62 },
+        { "file": "/bgm/retro/magic-town.mp3", "title": "Magic Town", "artist": "controllerhead", "sourceUrl": "https://opengameart.org/content/magic-town", "license": "CC0", "durationSec": 56 }
       ]
     }
   ]

@@ -5,7 +5,7 @@ import { HttpError } from "./http";
 import { assertAdminNotLocked, recordAdminFailure } from "./ratelimit";
 import type { ReportLogEntry } from "./reports";
 import { safeEqual } from "./session";
-import { byCreated, deleteGrave, getStore, toPublicGrave, type GraveStore } from "./store";
+import { byCreated, deleteGrave, getStore, sweepShrine, toPublicGrave, type GraveStore } from "./store";
 import type { PublicGrave } from "./types";
 import type { AdminAction } from "./validate";
 
@@ -74,7 +74,7 @@ export async function requireAdmin(req: NextRequest): Promise<void> {
 
 /** 모든 채널, 숨김 포함 + 신고 요약. 등록 순 (각 항목에 channel) */
 export async function listAdminGraves(store: GraveStore = getStore()): Promise<AdminGrave[]> {
-  const [records, reports] = await Promise.all([store.listAll(), store.reportSummary()]);
+  const [records, reports] = await Promise.all([store.listAll(), store.reportSummary(), sweepShrine(store)]);
   return records.sort(byCreated).map((r) => ({
     ...toPublicGrave(r),
     hidden: !!r.hidden,

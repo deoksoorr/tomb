@@ -50,6 +50,8 @@ export type Grave = {
   style?: string;
   /** 세운 채널 1..MAX_CHANNELS. 채널마다 묘지가 따로다. 예전 묘비(값 없음)는 1채널로 본다 */
   channel?: number;
+  /** 상주의 한마디 (한 줄, 100자) */
+  comment?: string;
 };
 
 /** 묘비 꾸미기 (상점 아이템, 7일 유지) */
@@ -279,6 +281,8 @@ export type InquiryInfoResponse = { enabled: boolean; public: boolean };
 export const SHRINE_KEEP_DAYS = 30;
 export type ShrineEntry = { grave: PublicGrave; removedAt: number; expiresAt: number };
 export type ShrineListResponse = { entries: ShrineEntry[] };
+/** POST /api/shrine/{id}/restore → 복구된 묘비 (원래 채널 맨 뒤 자리) */
+export type ShrineRestoreResponse = { grave: PublicGrave };
 
 /** GET /api/rank/points → 모은 포인트(lifetimePoints) 상위 50명과 내 순위 */
 export type PointRankRow = { rank: number; name: string; points: number; me: boolean };

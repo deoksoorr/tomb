@@ -27,12 +27,37 @@ export function queueText(status: QueueStatus | undefined): string {
   return "지금 묘지가 꽉 찼어요 — 자리가 나면 자동으로 들어가요";
 }
 
-/** 상단 가운데: 채널·인원, 시간대·날씨 */
-export default function Hud({ onOpenChannels }: { onOpenChannels: () => void }) {
+/** 상단 가운데: 채널·인원, 시간대·날씨. compact(터치 화면 위 가장자리 바)는 작은 한 줄 */
+export default function Hud({ onOpenChannels, compact = false }: { onOpenChannels: () => void; compact?: boolean }) {
   const status = useBridgeValue("net:status");
   const ambience = useAmbience();
   const mode = status?.mode ?? "connecting";
   const channel = status?.channel ?? null;
+
+  if (compact) {
+    const where =
+      mode === "online" && channel !== null
+        ? `${channel}채널 ${status?.count}/${status?.cap}`
+        : MODE_TEXT[mode === "online" ? "connecting" : mode];
+    const sky = ambience ? ` · ${PHASE_LABELS[ambience.phase]}·${WEATHER_LABELS[ambience.weather]}` : "";
+    return mode === "online" && channel !== null ? (
+      <button type="button" className={styles.line} onClick={onOpenChannels} aria-haspopup="dialog">
+        <span className={styles.live} aria-hidden="true" />
+        <span className={styles.lineText}>
+          {where}
+          {sky}
+        </span>
+        <span className="visually-hidden">, 채널 이동</span>
+      </button>
+    ) : (
+      <span className={styles.line} data-mode={mode} role="status">
+        <span className={styles.lineText}>
+          {where}
+          {sky}
+        </span>
+      </span>
+    );
+  }
 
   return (
     <div className={styles.hud}>

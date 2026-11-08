@@ -4,10 +4,10 @@ import { handler, HttpError, json, notFound } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { getVisitorId, isOwner, requireVisitor } from "@/lib/session";
 import {
-  deleteGrave,
   findVisible,
   getAccounts,
   getStore,
+  moveToShrine,
   releaseImage,
   saveGrave,
   toPublicGrave,
@@ -49,7 +49,7 @@ async function requireOwned(req: NextRequest, store: GraveStore, id: string) {
 }
 
 /**
- * 전체 덮어쓰기 (입력 형태는 POST와 같다). 숨김·꾸미기는 저장소가 따로 지킨다.
+ * 전체 덮어쓰기 (입력 형태는 POST와 같다, comment를 빼면 지운다). 숨김·꾸미기는 저장소가 따로 지킨다.
  * style을 빼면 지금 디자인을 유지하고, 다른 유료 디자인으로 바꿀 때만 요청한 계정의 디자인권을 쓴다.
  */
 export const PATCH = handler<Params>(async (req, { id }) => {
@@ -74,10 +74,13 @@ export const PATCH = handler<Params>(async (req, { id }) => {
   });
 });
 
-/** 이장(삭제). Blob 이미지도 같이 정리한다 */
+/**
+ * 이장. 바로 지우지 않고 성황당에 30일 모신다 (`POST /api/shrine/{id}/restore`로 되돌릴 수 있다).
+ * 30일이 지나면 이미지까지 정리된다. 관리자 삭제는 따로 완전 삭제
+ */
 export const DELETE = handler<Params>(async (req, { id }) => {
   const store = getStore();
-  await requireOwned(req, store, id);
-  await deleteGrave(store, id);
+  const { grave, visitorId } = await requireOwned(req, store, id);
+  if (!(await moveToShrine(store, getAccounts(), grave, visitorId))) throw notFound();
   return json({ ok: true });
 });

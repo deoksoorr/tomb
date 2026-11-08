@@ -1,7 +1,7 @@
 import type { CosmeticSlot } from "@tomb/protocol";
 import type { EarnSource } from "../economy";
 import type { ReportLogEntry, ReportReason } from "../reports";
-import type { Grave, GraveDecor, ReviveResponse } from "../types";
+import { SHRINE_KEEP_DAYS, type Grave, type GraveDecor, type ReviveResponse } from "../types";
 
 /**
  * 저장소 원본 + 카운트 + 채널(읽을 때 항상 채운다, 예전 묘비는 1).
@@ -10,6 +10,10 @@ import type { Grave, GraveDecor, ReviveResponse } from "../types";
 export type GraveRecord = Grave & { channel: number; flowers: number; revives: number };
 
 export type ViewerState = { myRevive: boolean; myFlowerToday: boolean };
+
+/** 성황당 보관 기간 */
+export const SHRINE_KEEP_MS = SHRINE_KEEP_DAYS * 86_400_000;
+export type ShrineRecord = { record: GraveRecord; removedAt: number; expiresAt: number };
 
 /** 관리자용 신고 요약: 지금 세고 있는 신고 IP 수 + 최근 기록(최신 먼저) */
 export type ReportSummary = { count: number; log: ReportLogEntry[] };
@@ -35,8 +39,19 @@ export interface GraveStore {
    * grave.hidden·decor는 무시하고 기존 숨김·꾸미기를 유지한다
    */
   put(grave: Grave): Promise<void>;
-  /** 메타·카운트·집합을 모두 지우고 지운 묘비를 돌려준다 (이미지는 호출자가 정리) */
+  /** 메타·카운트·집합을 모두 지우고 지운 묘비를 돌려준다 (이미지는 호출자가 정리). 관리자 삭제용 */
   remove(id: string): Promise<Grave | null>;
+  /**
+   * 성황당으로 옮긴다 (주인의 이장). 목록·채널·랭킹에서 빠지고 accountId의 성황당에 SHRINE_KEEP_DAYS 동안 남는다.
+   * 반응 수·숨김·디자인·꾸미기를 같이 보관한다. 없으면 null
+   */
+  toShrine(id: string, accountId: string, now: number): Promise<Grave | null>;
+  /** 내 성황당 (만료 전만, 최근에 옮긴 것 먼저) */
+  shrine(accountId: string, now: number): Promise<ShrineRecord[]>;
+  /** 원래 채널의 맨 뒤 자리(createdAt = now)로 되돌린다. 성황당에 없거나 만료됐으면 null */
+  restore(accountId: string, id: string, now: number): Promise<GraveRecord | null>;
+  /** 만료된 성황당 묘비를 limit개까지 완전히 지우고 돌려준다 (이미지는 호출자가 정리) */
+  purgeShrine(now: number, limit: number): Promise<Grave[]>;
   /**
    * 숨김 해제 시 신고 수(IP·방문자 집합)를 0으로 되돌린다 (다음 신고 한 번에 바로 다시 숨지 않게).
    * 신고 기록(로그)은 남긴다. 묘비가 없으면 false
@@ -71,9 +86,21 @@ export interface GraveStore {
 
 export type EquippedItem = { itemId: string; until: number };
 
+/** 머무르기 포인트 최소 간격 (클라이언트 주기 10분보다 조금 짧게 → 타이머 오차로 빠지지 않게) */
+export const PRESENCE_MIN_GAP_MS = 9.5 * 60_000;
+
+/** 적립 선택값: amount(없으면 항목 기본 점수), ipHash(주면 같은 IP 합계도 항목 한도 × ATTEND_ACCOUNTS_PER_IP로 막는다) */
+export type EarnOptions = { amount?: number; ipHash?: string };
+export type Profile = { name?: string | null; color?: string | null; body?: string | null };
+export type RankEntry = { accountId: string; name: string | null; points: number; rank: number };
+
 export type AccountRecord = {
   points: number;
+  /** 지금까지 모은 포인트 (써도 줄지 않는다, 포인트 랭킹 기준) */
+  lifetimePoints: number;
   name: string | null;
+  color: string | null;
+  body: string | null;
   streak: number;
   /** 마지막 출석일 (KST, YYYYMMDD) */
   lastAttend: string | null;
@@ -90,18 +117,31 @@ export type AccountRecord = {
 export interface AccountStore {
   get(id: string, day: string, now: number): Promise<AccountRecord>;
   /** 항목별 하루 한도·하루 전체 한도·지갑 한도 안에서 적립하고 실제 쌓인 점수를 돌려준다 (0 = 한도) */
-  earn(id: string, source: EarnSource, day: string): Promise<number>;
+  earn(id: string, source: EarnSource, day: string, opts?: EarnOptions): Promise<number>;
+  /** 원자적 차감. 잔액이 모자라면 null, 아니면 남은 잔액. reason은 계정의 최근 사용 기록(최대 100개)에 남는다 */
+  spend(id: string, amount: number, reason: string, now: number): Promise<number | null>;
+  /**
+   * 돌려주기 (되팔기·결제 뒤 실패 보상): 잔액만 늘린다 (지갑 상한에서 잘림). 적립이 아니므로
+   * 하루 적립 한도·모은 포인트·랭킹과 무관하다. reason은 사용 기록에 남는다. 새 잔액을 돌려준다
+   */
+  refund(id: string, amount: number, reason: string, now: number): Promise<number>;
+  /** 머무르기: 직전 지급 후 PRESENCE_MIN_GAP_MS가 지났으면 적립(한도 안에서). 너무 이르면 null */
+  presence(id: string, day: string, now: number): Promise<number | null>;
+  /** 모은 포인트 상위 limit명 + me의 순위(없으면 null) */
+  pointRank(limit: number, me: string | null): Promise<{ rows: RankEntry[]; mine: RankEntry | null }>;
   /**
    * 출석. 오늘 처음이면 연속 일수를 갱신하고 출석(+7일째마다 보너스) 포인트를 준다.
    * 같은 IP에서 오늘 이미 ATTEND_ACCOUNTS_PER_IP개 계정이 받았으면 출석만 기록하고 포인트는 주지 않는다.
-   * name은 계정에 아직 이름이 없을 때만 저장한다 (개인 코드로 들어온 기기의 다른 이름이 저장된 이름을 덮어쓰지 않게).
+   * 이름·색·몸 모양은 계정에 아직 값이 없을 때만 저장한다 (코드로 시작·이어서 들어온 기기의 다른 값이 덮어쓰지 않게).
    */
-  attend(id: string, ipHash: string, name: string | null, day: string, yesterday: string): Promise<number>;
+  attend(id: string, ipHash: string, profile: Profile, day: string, yesterday: string): Promise<number>;
   /** 개인 코드 해시 교체 (이전 코드는 무효) */
   setCode(id: string, codeHash: string): Promise<void>;
   findByCode(codeHash: string): Promise<string | null>;
-  /** 잔액이 모자라면 false */
-  buy(id: string, itemId: string, price: number): Promise<boolean>;
+  /**
+   * 구매. unique(캐릭터 꾸미기)면 가방에 있거나 지금 착용 중일 때 "owned"로 거절한다 (확인과 차감이 한 번에).
+   */
+  buy(id: string, itemId: string, price: number, opts?: { unique?: boolean; now?: number }): Promise<"ok" | "insufficient" | "owned">;
   /** 가방에서 1개 쓰기. 없으면 false */
   consume(id: string, itemId: string): Promise<boolean>;
   /** 가방에서 1개 쓰고 그 부위에 착용 (같은 부위는 교체). 없으면 false */

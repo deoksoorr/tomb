@@ -258,3 +258,74 @@ export function shimmer(): HTMLCanvasElement {
   g.set(6, 0, 0xcfe3ea, 100);
   return g.toCanvas();
 }
+
+// ── 아바타 꾸미기 연출 (AvatarView) ──
+
+/** 등의 작은 유령 날개: 프레임 0 = 앞·뒷모습(양쪽 날개), 1 = 옆모습(뒤로 뻗은 한쪽 날개). 각 26×12 */
+export function avatarWings(): HTMLCanvasElement {
+  const g = new Grid(52, 12);
+  const fill = 0xf4f1ff;
+  const mid = 0xe2ddf6;
+  const lo = 0xb9b2dc;
+  /** 어깨(ox)에서 dir 쪽으로 len칸 뻗는 날개. 바깥으로 갈수록 위로 솟고 아래 끝은 깃털처럼 들쭉날쭉 */
+  const wing = (ox: number, dir: 1 | -1, len: number) => {
+    for (let i = 0; i < len; i++) {
+      const x = ox + dir * i;
+      const y0 = 4 - Math.round(Math.sin((i / len) * Math.PI * 0.9) * 3.5);
+      const y1 = 8 - Math.floor(i / 3) + (i % 3 === 2 ? -1 : 0);
+      for (let y = y0; y <= y1; y++) g.set(x, y, y === y1 ? lo : y > y0 + 2 ? mid : fill, 235);
+    }
+  };
+  wing(11, -1, 10);
+  wing(14, 1, 10);
+  wing(26 + 15, 1, 10);
+  g.outline(0x5e5880, false, 210);
+  return g.toCanvas();
+}
+
+/** 그림자 유령 친구 (9×10): 반투명 보랏빛 그림자에 눈 두 점 */
+export function petGhost(): HTMLCanvasElement {
+  const g = new Grid(9, 10);
+  const body = 0x3c3552;
+  g.ellipse(4.5, 4, 3.6, 3.6, body);
+  g.rect(1, 4, 7, 4, body);
+  for (const x of [1, 3, 5, 7]) g.set(x, 8, body);
+  g.set(3, 3, 0xf6efd4);
+  g.set(5, 3, 0xf6efd4);
+  g.set(2, 2, 0x5a5078);
+  g.outline(0x1a1626, false, 160);
+  return g.toCanvas();
+}
+
+/** 발자국 꽃: 3가지 색 (각 5×5) */
+export function footFlower(): HTMLCanvasElement {
+  const g = new Grid(15, 5);
+  const cols = [0xf2b8c6, 0xf3e27a, 0xb8c8f2];
+  cols.forEach((c, i) => {
+    const ox = i * 5;
+    g.set(ox + 2, 1, c);
+    g.set(ox + 1, 2, c);
+    g.set(ox + 3, 2, c);
+    g.set(ox + 2, 3, c);
+    g.set(ox + 2, 2, 0xfff4c0);
+    g.set(ox + 3, 4, 0x6f9a4c);
+  });
+  return g.toCanvas();
+}
+
+/** 수면 물결 고리 (14×5) */
+export function ripple(): HTMLCanvasElement {
+  const g = new Grid(14, 5);
+  g.ellipse(7, 2.5, 7, 2.5, 0xd8f0fa, 170);
+  g.ellipse(7, 2.5, 5.5, 1.5, 0x000000, 0);
+  for (let i = 0; i < g.px.length; i++) if ((g.px[i] & 255) === 0) g.px[i] = 0;
+  return g.toCanvas();
+}
+
+/** 잠수 물방울 (3×3) */
+export function avBubble(): HTMLCanvasElement {
+  const g = new Grid(3, 3);
+  for (const [x, y] of [[1, 0], [0, 1], [2, 1], [1, 2]]) g.set(x, y, 0xd8f0fa, 220);
+  g.set(1, 1, 0xffffff, 90);
+  return g.toCanvas();
+}

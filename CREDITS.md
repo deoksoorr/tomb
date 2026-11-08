@@ -10,22 +10,25 @@
 - 외부 에셋으로 교체할 때는 **CC0만** 사용하고(예: Kenney), 이 표에 출처를 추가합니다. 교체 지점은 `apps/web/game/assets/manifest.ts`입니다.
 
 ## 음원 (BGM)
-플레이리스트 6개, 59곡입니다. 곡 목록·순서·길이·저작자는 `apps/web/public/bgm/tracks.json`에 있고(플레이어 ⓘ에 표시됨), 파일은 모두 `apps/web/public/bgm/{playlist}/*.mp3`에 직접 넣었습니다(외부 핫링크 없음). 형식은 MP3 128kbps 44.1kHz 스테레오, 통합 라우드니스 약 -19 LUFS, true peak ≤ -2 dBTP로 통일했습니다.
+플레이리스트 9개, 84곡입니다. 곡 목록·순서·길이·저작자는 `apps/web/public/bgm/tracks.json`에 있고(플레이어 ⓘ에 표시됨), 파일은 모두 `apps/web/public/bgm/{playlist}/*.mp3`에 직접 넣었습니다(외부 핫링크 없음). 형식은 MP3 128kbps 44.1kHz 스테레오, 통합 라우드니스 약 -19 LUFS, true peak ≤ -2 dBTP로 통일했습니다.
 
-### 자체 제작 (CC0) — 40곡
+### 자체 제작 (CC0) — 55곡
 외부 음원·샘플 없이 `scripts/gen-bgm.mjs`가 코드로 작곡·합성했습니다. 트랙마다 고정 시드를 써서 `node scripts/gen-bgm.mjs`를 다시 돌리면 같은 파일이 나옵니다(ffmpeg 필요).
 
 | 플레이리스트 | 곡 수 | 파일 (`apps/web/public/bgm/…`) |
 |---|---|---|
-| 오르골 | 10 | `orgel/`: moonlit-orgel, unfinished-lullaby, first-commit-waltz, archived-dreams, hello-world, forgotten-readme, localhost-lullaby, sleeping-prototype, deprecated-star, version-zero-one |
-| 로파이 | 12 | `lofi/`: late-commit, todo-forever, debugging-at-3am, empty-repository, sleeping-server-room, stale-branch, cold-coffee-stack-trace, stashed-summer, expired-domain, sunday-side-project, merge-tomorrow, last-deploy |
+| 오르골 | 11 | `orgel/`: moonlit-orgel, unfinished-lullaby, first-commit-waltz, archived-dreams, hello-world, forgotten-readme, localhost-lullaby, sleeping-prototype, deprecated-star, version-zero-one, last-star-on-the-graph |
+| 로파이 | 12 | `lofi/`: late-commit, todo-forever, debugging-at-3am, empty-repository, sleeping-server-room, stale-branch, cold-coffee-stack-trace, stashed-summer, expired-domain, sunday-side-project, merge-tomorrow, last-deploy, rubber-duck-at-midnight |
 | 빗소리 앰비언트 | 8 | `rain/`: rain-on-stones, distant-thunder, rainy-night-etude, night-crickets, wind-in-the-trees, tin-roof, drizzle-far-bell, foggy-dawn |
-| 잔잔한 피아노 | 3 | `piano/`: after-the-last-commit, closed-issues, commented-out-feelings |
+| 잔잔한 피아노 | 5 | `piano/`: after-the-last-commit, closed-issues, commented-out-feelings, deprecated-docs, snow-on-the-server |
 | 8비트 | 4 | `chiptune/`: pixel-graveyard-walk, save-point, no-extra-life, stuck-on-title-screen |
-| 재즈 카페 | 3 | `jazz/`: cafe-refactoring, blue-screen-blues, closed-startup-cafe |
+| 재즈 카페 | 5 | `jazz/`: cafe-refactoring, blue-screen-blues, closed-startup-cafe, pull-request-bossa, late-shift-ballad |
+| 몽환 앰비언트 | 3 | `ambient/`: dreaming-in-the-cloud, garbage-collected-memories, sleep-mode |
+| 어쿠스틱 기타 | 3 | `acoustic/`: campfire-standup, porch-of-the-old-repo, autumn-backlog |
+| 레트로 RPG 마을 | 3 | `retro/`: item-shop-of-unfinished-swords, inn-at-version-zero, village-of-abandoned-quests |
 
-### 외부 무료 음원 — 19곡
-원본 페이지에서 라이선스를 직접 확인한 곡만 넣었습니다(2026-11 확인). 받은 원본을 44.1kHz 스테레오 128kbps로 다시 인코딩하고 음량을 다른 곡과 같은 -19 LUFS로 맞췄습니다(변경 사항). happy lofi day, Dimly lit, Apple Cider는 고역을 살짝 깎았습니다. 다시 받으려면 `node scripts/gen-bgm.mjs --fetch`(출처 목록은 스크립트의 `EXTERNAL`).
+### 외부 무료 음원 — 29곡
+원본 페이지에서 라이선스를 직접 확인한 곡만 넣었습니다(2026-11 확인, 여러 라이선스가 걸린 곡은 CC0로 사용). 받은 원본을 44.1kHz 스테레오 128kbps로 다시 인코딩하고 음량을 다른 곡과 같은 -19 LUFS로 맞췄습니다(변경 사항). happy lofi day, Dimly lit, Apple Cider는 고역을 살짝 깎았습니다. 다시 받으려면 `node scripts/gen-bgm.mjs --fetch`(출처 목록은 스크립트의 `EXTERNAL`).
 
 | 플레이리스트 | 파일 | 곡 | 작가 | 출처 | 라이선스 |
 |---|---|---|---|---|---|
@@ -48,11 +51,21 @@
 | 재즈 카페 | `jazz/once-in-a-while.mp3` | Once In a While | Alex McCulloch (Pro Sensory) | https://opengameart.org/content/once-in-a-while | CC0 |
 | 재즈 카페 | `jazz/coffee-house-bump.mp3` | Coffee House Bump | OatCog | https://opengameart.org/content/coffee-house-bump | CC0 |
 | 재즈 카페 | `jazz/lobby-time.mp3` | Lobby Time | Kevin MacLeod (incompetech.com) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600054 | CC BY 4.0 |
+| 몽환 앰비언트 | `ambient/waking-states.mp3` | Waking States | Tsorthan Grove | https://opengameart.org/content/waking-states | CC0 |
+| 몽환 앰비언트 | `ambient/dream-ambience.mp3` | Dream (Ambience) | TokyoGeisha | https://opengameart.org/content/dream-ambience | CC0 |
+| 몽환 앰비언트 | `ambient/contemplation.mp3` | Contemplation | Joth | https://opengameart.org/content/contemplation-0 | CC0 |
+| 어쿠스틱 기타 | `acoustic/a-small-fire-will-do.mp3` | A Small Fire Will Do | Cal McEachern (Trex0n) | https://opengameart.org/content/a-small-fire-will-do-calming-loop | CC0 |
+| 어쿠스틱 기타 | `acoustic/just-you-and-me.mp3` | Just You and Me (Guitar) | Alex McCulloch (Pro Sensory) | https://opengameart.org/content/just-you-and-me-guitar | CC0 |
+| 어쿠스틱 기타 | `acoustic/ladada-guitar.mp3` | LaDaDa Guitar | Alex McCulloch (Pro Sensory) | https://opengameart.org/content/ladada-guitar | CC0 |
+| 레트로 RPG 마을 | `retro/welcome-to-the-item-shop.mp3` | Welcome to the Item Shop | congusbongus | https://opengameart.org/content/welcome-to-the-item-shop | CC0 |
+| 레트로 RPG 마을 | `retro/quaint-town.mp3` | Quaint Town | neonarkade | https://opengameart.org/content/quaint-town | CC0 |
+| 레트로 RPG 마을 | `retro/a-new-town.mp3` | A New Town | The Cynic Project (cynicmusic.com / pixelsphere.org) | https://opengameart.org/content/a-new-town-rpg-theme | CC0 |
+| 레트로 RPG 마을 | `retro/magic-town.mp3` | Magic Town | controllerhead | https://opengameart.org/content/magic-town | CC0 |
 
 - Kevin MacLeod 곡 저작자 표시: "<곡명>" Kevin MacLeod (incompetech.com), Licensed under Creative Commons: By Attribution 4.0 License — http://creativecommons.org/licenses/by/4.0/
 - CC0 곡이라도 작가가 표기를 부탁한 경우(The Cynic Project, Alex McCulloch 등)를 포함해 모든 외부 곡의 작가를 이 표와 tracks.json에 적어 둡니다.
 - 외부 음원을 더 넣을 때도 원본 페이지에서 라이선스를 확인할 수 있는 CC0·CC BY 곡만 씁니다(Pixabay Content License도 가능). 출처가 불분명하거나 유튜브에서 뽑은 음원은 쓰지 않습니다.
 
 ## 효과음 (SFX)
-- `apps/web/public/sfx/`: firework-launch(폭죽 상승, 1.2초), firework-burst(폭죽 터짐·불꽃, 2초), coin(구매, 0.4초), flower(헌화 종소리, 0.8초)
-- 모두 `scripts/gen-bgm.mjs`가 코드로 합성한 자체 제작 음원이며 **CC0**입니다. 약 -16 LUFS, true peak ≤ -2.8 dBTP로 맞췄습니다.
+- `apps/web/public/sfx/` 22개: firework-launch, firework-burst, coin, flower, bell(산사 종), splash, swim(물장구 루프), bubble(잠수), swing(삐걱), wave(휘파람), cheer, hit, crit, monster-die, levelup, potion, skill, coin-drop, defeat, victory, tick, miss
+- 모두 `scripts/gen-bgm.mjs`가 코드로 합성한 자체 제작 음원이며 **CC0**입니다. 대부분 약 -16 LUFS(봉우리가 날카로운 splash·swing은 약 -17~-18, 아주 짧은 tick은 -21), true peak ≤ -1.6 dBTP로 맞췄습니다.

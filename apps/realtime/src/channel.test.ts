@@ -66,7 +66,7 @@ function setup(capacity = 3, graceMs = 20_000) {
   const conn = (id: string): Conn => ({ id, out: [] });
   /** 접속시키고 welcome을 받은 소켓을 돌려준다 */
   const join = (id: string, now = 0, spawn?: { x: number; y: number }, c = conn(id), look: string[] = []) => {
-    core.join(c, { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn, look }, now);
+    core.join(c, { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn, look, body: "hood" }, now);
     return c;
   };
   return { core, reservations, counts, visitors, conn, join };
@@ -89,8 +89,8 @@ describe("join / capacity / duplicate", () => {
     const a = join("a", 0, { x: 100, y: 200 });
     const b = join("b");
     expect(welcome(a)).toMatchObject({ sid: 1, channel: 1, cap: 3, peers: [], seats: {}, resumed: false });
-    expect(welcome(b).peers).toEqual([{ sid: 1, x: 100, y: 200, state: STATE.idle, dir: DIR.down, name: "a", color: AVATAR_COLORS[0], look: [] }]);
-    expect(events(a)).toContainEqual({ t: "join", sid: 2, x: SPAWN.x, y: SPAWN.y, state: STATE.idle, dir: DIR.down, name: "b", color: AVATAR_COLORS[0], look: [] });
+    expect(welcome(b).peers).toEqual([{ sid: 1, x: 100, y: 200, state: STATE.idle, dir: DIR.down, name: "a", color: AVATAR_COLORS[0], look: [], body: "hood" }]);
+    expect(events(a)).toContainEqual({ t: "join", sid: 2, x: SPAWN.x, y: SPAWN.y, state: STATE.idle, dir: DIR.down, name: "b", color: AVATAR_COLORS[0], look: [], body: "hood" });
     expect(events(b).filter((e) => e.t === "join")).toHaveLength(0);
     expect(a.att?.sid).toBe(1); // 입장 때 attachment 기록
     expect(counts).toEqual([1, 2]);
@@ -331,8 +331,8 @@ describe("seats (server authority)", () => {
     core.disconnect(a, 1000, 0);
     expect(events(b)).toEqual([
       { t: "seat", seatId: "bB-0", sid: 1 },
+      { t: "seat", seatId: "bB-1", sid: 1 }, // 같은 벤치 옆자리로: 새 자리 점유 → 옛 자리 해제
       { t: "seat", seatId: "bB-0", sid: null },
-      { t: "seat", seatId: "bB-1", sid: 1 },
       { t: "seat", seatId: "bB-1", sid: null },
       { t: "seat", seatId: "bB-2", sid: 1 },
       { t: "seat", seatId: "bB-2", sid: null },
@@ -528,11 +528,80 @@ describe("v2: look / firework / sync / join-loss guards", () => {
   });
 });
 
+describe("v3: body / act / bench slide", () => {
+  it("re-announces join when the body changes on takeover", () => {
+    const { core, join, conn } = setup();
+    join("a");
+    const b = join("b");
+    clear(b);
+    core.join(conn("a2"), { visitorId: "a", name: "a", color: AVATAR_COLORS[0], channel: 1, look: [], body: "cat" }, 10);
+    expect(events(b)).toEqual([expect.objectContaining({ t: "join", sid: 1, body: "cat" })]);
+  });
+
+  it("relays act to everyone with the sender's position, at most every 2s per connection", () => {
+    const { core, join } = setup();
+    const a = join("a", 0, { x: 300, y: 200 });
+    const b = join("b");
+    clear(a, b);
+    core.message(a, send({ t: "act", kind: "bell" }), 0);
+    core.message(a, send({ t: "act", kind: "wave" }), 1_999);
+    core.message(a, send({ t: "act", kind: "cheer" }), 2_000);
+    expect(events(b)).toEqual([
+      { t: "act", sid: 1, kind: "bell", x: 300, y: 200 },
+      { t: "act", sid: 1, kind: "cheer", x: 300, y: 200 },
+    ]);
+    expect(events(a)).toEqual(events(b));
+  });
+
+  it("slides along the same bench while seated: occupy new + release old together", () => {
+    const { core, join } = setup();
+    const [s0, , s2] = ["bB-0", "bB-1", "bB-2"].map((id) => seatById(id)!);
+    const a = join("a", 0, { x: s0.x, y: s0.y });
+    const b = join("b");
+    core.message(a, send({ t: "sit", seatId: "bB-0" }), 0);
+    clear(a, b);
+    core.message(a, send({ t: "sit", seatId: "bB-2" }), 0); // 32px 떨어진 끝자리도 같은 벤치면 OK
+    expect(events(b)).toEqual([
+      { t: "seat", seatId: "bB-2", sid: 1 },
+      { t: "seat", seatId: "bB-0", sid: null },
+    ]);
+    core.tick(100);
+    expect(snapshots(b)[0].entries).toEqual([{ sid: 1, x: s2.x, y: s2.y, state: STATE.sitChair, dir: s2.facing }]);
+  });
+
+  it("two seated people sliding into the same free bench seat: only one gets it", () => {
+    const { core, join } = setup();
+    const [s0, , s2] = ["bB-0", "bB-1", "bB-2"].map((id) => seatById(id)!);
+    const a = join("a", 0, { x: s0.x, y: s0.y });
+    const b = join("b", 0, { x: s2.x, y: s2.y });
+    core.message(a, send({ t: "sit", seatId: "bB-0" }), 0);
+    core.message(b, send({ t: "sit", seatId: "bB-2" }), 0);
+    clear(a, b);
+    core.message(a, send({ t: "sit", seatId: "bB-1" }), 10);
+    core.message(b, send({ t: "sit", seatId: "bB-1" }), 10);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: "bB-1" });
+    expect(core.peer(1)?.seatId).toBe("bB-1");
+    expect(core.peer(2)?.seatId).toBe("bB-2"); // 거절된 쪽은 원래 자리 그대로
+    expect(events(a).filter((e) => e.t === "seat" && e.sid !== null)).toEqual([{ t: "seat", seatId: "bB-1", sid: 1 }]);
+  });
+
+  it("does not slide across different furniture beyond the seat radius", () => {
+    const { core, join } = setup();
+    const s = seatById("bB-0")!;
+    const a = join("a", 0, { x: s.x, y: s.y });
+    core.message(a, send({ t: "sit", seatId: "bB-0" }), 0);
+    clear(a);
+    core.message(a, send({ t: "sit", seatId: "bA-0" }), 0);
+    expect(events(a)).toEqual([{ t: "seatDenied", seatId: "bA-0" }]);
+    expect(core.peer(1)?.seatId).toBe("bB-0");
+  });
+});
+
 describe("restore after hibernation", () => {
   it("rebuilds peers, seats and reservations", () => {
     const { core, conn, join } = setup();
     const a = conn("a");
-    const recA: PeerRecord = { sid: 4, visitorId: "a", name: "a", color: AVATAR_COLORS[1], x: 420, y: 336, state: STATE.sitChair, dir: DIR.right, seatId: "cA", look: ["hat_cat"], joinedAt: 0 };
+    const recA: PeerRecord = { sid: 4, visitorId: "a", name: "a", color: AVATAR_COLORS[1], x: 420, y: 336, state: STATE.sitChair, dir: DIR.right, seatId: "cA", look: ["hat_cat"], body: "cat", joinedAt: 0 };
     // v1에서 저장된 예약에는 look/joinedAt이 없다
     const recB = { sid: 1, visitorId: "b", name: "b", color: AVATAR_COLORS[0], x: 10, y: 10, state: STATE.idle, dir: DIR.up, seatId: null, until: 5_000 } as unknown as Reservation;
     core.restore([[a, recA]], [recB], 0);
@@ -544,6 +613,8 @@ describe("restore after hibernation", () => {
     expect(welcome(c).peers.map((p) => p.sid).sort()).toEqual([1, 4]);
     expect(welcome(c).peers.find((p) => p.sid === 4)?.look).toEqual(["hat_cat"]);
     expect(welcome(c).peers.find((p) => p.sid === 1)?.look).toEqual([]);
+    expect(welcome(c).peers.find((p) => p.sid === 4)?.body).toBe("cat");
+    expect(welcome(c).peers.find((p) => p.sid === 1)?.body).toBe("hood"); // 이전 버전 예약 → 기본 몸
     core.message(a, send({ t: "stand" }), 0); // 복원된 소켓이 그대로 동작
     expect(events(c)).toContainEqual({ t: "seat", seatId: "cA", sid: null });
   });

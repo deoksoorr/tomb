@@ -1,0 +1,49 @@
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.entry {
+  position: relative;
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.badge {
+  flex: none;
+  padding: 0 5px;
+  background: var(--candle);
+  color: var(--bg-deep);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  background: var(--candle);
+  box-shadow: 0 0 6px var(--candle);
+}
+
+.zoom {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--muted);
+}
+
+.zoom span {
+  margin-right: auto;
+}

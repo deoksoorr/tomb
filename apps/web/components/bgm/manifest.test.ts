@@ -5,7 +5,7 @@ import { needsAttribution, nextIndex, parseManifest, randomStart, type Playlist 
 describe("parseManifest", () => {
   it("저장소의 tracks.json은 모든 플레이리스트에 곡이 있다", () => {
     const lists = parseManifest(tracksJson);
-    expect(lists.map((p) => p.id)).toEqual(["orgel", "lofi", "rain", "piano", "chiptune", "jazz"]);
+    expect(lists.map((p) => p.id)).toEqual(["orgel", "lofi", "rain", "piano", "chiptune", "jazz", "ambient", "acoustic", "retro"]);
     expect(lists.every((p) => p.tracks.length > 0)).toBe(true);
   });
 

@@ -122,3 +122,31 @@
     padding: 4px 10px;
   }
 }
+
+/* 터치 화면 위 가장자리 바 가운데: 채널·날씨 한 줄 */
+.line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 4px 10px;
+  border: 0;
+  background: rgba(20, 21, 17, 0.72);
+  color: var(--text);
+  font-family: var(--font-small);
+  font-size: 10px;
+  box-shadow: 0 0 0 1px var(--line);
+  pointer-events: auto;
+}
+
+.line[data-mode] {
+  color: var(--muted);
+}
+
+.lineText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

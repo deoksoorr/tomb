@@ -3,7 +3,8 @@ import { isFireworkId, itemById, ITEMS } from "@tomb/protocol";
 import { InputHub } from "../input/InputHub";
 import { gearOf, lookKey, SPRITE_COSMETICS } from "../sprites/avatar";
 import { defaultZoom } from "./cameraMath";
-import { burstSpeed, finaleTimes, fireworkPlan, FW_BASE_RADIUS, heartPoint, playerLightRadius } from "./fxMath";
+import { burstSpeed, finaleTimes, fireworkPlan, FW_BASE_RADIUS, heartPoint, meteorShower, playerLightRadius, sampleTextMask } from "./fxMath";
+import { hasItemIcon } from "../sprites/itemIcons";
 import { declutter, type LabelBox } from "./labels";
 import { activeDecor, buildLayout, DECOR_IDS, MAX_DECOR } from "./graveLayout";
 
@@ -194,5 +195,50 @@ describe("firework power", () => {
     const t = 1.23;
     const v = burstSpeed(FW_BASE_RADIUS * 2.8, drag, t);
     expect((v / drag) * (1 - Math.exp(-drag * t))).toBeCloseTo(FW_BASE_RADIUS * 2.8, 5);
+  });
+});
+
+describe("v3 item visuals", () => {
+  it("every shop item has its own icon (no question-mark fallback)", () => {
+    for (const it of ITEMS) expect(hasItemIcon(it.id), it.id).toBe(true);
+    expect(hasItemIcon("nope")).toBe(false);
+  });
+
+  it("every decor item can be drawn on a grave", () => {
+    const decor = ITEMS.filter((i) => i.kind === "decor").map((i) => i.id);
+    expect(decor).toEqual(expect.arrayContaining(["decor_rainbow", "decor_butterfly", "decor_snowman", "decor_flowerpot"]));
+    for (const id of decor) expect(DECOR_IDS as readonly string[]).toContain(id);
+  });
+
+  it("text mask sampling stays within the cap and the glyph box, centered", () => {
+    const w = 40;
+    const h = 18;
+    const alpha = new Uint8Array(w * h);
+    for (let y = 3; y < 15; y++) for (let x = 2; x < 38; x++) if ((x + y) % 3 !== 0) alpha[y * w + x] = 255;
+    for (const cap of [20, 150, 2000]) {
+      const pts = sampleTextMask(alpha, w, h, cap);
+      expect(pts.length).toBeGreaterThan(0);
+      expect(pts.length).toBeLessThanOrEqual(cap);
+      for (const p of pts) {
+        expect(Math.abs(p.x)).toBeLessThanOrEqual(w / 2);
+        expect(Math.abs(p.y)).toBeLessThanOrEqual(h / 2);
+      }
+    }
+    expect(sampleTextMask(new Uint8Array(w * h), w, h, 50)).toEqual([]);
+  });
+
+  it("meteor shower: streaks fall diagonally (down-left) inside the span, sorted", () => {
+    let seed = 1;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const m = meteorShower(12, 2600, rnd);
+    expect(m).toHaveLength(12);
+    for (let i = 0; i < m.length; i++) {
+      expect(m[i].at).toBeGreaterThanOrEqual(0);
+      expect(m[i].at).toBeLessThanOrEqual(2600);
+      if (i) expect(m[i].at).toBeGreaterThanOrEqual(m[i - 1].at);
+      expect(m[i].dx).toBeLessThan(0);
+      expect(m[i].dy).toBeGreaterThan(0);
+      expect(m[i].dur).toBeGreaterThan(400);
+    }
   });
 });

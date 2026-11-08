@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { DIR, JUMP_HEIGHT, JUMP_MS, RUN_MULTIPLIER, SEATS, WALK_SPEED } from "@tomb/protocol";
 import { canJump, escape, jumpHeight, overlaps, pushOut, shadowScale } from "./jump";
 import { emptyMove, faceToward, pickDir, resolveMove } from "./movement";
-import { pickInteract, pickSeat, standPoint } from "./sit";
+import { pickInteract, pickSeat, standPoint, neighborSeat, sideIntent } from "./sit";
+import { nearestObject, pickInteraction } from "./interact";
+import type { Interactable } from "../world/layout";
+import { NearTracker } from "../world/nearTracker";
 
 describe("movement", () => {
   it("keyboard diagonal is normalized to walk speed", () => {
@@ -146,5 +149,85 @@ describe("jump", () => {
         for (const g of graves) expect(overlaps(moved, g)).toBe(false);
       }
     }
+  });
+});
+
+describe("bench: move to the next seat while sitting", () => {
+  const seat = (id: string) => SEATS.find((s) => s.id === id)!;
+  const none = new Map<string, number>();
+
+  it("←/→ picks the adjacent seat of the same bench", () => {
+    expect(neighborSeat(seat("lA-1"), 1, none, null)?.id).toBe("lA-2");
+    expect(neighborSeat(seat("lA-1"), -1, none, null)?.id).toBe("lA-0");
+  });
+
+  it("stays put at the bench end, on a single chair, or when the neighbor is taken", () => {
+    expect(neighborSeat(seat("lA-0"), -1, none, null)).toBeNull();
+    expect(neighborSeat(seat("lA-3"), 1, none, null)).toBeNull();
+    expect(neighborSeat(seat("cA"), 1, none, null)).toBeNull();
+    expect(neighborSeat(seat("lA-1"), 1, new Map([["lA-2", 7]]), 3)).toBeNull();
+    // 내가 이미 잡아 둔 자리는 괜찮다
+    expect(neighborSeat(seat("lA-1"), 1, new Map([["lA-2", 3]]), 3)?.id).toBe("lA-2");
+  });
+
+  it("side intent only for clearly horizontal input (up/down stands up)", () => {
+    expect(sideIntent(1, 0)).toBe(1);
+    expect(sideIntent(-0.9, 0.2)).toBe(-1);
+    expect(sideIntent(0, 1)).toBe(0);
+    expect(sideIntent(0.6, 0.6)).toBe(0);
+    expect(sideIntent(0.3, 0)).toBe(0);
+  });
+});
+
+describe("interaction picker", () => {
+  const tree: Interactable = { id: "t1", kind: "tree", x: 100, y: 100, r: 14, ax: 100, ay: 104, label: "매달리기" };
+  const bell: Interactable = { id: "b1", kind: "bell", x: 140, y: 100, r: 16, ax: 140, ay: 100, label: "종 치기" };
+  const base = { grave: null, seat: null, objects: [tree, bell], water: null, nearWater: false } as const;
+
+  it("in water E toggles dive/surface", () => {
+    expect(pickInteraction({ ...base, px: 0, py: 0, water: "swim" }).kind).toBe("dive");
+    expect(pickInteraction({ ...base, px: 0, py: 0, water: "dive" }).kind).toBe("surface");
+  });
+
+  it("nearest object within its radius; grave wins when closer", () => {
+    const t = pickInteraction({ ...base, px: 104, py: 106 });
+    expect(t.kind === "object" && t.obj.id).toBe("t1");
+    expect(pickInteraction({ ...base, px: 300, py: 300 }).kind).toBe("none");
+    expect(pickInteraction({ ...base, px: 104, py: 106, grave: { id: "g", dist: 3 } }).kind).toBe("grave");
+    expect(nearestObject([tree, bell], 135, 100)?.obj.id).toBe("b1");
+  });
+
+  it("splash only when nothing else is near and standing by the water", () => {
+    expect(pickInteraction({ ...base, px: 300, py: 300, nearWater: true }).kind).toBe("splash");
+    expect(pickInteraction({ ...base, px: 104, py: 106, nearWater: true }).kind).toBe("object");
+  });
+});
+
+describe("near tooltip tracker (removed grave tag bug)", () => {
+  it("hides immediately when the near grave disappears from the list", () => {
+    const t = new NearTracker();
+    expect(t.next("g1")).toBe(true);
+    expect(t.next("g1")).toBe(false);
+    // 이장/삭제로 목록에서 빠짐 → 바로 숨겨야 하고, 다음 프레임(근처 묘비 없음)에도 한 번 더 갱신된다
+    expect(t.invalidate((id) => id !== "g1")).toBe(true);
+    expect(t.id).toBeNull();
+    expect(t.next(null)).toBe(true);
+    expect(t.next(null)).toBe(false);
+  });
+
+  it("list change that keeps the grave just refreshes once", () => {
+    const t = new NearTracker();
+    t.next("g1");
+    expect(t.invalidate(() => true)).toBe(false);
+    expect(t.next("g1")).toBe(true);
+    expect(t.next("g1")).toBe(false);
+  });
+
+  it("my own removal drops it right away", () => {
+    const t = new NearTracker();
+    t.next("g2");
+    expect(t.drop("g3")).toBe(false);
+    expect(t.drop("g2")).toBe(true);
+    expect(t.next(null)).toBe(true);
   });
 });

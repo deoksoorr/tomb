@@ -1,5 +1,8 @@
 import type { GraveEventKind, QueueStatus } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
+import type { HouseEditState, HouseTool } from "@/game/housing/events";
+import type { PublicHouse } from "@/lib/housing/types";
+import type { RpgAction, RpgHud, RpgPlay, RunResult } from "@/lib/rpg/types";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
 // "sticky" 이벤트는 마지막 값을 기억해서, 늦게 구독한 쪽도 last()로 현재 값을 읽을 수 있다.
@@ -34,6 +37,8 @@ export type NetStats = {
 export type GameStartOptions = {
   name: string;
   color: string;
+  /** 아바타 몸 모양 (AVATAR_BODIES id, 계정 저장값). 없으면 입장 토큰 값 */
+  body?: string;
   /** 입장 화면에서 고른 채널 */
   channel: number | "auto";
   /** 공유 링크 /?grave={id} 로 들어왔으면 그 묘비 앞에 스폰하고 grave:open을 보낸다 */
@@ -66,6 +71,22 @@ export type GameEvents = {
   "portal:open": { kind: "hunt" | "housing" | "shrine" };
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
   "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house" };
+
+  // ── 하우징 ── (game/housing, components/housing)
+  /** 집 안 편집 상태 (편집 모드에서 바뀔 때마다). UI가 가방 남은 개수·점수·저장 버튼에 쓴다 */
+  "house:state": HouseEditState;
+  /** 집 안 방명록 팻말과 상호작용 → UI가 방명록을 연다 */
+  "house:guestbook": undefined;
+  /** 집에서 나와 월드로 돌아옴 (문으로 걸어 나감 또는 house:exit) */
+  "house:left": undefined;
+  /** 편집 중 안내 (빈자리 없음 등) */
+  "house:notice": { message: string };
+
+  // ── 사냥터(RPG) ── (game/rpg, components/rpg)
+  /** 사냥터·미니게임 진행 상태 (초당 약 8번). components/rpg의 HUD가 그린다 */
+  "rpg:hud": RpgHud;
+  /** 판이 끝남 (시간 끝·전멸·클리어·포기). UI가 결과를 서버로 보내고 결과 창을 연다. 월드는 이미 다시 보인다 */
+  "rpg:ended": { result: RunResult; aborted: boolean };
 };
 
 
@@ -94,6 +115,8 @@ export type UiEvents = {
   "input:sit": undefined;
   /** 점프 (모바일 버튼). 데스크톱은 Space */
   "input:jump": undefined;
+  /** 감정표현 (모바일 버튼). 데스크톱은 1=wave, 2=cheer */
+  "input:act": { kind: "wave" | "cheer" };
   "input:interact": undefined;
   /** 모달·폼이 열려 있는 동안 게임 키보드 입력을 막는다 */
   "ui:blockKeys": { blocked: boolean };
@@ -113,6 +136,32 @@ export type UiEvents = {
   "audio:settings": { volume: number; muted: boolean };
   /** 상점 UI가 닫힘 → 게임 키 입력 복귀 등 */
   "shop:closed": undefined;
+
+  // ── 하우징 ── (game/housing, components/housing)
+  /** 집에 들어간다 (분양 사무소 → 내 집/다른 사람 집). 월드는 숨기고 연결은 유지한다 */
+  "house:enter": { house: PublicHouse; mine: boolean; edit?: boolean };
+  /** 집에서 나간다 (UI의 나가기 버튼) */
+  "house:exit": undefined;
+  /** 저장 등으로 집 정보가 바뀜 → 다시 그린다 */
+  "house:data": { house: PublicHouse };
+  /** 편집 모드 켜기/끄기. revert=true면 저장하지 않은 변경을 버린다 */
+  "house:edit": { on: boolean; revert?: boolean };
+  /** 편집 도구 */
+  "house:tool": HouseTool;
+
+  // ── 사냥터(RPG) ── (game/rpg, components/rpg)
+  /** 판 시작 (서버가 준 시드·시간 + 내 캐릭터). 월드는 숨기고(연결 유지, 내 아바타는 입구에 멈춤) 미니게임 씬을 띄운다 */
+  "rpg:play": RpgPlay;
+  /** 공격·스킬·포션·칸 누르기 (모바일 버튼). 데스크톱 키보드는 게임이 직접 받는다 */
+  "rpg:action": RpgAction;
+  /** 모바일 가상 조이스틱 -1..1 */
+  "rpg:joystick": { x: number; y: number };
+  /** 화면 탭 (브라우저 좌표). 오버레이가 캔버스 위를 덮고 있어서 대신 전달한다 */
+  "rpg:tap": { x: number; y: number };
+  /** 멈춤 메뉴를 여닫을 때 */
+  "rpg:pause": { paused: boolean };
+  /** 포기하고 나가기 → 지금까지의 결과로 rpg:ended(aborted=true) */
+  "rpg:quit": undefined;
 };
 
 type AllEvents = GameEvents & UiEvents;

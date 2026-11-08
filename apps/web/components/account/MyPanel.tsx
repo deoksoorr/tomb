@@ -20,13 +20,15 @@ type Props = {
   onLeave: () => void;
   /** 로그아웃이 끝났다: 게임을 내리고 입장 첫 화면으로 */
   onLoggedOut: () => void;
+  /** 이장한 묘비를 다시 모시는 곳 */
+  onOpenShrine: () => void;
   onClose: () => void;
 };
 
 type Ending = "leave" | "logout" | null;
 
 /** 내 정보: 포인트·출석, 내 묘비, 개인 코드, 접속 종료·로그아웃 (가방은 HUD의 [가방]) */
-export default function MyPanel({ myGraves, onGoToMyGrave, onBury, onLeave, onLoggedOut, onClose }: Props) {
+export default function MyPanel({ myGraves, onGoToMyGrave, onBury, onLeave, onLoggedOut, onOpenShrine, onClose }: Props) {
   const { me, error } = useMe();
   const [ending, setEnding] = useState<Ending>(null);
   const [pending, setPending] = useState(false);
@@ -90,7 +92,12 @@ export default function MyPanel({ myGraves, onGoToMyGrave, onBury, onLeave, onLo
 
         <CodeSection hasCode={me.hasCode} buttonId={codeButtonId} />
 
-        <InquiryButton className={styles.leave} />
+        <div className={styles.endButtons}>
+          <button type="button" className={cx(ui.button, styles.leave)} onClick={onOpenShrine}>
+            성황당 (이장한 묘비)
+          </button>
+          <InquiryButton className={styles.leave} />
+        </div>
 
         <section className={styles.section}>
           {ending === "leave" ? (

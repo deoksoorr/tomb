@@ -330,6 +330,199 @@ function styleTicket(shape: GraveShape): HTMLCanvasElement {
   return c;
 }
 
+// ── v3 새 아이템 ──
+function hatHalo(): Grid {
+  const g = blank();
+  // 비스듬한 금빛 고리 (속은 비어 있다) + 위로 퍼지는 빛살
+  for (let a = 0; a < 48; a++) {
+    const t = (a / 48) * Math.PI * 2;
+    const x = Math.round(8 + Math.cos(t) * 6.2);
+    const y = Math.round(10 + Math.sin(t) * 2.6);
+    g.set(x, y, y <= 9 ? 0xfff4c0 : 0xf0c040);
+  }
+  g.outline(0x8a6a20, false, 170);
+  for (const [x, y] of [[8, 2], [8, 3], [4, 4], [12, 4], [2, 6], [14, 6]]) g.set(x, y, 0xfff0a8, y <= 3 ? 230 : 150);
+  return g;
+}
+
+function backWings(): Grid {
+  const g = blank();
+  // 위로 뾰족하게 펼친 두 날개 (아래 끝은 깃털 물결), 가운데 등
+  const rows = ["1......", "11.....", "111....", "1111...", ".11111.", ".111111", "..11111", "..1111.", "...1.1.", "...1..."];
+  rows.forEach((r, y) =>
+    [...r].forEach((v, x) => {
+      if (v !== "1") return;
+      const c = x <= 1 || y >= 8 ? 0xc8d8f0 : 0xf4f8ff;
+      g.set(x + 1, y + 3, c);
+      g.set(14 - x, y + 3, c);
+    }),
+  );
+  // 깃털 결
+  for (const [x, y] of [[3, 7], [4, 9], [5, 10]]) {
+    g.set(x, y, 0xa8bcdc);
+    g.set(15 - x, y, 0xa8bcdc);
+  }
+  g.vline(7, 8, 10, 0x8a98b4);
+  g.vline(8, 8, 10, 0x8a98b4);
+  g.outline(0x4a5878);
+  return g;
+}
+
+function petGhost(): Grid {
+  const g = blank();
+  const body = 0x4a4660;
+  const lo = 0x34304a;
+  g.ellipse(8, 7, 5, 5, body);
+  g.rect(3, 7, 11, 5, body);
+  // 물결 꼬리
+  for (const x of [3, 4, 7, 8, 11, 12]) g.set(x, 12, body);
+  g.recolor((x, y) => g.filled(x, y) && (x >= 11 || y >= 11), lo);
+  g.ellipse(6, 7, 1, 1.3, 0xf6efd4);
+  g.ellipse(10, 7, 1, 1.3, 0xf6efd4);
+  g.set(8, 9, 0xb07ab0);
+  g.outline(0x16141e);
+  // 따라오는 작은 점들
+  g.set(14, 14, 0x8a86a0, 160);
+  g.set(15, 12, 0x8a86a0, 110);
+  return g;
+}
+
+function feetFlowers(): Grid {
+  const g = blank();
+  // 발자국 두 개 + 피어난 꽃
+  const print = (x: number, y: number) => {
+    g.rect(x, y, 3, 4, 0x6a5641);
+    g.set(x + 1, y - 1, 0x6a5641);
+  };
+  print(2, 10);
+  print(9, 5);
+  const flower = (x: number, y: number, c: number) => {
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) g.set(x + dx, y + dy, c);
+    g.set(x, y, 0xffe07a);
+  };
+  flower(6, 13, 0xf6a8c8);
+  flower(13, 9, 0xffffff);
+  flower(12, 2, 0xb8a8ff);
+  flower(3, 6, 0xffc2a0);
+  g.outline(OUT, false, 140);
+  return g;
+}
+
+function auraFog(): Grid {
+  const g = blank();
+  // 푸른 안개 망토: 아래로 갈수록 흩어지는 물결 띠
+  g.ellipse(8, 5, 4, 3, 0x5a6a8a);
+  g.rect(4, 5, 9, 4, 0x5a6a8a);
+  g.set(6, 4, 0xf6efd4);
+  g.set(10, 4, 0xf6efd4);
+  g.rect(6, 5, 5, 1, 0x1a1a24);
+  g.outline(0x2a3044);
+  const band = (y: number, c: number, a: number) => {
+    for (let x = 0; x < 16; x++) if (Math.sin(x * 0.9 + y) > -0.3) g.set(x, y, c, a);
+  };
+  band(10, 0xa8c4e8, 220);
+  band(12, 0x8aaad8, 170);
+  band(14, 0x7a98c8, 110);
+  return g;
+}
+
+function rainbowIcon(): Grid {
+  const g = blank();
+  const bands = [0xff6a6a, 0xffb050, 0xfff07a, 0x7ae08a, 0x7ab8ff, 0xb08aff];
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++) {
+      const d = Math.hypot(x - 7.5, y - 13.5);
+      const i = Math.floor(7.6 - d);
+      if (i >= 0 && i < bands.length && y <= 12) g.set(x, y, bands[i]);
+    }
+  g.ellipse(2.5, 13, 2.6, 1.6, 0xf4f6ff);
+  g.ellipse(13, 13, 2.6, 1.6, 0xf4f6ff);
+  g.outline(OUT, false, 120);
+  return g;
+}
+
+function butterflyIcon(): Grid {
+  const g = blank();
+  const w = (x: number, y: number, rx: number, ry: number, c: number) => g.ellipse(x, y, rx, ry, c);
+  w(4.5, 5, 3.4, 3, 0xffa8d4);
+  w(11.5, 5, 3.4, 3, 0xffa8d4);
+  w(5, 10.5, 2.5, 2.2, 0xff80b8);
+  w(11, 10.5, 2.5, 2.2, 0xff80b8);
+  g.set(4, 4, 0xffe4f0);
+  g.set(12, 4, 0xffe4f0);
+  g.vline(8, 3, 12, 0x3a2a30);
+  g.set(7, 2, 0x3a2a30);
+  g.set(9, 2, 0x3a2a30);
+  g.outline(0x6a2440);
+  return g;
+}
+
+function snowmanIcon(): Grid {
+  const g = blank();
+  g.ellipse(8, 11, 4.6, 4, 0xf4f8ff);
+  g.ellipse(8, 5, 3.4, 3.2, 0xf4f8ff);
+  g.recolor((x, y) => g.filled(x, y) && x >= 10, 0xc8d4e8);
+  g.set(7, 4, 0x2a2a30);
+  g.set(9, 4, 0x2a2a30);
+  g.set(8, 5, 0xf08a3a);
+  g.hline(5, 11, 8, 0xd04a3c);
+  g.vline(10, 9, 10, 0xa8382e);
+  g.set(8, 11, 0x3a3a40);
+  g.set(8, 13, 0x3a3a40);
+  g.outline(0x5a6a84);
+  g.set(1, 9, 0x6a4a30);
+  g.set(2, 10, 0x6a4a30);
+  g.set(14, 9, 0x6a4a30);
+  return g;
+}
+
+function flowerpotIcon(): Grid {
+  const g = blank();
+  g.rect(3, 9, 10, 2, 0xd88a5a);
+  for (let y = 11; y <= 14; y++) g.hline(4 + (y > 13 ? 1 : 0), 11 - (y > 13 ? 1 : 0), y, y === 14 ? 0x8e4a2a : 0xb8683c);
+  g.vline(8, 4, 8, 0x4f8a40);
+  g.ellipse(5.5, 6.5, 1.8, 1, 0x6aa850);
+  g.ellipse(10.5, 5.5, 1.8, 1, 0x6aa850);
+  g.ellipse(8, 2.5, 2.2, 2, 0xffd84a);
+  g.set(8, 2, 0xf08a3a);
+  g.outline(OUT);
+  return g;
+}
+
+function fwMeteor(): Grid {
+  const g = blank();
+  // 비스듬한 별똥별 세 줄기
+  const streak = (x: number, y: number, len: number, c: number) => {
+    for (let i = 0; i < len; i++) g.set(x - i, y + i, c, Math.max(50, 255 - i * Math.floor(200 / len)));
+    star(g, x, y, c);
+  };
+  streak(13, 2, 8, 0xd8f0ff);
+  streak(9, 7, 6, 0xfff0b0);
+  streak(14, 10, 5, 0xffd0e8);
+  for (const [x, y] of [[2, 2], [5, 13], [11, 14]]) g.set(x, y, 0xffffff, 170);
+  return g;
+}
+
+function fwLetter(): Grid {
+  const g = blank();
+  // 불꽃 점으로 쓴 "Hi" + 아래 로켓 꼬리
+  const dots: [number, number][] = [
+    [2, 2], [2, 4], [2, 6], [2, 8], [4, 5], [6, 2], [6, 4], [6, 6], [6, 8],
+    [9, 2], [9, 5], [9, 7], [9, 9],
+    [12, 3], [13, 5], [12, 7], [14, 2], [14, 8],
+  ];
+  const cols = [0xffe08a, 0xff8fb8, 0x8fe0ff, 0xd0a0ff];
+  dots.forEach(([x, y], i) => {
+    g.set(x, y, 0xffffff);
+    g.set(x + 1, y, cols[Math.floor((x / 16) * cols.length)], 170);
+    void i;
+  });
+  g.vline(8, 11, 14, 0xffb860);
+  g.set(8, 15, 0xffe08a, 140);
+  g.outline(OUT, false, 120);
+  return g;
+}
+
 function unknown(): Grid {
   const g = blank();
   g.rect(3, 3, 10, 10, 0x5a5660);
@@ -378,9 +571,49 @@ function base(itemId: string): HTMLCanvasElement {
       return centered(ghostCat(), 0, 0, 12, 8);
     case "decor_stars":
       return starlight().toCanvas();
+    case "hat_halo":
+      return hatHalo().toCanvas();
+    case "back_wings":
+      return backWings().toCanvas();
+    case "pet_ghost":
+      return petGhost().toCanvas();
+    case "feet_flowers":
+      return feetFlowers().toCanvas();
+    case "aura_fog":
+      return auraFog().toCanvas();
+    case "decor_rainbow":
+      return rainbowIcon().toCanvas();
+    case "decor_butterfly":
+      return butterflyIcon().toCanvas();
+    case "decor_snowman":
+      return snowmanIcon().toCanvas();
+    case "decor_flowerpot":
+      return flowerpotIcon().toCanvas();
+    case "fw_meteor":
+      return fwMeteor().toCanvas();
+    case "fw_letter":
+      return fwLetter().toCanvas();
     default:
       return unknown().toCanvas();
   }
+}
+
+/** 전용 그림이 있는 아이템 id (묘비 디자인권 gs_*는 따로). 테스트: 모든 ITEMS가 여기 있거나 gs_여야 한다 */
+export const ICON_IDS: readonly string[] = [
+  "fw_small", "fw_heart", "fw_triple", "fw_big", "fw_grand", "fw_meteor", "fw_letter",
+  "hat_straw", "hat_cat", "hat_flower", "hat_halo", "hand_lantern", "aura_firefly", "aura_fog", "neck_scarf",
+  "back_wings", "pet_ghost", "feet_flowers",
+  "decor_candles", "decor_wreath", "decor_ribbon", "decor_lantern", "decor_ghostcat", "decor_stars",
+  "decor_rainbow", "decor_butterfly", "decor_snowman", "decor_flowerpot",
+];
+
+/** 이 아이템에 전용 아이콘이 있는지 (없으면 물음표 아이콘) */
+export function hasItemIcon(itemId: string): boolean {
+  if (itemId.startsWith("gs_")) {
+    const shape = itemId.slice(3) as GraveShape;
+    return shape in GRAVE_STONE_H && isPaidShape(shape);
+  }
+  return ICON_IDS.includes(itemId);
 }
 
 /** 아이콘 원본 크기: 묘비 디자인권은 32, 나머지는 16 */

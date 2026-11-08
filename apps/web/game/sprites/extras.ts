@@ -89,6 +89,98 @@ export function ghostCat(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
+/** 작은 무지개 아치 (24×12, 원점 아래 가운데). 일곱 빛깔 중 다섯 띠 */
+export function rainbow(): HTMLCanvasElement {
+  const W = 24;
+  const H = 12;
+  const g = new Grid(W, H);
+  const bands = [0xff6a6a, 0xffb050, 0xfff07a, 0x7ae08a, 0x7ab8ff, 0xb08aff];
+  const cx = W / 2 - 0.5;
+  const cy = H - 0.5;
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const d = Math.hypot(x - cx, (y - cy) * 1.05);
+      const i = Math.floor(11.6 - d);
+      if (i >= 0 && i < bands.length) g.set(x, y, bands[i], 215);
+    }
+  // 양 끝 구름 받침
+  for (const ox of [1, W - 6]) {
+    g.ellipse(ox + 2.5, H - 1.5, 2.8, 1.6, 0xf4f6ff);
+    g.set(ox + 1, H - 3, 0xffffff);
+  }
+  return g.toCanvas();
+}
+
+/** 나비 2프레임 (날개 펴기/접기, 7×5 × 2) */
+export function butterfly(): HTMLCanvasElement {
+  const g = new Grid(14, 5);
+  const wing = 0xffffff;
+  for (let f = 0; f < 2; f++) {
+    const o = f * 7;
+    g.vline(o + 3, 1, 4, 0x3a2a30);
+    if (f === 0) {
+      // 활짝
+      g.rect(o, 0, 3, 2, wing);
+      g.rect(o + 4, 0, 3, 2, wing);
+      g.rect(o + 1, 2, 2, 2, wing);
+      g.rect(o + 4, 2, 2, 2, wing);
+      g.set(o + 1, 0, 0xd8d8d8);
+      g.set(o + 5, 0, 0xd8d8d8);
+    } else {
+      // 접힘 (위로 세운 날개)
+      g.rect(o + 2, 0, 1, 3, wing);
+      g.rect(o + 4, 0, 1, 3, wing);
+    }
+  }
+  return g.toCanvas();
+}
+
+/** 작은 눈사람 (10×15, 원점 아래 가운데): 빨간 목도리, 나뭇가지 팔, 숯 단추 */
+export function snowman(): HTMLCanvasElement {
+  const g = new Grid(12, 15);
+  const snow = 0xf4f8ff;
+  const shade = 0xc8d4e8;
+  g.ellipse(6, 10.5, 4.2, 3.6, snow);
+  g.ellipse(6, 4.5, 3, 2.8, snow);
+  g.recolor((x, y) => g.filled(x, y) && x >= 8 && y >= 8, shade);
+  g.recolor((x, y) => g.filled(x, y) && y >= 13, shade);
+  // 모자 없이 눈·코
+  g.set(5, 4, 0x2a2a30);
+  g.set(7, 4, 0x2a2a30);
+  g.set(6, 5, 0xf08a3a);
+  // 목도리
+  g.hline(3, 9, 7, 0xd04a3c);
+  g.set(8, 8, 0xd04a3c);
+  g.set(8, 9, 0xa8382e);
+  // 단추
+  g.set(6, 10, 0x3a3a40);
+  g.set(6, 12, 0x3a3a40);
+  g.outline(0x6a7a94, false, 200);
+  // 나뭇가지 팔 (외곽선 뒤)
+  g.set(1, 8, 0x6a4a30);
+  g.set(0, 7, 0x6a4a30);
+  g.set(11, 8, 0x6a4a30);
+  shadow(g, 6, 14, 5, 1, 60);
+  return g.toCanvas();
+}
+
+/** 작은 화분 (9×12, 원점 아래 가운데): 테라코타 화분 + 초록 잎 + 노란 꽃 */
+export function flowerpot(): HTMLCanvasElement {
+  const g = new Grid(9, 12);
+  const pot = { hi: 0xd88a5a, mid: 0xb8683c, lo: 0x8e4a2a };
+  g.rect(1, 6, 7, 2, pot.hi);
+  for (let y = 8; y < 11; y++) g.hline(2 - (y > 9 ? 0 : 0) + (y === 10 ? 1 : 0), 6 - (y === 10 ? 1 : 0), y, y === 10 ? pot.lo : pot.mid);
+  g.vline(4, 2, 5, 0x4f8a40);
+  g.set(2, 4, 0x6aa850);
+  g.set(3, 5, 0x6aa850);
+  g.set(6, 3, 0x6aa850);
+  g.set(5, 4, 0x6aa850);
+  g.rect(3, 0, 3, 2, 0xffd84a);
+  g.set(4, 1, 0xf08a3a);
+  g.outline(OUT, false, 170);
+  return g.toCanvas();
+}
+
 // ── 유령 잡화점 ──
 export const SHOP_HUT_W = 60;
 export const SHOP_HUT_H = 54;
