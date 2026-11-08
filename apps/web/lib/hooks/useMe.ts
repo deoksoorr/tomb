@@ -29,6 +29,11 @@ class MeStore {
     this.update({ me, error: null });
   }
 
+  /** 새로 시작·로그아웃: 이전 계정 정보를 버린다 */
+  reset(): void {
+    this.update(INITIAL);
+  }
+
   async refresh(): Promise<Me | null> {
     try {
       const me = await api.me();

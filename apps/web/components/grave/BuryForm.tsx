@@ -37,13 +37,15 @@ type Props = {
   /** 새 묘비의 상주 = 지금 유저이름 (고칠 때는 원래 상주를 그대로 둔다) */
   mourner: string;
   cache: GraveCache;
-  /** 지금 묘비 수 = 새 묘비가 들어갈 자리 번호. 목록을 아직 못 받았으면 null */
+  /** 지금 채널 (새 묘비는 이 채널 묘지에 묻힌다) */
+  channel: number;
+  /** 지금 채널 묘비 수 = 새 묘비가 들어갈 자리 번호. 목록을 아직 못 받았으면 null */
   graveCount: number | null;
   onClose: () => void;
 };
 
 /** 귀찮지 않게 꼭 필요한 것만: 이름 · 얼마나 살았나 · (사인) · (묘비명) */
-export default function BuryForm({ mode, mourner, cache, graveCount, onClose }: Props) {
+export default function BuryForm({ mode, mourner, cache, channel, graveCount, onClose }: Props) {
   const editing = mode.kind === "edit" ? mode.grave : null;
   const uid = useId();
   const [initial] = useState<QuickValues>(() =>
@@ -95,7 +97,7 @@ export default function BuryForm({ mode, mourner, cache, graveCount, onClose }: 
     setError(null);
     try {
       if (mode.kind === "create") {
-        const { grave, ownerToken, earned } = await api.createGrave(toQuickInput({ ...values, lived }, mourner));
+        const { grave, ownerToken, earned } = await api.createGrave(toQuickInput({ ...values, lived }, mourner, channel));
         saveOwnerToken(grave.id, ownerToken);
         cache.upsert(grave);
         meStore.addGrave(grave.id);
@@ -258,7 +260,9 @@ export default function BuryForm({ mode, mourner, cache, graveCount, onClose }: 
               {styleName(style)} · 상주 {editing?.mourner ?? mourner}
             </p>
             {mode.kind === "create" && graveCount !== null && (
-              <p className={styles.previewPlot}>세우면 {plotLabel(graveCount)}에 묻혀요.</p>
+              <p className={styles.previewPlot}>
+                세우면 {channel}채널 {plotLabel(graveCount)}에 묻혀요.
+              </p>
             )}
           </div>
         </aside>

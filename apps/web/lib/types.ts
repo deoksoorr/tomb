@@ -255,6 +255,6 @@ export type InquiryCategory = (typeof INQUIRY_CATEGORIES)[number]["id"];
  * message 10~1000자, contact(답장 받을 이메일 등)는 선택 100자.
  * 저장소가 공개면 문의 내용이 공개되므로 UI는 `GET /api/inquiry` → { enabled, public }을 보고 안내한다.
  */
-export type InquiryInput = { category: InquiryCategory; message: string; contact?: string };
+export type InquiryInput = { category: InquiryCategory; message: string; contact?: string; /** 문의 당시 채널 (이슈에 표시) */ channel?: number };
 export type InquiryResponse = { ok: true };
 export type InquiryInfoResponse = { enabled: boolean; public: boolean };

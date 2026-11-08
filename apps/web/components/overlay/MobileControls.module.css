@@ -27,7 +27,6 @@
   pointer-events: none;
 }
 
-/* 엄지가 닿기 쉬운 삼각 배치: 상호작용(크게)을 가장 아래 오른쪽에 */
 .actions {
   position: absolute;
   right: var(--safe-right);
@@ -87,14 +86,28 @@
     0 0 14px rgba(224, 195, 106, 0.35);
 }
 
+/* 엄지 자리: 상호작용(크게)·점프는 맨 아래, 달리기·앉기는 그 위 */
+.action[data-slot="jump"] {
+  right: 82px;
+  bottom: 0;
+  width: 60px;
+  height: 60px;
+  font-size: 12px;
+  font-family: var(--font-body);
+}
+
 .action[data-slot="sit"] {
-  right: 84px;
-  bottom: 4px;
+  right: 80px;
+  bottom: 72px;
+  width: 52px;
+  height: 52px;
 }
 
 .action[data-slot="run"] {
-  right: 14px;
-  bottom: 84px;
+  right: 10px;
+  bottom: 82px;
+  width: 52px;
+  height: 52px;
 }
 
 .action[aria-pressed="true"] {

@@ -62,7 +62,7 @@ export default function AdminRow({ grave: g, expanded, selected, busy, onToggleE
         >
           <span className={styles.name}>{g.name}</span>
           <span className={styles.meta}>
-            {g.mourner} · {formatDate(g.createdAt)}
+            {g.channel}채널 · {g.mourner} · {formatDate(g.createdAt)}
           </span>
           <span className={styles.meta}>
             🌼 {g.flowers} · 🙏 {g.revives} ·{" "}

@@ -105,8 +105,10 @@ export function nearShopDoor(x: number, y: number, radius = SHOP_ENTER_RADIUS): 
   return Math.hypot(x - SHOP_DOOR.x, y - SHOP_DOOR.y) <= radius;
 }
 
+/** 좌석 수에 따른 벤치 폭 (2인 40, 3인 56, 4인 72) */
 export function benchWidth(f: Furniture): number {
-  return f.seatOffsets.length >= 3 ? 56 : 40;
+  const n = f.seatOffsets.length;
+  return n >= 4 ? 72 : n >= 3 ? 56 : 40;
 }
 
 export function furnitureCollider(f: Furniture): Rect {

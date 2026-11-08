@@ -45,35 +45,14 @@
   font-weight: 400;
 }
 
-.empty {
-  color: var(--muted);
-}
 
-.list {
-  display: grid;
-  gap: 4px;
-}
 
 .row,
 
 
 
-.rowMain {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
 
-.count {
-  color: var(--candle);
-}
 
-.meta {
-  display: block;
-  color: var(--muted);
-  font-family: var(--font-small);
-  font-size: 10px;
-}
 
 .codeBox {
   display: grid;
@@ -113,14 +92,21 @@
 
 .confirmButtons {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .notice {
   min-height: 1.6em;
   color: var(--candle);
   text-align: center;
+}
+
+.endButtons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .leave {

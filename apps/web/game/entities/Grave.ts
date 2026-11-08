@@ -41,6 +41,9 @@ export class GraveView {
   private fx: Fx[] = [];
   private fxGlow: Phaser.GameObjects.Image | null = null;
   private flag: Phaser.GameObjects.Image | null = null;
+  private mineHalo: Phaser.GameObjects.Image | null = null;
+  private minePillar: Phaser.GameObjects.Image | null = null;
+  private mine = false;
   private sway = 0;
   private glowBase = 0;
   private phase = 0;
@@ -102,12 +105,30 @@ export class GraveView {
     }
     this.bindDecor(p);
     const bright = this.bindStyle(p);
+    this.mine = mine;
     if (mine) {
       const w = SHAPE_SIZE[p.shape].w;
+      const h = GRAVE_STONE_H[p.shape];
       this.flag = this.scene.add
-        .image(p.x + w / 2, p.y - GRAVE_STONE_H[p.shape] + 4, TEX.mineFlag)
+        .image(p.x + w / 2, p.y - h + 4, TEX.mineFlag)
         .setOrigin(0.15, 1)
-        .setDepth(p.y + 0.7);
+        .setDepth(p.y + 0.7)
+        .setScale(p.copy ? 0.7 : 1);
+      if (!p.copy) {
+        // 내 묘비의 상시 빛: 은은한 후광 + 위로 뻗는 부드러운 빛기둥 (묘비 오브젝트에 붙어 같이 움직이고 같이 사라진다)
+        this.mineHalo = this.scene.add
+          .image(p.x, p.y - h / 2, TEX.glow)
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setDepth(DEPTH.lights)
+          .setTint(0xffd98a)
+          .setScale((h + 26) / 64);
+        this.minePillar = this.scene.add
+          .image(p.x, p.y - h - 26, TEX.glow)
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setDepth(DEPTH.lights)
+          .setTint(0xffe6a8)
+          .setScale(0.16, 1.1);
+      }
     }
     // 묘비 위 스폿: 기본도 충분히 밝게, 부활 대기석·빛나는 디자인·꾸미기 빛·내 묘비는 더
     this.spot = 0.5 + (p.rank >= 0 ? 0.15 : 0) + (this.decorLit ? 0.15 : 0) + (bright ? 0.15 : 0) + (mine ? 0.15 : 0);
@@ -121,6 +142,7 @@ export class GraveView {
       this.fx.length > 0 ||
       !!this.fxGlow ||
       !!this.flag ||
+      !!this.mineHalo ||
       p.shape === "duck" ||
       p.shape === "404";
   }
@@ -264,6 +286,8 @@ export class GraveView {
     this.cat?.destroy();
     this.fxGlow?.destroy();
     this.flag?.destroy();
+    this.mineHalo?.destroy();
+    this.minePillar?.destroy();
     this.candles = [];
     this.lights = [];
     this.decorObjs = [];
@@ -273,6 +297,8 @@ export class GraveView {
     this.cat = null;
     this.fxGlow = null;
     this.flag = null;
+    this.mineHalo = null;
+    this.minePillar = null;
   }
 
   unbind(): void {
@@ -302,6 +328,8 @@ export class GraveView {
     this.cat?.setVisible(v);
     this.fxGlow?.setVisible(v);
     this.flag?.setVisible(v);
+    this.mineHalo?.setVisible(v);
+    this.minePillar?.setVisible(v);
   }
 
   /** lightLevel: 시간대 빛 세기 0..1 */
@@ -327,6 +355,14 @@ export class GraveView {
     if (this.cat && !this.reduced) this.cat.setY(p.y - GRAVE_STONE_H[p.shape] + 1 - (Math.sin(now / 900 + this.phase) > 0.6 ? 1 : 0));
     this.updateStyle(p, now, lightLevel);
     if (this.flag && !this.reduced) this.flag.setRotation(Math.sin(now / 700 + this.phase) * 0.06);
+    if (this.mineHalo) {
+      // 세운 직후 잠깐 더 밝게, 그 뒤로는 은은하게 계속
+      const fresh = this.riseAt ? Math.max(0, 1 - (now - this.riseAt) / 2500) : 0;
+      const pulse = this.reduced ? 1 : 0.85 + 0.15 * Math.sin(now / 1100 + this.phase);
+      const a = (0.3 + 0.2 * lightLevel) * pulse + 0.5 * fresh;
+      this.mineHalo.setAlpha(a);
+      this.minePillar?.setAlpha(a * 0.8);
+    }
     if (this.stars.length) {
       // 별가루: 묘비 위에서 천천히 내려오며 깜빡인다
       const h = GRAVE_STONE_H[p.shape];
@@ -419,47 +455,6 @@ export class GraveView {
     this.stone.destroy();
     this.flowers?.destroy();
     this.glow?.destroy();
-  }
-}
-
-/** 부활 대기석으로 올라간 묘비의 원래 격자 자리: 빈 흙자리 + 작은 "↑" */
-export class PlotView {
-  index = -1;
-  private readonly plot: Phaser.GameObjects.Image;
-  private readonly marker: Phaser.GameObjects.Image;
-  private baseY = 0;
-
-  constructor(scene: Phaser.Scene) {
-    this.plot = scene.add.image(0, 0, TEX.plot).setDepth(DEPTH.decal).setVisible(false);
-    this.marker = scene.add.image(0, 0, TEX.upMarker).setOrigin(0.5, 1).setVisible(false);
-  }
-
-  bind(index: number, x: number, y: number): void {
-    this.index = index;
-    this.baseY = y - 3;
-    this.plot.setPosition(x, y - 2).setVisible(true);
-    this.marker.setPosition(x, this.baseY).setDepth(y).setVisible(true);
-  }
-
-  unbind(): void {
-    this.index = -1;
-    this.plot.setVisible(false);
-    this.marker.setVisible(false);
-  }
-
-  update(now: number, reduced: boolean): void {
-    if (this.index < 0 || reduced) return;
-    this.marker.setY(this.baseY - (Math.sin(now / 500 + this.index) > 0.6 ? 1 : 0));
-  }
-
-  setVisible(v: boolean): void {
-    this.plot.setVisible(v);
-    this.marker.setVisible(v);
-  }
-
-  destroy(): void {
-    this.plot.destroy();
-    this.marker.destroy();
   }
 }
 

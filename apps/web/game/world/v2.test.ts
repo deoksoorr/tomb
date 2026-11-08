@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ITEMS } from "@tomb/protocol";
+import { isFireworkId, itemById, ITEMS } from "@tomb/protocol";
 import { InputHub } from "../input/InputHub";
 import { gearOf, lookKey, SPRITE_COSMETICS } from "../sprites/avatar";
 import { defaultZoom } from "./cameraMath";
-import { heartPoint, playerLightRadius } from "./fxMath";
+import { burstSpeed, finaleTimes, fireworkPlan, FW_BASE_RADIUS, heartPoint, playerLightRadius } from "./fxMath";
+import { declutter, type LabelBox } from "./labels";
 import { activeDecor, buildLayout, DECOR_IDS, MAX_DECOR } from "./graveLayout";
 
 describe("grave decor", () => {
@@ -100,5 +101,98 @@ describe("input hub", () => {
     expect(got).toEqual(["sit"]);
     // 막히면 조이스틱도 0
     expect(hub.read({ ax: 0, ay: 0, run: false }).ax).toBe(0);
+  });
+});
+
+describe("name labels", () => {
+  it("overlapping labels are nudged up; the front (lower) one keeps its place", () => {
+    const a: LabelBox = { x: 100, y: 200, w: 30, h: 5 };
+    const b: LabelBox = { x: 105, y: 198, w: 30, h: 5 };
+    const c: LabelBox = { x: 300, y: 198, w: 30, h: 5 };
+    declutter([a, b, c], []);
+    expect(a.y).toBe(200);
+    expect(b.y).toBeLessThanOrEqual(195);
+    expect(c.y).toBe(198); // 떨어져 있으면 그대로
+  });
+  it("a crowd stacks without overlaps", () => {
+    const boxes: LabelBox[] = Array.from({ length: 6 }, (_, i) => ({ x: 100 + i, y: 200 - i * 0.5, w: 30, h: 5 }));
+    declutter(boxes, []);
+    const ys = boxes.map((b) => b.y).sort((p, q) => p - q);
+    for (let i = 1; i < ys.length; i++) expect(ys[i] - ys[i - 1]).toBeGreaterThanOrEqual(5 - 1e-9);
+  });
+});
+
+describe("firework power", () => {
+  const fireworks = ITEMS.filter((i) => isFireworkId(i.id));
+
+  it("every firework item has a power and pricier ones are never weaker", () => {
+    expect(fireworks.map((i) => i.id)).toEqual(expect.arrayContaining(["fw_small", "fw_heart", "fw_triple", "fw_big", "fw_grand"]));
+    const byPrice = [...fireworks].sort((a, b) => a.price - b.price);
+    let prev = fireworkPlan(byPrice[0].power);
+    for (const it of byPrice.slice(1)) {
+      const p = fireworkPlan(it.power);
+      expect(p.power).toBeGreaterThanOrEqual(prev.power);
+      // 덮는 넓이(반경² × 발 수)
+      expect(p.radius * p.radius * p.shots).toBeGreaterThanOrEqual(prev.radius * prev.radius * prev.shots);
+      expect(p.lift).toBeGreaterThanOrEqual(prev.lift);
+      expect(p.volume).toBeGreaterThanOrEqual(prev.volume);
+      prev = p;
+    }
+  });
+
+  it("scales size, afterglow and light by power", () => {
+    const small = fireworkPlan(itemById("fw_small")?.power);
+    const big = fireworkPlan(itemById("fw_big")?.power);
+    expect(small.radius).toBe(1);
+    expect(fireworkPlan(itemById("fw_heart")?.power).radius).toBeGreaterThan(1);
+    expect(fireworkPlan(itemById("fw_triple")?.power).shots).toBe(3);
+    expect(big.radius).toBeGreaterThanOrEqual(2.5);
+    expect(big.life).toBeGreaterThan(small.life * 1.5);
+    expect(big.light).toBeGreaterThanOrEqual(small.light * 2.5);
+    expect(big.lift).toBeGreaterThan(0);
+    expect(big.sky).toBe(false);
+  });
+
+  it("finale fills the whole channel sky: 15~25 shots over 4~6 s", () => {
+    const f = fireworkPlan(itemById("fw_grand")?.power);
+    expect(f.sky).toBe(true);
+    expect(f.shots).toBeGreaterThanOrEqual(15);
+    expect(f.shots).toBeLessThanOrEqual(25);
+    expect(f.spanMs).toBeGreaterThanOrEqual(4000);
+    expect(f.spanMs).toBeLessThanOrEqual(6000);
+    expect(f.lift).toBeGreaterThan(fireworkPlan(4).lift);
+    const t = finaleTimes(f.shots, f.spanMs, () => 0.5);
+    expect(t).toHaveLength(f.shots);
+    expect(t[0]).toBe(0);
+    for (let i = 1; i < t.length; i++) expect(t[i]).toBeGreaterThanOrEqual(t[i - 1]);
+    expect(t[t.length - 1]).toBeLessThanOrEqual(f.spanMs);
+    // 마지막엔 몰아서 (클라이맥스)
+    expect(t.filter((x) => x >= f.spanMs * 0.85).length).toBeGreaterThanOrEqual(3);
+    const r = finaleTimes(f.shots, f.spanMs);
+    expect(r.every((x) => x >= 0 && x <= f.spanMs)).toBe(true);
+  });
+
+  it("reduced-motion: fewer finale shots, no shake, softer flash", () => {
+    const f = fireworkPlan(5, true);
+    expect(f.shots).toBeLessThan(fireworkPlan(5).shots);
+    expect(f.shots).toBeGreaterThanOrEqual(6);
+    for (let p = 1; p <= 5; p++) {
+      expect(fireworkPlan(p, true).shake).toBe(0);
+      expect(fireworkPlan(p, true).lift).toBeLessThanOrEqual(fireworkPlan(p).lift);
+    }
+  });
+
+  it("unknown/odd power falls back to the smallest; out of range clamps", () => {
+    expect(fireworkPlan(undefined).power).toBe(1);
+    expect(fireworkPlan(Number.NaN).power).toBe(1);
+    expect(fireworkPlan(99).power).toBe(5);
+    expect(fireworkPlan(0).power).toBe(1);
+  });
+
+  it("burstSpeed reaches the target radius under drag", () => {
+    const drag = 1.3;
+    const t = 1.23;
+    const v = burstSpeed(FW_BASE_RADIUS * 2.8, drag, t);
+    expect((v / drag) * (1 - Math.exp(-drag * t))).toBeCloseTo(FW_BASE_RADIUS * 2.8, 5);
   });
 });

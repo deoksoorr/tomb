@@ -104,6 +104,8 @@ export function mockGraves(count: number, now = Date.now()): { grave: Grave; flo
       // 등록 순서 = 인덱스 순서. 하루 반 간격 + 간격보다 작은 흔들림 → 순서는 유지된다
       createdAt: now - (count - i) * 36 * HOUR + int(0, 6 * HOUR),
       ownerTokenHash: "",
+      // 로컬에서 채널별 묘지를 확인할 수 있게 1~3채널에 돌아가며 심는다
+      channel: (i % 3) + 1,
     };
     return {
       grave,

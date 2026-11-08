@@ -161,16 +161,16 @@ function contract(make: () => Kit) {
     const gid = `t-${nanoid(8)}`;
     await graves.put(grave(gid));
     try {
-      expect(await accounts.placeDecor(id, `t-${nanoid(8)}`, "decor_candles", 10_000, 0)).toBeNull();
-      expect(await accounts.placeDecor(id, gid, "decor_candles", 10_000, 0)).toBe("no_item");
+      expect(await accounts.placeDecor(id, `t-${nanoid(8)}`, 1, "decor_candles", 10_000, 0)).toBeNull();
+      expect(await accounts.placeDecor(id, gid, 1, "decor_candles", 10_000, 0)).toBe("no_item");
       await kit.setPoints(id, 1000);
       for (let i = 0; i < 5; i++) await accounts.buy(id, "decor_candles", 30);
 
-      for (const until of [1000, 2000, 3000]) await accounts.placeDecor(id, gid, "decor_candles", until, 0);
-      expect(await accounts.placeDecor(id, gid, "decor_candles", 4000, 0)).toEqual(
+      for (const until of [1000, 2000, 3000]) await accounts.placeDecor(id, gid, 1, "decor_candles", until, 0);
+      expect(await accounts.placeDecor(id, gid, 1, "decor_candles", 4000, 0)).toEqual(
         [2000, 3000, 4000].map((until) => ({ itemId: "decor_candles", until })),
       );
-      expect(await accounts.placeDecor(id, gid, "decor_candles", 9000, 3500)).toEqual([
+      expect(await accounts.placeDecor(id, gid, 1, "decor_candles", 9000, 3500)).toEqual([
         { itemId: "decor_candles", until: 4000 },
         { itemId: "decor_candles", until: 9000 },
       ]);
@@ -185,7 +185,7 @@ function contract(make: () => Kit) {
     } finally {
       await graves.remove(gid);
     }
-    expect((await graves.list()).some((g) => g.id === gid)).toBe(false);
+    expect((await graves.listAll()).some((g) => g.id === gid)).toBe(false);
   });
 
   it("디자인권 1개로 묘비 2개를 동시에 세우면 하나만 저장된다", async () => {

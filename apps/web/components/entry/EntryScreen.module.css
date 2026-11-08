@@ -53,6 +53,122 @@
   color: var(--bone);
 }
 
+/* 첫 화면: 큰 선택 두 개 + 이 기기 계정으로 이어서 */
+.choose {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 360px);
+  margin-top: 40px;
+  animation: appear 1.6s 0.6s ease both;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 0;
+  background: rgba(16, 17, 14, 0.6);
+  color: var(--text);
+  text-align: left;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.notice:hover {
+  background: rgba(38, 40, 31, 0.8);
+}
+
+.noticeTag {
+  flex: none;
+  padding: 0 6px;
+  background: var(--candle);
+  color: var(--bg-deep);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.noticeTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.big {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-height: 64px;
+  font-family: var(--font-read);
+  font-size: 15px;
+}
+
+.bigSub {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.continue,
+.back {
+  min-height: 40px;
+  padding: 4px 8px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.continue {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.back {
+  justify-self: start;
+  padding-left: 0;
+}
+
+.continue:hover,
+.back:hover {
+  color: var(--text);
+}
+
+.lockedName {
+  flex: 1;
+  min-height: 40px;
+  padding: 8px 10px;
+  background: var(--bg-deep);
+  color: var(--bone);
+  font-size: 16px;
+  box-shadow: var(--px-border);
+}
+
+.shared {
+  color: var(--candle);
+}
+
+.confirm {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-deep);
+  color: var(--bone);
+  text-align: center;
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}
+
+.confirmButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
 .form {
   display: grid;
   gap: 20px;
@@ -66,7 +182,8 @@
     0 0 0 4px rgba(9, 10, 8, 0.35);
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
-  animation: appear 1.6s 0.6s ease both;
+  /* 단계를 오갈 때마다 다시 그려지므로 짧게 */
+  animation: appear 0.35s ease both;
 }
 
 .nameRow {
@@ -122,10 +239,6 @@
   outline-offset: 6px;
 }
 
-.account {
-  color: var(--candle);
-  text-align: center;
-}
 
 /* 폼이 길어 화면을 넘으면 입장 버튼은 아래에 붙어 있게 */
 .enter {
@@ -147,5 +260,12 @@
 @keyframes breathe {
   50% {
     opacity: 0.45;
+  }
+}
+
+@media (pointer: coarse) {
+  .continue,
+  .back {
+    min-height: 44px;
   }
 }

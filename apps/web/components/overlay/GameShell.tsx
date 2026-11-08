@@ -9,16 +9,20 @@ import { useGraves } from "@/lib/hooks/useGraves";
 import { useGameKeyboardGuard } from "@/lib/hooks/useKeyBlock";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
+import { useMyGraves } from "@/lib/hooks/useMyGraves";
 import { useNewVersion } from "@/lib/hooks/useNewVersion";
+import { useNotices } from "@/lib/hooks/useNotices";
 import { showToast, useToasts } from "@/lib/hooks/useToasts";
 import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
 import { restoreLook } from "../account/actions";
-import { myGraveEntries, pointsText } from "../account/items";
+import BagDialog from "../account/BagDialog";
+import { pointsText, type MyGraveEntry } from "../account/items";
 import MyGraves from "../account/MyGraves";
 import MyPanel from "../account/MyPanel";
 import BgmPlayer from "../bgm/BgmPlayer";
 import BuryForm, { type BuryMode } from "../grave/BuryForm";
 import GraveModal from "../grave/GraveModal";
+import NoticesDialog from "../notice/NoticesDialog";
 import RankingPanel from "../grave/RankingPanel";
 import ShopDialog from "../shop/ShopDialog";
 import { cx } from "../ui/cx";
@@ -36,22 +40,22 @@ import styles from "./GameShell.module.css";
 
 const GameCanvas = dynamic(() => import("@/game/GameCanvas"), { ssr: false });
 
-const CAMERA_HINT = "휠: 확대·축소 · 우클릭 드래그: 둘러보기";
+const KEY_HINTS = ["Space 점프 · E 살펴보기", "휠: 확대·축소 · 우클릭 드래그: 둘러보기"];
 
-/** 데스크톱에서 처음 입장했을 때 한 번만 시점 조작 힌트를 띄운다 */
-function useCameraHint(active: boolean) {
+/** 데스크톱에서 처음 입장했을 때 한 번만 키 조작 힌트를 띄운다 */
+function useKeyHints(active: boolean) {
   useEffect(() => {
     if (!active || readItem(UI_KEYS.cameraHintSeen)) return;
     const timer = setTimeout(() => {
       writeItem(UI_KEYS.cameraHintSeen, "1");
-      showToast(CAMERA_HINT, 6_000);
+      KEY_HINTS.forEach((hint) => showToast(hint, 7_000));
     }, 1_500);
     return () => clearTimeout(timer);
   }, [active]);
 }
 
 /** 입장: 내 계정·착용 상태를 불러오고, 월드가 보이면 출석 처리 (하루 1번만 포인트) */
-function useAccountOnEnter(ready: boolean) {
+function useAccountOnEnter(ready: boolean, name: string) {
   useEffect(() => {
     void meStore.refresh();
     restoreLook().catch(() => {
@@ -61,7 +65,7 @@ function useAccountOnEnter(ready: boolean) {
   useEffect(() => {
     if (!ready) return;
     api
-      .attend()
+      .attend(name)
       .then(({ me, earned }) => {
         meStore.set(me);
         const points = pointsText(earned);
@@ -72,35 +76,41 @@ function useAccountOnEnter(ready: boolean) {
       .catch(() => {
         // 출석 실패는 조용히 (다음 입장 때 다시)
       });
-  }, [ready]);
+  }, [ready, name]);
 }
 
-type Panel = "guide" | "me" | "shop" | "channels" | "graves";
+type Panel = "guide" | "me" | "shop" | "channels" | "graves" | "bag" | "notices";
 type Props = {
   options: GameStartOptions;
   ready: boolean;
   /** 접속 종료: App이 게임을 내린다 (실시간 연결은 GameCanvas 정리에서 1000으로 닫힌다) */
   onLeave: () => void;
+  /** 로그아웃 뒤: 게임을 내리고 입장 첫 화면으로 */
+  onLoggedOut: () => void;
 };
 
-export default function GameShell({ options, ready, onLeave }: Props) {
-  const graves = useGraves();
+export default function GameShell({ options, ready, onLeave, onLoggedOut }: Props) {
+  const status = useBridgeValue("net:status");
+  // 채널마다 묘지가 따로다. 채널을 아직 모르면 고른 채널, 자동 배정이면 1채널
+  const channel = status?.channel ?? (typeof options.channel === "number" ? options.channel : 1);
+  const graves = useGraves(channel);
   const { me } = useMe();
+  const myGraves = useMyGraves(me?.graves ?? [], graves);
   const [openGraveId, setOpenGraveId] = useState<string | null>(null);
   const [bury, setBury] = useState<BuryMode | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
   const coarse = useMediaQuery("(pointer: coarse)");
   // 폰 폭에서는 윗줄에 채널 표시 자리가 없다. 둘째 줄로 내리면 스폰 자리 이름표를 가리므로 아래 안내 줄로 보낸다
   const narrow = useMediaQuery("(max-width: 700px)");
-  const status = useBridgeValue("net:status");
   const inShop = useBridgeValue("scene:changed")?.scene === "shop";
   const outdated = useNewVersion();
   // 게임이 준비되기 전(접속 중)에 온 토스트도 놓치지 않게 오버레이보다 먼저 구독한다
   const toasts = useToasts();
 
   useGameKeyboardGuard();
-  useCameraHint(ready && !coarse);
-  useAccountOnEnter(ready);
+  useKeyHints(ready && !coarse);
+  const { unread: unreadNotice } = useNotices();
+  useAccountOnEnter(ready, options.name);
   useBridgeEvent("grave:open", ({ graveId }) => setOpenGraveId(graveId));
   useBridgeEvent("shop:open", () => setPanel("shop"));
 
@@ -126,10 +136,27 @@ export default function GameShell({ options, ready, onLeave }: Props) {
     if (openModal) setOpenGraveId(graveId);
   }
 
+  /** 다른 채널 묘비: 그 채널로 옮기고, 그 채널 목록이 깔리면 묘비 앞으로 */
+  function goToMyGrave({ grave, here }: MyGraveEntry) {
+    if (here) return goToGrave(grave.id, false);
+    setPanel(null);
+    const { cache } = graves;
+    const off = cache.subscribe(() => {
+      const snap = cache.getSnapshot();
+      if (snap.channel !== grave.channel || !snap.byId.has(grave.id)) return;
+      off();
+      clearTimeout(giveUp);
+      bridge.emit("grave:focus", { graveId: grave.id, teleport: true });
+    });
+    // 채널을 못 옮기면(가득 참 등) 기다리지 않는다
+    const giveUp = setTimeout(off, 20_000);
+    bridge.emit("channel:switch", { channel: grave.channel });
+  }
+
   /** 내 묘비가 하나뿐이면 바로 그 앞으로, 아니면 목록 */
   function openMyGraves() {
-    const mine = me ? myGraveEntries(me.graves, graves.graves) : [];
-    if (mine.length === 1) goToGrave(mine[0].grave.id, false);
+    const { entries, pending } = myGraves;
+    if (entries.length === 1 && pending === 0) goToMyGrave(entries[0]);
     else setPanel("graves");
   }
 
@@ -144,6 +171,7 @@ export default function GameShell({ options, ready, onLeave }: Props) {
   }
 
   const disconnected = status?.mode === "replaced" || status?.mode === "offline";
+  const bagCount = me ? Object.values(me.inventory).reduce((n, c) => n + Math.max(0, c), 0) : 0;
 
   return (
     <div className={styles.shell}>
@@ -193,10 +221,24 @@ export default function GameShell({ options, ready, onLeave }: Props) {
             {narrow && <Hud onOpenChannels={() => setPanel("channels")} />}
           </div>
           <CameraControls />
-          <button type="button" className={cx(ui.button, styles.myGraves)} onClick={openMyGraves}>
-            <PixelIcon name="grave" />
-            내 묘비{me ? ` (${me.graves.length})` : ""}
-          </button>
+          <div className={styles.leftRow}>
+            <button type="button" className={cx(ui.button, styles.leftButton)} onClick={openMyGraves}>
+              <PixelIcon name="grave" />내 묘비{me ? ` (${me.graves.length})` : ""}
+            </button>
+            <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("bag")}>
+              <PixelIcon name="bag" />가방
+              {bagCount > 0 && <span className={styles.badge}>{bagCount}</span>}
+            </button>
+            <button
+              type="button"
+              className={cx(ui.button, ui.icon, styles.leftButton)}
+              onClick={() => setPanel("notices")}
+              aria-label={unreadNotice ? "공지 (새 공지 있음)" : "공지"}
+            >
+              <PixelIcon name="bell" />
+              {unreadNotice && <span className={styles.dot} aria-hidden="true" />}
+            </button>
+          </div>
           <FireworkButton />
           {!inShop && (
             <button
@@ -225,6 +267,7 @@ export default function GameShell({ options, ready, onLeave }: Props) {
           mode={bury}
           mourner={options.name}
           cache={graves.cache}
+          channel={graves.channel}
           graveCount={graves.loaded ? graves.graves.length : null}
           onClose={() => setBury(null)}
         />
@@ -233,23 +276,21 @@ export default function GameShell({ options, ready, onLeave }: Props) {
       {panel === "guide" && <GuideDialog onClose={closePanel} />}
       {panel === "me" && (
         <MyPanel
-          graves={graves}
-          onGoToGrave={(id) => goToGrave(id, false)}
+          myGraves={myGraves}
+          onGoToMyGrave={goToMyGrave}
           onBury={startBury}
           onLeave={onLeave}
+          onLoggedOut={onLoggedOut}
           onClose={closePanel}
         />
       )}
       {panel === "graves" && (
         <Dialog title="내 묘비" onClose={closePanel} size="sm">
-          <MyGraves
-            ids={me?.graves ?? []}
-            graves={graves.graves}
-            onGo={(id) => goToGrave(id, false)}
-            onBury={startBury}
-          />
+          <MyGraves entries={myGraves.entries} pending={myGraves.pending} onGo={goToMyGrave} onBury={startBury} />
         </Dialog>
       )}
+      {panel === "bag" && <BagDialog cache={graves.cache} myGraves={myGraves.entries} onClose={closePanel} />}
+      {panel === "notices" && <NoticesDialog onClose={closePanel} />}
       {panel === "shop" && <ShopDialog onClose={closePanel} />}
     </div>
   );

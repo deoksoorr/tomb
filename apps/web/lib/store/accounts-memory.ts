@@ -98,7 +98,7 @@ export class MemoryAccounts implements AccountStore {
 
   async attend(id: string, ipHash: string, name: string | null, day: string, yesterday: string): Promise<number> {
     const a = this.acct(id);
-    if (name) a.name = name;
+    if (name && !a.name) a.name = name;
     if (a.lastAttend === day) return 0;
     a.streak = a.lastAttend === yesterday ? a.streak + 1 : 1;
     a.lastAttend = day;
@@ -147,6 +147,7 @@ export class MemoryAccounts implements AccountStore {
   async placeDecor(
     id: string,
     graveId: string,
+    _channel: number,
     itemId: string,
     until: number,
     now: number,

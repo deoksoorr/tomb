@@ -72,9 +72,9 @@ export async function requireAdmin(req: NextRequest): Promise<void> {
   throw unauthorized();
 }
 
-/** 숨김 포함 전체 + 신고 요약. 등록 순 */
+/** 모든 채널, 숨김 포함 + 신고 요약. 등록 순 (각 항목에 channel) */
 export async function listAdminGraves(store: GraveStore = getStore()): Promise<AdminGrave[]> {
-  const [records, reports] = await Promise.all([store.list(), store.reportSummary()]);
+  const [records, reports] = await Promise.all([store.listAll(), store.reportSummary()]);
   return records.sort(byCreated).map((r) => ({
     ...toPublicGrave(r),
     hidden: !!r.hidden,

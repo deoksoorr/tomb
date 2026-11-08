@@ -41,6 +41,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+.itemName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.itemName svg {
+  flex: none;
+}
+
 .note {
   display: block;
   color: var(--muted);
@@ -55,4 +65,10 @@
   padding-left: 14px;
   color: var(--text);
   list-style: "· ";
+}
+
+.inquiry {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
 }

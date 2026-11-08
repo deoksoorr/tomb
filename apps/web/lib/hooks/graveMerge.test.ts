@@ -11,6 +11,7 @@ const g = (id: string, createdAt: number, revives = 0, flowers = 0): PublicGrave
   ageDays: 2,
   causes: ["time"],
   mourner: "유령",
+  channel: 1,
   createdAt,
   revives,
   flowers,

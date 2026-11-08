@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DIR, RUN_MULTIPLIER, SEATS, WALK_SPEED } from "@tomb/protocol";
+import { DIR, JUMP_HEIGHT, JUMP_MS, RUN_MULTIPLIER, SEATS, WALK_SPEED } from "@tomb/protocol";
+import { canJump, escape, jumpHeight, overlaps, pushOut, shadowScale } from "./jump";
 import { emptyMove, faceToward, pickDir, resolveMove } from "./movement";
 import { pickInteract, pickSeat, standPoint } from "./sit";
 
@@ -102,5 +103,48 @@ describe("sit rules", () => {
     expect(pickInteract({ id: "g", dist: 5 }, seat, seat.x + 20, seat.y)).toEqual({ kind: "grave", graveId: "g" });
     expect(pickInteract({ id: "g", dist: 25 }, seat, seat.x + 2, seat.y).kind).toBe("seat");
     expect(pickInteract(null, null, 0, 0).kind).toBe("none");
+  });
+});
+
+describe("jump", () => {
+  it("parabola peaks at JUMP_HEIGHT halfway and lands at JUMP_MS", () => {
+    expect(jumpHeight(0)).toBe(0);
+    expect(jumpHeight(JUMP_MS / 2)).toBeCloseTo(JUMP_HEIGHT, 5);
+    expect(jumpHeight(JUMP_MS)).toBe(0);
+    expect(jumpHeight(JUMP_MS * 0.25)).toBeCloseTo(JUMP_HEIGHT * 0.75, 5);
+    expect(shadowScale(JUMP_HEIGHT)).toBeCloseTo(0.6);
+    expect(shadowScale(0)).toBe(1);
+  });
+
+  it("no double jump in the air, 150ms cooldown after landing", () => {
+    expect(canJump(1000, true, 0)).toBe(false);
+    expect(canJump(1000, false, 900)).toBe(false);
+    expect(canJump(1000, false, 850)).toBe(true);
+  });
+
+  it("landing on a grave pushes out by the shortest way (keeps going forward)", () => {
+    const grave = { x: 100, y: 200, w: 12, h: 5 };
+    // 위로(북쪽) 뛰어 받침 안쪽 3px에 착지 → 위로 살짝
+    const feet = { x: 102, y: 197, w: 8, h: 5 };
+    const d = pushOut(feet, grave);
+    expect(d.dx).toBe(0);
+    expect(d.dy).toBeLessThan(0);
+    expect(overlaps({ ...feet, y: feet.y + d.dy }, grave)).toBe(false);
+  });
+
+  it("never stays stuck between neighbouring graves", () => {
+    const graves = [
+      { x: 100, y: 200, w: 12, h: 5 },
+      { x: 113, y: 200, w: 12, h: 5 },
+    ];
+    for (let x = 96; x < 126; x += 1.5) {
+      for (let y = 194; y < 206; y += 1.5) {
+        const feet = { x, y, w: 8, h: 5 };
+        const e = escape(feet, graves);
+        expect(e, `${x},${y}`).not.toBeNull();
+        const moved = { ...feet, x: feet.x + e!.dx, y: feet.y + e!.dy };
+        for (const g of graves) expect(overlaps(moved, g)).toBe(false);
+      }
+    }
   });
 });

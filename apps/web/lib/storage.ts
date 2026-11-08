@@ -5,15 +5,26 @@ import { LS } from "./types";
 /** UI 전용 키 (types.ts의 LS와 겹치지 않게 tomb.ui.* 아래에 둔다) */
 export const UI_KEYS = {
   cameraHintSeen: "tomb.ui.cameraHintSeen",
-  /** 마지막으로 받은 묘비 목록 (다음 입장 때 바로 그리기) */
-  gravesCache: "tomb.ui.gravesCache",
+  /** 마지막으로 본 공지 id (새 공지 점 표시) */
+  noticeSeen: "tomb.ui.noticeSeen",
 } as const;
+
+/** 채널별로 마지막에 받은 묘비 목록 (다음 입장 때 바로 그리기) */
+export const gravesCacheKey = (channel: number) => `tomb.ui.gravesCache.${channel}`;
 
 export function readItem(key: string): string | null {
   try {
     return localStorage.getItem(key);
   } catch {
     return null;
+  }
+}
+
+export function removeItem(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // 저장소를 못 쓰면 지울 것도 없다
   }
 }
 

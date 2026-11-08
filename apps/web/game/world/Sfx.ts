@@ -8,8 +8,8 @@ const FILES: Record<SfxName, string> = {
   burst: "/sfx/firework-burst.mp3",
 };
 
-/** 같은 소리가 너무 많이 겹치지 않게 (삼연발·여러 사람이 동시에 쏠 때) */
-const MAX_VOICES = 6;
+/** 같은 소리가 너무 많이 겹치지 않게 (피날레·여러 사람이 동시에 쏠 때도 이 이상은 안 겹친다) */
+const MAX_VOICES = 12;
 
 export class Sfx {
   private readonly base = new Map<SfxName, HTMLAudioElement>();
@@ -36,12 +36,20 @@ export class Sfx {
     this.muted = muted;
   }
 
-  play(name: SfxName, gain = 1): void {
-    if (this.muted || this.volume <= 0 || this.missing.has(name) || this.voices >= MAX_VOICES) return;
+  /**
+   * gain: 0..1 (UI 볼륨에 곱한다), rate: 재생 속도(작으면 낮고 묵직한 소리),
+   * limit: 이미 이만큼 겹쳐 있으면 건너뛴다 (중요하지 않은 소리는 작게 줘서 자리를 남긴다)
+   */
+  play(name: SfxName, gain = 1, rate = 1, limit = MAX_VOICES): void {
+    if (this.muted || this.volume <= 0 || this.missing.has(name) || this.voices >= Math.min(limit, MAX_VOICES)) return;
     const src = this.base.get(name);
     if (!src) return;
     const a = src.cloneNode(true) as HTMLAudioElement;
     a.volume = Math.max(0, Math.min(1, this.volume * gain));
+    if (rate !== 1) {
+      a.preservesPitch = false;
+      a.playbackRate = Math.max(0.5, Math.min(2, rate));
+    }
     this.voices++;
     const done = () => {
       this.voices = Math.max(0, this.voices - 1);

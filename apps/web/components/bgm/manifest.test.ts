@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import tracksJson from "../../public/bgm/tracks.json";
-import { needsAttribution, nextIndex, parseManifest } from "./manifest";
+import { needsAttribution, nextIndex, parseManifest, randomStart, type Playlist } from "./manifest";
 
 describe("parseManifest", () => {
   it("저장소의 tracks.json은 모든 플레이리스트에 곡이 있다", () => {
@@ -48,5 +48,27 @@ describe("needsAttribution", () => {
     expect(needsAttribution("CC-BY-SA 3.0")).toBe(true);
     expect(needsAttribution("CC0")).toBe(false);
     expect(needsAttribution("Pixabay Content License")).toBe(false);
+  });
+});
+
+describe("randomStart", () => {
+  const track = (n: number) => ({ file: `/bgm/x/${n}.mp3`, title: `${n}`, artist: "", sourceUrl: "", license: "", durationSec: 1 });
+  const lists: Playlist[] = [
+    { id: "orgel", title: "오르골", tracks: [track(0), track(1), track(2), track(3)] },
+    { id: "lofi", title: "로파이", tracks: [track(0), track(1)] },
+  ];
+
+  it("저장한 플레이리스트가 있으면 그 안에서 아무 곡", () => {
+    expect(randomStart(lists, "lofi", () => 0.99)).toEqual({ playlistId: "lofi", index: 1 });
+  });
+
+  it("없으면 아무 플레이리스트의 아무 곡", () => {
+    const seq = [0.6, 0.3];
+    expect(randomStart(lists, null, () => seq.shift() ?? 0)).toEqual({ playlistId: "lofi", index: 0 });
+  });
+
+  it("곡이 없으면 0번, 목록이 없으면 null", () => {
+    expect(randomStart([{ id: "rain", title: "비", tracks: [] }], null, () => 0.5)).toEqual({ playlistId: "rain", index: 0 });
+    expect(randomStart([], null)).toEqual({ playlistId: null, index: 0 });
   });
 });

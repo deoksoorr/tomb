@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
-import { DIR, STATE, type DirId, type Seat, type StateName } from "@tomb/protocol";
+import { DIR, JUMP_MS, STATE, type DirId, type Seat, type StateName } from "@tomb/protocol";
+import { canJump, jumpHeight, shadowScale } from "../logic/jump";
 import { emptyMove, faceToward, resolveMove, type MoveInput } from "../logic/movement";
 import { standPoint } from "../logic/sit";
 import type { NetPose } from "../net/sendThrottle";
@@ -11,6 +12,8 @@ import { AvatarView, SIT_CHAIR_LIFT } from "./AvatarView";
 //  - 앉기: 빈 좌석이 24px 안이면 서버에 점유 요청과 "동시에" 좌석으로 부드럽게 스냅 (지연 숨김),
 //          거절되면 원래 자리로 돌아가 바닥 앉기. 좌석이 없으면 그 자리에서 바닥 앉기.
 //  - 앉은 채 이동 입력 → 일어선 뒤 이동.
+//  - 점프(Space): JUMP_MS 동안 그림만 포물선으로 띄우고(발 위치·물리 바디는 그대로) 뛰기 직전 속도로 계속 간다.
+//    공중에 있는 동안 묘비 충돌은 씬이 끄고, 착지하면 onLand로 알린다.
 
 const BODY_W = 8;
 const BODY_H = 5;
@@ -31,6 +34,13 @@ export class Player {
   private preSit: { x: number; y: number } | null = null;
   private snap: Phaser.Tweens.Tween | null = null;
   private readonly move = emptyMove();
+  airborne = false;
+  private jumpStart = 0;
+  private landedAt = -Infinity;
+  private jumpVx = 0;
+  private jumpVy = 0;
+  /** 착지 직후 (묘비에 겹쳐 내렸으면 씬이 밀어낸다) */
+  onLand: (() => void) | null = null;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -78,8 +88,50 @@ export class Player {
     return out;
   }
 
+  /** 점프 시작. 앉아 있으면 점프 대신 일어난다. 뛰었으면 true */
+  jump(now: number, seats: SeatRequester | null): boolean {
+    if (this.sitting) {
+      this.stand(now, seats);
+      return false;
+    }
+    if (!canJump(now, this.airborne, this.landedAt) || !this.body.enable) return false;
+    this.airborne = true;
+    this.jumpStart = now;
+    // 뛰기 직전의 이동 방향·속도를 그대로 유지한다 (달리기 점프 가능)
+    this.jumpVx = this.body.velocity.x;
+    this.jumpVy = this.body.velocity.y;
+    this.state = "jump";
+    this.view.apply(this.state, this.dir, now);
+    return true;
+  }
+
+  private setHop(h: number): void {
+    const d = this.view.setHop(h, shadowScale(h));
+    // 표시 원점이 올라간 만큼 바디 오프셋도 올려 발 위치(충돌)는 그대로 둔다
+    if (d) this.body.setOffset(this.body.offset.x, this.body.offset.y + d);
+  }
+
+  /** 점프를 바로 끝낸다 (순간이동·일어서기 등) */
+  private endJump(now: number): void {
+    if (!this.airborne) return;
+    this.airborne = false;
+    this.landedAt = now;
+    this.setHop(0);
+  }
+
   /** 매 프레임. 이번 프레임에 걷기 시작했으면 true (카메라 복귀 신호) */
   update(input: MoveInput, now: number, seats: SeatRequester): boolean {
+    if (this.airborne) {
+      const t = now - this.jumpStart;
+      if (t < JUMP_MS) {
+        this.setHop(jumpHeight(t));
+        this.body.setVelocity(this.jumpVx, this.jumpVy);
+        return false;
+      }
+      this.endJump(now);
+      this.state = "idle";
+      this.onLand?.();
+    }
     resolveMove(input, this.dir, this.move);
     const wasMoving = this.state === "walk" || this.state === "run";
     if (this.sitting) {
@@ -188,6 +240,7 @@ export class Player {
 
   /** 순간이동 (랭킹 클릭 등) */
   warp(x: number, y: number, now: number, seats: SeatRequester | null): void {
+    this.endJump(now);
     if (this.sitting) this.stand(now, seats);
     this.cancelSnap();
     this.body.enable = true;

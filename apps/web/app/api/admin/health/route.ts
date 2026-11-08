@@ -25,6 +25,7 @@ export const GET = handler(async (req) => {
     mourner: "관리자",
     createdAt: Date.now(),
     ownerTokenHash: "healthcheck",
+    channel: 1,
   };
   const steps: Step[] = [];
   const run = async (step: string, fn: () => Promise<unknown>) => {
@@ -41,7 +42,7 @@ export const GET = handler(async (req) => {
   await run("get", async () => {
     if (!(await store.get(id))) throw new Error("방금 쓴 묘비를 읽지 못함");
   });
-  await run("list", () => store.list());
+  await run("list", () => store.list(1));
   await run("flower", () => store.flower(id, "healthcheck"));
   await run("toggleRevive", () => store.toggleRevive(id, "healthcheck"));
   await run("remove", () => store.remove(id));

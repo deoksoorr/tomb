@@ -157,6 +157,10 @@ export class ShopScene extends Phaser.Scene {
       bridge.emit("shop:open");
       return;
     }
+    if (a === "jump") {
+      this.player.jump(this.time.now, NO_SEATS);
+      return;
+    }
     if (a === "sit") {
       if (this.player.sitting) this.player.stand(this.time.now, NO_SEATS);
       else this.player.sit(null, this.time.now, NO_SEATS);

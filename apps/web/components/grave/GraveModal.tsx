@@ -205,11 +205,6 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   const decorInBag = me ? bagEntries(me.inventory, "decor") : [];
   const location = graveLocation(graves.graves, graves.reviveTop, graveId);
 
-  function goToGrave() {
-    bridge.emit("grave:focus", { graveId, teleport: true });
-    onClose();
-  }
-
   return (
     <Dialog title={grave.name} onClose={onClose}>
       <article className={styles.grave}>
@@ -238,12 +233,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
           {location && (
             <div>
               <dt>위치</dt>
-              <dd className={styles.location}>
-                <span>{location}</span>
-                <button type="button" className={cx(ui.button, styles.goTo)} onClick={goToGrave}>
-                  이 묘비 앞으로 가기
-                </button>
-              </dd>
+              <dd>{location}</dd>
             </div>
           )}
           <div>

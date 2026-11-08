@@ -56,6 +56,13 @@ export const env = {
   /** 배포 식별자 (next.config.ts의 NEXT_PUBLIC_APP_VERSION과 같은 규칙). 클라이언트가 자기 빌드 값과 비교해 새 버전을 안내한다 */
   appVersion: () => read("VERCEL_DEPLOYMENT_ID") ?? read("VERCEL_GIT_COMMIT_SHA") ?? "dev",
 
+  /** 문의 → GitHub 이슈. 둘 다 있어야 켜진다. 토큰은 그 저장소의 Issues 읽기·쓰기만 있는 fine-grained PAT */
+  github(): { token: string; repo: string } | null {
+    const token = read("GITHUB_TOKEN");
+    const repo = read("GITHUB_INQUIRY_REPO");
+    return token && repo && /^[\w.-]+\/[\w.-]+$/.test(repo) ? { token, repo } : null;
+  },
+
   /** MemoryStore가 처음 뜰 때 심는 목업 묘비 수 */
   mockGraves(): number {
     const n = Number(read("MOCK_GRAVES") ?? 30);

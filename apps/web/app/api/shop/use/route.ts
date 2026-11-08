@@ -54,7 +54,8 @@ export const POST = handler(async (req) => {
   if (!grave) throw notFound();
   if (grave.ownerAccountId !== visitorId)
     throw new HttpError(403, "NOT_OWNER", "내 계정으로 세운 묘비에만 꾸밀 수 있어요.");
-  const placed = await accounts.placeDecor(visitorId, graveId, itemId, now + (item.durationMs ?? DECOR_DURATION_MS), now);
+  const until = now + (item.durationMs ?? DECOR_DURATION_MS);
+  const placed = await accounts.placeDecor(visitorId, graveId, grave.channel, itemId, until, now);
   if (placed === null) throw notFound();
   if (placed === "no_item") throw noItem();
   return json<UseItemResponse>({

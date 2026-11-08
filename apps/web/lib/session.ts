@@ -48,6 +48,11 @@ export async function setSessionCookie(res: NextResponse, visitorId: string): Pr
   });
 }
 
+/** 로그아웃: 쿠키를 지운다 (개인 코드가 없으면 그 계정으로 다시 들어올 방법이 없다) */
+export function clearSessionCookie(res: NextResponse): void {
+  res.cookies.set(SESSION_COOKIE, "", { httpOnly: true, sameSite: "lax", secure: env.isProd(), path: "/", maxAge: 0 });
+}
+
 // ── 비밀값 비교 / 묘비 소유 토큰 ──
 
 export const sha256Hex = (s: string) => createHash("sha256").update(s).digest("hex");

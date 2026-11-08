@@ -56,12 +56,25 @@ export function pointsText(earned: number | undefined): string | null {
   return earned && earned > 0 ? `+${earned} 포인트` : null;
 }
 
-export type MyGraveEntry = { grave: PublicGrave; plot: string };
+/** here: 지금 채널의 묘비 (자리 이름이 있다). 다른 채널 묘비는 plot 대신 채널만 안다 */
+export type MyGraveEntry = { grave: PublicGrave; plot: string | null; here: boolean };
 
-/** 내 계정이 세운 묘비 (최근 순). 자리 이름은 전체 목록(등록 순 = 격자 순서) 안 위치로 */
-export function myGraveEntries(ids: readonly string[], graves: readonly PublicGrave[]): MyGraveEntry[] {
-  const mine = new Set(ids);
-  return graves
-    .flatMap((grave, index) => (mine.has(grave.id) ? [{ grave, plot: plotLabel(index) }] : []))
+/**
+ * 내 계정이 세운 묘비 (최근 순). 지금 채널 묘비는 그 채널 목록(등록 순 = 격자 순서) 안 위치로 자리 이름을 붙이고,
+ * 다른 채널 묘비는 따로 받아 둔 상세(others)로 채운다.
+ */
+export function myGraveEntries(
+  ids: readonly string[],
+  current: readonly PublicGrave[],
+  others: ReadonlyMap<string, PublicGrave> = new Map(),
+): MyGraveEntry[] {
+  const index = new Map(current.map((g, i) => [g.id, i]));
+  return ids
+    .flatMap((id): MyGraveEntry[] => {
+      const i = index.get(id);
+      if (i !== undefined) return [{ grave: current[i], plot: plotLabel(i), here: true }];
+      const other = others.get(id);
+      return other ? [{ grave: other, plot: null, here: false }] : [];
+    })
     .sort((a, b) => b.grave.createdAt - a.grave.createdAt);
 }

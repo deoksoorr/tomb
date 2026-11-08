@@ -84,6 +84,7 @@ npm run build      # Next 프로덕션 빌드
    - `SESSION_SECRET`, `JOIN_SECRET`(Worker와 같은 값), `ADMIN_KEY`: 모두 32자 이상
    - `NEXT_PUBLIC_REALTIME_URL`: 예) `https://rt.example.com`
    - `ADMIN_ALLOWED_IPS`: 관리자 화면에 들어올 IP (8절). 비워 두면 운영에서는 아무도 못 들어온다.
+   - (선택) `GITHUB_TOKEN`, `GITHUB_INQUIRY_REPO`: 문의하기 → GitHub 이슈. 비공개 저장소를 권장한다.
 5. 배포한 웹 주소를 Worker의 `ALLOWED_ORIGINS`에 넣었는지 다시 확인한다.
 
 ## 3. 용량 조정
@@ -193,6 +194,17 @@ npm run loadtest -w realtime -- --scenario hold --duration 300   # 봇 39명 상
   - 세운 계정이면 어느 기기에서든 수정·삭제할 수 있다. 상세의 `isMine`이 이를 알려 준다. 기존 `x-owner-token`도 계속 통한다.
 - **대기열:** 전체 400명이 차면 `/api/join`이 `{mode:"queue", queueUrl}`를 준다. 클라이언트는 그 주소를 5초마다 확인하다가 자리가 나면 그 채널로 다시 입장한다(대기열 토큰은 10분 유효).
 - **새 버전 안내:** `GET /api/version`은 배포 식별자(`VERCEL_DEPLOYMENT_ID` → `VERCEL_GIT_COMMIT_SHA`)를 준다. 빌드에 박힌 `NEXT_PUBLIC_APP_VERSION`과 다르면 새로고침을 안내한다.
+- **채널별 묘지:** 묘비는 세운 채널에만 있다. `GET /api/graves?channel=N`(없으면 1)은 그 채널의 묘비와 랭킹만 준다.
+  - 키: 1채널은 개편 전 이름(`graves:meta` 등)을 그대로 쓰고, 2~10채널은 `ch:{n}:graves:*`를 쓴다. 그래서 기존 묘비는 옮기지 않아도 1채널 묘비가 된다.
+  - 묘비 id → 채널은 `graves:ch` 해시로 찾는다. 기록이 없으면 1채널이다.
+- **새로 시작 / 로그아웃:** `POST /api/session {fresh:true}`는 기존 쿠키를 버리고 새 계정을 만든다. `POST /api/me/logout`은 쿠키를 지운다.
+  - 계정 닉네임은 처음 정한 이름을 유지한다. 개인 코드로 들어온 기기의 다른 이름이 덮어쓰지 않는다.
+- **공지사항:** `GET /api/notices`(고정 먼저, 최신 순, 최대 20개). 쓰기·수정·삭제·고정은 `/admin`의 "공지사항" 탭(`/api/admin/notices`)에서 한다.
+- **문의하기:** `POST /api/inquiry`로 받은 문의는 운영자 GitHub 저장소(`GITHUB_INQUIRY_REPO`)의 이슈가 된다. 라벨은 `문의`와 카테고리.
+  - 방문자·IP당 하루 3번까지 받는다.
+  - 내용은 코드 블록에 넣어서 링크·멘션이 작동하지 않는다. 계정 id는 앞 6자만 남긴다.
+  - 토큰은 fine-grained PAT로, 그 저장소의 Issues: Read and write 권한만 준다.
+  - **공개 저장소면 문의가 공개된다.** 비공개 저장소를 권장한다. 공개 저장소면 문의 화면이 이를 안내한다.
 - **묘비 목록 캐시:** `Cache-Control: s-maxage=30, stale-while-revalidate=86400`. 한동안 아무도 없다가 들어와도 CDN이 마지막 목록을 바로 주고, 뒤에서 새로 받아 둔다.
 
 ## 8. 관리자 화면과 API

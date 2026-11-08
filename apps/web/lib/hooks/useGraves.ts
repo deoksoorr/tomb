@@ -3,7 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
 import { api, ApiRequestError } from "@/lib/api";
-import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
+import { gravesCacheKey, readItem, writeItem } from "@/lib/storage";
 import type { GraveDetailResponse, GraveListResponse, PublicGrave } from "@/lib/types";
 import { GraveEventGate, isActionableGraveEvent } from "./graveEventGate";
 import { mergeGraves, pruneOverrides, REVIVE_TOP_N, sortByRevives, type Overrides } from "./graveMerge";
@@ -11,23 +11,38 @@ import { mergeGraves, pruneOverrides, REVIVE_TOP_N, sortByRevives, type Override
 const LIST_POLL_MS = 30_000;
 
 export type GravesSnapshot = {
+  /** 이 목록의 채널 (채널마다 묘지가 따로다) */
+  channel: number;
   graves: PublicGrave[];
   reviveTop: string[];
   byId: ReadonlyMap<string, PublicGrave>;
   loaded: boolean;
 };
 
-const EMPTY: GravesSnapshot = { graves: [], reviveTop: [], byId: new Map(), loaded: false };
+const emptySnapshot = (channel: number): GravesSnapshot => ({
+  channel,
+  graves: [],
+  reviveTop: [],
+  byId: new Map(),
+  loaded: false,
+});
 
 /**
- * 묘비 목록의 클라이언트 사본. 첫 목록을 받은 뒤로는 바뀔 때마다 그 자리에서 graves:set을 보내므로,
+ * 한 채널 묘지의 클라이언트 사본. 첫 목록을 받은 뒤로는 바뀔 때마다 그 자리에서 graves:set을 보내므로,
  * `cache.upsert(grave)` 직후에 `grave:buried` 같은 이벤트를 보내면 게임은 이미 그 묘비를 알고 있다.
+ * 채널을 옮기면 비우고 새 채널 목록을 기다린다. 다른 채널 묘비는 섞지 않는다.
  */
 export class GraveCache {
+  private channel: number;
   private list: GraveListResponse | null = null;
   private overrides: Overrides = {};
-  private snapshot = EMPTY;
+  private snapshot: GravesSnapshot;
   private listeners = new Set<() => void>();
+
+  constructor(channel: number) {
+    this.channel = channel;
+    this.snapshot = emptySnapshot(channel);
+  }
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -38,15 +53,28 @@ export class GraveCache {
 
   getSnapshot = () => this.snapshot;
 
+  getChannel = () => this.channel;
+
+  /** 채널을 옮겼다: 이전 채널 목록·덮어쓰기를 버리고 새 목록을 기다린다 */
+  setChannel(channel: number): void {
+    if (channel === this.channel) return;
+    this.channel = channel;
+    this.list = null;
+    this.overrides = {};
+    this.snapshot = emptySnapshot(channel);
+    this.listeners.forEach((fn) => fn());
+  }
+
   setList(list: GraveListResponse): void {
-    // CDN 캐시가 같은 응답을 다시 주면 게임을 괜히 다시 맞추지 않는다
-    if (this.list?.generatedAt === list.generatedAt) return;
+    // 늦게 도착한 다른 채널 목록, CDN 캐시가 다시 준 같은 응답은 무시한다
+    if ((list.channel ?? 1) !== this.channel || this.list?.generatedAt === list.generatedAt) return;
     this.list = list;
     this.overrides = pruneOverrides(this.overrides, list.generatedAt, Date.now());
     this.publish();
   }
 
   upsert(grave: PublicGrave): void {
+    if (grave.channel !== this.channel) return;
     this.overrides = { ...this.overrides, [grave.id]: { grave, at: Date.now() } };
     this.publish();
   }
@@ -82,9 +110,10 @@ export class GraveCache {
     const reviveTop = sortByRevives(graves, this.list?.reviveTop ?? [])
       .slice(0, REVIVE_TOP_N)
       .map((g) => g.id);
-    this.snapshot = { graves, reviveTop, byId: new Map(graves.map((g) => [g.id, g])), loaded: this.list !== null };
+    const channel = this.channel;
+    this.snapshot = { channel, graves, reviveTop, byId: new Map(graves.map((g) => [g.id, g])), loaded: this.list !== null };
     // 첫 목록 전에 보내면 게임이 "묘비 0개(또는 몇 개)"로 월드를 잘못 깔았다가 다시 맞추게 된다
-    if (this.list) bridge.emit("graves:set", { graves, reviveTop });
+    if (this.list) bridge.emit("graves:set", { channel, graves, reviveTop });
     this.listeners.forEach((fn) => fn());
   }
 }
@@ -93,18 +122,20 @@ export type GravesState = GravesSnapshot & { cache: GraveCache };
 
 // ── 첫 화면 속도: 입장 화면이 뜨자마자 목록을 받아 두고, 마지막 목록은 localStorage에 남겨 다음 방문 때 바로 깐다 ──
 
-let prefetched: Promise<GraveListResponse> | null = null;
+let prefetched: { channel: number; list: Promise<GraveListResponse> } | null = null;
 
-/** 입장 화면에서 부른다. 입장하면 useGraves가 이 응답을 이어받는다 */
-export function prefetchGraves(): void {
-  prefetched ??= api.listGraves();
-  prefetched.catch(() => {
-    prefetched = null;
+/** 입장 버튼을 누를 때 들어갈(것으로 보이는) 채널 목록을 미리 받는다. 입장하면 useGraves가 이어받는다 */
+export function prefetchGraves(channel: number): void {
+  if (prefetched?.channel === channel) return;
+  const entry = { channel, list: api.listGraves(channel) };
+  prefetched = entry;
+  entry.list.catch(() => {
+    if (prefetched === entry) prefetched = null;
   });
 }
 
-function takePrefetched(): Promise<GraveListResponse> | null {
-  const p = prefetched;
+function takePrefetched(channel: number): Promise<GraveListResponse> | null {
+  const p = prefetched?.channel === channel ? prefetched.list : null;
   prefetched = null;
   return p;
 }
@@ -114,7 +145,10 @@ export function parseCachedList(raw: string | null): GraveListResponse | null {
   if (!raw) return null;
   try {
     const v = JSON.parse(raw) as Partial<GraveListResponse>;
-    return Array.isArray(v.graves) && Array.isArray(v.reviveTop) && typeof v.generatedAt === "number"
+    return Array.isArray(v.graves) &&
+      Array.isArray(v.reviveTop) &&
+      typeof v.generatedAt === "number" &&
+      typeof v.channel === "number"
       ? (v as GraveListResponse)
       : null;
   } catch {
@@ -123,28 +157,29 @@ export function parseCachedList(raw: string | null): GraveListResponse | null {
 }
 
 /**
- * 목록: 저장해 둔 목록을 바로 깔고 → 미리 받아 둔(또는 새로 받은) 최신 목록으로 바꾸고 → 30초마다 갱신.
- * 같은 채널의 묘비 변경(net:graveEvent)은 상세를 받아 바로 반영한다.
+ * 지금 채널의 목록: 저장해 둔 목록을 바로 깔고 → 미리 받아 둔(또는 새로 받은) 최신 목록으로 바꾸고 → 30초마다 갱신.
+ * 채널이 바뀌면 즉시 그 채널 목록으로 다시 시작한다. 같은 채널의 묘비 변경(net:graveEvent)은 상세를 받아 바로 반영한다.
  */
-export function useGraves(): GravesState {
-  const [cache] = useState(() => new GraveCache());
+export function useGraves(channel: number): GravesState {
+  const [cache] = useState(() => new GraveCache(channel));
   const snapshot = useSyncExternalStore(cache.subscribe, cache.getSnapshot, cache.getSnapshot);
 
   useEffect(() => {
-    const cached = parseCachedList(readItem(UI_KEYS.gravesCache));
+    cache.setChannel(channel);
+    const cached = parseCachedList(readItem(gravesCacheKey(channel)));
     if (cached) cache.setList(cached);
 
     let ctrl: AbortController | null = null;
     const apply = (list: GraveListResponse) => {
       cache.setList(list);
-      writeItem(UI_KEYS.gravesCache, JSON.stringify(list));
+      writeItem(gravesCacheKey(channel), JSON.stringify(list));
     };
     const load = async () => {
       if (document.hidden) return;
       ctrl?.abort();
       const mine = (ctrl = new AbortController());
       try {
-        const list = await api.listGraves(mine.signal);
+        const list = await api.listGraves(channel, mine.signal);
         if (!mine.signal.aborted) apply(list);
       } catch {
         // 다음 주기에 다시 받는다
@@ -153,7 +188,7 @@ export function useGraves(): GravesState {
     const onVisibility = () => {
       if (!document.hidden) void load();
     };
-    const early = takePrefetched();
+    const early = takePrefetched(channel);
     if (early) void early.then(apply, load);
     else void load();
     const timer = setInterval(load, LIST_POLL_MS);
@@ -163,7 +198,7 @@ export function useGraves(): GravesState {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [cache]);
+  }, [cache, channel]);
 
   // 같은 채널의 묘비 변경 알림 → 한도(graveEventGate) 안에서만 상세를 받아 반영한다
   useEffect(() => {

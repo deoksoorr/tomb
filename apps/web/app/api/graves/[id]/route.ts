@@ -65,6 +65,7 @@ export const PATCH = handler<Params>(async (req, { id }) => {
     ownerTokenHash: current.ownerTokenHash,
     ownerAccountId: current.ownerAccountId,
     style: input.style ?? current.style,
+    channel: current.channel,
   };
   await saveGrave(store, getAccounts(), visitorId, next, !!input.style && input.style !== current.style);
   if (current.imageUrl !== next.imageUrl) await releaseImage(store, current.imageUrl);

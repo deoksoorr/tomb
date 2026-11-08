@@ -47,6 +47,7 @@ export class MemoryStore implements GraveStore {
   private record(g: Grave): GraveRecord {
     return {
       ...g,
+      channel: g.channel ?? 1,
       hidden: this.hidden.has(g.id) || undefined,
       decor: this.decor.get(g.id),
       flowers: this.flowers.get(g.id) ?? 0,
@@ -64,7 +65,11 @@ export class MemoryStore implements GraveStore {
     return set;
   }
 
-  async list(): Promise<GraveRecord[]> {
+  async list(channel: number): Promise<GraveRecord[]> {
+    return [...this.graves.values()].filter((g) => (g.channel ?? 1) === channel).map((g) => this.record(g));
+  }
+
+  async listAll(): Promise<GraveRecord[]> {
     return [...this.graves.values()].map((g) => this.record(g));
   }
 
@@ -79,7 +84,7 @@ export class MemoryStore implements GraveStore {
 
   /** MemoryAccounts가 가방 차감과 함께 동기적으로 부른다 (원자적) */
   putSync(grave: Grave): void {
-    this.graves.set(grave.id, { ...grave, hidden: undefined, decor: undefined });
+    this.graves.set(grave.id, { ...grave, channel: grave.channel ?? 1, hidden: undefined, decor: undefined });
   }
 
   async remove(id: string): Promise<Grave | null> {

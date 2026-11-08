@@ -1,0 +1,5 @@
+/* 게임과 같은 픽셀아트 아이콘. 크기를 맞춰 줄일 때 번지지 않게 */
+.icon {
+  image-rendering: pixelated;
+  display: block;
+}

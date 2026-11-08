@@ -9,8 +9,12 @@ import type {
   GraveDetailResponse,
   GraveInput,
   GraveListResponse,
+  InquiryInfoResponse,
+  InquiryInput,
+  InquiryResponse,
   LookGrantResponse,
   Me,
+  NoticeListResponse,
   QuickGraveInput,
   ReportResponse,
   ReviveResponse,
@@ -74,8 +78,13 @@ const ownerHeaders = (ownerToken: string | null): Record<string, string> =>
   ownerToken ? { [OWNER_HEADER]: ownerToken } : {};
 
 export const api = {
-  startSession: () => request<SessionResponse>("/api/session", { method: "POST" }),
-  listGraves: (signal?: AbortSignal) => request<GraveListResponse>("/api/graves", { signal }),
+  /** fresh: 이 기기의 기존 계정을 버리고 새 계정으로 ("새로 시작") */
+  startSession: (fresh = false) =>
+    request<SessionResponse>("/api/session", fresh ? jsonInit("POST", { fresh: true }) : { method: "POST" }),
+  logout: () => request<unknown>("/api/me/logout", { method: "POST" }),
+  /** 채널마다 묘지가 따로다 */
+  listGraves: (channel: number, signal?: AbortSignal) =>
+    request<GraveListResponse>(`/api/graves?channel=${channel}`, { signal }),
   /** 상세는 목록의 CDN 캐시(30초)를 거치지 않는다 */
   graveDetail: (id: string, signal?: AbortSignal) =>
     request<GraveDetailResponse>(gravePath(id), { cache: "no-store", signal }),
@@ -91,7 +100,8 @@ export const api = {
     request<ReportResponse>(gravePath(id, "/report"), jsonInit("POST", { reason })),
 
   me: () => request<Me>("/api/me", { cache: "no-store" }),
-  attend: () => request<AttendResponse>("/api/me/attend", { method: "POST" }),
+  /** 출석. name은 계정에 이름이 아직 없을 때만 저장된다(코드로 시작한 기기가 이름을 덮어쓰지 않게) */
+  attend: (name: string) => request<AttendResponse>("/api/me/attend", jsonInit("POST", { name })),
   issueCode: () => request<CodeResponse>("/api/me/code", { method: "POST" }),
   loginWithCode: (code: string) => request<CodeLoginResponse>("/api/me/login", jsonInit("POST", { code })),
   myLook: () => request<LookGrantResponse>("/api/me/look", { cache: "no-store" }),
@@ -100,4 +110,7 @@ export const api = {
   spendItem: (itemId: string, graveId?: string) =>
     request<UseItemResponse>("/api/shop/use", jsonInit("POST", graveId ? { itemId, graveId } : { itemId })),
   version: () => request<VersionResponse>("/api/version", { cache: "no-store" }),
+  notices: () => request<NoticeListResponse>("/api/notices"),
+  inquiryInfo: () => request<InquiryInfoResponse>("/api/inquiry", { cache: "no-store" }),
+  inquire: (input: InquiryInput) => request<InquiryResponse>("/api/inquiry", jsonInit("POST", input)),
 };

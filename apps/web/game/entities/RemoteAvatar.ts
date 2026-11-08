@@ -1,5 +1,6 @@
 import type * as Phaser from "phaser";
 import { DIR, STATE, STATE_NAMES, seatById, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
+import { jumpHeight, shadowScale } from "../logic/jump";
 import { Interpolator, type InterpOut } from "../net/Interpolator";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
 import { AvatarView } from "./AvatarView";
@@ -23,6 +24,8 @@ export class RemoteAvatar {
   stateId: StateId = STATE.idle;
   /** 달리는 중 먼지 타이머 */
   dustAt = 0;
+  /** 점프를 시작한 (내 시계) 시각. 보간과 따로, 상태가 jump로 바뀐 순간부터 같은 포물선을 그린다 */
+  private jumpAt = -1;
 
   constructor(
     scene: Phaser.Scene,
@@ -63,6 +66,14 @@ export class RemoteAvatar {
     this.y = y;
     this.view.apply(STATE_NAMES[o.state], o.dir, now);
     this.view.place(x, y);
+    if (o.state === STATE.jump) {
+      if (this.jumpAt < 0) this.jumpAt = now;
+      const h = jumpHeight(now - this.jumpAt);
+      this.view.setHop(h, shadowScale(h));
+    } else if (this.jumpAt >= 0) {
+      this.jumpAt = -1;
+      this.view.setHop(0, 1);
+    }
 
     // 여유 = 이름표 폭/높이 (이름표는 화면 픽셀 크기라 줌아웃하면 월드에서 넓어진다)
     const label = this.view.label;

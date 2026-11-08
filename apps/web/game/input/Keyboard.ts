@@ -1,12 +1,13 @@
 // 키보드 입력. Phaser 키보드 플러그인 대신 window 이벤트를 직접 받는다:
 //  - 입력창(input/textarea/select/contenteditable)에 포커스가 있으면 무시 → 폼에서 WASD·스페이스가 그대로 입력됨
+//  - Space = 점프, E(또는 Enter) = 상호작용, X/C = 앉기
 //  - 오버레이 버튼에 "지금" 포커스가 남아 있으면 Space/Enter는 버튼 몫으로 둔다.
 //    (UI가 게임 키를 누르면 캡처 단계에서 버튼을 blur 하므로 e.target이 아닌 document.activeElement로 판단한다.
 //     그래야 HUD 버튼을 클릭한 직후의 첫 Space도 게임 상호작용이 된다)
 //  - ui:blockKeys 동안은 전부 무시하고 눌린 키를 모두 뗀 것으로 친다
 // event.code 기준이라 한글 자판 상태(ㅈㅁㄴㅇ)에서도 동작한다.
 
-export type KeyAction = "sit" | "interact";
+export type KeyAction = "sit" | "interact" | "jump";
 
 const UP_KEYS = ["KeyW", "ArrowUp"] as const;
 const DOWN_KEYS = ["KeyS", "ArrowDown"] as const;
@@ -18,7 +19,8 @@ const LEFT = new Set<string>(LEFT_KEYS);
 const RIGHT = new Set<string>(RIGHT_KEYS);
 const RUN = new Set(["ShiftLeft", "ShiftRight"]);
 const SIT = new Set(["KeyX", "KeyC"]);
-const INTERACT = new Set(["KeyE", "Space"]);
+const INTERACT = new Set(["KeyE", "Enter", "NumpadEnter"]);
+const JUMP = new Set(["Space"]);
 const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"]);
 
 function isEditable(t: EventTarget | null): boolean {
@@ -87,7 +89,7 @@ export class KeyboardInput {
     if (this.blocked || e.isComposing || isEditable(e.target) || isEditable(document.activeElement)) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const code = e.code;
-    const relevant = UP.has(code) || DOWN.has(code) || LEFT.has(code) || RIGHT.has(code) || RUN.has(code) || SIT.has(code) || INTERACT.has(code);
+    const relevant = UP.has(code) || DOWN.has(code) || LEFT.has(code) || RIGHT.has(code) || RUN.has(code) || SIT.has(code) || INTERACT.has(code) || JUMP.has(code);
     if (!relevant) return;
     if ((code === "Space" || code === "Enter") && isButtonLike(document.activeElement)) return;
     if (SCROLL_KEYS.has(code)) e.preventDefault();
@@ -96,6 +98,7 @@ export class KeyboardInput {
     if (e.repeat) return;
     if (SIT.has(code)) this.onAction("sit");
     else if (INTERACT.has(code)) this.onAction("interact");
+    else if (JUMP.has(code)) this.onAction("jump");
   };
 
   private readonly onKeyUp = (e: KeyboardEvent): void => {

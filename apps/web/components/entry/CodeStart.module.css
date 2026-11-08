@@ -1,0 +1,44 @@
+.box {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 360px);
+  margin-top: 36px;
+  padding: 20px 18px;
+  text-align: left;
+  background: rgba(16, 17, 14, 0.74);
+  box-shadow:
+    var(--px-border),
+    0 0 0 4px rgba(9, 10, 8, 0.35);
+}
+
+.back {
+  justify-self: start;
+  min-height: 36px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.back:hover {
+  color: var(--text);
+}
+
+.input {
+  font-family: ui-monospace, Menlo, monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.submit {
+  min-height: 46px;
+  font-family: var(--font-read);
+  font-size: 15px;
+}
+
+@media (pointer: coarse) {
+  .back {
+    min-height: 44px;
+  }
+}

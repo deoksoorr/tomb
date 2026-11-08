@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
-import { GRID_COLS, graveSlot } from "@tomb/protocol";
+import { GRID_COLS } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
-import { GraveView, PlotView } from "../entities/Grave";
+import { GraveView } from "../entities/Grave";
 import {
   buildLayout,
   layoutSignature,
@@ -32,9 +32,7 @@ export class GraveField {
   private signature = "";
   private readonly views = new Map<number, GraveView>();
   private readonly reviveViews: (GraveView | null)[] = [];
-  private readonly plots = new Map<number, PlotView>();
   private readonly pool: GraveView[] = [];
-  private readonly plotPool: PlotView[] = [];
   private readonly animated: GraveView[] = [];
   private r0 = 0;
   private r1 = -1;
@@ -138,7 +136,7 @@ export class GraveField {
       }
     }
     for (let i = lo; i <= hi; i++) {
-      if (L.promoted[i] || this.zones.has(i)) continue;
+      if (this.zones.has(i)) continue;
       this.zones.set(i, this.makeZone(L.placements[i]));
     }
     this.cr0 = a;
@@ -187,7 +185,6 @@ export class GraveField {
       this.cullX(view);
     }
     for (const v of this.animated) v.update(now, lightLevel);
-    if (!this.reduced) for (const pv of this.plots.values()) pv.update(now, this.reduced);
   }
 
   private reconcile(r0: number, r1: number, now: number): void {
@@ -197,32 +194,18 @@ export class GraveField {
     const full = this.dirty;
 
     for (const [i, v] of this.views) {
-      if (full || i < lo || i > hi || L.promoted[i] || !L.placements[i]) {
+      if (full || i < lo || i > hi || !L.placements[i]) {
         this.release(v);
         this.views.delete(i);
       }
     }
-    for (const [i, pv] of this.plots) {
-      if (full || i < lo || i > hi || !L.promoted[i]) {
-        pv.unbind();
-        this.plotPool.push(pv);
-        this.plots.delete(i);
-      }
-    }
+    // 격자에는 언제나 진짜 묘비 (명당으로 올라가도 자리를 비우지 않는다)
     for (let i = lo; i <= hi; i++) {
-      if (L.promoted[i]) {
-        if (!this.plots.has(i)) {
-          const pv = this.plotPool.pop() ?? new PlotView(this.scene);
-          const s = graveSlot(i);
-          pv.bind(i, s.x, s.y);
-          this.plots.set(i, pv);
-        }
-      } else if (!this.views.has(i)) {
-        const v = this.acquire();
-        const p = L.placements[i];
-        v.bind(p, this.reduced, this.riseAt(p.id, now), this.mine.has(p.id));
-        this.views.set(i, v);
-      }
+      if (this.views.has(i)) continue;
+      const v = this.acquire();
+      const p = L.placements[i];
+      v.bind(p, this.reduced, this.riseAt(p.id, now), this.mine.has(p.id));
+      this.views.set(i, v);
     }
 
     if (full) {
@@ -269,10 +252,6 @@ export class GraveField {
       v.setVisible(on);
       if (on) vis.push(v);
     }
-    for (const pv of this.plots.values()) {
-      const s = graveSlot(pv.index);
-      pv.setVisible(s.x >= l && s.x <= r);
-    }
   }
 
   /** 디버그/테스트용: 지금 붙어 있는 묘비 수 */
@@ -284,8 +263,6 @@ export class GraveField {
     for (const v of this.views.values()) v.destroy();
     for (const v of this.reviveViews) v?.destroy();
     for (const v of this.pool) v.destroy();
-    for (const p of this.plots.values()) p.destroy();
-    for (const p of this.plotPool) p.destroy();
     this.colliders.clear(true, true);
   }
 }

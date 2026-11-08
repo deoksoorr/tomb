@@ -28,11 +28,17 @@ describe("validateQuick", () => {
 
 describe("toQuickInput", () => {
   it("고르지 않은 사인·빈 묘비명·자동 디자인은 빼고 보낸다 (서버가 기본값을 넣는다)", () => {
-    expect(toQuickInput({ ...base, lived: "week", name: " 앱 " }, "유령")).toEqual({ name: "앱", lived: "week", mourner: "유령" });
-    expect(toQuickInput({ ...base, lived: "day", cause: "time", epitaph: " 잘 가 ", style: "duck" }, "유령")).toEqual({
+    expect(toQuickInput({ ...base, lived: "week", name: " 앱 " }, "유령", 3)).toEqual({
+      name: "앱",
+      lived: "week",
+      mourner: "유령",
+      channel: 3,
+    });
+    expect(toQuickInput({ ...base, lived: "day", cause: "time", epitaph: " 잘 가 ", style: "duck" }, "유령", 1)).toEqual({
       name: "할 일 앱",
       lived: "day",
       mourner: "유령",
+      channel: 1,
       cause: "time",
       epitaph: "잘 가",
       style: "duck",
@@ -68,6 +74,7 @@ describe("toEditInput", () => {
     imageUrl: "https://x.public.blob.vercel-storage.com/a.webp",
     mourner: "원래 상주",
     style: "gold",
+    channel: 2,
     createdAt: 1,
     flowers: 3,
     revives: 1,

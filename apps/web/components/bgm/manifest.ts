@@ -39,6 +39,21 @@ export function parseManifest(data: unknown): Playlist[] {
   });
 }
 
+/**
+ * 처음 들어올 때 시작할 곡: 저장해 둔 플레이리스트가 있으면 그 안에서, 없으면 아무 플레이리스트에서 아무 곡.
+ * 그다음부터는 순서대로 돈다. rand는 [0,1) (테스트에서 고정값을 넣는다)
+ */
+export function randomStart(
+  playlists: readonly Playlist[],
+  savedId: string | null,
+  rand: () => number = Math.random,
+): { playlistId: string | null; index: number } {
+  const saved = playlists.find((p) => p.id === savedId);
+  const playlist = saved ?? playlists[Math.floor(rand() * playlists.length)];
+  if (!playlist) return { playlistId: null, index: 0 };
+  return { playlistId: playlist.id, index: Math.floor(rand() * playlist.tracks.length) || 0 };
+}
+
 /** 마지막 곡 다음은 첫 곡 */
 export function nextIndex(index: number, length: number): number {
   return length > 0 ? (index + 1) % length : 0;

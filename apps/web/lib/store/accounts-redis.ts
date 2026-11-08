@@ -2,7 +2,7 @@ import { Redis } from "@upstash/redis";
 import { MAX_DECOR_PER_GRAVE, type CosmeticSlot } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import type { Grave, GraveDecor } from "../types";
-import { DECOR, K } from "./keys";
+import { chKeys, DECOR, K } from "./keys";
 import { encode } from "./redis";
 import type { AccountRecord, AccountStore, EquippedItem } from "./types";
 
@@ -46,7 +46,7 @@ return credit(KEYS[1], KEYS[2], ARGV[1], tonumber(ARGV[2]), tonumber(ARGV[3]), t
 // KEYS: acct, earn, attendIp
 // ARGV: id, day, yesterday, name, perIp, ttl, attendPts, attendMax, streakPts, streakMax, dailyCap, balanceCap, now
 const ATTEND_LUA = `${CREDIT_FN}
-if ARGV[4] ~= '' then redis.call('HSET', KEYS[1], 'name', ARGV[4]) end
+if ARGV[4] ~= '' then redis.call('HSETNX', KEYS[1], 'name', ARGV[4]) end
 redis.call('HSETNX', KEYS[1], 'createdAt', ARGV[13])
 local last = redis.call('HGET', KEYS[1], 'lastAttend')
 if last == ARGV[2] then return 0 end
@@ -105,12 +105,13 @@ redis.call('HSET', KEYS[1], '${DECOR}' .. ARGV[1], json)
 return json
 `;
 
-// 유료 디자인 묘비 저장: 디자인권 차감과 묘비 저장(RedisStore.put과 같은 두 명령)을 한 번에
-// KEYS: inv, meta, created  ARGV: itemId, graveId, json, createdAt
+// 유료 디자인 묘비 저장: 디자인권 차감과 묘비 저장(RedisStore.put과 같은 세 명령)을 한 번에
+// KEYS: inv, meta, created, graveChannel  ARGV: itemId, graveId, json, createdAt, channel
 const PUT_WITH_ITEM_LUA = `${TAKE_FN}
 if not take(KEYS[1], ARGV[1]) then return 0 end
 redis.call('HSET', KEYS[2], ARGV[2], ARGV[3])
 redis.call('ZADD', KEYS[3], ARGV[4], ARGV[2])
+redis.call('HSET', KEYS[4], ARGV[2], ARGV[5])
 return 1
 `;
 
@@ -242,6 +243,7 @@ export class RedisAccounts implements AccountStore {
   async placeDecor(
     id: string,
     graveId: string,
+    channel: number,
     itemId: string,
     until: number,
     now: number,
@@ -249,7 +251,7 @@ export class RedisAccounts implements AccountStore {
     const nonce = Math.random().toString(36).slice(2, 10);
     const r = await this.redis.eval<string[], string | null>(
       DECOR_LUA,
-      [K.meta, K.inv(id), K.decor(graveId)],
+      [chKeys(channel).meta, K.inv(id), K.decor(graveId)],
       [graveId, itemId, String(until), String(now), String(MAX_DECOR_PER_GRAVE), nonce],
     );
     if (r === null) return null;
@@ -257,10 +259,12 @@ export class RedisAccounts implements AccountStore {
   }
 
   async putGraveUsing(id: string, itemId: string, grave: Grave): Promise<boolean> {
+    const channel = grave.channel ?? 1;
+    const k = chKeys(channel);
     const r = await this.redis.eval<string[], number>(
       PUT_WITH_ITEM_LUA,
-      [K.inv(id), K.meta, K.created],
-      [itemId, grave.id, encode(grave), String(grave.createdAt)],
+      [K.inv(id), k.meta, k.created, K.graveChannel],
+      [itemId, grave.id, encode({ ...grave, channel }), String(grave.createdAt), String(channel)],
     );
     return Number(r) === 1;
   }

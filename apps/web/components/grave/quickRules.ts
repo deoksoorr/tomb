@@ -52,13 +52,14 @@ export function validateQuick(v: QuickValues): QuickErrors {
   return Object.fromEntries(Object.entries(errors).filter(([, m]) => m)) as QuickErrors;
 }
 
-/** 새 묘비: 묘비명을 비우면 서버가 `향년 N일, 조용히 별세`를 넣는다 */
-export function toQuickInput(v: QuickValues & { lived: LifespanId }, mourner: string): QuickGraveInput {
+/** 새 묘비 (지금 채널에): 묘비명을 비우면 서버가 `향년 N일, 조용히 별세`를 넣는다 */
+export function toQuickInput(v: QuickValues & { lived: LifespanId }, mourner: string, channel: number): QuickGraveInput {
   const epitaph = v.epitaph.trim();
   return {
     name: v.name.trim(),
     lived: v.lived,
     mourner,
+    channel,
     ...(v.cause && { cause: v.cause }),
     ...(epitaph && { epitaph }),
     ...(v.style !== "auto" && { style: v.style }),

@@ -99,12 +99,38 @@
   pointer-events: auto;
 }
 
-/* [내 묘비] 데스크톱: 왼쪽 아래 폭죽 버튼 위 · 터치: 왼쪽 줌 버튼 위 */
-.myGraves {
+/* [내 묘비][가방] 데스크톱: 왼쪽 아래 폭죽 버튼 위 · 터치: 왼쪽 줌 버튼 위 */
+.leftRow {
   position: absolute;
   left: var(--safe-left);
   bottom: calc(var(--safe-bottom) + 60px);
+  display: flex;
+  gap: 6px;
+}
+
+.leftButton {
+  position: relative;
   background: var(--panel);
+}
+
+.dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  background: var(--candle);
+  box-shadow: 0 0 6px var(--candle);
+}
+
+.badge {
+  min-width: 18px;
+  padding: 0 4px;
+  background: var(--candle);
+  color: var(--bg-deep);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
 }
 
 .bury {
@@ -136,7 +162,7 @@
     transform: translateY(1px);
   }
 
-  .myGraves {
+  .leftRow {
     bottom: calc(var(--safe-bottom) + 246px);
   }
 

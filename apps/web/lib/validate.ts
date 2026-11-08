@@ -2,11 +2,12 @@ import { checkName, isAvatarColor, isGraveStyle, itemById } from "@tomb/protocol
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { CODE_RE, normalizeCode } from "./economy";
+import { GRAVE_CHANNELS } from "./store/channels";
 import { ageDays, parseYmd, suggestEpitaph, todayKst } from "./epitaph";
 import { isAllowedImageUrl } from "./blob";
 import { REPORT_REASONS } from "./reports";
 import { HttpError } from "./http";
-import { CAUSE_TAGS, LIFESPAN_PRESETS, type LifespanId } from "./types";
+import { CAUSE_TAGS, INQUIRY_CATEGORIES, LIFESPAN_PRESETS, type InquiryCategory, type LifespanId } from "./types";
 
 // 따로 메시지를 달지 않은 오류(타입 불일치 등)도 한국어로 나오게 한다
 z.config(z.locales.ko());
@@ -42,6 +43,9 @@ const tagList = (item: z.ZodString, max: number, tooMany: string) =>
 
 /** 묘비 디자인 (GRAVE_STYLES). 유료 디자인의 디자인권 확인·소모는 라우트가 저장과 함께 한다 */
 const graveStyle = z.string().refine((s) => isGraveStyle(s), "알 수 없는 묘비 디자인이에요.").optional();
+
+/** 묘비를 세울 채널 (채널마다 묘지가 따로다) */
+export const graveChannel = z.number("채널 번호가 올바르지 않아요.").int().min(1, `채널은 1~${GRAVE_CHANNELS} 중 하나예요.`).max(GRAVE_CHANNELS, `채널은 1~${GRAVE_CHANNELS} 중 하나예요.`);
 
 /** 유저이름 규칙(@tomb/protocol checkName)을 그대로 쓰고, 정규화된 이름을 돌려준다 */
 const userName = z.string().transform((s, ctx) => {
@@ -81,6 +85,8 @@ export const GraveInputSchema = z
     imageUrl: optional(z.string().trim().refine((s) => !s || isAllowedImageUrl(s), "업로드한 이미지만 쓸 수 있어요.")),
     mourner: userName,
     style: graveStyle,
+    /** 세울 채널. 수정(PATCH)에서는 무시한다 (묘비는 채널을 옮기지 않는다) */
+    channel: graveChannel.optional(),
   })
   .superRefine((v, ctx) => {
     if (v.diedAt < v.bornAt)
@@ -114,12 +120,13 @@ export const QuickGraveInputSchema = z
     epitaph: optional(z.string().trim().overwrite(oneLine).refine(within(30), "묘비명은 30자까지 적을 수 있어요.")),
     mourner: userName,
     style: graveStyle,
+    channel: graveChannel,
   })
-  .transform(({ name, lived, cause, epitaph, mourner, style }): ParsedGraveInput => {
+  .transform(({ name, lived, cause, epitaph, mourner, style, channel }): ParsedGraveInput => {
     const life = quickLifespan(lived);
     const none = { lastTask: undefined, causeDetail: undefined, links: undefined, stack: undefined, imageUrl: undefined };
     const epitaphOrDefault = epitaph ?? suggestEpitaph(life.ageDays);
-    return { ...none, name, mourner, style, ...life, causes: [cause ?? "other"], epitaph: epitaphOrDefault };
+    return { ...none, name, mourner, style, channel, ...life, causes: [cause ?? "other"], epitaph: epitaphOrDefault };
   });
 
 /** POST /api/graves: `lived`가 있으면 간단 입력, 아니면 전체 입력 */
@@ -154,6 +161,9 @@ export const AdminBulkSchema = z.object({
 
 export const AttendSchema = z.object({ name: userName.optional() });
 
+/** POST /api/session — fresh면 기존 쿠키를 버리고 새 계정으로 시작 */
+export const SessionSchema = z.object({ fresh: z.boolean().optional() });
+
 export const CodeLoginSchema = z.object({
   code: z
     .string()
@@ -178,6 +188,29 @@ export const AdminPointsSchema = z
   })
   .refine((v) => !!v.code !== !!v.accountId, "개인 코드와 계정 id 중 하나만 적어 주세요.")
   .refine((v) => !v.code || CODE_RE.test(v.code), "코드는 XXXX-XXXX-XXXX 모양이에요.");
+
+// ── 공지사항 (관리자) ──
+const noticeTitle = z.string().trim().overwrite(oneLine).min(1, "제목을 적어 주세요.").refine(within(60), "제목은 60자까지 적을 수 있어요.");
+const noticeBody = z.string().trim().min(1, "본문을 적어 주세요.").refine(within(2000), "본문은 2000자까지 적을 수 있어요.");
+export const NoticeInputSchema = z.object({ title: noticeTitle, body: noticeBody, pinned: z.boolean().optional() });
+/** 수정: 바꿀 것만 (고정 토글만 보내도 된다) */
+export const NoticePatchSchema = z
+  .object({ title: noticeTitle.optional(), body: noticeBody.optional(), pinned: z.boolean().optional() })
+  .refine((v) => v.title !== undefined || v.body !== undefined || v.pinned !== undefined, "바꿀 내용을 보내 주세요.");
+
+// ── 문의 ──
+const INQUIRY_IDS = INQUIRY_CATEGORIES.map((c) => c.id) as [InquiryCategory, ...InquiryCategory[]];
+export const InquirySchema = z.object({
+  category: z.enum(INQUIRY_IDS, "문의 종류를 골라 주세요."),
+  message: z
+    .string()
+    .trim()
+    .refine((s) => [...s].length >= 10, "문의 내용을 10자 이상 적어 주세요.")
+    .refine(within(1000), "문의 내용은 1000자까지 적을 수 있어요."),
+  contact: optional(z.string().trim().overwrite(oneLine).refine(within(100), "연락처는 100자까지 적을 수 있어요.")),
+  /** 문의를 보낸 채널 (계약에는 없지만 UI가 보내면 운영자가 상황을 보기 쉽다) */
+  channel: graveChannel.optional(),
+});
 
 export const AdminLoginSchema = z.object({ key: z.string().min(1, "관리자 키를 입력해 주세요.").max(500) });
 

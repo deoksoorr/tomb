@@ -19,6 +19,14 @@ export function firefly(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
+/** 점프할 때 바닥에 남는 그림자 (12×4) */
+export function groundShadow(): HTMLCanvasElement {
+  const g = new Grid(12, 4);
+  g.ellipse(6, 2, 6, 2, 0x000000, 90);
+  g.ellipse(6, 2, 3.5, 1.2, 0x000000, 130);
+  return g.toCanvas();
+}
+
 export function dust(): HTMLCanvasElement {
   const g = new Grid(4, 4);
   g.ellipse(2, 2, 2, 2, 0xcabba0, 200);

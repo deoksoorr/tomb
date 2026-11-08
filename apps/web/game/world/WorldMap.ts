@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { FURNITURE, MAP_WIDTH, SHOP, TILE, mapHeight, playerBounds, type Furniture } from "@tomb/protocol";
+import { ALTAR_NAME, FURNITURE, MAP_WIDTH, SHOP, TILE, mapHeight, playerBounds, type Furniture } from "@tomb/protocol";
 import { addCanvasTexture, TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
 import { CHUNK_H, drawGroundChunk } from "../sprites/ground";
@@ -66,7 +66,7 @@ export class WorldMap {
         scene.add.sprite(altar.x + dx, altar.y + dy + 6, TEX.candle, 0).setOrigin(0.5, 1).setDepth(altar.y + 1).play("fx-candle-flicker");
         this.staticLights.push({ x: altar.x + dx, y: altar.y + dy - 1, scale: 0.4, tint: 0xffc870, base: 0.55 });
       }
-      this.addLabel(atlas, altar.x, altar.y + 4, "부활 대기석", 0xcfc6a8, 0);
+      this.addLabel(atlas, altar.x, altar.y + 4, ALTAR_NAME, 0xcfc6a8, 0);
     }
 
     // 유령 잡화점 오두막
@@ -126,7 +126,10 @@ export class WorldMap {
 
   private addFurniture(f: Furniture): void {
     let key: string;
-    if (f.kind === "bench") key = benchWidth(f) >= 56 ? TEX.bench3 : TEX.bench2;
+    if (f.kind === "bench") {
+      const w = benchWidth(f);
+      key = w >= 72 ? TEX.bench4 : w >= 56 ? TEX.bench3 : TEX.bench2;
+    }
     else key = f.facing === 1 ? TEX.chairLeft : f.facing === 2 ? TEX.chairRight : TEX.chairDown;
     this.scene.add.image(f.x, f.y + 2, key).setOrigin(0.5, 1).setDepth(f.y);
     this.addCollider(this.colliders, furnitureCollider(f));

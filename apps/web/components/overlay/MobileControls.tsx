@@ -8,7 +8,7 @@ import styles from "./MobileControls.module.css";
 /** 손잡이가 바닥 원 반지름의 몇 배까지 움직이는지 */
 const KNOB_TRAVEL = 0.55;
 
-/** 터치 기기 전용: 좌하단 아날로그 조이스틱 + 우하단 [달리기] [앉기] [상호작용] */
+/** 터치 기기 전용: 좌하단 아날로그 조이스틱 + 우하단 [상호작용] [점프] [달리기] [앉기] */
 export default function MobileControls() {
   const [running, setRunning] = useState(false);
   // sticky라 마운트 전에 다가간 묘비·좌석도 바로 반영된다
@@ -34,6 +34,9 @@ export default function MobileControls() {
           onClick={() => bridge.emit("input:interact")}
         >
           {inShop ? "말 걸기" : nearGrave ? "살펴보기" : "상호작용"}
+        </button>
+        <button type="button" className={styles.action} data-slot="jump" onClick={() => bridge.emit("input:jump")}>
+          점프
         </button>
         <button
           type="button"

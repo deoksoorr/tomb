@@ -29,7 +29,9 @@ import * as attend from "./me/attend/route";
 import * as code from "./me/code/route";
 import * as login from "./me/login/route";
 import * as look from "./me/look/route";
+import * as logout from "./me/logout/route";
 import * as me from "./me/route";
+import * as reviveRoute from "./graves/[id]/revive/route";
 import * as session from "./session/route";
 import * as buy from "./shop/buy/route";
 import * as use from "./shop/use/route";
@@ -73,7 +75,7 @@ function setPoints(v: Visitor, n: number) {
 }
 const getMe = (v: Visitor) => bodyOf<Me>(me.GET(call("/api/me", { visitor: v })));
 const quickBury = (v: Visitor, body: object = {}) =>
-  graves.POST(call("/api/graves", { visitor: v, body: { name: "할 일 앱", lived: "week", mourner: "새벽코더", ...body } }));
+  graves.POST(call("/api/graves", { visitor: v, body: { name: "할 일 앱", lived: "week", mourner: "새벽코더", channel: 1, ...body } }));
 
 describe("계정·출석", () => {
   it("세션이 없으면 401, 처음엔 0점·빈 가방", async () => {
@@ -389,5 +391,89 @@ describe("관리자 포인트 지급", () => {
     expect((await admin({ accountId: v.visitorId, delta: 1 })).status).toBe(404); // 아직 기록이 없는 계정
     expect((await admin({ code: "2222-2222-2222", delta: 1 })).status).toBe(404);
     expect((await admin({ accountId: v.visitorId, delta: 1 }, "wrong")).status).toBe(401);
+  });
+});
+
+describe("채널별 묘지", () => {
+  const listOf = (channel?: number) =>
+    bodyOf<GraveListResponse>(graves.GET(call(channel === undefined ? "/api/graves" : `/api/graves?channel=${channel}`)));
+
+  it("세운 채널에만 있다: 다른 채널 목록에 안 나오고, 상세·반응은 id로 그대로 된다", async () => {
+    const v = await newVisitor();
+    const { grave } = await bodyOf<CreateGraveResponse>(quickBury(v, { channel: 2 }));
+    expect(grave.channel).toBe(2);
+    expect((await listOf()).graves.some((g) => g.id === grave.id)).toBe(false);
+    expect((await listOf(1)).graves.some((g) => g.id === grave.id)).toBe(false);
+    const two = await listOf(2);
+    expect(two.channel).toBe(2);
+    expect(two.graves.find((g) => g.id === grave.id)?.channel).toBe(2);
+    expect(two.graves.every((g) => g.channel === 2)).toBe(true);
+
+    const fan = await newVisitor();
+    await flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: fan }), ctx(grave.id));
+    const detail = await bodyOf<GraveDetailResponse>(graveById.GET(call(`/api/graves/${grave.id}`), ctx(grave.id)));
+    expect(detail.grave).toMatchObject({ channel: 2, flowers: 1 });
+    expect((await getMe(v)).graves).toContain(grave.id);
+
+    // 수정해도 채널은 옮겨지지 않는다
+    const full = { name: "고침", epitaph: "e", bornAt: grave.bornAt, diedAt: grave.diedAt, causes: ["time"], mourner: "새벽코더", channel: 5 };
+    const patched = await graveById.PATCH(call(`/api/graves/${grave.id}`, { method: "PATCH", visitor: v, body: full }), ctx(grave.id));
+    expect(((await patched.json()) as { grave: { channel: number } }).grave.channel).toBe(2);
+  });
+
+  it("다시 피어날 자리(reviveTop)도 채널별", async () => {
+    const v = await newVisitor();
+    const { grave: a } = await bodyOf<CreateGraveResponse>(quickBury(v, { channel: 3 }));
+    const { grave: b } = await bodyOf<CreateGraveResponse>(quickBury(v, { channel: 4 }));
+    const fan = await newVisitor();
+    for (const g of [a, b]) await reviveRoute.POST(call(`/api/graves/${g.id}/revive`, { method: "POST", visitor: fan }), ctx(g.id));
+    expect((await listOf(3)).reviveTop).toContain(a.id);
+    expect((await listOf(3)).reviveTop).not.toContain(b.id);
+    expect((await listOf(4)).reviveTop).toEqual([b.id]);
+  });
+
+  it("채널 검증: 목록 ?channel은 1~10, 간단 입력은 channel 필수", async () => {
+    for (const bad of ["0", "11", "abc", "1.5"]) expect((await graves.GET(call(`/api/graves?channel=${bad}`))).status, bad).toBe(400);
+    const v = await newVisitor();
+    const res = await graves.POST(call("/api/graves", { visitor: v, body: { name: "x", lived: "day", mourner: "새벽코더" } }));
+    expect(res.status).toBe(400);
+  });
+
+  it("관리자 목록은 모든 채널을 채널과 함께 보여 준다", async () => {
+    const v = await newVisitor();
+    const { grave } = await bodyOf<CreateGraveResponse>(quickBury(v, { channel: 7 }));
+    const admin = await bodyOf<{ graves: AdminGrave[] }>(adminGraves.GET(call("/api/admin/graves", { headers: { "x-admin-key": "dev-admin" } })));
+    expect(admin.graves.find((g) => g.id === grave.id)?.channel).toBe(7);
+    expect(new Set(admin.graves.map((g) => g.channel)).size).toBeGreaterThan(1);
+  });
+});
+
+describe("새로 시작·로그아웃·닉네임", () => {
+  it("fresh면 기존 쿠키를 버리고 새 계정, 아니면 같은 계정", async () => {
+    const v = await newVisitor();
+    const same = await bodyOf<{ visitorId: string }>(session.POST(call("/api/session", { method: "POST", visitor: v })));
+    expect(same.visitorId).toBe(v.visitorId);
+    const res = await session.POST(call("/api/session", { visitor: v, body: { fresh: true } }));
+    const fresh = (await res.json()) as { visitorId: string };
+    expect(fresh.visitorId).not.toBe(v.visitorId);
+    expect(await verifySession(res.headers.get("set-cookie")!.split(";")[0].replace(/^vid=/, ""))).toBe(fresh.visitorId);
+  });
+
+  it("로그아웃은 204와 함께 세션 쿠키를 지운다", async () => {
+    const v = await newVisitor();
+    const res = await logout.POST(call("/api/me/logout", { method: "POST", visitor: v }));
+    expect(res.status).toBe(204);
+    expect(res.headers.get("set-cookie")).toMatch(/^vid=;.*Max-Age=0/i);
+  });
+
+  it("개인 코드로 들어온 기기에서 다른 이름으로 출석해도 계정 닉네임은 그대로", async () => {
+    const v = await newVisitor();
+    await attend.POST(call("/api/me/attend", { visitor: v, body: { name: "원래이름" } }));
+    const { code: c } = await bodyOf<CodeResponse>(code.POST(call("/api/me/code", { method: "POST", visitor: v })));
+    const res = await login.POST(call("/api/me/login", { body: { code: c }, headers: { "x-forwarded-for": "10.5.0.1" } }));
+    expect(((await res.json()) as CodeLoginResponse).me.name).toBe("원래이름");
+    const device2: Visitor = { cookie: res.headers.get("set-cookie")!.split(";")[0], ip: "10.5.0.1", visitorId: v.visitorId };
+    await attend.POST(call("/api/me/attend", { visitor: device2, body: { name: "다른기기" } }));
+    expect((await getMe(device2)).name).toBe("원래이름");
   });
 });

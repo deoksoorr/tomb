@@ -1,3 +1,4 @@
+import { Redis } from "@upstash/redis";
 import { nanoid } from "nanoid";
 import { afterEach, describe, expect, it } from "vitest";
 import { env } from "../env";
@@ -43,7 +44,7 @@ function contract(make: () => GraveStore) {
 
   it("put/get: 메타와 0 카운트를 돌려주고, 없는 id는 null", async () => {
     const g = await add({ links: ["https://example.com"], stack: ["Go"] });
-    expect(await store.get(g.id)).toEqual({ ...g, flowers: 0, revives: 0 });
+    expect(await store.get(g.id)).toEqual({ ...g, channel: 1, flowers: 0, revives: 0 });
     expect(await store.get("test-nope")).toBeNull();
   });
 
@@ -165,7 +166,7 @@ function contract(make: () => GraveStore) {
     await store.setHidden(g.id, true);
     expect((await store.remove(g.id))?.id).toBe(g.id);
     expect(await store.get(g.id)).toBeNull();
-    expect((await store.list()).some((r) => r.id === g.id)).toBe(false);
+    expect((await store.listAll()).some((r) => r.id === g.id)).toBe(false);
     expect((await store.viewer(g.id, "a")).myRevive).toBe(false);
     expect((await store.reportSummary()).has(g.id)).toBe(false);
     expect(await store.remove(g.id)).toBeNull();
@@ -176,13 +177,43 @@ function contract(make: () => GraveStore) {
     expect(await store.report(g.id, "a", "ip-a", "other")).toBe("added");
   });
 
+  it("채널마다 묘지가 따로: 목록·랭킹이 섞이지 않고, id로 부르면 채널을 스스로 찾는다", async () => {
+    const one = await add({ channel: 1 });
+    const two = await add({ channel: 2 });
+    await store.toggleRevive(two.id, "v1");
+    await store.flower(two.id, "v1");
+    const ids = async (ch: number) => (await store.list(ch)).map((r) => r.id);
+    expect(await ids(1)).toContain(one.id);
+    expect(await ids(1)).not.toContain(two.id);
+    expect(await ids(2)).toContain(two.id);
+    expect(await ids(2)).not.toContain(one.id);
+    expect(await store.get(two.id)).toMatchObject({ channel: 2, revives: 1, flowers: 1 });
+    expect((await store.list(2)).find((r) => r.id === two.id)).toMatchObject({ channel: 2, revives: 1, flowers: 1 });
+    const all = await store.listAll();
+    expect(all.find((r) => r.id === one.id)?.channel).toBe(1);
+    expect(all.find((r) => r.id === two.id)?.channel).toBe(2);
+    // 숨김·신고·삭제도 그 채널에서
+    expect(await store.setHidden(two.id, true)).toBe(true);
+    expect((await store.get(two.id))?.hidden).toBe(true);
+    expect(await store.report(two.id, "v2", "ip2", "spam")).toBe("added");
+    expect((await store.remove(two.id))?.channel).toBe(2);
+    expect(await ids(2)).not.toContain(two.id);
+  });
+
+  it("채널 없는 예전 묘비는 1채널 묘비로 본다", async () => {
+    const legacy = await add();
+    expect(legacy.channel).toBeUndefined();
+    expect((await store.list(1)).some((r) => r.id === legacy.id)).toBe(true);
+    expect((await store.get(legacy.id))?.channel).toBe(1);
+  });
+
   it("list는 카운트를 붙여 돌려준다 (숨김 포함)", async () => {
     const a = await add();
     const b = await add();
     await store.setHidden(b.id, true);
     await store.flower(a.id, "x");
     await store.toggleRevive(a.id, "x");
-    const mine = (await store.list()).filter((r) => r.id === a.id || r.id === b.id);
+    const mine = (await store.list(1)).filter((r) => r.id === a.id || r.id === b.id);
     expect(mine).toHaveLength(2);
     expect(mine.find((r) => r.id === a.id)).toMatchObject({ flowers: 1, revives: 1 });
     expect(mine.find((r) => r.id === b.id)?.hidden).toBe(true);
@@ -195,6 +226,24 @@ const redisEnv = env.redis();
 describe.skipIf(!redisEnv)("RedisStore (실제 Upstash, 개발용 DB에서만 실행)", () =>
   contract(() => new RedisStore(redisEnv!)),
 );
+
+describe.skipIf(!redisEnv)("RedisStore 채널 이관 (실제 Redis)", () => {
+  it("채널 개편 전에 graves:meta에 저장된 묘비(채널 필드·graves:ch 없음)는 그대로 1채널 묘비다", async () => {
+    const raw = new Redis({ ...redisEnv!, automaticDeserialization: false });
+    const store = new RedisStore(redisEnv!);
+    const legacy = grave();
+    await raw.hset("graves:meta", { [legacy.id]: JSON.stringify(legacy) });
+    try {
+      expect((await store.get(legacy.id))?.channel).toBe(1);
+      expect((await store.list(1)).find((r) => r.id === legacy.id)?.channel).toBe(1);
+      expect(await store.toggleRevive(legacy.id, "v")).toEqual({ revived: true, count: 1 });
+      expect((await listPublic(store, 1)).reviveTop).toContain(legacy.id);
+    } finally {
+      await store.remove(legacy.id);
+    }
+    expect(await raw.hget("graves:meta", legacy.id)).toBeNull();
+  });
+});
 
 describe("MemoryStore 전용", () => {
   it("헌화 표시는 24시간 뒤에 풀린다", async () => {
@@ -219,6 +268,10 @@ describe("목업 묘비", () => {
       expect(r.data?.ageDays).toBe(g.ageDays);
       expect(g.ownerTokenHash).toBe("");
     }
+  });
+
+  it("로컬 확인용으로 1~3채널에 나눠 심는다", () => {
+    expect(new Set(seed.map((s) => s.grave.channel))).toEqual(new Set([1, 2, 3]));
   });
 
   it("생존 기간 4단계가 모두 섞여 있고 등록 순서가 인덱스 순서다", () => {
@@ -247,8 +300,9 @@ describe("listPublic / toPublicGrave / deleteGrave", () => {
     for (let i = 1; i <= 12; i++) for (const v of visitors(i)) await store.toggleRevive(`g${i}`, v);
     for (const v of visitors(20)) await store.toggleRevive("g0", v); // 숨김이라 순위에서 빠져야 함
 
-    const res = await listPublic(store, 42);
+    const res = await listPublic(store, 1, 42);
     expect(res.generatedAt).toBe(42);
+    expect(res.channel).toBe(1);
     expect(res.graves.map((g) => g.id)).toEqual(gs.slice(1).map((g) => g.id).reverse());
     expect(res.reviveTop).toEqual(["g12", "g11", "g10", "g9", "g8", "g7", "g6", "g5", "g4", "g3"]);
     for (const g of res.graves) {
@@ -257,11 +311,23 @@ describe("listPublic / toPublicGrave / deleteGrave", () => {
     }
   });
 
-  it("toPublicGrave는 비밀 필드를 떼어낸다", () => {
-    const pub = toPublicGrave({ ...grave({ hidden: true }), flowers: 1, revives: 2 });
+  it("toPublicGrave는 비밀 필드를 떼어내고 채널을 항상 넣는다", () => {
+    const pub = toPublicGrave({ ...grave({ hidden: true, ownerAccountId: "acct" }), flowers: 1, revives: 2 });
     expect(pub).not.toHaveProperty("ownerTokenHash");
     expect(pub).not.toHaveProperty("hidden");
-    expect(pub).toMatchObject({ flowers: 1, revives: 2 });
+    expect(pub).not.toHaveProperty("ownerAccountId");
+    expect(pub).toMatchObject({ flowers: 1, revives: 2, channel: 1 });
+    expect(toPublicGrave({ ...grave({ channel: 3 }), flowers: 0, revives: 0 }).channel).toBe(3);
+  });
+
+  it("채널별 목록과 랭킹", async () => {
+    const store = new MemoryStore();
+    await store.put(grave({ id: "a", channel: 1 }));
+    await store.put(grave({ id: "b", channel: 2 }));
+    await store.toggleRevive("b", "v");
+    expect(await listPublic(store, 1, 0)).toMatchObject({ channel: 1, reviveTop: [], graves: [{ id: "a", channel: 1 }] });
+    expect(await listPublic(store, 2, 0)).toMatchObject({ channel: 2, reviveTop: ["b"], graves: [{ id: "b", channel: 2 }] });
+    expect((await listPublic(store, 3, 0)).graves).toEqual([]);
   });
 
   it("deleteGrave: 있으면 true, 없으면 false", async () => {

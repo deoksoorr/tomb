@@ -22,6 +22,10 @@ export class AvatarView {
   private aura: Phaser.GameObjects.Image[] = [];
   /** 손등불을 들고 있으면 조명이 더 넓다 */
   lantern = false;
+  /** 점프 높이 (px). 스프라이트만 띄우고 발 위치(물리·네트워크)는 그대로 */
+  hop = 0;
+  private shadow: Phaser.GameObjects.Image | null = null;
+  private baseOriginY = 0;
   private anim = "";
   private gestureUntil = 0;
   state: StateName = "idle";
@@ -43,6 +47,7 @@ export class AvatarView {
   ) {
     this.texKey = ensureAvatarTexture(scene, color, look);
     this.sprite = scene.add.sprite(x, y, this.texKey, avatarFrame("idle", DIR.down)).setOrigin(0.5, AV_ORIGIN_Y);
+    this.baseOriginY = this.sprite.displayOriginY;
     atlas.ensure(name);
     this.label = scene.add
       .bitmapText(x, y - LABEL_GAP, FONT_KEY, name, FONT_PX)
@@ -109,6 +114,25 @@ export class AvatarView {
     this.sprite.setFrame(avatarFrame("sitGround", dir));
   }
 
+  /**
+   * 점프 높이 반영: 표시 원점을 올려 그림만 띄운다 (위치는 그대로라 물리 바디·네트워크 좌표가 바뀌지 않는다).
+   * 바닥에는 높이에 따라 작아지는 그림자를 남긴다. 바뀐 원점 차이를 돌려준다 (물리 바디 보정용).
+   */
+  setHop(h: number, shadowScale: number): number {
+    const prev = this.hop;
+    this.hop = h;
+    const s = this.sprite;
+    if (h !== prev) s.setDisplayOrigin(s.displayOriginX, this.baseOriginY + h);
+    if (h > 0.01) {
+      if (!this.shadow) this.shadow = this.scene.add.image(0, 0, TEX.shadow).setOrigin(0.5, 0.5);
+      this.shadow.setPosition(s.x, s.y - 1).setScale(shadowScale).setDepth(s.depth - 0.5).setVisible(s.visible);
+    } else if (this.shadow) {
+      this.shadow.destroy();
+      this.shadow = null;
+    }
+    return h - prev;
+  }
+
   /** 논리 위치(발밑/좌석 앵커)에 놓는다 */
   place(x: number, y: number): void {
     const lift = this.state === "sitChair" ? SIT_CHAIR_LIFT : 0;
@@ -125,7 +149,8 @@ export class AvatarView {
     }
     s.setDepth(this.depthOverride ?? s.y);
     const lift = this.state === "sitGround" ? 3 : this.state === "sitChair" ? 1 : 0;
-    this.label.setPosition(Math.round(s.x), s.y - LABEL_GAP + lift);
+    this.label.setPosition(Math.round(s.x), s.y - LABEL_GAP + lift - this.hop);
+    if (this.shadow) this.shadow.setPosition(s.x, s.y - 1).setDepth((this.depthOverride ?? s.y) - 0.5);
     if (this.label.scaleX !== labelScale) this.label.setScale(labelScale);
 
     for (let i = 0; i < this.aura.length; i++) {
@@ -157,6 +182,7 @@ export class AvatarView {
     this.label.setVisible(v);
     this.bubble?.setVisible(v);
     for (const a of this.aura) a.setVisible(v);
+    this.shadow?.setVisible(v);
   }
 
   get visible(): boolean {
@@ -170,5 +196,7 @@ export class AvatarView {
     this.bubble = null;
     for (const a of this.aura) a.destroy();
     this.aura = [];
+    this.shadow?.destroy();
+    this.shadow = null;
   }
 }

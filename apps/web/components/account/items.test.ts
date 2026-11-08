@@ -59,13 +59,15 @@ describe("pointsText", () => {
 });
 
 describe("myGraveEntries", () => {
-  const g = (id: string, createdAt: number) => ({ id, createdAt }) as PublicGrave;
-  it("내 묘비만 최근 순으로, 자리는 전체 목록 위치로", () => {
-    const all = [g("a", 1), g("b", 2), g("c", 3), g("d", 4)];
-    expect(myGraveEntries(["b", "d", "x"], all).map((e) => [e.grave.id, e.plot])).toEqual([
-      ["d", plotLabel(3)],
-      ["b", plotLabel(1)],
+  const g = (id: string, createdAt: number, channel = 1) => ({ id, createdAt, channel }) as PublicGrave;
+  it("지금 채널 묘비는 자리 이름, 다른 채널 묘비는 상세로 채우고 최근 순", () => {
+    const current = [g("a", 1), g("b", 2), g("c", 3), g("d", 4)];
+    const others = new Map([["x", g("x", 9, 3)]]);
+    expect(myGraveEntries(["b", "d", "x", "missing"], current, others).map((e) => [e.grave.id, e.plot, e.here])).toEqual([
+      ["x", null, false],
+      ["d", plotLabel(3), true],
+      ["b", plotLabel(1), true],
     ]);
-    expect(myGraveEntries([], all)).toEqual([]);
+    expect(myGraveEntries([], current)).toEqual([]);
   });
 });

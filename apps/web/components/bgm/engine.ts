@@ -1,7 +1,7 @@
 import { bridge } from "@/game/bridge";
 import { readItem, writeItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
-import { nextIndex, parseManifest, type Playlist, type Track } from "./manifest";
+import { nextIndex, parseManifest, randomStart, type Playlist, type Track } from "./manifest";
 import { silentWav } from "./silence";
 
 // BGM 엔진 (싱글턴). iOS는 audio.volume을 무시하므로 볼륨·크로스페이드는 모두 Web Audio GainNode로 한다.
@@ -70,12 +70,13 @@ class BgmEngine {
         .then((r) => (r.ok ? r.json() : null))
         .then(parseManifest)
         .catch(() => []);
-      const savedPlaylist = readItem(LS.playlist);
+      const start = randomStart(playlists, readItem(LS.playlist));
       const savedVolume = readItem(LS.volume);
       this.set({
         loaded: true,
         playlists,
-        playlistId: playlists.find((p) => p.id === savedPlaylist)?.id ?? playlists[0]?.id ?? this.state.playlistId,
+        playlistId: start.playlistId ?? this.state.playlistId,
+        index: start.index,
         volume: savedVolume !== null && Number.isFinite(+savedVolume) ? clamp01(+savedVolume) : DEFAULT_VOLUME,
         muted: readItem(LS.muted) === "1",
       });

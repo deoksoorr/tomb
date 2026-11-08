@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import type { LobbyInfo } from "@tomb/protocol";
+import { DEFAULT_MAX_CHANNELS, type LobbyInfo } from "@tomb/protocol";
 import type { AdminGrave } from "@/lib/admin";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { CODE_RE, normalizeCode } from "@/lib/economy";
@@ -10,6 +10,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import AdminRow, { isReported } from "./AdminRow";
+import NoticesPanel from "./NoticesPanel";
 import { adminApi } from "./adminApi";
 import styles from "./Admin.module.css";
 
@@ -60,9 +61,13 @@ const toggle = (set: ReadonlySet<string>, id: string) => {
 
 export default function AdminApp() {
   const [phase, setPhase] = useState<"loading" | "login" | "ready" | "error">("loading");
+  const [tab, setTab] = useState<"graves" | "notices">("graves");
+  const authLost = useCallback(() => setPhase("login"), []);
   const [graves, setGraves] = useState<AdminGrave[]>([]);
   const [lobby, setLobby] = useState<LobbyInfo | "error" | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  /** 0 = 모든 채널 */
+  const [channel, setChannel] = useState(0);
   const [sort, setSort] = useState<Sort>("reports");
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -111,9 +116,10 @@ export default function AdminApp() {
     const q = query.trim().toLowerCase();
     return graves
       .filter((g) => filter === "all" || (filter === "hidden" ? g.hidden : isReported(g)))
+      .filter((g) => !channel || g.channel === channel)
       .filter((g) => !q || g.name.toLowerCase().includes(q) || g.mourner.toLowerCase().includes(q))
       .sort(SORTERS[sort]);
-  }, [graves, filter, sort, query]);
+  }, [graves, filter, channel, sort, query]);
 
   const run = async (ids: string[], action: AdminAction) => {
     setBusy(true);
@@ -174,6 +180,30 @@ export default function AdminApp() {
         {phase === "login" && <LoginForm onDone={reload} />}
 
         {phase === "ready" && (
+          <div className={styles.segmented} role="tablist" aria-label="관리 화면">
+            {(
+              [
+                ["graves", "묘비"],
+                ["notices", "공지사항"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                className={ui.button}
+                aria-selected={tab === value}
+                onClick={() => setTab(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {phase === "ready" && tab === "notices" && <NoticesPanel toast={toast} onAuthLost={authLost} />}
+
+        {phase === "ready" && tab === "graves" && (
           <>
             <section className={styles.summary} aria-label="요약">
               <Stat label="전체 묘비" value={graves.length} />
@@ -182,7 +212,7 @@ export default function AdminApp() {
               <Channels lobby={lobby} />
             </section>
 
-            <PointsForm toast={toast} onAuthLost={() => setPhase("login")} />
+            <PointsForm toast={toast} onAuthLost={authLost} />
 
             <div className={styles.toolbar}>
               <div className={styles.segmented} role="group" aria-label="보기">
@@ -198,6 +228,19 @@ export default function AdminApp() {
                   </button>
                 ))}
               </div>
+              <select
+                className={cx(ui.input, styles.select)}
+                value={channel}
+                onChange={(e) => setChannel(Number(e.target.value))}
+                aria-label="채널"
+              >
+                <option value={0}>모든 채널</option>
+                {Array.from({ length: DEFAULT_MAX_CHANNELS }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {n}채널 ({graves.filter((g) => g.channel === n).length})
+                  </option>
+                ))}
+              </select>
               <select
                 className={cx(ui.input, styles.select)}
                 value={sort}

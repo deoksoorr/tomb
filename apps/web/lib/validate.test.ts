@@ -160,13 +160,22 @@ describe("간단 묘비 입력", () => {
   });
 
   it("기본값: 묘비명 `향년 {N}일, 조용히 별세`, 사인 기타, 선택 필드 없음", () => {
-    const r = QuickGraveInputSchema.parse({ name: " 할 일 앱 ", lived: "week", mourner: "새벽코더" });
-    expect(r).toMatchObject({ name: "할 일 앱", epitaph: "향년 7일, 조용히 별세", causes: ["other"], ageDays: 7, diedAt: todayKst() });
+    const r = QuickGraveInputSchema.parse({ name: " 할 일 앱 ", lived: "week", mourner: "새벽코더", channel: 2 });
+    expect(r).toMatchObject({ name: "할 일 앱", epitaph: "향년 7일, 조용히 별세", causes: ["other"], ageDays: 7, diedAt: todayKst(), channel: 2 });
     expect(r.links).toBeUndefined();
-    expect(QuickGraveInputSchema.parse({ name: "a", lived: "day", cause: "time", epitaph: "짧았다", mourner: "새벽코더" })).toMatchObject({
+    expect(QuickGraveInputSchema.parse({ name: "a", lived: "day", cause: "time", epitaph: "짧았다", mourner: "새벽코더", channel: 1 })).toMatchObject({
       epitaph: "짧았다",
       causes: ["time"],
     });
+  });
+
+  it("세울 채널은 필수, 1~10", () => {
+    const quick = { name: "a", lived: "day", mourner: "새벽코더" };
+    for (const channel of [undefined, 0, 11, 1.5, "2"])
+      expect(QuickGraveInputSchema.safeParse({ ...quick, channel }).success, String(channel)).toBe(false);
+    expect(QuickGraveInputSchema.safeParse({ ...quick, channel: 10 }).success).toBe(true);
+    expect(GraveInputSchema.safeParse({ ...base, channel: 11 }).success).toBe(false);
+    expect(GraveInputSchema.parse(base).channel).toBeUndefined();
   });
 
   it("lived가 있으면 간단 입력, 없으면 전체 입력으로 검증한다", () => {

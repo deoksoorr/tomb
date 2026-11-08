@@ -77,19 +77,7 @@
   overflow-wrap: anywhere;
 }
 
-.location {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-}
 
-.goTo {
-  min-height: 28px;
-  padding: 2px 8px;
-  font-family: var(--font-small);
-  font-size: 10px;
-}
 
 .tags {
   display: flex;

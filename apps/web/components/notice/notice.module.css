@@ -1,0 +1,107 @@
+.state {
+  padding: 24px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.notices {
+  display: grid;
+  gap: 14px;
+}
+
+.notice {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.noticeTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.pin {
+  flex: none;
+  padding: 0 6px;
+  background: var(--candle);
+  color: var(--bg-deep);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.date {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.body {
+  color: var(--text);
+  line-height: 1.7;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+.warning {
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  color: var(--candle);
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}
+
+.group {
+  display: grid;
+  gap: 8px;
+}
+
+.group legend {
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  min-height: 40px;
+  padding: 8px 12px;
+  background: var(--bg-deep);
+  color: var(--muted);
+  box-shadow: var(--px-border);
+  cursor: pointer;
+  user-select: none;
+}
+
+.chip:has(input:checked) {
+  background: var(--moss-deep);
+  color: var(--bone);
+}
+
+.chip:has(input:focus-visible) {
+  outline: 2px solid var(--candle);
+  outline-offset: 3px;
+}
+
+@media (pointer: coarse) {
+  .chip {
+    min-height: 44px;
+  }
+}

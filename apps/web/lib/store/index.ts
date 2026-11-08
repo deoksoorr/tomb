@@ -8,13 +8,18 @@ import { MemoryAccounts } from "./accounts-memory";
 import { RedisAccounts } from "./accounts-redis";
 import { MemoryStore } from "./memory";
 import { mockGraves } from "./mock";
+import { MemoryNotices, RedisNotices, type NoticeStore } from "./notices";
 import { RedisStore } from "./redis";
 import type { AccountStore, GraveRecord, GraveStore } from "./types";
 
 export type { AccountStore, GraveRecord, GraveStore } from "./types";
 
 // HMR로 모듈이 다시 로드돼도 로컬 데이터가 날아가지 않게 globalThis에 둔다
-const g = globalThis as typeof globalThis & { __tombStore?: GraveStore; __tombAccounts?: AccountStore };
+const g = globalThis as typeof globalThis & {
+  __tombStore?: GraveStore;
+  __tombAccounts?: AccountStore;
+  __tombNotices?: NoticeStore;
+};
 
 /** Redis 환경변수가 있으면 RedisStore, 없으면 (로컬 한정) 목업을 심은 MemoryStore */
 export function getStore(): GraveStore {
@@ -44,13 +49,25 @@ export function getAccounts(): AccountStore {
   return g.__tombAccounts;
 }
 
+/** 공지사항 저장소 (묘비 저장소와 같은 백엔드) */
+export function getNotices(): NoticeStore {
+  const cur = g.__tombNotices;
+  const conn = env.redis();
+  if (conn) return cur instanceof RedisNotices ? cur : (g.__tombNotices = new RedisNotices(conn));
+  getStore(); // 운영에서 Redis가 없으면 여기서 실패한다
+  if (cur instanceof MemoryNotices) return cur;
+  g.__tombNotices = cur ? Object.assign(new MemoryNotices(), cur) : new MemoryNotices();
+  return g.__tombNotices;
+}
+
 /**
  * 클라이언트로 내보낼 형태. ownerTokenHash·hidden·ownerAccountId는 절대 내보내지 않는다.
- * 꾸미기는 만료되지 않은 것만 (없으면 필드를 뺀다)
+ * 채널은 항상 넣고(예전 묘비는 1), 꾸미기는 만료되지 않은 것만 (없으면 필드를 뺀다)
  */
-export function toPublicGrave(r: GraveRecord, now = Date.now()): PublicGrave {
+export function toPublicGrave(r: Grave & { flowers: number; revives: number }, now = Date.now()): PublicGrave {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { ownerTokenHash, hidden, ownerAccountId, decor, ...pub } = r;
+  const { ownerTokenHash, hidden, ownerAccountId, decor, channel, ...rest } = r;
+  const pub = { ...rest, channel: channel ?? 1 };
   const live = decor?.filter((d) => d.until > now);
   return live?.length ? { ...pub, decor: live } : pub;
 }
@@ -58,14 +75,15 @@ export function toPublicGrave(r: GraveRecord, now = Date.now()): PublicGrave {
 /** 등록 순(오래된 것 먼저) = 격자 배치 순서 */
 export const byCreated = (a: GraveRecord, b: GraveRecord) => a.createdAt - b.createdAt || a.id.localeCompare(b.id);
 
-export async function listPublic(store: GraveStore, now = Date.now()): Promise<GraveListResponse> {
-  const visible = (await store.list()).filter((r) => !r.hidden).sort(byCreated);
+/** 한 채널의 묘지: 그 채널 묘비만, 랭킹(reviveTop)도 그 채널 안에서 */
+export async function listPublic(store: GraveStore, channel: number, now = Date.now()): Promise<GraveListResponse> {
+  const visible = (await store.list(channel)).filter((r) => !r.hidden).sort(byCreated);
   const reviveTop = visible
     .filter((r) => r.revives > 0)
     .sort((a, b) => b.revives - a.revives || byCreated(a, b))
     .slice(0, 10)
     .map((r) => r.id);
-  return { graves: visible.map((r) => toPublicGrave(r, now)), reviveTop, generatedAt: now };
+  return { channel, graves: visible.map((r) => toPublicGrave(r, now)), reviveTop, generatedAt: now };
 }
 
 /**
@@ -97,7 +115,7 @@ export async function findVisible(store: GraveStore, id: string): Promise<GraveR
  * (업로더 폴더 검사에 더한 2차 방어. 목록 조회 1회라 삭제·교체처럼 드문 경로에서만 쓴다).
  */
 export async function releaseImage(store: GraveStore, url: string | undefined): Promise<void> {
-  if (!url || (await store.list()).some((g) => g.imageUrl === url)) return;
+  if (!url || (await store.listAll()).some((g) => g.imageUrl === url)) return;
   await deleteImage(url);
 }
 

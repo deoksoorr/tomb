@@ -1,12 +1,20 @@
 // Redis 키 (spec §6 + v2 계정·포인트·상점). 묘비 저장소와 계정 저장소가 같은 키를 함께 쓴다.
 
+/**
+ * 채널별 묘지 키. 채널마다 묘지가 따로라 목록·랭킹도 채널별이다 (목록 = 그 채널 키 3개를 파이프라인 1회).
+ * 1채널은 채널 개편 전 키 이름을 그대로 쓴다 → 운영 Redis의 기존 묘비가 옮기지 않고 그대로 1채널 묘비가 된다.
+ *  - meta: HASH. 필드 `{id}` → 압축 JSON, `hidden:{id}` → "1"(숨김), `decor:{id}` → 꾸미기 JSON 배열.
+ *    숨김·꾸미기를 같은 해시의 별도 필드에 두면 목록은 여전히 HGETALL 한 번이고, 주인의 수정(HSET {id})이 덮어쓰지 못한다.
+ *  - created: ZSET 등록 순 / revive: ZSET 살려주세요 랭킹 / flower: ZSET 헌화 순
+ */
+export function chKeys(channel: number) {
+  const p = channel === 1 ? "graves" : `ch:${channel}:graves`;
+  return { meta: `${p}:meta`, created: `${p}:created`, revive: `${p}:revive`, flower: `${p}:flower` };
+}
+
 export const K = {
-  // HASH. 필드 `{id}` → 압축 JSON, `hidden:{id}` → "1"(숨김), `decor:{id}` → 꾸미기 JSON 배열.
-  // 숨김·꾸미기를 같은 해시의 별도 필드에 두면 목록은 여전히 HGETALL 한 번이고, 주인의 수정(HSET {id})이 덮어쓰지 못한다.
-  meta: "graves:meta",
-  created: "graves:created", // ZSET 등록 순
-  revive: "graves:revive", // ZSET 살려주세요 랭킹
-  flower: "graves:flower", // ZSET 헌화 순
+  /** HASH 묘비 id → 채널. 없으면 1채널(채널 개편 전 묘비) */
+  graveChannel: "graves:ch",
   reported: "graves:reported", // ZSET 신고 기록이 있는 묘비 → 지금 세는 신고 수 (관리자 목록용)
   revivers: (id: string) => `grave:${id}:revivers`, // SET visitorId (지금 살려주세요 중)
   reviveEarned: (id: string) => `grave:${id}:reviveEarned`, // SET visitorId (포인트를 한 번 받은 사람, 취소해도 남김)

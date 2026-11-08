@@ -3,8 +3,11 @@ import type { EarnSource } from "../economy";
 import type { ReportLogEntry, ReportReason } from "../reports";
 import type { Grave, GraveDecor, ReviveResponse } from "../types";
 
-/** 저장소 원본 + 카운트. ownerTokenHash·hidden이 들어 있으므로 그대로 내보내지 않는다 (toPublicGrave 사용) */
-export type GraveRecord = Grave & { flowers: number; revives: number };
+/**
+ * 저장소 원본 + 카운트 + 채널(읽을 때 항상 채운다, 예전 묘비는 1).
+ * ownerTokenHash·hidden이 들어 있으므로 그대로 내보내지 않는다 (toPublicGrave 사용)
+ */
+export type GraveRecord = Grave & { channel: number; flowers: number; revives: number };
 
 export type ViewerState = { myRevive: boolean; myFlowerToday: boolean };
 
@@ -20,11 +23,17 @@ export const REPORT_HIDE_THRESHOLD = 5;
  * 반응 연산은 모두 묘비 존재 확인과 한 덩어리로 원자적이다 (삭제와 경합해 고아 키가 생기지 않는다).
  * 숨김 여부는 메타와 따로 저장한다 → 주인의 수정(put)이 신고·관리자의 숨김을 덮어쓰지 못한다.
  */
+/** 채널마다 묘지가 따로다. id로 부르는 연산은 저장소가 묘비의 채널을 스스로 찾는다 */
 export interface GraveStore {
-  /** 숨김 포함 전체. 순서는 보장하지 않는다 */
-  list(): Promise<GraveRecord[]>;
+  /** 한 채널의 묘비 (숨김 포함). 순서는 보장하지 않는다 */
+  list(channel: number): Promise<GraveRecord[]>;
+  /** 모든 채널 (관리자 목록, 이미지 공유 확인용) */
+  listAll(): Promise<GraveRecord[]>;
   get(id: string): Promise<GraveRecord | null>;
-  /** 생성과 수정 공용 (id 기준 덮어쓰기). grave.hidden·decor는 무시하고 기존 숨김·꾸미기를 유지한다 */
+  /**
+   * 생성과 수정 공용 (id 기준 덮어쓰기, grave.channel 채널에 둔다. 없으면 1).
+   * grave.hidden·decor는 무시하고 기존 숨김·꾸미기를 유지한다
+   */
   put(grave: Grave): Promise<void>;
   /** 메타·카운트·집합을 모두 지우고 지운 묘비를 돌려준다 (이미지는 호출자가 정리) */
   remove(id: string): Promise<Grave | null>;
@@ -85,7 +94,7 @@ export interface AccountStore {
   /**
    * 출석. 오늘 처음이면 연속 일수를 갱신하고 출석(+7일째마다 보너스) 포인트를 준다.
    * 같은 IP에서 오늘 이미 ATTEND_ACCOUNTS_PER_IP개 계정이 받았으면 출석만 기록하고 포인트는 주지 않는다.
-   * name이 있으면 계정 이름도 저장한다.
+   * name은 계정에 아직 이름이 없을 때만 저장한다 (개인 코드로 들어온 기기의 다른 이름이 저장된 이름을 덮어쓰지 않게).
    */
   attend(id: string, ipHash: string, name: string | null, day: string, yesterday: string): Promise<number>;
   /** 개인 코드 해시 교체 (이전 코드는 무효) */
@@ -101,7 +110,14 @@ export interface AccountStore {
    * 가방에서 1개 쓰고 묘비에 꾸미기를 놓는다 (만료된 것 정리, 최대 개수를 넘으면 가장 오래된 것 교체).
    * 묘비가 없으면 null, 가방에 없으면 "no_item". 주인 확인은 호출자가 한다
    */
-  placeDecor(id: string, graveId: string, itemId: string, until: number, now: number): Promise<GraveDecor[] | "no_item" | null>;
+  placeDecor(
+    id: string,
+    graveId: string,
+    channel: number,
+    itemId: string,
+    until: number,
+    now: number,
+  ): Promise<GraveDecor[] | "no_item" | null>;
   /**
    * 가방에서 itemId 1개를 쓰면서 묘비를 저장한다 (유료 묘비 디자인). 둘이 한 번에 일어나므로
    * 디자인권 1개로 묘비 2개를 동시에 세울 수 없다. 가방에 없으면 저장하지 않고 false

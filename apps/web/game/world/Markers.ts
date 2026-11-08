@@ -6,7 +6,8 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import type { GravePlacement } from "./graveLayout";
 
 // 새 묘비 위치 표시: 위에서 내려오는 가는 빛기둥 + 은은한 빛 + 아래를 가리키는 작은 화살표 (+ 라벨).
-// 내가 세운 묘비는 8초 + "여기 잠들었어요", 같은 채널 다른 사람이 세운 묘비는 4초 (라벨 없음).
+// 같은 채널 다른 사람이 세운 묘비에 잠깐(4초). 내 묘비는 상시 빛(GraveView)으로 대신한다.
+// 좌표를 고정하지 않고 매 프레임 묘비 id로 자리를 다시 찾는다: 목록이 바뀌어 자리가 밀리면 따라가고, 지워지면 바로 사라진다.
 // prefers-reduced-motion이면 내려오기·흔들림·깜빡임 없이 그 자리에 정적으로 보였다가 사라진다.
 
 const FADE_IN = 400;
@@ -65,13 +66,24 @@ export class GraveMarkers {
     this.items.push({ id: p.id, x: p.x, y: p.y, top, start: now, end: now + ms, beam, halo, arrow, label: text });
   }
 
-  update(now: number, labelScale: number, tip: TooltipInfo | null = null): void {
+  update(now: number, labelScale: number, tip: TooltipInfo | null, resolve: (id: string) => GravePlacement | undefined): void {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const m = this.items[i];
-      if (now >= m.end) {
+      const p = resolve(m.id);
+      if (now >= m.end || !p) {
         this.destroyItem(m);
         this.items.splice(i, 1);
         continue;
+      }
+      if (p.x !== m.x || p.y !== m.y) {
+        // 묘비가 다른 자리로 밀렸다 → 같이 옮긴다
+        m.x = p.x;
+        m.y = p.y;
+        m.top = p.y - GRAVE_STONE_H[p.shape];
+        m.beam.setPosition(p.x, p.y - BEAM_H);
+        m.halo.setPosition(p.x, p.y - BEAM_H / 2);
+        m.arrow.setX(p.x);
+        m.label?.setX(p.x);
       }
       const t = now - m.start;
       const a = Math.min(1, t / FADE_IN) * Math.min(1, (m.end - now) / FADE_OUT);
@@ -101,8 +113,17 @@ export class GraveMarkers {
     m.label?.destroy();
   }
 
-  destroy(): void {
+  /** 채널을 옮기는 등 묘비가 모두 바뀔 때 */
+  clear(): void {
     for (const m of this.items) this.destroyItem(m);
     this.items.length = 0;
+  }
+
+  get count(): number {
+    return this.items.length;
+  }
+
+  destroy(): void {
+    this.clear();
   }
 }

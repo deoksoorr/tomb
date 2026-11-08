@@ -11,7 +11,7 @@ export type NetPose = { x: number; y: number; state: StateId; dir: DirId };
 type Sent = NetPose & { t: number };
 
 export function isMovingState(s: StateId): boolean {
-  return s === STATE.walk || s === STATE.run;
+  return s === STATE.walk || s === STATE.run || s === STATE.jump;
 }
 
 /**

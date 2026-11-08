@@ -2,7 +2,7 @@ import * as Phaser from "phaser";
 import { DIR, FURNITURE, SHOP_DOOR, SPAWN, STATE, TELEPORT_DIST, type PeerInfo, type Seat, type Sid } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 import { TEX } from "../assets/manifest";
-import { bridge } from "../bridge";
+import { bridge, type NetStatus } from "../bridge";
 import { DEPTH, GRAVE_NEAR_RADIUS, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { GraveTooltip } from "../entities/Grave";
 import { Player, type SeatRequester } from "../entities/Player";
@@ -10,6 +10,7 @@ import { RemoteAvatar } from "../entities/RemoteAvatar";
 import { SeatHint } from "../entities/SeatHint";
 import { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
+import { escape, overlaps, type Box } from "../logic/jump";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { pickInteract, pickSeat } from "../logic/sit";
 import { RealtimeClient } from "../net/RealtimeClient";
@@ -19,6 +20,8 @@ import { CameraRig } from "../world/CameraRig";
 import { Effects } from "../world/Effects";
 import { Fireworks } from "../world/Fireworks";
 import { GraveField } from "../world/GraveField";
+import { graveChannelFor } from "../world/graveChannel";
+import { declutter, type LabelBox } from "../world/labels";
 import { graveAt, nearestGrave, standSpot, type GravePlacement, type NearResult } from "../world/graveLayout";
 import { nearShopDoor } from "../world/layout";
 import { Lighting, playerLightRadius } from "../world/Lighting";
@@ -36,7 +39,6 @@ const BURY_WAIT_MS = 15_000;
 const REMOTE_BURY_TTL_MS = 30_000;
 /** 묘비가 솟아오른 뒤 캐릭터를 그 앞으로 옮기는 시점 */
 const BURY_WARP_DELAY_MS = 1700;
-const MY_GRAVE_MARK_MS = 8000;
 const OTHER_GRAVE_MARK_MS = 4000;
 const DUST_MS = 90;
 const EMPTY_SEATS = new Map<string, Sid>();
@@ -75,11 +77,19 @@ export class WorldScene extends Phaser.Scene {
   private cleaned = false;
   private inShop = false;
   private seatHint!: SeatHint;
+  private graveCollider!: Phaser.Physics.Arcade.Collider;
+  /** 착지했는데 묘비에 겹쳐 빠져나오지 못했으면, 겹침이 풀릴 때까지 묘비 충돌을 계속 끈다 */
+  private graveLock = false;
+  /** 지금 보여 주는 묘지의 채널 (채널마다 묘지가 따로) */
+  private graveChannel = 1;
   private nearSeatId: string | null = null;
   private readonly unsubs: (() => void)[] = [];
   /** 이번 프레임 화면 (CameraRig.frameView가 채운다) */
   private readonly view = new Phaser.Geom.Rectangle();
   private readonly near: NearResult = { p: null as unknown as GravePlacement, dist: 0 };
+  private readonly resolveGrave = (id: string) => this.field.placement(id);
+  private readonly labelBoxes: (LabelBox & { t: Phaser.GameObjects.BitmapText | null })[] = [];
+  private readonly labelOrder: LabelBox[] = [];
 
   constructor() {
     super("world");
@@ -106,8 +116,10 @@ export class WorldScene extends Phaser.Scene {
     this.field = new GraveField(this, this.reduced);
     this.fx = new Effects(this, this.reduced);
 
-    // 묘비 목록이 이미 와 있으면 먼저 깔고, 공유 링크 묘비가 있으면 그 앞에서 시작한다
-    const initial = bridge.last("graves:set");
+    // 묘비 목록이 이미 와 있으면(이 채널 것만) 먼저 깔고, 공유 링크 묘비가 있으면 그 앞에서 시작한다
+    this.graveChannel = graveChannelFor(bridge.last("net:status"), opts.channel);
+    const last = bridge.last("graves:set");
+    const initial = last && last.channel === this.graveChannel ? last : undefined;
     if (initial) this.applyGraves(initial.graves, initial.reviveTop, false);
     let spawn: { x: number; y: number } = SPAWN;
     let openOnStart: string | null = null;
@@ -122,7 +134,9 @@ export class WorldScene extends Phaser.Scene {
     this.player = new Player(this, this.atlas, spawn.x, spawn.y, opts.color, opts.name);
     this.physics.add.collider(this.player.sprite, this.map.colliders);
     this.physics.add.collider(this.player.sprite, this.map.gridColliders);
-    this.physics.add.collider(this.player.sprite, this.field.colliders);
+    // 묘비 충돌은 점프 중에 끈다 (벽·나무·가구·연못·오두막은 그대로)
+    this.graveCollider = this.physics.add.collider(this.player.sprite, this.field.colliders);
+    this.player.onLand = () => this.onPlayerLand();
     this.playerGlow = this.add.image(spawn.x, spawn.y, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffe2a8).setDepth(DEPTH.lights);
 
     this.rig = new CameraRig(this, this.player.sprite, canvas, (x, y) => this.onTap(x, y));
@@ -302,7 +316,13 @@ export class WorldScene extends Phaser.Scene {
 
   private bindBridge(): void {
     const on = this.unsubs;
-    on.push(bridge.on("graves:set", ({ graves, reviveTop }) => this.applyGraves(graves, reviveTop, true)));
+    on.push(
+      bridge.on("graves:set", ({ channel, graves, reviveTop }) => {
+        // 다른 채널 묘지 목록은 무시 (채널을 옮기는 사이에 늦게 온 응답 등)
+        if (channel === this.graveChannel) this.applyGraves(graves, reviveTop, true);
+      }),
+    );
+    on.push(bridge.on("net:status", (st) => this.onNetStatus(st)));
     on.push(bridge.on("grave:focus", ({ graveId, teleport }) => this.focusGrave(graveId, teleport)));
     on.push(
       bridge.on("grave:buried", ({ graveId }) => {
@@ -327,6 +347,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("input:runToggle", ({ on: v }) => this.hub.setRunToggle(v)));
     on.push(bridge.on("input:sit", () => this.hub.dispatch("sit")));
     on.push(bridge.on("input:interact", () => this.hub.dispatch("interact")));
+    on.push(bridge.on("input:jump", () => this.hub.dispatch("jump")));
     on.push(bridge.on("ui:blockKeys", ({ blocked }) => this.hub.setBlocked(blocked)));
     on.push(bridge.on("camera:recenter", () => this.rig.recenter()));
     on.push(bridge.on("camera:zoom", ({ delta }) => this.rig.zoomBy(delta)));
@@ -353,6 +374,19 @@ export class WorldScene extends Phaser.Scene {
     const clean = Array.isArray(look) ? look.filter((x): x is string => typeof x === "string") : [];
     this.player.view.setLook(clean);
     if (grant) this.net.look(grant);
+  }
+
+  /** 채널이 바뀌면 묘지를 비우고, 그 채널 목록이 이미 와 있으면 바로 깐다 */
+  private onNetStatus(st: NetStatus): void {
+    const ch = graveChannelFor(st, this.ctx.opts.channel);
+    if (ch === this.graveChannel) return;
+    this.graveChannel = ch;
+    this.markers.clear();
+    this.remoteBuried.clear();
+    this.pendingBury = null;
+    this.applyGraves([], [], true);
+    const last = bridge.last("graves:set");
+    if (last && last.channel === ch) this.applyGraves(last.graves, last.reviveTop, true);
   }
 
   private applyGraves(graves: PublicGrave[], reviveTop: string[], live: boolean): void {
@@ -442,7 +476,7 @@ export class WorldScene extends Phaser.Scene {
       this.net.warp(s.x, s.y);
       this.rig.recenter();
       this.recenterAt = 0;
-      this.markers.add(q, MY_GRAVE_MARK_MS, "여기 잠들었어요", now);
+      // 위치 표시는 내 묘비의 상시 빛(GraveView)이 맡는다 (세운 순간 잠깐 더 밝다)
     });
   }
 
@@ -537,6 +571,11 @@ export class WorldScene extends Phaser.Scene {
     const now = this.time.now;
     const occupied = this.net.online ? this.seats : EMPTY_SEATS;
     const mySid = this.net.online ? this.net.mySid : null;
+    if (a === "jump") {
+      pl.jump(now, this.seatReq);
+      return;
+    }
+    if (pl.airborne) return;
     // 이동 입력이 있는 동안에는 앉지 않는다 (걷다가 X를 같이 눌러도 상태가 튀지 않게)
     const moving = Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER;
     if (a === "sit") {
@@ -588,6 +627,8 @@ export class WorldScene extends Phaser.Scene {
     this.hub.read(this.move);
     if (this.hub.isBlocked) this.move.ax = this.move.ay = 0;
     const started = pl.update(this.move, now, this.seatReq);
+    if (this.graveLock && !this.overlappingGrave()) this.graveLock = false;
+    this.graveCollider.active = !pl.airborne && !this.graveLock;
     if (started && this.rig.detached) {
       this.rig.recenter();
       this.recenterAt = 0;
@@ -624,10 +665,11 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
+    this.declutterLabels();
     this.updateNear();
     this.updateSeatHint(now, s);
     this.tooltip.layout(s, pl.y);
-    this.markers.update(now, s, this.tooltip);
+    this.markers.update(now, s, this.tooltip, this.resolveGrave);
 
     const longSit = pl.sitting && pl.view.sitSince > 0 && now - pl.view.sitSince > SIT_IDLE_MS;
     this.atmos.gather(longSit ? { x: pl.x, y: pl.y } : null);
@@ -650,7 +692,8 @@ export class WorldScene extends Phaser.Scene {
       .setPosition(pl.x, pl.y - 9)
       .setScale((r * 1.6) / 64)
       .setAlpha((0.05 + 0.13 * L.glow) * (lantern ? 1.5 : 1) * Math.min(1, L.darkness * 3));
-    lit.begin(view, L.darkness);
+    // 큰 폭죽(대형·피날레)이 터지는 동안은 화면 전체 어둠이 걷힌다
+    lit.begin(view, L.darkness * (1 - 0.6 * this.fireworks.lift));
     if (L.darkness > 0.004) {
       lit.add(pl.x, pl.y - 8, r, 0.92);
       for (const a of this.remotes.values()) {
@@ -686,6 +729,63 @@ export class WorldScene extends Phaser.Scene {
       if (near && g) this.tooltip.show(near.p, g.name, g.epitaph, this.field.isMine(g.id));
       else this.tooltip.hide();
     }
+  }
+
+  /** 플레이어 발 상자 (물리 바디) */
+  private feetBox(): Box {
+    const b = this.player.body;
+    return { x: b.x, y: b.y, w: b.width, h: b.height };
+  }
+
+  private graveBoxes(): Box[] {
+    const out: Box[] = [];
+    for (const z of this.field.colliders.getChildren()) {
+      const b = (z as Phaser.GameObjects.Zone).body as Phaser.Physics.Arcade.StaticBody | null;
+      if (b) out.push({ x: b.x, y: b.y, w: b.width, h: b.height });
+    }
+    return out;
+  }
+
+  private overlappingGrave(): boolean {
+    const f = this.feetBox();
+    return this.graveBoxes().some((g) => overlaps(f, g));
+  }
+
+  /** 착지: 묘비 위(충돌체 안)에 내렸으면 가장 가까운 빈자리로 살짝 밀어낸다 */
+  private onPlayerLand(): void {
+    const pl = this.player;
+    for (let i = 0; i < 2; i++) this.fx.dust(pl.x - 3 + i * 6, pl.y);
+    const graves = this.graveBoxes();
+    const f = this.feetBox();
+    if (!graves.some((g) => overlaps(f, g))) return;
+    const e = escape(f, graves);
+    if (e) pl.body.reset(pl.x + e.dx, pl.y + e.dy);
+    else this.graveLock = true;
+  }
+
+  /** 이름표가 겹치면 위쪽 사람 이름표를 살짝 올린다 (모든 사람 이름이 보이게) */
+  private declutterLabels(): void {
+    let n = this.pushLabel(this.player.view.label, 0);
+    for (const r of this.remotes.values()) n = this.pushLabel(r.view.label, n);
+    if (n < 2) return;
+    const boxes = this.labelBoxes;
+    declutter(boxes, this.labelOrder, n);
+    for (let i = 0; i < n; i++) {
+      const b = boxes[i];
+      if (b.t && b.t.y !== b.y) b.t.setY(b.y);
+    }
+  }
+
+  private pushLabel(t: Phaser.GameObjects.BitmapText, n: number): number {
+    if (!t.visible) return n;
+    let b = this.labelBoxes[n];
+    if (!b) this.labelBoxes.push((b = { x: 0, y: 0, w: 0, h: 0, t: null }));
+    b.t = t;
+    b.x = t.x;
+    b.y = t.y;
+    b.w = t.width + 2 / this.cameras.main.zoom;
+    b.h = t.height;
+    return n + 1;
   }
 
   /** 근처 빈 좌석 안내 + seat:near (UI가 모바일 앉기 버튼을 강조) */

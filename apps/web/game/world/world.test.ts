@@ -14,6 +14,7 @@ import {
 } from "@tomb/protocol";
 import { ambienceAt } from "@/lib/ambience";
 import { LevelBlender, levelsFor, mixColor } from "./ambienceMix";
+import { graveChannelFor } from "./graveChannel";
 import { cameraBounds, clampZoom, parseStoredZoom, pinchZoom, snapZoom, stepZoom, approach } from "./cameraMath";
 import { buildLayout, graveAt, layoutSignature, nearestGrave, standSpot, visibleRows } from "./graveLayout";
 import { UPPER_PROPS, furnitureCollider, gridProps, groundKind, nearShopDoor, pondColliders, propCollider, shopCollider, type Rect } from "./layout";
@@ -88,15 +89,42 @@ describe("static layout", () => {
 });
 
 describe("grave layout", () => {
-  it("grid order follows index; top revive graves move to the altar and leave an empty plot", () => {
+  it("grid order follows index; top revive graves get a copy at the altar", () => {
     const list = graves(25);
     const l = buildLayout(list, ["g7", "g3"]);
-    expect(l.placements[0]).toMatchObject({ x: graveSlot(0).x, y: graveSlot(0).y, rank: -1 });
-    expect(l.byId.get("g7")).toMatchObject({ x: REVIVE_SLOTS[0].x, y: REVIVE_SLOTS[0].y, rank: 0 });
+    expect(l.placements[0]).toMatchObject({ x: graveSlot(0).x, y: graveSlot(0).y, rank: -1, copy: false });
+    expect(l.revive[0]).toMatchObject({ id: "g7", x: REVIVE_SLOTS[0].x, y: REVIVE_SLOTS[0].y, rank: 0, copy: true });
     expect(l.revive[1]?.id).toBe("g3");
-    expect(l.promoted[7]).toBe(1);
-    expect(l.promoted[8]).toBe(0);
+    expect(l.reviveRank[7]).toBe(0);
+    expect(l.reviveRank[8]).toBe(-1);
     expect(l.rows).toBe(Math.ceil(25 / GRID_COLS));
+  });
+
+  it("regression: a promoted grave stays in its grid slot with the same design; the altar copy matches", () => {
+    const list = graves(20).map((g, i) => ({
+      ...g,
+      style: i === 5 ? "coffee" : undefined,
+      flowers: i === 5 ? 9 : g.flowers,
+      decor: i === 5 ? [{ itemId: "decor_wreath", until: Date.now() + 1e7 }] : undefined,
+    }));
+    const before = buildLayout(list, []);
+    const after = buildLayout(list, ["g5"]);
+    const real = after.byId.get("g5")!;
+    // 격자 자리의 진짜 묘비는 그대로 (자리·디자인·꽃·꾸미기)
+    expect(real).toMatchObject({ x: graveSlot(5).x, y: graveSlot(5).y, shape: "coffee", copy: false });
+    expect(real.flowers).toBe(before.byId.get("g5")!.flowers);
+    expect(real.decor).toEqual(["decor_wreath"]);
+    // 다시 피어날 자리에는 같은 모양의 복제본
+    const copy = after.revive[0]!;
+    expect(copy).toMatchObject({ id: "g5", shape: "coffee", copy: true, rank: 0, flowers: real.flowers });
+    expect(copy.decor).toEqual(real.decor);
+    // 두 곳 모두 같은 묘비를 연다
+    expect(graveAt(after, real.x, real.y - 5)?.id).toBe("g5");
+    expect(graveAt(after, copy.x, copy.y - 5)?.id).toBe("g5");
+    expect(nearestGrave(after, real.x, real.y + 22, 26)?.p.id).toBe("g5");
+    expect(nearestGrave(after, copy.x, copy.y + 22, 26)?.p.id).toBe("g5");
+    // 격자 자리에 빈 흙자리가 생기지 않는다: 같은 칸의 묘비가 그대로
+    expect(after.placements[5]).toBe(real);
   });
 
   it("ignores unknown ids in reviveTop and caps at 10", () => {
@@ -118,9 +146,9 @@ describe("grave layout", () => {
     const s = standSpot(p);
     expect(nearestGrave(l, s.x, s.y, 26)?.p.id).toBe("g123");
     expect(graveAt(l, p.x, p.y - 5)?.id).toBe("g123");
-    // 올라간 묘비의 빈 자리는 비어 있다
-    const empty = graveSlot(499);
-    expect(graveAt(l, empty.x, empty.y - 5)).toBeNull();
+    // 명당으로 올라간 묘비도 원래 자리에 그대로 있다
+    const slot = graveSlot(499);
+    expect(graveAt(l, slot.x, slot.y - 5)?.id).toBe("g499");
     expect(nearestGrave(l, REVIVE_SLOTS[0].x, REVIVE_SLOTS[0].y + 16, 26)?.p.id).toBe("g499");
   });
 
@@ -197,5 +225,22 @@ describe("ambience mix", () => {
   it("mixColor blends per channel", () => {
     expect(mixColor(0x000000, 0xffffff, 0.5)).toBe(0x808080);
     expect(mixColor(0xff0000, 0x0000ff, 1)).toBe(0x0000ff);
+  });
+});
+
+describe("graveyard per channel", () => {
+  const st = (mode: string, channel: number | null) => ({ mode, channel, count: 1, cap: 40 }) as Parameters<typeof graveChannelFor>[0];
+  it("shows the connected (or connecting) channel's graves", () => {
+    expect(graveChannelFor(st("online", 3), "auto")).toBe(3);
+    expect(graveChannelFor(st("connecting", 2), "auto")).toBe(2);
+    expect(graveChannelFor(st("reconnecting", 4), 1)).toBe(4);
+  });
+  it("falls back to channel 1 when there is no channel (spectator/queue/offline/replaced)", () => {
+    for (const m of ["spectator", "queue", "offline", "replaced"]) expect(graveChannelFor(st(m, null), 5)).toBe(1);
+    expect(graveChannelFor(st("connecting", null), "auto")).toBe(1);
+  });
+  it("before any status, uses the channel picked at the entrance", () => {
+    expect(graveChannelFor(undefined, 7)).toBe(7);
+    expect(graveChannelFor(undefined, "auto")).toBe(1);
   });
 });

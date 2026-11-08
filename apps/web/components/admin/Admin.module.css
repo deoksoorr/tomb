@@ -133,7 +133,8 @@
   gap: 4px;
 }
 
-.segmented [aria-pressed="true"] {
+.segmented [aria-pressed="true"],
+.segmented [aria-selected="true"] {
   background: var(--moss-deep);
   color: var(--bone);
 }
@@ -354,6 +355,57 @@
 .confirm {
   display: grid;
   gap: 14px;
+}
+
+/* ── 공지사항 ── */
+
+.notices {
+  display: grid;
+  gap: 12px;
+}
+
+.noticesHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.notice {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.noticeTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--bone);
+}
+
+/* 본문 줄바꿈을 그대로 보여 준다 */
+.noticeBody {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.noticeEditor {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.noticePreview {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
 }
 
 /* ── 알림 ── */

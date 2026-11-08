@@ -200,10 +200,14 @@ describe("묘비 CRUD", () => {
     const v = await newVisitor();
     const { grave } = await createGrave(v);
     const res = await graves.GET(call("/api/graves"));
-    expect(res.headers.get("cache-control")).toBe("s-maxage=30, stale-while-revalidate=86400");
+    expect(res.headers.get("vercel-cdn-cache-control")).toBe("max-age=30, stale-while-revalidate=86400");
+    expect(res.headers.get("cache-control")).toBe("no-store");
     const list = (await res.json()) as GraveListResponse;
     expect(list.graves.at(-1)?.id).toBe(grave.id);
-    expect(list.graves.slice(0, 3).map((g) => g.id)).toEqual(["mock-001", "mock-002", "mock-003"]);
+    // 목업은 1~3채널에 돌아가며 심는다 → 1채널(기본) 목록에는 mock-001만
+    expect(list.channel).toBe(1);
+    expect(list.graves.filter((g) => g.id.startsWith("mock-")).map((g) => g.id)).toEqual(["mock-001"]);
+    expect(list.graves.every((g) => g.channel === 1)).toBe(true);
     expect(JSON.stringify(list)).not.toMatch(/ownerTokenHash|"hidden"/);
   });
 

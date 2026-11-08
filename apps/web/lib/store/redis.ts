@@ -1,7 +1,8 @@
 import { Redis } from "@upstash/redis";
+import { GRAVE_CHANNELS } from "./channels";
 import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../reports";
 import type { Grave, GraveDecor, ReviveResponse } from "../types";
-import { DECOR, HIDDEN, K } from "./keys";
+import { chKeys, DECOR, HIDDEN, K } from "./keys";
 import {
   FLOWER_TTL_SEC,
   REPORT_HIDE_THRESHOLD,
@@ -82,22 +83,37 @@ const parseDecor = (raw: string | null | undefined) => (raw ? (JSON.parse(raw) a
 export const encode = (g: Grave) => JSON.stringify({ ...g, hidden: undefined, decor: undefined });
 const isGraveField = (field: string) => !field.startsWith(HIDDEN) && !field.startsWith(DECOR);
 
+/** 이 프로젝트에서 묘비를 둘 수 있는 채널 */
+const CHANNELS = Array.from({ length: GRAVE_CHANNELS }, (_, i) => i + 1);
+
 export class RedisStore implements GraveStore {
   private redis: Redis;
+  /** 묘비 id → 채널. 묘비는 채널을 옮기지 않으므로 한 번 찾으면 인스턴스 안에서 다시 묻지 않는다 */
+  private channels = new Map<string, number>();
 
   constructor(conn: { url: string; token: string }) {
     // 응답을 원문 문자열로 받는다. 자동 JSON 파싱을 켜 두면 숫자처럼 생긴 id("1e5..")가 숫자로 바뀔 수 있다.
     this.redis = new Redis({ ...conn, automaticDeserialization: false });
   }
 
-  /** 명령 3개를 파이프라인 1회로. TODO: 묘비가 1,000개를 넘으면 graves:created 기준으로 페이지를 나눈다 */
-  async list(): Promise<GraveRecord[]> {
-    const [meta, revive, flower] = await this.redis
-      .pipeline()
-      .hgetall(K.meta)
-      .zrange(K.revive, 0, -1, { withScores: true })
-      .zrange(K.flower, 0, -1, { withScores: true })
-      .exec<[string[] | null, string[], string[]]>();
+  /** 묘비의 채널 (기록이 없으면 채널 개편 전 묘비 = 1채널) */
+  private async channelOf(id: string): Promise<number> {
+    let ch = this.channels.get(id);
+    if (ch === undefined) {
+      ch = Number((await this.redis.hget<string>(K.graveChannel, id)) ?? 1);
+      if (this.channels.size > 10_000) this.channels.clear();
+      this.channels.set(id, ch);
+    }
+    return ch;
+  }
+
+  private async keysOf(id: string) {
+    const channel = await this.channelOf(id);
+    return { channel, ...chKeys(channel) };
+  }
+
+  /** 한 채널의 메타 해시·랭킹 두 개 → 묘비 목록 */
+  private static records(channel: number, meta: string[] | null, revive: string[], flower: string[]): GraveRecord[] {
     const fields = pairs(meta);
     const revives = pairs(revive);
     const flowers = pairs(flower);
@@ -105,6 +121,7 @@ export class RedisStore implements GraveStore {
       .filter(([field]) => isGraveField(field))
       .map(([id, raw]) => ({
         ...parse(raw),
+        channel,
         hidden: fields.has(HIDDEN + id) || undefined,
         decor: parseDecor(fields.get(DECOR + id)),
         flowers: Number(flowers.get(id) ?? 0),
@@ -112,18 +129,43 @@ export class RedisStore implements GraveStore {
       }));
   }
 
+  /** 명령 3개를 파이프라인 1회로. TODO: 한 채널 묘비가 1,000개를 넘으면 created 기준으로 페이지를 나눈다 */
+  async list(channel: number): Promise<GraveRecord[]> {
+    const k = chKeys(channel);
+    const [meta, revive, flower] = await this.redis
+      .pipeline()
+      .hgetall(k.meta)
+      .zrange(k.revive, 0, -1, { withScores: true })
+      .zrange(k.flower, 0, -1, { withScores: true })
+      .exec<[string[] | null, string[], string[]]>();
+    return RedisStore.records(channel, meta, revive, flower);
+  }
+
+  /** 모든 채널을 파이프라인 1회로 (채널마다 명령 3개) */
+  async listAll(): Promise<GraveRecord[]> {
+    const p = this.redis.pipeline();
+    for (const ch of CHANNELS) {
+      const k = chKeys(ch);
+      p.hgetall(k.meta).zrange(k.revive, 0, -1, { withScores: true }).zrange(k.flower, 0, -1, { withScores: true });
+    }
+    const r = await p.exec<(string[] | null)[]>();
+    return CHANNELS.flatMap((ch, i) => RedisStore.records(ch, r[i * 3], r[i * 3 + 1] ?? [], r[i * 3 + 2] ?? []));
+  }
+
   async get(id: string): Promise<GraveRecord | null> {
+    const k = await this.keysOf(id);
     const [raw, hidden, decor, revives, flowers] = await this.redis
       .pipeline()
-      .hget(K.meta, id)
-      .hexists(K.meta, HIDDEN + id)
-      .hget(K.meta, DECOR + id)
-      .zscore(K.revive, id)
-      .zscore(K.flower, id)
+      .hget(k.meta, id)
+      .hexists(k.meta, HIDDEN + id)
+      .hget(k.meta, DECOR + id)
+      .zscore(k.revive, id)
+      .zscore(k.flower, id)
       .exec<[Raw, number, Raw, Raw, Raw]>();
     if (!raw) return null;
     return {
       ...parse(raw),
+      channel: k.channel,
       hidden: Number(hidden) === 1 || undefined,
       decor: parseDecor(decor),
       flowers: Number(flowers ?? 0),
@@ -132,42 +174,50 @@ export class RedisStore implements GraveStore {
   }
 
   async put(grave: Grave): Promise<void> {
+    const channel = grave.channel ?? 1;
+    const k = chKeys(channel);
+    this.channels.set(grave.id, channel);
     await this.redis
       .multi()
-      .hset(K.meta, { [grave.id]: encode(grave) })
-      .zadd(K.created, { score: grave.createdAt, member: grave.id })
+      .hset(k.meta, { [grave.id]: encode({ ...grave, channel }) })
+      .zadd(k.created, { score: grave.createdAt, member: grave.id })
+      .hset(K.graveChannel, { [grave.id]: String(channel) })
       .exec();
   }
 
   async remove(id: string): Promise<Grave | null> {
-    const raw = await this.redis.hget<string>(K.meta, id);
+    const k = await this.keysOf(id);
+    const raw = await this.redis.hget<string>(k.meta, id);
     if (!raw) return null;
     // flower:{id}:{visitorId} 키는 SCAN 없이 찾을 수 없으므로 24시간 TTL로 저절로 사라지게 둔다
     await this.redis
       .multi()
-      .hdel(K.meta, id, HIDDEN + id, DECOR + id)
-      .zrem(K.created, id)
-      .zrem(K.revive, id)
-      .zrem(K.flower, id)
+      .hdel(k.meta, id, HIDDEN + id, DECOR + id)
+      .zrem(k.created, id)
+      .zrem(k.revive, id)
+      .zrem(k.flower, id)
       .zrem(K.reported, id)
+      .hdel(K.graveChannel, id)
       .del(K.revivers(id), K.reviveEarned(id), K.reports(id), K.reporters(id), K.reportLog(id), K.decor(id))
       .exec();
-    return parse(raw);
+    return { ...parse(raw), channel: k.channel };
   }
 
   async setHidden(id: string, hidden: boolean): Promise<boolean> {
+    const k = await this.keysOf(id);
     const r = await this.redis.eval<string[], number>(
       SET_HIDDEN_LUA,
-      [K.meta, K.reports(id), K.reporters(id), K.reported],
+      [k.meta, K.reports(id), K.reporters(id), K.reported],
       [id, hidden ? "1" : "0"],
     );
     return Number(r) === 1;
   }
 
   async resetReports(id: string): Promise<boolean> {
+    const k = await this.keysOf(id);
     const r = await this.redis.eval<string[], number>(
       RESET_REPORTS_LUA,
-      [K.meta, K.reports(id), K.reporters(id), K.reportLog(id), K.reported],
+      [k.meta, K.reports(id), K.reporters(id), K.reportLog(id), K.reported],
       [id],
     );
     return Number(r) === 1;
@@ -197,9 +247,10 @@ export class RedisStore implements GraveStore {
   }
 
   async flower(id: string, visitorId: string): Promise<number | "already" | null> {
+    const k = await this.keysOf(id);
     const r = await this.redis.eval<string[], [number, string?] | null>(
       FLOWER_LUA,
-      [K.meta, K.flowerMark(id, visitorId), K.flower],
+      [k.meta, K.flowerMark(id, visitorId), k.flower],
       [id, String(FLOWER_TTL_SEC)],
     );
     if (!r) return null;
@@ -211,9 +262,10 @@ export class RedisStore implements GraveStore {
   }
 
   async toggleRevive(id: string, visitorId: string): Promise<ReviveResponse | null> {
+    const k = await this.keysOf(id);
     const r = await this.redis.eval<string[], [number, string] | null>(
       REVIVE_LUA,
-      [K.meta, K.revivers(id), K.revive],
+      [k.meta, K.revivers(id), k.revive],
       [id, visitorId],
     );
     return r ? { revived: Number(r[0]) === 1, count: Number(r[1]) } : null;
@@ -226,10 +278,11 @@ export class RedisStore implements GraveStore {
     reason: ReportReason,
     at = Date.now(),
   ): Promise<"added" | "duplicate" | null> {
+    const k = await this.keysOf(id);
     const entry: ReportLogEntry = { at, reason };
     const r = await this.redis.eval<string[], number | null>(
       REPORT_LUA,
-      [K.meta, K.reports(id), K.reporters(id), K.reportLog(id), K.reported],
+      [k.meta, K.reports(id), K.reporters(id), K.reportLog(id), K.reported],
       [id, ipHash, visitorId, String(REPORT_HIDE_THRESHOLD), JSON.stringify(entry), String(REPORT_LOG_MAX)],
     );
     if (r === null) return null;

@@ -22,7 +22,7 @@ const MAX_SAMPLES = 32;
  * 샘플 간격은 서버 틱이 아니라 상대의 전송 주기(≥100ms)를 따르므로 그 기준으로 잡는다 */
 const GAP_MS = SEND_INTERVAL_MS * 2;
 
-const moving = (s: StateId) => s === STATE.walk || s === STATE.run;
+const moving = (s: StateId) => s === STATE.walk || s === STATE.run || s === STATE.jump;
 
 export class Interpolator {
   private buf: Sample[] = [];

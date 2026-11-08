@@ -12,13 +12,16 @@ import {
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES } from "@/lib/economy";
 import { durationLabel, effectLabel, KIND_LABELS } from "../account/items";
 import Dialog from "../ui/Dialog";
+import ItemIcon from "../ui/ItemIcon";
+import { InquiryButton } from "../notice/InquiryDialog";
 import styles from "./GuideDialog.module.css";
 
 const CONTROLS: [string, string, string][] = [
   ["걷기", "WASD · 방향키", "왼쪽 아래 조이스틱"],
   ["달리기", "Shift 누른 채 걷기", "달리기 버튼"],
+  ["점프 (묘비를 넘어가요)", "Space", "점프 버튼"],
   ["앉기·일어서기", "X 또는 C (벤치·의자 근처면 그 자리에)", "앉기 버튼 (근처에 자리가 있으면 빛나요)"],
-  ["묘비 보기·말 걸기", "E 또는 Space", "상호작용 버튼"],
+  ["묘비 보기·말 걸기", "E", "상호작용 버튼"],
   ["확대·축소", "마우스 휠 · ＋/－", "＋/－ 버튼"],
   ["둘러보기", "오른쪽 버튼으로 끌기", "—"],
   ["시점 되돌리기", "내 캐릭터로 버튼", "내 캐릭터로 버튼"],
@@ -97,8 +100,13 @@ export default function GuideDialog({ onClose }: { onClose: () => void }) {
               {ITEMS.map((item) => (
                 <tr key={item.id}>
                   <th scope="row">
-                    {item.name}
-                    <span className={styles.note}>{KIND_LABELS[item.kind]}</span>
+                    <span className={styles.itemName}>
+                      <ItemIcon itemId={item.id} scale={3} />
+                      <span>
+                        {item.name}
+                        <span className={styles.note}>{KIND_LABELS[item.kind]}</span>
+                      </span>
+                    </span>
                   </th>
                   <td>{item.price}</td>
                   <td>{effectLabel(item)}</td>
@@ -169,6 +177,11 @@ export default function GuideDialog({ onClose }: { onClose: () => void }) {
             화면 왼쪽 아래의 [내 묘비] 버튼을 누르면 내가 세운 묘비 목록(자리·헌화·살려주세요 수)이 나오고, 고르면 그
             앞으로 바로 가요. 하나뿐이면 누르자마자 가요. 지도에도 내 묘비가 표시돼요.
           </p>
+        </section>
+        <section className={styles.inquiry}>
+          <h3>문의</h3>
+          <p>버그·제안·계정 문제는 여기로 알려 주세요.</p>
+          <InquiryButton />
         </section>
       </div>
     </Dialog>

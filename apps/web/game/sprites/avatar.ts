@@ -9,13 +9,15 @@ export const AV_H = 20;
 /** 스프라이트 원점 (발바닥) */
 export const AV_ORIGIN_Y = 19 / AV_H;
 
-export const AV_COLS = 14;
+export const AV_COLS = 15;
 export const AV_ANIM = {
   idle: { col: 0, frames: 2, fps: 2 },
   walk: { col: 2, frames: 4, fps: 8 },
   run: { col: 6, frames: 6, fps: 13 },
   sitGround: { col: 12, frames: 1, fps: 1 },
   sitChair: { col: 13, frames: 1, fps: 1 },
+  /** 점프: 다리를 웅크린 프레임 (그림자 없음 — 높이는 그리는 쪽에서 띄우고 그림자는 바닥에 따로) */
+  jump: { col: 14, frames: 1, fps: 1 },
 } as const;
 
 type View = "down" | "side" | "up";
@@ -28,6 +30,8 @@ type Pose = {
   f0: [number, number];
   f1: [number, number];
   sit: 0 | 1 | 2; // 0 서기, 1 바닥, 2 의자
+  /** 공중 (점프): 발밑 그림자를 그리지 않는다 */
+  air?: boolean;
 };
 
 type Pal = {
@@ -95,7 +99,8 @@ function framesFor(view: View): Pose[] {
     if (side) run.push(P(bob, [Math.round(-3 * s), s < -0.3 ? -1 : 0], [Math.round(3 * s), s > 0.3 ? -1 : 0], 1));
     else run.push(P(bob, [0, s > 0.3 ? -2 : 0], [0, s < -0.3 ? -2 : 0]));
   }
-  return [...idle, ...walk, ...run, P(0, [0, 0], [0, 0], 0, 1), P(0, [0, 0], [0, 0], 0, 2)];
+  const jump: Pose = side ? { ...P(0, [-2, -1], [2, -2]), air: true } : { ...P(0, [0, -1], [0, -1]), air: true };
+  return [...idle, ...walk, ...run, P(0, [0, 0], [0, 0], 0, 1), P(0, [0, 0], [0, 0], 0, 2), jump];
 }
 
 /** 프레임 하나를 그린다 (오른쪽을 보는 옆모습 기준, 왼쪽은 좌우 반전) */
@@ -219,8 +224,8 @@ function drawFrame(view: View, pose: Pose, pal: Pal, gear: Gear): Grid {
   // 등불 창은 외곽선 뒤에도 밝게 (빛나는 점)
   if (gear.lantern) drawLanternGlow(g, view, cx, hy);
 
-  // 발밑 그림자 (외곽선 뒤, 투명한 곳에만)
-  if (pose.sit !== 2) {
+  // 발밑 그림자 (외곽선 뒤, 투명한 곳에만). 공중에서는 바닥에 따로 그린다
+  if (pose.sit !== 2 && !pose.air) {
     for (let x = 3; x < 13; x++) {
       const y = 19;
       if (!g.filled(x, y)) g.set(x, y, 0x000000, x === 3 || x === 12 ? 40 : 80);

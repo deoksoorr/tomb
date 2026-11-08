@@ -56,3 +56,7 @@
 .counts {
   flex: none;
 }
+
+.meta[data-elsewhere="true"] {
+  color: var(--candle);
+}

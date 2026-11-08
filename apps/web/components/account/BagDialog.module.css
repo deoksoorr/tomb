@@ -1,0 +1,97 @@
+.bag {
+  display: grid;
+  gap: 16px;
+}
+
+.state,
+.empty {
+  color: var(--muted);
+  text-align: center;
+}
+
+.state {
+  padding: 24px 0;
+}
+
+.section {
+  display: grid;
+  gap: 8px;
+}
+
+.heading {
+  color: var(--bone);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.list {
+  display: grid;
+  gap: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 4px 8px 4px 4px;
+  background: var(--bg-deep);
+}
+
+.row svg {
+  flex: none;
+}
+
+.worn {
+  opacity: 0.8;
+}
+
+.main {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.count {
+  color: var(--candle);
+}
+
+.meta {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.place {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.placeChoice {
+  display: grid;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+
+.placeChoice:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.notice {
+  min-height: 1.6em;
+  color: var(--candle);
+  text-align: center;
+}
