@@ -1,6 +1,7 @@
 import { pickChannel, signJoinToken, type LobbyInfo } from "@tomb/protocol";
 import { z } from "zod";
 import { env } from "./env";
+import { HttpError } from "./http";
 import type { JoinResponse } from "./types";
 
 const LOBBY_TIMEOUT_MS = 1500;
@@ -31,12 +32,17 @@ export async function fetchLobbyServer(timeoutMs = LOBBY_TIMEOUT_MS): Promise<Lo
 }
 
 /**
- * 자동 배정. 로비가 응답하지 않으면 1채널로 보낸다
- * (만석이면 Channel DO가 4001로 거절하고 클라이언트가 다른 채널로 재시도한다). null = 전체 만석.
+ * 채널 결정. "auto"면 로비를 보고 pickChannel로 고르고(null = 전체 만석 → 관람 모드),
+ * 직접 고른 채널은 로비의 maxChannels 범위인지 확인한다.
+ * 로비가 응답하지 않으면 auto는 1채널, 직접 고른 채널은 입력 검증(1~99)만으로 보낸다
+ * (만석이면 Channel DO가 4001로 거절하고 클라이언트가 다른 채널로 재시도한다).
  */
-async function autoChannel(): Promise<number | null> {
+async function resolveChannel(requested: number | "auto"): Promise<number | null> {
   const lobby = await fetchLobbyServer();
-  return lobby ? pickChannel(lobby) : 1;
+  if (requested === "auto") return lobby ? pickChannel(lobby) : 1;
+  if (lobby && requested > lobby.maxChannels)
+    throw new HttpError(400, "INVALID_INPUT", `채널은 1~${lobby.maxChannels} 중에서 골라 주세요.`);
+  return requested;
 }
 
 export async function issueJoin(
@@ -44,9 +50,10 @@ export async function issueJoin(
   claims: { visitorId: string; name: string; color: string },
 ): Promise<JoinResponse> {
   const wsBase = env.realtimeWsUrl();
-  const channel = requested === "auto" ? await autoChannel() : requested;
+  const channel = await resolveChannel(requested);
   if (channel === null) return { mode: "spectator" };
 
-  const token = await signJoinToken(env.joinSecret(), claims);
+  // 토큰은 배정된 채널 하나에만 유효하다 (토큰 하나로 여러 채널 자리를 차지하지 못하게)
+  const token = await signJoinToken(env.joinSecret(), { ...claims, channel });
   return { mode: "channel", channel, token, wsUrl: `${wsBase}/ch/${channel}?t=${encodeURIComponent(token)}` };
 }

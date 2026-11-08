@@ -5,6 +5,7 @@ import * as Phaser from "phaser";
 // 근처 묘비 툴팁)만 CSS 웹폰트(Galmuri11)로 캔버스에 그려 비트맵 폰트로 등록하고, 새 글자가 보이면 이어 붙인다.
 // 각 글리프는 픽셀이 뭉개지지 않게 알파를 이진화하고, 어두운 외곽선을 1px 둘러 어떤 바닥 위에서도 읽히게 한다.
 // 라벨은 월드에 1/zoom 배율로 놓아 화면에서 1:1 픽셀(12px)로 보인다.
+// 새 글자를 그리면 표시만 해 두고, GPU 업로드(1024² 전체)는 렌더 직전에 프레임당 최대 1회만 한다.
 
 export const FONT_KEY = "galmuri-dyn";
 const TEX_KEY = "glyph-atlas";
@@ -28,6 +29,7 @@ export class GlyphAtlas {
   private cx = 0;
   private cy = 0;
   private full = false;
+  private dirty = false;
 
   constructor(scene: Phaser.Scene, family = "Galmuri11") {
     if (scene.textures.exists(TEX_KEY)) scene.textures.remove(TEX_KEY);
@@ -60,18 +62,25 @@ export class GlyphAtlas {
     scene.cache.bitmapFont.remove(FONT_KEY);
     scene.cache.bitmapFont.add(FONT_KEY, { data, texture: TEX_KEY, frame: null, fromAtlas: false });
     this.ensure(" ?…·");
+    scene.sys.events.on(Phaser.Scenes.Events.PRE_RENDER, this.flush, this);
+    scene.sys.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.sys.events.off(Phaser.Scenes.Events.PRE_RENDER, this.flush, this));
   }
 
-  /** text에 쓰인 글자를 아틀라스에 준비한다. 새로 그린 게 있으면 텍스처를 다시 올린다 */
+  /** 렌더 직전: 이번 프레임에 글자가 추가됐으면 텍스처를 한 번만 다시 올린다 */
+  private flush(): void {
+    if (!this.dirty) return;
+    this.dirty = false;
+    this.tex.refresh();
+  }
+
+  /** text에 쓰인 글자를 아틀라스에 준비한다 (글자 정보는 즉시, 텍스처 업로드는 렌더 직전에) */
   ensure(text: string): void {
-    let added = false;
     for (let i = 0; i < text.length; i++) {
       const code = text.charCodeAt(i);
       // 서로게이트(이모지 등)와 제어문자는 건너뛴다. BitmapText도 charCodeAt 단위로 그린다
       if (code < 32 || (code >= 0xd800 && code <= 0xdfff) || this.chars[code]) continue;
-      if (this.addGlyph(code)) added = true;
+      if (this.addGlyph(code)) this.dirty = true;
     }
-    if (added) this.tex.refresh();
   }
 
   private addGlyph(code: number): boolean {

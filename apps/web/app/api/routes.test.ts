@@ -1,7 +1,7 @@
 import { verifyJoinToken, type LobbyInfo } from "@tomb/protocol";
 import { getPayloadFromClientToken } from "@vercel/blob/client";
 import { NextRequest } from "next/server";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { REALTIME_WS_URL } from "@/lib/realtime";
 import type {
   ApiError,
@@ -158,6 +158,22 @@ describe("묘비 CRUD", () => {
     const gone = await graveById.GET(call(`/api/graves/${grave.id}`), ctx(grave.id));
     expect(gone.status).toBe(404);
     expect((await errorOf(gone)).code).toBe("NOT_FOUND");
+  });
+
+  it("상세: 공유 캐시 금지, IP당 분당 120회 (쿠키를 바꿔도 같은 IP면 같이 센다)", async () => {
+    const ip = "10.5.5.5";
+    const detail = async (cookie?: string) =>
+      graveById.GET(call("/api/graves/mock-001", { headers: { "x-forwarded-for": ip, ...(cookie && { cookie }) } }), ctx("mock-001"));
+    const first = await detail();
+    expect(first.status).toBe(200);
+    expect(first.headers.get("cache-control")).toBe("private, no-store");
+    for (let i = 1; i < 119; i++) await detail();
+    expect((await detail((await newVisitor()).cookie)).status).toBe(200);
+    const limited = await detail((await newVisitor()).cookie);
+    expect(limited.status).toBe(429);
+    expect((await errorOf(limited)).code).toBe("RATE_LIMITED");
+    expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect((await graveById.GET(call("/api/graves/mock-001", { headers: { "x-forwarded-for": "10.5.5.6" } }), ctx("mock-001"))).status).toBe(200);
   });
 
   it("목업 묘비(소유자 없음)는 아무도 고칠 수 없다", async () => {
@@ -351,8 +367,12 @@ describe("POST /api/join", () => {
     maxChannels: counts.length,
     threshold: 0.8,
   });
+  // 기본은 로비 무응답. 로비가 필요한 테스트는 mockResolvedValueOnce로 덮는다
+  beforeEach(() => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no lobby"));
+  });
 
-  it("auto: 로비를 보고 채널을 고르고, 60초짜리 토큰과 wsUrl을 준다", async () => {
+  it("auto: 로비를 보고 채널을 고르고, 그 채널 전용 60초짜리 토큰과 wsUrl을 준다", async () => {
     const v = await newVisitor();
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json(lobby([35, 12, 0])));
     const res = (await (await join.POST(call("/api/join", { method: "POST", visitor: v, body }))).json()) as JoinResponse;
@@ -360,20 +380,33 @@ describe("POST /api/join", () => {
     expect(res.channel).toBe(2);
     expect(res.wsUrl).toBe(`${REALTIME_WS_URL}/ch/2?t=${encodeURIComponent(res.token)}`);
     const claims = await verifyJoinToken("dev-join-secret-change-me", res.token);
-    expect(claims).toMatchObject({ visitorId: v.visitorId, name: "새벽코더", color: "#9fc5a8" });
+    expect(claims).toMatchObject({ visitorId: v.visitorId, name: "새벽코더", color: "#9fc5a8", channel: 2 });
     expect(claims!.exp - Math.floor(Date.now() / 1000)).toBeLessThanOrEqual(60);
   });
 
-  it("로비가 응답하지 않으면 1채널, 채널을 지정하면 그 채널", async () => {
+  it("로비가 응답하지 않으면 auto는 1채널, 직접 고른 채널은 1~99 검증만으로 그 채널", async () => {
     const v = await newVisitor();
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("timeout"));
     const auto = (await (await join.POST(call("/api/join", { method: "POST", visitor: v, body }))).json()) as JoinResponse;
     expect(auto).toMatchObject({ mode: "channel", channel: 1 });
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-    const picked = await join.POST(call("/api/join", { method: "POST", visitor: v, body: { ...body, channel: 7 } }));
-    expect(await picked.json()).toMatchObject({ mode: "channel", channel: 7 });
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const picked = (await (
+      await join.POST(call("/api/join", { method: "POST", visitor: v, body: { ...body, channel: 42 } }))
+    ).json()) as JoinResponse;
+    if (picked.mode !== "channel") throw new Error("channel 모드여야 한다");
+    expect(picked.channel).toBe(42);
+    expect((await verifyJoinToken("dev-join-secret-change-me", picked.token))?.channel).toBe(42);
+  });
+
+  it("로비를 알면 직접 고른 채널은 maxChannels 안이어야 한다", async () => {
+    const v = await newVisitor();
+    const pick = (channel: number) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json(lobby([3, 0, 0])));
+      return join.POST(call("/api/join", { method: "POST", visitor: v, body: { ...body, channel } }));
+    };
+    expect(await (await pick(3)).json()).toMatchObject({ mode: "channel", channel: 3 });
+    const over = await pick(4);
+    expect(over.status).toBe(400);
+    expect(await errorOf(over)).toEqual({ code: "INVALID_INPUT", message: "채널은 1~3 중에서 골라 주세요." });
   });
 
   it("로비 응답 형태가 이상하면 1채널", async () => {

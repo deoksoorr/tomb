@@ -24,25 +24,27 @@ describe("origins", () => {
 });
 
 describe("admit", () => {
-  const claims = { visitorId: "V1StGXR8_Z5jdHi6B-myT", name: "  달빛   산책 ", color: AVATAR_COLORS[2] };
+  const claims = { visitorId: "V1StGXR8_Z5jdHi6B-myT", name: "  달빛   산책 ", color: AVATAR_COLORS[2], channel: 3 };
 
   it("verifies the token and builds a ticket", async () => {
     const t = await admit(SECRET, await signJoinToken(SECRET, claims), 3, { x: 1, y: 2 });
     expect(t).toEqual({ visitorId: claims.visitorId, name: "달빛 산책", color: AVATAR_COLORS[2], channel: 3, spawn: { x: 1, y: 2 } });
   });
 
-  it("rejects bad signatures, expired tokens, missing secret and odd visitor ids", async () => {
+  it("rejects bad signatures, expired tokens, missing secret, odd visitor ids and other channels", async () => {
     const good = await signJoinToken(SECRET, claims);
-    expect(await admit("other-secret", good, 1, undefined)).toBeNull();
-    expect(await admit(undefined, good, 1, undefined)).toBeNull();
-    expect(await admit(SECRET, null, 1, undefined)).toBeNull();
-    expect(await admit(SECRET, "garbage", 1, undefined)).toBeNull();
-    expect(await admit(SECRET, await signJoinToken(SECRET, claims, -1), 1, undefined)).toBeNull();
-    expect(await admit(SECRET, await signJoinToken(SECRET, { ...claims, visitorId: "a b" }), 1, undefined)).toBeNull();
+    expect(await admit(SECRET, good, 3, undefined)).not.toBeNull();
+    expect(await admit(SECRET, good, 4, undefined)).toBeNull(); // 3채널용 토큰으로 4채널에 들어갈 수 없다
+    expect(await admit("other-secret", good, 3, undefined)).toBeNull();
+    expect(await admit(undefined, good, 3, undefined)).toBeNull();
+    expect(await admit(SECRET, null, 3, undefined)).toBeNull();
+    expect(await admit(SECRET, "garbage", 3, undefined)).toBeNull();
+    expect(await admit(SECRET, await signJoinToken(SECRET, claims, -1), 3, undefined)).toBeNull();
+    expect(await admit(SECRET, await signJoinToken(SECRET, { ...claims, visitorId: "a b" }), 3, undefined)).toBeNull();
   });
 
   it("clamps the name length and falls back to a preset color", async () => {
-    const t = await admit(SECRET, await signJoinToken(SECRET, { ...claims, name: "가".repeat(30), color: "red" }), 1, undefined);
+    const t = await admit(SECRET, await signJoinToken(SECRET, { ...claims, name: "가".repeat(30), color: "red" }), 3, undefined);
     expect(t?.name).toBe("가".repeat(12));
     expect(t?.color).toBe(AVATAR_COLORS[0]);
   });

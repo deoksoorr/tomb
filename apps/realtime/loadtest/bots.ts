@@ -155,6 +155,10 @@ const sentKey = (ch: number, sid: number, x: number, y: number) => `${ch}:${sid}
 // ── 봇 ──
 
 type Mode = "idle" | "ground" | "walk" | "seatWait" | "seated";
+/** 클라이언트(RealtimeClient)와 같은 ping 주기 */
+const PING_MS = 2000;
+/** Chromium이 클로징 핸드셰이크 뒤 서버의 TCP 종료를 기다리는 시간 */
+const BROWSER_CLOSE_TIMEOUT_MS = 2000;
 type Goal = { x: number; y: number; seatId?: string };
 
 /** 봇이 돌아다니는 범위: 의자·벤치가 있는 위쪽 구역 */
@@ -209,7 +213,7 @@ class Bot {
 
   /** 새 토큰을 서명해 접속하고 welcome 또는 close/HTTP 오류를 기다린다 */
   async connect(channel: number): Promise<ConnectResult> {
-    const token = await signJoinToken(SECRET, { visitorId: this.visitorId, name: this.name, color: this.color });
+    const token = await signJoinToken(SECRET, { visitorId: this.visitorId, name: this.name, color: this.color, channel });
     this.channel = channel;
     this.welcome = null;
     this.closed = null;
@@ -218,12 +222,24 @@ class Bot {
       headers: { Origin: ORIGIN },
     });
     this.ws = ws;
+    // 실제 클라이언트처럼 2초마다 ping (런타임이 자동으로 pong. DO는 깨지 않고, 서버의 유령 연결 정리 기준이 된다)
+    let ping: NodeJS.Timeout | undefined;
+    ws.on("open", () => (ping = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send(PING), PING_MS)));
+    // 브라우저(Chrome)처럼: close 프레임을 주고받은 뒤 서버가 2초 안에 TCP를 닫지 않으면 직접 끊는다(close 이벤트는 서버의 코드로 온다).
+    // 로컬 workerd는 서버가 먼저 닫은 hibernation 소켓의 TCP 정리를 DO의 다음 이벤트까지 미룬다. close 프레임 자체는 즉시 온다.
+    const closing = setInterval(() => {
+      if (ws.readyState !== WebSocket.CLOSING) return;
+      clearInterval(closing);
+      setTimeout(() => ws.terminate(), BROWSER_CLOSE_TIMEOUT_MS);
+    }, 100);
     return new Promise((resolve) => {
       ws.on("message", (data, isBinary) => {
         this.onMessage(data as Buffer, isBinary);
         if (this.welcome) resolve({ welcome: this.welcome });
       });
       ws.on("close", (code) => {
+        clearInterval(ping);
+        clearInterval(closing);
         if (this.ws === ws) {
           this.closed = { code, at: performance.now() };
           this.stop();
@@ -538,14 +554,19 @@ async function smoke(): Promise<void> {
   const evil = await fetch(`${HTTP_URL}/lobby`, { headers: { Origin: "https://evil.example" } });
   check("GET /lobby no CORS for other origins", evil.headers.get("access-control-allow-origin") === null);
 
-  const token = await signJoinToken(SECRET, { visitorId: newVisitorId(), name: "probe", color: AVATAR_COLORS[0] });
-  const expired = await signJoinToken(SECRET, { visitorId: newVisitorId(), name: "probe", color: AVATAR_COLORS[0] }, -10);
+  const otherCh = CHANNEL === 1 ? 2 : 1;
+  const probe = (channel: number) => ({ visitorId: newVisitorId(), name: "probe", color: AVATAR_COLORS[0], channel });
+  const token = await signJoinToken(SECRET, probe(CHANNEL));
+  const expired = await signJoinToken(SECRET, probe(CHANNEL), -10);
+  const wrongCh = await signJoinToken(SECRET, probe(otherCh));
   const r403 = await attempt(`/ch/${CHANNEL}?t=${token}`, "https://evil.example");
   check("bad Origin → HTTP 403", "status" in r403 && r403.status === 403, describeResult(r403));
   const r4003 = await attempt(`/ch/${CHANNEL}?t=forged.token`);
   check("forged token → 4003", "code" in r4003 && r4003.code === CLOSE.INVALID_TOKEN, describeResult(r4003));
   const r4003b = await attempt(`/ch/${CHANNEL}?t=${expired}`);
   check("expired token → 4003", "code" in r4003b && r4003b.code === CLOSE.INVALID_TOKEN, describeResult(r4003b));
+  const r4003c = await attempt(`/ch/${CHANNEL}?t=${wrongCh}`);
+  check("token issued for another channel → 4003", "code" in r4003c && r4003c.code === CLOSE.INVALID_TOKEN, describeResult(r4003c));
   const r4004 = await attempt(`/ch/0?t=${token}`);
   const r4004b = await attempt(`/ch/999?t=${token}`);
   check(
@@ -592,6 +613,11 @@ async function smoke(): Promise<void> {
   a.send({ t: "emote", kind: "flower", graveId: "g1" });
   check("emote relayed to others with sender sid", await waitFor(() => b.events.some((e) => e.t === "emote" && e.sid === a.sid), 1000));
   check("emote not echoed to sender", !a.events.some((e) => e.t === "emote"));
+  a.send({ t: "graveEvent", kind: "updated", graveId: "g9" });
+  b.send({ t: "graveEvent", kind: "updated", graveId: "g9" }); // 같은 묘비를 5초 안에 다시 → 채널에서 한 번만 중계
+  await sleep(300);
+  const g9 = (x: Bot) => x.events.filter((e) => e.t === "graveEvent" && e.graveId === "g9").length;
+  check("graveEvent for the same grave relayed once per 5s per channel", g9(a) + g9(b) === 1, `${g9(a)}+${g9(b)}`);
 
   // 아무도 움직이지 않으면 틱이 멈추고 DO가 hibernate된다(로컬 workerd는 유휴 약 10초 뒤).
   // 깨어난 뒤 소켓 attachment로 좌석·위치가 복원되는지 본다.
@@ -614,9 +640,16 @@ async function smoke(): Promise<void> {
   // 같은 visitorId로 두 번째 탭
   const a2 = new Bot("smokeA", { x: a.x, y: a.y }, a.visitorId);
   const ra2 = await a2.connect(CHANNEL);
-  check("duplicate visitor: old socket closed 4002", await waitFor(() => a.closed?.code === CLOSE.REPLACED, 1000), `${a.closed?.code}`);
+  check("duplicate visitor: old socket closed 4002", await waitFor(() => a.closed?.code === CLOSE.REPLACED, 3000), `${a.closed?.code}`);
   check("duplicate visitor: new socket keeps sid, resumed=true", isWelcome(ra2) && ra2.welcome.sid === a.sid && ra2.welcome.resumed);
   check("duplicate visitor: others see no leave", !b.leaves.has(a.sid));
+
+  // 같은 visitorId가 다른 채널에 들어가면 로비가 이전 채널의 자리를 4002로 정리한다
+  const a3 = new Bot("smokeA", { x: a.x, y: a.y }, a.visitorId);
+  const ra3 = await a3.connect(otherCh);
+  check(`same visitor joins channel ${otherCh} → welcome there`, isWelcome(ra3));
+  check(`…and its channel-${CHANNEL} socket is closed 4002 via the lobby`, await waitFor(() => a2.closed?.code === CLOSE.REPLACED, 3000), `${a2.closed?.code}`);
+  check(`…and channel-${CHANNEL} peers see it leave`, await waitFor(() => b.leaves.has(a.sid), 1000));
 
   // 초당 30메시지를 계속 보내면 10초 뒤 4008
   const f = new Bot("smokeFlood");
@@ -628,7 +661,7 @@ async function smoke(): Promise<void> {
   check("flood > 20 msg/s for 10s → 4008", kicked && f.closed?.code === CLOSE.RATE_LIMITED, `${f.closed?.code} after ${fmt((performance.now() - t0) / 1000)}s`);
   check("flooder's leave broadcast", await waitFor(() => b.leaves.has(f.sid), 1000));
 
-  await teardown([a2, b, c, f]);
+  await teardown([a3, b, c, f]);
 }
 
 async function scenario1(): Promise<void> {
@@ -765,6 +798,9 @@ function bench(): void {
       dropReservation: () => {},
       requestTick: () => {},
       countChanged: () => {},
+      lastPing: () => 0,
+      visitorJoined: () => {},
+      visitorLeft: () => {},
     },
   );
   const pos = conns.map((_, i) => ({ x: 60 + (i % 10) * 50, y: 60 + Math.floor(i / 10) * 80 }));
@@ -809,11 +845,11 @@ async function main(): Promise<void> {
   }
 
   if (allMetrics.length) {
-    console.log("\n| 측정 | 클라이언트 | 지연 p50 / p95 / max (ms) | 수신 Hz 평균 / 최소 | 수신 KB/s 평균 / 최대 | 스냅샷 간격 p95 (ms) | 봇 이벤트루프 p99 (ms) |");
-    console.log("|---|---|---|---|---|---|---|");
+    console.log("\n| 측정 | 클라이언트 | 지연 p50 / p95 / max (ms) | 1초 초과로 버린 샘플 | 수신 Hz 평균 / 최소 | 수신 KB/s 평균 / 최대 | 스냅샷 간격 p95 (ms) | 봇 이벤트루프 p99 (ms) |");
+    console.log("|---|---|---|---|---|---|---|---|");
     for (const m of allMetrics) {
       console.log(
-        `| ${m.label} | ${m.clients} | ${fmt(m.latency.p50)} / ${fmt(m.latency.p95)} / ${fmt(m.latency.max)} (n=${m.latency.n}) | ${fmt(m.hz.mean, 2)} / ${fmt(m.hz.min, 2)} | ${fmt(m.kbps.mean, 2)} / ${fmt(m.kbps.max, 2)} | ${fmt(m.intervalP95)} | ${fmt(m.loopP99)} |`,
+        `| ${m.label} | ${m.clients} | ${fmt(m.latency.p50)} / ${fmt(m.latency.p95)} / ${fmt(m.latency.max)} (n=${m.latency.n}) | ${m.latency.stale} | ${fmt(m.hz.mean, 2)} / ${fmt(m.hz.min, 2)} | ${fmt(m.kbps.mean, 2)} / ${fmt(m.kbps.max, 2)} | ${fmt(m.intervalP95)} | ${fmt(m.loopP99)} |`,
       );
     }
   }

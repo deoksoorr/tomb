@@ -25,6 +25,16 @@ describe("movement", () => {
     expect(r.dir).toBe(DIR.left);
   });
 
+  it("joystick deadzone has hysteresis (enter 0.2 / exit 0.12)", () => {
+    const out = emptyMove();
+    expect(resolveMove({ ax: 0.15, ay: 0, run: false }, DIR.down, out).moving).toBe(false);
+    expect(resolveMove({ ax: 0.21, ay: 0, run: false }, DIR.down, out).moving).toBe(true);
+    // 걷는 중엔 0.15로 떨어져도 계속 걷는다
+    expect(resolveMove({ ax: 0.15, ay: 0, run: false }, DIR.right, out).moving).toBe(true);
+    expect(resolveMove({ ax: 0.11, ay: 0, run: false }, DIR.right, out).moving).toBe(false);
+    expect(resolveMove({ ax: 0.15, ay: 0, run: false }, DIR.right, out).moving).toBe(false);
+  });
+
   it("small analog tilt walks slower but not below 40%", () => {
     const r = resolveMove({ ax: 0.25, ay: 0, run: false }, DIR.down, emptyMove());
     expect(r.vx).toBeGreaterThanOrEqual(WALK_SPEED * 0.4 - 1e-9);

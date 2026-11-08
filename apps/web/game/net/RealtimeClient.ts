@@ -1,6 +1,7 @@
 import {
   CLOSE,
   MAX_JOIN_RETRIES,
+  STATE,
   PING,
   PONG,
   SPECTATOR_POLL_MS,
@@ -22,6 +23,7 @@ import { fetchLobby } from "@/lib/realtime";
 import type { ApiError, JoinRequest, JoinResponse } from "@/lib/types";
 import { bridge, type NetMode } from "../bridge";
 import { backoffDelay } from "./backoff";
+import { isPermanentJoinError, JoinLimiter, reusableToken, utf8Bytes, type CachedToken } from "./joinPolicy";
 import { MoveThrottle, type NetPose } from "./sendThrottle";
 
 // 실시간 연결 (명세 3-2, 4-1).
@@ -31,6 +33,9 @@ import { MoveThrottle, type NetPose } from "./sendThrottle";
 //  - 끊기면 0.5→1→2→4→8s(지터) 백오프. 실시간 서버가 없어도 게임은 혼자 그대로 돌아간다 (mode "offline")
 //  - 4001 만석: 로비를 보고 다른 채널로 최대 3회 → 그래도 안 되면 관람 모드(30초마다 로비 확인 후 합류)
 //  - 4002 다른 탭에서 접속: "replaced", 재접속하지 않음 / 4003 토큰 만료: 새 토큰으로 바로 재접속 / 4008 과다 전송
+//  - 4004 잘못된 요청: 자동 배정으로 다시 / /api/join 400: 재시도해도 소용없으니 offline + 안내 1회
+//  - 클라이언트가 끊는 경우: 의도적 퇴장(stop·채널 이동)만 1000, 타임아웃 등은 4000
+//    (서버는 1000을 "떠남"으로 보고 재연결 유예 없이 자리를 비운다)
 
 export type NetCallbacks = {
   getPose(out: NetPose): NetPose;
@@ -60,7 +65,10 @@ class JoinError extends Error {
 
 const PING_MS = 2000;
 const PONG_TIMEOUT_MS = 10_000;
-const WELCOME_TIMEOUT_MS = 10_000;
+/** 소켓을 만든 순간부터 welcome까지 */
+const CONNECT_TIMEOUT_MS = 8_000;
+/** 클라이언트가 연결을 버릴 때 (타임아웃·교체). 서버가 재연결 유예를 적용한다 */
+const CLOSE_CLIENT_DROP = 4000;
 const STATS_MS = 1000;
 /** 이만큼 재시도해도 안 되면 "reconnecting" 대신 "offline"으로 표시 (유예 20초를 넘김) */
 const RECONNECTING_ATTEMPTS = 5;
@@ -91,6 +99,9 @@ export class RealtimeClient {
   private readonly throttle = new MoveThrottle();
   private hidden = false;
   private pendingWarp: { x: number; y: number } | null = null;
+  private readonly joinLimiter = new JoinLimiter();
+  private token: CachedToken<Extract<JoinResponse, { mode: "channel" }>> | null = null;
+  private hiddenIdleTimer: ReturnType<typeof setTimeout> | null = null;
   private lastWarpAt = -Infinity;
   private lastToast = "";
   // 통계
@@ -203,15 +214,15 @@ export class RealtimeClient {
   private async connect(channel: number | "auto"): Promise<void> {
     const gen = ++this.gen;
     this.clearRetry();
-    let res: JoinResponse;
+    let res: JoinResponse | null;
     try {
-      res = await this.join(channel);
+      res = await this.join(channel, gen);
     } catch (e) {
       if (gen !== this.gen || this.stopped) return;
       this.onJoinFailed(e);
       return;
     }
-    if (gen !== this.gen || this.stopped) return;
+    if (!res || gen !== this.gen || this.stopped) return;
     if (res.mode === "spectator") {
       this.enterSpectator();
       return;
@@ -219,7 +230,16 @@ export class RealtimeClient {
     this.openSocket(res, gen);
   }
 
-  private async join(channel: number | "auto"): Promise<JoinResponse> {
+  /** 토큰을 얻는다. 기다리는 사이 흐름이 낡으면 null */
+  private async join(channel: number | "auto", gen: number): Promise<JoinResponse | null> {
+    const reuse = reusableToken(this.token, channel, Date.now());
+    if (reuse) return reuse;
+    const wait = this.joinLimiter.delay(Date.now());
+    if (wait > 0) {
+      await new Promise((r) => setTimeout(r, wait));
+      if (gen !== this.gen || this.stopped) return null;
+    }
+    this.joinLimiter.record(Date.now());
     const body: JoinRequest = { channel, name: this.opts.name, color: this.opts.color };
     const post = () =>
       fetch("/api/join", {
@@ -233,16 +253,26 @@ export class RealtimeClient {
     if (r.status === 401) {
       // 방문자 쿠키가 없거나 만료 → 세션을 받고 한 번 더
       await fetch("/api/session", { method: "POST", credentials: "same-origin" }).catch(() => null);
+      this.joinLimiter.record(Date.now());
       r = await post();
     }
     if (!r.ok) {
       const err = (await r.json().catch(() => null)) as ApiError | null;
       throw new JoinError(r.status, err?.error?.message ?? `join failed (${r.status})`);
     }
-    return (await r.json()) as JoinResponse;
+    const res = (await r.json()) as JoinResponse;
+    if (res.mode === "channel") this.token = { channel: res.channel, at: Date.now(), res };
+    return res;
   }
 
   private onJoinFailed(e: unknown): void {
+    if (e instanceof JoinError && isPermanentJoinError(e.status)) {
+      // 이름·색 검증 실패 등: 몇 번을 다시 해도 같다 → 혼자 걷기(offline)로 두고 한 번만 알린다
+      this.toast(e.message || "실시간 접속 정보를 확인할 수 없어 혼자 걷는 중이에요.");
+      this.clearRetry();
+      this.setMode("offline");
+      return;
+    }
     if (e instanceof JoinError && e.status >= 400 && e.status < 500 && e.status !== 408) {
       // 이름 검증 실패·레이트리밋 등: 사용자에게 알리고 천천히 다시 시도
       this.toast(e.message);
@@ -253,6 +283,10 @@ export class RealtimeClient {
   }
 
   private openSocket(res: Extract<JoinResponse, { mode: "channel" }>, gen: number): void {
+    // 남아 있는 소켓(관람 모드 폴링·재시도가 겹친 경우)을 먼저 정리한다
+    if (this.ws) this.closeSocket(CLOSE_CLIENT_DROP, "superseded");
+    if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
+    this.welcomeTimer = null;
     const p = this.cb.getPose(this.pose);
     const sep = res.wsUrl.includes("?") ? "&" : "?";
     const url = `${res.wsUrl}${sep}x=${Math.round(p.x)}&y=${Math.round(p.y)}`;
@@ -266,10 +300,8 @@ export class RealtimeClient {
     ws.binaryType = "arraybuffer";
     this.ws = ws;
     this.connectingTo = res.channel;
-    ws.onopen = () => {
-      if (this.ws !== ws) return;
-      this.welcomeTimer = setTimeout(() => this.drop(ws, 4000), WELCOME_TIMEOUT_MS);
-    };
+    // 소켓을 만든 순간부터: 열리지도, welcome이 오지도 않으면 버린다
+    this.welcomeTimer = setTimeout(() => this.drop(ws, CLOSE_CLIENT_DROP), CONNECT_TIMEOUT_MS);
     ws.onmessage = (ev) => {
       if (this.ws === ws && gen === this.gen) this.onMessage(ev.data);
     };
@@ -281,7 +313,7 @@ export class RealtimeClient {
 
   private onMessage(data: unknown): void {
     if (typeof data === "string") {
-      this.bytesIn += data.length;
+      this.bytesIn += utf8Bytes(data);
       if (data === PONG) {
         const now = performance.now();
         this.lastPongAt = now;
@@ -361,7 +393,8 @@ export class RealtimeClient {
     try {
       ws.onclose = null;
       ws.onmessage = null;
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close(1000);
+      // 1000으로 닫으면 서버가 의도적 퇴장으로 보고 유예 없이 자리를 비운다 → 4000
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close(CLOSE_CLIENT_DROP);
     } catch {
       // 무시
     }
@@ -380,8 +413,14 @@ export class RealtimeClient {
         this.channel = null;
         this.setMode("replaced");
         return;
+      case CLOSE.BAD_REQUEST:
+        this.token = null;
+        this.setMode(this.everOnline ? "reconnecting" : "connecting");
+        void this.connect("auto");
+        return;
       case CLOSE.INVALID_TOKEN:
         // 토큰 만료: 새 토큰으로 곧바로 (반복되면 백오프)
+        this.token = null;
         this.consecutiveInvalid++;
         if (this.consecutiveInvalid <= 2) {
           this.setMode(this.everOnline ? "reconnecting" : "connecting");
@@ -477,6 +516,8 @@ export class RealtimeClient {
 
   private clearTimers(): void {
     this.clearRetry();
+    if (this.hiddenIdleTimer) clearTimeout(this.hiddenIdleTimer);
+    this.hiddenIdleTimer = null;
     this.stopSpectatorPoll();
     this.stopPing();
     if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
@@ -565,6 +606,25 @@ export class RealtimeClient {
     const hidden = document.hidden;
     if (this.hidden && !hidden) this.throttle.reset(); // 돌아오면 현재 상태 1회
     this.hidden = hidden;
-    if (!hidden) this.lastPongAt = performance.now();
+    if (!hidden) {
+      this.lastPongAt = performance.now();
+      if (this.hiddenIdleTimer) clearTimeout(this.hiddenIdleTimer);
+      this.hiddenIdleTimer = null;
+      return;
+    }
+    // 걷던 중에 탭이 숨으면 게임 루프가 멈춘다 → 다른 사람 화면에서 계속 걷지 않도록 멈춤(idle)을 1회 알리고 쉰다
+    if (this.online && this.throttle.lastWasMoving) {
+      const wait = this.throttle.waitMs(performance.now());
+      this.hiddenIdleTimer = setTimeout(() => {
+        this.hiddenIdleTimer = null;
+        if (!this.hidden || !this.online) return;
+        const pose = this.cb.getPose(this.pose);
+        pose.state = STATE.idle;
+        const now = performance.now();
+        if (this.throttle.waitMs(now) > 0) return;
+        const seq = this.throttle.markSent(now, pose);
+        this.ws!.send(encodeMove({ x: pose.x, y: pose.y, state: pose.state, dir: pose.dir, seq }));
+      }, wait);
+    }
   };
 }

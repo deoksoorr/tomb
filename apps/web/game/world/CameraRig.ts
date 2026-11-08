@@ -26,6 +26,8 @@ export class CameraRig {
   private target: number;
   detached = false;
   private returning = false;
+  /** Phaser 카메라가 지금 캐릭터를 따라가는 중인지 (startFollow 상태) */
+  private following = false;
   private panGoal: Pt | null = null;
   private mapH = mapHeight(0);
   private emitted: { detached: boolean; zoom: number } | null = null;
@@ -56,6 +58,7 @@ export class CameraRig {
     this.cam.setZoom(this.zoom);
     this.cam.setRoundPixels(true);
     this.cam.startFollow(follow, true, CAMERA_LERP, CAMERA_LERP, 0, CAMERA_FOLLOW_OFFSET_Y);
+    this.following = true;
     this.applyBounds();
     this.attach();
     this.emitState();
@@ -99,6 +102,7 @@ export class CameraRig {
 
   private detach(): void {
     this.cam.stopFollow();
+    this.following = false;
     this.returning = false;
     if (!this.detached) {
       this.detached = true;
@@ -117,18 +121,44 @@ export class CameraRig {
       this.applyBounds();
     }
 
-    const goal = this.returning ? { x: this.follow.x, y: this.follow.y - CAMERA_FOLLOW_OFFSET_Y } : this.panGoal;
+    const goal = this.returning || this.panGoal !== null;
     if (goal) {
-      const tx = cam.clampX(goal.x - cam.width / 2);
-      const ty = cam.clampY(goal.y - cam.height / 2);
+      const gx = this.returning ? this.follow.x : this.panGoal!.x;
+      const gy = this.returning ? this.follow.y - CAMERA_FOLLOW_OFFSET_Y : this.panGoal!.y;
+      const tx = cam.clampX(gx - cam.width / 2);
+      const ty = cam.clampY(gy - cam.height / 2);
       const tau = this.returning ? RETURN_TAU_MS : PAN_TAU_MS;
       cam.scrollX = approach(cam.scrollX, tx, dt, tau);
       cam.scrollY = approach(cam.scrollY, ty, dt, tau);
       if (this.returning && Math.abs(cam.scrollX - tx) < 1 && Math.abs(cam.scrollY - ty) < 1) {
         this.returning = false;
         cam.startFollow(this.follow, true, CAMERA_LERP, CAMERA_LERP, 0, CAMERA_FOLLOW_OFFSET_Y);
+        this.following = true;
       }
     }
+  }
+
+  /**
+   * 이번 프레임에 그려질 worldView. Phaser는 렌더 직전(preRender)에 추적 lerp를 적용하고 worldView를 갱신하므로
+   * update 시점의 cam.worldView는 한 프레임 늦다. 컬링이 그 차이로 가장자리에서 깜빡이지 않게 같은 계산을 미리 한다.
+   */
+  frameView(out: Phaser.Geom.Rectangle): Phaser.Geom.Rectangle {
+    const cam = this.cam;
+    let sx = cam.scrollX;
+    let sy = cam.scrollY;
+    if (this.following) {
+      sx += (this.follow.x - cam.width / 2 - sx) * CAMERA_LERP;
+      sy += (this.follow.y - CAMERA_FOLLOW_OFFSET_Y - cam.height / 2 - sy) * CAMERA_LERP;
+    }
+    if (cam.roundPixels) {
+      sx = Math.floor(sx);
+      sy = Math.floor(sy);
+    }
+    sx = cam.clampX(sx);
+    sy = cam.clampY(sy);
+    const dw = Math.floor(cam.width / cam.zoom + 0.5);
+    const dh = Math.floor(cam.height / cam.zoom + 0.5);
+    return out.setTo(Math.floor(sx + cam.width / 2 - dw / 2 + 0.5), Math.floor(sy + cam.height / 2 - dh / 2 + 0.5), dw, dh);
   }
 
   private persist(): void {

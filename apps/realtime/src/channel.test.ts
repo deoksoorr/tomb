@@ -4,7 +4,6 @@ import {
   DIR,
   SPAWN,
   STATE,
-  WARP_COOLDOWN_MS,
   decodeSnapshot,
   encodeEvent,
   encodeMove,
@@ -15,13 +14,30 @@ import {
   type StateId,
 } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { ChannelCore, type ChannelHost, type PeerRecord, type Reservation } from "./channel";
+import {
+  CLOSE_STALE,
+  ChannelCore,
+  SERVER_WARP_COOLDOWN_MS,
+  STALE_AFTER_MS,
+  type ChannelHost,
+  type PeerRecord,
+  type Reservation,
+} from "./channel";
 
-type Conn = { id: string; out: (string | ArrayBuffer)[]; closed?: { code: number; reason: string }; att?: PeerRecord | null };
+type Conn = {
+  id: string;
+  out: (string | ArrayBuffer)[];
+  closed?: { code: number; reason: string };
+  att?: PeerRecord | null;
+  /** 런타임이 마지막으로 pong을 자동 응답한 시각 */
+  pingAt?: number;
+};
 
 function setup(capacity = 3, graceMs = 20_000) {
   const reservations = new Map<number, Reservation>();
   const counts: number[] = [];
+  /** 로비 레지스트리로 가는 호출: "+v" = 자리 잡음, "-v" = 최종 퇴장 */
+  const visitors: string[] = [];
   const host: ChannelHost<Conn> = {
     send: (c, d) => void c.out.push(d),
     close: (c, code, reason) => void (c.closed = { code, reason }),
@@ -30,6 +46,9 @@ function setup(capacity = 3, graceMs = 20_000) {
     dropReservation: (sid) => void reservations.delete(sid),
     requestTick: () => {},
     countChanged: (n) => void counts.push(n),
+    lastPing: (c) => c.pingAt ?? 0,
+    visitorJoined: (v) => void visitors.push(`+${v}`),
+    visitorLeft: (v) => void visitors.push(`-${v}`),
   };
   const core = new ChannelCore<Conn>({ capacity, graceMs }, host);
   const conn = (id: string): Conn => ({ id, out: [] });
@@ -38,7 +57,7 @@ function setup(capacity = 3, graceMs = 20_000) {
     core.join(c, { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn }, now);
     return c;
   };
-  return { core, reservations, counts, conn, join };
+  return { core, reservations, counts, visitors, conn, join };
 }
 
 const events = (c: Conn) => c.out.filter((d): d is string => typeof d === "string").map((d) => JSON.parse(d) as S2C);
@@ -240,12 +259,12 @@ describe("speed validation", () => {
     const a = join("a");
     const b = join("b");
     core.message(a, send({ t: "warp", x: 400, y: 900 }), 0);
-    core.message(a, send({ t: "warp", x: 100, y: 100 }), WARP_COOLDOWN_MS - 1);
+    core.message(a, send({ t: "warp", x: 100, y: 100 }), SERVER_WARP_COOLDOWN_MS - 1);
     core.tick(100);
     expect(entriesOf(b)).toEqual([{ sid: 1, x: 400, y: 900, state: STATE.idle, dir: DIR.down }]);
-    core.message(a, send({ t: "warp", x: 9999, y: 100 }), WARP_COOLDOWN_MS + 10); // 범위 밖
-    core.message(a, send({ t: "warp", x: 100, y: 100 }), WARP_COOLDOWN_MS + 20);
-    core.tick(WARP_COOLDOWN_MS + 100);
+    core.message(a, send({ t: "warp", x: 9999, y: 100 }), SERVER_WARP_COOLDOWN_MS + 10); // 범위 밖
+    core.message(a, send({ t: "warp", x: 100, y: 100 }), SERVER_WARP_COOLDOWN_MS + 20);
+    core.tick(SERVER_WARP_COOLDOWN_MS + 100);
     expect(entriesOf(b).at(-1)).toMatchObject({ x: 100, y: 100 });
   });
 });
@@ -318,18 +337,38 @@ describe("seats (server authority)", () => {
 });
 
 describe("events and limits", () => {
-  it("relays emote/graveEvent to the others with the sender sid, throttled", () => {
+  it("relays emote to the others with the sender sid; 250ms per connection, same (sid, grave) once per second", () => {
     const { core, join } = setup();
     const a = join("a");
     const b = join("b");
     clear(a, b);
-    core.message(a, send({ t: "emote", kind: "flower", graveId: "g1" }), 0);
-    core.message(a, send({ t: "emote", kind: "flower", graveId: "g1" }), 100); // 250ms 안 → 버림
-    core.message(a, send({ t: "graveEvent", kind: "buried", graveId: "g2" }), 300);
+    const emote = (graveId: string, t: number) => core.message(a, send({ t: "emote", kind: "flower", graveId }), t);
+    emote("g1", 0);
+    emote("g2", 100); // 연결당 250ms 안 → 버림
+    emote("g1", 300); // 같은 (sid, g1)이 1초 안 → 버림
+    emote("g2", 600); // 다른 묘비 → 중계
+    emote("g1", 1_000); // 1초 지남 → 중계
     expect(events(a)).toEqual([]);
-    expect(events(b)).toEqual([
-      { t: "emote", sid: 1, kind: "flower", graveId: "g1" },
-      { t: "graveEvent", sid: 1, kind: "buried", graveId: "g2" },
+    expect(events(b).map((e) => e.t === "emote" && e.graveId)).toEqual(["g1", "g2", "g1"]);
+    expect(events(b)[0]).toEqual({ t: "emote", sid: 1, kind: "flower", graveId: "g1" });
+  });
+
+  it("graveEvent: once per 5s per connection, and the same graveId once per 5s per channel", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const b = join("b");
+    const c = join("c");
+    clear(a, b, c);
+    const ev = (from: Conn, graveId: string, t: number) => core.message(from, send({ t: "graveEvent", kind: "buried", graveId }), t);
+    ev(a, "g1", 0);
+    ev(a, "g2", 1_000); // a의 연결 예산(5초) → 버림
+    ev(b, "g1", 2_000); // 같은 g1이 채널에서 5초 안 → 버림 (b가 보냈어도)
+    ev(b, "g3", 2_100); // 다른 묘비 → 중계
+    ev(a, "g1", 5_000); // 5초 지남 → 중계
+    expect(events(c)).toEqual([
+      { t: "graveEvent", sid: 1, kind: "buried", graveId: "g1" },
+      { t: "graveEvent", sid: 2, kind: "buried", graveId: "g3" },
+      { t: "graveEvent", sid: 1, kind: "buried", graveId: "g1" },
     ]);
   });
 
@@ -342,6 +381,55 @@ describe("events and limits", () => {
     expect(a.att).toBeNull();
     expect(events(b)).toContainEqual({ t: "leave", sid: 1 });
     expect(core.count).toBe(1);
+  });
+});
+
+describe("lobby registry hooks / evict / stale connections", () => {
+  it("reports join/resume/takeover and only the final leave to the lobby registry", () => {
+    const { core, join, conn, visitors } = setup();
+    const a = join("a");
+    core.disconnect(a, 1006, 0); // 유예 → 최종 퇴장 아님
+    const a2 = join("a", 1_000, undefined, conn("a2")); // 복귀
+    join("a", 2_000, undefined, conn("a3")); // 다른 탭 교체
+    expect(visitors).toEqual(["+a", "+a", "+a"]);
+    core.disconnect(a2, 1000, 3_000); // 교체된 소켓 → 무시
+    expect(visitors).toHaveLength(3);
+    core.expire(Number.MAX_SAFE_INTEGER); // 유예 예약 없음 → 그대로
+    expect(core.count).toBe(1);
+  });
+
+  it("evict (same visitor joined another channel) closes 4002 or drops the reservation, without grace", () => {
+    const { core, join, reservations, visitors } = setup();
+    const a = join("a");
+    const b = join("b");
+    const c = join("c");
+    core.evict("a");
+    expect(a.closed?.code).toBe(CLOSE.REPLACED);
+    expect(events(c)).toContainEqual({ t: "leave", sid: 1 });
+    core.disconnect(b, 1006, 0);
+    expect(reservations.has(2)).toBe(true);
+    core.evict("b");
+    expect(reservations.size).toBe(0);
+    expect(events(c)).toContainEqual({ t: "leave", sid: 2 });
+    expect(visitors).toEqual(["+a", "+b", "+c", "-a", "-b"]);
+    expect(core.count).toBe(1);
+    core.evict("nobody"); // 없는 방문자는 무시
+  });
+
+  it("reaps sockets with no ping and no message for 60s (4000 → grace)", () => {
+    const { core, join, reservations } = setup();
+    const a = join("a", 0);
+    const b = join("b", 0);
+    const c = join("c", 0);
+    a.pingAt = 50_000; // ping 중
+    core.message(b, move(SPAWN.x, SPAWN.y, STATE.idle), 30_000); // 메시지 중
+    core.reap(STALE_AFTER_MS + 1);
+    expect(c.closed?.code).toBe(CLOSE_STALE);
+    expect(c.att).toBeNull();
+    expect(reservations.has(3)).toBe(true); // 유예로 넘어감
+    expect(a.closed).toBeUndefined();
+    expect(b.closed).toBeUndefined();
+    expect(core.online).toBe(2);
   });
 });
 

@@ -12,9 +12,13 @@ import { type Env, lobbyStub, readConfig } from "./config";
 //   attachment는 입장 때와 틱 루프가 멈출 때(= hibernate 가능해지기 직전)만 갱신한다. MOVE마다 쓰지 않는다.
 // - 재연결 유예 예약: storage("r:<sid>") + 알람. 소켓이 없으니 attachment에 둘 수 없고, hibernate 중에도 만료돼야 한다.
 // - 채널 번호: storage("channel"). 소켓이 하나도 없을 때 깨어난 알람도 로비에 보고할 수 있게.
+//
+// 알람 하나로 두 가지를 한다: 재연결 유예 만료, 그리고 연결이 있는 동안 5분마다 유령 연결 정리(reap).
 
 const RES_PREFIX = "r:";
 const CHANNEL_KEY = "channel";
+/** 연결이 있는 동안 유령 연결을 확인하는 알람 주기. DO가 이미 깨어 있을 때(틱 루프가 멈출 때)도 확인한다 */
+const REAP_INTERVAL_MS = 5 * 60_000;
 
 export class ChannelDO extends DurableObject<Env> {
   private readonly core: ChannelCore<WebSocket>;
@@ -23,6 +27,9 @@ export class ChannelDO extends DurableObject<Env> {
   private nextTickAt = 0;
   private reportTimer: ReturnType<typeof setTimeout> | null = null;
   private alarmAt: number | null = null;
+  private reapDueAt: number | null = null;
+  /** 로비 보고에 붙이는 단조 증가 번호. 시각 기반이라 hibernate 뒤 새 인스턴스에서도 앞선 번호보다 크다 */
+  private seq = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -63,6 +70,17 @@ export class ChannelDO extends DurableObject<Env> {
         },
         requestTick: () => this.startTicking(),
         countChanged: () => this.scheduleReport(),
+        lastPing: (ws) => ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0,
+        visitorJoined: (visitorId) => {
+          lobbyStub(env)
+            .claimVisitor(visitorId, this.channel)
+            .catch((e) => console.error("claimVisitor failed", e));
+        },
+        visitorLeft: (visitorId) => {
+          lobbyStub(env)
+            .releaseVisitor(visitorId, this.channel)
+            .catch((e) => console.error("releaseVisitor failed", e));
+        },
       },
     );
 
@@ -94,12 +112,18 @@ export class ChannelDO extends DurableObject<Env> {
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
     this.core.join(server, ticket, Date.now());
+    this.scheduleAlarm(); // 연결이 생겼다 → 유령 연결 정리 알람
     return new Response(null, { status: 101, webSocket: client });
   }
 
   /** Lobby DO가 상태를 다시 맞출 때 부른다 (RPC) */
-  getCount(): number {
-    return this.core.count;
+  getCount(): { count: number; seq: number } {
+    return { count: this.core.count, seq: this.nextSeq() };
+  }
+
+  /** Lobby DO → 같은 방문자가 다른 채널에 들어갔다. 여기 자리(접속·유예 예약)를 4002로 정리한다 (RPC) */
+  kick(visitorId: string): void {
+    this.core.evict(visitorId);
   }
 
   webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): void {
@@ -115,15 +139,24 @@ export class ChannelDO extends DurableObject<Env> {
     this.core.disconnect(ws, 1006, Date.now());
   }
 
-  /** 재연결 유예 만료 */
+  /** 재연결 유예 만료 + 유령 연결 정리 */
   alarm(): void {
+    const now = Date.now();
     this.alarmAt = null;
-    this.core.expire(Date.now());
+    this.core.expire(now);
+    if (this.reapDueAt !== null && now >= this.reapDueAt) {
+      this.reapDueAt = null;
+      this.core.reap(now);
+    }
     this.scheduleAlarm();
   }
 
+  /** 다음 알람 = min(가장 이른 유예 만료, 연결이 있으면 다음 유령 연결 확인) */
   private scheduleAlarm(): void {
-    const at = this.core.nextExpiry();
+    if (this.core.online === 0) this.reapDueAt = null;
+    else this.reapDueAt ??= Date.now() + REAP_INTERVAL_MS;
+    const expiry = this.core.nextExpiry();
+    const at = expiry === null ? this.reapDueAt : this.reapDueAt === null ? expiry : Math.min(expiry, this.reapDueAt);
     if (at === this.alarmAt) return;
     this.alarmAt = at;
     const op = at === null ? this.ctx.storage.deleteAlarm() : this.ctx.storage.setAlarm(at);
@@ -148,6 +181,7 @@ export class ChannelDO extends DurableObject<Env> {
     const now = Date.now();
     if (!this.core.tick(now)) {
       this.ticking = false;
+      this.core.reap(now); // 어차피 깨어 있는 김에 유령 연결을 정리한다(정리되면 유예 처리로 틱이 다시 돈다)
       return;
     }
     this.nextTickAt += TICK_MS;
@@ -156,15 +190,20 @@ export class ChannelDO extends DurableObject<Env> {
   };
 
   // ── 로비 보고 ──
-  // 인원이 바뀌면 1초 뒤 한 번 보고한다(그 사이 변화는 합친다). 보고가 유실돼도 로비가 30초마다 다시 물어 본다.
+  // 인원이 바뀌면 1초 뒤 한 번 보고한다(그 사이 변화는 합친다). 보고가 유실돼도 로비가 5분마다 다시 물어 본다.
 
   private scheduleReport(): void {
     if (this.reportTimer !== null) return;
     this.reportTimer = setTimeout(() => {
       this.reportTimer = null;
       lobbyStub(this.env)
-        .report(this.channel, this.core.count)
+        .report(this.channel, this.core.count, this.nextSeq())
         .catch((e) => console.error("lobby report failed", e));
     }, LOBBY_DEBOUNCE_MS);
+  }
+
+  private nextSeq(): number {
+    this.seq = Math.max(Date.now(), this.seq + 1);
+    return this.seq;
   }
 }

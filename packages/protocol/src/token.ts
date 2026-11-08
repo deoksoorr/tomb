@@ -8,6 +8,8 @@ export type JoinClaims = {
   visitorId: string;
   name: string;
   color: string;
+  /** 이 토큰으로 들어갈 수 있는 채널. 토큰 하나로 여러 채널 자리를 차지하지 못하게 한다 */
+  channel: number;
   /** 만료 시각 (unix seconds) */
   exp: number;
 };
@@ -91,9 +93,16 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, exp } = c as Record<string, unknown>;
-  if (typeof visitorId !== "string" || typeof name !== "string" || typeof color !== "string" || typeof exp !== "number")
+  const { visitorId, name, color, channel, exp } = c as Record<string, unknown>;
+  if (
+    typeof visitorId !== "string" ||
+    typeof name !== "string" ||
+    typeof color !== "string" ||
+    typeof channel !== "number" ||
+    !Number.isInteger(channel) ||
+    typeof exp !== "number"
+  )
     return null;
   if (exp < nowSec) return null;
-  return { visitorId, name, color, exp };
+  return { visitorId, name, color, channel, exp };
 }

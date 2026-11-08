@@ -144,10 +144,26 @@ export class Player {
       duration: 120,
       ease: "Sine.easeOut",
       onComplete: () => {
+        this.snap = null;
         this.body.enable = true;
         this.body.reset(back.x, back.y);
       },
     });
+  }
+
+  /**
+   * 진행 중인 스냅 tween(좌석으로/좌석 거절 후 되돌아가기)을 멈추고 충돌을 복구한다.
+   * 거절 tween이 끝나기 전에 일어서거나 순간이동하면, 늦게 끝난 tween이 캐릭터를 끌고 가지 않게 한다.
+   */
+  private cancelSnap(): void {
+    if (this.snap) {
+      this.snap.stop();
+      this.snap = null;
+    }
+    if (!this.body.enable && this.state !== "sitChair") {
+      this.body.enable = true;
+      this.body.reset(this.view.sprite.x, this.view.sprite.y);
+    }
   }
 
   stand(now: number, seats: SeatRequester | null): void {
@@ -165,6 +181,7 @@ export class Player {
       seats?.stand();
     } else {
       this.state = "idle";
+      this.cancelSnap();
     }
     this.view.apply(this.state, this.dir, now);
   }
@@ -172,6 +189,8 @@ export class Player {
   /** 순간이동 (랭킹 클릭 등) */
   warp(x: number, y: number, now: number, seats: SeatRequester | null): void {
     if (this.sitting) this.stand(now, seats);
+    this.cancelSnap();
+    this.body.enable = true;
     this.body.reset(x, y);
     this.state = "idle";
     this.view.apply(this.state, this.dir, now);

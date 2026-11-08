@@ -103,11 +103,11 @@ export function buildLayout(graves: readonly GraveInfo[], reviveTop: readonly st
 const ROW_TOP = 32;
 const ROW_BOTTOM = 10;
 
-/** 화면에 걸치는 격자 행 범위 [r0, r1] (없으면 r0 > r1) */
-export function visibleRows(top: number, bottom: number, rows: number): [number, number] {
-  const r0 = Math.max(0, Math.floor((top - GRID_Y0 - ROW_BOTTOM) / GRID_DY));
-  const r1 = Math.min(rows - 1, Math.floor((bottom - GRID_Y0 + ROW_TOP) / GRID_DY));
-  return [r0, r1];
+/** 화면에 걸치는 격자 행 범위 [r0, r1] (없으면 r0 > r1). out을 주면 거기에 채운다 */
+export function visibleRows(top: number, bottom: number, rows: number, out: [number, number] = [0, 0]): [number, number] {
+  out[0] = Math.max(0, Math.floor((top - GRID_Y0 - ROW_BOTTOM) / GRID_DY));
+  out[1] = Math.min(rows - 1, Math.floor((bottom - GRID_Y0 + ROW_TOP) / GRID_DY));
+  return out;
 }
 
 /** 묘비 앞, 캐릭터가 서는 자리 */
@@ -121,28 +121,49 @@ const FRONT_PROBE = 6;
 
 export type NearResult = { p: GravePlacement; dist: number };
 
-function consider(p: GravePlacement | null | undefined, x: number, y: number, best: NearResult | null, radius: number) {
-  if (!p) return best;
+// nearestGrave의 작업 변수 (매 프레임 호출이라 클로저·객체를 만들지 않는다)
+let probeBest: GravePlacement | null = null;
+let probeD = Infinity;
+function probe(p: GravePlacement | null | undefined, x: number, y: number, radius: number): void {
+  if (!p) return;
   const d = Math.hypot(p.x - x, p.y + FRONT_PROBE - y);
-  if (d <= radius && (!best || d < best.dist)) return { p, dist: d };
-  return best;
+  if (d <= radius && d < probeD) {
+    probeBest = p;
+    probeD = d;
+  }
 }
 
-/** (x,y)에서 radius 안의 가장 가까운 묘비. 전체를 훑지 않고 근처 행만 본다 */
-export function nearestGrave(layout: GraveLayout, x: number, y: number, radius: number): NearResult | null {
-  let best: NearResult | null = null;
-  for (const p of layout.revive) best = consider(p, x, y, best, radius);
-  if (!layout.count) return best;
-  const row = Math.round((y - GRID_Y0) / GRID_DY);
-  for (let r = row - 1; r <= row + 1; r++) {
-    if (r < 0 || r >= layout.rows) continue;
-    for (let c = 0; c < GRID_COLS; c++) {
-      const i = r * GRID_COLS + c;
-      if (i >= layout.count || layout.promoted[i]) continue;
-      best = consider(layout.placements[i], x, y, best, radius);
+/**
+ * (x,y)에서 radius 안의 가장 가까운 묘비. 전체를 훑지 않고 근처 행만 본다.
+ * 결과는 out에 채워 돌려준다 (없으면 null).
+ */
+export function nearestGrave(
+  layout: GraveLayout,
+  x: number,
+  y: number,
+  radius: number,
+  out: NearResult = { p: null as unknown as GravePlacement, dist: 0 },
+): NearResult | null {
+  probeBest = null;
+  probeD = Infinity;
+  for (let i = 0; i < layout.revive.length; i++) probe(layout.revive[i], x, y, radius);
+  if (layout.count) {
+    const row = Math.round((y - GRID_Y0) / GRID_DY);
+    for (let r = row - 1; r <= row + 1; r++) {
+      if (r < 0 || r >= layout.rows) continue;
+      for (let c = 0; c < GRID_COLS; c++) {
+        const i = r * GRID_COLS + c;
+        if (i >= layout.count || layout.promoted[i]) continue;
+        probe(layout.placements[i], x, y, radius);
+      }
     }
   }
-  return best;
+  const best = probeBest as GravePlacement | null;
+  probeBest = null;
+  if (!best) return null;
+  out.p = best;
+  out.dist = probeD;
+  return out;
 }
 
 function hit(p: GravePlacement | null | undefined, wx: number, wy: number): boolean {

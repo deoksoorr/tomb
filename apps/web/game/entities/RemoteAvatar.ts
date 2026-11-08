@@ -8,7 +8,9 @@ import { AvatarView } from "./AvatarView";
 // 위치는 Interpolator(120ms 지연 버퍼, 200ms 외삽, 96px 스냅)가 정한다.
 // 화면 밖이면 위치 갱신은 계속하되 그리지 않는다.
 
-const CULL_MARGIN = 24;
+const CULL_MARGIN = 16;
+/** 발밑에서 이름표 위까지 (말풍선 포함) */
+const LABEL_TOP = 34;
 
 export class RemoteAvatar {
   readonly view: AvatarView;
@@ -61,8 +63,11 @@ export class RemoteAvatar {
     this.view.apply(STATE_NAMES[o.state], o.dir, now);
     this.view.place(x, y);
 
-    const visible =
-      !view || (x > view.x - CULL_MARGIN && x < view.right + CULL_MARGIN && y > view.y - CULL_MARGIN && y < view.bottom + CULL_MARGIN * 2);
+    // 여유 = 이름표 폭/높이 (이름표는 화면 픽셀 크기라 줌아웃하면 월드에서 넓어진다)
+    const label = this.view.label;
+    const mx = Math.max(CULL_MARGIN, label.width / 2 + 4);
+    const my = label.height + LABEL_TOP;
+    const visible = !view || (x > view.x - mx && x < view.right + mx && y > view.y - my && y < view.bottom + CULL_MARGIN);
     this.view.setVisible(visible);
     if (visible) this.view.sync(now, labelScale);
   }

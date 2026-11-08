@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
 import { api, ApiRequestError } from "@/lib/api";
 import type { GraveDetailResponse, GraveListResponse, PublicGrave } from "@/lib/types";
-import { useBridgeEvent } from "./useBridge";
+import { GraveEventGate, isActionableGraveEvent } from "./graveEventGate";
 import { mergeGraves, pruneOverrides, REVIVE_TOP_N, sortByRevives, type Overrides } from "./graveMerge";
 
 const LIST_POLL_MS = 30_000;
@@ -121,11 +121,40 @@ export function useGraves(): GravesState {
     };
   }, [cache]);
 
-  useBridgeEvent("net:graveEvent", ({ graveId }) => {
-    cache.refresh(graveId).catch(() => {
-      // 네트워크 실패는 다음 목록 갱신 때 맞춰진다
+  // 같은 채널의 묘비 변경 알림 → 한도(graveEventGate) 안에서만 상세를 받아 반영한다
+  useEffect(() => {
+    const gate = new GraveEventGate();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const refresh = (graveId: string) => {
+      cache.refresh(graveId).catch(() => {
+        // 네트워크 실패는 다음 목록 갱신 때 맞춰진다
+      });
+    };
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      const at = gate.nextDueAt();
+      if (at === null) return;
+      timer = setTimeout(
+        () => {
+          timer = null;
+          gate.due(Date.now()).forEach(refresh);
+          schedule();
+        },
+        Math.max(0, at - Date.now()),
+      );
+    };
+    const off = bridge.on("net:graveEvent", ({ kind, graveId }) => {
+      if (!isActionableGraveEvent(kind, graveId, cache.getSnapshot().byId.has(graveId))) return;
+      const decision = gate.offer(graveId, Date.now());
+      if (decision === "now") refresh(graveId);
+      else if (decision === "later") schedule();
     });
-  });
+    return () => {
+      off();
+      if (timer) clearTimeout(timer);
+    };
+  }, [cache]);
 
   return { ...snapshot, cache };
 }

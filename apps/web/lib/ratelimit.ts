@@ -12,6 +12,7 @@ const DAY = 24 * 60 * MIN;
  * 방문자(쿠키)와 IP 해시에 한도를 따로 두고, 둘 중 하나라도 넘으면 429.
  * → 쿠키를 새로 받거나 IP를 바꾸는 것만으로는 한도를 우회할 수 없다.
  * 입장·반응은 같은 와이파이(NAT) 뒤 여러 사람이 동시에 쓰는 경우가 흔하므로 IP 한도를 넉넉히 둔다.
+ * visitor가 null인 항목은 쿠키 없이도 부르는 공개 조회라 IP 한도만 둔다.
  */
 const LIMITS = {
   grave: { visitor: 3, ip: 3, windowSec: DAY, message: "묘비는 하루에 3개까지 세울 수 있어요." },
@@ -19,6 +20,7 @@ const LIMITS = {
   reaction: { visitor: 30, ip: 120, windowSec: MIN, message: "조금만 천천히 눌러 주세요." },
   join: { visitor: 10, ip: 60, windowSec: MIN, message: "입장 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   report: { visitor: 10, ip: 10, windowSec: DAY, message: "오늘은 더 신고할 수 없어요." },
+  detail: { visitor: null, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
 } as const;
 
 /** 관리자 키 대입 방지: IP당 분당 실패 10회 */
@@ -86,12 +88,11 @@ function tooMany(message: string, reset: number): HttpError {
 }
 
 /** 한도를 넘으면 429 RATE_LIMITED를 던진다 */
-export async function rateLimit(action: LimitAction, req: NextRequest, visitorId: string): Promise<void> {
+export async function rateLimit(action: LimitAction, req: NextRequest, visitorId?: string): Promise<void> {
   const { visitor, ip, windowSec, message } = LIMITS[action];
-  const verdicts = await Promise.all([
-    limiter(`${action}:v`, { tokens: visitor, windowSec }).take(visitorId),
-    limiter(`${action}:ip`, { tokens: ip, windowSec }).take(ipHash(req)),
-  ]);
+  const checks = [limiter(`${action}:ip`, { tokens: ip, windowSec }).take(ipHash(req))];
+  if (visitor !== null && visitorId) checks.push(limiter(`${action}:v`, { tokens: visitor, windowSec }).take(visitorId));
+  const verdicts = await Promise.all(checks);
   const blocked = verdicts.filter((v) => !v.success);
   if (blocked.length) throw tooMany(message, Math.max(...blocked.map((v) => v.reset)));
 }

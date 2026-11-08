@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { assertImageUsable } from "@/lib/blob";
 import { handler, HttpError, json, notFound } from "@/lib/http";
+import { rateLimit } from "@/lib/ratelimit";
 import { getVisitorId, isOwner, requireVisitor } from "@/lib/session";
 import {
   deleteGrave,
@@ -15,12 +16,19 @@ import { GraveInputSchema, isGraveId, readBody } from "@/lib/validate";
 
 type Params = { id: string };
 
-/** 상세 + 내 반응 상태. 방문자별 응답이므로 캐시하지 않는다 */
+/**
+ * 상세 + 내 반응 상태. 방문자별 응답(myRevive)이라 공유 캐시에 올리지 않는다.
+ * 쿠키 없이도 부를 수 있으므로 IP 기준으로 분당 120회까지만 받는다.
+ */
 export const GET = handler<Params>(async (req, { id }) => {
+  await rateLimit("detail", req);
   const store = getStore();
   const [grave, visitorId] = await Promise.all([findVisible(store, id), getVisitorId(req)]);
   const viewer = visitorId ? await store.viewer(id, visitorId) : { myRevive: false, myFlowerToday: false };
-  return json<GraveDetailResponse>({ grave: toPublicGrave(grave), ...viewer });
+  return json<GraveDetailResponse>(
+    { grave: toPublicGrave(grave), ...viewer },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 });
 
 /** 숨겨진 묘비라도 주인은 고치거나 이장할 수 있다 */

@@ -59,13 +59,14 @@ describe("events", () => {
 describe("token", () => {
   const secret = "s3cret";
   it("signs and verifies", async () => {
-    const t = await signJoinToken(secret, { visitorId: "v1", name: "유령 하나", color: AVATAR_COLORS[0] });
+    const t = await signJoinToken(secret, { visitorId: "v1", name: "유령 하나", color: AVATAR_COLORS[0], channel: 3 });
     const c = await verifyJoinToken(secret, t);
     expect(c?.visitorId).toBe("v1");
     expect(c?.name).toBe("유령 하나");
+    expect(c?.channel).toBe(3);
   });
   it("rejects wrong secret, tampering, expiry", async () => {
-    const t = await signJoinToken(secret, { visitorId: "v1", name: "a", color: "#fff" }, 60, 1000);
+    const t = await signJoinToken(secret, { visitorId: "v1", name: "a", color: "#fff", channel: 1 }, 60, 1000);
     expect(await verifyJoinToken("other", t, 1000)).toBeNull();
     expect(await verifyJoinToken(secret, t, 1061)).toBeNull();
     expect(await verifyJoinToken(secret, t, 1059)).not.toBeNull();

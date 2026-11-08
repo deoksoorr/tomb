@@ -37,6 +37,7 @@ export class GraveField {
   private dirty = true;
   private lastView = new Phaser.Geom.Rectangle(-1, -1, 0, 0);
   private readonly rises = new Map<string, number>();
+  private readonly rowsTmp: [number, number] = [0, -1];
   readonly colliders: Phaser.Physics.Arcade.StaticGroup;
 
   constructor(
@@ -114,7 +115,7 @@ export class GraveField {
       view.x !== this.lastView.x || view.y !== this.lastView.y || view.width !== this.lastView.width || view.height !== this.lastView.height;
     if (moved || this.dirty) {
       this.lastView.setTo(view.x, view.y, view.width, view.height);
-      const [r0, r1] = visibleRows(view.y, view.bottom, this.layout.rows);
+      const [r0, r1] = visibleRows(view.y, view.bottom, this.layout.rows, this.rowsTmp);
       if (this.dirty || r0 !== this.r0 || r1 !== this.r1) this.reconcile(r0, r1, now);
       this.cullX(view);
     }

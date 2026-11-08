@@ -7,7 +7,7 @@ import { GraveTooltip } from "../entities/Grave";
 import { Player, type SeatRequester } from "../entities/Player";
 import { RemoteAvatar } from "../entities/RemoteAvatar";
 import { KeyboardInput, type KeyAction } from "../input/Keyboard";
-import type { MoveInput } from "../logic/movement";
+import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { pickInteract, pickSeat } from "../logic/sit";
 import { RealtimeClient } from "../net/RealtimeClient";
 import { GlyphAtlas } from "../text/GlyphAtlas";
@@ -15,7 +15,7 @@ import { Atmosphere } from "../world/Atmosphere";
 import { CameraRig } from "../world/CameraRig";
 import { Effects } from "../world/Effects";
 import { GraveField } from "../world/GraveField";
-import { graveAt, nearestGrave, standSpot } from "../world/graveLayout";
+import { graveAt, nearestGrave, standSpot, type GravePlacement, type NearResult } from "../world/graveLayout";
 import { WorldMap } from "../world/WorldMap";
 import type { GameContext } from "./context";
 
@@ -56,6 +56,9 @@ export class WorldScene extends Phaser.Scene {
   private netStarted = false;
   private cleaned = false;
   private readonly unsubs: (() => void)[] = [];
+  /** 이번 프레임 화면 (CameraRig.frameView가 채운다) */
+  private readonly view = new Phaser.Geom.Rectangle();
+  private readonly near: NearResult = { p: null as unknown as GravePlacement, dist: 0 };
 
   constructor() {
     super("world");
@@ -204,8 +207,13 @@ export class WorldScene extends Phaser.Scene {
 
   private addRemote(p: PeerInfo): void {
     if (p.sid === this.net.mySid) return;
-    this.remotes.get(p.sid)?.destroy();
-    this.remotes.set(p.sid, new RemoteAvatar(this, this.atlas, p.sid, p.name, p.color, p, performance.now()));
+    const prev = this.remotes.get(p.sid);
+    prev?.destroy();
+    const r = new RemoteAvatar(this, this.atlas, p.sid, p.name, p.color, p, performance.now());
+    // 같은 sid가 다시 들어오면(이름·색 변경) 앉아 있던 좌석을 이어받는다
+    r.seatId = prev?.seatId ?? null;
+    if (!r.seatId) for (const [seatId, owner] of this.seats) if (owner === p.sid) r.seatId = seatId;
+    this.remotes.set(p.sid, r);
   }
 
   private clearRemotes(): void {
@@ -375,13 +383,16 @@ export class WorldScene extends Phaser.Scene {
     const now = this.time.now;
     const occupied = this.net.online ? this.seats : EMPTY_SEATS;
     const mySid = this.net.online ? this.net.mySid : null;
+    // 이동 입력이 있는 동안에는 앉지 않는다 (걷다가 X를 같이 눌러도 상태가 튀지 않게)
+    const moving = Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER;
     if (a === "sit") {
+      if (moving) return;
       if (pl.sitting) pl.stand(now, this.seatReq);
       else pl.sit(pickSeat(pl.x, pl.y, occupied, mySid), now, this.seatReq);
       return;
     }
     const near = nearestGrave(this.field.layout, pl.x, pl.y, GRAVE_NEAR_RADIUS);
-    const seat = pl.sitting ? null : pickSeat(pl.x, pl.y, occupied, mySid);
+    const seat = pl.sitting || moving ? null : pickSeat(pl.x, pl.y, occupied, mySid);
     const t = pickInteract(near ? { id: near.p.id, dist: near.dist } : null, seat, pl.x, pl.y);
     if (t.kind === "grave") bridge.emit("grave:open", { graveId: t.graveId });
     else if (t.kind === "seat") pl.sit(t.seat, now, this.seatReq);
@@ -431,7 +442,7 @@ export class WorldScene extends Phaser.Scene {
       this.rig.recenter();
     }
     const s = this.rig.labelScale;
-    const view = this.cameras.main.worldView;
+    const view = this.rig.frameView(this.view);
     pl.view.sync(now, s);
 
     this.map.update(view);
@@ -459,7 +470,7 @@ export class WorldScene extends Phaser.Scene {
 
   private updateNear(): void {
     const pl = this.player;
-    const near = nearestGrave(this.field.layout, pl.x, pl.y, GRAVE_NEAR_RADIUS);
+    const near = nearestGrave(this.field.layout, pl.x, pl.y, GRAVE_NEAR_RADIUS, this.near);
     const id = near ? near.p.id : null;
     if (id !== this.nearId) {
       this.nearId = id;

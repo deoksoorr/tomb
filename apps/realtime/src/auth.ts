@@ -27,7 +27,7 @@ const VISITOR_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const FALLBACK_NAME = "무명";
 
 /**
- * 입장 토큰을 검증하고 DO에 넘길 입장 정보를 만든다. 서명이 틀리거나 만료됐으면 null.
+ * 입장 토큰을 검증하고 DO에 넘길 입장 정보를 만든다. 서명이 틀렸거나, 만료됐거나, 다른 채널용이면 null.
  * 이름·색은 Vercel이 이미 검증해 서명했지만, 여기서도 길이와 색 프리셋만큼은 한 번 더 맞춘다.
  */
 export async function admit(
@@ -38,7 +38,8 @@ export async function admit(
 ): Promise<JoinTicket | null> {
   if (!secret || !token) return null;
   const claims = await verifyJoinToken(secret, token).catch(() => null);
-  if (!claims || !VISITOR_ID_RE.test(claims.visitorId)) return null;
+  // 토큰은 발급받은 채널에서만 쓸 수 있다(토큰 하나로 여러 채널 자리를 차지하지 못하게)
+  if (!claims || claims.channel !== channel || !VISITOR_ID_RE.test(claims.visitorId)) return null;
   const name = [...normalizeName(claims.name)].slice(0, NAME_MAX).join("") || FALLBACK_NAME;
   const color = isAvatarColor(claims.color) ? claims.color : AVATAR_COLORS[0];
   return { visitorId: claims.visitorId, name, color, channel, spawn };

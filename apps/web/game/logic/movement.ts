@@ -17,7 +17,13 @@ export type MoveResult = {
   dir: DirId;
 };
 
-export const DEADZONE = 0.18;
+/**
+ * 아날로그 데드존 (게임이 소유한다. UI 조이스틱은 원시 값을 보낸다).
+ * 히스테리시스: 멈춰 있다가는 0.2를 넘어야 걷기 시작하고, 걷던 중에는 0.12 아래로 떨어져야 멈춘다.
+ * 손가락이 경계에서 떨려도 걷기↔멈춤이 깜빡이지 않아 MOVE가 쏟아지지 않는다.
+ */
+export const DEADZONE_ENTER = 0.2;
+export const DEADZONE_EXIT = 0.12;
 /** 아날로그 스틱을 살짝만 기울였을 때의 최소 속도 비율 */
 const MIN_ANALOG = 0.4;
 const FULL_TILT = 0.85;
@@ -38,10 +44,11 @@ export function pickDir(nx: number, ny: number, prev: DirId): DirId {
   return ax > ay ? horiz : vert;
 }
 
-/** out을 채워서 돌려준다 (매 프레임 할당 없음) */
+/** out을 채워서 돌려준다 (매 프레임 할당 없음). 직전 결과(out.moving)로 데드존 히스테리시스를 적용한다 */
 export function resolveMove(input: MoveInput, prevDir: DirId, out: MoveResult): MoveResult {
   const mag = Math.hypot(input.ax, input.ay);
-  if (!Number.isFinite(mag) || mag < DEADZONE) {
+  const dead = out.moving ? DEADZONE_EXIT : DEADZONE_ENTER;
+  if (!Number.isFinite(mag) || mag < dead) {
     out.vx = 0;
     out.vy = 0;
     out.moving = false;
@@ -52,7 +59,7 @@ export function resolveMove(input: MoveInput, prevDir: DirId, out: MoveResult): 
   const nx = input.ax / mag;
   const ny = input.ay / mag;
   const strength = Math.min(1, mag);
-  const t = Math.max(0, Math.min(1, (strength - DEADZONE) / (FULL_TILT - DEADZONE)));
+  const t = Math.max(0, Math.min(1, (strength - DEADZONE_ENTER) / (FULL_TILT - DEADZONE_ENTER)));
   const analog = MIN_ANALOG + (1 - MIN_ANALOG) * t;
   const speed = WALK_SPEED * (input.run ? RUN_MULTIPLIER : 1) * analog;
   out.vx = nx * speed;

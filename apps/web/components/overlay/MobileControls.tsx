@@ -5,8 +5,6 @@ import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import styles from "./MobileControls.module.css";
 
-/** 이 비율 안쪽은 0으로 본다 (손가락 떨림) */
-const DEAD_ZONE = 0.15;
 /** 손잡이가 바닥 원 반지름의 몇 배까지 움직이는지 */
 const KNOB_TRAVEL = 0.55;
 
@@ -81,8 +79,8 @@ function Joystick() {
       y /= len;
     }
     knob.style.transform = `translate(${x * radius * KNOB_TRAVEL}px, ${y * radius * KNOB_TRAVEL}px)`;
-    if (len < DEAD_ZONE) send(0, 0);
-    else send(Math.round(x * 100) / 100, Math.round(y * 100) / 100);
+    // 데드존(히스테리시스 포함)은 게임이 처리한다 → 원시 값을 보낸다
+    send(Math.round(x * 100) / 100, Math.round(y * 100) / 100);
   }
 
   function release(e: PointerEvent<HTMLDivElement>) {

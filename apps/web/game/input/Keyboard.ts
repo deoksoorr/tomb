@@ -8,10 +8,14 @@
 
 export type KeyAction = "sit" | "interact";
 
-const UP = new Set(["KeyW", "ArrowUp"]);
-const DOWN = new Set(["KeyS", "ArrowDown"]);
-const LEFT = new Set(["KeyA", "ArrowLeft"]);
-const RIGHT = new Set(["KeyD", "ArrowRight"]);
+const UP_KEYS = ["KeyW", "ArrowUp"] as const;
+const DOWN_KEYS = ["KeyS", "ArrowDown"] as const;
+const LEFT_KEYS = ["KeyA", "ArrowLeft"] as const;
+const RIGHT_KEYS = ["KeyD", "ArrowRight"] as const;
+const UP = new Set<string>(UP_KEYS);
+const DOWN = new Set<string>(DOWN_KEYS);
+const LEFT = new Set<string>(LEFT_KEYS);
+const RIGHT = new Set<string>(RIGHT_KEYS);
 const RUN = new Set(["ShiftLeft", "ShiftRight"]);
 const SIT = new Set(["KeyX", "KeyC"]);
 const INTERACT = new Set(["KeyE", "Space"]);
@@ -64,14 +68,15 @@ export class KeyboardInput {
     this.down.clear();
   };
 
-  /** -1..1 축 */
+  private any(keys: readonly string[]): boolean {
+    for (let i = 0; i < keys.length; i++) if (this.down.has(keys[i])) return true;
+    return false;
+  }
+
+  /** -1..1 축 (매 프레임 호출 — 할당 없음) */
   axis(out: { ax: number; ay: number }): void {
-    const has = (s: Set<string>) => {
-      for (const k of s) if (this.down.has(k)) return true;
-      return false;
-    };
-    out.ax = (has(RIGHT) ? 1 : 0) - (has(LEFT) ? 1 : 0);
-    out.ay = (has(DOWN) ? 1 : 0) - (has(UP) ? 1 : 0);
+    out.ax = (this.any(RIGHT_KEYS) ? 1 : 0) - (this.any(LEFT_KEYS) ? 1 : 0);
+    out.ay = (this.any(DOWN_KEYS) ? 1 : 0) - (this.any(UP_KEYS) ? 1 : 0);
   }
 
   get running(): boolean {
@@ -86,8 +91,9 @@ export class KeyboardInput {
     if (!relevant) return;
     if ((code === "Space" || code === "Enter") && isButtonLike(document.activeElement)) return;
     if (SCROLL_KEYS.has(code)) e.preventDefault();
-    if (e.repeat) return;
+    // 모달이 닫힌 뒤에도 계속 누르고 있던 키는 반복 이벤트로만 들어온다 → 눌림으로는 기록하고 액션만 건너뛴다
     this.down.add(code);
+    if (e.repeat) return;
     if (SIT.has(code)) this.onAction("sit");
     else if (INTERACT.has(code)) this.onAction("interact");
   };

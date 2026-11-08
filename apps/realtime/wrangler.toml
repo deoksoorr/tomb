@@ -11,6 +11,10 @@ class_name = "ChannelDO"
 name = "LOBBY"
 class_name = "LobbyDO"
 
+# Workers Logs (console.error, 요청·DO 이벤트의 CPU 시간). LOADTEST.md의 운영 지표 확인에 쓴다.
+[observability]
+enabled = true
+
 # SQLite 백엔드 (동기 KV API 사용, Workers Paid에서 권장되는 저장소)
 [[migrations]]
 tag = "v1"

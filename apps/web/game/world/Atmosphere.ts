@@ -146,23 +146,19 @@ export class Atmosphere {
     // ── 월드에 붙은 화면 고정 타일: 타일 위치 = 카메라가 보는 월드 좌표 ──
     const ox = cam.scrollX + cam.width / 2;
     const oy = cam.scrollY + cam.height / 2;
-    const anchor = (t: Phaser.GameObjects.TileSprite, par: number, dx: number, dy: number) => {
-      const hw = (t.width * TS_SCALE) / 2;
-      const hh = (t.height * TS_SCALE) / 2;
-      t.setTilePosition((ox - hw) * par + dx, (oy - hh) * par + dy);
-    };
+    const anchor = Atmosphere.anchor;
     const s = time / 1000;
     const drift = this.reduced ? 0.3 : 1;
 
     this.fogFar.setAlpha(L.fog * 0.55).setVisible(L.fog > 0.01);
     this.fogNear.setAlpha(L.fog * 0.75).setVisible(L.fog > 0.01);
     if (L.fog > 0.01) {
-      anchor(this.fogFar, 0.85, s * 3 * drift, s * 0.6 * drift);
-      anchor(this.fogNear, 1, s * 7 * drift, -s * 1.2 * drift);
+      anchor(this.fogFar, ox, oy, 0.85, s * 3 * drift, s * 0.6 * drift);
+      anchor(this.fogNear, ox, oy, 1, s * 7 * drift, -s * 1.2 * drift);
     }
 
     this.cloud.setAlpha(L.cloud * 0.55).setVisible(L.cloud > 0.01);
-    if (L.cloud > 0.01) anchor(this.cloud, 1, -s * 9 * drift, -s * 4 * drift);
+    if (L.cloud > 0.01) anchor(this.cloud, ox, oy, 1, -s * 9 * drift, -s * 4 * drift);
 
     const rainSpeed = this.reduced ? 0.35 : 1;
     this.rainFar.setAlpha(L.rain * (this.reduced ? 0.35 : 0.55)).setVisible(L.rain > 0.01);
@@ -188,6 +184,13 @@ export class Atmosphere {
     this.updateFireflies(time, dt, L.fireflies, view);
   }
 
+  /** 화면 고정 TileSprite의 무늬를 월드 좌표에 붙인다 (ox,oy: 카메라 중심의 월드 좌표). 매 프레임 클로저를 만들지 않게 static */
+  private static anchor(t: Phaser.GameObjects.TileSprite, ox: number, oy: number, par: number, dx: number, dy: number): void {
+    const hw = (t.width * TS_SCALE) / 2;
+    const hh = (t.height * TS_SCALE) / 2;
+    t.setTilePosition((ox - hw) * par + dx, (oy - hh) * par + dy);
+  }
+
   private updateLights(lights: Light[], time: number, glow: number, view: Phaser.Geom.Rectangle): void {
     for (const l of lights) {
       const { x, y } = l.spot;
@@ -211,7 +214,13 @@ export class Atmosphere {
     this.splashAcc += (dt / 1000) * rain * 40;
     while (this.splashAcc >= 1) {
       this.splashAcc -= 1;
-      const sp = this.splashes.find((p) => !p.img.visible);
+      let sp: Splash | null = null;
+      for (let i = 0; i < this.splashes.length; i++) {
+        if (!this.splashes[i].img.visible) {
+          sp = this.splashes[i];
+          break;
+        }
+      }
       if (!sp) break;
       sp.born = time;
       sp.img

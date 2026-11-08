@@ -58,7 +58,9 @@ export class Interpolator {
         return;
       }
       if (t < last.t) t = last.t; // 시계 역행 방지
-      if (t - last.t > GAP_MS) this.buf.push({ ...last, t: t - TICK_MS });
+      // 움직이던 중의 빈 틱(클라이언트 전송 간격 ≥100ms와 서버 틱 100ms가 어긋나 가끔 한 틱이 빠진다)은
+      // 멈춘 게 아니므로 그대로 선형 보간한다. 정지 샘플을 끼우면 외삽했던 만큼 뒤로 당겨지는 떨림이 생긴다.
+      if (t - last.t > GAP_MS && !moving(last.state)) this.buf.push({ ...last, t: t - TICK_MS });
     }
     this.buf.push({ t, x, y, state, dir });
     while (this.buf.length > MAX_SAMPLES) this.prev = this.buf.shift() ?? null;

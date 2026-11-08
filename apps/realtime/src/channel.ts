@@ -6,7 +6,6 @@ import {
   SNAPSHOT_MAX_ENTRIES,
   SPAWN,
   STATE,
-  WARP_COOLDOWN_MS,
   decodeMove,
   encodeEvent,
   encodeSnapshot,
@@ -65,14 +64,32 @@ export interface ChannelHost<C> {
   requestTick(): void;
   /** 인원(접속 중 + 유예 예약)이 바뀌었다 → 로비 보고 */
   countChanged(count: number): void;
+  /** 이 소켓에 런타임이 마지막으로 pong을 자동 응답한 시각(ms, 없으면 0) */
+  lastPing(conn: C): number;
+  /** 방문자가 이 채널에 자리를 잡았다(신규·복귀·교체) / 최종 퇴장했다 → 로비의 채널 간 중복 방지 레지스트리 */
+  visitorJoined(visitorId: string): void;
+  visitorLeft(visitorId: string): void;
 }
 
 export type ChannelConfig = { capacity: number; graceMs: number };
 
-/** 클라이언트가 채널 이동·나가기로 직접 닫을 때 쓰는 코드. 유예 없이 바로 퇴장시킨다. */
+/** 클라이언트가 채널 이동·나가기로 직접 닫을 때 쓰는 코드. 유예 없이 바로 퇴장시킨다. 그 밖의 코드는 모두 유예. */
 export const CLOSE_NORMAL = 1000;
-/** emote/graveEvent 연결당 최소 간격. 레이트리밋(20/s)과 별개로 브로드캐스트 증폭(× 인원수)을 막는다 */
-export const EVENT_MIN_INTERVAL_MS = 250;
+/** 서버가 응답 없는(유령) 연결을 닫을 때. 1000이 아니므로 재연결 유예가 적용된다 */
+export const CLOSE_STALE = 4000;
+/** 이 시간 넘게 ping도 메시지도 없으면 유령 연결로 본다 (클라이언트는 2초마다 ping) */
+export const STALE_AFTER_MS = 60_000;
+
+// 이벤트는 받은 사람 모두가 반응한다(graveEvent는 각자 Vercel 상세 API를 다시 부른다). 레이트리밋(20/s)과 별개로
+// 브로드캐스트 증폭(× 인원수)을 막는다.
+/** emote: 연결당 최소 간격 */
+export const EMOTE_INTERVAL_MS = 250;
+/** emote: 채널 안에서 같은 (sid, graveId) 연타는 이 간격에 한 번만 중계 */
+export const EMOTE_DEDUPE_MS = 1_000;
+/** graveEvent: 연결당 최소 간격이자, 채널 안에서 같은 graveId를 중계하는 최소 간격 */
+export const GRAVE_EVENT_INTERVAL_MS = 5_000;
+/** warp 서버 쿨다운. 클라이언트(WARP_COOLDOWN_MS 1초)보다 짧게 둬서 네트워크 지터로 정상 요청이 버려지지 않게 한다 */
+export const SERVER_WARP_COOLDOWN_MS = 800;
 
 type Peer<C> = PeerRecord & {
   /** null = 연결이 끊겨 재연결 유예 중. 다른 사람에게는 멈춘 아바타로 계속 보인다 */
@@ -85,7 +102,10 @@ type Peer<C> = PeerRecord & {
   rate: RateLimiter;
   budget: MoveBudget;
   lastWarpAt: number;
-  lastEventAt: number;
+  lastEmoteAt: number;
+  lastGraveEventAt: number;
+  /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
+  lastSeenAt: number;
   /** attachment가 최신인지 */
   saved: boolean;
 };
@@ -100,6 +120,8 @@ export class ChannelCore<C extends object> {
   private readonly dirty = new Set<number>();
   /** 속도 예산 때문에 아직 보고된 위치에 닿지 못한 sid */
   private readonly chasing = new Set<number>();
+  /** 채널 단위 이벤트 중복 제거: 키 → 마지막 중계 시각 */
+  private readonly recentEvents = new Map<string, number>();
   private tickNo = 0;
 
   constructor(
@@ -110,6 +132,11 @@ export class ChannelCore<C extends object> {
   /** 접속 중 + 유예 예약. 상한 판정과 로비 보고에 쓴다 */
   get count(): number {
     return this.peers.size;
+  }
+
+  /** 소켓이 붙어 있는 인원 (유예 중 제외) */
+  get online(): number {
+    return this.bySocket.size;
   }
 
   /** 이 visitorId를 받을 수 있는지: 이미 자리가 있거나(복귀·중복 접속) 상한 미만 */
@@ -170,6 +197,7 @@ export class ChannelCore<C extends object> {
     this.welcome(p, t.channel, false);
     this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
     this.host.countChanged(this.peers.size);
+    this.host.visitorJoined(p.visitorId);
   }
 
   /**
@@ -200,6 +228,7 @@ export class ChannelCore<C extends object> {
     this.welcome(p, t.channel, true);
     // 이름·색은 입장 때 한 번만 보낸다. 바뀌었을 때만 join을 다시 보낸다(클라이언트는 같은 sid의 join을 덮어쓰기로 처리).
     if (renamed) this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
+    this.host.visitorJoined(p.visitorId);
   }
 
   /** 복귀한 클라이언트가 알려 준 위치로 옮긴다(위치의 원천은 클라이언트). 앉아 있던 좌석 근처면 좌석을 유지한다. */
@@ -235,6 +264,7 @@ export class ChannelCore<C extends object> {
     const sid = this.bySocket.get(conn);
     const p = sid === undefined ? undefined : this.peers.get(sid);
     if (!p) return;
+    p.lastSeenAt = now;
     const verdict = p.rate.hit(now);
     if (verdict === "kick") return this.kick(p, CLOSE.RATE_LIMITED, "rate limited");
     if (verdict === "drop") return;
@@ -277,6 +307,29 @@ export class ChannelCore<C extends object> {
       if (p.conn || p.until > now) continue;
       this.host.dropReservation(p.sid);
       this.remove(p);
+    }
+  }
+
+  /** 다른 채널에 같은 방문자가 들어갔다(로비가 부름): 접속 중이면 4002로 닫고, 유예 예약이면 지운다. 유예 없음. */
+  evict(visitorId: string): void {
+    const sid = this.byVisitor.get(visitorId);
+    const p = sid === undefined ? undefined : this.peers.get(sid);
+    if (!p) return;
+    if (!p.conn) this.host.dropReservation(p.sid);
+    this.kick(p, CLOSE.REPLACED, "joined another channel");
+  }
+
+  /**
+   * 유령 연결 정리: STALE_AFTER_MS 넘게 ping(런타임 자동 응답 시각)도 메시지도 없는 소켓을 4000으로 닫고 유예로 넘긴다.
+   * DO가 이미 깨어 있을 때(틱 루프가 멈출 때, 알람)만 부른다 — 이것 때문에 DO를 깨우지 않는다.
+   */
+  reap(now: number): void {
+    for (const p of [...this.peers.values()]) {
+      const conn = p.conn;
+      if (!conn || now - Math.max(p.lastSeenAt, this.host.lastPing(conn)) <= STALE_AFTER_MS) continue;
+      this.host.persist(conn, null);
+      this.host.close(conn, CLOSE_STALE, "stale");
+      this.disconnect(conn, CLOSE_STALE, now);
     }
   }
 
@@ -328,16 +381,28 @@ export class ChannelCore<C extends object> {
       case "warp":
         return this.onWarp(p, m, now);
       case "emote":
-      case "graveEvent": {
-        if (now - p.lastEventAt < EVENT_MIN_INTERVAL_MS) return;
-        p.lastEventAt = now;
-        const out: S2C =
-          m.t === "emote"
-            ? { t: "emote", sid: p.sid, kind: m.kind, graveId: m.graveId }
-            : { t: "graveEvent", sid: p.sid, kind: m.kind, graveId: m.graveId };
-        return this.broadcast(encodeEvent(out), p.sid);
-      }
+        if (now - p.lastEmoteAt < EMOTE_INTERVAL_MS) return;
+        if (!this.once(`e:${p.sid}:${m.graveId}`, EMOTE_DEDUPE_MS, now)) return;
+        p.lastEmoteAt = now;
+        return this.broadcast(encodeEvent({ t: "emote", sid: p.sid, kind: m.kind, graveId: m.graveId }), p.sid);
+      case "graveEvent":
+        if (now - p.lastGraveEventAt < GRAVE_EVENT_INTERVAL_MS) return;
+        if (!this.once(`g:${m.graveId}`, GRAVE_EVENT_INTERVAL_MS, now)) return;
+        p.lastGraveEventAt = now;
+        return this.broadcast(encodeEvent({ t: "graveEvent", sid: p.sid, kind: m.kind, graveId: m.graveId }), p.sid);
     }
+  }
+
+  /** 채널 단위 중복 제거: 같은 키는 windowMs에 한 번만 true */
+  private once(key: string, windowMs: number, now: number): boolean {
+    const last = this.recentEvents.get(key);
+    if (last !== undefined && now - last < windowMs) return false;
+    this.recentEvents.set(key, now);
+    // 키는 레이트리밋으로 묶여 있지만, 오래된 것은 가끔 치워 둔다
+    if (this.recentEvents.size > 256) {
+      for (const [k, t] of this.recentEvents) if (now - t >= GRAVE_EVENT_INTERVAL_MS) this.recentEvents.delete(k);
+    }
+    return true;
   }
 
   // ── 좌석 (서버가 판정) ──
@@ -381,7 +446,7 @@ export class ChannelCore<C extends object> {
 
   /** 랭킹 클릭 등 의도된 순간이동: 속도 검증 없이 범위만 본다. 쿨다운 안의 요청은 무시. */
   private onWarp(p: Peer<C>, to: Point, now: number): void {
-    if (!inServerBounds(to.x, to.y) || now - p.lastWarpAt < WARP_COOLDOWN_MS) return;
+    if (!inServerBounds(to.x, to.y) || now - p.lastWarpAt < SERVER_WARP_COOLDOWN_MS) return;
     p.lastWarpAt = now;
     if (p.seatId) this.releaseSeat(p);
     if (p.state === STATE.sitChair || p.state === STATE.sitGround) p.state = STATE.idle;
@@ -445,6 +510,7 @@ export class ChannelCore<C extends object> {
     this.chasing.delete(p.sid);
     this.broadcast(encodeEvent({ t: "leave", sid: p.sid }));
     this.host.countChanged(this.peers.size);
+    this.host.visitorLeft(p.visitorId);
   }
 
   private markDirty(p: Peer<C>): void {
@@ -479,7 +545,9 @@ export class ChannelCore<C extends object> {
       rate: new RateLimiter(),
       budget: new MoveBudget(now),
       lastWarpAt: -Infinity,
-      lastEventAt: -Infinity,
+      lastEmoteAt: -Infinity,
+      lastGraveEventAt: -Infinity,
+      lastSeenAt: now,
       saved: true,
     };
     this.peers.set(p.sid, p);
@@ -492,7 +560,9 @@ export class ChannelCore<C extends object> {
     p.rate = new RateLimiter();
     p.budget = new MoveBudget(now);
     p.lastWarpAt = -Infinity;
-    p.lastEventAt = -Infinity;
+    p.lastEmoteAt = -Infinity;
+    p.lastGraveEventAt = -Infinity;
+    p.lastSeenAt = now;
   }
 
   private sendTo(p: Peer<C>, msg: S2C): void {
