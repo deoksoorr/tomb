@@ -42,7 +42,7 @@ describe("binary", () => {
   it("rejects malformed MOVE", () => {
     expect(decodeMove(new ArrayBuffer(8))).toBeNull();
     const bad = new Uint8Array(encodeMove({ x: 1, y: 1, state: 0, dir: 0, seq: 0 }));
-    bad[5] = 9;
+    bad[5] = 99;
     expect(decodeMove(bad)).toBeNull();
   });
   it("SNAPSHOT round-trips, 40 entries fit 512 bytes", () => {
