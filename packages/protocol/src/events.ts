@@ -1,4 +1,4 @@
-import { MAX_MESSAGE_BYTES } from "./constants";
+import { ACT_KINDS, MAX_MESSAGE_BYTES, type ActKind } from "./constants";
 import type { PeerInfo, Sid } from "./types";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
@@ -23,7 +23,9 @@ export type C2S =
   /** 폭죽 1발: Vercel이 서명한 firework 증서. 현재 위치에서 터진다 */
   | { t: "firework"; grant: string }
   /** 접속자 목록 다시 받기 (자가 복구용, 1분에 한 번 정도) → 서버가 peers로 답한다 */
-  | { t: "sync" };
+  | { t: "sync" }
+  /** 한 번 하는 동작 (종 치기 등). 서버가 같은 채널에 중계한다 */
+  | { t: "act"; kind: ActKind };
 
 // ── 서버 → 클라이언트 ──
 export type WelcomeMsg = {
@@ -50,7 +52,8 @@ export type S2C =
   | { t: "look"; sid: Sid; look: string[] }
   | { t: "firework"; sid: Sid; item: string; x: number; y: number }
   /** sync 응답: 나를 제외한 현재 접속자 전체와 좌석. 클라이언트는 이걸로 원격 아바타를 맞춘다 */
-  | { t: "peers"; peers: PeerInfo[]; seats: Record<string, Sid> };
+  | { t: "peers"; peers: PeerInfo[]; seats: Record<string, Sid> }
+  | { t: "act"; sid: Sid; kind: ActKind; x: number; y: number };
 
 export function encodeEvent(msg: C2S | S2C): string {
   return JSON.stringify(msg);
@@ -93,6 +96,8 @@ export function parseC2S(text: string): C2S | null {
       return typeof m.grant === "string" && m.grant.length <= 400 ? { t: m.t, grant: m.grant } : null;
     case "sync":
       return { t: "sync" };
+    case "act":
+      return typeof m.kind === "string" && (ACT_KINDS as readonly string[]).includes(m.kind) ? { t: "act", kind: m.kind as ActKind } : null;
     default:
       return null;
   }

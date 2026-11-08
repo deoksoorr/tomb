@@ -1,7 +1,17 @@
 // 포인트 정책 (서버가 강제하고, UI의 ⓘ 가이드가 그대로 보여 준다). 바꾸면 가이드도 자동으로 바뀐다.
 // 날짜 기준은 한국 시간(KST) 자정. 모든 아이템은 1회성(items.ts).
 
-export type EarnSource = "attend" | "streak" | "flower" | "revive" | "bury" | "gotFlower" | "gotRevive";
+export type EarnSource =
+  | "attend"
+  | "streak"
+  | "flower"
+  | "revive"
+  | "bury"
+  | "gotFlower"
+  | "gotRevive"
+  | "presence"
+  | "hunt"
+  | "houseLike";
 
 export type EarnRule = { source: EarnSource; label: string; points: number; dailyMax: number; note: string };
 
@@ -13,10 +23,13 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "bury", label: "묘비 세우기", points: 20, dailyMax: 20, note: "하루 1개분만 지급" },
   { source: "gotFlower", label: "내 묘비가 헌화 받음", points: 1, dailyMax: 20, note: "다른 사람이 헌화할 때" },
   { source: "gotRevive", label: "내 묘비가 살려주세요 받음", points: 1, dailyMax: 20, note: "다른 사람이 처음 눌렀을 때" },
+  { source: "presence", label: "묘지에 머무르기", points: 5, dailyMax: 60, note: "접속해 있는 10분마다 (다른 일을 해도 OK)" },
+  { source: "hunt", label: "사냥터·미니게임", points: 0, dailyMax: 300, note: "난이도와 성적에 따라 (한 판 보상은 게임 결과로)" },
+  { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때" },
 ];
 
 /** 하루에 쌓을 수 있는 전체 포인트 (위 항목 한도의 합보다 작게 잡아 하루 상한을 둔다) */
-export const DAILY_EARN_CAP = 100;
+export const DAILY_EARN_CAP = 500;
 /** 지갑 상한 */
 export const BALANCE_CAP = 9_999;
 /** 같은 IP에서 하루에 출석 포인트를 받을 수 있는 계정 수 (계정 여러 개로 출석 농사 방지) */

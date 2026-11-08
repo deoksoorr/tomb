@@ -84,6 +84,24 @@ export const AVATAR_COLORS = [
   "#e0c36a", // 촛불
 ] as const;
 export type AvatarColor = (typeof AVATAR_COLORS)[number];
+
+/** 아바타 몸 모양 (새로 시작할 때 고른다. 계정에 저장되어 코드·이어서 들어가기에선 그대로) */
+export const AVATAR_BODIES = [
+  { id: "hood", label: "후드 유령" },
+  { id: "cat", label: "고양이 유령" },
+  { id: "bun", label: "토끼 유령" },
+  { id: "sheet", label: "이불 유령" },
+  { id: "tall", label: "키다리 유령" },
+  { id: "round", label: "동글 유령" },
+] as const;
+export type AvatarBody = (typeof AVATAR_BODIES)[number]["id"];
+export function isAvatarBody(b: unknown): b is AvatarBody {
+  return typeof b === "string" && AVATAR_BODIES.some((x) => x.id === b);
+}
+
+/** 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호 */
+export const ACT_KINDS = ["bell", "splash", "wave", "cheer"] as const;
+export type ActKind = (typeof ACT_KINDS)[number];
 export function isAvatarColor(c: unknown): c is AvatarColor {
   return typeof c === "string" && (AVATAR_COLORS as readonly string[]).includes(c);
 }

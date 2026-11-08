@@ -105,6 +105,8 @@ export type GraveInput = {
   mourner: string;
   /** 묘비 디자인 (생략하면 기존 디자인 유지, 유료 디자인으로 바꾸면 디자인권 1개 소모) */
   style?: string;
+  /** 상주의 한마디 (선택, 100자) */
+  comment?: string;
 };
 
 export type CreateGraveResponse = { grave: PublicGrave; ownerToken: string; earned: number };
@@ -136,6 +138,8 @@ export type QuickGraveInput = {
   style?: string;
   /** 세울 채널 = 지금 들어가 있는 채널 (관람·오프라인이면 1) */
   channel: number;
+  /** 상주의 한마디 (선택, 100자) */
+  comment?: string;
 };
 export type UpdateGraveResponse = { grave: PublicGrave };
 /** 반응 응답의 earned = 이번에 쌓인 포인트 (한도에 걸리면 0) */
@@ -154,6 +158,8 @@ export type JoinRequest = {
   channel: number | "auto";
   name: string;
   color: string;
+  /** AVATAR_BODIES id */
+  body?: string;
 };
 
 /**
@@ -176,6 +182,11 @@ export type Me = {
   accountId: string;
   /** 마지막으로 쓴 유저이름 (코드 로그인한 기기의 입장 화면에 미리 채움) */
   name: string | null;
+  /** 저장된 아바타 색·몸 모양 (코드로 시작·이어서 들어가기에선 그대로 쓰고 채널만 고른다) */
+  color: string | null;
+  body: string | null;
+  /** 지금까지 모은 포인트 합계 (쓰더라도 줄지 않음, 포인트 랭킹 기준) */
+  lifetimePoints: number;
   points: number;
   /** 오늘 쌓은 포인트 (DAILY_EARN_CAP 대비) */
   todayEarned: number;
@@ -258,3 +269,21 @@ export type InquiryCategory = (typeof INQUIRY_CATEGORIES)[number]["id"];
 export type InquiryInput = { category: InquiryCategory; message: string; contact?: string; /** 문의 당시 채널 (이슈에 표시) */ channel?: number };
 export type InquiryResponse = { ok: true };
 export type InquiryInfoResponse = { enabled: boolean; public: boolean };
+
+// ── v3: 성황당·포인트 랭킹·머무르기 ──
+
+/**
+ * 성황당: 내가 이장(삭제)한 묘비는 30일 동안 성황당에 모셔지고 다시 모실(복구) 수 있다.
+ * GET /api/shrine → 내 계정이 이장한 묘비들, POST /api/shrine/{id}/restore → 원래 채널 맨 뒤 자리로 복구.
+ */
+export const SHRINE_KEEP_DAYS = 30;
+export type ShrineEntry = { grave: PublicGrave; removedAt: number; expiresAt: number };
+export type ShrineListResponse = { entries: ShrineEntry[] };
+
+/** GET /api/rank/points → 모은 포인트(lifetimePoints) 상위 50명과 내 순위 */
+export type PointRankRow = { rank: number; name: string; points: number; me: boolean };
+export type PointRankResponse = { rows: PointRankRow[]; mine: PointRankRow | null };
+
+/** POST /api/me/presence (화면이 켜져 있는 동안 10분마다) → 머무르기 포인트 */
+export const PRESENCE_INTERVAL_MS = 10 * 60_000;
+export type PresenceResponse = { earned: number; me: Me };

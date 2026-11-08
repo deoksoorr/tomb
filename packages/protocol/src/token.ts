@@ -1,4 +1,4 @@
-import { JOIN_TOKEN_TTL_SEC } from "./constants";
+import { JOIN_TOKEN_TTL_SEC, isAvatarBody } from "./constants";
 import { sanitizeLook } from "./items";
 
 // 입장 토큰: base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload, JOIN_SECRET))
@@ -13,6 +13,8 @@ export type JoinClaims = {
   channel: number;
   /** 입장 시점에 착용 중인 꾸미기 (없으면 빈 배열) */
   look?: string[];
+  /** 아바타 몸 모양 (AVATAR_BODIES, 없으면 hood) */
+  body?: string;
   /** 만료 시각 (unix seconds) */
   exp: number;
 };
@@ -96,7 +98,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp, look } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look, body: rawBody } = c as Record<string, unknown>;
   if (
     typeof visitorId !== "string" ||
     typeof name !== "string" ||
@@ -107,5 +109,5 @@ export async function verifyJoinToken(
   )
     return null;
   if (exp < nowSec) return null;
-  return { visitorId, name, color, channel, exp, look: sanitizeLook(look) };
+  return { visitorId, name, color, channel, exp, look: sanitizeLook(look), body: isAvatarBody(rawBody) ? rawBody : "hood" };
 }

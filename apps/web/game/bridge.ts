@@ -62,8 +62,10 @@ export type GameEvents = {
   "queue:status": QueueStatus;
   /** 상점 맵 안에서 주인장과 상호작용 → UI가 상점 창을 연다 */
   "shop:open": undefined;
+  /** 월드의 특별한 장소와 상호작용: 사냥터 입구 / 분양 사무소(하우징) / 성황당 → UI가 해당 창을 연다 */
+  "portal:open": { kind: "hunt" | "housing" | "shrine" };
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
-  "scene:changed": { scene: "world" | "shop" };
+  "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house" };
 };
 
 
