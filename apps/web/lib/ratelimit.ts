@@ -2,7 +2,8 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import type { NextRequest } from "next/server";
 import { env } from "./env";
-import { HttpError } from "./http";
+import { clientIp, HttpError } from "./http";
+import { isAdminIp } from "./ipAllow";
 import { ipHash } from "./session";
 
 const MIN = 60;
@@ -87,8 +88,15 @@ function tooMany(message: string, reset: number): HttpError {
   return new HttpError(429, "RATE_LIMITED", message, { "Retry-After": String(retryAfter) });
 }
 
+/** 운영자 IP(ADMIN_ALLOWED_IPS에 명시된 경우만)는 테스트를 반복하므로 방문자 한도에서 뺀다. 관리자 키 실패 한도는 그대로 */
+function isOperator(req: NextRequest): boolean {
+  const allow = env.adminAllowedIps();
+  return !!allow && isAdminIp(clientIp(req), allow, env.isProd());
+}
+
 /** 한도를 넘으면 429 RATE_LIMITED를 던진다 */
 export async function rateLimit(action: LimitAction, req: NextRequest, visitorId?: string): Promise<void> {
+  if (isOperator(req)) return;
   const { visitor, ip, windowSec, message } = LIMITS[action];
   const checks = [limiter(`${action}:ip`, { tokens: ip, windowSec }).take(ipHash(req))];
   if (visitor !== null && visitorId) checks.push(limiter(`${action}:v`, { tokens: visitor, windowSec }).take(visitorId));
@@ -99,6 +107,7 @@ export async function rateLimit(action: LimitAction, req: NextRequest, visitorId
 
 /** 한도를 쓰지 않고 지금 남아 있는지만 본다. 이미 다 썼으면 같은 429를 던진다 */
 export async function assertRateLimitOpen(action: LimitAction, req: NextRequest, visitorId: string): Promise<void> {
+  if (isOperator(req)) return;
   const { visitor, ip, windowSec, message } = LIMITS[action];
   const checks = [limiter(`${action}:ip`, { tokens: ip, windowSec }).peek(ipHash(req))];
   if (visitor !== null) checks.push(limiter(`${action}:v`, { tokens: visitor, windowSec }).peek(visitorId));
