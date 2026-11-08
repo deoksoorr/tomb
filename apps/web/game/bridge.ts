@@ -47,6 +47,8 @@ export type GameEvents = {
   ready: undefined;
   /** 근접 툴팁 대상 묘비 (없으면 null). 모바일 상호작용 버튼 표시용 */
   "grave:near": { graveId: string } | null;
+  /** 앉을 수 있는 빈 좌석 근처(없으면 null). 게임은 좌석 옆에 "X 앉기" 안내를, UI는 모바일 앉기 버튼을 강조한다 (sticky) */
+  "seat:near": { seatId: string; kind: "bench" | "chair" } | null;
   /** E/Space/탭으로 묘비 상세 모달을 열어 달라는 요청 */
   "grave:open": { graveId: string };
   "net:status": NetStatus;
@@ -118,6 +120,7 @@ const STICKY = new Set<keyof AllEvents>([
   "grave:near",
   "look:set",
   "graves:mine",
+  "seat:near",
   "audio:settings",
   "queue:status",
   "scene:changed",
