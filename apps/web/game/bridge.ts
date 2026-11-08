@@ -90,6 +90,8 @@ export type UiEvents = {
   "input:joystick": { x: number; y: number };
   "input:runToggle": { on: boolean };
   "input:sit": undefined;
+  /** 점프 (모바일 버튼). 데스크톱은 Space */
+  "input:jump": undefined;
   "input:interact": undefined;
   /** 모달·폼이 열려 있는 동안 게임 키보드 입력을 막는다 */
   "ui:blockKeys": { blocked: boolean };

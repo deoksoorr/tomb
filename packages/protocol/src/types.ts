@@ -5,12 +5,14 @@ export const STATE = {
   run: 2,
   sitGround: 3,
   sitChair: 4,
+  /** 점프 중(약 0.45초). 이 동안은 묘비 같은 낮은 장애물을 넘어갈 수 있다 */
+  jump: 5,
 } as const;
 export type StateName = keyof typeof STATE;
 export type StateId = (typeof STATE)[StateName];
-export const STATE_NAMES: readonly StateName[] = ["idle", "walk", "run", "sitGround", "sitChair"];
+export const STATE_NAMES: readonly StateName[] = ["idle", "walk", "run", "sitGround", "sitChair", "jump"];
 export function isStateId(n: number): n is StateId {
-  return Number.isInteger(n) && n >= 0 && n <= 4;
+  return Number.isInteger(n) && n >= 0 && n <= 5;
 }
 
 /** 4방향 스프라이트 방향. 바이너리로 u8 전송. */

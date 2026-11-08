@@ -153,6 +153,20 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "bK", kind: "bench", x: 900, y: 400, facing: DIR.down, seatOffsets: [-12, 12] },
   // 묘비 블록 사이 산책로: 길 양쪽 가장자리에 마주 보는 의자 (가운데는 비워 둔다)
   ...walkwayChairs(),
+  // ── 가로로 긴 벤치 (3~4인용) ──
+  // 광장 아래 가장자리 (부활 대기석 앞자리·중앙 통로는 비운다)
+  { id: "lA", kind: "bench", x: 400, y: 284, facing: DIR.down, seatOffsets: [-27, -9, 9, 27] },
+  { id: "lB", kind: "bench", x: MAP_WIDTH - 400, y: 284, facing: DIR.down, seatOffsets: [-27, -9, 9, 27] },
+  // 정원 가로길 아래
+  { id: "lC", kind: "bench", x: 120, y: 216, facing: DIR.down, seatOffsets: [-27, -9, 9, 27] },
+  { id: "lD", kind: "bench", x: MAP_WIDTH - 120, y: 216, facing: DIR.down, seatOffsets: [-27, -9, 9, 27] },
+  // 광장과 묘역 사이 잔디밭 (중앙 통로 양옆 두 줄)
+  { id: "lE", kind: "bench", x: 420, y: 340, facing: DIR.down, seatOffsets: [-27, -9, 9, 27] },
+  { id: "lF", kind: "bench", x: MAP_WIDTH - 420, y: 340, facing: DIR.down, seatOffsets: [-27, -9, 9, 27] },
+  { id: "lG", kind: "bench", x: 420, y: 400, facing: DIR.down, seatOffsets: [-27, -9, 9, 27] },
+  { id: "lH", kind: "bench", x: MAP_WIDTH - 420, y: 400, facing: DIR.down, seatOffsets: [-27, -9, 9, 27] },
+  // 유령 잡화점 문 오른쪽
+  { id: "lI", kind: "bench", x: 276, y: 262, facing: DIR.down, seatOffsets: [-16, 0, 16] },
 ];
 
 function walkwayChairs(): Furniture[] {

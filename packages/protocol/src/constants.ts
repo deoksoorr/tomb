@@ -64,6 +64,9 @@ export const RUN_SPEED = WALK_SPEED * RUN_MULTIPLIER;
 /** 서버 검증: 달리기 최대 속도 × 1.5를 넘는 이동은 무시 */
 export const SPEED_TOLERANCE = 1.5;
 export const MAX_VALID_SPEED = RUN_SPEED * SPEED_TOLERANCE;
+/** 점프: 체공 시간과 최고 높이(화면 연출용, 월드 좌표는 바뀌지 않는다). 체공 중엔 묘비 충돌을 끈다 */
+export const JUMP_MS = 450;
+export const JUMP_HEIGHT = 10;
 /** 앉기 키를 눌렀을 때 의자를 찾는 반경 */
 export const SEAT_SEARCH_RADIUS = 24;
 /** 서버가 좌석 점유 요청을 받을 때 허용하는 플레이어-좌석 거리 (지연 여유 포함) */
