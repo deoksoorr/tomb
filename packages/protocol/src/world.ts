@@ -28,6 +28,8 @@ export const WALL_THICKNESS = 2 * TILE;
 const CX = MAP_WIDTH / 2; // 512
 
 export const SPAWN = { x: CX, y: 56 } as const;
+/** 살려주세요 상위 10개가 모이는 입구 제단 앞자리의 이름 (지도·UI·가이드 공통) */
+export const ALTAR_NAME = "다시 피어날 자리";
 export const ALTAR = { x: CX, y: 128 } as const;
 
 /** 부활 대기석: 살려주세요 상위 10개 묘비 자리. index 0 = 1위 */

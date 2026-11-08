@@ -69,8 +69,11 @@ export type GameEvents = {
 
 /** UI → Game */
 export type UiEvents = {
-  /** 묘비 목록 (등록 순 = 격자 순서). 받을 때마다 월드를 다시 맞춘다 */
-  "graves:set": { graves: PublicGrave[]; reviveTop: string[] };
+  /**
+   * 지금 채널의 묘비 목록 (등록 순 = 격자 순서). 받을 때마다 월드를 다시 맞춘다.
+   * 채널마다 묘지가 따로라, 게임은 channel이 자기 채널과 다른 목록은 무시하고 채널을 옮기면 묘비를 바로 비운다.
+   */
+  "graves:set": { channel: number; graves: PublicGrave[]; reviveTop: string[] };
   /** 랭킹 클릭 등: 내 캐릭터를 그 묘비 앞으로 순간이동 (teleport=false면 카메라만) */
   "grave:focus": { graveId: string; teleport: boolean };
   /** 내가 방금 묘비를 세움: 카메라 이동 + 흙 덮이는 연출 + graveEvent(buried) 전송 */

@@ -48,13 +48,17 @@ export type Grave = {
   decor?: GraveDecor[];
   /** 묘비 디자인 (@tomb/protocol GRAVE_STYLES). 없으면 "auto"(생존 기간 규칙) */
   style?: string;
+  /** 세운 채널 1..MAX_CHANNELS. 채널마다 묘지가 따로다. 예전 묘비(값 없음)는 1채널로 본다 */
+  channel?: number;
 };
 
 /** 묘비 꾸미기 (상점 아이템, 7일 유지) */
 export type GraveDecor = { itemId: string; until: number };
 
 /** 클라이언트로 내보내는 묘비 */
-export type PublicGrave = Omit<Grave, "ownerTokenHash" | "hidden" | "ownerAccountId"> & {
+export type PublicGrave = Omit<Grave, "ownerTokenHash" | "hidden" | "ownerAccountId" | "channel"> & {
+  /** 이 묘비가 있는 채널 (채널마다 묘지가 따로다) */
+  channel: number;
   flowers: number;
   revives: number;
   /** 만료되지 않은 꾸미기만 */
@@ -63,8 +67,12 @@ export type PublicGrave = Omit<Grave, "ownerTokenHash" | "hidden" | "ownerAccoun
 
 // ── API 응답 ──
 
-/** GET /api/graves — graves는 등록 순(오래된 것 먼저) = 격자 배치 순서 */
+/**
+ * GET /api/graves?channel=N — 그 채널의 묘비만, 등록 순(오래된 것 먼저) = 그 채널 격자 배치 순서.
+ * reviveTop(다시 피어날 자리)·랭킹도 채널별이다. channel이 없으면 1채널.
+ */
 export type GraveListResponse = {
+  channel: number;
   graves: PublicGrave[];
   /** 살려주세요 상위 10개 id (1위부터, 점수 > 0만) */
   reviveTop: string[];
@@ -126,6 +134,8 @@ export type QuickGraveInput = {
   mourner: string;
   /** 묘비 디자인. 무료가 아니면 가방의 "gs_{style}" 디자인권 1개를 소모한다(없으면 409 NO_ITEM) */
   style?: string;
+  /** 세울 채널 = 지금 들어가 있는 채널 (관람·오프라인이면 1) */
+  channel: number;
 };
 export type UpdateGraveResponse = { grave: PublicGrave };
 /** 반응 응답의 earned = 이번에 쌓인 포인트 (한도에 걸리면 0) */
@@ -133,7 +143,10 @@ export type FlowerResponse = { count: number; earned: number };
 export type ReviveResponse = { revived: boolean; count: number; earned?: number };
 export type ReportResponse = { ok: true };
 
-/** POST /api/session */
+/**
+ * POST /api/session { fresh?: boolean } — fresh면 기존 쿠키를 버리고 새 계정으로 시작("새로 시작").
+ * POST /api/me/logout — 세션 쿠키를 지운다(코드가 없으면 그 계정으로 다시 못 들어온다는 안내는 UI가).
+ */
 export type SessionResponse = { visitorId: string };
 
 /** POST /api/join 입력 */
