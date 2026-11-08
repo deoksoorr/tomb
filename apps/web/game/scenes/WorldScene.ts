@@ -15,6 +15,7 @@ import { Atmosphere } from "../world/Atmosphere";
 import { CameraRig } from "../world/CameraRig";
 import { Effects } from "../world/Effects";
 import { GraveField } from "../world/GraveField";
+import { GraveMarkers } from "../world/Markers";
 import { graveAt, nearestGrave, standSpot, type GravePlacement, type NearResult } from "../world/graveLayout";
 import { WorldMap } from "../world/WorldMap";
 import type { GameContext } from "./context";
@@ -24,6 +25,10 @@ import type { GameContext } from "./context";
 const FOCUS_WAIT_MS = 4000;
 const BURY_WAIT_MS = 15_000;
 const REMOTE_BURY_TTL_MS = 30_000;
+/** 묘비가 솟아오른 뒤 캐릭터를 그 앞으로 옮기는 시점 */
+const BURY_WARP_DELAY_MS = 1700;
+const MY_GRAVE_MARK_MS = 8000;
+const OTHER_GRAVE_MARK_MS = 4000;
 const DUST_MS = 90;
 const EMPTY_SEATS = new Map<string, Sid>();
 
@@ -38,6 +43,7 @@ export class WorldScene extends Phaser.Scene {
   private rig!: CameraRig;
   private player!: Player;
   private tooltip!: GraveTooltip;
+  private markers!: GraveMarkers;
   private keys!: KeyboardInput;
   private net!: RealtimeClient;
   private seatReq!: SeatRequester;
@@ -107,6 +113,7 @@ export class WorldScene extends Phaser.Scene {
     this.atmos.setStaticLights(this.map.staticLights);
     this.atmos.setGridLights(this.map.gridLights);
     this.tooltip = new GraveTooltip(this, this.atlas);
+    this.markers = new GraveMarkers(this, this.atlas, this.reduced);
 
     this.keys = new KeyboardInput((a) => this.onAction(a));
     this.keys.attach();
@@ -281,6 +288,7 @@ export class WorldScene extends Phaser.Scene {
         this.field.rise(id, now);
         const p = this.field.placement(id)!;
         this.fx.bury(p.x, p.y);
+        this.markers.add(p, OTHER_GRAVE_MARK_MS, null, now);
         this.remoteBuried.delete(id);
       } else if (now - at > REMOTE_BURY_TTL_MS) this.remoteBuried.delete(id);
     }
@@ -333,10 +341,23 @@ export class WorldScene extends Phaser.Scene {
     const p = this.field.placement(b.id);
     if (!p) return; // 목록 갱신을 기다린다
     this.pendingBury = null;
+    // 1) 카메라가 새 묘비로 가서 2) 흙이 덮이고 묘비가 솟은 뒤 3) 내 캐릭터가 그 앞으로 순간이동, 카메라는 다시 따라간다
     this.rig.focus(p.x, p.y - 10);
     this.field.rise(b.id, this.time.now + 450);
     this.time.delayedCall(450, () => this.fx.bury(p.x, p.y));
-    this.recenterAt = this.time.now + 2900;
+    const id = b.id;
+    this.time.delayedCall(BURY_WARP_DELAY_MS, () => {
+      if (this.cleaned) return;
+      const q = this.field.placement(id) ?? p;
+      const s = standSpot(q);
+      const now = this.time.now;
+      this.player.warp(s.x, s.y, now, this.seatReq);
+      this.player.faceTo(q.x, q.y, now);
+      this.net.warp(s.x, s.y);
+      this.rig.recenter();
+      this.recenterAt = 0;
+      this.markers.add(q, MY_GRAVE_MARK_MS, "여기 잠들었어요", now);
+    });
   }
 
   private playMyFlower(graveId: string): void {
@@ -460,6 +481,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.updateNear();
     this.tooltip.layout(s, pl.y);
+    this.markers.update(now, s, this.tooltip);
 
     const longSit = pl.sitting && pl.view.sitSince > 0 && now - pl.view.sitSince > SIT_IDLE_MS;
     this.atmos.gather(longSit ? { x: pl.x, y: pl.y } : null);

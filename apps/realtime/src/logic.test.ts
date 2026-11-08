@@ -1,4 +1,4 @@
-import { MAX_VALID_SPEED, RUN_SPEED } from "@tomb/protocol";
+import { MAP_WIDTH, MAX_VALID_SPEED, RUN_SPEED } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { MoveBudget, RateLimiter, allocSid, parseChannel, parseSpawn, stepToward } from "./logic";
 
@@ -72,7 +72,8 @@ describe("helpers", () => {
   it("parseSpawn needs both coordinates inside the map", () => {
     expect(parseSpawn("320", "56")).toEqual({ x: 320, y: 56 });
     expect(parseSpawn("320", null)).toBeUndefined();
-    expect(parseSpawn("641", "56")).toBeUndefined();
+    expect(parseSpawn(String(MAP_WIDTH), "56")).toEqual({ x: MAP_WIDTH, y: 56 });
+    expect(parseSpawn(String(MAP_WIDTH + 1), "56")).toBeUndefined();
     expect(parseSpawn("-1", "56")).toBeUndefined();
     expect(parseSpawn("3.5", "56")).toBeUndefined();
   });

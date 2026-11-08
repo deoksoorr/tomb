@@ -13,6 +13,16 @@ import {
   encodeSnapshot,
   flowerStack,
   graveSlot,
+  plotLabel,
+  inServerBounds,
+  ALTAR,
+  GRID_COLS,
+  GRID_Y0,
+  MAP_MIN_HEIGHT,
+  MAP_WIDTH,
+  REVIVE_SLOTS,
+  SPAWN,
+  WALL_THICKNESS,
   graveTier,
   mapHeight,
   parseC2S,
@@ -77,15 +87,36 @@ describe("token", () => {
 });
 
 describe("world", () => {
-  it("grid is symmetric around the aisle and deterministic", () => {
-    expect(graveSlot(0)).toMatchObject({ x: 72, y: 416, col: 0, row: 0 });
-    expect(graveSlot(9).x).toBe(568);
-    expect(graveSlot(4).x + graveSlot(5).x).toBe(640);
-    expect(graveSlot(23)).toMatchObject({ col: 3, row: 2 });
+  it("grid is symmetric around the center aisle and deterministic", () => {
+    expect(GRID_COLS).toBe(16);
+    expect(graveSlot(0)).toMatchObject({ x: 88, y: GRID_Y0, col: 0, row: 0 });
+    expect(graveSlot(15).x).toBe(936);
+    for (let c = 0; c < GRID_COLS / 2; c++) expect(graveSlot(c).x + graveSlot(GRID_COLS - 1 - c).x).toBe(MAP_WIDTH);
+    // 블록 안은 48px, 블록 사이 산책로는 +32, 가운데 통로는 +64
+    expect(graveSlot(1).x - graveSlot(0).x).toBe(48);
+    expect(graveSlot(4).x - graveSlot(3).x).toBe(80);
+    expect(graveSlot(8).x - graveSlot(7).x).toBe(112);
+    expect(graveSlot(23)).toMatchObject({ col: 7, row: 1 });
+    // 모든 자리가 돌담 안쪽
+    for (let c = 0; c < GRID_COLS; c++) {
+      expect(graveSlot(c).x).toBeGreaterThan(WALL_THICKNESS + 16);
+      expect(graveSlot(c).x).toBeLessThan(MAP_WIDTH - WALL_THICKNESS - 16);
+    }
+  });
+  it("plot labels are 1-based row/column", () => {
+    expect(plotLabel(0)).toBe("1번째 줄 · 1번 자리");
+    expect(plotLabel(GRID_COLS + 6)).toBe("2번째 줄 · 7번 자리");
   });
   it("map grows with graves", () => {
-    expect(mapHeight(0)).toBe(960);
+    expect(mapHeight(0)).toBe(MAP_MIN_HEIGHT);
     expect(mapHeight(500)).toBeGreaterThan(mapHeight(30));
+    expect(mapHeight(500)).toBe(GRID_Y0 + Math.ceil(500 / GRID_COLS) * 64 + 96);
+  });
+  it("spawn, altar and revive slots are centered", () => {
+    expect(SPAWN.x).toBe(MAP_WIDTH / 2);
+    expect(ALTAR.x).toBe(MAP_WIDTH / 2);
+    expect(REVIVE_SLOTS[0].x).toBe(MAP_WIDTH / 2);
+    for (const s of SEATS) expect(inServerBounds(s.x, s.y)).toBe(true);
   });
   it("seat ids are unique", () => {
     expect(new Set(SEATS.map((s) => s.id)).size).toBe(SEATS.length);

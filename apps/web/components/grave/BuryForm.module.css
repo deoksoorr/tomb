@@ -223,6 +223,11 @@
   font-size: 10px;
 }
 
+.previewPlot {
+  color: var(--candle);
+  font-size: 12px;
+}
+
 .footer {
   display: grid;
   gap: 8px;

@@ -4,6 +4,7 @@ import {
   GRID_DY,
   GRID_Y0,
   MAP_COLS,
+  MAP_WIDTH,
   TILE,
   type Furniture,
 } from "@tomb/protocol";
@@ -15,45 +16,64 @@ export type Rect = { x: number; y: number; w: number; h: number };
 export type PropKind = "tree" | "deadTree" | "lantern" | "table" | "altar";
 export type PropDef = { kind: PropKind; x: number; y: number; variant: number };
 
-/** 작은 연못 (타원) */
-export const POND = { x: 96, y: 318, rx: 30, ry: 13 } as const;
-/** 의자 cA·cB 사이 돌탁자 */
-export const TABLE = { x: 440, y: 338 } as const;
+/** 왼쪽 정원의 연못 (타원) */
+export const POND = { x: 150, y: 336, rx: 44, ry: 17 } as const;
+/** 의자 사이 돌탁자 (오른쪽: cA·cB, 왼쪽: cE·cF) */
+export const TABLES: readonly { x: number; y: number }[] = [
+  { x: 832, y: 374 },
+  { x: 246, y: 374 },
+];
 
-/** 위쪽 고정 구역(입구·제단·벤치·연못)의 소품 */
+const CX = MAP_WIDTH / 2;
+
+/** 위쪽 고정 구역(입구·제단·정원)의 소품. 좌우 정원은 x=512 기준 대칭에 가깝게 */
 export const UPPER_PROPS: readonly PropDef[] = [
   { kind: "altar", x: ALTAR.x, y: ALTAR.y, variant: 0 },
-  { kind: "table", x: TABLE.x, y: TABLE.y, variant: 0 },
-  // 석등: 입구 양옆, 제단 양옆, 벤치 옆
-  { kind: "lantern", x: 272, y: 66, variant: 0 },
-  { kind: "lantern", x: 368, y: 66, variant: 0 },
-  { kind: "lantern", x: 252, y: 112, variant: 0 },
-  { kind: "lantern", x: 388, y: 112, variant: 0 },
-  { kind: "lantern", x: 158, y: 250, variant: 0 },
-  { kind: "lantern", x: 564, y: 296, variant: 0 },
-  // 고목
-  { kind: "tree", x: 62, y: 84, variant: 0 },
-  { kind: "tree", x: 578, y: 82, variant: 1 },
-  { kind: "deadTree", x: 120, y: 156, variant: 0 },
-  { kind: "tree", x: 540, y: 150, variant: 0 },
-  { kind: "tree", x: 52, y: 230, variant: 1 },
-  { kind: "deadTree", x: 590, y: 236, variant: 1 },
-  { kind: "tree", x: 206, y: 318, variant: 0 },
-  { kind: "tree", x: 378, y: 312, variant: 1 },
-  { kind: "deadTree", x: 590, y: 372, variant: 0 },
-  { kind: "tree", x: 46, y: 384, variant: 0 },
+  ...TABLES.map((t) => ({ kind: "table" as const, x: t.x, y: t.y, variant: 0 })),
+  // 석등: 입구 양옆, 제단 양옆, 광장 모서리, 정원
+  { kind: "lantern", x: CX - 48, y: 66, variant: 0 },
+  { kind: "lantern", x: CX + 48, y: 66, variant: 0 },
+  { kind: "lantern", x: CX - 60, y: 124, variant: 0 },
+  { kind: "lantern", x: CX + 60, y: 124, variant: 0 },
+  { kind: "lantern", x: 320, y: 268, variant: 0 },
+  { kind: "lantern", x: 704, y: 268, variant: 0 },
+  { kind: "lantern", x: 202, y: 300, variant: 0 },
+  { kind: "lantern", x: 902, y: 300, variant: 0 },
+  { kind: "lantern", x: 60, y: 196, variant: 0 },
+  { kind: "lantern", x: 964, y: 196, variant: 0 },
+  // 왼쪽 정원 고목
+  { kind: "tree", x: 60, y: 84, variant: 0 },
+  { kind: "tree", x: 190, y: 76, variant: 1 },
+  { kind: "deadTree", x: 262, y: 150, variant: 0 },
+  { kind: "tree", x: 56, y: 252, variant: 1 },
+  { kind: "tree", x: 236, y: 250, variant: 0 },
+  { kind: "deadTree", x: 60, y: 396, variant: 1 },
+  { kind: "tree", x: 300, y: 330, variant: 1 },
+  // 오른쪽 정원 고목
+  { kind: "tree", x: 964, y: 84, variant: 1 },
+  { kind: "tree", x: 834, y: 76, variant: 0 },
+  { kind: "deadTree", x: 762, y: 150, variant: 1 },
+  { kind: "tree", x: 968, y: 252, variant: 0 },
+  { kind: "tree", x: 788, y: 250, variant: 1 },
+  { kind: "deadTree", x: 964, y: 396, variant: 0 },
+  { kind: "tree", x: 724, y: 330, variant: 0 },
 ];
+
+/** 산책로(블록 사이) 가운데 x */
+const WALK_XS = [272, MAP_WIDTH - 272];
 
 /** 묘비 격자 구역의 소품. 행 수에 따라 아래로 늘어난다 */
 export function gridProps(rows: number): PropDef[] {
   const out: PropDef[] = [];
   for (let r = 0; r < rows + 1; r++) {
-    const rowY = GRID_Y0 + r * GRID_DY;
-    // 좌우 가장자리 고목 (번갈아)
-    if (r % 2 === 0) out.push({ kind: r % 4 === 0 ? "tree" : "deadTree", x: 42, y: rowY + 40, variant: r % 2 });
-    else out.push({ kind: r % 4 === 1 ? "tree" : "deadTree", x: 598, y: rowY + 40, variant: (r + 1) % 2 });
+    const y = GRID_Y0 + r * GRID_DY + 40;
+    // 좌우 돌담 옆 고목 (번갈아)
+    if (r % 2 === 0) out.push({ kind: r % 4 === 0 ? "tree" : "deadTree", x: 48, y, variant: r % 2 });
+    else out.push({ kind: r % 4 === 1 ? "tree" : "deadTree", x: MAP_WIDTH - 48, y, variant: (r + 1) % 2 });
+    // 산책로 석등 (3행마다, 좌우 번갈아)
+    if (r % 3 === 1) out.push({ kind: "lantern", x: WALK_XS[(r >> 1) % 2], y, variant: 0 });
     // 중앙 통로 석등 (3행마다, 좌우 번갈아)
-    if (r % 3 === 1) out.push({ kind: "lantern", x: r % 2 ? 294 : 346, y: rowY + 40, variant: 0 });
+    if (r % 3 === 2) out.push({ kind: "lantern", x: r % 2 ? CX - 22 : CX + 22, y, variant: 0 });
   }
   return out;
 }
@@ -101,10 +121,18 @@ export function allFurnitureColliders(): Rect[] {
 // ── 바닥 ──
 export type GroundKind = "grass" | "dirt" | "stone" | "wallTop" | "wallFace" | "wallSide" | "gate";
 
-const AISLE_TX0 = 19;
-const AISLE_TX1 = 20;
-export const GATE_TX0 = 18;
-export const GATE_TX1 = 21;
+const MID_TX = MAP_COLS / 2; // 32
+/** 정문 (윗담 가운데 4칸) */
+export const GATE_TX0 = MID_TX - 2;
+export const GATE_TX1 = MID_TX + 1;
+const AISLE_TX0 = MID_TX - 1;
+const AISLE_TX1 = MID_TX;
+/** 블록 사이 산책로 (x 256..288, 736..768) */
+const WALK_TX: readonly [number, number][] = [
+  [16, 17],
+  [MAP_COLS - 18, MAP_COLS - 17],
+];
+const GRID_TY0 = GRID_Y0 / TILE;
 
 /** 묘비 행 사이 가로 오솔길 (묘비 받침 바로 아래) */
 export function isRowPathTile(ty: number): boolean {
@@ -120,15 +148,19 @@ export function groundKind(tx: number, ty: number): GroundKind {
     return ty === 0 ? "wallTop" : "wallFace";
   }
   if (tx <= 1 || tx >= lastCol - 1) return "wallSide";
-  // 제단·부활 대기석 포석 (중앙 통로보다 우선)
-  if (ty >= 6 && ty <= 15 && tx >= 10 && tx <= 29) return "stone";
+  const inner = tx >= 3 && tx <= lastCol - 3;
+  // 제단·부활 대기석 광장 포석 (중앙 통로보다 우선)
+  if (ty >= 6 && ty <= 16 && tx >= 19 && tx <= lastCol - 19) return "stone";
   if (tx >= AISLE_TX0 && tx <= AISLE_TX1) return "dirt";
   // 입구 앞마당
-  if (ty >= 2 && ty <= 5 && tx >= 16 && tx <= 23) return "dirt";
-  // 벤치·연못·탁자를 잇는 가로 오솔길
-  if (ty === 16 && tx >= 3 && tx <= lastCol - 3) return "dirt";
+  if (ty >= 2 && ty <= 5 && tx >= MID_TX - 4 && tx <= MID_TX + 3) return "dirt";
+  // 광장과 양쪽 정원을 잇는 가로길, 묘역 바로 위 가로길
+  if ((ty === 11 || ty === GRID_TY0 - 2) && inner) return "dirt";
   // 탁자·의자 앞
-  if (ty === 21 && tx >= 25 && tx <= 31) return "dirt";
-  if (isRowPathTile(ty) && tx >= 3 && tx <= lastCol - 3) return "dirt";
+  if (ty === 23 && ((tx >= 13 && tx <= 17) || (tx >= lastCol - 17 && tx <= lastCol - 13))) return "dirt";
+  if (ty >= GRID_TY0 - 2) {
+    for (const [a, b] of WALK_TX) if (tx >= a && tx <= b) return "dirt";
+    if (isRowPathTile(ty) && inner) return "dirt";
+  }
   return "grass";
 }

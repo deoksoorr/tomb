@@ -209,6 +209,8 @@ export class GraveTooltip {
   private shownId: string | null = null;
   private anchor = { x: 0, y: 0 };
   private graveTop = 0;
+  /** 툴팁 위쪽 끝 (월드 y). 위치 표시 라벨이 겹치지 않게 그 위로 올린다 */
+  topY = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -242,6 +244,11 @@ export class GraveTooltip {
     return this.shownId !== null;
   }
 
+  /** 지금 툴팁이 가리키는 묘비 id */
+  get graveId(): string | null {
+    return this.shownId;
+  }
+
   /**
    * 줌에 맞춰 크기·위치를 맞춘다 (s = 1/zoom: 화면 1px의 월드 길이).
    * 묘비 뒤(위쪽)에 서 있으면 내 캐릭터·이름표를 가리지 않게 그 위로 올린다.
@@ -258,6 +265,7 @@ export class GraveTooltip {
     const h = lineH * (hasEpitaph ? 2 : 1) + pad * 2 - 3 * s;
     const { x, y } = this.anchor;
     this.bg.setPosition(x, y).setSize(w, h);
+    this.topY = y - h - 2 * s;
     this.border.setPosition(x, y + s).setSize(w + 2 * s, h + 2 * s);
     this.name.setPosition(x, y - h + pad);
     this.epitaph.setPosition(x, y - h + pad + lineH);

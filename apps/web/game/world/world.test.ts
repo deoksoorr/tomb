@@ -48,8 +48,10 @@ describe("static layout", () => {
   it("ground: walls, gate, aisle and row paths", () => {
     expect(groundKind(0, 5)).toBe("wallSide");
     expect(groundKind(5, 0)).toBe("wallTop");
-    expect(groundKind(19, 0)).toBe("gate");
-    expect(groundKind(19, 40)).toBe("dirt");
+    expect(groundKind(31, 0)).toBe("gate");
+    expect(groundKind(31, 40)).toBe("dirt"); // 중앙 통로
+    expect(groundKind(16, 40)).toBe("dirt"); // 블록 사이 산책로
+    expect(groundKind(62, 5)).toBe("wallSide");
     expect(groundKind(5, (graveSlot(0).y + 16) / 16)).toBe("dirt");
     expect(groundKind(5, (graveSlot(0).y - 16) / 16)).toBe("grass");
     expect(groundKind(Math.floor(ALTAR.x / 16), Math.floor((ALTAR.y + 8) / 16))).toBe("stone");
@@ -65,7 +67,7 @@ describe("grave layout", () => {
     expect(l.revive[1]?.id).toBe("g3");
     expect(l.promoted[7]).toBe(1);
     expect(l.promoted[8]).toBe(0);
-    expect(l.rows).toBe(3);
+    expect(l.rows).toBe(Math.ceil(25 / GRID_COLS));
   });
 
   it("ignores unknown ids in reviveTop and caps at 10", () => {

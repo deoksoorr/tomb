@@ -69,14 +69,16 @@ describe("sit rules", () => {
   });
 
   it("skips occupied seats, falls back to the next free one", () => {
-    // cA(420,336) 와 cB(460,336) 사이 (440,336): 둘 다 20px
+    // cA와 cB 사이 (둘 다 20px 안쪽)
+    const cB = SEATS.find((s) => s.id === "cB")!;
+    const mx = (seat.x + cB.x) / 2 - 1;
     const occupied = new Map([["cA", 7]]);
-    expect(pickSeat(439, 336, occupied, 1)?.id).toBe("cB");
+    expect(pickSeat(mx, seat.y, occupied, 1)?.id).toBe("cB");
     const both = new Map([
       ["cA", 7],
       ["cB", 8],
     ]);
-    expect(pickSeat(439, 336, both, 1)).toBeNull();
+    expect(pickSeat(mx, seat.y, both, 1)).toBeNull();
   });
 
   it("treats my own seat as free", () => {

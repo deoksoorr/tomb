@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import Image from "next/image";
-import { graveTier } from "@tomb/protocol";
+import { graveTier, plotLabel } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { api, errorMessage } from "@/lib/api";
 import { ageDays, lifespanLabel, suggestEpitaph, todayKst } from "@/lib/epitaph";
@@ -28,6 +28,8 @@ type Props = {
   /** 새 묘비의 상주 = 지금 유저이름 (고칠 때는 원래 상주를 그대로 둔다) */
   mourner: string;
   cache: GraveCache;
+  /** 지금 묘비 수 = 새 묘비가 들어갈 자리 번호. 목록을 아직 못 받았으면 null */
+  graveCount: number | null;
   onClose: () => void;
 };
 
@@ -43,7 +45,7 @@ const FIELD_ORDER: (keyof BuryValues)[] = [
   "stack",
 ];
 
-export default function BuryForm({ mode, mourner, cache, onClose }: Props) {
+export default function BuryForm({ mode, mourner, cache, graveCount, onClose }: Props) {
   const editing = mode.kind === "edit" ? mode.grave : null;
   // PATCH는 전체 덮어쓰기라 상주를 지금 이름으로 바꾸지 않게 원래 값을 보낸다
   const mournerName = editing?.mourner ?? mourner;
@@ -154,7 +156,9 @@ export default function BuryForm({ mode, mourner, cache, onClose }: Props) {
         saveOwnerToken(grave.id, ownerToken);
         cache.upsert(grave);
         bridge.emit("grave:buried", { graveId: grave.id });
-        showToast("묘비를 세웠어요. 이 브라우저에서만 수정/삭제할 수 있어요.", 6_000);
+        const index = cache.getSnapshot().graves.findIndex((g) => g.id === grave.id);
+        showToast(index === -1 ? "새 묘비를 세웠어요." : `새 묘비가 ${plotLabel(index)}에 세워졌어요.`, 6_000);
+        showToast("이 브라우저에서만 수정/삭제할 수 있어요.", 6_000);
       } else {
         const { grave } = await api.updateGrave(mode.grave.id, mode.ownerToken, input);
         cache.upsert(grave);
@@ -493,6 +497,9 @@ export default function BuryForm({ mode, mourner, cache, onClose }: Props) {
             <p className={styles.previewMeta}>
               {TIER_LABELS[tier]} · 상주 {mournerName}
             </p>
+            {mode.kind === "create" && graveCount !== null && (
+              <p className={styles.previewPlot}>세우면 {plotLabel(graveCount)}에 묻혀요.</p>
+            )}
           </aside>
         </div>
 

@@ -95,7 +95,15 @@ export default function GameShell({ options, ready }: Props) {
           onEdit={(grave, ownerToken) => setBury({ kind: "edit", grave, ownerToken })}
         />
       )}
-      {bury && <BuryForm mode={bury} mourner={options.name} cache={graves.cache} onClose={() => setBury(null)} />}
+      {bury && (
+        <BuryForm
+          mode={bury}
+          mourner={options.name}
+          cache={graves.cache}
+          graveCount={graves.loaded ? graves.graves.length : null}
+          onClose={() => setBury(null)}
+        />
+      )}
       {channelMenuOpen && <ChannelMenu onClose={() => setChannelMenuOpen(false)} />}
     </div>
   );

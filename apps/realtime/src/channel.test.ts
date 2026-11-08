@@ -68,6 +68,9 @@ const clear = (...cs: Conn[]) => cs.forEach((c) => (c.out.length = 0));
 const move = (x: number, y: number, state: StateId = STATE.walk, dir = DIR.down) => encodeMove({ x, y, state, dir, seq: 0 });
 const send = (msg: C2S) => encodeEvent(msg);
 
+/** 벤치 A 첫 좌석 (맵 배치가 바뀌어도 좌석 기준으로 테스트한다) */
+const bA0 = seatById("bA-0")!;
+
 describe("join / capacity / duplicate", () => {
   it("welcomes the joiner and announces it to the others", () => {
     const { core, join, counts } = setup();
@@ -95,7 +98,7 @@ describe("join / capacity / duplicate", () => {
 
   it("replaces the old socket of the same visitor with 4002 and keeps sid/seat (even when full)", () => {
     const { core, join, conn } = setup(2);
-    const a = join("a", 0, { x: 120, y: 240 });
+    const a = join("a", 0, { x: bA0.x + 12, y: bA0.y - 8 });
     join("b");
     core.message(a, send({ t: "sit", seatId: "bA-0" }), 0);
     const sentBefore = a.out.length;
@@ -115,7 +118,7 @@ describe("join / capacity / duplicate", () => {
 describe("reconnect grace", () => {
   it("keeps the slot, blocks outsiders, and resumes with the same sid and seat", () => {
     const { core, join, conn, reservations, counts } = setup(3);
-    const a = join("a", 0, { x: 120, y: 240 });
+    const a = join("a", 0, { x: bA0.x + 12, y: bA0.y - 8 });
     const b = join("b");
     join("c");
     core.message(a, send({ t: "sit", seatId: "bA-0" }), 0);
@@ -130,7 +133,7 @@ describe("reconnect grace", () => {
     const outsider = join("d", 2_000);
     expect(outsider.closed?.code).toBe(CLOSE.CHANNEL_FULL);
 
-    const a2 = join("a", 15_000, { x: 121, y: 245 }, conn("a2"));
+    const a2 = join("a", 15_000, { x: bA0.x + 13, y: bA0.y - 3 }, conn("a2"));
     expect(welcome(a2)).toMatchObject({ sid: 1, resumed: true, seats: { "bA-0": 1 } });
     expect(reservations.size).toBe(0);
     expect(core.peer(1)).toMatchObject({ online: true, seatId: "bA-0", state: STATE.sitChair });
@@ -139,7 +142,7 @@ describe("reconnect grace", () => {
 
   it("releases the seat and broadcasts leave when grace expires", () => {
     const { core, join, reservations } = setup();
-    const a = join("a", 0, { x: 120, y: 240 });
+    const a = join("a", 0, { x: bA0.x + 12, y: bA0.y - 8 });
     const b = join("b");
     core.message(a, send({ t: "sit", seatId: "bA-0" }), 0);
     core.disconnect(a, 1001, 1_000);
@@ -179,7 +182,7 @@ describe("reconnect grace", () => {
 
   it("releases a held seat on resume when the client comes back far away", () => {
     const { core, join, conn } = setup();
-    const a = join("a", 0, { x: 120, y: 240 });
+    const a = join("a", 0, { x: bA0.x + 12, y: bA0.y - 8 });
     const b = join("b");
     core.message(a, send({ t: "sit", seatId: "bA-0" }), 0);
     core.disconnect(a, 1006, 0);
@@ -302,15 +305,16 @@ describe("seats (server authority)", () => {
 
   it("one seat per player; releases on stand, on non-sitChair MOVE and on leave", () => {
     const { core, join } = setup();
-    const a = join("a", 0, { x: 520, y: 296 });
+    const [bB0, bB1, bB2] = [seatById("bB-0")!, seatById("bB-1")!, seatById("bB-2")!];
+    const a = join("a", 0, { x: bB1.x, y: bB1.y });
     const b = join("b");
     clear(b);
     core.message(a, send({ t: "sit", seatId: "bB-0" }), 0);
     core.message(a, send({ t: "sit", seatId: "bB-1" }), 0); // 옆 자리로 옮기기
-    core.message(a, move(504, 296, STATE.sitChair), 0); // 앉은 채 MOVE: 자리 유지
+    core.message(a, move(bB0.x, bB0.y, STATE.sitChair), 0); // 앉은 채 MOVE: 자리 유지
     core.message(a, send({ t: "stand" }), 0);
     core.message(a, send({ t: "sit", seatId: "bB-2" }), 0);
-    core.message(a, move(540, 296, STATE.walk), 0);
+    core.message(a, move(bB2.x + 4, bB2.y, STATE.walk), 0);
     core.message(a, send({ t: "sit", seatId: "bB-2" }), 0);
     core.disconnect(a, 1000, 0);
     expect(events(b)).toEqual([

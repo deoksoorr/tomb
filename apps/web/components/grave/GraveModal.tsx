@@ -14,6 +14,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import GraveArt from "./GraveArt";
+import { graveLocation } from "./location";
 import styles from "./GraveModal.module.css";
 
 type Action = "flower" | "revive" | "share" | "report" | "remove";
@@ -155,6 +156,12 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   }
 
   const links = safeLinks(grave.links);
+  const location = graveLocation(graves.graves, graves.reviveTop, graveId);
+
+  function goToGrave() {
+    bridge.emit("grave:focus", { graveId, teleport: true });
+    onClose();
+  }
 
   return (
     <Dialog title={grave.name} onClose={onClose}>
@@ -181,6 +188,17 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
         <p className={styles.lifespan}>{lifespanLabel(grave.bornAt, grave.diedAt, grave.ageDays)}</p>
 
         <dl className={styles.facts}>
+          {location && (
+            <div>
+              <dt>위치</dt>
+              <dd className={styles.location}>
+                <span>{location}</span>
+                <button type="button" className={cx(ui.button, styles.goTo)} onClick={goToGrave}>
+                  이 묘비 앞으로 가기
+                </button>
+              </dd>
+            </div>
+          )}
           <div>
             <dt>사인</dt>
             <dd>

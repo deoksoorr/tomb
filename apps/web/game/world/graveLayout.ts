@@ -110,8 +110,8 @@ export function visibleRows(top: number, bottom: number, rows: number, out: [num
   return out;
 }
 
-/** 묘비 앞, 캐릭터가 서는 자리 */
-export const FRONT_OFFSET = 16;
+/** 묘비 앞, 캐릭터가 서는 자리 (아바타 머리가 비석을 가리지 않을 만큼 떨어져 선다) */
+export const FRONT_OFFSET = 22;
 export function standSpot(p: Pick<GravePlacement, "x" | "y">): { x: number; y: number } {
   return { x: p.x, y: p.y + FRONT_OFFSET };
 }
