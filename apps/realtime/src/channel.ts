@@ -1,0 +1,519 @@
+import {
+  CLOSE,
+  DIR,
+  MAX_MESSAGE_BYTES,
+  SEAT_SERVER_RADIUS,
+  SNAPSHOT_MAX_ENTRIES,
+  SPAWN,
+  STATE,
+  WARP_COOLDOWN_MS,
+  decodeMove,
+  encodeEvent,
+  encodeSnapshot,
+  inServerBounds,
+  parseC2S,
+  seatById,
+  type C2S,
+  type DirId,
+  type MoveMsg,
+  type PeerInfo,
+  type PeerState,
+  type S2C,
+  type StateId,
+} from "@tomb/protocol";
+import { MoveBudget, RateLimiter, allocSid, dist, stepToward, type Point } from "./logic";
+
+// 채널 하나의 상태 머신. ChannelDO는 소켓·스토리지·타이머만 이어 주고 판정은 전부 여기서 동기적으로 한다.
+// Workers API를 쓰지 않으므로 Node에서 그대로 단위 테스트하고(channel.test.ts) 부하 테스트의 틱 벤치마크에도 쓴다.
+// 접속자 위치·상태·좌석은 메모리에만 둔다. 영구 저장하는 것은 재연결 유예 예약뿐이다.
+
+/** 소켓 attachment와 유예 예약에 저장하는 형태 (hibernation 뒤 복원용) */
+export type PeerRecord = {
+  sid: number;
+  visitorId: string;
+  name: string;
+  color: string;
+  x: number;
+  y: number;
+  state: StateId;
+  dir: DirId;
+  seatId: string | null;
+};
+
+/** 재연결 유예 예약. until(ms)까지 sid·좌석·위치를 지킨다 */
+export type Reservation = PeerRecord & { until: number };
+
+/** Worker가 토큰을 검증한 뒤 DO에 넘기는 입장 정보 */
+export type JoinTicket = {
+  visitorId: string;
+  name: string;
+  color: string;
+  channel: number;
+  /** 클라이언트가 붙인 ?x=&y=. 없으면 새 입장은 SPAWN, 복귀는 기존 위치 */
+  spawn?: Point;
+};
+
+/** ChannelCore가 바깥(DO)에 맡기는 부수 효과 */
+export interface ChannelHost<C> {
+  send(conn: C, data: string | ArrayBuffer): void;
+  close(conn: C, code: number, reason: string): void;
+  /** 소켓 attachment 갱신. null이면 이 소켓은 더 이상 피어가 아니다(교체·추방) */
+  persist(conn: C, rec: PeerRecord | null): void;
+  saveReservation(r: Reservation): void;
+  dropReservation(sid: number): void;
+  /** 바뀐 사람이 생겼다 → 틱 루프를 깨운다 (이미 돌고 있으면 무시) */
+  requestTick(): void;
+  /** 인원(접속 중 + 유예 예약)이 바뀌었다 → 로비 보고 */
+  countChanged(count: number): void;
+}
+
+export type ChannelConfig = { capacity: number; graceMs: number };
+
+/** 클라이언트가 채널 이동·나가기로 직접 닫을 때 쓰는 코드. 유예 없이 바로 퇴장시킨다. */
+export const CLOSE_NORMAL = 1000;
+/** emote/graveEvent 연결당 최소 간격. 레이트리밋(20/s)과 별개로 브로드캐스트 증폭(× 인원수)을 막는다 */
+export const EVENT_MIN_INTERVAL_MS = 250;
+
+type Peer<C> = PeerRecord & {
+  /** null = 연결이 끊겨 재연결 유예 중. 다른 사람에게는 멈춘 아바타로 계속 보인다 */
+  conn: C | null;
+  until: number;
+  /** 클라이언트가 마지막으로 보고한 위치. 서버 위치(x,y)는 속도 예산 안에서 이 지점을 따라간다 */
+  tx: number;
+  ty: number;
+  // 연결 단위 일시 상태 — hibernation 뒤 초기화돼도 무방하다
+  rate: RateLimiter;
+  budget: MoveBudget;
+  lastWarpAt: number;
+  lastEventAt: number;
+  /** attachment가 최신인지 */
+  saved: boolean;
+};
+
+export class ChannelCore<C extends object> {
+  private readonly peers = new Map<number, Peer<C>>();
+  private readonly bySocket = new Map<C, number>();
+  private readonly byVisitor = new Map<string, number>();
+  /** seatId → sid */
+  private readonly seats = new Map<string, number>();
+  /** 다음 틱 SNAPSHOT에 실을 sid ("바뀐 사람" 집합) */
+  private readonly dirty = new Set<number>();
+  /** 속도 예산 때문에 아직 보고된 위치에 닿지 못한 sid */
+  private readonly chasing = new Set<number>();
+  private tickNo = 0;
+
+  constructor(
+    private readonly cfg: ChannelConfig,
+    private readonly host: ChannelHost<C>,
+  ) {}
+
+  /** 접속 중 + 유예 예약. 상한 판정과 로비 보고에 쓴다 */
+  get count(): number {
+    return this.peers.size;
+  }
+
+  /** 이 visitorId를 받을 수 있는지: 이미 자리가 있거나(복귀·중복 접속) 상한 미만 */
+  admits(visitorId: string): boolean {
+    return this.byVisitor.has(visitorId) || this.peers.size < this.cfg.capacity;
+  }
+
+  /** 테스트·디버그용 읽기 전용 사본 */
+  peer(sid: number): (PeerRecord & { online: boolean }) | undefined {
+    const p = this.peers.get(sid);
+    return p && { ...this.record(p), online: p.conn !== null };
+  }
+
+  /** 가장 이른 유예 만료 시각 (없으면 null) */
+  nextExpiry(): number | null {
+    let t: number | null = null;
+    for (const p of this.peers.values()) if (!p.conn && (t === null || p.until < t)) t = p.until;
+    return t;
+  }
+
+  /** hibernation에서 깨어났을 때: 소켓 attachment와 저장된 유예 예약으로 상태를 다시 세운다 */
+  restore(active: Iterable<[C, PeerRecord]>, reserved: Iterable<Reservation>, now: number): void {
+    for (const [conn, rec] of active) {
+      if (!this.adopt(rec, conn, 0, now)) {
+        this.host.persist(conn, null);
+        this.host.close(conn, CLOSE.REPLACED, "replaced");
+      }
+    }
+    for (const r of reserved) if (!this.adopt(r, null, r.until, now)) this.host.dropReservation(r.sid);
+  }
+
+  // ── 입장 ──
+
+  join(conn: C, t: JoinTicket, now: number): void {
+    const sid = this.byVisitor.get(t.visitorId);
+    const prev = sid === undefined ? undefined : this.peers.get(sid);
+    if (prev) return this.takeOver(prev, conn, t, now);
+
+    // 상한은 접속 중 + 유예 예약으로 센다. 이 DO가 채널의 유일한 인스턴스이므로 경쟁 조건이 없다.
+    // (DO는 admits()로 먼저 거르지만, 여기서도 한 번 더 지킨다)
+    const newSid = this.admits(t.visitorId) ? allocSid(this.peers) : null;
+    if (newSid === null) return this.host.close(conn, CLOSE.CHANNEL_FULL, "channel full");
+
+    const pos = t.spawn ?? SPAWN;
+    const rec: PeerRecord = {
+      sid: newSid,
+      visitorId: t.visitorId,
+      name: t.name,
+      color: t.color,
+      x: pos.x,
+      y: pos.y,
+      state: STATE.idle,
+      dir: DIR.down,
+      seatId: null,
+    };
+    const p = this.adoptNew(rec, conn, now);
+    this.save(p);
+    this.welcome(p, t.channel, false);
+    this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
+    this.host.countChanged(this.peers.size);
+  }
+
+  /**
+   * 같은 visitorId가 이미 있다. 상한 검사 없이 같은 sid·좌석을 넘겨받는다.
+   * - 유예 중이면 복귀(재연결)
+   * - 접속 중이면 기존 소켓을 4002로 닫는다 (탭 여러 개로 자리 차지 방지. 죽은 연결의 재접속도 여기로 온다)
+   */
+  private takeOver(p: Peer<C>, conn: C, t: JoinTicket, now: number): void {
+    if (p.conn) {
+      this.bySocket.delete(p.conn);
+      this.host.persist(p.conn, null);
+      this.host.close(p.conn, CLOSE.REPLACED, "replaced");
+      p.conn = null;
+    } else {
+      this.host.dropReservation(p.sid);
+    }
+    const renamed = p.name !== t.name || p.color !== t.color;
+    p.name = t.name;
+    p.color = t.color;
+    // 새 소켓을 붙이기 전에 옮긴다: 좌석 해제 알림은 다른 사람에게만 가고, 본인은 결과가 반영된 welcome을 처음으로 받는다
+    if (t.spawn) this.relocate(p, t.spawn);
+
+    p.conn = conn;
+    p.until = 0;
+    this.bySocket.set(conn, p.sid);
+    this.resetConnState(p, now);
+    this.save(p);
+    this.welcome(p, t.channel, true);
+    // 이름·색은 입장 때 한 번만 보낸다. 바뀌었을 때만 join을 다시 보낸다(클라이언트는 같은 sid의 join을 덮어쓰기로 처리).
+    if (renamed) this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
+  }
+
+  /** 복귀한 클라이언트가 알려 준 위치로 옮긴다(위치의 원천은 클라이언트). 앉아 있던 좌석 근처면 좌석을 유지한다. */
+  private relocate(p: Peer<C>, to: Point): void {
+    const seat = p.seatId ? seatById(p.seatId) : undefined;
+    if (seat && dist(seat, to) <= SEAT_SERVER_RADIUS) return;
+    if (p.seatId) this.releaseSeat(p);
+    if (p.x === to.x && p.y === to.y) return;
+    p.x = p.tx = to.x;
+    p.y = p.ty = to.y;
+    p.state = STATE.idle; // 좌석을 놓았거나 자리를 옮겼다. 실제 상태는 클라이언트의 다음 MOVE가 알려 준다.
+    this.chasing.delete(p.sid);
+    this.markDirty(p);
+  }
+
+  private welcome(p: Peer<C>, channel: number, resumed: boolean): void {
+    const peers: PeerInfo[] = [];
+    for (const o of this.peers.values()) if (o !== p) peers.push(this.info(o));
+    this.sendTo(p, {
+      t: "welcome",
+      sid: p.sid,
+      channel,
+      cap: this.cfg.capacity,
+      peers,
+      seats: Object.fromEntries(this.seats),
+      resumed,
+    });
+  }
+
+  // ── 수신 ──
+
+  message(conn: C, data: string | ArrayBuffer, now: number): void {
+    const sid = this.bySocket.get(conn);
+    const p = sid === undefined ? undefined : this.peers.get(sid);
+    if (!p) return;
+    const verdict = p.rate.hit(now);
+    if (verdict === "kick") return this.kick(p, CLOSE.RATE_LIMITED, "rate limited");
+    if (verdict === "drop") return;
+
+    if (typeof data === "string") {
+      const m = parseC2S(data); // 512자 초과·형식 오류는 null
+      if (m) this.onEvent(p, m, now);
+      return;
+    }
+    if (data.byteLength > MAX_MESSAGE_BYTES) return;
+    const mv = decodeMove(data);
+    if (mv) this.onMove(p, mv, now);
+  }
+
+  /** 연결 종료. 1000(의도적 퇴장)이 아니면 RECONNECT_GRACE 동안 자리를 지킨다. */
+  disconnect(conn: C, code: number, now: number): void {
+    const sid = this.bySocket.get(conn);
+    if (sid === undefined) return; // 이미 교체(4002)·추방(4008)·거절(4001)된 소켓
+    this.bySocket.delete(conn);
+    const p = this.peers.get(sid);
+    if (!p || p.conn !== conn) return;
+    p.conn = null;
+    if (code === CLOSE_NORMAL || this.cfg.graceMs <= 0) return this.remove(p);
+
+    p.until = now + this.cfg.graceMs;
+    p.tx = p.x;
+    p.ty = p.y;
+    this.chasing.delete(sid);
+    // 걷던 모습 그대로 제자리걸음을 하지 않도록 서 있는 상태로 멈춘다
+    if (p.state === STATE.walk || p.state === STATE.run) {
+      p.state = STATE.idle;
+      this.markDirty(p);
+    }
+    this.host.saveReservation({ ...this.record(p), until: p.until });
+  }
+
+  /** 만료된 유예 예약을 정리한다 (알람에서 호출) */
+  expire(now: number): void {
+    for (const p of [...this.peers.values()]) {
+      if (p.conn || p.until > now) continue;
+      this.host.dropReservation(p.sid);
+      this.remove(p);
+    }
+  }
+
+  private onMove(p: Peer<C>, m: MoveMsg, now: number): void {
+    if (!inServerBounds(m.x, m.y)) return;
+    // 좌석 판정은 서버가 한다: 좌석을 얻지 못한 채 보낸 sitChair는 바닥 앉기로 본다.
+    // (클라이언트는 요청과 동시에 스냅을 시작하므로 sit보다 MOVE가 먼저 올 수 있다. 승인되면 onSit이 sitChair로 바꾼다)
+    const state = m.state === STATE.sitChair && !p.seatId ? STATE.sitGround : m.state;
+    if (p.seatId && state !== STATE.sitChair) this.releaseSeat(p);
+    const changed = state !== p.state || m.dir !== p.dir;
+    p.state = state;
+    p.dir = m.dir;
+    // 앉아 있는 동안 위치는 좌석 앵커에 고정한다
+    if (!p.seatId) {
+      p.tx = m.x;
+      p.ty = m.y;
+    }
+    // 즉시 중계하지 않는다. 서버 위치만 갱신하고 "바뀐 사람"에 넣어 다음 틱에 한 번에 보낸다.
+    if (this.chase(p, now) || changed) this.markDirty(p);
+  }
+
+  /** 속도 예산 안에서 서버 위치를 보고된 위치로 전진시킨다(초과분은 무시 → 다음 틱에 이어서). 움직였으면 true */
+  private chase(p: Peer<C>, now: number): boolean {
+    const target = { x: p.tx, y: p.ty };
+    const want = dist(p, target);
+    if (want === 0) {
+      this.chasing.delete(p.sid);
+      return false;
+    }
+    const next = stepToward(p, target, p.budget.take(want, now));
+    const moved = next.x !== p.x || next.y !== p.y;
+    p.x = next.x;
+    p.y = next.y;
+    if (p.x === p.tx && p.y === p.ty) {
+      this.chasing.delete(p.sid);
+    } else {
+      this.chasing.add(p.sid);
+      this.host.requestTick();
+    }
+    return moved;
+  }
+
+  private onEvent(p: Peer<C>, m: C2S, now: number): void {
+    switch (m.t) {
+      case "sit":
+        return this.onSit(p, m.seatId);
+      case "stand":
+        return this.onStand(p);
+      case "warp":
+        return this.onWarp(p, m, now);
+      case "emote":
+      case "graveEvent": {
+        if (now - p.lastEventAt < EVENT_MIN_INTERVAL_MS) return;
+        p.lastEventAt = now;
+        const out: S2C =
+          m.t === "emote"
+            ? { t: "emote", sid: p.sid, kind: m.kind, graveId: m.graveId }
+            : { t: "graveEvent", sid: p.sid, kind: m.kind, graveId: m.graveId };
+        return this.broadcast(encodeEvent(out), p.sid);
+      }
+    }
+  }
+
+  // ── 좌석 (서버가 판정) ──
+
+  private onSit(p: Peer<C>, seatId: string): void {
+    const seat = seatById(seatId);
+    const holder = this.seats.get(seatId);
+    if (seat && holder === p.sid) return this.sendTo(p, { t: "seat", seatId, sid: p.sid }); // 재요청: 이미 내 자리
+    // 위치는 클라이언트가 마지막으로 보고한 지점으로 잰다 (서버 위치가 속도 예산 때문에 잠깐 뒤처져 있어도 거절하지 않게)
+    if (!seat || holder !== undefined || dist(seat, { x: p.tx, y: p.ty }) > SEAT_SERVER_RADIUS) {
+      return this.sendTo(p, { t: "seatDenied", seatId });
+    }
+    if (p.seatId) this.releaseSeat(p); // 한 사람당 한 자리
+    this.seats.set(seatId, p.sid);
+    p.seatId = seatId;
+    p.x = p.tx = seat.x;
+    p.y = p.ty = seat.y;
+    p.state = STATE.sitChair;
+    p.dir = seat.facing;
+    this.chasing.delete(p.sid);
+    this.markDirty(p);
+    this.broadcast(encodeEvent({ t: "seat", seatId, sid: p.sid }));
+  }
+
+  private onStand(p: Peer<C>): void {
+    if (!p.seatId) return;
+    this.releaseSeat(p);
+    if (p.state === STATE.sitChair) p.state = STATE.idle;
+    this.markDirty(p);
+  }
+
+  /** 좌석을 비우고 모두에게 알린다. 상태(state)는 호출한 쪽이 정한다. */
+  private releaseSeat(p: Peer<C>): void {
+    const seatId = p.seatId;
+    if (!seatId) return;
+    this.seats.delete(seatId);
+    p.seatId = null;
+    p.saved = false;
+    this.broadcast(encodeEvent({ t: "seat", seatId, sid: null }));
+  }
+
+  /** 랭킹 클릭 등 의도된 순간이동: 속도 검증 없이 범위만 본다. 쿨다운 안의 요청은 무시. */
+  private onWarp(p: Peer<C>, to: Point, now: number): void {
+    if (!inServerBounds(to.x, to.y) || now - p.lastWarpAt < WARP_COOLDOWN_MS) return;
+    p.lastWarpAt = now;
+    if (p.seatId) this.releaseSeat(p);
+    if (p.state === STATE.sitChair || p.state === STATE.sitGround) p.state = STATE.idle;
+    p.x = p.tx = to.x;
+    p.y = p.ty = to.y;
+    this.chasing.delete(p.sid);
+    this.markDirty(p); // 96px 넘게 떨어지면 클라이언트가 보간 없이 스냅한다
+  }
+
+  // ── 틱 ──
+
+  /**
+   * 100ms마다 호출된다. 바뀐 사람만 담은 델타 SNAPSHOT 1개를 모두에게 보낸다.
+   * 보낼 것이 없으면 false → 호출한 쪽이 루프를 멈춘다(그래야 DO가 hibernate된다).
+   */
+  tick(now: number): boolean {
+    for (const sid of this.chasing) {
+      const p = this.peers.get(sid);
+      if (p && this.chase(p, now)) this.markDirty(p);
+    }
+    if (this.dirty.size > 0) {
+      const entries: PeerState[] = [];
+      for (const sid of this.dirty) {
+        const p = this.peers.get(sid);
+        if (p) entries.push(this.state(p));
+      }
+      this.dirty.clear();
+      // 엔트리 63개(512바이트)를 넘으면 나눠 보낸다. 같은 tick 번호를 쓴다.
+      for (let i = 0; i < entries.length; i += SNAPSHOT_MAX_ENTRIES) {
+        this.broadcast(encodeSnapshot(this.tickNo, entries.slice(i, i + SNAPSHOT_MAX_ENTRIES)));
+      }
+      this.tickNo = (this.tickNo + 1) & 0xffff;
+      return true;
+    }
+    if (this.chasing.size > 0) return true;
+    // 루프가 멈춘다 = 곧 hibernate될 수 있다. MOVE마다 하지 않고 이때 한 번 attachment를 갱신한다.
+    for (const p of this.peers.values()) if (!p.saved) this.save(p);
+    return false;
+  }
+
+  // ── 내부 ──
+
+  private kick(p: Peer<C>, code: number, reason: string): void {
+    if (p.conn) {
+      this.host.persist(p.conn, null);
+      this.host.close(p.conn, code, reason);
+    }
+    this.remove(p);
+  }
+
+  /** 퇴장: 좌석 해제 → leave 브로드캐스트 → 인원 보고 */
+  private remove(p: Peer<C>): void {
+    if (p.conn) {
+      this.bySocket.delete(p.conn);
+      p.conn = null;
+    }
+    if (p.seatId) this.releaseSeat(p);
+    this.peers.delete(p.sid);
+    this.byVisitor.delete(p.visitorId);
+    this.dirty.delete(p.sid);
+    this.chasing.delete(p.sid);
+    this.broadcast(encodeEvent({ t: "leave", sid: p.sid }));
+    this.host.countChanged(this.peers.size);
+  }
+
+  private markDirty(p: Peer<C>): void {
+    this.dirty.add(p.sid);
+    p.saved = false;
+    this.host.requestTick();
+  }
+
+  private save(p: Peer<C>): void {
+    if (p.conn) this.host.persist(p.conn, this.record(p));
+    p.saved = true;
+  }
+
+  private adopt(rec: PeerRecord, conn: C | null, until: number, now: number): boolean {
+    if (this.peers.has(rec.sid) || this.byVisitor.has(rec.visitorId)) return false;
+    const p = this.adoptNew(rec, conn, now);
+    p.until = until;
+    if (p.seatId) {
+      if (!seatById(p.seatId) || this.seats.has(p.seatId)) p.seatId = null;
+      else this.seats.set(p.seatId, p.sid);
+    }
+    return true;
+  }
+
+  private adoptNew(rec: PeerRecord, conn: C | null, now: number): Peer<C> {
+    const p: Peer<C> = {
+      ...this.record(rec),
+      conn,
+      until: 0,
+      tx: rec.x,
+      ty: rec.y,
+      rate: new RateLimiter(),
+      budget: new MoveBudget(now),
+      lastWarpAt: -Infinity,
+      lastEventAt: -Infinity,
+      saved: true,
+    };
+    this.peers.set(p.sid, p);
+    this.byVisitor.set(p.visitorId, p.sid);
+    if (conn) this.bySocket.set(conn, p.sid);
+    return p;
+  }
+
+  private resetConnState(p: Peer<C>, now: number): void {
+    p.rate = new RateLimiter();
+    p.budget = new MoveBudget(now);
+    p.lastWarpAt = -Infinity;
+    p.lastEventAt = -Infinity;
+  }
+
+  private sendTo(p: Peer<C>, msg: S2C): void {
+    if (p.conn) this.host.send(p.conn, encodeEvent(msg));
+  }
+
+  /** 접속 중인 모두에게 (except 제외). 유예 중인 피어는 소켓이 없으므로 건너뛴다. */
+  private broadcast(data: string | ArrayBuffer, except?: number): void {
+    for (const p of this.peers.values()) if (p.conn && p.sid !== except) this.host.send(p.conn, data);
+  }
+
+  private state(p: Peer<C>): PeerState {
+    return { sid: p.sid, x: p.x, y: p.y, state: p.state, dir: p.dir };
+  }
+
+  private info(p: Peer<C>): PeerInfo {
+    return { ...this.state(p), name: p.name, color: p.color };
+  }
+
+  private record(r: PeerRecord): PeerRecord {
+    const { sid, visitorId, name, color, x, y, state, dir, seatId } = r;
+    return { sid, visitorId, name, color, x, y, state, dir, seatId };
+  }
+}

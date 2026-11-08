@@ -1,0 +1,31 @@
+name = "tomb-realtime"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+# 채널 하나 = Channel DO 하나 (idFromName("ch-N")), 로비는 전체에 하나 (idFromName("lobby")).
+[[durable_objects.bindings]]
+name = "CHANNEL"
+class_name = "ChannelDO"
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "LobbyDO"
+
+# SQLite 백엔드 (동기 KV API 사용, Workers Paid에서 권장되는 저장소)
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChannelDO", "LobbyDO"]
+
+# 용량 설정. 바꾼 뒤 `npm run deploy -w realtime`으로 재배포한다.
+# JOIN_SECRET, ALLOWED_ORIGINS는 secret이다 — 여기 두지 말고 `wrangler secret put`으로 넣는다
+# ([vars]에 같은 이름이 있으면 secret과 충돌해 배포가 실패한다). 로컬은 package.json dev 스크립트의 --var.
+[vars]
+CHANNEL_CAPACITY = "40"
+MAX_CHANNELS = "10"
+AUTO_OPEN_THRESHOLD = "0.8"
+RECONNECT_GRACE_SEC = "20"
+
+# 커스텀 도메인 rt.{도메인} 연결 (도메인이 Cloudflare 존에 있어야 한다)
+# routes = [
+#   { pattern = "rt.example.com", custom_domain = true }
+# ]

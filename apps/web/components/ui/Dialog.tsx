@@ -37,7 +37,10 @@ export default function Dialog({ title, onClose, children, size = "md", closable
     const dialog = ref.current;
     if (!dialog) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const handleClose = () => onBrowserClose(dialog);
+    // close 이벤트는 비동기로 온다. StrictMode 재마운트처럼 닫았다 곧바로 다시 연 경우의 늦은 이벤트는 무시한다
+    const handleClose = () => {
+      if (!dialog.open) onBrowserClose(dialog);
+    };
     if (!dialog.open) dialog.showModal();
     dialog.addEventListener("close", handleClose);
     return () => {

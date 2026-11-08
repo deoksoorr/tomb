@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --port 8787 --var JOIN_SECRET:dev-join-secret-change-me --var ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000",
+    "dev": "wrangler dev --port 8787 --var JOIN_SECRET:dev-join-secret-change-me --var ALLOWED_ORIGINS:http://localhost:${WEB_PORT:-3000},http://127.0.0.1:${WEB_PORT:-3000}",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit -p .",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p loadtest",
     "test": "vitest run",
     "loadtest": "tsx loadtest/bots.ts"
   },
