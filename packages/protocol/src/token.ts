@@ -1,4 +1,4 @@
-import { JOIN_TOKEN_TTL_SEC, isAvatarBody } from "./constants";
+import { JOIN_TOKEN_TTL_SEC, ROOM_ID_RE, isAvatarBody } from "./constants";
 import { sanitizeLook } from "./items";
 
 // 입장 토큰: base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload, JOIN_SECRET))
@@ -15,6 +15,8 @@ export type JoinClaims = {
   look?: string[];
   /** 아바타 몸 모양 (AVATAR_BODIES, 없으면 hood) */
   body?: string;
+  /** 방 입장 토큰이면 방 id (이때 channel은 0). 채널 토큰엔 없다 */
+  room?: string;
   /** 만료 시각 (unix seconds) */
   exp: number;
 };
@@ -98,7 +100,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp, look, body: rawBody } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look, body: rawBody, room } = c as Record<string, unknown>;
   if (
     typeof visitorId !== "string" ||
     typeof name !== "string" ||
@@ -109,5 +111,5 @@ export async function verifyJoinToken(
   )
     return null;
   if (exp < nowSec) return null;
-  return { visitorId, name, color, channel, exp, look: sanitizeLook(look), body: isAvatarBody(rawBody) ? rawBody : "hood" };
+  return { visitorId, name, color, channel, exp, look: sanitizeLook(look), body: isAvatarBody(rawBody) ? rawBody : "hood", ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}) };
 }

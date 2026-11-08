@@ -1,4 +1,4 @@
-import { ACT_KINDS, MAX_MESSAGE_BYTES, type ActKind } from "./constants";
+import { ACT_KINDS, MAX_MESSAGE_BYTES, isPhraseId, type ActKind, type PhraseId } from "./constants";
 import type { PeerInfo, Sid } from "./types";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
@@ -25,7 +25,9 @@ export type C2S =
   /** 접속자 목록 다시 받기 (자가 복구용, 1분에 한 번 정도) → 서버가 peers로 답한다 */
   | { t: "sync" }
   /** 한 번 하는 동작 (종 치기 등). 서버가 같은 채널에 중계한다 */
-  | { t: "act"; kind: ActKind };
+  | { t: "act"; kind: ActKind }
+  /** 정해진 문장 말풍선 (PHRASES id) */
+  | { t: "say"; id: PhraseId };
 
 // ── 서버 → 클라이언트 ──
 export type WelcomeMsg = {
@@ -53,7 +55,8 @@ export type S2C =
   | { t: "firework"; sid: Sid; item: string; x: number; y: number }
   /** sync 응답: 나를 제외한 현재 접속자 전체와 좌석. 클라이언트는 이걸로 원격 아바타를 맞춘다 */
   | { t: "peers"; peers: PeerInfo[]; seats: Record<string, Sid> }
-  | { t: "act"; sid: Sid; kind: ActKind; x: number; y: number };
+  | { t: "act"; sid: Sid; kind: ActKind; x: number; y: number }
+  | { t: "say"; sid: Sid; id: PhraseId };
 
 export function encodeEvent(msg: C2S | S2C): string {
   return JSON.stringify(msg);
@@ -96,6 +99,8 @@ export function parseC2S(text: string): C2S | null {
       return typeof m.grant === "string" && m.grant.length <= 400 ? { t: m.t, grant: m.grant } : null;
     case "sync":
       return { t: "sync" };
+    case "say":
+      return isPhraseId(m.id) ? { t: "say", id: m.id } : null;
     case "act":
       return typeof m.kind === "string" && (ACT_KINDS as readonly string[]).includes(m.kind) ? { t: "act", kind: m.kind as ActKind } : null;
     default:

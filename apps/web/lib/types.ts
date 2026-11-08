@@ -189,6 +189,12 @@ export type Me = {
   body: string | null;
   /** 지금까지 모은 포인트 합계 (쓰더라도 줄지 않음, 포인트 랭킹 기준) */
   lifetimePoints: number;
+  /** 안 읽은 내 소식 수 */
+  activityUnread: number;
+  /** 다음 닉네임 변경 가능 시각(0이면 지금 가능)과 다음 변경 비용 */
+  nameChange: { nextAllowedAt: number; cost: number };
+  /** 첫 방문 안내를 끝냈는지 (계정 기준 — 기기를 바꿔도 다시 안 뜬다) */
+  tutorialDone: boolean;
   points: number;
   /** 오늘 쌓은 포인트 (DAILY_EARN_CAP 대비) */
   todayEarned: number;
@@ -291,3 +297,29 @@ export type PointRankResponse = { rows: PointRankRow[]; mine: PointRankRow | nul
 /** POST /api/me/presence (화면이 켜져 있는 동안 10분마다) → 머무르기 포인트 */
 export const PRESENCE_INTERVAL_MS = 10 * 60_000;
 export type PresenceResponse = { earned: number; me: Me };
+
+// ── v4: 방 입장·소식·닉네임·오류·경제 ──
+
+/** POST /api/join/room { room } → 방(마을·집·사냥터) 입장 토큰. wsUrl = `${REALTIME_WS_URL}/room/${encodeURIComponent(room)}?t=...` */
+export type RoomJoinRequest = { room: string };
+export type RoomJoinResponse = { room: string; token: string; wsUrl: string };
+
+/**
+ * 내 소식 (자리를 비운 사이 내 묘비·집에 생긴 일). GET /api/me/activity?since=epochMs → 최신 순 50개.
+ * POST /api/me/activity/seen { at } → 여기까지 읽음. me.activityUnread로 안 읽은 수를 HUD에 띄운다.
+ */
+export type ActivityKind = "flower" | "revive" | "houseLike" | "guestbook" | "restore";
+export type ActivityItem = { id: string; kind: ActivityKind; at: number; who: string; targetId: string; targetName: string };
+export type ActivityResponse = { items: ActivityItem[]; unread: number; lastSeenAt: number };
+
+/** POST /api/me/name { name } → 닉네임 변경. 첫 변경 무료, 이후 NAME_CHANGE_PRICE 포인트, NAME_CHANGE_COOLDOWN_DAYS일에 한 번 */
+export const NAME_CHANGE_PRICE = 100;
+export const NAME_CHANGE_COOLDOWN_DAYS = 7;
+export type NameChangeResponse = { me: Me; cost: number; nextAllowedAt: number };
+
+/** POST /api/errors (세션 없어도 됨, 레이트리밋) — 클라이언트 오류 보고. 관리자 화면 "오류" 탭에서 본다 */
+export type ErrorReport = { message: string; stack?: string; url: string; kind: "error" | "unhandledrejection" | "react" | "api"; ua?: string };
+
+/** 관리자: GET /api/admin/economy?days=14 → 날짜별 적립(항목별)·사용(사유별) 합계 */
+export type EconomyDay = { date: string; earned: Record<string, number>; spent: Record<string, number> };
+export type EconomyResponse = { days: EconomyDay[]; totals: { wallets: number; accounts: number } };

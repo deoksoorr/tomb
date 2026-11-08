@@ -63,6 +63,8 @@ export type GameEvents = {
   toast: { message: string };
   /** 카메라 상태. detached=true면 우클릭 드래그로 시점을 옮겨서 내 캐릭터를 따라가지 않는 중 (UI가 "내 캐릭터로" 버튼 표시) */
   "camera:state": { detached: boolean; zoom: number };
+  /** 화면 연출 모드 (sticky). campfire = 모닥불에 앉아 카메라가 불멍 구도로 바뀐 상태 → UI는 HUD를 은은하게 줄인다 */
+  "view:mode": { mode: "normal" | "campfire" };
   /** 대기열 순번 (sticky) */
   "queue:status": QueueStatus;
   /** 상점 맵 안에서 주인장과 상호작용 → UI가 상점 창을 연다 */
@@ -117,6 +119,10 @@ export type UiEvents = {
   "input:jump": undefined;
   /** 감정표현 (모바일 버튼). 데스크톱은 1=wave, 2=cheer */
   "input:act": { kind: "wave" | "cheer" };
+  /** 정해진 문장 말풍선 (PHRASES id). 지금 있는 공간(채널·방)에 보낸다 */
+  "input:say": { id: string };
+  /** 첫 방문 안내: 월드의 한 지점을 화살표로 가리킨다 (null이면 지움). target이 있으면 게임이 그 대상의 좌표를 찾는다 */
+  "guide:point": { target: "nearestGrave" | "shop" | "hunt" | "housing" | "bench" | "campfire" | null; label?: string };
   "input:interact": undefined;
   /** 모달·폼이 열려 있는 동안 게임 키보드 입력을 막는다 */
   "ui:blockKeys": { blocked: boolean };
@@ -177,6 +183,7 @@ const STICKY = new Set<keyof AllEvents>([
   "look:set",
   "graves:mine",
   "seat:near",
+  "view:mode",
   "audio:settings",
   "queue:status",
   "scene:changed",

@@ -102,6 +102,36 @@ export function isAvatarBody(b: unknown): b is AvatarBody {
 /** 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호 */
 export const ACT_KINDS = ["bell", "splash", "wave", "cheer"] as const;
 export type ActKind = (typeof ACT_KINDS)[number];
+
+/**
+ * 정해진 문장 말풍선 (채팅 대신). id만 주고받고 문장은 클라이언트가 이 표로 그린다 → 욕설·스팸이 원천적으로 없다.
+ */
+export const PHRASES = [
+  { id: "hi", text: "반가워요" },
+  { id: "bye", text: "잘 가요" },
+  { id: "thanks", text: "고마워요" },
+  { id: "sit", text: "같이 앉을래요?" },
+  { id: "follow", text: "따라와요!" },
+  { id: "nice", text: "멋져요" },
+  { id: "rip", text: "편히 쉬길…" },
+  { id: "revive", text: "이건 살려야 해요" },
+  { id: "same", text: "저도 그런 적 있어요" },
+  { id: "cheer", text: "다음 건 꼭 끝내요" },
+  { id: "hunt", text: "사냥 같이 가요" },
+  { id: "house", text: "우리 집 놀러 와요" },
+] as const;
+export type PhraseId = (typeof PHRASES)[number]["id"];
+export function isPhraseId(id: unknown): id is PhraseId {
+  return typeof id === "string" && PHRASES.some((p) => p.id === id);
+}
+
+/**
+ * 방(room): 채널 묘지 말고 따로 모이는 공간 — 분양 마을, 개인 집, 사냥터.
+ * 같은 방에 들어온 사람끼리 서로 보인다(위치·상태·말풍선만, 좌석·묘비 이벤트 없음).
+ * id 형식: "village" | "house:{houseId}" | "hunt:{zone}:{difficulty}". 토큰의 room 클레임과 같아야 들어갈 수 있다.
+ */
+export const ROOM_CAPACITY = 30;
+export const ROOM_ID_RE = /^(village|house:[A-Za-z0-9_-]{4,24}|hunt:[a-z0-9_-]{1,24}:[a-z]{1,10})$/;
 export function isAvatarColor(c: unknown): c is AvatarColor {
   return typeof c === "string" && (AVATAR_COLORS as readonly string[]).includes(c);
 }
