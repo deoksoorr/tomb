@@ -3,7 +3,7 @@ import {
   INTERP_DELAY_MS,
   STATE,
   TELEPORT_DIST,
-  TICK_MS,
+  SEND_INTERVAL_MS,
   type DirId,
   type StateId,
 } from "@tomb/protocol";
@@ -18,8 +18,9 @@ export type Sample = { t: number; x: number; y: number; state: StateId; dir: Dir
 export type InterpOut = { x: number; y: number; state: StateId; dir: DirId };
 
 const MAX_SAMPLES = 32;
-/** 델타 스냅샷이라 멈춰 있던 사람은 샘플이 오지 않는다. 이보다 오래 비었으면 직전 위치를 한 틱 전에 다시 넣어 출발을 부드럽게 만든다 */
-const GAP_MS = TICK_MS * 2;
+/** 델타 스냅샷이라 멈춰 있던 사람은 샘플이 오지 않는다. 이보다 오래 비었으면 직전 위치를 전송 한 번 전에 다시 넣어 출발을 부드럽게 만든다.
+ * 샘플 간격은 서버 틱이 아니라 상대의 전송 주기(≥100ms)를 따르므로 그 기준으로 잡는다 */
+const GAP_MS = SEND_INTERVAL_MS * 2;
 
 const moving = (s: StateId) => s === STATE.walk || s === STATE.run;
 
@@ -60,7 +61,7 @@ export class Interpolator {
       if (t < last.t) t = last.t; // 시계 역행 방지
       // 움직이던 중의 빈 틱(클라이언트 전송 간격 ≥100ms와 서버 틱 100ms가 어긋나 가끔 한 틱이 빠진다)은
       // 멈춘 게 아니므로 그대로 선형 보간한다. 정지 샘플을 끼우면 외삽했던 만큼 뒤로 당겨지는 떨림이 생긴다.
-      if (t - last.t > GAP_MS && !moving(last.state)) this.buf.push({ ...last, t: t - TICK_MS });
+      if (t - last.t > GAP_MS && !moving(last.state)) this.buf.push({ ...last, t: t - SEND_INTERVAL_MS });
     }
     this.buf.push({ t, x, y, state, dir });
     while (this.buf.length > MAX_SAMPLES) this.prev = this.buf.shift() ?? null;

@@ -5,8 +5,13 @@ export const DEFAULT_MAX_CHANNELS = 10;
 export const DEFAULT_AUTO_OPEN_THRESHOLD = 0.8;
 export const DEFAULT_RECONNECT_GRACE_SEC = 20;
 
-/** 서버 브로드캐스트 틱 (델타 SNAPSHOT 주기) */
-export const TICK_MS = 100;
+/**
+ * 서버 브로드캐스트 틱 (델타 SNAPSHOT 주기).
+ * 명세는 100ms였지만, 운영 실측(한국 → Cloudflare apac DO 왕복 약 76ms)에서 틱 대기(0~100ms)가 더해져
+ * 이동→상대 수신 지연 p95가 193ms로 기준(150ms)을 넘었다. 명세 8절에 따라 틱을 50ms로 줄였다.
+ * 클라이언트 전송(MOVE)은 그대로 최대 10Hz라 DO 요청 수(=요금)는 늘지 않는다. 송신은 무료.
+ */
+export const TICK_MS = 50;
 /** 클라이언트 MOVE 최대 전송 주기 (10Hz) */
 export const SEND_INTERVAL_MS = 100;
 /** 원격 아바타 보간 지연 버퍼 */
