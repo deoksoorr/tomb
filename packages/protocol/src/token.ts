@@ -1,4 +1,5 @@
 import { JOIN_TOKEN_TTL_SEC } from "./constants";
+import { sanitizeLook } from "./items";
 
 // 입장 토큰: base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload, JOIN_SECRET))
 // Web Crypto만 사용하므로 Node(>=20, Vercel)와 Cloudflare Workers 양쪽에서 같은 코드가 돈다.
@@ -10,6 +11,8 @@ export type JoinClaims = {
   color: string;
   /** 이 토큰으로 들어갈 수 있는 채널. 토큰 하나로 여러 채널 자리를 차지하지 못하게 한다 */
   channel: number;
+  /** 입장 시점에 착용 중인 꾸미기 (없으면 빈 배열) */
+  look?: string[];
   /** 만료 시각 (unix seconds) */
   exp: number;
 };
@@ -93,7 +96,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look } = c as Record<string, unknown>;
   if (
     typeof visitorId !== "string" ||
     typeof name !== "string" ||
@@ -104,5 +107,5 @@ export async function verifyJoinToken(
   )
     return null;
   if (exp < nowSec) return null;
-  return { visitorId, name, color, channel, exp };
+  return { visitorId, name, color, channel, exp, look: sanitizeLook(look) };
 }

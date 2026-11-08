@@ -43,12 +43,20 @@ export type Grave = {
   createdAt: number;
   hidden?: boolean;
   ownerTokenHash: string; // sha256(ownerToken). 원문은 저장하지 않음
+  /** 세운 계정 (계정 개편 이후 묘비). 이 계정으로 들어오면 어느 기기에서든 수정·삭제할 수 있다 */
+  ownerAccountId?: string;
+  decor?: GraveDecor[];
 };
 
+/** 묘비 꾸미기 (상점 아이템, 7일 유지) */
+export type GraveDecor = { itemId: string; until: number };
+
 /** 클라이언트로 내보내는 묘비 */
-export type PublicGrave = Omit<Grave, "ownerTokenHash" | "hidden"> & {
+export type PublicGrave = Omit<Grave, "ownerTokenHash" | "hidden" | "ownerAccountId"> & {
   flowers: number;
   revives: number;
+  /** 만료되지 않은 꾸미기만 */
+  decor?: GraveDecor[];
 };
 
 // ── API 응답 ──
@@ -67,6 +75,8 @@ export type GraveDetailResponse = {
   myRevive: boolean;
   /** 오늘 이미 헌화했는지 */
   myFlowerToday: boolean;
+  /** 내 계정이 세운 묘비인지 (ownerToken이 없어도 수정·삭제·꾸미기 가능) */
+  isMine: boolean;
 };
 
 /** POST /api/graves 와 PATCH /api/graves/[id] 의 입력 */
@@ -85,10 +95,30 @@ export type GraveInput = {
   mourner: string;
 };
 
-export type CreateGraveResponse = { grave: PublicGrave; ownerToken: string };
+export type CreateGraveResponse = { grave: PublicGrave; ownerToken: string; earned: number };
+
+/** 간단 묘비 세우기: "얼마나 살았나요" 선택지 (탄생일 = 오늘 - days + 1, 사망일 = 오늘) */
+export const LIFESPAN_PRESETS = [
+  { id: "day", label: "하루", days: 1 },
+  { id: "week", label: "일주일", days: 7 },
+  { id: "month", label: "한 달", days: 30 },
+  { id: "season", label: "석 달", days: 90 },
+  { id: "half", label: "반년", days: 180 },
+  { id: "year", label: "1년", days: 365 },
+  { id: "years", label: "몇 년", days: 730 },
+] as const;
+export type LifespanId = (typeof LIFESPAN_PRESETS)[number]["id"];
+
+/**
+ * POST /api/graves 의 간단 입력 (세우기 폼은 이것만 쓴다).
+ * 묘비명이 비면 서버가 `향년 {N}일, 조용히 별세`를 넣는다. 사인을 안 고르면 "other". 상주는 세션 계정의 이름.
+ * PATCH(수정)는 기존 GraveInput 전체 교체도 계속 받는다.
+ */
+export type QuickGraveInput = { name: string; lived: LifespanId; cause?: CauseTag; epitaph?: string; mourner: string };
 export type UpdateGraveResponse = { grave: PublicGrave };
-export type FlowerResponse = { count: number };
-export type ReviveResponse = { revived: boolean; count: number };
+/** 반응 응답의 earned = 이번에 쌓인 포인트 (한도에 걸리면 0) */
+export type FlowerResponse = { count: number; earned: number };
+export type ReviveResponse = { revived: boolean; count: number; earned?: number };
 export type ReportResponse = { ok: true };
 
 /** POST /api/session */
@@ -108,7 +138,52 @@ export type JoinRequest = {
  */
 export type JoinResponse =
   | { mode: "channel"; channel: number; token: string; wsUrl: string }
+  /** 전체 400명이 차서 대기열. queueUrl을 QUEUE_POLL_MS마다 GET하면 QueueStatus가 온다(토큰 10분 유효) */
+  | { mode: "queue"; queueUrl: string }
   | { mode: "spectator" };
+
+// ── 계정·포인트·상점 ──
+// 방문자 쿠키(vid) = 계정 id. 처음 오면 자동으로 익명 계정이 생긴다.
+// "개인 코드"를 발급받아 두면 다른 기기에서 그 코드로 같은 계정에 들어올 수 있다.
+
+/** GET /api/me (세션 필요) */
+export type Me = {
+  accountId: string;
+  /** 마지막으로 쓴 유저이름 (코드 로그인한 기기의 입장 화면에 미리 채움) */
+  name: string | null;
+  points: number;
+  /** 오늘 쌓은 포인트 (DAILY_EARN_CAP 대비) */
+  todayEarned: number;
+  attendance: { today: boolean; streak: number };
+  /** 개인 코드를 발급받은 적이 있는지 (원문은 발급 때 한 번만 보여 준다) */
+  hasCode: boolean;
+  /** 가방: itemId → 개수 */
+  inventory: Record<string, number>;
+  /** 착용 중인 꾸미기 (만료 전) */
+  equipped: { itemId: string; until: number }[];
+  /** 내 계정이 세운 묘비 id */
+  graves: string[];
+};
+
+/** POST /api/me/attend → 출석 처리 (입장할 때 호출, 하루 1번만 지급) */
+export type AttendResponse = { me: Me; earned: number };
+/** POST /api/me/code → 개인 코드 발급(재발급하면 이전 코드는 무효) */
+export type CodeResponse = { code: string };
+/** POST /api/me/login { code } → 이 기기를 그 계정으로 전환 (세션 쿠키 교체) */
+export type CodeLoginResponse = { me: Me };
+/** POST /api/shop/buy { itemId } */
+export type BuyResponse = { me: Me };
+/**
+ * POST /api/shop/use { itemId, graveId? }
+ *  - firework → grant(폭죽 증서, 60초) : 게임이 실시간 서버로 보낸다
+ *  - cosmetic → lookGrant(착용 증서) : 게임이 실시간 서버로 보내 다른 사람에게도 보이게 한다
+ *  - decor(graveId 필수, 내 묘비만) → grave(꾸미기가 반영된 묘비)
+ */
+export type UseItemResponse = { me: Me; grant?: string; lookGrant?: string; grave?: PublicGrave };
+/** GET /api/me/look → 지금 착용 상태의 증서 (재접속 때) */
+export type LookGrantResponse = { look: string[]; lookGrant: string };
+/** GET /api/version → 배포 식별자. 다르면 새 버전 안내 */
+export type VersionResponse = { version: string };
 
 /**
  * GET /api/upload — 업로드 방식 안내 (Blob 토큰이 없으면 로컬 대체 경로).
@@ -131,4 +206,6 @@ export const LS = {
   lastChannel: "tomb.lastChannel",
   /** { [graveId]: ownerToken } */
   ownerTokens: "tomb.ownerTokens",
+  /** 묘지 디자인 테마 */
+  theme: "tomb.theme",
 } as const;

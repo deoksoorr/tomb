@@ -1,4 +1,4 @@
-import type { GraveEventKind } from "@tomb/protocol";
+import type { GraveEventKind, QueueStatus } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
@@ -9,7 +9,8 @@ export type NetMode =
   | "online" // 채널 접속 중
   | "reconnecting" // 끊겨서 재시도 중 (지수 백오프)
   | "spectator" // 전체 상한 도달 → 관람 모드 (혼자 걷기, 30초마다 합류 재시도)
-  | "replaced" // 다른 탭/기기에서 같은 방문자로 접속해서 이 연결이 종료됨 (4002). 자동 재접속하지 않음
+  | "replaced" // 다른 탭/기기에서 같은 방문자로 접속해서 이 연결이 종료됨 (4002). 자동 재접속하지 않음 (UI가 "여기서 다시 접속" 제공)
+  | "queue" // 전체 상한 도달 → 대기열 (혼자 걷기 + 순번 표시). queue:status로 순번이 온다
   | "offline"; // 재시도 포기 / 실시간 서버 없음
 
 export type NetStatus = {
@@ -55,7 +56,21 @@ export type GameEvents = {
   toast: { message: string };
   /** 카메라 상태. detached=true면 우클릭 드래그로 시점을 옮겨서 내 캐릭터를 따라가지 않는 중 (UI가 "내 캐릭터로" 버튼 표시) */
   "camera:state": { detached: boolean; zoom: number };
+  /** 대기열 순번 (sticky) */
+  "queue:status": QueueStatus;
+  /** 상점 맵 안에서 주인장과 상호작용 → UI가 상점 창을 연다 */
+  "shop:open": undefined;
+  /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
+  "scene:changed": { scene: "world" | "shop" };
 };
+
+/** 묘지 디자인: temple 고요한 산사(기본) / gothic 서양 고딕 묘지 / sakura 벚꽃 언덕 */
+export const THEMES = [
+  { id: "temple", label: "고요한 산사" },
+  { id: "gothic", label: "고딕 묘지" },
+  { id: "sakura", label: "벚꽃 언덕" },
+] as const;
+export type ThemeId = (typeof THEMES)[number]["id"];
 
 /** UI → Game */
 export type UiEvents = {
@@ -84,12 +99,36 @@ export type UiEvents = {
   "camera:recenter": undefined;
   /** 줌 버튼(모바일 등). delta>0 확대, <0 축소. 휠과 같은 단계로 움직인다 */
   "camera:zoom": { delta: number };
+  /** "여기서 다시 접속" (replaced/offline 상태에서) */
+  "net:reconnect": undefined;
+  /** 꾸미기 착용 변경: 내 아바타에 바로 반영하고 grant를 실시간 서버로 보낸다 (sticky) */
+  "look:set": { look: string[]; lookGrant: string };
+  /** 폭죽 발사: 내 위치에서 바로 터뜨리고 grant를 실시간 서버로 보낸다 */
+  "firework:fire": { item: string; grant: string };
+  /** 묘지 디자인 테마 (sticky) */
+  "theme:set": { theme: ThemeId };
+  /** BGM 볼륨·음소거를 효과음에도 적용 (sticky) */
+  "audio:settings": { volume: number; muted: boolean };
+  /** 상점 UI가 닫힘 → 게임 키 입력 복귀 등 */
+  "shop:closed": undefined;
 };
 
 type AllEvents = GameEvents & UiEvents;
 type Handler<K extends keyof AllEvents> = (payload: AllEvents[K]) => void;
 
-const STICKY = new Set<keyof AllEvents>(["net:status", "graves:set", "ui:blockKeys", "ready", "camera:state", "grave:near"]);
+const STICKY = new Set<keyof AllEvents>([
+  "net:status",
+  "graves:set",
+  "ui:blockKeys",
+  "ready",
+  "camera:state",
+  "grave:near",
+  "look:set",
+  "theme:set",
+  "audio:settings",
+  "queue:status",
+  "scene:changed",
+]);
 
 class Bridge {
   private handlers = new Map<keyof AllEvents, Set<Handler<never>>>();

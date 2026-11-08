@@ -19,6 +19,18 @@ export type LobbyInfo = {
 
 export type ChannelStatus = "ok" | "busy" | "full";
 
+/**
+ * 대기열 (전체 상한 도달 시). 실시간 서버 로비가 순서를 관리한다(먼저 온 순서대로).
+ * 클라이언트는 QUEUE_POLL_MS마다 자기 자리를 확인하고, admitted가 오면 그 채널로 바로 입장한다
+ * (자리는 QUEUE_HOLD_MS 동안 그 사람 몫으로 잡아 둔다). 기다리는 동안은 혼자 걷기(관람) 모드.
+ */
+export type QueueStatus =
+  | { state: "waiting"; position: number; size: number }
+  | { state: "admitted"; channel: number; holdUntil: number }
+  | { state: "none" };
+export const QUEUE_POLL_MS = 5_000;
+export const QUEUE_HOLD_MS = 30_000;
+
 /** 여유=초록(ok), 혼잡(threshold 이상)=노랑(busy), 만석=회색(full) */
 export function channelStatus(ch: ChannelInfo, threshold = DEFAULT_AUTO_OPEN_THRESHOLD): ChannelStatus {
   if (ch.count >= ch.cap) return "full";

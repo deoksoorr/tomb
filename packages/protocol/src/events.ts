@@ -17,7 +17,13 @@ export type C2S =
   /** 묘비 생성/수정/삭제 후 같은 채널에 알린다 */
   | { t: "graveEvent"; kind: GraveEventKind; graveId: string }
   /** 랭킹 클릭 등 의도된 순간이동. 속도 검증을 건너뛰고 범위만 검증한다(쿨다운 있음). */
-  | { t: "warp"; x: number; y: number };
+  | { t: "warp"; x: number; y: number }
+  /** 꾸미기 변경: Vercel이 서명한 look 증서(grants.ts) */
+  | { t: "look"; grant: string }
+  /** 폭죽 1발: Vercel이 서명한 firework 증서. 현재 위치에서 터진다 */
+  | { t: "firework"; grant: string }
+  /** 접속자 목록 다시 받기 (자가 복구용, 1분에 한 번 정도) → 서버가 peers로 답한다 */
+  | { t: "sync" };
 
 // ── 서버 → 클라이언트 ──
 export type WelcomeMsg = {
@@ -40,7 +46,11 @@ export type S2C =
   | { t: "seat"; seatId: string; sid: Sid | null }
   | { t: "seatDenied"; seatId: string }
   | { t: "emote"; sid: Sid; kind: EmoteKind; graveId: string }
-  | { t: "graveEvent"; sid: Sid; kind: GraveEventKind; graveId: string };
+  | { t: "graveEvent"; sid: Sid; kind: GraveEventKind; graveId: string }
+  | { t: "look"; sid: Sid; look: string[] }
+  | { t: "firework"; sid: Sid; item: string; x: number; y: number }
+  /** sync 응답: 나를 제외한 현재 접속자 전체와 좌석. 클라이언트는 이걸로 원격 아바타를 맞춘다 */
+  | { t: "peers"; peers: PeerInfo[]; seats: Record<string, Sid> };
 
 export function encodeEvent(msg: C2S | S2C): string {
   return JSON.stringify(msg);
@@ -78,6 +88,11 @@ export function parseC2S(text: string): C2S | null {
         : null;
     case "warp":
       return isNum(m.x) && isNum(m.y) ? { t: "warp", x: Math.round(m.x), y: Math.round(m.y) } : null;
+    case "look":
+    case "firework":
+      return typeof m.grant === "string" && m.grant.length <= 400 ? { t: m.t, grant: m.grant } : null;
+    case "sync":
+      return { t: "sync" };
     default:
       return null;
   }

@@ -40,4 +40,6 @@ export type PeerState = {
 export type PeerInfo = PeerState & {
   name: string;
   color: string;
+  /** 착용 중인 꾸미기 아이템 id (items.ts). 입장 때와 바뀔 때만 보낸다 */
+  look: string[];
 };

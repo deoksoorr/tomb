@@ -6,3 +6,5 @@ export * from "./token";
 export * from "./world";
 export * from "./lobby";
 export * from "./names";
+export * from "./items";
+export * from "./grants";

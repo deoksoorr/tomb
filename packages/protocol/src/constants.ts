@@ -32,6 +32,8 @@ export const JOIN_TOKEN_TTL_SEC = 60;
 export const LOBBY_POLL_MS = 5_000;
 export const LOBBY_CACHE_SEC = 2;
 export const SPECTATOR_POLL_MS = 30_000;
+/** 접속자 목록 자가 복구 주기 (C2S sync) */
+export const PEER_SYNC_MS = 60_000;
 export const EMPTY_CHANNEL_HIDE_MS = 5 * 60_000;
 export const LOBBY_DEBOUNCE_MS = 1_000;
 export const LOBBY_SNAPSHOT_MS = 30_000;
