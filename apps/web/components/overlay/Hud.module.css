@@ -72,13 +72,15 @@
   pointer-events: auto;
 }
 
-.note {
-  padding: 2px 8px;
-  background: rgba(20, 21, 17, 0.7);
-  color: var(--muted);
-  font-family: var(--font-small);
-  font-size: 10px;
+/* 연결이 끊긴 탭: 한 줄 카드 (가운데 캐릭터를 가리지 않게) */
+.disconnected {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
 }
+
 
 .toasts {
   display: grid;
@@ -107,5 +109,16 @@
 @keyframes breathe {
   50% {
     opacity: 0.5;
+  }
+}
+
+/* 낮은 화면(가로 폰): 토스트는 최근 하나만 */
+@media (max-height: 520px) {
+  .toast:not(:last-child) {
+    display: none;
+  }
+
+  .banner {
+    padding: 4px 10px;
   }
 }

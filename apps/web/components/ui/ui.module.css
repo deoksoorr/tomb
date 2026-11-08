@@ -168,3 +168,18 @@ textarea.input {
   font-size: 12px;
   box-shadow: 0 0 0 1px var(--line);
 }
+
+/* 손가락으로 누르기 편하게 (44px) */
+@media (pointer: coarse) {
+  .button {
+    min-height: 44px;
+  }
+
+  .icon {
+    min-width: 44px;
+  }
+
+  .input {
+    min-height: 44px;
+  }
+}

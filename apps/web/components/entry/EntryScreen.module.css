@@ -122,7 +122,16 @@
   outline-offset: 6px;
 }
 
+.account {
+  color: var(--candle);
+  text-align: center;
+}
+
+/* 폼이 길어 화면을 넘으면 입장 버튼은 아래에 붙어 있게 */
 .enter {
+  position: sticky;
+  bottom: calc(var(--safe-bottom) + 4px);
+  z-index: 1;
   min-height: 46px;
   font-family: var(--font-read);
   font-size: 15px;

@@ -8,8 +8,10 @@ export const GRAVE_TEX_W = 18;
 export const GRAVE_MOUND_H = 6;
 export const GRAVE_STONE_H: Record<GraveTier, number> = { woodSign: 17, smallStone: 16, largeStone: 22, pagoda: 28 };
 
-export function graveTexKey(tier: GraveTier, variant: number): string {
-  return `grave-${tier}-${variant}`;
+export type GraveStyle = "temple" | "gothic" | "sakura";
+
+export function graveTexKey(tier: GraveTier, variant: number, style: GraveStyle = "temple"): string {
+  return style === "temple" ? `grave-${tier}-${variant}` : `grave-${style}-${tier}-${variant}`;
 }
 export function graveOriginY(tier: GraveTier): number {
   return GRAVE_STONE_H[tier] / (GRAVE_STONE_H[tier] + GRAVE_MOUND_H);
@@ -19,8 +21,9 @@ const OUT = 0x2b2a27;
 const WOOD = { hi: 0x9e7f5a, mid: 0x8a6c4a, lo: 0x6b5238, grain: 0x5e4630 };
 const MOSS = 0x5f6e4a;
 
+let stoneBase: Color | null = null;
 function stonePal(variant: number) {
-  const base = variant === 1 ? 0x7d8184 : 0x8b8a82;
+  const base = stoneBase ?? (variant === 1 ? 0x7d8184 : 0x8b8a82);
   return { hi: lighten(base, 0.18), mid: base, lo: darken(base, 0.2), cut: darken(base, 0.38) };
 }
 
@@ -146,17 +149,86 @@ function pagoda(variant: number): Grid {
   return g;
 }
 
-export function graveCanvas(tier: GraveTier, variant: number): HTMLCanvasElement {
+function templeGrave(tier: GraveTier, variant: number): Grid {
   switch (tier) {
     case "woodSign":
-      return woodSign(variant).toCanvas();
+      return woodSign(variant);
     case "smallStone":
-      return smallStone(variant).toCanvas();
+      return smallStone(variant);
     case "largeStone":
-      return largeStone(variant).toCanvas();
+      return largeStone(variant);
     case "pagoda":
-      return pagoda(variant).toCanvas();
+      return pagoda(variant);
   }
+}
+
+// ── 고딕: 나무 십자가 / 십자 새긴 비석 / 고리 십자가 / 오벨리스크 ──
+function gothicGrave(tier: GraveTier, variant: number): Grid {
+  const sh = GRAVE_STONE_H[tier];
+  const g = new Grid(GRAVE_TEX_W, sh + GRAVE_MOUND_H);
+  mound(g, sh);
+  const b = new Grid(GRAVE_TEX_W, sh + GRAVE_MOUND_H);
+  const p = { hi: 0x9a9da6, mid: 0x7a7d86, lo: 0x5a5c64, cut: 0x3c3d44 };
+  if (variant === 1) Object.assign(p, { hi: 0x8e8a86, mid: 0x6e6a66, lo: 0x524e4b, cut: 0x34312e });
+  if (tier === "woodSign") {
+    const w = { hi: 0x7a5c40, mid: 0x5e4632, lo: 0x46331f };
+    b.rect(8, 1, 2, sh - 1, w.mid);
+    b.vline(9, 1, sh - 1, w.lo);
+    b.rect(4, 4, 10, 2, w.mid);
+    b.hline(4, 13, 4, w.hi);
+    if (variant === 2) b.set(5, 6, w.lo);
+  } else if (tier === "smallStone") {
+    b.ellipse(9, 6, 6, 4, p.mid);
+    b.rect(3, 6, 12, sh - 6, p.mid);
+    shade(b, 4, 13, 0, sh, p);
+    b.vline(9, 5, 11, p.cut);
+    b.hline(7, 11, 7, p.cut);
+  } else if (tier === "largeStone") {
+    b.rect(3, 17, 12, sh - 17, p.lo);
+    b.hline(3, 14, 17, p.mid);
+    b.rect(7, 1, 4, 16, p.mid);
+    b.rect(3, 5, 12, 4, p.mid);
+    // 교차점의 고리
+    for (let a = 0; a < 24; a++) b.set(Math.round(9 + Math.cos((a / 24) * Math.PI * 2) * 4), Math.round(7 + Math.sin((a / 24) * Math.PI * 2) * 4), p.lo);
+    b.vline(7, 1, 16, p.hi);
+    b.hline(3, 14, 5, p.hi);
+  } else {
+    b.rect(3, 22, 12, 6, p.lo);
+    b.hline(3, 14, 22, p.mid);
+    for (let y = 4; y < 22; y++) {
+      const hw = 1 + Math.floor((y - 4) / 6);
+      b.hline(9 - hw, 8 + hw, y, y % 5 === 0 ? p.lo : p.mid);
+      b.set(9 - hw, y, p.hi);
+    }
+    b.set(8, 1, p.hi);
+    b.hline(8, 9, 2, p.mid);
+    b.hline(7, 10, 3, p.mid);
+  }
+  if (variant === 2 && tier !== "woodSign") for (const [x, y] of [[4, sh - 2], [5, sh - 1], [12, sh - 1]]) b.set(x, y, 0x4f5a44);
+  g.draw(b, 0, 0);
+  g.outline(OUT);
+  return g;
+}
+
+/** 벚꽃: 산사와 같은 모양을 밝은 돌빛으로, 흙무덤에 꽃잎 */
+function sakuraGrave(tier: GraveTier, variant: number): Grid {
+  stoneBase = variant === 1 ? 0xa3a2a6 : 0xaeaaa2;
+  const g = templeGrave(tier, variant);
+  stoneBase = null;
+  const sh = GRAVE_STONE_H[tier];
+  const r = rng(tier.length * 7 + variant);
+  for (let i = 0; i < 6; i++) {
+    const x = 3 + Math.floor(r() * 12);
+    const y = sh + Math.floor(r() * 4);
+    if (g.filled(x, y)) g.set(x, y, r() < 0.5 ? 0xf2b8c8 : 0xe89ab0);
+  }
+  return g;
+}
+
+export function graveCanvas(tier: GraveTier, variant: number, style: GraveStyle = "temple"): HTMLCanvasElement {
+  if (style === "gothic") return gothicGrave(tier, variant).toCanvas();
+  if (style === "sakura") return sakuraGrave(tier, variant).toCanvas();
+  return templeGrave(tier, variant).toCanvas();
 }
 
 // ── 꽃 더미 (헌화 수, 최대 8송이) ──

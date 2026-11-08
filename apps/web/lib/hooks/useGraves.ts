@@ -3,6 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
 import { api, ApiRequestError } from "@/lib/api";
+import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
 import type { GraveDetailResponse, GraveListResponse, PublicGrave } from "@/lib/types";
 import { GraveEventGate, isActionableGraveEvent } from "./graveEventGate";
 import { mergeGraves, pruneOverrides, REVIVE_TOP_N, sortByRevives, type Overrides } from "./graveMerge";
@@ -90,20 +91,61 @@ export class GraveCache {
 
 export type GravesState = GravesSnapshot & { cache: GraveCache };
 
-/** 목록을 시작 시 + 30초마다 받고, 같은 채널의 묘비 변경(net:graveEvent)은 상세를 받아 바로 반영한다 */
+// ── 첫 화면 속도: 입장 화면이 뜨자마자 목록을 받아 두고, 마지막 목록은 localStorage에 남겨 다음 방문 때 바로 깐다 ──
+
+let prefetched: Promise<GraveListResponse> | null = null;
+
+/** 입장 화면에서 부른다. 입장하면 useGraves가 이 응답을 이어받는다 */
+export function prefetchGraves(): void {
+  prefetched ??= api.listGraves();
+  prefetched.catch(() => {
+    prefetched = null;
+  });
+}
+
+function takePrefetched(): Promise<GraveListResponse> | null {
+  const p = prefetched;
+  prefetched = null;
+  return p;
+}
+
+/** 저장해 둔 목록. 형식이 다르면 null */
+export function parseCachedList(raw: string | null): GraveListResponse | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as Partial<GraveListResponse>;
+    return Array.isArray(v.graves) && Array.isArray(v.reviveTop) && typeof v.generatedAt === "number"
+      ? (v as GraveListResponse)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 목록: 저장해 둔 목록을 바로 깔고 → 미리 받아 둔(또는 새로 받은) 최신 목록으로 바꾸고 → 30초마다 갱신.
+ * 같은 채널의 묘비 변경(net:graveEvent)은 상세를 받아 바로 반영한다.
+ */
 export function useGraves(): GravesState {
   const [cache] = useState(() => new GraveCache());
   const snapshot = useSyncExternalStore(cache.subscribe, cache.getSnapshot, cache.getSnapshot);
 
   useEffect(() => {
+    const cached = parseCachedList(readItem(UI_KEYS.gravesCache));
+    if (cached) cache.setList(cached);
+
     let ctrl: AbortController | null = null;
+    const apply = (list: GraveListResponse) => {
+      cache.setList(list);
+      writeItem(UI_KEYS.gravesCache, JSON.stringify(list));
+    };
     const load = async () => {
       if (document.hidden) return;
       ctrl?.abort();
       const mine = (ctrl = new AbortController());
       try {
         const list = await api.listGraves(mine.signal);
-        if (!mine.signal.aborted) cache.setList(list);
+        if (!mine.signal.aborted) apply(list);
       } catch {
         // 다음 주기에 다시 받는다
       }
@@ -111,7 +153,9 @@ export function useGraves(): GravesState {
     const onVisibility = () => {
       if (!document.hidden) void load();
     };
-    void load();
+    const early = takePrefetched();
+    if (early) void early.then(apply, load);
+    else void load();
     const timer = setInterval(load, LIST_POLL_MS);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {

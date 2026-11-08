@@ -1,0 +1,141 @@
+.panel {
+  display: grid;
+  gap: 18px;
+}
+
+.state {
+  padding: 24px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.points {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  background: var(--bg-deep);
+  text-align: center;
+}
+
+.balance {
+  color: var(--bone);
+}
+
+.balance strong {
+  color: var(--candle);
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sub {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.section {
+  display: grid;
+  gap: 8px;
+}
+
+.heading {
+  color: var(--bone);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.empty {
+  color: var(--muted);
+}
+
+.list {
+  display: grid;
+  gap: 4px;
+}
+
+.row,
+.graveButton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 8px;
+  background: var(--bg-deep);
+}
+
+.graveButton {
+  width: 100%;
+  border: 0;
+  color: var(--text);
+  text-align: left;
+}
+
+.graveButton:hover {
+  background: var(--surface);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.count {
+  color: var(--candle);
+}
+
+.meta {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.codeBox {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-deep);
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}
+
+.code {
+  color: var(--bone);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
+.warning {
+  grid-column: 1 / -1;
+  color: var(--candle);
+}
+
+.confirm {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-deep);
+  text-align: center;
+}
+
+.confirmButtons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.notice {
+  min-height: 1.6em;
+  color: var(--candle);
+  text-align: center;
+}

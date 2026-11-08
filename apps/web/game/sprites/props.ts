@@ -4,8 +4,13 @@ import { darken, Grid, lighten, rng, type Color } from "./pixel";
 // 모두 원점 = 바닥 중앙 (0.5, 1)으로 쓰도록 맨 아래 줄을 그림자 줄로 둔다.
 
 const OUT = 0x1f1d1a;
-const WOOD = { hi: 0x927252, mid: 0x7a5d40, lo: 0x5a432e, line: 0x2e2219 };
+export type WoodPal = { hi: Color; mid: Color; lo: Color; line: Color };
+export type LeafPal = { hi: Color; mid: Color; lo: Color; deep: Color };
+export type TrunkPal = { hi: Color; mid: Color; lo: Color };
+const WOOD: WoodPal = { hi: 0x927252, mid: 0x7a5d40, lo: 0x5a432e, line: 0x2e2219 };
 const STONE = { hi: 0xa4a297, mid: 0x8a887e, lo: 0x67655d, line: 0x3a3934 };
+const LEAF: LeafPal = { hi: 0x4a5f3c, mid: 0x38492f, lo: 0x2a3825, deep: 0x222d1f };
+const TRUNK: TrunkPal = { hi: 0x6e5840, mid: 0x5a4632, lo: 0x43342a };
 
 function shadow(g: Grid, cx: number, cy: number, rx: number, ry: number, a = 70) {
   for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++)
@@ -25,17 +30,16 @@ function line(g: Grid, x0: number, y0: number, x1: number, y1: number, c: Color,
   }
 }
 
-export function tree(variant: number): HTMLCanvasElement {
+export function tree(variant: number, leaf: LeafPal = LEAF, trunk: TrunkPal = TRUNK): HTMLCanvasElement {
   const g = new Grid(32, 40);
   const r = rng(17 + variant * 31);
-  const leaf = { hi: 0x4a5f3c, mid: 0x38492f, lo: 0x2a3825, deep: 0x222d1f };
   // 줄기
   for (let y = 22; y <= 37; y++) {
     const flare = y > 34 ? y - 34 : 0;
-    for (let x = 13 - flare; x <= 18 + flare; x++) g.set(x, y, x <= 14 ? 0x6e5840 : x >= 17 ? 0x43342a : 0x5a4632);
+    for (let x = 13 - flare; x <= 18 + flare; x++) g.set(x, y, x <= 14 ? trunk.hi : x >= 17 ? trunk.lo : trunk.mid);
   }
-  g.set(15, 28, 0x43342a);
-  g.set(16, 31, 0x43342a);
+  g.set(15, 28, trunk.lo);
+  g.set(16, 31, trunk.lo);
   // 수관
   const blobs: [number, number, number, number][] =
     variant % 2 === 0
@@ -69,10 +73,8 @@ export function tree(variant: number): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-export function deadTree(variant: number): HTMLCanvasElement {
+export function deadTree(variant: number, bark: Color = 0x51443a, hi: Color = 0x65574a): HTMLCanvasElement {
   const g = new Grid(28, 38);
-  const bark = 0x51443a;
-  const hi = 0x65574a;
   for (let y = 16; y <= 35; y++) {
     const flare = y > 32 ? y - 32 : 0;
     for (let x = 12 - flare; x <= 15 + flare; x++) g.set(x, y, x <= 12 ? hi : bark);
@@ -128,9 +130,8 @@ export function lantern(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-export function bench(width: number): HTMLCanvasElement {
+export function bench(width: number, w: WoodPal = WOOD): HTMLCanvasElement {
   const g = new Grid(width, 16);
-  const w = WOOD;
   // 등받이
   g.rect(2, 1, width - 4, 2, w.mid);
   g.rect(2, 1, width - 4, 1, w.hi);
@@ -148,9 +149,8 @@ export function bench(width: number): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-export function chair(facing: "down" | "left" | "right"): HTMLCanvasElement {
+export function chair(facing: "down" | "left" | "right", w: WoodPal = WOOD): HTMLCanvasElement {
   const g = new Grid(14, 18);
-  const w = WOOD;
   if (facing === "down") {
     g.rect(2, 1, 10, 2, w.mid);
     g.rect(2, 1, 10, 1, w.hi);

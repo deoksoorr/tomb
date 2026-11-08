@@ -7,12 +7,14 @@ import { useAmbience } from "@/lib/hooks/useAmbience";
 import { isChannelSelectable, useLobby } from "@/lib/hooks/useLobby";
 import { useHydrated } from "@/lib/hooks/useMedia";
 import { readItem, writeItem } from "@/lib/storage";
-import { LS } from "@/lib/types";
+import { LS, type Me } from "@/lib/types";
+import ThemePicker from "../account/ThemePicker";
 import { bgm } from "../bgm/engine";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import AvatarSprite from "./AvatarSprite";
 import ChannelPicker, { type ChannelChoice } from "./ChannelPicker";
+import CodeLogin from "./CodeLogin";
 import NightSky from "./NightSky";
 import styles from "./EntryScreen.module.css";
 
@@ -69,6 +71,7 @@ function EntryForm({ onEnter }: { onEnter: (choice: EntryChoice) => void }) {
   const [touched, setTouched] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [account, setAccount] = useState<Me | null>(null);
   const lobby = useLobby();
   const nameId = useId();
 
@@ -78,7 +81,13 @@ function EntryForm({ onEnter }: { onEnter: (choice: EntryChoice) => void }) {
   const check = checkName(name);
   // 첫 글자를 치는 중에는 길이 경고를 띄우지 않는다
   const nameError = !check.ok && (touched || [...name].length >= 2) ? check.reason : null;
-  const returning = checkName(savedName).ok;
+  const returning = checkName(savedName).ok || account !== null;
+
+  /** 개인 코드로 계정을 옮겨 왔으면 그 계정의 마지막 이름을 채운다 */
+  function onCodeLogin(me: Me) {
+    setAccount(me);
+    if (me.name) setName(me.name);
+  }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -148,6 +157,16 @@ function EntryForm({ onEnter }: { onEnter: (choice: EntryChoice) => void }) {
       </fieldset>
 
       <ChannelPicker lobby={lobby} value={channel} onChange={setChannel} allowAuto />
+
+      <ThemePicker />
+
+      {account ? (
+        <p className={styles.account} role="status">
+          계정에 들어왔어요 · {account.points.toLocaleString("ko-KR")} 포인트
+        </p>
+      ) : (
+        <CodeLogin onLogin={onCodeLogin} />
+      )}
 
       {error && (
         <p className={ui.error} role="alert">

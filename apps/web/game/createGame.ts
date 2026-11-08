@@ -2,14 +2,18 @@ import * as Phaser from "phaser";
 import type { GameStartOptions } from "./bridge";
 import { BootScene } from "./scenes/BootScene";
 import type { GameContext } from "./scenes/context";
+import { ShopScene } from "./scenes/ShopScene";
 import { WorldScene } from "./scenes/WorldScene";
+import { bridge } from "./bridge";
+import { isThemeId } from "./theme";
 
 // Phaser 게임 생성. GameCanvas가 브라우저에서만 동적 import 한다 (Phaser는 이 경로로만 로드된다).
 
 export type GameHandle = { destroy(): void };
 
 export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHandle {
-  const ctx: GameContext = { opts, disposers: [], disposed: false };
+  const t = bridge.last("theme:set")?.theme;
+  const ctx: GameContext = { opts, disposers: [], disposed: false, theme: isThemeId(t) ? t : "temple" };
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent,
@@ -33,7 +37,7 @@ export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHan
     // 입력은 직접 받는다 (키보드: window, 포인터: 캔버스 DOM). Phaser 입력을 켜면 오버레이 터치까지 포인터로 잡는다
     input: { keyboard: false, mouse: false, touch: false, gamepad: false, windowEvents: false },
     audio: { noAudio: true },
-    scene: [BootScene, WorldScene],
+    scene: [BootScene, WorldScene, ShopScene],
   });
   game.registry.set("ctx", ctx);
   // ?debug=1: 콘솔에서 상태를 들여다볼 수 있게 (게임 화면에는 아무것도 그리지 않는다. 수치는 UI의 NetHud가 net:stats로 표시)

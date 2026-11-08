@@ -1,13 +1,26 @@
 /*
  * 오버레이 배치 (게임 캔버스 위). 컨테이너는 pointer-events: none 이라 빈 곳은 캔버스가 입력을 받는다.
- *  데스크톱: 좌상 BGM · 중앙 상단 채널 HUD · 우상 랭킹 · 하단 중앙 [묘비 세우기] · 우하 줌
- *  터치:     좌하 조이스틱(+ 위에 줌) · 우하 행동 버튼(+ 위에 묘비 세우기)
+ *  윗줄: 좌 BGM · 가운데 채널 HUD(폰 폭이면 아래 안내 줄 맨 아래로) · 우 [안내][내 정보][랭킹]
+ *  아래 안내 줄(가운데): 토스트 · 대기열/연결 끊김 · 새 버전
+ *  데스크톱 아랫줄: 좌 폭죽 · 가운데 [내 캐릭터로][묘비 세우기] · 우 줌
+ *  터치 아랫줄: 좌 조이스틱(+ 위에 줌) · 우 행동 버튼(+ 위에 묘비 세우기, 폭죽) · 가운데 [내 캐릭터로]
+ * 화면 가운데(내 캐릭터와 이름표)는 비워 둔다.
  */
 
 .shell {
   position: fixed;
   inset: 0;
   background: var(--bg);
+}
+
+/* 연결이 끊긴 탭: 화면을 살짝 어둡게 (입력은 막지 않는다) */
+.dim {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: rgba(8, 9, 7, 0.4);
+  pointer-events: none;
+  animation: fadeIn 0.6s ease both;
 }
 
 .overlay {
@@ -38,7 +51,7 @@
   position: absolute;
   top: var(--safe-top);
   left: 50%;
-  width: min(520px, calc(100% - 2 * 160px));
+  width: min(520px, calc(100% - 2 * 250px));
   transform: translateX(-50%);
   display: flex;
   justify-content: center;
@@ -49,6 +62,41 @@
   z-index: 2;
   top: var(--safe-top);
   right: var(--safe-right);
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.topButton {
+  background: var(--panel);
+}
+
+.meLabel {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 아래쪽 안내 줄: [묘비 세우기]·[내 캐릭터로] 위, 화면 가운데(내 캐릭터)보다는 아래 */
+.bottomCenter {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 112px);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: min(560px, calc(100% - var(--safe-left) - var(--safe-right)));
+  transform: translateX(-50%);
+}
+
+.versionBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 14px;
+  background: var(--panel);
+  color: var(--bone);
+  white-space: nowrap;
+  box-shadow: var(--px-border-strong);
+  pointer-events: auto;
 }
 
 .bury {
@@ -66,20 +114,11 @@
   transform: translateX(-50%) translateY(1px);
 }
 
-/* 좁은 화면: 채널 HUD는 BGM·랭킹 버튼 아래 줄로 */
-@media (max-width: 640px) {
-  .topCenter {
-    top: calc(var(--safe-top) + 48px);
-    width: calc(100% - var(--safe-left) - var(--safe-right));
-  }
-}
-
 @media (pointer: coarse) {
   .bury {
     left: auto;
     right: var(--safe-right);
     bottom: calc(var(--safe-bottom) + 156px);
-    min-height: 40px;
     padding-inline: 14px;
     transform: none;
     font-size: 12px;
@@ -87,6 +126,19 @@
 
   .bury:active:not(:disabled) {
     transform: translateY(1px);
+  }
+
+  /* 터치: 오른쪽 아래 폭죽 버튼(위 끝 ≈ 264px)보다 위 */
+  .bottomCenter {
+    bottom: calc(var(--safe-bottom) + 276px);
+  }
+}
+
+/* 가로 폰처럼 낮은 터치 화면: 조이스틱과 행동 버튼 사이 아래쪽에 */
+@media (pointer: coarse) and (max-height: 520px) {
+  .bottomCenter {
+    bottom: calc(var(--safe-bottom) + 8px);
+    width: min(420px, calc(100% - 2 * 180px));
   }
 }
 

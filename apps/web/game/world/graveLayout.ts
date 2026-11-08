@@ -12,7 +12,32 @@ import {
 // 묘비 배치 계산 (순수). 격자는 등록 순서(index) → graveSlot(index).
 // 살려주세요 상위 10개는 "부활 대기석"(REVIVE_SLOTS)으로 올라가고, 원래 격자 자리는 빈 흙자리(↑)가 된다.
 
-export type GraveInfo = { id: string; ageDays: number; flowers: number; revives: number };
+export type GraveInfo = {
+  id: string;
+  ageDays: number;
+  flowers: number;
+  revives: number;
+  /** 묘비 꾸미기 (until이 지나면 그리지 않는다) */
+  decor?: readonly { itemId: string; until: number }[];
+};
+
+/** 그릴 수 있는 묘비 꾸미기 */
+export const DECOR_IDS = ["decor_candles", "decor_wreath", "decor_ribbon", "decor_lantern", "decor_ghostcat", "decor_stars"] as const;
+const DECOR_SET = new Set<string>(DECOR_IDS);
+export const MAX_DECOR = 3;
+
+/** 아직 유효한 꾸미기 id (중복 제거, 최대 3개)와 가장 이른 만료 시각 */
+export function activeDecor(decor: GraveInfo["decor"], now: number): { ids: string[]; expiresAt: number } {
+  const ids: string[] = [];
+  let expiresAt = Infinity;
+  for (const d of decor ?? []) {
+    if (!d || !DECOR_SET.has(d.itemId) || !(d.until > now) || ids.includes(d.itemId)) continue;
+    ids.push(d.itemId);
+    expiresAt = Math.min(expiresAt, d.until);
+    if (ids.length >= MAX_DECOR) break;
+  }
+  return { ids, expiresAt };
+}
 
 export type GravePlacement = {
   index: number;
@@ -27,6 +52,8 @@ export type GravePlacement = {
   revives: number;
   /** 같은 외형이 반복되지 않게 고르는 변형 번호 */
   variant: number;
+  /** 지금 보이는 묘비 꾸미기 */
+  decor: string[];
 };
 
 export type GraveLayout = {
@@ -39,6 +66,8 @@ export type GraveLayout = {
   byId: Map<string, GravePlacement>;
   rows: number;
   count: number;
+  /** 가장 먼저 만료되는 꾸미기 시각 (그때 다시 배치해서 지운다) */
+  decorExpiresAt: number;
 };
 
 /** 외형별 크기 (받침 기준 위로 h, 히트 테스트·툴팁 위치용) */
@@ -60,7 +89,7 @@ function hashId(id: string): number {
   return h >>> 0;
 }
 
-export function buildLayout(graves: readonly GraveInfo[], reviveTop: readonly string[]): GraveLayout {
+export function buildLayout(graves: readonly GraveInfo[], reviveTop: readonly string[], now: number = Date.now()): GraveLayout {
   // 목록에 없는 id(숨김·삭제)는 건너뛰고 순위를 당긴다
   const known = new Set(graves.map((g) => g.id));
   const rankOf = new Map<string, number>();
@@ -73,8 +102,11 @@ export function buildLayout(graves: readonly GraveInfo[], reviveTop: readonly st
   const revive: (GravePlacement | null)[] = REVIVE_SLOTS.map(() => null);
   const promoted = new Uint8Array(graves.length);
   const byId = new Map<string, GravePlacement>();
+  let decorExpiresAt = Infinity;
 
   graves.forEach((g, index) => {
+    const decor = activeDecor(g.decor, now);
+    decorExpiresAt = Math.min(decorExpiresAt, decor.expiresAt);
     const rank = rankOf.get(g.id) ?? -1;
     const pos = rank >= 0 ? REVIVE_SLOTS[rank] : graveSlot(index);
     const p: GravePlacement = {
@@ -87,6 +119,7 @@ export function buildLayout(graves: readonly GraveInfo[], reviveTop: readonly st
       flowers: flowerStack(g.flowers),
       revives: g.revives,
       variant: hashId(g.id) % VARIANTS,
+      decor: decor.ids,
     };
     placements.push(p);
     byId.set(g.id, p);
@@ -96,7 +129,7 @@ export function buildLayout(graves: readonly GraveInfo[], reviveTop: readonly st
     }
   });
 
-  return { placements, revive, promoted, byId, rows: Math.ceil(graves.length / GRID_COLS), count: graves.length };
+  return { placements, revive, promoted, byId, rows: Math.ceil(graves.length / GRID_COLS), count: graves.length, decorExpiresAt };
 }
 
 /** 격자 묘비가 그려지는 세로 범위: 받침 위로 32px, 아래로 10px (꽃·흙) */

@@ -62,8 +62,10 @@ export class GlyphAtlas {
     scene.cache.bitmapFont.remove(FONT_KEY);
     scene.cache.bitmapFont.add(FONT_KEY, { data, texture: TEX_KEY, frame: null, fromAtlas: false });
     this.ensure(" ?…·");
-    scene.sys.events.on(Phaser.Scenes.Events.PRE_RENDER, this.flush, this);
-    scene.sys.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.sys.events.off(Phaser.Scenes.Events.PRE_RENDER, this.flush, this));
+    // 게임 전체 렌더 직전 (월드·상점 어느 씬이 그려지든 한 번)
+    const game = scene.game;
+    game.events.on(Phaser.Core.Events.PRE_RENDER, this.flush, this);
+    scene.sys.events.once(Phaser.Scenes.Events.SHUTDOWN, () => game.events.off(Phaser.Core.Events.PRE_RENDER, this.flush, this));
   }
 
   /** 렌더 직전: 이번 프레임에 글자가 추가됐으면 텍스처를 한 번만 다시 올린다 */

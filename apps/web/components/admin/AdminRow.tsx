@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { itemById } from "@tomb/protocol";
 import type { AdminGrave } from "@/lib/admin";
 import { lifespanLabel } from "@/lib/epitaph";
 import { REPORT_REASON_LABELS } from "@/lib/reports";
@@ -114,6 +115,18 @@ export default function AdminRow({ grave: g, expanded, selected, busy, onToggleE
                   {g.stack.map((t) => (
                     <span key={t} className={ui.tag}>
                       {t}
+                    </span>
+                  ))}
+                </dd>
+              </>
+            ) : null}
+            {g.decor?.length ? (
+              <>
+                <dt>꾸미기</dt>
+                <dd className={styles.tags}>
+                  {g.decor.map((d) => (
+                    <span key={`${d.itemId}-${d.until}`} className={ui.tag}>
+                      {itemById(d.itemId)?.name ?? d.itemId} · ~{formatDate(d.until)}
                     </span>
                   ))}
                 </dd>

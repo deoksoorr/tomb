@@ -29,6 +29,16 @@
   opacity: 0.9;
 }
 
+/* 좁은 화면에서는 제목을 가리지 않게 구석으로 작게 */
+@media (max-width: 640px) {
+  .moon {
+    top: 10px;
+    right: 10px;
+    transform: scale(0.6);
+    transform-origin: top right;
+  }
+}
+
 /* 해는 흐릿하고 낮게, 조용하게 */
 .sun {
   bottom: clamp(140px, 30vh, 300px);

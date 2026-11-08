@@ -96,6 +96,13 @@ export function inServerBounds(x: number, y: number): boolean {
   return x >= 0 && x <= MAP_WIDTH && y >= 0 && y <= MAP_MAX_HEIGHT;
 }
 
+// ── 유령 잡화점 ── 왼쪽 정원의 작은 오두막. 문 앞(SHOP_DOOR)에서 들어가면 상점 맵(실내)으로 바뀐다.
+// 상점 안에 있는 동안 실시간 위치는 문 앞에 멈춰 있는 것으로 둔다.
+/** 오두막 바닥 가운데 */
+export const SHOP = { x: 236, y: 244 } as const;
+/** 문 앞 (들어가는 자리이자 나왔을 때 서는 자리) */
+export const SHOP_DOOR = { x: 236, y: 256 } as const;
+
 // ── 의자와 벤치 ── 좌석 점유는 서버가 판정한다.
 export type FurnitureKind = "bench" | "chair";
 export type Furniture = {

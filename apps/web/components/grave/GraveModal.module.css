@@ -169,6 +169,21 @@
   gap: 10px;
 }
 
+.decorPicker {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-deep);
+  text-align: center;
+}
+
+.decorChoices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
 .notice {
   min-height: 1.6em;
   color: var(--candle);

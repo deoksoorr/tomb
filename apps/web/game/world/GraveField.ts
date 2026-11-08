@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { GRID_COLS, graveSlot } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 import { GraveView, PlotView } from "../entities/Grave";
+import type { GraveStyle } from "../sprites/graves";
 import {
   buildLayout,
   layoutSignature,
@@ -14,10 +15,14 @@ import {
 // 묘비 전체를 관리한다. 500기 이상에서도 60fps를 지키기 위해:
 //  - 화면(worldView)에 걸치는 격자 행만 풀에서 GraveView를 꺼내 붙이고, 벗어난 행은 돌려보낸다.
 //  - 카메라가 움직이지 않으면 아무것도 다시 계산하지 않는다 (흔들림·빛이 있는 묘비만 매 프레임 갱신).
-//  - 충돌 박스는 배치(순서·외형·부활 대기석)가 바뀔 때만 다시 만든다. 꽃·살려주세요 수 변화는 그림만 바꾼다.
+//  - 충돌 박스도 화면 근처 행(±COLLIDER_ROWS)만 둔다. 플레이어만 부딪히므로 그 밖은 필요 없다.
+//    → 묘비 목록을 받은 첫 프레임에 수백 개의 정적 바디를 만들지 않아 로딩이 끊기지 않는다.
+//  - 꽃·살려주세요 수 변화는 그림만 바꾼다. 꾸미기는 만료 시각이 지나면 다시 배치해서 지운다.
 
 const EMPTY = buildLayout([], []);
 const X_MARGIN = 20;
+/** 화면 행 범위 위아래로 이만큼 더 충돌 박스를 둔다 */
+const COLLIDER_ROWS = 2;
 
 export type SetResult = { layoutChanged: boolean; rowsChanged: boolean };
 
@@ -39,6 +44,14 @@ export class GraveField {
   private readonly rises = new Map<string, number>();
   private readonly rowsTmp: [number, number] = [0, -1];
   readonly colliders: Phaser.Physics.Arcade.StaticGroup;
+  private readonly zones = new Map<number, Phaser.GameObjects.Zone>();
+  private reviveZones: Phaser.GameObjects.Zone[] = [];
+  private cr0 = 0;
+  private cr1 = -1;
+  private style: GraveStyle = "temple";
+  private reviveTop: string[] = [];
+  /** 지금 화면에 보이는 묘비 (조명용, 컬링할 때 다시 채운다) */
+  readonly visibleViews: GraveView[] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -62,14 +75,22 @@ export class GraveField {
   setData(graves: PublicGrave[], reviveTop: string[]): SetResult {
     const prevRows = this.layout.rows;
     this.graves = graves;
+    this.reviveTop = reviveTop;
     this.byId = new Map(graves.map((g) => [g.id, g]));
     this.layout = buildLayout(graves, reviveTop);
     const sig = layoutSignature(graves, reviveTop);
     const layoutChanged = sig !== this.signature;
     this.signature = sig;
-    if (layoutChanged) this.rebuildColliders();
+    if (layoutChanged) this.resetColliders();
     this.dirty = true;
     return { layoutChanged, rowsChanged: prevRows !== this.layout.rows };
+  }
+
+  /** 테마가 바뀌면 묘비 모양만 다시 붙인다 */
+  setStyle(style: GraveStyle): void {
+    if (style === this.style) return;
+    this.style = style;
+    this.dirty = true;
   }
 
   /** 흙이 덮이며 묘비가 솟아오르는 연출 */
@@ -78,16 +99,50 @@ export class GraveField {
     this.dirty = true;
   }
 
-  private rebuildColliders(): void {
+  private makeZone(p: GravePlacement): Phaser.GameObjects.Zone {
+    const w = TIER_SIZE[p.tier].collider;
+    // 충돌 전용 존은 그릴 게 없으니 디스플레이 리스트에서 뺀다
+    const zone = this.scene.add.zone(p.x, p.y - 2.5, w, 5);
+    zone.removeFromDisplayList();
+    this.colliders.add(zone);
+    return zone;
+  }
+
+  /** 배치가 바뀌면 충돌 박스를 비우고 (부활 대기석만 바로) 화면 근처 행은 다음 프레임에 다시 만든다 */
+  private resetColliders(): void {
     this.colliders.clear(true, true);
-    const add = (p: GravePlacement) => {
-      const w = TIER_SIZE[p.tier].collider;
-      // 충돌 전용 존은 그릴 게 없으니 디스플레이 리스트에서 뺀다 (묘비 1000기면 1000개)
-      const zone = this.scene.add.zone(p.x, p.y - 2.5, w, 5);
-      zone.removeFromDisplayList();
-      this.colliders.add(zone);
-    };
-    for (const p of this.layout.placements) add(p);
+    this.zones.clear();
+    this.reviveZones = [];
+    for (const p of this.layout.revive) if (p) this.reviveZones.push(this.makeZone(p));
+    this.cr0 = 0;
+    this.cr1 = -1;
+  }
+
+  /** 충돌 박스 창을 화면 행 ±COLLIDER_ROWS에 맞춘다 */
+  private syncColliders(r0: number, r1: number): void {
+    const L = this.layout;
+    const a = Math.max(0, r0 - COLLIDER_ROWS);
+    const b = Math.min(L.rows - 1, r1 + COLLIDER_ROWS);
+    if (a === this.cr0 && b === this.cr1) return;
+    const lo = a * GRID_COLS;
+    const hi = Math.min(L.count - 1, (b + 1) * GRID_COLS - 1);
+    for (const [i, z] of this.zones) {
+      if (i < lo || i > hi) {
+        this.colliders.remove(z, true, true);
+        this.zones.delete(i);
+      }
+    }
+    for (let i = lo; i <= hi; i++) {
+      if (L.promoted[i] || this.zones.has(i)) continue;
+      this.zones.set(i, this.makeZone(L.placements[i]));
+    }
+    this.cr0 = a;
+    this.cr1 = b;
+  }
+
+  /** 지금 충돌 박스가 있는 묘비 수 (테스트·디버그) */
+  get colliderCount(): number {
+    return this.zones.size + this.reviveZones.length;
   }
 
   private acquire(): GraveView {
@@ -113,10 +168,17 @@ export class GraveField {
   update(now: number, view: Phaser.Geom.Rectangle, lightLevel: number): void {
     const moved =
       view.x !== this.lastView.x || view.y !== this.lastView.y || view.width !== this.lastView.width || view.height !== this.lastView.height;
+    // (now는 게임 시계, 꾸미기 만료는 실제 시각)
+    if (this.layout.decorExpiresAt !== Infinity && Date.now() >= this.layout.decorExpiresAt) {
+      // 꾸미기 만료 → 같은 목록으로 다시 배치 (만료된 건 빠진다)
+      this.layout = buildLayout(this.graves, this.reviveTop, Date.now());
+      this.dirty = true;
+    }
     if (moved || this.dirty) {
       this.lastView.setTo(view.x, view.y, view.width, view.height);
       const [r0, r1] = visibleRows(view.y, view.bottom, this.layout.rows, this.rowsTmp);
       if (this.dirty || r0 !== this.r0 || r1 !== this.r1) this.reconcile(r0, r1, now);
+      this.syncColliders(r0, r1);
       this.cullX(view);
     }
     for (const v of this.animated) v.update(now, lightLevel);
@@ -153,7 +215,7 @@ export class GraveField {
       } else if (!this.views.has(i)) {
         const v = this.acquire();
         const p = L.placements[i];
-        v.bind(p, this.reduced, this.riseAt(p.id, now));
+        v.bind(p, this.reduced, this.riseAt(p.id, now), this.style);
         this.views.set(i, v);
       }
     }
@@ -170,7 +232,7 @@ export class GraveField {
           continue;
         }
         if (!v) v = this.reviveViews[rank] = this.acquire();
-        v.bind(p, this.reduced, this.riseAt(p.id, now));
+        v.bind(p, this.reduced, this.riseAt(p.id, now), this.style);
       }
     }
 
@@ -188,8 +250,20 @@ export class GraveField {
     const r = view.right + X_MARGIN;
     const t = view.y - 40;
     const b = view.bottom + 20;
-    for (const v of this.views.values()) if (v.p) v.setVisible(v.p.x >= l && v.p.x <= r);
-    for (const v of this.reviveViews) if (v?.p) v.setVisible(v.p.x >= l && v.p.x <= r && v.p.y >= t && v.p.y <= b);
+    const vis = this.visibleViews;
+    vis.length = 0;
+    for (const v of this.views.values()) {
+      if (!v.p) continue;
+      const on = v.p.x >= l && v.p.x <= r;
+      v.setVisible(on);
+      if (on) vis.push(v);
+    }
+    for (const v of this.reviveViews) {
+      if (!v?.p) continue;
+      const on = v.p.x >= l && v.p.x <= r && v.p.y >= t && v.p.y <= b;
+      v.setVisible(on);
+      if (on) vis.push(v);
+    }
     for (const pv of this.plots.values()) {
       const s = graveSlot(pv.index);
       pv.setVisible(s.x >= l && s.x <= r);

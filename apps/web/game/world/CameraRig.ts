@@ -2,7 +2,7 @@ import * as Phaser from "phaser";
 import { MAP_WIDTH, mapHeight } from "@tomb/protocol";
 import { bridge } from "../bridge";
 import { CAMERA_FOLLOW_OFFSET_Y, CAMERA_LERP, LS_ZOOM } from "../config";
-import { approach, cameraBounds, parseStoredZoom, pinchZoom, snapZoom, stepZoom } from "./cameraMath";
+import { approach, cameraBounds, defaultZoom, parseStoredZoom, pinchZoom, snapZoom, stepZoom } from "./cameraMath";
 
 // 카메라: 캐릭터를 lerp로 따라가고 맵 경계에서 멈춘다.
 //  - 휠 / camera:zoom: 0.5 단계 줌 (1.5~5), 지수 감쇠로 부드럽게. 마지막 줌은 localStorage(tomb.zoom)
@@ -25,6 +25,8 @@ export class CameraRig {
   zoom: number;
   private target: number;
   detached = false;
+  /** 상점 안에서는 월드 카메라 입력(휠·드래그·탭)을 받지 않는다 */
+  enabled = true;
   private returning = false;
   /** Phaser 카메라가 지금 캐릭터를 따라가는 중인지 (startFollow 상태) */
   private following = false;
@@ -54,7 +56,8 @@ export class CameraRig {
     } catch {
       // 저장소를 못 쓰면 기본 줌
     }
-    this.zoom = this.target = parseStoredZoom(stored);
+    // 저장된 줌이 없으면 화면 크기에 맞춘 기본값 (작은 화면은 조금 넓게)
+    this.zoom = this.target = stored === null ? defaultZoom(this.cam.width, this.cam.height) : parseStoredZoom(stored);
     this.cam.setZoom(this.zoom);
     this.cam.setRoundPixels(true);
     this.cam.startFollow(follow, true, CAMERA_LERP, CAMERA_LERP, 0, CAMERA_FOLLOW_OFFSET_Y);
@@ -210,6 +213,7 @@ export class CameraRig {
   }
 
   private onDown(e: PointerEvent): void {
+    if (!this.enabled) return;
     if (e.pointerType === "mouse") {
       if (e.button === 2) {
         e.preventDefault();
@@ -290,6 +294,7 @@ export class CameraRig {
 
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
+    if (!this.enabled) return;
     const now = performance.now();
     // 트랙패드는 작은 delta가 연달아 오므로 모아서 한 칸씩, 너무 빠르게 넘기지 않게 80ms 간격
     if (now - this.wheelLast > 250) this.wheelAcc = 0;

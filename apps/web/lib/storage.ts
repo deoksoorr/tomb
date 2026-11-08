@@ -5,6 +5,8 @@ import { LS } from "./types";
 /** UI 전용 키 (types.ts의 LS와 겹치지 않게 tomb.ui.* 아래에 둔다) */
 export const UI_KEYS = {
   cameraHintSeen: "tomb.ui.cameraHintSeen",
+  /** 마지막으로 받은 묘비 목록 (다음 입장 때 바로 그리기) */
+  gravesCache: "tomb.ui.gravesCache",
 } as const;
 
 export function readItem(key: string): string | null {

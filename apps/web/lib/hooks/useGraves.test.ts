@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { bridge } from "@/game/bridge";
 import type { PublicGrave } from "@/lib/types";
-import { GraveCache } from "./useGraves";
+import { GraveCache, parseCachedList } from "./useGraves";
 
 const grave = (id: string, createdAt: number): PublicGrave => ({
   id,
@@ -40,5 +40,15 @@ describe("GraveCache", () => {
     const emit = vi.spyOn(bridge, "emit");
     cache.setList({ graves: [], reviveTop: [], generatedAt: 7 });
     expect(emit).not.toHaveBeenCalled();
+  });
+});
+
+describe("parseCachedList", () => {
+  it("형식이 맞는 저장본만 쓴다", () => {
+    const list = { graves: [grave("a", 1)], reviveTop: [], generatedAt: 3 };
+    expect(parseCachedList(JSON.stringify(list))).toEqual(list);
+    expect(parseCachedList(null)).toBeNull();
+    expect(parseCachedList("{깨진")).toBeNull();
+    expect(parseCachedList(JSON.stringify({ graves: "x", reviveTop: [], generatedAt: 1 }))).toBeNull();
   });
 });

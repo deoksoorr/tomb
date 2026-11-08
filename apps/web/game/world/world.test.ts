@@ -6,6 +6,8 @@ import {
   MAP_WIDTH,
   REVIVE_SLOTS,
   SEATS,
+  SHOP,
+  SHOP_DOOR,
   SPAWN,
   graveSlot,
   mapHeight,
@@ -14,7 +16,7 @@ import { ambienceAt } from "@/lib/ambience";
 import { LevelBlender, levelsFor, mixColor } from "./ambienceMix";
 import { cameraBounds, clampZoom, parseStoredZoom, pinchZoom, snapZoom, stepZoom, approach } from "./cameraMath";
 import { buildLayout, graveAt, layoutSignature, nearestGrave, standSpot, visibleRows } from "./graveLayout";
-import { UPPER_PROPS, furnitureCollider, gridProps, groundKind, pondColliders, propCollider, type Rect } from "./layout";
+import { UPPER_PROPS, furnitureCollider, gridProps, groundKind, nearShopDoor, pondColliders, propCollider, shopCollider, type Rect } from "./layout";
 
 const graves = (n: number) =>
   Array.from({ length: n }, (_, i) => ({ id: `g${i}`, ageDays: (i * 37) % 800, flowers: i % 9, revives: i % 5 }));
@@ -28,10 +30,11 @@ describe("static layout", () => {
     ...gridProps(60).map(propCollider),
     ...FURNITURE.map(furnitureCollider),
     ...pondColliders(),
+    shopCollider(),
   ].filter((r): r is Rect => !!r);
 
   it("spawn, revive stand spots and grid stand spots are walkable", () => {
-    const spots = [SPAWN, ...REVIVE_SLOTS.map(standSpot), ...Array.from({ length: 200 }, (_, i) => standSpot(graveSlot(i)))];
+    const spots = [SPAWN, SHOP_DOOR, ...REVIVE_SLOTS.map(standSpot), ...Array.from({ length: 200 }, (_, i) => standSpot(graveSlot(i)))];
     for (const s of spots) for (const c of colliders) expect(inside(c, s.x, s.y, 2), JSON.stringify([s, c])).toBe(false);
   });
 
@@ -39,6 +42,17 @@ describe("static layout", () => {
     const props = [...UPPER_PROPS, ...gridProps(60)].filter((p) => p.kind !== "altar" && p.kind !== "table");
     const points = [...REVIVE_SLOTS, ...SEATS, ...Array.from({ length: 600 }, (_, i) => graveSlot(i))];
     for (const p of props) for (const q of points) expect(Math.hypot(p.x - q.x, p.y - q.y), JSON.stringify([p, q])).toBeGreaterThan(14);
+  });
+
+  it("shop hut sits in the left garden away from seats and props; its door is reachable", () => {
+    for (const s of SEATS) expect(Math.hypot(s.x - SHOP.x, s.y - SHOP.y)).toBeGreaterThan(40);
+    const hut = shopCollider();
+    for (const p of UPPER_PROPS) {
+      const c = propCollider(p);
+      if (c) expect(c.x + c.w < hut.x || c.x > hut.x + hut.w || c.y + c.h < hut.y || c.y > hut.y + hut.h, JSON.stringify(p)).toBe(true);
+    }
+    expect(nearShopDoor(SHOP_DOOR.x, SHOP_DOOR.y)).toBe(true);
+    expect(nearShopDoor(SHOP_DOOR.x, SHOP_DOOR.y + 30)).toBe(false);
   });
 
   it("seat anchors stay reachable (stand point is outside furniture)", () => {

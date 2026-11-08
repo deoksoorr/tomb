@@ -1,9 +1,10 @@
 import * as Phaser from "phaser";
 import { DIR, STATE_NAMES, type DirId, type StateName } from "@tomb/protocol";
-import { AV_ANIM, AV_COLS, AV_H, AV_W, buildAvatarSheet } from "../sprites/avatar";
+import { AV_ANIM, AV_COLS, AV_H, AV_W, buildAvatarSheet, lookKey } from "../sprites/avatar";
 import * as fx from "../sprites/fx";
 import { flowersCanvas, graveCanvas, graveTexKey, plotCanvas, upMarkerCanvas } from "../sprites/graves";
 import * as props from "../sprites/props";
+import * as art from "../sprites/themeArt";
 import { parseHex } from "../sprites/pixel";
 
 // 텍스처 키 → 생성기. 지금은 전부 코드로 그린 플레이스홀더 픽셀아트이고,
@@ -53,6 +54,24 @@ export const TEX = {
   wallFace: "prop-wall-face",
   plot: "grave-plot",
   upMarker: "grave-up",
+  dot: "fx-dot",
+  crowFly: "fx-crow-fly",
+  crowPerch: "fx-crow-perch",
+  petalPink: "fx-petal-pink",
+  leaf: "fx-leaf",
+  wreath: "decor-wreath",
+  ribbon: "decor-ribbon",
+  miniLantern: "decor-lantern",
+  ghostCat: "decor-ghostcat",
+  shopHut: "shop-hut",
+  shopFloor: "shop-floor",
+  shopWall: "shop-wall",
+  shopShelf0: "shop-shelf-0",
+  shopShelf1: "shop-shelf-1",
+  shopShelf2: "shop-shelf-2",
+  shopCounter: "shop-counter",
+  shopKeeper: "shop-keeper",
+  shopDoor: "shop-door",
 } as const;
 
 export function flowersKey(n: number): string {
@@ -103,6 +122,31 @@ function buildManifest(): Record<string, TextureSource> {
     [TEX.wallFace]: proc(props.wallFaceTile),
     [TEX.plot]: proc(plotCanvas),
     [TEX.upMarker]: proc(upMarkerCanvas),
+    [TEX.dot]: proc(() => {
+      const c = document.createElement("canvas");
+      c.width = c.height = 2;
+      const ctx = c.getContext("2d")!;
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, 2, 2);
+      return c;
+    }),
+    [TEX.crowFly]: proc(art.crowFly, { frameW: 11, frameH: 7 }),
+    [TEX.crowPerch]: proc(art.crowPerch, { frameW: 7, frameH: 7 }),
+    [TEX.petalPink]: proc(art.petalPink),
+    [TEX.leaf]: proc(art.deadLeaf),
+    [TEX.wreath]: proc(art.wreath),
+    [TEX.ribbon]: proc(art.ribbon),
+    [TEX.miniLantern]: proc(art.miniLantern),
+    [TEX.ghostCat]: proc(art.ghostCat, { frameW: 12, frameH: 8 }),
+    [TEX.shopHut]: proc(art.shopHut),
+    [TEX.shopFloor]: proc(art.shopFloor),
+    [TEX.shopWall]: proc(art.shopWall),
+    [TEX.shopShelf0]: proc(() => art.shopShelf(1)),
+    [TEX.shopShelf1]: proc(() => art.shopShelf(2)),
+    [TEX.shopShelf2]: proc(() => art.shopShelf(3)),
+    [TEX.shopCounter]: proc(art.shopCounter),
+    [TEX.shopKeeper]: proc(art.shopKeeper, { frameW: 16, frameH: 22 }),
+    [TEX.shopDoor]: proc(art.shopDoor),
   };
   for (const tier of ["woodSign", "smallStone", "largeStone", "pagoda"] as const)
     for (let v = 0; v < 3; v++) m[graveTexKey(tier, v)] = proc(() => graveCanvas(tier, v));
@@ -134,20 +178,27 @@ export function preloadFiles(scene: Phaser.Scene): void {
   }
 }
 
-/** BootScene.create: 코드 생성 항목을 모두 만든다 */
-export function installProcedural(scene: Phaser.Scene): void {
+/** BootScene.create: 코드 생성 항목을 모두 만든다. 항목별 소요 시간(ms)을 돌려준다 (?debug=1 측정용) */
+export function installProcedural(scene: Phaser.Scene): Record<string, number> {
+  const timing: Record<string, number> = {};
   for (const [key, src] of Object.entries(MANIFEST)) {
+    const t0 = performance.now();
     if (src.kind === "procedural") addCanvasTexture(scene, key, src.build());
     else if (src.linear && scene.textures.exists(key)) scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.LINEAR);
+    timing[key] = performance.now() - t0;
   }
+  return timing;
 }
 
 // ── 아바타: 색마다 시트를 하나씩 (처음 보는 색일 때 생성) ──
 
 const DIR_IDS: readonly DirId[] = [DIR.down, DIR.left, DIR.right, DIR.up];
 
-export function avatarKey(color: string): string {
-  return `avatar-${parseHex(color).toString(16).padStart(6, "0")}`;
+/** 색 + (스프라이트에 그려지는) 꾸미기 조합마다 시트 하나 */
+export function avatarKey(color: string, look: readonly string[] = []): string {
+  const base = `avatar-${parseHex(color).toString(16).padStart(6, "0")}`;
+  const k = lookKey(look);
+  return k ? `${base}~${k}` : base;
 }
 
 export function avatarAnimKey(texKey: string, state: StateName, dir: DirId): string {
@@ -155,10 +206,10 @@ export function avatarAnimKey(texKey: string, state: StateName, dir: DirId): str
 }
 
 /** 아바타 텍스처와 애니메이션을 준비하고 텍스처 키를 돌려준다 */
-export function ensureAvatarTexture(scene: Phaser.Scene, color: string): string {
-  const key = avatarKey(color);
+export function ensureAvatarTexture(scene: Phaser.Scene, color: string, look: readonly string[] = []): string {
+  const key = avatarKey(color, look);
   if (!scene.textures.exists(key)) {
-    addCanvasTexture(scene, key, { canvas: buildAvatarSheet(color), frameW: AV_W, frameH: AV_H });
+    addCanvasTexture(scene, key, { canvas: buildAvatarSheet(color, look), frameW: AV_W, frameH: AV_H });
   }
   if (!scene.anims.exists(avatarAnimKey(key, "idle", DIR.down))) {
     for (const dir of DIR_IDS) {

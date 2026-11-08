@@ -396,7 +396,10 @@ describe("관리자", () => {
 
     const withCookie = (c: string) => adminGraves.GET(call("/api/admin/graves", { headers: { cookie: c, "x-forwarded-for": ip } }));
     expect((await withCookie(cookie)).status).toBe(200);
-    expect((await withCookie(cookie.replace(/.$/, (ch) => (ch === "A" ? "B" : "A")))).status).toBe(401);
+    // base64url 서명의 마지막 글자는 하위 비트가 버려져 바꿔도 같은 바이트가 될 수 있으므로, 가운데 글자를 바꾼다
+    const mid = cookie.length - 10;
+    const tampered = cookie.slice(0, mid) + (cookie[mid] === "A" ? "B" : "A") + cookie.slice(mid + 1);
+    expect((await withCookie(tampered)).status).toBe(401);
     expect((await withCookie("tomb_admin=99999999999.forged")).status).toBe(401);
     // 쿠키도 키도 없는 요청(로그인 전 화면)은 실패로 세지 않는다
     for (let i = 0; i < 12; i++) expect((await adminGraves.GET(call("/api/admin/graves", { headers: { "x-forwarded-for": ip } }))).status).toBe(401);

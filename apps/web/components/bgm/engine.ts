@@ -1,3 +1,4 @@
+import { bridge } from "@/game/bridge";
 import { readItem, writeItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
 import { nextIndex, parseManifest, type Playlist, type Track } from "./manifest";
@@ -78,6 +79,7 @@ class BgmEngine {
         volume: savedVolume !== null && Number.isFinite(+savedVolume) ? clamp01(+savedVolume) : DEFAULT_VOLUME,
         muted: readItem(LS.muted) === "1",
       });
+      this.shareAudioSettings();
     })();
     return this.loading;
   }
@@ -131,6 +133,7 @@ class BgmEngine {
     writeItem(LS.muted, "0");
     this.set({ volume: v, muted: false });
     this.applyVolume();
+    this.shareAudioSettings();
   }
 
   toggleMute(): void {
@@ -138,6 +141,12 @@ class BgmEngine {
     writeItem(LS.muted, muted ? "1" : "0");
     this.set({ muted });
     this.applyVolume();
+    this.shareAudioSettings();
+  }
+
+  /** 게임 효과음도 같은 볼륨·음소거를 따른다 */
+  private shareAudioSettings(): void {
+    bridge.emit("audio:settings", { volume: this.state.volume, muted: this.state.muted });
   }
 
   private set(patch: Partial<BgmState>): void {

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { bridge, type GameStartOptions } from "@/game/bridge";
+import { chooseTheme, savedTheme } from "@/lib/hooks/theme";
+import { prefetchGraves } from "@/lib/hooks/useGraves";
 import { bgm } from "./bgm/engine";
 import EntryScreen, { type EntryChoice } from "./entry/EntryScreen";
 
@@ -26,9 +28,11 @@ export default function App({ initialGraveId, debug }: Props) {
 
   // ready는 값 없는 sticky 이벤트라 last()로는 도착 여부를 알 수 없어서, 게임을 띄우기 전부터 구독해 둔다
   useEffect(() => bridge.on("ready", () => setReady(true)), []);
-  // 입장 클릭 제스처 안에서 바로 재생하려면 곡 목록이 미리 와 있어야 한다
+  // 입장 화면이 떠 있는 동안 미리 받아 둔다: 곡 목록(클릭 제스처 안에서 바로 재생하려면 필요), 묘비 목록(입장 직후 바로 그리기)
   useEffect(() => {
     void bgm.load();
+    prefetchGraves();
+    chooseTheme(savedTheme());
   }, []);
 
   useEffect(() => {

@@ -2,15 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { graveTier } from "@tomb/protocol";
+import { DECOR_DURATION_MS, graveTier, itemById, MAX_DECOR_PER_GRAVE } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { api, ApiRequestError, errorMessage, isAbortError } from "@/lib/api";
 import { lifespanLabel } from "@/lib/epitaph";
 import { REPORT_REASON_LABELS, REPORT_REASONS, type ReportReason } from "@/lib/reports";
 import type { GravesState } from "@/lib/hooks/useGraves";
+import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
 import { forgetOwnerToken, getOwnerToken } from "@/lib/storage";
 import { CAUSE_LABELS, type PublicGrave } from "@/lib/types";
+import { decorateGrave } from "../account/actions";
+import { bagEntries, durationLabel, pointsText, remainingLabel } from "../account/items";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
@@ -18,14 +21,21 @@ import GraveArt from "./GraveArt";
 import { graveLocation } from "./location";
 import styles from "./GraveModal.module.css";
 
-type Action = "flower" | "revive" | "share" | "report" | "remove";
-type Mine = { revived: boolean; floweredToday: boolean };
+type Action = "flower" | "revive" | "share" | "report" | "remove" | "decorate";
+/** 상세 응답에서 온 "나와의 관계". isMine: 내 계정이 세운 묘비 */
+type Mine = { revived: boolean; floweredToday: boolean; isMine: boolean };
 
 type Props = {
   graveId: string;
   graves: GravesState;
   onClose: () => void;
-  onEdit: (grave: PublicGrave, ownerToken: string) => void;
+  /** ownerToken은 계정 개편 전 묘비용. 내 계정 묘비면 null이어도 된다 */
+  onEdit: (grave: PublicGrave, ownerToken: string | null) => void;
+};
+
+const withPoints = (message: string, earned: number | undefined) => {
+  const points = pointsText(earned);
+  return points ? `${message} · ${points}` : message;
 };
 
 /** http(s) 링크만, 보이는 글자는 호스트+경로 */
@@ -51,6 +61,11 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   const [reportReason, setReportReason] = useState<ReportReason>("other");
   const [notice, setNotice] = useState<string | null>(null);
   const [ownerToken] = useState(() => getOwnerToken(graveId));
+  const [decorating, setDecorating] = useState(false);
+  const { me } = useMe();
+  const canManage = ownerToken !== null || mine?.isMine === true;
+  // 화면에 그릴 때 기준 시각 (남은 기간 표시용, 렌더 중에 시계를 읽지 않게 열 때 한 번)
+  const [openedAt] = useState(() => Date.now());
 
   // 열 때마다 상세를 다시 받는다: 내 반응 여부 + 최신 카운트
   useEffect(() => {
@@ -59,7 +74,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
       .refresh(graveId, ctrl.signal)
       .then((detail) => {
         if (!detail) setMissing(true);
-        else setMine({ revived: detail.myRevive, floweredToday: detail.myFlowerToday });
+        else setMine({ revived: detail.myRevive, floweredToday: detail.myFlowerToday, isMine: detail.isMine });
       })
       .catch((e: unknown) => {
         if (!isAbortError(e)) setNotice(errorMessage(e));
@@ -83,11 +98,12 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   const flower = () =>
     run("flower", async () => {
       try {
-        const { count } = await api.flower(graveId);
+        const { count, earned } = await api.flower(graveId);
         cache.patch(graveId, { flowers: count });
         setMine((m) => m && { ...m, floweredToday: true });
+        meStore.addEarned(earned);
         bridge.emit("grave:flowered", { graveId });
-        setNotice("꽃을 놓았어요.");
+        setNotice(withPoints("꽃을 놓았어요.", earned));
       } catch (e) {
         // 오늘 이미 헌화함
         if (e instanceof ApiRequestError && e.status === 409) setMine((m) => m && { ...m, floweredToday: true });
@@ -107,7 +123,10 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
         const res = await api.revive(graveId);
         setMine((m) => m && { ...m, revived: res.revived });
         cache.patch(graveId, { revives: res.count });
+        meStore.addEarned(res.earned);
         bridge.emit("grave:revived", { graveId, revived: res.revived });
+        const points = pointsText(res.earned);
+        if (points) setNotice(points);
       } catch (e) {
         setMine((m) => m && { ...m, revived: before.revived });
         cache.patch(graveId, { revives: before.count });
@@ -135,7 +154,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
 
   const remove = () =>
     run("remove", async () => {
-      if (!ownerToken) return;
+      if (!canManage) return;
       setConfirming(null);
       await api.deleteGrave(graveId, ownerToken);
       forgetOwnerToken(graveId);
@@ -143,6 +162,13 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
       bridge.emit("grave:changed", { graveId, kind: "removed" });
       showToast("묘비를 이장했어요.");
       onClose();
+    });
+
+  const decorate = (itemId: string) =>
+    run("decorate", async () => {
+      await decorateGrave(itemId, graveId, cache);
+      setDecorating(false);
+      setNotice(`${itemById(itemId)?.name ?? "꾸미기"}을(를) 놓았어요.`);
     });
 
   // 상세를 한 번 받은 뒤 목록에서 사라졌으면(이장·숨김) 더는 보여 줄 것이 없다
@@ -158,6 +184,8 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   }
 
   const links = safeLinks(grave.links);
+  const decor = grave.decor ?? [];
+  const decorInBag = me ? bagEntries(me.inventory, "decor") : [];
   const location = graveLocation(graves.graves, graves.reviveTop, graveId);
 
   function goToGrave() {
@@ -224,6 +252,20 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
             <dt>상주</dt>
             <dd>{grave.mourner}</dd>
           </div>
+          {decor.length > 0 && (
+            <div>
+              <dt>꾸밈</dt>
+              <dd>
+                <ul className={styles.tags}>
+                  {decor.map((d) => (
+                    <li key={d.itemId} className={ui.tag}>
+                      {itemById(d.itemId)?.name ?? d.itemId} · {remainingLabel(d.until, openedAt)}
+                    </li>
+                  ))}
+                </ul>
+              </dd>
+            </div>
+          )}
           {links.length > 0 && (
             <div>
               <dt>링크</dt>
@@ -319,8 +361,16 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
             >
               신고
             </button>
-            {ownerToken && (
+            {canManage && (
               <>
+                <button
+                  type="button"
+                  className={cx(ui.button, ui.quiet)}
+                  onClick={() => setDecorating((v) => !v)}
+                  aria-expanded={decorating}
+                >
+                  꾸미기
+                </button>
                 <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => onEdit(grave, ownerToken)}>
                   수정
                 </button>
@@ -332,6 +382,35 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
                 >
                   이장(삭제)
                 </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {decorating && !confirming && (
+          <div className={styles.decorPicker}>
+            {decor.length >= MAX_DECOR_PER_GRAVE ? (
+              <p>묘비 하나에는 {MAX_DECOR_PER_GRAVE}개까지 놓을 수 있어요. 기간이 끝나면 다시 놓을 수 있어요.</p>
+            ) : decorInBag.length === 0 ? (
+              <p>가방에 묘비 꾸미기가 없어요. 상점에서 살 수 있어요.</p>
+            ) : (
+              <>
+                <p className={ui.hint}>
+                  놓는 순간 가방에서 사라지고 {durationLabel(DECOR_DURATION_MS)} 동안 이 묘비에 남아요.
+                </p>
+                <div className={styles.decorChoices}>
+                  {decorInBag.map(({ item, count }) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={ui.button}
+                      onClick={() => decorate(item.id)}
+                      disabled={pending.decorate}
+                    >
+                      {item.name} 놓기 ({count})
+                    </button>
+                  ))}
+                </div>
               </>
             )}
           </div>

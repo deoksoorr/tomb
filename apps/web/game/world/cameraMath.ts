@@ -41,6 +41,11 @@ export function cameraBounds(viewW: number, viewH: number, mapW: number, mapH: n
   return { x, y, w, h };
 }
 
+/** 저장된 줌이 없을 때: 짧은 변이 500px 미만인 작은 화면(휴대폰)은 2.5로 조금 넓게 본다 */
+export function defaultZoom(width: number, height: number): number {
+  return Math.min(width, height) < 500 ? 2.5 : ZOOM_DEFAULT;
+}
+
 /** localStorage 값 → 줌 (없거나 이상하면 기본값) */
 export function parseStoredZoom(raw: string | null): number {
   if (raw == null) return ZOOM_DEFAULT;

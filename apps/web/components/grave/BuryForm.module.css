@@ -1,63 +1,9 @@
 .form {
   display: grid;
-  gap: 20px;
-}
-
-.layout {
-  display: grid;
-  gap: 24px;
-}
-
-.fields {
-  display: grid;
   gap: 18px;
-  min-width: 0;
 }
 
-.dates {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.age {
-  margin-top: -8px;
-  color: var(--candle);
-}
-
-.photo {
-  position: relative;
-  aspect-ratio: 16 / 10;
-  overflow: hidden;
-  background: var(--bg-deep);
-  box-shadow: var(--px-border);
-}
-
-.photoImage {
-  object-fit: cover;
-}
-
-.photoButtons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.fileButton {
-  cursor: pointer;
-}
-
-.fileButton:has(input:focus-visible) {
-  outline: 2px solid var(--candle);
-  outline-offset: 3px;
-}
-
-.fileButton[aria-disabled="true"] {
-  cursor: progress;
-  opacity: 0.6;
-}
-
-.causes {
+.group {
   display: grid;
   gap: 8px;
 }
@@ -75,20 +21,24 @@
 }
 
 .chip {
-  padding: 6px 10px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 0;
   background: var(--bg-deep);
   color: var(--muted);
   font-size: 12px;
   box-shadow: var(--px-border);
   cursor: pointer;
   user-select: none;
+  touch-action: manipulation;
 }
 
 .chip:hover {
   color: var(--text);
 }
 
-.chip:has(input:checked) {
+.chip:has(input:checked),
+.chip[aria-pressed="true"] {
   background: var(--moss-deep);
   color: var(--bone);
   box-shadow:
@@ -101,30 +51,6 @@
 .chip:has(input:focus-visible) {
   outline: 2px solid var(--candle);
   outline-offset: 3px;
-}
-
-.linkButton {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--moss);
-  font-family: var(--font-small);
-  font-size: 10px;
-  text-decoration: underline;
-}
-
-.linkList {
-  display: grid;
-  gap: 8px;
-}
-
-.linkRow {
-  display: flex;
-  gap: 6px;
-}
-
-.addLink {
-  justify-self: start;
 }
 
 .confirmClose {
@@ -147,66 +73,39 @@
   gap: 10px;
 }
 
-.tagBox {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.tagRemove {
-  padding: 0 2px;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1;
-}
-
-.tagRemove:hover {
-  color: var(--danger);
-}
-
-.tagInput {
-  flex: 1;
-  min-width: 140px;
-}
-
+/* 게임 안처럼 어두운 풀밭 위 묘비와 이름표 */
 .preview {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  padding: 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
   background: var(--bg-deep);
   box-shadow: var(--px-border);
-  text-align: center;
 }
 
-.previewHeading {
-  justify-self: start;
-  color: var(--muted);
-  font-family: var(--font-small);
-  font-size: 10px;
-}
-
-/* 게임 안처럼 어두운 풀밭 위 묘비와 이름표 */
 .stage {
+  flex: none;
   display: grid;
   justify-items: center;
   gap: 4px;
-  width: 100%;
-  padding: 12px 0 0;
+  padding-top: 6px;
   background: radial-gradient(ellipse at 50% 90%, rgba(85, 112, 79, 0.25), transparent 70%);
 }
 
 .stageName {
-  max-width: 100%;
+  max-width: 120px;
   padding: 1px 6px;
   overflow: hidden;
   background: rgba(9, 10, 8, 0.6);
   color: var(--bone);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.previewText {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }
 
 .previewEpitaph {
@@ -228,10 +127,18 @@
   font-size: 12px;
 }
 
+/* 폼이 대화상자보다 길어도 제출 버튼은 아래에 붙어 있게 (본문 여백 16px만큼 바깥으로) */
 .footer {
+  position: sticky;
+  bottom: -16px;
+  z-index: 1;
   display: grid;
   gap: 8px;
   justify-items: center;
+  margin: 0 -16px -16px;
+  padding: 10px 16px 16px;
+  background: var(--panel-solid);
+  box-shadow: 0 -2px 0 var(--line);
   text-align: center;
 }
 
@@ -242,23 +149,13 @@
   font-size: 15px;
 }
 
-@media (min-width: 760px) {
-  .layout {
-    grid-template-columns: minmax(0, 1fr) 220px;
-    align-items: start;
-  }
-
-  .preview {
-    position: sticky;
-    top: 0;
+@media (pointer: coarse) {
+  .chip {
+    min-height: 44px;
   }
 }
 
 @media (max-width: 380px) {
-  .dates {
-    grid-template-columns: 1fr;
-  }
-
   .submit {
     width: 100%;
     min-width: 0;

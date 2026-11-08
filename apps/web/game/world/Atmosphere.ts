@@ -5,7 +5,7 @@ import { DEPTH, ZOOM_MIN } from "../config";
 import { LevelBlender, levelsFor, TRANSITION_MS, type Levels } from "./ambienceMix";
 import type { LightSpot } from "./WorldMap";
 
-// 분위기 레이어: KST 시간대 톤(곱하기 틴트 + 어둠) → 빛(가산) → 반딧불 → 날씨 → 안개 → 비네트.
+// 분위기 레이어: KST 시간대 톤(곱하기 틴트) → [어둠·빛 구멍은 Lighting] → 빛(가산) → 반딧불 → 날씨 → 안개 → 비네트.
 // 톤·날씨는 lib/ambience(공용, 시계 기반)로 1분마다 다시 계산하고 바뀌면 2.5초 동안 섞는다.
 // 모든 레이어는 화면 고정 오브젝트 몇 개와 작은 풀(pool)로만 그려서 프레임당 비용이 일정하다.
 
@@ -25,7 +25,6 @@ export class Atmosphere {
   private readonly blender: LevelBlender;
   private nextCheck = 0;
   private readonly tint: Phaser.GameObjects.Image;
-  private readonly dark: Phaser.GameObjects.Image;
   private readonly vignette: Phaser.GameObjects.Image;
   private readonly fogNear: Phaser.GameObjects.TileSprite;
   private readonly fogFar: Phaser.GameObjects.TileSprite;
@@ -53,7 +52,6 @@ export class Atmosphere {
       o.setScrollFactor(0).setDepth(depth).setOrigin(0.5, 0.5);
 
     this.tint = fixed(scene.add.image(0, 0, TEX.pixel), DEPTH.tint).setBlendMode(Phaser.BlendModes.MULTIPLY) as Phaser.GameObjects.Image;
-    this.dark = fixed(scene.add.image(0, 0, TEX.pixel), DEPTH.dark).setTint(0x070812) as Phaser.GameObjects.Image;
     this.vignette = fixed(scene.add.image(0, 0, TEX.vignette), DEPTH.vignette) as Phaser.GameObjects.Image;
 
     const tile = (key: string, depth: number) => {
@@ -86,7 +84,7 @@ export class Atmosphere {
     const h = cam.height / ZOOM_MIN + 64;
     const cx = cam.width / 2;
     const cy = cam.height / 2;
-    for (const o of [this.tint, this.dark]) o.setPosition(cx, cy).setDisplaySize(w, h);
+    this.tint.setPosition(cx, cy).setDisplaySize(w, h);
     for (const t of [this.cloud, this.rainFar, this.rainNear, this.snowFar, this.snowNear, this.fogFar, this.fogNear]) {
       t.setPosition(cx, cy).setSize(Math.ceil(w / TS_SCALE), Math.ceil(h / TS_SCALE));
     }
@@ -132,7 +130,7 @@ export class Atmosphere {
     // ── 톤 ──
     this.tint.setTint(L.tint);
     this.tint.setVisible(L.tint !== 0xffffff);
-    this.dark.setAlpha(L.darkness).setVisible(L.darkness > 0.003);
+    // 어둠은 Lighting이 그린다 (빛 구멍을 뚫기 위해)
     this.vignette
       .setPosition(cam.width / 2, cam.height / 2)
       .setDisplaySize(cam.width / cam.zoom + 2, cam.height / cam.zoom + 2)

@@ -13,6 +13,7 @@ export default function MobileControls() {
   const [running, setRunning] = useState(false);
   // sticky라 마운트 전에 다가간 묘비도 바로 반영된다
   const nearGrave = useBridgeValue("grave:near") != null;
+  const inShop = useBridgeValue("scene:changed")?.scene === "shop";
 
   function toggleRun() {
     const on = !running;
@@ -31,7 +32,7 @@ export default function MobileControls() {
           data-near={nearGrave}
           onClick={() => bridge.emit("input:interact")}
         >
-          {nearGrave ? "살펴보기" : "상호작용"}
+          {inShop ? "말 걸기" : nearGrave ? "살펴보기" : "상호작용"}
         </button>
         <button type="button" className={styles.action} data-slot="sit" onClick={() => bridge.emit("input:sit")}>
           앉기

@@ -7,6 +7,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 
 // 아바타 한 명의 화면 표현 (스프라이트 + 이름 라벨 + "…" 말풍선). 내 캐릭터와 원격 아바타가 같이 쓴다.
 // 상태 값(idle|walk|run|sitGround|sitChair)과 방향만 받아서 애니메이션을 고른다.
+// 꾸미기(모자·목도리·손등불)는 시트에 함께 그려져 4방향·앉기에도 맞게 따라가고, 반딧불 오라는 따로 맴돈다.
 
 /** 의자에 앉으면 좌석 위로 살짝 올려 그린다 */
 export const SIT_CHAIR_LIFT = 3;
@@ -16,7 +17,11 @@ export class AvatarView {
   readonly sprite: Phaser.GameObjects.Sprite;
   readonly label: Phaser.GameObjects.BitmapText;
   private bubble: Phaser.GameObjects.Image | null = null;
-  private readonly texKey: string;
+  private texKey: string;
+  private look: readonly string[] = [];
+  private aura: Phaser.GameObjects.Image[] = [];
+  /** 손등불을 들고 있으면 조명이 더 넓다 */
+  lantern = false;
   private anim = "";
   private gestureUntil = 0;
   state: StateName = "idle";
@@ -31,11 +36,12 @@ export class AvatarView {
     private readonly atlas: GlyphAtlas,
     x: number,
     y: number,
-    color: string,
+    private readonly color: string,
     name: string,
     isMe: boolean,
+    look: readonly string[] = [],
   ) {
-    this.texKey = ensureAvatarTexture(scene, color);
+    this.texKey = ensureAvatarTexture(scene, color, look);
     this.sprite = scene.add.sprite(x, y, this.texKey, avatarFrame("idle", DIR.down)).setOrigin(0.5, AV_ORIGIN_Y);
     atlas.ensure(name);
     this.label = scene.add
@@ -44,6 +50,35 @@ export class AvatarView {
       .setDepth(DEPTH.labels + (isMe ? 1 : 0))
       .setTint(isMe ? LABEL_ME : LABEL_OTHER);
     this.apply("idle", DIR.down, 0);
+    this.setLook(look);
+  }
+
+  /** 꾸미기 착용 변경 (바로 반영) */
+  setLook(look: readonly string[]): void {
+    this.look = look.slice();
+    this.lantern = look.includes("hand_lantern");
+    const key = ensureAvatarTexture(this.scene, this.color, look);
+    if (key !== this.texKey) {
+      this.texKey = key;
+      this.anim = "";
+      this.sprite.setTexture(key, this.sprite.frame.name);
+      this.apply(this.state, this.dir, 0);
+    }
+    const wantAura = look.includes("aura_firefly");
+    if (wantAura && !this.aura.length) {
+      for (let i = 0; i < 3; i++) {
+        this.aura.push(
+          this.scene.add.image(0, 0, TEX.firefly).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.fireflies + 1).setVisible(this.sprite.visible),
+        );
+      }
+    } else if (!wantAura && this.aura.length) {
+      for (const a of this.aura) a.destroy();
+      this.aura = [];
+    }
+  }
+
+  get wearing(): readonly string[] {
+    return this.look;
   }
 
   setName(name: string): void {
@@ -93,6 +128,13 @@ export class AvatarView {
     this.label.setPosition(Math.round(s.x), s.y - LABEL_GAP + lift);
     if (this.label.scaleX !== labelScale) this.label.setScale(labelScale);
 
+    for (let i = 0; i < this.aura.length; i++) {
+      // 반딧불 세 마리가 몸 둘레를 천천히 돈다
+      const a = now / 900 + (i * Math.PI * 2) / this.aura.length;
+      const blink = 0.45 + 0.55 * Math.max(0, Math.sin(now / 350 + i * 2.1));
+      this.aura[i].setPosition(s.x + Math.cos(a) * 10, s.y - 9 + Math.sin(a * 1.3) * 5).setAlpha(blink);
+    }
+
     const longSit = this.sitSince > 0 && now - this.sitSince > SIT_IDLE_MS;
     if (longSit) {
       if (!this.bubble) {
@@ -114,6 +156,7 @@ export class AvatarView {
     this.sprite.setVisible(v);
     this.label.setVisible(v);
     this.bubble?.setVisible(v);
+    for (const a of this.aura) a.setVisible(v);
   }
 
   get visible(): boolean {
@@ -125,5 +168,7 @@ export class AvatarView {
     this.label.destroy();
     this.bubble?.destroy();
     this.bubble = null;
+    for (const a of this.aura) a.destroy();
+    this.aura = [];
   }
 }

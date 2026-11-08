@@ -171,9 +171,19 @@ export class Grid {
     ctx.drawImage(tmp, dx, dy);
   }
 
+  /** 새 캔버스로 (합성할 게 없으니 임시 캔버스 없이 바로 putImageData) */
   toCanvas(): HTMLCanvasElement {
     const { canvas, ctx } = makeCanvas(this.w, this.h);
-    this.blit(ctx);
+    const img = ctx.createImageData(this.w, this.h);
+    const d = img.data;
+    for (let i = 0; i < this.px.length; i++) {
+      const v = this.px[i];
+      d[i * 4] = (v >>> 24) & 255;
+      d[i * 4 + 1] = (v >>> 16) & 255;
+      d[i * 4 + 2] = (v >>> 8) & 255;
+      d[i * 4 + 3] = v & 255;
+    }
+    ctx.putImageData(img, 0, 0);
     return canvas;
   }
 }

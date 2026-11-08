@@ -1,13 +1,13 @@
 import * as Phaser from "phaser";
 import { flowersKey, TEX } from "../assets/manifest";
 import { DEPTH, TOOLTIP_EPITAPH, TOOLTIP_NAME } from "../config";
-import { GRAVE_STONE_H, graveOriginY, graveTexKey } from "../sprites/graves";
+import { GRAVE_STONE_H, graveOriginY, graveTexKey, type GraveStyle } from "../sprites/graves";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import type { GravePlacement } from "../world/graveLayout";
 
 // 묘비 한 기의 화면 표현. 화면에 보이는 행만 풀에서 꺼내 붙인다 (GraveField).
 // 살려주세요가 많을수록 은은한 빛, 아주 많으면 미세한 흔들림 (prefers-reduced-motion이면 흔들림 없음).
-// 부활 대기석 상위 3개에는 촛불, 1위에는 유령불까지.
+// 부활 대기석 상위 3개에는 촛불, 1위에는 유령불까지. 묘비 꾸미기(촛불·화환·리본·작은 석등·유령 고양이·별빛)도 여기서.
 
 const RISE_MS = 1100;
 
@@ -17,6 +17,7 @@ export function reviveLevel(revives: number): number {
 }
 
 type Light = { img: Phaser.GameObjects.Image; base: number; phase: number };
+type Star = { img: Phaser.GameObjects.Image; t0: number };
 
 export class GraveView {
   p: GravePlacement | null = null;
@@ -26,23 +27,36 @@ export class GraveView {
   private candles: Phaser.GameObjects.Sprite[] = [];
   private wisp: Phaser.GameObjects.Sprite | null = null;
   private lights: Light[] = [];
+  private decorObjs: Phaser.GameObjects.GameObject[] = [];
+  private cat: Phaser.GameObjects.Sprite | null = null;
+  private stars: Star[] = [];
   private sway = 0;
   private glowBase = 0;
   private phase = 0;
+  private reduced = false;
   riseAt = 0;
-  /** 매 프레임 갱신이 필요한지 (흔들림·빛·촛불·솟아오르기) */
+  /** 매 프레임 갱신이 필요한지 (흔들림·빛·촛불·솟아오르기·꾸미기) */
   animated = false;
+  /** 어둠 걷어내기용: 묘비 위 스폿 세기 (부활 대기석·꾸미기 빛이 있으면 더 밝게) */
+  spot = 0.3;
+  /** 촛불·작은 석등 꾸미기가 있으면 둘레를 밝힌다 */
+  decorLit = false;
 
   constructor(private readonly scene: Phaser.Scene) {
     this.stone = scene.add.image(0, 0, TEX.pixel).setVisible(false);
   }
 
-  bind(p: GravePlacement, reduced: boolean, riseAt: number): void {
+  get height(): number {
+    return this.p ? GRAVE_STONE_H[this.p.tier] : 0;
+  }
+
+  bind(p: GravePlacement, reduced: boolean, riseAt: number, style: GraveStyle = "temple"): void {
     this.p = p;
     this.riseAt = riseAt;
+    this.reduced = reduced;
     this.phase = (p.index * 1.7) % (Math.PI * 2);
     const s = this.stone;
-    s.setTexture(graveTexKey(p.tier, p.variant))
+    s.setTexture(graveTexKey(p.tier, p.variant, style))
       .setOrigin(0.5, graveOriginY(p.tier))
       .setPosition(p.x, p.y)
       .setDepth(p.y)
@@ -67,19 +81,66 @@ export class GraveView {
 
     this.clearExtras();
     if (p.rank >= 0 && p.rank < 3) {
-      for (const dx of [-10, 10]) {
-        const c = this.scene.add.sprite(p.x + dx, p.y + 2, TEX.candle, 0).setOrigin(0.5, 1).setDepth(p.y + 2);
-        c.play({ key: "fx-candle-flicker", startFrame: dx > 0 ? 1 : 0 });
-        this.candles.push(c);
-        this.lights.push({ img: this.makeLight(p.x + dx, p.y - 4, 0.45, 0xffc870), base: 0.55, phase: dx });
-      }
+      this.addCandles(p, -10, 10);
       if (p.rank === 0) {
         this.wisp = this.scene.add.sprite(p.x - 12, p.y - 26, TEX.wisp, 0).setDepth(DEPTH.lights + 1);
         this.wisp.play("fx-wisp-float");
         this.lights.push({ img: this.makeLight(p.x - 12, p.y - 26, 0.6, 0x9fdcf0), base: 0.7, phase: 3 });
       }
     }
-    this.animated = this.sway > 0 || this.glowBase > 0 || this.lights.length > 0 || riseAt > 0;
+    this.bindDecor(p);
+    this.spot = (p.rank >= 0 ? 0.45 : 0.3) + (this.decorLit ? 0.2 : 0);
+    this.animated = this.sway > 0 || this.glowBase > 0 || this.lights.length > 0 || riseAt > 0 || !!this.cat || this.stars.length > 0;
+  }
+
+  private addCandles(p: GravePlacement, dl: number, dr: number): void {
+    for (const dx of [dl, dr]) {
+      const c = this.scene.add.sprite(p.x + dx, p.y + 2, TEX.candle, 0).setOrigin(0.5, 1).setDepth(p.y + 2);
+      c.play({ key: "fx-candle-flicker", startFrame: dx > 0 ? 1 : 0 });
+      this.candles.push(c);
+      this.lights.push({ img: this.makeLight(p.x + dx, p.y - 4, 0.45, 0xffc870), base: 0.55, phase: dx });
+    }
+  }
+
+  private bindDecor(p: GravePlacement): void {
+    this.decorLit = false;
+    const h = GRAVE_STONE_H[p.tier];
+    for (const id of p.decor) {
+      switch (id) {
+        case "decor_candles":
+          // 부활 대기석 촛불과 겹치지 않게 조금 바깥에
+          if (p.rank < 0 || p.rank >= 3) this.addCandles(p, -9, 9);
+          this.decorLit = true;
+          break;
+        case "decor_wreath":
+          this.decorObjs.push(this.scene.add.image(p.x, p.y + 3, TEX.wreath).setDepth(p.y + 3));
+          break;
+        case "decor_ribbon":
+          this.decorObjs.push(this.scene.add.image(p.x + 4, p.y - h + 3, TEX.ribbon).setOrigin(0.5, 0).setDepth(p.y + 0.5));
+          break;
+        case "decor_lantern": {
+          const lx = p.x + 13;
+          this.decorObjs.push(this.scene.add.image(lx, p.y + 2, TEX.miniLantern).setOrigin(0.5, 1).setDepth(p.y + 2));
+          this.lights.push({ img: this.makeLight(lx, p.y - 6, 0.5, 0xffc070), base: 0.6, phase: 7 });
+          this.decorLit = true;
+          break;
+        }
+        case "decor_ghostcat":
+          this.cat = this.scene.add
+            .sprite(p.x, p.y - h + 1, TEX.ghostCat, 0)
+            .setOrigin(0.5, 1)
+            .setAlpha(0.8)
+            .setDepth(p.y + 0.6);
+          if (!this.reduced) this.cat.play("fx-ghostcat-tail");
+          break;
+        case "decor_stars":
+          for (let i = 0; i < (this.reduced ? 2 : 5); i++) {
+            const img = this.scene.add.image(p.x, p.y - h, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 1);
+            this.stars.push({ img, t0: i * 700 + this.phase * 300 });
+          }
+          break;
+      }
+    }
   }
 
   private makeLight(x: number, y: number, scale: number, tint: number): Phaser.GameObjects.Image {
@@ -94,10 +155,16 @@ export class GraveView {
   private clearExtras(): void {
     for (const c of this.candles) c.destroy();
     for (const l of this.lights) l.img.destroy();
+    for (const o of this.decorObjs) o.destroy();
+    for (const st of this.stars) st.img.destroy();
     this.wisp?.destroy();
+    this.cat?.destroy();
     this.candles = [];
     this.lights = [];
+    this.decorObjs = [];
+    this.stars = [];
     this.wisp = null;
+    this.cat = null;
   }
 
   unbind(): void {
@@ -109,6 +176,10 @@ export class GraveView {
     this.animated = false;
   }
 
+  get visible(): boolean {
+    return !!this.p && this.stone.visible;
+  }
+
   setVisible(v: boolean): void {
     if (this.stone.visible === v) return;
     this.stone.setVisible(v);
@@ -116,7 +187,10 @@ export class GraveView {
     if (this.glow && this.glowBase > 0) this.glow.setVisible(v);
     for (const c of this.candles) c.setVisible(v);
     for (const l of this.lights) l.img.setVisible(v);
+    for (const o of this.decorObjs) (o as unknown as Phaser.GameObjects.Components.Visible).setVisible(v);
+    for (const st of this.stars) st.img.setVisible(v);
     this.wisp?.setVisible(v);
+    this.cat?.setVisible(v);
   }
 
   /** lightLevel: 시간대 빛 세기 0..1 */
@@ -136,7 +210,20 @@ export class GraveView {
       const wy = p.y - 26 + Math.sin(now / 700) * 3;
       const wx = p.x - 12 + Math.sin(now / 1100) * 2;
       this.wisp.setPosition(wx, wy);
-      if (this.lights.length) this.lights[this.lights.length - 1].img.setPosition(wx, wy);
+      // 유령불 빛은 촛불 둘 다음 (lights[2])
+      if (this.lights.length > 2) this.lights[2].img.setPosition(wx, wy);
+    }
+    if (this.cat && !this.reduced) this.cat.setY(p.y - GRAVE_STONE_H[p.tier] + 1 - (Math.sin(now / 900 + this.phase) > 0.6 ? 1 : 0));
+    if (this.stars.length) {
+      // 별가루: 묘비 위에서 천천히 내려오며 깜빡인다
+      const h = GRAVE_STONE_H[p.tier];
+      for (let i = 0; i < this.stars.length; i++) {
+        const st = this.stars[i];
+        const period = this.reduced ? 6000 : 3200;
+        const t = ((now + st.t0) % period) / period;
+        const dx = Math.sin(i * 2.3 + this.phase) * 7;
+        st.img.setPosition(p.x + dx, p.y - h - 14 + t * (h + 10)).setAlpha(Math.sin(t * Math.PI) * 0.9).setScale(0.6 + 0.4 * Math.sin(t * Math.PI));
+      }
     }
     if (this.riseAt) {
       const t = Math.min(1, (now - this.riseAt) / RISE_MS);

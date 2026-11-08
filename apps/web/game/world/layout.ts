@@ -5,6 +5,8 @@ import {
   GRID_Y0,
   MAP_COLS,
   MAP_WIDTH,
+  SHOP,
+  SHOP_DOOR,
   TILE,
   type Furniture,
 } from "@tomb/protocol";
@@ -46,7 +48,6 @@ export const UPPER_PROPS: readonly PropDef[] = [
   { kind: "tree", x: 190, y: 76, variant: 1 },
   { kind: "deadTree", x: 262, y: 150, variant: 0 },
   { kind: "tree", x: 56, y: 252, variant: 1 },
-  { kind: "tree", x: 236, y: 250, variant: 0 },
   { kind: "deadTree", x: 60, y: 396, variant: 1 },
   { kind: "tree", x: 300, y: 330, variant: 1 },
   // 오른쪽 정원 고목
@@ -91,6 +92,17 @@ export function propCollider(p: PropDef): Rect | null {
     case "altar":
       return { x: p.x - 19, y: p.y - 12, w: 38, h: 12 };
   }
+}
+
+/** 유령 잡화점 오두막 충돌 박스 (문은 아래 가운데, 문 앞 SHOP_DOOR에서 들어간다) */
+export function shopCollider(): Rect {
+  return { x: SHOP.x - 28, y: SHOP.y - 18, w: 56, h: 18 };
+}
+
+/** 문 앞에 서 있으면 들어갈 수 있다 */
+export const SHOP_ENTER_RADIUS = 12;
+export function nearShopDoor(x: number, y: number, radius = SHOP_ENTER_RADIUS): boolean {
+  return Math.hypot(x - SHOP_DOOR.x, y - SHOP_DOOR.y) <= radius;
 }
 
 export function benchWidth(f: Furniture): number {

@@ -1,23 +1,29 @@
 import type {
   ApiError,
+  AttendResponse,
+  BuyResponse,
+  CodeLoginResponse,
+  CodeResponse,
   CreateGraveResponse,
   FlowerResponse,
   GraveDetailResponse,
   GraveInput,
   GraveListResponse,
-  LocalUploadResponse,
+  LookGrantResponse,
+  Me,
+  QuickGraveInput,
   ReportResponse,
   ReviveResponse,
   SessionResponse,
   UpdateGraveResponse,
-  UploadModeResponse,
+  UseItemResponse,
+  VersionResponse,
 } from "./types";
 import type { ReportReason } from "./reports";
 
 // 브라우저 → Next API 호출. 서버가 준 한국어 메시지를 그대로 사용자에게 보여 준다.
 
 const FALLBACK_MESSAGE = "연결이 불안정해요. 잠시 후 다시 시도해 주세요.";
-const UPLOAD_FAILED_MESSAGE = "사진을 올리지 못했어요. 잠시 후 다시 시도해 주세요.";
 
 export class ApiRequestError extends Error {
   constructor(
@@ -63,34 +69,9 @@ function jsonInit(method: string, data: unknown, headers?: Record<string, string
 
 const gravePath = (id: string, sub = "") => `/api/graves/${encodeURIComponent(id)}${sub}`;
 
-/**
- * WebP 스크린샷을 올리고 공개 주소를 돌려준다. Blob이 연결되지 않은 개발 환경에서는 로컬 대체 경로로 보낸다.
- * 업로드 URL이 60초만 유효하므로 제출 직전에 모드 조회 → presigned URL → 업로드를 연달아 부른다.
- */
-async function uploadScreenshot(image: Blob): Promise<string> {
-  // 모드 조회가 세션·업로드 한도를 먼저 확인해 한국어 에러(401·429)를 그대로 돌려준다.
-  // (uploadPresigned는 URL 발급 단계의 에러를 "Failed to retrieve the presigned URL"로 뭉갠다)
-  const { mode, prefix } = await request<UploadModeResponse>("/api/upload", { cache: "no-store" });
-  if (mode === "local") {
-    const form = new FormData();
-    form.append("file", image, "screenshot.webp");
-    return (await request<LocalUploadResponse>("/api/upload/local", { method: "POST", body: form })).url;
-  }
-  // 서버는 이 방문자 전용 prefix 아래 `[A-Za-z0-9_-]{1,64}.webp` 경로만 받는다
-  const pathname = `${prefix}${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}.webp`;
-  // presigned 흐름은 읽기쓰기 토큰 방식과 OIDC(BLOB_STORE_ID) 방식 모두에서 돈다
-  const { uploadPresigned } = await import("@vercel/blob/client");
-  try {
-    const blob = await uploadPresigned(pathname, image, {
-      access: "public",
-      handleUploadUrl: "/api/upload",
-      contentType: "image/webp",
-    });
-    return blob.url;
-  } catch {
-    throw new ApiRequestError(0, "UPLOAD_FAILED", UPLOAD_FAILED_MESSAGE);
-  }
-}
+/** 내 계정이 세운 묘비는 토큰 없이도 고칠 수 있다 (토큰은 계정 개편 전 묘비용) */
+const ownerHeaders = (ownerToken: string | null): Record<string, string> =>
+  ownerToken ? { [OWNER_HEADER]: ownerToken } : {};
 
 export const api = {
   startSession: () => request<SessionResponse>("/api/session", { method: "POST" }),
@@ -98,14 +79,25 @@ export const api = {
   /** 상세는 목록의 CDN 캐시(30초)를 거치지 않는다 */
   graveDetail: (id: string, signal?: AbortSignal) =>
     request<GraveDetailResponse>(gravePath(id), { cache: "no-store", signal }),
-  createGrave: (input: GraveInput) => request<CreateGraveResponse>("/api/graves", jsonInit("POST", input)),
-  updateGrave: (id: string, ownerToken: string, input: GraveInput) =>
-    request<UpdateGraveResponse>(gravePath(id), jsonInit("PATCH", input, { [OWNER_HEADER]: ownerToken })),
-  deleteGrave: (id: string, ownerToken: string) =>
-    request<unknown>(gravePath(id), { method: "DELETE", headers: { [OWNER_HEADER]: ownerToken } }),
+  createGrave: (input: QuickGraveInput) => request<CreateGraveResponse>("/api/graves", jsonInit("POST", input)),
+  /** PATCH는 전체 교체 */
+  updateGrave: (id: string, ownerToken: string | null, input: GraveInput) =>
+    request<UpdateGraveResponse>(gravePath(id), jsonInit("PATCH", input, ownerHeaders(ownerToken))),
+  deleteGrave: (id: string, ownerToken: string | null) =>
+    request<unknown>(gravePath(id), { method: "DELETE", headers: ownerHeaders(ownerToken) }),
   flower: (id: string) => request<FlowerResponse>(gravePath(id, "/flower"), { method: "POST" }),
   revive: (id: string) => request<ReviveResponse>(gravePath(id, "/revive"), { method: "POST" }),
   report: (id: string, reason: ReportReason) =>
     request<ReportResponse>(gravePath(id, "/report"), jsonInit("POST", { reason })),
-  uploadScreenshot,
+
+  me: () => request<Me>("/api/me", { cache: "no-store" }),
+  attend: () => request<AttendResponse>("/api/me/attend", { method: "POST" }),
+  issueCode: () => request<CodeResponse>("/api/me/code", { method: "POST" }),
+  loginWithCode: (code: string) => request<CodeLoginResponse>("/api/me/login", jsonInit("POST", { code })),
+  myLook: () => request<LookGrantResponse>("/api/me/look", { cache: "no-store" }),
+  buy: (itemId: string) => request<BuyResponse>("/api/shop/buy", jsonInit("POST", { itemId })),
+  /** 아이템 사용 (이름이 use로 시작하면 훅으로 오해받으므로 spend) */
+  spendItem: (itemId: string, graveId?: string) =>
+    request<UseItemResponse>("/api/shop/use", jsonInit("POST", graveId ? { itemId, graveId } : { itemId })),
+  version: () => request<VersionResponse>("/api/version", { cache: "no-store" }),
 };

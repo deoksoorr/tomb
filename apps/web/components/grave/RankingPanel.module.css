@@ -114,6 +114,18 @@ li:nth-child(-n + 3) .rank {
   text-align: center;
 }
 
+/* 터치: 오른쪽 아래 행동 버튼·묘비 세우기·폭죽 자리를 비워 둔다 */
+@media (pointer: coarse) {
+  .panel {
+    max-height: min(480px, calc(100dvh - var(--safe-top) - 340px));
+  }
+
+  .item,
+  .tab {
+    min-height: 44px;
+  }
+}
+
 /* 가로 모드처럼 낮은 화면: 아래쪽 조작 버튼 자리를 비우지 않고 화면 높이를 거의 다 쓴다 */
 @media (max-height: 480px) {
   .panel {

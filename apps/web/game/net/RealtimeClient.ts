@@ -1,6 +1,8 @@
 import {
   CLOSE,
   MAX_JOIN_RETRIES,
+  PEER_SYNC_MS,
+  QUEUE_POLL_MS,
   STATE,
   PING,
   PONG,
@@ -16,6 +18,7 @@ import {
   type GraveEventKind,
   type PeerInfo,
   type PeerState,
+  type QueueStatus,
   type Sid,
   type WelcomeMsg,
 } from "@tomb/protocol";
@@ -36,6 +39,8 @@ import { MoveThrottle, type NetPose } from "./sendThrottle";
 //  - 4004 잘못된 요청: 자동 배정으로 다시 / /api/join 400: 재시도해도 소용없으니 offline + 안내 1회
 //  - 클라이언트가 끊는 경우: 의도적 퇴장(stop·채널 이동)만 1000, 타임아웃 등은 4000
 //    (서버는 1000을 "떠남"으로 보고 재연결 유예 없이 자리를 비운다)
+//  - 대기열(/api/join → queue): 혼자 걸으며 queueUrl을 QUEUE_POLL_MS마다 확인, admitted면 그 채널로 입장
+//  - 자가 복구: PEER_SYNC_MS마다(그리고 탭이 다시 보일 때) sync → peers로 원격 아바타 목록을 서버 기준으로 맞춘다
 
 export type NetCallbacks = {
   getPose(out: NetPose): NetPose;
@@ -50,6 +55,10 @@ export type NetCallbacks = {
   onGraveEvent(sid: Sid, kind: GraveEventKind, graveId: string): void;
   /** 연결이 끊김/채널 이동/관람 모드: 원격 아바타와 좌석 점유표를 비운다 */
   onReset(): void;
+  /** sync 응답: 서버가 아는 접속자 전체 (나 제외) */
+  onPeers(peers: PeerInfo[], seats: Record<string, Sid>): void;
+  onLook(sid: Sid, look: string[]): void;
+  onFirework(sid: Sid, item: string, x: number, y: number): void;
 };
 
 export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean };
@@ -106,6 +115,13 @@ export class RealtimeClient {
   private readonly joinLimiter = new JoinLimiter();
   private token: CachedToken<Extract<JoinResponse, { mode: "channel" }>> | null = null;
   private hiddenIdleTimer: ReturnType<typeof setTimeout> | null = null;
+  private queueTimer: ReturnType<typeof setTimeout> | null = null;
+  private queueUrl: string | null = null;
+  private syncTimer: ReturnType<typeof setInterval> | null = null;
+  /** 대기열에서 들어온 채널 (welcome 때 안내) */
+  private admittedTo: number | null = null;
+  /** 마지막 꾸미기 증서. 다시 접속하면 한 번 더 보낸다 (만료됐으면 서버가 무시) */
+  private lookGrant: string | null = null;
   private lastWarpAt = -Infinity;
   private lastToast = "";
   // 통계
@@ -170,6 +186,22 @@ export class RealtimeClient {
     void this.connect(channel);
   }
 
+  /** "여기서 다시 접속": replaced/offline/대기 상태에서 처음부터 다시 */
+  reconnect(): void {
+    if (this.stopped) return;
+    this.closeSocket(4000, "reconnect");
+    this.cb.onReset();
+    this.peers.clear();
+    this.clearTimers();
+    this.triedFull.clear();
+    this.fullRetries = 0;
+    this.redirected = false;
+    this.attempt = 0;
+    this.token = null;
+    this.setMode("connecting");
+    void this.connect(this.channel ?? this.target);
+  }
+
   // ── 송신 ──
 
   /** 매 프레임 호출. 보낼 때가 아니면 아무것도 하지 않는다 */
@@ -209,6 +241,21 @@ export class RealtimeClient {
     this.send({ t: "graveEvent", kind, graveId });
   }
 
+  /** 꾸미기 변경 증서 (Vercel 서명). 접속 중이 아니면 다음 welcome 때 보낸다 */
+  look(grant: string): void {
+    this.lookGrant = grant;
+    this.send({ t: "look", grant });
+  }
+
+  firework(grant: string): void {
+    this.send({ t: "firework", grant });
+  }
+
+  /** 접속자 목록 다시 받기 (자가 복구) */
+  sync(): void {
+    this.send({ t: "sync" });
+  }
+
   private send(msg: C2S): void {
     if (this.online) this.ws!.send(encodeEvent(msg));
   }
@@ -229,6 +276,10 @@ export class RealtimeClient {
     if (!res || gen !== this.gen || this.stopped) return;
     if (res.mode === "spectator") {
       this.enterSpectator();
+      return;
+    }
+    if (res.mode === "queue") {
+      this.enterQueue(res.queueUrl);
       return;
     }
     this.openSocket(res, gen);
@@ -354,6 +405,23 @@ export class RealtimeClient {
         case "graveEvent":
           if (m.sid !== this.mySid) this.cb.onGraveEvent(m.sid, m.kind, m.graveId);
           break;
+        case "look":
+          if (m.sid !== this.mySid) this.cb.onLook(m.sid, m.look);
+          break;
+        case "firework":
+          // 내 폭죽은 누른 순간 이미 터뜨렸다 → 중복 재생하지 않는다
+          if (m.sid !== this.mySid) this.cb.onFirework(m.sid, m.item, m.x, m.y);
+          break;
+        case "peers": {
+          this.peers.clear();
+          for (const p of m.peers) if (p.sid !== this.mySid) this.peers.add(p.sid);
+          this.cb.onPeers(
+            m.peers.filter((p) => p.sid !== this.mySid),
+            m.seats,
+          );
+          this.emitStatus();
+          break;
+        }
       }
       return;
     }
@@ -375,8 +443,11 @@ export class RealtimeClient {
     this.cap = m.cap;
     this.peers.clear();
     for (const p of m.peers) if (p.sid !== m.sid) this.peers.add(p.sid);
-    if (this.redirected) this.toast(`채널이 가득 차 ${m.channel}채널로 안내했어요`);
+    if (this.admittedTo !== null) this.toast(`자리가 나서 ${m.channel}채널로 들어왔어요`);
+    else if (this.redirected) this.toast(`채널이 가득 차 ${m.channel}채널로 안내했어요`);
     this.redirected = false;
+    this.admittedTo = null;
+    this.stopQueue();
     this.triedFull.clear();
     this.fullRetries = 0;
     this.attempt = 0;
@@ -386,8 +457,71 @@ export class RealtimeClient {
     this.throttle.reset();
     this.lastPongAt = performance.now();
     this.startPing();
+    this.startSync();
     this.setMode("online");
     this.cb.onWelcome({ ...m, peers: m.peers.filter((p) => p.sid !== m.sid) });
+    if (this.lookGrant) this.send({ t: "look", grant: this.lookGrant });
+  }
+
+  // ── 대기열 ──
+
+  private enterQueue(queueUrl: string): void {
+    this.channel = null;
+    this.cb.onReset();
+    this.peers.clear();
+    this.queueUrl = queueUrl;
+    this.setMode("queue");
+    this.stopQueue();
+    this.queueTimer = setTimeout(() => void this.pollQueue(), 0);
+  }
+
+  private stopQueue(): void {
+    if (this.queueTimer) clearTimeout(this.queueTimer);
+    this.queueTimer = null;
+  }
+
+  private async pollQueue(): Promise<void> {
+    this.queueTimer = null;
+    const url = this.queueUrl;
+    if (this.stopped || this.mode !== "queue" || !url) return;
+    const gen = this.gen;
+    let status: QueueStatus | null = null;
+    let expired = false;
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (r.status === 401 || r.status === 403 || r.status === 404 || r.status === 410) expired = true;
+      else if (r.ok) status = (await r.json()) as QueueStatus;
+    } catch {
+      // 네트워크 오류: 다음 주기에 다시
+    }
+    if (gen !== this.gen || this.stopped || this.mode !== "queue") return;
+    if (status) bridge.emit("queue:status", status);
+    if (expired || status?.state === "none") {
+      // 대기 증서가 만료됐거나 줄에서 빠졌다 → /api/join부터 다시 (또 대기열일 수 있다)
+      void this.connect("auto");
+      return;
+    }
+    if (status?.state === "admitted") {
+      this.admittedTo = status.channel;
+      this.target = status.channel;
+      void this.connect(status.channel);
+      return;
+    }
+    this.queueTimer = setTimeout(() => void this.pollQueue(), QUEUE_POLL_MS);
+  }
+
+  // ── 자가 복구 ──
+
+  private startSync(): void {
+    if (this.syncTimer) clearInterval(this.syncTimer);
+    this.syncTimer = setInterval(() => {
+      if (!this.hidden) this.sync();
+    }, PEER_SYNC_MS);
+  }
+
+  private stopSync(): void {
+    if (this.syncTimer) clearInterval(this.syncTimer);
+    this.syncTimer = null;
   }
 
   /** 소켓이 닫혔거나 죽은 것으로 판단됨 */
@@ -403,6 +537,7 @@ export class RealtimeClient {
       // 무시
     }
     this.stopPing();
+    this.stopSync();
     if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
     this.welcomeTimer = null;
     this.peers.clear();
@@ -520,6 +655,8 @@ export class RealtimeClient {
 
   private clearTimers(): void {
     this.clearRetry();
+    this.stopQueue();
+    this.stopSync();
     if (this.hiddenIdleTimer) clearTimeout(this.hiddenIdleTimer);
     this.hiddenIdleTimer = null;
     this.stopSpectatorPoll();
@@ -532,6 +669,7 @@ export class RealtimeClient {
     const ws = this.ws;
     this.ws = null;
     this.stopPing();
+    this.stopSync();
     if (!ws) return;
     ws.onclose = null;
     ws.onmessage = null;
@@ -615,6 +753,8 @@ export class RealtimeClient {
       this.lastPongAt = performance.now();
       if (this.hiddenIdleTimer) clearTimeout(this.hiddenIdleTimer);
       this.hiddenIdleTimer = null;
+      // 숨어 있는 동안 놓친 입장·퇴장을 서버 기준으로 다시 맞춘다
+      this.sync();
       return;
     }
     // 걷던 중에 탭이 숨으면 게임 루프가 멈춘다 → 다른 사람 화면에서 계속 걷지 않도록 멈춤(idle)을 1회 알리고 쉰다

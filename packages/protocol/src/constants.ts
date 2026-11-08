@@ -14,8 +14,12 @@ export const DEFAULT_RECONNECT_GRACE_SEC = 20;
 export const TICK_MS = 50;
 /** 클라이언트 MOVE 최대 전송 주기 (10Hz) */
 export const SEND_INTERVAL_MS = 100;
-/** 원격 아바타 보간 지연 버퍼 */
-export const INTERP_DELAY_MS = 120;
+/**
+ * 원격 아바타 보간 지연 버퍼. 명세는 120ms였지만 틱을 50ms로 줄인 뒤에는 한 사람의 샘플 간격이
+ * 전송 간격(≥100ms, 프레임 단위로 ~117ms)+틱 대기(≤50ms) ≈ 최대 170ms가 되어, 120ms 버퍼가 자주 비고
+ * 외삽 후 되돌림(뒤로 1~3px)이 생겼다. 걷는 중엔 외삽 없이 보간만 하도록 버퍼를 샘플 간격에 맞췄다.
+ */
+export const INTERP_DELAY_MS = 170;
 /** 패킷이 끊겼을 때 외삽 최대 시간 */
 export const EXTRAPOLATE_MAX_MS = 200;
 /** 이 거리보다 멀리 이동하면 보간 없이 즉시 이동 */

@@ -29,11 +29,12 @@ export class RemoteAvatar {
     atlas: GlyphAtlas,
     readonly sid: Sid,
     public name: string,
-    color: string,
+    readonly color: string,
     init: Pick<PeerInfo, "x" | "y" | "state" | "dir">,
     now: number,
+    look: readonly string[] = [],
   ) {
-    this.view = new AvatarView(scene, atlas, init.x, init.y, color, name, false);
+    this.view = new AvatarView(scene, atlas, init.x, init.y, color, name, false, look);
     this.push(now, init.x, init.y, init.state, init.dir);
     this.update(now, null, 1);
   }

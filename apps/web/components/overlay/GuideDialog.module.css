@@ -1,0 +1,58 @@
+.guide {
+  display: grid;
+  gap: 22px;
+  line-height: 1.7;
+}
+
+.guide h3 {
+  margin-bottom: 8px;
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th,
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table thead th {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.table tbody th {
+  color: var(--text);
+  font-weight: 400;
+}
+
+.table td {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.points {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  padding-left: 14px;
+  color: var(--text);
+  list-style: "· ";
+}
