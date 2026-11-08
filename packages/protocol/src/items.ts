@@ -3,11 +3,12 @@
 //  - 폭죽: 쏘는 순간 소모. 같은 채널 모두에게 보이고 들린다.
 //  - 캐릭터 꾸미기: 착용하는 순간 소모, 24시간 동안 유지된다(같은 부위는 마지막 것으로 교체).
 //  - 묘비 꾸미기: 내 묘비 하나에 놓는 순간 소모, 7일 동안 유지된다(묘비당 최대 3개).
+//  - 묘비 디자인권: 묘비를 세우거나 내 묘비의 디자인을 바꿀 때 소모, 그 묘비는 그 디자인으로 계속 남는다.
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
-export type ItemKind = "firework" | "cosmetic" | "decor";
+export type ItemKind = "firework" | "cosmetic" | "decor" | "graveStyle";
 export type CosmeticSlot = "head" | "hand" | "aura" | "neck";
 
 export type ItemDef = {
@@ -44,7 +45,55 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "decor_lantern", kind: "decor", name: "작은 석등", desc: "묘비 옆을 은은히 밝혀요.", price: 60, durationMs: DECOR_DURATION_MS },
   { id: "decor_ghostcat", kind: "decor", name: "유령 고양이", desc: "묘비 위에서 졸고 있어요.", price: 80, durationMs: DECOR_DURATION_MS },
   { id: "decor_stars", kind: "decor", name: "별빛", desc: "묘비 위로 별가루가 내려요.", price: 120, durationMs: DECOR_DURATION_MS },
+
+  // 묘비 디자인권 (포인트로 만드는 특별 묘비). id = "gs_" + 디자인 id
+  { id: "gs_coffee", kind: "graveStyle", name: "식은 커피잔 묘비", desc: "마지막 한 모금은 끝내 마시지 못했다.", price: 100 },
+  { id: "gs_duck", kind: "graveStyle", name: "고무오리 묘비", desc: "디버깅을 끝까지 들어 준 친구.", price: 120 },
+  { id: "gs_404", kind: "graveStyle", name: "404 비석", desc: "찾을 수 없는 프로젝트.", price: 120 },
+  { id: "gs_monitor", kind: "graveStyle", name: "모니터 묘비", desc: "꺼지지 않는 커서가 깜빡여요.", price: 150 },
+  { id: "gs_sakura", kind: "graveStyle", name: "벚꽃 비석", desc: "꽃잎이 내려앉는 비석.", price: 150 },
+  { id: "gs_server", kind: "graveStyle", name: "서버 랙 묘비", desc: "LED가 아직 깜빡여요. 요금은 끊겼지만.", price: 180 },
+  { id: "gs_rocket", kind: "graveStyle", name: "못 쏜 로켓", desc: "출시 직전에 멈춘 로켓.", price: 200 },
+  { id: "gs_angel", kind: "graveStyle", name: "대리석 천사상", desc: "날개를 접은 작은 천사.", price: 300 },
+  { id: "gs_crystal", kind: "graveStyle", name: "수정 묘비", desc: "밤에 은은하게 빛나요.", price: 400 },
+  { id: "gs_gold", kind: "graveStyle", name: "황금 비석", desc: "가장 빛나던 아이디어에게.", price: 500 },
 ];
+
+/**
+ * 묘비 디자인. 맵 분위기는 모두 같고, 묘비마다 디자인을 골라 세운다.
+ * free = 누구나 고를 수 있음, 나머지는 같은 id의 "gs_" 디자인권이 있어야 한다(쓰면 소모).
+ * "auto"는 명세의 생존 기간 규칙(나무 팻말 → 작은 비석 → 큰 비석 → 석탑)을 따른다.
+ */
+export const GRAVE_STYLES = [
+  { id: "auto", name: "자동 (살아온 기간에 따라)", free: true },
+  { id: "wood", name: "나무 팻말", free: true },
+  { id: "stone", name: "둥근 비석", free: true },
+  { id: "tall", name: "큰 비석", free: true },
+  { id: "cross", name: "십자 묘비", free: true },
+  { id: "pagoda", name: "석탑", free: true },
+  { id: "coffee", name: "식은 커피잔 묘비", free: false },
+  { id: "duck", name: "고무오리 묘비", free: false },
+  { id: "404", name: "404 비석", free: false },
+  { id: "monitor", name: "모니터 묘비", free: false },
+  { id: "sakura", name: "벚꽃 비석", free: false },
+  { id: "server", name: "서버 랙 묘비", free: false },
+  { id: "rocket", name: "못 쏜 로켓", free: false },
+  { id: "angel", name: "대리석 천사상", free: false },
+  { id: "crystal", name: "수정 묘비", free: false },
+  { id: "gold", name: "황금 비석", free: false },
+] as const;
+export type GraveStyleId = (typeof GRAVE_STYLES)[number]["id"];
+const styleMap = new Map<string, (typeof GRAVE_STYLES)[number]>(GRAVE_STYLES.map((g) => [g.id, g]));
+export function isGraveStyle(id: unknown): id is GraveStyleId {
+  return typeof id === "string" && styleMap.has(id);
+}
+export function isFreeStyle(id: string): boolean {
+  return styleMap.get(id)?.free === true;
+}
+/** 유료 디자인의 디자인권 아이템 id (무료면 null) */
+export function styleItemId(id: string): string | null {
+  return isGraveStyle(id) && !isFreeStyle(id) ? `gs_${id}` : null;
+}
 
 const byId = new Map(ITEMS.map((i) => [i.id, i]));
 export function itemById(id: string): ItemDef | undefined {

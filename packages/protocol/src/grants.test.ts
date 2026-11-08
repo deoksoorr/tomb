@@ -12,6 +12,18 @@ describe("items", () => {
   });
 });
 
+describe("grave styles", () => {
+  it("every paid style has a matching graveStyle item and vice versa", async () => {
+    const { GRAVE_STYLES, styleItemId, itemById, ITEMS: all } = await import("./index");
+    for (const g of GRAVE_STYLES) {
+      const item = styleItemId(g.id);
+      if (g.free) expect(item).toBeNull();
+      else expect(itemById(item!)?.kind).toBe("graveStyle");
+    }
+    expect(all.filter((i) => i.kind === "graveStyle").length).toBe(GRAVE_STYLES.filter((g) => !g.free).length);
+  });
+});
+
 describe("grants", () => {
   const s = "secret";
   it("round-trips look and firework grants", async () => {

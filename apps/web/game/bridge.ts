@@ -64,13 +64,6 @@ export type GameEvents = {
   "scene:changed": { scene: "world" | "shop" };
 };
 
-/** 묘지 디자인: temple 고요한 산사(기본) / gothic 서양 고딕 묘지 / sakura 벚꽃 언덕 */
-export const THEMES = [
-  { id: "temple", label: "고요한 산사" },
-  { id: "gothic", label: "고딕 묘지" },
-  { id: "sakura", label: "벚꽃 언덕" },
-] as const;
-export type ThemeId = (typeof THEMES)[number]["id"];
 
 /** UI → Game */
 export type UiEvents = {
@@ -105,8 +98,8 @@ export type UiEvents = {
   "look:set": { look: string[]; lookGrant: string };
   /** 폭죽 발사: 내 위치에서 바로 터뜨리고 grant를 실시간 서버로 보낸다 */
   "firework:fire": { item: string; grant: string };
-  /** 묘지 디자인 테마 (sticky) */
-  "theme:set": { theme: ThemeId };
+  /** 내 계정이 세운 묘비 id들 (sticky). 게임은 이 묘비들에 "내 묘비" 표시를 띄운다 */
+  "graves:mine": { ids: string[] };
   /** BGM 볼륨·음소거를 효과음에도 적용 (sticky) */
   "audio:settings": { volume: number; muted: boolean };
   /** 상점 UI가 닫힘 → 게임 키 입력 복귀 등 */
@@ -124,7 +117,7 @@ const STICKY = new Set<keyof AllEvents>([
   "camera:state",
   "grave:near",
   "look:set",
-  "theme:set",
+  "graves:mine",
   "audio:settings",
   "queue:status",
   "scene:changed",

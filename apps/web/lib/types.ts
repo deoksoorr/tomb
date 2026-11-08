@@ -46,6 +46,8 @@ export type Grave = {
   /** 세운 계정 (계정 개편 이후 묘비). 이 계정으로 들어오면 어느 기기에서든 수정·삭제할 수 있다 */
   ownerAccountId?: string;
   decor?: GraveDecor[];
+  /** 묘비 디자인 (@tomb/protocol GRAVE_STYLES). 없으면 "auto"(생존 기간 규칙) */
+  style?: string;
 };
 
 /** 묘비 꾸미기 (상점 아이템, 7일 유지) */
@@ -114,7 +116,15 @@ export type LifespanId = (typeof LIFESPAN_PRESETS)[number]["id"];
  * 묘비명이 비면 서버가 `향년 {N}일, 조용히 별세`를 넣는다. 사인을 안 고르면 "other". 상주는 세션 계정의 이름.
  * PATCH(수정)는 기존 GraveInput 전체 교체도 계속 받는다.
  */
-export type QuickGraveInput = { name: string; lived: LifespanId; cause?: CauseTag; epitaph?: string; mourner: string };
+export type QuickGraveInput = {
+  name: string;
+  lived: LifespanId;
+  cause?: CauseTag;
+  epitaph?: string;
+  mourner: string;
+  /** 묘비 디자인. 무료가 아니면 가방의 "gs_{style}" 디자인권 1개를 소모한다(없으면 409 NO_ITEM) */
+  style?: string;
+};
 export type UpdateGraveResponse = { grave: PublicGrave };
 /** 반응 응답의 earned = 이번에 쌓인 포인트 (한도에 걸리면 0) */
 export type FlowerResponse = { count: number; earned: number };
@@ -206,6 +216,5 @@ export const LS = {
   lastChannel: "tomb.lastChannel",
   /** { [graveId]: ownerToken } */
   ownerTokens: "tomb.ownerTokens",
-  /** 묘지 디자인 테마 */
-  theme: "tomb.theme",
+
 } as const;
