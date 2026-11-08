@@ -52,7 +52,7 @@ export type NetCallbacks = {
   onReset(): void;
 };
 
-export type NetOptions = { name: string; color: string; channel: number | "auto" };
+export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean };
 
 class JoinError extends Error {
   constructor(
@@ -63,8 +63,12 @@ class JoinError extends Error {
   }
 }
 
-const PING_MS = 2000;
-const PONG_TIMEOUT_MS = 10_000;
+// 핑 주기. 수신 메시지 수가 곧 DO 요청 수(20건=1요청)라서, 평소엔 생존 확인용으로 드물게 보내고
+// ?debug=1 HUD에서 RTT를 볼 때만 자주 보낸다. 서버는 60초 넘게 조용한 소켓을 유령으로 보고 닫는다.
+const PING_MS = 15_000;
+const DEBUG_PING_MS = 2_000;
+/** 핑 주기 + 이만큼 퐁이 없으면 죽은 연결로 본다 */
+const PONG_GRACE_MS = 10_000;
 /** 소켓을 만든 순간부터 welcome까지 */
 const CONNECT_TIMEOUT_MS = 8_000;
 /** 클라이언트가 연결을 버릴 때 (타임아웃·교체). 서버가 재연결 유예를 적용한다 */
@@ -543,18 +547,19 @@ export class RealtimeClient {
 
   private startPing(): void {
     this.stopPing();
+    const every = this.opts.debug ? DEBUG_PING_MS : PING_MS;
     this.pingTimer = setInterval(() => {
       const ws = this.ws;
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       const now = performance.now();
-      if (now - this.lastPongAt > PONG_TIMEOUT_MS && !this.hidden) {
+      if (now - this.lastPongAt > every + PONG_GRACE_MS && !this.hidden) {
         // 응답이 없다 → 죽은 연결로 보고 재접속
         this.drop(ws, 1006);
         return;
       }
       this.pingSentAt = now;
       ws.send(PING);
-    }, PING_MS);
+    }, every);
   }
 
   private stopPing(): void {

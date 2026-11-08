@@ -144,7 +144,7 @@ export class WorldScene extends Phaser.Scene {
   private createNet(): RealtimeClient {
     const { opts } = this.ctx;
     return new RealtimeClient(
-      { name: opts.name, color: opts.color, channel: opts.channel },
+      { name: opts.name, color: opts.color, channel: opts.channel, debug: opts.debug },
       {
         getPose: (out) => this.player.netPose(out),
         getFps: () => this.game.loop.actualFps,
