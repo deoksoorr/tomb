@@ -1,0 +1,27 @@
+{
+  "name": "hanttaeneun",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n web,rt -c green,magenta \"npm run dev -w web\" \"npm run dev -w realtime\"",
+    "build": "npm run build -w web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "loadtest": "npm run loadtest -w realtime"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261104.1": true
+  }
+}

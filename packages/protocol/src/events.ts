@@ -1,0 +1,95 @@
+import { MAX_MESSAGE_BYTES } from "./constants";
+import type { PeerInfo, Sid } from "./types";
+
+// 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
+
+export type EmoteKind = "flower" | "revive";
+export type GraveEventKind = "buried" | "updated" | "removed";
+
+// ── 클라이언트 → 서버 ──
+export type C2S =
+  /** 의자/벤치 좌석 점유 요청. 결과는 seat 브로드캐스트 또는 seatDenied */
+  | { t: "sit"; seatId: string }
+  /** 좌석에서 일어남 (sitChair가 아닌 MOVE를 보내도 자동 해제된다) */
+  | { t: "stand" }
+  /** 헌화/살려주세요 저장 성공 후 같은 채널에 연출을 알린다 */
+  | { t: "emote"; kind: EmoteKind; graveId: string }
+  /** 묘비 생성/수정/삭제 후 같은 채널에 알린다 */
+  | { t: "graveEvent"; kind: GraveEventKind; graveId: string }
+  /** 랭킹 클릭 등 의도된 순간이동. 속도 검증을 건너뛰고 범위만 검증한다(쿨다운 있음). */
+  | { t: "warp"; x: number; y: number };
+
+// ── 서버 → 클라이언트 ──
+export type WelcomeMsg = {
+  t: "welcome";
+  sid: Sid;
+  channel: number;
+  cap: number;
+  /** 나를 제외한 현재 접속자 */
+  peers: PeerInfo[];
+  /** 점유 중인 좌석: seatId → sid */
+  seats: Record<string, Sid>;
+  /** 재연결 유예 안에 돌아와서 자리를 되찾았으면 true */
+  resumed: boolean;
+};
+
+export type S2C =
+  | WelcomeMsg
+  | ({ t: "join" } & PeerInfo)
+  | { t: "leave"; sid: Sid }
+  | { t: "seat"; seatId: string; sid: Sid | null }
+  | { t: "seatDenied"; seatId: string }
+  | { t: "emote"; sid: Sid; kind: EmoteKind; graveId: string }
+  | { t: "graveEvent"; sid: Sid; kind: GraveEventKind; graveId: string };
+
+export function encodeEvent(msg: C2S | S2C): string {
+  return JSON.stringify(msg);
+}
+
+const GRAVE_ID_RE = /^[A-Za-z0-9_-]{1,32}$/;
+const SEAT_ID_RE = /^[A-Za-z0-9_-]{1,16}$/;
+const isNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+
+/** 서버가 받는 JSON 이벤트 검증. 형식이 맞지 않거나 512바이트를 넘으면 null. */
+export function parseC2S(text: string): C2S | null {
+  if (text.length > MAX_MESSAGE_BYTES) return null;
+  let o: unknown;
+  try {
+    o = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!o || typeof o !== "object") return null;
+  const m = o as Record<string, unknown>;
+  switch (m.t) {
+    case "sit":
+      return typeof m.seatId === "string" && SEAT_ID_RE.test(m.seatId) ? { t: "sit", seatId: m.seatId } : null;
+    case "stand":
+      return { t: "stand" };
+    case "emote":
+      return (m.kind === "flower" || m.kind === "revive") && typeof m.graveId === "string" && GRAVE_ID_RE.test(m.graveId)
+        ? { t: "emote", kind: m.kind, graveId: m.graveId }
+        : null;
+    case "graveEvent":
+      return (m.kind === "buried" || m.kind === "updated" || m.kind === "removed") &&
+        typeof m.graveId === "string" &&
+        GRAVE_ID_RE.test(m.graveId)
+        ? { t: "graveEvent", kind: m.kind, graveId: m.graveId }
+        : null;
+    case "warp":
+      return isNum(m.x) && isNum(m.y) ? { t: "warp", x: Math.round(m.x), y: Math.round(m.y) } : null;
+    default:
+      return null;
+  }
+}
+
+/** 클라이언트가 받는 JSON 이벤트 파싱 (서버를 신뢰하므로 최소 검증) */
+export function parseS2C(text: string): S2C | null {
+  try {
+    const o = JSON.parse(text) as S2C;
+    return o && typeof o === "object" && typeof o.t === "string" ? o : null;
+  } catch {
+    return null;
+  }
+}
+

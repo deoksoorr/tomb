@@ -1,0 +1,121 @@
+import type { GraveEventKind } from "@tomb/protocol";
+import type { PublicGrave } from "@/lib/types";
+
+// React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
+// "sticky" 이벤트는 마지막 값을 기억해서, 늦게 구독한 쪽도 last()로 현재 값을 읽을 수 있다.
+
+export type NetMode =
+  | "connecting" // 첫 연결 시도 중
+  | "online" // 채널 접속 중
+  | "reconnecting" // 끊겨서 재시도 중 (지수 백오프)
+  | "spectator" // 전체 상한 도달 → 관람 모드 (혼자 걷기, 30초마다 합류 재시도)
+  | "replaced" // 다른 탭/기기에서 같은 방문자로 접속해서 이 연결이 종료됨 (4002). 자동 재접속하지 않음
+  | "offline"; // 재시도 포기 / 실시간 서버 없음
+
+export type NetStatus = {
+  mode: NetMode;
+  channel: number | null;
+  /** 나를 포함한 채널 인원 */
+  count: number;
+  cap: number;
+};
+
+/** ?debug=1 HUD용. 1초마다 갱신 */
+export type NetStats = {
+  rttMs: number | null;
+  snapshotHz: number;
+  peers: number;
+  fps: number;
+  /** 수신 대역폭 KB/s */
+  inKBps: number;
+};
+
+export type GameStartOptions = {
+  name: string;
+  color: string;
+  /** 입장 화면에서 고른 채널 */
+  channel: number | "auto";
+  /** 공유 링크 /?grave={id} 로 들어왔으면 그 묘비 앞에 스폰하고 grave:open을 보낸다 */
+  focusGraveId?: string | null;
+  debug?: boolean;
+};
+
+/** Game → UI */
+export type GameEvents = {
+  /** Phaser 부팅이 끝나고 월드가 보이기 시작함 */
+  ready: undefined;
+  /** 근접 툴팁 대상 묘비 (없으면 null). 모바일 상호작용 버튼 표시용 */
+  "grave:near": { graveId: string } | null;
+  /** E/Space/탭으로 묘비 상세 모달을 열어 달라는 요청 */
+  "grave:open": { graveId: string };
+  "net:status": NetStatus;
+  "net:stats": NetStats;
+  /** 같은 채널의 다른 사람이 묘비를 세움/수정/삭제 → UI가 상세를 받아 목록에 반영 */
+  "net:graveEvent": { kind: GraveEventKind; graveId: string };
+  toast: { message: string };
+};
+
+/** UI → Game */
+export type UiEvents = {
+  /** 묘비 목록 (등록 순 = 격자 순서). 받을 때마다 월드를 다시 맞춘다 */
+  "graves:set": { graves: PublicGrave[]; reviveTop: string[] };
+  /** 랭킹 클릭 등: 내 캐릭터를 그 묘비 앞으로 순간이동 (teleport=false면 카메라만) */
+  "grave:focus": { graveId: string; teleport: boolean };
+  /** 내가 방금 묘비를 세움: 카메라 이동 + 흙 덮이는 연출 + graveEvent(buried) 전송 */
+  "grave:buried": { graveId: string };
+  /** 내가 묘비를 수정/이장함: graveEvent 전송 */
+  "grave:changed": { graveId: string; kind: "updated" | "removed" };
+  /** 헌화 저장 성공: 내 캐릭터가 꽃을 놓는 연출 + emote(flower) 전송 */
+  "grave:flowered": { graveId: string };
+  /** 살려주세요 저장 성공: revived=true면 연출 + emote(revive) 전송 */
+  "grave:revived": { graveId: string; revived: boolean };
+  /** 게임 안 채널 이동 메뉴. 연결을 닫고 새 채널에 입장, 캐릭터 위치는 유지 */
+  "channel:switch": { channel: number };
+  /** 모바일 가상 조이스틱. -1..1, 손을 떼면 {0,0} */
+  "input:joystick": { x: number; y: number };
+  "input:runToggle": { on: boolean };
+  "input:sit": undefined;
+  "input:interact": undefined;
+  /** 모달·폼이 열려 있는 동안 게임 키보드 입력을 막는다 */
+  "ui:blockKeys": { blocked: boolean };
+};
+
+type AllEvents = GameEvents & UiEvents;
+type Handler<K extends keyof AllEvents> = (payload: AllEvents[K]) => void;
+
+const STICKY = new Set<keyof AllEvents>(["net:status", "graves:set", "ui:blockKeys", "ready"]);
+
+class Bridge {
+  private handlers = new Map<keyof AllEvents, Set<Handler<never>>>();
+  private lastValues = new Map<keyof AllEvents, unknown>();
+
+  on<K extends keyof AllEvents>(event: K, fn: Handler<K>): () => void {
+    let set = this.handlers.get(event);
+    if (!set) this.handlers.set(event, (set = new Set()));
+    set.add(fn as Handler<never>);
+    return () => this.off(event, fn);
+  }
+
+  off<K extends keyof AllEvents>(event: K, fn: Handler<K>): void {
+    this.handlers.get(event)?.delete(fn as Handler<never>);
+  }
+
+  emit<K extends keyof AllEvents>(event: K, ...args: AllEvents[K] extends undefined ? [] : [AllEvents[K]]): void {
+    const payload = args[0] as AllEvents[K];
+    if (STICKY.has(event)) this.lastValues.set(event, payload);
+    this.handlers.get(event)?.forEach((fn) => (fn as Handler<K>)(payload));
+  }
+
+  /** sticky 이벤트의 마지막 값 */
+  last<K extends keyof AllEvents>(event: K): AllEvents[K] | undefined {
+    return this.lastValues.get(event) as AllEvents[K] | undefined;
+  }
+
+  /** 게임 종료 시 정리 (sticky 값 중 게임 상태만 지운다) */
+  resetGameState(): void {
+    this.lastValues.delete("net:status");
+    this.lastValues.delete("ready");
+  }
+}
+
+export const bridge = new Bridge();

@@ -1,0 +1,25 @@
+{
+  "name": "realtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787 --var JOIN_SECRET:dev-join-secret-change-me --var ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run",
+    "loadtest": "tsx loadtest/bots.ts"
+  },
+  "dependencies": {
+    "@tomb/protocol": "*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261108.1",
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.158.0",
+    "ws": "^8.22.1"
+  }
+}
