@@ -42,7 +42,14 @@ export async function admit(
   if (!claims || claims.channel !== channel || !VISITOR_ID_RE.test(claims.visitorId)) return null;
   const name = [...normalizeName(claims.name)].slice(0, NAME_MAX).join("") || FALLBACK_NAME;
   const color = isAvatarColor(claims.color) ? claims.color : AVATAR_COLORS[0];
-  return { visitorId: claims.visitorId, name, color, channel, spawn };
+  return { visitorId: claims.visitorId, name, color, channel, spawn, look: claims.look ?? [] };
+}
+
+/** 대기열 토큰(channel = 0, Vercel이 TTL 600초로 발급)이면 visitorId. 채널 입장 토큰은 대기열에 쓸 수 없고 그 반대도 마찬가지다 */
+export async function queueVisitor(secret: string | undefined, token: string | null): Promise<string | null> {
+  if (!secret || !token) return null;
+  const claims = await verifyJoinToken(secret, token).catch(() => null);
+  return claims && claims.channel === 0 && VISITOR_ID_RE.test(claims.visitorId) ? claims.visitorId : null;
 }
 
 /**

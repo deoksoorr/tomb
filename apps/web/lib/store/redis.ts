@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../reports";
-import type { Grave, ReviveResponse } from "../types";
+import type { Grave, GraveDecor, ReviveResponse } from "../types";
+import { DECOR, HIDDEN, K } from "./keys";
 import {
   FLOWER_TTL_SEC,
   REPORT_HIDE_THRESHOLD,
@@ -9,23 +10,6 @@ import {
   type ReportSummary,
   type ViewerState,
 } from "./types";
-
-// Redis 키 (spec §6)
-const K = {
-  // HASH. 필드 `{id}` → 압축 JSON, 필드 `hidden:{id}` → "1" (숨김 표시).
-  // 숨김을 같은 해시의 별도 필드에 두면 목록은 여전히 HGETALL 한 번이고, 주인의 수정(HSET {id})이 숨김을 덮어쓰지 못한다.
-  meta: "graves:meta",
-  created: "graves:created", // ZSET 등록 순
-  revive: "graves:revive", // ZSET 살려주세요 랭킹
-  flower: "graves:flower", // ZSET 헌화 순
-  revivers: (id: string) => `grave:${id}:revivers`, // SET visitorId
-  reports: (id: string) => `grave:${id}:reports`, // SET 신고한 IP 해시 (숨김 판정에 센다)
-  reporters: (id: string) => `grave:${id}:reporters`, // SET 신고한 visitorId (재신고 판정)
-  reportLog: (id: string) => `grave:${id}:reportlog`, // LIST {at, reason} JSON, 최신 먼저 최대 50개
-  reported: "graves:reported", // ZSET 신고 기록이 있는 묘비 → 지금 세는 신고 수 (관리자 목록용)
-  flowerMark: (id: string, visitorId: string) => `flower:${id}:${visitorId}`, // STRING NX EX 86400
-};
-const HIDDEN = "hidden:";
 
 // 반응은 모두 Lua 스크립트 하나로 처리한다. 스크립트 실행 중에는 다른 명령이 끼어들 수 없으므로
 // "묘비가 있을 때만" 조건과 분기를 원자적으로 묶을 수 있다 (삭제와 경합해 고아 키가 생기지 않는다).
@@ -93,8 +77,10 @@ function pairs(flat: string[] | null): Map<string, string> {
 }
 
 const parse = (raw: string) => JSON.parse(raw) as Grave;
-/** 압축 JSON: 비어 있는 선택 필드는 빠지고, 숨김은 별도 필드라 넣지 않는다 */
-const encode = (g: Grave) => JSON.stringify({ ...g, hidden: undefined });
+const parseDecor = (raw: string | null | undefined) => (raw ? (JSON.parse(raw) as GraveDecor[]) : undefined);
+/** 압축 JSON: 비어 있는 선택 필드는 빠지고, 숨김·꾸미기는 별도 필드라 넣지 않는다 */
+const encode = (g: Grave) => JSON.stringify({ ...g, hidden: undefined, decor: undefined });
+const isGraveField = (field: string) => !field.startsWith(HIDDEN) && !field.startsWith(DECOR);
 
 export class RedisStore implements GraveStore {
   private redis: Redis;
@@ -116,27 +102,30 @@ export class RedisStore implements GraveStore {
     const revives = pairs(revive);
     const flowers = pairs(flower);
     return [...fields]
-      .filter(([field]) => !field.startsWith(HIDDEN))
+      .filter(([field]) => isGraveField(field))
       .map(([id, raw]) => ({
         ...parse(raw),
         hidden: fields.has(HIDDEN + id) || undefined,
+        decor: parseDecor(fields.get(DECOR + id)),
         flowers: Number(flowers.get(id) ?? 0),
         revives: Number(revives.get(id) ?? 0),
       }));
   }
 
   async get(id: string): Promise<GraveRecord | null> {
-    const [raw, hidden, revives, flowers] = await this.redis
+    const [raw, hidden, decor, revives, flowers] = await this.redis
       .pipeline()
       .hget(K.meta, id)
       .hexists(K.meta, HIDDEN + id)
+      .hget(K.meta, DECOR + id)
       .zscore(K.revive, id)
       .zscore(K.flower, id)
-      .exec<[Raw, number, Raw, Raw]>();
+      .exec<[Raw, number, Raw, Raw, Raw]>();
     if (!raw) return null;
     return {
       ...parse(raw),
       hidden: Number(hidden) === 1 || undefined,
+      decor: parseDecor(decor),
       flowers: Number(flowers ?? 0),
       revives: Number(revives ?? 0),
     };
@@ -156,12 +145,12 @@ export class RedisStore implements GraveStore {
     // flower:{id}:{visitorId} 키는 SCAN 없이 찾을 수 없으므로 24시간 TTL로 저절로 사라지게 둔다
     await this.redis
       .multi()
-      .hdel(K.meta, id, HIDDEN + id)
+      .hdel(K.meta, id, HIDDEN + id, DECOR + id)
       .zrem(K.created, id)
       .zrem(K.revive, id)
       .zrem(K.flower, id)
       .zrem(K.reported, id)
-      .del(K.revivers(id), K.reports(id), K.reporters(id), K.reportLog(id))
+      .del(K.revivers(id), K.reviveEarned(id), K.reports(id), K.reporters(id), K.reportLog(id), K.decor(id))
       .exec();
     return parse(raw);
   }
@@ -215,6 +204,10 @@ export class RedisStore implements GraveStore {
     );
     if (!r) return null;
     return Number(r[0]) === 1 ? Number(r[1]) : "already";
+  }
+
+  async firstRevive(id: string, visitorId: string): Promise<boolean> {
+    return Number(await this.redis.sadd(K.reviveEarned(id), visitorId)) === 1;
   }
 
   async toggleRevive(id: string, visitorId: string): Promise<ReviveResponse | null> {

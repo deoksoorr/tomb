@@ -53,6 +53,9 @@ export const env = {
   /** 관리자 화면·API에 들어올 수 있는 IP 목록 (쉼표 구분, CIDR 가능). 규칙은 lib/ipAllow.ts */
   adminAllowedIps: () => read("ADMIN_ALLOWED_IPS"),
 
+  /** 배포 식별자 (next.config.ts의 NEXT_PUBLIC_APP_VERSION과 같은 규칙). 클라이언트가 자기 빌드 값과 비교해 새 버전을 안내한다 */
+  appVersion: () => read("VERCEL_DEPLOYMENT_ID") ?? read("VERCEL_GIT_COMMIT_SHA") ?? "dev",
+
   /** MemoryStore가 처음 뜰 때 심는 목업 묘비 수 */
   mockGraves(): number {
     const n = Number(read("MOCK_GRAVES") ?? 30);

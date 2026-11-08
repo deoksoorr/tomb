@@ -5,6 +5,9 @@ import { HttpError } from "./http";
 import type { JoinResponse } from "./types";
 
 const LOBBY_TIMEOUT_MS = 1500;
+/** 대기열 토큰: channel 0은 대기열 전용(실시간 서버가 그렇게 검증한다). 10분 동안 자리를 확인할 수 있다 */
+const QUEUE_CHANNEL = 0;
+const QUEUE_TOKEN_TTL_SEC = 600;
 
 const count = z.number().int().min(0);
 const LobbySchema = z.object({
@@ -32,7 +35,7 @@ export async function fetchLobbyServer(timeoutMs = LOBBY_TIMEOUT_MS): Promise<Lo
 }
 
 /**
- * 채널 결정. "auto"면 로비를 보고 pickChannel로 고르고(null = 전체 만석 → 관람 모드),
+ * 채널 결정. "auto"면 로비를 보고 pickChannel로 고르고(null = 전체 만석 → 대기열),
  * 직접 고른 채널은 로비의 maxChannels 범위인지 확인한다.
  * 로비가 응답하지 않으면 auto는 1채널, 직접 고른 채널은 입력 검증(1~99)만으로 보낸다
  * (만석이면 Channel DO가 4001로 거절하고 클라이언트가 다른 채널로 재시도한다).
@@ -45,13 +48,20 @@ async function resolveChannel(requested: number | "auto"): Promise<number | null
   return requested;
 }
 
-export async function issueJoin(
-  requested: number | "auto",
-  claims: { visitorId: string; name: string; color: string },
-): Promise<JoinResponse> {
+/** 입장 토큰 내용. look = 지금 착용 중인 꾸미기 (입장하자마자 다른 사람에게 보이게) */
+type Claims = { visitorId: string; name: string; color: string; look: string[] };
+
+/**
+ * 입장 토큰 발급. 전체 만석이면 대기열 주소를 준다: 클라이언트가 QUEUE_POLL_MS마다 GET하다가
+ * admitted가 오면 그 채널로 /api/join을 다시 부른다.
+ */
+export async function issueJoin(requested: number | "auto", claims: Claims): Promise<JoinResponse> {
   const wsBase = env.realtimeWsUrl();
   const channel = await resolveChannel(requested);
-  if (channel === null) return { mode: "spectator" };
+  if (channel === null) {
+    const token = await signJoinToken(env.joinSecret(), { ...claims, channel: QUEUE_CHANNEL }, QUEUE_TOKEN_TTL_SEC);
+    return { mode: "queue", queueUrl: `${env.realtimePublicUrl()}/queue?t=${encodeURIComponent(token)}` };
+  }
 
   // 토큰은 배정된 채널 하나에만 유효하다 (토큰 하나로 여러 채널 자리를 차지하지 못하게)
   const token = await signJoinToken(env.joinSecret(), { ...claims, channel });

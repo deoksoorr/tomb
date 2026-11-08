@@ -25,19 +25,24 @@ export const GET = handler<Params>(async (req, { id }) => {
   const store = getStore();
   const [grave, visitorId] = await Promise.all([findVisible(store, id), getVisitorId(req)]);
   const viewer = visitorId ? await store.viewer(id, visitorId) : { myRevive: false, myFlowerToday: false };
+  const isMine = !!visitorId && grave.ownerAccountId === visitorId;
   return json<GraveDetailResponse>(
-    { grave: toPublicGrave(grave), ...viewer },
+    { grave: toPublicGrave(grave), ...viewer, isMine },
     { headers: { "Cache-Control": "private, no-store" } },
   );
 });
 
-/** 숨겨진 묘비라도 주인은 고치거나 이장할 수 있다 */
+/**
+ * 주인 확인: 세운 계정으로 들어와 있거나(어느 기기든), 세운 브라우저의 x-owner-token이 맞으면 주인.
+ * 숨겨진 묘비라도 주인은 고치거나 이장할 수 있다.
+ */
 async function requireOwned(req: NextRequest, store: GraveStore, id: string) {
   const visitorId = await requireVisitor(req);
   const grave = isGraveId(id) ? await store.get(id) : null;
   if (!grave) throw notFound();
-  if (!isOwner(req.headers.get("x-owner-token"), grave.ownerTokenHash))
-    throw new HttpError(403, "NOT_OWNER", "이 묘비는 세운 브라우저에서만 고치거나 이장할 수 있어요.");
+  const byAccount = !!grave.ownerAccountId && grave.ownerAccountId === visitorId;
+  if (!byAccount && !isOwner(req.headers.get("x-owner-token"), grave.ownerTokenHash))
+    throw new HttpError(403, "NOT_OWNER", "이 묘비는 세운 계정이나 브라우저에서만 고치거나 이장할 수 있어요.");
   return { grave, visitorId };
 }
 
@@ -48,7 +53,13 @@ export const PATCH = handler<Params>(async (req, { id }) => {
   const input = await readBody(req, GraveInputSchema);
   assertImageUsable(input.imageUrl, visitorId, current.imageUrl);
 
-  const next: Grave = { ...input, id, createdAt: current.createdAt, ownerTokenHash: current.ownerTokenHash };
+  const next: Grave = {
+    ...input,
+    id,
+    createdAt: current.createdAt,
+    ownerTokenHash: current.ownerTokenHash,
+    ownerAccountId: current.ownerAccountId,
+  };
   await store.put(next);
   if (current.imageUrl !== next.imageUrl) await releaseImage(store, current.imageUrl);
   return json<UpdateGraveResponse>({

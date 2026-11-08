@@ -3,8 +3,10 @@ import tracksJson from "../../public/bgm/tracks.json";
 import { needsAttribution, nextIndex, parseManifest } from "./manifest";
 
 describe("parseManifest", () => {
-  it("저장소의 tracks.json은 세 플레이리스트를 가진다", () => {
-    expect(parseManifest(tracksJson).map((p) => p.id)).toEqual(["orgel", "lofi", "rain"]);
+  it("저장소의 tracks.json은 모든 플레이리스트에 곡이 있다", () => {
+    const lists = parseManifest(tracksJson);
+    expect(lists.map((p) => p.id)).toEqual(["orgel", "lofi", "rain", "piano", "chiptune", "jazz"]);
+    expect(lists.every((p) => p.tracks.length > 0)).toBe(true);
   });
 
   it("잘못된 항목과 외부 핫링크는 버린다", () => {

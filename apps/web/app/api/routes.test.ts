@@ -23,6 +23,7 @@ import * as revive from "./graves/[id]/revive/route";
 import * as graveById from "./graves/[id]/route";
 import * as graves from "./graves/route";
 import * as join from "./join/route";
+import { issueJoin } from "@/lib/joinToken";
 import * as og from "./og/route";
 import * as session from "./session/route";
 import * as localFile from "./upload/local/[...path]/route";
@@ -199,7 +200,7 @@ describe("묘비 CRUD", () => {
     const v = await newVisitor();
     const { grave } = await createGrave(v);
     const res = await graves.GET(call("/api/graves"));
-    expect(res.headers.get("cache-control")).toBe("s-maxage=30, stale-while-revalidate=300");
+    expect(res.headers.get("cache-control")).toBe("s-maxage=30, stale-while-revalidate=86400");
     const list = (await res.json()) as GraveListResponse;
     expect(list.graves.at(-1)?.id).toBe(grave.id);
     expect(list.graves.slice(0, 3).map((g) => g.id)).toEqual(["mock-001", "mock-002", "mock-003"]);
@@ -235,7 +236,7 @@ describe("반응", () => {
     const v = await newVisitor();
     const { grave } = await createGrave(v);
     const first = await flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: v }), ctx(grave.id));
-    expect(await first.json()).toEqual({ count: 1 });
+    expect(await first.json()).toEqual({ count: 1, earned: 2 });
     const second = await flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: v }), ctx(grave.id));
     expect(second.status).toBe(409);
     expect((await errorOf(second)).code).toBe("ALREADY_FLOWERED");
@@ -250,13 +251,16 @@ describe("반응", () => {
     const v = await newVisitor();
     const { grave } = await createGrave(v);
     const on = await revive.POST(call(`/api/graves/${grave.id}/revive`, { method: "POST", visitor: v }), ctx(grave.id));
-    expect(await on.json()).toEqual({ revived: true, count: 1 });
+    expect(await on.json()).toEqual({ revived: true, count: 1, earned: 1 });
     const detail = (await (
       await graveById.GET(call(`/api/graves/${grave.id}`, { visitor: v }), ctx(grave.id))
     ).json()) as GraveDetailResponse;
     expect(detail.myRevive).toBe(true);
     const off = await revive.POST(call(`/api/graves/${grave.id}/revive`, { method: "POST", visitor: v }), ctx(grave.id));
-    expect(await off.json()).toEqual({ revived: false, count: 0 });
+    expect(await off.json()).toEqual({ revived: false, count: 0, earned: 0 });
+    // 취소했다 다시 눌러도 포인트는 처음 한 번만
+    const again = await revive.POST(call(`/api/graves/${grave.id}/revive`, { method: "POST", visitor: v }), ctx(grave.id));
+    expect(await again.json()).toEqual({ revived: true, count: 1, earned: 0 });
   });
 
   it("없는 묘비에 반응 → 404", async () => {
@@ -511,22 +515,29 @@ describe("POST /api/join", () => {
     vi.stubEnv("REALTIME_INTERNAL_URL", "");
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
+      const claims = { visitorId: "v", name: "새벽코더", color: "#9fc5a8", look: [] };
+      await expect(issueJoin(1, claims)).rejects.toThrow(/NEXT_PUBLIC_REALTIME_URL/);
       const v = await newVisitor();
       const res = await join.POST(call("/api/join", { method: "POST", visitor: v, body: { ...body, channel: 1 } }));
       expect(res.status).toBe(500);
       expect((await errorOf(res)).code).toBe("INTERNAL");
-      expect(String(log.mock.calls[0]?.[1])).toMatch(/NEXT_PUBLIC_REALTIME_URL/);
+      expect(log).toHaveBeenCalled();
     } finally {
       for (const k of ["SESSION_SECRET", "JOIN_SECRET", "NEXT_PUBLIC_REALTIME_URL", "REALTIME_INTERNAL_URL"]) vi.stubEnv(k, "");
       vi.stubEnv("NODE_ENV", "test");
     }
   });
 
-  it("전체 만석이면 관람 모드", async () => {
+  it("전체 만석이면 대기열: 대기열 전용(channel 0) 10분 토큰이 든 queueUrl", async () => {
     const v = await newVisitor();
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json(lobby([40, 40])));
-    const res = await join.POST(call("/api/join", { method: "POST", visitor: v, body }));
-    expect(await res.json()).toEqual({ mode: "spectator" });
+    const res = (await (await join.POST(call("/api/join", { method: "POST", visitor: v, body }))).json()) as JoinResponse;
+    if (res.mode !== "queue") throw new Error("queue 모드여야 한다");
+    const url = new URL(res.queueUrl);
+    expect(`${url.origin}${url.pathname}`).toBe(`${REALTIME_WS_URL.replace(/^ws/, "http")}/queue`);
+    const claims = await verifyJoinToken("dev-join-secret-change-me", url.searchParams.get("t")!);
+    expect(claims).toMatchObject({ visitorId: v.visitorId, channel: 0, look: [] });
+    expect(claims!.exp - Math.floor(Date.now() / 1000)).toBeGreaterThan(590);
   });
 
   it("세션·입력 검증, 분당 10회", async () => {

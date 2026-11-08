@@ -1,11 +1,12 @@
-import { checkName, isAvatarColor } from "@tomb/protocol";
+import { checkName, isAvatarColor, itemById } from "@tomb/protocol";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { ageDays, parseYmd, todayKst } from "./epitaph";
+import { CODE_RE, normalizeCode } from "./economy";
+import { ageDays, parseYmd, suggestEpitaph, todayKst } from "./epitaph";
 import { isAllowedImageUrl } from "./blob";
 import { REPORT_REASONS } from "./reports";
 import { HttpError } from "./http";
-import { CAUSE_TAGS } from "./types";
+import { CAUSE_TAGS, LIFESPAN_PRESETS, type LifespanId } from "./types";
 
 // 따로 메시지를 달지 않은 오류(타입 불일치 등)도 한국어로 나오게 한다
 z.config(z.locales.ko());
@@ -88,6 +89,37 @@ export const GraveInputSchema = z
 
 export type ParsedGraveInput = z.output<typeof GraveInputSchema>;
 
+/** 간단 입력의 "얼마나 살았나요" → 날짜 (KST 오늘이 사망일, 향년 = 고른 날수) */
+export function quickLifespan(lived: LifespanId, today = todayKst()): { bornAt: string; diedAt: string; ageDays: number } {
+  const days = LIFESPAN_PRESETS.find((p) => p.id === lived)!.days;
+  const bornAt = new Date(parseYmd(today) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+  return { bornAt, diedAt: today, ageDays: days };
+}
+
+const LIFESPAN_IDS = LIFESPAN_PRESETS.map((p) => p.id) as [LifespanId, ...LifespanId[]];
+
+/**
+ * 간단 묘비 세우기 (QuickGraveInput) → 전체 입력과 같은 모양으로 바꾼다.
+ * 묘비명이 비면 `향년 {N}일, 조용히 별세`, 사인을 안 고르면 기타.
+ */
+export const QuickGraveInputSchema = z
+  .object({
+    name: requiredLine(40, "프로젝트 이름을 적어 주세요.", "프로젝트 이름은 40자까지 적을 수 있어요."),
+    lived: z.enum(LIFESPAN_IDS, "얼마나 살았는지 골라 주세요."),
+    cause: z.enum(CAUSE_TAGS, "알 수 없는 사인이에요.").optional(),
+    epitaph: optional(z.string().trim().overwrite(oneLine).refine(within(30), "묘비명은 30자까지 적을 수 있어요.")),
+    mourner: userName,
+  })
+  .transform(({ name, lived, cause, epitaph, mourner }): ParsedGraveInput => {
+    const life = quickLifespan(lived);
+    const none = { lastTask: undefined, causeDetail: undefined, links: undefined, stack: undefined, imageUrl: undefined };
+    return { ...none, name, mourner, ...life, causes: [cause ?? "other"], epitaph: epitaph ?? suggestEpitaph(life.ageDays) };
+  });
+
+/** POST /api/graves: `lived`가 있으면 간단 입력, 아니면 전체 입력 */
+export const createGraveSchema = (raw: unknown) =>
+  raw && typeof raw === "object" && "lived" in raw ? QuickGraveInputSchema : GraveInputSchema;
+
 export const JoinRequestSchema = z.object({
   channel: z.union([z.literal("auto"), z.number().int().min(1).max(99)], "채널 번호가 올바르지 않아요."),
   name: userName,
@@ -114,6 +146,23 @@ export const AdminBulkSchema = z.object({
   action: adminAction,
 });
 
+export const AttendSchema = z.object({ name: userName.optional() });
+
+export const CodeLoginSchema = z.object({
+  code: z
+    .string()
+    .max(40)
+    .transform(normalizeCode)
+    .refine((c) => CODE_RE.test(c), "코드는 XXXX-XXXX-XXXX 모양이에요."),
+});
+
+const shopItem = z.string().refine((id) => !!itemById(id), "없는 아이템이에요.");
+export const ShopBuySchema = z.object({ itemId: shopItem });
+export const ShopUseSchema = z.object({
+  itemId: shopItem,
+  graveId: z.string().refine((id) => isGraveId(id), "묘비 id 형식이 올바르지 않아요.").optional(),
+});
+
 export const AdminLoginSchema = z.object({ key: z.string().min(1, "관리자 키를 입력해 주세요.").max(500) });
 
 /** @vercel/blob/client uploadPresigned()가 보내는 presigned URL 요청. 업로드 완료 콜백은 쓰지 않으므로 그 이벤트는 받지 않는다 */
@@ -122,19 +171,26 @@ export const BlobUploadRequestSchema = z.object({
   payload: z.looseObject({ pathname: z.string().min(1).max(200) }),
 });
 
-const GRAVE_ID_RE =/^[A-Za-z0-9_-]{1,40}$/;
+const GRAVE_ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
 export const isGraveId = (id: string) => GRAVE_ID_RE.test(id);
 
-/** JSON 본문을 읽고 검증한다. 빈 본문은 `{}`로 본다. 실패하면 400 INVALID_INPUT (첫 번째 문제의 메시지) */
-export async function readBody<S extends z.ZodType>(req: NextRequest, schema: S): Promise<z.output<S>> {
-  let raw: unknown;
+/** JSON 본문. 빈 본문은 `{}`로 본다. 형식이 깨졌으면 400 INVALID_INPUT */
+export async function readJson(req: NextRequest): Promise<unknown> {
   try {
     const text = await req.text();
-    raw = text.trim() ? JSON.parse(text) : {};
+    return text.trim() ? JSON.parse(text) : {};
   } catch {
     throw new HttpError(400, "INVALID_INPUT", "요청 형식이 올바르지 않아요.");
   }
+}
+
+/** 검증 실패면 400 INVALID_INPUT (첫 번째 문제의 메시지) */
+export function parseWith<S extends z.ZodType>(schema: S, raw: unknown): z.output<S> {
   const r = schema.safeParse(raw);
   if (!r.success) throw new HttpError(400, "INVALID_INPUT", r.error.issues[0]?.message ?? "입력값을 확인해 주세요.");
   return r.data;
+}
+
+export async function readBody<S extends z.ZodType>(req: NextRequest, schema: S): Promise<z.output<S>> {
+  return parseWith(schema, await readJson(req));
 }

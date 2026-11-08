@@ -1,17 +1,21 @@
 // 한때는... BGM 생성기 — 외부 음원 없이 코드로 작곡·합성한다. 결과물은 CC0.
-// 사용: node scripts/gen-bgm.mjs [이름 필터]   (ffmpeg + libmp3lame 필요, npm 의존성 없음)
-//  → apps/web/public/bgm/{orgel,lofi,rain}/*.mp3 와 tracks.json
+// 사용: node scripts/gen-bgm.mjs [이름 필터] [--fetch]   (ffmpeg + libmp3lame 필요, npm 의존성 없음)
+//  → apps/web/public/bgm/{playlist}/*.mp3, tracks.json, 그리고 효과음 apps/web/public/sfx/*.mp3
 // 트랙마다 고정 시드를 쓰므로 다시 돌려도 같은 파일이 나온다. 필터를 주면 그 트랙만 다시 굽고 tracks.json은 그대로 둔다.
+// 외부 무료 음원(EXTERNAL, 라이선스 확인 완료)은 --fetch 때만 원본을 내려받아 128kbps·같은 음량으로 다시 굽는다.
+// 평소에는 이미 구워 둔 파일을 그대로 두고 tracks.json에만 넣는다.
 // 환경변수 BGM_DEBUG=1 이면 스템별 RMS를 출력한다.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { availableParallelism } from "node:os";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { availableParallelism, tmpdir } from "node:os";
+import { extname, join } from "node:path";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 
 const SR = 44100;
 const TAU = 2 * Math.PI;
 const OUT = join(import.meta.dirname, "../apps/web/public/bgm");
+const SFX_OUT = join(import.meta.dirname, "../apps/web/public/sfx");
+const FFMPEG = process.env.FFMPEG || "ffmpeg";
 const TARGET_LUFS = -18.65; // 모든 트랙 공통 통합 라우드니스(128k MP3 인코딩 후 약 -19 LUFS가 된다)
 const CEILING = 10 ** (-2 / 20); // MP3 인코딩 전 샘플 피크 상한(-2 dBFS → 인코딩 후 true peak ≤ -1 dBTP 여유)
 const ARTIST = "한때는... (자체 제작)";
@@ -388,7 +392,7 @@ function limiter(bus, ceil) {
   return minG;
 }
 
-function finalize(bus, { lp = 0, hp = 30, fadeIn = 3, fadeOut = 4 } = {}) {
+function finalize(bus, { lp = 0, hp = 30, fadeIn = 3, fadeOut = 4, target = TARGET_LUFS, ceil = CEILING } = {}) {
   filt(bus, "hp", hp, 0.6);
   if (lp) filt(bus, "lp", lp, 0.6);
   const n = bus[0].length, fi = fadeIn * SR, fo = fadeOut * SR;
@@ -400,9 +404,9 @@ function finalize(bus, { lp = 0, hp = 30, fadeIn = 3, fadeOut = 4 } = {}) {
   let minG = 1;
   for (let it = 0; it < 5; it++) {
     const l = lufs(bus);
-    if (Math.abs(l - TARGET_LUFS) < 0.05 && peakOf(bus) <= CEILING) break;
-    gainBus(bus, 10 ** ((TARGET_LUFS - l) / 20));
-    minG = Math.min(minG, limiter(bus, CEILING));
+    if (Math.abs(l - target) < 0.05 && peakOf(bus) <= ceil) break;
+    gainBus(bus, 10 ** ((target - l) / 20));
+    minG = Math.min(minG, limiter(bus, ceil));
   }
   return { lufs: lufs(bus), peak: dB(peakOf(bus)), gr: dB(minG) };
 }
@@ -415,7 +419,7 @@ function encode(bus, file, seed) {
   }
   const args = ["-hide_banner", "-loglevel", "error", "-y", "-f", "s16le", "-ar", String(SR), "-ac", "2", "-i", "pipe:0"];
   args.push("-c:a", "libmp3lame", "-b:a", "128k", "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact", "-id3v2_version", "0", file);
-  execFileSync(process.env.FFMPEG || "ffmpeg", args, { input: Buffer.from(pcm.buffer), stdio: ["pipe", "ignore", "inherit"], maxBuffer: 1 << 30 });
+  execFileSync(FFMPEG, args, { input: Buffer.from(pcm.buffer), stdio: ["pipe", "ignore", "inherit"], maxBuffer: 1 << 30 });
 }
 
 // ───────────────────────── 화성 도구 ─────────────────────────
@@ -601,10 +605,10 @@ function flute(bus, t0, m, v, dur, p, rng) {
     R[s0 + i] += y * gr;
   }
 }
-function bassNote(bus, t0, m, v, dur) {
+function bassNote(bus, t0, m, v, dur, dec = 0.9) {
   const [L, R] = bus, f = mtof(m), s0 = Math.max(0, Math.round(t0 * SR)), rel = 0.08;
   const len = Math.min(L.length - s0, Math.round((dur + rel) * SR)), w = (TAU * f) / SR, durN = dur * SR, relN = rel * SR;
-  const k = Math.exp(-0.9 / SR);
+  const k = Math.exp(-dec / SR);
   let e = v;
   for (let i = 0; i < len; i++) {
     const ph = w * i;
@@ -623,6 +627,76 @@ function padNote(bus, t, dur, m, amp, p, atk, rel) {
     tone(bus, t, dur, f * (k + 1) * 1.0016, amp * a * 0.5, p - 0.45, atk, rel, k);
     tone(bus, t, dur, f * (k + 1) * 0.9984, amp * a * 0.5, p + 0.45, atk, rel, k + 2);
   });
+}
+// 칩튠 펄스파(PolyBLEP로 앨리어싱을 줄인 사각파). duty 0.125/0.25/0.5
+function pulse(bus, t0, m, v, p, dur, duty = 0.25, { atk = 0.004, dec = 0.12, sus = 0.55, rel = 0.05, vib = 0 } = {}) {
+  const [L, R] = bus, f = mtof(m), s0 = Math.max(0, Math.round(t0 * SR)), len = Math.min(L.length - s0, Math.round((dur + rel) * SR));
+  const [gl, gr] = panGains(p), dc = 2 * duty - 1;
+  const blep = (t, dt) => (t < dt ? ((t /= dt), t + t - t * t - 1) : t > 1 - dt ? ((t = (t - 1) / dt), t * t + t + t + 1) : 0);
+  let ph = 0;
+  for (let i = 0; i < len; i++) {
+    const t = i / SR, dt = (f / SR) * (vib ? 1 + vib * Math.sin(TAU * 5.5 * t) * clamp((t - 0.15) / 0.2, 0, 1) : 1);
+    ph += dt;
+    if (ph >= 1) ph -= 1;
+    const y = (ph < duty ? 1 : -1) + blep(ph, dt) - blep((ph + 1 - duty) % 1, dt) - dc;
+    let e = t < atk ? t / atk : sus + (1 - sus) * Math.exp(-(t - atk) / dec);
+    if (t > dur) e *= Math.max(0, 1 - (t - dur) / rel);
+    const val = y * v * e;
+    L[s0 + i] += val * gl;
+    R[s0 + i] += val * gr;
+  }
+}
+// 칩튠 삼각파 베이스
+function tri(bus, t0, m, v, dur) {
+  const [L, R] = bus, f = mtof(m), s0 = Math.max(0, Math.round(t0 * SR)), rel = 0.03, len = Math.min(L.length - s0, Math.round((dur + rel) * SR));
+  for (let i = 0; i < len; i++) {
+    const t = i / SR, ph = (f * t) % 1;
+    let e = v * Math.min(1, t / 0.003);
+    if (t > dur) e *= Math.max(0, 1 - (t - dur) / rel);
+    const y = (4 * Math.abs(ph - 0.5) - 1) * e;
+    L[s0 + i] += y;
+    R[s0 + i] += y;
+  }
+}
+function chipDrumKit(rng) {
+  const mk = (sec, fn) => {
+    const x = new Float32Array(Math.round(sec * SR));
+    for (let i = 0; i < x.length; i++) x[i] = fn(i / SR);
+    return x;
+  };
+  let ph = 0;
+  const kick = mk(0.16, (t) => ((ph += (150 * Math.exp(-t * 25) + 45) / SR), (4 * Math.abs((ph % 1) - 0.5) - 1) * Math.exp(-t * 18)));
+  const snare = biquad(mk(0.12, (t) => rng.bi() * Math.exp(-t * 32)), "bp", 2600, 0.8);
+  const hat = biquad(mk(0.04, (t) => rng.bi() * Math.exp(-t * 110)), "hp", 6500, 0.7);
+  return { kick: normPeak(kick), snare: normPeak(snare), hat: normPeak(hat) };
+}
+// 스테레오 핑퐁 에코(칩튠에서 흔히 쓰는 지연 채널 흉내)
+function echo(bus, time, fb, mix) {
+  const [L, R] = bus, d = Math.round(time * SR), bl = new Float32Array(d), br = new Float32Array(d);
+  let k = 0;
+  for (let i = 0; i < L.length; i++) {
+    const yl = bl[k], yr = br[k];
+    bl[k] = R[i] + yr * fb;
+    br[k] = L[i] + yl * fb;
+    L[i] += yl * mix;
+    R[i] += yr * mix;
+    if (++k === d) k = 0;
+  }
+  return bus;
+}
+// 오르골 엔진에 꽂아 쓰는 악기 세트(lead/soft/bass)
+function instSet(kind, rng) {
+  if (kind === "piano") {
+    const pn = (hold, k = 1) => (bus, t, m, v, p, dur) => piano(bus, t, m, v * k, p, Math.max(hold, dur ?? 0) + 0.25, rng);
+    return { lead: pn(1.2), soft: pn(0.9, 1.25), bass: pn(2.2, 0.9) };
+  }
+  if (kind === "chip")
+    return {
+      lead: (bus, t, m, v, p, dur) => pulse(bus, t, m, v * 0.42, p, Math.max(0.08, dur * 0.9), 0.25, { dec: 0.16, sus: 0.5, vib: 0.004 }),
+      soft: (bus, t, m, v, p, dur) => pulse(bus, t, m, v * 0.45, p, Math.min(0.22, dur * 0.8), 0.125, { dec: 0.05, sus: 0.25 }),
+      bass: (bus, t, m, v, p, dur) => tri(bus, t, m, v * 0.85, dur * 0.85),
+    };
+  throw new Error(kind);
 }
 // 먼 산사의 범종: 낮은 허밍 + 비조화 배음, 짝을 이룬 배음끼리 '맥놀이'
 function templeBell(bus, t, f0, amp, p) {
@@ -675,6 +749,23 @@ function hatS(rng, open) {
   biquad(x, "hp", 6500, 0.7);
   biquad(x, "lp", 9500, 0.7);
   return normPeak(x);
+}
+
+function rideS(rng) {
+  const n = Math.round(1.1 * SR), x = new Float32Array(n);
+  for (let k = 0; k < 7; k++) {
+    const f = rng.range(2800, 6800), a = rng.range(0.3, 1), d = rng.range(2.5, 5);
+    for (let i = 0; i < n; i++) x[i] += a * Math.sin((TAU * f * i) / SR + k) * Math.exp((-d * i) / SR);
+  }
+  for (let i = 0; i < n; i++) x[i] += 1.4 * rng.bi() * Math.exp((-i / SR) * 10);
+  biquad(x, "hp", 2500, 0.7);
+  return normPeak(biquad(x, "lp", 8500, 0.7));
+}
+function brushS(rng) {
+  const n = Math.round(0.28 * SR), x = new Float32Array(n);
+  for (let i = 0; i < n; i++) x[i] = rng.bi() * Math.min(1, i / (0.02 * SR)) * Math.exp((-i / SR) * 13);
+  biquad(x, "bp", rng.range(2600, 3400), 0.6);
+  return normPeak(biquad(x, "lp", 7000, 0.7));
 }
 
 // ───────────────────────── 오르골 ─────────────────────────
@@ -737,30 +828,45 @@ function orgel(o, pl) {
   const rng = new Rng(o.seed), n = pl.dur * SR, bus = stereo(n);
   const cx = { scale: SCALES[o.scale], tonic: o.tonic, lo: -3, hi: SCALES[o.scale].length + 2 };
   const ns = cx.scale.length, mel = orgelMelody(rng, cx, o);
-  const e8 = pl.barSec / (o.meter * 2), lead = o.timbre === "celesta" ? celesta : musicBox, soft = lead === celesta ? musicBox : celesta;
-  const play = (fn, t, m, v, p) => fn(bus, Math.max(0, t + rng.range(-0.006, 0.006)), m, v * rng.range(0.9, 1.07), p);
+  const e8 = pl.barSec / (o.meter * 2);
+  let lead = o.timbre === "celesta" ? celesta : musicBox, soft = lead === celesta ? musicBox : celesta, bassI = lowBell;
+  if (o.inst) ({ lead, soft, bass: bassI } = instSet(o.inst, rng));
+  // dur(초)은 지속음 악기(피아노 페달, 칩 펄스)에만 쓰이고 벨류는 무시한다
+  const play = (fn, t, m, v, p, dur = e8 * 2) => fn(bus, Math.max(0, t + rng.range(-0.006, 0.006)), m, v * rng.range(0.9, 1.07), p, dur);
   const tBar = (b) => pl.start + b * pl.barSec;
 
   const accomp = (t0, ch, vel = 1) => {
     const iv = TRI[ch[1]], rp = pc(o.tonic + ch[0]), r = inRange(rp, o.tonic - 14);
     const T = [r, r + iv[2], r + 12, r + 12 + iv[1], r + 12 + iv[2]];
     const b = inRange(rp, 41);
-    play(lowBell, t0, b, 0.5 * vel, 0);
-    if (o.meter === 4 && o.bass2) play(lowBell, t0 + 4 * e8, b + 7 > 52 ? b - 5 : b + 7, 0.25 * vel, 0);
+    const half = o.meter === 4 && o.bass2;
+    play(bassI, t0, b, 0.5 * vel, 0, (half ? 4 : o.meter * 2) * e8 * 0.92);
+    if (half) play(bassI, t0 + 4 * e8, b + 7 > 52 ? b - 5 : b + 7, 0.25 * vel, 0, 4 * e8 * 0.92);
     if (o.acc === "arp") {
       const pat = o.meter === 4 ? [0, 1, 2, 1, 3, 1, 2, 1] : [0, 1, 2, 3, 2, 1];
-      pat.forEach((k, s) => play(soft, t0 + s * e8, T[k], (s === 0 ? 0.24 : 0.17) * vel, -0.25));
+      pat.forEach((k, s) => play(soft, t0 + s * e8, T[k], (s === 0 ? 0.24 : 0.17) * vel, -0.25, e8));
     } else if (o.acc === "waltz") {
       const d1 = inRange(pc(r + iv[1]), o.tonic - 10), d2 = inRange(pc(r + iv[2]), d1 + 1);
       for (const s of [2, 4]) {
-        play(soft, t0 + s * e8, d1, 0.16 * vel, -0.3);
-        play(soft, t0 + s * e8 + 0.012, d2, 0.14 * vel, 0.25);
+        play(soft, t0 + s * e8, d1, 0.16 * vel, -0.3, 2 * e8);
+        play(soft, t0 + s * e8 + 0.012, d2, 0.14 * vel, 0.25, 2 * e8);
       }
     } else if (o.acc === "block") {
-      [T[0], T[1], T[3]].forEach((m, k) => play(soft, t0 + k * 0.05, m, 0.2 * vel, -0.3 + k * 0.3));
-      if (o.meter === 4) [T[1], T[3]].forEach((m, k) => play(soft, t0 + 4 * e8 + k * 0.04, m, 0.12 * vel, 0));
+      [T[0], T[1], T[3]].forEach((m, k) => play(soft, t0 + k * 0.05, m, 0.2 * vel, -0.3 + k * 0.3, 4 * e8));
+      if (o.meter === 4) [T[1], T[3]].forEach((m, k) => play(soft, t0 + 4 * e8 + k * 0.04, m, 0.12 * vel, 0, 4 * e8));
     } else {
-      for (let q = 0; q < o.meter; q++) play(soft, t0 + q * 2 * e8, [T[1], T[3], T[2], T[3]][q], (q === 0 ? 0.19 : 0.14) * vel, -0.2);
+      for (let q = 0; q < o.meter; q++) play(soft, t0 + q * 2 * e8, [T[1], T[3], T[2], T[3]][q], (q === 0 ? 0.19 : 0.14) * vel, -0.2, 2 * e8);
+    }
+  };
+  // 칩튠 드럼(소음 채널 느낌): 인트로 뒤부터 조용히
+  const drums = o.drums ? chipDrumKit(rng) : null;
+  const drumBar = (t0) => {
+    const v = o.drums;
+    for (let s = 0; s < o.meter * 2; s++) {
+      const t = t0 + s * e8;
+      if (s === 0 || (o.meter === 4 && s === 4)) place(bus, drums.kick, t, 0.5 * v, 0);
+      else if (o.meter === 4 && (s === 2 || s === 6)) place(bus, drums.snare, t, 0.22 * v, 0.1);
+      place(bus, drums.hat, t, (s % 2 ? 0.07 : 0.1) * v, 0.25);
     }
   };
 
@@ -771,10 +877,11 @@ function orgel(o, pl) {
     for (let j = 0; j < 4; j++) {
       const t0 = tBar(pl.intro + k * 4 + j), ch = sec.chords[j];
       accomp(t0, ch, ph === "I" ? 0.9 : 1);
+      if (drums) drumBar(t0);
       const bar = sec.bars[j];
       if (ph === "I") {
         // 간주: 아래 성부가 동기를 받아 부른다(부름-응답)
-        if (bar) bar[0].forEach((r, i) => play(soft, t0 + r.pos * e8, degMidi(cx, bar[1][i]), 0.42, -0.35));
+        if (bar) bar[0].forEach((r, i) => play(soft, t0 + r.pos * e8, degMidi(cx, bar[1][i]), 0.42, -0.35, r.len * e8));
         else play(lead, t0 + 2 * e8, degMidi(cx, snap(cx, ns + 1, pcSet(o.tonic + ch[0], TRI[ch[1]]), rng)), 0.3, 0.4);
         continue;
       }
@@ -782,10 +889,11 @@ function orgel(o, pl) {
       rh.forEach((r, i) => {
         const t = t0 + r.pos * e8, m = degMidi(cx, degs[i]);
         const v = 0.55 + (r.pos === 0 ? 0.08 : 0) + (r.len >= 3 ? 0.04 : 0);
-        play(lead, t, m, v, 0.12);
-        if (deco && o.counter === "echo") play(soft, t + 2 * e8, m + 12 <= 93 ? m + 12 : m, v * 0.3, -0.5);
-        if (deco && o.counter === "thirds" && r.pos % 2 === 0) play(soft, t + 0.004, degMidi(cx, degs[i] - (ns === 5 ? 1 : 2)), v * 0.36, -0.3);
-        if (deco2 && m + 12 <= 96) play(lead, t + 0.003, m + 12, v * 0.16, 0.35);
+        const d = r.len * e8;
+        play(lead, t, m, v, 0.12, d);
+        if (deco && o.counter === "echo") play(soft, t + 2 * e8, m + 12 <= 93 ? m + 12 : m, v * 0.3, -0.5, d);
+        if (deco && o.counter === "thirds" && r.pos % 2 === 0) play(soft, t + 0.004, degMidi(cx, degs[i] - (ns === 5 ? 1 : 2)), v * 0.36, -0.3, d);
+        if (deco2 && m + 12 <= 96) play(lead, t + 0.003, m + 12, v * 0.16, 0.35, d);
       });
       if (deco && o.counter === "line") {
         // 대선율: 긴 음으로 화음음을 따라 부드럽게 움직인다
@@ -799,21 +907,26 @@ function orgel(o, pl) {
             if (c < bc) [best, bc] = [m, c];
           }
           cPrev = best;
-          play(soft, t0 + s * e8, best, s === 0 ? 0.3 : 0.22, -0.4);
+          play(soft, t0 + s * e8, best, s === 0 ? 0.3 : 0.22, -0.4, (o.meter === 4 ? 4 : 6) * e8);
         }
       }
     }
   });
   // 마무리: 으뜸화음을 굴려 치고 울림을 남긴다
   const tEnd = tBar(pl.intro + 4 * pl.P), iv = TRI[o.progA[0][1]], r = inRange(pc(o.tonic), o.tonic - 14);
-  play(lowBell, tEnd, inRange(pc(o.tonic), 41), 0.5, 0);
-  [r, r + iv[2], r + 12 + iv[1]].forEach((m, k) => play(soft, tEnd + k * 0.07, m, 0.22, -0.3 + 0.3 * k));
-  play(lead, tEnd + 0.3, o.tonic + 12 <= 84 ? o.tonic + 12 : o.tonic, 0.42, 0.15);
-  play(lead, tEnd + 1.1, degMidi(cx, ns + 2 <= cx.hi ? ns + 2 : ns), 0.2, 0.35);
+  play(bassI, tEnd, inRange(pc(o.tonic), 41), 0.5, 0, 5);
+  [r, r + iv[2], r + 12 + iv[1]].forEach((m, k) => play(soft, tEnd + k * 0.07, m, 0.22, -0.3 + 0.3 * k, 4.5));
+  play(lead, tEnd + 0.3, o.tonic + 12 <= 84 ? o.tonic + 12 : o.tonic, 0.42, 0.15, 4);
+  play(lead, tEnd + 1.1, degMidi(cx, ns + 2 <= cx.hi ? ns + 2 : ns), 0.2, 0.35, 3);
 
   stem("dry", bus);
+  if (o.inst === "chip") {
+    echo(bus, (3 * e8) / 1, 0.28, 0.22);
+    filt(bus, "lp", 6500, 0.7);
+  }
+  if (o.inst === "piano") filt(bus, "lp", 5200, 0.7);
   reverb(bus, { room: 0.84, damp: 0.42, wet: o.wet ?? 0.3, width: 0.9, pre: 0.025 });
-  return { bus, master: { lp: 9000, hp: 40 } };
+  return { bus, master: { lp: o.inst === "chip" ? 8000 : 9000, hp: 40 } };
 }
 
 // ───────────────────────── 로파이 ─────────────────────────
@@ -869,7 +982,9 @@ function planLofi(o) {
 
 function lofi(o, pl) {
   const rng = new Rng(o.seed), n = pl.dur * SR, beat = pl.barSec / 4, sw = o.swing, start = pl.start;
-  const keys = stereo(n), bass = stereo(n), drums = stereo(n), lead = stereo(n);
+  const keys = stereo(n), bass = stereo(n), drums = stereo(n), lead = stereo(n), jazz = o.style === "jazz";
+  // 재즈 카페 스타일은 같은 뼈대에 어쿠스틱 피아노 컴핑·워킹 베이스·라이드/브러시 드럼을 쓴다
+  const keyNote = jazz ? (bus, t, m, v, dur, p) => piano(bus, t, m, v * 0.8, p, dur + 0.15, rng) : epiano;
   const keyPc = pc(o.key), totalBeats = pl.bars * 4, secAt = (b) => pl.secs[Math.min(pl.bars - 1, Math.floor(b / 4))];
   const swing = (b) => {
     const f = b - Math.floor(b);
@@ -892,7 +1007,7 @@ function lofi(o, pl) {
 
   // 키(로즈) + 베이스
   const vel = { intro: 0.46, A: 0.55, B: 0.58, brk: 0.48, outro: 0.45 };
-  let prevV = null;
+  let prevV = null, walkPrev = 40;
   const kickTimes = [];
   segs.forEach((s, si) => {
     const sec = secAt(s.b), v = voicing(s.root, s.q, prevV, o.center ?? 62);
@@ -900,9 +1015,37 @@ function lofi(o, pl) {
     const style = sec.name === "A" ? o.comp : sec.name === "B" ? o.comp2 : "whole";
     for (const [hb, hl, hv] of COMP[style](s.L)) {
       const t = Math.max(start, T(s.b + hb)), strum = rng.range(0.008, 0.02);
-      v.forEach((m, j) => epiano(keys, t + j * strum + rng.range(0, 0.004), m, vel[sec.name] * hv * (j === v.length - 1 ? 0.62 : 0.5) * rng.range(0.92, 1.05), hl * beat, -0.25 + (0.5 * j) / (v.length - 1)));
+      v.forEach((m, j) => keyNote(keys, t + j * strum + rng.range(0, 0.004), m, vel[sec.name] * hv * (j === v.length - 1 ? 0.62 : 0.5) * rng.range(0.92, 1.05), hl * beat, -0.25 + (0.5 * j) / (v.length - 1)));
     }
-    if (sec.name === "A" || sec.name === "B" || (sec.name === "outro" && sec.i < 2)) {
+    if (o.bass === "walk" && (sec.name !== "intro" && !(sec.name === "outro" && sec.i >= 2))) {
+      // 워킹 베이스: 1박 근음 → 화음음으로 걷다가 → 마지막 박은 다음 근음으로 반음 접근
+      const next = segs[si + 1] ?? segs[0], tones = pcSet(s.root, LQ[s.q]);
+      const near = (p0, ref) => {
+        let m = inRange(p0, 33);
+        while (m + 12 <= 50 && Math.abs(m + 12 - ref) < Math.abs(m - ref)) m += 12;
+        return m;
+      };
+      for (let k = 0; k < s.L; k++) {
+        let m;
+        if (k === 0) m = near(s.root, walkPrev);
+        else if (k === s.L - 1) {
+          const tgt = near(next.root, walkPrev);
+          m = tgt + (rng.chance(0.55) ? -1 : 1);
+          if (m === walkPrev) m = 2 * tgt - m;
+        } else {
+          const tgt = near(next.root, walkPrev), dir = Math.sign(tgt - walkPrev) || (rng.chance(0.5) ? 1 : -1);
+          let best = walkPrev + dir * 2, bc = Infinity;
+          for (let x = Math.max(33, walkPrev - 5); x <= Math.min(50, walkPrev + 5); x++) {
+            if (x === walkPrev || !tones.has(pc(x))) continue;
+            const c = Math.abs(x - (walkPrev + dir * 3)) + rng.range(0, 1.2);
+            if (c < bc) [best, bc] = [x, c];
+          }
+          m = best;
+        }
+        bassNote(bass, T(s.b + k), clamp(m, 31, 52), 0.4 * (k === 0 ? 1 : 0.82) * rng.range(0.92, 1.05), beat * 0.88, 2.4);
+        walkPrev = clamp(m, 31, 52);
+      }
+    } else if (o.bass !== "walk" && (sec.name === "A" || sec.name === "B" || (sec.name === "outro" && sec.i < 2))) {
       const br = inRange(s.root, 33), next = segs[si + 1] ?? segs[0];
       for (const [hb, hl, iv] of BASSP[o.bass](s.L)) {
         let m = br + (typeof iv === "number" ? iv : 0);
@@ -918,7 +1061,7 @@ function lofi(o, pl) {
   });
   // 마지막 으뜸화음
   const tEnd = start + totalBeats * beat, tonicQ = o.mode === "minor" ? "m9" : "M9";
-  voicing(keyPc, tonicQ, prevV, o.center ?? 62).forEach((m, j) => epiano(keys, tEnd + j * 0.03, m, 0.45, 4.5, -0.25 + j * 0.17));
+  voicing(keyPc, tonicQ, prevV, o.center ?? 62).forEach((m, j) => keyNote(keys, tEnd + j * 0.03, m, 0.45, 4.5, -0.25 + j * 0.17));
   bassNote(bass, tEnd, inRange(keyPc, 33), 0.38, 4);
 
   // 리드(B 구간): 부름 4마디 + 응답 4마디를 한 번 만들고 매번 똑같이 반복한다
@@ -944,7 +1087,7 @@ function lofi(o, pl) {
     if (leadFn === "flute") flute(lead, t, m, v * 0.32, dur * 0.95, 0.2, rng);
     else if (leadFn === "vibes") vibes(lead, t, m, v * 0.5, 0.2);
     else if (leadFn === "musicbox") musicBox(lead, t, m + 12, v * 0.42, 0.2);
-    else epiano(lead, t, m, v * 0.42, dur, 0.15);
+    else keyNote(lead, t, jazz ? m + 12 : m, v * 0.42, dur, 0.15);
   };
   for (let bar = 0; bar < pl.bars; bar++) {
     const sec = pl.secs[bar];
@@ -956,8 +1099,8 @@ function lofi(o, pl) {
     // A·인트로의 4마디 끝에는 가끔 짧은 응답 프레이즈를 키로 넣는다
     if ((sec.name === "A" || sec.name === "intro") && sec.i % 4 === 3 && rng.chance(0.55)) {
       const d = snap(lcx, rng.pick([3, 4, 5]), chordPcs(bar * 4 + 3), rng);
-      epiano(lead, T(bar * 4 + 3), degMidi(lcx, d + 1), 0.24, beat * 0.45, 0.3);
-      epiano(lead, T(bar * 4 + 3.5), degMidi(lcx, d), 0.26, beat * 1.2, 0.3);
+      keyNote(lead, T(bar * 4 + 3), degMidi(lcx, d + 1) + (jazz ? 12 : 0), 0.24, beat * 0.45, 0.3);
+      keyNote(lead, T(bar * 4 + 3.5), degMidi(lcx, d) + (jazz ? 12 : 0), 0.26, beat * 1.2, 0.3);
     }
   }
 
@@ -966,7 +1109,23 @@ function lofi(o, pl) {
   const pat = DRUMP[o.drums], st = [0, sw / 2, sw, sw + (1 - sw) / 2];
   const stepT = (bar, s) => start + (bar * 4 + Math.floor(s / 4) + st[s % 4]) * beat;
   const sGain = o.snare === "rim" ? 0.3 : 0.42;
-  for (let bar = 0; bar < pl.bars; bar++) {
+  const jk = jazz ? { ride: bank(rng, 4, rideS), brush: bank(rng, 3, brushS) } : null;
+  for (let bar = 0; bar < pl.bars && jazz; bar++) {
+    // 재즈 키트: 라이드 '칭-치기-칭', 2·4박 하이햇 페달과 브러시, 깃털처럼 가벼운 킥
+    const sec = pl.secs[bar], full = sec.name === "A" || sec.name === "B", hum = () => rng.range(-0.005, 0.005);
+    if (!(full || sec.name === "brk" || (sec.name === "outro" && sec.i < 2) || (sec.name === "intro" && sec.i === 3))) continue;
+    const rv = full ? 1 : 0.6;
+    for (const b of [0, 1, 1.5, 2, 3, 3.5]) {
+      if (b % 1 && !rng.chance(0.85)) continue;
+      place(drums, rng.pick(jk.ride), T(bar * 4 + b) + hum(), 0.15 * rv * (b === 1 || b === 3 ? 1 : 0.78) * rng.range(0.9, 1.05), 0.35);
+    }
+    for (const b of [1, 3]) place(drums, rng.pick(hs), T(bar * 4 + b) + hum(), 0.05 * rv, -0.25);
+    if (!full) continue;
+    for (const b of [1, 3]) place(drums, rng.pick(jk.brush), T(bar * 4 + b) - 0.012, 0.3 * rng.range(0.85, 1.05), 0.1);
+    for (let b = 0; b < 4; b++) place(drums, rng.pick(ks), T(bar * 4 + b) + hum(), 0.14 * rng.range(0.85, 1.1), 0);
+    if (rng.chance(0.35)) place(drums, rng.pick(ss), T(bar * 4 + rng.pick([1.5, 2.5, 3.5])), 0.09, 0.05);
+  }
+  for (let bar = 0; bar < pl.bars && !jazz; bar++) {
     const sec = pl.secs[bar], nxt = pl.secs[bar + 1]?.name, full = sec.name === "A" || sec.name === "B";
     const lastOfSec = sec.i === sec.len - 1;
     const hum = () => rng.range(-0.004, 0.004);
@@ -1005,8 +1164,13 @@ function lofi(o, pl) {
   const cs = new Float32Array(n);
   let sm = cut[0];
   for (let i = 0; i < n; i++) cs[i] = sm += (cut[i] - sm) * 0.0002; // ~0.1초로 부드럽게
-  for (const x of keys) svf(x, cs, 0.75, "lp");
-  for (const x of lead) svf(x, cs.map((f) => Math.min(f * 1.4, 5000)), 0.7, "lp");
+  if (jazz) {
+    filt(keys, "lp", 5500, 0.7);
+    filt(lead, "lp", 6500, 0.7);
+  } else {
+    for (const x of keys) svf(x, cs, 0.75, "lp");
+    for (const x of lead) svf(x, cs.map((f) => Math.min(f * 1.4, 5000)), 0.7, "lp");
+  }
   // 킥에 맞춰 키를 살짝 눌러 숨 쉬게(사이드체인)
   {
     const kIdx = new Set(kickTimes.map((t) => Math.round(t * SR)));
@@ -1020,13 +1184,13 @@ function lofi(o, pl) {
       keys[1][i] *= g;
     }
   }
-  autopan(keys, o.trem ?? 3.6, 0.09);
-  saturate(keys, 1.4);
-  filt(bass, "lp", 420, 0.7);
+  if (!jazz) autopan(keys, o.trem ?? 3.6, 0.09);
+  saturate(keys, jazz ? 1.1 : 1.4);
+  filt(bass, "lp", jazz ? 600 : 420, 0.7);
   saturate(bass, 1.2);
   filt(drums, "lp", 8000, 0.7);
-  saturate(drums, 1.5);
-  reverb(drums, { room: 0.45, damp: 0.6, wet: 0.08, lowCut: 300 });
+  if (!jazz) saturate(drums, 1.5);
+  reverb(drums, { room: jazz ? 0.6 : 0.45, damp: 0.6, wet: jazz ? 0.12 : 0.08, lowCut: 300 });
   gainBus(keys, 1.0);
   gainBus(bass, 0.95);
   gainBus(lead, 1.0);
@@ -1036,7 +1200,8 @@ function lofi(o, pl) {
   stem("lead", lead);
   stem("drums", drums);
   const music = addBus(addBus(keys, bass), lead);
-  reverb(music, { room: 0.72, damp: 0.5, wet: 0.13, width: 0.8, lowCut: 250 });
+  reverb(music, { room: jazz ? 0.8 : 0.72, damp: 0.5, wet: jazz ? 0.16 : 0.13, width: 0.8, lowCut: 250 });
+  if (jazz) return { bus: addBus(music, drums), master: { lp: 9000, hp: 30 } };
   wobble(music, rng, { rate: o.wob ?? 0.5, cents: o.wobC ?? 9 });
   addBus(music, drums);
   const vin = vinyl(n, rng, o.vinyl ?? 1);
@@ -1381,11 +1546,149 @@ function rain(o, pl) {
   return { bus, master };
 }
 
+// ───────────────────────── 효과음 ─────────────────────────
+const SFX_LUFS = -15.65; // 인코딩 후 약 -16 LUFS
+const SFX_CEIL = 10 ** (-2.5 / 20);
+function sfx(o) {
+  const rng = new Rng(o.seed), n = Math.round(o.dur * SR), bus = stereo(n), [L, R] = bus;
+  const master = { hp: 60, lp: 11000, fadeIn: 0.003, fadeOut: 0.1 };
+  if (o.kind === "launch") {
+    // '퉁' 하고 쏘아 올린 뒤 휘이익 올라가는 휘파람 + 바람결
+    const th = biquad(brown(Math.round(0.14 * SR), rng), "lp", 260, 0.7);
+    normPeak(th);
+    for (let i = 0; i < th.length; i++) th[i] *= Math.exp((-i / SR) * 28);
+    place(bus, th, 0, 0.45, 0);
+    partial(bus, 0.004, 92, 0.35, 24, 0, 0.002);
+    const air = white(n, rng), fc = new Float32Array(n), envA = new Float32Array(n);
+    let ph = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / SR, u = clamp((t - 0.06) / 1.0, 0, 1), f = 650 * (2300 / 650) ** (u ** 0.85) * (1 + 0.006 * Math.sin(TAU * 9 * t));
+      const env = clamp((t - 0.05) / 0.12, 0, 1) * clamp((1.17 - t) / 0.28, 0, 1) * (0.65 + 0.35 * u);
+      ph += (TAU * f) / SR;
+      const [gl, gr] = panGains(-0.25 + 0.5 * u), v = env * 0.2 * Math.sin(ph);
+      L[i] += v * gl;
+      R[i] += v * gr;
+      fc[i] = f;
+      envA[i] = env;
+    }
+    svf(air, fc, 5, "bp");
+    for (let i = 0; i < n; i++) {
+      L[i] += air[i] * envA[i] * 0.35;
+      R[i] += air[i] * envA[i] * 0.35;
+    }
+    reverb(bus, { room: 0.6, damp: 0.5, wet: 0.14 });
+    master.fadeOut = 0.12;
+  } else if (o.kind === "burst") {
+    // 낮은 '펑' + 짧은 파열 + 지지직 흩어지는 불꽃
+    const boom = biquad(biquad(brown(n, rng), "lp", 170, 0.7), "lp", 170, 0.7);
+    normPeak(boom);
+    for (let i = 0; i < n; i++) {
+      const t = i / SR, e = Math.min(1, t / 0.015) * Math.exp(-t * 4.5);
+      L[i] += boom[i] * e * 0.3;
+      R[i] += boom[i] * e * 0.27;
+    }
+    partial(bus, 0, 62, 0.22, 7, 0, 0.015);
+    const cr = biquad(white(Math.round(0.15 * SR), rng), "bp", 1100, 0.7);
+    for (let i = 0; i < cr.length; i++) cr[i] *= Math.min(1, i / 200) * Math.exp((-i / SR) * 30);
+    place(bus, normPeak(cr), 0, 0.18, 0);
+    const ticks = bank(rng, 24, (r) => {
+      const x = new Float32Array(r.int(40, 140));
+      for (let i = 0; i < x.length; i++) x[i] = r.bi() * Math.exp(-i / (x.length / 4));
+      return normPeak(biquad(x, "bp", r.range(2500, 6000), 1.2));
+    });
+    for (let k = 0; k < 650; k++) {
+      const t = 0.18 + 1.65 * rng.next() ** 1.25, a = 0.15 * (1 - (t - 0.18) / 1.75) ** 1.3 * (0.3 + 0.7 * rng.next());
+      place(bus, rng.pick(ticks), t, a, rng.range(-0.85, 0.85));
+    }
+    for (let k = 0; k < 22; k++) {
+      const t = 0.2 + 1.3 * rng.next() ** 1.5;
+      partial(bus, t, rng.range(3000, 5200), 0.05 * (1 - (t - 0.2) / 1.4), 45, rng.range(-0.8, 0.8), 0.001);
+    }
+    reverb(bus, { room: 0.75, damp: 0.5, wet: 0.25, lowCut: 120 });
+    master.fadeOut = 0.4;
+    master.lp = 10000;
+  } else if (o.kind === "coin") {
+    // 짤랑: 두 음(B5→E6) 금속 핑 + 작은 동전 부딪는 소리
+    const ping = (t, f, v, p) => {
+      partial(bus, t, f, v, 9, p, 0.001, 0.5);
+      partial(bus, t, f * 2.76, v * 0.3, 16, p, 0.001, 0.5);
+      partial(bus, t, f * 5.4, v * 0.12, 30, p, 0.001, 0.5);
+    };
+    ping(0, 988, 0.5, -0.1);
+    ping(0.07, 1319, 0.55, 0.1);
+    for (let k = 0; k < 3; k++) ping(0.03 + k * 0.035 + rng.range(0, 0.01), rng.range(2200, 3400), 0.07, rng.range(-0.5, 0.5));
+    reverb(bus, { room: 0.5, damp: 0.5, wet: 0.1 });
+    master.fadeOut = 0.08;
+  } else if (o.kind === "flower") {
+    // 헌화: 맑은 종소리 아르페지오(C6 E6 G6 C7)
+    [84, 88, 91, 96].forEach((m, k) => {
+      const f = mtof(m), t = 0.005 + k * 0.075, p = -0.3 + 0.2 * k;
+      partial(bus, t, f, 0.4 - k * 0.05, 3.5, p, 0.002, 1);
+      partial(bus, t, f * 2, 0.07, 7, p, 0.002, 1);
+      partial(bus, t, f * 3.01, 0.03, 12, p, 0.002, 1);
+    });
+    reverb(bus, { room: 0.8, damp: 0.45, wet: 0.3 });
+    master.fadeOut = 0.25;
+  }
+  return { bus, master };
+}
+
+// ───────────────────────── 외부 무료 음원 ─────────────────────────
+// 원본 페이지에서 라이선스를 직접 확인한 곡만 넣는다(2026-11 확인). CC BY는 artist·license·sourceUrl로 저작자를 표시한다.
+// 변경 사항: 44.1kHz 스테레오 128kbps로 다시 인코딩하고 음량을 다른 곡과 같은 -19 LUFS로 맞췄다(일부 CC0 곡은 고역을 살짝 깎음).
+const OGA = "https://opengameart.org/sites/default/files/";
+const OGA_PAGE = "https://opengameart.org/content/";
+const KM = "https://incompetech.com/music/royalty-free/mp3-royaltyfree/";
+const KM_PAGE = "https://incompetech.com/music/royalty-free/index.html?isrc=";
+const KMA = "Kevin MacLeod (incompetech.com)";
+const ext = (pl, file, title, artist, license, sourceUrl, src, more = {}) => ({ pl, file, title, artist, license, sourceUrl, src, ext: true, ...more });
+const EXTERNAL = [
+  ext("orgel", "moonlit-lullaby-for-the-lost", "Moonlit Lullaby for the Lost", "Tsorthan Grove", "CC0", OGA_PAGE + "moonlit-lullaby-for-the-lost", OGA + "moonlit_lullaby_for_the_lost.flac"),
+  ext("orgel", "music-box-sad-tune", "Sad Tune (Music Box)", "Aureolus_Omicron", "CC0", OGA_PAGE + "4-music-box-tracks", OGA + "musicbox3_sad_tune.ogg"),
+  ext("orgel", "music-box-cute-tune", "Cute Tune (Music Box)", "Aureolus_Omicron", "CC0", OGA_PAGE + "4-music-box-tracks", OGA + "musicbox2_cute_tune.ogg"),
+  ext("orgel", "frost-waltz", "Frost Waltz", KMA, "CC BY 4.0", KM_PAGE + "USUAN1100516", KM + "Frost%20Waltz.mp3"),
+  ext("lofi", "chill-lofi-inspired", "Chill lofi inspired", "omfgdude", "CC0", OGA_PAGE + "chill-lofi-inspired", OGA + "ChillLofi.ogg"),
+  ext("lofi", "happy-lofi-day", "happy lofi day", "Tarush Singhal", "CC0", OGA_PAGE + "happy-lofi-day", OGA + "rhodes.mp3", { lp: 11000 }),
+  ext("lofi", "in-the-lobby", "In the Lobby", "Umplix", "CC0", OGA_PAGE + "in-the-lobby", OGA + "in_the_lobby.wav"),
+  ext("lofi", "dimly-lit", "Dimly lit", "iamoneabe", "CC0", OGA_PAGE + "dimly-lit", OGA + "dimlylit.wav", { lp: 11000 }),
+  ext("piano", "calm-piano-vaporware", "Calm Piano 1 (Vaporware)", "The Cynic Project (cynicmusic.com)", "CC0", OGA_PAGE + "calm-piano-1-vaporware", OGA + "003_Vaporware_2.mp3"),
+  ext("piano", "calmant", "Calmant", KMA, "CC BY 4.0", KM_PAGE + "USUAN1100859", KM + "Calmant.mp3"),
+  ext("piano", "dreamer", "Dreamer", KMA, "CC BY 4.0", KM_PAGE + "USUAN1600043", KM + "Dreamer.mp3"),
+  ext("chiptune", "apple-cider", "Apple Cider", "Zane Little Music", "CC0", OGA_PAGE + "apple-cider", OGA + "apple_cider.ogg", { lp: 9000 }),
+  ext("chiptune", "napping-on-a-cloud", "Napping on a Cloud", "congusbongus", "CC0", OGA_PAGE + "napping-on-a-cloud", OGA + "napping_on_a_cloud.ogg"),
+  ext("chiptune", "8bit-bossa", "8bit Bossa", "Joth", "CC0", OGA_PAGE + "bossa-nova", OGA + "8bit%20Bossa.mp3"),
+  ext("jazz", "mocha-frapp", "Mocha Frapp", "Alex McCulloch (Pro Sensory)", "CC0", OGA_PAGE + "mocha-frapp", OGA + "mocha_frapp_2.mp3"),
+  ext("jazz", "blue-rain", "Blue Rain", "Alex McCulloch (Pro Sensory)", "CC0", OGA_PAGE + "blue-rain", OGA + "blue_rain_0.mp3"),
+  ext("jazz", "once-in-a-while", "Once In a While", "Alex McCulloch (Pro Sensory)", "CC0", OGA_PAGE + "once-in-a-while", OGA + "Once%20In%20A%20while_4.mp3"),
+  ext("jazz", "coffee-house-bump", "Coffee House Bump", "OatCog", "CC0", OGA_PAGE + "coffee-house-bump", OGA + "little_cafe_0.wav"),
+  ext("jazz", "lobby-time", "Lobby Time", KMA, "CC BY 4.0", KM_PAGE + "USUAN1600054", KM + "Lobby%20Time.mp3"),
+];
+const hashSeed = (str) => [...str].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0, 7);
+function importExternal(s) {
+  const dir = join(process.env.BGM_CACHE || join(tmpdir(), "tomb-bgm-src"), s.file);
+  mkdirSync(dir, { recursive: true });
+  const src = join(dir, `src${extname(decodeURIComponent(new URL(s.src).pathname)).toLowerCase()}`);
+  if (!existsSync(src)) execFileSync("curl", ["-sSfL", "--max-time", "300", "-A", "Mozilla/5.0", "-o", src, s.src]);
+  const raw = execFileSync(FFMPEG, ["-v", "error", "-i", src, "-map", "0:a:0", "-ac", "2", "-ar", String(SR), "-f", "f32le", "pipe:1"], { maxBuffer: 1 << 30 });
+  const f = new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.length)), n = f.length >> 1, bus = stereo(n);
+  for (let i = 0; i < n; i++) {
+    bus[0][i] = f[2 * i];
+    bus[1][i] = f[2 * i + 1];
+  }
+  const st = finalize(bus, { hp: 20, lp: s.lp ?? 0, fadeIn: 0.02, fadeOut: 0.6 });
+  mkdirSync(join(OUT, s.pl), { recursive: true });
+  encode(bus, join(OUT, s.pl, `${s.file}.mp3`), hashSeed(s.file));
+  return { dur: Math.round(n / SR), ...st };
+}
+
 // ───────────────────────── 트랙 목록 ─────────────────────────
 const PLAYLISTS = [
   { id: "orgel", title: "오르골" },
   { id: "lofi", title: "로파이" },
   { id: "rain", title: "빗소리 앰비언트" },
+  { id: "piano", title: "잔잔한 피아노" },
+  { id: "chiptune", title: "8비트" },
+  { id: "jazz", title: "재즈 카페" },
 ];
 const M = (r, q) => [r, q];
 const SPECS = [
@@ -1424,24 +1727,60 @@ const SPECS = [
   { pl: "rain", file: "tin-roof", title: "양철 지붕의 비", seed: 53, kind: "tinroof", dur: 116 },
   { pl: "rain", file: "drizzle-far-bell", title: "이슬비와 먼 종소리", seed: 67, kind: "bell", dur: 128 },
   { pl: "rain", file: "foggy-dawn", title: "안개 낀 새벽", seed: 79, kind: "fog", dur: 132 },
+
+  // 잔잔한 피아노: 오르골 엔진 + 펠트 피아노
+  { pl: "piano", file: "after-the-last-commit", title: "마지막 커밋 이후", seed: 201, inst: "piano", tonic: 74, scale: "major", bpm: 58, meter: 3, progA: [M(0, "M7"), M(5, "M7"), M(0, "M7"), M(5, "M7")], progB: [M(9, "m7"), M(4, "m7"), M(5, "M7"), M(7, "M")], acc: "waltz", counter: "line", dur: 92, wet: 0.32 },
+  { pl: "piano", file: "closed-issues", title: "닫힌 이슈들", seed: 207, inst: "piano", tonic: 69, scale: "minor", bpm: 64, meter: 4, progA: [M(0, "m"), M(8, "M"), M(3, "M"), M(10, "M")], progB: [M(5, "m"), M(0, "m"), M(8, "M"), M(7, "M")], acc: "arp", counter: "thirds", dur: 90, wet: 0.3 },
+  { pl: "piano", file: "commented-out-feelings", title: "주석 처리한 마음", seed: 213, inst: "piano", tonic: 68, scale: "majPent", bpm: 56, meter: 4, progA: [M(0, "M7"), M(4, "m7"), M(5, "M7"), M(5, "m")], progB: [M(9, "m7"), M(2, "m7"), M(7, "7"), M(7, "sus2")], acc: "block", counter: "echo", dur: 94, bass2: true, wet: 0.32 },
+
+  // 8비트: 오르골 엔진 + 펄스·삼각파·소음 드럼
+  { pl: "chiptune", file: "pixel-graveyard-walk", title: "픽셀 묘지 산책", seed: 301, inst: "chip", drums: 1, tonic: 72, scale: "majPent", bpm: 92, meter: 4, progA: [M(0, "M"), M(9, "m"), M(5, "M"), M(7, "M")], progB: [M(5, "M"), M(7, "M"), M(4, "m"), M(7, "M")], acc: "arp", counter: "echo", dur: 88, wet: 0.18 },
+  { pl: "chiptune", file: "save-point", title: "세이브 포인트", seed: 307, inst: "chip", drums: 0.8, tonic: 65, scale: "lydian", bpm: 84, meter: 4, progA: [M(0, "M7"), M(2, "M"), M(0, "M7"), M(2, "M")], progB: [M(9, "m"), M(4, "m"), M(7, "M"), M(2, "M")], acc: "arp", counter: "line", dur: 90, wet: 0.2 },
+  { pl: "chiptune", file: "no-extra-life", title: "1UP은 없었다", seed: 311, inst: "chip", drums: 1, tonic: 69, scale: "minPent", bpm: 88, meter: 4, progA: [M(0, "m"), M(8, "M"), M(5, "m"), M(7, "m")], progB: [M(8, "M"), M(10, "M"), M(3, "M"), M(7, "M")], acc: "pulse", counter: "echo", dur: 86, bass2: true, wet: 0.18 },
+  { pl: "chiptune", file: "stuck-on-title-screen", title: "타이틀 화면에서 멈춤", seed: 317, inst: "chip", drums: 0.8, tonic: 67, scale: "major", bpm: 96, meter: 3, progA: [M(0, "M"), M(4, "m"), M(5, "M"), M(7, "M")], progB: [M(9, "m"), M(5, "M"), M(0, "M"), M(7, "7")], acc: "waltz", counter: "thirds", dur: 88, wet: 0.18 },
+
+  // 재즈 카페: 로파이 엔진 + 피아노 컴핑·워킹 베이스·라이드/브러시
+  { pl: "jazz", file: "cafe-refactoring", title: "카페에서 리팩터링", seed: 401, style: "jazz", key: 65, mode: "major", bpm: 112, prog: [[4, 2, "m9"], [4, 7, "13"], [4, 0, "M9"], [4, 9, "7b9"]], comp: "charleston", comp2: "stab", snare: "snare", swing: 0.64, bass: "walk", lead: "vibes", dur: 92 },
+  { pl: "jazz", file: "blue-screen-blues", title: "블루 스크린 블루스", seed: 409, style: "jazz", key: 64, mode: "minor", bpm: 100, prog: [[2, 5, "m7"], [2, 10, "9"], [2, 3, "M7"], [2, 8, "M7"], [2, 2, "m7b5"], [2, 7, "7b9"], [4, 0, "m9"]], comp: "whole", comp2: "stab", snare: "snare", swing: 0.66, bass: "walk", lead: "vibes", dur: 96 },
+  { pl: "jazz", file: "closed-startup-cafe", title: "문 닫은 스타트업 카페", seed: 419, style: "jazz", key: 63, mode: "major", bpm: 88, prog: [[4, 0, "M9"], [4, 9, "m9"], [4, 2, "m9"], [4, 7, "13"]], comp: "twoHit", comp2: "charleston", snare: "snare", swing: 0.62, bass: "walk", lead: "keys", dur: 94 },
+
+  // 효과음(게임용, tracks.json에는 넣지 않는다)
+  { pl: "sfx", file: "firework-launch", kind: "launch", seed: 501, dur: 1.2 },
+  { pl: "sfx", file: "firework-burst", kind: "burst", seed: 503, dur: 2.0 },
+  { pl: "sfx", file: "coin", kind: "coin", seed: 505, dur: 0.4 },
+  { pl: "sfx", file: "flower", kind: "flower", seed: 507, dur: 0.8 },
+  ...EXTERNAL,
 ];
 
-const planOf = (s) => (s.pl === "orgel" ? planOrgel(s) : s.pl === "lofi" ? planLofi(s) : { dur: s.dur });
+const engineOf = (s) =>
+  s.ext ? "ext" : s.pl === "sfx" ? "sfx" : ["orgel", "piano", "chiptune"].includes(s.pl) ? "melody" : ["lofi", "jazz"].includes(s.pl) ? "band" : "ambient";
+const planOf = (s) => (engineOf(s) === "melody" ? planOrgel(s) : engineOf(s) === "band" ? planLofi(s) : { dur: s.dur });
+const outFile = (s) => (s.pl === "sfx" ? join(SFX_OUT, `${s.file}.mp3`) : join(OUT, s.pl, `${s.file}.mp3`));
 
 function render(i) {
-  const s = SPECS[i], pl = planOf(s), t0 = Date.now();
-  const { bus, master } = s.pl === "orgel" ? orgel(s, pl) : s.pl === "lofi" ? lofi(s, pl) : rain(s, pl);
-  const st = finalize(bus, master);
-  mkdirSync(join(OUT, s.pl), { recursive: true });
-  encode(bus, join(OUT, s.pl, `${s.file}.mp3`), s.seed);
+  const s = SPECS[i], t0 = Date.now(), eng = engineOf(s);
+  if (eng === "ext") return { i, ...importExternal(s), sec: (Date.now() - t0) / 1000 };
+  const pl = planOf(s);
+  const { bus, master } = eng === "melody" ? orgel(s, pl) : eng === "band" ? lofi(s, pl) : eng === "sfx" ? sfx(s) : rain(s, pl);
+  const st = finalize(bus, eng === "sfx" ? { ...master, target: SFX_LUFS, ceil: SFX_CEIL } : master);
+  mkdirSync(eng === "sfx" ? SFX_OUT : join(OUT, s.pl), { recursive: true });
+  encode(bus, outFile(s), s.seed);
   return { i, dur: pl.dur, bpm: pl.bpm, ...st, sec: (Date.now() - t0) / 1000 };
 }
 
+const probeDur = (f) => Math.round(parseFloat(execFileSync(process.env.FFPROBE || "ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f]).toString()));
+// 자체 제작곡 사이사이에 외부 곡을 고르게 섞는다
+function ordered(id) {
+  const g = SPECS.filter((s) => s.pl === id && !s.ext), e = SPECS.filter((s) => s.pl === id && s.ext && existsSync(outFile(s)));
+  const out = [], total = g.length + e.length;
+  for (let k = 0, gi = 0, ei = 0; k < total; k++) out.push(ei < e.length && (gi >= g.length || Math.floor(((k + 1) * e.length) / total) > ei) ? e[ei++] : g[gi++]);
+  return out;
+}
 function writeManifest() {
   const row = (o) => `{ ${Object.entries(o).map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`).join(", ")} }`;
   const lists = PLAYLISTS.map((p) => {
-    const tracks = SPECS.filter((s) => s.pl === p.id).map((s) =>
-      row({ file: `/bgm/${s.pl}/${s.file}.mp3`, title: s.title, artist: ARTIST, sourceUrl: "", license: "CC0", durationSec: planOf(s).dur }),
+    const tracks = ordered(p.id).map((s) =>
+      row({ file: `/bgm/${s.pl}/${s.file}.mp3`, title: s.title, artist: s.artist ?? ARTIST, sourceUrl: s.sourceUrl ?? "", license: s.license ?? "CC0", durationSec: s.ext ? probeDur(outFile(s)) : planOf(s).dur }),
     );
     return `    {\n      "id": ${JSON.stringify(p.id)},\n      "title": ${JSON.stringify(p.title)},\n      "tracks": [\n${tracks.map((t) => `        ${t}`).join(",\n")}\n      ]\n    }`;
   });
@@ -1449,8 +1788,8 @@ function writeManifest() {
 }
 
 if (isMainThread) {
-  const filter = process.argv[2];
-  const ids = SPECS.map((_, i) => i).filter((i) => !filter || `${SPECS[i].pl}/${SPECS[i].file}`.includes(filter));
+  const args = process.argv.slice(2), fetchExt = args.includes("--fetch"), filter = args.find((a) => !a.startsWith("--"));
+  const ids = SPECS.map((_, i) => i).filter((i) => (fetchExt || !SPECS[i].ext) && (!filter || `${SPECS[i].pl}/${SPECS[i].file}`.includes(filter)));
   if (!ids.length) throw new Error(`no track matches "${filter}"`);
   const W = Math.min(ids.length, Math.max(1, Math.min(8, availableParallelism() - 2)));
   const groups = Array.from({ length: W }, (_, w) => ids.filter((_, k) => k % W === w));
@@ -1464,7 +1803,7 @@ if (isMainThread) {
             const w = new Worker(new URL(import.meta.url), { workerData: g });
             w.on("message", (m) => {
               const s = SPECS[m.i];
-              console.log(`${`${s.pl}/${s.file}`.padEnd(32)} ${String(m.dur).padStart(4)}s ${m.bpm ? `${m.bpm}bpm` : "     "}  ${m.lufs.toFixed(2)} LUFS  peak ${m.peak.toFixed(2)} dB  limit ${m.gr.toFixed(2)} dB  (${m.sec.toFixed(1)}s)`);
+              console.log(`${`${s.pl}/${s.file}`.padEnd(36)} ${String(m.dur).padStart(4)}s ${m.bpm ? `${m.bpm}bpm` : "     "}  ${m.lufs.toFixed(2)} LUFS  peak ${m.peak.toFixed(2)} dB  limit ${m.gr.toFixed(2)} dB  (${m.sec.toFixed(1)}s)`);
               out.push(m);
             });
             w.on("error", rej);
@@ -1475,10 +1814,13 @@ if (isMainThread) {
   ).flat();
   console.log(`rendered ${results.length} tracks in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   if (!filter) {
+    const missing = SPECS.filter((s) => s.ext && !existsSync(outFile(s)));
+    if (missing.length) console.warn(`외부 곡 ${missing.length}개가 아직 없다 → node scripts/gen-bgm.mjs --fetch`);
     writeManifest();
-    // 목록에 없는 예전 파일은 지운다
+    // 목록에 없는 예전 파일은 지운다(BGM 폴더만)
     for (const p of PLAYLISTS) {
       const keep = new Set(SPECS.filter((s) => s.pl === p.id).map((s) => `${s.file}.mp3`));
+      mkdirSync(join(OUT, p.id), { recursive: true });
       for (const f of readdirSync(join(OUT, p.id))) if (f.endsWith(".mp3") && !keep.has(f)) rmSync(join(OUT, p.id, f));
     }
     console.log("wrote tracks.json");

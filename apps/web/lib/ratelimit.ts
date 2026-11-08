@@ -22,10 +22,13 @@ const LIMITS = {
   join: { visitor: 10, ip: 60, windowSec: MIN, message: "입장 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   report: { visitor: 10, ip: 10, windowSec: DAY, message: "오늘은 더 신고할 수 없어요." },
   detail: { visitor: null, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  shop: { visitor: 20, ip: 60, windowSec: MIN, message: "상점 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
 } as const;
 
 /** 관리자 키 대입 방지: IP당 분당 실패 10회 */
 const ADMIN_FAILURES = { tokens: 10, windowSec: MIN };
+/** 개인 코드 대입 방지: IP당 시간당 실패 10회 */
+const CODE_FAILURES = { tokens: 10, windowSec: 60 * MIN };
 
 export type LimitAction = keyof typeof LIMITS;
 type Verdict = { success: boolean; reset: number };
@@ -123,4 +126,17 @@ export async function assertAdminNotLocked(req: NextRequest): Promise<void> {
 
 export async function recordAdminFailure(req: NextRequest): Promise<void> {
   await limiter("admin-fail", ADMIN_FAILURES).take(ipHash(req));
+}
+
+/**
+ * 개인 코드 로그인: 실패가 한도에 닿은 IP는 맞는 코드여도 잠시 막는다.
+ * 계정을 통째로 가져가는 경로라 운영자 IP도 예외로 두지 않는다.
+ */
+export async function assertCodeLoginOpen(req: NextRequest): Promise<void> {
+  const v = await limiter("code-fail", CODE_FAILURES).peek(ipHash(req));
+  if (!v.success) throw tooMany("코드 입력을 너무 많이 틀렸어요. 한 시간 뒤에 다시 시도해 주세요.", v.reset);
+}
+
+export async function recordCodeLoginFailure(req: NextRequest): Promise<void> {
+  await limiter("code-fail", CODE_FAILURES).take(ipHash(req));
 }

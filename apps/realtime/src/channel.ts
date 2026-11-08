@@ -14,6 +14,7 @@ import {
   seatById,
   type C2S,
   type DirId,
+  type Grant,
   type MoveMsg,
   type PeerInfo,
   type PeerState,
@@ -37,6 +38,10 @@ export type PeerRecord = {
   state: StateId;
   dir: DirId;
   seatId: string | null;
+  /** 착용 중인 꾸미기 (입장 토큰 → look 증서로 바뀜) */
+  look: string[];
+  /** 이 연결로 자리를 잡은 시각. 로비의 채널 간 중복 정리(kick)가 더 새 연결을 내보내지 않게 비교한다 */
+  joinedAt: number;
 };
 
 /** 재연결 유예 예약. until(ms)까지 sid·좌석·위치를 지킨다 */
@@ -50,6 +55,8 @@ export type JoinTicket = {
   channel: number;
   /** 클라이언트가 붙인 ?x=&y=. 없으면 새 입장은 SPAWN, 복귀는 기존 위치 */
   spawn?: Point;
+  /** 입장 시점의 꾸미기 (JoinClaims.look) */
+  look: string[];
 };
 
 /** ChannelCore가 바깥(DO)에 맡기는 부수 효과 */
@@ -67,8 +74,12 @@ export interface ChannelHost<C> {
   /** 이 소켓에 런타임이 마지막으로 pong을 자동 응답한 시각(ms, 없으면 0) */
   lastPing(conn: C): number;
   /** 방문자가 이 채널에 자리를 잡았다(신규·복귀·교체) / 최종 퇴장했다 → 로비의 채널 간 중복 방지 레지스트리 */
-  visitorJoined(visitorId: string): void;
+  visitorJoined(visitorId: string, at: number): void;
   visitorLeft(visitorId: string): void;
+  /** Vercel이 서명한 증서(look/firework) 검증. 비동기(HMAC) */
+  verifyGrant(token: string): Promise<Grant | null>;
+  /** 폭죽 nonce를 until(ms)까지 "사용됨"으로 기록. 이미 쓴 nonce면 false */
+  claimNonce(nonce: string, until: number): boolean;
 }
 
 export type ChannelConfig = { capacity: number; graceMs: number };
@@ -88,6 +99,12 @@ export const EMOTE_INTERVAL_MS = 250;
 export const EMOTE_DEDUPE_MS = 1_000;
 /** graveEvent: 연결당 최소 간격이자, 채널 안에서 같은 graveId를 중계하는 최소 간격 */
 export const GRAVE_EVENT_INTERVAL_MS = 5_000;
+/** look 증서 연결당 최소 간격 */
+export const LOOK_INTERVAL_MS = 10_000;
+/** firework 증서 연결당 최소 간격 */
+export const FIREWORK_INTERVAL_MS = 3_000;
+/** sync(접속자 목록 다시 받기) 연결당 최소 간격. 클라이언트는 PEER_SYNC_MS(60초)마다 보낸다 */
+export const SYNC_INTERVAL_MS = 20_000;
 /** warp 서버 쿨다운. 클라이언트(WARP_COOLDOWN_MS 1초)보다 짧게 둬서 네트워크 지터로 정상 요청이 버려지지 않게 한다 */
 export const SERVER_WARP_COOLDOWN_MS = 800;
 
@@ -104,6 +121,9 @@ type Peer<C> = PeerRecord & {
   lastWarpAt: number;
   lastEmoteAt: number;
   lastGraveEventAt: number;
+  lastLookAt: number;
+  lastFireworkAt: number;
+  lastSyncAt: number;
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
   lastSeenAt: number;
   /** attachment가 최신인지 */
@@ -137,6 +157,11 @@ export class ChannelCore<C extends object> {
   /** 소켓이 붙어 있는 인원 (유예 중 제외) */
   get online(): number {
     return this.bySocket.size;
+  }
+
+  /** 이 방문자가 이미 자리를 갖고 있는지 (접속 중이거나 유예 중) */
+  has(visitorId: string): boolean {
+    return this.byVisitor.has(visitorId);
   }
 
   /** 이 visitorId를 받을 수 있는지: 이미 자리가 있거나(복귀·중복 접속) 상한 미만 */
@@ -191,13 +216,15 @@ export class ChannelCore<C extends object> {
       state: STATE.idle,
       dir: DIR.down,
       seatId: null,
+      look: t.look,
+      joinedAt: now,
     };
     const p = this.adoptNew(rec, conn, now);
     this.save(p);
     this.welcome(p, t.channel, false);
     this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
     this.host.countChanged(this.peers.size);
-    this.host.visitorJoined(p.visitorId);
+    this.host.visitorJoined(p.visitorId, p.joinedAt);
   }
 
   /**
@@ -214,9 +241,11 @@ export class ChannelCore<C extends object> {
     } else {
       this.host.dropReservation(p.sid);
     }
-    const renamed = p.name !== t.name || p.color !== t.color;
+    const renamed = p.name !== t.name || p.color !== t.color || p.look.join() !== t.look.join();
     p.name = t.name;
     p.color = t.color;
+    p.look = t.look;
+    p.joinedAt = now;
     // 새 소켓을 붙이기 전에 옮긴다: 좌석 해제 알림은 다른 사람에게만 가고, 본인은 결과가 반영된 welcome을 처음으로 받는다
     if (t.spawn) this.relocate(p, t.spawn);
 
@@ -226,9 +255,9 @@ export class ChannelCore<C extends object> {
     this.resetConnState(p, now);
     this.save(p);
     this.welcome(p, t.channel, true);
-    // 이름·색은 입장 때 한 번만 보낸다. 바뀌었을 때만 join을 다시 보낸다(클라이언트는 같은 sid의 join을 덮어쓰기로 처리).
+    // 이름·색·꾸미기는 입장 때 한 번만 보낸다. 바뀌었을 때만 join을 다시 보낸다(클라이언트는 같은 sid의 join을 덮어쓰기로 처리).
     if (renamed) this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
-    this.host.visitorJoined(p.visitorId);
+    this.host.visitorJoined(p.visitorId, p.joinedAt);
   }
 
   /** 복귀한 클라이언트가 알려 준 위치로 옮긴다(위치의 원천은 클라이언트). 앉아 있던 좌석 근처면 좌석을 유지한다. */
@@ -245,17 +274,22 @@ export class ChannelCore<C extends object> {
   }
 
   private welcome(p: Peer<C>, channel: number, resumed: boolean): void {
-    const peers: PeerInfo[] = [];
-    for (const o of this.peers.values()) if (o !== p) peers.push(this.info(o));
     this.sendTo(p, {
       t: "welcome",
       sid: p.sid,
       channel,
       cap: this.cfg.capacity,
-      peers,
+      peers: this.othersOf(p),
       seats: Object.fromEntries(this.seats),
       resumed,
     });
+  }
+
+  /** 나를 뺀 현재 접속자 전체 (유예 중인 사람 포함 — 다른 사람에게는 멈춘 아바타로 보인다) */
+  private othersOf(p: Peer<C>): PeerInfo[] {
+    const out: PeerInfo[] = [];
+    for (const o of this.peers.values()) if (o !== p) out.push(this.info(o));
+    return out;
   }
 
   // ── 수신 ──
@@ -284,6 +318,9 @@ export class ChannelCore<C extends object> {
     const sid = this.bySocket.get(conn);
     if (sid === undefined) return; // 이미 교체(4002)·추방(4008)·거절(4001)된 소켓
     this.bySocket.delete(conn);
+    // 닫힌 소켓도 TCP 정리 전까지 getWebSockets()에 잠시 남는다. 그 사이 hibernate됐다 깨어나면
+    // 옛 attachment로 유령 피어가 되살아나거나(재사용된 sid와 부딪혀 정상 피어가 밀려남) 하지 않도록 지운다.
+    this.host.persist(conn, null);
     const p = this.peers.get(sid);
     if (!p || p.conn !== conn) return;
     p.conn = null;
@@ -310,11 +347,15 @@ export class ChannelCore<C extends object> {
     }
   }
 
-  /** 다른 채널에 같은 방문자가 들어갔다(로비가 부름): 접속 중이면 4002로 닫고, 유예 예약이면 지운다. 유예 없음. */
-  evict(visitorId: string): void {
+  /**
+   * 다른 채널에 같은 방문자가 들어갔다(로비가 부름): 접속 중이면 4002로 닫고, 유예 예약이면 지운다. 유예 없음.
+   * claimedAt(다른 채널에 자리를 잡은 시각)보다 나중에 여기 다시 들어온 연결은 건드리지 않는다
+   * (빠르게 채널을 오가면 늦게 도착한 kick이 새 연결을 내보낼 수 있다).
+   */
+  evict(visitorId: string, claimedAt = Infinity): void {
     const sid = this.byVisitor.get(visitorId);
     const p = sid === undefined ? undefined : this.peers.get(sid);
-    if (!p) return;
+    if (!p || p.joinedAt > claimedAt) return;
     if (!p.conn) this.host.dropReservation(p.sid);
     this.kick(p, CLOSE.REPLACED, "joined another channel");
   }
@@ -390,7 +431,46 @@ export class ChannelCore<C extends object> {
         if (!this.once(`g:${m.graveId}`, GRAVE_EVENT_INTERVAL_MS, now)) return;
         p.lastGraveEventAt = now;
         return this.broadcast(encodeEvent({ t: "graveEvent", sid: p.sid, kind: m.kind, graveId: m.graveId }), p.sid);
+      case "look":
+        if (now - p.lastLookAt < LOOK_INTERVAL_MS) return;
+        p.lastLookAt = now;
+        return this.verifyThenApply(p, "look", m.grant);
+      case "firework":
+        if (now - p.lastFireworkAt < FIREWORK_INTERVAL_MS) return;
+        p.lastFireworkAt = now;
+        return this.verifyThenApply(p, "firework", m.grant);
+      case "sync":
+        // 자가 복구: 클라이언트가 놓친 join/leave가 있어도 이걸로 맞춘다
+        if (now - p.lastSyncAt < SYNC_INTERVAL_MS) return;
+        p.lastSyncAt = now;
+        return this.sendTo(p, { t: "peers", peers: this.othersOf(p), seats: Object.fromEntries(this.seats) });
     }
+  }
+
+  /** 증서 검증(HMAC, 비동기)은 연결당 간격을 통과한 뒤에만 한다 — 검증 CPU를 아끼려고. */
+  private verifyThenApply(p: Peer<C>, kind: Grant["kind"], grant: string): void {
+    const conn = p.conn;
+    if (!conn) return;
+    this.host.verifyGrant(grant).then(
+      (g) => {
+        if (g?.kind === kind) this.applyGrant(conn, g);
+      },
+      () => {},
+    );
+  }
+
+  /** 검증된 증서를 반영한다. 다른 사람 앞으로 발급된 증서이거나 그 사이 연결이 바뀌었으면 무시 */
+  applyGrant(conn: C, g: Grant): void {
+    const sid = this.bySocket.get(conn);
+    const p = sid === undefined ? undefined : this.peers.get(sid);
+    if (!p || g.visitorId !== p.visitorId) return;
+    if (g.kind === "look") {
+      p.look = g.look;
+      this.save(p);
+      return this.broadcast(encodeEvent({ t: "look", sid: p.sid, look: p.look }));
+    }
+    if (!this.host.claimNonce(g.nonce, g.exp * 1000)) return; // 이미 쏜 폭죽
+    this.broadcast(encodeEvent({ t: "firework", sid: p.sid, item: g.item, x: p.x, y: p.y }));
   }
 
   /** 채널 단위 중복 제거: 같은 키는 windowMs에 한 번만 true */
@@ -547,6 +627,9 @@ export class ChannelCore<C extends object> {
       lastWarpAt: -Infinity,
       lastEmoteAt: -Infinity,
       lastGraveEventAt: -Infinity,
+      lastLookAt: -Infinity,
+      lastFireworkAt: -Infinity,
+      lastSyncAt: -Infinity,
       lastSeenAt: now,
       saved: true,
     };
@@ -562,6 +645,9 @@ export class ChannelCore<C extends object> {
     p.lastWarpAt = -Infinity;
     p.lastEmoteAt = -Infinity;
     p.lastGraveEventAt = -Infinity;
+    p.lastLookAt = -Infinity;
+    p.lastFireworkAt = -Infinity;
+    p.lastSyncAt = -Infinity;
     p.lastSeenAt = now;
   }
 
@@ -579,11 +665,12 @@ export class ChannelCore<C extends object> {
   }
 
   private info(p: Peer<C>): PeerInfo {
-    return { ...this.state(p), name: p.name, color: p.color };
+    return { ...this.state(p), name: p.name, color: p.color, look: p.look };
   }
 
+  /** 저장 형태로 복사. v1 attachment·예약에는 look/joinedAt이 없으므로 기본값을 채운다 */
   private record(r: PeerRecord): PeerRecord {
     const { sid, visitorId, name, color, x, y, state, dir, seatId } = r;
-    return { sid, visitorId, name, color, x, y, state, dir, seatId };
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look: Array.isArray(r.look) ? r.look : [], joinedAt: r.joinedAt ?? 0 };
   }
 }

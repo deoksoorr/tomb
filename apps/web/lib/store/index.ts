@@ -3,15 +3,17 @@ import { env } from "../env";
 import { notFound } from "../http";
 import type { GraveListResponse, PublicGrave } from "../types";
 import { isGraveId } from "../validate";
+import { MemoryAccounts } from "./accounts-memory";
+import { RedisAccounts } from "./accounts-redis";
 import { MemoryStore } from "./memory";
 import { mockGraves } from "./mock";
 import { RedisStore } from "./redis";
-import type { GraveRecord, GraveStore } from "./types";
+import type { AccountStore, GraveRecord, GraveStore } from "./types";
 
-export type { GraveRecord, GraveStore } from "./types";
+export type { AccountStore, GraveRecord, GraveStore } from "./types";
 
 // HMR로 모듈이 다시 로드돼도 로컬 데이터가 날아가지 않게 globalThis에 둔다
-const g = globalThis as typeof globalThis & { __tombStore?: GraveStore };
+const g = globalThis as typeof globalThis & { __tombStore?: GraveStore; __tombAccounts?: AccountStore };
 
 /** Redis 환경변수가 있으면 RedisStore, 없으면 (로컬 한정) 목업을 심은 MemoryStore */
 export function getStore(): GraveStore {
@@ -29,11 +31,27 @@ export function getStore(): GraveStore {
   return g.__tombStore;
 }
 
-/** 클라이언트로 내보낼 형태. ownerTokenHash·hidden은 절대 내보내지 않는다 */
-export function toPublicGrave(r: GraveRecord): PublicGrave {
+/** 계정 저장소 (묘비 저장소와 같은 백엔드). 로컬 계정은 꾸미기를 놓을 때 MemoryStore를 같이 바꾼다 */
+export function getAccounts(): AccountStore {
+  const cur = g.__tombAccounts;
+  const conn = env.redis();
+  if (conn) return cur instanceof RedisAccounts ? cur : (g.__tombAccounts = new RedisAccounts(conn));
+  getStore(); // 운영에서 Redis가 없으면 여기서 실패한다
+  if (cur instanceof MemoryAccounts) return cur;
+  const fresh = new MemoryAccounts(() => getStore() as MemoryStore);
+  g.__tombAccounts = cur ? Object.assign(fresh, cur, { graves: () => getStore() as MemoryStore }) : fresh;
+  return g.__tombAccounts;
+}
+
+/**
+ * 클라이언트로 내보낼 형태. ownerTokenHash·hidden·ownerAccountId는 절대 내보내지 않는다.
+ * 꾸미기는 만료되지 않은 것만 (없으면 필드를 뺀다)
+ */
+export function toPublicGrave(r: GraveRecord, now = Date.now()): PublicGrave {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { ownerTokenHash, hidden, ...pub } = r;
-  return pub;
+  const { ownerTokenHash, hidden, ownerAccountId, decor, ...pub } = r;
+  const live = decor?.filter((d) => d.until > now);
+  return live?.length ? { ...pub, decor: live } : pub;
 }
 
 /** 등록 순(오래된 것 먼저) = 격자 배치 순서 */
@@ -46,7 +64,7 @@ export async function listPublic(store: GraveStore, now = Date.now()): Promise<G
     .sort((a, b) => b.revives - a.revives || byCreated(a, b))
     .slice(0, 10)
     .map((r) => r.id);
-  return { graves: visible.map(toPublicGrave), reviveTop, generatedAt: now };
+  return { graves: visible.map((r) => toPublicGrave(r, now)), reviveTop, generatedAt: now };
 }
 
 /** 공개 조회·반응용. 없거나 숨겨진 묘비는 404 */
@@ -65,9 +83,13 @@ export async function releaseImage(store: GraveStore, url: string | undefined): 
   await deleteImage(url);
 }
 
-/** 데이터와 이미지(Blob 또는 로컬 업로드)를 함께 정리한다 */
-export async function deleteGrave(store: GraveStore, id: string): Promise<boolean> {
+/** 데이터·이미지(Blob 또는 로컬 업로드)·세운 계정의 묘비 목록을 함께 정리한다 */
+export async function deleteGrave(store: GraveStore, id: string, accounts = getAccounts()): Promise<boolean> {
   const removed = await store.remove(id);
-  if (removed) await releaseImage(store, removed.imageUrl);
-  return !!removed;
+  if (!removed) return false;
+  await Promise.all([
+    releaseImage(store, removed.imageUrl),
+    removed.ownerAccountId ? accounts.removeGrave(removed.ownerAccountId, id) : undefined,
+  ]);
+  return true;
 }

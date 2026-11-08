@@ -1,6 +1,6 @@
 import { AVATAR_COLORS, signJoinToken } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { admit, corsHeaders, decodeTicket, encodeTicket, isAllowedOrigin, parseOrigins } from "./auth";
+import { admit, corsHeaders, decodeTicket, encodeTicket, isAllowedOrigin, parseOrigins, queueVisitor } from "./auth";
 import { readConfig } from "./config";
 
 const SECRET = "test-secret";
@@ -28,7 +28,9 @@ describe("admit", () => {
 
   it("verifies the token and builds a ticket", async () => {
     const t = await admit(SECRET, await signJoinToken(SECRET, claims), 3, { x: 1, y: 2 });
-    expect(t).toEqual({ visitorId: claims.visitorId, name: "달빛 산책", color: AVATAR_COLORS[2], channel: 3, spawn: { x: 1, y: 2 } });
+    expect(t).toEqual({ visitorId: claims.visitorId, name: "달빛 산책", color: AVATAR_COLORS[2], channel: 3, spawn: { x: 1, y: 2 }, look: [] });
+    const withLook = await admit(SECRET, await signJoinToken(SECRET, { ...claims, look: ["hat_cat", "bogus", "hat_straw"] }), 3, undefined);
+    expect(withLook?.look).toEqual(["hat_cat"]); // 카탈로그에 없는 것·같은 부위 중복은 빠진다
   });
 
   it("rejects bad signatures, expired tokens, missing secret, odd visitor ids and other channels", async () => {
@@ -50,12 +52,27 @@ describe("admit", () => {
   });
 
   it("round-trips the internal ticket header with Korean names", () => {
-    const t = { visitorId: "abc", name: "한때는", color: AVATAR_COLORS[0], channel: 2 };
+    const t = { visitorId: "abc", name: "한때는", color: AVATAR_COLORS[0], channel: 2, look: ["hat_cat"] };
     const raw = encodeTicket(t);
     expect(raw).toMatch(/^[\x20-\x7e]+$/); // ByteString
     expect(decodeTicket(raw)).toEqual(t);
     expect(decodeTicket("%7Bnope")).toBeNull();
     expect(decodeTicket(null)).toBeNull();
+  });
+});
+
+describe("queueVisitor", () => {
+  it("accepts only channel-0 queue tokens", async () => {
+    const base = { visitorId: "V1StGXR8_Z5jdHi6B-myT", name: "줄 선 사람", color: AVATAR_COLORS[0] };
+    expect(await queueVisitor(SECRET, await signJoinToken(SECRET, { ...base, channel: 0 }, 600))).toBe(base.visitorId);
+    expect(await queueVisitor(SECRET, await signJoinToken(SECRET, { ...base, channel: 1 }))).toBeNull();
+    expect(await queueVisitor(SECRET, await signJoinToken(SECRET, { ...base, channel: 0 }, -1))).toBeNull();
+    expect(await queueVisitor(undefined, "x")).toBeNull();
+  });
+
+  it("channel tokens cannot be used for /ch/0 either", async () => {
+    const q = await signJoinToken(SECRET, { visitorId: "abc", name: "ab", color: AVATAR_COLORS[0], channel: 0 }, 600);
+    expect(await admit(SECRET, q, 1, undefined)).toBeNull();
   });
 });
 

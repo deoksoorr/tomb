@@ -10,7 +10,9 @@
  * 시나리오
  *   smoke  프로토콜 동작 확인 (welcome/join/snapshot/seat/seatDenied/emote/ping, 403·4003·4004·4002·4008)
  *   1      한 채널에 상한(40)까지 → 41번째는 4001. 지연·수신 Hz·대역폭 측정
- *   2      전 채널 × 상한(400) → 401번째는 pickChannel()이 null(관람 모드), 직접 접속도 모두 4001. 같은 지표 측정
+ *   2      전 채널 × 상한(400) → 401번째는 pickChannel()이 null, 직접 접속도 모두 4001. 같은 지표 측정.
+ *          이어서 대기열: 401번째가 GET /queue로 줄 서기(1번) → 한 명이 1000으로 나가면 401번째에게 그 채널 자리 →
+ *          그 사이 끼어든 신규는 4001 → 401번째가 그 자리로 입장
  *   3      봇 절반이 동시에 끊고 15초 안에 새 토큰으로 재접속 → 같은 sid, resumed. 유예 중 외부인은 4001.
  *          한 명은 돌아오지 않음 → 약 RECONNECT_GRACE_SEC 뒤 leave와 좌석 해제
  *   bench  ChannelCore 틱 처리 시간 (Workers 안에서는 동기 CPU 시간을 잴 수 없어 Node에서 같은 코드로 잰다)
@@ -37,11 +39,13 @@ import {
   parseS2C,
   pickChannel,
   seatById,
+  signGrant,
   signJoinToken,
   type C2S,
   type DirId,
   type LobbyInfo,
   type PeerState,
+  type QueueStatus,
   type S2C,
   type StateId,
   type WelcomeMsg,
@@ -202,6 +206,8 @@ class Bot {
     pos = randomPoint(),
     /** 같은 visitorId로 다시 만들면 "두 번째 탭" */
     readonly visitorId = newVisitorId(),
+    /** 입장 토큰에 실을 꾸미기 */
+    readonly look: string[] = [],
   ) {
     this.x = pos.x;
     this.y = pos.y;
@@ -213,7 +219,7 @@ class Bot {
 
   /** 새 토큰을 서명해 접속하고 welcome 또는 close/HTTP 오류를 기다린다 */
   async connect(channel: number): Promise<ConnectResult> {
-    const token = await signJoinToken(SECRET, { visitorId: this.visitorId, name: this.name, color: this.color, channel });
+    const token = await signJoinToken(SECRET, { visitorId: this.visitorId, name: this.name, color: this.color, channel, look: this.look });
     this.channel = channel;
     this.welcome = null;
     this.closed = null;
@@ -619,6 +625,30 @@ async function smoke(): Promise<void> {
   const g9 = (x: Bot) => x.events.filter((e) => e.t === "graveEvent" && e.graveId === "g9").length;
   check("graveEvent for the same grave relayed once per 5s per channel", g9(a) + g9(b) === 1, `${g9(a)}+${g9(b)}`);
 
+  // v2: 꾸미기(look)·폭죽(firework) 증서, 접속자 목록 다시 받기(sync)
+  const exp = Math.floor(Date.now() / 1000) + 60;
+  const lk = new Bot("smokeLook", undefined, undefined, ["hat_cat"]);
+  await lk.connect(CHANNEL);
+  check("join carries the token's look", await waitFor(() => a.events.some((e) => e.t === "join" && e.sid === lk.sid && e.look.includes("hat_cat")), 1000));
+  a.send({ t: "look", grant: await signGrant(SECRET, { kind: "look", visitorId: a.visitorId, look: ["hat_straw"], exp }) });
+  const sawLook = (x: Bot) => x.events.some((e) => e.t === "look" && e.sid === a.sid && e.look[0] === "hat_straw");
+  check("look grant → look{sid,look} to everyone (sender included)", await waitFor(() => sawLook(b) && sawLook(a), 1000));
+  const fwGrant = await signGrant(SECRET, { kind: "firework", visitorId: a.visitorId, item: "fw_small", nonce: newVisitorId().slice(0, 12), exp });
+  const fireworks = (x: Bot) => x.events.filter((e) => e.t === "firework" && e.sid === a.sid).length;
+  a.send({ t: "firework", grant: fwGrant });
+  check("firework grant → firework{sid,item,x,y} to everyone", await waitFor(() => fireworks(b) === 1 && fireworks(a) === 1, 1000));
+  await sleep(3_100);
+  a.send({ t: "firework", grant: fwGrant }); // 같은 nonce 재사용
+  await sleep(400);
+  check("the same firework grant cannot be fired twice", fireworks(b) === 1, `${fireworks(b)}`);
+  b.send({ t: "sync" });
+  check(
+    "sync → peers{peers,seats} to the requester only",
+    await waitFor(() => b.events.some((e) => e.t === "peers" && e.peers.some((p) => p.sid === a.sid)), 1000) &&
+      !a.events.some((e) => e.t === "peers"),
+  );
+  lk.leave();
+
   // 아무도 움직이지 않으면 틱이 멈추고 DO가 hibernate된다(로컬 workerd는 유휴 약 10초 뒤).
   // 깨어난 뒤 소켓 attachment로 좌석·위치가 복원되는지 본다.
   a.send({ t: "sit", seatId: "cA" });
@@ -683,7 +713,7 @@ async function scenario1(): Promise<void> {
 
   const l = await lobbyUntil((x) => x.channels[CHANNEL - 1]?.count === cap);
   check("lobby reports the full channel", l.channels[CHANNEL - 1]?.count === cap, `${l.channels[CHANNEL - 1]?.count}/${cap}`);
-  if (CHANNEL === 1 && l.total === cap) check("lobby auto-opens channel 2 (ch1 ≥ threshold)", l.channels[1]?.open === true);
+  check("lobby lists every channel as open", l.channels.length === l.maxChannels && l.channels.every((c) => c.open));
   await teardown(bots);
 }
 
@@ -711,7 +741,35 @@ async function scenario2(): Promise<void> {
   const codes: string[] = [];
   for (let ch = 1; ch <= max; ch++) codes.push(describeResult(await extra.connect(ch)));
   check(`bot #${max * cap + 1}: direct connect to every channel → 4001`, codes.every((c) => c === `close ${CLOSE.CHANNEL_FULL}`), codes.join(","));
-  await teardown(all);
+
+  // 대기열 (순차 입장)
+  const queued = new Bot("s2-queued");
+  const qToken = await signJoinToken(SECRET, { visitorId: queued.visitorId, name: queued.name, color: queued.color, channel: 0 }, 600);
+  const st1 = await queuePoll(qToken);
+  check(`bot #${max * cap + 1}: GET /queue → waiting, position 1`, st1.state === "waiting" && st1.position === 1, JSON.stringify(st1));
+  const leaver = all[Math.floor(Math.random() * all.length)];
+  const freed = leaver.channel;
+  leaver.leave(); // 1000 → 유예 없이 자리가 빈다
+  await waitFor(() => !leaver.open, 2000);
+  const intruder = new Bot("s2-intruder");
+  const ri = await intruder.connect(freed);
+  check(`newcomer cutting in to channel ${freed} right after the leave → 4001`, "code" in ri && ri.code === CLOSE.CHANNEL_FULL, describeResult(ri));
+  let st: QueueStatus = st1;
+  for (let i = 0; i < 20 && st.state !== "admitted"; i++) {
+    await sleep(500);
+    st = await queuePoll(qToken);
+  }
+  check(`queued bot is admitted to channel ${freed} (seat held)`, st.state === "admitted" && st.channel === freed, JSON.stringify(st));
+  const ri2 = await intruder.connect(freed);
+  check("newcomer cannot take the held seat → 4001", "code" in ri2 && ri2.code === CLOSE.CHANNEL_FULL, describeResult(ri2));
+  const rq = st.state === "admitted" ? await queued.connect(st.channel) : { code: 0 };
+  check("queued bot joins the held seat", isWelcome(rq), describeResult(rq));
+  await teardown([...all, queued]);
+}
+
+async function queuePoll(token: string): Promise<QueueStatus> {
+  const res = await fetch(`${HTTP_URL}/queue?t=${token}`, { headers: { Origin: ORIGIN } });
+  return (await res.json()) as QueueStatus;
 }
 
 async function scenario3(): Promise<void> {
@@ -798,13 +856,15 @@ function bench(): void {
       dropReservation: () => {},
       requestTick: () => {},
       countChanged: () => {},
+      verifyGrant: async () => null,
+      claimNonce: () => true,
       lastPing: () => 0,
       visitorJoined: () => {},
       visitorLeft: () => {},
     },
   );
   const pos = conns.map((_, i) => ({ x: 60 + (i % 10) * 50, y: 60 + Math.floor(i / 10) * 80 }));
-  conns.forEach((c, i) => core.join(c, { visitorId: `v${i}`, name: `b${i}`, color: AVATAR_COLORS[0], channel: 1, spawn: pos[i] }, 0));
+  conns.forEach((c, i) => core.join(c, { visitorId: `v${i}`, name: `b${i}`, color: AVATAR_COLORS[0], channel: 1, spawn: pos[i], look: [] }, 0));
   const tickMs: number[] = [];
   const moveUs: number[] = [];
   let now = 0;

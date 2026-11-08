@@ -1,5 +1,6 @@
 import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../reports";
-import type { Grave, ReviveResponse } from "../types";
+import { MAX_DECOR_PER_GRAVE } from "@tomb/protocol";
+import type { Grave, GraveDecor, ReviveResponse } from "../types";
 import {
   FLOWER_TTL_SEC,
   REPORT_HIDE_THRESHOLD,
@@ -21,6 +22,8 @@ export class MemoryStore implements GraveStore {
   private flowers = new Map<string, number>();
   private revives = new Map<string, number>();
   private revivers = new Map<string, Set<string>>();
+  private reviveEarned = new Map<string, Set<string>>();
+  private decor = new Map<string, GraveDecor[]>();
   /** 신고한 IP 해시 (숨김 판정에 세는 집합) */
   private reportIps = new Map<string, Set<string>>();
   /** 신고한 방문자 (재신고 판정용) */
@@ -45,6 +48,7 @@ export class MemoryStore implements GraveStore {
     return {
       ...g,
       hidden: this.hidden.has(g.id) || undefined,
+      decor: this.decor.get(g.id),
       flowers: this.flowers.get(g.id) ?? 0,
       revives: this.revives.get(g.id) ?? 0,
     };
@@ -70,13 +74,23 @@ export class MemoryStore implements GraveStore {
   }
 
   async put(grave: Grave): Promise<void> {
-    this.graves.set(grave.id, { ...grave, hidden: undefined });
+    this.graves.set(grave.id, { ...grave, hidden: undefined, decor: undefined });
   }
 
   async remove(id: string): Promise<Grave | null> {
     const g = this.graves.get(id);
     if (!g) return null;
-    for (const m of [this.graves, this.flowers, this.revives, this.revivers, this.reportIps, this.reporters, this.reportLogs])
+    for (const m of [
+      this.graves,
+      this.flowers,
+      this.revives,
+      this.revivers,
+      this.reviveEarned,
+      this.decor,
+      this.reportIps,
+      this.reporters,
+      this.reportLogs,
+    ])
       m.delete(id);
     this.hidden.delete(id);
     return g;
@@ -128,6 +142,29 @@ export class MemoryStore implements GraveStore {
     const count = (this.revives.get(id) ?? 0) + (revived ? 1 : -1);
     this.revives.set(id, count);
     return { revived, count };
+  }
+
+  async firstRevive(id: string, visitorId: string): Promise<boolean> {
+    const set = this.setOf(this.reviveEarned, id);
+    if (set.has(visitorId)) return false;
+    set.add(visitorId);
+    return true;
+  }
+
+  /**
+   * 묘비에 꾸미기 놓기 (MemoryAccounts가 가방 차감과 함께 동기적으로 부른다 → 원자적).
+   * 만료된 것을 정리하고, 최대 개수를 넘으면 가장 먼저 놓은 것(만료가 가장 이른 것)을 뺀다. 묘비가 없으면 null
+   */
+  applyDecor(id: string, itemId: string, until: number, now: number): GraveDecor[] | null {
+    if (!this.graves.has(id)) return null;
+    const kept = (this.decor.get(id) ?? []).filter((d) => d.until > now).sort((a, b) => a.until - b.until);
+    const next = [...kept.slice(Math.max(0, kept.length - MAX_DECOR_PER_GRAVE + 1)), { itemId, until }];
+    this.decor.set(id, next);
+    return next;
+  }
+
+  hasGrave(id: string): boolean {
+    return this.graves.has(id);
   }
 
   async report(

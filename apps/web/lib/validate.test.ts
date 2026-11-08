@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { todayKst } from "./epitaph";
-import { GraveInputSchema, JoinRequestSchema } from "./validate";
+import { createGraveSchema, GraveInputSchema, JoinRequestSchema, quickLifespan, QuickGraveInputSchema } from "./validate";
 
 const base = {
   name: "  동네 맛집 지도  ",
@@ -144,5 +144,34 @@ describe("JoinRequestSchema", () => {
     expect(JoinRequestSchema.safeParse({ ...join, color: "#000000" }).error?.issues[0]?.message).toBe(
       "고를 수 있는 색이 아니에요.",
     );
+  });
+});
+
+describe("간단 묘비 입력", () => {
+  it("얼마나 살았나요 → 날짜 (사망일 = KST 오늘, 향년 = 고른 날수, 달·윤년 경계 포함)", () => {
+    expect(quickLifespan("day", "2026-11-08")).toEqual({ bornAt: "2026-11-08", diedAt: "2026-11-08", ageDays: 1 });
+    expect(quickLifespan("week", "2026-03-03")).toEqual({ bornAt: "2026-02-25", diedAt: "2026-03-03", ageDays: 7 });
+    expect(quickLifespan("month", "2024-03-01")).toEqual({ bornAt: "2024-02-01", diedAt: "2024-03-01", ageDays: 30 });
+    expect(quickLifespan("year", "2026-01-01")).toEqual({ bornAt: "2025-01-02", diedAt: "2026-01-01", ageDays: 365 });
+    for (const lived of ["season", "half", "years"] as const) {
+      const r = quickLifespan(lived, "2026-11-08");
+      expect(GraveInputSchema.safeParse({ ...base, ...r }).data?.ageDays).toBe(r.ageDays);
+    }
+  });
+
+  it("기본값: 묘비명 `향년 {N}일, 조용히 별세`, 사인 기타, 선택 필드 없음", () => {
+    const r = QuickGraveInputSchema.parse({ name: " 할 일 앱 ", lived: "week", mourner: "새벽코더" });
+    expect(r).toMatchObject({ name: "할 일 앱", epitaph: "향년 7일, 조용히 별세", causes: ["other"], ageDays: 7, diedAt: todayKst() });
+    expect(r.links).toBeUndefined();
+    expect(QuickGraveInputSchema.parse({ name: "a", lived: "day", cause: "time", epitaph: "짧았다", mourner: "새벽코더" })).toMatchObject({
+      epitaph: "짧았다",
+      causes: ["time"],
+    });
+  });
+
+  it("lived가 있으면 간단 입력, 없으면 전체 입력으로 검증한다", () => {
+    expect(createGraveSchema({ lived: "day" })).toBe(QuickGraveInputSchema);
+    expect(createGraveSchema({ name: "x" })).toBe(GraveInputSchema);
+    expect(createGraveSchema(null)).toBe(GraveInputSchema);
   });
 });

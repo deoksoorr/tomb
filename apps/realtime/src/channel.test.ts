@@ -9,6 +9,7 @@ import {
   encodeMove,
   seatById,
   type C2S,
+  type Grant,
   type PeerState,
   type S2C,
   type StateId,
@@ -19,6 +20,7 @@ import {
   ChannelCore,
   SERVER_WARP_COOLDOWN_MS,
   STALE_AFTER_MS,
+  SYNC_INTERVAL_MS,
   type ChannelHost,
   type PeerRecord,
   type Reservation,
@@ -33,9 +35,13 @@ type Conn = {
   pingAt?: number;
 };
 
+/** 증서 검증 흉내: 토큰 문자열 = JSON(Grant). "bad"는 서명이 틀린 증서 */
+const grantToken = (g: Grant) => JSON.stringify(g);
+
 function setup(capacity = 3, graceMs = 20_000) {
   const reservations = new Map<number, Reservation>();
   const counts: number[] = [];
+  const nonces = new Map<string, number>();
   /** 로비 레지스트리로 가는 호출: "+v" = 자리 잡음, "-v" = 최종 퇴장 */
   const visitors: string[] = [];
   const host: ChannelHost<Conn> = {
@@ -49,12 +55,18 @@ function setup(capacity = 3, graceMs = 20_000) {
     lastPing: (c) => c.pingAt ?? 0,
     visitorJoined: (v) => void visitors.push(`+${v}`),
     visitorLeft: (v) => void visitors.push(`-${v}`),
+    verifyGrant: async (token) => (token === "bad" ? null : (JSON.parse(token) as Grant)),
+    claimNonce: (nonce, until) => {
+      if (nonces.has(nonce)) return false;
+      nonces.set(nonce, until);
+      return true;
+    },
   };
   const core = new ChannelCore<Conn>({ capacity, graceMs }, host);
   const conn = (id: string): Conn => ({ id, out: [] });
   /** 접속시키고 welcome을 받은 소켓을 돌려준다 */
-  const join = (id: string, now = 0, spawn?: { x: number; y: number }, c = conn(id)) => {
-    core.join(c, { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn }, now);
+  const join = (id: string, now = 0, spawn?: { x: number; y: number }, c = conn(id), look: string[] = []) => {
+    core.join(c, { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn, look }, now);
     return c;
   };
   return { core, reservations, counts, visitors, conn, join };
@@ -77,8 +89,8 @@ describe("join / capacity / duplicate", () => {
     const a = join("a", 0, { x: 100, y: 200 });
     const b = join("b");
     expect(welcome(a)).toMatchObject({ sid: 1, channel: 1, cap: 3, peers: [], seats: {}, resumed: false });
-    expect(welcome(b).peers).toEqual([{ sid: 1, x: 100, y: 200, state: STATE.idle, dir: DIR.down, name: "a", color: AVATAR_COLORS[0] }]);
-    expect(events(a)).toContainEqual({ t: "join", sid: 2, x: SPAWN.x, y: SPAWN.y, state: STATE.idle, dir: DIR.down, name: "b", color: AVATAR_COLORS[0] });
+    expect(welcome(b).peers).toEqual([{ sid: 1, x: 100, y: 200, state: STATE.idle, dir: DIR.down, name: "a", color: AVATAR_COLORS[0], look: [] }]);
+    expect(events(a)).toContainEqual({ t: "join", sid: 2, x: SPAWN.x, y: SPAWN.y, state: STATE.idle, dir: DIR.down, name: "b", color: AVATAR_COLORS[0], look: [] });
     expect(events(b).filter((e) => e.t === "join")).toHaveLength(0);
     expect(a.att?.sid).toBe(1); // 입장 때 attachment 기록
     expect(counts).toEqual([1, 2]);
@@ -437,12 +449,92 @@ describe("lobby registry hooks / evict / stale connections", () => {
   });
 });
 
+describe("v2: look / firework / sync / join-loss guards", () => {
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it("carries the token's look in welcome/join, and a verified look grant updates everyone (10s per connection)", async () => {
+    const { core, join } = setup();
+    const a = join("a", 0, undefined, undefined, ["hat_cat"]);
+    const b = join("b");
+    expect(welcome(b).peers[0].look).toEqual(["hat_cat"]);
+    clear(a, b);
+    const look = (who: string, l: string[], t: number) =>
+      core.message(a, send({ t: "look", grant: grantToken({ kind: "look", visitorId: who, look: l, exp: 9e9 }) }), t);
+    look("a", ["hat_straw", "neck_scarf"], 0);
+    await flush();
+    expect(events(b)).toEqual([{ t: "look", sid: 1, look: ["hat_straw", "neck_scarf"] }]);
+    expect(events(a)).toEqual(events(b)); // 본인도 받는다
+    expect(a.att?.look).toEqual(["hat_straw", "neck_scarf"]); // attachment에 저장
+    look("a", ["hat_flower"], 5_000); // 10초 안 → 무시
+    look("b", ["hat_flower"], 10_000); // 다른 사람 앞으로 발급된 증서 → 무시
+    core.message(a, send({ t: "look", grant: "bad" }), 20_000); // 서명이 틀림 → 무시
+    await flush();
+    expect(events(b)).toHaveLength(1);
+  });
+
+  it("fires a verified firework once per nonce at the sender's server position (3s per connection)", async () => {
+    const { core, join } = setup();
+    const a = join("a", 0, { x: 200, y: 300 });
+    const b = join("b");
+    clear(a, b);
+    const fw = (nonce: string, t: number) =>
+      core.message(a, send({ t: "firework", grant: grantToken({ kind: "firework", visitorId: "a", item: "fw_heart", nonce, exp: 9e9 }) }), t);
+    fw("n1", 0);
+    fw("n2", 1_000); // 3초 안 → 무시
+    fw("n1", 3_000); // 같은 nonce 재사용 → 무시
+    fw("n3", 6_000);
+    await flush();
+    expect(events(b)).toEqual([
+      { t: "firework", sid: 1, item: "fw_heart", x: 200, y: 300 },
+      { t: "firework", sid: 1, item: "fw_heart", x: 200, y: 300 },
+    ]);
+    expect(events(a)).toEqual(events(b));
+  });
+
+  it("answers sync with the full peer list and seats, to the requester only, at most every 20s", () => {
+    const { core, join } = setup();
+    const chair = seatById("cA")!;
+    const a = join("a", 0, { x: chair.x, y: chair.y + 4 });
+    const b = join("b");
+    core.message(b, send({ t: "sit", seatId: "cA" }), 0); // b는 멀어서 거절
+    core.message(a, send({ t: "sit", seatId: "cA" }), 0);
+    clear(a, b);
+    core.message(b, send({ t: "sync" }), 0);
+    core.message(b, send({ t: "sync" }), SYNC_INTERVAL_MS - 1);
+    expect(events(b)).toEqual([{ t: "peers", peers: [expect.objectContaining({ sid: 1, name: "a", look: [] })], seats: { cA: 1 } }]);
+    expect(events(a)).toEqual([]);
+    core.message(b, send({ t: "sync" }), SYNC_INTERVAL_MS);
+    expect(events(b)).toHaveLength(2);
+  });
+
+  it("clears the attachment of a socket that disconnects (no ghost after hibernation)", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const b = join("b");
+    core.disconnect(a, 1006, 0);
+    core.disconnect(b, 1000, 0);
+    expect(a.att).toBeNull();
+    expect(b.att).toBeNull();
+  });
+
+  it("a delayed lobby kick does not evict a connection made after the claim", () => {
+    const { core, join, conn } = setup();
+    join("a", 1_000);
+    core.evict("a", 500); // 500에 다른 채널로 갔다는 kick이 늦게 왔지만, 여기 연결은 1000에 생겼다
+    expect(core.peer(1)?.online).toBe(true);
+    join("a", 2_000, undefined, conn("a2")); // 교체: joinedAt 갱신
+    core.evict("a", 2_500);
+    expect(core.peer(1)).toBeUndefined();
+  });
+});
+
 describe("restore after hibernation", () => {
   it("rebuilds peers, seats and reservations", () => {
     const { core, conn, join } = setup();
     const a = conn("a");
-    const recA: PeerRecord = { sid: 4, visitorId: "a", name: "a", color: AVATAR_COLORS[1], x: 420, y: 336, state: STATE.sitChair, dir: DIR.right, seatId: "cA" };
-    const recB: Reservation = { sid: 1, visitorId: "b", name: "b", color: AVATAR_COLORS[0], x: 10, y: 10, state: STATE.idle, dir: DIR.up, seatId: null, until: 5_000 };
+    const recA: PeerRecord = { sid: 4, visitorId: "a", name: "a", color: AVATAR_COLORS[1], x: 420, y: 336, state: STATE.sitChair, dir: DIR.right, seatId: "cA", look: ["hat_cat"], joinedAt: 0 };
+    // v1에서 저장된 예약에는 look/joinedAt이 없다
+    const recB = { sid: 1, visitorId: "b", name: "b", color: AVATAR_COLORS[0], x: 10, y: 10, state: STATE.idle, dir: DIR.up, seatId: null, until: 5_000 } as unknown as Reservation;
     core.restore([[a, recA]], [recB], 0);
     expect(core.count).toBe(2);
     expect(core.nextExpiry()).toBe(5_000);
@@ -450,6 +542,8 @@ describe("restore after hibernation", () => {
     const c = join("c");
     expect(welcome(c)).toMatchObject({ sid: 2, seats: { cA: 4 } });
     expect(welcome(c).peers.map((p) => p.sid).sort()).toEqual([1, 4]);
+    expect(welcome(c).peers.find((p) => p.sid === 4)?.look).toEqual(["hat_cat"]);
+    expect(welcome(c).peers.find((p) => p.sid === 1)?.look).toEqual([]);
     core.message(a, send({ t: "stand" }), 0); // 복원된 소켓이 그대로 동작
     expect(events(c)).toContainEqual({ t: "seat", seatId: "cA", sid: null });
   });
