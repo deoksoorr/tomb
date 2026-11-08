@@ -191,6 +191,12 @@ npm run loadtest -w realtime -- --scenario hold --duration 300   # 봇 39명 상
 | POST | `/api/admin/graves/{id}` | `{"action": "hide" \| "unhide" \| "delete" \| "resetReports"}` |
 | POST | `/api/admin/graves/bulk` | `{"ids": [...최대 100개], "action": ...}` → `{"done": [...], "notFound": [...]}` |
 | GET | `/api/admin/channels` | 채널 인원(로비) |
+| GET | `/api/admin/health` | 저장소 점검: 임시 묘비를 쓰기 → 읽기 → 목록 → 헌화 → 살려주세요 → 삭제까지 해 보고 단계별 성공 여부·소요 시간을 돌려준다 |
+
+- **운영자 IP는 방문자 레이트리밋에서 빠진다.**
+  - 대상은 `ADMIN_ALLOWED_IPS`에 명시된 IP다.
+  - 묘비 세우기 하루 3개 같은 한도 없이 반복해서 테스트할 수 있다.
+  - 관리자 키 실패 제한은 그대로 적용된다.
 
 - 신고는 IP 단위로 센다. 서로 다른 IP 5곳이 신고하면 자동으로 숨긴다. 사유는 스팸·광고 / 욕설·혐오 / 개인정보 노출 / 기타.
 - `unhide`는 신고 수를 0으로 되돌린다(기록은 남는다). `resetReports`는 신고 수와 기록을 비운다(숨김 상태는 그대로).
