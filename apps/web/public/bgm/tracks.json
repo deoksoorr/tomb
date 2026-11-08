@@ -4,23 +4,48 @@
       "id": "orgel",
       "title": "오르골",
       "tracks": [
-        { "file": "/bgm/orgel/moonlit-orgel.mp3", "title": "달빛 오르골", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 80 },
-        { "file": "/bgm/orgel/unfinished-lullaby.mp3", "title": "끝내지 못한 자장가", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 80 }
+        { "file": "/bgm/orgel/moonlit-orgel.mp3", "title": "달빛 오르골", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 107 },
+        { "file": "/bgm/orgel/unfinished-lullaby.mp3", "title": "끝내지 못한 자장가", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 124 },
+        { "file": "/bgm/orgel/first-commit-waltz.mp3", "title": "첫 커밋의 왈츠", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 105 },
+        { "file": "/bgm/orgel/archived-dreams.mp3", "title": "보관된 꿈", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 117 },
+        { "file": "/bgm/orgel/hello-world.mp3", "title": "안녕, 세상", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 105 },
+        { "file": "/bgm/orgel/forgotten-readme.mp3", "title": "잊힌 README", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 113 },
+        { "file": "/bgm/orgel/localhost-lullaby.mp3", "title": "로컬호스트 자장가", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 121 },
+        { "file": "/bgm/orgel/sleeping-prototype.mp3", "title": "잠든 프로토타입", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 110 },
+        { "file": "/bgm/orgel/deprecated-star.mp3", "title": "지원 종료된 별", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 108 },
+        { "file": "/bgm/orgel/version-zero-one.mp3", "title": "v0.1의 기억", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 102 }
       ]
     },
     {
       "id": "lofi",
       "title": "로파이",
       "tracks": [
-        { "file": "/bgm/lofi/late-commit.mp3", "title": "늦은 커밋", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 90 },
-        { "file": "/bgm/lofi/todo-forever.mp3", "title": "영원한 TODO", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 90 }
+        { "file": "/bgm/lofi/late-commit.mp3", "title": "늦은 커밋", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 124 },
+        { "file": "/bgm/lofi/todo-forever.mp3", "title": "영원한 TODO", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 131 },
+        { "file": "/bgm/lofi/debugging-at-3am.mp3", "title": "새벽 3시의 디버깅", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 113 },
+        { "file": "/bgm/lofi/empty-repository.mp3", "title": "빈 레포지토리", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 121 },
+        { "file": "/bgm/lofi/sleeping-server-room.mp3", "title": "잠든 서버실", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 134 },
+        { "file": "/bgm/lofi/stale-branch.mp3", "title": "오래된 브랜치", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 108 },
+        { "file": "/bgm/lofi/cold-coffee-stack-trace.mp3", "title": "식은 커피와 스택 트레이스", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 127 },
+        { "file": "/bgm/lofi/stashed-summer.mp3", "title": "git stash 속의 여름", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 115 },
+        { "file": "/bgm/lofi/expired-domain.mp3", "title": "만료된 도메인", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 131 },
+        { "file": "/bgm/lofi/sunday-side-project.mp3", "title": "일요일의 사이드 프로젝트", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 105 },
+        { "file": "/bgm/lofi/merge-tomorrow.mp3", "title": "충돌은 내일 해결하기로", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 121 },
+        { "file": "/bgm/lofi/last-deploy.mp3", "title": "마지막 배포", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 130 }
       ]
     },
     {
       "id": "rain",
       "title": "빗소리 앰비언트",
       "tracks": [
-        { "file": "/bgm/rain/rain-on-stones.mp3", "title": "비석 위의 비", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 120 }
+        { "file": "/bgm/rain/rain-on-stones.mp3", "title": "비석 위의 비", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 126 },
+        { "file": "/bgm/rain/distant-thunder.mp3", "title": "멀리서 우는 천둥", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 134 },
+        { "file": "/bgm/rain/rainy-night-etude.mp3", "title": "비 오는 밤의 연습곡", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 130 },
+        { "file": "/bgm/rain/night-crickets.mp3", "title": "풀벌레 우는 밤", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 120 },
+        { "file": "/bgm/rain/wind-in-the-trees.mp3", "title": "묘지 숲의 바람", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 124 },
+        { "file": "/bgm/rain/tin-roof.mp3", "title": "양철 지붕의 비", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 116 },
+        { "file": "/bgm/rain/drizzle-far-bell.mp3", "title": "이슬비와 먼 종소리", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 128 },
+        { "file": "/bgm/rain/foggy-dawn.mp3", "title": "안개 낀 새벽", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 132 }
       ]
     }
   ]
