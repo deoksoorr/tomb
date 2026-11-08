@@ -233,3 +233,28 @@ export const LS = {
   ownerTokens: "tomb.ownerTokens",
 
 } as const;
+
+// ── 공지사항·문의 ──
+
+/** GET /api/notices → 활성 공지(고정 먼저, 최신 순, 최대 20). 관리자: GET/POST /api/admin/notices, PATCH/DELETE /api/admin/notices/[id] */
+export type Notice = { id: string; title: string; body: string; createdAt: number; pinned: boolean };
+export type NoticeListResponse = { notices: Notice[] };
+export type NoticeInput = { title: string; body: string; pinned?: boolean };
+
+export const INQUIRY_CATEGORIES = [
+  { id: "bug", label: "버그 신고" },
+  { id: "idea", label: "제안" },
+  { id: "account", label: "계정·포인트" },
+  { id: "grave", label: "부적절한 묘비" },
+  { id: "other", label: "기타" },
+] as const;
+export type InquiryCategory = (typeof INQUIRY_CATEGORIES)[number]["id"];
+
+/**
+ * POST /api/inquiry (세션 필요) → 운영자의 GitHub 저장소(GITHUB_INQUIRY_REPO)에 이슈로 등록된다.
+ * message 10~1000자, contact(답장 받을 이메일 등)는 선택 100자.
+ * 저장소가 공개면 문의 내용이 공개되므로 UI는 `GET /api/inquiry` → { enabled, public }을 보고 안내한다.
+ */
+export type InquiryInput = { category: InquiryCategory; message: string; contact?: string };
+export type InquiryResponse = { ok: true };
+export type InquiryInfoResponse = { enabled: boolean; public: boolean };
