@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const put = vi.fn(async (pathname: string) => ({ url: `https://x.public.blob.vercel-storage.com/${pathname}` }));
-vi.mock("@vercel/blob/client", () => ({ put }));
+const uploadPresigned = vi.fn(async (pathname: string) => ({ url: `https://x.public.blob.vercel-storage.com/${pathname}` }));
+vi.mock("@vercel/blob/client", () => ({ uploadPresigned }));
 
 const { api, ApiRequestError } = await import("./api");
 
@@ -23,37 +23,40 @@ function stubFetch(replies: Record<string, Reply>) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  put.mockClear();
+  uploadPresigned.mockClear();
 });
 
 describe("api.uploadScreenshot (blob 모드)", () => {
   const image = new Blob([new Uint8Array(4)], { type: "image/webp" });
 
-  it("방문자 prefix 아래 경로로 토큰을 받아 올린다", async () => {
-    const calls = stubFetch({
-      "GET /api/upload": { status: 200, body: { mode: "blob", prefix: "graves/abc123/" } },
-      "POST /api/upload": { status: 200, body: { type: "blob.generate-client-token", clientToken: "tok" } },
-    });
+  it("방문자 prefix 아래 경로로 presigned 업로드한다 (OIDC·읽기쓰기 토큰 공통)", async () => {
+    stubFetch({ "GET /api/upload": { status: 200, body: { mode: "blob", prefix: "graves/abc123/" } } });
     const url = await api.uploadScreenshot(image);
-    const tokenRequest = calls[1].body as { type: string; payload: { pathname: string } };
-    expect(tokenRequest.type).toBe("blob.generate-client-token");
-    expect(tokenRequest.payload.pathname).toMatch(/^graves\/abc123\/[A-Za-z0-9_-]{1,64}\.webp$/);
-    expect(put).toHaveBeenCalledWith(tokenRequest.payload.pathname, image, expect.objectContaining({ token: "tok" }));
-    expect(url).toContain(tokenRequest.payload.pathname);
+    const [pathname, body, options] = uploadPresigned.mock.calls[0] as unknown as [string, Blob, Record<string, unknown>];
+    expect(pathname).toMatch(/^graves\/abc123\/[A-Za-z0-9_-]{1,64}\.webp$/);
+    expect(body).toBe(image);
+    expect(options).toEqual({ access: "public", handleUploadUrl: "/api/upload", contentType: "image/webp" });
+    expect(url).toContain(pathname);
   });
 
-  it("토큰 발급이 막히면(429) 서버의 한국어 메시지를 그대로 쓴다", async () => {
+  it("업로드 한도를 다 썼으면(429) 모드 조회에서 서버의 한국어 메시지를 그대로 쓴다", async () => {
     stubFetch({
-      "GET /api/upload": { status: 200, body: { mode: "blob", prefix: "graves/abc123/" } },
-      "POST /api/upload": {
+      "GET /api/upload": {
         status: 429,
-        body: { error: { code: "RATE_LIMITED", message: "오늘은 사진을 더 올릴 수 없어요." } },
+        body: { error: { code: "RATE_LIMITED", message: "사진은 하루에 5장까지 올릴 수 있어요." } },
       },
     });
     const err = await api.uploadScreenshot(image).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiRequestError);
-    expect((err as InstanceType<typeof ApiRequestError>).message).toBe("오늘은 사진을 더 올릴 수 없어요.");
-    expect(put).not.toHaveBeenCalled();
+    expect((err as InstanceType<typeof ApiRequestError>).message).toBe("사진은 하루에 5장까지 올릴 수 있어요.");
+    expect(uploadPresigned).not.toHaveBeenCalled();
+  });
+
+  it("presigned 업로드가 실패하면 UPLOAD_FAILED", async () => {
+    stubFetch({ "GET /api/upload": { status: 200, body: { mode: "blob", prefix: "graves/abc123/" } } });
+    uploadPresigned.mockRejectedValueOnce(new Error("Failed to retrieve the presigned URL"));
+    const err = await api.uploadScreenshot(image).catch((e: unknown) => e);
+    expect((err as InstanceType<typeof ApiRequestError>).code).toBe("UPLOAD_FAILED");
   });
 
   it("세션이 없으면(401) 모드 조회에서 바로 서버 메시지", async () => {

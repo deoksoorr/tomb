@@ -1,5 +1,5 @@
 import { verifyJoinToken, type LobbyInfo } from "@tomb/protocol";
-import { getPayloadFromClientToken } from "@vercel/blob/client";
+import { del, issueSignedToken } from "@vercel/blob";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { REALTIME_WS_URL } from "@/lib/realtime";
@@ -11,9 +11,12 @@ import type {
   JoinResponse,
   UploadModeResponse,
 } from "@/lib/types";
+import type { AdminGrave } from "@/lib/admin";
 import * as adminChannels from "./admin/channels/route";
+import * as adminBulk from "./admin/graves/bulk/route";
 import * as adminGrave from "./admin/graves/[id]/route";
 import * as adminGraves from "./admin/graves/route";
+import * as adminSession from "./admin/session/route";
 import * as flower from "./graves/[id]/flower/route";
 import * as report from "./graves/[id]/report/route";
 import * as revive from "./graves/[id]/revive/route";
@@ -26,9 +29,16 @@ import * as localFile from "./upload/local/[...path]/route";
 import * as localUpload from "./upload/local/route";
 import * as upload from "./upload/route";
 
+// Blob 제어 API(네트워크)를 부르는 두 함수만 가짜로 바꾼다. presigned URL 서명 자체는 SDK가 로컬에서 계산한다
+vi.mock("@vercel/blob", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@vercel/blob")>()),
+  issueSignedToken: vi.fn(),
+  del: vi.fn(),
+}));
+
 // 외부 계정 없이 도는 로컬 구성(MemoryStore + 메모리 레이트리밋 + 로컬 업로드)으로 라우트를 직접 호출한다
 beforeAll(() => {
-  for (const k of ["KV_REST_API_URL", "UPSTASH_REDIS_REST_URL", "BLOB_READ_WRITE_TOKEN", "SESSION_SECRET", "JOIN_SECRET"])
+  for (const k of ["KV_REST_API_URL", "UPSTASH_REDIS_REST_URL", "BLOB_READ_WRITE_TOKEN", "BLOB_STORE_ID", "SESSION_SECRET", "JOIN_SECRET"])
     vi.stubEnv(k, "");
   vi.stubEnv("MOCK_GRAVES", "3");
 });
@@ -306,6 +316,27 @@ describe("신고 남용 (QA)", () => {
   });
 });
 
+describe("신고 사유", () => {
+  it("사유를 고르면 기록되고, 본문이 없으면 기타로 받는다. 모르는 사유는 400", async () => {
+    const owner = await newVisitor();
+    const { grave } = await createGrave(owner);
+    const post = (v: Visitor, body?: object) =>
+      report.POST(call(`/api/graves/${grave.id}/report`, { method: "POST", visitor: v, body }), ctx(grave.id));
+    const bad = await post(await newVisitor(), { reason: "boring" });
+    expect(await errorOf(bad)).toEqual({ code: "INVALID_INPUT", message: "알 수 없는 신고 사유예요." });
+    expect((await post(await newVisitor(), { reason: "privacy" })).status).toBe(200);
+    expect((await post(await newVisitor())).status).toBe(200);
+
+    const list = (await (await adminGraves.GET(call("/api/admin/graves", { headers: { "x-admin-key": "dev-admin" } }))).json()) as {
+      graves: AdminGrave[];
+    };
+    const mine = list.graves.find((g) => g.id === grave.id)!;
+    expect(mine.reports).toBe(2);
+    expect(mine.reportLog.map((e) => e.reason)).toEqual(["other", "privacy"]);
+    expect(mine.reportLog[0].at).toBeGreaterThan(Date.now() - 10_000);
+  });
+});
+
 describe("관리자", () => {
   it("키가 없거나 틀리면 401 UNAUTHORIZED", async () => {
     const attempts: (Record<string, string> | undefined)[] = [
@@ -344,6 +375,60 @@ describe("관리자", () => {
     expect((await act(grave.id, "explode")).status).toBe(400);
     expect((await act(grave.id, "delete")).status).toBe(200);
     expect((await act(grave.id, "delete")).status).toBe(404);
+  });
+
+  it("로그인 쿠키: 맞는 키면 12시간짜리 httpOnly·SameSite=Strict 쿠키, 그 쿠키로 API 사용, 로그아웃하면 끝", async () => {
+    const ip = "10.4.4.4";
+    const login = (key: string) =>
+      adminSession.POST(call("/api/admin/session", { method: "POST", body: { key }, headers: { "x-forwarded-for": ip } }));
+    expect((await login("wrong")).status).toBe(401);
+    const ok = await login("dev-admin");
+    const setCookie = ok.headers.get("set-cookie")!;
+    expect(setCookie).toMatch(/^tomb_admin=\d+\.[\w-]+;/);
+    expect(setCookie).toMatch(/HttpOnly/i);
+    expect(setCookie).toMatch(/SameSite=strict/i);
+    expect(setCookie).toMatch(/Max-Age=43200/);
+    const cookie = setCookie.split(";")[0];
+
+    const withCookie = (c: string) => adminGraves.GET(call("/api/admin/graves", { headers: { cookie: c, "x-forwarded-for": ip } }));
+    expect((await withCookie(cookie)).status).toBe(200);
+    expect((await withCookie(cookie.replace(/.$/, (ch) => (ch === "A" ? "B" : "A")))).status).toBe(401);
+    expect((await withCookie("tomb_admin=99999999999.forged")).status).toBe(401);
+    // 쿠키도 키도 없는 요청(로그인 전 화면)은 실패로 세지 않는다
+    for (let i = 0; i < 12; i++) expect((await adminGraves.GET(call("/api/admin/graves", { headers: { "x-forwarded-for": ip } }))).status).toBe(401);
+    expect((await withCookie(cookie)).status).toBe(200);
+
+    const out = await adminSession.DELETE(call("/api/admin/session", { method: "DELETE" }));
+    expect(out.headers.get("set-cookie")).toMatch(/tomb_admin=;.*Max-Age=0/i);
+  });
+
+  it("신고 초기화와 일괄 처리 (최대 100개, 없는 묘비는 따로 알려 준다)", async () => {
+    const owner = await newVisitor();
+    const a = (await createGrave(owner)).grave.id;
+    const b = (await createGrave(owner)).grave.id;
+    const key = { "x-admin-key": "dev-admin" };
+    const bulk = (body: object) => adminBulk.POST(call("/api/admin/graves/bulk", { method: "POST", body, headers: key }));
+    const status = async (id: string) =>
+      ((await (await adminGraves.GET(call("/api/admin/graves", { headers: key }))).json()) as { graves: AdminGrave[] }).graves.find(
+        (g) => g.id === id,
+      );
+
+    await report.POST(call(`/api/graves/${a}/report`, { method: "POST", visitor: await newVisitor(), body: { reason: "spam" } }), ctx(a));
+    expect(await (await bulk({ ids: [a, b, "nope", a], action: "hide" })).json()).toEqual({ done: [a, b], notFound: ["nope"] });
+    expect(await status(a)).toMatchObject({ hidden: true, reports: 1 });
+
+    const reset = await adminGrave.POST(
+      call(`/api/admin/graves/${a}`, { method: "POST", body: { action: "resetReports" }, headers: key }),
+      ctx(a),
+    );
+    expect(reset.status).toBe(200);
+    expect(await status(a)).toMatchObject({ hidden: true, reports: 0, reportLog: [] });
+
+    expect(await (await bulk({ ids: [a, b], action: "delete" })).json()).toEqual({ done: [a, b], notFound: [] });
+    expect(await status(a)).toBeUndefined();
+    expect((await bulk({ ids: [], action: "hide" })).status).toBe(400);
+    expect((await bulk({ ids: Array.from({ length: 101 }, (_, i) => `id${i}`), action: "hide" })).status).toBe(400);
+    expect((await bulk({ ids: ["../x"], action: "hide" })).status).toBe(400);
   });
 
   it("채널 조회: 로비를 프록시하고, 실패하면 502", async () => {
@@ -565,45 +650,93 @@ describe("업로드", () => {
     expect((await errorOf(await post(new File([big], "a.webp", { type: "image/webp" })))).code).toBe("FILE_TOO_LARGE");
   });
 
-  it("Blob: 내 prefix 아래 <이름>.webp 경로만 토큰을 주고, 토큰은 60초짜리", async () => {
-    vi.stubEnv("BLOB_READ_WRITE_TOKEN", `vercel_blob_rw_AbC123xyz_${"s".repeat(30)}`);
-    try {
-      const v = await newVisitor();
-      const { mode, prefix } = await uploadMode(v);
-      expect(mode).toBe("blob");
-      const otherPrefix = (await uploadMode(await newVisitor())).prefix;
-      const tokenFor = (pathname: string) =>
-        upload.POST(
-          call("/api/upload", {
-            method: "POST",
-            visitor: v,
-            body: { type: "blob.generate-client-token", payload: { pathname, clientPayload: null, multipart: false } },
-          }),
-        );
-      for (const bad of [
-        `${otherPrefix}shot.webp`,
-        `${prefix}shot.png`,
-        `${prefix}sub/shot.webp`,
-        `${prefix}../shot.webp`,
-        `${prefix}${"a".repeat(65)}.webp`,
-        "graves/shot.webp",
-      ])
-        expect((await tokenFor(bad)).status, bad).toBe(400);
+  it("모드 조회는 업로드 한도를 미리 확인한다 (쓰지는 않는다)", async () => {
+    const v = await newVisitor();
+    for (let i = 0; i < 3; i++) expect((await upload.GET(call("/api/upload", { visitor: v }))).status).toBe(200);
+    for (let i = 0; i < 5; i++) await uploadLocal(v);
+    const res = await upload.GET(call("/api/upload", { visitor: v }));
+    expect(res.status).toBe(429);
+    expect(await errorOf(res)).toEqual({ code: "RATE_LIMITED", message: "사진은 하루에 5장까지 올릴 수 있어요." });
+  });
+});
 
-      const ok = await tokenFor(`${prefix}shot-1.webp`);
-      expect(ok.status).toBe(200);
-      const payload = getPayloadFromClientToken(((await ok.json()) as { clientToken: string }).clientToken);
-      expect(payload).toMatchObject({
-        pathname: `${prefix}shot-1.webp`,
-        allowedContentTypes: ["image/webp"],
-        maximumSizeInBytes: 300 * 1024,
-        addRandomSuffix: true,
-      });
-      expect(payload.validUntil - Date.now()).toBeGreaterThan(50_000);
-      expect(payload.validUntil - Date.now()).toBeLessThanOrEqual(60_000);
-    } finally {
-      vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
-    }
+describe("업로드 (Blob presigned: OIDC / 읽기쓰기 토큰)", () => {
+  /** issueSignedToken이 돌려주는 위임 토큰 흉내: base64url(JSON 범위) + "." + 서명 */
+  const fakeSignedToken = (opts: { pathname?: string; validUntil?: number }) => ({
+    delegationToken: `${Buffer.from(JSON.stringify({ ...opts, operations: ["put"], storeId: "store_AbC123" })).toString("base64url")}.sig`,
+    clientSigningToken: "client-signing-key",
+    validUntil: opts.validUntil ?? Date.now() + 60_000,
+  });
+  const presignRequest = (v: Visitor, pathname: string) =>
+    upload.POST(
+      call("/api/upload", {
+        method: "POST",
+        visitor: v,
+        body: { type: "blob.generate-presigned-url", payload: { pathname, clientPayload: null, multipart: false } },
+      }),
+    );
+  beforeEach(() => {
+    vi.mocked(issueSignedToken).mockReset().mockImplementation(async (opts) => fakeSignedToken(opts));
+    vi.mocked(del).mockReset();
+  });
+  afterEach(() => {
+    vi.stubEnv("BLOB_STORE_ID", "");
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
+  });
+
+  it("BLOB_STORE_ID만 있어도 blob 모드: 내 prefix 경로만, 토큰 없이(OIDC) 60초짜리 put 권한을 받는다", async () => {
+    vi.stubEnv("BLOB_STORE_ID", "store_AbC123");
+    const v = await newVisitor();
+    const { mode, prefix } = (await (await upload.GET(call("/api/upload", { visitor: v }))).json()) as UploadModeResponse;
+    expect(mode).toBe("blob");
+
+    const otherPrefix = ((await (await upload.GET(call("/api/upload", { visitor: await newVisitor() }))).json()) as UploadModeResponse)
+      .prefix;
+    for (const bad of [`${otherPrefix}shot.webp`, `${prefix}shot.png`, `${prefix}sub/shot.webp`, `${prefix}${"a".repeat(65)}.webp`])
+      expect((await presignRequest(v, bad)).status, bad).toBe(400);
+    expect(issueSignedToken).not.toHaveBeenCalled();
+
+    const ok = await presignRequest(v, `${prefix}shot-1.webp`);
+    expect(ok.status).toBe(200);
+    const opts = vi.mocked(issueSignedToken).mock.calls[0][0];
+    expect(opts).toMatchObject({
+      pathname: `${prefix}shot-1.webp`,
+      operations: ["put"],
+      allowedContentTypes: ["image/webp"],
+      maximumSizeInBytes: 300 * 1024,
+      token: undefined,
+    });
+    expect(opts.validUntil! - Date.now()).toBeGreaterThan(50_000);
+    expect(opts.validUntil! - Date.now()).toBeLessThanOrEqual(60_000);
+
+    const { presignedUrlPayload } = (await ok.json()) as { presignedUrlPayload: { signature: string; params: Record<string, string> } };
+    expect(presignedUrlPayload.signature).toBeTruthy();
+    expect(JSON.stringify(presignedUrlPayload.params)).toMatch(/image\/webp/);
+  });
+
+  it("읽기쓰기 토큰이 있으면 그 토큰을 명시적으로 넘긴다", async () => {
+    const rw = `vercel_blob_rw_AbC123_${"s".repeat(30)}`;
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", rw);
+    const v = await newVisitor();
+    const { prefix } = (await (await upload.GET(call("/api/upload", { visitor: v }))).json()) as UploadModeResponse;
+    expect((await presignRequest(v, `${prefix}shot.webp`)).status).toBe(200);
+    expect(vi.mocked(issueSignedToken).mock.calls[0][0].token).toBe(rw);
+  });
+
+  it("이장하면 OIDC 모드에서도 토큰 없이 Blob 이미지를 지운다 (BLOB_STORE_ID 스토어 호스트만 허용)", async () => {
+    vi.stubEnv("BLOB_STORE_ID", "store_AbC123");
+    const v = await newVisitor();
+    const { prefix } = (await (await upload.GET(call("/api/upload", { visitor: v }))).json()) as UploadModeResponse;
+    const url = `https://abc123.public.blob.vercel-storage.com/${prefix}shot-x1y2.webp`;
+    const other = `https://zzz999.public.blob.vercel-storage.com/${prefix}shot-x1y2.webp`;
+    expect((await graves.POST(call("/api/graves", { method: "POST", visitor: v, body: { ...input, imageUrl: other } }))).status).toBe(400);
+
+    const { grave, ownerToken } = await createGrave(v, { ...input, imageUrl: url });
+    await graveById.DELETE(
+      call(`/api/graves/${grave.id}`, { method: "DELETE", visitor: v, headers: { "x-owner-token": ownerToken } }),
+      ctx(grave.id),
+    );
+    expect(del).toHaveBeenCalledWith(url, { token: undefined });
   });
 });
 

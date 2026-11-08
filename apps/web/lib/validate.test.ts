@@ -112,6 +112,12 @@ describe("GraveInputSchema", () => {
     vi.stubEnv("NODE_ENV", "production");
     expect(parse({ imageUrl: local }).success).toBe(false);
     expect(parse({ imageUrl: blob }).success).toBe(true);
+
+    // OIDC 방식: 토큰 없이 BLOB_STORE_ID(`store_` 접두사, 대소문자 섞임)만 있어도 같은 호스트를 계산한다
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
+    vi.stubEnv("BLOB_STORE_ID", "store_AbC123xyz");
+    expect(parse({ imageUrl: blob }).success).toBe(true);
+    expect(parse({ imageUrl: blob.replace("abc123xyz", "other") }).success).toBe(false);
   });
 
   it("상주: 유저이름 규칙(2~12자, 허용 문자, 금칙어)", () => {

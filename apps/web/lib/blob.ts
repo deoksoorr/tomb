@@ -21,9 +21,9 @@ export function isUploadPathFor(pathname: string, visitorId: string): boolean {
   return pathname.startsWith(prefix) && /^[A-Za-z0-9_-]{1,64}\.webp$/.test(pathname.slice(prefix.length));
 }
 
-/** 토큰(`vercel_blob_rw_<storeId>_<secret>`)의 스토어 공개 호스트. @vercel/blob과 같은 방식으로 storeId를 읽는다 */
+/** 이 프로젝트 스토어의 공개 호스트. SDK는 `https://${storeId}.public.blob.vercel-storage.com`을 만들고 URL은 호스트를 소문자로 바꾼다 */
 function blobHost(): string | null {
-  const storeId = env.blobToken()?.split("_")[3];
+  const storeId = env.blobStoreId();
   return storeId ? `${storeId.toLowerCase()}.public.blob.vercel-storage.com` : null;
 }
 
@@ -87,6 +87,7 @@ export async function deleteImage(url: string | undefined): Promise<void> {
     return;
   }
   try {
+    // 읽기쓰기 토큰이 없으면 token을 비워 두어 SDK가 OIDC(BLOB_STORE_ID)로 인증하게 한다
     await del(url, { token: env.blobToken() });
   } catch (e) {
     console.error("[blob] 이미지 삭제 실패", url, e);

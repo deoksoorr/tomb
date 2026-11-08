@@ -12,6 +12,7 @@ import type {
   UpdateGraveResponse,
   UploadModeResponse,
 } from "./types";
+import type { ReportReason } from "./reports";
 
 // 브라우저 → Next API 호출. 서버가 준 한국어 메시지를 그대로 사용자에게 보여 준다.
 
@@ -37,7 +38,8 @@ export function errorMessage(e: unknown): string {
   return e instanceof ApiRequestError ? e.message : FALLBACK_MESSAGE;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/** JSON 응답을 받고, 실패하면 서버의 `{ error }`를 ApiRequestError로 바꾼다 (관리자 화면도 같이 쓴다) */
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, init);
@@ -62,10 +64,12 @@ function jsonInit(method: string, data: unknown, headers?: Record<string, string
 const gravePath = (id: string, sub = "") => `/api/graves/${encodeURIComponent(id)}${sub}`;
 
 /**
- * WebP 스크린샷을 올리고 공개 주소를 돌려준다. Blob 토큰이 없는 개발 환경에서는 로컬 대체 경로로 보낸다.
- * 업로드 토큰이 60초만 유효하므로 제출 직전에 모드 조회 → 토큰 → 업로드를 연달아 부른다.
+ * WebP 스크린샷을 올리고 공개 주소를 돌려준다. Blob이 연결되지 않은 개발 환경에서는 로컬 대체 경로로 보낸다.
+ * 업로드 URL이 60초만 유효하므로 제출 직전에 모드 조회 → presigned URL → 업로드를 연달아 부른다.
  */
 async function uploadScreenshot(image: Blob): Promise<string> {
+  // 모드 조회가 세션·업로드 한도를 먼저 확인해 한국어 에러(401·429)를 그대로 돌려준다.
+  // (uploadPresigned는 URL 발급 단계의 에러를 "Failed to retrieve the presigned URL"로 뭉갠다)
   const { mode, prefix } = await request<UploadModeResponse>("/api/upload", { cache: "no-store" });
   if (mode === "local") {
     const form = new FormData();
@@ -74,15 +78,14 @@ async function uploadScreenshot(image: Blob): Promise<string> {
   }
   // 서버는 이 방문자 전용 prefix 아래 `[A-Za-z0-9_-]{1,64}.webp` 경로만 받는다
   const pathname = `${prefix}${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}.webp`;
-  // upload()는 토큰 발급 실패(401·429 등)를 "Failed to retrieve the client token"으로 뭉개므로,
-  // 같은 요청을 직접 보내 서버의 한국어 메시지를 살리고 받은 토큰으로 put()한다.
-  const { clientToken } = await request<{ clientToken: string }>(
-    "/api/upload",
-    jsonInit("POST", { type: "blob.generate-client-token", payload: { pathname, clientPayload: null, multipart: false } }),
-  );
-  const { put } = await import("@vercel/blob/client");
+  // presigned 흐름은 읽기쓰기 토큰 방식과 OIDC(BLOB_STORE_ID) 방식 모두에서 돈다
+  const { uploadPresigned } = await import("@vercel/blob/client");
   try {
-    const blob = await put(pathname, image, { access: "public", token: clientToken, contentType: "image/webp" });
+    const blob = await uploadPresigned(pathname, image, {
+      access: "public",
+      handleUploadUrl: "/api/upload",
+      contentType: "image/webp",
+    });
     return blob.url;
   } catch {
     throw new ApiRequestError(0, "UPLOAD_FAILED", UPLOAD_FAILED_MESSAGE);
@@ -102,6 +105,7 @@ export const api = {
     request<unknown>(gravePath(id), { method: "DELETE", headers: { [OWNER_HEADER]: ownerToken } }),
   flower: (id: string) => request<FlowerResponse>(gravePath(id, "/flower"), { method: "POST" }),
   revive: (id: string) => request<ReviveResponse>(gravePath(id, "/revive"), { method: "POST" }),
-  report: (id: string) => request<ReportResponse>(gravePath(id, "/report"), { method: "POST" }),
+  report: (id: string, reason: ReportReason) =>
+    request<ReportResponse>(gravePath(id, "/report"), jsonInit("POST", { reason })),
   uploadScreenshot,
 };

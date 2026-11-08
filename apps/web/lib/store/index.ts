@@ -15,13 +15,17 @@ const g = globalThis as typeof globalThis & { __tombStore?: GraveStore };
 
 /** Redis 환경변수가 있으면 RedisStore, 없으면 (로컬 한정) 목업을 심은 MemoryStore */
 export function getStore(): GraveStore {
-  if (g.__tombStore) return g.__tombStore;
+  const cur = g.__tombStore;
   const conn = env.redis();
-  if (!conn && env.isProd())
+  if (conn) return cur instanceof RedisStore ? cur : (g.__tombStore = new RedisStore(conn));
+  if (env.isProd())
     throw new Error(
       "[store] Redis 환경변수가 없습니다. KV_REST_API_URL/KV_REST_API_TOKEN 또는 UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN을 설정하세요.",
     );
-  g.__tombStore = conn ? new RedisStore(conn) : new MemoryStore(mockGraves(env.mockGraves()));
+  if (cur instanceof MemoryStore) return cur;
+  // 처음이면 목업을 심는다. HMR로 MemoryStore 코드가 바뀌면 옛 인스턴스에는 새 메서드가 없으므로
+  // 데이터(필드)만 새 클래스 인스턴스로 옮긴다 → 로컬에서 세운 묘비를 잃지 않는다
+  g.__tombStore = cur ? Object.assign(new MemoryStore(), cur) : new MemoryStore(mockGraves(env.mockGraves()));
   return g.__tombStore;
 }
 

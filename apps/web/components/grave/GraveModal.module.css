@@ -139,6 +139,30 @@
   text-align: center;
 }
 
+.reasons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+}
+
+.reasons legend {
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.reason {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.reason input {
+  accent-color: var(--candle);
+}
+
 .confirmButtons {
   display: flex;
   justify-content: center;

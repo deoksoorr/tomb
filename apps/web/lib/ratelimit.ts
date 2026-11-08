@@ -97,6 +97,15 @@ export async function rateLimit(action: LimitAction, req: NextRequest, visitorId
   if (blocked.length) throw tooMany(message, Math.max(...blocked.map((v) => v.reset)));
 }
 
+/** 한도를 쓰지 않고 지금 남아 있는지만 본다. 이미 다 썼으면 같은 429를 던진다 */
+export async function assertRateLimitOpen(action: LimitAction, req: NextRequest, visitorId: string): Promise<void> {
+  const { visitor, ip, windowSec, message } = LIMITS[action];
+  const checks = [limiter(`${action}:ip`, { tokens: ip, windowSec }).peek(ipHash(req))];
+  if (visitor !== null) checks.push(limiter(`${action}:v`, { tokens: visitor, windowSec }).peek(visitorId));
+  const blocked = (await Promise.all(checks)).filter((v) => !v.success);
+  if (blocked.length) throw tooMany(message, Math.max(...blocked.map((v) => v.reset)));
+}
+
 /** 실패가 한도에 닿은 IP는 키가 맞아도 잠시 막는다 (맞았는지 여부로 키를 알아내지 못하게) */
 export async function assertAdminNotLocked(req: NextRequest): Promise<void> {
   const v = await limiter("admin-fail", ADMIN_FAILURES).peek(ipHash(req));

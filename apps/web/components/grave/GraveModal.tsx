@@ -6,6 +6,7 @@ import { graveTier } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { api, ApiRequestError, errorMessage, isAbortError } from "@/lib/api";
 import { lifespanLabel } from "@/lib/epitaph";
+import { REPORT_REASON_LABELS, REPORT_REASONS, type ReportReason } from "@/lib/reports";
 import type { GravesState } from "@/lib/hooks/useGraves";
 import { showToast } from "@/lib/hooks/useToasts";
 import { forgetOwnerToken, getOwnerToken } from "@/lib/storage";
@@ -47,6 +48,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   const [missing, setMissing] = useState(false);
   const [pending, setPending] = useState<Partial<Record<Action, boolean>>>({});
   const [confirming, setConfirming] = useState<"report" | "remove" | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReason>("other");
   const [notice, setNotice] = useState<string | null>(null);
   const [ownerToken] = useState(() => getOwnerToken(graveId));
 
@@ -127,7 +129,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   const report = () =>
     run("report", async () => {
       setConfirming(null);
-      await api.report(graveId);
+      await api.report(graveId, reportReason);
       setNotice("신고를 받았어요. 살펴볼게요.");
     });
 
@@ -273,6 +275,23 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
         {confirming ? (
           <div className={styles.confirm} role="group" aria-label="확인">
             <p>{confirming === "report" ? "이 묘비를 신고할까요?" : "이 묘비를 이장(삭제)할까요? 되돌릴 수 없어요."}</p>
+            {confirming === "report" && (
+              <fieldset className={styles.reasons}>
+                <legend className={ui.hint}>신고 사유</legend>
+                {REPORT_REASONS.map((r) => (
+                  <label key={r} className={styles.reason}>
+                    <input
+                      type="radio"
+                      name="report-reason"
+                      value={r}
+                      checked={reportReason === r}
+                      onChange={() => setReportReason(r)}
+                    />
+                    {REPORT_REASON_LABELS[r]}
+                  </label>
+                ))}
+              </fieldset>
+            )}
             <div className={styles.confirmButtons}>
               <button
                 type="button"

@@ -1,6 +1,14 @@
 import { Redis } from "@upstash/redis";
+import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../reports";
 import type { Grave, ReviveResponse } from "../types";
-import { FLOWER_TTL_SEC, REPORT_HIDE_THRESHOLD, type GraveRecord, type GraveStore, type ViewerState } from "./types";
+import {
+  FLOWER_TTL_SEC,
+  REPORT_HIDE_THRESHOLD,
+  type GraveRecord,
+  type GraveStore,
+  type ReportSummary,
+  type ViewerState,
+} from "./types";
 
 // Redis 키 (spec §6)
 const K = {
@@ -13,6 +21,8 @@ const K = {
   revivers: (id: string) => `grave:${id}:revivers`, // SET visitorId
   reports: (id: string) => `grave:${id}:reports`, // SET 신고한 IP 해시 (숨김 판정에 센다)
   reporters: (id: string) => `grave:${id}:reporters`, // SET 신고한 visitorId (재신고 판정)
+  reportLog: (id: string) => `grave:${id}:reportlog`, // LIST {at, reason} JSON, 최신 먼저 최대 50개
+  reported: "graves:reported", // ZSET 신고 기록이 있는 묘비 → 지금 세는 신고 수 (관리자 목록용)
   flowerMark: (id: string, visitorId: string) => `flower:${id}:${visitorId}`, // STRING NX EX 86400
 };
 const HIDDEN = "hidden:";
@@ -37,14 +47,22 @@ if not redis.call('SET', KEYS[2], '1', 'NX', 'EX', ARGV[2]) then return {0} end
 return {1, redis.call('ZINCRBY', KEYS[3], 1, ARGV[1])}
 `;
 
+// KEYS: meta, reports(IP), reporters(방문자), reportlog, graves:reported
+// ARGV: id, ipHash, visitorId, 숨김 기준, 기록 JSON, 기록 최대 개수
 const REPORT_LUA = `
 if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return nil end
 if redis.call('SISMEMBER', KEYS[3], ARGV[3]) == 1 or redis.call('SADD', KEYS[2], ARGV[2]) == 0 then return 0 end
 redis.call('SADD', KEYS[3], ARGV[3])
-if redis.call('SCARD', KEYS[2]) >= tonumber(ARGV[4]) then redis.call('HSET', KEYS[1], '${HIDDEN}' .. ARGV[1], '1') end
+redis.call('LPUSH', KEYS[4], ARGV[5])
+redis.call('LTRIM', KEYS[4], 0, tonumber(ARGV[6]) - 1)
+local n = redis.call('SCARD', KEYS[2])
+redis.call('ZADD', KEYS[5], n, ARGV[1])
+if n >= tonumber(ARGV[4]) then redis.call('HSET', KEYS[1], '${HIDDEN}' .. ARGV[1], '1') end
 return 1
 `;
 
+// 숨김 해제는 신고 수만 0으로 되돌리고(집합 삭제 + 요약 점수 0) 기록은 남긴다
+// KEYS: meta, reports, reporters, graves:reported  ARGV: id, '1'|'0'
 const SET_HIDDEN_LUA = `
 if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return 0 end
 if ARGV[2] == '1' then
@@ -52,7 +70,16 @@ if ARGV[2] == '1' then
 else
   redis.call('HDEL', KEYS[1], '${HIDDEN}' .. ARGV[1])
   redis.call('DEL', KEYS[2], KEYS[3])
+  redis.call('ZADD', KEYS[4], 'XX', 0, ARGV[1])
 end
+return 1
+`;
+
+// KEYS: meta, reports, reporters, reportlog, graves:reported  ARGV: id
+const RESET_REPORTS_LUA = `
+if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return 0 end
+redis.call('DEL', KEYS[2], KEYS[3], KEYS[4])
+redis.call('ZREM', KEYS[5], ARGV[1])
 return 1
 `;
 
@@ -133,7 +160,8 @@ export class RedisStore implements GraveStore {
       .zrem(K.created, id)
       .zrem(K.revive, id)
       .zrem(K.flower, id)
-      .del(K.revivers(id), K.reports(id), K.reporters(id))
+      .zrem(K.reported, id)
+      .del(K.revivers(id), K.reports(id), K.reporters(id), K.reportLog(id))
       .exec();
     return parse(raw);
   }
@@ -141,10 +169,33 @@ export class RedisStore implements GraveStore {
   async setHidden(id: string, hidden: boolean): Promise<boolean> {
     const r = await this.redis.eval<string[], number>(
       SET_HIDDEN_LUA,
-      [K.meta, K.reports(id), K.reporters(id)],
+      [K.meta, K.reports(id), K.reporters(id), K.reported],
       [id, hidden ? "1" : "0"],
     );
     return Number(r) === 1;
+  }
+
+  async resetReports(id: string): Promise<boolean> {
+    const r = await this.redis.eval<string[], number>(
+      RESET_REPORTS_LUA,
+      [K.meta, K.reports(id), K.reporters(id), K.reportLog(id), K.reported],
+      [id],
+    );
+    return Number(r) === 1;
+  }
+
+  /** ZRANGE 1회 + 신고된 묘비마다 LRANGE (파이프라인 1회). 관리자 화면에서만 부른다 */
+  async reportSummary(): Promise<Map<string, ReportSummary>> {
+    const counts = pairs(await this.redis.zrange<string[]>(K.reported, 0, -1, { withScores: true }));
+    const out = new Map<string, ReportSummary>();
+    if (!counts.size) return out;
+    const p = this.redis.pipeline();
+    for (const id of counts.keys()) p.lrange(K.reportLog(id), 0, -1);
+    const logs = await p.exec<string[][]>();
+    [...counts].forEach(([id, count], i) => {
+      out.set(id, { count: Number(count), log: logs[i].map((raw) => JSON.parse(raw) as ReportLogEntry) });
+    });
+    return out;
   }
 
   async viewer(id: string, visitorId: string): Promise<ViewerState> {
@@ -175,11 +226,18 @@ export class RedisStore implements GraveStore {
     return r ? { revived: Number(r[0]) === 1, count: Number(r[1]) } : null;
   }
 
-  async report(id: string, visitorId: string, ipHash: string): Promise<"added" | "duplicate" | null> {
+  async report(
+    id: string,
+    visitorId: string,
+    ipHash: string,
+    reason: ReportReason,
+    at = Date.now(),
+  ): Promise<"added" | "duplicate" | null> {
+    const entry: ReportLogEntry = { at, reason };
     const r = await this.redis.eval<string[], number | null>(
       REPORT_LUA,
-      [K.meta, K.reports(id), K.reporters(id)],
-      [id, ipHash, visitorId, String(REPORT_HIDE_THRESHOLD)],
+      [K.meta, K.reports(id), K.reporters(id), K.reportLog(id), K.reported],
+      [id, ipHash, visitorId, String(REPORT_HIDE_THRESHOLD), JSON.stringify(entry), String(REPORT_LOG_MAX)],
     );
     if (r === null) return null;
     return Number(r) === 1 ? "added" : "duplicate";

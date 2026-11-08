@@ -31,13 +31,27 @@ export const env = {
     return url && token ? { url, token } : null;
   },
 
+  // ── Vercel Blob: 두 연결 방식을 모두 받는다 ──
+  // 1) 읽기쓰기 토큰 BLOB_READ_WRITE_TOKEN (`vercel_blob_rw_<storeId>_<secret>`)
+  // 2) OIDC: BLOB_STORE_ID(`store_<storeId>`) + 런타임에 Vercel이 주는 OIDC 토큰 (SDK가 알아서 읽는다)
+  /** 있으면 SDK 호출에 명시적으로 넘기고, 없으면 넘기지 않아 SDK가 OIDC로 인증하게 둔다 */
   blobToken: () => read("BLOB_READ_WRITE_TOKEN"),
+  /** 스토어 id. @vercel/blob과 같은 규칙: 토큰의 네 번째 조각, 또는 BLOB_STORE_ID에서 `store_` 접두사를 뗀 값 */
+  blobStoreId(): string | undefined {
+    const id = read("BLOB_READ_WRITE_TOKEN")?.split("_")[3] || read("BLOB_STORE_ID");
+    return id?.replace(/^store_/, "") || undefined;
+  },
+  blobEnabled: (): boolean => !!env.blobStoreId(),
+  blobWebhookKey: () => read("BLOB_WEBHOOK_PUBLIC_KEY"),
 
   /** 브라우저가 접속할 실시간 서버 주소. 운영에서 빠지면 입장 토큰의 wsUrl이 localhost가 되므로 실패시킨다 */
   realtimePublicUrl: () => required("NEXT_PUBLIC_REALTIME_URL", REALTIME_HTTP_URL).replace(/\/$/, ""),
   realtimeWsUrl: (): string => env.realtimePublicUrl().replace(/^http/, "ws"),
   /** 서버에서 로비를 조회할 주소. 내부망 주소가 따로 있으면 REALTIME_INTERNAL_URL로 덮어쓴다 */
   realtimeHttpUrl: (): string => read("REALTIME_INTERNAL_URL")?.replace(/\/$/, "") ?? env.realtimePublicUrl(),
+
+  /** 관리자 화면·API에 들어올 수 있는 IP 목록 (쉼표 구분, CIDR 가능). 규칙은 lib/ipAllow.ts */
+  adminAllowedIps: () => read("ADMIN_ALLOWED_IPS"),
 
   /** MemoryStore가 처음 뜰 때 심는 목업 묘비 수 */
   mockGraves(): number {

@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { ageDays, parseYmd, todayKst } from "./epitaph";
 import { isAllowedImageUrl } from "./blob";
+import { REPORT_REASONS } from "./reports";
 import { HttpError } from "./http";
 import { CAUSE_TAGS } from "./types";
 
@@ -93,24 +94,43 @@ export const JoinRequestSchema = z.object({
   color: z.string().refine(isAvatarColor, "고를 수 있는 색이 아니에요."),
 });
 
-export const AdminActionSchema = z.object({
-  action: z.enum(["hide", "unhide", "delete"], "action은 hide, unhide, delete 중 하나여야 해요."),
+/** 신고 사유는 선택. 본문이 없거나 사유가 없으면 "other" */
+export const ReportRequestSchema = z.object({
+  reason: z.enum(REPORT_REASONS, "알 수 없는 신고 사유예요.").default("other"),
 });
 
-/** @vercel/blob/client upload()가 보내는 토큰 요청. 업로드 완료 콜백은 쓰지 않으므로 그 이벤트는 받지 않는다 */
-export const BlobTokenRequestSchema = z.object({
-  type: z.literal("blob.generate-client-token", "업로드 요청 형식이 올바르지 않아요."),
+export const ADMIN_ACTIONS = ["hide", "unhide", "delete", "resetReports"] as const;
+export type AdminAction = (typeof ADMIN_ACTIONS)[number];
+const adminAction = z.enum(ADMIN_ACTIONS, "action은 hide, unhide, delete, resetReports 중 하나여야 해요.");
+
+export const AdminActionSchema = z.object({ action: adminAction });
+
+export const AdminBulkSchema = z.object({
+  ids: z
+    .array(z.string().refine((id) => isGraveId(id), "묘비 id 형식이 올바르지 않아요."))
+    .min(1, "묘비를 하나 이상 골라 주세요.")
+    .max(100, "한 번에 100개까지 처리할 수 있어요.")
+    .transform(dedupe),
+  action: adminAction,
+});
+
+export const AdminLoginSchema = z.object({ key: z.string().min(1, "관리자 키를 입력해 주세요.").max(500) });
+
+/** @vercel/blob/client uploadPresigned()가 보내는 presigned URL 요청. 업로드 완료 콜백은 쓰지 않으므로 그 이벤트는 받지 않는다 */
+export const BlobUploadRequestSchema = z.object({
+  type: z.literal("blob.generate-presigned-url", "업로드 요청 형식이 올바르지 않아요."),
   payload: z.looseObject({ pathname: z.string().min(1).max(200) }),
 });
 
 const GRAVE_ID_RE =/^[A-Za-z0-9_-]{1,40}$/;
 export const isGraveId = (id: string) => GRAVE_ID_RE.test(id);
 
-/** JSON 본문을 읽고 검증한다. 실패하면 400 INVALID_INPUT (첫 번째 문제의 메시지) */
+/** JSON 본문을 읽고 검증한다. 빈 본문은 `{}`로 본다. 실패하면 400 INVALID_INPUT (첫 번째 문제의 메시지) */
 export async function readBody<S extends z.ZodType>(req: NextRequest, schema: S): Promise<z.output<S>> {
   let raw: unknown;
   try {
-    raw = await req.json();
+    const text = await req.text();
+    raw = text.trim() ? JSON.parse(text) : {};
   } catch {
     throw new HttpError(400, "INVALID_INPUT", "요청 형식이 올바르지 않아요.");
   }

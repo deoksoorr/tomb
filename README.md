@@ -75,11 +75,15 @@ npm run build      # Next 프로덕션 빌드
 ### Vercel (웹)
 
 1. 프로젝트를 연결하고 **Root Directory를 `apps/web`** 로 지정한다. 모노레포 루트의 npm workspaces를 그대로 설치한다.
-2. Storage → **Blob** 스토어를 만든다. `BLOB_READ_WRITE_TOKEN`이 자동으로 주입된다.
+2. Storage → **Blob** 스토어를 **Public** 접근으로 만들어 프로젝트에 연결한다. 연결 방식은 둘 중 하나이고, 코드는 둘 다 받는다.
+   - OIDC(현재 기본): `BLOB_STORE_ID`와 `BLOB_WEBHOOK_PUBLIC_KEY`가 주입되고, 인증 토큰은 런타임에 Vercel이 OIDC로 준다. 따로 할 일은 없다.
+   - 읽기쓰기 토큰: `BLOB_READ_WRITE_TOKEN`이 주입된다. 있으면 이 토큰을 우선 쓴다.
+   - 업로드는 두 방식 모두 presigned URL로 브라우저 → Blob에 직접 올라가고, 묘비 이미지는 이 스토어의 `graves/` 아래 주소만 허용한다.
 3. Marketplace → **Upstash Redis**를 추가한다. `KV_REST_API_URL`과 `KV_REST_API_TOKEN`이 자동으로 주입된다.
 4. 환경변수를 설정한다. 자세한 설명은 `apps/web/.env.example`에 있다.
    - `SESSION_SECRET`, `JOIN_SECRET`(Worker와 같은 값), `ADMIN_KEY`: 모두 32자 이상
    - `NEXT_PUBLIC_REALTIME_URL`: 예) `https://rt.example.com`
+   - `ADMIN_ALLOWED_IPS`: 관리자 화면에 들어올 IP (8절). 비워 두면 운영에서는 아무도 못 들어온다.
 5. 배포한 웹 주소를 Worker의 `ALLOWED_ORIGINS`에 넣었는지 다시 확인한다.
 
 ## 3. 용량 조정
@@ -168,15 +172,28 @@ npm run loadtest -w realtime -- --scenario hold --duration 300   # 봇 39명 상
   - 이동하거나 "내 캐릭터로" 버튼을 누르면 캐릭터로 돌아온다.
   - 모바일은 두 손가락으로 핀치 줌과 팬을 한다.
 
-## 8. 관리자 API
+## 8. 관리자 화면과 API
 
-헤더 `x-admin-key: <ADMIN_KEY>`가 필요하다.
+`/admin`에서 묘비 숨김·복구·삭제, 신고 내역 확인, 일괄 처리, 채널 현황 확인을 한다. 두 겹으로 막는다.
+
+1. **IP 제한** (`apps/web/proxy.ts`): `/admin`과 `/api/admin/*`는 `ADMIN_ALLOWED_IPS`에 든 IP에서만 열린다.
+   - 쉼표로 구분한 IPv4/IPv6 주소나 CIDR. 예) `58.233.55.38` 또는 `58.233.55.38, 10.0.0.0/8, 2001:db8::/32`
+   - 목록에 없으면 사이트의 일반 404를 보여 준다(관리자 화면이 있다는 것도 숨긴다).
+   - 운영에서 비어 있으면 전부 막는다. 로컬에서 비어 있으면 `127.0.0.1`·`::1`만 허용한다.
+   - **IP가 바뀌면** Vercel 환경변수를 고친 뒤 재배포한다.
+   - IP는 Vercel이 덮어쓰는 `x-forwarded-for` 첫 값을 믿는다. Vercel 밖에 직접 띄우면 이 헤더를 프록시가 덮어쓰도록 해야 한다.
+2. **관리자 키**: `/admin`에서 `ADMIN_KEY`를 한 번 입력하면 12시간짜리 httpOnly 쿠키(SameSite=Strict)를 받는다. API는 헤더 `x-admin-key: <ADMIN_KEY>`(또는 `Authorization: Bearer`)로도 부를 수 있다. 틀린 키는 IP당 분당 10회까지만 받는다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/api/admin/graves` | 숨김 포함 전체 목록 |
-| POST | `/api/admin/graves/{id}` | `{"action":"hide"\|"unhide"\|"delete"}` |
+| POST / DELETE | `/api/admin/session` | 로그인 `{"key"}` / 로그아웃 |
+| GET | `/api/admin/graves` | 숨김 포함 전체 목록 + 묘비별 신고 수·최근 신고 기록(사유·시각, 최대 50개) |
+| POST | `/api/admin/graves/{id}` | `{"action": "hide" \| "unhide" \| "delete" \| "resetReports"}` |
+| POST | `/api/admin/graves/bulk` | `{"ids": [...최대 100개], "action": ...}` → `{"done": [...], "notFound": [...]}` |
 | GET | `/api/admin/channels` | 채널 인원(로비) |
+
+- 신고는 IP 단위로 센다. 서로 다른 IP 5곳이 신고하면 자동으로 숨긴다. 사유는 스팸·광고 / 욕설·혐오 / 개인정보 노출 / 기타.
+- `unhide`는 신고 수를 0으로 되돌린다(기록은 남는다). `resetReports`는 신고 수와 기록을 비운다(숨김 상태는 그대로).
 
 ## 9. 알려진 한계
 

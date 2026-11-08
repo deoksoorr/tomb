@@ -1,5 +1,13 @@
+import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../reports";
 import type { Grave, ReviveResponse } from "../types";
-import { FLOWER_TTL_SEC, REPORT_HIDE_THRESHOLD, type GraveRecord, type GraveStore, type ViewerState } from "./types";
+import {
+  FLOWER_TTL_SEC,
+  REPORT_HIDE_THRESHOLD,
+  type GraveRecord,
+  type GraveStore,
+  type ReportSummary,
+  type ViewerState,
+} from "./types";
 
 type Seed = { grave: Grave; flowers: number; revives: number };
 
@@ -17,6 +25,8 @@ export class MemoryStore implements GraveStore {
   private reportIps = new Map<string, Set<string>>();
   /** 신고한 방문자 (재신고 판정용) */
   private reporters = new Map<string, Set<string>>();
+  /** 신고 기록 (최신 먼저) */
+  private reportLogs = new Map<string, ReportLogEntry[]>();
   /** `${id}:${visitorId}` → 만료 시각(ms) */
   private flowerMarks = new Map<string, number>();
 
@@ -66,7 +76,8 @@ export class MemoryStore implements GraveStore {
   async remove(id: string): Promise<Grave | null> {
     const g = this.graves.get(id);
     if (!g) return null;
-    for (const m of [this.graves, this.flowers, this.revives, this.revivers, this.reportIps, this.reporters]) m.delete(id);
+    for (const m of [this.graves, this.flowers, this.revives, this.revivers, this.reportIps, this.reporters, this.reportLogs])
+      m.delete(id);
     this.hidden.delete(id);
     return g;
   }
@@ -81,6 +92,18 @@ export class MemoryStore implements GraveStore {
       this.reporters.delete(id);
     }
     return true;
+  }
+
+  async resetReports(id: string): Promise<boolean> {
+    if (!this.graves.has(id)) return false;
+    for (const m of [this.reportIps, this.reporters, this.reportLogs]) m.delete(id);
+    return true;
+  }
+
+  async reportSummary(): Promise<Map<string, ReportSummary>> {
+    const out = new Map<string, ReportSummary>();
+    for (const [id, log] of this.reportLogs) out.set(id, { count: this.reportIps.get(id)?.size ?? 0, log: [...log] });
+    return out;
   }
 
   async viewer(id: string, visitorId: string): Promise<ViewerState> {
@@ -107,13 +130,20 @@ export class MemoryStore implements GraveStore {
     return { revived, count };
   }
 
-  async report(id: string, visitorId: string, ipHash: string): Promise<"added" | "duplicate" | null> {
+  async report(
+    id: string,
+    visitorId: string,
+    ipHash: string,
+    reason: ReportReason,
+    at = Date.now(),
+  ): Promise<"added" | "duplicate" | null> {
     if (!this.graves.has(id)) return null;
     const ips = this.setOf(this.reportIps, id);
     const visitors = this.setOf(this.reporters, id);
     if (visitors.has(visitorId) || ips.has(ipHash)) return "duplicate";
     ips.add(ipHash);
     visitors.add(visitorId);
+    this.reportLogs.set(id, [{ at, reason }, ...(this.reportLogs.get(id) ?? [])].slice(0, REPORT_LOG_MAX));
     if (ips.size >= REPORT_HIDE_THRESHOLD) this.hidden.add(id);
     return "added";
   }

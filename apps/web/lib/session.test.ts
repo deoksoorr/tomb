@@ -95,6 +95,18 @@ describe("env", () => {
     expect(env.realtimeWsUrl()).toBe("wss://rt.example.com");
   });
 
+  it("Blob: 읽기쓰기 토큰 또는 OIDC(BLOB_STORE_ID) 어느 쪽이든 켜지고, 스토어 id는 SDK 규칙대로 읽는다", () => {
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
+    vi.stubEnv("BLOB_STORE_ID", "");
+    expect(env.blobEnabled()).toBe(false);
+    vi.stubEnv("BLOB_STORE_ID", "store_AbC123");
+    expect([env.blobEnabled(), env.blobStoreId(), env.blobToken()]).toEqual([true, "AbC123", undefined]);
+    vi.stubEnv("BLOB_STORE_ID", "AbC123");
+    expect(env.blobStoreId()).toBe("AbC123");
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "vercel_blob_rw_Rw999_secret");
+    expect(env.blobStoreId()).toBe("Rw999");
+  });
+
   it("Redis는 KV_* 와 UPSTASH_* 이름을 모두 받는다", () => {
     for (const k of ["KV_REST_API_URL", "KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"])
       vi.stubEnv(k, "");
