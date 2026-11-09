@@ -114,13 +114,20 @@ export function swing(): HTMLCanvasElement {
   line(g, 23, 29, 27, 3, w.mid, 2);
   g.rect(4, 2, 26, 2, w.mid);
   g.hline(4, 29, 2, w.hi);
-  // 줄 + 판 (사람이 타면 아바타가 자기 줄을 그린다 → 은은하게)
+  g.outline(w.line);
+  shadow(g, 17, 30, 15, 1.4, 60);
+  return g.toCanvas();
+}
+
+/** 그네 줄 + 판 (틀과 같은 34×32 캔버스, 같은 자리에 겹쳐 그린다). 누가 타면 숨기고 아바타가 자기 줄·판을 그린다 */
+export function swingSeat(): HTMLCanvasElement {
+  const g = new Grid(34, 32);
+  const w = WOOD;
   g.vline(13, 4, 21, 0xa89a7e);
   g.vline(20, 4, 21, 0xa89a7e);
   g.rect(12, 22, 10, 2, w.mid);
   g.hline(12, 21, 22, w.hi);
   g.outline(w.line);
-  shadow(g, 17, 30, 15, 1.4, 60);
   return g.toCanvas();
 }
 
@@ -423,6 +430,124 @@ export function shrineTree(): HTMLCanvasElement {
   return c;
 }
 
+// ── 모닥불 (v4) ──
+export const FIRE_W = 18;
+export const FIRE_H = 24;
+export const FIRE_FRAMES = 6;
+/** 모닥불 빛 색 */
+export const FIRE_TINT = 0xffa048;
+
+/** 타오르는 불꽃 시트 (FIRE_FRAMES 프레임, 18×24, 원점 바닥 가운데). 맨 아래는 엇갈린 장작 */
+export function campfireSheet(): HTMLCanvasElement {
+  const g = new Grid(FIRE_W * FIRE_FRAMES, FIRE_H);
+  const layers: [number, Color][] = [
+    [1, 0xc8402a],
+    [0.78, 0xf0802c],
+    [0.55, 0xffc048],
+    [0.3, 0xfff0b0],
+  ];
+  for (let f = 0; f < FIRE_FRAMES; f++) {
+    const ox = f * FIRE_W;
+    const ph = (f / FIRE_FRAMES) * Math.PI * 2;
+    const r = rng(311 + f * 7);
+    // 장작 (엇갈린 두 개 + 숯)
+    line(g, ox + 3, 21, ox + 14, 18, WOOD.lo, 2);
+    line(g, ox + 3, 18, ox + 14, 21, WOOD.mid, 2);
+    g.set(ox + 3, 21, WOOD.hi);
+    g.set(ox + 14, 21, WOOD.hi);
+    g.set(ox + 8, 20, 0xff6a2a);
+    g.set(ox + 10, 19, 0xffa040);
+    // 불꽃: 가운데가 높고 프레임마다 혀가 일렁인다
+    for (const [k, c] of layers) {
+      for (let x = 2; x <= 15; x++) {
+        const t = (x - 8.5) / 7;
+        const prof = Math.max(0, 1 - t * t * 1.15);
+        const flick = 0.78 + 0.22 * Math.sin(ph + x * 1.3) + 0.08 * Math.sin(ph * 2 - x * 0.7);
+        const h = Math.round(17 * prof * flick * k);
+        if (h <= 0) continue;
+        const sway = Math.round(Math.sin(ph + (x - 8) * 0.25) * 0.8 * (k < 0.5 ? 0.5 : 1));
+        for (let y = 19 - h; y <= 19; y++) g.set(ox + x + (y < 19 - h * 0.5 ? sway : 0), y, c);
+      }
+    }
+    // 위로 튀는 불티 두세 개
+    for (let i = 0; i < 3; i++) {
+      const x = 4 + Math.floor(r() * 10);
+      const y = 1 + Math.floor(r() * 6);
+      g.set(ox + x, y, r() < 0.5 ? 0xffd060 : 0xff8a3a, 200);
+    }
+  }
+  return g.toCanvas();
+}
+
+/** 불 받침: 돌 고리 + 재 (바닥 장식, 30×14, 원점 가운데) */
+export function campfireRing(): HTMLCanvasElement {
+  const g = new Grid(30, 14);
+  // 그을린 바닥
+  for (let y = 0; y < 14; y++)
+    for (let x = 0; x < 30; x++) {
+      const dx = (x + 0.5 - 15) / 14;
+      const dy = (y + 0.5 - 7) / 6.5;
+      const d = dx * dx + dy * dy;
+      if (d <= 1) g.set(x, y, d < 0.45 ? 0x2a2422 : 0x3a3430, d < 0.45 ? 230 : 120);
+    }
+  // 돌 고리
+  const r = rng(77);
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    const x = Math.round(15 + Math.cos(a) * 11.5);
+    const y = Math.round(7 + Math.sin(a) * 4.6);
+    const c = r() < 0.4 ? STONE.hi : r() < 0.7 ? STONE.mid : STONE.lo;
+    g.rect(x - 1, y - 1, 3, 2, c);
+    g.set(x - 1, y, STONE.lo);
+  }
+  // 재 속 잉걸
+  for (const [x, y] of [[12, 7], [17, 6], [15, 8], [19, 8]]) g.set(x, y, 0xb04a24);
+  return g.toCanvas();
+}
+
+/** 통나무 의자 (2인, 34×11): 껍질 결 + 양 끝 나이테 */
+export function logSeat(): HTMLCanvasElement {
+  const g = new Grid(34, 11);
+  const bark = { hi: 0x8a6a48, mid: 0x6e5236, lo: 0x4e3a26 };
+  g.rect(2, 2, 30, 6, bark.mid);
+  g.hline(3, 30, 2, bark.hi);
+  g.hline(3, 30, 3, bark.hi);
+  g.hline(2, 31, 7, bark.lo);
+  const r = rng(41);
+  for (let i = 0; i < 16; i++) g.set(4 + Math.floor(r() * 26), 3 + Math.floor(r() * 4), r() < 0.5 ? bark.lo : bark.hi);
+  for (const ex of [1, 31]) {
+    g.rect(ex, 2, 2, 6, 0xc8a878);
+    g.set(ex, 4, 0x9a7a52);
+    g.set(ex + 1, 5, 0x9a7a52);
+  }
+  g.outline(WOOD.line);
+  shadow(g, 17, 9.5, 16, 1.2, 60);
+  return g.toCanvas();
+}
+
+/** 그루터기 (1인, 14×11) */
+export function stumpSeat(): HTMLCanvasElement {
+  const g = new Grid(14, 11);
+  g.rect(2, 3, 10, 5, 0x6e5236);
+  g.vline(2, 3, 7, 0x4e3a26);
+  g.vline(11, 3, 7, 0x4e3a26);
+  g.ellipse(6.5, 2.5, 5, 1.6, 0xc8a878);
+  g.set(6, 2, 0x9a7a52);
+  g.set(7, 3, 0x9a7a52);
+  g.set(4, 2, 0xdcc08e);
+  g.outline(WOOD.line);
+  shadow(g, 7, 9.5, 6, 1.1, 60);
+  return g.toCanvas();
+}
+
+/** 연기 한 줌 (12×12, 부드러운 회색) */
+export function smokePuff(): HTMLCanvasElement {
+  const g = new Grid(12, 12);
+  g.ellipse(6, 6, 5, 4.5, 0xb8b4ae, 120);
+  g.ellipse(5, 5, 3, 2.5, 0xd0ccc6, 150);
+  return g.toCanvas();
+}
+
 /** 반딧불 항아리·횃불 등 빛 색 */
 export const TORCH_TINT = 0xffa850;
 export const JAR_TINT = 0xd8f080;
@@ -440,6 +565,7 @@ export const WP = {
   bush2: "prop-bush-2",
   well: "prop-well",
   swing: "prop-swing",
+  swingSeat: "prop-swing-seat",
   bell: "prop-bell",
   cairn0: "prop-cairn-0",
   cairn1: "prop-cairn-1",
@@ -456,6 +582,11 @@ export const WP = {
   cave: "place-cave",
   office: "place-office",
   shrineTree: "place-shrine-tree",
+  fire: "prop-campfire",
+  fireRing: "prop-campfire-ring",
+  logSeat: "prop-log-seat",
+  stumpSeat: "prop-stump-seat",
+  smoke: "fx-smoke-puff",
 } as const;
 
 export const WORLD_PROP_ART: Readonly<Record<string, () => HTMLCanvasElement>> = {
@@ -470,6 +601,7 @@ export const WORLD_PROP_ART: Readonly<Record<string, () => HTMLCanvasElement>> =
   [WP.bush2]: () => bush(2),
   [WP.well]: well,
   [WP.swing]: swing,
+  [WP.swingSeat]: swingSeat,
   [WP.bell]: bellTower,
   [WP.cairn0]: () => cairn(0),
   [WP.cairn1]: () => cairn(1),
@@ -486,4 +618,13 @@ export const WORLD_PROP_ART: Readonly<Record<string, () => HTMLCanvasElement>> =
   [WP.cave]: caveGate,
   [WP.office]: officeHut,
   [WP.shrineTree]: shrineTree,
+  [WP.fireRing]: campfireRing,
+  [WP.logSeat]: logSeat,
+  [WP.stumpSeat]: stumpSeat,
+  [WP.smoke]: smokePuff,
+};
+
+/** 프레임으로 나뉜 시트 (manifest가 frameW/H와 함께 등록한다) */
+export const WORLD_PROP_SHEETS: Readonly<Record<string, { build: () => HTMLCanvasElement; frameW: number; frameH: number }>> = {
+  [WP.fire]: { build: campfireSheet, frameW: FIRE_W, frameH: FIRE_H },
 };

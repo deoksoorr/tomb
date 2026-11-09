@@ -4,15 +4,16 @@ import {
   BUG_SCORE,
   bugsCount,
   bugsPlan,
-  DEADLINE_SCORE,
-  deadlineCoffees,
-  deadlinePlan,
+  comboMult,
   huntPlan,
   huntSpawnable,
   huntTotal,
+  STAR_SCORE,
+  starsCount,
+  starsPlan,
   WAVE_MIN_GAP_SEC,
 } from "./plan";
-import type { BugsResult, DeadlineResult, Drop, HuntResult, RunResult } from "./types";
+import type { BugsResult, Drop, HuntResult, RunResult, StarsResult } from "./types";
 
 // 판 결과 검증과 보상 계산 (서버 전용으로 쓰지만 순수 함수라 테스트가 쉽다).
 // 클라이언트가 보낸 결과는 얼마든지 꾸밀 수 있으므로, 시드로 다시 만든 출현 계획과 서버가 잰 경과 시간으로 상한을 둔다.
@@ -60,8 +61,8 @@ export function evaluate(t: TicketInfo, result: RunResult, serverElapsedMs: numb
       return evalHunt(t, result, eff);
     case "bugs":
       return evalBugs(t, result, eff);
-    case "deadline":
-      return evalDeadline(t, result, eff, limitMs);
+    case "stars":
+      return evalStars(t, result, eff);
   }
 }
 
@@ -101,31 +102,33 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
 }
 
 function evalBugs(t: TicketInfo, r: BugsResult, eff: number): Verdict {
-  for (const v of [r.caught, r.golden, r.wrong, r.maxCombo])
-    if (!Number.isInteger(v) || v < 0) return reject("INVALID_RESULT", "기록 형식이 맞지 않아요.");
   const limit = timeLimitSec("bugs", t.difficulty);
   const plan = bugsPlan(t.seed, t.difficulty, limit, t.st);
   const c = bugsCount(plan, eff);
   if (r.caught > c.bug) return tooHigh("잡은 버그");
   if (r.golden > c.golden) return tooHigh("황금 버그");
   if (r.wrong > c.feature) return tooHigh("기능 누르기");
+  if (r.decoy > c.decoy) return tooHigh("가짜 버그 누르기");
   if (r.maxCombo > r.caught + r.golden) return tooHigh("콤보");
-  const score = Math.max(0, r.caught * BUG_SCORE.bug + r.golden * BUG_SCORE.golden + r.wrong * BUG_SCORE.feature + r.maxCombo * 2);
+  // 콤보 배수 점수는 서버가 순서를 모르므로 "최대 콤보 배수를 모든 타격에 줬을 때"로 상한을 둔다
+  const hits = r.caught * BUG_SCORE.bug + r.golden * BUG_SCORE.golden;
+  const penalty = r.wrong * BUG_SCORE.feature + r.decoy * BUG_SCORE.decoy;
+  const upper = Math.round(hits * comboMult(r.maxCombo)) + penalty;
+  const score = Math.max(0, Math.min(r.score, upper));
   const all = bugsCount(plan, Infinity);
-  const target = Math.max(1, 0.6 * (all.bug * BUG_SCORE.bug + all.golden * BUG_SCORE.golden));
+  const target = Math.max(1, all.bug * BUG_SCORE.bug + all.golden * BUG_SCORE.golden);
   return miniReward(t, score, clamp(score / target, 0, 1));
 }
 
-function evalDeadline(t: TicketInfo, r: DeadlineResult, eff: number, limitMs: number): Verdict {
-  for (const v of [r.survivedMs, r.coffees, r.hits]) if (!Number.isInteger(v) || v < 0) return reject("INVALID_RESULT", "기록 형식이 맞지 않아요.");
-  const survived = Math.min(r.survivedMs, limitMs);
-  if (survived > eff + CLOCK_SLACK_MS) return tooHigh("버틴 시간");
-  const plan = deadlinePlan(t.seed, t.difficulty, limitMs / 1000);
-  if (r.coffees > deadlineCoffees(plan, survived)) return tooHigh("커피");
-  const totalCoffees = Math.max(1, deadlineCoffees(plan, Infinity));
-  const score = Math.floor(survived / 1000) * DEADLINE_SCORE.perSec + r.coffees * DEADLINE_SCORE.coffee;
-  const perf = clamp(0.8 * (survived / limitMs) + 0.2 * (r.coffees / totalCoffees), 0, 1);
-  return miniReward(t, score, perf);
+function evalStars(t: TicketInfo, r: StarsResult, eff: number): Verdict {
+  const plan = starsPlan(t.seed, t.difficulty, timeLimitSec("stars", t.difficulty));
+  // 마지막 별은 판정 범위만큼 늦게 눌릴 수 있다
+  if (r.perfect + r.good + r.miss > starsCount(plan, eff + 300)) return tooHigh("별");
+  if (r.maxCombo > r.perfect + r.good) return tooHigh("콤보");
+  const upper = Math.round((r.perfect * STAR_SCORE.perfect + r.good * STAR_SCORE.good) * comboMult(r.maxCombo));
+  const score = Math.max(0, Math.min(r.score, upper));
+  const target = Math.max(1, plan.length * STAR_SCORE.perfect);
+  return miniReward(t, score, clamp(score / target, 0, 1));
 }
 
 function miniReward(t: TicketInfo, score: number, perf: number): Verdict {

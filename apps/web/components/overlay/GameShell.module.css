@@ -32,6 +32,22 @@
   animation: fadeIn 0.9s ease both;
 }
 
+/* 불멍 중: HUD는 은은하게, 손댈 때만 또렷하게. 묘비 세우기·아래 줄 버튼은 잠시 숨긴다 */
+.campfire {
+  opacity: 0.35;
+  transition: opacity 0.6s ease;
+}
+
+.campfire:hover,
+.campfire:focus-within {
+  opacity: 1;
+}
+
+.campfire .bury,
+.campfire .leftRow {
+  display: none;
+}
+
 .overlay :where(button, a, input, select, label) {
   pointer-events: auto;
 }

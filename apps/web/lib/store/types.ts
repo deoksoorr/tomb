@@ -1,7 +1,7 @@
 import type { CosmeticSlot } from "@tomb/protocol";
 import type { EarnSource } from "../economy";
 import type { ReportLogEntry, ReportReason } from "../reports";
-import { SHRINE_KEEP_DAYS, type Grave, type GraveDecor, type ReviveResponse } from "../types";
+import { SHRINE_KEEP_DAYS, type ActivityItem, type Grave, type GraveDecor, type ReviveResponse } from "../types";
 
 /**
  * 저장소 원본 + 카운트 + 채널(읽을 때 항상 채운다, 예전 묘비는 1).
@@ -111,7 +111,20 @@ export type AccountRecord = {
   graves: string[];
   /** 오늘 쌓은 포인트 */
   todayEarned: number;
+  /** 안 읽은 내 소식 수 (보관 중인 최근 50개 안에서) */
+  activityUnread: number;
+  /** 마지막 닉네임 변경 시각 (0 = 바꾼 적 없음)과 지금까지 바꾼 횟수 */
+  nameChangedAt: number;
+  nameChanges: number;
+  tutorialDone: boolean;
 };
+
+/** 내 소식 보관 개수 */
+export const ACTIVITY_KEEP = 50;
+/** 경제 통계 보관 기간 */
+export const ECON_TTL_SEC = 90 * 86_400;
+/** 닉네임 변경 결과. cooldown이면 다음 가능 시각, points면 포인트 부족 */
+export type NameChangeResult = { ok: true; cost: number } | { ok: false; reason: "cooldown"; nextAllowedAt: number } | { ok: false; reason: "points" };
 
 /** 날짜 인자는 모두 KST 기준 `YYYYMMDD` (lib/store/accounts.ts의 kstDay). 포인트·가방 변화는 모두 원자적이다 */
 export interface AccountStore {
@@ -167,4 +180,32 @@ export interface AccountStore {
   adjustPoints(id: string, delta: number): Promise<number | null>;
   addGrave(id: string, graveId: string): Promise<void>;
   removeGrave(id: string, graveId: string): Promise<void>;
+
+  // ── v4: 소식·닉네임·안내·경제 ──
+  /** 내 소식 하나 (최신 ACTIVITY_KEEP개만 남긴다) */
+  pushActivity(id: string, item: ActivityItem): Promise<void>;
+  /** 최신 순 + 여기까지 읽음 시각 */
+  activity(id: string): Promise<{ items: ActivityItem[]; lastSeenAt: number }>;
+  /** 읽음 시각을 at으로 (되돌리지는 않는다). 새 읽음 시각 */
+  seeActivity(id: string, at: number): Promise<number>;
+  /**
+   * 닉네임 변경 (원자적): 쿨다운 확인 → 첫 변경은 무료, 이후 price 차감 → 이름·시각·횟수 갱신.
+   * 묘비의 상주 이름은 그대로 두고, 계정 이름(랭킹 표시명)만 바뀐다
+   */
+  changeName(id: string, name: string, now: number, price: number, cooldownMs: number): Promise<NameChangeResult>;
+  setTutorialDone(id: string): Promise<void>;
+  /** 날짜(YYYYMMDD)별 경제 통계 필드: `earn:{source}`, `spend:{분류}`, `refund` */
+  economy(days: string[]): Promise<{ date: string; fields: Record<string, number> }[]>;
+  /** 포인트를 가진 적 있는 계정 수와 지갑 잔액 합계 */
+  walletTotals(): Promise<{ wallets: number; accounts: number }>;
+}
+
+/** 포인트 사용 사유 → 경제 통계 분류 (사유 앞부분으로 나눈다) */
+export function spendCategory(reason: string): string {
+  if (reason.startsWith("housing")) return "housing";
+  if (reason.startsWith("사냥터") || reason.startsWith("rpg")) return "rpg";
+  if (reason.startsWith("name")) return "name";
+  if (reason.startsWith("shop")) return "shop";
+  if (reason.startsWith("admin")) return "admin";
+  return "other";
 }

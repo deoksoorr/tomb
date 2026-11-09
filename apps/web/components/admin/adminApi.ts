@@ -1,8 +1,8 @@
 import type { LobbyInfo } from "@tomb/protocol";
-import type { AdminBulkResponse, AdminGrave, AdminPointsResponse } from "@/lib/admin";
+import type { AdminBulkResponse, AdminErrorsResponse, AdminGrave, AdminPointsResponse } from "@/lib/admin";
 import { request } from "@/lib/api";
 import type { AdminHouse } from "@/lib/housing/types";
-import type { Notice, NoticeInput, NoticeListResponse } from "@/lib/types";
+import type { EconomyResponse, Notice, NoticeInput, NoticeListResponse } from "@/lib/types";
 import type { AdminAction } from "@/lib/validate";
 
 // 관리자 화면 → /api/admin/*. 인증은 로그인 때 받은 httpOnly 쿠키가 자동으로 실린다.
@@ -33,6 +33,8 @@ export const adminApi = {
   houseAction: (id: string, action: ModAction) => request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}`, post({ action })),
   guestAction: (id: string, entryId: string, action: ModAction) =>
     request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}/guestbook/${encodeURIComponent(entryId)}`, post({ action })),
+  errors: (days: number) => request<AdminErrorsResponse>(`/api/admin/errors?days=${days}`, { cache: "no-store" }),
+  economy: (days: number) => request<EconomyResponse>(`/api/admin/economy?days=${days}`, { cache: "no-store" }),
   /** 하나든 여러 개든 일괄 처리 경로로 보낸다 */
   apply: (ids: string[], action: AdminAction) => request<AdminBulkResponse>("/api/admin/graves/bulk", post({ ids, action })),
 };

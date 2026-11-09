@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
+import { reportClientError } from "@/lib/hooks/errorReporting";
 import styles from "./error.module.css";
 
 export default function ErrorPage({ error, retry }: { error: unknown; retry: () => void }) {
   useEffect(() => {
     console.error(error);
+    reportClientError("react", error);
   }, [error]);
 
   return (

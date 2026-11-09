@@ -6,7 +6,7 @@ import { errorMessage } from "@/lib/api";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { meStore } from "@/lib/hooks/useMe";
-import { DIFFS, GAMES, gearById, potionById, timeLimitSec, ZONES, type Difficulty, type GameKind, type SkillId } from "@/lib/rpg/catalog";
+import { DIFFS, GAMES, gearById, potionById, ZONES, type Difficulty, type GameKind, type SkillId } from "@/lib/rpg/catalog";
 import { rpgApi, type CharacterAction } from "@/lib/rpg/client";
 import type { RpgView, RunReward, RunResult } from "@/lib/rpg/types";
 import { cx } from "../ui/cx";
@@ -334,7 +334,11 @@ function headline(o: Outcome): string {
     if (o.aborted) return "중간에 나왔어요";
     return r.wavesCleared >= ZONES[o.difficulty].waves ? "모든 웨이브를 막아 냈어요!" : "시간이 다 됐어요";
   }
-  if (r.game === "deadline") return r.survivedMs >= timeLimitSec("deadline", o.difficulty) * 1000 - 50 ? "마감까지 버텼어요!" : o.aborted ? "중간에 나왔어요" : "마감 전에 쓰러졌어요";
+  if (r.game === "stars") {
+    if (o.aborted) return "중간에 나왔어요";
+    const all = r.perfect + r.good + r.miss;
+    return all > 0 && r.miss === 0 ? "모든 별을 이었어요!" : "밤이 끝났어요";
+  }
   return o.aborted ? "중간에 나왔어요" : "시간 끝!";
 }
 

@@ -1,10 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
-import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, TICK_MS, verifyGrant } from "@tomb/protocol";
+import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, ROOM_CAPACITY, TICK_MS, verifyGrant } from "@tomb/protocol";
 import { TICKET_HEADER, decodeTicket, rejectSocket } from "./auth";
 import { ChannelCore, type PeerRecord, type Reservation } from "./channel";
 import { type Env, lobbyStub, readConfig } from "./config";
 
-// Channel DO (채널마다 하나, idFromName("ch-N")).
+// Channel DO (채널마다 하나, idFromName("ch-N")). 방(마을·집·사냥터)도 같은 클래스를 방 모드로 쓴다(idFromName("room:{id}")).
 // 판정은 ChannelCore(channel.ts)가 하고, 여기서는 Hibernation WebSocket·storage·타이머만 이어 준다.
 //
 // 저장 위치
@@ -18,6 +18,8 @@ import { type Env, lobbyStub, readConfig } from "./config";
 
 const RES_PREFIX = "r:";
 const CHANNEL_KEY = "channel";
+/** 방 모드면 방 id ("room:{id}" 이름의 DO). 채널 DO에는 없다 */
+const ROOM_KEY = "room";
 const NONCE_PREFIX = "n:";
 /** 새 방문자 입장 때 로비에 묻는 시간 상한. 넘기면(로비 장애) 받아 준다 — 순서보다 입장 가능성이 우선 */
 const ADMIT_TIMEOUT_MS = 3_000;
@@ -25,8 +27,10 @@ const ADMIT_TIMEOUT_MS = 3_000;
 const REAP_INTERVAL_MS = 5 * 60_000;
 
 export class ChannelDO extends DurableObject<Env> {
-  private readonly core: ChannelCore<WebSocket>;
+  private core: ChannelCore<WebSocket>;
   private channel: number;
+  /** 방 모드(마을·집·사냥터)면 방 id. 월드 채널이면 null */
+  private room: string | null;
   private ticking = false;
   private nextTickAt = 0;
   private reportTimer: ReturnType<typeof setTimeout> | null = null;
@@ -40,9 +44,31 @@ export class ChannelDO extends DurableObject<Env> {
     // heartbeat("ping"→"pong")는 런타임이 직접 답한다. DO를 깨우지 않고 요금도 들지 않는다.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
 
+    // 생성자는 처음 만들 때와 hibernate에서 깨어날 때마다 돈다. 메모리가 비어 있으므로
+    // 소켓 attachment + 저장된 유예 예약으로 다시 세운다. SQLite 백엔드의 동기 KV라 여기서 바로 읽힌다.
+    this.channel = ctx.storage.kv.get<number>(CHANNEL_KEY) ?? 0;
+    this.room = ctx.storage.kv.get<string>(ROOM_KEY) ?? null;
+    this.core = this.makeCore();
+    const active: [WebSocket, PeerRecord][] = [];
+    for (const ws of ctx.getWebSockets()) {
+      // 닫히는 중인 소켓은 TCP 정리 전까지 목록에 남는다 → 열린 것만. attachment가 null이면 교체·추방·퇴장한 소켓
+      const rec = ws.readyState === WebSocket.READY_STATE_OPEN ? (ws.deserializeAttachment() as PeerRecord | null) : null;
+      if (rec) active.push([ws, rec]);
+    }
+    const reserved = Array.from(ctx.storage.kv.list<Reservation>({ prefix: RES_PREFIX }), ([, r]) => r);
+    this.core.restore(active, reserved, Date.now());
+  }
+
+  /**
+   * 판정 로직(ChannelCore)과 이 DO를 잇는다. 방 모드(this.room)면 정원은 ROOM_CAPACITY이고,
+   * 로비 보고·채널 간 중복 정리(레지스트리)를 하지 않는다.
+   */
+  private makeCore(): ChannelCore<WebSocket> {
+    const { ctx, env } = this;
     const { capacity, graceMs } = readConfig(env);
-    this.core = new ChannelCore<WebSocket>(
-      { capacity, graceMs },
+    const room = this.room !== null;
+    return new ChannelCore<WebSocket>(
+      { capacity: room ? ROOM_CAPACITY : capacity, graceMs, room },
       {
         send: (ws, data) => {
           try {
@@ -73,14 +99,18 @@ export class ChannelDO extends DurableObject<Env> {
           ctx.storage.kv.delete(RES_PREFIX + sid);
         },
         requestTick: () => this.startTicking(),
-        countChanged: () => this.scheduleReport(),
+        countChanged: () => {
+          if (!room) this.scheduleReport();
+        },
         lastPing: (ws) => ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0,
         visitorJoined: (visitorId, at) => {
+          if (room) return; // 방은 월드 채널과 동시에 붙어 있을 수 있다 → 레지스트리에 올리지 않는다
           lobbyStub(env)
             .claimVisitor(visitorId, this.channel, at)
             .catch((e) => console.error("claimVisitor failed", e));
         },
         visitorLeft: (visitorId) => {
+          if (room) return;
           lobbyStub(env)
             .releaseVisitor(visitorId, this.channel)
             .catch((e) => console.error("releaseVisitor failed", e));
@@ -97,18 +127,6 @@ export class ChannelDO extends DurableObject<Env> {
         },
       },
     );
-
-    // 생성자는 처음 만들 때와 hibernate에서 깨어날 때마다 돈다. 메모리가 비어 있으므로
-    // 소켓 attachment + 저장된 유예 예약으로 다시 세운다. SQLite 백엔드의 동기 KV라 여기서 바로 읽힌다.
-    this.channel = ctx.storage.kv.get<number>(CHANNEL_KEY) ?? 0;
-    const active: [WebSocket, PeerRecord][] = [];
-    for (const ws of ctx.getWebSockets()) {
-      // 닫히는 중인 소켓은 TCP 정리 전까지 목록에 남는다 → 열린 것만. attachment가 null이면 교체·추방·퇴장한 소켓
-      const rec = ws.readyState === WebSocket.READY_STATE_OPEN ? (ws.deserializeAttachment() as PeerRecord | null) : null;
-      if (rec) active.push([ws, rec]);
-    }
-    const reserved = Array.from(ctx.storage.kv.list<Reservation>({ prefix: RES_PREFIX }), ([, r]) => r);
-    this.core.restore(active, reserved, Date.now());
   }
 
   /** Worker가 Origin·토큰을 검증한 뒤 넘긴 업그레이드 요청 */
@@ -116,6 +134,13 @@ export class ChannelDO extends DurableObject<Env> {
     const ticket = decodeTicket(req.headers.get(TICKET_HEADER));
     if (!ticket || req.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("bad request", { status: 400 });
+    }
+    if (ticket.room !== undefined && ticket.room !== this.room) {
+      // 처음 들어온 방 입장: 이 DO("room:{id}")를 방 모드로 굳힌다. 이름이 채널과 겹치지 않으므로 처음 한 번뿐이고, 아직 아무도 없다
+      if (this.core.count > 0) return new Response("bad request", { status: 400 });
+      this.room = ticket.room;
+      this.ctx.storage.kv.put(ROOM_KEY, ticket.room);
+      this.core = this.makeCore();
     }
     if (ticket.channel !== this.channel) {
       this.channel = ticket.channel;
@@ -126,7 +151,7 @@ export class ChannelDO extends DurableObject<Env> {
     if (!this.core.admits(ticket.visitorId)) return rejectSocket(CLOSE.CHANNEL_FULL, "channel full");
     // 새 방문자는 로비의 대기열 순서를 따른다(줄이 있으면 새치기 불가, 잡아 둔 자리는 그 사람만). 기다리는 사이
     // 다른 요청이 끼어들 수 있으므로 돌아와서 상한을 다시 본다.
-    if (!this.core.has(ticket.visitorId)) {
+    if (this.room === null && !this.core.has(ticket.visitorId)) {
       if (!(await this.lobbyAdmits(ticket.visitorId)) || !this.core.admits(ticket.visitorId)) {
         return rejectSocket(CLOSE.CHANNEL_FULL, "channel full");
       }
@@ -184,7 +209,7 @@ export class ChannelDO extends DurableObject<Env> {
       this.reapDueAt = null;
       this.core.reap(now);
       // 어차피 깨어난 김에 인원을 push한다 → 로비의 5분 재확인이 이 채널을 건너뛴다(유휴 채널을 두 번 깨우지 않게)
-      this.reportNow();
+      if (this.room === null) this.reportNow();
     }
     this.scheduleAlarm();
   }

@@ -25,7 +25,7 @@ export const PLOT_TIERS: readonly PlotTier[] = [
 export const tierById = (id: string): PlotTier | undefined => PLOT_TIERS.find((t) => t.id === id);
 export const nextTier = (id: PlotTierId): PlotTier | undefined => PLOT_TIERS[PLOT_TIERS.findIndex((t) => t.id === id) + 1];
 
-export type FurnitureCategory = "furniture" | "dev" | "nature" | "mood" | "skin";
+export type FurnitureCategory = "furniture" | "dev" | "nature" | "mood" | "skin" | "exterior";
 
 export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   furniture: "가구",
@@ -33,6 +33,7 @@ export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   nature: "자연",
   mood: "분위기",
   skin: "바닥·담장",
+  exterior: "외관",
 };
 
 export type FurnitureDef = {
@@ -54,6 +55,8 @@ export type FurnitureDef = {
   light?: { color: number; r: number };
   /** 바닥·담장 스킨: 칸에 놓지 않고 묘역 전체에 입힌다 */
   skin?: "floor" | "wall";
+  /** 외관 아이템: 마을에 보이는 집 바깥의 한 자리 (지붕·벽·울타리…). 칸에 놓지 않는다 */
+  ext?: ExtSlot;
 };
 
 export const FURNITURE: readonly FurnitureDef[] = [
@@ -96,7 +99,62 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "wall_stone", name: "돌담", desc: "이끼 낀 낮은 돌담.", category: "skin", price: 100, score: 12, w: 1, h: 1, skin: "wall" },
   { id: "wall_hedge", name: "생울타리", desc: "잘 다듬은 초록 울타리.", category: "skin", price: 90, score: 10, w: 1, h: 1, skin: "wall" },
   { id: "wall_iron", name: "철제 담장", desc: "고풍스러운 검은 철책.", category: "skin", price: 150, score: 18, w: 1, h: 1, skin: "wall" },
+  // ── 외관 (마을에서 보이는 집 바깥. 자리마다 하나씩 고른다) ──
+  ...ext("roof", [
+    ["roof_red", "붉은 기와 지붕", "멀리서도 눈에 띄는 붉은 기와.", 60, 8],
+    ["roof_teal", "청록 지붕", "달빛에 반짝이는 청록 함석.", 60, 8],
+    ["roof_thatch", "초가지붕", "볏짚을 엮어 올린 포근한 지붕.", 80, 10],
+    ["roof_moss", "이끼 지붕", "세월이 내려앉은 초록 지붕.", 100, 12],
+  ]),
+  ...ext("facade", [
+    ["facade_brick", "벽돌 벽", "빨간 벽돌을 차곡차곡.", 80, 10],
+    ["facade_stone", "돌벽", "튼튼한 회색 돌벽.", 100, 12],
+    ["facade_white", "흰 회벽", "깔끔한 하얀 벽.", 70, 9],
+  ]),
+  ...ext("fence", [
+    ["fence_picket", "흰 울타리", "앞마당을 두르는 하얀 나무 울타리.", 40, 5],
+    ["fence_stone", "낮은 돌담", "이끼 낀 낮은 돌담.", 60, 8],
+    ["fence_hedge", "생울타리", "둥글게 다듬은 초록 울타리.", 50, 7],
+  ]),
+  ...ext("door", [
+    ["door_red", "빨간 문", "반가운 손님을 부르는 빨간 문.", 30, 4],
+    ["door_arch", "아치 문", "둥근 아치에 작은 창이 난 문.", 60, 8],
+  ]),
+  ...ext("mailbox", [
+    ["mailbox_red", "빨간 우편함", "편지가 올 것만 같은 우편함.", 30, 4],
+    ["mailbox_ghost", "유령 우편함", "밤마다 덜컹거리는 우편함.", 50, 7],
+  ]),
+  ...ext("garden", [
+    ["garden_pots", "앞마당 화분", "문 앞에 놓은 화분 셋.", 30, 4],
+    ["garden_flowers", "앞마당 꽃밭", "현관까지 이어진 꽃길.", 40, 6],
+    ["garden_lanterns", "정원 등불", "문 양옆을 밝히는 작은 등불.", 60, 9],
+  ]),
+  ...ext("sign", [
+    ["sign_wood", "나무 간판", "집 이름을 새긴 나무 간판.", 30, 4],
+    ["sign_neon", "네온 간판", "밤에 은은하게 빛나는 간판.", 90, 12],
+  ]),
 ];
+
+function ext(slot: ExtSlot, rows: [string, string, string, number, number][]): FurnitureDef[] {
+  return rows.map(([id, name, desc, price, score]) => ({ id, name, desc, category: "exterior" as const, price, score, w: 1, h: 1, ext: slot }));
+}
+
+// ── 외관 자리 ──
+
+export type ExtSlot = "roof" | "facade" | "fence" | "door" | "mailbox" | "garden" | "sign";
+export const EXT_SLOTS: readonly { slot: ExtSlot; label: string; base: string; baseName: string }[] = [
+  { slot: "roof", label: "지붕", base: "roof_slate", baseName: "슬레이트 지붕" },
+  { slot: "facade", label: "벽", base: "facade_plank", baseName: "나무 판자 벽" },
+  { slot: "door", label: "문", base: "door_wood", baseName: "나무 문" },
+  { slot: "fence", label: "울타리", base: "fence_none", baseName: "없음" },
+  { slot: "mailbox", label: "우편함", base: "mailbox_none", baseName: "없음" },
+  { slot: "garden", label: "정원", base: "garden_none", baseName: "없음" },
+  { slot: "sign", label: "간판", base: "sign_none", baseName: "없음" },
+];
+export type HouseExteriorMap = Record<ExtSlot, string>;
+export const defaultExterior = (): HouseExteriorMap =>
+  Object.fromEntries(EXT_SLOTS.map((s) => [s.slot, s.base])) as HouseExteriorMap;
+export const isExtBase = (id: string) => EXT_SLOTS.some((s) => s.base === id);
 
 /** 처음부터 깔려 있는 무료 스킨 (카탈로그에서 팔지 않고 점수도 없다) */
 export const DEFAULT_FLOOR = "floor_grass";
@@ -142,7 +200,7 @@ export function nextTitle(score: number): HouseTitle | null {
 }
 
 /** 가장 많이 놓은 갈래에 따라 붙는 별칭 (물건이 3개 이상일 때) */
-export const STYLE_TAGS: Record<Exclude<FurnitureCategory, "skin">, string> = {
+export const STYLE_TAGS: Record<Exclude<FurnitureCategory, "skin" | "exterior">, string> = {
   furniture: "살림꾼의 집",
   dev: "야근 감성",
   nature: "숲속 정원",
@@ -166,3 +224,17 @@ export const GUEST_REPORT_HIDE = 3;
 
 export const HOUSE_NAME_MAX = 20;
 export const HOUSE_INTRO_MAX = 60;
+
+// ── 분양 마을 ──
+
+/** 마을 한 줄에 놓이는 필지 수. 집이 늘면 아래로 한 줄씩 늘어난다 */
+export const VILLAGE_COLS = 4;
+/** 처음부터 보여 주는 필지 수 (빈 필지는 "분양 중") */
+export const VILLAGE_MIN_LOTS = 8;
+/** 고를 수 있는 번지 상한 (마을이 끝없이 길어지지 않게) */
+export const VILLAGE_MAX_LOTS = 400;
+/** 지금 마을에 그릴 필지 수: 가장 큰 번지 다음 줄까지 + 빈 필지를 늘 몇 개 남긴다 */
+export function villageLots(maxLot: number, count: number): number {
+  const need = Math.max(VILLAGE_MIN_LOTS, maxLot, count + 4);
+  return Math.min(VILLAGE_MAX_LOTS, Math.ceil(need / VILLAGE_COLS) * VILLAGE_COLS);
+}

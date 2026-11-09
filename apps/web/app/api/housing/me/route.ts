@@ -13,13 +13,13 @@ export const GET = handler(async (req) => {
   return json<MyHouseResponse>(await myHouse(getHouseStore(), visitorId));
 });
 
-/** 분양 `{ name, intro }`: 작은 터 가격을 쓰고 내 묘역을 만든다 (계정당 1채) */
+/** 분양 `{ name, intro, lot? }`: 작은 터 가격을 쓰고 내 묘역을 만든다 (계정당 1채). lot이 없으면 가장 앞의 빈 번지 */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
-  const { name, intro } = await readBody(req, CreateHouseSchema);
+  const { name, intro, lot } = await readBody(req, CreateHouseSchema);
   await rateLimit("shop", req, visitorId);
   const me = await myPoints(visitorId);
-  return json<MyHouseResponse>(await buyPlot(getHouseStore(), visitorId, name, intro, me.name ?? "이름 없는 유령"), { status: 201 });
+  return json<MyHouseResponse>(await buyPlot(getHouseStore(), visitorId, name, intro, me.name ?? "이름 없는 유령", lot ?? null), { status: 201 });
 });
 
 /** 이름·소개 바꾸기 (무료) */

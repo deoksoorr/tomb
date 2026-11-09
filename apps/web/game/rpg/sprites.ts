@@ -23,6 +23,10 @@ export const RTEX = {
   rock: "rpg-rock",
   bug: "rpg-bug",
   golden: "rpg-golden",
+  decoy: "rpg-decoy",
+  star: "rpg-star",
+  glow: "rpg-glow",
+  dust: "rpg-dust",
   feature: "rpg-feature",
   splat: "rpg-splat",
   coffee: "rpg-coffee",
@@ -272,9 +276,9 @@ function rock(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-function bug(golden: boolean): HTMLCanvasElement {
+function bug(golden: boolean, decoy = false): HTMLCanvasElement {
   const sheet = new Grid(32, 16);
-  const body = golden ? 0xf0c83c : 0xc83c3c;
+  const body = decoy ? 0x7a7f88 : golden ? 0xf0c83c : 0xc83c3c;
   for (let f = 0; f < 2; f++) {
     const g = new Grid(16, 16);
     g.ellipse(8, 9, 4.5, 5, body);
@@ -291,6 +295,11 @@ function bug(golden: boolean): HTMLCanvasElement {
     if (golden) {
       g.set(4, 3, 0xffffff);
       g.set(12, 14, 0xffffff);
+    }
+    if (decoy) {
+      // 주석 처리: 몸통을 가로지르는 '//'
+      for (let i = 0; i < 9; i++) g.set(3 + i, 13 - i, 0xe8e8ec);
+      for (let i = 0; i < 9; i++) g.set(6 + i, 13 - i, 0xe8e8ec);
     }
     g.outline(OUT);
     sheet.draw(g, f * 16, 0);
@@ -329,6 +338,33 @@ function coffee(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
+/** 별: 네 갈래 반짝임이 있는 작은 별 (흰 → 노란 중심) */
+function starTex(): HTMLCanvasElement {
+  const g = new Grid(15, 15);
+  for (let i = 0; i < 15; i++) {
+    const a = 255 - Math.abs(i - 7) * 34;
+    g.set(i, 7, 0xfff3c8, Math.max(40, a));
+    g.set(7, i, 0xfff3c8, Math.max(40, a));
+  }
+  g.ellipse(7.5, 7.5, 2.6, 2.6, 0xfff3c8);
+  g.ellipse(7.5, 7.5, 1.4, 1.4, 0xffffff);
+  return g.toCanvas();
+}
+
+/** 부드러운 빛 번짐 (가산 혼합용, 안티앨리어싱 허용) */
+function glowTex(): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const ctx = c.getContext("2d")!;
+  const gr = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, "rgba(255,240,200,0.9)");
+  gr.addColorStop(0.35, "rgba(255,220,150,0.35)");
+  gr.addColorStop(1, "rgba(255,200,120,0)");
+  ctx.fillStyle = gr;
+  ctx.fillRect(0, 0, 64, 64);
+  return c;
+}
+
 /** 씬 공용 텍스처를 한 번만 만든다 */
 export function ensureRpgTextures(scene: Phaser.Scene): void {
   for (const id of Object.keys(MONSTERS) as MonsterId[]) {
@@ -347,6 +383,10 @@ export function ensureRpgTextures(scene: Phaser.Scene): void {
   addOnce(scene, RTEX.rock, rock);
   addOnce(scene, RTEX.bug, () => bug(false), 16, 16);
   addOnce(scene, RTEX.golden, () => bug(true), 16, 16);
+  addOnce(scene, RTEX.decoy, () => bug(false, true), 16, 16);
+  addOnce(scene, RTEX.star, starTex);
+  addOnce(scene, RTEX.glow, glowTex);
+  addOnce(scene, RTEX.dust, () => dot(1, 0xfff3c8, 0xfff3c8));
   addOnce(scene, RTEX.feature, feature, 16, 16);
   addOnce(scene, RTEX.splat, splat);
   addOnce(scene, RTEX.coffee, coffee);

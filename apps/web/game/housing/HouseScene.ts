@@ -9,6 +9,8 @@ import { Player, type SeatRequester } from "../entities/Player";
 import type { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
 import type { MoveInput } from "../logic/movement";
+import { RoomPresence } from "../net/RoomPresence";
+import type { NetPose } from "../net/sendThrottle";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
 import { Lighting, playerLightRadius } from "../world/Lighting";
@@ -70,6 +72,11 @@ export class HouseScene extends Phaser.Scene {
   private titleLabel!: Phaser.GameObjects.BitmapText;
   private sign = { x: 0, y: 0 };
   private readonly move: MoveInput = { ax: 0, ay: 0, run: false };
+  /** 같은 방(마을·이 집) 사람들 */
+  private presence: RoomPresence | null = null;
+  private readonly pose: NetPose = { x: 0, y: 0, state: 0, dir: 0 };
+  private presenceAt = 0;
+  private presenceKey = "";
   private readonly view = new Phaser.Geom.Rectangle();
   private exiting = false;
   private armed = false;
@@ -146,6 +153,13 @@ export class HouseScene extends Phaser.Scene {
     const sy = this.oy + (t.h + 1) * T + 22;
     this.player = new Player(this, atlas, sx, sy, this.data0.color, this.data0.name);
     this.player.view.setLook(this.data0.look);
+    this.presenceKey = "";
+    this.presence = new RoomPresence(this, {
+      atlas: this.data0.atlas,
+      room: `house:${this.data0.house.id}`,
+      me: this.player.view,
+      getPose: () => this.player.netPose(this.pose),
+    });
     this.player.dir = DIR.up;
     this.physics.add.collider(this.player.sprite, this.wallBodies);
     this.physics.add.collider(this.player.sprite, this.itemBodies);
@@ -184,6 +198,8 @@ export class HouseScene extends Phaser.Scene {
       for (const u of this.unsubs.splice(0)) u();
       this.atmos.destroy();
       this.lighting.destroy();
+      this.presence?.destroy();
+      this.presence = null;
       this.player.destroy();
     });
 
@@ -396,6 +412,21 @@ export class HouseScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const s = 1 / cam.zoom;
     this.player.view.sync(time, s);
+    if (this.presence) {
+      const now = performance.now();
+      this.presence.update(now, cam.worldView, s);
+      // 함께 있는 사람 수·집주인 여부를 UI에 (바뀔 때만, 1초마다 확인)
+      if (now >= this.presenceAt) {
+        this.presenceAt = now + 1000;
+        const st = this.presence.status;
+        const ownerHere = !!this.data0.mine || [...this.presence.remotes.values()].some((r) => r.name === this.data0.house.ownerName);
+        const key = `${st.count}|${this.presence.client.online}|${ownerHere}`;
+        if (key !== this.presenceKey) {
+          this.presenceKey = key;
+          bridge.emit("house:presence", { where: "house", count: st.count, online: this.presence.client.online, ownerHere });
+        }
+      }
+    }
     this.prompt.setScale(s).setVisible(!this.editing && this.nearSign());
     this.titleLabel.setScale(s);
 

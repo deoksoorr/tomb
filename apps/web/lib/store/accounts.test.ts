@@ -297,6 +297,68 @@ function contract(make: () => Kit) {
     expect(await accounts.get(id, DAY, 0)).toMatchObject({ name: "새벽코더", color: "#9fc5a8", body: "cat" });
   });
 
+  it("v4 내 소식: 최신 50개, 읽음 시각은 되돌리지 않고, get()의 activityUnread", async () => {
+    const id = newId();
+    for (let i = 1; i <= 55; i++)
+      await accounts.pushActivity(id, { id: `a${i}`, kind: "flower", at: i * 1000, who: "누군가", targetId: "g", targetName: "무덤" });
+    const { items, lastSeenAt } = await accounts.activity(id);
+    expect(items).toHaveLength(50);
+    expect(items[0]).toEqual({ id: "a55", kind: "flower", at: 55_000, who: "누군가", targetId: "g", targetName: "무덤" });
+    expect(lastSeenAt).toBe(0);
+    expect(await accounts.seeActivity(id, 50_000)).toBe(50_000);
+    expect(await accounts.seeActivity(id, 10_000)).toBe(50_000);
+    expect((await accounts.get(id, DAY, 0)).activityUnread).toBe(5);
+  });
+
+  it("v4 닉네임 변경: 첫 번째 무료 → 쿨다운 → 포인트 부족 → 유료, 동시 요청은 하나만", async () => {
+    const id = newId();
+    const t0 = Date.parse("2026-11-08T03:00:00Z");
+    const WEEK = 7 * 86_400_000;
+    expect(await accounts.changeName(id, "하나둘", t0, 100, WEEK)).toEqual({ ok: true, cost: 0 });
+    expect(await accounts.changeName(id, "셋넷", t0 + 1, 100, WEEK)).toEqual({ ok: false, reason: "cooldown", nextAllowedAt: t0 + WEEK });
+    expect(await accounts.changeName(id, "셋넷", t0 + WEEK, 100, WEEK)).toEqual({ ok: false, reason: "points" });
+    await kit.setPoints(id, 250);
+    const race = await Promise.all([0, 1, 2].map((i) => accounts.changeName(id, `이름${i}`, t0 + WEEK, 100, WEEK)));
+    expect(race.filter((r) => r.ok)).toHaveLength(1);
+    const a = await accounts.get(id, DAY, 0);
+    expect(a).toMatchObject({ points: 150, nameChangedAt: t0 + WEEK, nameChanges: 2 });
+    expect(a.name).toMatch(/^이름\d$/);
+  });
+
+  it("v4 튜토리얼 완료", async () => {
+    const id = newId();
+    expect((await accounts.get(id, DAY, 0)).tutorialDone).toBeFalsy();
+    await accounts.setTutorialDone(id);
+    expect((await accounts.get(id, DAY, 0)).tutorialDone).toBe(true);
+  });
+
+  it("v4 경제 통계: 적립·사용(분류)·환불·관리자 조정이 그날 필드에 더해지고, 지갑 합계", async () => {
+    const id = newId();
+    const now = Date.now(); // 관리자 조정·구매는 지금 날짜로 센다
+    const today = kstDay(now);
+    const stat = async () => (await accounts.economy([today, DAY]))[0].fields;
+    const walletsBefore = await accounts.walletTotals();
+    const before = await stat();
+    await accounts.earn(id, "flower", today);
+    await accounts.earn(id, "flower", today);
+    await accounts.adjustPoints(id, 300);
+    await accounts.spend(id, 30, "rpg:entry", now);
+    await accounts.spend(id, 20, "housing:furniture", now);
+    await accounts.spend(id, 9999, "shop:too-much", now); // 실패는 세지 않는다
+    await accounts.refund(id, 5, "housing:sell", now);
+    await accounts.adjustPoints(id, -7);
+    await accounts.buy(id, "fw_small", 30);
+    const after = await stat();
+    const d = (f: string) => (after[f] ?? 0) - (before[f] ?? 0);
+    expect([d("earn:flower"), d("earn:admin"), d("spend:rpg"), d("spend:housing"), d("refund"), d("spend:admin"), d("spend:shop")]).toEqual([
+      4, 300, 30, 20, 5, 7, 30,
+    ]);
+    expect((await accounts.economy([today, "20261107"])).map((r) => r.date)).toEqual([today, "20261107"]);
+    const walletsAfter = await accounts.walletTotals();
+    expect(walletsAfter.accounts - walletsBefore.accounts).toBe(1);
+    expect(walletsAfter.wallets - walletsBefore.wallets).toBe(4 + 300 - 30 - 20 + 5 - 7 - 30);
+  });
+
   it("내 묘비 목록", async () => {
     const id = newId();
     await accounts.addGrave(id, "g1");

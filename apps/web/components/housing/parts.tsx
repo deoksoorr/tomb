@@ -13,9 +13,12 @@ export function FurnitureIcon({ itemId, size = 48 }: { itemId: string; size?: nu
   const client = useSyncExternalStore(noop, () => true, () => false);
   if (!client) return <span style={{ width: size, height: size, display: "inline-block" }} aria-hidden="true" />;
   const base = furnitureIcon(itemId, 1);
-  const scale = Math.max(1, Math.round(size / Math.max(base.w, base.h)));
+  const big = Math.max(base.w, base.h);
+  const scale = Math.max(1, Math.round(size / big));
   const icon = furnitureIcon(itemId, scale);
-  return <img src={icon.url} width={icon.w} height={icon.h} alt="" aria-hidden="true" style={{ imageRendering: "pixelated", flex: "none" }} />;
+  // 원본이 size보다 크면(외관 미리보기 128px) 비율대로 줄여 보여 준다
+  const k = big > size * 1.5 ? size / big : 1;
+  return <img src={icon.url} width={Math.round(icon.w * k)} height={Math.round(icon.h * k)} alt="" aria-hidden="true" style={{ imageRendering: "pixelated", flex: "none" }} />;
 }
 
 /** 꾸밈 점수 호칭 배지 */

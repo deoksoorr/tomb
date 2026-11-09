@@ -1887,6 +1887,36 @@ const SFX2 = {
     place(bus, noiseHit(rng, 0.01, "hp", 3000, 0.7, 400), 0, 0.15, 0);
     return { fadeIn: 0.0005, fadeOut: 0.02, target: -21 };
   },
+  campfire: (bus, rng, n) => {
+    // 모닥불 루프: 낮은 웅웅(불길) + 쉭쉭 + 탁탁 튀는 장작. 꼬리를 머리에 겹쳐 이음새 없이 돈다
+    const X = 2 * SR, m = n + X, t = stereo(m);
+    for (let c = 0; c < 2; c++) {
+      const lo = biquad(biquad(brown(m, rng), "lp", 180, 0.7), "hp", 35, 0.7), hi = biquad(biquad(pink(m, rng), "bp", 1600, 0.5), "lp", 4000, 0.7);
+      const g1 = smoothNoise(m, rng, 1.7), g2 = smoothNoise(m, rng, 0.35);
+      for (let i = 0; i < m; i++) t[c][i] = lo[i] * 0.5 * (0.6 + 0.4 * g1[i]) + hi[i] * 0.05 * (0.4 + 0.6 * g2[i] ** 2);
+    }
+    const ticks = bank(rng, 32, (r) => normPeak(noiseHit(r, r.range(0.004, 0.02), "bp", r.range(1500, 5000), 1.5, r.range(150, 400))));
+    const pops = bank(rng, 8, (r) => {
+      const x = noiseHit(r, 0.06, "bp", r.range(700, 1400), 2, 60);
+      const f = r.range(250, 450);
+      for (let i = 0; i < x.length; i++) x[i] += 0.5 * Math.sin((TAU * f * i) / SR) * Math.exp((-i / SR) * 50);
+      return normPeak(x);
+    });
+    scatter(t, rng, ticks, 9, 0.05, 0.35, 0.7);
+    scatter(t, rng, pops, 0.6, 0.15, 0.4, 0.5);
+    reverb(t, { room: 0.35, damp: 0.6, wet: 0.08 });
+    for (let c = 0; c < 2; c++)
+      for (let i = 0; i < n; i++) {
+        const u = i / X;
+        bus[c][i] = i < X ? t[c][i] * Math.sqrt(u) + t[c][n + i] * Math.sqrt(1 - u) : t[c][i];
+      }
+    return { fadeIn: 0, fadeOut: 0, hp: 20, lp: 9000, target: -19.65 };
+  },
+  say: (bus) => {
+    // 말풍선 '뿅': 짧게 솟는 사인
+    glide(bus, 0, 0.12, (t) => 520 + 900 * (1 - Math.exp(-t * 35)), 0.5, 0, { atk: 0.003, rel: 0.07 });
+    return { fadeOut: 0.02, target: -21 };
+  },
   miss: (bus) => {
     notes(bus, [[0, 64, 0.5, 0.12], [0.16, 59, 0.5, 0.22]], (b, t, m, v, d, p) => pulse(b, t, m, v * 0.35, p, d, 0.5, { dec: 0.1, sus: 0.5 }));
     return { fadeOut: 0.06 };
@@ -2048,6 +2078,7 @@ const SPECS = [
   ...[
     ["bell", 4], ["splash", 1], ["swim", 1.6], ["bubble", 1.3], ["swing", 1.5], ["wave", 0.8], ["cheer", 2], ["hit", 0.25], ["crit", 0.5],
     ["monster-die", 0.8], ["levelup", 1.2], ["potion", 0.8], ["skill", 0.8], ["coin-drop", 0.8], ["defeat", 1.8], ["victory", 1.6], ["tick", 0.12], ["miss", 0.45],
+    ["campfire", 16], ["say", 0.2],
   ].map(([kind, dur], k) => ({ pl: "sfx", file: kind, kind, seed: 520 + k, dur })),
   ...EXTERNAL,
 ];

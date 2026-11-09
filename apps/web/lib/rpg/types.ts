@@ -46,9 +46,10 @@ export type HuntResult = {
   died: boolean;
   potionsUsed: Record<string, number>;
 };
-export type BugsResult = { game: "bugs"; durationMs: number; caught: number; golden: number; wrong: number; maxCombo: number };
-export type DeadlineResult = { game: "deadline"; durationMs: number; survivedMs: number; coffees: number; hits: number };
-export type RunResult = HuntResult | BugsResult | DeadlineResult;
+/** wrong: '기능'을 누른 수, decoy: 주석 처리된 가짜 버그를 누른 수, score: 콤보 배수까지 넣은 점수(서버가 상한으로 자른다) */
+export type BugsResult = { game: "bugs"; durationMs: number; caught: number; golden: number; wrong: number; decoy: number; maxCombo: number; score: number };
+export type StarsResult = { game: "stars"; durationMs: number; perfect: number; good: number; miss: number; maxCombo: number; score: number };
+export type RunResult = HuntResult | BugsResult | StarsResult;
 
 export type RunStartResponse = {
   ticket: string;
@@ -108,9 +109,16 @@ export type RpgHud = {
   wave?: [number, number];
   kills?: number;
   combo?: number;
+  /** 함께 사냥: 같은 사냥터·난이도 방에 있는 사람 수 (나 포함, 접속 전이면 없음) */
+  peers?: number;
+  /** 별자리 잇기: 마지막 판정 */
+  judge?: "perfect" | "good" | "miss";
   /** 단축키 칸별 남은 쿨타임 비율 0..1 */
   cooldowns: number[];
   potionCooldown: number;
+  /** 사냥터: 공격 쿨다운 남은 비율 0..1, 쿨다운 중 눌러 둔 공격이 있는지 */
+  attack?: number;
+  attackBuffered?: boolean;
   potions: Record<string, number>;
   buffs: { id: string; leftMs: number }[];
   /** 보스 HP 비율 (없으면 null) */

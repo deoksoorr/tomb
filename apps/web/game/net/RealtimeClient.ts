@@ -1,5 +1,6 @@
 import {
   ACT_KINDS,
+  isPhraseId,
   CLOSE,
   MAX_JOIN_RETRIES,
   QUEUE_POLL_MS,
@@ -15,6 +16,7 @@ import {
   pickChannel,
   type ActKind,
   type C2S,
+  type PhraseId,
   type EmoteKind,
   type GraveEventKind,
   type PeerInfo,
@@ -64,6 +66,8 @@ export type NetCallbacks = {
   onFirework(sid: Sid, item: string, x: number, y: number): void;
   /** 한 번 하는 동작 (종 치기·물 튀기기·손 흔들기·환호). 내 것은 오지 않는다 */
   onAct(sid: Sid, kind: ActKind, x: number, y: number): void;
+  /** 정해진 문장 말풍선 (PHRASES id). 내 것은 오지 않는다 */
+  onSay(sid: Sid, id: PhraseId): void;
   /** 입장 토큰에 든 내 아바타 몸 모양 (계정에 저장된 값) */
   onSelfBody?(body: string): void;
 };
@@ -264,6 +268,11 @@ export class RealtimeClient {
     this.send({ t: "act", kind });
   }
 
+  /** 정해진 문장 말풍선 */
+  say(id: PhraseId): void {
+    this.send({ t: "say", id });
+  }
+
   /** 접속자 목록 다시 받기 (자가 복구) */
   sync(): void {
     this.syncPolicy.mark(performance.now());
@@ -433,6 +442,9 @@ export class RealtimeClient {
         case "act":
           if (m.sid !== this.mySid && (ACT_KINDS as readonly string[]).includes(m.kind) && Number.isFinite(m.x) && Number.isFinite(m.y))
             this.cb.onAct(m.sid, m.kind, m.x, m.y);
+          break;
+        case "say":
+          if (m.sid !== this.mySid && isPhraseId(m.id)) this.cb.onSay(m.sid, m.id);
           break;
         case "firework":
           // 내 폭죽은 누른 순간 이미 터뜨렸다 → 중복 재생하지 않는다

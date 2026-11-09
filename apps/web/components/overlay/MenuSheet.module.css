@@ -47,3 +47,23 @@
 .zoom span {
   margin-right: auto;
 }
+
+.phrases {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.phrase {
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 0;
+  background: var(--bg-deep);
+  color: var(--text);
+  text-align: left;
+  box-shadow: var(--px-border);
+}
+
+.phrase:hover {
+  background: var(--surface);
+}

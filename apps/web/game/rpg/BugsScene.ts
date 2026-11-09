@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { BUG_SCORE, BUG_SLOTS, bugsPlan, type BugSpawn } from "@/lib/rpg/plan";
+import { BUG_SCORE, BUG_SLOTS, bugsPlan, comboMult, type BugSpawn } from "@/lib/rpg/plan";
 import type { BugsResult, RpgAction, RpgHud } from "@/lib/rpg/types";
 import { RpgScene } from "./base";
 import { ensureRpgTextures, RTEX } from "./sprites";
@@ -32,6 +32,9 @@ export class BugsScene extends RpgScene {
   private caught = 0;
   private golden = 0;
   private wrong = 0;
+  private decoy = 0;
+  /** 콤보 배수까지 넣은 점수 */
+  private points = 0;
   private combo = 0;
   private maxCombo = 0;
   private lastTick = 0;
@@ -47,7 +50,7 @@ export class BugsScene extends RpgScene {
     this.plan = bugsPlan(this.play.seed, this.play.difficulty, this.play.timeLimitSec, { dex: st.dex, luk: st.luk });
     this.nextIdx = 0;
     this.active = [];
-    this.caught = this.golden = this.wrong = this.combo = this.maxCombo = 0;
+    this.caught = this.golden = this.wrong = this.decoy = this.combo = this.maxCombo = this.points = 0;
     this.lastTick = 0;
     this.cameras.main.setBackgroundColor("#0e0d12");
 
@@ -113,10 +116,12 @@ export class BugsScene extends RpgScene {
       return;
     }
     a.done = true;
-    if (a.s.kind === "feature") {
-      this.wrong++;
+    if (a.s.kind === "feature" || a.s.kind === "decoy") {
+      if (a.s.kind === "feature") this.wrong++;
+      else this.decoy++;
+      this.points += BUG_SCORE[a.s.kind];
       this.combo = 0;
-      this.floatText(cx, cy - 8, `그건 기능이에요 ${BUG_SCORE.feature}`, "#ff6a6a", 11);
+      this.floatText(cx, cy - 8, a.s.kind === "feature" ? `그건 기능이에요 ${BUG_SCORE.feature}` : `주석 처리된 버그 ${BUG_SCORE.decoy}`, "#ff6a6a", 11);
       this.cameras.main.shake(100, 0.004);
       this.sfx.play("miss");
       this.tweens.add({ targets: a.sprite, alpha: 0, duration: 200, onComplete: () => a.sprite.destroy() });
@@ -126,8 +131,10 @@ export class BugsScene extends RpgScene {
     else this.caught++;
     this.combo++;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
-    const pts = BUG_SCORE[a.s.kind];
-    this.floatText(cx, cy - 8, this.combo >= 3 ? `+${pts} · ${this.combo}콤보` : `+${pts}`, a.s.kind === "golden" ? "#ffd04a" : "#f2ead3", a.s.kind === "golden" ? 14 : 12);
+    const mult = comboMult(this.combo);
+    const pts = Math.round(BUG_SCORE[a.s.kind] * mult);
+    this.points += pts;
+    this.floatText(cx, cy - 8, mult > 1 ? `+${pts} ×${mult}` : `+${pts}`, a.s.kind === "golden" ? "#ffd04a" : "#f2ead3", a.s.kind === "golden" ? 14 : 12);
     this.sfx.play(a.s.kind === "golden" ? "coin-drop" : "hit", 0.7);
     const splat = this.add.image(a.sprite.x, a.sprite.y, RTEX.splat).setAlpha(0.8);
     this.tweens.add({ targets: splat, alpha: 0, duration: 600, onComplete: () => splat.destroy() });
@@ -140,7 +147,7 @@ export class BugsScene extends RpgScene {
     while (this.nextIdx < this.plan.length && this.plan[this.nextIdx].t <= now) {
       const s = this.plan[this.nextIdx++];
       const { x, y } = slotPos(s.slot);
-      const tex = s.kind === "golden" ? RTEX.golden : s.kind === "feature" ? RTEX.feature : RTEX.bug;
+      const tex = s.kind === "golden" ? RTEX.golden : s.kind === "feature" ? RTEX.feature : s.kind === "decoy" ? RTEX.decoy : RTEX.bug;
       const sprite = this.add.sprite(x + WIN_W / 2 + (Math.random() - 0.5) * 30, y + WIN_H / 2 + 8, tex, 0).setScale(0.3);
       this.tweens.add({ targets: sprite, scale: 1.4, y: sprite.y - 6, duration: 140, ease: "Back.easeOut" });
       this.active.push({ s, sprite, until: s.t + s.lifeMs, done: false });
@@ -150,7 +157,7 @@ export class BugsScene extends RpgScene {
       a.sprite.setFrame(Math.floor(now / 140) % 2);
       if (now >= a.until) {
         a.done = true;
-        if (a.s.kind !== "feature") {
+        if (a.s.kind === "bug" || a.s.kind === "golden") {
           this.combo = 0;
           this.floatText(a.sprite.x, a.sprite.y - 8, "놓침", "#9aa3ad", 10);
         }
@@ -171,7 +178,7 @@ export class BugsScene extends RpgScene {
   }
 
   private score(): number {
-    return Math.max(0, this.caught * BUG_SCORE.bug + this.golden * BUG_SCORE.golden + this.wrong * BUG_SCORE.feature + this.maxCombo * 2);
+    return Math.max(0, this.points);
   }
 
   protected hud(): RpgHud {
@@ -200,6 +207,8 @@ export class BugsScene extends RpgScene {
       caught: this.caught,
       golden: this.golden,
       wrong: this.wrong,
+      decoy: this.decoy,
+      score: this.score(),
       maxCombo: this.maxCombo,
     };
   }

@@ -318,3 +318,21 @@
     min-height: 44px;
   }
 }
+
+.stepLabel {
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.legal {
+  position: relative;
+  z-index: 1;
+  margin-top: 20px;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.legal a {
+  color: var(--muted);
+}

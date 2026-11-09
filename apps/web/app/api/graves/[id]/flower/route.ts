@@ -1,7 +1,7 @@
 import { handler, HttpError, json, notFound } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
-import { findVisible, getAccounts, getStore } from "@/lib/store";
+import { findVisible, getAccounts, getStore, pushActivity } from "@/lib/store";
 import { rewardReaction } from "@/lib/store/accounts";
 import type { FlowerResponse } from "@/lib/types";
 
@@ -15,5 +15,7 @@ export const POST = handler<{ id: string }>(async (req, { id }) => {
   if (count === null) throw notFound();
   if (count === "already") throw new HttpError(409, "ALREADY_FLOWERED", "오늘은 이미 꽃을 놓았어요. 내일 다시 찾아와 주세요.");
   const earned = await rewardReaction(getAccounts(), visitorId, grave.ownerAccountId, "flower", "gotFlower");
+  if (grave.ownerAccountId)
+    await pushActivity(grave.ownerAccountId, { kind: "flower", actorId: visitorId, targetId: id, targetName: grave.name });
   return json<FlowerResponse>({ count, earned });
 });

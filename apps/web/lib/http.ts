@@ -43,6 +43,8 @@ export function handler<P = unknown>(fn: (req: NextRequest, params: P) => Promis
     } catch (e) {
       if (e instanceof HttpError) return apiError(e.status, e.code, e.message, e.headers);
       console.error(`[api] ${req.method} ${req.nextUrl.pathname}`, e);
+      // 오류 탭에 남긴다 (저장소 → http 순환을 피해 늦게 불러온다)
+      await import("./errors").then((m) => m.recordServerError(req, e)).catch(() => {});
       return apiError(500, "INTERNAL", "잠시 문제가 생겼어요. 조금 뒤에 다시 시도해 주세요.");
     }
   };

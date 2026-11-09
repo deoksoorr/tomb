@@ -1,11 +1,12 @@
 // 효과음 (폭죽). Phaser 오디오는 꺼 두었으므로 HTMLAudioElement를 직접 쓴다.
 // 파일이 아직 없거나 재생이 막히면 조용히 넘어간다. 볼륨·음소거는 UI의 audio:settings(BGM과 같은 값)를 따른다.
 
-export type SfxName = "launch" | "burst";
+export type SfxName = "launch" | "burst" | "say";
 
 const FILES: Record<SfxName, string> = {
   launch: "/sfx/firework-launch.mp3",
   burst: "/sfx/firework-burst.mp3",
+  say: "/sfx/say.mp3",
 };
 
 /** 같은 소리가 너무 많이 겹치지 않게 (피날레·여러 사람이 동시에 쏠 때도 이 이상은 안 겹친다) */
@@ -34,6 +35,7 @@ export class Sfx {
     const v = Number.isFinite(volume) ? (volume > 1 ? volume / 100 : volume) : 0.7;
     this.volume = Math.max(0, Math.min(1, v));
     this.muted = muted;
+    this.applyCampfire();
   }
 
   /**
@@ -150,7 +152,121 @@ export class Sfx {
     }
   }
 
+  // ── 모닥불 타는 소리 (BGM 위에 은은한 루프) ──
+  // MP3는 앞뒤에 인코더 무음이 몇 ms 붙는다 → <audio loop> 대신 AudioBufferSourceNode(loop)로, 앞뒤 20ms를 잘라 이음새가 안 들리게.
+  private fireBuf: AudioBuffer | null = null;
+  private fireLoading = false;
+  private fireFailed = false;
+  private fireSrc: AudioBufferSourceNode | null = null;
+  private fireGain: GainNode | null = null;
+  private fireLevel = 0;
+  /** 소리가 0이 된 시각 (한동안 0이면 재생을 멈춘다) */
+  private fireQuietAt = 0;
+  private fireHidden = false;
+  private fireVisBound = false;
+
+  /**
+   * 모닥불 소리 크기 0..1 (거리·앉음은 campfireLevel()로). 매 프레임 불러도 된다 — 바뀔 때만 램프를 건다.
+   * audio:settings(볼륨·음소거)를 따르고, 탭이 숨으면 멈춘다.
+   */
+  campfire(level: number): void {
+    const lv = Math.max(0, Math.min(1, Number.isFinite(level) ? level : 0));
+    if (Math.abs(lv - this.fireLevel) < 0.01 && (lv > 0) === (this.fireLevel > 0)) {
+      this.maybeStopFire();
+      return;
+    }
+    this.fireLevel = lv;
+    this.applyCampfire();
+  }
+
+  private applyCampfire(): void {
+    const want = this.fireHidden || this.muted ? 0 : this.fireLevel * this.volume * 0.75;
+    if (want <= 0.001) {
+      if (this.fireGain && this.ac) this.fireGain.gain.setTargetAtTime(0, this.ac.currentTime, 0.35);
+      if (!this.fireQuietAt) this.fireQuietAt = performance.now();
+      return;
+    }
+    this.fireQuietAt = 0;
+    const ac = this.audio();
+    if (!ac) return;
+    this.bindFireVisibility();
+    if (!this.fireBuf) {
+      this.loadFire(ac);
+      return;
+    }
+    if (!this.fireGain) {
+      this.fireGain = ac.createGain();
+      this.fireGain.gain.value = 0;
+      this.fireGain.connect(ac.destination);
+    }
+    if (!this.fireSrc) {
+      const src = ac.createBufferSource();
+      src.buffer = this.fireBuf;
+      src.loop = true;
+      const d = this.fireBuf.duration;
+      if (d > 0.1) {
+        src.loopStart = 0.02;
+        src.loopEnd = d - 0.02;
+      }
+      src.connect(this.fireGain);
+      src.start(ac.currentTime + 0.01, 0.02 + Math.random() * Math.max(0, d - 0.1));
+      this.fireSrc = src;
+    }
+    this.fireGain.gain.setTargetAtTime(want, ac.currentTime, 0.45);
+  }
+
+  /** 4초 넘게 조용하면 재생을 멈춘다 (다시 가까워지면 버퍼에서 새로 시작) */
+  private maybeStopFire(): void {
+    if (!this.fireSrc || !this.fireQuietAt || performance.now() - this.fireQuietAt < 4000) return;
+    try {
+      this.fireSrc.stop();
+    } catch {
+      // 이미 멈춤
+    }
+    this.fireSrc.disconnect();
+    this.fireSrc = null;
+  }
+
+  private loadFire(ac: AudioContext): void {
+    if (this.fireLoading || this.fireFailed || typeof fetch === "undefined") return;
+    this.fireLoading = true;
+    fetch("/sfx/campfire.mp3")
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+      .then((b) => ac.decodeAudioData(b))
+      .then((buf) => {
+        this.fireBuf = buf;
+        this.fireLoading = false;
+        if (this.ac === ac) this.applyCampfire();
+      })
+      .catch(() => {
+        this.fireLoading = false;
+        this.fireFailed = true;
+      });
+  }
+
+  private bindFireVisibility(): void {
+    if (this.fireVisBound || typeof document === "undefined") return;
+    this.fireVisBound = true;
+    document.addEventListener("visibilitychange", this.onFireVisibility);
+  }
+
+  private readonly onFireVisibility = (): void => {
+    this.fireHidden = document.hidden;
+    this.applyCampfire();
+    if (this.fireHidden) this.fireQuietAt = performance.now() - 4000;
+    this.maybeStopFire();
+  };
+
   destroy(): void {
+    if (this.fireVisBound) document.removeEventListener("visibilitychange", this.onFireVisibility);
+    this.fireVisBound = false;
+    try {
+      this.fireSrc?.stop();
+    } catch {
+      // 무시
+    }
+    this.fireSrc = null;
+    this.fireGain = null;
     void this.ac?.close().catch(() => undefined);
     this.ac = null;
     for (const a of this.base.values()) a.src = "";

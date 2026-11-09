@@ -12,7 +12,9 @@ import {
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES } from "@/lib/economy";
 import { PRESENCE_INTERVAL_MS, SHRINE_KEEP_DAYS } from "@/lib/types";
 import { durationLabel, effectLabel, KIND_LABELS } from "../account/items";
+import Link from "next/link";
 import Dialog from "../ui/Dialog";
+import ui from "../ui/ui.module.css";
 import ItemIcon from "../ui/ItemIcon";
 import { InquiryButton } from "../notice/InquiryDialog";
 import styles from "./GuideDialog.module.css";
@@ -26,13 +28,16 @@ const CONTROLS: [string, string, string][] = [
   ["나무에 매달리기·그네·종 치기·잠수", "가까이 가서 E (화면 안내를 따라)", "상호작용 버튼"],
   ["수영·잠수", "물에 들어가면 헤엄쳐요 (잠수도 돼요)", "조이스틱으로 물에"],
   ["감정 표현", "1 손 흔들기 · 2 환호", "메뉴 → 감정 표현"],
+  ["말풍선", "T → 문장 고르기", "메뉴 → 말풍선"],
   ["확대·축소", "마우스 휠 · ＋/－", "＋/－ 버튼"],
   ["둘러보기", "오른쪽 버튼으로 끌기", "—"],
   ["시점 되돌리기", "내 캐릭터로 버튼", "내 캐릭터로 버튼"],
 ];
 
 /** 숫자는 전부 정책·카탈로그에서 읽는다 (정책을 바꾸면 가이드도 바뀐다) */
-export default function GuideDialog({ onClose }: { onClose: () => void }) {
+type Props = { onClose: () => void; onReplayTutorial: () => void };
+
+export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
   return (
     <Dialog title="한때는... 안내" onClose={onClose} size="lg">
       <div className={styles.guide}>
@@ -200,9 +205,26 @@ export default function GuideDialog({ onClose }: { onClose: () => void }) {
         </section>
 
         <section className={styles.inquiry}>
+          <h3>처음 왔을 때 안내</h3>
+          <p>걷기부터 헌화, 장소 소개까지 1분 남짓한 안내를 다시 볼 수 있어요.</p>
+          <button type="button" className={ui.button} onClick={onReplayTutorial}>
+            첫 방문 안내 다시 보기
+          </button>
+        </section>
+
+        <section className={styles.inquiry}>
           <h3>문의</h3>
           <p>버그·제안·계정 문제는 여기로 알려 주세요.</p>
           <InquiryButton />
+          <p>
+            <Link href="/privacy" target="_blank">
+              개인정보처리방침
+            </Link>
+            {" · "}
+            <Link href="/terms" target="_blank">
+              이용약관
+            </Link>
+          </p>
         </section>
       </div>
     </Dialog>

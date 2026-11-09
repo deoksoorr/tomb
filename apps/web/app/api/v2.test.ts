@@ -94,6 +94,9 @@ describe("계정·출석", () => {
       inventory: {},
       equipped: [],
       graves: [],
+      activityUnread: 0,
+      nameChange: { nextAllowedAt: 0, cost: 0 },
+      tutorialDone: false,
     });
   });
 

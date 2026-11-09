@@ -54,7 +54,10 @@ export type JoinTicket = {
   visitorId: string;
   name: string;
   color: string;
+  /** 채널 번호 (방이면 0) */
   channel: number;
+  /** 방(room) 입장이면 방 id ("village" | "house:…" | "hunt:…") */
+  room?: string;
   /** 클라이언트가 붙인 ?x=&y=. 없으면 새 입장은 SPAWN, 복귀는 기존 위치 */
   spawn?: Point;
   /** 입장 시점의 꾸미기 (JoinClaims.look) */
@@ -86,7 +89,13 @@ export interface ChannelHost<C> {
   claimNonce(nonce: string, until: number): boolean;
 }
 
-export type ChannelConfig = { capacity: number; graceMs: number };
+/**
+ * room = 방(마을·집·사냥터) 모드. 같은 Channel DO 코드로 돌리되:
+ * - 위치·상태·look·body·act·say·sync·warp만 다룬다. 좌석(sit/stand)·graveEvent·emote·firework는 무시
+ * - 방 크기를 모르므로 좌표는 u16 범위만 본다(MOVE 형식이 이미 보장)
+ * - 로비 보고·대기열·채널 간 중복 정리는 DO(호스트) 쪽에서 하지 않는다
+ */
+export type ChannelConfig = { capacity: number; graceMs: number; room?: boolean };
 
 /** 클라이언트가 채널 이동·나가기로 직접 닫을 때 쓰는 코드. 유예 없이 바로 퇴장시킨다. 그 밖의 코드는 모두 유예. */
 export const CLOSE_NORMAL = 1000;
@@ -114,6 +123,8 @@ export const FIREWORK_INTERVAL_MS = 3_000;
 export const SYNC_INTERVAL_MS = 20_000;
 /** act(종 치기·손 흔들기 등) 연결당 최소 간격 */
 export const ACT_INTERVAL_MS = 2_000;
+/** say(정해진 문장 말풍선) 연결당 최소 간격 */
+export const SAY_INTERVAL_MS = 3_000;
 /** warp 서버 쿨다운. 클라이언트(WARP_COOLDOWN_MS 1초)보다 짧게 둬서 네트워크 지터로 정상 요청이 버려지지 않게 한다 */
 export const SERVER_WARP_COOLDOWN_MS = 800;
 
@@ -134,6 +145,7 @@ type Peer<C> = PeerRecord & {
   lastFireworkAt: number;
   lastSyncAt: number;
   lastActAt: number;
+  lastSayAt: number;
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
   lastSeenAt: number;
   /** attachment가 최신인지 */
@@ -387,7 +399,7 @@ export class ChannelCore<C extends object> {
   }
 
   private onMove(p: Peer<C>, m: MoveMsg, now: number): void {
-    if (!inServerBounds(m.x, m.y)) return;
+    if (!this.inBounds(m.x, m.y)) return;
     // 좌석 판정은 서버가 한다: 좌석을 얻지 못한 채 보낸 sitChair는 바닥 앉기로 본다.
     // (클라이언트는 요청과 동시에 스냅을 시작하므로 sit보다 MOVE가 먼저 올 수 있다. 승인되면 onSit이 sitChair로 바꾼다)
     const state = m.state === STATE.sitChair && !p.seatId ? STATE.sitGround : m.state;
@@ -426,6 +438,7 @@ export class ChannelCore<C extends object> {
   }
 
   private onEvent(p: Peer<C>, m: C2S, now: number): void {
+    if (this.cfg.room && (m.t === "sit" || m.t === "stand" || m.t === "emote" || m.t === "graveEvent" || m.t === "firework")) return;
     switch (m.t) {
       case "sit":
         return this.onSit(p, m.seatId);
@@ -460,7 +473,16 @@ export class ChannelCore<C extends object> {
         if (now - p.lastActAt < ACT_INTERVAL_MS) return;
         p.lastActAt = now;
         return this.broadcast(encodeEvent({ t: "act", sid: p.sid, kind: m.kind, x: p.x, y: p.y }));
+      case "say":
+        if (now - p.lastSayAt < SAY_INTERVAL_MS) return;
+        p.lastSayAt = now;
+        return this.broadcast(encodeEvent({ t: "say", sid: p.sid, id: m.id }));
     }
+  }
+
+  /** 월드 채널은 묘지 맵 범위, 방은 크기를 모르므로 u16 범위만 */
+  private inBounds(x: number, y: number): boolean {
+    return this.cfg.room ? x >= 0 && x <= 0xffff && y >= 0 && y <= 0xffff : inServerBounds(x, y);
   }
 
   /** 증서 검증(HMAC, 비동기)은 연결당 간격을 통과한 뒤에만 한다 — 검증 CPU를 아끼려고. */
@@ -553,7 +575,7 @@ export class ChannelCore<C extends object> {
 
   /** 랭킹 클릭 등 의도된 순간이동: 속도 검증 없이 범위만 본다. 쿨다운 안의 요청은 무시. */
   private onWarp(p: Peer<C>, to: Point, now: number): void {
-    if (!inServerBounds(to.x, to.y) || now - p.lastWarpAt < SERVER_WARP_COOLDOWN_MS) return;
+    if (!this.inBounds(to.x, to.y) || now - p.lastWarpAt < SERVER_WARP_COOLDOWN_MS) return;
     p.lastWarpAt = now;
     if (p.seatId) this.releaseSeat(p);
     if (p.state === STATE.sitChair || p.state === STATE.sitGround) p.state = STATE.idle;
@@ -658,6 +680,7 @@ export class ChannelCore<C extends object> {
       lastFireworkAt: -Infinity,
       lastSyncAt: -Infinity,
       lastActAt: -Infinity,
+      lastSayAt: -Infinity,
       lastSeenAt: now,
       saved: true,
     };
@@ -677,6 +700,7 @@ export class ChannelCore<C extends object> {
     p.lastFireworkAt = -Infinity;
     p.lastSyncAt = -Infinity;
     p.lastActAt = -Infinity;
+    p.lastSayAt = -Infinity;
     p.lastSeenAt = now;
   }
 

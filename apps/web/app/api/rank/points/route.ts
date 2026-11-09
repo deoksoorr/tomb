@@ -1,11 +1,10 @@
 import { handler, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { getVisitorId } from "@/lib/session";
-import { getAccounts } from "@/lib/store";
+import { getAccounts, NO_NAME } from "@/lib/store";
 import type { PointRankResponse, PointRankRow } from "@/lib/types";
 
 const RANK_SIZE = 50;
-const NO_NAME = "이름 없는 유령";
 
 /**
  * 모은 포인트(lifetimePoints) 상위 50명.

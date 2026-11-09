@@ -23,8 +23,8 @@ export const RunResultSchema = z.discriminatedUnion("game", [
     died: z.boolean(),
     potionsUsed: z.record(itemId, count).default({}),
   }),
-  z.object({ game: z.literal("bugs"), durationMs: duration, caught: count, golden: count, wrong: count, maxCombo: count }),
-  z.object({ game: z.literal("deadline"), durationMs: duration, survivedMs: duration, coffees: count, hits: count }),
+  z.object({ game: z.literal("bugs"), durationMs: duration, caught: count, golden: count, wrong: count, decoy: count, maxCombo: count, score: z.number().int().min(0).max(1_000_000) }),
+  z.object({ game: z.literal("stars"), durationMs: duration, perfect: count, good: count, miss: count, maxCombo: count, score: z.number().int().min(0).max(1_000_000) }),
 ]);
 
 export const RunFinishSchema = z.object({

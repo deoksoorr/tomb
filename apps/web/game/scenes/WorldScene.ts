@@ -1,13 +1,14 @@
 import * as Phaser from "phaser";
-import { DIR, FURNITURE, isAvatarBody, SHOP_DOOR, SPAWN, STATE, TELEPORT_DIST, type ActKind, type PeerInfo, type Seat, type Sid } from "@tomb/protocol";
+import { CAMPFIRES, campfireOfSeat, DIR, FURNITURE, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, SHOP, SHOP_DOOR, SPAWN, STATE, TELEPORT_DIST, type ActKind, type PeerInfo, type Seat, type Sid } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 import { TEX } from "../assets/manifest";
-import { bridge, type NetStatus } from "../bridge";
+import { bridge, type NetStatus, type UiEvents } from "../bridge";
 import { DEPTH, GRAVE_NEAR_RADIUS, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { GraveTooltip } from "../entities/Grave";
 import { Player, type SeatRequester } from "../entities/Player";
-import { RemoteAvatar } from "../entities/RemoteAvatar";
+import { RemoteAvatar, SWING_FRONT } from "../entities/RemoteAvatar";
 import { SeatHint } from "../entities/SeatHint";
+import { phraseOf, type SpeechBubble } from "../entities/SpeechBubble";
 import { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
 import { escape, overlaps, type Box } from "../logic/jump";
@@ -28,6 +29,9 @@ import { inWater, nearShopDoor, nearWater, type Interactable } from "../world/la
 import { NearTracker } from "../world/nearTracker";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import { GraveMarkers } from "../world/Markers";
+import { GuideArrow } from "../world/GuideArrow";
+import { CampfireView } from "../world/Campfire";
+import { campfireLevel, nearestCampfire } from "../world/campfireMath";
 import { Sfx } from "../world/Sfx";
 import { WorldMap } from "../world/WorldMap";
 import type { GameContext } from "./context";
@@ -50,6 +54,9 @@ const FURNITURE_KIND = new Map(FURNITURE.map((f) => [f.id, f.kind]));
 const MULTI_SEAT = new Set(FURNITURE.filter((f) => f.seatOffsets.length > 1).map((f) => f.id));
 /** 같은 동작을 연달아 보내지 않는 간격 */
 const ACT_COOLDOWN_MS = 700;
+/** 말풍선 연타 간격 */
+const SAY_COOLDOWN_MS = 1000;
+type GuideTarget = NonNullable<UiEvents["guide:point"]["target"]>;
 /** 원격 아바타 수와 HUD 인원이 어긋났는지 보는 주기 (어긋나면 sync 1회) */
 const PEER_CHECK_MS = 5000;
 
@@ -107,6 +114,11 @@ export class WorldScene extends Phaser.Scene {
   private readonly labelBoxes: (LabelBox & { t: Phaser.GameObjects.BitmapText | null })[] = [];
   private readonly labelOrder: LabelBox[] = [];
   private readonly hintBuf = { x: 0, y: 0, text: "" };
+  private readonly bubbleBoxes: SpeechBubble[] = [];
+  private sayAt = -Infinity;
+  private guide!: GuideArrow;
+  private readonly swingRiders: number[] = [];
+  private campfire!: CampfireView;
 
   constructor() {
     super("world");
@@ -167,6 +179,8 @@ export class WorldScene extends Phaser.Scene {
     this.tooltip = new GraveTooltip(this, this.atlas);
     this.markers = new GraveMarkers(this, this.atlas, this.reduced);
     this.seatHint = new SeatHint(this, this.atlas);
+    this.guide = new GuideArrow(this, this.atlas, this.reduced);
+    this.campfire = new CampfireView(this, this.rig, this.map, this.reduced);
 
     this.atmos.setStaticLights(this.map.staticLights);
     this.atmos.setGridLights(this.map.gridLights);
@@ -284,6 +298,14 @@ export class WorldScene extends Phaser.Scene {
         onLook: (sid, look) => this.remotes.get(sid)?.view.setLook(look ?? []),
         onFirework: (sid, item, x, y) => this.fireworks.launch(item, x, y, this.rig.frameView(this.view), false, this.remotes.get(sid)?.name ?? ""),
         onAct: (sid, kind, x, y) => this.playAct(sid, kind, x, y),
+        onSay: (sid, id) => {
+          const text = phraseOf(id);
+          const r = this.remotes.get(sid);
+          if (!text || !r) return;
+          r.view.say(text, performance.now());
+          // 보이는 사람의 말풍선만 작게 소리
+          if (r.visible) this.sfx.play("say", 0.3);
+        },
         onSelfBody: (body) => {
           if (isAvatarBody(body)) this.player.view.setBody(body);
         },
@@ -384,6 +406,8 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("input:sit", () => this.hub.dispatch("sit")));
     on.push(bridge.on("input:interact", () => this.hub.dispatch("interact")));
     on.push(bridge.on("input:jump", () => this.hub.dispatch("jump")));
+    on.push(bridge.on("input:say", ({ id }) => this.doSay(id)));
+    on.push(bridge.on("guide:point", ({ target, label }) => this.guide.set(target ? this.resolveGuide(target, label) : null)));
     on.push(
       bridge.on("input:act", ({ kind }) => {
         if (kind === "wave" || kind === "cheer") this.hub.dispatch(kind);
@@ -564,6 +588,8 @@ export class WorldScene extends Phaser.Scene {
     this.inShop = true;
     const pl = this.player;
     if (pl.sitting) pl.stand(this.time.now, this.seatReq);
+    this.leaveCampfire();
+    this.sfx.campfire(0);
     this.tooltip.hide();
     if (this.nearId) bridge.emit("grave:near", null);
     if (this.nearSeatId) bridge.emit("seat:near", null);
@@ -682,7 +708,8 @@ export class WorldScene extends Phaser.Scene {
         pl.attach("hang", o.ax, o.ay, o.ay + 0.5, now, this.seatReq);
         break;
       case "swing":
-        pl.attach("swing", o.ax, o.ay, o.ay + 0.5, now, this.seatReq);
+        // 그네 틀(받침 y)보다 앞에 그려야 아바타가 가려지지 않는다
+        pl.attach("swing", o.ax, o.ay, o.ay + SWING_FRONT, now, this.seatReq);
         break;
       case "bell":
         pl.faceTo(o.x, o.y - 8, now);
@@ -702,6 +729,57 @@ export class WorldScene extends Phaser.Scene {
         }
         break;
     }
+  }
+
+  /** 첫 방문 안내 대상 → 화살표를 띄울 월드 좌표 (대상 그림 위쪽) */
+  private resolveGuide(target: GuideTarget, label?: string): { x: number; y: number; text: string } | null {
+    const pl = this.player;
+    const near = <T extends { x: number; y: number }>(list: Iterable<T>): T | null => {
+      let best: T | null = null;
+      let bd = Infinity;
+      for (const p of list) {
+        const d = Math.hypot(p.x - pl.x, p.y - pl.y);
+        if (d < bd) {
+          bd = d;
+          best = p;
+        }
+      }
+      return best;
+    };
+    switch (target) {
+      case "nearestGrave": {
+        const l = this.field.layout;
+        const p = near([...l.placements, ...l.revive.filter((r): r is GravePlacement => r !== null)]);
+        return p ? { x: p.x, y: p.y - 26, text: label ?? "묘비" } : null;
+      }
+      case "shop":
+        return { x: SHOP.x, y: SHOP.y - 34, text: label ?? "유령 잡화점" };
+      case "hunt":
+        return { x: HUNT_GATE.x, y: HUNT_GATE.y - 30, text: label ?? "사냥터" };
+      case "housing":
+        return { x: HOUSING_DOOR.x, y: HOUSING_DOOR.y - 40, text: label ?? "분양 사무소" };
+      case "bench": {
+        const f = near(FURNITURE.filter((x) => x.kind === "bench" && !x.campfire));
+        return f ? { x: f.x, y: f.y - 12, text: label ?? "벤치" } : null;
+      }
+      case "campfire": {
+        const c = near(CAMPFIRES);
+        return c ? { x: c.x, y: c.y - 22, text: label ?? "모닥불" } : null;
+      }
+      default:
+        return null;
+    }
+  }
+
+  /** 말풍선: 내 머리 위에 바로 띄우고 같은 채널에 보낸다 */
+  private doSay(id: string): void {
+    const text = phraseOf(id);
+    const now = this.time.now;
+    if (!text || !isPhraseId(id) || now - this.sayAt < SAY_COOLDOWN_MS || this.cleaned) return;
+    this.sayAt = now;
+    this.player.view.say(text, now);
+    this.net.say(id);
+    this.sfx.play("say", 0.5);
   }
 
   /** 내 동작: 바로 보여 주고 같은 채널에 보낸다 (연타는 ACT_COOLDOWN_MS로 묶는다) */
@@ -767,7 +845,14 @@ export class WorldScene extends Phaser.Scene {
     if (o && o.dist < 16 && Math.hypot(o.obj.x - pl.x, o.obj.y - pl.y) <= o.obj.r * 1.5 && !pl.airborne) this.useObject(o.obj);
   }
 
+  private leaveCampfire(): void {
+    if (!this.campfire.active) return;
+    this.campfire.exit();
+    bridge.emit("view:mode", { mode: "normal" });
+  }
+
   private onResize(): void {
+    this.campfire.resize();
     this.rig.applyBounds();
     this.atmos.resize();
     this.lighting.resize();
@@ -815,6 +900,15 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.rig.update(dt);
+    // 모닥불 좌석에 앉으면 불멍 구도 (카메라·레터박스), 일어나면 원래대로. 불 타는 소리는 거리에 따라
+    const fire = pl.state === "sitChair" && pl.seat ? campfireOfSeat(pl.seat.id) : null;
+    if (fire && this.campfire.active?.id !== fire.id) {
+      this.campfire.enter(fire);
+      bridge.emit("view:mode", { mode: "campfire" });
+    } else if (!fire && this.campfire.active) this.leaveCampfire();
+    this.campfire.update(now, dt);
+    const nf = nearestCampfire(pl.x, pl.y);
+    this.sfx.campfire(nf ? campfireLevel(nf.dist, !!fire) : 0);
     if (this.recenterAt && now >= this.recenterAt) {
       this.recenterAt = 0;
       this.rig.recenter();
@@ -824,6 +918,19 @@ export class WorldScene extends Phaser.Scene {
     pl.view.sync(now, s);
 
     this.map.update(view);
+    // 그네 탄 사람이 있으면 가만히 있는 줄·판을 숨긴다 (아바타가 자기 줄·판과 함께 흔들린다)
+    let rn = 0;
+    const riders = this.swingRiders;
+    if (pl.state === "swing") {
+      riders[rn++] = pl.x;
+      riders[rn++] = pl.y;
+    }
+    for (const r of this.remotes.values()) {
+      if (r.stateId !== STATE.swing) continue;
+      riders[rn++] = r.x;
+      riders[rn++] = r.y;
+    }
+    this.map.updateSwings(riders, rn);
     this.map.scaleLabels(s);
     const L = this.atmos.levels;
     this.field.update(now, view, L.glow);
@@ -836,11 +943,12 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
-    this.declutterLabels();
+    this.declutterLabels(now, pnow);
     this.updateNear();
     this.updateSeatHint(now, s);
     this.tooltip.layout(s, pl.y);
     this.markers.update(now, s, this.tooltip, this.resolveGrave);
+    this.guide.update(now, view, s);
 
     const longSit = pl.sitting && pl.view.sitSince > 0 && now - pl.view.sitSince > SIT_IDLE_MS;
     this.atmos.gather(longSit ? { x: pl.x, y: pl.y } : null);
@@ -966,12 +1074,45 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** 이름표가 겹치면 위쪽 사람 이름표를 살짝 올린다 (모든 사람 이름이 보이게) */
-  private declutterLabels(): void {
+  /** 이름표·말풍선 겹침 풀기: 이름표를 먼저 풀고, 말풍선을 각자 이름표 위에 놓은 뒤 함께 한 번 더 (겹치면 위로) */
+  private declutterLabels(now: number, pnow: number): void {
     let n = this.pushLabel(this.player.view.label, 0);
     for (const r of this.remotes.values()) n = this.pushLabel(r.view.label, n);
-    if (n < 2) return;
     const boxes = this.labelBoxes;
-    declutter(boxes, this.labelOrder, n);
+    if (n >= 2) {
+      declutter(boxes, this.labelOrder, n);
+      for (let i = 0; i < n; i++) {
+        const b = boxes[i];
+        if (b.t && b.t.y !== b.y) b.t.setY(b.y);
+      }
+    }
+    // 말풍선
+    const bubbles = this.bubbleBoxes;
+    let m = 0;
+    const me = this.player.view.speechAt(now);
+    if (me) bubbles[m++] = me;
+    for (const r of this.remotes.values()) {
+      const sb = r.view.speechAt(pnow);
+      if (sb) bubbles[m++] = sb;
+    }
+    bubbles.length = m;
+    if (!m) return;
+    let k = n;
+    for (let i = 0; i < m; i++) {
+      let b = boxes[k];
+      if (!b) boxes.push((b = { x: 0, y: 0, w: 0, h: 0, t: null }));
+      b.t = null;
+      b.x = bubbles[i].box.x;
+      b.y = bubbles[i].box.y;
+      b.w = bubbles[i].box.w;
+      b.h = bubbles[i].box.h;
+      k++;
+    }
+    declutter(boxes, this.labelOrder, k);
+    for (let i = 0; i < m; i++) {
+      const b = boxes[n + i];
+      if (b.y !== bubbles[i].box.y) bubbles[i].setBottom(b.y);
+    }
     for (let i = 0; i < n; i++) {
       const b = boxes[i];
       if (b.t && b.t.y !== b.y) b.t.setY(b.y);
@@ -1011,6 +1152,8 @@ export class WorldScene extends Phaser.Scene {
     const sittingFor = pl.sitting && pl.view.sitSince > 0 ? now - pl.view.sitSince : -1;
     const bench = pl.state === "sitChair" && pl.seat && MULTI_SEAT.has(pl.seat.furnitureId);
     const standText = bench ? (this.seatHint.prefix === "E " ? "←→ 옆자리 · ↑↓ 일어나기" : "좌우로 옆자리 · 위아래로 일어나기") : null;
+    // 불멍 구도에서는 화면을 가리지 않게 앉기 안내를 띄우지 않는다
+    if (this.campfire.active) hidden = true;
     this.seatHint.update(seat, pl, sittingFor, hidden, labelScale, seat || pl.sitting ? null : this.objectHint(), standText);
   }
 
@@ -1063,6 +1206,8 @@ export class WorldScene extends Phaser.Scene {
     this.net?.stop();
     this.hub?.detach();
     this.rig?.destroy();
+    this.campfire?.destroy();
+    if (bridge.last("view:mode")?.mode === "campfire") bridge.emit("view:mode", { mode: "normal" });
     this.sfx?.destroy();
     this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this);
     if (this.nearId) bridge.emit("grave:near", null);

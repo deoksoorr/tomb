@@ -60,6 +60,11 @@ export function channelStub(env: Env, n: number) {
   return env.CHANNEL.get(env.CHANNEL.idFromName(`ch-${n}`), { locationHint: LOCATION_HINT });
 }
 
+/** 방(마을·집·사냥터)은 Channel DO 코드를 방 모드로 재사용한다. 이름 공간이 채널("ch-N")과 겹치지 않는다 */
+export function roomStub(env: Env, room: string) {
+  return env.CHANNEL.get(env.CHANNEL.idFromName(`room:${room}`), { locationHint: LOCATION_HINT });
+}
+
 export function lobbyStub(env: Env) {
   return env.LOBBY.get(env.LOBBY.idFromName("lobby"), { locationHint: LOCATION_HINT });
 }

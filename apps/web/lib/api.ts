@@ -1,4 +1,5 @@
 import type {
+  ActivityResponse,
   ApiError,
   AttendResponse,
   BuyResponse,
@@ -14,6 +15,7 @@ import type {
   InquiryResponse,
   LookGrantResponse,
   Me,
+  NameChangeResponse,
   NoticeListResponse,
   PointRankResponse,
   PresenceResponse,
@@ -28,6 +30,7 @@ import type {
   VersionResponse,
 } from "./types";
 import type { ReportReason } from "./reports";
+import { reportClientError } from "./hooks/errorReporting";
 
 // 브라우저 → Next API 호출. 서버가 준 한국어 메시지를 그대로 사용자에게 보여 준다.
 
@@ -64,6 +67,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
     const err = (body as Partial<ApiError> | null)?.error;
+    // 서버가 터진 경우만 운영자에게 알린다 (4xx는 사용자 입력 문제)
+    if (res.status >= 500) reportClientError("api", new Error(`${init?.method ?? "GET"} ${path} → ${res.status} ${err?.code ?? ""}`));
     throw new ApiRequestError(res.status, err?.code ?? "UNKNOWN", err?.message ?? FALLBACK_MESSAGE);
   }
   return body as T;
@@ -120,6 +125,10 @@ export const api = {
   inquiryInfo: () => request<InquiryInfoResponse>("/api/inquiry", { cache: "no-store" }),
   inquire: (input: InquiryInput) => request<InquiryResponse>("/api/inquiry", jsonInit("POST", input)),
   presence: () => request<PresenceResponse>("/api/me/presence", { method: "POST" }),
+  activity: () => request<ActivityResponse>("/api/me/activity", { cache: "no-store" }),
+  activitySeen: (at: number) => request<unknown>("/api/me/activity/seen", jsonInit("POST", { at })),
+  changeName: (name: string) => request<NameChangeResponse>("/api/me/name", jsonInit("POST", { name })),
+  finishTutorial: () => request<unknown>("/api/me/tutorial", { method: "POST" }),
   /** me=1: 내 순위까지 (개인화 응답이라 CDN 캐시를 타지 않는다) */
   pointRank: () => request<PointRankResponse>("/api/rank/points?me=1", { cache: "no-store" }),
   shrine: () => request<ShrineListResponse>("/api/shrine", { cache: "no-store" }),

@@ -2,13 +2,15 @@ import * as Phaser from "phaser";
 import { MAP_WIDTH, mapHeight } from "@tomb/protocol";
 import { bridge } from "../bridge";
 import { CAMERA_FOLLOW_OFFSET_Y, CAMERA_LERP, LS_ZOOM } from "../config";
-import { approach, cameraBounds, defaultZoom, parseStoredZoom, pinchZoom, snapZoom, stepZoom } from "./cameraMath";
+import { approach, cameraBounds, clampZoom, defaultZoom, parseStoredZoom, pinchZoom, snapZoom, stepZoom } from "./cameraMath";
 
 // 카메라: 캐릭터를 lerp로 따라가고 맵 경계에서 멈춘다.
 //  - 휠 / camera:zoom: 0.5 단계 줌 (1.5~5), 지수 감쇠로 부드럽게. 마지막 줌은 localStorage(tomb.zoom)
 //  - 우클릭 드래그: 시점 이동 (추적 해제). 캐릭터가 걷기 시작하거나 camera:recenter면 부드럽게 돌아와 다시 추적
 //  - 모바일: 캔버스 위 두 손가락 핀치 줌 + 두 손가락 드래그 팬 (조이스틱은 React 오버레이가 받으므로 캔버스엔 오지 않음)
 //  - 한 손가락/왼클릭 탭은 onTap(월드 좌표)로 넘긴다 (묘비 클릭)
+//  - cinematic({x,y,zoom}): 모닥불 불멍 같은 연출 구도. 추적·드래그·휠·핀치를 잠시 멈추고 천천히 그 자리로 미끄러진다.
+//    cinematic(null)이면 원래 줌으로 돌아가며 캐릭터를 다시 따라간다 (연출 줌은 저장하지 않는다)
 // 입력은 Phaser 입력 시스템이 아닌 캔버스 DOM 포인터 이벤트로 직접 받는다 (오버레이 클릭과 섞이지 않게).
 
 const ZOOM_TAU_MS = 70;
@@ -17,6 +19,9 @@ const PAN_TAU_MS = 160;
 const TAP_SLOP = 8;
 const TAP_MS = 500;
 const WHEEL_STEP = 50;
+/** 연출 구도로 들어가고 나올 때의 부드러움 */
+const CINE_PAN_TAU_MS = 340;
+const CINE_ZOOM_TAU_MS = 300;
 
 type Pt = { x: number; y: number };
 
@@ -42,6 +47,12 @@ export class CameraRig {
   private wheelLast = 0;
   private readonly off: (() => void)[] = [];
   private readonly tmp = new Phaser.Math.Vector2();
+  /** 연출 구도 (없으면 null) */
+  private cine: { x: number; y: number; zoom: number } | null = null;
+  /** 연출 전 줌 (나오면 돌아간다) */
+  private savedZoom = 0;
+  /** 연출에서 나오는 중: 줌을 천천히 되돌린다 */
+  private leavingCine = false;
 
   constructor(
     scene: Phaser.Scene,
@@ -83,6 +94,7 @@ export class CameraRig {
   }
 
   zoomBy(delta: number): void {
+    if (this.cine) return;
     this.target = stepZoom(this.target, delta);
     this.persist();
     this.emitState();
@@ -90,6 +102,7 @@ export class CameraRig {
 
   /** 캐릭터로 돌아가 다시 따라가기 */
   recenter(): void {
+    if (this.cine) return;
     if (!this.detached && !this.panGoal) return;
     this.panGoal = null;
     this.detached = false;
@@ -99,6 +112,7 @@ export class CameraRig {
 
   /** 추적을 풀고 (x,y)로 부드럽게 이동 */
   focus(x: number, y: number): void {
+    if (this.cine) this.cinematic(null);
     this.detach();
     this.panGoal = { x, y };
   }
@@ -113,10 +127,57 @@ export class CameraRig {
     }
   }
 
+  /** 연출 구도로 (null이면 원래 줌·추적으로 돌아간다). cut이면 미끄러지지 않고 바로 (reduced-motion) */
+  cinematic(goal: { x: number; y: number; zoom: number } | null, cut = false): void {
+    const cam = this.cam;
+    if (goal) {
+      if (!this.cine) this.savedZoom = this.leavingCine ? this.savedZoom : this.target;
+      this.cine = { x: goal.x, y: goal.y, zoom: clampZoom(goal.zoom) };
+      this.leavingCine = false;
+      cam.stopFollow();
+      this.following = false;
+      this.returning = false;
+      this.panGoal = null;
+      this.rightDrag = null;
+      this.pinch = null;
+      this.target = this.cine.zoom;
+      if (cut) {
+        this.zoom = this.target;
+        cam.setZoom(this.zoom);
+        this.applyBounds();
+        cam.scrollX = cam.clampX(goal.x - cam.width / 2);
+        cam.scrollY = cam.clampY(goal.y - cam.height / 2);
+      }
+      return;
+    }
+    if (!this.cine) return;
+    this.cine = null;
+    this.target = this.savedZoom || this.target;
+    this.detached = false;
+    if (cut) {
+      this.zoom = this.target;
+      cam.setZoom(this.zoom);
+      this.applyBounds();
+      cam.startFollow(this.follow, true, CAMERA_LERP, CAMERA_LERP, 0, CAMERA_FOLLOW_OFFSET_Y);
+      this.following = true;
+      this.returning = false;
+    } else {
+      this.leavingCine = true;
+      this.returning = true;
+    }
+    this.emitState();
+  }
+
+  /** 연출 구도 중인지 */
+  get inCinematic(): boolean {
+    return this.cine !== null;
+  }
+
   update(dt: number): void {
     const cam = this.cam;
     if (this.zoom !== this.target && !this.pinch) {
-      this.zoom = approach(this.zoom, this.target, dt, ZOOM_TAU_MS);
+      const slow = this.cine !== null || this.leavingCine;
+      this.zoom = approach(this.zoom, this.target, dt, slow ? CINE_ZOOM_TAU_MS : ZOOM_TAU_MS);
       if (Math.abs(this.zoom - this.target) < 0.003) this.zoom = this.target;
     }
     if (cam.zoom !== this.zoom) {
@@ -124,13 +185,21 @@ export class CameraRig {
       this.applyBounds();
     }
 
+    if (this.cine) {
+      const tx = cam.clampX(this.cine.x - cam.width / 2);
+      const ty = cam.clampY(this.cine.y - cam.height / 2);
+      cam.scrollX = approach(cam.scrollX, tx, dt, CINE_PAN_TAU_MS);
+      cam.scrollY = approach(cam.scrollY, ty, dt, CINE_PAN_TAU_MS);
+      return;
+    }
+    if (this.leavingCine && this.zoom === this.target && !this.returning) this.leavingCine = false;
     const goal = this.returning || this.panGoal !== null;
     if (goal) {
       const gx = this.returning ? this.follow.x : this.panGoal!.x;
       const gy = this.returning ? this.follow.y - CAMERA_FOLLOW_OFFSET_Y : this.panGoal!.y;
       const tx = cam.clampX(gx - cam.width / 2);
       const ty = cam.clampY(gy - cam.height / 2);
-      const tau = this.returning ? RETURN_TAU_MS : PAN_TAU_MS;
+      const tau = this.leavingCine ? CINE_PAN_TAU_MS : this.returning ? RETURN_TAU_MS : PAN_TAU_MS;
       cam.scrollX = approach(cam.scrollX, tx, dt, tau);
       cam.scrollY = approach(cam.scrollY, ty, dt, tau);
       if (this.returning && Math.abs(cam.scrollX - tx) < 1 && Math.abs(cam.scrollY - ty) < 1) {
@@ -214,6 +283,8 @@ export class CameraRig {
 
   private onDown(e: PointerEvent): void {
     if (!this.enabled) return;
+    // 불멍 구도 중엔 우클릭 드래그를 받지 않는다 (탭은 그대로)
+    if (this.cine && e.pointerType === "mouse" && e.button !== 0) return;
     if (e.pointerType === "mouse") {
       if (e.button === 2) {
         e.preventDefault();
@@ -257,7 +328,7 @@ export class CameraRig {
     if (!this.touches.has(e.pointerId)) return;
     this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const p = this.pinch;
-    if (p && this.touches.size >= 2) {
+    if (p && this.touches.size >= 2 && !this.cine) {
       const [a, b] = [...this.touches.values()];
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
       this.zoom = this.target = pinchZoom(p.zoom, p.dist, dist);
@@ -294,7 +365,7 @@ export class CameraRig {
 
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
-    if (!this.enabled) return;
+    if (!this.enabled || this.cine) return;
     const now = performance.now();
     // 트랙패드는 작은 delta가 연달아 오므로 모아서 한 칸씩, 너무 빠르게 넘기지 않게 80ms 간격
     if (now - this.wheelLast > 250) this.wheelAcc = 0;

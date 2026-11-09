@@ -1,4 +1,8 @@
 import {
+  defaultExterior,
+  EXT_SLOTS,
+  isExtBase,
+  type HouseExteriorMap,
   DEFAULT_FLOOR,
   DEFAULT_WALL,
   furnitureById,
@@ -84,7 +88,7 @@ export function buildOccupancy(items: readonly Placed[], tier: Pick<PlotTier, "w
   for (const p of items) {
     if (p.u === skipU) continue;
     const def = furnitureById(p.i);
-    if (def && !def.skin) occ.add(p, def);
+    if (def && !def.skin && !def.ext) occ.add(p, def);
   }
   return occ;
 }
@@ -123,7 +127,7 @@ export function validateLayout(layout: HouseLayout, tierId: PlotTierId, owned: R
     if (!UID_RE.test(p.u) || seen.has(p.u)) return fail("BAD_LAYOUT", "배치 정보가 올바르지 않아요.");
     seen.add(p.u);
     const def = furnitureById(p.i);
-    if (!def || def.skin) return fail("BAD_ITEM", "알 수 없는 물건이 있어요.");
+    if (!def || def.skin || def.ext) return fail("BAD_ITEM", "알 수 없는 물건이 있어요.");
     if (![p.x, p.y, p.r].every(Number.isInteger) || p.r < 0 || p.r > 3) return fail("BAD_LAYOUT", "배치 정보가 올바르지 않아요.");
     const why = occ.check(def, p.x, p.y, p.r);
     if (why) return fail("BAD_PLACE", `${def.name}: ${why}`);
@@ -143,7 +147,7 @@ export function styleTag(layout: HouseLayout): string | null {
   const by: Record<string, number> = {};
   for (const p of layout.items) {
     const c = furnitureById(p.i)?.category;
-    if (c && c !== "skin") by[c] = (by[c] ?? 0) + 1;
+    if (c && c !== "skin" && c !== "exterior") by[c] = (by[c] ?? 0) + 1;
   }
   const top = Object.entries(by).sort((a, b) => b[1] - a[1])[0];
   return top ? STYLE_TAGS[top[0] as keyof typeof STYLE_TAGS] : null;
@@ -174,4 +178,49 @@ export function newUid(items: readonly Placed[]): string {
       .padStart(6, "0");
     if (!used.has(u)) return u;
   }
+}
+
+// ── 외관 ──
+
+/** 저장된 외관을 읽을 때: 모르는 자리·값은 기본으로 */
+export function normalizeExterior(raw: unknown): HouseExteriorMap {
+  const out = defaultExterior();
+  if (!raw || typeof raw !== "object") return out;
+  for (const { slot } of EXT_SLOTS) {
+    const v = (raw as Record<string, unknown>)[slot];
+    if (typeof v === "string" && (isExtBase(v) || furnitureById(v)?.ext === slot)) out[slot] = v;
+  }
+  return out;
+}
+
+export function exteriorCounts(ext: HouseExteriorMap): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const { slot } of EXT_SLOTS) if (!isExtBase(ext[slot])) counts[ext[slot]] = (counts[ext[slot]] ?? 0) + 1;
+  return counts;
+}
+
+export const exteriorScore = (ext: HouseExteriorMap) =>
+  Object.keys(exteriorCounts(ext)).reduce((s, id) => s + (furnitureById(id)?.score ?? 0), 0);
+
+/** 안(배치·스킨) + 밖(외관)에서 쓰는 물건 수 */
+export function designCounts(layout: HouseLayout, ext: HouseExteriorMap): Record<string, number> {
+  const c = layoutCounts(layout);
+  for (const [id, n] of Object.entries(exteriorCounts(ext))) c[id] = (c[id] ?? 0) + n;
+  return c;
+}
+
+/** 꾸밈 점수의 물건 몫 = 안 + 밖 */
+export const designScore = (layout: HouseLayout, ext: HouseExteriorMap) => placedScore(layout) + exteriorScore(ext);
+
+export function validateExterior(ext: Record<string, unknown>, owned: Record<string, number> | null): { ok: true; exterior: HouseExteriorMap } | LayoutError {
+  const out = defaultExterior();
+  for (const { slot, label } of EXT_SLOTS) {
+    const v = ext[slot];
+    if (v === undefined) continue;
+    if (typeof v !== "string" || !(isExtBase(v) ? EXT_SLOTS.find((s) => s.slot === slot)!.base === v : furnitureById(v)?.ext === slot))
+      return fail("BAD_EXTERIOR", `${label}에 쓸 수 없는 아이템이에요.`);
+    if (!isExtBase(v) && owned && (owned[v] ?? 0) < 1) return fail("NOT_OWNED", `${furnitureById(v)!.name}을(를) 먼저 사 주세요.`);
+    out[slot] = v;
+  }
+  return { ok: true, exterior: out };
 }

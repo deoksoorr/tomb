@@ -1,9 +1,13 @@
 import type { CosmeticSlot } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
-import type { Grave, GraveDecor } from "../types";
+import type { ActivityItem, Grave, GraveDecor } from "../types";
+import { kstDay } from "./accounts";
 import type { MemoryStore } from "./memory";
 import {
+  ACTIVITY_KEEP,
   PRESENCE_MIN_GAP_MS,
+  spendCategory,
+  type NameChangeResult,
   type AccountRecord,
   type AccountStore,
   type EarnOptions,
@@ -21,6 +25,11 @@ type Acct = {
   body: string | null;
   presenceAt: number;
   ledger: { at: number; amount: number; reason: string }[];
+  activity: ActivityItem[];
+  activitySeen: number;
+  nameChangedAt: number;
+  nameChanges: number;
+  tutorialDone: boolean;
   streak: number;
   lastAttend: string | null;
   codeHash: string | null;
@@ -43,6 +52,14 @@ export class MemoryAccounts implements AccountStore {
   private attendIps = new Map<string, Set<string>>();
   /** `${ipHash}:${day}:${source}` → 그 IP가 그날 그 항목으로 받은 합계 */
   private ipEarned = new Map<string, number>();
+  /** 경제 통계: 날짜 → 필드(`earn:{source}`, `spend:{분류}`, `refund`) → 합계 */
+  private econ = new Map<string, Map<string, number>>();
+
+  private stat(day: string, field: string, amount: number): void {
+    let m = this.econ.get(day);
+    if (!m) this.econ.set(day, (m = new Map()));
+    m.set(field, (m.get(field) ?? 0) + amount);
+  }
 
   constructor(private graves: () => MemoryStore) {}
 
@@ -55,6 +72,11 @@ export class MemoryAccounts implements AccountStore {
       body: null,
       presenceAt: 0,
       ledger: [],
+      activity: [],
+      activitySeen: 0,
+      nameChangedAt: 0,
+      nameChanges: 0,
+      tutorialDone: false,
       streak: 0,
       lastAttend: null,
       codeHash: null,
@@ -99,6 +121,7 @@ export class MemoryAccounts implements AccountStore {
     if (ipKey) this.ipEarned.set(ipKey, (this.ipEarned.get(ipKey) ?? 0) + amount);
     a.points += amount;
     this.addLifetime(a, amount);
+    this.stat(day, `earn:${source}`, amount);
     return amount;
   }
 
@@ -125,6 +148,10 @@ export class MemoryAccounts implements AccountStore {
       equipped: [...a.look.values()].filter((e) => e.until > now),
       graves: [...a.graves],
       todayEarned: a.earnDay === day ? (a.earned.get("_total") ?? 0) : 0,
+      activityUnread: (a.activity ?? []).filter((x) => x.at > (a.activitySeen ?? 0)).length,
+      nameChangedAt: a.nameChangedAt ?? 0,
+      nameChanges: a.nameChanges ?? 0,
+      tutorialDone: a.tutorialDone ?? false,
     };
   }
 
@@ -137,13 +164,16 @@ export class MemoryAccounts implements AccountStore {
     if (a.points < amount) return null;
     a.points -= amount;
     a.ledger = [{ at: now, amount: -amount, reason }, ...(a.ledger ?? [])].slice(0, 100);
+    this.stat(kstDay(now), `spend:${spendCategory(reason)}`, amount);
     return a.points;
   }
 
   async refund(id: string, amount: number, reason: string, now: number): Promise<number> {
     const a = this.acct(id);
     a.lifetime ??= a.points; // 모은 포인트는 그대로 (개편 전 계정은 지금 잔액에서 시작)
+    const before = a.points;
     a.points = Math.min(BALANCE_CAP, a.points + amount);
+    this.stat(kstDay(now), "refund", a.points - before);
     a.ledger = [{ at: now, amount, reason }, ...(a.ledger ?? [])].slice(0, 100);
     return a.points;
   }
@@ -207,6 +237,7 @@ export class MemoryAccounts implements AccountStore {
     if (opts.unique && ((a.inv.get(itemId) ?? 0) > 0 || wearing)) return "owned";
     if (a.points < price) return "insufficient";
     a.points -= price;
+    this.stat(kstDay(now), "spend:shop", price);
     a.inv.set(itemId, (a.inv.get(itemId) ?? 0) + 1);
     return "ok";
   }
@@ -248,6 +279,8 @@ export class MemoryAccounts implements AccountStore {
     const before = a.points;
     a.points = Math.min(BALANCE_CAP, Math.max(0, a.points + delta));
     if (a.points > before) this.addLifetime(a, a.points - before);
+    if (a.points > before) this.stat(kstDay(), "earn:admin", a.points - before);
+    if (a.points < before) this.stat(kstDay(), "spend:admin", before - a.points);
     return a.points;
   }
 
@@ -257,5 +290,50 @@ export class MemoryAccounts implements AccountStore {
 
   async removeGrave(id: string, graveId: string): Promise<void> {
     this.acct(id).graves.delete(graveId);
+  }
+
+  async pushActivity(id: string, item: ActivityItem): Promise<void> {
+    const a = this.acct(id);
+    a.activity = [item, ...(a.activity ?? [])].slice(0, ACTIVITY_KEEP);
+  }
+
+  async activity(id: string): Promise<{ items: ActivityItem[]; lastSeenAt: number }> {
+    const a = this.accts.get(id);
+    return { items: [...(a?.activity ?? [])], lastSeenAt: a?.activitySeen ?? 0 };
+  }
+
+  async seeActivity(id: string, at: number): Promise<number> {
+    const a = this.acct(id);
+    a.activitySeen = Math.max(a.activitySeen ?? 0, at);
+    return a.activitySeen;
+  }
+
+  async changeName(id: string, name: string, now: number, price: number, cooldownMs: number): Promise<NameChangeResult> {
+    const a = this.acct(id);
+    if (a.nameChangedAt && now < a.nameChangedAt + cooldownMs) return { ok: false, reason: "cooldown", nextAllowedAt: a.nameChangedAt + cooldownMs };
+    const cost = a.nameChanges ? price : 0;
+    if (a.points < cost) return { ok: false, reason: "points" };
+    a.points -= cost;
+    if (cost) {
+      a.ledger = [{ at: now, amount: -cost, reason: "name" }, ...(a.ledger ?? [])].slice(0, 100);
+      this.stat(kstDay(now), "spend:name", cost);
+    }
+    a.name = name;
+    a.nameChangedAt = now;
+    a.nameChanges = (a.nameChanges ?? 0) + 1;
+    return { ok: true, cost };
+  }
+
+  async setTutorialDone(id: string): Promise<void> {
+    this.acct(id).tutorialDone = true;
+  }
+
+  async economy(days: string[]): Promise<{ date: string; fields: Record<string, number> }[]> {
+    return days.map((date) => ({ date, fields: Object.fromEntries(this.econ.get(date) ?? []) }));
+  }
+
+  async walletTotals(): Promise<{ wallets: number; accounts: number }> {
+    const all = [...this.accts.values()].filter((a) => a.points > 0 || (a.lifetime ?? 0) > 0);
+    return { wallets: all.reduce((n, a) => n + a.points, 0), accounts: all.length };
   }
 }

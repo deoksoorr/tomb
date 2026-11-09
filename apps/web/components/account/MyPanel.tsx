@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { checkName } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { DAILY_EARN_CAP } from "@/lib/economy";
 import { meStore, useMe } from "@/lib/hooks/useMe";
+import { writeItem } from "@/lib/storage";
+import { LS, type Me } from "@/lib/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
@@ -85,6 +89,8 @@ export default function MyPanel({ myGraves, onGoToMyGrave, onBury, onLeave, onLo
           </p>
         </section>
 
+        <NameSection me={me} />
+
         <section className={styles.section}>
           <h3 className={styles.heading}>내 묘비</h3>
           <MyGraves entries={myGraves.entries} pending={myGraves.pending} onGo={onGoToMyGrave} onBury={onBury} />
@@ -147,6 +153,16 @@ export default function MyPanel({ myGraves, onGoToMyGrave, onBury, onLeave, onLo
             {notice}
           </p>
         </section>
+
+        <p className={styles.legal}>
+          <Link href="/privacy" target="_blank">
+            개인정보처리방침
+          </Link>
+          {" · "}
+          <Link href="/terms" target="_blank">
+            이용약관
+          </Link>
+        </p>
       </div>
     </Dialog>
   );
@@ -225,6 +241,87 @@ function CodeSection({ hasCode, buttonId }: { hasCode: boolean; buttonId: string
           {pending ? "만드는 중…" : hasCode ? "코드 다시 만들기" : "개인 코드 만들기"}
         </button>
       )}
+      {message && (
+        <p className={styles.sub} role="status">
+          {message}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** 닉네임 바꾸기: 첫 변경은 무료, 이후 포인트와 대기 기간 (서버가 정한 값을 그대로 보여 준다) */
+function NameSection({ me }: { me: Me }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(me.name ?? "");
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  // 다음 변경 가능 시각 비교 기준 (렌더 중에 시계를 읽지 않는다)
+  const [openedAt] = useState(() => Date.now());
+  const id = useId();
+  const { nextAllowedAt, cost } = me.nameChange;
+  const waiting = nextAllowedAt > openedAt;
+  const check = checkName(name);
+  const price = cost === 0 ? "이번 변경은 무료예요." : `바꾸면 ${cost.toLocaleString("ko-KR")} 포인트가 들어요.`;
+
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!check.ok || pending) return;
+    setPending(true);
+    setMessage(null);
+    try {
+      const res = await api.changeName(check.name);
+      meStore.set(res.me);
+      writeItem(LS.name, check.name);
+      setOpen(false);
+      setMessage("닉네임을 바꿨어요. 다음에 들어올 때부터 머리 위 이름도 바뀌어요.");
+    } catch (err) {
+      setMessage(errorMessage(err));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <section className={styles.section}>
+      <h3 className={styles.heading}>닉네임</h3>
+      {open ? (
+        <form className={styles.nameForm} onSubmit={submit} noValidate>
+          <input
+            id={id}
+            className={ui.input}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-label="새 닉네임"
+            aria-invalid={!check.ok}
+            aria-describedby={`${id}-hint`}
+            autoFocus
+          />
+          <p id={`${id}-hint`} className={check.ok ? ui.hint : ui.error}>
+            {check.ok ? price : check.reason}
+          </p>
+          <div className={styles.confirmButtons}>
+            <button type="submit" className={cx(ui.button, ui.primary)} disabled={!check.ok || pending}>
+              {pending ? "바꾸는 중…" : "바꾸기"}
+            </button>
+            <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setOpen(false)}>
+              그만두기
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className={styles.nameRow}>
+          <span className={styles.nameNow}>{me.name ?? "이름 없음"}</span>
+          <button type="button" className={ui.button} onClick={() => setOpen(true)} disabled={waiting}>
+            닉네임 바꾸기
+          </button>
+        </div>
+      )}
+      <p className={ui.hint}>
+        {waiting
+          ? `${new Date(nextAllowedAt).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}부터 바꿀 수 있어요.`
+          : price}
+      </p>
       {message && (
         <p className={styles.sub} role="status">
           {message}

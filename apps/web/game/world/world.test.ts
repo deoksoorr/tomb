@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ALTAR,
+  CAMPFIRES,
+  DIR,
   FURNITURE,
   GRID_COLS,
   GRID_DY,
@@ -15,15 +17,18 @@ import {
   SHOP,
   SHOP_DOOR,
   SPAWN,
+  campfireOfSeat,
   graveSlot,
   mapHeight,
 } from "@tomb/protocol";
+import { CAMPFIRE_HEAR_PX, CAMPFIRE_NEAR_MAX, campfireLevel, cineCenter, cineZoom, letterboxHeight, nearestCampfire } from "./campfireMath";
 import { ambienceAt } from "@/lib/ambience";
 import { LevelBlender, levelsFor, mixColor } from "./ambienceMix";
 import { graveChannelFor } from "./graveChannel";
 import { cameraBounds, clampZoom, parseStoredZoom, pinchZoom, snapZoom, stepZoom, approach } from "./cameraMath";
 import { buildLayout, graveAt, layoutSignature, nearestGrave, standSpot, visibleRows } from "./graveLayout";
 import {
+  allCampfireColliders,
   BRIDGE_DECK,
   POND,
   POOL,
@@ -366,5 +371,84 @@ describe("graveyard per channel", () => {
   it("before any status, uses the channel picked at the entrance", () => {
     expect(graveChannelFor(undefined, 7)).toBe(7);
     expect(graveChannelFor(undefined, "auto")).toBe(1);
+  });
+});
+
+describe("campfires (불멍)", () => {
+  const fireColliders = allCampfireColliders();
+  const all = [
+    ...UPPER_PROPS.map(propCollider),
+    ...gridProps(60).map(propCollider),
+    ...FURNITURE.map(furnitureCollider),
+    ...fireColliders,
+    shopCollider(),
+    officeCollider(),
+  ].filter((r): r is Rect => !!r);
+  const fireSeats = SEATS.filter((s) => campfireOfSeat(s.id));
+
+  it("2~3 campfires, each with 4~6 seats facing the fire (server-judged SEATS)", () => {
+    expect(CAMPFIRES.length).toBeGreaterThanOrEqual(2);
+    expect(CAMPFIRES.length).toBeLessThanOrEqual(3);
+    for (const c of CAMPFIRES) {
+      const seats = fireSeats.filter((s) => campfireOfSeat(s.id)?.id === c.id);
+      expect(seats.length).toBeGreaterThanOrEqual(4);
+      expect(seats.length).toBeLessThanOrEqual(6);
+      for (const s of seats) {
+        expect(Math.hypot(s.x - c.x, s.y - c.y)).toBeLessThan(34);
+        // 불을 바라본다
+        const dx = c.x - s.x;
+        const dy = c.y - s.y;
+        const want = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? DIR.left : DIR.right) : dy < 0 ? DIR.up : DIR.down;
+        expect(s.facing, s.id).toBe(want);
+      }
+    }
+    expect(campfireOfSeat("bA-0")).toBeNull();
+    expect(campfireOfSeat("nope")).toBeNull();
+  });
+
+  it("seats are reachable (stand point free), not in water, and the fire blocks nothing important", () => {
+    for (const s of fireSeats) {
+      for (const c of all) expect(inside(c, s.x, s.y + 9), JSON.stringify([s.id, c])).toBe(false);
+      expect(inWater(s.x, s.y + 9)).toBe(false);
+    }
+    const spots = [SPAWN, SHOP_DOOR, HOUSING_DOOR, HUNT_GATE, SHRINE, ...REVIVE_SLOTS.map(standSpot), ...Array.from({ length: 960 }, (_, i) => standSpot(graveSlot(i)))];
+    for (const c of fireColliders) for (const s of spots) expect(inside(c, s.x, s.y, 6), JSON.stringify([s, c])).toBe(false);
+    for (const c of CAMPFIRES) {
+      // 중앙 통로·산책로를 막지 않는다
+      expect(Math.abs(c.x - MAP_WIDTH / 2)).toBeGreaterThan(60);
+      for (const wx of WALK_XS) expect(Math.abs(c.x - wx) > 40 || c.y < GRID_Y0 - 40).toBe(true);
+      expect(c.y + 40).toBeLessThan(GRID_Y0);
+    }
+    // 소품이 모닥불 위에 놓이지 않는다
+    for (const p of [...UPPER_PROPS, ...gridProps(60)]) for (const c of CAMPFIRES) expect(Math.hypot(p.x - c.x, p.y - c.y), JSON.stringify(p)).toBeGreaterThan(24);
+  });
+
+  it("sound level: 1 when seated, fades with distance, silent far away", () => {
+    expect(campfireLevel(500, true)).toBe(1);
+    expect(campfireLevel(0, false)).toBeCloseTo(CAMPFIRE_NEAR_MAX, 5);
+    expect(campfireLevel(CAMPFIRE_HEAR_PX, false)).toBe(0);
+    expect(campfireLevel(Number.NaN, false)).toBe(0);
+    let prev = Infinity;
+    for (let d = 0; d <= CAMPFIRE_HEAR_PX; d += 20) {
+      const l = campfireLevel(d, false);
+      expect(l).toBeLessThanOrEqual(prev + 1e-9);
+      expect(l).toBeLessThanOrEqual(CAMPFIRE_NEAR_MAX);
+      prev = l;
+    }
+    expect(nearestCampfire(CAMPFIRES[0].x + 3, CAMPFIRES[0].y)?.fire.id).toBe(CAMPFIRES[0].id);
+  });
+
+  it("cinematic framing: zoom 4~5, letterbox ~11% that eases in", () => {
+    for (const [w, h] of [[1280, 800], [390, 844], [844, 390], [1920, 1080]]) {
+      const z = cineZoom(w, h);
+      expect(z).toBeGreaterThanOrEqual(4);
+      expect(z).toBeLessThanOrEqual(5);
+    }
+    expect(letterboxHeight(800, 0)).toBe(0);
+    expect(letterboxHeight(800, 1)).toBe(Math.round(800 * 0.11));
+    expect(letterboxHeight(800, 0.5)).toBeGreaterThan(letterboxHeight(800, 0.25));
+    const c = cineCenter(CAMPFIRES[0]);
+    expect(c.x).toBe(CAMPFIRES[0].x);
+    expect(c.y).toBeLessThan(CAMPFIRES[0].y);
   });
 });

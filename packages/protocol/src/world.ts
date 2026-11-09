@@ -128,7 +128,33 @@ export type Furniture = {
   facing: DirId;
   /** 좌석 앵커의 x 오프셋 (벤치는 여러 개) */
   seatOffsets: readonly number[];
+  /** 모닥불 둘레 통나무·그루터기면 그 모닥불 id (CAMPFIRES) */
+  campfire?: string;
 };
+
+// ── 모닥불 ── 둘러앉는 통나무(위·아래, 2인)와 그루터기(좌우, 1인). 앉으면 클라이언트가 "불멍" 구도로 바뀐다.
+export type Campfire = { id: string; x: number; y: number };
+/** 모닥불 자리 (불 받침 가운데). 광장 아래 잔디밭 양쪽 + 사냥터 입구 옆 숲 가장자리 */
+export const CAMPFIRES: readonly Campfire[] = [
+  { id: "fireW", x: 340, y: 372 },
+  { id: "fireE", x: MAP_WIDTH - 340, y: 372 },
+  { id: "fireN", x: 905, y: 105 },
+];
+/** 모닥불 중심에서 위 통나무·그루터기까지 (아래 통나무는 앉은 사람이 불을 가리지 않게 6px 더 아래) */
+export const CAMPFIRE_LOG_DY = 20;
+export const CAMPFIRE_STUMP_DX = 26;
+
+function campfireSeats(): Furniture[] {
+  const out: Furniture[] = [];
+  for (const f of CAMPFIRES) {
+    const k = f.id.slice(4); // W/E/N
+    out.push({ id: `k${k}n`, kind: "bench", x: f.x, y: f.y - CAMPFIRE_LOG_DY, facing: DIR.down, seatOffsets: [-9, 9], campfire: f.id });
+    out.push({ id: `k${k}s`, kind: "bench", x: f.x, y: f.y + CAMPFIRE_LOG_DY + 6, facing: DIR.up, seatOffsets: [-9, 9], campfire: f.id });
+    out.push({ id: `k${k}w`, kind: "chair", x: f.x - CAMPFIRE_STUMP_DX, y: f.y + 3, facing: DIR.right, seatOffsets: [0], campfire: f.id });
+    out.push({ id: `k${k}e`, kind: "chair", x: f.x + CAMPFIRE_STUMP_DX, y: f.y + 3, facing: DIR.left, seatOffsets: [0], campfire: f.id });
+  }
+  return out;
+}
 
 export const FURNITURE: readonly Furniture[] = [
   // 기존 id는 유지한다 (서버 좌석 판정·테스트가 id로 참조)
@@ -179,6 +205,8 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "lH", kind: "bench", x: MAP_WIDTH - 420, y: 400, facing: DIR.down, seatOffsets: [-27, -9, 9, 27] },
   // 유령 잡화점 문 오른쪽
   { id: "lI", kind: "bench", x: 276, y: 262, facing: DIR.down, seatOffsets: [-16, 0, 16] },
+  // 모닥불 둘레 (통나무 2인 × 2 + 그루터기 × 2)
+  ...campfireSeats(),
 ];
 
 function walkwayChairs(): Furniture[] {
@@ -214,6 +242,15 @@ export const SEATS: readonly Seat[] = FURNITURE.flatMap((f) =>
 const seatMap = new Map(SEATS.map((s) => [s.id, s]));
 export function seatById(id: string): Seat | undefined {
   return seatMap.get(id);
+}
+
+const furnitureMap = new Map(FURNITURE.map((f) => [f.id, f]));
+const campfireMap = new Map(CAMPFIRES.map((c) => [c.id, c]));
+/** 이 좌석이 모닥불 둘레 자리면 그 모닥불 (아니면 null) */
+export function campfireOfSeat(seatId: string): Campfire | null {
+  const s = seatMap.get(seatId);
+  const f = s ? furnitureMap.get(s.furnitureId) : undefined;
+  return (f?.campfire && campfireMap.get(f.campfire)) || null;
 }
 
 /** (x,y)에서 radius 안의 좌석 중 가장 가까운 것부터 정렬 */

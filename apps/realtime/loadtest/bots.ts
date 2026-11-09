@@ -28,6 +28,7 @@ import {
   DIR,
   PING,
   PONG,
+  ROOM_CAPACITY,
   RUN_SPEED,
   SEATS,
   SEND_INTERVAL_MS,
@@ -219,13 +220,16 @@ class Bot {
   }
 
   /** 새 토큰을 서명해 접속하고 welcome 또는 close/HTTP 오류를 기다린다 */
-  async connect(channel: number): Promise<ConnectResult> {
-    const token = await signJoinToken(SECRET, { visitorId: this.visitorId, name: this.name, color: this.color, channel, look: this.look, body: this.body });
-    this.channel = channel;
+  /** room을 주면 방(/room/:id)에 방 토큰(channel 0 + room)으로 들어간다. token을 주면 그걸 쓴다(교차 거절 확인용) */
+  async connect(channel: number, room?: string, token?: string): Promise<ConnectResult> {
+    const claims = { visitorId: this.visitorId, name: this.name, color: this.color, look: this.look, body: this.body };
+    token ??= await signJoinToken(SECRET, room ? { ...claims, channel: 0, room } : { ...claims, channel });
+    this.channel = room ? 0 : channel;
     this.welcome = null;
     this.closed = null;
     this.peers.clear();
-    const ws = new WebSocket(`${WS_URL}/ch/${channel}?t=${token}&x=${Math.round(this.x)}&y=${Math.round(this.y)}`, {
+    const path = room ? `/room/${encodeURIComponent(room)}` : `/ch/${channel}`;
+    const ws = new WebSocket(`${WS_URL}${path}?t=${token}&x=${Math.round(this.x)}&y=${Math.round(this.y)}`, {
       headers: { Origin: ORIGIN },
     });
     this.ws = ws;
@@ -656,7 +660,43 @@ async function smoke(): Promise<void> {
     await waitFor(() => b.events.some((e) => e.t === "peers" && e.peers.some((p) => p.sid === a.sid)), 1000) &&
       !a.events.some((e) => e.t === "peers"),
   );
+  lk.send({ t: "say", id: "hi" });
+  lk.send({ t: "say", id: "thanks" }); // 3초 안 → 무시
+  await sleep(300);
+  const says = (x: Bot) => x.events.filter((e) => e.t === "say" && e.sid === lk.sid).length;
+  check("say → say{sid,id} to everyone, once per 3s", says(a) === 1 && says(lk) === 1, `${says(a)}/${says(lk)}`);
   lk.leave();
+
+  // v4: 방(room) — 토큰의 room과 같은 방에만, 정원 ROOM_CAPACITY, 좌석·이모트 무시, 월드 채널과 동시 접속 가능
+  const roomId = `house:smoke${newVisitorId().slice(0, 6).replace(/[^A-Za-z0-9]/g, "x")}`;
+  const roomTok = await signJoinToken(SECRET, { ...probe(0), room: roomId });
+  const rCh = await attempt(`/ch/${CHANNEL}?t=${roomTok}`);
+  check("room token on a channel → 4003", "code" in rCh && rCh.code === CLOSE.INVALID_TOKEN, describeResult(rCh));
+  const rRoom = await attempt(`/room/${encodeURIComponent(roomId)}?t=${token}`);
+  check("channel token on a room → 4003", "code" in rRoom && rRoom.code === CLOSE.INVALID_TOKEN, describeResult(rRoom));
+  const rOther = await attempt(`/room/village?t=${roomTok}`);
+  check("token for another room → 4003", "code" in rOther && rOther.code === CLOSE.INVALID_TOKEN, describeResult(rOther));
+  const rm1 = new Bot("roomA", { x: 3000, y: 3000 }, b.visitorId); // b는 월드 채널에 그대로 있다
+  const rm1r = await rm1.connect(0, roomId);
+  check("room join (same visitor stays in its world channel too)", isWelcome(rm1r) && rm1r.welcome.channel === 0 && b.open, describeResult(rm1r));
+  const roomBots = [rm1];
+  for (let i = 1; i < ROOM_CAPACITY; i++) {
+    const rb = new Bot(`room${i}`);
+    roomBots.push(rb);
+    await rb.connect(0, roomId);
+  }
+  const over = new Bot("roomOver");
+  const ro = await over.connect(0, roomId);
+  check(`room capacity ${ROOM_CAPACITY}: next one → 4001`, roomBots.every((x) => x.open) && "code" in ro && ro.code === CLOSE.CHANNEL_FULL, describeResult(ro));
+  const rm2 = roomBots[1];
+  rm1.x = 3010;
+  rm1.state = STATE.walk;
+  rm1.sendMove();
+  rm1.send({ t: "sit", seatId: "cA" });
+  rm1.send({ t: "say", id: "house" });
+  check("room relays positions outside the world map and say", await waitFor(() => rm2.peers.get(rm1.sid)?.x === 3010 && rm2.events.some((e) => e.t === "say" && e.sid === rm1.sid), 1000));
+  check("room ignores seat requests", !rm2.events.some((e) => e.t === "seat" || e.t === "seatDenied") && !rm1.events.some((e) => e.t === "seat" || e.t === "seatDenied"));
+  await teardown(roomBots);
 
   // 아무도 움직이지 않으면 틱이 멈추고 DO가 hibernate된다(로컬 workerd는 유휴 약 10초 뒤).
   // 깨어난 뒤 소켓 attachment로 좌석·위치가 복원되는지 본다.

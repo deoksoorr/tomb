@@ -113,3 +113,30 @@
   width: 100%;
   color: var(--muted);
 }
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nameNow {
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 15px;
+}
+
+.nameForm {
+  display: grid;
+  gap: 8px;
+}
+
+.legal {
+  color: var(--muted);
+  text-align: center;
+}
+
+.legal a {
+  color: var(--muted);
+}

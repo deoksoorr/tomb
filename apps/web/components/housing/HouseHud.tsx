@@ -37,12 +37,14 @@ export default function HouseHud({ house, mine, my, onMy, onHouse, onLeave }: Pr
   const [modal, setModal] = useState<Modal>(null);
   const [saving, setSaving] = useState(false);
   const [leaveTo, setLeaveTo] = useState(false);
+  const [here, setHere] = useState<{ count: number; online: boolean; ownerHere: boolean } | null>(null);
 
   useEffect(() => {
     const offs = [
       bridge.on("house:state", (s) => setEdit(s)),
       bridge.on("house:notice", ({ message }) => setNotice(message)),
       bridge.on("house:guestbook", () => setModal("guestbook")),
+      bridge.on("house:presence", (p) => p.where === "house" && setHere(p)),
     ];
     return () => offs.forEach((o) => o());
   }, []);
@@ -122,6 +124,11 @@ export default function HouseHud({ house, mine, my, onMy, onHouse, onLeave }: Pr
               {house.ownerName}의 {tier.name} · 꾸밈 {fmt(score)}점 · 좋아요 {house.likes}
               {tag ? ` · ${tag}` : ""}
             </span>
+            {here?.online && (
+              <span className={styles.tag}>
+                함께 {here.count}명{!mine && here.ownerHere ? " · 집주인이 집에 있어요" : ""}
+              </span>
+            )}
           </span>
         </div>
         <div className={styles.hudButtons}>
@@ -211,7 +218,7 @@ function EditToolbar({
   const counts = layoutCounts({ items: edit.items, floor: edit.floor, wall: edit.wall });
   const sel = edit.selected ? edit.items.find((p) => p.u === edit.selected) : undefined;
   const selDef = sel && furnitureById(sel.i);
-  const owned = FURNITURE.filter((f) => !f.skin && (my.inventory[f.id] ?? 0) > 0);
+  const owned = FURNITURE.filter((f) => !f.skin && !f.ext && (my.inventory[f.id] ?? 0) > 0);
   const floors = [DEFAULT_FLOOR, ...FURNITURE.filter((f) => f.skin === "floor" && (my.inventory[f.id] ?? 0) > 0).map((f) => f.id)];
   const walls = [DEFAULT_WALL, ...FURNITURE.filter((f) => f.skin === "wall" && (my.inventory[f.id] ?? 0) > 0).map((f) => f.id)];
   const tool = (t: HouseTool) => bridge.emit("house:tool", t);

@@ -4,6 +4,7 @@ import { avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX 
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, BODY_METRICS, bodyOf, waterSink } from "../sprites/avatar";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
+import { SpeechBubble } from "./SpeechBubble";
 
 // 아바타 한 명의 화면 표현 (스프라이트 + 이름 라벨 + "…" 말풍선). 내 캐릭터와 원격 아바타가 같이 쓴다.
 // 상태 값과 방향만 받아서 애니메이션을 고르고, 상태별 연출은 그림에만 얹는다 (논리 위치는 그대로):
@@ -17,7 +18,7 @@ export const SIT_CHAIR_LIFT = 3;
 /** 나무에 매달리면 그림을 이만큼 들어 올린다 (발 위치는 줄기 앞 그대로) */
 export const HANG_LIFT = 13;
 /** 그네 진자 폭 (px)과 주기 (ms) */
-const SWING_AMP = 5;
+const SWING_AMP = 3;
 const SWING_PERIOD = 1600;
 /** 수면 줄: 발바닥에서 위로 */
 const WATER_LINE = 5;
@@ -32,6 +33,8 @@ export class AvatarView {
   readonly sprite: Phaser.GameObjects.Sprite;
   readonly label: Phaser.GameObjects.BitmapText;
   private bubble: Phaser.GameObjects.Image | null = null;
+  /** 말풍선(say) — 처음 말할 때 만든다 */
+  private speech: SpeechBubble | null = null;
   private texKey: string;
   private look: readonly string[] = [];
   private body: string;
@@ -313,6 +316,17 @@ export class AvatarView {
     this.sprite.setPosition(x, y - lift);
   }
 
+  /** 정해진 문장 말풍선 (4초). 이름표 위에 뜬다 */
+  say(text: string, now: number): void {
+    this.speech ??= new SpeechBubble(this.scene, this.atlas);
+    this.speech.show(text, now);
+  }
+
+  /** 지금 떠 있는 말풍선 (겹침 풀기용, 없으면 null) */
+  speechAt(now: number): SpeechBubble | null {
+    return this.speech && this.speech.active(now) && this.sprite.visible ? this.speech : null;
+  }
+
   /** 라벨·말풍선·depth·상태 연출·꾸미기를 스프라이트에 맞춘다 (보이는 아바타만 매 프레임) */
   sync(now: number, labelScale: number): void {
     const s = this.sprite;
@@ -330,17 +344,20 @@ export class AvatarView {
       const sway = this.reduced ? 0 : Math.round(Math.sin(now / 650) * 1);
       this.setPose(sway, HANG_LIFT);
     } else if (st === "swing") {
+      // 그네는 정면에서 보이므로 앞뒤로 흔들린다: 앞으로 오면 아래로·조금 크게, 뒤로 가면 위로·조금 작게.
+      // 줄과 좌판은 아바타 그림에 함께 그려져 같이 움직인다 (가만히 있는 좌판은 WorldMap이 숨긴다)
       const ph = ((now % SWING_PERIOD) / SWING_PERIOD) * Math.PI * 2;
-      const amp = this.reduced ? 2 : SWING_AMP;
       const sn = Math.sin(ph);
-      // 원점을 오른쪽으로 옮기면 그림은 왼쪽으로 간다
-      this.setPose(-Math.round(sn * amp), Math.round(Math.abs(sn) * 2));
-      const f = Math.cos(ph) > 0 ? 0 : 1;
+      this.setPose(0, -Math.round(sn * (this.reduced ? 1 : SWING_AMP)));
+      const sc = Math.round((1 + (this.reduced ? 0.02 : 0.07) * sn) * 50) / 50;
+      if (s.scaleX !== sc) s.setScale(sc);
+      const f = sn > 0 ? 0 : 1;
       if (f !== this.swingFrame && now >= this.gestureUntil) {
         this.swingFrame = f;
         s.setFrame(avatarFrame("swing", this.dir, f));
       }
     } else this.setPose(0, 0);
+    if (st !== "swing" && s.scaleX !== 1) s.setScale(1);
 
     s.setDepth(this.depthOverride ?? s.y);
     const sitLift = st === "sitGround" ? 3 : st === "sitChair" ? 1 : 0;
@@ -363,7 +380,9 @@ export class AvatarView {
     this.syncWater(now, bx, s.y, vis);
     this.syncCosmetics(now, dt, bx, headY, vis);
 
-    const longSit = this.sitSince > 0 && now - this.sitSince > SIT_IDLE_MS;
+    const speaking = !!this.speech?.active(now);
+    if (this.speech) this.speech.place(this.label.x, this.label.y - this.label.displayHeight - 1, labelScale, now, vis);
+    const longSit = !speaking && this.sitSince > 0 && now - this.sitSince > SIT_IDLE_MS;
     if (longSit) {
       if (!this.bubble) {
         this.bubble = this.scene.add.image(0, 0, TEX.bubble).setOrigin(0.5, 1).setDepth(DEPTH.bubble).setAlpha(0);
@@ -505,6 +524,7 @@ export class AvatarView {
     this.sprite.setVisible(v);
     this.label.setVisible(v);
     this.bubble?.setVisible(v);
+    if (!v) this.speech?.hide();
     for (const a of this.aura) a.setVisible(v);
     this.shadow?.setVisible(v);
     this.haloGlow?.setVisible(v);
@@ -524,6 +544,8 @@ export class AvatarView {
     this.label.destroy();
     this.bubble?.destroy();
     this.bubble = null;
+    this.speech?.destroy();
+    this.speech = null;
     for (const a of this.aura) a.destroy();
     this.aura = [];
     this.shadow?.destroy();

@@ -3,7 +3,7 @@ import { customAlphabet } from "nanoid";
 import { GRANT_TTL_SEC, signGrant, type Look } from "@tomb/protocol";
 import { CODE_ALPHABET, type EarnSource } from "../economy";
 import { parseYmd, todayKst } from "../epitaph";
-import type { Me } from "../types";
+import { NAME_CHANGE_COOLDOWN_DAYS, NAME_CHANGE_PRICE, type Me } from "../types";
 import type { AccountRecord, AccountStore } from "./types";
 
 // 계정·포인트 공용 도우미 (라우트가 쓴다). 날짜 키는 KST 기준 YYYYMMDD.
@@ -12,7 +12,10 @@ export const kstDay = (now = Date.now()) => todayKst(now).replaceAll("-", "");
 export const kstYesterday = (now = Date.now()) =>
   new Date(parseYmd(todayKst(now)) - 86_400_000).toISOString().slice(0, 10).replaceAll("-", "");
 
-export function toMe(accountId: string, a: AccountRecord, day: string): Me {
+export const NAME_CHANGE_COOLDOWN_MS = NAME_CHANGE_COOLDOWN_DAYS * 86_400_000;
+
+export function toMe(accountId: string, a: AccountRecord, day: string, now: number): Me {
+  const nextAllowedAt = a.nameChangedAt ? a.nameChangedAt + NAME_CHANGE_COOLDOWN_MS : 0;
   return {
     accountId,
     name: a.name,
@@ -26,12 +29,16 @@ export function toMe(accountId: string, a: AccountRecord, day: string): Me {
     inventory: a.inventory,
     equipped: a.equipped,
     graves: a.graves,
+    activityUnread: a.activityUnread,
+    // 첫 변경은 무료, 그다음부터 NAME_CHANGE_PRICE
+    nameChange: { nextAllowedAt: nextAllowedAt > now ? nextAllowedAt : 0, cost: a.nameChanges ? NAME_CHANGE_PRICE : 0 },
+    tutorialDone: a.tutorialDone,
   };
 }
 
 export async function loadMe(accounts: AccountStore, accountId: string, now = Date.now()): Promise<Me> {
   const day = kstDay(now);
-  return toMe(accountId, await accounts.get(accountId, day, now), day);
+  return toMe(accountId, await accounts.get(accountId, day, now), day, now);
 }
 
 /**

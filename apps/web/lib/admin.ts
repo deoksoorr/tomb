@@ -7,6 +7,7 @@ import type { ReportLogEntry } from "./reports";
 import { safeEqual } from "./session";
 import { byCreated, deleteGrave, getStore, sweepShrine, toPublicGrave, type GraveStore } from "./store";
 import type { PublicGrave } from "./types";
+import type { ErrorGroup } from "./store/errors";
 import type { AdminAction } from "./validate";
 
 // 관리자 인증 (IP 허용 목록은 proxy.ts가 먼저 거른다).
@@ -14,6 +15,9 @@ import type { AdminAction } from "./validate";
 
 /** 관리자 목록 항목: 공개 형태 + 숨김 여부 + 신고 수(지금 세는 IP 수) + 최근 신고 기록(최신 먼저) */
 export type AdminGrave = PublicGrave & { hidden: boolean; reports: number; reportLog: ReportLogEntry[] };
+
+/** GET /api/admin/errors 응답: 오류 묶음(날짜를 합친 횟수, 며칠에 걸쳐 났는지) */
+export type AdminErrorsResponse = { errors: (ErrorGroup & { days: number })[] };
 
 /** POST /api/admin/accounts/points 응답 */
 export type AdminPointsResponse = { accountId: string; points: number };

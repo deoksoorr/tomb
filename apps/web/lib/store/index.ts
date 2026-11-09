@@ -1,15 +1,17 @@
 import { styleItemId } from "@tomb/protocol";
+import { nanoid } from "nanoid";
 import { deleteImage } from "../blob";
 import type { EarnSource } from "../economy";
 import { env } from "../env";
 import { HttpError, notFound } from "../http";
-import type { Grave, GraveListResponse, Me, PublicGrave } from "../types";
+import type { ActivityItem, Grave, GraveListResponse, Me, PublicGrave } from "../types";
 import { kstDay, loadMe } from "./accounts";
 import { isGraveId } from "../validate";
 import { MemoryAccounts } from "./accounts-memory";
 import { RedisAccounts } from "./accounts-redis";
 import { MemoryStore } from "./memory";
 import { mockGraves } from "./mock";
+import { MemoryErrors, RedisErrors, type ErrorStore } from "./errors";
 import { MemoryNotices, RedisNotices, type NoticeStore } from "./notices";
 import { RedisStore } from "./redis";
 import type { AccountStore, GraveRecord, GraveStore } from "./types";
@@ -21,6 +23,7 @@ const g = globalThis as typeof globalThis & {
   __tombStore?: GraveStore;
   __tombAccounts?: AccountStore;
   __tombNotices?: NoticeStore;
+  __tombErrors?: ErrorStore;
 };
 
 /** Redis 환경변수가 있으면 RedisStore, 없으면 (로컬 한정) 목업을 심은 MemoryStore */
@@ -94,6 +97,41 @@ export async function refundPoints(accountId: string, amount: number, reason: st
   const now = Date.now();
   await accounts.refund(accountId, amount, reason, now);
   return loadMe(accounts, accountId, now);
+}
+
+/** 계정 닉네임 (없으면 "이름 없는 유령") — 소식·랭킹 표시용 */
+export const NO_NAME = "이름 없는 유령";
+export async function displayName(accountId: string, now = Date.now()): Promise<string> {
+  return (await getAccounts().get(accountId, kstDay(now), now)).name ?? NO_NAME;
+}
+
+/**
+ * 내 소식 남기기 (다른 사람이 내 묘비·집에 한 일). 하우징 등 다른 기능도 쓴다.
+ * who는 actorId의 계정 닉네임으로 채운다. 자기 것에 자기가 한 일은 남기지 않는다
+ */
+export async function pushActivity(
+  accountId: string,
+  item: { kind: ActivityItem["kind"]; actorId: string; targetId: string; targetName: string },
+  now = Date.now(),
+): Promise<void> {
+  if (item.actorId === accountId) return;
+  await getAccounts().pushActivity(accountId, {
+    id: nanoid(10),
+    kind: item.kind,
+    at: now,
+    who: await displayName(item.actorId, now),
+    targetId: item.targetId,
+    targetName: item.targetName,
+  });
+}
+
+/** 오류 모음 저장소. Redis가 없으면(운영 포함) 메모리에 둔다 — 오류 기록이 다른 오류를 낳지 않게 */
+export function getErrors(): ErrorStore {
+  const cur = g.__tombErrors;
+  const conn = env.redis();
+  if (conn) return cur instanceof RedisErrors ? cur : (g.__tombErrors = new RedisErrors(conn));
+  if (cur instanceof MemoryErrors) return cur;
+  return (g.__tombErrors = cur ? Object.assign(new MemoryErrors(), cur) : new MemoryErrors());
 }
 
 /** 공지사항 저장소 (묘비 저장소와 같은 백엔드) */

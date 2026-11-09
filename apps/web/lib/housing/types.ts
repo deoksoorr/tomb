@@ -1,4 +1,4 @@
-import type { HouseSort, PlotTierId } from "./catalog";
+import type { HouseExteriorMap, HouseSort, PlotTierId } from "./catalog";
 
 // 하우징 API 계약 (서버·클라이언트 공용). 계정 id는 절대 내보내지 않는다: 집 id는 계정 id의 HMAC이다.
 
@@ -7,8 +7,13 @@ export type Placed = { u: string; i: string; x: number; y: number; r: number };
 
 export type HouseLayout = { items: Placed[]; floor: string; wall: string };
 
+export type HouseExterior = HouseExteriorMap;
+
 export type PublicHouse = {
   id: string;
+  /** 분양 마을 번지 (1부터) */
+  lot: number;
+  exterior: HouseExterior;
   name: string;
   intro: string;
   ownerName: string;
@@ -25,6 +30,7 @@ export type PublicHouse = {
 
 export type HouseSummary = {
   id: string;
+  lot: number;
   name: string;
   ownerName: string;
   tier: PlotTierId;
@@ -59,3 +65,9 @@ export type GuestbookResponse = { entries: GuestEntryView[] };
 
 /** 관리자 목록 */
 export type AdminHouse = HouseSummary & { hidden: boolean; ownerTail: string; reportedEntries: (GuestEntry & { reports: number; hidden: boolean })[] };
+
+/** 마을에 서 있는 집 하나 (외관·문패) */
+export type VillageHouse = HouseSummary & { exterior: HouseExterior };
+
+/** 분양 마을: lots = 지금 그리는 필지 수, taken = 숨긴 집 등 정보 없이 자리만 찬 번지 */
+export type VillageResponse = { lots: number; houses: VillageHouse[]; taken: number[]; generatedAt: number };

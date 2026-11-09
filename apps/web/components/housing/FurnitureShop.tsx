@@ -12,7 +12,7 @@ import ui from "../ui/ui.module.css";
 import styles from "./housing.module.css";
 import { fmt, FurnitureIcon } from "./parts";
 
-const CATS: FurnitureCategory[] = ["furniture", "dev", "nature", "mood", "skin"];
+const CATS: FurnitureCategory[] = ["furniture", "dev", "nature", "mood", "skin", "exterior"];
 
 type Props = {
   my: MyHouseResponse;
@@ -83,12 +83,12 @@ export default function FurnitureShop({ my, placed, onMy, onClose }: Props) {
             return (
               <li key={f.id} className={styles.item}>
                 <div className={styles.itemArt}>
-                  <FurnitureIcon itemId={f.id} size={56} />
+                  <FurnitureIcon itemId={f.id} size={f.ext ? 64 : 56} />
                 </div>
                 <p className={styles.itemName}>{f.name}</p>
                 <p className={styles.small}>{f.desc}</p>
                 <p className={styles.itemMeta}>
-                  꾸밈 +{f.score} · {f.skin ? (f.skin === "floor" ? "바닥 전체" : "담장 전체") : `${f.w}×${f.h}칸`}
+                  꾸밈 +{f.score} · {f.ext ? "외관 (외관 꾸미기에서 입힘)" : f.skin ? (f.skin === "floor" ? "바닥 전체" : "담장 전체") : `${f.w}×${f.h}칸`}
                   {f.floor ? " · 밟고 지나감" : ""}
                   {f.light ? " · 밤에 빛남" : ""}
                   {owned > 0 ? ` · 가진 것 ${owned}` : ""}
@@ -97,11 +97,11 @@ export default function FurnitureShop({ my, placed, onMy, onClose }: Props) {
                   <button
                     type="button"
                     className={cx(ui.button, ui.primary)}
-                    disabled={pending !== null || short || full || (!!f.skin && owned > 0)}
+                    disabled={pending !== null || short || full || ((!!f.skin || !!f.ext) && owned > 0)}
                     onClick={() => act(f, false)}
                     aria-label={`${f.name}, ${f.price}포인트에 사기`}
                   >
-                    {pending === f.id ? "…" : f.skin && owned > 0 ? "가짐" : `${fmt(f.price)}P`}
+                    {pending === f.id ? "…" : (f.skin || f.ext) && owned > 0 ? "가짐" : `${fmt(f.price)}P`}
                   </button>
                   {owned > 0 && (
                     <button

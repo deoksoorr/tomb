@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import type { RpgAction, RpgHud, RpgPlay, RunResult } from "@/lib/rpg/types";
 import { bridge } from "../bridge";
+import type { GlyphAtlas } from "../text/GlyphAtlas";
 import { RpgSfx } from "./sfx";
 
 // 사냥터·미니게임 씬의 공통 뼈대: 입력(키보드·조이스틱·탭·버튼), 멈춤, 경과 시간, HUD 보내기, 끝내기.
@@ -10,7 +11,11 @@ import { RpgSfx } from "./sfx";
 export type RpgSceneData = {
   play: RpgPlay;
   color: string;
+  name: string;
+  body: string;
   look: readonly string[];
+  /** 월드 씬의 이름표 글자 아틀라스 (같은 텍스처를 쓴다, 새로 만들면 월드 이름표가 깨진다). 없으면 이름표·함께 사냥 없이 */
+  atlas: GlyphAtlas | null;
   reduced: boolean;
   onEnd(result: RunResult, aborted: boolean): void;
 };

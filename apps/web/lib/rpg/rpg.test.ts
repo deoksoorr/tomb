@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { GEAR, MONSTERS, SKILLS, ZONES } from "./catalog";
 import { addGear, allocStats, consumePotions, equip, gainExp, learnSkill, newCharacter, removeGearForSale, RpgError, setHotbar } from "./character";
 import { applyExp, damage, derive, expToNext, hitChance, MAX_LEVEL, monsterStats } from "./formulas";
-import { bugsCount, bugsPlan, deadlinePlan, huntPlan, huntSpawnable } from "./plan";
+import { bugsCount, bugsPlan, comboMult, huntPlan, huntSpawnable, starsCount, starsPlan, starWindows } from "./plan";
 import { evaluate, MIN_RUN_MS, type TicketInfo } from "./rewards";
 import { signTicket, verifyTicket } from "./ticket";
 import { MemoryRpgStore } from "./store";
@@ -127,8 +127,15 @@ describe("출현 계획", () => {
     const b = bugsPlan(7, "hard", 60, { dex: 10, luk: 10 });
     expect(b.every((s) => s.t < 60_000)).toBe(true);
     expect(bugsCount(b, 10_000).bug).toBeLessThan(bugsCount(b, 60_000).bug);
-    const d = deadlinePlan(7, "easy", 90);
-    expect(d.some((s) => s.kind === "coffee")).toBe(true);
+    expect(bugsCount(bugsPlan(7, "hell", 60, { dex: 1, luk: 1 }), 60_000).decoy).toBeGreaterThan(0);
+    // 어려울수록 더 많이·더 빨리 나온다
+    expect(bugsPlan(7, "hell", 60, { dex: 1, luk: 1 }).length).toBeGreaterThan(bugsPlan(7, "easy", 60, { dex: 1, luk: 1 }).length);
+    const st = starsPlan(7, "normal", 75);
+    expect(st.every((n, i) => i === 0 || n.t >= st[i - 1].t)).toBe(true);
+    expect(st.every((n) => n.x >= 0 && n.x <= 1 && n.y >= 0 && n.y <= 1 && n.t < 75_000)).toBe(true);
+    expect(starsPlan(7, "hell", 75).length).toBeGreaterThan(starsPlan(7, "easy", 75).length);
+    expect(starWindows("easy", 50)[1]).toBeGreaterThan(starWindows("easy", 1)[1]);
+    expect([0, 4, 5, 10, 20, 99].map(comboMult)).toEqual([1, 1, 1.5, 2, 3, 3]);
   });
 });
 
@@ -197,20 +204,33 @@ describe("결과 검증", () => {
     expect(short).toMatchObject({ ok: true, points: 0, exp: 0 });
   });
 
-  it("버그 잡기: 나온 수보다 많이 잡으면 거절, 잘하면 최대 포인트", () => {
+  it("버그 잡기: 나온 수보다 많이 잡으면 거절, 점수는 콤보 상한으로 자르고, 잘하면 최대 포인트", () => {
     const B: TicketInfo = { ...T, game: "bugs" };
     const p = bugsPlan(B.seed, "easy", 60, B.st);
     const all = bugsCount(p, Infinity);
-    const ok = evaluate(B, { game: "bugs", durationMs: 60_000, caught: all.bug, golden: all.golden, wrong: 0, maxCombo: 10 }, 61_000);
-    expect(ok).toMatchObject({ ok: true, points: 12 });
-    const bad = evaluate(B, { game: "bugs", durationMs: 60_000, caught: all.bug + 1, golden: 0, wrong: 0, maxCombo: 0 }, 61_000);
+    const base = { game: "bugs" as const, durationMs: 60_000, wrong: 0, decoy: 0 };
+    const hits = all.bug * 10 + all.golden * 30;
+    const ok = evaluate(B, { ...base, caught: all.bug, golden: all.golden, maxCombo: 20, score: hits * 2 }, 61_000);
+    expect(ok).toMatchObject({ ok: true, points: 12, score: hits * 2 });
+    // 콤보 5짜리로 ×3 점수를 주장하면 ×1.5까지로 자른다
+    const capped = evaluate(B, { ...base, caught: all.bug, golden: all.golden, maxCombo: 5, score: hits * 3 }, 61_000);
+    expect(capped).toMatchObject({ ok: true, score: hits * 1.5 });
+    const bad = evaluate(B, { ...base, caught: all.bug + 1, golden: 0, maxCombo: 0, score: 0 }, 61_000);
     expect(bad).toMatchObject({ ok: false });
+    expect(evaluate(B, { ...base, caught: 1, golden: 0, decoy: all.decoy + 1, maxCombo: 1, score: 10 }, 61_000)).toMatchObject({ ok: false });
   });
 
-  it("데드라인: 버틴 시간이 실제 시간보다 길면 거절", () => {
-    const D: TicketInfo = { ...T, game: "deadline" };
-    expect(evaluate(D, { game: "deadline", durationMs: 20_000, survivedMs: 80_000, coffees: 0, hits: 0 }, 20_500)).toMatchObject({ ok: false });
-    expect(evaluate(D, { game: "deadline", durationMs: 90_000, survivedMs: 90_000, coffees: 0, hits: 1 }, 91_000)).toMatchObject({ ok: true });
+  it("별자리 잇기: 그 시간까지 나온 별보다 많이 판정하면 거절, 다 완벽이면 최대 포인트", () => {
+    const S: TicketInfo = { ...T, game: "stars" };
+    const plan = starsPlan(S.seed, "easy", 75);
+    const n = plan.length;
+    const full = evaluate(S, { game: "stars", durationMs: 75_000, perfect: n, good: 0, miss: 0, maxCombo: n, score: n * 300 * 2 }, 76_000);
+    expect(full).toMatchObject({ ok: true, points: 12 });
+    const early = starsCount(plan, 20_000);
+    expect(evaluate(S, { game: "stars", durationMs: 20_000, perfect: early + 3, good: 0, miss: 0, maxCombo: 1, score: 300 }, 20_500)).toMatchObject({ ok: false });
+    expect(evaluate(S, { game: "stars", durationMs: 75_000, perfect: 2, good: 0, miss: 0, maxCombo: 9, score: 600 }, 76_000)).toMatchObject({ ok: false });
+    const half = evaluate(S, { game: "stars", durationMs: 75_000, perfect: Math.floor(n / 3), good: 0, miss: n - Math.floor(n / 3), maxCombo: 3, score: Math.floor(n / 3) * 300 }, 76_000);
+    expect(half.ok && half.points).toBeLessThan(12);
   });
 
   it("카탈로그: 장비 id 형식과 가격", () => {

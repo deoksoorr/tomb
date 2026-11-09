@@ -1,0 +1,66 @@
+/* 개인정보처리방침·이용약관. body는 게임 때문에 overflow:hidden이라 이 컨테이너가 스크롤을 맡는다 */
+.page {
+  height: 100dvh;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.inner {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: calc(var(--safe-top) + 24px) var(--safe-right) calc(var(--safe-bottom) + 48px) var(--safe-left);
+  line-height: 1.8;
+}
+
+.home {
+  color: var(--muted);
+}
+
+.title {
+  margin: 24px 0 4px;
+  color: var(--bone);
+  font-size: 24px;
+  font-weight: 400;
+}
+
+.date {
+  color: var(--muted);
+}
+
+.inner h2 {
+  margin: 28px 0 8px;
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.inner p,
+.inner li {
+  color: var(--text);
+}
+
+.inner ul {
+  display: grid;
+  gap: 4px;
+  padding-left: 16px;
+  list-style: "· ";
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  color: var(--muted);
+  font-weight: 400;
+}

@@ -1,21 +1,23 @@
 import { Redis } from "@upstash/redis";
-import { GUEST_KEEP, GUEST_PER_DAY, GUEST_REPORT_HIDE, LIKE_WEIGHT, type HouseSort, type PlotTierId } from "./catalog";
-import { emptyLayout } from "./layout";
+import { defaultExterior, GUEST_KEEP, GUEST_PER_DAY, GUEST_REPORT_HIDE, LIKE_WEIGHT, VILLAGE_MAX_LOTS, type HouseSort, type PlotTierId } from "./catalog";
+import { emptyLayout, normalizeExterior } from "./layout";
 import {
   GUEST_DAY_TTL_SEC,
   GUEST_REPORT_TTL_SEC,
   LIKE_TTL_SEC,
   scoreOf,
   type HouseRecord,
+  type CreateResult,
   type HouseStore,
   type NewHouse,
   type SaveResult,
   type StoredGuest,
 } from "./store";
-import type { HouseLayout } from "./types";
+import type { HouseExterior, HouseLayout } from "./types";
 
 // Redis 키 (집 id = 계정 id의 HMAC. 계정 id는 키에도 공개 응답에도 드러나지 않는다)
-//  house:{id}                HASH owner, name, intro, ownerName, tier, createdAt, updatedAt, likes, placedScore, items, hidden
+//  house:{id}                HASH owner, name, intro, ownerName, tier, lot, exterior(JSON), createdAt, updatedAt, likes, placedScore, items, hidden
+//  houses:lots               HASH 번지 → 집 id (분양 마을. 번지 배정은 HEXISTS 확인과 HSET을 Lua 하나로)
 //  house:{id}:layout         STRING 배치 JSON
 //  house:{id}:inv            HASH 물건 id → 가진 개수 (놓은 것 포함)
 //  house:{id}:placed         HASH 물건 id → 놓은 개수 (되팔기 판정용, 배치 저장과 같이 바뀐다)
@@ -42,21 +44,55 @@ export const HK = {
   new: "houses:new",
   score: "houses:score",
   likes: "houses:likes",
+  lots: "houses:lots",
 };
 
 const SORT_KEY: Record<HouseSort, string> = { score: HK.score, likes: HK.likes, new: HK.new };
 
-// KEYS: meta, layout, all, new, score, likes  ARGV: id, owner, name, intro, ownerName, tier, now, emptyLayout
-const CREATE_LUA = `
-if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+// 가장 앞의 빈 번지 (없으면 nil)
+const FREE_LOT_FN = `
+local function freeLot(lots, max)
+  for l = 1, max do
+    if redis.call('HEXISTS', lots, tostring(l)) == 0 then return l end
+  end
+  return nil
+end
+`;
+
+// KEYS: meta, layout, all, new, score, likes, lots
+// ARGV: id, owner, name, intro, ownerName, tier, now, emptyLayout, lot(''=자동), maxLots, exteriorJson
+// 반환: 번지, -1 이미 있음, -2 그 번지는 이미 분양됨, -3 빈 번지 없음
+const CREATE_LUA = `${FREE_LOT_FN}
+if redis.call('EXISTS', KEYS[1]) == 1 then return -1 end
+local lot
+if ARGV[9] ~= '' then
+  if redis.call('HEXISTS', KEYS[7], ARGV[9]) == 1 then return -2 end
+  lot = tonumber(ARGV[9])
+else
+  lot = freeLot(KEYS[7], tonumber(ARGV[10]))
+  if not lot then return -3 end
+end
+redis.call('HSET', KEYS[7], tostring(lot), ARGV[1])
 redis.call('HSET', KEYS[1], 'owner', ARGV[2], 'name', ARGV[3], 'intro', ARGV[4], 'ownerName', ARGV[5], 'tier', ARGV[6],
-  'createdAt', ARGV[7], 'updatedAt', ARGV[7], 'likes', 0, 'placedScore', 0, 'items', 0)
+  'createdAt', ARGV[7], 'updatedAt', ARGV[7], 'likes', 0, 'placedScore', 0, 'items', 0, 'lot', lot, 'exterior', ARGV[11])
 redis.call('SET', KEYS[2], ARGV[8])
 redis.call('ZADD', KEYS[3], ARGV[7], ARGV[1])
 redis.call('ZADD', KEYS[4], ARGV[7], ARGV[1])
 redis.call('ZADD', KEYS[5], 0, ARGV[1])
 redis.call('ZADD', KEYS[6], 0, ARGV[1])
-return 1
+return lot
+`;
+
+// KEYS: meta, lots  ARGV: id, maxLots
+const ASSIGN_LOT_LUA = `${FREE_LOT_FN}
+if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+local cur = tonumber(redis.call('HGET', KEYS[1], 'lot') or '0')
+if cur > 0 then return cur end
+local lot = freeLot(KEYS[2], tonumber(ARGV[2]))
+if not lot then return 0 end
+redis.call('HSET', KEYS[2], tostring(lot), ARGV[1])
+redis.call('HSET', KEYS[1], 'lot', lot)
+return lot
 `;
 
 // KEYS: meta  ARGV: from, to, now
@@ -84,17 +120,22 @@ return 1
 `;
 
 // 가진 개수 확인과 배치·놓은 개수·점수 갱신을 한 번에 (되팔기와 경합해 가진 것보다 많이 놓이지 않게)
-// KEYS: meta, layout, inv, placed, score  ARGV: id, tier, layoutJson, placedScore, itemsCount, now, likeWeight, [itemId, count]...
+// KEYS: meta, layout, inv, placed, score
+// ARGV: id, tier, layoutJson(''=그대로), placedScore, itemsCount, now, likeWeight, exteriorJson(''=그대로), [itemId, count]...
 const SAVE_LUA = `
 if redis.call('EXISTS', KEYS[1]) == 0 then return -1 end
 if redis.call('HGET', KEYS[1], 'tier') ~= ARGV[2] then return -2 end
-for i = 8, #ARGV, 2 do
+for i = 9, #ARGV, 2 do
   if tonumber(redis.call('HGET', KEYS[3], ARGV[i]) or '0') < tonumber(ARGV[i + 1]) then return -3 end
 end
 redis.call('DEL', KEYS[4])
-for i = 8, #ARGV, 2 do redis.call('HSET', KEYS[4], ARGV[i], ARGV[i + 1]) end
-redis.call('SET', KEYS[2], ARGV[3])
-redis.call('HSET', KEYS[1], 'placedScore', ARGV[4], 'items', ARGV[5], 'updatedAt', ARGV[6])
+for i = 9, #ARGV, 2 do redis.call('HSET', KEYS[4], ARGV[i], ARGV[i + 1]) end
+if ARGV[3] ~= '' then
+  redis.call('SET', KEYS[2], ARGV[3])
+  redis.call('HSET', KEYS[1], 'items', ARGV[5])
+end
+if ARGV[8] ~= '' then redis.call('HSET', KEYS[1], 'exterior', ARGV[8]) end
+redis.call('HSET', KEYS[1], 'placedScore', ARGV[4], 'updatedAt', ARGV[6])
 if redis.call('HGET', KEYS[1], 'hidden') ~= '1' then
   local likes = tonumber(redis.call('HGET', KEYS[1], 'likes') or '0')
   redis.call('ZADD', KEYS[5], tonumber(ARGV[4]) + likes * tonumber(ARGV[7]), ARGV[1])
@@ -196,8 +237,16 @@ function toRecord(id: string, m: Map<string, string>, layout: HouseLayout | null
   if (!m.has("owner")) return null;
   const likes = Number(m.get("likes") ?? 0);
   const placedScore = Number(m.get("placedScore") ?? 0);
+  let exterior: unknown = null;
+  try {
+    exterior = JSON.parse(m.get("exterior") ?? "null");
+  } catch {
+    exterior = null;
+  }
   return {
     id,
+    lot: Number(m.get("lot") ?? 0),
+    exterior: normalizeExterior(exterior),
     owner: m.get("owner")!,
     name: m.get("name") ?? "",
     intro: m.get("intro") ?? "",
@@ -243,18 +292,51 @@ export class RedisHouseStore implements HouseStore {
     return Object.fromEntries([...pairs(flat)].map(([k, v]) => [k, Number(v)]));
   }
 
-  async create(n: NewHouse) {
-    const r = await this.redis.eval<string[], number>(
-      CREATE_LUA,
-      [HK.meta(n.id), HK.layout(n.id), HK.all, HK.new, HK.score, HK.likes],
-      [n.id, n.owner, n.name, n.intro, n.ownerName, n.tier, String(n.now), JSON.stringify(emptyLayout())],
+  async create(n: NewHouse): Promise<CreateResult> {
+    const r = Number(
+      await this.redis.eval<string[], number>(
+        CREATE_LUA,
+        [HK.meta(n.id), HK.layout(n.id), HK.all, HK.new, HK.score, HK.likes, HK.lots],
+        [
+          n.id,
+          n.owner,
+          n.name,
+          n.intro,
+          n.ownerName,
+          n.tier,
+          String(n.now),
+          JSON.stringify(emptyLayout()),
+          n.lot === null ? "" : String(n.lot),
+          String(VILLAGE_MAX_LOTS),
+          JSON.stringify(defaultExterior()),
+        ],
+      ),
     );
-    return Number(r) === 1;
+    return r > 0 ? { lot: r } : r === -1 ? "exists" : r === -2 ? "lot_taken" : "full";
+  }
+
+  async assignLot(id: string) {
+    const r = Number(await this.redis.eval<string[], number>(ASSIGN_LOT_LUA, [HK.meta(id), HK.lots], [id, String(VILLAGE_MAX_LOTS)]));
+    return r > 0 ? r : null;
+  }
+
+  async village() {
+    const flat = (await this.redis.hgetall(HK.lots)) as unknown as string[] | null;
+    const byLot = [...pairs(flat)].map(([lot, id]) => ({ lot: Number(lot), id })).sort((a, b) => a.lot - b.lot);
+    const recs = await this.records(
+      byLot.map((x) => x.id),
+      false,
+    );
+    return recs.filter((r) => r.lot > 0);
   }
 
   async remove(id: string) {
-    const eids = (await this.guestbook(id, true)).map((g) => g.id);
+    const [eids, lot] = await Promise.all([
+      this.guestbook(id, true).then((l) => l.map((g) => g.id)),
+      this.redis.hget<string>(HK.meta(id), "lot"),
+    ]);
     const p = this.redis.pipeline();
+    if (lot) p.hdel(HK.lots, String(lot));
     p.del(HK.meta(id), HK.layout(id), HK.inv(id), HK.placed(id), HK.guest(id), HK.guestHide(id), HK.guestRep(id));
     for (const e of eids) p.del(HK.guestRepIps(id, e));
     for (const z of [HK.all, HK.new, HK.score, HK.likes]) p.zrem(z, id);
@@ -281,7 +363,15 @@ export class RedisHouseStore implements HouseStore {
     return r < 0 ? ("none" as const) : r === 0 ? ("placed" as const) : ("ok" as const);
   }
 
-  async saveLayout(id: string, tier: PlotTierId, layout: HouseLayout, counts: Record<string, number>, placedScore: number, now: number): Promise<SaveResult> {
+  async saveDesign(
+    id: string,
+    tier: PlotTierId,
+    layout: HouseLayout | null,
+    exterior: HouseExterior | null,
+    counts: Record<string, number>,
+    placedScore: number,
+    now: number,
+  ): Promise<SaveResult> {
     const r = Number(
       await this.redis.eval<string[], number>(
         SAVE_LUA,
@@ -289,11 +379,12 @@ export class RedisHouseStore implements HouseStore {
         [
           id,
           tier,
-          JSON.stringify(layout),
+          layout ? JSON.stringify(layout) : "",
           String(placedScore),
-          String(layout.items.length),
+          String(layout?.items.length ?? 0),
           String(now),
           String(LIKE_WEIGHT),
+          exterior ? JSON.stringify(exterior) : "",
           ...Object.entries(counts).flatMap(([k, v]) => [k, String(v)]),
         ],
       ),

@@ -4,6 +4,7 @@ import { env } from "../env";
 import { getAccounts } from "../store";
 import { kstDay } from "../store/accounts";
 import {
+  defaultExterior,
   DEFAULT_FLOOR,
   DEFAULT_WALL,
   furnitureById,
@@ -18,8 +19,9 @@ import {
   nextTitle,
   PLOT_TIERS,
   sellPrice,
+  villageLots,
 } from "./catalog";
-import { emptyLayout, findFreeSpot, footprint, gateTiles, placedScore, styleTag, validateLayout } from "./layout";
+import { emptyLayout, normalizeExterior, findFreeSpot, footprint, gateTiles, placedScore, styleTag, validateLayout } from "./layout";
 import {
   buyFurniture,
   buyPlot,
@@ -28,8 +30,10 @@ import {
   likeHouse,
   postGuest,
   saveLayout,
+  saveExterior,
   sellFurniture,
   upgradePlot,
+  village,
 } from "./service";
 import { MemoryHouseStore, type HouseStore } from "./store";
 import { HK, RedisHouseStore } from "./store-redis";
@@ -87,6 +91,15 @@ describe("배치 검증", () => {
     expect(validateLayout(lay([], "wall_stone"), "small", null)).toMatchObject({ code: "BAD_SKIN" });
     const many = Array.from({ length: 31 }, (_, i) => p(`u${i}`, "stone_path", i % 10, Math.floor(i / 10)));
     expect(validateLayout(lay(many), "small", null)).toMatchObject({ code: "TOO_MANY" });
+  });
+  it("마을 필지 수: 최소 8, 4의 배수, 집이 늘면 아래로", () => {
+    expect(villageLots(0, 0)).toBe(8);
+    expect(villageLots(8, 8)).toBe(12);
+    expect(villageLots(13, 3)).toBe(16);
+  });
+  it("외관 정규화: 모르는 값·다른 자리 아이템은 기본으로", () => {
+    expect(normalizeExterior({ roof: "door_red", sign: "sign_neon", junk: 1 })).toEqual({ ...defaultExterior(), sign: "sign_neon" });
+    expect(normalizeExterior(null)).toEqual(defaultExterior());
   });
   it("빈자리 찾기는 겹치지 않는 칸을 준다", () => {
     const items = [p("a", "tree", 4, 3)];
@@ -156,7 +169,7 @@ describe.each(kits)("HouseStore (%s)", (_name, make) => {
   const fresh = async () => {
     const id = nanoid(12);
     made.push(id);
-    expect(await kit.store.create({ id, owner: `o_${id}`, name: "집", intro: "", ownerName: "주인", tier: "small", now: Date.now() })).toBe(true);
+    expect(await kit.store.create({ id, owner: `o_${id}`, name: "집", intro: "", ownerName: "주인", tier: "small", lot: null, now: Date.now() })).toMatchObject({ lot: expect.any(Number) });
     return id;
   };
   afterEach(async () => {
@@ -165,7 +178,7 @@ describe.each(kits)("HouseStore (%s)", (_name, make) => {
 
   it("같은 id로 두 번 만들 수 없다", async () => {
     const id = await fresh();
-    expect(await kit.store.create({ id, owner: "x", name: "b", intro: "", ownerName: "", tier: "small", now: 1 })).toBe(false);
+    expect(await kit.store.create({ id, owner: "x", name: "b", intro: "", ownerName: "", tier: "small", lot: null, now: 1 })).toBe("exists");
   });
 
   it("가방 상한, 놓인 물건은 되팔 수 없다, 배치 저장은 가진 개수를 원자적으로 확인한다", async () => {
@@ -176,12 +189,12 @@ describe.each(kits)("HouseStore (%s)", (_name, make) => {
     expect(await s.addItem(id, "pot", 2)).toBe("max");
     expect(await s.addItem("nohouse_xxxx", "pot", 2)).toBe("no_house");
     const l = lay([p("a", "pot", 0, 0), p("b", "pot", 1, 0)]);
-    expect(await s.saveLayout(id, "small", l, { pot: 2 }, 4, 1)).toBe("ok");
+    expect(await s.saveDesign(id, "small", l, null, { pot: 2 }, 4, 1)).toBe("ok");
     expect(await s.takeItem(id, "pot")).toBe("placed");
     expect(await s.takeItem(id, "desk")).toBe("none");
-    expect(await s.saveLayout(id, "small", l, { pot: 3 }, 6, 2)).toBe("not_owned");
-    expect(await s.saveLayout(id, "wide", l, { pot: 2 }, 4, 2)).toBe("tier");
-    expect(await s.saveLayout(id, "small", lay([p("a", "pot", 0, 0)]), { pot: 1 }, 2, 3)).toBe("ok");
+    expect(await s.saveDesign(id, "small", l, null, { pot: 3 }, 6, 2)).toBe("not_owned");
+    expect(await s.saveDesign(id, "wide", l, null, { pot: 2 }, 4, 2)).toBe("tier");
+    expect(await s.saveDesign(id, "small", lay([p("a", "pot", 0, 0)]), null, { pot: 1 }, 2, 3)).toBe("ok");
     expect(await s.takeItem(id, "pot")).toBe("ok");
     expect(await s.inventory(id)).toEqual({ pot: 1 });
     const h = await s.get(id);
@@ -194,7 +207,7 @@ describe.each(kits)("HouseStore (%s)", (_name, make) => {
     const b = await fresh();
     const s = kit.store;
     await s.addItem(a, "pot", 5);
-    await s.saveLayout(a, "small", lay([p("a", "pot", 0, 0)]), { pot: 1 }, 2, 1);
+    await s.saveDesign(a, "small", lay([p("a", "pot", 0, 0)]), null, { pot: 1 }, 2, 1);
     expect(await s.like(b, "v1", "20261109")).toEqual({ likes: 1, score: LIKE_WEIGHT });
     expect(await s.like(b, "v1", "20261109")).toBe("already");
     expect(await s.likedToday(b, "v1", "20261109")).toBe(true);
@@ -231,6 +244,39 @@ describe.each(kits)("HouseStore (%s)", (_name, make) => {
     expect(await s.removeGuest(id, "e1")).toBeNull();
     expect(await s.setGuestHidden(id, "e0", false)).toBe(true);
     expect((await s.guestbook(id, false)).some((g) => g.id === "e0")).toBe(true);
+  });
+
+  it("번지: 자동 배정은 가장 앞 빈 번지, 고른 번지가 차 있으면 lot_taken, 동시에 만들어도 번지가 겹치지 않는다", async () => {
+    const s = kit.store;
+    const mk = (id: string, lot: number | null) => s.create({ id, owner: `o_${id}`, name: "집", intro: "", ownerName: "주인", tier: "small", lot, now: 1 });
+    const ids = Array.from({ length: 6 }, () => nanoid(12));
+    made.push(...ids);
+    const before = new Set((await s.village()).map((h) => h.lot));
+    const results = await Promise.all(ids.slice(0, 5).map((id) => mk(id, null)));
+    const lots = results.map((r) => (typeof r === "object" ? r.lot : -1));
+    expect(new Set(lots).size).toBe(5);
+    for (const l of lots) expect(before.has(l)).toBe(false);
+    expect(await mk(ids[5], lots[0])).toBe("lot_taken");
+    const v = await s.village();
+    expect(v.filter((h) => ids.includes(h.id)).map((h) => h.lot).sort((a, b) => a - b)).toEqual([...lots].sort((a, b) => a - b));
+    await s.remove(ids[0]);
+    expect((await mk(ids[5], lots[0])) as { lot: number }).toEqual({ lot: lots[0] });
+  });
+
+  it("외관 저장: 기본 외관으로 시작하고, saveDesign으로 바꾼 외관은 배치를 건드리지 않는다", async () => {
+    const id = await fresh();
+    const s = kit.store;
+    expect((await s.get(id))!.exterior).toEqual(defaultExterior());
+    await s.addItem(id, "roof_red", 5);
+    await s.addItem(id, "pot", 5);
+    await s.saveDesign(id, "small", lay([p("a", "pot", 0, 0)]), null, { pot: 1 }, 2, 1);
+    const ext = { ...defaultExterior(), roof: "roof_red" };
+    expect(await s.saveDesign(id, "small", null, ext, { pot: 1, roof_red: 1 }, 10, 2)).toBe("ok");
+    const h = (await s.get(id))!;
+    expect(h.exterior.roof).toBe("roof_red");
+    expect(h.layout.items).toHaveLength(1);
+    expect(h.placedScore).toBe(10);
+    expect(await s.takeItem(id, "roof_red")).toBe("placed");
   });
 
   it(`방명록은 최근 ${GUEST_KEEP}개만 남긴다`, async () => {
@@ -326,10 +372,44 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
     await expect(postGuest(store, hid, visitor, "손님", "또")).rejects.toMatchObject({ status: 429 });
   });
 
+  it("외관: 산 것만 입히고, 꾸밈 점수에 더해지며, 입힌 외관 아이템은 되팔 수 없다", async () => {
+    const id = await account(2000);
+    await buyPlot(store, id, "집", "", "a");
+    await expect(saveExterior(store, id, { roof: "roof_red" })).rejects.toMatchObject({ code: "NOT_OWNED" });
+    await expect(saveExterior(store, id, { roof: "door_red" })).rejects.toMatchObject({ code: "BAD_EXTERIOR" });
+    await buyFurniture(store, id, "roof_red");
+    await buyFurniture(store, id, "sign_neon");
+    const r = await saveExterior(store, id, { roof: "roof_red", sign: "sign_neon" });
+    expect(r.house?.exterior).toMatchObject({ roof: "roof_red", sign: "sign_neon", door: "door_wood" });
+    expect(r.house?.placedScore).toBe(8 + 12);
+    await expect(sellFurniture(store, id, "roof_red")).rejects.toMatchObject({ code: "PLACED" });
+    // 배치를 저장해도 외관 몫 점수·놓은 개수가 유지된다
+    await buyFurniture(store, id, "pot");
+    const l = await saveLayout(store, id, "small", lay([p("a", "pot", 0, 0)]));
+    expect(l.house?.placedScore).toBe(20 + 2);
+    await expect(sellFurniture(store, id, "sign_neon")).rejects.toMatchObject({ code: "PLACED" });
+    // 외관 아이템은 묘역 칸에 놓을 수 없다
+    await expect(saveLayout(store, id, "small", lay([p("b", "roof_red", 1, 1)]))).rejects.toMatchObject({ code: "BAD_ITEM" });
+  });
+
+  it("분양 때 번지를 고를 수 있고, 찬 번지는 포인트를 쓰지 않고 거절한다. 마을 목록에 외관과 함께 나온다", async () => {
+    const a = await account(1000);
+    const b = await account(1000);
+    const free = (await village(store)).lots + 1;
+    const ra = await buyPlot(store, a, "가", "", "a", free);
+    expect(ra.house?.lot).toBe(free);
+    await expect(buyPlot(store, b, "나", "", "b", free)).rejects.toMatchObject({ code: "LOT_TAKEN" });
+    expect(await points(b)).toBe(1000);
+    const v = await village(store);
+    expect(v.houses.find((h) => h.lot === free)?.exterior.roof).toBe("roof_slate");
+    expect(v.lots % 4).toBe(0);
+    expect(v.lots).toBeGreaterThanOrEqual(free);
+  });
+
   it("Redis 키 이름 (README·운영 문서와 같은 값)", () => {
     expect(HK.meta("x")).toBe("house:x");
     expect(HK.layout("x")).toBe("house:x:layout");
     expect(HK.like("x", "v", "20261109")).toBe("house:x:like:v:20261109");
-    expect([HK.score, HK.new, HK.likes]).toEqual(["houses:score", "houses:new", "houses:likes"]);
+    expect([HK.score, HK.new, HK.likes, HK.lots]).toEqual(["houses:score", "houses:new", "houses:likes", "houses:lots"]);
   });
 });

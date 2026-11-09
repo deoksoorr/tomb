@@ -1,4 +1,12 @@
-import { AVATAR_COLORS, NAME_MAX, isAvatarColor, normalizeName, verifyJoinToken } from "@tomb/protocol";
+import {
+  AVATAR_COLORS,
+  NAME_MAX,
+  ROOM_ID_RE,
+  isAvatarColor,
+  normalizeName,
+  verifyJoinToken,
+  type JoinClaims,
+} from "@tomb/protocol";
 import type { JoinTicket } from "./channel";
 import type { Point } from "./logic";
 
@@ -38,8 +46,13 @@ export async function admit(
 ): Promise<JoinTicket | null> {
   if (!secret || !token) return null;
   const claims = await verifyJoinToken(secret, token).catch(() => null);
-  // 토큰은 발급받은 채널에서만 쓸 수 있다(토큰 하나로 여러 채널 자리를 차지하지 못하게)
-  if (!claims || claims.channel !== channel || !VISITOR_ID_RE.test(claims.visitorId)) return null;
+  // 토큰은 발급받은 채널에서만 쓸 수 있다(토큰 하나로 여러 채널 자리를 차지하지 못하게). 방 토큰은 채널에 못 쓴다
+  if (!claims || claims.room !== undefined || claims.channel !== channel || !VISITOR_ID_RE.test(claims.visitorId)) return null;
+  return ticketOf(claims, channel, spawn);
+}
+
+/** 검증된 클레임 → DO에 넘길 입장 정보. 이름 길이와 색 프리셋은 여기서도 한 번 더 맞춘다 */
+function ticketOf(claims: JoinClaims, channel: number, spawn: Point | undefined): JoinTicket {
   const name = [...normalizeName(claims.name)].slice(0, NAME_MAX).join("") || FALLBACK_NAME;
   const color = isAvatarColor(claims.color) ? claims.color : AVATAR_COLORS[0];
   return { visitorId: claims.visitorId, name, color, channel, spawn, look: claims.look ?? [], body: claims.body ?? "hood" };
@@ -49,7 +62,20 @@ export async function admit(
 export async function queueVisitor(secret: string | undefined, token: string | null): Promise<string | null> {
   if (!secret || !token) return null;
   const claims = await verifyJoinToken(secret, token).catch(() => null);
-  return claims && claims.channel === 0 && VISITOR_ID_RE.test(claims.visitorId) ? claims.visitorId : null;
+  return claims && claims.channel === 0 && claims.room === undefined && VISITOR_ID_RE.test(claims.visitorId) ? claims.visitorId : null;
+}
+
+/** 방 입장: 토큰의 room 클레임이 이 방 id와 같아야 한다(channel 0). 채널 토큰·대기열 토큰은 거절 */
+export async function admitRoom(
+  secret: string | undefined,
+  token: string | null,
+  room: string,
+  spawn: Point | undefined,
+): Promise<JoinTicket | null> {
+  if (!secret || !token || !ROOM_ID_RE.test(room)) return null;
+  const claims = await verifyJoinToken(secret, token).catch(() => null);
+  if (!claims || claims.room !== room || claims.channel !== 0 || !VISITOR_ID_RE.test(claims.visitorId)) return null;
+  return { ...ticketOf(claims, 0, spawn), room };
 }
 
 /**

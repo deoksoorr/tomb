@@ -10,6 +10,8 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import AdminRow, { isReported } from "./AdminRow";
+import EconomyPanel from "./EconomyPanel";
+import ErrorsPanel from "./ErrorsPanel";
 import HousingPanel from "./HousingPanel";
 import NoticesPanel from "./NoticesPanel";
 import { adminApi } from "./adminApi";
@@ -62,7 +64,7 @@ const toggle = (set: ReadonlySet<string>, id: string) => {
 
 export default function AdminApp() {
   const [phase, setPhase] = useState<"loading" | "login" | "ready" | "error">("loading");
-  const [tab, setTab] = useState<"graves" | "notices" | "housing">("graves");
+  const [tab, setTab] = useState<"graves" | "notices" | "housing" | "errors" | "economy">("graves");
   const authLost = useCallback(() => setPhase("login"), []);
   const [graves, setGraves] = useState<AdminGrave[]>([]);
   const [lobby, setLobby] = useState<LobbyInfo | "error" | null>(null);
@@ -187,6 +189,8 @@ export default function AdminApp() {
                 ["graves", "묘비"],
                 ["notices", "공지사항"],
                 ["housing", "하우징"],
+                ["economy", "경제"],
+                ["errors", "오류"],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -205,6 +209,8 @@ export default function AdminApp() {
 
         {phase === "ready" && tab === "notices" && <NoticesPanel toast={toast} onAuthLost={authLost} />}
         {phase === "ready" && tab === "housing" && <HousingPanel toast={toast} onAuthLost={authLost} />}
+        {phase === "ready" && tab === "economy" && <EconomyPanel toast={toast} onAuthLost={authLost} />}
+        {phase === "ready" && tab === "errors" && <ErrorsPanel toast={toast} onAuthLost={authLost} />}
 
         {phase === "ready" && tab === "graves" && (
           <>

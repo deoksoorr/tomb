@@ -1,5 +1,6 @@
 import {
   ALTAR,
+  CAMPFIRES,
   FURNITURE,
   GRID_COLS,
   GRID_DY,
@@ -17,6 +18,7 @@ import {
   TILE,
   graveSlot,
   mapHeight,
+  type Campfire,
   type Furniture,
 } from "@tomb/protocol";
 
@@ -129,8 +131,9 @@ export const UPPER_PROPS: readonly PropDef[] = [
   { kind: "flowers", x: 748, y: 350, variant: 0 },
   { kind: "flowers", x: 792, y: 348, variant: 2 },
   { kind: "flowers", x: 112, y: 258, variant: 1 },
-  { kind: "flowers", x: 344, y: 384, variant: 0 },
-  { kind: "flowers", x: 680, y: 384, variant: 1 },
+  // (광장 아래 잔디밭 꽃밭은 모닥불 자리 옆으로)
+  { kind: "flowers", x: 288, y: 404, variant: 0 },
+  { kind: "flowers", x: 736, y: 404, variant: 1 },
   { kind: "bush", x: 44, y: 300, variant: 0 },
   { kind: "bush", x: 984, y: 300, variant: 1 },
   { kind: "bush", x: 300, y: 420, variant: 2 },
@@ -326,12 +329,24 @@ export function benchWidth(f: Furniture): number {
 }
 
 export function furnitureCollider(f: Furniture): Rect {
+  // 모닥불 둘레: 통나무(2인)는 짧고 낮게, 그루터기는 작게
+  if (f.campfire) return f.kind === "bench" ? { x: f.x - 15, y: f.y - 6, w: 30, h: 6 } : { x: f.x - 5, y: f.y - 5, w: 10, h: 5 };
   if (f.kind === "bench") {
     const w = benchWidth(f);
     return { x: f.x - w / 2, y: f.y - 7, w, h: 7 };
   }
   return { x: f.x - 6, y: f.y - 6, w: 12, h: 6 };
 }
+
+/** 모닥불 돌 고리 충돌 (불 위로는 못 지나간다, 점프로도) */
+export function campfireCollider(c: Campfire): Rect {
+  return { x: c.x - 9, y: c.y - 5, w: 18, h: 7 };
+}
+export function allCampfireColliders(): Rect[] {
+  return CAMPFIRES.map(campfireCollider);
+}
+/** 모닥불 빛 (Atmosphere·조명 패스용, 받침 기준 dy) */
+export const CAMPFIRE_LIGHT = { dy: -8, scale: 1.35, tint: 0xffa048, base: 0.95 } as const;
 
 export function allFurnitureColliders(): Rect[] {
   return FURNITURE.map(furnitureCollider);

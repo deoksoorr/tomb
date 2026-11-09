@@ -16,6 +16,7 @@ import { showToast, useToasts } from "@/lib/hooks/useToasts";
 import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
 import { PRESENCE_INTERVAL_MS } from "@/lib/types";
 import { restoreLook } from "../account/actions";
+import ActivityDialog from "../account/ActivityDialog";
 import BagDialog from "../account/BagDialog";
 import FireworkDialog from "../account/FireworkDialog";
 import { bagEntries, pointsText, type MyGraveEntry } from "../account/items";
@@ -41,6 +42,8 @@ import Hud, { StatusBanners, ToastList } from "./Hud";
 import MenuSheet, { type MenuTarget } from "./MenuSheet";
 import MobileControls from "./MobileControls";
 import NetHud from "./NetHud";
+import SayDialog from "./SayDialog";
+import Tutorial from "./Tutorial";
 import styles from "./GameShell.module.css";
 import HousingOffice from "@/components/housing/HousingOffice";
 import HuntLobby from "@/components/rpg/HuntLobby";
@@ -118,7 +121,9 @@ type Panel =
   | "fireworks"
   | "shrine"
   | "hunt"
-  | "housing";
+  | "housing"
+  | "activity"
+  | "say";
 
 /** 다른 담당이 만드는 장소 창 (사냥터·분양 사무소). 컴포넌트가 들어오기 전까지 자리만 */
 type Props = {
@@ -159,6 +164,26 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   useBridgeEvent("portal:open", ({ kind }) => setPanel(kind));
   useBridgeEvent("grave:open", ({ graveId }) => setOpenGraveId(graveId));
   useBridgeEvent("shop:open", () => setPanel("shop"));
+  // 불멍(모닥불) 중에는 HUD를 은은하게
+  const campfire = useBridgeValue("view:mode")?.mode === "campfire";
+  // 첫 방문 안내: 계정이 아직 안 봤으면 저절로, 안내(ⓘ)에서 다시 보기
+  const [tutorialOn, setTutorialOn] = useState<boolean | null>(null);
+  const showTutorial = ready && !away && (tutorialOn ?? (me ? !me.tutorialDone : false));
+
+  // 데스크톱 T 키: 말풍선 고르기 (입력칸·열린 창이 없을 때만)
+  const quiet = panel === null && openGraveId === null && bury === null;
+  useEffect(() => {
+    if (!ready || !quiet) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyT" || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement;
+      if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]")) return;
+      e.preventDefault();
+      setPanel("say");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ready, quiet]);
 
   // 게임이 맵에 내 묘비를 표시한다 (sticky)
   const myGraveIds = me?.graves;
@@ -216,6 +241,16 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     setPanel(null);
   }
 
+  /** 소식의 묘비: 지금 채널에 있으면 바로, 아니면 상세로 채널을 알아내 옮긴다 */
+  function goToGraveById(graveId: string) {
+    if (graves.byId.has(graveId)) return goToGrave(graveId, false);
+    setPanel(null);
+    api
+      .graveDetail(graveId)
+      .then(({ grave }) => goToMyGrave({ grave, plot: null, here: grave.channel === graves.channel }))
+      .catch(() => showToast("그 묘비를 찾지 못했어요. 이장되었을 수 있어요."));
+  }
+
   /** 터치 메뉴 시트에서 고른 것 열기 */
   function pickFromMenu(target: MenuTarget) {
     if (target === "bury") startBury();
@@ -233,7 +268,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && disconnected && <div className={styles.dim} aria-hidden="true" />}
 
       {ready && (
-        <div className={cx(styles.overlay, away && styles.away)}>
+        <div className={cx(styles.overlay, away && styles.away, campfire && styles.campfire)}>
           {coarse ? (
             // 터치: 위 가장자리 바(음악 · 채널·날씨 · 메뉴) + 아래 조이스틱·행동 버튼만
             <div className={styles.touchBar}>
@@ -243,10 +278,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 type="button"
                 className={cx(ui.button, ui.icon, styles.menuButton)}
                 onClick={() => setPanel("menu")}
-                aria-label={unreadNotice ? "메뉴 (새 공지 있음)" : "메뉴"}
+                aria-label={unreadNotice || (me?.activityUnread ?? 0) > 0 ? "메뉴 (새 소식 있음)" : "메뉴"}
               >
                 <PixelIcon name="menu" size={18} />
-                {unreadNotice && <span className={styles.dot} aria-hidden="true" />}
+                {(unreadNotice || (me?.activityUnread ?? 0) > 0) && <span className={styles.dot} aria-hidden="true" />}
               </button>
             </div>
           ) : (
@@ -286,6 +321,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   <PixelIcon name="bag" />가방
                   {bagCount > 0 && <span className={styles.badge}>{bagCount}</span>}
                 </button>
+                <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("activity")}>
+                  <PixelIcon name="heart" />
+                  소식
+                  {(me?.activityUnread ?? 0) > 0 && <span className={styles.badge}>{me?.activityUnread}</span>}
+                </button>
                 <button
                   type="button"
                   className={cx(ui.button, ui.icon, styles.leftButton)}
@@ -309,6 +349,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
             </>
           )}
           <div className={styles.bottomCenter}>
+            {showTutorial && <Tutorial touch={coarse} onDone={() => setTutorialOn(false)} />}
             <ToastList toasts={toasts} />
             <StatusBanners />
             {outdated && (
@@ -346,7 +387,15 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         />
       )}
       {panel === "channels" && <ChannelMenu onClose={closePanel} />}
-      {panel === "guide" && <GuideDialog onClose={closePanel} />}
+      {panel === "guide" && (
+        <GuideDialog
+          onClose={closePanel}
+          onReplayTutorial={() => {
+            setPanel(null);
+            setTutorialOn(true);
+          }}
+        />
+      )}
       {panel === "me" && (
         <MyPanel
           myGraves={myGraves}
@@ -365,6 +414,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       )}
       {panel === "bag" && <BagDialog cache={graves.cache} myGraves={myGraves.entries} onClose={closePanel} />}
       {panel === "notices" && <NoticesDialog onClose={closePanel} />}
+      {panel === "activity" && (
+        <ActivityDialog onGoToGrave={goToGraveById} onOpenHousing={() => setPanel("housing")} onClose={closePanel} />
+      )}
+      {panel === "say" && <SayDialog onClose={closePanel} />}
       {panel === "menu" && (
         <MenuSheet
           canBury={!inShop}
@@ -372,6 +425,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           bagCount={bagCount}
           fireworkCount={fireworkCount}
           unreadNotice={unreadNotice}
+          activityUnread={me?.activityUnread ?? 0}
           points={me ? me.points : null}
           onPick={pickFromMenu}
           onClose={closePanel}

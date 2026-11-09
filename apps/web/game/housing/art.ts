@@ -1,4 +1,4 @@
-import { DEFAULT_FLOOR, DEFAULT_WALL, furnitureById } from "@/lib/housing/catalog";
+import { DEFAULT_FLOOR, DEFAULT_WALL, defaultExterior, furnitureById, type HouseExteriorMap } from "@/lib/housing/catalog";
 import { darken, Grid, hash2, lighten, type Color } from "../sprites/pixel";
 
 // 하우징 물건·바닥·담장 픽셀아트 (캔버스만 쓴다: 게임 텍스처와 UI 아이콘이 같은 그림).
@@ -404,7 +404,8 @@ export function furnitureIcon(id: string, scale: number): { url: string; w: numb
     src = new Grid(32, WALL_H);
     src.draw(wallGrid(id, 0), 0, 0);
     src.draw(wallGrid(id, 1), 16, 0);
-  } else src = furnitureGrid(id);
+  } else if (def?.ext) src = facadeGrid({ ...defaultExterior(), [def.ext]: id }, "small");
+  else src = furnitureGrid(id);
   const g = src ?? new Grid(16, 16);
   const c = document.createElement("canvas");
   c.width = g.w * scale;
@@ -412,6 +413,209 @@ export function furnitureIcon(id: string, scale: number): { url: string; w: numb
   const ctx = c.getContext("2d")!;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(g.toCanvas(), 0, 0, c.width, c.height);
+  const out = { url: c.toDataURL(), w: c.width, h: c.height };
+  icons.set(key, out);
+  return out;
+}
+
+// ── 집 외관 (분양 마을) ──
+// 캔버스 FACADE_W × FACADE_H. 집 몸체는 아래 가운데, 앞에 정원·울타리, 왼쪽에 우편함, 오른쪽에 간판.
+
+export const FACADE_W = 128;
+export const FACADE_H = 104;
+/** 몸체 아랫변 y (문 아래) */
+const BASE_Y = 88;
+
+const BODY: Record<string, { w: number; h: number; roof: number }> = {
+  small: { w: 56, h: 30, roof: 22 },
+  wide: { w: 72, h: 32, roof: 24 },
+  manor: { w: 88, h: 38, roof: 28 },
+};
+
+export type FacadeInfo = {
+  /** 문 앞 (캔버스 좌표, 발밑) */
+  door: { x: number; y: number };
+  /** 몸체 사각형 (충돌용) */
+  body: { x: number; y: number; w: number; h: number };
+  lights: { x: number; y: number; r: number; color: number }[];
+};
+
+export function facadeInfo(ext: HouseExteriorMap, tier: string): FacadeInfo {
+  const b = BODY[tier] ?? BODY.small;
+  const x0 = Math.round((FACADE_W - b.w) / 2);
+  const by = BASE_Y - b.h;
+  const lights: FacadeInfo["lights"] = [];
+  for (const wx of windowXs(b.w)) lights.push({ x: x0 + wx + 4, y: by + 12, r: 14, color: 0xffc070 });
+  if (ext.garden === "garden_lanterns") lights.push({ x: FACADE_W / 2 - 13, y: BASE_Y - 8, r: 18, color: 0xffb060 }, { x: FACADE_W / 2 + 13, y: BASE_Y - 8, r: 18, color: 0xffb060 });
+  if (ext.sign === "sign_neon") lights.push({ x: x0 + b.w + 12, y: BASE_Y - 22, r: 22, color: 0xff7ac0 });
+  return { door: { x: FACADE_W / 2, y: BASE_Y + 4 }, body: { x: x0, y: by, w: b.w, h: b.h }, lights };
+}
+
+function windowXs(w: number): number[] {
+  if (w >= 88) return [8, 24, w - 32, w - 16];
+  if (w >= 72) return [8, w - 16];
+  return [7, w - 15];
+}
+
+const ROOF: Record<string, [Color, Color]> = {
+  roof_slate: [0x3e4450, 0x2c313a],
+  roof_red: [0xa04030, 0x7a2c22],
+  roof_teal: [0x2f7a78, 0x205856],
+  roof_thatch: [0xb8954a, 0x8a6a30],
+  roof_moss: [0x4f6e3a, 0x3a5228],
+};
+
+const FACADE: Record<string, (g: Grid, x: number, y: number, w: number, h: number) => void> = {
+  facade_plank: (g, x, y, w, h) => {
+    g.rect(x, y, w, h, 0x7a5a3c);
+    for (let j = y + 3; j < y + h; j += 4) g.hline(x, x + w - 1, j, 0x5e4430);
+  },
+  facade_brick: (g, x, y, w, h) => {
+    g.rect(x, y, w, h, 0x8a3e30);
+    for (let j = y; j < y + h; j += 4) {
+      g.hline(x, x + w - 1, j, 0x5e2a20);
+      for (let i = x + ((j - y) % 8 ? 2 : 6); i < x + w; i += 8) g.vline(i, j, j + 3, 0x5e2a20);
+    }
+  },
+  facade_stone: (g, x, y, w, h) => {
+    g.rect(x, y, w, h, 0x5f5d57);
+    for (let j = y + 1; j < y + h - 2; j += 6)
+      for (let i = x + ((j - y) % 12 ? -3 : 1); i < x + w; i += 9) g.rect(Math.max(x + 1, i), j, 7, 4, (i + j) % 3 ? 0x8c8a82 : 0x7c7a72);
+  },
+  facade_white: (g, x, y, w, h) => {
+    g.rect(x, y, w, h, 0xd8d2c0);
+    g.hline(x, x + w - 1, y + h - 3, 0xb0a890);
+    g.rect(x, y + h - 2, w, 2, 0x8a8270);
+  },
+};
+
+export function facadeGrid(ext: HouseExteriorMap, tier: string): Grid {
+  const g = new Grid(FACADE_W, FACADE_H);
+  const b = BODY[tier] ?? BODY.small;
+  const x0 = Math.round((FACADE_W - b.w) / 2);
+  const by = BASE_Y - b.h;
+  const cx = FACADE_W / 2;
+
+  // 그림자
+  g.ellipse(cx, BASE_Y, b.w / 2 + 6, 4, 0x000000, 80);
+  // 몸체
+  (FACADE[ext.facade] ?? FACADE.facade_plank)(g, x0, by, b.w, b.h);
+  // 창문 (따뜻한 불빛)
+  for (const wx of windowXs(b.w)) {
+    g.rect(x0 + wx - 1, by + 7, 10, 11, 0x2a1c14);
+    g.rect(x0 + wx, by + 8, 8, 9, 0xffd27a);
+    g.vline(x0 + wx + 4, by + 8, by + 16, 0x8a5a30);
+    g.hline(x0 + wx, x0 + wx + 7, by + 12, 0x8a5a30);
+  }
+  // 지붕 (박공)
+  const [rc, rd] = ROOF[ext.roof] ?? ROOF.roof_slate;
+  const half = b.w / 2 + 6;
+  for (let i = 0; i < b.roof; i++) {
+    const hw = Math.round((half * (i + 1)) / b.roof);
+    const y = by - b.roof + i;
+    g.hline(cx - hw, cx + hw - 1, y, i % 4 === 3 ? rd : rc);
+  }
+  if (ext.roof === "roof_thatch") for (let i = 2; i < b.roof; i += 3) g.set(cx - 4 + ((i * 7) % 9), by - b.roof + i, 0xd8b868);
+  if (ext.roof === "roof_moss") for (let i = 3; i < b.roof; i += 2) g.set(cx - 10 + ((i * 11) % 21), by - b.roof + i, 0x76a466);
+  g.hline(cx - half, cx + half - 1, by - 1, rd);
+  // 굴뚝·다락 창
+  g.rect(cx + Math.round(half / 2), by - b.roof + 4, 5, 9, 0x5a4a40);
+  if (b.w >= 72) {
+    g.ellipse(cx, by - b.roof / 2 + 1, 4, 4, 0x2a1c14);
+    g.ellipse(cx, by - b.roof / 2 + 1, 3, 3, 0xffd27a);
+  }
+  // 문
+  const dx = cx - 5;
+  const dy = BASE_Y - 16;
+  const doorColor = ext.door === "door_red" ? 0xa83a30 : ext.door === "door_arch" ? 0x4a3020 : 0x5a3a26;
+  g.rect(dx, dy, 10, 16, doorColor);
+  if (ext.door === "door_arch") {
+    g.hline(dx + 1, dx + 8, dy - 1, doorColor);
+    g.hline(dx + 3, dx + 6, dy - 2, doorColor);
+    g.rect(dx + 3, dy + 2, 4, 3, 0xffd27a);
+  }
+  g.set(dx + 7, dy + 9, 0xe0c060);
+  g.rect(dx - 2, BASE_Y, 14, 2, 0x6a6862); // 문턱
+  // 정원
+  if (ext.garden === "garden_pots")
+    for (const px of [x0 + 2, x0 + 9, x0 + b.w - 8]) {
+      g.rect(px, BASE_Y - 4, 5, 4, 0xa85a3a);
+      g.ellipse(px + 2.5, BASE_Y - 6, 3, 2.5, LEAF);
+    }
+  if (ext.garden === "garden_flowers")
+    for (let i = 0; i < 22; i++) {
+      const fx = x0 - 4 + ((i * 9) % (b.w + 8));
+      if (Math.abs(fx - cx) < 8) continue;
+      g.set(fx, BASE_Y + 2 + (i % 3), LEAF);
+      g.set(fx, BASE_Y + 1 + (i % 3), [0xf0a0c0, 0xf0e080, 0xb0a0f0][i % 3]);
+    }
+  if (ext.garden === "garden_lanterns")
+    for (const lx of [cx - 13, cx + 12]) {
+      g.vline(lx, BASE_Y - 6, BASE_Y, 0x3a3c42);
+      g.rect(lx - 1, BASE_Y - 10, 3, 4, 0xffd080);
+    }
+  // 우편함 (왼쪽)
+  if (ext.mailbox !== "mailbox_none") {
+    const mx = x0 - 12;
+    g.vline(mx + 3, BASE_Y - 8, BASE_Y + 2, WOOD_D);
+    if (ext.mailbox === "mailbox_ghost") {
+      g.ellipse(mx + 3, BASE_Y - 12, 5, 5, 0xc8d0e0);
+      g.set(mx + 1, BASE_Y - 13, 0x303848);
+      g.set(mx + 5, BASE_Y - 13, 0x303848);
+      g.hline(mx + 2, mx + 4, BASE_Y - 10, 0x303848);
+    } else {
+      g.rect(mx - 1, BASE_Y - 15, 9, 7, 0xb04030);
+      g.rect(mx + 7, BASE_Y - 18, 1, 4, 0xe0c060);
+    }
+  }
+  // 간판 (오른쪽 기둥)
+  if (ext.sign !== "sign_none") {
+    const sx = x0 + b.w + 4;
+    g.vline(sx + 8, BASE_Y - 16, BASE_Y + 2, WOOD_D);
+    const neon = ext.sign === "sign_neon";
+    g.rect(sx, BASE_Y - 28, 17, 11, neon ? 0x2a1e34 : WOOD_L);
+    if (neon) {
+      g.hline(sx, sx + 16, BASE_Y - 28, 0xff7ac0);
+      g.hline(sx, sx + 16, BASE_Y - 18, 0xff7ac0);
+      g.vline(sx, BASE_Y - 28, BASE_Y - 18, 0xff7ac0);
+      g.vline(sx + 16, BASE_Y - 28, BASE_Y - 18, 0xff7ac0);
+      g.hline(sx + 4, sx + 12, BASE_Y - 23, 0x9ae8ff);
+    } else {
+      g.hline(sx + 3, sx + 13, BASE_Y - 24, WOOD_D);
+      g.hline(sx + 3, sx + 10, BASE_Y - 21, WOOD_D);
+    }
+  }
+  g.outline(OUT, false, 160);
+  // 울타리 (앞마당 둘레, 가운데 길은 비운다)
+  if (ext.fence !== "fence_none") {
+    const fy = FACADE_H - 8;
+    for (let x = 4; x < FACADE_W - 4; x++) {
+      if (Math.abs(x - cx) < 10) continue;
+      if (ext.fence === "fence_picket") {
+        if (x % 4 === 0) g.vline(x, fy, fy + 6, 0xe8e2d0);
+        g.set(x, fy + 2, 0xd8d2c0);
+        g.set(x, fy + 4, 0xd8d2c0);
+      } else if (ext.fence === "fence_stone") {
+        g.vline(x, fy + 2, fy + 6, (x >> 2) % 2 ? STONE : STONE_D);
+      } else {
+        g.vline(x, fy + 1 + ((x * 7) % 3 === 0 ? 0 : 1), fy + 6, x % 5 ? LEAF_D : LEAF);
+      }
+    }
+  }
+  return g;
+}
+
+/** 외관 미리보기 dataURL (UI). 같은 외관·크기는 캐시 */
+export function facadePreview(ext: HouseExteriorMap, tier: string, scale: number): { url: string; w: number; h: number } {
+  const key = `facade:${tier}:${Object.values(ext).join(",")}@${scale}`;
+  const hit = icons.get(key);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = FACADE_W * scale;
+  c.height = FACADE_H * scale;
+  const ctx = c.getContext("2d")!;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(facadeGrid(ext, tier).toCanvas(), 0, 0, c.width, c.height);
   const out = { url: c.toDataURL(), w: c.width, h: c.height };
   icons.set(key, out);
   return out;

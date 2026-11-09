@@ -1,7 +1,7 @@
 import { handler, json, notFound } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
-import { findVisible, getAccounts, getStore } from "@/lib/store";
+import { findVisible, getAccounts, getStore, pushActivity } from "@/lib/store";
 import { rewardReaction } from "@/lib/store/accounts";
 import type { ReviveResponse } from "@/lib/types";
 
@@ -18,5 +18,8 @@ export const POST = handler<{ id: string }>(async (req, { id }) => {
   if (!result) throw notFound();
   const first = result.revived && (await store.firstRevive(id, visitorId));
   const earned = first ? await rewardReaction(getAccounts(), visitorId, grave.ownerAccountId, "revive", "gotRevive") : 0;
+  // 소식은 처음 눌렀을 때만 (토글을 반복해도 쌓이지 않게)
+  if (first && grave.ownerAccountId)
+    await pushActivity(grave.ownerAccountId, { kind: "revive", actorId: visitorId, targetId: id, targetName: grave.name });
   return json<ReviveResponse>({ ...result, earned });
 });

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { bridge, type GameStartOptions } from "@/game/bridge";
+import { installErrorReporting } from "@/lib/hooks/errorReporting";
 import { meStore } from "@/lib/hooks/useMe";
 import { removeItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
@@ -31,6 +32,8 @@ export default function App({ initialGraveId, debug }: Props) {
 
   // ready는 값 없는 sticky 이벤트라 last()로는 도착 여부를 알 수 없어서, 게임을 띄우기 전부터 구독해 둔다
   useEffect(() => bridge.on("ready", () => setReady(true)), []);
+  // 잡히지 않은 오류를 운영자에게 알린다 (같은 메시지는 한 번, 분당 5건까지)
+  useEffect(installErrorReporting, []);
   // 입장 클릭 제스처 안에서 바로 재생하려면 곡 목록이 미리 와 있어야 한다
   useEffect(() => {
     void bgm.load();

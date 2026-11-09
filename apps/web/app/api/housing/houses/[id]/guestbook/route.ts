@@ -5,6 +5,7 @@ import type { GuestbookResponse } from "@/lib/housing/types";
 import { myPoints } from "@/lib/housing/points";
 import { rateLimit } from "@/lib/ratelimit";
 import { getVisitorId, requireVisitor } from "@/lib/session";
+import { pushActivity } from "@/lib/store";
 import { readBody } from "@/lib/validate";
 
 /** 방명록 (최신 50개, 가린 글 제외). 내가 쓴 글 표시(mine)가 있어 공유 캐시에 올리지 않는다 */
@@ -23,5 +24,7 @@ export const POST = handler<{ id: string }>(async (req, { id }) => {
   const store = getHouseStore();
   const me = await myPoints(visitorId);
   await postGuest(store, id, visitorId, me.name ?? "지나가던 유령", text);
+  const h = await store.get(id);
+  if (h) await pushActivity(h.owner, { kind: "guestbook", actorId: visitorId, targetId: id, targetName: h.name });
   return json<GuestbookResponse>({ entries: await guestView(store, id, visitorId) }, { status: 201 });
 });

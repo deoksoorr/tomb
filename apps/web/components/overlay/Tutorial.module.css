@@ -1,0 +1,81 @@
+.card {
+  display: grid;
+  gap: 8px;
+  width: min(360px, 100%);
+  padding: 12px 14px;
+  background: var(--panel);
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+  pointer-events: auto;
+  animation: rise 0.25s ease-out both;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.title {
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.skip {
+  min-height: 32px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.text {
+  color: var(--text);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dots {
+  display: flex;
+  gap: 5px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  background: var(--line-strong);
+}
+
+.dot[data-done="true"] {
+  background: var(--moss);
+}
+
+.dot[data-on="true"] {
+  background: var(--candle);
+}
+
+@media (pointer: coarse) {
+  .skip {
+    min-height: 44px;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}

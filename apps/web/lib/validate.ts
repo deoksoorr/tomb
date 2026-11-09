@@ -1,4 +1,4 @@
-import { checkName, isAvatarBody, isAvatarColor, isGraveStyle, itemById } from "@tomb/protocol";
+import { checkName, isAvatarBody, isAvatarColor, isGraveStyle, itemById, ROOM_ID_RE } from "@tomb/protocol";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { CODE_RE, normalizeCode } from "./economy";
@@ -170,6 +170,21 @@ export const AdminBulkSchema = z.object({
 
 /** 출석 때 입장 화면의 이름·색·몸 모양을 함께 보낸다 (계정에 값이 없을 때만 저장) */
 export const AttendSchema = z.object({ name: userName.optional(), color: avatarColor.optional(), body: avatarBody.optional() });
+
+/** 클라이언트 오류 보고. 너무 긴 값은 자른다 (거절하지 않는다) */
+const clip = (max: number) => z.string().transform((s) => s.slice(0, max));
+export const ErrorReportSchema = z.object({
+  message: clip(500).refine((s) => s.trim().length > 0, "메시지가 비었어요."),
+  stack: clip(4000).optional(),
+  url: clip(500),
+  kind: z.enum(["error", "unhandledrejection", "react", "api"], "알 수 없는 오류 종류예요."),
+  ua: clip(300).optional(),
+});
+
+export const RoomJoinSchema = z.object({ room: z.string().max(60).regex(ROOM_ID_RE, "들어갈 수 없는 방이에요.") });
+
+export const ActivitySeenSchema = z.object({ at: z.number().int().min(0) });
+export const NameChangeSchema = z.object({ name: userName });
 
 /** POST /api/session — fresh면 기존 쿠키를 버리고 새 계정으로 시작 */
 export const SessionSchema = z.object({ fresh: z.boolean().optional() });

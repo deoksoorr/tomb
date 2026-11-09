@@ -2,6 +2,8 @@ import { request } from "../api";
 import type { HouseSort, PlotTierId } from "./catalog";
 import type {
   GuestbookResponse,
+  HouseExterior,
+  VillageResponse,
   HouseDetailResponse,
   HouseLayout,
   HouseLikeResponse,
@@ -21,7 +23,11 @@ const house = (id: string, sub = "") => `/api/housing/houses/${encodeURIComponen
 
 export const housingApi = {
   mine: () => request<MyHouseResponse>("/api/housing/me", { cache: "no-store" }),
-  buyPlot: (name: string, intro: string) => request<MyHouseResponse>("/api/housing/me", send("POST", { name, intro })),
+  buyPlot: (name: string, intro: string, lot?: number | null) => request<MyHouseResponse>("/api/housing/me", send("POST", { name, intro, lot: lot ?? null })),
+  saveExterior: (exterior: HouseExterior) => request<MyHouseResponse>("/api/housing/me/exterior", send("PUT", { exterior })),
+  /** fresh=true: 방금 바꾼 내용을 보려고 CDN 캐시(15초)를 건너뛴다 */
+  village: (fresh = false) =>
+    request<VillageResponse>(fresh ? `/api/housing/village?t=${Date.now()}` : "/api/housing/village", fresh ? { cache: "no-store" } : undefined),
   editProfile: (name: string, intro: string) => request<MyHouseResponse>("/api/housing/me", send("PATCH", { name, intro })),
   upgrade: (to: PlotTierId) => request<MyHouseResponse>("/api/housing/me/upgrade", send("POST", { to })),
   buyItem: (itemId: string) => request<MyHouseResponse>("/api/housing/me/buy", send("POST", { itemId })),

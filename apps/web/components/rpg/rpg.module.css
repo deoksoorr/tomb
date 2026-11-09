@@ -494,8 +494,26 @@ button.card:hover {
   color: var(--muted);
 }
 
-.pause {
+.topButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin-left: auto;
+  align-self: flex-start;
+  pointer-events: auto;
+}
+
+.together {
+  color: var(--moss) !important;
+}
+
+.phrases {
+  justify-self: end;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 360px;
   pointer-events: auto;
 }
 
@@ -592,9 +610,21 @@ button.card:hover {
 
 .cool {
   position: absolute;
-  inset: auto 0 0 0;
-  background: rgba(10, 11, 9, 0.7);
+  inset: 0;
   pointer-events: none;
+}
+
+.attackLabel {
+  position: relative;
+}
+
+/* 쿨다운 중에 눌러 둔 공격이 있으면 테두리가 초록 (끝나는 순간 나간다) */
+.buffered {
+  box-shadow:
+    0 -2px 0 0 var(--moss),
+    0 2px 0 0 var(--moss),
+    -2px 0 0 0 var(--moss),
+    2px 0 0 0 var(--moss);
 }
 
 @media (pointer: coarse) and (max-width: 560px) {

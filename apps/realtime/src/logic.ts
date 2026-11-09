@@ -104,10 +104,10 @@ export function parseChannel(raw: string, maxChannels: number): number | null {
   return n <= maxChannels ? n : null;
 }
 
-/** ?x=&y= 스폰 위치. 둘 다 정수이고 맵 범위 안일 때만 쓴다 */
-export function parseSpawn(xs: string | null, ys: string | null): Point | undefined {
+/** ?x=&y= 스폰 위치. 둘 다 정수이고 맵 범위 안일 때만 쓴다 (방은 크기를 모르므로 u16 범위만) */
+export function parseSpawn(xs: string | null, ys: string | null, room = false): Point | undefined {
   if (xs === null || ys === null || !/^\d{1,5}$/.test(xs) || !/^\d{1,5}$/.test(ys)) return undefined;
   const x = Number(xs);
   const y = Number(ys);
-  return inServerBounds(x, y) ? { x, y } : undefined;
+  return (room ? x <= 0xffff && y <= 0xffff : inServerBounds(x, y)) ? { x, y } : undefined;
 }

@@ -7,7 +7,7 @@ import PixelIcon, { type IconName } from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import styles from "./MenuSheet.module.css";
 
-export type MenuTarget = "bury" | "graves" | "bag" | "fireworks" | "ranking" | "notices" | "me" | "guide";
+export type MenuTarget = "bury" | "graves" | "bag" | "fireworks" | "ranking" | "notices" | "activity" | "say" | "me" | "guide";
 
 type Props = {
   canBury: boolean;
@@ -15,6 +15,7 @@ type Props = {
   bagCount: number;
   fireworkCount: number;
   unreadNotice: boolean;
+  activityUnread: number;
   points: number | null;
   onPick: (target: MenuTarget) => void;
   onClose: () => void;
@@ -23,7 +24,17 @@ type Props = {
 type Entry = { target: MenuTarget; icon: IconName; label: string; badge?: string; dot?: boolean; primary?: boolean };
 
 /** 터치 화면의 메뉴: 아래쪽은 조이스틱·행동 버튼만 두고, 나머지는 모두 여기에 */
-export default function MenuSheet({ canBury, myGraveCount, bagCount, fireworkCount, unreadNotice, points, onPick, onClose }: Props) {
+export default function MenuSheet({
+  canBury,
+  myGraveCount,
+  bagCount,
+  fireworkCount,
+  unreadNotice,
+  activityUnread,
+  points,
+  onPick,
+  onClose,
+}: Props) {
   /** 감정 표현은 시트를 닫고 바로 보여 준다 */
   const act = (kind: "wave" | "cheer") => {
     onClose();
@@ -36,6 +47,8 @@ export default function MenuSheet({ canBury, myGraveCount, bagCount, fireworkCou
     ...(fireworkCount > 0
       ? [{ target: "fireworks" as const, icon: "spark" as const, label: "폭죽 쏘기", badge: String(fireworkCount) }]
       : []),
+    { target: "activity", icon: "heart", label: "내 소식", badge: activityUnread ? String(activityUnread) : undefined },
+    { target: "say", icon: "chat", label: "말풍선" },
     { target: "ranking", icon: "list", label: "랭킹" },
     { target: "notices", icon: "bell", label: "공지", dot: unreadNotice },
     { target: "me", icon: "user", label: "내 정보", badge: points !== null ? `${points.toLocaleString("ko-KR")}P` : undefined },

@@ -10,13 +10,15 @@ import {
   nextTier,
   PLOT_TIERS,
   sellPrice,
+  villageLots,
+  VILLAGE_MAX_LOTS,
   type PlotTierId,
 } from "./catalog";
-import { validateLayout } from "./layout";
+import { designCounts, designScore, validateExterior, validateLayout } from "./layout";
 import { myPoints, refundAndThrow, rewardLike, spend, refund } from "./points";
 import { MemoryHouseStore, type HouseRecord, type HouseStore } from "./store";
 import { RedisHouseStore } from "./store-redis";
-import type { GuestEntryView, HouseLayout, HouseSummary, MyHouseResponse, PublicHouse } from "./types";
+import type { GuestEntryView, HouseExterior, HouseLayout, HouseSummary, MyHouseResponse, PublicHouse, VillageResponse } from "./types";
 
 // 라우트가 쓰는 하우징 동작. 돈이 오가는 동작은 "검사 → spendPoints → 집 쪽 Lua" 순서이고,
 // 집 쪽 단계가 경합으로 실패하면(동시에 두 번 누름 등) 쓴 포인트를 그대로 돌려준다.
@@ -54,6 +56,7 @@ export function toPublicHouse(r: HouseRecord): PublicHouse {
 export function toSummary(r: HouseRecord): HouseSummary {
   return {
     id: r.id,
+    lot: r.lot,
     name: r.name,
     ownerName: r.ownerName,
     tier: r.tier,
@@ -73,7 +76,9 @@ export async function findVisibleHouse(store: HouseStore, id: string): Promise<H
 
 export async function myHouse(store: HouseStore, accountId: string, me?: Me): Promise<MyHouseResponse> {
   const id = houseIdFor(accountId);
-  const [h, inventory, m] = await Promise.all([store.get(id), store.inventory(id), me ?? myPoints(accountId)]);
+  const [h0, inventory, m] = await Promise.all([store.get(id), store.inventory(id), me ?? myPoints(accountId)]);
+  // 마을이 생기기 전에 분양받은 집은 처음 열 때 번지를 받는다
+  const h = h0 && !h0.lot && (await store.assignLot(id)) ? await store.get(id) : h0;
   return { house: h ? toPublicHouse(h) : null, inventory, points: m.points };
 }
 
@@ -83,14 +88,48 @@ const mustHave = async (store: HouseStore, accountId: string): Promise<HouseReco
   return h;
 };
 
-export async function buyPlot(store: HouseStore, accountId: string, name: string, intro: string, ownerName: string): Promise<MyHouseResponse> {
+const lotTaken = () => new HttpError(409, "LOT_TAKEN", "그 번지는 방금 다른 분이 분양받았어요. 다른 번지를 골라 주세요.");
+
+export async function buyPlot(
+  store: HouseStore,
+  accountId: string,
+  name: string,
+  intro: string,
+  ownerName: string,
+  lot: number | null = null,
+): Promise<MyHouseResponse> {
   const id = houseIdFor(accountId);
   if (await store.get(id)) throw new HttpError(409, "ALREADY_OWNED", "이미 내 묘역이 있어요. 한 계정에 하나만 분양받을 수 있어요.");
+  if (lot !== null && (!Number.isInteger(lot) || lot < 1 || lot > VILLAGE_MAX_LOTS))
+    throw new HttpError(400, "INVALID_INPUT", `번지는 1~${VILLAGE_MAX_LOTS} 중에서 골라 주세요.`);
+  if (lot !== null && (await store.village()).some((h) => h.lot === lot)) throw lotTaken();
   const tier = PLOT_TIERS[0];
   await spend(accountId, tier.price, "plot");
-  const ok = await store.create({ id, owner: accountId, name, intro, ownerName, tier: tier.id, now: Date.now() });
-  if (!ok) await refundAndThrow(accountId, tier.price, new HttpError(409, "ALREADY_OWNED", "이미 내 묘역이 있어요."));
+  const r = await store.create({ id, owner: accountId, name, intro, ownerName, tier: tier.id, lot, now: Date.now() });
+  if (r === "exists") await refundAndThrow(accountId, tier.price, new HttpError(409, "ALREADY_OWNED", "이미 내 묘역이 있어요."));
+  if (r === "lot_taken") await refundAndThrow(accountId, tier.price, lotTaken());
+  if (r === "full") await refundAndThrow(accountId, tier.price, new HttpError(409, "VILLAGE_FULL", "마을에 빈 번지가 없어요."));
   return myHouse(store, accountId);
+}
+
+/** 분양 마을: 번지가 있는 집들의 외관·문패 (숨긴 집은 자리만) */
+export async function village(store: HouseStore, now = Date.now()): Promise<VillageResponse> {
+  let all = await store.village();
+  // 마을이 생기기 전에 분양받은 집(번지 없음)은 여기서 빈 번지를 받는다 (한 번만 일어난다)
+  const everyone = await store.listAll();
+  const missing = everyone.filter((h) => !h.lot);
+  if (missing.length) {
+    for (const h of missing) await store.assignLot(h.id);
+    all = await store.village();
+  }
+  const shown = all.filter((h) => !h.hidden);
+  const maxLot = all.reduce((m, h) => Math.max(m, h.lot), 0);
+  return {
+    lots: villageLots(maxLot, all.length),
+    houses: shown.map((h) => ({ ...toSummary(h), exterior: h.exterior })),
+    taken: all.filter((h) => h.hidden).map((h) => h.lot),
+    generatedAt: now,
+  };
 }
 
 export async function editProfile(store: HouseStore, accountId: string, name: string, intro: string): Promise<MyHouseResponse> {
@@ -142,10 +181,23 @@ export async function saveLayout(store: HouseStore, accountId: string, tier: Plo
   if (h.tier !== tier) throw new HttpError(409, "CONFLICT", "묘역 크기가 바뀌었어요. 다시 열어 주세요.");
   const v = validateLayout(layout, tier, await store.inventory(h.id));
   if (!v.ok) throw new HttpError(400, v.code, v.message);
-  const r = await store.saveLayout(h.id, tier, layout, v.counts, v.placedScore, Date.now());
+  // 놓은 개수·점수는 안(배치) + 밖(지금 외관)을 함께 센다 (외관에 쓴 아이템을 되팔지 못하게)
+  const r = await store.saveDesign(h.id, tier, layout, null, designCounts(layout, h.exterior), designScore(layout, h.exterior), Date.now());
   if (r === "no_house") throw noHouse();
   if (r === "tier") throw new HttpError(409, "CONFLICT", "묘역 크기가 바뀌었어요. 다시 열어 주세요.");
   if (r === "not_owned") throw new HttpError(409, "NOT_OWNED", "가진 것보다 많이 놓았어요. 가방을 다시 확인해 주세요.");
+  return myHouse(store, accountId);
+}
+
+export async function saveExterior(store: HouseStore, accountId: string, exterior: Record<string, unknown>): Promise<MyHouseResponse> {
+  const h = await mustHave(store, accountId);
+  const v = validateExterior(exterior, await store.inventory(h.id));
+  if (!v.ok) throw new HttpError(400, v.code, v.message);
+  const ext: HouseExterior = v.exterior;
+  const r = await store.saveDesign(h.id, h.tier, null, ext, designCounts(h.layout, ext), designScore(h.layout, ext), Date.now());
+  if (r === "no_house") throw noHouse();
+  if (r === "tier") throw new HttpError(409, "CONFLICT", "묘역 크기가 바뀌었어요. 다시 열어 주세요.");
+  if (r === "not_owned") throw new HttpError(409, "NOT_OWNED", "가진 것보다 많이 썼어요. 가방을 다시 확인해 주세요.");
   return myHouse(store, accountId);
 }
 

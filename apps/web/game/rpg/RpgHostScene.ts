@@ -3,6 +3,7 @@ import type { RpgPlay, RunResult } from "@/lib/rpg/types";
 import { bridge } from "../bridge";
 import { prefersReducedMotion } from "../config";
 import type { GameContext } from "../scenes/context";
+import type { GlyphAtlas } from "../text/GlyphAtlas";
 import type { RpgSceneData } from "./base";
 
 // 사냥터 진입·복귀를 맡는 보이지 않는 씬 (게임이 뜰 때부터 켜져 있다).
@@ -10,7 +11,7 @@ import type { RpgSceneData } from "./base";
 // 판이 끝나면 rpg:ended를 보내고 씬을 닫은 뒤 월드를 다시 보인다 → 입구 앞으로 돌아온다.
 // 월드 씬은 건드리지 않는다: 월드 키 입력은 사냥터 오버레이가 ui:blockKeys로 막는다.
 
-export const RPG_SCENE_KEYS = { hunt: "rpg-hunt", bugs: "rpg-bugs", deadline: "rpg-deadline" } as const;
+export const RPG_SCENE_KEYS = { hunt: "rpg-hunt", bugs: "rpg-bugs", stars: "rpg-stars" } as const;
 
 export class RpgHostScene extends Phaser.Scene {
   private running: string | null = null;
@@ -43,6 +44,9 @@ export class RpgHostScene extends Phaser.Scene {
     const data: RpgSceneData = {
       play,
       color: ctx.opts.color,
+      name: ctx.opts.name,
+      body: ctx.opts.body ?? "hood",
+      atlas: (this.scene.get("world") as unknown as { atlas?: GlyphAtlas } | null)?.atlas ?? null,
       look: bridge.last("look:set")?.look ?? [],
       reduced: prefersReducedMotion(),
       onEnd: (result, aborted) => this.end(key, worldOn, result, aborted),

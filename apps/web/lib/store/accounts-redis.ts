@@ -1,11 +1,16 @@
 import { Redis } from "@upstash/redis";
 import { MAX_DECOR_PER_GRAVE, type CosmeticSlot } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
-import type { Grave, GraveDecor } from "../types";
+import type { ActivityItem, Grave, GraveDecor } from "../types";
+import { kstDay } from "./accounts";
 import { chKeys, DECOR, K } from "./keys";
 import { encode } from "./redis";
 import {
+  ACTIVITY_KEEP,
+  ECON_TTL_SEC,
   PRESENCE_MIN_GAP_MS,
+  spendCategory,
+  type NameChangeResult,
   type AccountRecord,
   type AccountStore,
   type EarnOptions,
@@ -24,7 +29,8 @@ const EARN_TTL_SEC = 2 * 86_400;
 /**
  * 항목별 하루 한도·하루 전체 한도·지갑 한도(+ ipKey가 있으면 같은 IP의 그 항목 합계) 안에서 적립하고
  * 모은 포인트(lifetime)와 포인트 랭킹을 같이 올린다. 개편 전 계정의 모은 포인트는 지금 잔액에서 시작한다.
- * MemoryAccounts.credit과 같은 규칙. c = { acct, earn, rank, id, dailyCap, balanceCap, ttl }
+ * 경제 통계(econ:{날짜})의 earn:{source}도 함께 올린다.
+ * MemoryAccounts.credit과 같은 규칙. c = { acct, earn, rank, econ, id, dailyCap, balanceCap, ttl }
  */
 const CREDIT_FN = `
 local function credit(c, source, points, dailyMax, ipKey, ipMax)
@@ -44,6 +50,8 @@ local function credit(c, source, points, dailyMax, ipKey, ipMax)
   redis.call('HINCRBY', c.acct, 'points', amount)
   redis.call('HSETNX', c.acct, 'lifetime', bal)
   redis.call('ZADD', c.rank, redis.call('HINCRBY', c.acct, 'lifetime', amount), c.id)
+  redis.call('HINCRBY', c.econ, 'earn:' .. source, amount)
+  redis.call('EXPIRE', c.econ, ${ECON_TTL_SEC})
   return amount
 end
 `;
@@ -57,23 +65,23 @@ local function take(inv, item)
 end
 `;
 
-// KEYS: acct, earn, rank, [earnIp]  ARGV: id, source, points, dailyMax, dailyCap, balanceCap, ttl, ipMax
+// KEYS: acct, earn, rank, econ, [earnIp]  ARGV: id, source, points, dailyMax, dailyCap, balanceCap, ttl, ipMax
 const EARN_LUA = `${CREDIT_FN}
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], id = ARGV[1], dailyCap = tonumber(ARGV[5]), balanceCap = tonumber(ARGV[6]), ttl = ARGV[7] }
-return credit(c, ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4]), KEYS[4], tonumber(ARGV[8]))
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], id = ARGV[1], dailyCap = tonumber(ARGV[5]), balanceCap = tonumber(ARGV[6]), ttl = ARGV[7] }
+return credit(c, ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4]), KEYS[5], tonumber(ARGV[8]))
 `;
 
 // 머무르기: 직전 지급 후 gap이 지났을 때만 (아니면 -1)
-// KEYS: acct, earn, rank  ARGV: id, now, gap, points, dailyMax, dailyCap, balanceCap, ttl
+// KEYS: acct, earn, rank, econ  ARGV: id, now, gap, points, dailyMax, dailyCap, balanceCap, ttl
 const PRESENCE_LUA = `${CREDIT_FN}
 if tonumber(ARGV[2]) - tonumber(redis.call('HGET', KEYS[1], 'presenceAt') or '0') < tonumber(ARGV[3]) then return -1 end
 redis.call('HSET', KEYS[1], 'presenceAt', ARGV[2])
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], id = ARGV[1], dailyCap = tonumber(ARGV[6]), balanceCap = tonumber(ARGV[7]), ttl = ARGV[8] }
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], id = ARGV[1], dailyCap = tonumber(ARGV[6]), balanceCap = tonumber(ARGV[7]), ttl = ARGV[8] }
 return credit(c, 'presence', tonumber(ARGV[4]), tonumber(ARGV[5]))
 `;
 
 // 출석. 이름·색·몸 모양은 계정에 값이 없을 때만 저장한다
-// KEYS: acct, earn, attendIp, rank
+// KEYS: acct, earn, attendIp, rank, econ
 // ARGV: id, day, yesterday, name, perIp, ttl, attendPts, attendMax, streakPts, streakMax, dailyCap, balanceCap, now, color, body
 const ATTEND_LUA = `${CREDIT_FN}
 if ARGV[4] ~= '' then redis.call('HSETNX', KEYS[1], 'name', ARGV[4]) end
@@ -88,14 +96,14 @@ redis.call('HSET', KEYS[1], 'lastAttend', ARGV[2], 'streak', streak)
 if redis.call('SISMEMBER', KEYS[3], ARGV[1]) == 0 and redis.call('SCARD', KEYS[3]) >= tonumber(ARGV[5]) then return 0 end
 redis.call('SADD', KEYS[3], ARGV[1])
 redis.call('EXPIRE', KEYS[3], ARGV[6])
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[4], id = ARGV[1], dailyCap = tonumber(ARGV[11]), balanceCap = tonumber(ARGV[12]), ttl = ARGV[6] }
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[4], econ = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[11]), balanceCap = tonumber(ARGV[12]), ttl = ARGV[6] }
 local earned = credit(c, 'attend', tonumber(ARGV[7]), tonumber(ARGV[8]))
 if streak % 7 == 0 then earned = earned + credit(c, 'streak', tonumber(ARGV[9]), tonumber(ARGV[10])) end
 return earned
 `;
 
 // 구매. unique('1')면 가방에 있거나 지금 착용 중일 때 -1. 잔액 부족은 0
-// KEYS: acct, inv, look  ARGV: itemId, price, unique, now
+// KEYS: acct, inv, look, econ  ARGV: itemId, price, unique, now
 const BUY_LUA = `
 if ARGV[3] == '1' then
   if tonumber(redis.call('HGET', KEYS[2], ARGV[1]) or '0') > 0 then return -1 end
@@ -108,11 +116,13 @@ local price = tonumber(ARGV[2])
 if tonumber(redis.call('HGET', KEYS[1], 'points') or '0') < price then return 0 end
 redis.call('HINCRBY', KEYS[1], 'points', -price)
 redis.call('HINCRBY', KEYS[2], ARGV[1], 1)
+redis.call('HINCRBY', KEYS[4], 'spend:shop', price)
+redis.call('EXPIRE', KEYS[4], ${ECON_TTL_SEC})
 return 1
 `;
 
 // 돌려주기: 잔액만 (지갑 상한에서 잘림), 모은 포인트·랭킹은 그대로
-// KEYS: acct, ledger  ARGV: amount, balanceCap, entryJson
+// KEYS: acct, ledger, econ  ARGV: amount, balanceCap, entryJson
 const REFUND_LUA = `
 local before = tonumber(redis.call('HGET', KEYS[1], 'points') or '0')
 redis.call('HSETNX', KEYS[1], 'lifetime', before)
@@ -120,17 +130,21 @@ local bal = math.min(tonumber(ARGV[2]), before + tonumber(ARGV[1]))
 redis.call('HSET', KEYS[1], 'points', bal)
 redis.call('LPUSH', KEYS[2], ARGV[3])
 redis.call('LTRIM', KEYS[2], 0, 99)
+redis.call('HINCRBY', KEYS[3], 'refund', bal - before)
+redis.call('EXPIRE', KEYS[3], ${ECON_TTL_SEC})
 return bal
 `;
 
 // 포인트 쓰기 (다른 기능 공용). 모자라면 -1, 아니면 남은 잔액
-// KEYS: acct, ledger  ARGV: amount, entryJson
+// KEYS: acct, ledger, econ  ARGV: amount, entryJson, 통계 필드(spend:{분류})
 const SPEND_LUA = `
 local amount = tonumber(ARGV[1])
 if tonumber(redis.call('HGET', KEYS[1], 'points') or '0') < amount then return -1 end
 local left = redis.call('HINCRBY', KEYS[1], 'points', -amount)
 redis.call('LPUSH', KEYS[2], ARGV[2])
 redis.call('LTRIM', KEYS[2], 0, 99)
+redis.call('HINCRBY', KEYS[3], ARGV[3], amount)
+redis.call('EXPIRE', KEYS[3], ${ECON_TTL_SEC})
 return left
 `;
 
@@ -177,7 +191,7 @@ return 1
 `;
 
 // 관리자 조정. 늘어난 만큼은 모은 포인트·랭킹에도 더한다. 계정 해시가 없으면 -1
-// KEYS: acct, rank  ARGV: delta, balanceCap, id
+// KEYS: acct, rank, econ  ARGV: delta, balanceCap, id
 const ADJUST_LUA = `
 if redis.call('EXISTS', KEYS[1]) == 0 then return -1 end
 local before = tonumber(redis.call('HGET', KEYS[1], 'points') or '0')
@@ -186,8 +200,40 @@ redis.call('HSET', KEYS[1], 'points', bal)
 if bal > before then
   redis.call('HSETNX', KEYS[1], 'lifetime', before)
   redis.call('ZADD', KEYS[2], redis.call('HINCRBY', KEYS[1], 'lifetime', bal - before), ARGV[3])
+  redis.call('HINCRBY', KEYS[3], 'earn:admin', bal - before)
+elseif bal < before then
+  redis.call('HINCRBY', KEYS[3], 'spend:admin', before - bal)
 end
+redis.call('EXPIRE', KEYS[3], ${ECON_TTL_SEC})
 return bal
+`;
+
+// 닉네임 변경: 쿨다운 → (두 번째부터) 비용 차감 → 이름·시각·횟수. {-2, 다음 가능 시각} | {-1, 0}(포인트 부족) | {비용, 0}
+// KEYS: acct, ledger, econ  ARGV: name, now, price, cooldownMs, entryJson
+const NAME_LUA = `
+local now = tonumber(ARGV[2])
+local changed = tonumber(redis.call('HGET', KEYS[1], 'nameChangedAt') or '0')
+if changed > 0 and now < changed + tonumber(ARGV[4]) then return {-2, changed + tonumber(ARGV[4])} end
+local cost = 0
+if tonumber(redis.call('HGET', KEYS[1], 'nameChanges') or '0') > 0 then cost = tonumber(ARGV[3]) end
+if cost > 0 then
+  if tonumber(redis.call('HGET', KEYS[1], 'points') or '0') < cost then return {-1, 0} end
+  redis.call('HINCRBY', KEYS[1], 'points', -cost)
+  redis.call('LPUSH', KEYS[2], ARGV[5])
+  redis.call('LTRIM', KEYS[2], 0, 99)
+  redis.call('HINCRBY', KEYS[3], 'spend:name', cost)
+  redis.call('EXPIRE', KEYS[3], ${ECON_TTL_SEC})
+end
+redis.call('HSET', KEYS[1], 'name', ARGV[1], 'nameChangedAt', now)
+redis.call('HINCRBY', KEYS[1], 'nameChanges', 1)
+return {cost, 0}
+`;
+
+// 읽음 시각은 앞으로만 간다. KEYS: acct  ARGV: at
+const SEEN_LUA = `
+local cur = tonumber(redis.call('HGET', KEYS[1], 'activitySeen') or '0')
+if tonumber(ARGV[1]) > cur then redis.call('HSET', KEYS[1], 'activitySeen', ARGV[1]); return tonumber(ARGV[1]) end
+return cur
 `;
 
 // 코드 교체. 읽은 뒤 바뀌었으면(동시에 재발급) 0을 돌려 다시 시도하게 한다 → 옛 코드가 살아남지 않는다.
@@ -214,14 +260,15 @@ export class RedisAccounts implements AccountStore {
   }
 
   async get(id: string, day: string, now: number): Promise<AccountRecord> {
-    const [acct, inv, look, graves, today] = await this.redis
+    const [acct, inv, look, graves, today, activity] = await this.redis
       .pipeline()
       .hgetall(K.acct(id))
       .hgetall(K.inv(id))
       .hgetall(K.look(id))
       .smembers(K.acctGraves(id))
       .hget(K.earn(id, day), "_total")
-      .exec<[string[] | null, string[] | null, string[] | null, string[], string | null]>();
+      .lrange(K.activity(id), 0, -1)
+      .exec<[string[] | null, string[] | null, string[] | null, string[], string | null, string[]]>();
     const a = pairs(acct);
     const equipped: EquippedItem[] = [...pairs(look).values()].flatMap((v) => {
       const [itemId, until] = v.split("|");
@@ -240,12 +287,16 @@ export class RedisAccounts implements AccountStore {
       equipped,
       graves,
       todayEarned: Number(today ?? 0),
+      activityUnread: activity.filter((raw) => (JSON.parse(raw) as ActivityItem).at > Number(a.get("activitySeen") ?? 0)).length,
+      nameChangedAt: Number(a.get("nameChangedAt") ?? 0),
+      nameChanges: Number(a.get("nameChanges") ?? 0),
+      tutorialDone: a.get("tutorialDone") === "1",
     };
   }
 
   async earn(id: string, source: EarnSource, day: string, opts: EarnOptions = {}): Promise<number> {
     const rule = earnRule(source);
-    const keys = [K.acct(id), K.earn(id, day), K.rankPoints];
+    const keys = [K.acct(id), K.earn(id, day), K.rankPoints, K.econ(day)];
     if (opts.ipHash) keys.push(K.earnIp(opts.ipHash, day));
     const r = await this.redis.eval<string[], number>(EARN_LUA, keys, [
       id,
@@ -262,21 +313,31 @@ export class RedisAccounts implements AccountStore {
 
   async spend(id: string, amount: number, reason: string, now: number): Promise<number | null> {
     const entry = JSON.stringify({ at: now, amount: -amount, reason });
-    const r = Number(await this.redis.eval<string[], number>(SPEND_LUA, [K.acct(id), K.ledger(id)], [String(amount), entry]));
+    const r = Number(
+      await this.redis.eval<string[], number>(SPEND_LUA, [K.acct(id), K.ledger(id), K.econ(kstDay(now))], [
+        String(amount),
+        entry,
+        `spend:${spendCategory(reason)}`,
+      ]),
+    );
     return r < 0 ? null : r;
   }
 
   async refund(id: string, amount: number, reason: string, now: number): Promise<number> {
     const entry = JSON.stringify({ at: now, amount, reason });
     return Number(
-      await this.redis.eval<string[], number>(REFUND_LUA, [K.acct(id), K.ledger(id)], [String(amount), String(BALANCE_CAP), entry]),
+      await this.redis.eval<string[], number>(REFUND_LUA, [K.acct(id), K.ledger(id), K.econ(kstDay(now))], [
+        String(amount),
+        String(BALANCE_CAP),
+        entry,
+      ]),
     );
   }
 
   async presence(id: string, day: string, now: number): Promise<number | null> {
     const rule = earnRule("presence");
     const r = Number(
-      await this.redis.eval<string[], number>(PRESENCE_LUA, [K.acct(id), K.earn(id, day), K.rankPoints], [
+      await this.redis.eval<string[], number>(PRESENCE_LUA, [K.acct(id), K.earn(id, day), K.rankPoints, K.econ(day)], [
         id,
         String(now),
         String(PRESENCE_MIN_GAP_MS),
@@ -317,7 +378,7 @@ export class RedisAccounts implements AccountStore {
     const streak = earnRule("streak");
     const r = await this.redis.eval<string[], number>(
       ATTEND_LUA,
-      [K.acct(id), K.earn(id, day), K.attendIp(ipHash, day), K.rankPoints],
+      [K.acct(id), K.earn(id, day), K.attendIp(ipHash, day), K.rankPoints, K.econ(day)],
       [
         id,
         day,
@@ -363,7 +424,7 @@ export class RedisAccounts implements AccountStore {
     opts: { unique?: boolean; now?: number } = {},
   ): Promise<"ok" | "insufficient" | "owned"> {
     const r = Number(
-      await this.redis.eval<string[], number>(BUY_LUA, [K.acct(id), K.inv(id), K.look(id)], [
+      await this.redis.eval<string[], number>(BUY_LUA, [K.acct(id), K.inv(id), K.look(id), K.econ(kstDay(opts.now ?? Date.now()))], [
         itemId,
         String(price),
         opts.unique ? "1" : "0",
@@ -413,7 +474,11 @@ export class RedisAccounts implements AccountStore {
 
   async adjustPoints(id: string, delta: number): Promise<number | null> {
     const r = Number(
-      await this.redis.eval<string[], number>(ADJUST_LUA, [K.acct(id), K.rankPoints], [String(delta), String(BALANCE_CAP), id]),
+      await this.redis.eval<string[], number>(ADJUST_LUA, [K.acct(id), K.rankPoints, K.econ(kstDay())], [
+        String(delta),
+        String(BALANCE_CAP),
+        id,
+      ]),
     );
     return r < 0 ? null : r;
   }
@@ -424,5 +489,60 @@ export class RedisAccounts implements AccountStore {
 
   async removeGrave(id: string, graveId: string): Promise<void> {
     await this.redis.srem(K.acctGraves(id), graveId);
+  }
+
+  async pushActivity(id: string, item: ActivityItem): Promise<void> {
+    await this.redis.multi().lpush(K.activity(id), JSON.stringify(item)).ltrim(K.activity(id), 0, ACTIVITY_KEEP - 1).exec();
+  }
+
+  async activity(id: string): Promise<{ items: ActivityItem[]; lastSeenAt: number }> {
+    const [items, seen] = await this.redis
+      .pipeline()
+      .lrange(K.activity(id), 0, -1)
+      .hget(K.acct(id), "activitySeen")
+      .exec<[string[], string | null]>();
+    return { items: items.map((raw) => JSON.parse(raw) as ActivityItem), lastSeenAt: Number(seen ?? 0) };
+  }
+
+  async seeActivity(id: string, at: number): Promise<number> {
+    return Number(await this.redis.eval<string[], number>(SEEN_LUA, [K.acct(id)], [String(at)]));
+  }
+
+  async changeName(id: string, name: string, now: number, price: number, cooldownMs: number): Promise<NameChangeResult> {
+    const entry = JSON.stringify({ at: now, amount: -price, reason: "name" });
+    const [code, next] = (
+      await this.redis.eval<string[], [number, number]>(NAME_LUA, [K.acct(id), K.ledger(id), K.econ(kstDay(now))], [
+        name,
+        String(now),
+        String(price),
+        String(cooldownMs),
+        entry,
+      ])
+    ).map(Number);
+    if (code === -2) return { ok: false, reason: "cooldown", nextAllowedAt: next };
+    if (code === -1) return { ok: false, reason: "points" };
+    return { ok: true, cost: code };
+  }
+
+  async setTutorialDone(id: string): Promise<void> {
+    await this.redis.hset(K.acct(id), { tutorialDone: "1" });
+  }
+
+  async economy(days: string[]): Promise<{ date: string; fields: Record<string, number> }[]> {
+    if (!days.length) return [];
+    const p = this.redis.pipeline();
+    for (const d of days) p.hgetall(K.econ(d));
+    const r = await p.exec<(string[] | null)[]>();
+    return days.map((date, i) => ({ date, fields: Object.fromEntries([...pairs(r[i])].map(([k, v]) => [k, Number(v)])) }));
+  }
+
+  /** 랭킹에 오른 계정(포인트를 모은 적 있는 계정)의 잔액 합계. 관리자 화면에서만 부른다 */
+  async walletTotals(): Promise<{ wallets: number; accounts: number }> {
+    const ids = await this.redis.zrange<string[]>(K.rankPoints, 0, -1);
+    if (!ids.length) return { wallets: 0, accounts: 0 };
+    const p = this.redis.pipeline();
+    for (const id of ids) p.hget(K.acct(id), "points");
+    const pts = await p.exec<(string | null)[]>();
+    return { wallets: pts.reduce((n, v) => n + Number(v ?? 0), 0), accounts: ids.length };
   }
 }

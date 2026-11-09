@@ -1,15 +1,17 @@
 import * as Phaser from "phaser";
-import { ALTAR_NAME, FURNITURE, GRID_DY, GRID_Y0, HOUSING_OFFICE, HUNT_GATE, MAP_WIDTH, SHOP, SHRINE, TILE, mapHeight, playerBounds, type Furniture } from "@tomb/protocol";
+import { ALTAR_NAME, CAMPFIRES, FURNITURE, GRID_DY, GRID_Y0, HOUSING_OFFICE, HUNT_GATE, MAP_WIDTH, SHOP, SHRINE, TILE, mapHeight, playerBounds, type Furniture } from "@tomb/protocol";
 import { addCanvasTexture, TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
 import { CHUNK_H, drawGroundChunk } from "../sprites/ground";
 import { ALTAR_CANDLES } from "../sprites/props";
 import { SHOP_HUT_H } from "../sprites/extras";
-import { CAVE_H, CAVE_TORCHES, OFFICE_H, TORCH_TINT, WP } from "../sprites/worldProps";
+import { CAVE_H, CAVE_TORCHES, FIRE_FRAMES, OFFICE_H, TORCH_TINT, WP } from "../sprites/worldProps";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import {
   benchWidth,
   BRIDGE,
+  CAMPFIRE_LIGHT,
+  campfireCollider,
   furnitureCollider,
   gridProps,
   interactables,
@@ -29,10 +31,13 @@ import {
 // 맵: 바닥(덩어리 텍스처, 화면 근처만 생성), 담장, 정문, 소품, 가구, 유령 잡화점·분양 사무소 오두막, 사냥터 동굴, 성황당, 충돌 박스.
 // 묘비 수에 따라 아래로 늘어나므로 setRows()로 높이·바닥 담장·격자 소품·물리 경계·상호작용 대상을 다시 맞춘다.
 // 격자 구역 소품은 충돌·빛·상호작용은 모두 미리 만들고, 그림은 화면 근처 띠(BAND_ROWS행)만 만들어 둔다 (수백 행에서도 비용이 일정).
+// 모닥불: 돌 고리 + 일렁이는 불꽃 + 불티·연기 + 흔들리는 빛. 불멍(CampfireView) 중인 불은 불티를 더 많이 낸다.
 
 export type LightSpot = { x: number; y: number; scale: number; tint: number; base: number };
 
 const KEEP_CHUNKS = 10;
+/** 그네 틀은 받침보다 이만큼 뒤(depth)에 그려 탄 사람이 가려지지 않게 한다 */
+const SWING_BEHIND = 8;
 /** 격자 소품 그림을 만드는 단위 (행) */
 const BAND_ROWS = 6;
 const BAND_H = BAND_ROWS * GRID_DY;
@@ -65,6 +70,11 @@ export class WorldMap {
   private lastViewY = NaN;
   private lastViewH = NaN;
   private readonly labels: Phaser.GameObjects.BitmapText[] = [];
+  /** 그네 줄·판 (받침 좌표 x*65536+y → 이미지) */
+  private readonly swingSeats = new Map<number, Phaser.GameObjects.Image>();
+  /** 모닥불 id → 불티·연기 이미터 */
+  private readonly fires = new Map<string, { embers: Phaser.GameObjects.Particles.ParticleEmitter; smoke: Phaser.GameObjects.Particles.ParticleEmitter }>();
+  private readonly reduced: boolean;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -73,6 +83,7 @@ export class WorldMap {
     this.colliders = scene.physics.add.staticGroup();
     this.gridColliders = scene.physics.add.staticGroup();
     this.furnitureColliders = scene.physics.add.staticGroup();
+    this.reduced = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
     // 정문 (윗담 가운데)
     scene.add.image(MAP_WIDTH / 2, 2 * TILE + 2, TEX.gate).setOrigin(0.5, 1).setDepth(2 * TILE);
@@ -82,6 +93,7 @@ export class WorldMap {
       this.addPropBody(p, this.colliders, this.staticLights);
     }
     for (const f of FURNITURE) this.addFurniture(f);
+    this.addCampfires();
     this.addPondShimmer();
     // 시내 위 작은 다리 (바닥 높이)
     scene.add.image(BRIDGE.x, BRIDGE.y, WP.bridge).setOrigin(0.5, 1).setDepth(DEPTH.decal + 2);
@@ -186,10 +198,41 @@ export class WorldMap {
 
   /** 소품 그림 (텍스처 맨 아래 줄은 그림자 → 받침(y)이 그 위에 오도록 1px 내린다) */
   private addPropImage(p: PropDef): Phaser.GameObjects.Image {
+    if (p.kind === "swing") {
+      // 그네: 틀은 탄 사람 뒤에, 줄·판은 따로 (누가 타면 숨긴다 — 아바타가 자기 줄·판과 함께 앞뒤로 흔들린다)
+      const frame = this.scene.add.image(p.x, p.y + 1, this.propTexture(p)).setOrigin(0.5, 1).setDepth(p.y - SWING_BEHIND);
+      const seat = this.scene.add.image(p.x, p.y + 1, WP.swingSeat).setOrigin(0.5, 1).setDepth(p.y - SWING_BEHIND + 1);
+      const key = p.x * 65536 + p.y;
+      this.swingSeats.set(key, seat);
+      frame.once(Phaser.GameObjects.Events.DESTROY, () => {
+        seat.destroy();
+        this.swingSeats.delete(key);
+      });
+      return frame;
+    }
     return this.scene.add
       .image(p.x, p.y + 1, this.propTexture(p))
       .setOrigin(0.5, 1)
       .setDepth(FLAT.has(p.kind) ? DEPTH.decal + 3 : p.y);
+  }
+
+  /**
+   * 그네 탄 사람 자리(좌석 = 그네 받침 y − 4)들을 받아, 사람이 있는 그네의 가만히 있는 줄·판을 숨긴다.
+   * riders: [x0, y0, x1, y1, …] (프레임마다 재사용 배열)
+   */
+  updateSwings(riders: readonly number[], n: number): void {
+    for (const [key, seat] of this.swingSeats) {
+      const px = Math.floor(key / 65536);
+      const py = key % 65536;
+      let busy = false;
+      for (let i = 0; i < n; i += 2) {
+        if (Math.abs(riders[i] - px) <= 6 && Math.abs(riders[i + 1] - (py - 4)) <= 6) {
+          busy = true;
+          break;
+        }
+      }
+      if (seat.visible === busy) seat.setVisible(!busy);
+    }
   }
 
   /** 소품 충돌·빛 */
@@ -207,13 +250,66 @@ export class WorldMap {
 
   private addFurniture(f: Furniture): void {
     let key: string;
-    if (f.kind === "bench") {
+    if (f.campfire) key = f.kind === "bench" ? WP.logSeat : WP.stumpSeat;
+    else if (f.kind === "bench") {
       const w = benchWidth(f);
       key = w >= 72 ? TEX.bench4 : w >= 56 ? TEX.bench3 : TEX.bench2;
     }
     else key = f.facing === 1 ? TEX.chairLeft : f.facing === 2 ? TEX.chairRight : TEX.chairDown;
     this.scene.add.image(f.x, f.y + 2, key).setOrigin(0.5, 1).setDepth(f.y);
     this.addCollider(this.furnitureColliders, furnitureCollider(f));
+  }
+
+  private addCampfires(): void {
+    const scene = this.scene;
+    if (!scene.anims.exists("fx-campfire-burn")) {
+      scene.anims.create({
+        key: "fx-campfire-burn",
+        frames: Array.from({ length: FIRE_FRAMES }, (_, i) => ({ key: WP.fire, frame: i })),
+        frameRate: this.reduced ? 4 : 10,
+        repeat: -1,
+      });
+    }
+    for (const c of CAMPFIRES) {
+      scene.add.image(c.x, c.y + 1, WP.fireRing).setOrigin(0.5, 0.5).setDepth(DEPTH.decal + 2);
+      const fire = scene.add.sprite(c.x, c.y + 2, WP.fire, 0).setOrigin(0.5, 1).setDepth(c.y);
+      fire.play({ key: "fx-campfire-burn", startFrame: Math.floor(Math.random() * FIRE_FRAMES) });
+      this.addCollider(this.colliders, campfireCollider(c));
+      this.staticLights.push({ x: c.x, y: c.y + CAMPFIRE_LIGHT.dy, scale: CAMPFIRE_LIGHT.scale, tint: CAMPFIRE_LIGHT.tint, base: CAMPFIRE_LIGHT.base });
+      const embers = scene.add
+        .particles(c.x, c.y - 10, TEX.spark, {
+          lifespan: { min: 900, max: 1700 },
+          speedX: { min: -7, max: 7 },
+          speedY: { min: -30, max: -16 },
+          accelerationX: { min: -6, max: 6 },
+          scale: { start: 0.42, end: 0.08 },
+          alpha: { start: 1, end: 0 },
+          tint: [0xffd060, 0xff9a40, 0xff6a2a],
+          blendMode: Phaser.BlendModes.ADD,
+          frequency: this.reduced ? 520 : 180,
+          x: { min: -4, max: 4 },
+        })
+        .setDepth(DEPTH.lights + 3);
+      const smoke = scene.add
+        .particles(c.x, c.y - 18, WP.smoke, {
+          lifespan: { min: 2200, max: 3200 },
+          speedX: { min: -3, max: 5 },
+          speedY: { min: -12, max: -7 },
+          scale: { start: 0.35, end: 1.5 },
+          alpha: { start: 0.22, end: 0 },
+          frequency: this.reduced ? 1400 : 650,
+        })
+        .setDepth(c.y + 30);
+      this.fires.set(c.id, { embers, smoke });
+    }
+  }
+
+  /** 불멍 중인 모닥불은 불티를 더 많이 (null이면 모두 평소대로) */
+  boostCampfire(id: string | null): void {
+    for (const [k, f] of this.fires) {
+      const on = k === id;
+      f.embers.frequency = on ? (this.reduced ? 260 : 60) : this.reduced ? 520 : 180;
+    }
   }
 
   private addPondShimmer(): void {

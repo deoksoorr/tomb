@@ -1,0 +1,60 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import styles from "../legal.module.css";
+
+export const metadata: Metadata = { title: "이용약관 · 한때는..." };
+
+const EFFECTIVE = "2026년 11월 9일";
+
+export default function TermsPage() {
+  return (
+    <main className={styles.page}>
+      <div className={styles.inner}>
+        <Link href="/" className={styles.home}>
+          ← 묘지로 돌아가기
+        </Link>
+        <h1 className={styles.title}>이용약관</h1>
+        <p className={styles.date}>시행일 {EFFECTIVE}</p>
+
+        <h2>1. 서비스</h2>
+        <p>
+          「한때는...」은 끝내지 못한 사이드프로젝트의 묘비를 세우고, 다른 방문자와 함께 둘러보는 무료 웹 서비스예요. 들어오는
+          것만으로 이 약관에 동의한 것으로 봐요.
+        </p>
+
+        <h2>2. 하지 말아 주세요</h2>
+        <ul>
+          <li>욕설·혐오·괴롭힘이 담긴 묘비·집·방명록·닉네임</li>
+          <li>나나 다른 사람의 개인정보(연락처, 주소, 실명 등)를 올리는 것</li>
+          <li>광고·스팸 묘비, 같은 내용을 반복해서 올리는 것</li>
+          <li>버그를 악용하거나 자동화 도구로 서비스에 무리를 주는 것</li>
+        </ul>
+        <p>이런 내용은 신고나 운영자 판단으로 숨기거나 지울 수 있고, 반복되면 이용을 제한할 수 있어요.</p>
+
+        <h2>3. 포인트와 아이템</h2>
+        <ul>
+          <li>포인트와 아이템은 서비스 안에서만 쓰는 것이고 현금 가치가 없어요. 사고팔거나 환불할 수 없어요.</li>
+          <li>운영 정책에 따라 얻는 양·가격·효과가 바뀔 수 있어요. 오류로 얻은 포인트·아이템은 회수할 수 있어요.</li>
+        </ul>
+
+        <h2>4. 내가 쓴 내용</h2>
+        <p>
+          묘비·집·방명록에 쓴 내용은 모두에게 공개돼요. 그 내용의 권리는 쓴 사람에게 있고, 서비스는 그것을 보여 주는 데에만
+          써요.
+        </p>
+
+        <h2>5. 서비스 변경·중단</h2>
+        <p>
+          서비스는 미리 알리고 바뀌거나 멈출 수 있어요. 급한 장애나 보안 문제가 있으면 먼저 멈추고 나중에 알릴 수 있어요. 무료
+          서비스라 그로 인한 손해를 책임지기 어려워요.
+        </p>
+
+        <h2>6. 문의</h2>
+        <p>
+          게임 안 ⓘ 안내나 내 정보의 [문의하기]로 알려 주세요. 개인정보는{" "}
+          <Link href="/privacy">개인정보처리방침</Link>을 봐 주세요.
+        </p>
+      </div>
+    </main>
+  );
+}

@@ -10,6 +10,8 @@ import { AvatarView } from "./AvatarView";
 // 화면 밖이면 위치 갱신은 계속하되 그리지 않는다.
 
 const CULL_MARGIN = 16;
+/** 그네 좌석 y → 그네 틀보다 앞에 그릴 depth 오프셋 */
+export const SWING_FRONT = 7;
 /** 발밑에서 이름표 위까지 (말풍선 포함) */
 const LABEL_TOP = 34;
 
@@ -63,6 +65,8 @@ export class RemoteAvatar {
         this.view.depthOverride = seat.y + 1;
       }
     }
+    // 그네 탄 사람은 그네 틀(받침 y = 좌석 + 5) 앞에 그린다
+    else if (o.state === STATE.swing) this.view.depthOverride = y + SWING_FRONT;
     this.x = x;
     this.y = y;
     this.view.apply(STATE_NAMES[o.state], o.dir, now);

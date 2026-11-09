@@ -3,6 +3,10 @@ import { MONSTERS, potionById, POTION_COOLDOWN_MS, SKILL_FX, skillById, ZONES, t
 import { damage, hitChance, monsterStats, type MonsterStats } from "@/lib/rpg/formulas";
 import { huntPlan, WAVE_MAX_GAP_SEC, type HuntWave } from "@/lib/rpg/plan";
 import type { HuntResult, RpgAction, RpgHud } from "@/lib/rpg/types";
+import { DIR, STATE, type DirId } from "@tomb/protocol";
+import { bridge } from "../bridge";
+import { AvatarView } from "../entities/AvatarView";
+import { RoomPresence } from "../net/RoomPresence";
 import { RpgScene } from "./base";
 import { avFrame, ensureFloor, ensureRpgTextures, makePlayer, RTEX } from "./sprites";
 
@@ -40,6 +44,11 @@ type Mon = {
   vuln: number;
   slowUntil: number;
   hidden: boolean;
+  /** 넉백 속도 (px/s, 매 프레임 줄어든다) */
+  kbx: number;
+  kby: number;
+  /** 피격 경직: 이 시각까지 움직이지도 때리지도 못한다 */
+  stunUntil: number;
 };
 
 type Shot = { x: number; y: number; vx: number; vy: number; dmg: number; until: number; sprite: Phaser.GameObjects.Image };
@@ -77,9 +86,24 @@ export class HuntScene extends RpgScene {
   private rootUntil = 0;
   private regenAt = 0;
   private player!: Phaser.GameObjects.Sprite;
+  /** 월드와 같은 아바타 (이름표·몸 모양·말풍선). 아틀라스가 없으면 null → 단순 스프라이트 */
+  private me: AvatarView | null = null;
+  /** 함께 사냥: 같은 사냥터·난이도 방 사람들 (전투는 각자, 위치·모습·말풍선만) */
+  private presence: RoomPresence | null = null;
+  private peers = 0;
+  private movingNow = false;
   private pShadow!: Phaser.GameObjects.Image;
   private helper: { sprite: Phaser.GameObjects.Sprite; until: number; nextAtk: number } | null = null;
   private walkT = 0;
+  /** 쿨다운 중에 누른 공격 (끝나는 순간 자동으로 나간다) */
+  private atkBuffered = false;
+  private atkCdMs = 1;
+  /** 게이지가 다 찬 순간 반짝임 */
+  private gaugeFlashUntil = 0;
+  private wasReady = true;
+  /** 히트스톱 남은 ms (타격감: 아주 잠깐 멈춘다) */
+  private hitstop = 0;
+  private gauge!: Phaser.GameObjects.Graphics;
 
   constructor() {
     super("rpg-hunt");
@@ -137,7 +161,37 @@ export class HuntScene extends RpgScene {
     }
 
     this.pShadow = this.add.image(this.px, this.py, RTEX.shadow).setDepth(-500);
-    this.player = this.add.sprite(this.px, this.py, RTEX.player, avFrame(0, 0)).setOrigin(0.5, 19 / 20);
+    const atlas = this.data0.atlas;
+    if (atlas) {
+      this.me = new AvatarView(this, atlas, this.px, this.py, this.data0.color, this.data0.name, true, this.data0.look, this.data0.body);
+      this.player = this.me.sprite;
+      const room = `hunt:${zone.slug}:${play.difficulty}`;
+      this.peers = 0;
+      this.presence = new RoomPresence(this, {
+        atlas,
+        room,
+        me: this.me,
+        getPose: () => ({ x: Math.round(this.px), y: Math.round(this.py), state: this.movingNow ? STATE.walk : STATE.idle, dir: this.dirRow as DirId }),
+        onStatus: (st) => (this.peers = st.mode === "online" ? st.count : 0),
+      });
+    } else {
+      this.me = null;
+      this.player = this.add.sprite(this.px, this.py, RTEX.player, avFrame(0, 0)).setOrigin(0.5, 19 / 20);
+    }
+    const offSay = bridge.on("rpg:say", ({ id }) => this.presence?.say(id));
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      offSay();
+      this.presence?.destroy();
+      this.presence = null;
+      this.me?.destroy();
+      this.me = null;
+    });
+    this.gauge = this.add.graphics();
+    this.atkBuffered = false;
+    this.atkReadyAt = 0;
+    this.atkCdMs = 1;
+    this.wasReady = true;
+    this.hitstop = 0;
 
     const cam = this.cameras.main;
     cam.setRoundPixels(true);
@@ -221,8 +275,16 @@ export class HuntScene extends RpgScene {
   }
 
   private attack(): void {
-    if (this.now < this.atkReadyAt || this.now < this.rootUntil) return;
-    this.atkReadyAt = this.now + 1000 / this.play.derived.aspd;
+    if (this.died) return;
+    // 쿨다운 중이면 버퍼에 넣었다가 끝나는 순간 나간다 (연타가 씹히지 않게)
+    if (this.now < this.atkReadyAt || this.now < this.rootUntil) {
+      this.atkBuffered = true;
+      return;
+    }
+    this.atkBuffered = false;
+    this.atkCdMs = 1000 / this.play.derived.aspd;
+    this.atkReadyAt = this.now + this.atkCdMs;
+    this.wasReady = false;
     const target = this.nearest(24);
     if (target) this.setFace(target.x - this.px, target.y - this.py);
     this.swing(1);
@@ -261,9 +323,19 @@ export class HuntScene extends RpgScene {
     this.sfx.play(crit ? "crit" : "hit", 0.6);
     m.sprite.setTintFill(0xffffff);
     this.time.delayedCall(70, () => m.alive && m.sprite.clearTint());
-    // 살짝 밀려난다
+    // 넉백: 가벼울수록 멀리 (몸집 기준 무게), 우두머리는 거의 안 밀린다. 경직 동안은 움직이지도 때리지도 못한다
+    const def = MONSTERS[m.id];
     const k = Math.hypot(m.x - this.px, m.y - this.py) || 1;
-    if (MONSTERS[m.id].behavior !== "boss") this.moveMon(m, ((m.x - this.px) / k) * 4, ((m.y - this.py) / k) * 4);
+    const boss = def.behavior === "boss";
+    const weight = boss ? 0.08 : Math.min(1.4, 13 / def.size);
+    const power = (crit ? 230 : 150) * weight;
+    m.kbx = ((m.x - this.px) / k) * power;
+    m.kby = ((m.y - this.py) / k) * power;
+    m.stunUntil = this.now + (boss ? 60 : crit ? 280 : 170);
+    m.windUntil = Math.min(m.windUntil, this.now);
+    m.dashUntil = Math.min(m.dashUntil, this.now);
+    this.hitstop = Math.max(this.hitstop, crit ? 75 : 40);
+    if (crit) this.cameras.main.shake(70, 0.003);
     if (m.hp <= 0) this.killMonster(m);
   }
 
@@ -416,6 +488,27 @@ export class HuntScene extends RpgScene {
     this.time.delayedCall(900, () => this.finish());
   }
 
+  /** 내 발밑 공격 쿨다운 게이지: 차오르다 다 차면 반짝, 버퍼에 공격이 있으면 초록 */
+  private drawGauge(now: number): void {
+    const g = this.gauge;
+    g.clear();
+    if (this.died) return;
+    const left = Math.max(0, this.atkReadyAt - now);
+    const ready = left <= 0;
+    if (ready && !this.wasReady) {
+      this.wasReady = true;
+      this.gaugeFlashUntil = now + 160;
+    }
+    const w = 16;
+    const x = Math.round(this.px - w / 2);
+    const y = Math.round(this.py + 3);
+    const p = ready ? 1 : 1 - left / this.atkCdMs;
+    g.fillStyle(0x0a0b10, 0.75).fillRect(x - 1, y - 1, w + 2, 4);
+    const color = now < this.gaugeFlashUntil ? 0xffffff : this.atkBuffered ? 0x9fc5a8 : ready ? 0xe0c36a : 0x8a7a5a;
+    g.fillStyle(color, 1).fillRect(x, y, Math.round(w * p), 2);
+    g.setDepth(this.py + 2);
+  }
+
   private ringFx(color: number, radius: number): void {
     const r = this.add.image(this.px, this.py - 6, RTEX.ring).setTint(color).setDepth(1e5).setScale(0.2).setAlpha(0.9);
     this.tweens.add({ targets: r, scale: radius / 32, alpha: 0, duration: 380, onComplete: () => r.destroy() });
@@ -458,6 +551,9 @@ export class HuntScene extends RpgScene {
       vuln: 0,
       slowUntil: 0,
       hidden: false,
+      kbx: 0,
+      kby: 0,
+      stunUntil: 0,
     });
   }
 
@@ -503,6 +599,13 @@ export class HuntScene extends RpgScene {
   private updateMonster(m: Mon, dt: number): void {
     const def = MONSTERS[m.id];
     const now = this.now;
+    if (m.kbx || m.kby) {
+      this.moveMon(m, m.kbx * dt, m.kby * dt);
+      const decay = Math.exp(-dt * 10);
+      m.kbx = Math.abs(m.kbx * decay) < 3 ? 0 : m.kbx * decay;
+      m.kby = Math.abs(m.kby * decay) < 3 ? 0 : m.kby * decay;
+    }
+    if (now < m.stunUntil) return;
     const dx = this.px - m.x;
     const dy = this.py - m.y;
     const dist = Math.hypot(dx, dy) || 1;
@@ -621,6 +724,16 @@ export class HuntScene extends RpgScene {
   // ── 매 프레임 ──
 
   update(_time: number, delta: number): void {
+    this.step(delta);
+    // 내 view.sync 다음에 (이름표 겹침 풀기가 내 위치를 쓴다). 같은 방 사람들은 멈춤·히트스톱과 상관없이 계속 움직인다
+    this.presence?.update(performance.now(), this.cameras.main.worldView, 1 / this.cameras.main.zoom);
+  }
+
+  private step(delta: number): void {
+    if (this.hitstop > 0 && !this.paused) {
+      this.hitstop -= delta;
+      return;
+    }
     if (!this.tickCommon(delta)) return;
     const dt = Math.min(delta, 100) / 1000;
     const now = this.now;
@@ -666,14 +779,20 @@ export class HuntScene extends RpgScene {
         this.setFace(a.x, a.y);
         this.walkT += delta;
       }
-      const col = moving ? 2 + (Math.floor(this.walkT / 120) % 4) : Math.floor(now / 500) % 2;
-      this.player.setFrame(avFrame(this.dirRow, col));
-      // 공격 키를 누르고 있으면 계속 친다
-      if (this.keys.has("Space") || this.keys.has("KeyJ")) this.attack();
+      this.movingNow = moving;
+      if (this.me) this.me.apply(moving ? "walk" : "idle", (this.dirRow as DirId) ?? DIR.down, this.time.now);
+      else this.player.setFrame(avFrame(this.dirRow, moving ? 2 + (Math.floor(this.walkT / 120) % 4) : Math.floor(now / 500) % 2));
+      // 공격 키를 누르고 있거나 버퍼에 있으면 쿨다운이 끝나는 순간 친다
+      if (this.keys.has("Space") || this.keys.has("KeyJ") || (this.atkBuffered && now >= this.atkReadyAt)) this.attack();
+    }
+    if (this.me) {
+      this.me.place(Math.round(this.px), Math.round(this.py));
+      this.me.sync(this.time.now, 1 / this.cameras.main.zoom);
     }
     this.player.setPosition(Math.round(this.px), Math.round(this.py)).setDepth(this.py);
     this.player.setAlpha(this.died ? 0.5 : this.buff("rollback") ? 0.55 + 0.3 * Math.sin(now / 60) : 1);
     this.pShadow.setPosition(this.px, this.py);
+    this.drawGauge(now);
 
     // 도우미 유령
     const h = this.helper;
@@ -759,6 +878,9 @@ export class HuntScene extends RpgScene {
         return left > 0 ? left / skillById(id)!.cooldownMs(lv) : 0;
       }),
       potionCooldown: Math.max(0, (this.potionReadyAt - now) / POTION_COOLDOWN_MS),
+      attack: Math.max(0, (this.atkReadyAt - now) / this.atkCdMs),
+      peers: this.presence ? this.peers || undefined : undefined,
+      attackBuffered: this.atkBuffered,
       potions: Object.fromEntries(Object.keys(this.play.potions).map((id) => [id, this.potionLeft(id)])),
       buffs: [...this.buffs].filter(([, b]) => b.until > now).map(([id, b]) => ({ id, leftMs: b.until - now })),
       boss: boss ? { name: MONSTERS[boss.id].name, ratio: Math.max(0, boss.hp / boss.st.maxHp) } : null,

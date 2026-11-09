@@ -1,8 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { PHRASES } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { GAMES, POTIONS, SKILLS, type GameKind, type SkillId } from "@/lib/rpg/catalog";
+import { comboMult } from "@/lib/rpg/plan";
 import type { RpgAction, RpgHud } from "@/lib/rpg/types";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -21,6 +23,9 @@ const BUFF_NAMES: Record<string, string> = {
   pair_prog: "페어",
   overtime: "야근",
 };
+
+/** 아이콘 위 원형 쿨다운 (남은 비율만큼 시계 방향으로 어둡게) */
+const ring = (left: number) => ({ background: `conic-gradient(rgba(10, 11, 9, 0.75) ${Math.round(left * 360)}deg, transparent 0deg)` });
 
 function Bar({ value, max, className, label }: { value: number; max: number; className: string; label: string }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
@@ -82,23 +87,9 @@ function Joystick() {
   );
 }
 
-/** 누르고 있는 동안 조이스틱 x를 보낸다 (데드라인 피하기 좌우 버튼) */
-function HoldButton({ dir, label }: { dir: -1 | 1; label: string }) {
-  const down = (e: React.PointerEvent) => {
-    e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    bridge.emit("rpg:joystick", { x: dir, y: 0 });
-  };
-  const up = () => bridge.emit("rpg:joystick", { x: 0, y: 0 });
-  return (
-    <button type="button" className={ui.button} aria-label={label} onPointerDown={down} onPointerUp={up} onPointerCancel={up} onContextMenu={(e) => e.preventDefault()}>
-      {dir < 0 ? "◀" : "▶"}
-    </button>
-  );
-}
-
 export default function RunHud({ game, hotbar, onPause }: { game: GameKind; hotbar: (SkillId | null)[]; onPause: () => void }) {
   const [hud, setHud] = useState<RpgHud | null>(null);
+  const [talk, setTalk] = useState(false);
   useBridgeEvent("rpg:hud", setHud);
   const act = (e: React.PointerEvent, a: RpgAction) => {
     e.stopPropagation();
@@ -133,15 +124,15 @@ export default function RunHud({ game, hotbar, onPause }: { game: GameKind; hotb
                   처치 <strong>{hud?.kills ?? 0}</strong>
                 </span>
               )}
+              {game === "hunt" && (hud?.peers ?? 0) > 1 && <span className={s.together}>함께 {hud!.peers}명</span>}
               {game !== "hunt" && (
                 <span>
                   점수 <strong>{hud?.score ?? 0}</strong>
                 </span>
               )}
-              {game === "bugs" && (hud?.combo ?? 0) >= 2 && <span className={s.timer}>{hud!.combo}콤보</span>}
-              {game === "deadline" && (
-                <span>
-                  남은 목숨 <strong>{hud?.hp ?? 3}</strong> · 커피 <strong>{hud?.kills ?? 0}</strong>
+              {game !== "hunt" && (hud?.combo ?? 0) >= 2 && (
+                <span className={s.timer}>
+                  {hud!.combo}콤보 ×{comboMult(hud!.combo!)}
                 </span>
               )}
             </div>
@@ -161,10 +152,35 @@ export default function RunHud({ game, hotbar, onPause }: { game: GameKind; hotb
               </>
             )}
           </div>
-          <button type="button" className={cx(ui.button, ui.icon, s.pause)} onPointerDown={stop} onClick={onPause} aria-label="멈춤">
-            <PixelIcon name="pause" />
-          </button>
+          <div className={s.topButtons}>
+            <button type="button" className={cx(ui.button, ui.icon)} onPointerDown={stop} onClick={onPause} aria-label="멈춤">
+              <PixelIcon name="pause" />
+            </button>
+            {game === "hunt" && (
+              <button type="button" className={cx(ui.button, ui.icon)} onPointerDown={stop} onClick={() => setTalk((t) => !t)} aria-expanded={talk} aria-label="말풍선">
+                말
+              </button>
+            )}
+          </div>
         </div>
+        {talk && game === "hunt" && (
+          <div className={s.phrases} role="group" aria-label="말풍선 보내기">
+            {PHRASES.filter((p) => ["hi", "nice", "thanks", "cheer", "follow", "bye"].includes(p.id)).map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={cx(ui.button, s.small)}
+                onPointerDown={stop}
+                onClick={() => {
+                  bridge.emit("rpg:say", { id: p.id });
+                  setTalk(false);
+                }}
+              >
+                {p.text}
+              </button>
+            ))}
+          </div>
+        )}
         {hud?.boss && (
           <div className={s.boss}>
             <span>{hud.boss.name}</span>
@@ -199,7 +215,7 @@ export default function RunHud({ game, hotbar, onPause }: { game: GameKind; hotb
                     <RpgIcon art={p.art} size={32} />
                     <span className={s.skillKey}>{p.key}</span>
                     <span className={s.skillCount}>{n}</span>
-                    {(hud?.potionCooldown ?? 0) > 0 && <span className={s.cool} style={{ height: `${hud!.potionCooldown * 100}%` }} />}
+                    {(hud?.potionCooldown ?? 0) > 0 && <span className={s.cool} style={ring(hud!.potionCooldown)} />}
                   </button>
                 );
               })}
@@ -217,21 +233,21 @@ export default function RunHud({ game, hotbar, onPause }: { game: GameKind; hotb
                   >
                     <RpgIcon art={sk.art} size={32} />
                     <span className={s.skillKey}>{i + 1}</span>
-                    {cd > 0 && <span className={s.cool} style={{ height: `${cd * 100}%` }} />}
+                    {cd > 0 && <span className={s.cool} style={ring(cd)} />}
                   </button>
                 );
               })}
             </div>
-            <button type="button" className={cx(s.skillBtn, s.attack, s.touchOnly)} onPointerDown={(e) => act(e, { kind: "attack" })} aria-label="공격">
-              공격
+            <button
+              type="button"
+              className={cx(s.skillBtn, s.attack, s.touchOnly, hud?.attackBuffered && s.buffered)}
+              onPointerDown={(e) => act(e, { kind: "attack" })}
+              aria-label="공격"
+            >
+              {(hud?.attack ?? 0) > 0 && <span className={s.cool} style={ring(hud!.attack!)} />}
+              <span className={s.attackLabel}>공격</span>
             </button>
           </>
-        )}
-        {game === "deadline" && (
-          <div className={cx(s.lr, s.touchOnly)}>
-            <HoldButton dir={-1} label="왼쪽으로" />
-            <HoldButton dir={1} label="오른쪽으로" />
-          </div>
         )}
         {game !== "hunt" && <p className={s.keysHint}>{GAMES[game].how} · Esc 멈춤</p>}
       </div>

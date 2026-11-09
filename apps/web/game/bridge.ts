@@ -1,7 +1,7 @@
 import type { GraveEventKind, QueueStatus } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
-import type { PublicHouse } from "@/lib/housing/types";
+import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
 import type { RpgAction, RpgHud, RpgPlay, RunResult } from "@/lib/rpg/types";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
@@ -79,8 +79,16 @@ export type GameEvents = {
   "house:state": HouseEditState;
   /** 집 안 방명록 팻말과 상호작용 → UI가 방명록을 연다 */
   "house:guestbook": undefined;
-  /** 집에서 나와 월드로 돌아옴 (문으로 걸어 나감 또는 house:exit) */
-  "house:left": undefined;
+  /** 집에서 나옴 (문으로 걸어 나감 또는 house:exit). to = 돌아간 곳 (마을에서 들어왔으면 마을) */
+  "house:left": { to: "world" | "village" };
+  /** 마을에서 집 문과 상호작용 → UI가 집 정보를 받아 house:enter */
+  "village:door": { houseId: string };
+  /** 마을의 빈 필지 팻말과 상호작용 → UI가 그 번지로 분양 창을 연다 */
+  "village:lot": { lot: number };
+  /** 마을에서 나와 월드로 돌아옴 */
+  "village:left": undefined;
+  /** 마을·집에 함께 있는 사람 (방 인원, 나 포함). ownerHere = 집주인이 이 집에 있음 (마을에서는 false) */
+  "house:presence": { where: "village" | "house"; count: number; online: boolean; ownerHere: boolean };
   /** 편집 중 안내 (빈자리 없음 등) */
   "house:notice": { message: string };
 
@@ -154,6 +162,12 @@ export type UiEvents = {
   "house:edit": { on: boolean; revert?: boolean };
   /** 편집 도구 */
   "house:tool": HouseTool;
+  /** 분양 마을로 들어간다 (월드 또는 집에서). spawnLot이면 그 번지 문 앞에서 */
+  "village:enter": { village: VillageResponse; myHouseId: string | null; spawnLot?: number | null };
+  /** 마을 정보가 바뀜 (분양·외관 저장 뒤) → 다시 그린다 */
+  "village:data": { village: VillageResponse; myHouseId: string | null };
+  /** 마을에서 나간다 (UI 버튼) */
+  "village:exit": undefined;
 
   // ── 사냥터(RPG) ── (game/rpg, components/rpg)
   /** 판 시작 (서버가 준 시드·시간 + 내 캐릭터). 월드는 숨기고(연결 유지, 내 아바타는 입구에 멈춤) 미니게임 씬을 띄운다 */
@@ -168,6 +182,8 @@ export type UiEvents = {
   "rpg:pause": { paused: boolean };
   /** 포기하고 나가기 → 지금까지의 결과로 rpg:ended(aborted=true) */
   "rpg:quit": undefined;
+  /** 함께 사냥: 정해진 문장 말풍선 (PHRASES id) — 내 머리 위에 띄우고 같은 방에 보낸다 */
+  "rpg:say": { id: string };
 };
 
 type AllEvents = GameEvents & UiEvents;

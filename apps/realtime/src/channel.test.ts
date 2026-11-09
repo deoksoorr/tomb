@@ -38,7 +38,7 @@ type Conn = {
 /** 증서 검증 흉내: 토큰 문자열 = JSON(Grant). "bad"는 서명이 틀린 증서 */
 const grantToken = (g: Grant) => JSON.stringify(g);
 
-function setup(capacity = 3, graceMs = 20_000) {
+function setup(capacity = 3, graceMs = 20_000, room = false) {
   const reservations = new Map<number, Reservation>();
   const counts: number[] = [];
   const nonces = new Map<string, number>();
@@ -62,7 +62,7 @@ function setup(capacity = 3, graceMs = 20_000) {
       return true;
     },
   };
-  const core = new ChannelCore<Conn>({ capacity, graceMs }, host);
+  const core = new ChannelCore<Conn>({ capacity, graceMs, room }, host);
   const conn = (id: string): Conn => ({ id, out: [] });
   /** 접속시키고 welcome을 받은 소켓을 돌려준다 */
   const join = (id: string, now = 0, spawn?: { x: number; y: number }, c = conn(id), look: string[] = []) => {
@@ -594,6 +594,46 @@ describe("v3: body / act / bench slide", () => {
     core.message(a, send({ t: "sit", seatId: "bA-0" }), 0);
     expect(events(a)).toEqual([{ t: "seatDenied", seatId: "bA-0" }]);
     expect(core.peer(1)?.seatId).toBe("bB-0");
+  });
+});
+
+describe("v4: say / room mode", () => {
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it("relays say to everyone (sender included), at most every 3s per connection", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const b = join("b");
+    clear(a, b);
+    core.message(a, send({ t: "say", id: "hi" }), 0);
+    core.message(a, send({ t: "say", id: "hi" }), 2_999);
+    core.message(a, send({ t: "say", id: "hi" }), 3_000);
+    expect(events(b)).toEqual([
+      { t: "say", sid: 1, id: "hi" },
+      { t: "say", sid: 1, id: "hi" },
+    ]);
+    expect(events(a)).toEqual(events(b));
+  });
+
+  it("room: capacity applies (4001), seats/emote/graveEvent/firework are ignored, coordinates are u16-only", async () => {
+    const { core, join } = setup(2, 20_000, true);
+    const a = join("a", 0, { x: 5_000, y: 7_000 }); // 묘지 맵 밖이어도 방에서는 된다
+    const b = join("b");
+    expect(join("c").closed?.code).toBe(CLOSE.CHANNEL_FULL);
+    clear(a, b);
+    core.message(a, send({ t: "sit", seatId: "cA" }), 0);
+    core.message(a, send({ t: "emote", kind: "flower", graveId: "g1" }), 0);
+    core.message(a, send({ t: "graveEvent", kind: "buried", graveId: "g1" }), 0);
+    core.message(a, send({ t: "firework", grant: grantToken({ kind: "firework", visitorId: "a", item: "fw_small", nonce: "n", exp: 9e9 }) }), 0);
+    core.message(a, send({ t: "say", id: "hi" }), 0);
+    core.message(a, move(6_000, 7_000), 0);
+    await flush();
+    expect(events(b)).toEqual([{ t: "say", sid: 1, id: "hi" }]);
+    core.tick(100);
+    const [e] = snapshots(b)[0].entries;
+    expect(e.x).toBeGreaterThan(5_000); // 묘지 맵(1024px) 밖 좌표를 받아들인다
+    expect(e.x).toBeLessThan(6_000); // 속도 예산은 방에서도 그대로
+    expect(e.state).toBe(STATE.walk);
   });
 });
 

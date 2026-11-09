@@ -43,16 +43,27 @@ export function huntSpawnable(plan: HuntWave[], effSec: number): Partial<Record<
 
 export const huntTotal = (plan: HuntWave[]) => plan.reduce((n, w) => n + w.monsters.length, 0);
 
+// ── 공용: 콤보 배수 ──
+
+/** 콤보가 5개 쌓일 때마다 ×0.5 (최대 ×3). 버그 잡기·별자리 잇기 공용 */
+export function comboMult(combo: number): number {
+  return 1 + Math.min(2, Math.floor(Math.max(0, combo) / 5) * 0.5);
+}
+
 // ── 버그 잡기 ──
 
 export const BUG_SLOTS = 9;
-export type BugKind = "bug" | "golden" | "feature";
+/** decoy: 주석 처리된 가짜 버그 (회색, 줄이 그어져 있다) — 누르면 감점 */
+export type BugKind = "bug" | "golden" | "feature" | "decoy";
 export type BugSpawn = { t: number; slot: number; kind: BugKind; lifeMs: number };
-export const BUG_SCORE = { bug: 10, golden: 30, feature: -15 } as const;
+export const BUG_SCORE = { bug: 10, golden: 30, feature: -15, decoy: -20 } as const;
 
-const BUG_INTERVAL: Record<Difficulty, number> = { easy: 900, normal: 700, hard: 540, hell: 420 };
-const BUG_LIFE: Record<Difficulty, number> = { easy: 1500, normal: 1150, hard: 900, hell: 720 };
-const FEATURE_P: Record<Difficulty, number> = { easy: 0.12, normal: 0.18, hard: 0.22, hell: 0.26 };
+const BUG_INTERVAL: Record<Difficulty, number> = { easy: 800, normal: 600, hard: 460, hell: 360 };
+const BUG_LIFE: Record<Difficulty, number> = { easy: 1300, normal: 1000, hard: 780, hell: 620 };
+const FEATURE_P: Record<Difficulty, number> = { easy: 0.1, normal: 0.12, hard: 0.14, hell: 0.16 };
+const DECOY_P: Record<Difficulty, number> = { easy: 0.05, normal: 0.1, hard: 0.14, hell: 0.18 };
+/** 같은 순간 두 칸에 나올 확률 */
+const DOUBLE_P: Record<Difficulty, number> = { easy: 0, normal: 0.12, hard: 0.25, hell: 0.4 };
 
 export function bugLifeBonus(dex: number): number {
   return 1 + clamp(dex * 0.003, 0, 0.3);
@@ -68,15 +79,19 @@ export function bugsPlan(seed: number, d: Difficulty, durationSec: number, st: {
   const end = durationSec * 1000;
   let t = 800;
   while (t < end) {
-    // 뒤로 갈수록 조금씩 빨라진다
-    const speedUp = 1 - 0.3 * (t / end);
+    // 뒤로 갈수록 빨라진다
+    const speedUp = 1 - 0.35 * (t / end);
     const life = Math.round(BUG_LIFE[d] * speedUp * bugLifeBonus(st.dex));
-    let slot = Math.floor(r() * BUG_SLOTS);
-    for (let k = 0; k < BUG_SLOTS && busy[slot] > t; k++) slot = (slot + 1) % BUG_SLOTS;
-    const roll = r();
-    if (busy[slot] <= t) {
-      const kind: BugKind = roll < FEATURE_P[d] ? "feature" : roll < FEATURE_P[d] + goldenChance(st.luk) ? "golden" : "bug";
-      out.push({ t, slot, kind, lifeMs: kind === "golden" ? Math.round(life * 0.75) : life });
+    const n = r() < DOUBLE_P[d] ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      let slot = Math.floor(r() * BUG_SLOTS);
+      for (let k = 0; k < BUG_SLOTS && busy[slot] > t; k++) slot = (slot + 1) % BUG_SLOTS;
+      const roll = r();
+      if (busy[slot] > t) continue;
+      const f = FEATURE_P[d];
+      const dc = f + DECOY_P[d];
+      const kind: BugKind = roll < f ? "feature" : roll < dc ? "decoy" : roll < dc + goldenChance(st.luk) ? "golden" : "bug";
+      out.push({ t, slot, kind, lifeMs: kind === "golden" ? Math.round(life * 0.7) : life });
       busy[slot] = t + life + 150;
     }
     t += Math.round(BUG_INTERVAL[d] * speedUp * (0.7 + r() * 0.6));
@@ -85,48 +100,72 @@ export function bugsPlan(seed: number, d: Difficulty, durationSec: number, st: {
 }
 
 export function bugsCount(plan: BugSpawn[], effMs: number): Record<BugKind, number> {
-  const c: Record<BugKind, number> = { bug: 0, golden: 0, feature: 0 };
+  const c: Record<BugKind, number> = { bug: 0, golden: 0, feature: 0, decoy: 0 };
   for (const s of plan) if (s.t <= effMs) c[s.kind]++;
   return c;
 }
 
-// ── 데드라인 피하기 ──
+// ── 별자리 잇기 ──
 
-export const DEADLINE_BLOCKS = ["요구사항 변경", "긴급 회의", "QA 반려", "스펙 추가", "일정 당김", "보고서 요청"] as const;
-export type FallKind = "block" | "coffee";
-/** x: 0..1 (화면 폭 비율), speed: 바닥까지 필요한 시간이 아니라 px/s(논리 높이 240 기준), w: 블록 폭(논리 px) */
-export type FallSpawn = { t: number; x: number; kind: FallKind; label: number; speed: number; w: number };
+/** 빛의 고리가 별에 닿는 시각(t)에 누른다. x·y는 0..1 (화면 비율에 맞춰 씬이 펼친다) */
+export type StarNote = { t: number; x: number; y: number; group: number; idx: number };
+export const STAR_SCORE = { perfect: 300, good: 100 } as const;
 
-const FALL_INTERVAL: Record<Difficulty, [number, number]> = { easy: [950, 520], normal: [800, 400], hard: [650, 300], hell: [520, 220] };
-const FALL_SPEED: Record<Difficulty, [number, number]> = { easy: [70, 130], normal: [85, 160], hard: [100, 200], hell: [120, 250] };
-export const DEADLINE_HP = 3;
-export const DEADLINE_SCORE = { perSec: 10, coffee: 25 } as const;
+/** 고리가 줄어드는 시간 (ms) */
+export const STAR_APPROACH: Record<Difficulty, number> = { easy: 1500, normal: 1200, hard: 950, hell: 780 };
+const STAR_BEAT: Record<Difficulty, number> = { easy: 820, normal: 640, hard: 500, hell: 400 };
+const STAR_HALF_P: Record<Difficulty, number> = { easy: 0, normal: 0.12, hard: 0.25, hell: 0.35 };
+const STAR_WIN: Record<Difficulty, [number, number]> = { easy: [75, 160], normal: [65, 140], hard: [55, 120], hell: [45, 100] };
 
-export function deadlinePlan(seed: number, d: Difficulty, durationSec: number): FallSpawn[] {
-  const r = seeded(seed ^ 0x44454144);
-  const out: FallSpawn[] = [];
-  const end = durationSec * 1000;
-  let t = 1200;
-  let nextCoffee = 5000 + r() * 3000;
+/** 판정 범위 [완벽, 좋아] ms. DEX가 높으면 조금 너그럽다 */
+export function starWindows(d: Difficulty, dex: number): [number, number] {
+  const k = 1 + clamp(dex * 0.004, 0, 0.25);
+  return [Math.round(STAR_WIN[d][0] * k), Math.round(STAR_WIN[d][1] * k)];
+}
+
+export function starsPlan(seed: number, d: Difficulty, durationSec: number): StarNote[] {
+  const r = seeded(seed ^ 0x53544152);
+  const out: StarNote[] = [];
+  const end = durationSec * 1000 - 400;
+  let t = STAR_APPROACH[d] + 600;
+  let group = 0;
   while (t < end) {
-    const p = t / end;
-    const [i0, i1] = FALL_INTERVAL[d];
-    const [s0, s1] = FALL_SPEED[d];
-    const speed = s0 + (s1 - s0) * p;
-    if (t >= nextCoffee) {
-      out.push({ t, x: 0.08 + r() * 0.84, kind: "coffee", label: 0, speed: speed * 0.8, w: 10 });
-      nextCoffee = t + 6000 + r() * 4000;
-    } else {
-      out.push({ t, x: 0.06 + r() * 0.88, kind: "block", label: Math.floor(r() * DEADLINE_BLOCKS.length), speed, w: 40 + Math.floor(r() * 22) });
+    const len = 5 + Math.floor(r() * 3);
+    let x = 0.2 + r() * 0.6;
+    let y = 0.25 + r() * 0.5;
+    for (let i = 0; i < len && t < end; i++) {
+      out.push({ t: Math.round(t), x, y, group, idx: i });
+      // 다음 별은 가까이 (별자리처럼 이어지게), 화면 안쪽으로
+      const a = r() * Math.PI * 2;
+      const step = 0.14 + r() * 0.12;
+      x = clamp(x + Math.cos(a) * step, 0.08, 0.92);
+      y = clamp(y + Math.sin(a) * step * 0.9, 0.12, 0.88);
+      t += STAR_BEAT[d] * (r() < STAR_HALF_P[d] ? 0.5 : 1);
     }
-    t += Math.round((i0 + (i1 - i0) * p) * (0.75 + r() * 0.5));
+    group++;
+    t += STAR_BEAT[d] * 1.8;
   }
   return out;
 }
 
-export function deadlineCoffees(plan: FallSpawn[], effMs: number): number {
-  return plan.filter((s) => s.kind === "coffee" && s.t <= effMs).length;
+export function starsCount(plan: StarNote[], effMs: number): number {
+  return plan.filter((n) => n.t <= effMs).length;
 }
+
+export const CONSTELLATIONS = [
+  "할 일 앱자리",
+  "포트폴리오자리",
+  "블로그 엔진자리",
+  "토이 언어자리",
+  "가계부자리",
+  "개인 위키자리",
+  "날씨 봇자리",
+  "독서 기록자리",
+  "디스코드 봇자리",
+  "게임 잼자리",
+  "리팩터링 브랜치자리",
+  "사이드 SaaS자리",
+] as const;
 
 /** 난이도 이름 (로그·메시지용) */
 export const diffName = (d: Difficulty) => DIFFS[d].name;

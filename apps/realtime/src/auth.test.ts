@@ -1,6 +1,6 @@
 import { AVATAR_COLORS, signJoinToken } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { admit, corsHeaders, decodeTicket, encodeTicket, isAllowedOrigin, parseOrigins, queueVisitor } from "./auth";
+import { admit, admitRoom, corsHeaders, decodeTicket, encodeTicket, isAllowedOrigin, parseOrigins, queueVisitor } from "./auth";
 import { readConfig } from "./config";
 
 const SECRET = "test-secret";
@@ -75,6 +75,27 @@ describe("queueVisitor", () => {
   it("channel tokens cannot be used for /ch/0 either", async () => {
     const q = await signJoinToken(SECRET, { visitorId: "abc", name: "ab", color: AVATAR_COLORS[0], channel: 0 }, 600);
     expect(await admit(SECRET, q, 1, undefined)).toBeNull();
+  });
+});
+
+describe("admitRoom", () => {
+  const base = { visitorId: "V1StGXR8_Z5jdHi6B-myT", name: "마을 주민", color: AVATAR_COLORS[0] };
+
+  it("accepts a room token only for the same room", async () => {
+    const t = await signJoinToken(SECRET, { ...base, channel: 0, room: "house:abcd1234" });
+    expect(await admitRoom(SECRET, t, "house:abcd1234", { x: 1, y: 2 })).toMatchObject({ room: "house:abcd1234", channel: 0, spawn: { x: 1, y: 2 } });
+    expect(await admitRoom(SECRET, t, "village", undefined)).toBeNull();
+  });
+
+  it("rejects room tokens on channels/queue, and channel/queue tokens on rooms", async () => {
+    const roomTok = await signJoinToken(SECRET, { ...base, channel: 0, room: "village" });
+    const chTok = await signJoinToken(SECRET, { ...base, channel: 1 });
+    const qTok = await signJoinToken(SECRET, { ...base, channel: 0 }, 600);
+    expect(await admit(SECRET, roomTok, 1, undefined)).toBeNull();
+    expect(await queueVisitor(SECRET, roomTok)).toBeNull();
+    expect(await admitRoom(SECRET, chTok, "village", undefined)).toBeNull();
+    expect(await admitRoom(SECRET, qTok, "village", undefined)).toBeNull();
+    expect(await admitRoom(SECRET, roomTok, "../etc", undefined)).toBeNull(); // 형식이 틀린 방 id
   });
 });
 

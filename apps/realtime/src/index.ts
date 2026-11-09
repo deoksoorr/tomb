@@ -16,11 +16,14 @@
  *   GET /lobby               채널 목록과 인원(LobbyInfo). CORS는 ALLOWED_ORIGINS만, 엣지 캐시 2초
  *   GET /queue?t=            대기열 자리 확인(QueueStatus). 대기열 토큰(channel 0)만 받는다. 캐시 없음
  *   GET /ch/:n?t=&x=&y=      채널 WebSocket. Origin·토큰(그 채널용)을 검증한 뒤 Channel DO로 넘긴다
+ *   GET /room/:id?t=&x=&y=   방(마을·집·사냥터) WebSocket. 토큰의 room이 id와 같아야 한다. 상한 ROOM_CAPACITY
  */
-import { CLOSE, LOBBY_CACHE_SEC } from "@tomb/protocol";
+import { CLOSE, LOBBY_CACHE_SEC, ROOM_ID_RE } from "@tomb/protocol";
+import type { JoinTicket } from "./channel";
 import {
   TICKET_HEADER,
   admit,
+  admitRoom,
   corsHeaders,
   encodeTicket,
   isAllowedOrigin,
@@ -28,7 +31,7 @@ import {
   queueVisitor,
   rejectSocket,
 } from "./auth";
-import { type Env, channelStub, lobbyStub, readConfig } from "./config";
+import { type Env, channelStub, lobbyStub, readConfig, roomStub } from "./config";
 import { parseChannel, parseSpawn } from "./logic";
 
 export { ChannelDO } from "./ChannelDO";
@@ -42,19 +45,33 @@ export default {
     if (url.pathname === "/queue") return queue(req, env, url);
     const ch = /^\/ch\/([^/]*)$/.exec(url.pathname);
     if (ch) return channel(req, env, url, ch[1]);
+    const rm = /^\/room\/([^/]*)$/.exec(url.pathname);
+    if (rm) return room(req, env, url, rm[1]);
     return new Response("not found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
 
 // ── GET /ch/:n ──
 
-async function channel(req: Request, env: Env, url: URL, rawN: string): Promise<Response> {
-  if (req.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
-    return new Response("expected websocket", { status: 426 });
-  }
+/** WebSocket 업그레이드 요청이고 Origin이 허용 목록에 있는지. 아니면 바로 보낼 HTTP 응답 */
+function upgradeGate(req: Request, env: Env): Response | null {
+  if (req.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("expected websocket", { status: 426 });
   if (!isAllowedOrigin(req.headers.get("Origin"), parseOrigins(env.ALLOWED_ORIGINS))) {
     return new Response("forbidden origin", { status: 403 });
   }
+  return null;
+}
+
+/** 검증한 입장 정보를 내부 헤더에 실어 DO로 넘긴다 */
+function forward(req: Request, stub: { fetch(r: Request): Promise<Response> }, ticket: JoinTicket): Promise<Response> {
+  const headers = new Headers(req.headers);
+  headers.set(TICKET_HEADER, encodeTicket(ticket));
+  return stub.fetch(new Request(req.url, { method: "GET", headers }));
+}
+
+async function channel(req: Request, env: Env, url: URL, rawN: string): Promise<Response> {
+  const gate = upgradeGate(req, env);
+  if (gate) return gate;
   const n = parseChannel(rawN, readConfig(env).maxChannels);
   if (n === null) return rejectSocket(CLOSE.BAD_REQUEST, "bad channel");
 
@@ -62,10 +79,26 @@ async function channel(req: Request, env: Env, url: URL, rawN: string): Promise<
   const spawn = parseSpawn(url.searchParams.get("x"), url.searchParams.get("y"));
   const ticket = await admit(env.JOIN_SECRET, url.searchParams.get("t"), n, spawn);
   if (!ticket) return rejectSocket(CLOSE.INVALID_TOKEN, "invalid token");
+  return forward(req, channelStub(env, n), ticket);
+}
 
-  const headers = new Headers(req.headers);
-  headers.set(TICKET_HEADER, encodeTicket(ticket));
-  return channelStub(env, n).fetch(new Request(req.url, { method: "GET", headers }));
+// ── GET /room/:id ── 방(마을·집·사냥터). 같은 사람이 월드 채널과 방에 동시에 붙어 있을 수 있다
+// (월드 아바타는 입구에 idle로 남는다). 그래서 방은 로비 보고·대기열·채널 간 중복 정리를 하지 않는다.
+
+async function room(req: Request, env: Env, url: URL, rawId: string): Promise<Response> {
+  const gate = upgradeGate(req, env);
+  if (gate) return gate;
+  let id: string;
+  try {
+    id = decodeURIComponent(rawId);
+  } catch {
+    return rejectSocket(CLOSE.BAD_REQUEST, "bad room");
+  }
+  if (!ROOM_ID_RE.test(id)) return rejectSocket(CLOSE.BAD_REQUEST, "bad room");
+  const spawn = parseSpawn(url.searchParams.get("x"), url.searchParams.get("y"), true);
+  const ticket = await admitRoom(env.JOIN_SECRET, url.searchParams.get("t"), id, spawn);
+  if (!ticket) return rejectSocket(CLOSE.INVALID_TOKEN, "invalid token");
+  return forward(req, roomStub(env, id), ticket);
 }
 
 // ── GET /lobby ──

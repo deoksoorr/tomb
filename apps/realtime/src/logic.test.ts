@@ -76,5 +76,7 @@ describe("helpers", () => {
     expect(parseSpawn(String(MAP_WIDTH + 1), "56")).toBeUndefined();
     expect(parseSpawn("-1", "56")).toBeUndefined();
     expect(parseSpawn("3.5", "56")).toBeUndefined();
+    expect(parseSpawn("5000", "9000", true)).toEqual({ x: 5000, y: 9000 }); // 방은 u16 범위만
+    expect(parseSpawn("70000", "1", true)).toBeUndefined();
   });
 });

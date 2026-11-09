@@ -1,6 +1,6 @@
-import { GUEST_KEEP, GUEST_PER_DAY, GUEST_REPORT_HIDE, LIKE_WEIGHT, type HouseSort, type PlotTierId } from "./catalog";
-import { emptyLayout } from "./layout";
-import type { GuestEntry, HouseLayout, PublicHouse } from "./types";
+import { defaultExterior, GUEST_KEEP, GUEST_PER_DAY, GUEST_REPORT_HIDE, LIKE_WEIGHT, VILLAGE_MAX_LOTS, type HouseSort, type PlotTierId } from "./catalog";
+import { emptyLayout, normalizeExterior } from "./layout";
+import type { GuestEntry, HouseExterior, HouseLayout, PublicHouse } from "./types";
 
 // 하우징 저장소. 포인트는 여기서 다루지 않는다 (공용 spendPoints/earnPoints → lib/housing/points.ts).
 // 집 쪽 상태 변화(가방 개수·배치·좋아요·방명록)는 Redis에서는 Lua 하나, 메모리에서는 await 없는 동기 코드로 원자적이다.
@@ -11,7 +11,10 @@ export type HouseRecord = PublicHouse & { owner: string; hidden: boolean; items:
 /** 방명록 원본: author(계정 id)는 내보내지 않고 mine 판정에만 쓴다 */
 export type StoredGuest = GuestEntry & { author: string };
 
-export type NewHouse = { id: string; owner: string; name: string; intro: string; ownerName: string; tier: PlotTierId; now: number };
+/** lot: 고른 번지 (null이면 가장 앞의 빈 번지를 자동으로) */
+export type NewHouse = { id: string; owner: string; name: string; intro: string; ownerName: string; tier: PlotTierId; lot: number | null; now: number };
+
+export type CreateResult = { lot: number } | "exists" | "lot_taken" | "full";
 
 export type SaveResult = "ok" | "no_house" | "tier" | "not_owned";
 
@@ -24,8 +27,12 @@ export interface HouseStore {
   get(id: string): Promise<HouseRecord | null>;
   /** 가진 물건 (놓은 것 포함) */
   inventory(id: string): Promise<Record<string, number>>;
-  /** 이미 있으면 false */
-  create(h: NewHouse): Promise<boolean>;
+  /** 집 만들기와 번지 배정을 한 번에 (같은 번지를 두 집이 받지 않는다) */
+  create(h: NewHouse): Promise<CreateResult>;
+  /** 번지가 없는 (마을이 생기기 전) 집에 가장 앞의 빈 번지를 준다. 이미 있으면 그 번지 */
+  assignLot(id: string): Promise<number | null>;
+  /** 마을: 번지가 있는 모든 집 (숨김 포함, 번지 순) */
+  village(): Promise<HouseRecord[]>;
   /** 집과 딸린 키를 모두 지운다 (분양 결제 실패 보상·관리자 삭제) */
   remove(id: string): Promise<void>;
   setProfile(id: string, name: string, intro: string, now: number): Promise<boolean>;
@@ -35,8 +42,19 @@ export interface HouseStore {
   addItem(id: string, itemId: string, max: number): Promise<"ok" | "max" | "no_house">;
   /** 놓지 않은 1개를 뺀다 (되팔기). 전부 놓여 있으면 "placed", 없으면 "none" */
   takeItem(id: string, itemId: string): Promise<"ok" | "placed" | "none">;
-  /** 배치 저장: tier가 그대로이고 counts가 가진 개수 안일 때만 (검증은 호출자가 먼저 한다) */
-  saveLayout(id: string, tier: PlotTierId, layout: HouseLayout, counts: Record<string, number>, placedScore: number, now: number): Promise<SaveResult>;
+  /**
+   * 배치·외관 저장 (null인 쪽은 그대로). tier가 그대로이고 counts(안+밖 전체)가 가진 개수 안일 때만.
+   * 검증·점수 계산은 호출자가 먼저 한다
+   */
+  saveDesign(
+    id: string,
+    tier: PlotTierId,
+    layout: HouseLayout | null,
+    exterior: HouseExterior | null,
+    counts: Record<string, number>,
+    placedScore: number,
+    now: number,
+  ): Promise<SaveResult>;
   /** 좋아요. 오늘 이미 눌렀으면 "already", 집이 없거나 숨김이면 null */
   like(id: string, visitorId: string, day: string): Promise<{ likes: number; score: number } | "already" | null>;
   likedToday(id: string, visitorId: string, day: string): Promise<boolean>;
@@ -72,6 +90,7 @@ type MemHouse = {
 
 export class MemoryHouseStore implements HouseStore {
   private houses = new Map<string, MemHouse>();
+  private lots = new Map<number, string>();
   private likes = new Set<string>();
   private guestDay = new Map<string, number>();
 
@@ -80,6 +99,8 @@ export class MemoryHouseStore implements HouseStore {
     return {
       ...r,
       layout: structuredClone(r.layout),
+      lot: r.lot ?? 0,
+      exterior: normalizeExterior(r.exterior),
       score: scoreOf(r.placedScore, r.likes),
       items: r.layout.items.length,
     };
@@ -94,11 +115,22 @@ export class MemoryHouseStore implements HouseStore {
     return Object.fromEntries(this.houses.get(id)?.inv ?? []);
   }
 
-  async create(n: NewHouse) {
-    if (this.houses.has(n.id)) return false;
+  private freeLot(): number | null {
+    for (let l = 1; l <= VILLAGE_MAX_LOTS; l++) if (!this.lots.has(l)) return l;
+    return null;
+  }
+
+  async create(n: NewHouse): Promise<CreateResult> {
+    if (this.houses.has(n.id)) return "exists";
+    if (n.lot !== null && this.lots.has(n.lot)) return "lot_taken";
+    const lot = n.lot ?? this.freeLot();
+    if (lot === null) return "full";
+    this.lots.set(lot, n.id);
     this.houses.set(n.id, {
       rec: {
         id: n.id,
+        lot,
+        exterior: defaultExterior(),
         owner: n.owner,
         name: n.name,
         intro: n.intro,
@@ -117,10 +149,30 @@ export class MemoryHouseStore implements HouseStore {
       guestHidden: new Set(),
       guestReports: new Map(),
     });
-    return true;
+    return { lot };
+  }
+
+  async assignLot(id: string) {
+    const h = this.houses.get(id);
+    if (!h) return null;
+    if (h.rec.lot) return h.rec.lot;
+    const lot = this.freeLot();
+    if (lot === null) return null;
+    this.lots.set(lot, id);
+    h.rec.lot = lot;
+    return lot;
+  }
+
+  async village() {
+    return [...this.houses.values()]
+      .filter((h) => h.rec.lot > 0)
+      .map((h) => this.view(h))
+      .sort((a, b) => a.lot - b.lot);
   }
 
   async remove(id: string) {
+    const h = this.houses.get(id);
+    if (h?.rec.lot && this.lots.get(h.rec.lot) === id) this.lots.delete(h.rec.lot);
     this.houses.delete(id);
   }
 
@@ -157,13 +209,23 @@ export class MemoryHouseStore implements HouseStore {
     return "ok" as const;
   }
 
-  async saveLayout(id: string, tier: PlotTierId, layout: HouseLayout, counts: Record<string, number>, placedScore: number, now: number) {
+  async saveDesign(
+    id: string,
+    tier: PlotTierId,
+    layout: HouseLayout | null,
+    exterior: HouseExterior | null,
+    counts: Record<string, number>,
+    placedScore: number,
+    now: number,
+  ) {
     const h = this.houses.get(id);
     if (!h) return "no_house" as const;
     if (h.rec.tier !== tier) return "tier" as const;
     for (const [item, n] of Object.entries(counts)) if ((h.inv.get(item) ?? 0) < n) return "not_owned" as const;
     h.placed = new Map(Object.entries(counts));
-    Object.assign(h.rec, { layout: structuredClone(layout), placedScore, updatedAt: now });
+    if (layout) h.rec.layout = structuredClone(layout);
+    if (exterior) h.rec.exterior = { ...exterior };
+    Object.assign(h.rec, { placedScore, updatedAt: now });
     return "ok" as const;
   }
 

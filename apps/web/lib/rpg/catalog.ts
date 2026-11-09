@@ -393,6 +393,8 @@ export const MONSTER_IDS = Object.keys(MONSTERS) as MonsterId[];
 
 export type ZoneDef = {
   difficulty: Difficulty;
+  /** 함께 사냥 방 id에 쓰는 영문 이름 (`hunt:{slug}:{difficulty}`) */
+  slug: string;
   name: string;
   desc: string;
   /** 일반 웨이브에 나오는 몬스터 */
@@ -409,6 +411,7 @@ export type ZoneDef = {
 export const ZONES: Record<Difficulty, ZoneDef> = {
   easy: {
     difficulty: "easy",
+    slug: "meeting-room",
     name: "기획 회의실",
     desc: "아이디어가 처음으로 반대에 부딪히는 곳.",
     pool: ["scope_creep", "endless_meeting", "req_change"],
@@ -420,6 +423,7 @@ export const ZONES: Record<Difficulty, ZoneDef> = {
   },
   normal: {
     difficulty: "normal",
+    slug: "legacy-forest",
     name: "레거시 숲",
     desc: "아무도 손대지 못한 코드가 나무처럼 자라 있다.",
     pool: ["tech_debt_slime", "already_exists", "merge_conflict", "req_change", "scope_creep"],
@@ -431,6 +435,7 @@ export const ZONES: Record<Difficulty, ZoneDef> = {
   },
   hard: {
     difficulty: "hard",
+    slug: "deadline-swamp",
     name: "데드라인 늪",
     desc: "발을 디딜수록 일정이 가라앉는다.",
     pool: ["merge_conflict", "server_bill", "opposing_lead", "legacy_golem", "tech_debt_slime"],
@@ -442,6 +447,7 @@ export const ZONES: Record<Difficulty, ZoneDef> = {
   },
   hell: {
     difficulty: "hell",
+    slug: "burnout-abyss",
     name: "번아웃 심연",
     desc: "모든 사이드프로젝트가 마지막으로 떨어지는 곳.",
     pool: ["burnout_wraith", "server_bill", "legacy_golem", "already_exists", "opposing_lead", "merge_conflict"],
@@ -455,31 +461,31 @@ export const ZONES: Record<Difficulty, ZoneDef> = {
 
 // ── 미니게임 ──
 
-export const GAME_KINDS = ["hunt", "bugs", "deadline"] as const;
+export const GAME_KINDS = ["hunt", "bugs", "stars"] as const;
 export type GameKind = (typeof GAME_KINDS)[number];
 
 export const GAMES: Record<GameKind, { name: string; desc: string; how: string; statNote: string }> = {
   hunt: {
     name: "사냥터",
     desc: "프로젝트를 망치는 것들을 웨이브마다 물리친다. 장비·스킬·포션을 모두 쓴다.",
-    how: "WASD/방향키 이동 · Space/J 공격 · 1~6 스킬 · Q/E/R 포션 · Esc 멈춤",
+    how: "WASD/방향키 이동 · Space/J 공격(쿨다운 중에 누르면 끝나는 순간 나감) · 1~6 스킬 · Q/E/R 포션 · Esc 멈춤",
     statNote: "모든 능력치와 장비가 그대로 쓰인다",
   },
   bugs: {
     name: "버그 잡기",
-    desc: "코드 줄 사이로 튀어나오는 버그를 잡는다. 초록색 '기능'은 건드리지 말 것.",
+    desc: "코드 줄 사이로 튀어나오는 버그를 잡는다. 초록 '기능'과 줄 그어진 회색 '주석 처리된 버그'는 건드리지 말 것. 콤보가 쌓일수록 점수 배수가 오른다.",
     how: "클릭·탭, 또는 Q W E / A S D / Z X C 키로 칸을 누른다",
     statNote: "DEX: 버그가 조금 더 오래 보임 · LUK: 황금 버그가 더 자주",
   },
-  deadline: {
-    name: "데드라인 피하기",
-    desc: "쏟아지는 '요구사항 변경'과 '긴급 회의'를 피해 마감까지 버틴다. 커피는 줍는다.",
-    how: "A/D·방향키, 또는 화면 좌우 버튼으로 움직인다",
-    statNote: "AGI: 이동속도가 조금 빨라짐",
+  stars: {
+    name: "별자리 잇기",
+    desc: "끝내지 못한 아이디어들이 밤하늘의 별로 떠오른다. 빛의 고리가 별에 닿는 순간 눌러 하나의 별자리로 잇는다.",
+    how: "고리가 별에 겹치는 순간 Space·J·클릭·탭 (어디를 눌러도 다음 별) · 너무 일찍 누르면 놓침",
+    statNote: "DEX: 판정이 조금 너그러워짐",
   },
 };
 
 /** 미니게임 시간 (초) */
-export const MINI_TIME_SEC: Record<Exclude<GameKind, "hunt">, number> = { bugs: 60, deadline: 90 };
+export const MINI_TIME_SEC: Record<Exclude<GameKind, "hunt">, number> = { bugs: 60, stars: 75 };
 
 export const timeLimitSec = (game: GameKind, d: Difficulty) => (game === "hunt" ? ZONES[d].timeLimitSec : MINI_TIME_SEC[game]);
