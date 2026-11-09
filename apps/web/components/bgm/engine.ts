@@ -12,6 +12,8 @@ import { silentWav } from "./silence";
 const MANIFEST_URL = "/bgm/tracks.json";
 const CROSSFADE_SEC = 1.5;
 const PAUSE_FADE_SEC = 0.25;
+/** 곡이 끝나기 이만큼 전에 다음 곡으로 크로스페이드를 시작한다 (끝난 뒤 넘기면 사이가 뚝 끊긴다) */
+const TAIL_SEC = CROSSFADE_SEC + 1;
 const DEFAULT_VOLUME = 0.5;
 
 export type BgmState = {
@@ -172,6 +174,7 @@ class BgmEngine {
       ctx.createMediaElementSource(audio).connect(gain).connect(master);
       const deck: Deck = { audio, gain, file: "", token: 0 };
       audio.addEventListener("ended", () => this.onDeckDone(deck));
+      audio.addEventListener("timeupdate", () => this.onDeckTime(deck));
       audio.addEventListener("error", () => this.onDeckError(deck));
       audio.addEventListener("playing", () => {
         this.failures = 0;
@@ -256,8 +259,20 @@ class BgmEngine {
     }, sec * 1000 + 50);
   }
 
+  /** 곡 끝 TAIL_SEC 전: 다음 곡을 미리 겹쳐 틀어 자연스럽게 넘어가게 (덱마다 한 곡에 한 번) */
+  private onDeckTime(deck: Deck): void {
+    if (!deck.file || deck !== this.decks[this.active] || !this.state.playing) return;
+    const left = deck.audio.duration - deck.audio.currentTime;
+    if (!Number.isFinite(left) || left > TAIL_SEC || this.tailFired.get(deck) === deck.token) return;
+    this.tailFired.set(deck, deck.token);
+    this.next();
+  }
+
+  private readonly tailFired = new WeakMap<Deck, number>();
+
   // deck.file이 비어 있으면 깨우기용 무음이다
   private onDeckDone(deck: Deck): void {
+    if (this.tailFired.get(deck) === deck.token) return;
     if (!deck.file || deck !== this.decks[this.active] || !this.state.playing) return;
     this.next();
   }

@@ -84,7 +84,8 @@ export function derive(level: number, stats: Stats, equip: Partial<Record<GearSl
     maxSp: Math.round((24 + level * 3 + b.sp) * (1 + s.int * 0.02)),
     atk: s.str * 2 + Math.floor(s.dex / 4) + Math.floor(s.luk / 5) + level + b.atk,
     def: b.def + Math.floor(s.vit / 2),
-    aspd: round2(clamp(1.3 + s.agi * 0.02 + s.dex * 0.005 + b.aspd, 0.5, 4)),
+    // 재미 위주: 기본 공격을 초당 3회로(후딜레이 약 0.33초). 어려움은 몬스터 패턴으로 준다
+    aspd: round2(clamp(3 + s.agi * 0.03 + s.dex * 0.01 + b.aspd, 1, 6)),
     crit: round2(clamp(1 + s.luk * 0.3 + b.crit, 0, 60)),
     hit: level + s.dex + b.hit,
     flee: level + s.agi + Math.floor(s.luk / 5) + b.flee,

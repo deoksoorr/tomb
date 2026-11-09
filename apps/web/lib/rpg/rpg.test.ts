@@ -25,7 +25,7 @@ describe("성장 공식", () => {
     expect(d1.def - d0.def).toBe(3); // 후드티
     expect(d1.maxHp).toBeGreaterThan(d0.maxHp);
     const strong = derive(1, { ...c.stats, agi: 99, luk: 99 }, {});
-    expect(strong.aspd).toBeLessThanOrEqual(4);
+    expect(strong.aspd).toBeLessThanOrEqual(6);
     expect(strong.crit).toBeLessThanOrEqual(60);
   });
 
