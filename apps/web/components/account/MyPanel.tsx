@@ -6,7 +6,7 @@ import { checkName } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { DAILY_EARN_CAP } from "@/lib/economy";
 import { meStore, useMe } from "@/lib/hooks/useMe";
-import { writeItem } from "@/lib/storage";
+import { forgetMyCode, readMyCode, saveMyCode, writeItem } from "@/lib/storage";
 import { LS, type Me } from "@/lib/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -48,6 +48,8 @@ export default function MyPanel({ myGraves, onGoToMyGrave, onBury, onLeave, onLo
     setNotice(null);
     try {
       await api.logout();
+      // 이 기기에 남겨 둔 코드도 함께 지운다 (다음 사람이 내 정보에서 보지 못하게)
+      forgetMyCode();
       onLoggedOut();
     } catch (e) {
       setNotice(errorMessage(e));
@@ -96,7 +98,7 @@ export default function MyPanel({ myGraves, onGoToMyGrave, onBury, onLeave, onLo
           <MyGraves entries={myGraves.entries} pending={myGraves.pending} onGo={onGoToMyGrave} onBury={onBury} />
         </section>
 
-        <CodeSection hasCode={me.hasCode} buttonId={codeButtonId} />
+        <CodeSection me={me} buttonId={codeButtonId} />
 
         <div className={styles.endButtons}>
           <button type="button" className={cx(ui.button, styles.leave)} onClick={onOpenShrine}>
@@ -122,7 +124,7 @@ export default function MyPanel({ myGraves, onGoToMyGrave, onBury, onLeave, onLo
             <div className={styles.confirm}>
               <p>
                 {me.hasCode
-                  ? "로그아웃할까요? 다시 들어오려면 개인 코드가 필요해요."
+                  ? "로그아웃할까요? 다시 들어오려면 개인 코드가 필요해요. 이 기기에 저장된 코드도 지워지니 먼저 적어 두세요."
                   : "코드를 발급받지 않으면 이 계정으로 다시 들어올 수 없어요."}
               </p>
               <div className={styles.confirmButtons}>
@@ -168,20 +170,30 @@ export default function MyPanel({ myGraves, onGoToMyGrave, onBury, onLeave, onLo
   );
 }
 
-/** 개인 코드 발급·재발급. 원문은 발급 응답에만 있으니 그때 복사하게 한다 */
-function CodeSection({ hasCode, buttonId }: { hasCode: boolean; buttonId: string }) {
-  const [code, setCode] = useState<string | null>(null);
+const MASKED_CODE = "••••-••••-••••";
+
+/**
+ * 개인 코드. 서버는 해시만 들고 있어 원문을 다시 못 보여 준다 → 이 기기에서 발급받았거나 코드로 들어왔으면
+ * 기기 저장본을 보여 주고(가리기·보기·복사), 없으면 새로 발급하게 한다 (예전 코드는 바로 못 쓰게 된다)
+ */
+function CodeSection({ me, buttonId }: { me: Me; buttonId: string }) {
+  const [code, setCode] = useState<string | null>(() => readMyCode(me.accountId));
+  const [shown, setShown] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const hasCode = me.hasCode || code !== null;
 
   async function issue() {
     setPending(true);
     setMessage(null);
     try {
       const res = await api.issueCode();
+      saveMyCode(me.accountId, res.code);
       setCode(res.code);
+      setShown(true);
       setConfirming(false);
+      setMessage("새 코드를 만들었어요. 안전한 곳에 적어 두세요.");
       void meStore.refresh();
     } catch (e) {
       setMessage(errorMessage(e));
@@ -195,7 +207,7 @@ function CodeSection({ hasCode, buttonId }: { hasCode: boolean; buttonId: string
       await navigator.clipboard.writeText(value);
       setMessage("복사했어요. 안전한 곳에 적어 두세요.");
     } catch {
-      setMessage("복사가 안 되면 길게 눌러 직접 적어 두세요.");
+      setMessage("복사가 안 되면 [보기]를 누르고 직접 적어 두세요.");
     }
   }
 
@@ -203,27 +215,39 @@ function CodeSection({ hasCode, buttonId }: { hasCode: boolean; buttonId: string
     <section className={styles.section}>
       <h3 className={styles.heading}>개인 코드</h3>
       <p className={ui.hint}>
-        코드를 만들어 두면 다른 기기에서도 이 계정(포인트·가방·내 묘비)으로 들어올 수 있어요. 입장 화면의 &quot;개인
-        코드로 들어가기&quot;에 넣으면 돼요.
+        다른 기기에서 이 계정(포인트·가방·내 묘비)으로 들어올 때 쓰는 코드예요. 입장 화면의 &quot;코드로 시작&quot;에
+        넣으면 돼요.
       </p>
-      {code ? (
+      {code && (
         <div className={styles.codeBox}>
-          <output className={styles.code} aria-label="개인 코드">
-            {code}
+          <output className={styles.code} aria-label={shown ? "개인 코드" : "개인 코드 (가려짐)"}>
+            {shown ? code : MASKED_CODE}
           </output>
-          <button type="button" className={cx(ui.button, ui.primary)} onClick={() => copy(code)}>
-            복사
-          </button>
+          <div className={styles.codeButtons}>
+            <button type="button" className={ui.button} onClick={() => setShown((v) => !v)} aria-pressed={shown}>
+              {shown ? "숨기기" : "보기"}
+            </button>
+            <button type="button" className={cx(ui.button, ui.primary)} onClick={() => copy(code)}>
+              복사
+            </button>
+          </div>
           <p className={styles.warning} role="note">
-            이 코드를 알면 누구나 내 계정에 들어올 수 있어요. 지금 한 번만 보여 드려요.
+            비밀번호처럼 다뤄 주세요. 이 코드를 알면 누구나 내 계정에 들어올 수 있어요.
           </p>
         </div>
-      ) : confirming ? (
+      )}
+      {!code && hasCode && (
+        <p className={ui.hint}>
+          이 기기에는 코드가 저장돼 있지 않아요. 코드는 비밀번호처럼 원문을 보관하지 않아 다시 보여 드릴 수 없어요. 잊었다면
+          새로 발급받으세요.
+        </p>
+      )}
+      {confirming ? (
         <div className={styles.confirm}>
-          <p>새로 만들면 예전 코드는 바로 쓸 수 없게 돼요.</p>
+          <p>새로 발급하면 예전 코드는 바로 쓸 수 없게 돼요. 다른 기기에서도 새 코드로 들어와야 해요.</p>
           <div className={styles.confirmButtons}>
             <button type="button" className={cx(ui.button, ui.danger)} onClick={issue} disabled={pending} autoFocus>
-              새 코드 만들기
+              {pending ? "만드는 중…" : "새 코드 발급"}
             </button>
             <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirming(false)}>
               그만두기
@@ -234,11 +258,11 @@ function CodeSection({ hasCode, buttonId }: { hasCode: boolean; buttonId: string
         <button
           id={buttonId}
           type="button"
-          className={ui.button}
+          className={cx(ui.button, code && ui.quiet)}
           onClick={hasCode ? () => setConfirming(true) : issue}
           disabled={pending}
         >
-          {pending ? "만드는 중…" : hasCode ? "코드 다시 만들기" : "개인 코드 만들기"}
+          {pending ? "만드는 중…" : hasCode ? "새 코드 발급" : "개인 코드 만들기"}
         </button>
       )}
       {message && (

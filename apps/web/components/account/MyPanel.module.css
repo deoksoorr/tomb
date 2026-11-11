@@ -77,6 +77,11 @@
   overflow-wrap: anywhere;
 }
 
+.codeButtons {
+  display: flex;
+  gap: 6px;
+}
+
 .warning {
   grid-column: 1 / -1;
   color: var(--candle);

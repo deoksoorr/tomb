@@ -322,10 +322,91 @@
   }
 }
 
+/* 단계 머리: [← 돌아가기] · "1 / 3 · 이름 정하기" · 진행 칸 */
+.stepHeader {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 2px 8px;
+}
+
+.stepHeader .back {
+  grid-row: 1;
+}
+
 .stepLabel {
+  grid-row: 1;
+  justify-self: end;
   color: var(--candle);
   font-family: var(--font-small);
   font-size: 10px;
+}
+
+.progress {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+}
+
+.progressCell {
+  height: 4px;
+  background: var(--line);
+}
+
+.progressCell[data-done="true"] {
+  background: var(--candle);
+}
+
+/* 캐릭터 단계의 큰 미리보기 */
+.preview {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 6px 0;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+/* 단계 화면(폼)이 떠 있으면 제목을 줄여 휴대폰 한 화면에 한 단계가 들어가게 */
+@media (max-width: 520px), (max-height: 960px) {
+  .content:has(.form) {
+    justify-content: flex-start;
+    padding-top: calc(var(--safe-top) + 16px);
+  }
+
+  .content:has(.form) .title {
+    font-size: 30px;
+  }
+
+  .content:has(.form) .subtitle {
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.55;
+  }
+
+  .content:has(.form) .form {
+    gap: 14px;
+    margin-top: 16px;
+    padding: 14px 16px;
+  }
+
+  .content:has(.form) .legal {
+    margin-top: 12px;
+  }
+
+  .content:has(.form) .colors legend {
+    margin-bottom: 4px;
+  }
+}
+
+/* 아주 낮은 화면(아이폰 SE 등): 소개 문구와 큰 미리보기를 접는다 (몸 모양 칸에 고른 색이 그대로 보인다) */
+@media (max-height: 700px) {
+  .content:has(.form) .subtitle,
+  .content:has(.form) .preview {
+    display: none;
+  }
 }
 
 .legal {

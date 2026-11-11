@@ -4,6 +4,7 @@ import { useId, useState, type FormEvent } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { CODE_RE, normalizeCode } from "@/lib/economy";
 import { meStore } from "@/lib/hooks/useMe";
+import { saveMyCode } from "@/lib/storage";
 import type { Me } from "@/lib/types";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -32,6 +33,8 @@ export default function CodeStart({ onLogin, onBack }: Props) {
       await api.startSession();
       const { me } = await api.loginWithCode(normalized);
       meStore.set(me);
+      // 서버엔 해시만 남으니 이 기기에 원문을 남겨 내 정보에서 다시 보여 준다
+      saveMyCode(me.accountId, normalized);
       onLogin(me);
     } catch (err) {
       setError(errorMessage(err));

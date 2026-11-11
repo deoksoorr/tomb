@@ -91,11 +91,17 @@ export default function EntryScreen({ start, focusGraveId, entering, stalled, on
 type Path = { kind: "new" } | { kind: "continue" } | { kind: "code"; me: Me };
 /** 들어갈 때의 모습 */
 type Look = { name: string; color: string; body: string | undefined };
+type AccountPath = Exclude<Path, { kind: "new" }>;
 type Step =
   | { kind: "choose" }
   | { kind: "code" }
-  | { kind: "profile"; path: Path; look?: Look }
-  | { kind: "channel"; path: Path; look: Look };
+  /** 새로 시작 ① 이름 → ② 캐릭터(몸 모양·색) → ③ 채널. 계정에 이름이 없는 이어서·코드도 이 길로 */
+  | { kind: "name"; path: Path; draft: Look }
+  | { kind: "look"; path: Path; draft: Look }
+  /** 이어서·코드: ① 계정 확인 → ② 채널 */
+  | { kind: "account"; path: AccountPath }
+  /** custom: 이름·모습을 직접 정했다 (3단계, [이전]은 캐릭터로) */
+  | { kind: "channel"; path: Path; look: Look; custom: boolean };
 
 const SUBMIT_LABELS: Record<Path["kind"], string> = {
   new: "입장하기",
@@ -112,12 +118,22 @@ function lookOf(me: Pick<Me, "name" | "color" | "body"> | null, fallbackName: st
   return { name, color, body: me?.body && isAvatarBody(me.body) ? me.body : undefined };
 }
 
-/** 처음 고르기 → ① 캐릭터(정하기 또는 확인) → [다음] → ② 채널 목록 (세 길 모두 같은 채널 화면) */
+/** 새로 시작의 처음 모습: 이 기기에 남은 색, 기본 몸 모양 */
+function freshDraft(): Look {
+  const saved = readItem(LS.color);
+  return { name: "", color: isAvatarColor(saved) ? saved : AVATAR_COLORS[0], body: AVATAR_BODIES[0].id };
+}
+
+/**
+ * 처음 고르기 →
+ *  새로 시작: ① 이름 → ② 캐릭터 → ③ 채널 (휴대폰 한 화면에 한 단계씩)
+ *  이어서·코드: ① 계정 확인 → ② 채널 (세 길 모두 같은 채널 화면)
+ */
 function EntryFlow({ start, focusGraveId, onEnter }: Omit<Props, "entering" | "stalled">) {
   const [savedName] = useState(() => readItem(LS.name) ?? "");
   const previous = checkName(savedName).ok ? savedName : null;
   const [step, setStep] = useState<Step>(() =>
-    start === "continue" && previous ? { kind: "profile", path: { kind: "continue" } } : { kind: "choose" },
+    start === "continue" && previous ? { kind: "account", path: { kind: "continue" } } : { kind: "choose" },
   );
   // 공유 링크의 묘비가 있는 채널 (그 채널로 들어간다)
   const [sharedChannel, setSharedChannel] = useState<number | null>(null);
@@ -151,7 +167,7 @@ function EntryFlow({ start, focusGraveId, onEnter }: Omit<Props, "entering" | "s
           <button
             type="button"
             className={cx(ui.button, ui.primary, styles.big)}
-            onClick={() => setStep({ kind: "profile", path: { kind: "new" } })}
+            onClick={() => setStep({ kind: "name", path: { kind: "new" }, draft: freshDraft() })}
           >
             새로 시작
             <span className={styles.bigSub}>이름과 모습을 정하고 처음 들어가요</span>
@@ -164,7 +180,7 @@ function EntryFlow({ start, focusGraveId, onEnter }: Omit<Props, "entering" | "s
             <button
               type="button"
               className={styles.continue}
-              onClick={() => setStep({ kind: "profile", path: { kind: "continue" } })}
+              onClick={() => setStep({ kind: "account", path: { kind: "continue" } })}
             >
               {previous}(으)로 이어서 들어가기
             </button>
@@ -172,16 +188,32 @@ function EntryFlow({ start, focusGraveId, onEnter }: Omit<Props, "entering" | "s
         </div>
       );
     case "code":
-      return <CodeStart onLogin={(me) => setStep({ kind: "profile", path: { kind: "code", me } })} onBack={back} />;
-    case "profile":
+      return <CodeStart onLogin={(me) => setStep({ kind: "account", path: { kind: "code", me } })} onBack={back} />;
+    case "name":
       return (
-        <ProfileStep
+        <NameStep
+          draft={step.draft}
+          onBack={back}
+          onNext={(draft) => setStep({ kind: "look", path: step.path, draft })}
+        />
+      );
+    case "look":
+      return (
+        <LookStep
+          draft={step.draft}
+          onBack={(draft) => setStep({ kind: "name", path: step.path, draft })}
+          onNext={(look) => setStep({ kind: "channel", path: step.path, look, custom: true })}
+        />
+      );
+    case "account":
+      return (
+        <AccountStep
           key={step.path.kind}
           path={step.path}
-          initial={step.look}
           fallbackName={previous ?? ""}
           onBack={back}
-          onNext={(look) => setStep({ kind: "channel", path: step.path, look })}
+          onNext={(look) => setStep({ kind: "channel", path: step.path, look, custom: false })}
+          onCustomize={() => setStep({ kind: "name", path: step.path, draft: freshDraft() })}
         />
       );
     case "channel":
@@ -189,37 +221,189 @@ function EntryFlow({ start, focusGraveId, onEnter }: Omit<Props, "entering" | "s
         <ChannelStep
           path={step.path}
           look={step.look}
+          custom={step.custom}
           sharedChannel={sharedChannel}
-          onBack={() => setStep({ kind: "profile", path: step.path, look: step.look })}
+          onBack={() =>
+            setStep(
+              step.custom || step.path.kind === "new"
+                ? { kind: "look", path: step.path, draft: step.look }
+                : { kind: "account", path: step.path },
+            )
+          }
           onEnter={onEnter}
         />
       );
   }
 }
 
-type ProfileProps = {
-  path: Path;
-  /** [이전]으로 돌아왔을 때 고른 값 그대로 */
-  initial?: Look;
+/** 단계 머리: [← 돌아가기] + "1 / 3 · 이름" + 진행 칸 */
+function StepHeader({
+  index,
+  total,
+  label,
+  backLabel,
+  onBack,
+}: {
+  index: number;
+  total: number;
+  label: string;
+  backLabel: string;
+  onBack: () => void;
+}) {
+  return (
+    <div className={styles.stepHeader}>
+      <button type="button" className={styles.back} onClick={onBack}>
+        ← {backLabel}
+      </button>
+      <p className={styles.stepLabel}>
+        <span aria-hidden="true">
+          {index} / {total}
+        </span>
+        <span className="visually-hidden">
+          {total}단계 중 {index}단계,
+        </span>{" "}
+        · {label}
+      </p>
+      <span className={styles.progress} aria-hidden="true">
+        {Array.from({ length: total }, (_, i) => (
+          <span key={i} className={styles.progressCell} data-done={i < index} />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+type DraftProps = { draft: Look; onNext: (look: Look) => void };
+
+/** 새로 시작 ① 이름 */
+function NameStep({ draft, onBack, onNext }: DraftProps & { onBack: () => void }) {
+  const [name, setName] = useState(draft.name);
+  const [touched, setTouched] = useState(false);
+  const nameId = useId();
+  const check = checkName(name);
+  // 첫 글자를 치는 중에는 길이 경고를 띄우지 않는다
+  const nameError = !check.ok && (touched || [...name].length >= 2) ? check.reason : null;
+
+  function next(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setTouched(true);
+    if (check.ok) onNext({ ...draft, name: check.name });
+  }
+
+  return (
+    <form className={styles.form} onSubmit={next} noValidate>
+      <StepHeader index={1} total={3} label="이름 정하기" backLabel="처음으로" onBack={onBack} />
+      <div className={ui.field}>
+        <label htmlFor={nameId} className={ui.label}>
+          이름
+        </label>
+        <div className={styles.nameRow}>
+          <span className={styles.avatar}>
+            <AvatarSprite color={draft.color} body={draft.body} scale={2} />
+          </span>
+          <input
+            id={nameId}
+            className={ui.input}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => setTouched(true)}
+            placeholder="묘지에서 불릴 이름"
+            autoComplete="nickname"
+            enterKeyHint="next"
+            spellCheck={false}
+            aria-invalid={nameError !== null}
+            aria-describedby={`${nameId}-hint`}
+            autoFocus
+          />
+        </div>
+        <p id={`${nameId}-hint`} className={nameError ? ui.error : ui.hint}>
+          {nameError ?? "2~12자 · 한글, 영문, 숫자, 공백, _"}
+        </p>
+      </div>
+      <button type="submit" className={cx(ui.button, ui.primary, styles.enter)}>
+        다음
+      </button>
+    </form>
+  );
+}
+
+/** 새로 시작 ② 캐릭터: 몸 모양·색 */
+function LookStep({ draft, onBack, onNext }: DraftProps & { onBack: (draft: Look) => void }) {
+  const [color, setColor] = useState(draft.color);
+  const [body, setBody] = useState<string>(draft.body ?? AVATAR_BODIES[0].id);
+  const look: Look = { name: draft.name, color, body };
+
+  function next(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    onNext(look);
+  }
+
+  return (
+    <form className={styles.form} onSubmit={next} noValidate>
+      <StepHeader index={2} total={3} label="캐릭터 고르기" backLabel="이전" onBack={() => onBack(look)} />
+      <div className={styles.preview}>
+        <AvatarSprite color={color} body={body} scale={4} />
+        <span className={styles.lockedName}>{draft.name}</span>
+      </div>
+
+      <fieldset className={styles.colors}>
+        <legend className={ui.label}>몸 모양</legend>
+        <div className={styles.bodies}>
+          {AVATAR_BODIES.map((b) => (
+            <label key={b.id} className={styles.bodyOption}>
+              <input
+                type="radio"
+                name="avatar-body"
+                className="visually-hidden"
+                checked={body === b.id}
+                onChange={() => setBody(b.id)}
+              />
+              <AvatarSprite color={color} body={b.id} scale={2} />
+              <span className={styles.bodyLabel}>{b.label}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset className={styles.colors}>
+        <legend className={ui.label}>아바타 색</legend>
+        <div className={styles.swatches}>
+          {AVATAR_COLORS.map((c, i) => (
+            <label key={c} className={styles.swatch} style={{ "--swatch": c } as CSSProperties}>
+              <input
+                type="radio"
+                name="avatar-color"
+                className="visually-hidden"
+                checked={color === c}
+                onChange={() => setColor(c)}
+              />
+              <span className="visually-hidden">{COLOR_NAMES[i] ?? `색 ${i + 1}`}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <button type="submit" className={cx(ui.button, ui.primary, styles.enter)}>
+        다음
+      </button>
+    </form>
+  );
+}
+
+type AccountProps = {
+  path: AccountPath;
   fallbackName: string;
   onBack: () => void;
   onNext: (look: Look) => void;
+  /** 계정에 이름이 없다 → 새로 시작처럼 이름·모습을 정한다 */
+  onCustomize: () => void;
 };
 
-/** ① 새로 시작: 닉네임·몸 모양·색을 정한다. 이어서·코드: 계정에 저장된 모습을 확인만 한다 */
-function ProfileStep({ path, initial, fallbackName, onBack, onNext }: ProfileProps) {
-  const [name, setName] = useState(initial?.name ?? "");
-  const [color, setColor] = useState<string>(() => {
-    if (initial) return initial.color;
-    const saved = readItem(LS.color);
-    return isAvatarColor(saved) ? saved : AVATAR_COLORS[0];
-  });
-  const [body, setBody] = useState<string>(initial?.body ?? AVATAR_BODIES[0].id);
-  const [touched, setTouched] = useState(false);
+/** 이어서·코드 ① 계정에 저장된 이름·모습을 확인만 한다 */
+function AccountStep({ path, fallbackName, onBack, onNext, onCustomize }: AccountProps) {
   // 이어서 들어가기: 이 기기 계정의 저장된 모습 (없으면 이 기기에 남은 이름·색)
   const [account, setAccount] = useState<Me | null>(null);
   const [accountChecked, setAccountChecked] = useState(path.kind !== "continue");
-  const nameId = useId();
 
   useEffect(() => {
     if (path.kind !== "continue") return;
@@ -232,20 +416,15 @@ function ProfileStep({ path, initial, fallbackName, onBack, onNext }: ProfilePro
       .finally(() => setAccountChecked(true));
   }, [path.kind]);
 
-  const saved =
-    path.kind === "code" ? lookOf(path.me, fallbackName) : path.kind === "continue" ? lookOf(account, fallbackName) : null;
-  const check = checkName(name);
-  // 첫 글자를 치는 중에는 길이 경고를 띄우지 않는다
-  const nameError = !check.ok && (touched || [...name].length >= 2) ? check.reason : null;
+  const saved = lookOf(path.kind === "code" ? path.me : account, fallbackName);
 
   function next(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (saved) return onNext(saved);
-    setTouched(true);
-    if (check.ok) onNext({ name: check.name, color, body });
+    if (saved) onNext(saved);
+    else onCustomize();
   }
 
-  if (path.kind !== "new" && !accountChecked) {
+  if (!accountChecked) {
     return (
       <p className={styles.loading} role="status">
         계정을 확인하는 중…
@@ -255,11 +434,7 @@ function ProfileStep({ path, initial, fallbackName, onBack, onNext }: ProfilePro
 
   return (
     <form className={styles.form} onSubmit={next} noValidate>
-      <button type="button" className={styles.back} onClick={onBack}>
-        ← 처음으로
-      </button>
-      <p className={styles.stepLabel}>1 / 2 · {saved ? "계정 확인" : "캐릭터 정하기"}</p>
-
+      <StepHeader index={1} total={2} label="계정 확인" backLabel="처음으로" onBack={onBack} />
       {saved ? (
         <div className={styles.profile}>
           <span className={styles.avatar}>
@@ -271,75 +446,10 @@ function ProfileStep({ path, initial, fallbackName, onBack, onNext }: ProfilePro
           </span>
         </div>
       ) : (
-        <>
-          <div className={ui.field}>
-            <label htmlFor={nameId} className={ui.label}>
-              이름
-            </label>
-            <div className={styles.nameRow}>
-              <span className={styles.avatar}>
-                <AvatarSprite color={color} body={body} scale={2} />
-              </span>
-              <input
-                id={nameId}
-                className={ui.input}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onBlur={() => setTouched(true)}
-                placeholder="묘지에서 불릴 이름"
-                autoComplete="nickname"
-                enterKeyHint="next"
-                spellCheck={false}
-                aria-invalid={nameError !== null}
-                aria-describedby={`${nameId}-hint`}
-              />
-            </div>
-            <p id={`${nameId}-hint`} className={nameError ? ui.error : ui.hint}>
-              {nameError ?? "2~12자 · 한글, 영문, 숫자, 공백, _"}
-            </p>
-          </div>
-
-          <fieldset className={styles.colors}>
-            <legend className={ui.label}>몸 모양</legend>
-            <div className={styles.bodies}>
-              {AVATAR_BODIES.map((b) => (
-                <label key={b.id} className={styles.bodyOption}>
-                  <input
-                    type="radio"
-                    name="avatar-body"
-                    className="visually-hidden"
-                    checked={body === b.id}
-                    onChange={() => setBody(b.id)}
-                  />
-                  <AvatarSprite color={color} body={b.id} scale={3} />
-                  <span className={styles.bodyLabel}>{b.label}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <fieldset className={styles.colors}>
-            <legend className={ui.label}>아바타 색</legend>
-            <div className={styles.swatches}>
-              {AVATAR_COLORS.map((c, i) => (
-                <label key={c} className={styles.swatch} style={{ "--swatch": c } as CSSProperties}>
-                  <input
-                    type="radio"
-                    name="avatar-color"
-                    className="visually-hidden"
-                    checked={color === c}
-                    onChange={() => setColor(c)}
-                  />
-                  <span className="visually-hidden">{COLOR_NAMES[i] ?? `색 ${i + 1}`}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        </>
+        <p className={ui.hint}>이 계정에는 저장된 이름이 없어요. 이름과 모습을 정하고 들어가요.</p>
       )}
-
       <button type="submit" className={cx(ui.button, ui.primary, styles.enter)}>
-        다음
+        {saved ? "다음" : "이름 정하기"}
       </button>
     </form>
   );
@@ -348,13 +458,15 @@ function ProfileStep({ path, initial, fallbackName, onBack, onNext }: ProfilePro
 type ChannelProps = {
   path: Path;
   look: Look;
+  /** 이름·모습을 직접 정하고 왔다 (3단계 중 3단계) */
+  custom: boolean;
   sharedChannel: number | null;
   onBack: () => void;
   onEnter: (choice: EntryChoice) => void;
 };
 
 /** ② 채널 목록 → 입장. 세 길이 같은 화면을 쓰고, 버튼 문구만 다르다 */
-function ChannelStep({ path, look, sharedChannel, onBack, onEnter }: ChannelProps) {
+function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter }: ChannelProps) {
   const [channel, setChannel] = useState<ChannelChoice>("auto");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -406,10 +518,13 @@ function ChannelStep({ path, look, sharedChannel, onBack, onEnter }: ChannelProp
 
   return (
     <form className={styles.form} onSubmit={submit} noValidate>
-      <button type="button" className={styles.back} onClick={onBack}>
-        ← 이전
-      </button>
-      <p className={styles.stepLabel}>2 / 2 · 채널 고르기</p>
+      <StepHeader
+        index={custom ? 3 : 2}
+        total={custom ? 3 : 2}
+        label="채널 고르기"
+        backLabel="이전"
+        onBack={onBack}
+      />
       <div className={styles.profile}>
         <span className={styles.avatar}>
           <AvatarSprite color={look.color} body={look.body} scale={2} />
