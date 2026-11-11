@@ -90,7 +90,8 @@ const SILHOUETTE: PixelRect[] = [
   [150, 25, 3, 1, "#5f512a"],
 ];
 
-export default function NightSky({ ambience }: { ambience: Ambience | null }) {
+/** hidden: 움직이는 마을 배경(LiveBackground)이 다 덮었다 → 그리지 않는다(애니메이션도 쉰다) */
+export default function NightSky({ ambience, hidden = false }: { ambience: Ambience | null; hidden?: boolean }) {
   const { weather, intensity, palette } = ambience ?? NIGHT_DEFAULT;
   const lit = Math.round(FIREFLY_COUNT * palette.fireflies);
   const vars = {
@@ -103,7 +104,7 @@ export default function NightSky({ ambience }: { ambience: Ambience | null }) {
   } as CSSProperties;
 
   return (
-    <div className={styles.sky} style={vars} aria-hidden="true">
+    <div className={styles.sky} style={vars} aria-hidden="true" data-hidden={hidden}>
       <div className={styles.moon} data-on={palette.celestial === "moon"}>
         <PixelArt width={12} height={12} scale={5} rects={MOON} />
       </div>

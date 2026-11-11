@@ -12,6 +12,8 @@ export type Levels = {
   rain: number;
   snow: number;
   cloud: number;
+  /** 떨어지는 낙엽 0..1 */
+  leaves: number;
 };
 
 export const TRANSITION_MS = 2500;
@@ -31,6 +33,7 @@ export function levelsFor(a: Ambience): Levels {
     rain: w === "rain" ? k : 0,
     snow: w === "snow" ? k : 0,
     cloud: w === "cloudy" ? 0.4 + 0.4 * k : w === "rain" ? 0.25 : 0,
+    leaves: clamp01(a.leaves),
   };
 }
 
@@ -50,6 +53,7 @@ export function mixLevels(a: Levels, b: Levels, t: number, out: Levels): Levels 
   out.rain = l(a.rain, b.rain);
   out.snow = l(a.snow, b.snow);
   out.cloud = l(a.cloud, b.cloud);
+  out.leaves = l(a.leaves, b.leaves);
   return out;
 }
 
@@ -93,6 +97,7 @@ function sameLevels(a: Levels, b: Levels): boolean {
     Math.abs(a.fog - b.fog) < 1e-3 &&
     Math.abs(a.rain - b.rain) < 1e-3 &&
     Math.abs(a.snow - b.snow) < 1e-3 &&
-    Math.abs(a.cloud - b.cloud) < 1e-3
+    Math.abs(a.cloud - b.cloud) < 1e-3 &&
+    Math.abs(a.leaves - b.leaves) < 1e-3
   );
 }

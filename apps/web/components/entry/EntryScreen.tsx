@@ -27,6 +27,8 @@ import ui from "../ui/ui.module.css";
 import AvatarSprite from "./AvatarSprite";
 import ChannelPicker, { type ChannelChoice } from "./ChannelPicker";
 import CodeStart from "./CodeStart";
+import EntryMusic, { entryMusic } from "./EntryMusic";
+import LiveBackground from "./LiveBackground";
 import NightSky from "./NightSky";
 import styles from "./EntryScreen.module.css";
 
@@ -52,9 +54,13 @@ type Props = {
 export default function EntryScreen({ start, focusGraveId, entering, stalled, onEnter }: Props) {
   const hydrated = useHydrated();
   const ambience = useAmbience();
+  const [liveShown, setLiveShown] = useState(false);
   return (
     <main className={styles.screen}>
-      <NightSky ambience={ambience} />
+      {/* 그림 하늘 위로, 준비되면 진짜 마을이 천천히 움직이는 배경이 덮는다 */}
+      <NightSky ambience={ambience} hidden={liveShown} />
+      <LiveBackground paused={entering} onShown={() => setLiveShown(true)} />
+      <EntryMusic />
       <div className={styles.content}>
         <h1 className={styles.title}>한때는...</h1>
         <p className={styles.subtitle}>
@@ -495,8 +501,10 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter }: Cha
       setConfirmFresh(true);
       return;
     }
-    // 입장 클릭이 오디오 재생을 허락받는 사용자 제스처다 (await 전에 불러야 한다)
-    bgm.play();
+    // 입장 클릭이 오디오 재생을 허락받는 사용자 제스처다 (await 전에 불러야 한다).
+    // 입장 화면의 음악 버튼으로 껐으면 그대로 둔다
+    const wasPlaying = bgm.getSnapshot().playing;
+    if (!entryMusic.optedOut) bgm.play();
     writeItem(LS.name, look.name);
     writeItem(LS.color, look.color);
     setPending(true);
@@ -510,7 +518,7 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter }: Cha
       prefetchGraves(typeof target === "number" ? target : (lobby.lobby && pickChannel(lobby.lobby)) || 1);
       onEnter({ ...look, channel: target });
     } catch (err) {
-      bgm.pause();
+      if (!wasPlaying) bgm.pause();
       setError(errorMessage(err));
       setPending(false);
     }

@@ -14,6 +14,9 @@ export const WEATHERS: readonly Weather[] = ["clear", "cloudy", "fog", "rain", "
 export const PHASE_LABELS: Record<TimePhase, string> = { dawn: "새벽", day: "낮", dusk: "해질녘", night: "밤" };
 export const WEATHER_LABELS: Record<Weather, string> = { clear: "맑음", cloudy: "흐림", fog: "안개", rain: "비", snow: "눈" };
 
+export type Season = "spring" | "summer" | "autumn" | "winter";
+export const SEASONS: readonly Season[] = ["spring", "summer", "autumn", "winter"];
+
 export type Palette = {
   /** CSS 배경 그라데이션 (위 → 아래) */
   skyTop: string;
@@ -35,6 +38,9 @@ export type Ambience = {
   weather: Weather;
   /** 날씨 세기 0..1 (빗줄기·눈송이·안개 밀도) */
   intensity: number;
+  season: Season;
+  /** 떨어지는 낙엽 밀도 0..1 (가을에만) */
+  leaves: number;
   /** KST 시각 (0~24 실수) */
   kstHour: number;
   palette: Palette;
@@ -82,6 +88,14 @@ export function kstMonth(now: number): number {
   return new Date(now + KST_OFFSET).getUTCMonth() + 1;
 }
 
+/** 계절 (KST 월 기준: 3~5 봄, 6~8 여름, 9~11 가을, 12~2 겨울) */
+export function seasonOf(month: number): Season {
+  if (month >= 3 && month <= 5) return "spring";
+  if (month >= 6 && month <= 8) return "summer";
+  if (month >= 9 && month <= 11) return "autumn";
+  return "winter";
+}
+
 export function timePhase(hour: number): TimePhase {
   if (hour >= 5 && hour < 7) return "dawn";
   if (hour >= 7 && hour < 17.5) return "day";
@@ -97,18 +111,40 @@ function hash01(n: number, salt: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 2 ** 32;
 }
 
-/** 2시간 블록마다 바뀌는 결정적 랜덤 날씨. 눈은 12~2월에만, 그 밖의 달에는 흐림으로 바뀐다. */
-export function weatherAt(now: number): { weather: Weather; intensity: number; nextWeatherAt: number } {
+/**
+ * 2시간 블록마다 바뀌는 결정적 랜덤 날씨.
+ * 눈은 11~3월에만 온다 (그 밖의 달에는 흐림). 한겨울(12~2월)에는 비 오는 블록의 절반이 눈으로 바뀐다.
+ * month: QA용 계절 덮어쓰기 (없으면 KST 달)
+ */
+export function weatherAt(now: number, month: number = kstMonth(now)): { weather: Weather; intensity: number; nextWeatherAt: number } {
   const block = Math.floor((now + KST_OFFSET) / WEATHER_BLOCK_MS);
   const u = hash01(block, 1);
   let weather: Weather = u < 0.38 ? "clear" : u < 0.58 ? "cloudy" : u < 0.72 ? "fog" : u < 0.92 ? "rain" : "snow";
-  const m = kstMonth(now);
-  if (weather === "snow" && !(m === 12 || m <= 2)) weather = "cloudy";
+  const deepWinter = month === 12 || month <= 2;
+  const snowy = deepWinter || month === 11 || month === 3;
+  if (weather === "snow" && !snowy) weather = "cloudy";
+  if (weather === "rain" && deepWinter && hash01(block, 3) < 0.5) weather = "snow";
   return {
     weather,
     intensity: 0.4 + 0.6 * hash01(block, 2),
     nextWeatherAt: (block + 1) * WEATHER_BLOCK_MS - KST_OFFSET,
   };
+}
+
+/** 낙엽 밀도: 가을의 맑고 흐린 날에 가장 많고, 젖은 날·눈 오는 날은 드문드문 */
+export function leavesFor(season: Season, weather: Weather, intensity: number): number {
+  if (season !== "autumn") return 0;
+  switch (weather) {
+    case "clear":
+    case "cloudy":
+      return 0.55 + 0.35 * intensity;
+    case "fog":
+      return 0.35;
+    case "rain":
+      return 0.15;
+    case "snow":
+      return 0.12;
+  }
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -145,10 +181,13 @@ function keyAt(hour: number): Key {
   return NIGHT;
 }
 
-export type AmbienceOverride = { hour?: number; weather?: Weather };
+export type AmbienceOverride = { hour?: number; weather?: Weather; season?: Season };
+
+/** 계절 덮어쓰기를 그 계절의 대표 달로 */
+const SEASON_MONTH: Record<Season, number> = { spring: 4, summer: 7, autumn: 10, winter: 1 };
 
 /**
- * QA용 덮어쓰기: `?time=dawn|day|dusk|night|0~23` , `?weather=clear|cloudy|fog|rain|snow`
+ * QA용 덮어쓰기: `?time=dawn|day|dusk|night|0~23` , `?weather=clear|cloudy|fog|rain|snow` , `?season=spring|summer|autumn|winter`
  */
 export function parseAmbienceOverride(search: string): AmbienceOverride {
   const q = new URLSearchParams(search);
@@ -159,12 +198,16 @@ export function parseAmbienceOverride(search: string): AmbienceOverride {
   else if (t && /^\d{1,2}(\.\d+)?$/.test(t) && +t < 24) out.hour = +t;
   const w = q.get("weather");
   if (w && (WEATHERS as readonly string[]).includes(w)) out.weather = w as Weather;
+  const se = q.get("season");
+  if (se && (SEASONS as readonly string[]).includes(se)) out.season = se as Season;
   return out;
 }
 
 export function ambienceAt(now: number = Date.now(), override: AmbienceOverride = {}): Ambience {
   const hour = override.hour ?? kstHour(now);
-  const auto = weatherAt(now);
+  const month = override.season ? SEASON_MONTH[override.season] : kstMonth(now);
+  const season = seasonOf(month);
+  const auto = weatherAt(now, month);
   const weather = override.weather ?? auto.weather;
   const intensity = override.weather ? 0.8 : auto.intensity;
   const k = keyAt(hour);
@@ -174,6 +217,8 @@ export function ambienceAt(now: number = Date.now(), override: AmbienceOverride 
     phase,
     weather,
     intensity,
+    season,
+    leaves: leavesFor(season, weather, intensity),
     kstHour: hour,
     nextWeatherAt: auto.nextWeatherAt,
     palette: {

@@ -1,0 +1,33 @@
+/* 입장 화면 뒤 움직이는 마을. 첫 장면이 그려지면 그림 하늘(NightSky) 위로 서서히 나타난다 */
+.live {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.6s ease;
+}
+
+.live[data-shown="true"] {
+  opacity: 1;
+}
+
+.live canvas {
+  display: block;
+}
+
+/* 가운데 입장 패널의 글씨가 잘 읽히게 가장자리보다 가운데를 살짝 어둡게 + 아래쪽 그늘 */
+.live::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 55% at 50% 50%, rgba(10, 11, 9, 0.5) 0%, rgba(10, 11, 9, 0.2) 70%, rgba(10, 11, 9, 0.1) 100%),
+    linear-gradient(180deg, rgba(10, 11, 9, 0) 55%, rgba(10, 11, 9, 0.35) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live {
+    transition: none;
+  }
+}

@@ -81,5 +81,5 @@
 - 외부 음원을 더 넣을 때도 원본 페이지에서 라이선스를 확인할 수 있는 CC0·CC BY 곡만 씁니다(Pixabay Content License도 가능). 출처가 불분명하거나 유튜브에서 뽑은 음원은 쓰지 않습니다.
 
 ## 효과음 (SFX)
-- `apps/web/public/sfx/` 24개: campfire(모닥불 16초 루프, 약 -20 LUFS), say(말풍선 '뿅', 0.2초), firework-launch, firework-burst, coin, flower, bell(산사 종), splash, swim(물장구 루프), bubble(잠수), swing(삐걱), wave(휘파람), cheer, hit, crit, monster-die, levelup, potion, skill, coin-drop, defeat, victory, tick, miss
+- `apps/web/public/sfx/` 26개: campfire(모닥불 16초 루프, 약 -20 LUFS), say(말풍선 '뿅', 0.2초), firework-launch, firework-burst, coin, flower, bell(산사 종), splash, swim(물장구 루프), bubble(잠수), swing(삐걱), wave(휘파람), cheer, hit, crit, monster-die, levelup, potion, skill, coin-drop, defeat, victory, tick, miss, rain-loop(날씨 비 12초 루프, 약 -21 LUFS, 56kbps), thunder(천둥 한 번 8초, 56kbps)
 - 모두 `scripts/gen-bgm.mjs`가 코드로 합성한 자체 제작 음원이며 **CC0**입니다. 대부분 약 -16 LUFS(봉우리가 날카로운 splash·swing은 약 -17~-18, 아주 짧은 tick은 -21), true peak ≤ -1.6 dBTP로 맞췄습니다.

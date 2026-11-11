@@ -1,5 +1,9 @@
+import { AmbientLoop } from "./ambientLoop";
+import { AudioHost } from "./audioHost";
+
 // 효과음 (폭죽). Phaser 오디오는 꺼 두었으므로 HTMLAudioElement를 직접 쓴다.
 // 파일이 아직 없거나 재생이 막히면 조용히 넘어간다. 볼륨·음소거는 UI의 audio:settings(BGM과 같은 값)를 따른다.
+// WebAudio 컨텍스트·볼륨·깨우기는 AudioHost, 모닥불 루프는 AmbientLoop (빗소리 WeatherSound와 같은 코드).
 
 export type SfxName = "launch" | "burst" | "say";
 
@@ -12,14 +16,15 @@ const FILES: Record<SfxName, string> = {
 /** 같은 소리가 너무 많이 겹치지 않게 (피날레·여러 사람이 동시에 쏠 때도 이 이상은 안 겹친다) */
 const MAX_VOICES = 12;
 
-export class Sfx {
+export class Sfx extends AudioHost {
   private readonly base = new Map<SfxName, HTMLAudioElement>();
   private readonly missing = new Set<SfxName>();
   private voices = 0;
-  private volume = 0.7;
-  private muted = false;
+  /** 모닥불 타는 소리 (BGM 위에 은은한 루프) */
+  private readonly fire = new AmbientLoop(this, "/sfx/campfire.mp3", { gain: 0.75 });
 
   constructor() {
+    super();
     if (typeof Audio === "undefined") return;
     for (const [name, url] of Object.entries(FILES) as [SfxName, string][]) {
       const a = new Audio();
@@ -32,10 +37,8 @@ export class Sfx {
 
   /** UI 볼륨: 0..1 (혹시 0..100이 오면 나눠서) */
   setSettings(volume: number, muted: boolean): void {
-    const v = Number.isFinite(volume) ? (volume > 1 ? volume / 100 : volume) : 0.7;
-    this.volume = Math.max(0, Math.min(1, v));
-    this.muted = muted;
-    this.applyCampfire();
+    this.setVolume(volume, muted);
+    this.fire.refresh();
   }
 
   /**
@@ -62,37 +65,7 @@ export class Sfx {
   }
 
   // ── 합성음 (파일 없이 WebAudio로): 종소리·물소리 ──
-  private ac: AudioContext | null = null;
   private noise: AudioBuffer | null = null;
-
-  private audio(): AudioContext | null {
-    if (this.muted || this.volume <= 0) return null;
-    if (!this.ac) {
-      const AC = typeof window !== "undefined" ? (window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) : undefined;
-      if (!AC) return null;
-      try {
-        this.ac = new AC();
-      } catch {
-        return null;
-      }
-    }
-    this.kick(true);
-    return this.ac;
-  }
-
-  private kickAt = -Infinity;
-  /**
-   * 멈춘 오디오 컨텍스트를 다시 깨운다. 창·탭을 바꾸면 브라우저가 컨텍스트를 suspended(크롬)·interrupted(사파리)로
-   * 돌려 놓고, 사용자 입력 없이 부른 resume()은 거절되기도 한다 → 돌아온 뒤 입력이 들어올 때까지 1초마다 다시 시도한다.
-   */
-  private kick(force = false): void {
-    const ac = this.ac;
-    if (!ac || ac.state === "running" || ac.state === "closed") return;
-    const now = performance.now();
-    if (!force && now - this.kickAt < 1000) return;
-    this.kickAt = now;
-    void ac.resume().catch(() => undefined);
-  }
 
   /** 범종 한 번: 낮은 기음 + 비조화 배음, 길게 울린다. gain: 거리 감쇠 등 */
   bell(gain = 1): void {
@@ -166,148 +139,17 @@ export class Sfx {
     }
   }
 
-  // ── 모닥불 타는 소리 (BGM 위에 은은한 루프) ──
-  // MP3는 앞뒤에 인코더 무음이 몇 ms 붙는다 → <audio loop> 대신 AudioBufferSourceNode(loop)로, 앞뒤 20ms를 잘라 이음새가 안 들리게.
-  private fireBuf: AudioBuffer | null = null;
-  private fireLoading = false;
-  private fireFailed = false;
-  private fireSrc: AudioBufferSourceNode | null = null;
-  private fireGain: GainNode | null = null;
-  private fireLevel = 0;
-  /** 소리가 0이 된 시각 (한동안 0이면 재생을 멈춘다) */
-  private fireQuietAt = 0;
-  private fireHidden = false;
-  private fireVisBound = false;
-
   /**
    * 모닥불 소리 크기 0..1 (거리·앉음은 campfireLevel()로). 매 프레임 불러도 된다 — 바뀔 때만 램프를 건다.
    * audio:settings(볼륨·음소거)를 따르고, 탭이 숨으면 멈춘다.
    */
   campfire(level: number): void {
-    const lv = Math.max(0, Math.min(1, Number.isFinite(level) ? level : 0));
-    if (Math.abs(lv - this.fireLevel) < 0.01 && (lv > 0) === (this.fireLevel > 0)) {
-      this.maybeStopFire();
-      // 들려야 하는데 멈춰 있다(창을 바꿨다 돌아옴 등): 컨텍스트를 깨우고, 숨을 때 멈춘 루프를 다시 튼다
-      if (lv > 0 && !this.fireHidden && !this.muted) {
-        this.kick();
-        if (!this.fireSrc && this.fireBuf) this.applyCampfire();
-      }
-      return;
-    }
-    this.fireLevel = lv;
-    this.applyCampfire();
+    this.fire.set(level);
   }
-
-  private applyCampfire(): void {
-    const want = this.fireHidden || this.muted ? 0 : this.fireLevel * this.volume * 0.75;
-    if (want <= 0.001) {
-      if (this.fireGain && this.ac) this.fireGain.gain.setTargetAtTime(0, this.ac.currentTime, 0.35);
-      if (!this.fireQuietAt) this.fireQuietAt = performance.now();
-      return;
-    }
-    this.fireQuietAt = 0;
-    const ac = this.audio();
-    if (!ac) return;
-    this.bindFireVisibility();
-    if (!this.fireBuf) {
-      this.loadFire(ac);
-      return;
-    }
-    if (!this.fireGain) {
-      this.fireGain = ac.createGain();
-      this.fireGain.gain.value = 0;
-      this.fireGain.connect(ac.destination);
-    }
-    if (!this.fireSrc) {
-      const src = ac.createBufferSource();
-      src.buffer = this.fireBuf;
-      src.loop = true;
-      const d = this.fireBuf.duration;
-      if (d > 0.1) {
-        src.loopStart = 0.02;
-        src.loopEnd = d - 0.02;
-      }
-      src.connect(this.fireGain);
-      src.start(ac.currentTime + 0.01, 0.02 + Math.random() * Math.max(0, d - 0.1));
-      this.fireSrc = src;
-    }
-    this.fireGain.gain.setTargetAtTime(want, ac.currentTime, 0.45);
-  }
-
-  /** 4초 넘게 조용하면 재생을 멈춘다 (다시 가까워지면 버퍼에서 새로 시작) */
-  private maybeStopFire(): void {
-    if (!this.fireSrc || !this.fireQuietAt || performance.now() - this.fireQuietAt < 4000) return;
-    try {
-      this.fireSrc.stop();
-    } catch {
-      // 이미 멈춤
-    }
-    this.fireSrc.disconnect();
-    this.fireSrc = null;
-  }
-
-  private loadFire(ac: AudioContext): void {
-    if (this.fireLoading || this.fireFailed || typeof fetch === "undefined") return;
-    this.fireLoading = true;
-    fetch("/sfx/campfire.mp3")
-      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
-      .then((b) => ac.decodeAudioData(b))
-      .then((buf) => {
-        this.fireBuf = buf;
-        this.fireLoading = false;
-        if (this.ac === ac) this.applyCampfire();
-      })
-      .catch(() => {
-        this.fireLoading = false;
-        this.fireFailed = true;
-      });
-  }
-
-  private bindFireVisibility(): void {
-    if (this.fireVisBound || typeof document === "undefined") return;
-    this.fireVisBound = true;
-    document.addEventListener("visibilitychange", this.onFireVisibility);
-    // 창 전환(탭은 그대로 보이는 경우 포함)·bfcache 복귀·다음 입력 때 컨텍스트를 다시 깨운다 (6번: 불멍 중 창을 바꾸면 소리가 사라짐)
-    window.addEventListener("focus", this.onFireWake);
-    window.addEventListener("pageshow", this.onFireWake);
-    window.addEventListener("pointerdown", this.onFireWake, true);
-    window.addEventListener("keydown", this.onFireWake, true);
-  }
-
-  private readonly onFireWake = (): void => {
-    if (this.fireLevel <= 0 || this.muted) return;
-    this.fireHidden = document.hidden;
-    if (this.fireHidden) return;
-    this.kick(true);
-    this.applyCampfire();
-  };
-
-  private readonly onFireVisibility = (): void => {
-    this.fireHidden = document.hidden;
-    if (!this.fireHidden) this.kick(true);
-    this.applyCampfire();
-    if (this.fireHidden) this.fireQuietAt = performance.now() - 4000;
-    this.maybeStopFire();
-  };
 
   destroy(): void {
-    if (this.fireVisBound) {
-      document.removeEventListener("visibilitychange", this.onFireVisibility);
-      window.removeEventListener("focus", this.onFireWake);
-      window.removeEventListener("pageshow", this.onFireWake);
-      window.removeEventListener("pointerdown", this.onFireWake, true);
-      window.removeEventListener("keydown", this.onFireWake, true);
-    }
-    this.fireVisBound = false;
-    try {
-      this.fireSrc?.stop();
-    } catch {
-      // 무시
-    }
-    this.fireSrc = null;
-    this.fireGain = null;
-    void this.ac?.close().catch(() => undefined);
-    this.ac = null;
+    this.fire.destroy();
+    this.closeAudio();
     for (const a of this.base.values()) a.src = "";
     this.base.clear();
   }

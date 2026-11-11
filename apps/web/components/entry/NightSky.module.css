@@ -12,6 +12,11 @@
     --sky-bottom 2.5s ease;
 }
 
+/* 움직이는 마을 배경이 덮으면 그리지도 움직이지도 않는다 */
+.sky[data-hidden="true"] {
+  display: none;
+}
+
 .moon,
 .sun {
   position: absolute;

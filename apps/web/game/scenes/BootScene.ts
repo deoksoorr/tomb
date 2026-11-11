@@ -8,7 +8,7 @@ import type { GameContext } from "./context";
 
 const FONT_WAIT_MS = 2500;
 
-async function fontsReady(): Promise<void> {
+export async function fontsReady(): Promise<void> {
   const fonts = typeof document !== "undefined" ? document.fonts : undefined;
   if (!fonts?.load) return;
   const timeout = new Promise<void>((r) => setTimeout(r, FONT_WAIT_MS));
@@ -16,6 +16,47 @@ async function fontsReady(): Promise<void> {
     .then(() => undefined)
     .catch(() => undefined);
   await Promise.race([load, timeout]);
+}
+
+/** 월드 소품이 쓰는 반복 애니메이션 (촛불·유령 고양이·잡화점 주인·도깨비불). 입장 화면 배경(PreviewScene)도 같이 쓴다 */
+export function installSharedAnims(scene: Phaser.Scene): void {
+  const slow = prefersReducedMotion();
+  scene.anims.create({
+    key: "fx-candle-flicker",
+    frames: [
+      { key: TEX.candle, frame: 0 },
+      { key: TEX.candle, frame: 1 },
+    ],
+    frameRate: slow ? 2 : 6,
+    repeat: -1,
+  });
+  scene.anims.create({
+    key: "fx-ghostcat-tail",
+    frames: [
+      { key: TEX.ghostCat, frame: 0 },
+      { key: TEX.ghostCat, frame: 1 },
+    ],
+    frameRate: 1.5,
+    repeat: -1,
+  });
+  scene.anims.create({
+    key: "fx-keeper-float",
+    frames: [
+      { key: TEX.shopKeeper, frame: 0 },
+      { key: TEX.shopKeeper, frame: 1 },
+    ],
+    frameRate: 2,
+    repeat: -1,
+  });
+  scene.anims.create({
+    key: "fx-wisp-float",
+    frames: [
+      { key: TEX.wisp, frame: 0 },
+      { key: TEX.wisp, frame: 1 },
+    ],
+    frameRate: slow ? 1.5 : 4,
+    repeat: -1,
+  });
 }
 
 export class BootScene extends Phaser.Scene {
@@ -40,43 +81,7 @@ export class BootScene extends Phaser.Scene {
       console.info(`[tomb] boot textures ${bootMs.toFixed(1)}ms · slowest: ${top.join(", ")}`);
       (window as unknown as { __tombBoot?: unknown }).__tombBoot = { bootMs, timing };
     }
-    const slow = prefersReducedMotion();
-    this.anims.create({
-      key: "fx-candle-flicker",
-      frames: [
-        { key: TEX.candle, frame: 0 },
-        { key: TEX.candle, frame: 1 },
-      ],
-      frameRate: slow ? 2 : 6,
-      repeat: -1,
-    });
-    this.anims.create({
-      key: "fx-ghostcat-tail",
-      frames: [
-        { key: TEX.ghostCat, frame: 0 },
-        { key: TEX.ghostCat, frame: 1 },
-      ],
-      frameRate: 1.5,
-      repeat: -1,
-    });
-    this.anims.create({
-      key: "fx-keeper-float",
-      frames: [
-        { key: TEX.shopKeeper, frame: 0 },
-        { key: TEX.shopKeeper, frame: 1 },
-      ],
-      frameRate: 2,
-      repeat: -1,
-    });
-    this.anims.create({
-      key: "fx-wisp-float",
-      frames: [
-        { key: TEX.wisp, frame: 0 },
-        { key: TEX.wisp, frame: 1 },
-      ],
-      frameRate: slow ? 1.5 : 4,
-      repeat: -1,
-    });
+    installSharedAnims(this);
     const ctx = this.registry.get("ctx") as GameContext;
     void fontsReady().then(() => {
       // 기다리는 사이 게임이 정리됐으면 아무것도 하지 않는다

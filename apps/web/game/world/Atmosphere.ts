@@ -1,13 +1,24 @@
 import * as Phaser from "phaser";
-import { ambienceAt, parseAmbienceOverride, type AmbienceOverride } from "@/lib/ambience";
+import { ambienceAt, kstHour, parseAmbienceOverride, type AmbienceOverride } from "@/lib/ambience";
 import { TEX } from "../assets/manifest";
 import { DEPTH, ZOOM_MIN } from "../config";
 import { LevelBlender, levelsFor, TRANSITION_MS, type Levels } from "./ambienceMix";
+import { isQuietHour, THUNDER_MIN_RAIN, thunderDelaySec, thunderFlash, thunderGapMs } from "./weatherMath";
+import { WeatherSound } from "./WeatherSound";
 import type { LightSpot } from "./WorldMap";
 
-// 분위기 레이어: KST 시간대 톤(곱하기 틴트) → [어둠·빛 구멍은 Lighting] → 빛(가산) → 반딧불 → 날씨 → 안개 → 비네트.
+// 분위기 레이어: KST 시간대 톤(곱하기 틴트) → [어둠·빛 구멍은 Lighting] → 빛(가산) → 반딧불 → 날씨(비·눈·낙엽) → 안개 → 번개 → 비네트.
 // 톤·날씨는 lib/ambience(공용, 시계 기반)로 1분마다 다시 계산하고 바뀌면 2.5초 동안 섞는다.
 // 모든 레이어는 화면 고정 오브젝트 몇 개와 작은 풀(pool)로만 그려서 프레임당 비용이 일정하다.
+// 소리: 비 세기·실내 여부를 게임 하나에 하나인 WeatherSound에 알려 주고(빗소리 루프), 센 비에는 가끔 천둥(번개 + 소리).
+// 번개 번쩍임은 prefers-reduced-motion이면 끈다(소리만). QA: ?weather=rain&thunder=1 이면 몇 초마다 천둥.
+
+export type AtmosphereOptions = {
+  /** 날씨 소리를 낸다 (입장 화면 배경은 끈다). 기본 true */
+  sound?: boolean;
+  /** 집 안: 비·눈·낙엽·번개를 그리지 않고 소리는 벽 너머로 먹먹하게. 기본 false */
+  indoor?: boolean;
+};
 
 const RECHECK_MS = 60_000;
 /** TileSprite 내부 캔버스를 줄이기 위해 1/4 크기로 만들고 4배로 키운다 */
@@ -15,10 +26,21 @@ const TS_SCALE = 4;
 const FIREFLY_MAX = 26;
 const FIREFLY_MAX_REDUCED = 8;
 const SPLASH_POOL = 28;
+const LEAF_MAX = 22;
+const LEAF_MAX_REDUCED = 6;
+/** 낙엽 색 (주황·빨강·노랑·갈색) — [몸, 밝은 쪽, 잎자루] */
+const LEAF_COLORS: readonly [string, string, string][] = [
+  ["#c8642a", "#e08a3c", "#7a3c1c"],
+  ["#a83c28", "#c85a3a", "#5e2016"],
+  ["#d9a43a", "#ecc35a", "#7a5a1c"],
+  ["#8a5a2e", "#a8743e", "#4e3018"],
+];
+const leafKey = (i: number) => `fx-leaf-${i}`;
 
 type Firefly = { img: Phaser.GameObjects.Image; x: number; y: number; vx: number; vy: number; phase: number; orbit: number };
 type Light = { spot: LightSpot; img: Phaser.GameObjects.Image; phase: number };
 type Splash = { img: Phaser.GameObjects.Image; born: number };
+type Leaf = { img: Phaser.GameObjects.Image; x: number; y: number; fall: number; phase: number; flutter: number };
 
 export class Atmosphere {
   private readonly override: AmbienceOverride;
@@ -39,13 +61,26 @@ export class Atmosphere {
   private readonly splashes: Splash[] = [];
   private splashAcc = 0;
   private gatherTarget: { x: number; y: number } | null = null;
+  private readonly leaves: Leaf[] = [];
+  private readonly flash: Phaser.GameObjects.Image;
+  private readonly indoor: boolean;
+  private readonly sound: WeatherSound | null;
+  private readonly forceThunder: boolean;
+  /** 다음 천둥 시각 (0 = 센 비가 아님) */
+  private thunderAt = 0;
+  private flashAt = -Infinity;
+  private flashPower = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly reduced: boolean,
     search: string,
+    opts: AtmosphereOptions = {},
   ) {
     this.override = parseAmbienceOverride(search);
+    this.indoor = opts.indoor ?? false;
+    this.forceThunder = new URLSearchParams(search).get("thunder") === "1";
+    this.sound = opts.sound === false ? null : WeatherSound.of(scene);
     this.blender = new LevelBlender(levelsFor(ambienceAt(Date.now(), this.override)), TRANSITION_MS);
 
     const fixed = (o: Phaser.GameObjects.Image | Phaser.GameObjects.TileSprite, depth: number) =>
@@ -74,7 +109,47 @@ export class Atmosphere {
     for (let i = 0; i < SPLASH_POOL; i++) {
       this.splashes.push({ img: scene.add.image(0, 0, TEX.splash).setDepth(DEPTH.weather - 1).setVisible(false), born: 0 });
     }
+    Atmosphere.ensureLeafTextures(scene);
+    const nl = reduced ? LEAF_MAX_REDUCED : LEAF_MAX;
+    for (let i = 0; i < nl; i++) {
+      const img = scene.add.image(0, 0, leafKey(i % LEAF_COLORS.length)).setDepth(DEPTH.weather - 2).setVisible(false);
+      this.leaves.push({ img, x: NaN, y: 0, fall: 9 + Math.random() * 8, phase: Math.random() * 10, flutter: 260 + Math.random() * 260 });
+    }
+    this.flash = fixed(scene.add.image(0, 0, TEX.pixel), DEPTH.vignette - 1)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setTint(0xdde6ff)
+      .setVisible(false) as Phaser.GameObjects.Image;
+    if (this.forceThunder && typeof window !== "undefined") {
+      (window as unknown as { __tombThunder?: () => void }).__tombThunder = () => this.strike();
+    }
     this.resize();
+  }
+
+  /** 6×6 픽셀 낙엽 몇 가지 (한 번만 만든다) */
+  private static ensureLeafTextures(scene: Phaser.Scene): void {
+    // 행마다 [시작 x, 너비, 칠할 색 인덱스: 0 몸 / 1 밝은 쪽 / 2 잎자루]
+    const rows: [number, number, number][][] = [
+      [[2, 2, 1]],
+      [[1, 2, 1], [3, 2, 0]],
+      [[0, 3, 1], [3, 3, 0]],
+      [[1, 4, 0]],
+      [[2, 2, 0]],
+      [[1, 1, 2]],
+    ];
+    LEAF_COLORS.forEach((cols, i) => {
+      const key = leafKey(i);
+      if (scene.textures.exists(key)) return;
+      const tex = scene.textures.createCanvas(key, 6, 6);
+      if (!tex) return;
+      const ctx = tex.getContext();
+      rows.forEach((segs, y) => {
+        for (const [x, w, c] of segs) {
+          ctx.fillStyle = cols[c];
+          ctx.fillRect(x, y, w, 1);
+        }
+      });
+      tex.refresh();
+    });
   }
 
   /** 화면 크기가 바뀌면 화면 고정 레이어를 다시 덮는다 */
@@ -85,6 +160,7 @@ export class Atmosphere {
     const cx = cam.width / 2;
     const cy = cam.height / 2;
     this.tint.setPosition(cx, cy).setDisplaySize(w, h);
+    this.flash.setPosition(cx, cy).setDisplaySize(w, h);
     for (const t of [this.cloud, this.rainFar, this.rainNear, this.snowFar, this.snowNear, this.fogFar, this.fogNear]) {
       t.setPosition(cx, cy).setSize(Math.ceil(w / TS_SCALE), Math.ceil(h / TS_SCALE));
     }
@@ -126,6 +202,8 @@ export class Atmosphere {
     }
     const L = this.blender.update(time);
     const cam = this.scene.cameras.main;
+    this.sound?.report(L.rain, this.indoor);
+    this.updateThunder(time, L);
 
     // ── 톤 ──
     this.tint.setTint(L.tint);
@@ -158,19 +236,22 @@ export class Atmosphere {
     this.cloud.setAlpha(L.cloud * 0.4).setVisible(L.cloud > 0.01);
     if (L.cloud > 0.01) anchor(this.cloud, ox, oy, 1, -s * 9 * drift, -s * 4 * drift);
 
+    // 집 안에는 비·눈·낙엽이 내리지 않는다
+    const rain = this.indoor ? 0 : L.rain;
+    const snow = this.indoor ? 0 : L.snow;
     const rainSpeed = this.reduced ? 0.35 : 1;
-    this.rainFar.setAlpha(L.rain * (this.reduced ? 0.3 : 0.45)).setVisible(L.rain > 0.01);
-    this.rainNear.setAlpha(this.reduced ? 0 : L.rain * 0.6).setVisible(!this.reduced && L.rain > 0.15);
-    if (L.rain > 0.01) {
+    this.rainFar.setAlpha(rain * (this.reduced ? 0.3 : 0.45)).setVisible(rain > 0.01);
+    this.rainNear.setAlpha(this.reduced ? 0 : rain * 0.6).setVisible(!this.reduced && rain > 0.15);
+    if (rain > 0.01) {
       this.rainFar.tilePositionY -= dt * 0.22 * rainSpeed;
       this.rainFar.tilePositionX += dt * 0.073 * rainSpeed;
       this.rainNear.tilePositionY -= dt * 0.34 * rainSpeed;
       this.rainNear.tilePositionX += dt * 0.113 * rainSpeed;
     }
 
-    this.snowFar.setAlpha(L.snow * 0.7).setVisible(L.snow > 0.01);
-    this.snowNear.setAlpha(this.reduced ? 0 : L.snow * 0.9).setVisible(!this.reduced && L.snow > 0.15);
-    if (L.snow > 0.01) {
+    this.snowFar.setAlpha(snow * 0.7).setVisible(snow > 0.01);
+    this.snowNear.setAlpha(this.reduced ? 0 : snow * 0.9).setVisible(!this.reduced && snow > 0.15);
+    if (snow > 0.01) {
       const k = this.reduced ? 0.4 : 1;
       this.snowFar.tilePositionY -= dt * 0.012 * k;
       this.snowFar.tilePositionX = Math.sin(s * 0.7) * 4;
@@ -178,8 +259,81 @@ export class Atmosphere {
       this.snowNear.tilePositionX = Math.sin(s * 0.9 + 1) * 7;
     }
 
-    this.updateSplashes(time, dt, L.rain, view);
+    this.updateSplashes(time, dt, rain, view);
+    this.updateLeaves(time, dt, this.indoor ? 0 : L.leaves, view);
     this.updateFireflies(time, dt, L.fireflies, view);
+  }
+
+  // ── 천둥·번개 ──
+
+  private quiet(): boolean {
+    return isQuietHour(this.override.hour ?? kstHour(Date.now()));
+  }
+
+  /** 센 비가 오는 동안 가끔 천둥. 번개가 번쩍이는 동안은 어둠도 걷힌다 (Lighting이 levels.darkness를 읽는다) */
+  private updateThunder(time: number, L: Levels): void {
+    if (L.rain >= THUNDER_MIN_RAIN) {
+      if (!this.thunderAt) this.thunderAt = time + thunderGapMs(L.rain, this.quiet(), Math.random(), true, this.forceThunder);
+      else if (time >= this.thunderAt) {
+        this.strike();
+        this.thunderAt = time + thunderGapMs(L.rain, this.quiet(), Math.random(), false, this.forceThunder);
+      }
+    } else this.thunderAt = 0;
+    // 친 뒤 처음 그리는 프레임이 가장 밝게 (프레임이 느려도 첫 번쩍임을 건너뛰지 않게)
+    if (Number.isNaN(this.flashAt)) this.flashAt = time;
+    const a = this.flashPower > 0 ? thunderFlash(time - this.flashAt) * this.flashPower : 0;
+    this.flash.setVisible(a > 0.005);
+    if (a > 0.005) {
+      this.flash.setAlpha(0.42 * a);
+      L.darkness *= 1 - 0.8 * a;
+    }
+  }
+
+  /** 번개 한 번 (+ 거리만큼 늦게 천둥소리) */
+  private strike(): void {
+    const quiet = this.quiet();
+    const rain = this.blender.current.rain;
+    // 움직임 줄이기 설정이면 번쩍이지 않는다 (소리만), 집 안에서도 창이 없으니 번쩍이지 않는다
+    this.flashPower = this.reduced || this.indoor ? 0 : (0.55 + 0.45 * Math.random()) * (quiet ? 0.55 : 1);
+    this.flashAt = NaN;
+    this.sound?.thunder((0.6 + 0.4 * Math.random()) * (0.6 + 0.4 * rain) * (quiet ? 0.45 : 1), thunderDelaySec(Math.random()));
+  }
+
+  // ── 낙엽 ──
+
+  /** 가을: 화면 위쪽에서 나뭇잎이 흔들리며 떨어진다 (월드 좌표, 화면을 벗어나면 위에서 다시) */
+  private updateLeaves(time: number, dt: number, density: number, view: Phaser.Geom.Rectangle): void {
+    const active = density < 0.02 ? 0 : Math.max(1, Math.round(this.leaves.length * density));
+    const k = dt / 1000;
+    const speed = this.reduced ? 0.5 : 1;
+    for (let i = 0; i < this.leaves.length; i++) {
+      const f = this.leaves[i];
+      if (i >= active) {
+        if (f.img.visible) f.img.setVisible(false);
+        f.x = NaN;
+        continue;
+      }
+      const out = !(f.y < view.bottom + 8 && f.x > view.x - 40 && f.x < view.right + 40 && f.y > view.y - view.height);
+      if (Number.isNaN(f.x)) {
+        // 처음에는 화면 곳곳에서 (한꺼번에 위에서 쏟아지지 않게)
+        f.x = view.x + Math.random() * view.width;
+        f.y = view.y + Math.random() * view.height;
+      } else if (out) {
+        f.x = view.x - 20 + Math.random() * (view.width + 20);
+        f.y = view.y - 8 - Math.random() * view.height * 0.3;
+      }
+      const sway = Math.sin(time / 900 + f.phase) * 10;
+      f.x += (5 + sway) * k * speed;
+      f.y += f.fall * k * speed * (0.75 + 0.25 * Math.sin(time / 500 + f.phase * 2));
+      // 빙글빙글: 가로로 뒤집히며 납작해졌다 넓어졌다
+      const c = this.reduced ? 1 : Math.cos(time / f.flutter + f.phase);
+      f.img
+        .setPosition(Math.round(f.x), Math.round(f.y))
+        .setScale(Math.max(0.3, Math.abs(c)), 1)
+        .setFlipX(c < 0)
+        .setAlpha(0.92)
+        .setVisible(true);
+    }
   }
 
   /** 화면 고정 TileSprite의 무늬를 월드 좌표에 붙인다 (ox,oy: 카메라 중심의 월드 좌표). 매 프레임 클로저를 만들지 않게 static */

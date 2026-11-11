@@ -2034,6 +2034,36 @@ const SFX2 = {
       }
     return { fadeIn: 0, fadeOut: 0, hp: 20, lp: 9000, target: -19.65 };
   },
+  "rain-loop": (bus, rng, n) => {
+    // 날씨 '비' 루프: 넓은 빗줄기 + 낮게 깔리는 쏴아 + 돌·지붕에 톡톡 + 가끔 웅덩이 방울. 꼬리를 머리에 겹쳐 이음새 없이 돈다
+    const X = 2 * SR, m = n + X;
+    const t = rainBed(m, rng, { level: 0.3, hp: 300, lp: 4800, width: 0.85, swell: 0.18, period: 6 });
+    addBus(t, rainBed(m, rng, { level: 0.16, hp: 70, lp: 800, width: 0.5, swell: 0.25, period: 9 }));
+    scatter(t, rng, bank(rng, 40, stoneTick), 22, 0.02, 0.12, 0.95);
+    scatter(t, rng, bank(rng, 16, (r) => plink(r)), 0.8, 0.02, 0.07, 0.7);
+    reverb(t, { room: 0.5, damp: 0.55, wet: 0.08 });
+    for (let c = 0; c < 2; c++)
+      for (let i = 0; i < n; i++) {
+        const u = i / X;
+        bus[c][i] = i < X ? t[c][i] * Math.sqrt(u) + t[c][n + i] * Math.sqrt(1 - u) : t[c][i];
+      }
+    return { fadeIn: 0, fadeOut: 0, hp: 30, lp: 8000, target: -21 };
+  },
+  thunder: (bus, rng) => {
+    // 가까운 천둥 한 번: 찢어지는 크랙 몇 번 + 낮은 쿵 + 길게 구르는 우르릉 (게임 날씨용)
+    let at = 0.02;
+    for (let k = 0; k < 5; k++) {
+      place(bus, noiseHit(rng, rng.range(0.15, 0.4), "bp", rng.range(600, 1800), 0.6, rng.range(8, 18), 0.002), at, 0.42 * (1 - k * 0.13), rng.range(-0.4, 0.4));
+      at += rng.range(0.04, 0.12);
+    }
+    const boom = biquad(biquad(brown(Math.round(3.2 * SR), rng), "lp", 140, 0.7), "lp", 140, 0.7);
+    normPeak(boom);
+    for (let i = 0; i < boom.length; i++) boom[i] *= Math.min(1, i / (0.03 * SR)) * Math.exp((-i / SR) * 1.1);
+    place(bus, boom, 0.03, 0.7, 0);
+    thunder(bus, rng, 0.2, 0.42);
+    reverb(bus, { room: 0.85, damp: 0.6, wet: 0.2, lowCut: 60 });
+    return { fadeIn: 0.001, fadeOut: 1.5, hp: 25, lp: 7000, target: -17 };
+  },
   say: (bus) => {
     // 말풍선 '뿅': 짧게 솟는 사인
     glide(bus, 0, 0.12, (t) => 520 + 900 * (1 - Math.exp(-t * 35)), 0.5, 0, { atk: 0.003, rel: 0.07 });
@@ -2319,6 +2349,9 @@ const SPECS = [
     ["monster-die", 0.8], ["levelup", 1.2], ["potion", 0.8], ["skill", 0.8], ["coin-drop", 0.8], ["defeat", 1.8], ["victory", 1.6], ["tick", 0.12], ["miss", 0.45],
     ["campfire", 16], ["say", 0.2],
   ].map(([kind, dur], k) => ({ pl: "sfx", file: kind, kind, seed: 520 + k, dur })),
+  // 날씨(비·천둥): 용량을 아끼려고 56kbps
+  { pl: "sfx", file: "rain-loop", kind: "rain-loop", seed: 560, dur: 12, kbps: 56 },
+  { pl: "sfx", file: "thunder", kind: "thunder", seed: 562, dur: 8, kbps: 56 },
   ...EXTERNAL,
 ];
 

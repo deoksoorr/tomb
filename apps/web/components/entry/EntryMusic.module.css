@@ -1,0 +1,21 @@
+/* 입장 화면 좌상단 음악 켜기/끄기 (게임 안 BGM 플레이어와 같은 자리) */
+.toggle {
+  position: fixed;
+  top: var(--safe-top);
+  left: var(--safe-left);
+  z-index: 2;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--panel);
+  box-shadow: var(--px-border);
+  color: var(--muted);
+}
+
+.toggle[data-on="true"] {
+  color: var(--bone);
+}
+
+.label {
+  font-family: var(--font-small);
+  font-size: 10px;
+}
