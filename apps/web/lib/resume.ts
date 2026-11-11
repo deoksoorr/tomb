@@ -12,14 +12,14 @@ export const RESUME_KEY = "tomb.resume";
 export const RESUME_MAX_AGE_MS = 60_000;
 
 /** 되살릴 자세. 걷던 중이면 서 있는 것으로 저장한다 */
-export type ResumePose = "idle" | "sitGround" | "sitChair" | "swing" | "hang" | "hammock";
-const POSES: readonly ResumePose[] = ["idle", "sitGround", "sitChair", "swing", "hang", "hammock"];
+export type ResumePose = "idle" | "sitGround" | "sitChair" | "swing" | "hang" | "hammock" | "boat" | "seesaw" | "trampoline" | "carousel";
+const POSES: readonly ResumePose[] = ["idle", "sitGround", "sitChair", "swing", "hang", "hammock", "boat", "seesaw", "trampoline", "carousel"];
 
 export type ResumeState = {
   channel: number;
   x: number;
   y: number;
-  /** sitChair일 때 앉아 있던 좌석 */
+  /** sitChair일 때 앉아 있던 좌석, boat일 때 타고 있던 배 자리 (50번) */
   seatId: string | null;
   pose: ResumePose;
   dir: number;
@@ -54,13 +54,13 @@ export function parseResume(raw: string | null, now: number): ResumeState | null
   // 맵이 바뀐 뒤의 옛 기록: 채널은 잇고 자리는 입구에서 (옛 좌표·좌석 id는 새 맵에서 엉뚱한 곳일 수 있다)
   const sameMap = r.map === MAP_VERSION;
   const pose = sameMap && POSES.includes(r.pose as ResumePose) ? (r.pose as ResumePose) : "idle";
-  const seatId = pose === "sitChair" && typeof r.seatId === "string" && r.seatId ? r.seatId : null;
+  const seatId = (pose === "sitChair" || pose === "boat") && typeof r.seatId === "string" && r.seatId ? r.seatId : null;
   return {
     channel: r.channel,
     x: sameMap ? r.x : SPAWN.x,
     y: sameMap ? r.y : SPAWN.y,
     seatId,
-    pose: pose === "sitChair" && !seatId ? "sitGround" : pose,
+    pose: pose === "sitChair" && !seatId ? "sitGround" : pose === "boat" && !seatId ? "idle" : pose,
     dir: isNum(r.dir) && Number.isInteger(r.dir) && r.dir >= 0 && r.dir <= 3 ? r.dir : 0,
     savedAt: r.savedAt,
     name: r.name,

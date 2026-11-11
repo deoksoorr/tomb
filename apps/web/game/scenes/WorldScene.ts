@@ -6,7 +6,7 @@ import { TEX } from "../assets/manifest";
 import { bridge, type NetStatus, type UiEvents } from "../bridge";
 import { DEPTH, GRAVE_NEAR_RADIUS, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { GraveTooltip } from "../entities/Grave";
-import { Player, type SeatRequester } from "../entities/Player";
+import { isAttachKind, Player, type SeatRequester } from "../entities/Player";
 import { HAMMOCK_FRONT, RemoteAvatar, SWING_FRONT } from "../entities/RemoteAvatar";
 import { SeatHint } from "../entities/SeatHint";
 import { phraseOf, type SpeechBubble } from "../entities/SpeechBubble";
@@ -40,6 +40,11 @@ import { CampfireView } from "../world/Campfire";
 import { campfireLevel, LETTERBOX, nearestCampfire } from "../world/campfireMath";
 import { Sfx } from "../world/Sfx";
 import { WorldMap } from "../world/WorldMap";
+import { BoatRide } from "../world/BoatRide";
+import { PlazaRides, type RideHost } from "../world/PlazaRides";
+import { RideSound } from "../world/RideSound";
+import { VillageLife } from "../world/life/VillageLife";
+import { Foraging } from "../world/forage/Foraging";
 import type { GameContext } from "./context";
 import type { ShopContext } from "./ShopScene";
 
@@ -93,6 +98,10 @@ export class WorldScene extends Phaser.Scene {
   private hub!: InputHub;
   private net!: RealtimeClient;
   private seatReq!: SeatRequester;
+  /** 22번 마을 생물: 고양이·유령·황금 고블린·망원경·돗자리·별똥별 (world/life) */
+  private life!: VillageLife;
+  /** 4·32번 낚시·채집: 낚시 자리·NPC·채집 지점 (world/forage) */
+  private forage!: Foraging;
   private readonly remotes = new Map<Sid, RemoteAvatar>();
   private readonly seats = new Map<string, Sid>();
   private readonly move: MoveInput = { ax: 0, ay: 0, run: false };
@@ -151,6 +160,10 @@ export class WorldScene extends Phaser.Scene {
   private spotsJudged = false;
   private toastAt = -Infinity;
   private toastMsg = "";
+  // 50번 조각배·광장 놀거리 (world/BoatRide.ts, world/PlazaRides.ts)
+  private rideSound!: RideSound;
+  private rides!: PlazaRides;
+  private boats!: BoatRide;
 
   constructor() {
     super("world");
@@ -227,6 +240,7 @@ export class WorldScene extends Phaser.Scene {
     this.graveCollider = this.physics.add.collider(this.player.sprite, this.field.colliders);
     this.furnitureCollider = this.physics.add.collider(this.player.sprite, this.map.furnitureColliders);
     this.player.onLand = () => this.onPlayerLand();
+    this.initRides();
     if (this.resume) this.applyResumePose(this.resume);
     this.playerGlow = this.add.image(spawn.x, spawn.y, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffe2a8).setDepth(DEPTH.lights);
 
@@ -257,6 +271,29 @@ export class WorldScene extends Phaser.Scene {
 
     this.net = this.createNet();
     this.seatReq = { sit: (id) => this.net.sit(id), stand: () => this.net.stand() };
+    this.life = new VillageLife({
+      scene: this,
+      atlas: this.atlas,
+      sfx: this.sfx,
+      reduced: this.reduced,
+      colliders: this.map.colliders,
+      player: () => this.player,
+      net: () => this.net,
+      seats: () => this.seats,
+      channel: () => this.net.channel ?? (typeof opts.channel === "number" ? opts.channel : 1),
+      toast: (m) => this.toast(m),
+    });
+    this.forage = new Foraging({
+      scene: this,
+      atlas: this.atlas,
+      reduced: this.reduced,
+      colliders: this.map.colliders,
+      player: () => this.player,
+      net: () => this.net,
+      seats: () => this.seats,
+      setItems: (items) => this.map.setExtraItems(items),
+      toast: (m) => this.toast(m),
+    });
     const look = bridge.last("look:set");
     if (look) this.applyLook(look.look, look.lookGrant);
     this.bindBridge();
@@ -310,6 +347,8 @@ export class WorldScene extends Phaser.Scene {
         getFps: () => this.game.loop.actualFps,
         onWelcome: (m) => {
           this.clearRemotes();
+          this.life.onWelcome(m);
+          this.forage.onWelcome(m);
           this.spotsJudged = m.spots === true;
           this.syncSeats(m.seats);
           for (const p of m.peers) this.addRemote(p);
@@ -332,6 +371,8 @@ export class WorldScene extends Phaser.Scene {
             if (v === "claim") this.net.sit(spot);
             else if (v === "leave") this.mySpotLost(spot);
           }
+          // 조각배에 탄 채로 (다시) 붙었다: 배 자리도 서버 점유표로 (놓쳤으면 뭍으로)
+          this.boats.onWelcome(m);
         },
         onJoin: (p) => this.addRemote(p),
         onLeave: (sid) => {
@@ -347,6 +388,8 @@ export class WorldScene extends Phaser.Scene {
           }
         },
         onSeat: (seatId, sid) => {
+          this.life.seatChanged(seatId, sid);
+          this.forage.seatChanged(seatId, sid);
           for (const r of this.remotes.values()) if (r.seatId === seatId) r.seatId = null;
           if (sid === null) {
             this.seats.delete(seatId);
@@ -364,8 +407,12 @@ export class WorldScene extends Phaser.Scene {
           if (sid !== this.net.mySid && this.player.seat?.id === seatId) this.mySeatDenied(seatId);
           // 나무·그네를 동시에 잡았는데 다른 사람이 먼저였다 → 내려온다
           if (sid !== this.net.mySid && this.player.spotId === seatId) this.mySpotLost(seatId);
+          this.boats.onSeat(seatId, sid);
         },
         onSeatDenied: (seatId) => {
+          if (this.boats.onSeatDenied(seatId)) return;
+          if (this.life.seatDenied(seatId)) return;
+          if (this.forage.seatDenied(seatId)) return;
           if (this.player.spotId === seatId) this.mySpotLost(seatId);
           else this.mySeatDenied(seatId);
         },
@@ -375,6 +422,7 @@ export class WorldScene extends Phaser.Scene {
           if (kind === "buried") this.remoteBuried.set(graveId, this.time.now);
         },
         onReset: () => {
+          this.life.onReset();
           this.clearRemotes();
           this.seats.clear();
           this.spotsJudged = false;
@@ -391,6 +439,10 @@ export class WorldScene extends Phaser.Scene {
           // 보이는 사람의 말풍선만 작게 소리
           if (r.visible) this.sfx.play("say", 0.3);
         },
+        onGoblin: (g) => this.life.onGoblin(g),
+        onGoblinGone: (id) => this.life.onGoblinGone(id),
+        onGoblinCaught: (id, sid, name, points) => this.life.onGoblinCaught(id, sid, name, points),
+        onGoblinGrant: (id, grant, points) => this.life.onGoblinGrant(id, grant, points),
         onSelfBody: (body) => {
           if (!isAvatarBody(body)) return;
           this.selfBody = body;
@@ -417,7 +469,7 @@ export class WorldScene extends Phaser.Scene {
       const o = anchorAt(this.map.interactables, r.pose === "hang" ? "tree" : r.pose, r.x, r.y);
       // 자리 요청은 접속 뒤 welcome에서 (onWelcome의 spotVerdict). 그 자리가 없어졌으면(맵 개편) 서 있기로
       if (o) pl.attach(r.pose, o.ax, o.ay, spotDepth(r.pose, o.ay), now, null, spotSeatId(r.pose, o.ax, o.ay));
-    }
+    } else this.applyRideResume(r, now);
     pl.view.apply(pl.state, pl.dir, now);
   }
 
@@ -435,8 +487,10 @@ export class WorldScene extends Phaser.Scene {
     if (m.channel !== r.channel) {
       if (pl.sitting) pl.stand(now, null);
       if (pl.anchored) pl.leaveAnchor(now);
+      if (pl.inBoat) this.boats.disembark(true);
       return;
     }
+    if (pl.inBoat) return; // 배 자리는 boats.onWelcome이 판정한다
     if (pl.state === "sitChair" && pl.seat) {
       this.restoreSeat = { id: pl.seat.id, until: now + RESTORE_SEAT_WINDOW_MS };
       return;
@@ -486,12 +540,13 @@ export class WorldScene extends Phaser.Scene {
     const pl = this.player;
     const p = pl.netPose(this.poseBuf);
     const st = pl.state;
-    const pose: ResumePose = st === "sitChair" && pl.seat ? "sitChair" : st === "sitGround" || st === "swing" || st === "hang" || st === "hammock" ? st : "idle";
+    const ride = st === "seesaw" || st === "trampoline" || st === "carousel" || (st === "boat" && pl.boatSeatId);
+    const pose: ResumePose = st === "sitChair" && pl.seat ? "sitChair" : st === "sitGround" || st === "swing" || st === "hang" || st === "hammock" || ride ? st : "idle";
     saveResume({
       channel: ch,
       x: Math.round(p.x),
       y: Math.round(p.y),
-      seatId: pose === "sitChair" ? (pl.seat?.id ?? null) : null,
+      seatId: pose === "sitChair" ? (pl.seat?.id ?? null) : pose === "boat" ? pl.boatSeatId : null,
       pose,
       dir: pl.dir,
       savedAt: Date.now(),
@@ -619,6 +674,7 @@ export class WorldScene extends Phaser.Scene {
     );
     on.push(bridge.on("audio:settings", ({ volume, muted }) => this.sfx.setSettings(volume, muted)));
     on.push(bridge.on("shop:closed", () => this.hub.setBlocked(bridge.last("ui:blockKeys")?.blocked ?? false)));
+    on.push(bridge.on("wish:thrown", () => this.onWishThrown()));
   }
 
   private applyLook(look: string[], grant: string): void {
@@ -700,6 +756,7 @@ export class WorldScene extends Phaser.Scene {
     const now = this.time.now;
     if (pl.anchored) pl.leaveAnchor(now);
     else if (pl.sitting) pl.stand(now, this.seatReq);
+    if (pl.inBoat) this.boats.disembark(true);
     this.rig.recenter();
     this.recenterAt = 0;
   }
@@ -835,6 +892,8 @@ export class WorldScene extends Phaser.Scene {
       this.doAct(a);
       return;
     }
+    // 조각배 위: E = 물가에서 내리기, 앉기·점프 없음
+    if (this.boats.onAction(a)) return;
     if (pl.airborne) return;
     // 이동 입력이 있는 동안에는 앉지 않는다 (걷다가 X를 같이 눌러도 상태가 튀지 않게)
     const moving = Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER;
@@ -853,6 +912,8 @@ export class WorldScene extends Phaser.Scene {
       pl.leaveAnchor(now);
       return;
     }
+    // 22번: 바로 옆 고양이·유령 쓰다듬기
+    if (!pl.sitting && !pl.inWater && this.life.pet()) return;
     const water = pl.state === "swim" ? "swim" : pl.state === "dive" ? "dive" : null;
     const near = water ? null : nearestGrave(this.field.layout, pl.x, pl.y, GRAVE_NEAR_RADIUS);
     const seat = pl.sitting || moving || water ? null : pickSeat(pl.x, pl.y, occupied, mySid);
@@ -926,10 +987,32 @@ export class WorldScene extends Phaser.Scene {
         pl.faceTo(o.x, o.y - 10, now);
         if (o.lot) bridge.emit("portal:open", { kind: "housing", lot: o.lot });
         break;
+      case "forage":
+        // 4·32번 낚시 자리·NPC·채집 지점 (world/forage)
+        this.forage.use(o);
+        break;
+      case "telescope":
+      case "mat":
+        // 22번 별 보기 언덕: 망원경(별자리 잇기)·돗자리 — 1인 자리
+        this.life.useStarSpot(o);
+        break;
       case "dock":
-        // 조각배(50번)는 다음 작업 — 지금은 안내만 (FERRY_DOCK·BOAT_MOORING이 그 자리)
+        // 조각배(50번): 빈 배 앞자리에 타거나 2인승 뒷자리에 같이 탄다 (BoatRide)
         pl.faceTo(o.x, o.y + 10, now);
-        this.toast("조각배는 곧 띄울 거예요. 조금만 기다려 주세요");
+        this.boats.useDock();
+        break;
+      // ── 50번 광장 놀거리 ── 시소·트램펄린은 그네처럼 1인 자리, 회전목마는 빈 목마를 골라 탄다, 소원 분수는 UI 창
+      case "seesaw":
+      case "trampoline":
+        this.useSpot(o);
+        break;
+      case "carousel":
+        this.rides.useCarousel(o);
+        break;
+      case "wish":
+        pl.faceTo(o.x, o.y - 12, now);
+        if (pl.sitting) pl.stand(now, this.seatReq);
+        bridge.emit("portal:open", { kind: "wish" });
         break;
     }
   }
@@ -941,6 +1024,8 @@ export class WorldScene extends Phaser.Scene {
   private useSpot(o: Interactable): void {
     const spot = spotOf(o);
     if (!spot) return;
+    if (spot.kind === "telescope" || spot.kind === "mat") return this.life.useStarSpot(o); // 22번 (world/life)
+    if (!isAttachKind(spot.kind)) return;
     const pl = this.player;
     const judged = this.spotsJudged && this.net.online;
     if (judged && spotTaken(spot.id, this.seats, this.net.mySid)) {
@@ -1093,7 +1178,9 @@ export class WorldScene extends Phaser.Scene {
       this.sfx.bell(gain);
     } else if (kind === "splash") {
       const well = at ?? this.nearestOf("well", x, y, 32);
+      const fountain = well ? null : this.rides.nearFountain(x, y);
       if (well) this.fx.splash(well.x, well.y - 6);
+      else if (fountain) this.fx.splash(fountain.x, fountain.y);
       else this.fx.splash(x, y);
       if (d < 360 || mine) this.sfx.splash(gain);
     } else if (d < 400 || mine) {
@@ -1173,6 +1260,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.hub.isBlocked) this.move.ax = this.move.ay = 0;
     this.walker.steer(this.move, Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER, now);
     const started = pl.update(this.benchInput(now), now, this.seatReq);
+    this.boats.steer(this.move, dt);
     if (this.graveLock && !this.overlappingGrave()) this.graveLock = false;
     this.graveCollider.active = !pl.airborne && !this.graveLock;
     this.furnitureCollider.active = this.graveCollider.active;
@@ -1211,6 +1299,8 @@ export class WorldScene extends Phaser.Scene {
     }
     const s = this.rig.labelScale;
     const view = this.rig.frameView(this.view);
+    this.rides.prepare();
+    this.boats.prepare();
     pl.view.sync(now, s);
 
     this.map.update(view);
@@ -1230,6 +1320,8 @@ export class WorldScene extends Phaser.Scene {
     this.map.scaleLabels(s);
     const L = this.atmos.levels;
     this.field.update(now, view, L.glow);
+    this.life.update(dt, view, s);
+    this.forage.update(dt, view, s);
 
     for (const r of this.remotes.values()) {
       r.update(pnow, view, s);
@@ -1238,6 +1330,8 @@ export class WorldScene extends Phaser.Scene {
         this.fx.dust(r.x, r.y);
       }
     }
+    this.boats.update(dt);
+    this.rides.update();
 
     this.declutterLabels(now, pnow);
     this.updateNear();
@@ -1290,6 +1384,7 @@ export class WorldScene extends Phaser.Scene {
         if (v.decorLit) lit.add(p.x, p.y - 2, 26, 0.45);
       }
       this.fireworks.addLights(lit);
+      this.life.addLights(lit);
     }
     lit.end();
   }
@@ -1433,7 +1528,7 @@ export class WorldScene extends Phaser.Scene {
     const pl = this.player;
     const occupied = this.net.online ? this.seats : EMPTY_SEATS;
     const mySid = this.net.online ? this.net.mySid : null;
-    const seat: Seat | null = pl.sitting ? null : pickSeat(pl.x, pl.y, occupied, mySid);
+    const seat: Seat | null = pl.sitting || pl.inBoat ? null : pickSeat(pl.x, pl.y, occupied, mySid);
     const id = seat ? seat.id : null;
     if (id !== this.nearSeatId) {
       this.nearSeatId = id;
@@ -1461,6 +1556,13 @@ export class WorldScene extends Phaser.Scene {
     const h = this.hintBuf;
     h.dim = false;
     if (pl.airborne) return null;
+    const boatText = this.boats.hint(pre);
+    if (boatText) {
+      h.x = pl.x;
+      h.y = pl.y + 2;
+      h.text = boatText;
+      return h;
+    }
     if (pl.state === "swim" || pl.state === "dive") {
       h.x = pl.x;
       h.y = pl.y + 2;
@@ -1474,6 +1576,14 @@ export class WorldScene extends Phaser.Scene {
       return h;
     }
     const o = nearestObject(this.map.interactables, pl.x, pl.y);
+    // 22번: 바로 옆 고양이·유령 ("E 치즈 쓰다듬기") — E도 이쪽이 먼저다
+    const critter = pl.sitting ? null : this.life.hint(pre, pl.x, pl.y);
+    if (critter) {
+      h.x = critter.x;
+      h.y = critter.y;
+      h.text = critter.text;
+      return h;
+    }
     if (o) {
       // 묘비 툴팁이 더 가까우면 겹치지 않게 숨긴다
       if (this.nearId) {
@@ -1490,6 +1600,14 @@ export class WorldScene extends Phaser.Scene {
         h.text = SPOT_TAKEN_HINT[spot.kind];
         h.dim = true;
       }
+      if (o.obj.kind === "dock") {
+        const d = this.boats.dockHint(pre);
+        h.text = d.text;
+        h.dim = d.dim;
+      } else if (o.obj.kind === "carousel" && this.rides.carouselFull(o.obj)) {
+        h.text = "목마가 모두 찼어요";
+        h.dim = true;
+      }
       return h;
     }
     if (!this.nearId && nearWater(pl.x, pl.y)) {
@@ -1501,6 +1619,55 @@ export class WorldScene extends Phaser.Scene {
     return null;
   }
 
+  // ── 50번 조각배·광장 놀거리 ──
+
+  private initRides(): void {
+    this.rideSound = new RideSound();
+    const host: RideHost = {
+      scene: this,
+      reduced: this.reduced,
+      fx: this.fx,
+      sound: this.rideSound,
+      player: () => this.player,
+      remotes: () => this.remotes,
+      seats: () => (this.net?.online ? this.seats : EMPTY_SEATS),
+      mySid: () => (this.net?.online ? this.net.mySid : null),
+      judged: () => this.spotsJudged && !!this.net?.online,
+      sit: (id) => this.net.sit(id),
+      stand: () => this.net.stand(),
+      seatReq: () => this.seatReq,
+      toast: (m) => this.toast(m),
+    };
+    this.rides = new PlazaRides(host);
+    this.boats = new BoatRide(host);
+  }
+
+  /** 새로고침 복원: 조각배·시소·트램펄린·회전목마 (자리 판정은 welcome에서) */
+  private applyRideResume(r: ResumeState, now: number): void {
+    const pl = this.player;
+    if (r.pose === "boat") this.boats.resumePose(r);
+    else if (r.pose === "seesaw" || r.pose === "trampoline") {
+      const o = anchorAt(this.map.interactables, r.pose, r.x, r.y);
+      if (o) pl.attach(r.pose, o.ax, o.ay, o.ay + 0.5, now, null, spotSeatId(r.pose, o.ax, o.ay));
+    } else if (r.pose === "carousel") {
+      const ref = this.rides.resumeCarousel(r.x, r.y);
+      if (ref) pl.attach("carousel", ref.ax, ref.ay, ref.ay + 0.6, now, null, spotSeatId("carousel", ref.ax, ref.ay));
+    }
+  }
+
+  /** 소원 분수에 동전을 던졌다 (UI가 서버 결과를 받은 뒤): 동전이 날아가 퐁당 + 같은 채널에 물 튀기기 */
+  private onWishThrown(): void {
+    if (this.cleaned || this.inShop) return;
+    const pl = this.player;
+    const now = this.time.now;
+    this.rides.coinToss(pl.x, pl.y);
+    pl.view.playAct("bell", now);
+    if (now - this.actAt >= ACT_COOLDOWN_MS) {
+      this.actAt = now;
+      this.net.act("splash");
+    }
+  }
+
   private cleanup(): void {
     if (this.cleaned) return;
     this.cleaned = true;
@@ -1509,6 +1676,11 @@ export class WorldScene extends Phaser.Scene {
     window.removeEventListener("pagehide", this.onPageHide);
     this.houses?.destroy();
     this.houses = null;
+    this.boats?.destroy();
+    this.rides?.destroy();
+    this.rideSound?.destroy();
+    this.life?.destroy();
+    this.forage?.destroy();
     for (const u of this.unsubs) u();
     this.unsubs.length = 0;
     this.net?.stop();

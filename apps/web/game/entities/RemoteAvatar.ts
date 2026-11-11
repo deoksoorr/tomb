@@ -23,6 +23,8 @@ export class RemoteAvatar {
   private readonly out: InterpOut = { x: 0, y: 0, state: STATE.idle, dir: DIR.down };
   /** 서버 좌석 점유표에서 이 사람이 차지한 1인 자리 (의자·벤치 좌석 또는 나무·그네·해먹) */
   seatId: string | null = null;
+  /** 조각배 뒷자리처럼 다른 사람(노 젓는 사람)에 붙어 그려야 할 때의 자리 (BoatRide가 넣는다). null이면 보간 위치 */
+  posOverride: { x: number; y: number } | null = null;
   x = 0;
   y = 0;
   stateId: StateId = STATE.idle;
@@ -61,9 +63,14 @@ export class RemoteAvatar {
     this.view.depthOverride = null;
     // 차지한 자리(의자·나무·그네)에 있는 동안은 그 앵커에 고정한다 (보간이 늦어도 자리 위에 정확히)
     const slot = this.seatId ? seatSlot(this.seatId) : undefined;
-    if (slot && slot.state === o.state) {
+    // 움직이는 자리(조각배)는 앵커(나루터)에 묶지 않는다 — 배를 따라 보간 위치 그대로
+    if (slot && slot.state === o.state && !slot.mobile) {
       x = slot.x;
       y = slot.y;
+    }
+    if (this.posOverride && o.state === STATE.boat) {
+      x = this.posOverride.x;
+      y = this.posOverride.y;
     }
     if (o.state === STATE.sitChair && slot) this.view.depthOverride = y + 1;
     // 그네 탄 사람은 그네 틀(받침 y = 좌석 + 5) 앞에, 매달린 사람은 나무 줄기 앞에 그린다 (내 캐릭터와 같은 기준)

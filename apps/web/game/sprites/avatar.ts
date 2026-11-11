@@ -33,7 +33,20 @@ export const AV_ANIM = {
   swing: { col: 21, frames: 2, fps: 1.25 },
   /** 해먹: 그림자 없는 선 자세 (AvatarView가 90° 눕혀 그린다) */
   hammock: { col: 27, frames: 1, fps: 1 },
+  // 50번 조각배·광장 놀거리: 새 그림 없이 있던 프레임을 쓴다 (AV_ALIASES — 배·시소·목마는 앉은 자세, 트램펄린은 웅크린 점프 자세)
+  boat: { col: 13, frames: 1, fps: 1 },
+  seesaw: { col: 13, frames: 1, fps: 1 },
+  trampoline: { col: 14, frames: 1, fps: 1 },
+  carousel: { col: 13, frames: 1, fps: 1 },
 } as const;
+
+/** 다른 상태의 프레임을 그대로 쓰는 상태 (시트 열을 따로 차지하지 않는다) */
+export const AV_ALIASES: Readonly<Partial<Record<keyof typeof AV_ANIM, keyof typeof AV_ANIM>>> = {
+  boat: "sitChair",
+  seesaw: "sitChair",
+  trampoline: "jump",
+  carousel: "sitChair",
+};
 
 /** 한 번 하는 동작 애니메이션 (act) */
 export const AV_ACT_ANIM = {

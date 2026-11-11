@@ -77,7 +77,9 @@ function contract(make: () => Kit) {
     for (const [source, times, amount] of plan as readonly (readonly [EarnSource, number, number?])[])
       for (let i = 0; i < times; i++) total += await accounts.earn(id, source, DAY, { amount });
     // 49번에서 살려주세요 항목(10+20)이 빠져 항목 한도 합(780)이 하루 상한(800)보다 작아졌다
-    const cap = Math.min(DAILY_EARN_CAP, EARN_RULES.reduce((n, r) => n + r.dailyMax, 0));
+    // 낚시·채집·도감·고블린·소원 분수(4·22·32·50·51번)처럼 항목이 늘어도 이 계획이 받는 항목들의 한도 합으로 잰다
+    const planned = new Set<string>(plan.map(([source]) => source));
+    const cap = Math.min(DAILY_EARN_CAP, EARN_RULES.filter((r) => planned.has(r.source)).reduce((n, r) => n + r.dailyMax, 0));
     expect(total).toBe(cap);
     expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: cap, todayEarned: cap, lifetimePoints: cap });
     expect(await accounts.earn(id, "flower", DAY)).toBe(0);

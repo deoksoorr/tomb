@@ -72,6 +72,13 @@ describe("resume (새로고침 뒤 자리 복원 기록)", () => {
     expect(parseResume(JSON.stringify({ ...base, dir: 9 }), now)?.dir).toBe(0);
   });
 
+  it("50번: 조각배는 배 자리 id와 물 위 위치를 잇고, 시소·트램펄린·회전목마는 앵커 자리로", () => {
+    const now = base.savedAt;
+    expect(parseResume(JSON.stringify({ ...base, pose: "boat", seatId: "b_1338_872", x: 1420, y: 890 }), now)).toMatchObject({ pose: "boat", seatId: "b_1338_872", x: 1420, y: 890 });
+    expect(parseResume(JSON.stringify({ ...base, pose: "boat", seatId: null }), now)).toMatchObject({ pose: "idle", seatId: null });
+    for (const pose of ["seesaw", "trampoline", "carousel"]) expect(parseResume(JSON.stringify({ ...base, pose }), now)).toMatchObject({ pose, seatId: null });
+  });
+
   it("저장소가 없거나 막혀 있어도 던지지 않는다", () => {
     expect(takeResume(0, null)).toBeNull();
     const broken = {

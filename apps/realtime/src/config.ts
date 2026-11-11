@@ -22,6 +22,8 @@ export interface Env {
   MAX_CHANNELS?: string;
   AUTO_OPEN_THRESHOLD?: string;
   RECONNECT_GRACE_SEC?: string;
+  /** "1"이면 개발용 훅(POST /dev/goblin)을 연다. 로컬 wrangler dev에서만 --var DEV_HOOKS:1 로 준다 (운영에는 두지 않는다) */
+  DEV_HOOKS?: string;
 }
 
 export type Config = {

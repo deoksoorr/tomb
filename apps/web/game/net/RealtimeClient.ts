@@ -20,6 +20,7 @@ import {
   type PhraseId,
   type EmoteKind,
   type GraveEventKind,
+  type GoblinInfo,
   type PeerInfo,
   type PeerState,
   type QueueStatus,
@@ -73,6 +74,15 @@ export type NetCallbacks = {
   onSay(sid: Sid, id: PhraseId): void;
   /** 입장 토큰에 든 내 아바타 몸 모양 (계정에 저장된 값) */
   onSelfBody?(body: string): void;
+  // ── 22번 황금 고블린 ──
+  /** 나타났다 (welcome에 실려 온 것도 이걸로) */
+  onGoblin?(g: GoblinInfo): void;
+  /** 아무도 못 잡고 사라졌다 */
+  onGoblinGone?(id: string): void;
+  /** 누가 잡았다 (나 포함) */
+  onGoblinCaught?(id: string, sid: Sid, name: string, points: number): void;
+  /** 내가 잡았다: 보상 증서 */
+  onGoblinGrant?(id: string, grant: string, points: number): void;
 };
 
 export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean; body?: string };
@@ -279,6 +289,20 @@ export class RealtimeClient {
     this.send({ t: "act", kind });
   }
 
+  /** 22번: 황금 고블린에 닿았다 (판정은 서버) */
+  claimGoblin(id: string): void {
+    this.send({ t: "goblin", id });
+  }
+
+  /**
+   * 22번: 서버 시계 (ms). welcome.now로 맞춘 차이를 더한다 — 고양이·유령·고블린을 같은 채널 모두가 같은 시각으로 계산한다.
+   * 이전 서버(welcome.now 없음)나 접속 전에는 내 시계
+   */
+  serverNow(): number {
+    return Date.now() + this.clockOffset;
+  }
+  private clockOffset = 0;
+
   /** 정해진 문장 말풍선 */
   say(id: PhraseId): void {
     this.send({ t: "say", id });
@@ -461,6 +485,19 @@ export class RealtimeClient {
           // 내 폭죽은 누른 순간 이미 터뜨렸다 → 중복 재생하지 않는다
           if (m.sid !== this.mySid) this.cb.onFirework(m.sid, m.item, m.x, m.y);
           break;
+        // ── 22번 황금 고블린 (판정은 서버, 여기서는 전달만) ──
+        case "goblin":
+          if (m.g && typeof m.g.id === "string") this.cb.onGoblin?.(m.g);
+          break;
+        case "goblinGone":
+          this.cb.onGoblinGone?.(m.id);
+          break;
+        case "goblinCaught":
+          this.cb.onGoblinCaught?.(m.id, m.sid, String(m.name ?? ""), Number(m.points) || 0);
+          break;
+        case "goblinGrant":
+          if (typeof m.grant === "string") this.cb.onGoblinGrant?.(m.id, m.grant, Number(m.points) || 0);
+          break;
         case "peers": {
           this.peers.clear();
           this.syncPolicy.mark(performance.now());
@@ -497,6 +534,8 @@ export class RealtimeClient {
     this.welcomeTimer = null;
     this.mySid = m.sid;
     this.channel = m.channel;
+    // 22번: 서버 시계 맞추기 (왕복 절반만큼 늦게 도착했다고 본다)
+    if (typeof m.now === "number" && Number.isFinite(m.now)) this.clockOffset = m.now + (this.rtt ?? 60) / 2 - Date.now();
     this.target = m.channel;
     this.cap = m.cap;
     this.peers.clear();

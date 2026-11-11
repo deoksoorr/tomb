@@ -78,6 +78,11 @@ export class AvatarView {
   sitSince = 0;
   /** 의자 위처럼 y 정렬을 덮어써야 할 때 */
   depthOverride: number | null = null;
+  /**
+   * 50번 조각배·시소·트램펄린·회전목마: 씬(PlazaRides·BoatRide)이 매 프레임 넣어 주는 그림 연출.
+   * ox = 앵커에서 옆으로(회전목마), lift = 위로 띄우는 높이, depth = 그릴 순서 (null이면 그대로). 논리 위치는 그대로다
+   */
+  ride: { ox: number; lift: number; depth: number | null } | null = null;
 
   private readonly reduced = prefersReducedMotion();
   private lastNow = 0;
@@ -292,6 +297,7 @@ export class AvatarView {
     if (kind === "wave" || kind === "cheer") this.emote(kind, now);
     const s = this.state;
     if (s === "swim" || s === "dive" || s === "hang" || s === "swing" || s === "hammock" || s === "sitGround" || s === "sitChair" || s === "jump") return;
+    if (s === "boat" || s === "seesaw" || s === "trampoline" || s === "carousel") return;
     const act = kind === "cheer" || kind === "splash" ? "cheer" : "wave";
     this.gestureUntil = now + ACT_MS;
     this.anim = "";
@@ -405,6 +411,11 @@ export class AvatarView {
       this.setPose(this.reduced ? 0 : Math.round(Math.sin(ph)), -LIE_PIVOT);
       const tilt = this.reduced ? -90 : -90 + Math.round(Math.sin(ph) * 2);
       if (s.angle !== tilt) s.setAngle(tilt);
+    } else if (st === "boat" || st === "seesaw" || st === "trampoline" || st === "carousel") {
+      // 놀거리 연출은 씬이 정해 준다 (회전목마는 앵커 둘레를 돌고, 트램펄린은 통통, 시소는 오르락내리락, 배는 물결에 살짝)
+      const r = this.ride;
+      this.setPose(r ? -Math.round(r.ox) : 0, r ? Math.round(r.lift) : 0);
+      if (r && r.depth !== null) this.depthOverride = r.depth;
     } else this.setPose(0, 0);
     if (st !== "hammock" && s.angle !== 0) s.setAngle(0);
     if (st !== "swing" && s.scaleX !== 1) s.setScale(1);

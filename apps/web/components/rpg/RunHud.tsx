@@ -87,7 +87,8 @@ function Joystick() {
   );
 }
 
-export default function RunHud({ game, hotbar, onPause }: { game: GameKind; hotbar: (SkillId | null)[]; onPause: () => void }) {
+/** title: 게임 이름 대신 (32번 곤충 채집은 "곤충 채집") */
+export default function RunHud({ game, hotbar, onPause, title }: { game: GameKind; hotbar: (SkillId | null)[]; onPause: () => void; title?: string }) {
   const [hud, setHud] = useState<RpgHud | null>(null);
   useBridgeEvent("rpg:hud", setHud);
   const holding = useRef<number | null>(null);
@@ -128,7 +129,7 @@ export default function RunHud({ game, hotbar, onPause }: { game: GameKind; hotb
         <div className={s.hudLine}>
           <div className={s.hudPanel}>
             <div className={s.hudStats}>
-              <strong>{GAMES[game].name}</strong>
+              <strong>{title ?? GAMES[game].name}</strong>
               <span>
                 남은 시간 <strong className={s.timer}>{hud ? mmss(hud.leftMs) : "–"}</strong>
               </span>

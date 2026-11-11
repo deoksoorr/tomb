@@ -51,6 +51,13 @@ type Common = {
 
 // ── 출발 ──
 
+/**
+ * 사냥터 로비에서 빠진 게임 (마을로 옮겨 갔다). 저장된 선택이 이 중 하나면 사냥으로 돌린다 (HuntLobby readPick).
+ * stars → 별 보기 언덕 망원경(22번, components/rpg/Telescope.tsx)
+ * bugs → 마을 수풀의 곤충 채집(32번, components/forage — 같은 미니게임을 나비·반딧불이 그림으로)
+ */
+export const LOBBY_HIDDEN: ReadonlySet<GameKind> = new Set<GameKind>(["stars", "bugs"]);
+
 export function StartPanel({
   view,
   game,
@@ -81,7 +88,7 @@ export function StartPanel({
           어디로 갈까요
         </h3>
         <div className={s.cards} role="radiogroup" aria-labelledby="rpg-games">
-          {GAME_KINDS.map((g) => (
+          {GAME_KINDS.filter((g) => !LOBBY_HIDDEN.has(g)).map((g) => (
             <button key={g} type="button" role="radio" aria-checked={game === g} className={s.card} onClick={() => onGame(g)}>
               <span className={s.cardName}>{GAMES[g].name}</span>
               <span>{GAMES[g].desc}</span>

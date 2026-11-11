@@ -82,6 +82,10 @@ export class WorldMap {
   private lastCull = "";
   private fixedItems: Interactable[] = interactables();
   private items: Interactable[] = this.fixedItems;
+  /** 주거 구역 집 문·빈 필지 */
+  private houseItems: Interactable[] = [];
+  /** 다른 모듈이 덧붙이는 상호작용 (4·32번 낚시 자리·NPC·채집 지점 — game/world/forage) */
+  private extraItems: Interactable[] = [];
   readonly height = MAP_HEIGHT;
   /** 정적 빛 (석등·오두막 창·가로등) — Atmosphere가 그린다 */
   readonly staticLights: LightSpot[] = [];
@@ -302,6 +306,12 @@ export class WorldMap {
     return this.items;
   }
 
+  /** 덧붙이는 상호작용 대상을 통째로 바꾼다 (낚시·채집: 피어 있는 지점이 바뀔 때마다) */
+  setExtraItems(items: Interactable[]): void {
+    this.extraItems = items;
+    this.items = [...this.fixedItems, ...this.houseItems, ...this.extraItems];
+  }
+
   private addFurniture(f: Furniture): void {
     let key: string;
     if (f.campfire) key = f.kind === "bench" ? WP.logSeat : WP.stumpSeat;
@@ -408,7 +418,8 @@ export class WorldMap {
       const it = h || !taken.has(lot.lot) ? lotInteractable(lot.lot, h ? { id: h.id, name: h.name } : null) : null;
       if (it) items.push(it);
     }
-    this.items = [...this.fixedItems, ...items];
+    this.houseItems = items;
+    this.items = [...this.fixedItems, ...this.houseItems, ...this.extraItems];
     return true;
   }
 

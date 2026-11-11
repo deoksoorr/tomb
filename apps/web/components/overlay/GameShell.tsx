@@ -48,6 +48,10 @@ import UpdateNotice from "./UpdateNotice";
 import styles from "./GameShell.module.css";
 import HousingOffice from "@/components/housing/HousingOffice";
 import HuntLobby from "@/components/rpg/HuntLobby";
+import ForageLayer from "@/components/forage/ForageLayer";
+import WishDialog from "@/components/plaza/WishDialog";
+import Telescope from "@/components/rpg/Telescope";
+import GoblinClaim from "./GoblinClaim";
 
 const GameCanvas = dynamic(() => import("@/game/GameCanvas"), { ssr: false });
 
@@ -122,6 +126,8 @@ type Panel =
   | "fireworks"
   | "shrine"
   | "hunt"
+  | "wish"
+  | "telescope"
   | "housing"
   | "activity"
   | "passed"
@@ -278,7 +284,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   function pickFromMenu(target: MenuTarget) {
     if (target === "bury") startBury();
     else if (target === "graves") openMyGraves();
-    else setPanel(target);
+    else if (target === "dex") {
+      setPanel(null);
+      bridge.emit("forage:dex", {});
+    } else setPanel(target);
   }
 
   const disconnected = status?.mode === "replaced" || status?.mode === "offline";
@@ -290,6 +299,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       <GameCanvas {...options} />
       {ready && disconnected && <div className={styles.dim} aria-hidden="true" />}
       {ready && <UpdateNotice />}
+      {/* 4·32·51번 낚시·채집·판매·도감 (자기 창·HUD를 스스로 연다) */}
+      {ready && <ForageLayer />}
 
       {ready && (
         <div className={cx(styles.overlay, away && styles.away, campfire && styles.campfire)}>
@@ -349,6 +360,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("hunt")}>
                   <PixelIcon name="sword" />
                   사냥
+                </button>
+                <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => bridge.emit("forage:dex", {})}>
+                  <PixelIcon name="book" />
+                  도감
                 </button>
                 <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("housing")}>
                   <PixelIcon name="house" />집
@@ -457,6 +472,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "shrine" && <ShrineDialog cache={graves.cache} onGo={goToMyGrave} onClose={closePanel} />}
       {panel === "housing" && <HousingOffice key={housingIntent?.houseId ?? housingIntent?.lot ?? "office"} intent={housingIntent} onClose={closePanel} />}
       {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
+      {panel === "wish" && <WishDialog onClose={closePanel} />}
+      {panel === "telescope" && <Telescope onClose={closePanel} />}
+      <GoblinClaim />
       {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
     </div>
   );

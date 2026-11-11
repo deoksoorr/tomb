@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, ROOM_CAPACITY, TICK_MS, verifyGrant } from "@tomb/protocol";
+import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, ROOM_CAPACITY, TICK_MS, signGrant, verifyGrant } from "@tomb/protocol";
 import { TICKET_HEADER, decodeTicket, rejectSocket } from "./auth";
 import { ChannelCore, type PeerRecord, type Reservation } from "./channel";
 import { type Env, lobbyStub, readConfig } from "./config";
@@ -27,6 +27,8 @@ const CHANNEL_KEY = "channel";
 const ROOM_KEY = "room";
 const NONCE_PREFIX = "n:";
 const LIVE_KEY = "live";
+/** 22번 황금 고블린: 다음 등장 시각 + 지금 나와 있는 고블린(잡혔는지까지). 등장·잡힘·사라짐 때만 쓴다 */
+const GOBLIN_KEY = "goblin";
 /** 좌석·입퇴장 변화를 저장하기까지 모으는 시간 */
 const LIVE_DEBOUNCE_MS = 500;
 /** 위치만 바뀐 경우 저장 최소 간격 (틱 루프가 멈출 때 이만큼 지났으면 쓴다) */
@@ -81,6 +83,7 @@ export class ChannelDO extends DurableObject<Env> {
     const { graceMs } = readConfig(env);
     const revived = this.core.restore(active, reserved, Date.now(), Array.isArray(live) ? live : [], Math.max(graceMs, RESTART_GRACE_MIN_MS));
     this.liveSavedAt = Date.now();
+    if (this.room === null) this.core.restoreGoblin(ctx.storage.kv.get(GOBLIN_KEY));
     if (revived > 0) {
       console.log(`channel ${this.channel}: restored ${revived} peer(s) from live snapshot`);
       this.scheduleReport();
@@ -158,6 +161,17 @@ export class ChannelDO extends DurableObject<Env> {
           for (const [key, exp] of kv.list<number>({ prefix: NONCE_PREFIX })) if (exp <= now) kv.delete(key);
           return true;
         },
+        // 22번 황금 고블린 (월드 채널만 — 방은 ChannelCore가 끈다)
+        signGrant: (g) => (env.JOIN_SECRET ? signGrant(env.JOIN_SECRET, g).catch(() => null) : Promise.resolve(null)),
+        goblinChanged: (s) => {
+          if (room) return;
+          try {
+            ctx.storage.kv.put(GOBLIN_KEY, s);
+          } catch (e) {
+            console.error("goblin save failed", e);
+          }
+          this.scheduleAlarm();
+        },
       },
     );
   }
@@ -192,8 +206,16 @@ export class ChannelDO extends DurableObject<Env> {
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
     this.core.join(server, ticket, Date.now());
+    this.core.goblinCheck(Date.now()); // 22번: 사람이 생겼다 → 고블린 일정 확인
     this.scheduleAlarm(); // 연결이 생겼다 → 유령 연결 정리 알람
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /** 개발용 훅(/dev/goblin, DEV_HOOKS=1일 때만): 황금 고블린을 지금 나오게 한다 (RPC) */
+  devGoblin(): { id: string; seed: number; at: number; until: number; points: number } | null {
+    const c = this.core.forceGoblin(Date.now());
+    this.scheduleAlarm();
+    return c ? { id: c.id, seed: c.seed, at: c.at, until: c.until, points: c.points } : null;
   }
 
   /** Lobby DO가 상태를 다시 맞출 때 부른다 (RPC) */
@@ -238,6 +260,7 @@ export class ChannelDO extends DurableObject<Env> {
     const now = Date.now();
     this.alarmAt = null;
     this.core.expire(now);
+    this.core.goblinCheck(now); // 22번: 고블린 등장·사라짐
     if (this.reapDueAt !== null && now >= this.reapDueAt) {
       this.reapDueAt = null;
       this.core.reap(now);
@@ -252,7 +275,10 @@ export class ChannelDO extends DurableObject<Env> {
     if (this.core.online === 0) this.reapDueAt = null;
     else this.reapDueAt ??= Date.now() + REAP_INTERVAL_MS;
     const expiry = this.core.nextExpiry();
-    const at = expiry === null ? this.reapDueAt : this.reapDueAt === null ? expiry : Math.min(expiry, this.reapDueAt);
+    let at = expiry === null ? this.reapDueAt : this.reapDueAt === null ? expiry : Math.min(expiry, this.reapDueAt);
+    // 22번 황금 고블린: 사람이 있으면 다음 등장 시각, 나와 있으면 사라질 시각에 깨운다
+    const goblin = this.core.goblinDue();
+    if (goblin !== null) at = at === null ? goblin : Math.min(at, goblin);
     if (at === this.alarmAt) return;
     this.alarmAt = at;
     const op = at === null ? this.ctx.storage.deleteAlarm() : this.ctx.storage.setAlarm(at);

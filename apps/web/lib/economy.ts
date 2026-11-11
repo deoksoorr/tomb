@@ -9,7 +9,15 @@ export type EarnSource =
   | "gotFlower"
   | "presence"
   | "hunt"
-  | "houseLike";
+  | "houseLike"
+  // ── 4·32·51번 낚시·채집·도감 (lib/forage) ──
+  | "fish"
+  | "gather"
+  | "dex"
+  // ── 22번 황금 고블린(보너스 요정) (/api/goblin) ──
+  | "goblin"
+  // ── 50번 소원 분수 (lib/wish.ts, /api/plaza/wish) ──
+  | "wish";
 
 export type EarnRule = { source: EarnSource; label: string; points: number; dailyMax: number; note: string };
 
@@ -22,9 +30,20 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "presence", label: "묘지에 머무르기", points: 5, dailyMax: 60, note: "접속해 있는 10분마다 (다른 일을 해도 OK)" },
   { source: "hunt", label: "사냥터·미니게임", points: 0, dailyMax: 600, note: "난이도와 성적에 따라 (한 판 보상은 게임 결과로)" },
   { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때" },
+  // 낚시·채집은 잡을 때가 아니라 NPC에게 팔 때 들어온다 (값은 lib/forage/catalog.ts). 한도를 넘는 만큼은 가방에 남아 내일 팔 수 있다
+  { source: "fish", label: "물고기 팔기", points: 0, dailyMax: 200, note: "호수 잔교 옆 어부에게 (희귀할수록 비싸요)" },
+  { source: "gather", label: "채집물 팔기", points: 0, dailyMax: 150, note: "숲 빈터의 수집가에게 (약초·광석·발굴품·곤충)" },
+  { source: "dex", label: "도감 달성 보상", points: 0, dailyMax: 300, note: "종류별 도감을 25·50·75·100% 채울 때 한 번씩" },
+  // 실시간 서버가 "가장 먼저 잡은 한 명"에게 서명한 증서로만 받는다 (고블린 한 마리당 한 번, lib/goblin.ts)
+  { source: "goblin", label: "황금 고블린 잡기", points: 0, dailyMax: 150, note: "가끔 마을에 나타나는 황금 고블린(보너스 요정)을 가장 먼저 잡으면 20~100P" },
+  // 광장 소원 분수에 동전(1~5P)을 던지면 가끔 튀어 돌아온다 (하루 3번)
+  { source: "wish", label: "소원 분수", points: 0, dailyMax: 30, note: "광장 분수에 동전을 던지면 가끔 몇 포인트가 튀어 돌아와요 (하루 3번)" },
 ];
 
-/** 하루에 쌓을 수 있는 전체 포인트 (위 항목 한도의 합보다 작게 잡아 하루 상한을 둔다. 사냥을 많이 하면 닿는다) */
+/**
+ * 하루에 쌓을 수 있는 전체 포인트. 위 항목 한도의 합(1,430)보다 작게 잡아 하루 상한을 둔다 — 사냥만 해도(600) 닿기 쉽고,
+ * 출석·머무르기(70) + 낚시(200) + 채집(150)처럼 골고루 하면 420쯤. 낚시·채집을 더해도 하루 최대는 그대로 800
+ */
 export const DAILY_EARN_CAP = 800;
 /** 지갑 상한 */
 export const BALANCE_CAP = 9_999;

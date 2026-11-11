@@ -17,7 +17,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import { pts } from "./format";
-import { CharacterPanel, GearPanel, ShopPanel, SkillPanel, StartPanel } from "./Panels";
+import { CharacterPanel, GearPanel, LOBBY_HIDDEN, ShopPanel, SkillPanel, StartPanel } from "./Panels";
 import RpgIcon from "./RpgIcon";
 import RunHud from "./RunHud";
 import s from "./rpg.module.css";
@@ -44,7 +44,7 @@ const LS_PICK = "tomb.rpg.pick";
 function readPick(): { game: GameKind; diff: Difficulty } {
   try {
     const v = JSON.parse(localStorage.getItem(LS_PICK) ?? "null") as { game: GameKind; diff: Difficulty } | null;
-    if (v && v.game in GAMES && v.diff in DIFFS) return v;
+    if (v && v.game in GAMES && !LOBBY_HIDDEN.has(v.game) && v.diff in DIFFS) return v;
   } catch {
     /* 저장소를 못 쓰면 기본값 */
   }

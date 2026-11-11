@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { AVATAR_BODIES, ITEMS, STATE_NAMES } from "@tomb/protocol";
-import { AV_ACT_ANIM, AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, avatarFrameGrid, BODY_METRICS, bodyOf, gearOf, lookKey, SPRITE_COSMETICS, waterSink } from "./avatar";
+import { AV_ACT_ANIM, AV_ALIASES, AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, avatarFrameGrid, BODY_METRICS, bodyOf, gearOf, lookKey, SPRITE_COSMETICS, waterSink } from "./avatar";
 import { EMOTE_ICONS, emoteGrid } from "./emotes";
 import { lighten, mix, parseHex } from "./pixel";
 
 describe("avatar sheet layout", () => {
   it("has an animation for every network state and acts, without overlapping columns", () => {
     const used = new Set<number>();
-    const all = [...STATE_NAMES.map((s) => AV_ANIM[s]), ...Object.values(AV_ACT_ANIM)];
+    // 다른 상태의 프레임을 그대로 쓰는 상태(AV_ALIASES, 50번 놀거리)는 그 상태와 같은 열이어야 하고 열을 따로 차지하지 않는다
+    for (const [s, base] of Object.entries(AV_ALIASES)) expect(AV_ANIM[s as keyof typeof AV_ANIM], s).toEqual(AV_ANIM[base]);
+    const all = [...STATE_NAMES.filter((s) => !(s in AV_ALIASES)).map((s) => AV_ANIM[s]), ...Object.values(AV_ACT_ANIM)];
     expect(Object.keys(AV_ANIM).sort()).toEqual([...STATE_NAMES].sort());
     for (const a of all) {
       for (let i = 0; i < a.frames; i++) {

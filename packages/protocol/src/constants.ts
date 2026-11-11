@@ -63,7 +63,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
  * 평소 패치(버전 그대로)는 배포 id만 바뀌어 아래쪽 배너로 안내된다.
  */
 // 2 = 가을·겨울 마을 맵 개편(1·50번: 넓은 고정 맵·강·광장·주거 구역, 해먹 상태 STATE.hammock=10, 다시 피어날 자리 제거)
-export const CLIENT_VERSION = 2;
+// 3 = 조각배·광장 놀거리(50번: STATE.boat~carousel=11~14 — 옛 클라이언트는 모르는 상태 값이 든 SNAPSHOT을 통째로 버린다)
+export const CLIENT_VERSION = 3;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */

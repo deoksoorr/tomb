@@ -2,10 +2,12 @@ import * as Phaser from "phaser";
 import { BUG_SCORE, BUG_SLOTS, bugsPlan, comboMult, type BugSpawn } from "@/lib/rpg/plan";
 import type { BugsResult, RpgAction, RpgHud } from "@/lib/rpg/types";
 import { RpgScene } from "./base";
+import { ensureMeadowTextures, MEADOW_TEXT, MTEX } from "./meadowArt";
 import { ensureRpgTextures, RTEX } from "./sprites";
 
 // 벌레 잡기: 3×3 창에서 튀어나오는 벌레를 누른다. 초록 체크는 누르면 감점.
 // 출현은 서버가 준 시드의 계획(bugsPlan)대로이고, DEX는 버그가 보이는 시간을, LUK는 황금 버그 확률을 조금 늘린다.
+// play.theme === "meadow"(32번 곤충 채집, 마을 수풀에서): 같은 규칙에 그림만 풀숲·나비/반딧불이·꿀벌·낙엽으로 (meadowArt.ts)
 
 const COLS = 3;
 const WIN_W = 76;
@@ -38,6 +40,7 @@ export class BugsScene extends RpgScene {
   private combo = 0;
   private maxCombo = 0;
   private lastTick = 0;
+  private meadow = false;
 
   constructor() {
     super("rpg-bugs");
@@ -52,6 +55,12 @@ export class BugsScene extends RpgScene {
     this.active = [];
     this.caught = this.golden = this.wrong = this.decoy = this.combo = this.maxCombo = this.points = 0;
     this.lastTick = 0;
+    this.meadow = this.play.theme === "meadow";
+    if (this.meadow) {
+      this.createMeadow();
+      this.fit();
+      return;
+    }
     this.cameras.main.setBackgroundColor("#0e0d12");
 
     const rnd = new Phaser.Math.RandomDataGenerator([String(this.play.seed)]);
@@ -74,6 +83,17 @@ export class BugsScene extends RpgScene {
       this.label(x + WIN_W - 7, y + WIN_H - 1, KEY_LABELS[slot], "#6a6e78", 10).setAlpha(0.8);
     }
     this.fit();
+  }
+
+  /** 곤충 채집: 9칸을 풀숲으로 */
+  private createMeadow(): void {
+    ensureMeadowTextures(this);
+    this.cameras.main.setBackgroundColor(this.play.night ? "#0c1410" : "#1c2a1a");
+    for (let slot = 0; slot < BUG_SLOTS; slot++) {
+      const { x, y } = slotPos(slot);
+      this.add.image(x, y, `${MTEX.tuft}-${slot}`).setOrigin(0, 0);
+      this.label(x + WIN_W - 7, y + WIN_H - 1, KEY_LABELS[slot], "#a8c890", 10).setAlpha(0.7);
+    }
   }
 
   private fit(): void {
@@ -121,7 +141,8 @@ export class BugsScene extends RpgScene {
       else this.decoy++;
       this.points += BUG_SCORE[a.s.kind];
       this.combo = 0;
-      this.floatText(cx, cy - 8, a.s.kind === "feature" ? `체크는 잡지 마세요 ${BUG_SCORE.feature}` : `이미 잡은 벌레 ${BUG_SCORE.decoy}`, "#ff6a6a", 11);
+      const warn = this.meadow ? (a.s.kind === "feature" ? MEADOW_TEXT.feature : MEADOW_TEXT.decoy) : a.s.kind === "feature" ? "체크는 잡지 마세요" : "이미 잡은 벌레";
+      this.floatText(cx, cy - 8, `${warn} ${a.s.kind === "feature" ? BUG_SCORE.feature : BUG_SCORE.decoy}`, "#ff6a6a", 11);
       this.cameras.main.shake(100, 0.004);
       this.sfx.play("miss");
       this.tweens.add({ targets: a.sprite, alpha: 0, duration: 200, onComplete: () => a.sprite.destroy() });
@@ -136,7 +157,7 @@ export class BugsScene extends RpgScene {
     this.points += pts;
     this.floatText(cx, cy - 8, mult > 1 ? `+${pts} ×${mult}` : `+${pts}`, a.s.kind === "golden" ? "#ffd04a" : "#f2ead3", a.s.kind === "golden" ? 14 : 12);
     this.sfx.play(a.s.kind === "golden" ? "coin-drop" : "hit", 0.7);
-    const splat = this.add.image(a.sprite.x, a.sprite.y, RTEX.splat).setAlpha(0.8);
+    const splat = this.add.image(a.sprite.x, a.sprite.y, this.meadow ? MTEX.splat : RTEX.splat).setAlpha(0.8);
     this.tweens.add({ targets: splat, alpha: 0, duration: 600, onComplete: () => splat.destroy() });
     a.sprite.destroy();
   }
@@ -147,7 +168,21 @@ export class BugsScene extends RpgScene {
     while (this.nextIdx < this.plan.length && this.plan[this.nextIdx].t <= now) {
       const s = this.plan[this.nextIdx++];
       const { x, y } = slotPos(s.slot);
-      const tex = s.kind === "golden" ? RTEX.golden : s.kind === "feature" ? RTEX.feature : s.kind === "decoy" ? RTEX.decoy : RTEX.bug;
+      const tex = this.meadow
+        ? s.kind === "golden"
+          ? MTEX.golden
+          : s.kind === "feature"
+            ? MTEX.feature
+            : s.kind === "decoy"
+              ? MTEX.decoy
+              : MTEX.bug(!!this.play.night)
+        : s.kind === "golden"
+          ? RTEX.golden
+          : s.kind === "feature"
+            ? RTEX.feature
+            : s.kind === "decoy"
+              ? RTEX.decoy
+              : RTEX.bug;
       const sprite = this.add.sprite(x + WIN_W / 2 + (Math.random() - 0.5) * 30, y + WIN_H / 2 + 8, tex, 0).setScale(0.3);
       this.tweens.add({ targets: sprite, scale: 1.4, y: sprite.y - 6, duration: 140, ease: "Back.easeOut" });
       this.active.push({ s, sprite, until: s.t + s.lifeMs, done: false });
@@ -159,7 +194,7 @@ export class BugsScene extends RpgScene {
         a.done = true;
         if (a.s.kind === "bug" || a.s.kind === "golden") {
           this.combo = 0;
-          this.floatText(a.sprite.x, a.sprite.y - 8, "놓침", "#9aa3ad", 10);
+          this.floatText(a.sprite.x, a.sprite.y - 8, this.meadow ? MEADOW_TEXT.miss : "놓침", "#9aa3ad", 10);
         }
         const sp = a.sprite;
         this.tweens.add({ targets: sp, alpha: 0, scale: 0.4, duration: 160, onComplete: () => sp.destroy() });

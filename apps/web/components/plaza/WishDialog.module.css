@@ -1,0 +1,56 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lead {
+  margin: 0;
+  line-height: 1.55;
+  color: var(--text-dim, #c9c2b0);
+}
+
+.coins {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.coin {
+  flex: 1 1 0;
+  min-width: 72px;
+}
+
+.points {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-dim, #b9b4a4);
+}
+
+.result {
+  border: 1px solid rgba(232, 196, 90, 0.45);
+  background: rgba(232, 196, 90, 0.08);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.luck {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f0d070;
+  letter-spacing: 0.06em;
+}
+
+.text {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.bonus {
+  margin: 0;
+  color: #9fdc9a;
+  font-weight: 600;
+}

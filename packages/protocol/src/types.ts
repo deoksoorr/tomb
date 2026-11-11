@@ -17,12 +17,21 @@ export const STATE = {
   swing: 9,
   /** 해먹에 누워 흔들흔들 (1인 자리) */
   hammock: 10,
+  // ── 50번 조각배·광장 놀거리 (1인 자리, 서버 좌석) ──
+  /** 조각배에 앉아 있음 (앞자리 = 노 젓기, 2인승 뒷자리 = 같이 타기). 물 위에서 움직이는 자리 */
+  boat: 11,
+  /** 시소에 앉아 오르락내리락 (2인, 양 끝이 각각 1인 자리) */
+  seesaw: 12,
+  /** 트램펄린에서 통통 높이 뛰기 (1인 자리) */
+  trampoline: 13,
+  /** 회전목마 목마에 타고 빙글빙글 (자리마다 1인) */
+  carousel: 14,
 } as const;
 export type StateName = keyof typeof STATE;
 export type StateId = (typeof STATE)[StateName];
-export const STATE_NAMES: readonly StateName[] = ["idle", "walk", "run", "sitGround", "sitChair", "jump", "hang", "swim", "dive", "swing", "hammock"];
+export const STATE_NAMES: readonly StateName[] = ["idle", "walk", "run", "sitGround", "sitChair", "jump", "hang", "swim", "dive", "swing", "hammock", "boat", "seesaw", "trampoline", "carousel"];
 export function isStateId(n: number): n is StateId {
-  return Number.isInteger(n) && n >= 0 && n <= 10;
+  return Number.isInteger(n) && n >= 0 && n < STATE_NAMES.length;
 }
 
 /** 4방향 스프라이트 방향. 바이너리로 u8 전송. */

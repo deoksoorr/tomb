@@ -18,6 +18,7 @@
  *   GET /ch/:n?t=&x=&y=&v=   채널 WebSocket. Origin·클라이언트 버전·토큰(그 채널용)을 검증한 뒤 Channel DO로 넘긴다
  *   GET /room/:id?t=&x=&y=&v= 방(마을·집·사냥터) WebSocket. 토큰의 room이 id와 같아야 한다. 상한 ROOM_CAPACITY
  *   (v < MIN_CLIENT_VERSION이면 DO까지 가지 않고 4010으로 거절 → 클라이언트가 새로고침 창을 띄운다)
+ *   POST /dev/goblin?ch=N    (개발용, DEV_HOOKS=1일 때만) 그 채널에 황금 고블린을 지금 나오게 한다. 운영에서는 404
  */
 import { CLOSE, LOBBY_CACHE_SEC, ROOM_ID_RE } from "@tomb/protocol";
 import type { JoinTicket } from "./channel";
@@ -48,6 +49,11 @@ export default {
     if (ch) return channel(req, env, url, ch[1]);
     const rm = /^\/room\/([^/]*)$/.exec(url.pathname);
     if (rm) return room(req, env, url, rm[1]);
+    if (url.pathname === "/dev/goblin" && env.DEV_HOOKS === "1" && req.method === "POST") {
+      const n = parseChannel(url.searchParams.get("ch") ?? "1", readConfig(env).maxChannels);
+      if (n === null) return new Response("bad channel", { status: 400 });
+      return Response.json({ goblin: await channelStub(env, n).devGoblin() });
+    }
     return new Response("not found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;

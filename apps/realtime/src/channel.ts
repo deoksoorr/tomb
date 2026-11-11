@@ -1,6 +1,7 @@
 import {
   CLOSE,
   DIR,
+  GOBLIN_GRANT_TTL_SEC,
   MAX_MESSAGE_BYTES,
   SEAT_SERVER_RADIUS,
   SNAPSHOT_MAX_ENTRIES,
@@ -25,6 +26,7 @@ import {
   type StateId,
 } from "@tomb/protocol";
 import { MoveBudget, RateLimiter, allocSid, dist, stepToward, type Point } from "./logic";
+import { GoblinCore, type GoblinState } from "./goblin";
 
 // 채널 하나의 상태 머신. ChannelDO는 소켓·스토리지·타이머만 이어 주고 판정은 전부 여기서 동기적으로 한다.
 // Workers API를 쓰지 않으므로 Node에서 그대로 단위 테스트하고(channel.test.ts) 부하 테스트의 틱 벤치마크에도 쓴다.
@@ -97,6 +99,13 @@ export interface ChannelHost<C> {
   verifyGrant(token: string): Promise<Grant | null>;
   /** 폭죽 nonce를 until(ms)까지 "사용됨"으로 기록. 이미 쓴 nonce면 false */
   claimNonce(nonce: string, until: number): boolean;
+  // ── 22번 황금 고블린 (없으면 고블린 기능이 꺼진다: 방·테스트) ──
+  /** 보상 증서 서명 (JOIN_SECRET). 비동기(HMAC) */
+  signGrant?(g: Grant): Promise<string | null>;
+  /** 고블린 일정·상태가 바뀌었다 → 저장하고 알람을 다시 잡는다 */
+  goblinChanged?(s: GoblinState): void;
+  /** 난수 (테스트에서 고정) */
+  random?(): number;
 }
 
 /**
@@ -179,6 +188,8 @@ export class ChannelCore<C extends object> {
   /** 채널 단위 이벤트 중복 제거: 키 → 마지막 중계 시각 */
   private readonly recentEvents = new Map<string, number>();
   private tickNo = 0;
+  /** 22번 황금 고블린 (등장·주인 판정) */
+  private readonly goblin = new GoblinCore(() => (this.host.random ? this.host.random() : Math.random()));
 
   constructor(
     private readonly cfg: ChannelConfig,
@@ -290,7 +301,7 @@ export class ChannelCore<C extends object> {
     };
     const p = this.adoptNew(rec, conn, now);
     this.save(p);
-    this.welcome(p, t.channel, false);
+    this.welcome(p, t.channel, false, now);
     this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
     this.host.countChanged(this.peers.size);
     this.host.visitorJoined(p.visitorId, p.joinedAt);
@@ -325,7 +336,7 @@ export class ChannelCore<C extends object> {
     this.bySocket.set(conn, p.sid);
     this.resetConnState(p, now);
     this.save(p);
-    this.welcome(p, t.channel, true);
+    this.welcome(p, t.channel, true, now);
     // 이름·색·몸·꾸미기는 입장 때 한 번만 보낸다. 바뀌었을 때만 join을 다시 보낸다(클라이언트는 같은 sid의 join을 덮어쓰기로 처리).
     if (renamed) this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
     this.host.visitorJoined(p.visitorId, p.joinedAt);
@@ -335,6 +346,8 @@ export class ChannelCore<C extends object> {
   /** 복귀한 클라이언트가 알려 준 위치로 옮긴다(위치의 원천은 클라이언트). 앉아 있던 좌석 근처면 좌석을 유지한다. */
   private relocate(p: Peer<C>, want: Point): void {
     const seat = p.seatId ? seatSlot(p.seatId) : undefined;
+    // 움직이는 자리(조각배, 50번): 자리는 그대로 두고 위치만 클라이언트가 알려 준 물 위로 (앵커와 멀어도 된다)
+    if (seat?.mobile) return this.moveSeated(p, want);
     if (seat && dist(seat, want) <= SEAT_SERVER_RADIUS) return;
     if (p.seatId) this.releaseSeat(p);
     // 그 사이 다른 사람이 앉은 좌석 위로 돌아오지 않는다 (클라이언트는 seatDenied를 받고 가까운 빈자리로 옮긴다)
@@ -347,18 +360,29 @@ export class ChannelCore<C extends object> {
     this.markDirty(p);
   }
 
+  /** 움직이는 자리(조각배)에 앉은 채 복귀: 자리는 유지하고 위치만 옮긴다 */
+  private moveSeated(p: Peer<C>, to: Point): void {
+    if (p.x === to.x && p.y === to.y) return;
+    p.x = p.tx = to.x;
+    p.y = p.ty = to.y;
+    this.chasing.delete(p.sid);
+    this.markDirty(p);
+  }
+
   /** 다른 사람이 앉아 있는 좌석 앵커 바로 위면 그 좌석 앞(내려설 자리)으로. 아니면 그대로 */
   private clearOfSeats(pos: Point, self?: number): Point {
     if (this.cfg.room) return pos;
     for (const [seatId, sid] of this.seats) {
       if (sid === self) continue;
       const s = seatSlot(seatId);
-      if (s && dist(s, pos) < SEAT_CLEAR_RADIUS) return { x: s.x, y: s.y + SEAT_STAND_DY };
+      // 움직이는 자리(조각배)는 앵커에 사람이 있지 않다 (배가 물 위에 나가 있다)
+      if (s && !s.mobile && dist(s, pos) < SEAT_CLEAR_RADIUS) return { x: s.x, y: s.y + SEAT_STAND_DY };
     }
     return pos;
   }
 
-  private welcome(p: Peer<C>, channel: number, resumed: boolean): void {
+  private welcome(p: Peer<C>, channel: number, resumed: boolean, now = Date.now()): void {
+    const goblin = this.goblinOn ? this.goblin.visible(now) : undefined;
     this.sendTo(p, {
       t: "welcome",
       sid: p.sid,
@@ -369,7 +393,13 @@ export class ChannelCore<C extends object> {
       resumed,
       // 나무·그네도 좌석처럼 판정한다 (이 값이 없는 이전 서버에는 클라이언트가 소품 자리를 요청하지 않는다)
       ...(this.cfg.room ? {} : { spots: true }),
+      // 22번: 서버 시계(고양이·유령·고블린을 모두가 같은 시각으로) + 지금 나와 있는 고블린
+      ...(this.cfg.room ? {} : { now }),
+      ...(goblin ? { goblin } : {}),
     });
+    // 고블린을 잡았는데 증서를 받기 전에 끊겼다 → 다시 보낸다 (웹은 같은 고블린을 한 번만 지급한다)
+    const owed = this.goblinOn ? this.goblin.grantFor(p.visitorId, now) : null;
+    if (owed) this.sendTo(p, { t: "goblinGrant", ...owed });
   }
 
   /** 나를 뺀 현재 접속자 전체 (유예 중인 사람 포함 — 다른 사람에게는 멈춘 아바타로 보인다) */
@@ -386,6 +416,7 @@ export class ChannelCore<C extends object> {
     const p = sid === undefined ? undefined : this.peers.get(sid);
     if (!p) return;
     p.lastSeenAt = now;
+    this.goblinCheck(now);
     const verdict = p.rate.hit(now);
     if (verdict === "kick") return this.kick(p, CLOSE.RATE_LIMITED, "rate limited");
     if (verdict === "drop") return;
@@ -484,8 +515,8 @@ export class ChannelCore<C extends object> {
     const changed = state !== p.state || m.dir !== p.dir;
     p.state = state;
     p.dir = m.dir;
-    // 앉아 있는 동안 위치는 좌석 앵커에 고정한다
-    if (!p.seatId) {
+    // 앉아 있는 동안 위치는 좌석 앵커에 고정한다 (움직이는 자리 — 조각배 — 는 보고된 위치를 따라간다)
+    if (!p.seatId || held?.mobile) {
       p.tx = m.x;
       p.ty = m.y;
     }
@@ -554,6 +585,8 @@ export class ChannelCore<C extends object> {
         if (now - p.lastSayAt < SAY_INTERVAL_MS) return;
         p.lastSayAt = now;
         return this.broadcast(encodeEvent({ t: "say", sid: p.sid, id: m.id }));
+      case "goblin":
+        return this.onGoblinClaim(p, m.id, now);
     }
   }
 
@@ -585,6 +618,7 @@ export class ChannelCore<C extends object> {
       this.host.liveChanged?.(true);
       return this.broadcast(encodeEvent({ t: "look", sid: p.sid, look: p.look }));
     }
+    if (g.kind !== "firework") return; // 고블린 증서는 실시간 서버가 내주기만 한다 (받지 않는다)
     if (!this.host.claimNonce(g.nonce, g.exp * 1000)) return; // 이미 쏜 폭죽
     this.broadcast(encodeEvent({ t: "firework", sid: p.sid, item: g.item, x: p.x, y: p.y }));
   }
@@ -615,10 +649,10 @@ export class ChannelCore<C extends object> {
     const old = p.seatId ? seatSlot(p.seatId) : undefined;
     const slide = !!seat && !!old && old.furnitureId !== null && old.furnitureId === seat.furnitureId;
     // 위치는 클라이언트가 마지막으로 보고한 지점으로 잰다 (서버 위치가 속도 예산 때문에 잠깐 뒤처져 있어도 거절하지 않게)
-    if (!seat || holder !== undefined || (!slide && dist(seat, { x: p.tx, y: p.ty }) > SEAT_SERVER_RADIUS)) {
+    if (!seat || holder !== undefined || (!slide && dist(seat, { x: p.tx, y: p.ty }) > (seat.radius ?? SEAT_SERVER_RADIUS))) {
       return this.sendTo(p, { t: "seatDenied", seatId });
     }
-    this.occupy(p, seat);
+    this.occupy(p, seat, slide);
   }
 
   /** MOVE로 들어온 나무·그네 상태의 자리 잡기 (이전 클라이언트용). 잡았으면(이미 내 자리 포함) true. 거절 알림은 보내지 않는다 */
@@ -627,12 +661,13 @@ export class ChannelCore<C extends object> {
     if (!seat) return false;
     const holder = this.seats.get(seatId);
     if (holder === p.sid) return true;
-    if (holder !== undefined || dist(seat, { x: p.tx, y: p.ty }) > SEAT_SERVER_RADIUS) return false;
+    if (holder !== undefined || dist(seat, { x: p.tx, y: p.ty }) > (seat.radius ?? SEAT_SERVER_RADIUS)) return false;
     this.occupy(p, seat);
     return true;
   }
 
-  private occupy(p: Peer<C>, seat: SeatSlot): void {
+  /** slide = 같은 배·벤치 안에서 옮겨 앉기. 움직이는 자리(조각배)로 옮겨 앉으면 위치는 그대로 둔다 (배가 물 위에 있다) */
+  private occupy(p: Peer<C>, seat: SeatSlot, slide = false): void {
     const seatId = seat.id;
     // 한 사람당 한 자리. DO는 한 번에 한 이벤트만 처리하므로 점유와 해제 사이에 다른 요청이 끼어들 수 없다
     // (같은 빈 자리로 두 명이 동시에 옮기면 먼저 처리된 한 명만 앉고, 다른 한 명은 seatDenied).
@@ -644,8 +679,10 @@ export class ChannelCore<C extends object> {
     }
     this.seats.set(seatId, p.sid);
     p.seatId = seatId;
-    p.x = p.tx = seat.x;
-    p.y = p.ty = seat.y;
+    if (!(seat.mobile && slide)) {
+      p.x = p.tx = seat.x;
+      p.y = p.ty = seat.y;
+    }
     p.state = seat.state;
     p.dir = seat.facing;
     this.chasing.delete(p.sid);
@@ -684,6 +721,67 @@ export class ChannelCore<C extends object> {
     p.y = p.ty = to.y;
     this.chasing.delete(p.sid);
     this.markDirty(p); // 96px 넘게 떨어지면 클라이언트가 보간 없이 스냅한다
+  }
+
+  // ── 22번 황금 고블린(보너스 요정) ── (판정은 goblin.ts GoblinCore, 여기서는 알림·증서만 잇는다)
+
+  /** 고블린 기능: 월드 채널이고 증서를 서명할 수 있을 때만 */
+  private get goblinOn(): boolean {
+    return !this.cfg.room && !!this.host.signGrant;
+  }
+
+  /** 저장해 둔 고블린 상태 (DO 생성자) */
+  restoreGoblin(raw: unknown): void {
+    if (this.goblinOn) this.goblin.restore(raw);
+  }
+
+  /** DO가 고블린 때문에 깨어나야 하는 시각 (없으면 null) */
+  goblinDue(): number | null {
+    return this.goblinOn ? this.goblin.due(this.online) : null;
+  }
+
+  /** 시간이 흘렀다: 사라짐·등장을 알린다. 메시지·입장·알람마다 부른다 (비교 몇 번뿐) */
+  goblinCheck(now: number): void {
+    if (!this.goblinOn) return;
+    const r = this.goblin.check(now, this.online);
+    if (r.gone) this.broadcast(encodeEvent({ t: "goblinGone", id: r.gone }));
+    if (r.spawned) this.broadcast(encodeEvent({ t: "goblin", g: r.spawned }));
+    if (r.changed) this.host.goblinChanged?.(this.goblin.state);
+  }
+
+  /** 개발용 훅: 지금 바로 나오게 한다 (이미 나와 있으면 그대로). 접속자가 없으면 null */
+  forceGoblin(now: number): GoblinState["cur"] {
+    if (!this.goblinOn || this.online === 0) return null;
+    this.goblinCheck(now);
+    if (!this.goblin.visible(now)) {
+      this.broadcast(encodeEvent({ t: "goblin", g: this.goblin.spawn(now) }));
+      this.host.goblinChanged?.(this.goblin.state);
+    }
+    return this.goblin.state.cur;
+  }
+
+  /** 잡기 요청: 가장 먼저 닿은 한 명만. 위치는 서버가 아는 값(마지막 보고·서버 추적 위치 중 가까운 쪽)으로 잰다 */
+  private onGoblinClaim(p: Peer<C>, id: string, now: number): void {
+    if (!this.goblinOn || !p.conn) return;
+    this.goblinCheck(now);
+    const points = this.goblin.claim(id, p.visitorId, [{ x: p.tx, y: p.ty }, { x: p.x, y: p.y }], now);
+    if (points === null) return;
+    this.host.goblinChanged?.(this.goblin.state);
+    this.broadcast(encodeEvent({ t: "goblinCaught", id, sid: p.sid, name: p.name, points }));
+    const conn = p.conn;
+    const exp = Math.floor(now / 1000) + GOBLIN_GRANT_TTL_SEC;
+    this.host.signGrant!({ kind: "goblin", visitorId: p.visitorId, points, nonce: id, exp }).then(
+      (grant) => {
+        if (!grant) return;
+        this.goblin.setGrant(id, grant);
+        this.host.goblinChanged?.(this.goblin.state);
+        // 그 사이 다시 접속했으면 새 소켓으로 (welcome이 grantFor로 한 번 더 보내기도 한다 — 웹이 한 번만 지급)
+        const cur = this.peers.get(this.byVisitor.get(p.visitorId) ?? -1);
+        const to = cur?.conn ?? conn;
+        this.host.send(to, encodeEvent({ t: "goblinGrant", id, grant, points }));
+      },
+      () => {},
+    );
   }
 
   // ── 틱 ──

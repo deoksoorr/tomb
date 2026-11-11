@@ -20,6 +20,7 @@ import {
 } from "./character";
 import { derive, expToNext } from "./formulas";
 import { evaluate, FINISH_GRACE_SEC } from "./rewards";
+import { STARRY_NIGHT_BONUS, starryNight } from "../stargaze";
 import type { z } from "zod";
 import type { CharacterActionSchema, ShopActionSchema } from "./schemas";
 import { getRpgStore, RUNS_PER_HOUR, type RpgStore } from "./store";
@@ -178,7 +179,10 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       return { state: { ...dr.state, runs: dr.state.runs + 1 }, result: { levelsGained: g.levelsGained, lost: dr.lost } };
     }),
   );
-  const earned = v.points > 0 ? (await earnPoints(acct, "hunt", v.points, ipHash)).earned : 0;
+  // 22번: 별자리 잇기를 진짜 맑은 밤(판 시작 시각, KST)에 했으면 포인트 보너스
+  const nightBonus = t.g === "stars" && starryNight(t.t);
+  const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
+  const earned = pointsRaw > 0 ? (await earnPoints(acct, "hunt", pointsRaw, ipHash)).earned : 0;
   await store.addDaily(acct, kstDay(now), { points: earned, runs: 1, exp: v.exp });
   // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터)
   if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null))
@@ -187,9 +191,10 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
     reward: {
       score: v.score,
       exp: v.exp,
-      pointsRaw: v.points,
+      pointsRaw,
       points: earned,
-      capped: earned < v.points,
+      capped: earned < pointsRaw,
+      ...(nightBonus ? { nightBonus: true } : {}),
       drops: v.drops,
       levelsGained: applied.levelsGained,
       newLevel: state.level,

@@ -218,4 +218,32 @@ describe("1인 자리 (좌석 체계 공통)", () => {
     // 의자 id와 겹치지 않는다
     expect(SEATS.some((s) => s.id.includes("_"))).toBe(false);
   });
+
+  it("50번: 조각배는 정해진 자리만(움직이는 자리), 시소·트램펄린·회전목마는 소품 자리", async () => {
+    const { seatSlot, spotSeatId, spotKindOfState, BOATS, BOAT_SEATS, boatSeatById, SPOT_KINDS, STATE_NAMES, isStateId, decodeSnapshot, encodeSnapshot } = await import("./index");
+    expect(BOATS.length).toBeGreaterThanOrEqual(2);
+    expect(BOATS.some((b) => b.seats === 2)).toBe(true);
+    expect(new Set(BOAT_SEATS.map((b) => b.id)).size).toBe(BOAT_SEATS.length);
+    for (const b of BOAT_SEATS) {
+      expect(b.id).toBe(spotSeatId("boat", b.x, b.y));
+      expect(seatSlot(b.id)).toMatchObject({ kind: "boat", state: STATE.boat, mobile: true, furnitureId: b.boatId, radius: SPOT_KINDS.boat.radius });
+      expect(boatSeatById(b.id)).toBe(b);
+    }
+    // 아무 좌표의 배 자리는 없다
+    expect(seatSlot(spotSeatId("boat", 600, 860))).toBeUndefined();
+    for (const k of ["seesaw", "trampoline", "carousel"] as const) {
+      const id = spotSeatId(k, 950, 640);
+      expect(seatSlot(id)).toMatchObject({ kind: k, state: STATE[k], x: 950, y: 640, furnitureId: null });
+      expect(seatSlot(id)?.mobile).toBeUndefined();
+      expect(spotKindOfState(STATE[k])).toBe(k);
+    }
+    expect(spotKindOfState(STATE.boat)).toBe("boat");
+    // 새 상태 값은 바이너리로 오가고, 범위 밖은 여전히 거절
+    expect(STATE_NAMES.length).toBe(15);
+    expect(STATE_NAMES[STATE.carousel]).toBe("carousel");
+    expect(isStateId(14)).toBe(true);
+    expect(isStateId(15)).toBe(false);
+    const snap = decodeSnapshot(encodeSnapshot(1, [{ sid: 3, x: 1338, y: 868, state: STATE.boat, dir: DIR.right }]));
+    expect(snap?.entries[0]).toEqual({ sid: 3, x: 1338, y: 868, state: STATE.boat, dir: DIR.right });
+  });
 });

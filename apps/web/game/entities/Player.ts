@@ -26,6 +26,13 @@ const SNAP_MS = 160;
 export const SWIM_SPEED = 0.6;
 export const DIVE_SPEED = 0.45;
 
+/** 붙어 있는 자세(앵커): 나무·그네·해먹 + 50번 시소·트램펄린·회전목마 */
+export const ATTACH_KINDS = ["hang", "swing", "hammock", "seesaw", "trampoline", "carousel"] as const;
+export type AttachKind = (typeof ATTACH_KINDS)[number];
+export function isAttachKind(k: string): k is AttachKind {
+  return (ATTACH_KINDS as readonly string[]).includes(k);
+}
+
 export type SeatRequester = {
   sit(seatId: string): void;
   stand(): void;
@@ -59,6 +66,8 @@ export class Player {
   current: ((x: number, y: number) => { vx: number; vy: number }) | null = null;
   /** 옆자리로 옮겨 앉는 중이면 원래 좌석 (서버가 거절하면 되돌아간다) */
   private moveFrom: Seat | null = null;
+  /** 조각배(50번)에 타고 있으면 그 배 자리 id. 위치는 씬의 BoatRide가 물 위로 옮긴다 (물리 바디 끔) */
+  boatSeatId: string | null = null;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -100,6 +109,10 @@ export class Player {
   get inWater(): boolean {
     return this.state === "swim" || this.state === "dive";
   }
+  /** 조각배에 타고 있다 */
+  get inBoat(): boolean {
+    return this.boatSeatId !== null;
+  }
 
   /** 네트워크로 보낼 논리 상태. 의자에 앉으면 스냅 도중에도 좌석 앵커를 보낸다 */
   netPose(out: NetPose): NetPose {
@@ -128,7 +141,7 @@ export class Player {
       this.leaveAnchor(now);
       return false;
     }
-    if (this.inWater) return false;
+    if (this.inWater || this.inBoat) return false;
     if (!canJump(now, this.airborne, this.landedAt) || !this.body.enable) return false;
     this.airborne = true;
     this.jumpStart = now;
@@ -181,6 +194,8 @@ export class Player {
       this.onLand?.();
     }
     resolveMove(input, this.dir, this.move);
+    // 조각배: 이동은 씬(BoatRide)이 노 젓기로 처리한다
+    if (this.boatSeatId) return false;
     if (this.anchor) {
       if (!this.move.moving) {
         this.view.apply(this.state, this.dir, now);
@@ -264,7 +279,7 @@ export class Player {
    * 나무에 매달리기 / 그네 타기: (ax, ay)에 붙는다. depth: 그 오브젝트 앞에 그리도록.
    * spotId: 이 자리의 1인 자리 id (점유 요청은 씬이 보낸다 — 일어서기(stand)가 먼저 나가야 해서)
    */
-  attach(kind: "hang" | "swing" | "hammock", ax: number, ay: number, depth: number, now: number, seats: SeatRequester | null, spotId: string | null = null): void {
+  attach(kind: AttachKind, ax: number, ay: number, depth: number, now: number, seats: SeatRequester | null, spotId: string | null = null): void {
     if (this.airborne) this.endJump(now);
     if (this.sitting) this.stand(now, seats);
     if (this.anchor) this.leaveAnchor(now);
@@ -278,6 +293,67 @@ export class Player {
     this.view.depthOverride = depth;
     this.view.apply(this.state, this.dir, now);
     this.snap = this.scene.tweens.add({ targets: this.view.sprite, x: ax, y: ay, duration: 140, ease: "Sine.easeOut" });
+  }
+
+  /** 조각배에 탄다 (나루터에 매어 둔 자리 x,y로 미끄러지듯). 점유 요청은 씬이 보낸다 */
+  board(seatId: string, x: number, y: number, dir: DirId, now: number, seats: SeatRequester | null, snap = true): void {
+    if (this.airborne) this.endJump(now);
+    if (this.sitting) this.stand(now, seats);
+    if (this.anchor) this.leaveAnchor(now);
+    this.cancelSnap();
+    this.diving = false;
+    this.boatSeatId = seatId;
+    this.state = "boat";
+    this.dir = dir;
+    this.body.setVelocity(0, 0);
+    this.body.enable = false;
+    this.view.depthOverride = null;
+    this.view.apply(this.state, this.dir, now);
+    if (snap)
+      this.snap = this.scene.tweens.add({
+        targets: this.view.sprite,
+        x,
+        y,
+        duration: 180,
+        ease: "Sine.easeOut",
+        onComplete: () => {
+          this.snap = null;
+        },
+      });
+    else this.view.sprite.setPosition(x, y);
+  }
+
+  /** 배 위에서의 위치·방향 (BoatRide가 매 프레임). 타는 동작(스냅)이 끝나기 전엔 위치를 건드리지 않는다 */
+  boatTo(x: number, y: number, dir: DirId, now: number): void {
+    if (!this.boatSeatId) return;
+    if (!this.snap) this.view.sprite.setPosition(x, y);
+    if (dir !== this.dir) {
+      this.dir = dir;
+      this.view.apply(this.state, this.dir, now);
+    }
+  }
+
+  /** 같은 배 안에서 자리를 옮긴다 (2인승 뒷자리 → 노 젓는 앞자리) */
+  boardSlide(seatId: string, x: number, y: number): void {
+    if (!this.boatSeatId) return;
+    this.boatSeatId = seatId;
+    this.snap?.stop();
+    this.snap = null;
+    this.view.sprite.setPosition(x, y);
+  }
+
+  /** 배에서 내린다 (뭍 x,y로) */
+  leaveBoat(x: number, y: number, now: number): void {
+    if (!this.boatSeatId) return;
+    this.boatSeatId = null;
+    this.snap?.stop();
+    this.snap = null;
+    this.view.depthOverride = null;
+    this.state = "idle";
+    this.view.apply(this.state, this.dir, now);
+    this.syncPose();
+    this.body.enable = true;
+    this.body.reset(x, y);
   }
 
   /** 나무·그네에서 내려온다 */
@@ -378,6 +454,10 @@ export class Player {
     if (this.anchor) {
       this.anchor = null;
       this.spotId = null;
+      this.view.depthOverride = null;
+    }
+    if (this.boatSeatId) {
+      this.boatSeatId = null;
       this.view.depthOverride = null;
     }
     this.diving = false;

@@ -81,7 +81,9 @@ export type GameEvents = {
    * 월드의 특별한 장소와 상호작용: 사냥터 입구 / 분양 사무소(하우징) / 성황당 → UI가 해당 창을 연다.
    * 주거 구역(메인 맵의 분양 마을): 집 문이면 houseId(그 집으로 들어가기), 빈 필지 팻말이면 lot(그 번지로 분양 문의)
    */
-  "portal:open": { kind: "hunt" | "housing" | "shrine"; houseId?: string; lot?: number };
+  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish"; houseId?: string; lot?: number };
+  /** 22번 황금 고블린을 내가 가장 먼저 잡았다 → UI가 증서로 /api/goblin에 보상을 받는다 */
+  "goblin:grant": { id: string; grant: string; points: number };
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
   "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house" };
   /** 실시간 서버가 이 화면을 옛 버전이라 거절함(4010, 큰 패치) → UI가 업데이트 창을 띄운다 (sticky) */
@@ -110,6 +112,12 @@ export type GameEvents = {
   "rpg:hud": RpgHud;
   /** 판이 끝남 (시간 끝·전멸·클리어·포기). UI가 결과를 서버로 보내고 결과 창을 연다. 월드는 이미 다시 보인다 */
   "rpg:ended": { result: RunResult; aborted: boolean };
+
+  // ── 낚시·채집 (4·32번) ── (game/world/forage, components/forage)
+  /** 낚시 자리에 앉음 / NPC 앞 / 채집 지점에서 E → UI가 낚시 창·판매 창·채집(게이지·곤충 미니게임)을 연다 */
+  "forage:use": ForageUse;
+  /** 낚시 자리에서 일어났거나 자리를 놓쳤다 → UI가 낚시 창을 닫는다 */
+  "forage:left": undefined;
 };
 
 
@@ -170,6 +178,8 @@ export type UiEvents = {
   "audio:settings": { volume: number; muted: boolean };
   /** 상점 UI가 닫힘 → 게임 키 입력 복귀 등 */
   "shop:closed": undefined;
+  /** 50번 소원 분수: 동전 던지기가 서버에서 처리됐다 → 게임이 동전이 날아가 퐁당하는 연출 + 같은 채널에 물 튀기기 */
+  "wish:thrown": { amount: number };
 
   // ── 하우징 ── (game/housing, components/housing)
   /** 집에 들어간다 (분양 사무소 → 내 집/다른 사람 집). 월드는 숨기고 연결은 유지한다 */
@@ -206,7 +216,26 @@ export type UiEvents = {
   "rpg:quit": undefined;
   /** 함께 사냥: 정해진 문장 말풍선 (PHRASES id) — 내 머리 위에 띄우고 같은 방에 보낸다 */
   "rpg:say": { id: string };
+
+  // ── 낚시·채집 (4·32번) ──
+  /** 지금 나에게 피어 있는 채집 지점 id (sticky). 게임이 그 지점만 그리고 상호작용을 붙인다 */
+  "forage:nodes": { ids: string[] };
+  /** 내 낚싯대 연출 단계. tension 0..1 (감는 중 줄 팽팽함) */
+  "forage:rod": { phase: ForageRodPhase; tension?: number };
+  /** 채집 게이지: start(ms 동안 머리 위 막대) / end(ok면 그 지점을 지운다) */
+  "forage:gauge": { phase: "start"; ms: number; kind: string; node: string } | { phase: "end"; ok: boolean; node: string };
+  /** 잡은 것·캔 것을 머리 위로 띄운다 */
+  "forage:pop": { itemId: string };
+  /** 낚시 그만하기 (일어난다) */
+  "forage:leave": undefined;
+  /** 판매 동전 소리 */
+  "forage:coin": undefined;
+  /** 도감 열기 (UI 안에서 쓴다: HUD 버튼·메뉴·남의 도감) */
+  "forage:dex": { accountId?: string; name?: string | null };
 };
+
+export type ForageUse = { kind: "fish"; spot: string; water: "lake" | "river" } | { kind: "npc"; npc: "fishmonger" | "collector" } | { kind: "node"; node: string };
+export type ForageRodPhase = "idle" | "cast" | "wait" | "nibble" | "bite" | "reel" | "catch" | "escape" | "snap";
 
 type AllEvents = GameEvents & UiEvents;
 type Handler<K extends keyof AllEvents> = (payload: AllEvents[K]) => void;
@@ -227,6 +256,7 @@ const STICKY = new Set<keyof AllEvents>([
   "scene:changed",
   "app:outdated",
   "village:data",
+  "forage:nodes",
 ]);
 
 class Bridge {

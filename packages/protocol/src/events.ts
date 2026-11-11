@@ -1,4 +1,5 @@
 import { ACT_KINDS, MAX_MESSAGE_BYTES, isPhraseId, type ActKind, type PhraseId } from "./constants";
+import { GOBLIN_ID_RE, type GoblinInfo } from "./npc";
 import type { PeerInfo, Sid } from "./types";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
@@ -28,7 +29,9 @@ export type C2S =
   /** 한 번 하는 동작 (종 치기 등). 서버가 같은 채널에 중계한다 */
   | { t: "act"; kind: ActKind }
   /** 정해진 문장 말풍선 (PHRASES id) */
-  | { t: "say"; id: PhraseId };
+  | { t: "say"; id: PhraseId }
+  /** 22번: 황금 고블린에 닿았다 (서버가 거리·먼저 온 순서를 판정한다) */
+  | { t: "goblin"; id: string };
 
 // ── 서버 → 클라이언트 ──
 export type WelcomeMsg = {
@@ -47,6 +50,10 @@ export type WelcomeMsg = {
    * 없으면(이전 서버) 클라이언트는 소품 자리를 요청하지 않고 예전처럼 혼자 붙는다.
    */
   spots?: boolean;
+  /** 22번: 서버 시계(ms). 고양이·유령·고블린 움직임을 모두가 같은 시각으로 계산한다 (없으면 이전 서버 → 내 시계) */
+  now?: number;
+  /** 22번: 지금 나와 있는(아직 아무도 못 잡은) 황금 고블린 */
+  goblin?: GoblinInfo;
 };
 
 export type S2C =
@@ -62,7 +69,16 @@ export type S2C =
   /** sync 응답: 나를 제외한 현재 접속자 전체와 좌석. 클라이언트는 이걸로 원격 아바타를 맞춘다 */
   | { t: "peers"; peers: PeerInfo[]; seats: Record<string, Sid> }
   | { t: "act"; sid: Sid; kind: ActKind; x: number; y: number }
-  | { t: "say"; sid: Sid; id: PhraseId };
+  | { t: "say"; sid: Sid; id: PhraseId }
+  // ── 22번 황금 고블린 (옛 클라이언트는 모르는 t라 그냥 버린다) ──
+  /** 나타났다 */
+  | { t: "goblin"; g: GoblinInfo }
+  /** 아무도 못 잡고 사라졌다 */
+  | { t: "goblinGone"; id: string }
+  /** sid가 잡았다 (모두에게). name = 잡은 사람 이름 */
+  | { t: "goblinCaught"; id: string; sid: Sid; name: string; points: number }
+  /** 잡은 사람에게만: 보상 증서 (웹 /api/goblin이 검증해 포인트를 준다) */
+  | { t: "goblinGrant"; id: string; grant: string; points: number };
 
 export function encodeEvent(msg: C2S | S2C): string {
   return JSON.stringify(msg);
@@ -107,6 +123,8 @@ export function parseC2S(text: string): C2S | null {
       return { t: "sync" };
     case "say":
       return isPhraseId(m.id) ? { t: "say", id: m.id } : null;
+    case "goblin":
+      return typeof m.id === "string" && GOBLIN_ID_RE.test(m.id) ? { t: "goblin", id: m.id } : null;
     case "act":
       return typeof m.kind === "string" && (ACT_KINDS as readonly string[]).includes(m.kind) ? { t: "act", kind: m.kind as ActKind } : null;
     default:

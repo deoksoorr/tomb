@@ -13,6 +13,7 @@ export type MenuTarget =
   | "passed"
   | "bag"
   | "hunt"
+  | "dex"
   | "housing"
   | "fireworks"
   | "ranking"
@@ -59,6 +60,7 @@ export default function MenuSheet({
   const entries: Entry[] = [
     { target: "bag", icon: "bag", label: "가방", badge: bagCount ? String(bagCount) : undefined },
     { target: "hunt", icon: "sword", label: "사냥터" },
+    { target: "dex", icon: "book", label: "도감" },
     { target: "housing", icon: "house", label: "집·분양 마을" },
     ...(fireworkCount > 0
       ? [{ target: "fireworks" as const, icon: "spark" as const, label: "폭죽 쏘기", badge: String(fireworkCount) }]

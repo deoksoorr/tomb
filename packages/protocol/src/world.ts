@@ -216,12 +216,68 @@ export const BOAT_MOORING = { x: 1336, y: 886 } as const;
 /** 호수 낚시 잔교 (4번 낚시 자리 예정). 뭍에서 호수로 뻗은 판자 */
 export const LAKE_PIER = { x: 1560, y: 1092, w: 92, h: 16 } as const;
 
+// ── 낚시 자리 (4번) ── 호수 잔교·호숫가·강둑. 자리마다 1인(SPOT_KINDS.fish, 서버 좌석 — 정해진 자리만).
+// 앵커(x,y) = 앉는 발 위치(물가 뭍), facing = 물 쪽. 자리 id = spotSeatId("fish", x, y) — 예 "f_1646_1100".
+// 무엇이 잡히는지(호수/강)는 water로 웹 서버(apps/web/lib/forage)가 정한다. 실시간 서버는 점유만 판정한다.
+export type FishingSpot = { id: string; water: "lake" | "river"; x: number; y: number; facing: DirId };
+const fishSpot = (water: FishingSpot["water"], x: number, y: number, facing: DirId): FishingSpot => ({ id: `f_${x}_${y}`, water, x, y, facing });
+export const FISHING_SPOTS: readonly FishingSpot[] = [
+  // 호수: 잔교 끝·잔교 양옆·북쪽 물가·남쪽 물가
+  fishSpot("lake", 1646, 1100, DIR.right),
+  fishSpot("lake", 1612, 1093, DIR.up),
+  fishSpot("lake", 1612, 1107, DIR.down),
+  fishSpot("lake", 1792, 974, DIR.down),
+  fishSpot("lake", 1760, 1224, DIR.up),
+  // 강: 북쪽 둑(아래를 본다)·남쪽 둑(위를 본다)
+  fishSpot("river", 220, 852, DIR.down),
+  fishSpot("river", 700, 862, DIR.down),
+  fishSpot("river", 900, 845, DIR.down),
+  fishSpot("river", 1150, 858, DIR.down),
+  fishSpot("river", 760, 906, DIR.up),
+  fishSpot("river", 1400, 914, DIR.up),
+];
+/** 이 좌석 id의 낚시 자리 (없으면 undefined) */
+export function fishingSpotById(id: string): FishingSpot | undefined {
+  return FISHING_SPOTS.find((s) => s.id === id);
+}
+
+// ── 조각배 (50번) ── 나루터(FERRY_DOCK)에서 E → 배에 탄다. 자리마다 1인(SPOT_KINDS.boat, 서버 좌석).
+// 1인승 2척(나루터 동쪽) + 2인승 1척(서쪽, 앞자리 = 노 젓는 사람, 뒷자리 = 같이 타는 사람).
+// 앵커(x,y) = 나루터에 매어 둔 자리. 타면 위치는 클라이언트가 물 위로 옮기고(서버는 mobile 자리라 따라간다),
+// 내리면 배는 잠시 뒤 이 자리로 돌아온다 (클라이언트 연출). 자리 id = spotSeatId("boat", x, y) — 예 "b_1338_872"
+export type Boat = { id: string; x: number; y: number; seats: 1 | 2; facing: DirId };
+export const BOATS: readonly Boat[] = [
+  { id: "boatA", x: 1338, y: 872, seats: 1, facing: DIR.right },
+  { id: "boatB", x: 1338, y: 895, seats: 1, facing: DIR.right },
+  { id: "boatC", x: 1264, y: 880, seats: 2, facing: DIR.left },
+];
+/** 2인승 뒷자리: 앞자리(노 젓는 자리)에서 뱃머리 반대쪽으로 이만큼 */
+export const BOAT_BACK_SEAT = 11;
+export type BoatSeat = { id: string; boatId: string; index: 0 | 1; x: number; y: number; facing: DirId };
+/** 배 자리 전부 (앞자리 index 0, 2인승 뒷자리 index 1) */
+export const BOAT_SEATS: readonly BoatSeat[] = BOATS.flatMap((b) => {
+  const back = b.facing === DIR.right ? -BOAT_BACK_SEAT : BOAT_BACK_SEAT;
+  const seats: BoatSeat[] = [{ id: `b_${b.x}_${b.y}`, boatId: b.id, index: 0, x: b.x, y: b.y, facing: b.facing }];
+  if (b.seats === 2) seats.push({ id: `b_${b.x + back}_${b.y}`, boatId: b.id, index: 1, x: b.x + back, y: b.y, facing: b.facing });
+  return seats;
+});
+/** 이 좌석 id의 배 자리 (없으면 undefined) */
+export function boatSeatById(id: string): BoatSeat | undefined {
+  return BOAT_SEATS.find((s) => s.id === id);
+}
+
 // ── 별 보기 언덕 ── 북서쪽 구석의 높은 대지. 남쪽·동쪽은 절벽이고 계단(HILL_STAIRS)으로만 오른다
 export const HILL = { x: 32, y: 32, w: 416, h: 272 } as const;
 /** 계단 (절벽 사이의 틈, 이 x 범위로만 오르내린다) */
 export const HILL_STAIRS = { x: 288, w: 32 } as const;
 /** 절벽 두께 (언덕 아랫변 HILL.y + HILL.h 부터) */
 export const HILL_CLIFF = 16;
+/**
+ * 망원경 (22번·별 보기 언덕): 언덕 동쪽 끝에서 마을을 내려다본다. 받침 가운데(발 위치).
+ * 앞자리(TELESCOPE_SPOT)에서 E → 별자리 잇기. 1인 자리(SPOT_KINDS.telescope, id = spotSeatId("telescope", x, y))
+ */
+export const TELESCOPE = { x: 404, y: 108 } as const;
+export const TELESCOPE_SPOT = { x: TELESCOPE.x, y: TELESCOPE.y + 10 } as const;
 
 // ── 의자와 벤치 ── 좌석 점유는 서버가 판정한다.
 export type FurnitureKind = "bench" | "chair";
@@ -364,17 +420,44 @@ export function seatsNear(x: number, y: number, radius: number): Seat[] {
 //   `${code}_${x}_${y}` (예: 나무 "h_60_90", 그네 "s_140_96"). 앵커 = 그 자리를 차지한 캐릭터의 발 위치(MOVE x,y).
 // 서버는 형식(정규형: 같은 자리는 id가 하나뿐)과 플레이어와의 거리만 확인한다. 새 1인 자리는 SPOT_KINDS에 한 줄 더하면 된다.
 
-export type SpotKind = "hang" | "swing" | "hammock";
-export const SPOT_KINDS: Readonly<Record<SpotKind, { code: string; state: StateId; facing: DirId }>> = {
+export type SpotKind = "hang" | "swing" | "hammock" | "boat" | "seesaw" | "trampoline" | "carousel" | "telescope" | "mat" | "fish";
+/**
+ * mobile = 앉은 채 움직이는 자리(조각배): 서버는 위치를 앵커에 고정하지 않고 MOVE를 따라간다 (속도 검증은 그대로).
+ * radius = 서버가 점유 요청을 받을 때 허용하는 거리 (없으면 SEAT_SERVER_RADIUS)
+ * fixed = 정해진 자리만 (BOATS). 형식만 맞는 아무 좌표의 id는 받지 않는다
+ */
+export type SpotKindDef = { code: string; state: StateId; facing: DirId; mobile?: boolean; radius?: number; fixed?: boolean; shared?: boolean };
+export const SPOT_KINDS: Readonly<Record<SpotKind, SpotKindDef>> = {
   /** 나무에 매달리기 (앵커 = 줄기 앞 발 위치) */
   hang: { code: "h", state: STATE.hang, facing: DIR.down },
   /** 그네 타기 (앵커 = 그네 좌석) */
   swing: { code: "s", state: STATE.swing, facing: DIR.down },
   /** 해먹에 눕기 (앵커 = 해먹 천 가운데) */
   hammock: { code: "m", state: STATE.hammock, facing: DIR.down },
+  // ── 50번 조각배·광장 놀거리 ── (아래 "조각배" 절 참고)
+  /** 조각배 자리 (앵커 = 나루터에 매어 둔 자리). 타고 나면 물 위를 움직인다 */
+  boat: { code: "b", state: STATE.boat, facing: DIR.right, mobile: true, radius: 72, fixed: true },
+  /** 시소 한쪽 끝 (앵커 = 앉는 자리) */
+  seesaw: { code: "e", state: STATE.seesaw, facing: DIR.down },
+  /** 트램펄린 (앵커 = 매트 가운데) */
+  trampoline: { code: "j", state: STATE.trampoline, facing: DIR.down },
+  /** 회전목마 목마 하나 (앵커 = 그 목마의 기준 자리. 그림은 회전하지만 서버 위치는 앵커 그대로) */
+  carousel: { code: "r", state: STATE.carousel, facing: DIR.down },
+  // ── 22번 별 보기 언덕 ── shared = 평소 자세(서 있기·바닥 앉기)와 같은 상태라 MOVE만으로는 자리를 잡아 주지 않는다 (sit 요청으로만)
+  /** 망원경 앞 (앵커 = TELESCOPE_SPOT). 서서 위를 본다 */
+  telescope: { code: "t", state: STATE.idle, facing: DIR.up, shared: true },
+  /** 돗자리에 앉기 (앵커 = 돗자리 가운데) */
+  mat: { code: "n", state: STATE.sitGround, facing: DIR.down, shared: true },
+  // ── 4번 낚시 ── 물가에 앉아 낚싯대를 드리운다 (바닥 앉기와 같은 상태라 shared). 정해진 자리(FISHING_SPOTS)만
+  /** 낚시 자리 (앵커 = 앉는 발 위치, 방향은 자리마다 물 쪽) */
+  fish: { code: "f", state: STATE.sitGround, facing: DIR.down, shared: true, fixed: true },
 };
 const SPOT_BY_CODE = new Map(Object.entries(SPOT_KINDS).map(([kind, v]) => [v.code, kind as SpotKind]));
-const SPOT_BY_STATE = new Map<number, SpotKind>(Object.entries(SPOT_KINDS).map(([kind, v]) => [v.state, kind as SpotKind]));
+const SPOT_BY_STATE = new Map<number, SpotKind>(
+  Object.entries(SPOT_KINDS)
+    .filter(([, v]) => !v.shared)
+    .map(([kind, v]) => [v.state, kind as SpotKind]),
+);
 const SPOT_ID_RE = /^([a-z])_(0|[1-9]\d{0,4})_(0|[1-9]\d{0,4})$/;
 
 /** 소품 자리 id (좌표는 정수로 반올림) */
@@ -399,11 +482,20 @@ export type SeatSlot = {
   facing: DirId;
   state: StateId;
   furnitureId: string | null;
+  /** 앉은 채 움직이는 자리 (조각배). 서버는 위치를 앵커에 묶지 않는다 */
+  mobile?: boolean;
+  /** 점유 요청을 받는 거리 (없으면 SEAT_SERVER_RADIUS) */
+  radius?: number;
 };
 
 const seatSlots = new Map<string, SeatSlot>(
   SEATS.map((s) => [s.id, { id: s.id, kind: "seat", x: s.x, y: s.y, facing: s.facing, state: STATE.sitChair, furnitureId: s.furnitureId }]),
 );
+for (const b of BOAT_SEATS) {
+  const k = SPOT_KINDS.boat;
+  seatSlots.set(b.id, { id: b.id, kind: "boat", x: b.x, y: b.y, facing: b.facing, state: k.state, furnitureId: b.boatId, mobile: true, radius: k.radius });
+}
+for (const f of FISHING_SPOTS) seatSlots.set(f.id, { id: f.id, kind: "fish", x: f.x, y: f.y, facing: f.facing, state: SPOT_KINDS.fish.state, furnitureId: null });
 
 /** id → 자리 (의자·벤치 좌석 또는 형식이 맞는 소품 자리). 모르는 id면 undefined */
 export function seatSlot(id: string): SeatSlot | undefined {
@@ -416,7 +508,8 @@ export function seatSlot(id: string): SeatSlot | undefined {
   const y = Number(m[3]);
   if (!kind || x > 0xffff || y > 0xffff) return undefined;
   const k = SPOT_KINDS[kind];
-  return { id, kind, x, y, facing: k.facing, state: k.state, furnitureId: null };
+  if (k.fixed) return undefined; // 조각배처럼 정해진 자리만 있는 종류 (위 seatSlots에 없으면 없는 자리)
+  return { id, kind, x, y, facing: k.facing, state: k.state, furnitureId: null, ...(k.radius ? { radius: k.radius } : {}) };
 }
 
 // ── 생존 기간에 따른 묘비 외형 ──

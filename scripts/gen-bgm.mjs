@@ -2073,6 +2073,100 @@ const SFX2 = {
     notes(bus, [[0, 64, 0.5, 0.12], [0.16, 59, 0.5, 0.22]], (b, t, m, v, d, p) => pulse(b, t, m, v * 0.35, p, d, 0.5, { dec: 0.1, sus: 0.5 }));
     return { fadeOut: 0.06 };
   },
+  // ── 50번 조각배·광장 놀거리 ──
+  row: (bus, rng) => {
+    // 노 한 번 젓기: 노가 물을 가르는 '쏴아' (부풀었다 잦아드는 대역 잡음) + 노를 빼며 '찰방' + 물방울
+    const n = Math.round(0.55 * SR), x = white(n, rng), fc = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const u = i / n;
+      fc[i] = 700 + 900 * Math.sin(Math.PI * u);
+      x[i] *= Math.sin(Math.PI * u) ** 1.6;
+    }
+    svf(x, fc, 1.6, "bp");
+    place(bus, normPeak(x), 0.02, 0.32, -0.15);
+    place(bus, noiseHit(rng, 0.18, "bp", 1100, 0.8, 22, 0.01), 0.5, 0.22, 0.2);
+    for (let k = 0; k < 5; k++) place(bus, plink(rng, 600, 1500), 0.55 + rng.next() * 0.3, rng.range(0.03, 0.07), rng.range(-0.6, 0.6));
+    reverb(bus, { room: 0.5, damp: 0.6, wet: 0.12 });
+    return { fadeOut: 0.12, target: -18 };
+  },
+  "boat-board": (bus, rng) => {
+    // 배에 오르내릴 때: 나무 배가 '쿵' + 출렁이는 물 + 삐걱
+    glide(bus, 0.01, 0.16, (t) => 150 * Math.exp(-t * 9) + 70, 0.55, 0, { atk: 0.002, rel: 0.08 });
+    place(bus, noiseHit(rng, 0.09, "bp", 700, 1.2, 40), 0.01, 0.35, 0);
+    place(bus, noiseHit(rng, 0.45, "bp", 900, 0.6, 7, 0.06), 0.08, 0.25, 0.1);
+    for (let k = 0; k < 4; k++) place(bus, plink(rng, 500, 1200), 0.18 + rng.next() * 0.35, rng.range(0.03, 0.06), rng.range(-0.5, 0.5));
+    reverb(bus, { room: 0.45, damp: 0.6, wet: 0.1 });
+    return { fadeOut: 0.12 };
+  },
+  seesaw: (bus, rng) => {
+    // 시소 끝이 땅에 '통' + 받침이 '끼익'
+    glide(bus, 0, 0.14, (t) => 120 * Math.exp(-t * 12) + 60, 0.6, 0, { atk: 0.002, rel: 0.07 });
+    place(bus, noiseHit(rng, 0.06, "lp", 900, 0.8, 45), 0, 0.3, 0);
+    const sq = new Float32Array(Math.round(0.3 * SR));
+    let ph = 0;
+    for (let i = 0; i < sq.length; i++) {
+      ph += (34 + 18 * (i / sq.length)) * (1 + 0.2 * rng.bi()) / SR;
+      if (ph >= 1) {
+        ph -= 1;
+        sq[i] = rng.range(0.6, 1);
+      }
+    }
+    biquad(sq, "bp", 1400, 10);
+    for (let i = 0; i < sq.length; i++) sq[i] *= Math.sin((Math.PI * i) / sq.length);
+    place(bus, normPeak(sq), 0.08, 0.18, 0.25);
+    return { fadeOut: 0.08, target: -18 };
+  },
+  boing: (bus, rng) => {
+    // 트램펄린 '보잉': 낮게 눌렸다 튀어 오르는 떨리는 음 + 매트 '퉁'
+    glide(bus, 0, 0.5, (t) => (180 + 260 * (1 - Math.exp(-t * 9))) * (1 + 0.06 * Math.sin(TAU * 22 * t) * Math.exp(-t * 5)), 0.45, 0, { atk: 0.004, rel: 0.2 });
+    glide(bus, 0, 0.12, (t) => 90 * Math.exp(-t * 10) + 50, 0.5, 0, { atk: 0.002, rel: 0.06 });
+    place(bus, noiseHit(rng, 0.05, "lp", 600, 0.8, 50), 0, 0.2, 0);
+    return { fadeOut: 0.1, target: -18 };
+  },
+  wish: (bus, rng) => {
+    // 소원 분수: 동전 '팅' → 물에 '퐁당' → 맑은 종소리 셋
+    const ping = (t, f, v) => {
+      partial(bus, t, f, v, 10, 0, 0.001, 0.6);
+      partial(bus, t, f * 2.76, v * 0.3, 18, 0, 0.001, 0.6);
+    };
+    ping(0.01, 1568, 0.4);
+    ping(0.06, 2093, 0.3);
+    glide(bus, 0.42, 0.12, (t) => 380 + 900 * (t / 0.12), 0.35, 0, { atk: 0.002, rel: 0.05 });
+    place(bus, noiseHit(rng, 0.2, "bp", 1200, 0.8, 18, 0.005), 0.42, 0.2, 0);
+    for (let k = 0; k < 4; k++) place(bus, plink(rng, 700, 1700), 0.5 + rng.next() * 0.25, rng.range(0.03, 0.06), rng.range(-0.5, 0.5));
+    [79, 83, 86].forEach((m, k) => {
+      const f = mtof(m);
+      partial(bus, 0.62 + k * 0.11, f, 0.22, 3.2, -0.3 + 0.3 * k, 0.002, 1);
+      partial(bus, 0.62 + k * 0.11, f * 2, 0.04, 7, -0.3 + 0.3 * k, 0.002, 1);
+    });
+    reverb(bus, { room: 0.75, damp: 0.45, wet: 0.25 });
+    return { fadeOut: 0.3 };
+  },
+  "carousel-loop": (bus) => {
+    // 회전목마 오르골: 3박 왈츠 8마디(0.4초 박) — 끝을 이어 붙여 돈다. 마지막 마디는 가볍게 끝내 이음새가 덜 들린다
+    const beat = 0.4;
+    const mel = [
+      [76, 1], [79, 1], [84, 1], [83, 2], [79, 1], [81, 1], [79, 1], [76, 1], [74, 3],
+      [77, 1], [81, 1], [84, 1], [83, 2], [81, 1], [79, 1], [77, 1], [74, 1], [72, 3],
+    ];
+    let t = 0.01;
+    for (const [m, d] of mel) {
+      musicBox(bus, t, m, 0.32, 0.1);
+      t += d * beat;
+    }
+    // 반주: 마디 첫 박 베이스 + 둘째·셋째 박 화음 (C G7 C F | F C G7 C)
+    const chords = [[48, 64, 67], [43, 62, 65], [48, 64, 67], [41, 65, 69], [41, 65, 69], [48, 64, 67], [43, 62, 65], [48, 64, 67]];
+    chords.forEach(([b, x, y], k) => {
+      const t0 = 0.01 + k * 3 * beat;
+      musicBox(bus, t0, b + 12, 0.22, -0.2);
+      for (const j of [1, 2]) {
+        musicBox(bus, t0 + j * beat, x, 0.12, -0.25);
+        musicBox(bus, t0 + j * beat, y, 0.1, 0.25);
+      }
+    });
+    reverb(bus, { room: 0.6, damp: 0.5, wet: 0.18 });
+    return { fadeIn: 0.005, fadeOut: 0.06, lp: 7000 };
+  },
 };
 
 // ───────────────────────── 외부 무료 음원 ─────────────────────────
@@ -2349,6 +2443,8 @@ const SPECS = [
     ["monster-die", 0.8], ["levelup", 1.2], ["potion", 0.8], ["skill", 0.8], ["coin-drop", 0.8], ["defeat", 1.8], ["victory", 1.6], ["tick", 0.12], ["miss", 0.45],
     ["campfire", 16], ["say", 0.2],
   ].map(([kind, dur], k) => ({ pl: "sfx", file: kind, kind, seed: 520 + k, dur })),
+  // 50번 조각배·광장 놀거리
+  ...[["row", 0.9], ["boat-board", 0.75], ["seesaw", 0.5], ["boing", 0.6], ["wish", 1.6], ["carousel-loop", 9.6]].map(([kind, dur], k) => ({ pl: "sfx", file: kind, kind, seed: 600 + k, dur, kbps: kind === "carousel-loop" ? 64 : undefined })),
   // 날씨(비·천둥): 용량을 아끼려고 56kbps
   { pl: "sfx", file: "rain-loop", kind: "rain-loop", seed: 560, dur: 12, kbps: 56 },
   { pl: "sfx", file: "thunder", kind: "thunder", seed: 562, dur: 8, kbps: 56 },

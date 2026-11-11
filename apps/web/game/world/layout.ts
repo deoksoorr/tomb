@@ -1,5 +1,4 @@
 import {
-  BOAT_MOORING,
   BRIDGES,
   CAMPFIRES,
   DOCK_DECK,
@@ -42,6 +41,8 @@ import {
   type Furniture,
 } from "@tomb/protocol";
 import { facadeInfo } from "../housing/art";
+import { stargazeColliders, stargazeInteractables } from "./life/stargazeLayout";
+import { RIDE_KEEPOUT, rideColliders, rideInteractables } from "./rides";
 
 // 정적 맵 배치 (순수 데이터). 좌석·스폰·특별한 장소·강·필지 좌표는 packages/protocol/src/world.ts가 원본이고,
 // 여기서는 그 사이를 채우는 나무·석등·우물·그네·해먹·종루·꽃밭 등 소품과 바닥 종류, 물(강·호수), 물살, 충돌, 상호작용 대상을 정한다.
@@ -347,8 +348,7 @@ const HAND_PROPS: readonly PropDef[] = [
   P("reeds", 600, 856, 0),
   P("reeds", 120, 850, 1),
   P("reeds", 880, 848, 0),
-  // 나루터에 매어 둔 조각배 (배 작업이 이어 쓴다)
-  P("boat", BOAT_MOORING.x, BOAT_MOORING.y),
+  // 나루터의 조각배(BOATS)는 소품이 아니라 BoatRide.ts가 그린다 (타고 움직이니까)
   // ── 강 건너 ──
   P("hammock", HAMMOCKS[2].x, HAMMOCKS[2].y),
   P("swing", SWINGS[2].x, SWINGS[2].y),
@@ -393,6 +393,7 @@ function freeForProp(placed: readonly PropDef[], x: number, y: number, gap: numb
   for (const c of CAMPFIRES) if (Math.hypot(c.x - x, c.y - y) < 44) return false;
   for (const p of placed) if (Math.hypot(p.x - x, p.y - y) < (isTree(p.kind) ? gap : 12)) return false;
   for (const p of HAND_PROPS) if (Math.hypot(p.x - x, p.y - y) < (isTree(p.kind) || p.kind === "hammock" || p.kind === "swing" ? gap : 14)) return false;
+  for (const k of RIDE_KEEPOUT) if (Math.hypot(k.x - x, k.y - y) < k.r) return false; // 50번 광장 놀거리 (rides.ts)
   return true;
 }
 
@@ -573,6 +574,8 @@ export function staticColliders(): Rect[] {
     if (p.kind === "hammock") out.push(...hammockPosts(p));
   }
   out.push(...allCampfireColliders(), shopCollider(), officeCollider(), ...cliffColliders());
+  out.push(...stargazeColliders()); // 22번 별 보기 언덕 망원경 (life/stargazeLayout.ts)
+  out.push(...rideColliders()); // 50번 광장 놀거리 받침 (rides.ts)
   return out;
 }
 
@@ -731,7 +734,7 @@ export function groundKind(tx: number, ty: number): GroundKind {
 }
 
 // ── 상호작용 오브젝트 (E/탭) ── WorldScene이 가장 가까운 것을 골라 안내 문구를 띄우고 상호작용한다.
-export type InteractKind = "tree" | "swing" | "hammock" | "bell" | "well" | "water" | "portal" | "door" | "lot" | "dock";
+export type InteractKind = "tree" | "swing" | "hammock" | "bell" | "well" | "water" | "portal" | "door" | "lot" | "dock" | "wish" | "seesaw" | "trampoline" | "carousel" | "telescope" | "mat" | "forage";
 export type PortalKind = "hunt" | "housing" | "shrine";
 export type Interactable = {
   id: string;
@@ -750,6 +753,8 @@ export type Interactable = {
   lot?: number;
   /** 안내 문구 (예: "매달리기", "종 치기", "사냥터 들어가기") */
   label: string;
+  /** 4·32번 낚시·채집 (game/world/forage): "fish:{자리 id}" | "npc:{id}" | "node:{지점 id}" */
+  forage?: string;
 };
 
 const PORTALS: readonly Interactable[] = [
@@ -775,6 +780,9 @@ export function propInteractable(p: PropDef): Interactable | null {
       return { id, kind: "bell", x: p.x, y: p.y + 8, r: 16, ax: p.x, ay: p.y + 8, label: "종 치기" };
     case "well":
       return { id, kind: "well", x: p.x, y: p.y + 8, r: 16, ax: p.x, ay: p.y + 8, label: "우물에 동전 던지기" };
+    case "mat":
+      // 22번 별 보기 언덕: 돗자리 가운데에 앉는다 (1인 자리, 바닥 앉기)
+      return { id, kind: "mat", x: p.x, y: p.y - 3, r: 15, ax: p.x, ay: p.y - 3, label: "돗자리에 앉기" };
     default:
       return null;
   }
@@ -789,6 +797,8 @@ export function interactables(): Interactable[] {
       const i = propInteractable(p);
       if (i) out.push(i);
     }
+    out.push(...stargazeInteractables()); // 22번 망원경 (life/stargazeLayout.ts)
+    out.push(...rideInteractables()); // 50번 소원 분수·시소·트램펄린·회전목마 (rides.ts)
     fixedItems = out;
   }
   return fixedItems.slice();

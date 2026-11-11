@@ -1,5 +1,6 @@
 import { isPaidShape, type GraveShape } from "../graveShape";
 import { ghostCat, miniLantern } from "./extras";
+import { forageIconCanvas, isForageIcon } from "./forageIcons";
 import { GRAVE_STONE_H, graveCanvas } from "./graves";
 import { Grid, type Color } from "./pixel";
 
@@ -594,7 +595,8 @@ function base(itemId: string): HTMLCanvasElement {
     case "fw_letter":
       return fwLetter().toCanvas();
     default:
-      return unknown().toCanvas();
+      // 낚시·채집물 (4·32번: f_/b_/h_/o_/d_)
+      return forageIconCanvas(itemId) ?? unknown().toCanvas();
   }
 }
 
@@ -613,7 +615,7 @@ export function hasItemIcon(itemId: string): boolean {
     const shape = itemId.slice(3) as GraveShape;
     return shape in GRAVE_STONE_H && isPaidShape(shape);
   }
-  return ICON_IDS.includes(itemId);
+  return ICON_IDS.includes(itemId) || isForageIcon(itemId);
 }
 
 /** 아이콘 원본 크기: 묘비 디자인권은 32, 나머지는 16 */

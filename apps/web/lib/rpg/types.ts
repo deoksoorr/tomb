@@ -75,6 +75,8 @@ export type RunReward = {
   newLevel: number;
   /** 드롭 장비가 가방이 가득 차서 못 들어온 경우 */
   lostDrops: number;
+  /** 22번: 별자리 잇기를 맑은 밤에 해서 포인트 보너스를 받았다 */
+  nightBonus?: boolean;
 };
 
 export type RunFinishResponse = { reward: RunReward; view: RpgView };
@@ -93,6 +95,9 @@ export type RpgPlay = {
   hotbar: (SkillId | null)[];
   potions: Record<string, number>;
   equip: Record<GearSlot, string | null>;
+  /** 32번 곤충 채집: 벌레 잡기를 마을 수풀 그림(나비·반딧불이)으로. night면 반딧불이 */
+  theme?: "meadow";
+  night?: boolean;
 };
 
 /** 게임 → UI 상태 (초당 약 8번) */

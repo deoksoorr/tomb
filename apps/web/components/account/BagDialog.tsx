@@ -12,6 +12,7 @@ import { fittingLook } from "../shop/fitting";
 import { OutfitCanvas, useOutfitView, ViewControls } from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
+import ForageBag from "../forage/ForageBag";
 import ItemIcon from "../ui/ItemIcon";
 import { DollNote, DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
@@ -37,7 +38,7 @@ import {
 import styles from "./BagDialog.module.css";
 
 const OTHER_KINDS: ItemKind[] = ["firework", "decor", "graveStyle"];
-type BagTab = "wear" | "other";
+type BagTab = "wear" | "other" | "forage";
 
 /** 몸 위치에 맞춘 칸 배치: 등은 어깨 뒤, 목·손은 오른쪽, 오라는 몸 옆, 발은 아래, 펫은 발 옆 */
 const DOLL_AREAS = `"back head neck" "aura fig hand" "pet feet info"`;
@@ -103,6 +104,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
             [
               ["wear", `캐릭터 꾸미기 ${wardrobe.length}`],
               ["other", `폭죽·묘비 ${others.reduce((n, e) => n + e.count, 0)}`],
+              ["forage", "물고기·채집물"],
             ] as const
           ).map(([k, label]) => (
             <button
@@ -123,6 +125,8 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
         <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`}>
           {tab === "wear" ? (
             <Wardrobe entries={wardrobe} now={now} pending={pending} act={act} avatar={resolveAvatar(avatar, me, savedColor)} />
+          ) : tab === "forage" ? (
+            <ForageBag />
           ) : (
             <div className={styles.others}>
               {others.length === 0 && <p className={styles.empty}>폭죽·묘비 물건이 없어요. 상점에서 포인트로 살 수 있어요.</p>}

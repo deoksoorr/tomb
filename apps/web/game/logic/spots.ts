@@ -5,25 +5,42 @@ import { spotSeatId, type Sid, type SpotKind } from "@tomb/protocol";
 // 새 1인 자리(낚시 자리·채집 지점·집 안 가구 …)는 protocol SPOT_KINDS + 아래 SPOT_OF·문구에 한 줄씩 더하면 같은 흐름을 탄다.
 
 /** 상호작용 오브젝트 종류 → 1인 자리 종류. 여럿이 함께 쓰는 오브젝트(종·우물·물가 등)는 없다 */
-const SPOT_OF: Readonly<Record<string, SpotKind>> = { tree: "hang", swing: "swing", hammock: "hammock" };
+const SPOT_OF: Readonly<Record<string, SpotKind>> = { tree: "hang", swing: "swing", hammock: "hammock", telescope: "telescope", mat: "mat", seesaw: "seesaw", trampoline: "trampoline" };
 
 /** 누가 먼저 차지했을 때 안내 (E/탭을 눌렀을 때 토스트) */
 export const SPOT_TAKEN_TOAST: Readonly<Record<SpotKind, string>> = {
   hang: "누가 먼저 매달려 있어요",
   swing: "누가 먼저 타고 있어요",
   hammock: "누가 먼저 누워 있어요",
+  // 50번 조각배·광장 놀거리
+  boat: "그 배는 누가 타고 있어요",
+  seesaw: "누가 먼저 앉아 있어요",
+  trampoline: "누가 먼저 뛰고 있어요",
+  carousel: "누가 먼저 타고 있어요",
+  telescope: "누가 먼저 망원경을 보고 있어요",
+  mat: "누가 먼저 앉아 있어요",
+  fish: "누가 먼저 낚시하고 있어요",
 };
 /** 누가 차지한 자리 앞의 회색 안내 (키 안내 대신) */
 export const SPOT_TAKEN_HINT: Readonly<Record<SpotKind, string>> = {
   hang: "누가 매달려 있어요",
   swing: "누가 타고 있어요",
   hammock: "누가 누워 있어요",
+  boat: "누가 타고 있어요",
+  seesaw: "누가 앉아 있어요",
+  trampoline: "누가 뛰고 있어요",
+  carousel: "목마가 모두 찼어요",
+  telescope: "누가 별을 보고 있어요",
+  mat: "누가 앉아 있어요",
+  fish: "누가 낚시하고 있어요",
 };
 
-export type SpotTarget = { kind: string; ax: number; ay: number };
+/** forage = 4번 낚시 자리면 "fish:{자리 id}" (game/world/forage가 붙인 상호작용) */
+export type SpotTarget = { kind: string; ax: number; ay: number; forage?: string };
 
 /** 이 오브젝트의 1인 자리 (없으면 null) */
 export function spotOf(o: SpotTarget): { kind: SpotKind; id: string } | null {
+  if (o.forage?.startsWith("fish:")) return { kind: "fish", id: o.forage.slice(5) };
   const kind = SPOT_OF[o.kind];
   return kind ? { kind, id: spotSeatId(kind, o.ax, o.ay) } : null;
 }

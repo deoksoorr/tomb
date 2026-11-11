@@ -1,7 +1,9 @@
 import {
   AVATAR_COLORS,
+  BOAT_SEATS,
   CLOSE,
   DIR,
+  FISHING_SPOTS,
   SPAWN,
   STATE,
   decodeSnapshot,
@@ -905,5 +907,123 @@ describe("one spot, one person: tree hang / swing (39)", () => {
     const c = next.join("c", 11_000, { ...TREE });
     expect(welcome(c).seats).toEqual({ [H]: 1 });
     expect(next.core.peer(welcome(c).sid)).toMatchObject({ x: TREE.x, y: TREE.y + 9, seatId: null });
+  });
+});
+
+describe("rowboat: a moving one-person seat (50)", () => {
+  const A = BOAT_SEATS.find((b) => b.boatId === "boatA")!;
+  const C0 = BOAT_SEATS.find((b) => b.boatId === "boatC" && b.index === 0)!;
+  const C1 = BOAT_SEATS.find((b) => b.boatId === "boatC" && b.index === 1)!;
+  const DOCK = { x: 1302, y: 876 };
+
+  it("board from the dock (wider radius), one per boat seat; the server follows the rowing boat instead of pinning it", () => {
+    const { core, join } = setup();
+    const a = join("a", 0, DOCK);
+    const b = join("b", 0, { x: DOCK.x, y: DOCK.y - 4 });
+    core.message(a, send({ t: "sit", seatId: A.id }), 0);
+    core.message(b, send({ t: "sit", seatId: A.id }), 0);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: A.id });
+    expect(core.peer(1)).toMatchObject({ seatId: A.id, state: STATE.boat, x: A.x, y: A.y });
+    clear(a, b);
+    // 노를 저어 동쪽으로 (속도 예산 안에서 서버 위치가 따라간다), 자리는 그대로
+    core.message(a, move(A.x + 20, A.y + 4, STATE.boat, DIR.right), 1_000);
+    core.tick(1_050);
+    expect(core.peer(1)).toMatchObject({ seatId: A.id, state: STATE.boat, x: A.x + 20, y: A.y + 4 });
+    expect(snapshots(b)[0].entries).toContainEqual({ sid: 1, x: A.x + 20, y: A.y + 4, state: STATE.boat, dir: DIR.right });
+    // 내리면(물가에서 걷기) 자리가 풀린다
+    core.message(a, move(A.x + 20, A.y - 30, STATE.idle), 1_600);
+    expect(events(b)).toContainEqual({ t: "seat", seatId: A.id, sid: null });
+  });
+
+  it("only the fixed boat seats exist (no boats at arbitrary coordinates); far from the dock is denied", () => {
+    const { core, join } = setup();
+    const a = join("a", 0, { x: 600, y: 860 });
+    core.message(a, send({ t: "sit", seatId: "b_600_860" }), 0);
+    core.message(a, send({ t: "sit", seatId: A.id }), 0);
+    expect(events(a).filter((e) => e.t === "seatDenied")).toEqual([
+      { t: "seatDenied", seatId: "b_600_860" },
+      { t: "seatDenied", seatId: A.id },
+    ]);
+  });
+
+  it("two-seat boat: a passenger takes the back seat; when the rower leaves, the passenger slides forward without being teleported", () => {
+    const { core, join } = setup();
+    const r = join("r", 0, DOCK);
+    const p = join("p", 0, DOCK);
+    core.message(r, send({ t: "sit", seatId: C0.id }), 0);
+    core.message(p, send({ t: "sit", seatId: C1.id }), 0);
+    expect(core.peer(2)).toMatchObject({ seatId: C1.id, state: STATE.boat });
+    // 둘이 같이 저어 나간다
+    core.message(r, move(C0.x - 30, C0.y + 6, STATE.boat, DIR.left), 2_000);
+    core.message(p, move(C1.x - 30, C1.y + 6, STATE.boat, DIR.left), 2_000);
+    core.tick(2_050);
+    // 노 젓던 사람이 둑으로 내린다 → 뒷자리 사람이 앞자리로 (거리와 상관없이 같은 배 안)
+    core.message(r, move(C0.x - 30, C0.y - 30, STATE.idle), 3_000);
+    core.message(p, send({ t: "sit", seatId: C0.id }), 3_000);
+    expect(core.peer(2)).toMatchObject({ seatId: C0.id, state: STATE.boat, x: C1.x - 30, y: C1.y + 6 });
+  });
+
+  it("reload (grace) and redeploy keep the boat seat where the boat is, and nobody is nudged off a moving seat's anchor", () => {
+    const old = setup();
+    const a = old.join("a", 0, DOCK);
+    old.core.message(a, send({ t: "sit", seatId: A.id }), 0);
+    old.core.message(a, move(A.x + 60, A.y + 10, STATE.boat, DIR.right), 2_000);
+    old.core.tick(2_050);
+    old.core.disconnect(a, 1001, 2_100);
+    const far = { x: A.x + 64, y: A.y + 11 };
+    const a2 = old.join("a", 4_000, far, old.conn("a2"));
+    expect(welcome(a2)).toMatchObject({ sid: 1, resumed: true, seats: { [A.id]: 1 } });
+    expect(old.core.peer(1)).toMatchObject({ seatId: A.id, x: far.x, y: far.y });
+    const next = setup();
+    next.core.restore([], [], 10_000, old.core.liveRecords(), 60_000);
+    expect(next.core.peer(1)).toMatchObject({ seatId: A.id, state: STATE.boat, x: far.x, y: far.y });
+    // 배의 앵커(나루터) 위로 새로 들어온 사람은 옮겨지지 않는다 (배는 나가 있다)
+    const c = next.join("c", 11_000, { x: A.x, y: A.y });
+    expect(next.core.peer(welcome(c).sid)).toMatchObject({ x: A.x, y: A.y });
+  });
+});
+
+describe("plaza rides: seesaw / trampoline / carousel are one-person spots (50)", () => {
+  it("each end, the trampoline and each horse is a spot judged like a swing", () => {
+    const { core, join } = setup();
+    const e = spotSeatId("seesaw", 950, 640);
+    const t = spotSeatId("trampoline", 1080, 630);
+    const r = spotSeatId("carousel", 880, 652);
+    const a = join("a", 0, { x: 950, y: 646 });
+    const b = join("b", 0, { x: 950, y: 648 });
+    core.message(a, send({ t: "sit", seatId: e }), 0);
+    core.message(b, send({ t: "sit", seatId: e }), 0);
+    expect(core.peer(1)).toMatchObject({ seatId: e, state: STATE.seesaw, x: 950, y: 640 });
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: e });
+    const c = join("c", 0, { x: 1080, y: 640 });
+    core.message(c, send({ t: "sit", seatId: t }), 0);
+    expect(core.peer(3)).toMatchObject({ seatId: t, state: STATE.trampoline });
+    core.message(b, move(880, 676, STATE.walk), 3_000);
+    core.message(b, send({ t: "sit", seatId: r }), 3_000);
+    expect(core.peer(2)).toMatchObject({ seatId: r, state: STATE.carousel, x: 880, y: 652 });
+  });
+});
+
+describe("fishing spots are fixed one-person spots (4)", () => {
+  it("only listed spots, one angler each; sitting on the ground never claims one; moving off releases it", () => {
+    const { core, join } = setup();
+    const spot = FISHING_SPOTS[0];
+    const a = join("a", 0, { x: spot.x - 4, y: spot.y });
+    const b = join("b", 0, { x: spot.x - 6, y: spot.y });
+    core.message(a, send({ t: "sit", seatId: spot.id }), 0);
+    core.message(b, send({ t: "sit", seatId: spot.id }), 0);
+    expect(core.peer(1)).toMatchObject({ seatId: spot.id, state: STATE.sitGround, dir: spot.facing, x: spot.x, y: spot.y });
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: spot.id });
+    // 목록에 없는 좌표는 형식이 맞아도 거절
+    core.message(b, send({ t: "sit", seatId: `f_${spot.x - 6}_${spot.y}` }), 0);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: `f_${spot.x - 6}_${spot.y}` });
+    // 바닥 앉기 MOVE는 낚시 자리를 잡지 않는다 (shared)
+    core.message(b, move(spot.x - 6, spot.y, STATE.sitGround), 500);
+    expect(core.peer(2)).toMatchObject({ seatId: null, state: STATE.sitGround });
+    // 낚시 중에는 sitGround MOVE로 자리를 유지하고, 걸으면 놓는다
+    core.message(a, move(spot.x, spot.y, STATE.sitGround, DIR.right), 600);
+    expect(core.peer(1)).toMatchObject({ seatId: spot.id });
+    core.message(a, move(spot.x - 3, spot.y, STATE.walk), 900);
+    expect(core.peer(1)!.seatId).toBeNull();
   });
 });
