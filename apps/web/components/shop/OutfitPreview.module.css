@@ -1,0 +1,70 @@
+/* 상점 입어 보기 무대 + 방향·자세 버튼 */
+
+.preview {
+  --scale: 4;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+/* 논리 72×64px 캔버스를 정수 배율로 키운다 (픽셀이 번지지 않게) */
+.stage {
+  display: block;
+  width: calc(72px * var(--scale));
+  height: calc(64px * var(--scale));
+  image-rendering: pixelated;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.stage:focus-visible {
+  outline: 2px solid var(--candle);
+  outline-offset: 2px;
+}
+
+.controls {
+  display: grid;
+  gap: 6px;
+  width: calc(72px * var(--scale));
+}
+
+.segment {
+  display: flex;
+  gap: 6px;
+}
+
+.seg {
+  flex: 1;
+  min-height: 40px;
+}
+
+/* 눌린 버튼은 hover(터치 뒤 남는 hover 포함)보다 우선 */
+.seg[aria-pressed="true"],
+.seg[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--moss-deep);
+  color: var(--bone);
+}
+
+.hint {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-align: center;
+}
+
+/* 터치 기기: 버튼을 손가락 크기로, 키보드 안내는 숨긴다 */
+@media (pointer: coarse) {
+  .seg {
+    min-height: 44px;
+  }
+
+  .hint[data-keys] {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .preview {
+    --scale: 3;
+  }
+}

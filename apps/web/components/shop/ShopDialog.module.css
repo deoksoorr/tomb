@@ -92,3 +92,87 @@
   color: var(--candle);
   text-align: center;
 }
+
+/* ── 캐릭터 꾸미기: 입어 보기 무대 + 목록 ── */
+.fitting {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+/* 넓은 화면: 목록을 내려도 무대가 따라온다 */
+.fitPanel {
+  position: sticky;
+  top: 0;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.fitTitle {
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 15px;
+  text-align: center;
+}
+
+.fitKicker {
+  margin-right: 4px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.fitNote {
+  min-height: 1.6em;
+  color: var(--candle);
+  text-align: center;
+}
+
+.fitBuy {
+  width: 100%;
+}
+
+.fitGrid {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.card[data-picked] {
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 2px var(--candle);
+}
+
+.tryOn {
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  color: var(--muted);
+  touch-action: manipulation;
+}
+
+.tryOn:hover,
+.tryOn[aria-pressed="true"] {
+  color: var(--candle);
+}
+
+.tryLabel {
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 좁은 화면: 무대를 목록 위에 (고르면 무대가 보이게 올라간다) */
+@media (max-width: 720px) {
+  .fitting {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fitPanel {
+    position: static;
+  }
+}

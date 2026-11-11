@@ -48,7 +48,8 @@ function px(ctx: CanvasRenderingContext2D, x: number, y: number, c: Color, w = 1
   ctx.fillRect(x, y, w, h);
 }
 
-function grassTile(seed: number): TileCanvas {
+/** 풀밭 타일 한 칸 (16×16). 상점 입어 보기 무대 바닥에도 쓴다 */
+export function grassTile(seed: number): TileCanvas {
   const { canvas, ctx } = makeCanvas(TILE, TILE);
   const r = rng(seed);
   px(ctx, 0, 0, C.grass, TILE, TILE);

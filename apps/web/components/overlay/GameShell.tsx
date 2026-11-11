@@ -440,7 +440,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "shrine" && <ShrineDialog cache={graves.cache} onGo={goToMyGrave} onClose={closePanel} />}
       {panel === "housing" && <HousingOffice onClose={closePanel} />}
       {panel === "hunt" && <HuntLobby onClose={closePanel} />}
-      {panel === "shop" && <ShopDialog onClose={closePanel} />}
+      {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
     </div>
   );
 }
