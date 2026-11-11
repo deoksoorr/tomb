@@ -8,6 +8,9 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 // 좌석이 없으면 근처 오브젝트 안내("E 매달리기", "E 종 치기", 물속 "E 잠수" …)를 같은 자리에 띄운다.
 
 const SITTING_HINT_MS = 4000;
+const TINT = 0xf2e6c4;
+/** 누가 먼저 차지한 1인 자리(나무·그네) 앞: 회색으로 눌러도 안 된다는 것을 보인다 */
+const TINT_DIM = 0x8c877c;
 
 function isTouchDevice(): boolean {
   return typeof window !== "undefined" && (window.matchMedia?.("(pointer: coarse)").matches || "ontouchstart" in window);
@@ -30,7 +33,7 @@ export class SeatHint {
     this.text = scene.add
       .bitmapText(0, 0, FONT_KEY, this.sitLabel, FONT_PX)
       .setOrigin(0.5, 0)
-      .setTint(0xf2e6c4)
+      .setTint(TINT)
       .setDepth(DEPTH.labels - 2)
       .setVisible(false);
   }
@@ -45,11 +48,13 @@ export class SeatHint {
     sittingFor: number,
     hidden: boolean,
     labelScale: number,
-    other: { x: number; y: number; text: string } | null = null,
+    other: { x: number; y: number; text: string; dim?: boolean } | null = null,
     standText: string | null = null,
   ): void {
     const t = this.text;
     if (t.scaleX !== labelScale) t.setScale(labelScale);
+    const tint = !seat && sittingFor < 0 && other?.dim ? TINT_DIM : TINT;
+    if (t.tintTopLeft !== tint) t.setTint(tint);
     if (sittingFor >= 0) {
       if (sittingFor > SITTING_HINT_MS || hidden) {
         t.setVisible(false);

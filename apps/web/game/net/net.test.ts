@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { DIR, EXTRAPOLATE_MAX_MS, INTERP_DELAY_MS, PEER_SYNC_MS, SEND_INTERVAL_MS, STATE } from "@tomb/protocol";
+import { DIR, EXTRAPOLATE_MAX_MS, PEER_SYNC_MS, SEND_INTERVAL_MS, STATE } from "@tomb/protocol";
 import { bodyFromWsUrl, SYNC_EVERY_MS, SYNC_MIN_GAP_MS, SyncPolicy } from "./syncPolicy";
 import { BACKOFF_MAX_MS, backoffDelay } from "./backoff";
 import { Interpolator, type InterpOut } from "./Interpolator";
+import { MAX_MOVES_PER_SEC, PROFILES, simulateAvg } from "./netsim";
 import type { DirId } from "@tomb/protocol";
 import { emptyMove, resolveMove } from "../logic/movement";
 import { JoinLimiter, isPermanentJoinError, reusableToken, utf8Bytes, JOIN_WINDOW_MS, TOKEN_REUSE_MS } from "./joinPolicy";
@@ -48,75 +49,113 @@ describe("Interpolator", () => {
     }
   });
 
-  it("interpolates linearly with a 120ms delay", () => {
-    const ip = new Interpolator();
-    ip.push(1000, 0, 0, STATE.walk, DIR.right);
-    ip.push(1100, 10, 0, STATE.walk, DIR.right);
+  /** 60fps로 from..to를 그리며 매 프레임 결과를 모은다. arrivals는 [도착 시각, x, y, state] */
+  function play(ip: Interpolator, arrivals: [number, number, number, number][], from: number, to: number) {
+    const frames: { t: number; x: number; y: number; state: number }[] = [];
     const o = out();
-    ip.sample(1100 + INTERP_DELAY_MS - 50, o); // render time 1050 → halfway
-    expect(o.x).toBeCloseTo(5, 5);
-    expect(o.state).toBe(STATE.walk);
+    let k = 0;
+    for (let t = from; t <= to; t += 1000 / 60) {
+      while (k < arrivals.length && arrivals[k][0] <= t) {
+        const [at, x, y, st] = arrivals[k++];
+        ip.push(at, x, y, st as never, DIR.right);
+      }
+      if (ip.sample(t, o)) frames.push({ t, x: o.x, y: o.y, state: o.state });
+    }
+    return frames;
+  }
+
+  it("walks at an even speed even when arrivals bunch up (tick quantization + jitter)", () => {
+    // 5.6px / ~108ms로 걷는데 도착은 50ms 틱에 묶여 100·150ms, 지터 ±20ms
+    const ip = new Interpolator();
+    const arr: [number, number, number, number][] = [];
+    const rnd = mulberry(7);
+    let at = 1000;
+    for (let i = 0; i < 40; i++) {
+      arr.push([at, 100 + i * 6, 100, STATE.walk]);
+      at += (i % 2 ? 100 : 150) + (rnd() - 0.5) * 40;
+    }
+    arr.push([at, 100 + 39 * 6, 100, STATE.idle]); // 멈춤
+    const f = play(ip, arr, 1000, at + 600);
+    const speeds: number[] = [];
+    for (let i = 1; i < f.length; i++) if (f[i].t > 1800 && f[i].t < at - 300) speeds.push((f[i].x - f[i - 1].x) / (f[i].t - f[i - 1].t));
+    const mean = speeds.reduce((s, v) => s + v, 0) / speeds.length;
+    const sd = Math.sqrt(speeds.reduce((s, v) => s + (v - mean) ** 2, 0) / speeds.length);
+    expect(sd / mean).toBeLessThan(0.15);
+    expect(Math.min(...speeds)).toBeGreaterThan(0);
+    // 끝에는 마지막 위치에 닿는다
+    expect(f[f.length - 1].x).toBeCloseTo(100 + 39 * 6, 0);
   });
 
-  it("extrapolates up to 200ms then holds", () => {
+  it("extrapolates only a little (≤6px) when packets stall, then never pulls back", () => {
     const ip = new Interpolator();
-    ip.push(1000, 0, 0, STATE.walk, DIR.right);
-    ip.push(1100, 10, 0, STATE.walk, DIR.right); // 0.1 px/ms
-    const o = out();
-    ip.sample(1100 + INTERP_DELAY_MS + 100, o); // 100ms past last sample
-    expect(o.x).toBeCloseTo(20, 5);
-    ip.sample(1100 + INTERP_DELAY_MS + 1000, o); // way past → capped at 200ms
-    expect(o.x).toBeCloseTo(10 + 0.1 * EXTRAPOLATE_MAX_MS, 5);
+    const arr: [number, number, number, number][] = [];
+    for (let i = 0; i < 10; i++) arr.push([1000 + i * 100, i * 6, 0, STATE.walk]);
+    // 1900 이후 600ms 동안 아무것도 안 오다가, 이어서 걷는다
+    for (let i = 10; i < 16; i++) arr.push([2500 + (i - 10) * 100, i * 6, 0, STATE.walk]);
+    arr.push([3100, 15 * 6, 0, STATE.idle]);
+    const f = play(ip, arr, 1000, 3800);
+    const stall = f.filter((q) => q.t > 2300 && q.t < 2500);
+    expect(Math.max(...stall.map((q) => q.x))).toBeLessThanOrEqual(9 * 6 + EXTRAPOLATE_MAX_MS); // 상한 안
+    expect(Math.max(...stall.map((q) => q.x))).toBeLessThanOrEqual(9 * 6 + 6 + 1e-9);
+    // 걷는 동안은 한 번도 뒤로 가지 않는다 (멈춘 뒤 외삽했던 만큼은 서 있는 채로 천천히 맞춘다)
+    for (let i = 1; i < f.length; i++) if (f[i].state === STATE.walk) expect(f[i].x).toBeGreaterThanOrEqual(f[i - 1].x - 1e-9);
+    expect(f[f.length - 1].x).toBeCloseTo(15 * 6, 5);
   });
 
-  it("does not extrapolate a stopped avatar", () => {
+  it("a stopped avatar stays exactly on its stop sample", () => {
     const ip = new Interpolator();
-    ip.push(1000, 0, 0, STATE.walk, DIR.right);
-    ip.push(1100, 10, 0, STATE.idle, DIR.right);
-    const o = out();
-    ip.sample(5000, o);
-    expect(o.x).toBe(10);
-    expect(o.state).toBe(STATE.idle);
+    const f = play(ip, [[1000, 0, 0, STATE.walk], [1100, 6, 0, STATE.walk], [1200, 10, 0, STATE.idle]], 1000, 5000);
+    expect(f[f.length - 1].x).toBe(10);
+    expect(f[f.length - 1].state).toBe(STATE.idle);
   });
 
-  it("snaps on teleport (> 96px)", () => {
+  it("starts from rest smoothly after a long idle gap (delta snapshots)", () => {
     const ip = new Interpolator();
-    ip.push(1000, 0, 0, STATE.walk, DIR.right);
-    ip.push(1100, 10, 0, STATE.walk, DIR.right);
-    ip.push(1200, 300, 0, STATE.idle, DIR.down);
-    const o = out();
-    ip.sample(1200, o); // no delay for the snap
-    expect(o.x).toBe(300);
+    const f = play(ip, [[0, 100, 100, STATE.idle], [10_000, 106, 100, STATE.walk], [10_110, 112, 100, STATE.walk]], 9_000, 10_060);
+    const last = f[f.length - 1];
+    // 10초짜리 구간으로 늘어지지도, 한 번에 건너뛰지도 않는다
+    expect(last.x).toBeGreaterThan(100);
+    expect(last.x).toBeLessThan(106);
+    expect(last.state).toBe(STATE.walk);
   });
 
-  it("starts smoothly after a long idle gap (delta snapshots)", () => {
+  it("shows walking while sliding into a stop/sit sample, glides into it within ~120ms", () => {
     const ip = new Interpolator();
-    ip.push(0, 100, 100, STATE.idle, DIR.down);
-    ip.push(10_000, 105, 100, STATE.walk, DIR.right);
-    const o = out();
-    // 지연 시간 동안 원래 자리에서 천천히 출발해야지, 10초짜리 구간으로 늘어지면 안 된다
-    ip.sample(10_000 + INTERP_DELAY_MS - 50, o);
-    expect(o.x).toBeGreaterThan(100);
-    expect(o.x).toBeLessThan(105);
-    expect(o.state).toBe(STATE.walk);
+    const f = play(ip, [[1000, 0, 0, STATE.walk], [1100, 0, 8, STATE.sitChair]], 1000, 1500);
+    const sliding = f.find((q) => q.t > 1100 && q.y > 0 && q.y < 8);
+    expect(sliding?.state).toBe(STATE.walk);
+    const seated = f.find((q) => q.state === STATE.sitChair)!;
+    expect(seated.y).toBe(8);
+    expect(seated.t).toBeLessThanOrEqual(1100 + 140);
   });
 
-  it("shows walking while sliding into a stop/sit sample", () => {
+  it("catches up after a long backlog (hidden tab) instead of replaying it slowly", () => {
     const ip = new Interpolator();
-    ip.push(1000, 0, 0, STATE.walk, DIR.down);
-    ip.push(1100, 0, 8, STATE.sitChair, DIR.left);
-    const o = out();
-    ip.sample(1100 + INTERP_DELAY_MS - 50, o);
-    expect(o.state).toBe(STATE.walk);
-    ip.sample(1100 + INTERP_DELAY_MS + 10, o);
-    expect(o.state).toBe(STATE.sitChair);
-    expect(o.y).toBe(8);
+    const arr: [number, number, number, number][] = [];
+    for (let i = 0; i < 31; i++) arr.push([1000, i * 3, 0, STATE.walk]); // 숨긴 탭: 3초치가 한꺼번에
+    const f = play(ip, arr, 1000, 1400);
+    expect(f[f.length - 1].x).toBeGreaterThan(30 * 3 - 0.056 * 400);
   });
 
   it("caps the buffer", () => {
     const ip = new Interpolator();
     for (let i = 0; i < 100; i++) ip.push(i * 100, i % 50, 0, STATE.walk, DIR.right);
     expect(ip.size).toBeLessThanOrEqual(32);
+  });
+
+  it("network sim (지연·지터·틱 양자화): 좋은 망에서 매끄럽고 뒤로 밀리지 않는다, 대역폭은 그대로", () => {
+    const good = simulateAvg(() => new Interpolator(), PROFILES.good);
+    expect(good.speedCv).toBeLessThan(0.15); // 예전 방식 0.24
+    expect(good.backFrames).toBe(0);
+    expect(good.stallRatio).toBeLessThan(0.01);
+    expect(good.lagMs).toBeLessThan(280); // 예전 방식 277ms
+    expect(good.endErr).toBeLessThan(0.5);
+    const jit = simulateAvg(() => new Interpolator(), PROFILES.jittery);
+    expect(jit.speedCv).toBeLessThan(0.3); // 예전 방식 1.09
+    expect(jit.backFrames).toBe(0); // 예전 방식 15프레임
+    expect(jit.endErr).toBeLessThan(0.5);
+    // 보내는 MOVE 수는 그대로 (≤10Hz): 받은 엔트리 = 보낸 MOVE 이하
+    expect(good.entries).toBeLessThanOrEqual((18_000 / 1000) * MAX_MOVES_PER_SEC);
   });
 });
 

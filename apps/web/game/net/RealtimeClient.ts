@@ -30,6 +30,7 @@ import { fetchLobby } from "@/lib/realtime";
 import type { ApiError, JoinRequest, JoinResponse } from "@/lib/types";
 import { bridge, type NetMode } from "../bridge";
 import { backoffDelay } from "./backoff";
+import { LookPacer } from "./lookPacer";
 import { isPermanentJoinError, JoinLimiter, reusableToken, utf8Bytes, type CachedToken } from "./joinPolicy";
 import { MoveThrottle, type NetPose } from "./sendThrottle";
 import { bodyFromWsUrl, SYNC_EVERY_MS, SyncPolicy } from "./syncPolicy";
@@ -136,6 +137,12 @@ export class RealtimeClient {
   private admittedTo: number | null = null;
   /** 마지막 꾸미기 증서. 다시 접속하면 한 번 더 보낸다 (만료됐으면 서버가 무시) */
   private lookGrant: string | null = null;
+  /** 서버가 10초 안에 다시 온 look을 버리므로 마지막 착용이 꼭 가도록 간격을 맞춰 보낸다 */
+  private readonly lookPacer = new LookPacer((grant) => {
+    if (!this.online) return false;
+    this.ws!.send(encodeEvent({ t: "look", grant }));
+    return true;
+  });
   private lastWarpAt = -Infinity;
   private lastToast = "";
   // 통계
@@ -175,6 +182,7 @@ export class RealtimeClient {
     if (this.stopped) return;
     this.stopped = true;
     this.gen++;
+    this.lookPacer.destroy();
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.clearTimers();
     if (this.statsTimer) clearInterval(this.statsTimer);
@@ -182,10 +190,11 @@ export class RealtimeClient {
     this.closeSocket(1000, "bye");
   }
 
-  /** 게임 안 채널 이동: 연결을 닫고 새 채널에 입장 (캐릭터 위치는 그대로) */
+  /** 게임 안 채널 이동: 연결을 닫고 새 채널에 입장. 위치는 지금 캐릭터 위치(씬이 먼저 처음 자리 SPAWN으로 옮겨 둔다) */
   switchChannel(channel: number): void {
     if (this.stopped) return;
     if (channel === this.channel && this.online) return;
+    this.pendingWarp = null; // 옛 채널에 보내려던 순간이동은 새 채널에 의미가 없다 (접속 좌표가 곧 위치)
     this.closeSocket(1000, "switch");
     this.cb.onReset();
     this.peers.clear();
@@ -258,7 +267,7 @@ export class RealtimeClient {
   /** 꾸미기 변경 증서 (Vercel 서명). 접속 중이 아니면 다음 welcome 때 보낸다 */
   look(grant: string): void {
     this.lookGrant = grant;
-    this.send({ t: "look", grant });
+    this.lookPacer.push(grant);
   }
 
   firework(grant: string): void {
@@ -510,7 +519,9 @@ export class RealtimeClient {
     this.startSync();
     this.setMode("online");
     this.cb.onWelcome({ ...m, peers: m.peers.filter((p) => p.sid !== m.sid) });
-    if (this.lookGrant) this.send({ t: "look", grant: this.lookGrant });
+    // 새 연결: 서버 간격이 처음부터라 지금 착용 증서를 바로 보낸다 (기다리던 것도 함께 정리)
+    if (this.lookGrant) this.lookPacer.push(this.lookGrant);
+    this.lookPacer.reset();
   }
 
   // ── 대기열 ──

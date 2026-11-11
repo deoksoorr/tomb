@@ -151,3 +151,31 @@ export function meteorShower(n: number, spanMs: number, rand: () => number = Mat
   }
   return out.sort((a, b) => a.at - b.at);
 }
+
+/** 폭죽 터지는 높이·반경을 보이는 화면 안에 맞출 때 최소값 (월드 px) */
+export const FIT_MIN_RISE = 20;
+export const FIT_MIN_RADIUS = 16;
+
+/**
+ * 발밑 (x,y)에서 h만큼 솟아 반경 r로 터지는 폭죽을 보이는 영역 safe(월드 좌표) 안에 맞춘다 (6/8번: 불멍 구도에서 잘림).
+ *  - 반경은 영역 짧은 변의 45%까지, 좌우 가장자리에 가까우면 그만큼 줄인다
+ *  - 터지는 자리가 영역 위로 넘으면 덜 솟게(최소 FIT_MIN_RISE), 그래도 넘으면 반경을 줄인다(최소 FIT_MIN_RADIUS)
+ *  - 이미 들어맞으면 그대로 (평소 화면에서는 대부분 그대로다)
+ */
+export function fitBurst(
+  x: number,
+  y: number,
+  h: number,
+  r: number,
+  safe: { x: number; y: number; width: number; height: number },
+): { h: number; r: number } {
+  const k = 0.85; // 불티가 반경의 85%까지만 들어오면 충분 (끝자락은 사라지며 퍼진다)
+  let rr = Math.min(r, 0.45 * Math.min(safe.width, safe.height));
+  const side = Math.min(x - safe.x, safe.x + safe.width - x) / k;
+  if (side > 0) rr = Math.min(rr, Math.max(FIT_MIN_RADIUS, side));
+  const top = safe.y + rr * k;
+  let hh = h;
+  if (y - hh < top) hh = Math.max(FIT_MIN_RISE, y - top);
+  if (y - hh < top) rr = Math.max(FIT_MIN_RADIUS, Math.min(rr, (y - hh - safe.y) / k));
+  return { h: hh, r: Math.max(FIT_MIN_RADIUS, Math.min(r, rr)) };
+}

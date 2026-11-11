@@ -76,8 +76,22 @@ export class Sfx {
         return null;
       }
     }
-    if (this.ac.state === "suspended") void this.ac.resume().catch(() => undefined);
+    this.kick(true);
     return this.ac;
+  }
+
+  private kickAt = -Infinity;
+  /**
+   * 멈춘 오디오 컨텍스트를 다시 깨운다. 창·탭을 바꾸면 브라우저가 컨텍스트를 suspended(크롬)·interrupted(사파리)로
+   * 돌려 놓고, 사용자 입력 없이 부른 resume()은 거절되기도 한다 → 돌아온 뒤 입력이 들어올 때까지 1초마다 다시 시도한다.
+   */
+  private kick(force = false): void {
+    const ac = this.ac;
+    if (!ac || ac.state === "running" || ac.state === "closed") return;
+    const now = performance.now();
+    if (!force && now - this.kickAt < 1000) return;
+    this.kickAt = now;
+    void ac.resume().catch(() => undefined);
   }
 
   /** 범종 한 번: 낮은 기음 + 비조화 배음, 길게 울린다. gain: 거리 감쇠 등 */
@@ -173,6 +187,11 @@ export class Sfx {
     const lv = Math.max(0, Math.min(1, Number.isFinite(level) ? level : 0));
     if (Math.abs(lv - this.fireLevel) < 0.01 && (lv > 0) === (this.fireLevel > 0)) {
       this.maybeStopFire();
+      // 들려야 하는데 멈춰 있다(창을 바꿨다 돌아옴 등): 컨텍스트를 깨우고, 숨을 때 멈춘 루프를 다시 튼다
+      if (lv > 0 && !this.fireHidden && !this.muted) {
+        this.kick();
+        if (!this.fireSrc && this.fireBuf) this.applyCampfire();
+      }
       return;
     }
     this.fireLevel = lv;
@@ -248,17 +267,37 @@ export class Sfx {
     if (this.fireVisBound || typeof document === "undefined") return;
     this.fireVisBound = true;
     document.addEventListener("visibilitychange", this.onFireVisibility);
+    // 창 전환(탭은 그대로 보이는 경우 포함)·bfcache 복귀·다음 입력 때 컨텍스트를 다시 깨운다 (6번: 불멍 중 창을 바꾸면 소리가 사라짐)
+    window.addEventListener("focus", this.onFireWake);
+    window.addEventListener("pageshow", this.onFireWake);
+    window.addEventListener("pointerdown", this.onFireWake, true);
+    window.addEventListener("keydown", this.onFireWake, true);
   }
+
+  private readonly onFireWake = (): void => {
+    if (this.fireLevel <= 0 || this.muted) return;
+    this.fireHidden = document.hidden;
+    if (this.fireHidden) return;
+    this.kick(true);
+    this.applyCampfire();
+  };
 
   private readonly onFireVisibility = (): void => {
     this.fireHidden = document.hidden;
+    if (!this.fireHidden) this.kick(true);
     this.applyCampfire();
     if (this.fireHidden) this.fireQuietAt = performance.now() - 4000;
     this.maybeStopFire();
   };
 
   destroy(): void {
-    if (this.fireVisBound) document.removeEventListener("visibilitychange", this.onFireVisibility);
+    if (this.fireVisBound) {
+      document.removeEventListener("visibilitychange", this.onFireVisibility);
+      window.removeEventListener("focus", this.onFireWake);
+      window.removeEventListener("pageshow", this.onFireWake);
+      window.removeEventListener("pointerdown", this.onFireWake, true);
+      window.removeEventListener("keydown", this.onFireWake, true);
+    }
     this.fireVisBound = false;
     try {
       this.fireSrc?.stop();

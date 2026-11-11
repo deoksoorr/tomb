@@ -49,6 +49,8 @@ export class Player {
   onLand: (() => void) | null = null;
   /** 매달리기·그네: 붙어 있는 자리 (발 위치) */
   private anchor: { x: number; y: number } | null = null;
+  /** 매달리기·그네: 차지한 1인 자리 id (world.ts spotSeatId — 서버가 점유를 판정한다) */
+  spotId: string | null = null;
   private diving = false;
   /** 발밑이 물인지 (씬이 넣어 준다) */
   water: ((x: number, y: number) => boolean) | null = null;
@@ -251,13 +253,17 @@ export class Player {
     if (this.seat?.id === seatId) this.moveFrom = null;
   }
 
-  /** 나무에 매달리기 / 그네 타기: (ax, ay)에 붙는다. depth: 그 오브젝트 앞에 그리도록 */
-  attach(kind: "hang" | "swing", ax: number, ay: number, depth: number, now: number, seats: SeatRequester | null): void {
+  /**
+   * 나무에 매달리기 / 그네 타기: (ax, ay)에 붙는다. depth: 그 오브젝트 앞에 그리도록.
+   * spotId: 이 자리의 1인 자리 id (점유 요청은 씬이 보낸다 — 일어서기(stand)가 먼저 나가야 해서)
+   */
+  attach(kind: "hang" | "swing", ax: number, ay: number, depth: number, now: number, seats: SeatRequester | null, spotId: string | null = null): void {
     if (this.airborne) this.endJump(now);
     if (this.sitting) this.stand(now, seats);
     if (this.anchor) this.leaveAnchor(now);
     this.cancelSnap();
     this.anchor = { x: ax, y: ay };
+    this.spotId = spotId;
     this.state = kind;
     this.dir = DIR.down;
     this.body.setVelocity(0, 0);
@@ -272,6 +278,7 @@ export class Player {
     const a = this.anchor;
     if (!a) return;
     this.anchor = null;
+    this.spotId = null;
     this.snap?.stop();
     this.snap = null;
     this.view.depthOverride = null;
@@ -363,6 +370,7 @@ export class Player {
     this.endJump(now);
     if (this.anchor) {
       this.anchor = null;
+      this.spotId = null;
       this.view.depthOverride = null;
     }
     this.diving = false;

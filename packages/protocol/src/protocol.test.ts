@@ -185,3 +185,25 @@ describe("클라이언트 버전", () => {
     expect(CLOSE.OUTDATED).toBe(4010);
   });
 });
+
+describe("1인 자리 (좌석 체계 공통)", () => {
+  it("의자·벤치 좌석은 sitChair 자리, 소품 자리는 종류·앵커 좌표가 id에 담긴다", async () => {
+    const { seatSlot, spotSeatId, spotKindOfState, SPOT_KINDS, parseC2S: parse } = await import("./index");
+    const chair = seatSlot("cA")!;
+    expect(chair).toMatchObject({ kind: "seat", state: STATE.sitChair, furnitureId: "cA" });
+    expect(seatSlot("bA-1")).toMatchObject({ kind: "seat", furnitureId: "bA" });
+    const h = spotSeatId("hang", 60.4, 90);
+    expect(h).toBe("h_60_90");
+    expect(seatSlot(h)).toEqual({ id: h, kind: "hang", x: 60, y: 90, facing: SPOT_KINDS.hang.facing, state: STATE.hang, furnitureId: null });
+    expect(seatSlot(spotSeatId("swing", 140, 96))).toMatchObject({ kind: "swing", state: STATE.swing, x: 140, y: 96 });
+    // 정규형만 (같은 자리에 id가 둘이면 두 명이 앉을 수 있다): 앞자리 0·음수·u16 초과·모르는 종류는 거절
+    for (const bad of ["h_060_90", "h_60_-1", "h_70000_1", "z_1_1", "h_1", "h_1_1_1", "H_1_1", "nope"]) expect(seatSlot(bad)).toBeUndefined();
+    expect(spotKindOfState(STATE.hang)).toBe("hang");
+    expect(spotKindOfState(STATE.swing)).toBe("swing");
+    expect(spotKindOfState(STATE.sitChair)).toBeNull();
+    // 기존 sit 이벤트 형식(16자, [A-Za-z0-9_-]) 안에 들어간다
+    expect(parse(JSON.stringify({ t: "sit", seatId: spotSeatId("hang", 65535, 65535) }))).toEqual({ t: "sit", seatId: "h_65535_65535" });
+    // 의자 id와 겹치지 않는다
+    expect(SEATS.some((s) => s.id.includes("_"))).toBe(false);
+  });
+});

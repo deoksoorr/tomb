@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { CAMPFIRES, campfireOfSeat, DIR, FURNITURE, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, seatById, SHOP, SHOP_DOOR, SPAWN, STATE, TELEPORT_DIST, type ActKind, type DirId, type PeerInfo, type Seat, type Sid, type WelcomeMsg } from "@tomb/protocol";
+import { CAMPFIRES, campfireOfSeat, DIR, FURNITURE, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import type { PublicGrave } from "@/lib/types";
 import { TEX } from "../assets/manifest";
@@ -15,7 +15,8 @@ import type { KeyAction } from "../input/Keyboard";
 import { escape, overlaps, type Box } from "../logic/jump";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { nearestObject, pickInteraction } from "../logic/interact";
-import { anchorAt, nudgeSpot, restoreAfterDenied } from "../logic/restore";
+import { anchorAt, nudgeSpot, restoreAfterDenied, spotVerdict, standBesideSpot } from "../logic/restore";
+import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST, spotOf, spotTaken } from "../logic/spots";
 import { neighborSeat, pickSeat, sideIntent, standPoint } from "../logic/sit";
 import { RealtimeClient } from "../net/RealtimeClient";
 import type { NetPose } from "../net/sendThrottle";
@@ -34,7 +35,7 @@ import { Lighting, playerLightRadius } from "../world/Lighting";
 import { GraveMarkers } from "../world/Markers";
 import { GuideArrow } from "../world/GuideArrow";
 import { CampfireView } from "../world/Campfire";
-import { campfireLevel, nearestCampfire } from "../world/campfireMath";
+import { campfireLevel, LETTERBOX, nearestCampfire } from "../world/campfireMath";
 import { Sfx } from "../world/Sfx";
 import { WorldMap } from "../world/WorldMap";
 import type { GameContext } from "./context";
@@ -66,6 +67,8 @@ const PEER_CHECK_MS = 5000;
 const RESTORE_SEAT_WINDOW_MS = 8000;
 /** 대신 앉을 좌석 앞으로 옮긴 뒤 앉기 요청까지 (옮긴 위치 MOVE가 서버에 먼저 닿게) */
 const RESTORE_SIT_DELAY_MS = 300;
+/** 같은 안내 토스트를 연달아 띄우지 않는 간격 */
+const TOAST_REPEAT_MS = 1500;
 
 export class WorldScene extends Phaser.Scene {
   private ctx!: GameContext;
@@ -116,11 +119,12 @@ export class WorldScene extends Phaser.Scene {
   private readonly unsubs: (() => void)[] = [];
   /** 이번 프레임 화면 (CameraRig.frameView가 채운다) */
   private readonly view = new Phaser.Geom.Rectangle();
+  private readonly fwView = new Phaser.Geom.Rectangle();
   private readonly near: NearResult = { p: null as unknown as GravePlacement, dist: 0 };
   private readonly resolveGrave = (id: string) => this.field.placement(id);
   private readonly labelBoxes: (LabelBox & { t: Phaser.GameObjects.BitmapText | null })[] = [];
   private readonly labelOrder: LabelBox[] = [];
-  private readonly hintBuf = { x: 0, y: 0, text: "" };
+  private readonly hintBuf = { x: 0, y: 0, text: "", dim: false };
   private readonly bubbleBoxes: SpeechBubble[] = [];
   private sayAt = -Infinity;
   private guide!: GuideArrow;
@@ -133,6 +137,10 @@ export class WorldScene extends Phaser.Scene {
   /** 내 몸 모양 (입장 토큰 값이 오면 갱신). 새로고침 복원 기록에 싣는다 */
   private selfBody: string | undefined;
   private readonly poseBuf: NetPose = { x: 0, y: 0, state: STATE.idle, dir: DIR.down };
+  /** 접속한 서버가 나무·그네도 좌석처럼 판정한다 (welcome.spots). 아니면 예전처럼 혼자 붙는다 */
+  private spotsJudged = false;
+  private toastAt = -Infinity;
+  private toastMsg = "";
 
   constructor() {
     super("world");
@@ -274,6 +282,7 @@ export class WorldScene extends Phaser.Scene {
         getFps: () => this.game.loop.actualFps,
         onWelcome: (m) => {
           this.clearRemotes();
+          this.spotsJudged = m.spots === true;
           this.syncSeats(m.seats);
           for (const p of m.peers) this.addRemote(p);
           const r = this.resume;
@@ -287,6 +296,13 @@ export class WorldScene extends Phaser.Scene {
             const owner = this.seats.get(seat.id);
             if (owner === undefined) this.net.sit(seat.id);
             else if (owner !== m.sid) this.mySeatDenied(seat.id);
+          }
+          // 나무·그네에 붙은 채로 (다시) 붙었다: 서버 점유표로 판정 (새로고침 복원·재연결·재배포 공통)
+          const spot = this.player.anchored ? this.player.spotId : null;
+          if (spot && this.spotsJudged) {
+            const v = spotVerdict(spot, m.seats, m.sid);
+            if (v === "claim") this.net.sit(spot);
+            else if (v === "leave") this.mySpotLost(spot);
           }
         },
         onJoin: (p) => this.addRemote(p),
@@ -318,8 +334,13 @@ export class WorldScene extends Phaser.Scene {
           if (r) r.seatId = seatId;
           // 다른 사람이 먼저 앉았다 → 나는 바닥 앉기 (복원 중이면 가까운 빈자리로)
           if (sid !== this.net.mySid && this.player.seat?.id === seatId) this.mySeatDenied(seatId);
+          // 나무·그네를 동시에 잡았는데 다른 사람이 먼저였다 → 내려온다
+          if (sid !== this.net.mySid && this.player.spotId === seatId) this.mySpotLost(seatId);
         },
-        onSeatDenied: (seatId) => this.mySeatDenied(seatId),
+        onSeatDenied: (seatId) => {
+          if (this.player.spotId === seatId) this.mySpotLost(seatId);
+          else this.mySeatDenied(seatId);
+        },
         onEmote: (sid, kind, graveId) => this.playRemoteEmote(sid, kind, graveId),
         onGraveEvent: (_sid, kind, graveId) => {
           bridge.emit("net:graveEvent", { kind, graveId });
@@ -328,10 +349,11 @@ export class WorldScene extends Phaser.Scene {
         onReset: () => {
           this.clearRemotes();
           this.seats.clear();
+          this.spotsJudged = false;
         },
         onPeers: (peers, seats) => this.reconcilePeers(peers, seats),
         onLook: (sid, look) => this.remotes.get(sid)?.view.setLook(look ?? []),
-        onFirework: (sid, item, x, y) => this.fireworks.launch(item, x, y, this.rig.frameView(this.view), false, this.remotes.get(sid)?.name ?? ""),
+        onFirework: (sid, item, x, y) => this.fireworks.launch(item, x, y, this.fireworkView(), false, this.remotes.get(sid)?.name ?? ""),
         onAct: (sid, kind, x, y) => this.playAct(sid, kind, x, y),
         onSay: (sid, id) => {
           const text = phraseOf(id);
@@ -365,7 +387,8 @@ export class WorldScene extends Phaser.Scene {
       pl.sit(null, now, null);
     } else if (r.pose === "swing" || r.pose === "hang") {
       const o = anchorAt(this.map.interactables, r.pose === "swing" ? "swing" : "tree", r.x, r.y);
-      if (o) pl.attach(r.pose, o.ax, o.ay, r.pose === "swing" ? o.ay + SWING_FRONT : o.ay + 0.5, now, null);
+      // 자리 요청은 접속 뒤 welcome에서 (onWelcome의 spotVerdict)
+      if (o) pl.attach(r.pose, o.ax, o.ay, r.pose === "swing" ? o.ay + SWING_FRONT : o.ay + 0.5, now, null, spotSeatId(r.pose, o.ax, o.ay));
     }
     pl.view.apply(pl.state, pl.dir, now);
   }
@@ -374,7 +397,8 @@ export class WorldScene extends Phaser.Scene {
    * 첫 welcome: 서버 기준으로 복원을 마무리한다. 한 자리에는 한 명.
    * - 다른 채널로 들어왔으면(만석 안내 등) 좌석은 잇지 않는다
    * - 의자: 이어서 좌석 확인(onWelcome) → 거절되면 mySeatDenied가 가까운 빈자리로
-   * - 그네·나무: 그 자리에 이미 다른 사람이 있으면 내려와 옆에 선다
+   * - 그네·나무: 서버 좌석 점유표로 판정(onWelcome의 spotVerdict) — 남이 차지했으면 내려와 옆에 선다.
+   *   소품 자리를 판정하지 않는 이전 서버면 그 자리에 매달린 사람이 보이는지로 판단한다
    * - 서 있기·바닥 앉기: 같은 자리에 다른 사람이 서 있으면 살짝 비켜 선다
    */
   private finishResume(r: ResumeState, m: WelcomeMsg): void {
@@ -391,6 +415,7 @@ export class WorldScene extends Phaser.Scene {
     }
     const others = m.peers.map((p) => ({ x: p.x, y: p.y, state: p.state }));
     if (pl.anchored) {
+      if (m.spots) return;
       const taken = others.some((o) => (o.state === STATE.swing || o.state === STATE.hang) && Math.hypot(o.x - r.x, o.y - r.y) <= 3);
       if (!taken) return;
       pl.leaveAnchor(now);
@@ -531,11 +556,11 @@ export class WorldScene extends Phaser.Scene {
         if (!revived) return;
         const p = this.field.placement(graveId);
         if (p) this.fx.reviveGlow(p.x, p.y);
-        this.fx.emoteIcon(this.player.x, this.player.y, "revive");
+        this.player.view.emote("revive", this.time.now);
         this.net.emote("revive", graveId);
       }),
     );
-    on.push(bridge.on("channel:switch", ({ channel }) => this.net.switchChannel(channel)));
+    on.push(bridge.on("channel:switch", ({ channel }) => this.switchChannel(channel)));
     on.push(bridge.on("input:joystick", ({ x, y }) => this.hub.setJoystick(x, y)));
     on.push(bridge.on("input:runToggle", ({ on: v }) => this.hub.setRunToggle(v)));
     on.push(bridge.on("input:sit", () => this.hub.dispatch("sit")));
@@ -556,7 +581,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(
       bridge.on("firework:fire", ({ item, grant }) => {
         // 누른 순간 내 자리에서 바로 터뜨리고, 서버에는 증서를 보낸다 (서버가 같은 채널에 알린다)
-        this.fireworks.launch(item, this.player.x, this.player.y, this.rig.frameView(this.view), true, this.ctx.opts.name);
+        this.fireworks.launch(item, this.player.x, this.player.y, this.fireworkView(), true, this.ctx.opts.name);
         this.net.firework(grant);
       }),
     );
@@ -692,7 +717,7 @@ export class WorldScene extends Phaser.Scene {
         this.fx.flowerToss(pl.x, pl.y, p.x, p.y);
       } else {
         this.fx.flowerBurst(p.x, p.y);
-        this.fx.emoteIcon(pl.x, pl.y, "flower");
+        pl.view.emote("flower", now);
       }
     }
     this.net.emote("flower", graveId);
@@ -708,11 +733,11 @@ export class WorldScene extends Phaser.Scene {
         this.fx.flowerToss(r.x, r.y, p.x, p.y);
       } else {
         if (p) this.fx.flowerBurst(p.x, p.y);
-        if (r?.visible) this.fx.emoteIcon(r.x, r.y, "flower");
+        if (r?.visible) r.view.emote("flower", now);
       }
     } else {
       if (p) this.fx.reviveGlow(p.x, p.y);
-      if (r?.visible) this.fx.emoteIcon(r.x, r.y, "revive");
+      if (r?.visible) r.view.emote("revive", now);
     }
   }
 
@@ -740,6 +765,7 @@ export class WorldScene extends Phaser.Scene {
       color: this.ctx.opts.color,
       name: this.ctx.opts.name,
       look: this.player.view.wearing,
+      body: this.player.view.bodyId,
       reduced: this.reduced,
       onExit: () => this.exitShop(),
     };
@@ -840,11 +866,8 @@ export class WorldScene extends Phaser.Scene {
     const now = this.time.now;
     switch (o.kind) {
       case "tree":
-        pl.attach("hang", o.ax, o.ay, o.ay + 0.5, now, this.seatReq);
-        break;
       case "swing":
-        // 그네 틀(받침 y)보다 앞에 그려야 아바타가 가려지지 않는다
-        pl.attach("swing", o.ax, o.ay, o.ay + SWING_FRONT, now, this.seatReq);
+        this.useSpot(o);
         break;
       case "bell":
         pl.faceTo(o.x, o.y - 8, now);
@@ -864,6 +887,66 @@ export class WorldScene extends Phaser.Scene {
         }
         break;
     }
+  }
+
+  /**
+   * 1인 자리(나무 매달리기·그네): 한 자리에는 한 명. 서버가 판정하면 이미 누가 있을 때 붙지 않고 안내만,
+   * 비어 보이면 바로 붙고(지연 숨김) 점유를 요청한다 — 동시에 잡아 거절되면 mySpotLost가 내려오게 한다.
+   */
+  private useSpot(o: Interactable): void {
+    const spot = spotOf(o);
+    if (!spot) return;
+    const pl = this.player;
+    const judged = this.spotsJudged && this.net.online;
+    if (judged && spotTaken(spot.id, this.seats, this.net.mySid)) {
+      this.toast(SPOT_TAKEN_TOAST[spot.kind]);
+      return;
+    }
+    // 그네 틀(받침 y)보다 앞에 그려야 아바타가 가려지지 않는다
+    const depth = spot.kind === "swing" ? o.ay + SWING_FRONT : o.ay + 0.5;
+    pl.attach(spot.kind, o.ax, o.ay, depth, this.time.now, this.seatReq, spot.id);
+    // 의자에서 바로 옮겨 오면 attach가 일어서기(stand)를 먼저 보낸다 → 그다음 점유 요청
+    if (judged) this.net.sit(spot.id);
+  }
+
+  /** 내 나무·그네 자리를 다른 사람이 먼저 차지했다 (동시 시도·복원 경쟁): 내려와 옆에 서고 안내한다 */
+  private mySpotLost(spotId: string): void {
+    const pl = this.player;
+    if (pl.spotId !== spotId) return;
+    const slot = seatSlot(spotId);
+    const now = this.time.now;
+    pl.leaveAnchor(now);
+    if (!slot) return;
+    const others = [...this.remotes.values()].map((r) => ({ x: r.x, y: r.y }));
+    const to = standBesideSpot(slot, others, inWater);
+    pl.warp(to.x, to.y, now, null);
+    if (slot.kind !== "seat") this.toast(SPOT_TAKEN_TOAST[slot.kind as SpotKind]);
+  }
+
+  private toast(message: string): void {
+    const now = this.time.now;
+    if (message === this.toastMsg && now - this.toastAt < TOAST_REPEAT_MS) return;
+    this.toastMsg = message;
+    this.toastAt = now;
+    bridge.emit("toast", { message });
+  }
+
+  /**
+   * 게임 안 채널 이동 (19): 새 채널의 처음 자리(SPAWN)에서 시작한다. 앉은 자리·나무·그네는 놓고 간다
+   * (옛 채널은 1000으로 닫혀 바로 비워진다). 새로고침 복원(lib/resume.ts)은 이 길을 타지 않아 같은 채널의 같은 자리로 돌아온다.
+   */
+  private switchChannel(channel: number): void {
+    if (this.net.online && this.net.channel === channel) return;
+    if (!this.inShop) {
+      const now = this.time.now;
+      this.leaveCampfire();
+      this.player.warp(SPAWN.x, SPAWN.y, now, this.seatReq);
+      this.player.dir = DIR.down;
+      this.player.view.apply(this.player.state, DIR.down, now);
+      this.rig.recenter();
+      this.recenterAt = 0;
+    }
+    this.net.switchChannel(channel);
   }
 
   /** 첫 방문 안내 대상 → 화살표를 띄울 월드 좌표 (대상 그림 위쪽) */
@@ -949,7 +1032,8 @@ export class WorldScene extends Phaser.Scene {
       else this.fx.splash(x, y);
       if (d < 360 || mine) this.sfx.splash(gain);
     } else if (d < 400 || mine) {
-      this.fx.actIcon(x, y, kind);
+      // 손 흔들기·환호 이모티콘은 아바타가 이름표 위에 띄운다 (AvatarView.playAct). 여기는 환호 반짝임만
+      this.fx.actSparks(x, y, kind);
     }
   }
 
@@ -978,6 +1062,16 @@ export class WorldScene extends Phaser.Scene {
     const pl = this.player;
     const o = nearestObject(this.map.interactables, wx, wy + 6);
     if (o && o.dist < 16 && Math.hypot(o.obj.x - pl.x, o.obj.y - pl.y) <= o.obj.r * 1.5 && !pl.airborne) this.useObject(o.obj);
+  }
+
+  /** 폭죽을 맞출 보이는 영역: 이번 프레임 화면, 불멍 중이면 위아래 레터박스를 뺀다 (8번: 불멍 중 폭죽이 잘림) */
+  private fireworkView(): Phaser.Geom.Rectangle {
+    const v = this.rig.frameView(this.fwView);
+    if (this.campfire.active) {
+      const inset = v.height * LETTERBOX;
+      v.setTo(v.x, v.y + inset, v.width, v.height - 2 * inset);
+    }
+    return v;
   }
 
   private leaveCampfire(): void {
@@ -1293,10 +1387,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** 좌석이 없을 때의 안내: 물속·매달리기·그네·근처 오브젝트·물가 */
-  private objectHint(): { x: number; y: number; text: string } | null {
+  private objectHint(): { x: number; y: number; text: string; dim: boolean } | null {
     const pl = this.player;
     const pre = this.seatHint.prefix;
     const h = this.hintBuf;
+    h.dim = false;
     if (pl.airborne) return null;
     if (pl.state === "swim" || pl.state === "dive") {
       h.x = pl.x;
@@ -1321,6 +1416,12 @@ export class WorldScene extends Phaser.Scene {
       h.x = pl.x;
       h.y = pl.y + 2;
       h.text = pre + o.obj.label;
+      // 1인 자리를 다른 사람이 차지했으면 회색으로 "누가 매달려 있어요"
+      const spot = this.spotsJudged && this.net.online ? spotOf(o.obj) : null;
+      if (spot && spotTaken(spot.id, this.seats, this.net.mySid)) {
+        h.text = SPOT_TAKEN_HINT[spot.kind];
+        h.dim = true;
+      }
       return h;
     }
     if (!this.nearId && nearWater(pl.x, pl.y)) {

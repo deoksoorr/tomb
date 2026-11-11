@@ -8,6 +8,7 @@ import {
   encodeEvent,
   encodeMove,
   seatById,
+  spotSeatId,
   type C2S,
   type Grant,
   type PeerState,
@@ -791,5 +792,118 @@ describe("one seat, one person (restore after a long absence)", () => {
     core.tick(3_100);
     expect(events(b)).toEqual([]);
     expect(snapshots(b)).toEqual([]);
+  });
+});
+
+describe("one spot, one person: tree hang / swing (39)", () => {
+  // 나무 (60,84)의 매달리는 자리 = 줄기 앞 (60,90), 그네 (140,100)의 좌석 = (140,96). 서버는 좌표 id로만 판정한다
+  const TREE = { x: 60, y: 90 };
+  const SWING = { x: 140, y: 96 };
+  const H = spotSeatId("hang", TREE.x, TREE.y);
+  const S = spotSeatId("swing", SWING.x, SWING.y);
+
+  it("welcome advertises spot judging (channels only, not rooms)", () => {
+    expect(welcome(setup().join("a"))).toMatchObject({ spots: true });
+    expect(welcome(setup(3, 20_000, true).join("a")).spots).toBeUndefined();
+  });
+
+  it("two players try the same tree at once → only the first hangs, the other gets seatDenied", () => {
+    const { core, join } = setup();
+    const a = join("a", 0, { x: TREE.x + 8, y: TREE.y + 6 });
+    const b = join("b", 0, { x: TREE.x - 8, y: TREE.y + 6 });
+    clear(a, b);
+    core.message(a, send({ t: "sit", seatId: H }), 0);
+    core.message(b, send({ t: "sit", seatId: H }), 0);
+    expect(events(a)).toEqual([{ t: "seat", seatId: H, sid: 1 }]);
+    expect(events(b)).toEqual([
+      { t: "seat", seatId: H, sid: 1 },
+      { t: "seatDenied", seatId: H },
+    ]);
+    // 거절된 B가 늦게 보낸 hang MOVE도 자리를 빼앗지 못한다 → B는 그 옆에 서 있는 것으로 보인다
+    core.message(b, move(TREE.x, TREE.y, STATE.hang), 10);
+    core.message(a, move(TREE.x, TREE.y, STATE.hang), 10);
+    core.tick(50);
+    const entries = snapshots(a)[0].entries;
+    expect(entries).toContainEqual({ sid: 1, x: TREE.x, y: TREE.y, state: STATE.hang, dir: DIR.down });
+    expect(entries.find((e) => e.sid === 2)?.state).toBe(STATE.idle);
+    expect(core.peer(1)?.seatId).toBe(H);
+    expect(core.peer(2)?.seatId).toBeNull();
+  });
+
+  it("same for the swing; letting go (non-swing MOVE) frees it for the next player", () => {
+    const { core, join } = setup();
+    const a = join("a", 0, { x: SWING.x, y: SWING.y + 5 });
+    const b = join("b", 0, { x: SWING.x + 6, y: SWING.y + 5 });
+    core.message(a, send({ t: "sit", seatId: S }), 0);
+    core.message(b, send({ t: "sit", seatId: S }), 0);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: S });
+    expect(core.peer(1)).toMatchObject({ seatId: S, state: STATE.swing, x: SWING.x, y: SWING.y });
+    clear(a, b);
+    core.message(a, move(SWING.x, SWING.y + 2, STATE.walk), 100);
+    expect(events(b)).toEqual([{ t: "seat", seatId: S, sid: null }]);
+    core.message(b, send({ t: "sit", seatId: S }), 100);
+    expect(core.peer(2)).toMatchObject({ seatId: S, state: STATE.swing });
+  });
+
+  it("explicit stand and warp release a spot too; far / malformed spot ids are denied", () => {
+    const { core, join } = setup();
+    const a = join("a", 0, { x: TREE.x, y: TREE.y + 4 });
+    core.message(a, send({ t: "sit", seatId: H }), 0);
+    core.message(a, send({ t: "stand" }), 0);
+    expect(core.peer(1)).toMatchObject({ seatId: null, state: STATE.idle });
+    core.message(a, send({ t: "sit", seatId: H }), 0);
+    core.message(a, send({ t: "warp", x: 500, y: 500 }), 1_000);
+    expect(core.peer(1)).toMatchObject({ seatId: null, state: STATE.idle });
+    clear(a);
+    core.message(a, send({ t: "sit", seatId: H }), 2_000); // 440px 떨어져 있다
+    core.message(a, send({ t: "sit", seatId: "h_060_90" }), 2_000);
+    expect(events(a)).toEqual([
+      { t: "seatDenied", seatId: H },
+      { t: "seatDenied", seatId: "h_060_90" },
+    ]);
+  });
+
+  it("legacy clients (no sit for spots) are claimed from their hang MOVE — still one per tree", () => {
+    const { core, join } = setup();
+    const a = join("a", 0, { x: TREE.x + 4, y: TREE.y + 8 });
+    const b = join("b", 0, { x: TREE.x - 4, y: TREE.y + 8 });
+    clear(a, b);
+    core.message(a, move(TREE.x, TREE.y, STATE.hang), 0);
+    expect(events(b)).toEqual([{ t: "seat", seatId: H, sid: 1 }]);
+    core.message(b, move(TREE.x, TREE.y, STATE.hang), 0);
+    expect(core.peer(2)).toMatchObject({ seatId: null, state: STATE.idle });
+    // 앉아 있던 의자에서 바로 나무로 옮겨도 한 사람 한 자리
+    const c = join("c", 0, { x: bA0.x, y: bA0.y + 4 });
+    core.message(c, send({ t: "sit", seatId: "bA-0" }), 0);
+    core.message(a, move(TREE.x + 2, TREE.y + 9, STATE.walk), 100); // A가 내려옴
+    core.message(c, move(TREE.x, TREE.y, STATE.hang), 5_000); // 순간이동은 아니지만 판정은 보고 위치 기준
+    expect(core.peer(3)?.seatId).toBe(null); // 의자에서 280px 떨어진 나무: 직전 보고 위치(의자)와 멀어 거절
+    expect(core.peer(3)?.state).toBe(STATE.idle);
+  });
+
+  it("rooms ignore spots (no claim, state passes through)", () => {
+    const { core, join } = setup(3, 20_000, true);
+    const a = join("a", 0, { x: TREE.x, y: TREE.y });
+    core.message(a, move(TREE.x, TREE.y, STATE.hang), 0);
+    expect(core.peer(1)).toMatchObject({ seatId: null, state: STATE.hang });
+  });
+
+  it("reload / redeploy keep the spot (resume on the anchor), and a newcomer is never placed on an occupied spot", () => {
+    const old = setup();
+    const a = old.join("a", 0, { x: TREE.x, y: TREE.y + 6 });
+    old.core.message(a, send({ t: "sit", seatId: H }), 0);
+    // 새로고침: 1001로 끊기고 같은 좌표(앵커)로 돌아온다 → 자리 유지
+    old.core.disconnect(a, 1001, 100);
+    const a2 = old.join("a", 2_000, { ...TREE }, old.conn("a2"));
+    expect(welcome(a2)).toMatchObject({ sid: 1, resumed: true, seats: { [H]: 1 } });
+    // 재배포: 스냅샷으로 되살아나 같은 자리
+    const live = old.core.liveRecords();
+    const next = setup();
+    next.core.restore([], [], 10_000, live, 60_000);
+    expect(next.core.peer(1)).toMatchObject({ seatId: H, state: STATE.hang });
+    // 그 사이 새로 온 사람이 앵커 좌표로 들어와도 그 위가 아니라 앞에 선다
+    const c = next.join("c", 11_000, { ...TREE });
+    expect(welcome(c).seats).toEqual({ [H]: 1 });
+    expect(next.core.peer(welcome(c).sid)).toMatchObject({ x: TREE.x, y: TREE.y + 9, seatId: null });
   });
 });

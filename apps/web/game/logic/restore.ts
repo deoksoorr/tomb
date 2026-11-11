@@ -4,6 +4,7 @@ import { standPoint } from "./sit";
 // 새로고침 뒤 자리 복원의 순수 규칙 (lib/resume.ts 기록 → WorldScene). 한 자리에는 무조건 한 명:
 //  - 앉아 있던 좌석을 서버가 거절하면(그 사이 다른 사람이 앉음) 가까운 빈 좌석으로, 없으면 그 좌석 앞에 선다
 //  - 서 있던 자리에 다른 사람이 서 있으면 살짝 비켜 선다
+//  - 나무·그네(1인 소품 자리, logic/spots.ts)도 서버 좌석 점유표로 판정한다: 남이 차지했으면 내려와 옆에 선다
 
 /** 거절된 좌석 대신 앉을 빈자리를 찾는 반경 (모닥불 둘레 자리끼리는 30~50px) */
 export const RESTORE_SEAT_RADIUS = 56;
@@ -63,6 +64,30 @@ export function restoreAfterDenied(
   const seat = fallbackSeat(denied, occupied, mySid);
   if (seat) return { seat, stand: standPoint(seat) };
   return { seat: null, stand: nudgeSpot(standPoint(denied), others) };
+}
+
+/**
+ * (재)접속 welcome에서 붙어 있던 소품 자리(나무·그네)를 서버 점유표로 판정한다 (새로고침 복원·재연결 공통).
+ *  - keep: 서버가 이미 내 자리로 기억한다 (유예 안 복귀·재배포 복원)
+ *  - claim: 비어 있다 → 다시 요청 (그 사이 누가 먼저면 seatDenied로 내려온다)
+ *  - leave: 그 사이 다른 사람이 차지했다 → 내려와 옆에 선다
+ */
+export function spotVerdict(id: string, seats: Readonly<Record<string, Sid>>, mySid: Sid): "keep" | "claim" | "leave" {
+  const owner = seats[id];
+  if (owner === undefined) return "claim";
+  return owner === mySid ? "keep" : "leave";
+}
+
+/** 소품 자리에서 내려설 때 앵커 아래로 (서버 SEAT_STAND_DY와 같다) */
+export const SPOT_STAND_DY = 9;
+
+/** 소품 자리를 놓쳤을 때 설 곳: 앵커 바로 앞(차지한 사람 발밑)을 피해 비켜 선다 */
+export function standBesideSpot(
+  anchor: { x: number; y: number },
+  others: Iterable<{ x: number; y: number }>,
+  blocked: (x: number, y: number) => boolean = () => false,
+): { x: number; y: number } {
+  return nudgeSpot({ x: anchor.x, y: anchor.y + SPOT_STAND_DY }, [anchor, ...others], blocked);
 }
 
 /** 그네·나무: 저장된 앵커(x,y)와 같은 오브젝트 (2px 안) */

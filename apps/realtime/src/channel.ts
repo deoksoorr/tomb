@@ -11,13 +11,16 @@ import {
   encodeSnapshot,
   inServerBounds,
   parseC2S,
-  seatById,
+  seatSlot,
+  spotKindOfState,
+  spotSeatId,
   type C2S,
   type DirId,
   type Grant,
   type MoveMsg,
   type PeerInfo,
   type PeerState,
+  type SeatSlot,
   type S2C,
   type StateId,
 } from "@tomb/protocol";
@@ -331,7 +334,7 @@ export class ChannelCore<C extends object> {
 
   /** 복귀한 클라이언트가 알려 준 위치로 옮긴다(위치의 원천은 클라이언트). 앉아 있던 좌석 근처면 좌석을 유지한다. */
   private relocate(p: Peer<C>, want: Point): void {
-    const seat = p.seatId ? seatById(p.seatId) : undefined;
+    const seat = p.seatId ? seatSlot(p.seatId) : undefined;
     if (seat && dist(seat, want) <= SEAT_SERVER_RADIUS) return;
     if (p.seatId) this.releaseSeat(p);
     // 그 사이 다른 사람이 앉은 좌석 위로 돌아오지 않는다 (클라이언트는 seatDenied를 받고 가까운 빈자리로 옮긴다)
@@ -349,7 +352,7 @@ export class ChannelCore<C extends object> {
     if (this.cfg.room) return pos;
     for (const [seatId, sid] of this.seats) {
       if (sid === self) continue;
-      const s = seatById(seatId);
+      const s = seatSlot(seatId);
       if (s && dist(s, pos) < SEAT_CLEAR_RADIUS) return { x: s.x, y: s.y + SEAT_STAND_DY };
     }
     return pos;
@@ -364,6 +367,8 @@ export class ChannelCore<C extends object> {
       peers: this.othersOf(p),
       seats: Object.fromEntries(this.seats),
       resumed,
+      // 나무·그네도 좌석처럼 판정한다 (이 값이 없는 이전 서버에는 클라이언트가 소품 자리를 요청하지 않는다)
+      ...(this.cfg.room ? {} : { spots: true }),
     });
   }
 
@@ -458,10 +463,24 @@ export class ChannelCore<C extends object> {
 
   private onMove(p: Peer<C>, m: MoveMsg, now: number): void {
     if (!this.inBounds(m.x, m.y)) return;
-    // 좌석 판정은 서버가 한다: 좌석을 얻지 못한 채 보낸 sitChair는 바닥 앉기로 본다.
-    // (클라이언트는 요청과 동시에 스냅을 시작하므로 sit보다 MOVE가 먼저 올 수 있다. 승인되면 onSit이 sitChair로 바꾼다)
-    const state = m.state === STATE.sitChair && !p.seatId ? STATE.sitGround : m.state;
-    if (p.seatId && state !== STATE.sitChair) this.releaseSeat(p);
+    // 좌석 판정은 서버가 한다. 자리를 차지한 상태(의자 sitChair, 나무 hang, 그네 swing)가 아닌 MOVE가 오면 자리를 놓는다.
+    let held = p.seatId ? seatSlot(p.seatId) : undefined;
+    if (p.seatId && (!held || m.state !== held.state)) {
+      this.releaseSeat(p);
+      held = undefined;
+    }
+    let state: StateId = m.state;
+    if (!held) {
+      // 좌석을 얻지 못한 채 보낸 sitChair는 바닥 앉기로 본다.
+      // (클라이언트는 요청과 동시에 스냅을 시작하므로 sit보다 MOVE가 먼저 올 수 있다. 승인되면 onSit이 sitChair로 바꾼다)
+      if (state === STATE.sitChair) state = STATE.sitGround;
+      // 나무·그네 상태인데 자리가 없다: 자리를 요청하지 않는 이전 클라이언트(또는 거절된 뒤 늦게 온 MOVE).
+      // 보고된 위치(= 앵커)의 소품 자리가 비어 있으면 대신 잡아 주고, 누가 있으면 그 옆에 서 있는 것으로 본다 → 한 자리에 한 명
+      else if (!this.cfg.room) {
+        const kind = spotKindOfState(state);
+        if (kind && !this.claimSpot(p, spotSeatId(kind, m.x, m.y))) state = STATE.idle;
+      }
+    }
     const changed = state !== p.state || m.dir !== p.dir;
     p.state = state;
     p.dir = m.dir;
@@ -584,17 +603,37 @@ export class ChannelCore<C extends object> {
 
   // ── 좌석 (서버가 판정) ──
 
+  /**
+   * 1인 자리 점유 (의자·벤치 좌석과 나무·그네 같은 소품 자리 공통, world.ts seatSlot).
+   * 한 자리에는 한 명: 이미 누가 있거나 멀면 seatDenied.
+   */
   private onSit(p: Peer<C>, seatId: string): void {
-    const seat = seatById(seatId);
+    const seat = seatSlot(seatId);
     const holder = this.seats.get(seatId);
     if (seat && holder === p.sid) return this.sendTo(p, { t: "seat", seatId, sid: p.sid }); // 재요청: 이미 내 자리
     // 긴 벤치에서 앉은 채 옆자리로: 같은 가구의 다른 좌석이면 거리와 상관없이 옮겨 앉는다
-    const old = p.seatId ? seatById(p.seatId) : undefined;
-    const slide = !!seat && !!old && old.furnitureId === seat.furnitureId;
+    const old = p.seatId ? seatSlot(p.seatId) : undefined;
+    const slide = !!seat && !!old && old.furnitureId !== null && old.furnitureId === seat.furnitureId;
     // 위치는 클라이언트가 마지막으로 보고한 지점으로 잰다 (서버 위치가 속도 예산 때문에 잠깐 뒤처져 있어도 거절하지 않게)
     if (!seat || holder !== undefined || (!slide && dist(seat, { x: p.tx, y: p.ty }) > SEAT_SERVER_RADIUS)) {
       return this.sendTo(p, { t: "seatDenied", seatId });
     }
+    this.occupy(p, seat);
+  }
+
+  /** MOVE로 들어온 나무·그네 상태의 자리 잡기 (이전 클라이언트용). 잡았으면(이미 내 자리 포함) true. 거절 알림은 보내지 않는다 */
+  private claimSpot(p: Peer<C>, seatId: string): boolean {
+    const seat = seatSlot(seatId);
+    if (!seat) return false;
+    const holder = this.seats.get(seatId);
+    if (holder === p.sid) return true;
+    if (holder !== undefined || dist(seat, { x: p.tx, y: p.ty }) > SEAT_SERVER_RADIUS) return false;
+    this.occupy(p, seat);
+    return true;
+  }
+
+  private occupy(p: Peer<C>, seat: SeatSlot): void {
+    const seatId = seat.id;
     // 한 사람당 한 자리. DO는 한 번에 한 이벤트만 처리하므로 점유와 해제 사이에 다른 요청이 끼어들 수 없다
     // (같은 빈 자리로 두 명이 동시에 옮기면 먼저 처리된 한 명만 앉고, 다른 한 명은 seatDenied).
     // 새 자리 점유를 먼저 알리고 옛 자리 해제를 바로 이어 보낸다 — 클라이언트에는 같은 틱에 함께 도착한다.
@@ -607,7 +646,7 @@ export class ChannelCore<C extends object> {
     p.seatId = seatId;
     p.x = p.tx = seat.x;
     p.y = p.ty = seat.y;
-    p.state = STATE.sitChair;
+    p.state = seat.state;
     p.dir = seat.facing;
     this.chasing.delete(p.sid);
     this.markDirty(p);
@@ -618,8 +657,9 @@ export class ChannelCore<C extends object> {
 
   private onStand(p: Peer<C>): void {
     if (!p.seatId) return;
+    const held = seatSlot(p.seatId);
     this.releaseSeat(p);
-    if (p.state === STATE.sitChair) p.state = STATE.idle;
+    if (p.state === STATE.sitChair || (held && p.state === held.state)) p.state = STATE.idle;
     this.markDirty(p);
   }
 
@@ -639,7 +679,7 @@ export class ChannelCore<C extends object> {
     if (!this.inBounds(to.x, to.y) || now - p.lastWarpAt < SERVER_WARP_COOLDOWN_MS) return;
     p.lastWarpAt = now;
     if (p.seatId) this.releaseSeat(p);
-    if (p.state === STATE.sitChair || p.state === STATE.sitGround) p.state = STATE.idle;
+    if (p.state === STATE.sitChair || p.state === STATE.sitGround || spotKindOfState(p.state)) p.state = STATE.idle;
     p.x = p.tx = to.x;
     p.y = p.ty = to.y;
     this.chasing.delete(p.sid);
@@ -721,7 +761,7 @@ export class ChannelCore<C extends object> {
     const p = this.adoptNew(rec, conn, now);
     p.until = until;
     if (p.seatId) {
-      if (!seatById(p.seatId) || this.seats.has(p.seatId)) p.seatId = null;
+      if (!seatSlot(p.seatId) || this.seats.has(p.seatId)) p.seatId = null;
       else this.seats.set(p.seatId, p.sid);
     }
     return true;

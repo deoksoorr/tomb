@@ -8,7 +8,7 @@ export type GraveEventKind = "buried" | "updated" | "removed";
 
 // ── 클라이언트 → 서버 ──
 export type C2S =
-  /** 의자/벤치 좌석 점유 요청. 결과는 seat 브로드캐스트 또는 seatDenied */
+  /** 1인 자리 점유 요청: 의자/벤치 좌석 또는 소품 자리(world.ts seatSlot). 결과는 seat 브로드캐스트 또는 seatDenied */
   | { t: "sit"; seatId: string }
   /** 좌석에서 일어남 (sitChair가 아닌 MOVE를 보내도 자동 해제된다) */
   | { t: "stand" }
@@ -41,6 +41,11 @@ export type WelcomeMsg = {
   seats: Record<string, Sid>;
   /** 재연결 유예 안에 돌아와서 자리를 되찾았으면 true */
   resumed: boolean;
+  /**
+   * 서버가 소품 자리(나무 매달리기·그네 등, world.ts SPOT_KINDS)도 좌석처럼 판정한다.
+   * 없으면(이전 서버) 클라이언트는 소품 자리를 요청하지 않고 예전처럼 혼자 붙는다.
+   */
+  spots?: boolean;
 };
 
 export type S2C =

@@ -1,4 +1,4 @@
-import { DIR, type DirId } from "./types";
+import { DIR, STATE, type DirId, type StateId } from "./types";
 
 // 맵 레이아웃. 모든 채널이 같은 맵을 쓰고, 서버(좌석 판정·범위 검증)와 클라이언트(렌더링)가 공유한다.
 // 단위: 월드 픽셀(스케일 전). 16px 타일, 화면에는 3배 줌. 가로 1024px, 중앙 x=512 기준 좌우 대칭.
@@ -259,6 +259,66 @@ export function seatsNear(x: number, y: number, radius: number): Seat[] {
     .filter((e) => e.d <= radius)
     .sort((a, b) => a.d - b.d)
     .map((e) => e.s);
+}
+
+// ── 1인 자리 (좌석 체계 공통) ──
+// 한 자리에는 무조건 한 명(사용자 원칙). 의자·벤치(SEATS, 고정 id)와 똑같은 sit → seat/seatDenied 판정으로
+// 맵 소품 자리(나무 매달리기·그네, 앞으로 낚시 자리·채집 지점·집 안 가구 …)도 서버가 점유를 정한다.
+// 소품 자리는 묘비 수에 따라 배치가 바뀌는 구역에도 있어 서버가 목록을 다 알 수 없다 → id에 종류와 앵커 좌표를 담는다:
+//   `${code}_${x}_${y}` (예: 나무 "h_60_90", 그네 "s_140_96"). 앵커 = 그 자리를 차지한 캐릭터의 발 위치(MOVE x,y).
+// 서버는 형식(정규형: 같은 자리는 id가 하나뿐)과 플레이어와의 거리만 확인한다. 새 1인 자리는 SPOT_KINDS에 한 줄 더하면 된다.
+
+export type SpotKind = "hang" | "swing";
+export const SPOT_KINDS: Readonly<Record<SpotKind, { code: string; state: StateId; facing: DirId }>> = {
+  /** 나무에 매달리기 (앵커 = 줄기 앞 발 위치) */
+  hang: { code: "h", state: STATE.hang, facing: DIR.down },
+  /** 그네 타기 (앵커 = 그네 좌석) */
+  swing: { code: "s", state: STATE.swing, facing: DIR.down },
+};
+const SPOT_BY_CODE = new Map(Object.entries(SPOT_KINDS).map(([kind, v]) => [v.code, kind as SpotKind]));
+const SPOT_BY_STATE = new Map<number, SpotKind>(Object.entries(SPOT_KINDS).map(([kind, v]) => [v.state, kind as SpotKind]));
+const SPOT_ID_RE = /^([a-z])_(0|[1-9]\d{0,4})_(0|[1-9]\d{0,4})$/;
+
+/** 소품 자리 id (좌표는 정수로 반올림) */
+export function spotSeatId(kind: SpotKind, x: number, y: number): string {
+  return `${SPOT_KINDS[kind].code}_${Math.round(x)}_${Math.round(y)}`;
+}
+
+/** 이 상태(STATE)로 차지하는 소품 자리 종류 (hang → "hang"). 없으면 null */
+export function spotKindOfState(state: number): SpotKind | null {
+  return SPOT_BY_STATE.get(state) ?? null;
+}
+
+/**
+ * 좌석 체계의 한 자리: 의자·벤치 좌석 또는 소품 자리.
+ * state = 그 자리를 차지한 동안의 캐릭터 상태(의자 sitChair, 나무 hang, 그네 swing), furnitureId = 같은 벤치 판정용(소품 자리는 null)
+ */
+export type SeatSlot = {
+  id: string;
+  kind: "seat" | SpotKind;
+  x: number;
+  y: number;
+  facing: DirId;
+  state: StateId;
+  furnitureId: string | null;
+};
+
+const seatSlots = new Map<string, SeatSlot>(
+  SEATS.map((s) => [s.id, { id: s.id, kind: "seat", x: s.x, y: s.y, facing: s.facing, state: STATE.sitChair, furnitureId: s.furnitureId }]),
+);
+
+/** id → 자리 (의자·벤치 좌석 또는 형식이 맞는 소품 자리). 모르는 id면 undefined */
+export function seatSlot(id: string): SeatSlot | undefined {
+  const s = seatSlots.get(id);
+  if (s) return s;
+  const m = SPOT_ID_RE.exec(id);
+  if (!m) return undefined;
+  const kind = SPOT_BY_CODE.get(m[1]);
+  const x = Number(m[2]);
+  const y = Number(m[3]);
+  if (!kind || x > 0xffff || y > 0xffff) return undefined;
+  const k = SPOT_KINDS[kind];
+  return { id, kind, x, y, facing: k.facing, state: k.state, furnitureId: null };
 }
 
 // ── 생존 기간에 따른 묘비 외형 ──

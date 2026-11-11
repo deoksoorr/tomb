@@ -2,7 +2,7 @@ import * as Phaser from "phaser";
 import { itemById } from "@tomb/protocol";
 import { TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
-import { burstSpeed, finaleTimes, fireworkPlan, FW_BASE_RADIUS, heartPoint, meteorShower, sampleTextMask, type FireworkPlan, type MeteorStreak } from "./fxMath";
+import { burstSpeed, finaleTimes, fireworkPlan, fitBurst, FW_BASE_RADIUS, heartPoint, meteorShower, sampleTextMask, type FireworkPlan, type MeteorStreak } from "./fxMath";
 import type { Lighting } from "./Lighting";
 import type { Sfx } from "./Sfx";
 
@@ -156,7 +156,10 @@ export class Fireworks {
     return this.scene.add.image(0, 0, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setVisible(false).setActive(false);
   }
 
-  /** (x,y): 쏜 사람의 발밑 (월드 좌표). mine이면 소리를 조금 크게 */
+  /**
+   * (x,y): 쏜 사람의 발밑 (월드 좌표). mine이면 소리를 조금 크게.
+   * view: 보이는 영역 (불멍 중이면 레터박스를 뺀 영역) — 화면 안에서 쏘면 터지는 높이·반경을 그 안에 맞춘다
+   */
   launch(item: string, x: number, y: number, view: Phaser.Geom.Rectangle, mine: boolean, label?: string): void {
     const plan = fireworkPlan(itemById(item)?.power, this.reduced);
     const now = this.scene.time.now;
@@ -168,7 +171,9 @@ export class Fireworks {
       const burstY = y - BURST_H - 8;
       const onScreen = x > view.x - 30 && x < view.right + 30 && burstY > view.y - 40 && y < view.bottom + 60;
       const text = (label ?? "").trim().slice(0, 12) || LETTER_FALLBACK;
-      this.rockets.push({ x, y, t0: now, delay: 0, h: BURST_H + 8, r: 0, colors: COLORS.gold, pattern: "letters", plan, mode: onScreen ? "world" : "sky", loud: mine, big: false, trailAt: 0, launched: false, label: text });
+      // 글자는 높이 약 30px: 그만큼 들어오게 솟는 높이만 맞춘다
+      const lh = onScreen ? fitBurst(x, y, BURST_H + 8, 18, view).h : BURST_H + 8;
+      this.rockets.push({ x, y, t0: now, delay: 0, h: lh, r: 0, colors: COLORS.gold, pattern: "letters", plan, mode: onScreen ? "world" : "sky", loud: mine, big: false, trailAt: 0, launched: false, label: text });
       return;
     }
     if (plan.sky) {
@@ -187,7 +192,9 @@ export class Fireworks {
     const onScreen = x > view.x - margin && x < view.right + margin && burstY > view.y - 80 - margin && y < view.bottom + 60;
     const mode: Mode = onScreen ? "world" : "sky";
     const add = (dx: number, delay: number, hh: number, colors: readonly number[], pattern: Pattern) => {
-      this.rockets.push({ x: x + dx, y, t0: now, delay, h: hh, r, colors, pattern, plan, mode, loud: mine, big: false, trailAt: 0, launched: false });
+      // 화면 안에서 쏘면 보이는 영역 안에서 터지게 맞춘다 (불멍처럼 가까이 당긴 구도에서 위로 잘리지 않게)
+      const fit = mode === "world" ? fitBurst(x + dx, y, hh, r, view) : { h: hh, r };
+      this.rockets.push({ x: x + dx, y, t0: now, delay, h: fit.h, r: fit.r, colors, pattern, plan, mode, loud: mine, big: false, trailAt: 0, launched: false });
     };
     switch (plan.power) {
       case 2:

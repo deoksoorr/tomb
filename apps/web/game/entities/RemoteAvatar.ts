@@ -1,12 +1,12 @@
 import type * as Phaser from "phaser";
-import { DIR, STATE, STATE_NAMES, seatById, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
+import { DIR, STATE, STATE_NAMES, seatSlot, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
 import { jumpHeight, shadowScale } from "../logic/jump";
 import { Interpolator, type InterpOut } from "../net/Interpolator";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
 import { AvatarView } from "./AvatarView";
 
 // 원격 아바타: 받은 상태 값만으로 같은 상태 머신·애니메이션을 재생한다.
-// 위치는 Interpolator(120ms 지연 버퍼, 200ms 외삽, 96px 스냅)가 정한다.
+// 위치는 Interpolator(경로 따라가기 + 적응형 버퍼, 짧은 외삽, 96px 스냅)가 정한다.
 // 화면 밖이면 위치 갱신은 계속하되 그리지 않는다.
 
 const CULL_MARGIN = 16;
@@ -19,7 +19,7 @@ export class RemoteAvatar {
   readonly view: AvatarView;
   readonly interp = new Interpolator();
   private readonly out: InterpOut = { x: 0, y: 0, state: STATE.idle, dir: DIR.down };
-  /** 서버 좌석 점유표에서 이 사람이 앉은 좌석 */
+  /** 서버 좌석 점유표에서 이 사람이 차지한 1인 자리 (의자·벤치 좌석 또는 나무·그네) */
   seatId: string | null = null;
   x = 0;
   y = 0;
@@ -57,16 +57,16 @@ export class RemoteAvatar {
     let x = o.x;
     let y = o.y;
     this.view.depthOverride = null;
-    if (o.state === STATE.sitChair && this.seatId) {
-      const seat = seatById(this.seatId);
-      if (seat) {
-        x = seat.x;
-        y = seat.y;
-        this.view.depthOverride = seat.y + 1;
-      }
+    // 차지한 자리(의자·나무·그네)에 있는 동안은 그 앵커에 고정한다 (보간이 늦어도 자리 위에 정확히)
+    const slot = this.seatId ? seatSlot(this.seatId) : undefined;
+    if (slot && slot.state === o.state) {
+      x = slot.x;
+      y = slot.y;
     }
-    // 그네 탄 사람은 그네 틀(받침 y = 좌석 + 5) 앞에 그린다
+    if (o.state === STATE.sitChair && slot) this.view.depthOverride = y + 1;
+    // 그네 탄 사람은 그네 틀(받침 y = 좌석 + 5) 앞에, 매달린 사람은 나무 줄기 앞에 그린다 (내 캐릭터와 같은 기준)
     else if (o.state === STATE.swing) this.view.depthOverride = y + SWING_FRONT;
+    else if (o.state === STATE.hang) this.view.depthOverride = y + 0.5;
     this.x = x;
     this.y = y;
     this.view.apply(STATE_NAMES[o.state], o.dir, now);

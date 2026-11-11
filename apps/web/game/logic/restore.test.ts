@@ -47,3 +47,44 @@ describe("자리 복원 — 한 자리에는 한 명", () => {
     expect(anchorAt(list, "tree", 50, 63)).toBeNull();
   });
 });
+
+describe("자리 복원 — 나무·그네도 서버 좌석으로 (39)", () => {
+  it("welcome 점유표로 판정: 내 자리면 유지, 비었으면 다시 요청, 남이면 내려온다", async () => {
+    const { spotVerdict } = await import("./restore");
+    expect(spotVerdict("h_60_90", { h_60_90: 3 }, 3)).toBe("keep");
+    expect(spotVerdict("h_60_90", {}, 3)).toBe("claim");
+    expect(spotVerdict("h_60_90", { h_60_90: 7, "bA-0": 3 }, 3)).toBe("leave");
+  });
+
+  it("놓친 자리에서는 앵커(차지한 사람 발밑)를 피해 앞에 비켜 선다", async () => {
+    const { standBesideSpot, SPOT_STAND_DY } = await import("./restore");
+    const a = { x: 60, y: 90 };
+    expect(standBesideSpot(a, [])).toEqual({ x: 60, y: 90 + SPOT_STAND_DY });
+    const s = standBesideSpot(a, [{ x: 60, y: 90 + SPOT_STAND_DY }]);
+    expect(Math.hypot(s.x - 60, s.y - (90 + SPOT_STAND_DY))).toBeGreaterThanOrEqual(OVERLAP_DIST);
+    expect(Math.hypot(s.x - a.x, s.y - a.y)).toBeGreaterThanOrEqual(OVERLAP_DIST);
+  });
+
+  it("오브젝트 → 1인 자리: 나무 = hang, 그네 = swing, 종·우물은 여럿이 함께", async () => {
+    const { spotOf, spotTaken } = await import("./spots");
+    expect(spotOf({ kind: "tree", ax: 60, ay: 90 })).toEqual({ kind: "hang", id: "h_60_90" });
+    expect(spotOf({ kind: "swing", ax: 140, ay: 96 })).toEqual({ kind: "swing", id: "s_140_96" });
+    expect(spotOf({ kind: "bell", ax: 1, ay: 1 })).toBeNull();
+    const occ = new Map([["h_60_90", 5]]);
+    expect(spotTaken("h_60_90", occ, 5)).toBe(false);
+    expect(spotTaken("h_60_90", occ, 6)).toBe(true);
+    expect(spotTaken("s_140_96", occ, 6)).toBe(false);
+  });
+
+  it("맵의 모든 나무·그네 자리 id가 서로 다르고 서버가 알아보는 형식이다", async () => {
+    const { interactables } = await import("../world/layout");
+    const { spotOf } = await import("./spots");
+    const { seatSlot } = await import("@tomb/protocol");
+    const ids = interactables(40)
+      .map((o) => spotOf(o))
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+    expect(ids.length).toBeGreaterThan(10);
+    expect(new Set(ids.map((x) => x.id)).size).toBe(ids.length);
+    for (const x of ids) expect(seatSlot(x.id)?.kind).toBe(x.kind);
+  });
+});
