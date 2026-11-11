@@ -65,6 +65,35 @@ local function take(inv, item)
 end
 `;
 
+/**
+ * 캐릭터 꾸미기 착용 도우미. look = HASH 부위 → `${itemId}|${만료 ms}`, stash = HASH itemId → 만료 ms.
+ *  - prune: 만료된 착용품·벗어 둔 꾸미기를 지운다
+ *  - puton: 그 부위에 입힌다. 입던 것은 stash로 (같은 아이템이면 새 것이 대신하므로 버린다),
+ *    입는 아이템은 stash에서 지운다 → 한 아이템은 look과 stash 중 한 곳에만 있다. MemoryAccounts.putOn과 같은 규칙
+ */
+const LOOK_FN = `
+local function prune(look, stash, now)
+  local l = redis.call('HGETALL', look)
+  for i = 1, #l, 2 do
+    local untilMs = tonumber(string.match(l[i + 1], '|(.+)$') or '0')
+    if not untilMs or untilMs <= now then redis.call('HDEL', look, l[i]) end
+  end
+  local s = redis.call('HGETALL', stash)
+  for i = 1, #s, 2 do
+    if (tonumber(s[i + 1]) or 0) <= now then redis.call('HDEL', stash, s[i]) end
+  end
+end
+local function puton(look, stash, slot, item, untilMs)
+  local old = redis.call('HGET', look, slot)
+  if old then
+    local oldItem, oldUntil = string.match(old, '^([^|]+)|(.+)$')
+    if oldItem and oldItem ~= item then redis.call('HSET', stash, oldItem, oldUntil) end
+  end
+  redis.call('HDEL', stash, item)
+  redis.call('HSET', look, slot, item .. '|' .. untilMs)
+end
+`;
+
 // KEYS: acct, earn, rank, econ, [earnIp]  ARGV: id, source, points, dailyMax, dailyCap, balanceCap, ttl, ipMax
 const EARN_LUA = `${CREDIT_FN}
 local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], id = ARGV[1], dailyCap = tonumber(ARGV[5]), balanceCap = tonumber(ARGV[6]), ttl = ARGV[7] }
@@ -102,11 +131,12 @@ if streak % 7 == 0 then earned = earned + credit(c, 'streak', tonumber(ARGV[9]),
 return earned
 `;
 
-// 구매. unique('1')면 가방에 있거나 지금 착용 중일 때 -1. 잔액 부족은 0
-// KEYS: acct, inv, look, econ  ARGV: itemId, price, unique, now
+// 구매. unique('1')면 가방에 있거나 지금 착용 중이거나 벗어 둔 것(만료 전)이 있을 때 -1. 잔액 부족은 0
+// KEYS: acct, inv, look, econ, stash  ARGV: itemId, price, unique, now
 const BUY_LUA = `
 if ARGV[3] == '1' then
   if tonumber(redis.call('HGET', KEYS[2], ARGV[1]) or '0') > 0 then return -1 end
+  if tonumber(redis.call('HGET', KEYS[5], ARGV[1]) or '0') > tonumber(ARGV[4]) then return -1 end
   for _, v in ipairs(redis.call('HVALS', KEYS[3])) do
     local item, untilMs = string.match(v, '^([^|]+)|(.+)$')
     if item == ARGV[1] and tonumber(untilMs) > tonumber(ARGV[4]) then return -1 end
@@ -154,10 +184,34 @@ if take(KEYS[1], ARGV[1]) then return 1 end
 return 0
 `;
 
-// KEYS: inv, look  ARGV: itemId, slot, until
-const EQUIP_LUA = `${TAKE_FN}
+// 가방에서 꺼내 입기 (입던 것은 stash로)
+// KEYS: inv, look, stash  ARGV: itemId, slot, until, now
+const EQUIP_LUA = `${TAKE_FN}${LOOK_FN}
 if not take(KEYS[1], ARGV[1]) then return 0 end
-redis.call('HSET', KEYS[2], ARGV[2], ARGV[1] .. '|' .. ARGV[3])
+prune(KEYS[2], KEYS[3], tonumber(ARGV[4]))
+puton(KEYS[2], KEYS[3], ARGV[2], ARGV[1], ARGV[3])
+return 1
+`;
+
+// 벗어 둔 꾸미기 다시 입기 (남은 시간 그대로, 입던 것은 stash로). stash에 없으면(만료 포함) 0
+// KEYS: look, stash  ARGV: itemId, slot, now
+const WEAR_LUA = `${LOOK_FN}
+prune(KEYS[1], KEYS[2], tonumber(ARGV[3]))
+local untilMs = redis.call('HGET', KEYS[2], ARGV[1])
+if not untilMs then return 0 end
+puton(KEYS[1], KEYS[2], ARGV[2], ARGV[1], untilMs)
+return 1
+`;
+
+// 그 부위 벗기 (stash로, 남은 시간 그대로). 입은 게 없으면(만료 포함) 0
+// KEYS: look, stash  ARGV: slot, now
+const UNEQUIP_LUA = `${LOOK_FN}
+prune(KEYS[1], KEYS[2], tonumber(ARGV[2]))
+local cur = redis.call('HGET', KEYS[1], ARGV[1])
+if not cur then return 0 end
+local item, untilMs = string.match(cur, '^([^|]+)|(.+)$')
+redis.call('HDEL', KEYS[1], ARGV[1])
+if item then redis.call('HSET', KEYS[2], item, untilMs) end
 return 1
 `;
 
@@ -260,7 +314,7 @@ export class RedisAccounts implements AccountStore {
   }
 
   async get(id: string, day: string, now: number): Promise<AccountRecord> {
-    const [acct, inv, look, graves, today, activity] = await this.redis
+    const [acct, inv, look, graves, today, activity, stashRaw] = await this.redis
       .pipeline()
       .hgetall(K.acct(id))
       .hgetall(K.inv(id))
@@ -268,12 +322,17 @@ export class RedisAccounts implements AccountStore {
       .smembers(K.acctGraves(id))
       .hget(K.earn(id, day), "_total")
       .lrange(K.activity(id), 0, -1)
-      .exec<[string[] | null, string[] | null, string[] | null, string[], string | null, string[]]>();
+      .hgetall(K.stash(id))
+      .exec<[string[] | null, string[] | null, string[] | null, string[], string | null, string[], string[] | null]>();
     const a = pairs(acct);
     const equipped: EquippedItem[] = [...pairs(look).values()].flatMap((v) => {
       const [itemId, until] = v.split("|");
       return Number(until) > now ? [{ itemId, until: Number(until) }] : [];
     });
+    const stash: EquippedItem[] = [...pairs(stashRaw)]
+      .map(([itemId, until]) => ({ itemId, until: Number(until) }))
+      .filter((e) => e.until > now)
+      .sort((x, y) => x.until - y.until || x.itemId.localeCompare(y.itemId));
     return {
       points: Number(a.get("points") ?? 0),
       lifetimePoints: Number(a.get("lifetime") ?? a.get("points") ?? 0),
@@ -285,6 +344,7 @@ export class RedisAccounts implements AccountStore {
       hasCode: a.has("codeHash"),
       inventory: Object.fromEntries([...pairs(inv)].map(([k, v]) => [k, Number(v)])),
       equipped,
+      stash,
       graves,
       todayEarned: Number(today ?? 0),
       activityUnread: activity.filter((raw) => (JSON.parse(raw) as ActivityItem).at > Number(a.get("activitySeen") ?? 0)).length,
@@ -424,7 +484,7 @@ export class RedisAccounts implements AccountStore {
     opts: { unique?: boolean; now?: number } = {},
   ): Promise<"ok" | "insufficient" | "owned"> {
     const r = Number(
-      await this.redis.eval<string[], number>(BUY_LUA, [K.acct(id), K.inv(id), K.look(id), K.econ(kstDay(opts.now ?? Date.now()))], [
+      await this.redis.eval<string[], number>(BUY_LUA, [K.acct(id), K.inv(id), K.look(id), K.econ(kstDay(opts.now ?? Date.now())), K.stash(id)], [
         itemId,
         String(price),
         opts.unique ? "1" : "0",
@@ -438,8 +498,23 @@ export class RedisAccounts implements AccountStore {
     return Number(await this.redis.eval<string[], number>(CONSUME_LUA, [K.inv(id)], [itemId])) === 1;
   }
 
-  async equip(id: string, itemId: string, slot: CosmeticSlot, until: number): Promise<boolean> {
-    const r = await this.redis.eval<string[], number>(EQUIP_LUA, [K.inv(id), K.look(id)], [itemId, slot, String(until)]);
+  async equip(id: string, itemId: string, slot: CosmeticSlot, until: number, now: number): Promise<boolean> {
+    const r = await this.redis.eval<string[], number>(EQUIP_LUA, [K.inv(id), K.look(id), K.stash(id)], [
+      itemId,
+      slot,
+      String(until),
+      String(now),
+    ]);
+    return Number(r) === 1;
+  }
+
+  async wear(id: string, itemId: string, slot: CosmeticSlot, now: number): Promise<boolean> {
+    const r = await this.redis.eval<string[], number>(WEAR_LUA, [K.look(id), K.stash(id)], [itemId, slot, String(now)]);
+    return Number(r) === 1;
+  }
+
+  async unequip(id: string, slot: CosmeticSlot, now: number): Promise<boolean> {
+    const r = await this.redis.eval<string[], number>(UNEQUIP_LUA, [K.look(id), K.stash(id)], [slot, String(now)]);
     return Number(r) === 1;
   }
 

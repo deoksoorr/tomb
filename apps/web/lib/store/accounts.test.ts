@@ -112,16 +112,105 @@ function contract(make: () => Kit) {
     const id = newId();
     await kit.setPoints(id, 1000);
     for (const item of ["hat_straw", "hat_cat", "neck_scarf"]) await accounts.buy(id, item, 10);
-    expect(await accounts.equip(id, "hat_straw", "head", 5000)).toBe(true);
-    expect(await accounts.equip(id, "neck_scarf", "neck", 1500)).toBe(true);
-    expect(await accounts.equip(id, "hat_cat", "head", 6000)).toBe(true);
+    expect(await accounts.equip(id, "hat_straw", "head", 5000, 0)).toBe(true);
+    expect(await accounts.equip(id, "neck_scarf", "neck", 1500, 0)).toBe(true);
+    expect(await accounts.equip(id, "hat_cat", "head", 6000, 0)).toBe(true);
     expect((await accounts.get(id, DAY, 1000)).equipped.sort((a, b) => a.until - b.until)).toEqual([
       { itemId: "neck_scarf", until: 1500 },
       { itemId: "hat_cat", until: 6000 },
     ]);
     expect((await accounts.get(id, DAY, 2000)).equipped).toEqual([{ itemId: "hat_cat", until: 6000 }]);
-    expect(await accounts.equip(id, "hat_cat", "head", 9000)).toBe(false);
+    expect(await accounts.equip(id, "hat_cat", "head", 9000, 0)).toBe(false);
     expect((await accounts.get(id, DAY, 0)).inventory).toEqual({});
+  });
+
+  it("벗어 둔 꾸미기: 같은 부위에 새로 입으면 입던 것은 남은 시간 그대로 stash로, 만료된 것은 버린다", async () => {
+    const id = newId();
+    await kit.setPoints(id, 1000);
+    for (const item of ["hat_straw", "hat_cat", "hat_flower"]) await accounts.buy(id, item, 10, { unique: true, now: 0 });
+    expect(await accounts.equip(id, "hat_straw", "head", 5000, 0)).toBe(true);
+    expect(await accounts.equip(id, "hat_cat", "head", 8000, 100)).toBe(true);
+    let a = await accounts.get(id, DAY, 200);
+    expect(a.equipped).toEqual([{ itemId: "hat_cat", until: 8000 }]);
+    expect(a.stash).toEqual([{ itemId: "hat_straw", until: 5000 }]);
+    // 만료된 입던 것은 stash로 가지 않는다 (hat_cat은 아직 8000까지라 stash로)
+    expect(await accounts.equip(id, "hat_flower", "head", 9000, 6000)).toBe(true);
+    a = await accounts.get(id, DAY, 6000);
+    expect(a.equipped).toEqual([{ itemId: "hat_flower", until: 9000 }]);
+    expect(a.stash).toEqual([{ itemId: "hat_cat", until: 8000 }]);
+    // 남은 시간은 벗어 둔 동안에도 흐른다
+    expect((await accounts.get(id, DAY, 8000)).stash).toEqual([]);
+    expect(await accounts.wear(id, "hat_cat", "head", 8000)).toBe(false);
+  });
+
+  it("다시 입기·벗기: wear는 stash와 자리를 바꾸고, unequip은 stash로, 한 아이템은 한 곳에만", async () => {
+    const id = newId();
+    await kit.setPoints(id, 1000);
+    for (const item of ["hat_straw", "hat_cat", "neck_scarf"]) await accounts.buy(id, item, 10, { unique: true, now: 0 });
+    await accounts.equip(id, "hat_straw", "head", 5000, 0);
+    await accounts.equip(id, "hat_cat", "head", 8000, 0);
+    await accounts.equip(id, "neck_scarf", "neck", 7000, 0);
+
+    expect(await accounts.wear(id, "hat_straw", "head", 100)).toBe(true);
+    let a = await accounts.get(id, DAY, 100);
+    expect(a.equipped.sort((x, y) => x.until - y.until)).toEqual([
+      { itemId: "hat_straw", until: 5000 },
+      { itemId: "neck_scarf", until: 7000 },
+    ]);
+    expect(a.stash).toEqual([{ itemId: "hat_cat", until: 8000 }]);
+    // 이미 입고 있는 것은 stash에 없으므로 false (아무것도 바뀌지 않는다)
+    expect(await accounts.wear(id, "hat_straw", "head", 100)).toBe(false);
+    expect(await accounts.wear(id, "hat_halo", "head", 100)).toBe(false);
+
+    expect(await accounts.unequip(id, "neck", 200)).toBe(true);
+    expect(await accounts.unequip(id, "neck", 200)).toBe(false);
+    expect(await accounts.unequip(id, "pet", 200)).toBe(false);
+    a = await accounts.get(id, DAY, 200);
+    expect(a.equipped).toEqual([{ itemId: "hat_straw", until: 5000 }]);
+    expect(a.stash).toEqual([
+      { itemId: "neck_scarf", until: 7000 },
+      { itemId: "hat_cat", until: 8000 },
+    ]);
+    // 빈 부위에 다시 입기, 만료된 착용품은 벗을 수 없다
+    expect(await accounts.wear(id, "neck_scarf", "neck", 300)).toBe(true);
+    expect(await accounts.unequip(id, "head", 5000)).toBe(false);
+    a = await accounts.get(id, DAY, 5000);
+    expect(a.equipped).toEqual([{ itemId: "neck_scarf", until: 7000 }]);
+    expect(a.stash).toEqual([{ itemId: "hat_cat", until: 8000 }]);
+    for (const e of a.equipped) expect(a.stash.some((s) => s.itemId === e.itemId)).toBe(false);
+  });
+
+  it("동시에 여러 번 벗고 입어도 아이템이 늘거나 사라지지 않는다", async () => {
+    const id = newId();
+    await kit.setPoints(id, 1000);
+    for (const item of ["hat_straw", "hat_cat"]) await accounts.buy(id, item, 10, { unique: true, now: 0 });
+    await accounts.equip(id, "hat_straw", "head", 5000, 0);
+    await accounts.equip(id, "hat_cat", "head", 8000, 0);
+    await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        i % 3 === 0
+          ? accounts.unequip(id, "head", 100)
+          : accounts.wear(id, i % 3 === 1 ? "hat_straw" : "hat_cat", "head", 100),
+      ),
+    );
+    const a = await accounts.get(id, DAY, 100);
+    expect([...a.equipped, ...a.stash].map((e) => e.itemId).sort()).toEqual(["hat_cat", "hat_straw"]);
+    expect(a.equipped.length).toBeLessThanOrEqual(1);
+  });
+
+  it("벗어 둔 꾸미기도 가진 것: 다시 살 수 없고, 만료되면 살 수 있다", async () => {
+    const id = newId();
+    await kit.setPoints(id, 1000);
+    await accounts.buy(id, "hat_cat", 50, { unique: true, now: 0 });
+    await accounts.equip(id, "hat_cat", "head", 5000, 0);
+    await accounts.unequip(id, "head", 100);
+    expect(await accounts.buy(id, "hat_cat", 50, { unique: true, now: 4999 })).toBe("owned");
+    expect(await accounts.buy(id, "hat_cat", 50, { unique: true, now: 5000 })).toBe("ok");
+    // 가방의 새 것을 입으면 stash에 남은(만료 전) 같은 아이템은 지운다 → 한 곳에만
+    await accounts.equip(id, "hat_cat", "head", 9000, 0);
+    const a = await accounts.get(id, DAY, 0);
+    expect(a.equipped).toEqual([{ itemId: "hat_cat", until: 9000 }]);
+    expect(a.stash).toEqual([]);
   });
 
   it("출석: 하루 1번, 연속이면 streak+1, 7일째 보너스(+30), 끊기면 1부터. 이름 저장", async () => {
@@ -282,7 +371,7 @@ function contract(make: () => Kit) {
     const many = await Promise.all(Array.from({ length: 5 }, () => accounts.buy(id, "hat_cat", 50, { unique: true, now: 0 })));
     expect(many.filter((r) => r === "ok")).toHaveLength(1);
     expect(many.filter((r) => r === "owned")).toHaveLength(4);
-    await accounts.equip(id, "hat_cat", "head", 5000);
+    await accounts.equip(id, "hat_cat", "head", 5000, 0);
     expect(await accounts.buy(id, "hat_cat", 50, { unique: true, now: 4999 })).toBe("owned");
     expect(await accounts.buy(id, "hat_cat", 50, { unique: true, now: 5000 })).toBe("ok");
     expect(await accounts.buy(id, "fw_small", 30)).toBe("ok");

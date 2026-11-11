@@ -73,10 +73,12 @@ describe("myGraveEntries", () => {
 });
 
 describe("cosmeticBlock", () => {
-  it("착용 중·보유 중인 꾸미기는 다시 못 산다", () => {
+  it("착용 중·가방·벗어 둔 꾸미기는 다시 못 산다", () => {
     const hat = itemById("hat_cat")!;
     expect(cosmeticBlock(hat, {}, [{ itemId: "hat_cat", until: 10 }], 5)).toBe("착용 중");
-    expect(cosmeticBlock(hat, { hat_cat: 1 }, [{ itemId: "hat_cat", until: 1 }], 5)).toBe("보유 중");
+    expect(cosmeticBlock(hat, { hat_cat: 1 }, [{ itemId: "hat_cat", until: 1 }], 5)).toBe("가지고 있어요");
+    expect(cosmeticBlock(hat, {}, [], 5, [{ itemId: "hat_cat", until: 10 }])).toBe("가지고 있어요");
+    expect(cosmeticBlock(hat, {}, [], 5, [{ itemId: "hat_cat", until: 4 }])).toBeNull();
     expect(cosmeticBlock(hat, {}, [], 5)).toBeNull();
     expect(cosmeticBlock(itemById("fw_small")!, { fw_small: 3 }, [], 5)).toBeNull();
   });

@@ -2,6 +2,7 @@ import { bridge } from "@/game/bridge";
 import { api } from "@/lib/api";
 import type { GraveCache } from "@/lib/hooks/useGraves";
 import { meStore } from "@/lib/hooks/useMe";
+import type { Me } from "@/lib/types";
 import { currentLook } from "./items";
 
 // 아이템 사용 → 서버가 소모하고 증서(grant)를 주면 게임에 넘긴다. 실패하면 ApiRequestError를 그대로 던진다.
@@ -13,11 +14,25 @@ export async function fireFirework(itemId: string): Promise<void> {
   if (res.grant) bridge.emit("firework:fire", { item: itemId, grant: res.grant });
 }
 
-/** 캐릭터 꾸미기 착용 (같은 부위는 바뀐다) */
-export async function wearCosmetic(itemId: string): Promise<void> {
-  const res = await api.spendItem(itemId);
+/** 바뀐 착용 상태를 내 정보에 넣고, 증서가 있으면 게임(→ 같은 방 모두)에 알린다 */
+function applyLook(res: { me: Me; lookGrant?: string }): void {
   meStore.set(res.me);
   if (res.lookGrant) bridge.emit("look:set", { look: currentLook(res.me.equipped, Date.now()), lookGrant: res.lookGrant });
+}
+
+/** 가방의 새 꾸미기 입기: 이때부터 24시간. 같은 부위에 입던 것은 벗어 둔 쪽으로 간다 */
+export async function wearCosmetic(itemId: string): Promise<void> {
+  applyLook(await api.spendItem(itemId));
+}
+
+/** 벗어 둔 꾸미기 다시 입기 (남은 시간 그대로) */
+export async function wearStashed(itemId: string): Promise<void> {
+  applyLook(await api.wear(itemId));
+}
+
+/** 그 부위 벗기 → 벗어 둔 쪽으로 (남은 시간은 계속 흐른다) */
+export async function takeOff(slot: string): Promise<void> {
+  applyLook(await api.unequip(slot));
 }
 
 /** 내 묘비에 꾸미기를 놓는다 → 목록 반영 + 같은 채널에 알림 */

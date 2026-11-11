@@ -51,16 +51,21 @@ export function remainingLabel(until: number, now: number): string {
   return `${Math.max(1, Math.ceil(left / MINUTE))}분 남음`;
 }
 
-/** 캐릭터 꾸미기는 하나만 있으면 된다: 착용 중이거나 가방에 있으면 다시 사지 못한다 (서버도 409) */
+/**
+ * 캐릭터 꾸미기는 하나만 있으면 된다: 착용 중이거나, 벗어 두었거나, 가방에 있으면 다시 사지 못한다 (서버도 409).
+ * stash: 벗어 둔 꾸미기 (남은 시간이 흐르는 중)
+ */
 export function cosmeticBlock(
   item: ItemDef,
   inventory: Readonly<Record<string, number>>,
   equipped: readonly { itemId: string; until: number }[],
   now: number,
-): "착용 중" | "보유 중" | null {
+  stash: readonly { itemId: string; until: number }[] = [],
+): "착용 중" | "가지고 있어요" | null {
   if (item.kind !== "cosmetic") return null;
   if (equipped.some((e) => e.itemId === item.id && e.until > now)) return "착용 중";
-  return (inventory[item.id] ?? 0) > 0 ? "보유 중" : null;
+  if (stash.some((e) => e.itemId === item.id && e.until > now)) return "가지고 있어요";
+  return (inventory[item.id] ?? 0) > 0 ? "가지고 있어요" : null;
 }
 
 /** 반응·세우기 응답의 earned. 한도에 걸려 0이면 null (조용히) */

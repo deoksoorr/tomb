@@ -176,3 +176,60 @@
     position: static;
   }
 }
+
+/* ── 착용 부위 필터 ── */
+.fitList {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.slotFilter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.slotChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 10px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  box-shadow: var(--px-border);
+  touch-action: manipulation;
+}
+
+.slotChip:hover {
+  background: var(--surface-hover);
+}
+
+.slotChip[aria-pressed="true"] {
+  background: var(--moss-deep);
+  color: var(--bone);
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}
+
+.slotCount {
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.slotTag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 4px;
+  background: var(--surface);
+  color: var(--bone);
+  box-shadow: 0 0 0 1px var(--line);
+}

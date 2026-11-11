@@ -10,8 +10,8 @@
 /* 논리 72×64px 캔버스를 정수 배율로 키운다 (픽셀이 번지지 않게) */
 .stage {
   display: block;
-  width: calc(72px * var(--scale));
-  height: calc(64px * var(--scale));
+  width: calc(72px * var(--scale, 4));
+  height: calc(64px * var(--scale, 4));
   image-rendering: pixelated;
   background: var(--bg-deep);
   box-shadow: var(--px-border);
@@ -25,7 +25,7 @@
 .controls {
   display: grid;
   gap: 6px;
-  width: calc(72px * var(--scale));
+  width: calc(72px * var(--scale, 4));
 }
 
 .segment {

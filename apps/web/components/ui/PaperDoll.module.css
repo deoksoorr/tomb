@@ -1,0 +1,262 @@
+/* 장비창 (종이 인형): 가운데 아바타 + 몸 위치에 맞춘 부위 칸 */
+
+.doll {
+  --scale: 4;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: var(--areas);
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background:
+    radial-gradient(ellipse at 50% 55%, rgba(159, 197, 168, 0.1), transparent 62%),
+    var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.figure {
+  display: grid;
+  justify-items: center;
+  align-self: stretch;
+  align-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 무대(72×64) 가장자리를 잘라 48×52만 보인다: 아바타 둘레(날개·유령 친구·반딧불)는 이 안에 들어온다 */
+.crop {
+  width: calc(48px * var(--scale));
+  height: calc(52px * var(--scale));
+  overflow: hidden;
+  box-shadow: var(--px-border);
+}
+
+.crop canvas {
+  margin: calc(-8px * var(--scale)) 0 0 calc(-12px * var(--scale));
+  box-shadow: none;
+}
+
+.crop:focus-within {
+  outline: 2px solid var(--candle);
+  outline-offset: 2px;
+}
+
+.crop canvas:focus-visible {
+  outline: none;
+}
+
+.slotWrap {
+  position: relative;
+  display: grid;
+  justify-self: center;
+  width: 100%;
+  max-width: 150px;
+  min-width: 0;
+}
+
+.slot {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 3px;
+  width: 100%;
+  min-height: 96px;
+  padding: 6px 4px 7px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  text-align: center;
+  box-shadow:
+    var(--px-border-strong),
+    inset 0 0 0 2px rgba(0, 0, 0, 0.25);
+  touch-action: manipulation;
+  transition:
+    background-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.slot:hover {
+  background: var(--surface-hover);
+}
+
+.slot:focus-visible {
+  outline: 2px solid var(--candle);
+  outline-offset: 2px;
+}
+
+/* 빈 칸: 점선 같은 옅은 테두리 + 흐린 그림 */
+.empty {
+  background: rgba(38, 40, 31, 0.45);
+  box-shadow: var(--px-border);
+}
+
+.slot[aria-pressed="true"] {
+  background: var(--moss-deep);
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}
+
+/* 목록에서 고른(또는 끄는) 것이 들어갈 칸 */
+.slot[data-highlight] {
+  box-shadow:
+    0 -2px 0 0 var(--moss),
+    0 2px 0 0 var(--moss),
+    -2px 0 0 0 var(--moss),
+    2px 0 0 0 var(--moss),
+    inset 0 0 12px rgba(159, 197, 168, 0.25);
+}
+
+.slot[data-over] {
+  background: var(--moss-deep);
+}
+
+.slotLabel {
+  justify-self: stretch;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-align: left;
+}
+
+.slotIcon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+}
+
+.silhouette {
+  display: grid;
+  opacity: 0.22;
+  filter: grayscale(1) brightness(1.6);
+}
+
+.slotName {
+  max-width: 100%;
+  color: var(--bone);
+  font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.empty .slotName {
+  color: var(--faint);
+}
+
+.slotSub {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.meter {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.meterBar {
+  position: relative;
+  width: 100%;
+  max-width: 72px;
+  height: 4px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.meterBar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--moss);
+}
+
+.meterBar > span[data-low] {
+  background: var(--danger);
+}
+
+.meterText {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 말풍선: 마우스를 올리거나 키보드 초점일 때 (터치는 목록에 설명이 따로 있다) */
+.tip {
+  position: absolute;
+  z-index: 3;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  display: grid;
+  gap: 2px;
+  width: max-content;
+  max-width: 200px;
+  padding: 6px 8px;
+  background: var(--panel-solid);
+  color: var(--text);
+  font-size: 11px;
+  text-align: left;
+  box-shadow: var(--px-border-strong);
+  transform: translateX(-50%);
+  /* 숨은 동안은 자리를 차지하지 않게 (좁은 화면 가로 스크롤 방지) */
+  display: none;
+  pointer-events: none;
+}
+
+.tip[data-align="start"] {
+  left: 0;
+  transform: none;
+}
+
+.tip[data-align="end"] {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
+.tip b {
+  color: var(--bone);
+  font-weight: 400;
+}
+
+@media (hover: hover) {
+  .slot:hover + .tip {
+    display: grid;
+  }
+}
+
+.slot:focus-visible + .tip {
+  display: grid;
+}
+
+.note {
+  align-self: end;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-align: center;
+}
+
+@media (max-width: 520px) {
+  .doll {
+    --scale: 3;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .slot {
+    min-height: 92px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slot {
+    transition: none;
+  }
+}

@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
-import { AVATAR_COLORS, isAvatarBody, isAvatarColor, ITEMS, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { ITEMS, type ItemDef, type ItemKind } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { readItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
 import { cosmeticBlock, currentLook, effectLabel, KIND_LABELS } from "../account/items";
+import { matchesSlot, resolveAvatar, SHOP_COSMETICS, SLOT_NAMES, SLOT_ORDER, slotCounts, type SlotFilter } from "../account/wardrobe";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
@@ -17,7 +18,10 @@ import OutfitPreview from "./OutfitPreview";
 import styles from "./ShopDialog.module.css";
 
 const TABS: ItemKind[] = ["firework", "cosmetic", "decor", "graveStyle"];
-const COSMETICS = ITEMS.filter((i) => i.kind === "cosmetic");
+const COSMETICS = SHOP_COSMETICS;
+const SLOT_COUNTS = slotCounts(COSMETICS);
+/** 착용 부위 필터 (물건이 없는 부위는 숨긴다) */
+const SLOT_FILTERS = (["all", ...SLOT_ORDER] as SlotFilter[]).filter((f) => SLOT_COUNTS[f] > 0);
 
 type Props = {
   onClose: () => void;
@@ -29,6 +33,7 @@ type Props = {
 export default function ShopDialog({ onClose, avatar }: Props) {
   const { me, error } = useMe();
   const [tab, setTab] = useState<ItemKind>("firework");
+  const [slotFilter, setSlotFilter] = useState<SlotFilter>("all");
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const baseId = useId();
@@ -45,20 +50,13 @@ export default function ShopDialog({ onClose, avatar }: Props) {
     void meStore.refresh();
   }, []);
 
-  const color = isAvatarColor(avatar?.color)
-    ? avatar.color
-    : isAvatarColor(me?.color)
-      ? me.color
-      : isAvatarColor(savedColor)
-        ? savedColor
-        : AVATAR_COLORS[0];
-  const body = isAvatarBody(avatar?.body) ? avatar.body : isAvatarBody(me?.body) ? me.body : "hood";
+  const { color, body } = resolveAvatar(avatar, me, savedColor);
   const shown = COSMETICS.find((i) => i.id === (hoverId ?? fitId)) ?? COSMETICS[0];
   const fitting = fittingLook(me ? currentLook(me.equipped, openedAt) : [], shown?.id ?? null);
   const fitNote = fitting.wearing
     ? "지금 착용 중이에요."
     : fitting.replaced
-      ? `지금 ${fitting.replaced.name} 대신 착용돼요.`
+      ? `입으면 지금 입은 ${fitting.replaced.name}은(는) 벗어 둬요.`
       : null;
 
   async function buy(item: ItemDef) {
@@ -88,7 +86,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
 
   function buyButton(item: ItemDef, className?: string) {
     const short = me !== null && me.points < item.price;
-    const blocked = me ? cosmeticBlock(item, me.inventory, me.equipped, openedAt) : null;
+    const blocked = me ? cosmeticBlock(item, me.inventory, me.equipped, openedAt, me.stash) : null;
     return (
       <button
         type="button"
@@ -104,7 +102,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
 
   const grid = (
     <ul className={cx(styles.grid, tab === "cosmetic" && styles.fitGrid)}>
-      {ITEMS.filter((item) => item.kind === tab).map((item) => {
+      {ITEMS.filter((item) => item.kind === tab && (tab !== "cosmetic" || matchesSlot(item.slot, slotFilter))).map((item) => {
         const owned = me?.inventory[item.id] ?? 0;
         const cosmetic = item.kind === "cosmetic";
         const picked = cosmetic && fitId === item.id;
@@ -135,8 +133,10 @@ export default function ShopDialog({ onClose, avatar }: Props) {
             <p className={styles.name}>{item.name}</p>
             <p className={styles.desc}>{item.desc}</p>
             <p className={styles.meta}>
+              {item.slot && <span className={styles.slotTag}>{SLOT_NAMES[item.slot]}</span>}
               {effectLabel(item)}
               {owned > 0 && ` · 가방에 ${owned}개`}
+              {cosmetic && me?.stash?.some((e) => e.itemId === item.id && e.until > openedAt) && " · 벗어 둠"}
             </p>
             {buyButton(item)}
           </li>
@@ -186,7 +186,24 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                 </p>
                 {buyButton(shown, styles.fitBuy)}
               </section>
-              {grid}
+              <div className={styles.fitList}>
+                <div className={styles.slotFilter} role="group" aria-label="착용 부위">
+                  {SLOT_FILTERS.map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      className={styles.slotChip}
+                      aria-pressed={slotFilter === f}
+                      aria-label={`${f === "all" ? "전체" : SLOT_NAMES[f]} ${SLOT_COUNTS[f]}개`}
+                      onClick={() => setSlotFilter(f)}
+                    >
+                      {f === "all" ? "전체" : SLOT_NAMES[f]}
+                      <span className={styles.slotCount}>{SLOT_COUNTS[f]}</span>
+                    </button>
+                  ))}
+                </div>
+                {grid}
+              </div>
             </div>
           ) : (
             grid

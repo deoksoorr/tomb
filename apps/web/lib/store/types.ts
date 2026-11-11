@@ -106,8 +106,10 @@ export type AccountRecord = {
   lastAttend: string | null;
   hasCode: boolean;
   inventory: Record<string, number>;
-  /** 만료 전 착용품 */
+  /** 만료 전 착용품 (부위마다 하나) */
   equipped: EquippedItem[];
+  /** 벗어 둔 꾸미기 (만료 전). 남은 시간은 벗어 둔 동안에도 흐른다. 다시 입을 수 있고, 산 것으로 친다(중복 구매 불가) */
+  stash: EquippedItem[];
   graves: string[];
   /** 오늘 쌓은 포인트 */
   todayEarned: number;
@@ -152,13 +154,26 @@ export interface AccountStore {
   setCode(id: string, codeHash: string): Promise<void>;
   findByCode(codeHash: string): Promise<string | null>;
   /**
-   * 구매. unique(캐릭터 꾸미기)면 가방에 있거나 지금 착용 중일 때 "owned"로 거절한다 (확인과 차감이 한 번에).
+   * 구매. unique(캐릭터 꾸미기)면 가방에 있거나 지금 착용 중이거나 벗어 둔 것(stash, 만료 전)이 있을 때
+   * "owned"로 거절한다 (확인과 차감이 한 번에).
    */
   buy(id: string, itemId: string, price: number, opts?: { unique?: boolean; now?: number }): Promise<"ok" | "insufficient" | "owned">;
   /** 가방에서 1개 쓰기. 없으면 false */
   consume(id: string, itemId: string): Promise<boolean>;
-  /** 가방에서 1개 쓰고 그 부위에 착용 (같은 부위는 교체). 없으면 false */
-  equip(id: string, itemId: string, slot: CosmeticSlot, until: number): Promise<boolean>;
+  /**
+   * 가방에서 1개 쓰고 그 부위에 착용. 같은 부위에 입던 것은 사라지지 않고 벗어 둔 꾸미기(stash)로 옮긴다
+   * (이미 만료됐으면 버린다). 같은 아이템이 stash에 있으면 지운다 (새로 입는 쪽이 더 오래 간다 → 한 아이템은
+   * 입은 곳과 stash 중 한 곳에만 있다). now는 만료 판정 기준 (만료된 착용품·stash는 이때 정리한다). 가방에 없으면 false
+   */
+  equip(id: string, itemId: string, slot: CosmeticSlot, until: number, now: number): Promise<boolean>;
+  /**
+   * 벗어 둔 꾸미기를 다시 입는다 (남은 시간 그대로). 같은 부위에 입던 것은 stash로 옮긴다.
+   * stash에 없거나 만료됐으면 false. 이미 입고 있는 아이템은 stash에 없으므로 false다 (멱등 true가 아니다).
+   * slot은 그 아이템의 부위여야 한다 (호출자가 카탈로그에서 넘긴다)
+   */
+  wear(id: string, itemId: string, slot: CosmeticSlot, now: number): Promise<boolean>;
+  /** 그 부위에 입은 것을 벗어 stash로 옮긴다 (남은 시간 그대로). 입은 게 없으면 false */
+  unequip(id: string, slot: CosmeticSlot, now: number): Promise<boolean>;
   /**
    * 가방에서 1개 쓰고 묘비에 꾸미기를 놓는다 (만료된 것 정리, 최대 개수를 넘으면 가장 오래된 것 교체).
    * 묘비가 없으면 null, 가방에 없으면 "no_item". 주인 확인은 호출자가 한다

@@ -1,4 +1,4 @@
-import { checkName, isAvatarBody, isAvatarColor, isGraveStyle, itemById, ROOM_ID_RE } from "@tomb/protocol";
+import { checkName, isAvatarBody, isAvatarColor, isGraveStyle, itemById, ROOM_ID_RE, type CosmeticSlot } from "@tomb/protocol";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { CODE_RE, normalizeCode } from "./economy";
@@ -202,6 +202,16 @@ export const ShopBuySchema = z.object({ itemId: shopItem });
 export const ShopUseSchema = z.object({
   itemId: shopItem,
   graveId: z.string().refine((id) => isGraveId(id), "묘비 id 형식이 올바르지 않아요.").optional(),
+});
+
+/** 캐릭터 꾸미기 부위 (빠진 부위가 있으면 타입 오류가 난다) */
+const COSMETIC_SLOTS: Record<CosmeticSlot, true> = { head: true, hand: true, aura: true, neck: true, back: true, pet: true, feet: true };
+const cosmeticItem = z.string().refine((id) => itemById(id)?.kind === "cosmetic", "캐릭터 꾸미기 아이템이 아니에요.");
+/** POST /api/me/wear: 벗어 둔 꾸미기 다시 입기 */
+export const WearSchema = z.object({ itemId: cosmeticItem });
+/** POST /api/me/unequip: 그 부위 벗기 */
+export const UnequipSchema = z.object({
+  slot: z.string().refine((s): s is CosmeticSlot => Object.hasOwn(COSMETIC_SLOTS, s), "알 수 없는 부위예요."),
 });
 
 /** 관리자 포인트 조정: 개인 코드 또는 계정 id 중 하나 + 정수 증감 */

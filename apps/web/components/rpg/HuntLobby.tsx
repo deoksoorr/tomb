@@ -5,10 +5,14 @@ import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
-import { meStore } from "@/lib/hooks/useMe";
+import { meStore, useMe } from "@/lib/hooks/useMe";
 import { DIFFS, GAMES, gearById, potionById, ZONES, type Difficulty, type GameKind, type SkillId } from "@/lib/rpg/catalog";
 import { rpgApi, type CharacterAction } from "@/lib/rpg/client";
 import type { RpgView, RunReward, RunResult } from "@/lib/rpg/types";
+import { readItem } from "@/lib/storage";
+import { LS } from "@/lib/types";
+import { currentLook } from "../account/items";
+import { resolveAvatar } from "../account/wardrobe";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
@@ -47,8 +51,13 @@ function readPick(): { game: GameKind; diff: Difficulty } {
   return { game: "hunt", diff: "easy" };
 }
 
-export default function HuntLobby({ onClose }: { onClose: () => void }) {
+export default function HuntLobby({ onClose, avatar }: { onClose: () => void; avatar?: { color: string; body?: string } }) {
   const [view, setView] = useState<RpgView | null>(null);
+  // 장비창 가운데 내 아바타 (게임 속 색·몸 + 지금 입은 꾸미기)
+  const { me } = useMe();
+  const [savedColor] = useState(() => readItem(LS.color));
+  const [openedAt] = useState(() => Date.now());
+  const figure = { ...resolveAvatar(avatar, me, savedColor), look: me ? currentLook(me.equipped, openedAt) : [] };
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("start");
   const [pick, setPick] = useState(readPick);
@@ -311,7 +320,7 @@ export default function HuntLobby({ onClose }: { onClose: () => void }) {
                 />
               )}
               {tab === "character" && <CharacterPanel view={view} busy={busy} onCharacter={onCharacter} />}
-              {tab === "gear" && <GearPanel view={view} busy={busy} onCharacter={onCharacter} onSell={onSell} />}
+              {tab === "gear" && <GearPanel view={view} busy={busy} onCharacter={onCharacter} onSell={onSell} figure={figure} />}
               {tab === "skills" && <SkillPanel view={view} busy={busy} onCharacter={onCharacter} />}
               {tab === "shop" && <ShopPanel view={view} busy={busy} onBuy={onBuy} />}
             </div>

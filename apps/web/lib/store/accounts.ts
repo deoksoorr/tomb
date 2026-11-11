@@ -28,6 +28,7 @@ export function toMe(accountId: string, a: AccountRecord, day: string, now: numb
     hasCode: a.hasCode,
     inventory: a.inventory,
     equipped: a.equipped,
+    stash: a.stash,
     graves: a.graves,
     activityUnread: a.activityUnread,
     // 첫 변경은 무료, 그다음부터 NAME_CHANGE_PRICE
@@ -72,6 +73,7 @@ export const codeHash = (code: string) => createHash("sha256").update(`code:${co
 
 // ── 실시간 서버로 보내는 증서 (JOIN_SECRET으로 서명, 60초) ──
 
+/** 착용 증서에는 지금 입은 것만 (벗어 둔 stash는 넣지 않는다) */
 export const lookOf = (a: Pick<AccountRecord, "equipped">): Look => a.equipped.map((e) => e.itemId);
 
 export function lookGrant(secret: string, visitorId: string, look: Look, now = Date.now()): Promise<string> {

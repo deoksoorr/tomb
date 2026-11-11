@@ -243,23 +243,6 @@ button.card:hover {
 
 /* ── 장비·상점·스킬 목록 ── */
 
-.slots {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 6px;
-}
-
-.slot {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  background: var(--bg-deep);
-  box-shadow: 0 0 0 1px var(--line);
-  min-height: 52px;
-}
-
 .slotEmpty {
   width: 32px;
   height: 32px;
@@ -730,4 +713,252 @@ button.card:hover {
   place-items: center;
   background: rgba(9, 10, 8, 0.55);
   color: var(--bone);
+}
+
+/* ── 장비창 (종이 인형 + 전투 능력) ── */
+.gearTop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 220px);
+  align-items: start;
+  gap: 12px;
+}
+
+.statPanel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 10px;
+}
+
+.totals div {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: 22px;
+  align-items: baseline;
+}
+
+.totals dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.totals dd {
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.deltaUp,
+.deltaDown {
+  margin-left: 4px;
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.deltaUp {
+  color: #8fd27a;
+}
+
+.deltaDown {
+  color: #e0806a;
+}
+
+.pickBox {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 2px solid var(--line);
+}
+
+.bagHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.bagHead .filter button {
+  min-height: 44px;
+}
+
+/* 가방 칸: 큰 아이콘, 등급색 이름, 개수, 장착 표시, 잘 보이는 [팔기] */
+.bagGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.bagCell {
+  --grade: var(--text);
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-deep);
+  box-shadow:
+    0 0 0 1px var(--line),
+    inset 3px 0 0 var(--grade);
+}
+
+.bagCell[data-picked] {
+  background: rgba(47, 66, 52, 0.6);
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle),
+    inset 3px 0 0 var(--grade);
+}
+
+.bagPick {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.bagPick:focus-visible {
+  outline: 2px solid var(--candle);
+  outline-offset: 2px;
+}
+
+.bagIcon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--grade) 22%, transparent), transparent 70%), var(--surface);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--grade) 55%, var(--line));
+}
+
+.qty {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  padding: 0 2px;
+  background: rgba(0, 0, 0, 0.7);
+  color: var(--bone);
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bagInfo {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bagName {
+  color: var(--grade);
+  font-family: var(--font-read);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.grade {
+  color: var(--grade);
+}
+
+.bagBonus {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.equippedTag {
+  justify-self: start;
+  padding: 0 6px;
+  background: var(--moss-deep);
+  color: var(--moss);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 18px;
+}
+
+.cmp {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.cellActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.equipBtn,
+.sellBtn {
+  flex: 1 1 0;
+  min-width: 80px;
+  min-height: 44px;
+}
+
+/* 팔기: 금빛 테두리 + 값 (흐린 버튼이 아니라 바로 보이게) */
+.sellBtn {
+  background: #4a3a1c;
+  color: var(--bone);
+  box-shadow:
+    0 -2px 0 0 #a8862e,
+    0 2px 0 0 #a8862e,
+    -2px 0 0 0 #a8862e,
+    2px 0 0 0 #a8862e,
+    inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.sellBtn:hover:not(:disabled) {
+  background: #5c4822;
+}
+
+.sellBtn b {
+  color: var(--candle);
+  font-weight: 400;
+}
+
+.sellNote {
+  flex: 1 1 0;
+  align-self: center;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-align: center;
+}
+
+.confirm {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(208, 138, 118, 0.12);
+  box-shadow: 0 0 0 1px var(--danger);
+  color: var(--bone);
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .gearTop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bagGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

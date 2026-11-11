@@ -35,6 +35,8 @@ type Acct = {
   codeHash: string | null;
   inv: Map<string, number>;
   look: Map<CosmeticSlot, EquippedItem>;
+  /** 벗어 둔 꾸미기: itemId → 만료 ms. 예전(HMR 전) 계정에는 없을 수 있다 */
+  stash?: Map<string, number>;
   graves: Set<string>;
   /** 오늘 적립 기록 (source → 점수, `_total`). 날짜가 바뀌면 버린다 */
   earnDay: string | null;
@@ -82,6 +84,7 @@ export class MemoryAccounts implements AccountStore {
       codeHash: null,
       inv: new Map(),
       look: new Map(),
+      stash: new Map(),
       graves: new Set(),
       earnDay: null,
       earned: new Map(),
@@ -133,6 +136,30 @@ export class MemoryAccounts implements AccountStore {
     return true;
   }
 
+  private stashOf(a: Acct): Map<string, number> {
+    return (a.stash ??= new Map());
+  }
+
+  /** 만료된 착용품·벗어 둔 꾸미기를 지운다 */
+  private prune(a: Acct, now: number): void {
+    for (const [slot, e] of a.look) if (e.until <= now) a.look.delete(slot);
+    const stash = this.stashOf(a);
+    for (const [itemId, until] of stash) if (until <= now) stash.delete(itemId);
+  }
+
+  /**
+   * 그 부위에 입힌다. 입던 것은 stash로 (같은 아이템이면 새 것이 대신하므로 버린다),
+   * 입는 아이템은 stash에서 지운다 → 한 아이템은 입은 곳과 stash 중 한 곳에만 있다.
+   * lib/store/accounts-redis.ts의 Lua puton과 같은 규칙
+   */
+  private putOn(a: Acct, slot: CosmeticSlot, item: EquippedItem): void {
+    const stash = this.stashOf(a);
+    const old = a.look.get(slot);
+    if (old && old.itemId !== item.itemId) stash.set(old.itemId, old.until);
+    stash.delete(item.itemId);
+    a.look.set(slot, item);
+  }
+
   async get(id: string, day: string, now: number): Promise<AccountRecord> {
     const a = this.accts.get(id) ?? this.blank();
     return {
@@ -146,6 +173,10 @@ export class MemoryAccounts implements AccountStore {
       hasCode: !!a.codeHash,
       inventory: Object.fromEntries(a.inv),
       equipped: [...a.look.values()].filter((e) => e.until > now),
+      stash: [...(a.stash ?? [])]
+        .filter(([, until]) => until > now)
+        .map(([itemId, until]) => ({ itemId, until }))
+        .sort((x, y) => x.until - y.until || x.itemId.localeCompare(y.itemId)),
       graves: [...a.graves],
       todayEarned: a.earnDay === day ? (a.earned.get("_total") ?? 0) : 0,
       activityUnread: (a.activity ?? []).filter((x) => x.at > (a.activitySeen ?? 0)).length,
@@ -234,7 +265,8 @@ export class MemoryAccounts implements AccountStore {
     const a = this.acct(id);
     const now = opts.now ?? Date.now();
     const wearing = [...a.look.values()].some((e) => e.itemId === itemId && e.until > now);
-    if (opts.unique && ((a.inv.get(itemId) ?? 0) > 0 || wearing)) return "owned";
+    const stashed = (this.stashOf(a).get(itemId) ?? 0) > now;
+    if (opts.unique && ((a.inv.get(itemId) ?? 0) > 0 || wearing || stashed)) return "owned";
     if (a.points < price) return "insufficient";
     a.points -= price;
     this.stat(kstDay(now), "spend:shop", price);
@@ -246,10 +278,32 @@ export class MemoryAccounts implements AccountStore {
     return this.take(this.acct(id), itemId);
   }
 
-  async equip(id: string, itemId: string, slot: CosmeticSlot, until: number): Promise<boolean> {
+  async equip(id: string, itemId: string, slot: CosmeticSlot, until: number, now: number): Promise<boolean> {
     const a = this.acct(id);
     if (!this.take(a, itemId)) return false;
-    a.look.set(slot, { itemId, until });
+    this.prune(a, now);
+    this.putOn(a, slot, { itemId, until });
+    return true;
+  }
+
+  async wear(id: string, itemId: string, slot: CosmeticSlot, now: number): Promise<boolean> {
+    const a = this.accts.get(id);
+    if (!a) return false;
+    this.prune(a, now);
+    const until = this.stashOf(a).get(itemId);
+    if (until === undefined) return false;
+    this.putOn(a, slot, { itemId, until });
+    return true;
+  }
+
+  async unequip(id: string, slot: CosmeticSlot, now: number): Promise<boolean> {
+    const a = this.accts.get(id);
+    if (!a) return false;
+    this.prune(a, now);
+    const cur = a.look.get(slot);
+    if (!cur) return false;
+    a.look.delete(slot);
+    this.stashOf(a).set(cur.itemId, cur.until);
     return true;
   }
 

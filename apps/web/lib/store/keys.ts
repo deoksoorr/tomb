@@ -38,6 +38,7 @@ export const K = {
   acct: (id: string) => `acct:${id}`, // HASH points, name, createdAt, streak, lastAttend(YYYYMMDD), codeHash
   inv: (id: string) => `acct:${id}:inv`, // HASH itemId → 개수
   look: (id: string) => `acct:${id}:look`, // HASH 부위 → `${itemId}|${만료 ms}`
+  stash: (id: string) => `acct:${id}:stash`, // HASH 벗어 둔 꾸미기 itemId → 만료 ms (look과 겹치지 않는다)
   acctGraves: (id: string) => `acct:${id}:graves`, // SET 세운 묘비 id
   earn: (id: string, day: string) => `acct:${id}:earn:${day}`, // HASH source → 점수, `_total`. 2일 TTL
   code: (codeHash: string) => `code:${codeHash}`, // STRING → 계정 id
