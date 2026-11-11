@@ -45,7 +45,8 @@ export class RpgHostScene extends Phaser.Scene {
       play,
       color: ctx.opts.color,
       name: ctx.opts.name,
-      body: ctx.opts.body ?? "hood",
+      // 입장 화면에서 고르지 않았으면 입장 토큰으로 받은 몸 → 월드의 내 아바타가 가진 값이 정답
+      body: (this.scene.get("world") as unknown as { player?: { view?: { bodyId?: string } } } | null)?.player?.view?.bodyId ?? ctx.opts.body ?? "hood",
       atlas: (this.scene.get("world") as unknown as { atlas?: GlyphAtlas } | null)?.atlas ?? null,
       look: bridge.last("look:set")?.look ?? [],
       reduced: prefersReducedMotion(),

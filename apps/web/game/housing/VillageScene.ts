@@ -31,6 +31,8 @@ export type VillageSceneData = {
   color: string;
   name: string;
   look: readonly string[];
+  /** 내 몸 모양 (AVATAR_BODIES id). 없으면 hood */
+  body?: string;
   reduced: boolean;
   /** 이 번지 문 앞에서 시작 (집에서 나왔을 때·"내 집으로") */
   spawnLot?: number | null;
@@ -127,7 +129,7 @@ export class VillageScene extends Phaser.Scene {
     const spawnSpot = this.d.spawnLot ? this.spots.find((s) => (s.kind === "door" ? s.house.lot : s.lot) === this.d.spawnLot) : undefined;
     const sx = this.d.spawnAt?.x ?? spawnSpot?.x ?? this.W / 2;
     const sy = this.d.spawnAt?.y ?? (spawnSpot ? spawnSpot.y + 6 : this.H - 28);
-    this.player = new Player(this, atlas, sx, sy, this.d.color, this.d.name);
+    this.player = new Player(this, atlas, sx, sy, this.d.color, this.d.name, this.d.body);
     this.player.view.setLook(this.d.look);
     this.presenceKey = "";
     this.presence = new RoomPresence(this, {

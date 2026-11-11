@@ -3,7 +3,7 @@ import { addCanvasTexture, TEX } from "../assets/manifest";
 import { Grid } from "../sprites/pixel";
 import { DEPTH } from "../config";
 
-// 짧은 연출: 달리기 먼지, 꽃 놓기·꽃잎, 살려주세요 빛, 흙 덮기, 아바타 머리 위 이모트 아이콘,
+// 짧은 연출: 달리기 먼지, 꽃 놓기·꽃잎, 살려주세요 빛, 흙 덮기 (머리 위 이모티콘은 AvatarView → SpeechBubble),
 // 종소리 파동(채널 모두), 물 튀기기, 손 흔들기·환호 아이콘.
 // 파티클 이미터는 미리 하나씩 만들어 두고 explode/emitParticleAt만 호출한다 (프레임당 할당 없음).
 
@@ -118,6 +118,11 @@ export class Effects {
     if (kind === "cheer") this.sparkEm.explode(Math.ceil(8 * this.scale), x, y - 16);
   }
 
+  /** 환호: 머리 위로 반짝이가 튄다 (이모티콘 자체는 AvatarView 말풍선 자리에) */
+  actSparks(x: number, y: number, kind: "wave" | "cheer"): void {
+    if (kind === "cheer") this.sparkEm.explode(Math.ceil(8 * this.scale), x, y - 16);
+  }
+
   dust(x: number, y: number): void {
     if (this.reduced && Math.random() < 0.6) return;
     this.dustEm.emitParticleAt(x, y - 1, 1);
@@ -172,21 +177,6 @@ export class Effects {
     this.dirtEm.explode(n, x, y);
     this.scene.time.delayedCall(250, () => this.dirtEm.explode(Math.ceil(n / 2), x, y - 2));
     for (let i = 0; i < 4; i++) this.dustEm.emitParticleAt(x - 6 + i * 4, y + 1, 1);
-  }
-
-  /** 아바타 머리 위로 떠오르는 작은 아이콘 */
-  emoteIcon(x: number, y: number, kind: "flower" | "revive"): void {
-    const img = this.scene.add
-      .image(x, y - 24, kind === "flower" ? TEX.flowerIcon : TEX.reviveIcon)
-      .setDepth(DEPTH.bubble + 1);
-    this.scene.tweens.add({
-      targets: img,
-      y: y - 36,
-      alpha: 0,
-      duration: this.reduced ? 700 : 1300,
-      ease: "Sine.easeOut",
-      onComplete: () => img.destroy(),
-    });
   }
 
   /** 랭킹에서 고른 묘비를 잠깐 강조 */

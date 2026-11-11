@@ -2,7 +2,8 @@ import * as Phaser from "phaser";
 import { DIR, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
-import { AV_ORIGIN_Y, BODY_METRICS, bodyOf, waterSink } from "../sprites/avatar";
+import { AV_ORIGIN_Y, avatarArtTop, BODY_METRICS, bodyOf, waterSink } from "../sprites/avatar";
+import type { EmoteIcon } from "../sprites/emotes";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { SpeechBubble } from "./SpeechBubble";
 
@@ -12,6 +13,8 @@ import { SpeechBubble } from "./SpeechBubble";
 //  - swim: 수면 물결 고리                              - dive: 물결 + 물방울이 올라온다
 // 꾸미기: 모자·후광 고리·목도리·손등불은 시트에 함께 그려지고, 날개·후광 빛·그림자 유령 친구·발자국 꽃·
 // 안개 망토·반딧불 오라는 따로 붙는 오브젝트다. 몸 모양(AVATAR_BODIES)은 시트를 바꾼다.
+// 머리 위는 아래에서부터 머리 꾸미기(귀·모자·후광·날개 끝) → 이름표 → 말풍선/이모티콘 순으로 쌓는다:
+// 이름표 높이는 몸·꾸미기 조합의 실제 그림 높이(avatarArtTop)로 정해서 꾸미기가 높으면 저절로 위로 올라간다.
 
 /** 의자에 앉으면 좌석 위로 살짝 올려 그린다 */
 export const SIT_CHAIR_LIFT = 3;
@@ -28,6 +31,11 @@ const FLOWER_STEP = 10;
 const FLOWER_MS = 3000;
 const BUBBLES = 4;
 const BUBBLE_MS = 900;
+/** 꾸미기 반짝임 주기·길이 (착용하면 가끔 머리 위에서 반짝) */
+const SPARKLE_EVERY_MS = 2600;
+const SPARKLE_MS = 520;
+/** 날개 그림: 어깨에서 이만큼 위가 날개 끝 */
+const WING_TIP = 9;
 
 export class AvatarView {
   readonly sprite: Phaser.GameObjects.Sprite;
@@ -39,7 +47,11 @@ export class AvatarView {
   private look: readonly string[] = [];
   private body: string;
   private labelGap: number;
+  /** 발바닥에서 그림 맨 위 (머리 꾸미기 포함) */
+  private artTop: number;
   private shoulder: number;
+  private sparkle: Phaser.GameObjects.Image | null = null;
+  private sparkleAt = 0;
   private aura: Phaser.GameObjects.Image[] = [];
   /** 손등불을 들고 있으면 조명이 더 넓다 */
   lantern = false;
@@ -99,6 +111,7 @@ export class AvatarView {
   ) {
     this.body = bodyOf(body);
     const m = BODY_METRICS[bodyOf(body)];
+    this.artTop = m.top;
     this.labelGap = m.top + 2;
     this.shoulder = m.shoulder;
     this.texKey = ensureAvatarTexture(scene, color, look, this.body);
@@ -135,9 +148,16 @@ export class AvatarView {
     const b = bodyOf(body);
     if (b === this.body) return;
     this.body = b;
-    this.labelGap = BODY_METRICS[b].top + 2;
     this.shoulder = BODY_METRICS[b].shoulder;
+    this.relayout();
     this.retexture();
+  }
+
+  /** 머리 위 쌓기 높이: 그림 맨 위(머리 꾸미기 포함)와 날개 끝 중 높은 곳 + 2px 위에 이름표 */
+  private relayout(): void {
+    this.artTop = avatarArtTop(this.body, this.look);
+    const wings = this.look.includes("back_wings") ? this.shoulder + WING_TIP : 0;
+    this.labelGap = Math.max(this.artTop, wings) + 2;
   }
 
   get bodyId(): string {
@@ -148,6 +168,7 @@ export class AvatarView {
   setLook(look: readonly string[]): void {
     this.look = look.slice();
     this.lantern = look.includes("hand_lantern");
+    this.relayout();
     this.retexture();
     const vis = this.sprite.visible;
     const wantAura = look.includes("aura_firefly");
@@ -204,6 +225,16 @@ export class AvatarView {
       this.flowers = [];
       this.flowerBorn = [];
     }
+    // 착용하면 가끔 머리 위에서 작게 반짝 (움직임 줄이기 설정이면 없음)
+    if (look.length && !this.reduced) {
+      if (!this.sparkle) {
+        this.sparkle = this.scene.add.image(0, 0, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 3).setVisible(false);
+        this.sparkleAt = 0;
+      }
+    } else {
+      this.sparkle?.destroy();
+      this.sparkle = null;
+    }
   }
 
   get wearing(): readonly string[] {
@@ -253,6 +284,8 @@ export class AvatarView {
    * 물속·매달리기·그네·앉은 상태에서는 몸짓 없이 넘어간다 (연출은 씬이 따로 한다).
    */
   playAct(kind: ActKind, now: number): void {
+    // 이모티콘은 어떤 자세에서든 이름표 위에 뜬다 (같은 채널 모두에게)
+    if (kind === "wave" || kind === "cheer") this.emote(kind, now);
     const s = this.state;
     if (s === "swim" || s === "dive" || s === "hang" || s === "swing" || s === "sitGround" || s === "sitChair" || s === "jump") return;
     const act = kind === "cheer" || kind === "splash" ? "cheer" : "wave";
@@ -322,6 +355,12 @@ export class AvatarView {
     this.speech.show(text, now);
   }
 
+  /** 이모티콘 (손 흔들기·환호·헌화·살려주세요): 말풍선 자리에 크게 잠깐 */
+  emote(kind: EmoteIcon, now: number): void {
+    this.speech ??= new SpeechBubble(this.scene, this.atlas);
+    this.speech.showIcon(kind, now);
+  }
+
   /** 지금 떠 있는 말풍선 (겹침 풀기용, 없으면 null) */
   speechAt(now: number): SpeechBubble | null {
     return this.speech && this.speech.active(now) && this.sprite.visible ? this.speech : null;
@@ -364,7 +403,9 @@ export class AvatarView {
     // 물에 잠긴 만큼 이름표도 내린다
     const waterDrop = st === "swim" || st === "dive" ? waterSink(this.body, st) : 0;
     const headY = s.y - this.hop - this.poseDy;
-    this.label.setPosition(Math.round(s.x - this.poseDx), headY - this.labelGap + sitLift + waterDrop);
+    // 매달리기는 두 팔이 머리 위로 올라가 그만큼 더 띄운다
+    const armsUp = st === "hang" ? 3 : 0;
+    this.label.setPosition(Math.round(s.x - this.poseDx), headY - this.labelGap + sitLift + waterDrop - armsUp);
     if (this.shadow) this.shadow.setPosition(s.x, s.y - 1).setDepth((this.depthOverride ?? s.y) - 0.5);
     if (this.label.scaleX !== labelScale) this.label.setScale(labelScale);
     const vis = s.visible;
@@ -381,7 +422,9 @@ export class AvatarView {
     this.syncCosmetics(now, dt, bx, headY, vis);
 
     const speaking = !!this.speech?.active(now);
-    if (this.speech) this.speech.place(this.label.x, this.label.y - this.label.displayHeight - 1, labelScale, now, vis);
+    // 이름표 높이(height)는 이미 배율이 들어간 월드 높이 (displayHeight는 배율이 한 번 더 곱해져 이름표에 겹쳤다)
+    const labelTop = this.label.y - this.label.height;
+    if (this.speech) this.speech.place(this.label.x, labelTop - labelScale, labelScale, now, vis);
     const longSit = !speaking && this.sitSince > 0 && now - this.sitSince > SIT_IDLE_MS;
     if (longSit) {
       if (!this.bubble) {
@@ -390,7 +433,7 @@ export class AvatarView {
       }
       // 이름표 바로 위에 띄운다 (이름표는 화면 픽셀 크기라 줌에 따라 월드 높이가 바뀐다)
       const bob = Math.sin(now / 600) > 0.5 ? 1 : 0;
-      this.bubble.setPosition(s.x, this.label.y - this.label.displayHeight - bob);
+      this.bubble.setPosition(s.x, labelTop - labelScale - bob);
       this.bubble.setVisible(vis);
     } else if (this.bubble) {
       this.bubble.destroy();
@@ -456,7 +499,10 @@ export class AvatarView {
     const depth = this.depthOverride ?? s.y;
     if (this.haloGlow) {
       const pulse = this.reduced ? 0.45 : 0.38 + 0.14 * Math.sin(now / 500);
-      this.haloGlow.setPosition(x, headY - this.labelGap + 1 + (wet ? 2 : 0)).setAlpha(pulse).setVisible(vis && st !== "dive");
+      // 후광 고리는 그림 맨 위 (물에 들어가면 가라앉은 만큼 내려간다)
+      const sink = wet ? waterSink(this.body, st) : 0;
+      const sitDrop = st === "sitGround" ? 3 : st === "sitChair" ? 1 : 0;
+      this.haloGlow.setPosition(x, headY - this.artTop + 1 + sink + sitDrop).setAlpha(pulse).setVisible(vis && st !== "dive");
     }
     if (this.wings) {
       const side = this.dir === DIR.left || this.dir === DIR.right;
@@ -482,6 +528,26 @@ export class AvatarView {
         .setFlipX(this.petX > s.x)
         .setDepth(this.petY)
         .setVisible(vis);
+    }
+    if (this.sparkle) {
+      // 머리 꾸미기 언저리에서 작게 반짝 (반짝일 때만 보인다)
+      if (now >= this.sparkleAt + SPARKLE_EVERY_MS) {
+        this.sparkleAt = now + Math.random() * 600;
+        const head = this.look.some((id) => id.startsWith("hat_"));
+        const top = head ? this.artTop - 2 : Math.round(this.artTop * 0.55);
+        this.sparkle.setData("dx", Math.round((Math.random() - 0.5) * 12)).setData("dy", top - Math.round(Math.random() * 3));
+      }
+      const u = (now - this.sparkleAt) / SPARKLE_MS;
+      const on = u >= 0 && u < 1 && vis && st !== "dive";
+      if (on) {
+        const k = Math.sin(u * Math.PI);
+        const sink = wet ? waterSink(this.body, st) : 0;
+        this.sparkle
+          .setPosition(x + (this.sparkle.getData("dx") as number), headY - (this.sparkle.getData("dy") as number) + sink)
+          .setScale(0.6 + 0.5 * k)
+          .setAlpha(0.9 * k)
+          .setVisible(true);
+      } else if (this.sparkle.visible) this.sparkle.setVisible(false);
     }
     for (let i = 0; i < this.fog.length; i++) {
       const a = now / 1800 + i * 2.1;
@@ -528,6 +594,7 @@ export class AvatarView {
     for (const a of this.aura) a.setVisible(v);
     this.shadow?.setVisible(v);
     this.haloGlow?.setVisible(v);
+    if (!v) this.sparkle?.setVisible(false);
     this.wings?.setVisible(v);
     this.pet?.setVisible(v);
     for (const f of this.fog) f.setVisible(v);
@@ -552,6 +619,8 @@ export class AvatarView {
     this.shadow = null;
     this.haloGlow?.destroy();
     this.haloGlow = null;
+    this.sparkle?.destroy();
+    this.sparkle = null;
     this.wings?.destroy();
     this.wings = null;
     this.pet?.destroy();

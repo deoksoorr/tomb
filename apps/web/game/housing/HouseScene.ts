@@ -32,6 +32,8 @@ export type HouseSceneData = {
   color: string;
   name: string;
   look: readonly string[];
+  /** 내 몸 모양 (AVATAR_BODIES id). 없으면 hood */
+  body?: string;
   reduced: boolean;
   /** 편집 모드로 시작 (저장 뒤 다시 그릴 때 유지) */
   editing?: boolean;
@@ -151,7 +153,7 @@ export class HouseScene extends Phaser.Scene {
     // 문 밖에서 시작
     const sx = this.ox + (t.w / 2) * T;
     const sy = this.oy + (t.h + 1) * T + 22;
-    this.player = new Player(this, atlas, sx, sy, this.data0.color, this.data0.name);
+    this.player = new Player(this, atlas, sx, sy, this.data0.color, this.data0.name, this.data0.body);
     this.player.view.setLook(this.data0.look);
     this.presenceKey = "";
     this.presence = new RoomPresence(this, {

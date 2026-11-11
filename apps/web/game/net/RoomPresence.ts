@@ -1,5 +1,6 @@
 import type * as Phaser from "phaser";
 import { DIR, isAvatarBody, STATE, type ActKind, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
+import { bridge } from "../bridge";
 import type { AvatarView } from "../entities/AvatarView";
 import { RemoteAvatar } from "../entities/RemoteAvatar";
 import { phraseOf } from "../entities/SpeechBubble";
@@ -51,6 +52,7 @@ export class RoomPresence {
   private readonly order: LabelBox[] = [];
   private peerCheckAt = 0;
   private destroyed = false;
+  private offLook: (() => void) | null = null;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -99,6 +101,12 @@ export class RoomPresence {
       o.client,
     );
     this.client.joinRoom(o.room);
+    // 방 안에서 꾸미기를 바꾸면 내 아바타에 바로 입히고 방 사람들에게도 알린다
+    this.offLook = bridge.on("look:set", ({ look, lookGrant }) => {
+      const clean = Array.isArray(look) ? look.filter((x): x is string => typeof x === "string") : [];
+      o.me?.setLook(clean);
+      if (lookGrant) this.client.look(lookGrant);
+    });
   }
 
   /** 나를 포함한 방 인원 (접속 전이면 1) */
@@ -224,6 +232,8 @@ export class RoomPresence {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.offLook?.();
+    this.offLook = null;
     this.client.leave();
     this.clear();
   }

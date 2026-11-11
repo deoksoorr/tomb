@@ -3,6 +3,7 @@ import type { RoomJoinRequest, RoomJoinResponse } from "@/lib/types";
 import { bridge } from "../bridge";
 import { backoffDelay } from "./backoff";
 import { JoinLimiter, TOKEN_REUSE_MS } from "./joinPolicy";
+import { LookPacer } from "./lookPacer";
 import { isRoomId, parseRoomMessage, roomCloseAction, roomSocketUrl, type RoomWelcome } from "./roomPolicy";
 import { MoveThrottle, type NetPose } from "./sendThrottle";
 import { SYNC_EVERY_MS, SyncPolicy } from "./syncPolicy";
@@ -151,6 +152,8 @@ export class RoomClient {
 
   /** 방에서 나간다 (close 1000 → 서버가 유예 없이 자리를 비운다) */
   leave(): void {
+    this.lookPacer.destroy();
+    this.lookGrant = null;
     if (this.target === null) return;
     this.reset(1000, "bye");
     this.target = null;
@@ -177,10 +180,18 @@ export class RoomClient {
     if (isPhraseId(id)) this.send({ t: "say", id });
   }
 
-  /** 꾸미기 변경 증서 (Vercel 서명) */
+  /** 꾸미기 변경 증서 (Vercel 서명). 서버 간격(10초) 안이면 버리지 않고 간격이 지나자마자 최신 것을 보낸다 */
   look(grant: string): void {
-    this.send({ t: "look", grant });
+    this.lookGrant = grant;
+    this.lookPacer.push(grant);
   }
+
+  private lookGrant: string | null = null;
+  private readonly lookPacer = new LookPacer((grant) => {
+    if (!this.online) return false;
+    this.ws!.send(encodeEvent({ t: "look", grant }));
+    return true;
+  });
 
   /** 방 인원 다시 받기 (이상 징후 때만 — 최소 간격을 지킨다) */
   requestSync(): void {
@@ -360,6 +371,9 @@ export class RoomClient {
     this.mode = "online";
     this.cb.onWelcome?.(m);
     this.emitStatus();
+    // 방 안에서 꾸미기를 바꿨으면 새 연결에도 알린다 (입장 토큰은 잠깐 재사용돼 옛 착용일 수 있다)
+    if (this.lookGrant) this.lookPacer.push(this.lookGrant);
+    this.lookPacer.reset();
   }
 
   /** 소켓이 닫혔거나 죽은 것으로 판단됨 */

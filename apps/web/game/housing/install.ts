@@ -24,7 +24,7 @@ type WorldLike = Phaser.Scene & {
   rig?: { enabled: boolean };
   inShop?: boolean;
   reduced?: boolean;
-  player?: { view: { wearing: readonly string[] } };
+  player?: { view: { wearing: readonly string[]; bodyId: string } };
   onAction?: (a: KeyAction) => void;
 };
 
@@ -66,6 +66,8 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
     color: ctx.opts.color,
     name: ctx.opts.name,
     look: world!.player?.view.wearing ?? [],
+    // 입장 화면에서 고르지 않았으면 입장 토큰으로 받은 몸 (월드의 내 아바타가 가진 값이 정답)
+    body: world!.player?.view.bodyId ?? ctx.opts.body,
     reduced: !!world!.reduced,
   });
 

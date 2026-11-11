@@ -1,0 +1,124 @@
+import { Grid } from "./pixel";
+
+// 머리 위 이모티콘 (손 흔들기·환호·헌화·살려주세요). 말풍선 안에 화면 픽셀 3배로 크게 그린다 (SpeechBubble.showIcon).
+// 순수 그리드라 테스트에서 크기·외곽선을 확인한다.
+
+export type EmoteIcon = "wave" | "cheer" | "flower" | "revive";
+export const EMOTE_ICONS: readonly EmoteIcon[] = ["wave", "cheer", "flower", "revive"];
+
+const LINE = 0x2a2420;
+
+/** 펼친 손 (손가락 사이는 외곽선이 갈라 준다) + 흔드는 표시 */
+function wave(): Grid {
+  const g = new Grid(13, 13);
+  const skin = 0xffe7c2;
+  const shade = 0xe9c497;
+  for (const [x, y0] of [
+    [4, 2],
+    [6, 1],
+    [8, 2],
+    [10, 4],
+  ])
+    g.vline(x, y0, 7, skin);
+  g.rect(4, 6, 7, 4, skin);
+  g.hline(5, 9, 10, skin);
+  g.set(3, 7, skin);
+  g.set(2, 6, skin);
+  g.set(2, 5, skin);
+  g.hline(5, 10, 9, shade);
+  g.hline(5, 9, 10, shade);
+  g.set(6, 1, 0xfff6e4);
+  g.outline(LINE);
+  // 흔드는 선 (외곽선 없이 밝게)
+  g.set(0, 2, 0xfff0a8);
+  g.set(1, 1, 0xfff0a8);
+  g.set(12, 9, 0xfff0a8);
+  g.set(12, 10, 0xfff0a8);
+  return g;
+}
+
+/** 큰 별 + 작은 반짝임 두 개 */
+function cheer(): Grid {
+  const g = new Grid(13, 13);
+  const y = 0xffd84a;
+  const hi = 0xfff4b0;
+  const lo = 0xe8a92e;
+  g.vline(5, 1, 3, y);
+  g.hline(4, 6, 3, y);
+  g.hline(1, 9, 4, y);
+  g.hline(2, 8, 5, y);
+  g.hline(3, 7, 6, y);
+  g.hline(3, 7, 7, y);
+  g.set(2, 8, y);
+  g.set(3, 8, y);
+  g.set(7, 8, y);
+  g.set(8, 8, y);
+  g.set(2, 9, lo);
+  g.set(8, 9, lo);
+  g.set(5, 2, hi);
+  g.set(4, 4, hi);
+  g.set(5, 4, hi);
+  g.hline(6, 7, 7, lo);
+  g.outline(LINE);
+  // 작은 반짝임 (분홍·하늘)
+  const spark = (x: number, yy: number, c: number) => {
+    g.set(x, yy, 0xffffff);
+    g.set(x - 1, yy, c);
+    g.set(x + 1, yy, c);
+    g.set(x, yy - 1, c);
+    g.set(x, yy + 1, c);
+  };
+  spark(11, 2, 0xff8fb8);
+  spark(11, 10, 0x8fe0ff);
+  return g;
+}
+
+/** 다섯 잎 꽃 + 줄기 */
+function flower(): Grid {
+  const g = new Grid(13, 13);
+  const petal = 0xffa8c8;
+  const hi = 0xffd9e6;
+  const leaf = 0x6fae4c;
+  g.vline(6, 8, 11, leaf);
+  g.set(7, 10, leaf);
+  g.set(8, 9, leaf);
+  for (const [x, y] of [
+    [6, 2.2],
+    [3.4, 4.6],
+    [8.6, 4.6],
+    [4.4, 7.6],
+    [7.6, 7.6],
+  ])
+    g.ellipse(x + 0.5, y + 0.5, 1.7, 1.7, petal);
+  g.set(5, 2, hi);
+  g.set(3, 4, hi);
+  g.ellipse(6.5, 5.6, 1.3, 1.3, 0xffe066);
+  g.outline(LINE);
+  return g;
+}
+
+/** 위로 솟는 불씨 */
+function revive(): Grid {
+  const g = new Grid(13, 13);
+  const outer = 0xffa040;
+  const mid = 0xffd36e;
+  const core = 0xfff4c0;
+  g.ellipse(6.5, 8, 4, 3.6, outer);
+  for (let yy = 1; yy < 7; yy++) {
+    const hw = Math.max(0, (yy - 1) * 0.7);
+    g.hline(Math.round(6 - hw), Math.round(6 + hw), yy, outer);
+  }
+  g.ellipse(6.5, 8.4, 2.6, 2.4, mid);
+  g.vline(6, 4, 7, mid);
+  g.ellipse(6.5, 9, 1.4, 1.4, core);
+  g.outline(LINE);
+  return g;
+}
+
+const ART: Record<EmoteIcon, () => Grid> = { wave, cheer, flower, revive };
+
+export function emoteGrid(kind: EmoteIcon): Grid {
+  return ART[kind]();
+}
+
+export const emoteTexKey = (kind: EmoteIcon) => `emote-${kind}`;

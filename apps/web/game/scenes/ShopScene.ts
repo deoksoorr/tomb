@@ -20,6 +20,8 @@ export type ShopContext = {
   color: string;
   name: string;
   look: readonly string[];
+  /** 내 몸 모양 (AVATAR_BODIES id). 없으면 hood */
+  body?: string;
   reduced: boolean;
   onExit(): void;
 };
@@ -108,7 +110,7 @@ export class ShopScene extends Phaser.Scene {
     wall(W - 32, 124, 22, 16);
     this.physics.world.setBounds(10, 40, W - 20, H - 40 + 6);
 
-    this.player = new Player(this, atlas, DOOR_X, H - 20, this.ctx.color, this.ctx.name);
+    this.player = new Player(this, atlas, DOOR_X, H - 20, this.ctx.color, this.ctx.name, this.ctx.body);
     this.player.view.setLook(this.ctx.look);
     this.player.dir = DIR.up;
     this.physics.add.collider(this.player.sprite, walls);

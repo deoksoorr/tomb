@@ -57,7 +57,7 @@ export function bodyOf(body: string | null | undefined): AvatarBody {
 }
 
 type View = "down" | "side" | "up";
-type Arms = "none" | "up" | "wave0" | "wave1" | "cheer" | "paddle0" | "paddle1" | "rope";
+type Arms = "none" | "up" | "wave0" | "wave1" | "cheer0" | "cheer1" | "paddle0" | "paddle1" | "rope";
 type Pose = {
   /** 윗몸 세로 흔들림 */
   bob: number;
@@ -74,6 +74,8 @@ type Pose = {
   sink?: number;
   /** 이불 유령 밑단 물결 위상 */
   hem: number;
+  /** 팔 없는 몸(동글이·이불 유령)의 몸짓: 몸 전체를 좌우로 기울인다 (-1 왼쪽, 1 오른쪽) */
+  tilt?: number;
 };
 
 type Pal = {
@@ -89,6 +91,9 @@ type Pal = {
   scarfLo: Color;
   feet: Color;
   muzzle: Color;
+  /** 손 흔들기·환호 때 보이는 손 (몸보다 밝게) */
+  hand: Color;
+  handLo: Color;
 };
 
 /** 시트에 그려지는 꾸미기 (같은 조합이면 텍스처를 같이 쓴다) */
@@ -123,6 +128,8 @@ function palette(base: Color, body: AvatarBody): Pal {
     scarfLo: 0xb0a589,
     feet: 0x2a2520,
     muzzle: lighten(base, 0.62),
+    hand: mix(lighten(b, 0.5), 0xfff4dc, 0.45),
+    handLo: darken(mix(lighten(b, 0.5), 0xfff4dc, 0.45), 0.14),
   };
 }
 
@@ -166,12 +173,12 @@ function framesFor(view: View): Pose[] {
     { ...P(0, [0, 0], [-1, 1], 0, 2, 1), arms: "rope" },
   ];
   const wave: Pose[] = [
-    { ...P(0, [0, 0], [0, 0], 0, 0, 0), arms: "wave0" },
-    { ...P(0, [0, 0], [0, 0], 0, 0, 1), arms: "wave1" },
+    { ...P(0, [0, 0], [0, 0], 0, 0, 0), arms: "wave0", tilt: -1 },
+    { ...P(0, [0, 0], [0, 0], 0, 0, 1), arms: "wave1", tilt: 1 },
   ];
   const cheer: Pose[] = [
-    { ...P(0, [0, 0], [0, 0], 0, 0, 0), arms: "cheer" },
-    { ...P(-1, [0, -1], [0, -1], 0, 0, 1), arms: "cheer", air: true },
+    { ...P(0, [0, 0], [0, 0], 0, 0, 0), arms: "cheer0", tilt: -1 },
+    { ...P(-1, [0, -1], [0, -1], 0, 0, 1), arms: "cheer1", air: true, tilt: 1 },
   ];
   return [...idle, ...walk, ...run, P(0, [0, 0], [0, 0], 0, 1), P(0, [0, 0], [0, 0], 0, 2), jump, ...hang, ...swim, ...dive, ...swing, ...wave, ...cheer];
 }
@@ -404,8 +411,8 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     g.set(cx - 1 + (d > 0 ? 1 : 0), hy - 7, pal.hoodHi);
     g.set(cx + d, hy - 8, pal.hood);
     if (view === "up") g.vline(cx, hy - 2, hy + 2, pal.hoodLo);
-  } else if (body === "round") {
-    // 머리 위 새싹
+  } else if (body === "round" && !hatCovers) {
+    // 머리 위 새싹 (모자를 쓰면 모자 속에)
     g.set(cx, hy - 7, 0x6f9a4c);
     g.set(cx, hy - 8, 0x6f9a4c);
     g.set(cx + 1, hy - 8, 0x9cc46a);
@@ -415,7 +422,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   // ── 얼굴 ──
   drawFace(g, body, view, m, pal);
 
-  drawGear(g, view, gear, m, pal);
+  drawGear(g, view, gear, m, pal, body);
 
   // 귀는 모자 위로 튀어나오게 모자 다음에
   if (body === "cat") drawCatEars(g, view, m, pal);
@@ -459,6 +466,10 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   // 등불 창은 외곽선 뒤에도 밝게 (빛나는 점)
   if (gear.lantern && view !== "up") g.set(m.hx, m.hY + 1, 0xfff0b0);
   if (gear.hat === "hat_halo") drawHalo(g, m, view);
+  // 손 흔들기·환호: 팔 없는 몸은 몸 전체를 기울이고, 손은 밝은 색 + 외곽선으로 몸 밖에 크게 그린다
+  const tilt = (body === "round" || body === "sheet") && pose.tilt ? pose.tilt : 0;
+  if (tilt) g = shear(g, tilt);
+  for (const h of actHands(view, pose.arms, m)) drawHand(g, h, tilt, m, view, pal);
   if (pose.arms === "rope") drawRopes(g, view, m, pose);
 
   // ── 물 ── 몸을 가라앉히고 수면 아래는 지운다
@@ -521,16 +532,6 @@ function drawArms(g: Grid, view: View, pose: Pose, m: M, pal: Pal, water: boolea
       arm(shL, shY, cx - 5, top - 3);
       arm(shR, shY, cx + 4, top - 3);
     }
-  } else if (arms === "wave0" || arms === "wave1") {
-    const w = arms === "wave0";
-    if (side) arm(cx + 1, shY, w ? cx + 6 : cx + 4, w ? top + 1 : top - 2);
-    else arm(shR, shY, w ? cx + 8 : cx + 6, w ? top + 1 : top - 2);
-  } else if (arms === "cheer") {
-    if (side) arm(cx + 1, shY, cx + 5, top - 2);
-    else {
-      arm(shL, shY, cx - 8, top);
-      arm(shR, shY, cx + 7, top);
-    }
   } else if (arms === "rope") {
     // 줄을 잡은 손 (줄은 외곽선 뒤에 그린다)
     if (side) g.set(cx + 1, shY + 1, hand);
@@ -539,6 +540,129 @@ function drawArms(g: Grid, view: View, pose: Pose, m: M, pal: Pal, water: boolea
       g.set(shR + 1, shY + 1, hand);
     }
   }
+}
+
+type Hand = { x: number; y: number; back?: boolean };
+
+/**
+ * 손 흔들기·환호 때 손 자리 (2×2 손의 왼쪽 위, 기울이기 전 좌표). 머리 옆·위로 몸 밖에 크게:
+ *  wave0 머리 옆으로 쭉 뻗음 → wave1 머리 위로 올려 안쪽으로 (좌우 2~5px, 위아래 4px 흔들림)
+ *  cheer0 두 팔을 비스듬히 → cheer1 두 팔을 머리 위로 곧게 (옆모습은 뒷손이 머리 뒤로 보인다)
+ */
+function actHands(view: View, arms: Arms | undefined, m: M): Hand[] {
+  const { cx, rx, top } = m;
+  const R = Math.round(cx + rx);
+  const L = Math.round(cx - rx) - 2;
+  const side = view === "side";
+  switch (arms) {
+    case "wave0":
+      return [{ x: R + 1, y: top }];
+    case "wave1":
+      return [{ x: side ? cx + 1 : R - 1, y: top - 4 }];
+    case "cheer0":
+      return side
+        ? [
+            { x: L + 1, y: top - 1, back: true },
+            { x: R, y: top - 2 },
+          ]
+        : [
+            { x: L, y: top - 1 },
+            { x: R + 1, y: top - 1 },
+          ];
+    case "cheer1":
+      return side
+        ? [
+            { x: cx - 4, y: top - 5, back: true },
+            { x: cx + 2, y: top - 5 },
+          ]
+        : [
+            { x: L + 1, y: top - 5 },
+            { x: R, y: top - 5 },
+          ];
+    default:
+      return [];
+  }
+}
+
+/** 기울이기: 발바닥(26줄)은 그대로, 위로 갈수록 tilt 쪽으로 밀린다 (8줄마다 1px) */
+const shearDx = (tilt: number, y: number) => Math.round((tilt * Math.max(0, 26 - y)) / 8);
+
+function shear(g: Grid, tilt: number): Grid {
+  const out = new Grid(g.w, g.h);
+  for (let y = 0; y < g.h; y++) {
+    const dx = shearDx(tilt, y);
+    for (let x = 0; x < g.w; x++) {
+      const v = g.px[y * g.w + x];
+      const nx = x + dx;
+      if (v && nx >= 0 && nx < g.w) out.px[y * g.w + nx] = v;
+    }
+  }
+  return out;
+}
+
+/**
+ * 팔 + 2×2 밝은 손 (외곽선 뒤에 그린다). 팔은 몸 밖으로 나온 부분만 칠하고 따로 외곽선을 두른다.
+ * 손 둘레는 몸 위에 겹쳐도 테두리가 보이게 외곽선 색으로 덮는다.
+ */
+function drawHand(g: Grid, h: Hand, tilt: number, m: M, view: View, pal: Pal): void {
+  const x = Math.max(1, Math.min(AV_W - 3, h.x + shearDx(tilt, h.y)));
+  const y = Math.max(1, h.y);
+  // 팔: 어깨 → 손목. 비었거나 외곽선인 칸에만 (몸 안쪽은 몸이 가린다)
+  const side = view === "side";
+  const ax = (side ? (h.back ? m.cx - 2 : m.cx + 1) : h.x < m.cx ? m.shL : m.shR) + shearDx(tilt, m.shY);
+  const armC = h.back ? pal.cloakLo : pal.cloak;
+  const drawn: number[] = [];
+  const wx = x + (h.x < m.cx ? 1 : 0);
+  const wy = y + 1;
+  {
+    let x0 = Math.round(ax);
+    let y0 = Math.round(m.shY);
+    const dx = Math.abs(wx - x0);
+    const dy = -Math.abs(wy - y0);
+    const sx = x0 < wx ? 1 : -1;
+    const sy = y0 < wy ? 1 : -1;
+    let err = dx + dy;
+    for (;;) {
+      const v = g.get(x0, y0);
+      if (!(v & 255) || v >>> 8 === pal.line) {
+        g.set(x0, y0, armC);
+        drawn.push(x0, y0);
+      }
+      if (x0 === wx && y0 === wy) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) {
+        err += dy;
+        x0 += sx;
+      }
+      if (e2 <= dx) {
+        err += dx;
+        y0 += sy;
+      }
+    }
+  }
+  for (let i = 0; i < drawn.length; i += 2)
+    for (const [ox, oy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ])
+      if (!g.filled(drawn[i] + ox, drawn[i + 1] + oy)) g.set(drawn[i] + ox, drawn[i + 1] + oy, pal.line);
+  for (let j = -1; j <= 2; j++)
+    for (let i = -1; i <= 2; i++) {
+      const inside = i >= 0 && i <= 1 && j >= 0 && j <= 1;
+      if (inside) continue;
+      // 모서리는 둥글게 (대각선 칸은 비어 있을 때 칠하지 않는다)
+      const corner = (i === -1 || i === 2) && (j === -1 || j === 2);
+      if (corner && !g.filled(x + i, y + j)) continue;
+      g.set(x + i, y + j, pal.line);
+    }
+  const c = h.back ? darken(pal.hand, 0.18) : pal.hand;
+  const lo = h.back ? darken(pal.handLo, 0.18) : pal.handLo;
+  g.set(x, y, c);
+  g.set(x + 1, y, c);
+  g.set(x, y + 1, lo);
+  g.set(x + 1, y + 1, h.back ? lo : c);
 }
 
 function drawRopes(g: Grid, view: View, m: M, pose: Pose): void {
@@ -677,16 +801,18 @@ function drawHalo(g: Grid, m: M, view: View): void {
   const y0 = Math.max(0, m.crown - 4);
   const cx = m.cx + (view === "side" ? -1 : 0);
   const gold = 0xffe27a;
-  const hi = 0xfff6c8;
-  g.hline(cx - 2, cx + 1, y0, hi);
-  g.set(cx - 3, y0 + 1, gold);
-  g.set(cx + 2, y0 + 1, gold);
-  g.hline(cx - 2, cx + 1, y0 + 2, gold);
+  const hi = 0xfffbe0;
+  g.hline(cx - 3, cx + 2, y0, hi);
+  g.set(cx - 4, y0 + 1, gold);
+  g.set(cx + 3, y0 + 1, gold);
+  g.hline(cx - 3, cx + 2, y0 + 2, gold);
 }
 
 /** 머리·손 꾸미기 (외곽선 전에 그려 같이 테두리를 두른다) */
-function drawGear(g: Grid, view: View, gear: Gear, m: M, pal: Pal): void {
-  const { cx, top } = m;
+function drawGear(g: Grid, view: View, gear: Gear, m: M, pal: Pal, body: AvatarBody): void {
+  const { cx } = m;
+  // 동글이는 얼굴이 머리 위쪽까지 올라와 있어 모자를 조금 더 얹는다
+  const top = body === "round" ? m.top - 1 : m.top;
   if (gear.hat === "hat_straw") {
     const straw = 0xe2c27a;
     const shade = 0xb8964f;
@@ -715,14 +841,19 @@ function drawGear(g: Grid, view: View, gear: Gear, m: M, pal: Pal): void {
       ear(cx + 3, true);
     }
   } else if (gear.hat === "hat_flower") {
+    // 꽃 머리핀: 3×3 꽃잎 + 노란 꽃술 + 잎 (멀리서도 보이게 밝은 분홍)
     const fx = view === "side" ? cx - 3 : cx + 3;
-    const fy = top + 1;
-    const petal = 0xf2b8c6;
-    g.set(fx - 1, fy, petal);
-    g.set(fx + 1, fy, petal);
-    g.set(fx, fy - 1, petal);
-    g.set(fx, fy + 1, petal);
-    g.set(fx, fy, 0xf3d36b);
+    const fy = top;
+    const petal = 0xff9fc0;
+    const petalHi = 0xffd6e4;
+    g.rect(fx - 1, fy - 1, 3, 3, petal);
+    g.set(fx - 2, fy, petal);
+    g.set(fx + 2, fy, petal);
+    g.set(fx, fy - 2, petal);
+    g.set(fx, fy + 2, petal);
+    g.set(fx - 1, fy - 1, petalHi);
+    g.set(fx, fy, 0xffe066);
+    g.set(fx + (view === "side" ? 2 : -2), fy + 2, 0x7fbf5a);
   }
   if (gear.lantern && view !== "up") {
     // 손에 든 작은 등불 (아래·옆모습에서 보인다)
@@ -732,6 +863,44 @@ function drawGear(g: Grid, view: View, gear: Gear, m: M, pal: Pal): void {
     g.rect(lx - 1, ly, 3, 3, 0x6b4f32);
     g.set(lx, ly + 1, 0xffd77a);
   }
+}
+
+/** 프레임 하나의 픽셀 (테스트·머리 위 높이 계산용). col = 시트 열, view = 앞·옆·뒤 */
+export function avatarFrameGrid(body: string, view: "down" | "side" | "up", col: number, color = "#9fb8d8", look: readonly string[] = []): Grid {
+  const b = bodyOf(body);
+  return drawFrame(b, view, framesFor(view)[col], palette(parseHex(color), b), gearOf(look));
+}
+
+const artTopCache = new Map<string, number>();
+
+/**
+ * 발바닥(원점)에서 그림 맨 위까지 높이 (px): 귀·모자·후광 같은 머리 꾸미기까지 포함해 서 있는 프레임(앞·옆·뒤) 중 가장 높은 곳.
+ * 이름표는 이 위에 놓는다 (머리 꾸미기 → 이름표 → 말풍선 순으로 쌓기). 몸·꾸미기 조합마다 한 번만 계산한다.
+ */
+export function avatarArtTop(body: string, look: readonly string[] = []): number {
+  const b = bodyOf(body);
+  const key = `${b}|${lookKey(look)}`;
+  const hit = artTopCache.get(key);
+  if (hit !== undefined) return hit;
+  let top = BODY_METRICS[b].top;
+  for (const view of ["down", "side", "up"] as const)
+    for (let col = AV_ANIM.idle.col; col < AV_ANIM.idle.col + AV_ANIM.idle.frames; col++) {
+      const g = avatarFrameGrid(b, view, col, "#9fb8d8", look);
+      for (let y = 0; y < AV_H; y++) {
+        let found = false;
+        for (let x = 0; x < AV_W; x++)
+          if ((g.get(x, y) & 255) >= 128) {
+            found = true;
+            break;
+          }
+        if (found) {
+          top = Math.max(top, AV_H - 1 - y);
+          break;
+        }
+      }
+    }
+  artTopCache.set(key, top);
+  return top;
 }
 
 const VIEWS: readonly [number, View, boolean][] = [

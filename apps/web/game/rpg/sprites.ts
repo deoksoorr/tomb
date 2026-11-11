@@ -50,8 +50,8 @@ function addOnce(scene: Phaser.Scene, key: string, make: () => HTMLCanvasElement
 }
 
 /** 내 아바타 시트 (월드와 같은 그림). 색·꾸미기가 바뀌었을 수 있으니 판마다 새로 만든다 */
-export function makePlayer(scene: Phaser.Scene, color: string, look: readonly string[]): void {
-  addFrames(scene, RTEX.player, buildAvatarSheet(color, look), AV_W, AV_H);
+export function makePlayer(scene: Phaser.Scene, color: string, look: readonly string[], body = "hood"): void {
+  addFrames(scene, RTEX.player, buildAvatarSheet(color, look, body), AV_W, AV_H);
 }
 export const avFrame = (dirRow: number, col: number) => dirRow * AV_COLS + col;
 
