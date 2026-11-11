@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import tracksJson from "../../public/bgm/tracks.json";
 import { needsAttribution, nextIndex, parseManifest, randomStart, type Playlist } from "./manifest";
@@ -7,6 +9,19 @@ describe("parseManifest", () => {
     const lists = parseManifest(tracksJson);
     expect(lists.map((p) => p.id)).toEqual(["orgel", "lofi", "rain", "piano", "chiptune", "jazz", "ambient", "acoustic", "retro"]);
     expect(lists.every((p) => p.tracks.length > 0)).toBe(true);
+  });
+
+  it("플레이리스트마다 20곡 이상이고, 파일·제목이 겹치지 않으며 실제 파일이 있다", () => {
+    const lists = parseManifest(tracksJson);
+    for (const p of lists) expect(p.tracks.length, p.id).toBeGreaterThanOrEqual(20);
+    const all = lists.flatMap((p) => p.tracks);
+    expect(new Set(all.map((t) => t.file)).size).toBe(all.length);
+    expect(new Set(all.map((t) => t.title)).size).toBe(all.length);
+    const pub = fileURLToPath(new URL("../../public", import.meta.url));
+    for (const t of all) {
+      expect(existsSync(pub + t.file), t.file).toBe(true);
+      expect(t.durationSec, t.file).toBeGreaterThan(30);
+    }
   });
 
   it("잘못된 항목과 외부 핫링크는 버린다", () => {

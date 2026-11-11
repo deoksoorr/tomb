@@ -1,5 +1,6 @@
 // 한때는... BGM 생성기 — 외부 음원 없이 코드로 작곡·합성한다. 결과물은 CC0.
-// 사용: node scripts/gen-bgm.mjs [이름 필터] [--fetch]   (ffmpeg + libmp3lame 필요, npm 의존성 없음)
+// 사용: node scripts/gen-bgm.mjs [이름 필터] [--fetch] [--missing]   (ffmpeg + libmp3lame 필요, npm 의존성 없음)
+//  --missing: 아직 파일이 없는 자체 제작곡만 굽고 tracks.json을 다시 쓴다(이미 있는 mp3는 건드리지 않는다)
 //  → apps/web/public/bgm/{playlist}/*.mp3, tracks.json, 그리고 효과음 apps/web/public/sfx/*.mp3
 // 트랙마다 고정 시드를 쓰므로 다시 돌려도 같은 파일이 나온다. 필터를 주면 그 트랙만 다시 굽고 tracks.json은 그대로 둔다.
 // 외부 무료 음원(EXTERNAL, 라이선스 확인 완료)은 --fetch 때만 원본을 내려받아 128kbps·같은 음량으로 다시 굽는다.
@@ -415,14 +416,14 @@ function finalize(bus, { lp = 0, hp = 30, fadeIn = 3, fadeOut = 4, target = TARG
   return { lufs: lufs(bus), peak: dB(peakOf(bus)), gr: dB(minG) };
 }
 
-function encode(bus, file, seed) {
+function encode(bus, file, seed, kbps = 128) {
   const [L, R] = bus, n = L.length, pcm = new Int16Array(n * 2), rng = new Rng(seed ^ 0x5bd1e995);
   for (let i = 0; i < n; i++) {
     pcm[2 * i] = clamp(Math.round(L[i] * 32767 + rng.next() - rng.next()), -32768, 32767);
     pcm[2 * i + 1] = clamp(Math.round(R[i] * 32767 + rng.next() - rng.next()), -32768, 32767);
   }
   const args = ["-hide_banner", "-loglevel", "error", "-y", "-f", "s16le", "-ar", String(SR), "-ac", "2", "-i", "pipe:0"];
-  args.push("-c:a", "libmp3lame", "-b:a", "128k", "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact", "-id3v2_version", "0", file);
+  args.push("-c:a", "libmp3lame", "-b:a", `${kbps}k`, "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact", "-id3v2_version", "0", file);
   execFileSync(FFMPEG, args, { input: Buffer.from(pcm.buffer), stdio: ["pipe", "ignore", "inherit"], maxBuffer: 1 << 30 });
 }
 
@@ -434,6 +435,7 @@ const SCALES = {
   minor: [0, 2, 3, 5, 7, 8, 10],
   dorian: [0, 2, 3, 5, 7, 9, 10],
   lydian: [0, 2, 4, 6, 7, 9, 11],
+  mixolydian: [0, 2, 4, 5, 7, 9, 10],
 };
 // 오르골용 3·4화음(근음 포함)
 const TRI = { M: [0, 4, 7], m: [0, 3, 7], M7: [0, 4, 7, 11], m7: [0, 3, 7, 10], 7: [0, 4, 7, 10], sus2: [0, 2, 7] };
@@ -891,6 +893,20 @@ function orgel(o, pl) {
     } else if (o.acc === "block") {
       [T[0], T[1], T[3]].forEach((m, k) => play(soft, t0 + k * 0.05, m, 0.2 * vel, -0.3 + k * 0.3, 4 * e8));
       if (o.meter === 4) [T[1], T[3]].forEach((m, k) => play(soft, t0 + 4 * e8 + k * 0.04, m, 0.12 * vel, 0, 4 * e8));
+    } else if (o.acc === "alberti") {
+      // 알베르티 베이스: 근음-5음-3음-5음을 8분음으로 고르게
+      for (let s = 0; s < o.meter * 2; s++) play(soft, t0 + s * e8, T[[2, 4, 3, 4][s % 4]], (s === 0 ? 0.2 : 0.14) * vel, -0.2, e8);
+    } else if (o.acc === "strum") {
+      // 기타 스트럼: 화음을 아래→위(업스트로크는 위→아래)로 훑는다
+      const hits = o.meter === 4 ? [[0, 1, 1], [3, 0.6, -1], [4, 0.85, 1], [6, 0.6, -1]] : [[0, 1, 1], [2, 0.65, -1], [4, 0.65, -1]];
+      for (const [s, hv, dir] of hits) {
+        const ns = dir > 0 ? T : [...T].reverse();
+        ns.forEach((m, k) => play(soft, t0 + s * e8 + k * 0.014, m, 0.12 * hv * vel, -0.35 + 0.17 * k, 2 * e8));
+      }
+    } else if (o.acc === "arp16") {
+      // 16분 빠른 분산화음(칩·레트로 게임 느낌)
+      const pat = [0, 2, 3, 4, 3, 2, 1, 2];
+      for (let s = 0; s < o.meter * 4; s++) play(soft, t0 + (s * e8) / 2, T[pat[s % 8]], (s % 4 === 0 ? 0.17 : 0.11) * vel, -0.25, e8 / 2);
     } else {
       for (let q = 0; q < o.meter; q++) play(soft, t0 + q * 2 * e8, [T[1], T[3], T[2], T[3]][q], (q === 0 ? 0.19 : 0.14) * vel, -0.2, 2 * e8);
     }
@@ -1157,6 +1173,14 @@ function lofi(o, pl) {
     const sec = pl.secs[bar], full = sec.name === "A" || sec.name === "B", hum = () => rng.range(-0.005, 0.005);
     if (!(full || sec.name === "brk" || (sec.name === "outro" && sec.i < 2) || (sec.name === "intro" && sec.i === 3))) continue;
     const rv = full ? 1 : 0.6;
+    if (o.kit === "bossa") {
+      // 보사노바 키트: 8분 하이햇(셰이커처럼) + 2마디 림 클릭 패턴 + 1·3박을 받치는 킥
+      for (let b = 0; b < 4; b += 0.5) place(drums, rng.pick(hs), T(bar * 4 + b) + hum(), (b % 1 ? 0.035 : 0.055) * rv * rng.range(0.85, 1.1), 0.3);
+      if (!full) continue;
+      for (const b of bar % 2 ? [1, 2.5] : [0, 1.5, 3]) place(drums, rng.pick(ss), T(bar * 4 + b) + hum(), 0.2 * rng.range(0.85, 1.05), -0.1);
+      for (const [b, v] of [[0, 1], [1.5, 0.55], [2, 0.9], [3.5, 0.55]]) place(drums, rng.pick(ks), T(bar * 4 + b) + hum(), 0.17 * v * rng.range(0.9, 1.05), 0);
+      continue;
+    }
     for (const b of [0, 1, 1.5, 2, 3, 3.5]) {
       if (b % 1 && !rng.chance(0.85)) continue;
       place(drums, rng.pick(jk.ride), T(bar * 4 + b) + hum(), 0.15 * rv * (b === 1 || b === 3 ? 1 : 0.78) * rng.range(0.9, 1.05), 0.35);
@@ -1423,15 +1447,16 @@ function leaves(n, rng, gust, level) {
   return out;
 }
 
-function pianoPart(bus, rng, dur) {
-  const beat = 60 / 52, bar = beat * 4, start = 2.5, bars = Math.floor((dur - start - 11) / bar);
-  const prog = [[9, "m9"], [5, "M9"], [0, "M9"], [7, "69"]];
-  const cx = { scale: SCALES.majPent, tonic: 72, lo: -2, hi: 7 };
+// opt(모두 생략 가능): key = 으뜸음 반음 이동, bpm, prog = [으뜸음 기준 근음, 보이싱], scale, endQ = 마지막 화음
+function pianoPart(bus, rng, dur, opt = {}) {
+  const key = opt.key ?? 0, beat = 60 / (opt.bpm ?? 52), bar = beat * 4, start = 2.5, bars = Math.floor((dur - start - 11) / bar);
+  const prog = opt.prog ?? [[9, "m9"], [5, "M9"], [0, "M9"], [7, "69"]];
+  const cx = { scale: SCALES[opt.scale ?? "majPent"], tonic: 72 + key, lo: -2, hi: 7 };
   const MR = [[[0, 1.5], [1.5, 0.5], [2, 2]], [[1, 1], [2, 2]], [[0.5, 0.5], [1, 1], [2, 1.5]], [[0, 1], [1, 1], [2, 2]]];
   const strong = (r) => Number.isInteger(r.pos);
   let prevV = null, motif = null, mdeg = null;
   for (let b = 0; b < bars; b++) {
-    const [root, q] = prog[b % 4], rp = pc(root), t0 = start + b * bar, v = voicing(rp, q, prevV, 66), hold = bar + 0.5;
+    const [root, q] = prog[b % prog.length], rp = pc(root + key), t0 = start + b * bar, v = voicing(rp, q, prevV, 66), hold = bar + 0.5;
     prevV = v;
     const phase = b / bars, dens = phase < 0.12 || phase > 0.88 ? 0 : Math.floor(b / 8) % 2 ? 2 : 1;
     const lh = inRange(rp, 40);
@@ -1452,9 +1477,23 @@ function pianoPart(bus, rng, dur) {
     }
   }
   const tEnd = start + bars * bar;
-  piano(bus, tEnd, 36, 0.4, -0.2, 9, rng);
-  voicing(0, "M9", prevV, 66).forEach((m, k) => piano(bus, tEnd + 0.15 + k * 0.12, m, 0.26, 0.1, 9, rng));
-  piano(bus, tEnd + 0.8, 79, 0.24, 0.3, 9, rng);
+  piano(bus, tEnd, inRange(pc(key), 36), 0.4, -0.2, 9, rng);
+  voicing(pc(key), opt.endQ ?? "M9", prevV, 66).forEach((m, k) => piano(bus, tEnd + 0.15 + k * 0.12, m, 0.26, 0.1, 9, rng));
+  piano(bus, tEnd + 0.8, 79 + key, 0.24, 0.3, 9, rng);
+}
+
+// 젖은 길을 지나가는 차: 타이어 물보라(대역 잡음)가 한쪽에서 다가와 반대쪽으로 멀어진다
+function carPass(bus, rng, t0, len, amp) {
+  const [L, R] = bus, s0 = Math.round(t0 * SR), m = Math.min(Math.round(len * SR), L.length - s0);
+  if (m <= 0) return;
+  const hiss = biquad(biquad(pink(m, rng), "bp", rng.range(900, 1600), 0.5), "lp", 3200, 0.7);
+  const rumble = biquad(brown(m, rng), "lp", 160, 0.7), dir = rng.chance(0.5) ? 1 : -1;
+  for (let j = 0; j < m; j++) {
+    const u = j / m, e = amp * Math.sin(Math.PI * u) ** 3, a = ((clamp(dir * (2 * u - 1) * 0.85, -1, 1) + 1) * Math.PI) / 4;
+    const v = e * (hiss[j] + 0.6 * rumble[j]);
+    L[s0 + j] += v * Math.cos(a) * Math.SQRT2;
+    R[s0 + j] += v * Math.sin(a) * Math.SQRT2;
+  }
 }
 
 function rain(o, pl) {
@@ -1476,12 +1515,13 @@ function rain(o, pl) {
       break;
     }
     case "thunder": {
-      addBus(bus, rainBed(n, rng, { level: 0.3, hp: 250, lp: 4600, width: 0.9, swell: 0.25, period: 9 }));
+      addBus(bus, rainBed(n, rng, { level: o.rainLv ?? 0.3, hp: 250, lp: 4600, width: 0.9, swell: 0.25, period: 9 }));
       addBus(bus, lowRain(0.18, 900));
       scatter(bus, rng, bank(rng, 48, stoneTick), 34, 0.02, 0.14, 0.95);
       stem("rain", bus);
       const th = stereo(n);
-      for (let t = rng.range(9, 14); t < dur - 16; t += rng.range(24, 38)) thunder(th, rng, t, rng.range(0.17, 0.26));
+      const [g0, g1] = o.thunderGap ?? [24, 38];
+      for (let t = rng.range(9, 14); t < dur - 16; t += rng.range(g0, g1)) thunder(th, rng, t, rng.range(0.17, 0.26));
       stem("thunder", th);
       addBus(bus, th, 0.9);
       reverb(bus, { room: 0.7, damp: 0.6, wet: 0.1, lowCut: 120 });
@@ -1495,7 +1535,7 @@ function rain(o, pl) {
       filt(bus, "lp", 4200, 0.7);
       stem("rain", bus);
       const pno = stereo(n);
-      pianoPart(pno, rng, dur);
+      pianoPart(pno, rng, dur, o.piano);
       filt(pno, "lp", 3200, 0.7);
       reverb(pno, { room: 0.86, damp: 0.5, wet: 0.3, width: 0.9, pre: 0.03 });
       stem("piano", pno);
@@ -1508,7 +1548,7 @@ function rain(o, pl) {
       addBus(bus, w2.bus);
       stem("wind", bus);
       const cr = stereo(n);
-      crickets(cr, rng, dur, 5, 0.05);
+      crickets(cr, rng, dur, o.count ?? 5, 0.05);
       for (let t = rng.range(18, 30); t < dur - 10; t += rng.range(28, 45)) owl(cr, rng, t, 0.05, rng.range(-0.6, 0.6));
       filt(cr, "lp", 6000, 0.7);
       reverb(cr, { room: 0.75, damp: 0.5, wet: 0.25 });
@@ -1537,7 +1577,7 @@ function rain(o, pl) {
       addBus(bus, rainBed(n, rng, { level: 0.13, hp: 150, lp: 2500, width: 0.7, swell: 0.25 }));
       stem("bed", bus);
       const fx = stereo(n);
-      scatter(fx, rng, bank(rng, 48, tinPing), 22, 0.02, 0.12, 0.9);
+      scatter(fx, rng, bank(rng, 48, tinPing), o.density ?? 22, 0.02, 0.12, 0.9);
       scatter(fx, rng, bank(rng, 16, roofThunk), 3, 0.03, 0.12, 0.8);
       // 처마 끝 낙숫물: 거의 일정한 간격으로 웅덩이에 떨어진다
       const gut = bank(rng, 8, (r) => plink(r, 550, 900)), gp = rng.range(-0.6, 0.6);
@@ -1564,6 +1604,85 @@ function rain(o, pl) {
       addBus(bus, bell);
       break;
     }
+    case "street": {
+      // 비 오는 출근길: 젖은 길을 지나가는 차 소리 + 우산 위 빗방울 + 먼 도시의 웅웅거림
+      addBus(bus, rainBed(n, rng, { level: o.rainLv ?? 0.18, hp: 300, lp: 4200, width: 0.85, swell: 0.25, period: 8 }));
+      addBus(bus, lowRain(0.12, 500));
+      stem("rain", bus);
+      const fx = stereo(n);
+      scatter(fx, rng, bank(rng, 32, tinPing), o.umbrella ?? 9, 0.015, 0.07, 0.5); // 우산 천에 떨어지는 방울
+      scatter(fx, rng, bank(rng, 16, (r) => plink(r, 700, 1500)), 0.5, 0.02, 0.06, 0.9);
+      filt(fx, "lp", 3800, 0.7);
+      const [g0, g1] = o.carGap ?? [7, 16];
+      for (let t = rng.range(2, 6); t < dur - 8; t += rng.range(g0, g1)) carPass(fx, rng, t, rng.range(4, 7), rng.range(0.05, 0.1));
+      stem("street", fx);
+      addBus(bus, fx);
+      const hum = rainBed(n, rng, { level: 0.05, hp: 40, lp: 220, width: 0.6, swell: 0.4, period: 12 });
+      addBus(bus, hum);
+      reverb(bus, { room: 0.7, damp: 0.55, wet: 0.12, lowCut: 140 });
+      master = { lp: 6500, hp: 30 };
+      break;
+    }
+    case "window":
+    case "guitar": {
+      // 창가 자리: 유리창 너머 빗소리 + 느린 화음(로즈 또는 뜯는 기타)
+      addBus(bus, rainBed(n, rng, { level: o.rainLv ?? 0.15, hp: 280, lp: 4000, width: 0.85, swell: 0.25 }));
+      addBus(bus, lowRain(0.06, 650));
+      scatter(bus, rng, bank(rng, 24, (r) => plink(r, 1300, 3200)), 1.1, 0.015, 0.05, 0.85);
+      filt(bus, "lp", 4600, 0.7);
+      stem("rain", bus);
+      const mu = stereo(n), beat = 60 / o.bpm, bar = beat * o.meter, start = 2, bars = Math.floor((dur - start - 10) / bar);
+      let prevV = null;
+      for (let b = 0; b < bars; b++) {
+        const [root, q] = o.prog[b % o.prog.length], rp = pc(o.key + root), t0 = start + b * bar, u = b / bars;
+        const vel = u < 0.12 ? 0.75 : u > 0.88 ? 0.8 : 1;
+        if (o.kind === "window") {
+          const v = voicing(rp, q, prevV, o.center ?? 62);
+          prevV = v;
+          v.forEach((m, j) => epiano(mu, t0 + j * rng.range(0.012, 0.024), m, 0.21 * vel * (j === v.length - 1 ? 1.2 : 1) * rng.range(0.92, 1.05), bar * 0.92, -0.3 + (0.6 * j) / (v.length - 1)));
+          bassNote(mu, t0, inRange(rp, 34), 0.2 * vel, bar * 0.9, 1.4);
+          if (u > 0.12 && u < 0.88 && rng.chance(0.55)) {
+            const top = v.at(-1), m = top + rng.pick([2, 3, 5]);
+            epiano(mu, t0 + beat * rng.pick([2, 2.5]), m, 0.16, beat * 1.2, 0.3);
+            epiano(mu, t0 + beat * 3, top, 0.14, beat * 1.5, 0.3);
+          }
+        } else {
+          // 핑거피킹: 엄지가 근음, 나머지 손가락이 화음음을 오르내린다
+          const iv = TRI[q], r = inRange(rp, 40), T = [r, r + iv[2], r + 12, r + 12 + iv[1], r + 12 + iv[2]];
+          const pat = o.meter === 3 ? [0, 2, 3, 4, 3, 2] : [0, 2, 3, 2, 4, 2, 3, 1];
+          pat.forEach((k, s) => pluck(mu, t0 + s * (beat / 2) + rng.range(-0.006, 0.006), T[k], (s === 0 ? 0.32 : 0.22) * vel * rng.range(0.9, 1.06), -0.3 + 0.12 * k, beat, rng, 0.4, 2.6));
+        }
+      }
+      const tEnd = start + bars * bar, rk = pc(o.key);
+      if (o.kind === "window") voicing(rk, o.endQ ?? "M9", prevV, o.center ?? 62).forEach((m, j) => epiano(mu, tEnd + j * 0.03, m, 0.2, 5, -0.3 + 0.2 * j));
+      else [0, 7, 12, 16, 19].forEach((iv, j) => pluck(mu, tEnd + j * 0.05, inRange(rk, 40) + iv - (o.endMinor && iv === 16 ? 1 : 0), 0.26, -0.3 + 0.15 * j, 4, rng, 0.35, 3));
+      filt(mu, "lp", o.kind === "window" ? 2600 : 3600, 0.7);
+      if (o.kind === "window") autopan(mu, 3.2, 0.08);
+      reverb(mu, { room: 0.84, damp: 0.5, wet: 0.28, width: 0.9, pre: 0.025 });
+      stem("music", mu);
+      addBus(bus, mu, o.kind === "guitar" ? 2.2 : 1);
+      master = { lp: 7000, hp: 30 };
+      break;
+    }
+    case "rainpad": {
+      // 장마철 오후: 고른 빗소리 위로 느리게 바뀌는 패드 화음
+      addBus(bus, rainBed(n, rng, { level: o.rainLv ?? 0.17, hp: 260, lp: 4400, width: 0.9, swell: 0.3, period: 9 }));
+      addBus(bus, lowRain(0.08, 700));
+      scatter(bus, rng, bank(rng, 32, stoneTick), 8, 0.01, 0.06, 0.9);
+      stem("rain", bus);
+      const pad = stereo(n);
+      for (let t = 1, k = 0; t < dur - 8; k++) {
+        const d = rng.range(11, 15);
+        o.chords[k % o.chords.length].forEach((m, j) => padNote(pad, t + j * 0.45, d, m, 0.045, (j - 1.5) * 0.3, 4, 6));
+        t += d - 1.2;
+      }
+      filt(pad, "lp", 1900, 0.7);
+      reverb(pad, { room: 0.9, damp: 0.5, wet: 0.35, width: 1 });
+      stem("pad", pad);
+      addBus(bus, pad);
+      master = { lp: 7000, hp: 30 };
+      break;
+    }
     case "dream": {
       // 몽환 앰비언트: 느린 패드 화음 + 드문드문 반짝이는 종소리(또는 유리 같은 사인) + 옅은 공기
       const pad = stereo(n), sp = stereo(n), scale = SCALES[o.scale], cxs = { scale, tonic: o.tonic, lo: 0, hi: scale.length * 2 };
@@ -1580,6 +1699,9 @@ function rain(o, pl) {
         prev = deg;
         if (o.sparkle === "glass") tone(sp, t, rng.range(1.5, 3), mtof(m), 0.05, p, 1.2, 3);
         else if (o.sparkle === "piano") piano(sp, t, m, 0.3, p, 4, rng);
+        else if (o.sparkle === "vibes") vibes(sp, t, m, 0.26, p);
+        else if (o.sparkle === "pluck") pluck(sp, t, m, 0.7, p, 3, rng, 0.35, 3.2);
+        else if (o.sparkle === "musicbox") musicBox(sp, t, m, 0.2, p);
         else celesta(sp, t, m, 0.22, p);
       }
       filt(sp, "lp", 5000, 0.7);
@@ -1594,13 +1716,13 @@ function rain(o, pl) {
       break;
     }
     case "fog": {
-      const pad = stereo(n), root = 38;
+      const pad = stereo(n), root = o.root ?? 38;
       for (let t = 0; t < dur; t += 22) {
         padNote(pad, t, 28, root, 0.055, -0.2, 8, 10);
         padNote(pad, t + 3, 26, root + 7, 0.04, 0.2, 9, 10);
         padNote(pad, t + 6, 24, root + 12, 0.03, 0, 9, 10);
       }
-      const pool = [62, 64, 69, 71, 74, 76, 81];
+      const pool = o.pool ?? [62, 64, 69, 71, 74, 76, 81];
       for (let t = 4; t < dur - 8; t += rng.range(5, 9)) padNote(pad, t, rng.range(9, 14), rng.pick(pool), 0.03, rng.range(-0.7, 0.7), 4, 6);
       for (let t = 10; t < dur - 15; t += rng.range(14, 22)) tone(pad, t, 8, mtof(rng.pick([86, 88, 93])), 0.006, rng.range(-0.8, 0.8), 6, 6);
       filt(pad, "lp", 2200, 0.7);
@@ -2070,6 +2192,123 @@ const SPECS = [
   { pl: "retro", file: "inn-at-version-zero", title: "첫날의 여관", seed: 809, inst: "retro", tonic: 67, scale: "major", bpm: 84, meter: 3, progA: [M(0, "M"), M(9, "m"), M(5, "M"), M(7, "M")], progB: [M(4, "m"), M(9, "m"), M(2, "m"), M(7, "7")], acc: "waltz", counter: "thirds", dur: 92, wet: 0.22 },
   { pl: "retro", file: "village-of-abandoned-quests", title: "버려진 퀘스트의 마을", seed: 811, inst: "retro", drums: 0.5, tonic: 69, scale: "dorian", bpm: 90, meter: 4, progA: [M(0, "m7"), M(5, "M"), M(0, "m7"), M(10, "M")], progB: [M(3, "M"), M(10, "M"), M(5, "M"), M(7, "m")], acc: "arp", counter: "line", dur: 90, bass2: true, wet: 0.2 },
 
+  // 3차 보강(플레이리스트마다 20곡): 용량을 아끼려고 64kbps(빗소리·앰비언트는 잡음이 많아 80kbps)로 굽는다
+  ...[
+    // 오르골
+    { pl: "orgel", file: "sunday-eleven-pm", title: "일요일 밤 열한 시", seed: 121, tonic: 70, scale: "majPent", bpm: 62, meter: 3, progA: [M(0, "M"), M(7, "M"), M(9, "m"), M(5, "M")], progB: [M(2, "m"), M(5, "M"), M(0, "M"), M(7, "7")], acc: "alberti", counter: "line", timbre: "celesta", dur: 74 },
+    { pl: "orgel", file: "payday-night-music-box", title: "월급날 밤 오르골", seed: 127, tonic: 72, scale: "major", bpm: 70, meter: 4, progA: [M(0, "M7"), M(9, "m7"), M(2, "m7"), M(7, "7")], progB: [M(4, "m"), M(9, "m"), M(5, "M"), M(7, "sus2")], acc: "arp", counter: "thirds", timbre: "musicbox", dur: 72 },
+    { pl: "orgel", file: "first-snow-commute", title: "첫눈 오는 출근길", seed: 133, tonic: 66, scale: "minor", bpm: 60, meter: 3, progA: [M(0, "m"), M(10, "M"), M(8, "M"), M(7, "M")], progB: [M(3, "M"), M(10, "M"), M(5, "m"), M(7, "M")], acc: "waltz", counter: "echo", timbre: "musicbox", dur: 74 },
+    { pl: "orgel", file: "after-the-dishes", title: "설거지 끝낸 밤", seed: 139, tonic: 67, scale: "mixolydian", bpm: 66, meter: 4, progA: [M(0, "M"), M(10, "M"), M(5, "M"), M(0, "M")], progB: [M(5, "M"), M(10, "M"), M(2, "m"), M(7, "m")], acc: "block", counter: "line", timbre: "celesta", dur: 72, bass2: true },
+    { pl: "orgel", file: "saturday-no-alarm", title: "알람 없는 토요일", seed: 145, tonic: 64, scale: "lydian", bpm: 58, meter: 4, progA: [M(0, "M7"), M(2, "M"), M(4, "m"), M(2, "M")], progB: [M(9, "m"), M(7, "M"), M(4, "m7"), M(2, "M")], acc: "pulse", counter: "echo", timbre: "musicbox", dur: 72 },
+
+    // 로파이
+    { pl: "lofi", file: "friday-six-pm", title: "금요일 오후 여섯 시", seed: 131, key: 62, mode: "major", bpm: 84, prog: [[4, 5, "M9"], [4, 7, "13"], [4, 4, "m7"], [4, 9, "m9"]], comp: "stab", comp2: "push", drums: "bounce", snare: "snare", swing: 0.58, bass: "synco", lead: "vibes", dur: 74, brkHats: true },
+    { pl: "lofi", file: "cup-noodle-overtime", title: "야근 저녁은 컵라면", seed: 137, key: 64, mode: "minor", bpm: 72, prog: [[4, 0, "m9"], [4, 5, "9"], [4, 3, "M7"], [4, 7, "7b9"]], comp: "whole", comp2: "twoHit", drums: "half", snare: "rim", swing: 0.62, bass: "dotted", lead: "flute", dur: 76, keyCut: 3000 },
+    { pl: "lofi", file: "last-subway-home", title: "막차 탄 지하철", seed: 149, key: 66, mode: "major", bpm: 78, prog: [[2, 9, "m9"], [2, 2, "m9"], [2, 7, "13"], [2, 0, "M9"], [2, 5, "M9"], [2, 4, "m7"], [2, 2, "m9"], [2, 7, "7b9"]], comp: "charleston", comp2: "stab", drums: "lazy", snare: "snare", swing: 0.6, bass: "two", lead: "keys", dur: 74, center: 60 },
+
+    // 비 오는 출근길
+    { pl: "rain", file: "umbrella-crosswalk", title: "우산 쓰고 건너는 횡단보도", seed: 91, kind: "street", dur: 72 },
+    { pl: "rain", file: "bus-stop-downpour", title: "출근길 버스 정류장", seed: 93, kind: "street", rainLv: 0.24, carGap: [5, 11], umbrella: 14, dur: 70 },
+    { pl: "rain", file: "cafe-window-seat", title: "카페 창가 자리의 비", seed: 95, kind: "window", key: 63, bpm: 60, meter: 4, prog: [[0, "M9"], [9, "m9"], [2, "m9"], [7, "13"]], dur: 72 },
+    { pl: "rain", file: "meeting-room-monsoon", title: "회의실 창밖의 장맛비", seed: 85, kind: "window", key: 57, bpm: 56, meter: 4, prog: [[0, "m9"], [5, "m9"], [10, "13"], [3, "M9"]], endQ: "m9", center: 60, rainLv: 0.19, dur: 74 },
+    { pl: "rain", file: "rainy-monday-morning", title: "비 오는 월요일 아침", seed: 101, kind: "piano", piano: { key: -2, bpm: 60, prog: [[0, "M9"], [4, "m7"], [9, "m9"], [5, "69"]] }, dur: 72 },
+    { pl: "rain", file: "wet-sneakers", title: "젖은 운동화로 출근", seed: 103, kind: "piano", piano: { key: -3, bpm: 56, scale: "minPent", prog: [[0, "m9"], [5, "m7"], [10, "9"], [3, "M7"]], endQ: "m9" }, dur: 74 },
+    { pl: "rain", file: "waiting-under-the-eaves", title: "처마 밑에서 비 피하기", seed: 107, kind: "guitar", key: 7, bpm: 66, meter: 4, prog: [[0, "M"], [7, "M"], [9, "m"], [5, "M"]], dur: 72 },
+    { pl: "rain", file: "no-umbrella-going-home", title: "우산 없이 나온 퇴근길", seed: 109, kind: "guitar", key: 2, bpm: 72, meter: 3, prog: [[0, "m"], [10, "M"], [8, "M"], [7, "m"]], endMinor: true, rainLv: 0.18, dur: 70 },
+    { pl: "rain", file: "convenience-store-awning", title: "편의점 차양 아래", seed: 87, kind: "tinroof", density: 30, dur: 70 },
+    { pl: "rain", file: "thunder-overtime", title: "천둥 치는 야근 밤", seed: 89, kind: "thunder", rainLv: 0.24, thunderGap: [16, 26], dur: 74 },
+    { pl: "rain", file: "foggy-bus-window", title: "김 서린 버스 창문", seed: 117, kind: "fog", root: 41, pool: [65, 67, 72, 74, 77, 79, 84], dur: 72 },
+    { pl: "rain", file: "monsoon-office-afternoon", title: "장마철 사무실 오후", seed: 119, kind: "rainpad", chords: [[50, 57, 62, 66], [47, 54, 57, 62], [43, 50, 57, 59], [45, 52, 57, 61]], dur: 72 },
+
+    // 퇴근길 피아노
+    { pl: "piano", file: "back-seat-of-the-bus", title: "퇴근 버스 맨 뒷자리", seed: 231, inst: "piano", tonic: 70, scale: "major", bpm: 66, meter: 4, progA: [M(0, "M7"), M(4, "m7"), M(9, "m7"), M(5, "M7")], progB: [M(2, "m7"), M(7, "7"), M(0, "M7"), M(9, "m")], acc: "arp", counter: "line", dur: 74, wet: 0.3 },
+    { pl: "piano", file: "convenience-store-light", title: "편의점 불빛", seed: 235, inst: "piano", tonic: 64, scale: "majPent", bpm: 60, meter: 3, progA: [M(0, "M"), M(9, "m"), M(4, "m"), M(5, "M")], progB: [M(5, "M7"), M(7, "M"), M(9, "m7"), M(7, "sus2")], acc: "waltz", counter: "echo", dur: 72, wet: 0.32 },
+    { pl: "piano", file: "empty-elevator", title: "혼자 탄 엘리베이터", seed: 239, inst: "piano", tonic: 62, scale: "dorian", bpm: 64, meter: 4, progA: [M(0, "m7"), M(7, "m7"), M(5, "M"), M(0, "m7")], progB: [M(3, "M7"), M(5, "M"), M(10, "M"), M(7, "m")], acc: "alberti", counter: "thirds", dur: 74, wet: 0.3 },
+    { pl: "piano", file: "ten-pm-laundry", title: "밤 열 시의 세탁기", seed: 243, inst: "piano", tonic: 65, scale: "lydian", bpm: 68, meter: 4, progA: [M(0, "M7"), M(2, "M"), M(9, "m7"), M(7, "M")], progB: [M(4, "m"), M(9, "m"), M(2, "M"), M(7, "M")], acc: "block", counter: "line", dur: 72, bass2: true, wet: 0.32 },
+    { pl: "piano", file: "payday-sunset", title: "월급날의 노을", seed: 247, inst: "piano", tonic: 67, scale: "major", bpm: 70, meter: 3, progA: [M(0, "M"), M(4, "m"), M(5, "M"), M(7, "7")], progB: [M(9, "m"), M(2, "m7"), M(5, "M7"), M(7, "sus2")], acc: "alberti", counter: "echo", dur: 70, wet: 0.3 },
+    { pl: "piano", file: "letter-back-in-the-drawer", title: "다시 넣어 둔 사직서", seed: 251, inst: "piano", tonic: 69, scale: "minor", bpm: 62, meter: 4, progA: [M(0, "m"), M(5, "m"), M(10, "M"), M(3, "M")], progB: [M(8, "M"), M(3, "M"), M(5, "m7"), M(7, "M")], acc: "arp", counter: "line", dur: 76, wet: 0.32 },
+    { pl: "piano", file: "holiday-train-home", title: "명절 귀성 열차", seed: 255, inst: "piano", tonic: 63, scale: "majPent", bpm: 64, meter: 4, progA: [M(0, "M"), M(7, "M"), M(9, "m"), M(4, "m")], progB: [M(5, "M"), M(0, "M"), M(5, "M7"), M(7, "M")], acc: "pulse", counter: "thirds", dur: 74, wet: 0.3 },
+    { pl: "piano", file: "ten-minutes-on-the-roof", title: "옥상에서 쉬는 10분", seed: 259, inst: "piano", tonic: 72, scale: "mixolydian", bpm: 72, meter: 4, progA: [M(0, "M"), M(10, "M"), M(5, "M"), M(0, "M")], progB: [M(5, "M7"), M(10, "M"), M(7, "m"), M(0, "M")], acc: "arp", counter: "echo", dur: 72, wet: 0.28 },
+    { pl: "piano", file: "month-end-closing", title: "월말 정산 끝", seed: 263, inst: "piano", tonic: 68, scale: "major", bpm: 58, meter: 3, progA: [M(0, "M7"), M(5, "M7"), M(2, "m7"), M(7, "7")], progB: [M(4, "m7"), M(9, "m7"), M(2, "m7"), M(7, "sus2")], acc: "waltz", counter: "thirds", dur: 74, wet: 0.32 },
+    { pl: "piano", file: "after-the-farewell-party", title: "송별회 끝난 밤길", seed: 267, inst: "piano", tonic: 66, scale: "minor", bpm: 60, meter: 3, progA: [M(0, "m7"), M(5, "m7"), M(8, "M7"), M(7, "M")], progB: [M(3, "M7"), M(10, "M"), M(8, "M7"), M(7, "7")], acc: "arp", counter: "echo", dur: 72, wet: 0.32 },
+    { pl: "piano", file: "sunday-shirt-ironing", title: "일요일 밤 셔츠 다림질", seed: 271, inst: "piano", tonic: 71, scale: "majPent", bpm: 66, meter: 4, progA: [M(0, "M"), M(4, "m"), M(9, "m"), M(7, "M")], progB: [M(5, "M"), M(2, "m"), M(7, "M"), M(7, "sus2")], acc: "block", counter: "line", dur: 72, wet: 0.3 },
+    { pl: "piano", file: "first-workday-of-the-year", title: "새해 첫 출근", seed: 275, inst: "piano", tonic: 65, scale: "major", bpm: 74, meter: 4, progA: [M(0, "M"), M(2, "m"), M(4, "m"), M(5, "M")], progB: [M(9, "m"), M(7, "M"), M(5, "M"), M(7, "7")], acc: "alberti", counter: "line", dur: 70, wet: 0.28 },
+
+    // 점심시간 오락실
+    { pl: "chiptune", file: "lunch-menu-dilemma", title: "점심 메뉴 고민", seed: 321, inst: "chip", drums: 1, tonic: 72, scale: "majPent", bpm: 132, meter: 4, progA: [M(0, "M"), M(5, "M"), M(7, "M"), M(0, "M")], progB: [M(9, "m"), M(5, "M"), M(2, "m"), M(7, "M")], acc: "arp16", counter: "echo", dur: 70, wet: 0.16 },
+    { pl: "chiptune", file: "last-meal-ticket", title: "식권 한 장 남았다", seed: 325, inst: "chip", drums: 0.9, tonic: 69, scale: "minPent", bpm: 112, meter: 4, progA: [M(0, "m"), M(10, "M"), M(8, "M"), M(7, "m")], progB: [M(5, "m"), M(8, "M"), M(10, "M"), M(7, "m")], acc: "pulse", counter: "thirds", dur: 72, bass2: true, wet: 0.18 },
+    { pl: "chiptune", file: "elevator-mind-game", title: "엘리베이터 눈치 게임", seed: 329, inst: "chip", drums: 0.7, tonic: 67, scale: "major", bpm: 120, meter: 3, progA: [M(0, "M"), M(7, "M"), M(9, "m"), M(4, "m")], progB: [M(5, "M"), M(0, "M"), M(2, "m"), M(7, "7")], acc: "arp", counter: "line", dur: 70, wet: 0.18 },
+    { pl: "chiptune", file: "coffee-ladder-game", title: "커피 내기 사다리 타기", seed: 333, inst: "chip", drums: 1, tonic: 74, scale: "mixolydian", bpm: 126, meter: 4, progA: [M(0, "M"), M(10, "M"), M(5, "M"), M(0, "M")], progB: [M(7, "m"), M(5, "M"), M(10, "M"), M(0, "M")], acc: "arp16", counter: "echo", dur: 70, wet: 0.16 },
+    { pl: "chiptune", file: "afternoon-meeting-boss", title: "오후 회의 보스전", seed: 337, inst: "chip", drums: 1, tonic: 64, scale: "minor", bpm: 140, meter: 4, progA: [M(0, "m"), M(8, "M"), M(10, "M"), M(0, "m")], progB: [M(5, "m"), M(8, "M"), M(3, "M"), M(7, "M")], acc: "arp16", counter: "thirds", dur: 70, bass2: true, wet: 0.16 },
+    { pl: "chiptune", file: "pantry-snack-raid", title: "탕비실 과자 쟁탈전", seed: 341, inst: "chip", drums: 0.8, tonic: 70, scale: "majPent", bpm: 116, meter: 4, progA: [M(0, "M"), M(4, "m"), M(9, "m"), M(7, "M")], progB: [M(5, "M"), M(7, "M"), M(9, "m"), M(0, "M")], acc: "pulse", counter: "echo", dur: 72, wet: 0.18 },
+    { pl: "chiptune", file: "clock-out-speedrun", title: "칼퇴 스피드런", seed: 345, inst: "chip", drums: 1, tonic: 71, scale: "major", bpm: 144, meter: 4, progA: [M(0, "M"), M(5, "M"), M(9, "m"), M(7, "M")], progB: [M(2, "m"), M(7, "M"), M(4, "m"), M(9, "m")], acc: "arp16", counter: "line", dur: 70, wet: 0.16 },
+    { pl: "chiptune", file: "punch-in-combo", title: "출근 도장 콤보", seed: 349, inst: "chip", drums: 0.9, tonic: 65, scale: "dorian", bpm: 104, meter: 4, progA: [M(0, "m7"), M(10, "M"), M(5, "M"), M(7, "m")], progB: [M(3, "M"), M(10, "M"), M(5, "M"), M(7, "m")], acc: "arp", counter: "echo", dur: 72, wet: 0.18 },
+    { pl: "chiptune", file: "weekly-report-quest", title: "주간 보고 퀘스트", seed: 353, inst: "chip", drums: 0.8, tonic: 66, scale: "major", bpm: 108, meter: 4, progA: [M(0, "M"), M(2, "m"), M(5, "M"), M(7, "M")], progB: [M(9, "m"), M(4, "m"), M(5, "M"), M(7, "7")], acc: "alberti", counter: "thirds", dur: 72, wet: 0.18 },
+    { pl: "chiptune", file: "employee-badge-level-up", title: "사원증 레벨 업", seed: 357, inst: "chip", drums: 1, tonic: 72, scale: "major", bpm: 136, meter: 4, progA: [M(0, "M"), M(5, "M"), M(2, "m"), M(7, "M")], progB: [M(4, "m"), M(9, "m"), M(5, "M"), M(7, "7")], acc: "arp16", counter: "echo", dur: 70, wet: 0.16 },
+    { pl: "chiptune", file: "post-lunch-walk-stage", title: "점심 산책 스테이지", seed: 361, inst: "chip", drums: 0.6, tonic: 67, scale: "majPent", bpm: 96, meter: 4, progA: [M(0, "M"), M(9, "m"), M(2, "m"), M(7, "M")], progB: [M(5, "M"), M(4, "m"), M(2, "m"), M(7, "M")], acc: "pulse", counter: "line", dur: 72, wet: 0.2 },
+    { pl: "chiptune", file: "vending-machine-jackpot", title: "자판기 잭팟", seed: 365, inst: "chip", drums: 0.8, tonic: 68, scale: "major", bpm: 124, meter: 3, progA: [M(0, "M"), M(9, "m"), M(5, "M"), M(7, "M")], progB: [M(2, "m"), M(7, "M"), M(0, "M"), M(7, "7")], acc: "arp", counter: "thirds", dur: 70, wet: 0.18 },
+    { pl: "chiptune", file: "parcel-arrived-alert", title: "택배 도착 알림", seed: 369, inst: "chip", drums: 0.9, tonic: 73, scale: "majPent", bpm: 118, meter: 4, progA: [M(0, "M"), M(5, "M"), M(0, "M"), M(7, "M")], progB: [M(9, "m"), M(5, "M"), M(9, "m"), M(7, "M")], acc: "alberti", counter: "echo", dur: 72, bass2: true, wet: 0.18 },
+
+    // 회사 앞 재즈 카페
+    { pl: "jazz", file: "morning-americano", title: "아침 아메리카노", seed: 441, style: "jazz", key: 65, mode: "major", bpm: 116, prog: [[4, 0, "M9"], [4, 5, "9"], [4, 4, "m7"], [4, 9, "7b9"], [4, 2, "m9"], [4, 7, "13"], [4, 0, "M9"], [4, 0, "69"]], comp: "charleston", comp2: "stab", snare: "snare", swing: 0.64, bass: "walk", lead: "vibes", dur: 72 },
+    { pl: "jazz", file: "lunch-break-bossa", title: "점심시간 보사노바", seed: 445, style: "jazz", kit: "bossa", key: 60, mode: "major", bpm: 128, prog: [[4, 0, "M9"], [4, 2, "9"], [4, 2, "m9"], [4, 7, "13"]], comp: "stab", comp2: "charleston", snare: "rim", swing: 0.5, bass: "two", lead: "flute", dur: 72 },
+    { pl: "jazz", file: "rainy-day-latte", title: "비 오는 날의 라떼", seed: 449, style: "jazz", key: 67, mode: "minor", bpm: 92, prog: [[4, 0, "m9"], [4, 5, "9"], [4, 10, "M9"], [4, 3, "M7"], [2, 8, "M7"], [2, 2, "m7b5"], [4, 7, "7b9"]], comp: "whole", comp2: "twoHit", snare: "snare", swing: 0.62, bass: "walk", lead: "keys", dur: 74 },
+    { pl: "jazz", file: "friday-happy-hour", title: "불금 퇴근 한 잔", seed: 453, style: "jazz", key: 70, mode: "major", bpm: 132, prog: [[2, 0, "M9"], [2, 9, "7b9"], [2, 2, "m9"], [2, 7, "13"]], comp: "stab", comp2: "charleston", snare: "snare", swing: 0.66, bass: "walk", lead: "vibes", dur: 70 },
+    { pl: "jazz", file: "promotion-news-bossa", title: "승진 소식 보사노바", seed: 457, style: "jazz", kit: "bossa", key: 67, mode: "major", bpm: 124, prog: [[4, 0, "M9"], [4, 3, "9"], [4, 2, "m9"], [4, 7, "13"]], comp: "charleston", comp2: "stab", snare: "rim", swing: 0.5, bass: "two", lead: "vibes", dur: 72 },
+    { pl: "jazz", file: "espresso-before-overtime", title: "야근 전 에스프레소", seed: 461, style: "jazz", key: 62, mode: "minor", bpm: 104, prog: [[4, 0, "m9"], [4, 0, "m6"], [4, 5, "9"], [4, 7, "7b9"]], comp: "twoHit", comp2: "stab", snare: "snare", swing: 0.64, bass: "walk", lead: "keys", dur: 72 },
+    { pl: "jazz", file: "rooftop-sunset-swing", title: "옥상 노을 스윙", seed: 465, style: "jazz", key: 68, mode: "major", bpm: 140, prog: [[4, 5, "M9"], [4, 4, "m7"], [4, 9, "7b9"], [4, 2, "m9"], [4, 7, "13"], [4, 0, "M9"], [4, 2, "m9"], [4, 7, "13"]], comp: "charleston", comp2: "push", snare: "snare", swing: 0.66, bass: "walk", lead: "vibes", dur: 70 },
+    { pl: "jazz", file: "cancelled-field-meeting", title: "취소된 외근", seed: 469, style: "jazz", key: 61, mode: "major", bpm: 96, prog: [[4, 4, "m7"], [4, 9, "9"], [4, 2, "m9"], [4, 7, "13"]], comp: "push", comp2: "twoHit", snare: "rim", swing: 0.62, bass: "walk", lead: "flute", dur: 72 },
+    { pl: "jazz", file: "year-end-party-ballad", title: "송년회 끝 발라드", seed: 473, style: "jazz", key: 64, mode: "major", bpm: 72, prog: [[4, 0, "M9"], [4, 9, "m9"], [4, 5, "M9"], [4, 4, "7b9"], [4, 9, "m9"], [4, 2, "m9"], [4, 7, "13"], [4, 0, "69"]], comp: "whole", comp2: "twoHit", snare: "snare", swing: 0.64, bass: "walk", lead: "keys", dur: 74 },
+    { pl: "jazz", file: "monday-cafe-bossa", title: "월요일 아침 카페 보사", seed: 477, style: "jazz", kit: "bossa", key: 57, mode: "minor", bpm: 120, prog: [[4, 0, "m9"], [4, 5, "m9"], [4, 8, "M7"], [4, 7, "7b9"]], comp: "charleston", comp2: "stab", snare: "rim", swing: 0.5, bass: "two", lead: "flute", dur: 72 },
+
+    // 연차 날 낮잠
+    { pl: "ambient", file: "first-morning-of-leave", title: "연차 첫날 아침", seed: 621, kind: "dream", tonic: 74, scale: "majPent", chords: [[50, 57, 64, 66], [43, 50, 59, 64], [47, 54, 62, 69], [45, 52, 59, 62]], sparkle: "vibes", dur: 72 },
+    { pl: "ambient", file: "rainy-day-off", title: "비 오는 휴일 오후", seed: 625, kind: "dream", tonic: 76, scale: "minPent", chords: [[52, 59, 62, 66], [48, 55, 59, 64], [45, 52, 59, 60], [47, 54, 57, 62]], sparkle: "glass", drone: 40, gap: [2.5, 6], dur: 72 },
+    { pl: "ambient", file: "four-pm-wake-up", title: "낮잠 자다 깬 오후 네 시", seed: 629, kind: "dream", tonic: 77, scale: "lydian", chords: [[53, 60, 64, 71], [55, 62, 67, 71], [52, 59, 62, 67], [57, 60, 64, 67]], sparkle: "pluck", dur: 72 },
+    { pl: "ambient", file: "waiting-for-the-parcel", title: "택배 기다리는 오후", seed: 633, kind: "dream", tonic: 68, scale: "majPent", chords: [[44, 51, 60, 67], [41, 48, 56, 63], [49, 56, 60, 65], [51, 58, 61, 65]], sparkle: "piano", gap: [3, 7], dur: 72 },
+    { pl: "ambient", file: "saturday-sleep-in", title: "늦잠 자도 되는 토요일", seed: 637, kind: "dream", tonic: 72, scale: "dorian", chords: [[48, 55, 58, 62], [53, 57, 60, 63], [46, 53, 57, 62], [44, 51, 55, 60]], sparkle: "celesta", chordLen: 13, dur: 72 },
+    { pl: "ambient", file: "sunny-window-sofa", title: "햇살 드는 창가 소파", seed: 641, kind: "dream", tonic: 67, scale: "majPent", chords: [[43, 50, 57, 59], [52, 55, 59, 62], [48, 52, 55, 59], [50, 57, 62, 64]], sparkle: "vibes", gap: [2, 5], dur: 72 },
+    { pl: "ambient", file: "after-work-bath", title: "퇴근 후 반신욕", seed: 645, kind: "dream", tonic: 70, scale: "lydian", chords: [[46, 53, 57, 62], [46, 52, 55, 60], [43, 50, 57, 58], [51, 55, 58, 62]], sparkle: "glass", air: 0.05, dur: 72 },
+    { pl: "ambient", file: "folding-laundry-sunday", title: "일요일 저녁 빨래 개기", seed: 649, kind: "dream", tonic: 69, scale: "minPent", chords: [[45, 52, 59, 60], [41, 53, 57, 64], [50, 53, 57, 64], [52, 57, 59, 64]], sparkle: "pluck", drone: 33, dur: 72 },
+    { pl: "ambient", file: "payday-night-walk", title: "월급날 밤의 산책", seed: 653, kind: "dream", tonic: 76, scale: "majPent", chords: [[52, 59, 63, 66], [49, 56, 59, 64], [45, 52, 56, 61], [47, 54, 56, 61]], sparkle: "celesta", chordLen: 14, dur: 72 },
+    { pl: "ambient", file: "no-meeting-friday", title: "회의 없는 금요일 오후", seed: 657, kind: "dream", tonic: 74, scale: "dorian", chords: [[50, 57, 60, 64], [43, 53, 57, 60], [48, 55, 59, 64], [45, 52, 55, 60]], sparkle: "vibes", drone: 38, dur: 72 },
+    { pl: "ambient", file: "airplane-mode-day", title: "비행기 모드로 쉬는 날", seed: 661, kind: "dream", tonic: 66, scale: "minPent", chords: [[54, 61, 64, 68], [50, 57, 61, 66], [47, 54, 57, 61], [49, 56, 59, 64]], sparkle: "glass", gap: [3, 7], dur: 72 },
+    { pl: "ambient", file: "dangerous-outside-the-blanket", title: "이불 밖은 위험해", seed: 665, kind: "dream", tonic: 72, scale: "majPent", chords: [[48, 55, 62, 64], [45, 52, 59, 60], [41, 52, 55, 60], [43, 50, 57, 60]], sparkle: "piano", chordLen: 15, gap: [3.5, 8], dur: 74 },
+    { pl: "ambient", file: "last-night-of-leave", title: "연차 마지막 날 밤", seed: 669, kind: "dream", tonic: 75, scale: "lydian", chords: [[51, 58, 62, 69], [51, 57, 60, 65], [48, 55, 58, 62], [46, 53, 58, 60]], sparkle: "musicbox", drone: 39, dur: 72 },
+    { pl: "ambient", file: "half-day-off-nap", title: "오후 반차 후 낮잠", seed: 673, kind: "dream", tonic: 71, scale: "minPent", chords: [[47, 54, 57, 61], [43, 54, 59, 62], [52, 55, 59, 66], [42, 52, 57, 61]], sparkle: "vibes", air: 0.04, dur: 72 },
+
+    // 주말 캠핑 기타
+    { pl: "acoustic", file: "saturday-tent-morning", title: "토요일 아침 텐트", seed: 721, inst: "guitar", tonic: 67, scale: "majPent", bpm: 80, meter: 4, progA: [M(0, "M"), M(5, "M"), M(9, "m"), M(7, "M")], progB: [M(5, "M"), M(0, "M"), M(2, "m"), M(7, "M")], acc: "strum", counter: "line", dur: 70, wet: 0.22 },
+    { pl: "acoustic", file: "highway-to-the-campsite", title: "캠핑장 가는 고속도로", seed: 725, inst: "guitar", tonic: 69, scale: "mixolydian", bpm: 92, meter: 4, progA: [M(0, "M"), M(10, "M"), M(5, "M"), M(0, "M")], progB: [M(5, "M"), M(7, "m"), M(10, "M"), M(0, "M")], acc: "strum", counter: "echo", dur: 70, wet: 0.2 },
+    { pl: "acoustic", file: "toasted-marshmallow", title: "모닥불에 구운 마시멜로", seed: 729, inst: "guitar", tonic: 64, scale: "major", bpm: 68, meter: 3, progA: [M(0, "M"), M(9, "m"), M(5, "M"), M(7, "M")], progB: [M(4, "m"), M(9, "m"), M(2, "m"), M(7, "7")], acc: "waltz", counter: "thirds", dur: 72, wet: 0.24 },
+    { pl: "acoustic", file: "weekend-farm-lettuce", title: "주말농장 상추", seed: 733, inst: "guitar", tonic: 62, scale: "majPent", bpm: 84, meter: 4, progA: [M(0, "M"), M(7, "M"), M(5, "M"), M(0, "M")], progB: [M(9, "m"), M(5, "M"), M(0, "M"), M(7, "M")], acc: "pulse", counter: "echo", dur: 70, bass2: true, wet: 0.22 },
+    { pl: "acoustic", file: "riverside-picnic-mat", title: "강변 돗자리", seed: 737, inst: "guitar", tonic: 66, scale: "major", bpm: 74, meter: 4, progA: [M(0, "M7"), M(5, "M7"), M(4, "m7"), M(9, "m7")], progB: [M(2, "m7"), M(7, "7"), M(0, "M7"), M(7, "sus2")], acc: "arp", counter: "line", dur: 72, wet: 0.24 },
+    { pl: "acoustic", file: "trailhead-gimbap", title: "등산로 입구 김밥", seed: 741, inst: "guitar", tonic: 69, scale: "majPent", bpm: 88, meter: 4, progA: [M(0, "M"), M(9, "m"), M(2, "m"), M(7, "M")], progB: [M(5, "M"), M(4, "m"), M(9, "m"), M(7, "M")], acc: "alberti", counter: "echo", dur: 70, wet: 0.22 },
+    { pl: "acoustic", file: "feet-in-the-stream", title: "계곡물에 발 담그고", seed: 745, inst: "guitar", tonic: 71, scale: "lydian", bpm: 70, meter: 4, progA: [M(0, "M7"), M(2, "M"), M(0, "M7"), M(2, "M")], progB: [M(4, "m"), M(9, "m"), M(7, "M"), M(2, "M")], acc: "arp", counter: "thirds", dur: 72, wet: 0.24 },
+    { pl: "acoustic", file: "nap-in-the-camping-chair", title: "캠핑 의자에서 낮잠", seed: 749, inst: "guitar", tonic: 65, scale: "major", bpm: 64, meter: 3, progA: [M(0, "M"), M(5, "M"), M(2, "m"), M(7, "M")], progB: [M(9, "m"), M(5, "M"), M(0, "M"), M(7, "sus2")], acc: "arp", counter: "line", dur: 72, wet: 0.26 },
+    { pl: "acoustic", file: "stargazing-sunday-night", title: "별 보는 일요일 밤", seed: 753, inst: "guitar", tonic: 68, scale: "minor", bpm: 66, meter: 4, progA: [M(0, "m"), M(8, "M"), M(3, "M"), M(10, "M")], progB: [M(5, "m"), M(0, "m"), M(8, "M"), M(7, "M")], acc: "arp", counter: "echo", dur: 72, wet: 0.26 },
+    { pl: "acoustic", file: "night-before-monday", title: "다시 월요일 전날 밤", seed: 757, inst: "guitar", tonic: 63, scale: "dorian", bpm: 72, meter: 3, progA: [M(0, "m7"), M(5, "M"), M(0, "m7"), M(10, "M")], progB: [M(3, "M"), M(5, "M"), M(8, "M"), M(7, "m")], acc: "waltz", counter: "line", dur: 72, wet: 0.24 },
+    { pl: "acoustic", file: "sunday-bike-ride", title: "자전거 타는 일요일", seed: 761, inst: "guitar", tonic: 67, scale: "major", bpm: 96, meter: 4, progA: [M(0, "M"), M(4, "m"), M(5, "M"), M(7, "M")], progB: [M(9, "m"), M(5, "M"), M(2, "m"), M(7, "7")], acc: "strum", counter: "thirds", dur: 70, wet: 0.2 },
+    { pl: "acoustic", file: "car-camping-by-the-sea", title: "바닷가 차박", seed: 765, inst: "guitar", tonic: 64, scale: "majPent", bpm: 76, meter: 4, progA: [M(0, "M"), M(9, "m"), M(5, "M"), M(5, "m")], progB: [M(4, "m"), M(9, "m"), M(2, "m"), M(7, "M")], acc: "block", counter: "echo", dur: 72, wet: 0.26 },
+    { pl: "acoustic", file: "autumn-leaves-drive", title: "단풍 구경 드라이브", seed: 769, inst: "guitar", tonic: 70, scale: "dorian", bpm: 82, meter: 4, progA: [M(0, "m7"), M(10, "M"), M(5, "M"), M(7, "m")], progB: [M(3, "M7"), M(5, "M"), M(10, "M"), M(0, "m7")], acc: "alberti", counter: "line", dur: 70, wet: 0.22 },
+    { pl: "acoustic", file: "watering-the-garden", title: "텃밭에 물 주는 아침", seed: 773, inst: "guitar", tonic: 62, scale: "major", bpm: 78, meter: 3, progA: [M(0, "M"), M(7, "M"), M(9, "m"), M(5, "M")], progB: [M(2, "m"), M(7, "7"), M(4, "m"), M(9, "m")], acc: "strum", counter: "echo", dur: 72, wet: 0.24 },
+
+    // 퇴근 후 레트로 게임
+    { pl: "retro", file: "first-login-after-work", title: "퇴근 후 첫 접속", seed: 821, inst: "retro", drums: 0.5, tonic: 69, scale: "major", bpm: 96, meter: 4, progA: [M(0, "M"), M(5, "M"), M(9, "m"), M(7, "M")], progB: [M(2, "m"), M(7, "M"), M(4, "m"), M(9, "m")], acc: "arp", counter: "echo", dur: 72, wet: 0.2 },
+    { pl: "retro", file: "guild-meetup-friday", title: "길드 정모는 금요일", seed: 825, inst: "retro", drums: 0.7, tonic: 67, scale: "mixolydian", bpm: 112, meter: 4, progA: [M(0, "M"), M(10, "M"), M(5, "M"), M(0, "M")], progB: [M(5, "M"), M(10, "M"), M(7, "m"), M(0, "M")], acc: "arp16", counter: "thirds", dur: 70, wet: 0.18 },
+    { pl: "retro", file: "pajama-dungeon", title: "잠옷 입고 던전", seed: 829, inst: "retro", drums: 0.6, tonic: 64, scale: "minor", bpm: 100, meter: 4, progA: [M(0, "m"), M(8, "M"), M(3, "M"), M(10, "M")], progB: [M(5, "m"), M(0, "m"), M(8, "M"), M(7, "M")], acc: "arp", counter: "line", dur: 72, bass2: true, wet: 0.2 },
+    { pl: "retro", file: "late-night-snack-buff", title: "야식 버프", seed: 833, inst: "retro", drums: 0.6, tonic: 72, scale: "majPent", bpm: 108, meter: 4, progA: [M(0, "M"), M(9, "m"), M(5, "M"), M(7, "M")], progB: [M(5, "M"), M(7, "M"), M(9, "m"), M(0, "M")], acc: "pulse", counter: "echo", dur: 70, wet: 0.2 },
+    { pl: "retro", file: "daily-login-reward", title: "출석 보상 받는 밤", seed: 837, inst: "retro", tonic: 65, scale: "major", bpm: 88, meter: 3, progA: [M(0, "M"), M(4, "m"), M(9, "m"), M(5, "M")], progB: [M(2, "m"), M(7, "M"), M(0, "M"), M(7, "7")], acc: "waltz", counter: "thirds", dur: 72, wet: 0.22 },
+    { pl: "retro", file: "quest-do-the-dishes", title: "퀘스트: 설거지하기", seed: 841, inst: "retro", drums: 0.7, tonic: 70, scale: "major", bpm: 120, meter: 4, progA: [M(0, "M"), M(2, "m"), M(5, "M"), M(7, "M")], progB: [M(9, "m"), M(5, "M"), M(2, "m"), M(7, "7")], acc: "alberti", counter: "echo", dur: 70, wet: 0.18 },
+    { pl: "retro", file: "weekend-raid-lobby", title: "주말 레이드 대기실", seed: 845, inst: "retro", drums: 0.8, tonic: 66, scale: "dorian", bpm: 104, meter: 4, progA: [M(0, "m7"), M(5, "M"), M(10, "M"), M(0, "m7")], progB: [M(3, "M"), M(10, "M"), M(5, "M"), M(7, "m")], acc: "arp16", counter: "line", dur: 72, wet: 0.2 },
+    { pl: "retro", file: "blacksmith-overtime", title: "마을 대장간의 야근", seed: 849, inst: "retro", drums: 0.5, tonic: 62, scale: "minor", bpm: 92, meter: 4, progA: [M(0, "m"), M(5, "m"), M(8, "M"), M(7, "M")], progB: [M(3, "M"), M(10, "M"), M(5, "m"), M(7, "M")], acc: "pulse", counter: "thirds", dur: 72, bass2: true, wet: 0.2 },
+    { pl: "retro", file: "nap-at-the-inn", title: "여관에서 한숨 자기", seed: 853, inst: "retro", tonic: 68, scale: "majPent", bpm: 76, meter: 3, progA: [M(0, "M"), M(5, "M"), M(9, "m"), M(7, "M")], progB: [M(5, "M7"), M(4, "m"), M(2, "m7"), M(7, "M")], acc: "arp", counter: "echo", dur: 72, wet: 0.24 },
+    { pl: "retro", file: "convenience-store-checkpoint", title: "편의점 앞 중간 저장", seed: 857, inst: "retro", drums: 0.6, tonic: 71, scale: "major", bpm: 100, meter: 4, progA: [M(0, "M"), M(7, "M"), M(9, "m"), M(4, "m")], progB: [M(5, "M"), M(0, "M"), M(5, "M"), M(7, "M")], acc: "block", counter: "line", dur: 72, wet: 0.2 },
+    { pl: "retro", file: "max-level-monday", title: "만렙 찍은 월요일", seed: 861, inst: "retro", drums: 0.8, tonic: 73, scale: "lydian", bpm: 116, meter: 4, progA: [M(0, "M7"), M(2, "M"), M(0, "M7"), M(7, "M")], progB: [M(9, "m"), M(4, "m"), M(2, "M"), M(7, "M")], acc: "arp16", counter: "echo", dur: 70, wet: 0.18 },
+    { pl: "retro", file: "alarm-before-the-boss", title: "보스 앞에서 울린 알람", seed: 865, inst: "retro", drums: 0.9, tonic: 63, scale: "minPent", bpm: 124, meter: 4, progA: [M(0, "m"), M(10, "M"), M(8, "M"), M(10, "M")], progB: [M(5, "m"), M(3, "M"), M(10, "M"), M(7, "m")], acc: "arp16", counter: "thirds", dur: 70, wet: 0.18 },
+    { pl: "retro", file: "credits-and-cup-noodles", title: "엔딩 크레딧과 컵라면", seed: 869, inst: "retro", tonic: 67, scale: "major", bpm: 80, meter: 4, progA: [M(0, "M7"), M(9, "m7"), M(5, "M7"), M(7, "7")], progB: [M(4, "m7"), M(9, "m7"), M(2, "m7"), M(7, "sus2")], acc: "alberti", counter: "line", dur: 72, wet: 0.22 },
+  ].map((s) => ({ kbps: s.pl === "rain" || s.pl === "ambient" ? 80 : 64, ...s })),
+
   // 효과음(게임용, tracks.json에는 넣지 않는다)
   { pl: "sfx", file: "firework-launch", kind: "launch", seed: 501, dur: 1.2 },
   { pl: "sfx", file: "firework-burst", kind: "burst", seed: 503, dur: 2.0 },
@@ -2095,7 +2334,7 @@ function render(i) {
   const { bus, master } = eng === "melody" ? orgel(s, pl) : eng === "band" ? lofi(s, pl) : eng === "sfx" ? sfx(s) : rain(s, pl);
   const st = finalize(bus, eng === "sfx" ? { ...master, target: master.target ?? SFX_LUFS, ceil: SFX_CEIL } : master);
   mkdirSync(eng === "sfx" ? SFX_OUT : join(OUT, s.pl), { recursive: true });
-  encode(bus, outFile(s), s.seed);
+  encode(bus, outFile(s), s.seed, s.kbps);
   return { i, dur: pl.dur, bpm: pl.bpm, ...st, sec: (Date.now() - t0) / 1000 };
 }
 
@@ -2119,10 +2358,12 @@ function writeManifest() {
 }
 
 if (isMainThread) {
-  const args = process.argv.slice(2), fetchExt = args.includes("--fetch"), filter = args.find((a) => !a.startsWith("--"));
-  const ids = SPECS.map((_, i) => i).filter((i) => (fetchExt || !SPECS[i].ext) && (!filter || `${SPECS[i].pl}/${SPECS[i].file}`.includes(filter)));
-  if (!ids.length) throw new Error(`no track matches "${filter}"`);
-  const W = Math.min(ids.length, Math.max(1, Math.min(8, availableParallelism() - 2)));
+  const args = process.argv.slice(2), fetchExt = args.includes("--fetch"), missing = args.includes("--missing"), filter = args.find((a) => !a.startsWith("--"));
+  const ids = SPECS.map((_, i) => i).filter(
+    (i) => (fetchExt || !SPECS[i].ext) && (!filter || `${SPECS[i].pl}/${SPECS[i].file}`.includes(filter)) && !(missing && existsSync(outFile(SPECS[i]))),
+  );
+  if (!ids.length && !missing) throw new Error(`no track matches "${filter}"`);
+  const W = Math.min(Math.max(1, ids.length), Math.max(1, Math.min(8, availableParallelism() - 2)));
   const groups = Array.from({ length: W }, (_, w) => ids.filter((_, k) => k % W === w));
   const t0 = Date.now();
   const results = (
@@ -2145,8 +2386,8 @@ if (isMainThread) {
   ).flat();
   console.log(`rendered ${results.length} tracks in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   if (!filter) {
-    const missing = SPECS.filter((s) => s.ext && !existsSync(outFile(s)));
-    if (missing.length) console.warn(`외부 곡 ${missing.length}개가 아직 없다 → node scripts/gen-bgm.mjs --fetch`);
+    const extMissing = SPECS.filter((s) => s.ext && !existsSync(outFile(s)));
+    if (extMissing.length) console.warn(`외부 곡 ${extMissing.length}개가 아직 없다 → node scripts/gen-bgm.mjs --fetch`);
     writeManifest();
     // 목록에 없는 예전 파일은 지운다(BGM 폴더만)
     for (const p of PLAYLISTS) {
