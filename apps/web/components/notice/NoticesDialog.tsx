@@ -2,13 +2,15 @@
 
 import { useEffect } from "react";
 import { todayKst } from "@/lib/epitaph";
-import { markNoticesSeen, useNotices } from "@/lib/hooks/useNotices";
+import { markNoticesSeen, refreshNotices, useNotices } from "@/lib/hooks/useNotices";
 import Dialog from "../ui/Dialog";
 import styles from "./notice.module.css";
 
 /** 공지 목록 (고정 먼저). 본문 줄바꿈은 그대로, 링크는 글자로만 보여 준다 */
 export default function NoticesDialog({ onClose }: { onClose: () => void }) {
   const { notices } = useNotices();
+
+  useEffect(refreshNotices, []);
 
   useEffect(() => {
     if (notices) markNoticesSeen();
