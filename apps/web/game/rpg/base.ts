@@ -60,6 +60,9 @@ export abstract class RpgScene extends Phaser.Scene {
   /** 하위 씬의 create() 첫 줄에서 부른다 */
   protected setupCommon(): void {
     this.sfx = new RpgSfx();
+    // 같은 씬 객체를 다시 쓰므로, 지난 판이 멈춤 상태로 끝났으면 시계·트윈이 멈춘 채 남는다
+    this.time.paused = false;
+    this.tweens.resumeAll();
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("keyup", this.onKeyUp);
     window.addEventListener("blur", this.clearKeys);
