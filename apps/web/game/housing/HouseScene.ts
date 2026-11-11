@@ -167,7 +167,8 @@ export class HouseScene extends Phaser.Scene {
     this.physics.add.collider(this.player.sprite, this.itemBodies);
     this.physics.world.setBounds(T, this.oy - T, this.W - 2 * T, this.H - (this.oy - T));
 
-    this.atmos = new Atmosphere(this, this.data0.reduced, window.location.search);
+    // 집 안: 비·눈·낙엽은 그리지 않고 빗소리·천둥은 벽 너머로 먹먹하게
+    this.atmos = new Atmosphere(this, this.data0.reduced, window.location.search, { indoor: true });
     this.lighting = new Lighting(this);
     this.playerGlow = this.add.image(sx, sy, "fx-glow").setBlendMode(Phaser.BlendModes.ADD).setTint(0xffe2a8).setDepth(DEPTH.lights);
     this.applyLights();

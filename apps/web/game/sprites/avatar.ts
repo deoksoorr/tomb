@@ -31,6 +31,8 @@ export const AV_ANIM = {
   dive: { col: 19, frames: 2, fps: 2 },
   /** 그네: 앉은 자세 + 줄 두 가닥 + 발판 (앞뒤로 다리를 굴린다) */
   swing: { col: 21, frames: 2, fps: 1.25 },
+  /** 해먹: 그림자 없는 선 자세 (AvatarView가 90° 눕혀 그린다) */
+  hammock: { col: 27, frames: 1, fps: 1 },
 } as const;
 
 /** 한 번 하는 동작 애니메이션 (act) */
@@ -40,7 +42,7 @@ export const AV_ACT_ANIM = {
 } as const;
 export type AvatarActAnim = keyof typeof AV_ACT_ANIM;
 
-export const AV_COLS = 27;
+export const AV_COLS = 28;
 
 /** 몸마다 머리 꼭대기·어깨 높이 (발바닥에서 위로 px). 이름표·날개·후광 위치에 쓴다 */
 export const BODY_METRICS: Record<AvatarBody, { top: number; shoulder: number }> = {
@@ -180,7 +182,9 @@ function framesFor(view: View): Pose[] {
     { ...P(0, [0, 0], [0, 0], 0, 0, 0), arms: "cheer0", tilt: -1 },
     { ...P(-1, [0, -1], [0, -1], 0, 0, 1), arms: "cheer1", air: true, tilt: 1 },
   ];
-  return [...idle, ...walk, ...run, P(0, [0, 0], [0, 0], 0, 1), P(0, [0, 0], [0, 0], 0, 2), jump, ...hang, ...swim, ...dive, ...swing, ...wave, ...cheer];
+  // 해먹에 누운 자세 (그림자 없음). 시트에서는 서 있는 모양, 화면에서 눕혀 그린다
+  const lie: Pose = { ...P(0), air: true };
+  return [...idle, ...walk, ...run, P(0, [0, 0], [0, 0], 0, 1), P(0, [0, 0], [0, 0], 0, 2), jump, ...hang, ...swim, ...dive, ...swing, ...wave, ...cheer, lie];
 }
 
 function line(g: Grid, x0: number, y0: number, x1: number, y1: number, c: Color, a = 255): void {

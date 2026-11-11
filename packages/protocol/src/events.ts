@@ -3,7 +3,8 @@ import type { PeerInfo, Sid } from "./types";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
 
-export type EmoteKind = "flower" | "revive";
+/** 묘비 반응 연출. 살려주세요(revive)는 49번에서 없어졌다 (옛 클라이언트가 보내도 버린다) */
+export type EmoteKind = "flower";
 export type GraveEventKind = "buried" | "updated" | "removed";
 
 // ── 클라이언트 → 서버 ──
@@ -12,7 +13,7 @@ export type C2S =
   | { t: "sit"; seatId: string }
   /** 좌석에서 일어남 (sitChair가 아닌 MOVE를 보내도 자동 해제된다) */
   | { t: "stand" }
-  /** 헌화/살려주세요 저장 성공 후 같은 채널에 연출을 알린다 */
+  /** 헌화 저장 성공 후 같은 채널에 연출을 알린다 */
   | { t: "emote"; kind: EmoteKind; graveId: string }
   /** 묘비 생성/수정/삭제 후 같은 채널에 알린다 */
   | { t: "graveEvent"; kind: GraveEventKind; graveId: string }
@@ -88,7 +89,7 @@ export function parseC2S(text: string): C2S | null {
     case "stand":
       return { t: "stand" };
     case "emote":
-      return (m.kind === "flower" || m.kind === "revive") && typeof m.graveId === "string" && GRAVE_ID_RE.test(m.graveId)
+      return m.kind === "flower" && typeof m.graveId === "string" && GRAVE_ID_RE.test(m.graveId)
         ? { t: "emote", kind: m.kind, graveId: m.graveId }
         : null;
     case "graveEvent":

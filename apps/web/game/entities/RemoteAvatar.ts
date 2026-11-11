@@ -12,6 +12,8 @@ import { AvatarView } from "./AvatarView";
 const CULL_MARGIN = 16;
 /** 그네 좌석 y → 그네 틀보다 앞에 그릴 depth 오프셋 */
 export const SWING_FRONT = 7;
+/** 해먹에 누운 사람 자리(천 가운데) → 해먹 그림(받침 − 2)보다 앞에 그릴 depth 오프셋 */
+export const HAMMOCK_FRONT = 6;
 /** 발밑에서 이름표 위까지 (말풍선 포함) */
 const LABEL_TOP = 34;
 
@@ -19,7 +21,7 @@ export class RemoteAvatar {
   readonly view: AvatarView;
   readonly interp = new Interpolator();
   private readonly out: InterpOut = { x: 0, y: 0, state: STATE.idle, dir: DIR.down };
-  /** 서버 좌석 점유표에서 이 사람이 차지한 1인 자리 (의자·벤치 좌석 또는 나무·그네) */
+  /** 서버 좌석 점유표에서 이 사람이 차지한 1인 자리 (의자·벤치 좌석 또는 나무·그네·해먹) */
   seatId: string | null = null;
   x = 0;
   y = 0;
@@ -67,6 +69,7 @@ export class RemoteAvatar {
     // 그네 탄 사람은 그네 틀(받침 y = 좌석 + 5) 앞에, 매달린 사람은 나무 줄기 앞에 그린다 (내 캐릭터와 같은 기준)
     else if (o.state === STATE.swing) this.view.depthOverride = y + SWING_FRONT;
     else if (o.state === STATE.hang) this.view.depthOverride = y + 0.5;
+    else if (o.state === STATE.hammock) this.view.depthOverride = y + HAMMOCK_FRONT;
     this.x = x;
     this.y = y;
     this.view.apply(STATE_NAMES[o.state], o.dir, now);

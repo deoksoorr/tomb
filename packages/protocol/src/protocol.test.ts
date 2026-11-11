@@ -17,8 +17,14 @@ import {
   inServerBounds,
   ALTAR,
   GRID_COLS,
+  GRID_ROWS,
+  GRID_X0,
   GRID_Y0,
+  GRAVEYARD_AISLE_X,
+  GRAVEYARD_CAPACITY,
+  MAP_HEIGHT,
   MAP_MIN_HEIGHT,
+  graveVisible,
   MAP_WIDTH,
   REVIVE_SLOTS,
   SPAWN,
@@ -87,35 +93,39 @@ describe("token", () => {
 });
 
 describe("world", () => {
-  it("grid is symmetric around the center aisle and deterministic", () => {
-    expect(GRID_COLS).toBe(16);
-    expect(graveSlot(0)).toMatchObject({ x: 88, y: GRID_Y0, col: 0, row: 0 });
-    expect(graveSlot(15).x).toBe(936);
-    for (let c = 0; c < GRID_COLS / 2; c++) expect(graveSlot(c).x + graveSlot(GRID_COLS - 1 - c).x).toBe(MAP_WIDTH);
-    // 블록 안은 48px, 블록 사이 산책로는 +32, 가운데 통로는 +64
-    expect(graveSlot(1).x - graveSlot(0).x).toBe(48);
-    expect(graveSlot(4).x - graveSlot(3).x).toBe(80);
-    expect(graveSlot(8).x - graveSlot(7).x).toBe(112);
-    expect(graveSlot(23)).toMatchObject({ col: 7, row: 1 });
-    // 모든 자리가 돌담 안쪽
-    for (let c = 0; c < GRID_COLS; c++) {
-      expect(graveSlot(c).x).toBeGreaterThan(WALL_THICKNESS + 16);
-      expect(graveSlot(c).x).toBeLessThan(MAP_WIDTH - WALL_THICKNESS - 16);
+  it("작은 묘역: 8×4 격자, 가운데 통로 기준 좌우 대칭, 결정적", () => {
+    expect(GRID_COLS).toBe(8);
+    expect(GRID_COLS * GRID_ROWS).toBe(GRAVEYARD_CAPACITY);
+    expect(graveSlot(0)).toMatchObject({ x: GRID_X0, y: GRID_Y0, col: 0, row: 0 });
+    for (let c = 0; c < GRID_COLS / 2; c++) expect(graveSlot(c).x + graveSlot(GRID_COLS - 1 - c).x).toBe(2 * GRAVEYARD_AISLE_X);
+    expect(graveSlot(1).x - graveSlot(0).x).toBe(44);
+    expect(graveSlot(4).x - graveSlot(3).x).toBe(84);
+    expect(graveSlot(11)).toMatchObject({ col: 3, row: 1 });
+    // 묘역이 넘치면 자리를 돌려 쓴다 (index % 32)
+    expect(graveSlot(GRAVEYARD_CAPACITY + 5)).toEqual(graveSlot(5));
+    expect(graveVisible(0, GRAVEYARD_CAPACITY + 1)).toBe(false);
+    expect(graveVisible(GRAVEYARD_CAPACITY, GRAVEYARD_CAPACITY + 1)).toBe(true);
+    for (let i = 0; i < GRAVEYARD_CAPACITY; i++) {
+      expect(graveSlot(i).x).toBeGreaterThan(WALL_THICKNESS + 16);
+      expect(graveSlot(i).y).toBeLessThan(MAP_HEIGHT);
     }
   });
   it("plot labels are 1-based row/column", () => {
     expect(plotLabel(0)).toBe("1번째 줄 · 1번 자리");
     expect(plotLabel(GRID_COLS + 6)).toBe("2번째 줄 · 7번 자리");
   });
-  it("map grows with graves", () => {
-    expect(mapHeight(0)).toBe(MAP_MIN_HEIGHT);
-    expect(mapHeight(500)).toBeGreaterThan(mapHeight(30));
-    expect(mapHeight(500)).toBe(GRID_Y0 + Math.ceil(500 / GRID_COLS) * 64 + 96);
+  it("맵 크기는 고정 (묘비 수와 상관없다), 서버 범위도 맵 안", () => {
+    expect(mapHeight(0)).toBe(MAP_HEIGHT);
+    expect(mapHeight(500)).toBe(MAP_HEIGHT);
+    expect(MAP_MIN_HEIGHT).toBe(MAP_HEIGHT);
+    expect(inServerBounds(MAP_WIDTH, MAP_HEIGHT)).toBe(true);
+    expect(inServerBounds(10, MAP_HEIGHT + 1)).toBe(false);
+    expect(inServerBounds(MAP_WIDTH + 1, 10)).toBe(false);
   });
-  it("spawn, altar and revive slots are centered", () => {
+  it("spawn is centered at the gate; the revive altar is gone (deprecated names stay)", () => {
     expect(SPAWN.x).toBe(MAP_WIDTH / 2);
-    expect(ALTAR.x).toBe(MAP_WIDTH / 2);
-    expect(REVIVE_SLOTS[0].x).toBe(MAP_WIDTH / 2);
+    expect(REVIVE_SLOTS.length).toBe(0);
+    expect(typeof ALTAR.x).toBe("number");
     for (const s of SEATS) expect(inServerBounds(s.x, s.y)).toBe(true);
   });
   it("seat ids are unique", () => {
@@ -200,6 +210,8 @@ describe("1인 자리 (좌석 체계 공통)", () => {
     for (const bad of ["h_060_90", "h_60_-1", "h_70000_1", "z_1_1", "h_1", "h_1_1_1", "H_1_1", "nope"]) expect(seatSlot(bad)).toBeUndefined();
     expect(spotKindOfState(STATE.hang)).toBe("hang");
     expect(spotKindOfState(STATE.swing)).toBe("swing");
+    expect(spotKindOfState(STATE.hammock)).toBe("hammock");
+    expect(seatSlot(spotSeatId("hammock", 872, 579))).toMatchObject({ kind: "hammock", state: STATE.hammock, x: 872, y: 579 });
     expect(spotKindOfState(STATE.sitChair)).toBeNull();
     // 기존 sit 이벤트 형식(16자, [A-Za-z0-9_-]) 안에 들어간다
     expect(parse(JSON.stringify({ t: "sit", seatId: spotSeatId("hang", 65535, 65535) }))).toEqual({ t: "sit", seatId: "h_65535_65535" });

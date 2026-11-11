@@ -16,7 +16,8 @@ import { AvatarView, SIT_CHAIR_LIFT } from "./AvatarView";
 //    공중에 있는 동안 묘비·의자 충돌은 씬이 끄고, 착지하면 onLand로 알린다.
 //  - 긴 벤치에 앉은 채 ←/→: 옆 좌석으로 옮겨 앉기 (moveSeat, 서버가 같은 가구 안 이동을 원자적으로 처리)
 //  - 매달리기(나무)·그네: 그 자리에 붙어 있고(물리 바디 끔) 이동 입력이 들어오면 내려온다
-//  - 물(연못) 안: 자동으로 수영, E로 잠수 토글. 물속에서는 느리고 점프·앉기가 안 된다
+//  - 해먹: 매달리기·그네처럼 그 자리에 붙어 누워 흔들흔들 (1인 자리)
+//  - 물(강·호수) 안: 자동으로 수영, E로 잠수 토글. 물속에서는 느리고 점프·앉기가 안 된다. 강에서는 물살(current)에 살짝 떠내려간다
 
 const BODY_W = 8;
 const BODY_H = 5;
@@ -47,13 +48,15 @@ export class Player {
   private jumpVy = 0;
   /** 착지 직후 (묘비에 겹쳐 내렸으면 씬이 밀어낸다) */
   onLand: (() => void) | null = null;
-  /** 매달리기·그네: 붙어 있는 자리 (발 위치) */
+  /** 매달리기·그네·해먹: 붙어 있는 자리 (발 위치) */
   private anchor: { x: number; y: number } | null = null;
   /** 매달리기·그네: 차지한 1인 자리 id (world.ts spotSeatId — 서버가 점유를 판정한다) */
   spotId: string | null = null;
   private diving = false;
   /** 발밑이 물인지 (씬이 넣어 준다) */
   water: ((x: number, y: number) => boolean) | null = null;
+  /** 물살 (px/초, 씬이 넣어 준다). 물속에 있는 동안 이동 속도에 더한다 */
+  current: ((x: number, y: number) => { vx: number; vy: number }) | null = null;
   /** 옆자리로 옮겨 앉는 중이면 원래 좌석 (서버가 거절하면 되돌아간다) */
   private moveFrom: Seat | null = null;
 
@@ -89,7 +92,7 @@ export class Player {
   get sitting(): boolean {
     return this.state === "sitGround" || this.state === "sitChair";
   }
-  /** 나무에 매달리거나 그네를 타는 중 */
+  /** 나무에 매달리거나 그네를 타거나 해먹에 누운 중 */
   get anchored(): boolean {
     return this.anchor !== null;
   }
@@ -197,12 +200,16 @@ export class Player {
     const wet = this.water?.(this.x, this.y) ?? false;
     if (!wet) this.diving = false;
     const mul = wet ? (this.diving ? DIVE_SPEED : SWIM_SPEED) : 1;
+    // 강물에 떠내려가는 만큼 (가만히 있어도 흘러간다)
+    const cur = wet && this.current ? this.current(this.x, this.y) : null;
+    const cvx = cur ? cur.vx : 0;
+    const cvy = cur ? cur.vy : 0;
     if (this.move.moving) {
-      this.body.setVelocity(this.move.vx * mul, this.move.vy * mul);
+      this.body.setVelocity(this.move.vx * mul + cvx, this.move.vy * mul + cvy);
       this.dir = this.move.dir;
       this.state = wet ? (this.diving ? "dive" : "swim") : this.move.running ? "run" : "walk";
     } else {
-      this.body.setVelocity(0, 0);
+      this.body.setVelocity(cvx, cvy);
       this.state = wet ? (this.diving ? "dive" : "swim") : "idle";
     }
     this.view.apply(this.state, this.dir, now);
@@ -257,7 +264,7 @@ export class Player {
    * 나무에 매달리기 / 그네 타기: (ax, ay)에 붙는다. depth: 그 오브젝트 앞에 그리도록.
    * spotId: 이 자리의 1인 자리 id (점유 요청은 씬이 보낸다 — 일어서기(stand)가 먼저 나가야 해서)
    */
-  attach(kind: "hang" | "swing", ax: number, ay: number, depth: number, now: number, seats: SeatRequester | null, spotId: string | null = null): void {
+  attach(kind: "hang" | "swing" | "hammock", ax: number, ay: number, depth: number, now: number, seats: SeatRequester | null, spotId: string | null = null): void {
     if (this.airborne) this.endJump(now);
     if (this.sitting) this.stand(now, seats);
     if (this.anchor) this.leaveAnchor(now);

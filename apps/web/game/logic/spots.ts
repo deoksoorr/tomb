@@ -5,17 +5,19 @@ import { spotSeatId, type Sid, type SpotKind } from "@tomb/protocol";
 // 새 1인 자리(낚시 자리·채집 지점·집 안 가구 …)는 protocol SPOT_KINDS + 아래 SPOT_OF·문구에 한 줄씩 더하면 같은 흐름을 탄다.
 
 /** 상호작용 오브젝트 종류 → 1인 자리 종류. 여럿이 함께 쓰는 오브젝트(종·우물·물가 등)는 없다 */
-const SPOT_OF: Readonly<Record<string, SpotKind>> = { tree: "hang", swing: "swing" };
+const SPOT_OF: Readonly<Record<string, SpotKind>> = { tree: "hang", swing: "swing", hammock: "hammock" };
 
 /** 누가 먼저 차지했을 때 안내 (E/탭을 눌렀을 때 토스트) */
 export const SPOT_TAKEN_TOAST: Readonly<Record<SpotKind, string>> = {
   hang: "누가 먼저 매달려 있어요",
   swing: "누가 먼저 타고 있어요",
+  hammock: "누가 먼저 누워 있어요",
 };
 /** 누가 차지한 자리 앞의 회색 안내 (키 안내 대신) */
 export const SPOT_TAKEN_HINT: Readonly<Record<SpotKind, string>> = {
   hang: "누가 매달려 있어요",
   swing: "누가 타고 있어요",
+  hammock: "누가 누워 있어요",
 };
 
 export type SpotTarget = { kind: string; ax: number; ay: number };

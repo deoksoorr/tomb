@@ -3,14 +3,17 @@
 //  - 다시 열리면 App이 읽자마자 지운다. 탭을 복제하면 sessionStorage가 복사되므로, 남겨 두면 두 탭이 같은 자리로 돌아온다
 //  - 1분이 지난 기록은 버린다 (새로고침이 아니라 한참 뒤에 다시 연 것)
 //  - 좌석은 서버가 최종 판정한다: 그 사이 다른 사람이 앉았으면 가까운 빈자리, 없으면 그 옆에 선다 (WorldScene)
+//  - 맵 배치 버전(MAP_VERSION)이 다른 기록(맵 개편 전 화면이 남긴 것)은 채널·입장 정보만 쓰고 자리는 입구(SPAWN)에서 시작한다
+
+import { MAP_VERSION, SPAWN } from "@tomb/protocol";
 
 export const RESUME_KEY = "tomb.resume";
 /** 이보다 오래된 기록은 쓰지 않는다 */
 export const RESUME_MAX_AGE_MS = 60_000;
 
 /** 되살릴 자세. 걷던 중이면 서 있는 것으로 저장한다 */
-export type ResumePose = "idle" | "sitGround" | "sitChair" | "swing" | "hang";
-const POSES: readonly ResumePose[] = ["idle", "sitGround", "sitChair", "swing", "hang"];
+export type ResumePose = "idle" | "sitGround" | "sitChair" | "swing" | "hang" | "hammock";
+const POSES: readonly ResumePose[] = ["idle", "sitGround", "sitChair", "swing", "hang", "hammock"];
 
 export type ResumeState = {
   channel: number;
@@ -27,6 +30,8 @@ export type ResumeState = {
   body?: string;
   /** 음악을 틀어 두고 있었는지 (자동 재생은 막혀 있어 첫 입력 때 다시 튼다) */
   bgm?: boolean;
+  /** 저장할 때의 맵 배치 버전 (MAP_VERSION). 다르면 자리는 버린다 */
+  map?: number;
 };
 
 const isNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
@@ -46,12 +51,14 @@ export function parseResume(raw: string | null, now: number): ResumeState | null
   if (!isNum(r.channel) || !Number.isInteger(r.channel) || r.channel < 1) return null;
   if (!isNum(r.x) || !isNum(r.y) || r.x < 0 || r.y < 0 || r.x > 0xffff || r.y > 0xffff) return null;
   if (typeof r.name !== "string" || !r.name || typeof r.color !== "string" || !r.color) return null;
-  const pose = POSES.includes(r.pose as ResumePose) ? (r.pose as ResumePose) : "idle";
+  // 맵이 바뀐 뒤의 옛 기록: 채널은 잇고 자리는 입구에서 (옛 좌표·좌석 id는 새 맵에서 엉뚱한 곳일 수 있다)
+  const sameMap = r.map === MAP_VERSION;
+  const pose = sameMap && POSES.includes(r.pose as ResumePose) ? (r.pose as ResumePose) : "idle";
   const seatId = pose === "sitChair" && typeof r.seatId === "string" && r.seatId ? r.seatId : null;
   return {
     channel: r.channel,
-    x: r.x,
-    y: r.y,
+    x: sameMap ? r.x : SPAWN.x,
+    y: sameMap ? r.y : SPAWN.y,
     seatId,
     pose: pose === "sitChair" && !seatId ? "sitGround" : pose,
     dir: isNum(r.dir) && Number.isInteger(r.dir) && r.dir >= 0 && r.dir <= 3 ? r.dir : 0,
@@ -60,6 +67,7 @@ export function parseResume(raw: string | null, now: number): ResumeState | null
     color: r.color,
     body: typeof r.body === "string" ? r.body : undefined,
     bgm: r.bgm === true,
+    map: MAP_VERSION,
   };
 }
 
@@ -92,10 +100,10 @@ export function setResumeExtras(fn: () => Partial<Pick<ResumeState, "bgm">>): vo
   extras = fn;
 }
 
-export function saveResume(s: Omit<ResumeState, "bgm">, storage: Pick<Storage, "setItem"> | null = sessionStore()): void {
+export function saveResume(s: Omit<ResumeState, "bgm" | "map">, storage: Pick<Storage, "setItem"> | null = sessionStore()): void {
   if (!storage) return;
   try {
-    storage.setItem(RESUME_KEY, JSON.stringify({ ...s, ...extras() }));
+    storage.setItem(RESUME_KEY, JSON.stringify({ ...s, ...extras(), map: MAP_VERSION }));
   } catch {
     // 저장소를 못 쓰면 입구에서 다시 시작할 뿐이다
   }

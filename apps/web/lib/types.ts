@@ -62,29 +62,35 @@ export type PublicGrave = Omit<Grave, "ownerTokenHash" | "hidden" | "ownerAccoun
   /** 이 묘비가 있는 채널 (채널마다 묘지가 따로다) */
   channel: number;
   flowers: number;
+  /**
+   * @deprecated 살려주세요는 49번에서 없어졌다. 저장된 수는 보관만 하고 화면에는 내보내지 않는다 → 항상 0
+   * (옛 클라이언트·맵 코드가 읽어도 깨지지 않게 필드만 남긴다)
+   */
   revives: number;
   /** 만료되지 않은 꾸미기만 */
   decor?: GraveDecor[];
+  /** 이 시각(epoch ms)이 지나면 성불한다 (묘역이 가득 차면 더 일찍 성불할 수 있다). 목록·상세에서 채운다 */
+  passAt?: number;
 };
 
 // ── API 응답 ──
 
 /**
- * GET /api/graves?channel=N — 그 채널의 묘비만, 등록 순(오래된 것 먼저) = 그 채널 격자 배치 순서.
- * reviveTop(다시 피어날 자리)·랭킹도 채널별이다. channel이 없으면 1채널.
+ * GET /api/graves?channel=N — 그 채널의 묘비만, 등록 순(오래된 것 먼저) = 그 채널 격자 배치 순서. channel이 없으면 1채널.
  */
 export type GraveListResponse = {
   channel: number;
   graves: PublicGrave[];
-  /** 살려주세요 상위 10개 id (1위부터, 점수 > 0만) */
+  /** @deprecated 살려주세요(다시 피어날 자리)는 49번에서 없어졌다 → 항상 빈 배열 */
   reviveTop: string[];
+  /** 이 채널에서 최근(PASSED_RECENT_MS 안에) 성불한 묘비 id. 클라이언트가 아직 그 묘비를 그리고 있으면 빛 연출 뒤에 지운다 */
+  passed?: string[];
   generatedAt: number;
 };
 
 /** GET /api/graves/[id] */
 export type GraveDetailResponse = {
   grave: PublicGrave;
-  myRevive: boolean;
   /** 오늘 이미 헌화했는지 */
   myFlowerToday: boolean;
   /** 내 계정이 세운 묘비인지 (ownerToken이 없어도 수정·삭제·꾸미기 가능) */
@@ -146,7 +152,6 @@ export type QuickGraveInput = {
 export type UpdateGraveResponse = { grave: PublicGrave };
 /** 반응 응답의 earned = 이번에 쌓인 포인트 (한도에 걸리면 0) */
 export type FlowerResponse = { count: number; earned: number };
-export type ReviveResponse = { revived: boolean; count: number; earned?: number };
 export type ReportResponse = { ok: true };
 
 /**
@@ -318,7 +323,8 @@ export type RoomJoinResponse = { room: string; token: string; wsUrl: string };
  * 내 소식 (자리를 비운 사이 내 묘비·집에 생긴 일). GET /api/me/activity?since=epochMs → 최신 순 50개.
  * POST /api/me/activity/seen { at } → 여기까지 읽음. me.activityUnread로 안 읽은 수를 HUD에 띄운다.
  */
-export type ActivityKind = "flower" | "revive" | "houseLike" | "guestbook" | "restore";
+/** revive는 49번 이전에 쌓인 소식 (API가 걸러 내고 보여 주지 않는다). passed = 내 묘비가 성불함 (who는 빈 문자열) */
+export type ActivityKind = "flower" | "revive" | "houseLike" | "guestbook" | "restore" | "passed";
 export type ActivityItem = { id: string; kind: ActivityKind; at: number; who: string; targetId: string; targetName: string };
 export type ActivityResponse = { items: ActivityItem[]; unread: number; lastSeenAt: number };
 
@@ -333,3 +339,56 @@ export type ErrorReport = { message: string; stack?: string; url: string; kind: 
 /** 관리자: GET /api/admin/economy?days=14 → 날짜별 적립(항목별)·사용(사유별) 합계 */
 export type EconomyDay = { date: string; earned: Record<string, number>; spent: Record<string, number> };
 export type EconomyResponse = { days: EconomyDay[]; totals: { wallets: number; accounts: number } };
+
+// ── 49번: 성불·1인 1묘비·랭킹 ──
+
+/** 성불 기간 기본값 (관리자 설정으로 바꾼다) */
+export const DEFAULT_PASS_DAYS = 14;
+export const MIN_PASS_DAYS = 1;
+export const MAX_PASS_DAYS = 365;
+/** 목록 응답의 passed(빛 연출)에 넣는 최근 성불 기간 */
+export const PASSED_RECENT_MS = 10 * 60_000;
+
+/** 왜 성불했나: 기간이 다 됨 / 묘역이 가득 차 앞당겨짐 / 1인 1묘비 정리(새 묘비·옛 계정 정리) */
+export type PassReason = "time" | "full" | "one";
+
+/** 성불한 이야기 (성불 리스트 한 줄). 숨김 묘비는 공개 목록에 나오지 않는다 */
+export type PassedEntry = {
+  id: string;
+  name: string;
+  epitaph: string;
+  mourner: string;
+  bornAt: string;
+  diedAt: string;
+  ageDays: number;
+  style?: string;
+  comment?: string;
+  channel: number;
+  flowers: number;
+  createdAt: number;
+  passedAt: number;
+};
+/** GET /api/graves/passed?q=&offset= → 최신 성불 순 한 쪽. next가 있으면 offset=next로 다음 쪽 */
+export type PassedListResponse = { entries: PassedEntry[]; next: number | null; total: number };
+
+/**
+ * GET /api/me/grave → 내 계정의 지금 묘비 (1인 1묘비). active가 있으면 새로 쓸 수 없고 active.passAt에 성불한다.
+ * passDays = 지금 성불 기간 설정
+ */
+export type MyGraveStatusResponse = { active: PublicGrave | null; passDays: number };
+
+/** 랭킹 (49번: 포인트·사냥 중심). huntKills = 사냥터 처치 수 합계, huntBest = 사냥터(zone)별 최단 클리어 시간(ms, 작을수록 위) */
+export const RANK_BOARDS = ["points", "huntKills", "huntBest"] as const;
+export type RankBoard = (typeof RANK_BOARDS)[number];
+/** week = 이번 주(KST 월요일 0시부터), all = 전체 */
+export type RankPeriod = "week" | "all";
+export type RankRow = { rank: number; name: string; value: number; me: boolean };
+/** GET /api/rank?board=&period=&zone=&me=1 */
+export type RankResponse = {
+  board: RankBoard;
+  period: RankPeriod;
+  /** huntBest의 사냥터 (난이도 id) */
+  zone?: string;
+  rows: RankRow[];
+  mine: RankRow | null;
+};

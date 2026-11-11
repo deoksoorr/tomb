@@ -17,14 +17,18 @@ import type {
   LookGrantResponse,
   Me,
   NameChangeResponse,
+  MyGraveStatusResponse,
   NoticeListResponse,
+  PassedListResponse,
   PointRankResponse,
+  RankBoard,
+  RankPeriod,
+  RankResponse,
   PresenceResponse,
   PublicGrave,
   ShrineListResponse,
   QuickGraveInput,
   ReportResponse,
-  ReviveResponse,
   SessionResponse,
   UpdateGraveResponse,
   UseItemResponse,
@@ -105,7 +109,6 @@ export const api = {
   deleteGrave: (id: string, ownerToken: string | null) =>
     request<unknown>(gravePath(id), { method: "DELETE", headers: ownerHeaders(ownerToken) }),
   flower: (id: string) => request<FlowerResponse>(gravePath(id, "/flower"), { method: "POST" }),
-  revive: (id: string) => request<ReviveResponse>(gravePath(id, "/revive"), { method: "POST" }),
   report: (id: string, reason: ReportReason) =>
     request<ReportResponse>(gravePath(id, "/report"), jsonInit("POST", { reason })),
 
@@ -135,6 +138,14 @@ export const api = {
   finishTutorial: () => request<unknown>("/api/me/tutorial", { method: "POST" }),
   /** me=1: 내 순위까지 (개인화 응답이라 CDN 캐시를 타지 않는다) */
   pointRank: () => request<PointRankResponse>("/api/rank/points?me=1", { cache: "no-store" }),
+  /** 49번 랭킹 (포인트·사냥). zone은 huntBest의 사냥터(난이도 id) */
+  rank: (board: RankBoard, period: RankPeriod, zone?: string) =>
+    request<RankResponse>(`/api/rank?${new URLSearchParams({ board, period, me: "1", ...(zone ? { zone } : {}) })}`, { cache: "no-store" }),
+  /** 성불한 이야기들 (최신 성불 순, 검색) */
+  passed: (q: string, offset = 0) =>
+    request<PassedListResponse>(`/api/graves/passed?${new URLSearchParams({ ...(q ? { q } : {}), ...(offset ? { offset: String(offset) } : {}) })}`),
+  /** 1인 1묘비: 지금 내 묘비와 성불 시각 */
+  myGrave: () => request<MyGraveStatusResponse>("/api/me/grave", { cache: "no-store" }),
   shrine: () => request<ShrineListResponse>("/api/shrine", { cache: "no-store" }),
   /** 계약에 응답 형태가 없어 복구된 묘비가 오면 쓰고, 없으면 목록 갱신에 맡긴다 */
   restoreFromShrine: (id: string) =>

@@ -62,7 +62,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
  * - /api/version이 minClient로 이 값을 알려 주므로, 옛 화면은 접속이 끊기기 전에도 업데이트 창을 띄운다.
  * 평소 패치(버전 그대로)는 배포 id만 바뀌어 아래쪽 배너로 안내된다.
  */
-export const CLIENT_VERSION = 1;
+// 2 = 가을·겨울 마을 맵 개편(1·50번: 넓은 고정 맵·강·광장·주거 구역, 해먹 상태 STATE.hammock=10, 다시 피어날 자리 제거)
+export const CLIENT_VERSION = 2;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
@@ -135,7 +136,6 @@ export const PHRASES = [
   { id: "follow", text: "따라와요!" },
   { id: "nice", text: "멋져요" },
   { id: "rip", text: "편히 쉬길…" },
-  { id: "revive", text: "이건 살려야 해요" },
   { id: "same", text: "저도 그런 적 있어요" },
   { id: "cheer", text: "다음 건 꼭 끝내요" },
   { id: "hunt", text: "사냥 같이 가요" },

@@ -3,7 +3,7 @@ import { addCanvasTexture, TEX } from "../assets/manifest";
 import { Grid } from "../sprites/pixel";
 import { DEPTH } from "../config";
 
-// 짧은 연출: 달리기 먼지, 꽃 놓기·꽃잎, 살려주세요 빛, 흙 덮기 (머리 위 이모티콘은 AvatarView → SpeechBubble),
+// 짧은 연출: 달리기 먼지, 꽃 놓기·꽃잎, 강조 빛·성불 빛, 흙 덮기 (머리 위 이모티콘은 AvatarView → SpeechBubble),
 // 종소리 파동(채널 모두), 물 튀기기, 손 흔들기·환호 아이콘.
 // 파티클 이미터는 미리 하나씩 만들어 두고 explode/emitParticleAt만 호출한다 (프레임당 할당 없음).
 
@@ -152,7 +152,8 @@ export class Effects {
     });
   }
 
-  reviveGlow(x: number, y: number): void {
+  /** 묘비 위로 번지는 따뜻한 빛 (강조용) */
+  private glow(x: number, y: number): void {
     const g = this.scene.add
       .image(x, y - 10, TEX.glow)
       .setBlendMode(Phaser.BlendModes.ADD)
@@ -181,7 +182,31 @@ export class Effects {
 
   /** 랭킹에서 고른 묘비를 잠깐 강조 */
   highlight(x: number, y: number): void {
-    this.reviveGlow(x, y);
+    this.glow(x, y);
+  }
+
+  /** 성불: 묘비 자리에서 은은한 빛기둥이 위로 올라가며 사라진다 (약 1.5초, 동작 줄이기면 짧고 작게) */
+  passGlow(x: number, y: number): void {
+    const dur = this.reduced ? 600 : 1500;
+    const col = this.scene.add
+      .image(x, y - 8, TEX.glow)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(DEPTH.lights + 1)
+      .setTint(0xfff3c8)
+      .setScale(0.35, 0.5)
+      .setAlpha(0.9);
+    this.scene.tweens.add({
+      targets: col,
+      y: y - (this.reduced ? 14 : 36),
+      scaleX: 0.15,
+      scaleY: this.reduced ? 0.7 : 1.4,
+      alpha: 0,
+      duration: dur,
+      ease: "Sine.easeOut",
+      onComplete: () => col.destroy(),
+    });
+    this.sparkEm.explode(Math.ceil(8 * this.scale), x, y - 6);
+    if (!this.reduced) this.scene.time.delayedCall(450, () => this.sparkEm.explode(5, x, y - 18));
   }
 }
 

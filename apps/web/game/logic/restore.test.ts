@@ -76,11 +76,11 @@ describe("자리 복원 — 나무·그네도 서버 좌석으로 (39)", () => {
     expect(spotTaken("s_140_96", occ, 6)).toBe(false);
   });
 
-  it("맵의 모든 나무·그네 자리 id가 서로 다르고 서버가 알아보는 형식이다", async () => {
+  it("맵의 모든 나무·그네·해먹 자리 id가 서로 다르고 서버가 알아보는 형식이다", async () => {
     const { interactables } = await import("../world/layout");
     const { spotOf } = await import("./spots");
     const { seatSlot } = await import("@tomb/protocol");
-    const ids = interactables(40)
+    const ids = interactables()
       .map((o) => spotOf(o))
       .filter((x): x is NonNullable<typeof x> => x !== null);
     expect(ids.length).toBeGreaterThan(10);

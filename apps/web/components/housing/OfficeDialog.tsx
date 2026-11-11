@@ -15,6 +15,7 @@ import {
 } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { styleTag } from "@/lib/housing/layout";
+import { WORLD_LOTS } from "@tomb/protocol";
 import type { HouseSummary, MyHouseResponse } from "@/lib/housing/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -65,9 +66,9 @@ export default function OfficeDialog({
     <Dialog title="분양 사무소" onClose={onClose} size="lg">
       <div className={styles.stack}>
         <div className={styles.spread}>
-          <p className={styles.small}>골목마다 집들이 늘어선 밤 마을. 번지마다 주인이 꾸민 외관이 서 있어요.</p>
+          <p className={styles.small}>광장 동쪽 주거 구역에 번지마다 집이 서 있어요. 빈 필지를 골라 분양받고, 외관을 꾸며 보세요.</p>
           <button type="button" className={cx(ui.button, ui.primary)} onClick={() => (inVillage ? onClose() : onVillage(null))} disabled={busy}>
-            {inVillage ? "마을로 돌아가기" : "분양 마을로 가기"}
+            {inVillage ? "마을로 돌아가기" : "주거 구역 보기"}
           </button>
         </div>
         <div className={styles.tabs} role="tablist" aria-label="분양 사무소">
@@ -142,8 +143,10 @@ function MyPlot({
       .then((v) => {
         if (!alive) return;
         const used = new Set([...v.houses.map((h) => h.lot), ...v.taken]);
-        // 지금 마을의 빈 필지 + 다음 줄 하나 (원하면 마을을 넓히며 분양)
-        setFree(Array.from({ length: v.lots + 4 }, (_, i) => i + 1).filter((l) => !used.has(l)));
+        // 메인 맵 주거 구역(1..WORLD_LOTS)의 빈 필지 먼저. 다 찼으면 예전처럼 분양 마을(2단지) 번지
+        const all = Array.from({ length: Math.max(v.lots + 4, WORLD_LOTS) }, (_, i) => i + 1).filter((l) => !used.has(l));
+        const near = all.filter((l) => l <= WORLD_LOTS);
+        setFree(near.length ? near : all);
       })
       .catch(() => alive && setFree([]));
     return () => {
@@ -196,7 +199,7 @@ function MyPlot({
       </label>
       {withLot && (
         <label className={ui.field} htmlFor={`${fid}-lot`}>
-          <span className={ui.label}>번지 (분양 마을의 자리)</span>
+          <span className={ui.label}>번지 (주거 구역의 자리)</span>
           <select
             id={`${fid}-lot`}
             className={ui.input}
@@ -206,7 +209,7 @@ function MyPlot({
             <option value="">가장 앞의 빈 번지 (자동)</option>
             {(free ?? []).map((l) => (
               <option key={l} value={l}>
-                {l}번지
+                {l}번지{l > WORLD_LOTS ? " (2단지)" : ""}
               </option>
             ))}
             {lot !== null && !free?.includes(lot) && <option value={lot}>{lot}번지</option>}
@@ -232,7 +235,7 @@ function MyPlot({
           <p className={styles.points}>
             분양가 <strong>{fmt(plot.price)}P</strong> · 내 포인트 <strong>{fmt(my.points)}P</strong>
           </p>
-          {lot !== null && <p className={styles.tag}>고른 자리: 분양 마을 {lot}번지</p>}
+          {lot !== null && <p className={styles.tag}>고른 자리: 주거 구역 {lot}번지</p>}
           {short && <p className={styles.error}>포인트가 {fmt(plot.price - my.points)}P 모자라요. 출석·헌화로 모아 주세요.</p>}
         </div>
         {!short &&
@@ -280,7 +283,7 @@ function MyPlot({
             외관 꾸미기
           </button>
           <button type="button" className={ui.button} onClick={() => onVillage(h.lot)} disabled={busy}>
-            마을에서 내 집 보기
+            내 집 보러 가기
           </button>
           <button
             type="button"

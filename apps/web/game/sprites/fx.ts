@@ -122,19 +122,6 @@ export function flowerIcon(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-/** 이모트 아이콘: 살려주세요 (위로 솟는 작은 불씨) */
-export function reviveIcon(): HTMLCanvasElement {
-  const g = new Grid(7, 8);
-  const c = 0xfff0b0;
-  g.set(3, 1, c);
-  g.hline(2, 4, 2, c);
-  g.hline(1, 5, 3, 0xffd36e);
-  g.hline(2, 4, 4, 0xffd36e);
-  g.vline(3, 5, 6, 0xffb24e);
-  g.outline(0x2a2826);
-  return g.toCanvas();
-}
-
 export function splash(): HTMLCanvasElement {
   const g = new Grid(5, 3);
   g.set(0, 1, 0xd5e6f0, 200);

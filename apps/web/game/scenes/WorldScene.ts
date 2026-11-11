@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { CAMPFIRES, campfireOfSeat, DIR, FURNITURE, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
+import { CAMPFIRES, campfireOfSeat, DIR, FURNITURE, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import type { PublicGrave } from "@/lib/types";
 import { TEX } from "../assets/manifest";
@@ -7,7 +7,7 @@ import { bridge, type NetStatus, type UiEvents } from "../bridge";
 import { DEPTH, GRAVE_NEAR_RADIUS, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { GraveTooltip } from "../entities/Grave";
 import { Player, type SeatRequester } from "../entities/Player";
-import { RemoteAvatar, SWING_FRONT } from "../entities/RemoteAvatar";
+import { HAMMOCK_FRONT, RemoteAvatar, SWING_FRONT } from "../entities/RemoteAvatar";
 import { SeatHint } from "../entities/SeatHint";
 import { phraseOf, type SpeechBubble } from "../entities/SpeechBubble";
 import { InputHub } from "../input/InputHub";
@@ -25,11 +25,13 @@ import { Atmosphere } from "../world/Atmosphere";
 import { CameraRig } from "../world/CameraRig";
 import { Effects } from "../world/Effects";
 import { Fireworks } from "../world/Fireworks";
+import { GraveWalker } from "../world/GraveWalker";
 import { GraveField } from "../world/GraveField";
 import { graveChannelFor } from "../world/graveChannel";
 import { declutter, type LabelBox } from "../world/labels";
 import { graveAt, nearestGrave, standSpot, type GravePlacement, type NearResult } from "../world/graveLayout";
-import { inWater, nearShopDoor, nearWater, type Interactable } from "../world/layout";
+import { inWater, nearShopDoor, nearWater, standable, waterCurrent, type Interactable } from "../world/layout";
+import { WorldHouses } from "../world/WorldHouses";
 import { NearTracker } from "../world/nearTracker";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import { GraveMarkers } from "../world/Markers";
@@ -67,6 +69,8 @@ const PEER_CHECK_MS = 5000;
 const RESTORE_SEAT_WINDOW_MS = 8000;
 /** 대신 앉을 좌석 앞으로 옮긴 뒤 앉기 요청까지 (옮긴 위치 MOVE가 서버에 먼저 닿게) */
 const RESTORE_SIT_DELAY_MS = 300;
+/** 번지 안내 화살표가 떠 있는 최대 시간 */
+const LOT_GUIDE_MS = 45_000;
 /** 같은 안내 토스트를 연달아 띄우지 않는 간격 */
 const TOAST_REPEAT_MS = 1500;
 
@@ -105,6 +109,12 @@ export class WorldScene extends Phaser.Scene {
   private cleaned = false;
   private inShop = false;
   private seatHint!: SeatHint;
+  /** 41번: 내 묘비까지 걸어가기 */
+  private walker!: GraveWalker;
+  /** 주거 구역의 집 (분양 마을 정보) */
+  private houses: WorldHouses | null = null;
+  /** world:lot 안내 화살표 (문 앞에 닿으면 지운다) */
+  private lotGuide: { x: number; y: number; until: number } | null = null;
   private graveCollider!: Phaser.Physics.Arcade.Collider;
   private furnitureCollider!: Phaser.Physics.Arcade.Collider;
   /** 벤치에서 좌우 입력 (한 번 누를 때 한 칸) */
@@ -166,6 +176,16 @@ export class WorldScene extends Phaser.Scene {
     this.map.setRows(0, 0);
     this.field = new GraveField(this, this.reduced);
     this.fx = new Effects(this, this.reduced);
+    this.walker = new GraveWalker({
+      scene: this,
+      player: () => this.player,
+      seats: () => this.seatReq,
+      groups: () => [this.map.colliders, this.map.gridColliders, this.map.furnitureColliders, this.field.colliders],
+      layout: () => this.field.layout,
+      placement: (id) => this.field.placement(id),
+      water: inWater,
+      beforeWalk: () => this.beforeAutoWalk(),
+    });
 
     // 묘비 목록이 이미 와 있으면(이 채널 것만) 먼저 깔고, 공유 링크 묘비가 있으면 그 앞에서 시작한다
     this.graveChannel = graveChannelFor(bridge.last("net:status"), opts.channel);
@@ -189,12 +209,18 @@ export class WorldScene extends Phaser.Scene {
       const r = this.resume;
       const seat = r.pose === "sitChair" && r.seatId ? seatById(r.seatId) : undefined;
       spawn = seat ? standPoint(seat) : { x: r.x, y: r.y };
+      // 맵이 바뀌어 저장된 자리가 이제 막힌 곳(집·나무·절벽·담 밖)이면 입구에서 시작한다 (물속은 괜찮다)
+      if (!seat && !standable(spawn.x, spawn.y)) {
+        spawn = SPAWN;
+        this.resume = { ...r, x: SPAWN.x, y: SPAWN.y, pose: "idle", seatId: null };
+      }
       openOnStart = null;
       this.pendingFocus = null;
     }
 
     this.player = new Player(this, this.atlas, spawn.x, spawn.y, opts.color, opts.name, this.myBody());
     this.player.water = inWater;
+    this.player.current = waterCurrent;
     this.physics.add.collider(this.player.sprite, this.map.colliders);
     this.physics.add.collider(this.player.sprite, this.map.gridColliders);
     // 묘비·의자·벤치 충돌은 점프 중에 끈다 (벽·나무·오두막은 그대로)
@@ -218,6 +244,8 @@ export class WorldScene extends Phaser.Scene {
 
     this.atmos.setStaticLights(this.map.staticLights);
     this.atmos.setGridLights(this.map.gridLights);
+    // 주거 구역의 집 (마을 정보를 받으면 세운다 → 창문 빛도 다시)
+    this.houses = new WorldHouses(this.map, () => this.atmos.setGridLights(this.map.gridLights));
     this.field.setMine(bridge.last("graves:mine")?.ids ?? []);
     const audio = bridge.last("audio:settings");
     if (audio) this.sfx.setSettings(audio.volume, audio.muted);
@@ -385,10 +413,10 @@ export class WorldScene extends Phaser.Scene {
       pl.sit(seat ?? null, now, null);
     } else if (r.pose === "sitGround") {
       pl.sit(null, now, null);
-    } else if (r.pose === "swing" || r.pose === "hang") {
-      const o = anchorAt(this.map.interactables, r.pose === "swing" ? "swing" : "tree", r.x, r.y);
-      // 자리 요청은 접속 뒤 welcome에서 (onWelcome의 spotVerdict)
-      if (o) pl.attach(r.pose, o.ax, o.ay, r.pose === "swing" ? o.ay + SWING_FRONT : o.ay + 0.5, now, null, spotSeatId(r.pose, o.ax, o.ay));
+    } else if (r.pose === "swing" || r.pose === "hang" || r.pose === "hammock") {
+      const o = anchorAt(this.map.interactables, r.pose === "hang" ? "tree" : r.pose, r.x, r.y);
+      // 자리 요청은 접속 뒤 welcome에서 (onWelcome의 spotVerdict). 그 자리가 없어졌으면(맵 개편) 서 있기로
+      if (o) pl.attach(r.pose, o.ax, o.ay, spotDepth(r.pose, o.ay), now, null, spotSeatId(r.pose, o.ax, o.ay));
     }
     pl.view.apply(pl.state, pl.dir, now);
   }
@@ -458,7 +486,7 @@ export class WorldScene extends Phaser.Scene {
     const pl = this.player;
     const p = pl.netPose(this.poseBuf);
     const st = pl.state;
-    const pose: ResumePose = st === "sitChair" && pl.seat ? "sitChair" : st === "sitGround" || st === "swing" || st === "hang" ? st : "idle";
+    const pose: ResumePose = st === "sitChair" && pl.seat ? "sitChair" : st === "sitGround" || st === "swing" || st === "hang" || st === "hammock" ? st : "idle";
     saveResume({
       channel: ch,
       x: Math.round(p.x),
@@ -529,13 +557,19 @@ export class WorldScene extends Phaser.Scene {
   private bindBridge(): void {
     const on = this.unsubs;
     on.push(
-      bridge.on("graves:set", ({ channel, graves, reviveTop }) => {
+      bridge.on("graves:set", ({ channel, graves, reviveTop, passed }) => {
         // 다른 채널 묘지 목록은 무시 (채널을 옮기는 사이에 늦게 온 응답 등)
-        if (channel === this.graveChannel) this.applyGraves(graves, reviveTop, true);
+        if (channel !== this.graveChannel) return;
+        // 성불: 사라지기 전 자리에 작은 빛
+        for (const id of passed ?? []) {
+          const p = this.field.placement(id);
+          if (p && !graves.some((g) => g.id === id)) this.fx.passGlow(p.x, p.y);
+        }
+        this.applyGraves(graves, reviveTop, true);
       }),
     );
     on.push(bridge.on("net:status", (st) => this.onNetStatus(st)));
-    on.push(bridge.on("grave:focus", ({ graveId, teleport }) => this.focusGrave(graveId, teleport)));
+    on.push(bridge.on("grave:focus", ({ graveId, walk }) => this.focusGrave(graveId, walk)));
     on.push(
       bridge.on("grave:buried", ({ graveId }) => {
         this.net.graveEvent("buried", graveId);
@@ -551,15 +585,6 @@ export class WorldScene extends Phaser.Scene {
       }),
     );
     on.push(bridge.on("grave:flowered", ({ graveId }) => this.playMyFlower(graveId)));
-    on.push(
-      bridge.on("grave:revived", ({ graveId, revived }) => {
-        if (!revived) return;
-        const p = this.field.placement(graveId);
-        if (p) this.fx.reviveGlow(p.x, p.y);
-        this.player.view.emote("revive", this.time.now);
-        this.net.emote("revive", graveId);
-      }),
-    );
     on.push(bridge.on("channel:switch", ({ channel }) => this.switchChannel(channel)));
     on.push(bridge.on("input:joystick", ({ x, y }) => this.hub.setJoystick(x, y)));
     on.push(bridge.on("input:runToggle", ({ on: v }) => this.hub.setRunToggle(v)));
@@ -568,6 +593,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("input:jump", () => this.hub.dispatch("jump")));
     on.push(bridge.on("input:say", ({ id }) => this.doSay(id)));
     on.push(bridge.on("guide:point", ({ target, label }) => this.guide.set(target ? this.resolveGuide(target, label) : null)));
+    on.push(bridge.on("world:lot", ({ lot, label }) => this.showLot(lot, label)));
     on.push(
       bridge.on("input:act", ({ kind }) => {
         if (kind === "wave" || kind === "cheer") this.hub.dispatch(kind);
@@ -658,21 +684,24 @@ export class WorldScene extends Phaser.Scene {
     this.startNet();
   }
 
-  private focusGrave(id: string, teleport: boolean): void {
+  /** walk=true: 길을 찾아 그 묘비 앞까지 걸어간다 (41번, 순간이동 없음). false: 카메라만 */
+  private focusGrave(id: string, walk: boolean): void {
     const p = this.field.placement(id);
     if (!p) return;
     if (this.inShop) this.exitShop();
-    const now = this.time.now;
-    if (teleport) {
-      const s = standSpot(p);
-      this.player.warp(s.x, s.y, now, this.seatReq);
-      this.player.faceTo(p.x, p.y, now);
-      this.net.warp(s.x, s.y);
-      this.rig.recenter();
-    } else {
-      this.rig.focus(p.x, p.y - 10);
-    }
+    if (walk) this.walker.go(id, this.time.now);
+    else this.rig.focus(p.x, p.y - 10);
     this.fx.highlight(p.x, p.y);
+  }
+
+  /** 자동 걷기 직전: 앉았거나 매달려 있으면 일어나고(불멍 화면은 update가 푼다), 카메라는 다시 나를 따라온다 */
+  private beforeAutoWalk(): void {
+    const pl = this.player;
+    const now = this.time.now;
+    if (pl.anchored) pl.leaveAnchor(now);
+    else if (pl.sitting) pl.stand(now, this.seatReq);
+    this.rig.recenter();
+    this.recenterAt = 0;
   }
 
   private tryBury(): void {
@@ -723,7 +752,7 @@ export class WorldScene extends Phaser.Scene {
     this.net.emote("flower", graveId);
   }
 
-  private playRemoteEmote(sid: Sid, kind: "flower" | "revive", graveId: string): void {
+  private playRemoteEmote(sid: Sid, kind: EmoteKind, graveId: string): void {
     const r = this.remotes.get(sid);
     const p = this.field.placement(graveId);
     const now = performance.now();
@@ -735,9 +764,6 @@ export class WorldScene extends Phaser.Scene {
         if (p) this.fx.flowerBurst(p.x, p.y);
         if (r?.visible) r.view.emote("flower", now);
       }
-    } else {
-      if (p) this.fx.reviveGlow(p.x, p.y);
-      if (r?.visible) r.view.emote("revive", now);
     }
   }
 
@@ -745,6 +771,7 @@ export class WorldScene extends Phaser.Scene {
 
   private enterShop(): void {
     if (this.inShop || this.cleaned) return;
+    this.walker.cancel();
     this.inShop = true;
     const pl = this.player;
     if (pl.sitting) pl.stand(this.time.now, this.seatReq);
@@ -795,6 +822,7 @@ export class WorldScene extends Phaser.Scene {
 
   private onAction(a: KeyAction): void {
     if (this.hub.isBlocked || this.cleaned || this.inShop) return;
+    this.walker.cancel();
     const pl = this.player;
     const now = this.time.now;
     const occupied = this.net.online ? this.seats : EMPTY_SEATS;
@@ -867,6 +895,7 @@ export class WorldScene extends Phaser.Scene {
     switch (o.kind) {
       case "tree":
       case "swing":
+      case "hammock":
         this.useSpot(o);
         break;
       case "bell":
@@ -886,6 +915,22 @@ export class WorldScene extends Phaser.Scene {
           bridge.emit("portal:open", { kind: o.portal });
         }
         break;
+      case "door":
+        // 주거 구역의 집 문 → UI(하우징)가 집 정보를 받아 house:enter. 나오면 이 문 앞으로 돌아온다
+        pl.faceTo(o.x, o.y - 10, now);
+        if (pl.sitting) pl.stand(now, this.seatReq);
+        if (o.houseId) bridge.emit("portal:open", { kind: "housing", houseId: o.houseId });
+        break;
+      case "lot":
+        // 빈 필지 팻말 → 그 번지로 분양 문의 (분양 사무소 창)
+        pl.faceTo(o.x, o.y - 10, now);
+        if (o.lot) bridge.emit("portal:open", { kind: "housing", lot: o.lot });
+        break;
+      case "dock":
+        // 조각배(50번)는 다음 작업 — 지금은 안내만 (FERRY_DOCK·BOAT_MOORING이 그 자리)
+        pl.faceTo(o.x, o.y + 10, now);
+        this.toast("조각배는 곧 띄울 거예요. 조금만 기다려 주세요");
+        break;
     }
   }
 
@@ -902,9 +947,8 @@ export class WorldScene extends Phaser.Scene {
       this.toast(SPOT_TAKEN_TOAST[spot.kind]);
       return;
     }
-    // 그네 틀(받침 y)보다 앞에 그려야 아바타가 가려지지 않는다
-    const depth = spot.kind === "swing" ? o.ay + SWING_FRONT : o.ay + 0.5;
-    pl.attach(spot.kind, o.ax, o.ay, depth, this.time.now, this.seatReq, spot.id);
+    // 그네 틀·해먹 천(받침 y)보다 앞에 그려야 아바타가 가려지지 않는다
+    pl.attach(spot.kind, o.ax, o.ay, spotDepth(spot.kind, o.ay), this.time.now, this.seatReq, spot.id);
     // 의자에서 바로 옮겨 오면 attach가 일어서기(stand)를 먼저 보낸다 → 그다음 점유 요청
     if (judged) this.net.sit(spot.id);
   }
@@ -936,6 +980,7 @@ export class WorldScene extends Phaser.Scene {
    * (옛 채널은 1000으로 닫혀 바로 비워진다). 새로고침 복원(lib/resume.ts)은 이 길을 타지 않아 같은 채널의 같은 자리로 돌아온다.
    */
   private switchChannel(channel: number): void {
+    this.walker.cancel();
     if (this.net.online && this.net.channel === channel) return;
     if (!this.inShop) {
       const now = this.time.now;
@@ -986,6 +1031,26 @@ export class WorldScene extends Phaser.Scene {
       }
       default:
         return null;
+    }
+  }
+
+  /** 주거 구역의 그 번지를 비추고 문 위에 화살표 (걸어가면 사라진다: 카메라는 캐릭터가 걷기 시작하면 돌아온다) */
+  private showLot(lot: number, label?: string): void {
+    const l = houseLot(lot);
+    if (!l) return;
+    if (this.inShop) this.exitShop();
+    this.rig.focus(l.door.x, l.door.y - 40);
+    this.guide.set({ x: l.door.x, y: l.door.y - 34, text: label ?? `${lot}번지` });
+    this.lotGuide = { x: l.door.x, y: l.door.y, until: this.time.now + LOT_GUIDE_MS };
+  }
+
+  /** 번지 안내 화살표: 그 문 앞에 닿거나 시간이 지나면 지운다 */
+  private updateLotGuide(now: number): void {
+    const g = this.lotGuide;
+    if (!g) return;
+    if (now > g.until || Math.hypot(this.player.x - g.x, this.player.y - g.y) < 22) {
+      this.lotGuide = null;
+      this.guide.set(null);
     }
   }
 
@@ -1052,6 +1117,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private onTap(wx: number, wy: number): void {
+    this.walker.cancel();
     if (this.hub.isBlocked || this.cleaned || this.inShop) return;
     const p = graveAt(this.field.layout, wx, wy);
     if (p) {
@@ -1105,6 +1171,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.hub.read(this.move);
     if (this.hub.isBlocked) this.move.ax = this.move.ay = 0;
+    this.walker.steer(this.move, Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER, now);
     const started = pl.update(this.benchInput(now), now, this.seatReq);
     if (this.graveLock && !this.overlappingGrave()) this.graveLock = false;
     this.graveCollider.active = !pl.airborne && !this.graveLock;
@@ -1177,6 +1244,7 @@ export class WorldScene extends Phaser.Scene {
     this.updateSeatHint(now, s);
     this.tooltip.layout(s, pl.y);
     this.markers.update(now, s, this.tooltip, this.resolveGrave);
+    this.updateLotGuide(now);
     this.guide.update(now, view, s);
 
     const longSit = pl.sitting && pl.view.sitSince > 0 && now - pl.view.sitSince > SIT_IDLE_MS;
@@ -1402,7 +1470,7 @@ export class WorldScene extends Phaser.Scene {
     if (pl.anchored) {
       h.x = pl.x;
       h.y = pl.y + 2;
-      h.text = pl.state === "hang" ? "이동하면 내려와요" : "이동하면 내려요";
+      h.text = pl.state === "hang" ? "이동하면 내려와요" : pl.state === "hammock" ? "이동하면 일어나요" : "이동하면 내려요";
       return h;
     }
     const o = nearestObject(this.map.interactables, pl.x, pl.y);
@@ -1436,8 +1504,11 @@ export class WorldScene extends Phaser.Scene {
   private cleanup(): void {
     if (this.cleaned) return;
     this.cleaned = true;
+    this.walker?.cancel();
     this.ctx.disposed = true;
     window.removeEventListener("pagehide", this.onPageHide);
+    this.houses?.destroy();
+    this.houses = null;
     for (const u of this.unsubs) u();
     this.unsubs.length = 0;
     this.net?.stop();
@@ -1452,4 +1523,9 @@ export class WorldScene extends Phaser.Scene {
     this.nearT.clear();
     this.nearSeatId = null;
   }
+}
+
+/** 1인 소품 자리에 붙은 내 캐릭터의 depth: 그네 틀·해먹 천보다 앞, 나무 줄기 바로 앞 (원격 아바타와 같은 기준) */
+function spotDepth(kind: SpotKind, ay: number): number {
+  return kind === "swing" ? ay + SWING_FRONT : kind === "hammock" ? ay + HAMMOCK_FRONT : ay + 0.5;
 }

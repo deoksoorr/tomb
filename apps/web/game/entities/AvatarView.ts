@@ -11,6 +11,7 @@ import { SpeechBubble } from "./SpeechBubble";
 // 상태 값과 방향만 받아서 애니메이션을 고르고, 상태별 연출은 그림에만 얹는다 (논리 위치는 그대로):
 //  - hang: HANG_LIFT만큼 들어 올리고 살짝 흔들린다     - swing: 그네처럼 좌우로 왕복 (진자)
 //  - swim: 수면 물결 고리                              - dive: 물결 + 물방울이 올라온다
+//  - hammock: 몸 가운데를 축으로 90° 눕혀(머리가 왼쪽) 해먹 천 위에서 천천히 흔들린다
 // 꾸미기: 모자·후광 고리·목도리·손등불은 시트에 함께 그려지고, 날개·후광 빛·그림자 유령 친구·발자국 꽃·
 // 안개 망토·반딧불 오라는 따로 붙는 오브젝트다. 몸 모양(AVATAR_BODIES)은 시트를 바꾼다.
 // 머리 위는 아래에서부터 머리 꾸미기(귀·모자·후광·날개 끝) → 이름표 → 말풍선/이모티콘 순으로 쌓는다:
@@ -23,6 +24,9 @@ export const HANG_LIFT = 13;
 /** 그네 진자 폭 (px)과 주기 (ms) */
 const SWING_AMP = 3;
 const SWING_PERIOD = 1600;
+/** 해먹: 눕힐 때 회전 축 = 발바닥에서 이만큼 위(몸 가운데). 흔들림 주기 */
+const LIE_PIVOT = 9;
+const LIE_PERIOD = 2400;
 /** 수면 줄: 발바닥에서 위로 */
 const WATER_LINE = 5;
 const ACT_MS = 1200;
@@ -287,7 +291,7 @@ export class AvatarView {
     // 이모티콘은 어떤 자세에서든 이름표 위에 뜬다 (같은 채널 모두에게)
     if (kind === "wave" || kind === "cheer") this.emote(kind, now);
     const s = this.state;
-    if (s === "swim" || s === "dive" || s === "hang" || s === "swing" || s === "sitGround" || s === "sitChair" || s === "jump") return;
+    if (s === "swim" || s === "dive" || s === "hang" || s === "swing" || s === "hammock" || s === "sitGround" || s === "sitChair" || s === "jump") return;
     const act = kind === "cheer" || kind === "splash" ? "cheer" : "wave";
     this.gestureUntil = now + ACT_MS;
     this.anim = "";
@@ -395,17 +399,25 @@ export class AvatarView {
         this.swingFrame = f;
         s.setFrame(avatarFrame("swing", this.dir, f));
       }
+    } else if (st === "hammock") {
+      // 눕힌 그림에서 원점 x 이동은 화면 세로 움직임이 된다 → 1px 오르내림 + 아주 작은 기울기로 흔들흔들
+      const ph = ((now % LIE_PERIOD) / LIE_PERIOD) * Math.PI * 2;
+      this.setPose(this.reduced ? 0 : Math.round(Math.sin(ph)), -LIE_PIVOT);
+      const tilt = this.reduced ? -90 : -90 + Math.round(Math.sin(ph) * 2);
+      if (s.angle !== tilt) s.setAngle(tilt);
     } else this.setPose(0, 0);
+    if (st !== "hammock" && s.angle !== 0) s.setAngle(0);
     if (st !== "swing" && s.scaleX !== 1) s.setScale(1);
 
     s.setDepth(this.depthOverride ?? s.y);
     const sitLift = st === "sitGround" ? 3 : st === "sitChair" ? 1 : 0;
     // 물에 잠긴 만큼 이름표도 내린다
     const waterDrop = st === "swim" || st === "dive" ? waterSink(this.body, st) : 0;
-    const headY = s.y - this.hop - this.poseDy;
+    // 해먹에 누우면 머리 꼭대기 = 누운 몸 위쪽 (몸 두께의 절반 남짓)
+    const headY = st === "hammock" ? s.y + this.labelGap - 8 : s.y - this.hop - this.poseDy;
     // 매달리기는 두 팔이 머리 위로 올라가 그만큼 더 띄운다
     const armsUp = st === "hang" ? 3 : 0;
-    this.label.setPosition(Math.round(s.x - this.poseDx), headY - this.labelGap + sitLift + waterDrop - armsUp);
+    this.label.setPosition(Math.round(st === "hammock" ? s.x : s.x - this.poseDx), headY - this.labelGap + sitLift + waterDrop - armsUp);
     if (this.shadow) this.shadow.setPosition(s.x, s.y - 1).setDepth((this.depthOverride ?? s.y) - 0.5);
     if (this.label.scaleX !== labelScale) this.label.setScale(labelScale);
     const vis = s.visible;
@@ -502,7 +514,7 @@ export class AvatarView {
       // 후광 고리는 그림 맨 위 (물에 들어가면 가라앉은 만큼 내려간다)
       const sink = wet ? waterSink(this.body, st) : 0;
       const sitDrop = st === "sitGround" ? 3 : st === "sitChair" ? 1 : 0;
-      this.haloGlow.setPosition(x, headY - this.artTop + 1 + sink + sitDrop).setAlpha(pulse).setVisible(vis && st !== "dive");
+      this.haloGlow.setPosition(x, headY - this.artTop + 1 + sink + sitDrop).setAlpha(pulse).setVisible(vis && st !== "dive" && st !== "hammock");
     }
     if (this.wings) {
       const side = this.dir === DIR.left || this.dir === DIR.right;
@@ -514,7 +526,7 @@ export class AvatarView {
         .setScale(flap, 1)
         // 뒷모습(up)이면 날개가 앞에 보이고, 나머지는 몸 뒤
         .setDepth(this.dir === DIR.up ? depth + 0.05 : depth - 0.05)
-        .setVisible(vis && !wet);
+        .setVisible(vis && !wet && st !== "hammock");
     }
     if (this.pet) {
       // 몸 뒤쪽으로 조금 떨어져 느긋하게 따라온다

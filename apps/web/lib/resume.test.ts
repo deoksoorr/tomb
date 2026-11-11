@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAP_VERSION, SPAWN } from "@tomb/protocol";
 import { parseResume, RESUME_KEY, RESUME_MAX_AGE_MS, saveResume, setResumeExtras, takeResume, type ResumeState } from "./resume";
 
 const base: Omit<ResumeState, "bgm"> = {
@@ -12,6 +13,7 @@ const base: Omit<ResumeState, "bgm"> = {
   name: "모닥불",
   color: "#e8d9b0",
   body: "cat",
+  map: MAP_VERSION,
 };
 
 function memStore() {
@@ -47,6 +49,14 @@ describe("resume (새로고침 뒤 자리 복원 기록)", () => {
     expect(takeResume(base.savedAt + RESUME_MAX_AGE_MS + 1, st)).toBeNull();
     expect(st.m.has(RESUME_KEY)).toBe(false);
     expect(parseResume(JSON.stringify(base), base.savedAt + RESUME_MAX_AGE_MS)).not.toBeNull();
+  });
+
+  it("맵 개편 전(맵 버전이 없거나 다름)에 남긴 기록: 채널·입장 정보는 잇고 자리는 입구에서, 서 있기로", () => {
+    const old = { ...base, map: undefined };
+    const r = parseResume(JSON.stringify(old), base.savedAt);
+    expect(r).toMatchObject({ channel: 2, name: "모닥불", x: SPAWN.x, y: SPAWN.y, pose: "idle", seatId: null, map: MAP_VERSION });
+    expect(parseResume(JSON.stringify({ ...base, map: MAP_VERSION - 1 }), base.savedAt)).toMatchObject({ x: SPAWN.x, y: SPAWN.y, pose: "idle" });
+    expect(parseResume(JSON.stringify({ ...base, pose: "hammock" }), base.savedAt)).toMatchObject({ pose: "hammock", x: base.x });
   });
 
   it("형식이 틀리면 null, 이상한 자세는 서 있기로, 좌석 없는 의자 앉기는 바닥 앉기로", () => {

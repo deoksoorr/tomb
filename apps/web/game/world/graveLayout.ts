@@ -1,16 +1,10 @@
-import {
-  GRID_COLS,
-  GRID_DY,
-  GRID_Y0,
-  REVIVE_SLOTS,
-  flowerStack,
-  graveSlot,
-} from "@tomb/protocol";
+import { GRID_COLS, GRID_DY, GRID_ROWS, GRID_Y0, flowerStack, graveSlot, graveVisible } from "@tomb/protocol";
 import { graveShape, SHAPE_SIZE, shapeVariants, type GraveShape } from "../graveShape";
 
-// 묘비 배치 계산 (순수). 격자는 등록 순서(index) → graveSlot(index).
-// 살려주세요 상위 10개는 "다시 피어날 자리"(REVIVE_SLOTS)에 같은 묘비의 복제본을 따로 세운다.
-// 진짜 묘비는 격자 원래 자리에 그대로 둔다 (같은 디자인·꽃·꾸미기·내 묘비 빛). 두 곳 모두 같은 묘비(id)를 연다.
+// 묘비 배치 계산 (순수). 작은 묘역 격자에 등록 순서(index) → graveSlot(index).
+// 묘역에는 GRAVEYARD_CAPACITY(32)기까지 놓인다. 목록이 그보다 길면(성불이 따라잡기 전) 가장 최근 32기만 보이고,
+// 자리는 index % 32를 돌려 쓴다 (새 묘비가 가장 오래된 묘비의 자리에 선다 — 그 묘비가 곧 성불할 차례다).
+// "다시 피어날 자리"(살려주세요 상위 복제본)는 49번에서 없어졌다. revive/reviveRank는 호환용으로 늘 비어 있다.
 
 export type GraveInfo = {
   id: string;
@@ -57,9 +51,9 @@ export type GravePlacement = {
   id: string;
   x: number;
   y: number;
-  /** 부활 대기석 순위 (0 = 1위). 격자면 -1 */
+  /** @deprecated 부활 대기석 순위 (없어짐, 늘 -1) */
   rank: number;
-  /** 다시 피어날 자리에 세운 복제본이면 true (진짜는 격자 자리) */
+  /** @deprecated 다시 피어날 자리 복제본 (없어짐, 늘 false) */
   copy: boolean;
   /** 그릴 모양 (디자인 또는 생존 기간 규칙) */
   shape: GraveShape;
@@ -73,15 +67,17 @@ export type GravePlacement = {
 };
 
 export type GraveLayout = {
-  /** graves와 같은 순서 */
+  /** 묘역에 보이는 묘비 (graves 순서, 가장 최근 GRAVEYARD_CAPACITY기) */
   placements: GravePlacement[];
-  /** 다시 피어날 자리 순위별 복제본 (비어 있으면 null) */
+  /** @deprecated 다시 피어날 자리 (없어짐, 늘 빈 배열) */
   revive: (GravePlacement | null)[];
-  /** 격자 index → 다시 피어날 자리에 복제본이 있으면 순위, 없으면 -1 */
+  /** @deprecated (없어짐, 늘 빈 배열) */
   reviveRank: Int8Array;
-  /** id → 격자 자리의 진짜 묘비 */
+  /** id → 묘역의 묘비 (보이는 것만) */
   byId: Map<string, GravePlacement>;
+  /** 묘비가 놓인 줄 수 (0..GRID_ROWS) */
   rows: number;
+  /** 보이는 묘비 수 (placements.length) */
   count: number;
   /** 가장 먼저 만료되는 꾸미기 시각 (그때 다시 배치해서 지운다) */
   decorExpiresAt: number;
@@ -99,25 +95,16 @@ function hashId(id: string): number {
   return h >>> 0;
 }
 
-export function buildLayout(graves: readonly GraveInfo[], reviveTop: readonly string[], now: number = Date.now()): GraveLayout {
-  // 목록에 없는 id(숨김·삭제)는 건너뛰고 순위를 당긴다
-  const known = new Set(graves.map((g) => g.id));
-  const rankOf = new Map<string, number>();
-  reviveTop
-    .filter((id) => known.has(id))
-    .slice(0, REVIVE_SLOTS.length)
-    .forEach((id, i) => rankOf.set(id, i));
-
+export function buildLayout(graves: readonly GraveInfo[], reviveTop: readonly string[] = [], now: number = Date.now()): GraveLayout {
+  void reviveTop; // 다시 피어날 자리는 없어졌다 (호출부 호환용 인자)
   const placements: GravePlacement[] = [];
-  const revive: (GravePlacement | null)[] = REVIVE_SLOTS.map(() => null);
-  const reviveRank = new Int8Array(graves.length).fill(-1);
   const byId = new Map<string, GravePlacement>();
   let decorExpiresAt = Infinity;
-
+  const count = graves.length;
   graves.forEach((g, index) => {
+    if (!graveVisible(index, count)) return;
     const decor = activeDecor(g.decor, now);
     decorExpiresAt = Math.min(decorExpiresAt, decor.expiresAt);
-    const rank = rankOf.get(g.id) ?? -1;
     const pos = graveSlot(index);
     const shape = graveShape(g.style, g.ageDays);
     const p: GravePlacement = {
@@ -135,14 +122,16 @@ export function buildLayout(graves: readonly GraveInfo[], reviveTop: readonly st
     };
     placements.push(p);
     byId.set(g.id, p);
-    if (rank >= 0) {
-      // 명당 복제본: 같은 모양·꽃·꾸미기, 자리만 다르다
-      revive[rank] = { ...p, x: REVIVE_SLOTS[rank].x, y: REVIVE_SLOTS[rank].y, rank, copy: true };
-      reviveRank[index] = rank;
-    }
   });
-
-  return { placements, revive, reviveRank, byId, rows: Math.ceil(graves.length / GRID_COLS), count: graves.length, decorExpiresAt };
+  return {
+    placements,
+    revive: [],
+    reviveRank: new Int8Array(0),
+    byId,
+    rows: Math.min(GRID_ROWS, Math.ceil(placements.length / GRID_COLS)),
+    count: placements.length,
+    decorExpiresAt,
+  };
 }
 
 /** 격자 묘비가 그려지는 세로 범위: 받침 위로 32px, 아래로 10px (꽃·흙) */
@@ -179,10 +168,7 @@ function probe(p: GravePlacement | null | undefined, x: number, y: number, radiu
   }
 }
 
-/**
- * (x,y)에서 radius 안의 가장 가까운 묘비. 전체를 훑지 않고 근처 행만 본다.
- * 결과는 out에 채워 돌려준다 (없으면 null).
- */
+/** (x,y)에서 radius 안의 가장 가까운 묘비 (묘역은 최대 32기라 전부 본다). 결과는 out에 채워 돌려준다 (없으면 null) */
 export function nearestGrave(
   layout: GraveLayout,
   x: number,
@@ -192,18 +178,8 @@ export function nearestGrave(
 ): NearResult | null {
   probeBest = null;
   probeD = Infinity;
-  for (let i = 0; i < layout.revive.length; i++) probe(layout.revive[i], x, y, radius);
-  if (layout.count) {
-    const row = Math.round((y - GRID_Y0) / GRID_DY);
-    for (let r = row - 1; r <= row + 1; r++) {
-      if (r < 0 || r >= layout.rows) continue;
-      for (let c = 0; c < GRID_COLS; c++) {
-        const i = r * GRID_COLS + c;
-        if (i >= layout.count) continue;
-        probe(layout.placements[i], x, y, radius);
-      }
-    }
-  }
+  const list = layout.placements;
+  for (let i = 0; i < list.length; i++) probe(list[i], x, y, radius);
   const best = probeBest as GravePlacement | null;
   probeBest = null;
   if (!best) return null;
@@ -221,23 +197,16 @@ function hit(p: GravePlacement | null | undefined, wx: number, wy: number): bool
 
 /** 탭/클릭 지점의 묘비 */
 export function graveAt(layout: GraveLayout, wx: number, wy: number): GravePlacement | null {
-  for (const p of layout.revive) if (hit(p, wx, wy)) return p;
-  if (!layout.count) return null;
-  const row = Math.round((wy - GRID_Y0) / GRID_DY);
-  for (let r = row - 1; r <= row + 1; r++) {
-    if (r < 0 || r >= layout.rows) continue;
-    for (let c = 0; c < GRID_COLS; c++) {
-      const i = r * GRID_COLS + c;
-      if (i >= layout.count) continue;
-      if (hit(layout.placements[i], wx, wy)) return layout.placements[i];
-    }
-  }
+  for (const p of layout.placements) if (hit(p, wx, wy)) return p;
   return null;
 }
 
-/** 충돌 박스·격자 배치가 바뀌었는지 판단하는 서명 (꽃·살려주세요 수 변화는 제외) */
-export function layoutSignature(graves: readonly GraveInfo[], reviveTop: readonly string[]): string {
-  let s = `${graves.length}|${reviveTop.slice(0, REVIVE_SLOTS.length).join(",")}|`;
-  for (const g of graves) s += `${g.id}:${graveShape(g.style, g.ageDays)},`;
+/** 충돌 박스·격자 배치가 바뀌었는지 판단하는 서명 (꽃 수 변화는 제외) */
+export function layoutSignature(graves: readonly GraveInfo[], reviveTop: readonly string[] = []): string {
+  void reviveTop;
+  let s = `${graves.length}|`;
+  graves.forEach((g, i) => {
+    if (graveVisible(i, graves.length)) s += `${g.id}:${graveShape(g.style, g.ageDays)},`;
+  });
   return s;
 }

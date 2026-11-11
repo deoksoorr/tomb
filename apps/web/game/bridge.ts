@@ -59,6 +59,11 @@ export type GameEvents = {
   "seat:near": { seatId: string; kind: "bench" | "chair" } | null;
   /** E/Space/탭으로 묘비 상세 모달을 열어 달라는 요청 */
   "grave:open": { graveId: string };
+  /**
+   * 내 묘비 가기 걷기 상태 (41번). started = 길을 찾아 걷기 시작, arrived = 도착(또는 이미 가까워 바라보기만),
+   * cancelled = 이동·점프·클릭 등 입력으로 그만둠, unreachable = 길이 없음(또는 도중에 막힘)
+   */
+  "grave:walk": { graveId: string; status: "started" | "arrived" | "cancelled" | "unreachable" };
   "net:status": NetStatus;
   "net:stats": NetStats;
   /** 같은 채널의 다른 사람이 묘비를 세움/수정/삭제 → UI가 상세를 받아 목록에 반영 */
@@ -72,8 +77,11 @@ export type GameEvents = {
   "queue:status": QueueStatus;
   /** 상점 맵 안에서 주인장과 상호작용 → UI가 상점 창을 연다 */
   "shop:open": undefined;
-  /** 월드의 특별한 장소와 상호작용: 사냥터 입구 / 분양 사무소(하우징) / 성황당 → UI가 해당 창을 연다 */
-  "portal:open": { kind: "hunt" | "housing" | "shrine" };
+  /**
+   * 월드의 특별한 장소와 상호작용: 사냥터 입구 / 분양 사무소(하우징) / 성황당 → UI가 해당 창을 연다.
+   * 주거 구역(메인 맵의 분양 마을): 집 문이면 houseId(그 집으로 들어가기), 빈 필지 팻말이면 lot(그 번지로 분양 문의)
+   */
+  "portal:open": { kind: "hunt" | "housing" | "shrine"; houseId?: string; lot?: number };
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
   "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house" };
   /** 실시간 서버가 이 화면을 옛 버전이라 거절함(4010, 큰 패치) → UI가 업데이트 창을 띄운다 (sticky) */
@@ -111,17 +119,24 @@ export type UiEvents = {
    * 지금 채널의 묘비 목록 (등록 순 = 격자 순서). 받을 때마다 월드를 다시 맞춘다.
    * 채널마다 묘지가 따로라, 게임은 channel이 자기 채널과 다른 목록은 무시하고 채널을 옮기면 묘비를 바로 비운다.
    */
-  "graves:set": { channel: number; graves: PublicGrave[]; reviveTop: string[] };
-  /** 랭킹 클릭 등: 내 캐릭터를 그 묘비 앞으로 순간이동 (teleport=false면 카메라만) */
-  "grave:focus": { graveId: string; teleport: boolean };
+  "graves:set": {
+    channel: number;
+    graves: PublicGrave[];
+    reviveTop: string[];
+    /** 방금 성불한 묘비 id (이번 목록에서 빠진 것). 게임이 사라지기 전 자리에 작은 빛을 띄운다 */
+    passed?: string[];
+  };
+  /**
+   * 내 묘비 가기 등: walk=true면 내 캐릭터가 길을 찾아 그 묘비 앞까지 걸어간다 (순간이동 없음, 진행은 grave:walk).
+   * walk=false면 카메라만 그 묘비로 (랭킹 등)
+   */
+  "grave:focus": { graveId: string; walk: boolean };
   /** 내가 방금 묘비를 세움: 카메라 이동 + 흙 덮이는 연출 + graveEvent(buried) 전송 */
   "grave:buried": { graveId: string };
   /** 내가 묘비를 수정/이장함: graveEvent 전송 */
   "grave:changed": { graveId: string; kind: "updated" | "removed" };
   /** 헌화 저장 성공: 내 캐릭터가 꽃을 놓는 연출 + emote(flower) 전송 */
   "grave:flowered": { graveId: string };
-  /** 살려주세요 저장 성공: revived=true면 연출 + emote(revive) 전송 */
-  "grave:revived": { graveId: string; revived: boolean };
   /** 게임 안 채널 이동 메뉴. 연결을 닫고 새 채널에 입장, 캐릭터 위치는 유지 */
   "channel:switch": { channel: number };
   /** 모바일 가상 조이스틱. -1..1, 손을 떼면 {0,0} */
@@ -169,8 +184,10 @@ export type UiEvents = {
   "house:tool": HouseTool;
   /** 분양 마을로 들어간다 (월드 또는 집에서). spawnLot이면 그 번지 문 앞에서 */
   "village:enter": { village: VillageResponse; myHouseId: string | null; spawnLot?: number | null };
-  /** 마을 정보가 바뀜 (분양·외관 저장 뒤) → 다시 그린다 */
+  /** 마을 정보가 바뀜 (분양·외관 저장 뒤) → 다시 그린다. 메인 맵 주거 구역도 이걸로 집을 다시 세운다 (sticky) */
   "village:data": { village: VillageResponse; myHouseId: string | null };
+  /** 메인 맵 주거 구역의 그 번지로 안내 (카메라가 비추고 문 위에 화살표). 분양 사무소 "내 집 보기" 등 */
+  "world:lot": { lot: number; label?: string };
   /** 마을에서 나간다 (UI 버튼) */
   "village:exit": undefined;
 
@@ -209,6 +226,7 @@ const STICKY = new Set<keyof AllEvents>([
   "queue:status",
   "scene:changed",
   "app:outdated",
+  "village:data",
 ]);
 
 class Bridge {

@@ -1,4 +1,4 @@
-import { Grid, hash2, lighten, rng, type Color } from "./pixel";
+import { darken, Grid, hash2, lighten, rng, type Color } from "./pixel";
 import { tree, type LeafPal } from "./props";
 
 // v3 월드 소품 픽셀아트: 여러 종류 나무(가을나무·소나무·덤불), 우물, 그네, 종루, 돌무더기, 꽃밭, 버섯, 허수아비,
@@ -32,6 +32,48 @@ export function autumnTree(v: number): HTMLCanvasElement {
 }
 export function blossomTree(v: number): HTMLCanvasElement {
   return tree(v, BLOSSOM);
+}
+
+// 가을~겨울: 붉은 단풍나무, 노란 은행나무
+const MAPLE: LeafPal = { hi: 0xd0603a, mid: 0xa8402a, lo: 0x7c2c20, deep: 0x5e2018 };
+const GINKGO: LeafPal = { hi: 0xe8c45a, mid: 0xc99a34, lo: 0x9a7024, deep: 0x7a561c };
+export function mapleTree(v: number): HTMLCanvasElement {
+  return tree(v, MAPLE);
+}
+export function ginkgoTree(v: number): HTMLCanvasElement {
+  return tree(v, GINKGO);
+}
+
+/** 눈 덮인 소나무: 소나무 층마다 윗면에 눈 */
+export function snowPine(v: number): HTMLCanvasElement {
+  const c = pine(v);
+  const ctx = c.getContext("2d")!;
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  const d = img.data;
+  const at = (x: number, y: number) => (y * c.width + x) * 4;
+  const leafy = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= c.width || y >= c.height) return false;
+    const i = at(x, y);
+    return d[i + 3] === 255 && d[i + 1] > d[i] && d[i + 1] > 50 && y < 34;
+  };
+  // 위가 비어 있는 잎 픽셀(층의 윗면)에 눈을 얹는다
+  for (let y = 1; y < 34; y++)
+    for (let x = 0; x < c.width; x++) {
+      if (!leafy(x, y) || leafy(x, y - 1)) continue;
+      const i = at(x, y);
+      const shade = (x + y) % 5 === 0 ? 0xc6d2da : 0xe6ecef;
+      d[i] = (shade >> 16) & 255;
+      d[i + 1] = (shade >> 8) & 255;
+      d[i + 2] = shade & 255;
+      if (leafy(x, y + 1) && (x * 7 + y) % 3) {
+        const j = at(x, y + 1);
+        d[j] = 0xd8;
+        d[j + 1] = 0xe2;
+        d[j + 2] = 0xe8;
+      }
+    }
+  ctx.putImageData(img, 0, 0);
+  return c;
 }
 
 /** 소나무: 층층이 쌓인 삼각 수관 (24×40) */
@@ -263,6 +305,112 @@ export function bridge(): HTMLCanvasElement {
     g.rect(BRIDGE_W - 4, y, 4, 3, w.mid);
   }
   g.outline(w.line);
+  return g.toCanvas();
+}
+
+// ── 해먹 (HAMMOCK_W×HAMMOCK_H): 양쪽 나무 기둥 사이에 늘어진 줄무늬 천. 받침 = 기둥 발밑 가운데 ──
+export const HAMMOCK_W = 48;
+export const HAMMOCK_H = 30;
+export function hammock(): HTMLCanvasElement {
+  const g = new Grid(HAMMOCK_W, HAMMOCK_H);
+  const w = WOOD;
+  // 기둥 (x=4, x=43)
+  g.rect(3, 6, 3, 21, w.mid);
+  g.vline(3, 6, 26, w.hi);
+  g.rect(42, 6, 3, 21, w.lo);
+  g.rect(2, 4, 5, 2, w.lo);
+  g.rect(41, 4, 5, 2, w.lo);
+  // 줄
+  line(g, 6, 8, 11, 15, 0xc8b894);
+  line(g, 41, 8, 36, 15, 0xc8b894);
+  // 천: 가운데가 처진 띠 (줄무늬)
+  for (let x = 11; x <= 36; x++) {
+    const t = (x - 23.5) / 12.5;
+    const sag = Math.round(5 * (1 - t * t));
+    const y = 15 + sag;
+    const stripe = Math.floor((x - 11) / 3) % 2 ? 0xc85a46 : 0xe8d6b0;
+    g.vline(x, y - 2, y + 1, stripe);
+    g.set(x, y + 1, darken(stripe, 0.3));
+  }
+  g.outline(OUT);
+  shadow(g, 24, 27.5, 18, 1.6, 55);
+  return g.toCanvas();
+}
+
+// ── 조각배 (34×16): 나루터에 매어 둔 작은 나룻배 (물 위, 받침 = 배 바닥 가운데) ──
+export function boat(): HTMLCanvasElement {
+  const g = new Grid(34, 16);
+  const w = WOOD;
+  for (let y = 0; y < 7; y++) {
+    const inset = y < 2 ? 4 - y * 2 : Math.max(0, y - 3);
+    g.hline(2 + inset, 31 - inset, 6 + y, y < 2 ? w.hi : y < 5 ? w.mid : w.lo);
+  }
+  g.hline(4, 29, 6, lighten(w.hi, 0.1));
+  // 가로 좌판 2개 + 노
+  g.rect(11, 7, 2, 4, w.lo);
+  g.rect(21, 7, 2, 4, w.lo);
+  line(g, 8, 4, 27, 10, 0xb0906a);
+  g.rect(25, 9, 4, 2, 0x9a7a54);
+  // 밧줄 (나루터 쪽으로)
+  line(g, 2, 8, 0, 6, 0xc8b894);
+  g.outline(w.line);
+  // 물에 비친 그림자
+  for (let x = 4; x < 30; x++) g.set(x, 14, 0x000000, 70);
+  return g.toCanvas();
+}
+
+// ── 낙엽 더미 (20×8, 충돌 없음) ──
+export function leafPile(v: number): HTMLCanvasElement {
+  const g = new Grid(20, 8);
+  const r = rng(61 + v * 11);
+  const cols = [0xc8642e, 0xa8402a, 0xd8a83a, 0x8a5a2e, 0xb5782f];
+  g.ellipse(10, 5, 8.5, 2.6, 0x8a5a2e);
+  for (let i = 0; i < 40; i++) {
+    const x = 1 + Math.floor(r() * 18);
+    const y = 2 + Math.floor(r() * 5);
+    if (g.filled(x, y) || r() < 0.3) g.set(x, y, cols[Math.floor(r() * cols.length)]);
+  }
+  shadow(g, 10, 7, 8, 0.8, 40);
+  return g.toCanvas();
+}
+
+// ── 호박 (12×10) ──
+export function pumpkin(v: number): HTMLCanvasElement {
+  const g = new Grid(12, 10);
+  const c = v % 2 ? { hi: 0xe89a48, mid: 0xc87428, lo: 0x9a5418 } : { hi: 0xe0b860, mid: 0xc09030, lo: 0x8e6a20 };
+  g.ellipse(6, 6, 5, 3.2, c.mid);
+  g.vline(4, 4, 8, c.lo);
+  g.vline(8, 4, 8, c.lo);
+  g.hline(3, 9, 3, c.hi);
+  g.rect(5, 1, 2, 2, 0x5a6a34);
+  g.outline(OUT);
+  shadow(g, 6, 9, 5, 0.8, 50);
+  return g.toCanvas();
+}
+
+// ── 돗자리 (26×12, 바닥에 깐다): 별 보기 언덕 ──
+export function mat(v: number): HTMLCanvasElement {
+  const g = new Grid(26, 12);
+  const a = v % 2 ? 0x5a7aa0 : 0xa0524a;
+  const b = 0xe2d6b8;
+  for (let y = 1; y < 11; y++) for (let x = 1; x < 25; x++) g.set(x, y, (Math.floor(x / 4) + Math.floor(y / 4)) % 2 ? a : b);
+  g.hline(1, 24, 10, darken(a, 0.3));
+  g.outline(OUT, false, 160);
+  return g.toCanvas();
+}
+
+// ── 가로등 (12×32): 주거 구역 골목 ──
+export function streetLamp(): HTMLCanvasElement {
+  const g = new Grid(12, 32);
+  g.rect(5, 8, 2, 22, 0x2e3236);
+  g.vline(5, 8, 29, 0x4a5056);
+  g.rect(3, 29, 6, 2, 0x2e3236);
+  g.rect(3, 2, 6, 6, 0x2e3236);
+  g.rect(4, 3, 4, 4, 0xffd890);
+  g.set(4, 3, 0xfff2c8);
+  g.hline(2, 9, 1, 0x3c4246);
+  g.outline(OUT);
+  shadow(g, 6, 31, 4, 0.8, 60);
   return g.toCanvas();
 }
 
@@ -587,6 +735,21 @@ export const WP = {
   logSeat: "prop-log-seat",
   stumpSeat: "prop-stump-seat",
   smoke: "fx-smoke-puff",
+  maple0: "prop-maple-0",
+  maple1: "prop-maple-1",
+  ginkgo0: "prop-ginkgo-0",
+  ginkgo1: "prop-ginkgo-1",
+  snowPine0: "prop-snowpine-0",
+  snowPine1: "prop-snowpine-1",
+  hammock: "prop-hammock",
+  boat: "prop-boat",
+  leaves0: "prop-leaves-0",
+  leaves1: "prop-leaves-1",
+  pumpkin0: "prop-pumpkin-0",
+  pumpkin1: "prop-pumpkin-1",
+  mat0: "prop-mat-0",
+  mat1: "prop-mat-1",
+  lamp: "prop-street-lamp",
 } as const;
 
 export const WORLD_PROP_ART: Readonly<Record<string, () => HTMLCanvasElement>> = {
@@ -622,6 +785,21 @@ export const WORLD_PROP_ART: Readonly<Record<string, () => HTMLCanvasElement>> =
   [WP.logSeat]: logSeat,
   [WP.stumpSeat]: stumpSeat,
   [WP.smoke]: smokePuff,
+  [WP.maple0]: () => mapleTree(0),
+  [WP.maple1]: () => mapleTree(1),
+  [WP.ginkgo0]: () => ginkgoTree(0),
+  [WP.ginkgo1]: () => ginkgoTree(1),
+  [WP.snowPine0]: () => snowPine(0),
+  [WP.snowPine1]: () => snowPine(1),
+  [WP.hammock]: hammock,
+  [WP.boat]: boat,
+  [WP.leaves0]: () => leafPile(0),
+  [WP.leaves1]: () => leafPile(1),
+  [WP.pumpkin0]: () => pumpkin(0),
+  [WP.pumpkin1]: () => pumpkin(1),
+  [WP.mat0]: () => mat(0),
+  [WP.mat1]: () => mat(1),
+  [WP.lamp]: streetLamp,
 };
 
 /** 프레임으로 나뉜 시트 (manifest가 frameW/H와 함께 등록한다) */

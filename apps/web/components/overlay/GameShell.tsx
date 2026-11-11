@@ -13,7 +13,7 @@ import { useMyGraves } from "@/lib/hooks/useMyGraves";
 import { useNotices } from "@/lib/hooks/useNotices";
 import { showToast, useToasts } from "@/lib/hooks/useToasts";
 import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
-import { PRESENCE_INTERVAL_MS } from "@/lib/types";
+import { PRESENCE_INTERVAL_MS, type PublicGrave } from "@/lib/types";
 import { restoreLook } from "../account/actions";
 import ActivityDialog from "../account/ActivityDialog";
 import BagDialog from "../account/BagDialog";
@@ -25,6 +25,7 @@ import ShrineDialog from "../account/ShrineDialog";
 import BgmPlayer from "../bgm/BgmPlayer";
 import BuryForm, { type BuryMode } from "../grave/BuryForm";
 import GraveModal from "../grave/GraveModal";
+import PassedDialog from "../grave/PassedDialog";
 import NoticesDialog from "../notice/NoticesDialog";
 import RankingList from "../grave/RankingList";
 import RankingPanel from "../grave/RankingPanel";
@@ -123,6 +124,7 @@ type Panel =
   | "hunt"
   | "housing"
   | "activity"
+  | "passed"
   | "say";
 
 /** 다른 담당이 만드는 장소 창 (사냥터·분양 사무소). 컴포넌트가 들어오기 전까지 자리만 */
@@ -145,6 +147,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const [openGraveId, setOpenGraveId] = useState<string | null>(null);
   const [bury, setBury] = useState<BuryMode | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
+  /** 주거 구역의 집 문·빈 필지에서 하우징 창을 열었으면 그 집/번지 */
+  const [housingIntent, setHousingIntent] = useState<{ houseId?: string; lot?: number } | null>(null);
   const coarse = useMediaQuery("(pointer: coarse)");
   // 데스크톱인데 창이 좁으면 윗줄에 채널 표시 자리가 없다 → 아래 안내 줄로
   const narrow = useMediaQuery("(max-width: 700px)");
@@ -160,9 +164,16 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const { unread: unreadNotice } = useNotices();
   useAccountOnEnter(ready, options.name, options.color, options.body);
   usePresencePoints(ready);
-  useBridgeEvent("portal:open", ({ kind }) => setPanel(kind));
+  useBridgeEvent("portal:open", ({ kind, houseId, lot }) => {
+    setHousingIntent(kind === "housing" && (houseId || lot) ? { houseId, lot } : null);
+    setPanel(kind);
+  });
   useBridgeEvent("grave:open", ({ graveId }) => setOpenGraveId(graveId));
   useBridgeEvent("shop:open", () => setPanel("shop"));
+  // 내 묘비로 걸어가다 길이 막혔을 때 (41번)
+  useBridgeEvent("grave:walk", ({ status }) => {
+    if (status === "unreachable") showToast("길을 찾지 못했어요. 조금 움직인 뒤 다시 눌러 주세요.");
+  });
   // 불멍(모닥불) 중에는 HUD를 은은하게
   const campfire = useBridgeValue("view:mode")?.mode === "campfire";
   // 첫 방문 안내: 계정이 아직 안 봤으면 저절로, 안내(ⓘ)에서 다시 보기
@@ -200,15 +211,22 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     };
   }, [options.debug]);
 
-  function goToGrave(graveId: string, openModal: boolean) {
-    bridge.emit("grave:focus", { graveId, teleport: true });
+  /** 내 캐릭터가 그 묘비 앞까지 걸어간다 (41번: 순간이동 없음, 방향키·클릭·점프로 멈춘다) */
+  function goToGrave(graveId: string) {
+    bridge.emit("grave:focus", { graveId, walk: true });
     setPanel(null);
-    if (openModal) setOpenGraveId(graveId);
   }
 
-  /** 다른 채널 묘비: 그 채널로 옮기고, 그 채널 목록이 깔리면 묘비 앞으로 */
+  /** 랭킹(헌화) 클릭: 카메라만 그 묘비로 + 상세 */
+  function lookAtGrave(graveId: string) {
+    bridge.emit("grave:focus", { graveId, walk: false });
+    setPanel(null);
+    setOpenGraveId(graveId);
+  }
+
+  /** 다른 채널 묘비: 그 채널로 옮기고(입구에서 시작), 그 채널 목록이 깔리면 묘비 앞까지 걸어간다 */
   function goToMyGrave({ grave, here }: MyGraveEntry) {
-    if (here) return goToGrave(grave.id, false);
+    if (here) return goToGrave(grave.id);
     setPanel(null);
     const { cache } = graves;
     const off = cache.subscribe(() => {
@@ -216,7 +234,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       if (snap.channel !== grave.channel || !snap.byId.has(grave.id)) return;
       off();
       clearTimeout(giveUp);
-      bridge.emit("grave:focus", { graveId: grave.id, teleport: true });
+      bridge.emit("grave:focus", { graveId: grave.id, walk: true });
     });
     // 채널을 못 옮기면(가득 참 등) 기다리지 않는다
     const giveUp = setTimeout(off, 20_000);
@@ -235,6 +253,12 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     setBury({ kind: "create" });
   }
 
+  /** 1인 1묘비 안내의 [내 묘비 가기] */
+  function goToActiveGrave(grave: PublicGrave) {
+    setBury(null);
+    goToMyGrave({ grave, plot: null, here: grave.channel === graves.channel });
+  }
+
   function closePanel() {
     if (panel === "shop") bridge.emit("shop:closed");
     setPanel(null);
@@ -242,12 +266,12 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
 
   /** 소식의 묘비: 지금 채널에 있으면 바로, 아니면 상세로 채널을 알아내 옮긴다 */
   function goToGraveById(graveId: string) {
-    if (graves.byId.has(graveId)) return goToGrave(graveId, false);
+    if (graves.byId.has(graveId)) return goToGrave(graveId);
     setPanel(null);
     api
       .graveDetail(graveId)
       .then(({ grave }) => goToMyGrave({ grave, plot: null, here: grave.channel === graves.channel }))
-      .catch(() => showToast("그 묘비를 찾지 못했어요. 이장되었을 수 있어요."));
+      .catch(() => showToast("그 묘비를 찾지 못했어요. 성불했거나 이장되었을 수 있어요."));
   }
 
   /** 터치 메뉴 시트에서 고른 것 열기 */
@@ -311,15 +335,23 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                     <span className="visually-hidden"> 내 정보</span>
                   </span>
                 </button>
-                <RankingPanel graves={graves.graves} reviveTop={graves.reviveTop} onPick={(id) => goToGrave(id, true)} />
+                <RankingPanel graves={graves.graves} onPick={lookAtGrave} />
               </div>
               <div className={styles.leftRow}>
-                <button type="button" className={cx(ui.button, styles.leftButton)} onClick={openMyGraves}>
-                  <PixelIcon name="grave" />내 묘비{me ? ` (${me.graves.length})` : ""}
+                <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("menu")}>
+                  <PixelIcon name="menu" />
+                  메뉴
                 </button>
                 <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("bag")}>
                   <PixelIcon name="bag" />가방
                   {bagCount > 0 && <span className={styles.badge}>{bagCount}</span>}
+                </button>
+                <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("hunt")}>
+                  <PixelIcon name="sword" />
+                  사냥
+                </button>
+                <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("housing")}>
+                  <PixelIcon name="house" />집
                 </button>
                 <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("activity")}>
                   <PixelIcon name="heart" />
@@ -337,15 +369,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 </button>
               </div>
               <FireworkButton onOpen={() => setPanel("fireworks")} />
-              {!inShop && (
-                <button
-                  type="button"
-                  className={cx(ui.button, ui.primary, styles.bury)}
-                  onClick={() => setBury({ kind: "create" })}
-                >
-                  묘비 세우기
-                </button>
-              )}
             </>
           )}
           <div className={styles.bottomCenter}>
@@ -376,6 +399,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           channel={graves.channel}
           graveCount={graves.loaded ? graves.graves.length : null}
           onClose={() => setBury(null)}
+          onGoToGrave={goToActiveGrave}
         />
       )}
       {panel === "channels" && <ChannelMenu onClose={closePanel} />}
@@ -400,7 +424,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         />
       )}
       {panel === "graves" && (
-        <Dialog title="내 묘비" onClose={closePanel} size="sm">
+        <Dialog title="내 묘비 가기" onClose={closePanel} size="sm">
           <MyGraves entries={myGraves.entries} pending={myGraves.pending} onGo={goToMyGrave} onBury={startBury} />
         </Dialog>
       )}
@@ -425,12 +449,13 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       )}
       {panel === "ranking" && (
         <Dialog title="랭킹" onClose={closePanel} size="sm">
-          <RankingList graves={graves.graves} reviveTop={graves.reviveTop} onPick={(id) => goToGrave(id, true)} />
+          <RankingList graves={graves.graves} onPick={lookAtGrave} />
         </Dialog>
       )}
       {panel === "fireworks" && <FireworkDialog onClose={closePanel} />}
+      {panel === "passed" && <PassedDialog onClose={closePanel} />}
       {panel === "shrine" && <ShrineDialog cache={graves.cache} onGo={goToMyGrave} onClose={closePanel} />}
-      {panel === "housing" && <HousingOffice onClose={closePanel} />}
+      {panel === "housing" && <HousingOffice key={housingIntent?.houseId ?? housingIntent?.lot ?? "office"} intent={housingIntent} onClose={closePanel} />}
       {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { WORLD_LOTS } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { meStore } from "@/lib/hooks/useMe";
@@ -14,7 +15,9 @@ import HouseHud from "./HouseHud";
 import styles from "./housing.module.css";
 import OfficeDialog from "./OfficeDialog";
 
-type Mode = { kind: "office" } | { kind: "village" } | { kind: "house"; house: PublicHouse; mine: boolean; edit: boolean };
+type Mode = { kind: "office" } | { kind: "pending" } | { kind: "village" } | { kind: "house"; house: PublicHouse; mine: boolean; edit: boolean };
+/** 메인 맵 주거 구역에서 열었을 때: 그 집 문(houseId) 또는 빈 필지(lot) */
+export type HousingIntent = { houseId?: string; lot?: number } | null;
 /** 마을 위에 띄우는 창 */
 type Overlay = { kind: "office"; lot: number | null } | { kind: "exterior" } | null;
 
@@ -24,9 +27,12 @@ type Overlay = { kind: "office"; lot: number | null } | { kind: "exterior" } | n
  *  - 분양 마을: 게임은 village:enter로 마을 씬을 열고, 이 컴포넌트는 위쪽 막대(HUD)만 보여 준다
  *  - 집: 마을의 문이나 사무소 창에서 들어간다. 나오면 들어온 곳(마을 또는 월드)으로
  *  - 월드로 돌아오면 onClose (월드의 분양 사무소 앞). 집 안 "분양 사무소" 버튼은 창으로 돌아온다
+ *  - 분양 마을은 메인 맵의 주거 구역(1..WORLD_LOTS번지)이 됐다: 주거 구역의 집 문에서 열면(intent.houseId) 바로 그 집으로,
+ *    빈 필지 팻말에서 열면(intent.lot) 그 번지로 분양 창. "주거 구역 보기"는 창을 닫고 월드가 그 번지를 비춘다(world:lot).
+ *    WORLD_LOTS보다 큰 번지(예전에 분양된 먼 번지)만 예전 분양 마을 씬(2단지)으로 간다
  */
-export default function HousingOffice({ onClose }: { onClose: () => void }) {
-  const [mode, setMode] = useState<Mode>({ kind: "office" });
+export default function HousingOffice({ onClose, intent = null }: { onClose: () => void; intent?: HousingIntent }) {
+  const [mode, setMode] = useState<Mode>(intent?.houseId ? { kind: "pending" } : { kind: "office" });
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [my, setMy] = useState<MyHouseResponse | null>(null);
   const [myError, setMyError] = useState<string | null>(null);
@@ -62,6 +68,15 @@ export default function HousingOffice({ onClose }: { onClose: () => void }) {
     try {
       const village = fresh ? await housingApi.village(true) : await housingApi.village();
       const myHouseId = myRef.current?.house?.id ?? null;
+      // 메인 맵 주거 구역의 번지면: 창을 닫고 월드가 그 번지를 비춘다 (분양 마을 씬으로 가지 않는다)
+      const lot = spawnLot ?? myRef.current?.house?.lot ?? null;
+      if (!inScene.current && (lot === null || lot <= WORLD_LOTS)) {
+        bridge.emit("village:data", { village, myHouseId });
+        if (lot !== null) bridge.emit("world:lot", { lot, label: myHouseId && myRef.current?.house?.lot === lot ? "내 집" : `${lot}번지` });
+        else bridge.emit("world:lot", { lot: 1, label: "주거 구역" });
+        onCloseRef.current();
+        return;
+      }
       if (inScene.current && !spawnLot && fresh) bridge.emit("village:data", { village, myHouseId });
       else bridge.emit("village:enter", { village, myHouseId, spawnLot });
       inScene.current = true;
@@ -78,9 +93,16 @@ export default function HousingOffice({ onClose }: { onClose: () => void }) {
     (r: MyHouseResponse) => {
       const hadHouse = !!myRef.current?.house;
       const extChanged = JSON.stringify(myRef.current?.house?.exterior) !== JSON.stringify(r.house?.exterior);
+      const nameChanged = myRef.current?.house?.name !== r.house?.name;
       myRef.current = r;
       setMy(r);
       void meStore.refresh();
+      // 메인 맵 주거 구역도 바로 다시 세운다 (분양·외관·이름이 바뀌었을 때)
+      if (r.house && (!hadHouse || extChanged || nameChanged))
+        void housingApi
+          .village(true)
+          .then((village) => bridge.emit("village:data", { village, myHouseId: r.house?.id ?? null }))
+          .catch(() => undefined);
       // 마을에 있는 동안 분양·외관이 바뀌면 마을을 다시 그린다
       if (inScene.current && mode.kind === "village" && (!hadHouse || extChanged) && r.house) void goVillage(null, true);
     },
@@ -151,6 +173,33 @@ export default function HousingOffice({ onClose }: { onClose: () => void }) {
     };
   }, [visit]);
 
+  // 주거 구역에서 열린 창: 집 문이면 바로 그 집으로 (못 들어가면 안내 후 닫기)
+  const intentHouse = intent?.houseId ?? null;
+  useEffect(() => {
+    if (!intentHouse) return;
+    let alive = true;
+    const go = async () => {
+      // 내 집 문이면 주인으로 들어간다 (내 정보가 아직 없으면 한 번 받아 본다)
+      const me = myRef.current ?? (await housingApi.mine().catch(() => null));
+      if (!alive) return;
+      const mine = me?.house;
+      if (mine?.id === intentHouse) return setMode({ kind: "house", house: mine, mine: true, edit: false });
+      try {
+        const { house } = await housingApi.detail(intentHouse);
+        if (!alive) return;
+        setMode({ kind: "house", house, mine: false, edit: false });
+      } catch (e) {
+        if (!alive) return;
+        bridge.emit("toast", { message: errorMessage(e) });
+        onCloseRef.current();
+      }
+    };
+    void go();
+    return () => {
+      alive = false;
+    };
+  }, [intentHouse]);
+
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(null), 4000);
@@ -160,6 +209,8 @@ export default function HousingOffice({ onClose }: { onClose: () => void }) {
   const exterior = overlay?.kind === "exterior" && my?.house && (
     <ExteriorDialog my={my} onMy={onMy} onSaved={() => mode.kind === "village" && void goVillage(null, true)} onClose={() => setOverlay(null)} />
   );
+
+  if (mode.kind === "pending") return null;
 
   if (mode.kind === "house") {
     return (
@@ -240,7 +291,7 @@ export default function HousingOffice({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-      {overlay?.kind !== "exterior" && office(false, null)}
+      {overlay?.kind !== "exterior" && office(false, intent?.lot ?? null)}
       {exterior}
     </>
   );

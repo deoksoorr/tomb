@@ -1,10 +1,10 @@
 import { Grid } from "./pixel";
 
-// 머리 위 이모티콘 (손 흔들기·환호·헌화·살려주세요). 말풍선 안에 화면 픽셀 3배로 크게 그린다 (SpeechBubble.showIcon).
+// 머리 위 이모티콘 (손 흔들기·환호·헌화). 말풍선 안에 화면 픽셀 3배로 크게 그린다 (SpeechBubble.showIcon).
 // 순수 그리드라 테스트에서 크기·외곽선을 확인한다.
 
-export type EmoteIcon = "wave" | "cheer" | "flower" | "revive";
-export const EMOTE_ICONS: readonly EmoteIcon[] = ["wave", "cheer", "flower", "revive"];
+export type EmoteIcon = "wave" | "cheer" | "flower";
+export const EMOTE_ICONS: readonly EmoteIcon[] = ["wave", "cheer", "flower"];
 
 const LINE = 0x2a2420;
 
@@ -97,25 +97,7 @@ function flower(): Grid {
   return g;
 }
 
-/** 위로 솟는 불씨 */
-function revive(): Grid {
-  const g = new Grid(13, 13);
-  const outer = 0xffa040;
-  const mid = 0xffd36e;
-  const core = 0xfff4c0;
-  g.ellipse(6.5, 8, 4, 3.6, outer);
-  for (let yy = 1; yy < 7; yy++) {
-    const hw = Math.max(0, (yy - 1) * 0.7);
-    g.hline(Math.round(6 - hw), Math.round(6 + hw), yy, outer);
-  }
-  g.ellipse(6.5, 8.4, 2.6, 2.4, mid);
-  g.vline(6, 4, 7, mid);
-  g.ellipse(6.5, 9, 1.4, 1.4, core);
-  g.outline(LINE);
-  return g;
-}
-
-const ART: Record<EmoteIcon, () => Grid> = { wave, cheer, flower, revive };
+const ART: Record<EmoteIcon, () => Grid> = { wave, cheer, flower };
 
 export function emoteGrid(kind: EmoteIcon): Grid {
   return ART[kind]();

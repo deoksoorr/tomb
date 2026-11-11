@@ -6,11 +6,12 @@ import {
   DEFAULT_CHANNEL_CAPACITY,
   DEFAULT_MAX_CHANNELS,
   GRAVE_STYLES,
+  GRAVEYARD_CAPACITY,
   ITEMS,
   MAX_DECOR_PER_GRAVE,
 } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES } from "@/lib/economy";
-import { PRESENCE_INTERVAL_MS, SHRINE_KEEP_DAYS } from "@/lib/types";
+import { DEFAULT_PASS_DAYS, PRESENCE_INTERVAL_MS, SHRINE_KEEP_DAYS } from "@/lib/types";
 import { durationLabel, effectLabel, KIND_LABELS } from "../account/items";
 import Link from "next/link";
 import Dialog from "../ui/Dialog";
@@ -22,9 +23,9 @@ import styles from "./GuideDialog.module.css";
 const CONTROLS: [string, string, string][] = [
   ["걷기", "WASD · 방향키", "왼쪽 아래 조이스틱"],
   ["달리기", "Shift 누른 채 걷기", "달리기 버튼"],
-  ["점프 (묘비를 넘어가요)", "Space", "점프 버튼"],
+  ["점프 (낮은 것을 넘어가요)", "Space", "점프 버튼"],
   ["앉기·일어서기", "X 또는 C (벤치·의자 근처면 그 자리에)", "앉기 버튼 (근처에 자리가 있으면 빛나요)"],
-  ["묘비 보기·말 걸기", "E", "상호작용 버튼"],
+  ["말 걸기·살펴보기 (상점·묘비 등)", "E", "상호작용 버튼"],
   ["나무에 매달리기·그네·종 치기·잠수", "가까이 가서 E (화면 안내를 따라)", "상호작용 버튼"],
   ["수영·잠수", "물에 들어가면 헤엄쳐요 (잠수도 돼요)", "조이스틱으로 물에"],
   ["감정 표현", "1 손 흔들기 · 2 환호", "메뉴 → 감정 표현"],
@@ -64,6 +65,18 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
         </section>
 
         <section>
+          <h3>마을 안의 장소</h3>
+          <ul className={styles.points}>
+            <li>모닥불: 곁에 앉으면 불멍을 할 수 있어요. 다른 사람과 같이 쉬어 가요.</li>
+            <li>사냥터: 혼자 또는 함께 싸우고 미니게임을 하며 포인트를 모아요 (왼쪽 위 [사냥]으로도 열려요).</li>
+            <li>분양 사무소: 나만의 집을 꾸미고 다른 사람의 집에 좋아요를 눌러요 (왼쪽 위 [집]으로도 열려요).</li>
+            <li>유령 잡화점: 포인트로 꾸미기·폭죽·묘비 디자인권을 사요.</li>
+            <li>작은 묘역: 끝내지 못한 것들이 잠든 곳이에요. 아래 &quot;묘역과 묘비&quot;를 보세요.</li>
+            <li>자세한 건 각 장소에서 안내해요.</li>
+          </ul>
+        </section>
+
+        <section>
           <h3>포인트</h3>
           <table className={styles.table}>
             <thead>
@@ -93,7 +106,10 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
             <li>
               묘지에 머무르기만 해도 {PRESENCE_INTERVAL_MS / 60_000}분마다 포인트가 쌓여요(다른 창을 보고 있어도 괜찮아요).
             </li>
-            <li>랭킹의 &quot;포인트&quot; 탭은 지금까지 모은 포인트(써도 줄지 않아요) 순이에요.</li>
+            <li>
+              랭킹의 &quot;포인트&quot; 탭은 이번 주(월요일부터)·전체로 모은 포인트(써도 줄지 않아요) 순이에요. &quot;사냥&quot; 탭은
+              사냥터별 가장 빠른 클리어와 처치 수 순이에요.
+            </li>
             <li>한 곳(같은 IP)에서는 하루 {ATTEND_ACCOUNTS_PER_IP}개 계정까지만 출석 포인트를 받아요.</li>
           </ul>
         </section>
@@ -164,49 +180,39 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
         </section>
 
         <section>
-          <h3>묘비 디자인</h3>
+          <h3>묘역과 묘비</h3>
           <ul className={styles.points}>
+            <li>묘비 앞에서 할 수 있는 건 헌화(꽃 놓기)예요. 묘비마다 하루 한 번, 놓은 사람과 묘비 주인 모두 포인트를 받아요.</li>
             <li>
-              묘비를 세울 때 디자인을 골라요. 무료:{" "}
+              묘비는 한 사람에 하나만 쓸 수 있어요(메뉴 → 묘비 쓰기). 세운 뒤 {DEFAULT_PASS_DAYS}일(운영 상황에 따라 바뀔 수
+              있어요)이 지나면 성불해 묘역을 떠나요. 성불하면 소식으로 알려 드리고, 그 뒤에 새 묘비를 쓸 수 있어요.
+            </li>
+            <li>
+              묘역에는 채널마다 묘비 {GRAVEYARD_CAPACITY}개까지 놓여요. 자리가 모자라면 가장 오래된 묘비부터 조금 일찍 성불해요.
+            </li>
+            <li>성불한 묘비는 메뉴 → 성불한 이야기들에 남아요(최신 순·검색, 받은 헌화 수).</li>
+            <li>메뉴 → 내 묘비 가기를 누르면 캐릭터가 내 묘비 앞까지 걸어가요. 걷는 중에 움직이거나 점프하면 멈춰요.</li>
+            <li>
+              디자인: 무료{" "}
               {GRAVE_STYLES.filter((s) => s.free)
                 .map((s) => s.name)
                 .join(" · ")}
-              .
-            </li>
-            <li>
-              나머지는 상점의 디자인권이 있어야 해요(
+              , 나머지는 상점의 디자인권(
               {ITEMS.filter((i) => i.kind === "graveStyle")
                 .map((i) => `${i.name} ${i.price}P`)
                 .join(" · ")}
-              ). 묘비를 세우거나 내 묘비의 디자인을 바꿀 때 1개 써요.
+              )을 세우거나 바꿀 때 1개 써요. 세운 뒤에도 내 묘비 상세의 &quot;디자인 바꾸기&quot;로 바꿀 수 있어요.
             </li>
-            <li>세운 뒤에도 내 묘비 상세의 &quot;디자인 바꾸기&quot;로 바꿀 수 있어요.</li>
-          </ul>
-        </section>
-
-        <section>
-          <h3>내 묘비로 가기</h3>
-          <p>
-            [내 묘비] 버튼(데스크톱은 왼쪽 아래, 터치 화면은 오른쪽 위 메뉴 안)을 누르면 내가 세운 묘비 목록(자리·헌화·살려주세요 수)이 나오고, 고르면 그
-            앞으로 바로 가요. 하나뿐이면 누르자마자 가요. 지도에도 내 묘비가 표시돼요.
-          </p>
-        </section>
-        <section>
-          <h3>묘지 안의 장소</h3>
-          <ul className={styles.points}>
-            <li>사냥터: 혼자 또는 함께 싸우고 미니게임을 하며 포인트를 모아요.</li>
-            <li>분양 사무소: 나만의 집을 꾸미고 다른 사람의 집에 좋아요를 눌러요.</li>
             <li>
-              성황당: 이장한 내 묘비가 {SHRINE_KEEP_DAYS}일 동안 머무는 곳이에요. 그 안에 다시 모실 수 있어요(내 정보에서도
-              열 수 있어요).
+              성황당: 이장한 내 묘비가 {SHRINE_KEEP_DAYS}일 동안 머무는 곳이에요. 그 안에 다시 모실 수 있어요(내 정보에서
+              열어요). 다시 모시면 성불 기간은 그때부터 다시 세요.
             </li>
-            <li>자세한 건 각 장소에서 안내해요.</li>
           </ul>
         </section>
 
         <section className={styles.inquiry}>
           <h3>처음 왔을 때 안내</h3>
-          <p>걷기부터 헌화, 장소 소개까지 1분 남짓한 안내를 다시 볼 수 있어요.</p>
+          <p>걷기·앉기부터 모닥불·사냥터·집·묘역 소개까지 1분 남짓한 안내를 다시 볼 수 있어요.</p>
           <button type="button" className={ui.button} onClick={onReplayTutorial}>
             첫 방문 안내 다시 보기
           </button>

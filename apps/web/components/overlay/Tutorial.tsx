@@ -13,33 +13,44 @@ import styles from "./Tutorial.module.css";
 type Target = UiEvents["guide:point"]["target"];
 type Step = { title: string; text: string; point?: Target; waitFor?: "near" | "flowered" };
 
+/**
+ * 48번 순서: 이동·앉기·모닥불 → 사냥 → 집 → 상점 → (묘비는 뒤쪽, 해 보라고 붙잡지 않는다)
+ */
 function tutorialSteps(touch: boolean): Step[] {
   return [
     {
       title: "걸어 보기",
-      text: touch ? "왼쪽 아래 조이스틱으로 걸어요. [점프]로 묘비를 넘을 수 있어요." : "WASD나 방향키로 걸어요. Shift는 달리기, Space는 점프예요.",
+      text: touch ? "왼쪽 아래 조이스틱으로 걸어요. [점프]로 낮은 것을 넘을 수 있어요." : "WASD나 방향키로 걸어요. Shift는 달리기, Space는 점프예요.",
     },
-    { title: "가까운 묘비로", text: "화살표가 가리키는 묘비 앞으로 가 보세요.", point: "nearestGrave", waitFor: "near" },
     {
-      title: "헌화하기",
+      title: "앉아 쉬기",
       text: touch
-        ? "묘비 앞에서 [상호작용]을 누르고 🌼 헌화하기를 눌러 보세요."
-        : "묘비 앞에서 E를 누르고 🌼 헌화하기를 눌러 보세요.",
-      waitFor: "flowered",
+        ? "벤치나 의자 앞에서 [앉기]를 누르면 앉아요. 다시 걸으면 일어나요."
+        : "벤치나 의자 앞에서 X(또는 C)를 누르면 앉아요. 다시 걸으면 일어나요.",
+      point: "bench",
+    },
+    { title: "모닥불", text: "모닥불 곁에 앉으면 잠시 불멍을 할 수 있어요. 다른 사람과 같이 앉아도 좋아요.", point: "campfire" },
+    {
+      title: "사냥터",
+      text: `사냥과 미니게임으로 포인트를 모으는 곳이에요. 하루 최대 ${earnRule("hunt").dailyMax}포인트. ${touch ? "메뉴" : "왼쪽 위 [사냥]"}으로도 열 수 있어요.`,
+      point: "hunt",
     },
     {
-      title: "포인트",
-      text: `+${earnRule("flower").points} 포인트가 쌓였어요. 포인트로 상점에서 폭죽·꾸미기를 살 수 있어요.`,
+      title: "분양 사무소",
+      text: `나만의 집을 얻어 가구로 꾸밀 수 있어요. ${touch ? "메뉴" : "왼쪽 위 [집]"}으로도 열 수 있어요.`,
+      point: "housing",
     },
-    { title: "상점", text: "유령 잡화점이에요. 주인장에게 말을 걸면 상점이 열려요.", point: "shop" },
-    { title: "사냥터", text: "미니게임으로 포인트를 모으는 곳이에요.", point: "hunt" },
-    { title: "분양 사무소", text: "나만의 집을 얻어 꾸밀 수 있어요.", point: "housing" },
-    { title: "모닥불", text: "모닥불 곁에 앉으면 잠시 불멍을 할 수 있어요.", point: "campfire" },
+    { title: "상점", text: "유령 잡화점이에요. 주인장에게 말을 걸면 포인트로 꾸미기·폭죽을 살 수 있어요.", point: "shop" },
+    {
+      title: "작은 묘역",
+      text: `끝내지 못한 것들이 잠든 곳이에요. 묘비 앞에서 ${touch ? "[상호작용]" : "E"}를 누르면 꽃을 놓을 수 있어요(+${earnRule("flower").points}P). 내 묘비는 메뉴에서 한 사람에 하나 쓸 수 있고, 시간이 지나면 성불해요.`,
+      point: "nearestGrave",
+    },
     { title: "이제 자유롭게", text: "다시 보고 싶으면 ⓘ 안내에서 언제든 볼 수 있어요." },
   ];
 }
 
-/** 첫 방문 안내 (1분). 단계마다 월드의 장소를 가리키고, 묘비 근처·헌화는 실제로 해 보면 넘어간다 */
+/** 첫 방문 안내 (1분). 단계마다 월드의 장소를 가리킨다 (waitFor 단계는 실제로 해 보면 넘어간다) */
 export default function Tutorial({ touch, onDone }: { touch: boolean; onDone: () => void }) {
   const [steps] = useState(() => tutorialSteps(touch));
   const [index, setIndex] = useState(0);
