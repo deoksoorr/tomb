@@ -1,0 +1,446 @@
+/* 4·32·51번 낚시·채집·판매·도감. 다른 창과 같은 조용한 어두운 픽셀 스타일 (ui.module.css 변수) */
+
+/* ── 화면 아래 패널 (낚시·채집 중) ── */
+.dock {
+  position: fixed;
+  /* 내 캐릭터(화면 가운데)와 왼쪽 아래 메뉴 줄을 가리지 않게 오른쪽 아래 (줌 버튼 위) */
+  right: var(--safe-right);
+  bottom: calc(var(--safe-bottom) + 100px);
+  width: min(340px, calc(100vw - 2 * var(--gutter)));
+  padding: 10px 12px 12px;
+  background: var(--panel);
+  box-shadow: var(--px-border-strong);
+  color: var(--text);
+  display: grid;
+  gap: 8px;
+  z-index: 30;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+
+.dockHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dockHead strong {
+  color: var(--bone);
+  font-size: 13px;
+}
+
+.status {
+  min-height: 1.6em;
+  font-size: 14px;
+  color: var(--bone);
+  text-align: center;
+}
+
+.status[data-tone="hot"] {
+  color: #ffb070;
+}
+
+.status[data-tone="good"] {
+  color: var(--status-ok);
+}
+
+.status[data-tone="bad"] {
+  color: var(--danger);
+}
+
+.meter {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.track {
+  position: relative;
+  height: 10px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+  overflow: hidden;
+}
+
+.track > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--moss);
+}
+
+.track[data-kind="tension"] > span {
+  background: linear-gradient(90deg, #8fc27a 0%, #e0c36a 60%, #e0603a 100%);
+  background-size: 100% 100%;
+}
+
+.track[data-kind="tension"]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 82%;
+  width: 2px;
+  background: #e0603a;
+  opacity: 0.8;
+}
+
+.track[data-kind="gauge"] > span {
+  background: var(--candle);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.big {
+  flex: 1;
+  min-height: 52px;
+  font-size: 15px;
+}
+
+.big[data-hot="true"] {
+  animation: pulse 0.35s steps(2) infinite;
+}
+
+@keyframes pulse {
+  50% {
+    filter: brightness(1.35);
+  }
+}
+
+.keys {
+  font-size: 11px;
+  color: var(--faint);
+  text-align: center;
+}
+
+@media (max-width: 700px), (pointer: coarse) {
+  .dock {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(var(--safe-bottom) + 150px);
+  }
+}
+
+/* ── 잡았다 카드 ── */
+.catchCard {
+  position: fixed;
+  left: 50%;
+  top: calc(var(--safe-top) + 64px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--panel);
+  box-shadow: var(--px-border-strong);
+  color: var(--text);
+  z-index: 31;
+  pointer-events: none;
+  animation: rise 0.25s steps(4);
+}
+
+@keyframes rise {
+  from {
+    transform: translate(-50%, 10px);
+    opacity: 0;
+  }
+}
+
+.catchCard strong {
+  color: var(--bone);
+  font-size: 15px;
+}
+
+.catchMeta {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.badgeNew {
+  color: var(--candle);
+}
+
+.stars {
+  color: var(--candle);
+  letter-spacing: 1px;
+}
+
+/* ── 판매 창 ── */
+.npcHello {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.npcHello img {
+  flex: none;
+}
+
+.limits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.limits strong {
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+
+.sellList {
+  display: grid;
+  gap: 4px;
+  max-height: min(46vh, 380px);
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.sellRow {
+  display: grid;
+  grid-template-columns: 34px 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.sellRow small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.qty {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.qty button {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+}
+
+.price {
+  color: var(--candle);
+  font-variant-numeric: tabular-nums;
+  min-width: 48px;
+  text-align: right;
+}
+
+.sellFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.total {
+  font-size: 14px;
+}
+
+.total strong {
+  color: var(--candle);
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 16px 0;
+}
+
+/* ── 도감 ── */
+.dexTabs {
+  display: flex;
+  border-bottom: 2px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.dexTab {
+  flex: 1 0 auto;
+  min-height: 40px;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dexTab[aria-selected="true"] {
+  color: var(--bone);
+  box-shadow: inset 0 -2px 0 var(--candle);
+}
+
+.dexHead {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.dexHead > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.tiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tier {
+  font-size: 11px;
+  padding: 4px 8px;
+  min-height: 30px;
+}
+
+.tier[data-done="true"] {
+  opacity: 0.55;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 6px;
+}
+
+.cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  background: var(--surface);
+  border: 0;
+  padding: 0;
+  box-shadow: 0 0 0 1px var(--line);
+  cursor: pointer;
+}
+
+.cell[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--candle);
+}
+
+.cell[data-known="false"] img {
+  filter: brightness(0);
+  opacity: 0.35;
+}
+
+.cell .num {
+  position: absolute;
+  left: 3px;
+  top: 2px;
+  font-size: 9px;
+  color: var(--faint);
+}
+
+.cell .rare {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  font-size: 9px;
+  color: var(--candle);
+}
+
+.detail {
+  margin-top: 10px;
+  padding: 10px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.detail h4 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--bone);
+}
+
+.detail dl {
+  margin: 4px 0 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 8px;
+}
+
+.detail dt {
+  color: var(--muted);
+}
+
+.detail dd {
+  margin: 0;
+}
+
+.unknown img {
+  filter: brightness(0);
+  opacity: 0.35;
+}
+
+.titles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.titleTag {
+  padding: 2px 6px;
+  background: var(--moss-deep);
+  color: var(--moss);
+}
+
+/* ── 가방 칸 ── */
+.bagGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+}
+
+.bagItem {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 6px 2px 4px;
+  background: var(--surface);
+  font-size: 10px;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.2;
+}
+
+.bagItem b {
+  position: absolute;
+  right: 4px;
+  top: 2px;
+  color: var(--bone);
+  font-size: 11px;
+}
