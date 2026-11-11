@@ -4,6 +4,7 @@ import { useId, useState, type FormEvent } from "react";
 import { plotLabel } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { api, errorMessage } from "@/lib/api";
+import { useBusy } from "@/lib/busy";
 import { suggestEpitaph } from "@/lib/epitaph";
 import type { GraveCache } from "@/lib/hooks/useGraves";
 import { meStore, useMe } from "@/lib/hooks/useMe";
@@ -46,6 +47,8 @@ type Props = {
 
 /** 귀찮지 않게 꼭 필요한 것만: 이름 · 얼마나 살았나 · (사인) · (묘비명) */
 export default function BuryForm({ mode, mourner, cache, channel, graveCount, onClose }: Props) {
+  // 묘비를 쓰는 동안은 새 버전 자동 새로고침(큰 패치 포함)을 미룬다
+  useBusy("bury", true);
   const editing = mode.kind === "edit" ? mode.grave : null;
   const uid = useId();
   const [initial] = useState<QuickValues>(() =>

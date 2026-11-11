@@ -25,7 +25,9 @@ import { MoveBudget, RateLimiter, allocSid, dist, stepToward, type Point } from 
 
 // 채널 하나의 상태 머신. ChannelDO는 소켓·스토리지·타이머만 이어 주고 판정은 전부 여기서 동기적으로 한다.
 // Workers API를 쓰지 않으므로 Node에서 그대로 단위 테스트하고(channel.test.ts) 부하 테스트의 틱 벤치마크에도 쓴다.
-// 접속자 위치·상태·좌석은 메모리에만 둔다. 영구 저장하는 것은 재연결 유예 예약뿐이다.
+// 접속자 위치·상태·좌석은 메모리에 두고, 영구 저장은 재연결 유예 예약과 "접속자 스냅샷"(liveRecords) 둘이다.
+// 스냅샷은 실시간 서버 재배포(DO 재시작)로 소켓이 모두 끊겨도 같은 sid·좌석으로 돌아오게 하는 용도라
+// 좌석·입퇴장은 곧바로, 위치만 바뀐 것은 드물게 저장한다(저장 시점은 DO가 정한다: liveChanged).
 
 /** 소켓 attachment와 유예 예약에 저장하는 형태 (hibernation 뒤 복원용) */
 export type PeerRecord = {
@@ -78,6 +80,11 @@ export interface ChannelHost<C> {
   requestTick(): void;
   /** 인원(접속 중 + 유예 예약)이 바뀌었다 → 로비 보고 */
   countChanged(count: number): void;
+  /**
+   * 접속자 스냅샷(liveRecords)이 바뀌었다. urgent = 입장·퇴장·좌석·꾸미기처럼 재시작 뒤 꼭 맞아야 하는 변화,
+   * 아니면 위치·상태만 바뀐 것(드물게 저장해도 된다 — 복귀하는 클라이언트가 자기 좌표를 다시 알려 준다)
+   */
+  liveChanged?(urgent: boolean): void;
   /** 이 소켓에 런타임이 마지막으로 pong을 자동 응답한 시각(ms, 없으면 0) */
   lastPing(conn: C): number;
   /** 방문자가 이 채널에 자리를 잡았다(신규·복귀·교체) / 최종 퇴장했다 → 로비의 채널 간 중복 방지 레지스트리 */
@@ -127,6 +134,10 @@ export const ACT_INTERVAL_MS = 2_000;
 export const SAY_INTERVAL_MS = 3_000;
 /** warp 서버 쿨다운. 클라이언트(WARP_COOLDOWN_MS 1초)보다 짧게 둬서 네트워크 지터로 정상 요청이 버려지지 않게 한다 */
 export const SERVER_WARP_COOLDOWN_MS = 800;
+/** 입장·복귀 좌표가 다른 사람이 앉은 좌석 앵커에서 이 거리 안이면 그 좌석 앞(내려설 자리)으로 옮긴다 — 한 자리에 한 명 */
+export const SEAT_CLEAR_RADIUS = 6;
+/** 좌석 앞 내려설 자리 (클라이언트 standPoint의 STAND_OFFSET_Y와 같다) */
+export const SEAT_STAND_DY = 9;
 
 type Peer<C> = PeerRecord & {
   /** null = 연결이 끊겨 재연결 유예 중. 다른 사람에게는 멈춘 아바타로 계속 보인다 */
@@ -197,6 +208,13 @@ export class ChannelCore<C extends object> {
     return p && { ...this.record(p), online: p.conn !== null };
   }
 
+  /** 접속 중인 사람 전체의 저장 형태 (DO 재시작 복원용 스냅샷). 유예 중인 사람은 따로 예약으로 저장돼 있어 뺀다 */
+  liveRecords(): PeerRecord[] {
+    const out: PeerRecord[] = [];
+    for (const p of this.peers.values()) if (p.conn) out.push(this.record(p));
+    return out;
+  }
+
   /** 가장 이른 유예 만료 시각 (없으면 null) */
   nextExpiry(): number | null {
     let t: number | null = null;
@@ -204,8 +222,19 @@ export class ChannelCore<C extends object> {
     return t;
   }
 
-  /** hibernation에서 깨어났을 때: 소켓 attachment와 저장된 유예 예약으로 상태를 다시 세운다 */
-  restore(active: Iterable<[C, PeerRecord]>, reserved: Iterable<Reservation>, now: number): void {
+  /**
+   * hibernation에서 깨어났을 때·재시작했을 때: 소켓 attachment → 저장된 유예 예약 → 접속자 스냅샷 순으로 상태를 다시 세운다.
+   * 스냅샷에만 있는 사람(= 소켓이 사라졌다: 실시간 서버 재배포로 DO가 재시작했거나, hibernate 중에 끊겼다)은
+   * now + liveGraceMs까지의 유예 예약으로 바꾼다 → 다시 붙으면 기존 takeOver 경로로 같은 sid·좌석을 이어받는다.
+   * 스냅샷에서 예약으로 옮긴 인원 수를 돌려준다.
+   */
+  restore(
+    active: Iterable<[C, PeerRecord]>,
+    reserved: Iterable<Reservation>,
+    now: number,
+    live: Iterable<PeerRecord> = [],
+    liveGraceMs: number = this.cfg.graceMs,
+  ): number {
     for (const [conn, rec] of active) {
       if (!this.adopt(rec, conn, 0, now)) {
         this.host.persist(conn, null);
@@ -213,6 +242,20 @@ export class ChannelCore<C extends object> {
       }
     }
     for (const r of reserved) if (!this.adopt(r, null, r.until, now)) this.host.dropReservation(r.sid);
+    let revived = 0;
+    if (liveGraceMs > 0) {
+      for (const rec of live) {
+        if (!rec || typeof rec.sid !== "number" || typeof rec.visitorId !== "string") continue;
+        const until = now + liveGraceMs;
+        if (!this.adopt(rec, null, until, now)) continue; // 소켓이 살아 있거나(hibernate 복귀) 이미 예약이 있다
+        const p = this.peers.get(rec.sid)!;
+        if (p.state === STATE.walk || p.state === STATE.run) p.state = STATE.idle;
+        this.host.saveReservation({ ...this.record(p), until });
+        revived++;
+      }
+    }
+    if (revived > 0) this.host.liveChanged?.(true);
+    return revived;
   }
 
   // ── 입장 ──
@@ -227,7 +270,7 @@ export class ChannelCore<C extends object> {
     const newSid = this.admits(t.visitorId) ? allocSid(this.peers) : null;
     if (newSid === null) return this.host.close(conn, CLOSE.CHANNEL_FULL, "channel full");
 
-    const pos = t.spawn ?? SPAWN;
+    const pos = this.clearOfSeats(t.spawn ?? SPAWN);
     const rec: PeerRecord = {
       sid: newSid,
       visitorId: t.visitorId,
@@ -248,6 +291,7 @@ export class ChannelCore<C extends object> {
     this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
     this.host.countChanged(this.peers.size);
     this.host.visitorJoined(p.visitorId, p.joinedAt);
+    this.host.liveChanged?.(true);
   }
 
   /**
@@ -282,19 +326,33 @@ export class ChannelCore<C extends object> {
     // 이름·색·몸·꾸미기는 입장 때 한 번만 보낸다. 바뀌었을 때만 join을 다시 보낸다(클라이언트는 같은 sid의 join을 덮어쓰기로 처리).
     if (renamed) this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
     this.host.visitorJoined(p.visitorId, p.joinedAt);
+    this.host.liveChanged?.(true);
   }
 
   /** 복귀한 클라이언트가 알려 준 위치로 옮긴다(위치의 원천은 클라이언트). 앉아 있던 좌석 근처면 좌석을 유지한다. */
-  private relocate(p: Peer<C>, to: Point): void {
+  private relocate(p: Peer<C>, want: Point): void {
     const seat = p.seatId ? seatById(p.seatId) : undefined;
-    if (seat && dist(seat, to) <= SEAT_SERVER_RADIUS) return;
+    if (seat && dist(seat, want) <= SEAT_SERVER_RADIUS) return;
     if (p.seatId) this.releaseSeat(p);
+    // 그 사이 다른 사람이 앉은 좌석 위로 돌아오지 않는다 (클라이언트는 seatDenied를 받고 가까운 빈자리로 옮긴다)
+    const to = this.clearOfSeats(want, p.sid);
     if (p.x === to.x && p.y === to.y) return;
     p.x = p.tx = to.x;
     p.y = p.ty = to.y;
     p.state = STATE.idle; // 좌석을 놓았거나 자리를 옮겼다. 실제 상태는 클라이언트의 다음 MOVE가 알려 준다.
     this.chasing.delete(p.sid);
     this.markDirty(p);
+  }
+
+  /** 다른 사람이 앉아 있는 좌석 앵커 바로 위면 그 좌석 앞(내려설 자리)으로. 아니면 그대로 */
+  private clearOfSeats(pos: Point, self?: number): Point {
+    if (this.cfg.room) return pos;
+    for (const [seatId, sid] of this.seats) {
+      if (sid === self) continue;
+      const s = seatById(seatId);
+      if (s && dist(s, pos) < SEAT_CLEAR_RADIUS) return { x: s.x, y: s.y + SEAT_STAND_DY };
+    }
+    return pos;
   }
 
   private welcome(p: Peer<C>, channel: number, resumed: boolean): void {
@@ -505,6 +563,7 @@ export class ChannelCore<C extends object> {
     if (g.kind === "look") {
       p.look = g.look;
       this.save(p);
+      this.host.liveChanged?.(true);
       return this.broadcast(encodeEvent({ t: "look", sid: p.sid, look: p.look }));
     }
     if (!this.host.claimNonce(g.nonce, g.exp * 1000)) return; // 이미 쏜 폭죽
@@ -554,6 +613,7 @@ export class ChannelCore<C extends object> {
     this.markDirty(p);
     this.broadcast(encodeEvent({ t: "seat", seatId, sid: p.sid }));
     if (prevSeat) this.broadcast(encodeEvent({ t: "seat", seatId: prevSeat, sid: null }));
+    this.host.liveChanged?.(true);
   }
 
   private onStand(p: Peer<C>): void {
@@ -571,6 +631,7 @@ export class ChannelCore<C extends object> {
     p.seatId = null;
     p.saved = false;
     this.broadcast(encodeEvent({ t: "seat", seatId, sid: null }));
+    this.host.liveChanged?.(true);
   }
 
   /** 랭킹 클릭 등 의도된 순간이동: 속도 검증 없이 범위만 본다. 쿨다운 안의 요청은 무시. */
@@ -640,12 +701,14 @@ export class ChannelCore<C extends object> {
     this.broadcast(encodeEvent({ t: "leave", sid: p.sid }));
     this.host.countChanged(this.peers.size);
     this.host.visitorLeft(p.visitorId);
+    this.host.liveChanged?.(true);
   }
 
   private markDirty(p: Peer<C>): void {
     this.dirty.add(p.sid);
     p.saved = false;
     this.host.requestTick();
+    this.host.liveChanged?.(false);
   }
 
   private save(p: Peer<C>): void {

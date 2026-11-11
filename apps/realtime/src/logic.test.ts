@@ -1,6 +1,6 @@
-import { MAP_WIDTH, MAX_VALID_SPEED, RUN_SPEED } from "@tomb/protocol";
+import { CLIENT_VERSION, MAP_WIDTH, MAX_VALID_SPEED, RUN_SPEED } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { MoveBudget, RateLimiter, allocSid, parseChannel, parseSpawn, stepToward } from "./logic";
+import { MoveBudget, RateLimiter, allocSid, isOutdatedClient, parseChannel, parseSpawn, stepToward } from "./logic";
 
 describe("RateLimiter", () => {
   it("drops messages over 20/s for the rest of that second", () => {
@@ -78,5 +78,18 @@ describe("helpers", () => {
     expect(parseSpawn("3.5", "56")).toBeUndefined();
     expect(parseSpawn("5000", "9000", true)).toEqual({ x: 5000, y: 9000 }); // 방은 u16 범위만
     expect(parseSpawn("70000", "1", true)).toBeUndefined();
+  });
+});
+
+describe("isOutdatedClient (큰 패치 강제 새로고침)", () => {
+  it("v가 최소 버전보다 낮으면 거절, 없으면 1로 본다", () => {
+    expect(isOutdatedClient("1", 1)).toBe(false);
+    expect(isOutdatedClient("2", 1)).toBe(false); // 웹이 먼저 배포돼 더 새 클라이언트가 옛 서버에 붙어도 받는다
+    expect(isOutdatedClient(null, 1)).toBe(false); // 버전을 보내기 전 클라이언트 = 1
+    expect(isOutdatedClient(null, 2)).toBe(true);
+    expect(isOutdatedClient("1", 2)).toBe(true);
+    expect(isOutdatedClient("2", 2)).toBe(false);
+    expect(isOutdatedClient("x", 2)).toBe(true);
+    expect(isOutdatedClient(String(CLIENT_VERSION))).toBe(false); // 지금 빌드의 클라이언트는 언제나 받는다
   });
 });

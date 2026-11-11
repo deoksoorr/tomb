@@ -15,8 +15,9 @@
  *   GET /health              상태 확인
  *   GET /lobby               채널 목록과 인원(LobbyInfo). CORS는 ALLOWED_ORIGINS만, 엣지 캐시 2초
  *   GET /queue?t=            대기열 자리 확인(QueueStatus). 대기열 토큰(channel 0)만 받는다. 캐시 없음
- *   GET /ch/:n?t=&x=&y=      채널 WebSocket. Origin·토큰(그 채널용)을 검증한 뒤 Channel DO로 넘긴다
- *   GET /room/:id?t=&x=&y=   방(마을·집·사냥터) WebSocket. 토큰의 room이 id와 같아야 한다. 상한 ROOM_CAPACITY
+ *   GET /ch/:n?t=&x=&y=&v=   채널 WebSocket. Origin·클라이언트 버전·토큰(그 채널용)을 검증한 뒤 Channel DO로 넘긴다
+ *   GET /room/:id?t=&x=&y=&v= 방(마을·집·사냥터) WebSocket. 토큰의 room이 id와 같아야 한다. 상한 ROOM_CAPACITY
+ *   (v < MIN_CLIENT_VERSION이면 DO까지 가지 않고 4010으로 거절 → 클라이언트가 새로고침 창을 띄운다)
  */
 import { CLOSE, LOBBY_CACHE_SEC, ROOM_ID_RE } from "@tomb/protocol";
 import type { JoinTicket } from "./channel";
@@ -32,7 +33,7 @@ import {
   rejectSocket,
 } from "./auth";
 import { type Env, channelStub, lobbyStub, readConfig, roomStub } from "./config";
-import { parseChannel, parseSpawn } from "./logic";
+import { isOutdatedClient, parseChannel, parseSpawn } from "./logic";
 
 export { ChannelDO } from "./ChannelDO";
 export { LobbyDO } from "./LobbyDO";
@@ -53,12 +54,14 @@ export default {
 
 // ── GET /ch/:n ──
 
-/** WebSocket 업그레이드 요청이고 Origin이 허용 목록에 있는지. 아니면 바로 보낼 HTTP 응답 */
-function upgradeGate(req: Request, env: Env): Response | null {
+/** WebSocket 업그레이드 요청이고 Origin이 허용 목록에 있고 클라이언트 버전이 충분한지. 아니면 바로 보낼 응답 */
+function upgradeGate(req: Request, env: Env, url: URL): Response | null {
   if (req.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("expected websocket", { status: 426 });
   if (!isAllowedOrigin(req.headers.get("Origin"), parseOrigins(env.ALLOWED_ORIGINS))) {
     return new Response("forbidden origin", { status: 403 });
   }
+  // 큰 패치(맵·프로토콜 변경) 뒤 옛 화면: 토큰 검증·DO 호출 없이 바로 거절한다 (옛 화면이 재시도해도 비용이 거의 없다)
+  if (isOutdatedClient(url.searchParams.get("v"))) return rejectSocket(CLOSE.OUTDATED, "update required");
   return null;
 }
 
@@ -70,7 +73,7 @@ function forward(req: Request, stub: { fetch(r: Request): Promise<Response> }, t
 }
 
 async function channel(req: Request, env: Env, url: URL, rawN: string): Promise<Response> {
-  const gate = upgradeGate(req, env);
+  const gate = upgradeGate(req, env, url);
   if (gate) return gate;
   const n = parseChannel(rawN, readConfig(env).maxChannels);
   if (n === null) return rejectSocket(CLOSE.BAD_REQUEST, "bad channel");
@@ -86,7 +89,7 @@ async function channel(req: Request, env: Env, url: URL, rawN: string): Promise<
 // (월드 아바타는 입구에 idle로 남는다). 그래서 방은 로비 보고·대기열·채널 간 중복 정리를 하지 않는다.
 
 async function room(req: Request, env: Env, url: URL, rawId: string): Promise<Response> {
-  const gate = upgradeGate(req, env);
+  const gate = upgradeGate(req, env, url);
   if (gate) return gate;
   let id: string;
   try {

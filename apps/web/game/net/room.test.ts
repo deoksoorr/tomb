@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CLOSE, decodeMove, encodeSnapshot, PING, PONG, STATE, DIR } from "@tomb/protocol";
+import { CLIENT_VERSION, CLOSE, decodeMove, encodeSnapshot, PING, PONG, STATE, DIR } from "@tomb/protocol";
 import { RoomClient, type RoomStatus, type WsCtor } from "./RoomClient";
 import { isRoomId, parseRoomMessage, roomCloseAction, roomSocketUrl } from "./roomPolicy";
 import { BACKOFF_MAX_MS } from "./backoff";
@@ -17,13 +17,14 @@ describe("room policy", () => {
   });
 
   it("appends the spawn position to the ws url", () => {
-    expect(roomSocketUrl("wss://rt.test/room/village?t=abc", 10.4, 20.6)).toBe("wss://rt.test/room/village?t=abc&x=10&y=21");
-    expect(roomSocketUrl("wss://rt.test/room/village", 1, 2)).toBe("wss://rt.test/room/village?x=1&y=2");
+    expect(roomSocketUrl("wss://rt.test/room/village?t=abc", 10.4, 20.6)).toBe(`wss://rt.test/room/village?t=abc&x=10&y=21&v=${CLIENT_VERSION}`);
+    expect(roomSocketUrl("wss://rt.test/room/village", 1, 2)).toBe(`wss://rt.test/room/village?x=1&y=2&v=${CLIENT_VERSION}`);
   });
 
   it("close code → next step", () => {
     expect(roomCloseAction(1000, true)).toBe("leave");
     expect(roomCloseAction(CLOSE.REPLACED, false)).toBe("replaced");
+    expect(roomCloseAction(CLOSE.OUTDATED, false)).toBe("outdated");
     expect(roomCloseAction(CLOSE.INVALID_TOKEN, false)).toBe("refetch");
     expect(roomCloseAction(CLOSE.BAD_REQUEST, false)).toBe("refetch");
     expect(roomCloseAction(CLOSE.CHANNEL_FULL, false)).toBe("full");
@@ -147,7 +148,7 @@ describe("RoomClient", () => {
     await flush();
     expect(fetchMock).toHaveBeenCalledWith("/api/join/room", expect.objectContaining({ method: "POST", body: JSON.stringify({ room: "village" }) }));
     const ws = FakeWs.last!;
-    expect(ws.url).toBe("wss://rt.test/room/village?t=tok1&x=100&y=200");
+    expect(ws.url).toBe(`wss://rt.test/room/village?t=tok1&x=100&y=200&v=${CLIENT_VERSION}`);
     ws.open();
     ws.recv({ t: "welcome", sid: 1, cap: 30, resumed: false, peers: [{ sid: 2, x: 0, y: 0, name: "b", color: "#fff", state: 0, dir: 0, body: "cat", look: [] }] });
     expect(c.online).toBe(true);

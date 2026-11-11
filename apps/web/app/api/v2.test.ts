@@ -1,4 +1,4 @@
-import { verifyGrant, verifyJoinToken } from "@tomb/protocol";
+import { MIN_CLIENT_VERSION, verifyGrant, verifyJoinToken } from "@tomb/protocol";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AdminGrave } from "@/lib/admin";
@@ -93,6 +93,7 @@ describe("계정·출석", () => {
       hasCode: false,
       inventory: {},
       equipped: [],
+      stash: [],
       graves: [],
       activityUnread: 0,
       nameChange: { nextAllowedAt: 0, cost: 0 },
@@ -285,12 +286,12 @@ describe("GET /api/version", () => {
   it("배포 식별자, 캐시하지 않는다", async () => {
     const res = await version.GET(call("/api/version"));
     expect(res.headers.get("cache-control")).toBe("no-store");
-    expect(await res.json()).toEqual({ version: "dev" });
+    expect(await res.json()).toEqual({ version: "dev", minClient: MIN_CLIENT_VERSION });
     vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "abc123");
     try {
-      expect(await bodyOf(version.GET(call("/api/version")))).toEqual({ version: "abc123" });
+      expect(await bodyOf(version.GET(call("/api/version")))).toEqual({ version: "abc123", minClient: MIN_CLIENT_VERSION });
       vi.stubEnv("VERCEL_DEPLOYMENT_ID", "dpl_1");
-      expect(await bodyOf(version.GET(call("/api/version")))).toEqual({ version: "dpl_1" });
+      expect(await bodyOf(version.GET(call("/api/version")))).toEqual({ version: "dpl_1", minClient: MIN_CLIENT_VERSION });
     } finally {
       vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "");
       vi.stubEnv("VERCEL_DEPLOYMENT_ID", "");

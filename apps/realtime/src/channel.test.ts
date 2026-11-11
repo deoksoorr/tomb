@@ -13,6 +13,7 @@ import {
   type PeerState,
   type S2C,
   type StateId,
+  type DirId,
 } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import {
@@ -69,7 +70,7 @@ function setup(capacity = 3, graceMs = 20_000, room = false) {
     core.join(c, { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn, look, body: "hood" }, now);
     return c;
   };
-  return { core, reservations, counts, visitors, conn, join };
+  return { core, reservations, counts, visitors, conn, join, host };
 }
 
 const events = (c: Conn) => c.out.filter((d): d is string => typeof d === "string").map((d) => JSON.parse(d) as S2C);
@@ -77,7 +78,7 @@ const snapshots = (c: Conn) =>
   c.out.filter((d): d is ArrayBuffer => typeof d !== "string").map((d) => decodeSnapshot(d)!);
 const welcome = (c: Conn) => events(c).find((e) => e.t === "welcome") as Extract<S2C, { t: "welcome" }>;
 const clear = (...cs: Conn[]) => cs.forEach((c) => (c.out.length = 0));
-const move = (x: number, y: number, state: StateId = STATE.walk, dir = DIR.down) => encodeMove({ x, y, state, dir, seq: 0 });
+const move = (x: number, y: number, state: StateId = STATE.walk, dir: DirId = DIR.down) => encodeMove({ x, y, state, dir, seq: 0 });
 const send = (msg: C2S) => encodeEvent(msg);
 
 /** 벤치 A 첫 좌석 (맵 배치가 바뀌어도 좌석 기준으로 테스트한다) */
@@ -657,5 +658,138 @@ describe("restore after hibernation", () => {
     expect(welcome(c).peers.find((p) => p.sid === 1)?.body).toBe("hood"); // 이전 버전 예약 → 기본 몸
     core.message(a, send({ t: "stand" }), 0); // 복원된 소켓이 그대로 동작
     expect(events(c)).toContainEqual({ t: "seat", seatId: "cA", sid: null });
+  });
+});
+
+describe("restart (redeploy) survival / seat restore", () => {
+  /** 실시간 서버 재배포 흉내: 지금 core의 접속자 스냅샷·유예 예약만 들고 새 core를 만든다 (소켓은 모두 사라짐) */
+  function redeploy(old: ReturnType<typeof setup>, now: number, liveGraceMs = 60_000) {
+    const live = old.core.liveRecords();
+    const reserved = [...old.reservations.values()];
+    const next = setup(3);
+    for (const r of reserved) next.reservations.set(r.sid, r);
+    const revived = next.core.restore([], reserved, now, live, liveGraceMs);
+    return { next, revived };
+  }
+
+  it("liveRecords holds only connected peers (with seat), and changes are reported (urgent for seats/join/leave)", () => {
+    const s = setup();
+    const calls: boolean[] = [];
+    // 호스트에 liveChanged를 붙인 core를 따로 만든다 (DO는 urgent면 0.5초 뒤, 아니면 드물게 저장한다)
+    const host: ChannelHost<Conn> = { ...s.host, liveChanged: (u) => void calls.push(u) };
+    const core = new ChannelCore<Conn>({ capacity: 3, graceMs: 20_000 }, host);
+    const a = s.conn("a");
+    core.join(a, { visitorId: "a", name: "a", color: AVATAR_COLORS[0], channel: 1, spawn: { x: bA0.x + 4, y: bA0.y + 4 }, look: [], body: "hood" }, 0);
+    expect(calls).toEqual([true]);
+    core.message(a, send({ t: "sit", seatId: "bA-0" }), 0);
+    expect(calls.at(-1)).toBe(true);
+    expect(core.liveRecords()).toMatchObject([{ sid: 1, visitorId: "a", seatId: "bA-0", state: STATE.sitChair }]);
+    calls.length = 0;
+    core.message(a, move(bA0.x, bA0.y, STATE.sitChair, DIR.left), 0); // 방향만 바뀜 → 급하지 않음
+    expect(calls).toEqual([false]);
+    core.disconnect(a, 1006, 100);
+    expect(core.liveRecords()).toEqual([]); // 유예 중인 사람은 예약으로 따로 저장된다
+  });
+
+  it("after a restart everyone is a reservation; reconnecting resumes the same sid and seat (others see no leave/join)", () => {
+    const old = setup();
+    const a = old.join("a", 0, { x: bA0.x + 6, y: bA0.y + 6 });
+    old.join("b", 0, { x: 300, y: 300 });
+    old.core.message(a, send({ t: "sit", seatId: "bA-0" }), 0);
+
+    const { next, revived } = redeploy(old, 10_000);
+    expect(revived).toBe(2);
+    expect(next.core.peer(1)).toMatchObject({ online: false, seatId: "bA-0", state: STATE.sitChair });
+    expect(next.reservations.get(1)).toMatchObject({ seatId: "bA-0", until: 70_000 });
+    expect(next.core.nextExpiry()).toBe(70_000);
+
+    // B가 먼저 돌아온다 → A는 그 자리에 앉은 채(유예)로 보인다
+    const b2 = next.join("b", 11_000, { x: 300, y: 300 });
+    expect(welcome(b2)).toMatchObject({ sid: 2, resumed: true, seats: { "bA-0": 1 } });
+    expect(welcome(b2).peers).toMatchObject([{ sid: 1, x: bA0.x, y: bA0.y, state: STATE.sitChair }]);
+    // A가 좌석 좌표로 돌아온다 → 같은 sid·좌석, B에게는 아무 이벤트도 없다(입구 순간이동·중복 아바타 없음)
+    const a2 = next.join("a", 12_000, { x: bA0.x, y: bA0.y });
+    expect(welcome(a2)).toMatchObject({ sid: 1, resumed: true, seats: { "bA-0": 1 } });
+    expect(events(b2).filter((e) => e.t !== "welcome")).toEqual([]);
+    next.core.tick(12_100);
+    expect(snapshots(b2)).toEqual([]);
+    expect(next.core.count).toBe(2);
+  });
+
+  it("hibernation wake: a snapshot entry with a live socket is not duplicated", () => {
+    const old = setup();
+    const a = old.join("a");
+    const live = old.core.liveRecords();
+    const fresh = setup();
+    const revived = fresh.core.restore([[a, a.att!]], [], 0, live, 60_000);
+    expect(revived).toBe(0);
+    expect(fresh.core.count).toBe(1);
+    expect(fresh.core.peer(1)?.online).toBe(true);
+    expect(fresh.reservations.size).toBe(0);
+  });
+
+  it("restored reservations expire with seat release + leave (no ghost)", () => {
+    const old = setup();
+    const a = old.join("a", 0, { x: bA0.x, y: bA0.y });
+    old.core.message(a, send({ t: "sit", seatId: "bA-0" }), 0);
+    const { next } = redeploy(old, 0, 30_000);
+    const b = next.join("b", 1_000);
+    clear(b);
+    next.core.expire(30_000);
+    expect(events(b)).toEqual([
+      { t: "seat", seatId: "bA-0", sid: null },
+      { t: "leave", sid: 1 },
+    ]);
+  });
+});
+
+describe("one seat, one person (restore after a long absence)", () => {
+  it("a new joiner on someone else's seat is placed in front of it, never on it", () => {
+    const { core, join } = setup();
+    const c = join("c", 0, { x: bA0.x + 4, y: bA0.y });
+    core.message(c, send({ t: "sit", seatId: "bA-0" }), 0);
+    // A는 유예가 끝난 뒤 저장해 둔 좌석 좌표로 새로 들어온다
+    const a = join("a", 30_000, { x: bA0.x, y: bA0.y });
+    expect(welcome(a)).toMatchObject({ sid: 2, resumed: false, seats: { "bA-0": 1 } });
+    expect(core.peer(2)).toMatchObject({ x: bA0.x, y: bA0.y + 9, seatId: null });
+    // 그 좌석을 달라고 해도 거절 → 같은 좌석 2명은 없다
+    core.message(a, send({ t: "sit", seatId: "bA-0" }), 30_000);
+    expect(events(a)).toContainEqual({ t: "seatDenied", seatId: "bA-0" });
+    expect(core.peer(1)?.seatId).toBe("bA-0");
+    // 옆 빈자리는 받을 수 있다
+    core.message(a, send({ t: "sit", seatId: "bA-1" }), 30_000);
+    expect(core.peer(2)?.seatId).toBe("bA-1");
+  });
+
+  it("a resumed peer whose seat was taken during grace is moved off it", () => {
+    const { core, join, conn } = setup();
+    const a = join("a", 0, { x: bA0.x, y: bA0.y });
+    core.message(a, send({ t: "sit", seatId: "bA-0" }), 0);
+    core.disconnect(a, 1001, 0);
+    core.expire(20_000); // 유예 만료 → 좌석·sid 반납
+    const c = join("c", 21_000, { x: bA0.x + 2, y: bA0.y });
+    core.message(c, send({ t: "sit", seatId: "bA-0" }), 21_000);
+    const a2 = join("a", 25_000, { x: bA0.x, y: bA0.y }, conn("a2"));
+    expect(welcome(a2).resumed).toBe(false);
+    // 옛 A는 이미 leave 처리됨 → 남들 화면에도, 새 A의 목록에도 유령이 없다 (C만 있다)
+    expect(welcome(a2).peers.map((p) => p.name)).toEqual(["c"]);
+    expect(core.count).toBe(2);
+    expect(core.peer(welcome(a2).sid)).toMatchObject({ y: bA0.y + 9, seatId: null });
+  });
+
+  it("takeOver within grace keeps the seat when the client comes back on it", () => {
+    const { core, join, conn } = setup();
+    const a = join("a", 0, { x: bA0.x, y: bA0.y });
+    const b = join("b");
+    core.message(a, send({ t: "sit", seatId: "bA-0" }), 0);
+    core.tick(50);
+    core.disconnect(a, 1001, 100);
+    core.tick(150);
+    clear(b);
+    const a2 = join("a", 3_000, { x: bA0.x, y: bA0.y }, conn("a2"));
+    expect(welcome(a2)).toMatchObject({ sid: 1, resumed: true, seats: { "bA-0": 1 } });
+    core.tick(3_100);
+    expect(events(b)).toEqual([]);
+    expect(snapshots(b)).toEqual([]);
   });
 });

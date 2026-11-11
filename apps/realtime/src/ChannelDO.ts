@@ -13,6 +13,11 @@ import { type Env, lobbyStub, readConfig } from "./config";
 // - 재연결 유예 예약: storage("r:<sid>") + 알람. 소켓이 없으니 attachment에 둘 수 없고, hibernate 중에도 만료돼야 한다.
 // - 채널 번호: storage("channel"). 소켓이 하나도 없을 때 깨어난 알람도 로비에 보고할 수 있게.
 // - 쓴 폭죽 nonce: storage("n:<nonce>") → 증서 만료 시각. hibernate 뒤에도 같은 증서를 다시 쏘지 못하게.
+// - 접속자 스냅샷: storage("live") = 접속 중인 사람 전체(PeerRecord[])를 키 하나에 묶어 쓴다(쓰기 1건 = 행 1개).
+//   실시간 서버를 재배포하면 DO가 재시작되며 소켓이 모두 끊기고 attachment도 사라진다. 그때 이 스냅샷으로
+//   모두를 유예 예약(RESTART_GRACE_MS)으로 되살려, 다시 붙는 클라이언트가 같은 sid·좌석을 이어받게 한다(takeOver).
+//   쓰기 비용을 아끼려고 입장·퇴장·좌석·꾸미기 변화는 LIVE_DEBOUNCE_MS로 묶어 쓰고, 위치만 바뀐 것은
+//   LIVE_POS_MIN_MS에 한 번 정도만 쓴다(복귀하는 클라이언트가 어차피 자기 좌표를 다시 알려 준다). 방(room)은 쓰지 않는다.
 //
 // 알람 하나로 두 가지를 한다: 재연결 유예 만료, 그리고 연결이 있는 동안 5분마다 유령 연결 정리(reap).
 
@@ -21,6 +26,18 @@ const CHANNEL_KEY = "channel";
 /** 방 모드면 방 id ("room:{id}" 이름의 DO). 채널 DO에는 없다 */
 const ROOM_KEY = "room";
 const NONCE_PREFIX = "n:";
+const LIVE_KEY = "live";
+/** 좌석·입퇴장 변화를 저장하기까지 모으는 시간 */
+const LIVE_DEBOUNCE_MS = 500;
+/** 위치만 바뀐 경우 저장 최소 간격 (틱 루프가 멈출 때 이만큼 지났으면 쓴다) */
+const LIVE_POS_MIN_MS = 30_000;
+/** 계속 움직이는 사람이 있어 틱 루프가 멈추지 않을 때의 위치 저장 간격 */
+const LIVE_POS_MAX_MS = 60_000;
+/**
+ * 재시작(재배포) 뒤 스냅샷으로 되살린 사람을 기다리는 시간. 평소 유예(20초)보다 길게 둔다 —
+ * 숨겨 둔 탭은 브라우저가 타이머를 1분 단위로 묶어 재접속이 그만큼 늦을 수 있다.
+ */
+const RESTART_GRACE_MIN_MS = 60_000;
 /** 새 방문자 입장 때 로비에 묻는 시간 상한. 넘기면(로비 장애) 받아 준다 — 순서보다 입장 가능성이 우선 */
 const ADMIT_TIMEOUT_MS = 3_000;
 /** 연결이 있는 동안 유령 연결을 확인하는 알람 주기. DO가 이미 깨어 있을 때(틱 루프가 멈출 때)도 확인한다 */
@@ -38,6 +55,10 @@ export class ChannelDO extends DurableObject<Env> {
   private reapDueAt: number | null = null;
   /** 로비 보고에 붙이는 단조 증가 번호. 시각 기반이라 hibernate 뒤 새 인스턴스에서도 앞선 번호보다 크다 */
   private seq = 0;
+  private liveTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 위치만 바뀌어 아직 저장하지 않은 변화가 있다 */
+  private livePosDirty = false;
+  private liveSavedAt = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -56,7 +77,14 @@ export class ChannelDO extends DurableObject<Env> {
       if (rec) active.push([ws, rec]);
     }
     const reserved = Array.from(ctx.storage.kv.list<Reservation>({ prefix: RES_PREFIX }), ([, r]) => r);
-    this.core.restore(active, reserved, Date.now());
+    const live = this.room === null ? (ctx.storage.kv.get<PeerRecord[]>(LIVE_KEY) ?? []) : [];
+    const { graceMs } = readConfig(env);
+    const revived = this.core.restore(active, reserved, Date.now(), Array.isArray(live) ? live : [], Math.max(graceMs, RESTART_GRACE_MIN_MS));
+    this.liveSavedAt = Date.now();
+    if (revived > 0) {
+      console.log(`channel ${this.channel}: restored ${revived} peer(s) from live snapshot`);
+      this.scheduleReport();
+    }
   }
 
   /**
@@ -99,6 +127,11 @@ export class ChannelDO extends DurableObject<Env> {
           ctx.storage.kv.delete(RES_PREFIX + sid);
         },
         requestTick: () => this.startTicking(),
+        liveChanged: (urgent) => {
+          if (room) return;
+          if (urgent) this.scheduleLiveSave();
+          else this.livePosDirty = true;
+        },
         countChanged: () => {
           if (!room) this.scheduleReport();
         },
@@ -245,12 +278,42 @@ export class ChannelDO extends DurableObject<Env> {
     if (!this.core.tick(now)) {
       this.ticking = false;
       this.core.reap(now); // 어차피 깨어 있는 김에 유령 연결을 정리한다(정리되면 유예 처리로 틱이 다시 돈다)
+      // 곧 hibernate될 수 있다 → 위치 변화가 쌓였고 마지막 저장에서 충분히 지났으면 한 번 쓴다
+      if (this.livePosDirty && now - this.liveSavedAt >= LIVE_POS_MIN_MS) this.saveLive();
       return;
     }
+    if (this.livePosDirty && now - this.liveSavedAt >= LIVE_POS_MAX_MS) this.saveLive();
     this.nextTickAt += TICK_MS;
     if (this.nextTickAt <= now) this.nextTickAt = now + TICK_MS; // 크게 밀렸으면 따라잡지 말고 다시 맞춘다
     setTimeout(this.onTick, this.nextTickAt - now);
   };
+
+  // ── 접속자 스냅샷 (재배포 대비) ──
+
+  private scheduleLiveSave(): void {
+    if (this.liveTimer !== null) return;
+    this.liveTimer = setTimeout(() => {
+      this.liveTimer = null;
+      this.saveLive();
+    }, LIVE_DEBOUNCE_MS);
+  }
+
+  /** 접속 중인 사람 전체를 키 하나에 쓴다. 아무도 없으면 지운다 */
+  private saveLive(): void {
+    if (this.liveTimer !== null) {
+      clearTimeout(this.liveTimer);
+      this.liveTimer = null;
+    }
+    this.livePosDirty = false;
+    this.liveSavedAt = Date.now();
+    const recs = this.core.liveRecords();
+    try {
+      if (recs.length > 0) this.ctx.storage.kv.put(LIVE_KEY, recs);
+      else this.ctx.storage.kv.delete(LIVE_KEY);
+    } catch (e) {
+      console.error("live snapshot save failed", e);
+    }
+  }
 
   // ── 로비 보고 ──
   // 인원이 바뀌면 1초 뒤 한 번 보고한다(그 사이 변화는 합친다). 보고가 유실돼도 로비가 5분마다 다시 물어 본다.

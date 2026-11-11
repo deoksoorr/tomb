@@ -126,18 +126,6 @@
   transform: translateX(-50%);
 }
 
-.versionBanner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 6px 6px 14px;
-  background: var(--panel);
-  color: var(--bone);
-  white-space: nowrap;
-  box-shadow: var(--px-border-strong);
-  pointer-events: auto;
-}
-
 /* [내 묘비][가방] 데스크톱: 왼쪽 아래 폭죽 버튼 위 · 터치: 왼쪽 줌 버튼 위 */
 .leftRow {
   position: absolute;

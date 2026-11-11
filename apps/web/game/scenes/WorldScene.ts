@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
-import { CAMPFIRES, campfireOfSeat, DIR, FURNITURE, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, SHOP, SHOP_DOOR, SPAWN, STATE, TELEPORT_DIST, type ActKind, type PeerInfo, type Seat, type Sid } from "@tomb/protocol";
+import { CAMPFIRES, campfireOfSeat, DIR, FURNITURE, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, seatById, SHOP, SHOP_DOOR, SPAWN, STATE, TELEPORT_DIST, type ActKind, type DirId, type PeerInfo, type Seat, type Sid, type WelcomeMsg } from "@tomb/protocol";
+import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import type { PublicGrave } from "@/lib/types";
 import { TEX } from "../assets/manifest";
 import { bridge, type NetStatus, type UiEvents } from "../bridge";
@@ -14,8 +15,10 @@ import type { KeyAction } from "../input/Keyboard";
 import { escape, overlaps, type Box } from "../logic/jump";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { nearestObject, pickInteraction } from "../logic/interact";
-import { neighborSeat, pickSeat, sideIntent } from "../logic/sit";
+import { anchorAt, nudgeSpot, restoreAfterDenied } from "../logic/restore";
+import { neighborSeat, pickSeat, sideIntent, standPoint } from "../logic/sit";
 import { RealtimeClient } from "../net/RealtimeClient";
+import type { NetPose } from "../net/sendThrottle";
 import { GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
 import { CameraRig } from "../world/CameraRig";
@@ -59,6 +62,10 @@ const SAY_COOLDOWN_MS = 1000;
 type GuideTarget = NonNullable<UiEvents["guide:point"]["target"]>;
 /** 원격 아바타 수와 HUD 인원이 어긋났는지 보는 주기 (어긋나면 sync 1회) */
 const PEER_CHECK_MS = 5000;
+/** 복원한 좌석을 서버가 거절했을 때 대신 앉을 자리를 찾는 시한 (첫 welcome부터) */
+const RESTORE_SEAT_WINDOW_MS = 8000;
+/** 대신 앉을 좌석 앞으로 옮긴 뒤 앉기 요청까지 (옮긴 위치 MOVE가 서버에 먼저 닿게) */
+const RESTORE_SIT_DELAY_MS = 300;
 
 export class WorldScene extends Phaser.Scene {
   private ctx!: GameContext;
@@ -119,6 +126,13 @@ export class WorldScene extends Phaser.Scene {
   private guide!: GuideArrow;
   private readonly swingRiders: number[] = [];
   private campfire!: CampfireView;
+  /** 새로고침 전 자리 기록 (첫 welcome에서 서버 기준으로 마무리한다) */
+  private resume: ResumeState | null = null;
+  /** 복원한 좌석: 서버가 거절하면 가까운 빈자리로 (until까지) */
+  private restoreSeat: { id: string; until: number } | null = null;
+  /** 내 몸 모양 (입장 토큰 값이 오면 갱신). 새로고침 복원 기록에 싣는다 */
+  private selfBody: string | undefined;
+  private readonly poseBuf: NetPose = { x: 0, y: 0, state: STATE.idle, dir: DIR.down };
 
   constructor() {
     super("world");
@@ -159,6 +173,17 @@ export class WorldScene extends Phaser.Scene {
         openOnStart = p.id;
       } else if (!initial) this.pendingFocus = opts.focusGraveId;
     }
+    // 새로고침 직전 자리로 시작한다 (의자는 그 앞에 서서 앉는 동작으로 — 거절되면 바닥이 아니라 그 앞으로 돌아오게)
+    this.resume = opts.resume ?? null;
+    this.restoreSeat = null;
+    this.selfBody = isAvatarBody(opts.body) ? opts.body : undefined;
+    if (this.resume) {
+      const r = this.resume;
+      const seat = r.pose === "sitChair" && r.seatId ? seatById(r.seatId) : undefined;
+      spawn = seat ? standPoint(seat) : { x: r.x, y: r.y };
+      openOnStart = null;
+      this.pendingFocus = null;
+    }
 
     this.player = new Player(this, this.atlas, spawn.x, spawn.y, opts.color, opts.name, this.myBody());
     this.player.water = inWater;
@@ -168,6 +193,7 @@ export class WorldScene extends Phaser.Scene {
     this.graveCollider = this.physics.add.collider(this.player.sprite, this.field.colliders);
     this.furnitureCollider = this.physics.add.collider(this.player.sprite, this.map.furnitureColliders);
     this.player.onLand = () => this.onPlayerLand();
+    if (this.resume) this.applyResumePose(this.resume);
     this.playerGlow = this.add.image(spawn.x, spawn.y, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffe2a8).setDepth(DEPTH.lights);
 
     this.rig = new CameraRig(this, this.player.sprite, canvas, (x, y) => this.onTap(x, y));
@@ -200,6 +226,7 @@ export class WorldScene extends Phaser.Scene {
     this.bindBridge();
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.onResize, this);
+    window.addEventListener("pagehide", this.onPageHide);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
     this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanup, this);
     this.ctx.disposers.push(() => this.cleanup());
@@ -249,12 +276,17 @@ export class WorldScene extends Phaser.Scene {
           this.clearRemotes();
           this.syncSeats(m.seats);
           for (const p of m.peers) this.addRemote(p);
+          const r = this.resume;
+          if (r) {
+            this.resume = null;
+            this.finishResume(r, m);
+          }
           // 의자에 앉은 채로 다시 붙었으면 좌석을 다시 확인한다
           const seat = this.player.state === "sitChair" ? this.player.seat : null;
           if (seat) {
             const owner = this.seats.get(seat.id);
             if (owner === undefined) this.net.sit(seat.id);
-            else if (owner !== m.sid) this.player.seatDenied(seat.id, this.time.now);
+            else if (owner !== m.sid) this.mySeatDenied(seat.id);
           }
         },
         onJoin: (p) => this.addRemote(p),
@@ -278,13 +310,16 @@ export class WorldScene extends Phaser.Scene {
           }
           for (const [id, owner] of this.seats) if (owner === sid) this.seats.delete(id);
           this.seats.set(seatId, sid);
-          if (sid === this.net.mySid) this.player.seatConfirmed(seatId);
+          if (sid === this.net.mySid) {
+            this.player.seatConfirmed(seatId);
+            if (this.restoreSeat?.id === seatId) this.restoreSeat = null; // 복원한 좌석을 서버가 확정
+          }
           const r = this.remotes.get(sid);
           if (r) r.seatId = seatId;
-          // 다른 사람이 먼저 앉았다 → 나는 바닥 앉기
-          if (sid !== this.net.mySid && this.player.seat?.id === seatId) this.player.seatDenied(seatId, this.time.now);
+          // 다른 사람이 먼저 앉았다 → 나는 바닥 앉기 (복원 중이면 가까운 빈자리로)
+          if (sid !== this.net.mySid && this.player.seat?.id === seatId) this.mySeatDenied(seatId);
         },
-        onSeatDenied: (seatId) => this.player.seatDenied(seatId, this.time.now),
+        onSeatDenied: (seatId) => this.mySeatDenied(seatId),
         onEmote: (sid, kind, graveId) => this.playRemoteEmote(sid, kind, graveId),
         onGraveEvent: (_sid, kind, graveId) => {
           bridge.emit("net:graveEvent", { kind, graveId });
@@ -307,11 +342,111 @@ export class WorldScene extends Phaser.Scene {
           if (r.visible) this.sfx.play("say", 0.3);
         },
         onSelfBody: (body) => {
-          if (isAvatarBody(body)) this.player.view.setBody(body);
+          if (!isAvatarBody(body)) return;
+          this.selfBody = body;
+          this.player.view.setBody(body);
         },
       },
     );
   }
+
+  // ── 새로고침 뒤 자리 복원 (lib/resume.ts) ──
+
+  /** 접속 전: 저장된 자세를 그대로 보여 준다 (서버 판정은 첫 welcome에서) */
+  private applyResumePose(r: ResumeState): void {
+    const pl = this.player;
+    const now = this.time.now;
+    pl.dir = r.dir as DirId;
+    if (r.pose === "sitChair") {
+      const seat = r.seatId ? seatById(r.seatId) : undefined;
+      // 접속 전이라 좌석 요청은 보내지 않는다 (요청은 welcome에서). 의자 앞에서 앉는 동작으로 시작
+      pl.sit(seat ?? null, now, null);
+    } else if (r.pose === "sitGround") {
+      pl.sit(null, now, null);
+    } else if (r.pose === "swing" || r.pose === "hang") {
+      const o = anchorAt(this.map.interactables, r.pose === "swing" ? "swing" : "tree", r.x, r.y);
+      if (o) pl.attach(r.pose, o.ax, o.ay, r.pose === "swing" ? o.ay + SWING_FRONT : o.ay + 0.5, now, null);
+    }
+    pl.view.apply(pl.state, pl.dir, now);
+  }
+
+  /**
+   * 첫 welcome: 서버 기준으로 복원을 마무리한다. 한 자리에는 한 명.
+   * - 다른 채널로 들어왔으면(만석 안내 등) 좌석은 잇지 않는다
+   * - 의자: 이어서 좌석 확인(onWelcome) → 거절되면 mySeatDenied가 가까운 빈자리로
+   * - 그네·나무: 그 자리에 이미 다른 사람이 있으면 내려와 옆에 선다
+   * - 서 있기·바닥 앉기: 같은 자리에 다른 사람이 서 있으면 살짝 비켜 선다
+   */
+  private finishResume(r: ResumeState, m: WelcomeMsg): void {
+    const pl = this.player;
+    const now = this.time.now;
+    if (m.channel !== r.channel) {
+      if (pl.sitting) pl.stand(now, null);
+      if (pl.anchored) pl.leaveAnchor(now);
+      return;
+    }
+    if (pl.state === "sitChair" && pl.seat) {
+      this.restoreSeat = { id: pl.seat.id, until: now + RESTORE_SEAT_WINDOW_MS };
+      return;
+    }
+    const others = m.peers.map((p) => ({ x: p.x, y: p.y, state: p.state }));
+    if (pl.anchored) {
+      const taken = others.some((o) => (o.state === STATE.swing || o.state === STATE.hang) && Math.hypot(o.x - r.x, o.y - r.y) <= 3);
+      if (!taken) return;
+      pl.leaveAnchor(now);
+    }
+    const spot = nudgeSpot({ x: pl.x, y: pl.y }, others, inWater);
+    if (spot.x === pl.x && spot.y === pl.y) return;
+    const sat = pl.state === "sitGround";
+    pl.warp(spot.x, spot.y, now, null);
+    if (sat) pl.sit(null, now, null);
+  }
+
+  /** 서버가 내 좌석을 거절했다 / 남이 먼저 앉았다. 복원 직후면 바닥 대신 가까운 빈자리, 없으면 그 앞에 선다 */
+  private mySeatDenied(seatId: string): void {
+    const pl = this.player;
+    const now = this.time.now;
+    pl.seatDenied(seatId, now);
+    const rs = this.restoreSeat;
+    if (!rs || rs.id !== seatId) return;
+    this.restoreSeat = null;
+    const denied = seatById(seatId);
+    if (!denied || now > rs.until) return;
+    const others = [...this.remotes.values()].map((o) => ({ x: o.x, y: o.y }));
+    const { seat, stand } = restoreAfterDenied(denied, this.seats, this.net.mySid, others);
+    pl.warp(stand.x, stand.y, now, null);
+    if (!seat) return;
+    // 옮긴 위치(MOVE)가 먼저 닿은 뒤 앉기 요청 — 서버는 마지막으로 보고된 위치로 좌석 거리를 잰다
+    this.time.delayedCall(RESTORE_SIT_DELAY_MS, () => {
+      if (this.cleaned || pl.sitting || pl.anchored || Math.hypot(pl.x - stand.x, pl.y - stand.y) > 2) return;
+      const owner = this.seats.get(seat.id);
+      if (owner !== undefined && owner !== this.net.mySid) return;
+      pl.sit(seat, this.time.now, this.seatReq);
+    });
+  }
+
+  /** 페이지가 내려가기 직전(새로고침·업데이트): 채널·자리·자세를 남긴다. 다시 열리면 App이 읽자마자 지운다 */
+  private readonly onPageHide = (): void => {
+    if (this.cleaned) return;
+    const ch = this.net.channel;
+    if (typeof ch !== "number" || this.net.mode === "replaced") return;
+    const pl = this.player;
+    const p = pl.netPose(this.poseBuf);
+    const st = pl.state;
+    const pose: ResumePose = st === "sitChair" && pl.seat ? "sitChair" : st === "sitGround" || st === "swing" || st === "hang" ? st : "idle";
+    saveResume({
+      channel: ch,
+      x: Math.round(p.x),
+      y: Math.round(p.y),
+      seatId: pose === "sitChair" ? (pl.seat?.id ?? null) : null,
+      pose,
+      dir: pl.dir,
+      savedAt: Date.now(),
+      name: this.ctx.opts.name,
+      color: this.ctx.opts.color,
+      body: this.selfBody,
+    });
+  };
 
   private syncSeats(seats: Record<string, Sid>): void {
     this.seats.clear();
@@ -1201,6 +1336,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.cleaned) return;
     this.cleaned = true;
     this.ctx.disposed = true;
+    window.removeEventListener("pagehide", this.onPageHide);
     for (const u of this.unsubs) u();
     this.unsubs.length = 0;
     this.net?.stop();

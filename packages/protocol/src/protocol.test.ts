@@ -170,3 +170,18 @@ describe("names", () => {
     expect(CLOSE.RATE_LIMITED).toBe(4008);
   });
 });
+
+describe("클라이언트 버전", () => {
+  it("v가 없거나 이상하면 버전 개념 이전 클라이언트(1)로 본다", async () => {
+    const { parseClientVersion, LEGACY_CLIENT_VERSION, CLIENT_VERSION, MIN_CLIENT_VERSION } = await import("./constants");
+    expect(parseClientVersion(null)).toBe(LEGACY_CLIENT_VERSION);
+    expect(parseClientVersion("")).toBe(LEGACY_CLIENT_VERSION);
+    expect(parseClientVersion("abc")).toBe(LEGACY_CLIENT_VERSION);
+    expect(parseClientVersion("-3")).toBe(LEGACY_CLIENT_VERSION);
+    expect(parseClientVersion("1.5")).toBe(LEGACY_CLIENT_VERSION);
+    expect(parseClientVersion("3")).toBe(3);
+    // 지금 빌드는 자기 자신을 받아야 한다 (올릴 때 MIN도 함께 따라 오른다)
+    expect(MIN_CLIENT_VERSION).toBe(CLIENT_VERSION);
+    expect(CLOSE.OUTDATED).toBe(4010);
+  });
+});

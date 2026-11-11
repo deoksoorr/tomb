@@ -10,7 +10,6 @@ import { useGameKeyboardGuard } from "@/lib/hooks/useKeyBlock";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { useMyGraves } from "@/lib/hooks/useMyGraves";
-import { useNewVersion } from "@/lib/hooks/useNewVersion";
 import { useNotices } from "@/lib/hooks/useNotices";
 import { showToast, useToasts } from "@/lib/hooks/useToasts";
 import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
@@ -44,6 +43,7 @@ import MobileControls from "./MobileControls";
 import NetHud from "./NetHud";
 import SayDialog from "./SayDialog";
 import Tutorial from "./Tutorial";
+import UpdateNotice from "./UpdateNotice";
 import styles from "./GameShell.module.css";
 import HousingOffice from "@/components/housing/HousingOffice";
 import HuntLobby from "@/components/rpg/HuntLobby";
@@ -152,7 +152,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const inShop = scene === "shop";
   // 집·사냥터·미니게임 안에서는 그 화면이 자기 HUD를 그린다. 월드 HUD는 숨기기만 한다(BGM 플레이어는 계속 살아 있게)
   const away = scene === "house" || scene === "hunt" || scene === "minigame";
-  const outdated = useNewVersion();
   // 게임이 준비되기 전(접속 중)에 온 토스트도 놓치지 않게 오버레이보다 먼저 구독한다
   const toasts = useToasts();
 
@@ -266,6 +265,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     <div className={styles.shell}>
       <GameCanvas {...options} />
       {ready && disconnected && <div className={styles.dim} aria-hidden="true" />}
+      {ready && <UpdateNotice />}
 
       {ready && (
         <div className={cx(styles.overlay, away && styles.away, campfire && styles.campfire)}>
@@ -352,14 +352,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
             {showTutorial && <Tutorial touch={coarse} onDone={() => setTutorialOn(false)} />}
             <ToastList toasts={toasts} />
             <StatusBanners />
-            {outdated && (
-              <div className={styles.versionBanner} role="status">
-                <span>새 버전이 나왔어요</span>
-                <button type="button" className={cx(ui.button, ui.primary)} onClick={() => window.location.reload()}>
-                  새로고침
-                </button>
-              </div>
-            )}
             {narrow && !coarse && <Hud onOpenChannels={() => setPanel("channels")} />}
           </div>
           <CameraControls showZoom={!coarse} />
@@ -412,7 +404,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           <MyGraves entries={myGraves.entries} pending={myGraves.pending} onGo={goToMyGrave} onBury={startBury} />
         </Dialog>
       )}
-      {panel === "bag" && <BagDialog cache={graves.cache} myGraves={myGraves.entries} onClose={closePanel} />}
+      {panel === "bag" && <BagDialog cache={graves.cache} myGraves={myGraves.entries} onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       {panel === "notices" && <NoticesDialog onClose={closePanel} />}
       {panel === "activity" && (
         <ActivityDialog onGoToGrave={goToGraveById} onOpenHousing={() => setPanel("housing")} onClose={closePanel} />
@@ -439,7 +431,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "fireworks" && <FireworkDialog onClose={closePanel} />}
       {panel === "shrine" && <ShrineDialog cache={graves.cache} onGo={goToMyGrave} onClose={closePanel} />}
       {panel === "housing" && <HousingOffice onClose={closePanel} />}
-      {panel === "hunt" && <HuntLobby onClose={closePanel} />}
+      {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
     </div>
   );

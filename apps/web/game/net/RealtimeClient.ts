@@ -1,5 +1,6 @@
 import {
   ACT_KINDS,
+  CLIENT_VERSION,
   isPhraseId,
   CLOSE,
   MAX_JOIN_RETRIES,
@@ -35,12 +36,13 @@ import { bodyFromWsUrl, SYNC_EVERY_MS, SyncPolicy } from "./syncPolicy";
 
 // 실시간 연결 (명세 3-2, 4-1).
 //  - (재)연결마다 POST /api/join 으로 새 토큰을 받는다 (토큰 60초 유효). 같은 채널로 돌아가면 서버 유예(20초) 안에서 sid·좌석 유지
-//  - wsUrl + &x=..&y=.. (현재 위치) 로 접속 → welcome → join/leave/seat/emote/graveEvent JSON + 100ms 델타 SNAPSHOT
+//  - wsUrl + &x=..&y=..(현재 위치)&v=CLIENT_VERSION 으로 접속 → welcome → join/leave/seat/emote/graveEvent JSON + 100ms 델타 SNAPSHOT
 //  - MOVE: 움직이는 동안 ≤10Hz, 상태가 바뀌면 즉시 1회, 정지·앉기 중엔 0회, 탭이 숨으면 멈추고 돌아오면 1회
 //  - 끊기면 0.5→1→2→4→8s(지터) 백오프. 실시간 서버가 없어도 게임은 혼자 그대로 돌아간다 (mode "offline")
 //  - 4001 만석: 로비를 보고 다른 채널로 최대 3회 → 그래도 안 되면 관람 모드(30초마다 로비 확인 후 합류)
 //  - 4002 다른 탭에서 접속: "replaced", 재접속하지 않음 / 4003 토큰 만료: 새 토큰으로 바로 재접속 / 4008 과다 전송
 //  - 4004 잘못된 요청: 자동 배정으로 다시 / /api/join 400: 재시도해도 소용없으니 offline + 안내 1회
+//  - 4010 옛 버전(큰 패치): 재접속하지 않고 app:outdated → UI가 업데이트 창을 띄워 새로고침한다
 //  - 클라이언트가 끊는 경우: 의도적 퇴장(stop·채널 이동)만 1000, 타임아웃 등은 4000
 //    (서버는 1000을 "떠남"으로 보고 재연결 유예 없이 자리를 비운다)
 //  - 대기열(/api/join → queue): 혼자 걸으며 queueUrl을 QUEUE_POLL_MS마다 확인, admitted면 그 채널로 입장
@@ -375,7 +377,7 @@ export class RealtimeClient {
     if (mine) this.cb.onSelfBody?.(mine);
     const p = this.cb.getPose(this.pose);
     const sep = res.wsUrl.includes("?") ? "&" : "?";
-    const url = `${res.wsUrl}${sep}x=${Math.round(p.x)}&y=${Math.round(p.y)}`;
+    const url = `${res.wsUrl}${sep}x=${Math.round(p.x)}&y=${Math.round(p.y)}&v=${CLIENT_VERSION}`;
     let ws: WebSocket;
     try {
       ws = new WebSocket(url);
@@ -600,6 +602,12 @@ export class RealtimeClient {
       case CLOSE.REPLACED:
         this.channel = null;
         this.setMode("replaced");
+        return;
+      case CLOSE.OUTDATED:
+        // 새로고침해야만 풀린다. 다시 붙어 봐야 또 거절이라 재시도하지 않는다 (혼자 걷기 + 업데이트 창)
+        this.clearRetry();
+        this.setMode("offline");
+        bridge.emit("app:outdated", { source: "channel" });
         return;
       case CLOSE.BAD_REQUEST:
         this.token = null;

@@ -1,0 +1,89 @@
+/* 새 버전 안내. 게임 오버레이(z-index 10)와 연결 끊김 어둡게(5) 위에 둔다 */
+
+.banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 8px);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - var(--safe-left) - var(--safe-right));
+  padding: 6px 6px 6px 14px;
+  background: var(--panel);
+  color: var(--bone);
+  white-space: nowrap;
+  box-shadow: var(--px-border-strong);
+  transform: translateX(-50%);
+  animation: rise 0.3s ease-out both;
+}
+
+.top {
+  top: var(--safe-top);
+  bottom: auto;
+  padding: 8px 14px;
+}
+
+.cover {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+  background: rgba(9, 10, 8, 0.72);
+  animation: fade 0.3s ease both;
+}
+
+.card {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: min(360px, 100%);
+  padding: 22px 18px 18px;
+  background: var(--panel-solid);
+  color: var(--text);
+  text-align: center;
+  box-shadow: var(--px-border-strong);
+}
+
+.title {
+  margin: 0;
+  color: var(--bone);
+  font-family: var(--font-read);
+  line-height: 1.5;
+}
+
+.sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 터치: 아래 양쪽 조이스틱·행동 버튼(높이 140px) 위로 */
+@media (pointer: coarse) {
+  .banner:not(.top) {
+    bottom: calc(var(--safe-bottom) + 148px);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner,
+  .cover {
+    animation: none;
+  }
+}

@@ -50,8 +50,29 @@ export const CLOSE = {
   INVALID_TOKEN: 4003,
   BAD_REQUEST: 4004,
   RATE_LIMITED: 4008,
+  OUTDATED: 4010, // 클라이언트가 MIN_CLIENT_VERSION보다 낮다 → 새로고침해야 한다 (자동 재접속하지 않음)
 } as const;
 export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
+
+// ── 클라이언트 버전 (큰 패치 강제 새로고침) ──
+/**
+ * 이 빌드의 클라이언트 호환 버전. **맵·프로토콜이 바뀌는 큰 패치에서만 1 올린다 (이 한 줄).**
+ * - 웹 클라이언트는 실시간 접속 URL에 `&v=CLIENT_VERSION`을 붙인다.
+ * - 실시간 서버는 자기 빌드의 MIN_CLIENT_VERSION보다 낮은 클라이언트를 CLOSE.OUTDATED(4010)로 거절한다.
+ * - /api/version이 minClient로 이 값을 알려 주므로, 옛 화면은 접속이 끊기기 전에도 업데이트 창을 띄운다.
+ * 평소 패치(버전 그대로)는 배포 id만 바뀌어 아래쪽 배너로 안내된다.
+ */
+export const CLIENT_VERSION = 1;
+/** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
+export const MIN_CLIENT_VERSION = CLIENT_VERSION;
+/** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
+export const LEGACY_CLIENT_VERSION = 1;
+
+/** 접속 URL의 v 값 → 버전. 없거나 이상하면 LEGACY_CLIENT_VERSION */
+export function parseClientVersion(raw: string | null | undefined): number {
+  if (raw === null || raw === undefined || !/^\d{1,6}$/.test(raw)) return LEGACY_CLIENT_VERSION;
+  return Number(raw);
+}
 
 /** text 프레임 heartbeat. DO는 setWebSocketAutoResponse로 응답해서 깨어나지 않는다. */
 export const PING = "ping";

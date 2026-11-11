@@ -3,6 +3,7 @@ import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
 import type { RpgAction, RpgHud, RpgPlay, RunResult } from "@/lib/rpg/types";
+import type { ResumeState } from "@/lib/resume";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
 // "sticky" 이벤트는 마지막 값을 기억해서, 늦게 구독한 쪽도 last()로 현재 값을 읽을 수 있다.
@@ -44,6 +45,8 @@ export type GameStartOptions = {
   /** 공유 링크 /?grave={id} 로 들어왔으면 그 묘비 앞에 스폰하고 grave:open을 보낸다 */
   focusGraveId?: string | null;
   debug?: boolean;
+  /** 새로고침 직전 자리 (lib/resume.ts). 있으면 그 자리·자세로 시작하고 같은 좌석에 다시 앉는다 */
+  resume?: ResumeState | null;
 };
 
 /** Game → UI */
@@ -73,6 +76,8 @@ export type GameEvents = {
   "portal:open": { kind: "hunt" | "housing" | "shrine" };
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
   "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house" };
+  /** 실시간 서버가 이 화면을 옛 버전이라 거절함(4010, 큰 패치) → UI가 업데이트 창을 띄운다 (sticky) */
+  "app:outdated": { source: "channel" | "room" };
 
   // ── 하우징 ── (game/housing, components/housing)
   /** 집 안 편집 상태 (편집 모드에서 바뀔 때마다). UI가 가방 남은 개수·점수·저장 버튼에 쓴다 */
@@ -203,6 +208,7 @@ const STICKY = new Set<keyof AllEvents>([
   "audio:settings",
   "queue:status",
   "scene:changed",
+  "app:outdated",
 ]);
 
 class Bridge {

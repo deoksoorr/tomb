@@ -203,11 +203,20 @@ export type Me = {
   hasCode: boolean;
   /** 가방: itemId → 개수 */
   inventory: Record<string, number>;
-  /** 착용 중인 꾸미기 (만료 전) */
+  /** 착용 중인 꾸미기 (만료 전, 부위마다 하나) */
   equipped: { itemId: string; until: number }[];
+  /** 벗어 둔 꾸미기 (만료 전). 남은 시간은 벗어 둔 동안에도 흐른다. POST /api/me/wear로 다시 입는다 */
+  stash: { itemId: string; until: number }[];
   /** 내 계정이 세운 묘비 id */
   graves: string[];
 };
+
+/**
+ * POST /api/me/wear `{ itemId }` → 벗어 둔 꾸미기를 다시 입기 (같은 부위에 입던 것은 벗어 둔 쪽으로)
+ * POST /api/me/unequip `{ slot }` → 그 부위 벗기
+ * 둘 다 바뀐 착용 상태의 증서를 같이 준다 (게임이 실시간 서버로 보낸다). 없으면 409 NO_ITEM
+ */
+export type WearResponse = { me: Me; lookGrant: string };
 
 /** POST /api/me/attend → 출석 처리 (입장할 때 호출, 하루 1번만 지급) */
 export type AttendResponse = { me: Me; earned: number };
@@ -227,7 +236,8 @@ export type UseItemResponse = { me: Me; grant?: string; lookGrant?: string; grav
 /** GET /api/me/look → 지금 착용 상태의 증서 (재접속 때) */
 export type LookGrantResponse = { look: string[]; lookGrant: string };
 /** GET /api/version → 배포 식별자. 다르면 새 버전 안내 */
-export type VersionResponse = { version: string };
+/** version = 배포 id (다르면 평소 패치 배너), minClient = 이 배포가 요구하는 최소 클라이언트 버전 (내 CLIENT_VERSION보다 크면 강제 업데이트 창) */
+export type VersionResponse = { version: string; minClient: number };
 
 /**
  * GET /api/upload — 업로드 방식 안내 (Blob 토큰이 없으면 로컬 대체 경로).

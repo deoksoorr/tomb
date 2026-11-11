@@ -1,4 +1,4 @@
-import { MAX_VALID_SPEED, RATE_LIMIT_KICK_SEC, RATE_LIMIT_PER_SEC, inServerBounds } from "@tomb/protocol";
+import { MAX_VALID_SPEED, MIN_CLIENT_VERSION, RATE_LIMIT_KICK_SEC, RATE_LIMIT_PER_SEC, inServerBounds, parseClientVersion } from "@tomb/protocol";
 
 // Workers 런타임 API에 의존하지 않는 작은 순수 로직. vitest로 단위 테스트한다(logic.test.ts).
 
@@ -110,4 +110,12 @@ export function parseSpawn(xs: string | null, ys: string | null, room = false): 
   const x = Number(xs);
   const y = Number(ys);
   return (room ? x <= 0xffff && y <= 0xffff : inServerBounds(x, y)) ? { x, y } : undefined;
+}
+
+/**
+ * 접속 URL의 v(클라이언트 버전)가 이 서버가 받는 최소 버전보다 낮은지. 낮으면 Worker가 CLOSE.OUTDATED(4010)로 거절한다.
+ * v가 없는 옛 클라이언트는 LEGACY_CLIENT_VERSION(1)으로 본다 → CLIENT_VERSION을 2로 올리기 전까지는 그대로 받는다.
+ */
+export function isOutdatedClient(rawVersion: string | null, min: number = MIN_CLIENT_VERSION): boolean {
+  return parseClientVersion(rawVersion) < min;
 }

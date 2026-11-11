@@ -1,4 +1,4 @@
-import { ACT_KINDS, CLOSE, isPhraseId, ROOM_ID_RE, type ActKind, type PeerInfo, type PhraseId, type Sid } from "@tomb/protocol";
+import { ACT_KINDS, CLIENT_VERSION, CLOSE, isPhraseId, ROOM_ID_RE, type ActKind, type PeerInfo, type PhraseId, type Sid } from "@tomb/protocol";
 
 // 방(room) 연결의 순수 규칙: 접속 URL, 닫힘 코드 → 다음 행동, 받은 JSON 검증. Phaser·WebSocket 없이 테스트한다.
 
@@ -6,10 +6,10 @@ export function isRoomId(room: unknown): room is string {
   return typeof room === "string" && ROOM_ID_RE.test(room);
 }
 
-/** 서버가 준 wsUrl에 스폰 위치를 붙인다 (채널과 같은 규칙) */
+/** 서버가 준 wsUrl에 스폰 위치와 클라이언트 버전을 붙인다 (채널과 같은 규칙) */
 export function roomSocketUrl(wsUrl: string, x: number, y: number): string {
   const sep = wsUrl.includes("?") ? "&" : "?";
-  return `${wsUrl}${sep}x=${Math.round(x)}&y=${Math.round(y)}`;
+  return `${wsUrl}${sep}x=${Math.round(x)}&y=${Math.round(y)}&v=${CLIENT_VERSION}`;
 }
 
 /**
@@ -19,9 +19,10 @@ export function roomSocketUrl(wsUrl: string, x: number, y: number): string {
  *  - refetch: 토큰 만료·잘못된 요청 → 토큰을 새로 받아 곧바로 (연달아 3번째부터는 백오프)
  *  - full: 방이 가득 참 → 토큰을 버리고 천천히 다시
  *  - rate: 너무 많이 보냄 → 최소 2초 쉬고
+ *  - outdated: 옛 버전 화면(4010, 큰 패치) → 재접속하지 않고 업데이트 창
  *  - retry: 그 밖(네트워크 끊김·서버 재시작) → 같은 토큰으로 백오프 재접속
  */
-export type RoomCloseAction = "leave" | "replaced" | "refetch" | "full" | "rate" | "retry";
+export type RoomCloseAction = "leave" | "replaced" | "refetch" | "full" | "rate" | "outdated" | "retry";
 
 export function roomCloseAction(code: number, intentional: boolean): RoomCloseAction {
   if (intentional) return "leave";
@@ -35,6 +36,8 @@ export function roomCloseAction(code: number, intentional: boolean): RoomCloseAc
       return "full";
     case CLOSE.RATE_LIMITED:
       return "rate";
+    case CLOSE.OUTDATED:
+      return "outdated";
     default:
       return "retry";
   }

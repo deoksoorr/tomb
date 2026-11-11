@@ -1,5 +1,6 @@
 import { decodeSnapshot, DIR, encodeEvent, encodeMove, isPhraseId, PING, PONG, STATE, type ActKind, type C2S, type PeerInfo, type PeerState, type Sid } from "@tomb/protocol";
 import type { RoomJoinRequest, RoomJoinResponse } from "@/lib/types";
+import { bridge } from "../bridge";
 import { backoffDelay } from "./backoff";
 import { JoinLimiter, TOKEN_REUSE_MS } from "./joinPolicy";
 import { isRoomId, parseRoomMessage, roomCloseAction, roomSocketUrl, type RoomWelcome } from "./roomPolicy";
@@ -381,6 +382,10 @@ export class RoomClient {
       case "replaced":
         this.reason = "replaced";
         this.setMode("offline");
+        return;
+      case "outdated":
+        this.setMode("offline");
+        bridge.emit("app:outdated", { source: "room" });
         return;
       case "refetch":
         this.token = null;
