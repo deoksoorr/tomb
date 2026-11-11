@@ -4,21 +4,35 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { DEFAULT_MAX_CHANNELS, type LobbyInfo } from "@tomb/protocol";
 import type { AdminGrave } from "@/lib/admin";
 import { ApiRequestError, errorMessage } from "@/lib/api";
-import { CODE_RE, normalizeCode } from "@/lib/economy";
 import type { AdminAction } from "@/lib/validate";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import AdminRow, { isReported } from "./AdminRow";
+import DashboardPanel from "./DashboardPanel";
 import EconomyPanel from "./EconomyPanel";
 import ErrorsPanel from "./ErrorsPanel";
 import HousingPanel from "./HousingPanel";
+import MembersPanel from "./MembersPanel";
 import NoticesPanel from "./NoticesPanel";
+import PassedPanel from "./PassedPanel";
 import { adminApi } from "./adminApi";
 import styles from "./Admin.module.css";
 
 type Filter = "all" | "reported" | "hidden";
-type Sort = "reports" | "recent" | "flowers" | "revives";
+type Sort = "reports" | "recent" | "flowers";
+/** 48번 탭 순서: 대시보드 · 회원 · 신고 · 경제 · 하우징 · 공지 · 콘텐츠(묘비·성불) · 오류 */
+type Tab = "dashboard" | "members" | "reports" | "economy" | "housing" | "notices" | "content" | "errors";
+const TABS: [Tab, string][] = [
+  ["dashboard", "대시보드"],
+  ["members", "회원"],
+  ["reports", "신고"],
+  ["economy", "경제"],
+  ["housing", "하우징"],
+  ["notices", "공지"],
+  ["content", "콘텐츠"],
+  ["errors", "오류"],
+];
 
 const FILTERS: [Filter, string][] = [
   ["all", "전체"],
@@ -29,13 +43,11 @@ const SORTS: [Sort, string][] = [
   ["reports", "신고 많은 순"],
   ["recent", "최신 등록 순"],
   ["flowers", "헌화 많은 순"],
-  ["revives", "살려주세요 많은 순"],
 ];
 const SORTERS: Record<Sort, (a: AdminGrave, b: AdminGrave) => number> = {
   reports: (a, b) => b.reports - a.reports || b.reportLog.length - a.reportLog.length || b.createdAt - a.createdAt,
   recent: (a, b) => b.createdAt - a.createdAt,
   flowers: (a, b) => b.flowers - a.flowers || b.createdAt - a.createdAt,
-  revives: (a, b) => b.revives - a.revives || b.createdAt - a.createdAt,
 };
 const DONE: Record<AdminAction, string> = {
   hide: "숨겼어요",
@@ -64,7 +76,9 @@ const toggle = (set: ReadonlySet<string>, id: string) => {
 
 export default function AdminApp() {
   const [phase, setPhase] = useState<"loading" | "login" | "ready" | "error">("loading");
-  const [tab, setTab] = useState<"graves" | "notices" | "housing" | "errors" | "economy">("graves");
+  const [tab, setTab] = useState<Tab>("dashboard");
+  /** 콘텐츠 탭 안: 묘역의 묘비 / 성불한 묘비 (방명록은 하우징 탭) */
+  const [content, setContent] = useState<"graves" | "passed">("graves");
   const authLost = useCallback(() => setPhase("login"), []);
   const [graves, setGraves] = useState<AdminGrave[]>([]);
   const [lobby, setLobby] = useState<LobbyInfo | "error" | null>(null);
@@ -115,14 +129,16 @@ export default function AdminApp() {
     };
   }, [version, toast]);
 
+  // 신고 탭은 신고된 묘비만 (같은 목록·같은 처리 버튼)
+  const shown: Filter = tab === "reports" ? "reported" : filter;
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return graves
-      .filter((g) => filter === "all" || (filter === "hidden" ? g.hidden : isReported(g)))
+      .filter((g) => shown === "all" || (shown === "hidden" ? g.hidden : isReported(g)))
       .filter((g) => !channel || g.channel === channel)
       .filter((g) => !q || g.name.toLowerCase().includes(q) || g.mourner.toLowerCase().includes(q))
       .sort(SORTERS[sort]);
-  }, [graves, filter, channel, sort, query]);
+  }, [graves, shown, channel, sort, query]);
 
   const run = async (ids: string[], action: AdminAction) => {
     setBusy(true);
@@ -184,15 +200,7 @@ export default function AdminApp() {
 
         {phase === "ready" && (
           <div className={styles.segmented} role="tablist" aria-label="관리 화면">
-            {(
-              [
-                ["graves", "묘비"],
-                ["notices", "공지사항"],
-                ["housing", "하우징"],
-                ["economy", "경제"],
-                ["errors", "오류"],
-              ] as const
-            ).map(([value, label]) => (
+            {TABS.map(([value, label]) => (
               <button
                 key={value}
                 type="button"
@@ -202,9 +210,35 @@ export default function AdminApp() {
                 onClick={() => setTab(value)}
               >
                 {label}
+                {value === "reports" && reportedCount > 0 && ` ${reportedCount}`}
               </button>
             ))}
           </div>
+        )}
+
+        {phase === "ready" && tab === "dashboard" && (
+          <DashboardPanel
+            toast={toast}
+            onAuthLost={authLost}
+            lobby={lobby}
+            graveCount={graves.length}
+            reportedCount={reportedCount}
+            version={version}
+          />
+        )}
+        {phase === "ready" && tab === "members" && <MembersPanel toast={toast} onAuthLost={authLost} />}
+        {phase === "ready" && tab === "content" && (
+          <div className={styles.segmented} role="group" aria-label="콘텐츠">
+            <button type="button" className={ui.button} aria-pressed={content === "graves"} onClick={() => setContent("graves")}>
+              묘역의 묘비 {graves.length}
+            </button>
+            <button type="button" className={ui.button} aria-pressed={content === "passed"} onClick={() => setContent("passed")}>
+              성불한 묘비
+            </button>
+          </div>
+        )}
+        {phase === "ready" && tab === "content" && content === "passed" && (
+          <PassedPanel toast={toast} onAuthLost={authLost} onChanged={reload} />
         )}
 
         {phase === "ready" && tab === "notices" && <NoticesPanel toast={toast} onAuthLost={authLost} />}
@@ -212,19 +246,15 @@ export default function AdminApp() {
         {phase === "ready" && tab === "economy" && <EconomyPanel toast={toast} onAuthLost={authLost} />}
         {phase === "ready" && tab === "errors" && <ErrorsPanel toast={toast} onAuthLost={authLost} />}
 
-        {phase === "ready" && tab === "graves" && (
+        {phase === "ready" && (tab === "reports" || (tab === "content" && content === "graves")) && (
           <>
-            <section className={styles.summary} aria-label="요약">
-              <Stat label="전체 묘비" value={graves.length} />
-              <Stat label="숨김" value={hiddenCount} />
-              <Stat label="신고된 묘비" value={reportedCount} />
-              <Channels lobby={lobby} />
-            </section>
-
-            <PointsForm toast={toast} onAuthLost={authLost} />
-
+            {tab === "reports" && (
+              <p className={ui.hint}>
+                신고된 묘비 {reportedCount}개 · 숨김 {hiddenCount}개. 방명록 신고는 하우징 탭에서 봐요.
+              </p>
+            )}
             <div className={styles.toolbar}>
-              <div className={styles.segmented} role="group" aria-label="보기">
+              <div className={styles.segmented} role="group" aria-label="보기" hidden={tab === "reports"}>
                 {FILTERS.map(([value, label]) => (
                   <button
                     key={value}
@@ -384,95 +414,6 @@ export default function AdminApp() {
         ))}
       </div>
     </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className={styles.stat}>
-      <span className={styles.statValue}>{value}</span>
-      <span className={styles.statLabel}>{label}</span>
-    </div>
-  );
-}
-
-function Channels({ lobby }: { lobby: LobbyInfo | "error" | null }) {
-  return (
-    <div className={styles.channels}>
-      <span className={styles.statLabel}>채널 현황</span>
-      {lobby === null && <span className={ui.hint}>불러오는 중…</span>}
-      {lobby === "error" && <span className={ui.hint}>실시간 서버 로비에 연결할 수 없어요.</span>}
-      {lobby && lobby !== "error" && (
-        <>
-          <span className={styles.chip}>
-            접속 {lobby.total}/{lobby.totalCap}
-          </span>
-          {lobby.channels
-            .filter((c) => c.open || c.count > 0)
-            .map((c) => (
-              <span key={c.id} className={styles.chip}>
-                {c.id}채널 {c.count}/{c.cap}
-              </span>
-            ))}
-        </>
-      )}
-    </div>
-  );
-}
-
-/** 포인트 지급·회수: 개인 코드(XXXX-XXXX-XXXX) 또는 계정 id + 증감 */
-function PointsForm({ toast, onAuthLost }: { toast: (message: string) => void; onAuthLost: () => void }) {
-  const [target, setTarget] = useState("");
-  const [delta, setDelta] = useState("");
-  const [pending, setPending] = useState(false);
-  const amount = Number(delta);
-  const valid = target.trim() !== "" && Number.isInteger(amount) && amount !== 0;
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    const code = normalizeCode(target);
-    setPending(true);
-    try {
-      const r = await adminApi.points(CODE_RE.test(code) ? { code } : { accountId: target.trim() }, amount);
-      toast(`${r.accountId.slice(0, 6)}… 계정 잔액 ${r.points}점`);
-      setTarget("");
-      setDelta("");
-    } catch (err) {
-      if (err instanceof ApiRequestError && err.status === 401) onAuthLost();
-      else toast(errorMessage(err));
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <form className={styles.pointsForm} onSubmit={(e) => void submit(e)} aria-label="포인트 지급">
-      <span className={styles.statLabel}>포인트 지급</span>
-      <input
-        className={cx(ui.input, styles.pointsTarget)}
-        value={target}
-        onChange={(e) => setTarget(e.target.value)}
-        placeholder="개인 코드 또는 계정 id"
-        aria-label="개인 코드 또는 계정 id"
-        autoComplete="off"
-        spellCheck={false}
-      />
-      <input
-        className={cx(ui.input, styles.pointsDelta)}
-        type="number"
-        inputMode="numeric"
-        min={-9999}
-        max={9999}
-        step={1}
-        value={delta}
-        onChange={(e) => setDelta(e.target.value)}
-        placeholder="+100 / -50"
-        aria-label="지급량 (빼려면 음수)"
-      />
-      <button type="submit" className={ui.button} disabled={pending || !valid}>
-        지급
-      </button>
-    </form>
   );
 }
 

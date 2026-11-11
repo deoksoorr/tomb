@@ -1,9 +1,10 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { plotLabel } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
-import { api, errorMessage } from "@/lib/api";
+import { api, errorMessage, isAbortError } from "@/lib/api";
+import { oneGraveMessage } from "@/lib/passText";
 import { useBusy } from "@/lib/busy";
 import { suggestEpitaph } from "@/lib/epitaph";
 import type { GraveCache } from "@/lib/hooks/useGraves";
@@ -43,10 +44,69 @@ type Props = {
   /** 지금 채널 묘비 수 = 새 묘비가 들어갈 자리 번호. 목록을 아직 못 받았으면 null */
   graveCount: number | null;
   onClose: () => void;
+  /** 1인 1묘비 안내에서 [내 묘비 가기] */
+  onGoToGrave?: (grave: PublicGrave) => void;
 };
 
+type Gate = { state: "checking" } | { state: "open" } | { state: "blocked"; grave: PublicGrave; message: string };
+
+/**
+ * 1인 1묘비(49번): 새로 쓰기 전에 내 묘비가 묘역에 있는지 먼저 본다. 있으면 쓰기 대신
+ * "지금 묘비가 성불한 뒤에 쓸 수 있어요 (남은 기간)" 안내. 확인에 실패하면 폼을 연다 (서버가 다시 막는다)
+ */
+export default function BuryForm(props: Props) {
+  const creating = props.mode.kind === "create";
+  const [gate, setGate] = useState<Gate>(() => (creating ? { state: "checking" } : { state: "open" }));
+  useEffect(() => {
+    if (!creating) return;
+    let alive = true;
+    api
+      .myGrave()
+      .then(({ active }) => {
+        if (!alive) return;
+        if (active?.passAt) setGate({ state: "blocked", grave: active, message: oneGraveMessage(active.passAt) });
+        else setGate({ state: "open" });
+      })
+      .catch((e: unknown) => {
+        if (alive && !isAbortError(e)) setGate({ state: "open" });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [creating]);
+
+  if (gate.state === "open") return <BuryFormInner {...props} />;
+  return (
+    <Dialog title="묘비 쓰기" onClose={props.onClose} size="sm">
+      {gate.state === "checking" ? (
+        <p className={ui.hint} role="status">
+          내 묘비를 살피는 중…
+        </p>
+      ) : (
+        <div className={styles.blocked}>
+          <p role="status">{gate.message}</p>
+          <p className={ui.hint}>
+            묘비는 한 사람에 하나씩, 세운 뒤 일정 기간이 지나면 성불해 「성불한 이야기들」로 옮겨져요. 지금 묘비:{" "}
+            <strong>{gate.grave.name}</strong>
+          </p>
+          <div className={styles.confirmButtons}>
+            {props.onGoToGrave && (
+              <button type="button" className={cx(ui.button, ui.primary)} onClick={() => props.onGoToGrave?.(gate.grave)}>
+                내 묘비 가기
+              </button>
+            )}
+            <button type="button" className={cx(ui.button, ui.quiet)} onClick={props.onClose}>
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
+    </Dialog>
+  );
+}
+
 /** 귀찮지 않게 꼭 필요한 것만: 이름 · 얼마나 살았나 · (사인) · (묘비명) */
-export default function BuryForm({ mode, mourner, cache, channel, graveCount, onClose }: Props) {
+function BuryFormInner({ mode, mourner, cache, channel, graveCount, onClose }: Props) {
   // 묘비를 쓰는 동안은 새 버전 자동 새로고침(큰 패치 포함)을 미룬다
   useBusy("bury", true);
   const editing = mode.kind === "edit" ? mode.grave : null;
@@ -284,7 +344,7 @@ export default function BuryForm({ mode, mourner, cache, channel, graveCount, on
             </p>
             {mode.kind === "create" && graveCount !== null && (
               <p className={styles.previewPlot}>
-                세우면 {channel}채널 {plotLabel(graveCount)}에 묻혀요.
+                세우면 {channel}채널 {plotLabel(graveCount)}에 묻혀요. 묘비는 한 사람에 하나, 시간이 지나면 성불해요.
               </p>
             )}
           </div>

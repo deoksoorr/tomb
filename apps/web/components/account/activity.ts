@@ -16,7 +16,10 @@ export function activityText(item: ActivityItem): string {
     case "flower":
       return `${item.who}님이 ${target}에 헌화했어요`;
     case "revive":
-      return `${item.who}님이 ${target}을(를) 살려 달라고 했어요`;
+      // 49번에서 없어진 소식 (API가 걸러 낸다)
+      return `${target}에 마음이 닿았어요`;
+    case "passed":
+      return `${target}이(가) 성불했어요. 성불한 이야기들에서 다시 볼 수 있어요`;
     case "houseLike":
       return `${item.who}님이 내 집 ${target}에 좋아요를 눌렀어요`;
     case "guestbook":
@@ -26,5 +29,5 @@ export function activityText(item: ActivityItem): string {
   }
 }
 
-/** 집 관련 소식은 분양 사무소로, 나머지는 그 묘비로 */
+/** 집 관련 소식은 분양 사무소로, 성불은 성불한 이야기들로, 나머지는 그 묘비로 */
 export const isHouseActivity = (item: ActivityItem) => item.kind === "houseLike" || item.kind === "guestbook";

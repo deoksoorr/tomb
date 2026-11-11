@@ -7,7 +7,15 @@ import { ageDays, parseYmd, suggestEpitaph, todayKst } from "./epitaph";
 import { isAllowedImageUrl } from "./blob";
 import { REPORT_REASONS } from "./reports";
 import { HttpError } from "./http";
-import { CAUSE_TAGS, INQUIRY_CATEGORIES, LIFESPAN_PRESETS, type InquiryCategory, type LifespanId } from "./types";
+import {
+  CAUSE_TAGS,
+  INQUIRY_CATEGORIES,
+  LIFESPAN_PRESETS,
+  MAX_PASS_DAYS,
+  MIN_PASS_DAYS,
+  type InquiryCategory,
+  type LifespanId,
+} from "./types";
 
 // 따로 메시지를 달지 않은 오류(타입 불일치 등)도 한국어로 나오게 한다
 z.config(z.locales.ko());
@@ -158,6 +166,8 @@ export type AdminAction = (typeof ADMIN_ACTIONS)[number];
 const adminAction = z.enum(ADMIN_ACTIONS, "action은 hide, unhide, delete, resetReports 중 하나여야 해요.");
 
 export const AdminActionSchema = z.object({ action: adminAction });
+/** 관리자: 성불 기간(일) */
+export const GraveSettingsSchema = z.object({ passDays: z.number().int().min(MIN_PASS_DAYS).max(MAX_PASS_DAYS) });
 
 export const AdminBulkSchema = z.object({
   ids: z

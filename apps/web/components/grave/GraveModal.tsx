@@ -6,6 +6,7 @@ import { DECOR_DURATION_MS, itemById, MAX_DECOR_PER_GRAVE } from "@tomb/protocol
 import { bridge } from "@/game/bridge";
 import { api, ApiRequestError, errorMessage, isAbortError } from "@/lib/api";
 import { lifespanLabel } from "@/lib/epitaph";
+import { remainingText } from "@/lib/passText";
 import { REPORT_REASON_LABELS, REPORT_REASONS, type ReportReason } from "@/lib/reports";
 import type { GravesState } from "@/lib/hooks/useGraves";
 import { meStore, useMe } from "@/lib/hooks/useMe";
@@ -24,11 +25,11 @@ import StyleArt from "./StyleArt";
 import StylePicker from "./StylePicker";
 import styles from "./GraveModal.module.css";
 
-type Action = "flower" | "revive" | "share" | "report" | "remove" | "decorate" | "restyle";
+type Action = "flower" | "share" | "report" | "remove" | "decorate" | "restyle";
 /** 내 묘비 손질 도구: 꾸미기 놓기 · 디자인 바꾸기 */
 type OwnerTool = "decor" | "style";
 /** 상세 응답에서 온 "나와의 관계". isMine: 내 계정이 세운 묘비 */
-type Mine = { revived: boolean; floweredToday: boolean; isMine: boolean };
+type Mine = { floweredToday: boolean; isMine: boolean };
 
 type Props = {
   graveId: string;
@@ -80,7 +81,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
       .refresh(graveId, ctrl.signal)
       .then((detail) => {
         if (!detail) setMissing(true);
-        else setMine({ revived: detail.myRevive, floweredToday: detail.myFlowerToday, isMine: detail.isMine });
+        else setMine({ floweredToday: detail.myFlowerToday, isMine: detail.isMine });
       })
       .catch((e: unknown) => {
         if (!isAbortError(e)) setNotice(errorMessage(e));
@@ -113,29 +114,6 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
       } catch (e) {
         // 오늘 이미 헌화함
         if (e instanceof ApiRequestError && e.status === 409) setMine((m) => m && { ...m, floweredToday: true });
-        throw e;
-      }
-    });
-
-  // 낙관적 토글: 먼저 바꿔 보여 주고, 실패하면 되돌린다
-  const revive = () =>
-    run("revive", async () => {
-      if (!grave || !mine) return;
-      const before = { revived: mine.revived, count: grave.revives };
-      const next = !mine.revived;
-      setMine({ ...mine, revived: next });
-      cache.patch(graveId, { revives: Math.max(0, before.count + (next ? 1 : -1)) });
-      try {
-        const res = await api.revive(graveId);
-        setMine((m) => m && { ...m, revived: res.revived });
-        cache.patch(graveId, { revives: res.count });
-        meStore.addEarned(res.earned);
-        bridge.emit("grave:revived", { graveId, revived: res.revived });
-        const points = pointsText(res.earned);
-        if (points) setNotice(points);
-      } catch (e) {
-        setMine((m) => m && { ...m, revived: before.revived });
-        cache.patch(graveId, { revives: before.count });
         throw e;
       }
     });
@@ -203,7 +181,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   const links = safeLinks(grave.links);
   const decor = grave.decor ?? [];
   const decorInBag = me ? bagEntries(me.inventory, "decor") : [];
-  const location = graveLocation(graves.graves, graves.reviveTop, graveId);
+  const location = graveLocation(graves.graves, graveId);
 
   return (
     <Dialog title={grave.name} onClose={onClose}>
@@ -265,6 +243,14 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
             <dt>상주</dt>
             <dd>{grave.mourner}</dd>
           </div>
+          {grave.passAt !== undefined && (
+            <div>
+              <dt>성불</dt>
+              <dd>
+                {grave.passAt > openedAt ? `${remainingText(grave.passAt - openedAt)} 뒤 성불해요` : "곧 성불해요"}
+              </dd>
+            </div>
+          )}
           {decor.length > 0 && (
             <div>
               <dt>꾸밈</dt>
@@ -315,15 +301,6 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
             disabled={!mine || mine.floweredToday || pending.flower}
           >
             🌼 {mine?.floweredToday ? "오늘 헌화했어요" : "헌화하기"} ({grave.flowers})
-          </button>
-          <button
-            type="button"
-            className={cx(ui.button, styles.reaction)}
-            onClick={revive}
-            disabled={!mine}
-            aria-pressed={mine?.revived ?? false}
-          >
-            🙏 이건 살려주세요 ({grave.revives})
           </button>
         </div>
 

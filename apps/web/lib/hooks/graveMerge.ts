@@ -10,7 +10,6 @@ export type Overrides = Readonly<Record<string, Override>>;
 export const OVERRIDE_SKEW_MS = 60_000;
 /** 목록이 끝내 따라오지 않아도 이만큼 지나면 버린다 (s-maxage 30초 + stale-while-revalidate 300초보다 길게) */
 export const OVERRIDE_TTL_MS = 10 * 60_000;
-export const REVIVE_TOP_N = 10;
 
 export function pruneOverrides(overrides: Overrides, generatedAt: number, now: number): Overrides {
   const kept: Record<string, Override> = {};
@@ -35,15 +34,4 @@ export function mergeGraves(list: readonly PublicGrave[], overrides: Overrides):
     if (o.grave && !seen.has(id)) out.push(o.grave);
   }
   return out.sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-}
-
-/** 살려주세요가 1 이상인 묘비를 많은 순으로. 동점이면 서버 순위, 그다음 먼저 묻힌 순 */
-export function sortByRevives(graves: readonly PublicGrave[], serverTop: readonly string[]): PublicGrave[] {
-  const serverRank = (id: string) => {
-    const i = serverTop.indexOf(id);
-    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
-  };
-  return graves
-    .filter((g) => g.revives > 0)
-    .sort((a, b) => b.revives - a.revives || serverRank(a.id) - serverRank(b.id) || a.createdAt - b.createdAt);
 }

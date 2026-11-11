@@ -1,0 +1,78 @@
+.wrap {
+  display: grid;
+  gap: 12px;
+}
+
+.search {
+  width: 100%;
+}
+
+.list {
+  display: grid;
+  gap: 6px;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+
+.item:hover {
+  background: var(--moss-deep);
+}
+
+.main {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.name {
+  overflow: hidden;
+  color: var(--bone);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.flowers {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.detail {
+  display: grid;
+  gap: 6px;
+  padding: 8px 12px 12px;
+  background: var(--bg-deep);
+  line-height: 1.6;
+}
+
+.epitaph {
+  color: var(--bone);
+}
+
+.state {
+  padding: 16px 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.more {
+  justify-self: center;
+}

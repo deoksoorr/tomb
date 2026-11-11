@@ -12,6 +12,16 @@ export const kstDay = (now = Date.now()) => todayKst(now).replaceAll("-", "");
 export const kstYesterday = (now = Date.now()) =>
   new Date(parseYmd(todayKst(now)) - 86_400_000).toISOString().slice(0, 10).replaceAll("-", "");
 
+/** KST 날짜(YYYYMMDD)가 속한 주의 월요일 (YYYYMMDD). 주간 랭킹 키 */
+export function weekOfDay(day: string): string {
+  const t = Date.UTC(Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)));
+  const dow = new Date(t).getUTCDay(); // 0 = 일요일
+  return new Date(t - ((dow + 6) % 7) * 86_400_000).toISOString().slice(0, 10).replaceAll("-", "");
+}
+export const kstWeek = (now = Date.now()) => weekOfDay(kstDay(now));
+/** 주간 랭킹 보관 (지난주까지 보고 나서 저절로 지워지게) */
+export const WEEK_RANK_TTL_SEC = 21 * 86_400;
+
 export const NAME_CHANGE_COOLDOWN_MS = NAME_CHANGE_COOLDOWN_DAYS * 86_400_000;
 
 export function toMe(accountId: string, a: AccountRecord, day: string, now: number): Me {

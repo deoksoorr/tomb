@@ -1,10 +1,10 @@
 import { Redis } from "@upstash/redis";
 import { nanoid } from "nanoid";
 import { afterEach, describe, expect, it } from "vitest";
-import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, type EarnSource } from "../economy";
+import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, type EarnSource } from "../economy";
 import { env } from "../env";
 import type { Grave } from "../types";
-import { kstDay, kstYesterday } from "./accounts";
+import { kstDay, kstWeek, kstYesterday, weekOfDay } from "./accounts";
 import { MemoryAccounts } from "./accounts-memory";
 import { RedisAccounts } from "./accounts-redis";
 import { K } from "./keys";
@@ -61,25 +61,26 @@ function contract(make: () => Kit) {
     expect((await accounts.get(id, "20261109", 0)).todayEarned).toBe(2);
   });
 
-  it("하루 전체 한도: 항목 한도 합보다 작은 하루 상한에서 멈춘다 (사냥은 점수를 직접 준다)", async () => {
+  it("하루 전체 한도: 모든 항목을 한도까지 받아도 하루 상한을 넘지 않는다 (사냥은 점수를 직접 준다)", async () => {
     const id = newId();
     const plan = [
       ["hunt", 1, 600],
       ["attend", 1],
       ["streak", 1],
       ["flower", 10],
-      ["revive", 10],
       ["bury", 1],
       ["presence", 12],
       ["gotFlower", 20],
-      ["gotRevive", 20],
       ["houseLike", 10],
     ] as const;
     let total = 0;
     for (const [source, times, amount] of plan as readonly (readonly [EarnSource, number, number?])[])
       for (let i = 0; i < times; i++) total += await accounts.earn(id, source, DAY, { amount });
-    expect(total).toBe(DAILY_EARN_CAP);
-    expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: DAILY_EARN_CAP, todayEarned: DAILY_EARN_CAP, lifetimePoints: DAILY_EARN_CAP });
+    // 49번에서 살려주세요 항목(10+20)이 빠져 항목 한도 합(780)이 하루 상한(800)보다 작아졌다
+    const cap = Math.min(DAILY_EARN_CAP, EARN_RULES.reduce((n, r) => n + r.dailyMax, 0));
+    expect(total).toBe(cap);
+    expect(await accounts.get(id, DAY, 0)).toMatchObject({ points: cap, todayEarned: cap, lifetimePoints: cap });
+    expect(await accounts.earn(id, "flower", DAY)).toBe(0);
   });
 
   it("지갑 한도: 넘치는 만큼은 쌓이지 않는다", async () => {
@@ -455,6 +456,54 @@ function contract(make: () => Kit) {
     await accounts.removeGrave(id, "g1");
     expect((await accounts.get(id, DAY, 0)).graves).toEqual(["g2"]);
   });
+
+  it("주간 포인트 랭킹: 적립(출석·머무르기 포함)이 그 주(KST 월요일)에 쌓이고 다음 주는 따로", async () => {
+    const a = newId();
+    const b = newId();
+    const week = weekOfDay(DAY);
+    await accounts.earn(a, "flower", DAY);
+    await accounts.earn(a, "flower", DAY);
+    await accounts.earn(b, "bury", DAY);
+    await accounts.presence(a, DAY, 1_000_000_000);
+    await accounts.attend(b, `ip-${nanoid(6)}`, {}, DAY, "20261107");
+    // 다음 주 월요일
+    await accounts.earn(a, "flower", "20261116");
+    const mine = (await accounts.pointRank(10_000, a, week)).mine;
+    expect(mine?.points).toBe(2 + 2 + 5);
+    expect((await accounts.pointRank(10_000, b, week)).mine?.points).toBe(20 + 10);
+    expect((await accounts.pointRank(10_000, a, weekOfDay("20261116"))).mine?.points).toBe(2);
+    expect((await accounts.pointRank(10_000, a)).mine?.points).toBe(11); // 전체 = 모은 포인트
+    const { rows } = await accounts.pointRank(10_000, null, week);
+    const ra = rows.find((r) => r.accountId === a)!;
+    const rb = rows.find((r) => r.accountId === b)!;
+    expect(rb.rank).toBeLessThan(ra.rank);
+  });
+
+  it("사냥 기록: 처치 수는 더하고, 최단 클리어는 더 짧을 때만 바뀐다 (전체·주간, 사냥터별)", async () => {
+    const a = newId();
+    const b = newId();
+    const week = weekOfDay(DAY);
+    const nextWeek = weekOfDay("20261116");
+    await accounts.recordHunt(a, "easy", { kills: 30, clearMs: 90_000 }, week);
+    await accounts.recordHunt(a, "easy", { kills: 12, clearMs: 120_000 }, week); // 더 느림 → 그대로
+    await accounts.recordHunt(a, "easy", { kills: 5, clearMs: null }, nextWeek); // 클리어 못 함
+    await accounts.recordHunt(b, "easy", { kills: 40, clearMs: 80_000 }, week);
+    await accounts.recordHunt(b, "hard", { kills: 3, clearMs: 200_000 }, nextWeek);
+
+    expect((await accounts.huntRank("kills", 10_000, a, {})).mine?.points).toBe(47);
+    expect((await accounts.huntRank("kills", 10_000, a, { week })).mine?.points).toBe(42);
+    expect((await accounts.huntRank("kills", 10_000, a, { week: nextWeek })).mine?.points).toBe(5);
+    expect((await accounts.huntRank("best", 10_000, a, { zone: "easy" })).mine?.points).toBe(90_000);
+    expect((await accounts.huntRank("best", 10_000, a, { zone: "easy", week: nextWeek })).mine).toBeNull();
+    expect((await accounts.huntRank("best", 10_000, b, { zone: "hard" })).mine?.points).toBe(200_000);
+    expect((await accounts.huntRank("best", 10_000, a, { zone: "hard" })).mine).toBeNull();
+    // 최단 기록은 작을수록 위
+    const best = await accounts.huntRank("best", 10_000, null, { zone: "easy", week });
+    const ra = best.rows.find((r) => r.accountId === a)!;
+    const rb = best.rows.find((r) => r.accountId === b)!;
+    expect(rb.rank).toBeLessThan(ra.rank);
+    expect(rb.points).toBe(80_000);
+  });
 }
 
 describe("MemoryAccounts", () =>
@@ -484,11 +533,25 @@ describe.skipIf(!redisEnv)("RedisAccounts (실제 Redis, 개발용 DB에서만 �
       async cleanup(ids) {
         const keys = (await Promise.all(ids.map((id) => (id.startsWith("code:") ? [id] : raw.keys(`acct:${id}*`))))).flat();
         if (keys.length) await raw.del(...keys);
+        const members = ids.filter((id) => !id.startsWith("code:"));
+        if (!members.length) return;
+        // 공용 랭킹 ZSET에서 테스트 계정을 뺀다
+        const boards = (await raw.keys("rank:*")) as string[];
+        await Promise.all(boards.map((k) => raw.zrem(k, ...members)));
       },
     };
   }));
 
 describe("KST 날짜 키", () => {
+  it("주 키는 그 주 월요일 (KST)", () => {
+    expect(weekOfDay("20261112")).toBe("20261109"); // 목 → 월
+    expect(weekOfDay("20261109")).toBe("20261109"); // 월
+    expect(weekOfDay("20261115")).toBe("20261109"); // 일 → 그 주 월
+    expect(weekOfDay("20261116")).toBe("20261116");
+    expect(weekOfDay("20260301")).toBe("20260223"); // 달을 넘어간다
+    expect(kstWeek(Date.UTC(2026, 10, 15, 15, 1))).toBe("20261116"); // 11/16(월) 00:01 KST
+  });
+
   it("한국 자정 기준으로 오늘·어제를 YYYYMMDD로", () => {
     const justAfterMidnightKst = Date.UTC(2026, 10, 7, 15, 1); // 11/8 00:01 KST
     expect(kstDay(justAfterMidnightKst)).toBe("20261108");

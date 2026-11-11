@@ -49,6 +49,45 @@
   outline-offset: -2px;
 }
 
+/* 기간(이번 주·전체)·사냥 기록 종류·사냥터 고르기 */
+.filters {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 6px 2px;
+}
+
+.chips {
+  display: flex;
+  gap: 2px;
+}
+
+.chip {
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 0;
+  background: var(--surface);
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--moss-deep);
+  color: var(--bone);
+}
+
+.zone {
+  min-height: 28px;
+  padding: 2px 6px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
 .listWrap {
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -137,6 +176,11 @@ li:nth-child(-n + 3) .rank {
   .item,
   .tab {
     min-height: 44px;
+  }
+
+  .chip,
+  .zone {
+    min-height: 36px;
   }
 }
 

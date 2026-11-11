@@ -129,7 +129,6 @@ function GraveCard({ grave }: { grave: GraveRecord }) {
         <div style={{ fontSize: 28, marginTop: 22 }}>{lifespanLabel(grave.bornAt, grave.diedAt, grave.ageDays)}</div>
         <div style={{ display: "flex", gap: 40, fontSize: 30, marginTop: "auto" }}>
           <div>{`🌼 헌화 ${grave.flowers}`}</div>
-          <div>{`🙏 살려주세요 ${grave.revives}`}</div>
           <div style={{ color: C.muted }}>{`상주 ${grave.mourner}`}</div>
         </div>
       </div>

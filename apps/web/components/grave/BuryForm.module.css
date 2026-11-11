@@ -161,3 +161,11 @@
     min-width: 0;
   }
 }
+
+/* 1인 1묘비 안내 (49번) */
+.blocked {
+  display: grid;
+  gap: 12px;
+  text-align: center;
+  line-height: 1.6;
+}

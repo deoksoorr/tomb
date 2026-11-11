@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { earnPoints, getAccounts, refundPoints, spendPoints } from "../store";
-import { kstDay } from "../store/accounts";
+import { kstDay, kstWeek } from "../store/accounts";
 import { earnRule } from "../economy";
 import { env } from "../env";
 import { HttpError } from "../http";
@@ -180,6 +180,9 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   );
   const earned = v.points > 0 ? (await earnPoints(acct, "hunt", v.points, ipHash)).earned : 0;
   await store.addDaily(acct, kstDay(now), { points: earned, runs: 1, exp: v.exp });
+  // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터)
+  if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null))
+    await getAccounts().recordHunt(acct, t.d, v.hunt, kstWeek(now));
   return {
     reward: {
       score: v.score,

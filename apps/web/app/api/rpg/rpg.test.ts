@@ -6,6 +6,8 @@ import type { RpgView, RunFinishResponse, RunStartResponse } from "@/lib/rpg/typ
 import { earnRule } from "@/lib/economy";
 import { getAccounts } from "@/lib/store";
 import { kstDay } from "@/lib/store/accounts";
+import type { RankResponse } from "@/lib/types";
+import * as rank from "../rank/route";
 import * as session from "../session/route";
 import * as finish from "./run/finish/route";
 import * as start from "./run/start/route";
@@ -76,6 +78,14 @@ describe("사냥터 API", () => {
     expect(body.view.character.level).toBeGreaterThan(1);
     expect(body.view.character.potions.p_coffee).toBe(2);
     expect(body.view.today.huntPoints).toBe(20);
+    // 49번 랭킹: 그 사냥터의 최단 클리어(서버가 잰 시간과 결과 중 짧은 쪽)와 처치 수
+    const board = async (q: string) => (await (await rank.GET(call(`/api/rank?${q}&me=1`, v))).json()) as RankResponse;
+    const kills = Object.values(clearAll(s.seed).kills).reduce((n, k) => n + k, 0);
+    expect((await board("board=huntBest&zone=easy&period=week")).mine).toMatchObject({ value: 100_000, me: true });
+    expect((await board("board=huntBest&zone=easy&period=all")).mine?.value).toBe(100_000);
+    expect((await board("board=huntBest&zone=hard")).mine).toBeNull();
+    expect((await board("board=huntKills&period=week")).mine?.value).toBe(kills);
+    expect((await board("board=points&period=week")).mine?.value).toBe(20);
     const again = await finish.POST(call("/api/rpg/run/finish", v, { ticket: s.ticket, result: clearAll(s.seed) }));
     expect(again.status).toBe(409);
     expect(await errCode(again)).toBe("TICKET_USED");

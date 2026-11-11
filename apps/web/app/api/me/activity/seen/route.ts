@@ -10,5 +10,6 @@ export const POST = handler(async (req) => {
   const accounts = getAccounts();
   const lastSeenAt = await accounts.seeActivity(visitorId, Math.min(at, Date.now()));
   const { items } = await accounts.activity(visitorId);
-  return json({ lastSeenAt, unread: items.filter((i) => i.at > lastSeenAt).length });
+  // 49번에서 없어진 살려주세요 소식은 세지 않는다 (GET /api/me/activity와 같은 기준)
+  return json({ lastSeenAt, unread: items.filter((i) => i.kind !== "revive" && i.at > lastSeenAt).length });
 });

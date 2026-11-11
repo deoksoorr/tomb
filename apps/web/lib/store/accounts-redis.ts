@@ -2,7 +2,7 @@ import { Redis } from "@upstash/redis";
 import { MAX_DECOR_PER_GRAVE, type CosmeticSlot } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import type { ActivityItem, Grave, GraveDecor } from "../types";
-import { kstDay } from "./accounts";
+import { kstDay, WEEK_RANK_TTL_SEC, weekOfDay } from "./accounts";
 import { chKeys, DECOR, K } from "./keys";
 import { encode } from "./redis";
 import {
@@ -30,7 +30,8 @@ const EARN_TTL_SEC = 2 * 86_400;
  * 항목별 하루 한도·하루 전체 한도·지갑 한도(+ ipKey가 있으면 같은 IP의 그 항목 합계) 안에서 적립하고
  * 모은 포인트(lifetime)와 포인트 랭킹을 같이 올린다. 개편 전 계정의 모은 포인트는 지금 잔액에서 시작한다.
  * 경제 통계(econ:{날짜})의 earn:{source}도 함께 올린다.
- * MemoryAccounts.credit과 같은 규칙. c = { acct, earn, rank, econ, id, dailyCap, balanceCap, ttl }
+ * 그 주에 모은 포인트(주간 랭킹, c.week)도 같이 올린다.
+ * MemoryAccounts.credit과 같은 규칙. c = { acct, earn, rank, econ, week, id, dailyCap, balanceCap, ttl }
  */
 const CREDIT_FN = `
 local function credit(c, source, points, dailyMax, ipKey, ipMax)
@@ -50,6 +51,8 @@ local function credit(c, source, points, dailyMax, ipKey, ipMax)
   redis.call('HINCRBY', c.acct, 'points', amount)
   redis.call('HSETNX', c.acct, 'lifetime', bal)
   redis.call('ZADD', c.rank, redis.call('HINCRBY', c.acct, 'lifetime', amount), c.id)
+  redis.call('ZINCRBY', c.week, amount, c.id)
+  redis.call('EXPIRE', c.week, ${WEEK_RANK_TTL_SEC})
   redis.call('HINCRBY', c.econ, 'earn:' .. source, amount)
   redis.call('EXPIRE', c.econ, ${ECON_TTL_SEC})
   return amount
@@ -94,23 +97,23 @@ local function puton(look, stash, slot, item, untilMs)
 end
 `;
 
-// KEYS: acct, earn, rank, econ, [earnIp]  ARGV: id, source, points, dailyMax, dailyCap, balanceCap, ttl, ipMax
+// KEYS: acct, earn, rank, econ, week, [earnIp]  ARGV: id, source, points, dailyMax, dailyCap, balanceCap, ttl, ipMax
 const EARN_LUA = `${CREDIT_FN}
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], id = ARGV[1], dailyCap = tonumber(ARGV[5]), balanceCap = tonumber(ARGV[6]), ttl = ARGV[7] }
-return credit(c, ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4]), KEYS[5], tonumber(ARGV[8]))
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[5]), balanceCap = tonumber(ARGV[6]), ttl = ARGV[7] }
+return credit(c, ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4]), KEYS[6], tonumber(ARGV[8]))
 `;
 
 // 머무르기: 직전 지급 후 gap이 지났을 때만 (아니면 -1)
-// KEYS: acct, earn, rank, econ  ARGV: id, now, gap, points, dailyMax, dailyCap, balanceCap, ttl
+// KEYS: acct, earn, rank, econ, week  ARGV: id, now, gap, points, dailyMax, dailyCap, balanceCap, ttl
 const PRESENCE_LUA = `${CREDIT_FN}
 if tonumber(ARGV[2]) - tonumber(redis.call('HGET', KEYS[1], 'presenceAt') or '0') < tonumber(ARGV[3]) then return -1 end
 redis.call('HSET', KEYS[1], 'presenceAt', ARGV[2])
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], id = ARGV[1], dailyCap = tonumber(ARGV[6]), balanceCap = tonumber(ARGV[7]), ttl = ARGV[8] }
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[6]), balanceCap = tonumber(ARGV[7]), ttl = ARGV[8] }
 return credit(c, 'presence', tonumber(ARGV[4]), tonumber(ARGV[5]))
 `;
 
 // 출석. 이름·색·몸 모양은 계정에 값이 없을 때만 저장한다
-// KEYS: acct, earn, attendIp, rank, econ
+// KEYS: acct, earn, attendIp, rank, econ, week
 // ARGV: id, day, yesterday, name, perIp, ttl, attendPts, attendMax, streakPts, streakMax, dailyCap, balanceCap, now, color, body
 const ATTEND_LUA = `${CREDIT_FN}
 if ARGV[4] ~= '' then redis.call('HSETNX', KEYS[1], 'name', ARGV[4]) end
@@ -125,7 +128,7 @@ redis.call('HSET', KEYS[1], 'lastAttend', ARGV[2], 'streak', streak)
 if redis.call('SISMEMBER', KEYS[3], ARGV[1]) == 0 and redis.call('SCARD', KEYS[3]) >= tonumber(ARGV[5]) then return 0 end
 redis.call('SADD', KEYS[3], ARGV[1])
 redis.call('EXPIRE', KEYS[3], ARGV[6])
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[4], econ = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[11]), balanceCap = tonumber(ARGV[12]), ttl = ARGV[6] }
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[4], econ = KEYS[5], week = KEYS[6], id = ARGV[1], dailyCap = tonumber(ARGV[11]), balanceCap = tonumber(ARGV[12]), ttl = ARGV[6] }
 local earned = credit(c, 'attend', tonumber(ARGV[7]), tonumber(ARGV[8]))
 if streak % 7 == 0 then earned = earned + credit(c, 'streak', tonumber(ARGV[9]), tonumber(ARGV[10])) end
 return earned
@@ -300,6 +303,24 @@ redis.call('SET', KEYS[3], ARGV[3])
 return 1
 `;
 
+// 사냥 기록 (49번 랭킹). 처치 수는 전체·그 주에 더하고, 클리어 시간은 더 짧을 때만 바꾼다 (ZADD LT와 같은 뜻을 Lua로)
+// KEYS: killsAll, killsWeek, bestAll, bestWeek  ARGV: id, kills, clearMs(''=클리어 못 함), weekTtl
+const HUNT_LUA = `
+if tonumber(ARGV[2]) > 0 then
+  redis.call('ZINCRBY', KEYS[1], ARGV[2], ARGV[1])
+  redis.call('ZINCRBY', KEYS[2], ARGV[2], ARGV[1])
+  redis.call('EXPIRE', KEYS[2], ARGV[4])
+end
+if ARGV[3] ~= '' then
+  for i = 3, 4 do
+    local cur = redis.call('ZSCORE', KEYS[i], ARGV[1])
+    if not cur or tonumber(ARGV[3]) < tonumber(cur) then redis.call('ZADD', KEYS[i], ARGV[3], ARGV[1]) end
+  end
+  redis.call('EXPIRE', KEYS[4], ARGV[4])
+end
+return 1
+`;
+
 function pairs(flat: string[] | null): Map<string, string> {
   const m = new Map<string, string>();
   for (let i = 0; flat && i < flat.length; i += 2) m.set(flat[i], flat[i + 1]);
@@ -347,7 +368,10 @@ export class RedisAccounts implements AccountStore {
       stash,
       graves,
       todayEarned: Number(today ?? 0),
-      activityUnread: activity.filter((raw) => (JSON.parse(raw) as ActivityItem).at > Number(a.get("activitySeen") ?? 0)).length,
+      activityUnread: activity.filter((raw) => {
+        const item = JSON.parse(raw) as ActivityItem;
+        return item.kind !== "revive" && item.at > Number(a.get("activitySeen") ?? 0);
+      }).length,
       nameChangedAt: Number(a.get("nameChangedAt") ?? 0),
       nameChanges: Number(a.get("nameChanges") ?? 0),
       tutorialDone: a.get("tutorialDone") === "1",
@@ -356,7 +380,7 @@ export class RedisAccounts implements AccountStore {
 
   async earn(id: string, source: EarnSource, day: string, opts: EarnOptions = {}): Promise<number> {
     const rule = earnRule(source);
-    const keys = [K.acct(id), K.earn(id, day), K.rankPoints, K.econ(day)];
+    const keys = [K.acct(id), K.earn(id, day), K.rankPoints, K.econ(day), K.rankPointsWeek(weekOfDay(day))];
     if (opts.ipHash) keys.push(K.earnIp(opts.ipHash, day));
     const r = await this.redis.eval<string[], number>(EARN_LUA, keys, [
       id,
@@ -397,7 +421,10 @@ export class RedisAccounts implements AccountStore {
   async presence(id: string, day: string, now: number): Promise<number | null> {
     const rule = earnRule("presence");
     const r = Number(
-      await this.redis.eval<string[], number>(PRESENCE_LUA, [K.acct(id), K.earn(id, day), K.rankPoints, K.econ(day)], [
+      await this.redis.eval<string[], number>(
+        PRESENCE_LUA,
+        [K.acct(id), K.earn(id, day), K.rankPoints, K.econ(day), K.rankPointsWeek(weekOfDay(day))],
+        [
         id,
         String(now),
         String(PRESENCE_MIN_GAP_MS),
@@ -411,13 +438,13 @@ export class RedisAccounts implements AccountStore {
     return r < 0 ? null : r;
   }
 
-  /** ZRANGE 1회 + (상위 limit명 이름, 내 순위·점수) 파이프라인 1회 */
-  async pointRank(limit: number, me: string | null): Promise<{ rows: RankEntry[]; mine: RankEntry | null }> {
-    const flat = await this.redis.zrange<string[]>(K.rankPoints, 0, limit - 1, { rev: true, withScores: true });
+  /** ZRANGE 1회 + (상위 limit명 이름, 내 순위·점수) 파이프라인 1회. asc면 점수가 작을수록 위 (최단 기록) */
+  private async board(key: string, limit: number, me: string | null, asc = false): Promise<{ rows: RankEntry[]; mine: RankEntry | null }> {
+    const flat = await this.redis.zrange<string[]>(key, 0, limit - 1, { rev: !asc, withScores: true });
     const top = [...pairs(flat)];
     const p = this.redis.pipeline();
     for (const [id] of top) p.hget(K.acct(id), "name");
-    if (me) p.zrevrank(K.rankPoints, me).zscore(K.rankPoints, me).hget(K.acct(me), "name");
+    if (me) (asc ? p.zrank(key, me) : p.zrevrank(key, me)).zscore(key, me).hget(K.acct(me), "name");
     const r = top.length || me ? await p.exec<(string | number | null)[]>() : [];
     const rows = top.map(([accountId, score], i) => ({
       accountId,
@@ -433,12 +460,35 @@ export class RedisAccounts implements AccountStore {
     return { rows, mine };
   }
 
+  pointRank(limit: number, me: string | null, week?: string): Promise<{ rows: RankEntry[]; mine: RankEntry | null }> {
+    return this.board(week ? K.rankPointsWeek(week) : K.rankPoints, limit, me);
+  }
+
+  async recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string): Promise<void> {
+    await this.redis.eval<string[], number>(
+      HUNT_LUA,
+      [K.rankHuntKills, K.rankHuntKillsWeek(week), K.rankHuntBest(zone), K.rankHuntBestWeek(zone, week)],
+      [id, String(Math.max(0, Math.floor(run.kills))), run.clearMs === null ? "" : String(Math.round(run.clearMs)), String(WEEK_RANK_TTL_SEC)],
+    );
+  }
+
+  huntRank(
+    board: "kills" | "best",
+    limit: number,
+    me: string | null,
+    opts: { zone?: string; week?: string },
+  ): Promise<{ rows: RankEntry[]; mine: RankEntry | null }> {
+    if (board === "kills") return this.board(opts.week ? K.rankHuntKillsWeek(opts.week) : K.rankHuntKills, limit, me);
+    const zone = opts.zone ?? "easy";
+    return this.board(opts.week ? K.rankHuntBestWeek(zone, opts.week) : K.rankHuntBest(zone), limit, me, true);
+  }
+
   async attend(id: string, ipHash: string, profile: Profile, day: string, yesterday: string): Promise<number> {
     const attend = earnRule("attend");
     const streak = earnRule("streak");
     const r = await this.redis.eval<string[], number>(
       ATTEND_LUA,
-      [K.acct(id), K.earn(id, day), K.attendIp(ipHash, day), K.rankPoints, K.econ(day)],
+      [K.acct(id), K.earn(id, day), K.attendIp(ipHash, day), K.rankPoints, K.econ(day), K.rankPointsWeek(weekOfDay(day))],
       [
         id,
         day,

@@ -14,7 +14,7 @@ type Props = {
   onBury: () => void;
 };
 
-/** 내 묘비 목록 (최근 순, 자리 또는 채널·헌화·살려주세요). HUD의 [내 묘비]와 가방(묘비에 놓기)이 같이 쓴다 */
+/** 내 묘비 목록 (최근 순, 자리 또는 채널·헌화 수). 메뉴의 [내 묘비 가기]와 가방(묘비에 놓기)이 같이 쓴다 */
 export default function MyGraves({ entries, pending, onGo, onBury }: Props) {
   if (entries.length === 0) {
     return pending > 0 ? (
@@ -23,9 +23,9 @@ export default function MyGraves({ entries, pending, onGo, onBury }: Props) {
       </p>
     ) : (
       <div className={styles.empty}>
-        <p>아직 세운 묘비가 없어요.</p>
+        <p>지금 묘역에 내 묘비가 없어요.</p>
         <button type="button" className={ui.button} onClick={onBury}>
-          묘비 세우기
+          묘비 쓰기
         </button>
       </div>
     );
@@ -49,11 +49,11 @@ export default function MyGraves({ entries, pending, onGo, onBury }: Props) {
                 <span className={styles.name}>{grave.name}</span>
                 <span className={styles.meta} data-elsewhere={!here}>
                   {where}
-                  {!here && " · 누르면 채널을 옮겨요"}
+                  {!here && " · 누르면 채널을 옮겨 걸어가요"}
                 </span>
               </span>
-              <span className={styles.counts} aria-label={`헌화 ${grave.flowers}, 살려주세요 ${grave.revives}`}>
-                🌼 {grave.flowers} · 🙏 {grave.revives}
+              <span className={styles.counts} aria-label={`헌화 ${grave.flowers}`}>
+                🌼 {grave.flowers}
               </span>
             </button>
           </li>

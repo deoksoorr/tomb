@@ -39,7 +39,7 @@ function contract(make: () => GraveStore) {
     return g;
   };
   afterEach(async () => {
-    await Promise.all(created.splice(0).map((id) => store.remove(id)));
+    await Promise.all(created.splice(0).flatMap((id) => [store.remove(id), store.removePassed(id)]));
   });
 
   it("put/get: 메타와 0 카운트를 돌려주고, 없는 id는 null", async () => {
@@ -54,27 +54,11 @@ function contract(make: () => GraveStore) {
     expect((await store.get(g.id))?.name).toBe("고친 이름");
   });
 
-  it("20명이 동시에 살려주세요 → 정확히 20, 동시에 취소 → 0", async () => {
-    const g = await add();
-    const vs = visitors(20);
-    const on = await Promise.all(vs.map((v) => store.toggleRevive(g.id, v)));
-    expect(on.every((r) => r?.revived)).toBe(true);
-    expect((await store.get(g.id))?.revives).toBe(20);
-    expect(Math.max(...on.map((r) => r!.count))).toBe(20);
-    expect((await store.viewer(g.id, vs[3])).myRevive).toBe(true);
-
-    const off = await Promise.all(vs.map((v) => store.toggleRevive(g.id, v)));
-    expect(off.every((r) => r && !r.revived)).toBe(true);
-    expect((await store.get(g.id))?.revives).toBe(0);
-    expect((await store.viewer(g.id, vs[3])).myRevive).toBe(false);
-  });
-
   it("없는(삭제된) 묘비에 반응 → null, 고아 카운트·집합을 만들지 않는다", async () => {
     const id = `test-${nanoid(8)}`;
-    expect(await store.toggleRevive(id, "v")).toBeNull();
     expect(await store.flower(id, "v")).toBeNull();
     expect(await store.report(id, "v", "ip", "other")).toBeNull();
-    expect(await store.viewer(id, "v")).toEqual({ myRevive: false, myFlowerToday: false });
+    expect(await store.viewer(id, "v")).toEqual({ myFlowerToday: false });
     await add({ id });
     expect(await store.get(id)).toMatchObject({ flowers: 0, revives: 0 });
     expect(await store.report(id, "v", "ip", "other")).toBe("added");
@@ -92,7 +76,7 @@ function contract(make: () => GraveStore) {
     const results = await Promise.all(Array.from({ length: 5 }, () => store.flower(g.id, "same")));
     expect(results.filter((c) => c !== "already")).toEqual([1]);
     expect(await store.flower(g.id, "same")).toBe("already");
-    expect(await store.viewer(g.id, "same")).toEqual({ myRevive: false, myFlowerToday: true });
+    expect(await store.viewer(g.id, "same")).toEqual({ myFlowerToday: true });
     expect((await store.viewer(g.id, "other")).myFlowerToday).toBe(false);
   });
 
@@ -161,13 +145,12 @@ function contract(make: () => GraveStore) {
   it("remove는 메타·카운트·집합을 모두 지운다", async () => {
     const g = await add();
     await store.flower(g.id, "a");
-    await store.toggleRevive(g.id, "a");
     await store.report(g.id, "a", "ip-a", "other");
     await store.setHidden(g.id, true);
     expect((await store.remove(g.id))?.id).toBe(g.id);
     expect(await store.get(g.id)).toBeNull();
     expect((await store.listAll()).some((r) => r.id === g.id)).toBe(false);
-    expect((await store.viewer(g.id, "a")).myRevive).toBe(false);
+    expect((await store.viewer(g.id, "a")).myFlowerToday).toBe(true); // 헌화 표시는 24시간 TTL로 저절로 사라진다
     expect((await store.reportSummary()).has(g.id)).toBe(false);
     expect(await store.remove(g.id)).toBeNull();
     // 같은 id로 다시 세워도 예전 카운트·숨김·신고가 남아 있지 않다
@@ -180,15 +163,14 @@ function contract(make: () => GraveStore) {
   it("채널마다 묘지가 따로: 목록·랭킹이 섞이지 않고, id로 부르면 채널을 스스로 찾는다", async () => {
     const one = await add({ channel: 1 });
     const two = await add({ channel: 2 });
-    await store.toggleRevive(two.id, "v1");
     await store.flower(two.id, "v1");
     const ids = async (ch: number) => (await store.list(ch)).map((r) => r.id);
     expect(await ids(1)).toContain(one.id);
     expect(await ids(1)).not.toContain(two.id);
     expect(await ids(2)).toContain(two.id);
     expect(await ids(2)).not.toContain(one.id);
-    expect(await store.get(two.id)).toMatchObject({ channel: 2, revives: 1, flowers: 1 });
-    expect((await store.list(2)).find((r) => r.id === two.id)).toMatchObject({ channel: 2, revives: 1, flowers: 1 });
+    expect(await store.get(two.id)).toMatchObject({ channel: 2, flowers: 1 });
+    expect((await store.list(2)).find((r) => r.id === two.id)).toMatchObject({ channel: 2, flowers: 1 });
     const all = await store.listAll();
     expect(all.find((r) => r.id === one.id)?.channel).toBe(1);
     expect(all.find((r) => r.id === two.id)?.channel).toBe(2);
@@ -211,8 +193,6 @@ function contract(make: () => GraveStore) {
     const acct = `acct-${nanoid(6)}`;
     const g = await add({ channel: 2, createdAt: 1000 });
     await store.flower(g.id, "v1");
-    await store.toggleRevive(g.id, "v1");
-    await store.toggleRevive(g.id, "v2");
     await store.setHidden(g.id, true);
     const now = Date.now();
 
@@ -223,13 +203,13 @@ function contract(make: () => GraveStore) {
 
     const [entry] = await store.shrine(acct, now);
     expect(entry).toMatchObject({ removedAt: now, expiresAt: now + SHRINE_KEEP_MS });
-    expect(entry.record).toMatchObject({ id: g.id, channel: 2, flowers: 1, revives: 2, hidden: true, createdAt: 1000 });
+    expect(entry.record).toMatchObject({ id: g.id, channel: 2, flowers: 1, hidden: true, createdAt: 1000 });
 
     expect(await store.restore(`acct-${nanoid(6)}`, g.id, now + 1)).toBeNull(); // 남의 성황당
     const back = await store.restore(acct, g.id, now + 5);
-    expect(back).toMatchObject({ id: g.id, channel: 2, flowers: 1, revives: 2, hidden: true, createdAt: now + 5 });
-    expect(await store.get(g.id)).toMatchObject({ channel: 2, flowers: 1, revives: 2, createdAt: now + 5 });
-    expect((await store.viewer(g.id, "v1")).myRevive).toBe(true); // 살려주세요 한 사람 기록도 그대로
+    expect(back).toMatchObject({ id: g.id, channel: 2, flowers: 1, hidden: true, createdAt: now + 5 });
+    expect(await store.get(g.id)).toMatchObject({ channel: 2, flowers: 1, createdAt: now + 5 });
+    expect((await store.viewer(g.id, "v1")).myFlowerToday).toBe(true); // 헌화한 사람 기록도 그대로
     expect(await store.shrine(acct, now)).toEqual([]);
     expect(await store.restore(acct, g.id, now + 6)).toBeNull();
   });
@@ -257,11 +237,55 @@ function contract(make: () => GraveStore) {
     const b = await add();
     await store.setHidden(b.id, true);
     await store.flower(a.id, "x");
-    await store.toggleRevive(a.id, "x");
     const mine = (await store.list(1)).filter((r) => r.id === a.id || r.id === b.id);
     expect(mine).toHaveLength(2);
-    expect(mine.find((r) => r.id === a.id)).toMatchObject({ flowers: 1, revives: 1 });
+    expect(mine.find((r) => r.id === a.id)).toMatchObject({ flowers: 1, revives: 0 });
     expect(mine.find((r) => r.id === b.id)?.hidden).toBe(true);
+  });
+
+  it("성불: 묘역에서 빼고 성불 리스트로 옮긴다 (반응 수·숨김·꾸미기 보관), 두 번 불러도 한 번만", async () => {
+    const g = await add({ channel: 3, createdAt: 1234 });
+    await store.flower(g.id, "v1");
+    await store.flower(g.id, "v2");
+    await store.setHidden(g.id, true);
+    const now = Date.now();
+
+    const both = await Promise.all([store.passOn(g.id, now, "time"), store.passOn(g.id, now, "time")]);
+    expect(both.filter(Boolean)).toHaveLength(1);
+    const done = both.find(Boolean)!;
+    expect(done).toMatchObject({ passedAt: now, reason: "time" });
+    expect(done.record).toMatchObject({ id: g.id, channel: 3, flowers: 2, hidden: true, createdAt: 1234 });
+    expect(await store.get(g.id)).toBeNull();
+    expect((await store.list(3)).some((r) => r.id === g.id)).toBe(false);
+    expect(await store.flower(g.id, "v3")).toBeNull(); // 성불한 묘비에는 꽃을 놓을 수 없다
+
+    const all = await store.passedAll();
+    expect(all.find((p) => p.record.id === g.id)).toMatchObject({ passedAt: now, reason: "time", record: { flowers: 2, channel: 3 } });
+    expect((await store.passedSince(now - 1, 50)).map((p) => p.record.id)).toContain(g.id);
+    expect((await store.passedSince(now, 50)).map((p) => p.record.id)).not.toContain(g.id);
+
+    expect((await store.removePassed(g.id))?.id).toBe(g.id);
+    expect(await store.removePassed(g.id)).toBeNull();
+    expect((await store.passedAll()).some((p) => p.record.id === g.id)).toBe(false);
+    expect((await store.passedSince(now - 1, 50)).map((p) => p.record.id)).not.toContain(g.id);
+    expect(await store.passOn(`test-${nanoid(8)}`, now, "time")).toBeNull();
+  });
+
+  it("성불: 꾸미기도 같이 보관한다", async () => {
+    const g = await add();
+    const passed = await store.passOn(g.id, Date.now(), "full");
+    expect(passed?.reason).toBe("full");
+    expect(passed?.record.decor).toBeUndefined();
+  });
+
+  it("묘지 설정: passEpoch는 처음 한 번만 정해지고, 성불 기간을 바꿀 수 있다", async () => {
+    const first = await store.settings(1000);
+    const again = await store.settings(5000);
+    expect(again.passEpoch).toBe(first.passEpoch);
+    const before = first.passDays;
+    await store.setPassDays(3);
+    expect((await store.settings(9000)).passDays).toBe(3);
+    await store.setPassDays(before);
   });
 }
 
@@ -281,12 +305,34 @@ describe.skipIf(!redisEnv)("RedisStore 채널 이관 (실제 Redis)", () => {
     try {
       expect((await store.get(legacy.id))?.channel).toBe(1);
       expect((await store.list(1)).find((r) => r.id === legacy.id)?.channel).toBe(1);
-      expect(await store.toggleRevive(legacy.id, "v")).toEqual({ revived: true, count: 1 });
-      expect((await listPublic(store, 1)).reviveTop).toContain(legacy.id);
+      expect(await store.flower(legacy.id, "v")).toBe(1);
+      expect((await listPublic(store, 1)).graves.find((g) => g.id === legacy.id)?.flowers).toBe(1);
     } finally {
       await store.remove(legacy.id);
     }
     expect(await raw.hget("graves:meta", legacy.id)).toBeNull();
+  });
+});
+
+describe.skipIf(!redisEnv)("RedisStore 성불 보관 (실제 Redis)", () => {
+  it("저장된 살려주세요 수·꾸미기도 성불 보관 JSON에 그대로 남는다", async () => {
+    const raw = new Redis({ ...redisEnv!, automaticDeserialization: false });
+    const store = new RedisStore(redisEnv!);
+    const g = grave({ channel: 2 });
+    await store.put(g);
+    await raw.zadd("ch:2:graves:revive", { score: 7, member: g.id });
+    await raw.hset("ch:2:graves:meta", { [`decor:${g.id}`]: JSON.stringify([{ itemId: "candle", until: 9 }]) });
+    try {
+      const passed = await store.passOn(g.id, 1234, "one");
+      expect(passed?.record).toMatchObject({ id: g.id, channel: 2, revives: 7, decor: [{ itemId: "candle", until: 9 }] });
+      expect(await raw.zscore("ch:2:graves:revive", g.id)).toBeNull();
+      expect(await raw.hget("ch:2:graves:meta", `decor:${g.id}`)).toBeNull();
+      expect(await raw.hget("graves:ch", g.id)).toBeNull();
+      const back = (await store.passedAll()).find((p) => p.record.id === g.id);
+      expect(back).toMatchObject({ passedAt: 1234, reason: "one", record: { revives: 7, decor: [{ itemId: "candle" }] } });
+    } finally {
+      await store.removePassed(g.id);
+    }
   });
 });
 
@@ -336,20 +382,19 @@ describe("목업 묘비", () => {
 });
 
 describe("listPublic / toPublicGrave / deleteGrave", () => {
-  it("숨김 제외, 등록 순 정렬, reviveTop은 점수>0 상위 10개", async () => {
-    const store = new MemoryStore();
+  it("숨김 제외, 등록 순 정렬, 살려주세요는 보관만(revives 0, reviveTop 빈 배열), 성불 시각을 넣는다", async () => {
+    const store = new MemoryStore([{ grave: grave({ id: "old", createdAt: 500 }), flowers: 2, revives: 7 }]);
     const gs = Array.from({ length: 14 }, (_, i) => grave({ id: `g${i}`, createdAt: 1000 - i }));
     for (const g of gs) await store.put(g);
     await store.setHidden("g0", true);
-    // g1..g12에 i표씩 (g13은 0표)
-    for (let i = 1; i <= 12; i++) for (const v of visitors(i)) await store.toggleRevive(`g${i}`, v);
-    for (const v of visitors(20)) await store.toggleRevive("g0", v); // 숨김이라 순위에서 빠져야 함
 
     const res = await listPublic(store, 1, 42);
     expect(res.generatedAt).toBe(42);
     expect(res.channel).toBe(1);
-    expect(res.graves.map((g) => g.id)).toEqual(gs.slice(1).map((g) => g.id).reverse());
-    expect(res.reviveTop).toEqual(["g12", "g11", "g10", "g9", "g8", "g7", "g6", "g5", "g4", "g3"]);
+    expect(res.graves.map((g) => g.id)).toEqual(["old", ...gs.slice(1).map((g) => g.id).reverse()]);
+    expect(res.reviveTop).toEqual([]);
+    expect(res.graves[0]).toMatchObject({ id: "old", flowers: 2, revives: 0, passAt: 500 + 14 * 86_400_000 });
+    expect((await store.get("old"))?.revives).toBe(7); // 저장된 수는 그대로
     for (const g of res.graves) {
       expect(g).not.toHaveProperty("ownerTokenHash");
       expect(g).not.toHaveProperty("hidden");
@@ -361,17 +406,22 @@ describe("listPublic / toPublicGrave / deleteGrave", () => {
     expect(pub).not.toHaveProperty("ownerTokenHash");
     expect(pub).not.toHaveProperty("hidden");
     expect(pub).not.toHaveProperty("ownerAccountId");
-    expect(pub).toMatchObject({ flowers: 1, revives: 2, channel: 1 });
+    expect(pub).toMatchObject({ flowers: 1, revives: 0, channel: 1 });
+    expect(pub).not.toHaveProperty("passAt");
     expect(toPublicGrave({ ...grave({ channel: 3 }), flowers: 0, revives: 0 }).channel).toBe(3);
   });
 
-  it("채널별 목록과 랭킹", async () => {
+  it("채널별 목록, 최근 성불(passed)도 그 채널 것만", async () => {
     const store = new MemoryStore();
     await store.put(grave({ id: "a", channel: 1 }));
     await store.put(grave({ id: "b", channel: 2 }));
-    await store.toggleRevive("b", "v");
-    expect(await listPublic(store, 1, 0)).toMatchObject({ channel: 1, reviveTop: [], graves: [{ id: "a", channel: 1 }] });
-    expect(await listPublic(store, 2, 0)).toMatchObject({ channel: 2, reviveTop: ["b"], graves: [{ id: "b", channel: 2 }] });
+    await store.put(grave({ id: "c", channel: 2 }));
+    await store.passOn("c", 100, "time");
+    expect(await listPublic(store, 1, 200)).toMatchObject({ channel: 1, reviveTop: [], graves: [{ id: "a", channel: 1 }] });
+    expect((await listPublic(store, 1, 200)).passed).toBeUndefined();
+    expect(await listPublic(store, 2, 200)).toMatchObject({ channel: 2, passed: ["c"], graves: [{ id: "b", channel: 2 }] });
+    // 10분이 지나면 빛 연출 목록에서 빠진다
+    expect((await listPublic(store, 2, 100 + 10 * 60_000 + 1)).passed).toBeUndefined();
     expect((await listPublic(store, 3, 0)).graves).toEqual([]);
   });
 

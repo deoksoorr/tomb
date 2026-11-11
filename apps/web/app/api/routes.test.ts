@@ -212,9 +212,27 @@ describe("묘비 CRUD", () => {
     expect(JSON.stringify(list)).not.toMatch(/ownerTokenHash|"hidden"/);
   });
 
-  it("하루 3개를 넘게 세우면 429 RATE_LIMITED + Retry-After", async () => {
+  it("1인 1묘비: 묘역에 내 묘비가 있으면 409 ONE_GRAVE + 남은 기간 (하루 한도는 깎지 않는다)", async () => {
     const v = await newVisitor();
-    for (let i = 0; i < 3; i++) await createGrave(v);
+    await createGrave(v);
+    for (let i = 0; i < 4; i++) {
+      const res = await graves.POST(call("/api/graves", { method: "POST", visitor: v, body: input }));
+      expect(res.status).toBe(409);
+      const err = await errorOf(res);
+      expect(err.code).toBe("ONE_GRAVE");
+      expect(err.message).toMatch(/^지금 묘비가 성불한 뒤에 쓸 수 있어요 \(남은 기간 (13일 23시간|14일)\)$/);
+    }
+  });
+
+  it("이장했다 다시 세우기를 반복해도 하루 3개를 넘으면 429 RATE_LIMITED + Retry-After", async () => {
+    const v = await newVisitor();
+    for (let i = 0; i < 3; i++) {
+      const { grave, ownerToken } = await createGrave(v);
+      await graveById.DELETE(
+        call(`/api/graves/${grave.id}`, { method: "DELETE", visitor: v, headers: { "x-owner-token": ownerToken } }),
+        ctx(grave.id),
+      );
+    }
     const res = await graves.POST(call("/api/graves", { method: "POST", visitor: v, body: input }));
     expect(res.status).toBe(429);
     expect(await errorOf(res)).toEqual({ code: "RATE_LIMITED", message: "묘비는 하루에 3개까지 세울 수 있어요." });
@@ -229,8 +247,16 @@ describe("묘비 CRUD", () => {
     }
     expect(statuses).toEqual([201, 201, 201, 429, 429, 429]);
 
+    // 같은 쿠키로 IP를 바꿔 가며 (이장하고 다시 세우기)
     const roaming = await newVisitor();
-    for (let i = 0; i < 3; i++) await createGrave({ ...roaming, ip: `10.8.0.${i}` });
+    for (let i = 0; i < 3; i++) {
+      const at = { ...roaming, ip: `10.8.0.${i}` };
+      const { grave, ownerToken } = await createGrave(at);
+      await graveById.DELETE(
+        call(`/api/graves/${grave.id}`, { method: "DELETE", visitor: at, headers: { "x-owner-token": ownerToken } }),
+        ctx(grave.id),
+      );
+    }
     const res = await graves.POST(call("/api/graves", { method: "POST", visitor: { ...roaming, ip: "10.8.0.9" }, body: input }));
     expect(res.status).toBe(429);
   });
@@ -249,23 +275,21 @@ describe("반응", () => {
     const detail = (await (
       await graveById.GET(call(`/api/graves/${grave.id}`, { visitor: v }), ctx(grave.id))
     ).json()) as GraveDetailResponse;
-    expect(detail).toMatchObject({ myFlowerToday: true, myRevive: false, grave: { flowers: 1 } });
+    expect(detail).toMatchObject({ myFlowerToday: true, grave: { flowers: 1, revives: 0 } });
+    expect(detail).not.toHaveProperty("myRevive");
+    expect(detail.grave.passAt).toBeGreaterThan(Date.now());
   });
 
-  it("살려주세요: 토글, 상세에 myRevive", async () => {
+  it("살려주세요는 없어졌다: 옛 화면이 불러도 410 GONE, 아무것도 바뀌지 않는다", async () => {
     const v = await newVisitor();
     const { grave } = await createGrave(v);
-    const on = await revive.POST(call(`/api/graves/${grave.id}/revive`, { method: "POST", visitor: v }), ctx(grave.id));
-    expect(await on.json()).toEqual({ revived: true, count: 1, earned: 1 });
+    const res = await revive.POST(call(`/api/graves/${grave.id}/revive`, { method: "POST", visitor: v }), ctx(grave.id));
+    expect(res.status).toBe(410);
+    expect((await errorOf(res)).code).toBe("GONE");
     const detail = (await (
       await graveById.GET(call(`/api/graves/${grave.id}`, { visitor: v }), ctx(grave.id))
     ).json()) as GraveDetailResponse;
-    expect(detail.myRevive).toBe(true);
-    const off = await revive.POST(call(`/api/graves/${grave.id}/revive`, { method: "POST", visitor: v }), ctx(grave.id));
-    expect(await off.json()).toEqual({ revived: false, count: 0, earned: 0 });
-    // 취소했다 다시 눌러도 포인트는 처음 한 번만
-    const again = await revive.POST(call(`/api/graves/${grave.id}/revive`, { method: "POST", visitor: v }), ctx(grave.id));
-    expect(await again.json()).toEqual({ revived: true, count: 1, earned: 0 });
+    expect(detail.grave.revives).toBe(0);
   });
 
   it("없는 묘비에 반응 → 404", async () => {
@@ -415,9 +439,8 @@ describe("관리자", () => {
   });
 
   it("신고 초기화와 일괄 처리 (최대 100개, 없는 묘비는 따로 알려 준다)", async () => {
-    const owner = await newVisitor();
-    const a = (await createGrave(owner)).grave.id;
-    const b = (await createGrave(owner)).grave.id;
+    const a = (await createGrave(await newVisitor())).grave.id;
+    const b = (await createGrave(await newVisitor())).grave.id;
     const key = { "x-admin-key": "dev-admin" };
     const bulk = (body: object) => adminBulk.POST(call("/api/admin/graves/bulk", { method: "POST", body, headers: key }));
     const status = async (id: string) =>
@@ -646,15 +669,16 @@ describe("업로드", () => {
   it("이장은 성황당 보관이라 이미지를 바로 지우지 않고, 30일 뒤 정리할 때 다른 묘비가 같은 이미지를 쓰면 남긴다", async () => {
     const owner = await newVisitor();
     const url = await uploadLocal(owner);
-    const a = await createGrave(owner, { ...input, imageUrl: url });
-    const b = await createGrave(owner, { ...input, imageUrl: url });
     const del = (g: CreateGraveResponse) =>
       graveById.DELETE(
         call(`/api/graves/${g.grave.id}`, { method: "DELETE", visitor: owner, headers: { "x-owner-token": g.ownerToken } }),
         ctx(g.grave.id),
       );
     const later = Date.now() + 31 * 86_400_000;
+    // 1인 1묘비라 a를 이장한 뒤에 같은 사진으로 b를 세운다
+    const a = await createGrave(owner, { ...input, imageUrl: url });
     await del(a);
+    const b = await createGrave(owner, { ...input, imageUrl: url });
     await sweepShrine(getStore(), later);
     expect((await serve(url)).status).toBe(200); // b가 아직 쓴다
     await del(b);

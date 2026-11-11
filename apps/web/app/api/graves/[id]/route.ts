@@ -19,17 +19,18 @@ import { GraveInputSchema, isGraveId, readBody } from "@/lib/validate";
 type Params = { id: string };
 
 /**
- * 상세 + 내 반응 상태. 방문자별 응답(myRevive)이라 공유 캐시에 올리지 않는다.
+ * 상세 + 내 반응 상태(오늘 헌화했는지). 방문자별 응답이라 공유 캐시에 올리지 않는다.
  * 쿠키 없이도 부를 수 있으므로 IP 기준으로 분당 120회까지만 받는다.
  */
 export const GET = handler<Params>(async (req, { id }) => {
   await rateLimit("detail", req);
   const store = getStore();
-  const [grave, visitorId] = await Promise.all([findVisible(store, id), getVisitorId(req)]);
-  const viewer = visitorId ? await store.viewer(id, visitorId) : { myRevive: false, myFlowerToday: false };
+  const now = Date.now();
+  const [grave, visitorId, settings] = await Promise.all([findVisible(store, id), getVisitorId(req), store.settings(now)]);
+  const viewer = visitorId ? await store.viewer(id, visitorId) : { myFlowerToday: false };
   const isMine = !!visitorId && grave.ownerAccountId === visitorId;
   return json<GraveDetailResponse>(
-    { grave: toPublicGrave(grave), ...viewer, isMine },
+    { grave: toPublicGrave(grave, now, settings), ...viewer, isMine },
     { headers: { "Cache-Control": "private, no-store" } },
   );
 });

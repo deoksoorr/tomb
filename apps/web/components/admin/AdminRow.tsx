@@ -65,7 +65,7 @@ export default function AdminRow({ grave: g, expanded, selected, busy, onToggleE
             {g.channel}채널 · {g.mourner} · {formatDate(g.createdAt)}
           </span>
           <span className={styles.meta}>
-            🌼 {g.flowers} · 🙏 {g.revives} ·{" "}
+            🌼 {g.flowers} ·{g.passAt ? ` 성불 ${formatDate(g.passAt)} ·` : ""}{" "}
             <span className={cx(isReported(g) && styles.alert)}>
               신고 {g.reports}
               {g.reportLog.length > g.reports && ` (기록 ${g.reportLog.length})`}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PublicGrave } from "@/lib/types";
-import { mergeGraves, OVERRIDE_SKEW_MS, OVERRIDE_TTL_MS, pruneOverrides, sortByRevives } from "./graveMerge";
+import { mergeGraves, OVERRIDE_SKEW_MS, OVERRIDE_TTL_MS, pruneOverrides } from "./graveMerge";
 
 const g = (id: string, createdAt: number, revives = 0, flowers = 0): PublicGrave => ({
   id,
@@ -54,12 +54,5 @@ describe("pruneOverrides", () => {
 
   it("너무 오래되면 목록과 관계없이 버린다", () => {
     expect(pruneOverrides(o, 0, at + OVERRIDE_TTL_MS)).toEqual({});
-  });
-});
-
-describe("sortByRevives", () => {
-  it("0은 빼고, 동점은 서버 순위 → 먼저 묻힌 순", () => {
-    const graves = [g("a", 1, 3), g("b", 2, 5), g("c", 3, 3), g("d", 4, 0), g("e", 5, 3)];
-    expect(sortByRevives(graves, ["b", "c"]).map((x) => x.id)).toEqual(["b", "c", "a", "e"]);
   });
 });

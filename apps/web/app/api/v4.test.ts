@@ -115,7 +115,7 @@ describe("방 입장 토큰", () => {
 });
 
 describe("내 소식", () => {
-  it("남의 헌화·첫 살려주세요·집 좋아요·방명록을 쌓고, 내 행동과 두 번째 살려주세요는 남기지 않는다", async () => {
+  it("남의 헌화·집 좋아요·방명록을 쌓고, 내 행동과 (없어진) 살려주세요 소식은 보여 주지 않는다", async () => {
     const owner = await newVisitor();
     const fan = await newVisitor();
     const ghost = await newVisitor(); // 이름 없는 방문자
@@ -127,9 +127,9 @@ describe("내 소식", () => {
 
     await flower.POST(call(`/api/graves/${id}/flower`, { method: "POST", visitor: owner }), ctx(id)); // 내 헌화
     await flower.POST(call(`/api/graves/${id}/flower`, { method: "POST", visitor: fan }), ctx(id));
-    await revive.POST(call(`/api/graves/${id}/revive`, { method: "POST", visitor: ghost }), ctx(id));
-    await revive.POST(call(`/api/graves/${id}/revive`, { method: "POST", visitor: ghost }), ctx(id)); // 취소
-    await revive.POST(call(`/api/graves/${id}/revive`, { method: "POST", visitor: ghost }), ctx(id)); // 다시: 첫 번째가 아님
+    expect((await revive.POST(call(`/api/graves/${id}/revive`, { method: "POST", visitor: ghost }), ctx(id))).status).toBe(410);
+    // 49번 이전에 쌓인 살려주세요 소식은 남아 있어도 보여 주지 않고 안 읽은 수에도 넣지 않는다
+    await getAccounts().pushActivity(owner.visitorId, { id: "legacy", kind: "revive", at: Date.now(), who: "옛 유령", targetId: id, targetName: "할 일 앱" });
 
     const houseId = houseIdFor(owner.visitorId);
     await getHouseStore().create({ id: houseId, owner: owner.visitorId, name: "새벽의 집", intro: "", ownerName: "새벽코더", tier: "small", lot: null, now: Date.now() });
@@ -140,12 +140,11 @@ describe("내 소식", () => {
     expect(feed.items.map((i) => [i.kind, i.who, i.targetName])).toEqual([
       ["guestbook", "꽃집주인", "새벽의 집"],
       ["houseLike", "꽃집주인", "새벽의 집"],
-      ["revive", "이름 없는 유령", "할 일 앱"],
       ["flower", "꽃집주인", "할 일 앱"],
     ]);
-    expect(feed.items[3].targetId).toBe(id);
-    expect(feed.unread).toBe(4);
-    expect((await getMe(owner)).activityUnread).toBe(4);
+    expect(feed.items[2].targetId).toBe(id);
+    expect(feed.unread).toBe(3);
+    expect((await getMe(owner)).activityUnread).toBe(3);
     expect((await myActivity(fan)).items).toEqual([]);
 
     // 읽음: 뒤로 되돌리지 않고, 미래 시각은 지금으로 자른다

@@ -1,7 +1,7 @@
 import type { CosmeticSlot } from "@tomb/protocol";
 import type { EarnSource } from "../economy";
 import type { ReportLogEntry, ReportReason } from "../reports";
-import { SHRINE_KEEP_DAYS, type ActivityItem, type Grave, type GraveDecor, type ReviveResponse } from "../types";
+import { SHRINE_KEEP_DAYS, type ActivityItem, type Grave, type GraveDecor, type PassReason } from "../types";
 
 /**
  * 저장소 원본 + 카운트 + 채널(읽을 때 항상 채운다, 예전 묘비는 1).
@@ -9,7 +9,12 @@ import { SHRINE_KEEP_DAYS, type ActivityItem, type Grave, type GraveDecor, type 
  */
 export type GraveRecord = Grave & { channel: number; flowers: number; revives: number };
 
-export type ViewerState = { myRevive: boolean; myFlowerToday: boolean };
+export type ViewerState = { myFlowerToday: boolean };
+
+/** 성불한 묘비 (반응 수·숨김·꾸미기를 같이 보관한다) */
+export type PassedRecord = { record: GraveRecord; passedAt: number; reason: PassReason };
+/** 묘지 설정. passEpoch = 성불 규칙을 처음 켠 시각 (그 전에 세운 묘비의 기간은 이때부터 센다) */
+export type GraveSettings = { passDays: number; passEpoch: number };
 
 /** 성황당 보관 기간 */
 export const SHRINE_KEEP_MS = SHRINE_KEEP_DAYS * 86_400_000;
@@ -64,10 +69,24 @@ export interface GraveStore {
   viewer(id: string, visitorId: string): Promise<ViewerState>;
   /** 새 헌화 수. 24시간 안에 이미 헌화했으면 "already", 묘비가 없으면 null */
   flower(id: string, visitorId: string): Promise<number | "already" | null>;
-  /** 원자적 토글. 묘비가 없으면 null */
-  toggleRevive(id: string, visitorId: string): Promise<ReviveResponse | null>;
-  /** 이 방문자가 이 묘비에서 살려주세요 포인트를 처음 받는 차례면 true (취소했다 다시 눌러도 다시 받지 않는다) */
-  firstRevive(id: string, visitorId: string): Promise<boolean>;
+
+  // ── 49번 성불 ──
+  /**
+   * 성불: 묘역(목록·채널)에서 빼고 성불 리스트로 옮긴다 (원자적, 데이터는 지우지 않는다).
+   * 반응 수·숨김·디자인·꾸미기를 같이 보관한다. 이미 성불했거나 없는 묘비면 null (여러 번 불러도 한 번만 옮겨진다)
+   */
+  passOn(id: string, passedAt: number, reason: PassReason): Promise<PassedRecord | null>;
+  /** 성불한 묘비 전부 (숨김 포함, 순서는 보장하지 않는다) */
+  passedAll(): Promise<PassedRecord[]>;
+  /** since(ms) 이후에 성불한 것 (최근 것 먼저, 최대 limit개) — 목록의 빛 연출용 */
+  passedSince(since: number, limit: number): Promise<PassedRecord[]>;
+  /** 성불한 묘비를 완전히 지운다 (관리자). 없으면 null. 이미지는 호출자가 정리 */
+  removePassed(id: string): Promise<Grave | null>;
+  /** 묘지 설정. 처음 부르면 passEpoch를 now로 저장한다 */
+  settings(now: number): Promise<GraveSettings>;
+  setPassDays(days: number): Promise<void>;
+  /** 성불 정리 잠금: ttlMs 동안 한 번만 true (여러 요청이 같은 정리를 겹쳐 하지 않게). Redis는 서버 시계로 잰다 */
+  lockSweep(ttlMs: number, now: number): Promise<boolean>;
   /**
    * 신고는 IP 해시 단위로 센다 (쿠키를 새로 받아도 같은 IP는 1건). 같은 방문자나 같은 IP의 재신고는 "duplicate".
    * 서로 다른 IP가 REPORT_HIDE_THRESHOLD개 모이면 숨긴다. 받아들인 신고는 사유와 시각을 기록에 남긴다
@@ -142,8 +161,23 @@ export interface AccountStore {
   refund(id: string, amount: number, reason: string, now: number): Promise<number>;
   /** 머무르기: 직전 지급 후 PRESENCE_MIN_GAP_MS가 지났으면 적립(한도 안에서). 너무 이르면 null */
   presence(id: string, day: string, now: number): Promise<number | null>;
-  /** 모은 포인트 상위 limit명 + me의 순위(없으면 null) */
-  pointRank(limit: number, me: string | null): Promise<{ rows: RankEntry[]; mine: RankEntry | null }>;
+  /**
+   * 모은 포인트 상위 limit명 + me의 순위(없으면 null). week(그 주 월요일 YYYYMMDD)를 주면 그 주에 모은 포인트 순위.
+   * RankEntry.points = 순위 값
+   */
+  pointRank(limit: number, me: string | null, week?: string): Promise<{ rows: RankEntry[]; mine: RankEntry | null }>;
+  /**
+   * 사냥터 한 판 기록 (49번 랭킹): 처치 수 합계(전체·그 주)를 올리고, 클리어했으면(clearMs) 그 사냥터의
+   * 최단 기록(전체·그 주)을 더 짧을 때만 바꾼다. 원자적
+   */
+  recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string): Promise<void>;
+  /** 사냥 랭킹: kills = 처치 수 많은 순, best = 그 사냥터 최단 클리어 순(ms, 작을수록 위). week가 없으면 전체 */
+  huntRank(
+    board: "kills" | "best",
+    limit: number,
+    me: string | null,
+    opts: { zone?: string; week?: string },
+  ): Promise<{ rows: RankEntry[]; mine: RankEntry | null }>;
   /**
    * 출석. 오늘 처음이면 연속 일수를 갱신하고 출석(+7일째마다 보너스) 포인트를 준다.
    * 같은 IP에서 오늘 이미 ATTEND_ACCOUNTS_PER_IP개 계정이 받았으면 출석만 기록하고 포인트는 주지 않는다.

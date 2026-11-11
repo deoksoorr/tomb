@@ -2,47 +2,65 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
-import { todayKst } from "@/lib/epitaph";
-import { sortByRevives } from "@/lib/hooks/graveMerge";
-import type { PointRankResponse, PublicGrave } from "@/lib/types";
+import { DIFFICULTIES, ZONES, type Difficulty } from "@/lib/rpg/catalog";
+import type { PublicGrave, RankBoard, RankPeriod, RankResponse } from "@/lib/types";
 import styles from "./RankingPanel.module.css";
 
-type Tab = "revive" | "flower" | "recent" | "points";
+// 49번: 랭킹은 포인트·사냥 중심. 묘비(헌화 순)는 작은 탭 하나로만 남긴다 (살려주세요 순위는 없어졌다).
 
-const TABS: { id: Tab; label: string; empty: string }[] = [
-  { id: "revive", label: "살려주세요", empty: "아직 살려 달라는 목소리가 없어요." },
-  { id: "flower", label: "헌화", empty: "아직 놓인 꽃이 없어요." },
-  { id: "recent", label: "최근 안장", empty: "아직 아무도 잠들지 않았어요." },
-  { id: "points", label: "포인트", empty: "아직 포인트를 모은 사람이 없어요." },
+type Tab = "points" | "hunt" | "flower";
+type HuntMode = "huntKills" | "huntBest";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "points", label: "포인트" },
+  { id: "hunt", label: "사냥" },
+  { id: "flower", label: "헌화" },
 ];
+const PERIODS: { id: RankPeriod; label: string }[] = [
+  { id: "week", label: "이번 주" },
+  { id: "all", label: "전체" },
+];
+const EMPTY: Record<RankBoard, string> = {
+  points: "아직 포인트를 모은 사람이 없어요.",
+  huntKills: "아직 사냥 기록이 없어요.",
+  huntBest: "아직 이 사냥터를 끝까지 깬 사람이 없어요.",
+};
 
 const LIMIT = 20;
 
-function ranked(graves: readonly PublicGrave[], reviveTop: readonly string[], tab: Tab): PublicGrave[] {
-  if (tab === "revive") return sortByRevives(graves, reviveTop);
-  if (tab === "flower") return graves.filter((g) => g.flowers > 0).sort((a, b) => b.flowers - a.flowers);
-  return [...graves].sort((a, b) => b.createdAt - a.createdAt);
+/** 1:23.4 (최단 클리어) */
+export function clearTime(ms: number): string {
+  const tenths = Math.round(ms / 100);
+  const min = Math.floor(tenths / 600);
+  const sec = ((tenths % 600) / 10).toFixed(1).padStart(4, "0");
+  return `${min}:${sec}`;
 }
 
-function metric(g: PublicGrave, tab: Tab): string {
-  if (tab === "revive") return `🙏 ${g.revives}`;
-  if (tab === "flower") return `🌼 ${g.flowers}`;
-  return todayKst(g.createdAt).replaceAll("-", ".");
+export function rankValue(board: RankBoard, value: number): string {
+  if (board === "huntBest") return clearTime(value);
+  if (board === "huntKills") return `${value.toLocaleString("ko-KR")}마리`;
+  return `${value.toLocaleString("ko-KR")}P`;
 }
 
 type Props = {
-  /** 지금 채널 묘비 (묘비 랭킹은 채널별) */
+  /** 지금 채널 묘비 (헌화 탭은 채널별) */
   graves: readonly PublicGrave[];
-  reviveTop: readonly string[];
+  /** 헌화 탭 항목 클릭: 카메라만 그 묘비로 + 상세 */
   onPick: (graveId: string) => void;
 };
 
-/** 탭 4개: 살려주세요 순(기본)·헌화 순·최근 안장 (지금 채널) / 포인트 (모은 포인트, 전체) */
-export default function RankingList({ graves, reviveTop, onPick }: Props) {
-  const [tab, setTab] = useState<Tab>("revive");
+/** 탭 3개: 포인트(이번 주·전체) · 사냥(처치 수·사냥터별 최단 클리어) · 헌화(지금 채널 묘비) */
+export default function RankingList({ graves, onPick }: Props) {
+  const [tab, setTab] = useState<Tab>("points");
+  const [period, setPeriod] = useState<RankPeriod>("week");
+  const [hunt, setHunt] = useState<HuntMode>("huntBest");
+  const [zone, setZone] = useState<Difficulty>(DIFFICULTIES[0]);
   const baseId = useId();
-  const items = useMemo(() => (tab === "points" ? [] : ranked(graves, reviveTop, tab).slice(0, LIMIT)), [graves, reviveTop, tab]);
-  const current = TABS.find((t) => t.id === tab) ?? TABS[0];
+  const flowered = useMemo(
+    () => (tab === "flower" ? graves.filter((g) => g.flowers > 0).sort((a, b) => b.flowers - a.flowers).slice(0, LIMIT) : []),
+    [graves, tab],
+  );
+  const board: RankBoard = tab === "hunt" ? hunt : "points";
 
   return (
     <>
@@ -62,47 +80,81 @@ export default function RankingList({ graves, reviveTop, onPick }: Props) {
           </button>
         ))}
       </div>
-      <div id={`${baseId}-list`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={styles.listWrap}>
-        {tab === "points" ? (
-          <PointRanking empty={current.empty} />
-        ) : items.length === 0 ? (
-          <p className={styles.empty}>{current.empty}</p>
-        ) : (
-          <ol className={styles.list}>
-            {items.map((g, i) => (
-              <li key={g.id}>
-                <button type="button" className={styles.item} onClick={() => onPick(g.id)}>
-                  <span className={styles.rank}>{i + 1}</span>
-                  <span className={styles.name}>{g.name}</span>
-                  <span className={styles.metric}>{metric(g, tab)}</span>
-                </button>
-              </li>
+      {tab !== "flower" && (
+        <div className={styles.filters}>
+          <div className={styles.chips} role="group" aria-label="기간">
+            {PERIODS.map((p) => (
+              <button key={p.id} type="button" className={styles.chip} aria-pressed={period === p.id} onClick={() => setPeriod(p.id)}>
+                {p.label}
+              </button>
             ))}
-          </ol>
+          </div>
+          {tab === "hunt" && (
+            <>
+              <div className={styles.chips} role="group" aria-label="사냥 기록">
+                <button type="button" className={styles.chip} aria-pressed={hunt === "huntBest"} onClick={() => setHunt("huntBest")}>
+                  최단 클리어
+                </button>
+                <button type="button" className={styles.chip} aria-pressed={hunt === "huntKills"} onClick={() => setHunt("huntKills")}>
+                  처치 수
+                </button>
+              </div>
+              {hunt === "huntBest" && (
+                <select className={styles.zone} value={zone} onChange={(e) => setZone(e.target.value as Difficulty)} aria-label="사냥터">
+                  {DIFFICULTIES.map((d) => (
+                    <option key={d} value={d}>
+                      {ZONES[d].name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      <div id={`${baseId}-list`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={styles.listWrap}>
+        {tab === "flower" ? (
+          flowered.length === 0 ? (
+            <p className={styles.empty}>이 채널 묘비에 아직 놓인 꽃이 없어요.</p>
+          ) : (
+            <ol className={styles.list}>
+              {flowered.map((g, i) => (
+                <li key={g.id}>
+                  <button type="button" className={styles.item} onClick={() => onPick(g.id)}>
+                    <span className={styles.rank}>{i + 1}</span>
+                    <span className={styles.name}>{g.name}</span>
+                    <span className={styles.metric}>🌼 {g.flowers}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )
+        ) : (
+          <BoardRanking key={`${board}-${period}-${board === "huntBest" ? zone : ""}`} board={board} period={period} zone={zone} />
         )}
       </div>
     </>
   );
 }
 
-/** 모은 포인트(쓰더라도 줄지 않는 합계) 순위. 내 줄은 강조하고, 50위 밖이면 맨 아래에 따로 */
-function PointRanking({ empty }: { empty: string }) {
-  const [data, setData] = useState<PointRankResponse | null>(null);
+/** 서버 랭킹 한 판. 내 줄은 강조하고, 50위 밖이면 맨 아래에 따로 */
+function BoardRanking({ board, period, zone }: { board: RankBoard; period: RankPeriod; zone: Difficulty }) {
+  const [data, setData] = useState<RankResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     api
-      .pointRank()
+      .rank(board, period, board === "huntBest" ? zone : undefined)
       .then((r) => alive && setData(r))
       .catch((e: unknown) => alive && setError(errorMessage(e)));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [board, period, zone]);
 
   if (!data) return <p className={styles.empty}>{error ?? "불러오는 중…"}</p>;
-  if (data.rows.length === 0) return <p className={styles.empty}>{empty}</p>;
+  if (data.rows.length === 0) return <p className={styles.empty}>{EMPTY[board]}</p>;
   const mineOutside = data.mine && !data.rows.some((r) => r.me) ? data.mine : null;
   return (
     <ol className={styles.list}>
@@ -113,7 +165,7 @@ function PointRanking({ empty }: { empty: string }) {
             {r.name}
             {r.me && " (나)"}
           </span>
-          <span className={styles.metric}>{r.points.toLocaleString("ko-KR")}P</span>
+          <span className={styles.metric}>{rankValue(board, r.value)}</span>
         </li>
       ))}
     </ol>

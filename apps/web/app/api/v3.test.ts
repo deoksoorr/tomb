@@ -138,7 +138,7 @@ describe("성황당", () => {
     const owner = await newVisitor();
     const { grave } = await bodyOf<CreateGraveResponse>(quickBury(owner, { channel: 2 }));
     await flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: await newVisitor() }), ctx(grave.id));
-    await quickBury(owner, { channel: 2 }); // 뒤에 다른 묘비
+    await quickBury(await newVisitor(), { channel: 2 }); // 뒤에 다른 사람 묘비
 
     expect((await graveById.DELETE(call(`/api/graves/${grave.id}`, { method: "DELETE", visitor: owner }), ctx(grave.id))).status).toBe(200);
     const listed = async () => (await bodyOf<GraveListResponse>(graves.GET(call("/api/graves?channel=2")))).graves.map((g) => g.id);
@@ -155,11 +155,20 @@ describe("성황당", () => {
     expect((await bodyOf<ShrineListResponse>(shrine.GET(call("/api/shrine", { visitor: stranger })))).entries).toEqual([]);
     expect((await restore.POST(call(`/api/shrine/${grave.id}/restore`, { method: "POST", visitor: stranger }), ctx(grave.id))).status).toBe(404);
 
+    // 1인 1묘비: 그사이 새 묘비를 세웠으면 다시 모실 수 없다 (새 묘비를 이장하면 된다)
+    const newer = await bodyOf<CreateGraveResponse>(quickBury(owner, { channel: 2 }));
+    const blocked = await restore.POST(call(`/api/shrine/${grave.id}/restore`, { method: "POST", visitor: owner }), ctx(grave.id));
+    expect(blocked.status).toBe(409);
+    expect(((await blocked.json()) as { error: { code: string } }).error.code).toBe("ONE_GRAVE");
+    expect((await graveById.DELETE(call(`/api/graves/${newer.grave.id}`, { method: "DELETE", visitor: owner }), ctx(newer.grave.id))).status).toBe(200);
+
     const back = await bodyOf<UpdateGraveResponse>(restore.POST(call(`/api/shrine/${grave.id}/restore`, { method: "POST", visitor: owner }), ctx(grave.id)));
     expect(back.grave).toMatchObject({ id: grave.id, channel: 2, flowers: 1 });
     expect((await listed()).at(-1)).toBe(grave.id);
     expect((await getMe(owner)).graves).toContain(grave.id);
-    expect((await bodyOf<ShrineListResponse>(shrine.GET(call("/api/shrine", { visitor: owner })))).entries).toEqual([]);
+    expect((await bodyOf<ShrineListResponse>(shrine.GET(call("/api/shrine", { visitor: owner })))).entries.map((e) => e.grave.id)).toEqual([
+      newer.grave.id,
+    ]);
     expect((await restore.POST(call(`/api/shrine/${grave.id}/restore`, { method: "POST", visitor: owner }), ctx(grave.id))).status).toBe(404);
   });
 });

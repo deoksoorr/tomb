@@ -13,6 +13,9 @@ const EARN_LABELS: Record<string, string> = {
   ...Object.fromEntries(EARN_RULES.map((r) => [r.source, r.label])),
   admin: "관리자 지급",
   refund: "환불·되팔기",
+  // 49번에서 없어진 항목 (지난 기록에만 남아 있다)
+  revive: "살려주세요 (종료)",
+  gotRevive: "살려주세요 받음 (종료)",
 };
 const SPEND_LABELS: Record<string, string> = {
   shop: "상점",

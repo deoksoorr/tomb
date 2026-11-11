@@ -44,7 +44,7 @@ export const GET = handler(async (req) => {
   });
   await run("list", () => store.list(1));
   await run("flower", () => store.flower(id, "healthcheck"));
-  await run("toggleRevive", () => store.toggleRevive(id, "healthcheck"));
+  await run("settings", () => store.settings(Date.now()));
   await run("remove", () => store.remove(id));
 
   return json({

@@ -22,6 +22,24 @@ export const K = {
   shrineAll: "shrine:all",
   /** ZSET 계정 id → 모은 포인트 (포인트 랭킹) */
   rankPoints: "rank:points",
+  /** ZSET 계정 id → 그 주(KST 월요일 YYYYMMDD)에 모은 포인트. 3주 TTL */
+  rankPointsWeek: (week: string) => `rank:points:w:${week}`,
+  /** ZSET 계정 id → 사냥터 처치 수 합계 (전체 / 그 주) */
+  rankHuntKills: "rank:hunt:kills",
+  rankHuntKillsWeek: (week: string) => `rank:hunt:kills:w:${week}`,
+  /** ZSET 계정 id → 그 사냥터(난이도) 최단 클리어 ms (작을수록 위, 전체 / 그 주) */
+  rankHuntBest: (zone: string) => `rank:hunt:best:${zone}`,
+  rankHuntBestWeek: (zone: string, week: string) => `rank:hunt:best:${zone}:w:${week}`,
+
+  // ── 49번 성불 ──
+  /** HASH 성불한 묘비 id → 보관 JSON (묘비·채널·반응 수·숨김·꾸미기·성불 시각·이유) */
+  passedMeta: "passed:meta",
+  /** ZSET 성불한 묘비 id → 성불 시각(ms). 최신 순 목록·최근 성불(빛 연출)용 */
+  passedAt: "passed:at",
+  /** HASH 묘지 설정: passDays(성불 기간), passEpoch(성불 규칙을 처음 켠 시각 — 그 전에 세운 묘비는 이때부터 센다) */
+  graveCfg: "graves:cfg",
+  /** STRING 성불 정리 잠금 (여러 함수가 동시에 같은 정리를 하지 않게, 짧은 TTL) */
+  passSweep: "graves:passSweep",
   ledger: (id: string) => `acct:${id}:ledger`, // LIST 최근 포인트 사용 기록 {at, amount, reason}, 최대 100개
   activity: (id: string) => `acct:${id}:activity`, // LIST 내 소식 JSON, 최신 먼저 최대 50개
   econ: (day: string) => `econ:${day}`, // HASH earn:{source}/spend:{분류}/refund → 그날 합계 (90일)

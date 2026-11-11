@@ -5,10 +5,8 @@ export type EarnSource =
   | "attend"
   | "streak"
   | "flower"
-  | "revive"
   | "bury"
   | "gotFlower"
-  | "gotRevive"
   | "presence"
   | "hunt"
   | "houseLike";
@@ -19,10 +17,8 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "attend", label: "출석", points: 10, dailyMax: 10, note: "하루 첫 입장 때 1번" },
   { source: "streak", label: "7일 연속 출석", points: 30, dailyMax: 30, note: "연속 7일째마다 보너스" },
   { source: "flower", label: "헌화하기", points: 2, dailyMax: 20, note: "묘비마다 하루 1번, 하루 10번까지" },
-  { source: "revive", label: "살려주세요", points: 1, dailyMax: 10, note: "묘비마다 처음 1번만, 취소해도 회수 안 함" },
   { source: "bury", label: "묘비 세우기", points: 20, dailyMax: 20, note: "하루 1개분만 지급" },
   { source: "gotFlower", label: "내 묘비가 헌화 받음", points: 1, dailyMax: 20, note: "다른 사람이 헌화할 때" },
-  { source: "gotRevive", label: "내 묘비가 살려주세요 받음", points: 1, dailyMax: 20, note: "다른 사람이 처음 눌렀을 때" },
   { source: "presence", label: "묘지에 머무르기", points: 5, dailyMax: 60, note: "접속해 있는 10분마다 (다른 일을 해도 OK)" },
   { source: "hunt", label: "사냥터·미니게임", points: 0, dailyMax: 600, note: "난이도와 성적에 따라 (한 판 보상은 게임 결과로)" },
   { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때" },

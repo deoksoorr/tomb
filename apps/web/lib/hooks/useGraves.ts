@@ -6,7 +6,7 @@ import { api, ApiRequestError } from "@/lib/api";
 import { gravesCacheKey, readItem, writeItem } from "@/lib/storage";
 import type { GraveDetailResponse, GraveListResponse, PublicGrave } from "@/lib/types";
 import { GraveEventGate, isActionableGraveEvent } from "./graveEventGate";
-import { mergeGraves, pruneOverrides, REVIVE_TOP_N, sortByRevives, type Overrides } from "./graveMerge";
+import { mergeGraves, pruneOverrides, type Overrides } from "./graveMerge";
 
 const LIST_POLL_MS = 30_000;
 
@@ -14,6 +14,7 @@ export type GravesSnapshot = {
   /** 이 목록의 채널 (채널마다 묘지가 따로다) */
   channel: number;
   graves: PublicGrave[];
+  /** @deprecated 살려주세요(다시 피어날 자리)는 49번에서 없어졌다 → 항상 빈 배열 */
   reviveTop: string[];
   byId: ReadonlyMap<string, PublicGrave>;
   loaded: boolean;
@@ -70,7 +71,9 @@ export class GraveCache {
     if ((list.channel ?? 1) !== this.channel || this.list?.generatedAt === list.generatedAt) return;
     this.list = list;
     this.overrides = pruneOverrides(this.overrides, list.generatedAt, Date.now());
-    this.publish();
+    // 방금 성불한 묘비가 아직 내 화면에 있으면 게임이 빛 연출 뒤에 지운다
+    const passed = list.passed?.filter((id) => this.snapshot.byId.has(id));
+    this.publish(passed?.length ? passed : undefined);
   }
 
   upsert(grave: PublicGrave): void {
@@ -79,8 +82,8 @@ export class GraveCache {
     this.publish();
   }
 
-  /** 지금 보이는 값에 일부만 덮어쓴다 (헌화·살려주세요 카운트) */
-  patch(id: string, fields: Partial<Pick<PublicGrave, "flowers" | "revives">>): void {
+  /** 지금 보이는 값에 일부만 덮어쓴다 (헌화 수) */
+  patch(id: string, fields: Partial<Pick<PublicGrave, "flowers">>): void {
     const grave = this.snapshot.byId.get(id);
     if (grave) this.upsert({ ...grave, ...fields });
   }
@@ -105,15 +108,13 @@ export class GraveCache {
     }
   }
 
-  private publish(): void {
+  private publish(passed?: string[]): void {
     const graves = mergeGraves(this.list?.graves ?? [], this.overrides);
-    const reviveTop = sortByRevives(graves, this.list?.reviveTop ?? [])
-      .slice(0, REVIVE_TOP_N)
-      .map((g) => g.id);
+    const reviveTop: string[] = [];
     const channel = this.channel;
     this.snapshot = { channel, graves, reviveTop, byId: new Map(graves.map((g) => [g.id, g])), loaded: this.list !== null };
     // 첫 목록 전에 보내면 게임이 "묘비 0개(또는 몇 개)"로 월드를 잘못 깔았다가 다시 맞추게 된다
-    if (this.list) bridge.emit("graves:set", { channel, graves, reviveTop });
+    if (this.list) bridge.emit("graves:set", { channel, graves, reviveTop, ...(passed ? { passed } : {}) });
     this.listeners.forEach((fn) => fn());
   }
 }

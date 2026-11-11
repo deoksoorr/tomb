@@ -4,7 +4,7 @@ import { deleteImage } from "../blob";
 import type { EarnSource } from "../economy";
 import { env } from "../env";
 import { HttpError, notFound } from "../http";
-import type { ActivityItem, Grave, GraveListResponse, Me, PublicGrave } from "../types";
+import { PASSED_RECENT_MS, type ActivityItem, type Grave, type GraveListResponse, type Me, type PublicGrave } from "../types";
 import { kstDay, loadMe } from "./accounts";
 import { isGraveId } from "../validate";
 import { MemoryAccounts } from "./accounts-memory";
@@ -14,7 +14,8 @@ import { mockGraves } from "./mock";
 import { MemoryErrors, RedisErrors, type ErrorStore } from "./errors";
 import { MemoryNotices, RedisNotices, type NoticeStore } from "./notices";
 import { RedisStore } from "./redis";
-import type { AccountStore, GraveRecord, GraveStore } from "./types";
+import { passAtOf } from "./passing";
+import type { AccountStore, GraveRecord, GraveSettings, GraveStore } from "./types";
 
 export type { AccountStore, GraveRecord, GraveStore } from "./types";
 
@@ -147,12 +148,18 @@ export function getNotices(): NoticeStore {
 
 /**
  * 클라이언트로 내보낼 형태. ownerTokenHash·hidden·ownerAccountId는 절대 내보내지 않는다.
- * 채널은 항상 넣고(예전 묘비는 1), 꾸미기는 만료되지 않은 것만 (없으면 필드를 뺀다)
+ * 채널은 항상 넣고(예전 묘비는 1), 꾸미기는 만료되지 않은 것만 (없으면 필드를 뺀다).
+ * 살려주세요 수는 보관만 하고 내보내지 않는다(항상 0). settings를 주면 성불 시각(passAt)을 넣는다
  */
-export function toPublicGrave(r: Grave & { flowers: number; revives: number }, now = Date.now()): PublicGrave {
+export function toPublicGrave(
+  r: Grave & { flowers: number; revives: number },
+  now = Date.now(),
+  settings?: GraveSettings,
+): PublicGrave {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { ownerTokenHash, hidden, ownerAccountId, decor, channel, ...rest } = r;
-  const pub = { ...rest, channel: channel ?? 1 };
+  const { ownerTokenHash, hidden, ownerAccountId, decor, channel, revives, ...rest } = r;
+  const pub: PublicGrave = { ...rest, revives: 0, channel: channel ?? 1 };
+  if (settings) pub.passAt = passAtOf(r, settings);
   const live = decor?.filter((d) => d.until > now);
   return live?.length ? { ...pub, decor: live } : pub;
 }
@@ -160,15 +167,25 @@ export function toPublicGrave(r: Grave & { flowers: number; revives: number }, n
 /** 등록 순(오래된 것 먼저) = 격자 배치 순서 */
 export const byCreated = (a: GraveRecord, b: GraveRecord) => a.createdAt - b.createdAt || a.id.localeCompare(b.id);
 
-/** 한 채널의 묘지: 그 채널 묘비만, 랭킹(reviveTop)도 그 채널 안에서 */
+/**
+ * 한 채널의 묘지: 그 채널 묘비만 (성불 시각 포함). passed = 이 채널에서 최근 성불한 묘비 (클라이언트 빛 연출).
+ * reviveTop(다시 피어날 자리)은 49번에서 없어져 항상 비어 있다
+ */
 export async function listPublic(store: GraveStore, channel: number, now = Date.now()): Promise<GraveListResponse> {
-  const visible = (await store.list(channel)).filter((r) => !r.hidden).sort(byCreated);
-  const reviveTop = visible
-    .filter((r) => r.revives > 0)
-    .sort((a, b) => b.revives - a.revives || byCreated(a, b))
-    .slice(0, 10)
-    .map((r) => r.id);
-  return { channel, graves: visible.map((r) => toPublicGrave(r, now)), reviveTop, generatedAt: now };
+  const [records, settings, recent] = await Promise.all([
+    store.list(channel),
+    store.settings(now),
+    store.passedSince(now - PASSED_RECENT_MS, 50),
+  ]);
+  const visible = records.filter((r) => !r.hidden).sort(byCreated);
+  const passed = recent.filter((p) => p.record.channel === channel && !p.record.hidden).map((p) => p.record.id);
+  return {
+    channel,
+    graves: visible.map((r) => toPublicGrave(r, now, settings)),
+    reviveTop: [],
+    ...(passed.length ? { passed } : {}),
+    generatedAt: now,
+  };
 }
 
 /**

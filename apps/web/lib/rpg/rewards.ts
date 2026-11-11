@@ -47,7 +47,8 @@ export type TicketInfo = {
 };
 
 export type Verdict =
-  | { ok: true; score: number; exp: number; points: number; drops: Drop[] }
+  /** hunt = 사냥터 랭킹 기록 (검증을 통과한 처치 수, 쓰러지지 않고 모든 웨이브를 깼으면 걸린 시간 ms) */
+  | { ok: true; score: number; exp: number; points: number; drops: Drop[]; hunt?: { kills: number; clearMs: number | null } }
   | { ok: false; code: string; message: string };
 
 const reject = (code: string, message: string): Verdict => ({ ok: false, code, message });
@@ -105,7 +106,14 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
   }
   const bossKilled = (r.kills[ZONES[t.difficulty].boss] ?? 0) > 0 && cleared;
   const drops = rollDrops(t, Math.min(HUNT_DROP_ROLLS, Math.floor(total / KILLS_PER_DROP_ROLL)), bossKilled);
-  return { ok: true, score: Math.round(exp), exp: Math.round(xp), points: Math.round(points), drops };
+  return {
+    ok: true,
+    score: Math.round(exp),
+    exp: Math.round(xp),
+    points: Math.round(points),
+    drops,
+    hunt: { kills: total, clearMs: cleared && !r.died ? Math.round(eff) : null },
+  };
 }
 
 function evalBugs(t: TicketInfo, r: BugsResult, eff: number): Verdict {

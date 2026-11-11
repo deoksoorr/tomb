@@ -10,13 +10,12 @@ import styles from "./RankingPanel.module.css";
 
 type Props = {
   graves: readonly PublicGrave[];
-  reviveTop: readonly string[];
-  /** 항목 클릭: 그 묘비 앞으로 순간이동 + 상세 모달 */
+  /** 헌화 탭 항목 클릭: 카메라만 그 묘비로 + 상세 모달 */
   onPick: (graveId: string) => void;
 };
 
 /** 데스크톱 우측 접이식 랭킹 (터치 화면은 메뉴 시트에서 같은 목록을 연다) */
-export default function RankingPanel({ graves, reviveTop, onPick }: Props) {
+export default function RankingPanel({ graves, onPick }: Props) {
   const [open, setOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
@@ -45,7 +44,7 @@ export default function RankingPanel({ graves, reviveTop, onPick }: Props) {
             toggleRef.current?.focus();
           }}
         >
-          <RankingList graves={graves} reviveTop={reviveTop} onPick={onPick} />
+          <RankingList graves={graves} onPick={onPick} />
         </div>
       )}
     </section>

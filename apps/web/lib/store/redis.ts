@@ -1,13 +1,15 @@
 import { Redis } from "@upstash/redis";
 import { GRAVE_CHANNELS } from "./channels";
 import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../reports";
-import type { Grave, GraveDecor, ReviveResponse } from "../types";
+import { DEFAULT_PASS_DAYS, type Grave, type GraveDecor, type PassReason } from "../types";
 import { chKeys, DECOR, HIDDEN, K } from "./keys";
 import {
   FLOWER_TTL_SEC,
   REPORT_HIDE_THRESHOLD,
   type GraveRecord,
+  type GraveSettings,
   type GraveStore,
+  type PassedRecord,
   type ReportSummary,
   SHRINE_KEEP_MS,
   type ShrineRecord,
@@ -17,16 +19,6 @@ import {
 // 반응은 모두 Lua 스크립트 하나로 처리한다. 스크립트 실행 중에는 다른 명령이 끼어들 수 없으므로
 // "묘비가 있을 때만" 조건과 분기를 원자적으로 묶을 수 있다 (삭제와 경합해 고아 키가 생기지 않는다).
 // 공통: KEYS[1] = graves:meta, ARGV[1] = 묘비 id
-
-// spec은 살려주세요 토글을 MULTI로 적었지만, MULTI 안에서는 SADD의 결과를 보고 분기할 수 없다. 이 스크립트가 원자적 등가물이다.
-const REVIVE_LUA = `
-if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return nil end
-if redis.call('SADD', KEYS[2], ARGV[2]) == 1 then
-  return {1, redis.call('ZINCRBY', KEYS[3], 1, ARGV[1])}
-end
-redis.call('SREM', KEYS[2], ARGV[2])
-return {0, redis.call('ZINCRBY', KEYS[3], -1, ARGV[1])}
-`;
 
 const FLOWER_LUA = `
 if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return nil end
@@ -118,6 +110,66 @@ redis.call('ZREM', KEYS[3], ARGV[1])
 redis.call('DEL', KEYS[4], KEYS[5], KEYS[6], KEYS[7], KEYS[8], KEYS[9])
 return 1
 `;
+
+// 성불: 성황당 옮기기와 같은 방식으로 메타·숨김·꾸미기 필드와 채널 점수를 보관 JSON 하나로 묶어 성불 리스트에 둔다.
+// 묘비가 이미 없으면(먼저 성불했거나 이장·삭제됨) nil → 여러 요청이 겹쳐도 한 번만 옮겨진다.
+// 반응한 사람 집합·신고 기록·꾸미기 ZSET 같은 묘비 id 키는 그대로 둔다 (관리자가 지울 때 같이 지운다).
+// KEYS: meta, created, revive, flower, graveCh, passedMeta, passedAt  ARGV: id, passedAt, channel, reason
+const PASS_LUA = `
+local raw = redis.call('HGET', KEYS[1], ARGV[1])
+if not raw then return nil end
+local hidden = redis.call('HEXISTS', KEYS[1], '${HIDDEN}' .. ARGV[1]) == 1 and 'true' or 'false'
+local decor = redis.call('HGET', KEYS[1], '${DECOR}' .. ARGV[1]) or 'null'
+local revives = redis.call('ZSCORE', KEYS[3], ARGV[1]) or '0'
+local flowers = redis.call('ZSCORE', KEYS[4], ARGV[1]) or '0'
+redis.call('HDEL', KEYS[1], ARGV[1], '${HIDDEN}' .. ARGV[1], '${DECOR}' .. ARGV[1])
+redis.call('ZREM', KEYS[2], ARGV[1])
+redis.call('ZREM', KEYS[3], ARGV[1])
+redis.call('ZREM', KEYS[4], ARGV[1])
+redis.call('HDEL', KEYS[5], ARGV[1])
+local env = '{"grave":' .. raw .. ',"channel":' .. ARGV[3] .. ',"flowers":' .. flowers .. ',"revives":' .. revives ..
+  ',"hidden":' .. hidden .. ',"decor":' .. decor .. ',"passedAt":' .. ARGV[2] .. ',"reason":"' .. ARGV[4] .. '"}'
+redis.call('HSET', KEYS[6], ARGV[1], env)
+redis.call('ZADD', KEYS[7], ARGV[2], ARGV[1])
+return env
+`;
+
+// 성불한 묘비를 완전히 지운다 (관리자). 없으면 nil
+// KEYS: passedMeta, passedAt, reported, revivers, reviveEarned, reports, reporters, reportLog, decor  ARGV: id
+const REMOVE_PASSED_LUA = `
+local env = redis.call('HGET', KEYS[1], ARGV[1])
+redis.call('ZREM', KEYS[2], ARGV[1])
+if not env then return nil end
+redis.call('HDEL', KEYS[1], ARGV[1])
+redis.call('ZREM', KEYS[3], ARGV[1])
+redis.call('DEL', KEYS[4], KEYS[5], KEYS[6], KEYS[7], KEYS[8], KEYS[9])
+return env
+`;
+
+/** 성불 보관 JSON */
+type PassedEnvelope = {
+  grave: Grave;
+  channel: number;
+  flowers: number;
+  revives: number;
+  hidden: boolean;
+  decor: GraveDecor[] | null;
+  passedAt: number;
+  reason: PassReason;
+};
+
+const fromPassed = (e: PassedEnvelope): PassedRecord => ({
+  record: {
+    ...e.grave,
+    channel: e.channel,
+    hidden: e.hidden || undefined,
+    decor: e.decor ?? undefined,
+    flowers: Number(e.flowers),
+    revives: Number(e.revives),
+  },
+  passedAt: Number(e.passedAt),
+  reason: e.reason,
+});
 
 /** 성황당 보관 JSON */
 type ShrineEnvelope = {
@@ -378,12 +430,7 @@ export class RedisStore implements GraveStore {
   }
 
   async viewer(id: string, visitorId: string): Promise<ViewerState> {
-    const [member, marked] = await this.redis
-      .pipeline()
-      .sismember(K.revivers(id), visitorId)
-      .exists(K.flowerMark(id, visitorId))
-      .exec<[number, number]>();
-    return { myRevive: Number(member) === 1, myFlowerToday: Number(marked) === 1 };
+    return { myFlowerToday: Number(await this.redis.exists(K.flowerMark(id, visitorId))) === 1 };
   }
 
   async flower(id: string, visitorId: string): Promise<number | "already" | null> {
@@ -397,18 +444,66 @@ export class RedisStore implements GraveStore {
     return Number(r[0]) === 1 ? Number(r[1]) : "already";
   }
 
-  async firstRevive(id: string, visitorId: string): Promise<boolean> {
-    return Number(await this.redis.sadd(K.reviveEarned(id), visitorId)) === 1;
+  async passOn(id: string, passedAt: number, reason: PassReason): Promise<PassedRecord | null> {
+    const k = await this.keysOf(id);
+    const env = await this.redis.eval<string[], string | null>(
+      PASS_LUA,
+      [k.meta, k.created, k.revive, k.flower, K.graveChannel, K.passedMeta, K.passedAt],
+      [id, String(passedAt), String(k.channel), reason],
+    );
+    this.channels.delete(id);
+    return env ? fromPassed(JSON.parse(env) as PassedEnvelope) : null;
   }
 
-  async toggleRevive(id: string, visitorId: string): Promise<ReviveResponse | null> {
-    const k = await this.keysOf(id);
-    const r = await this.redis.eval<string[], [number, string] | null>(
-      REVIVE_LUA,
-      [k.meta, K.revivers(id), k.revive],
-      [id, visitorId],
+  async passedAll(): Promise<PassedRecord[]> {
+    const flat = (await this.redis.hgetall(K.passedMeta)) as unknown as string[] | null;
+    return [...pairs(flat).values()].map((raw) => fromPassed(JSON.parse(raw) as PassedEnvelope));
+  }
+
+  async passedSince(since: number, limit: number): Promise<PassedRecord[]> {
+    const ids = await this.redis.zrange<string[]>(K.passedAt, "+inf", `(${since}`, {
+      byScore: true,
+      rev: true,
+      offset: 0,
+      count: limit,
+    });
+    if (!ids.length) return [];
+    const raws = (await this.redis.hmget(K.passedMeta, ...ids)) as unknown as Record<string, string | null> | (string | null)[] | null;
+    const vals = Array.isArray(raws) ? raws : ids.map((id) => raws?.[id] ?? null);
+    return vals.flatMap((raw) => (raw ? [fromPassed(JSON.parse(raw) as PassedEnvelope)] : []));
+  }
+
+  async removePassed(id: string): Promise<Grave | null> {
+    const keys = [K.revivers(id), K.reviveEarned(id), K.reports(id), K.reporters(id), K.reportLog(id), K.decor(id)];
+    const env = await this.redis.eval<string[], string | null>(
+      REMOVE_PASSED_LUA,
+      [K.passedMeta, K.passedAt, K.reported, ...keys],
+      [id],
     );
-    return r ? { revived: Number(r[0]) === 1, count: Number(r[1]) } : null;
+    return env ? (JSON.parse(env) as PassedEnvelope).grave : null;
+  }
+
+  async settings(now: number): Promise<GraveSettings> {
+    const [, flat] = await this.redis
+      .pipeline()
+      .hsetnx(K.graveCfg, "passEpoch", String(now))
+      .hgetall(K.graveCfg)
+      .exec<[number, string[] | null]>();
+    const cfg = pairs(flat);
+    const days = Number(cfg.get("passDays"));
+    return {
+      passDays: Number.isFinite(days) && days > 0 ? days : DEFAULT_PASS_DAYS,
+      passEpoch: Number(cfg.get("passEpoch") ?? now),
+    };
+  }
+
+  async setPassDays(days: number): Promise<void> {
+    await this.redis.hset(K.graveCfg, { passDays: String(days) });
+  }
+
+  async lockSweep(ttlMs: number): Promise<boolean> {
+    // 잠금 만료는 Redis 서버 시계(PX)로 잰다 (함수 인스턴스마다 시계가 조금씩 달라도 겹치지 않게)
+    return (await this.redis.set(K.passSweep, "1", { nx: true, px: ttlMs })) !== null;
   }
 
   async report(

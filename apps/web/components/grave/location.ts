@@ -1,16 +1,10 @@
-import { ALTAR_NAME, plotLabel } from "@tomb/protocol";
+import { plotLabel } from "@tomb/protocol";
 
 /**
- * 묘비가 묻힌 자리. 목록 순서(등록 순) = 격자 순서라 목록 안 위치가 곧 자리 번호다.
- * 다시 피어날 자리(ALTAR_NAME, 살려주세요 상위)에 올라 있으면 순위를 덧붙인다. 목록에 없으면 null
+ * 묘비가 묻힌 자리. 목록 순서(등록 순) = 격자 순서라 목록 안 위치가 곧 자리 번호다. 목록에 없으면 null.
+ * (49번에서 살려주세요 "다시 피어날 자리"가 없어져 순위는 붙이지 않는다)
  */
-export function graveLocation(
-  graves: readonly { id: string }[],
-  reviveTop: readonly string[],
-  graveId: string,
-): string | null {
+export function graveLocation(graves: readonly { id: string }[], graveId: string): string | null {
   const index = graves.findIndex((g) => g.id === graveId);
-  if (index === -1) return null;
-  const rank = reviveTop.indexOf(graveId);
-  return rank === -1 ? plotLabel(index) : `${plotLabel(index)} · ${ALTAR_NAME} ${rank + 1}위`;
+  return index === -1 ? null : plotLabel(index);
 }

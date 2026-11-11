@@ -172,7 +172,8 @@ describe("간단 묘비 세우기", () => {
     expect(grave).toMatchObject({ bornAt: born, diedAt: today, ageDays: 7, epitaph: "향년 7일, 조용히 별세", causes: ["other"] });
     expect(grave).not.toHaveProperty("ownerAccountId");
     expect(earned).toBe(20);
-    expect((await bodyOf<CreateGraveResponse>(quickBury(owner, { lived: "day", cause: "time", epitaph: "짧았다" }))).earned).toBe(0);
+    // 1인 1묘비: 묘역에 내 묘비가 있는 동안은 새로 세울 수 없다
+    expect((await errorOf(await quickBury(owner, { lived: "day", cause: "time", epitaph: "짧았다" }))).code).toBe("ONE_GRAVE");
     expect((await getMe(owner)).graves).toContain(grave.id);
 
     const detail = (v: Visitor) => bodyOf<GraveDetailResponse>(graveById.GET(call(`/api/graves/${grave.id}`, { visitor: v }), ctx(grave.id)));
@@ -186,6 +187,8 @@ describe("간단 묘비 세우기", () => {
     expect((await graveById.DELETE(call(`/api/graves/${grave.id}`, { method: "DELETE", visitor: other }), ctx(grave.id))).status).toBe(403);
     expect((await graveById.DELETE(call(`/api/graves/${grave.id}`, { method: "DELETE", visitor: owner }), ctx(grave.id))).status).toBe(200);
     expect((await getMe(owner)).graves).not.toContain(grave.id);
+    // 이장하면 다시 세울 수 있지만 세우기 포인트는 하루 1개분
+    expect((await bodyOf<CreateGraveResponse>(quickBury(owner, { lived: "day", cause: "time", epitaph: "짧았다" }))).earned).toBe(0);
   });
 
   it("간단 입력 검증", async () => {
@@ -304,11 +307,11 @@ describe("묘비 디자인", () => {
   const style = async (id: string) => (await bodyOf<GraveDetailResponse>(graveById.GET(call(`/api/graves/${id}`), ctx(id)))).grave.style;
 
   it("무료는 그대로, 유료는 디자인권을 쓴다(없으면 409·저장 안 함), 기본은 auto", async () => {
+    expect((await bodyOf<CreateGraveResponse>(quickBury(await newVisitor()))).grave.style).toBe("auto");
     const v = await newVisitor();
-    expect((await bodyOf<CreateGraveResponse>(quickBury(v))).grave.style).toBe("auto");
     const noTicket = await quickBury(v, { style: "coffee" });
     expect(await errorOf(noTicket)).toEqual({ code: "NO_ITEM", message: "가방에 그 묘비 디자인권이 없어요. 상점에서 먼저 사 주세요." });
-    expect((await getMe(v)).graves).toHaveLength(1);
+    expect((await getMe(v)).graves).toHaveLength(0);
     expect((await errorOf(await quickBury(v, { style: "unicorn" }))).code).toBe("INVALID_INPUT");
 
     setPoints(v, 100);
@@ -428,15 +431,14 @@ describe("채널별 묘지", () => {
     expect(((await patched.json()) as { grave: { channel: number } }).grave.channel).toBe(2);
   });
 
-  it("다시 피어날 자리(reviveTop)도 채널별", async () => {
+  it("1인 1묘비는 채널을 가리지 않는다, 다시 피어날 자리(reviveTop)는 없어져 항상 비어 있다", async () => {
     const v = await newVisitor();
     const { grave: a } = await bodyOf<CreateGraveResponse>(quickBury(v, { channel: 3 }));
-    const { grave: b } = await bodyOf<CreateGraveResponse>(quickBury(v, { channel: 4 }));
+    expect((await errorOf(await quickBury(v, { channel: 4 }))).code).toBe("ONE_GRAVE");
     const fan = await newVisitor();
-    for (const g of [a, b]) await reviveRoute.POST(call(`/api/graves/${g.id}/revive`, { method: "POST", visitor: fan }), ctx(g.id));
-    expect((await listOf(3)).reviveTop).toContain(a.id);
-    expect((await listOf(3)).reviveTop).not.toContain(b.id);
-    expect((await listOf(4)).reviveTop).toEqual([b.id]);
+    expect((await reviveRoute.POST(call(`/api/graves/${a.id}/revive`, { method: "POST", visitor: fan }), ctx(a.id))).status).toBe(410);
+    expect((await listOf(3)).reviveTop).toEqual([]);
+    expect((await listOf(3)).graves.find((g) => g.id === a.id)?.revives).toBe(0);
   });
 
   it("채널 검증: 목록 ?channel은 1~10, 간단 입력은 channel 필수", async () => {

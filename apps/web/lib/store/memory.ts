@@ -1,11 +1,13 @@
 import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../reports";
 import { MAX_DECOR_PER_GRAVE } from "@tomb/protocol";
-import type { Grave, GraveDecor, ReviveResponse } from "../types";
+import { DEFAULT_PASS_DAYS, type Grave, type GraveDecor, type PassReason } from "../types";
 import {
   FLOWER_TTL_SEC,
   REPORT_HIDE_THRESHOLD,
   type GraveRecord,
+  type GraveSettings,
   type GraveStore,
+  type PassedRecord,
   type ReportSummary,
   SHRINE_KEEP_MS,
   type ShrineRecord,
@@ -22,9 +24,8 @@ export class MemoryStore implements GraveStore {
   private graves = new Map<string, Grave>();
   private hidden = new Set<string>();
   private flowers = new Map<string, number>();
+  /** 49번 이전에 쌓인 살려주세요 수 (보관만 한다) */
   private revives = new Map<string, number>();
-  private revivers = new Map<string, Set<string>>();
-  private reviveEarned = new Map<string, Set<string>>();
   private decor = new Map<string, GraveDecor[]>();
   /** 성황당: 계정 → (묘비 id → 묘비·옮긴 시각). 반응 수·숨김·꾸미기는 위 맵들에 id로 그대로 남는다 */
   private shrined = new Map<string, Map<string, { grave: Grave; removedAt: number }>>();
@@ -36,6 +37,10 @@ export class MemoryStore implements GraveStore {
   private reportLogs = new Map<string, ReportLogEntry[]>();
   /** `${id}:${visitorId}` → 만료 시각(ms) */
   private flowerMarks = new Map<string, number>();
+  /** 성불한 묘비 → 묘비·시각·이유. 반응 수·숨김·꾸미기는 위 맵들에 id로 그대로 남는다 */
+  private passedGraves = new Map<string, { grave: Grave; passedAt: number; reason: PassReason }>();
+  private cfg: Partial<GraveSettings> = {};
+  private sweepUntil = 0;
 
   constructor(
     seed: Seed[] = [],
@@ -104,8 +109,6 @@ export class MemoryStore implements GraveStore {
       this.graves,
       this.flowers,
       this.revives,
-      this.revivers,
-      this.reviveEarned,
       this.decor,
       this.reportIps,
       this.reporters,
@@ -180,7 +183,7 @@ export class MemoryStore implements GraveStore {
   }
 
   async viewer(id: string, visitorId: string): Promise<ViewerState> {
-    return { myRevive: !!this.revivers.get(id)?.has(visitorId), myFlowerToday: this.flowered(id, visitorId) };
+    return { myFlowerToday: this.flowered(id, visitorId) };
   }
 
   async flower(id: string, visitorId: string): Promise<number | "already" | null> {
@@ -192,21 +195,51 @@ export class MemoryStore implements GraveStore {
     return count;
   }
 
-  async toggleRevive(id: string, visitorId: string): Promise<ReviveResponse | null> {
-    if (!this.graves.has(id)) return null;
-    const set = this.setOf(this.revivers, id);
-    const revived = !set.has(visitorId);
-    if (revived) set.add(visitorId);
-    else set.delete(visitorId);
-    const count = (this.revives.get(id) ?? 0) + (revived ? 1 : -1);
-    this.revives.set(id, count);
-    return { revived, count };
+  async passOn(id: string, passedAt: number, reason: PassReason): Promise<PassedRecord | null> {
+    const g = this.graves.get(id);
+    if (!g) return null;
+    const record = this.record(g);
+    this.graves.delete(id);
+    this.passedGraves.set(id, { grave: g, passedAt, reason });
+    return { record, passedAt, reason };
   }
 
-  async firstRevive(id: string, visitorId: string): Promise<boolean> {
-    const set = this.setOf(this.reviveEarned, id);
-    if (set.has(visitorId)) return false;
-    set.add(visitorId);
+  private passedRecord(e: { grave: Grave; passedAt: number; reason: PassReason }): PassedRecord {
+    return { record: this.record(e.grave), passedAt: e.passedAt, reason: e.reason };
+  }
+
+  async passedAll(): Promise<PassedRecord[]> {
+    return [...this.passedGraves.values()].map((e) => this.passedRecord(e));
+  }
+
+  async passedSince(since: number, limit: number): Promise<PassedRecord[]> {
+    return [...this.passedGraves.values()]
+      .filter((e) => e.passedAt > since)
+      .sort((a, b) => b.passedAt - a.passedAt)
+      .slice(0, limit)
+      .map((e) => this.passedRecord(e));
+  }
+
+  async removePassed(id: string): Promise<Grave | null> {
+    const e = this.passedGraves.get(id);
+    if (!e) return null;
+    this.passedGraves.delete(id);
+    this.forget(id);
+    return e.grave;
+  }
+
+  async settings(now: number): Promise<GraveSettings> {
+    this.cfg.passEpoch ??= now;
+    return { passDays: this.cfg.passDays ?? DEFAULT_PASS_DAYS, passEpoch: this.cfg.passEpoch };
+  }
+
+  async setPassDays(days: number): Promise<void> {
+    this.cfg.passDays = days;
+  }
+
+  async lockSweep(ttlMs: number, now: number): Promise<boolean> {
+    if (now < this.sweepUntil) return false;
+    this.sweepUntil = now + ttlMs;
     return true;
   }
 

@@ -1,7 +1,7 @@
 import type { CosmeticSlot } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import type { ActivityItem, Grave, GraveDecor } from "../types";
-import { kstDay } from "./accounts";
+import { kstDay, weekOfDay } from "./accounts";
 import type { MemoryStore } from "./memory";
 import {
   ACTIVITY_KEEP,
@@ -41,6 +41,10 @@ type Acct = {
   /** 오늘 적립 기록 (source → 점수, `_total`). 날짜가 바뀌면 버린다 */
   earnDay: string | null;
   earned: Map<string, number>;
+  /** 주(월요일 YYYYMMDD) → 그 주에 모은 포인트. 예전(HMR 전) 계정에는 없을 수 있다 */
+  weeks?: Map<string, number>;
+  /** 사냥 기록: 처치 수 합계(전체·주별), 사냥터별 최단 클리어 ms(전체·`${zone}|${week}`) */
+  hunt?: { kills: number; killsWeek: Map<string, number>; best: Map<string, number>; bestWeek: Map<string, number> };
 };
 
 /**
@@ -124,6 +128,8 @@ export class MemoryAccounts implements AccountStore {
     if (ipKey) this.ipEarned.set(ipKey, (this.ipEarned.get(ipKey) ?? 0) + amount);
     a.points += amount;
     this.addLifetime(a, amount);
+    const weeks = (a.weeks ??= new Map());
+    weeks.set(weekOfDay(day), (weeks.get(weekOfDay(day)) ?? 0) + amount);
     this.stat(day, `earn:${source}`, amount);
     return amount;
   }
@@ -179,7 +185,7 @@ export class MemoryAccounts implements AccountStore {
         .sort((x, y) => x.until - y.until || x.itemId.localeCompare(y.itemId)),
       graves: [...a.graves],
       todayEarned: a.earnDay === day ? (a.earned.get("_total") ?? 0) : 0,
-      activityUnread: (a.activity ?? []).filter((x) => x.at > (a.activitySeen ?? 0)).length,
+      activityUnread: (a.activity ?? []).filter((x) => x.kind !== "revive" && x.at > (a.activitySeen ?? 0)).length,
       nameChangedAt: a.nameChangedAt ?? 0,
       nameChanges: a.nameChanges ?? 0,
       tutorialDone: a.tutorialDone ?? false,
@@ -216,13 +222,54 @@ export class MemoryAccounts implements AccountStore {
     return this.credit(a, "presence", day);
   }
 
-  async pointRank(limit: number, me: string | null): Promise<{ rows: RankEntry[]; mine: RankEntry | null }> {
+  /** value가 null인 계정은 순위에서 뺀다. asc면 작을수록 위 */
+  private board(limit: number, me: string | null, value: (a: Acct) => number | null, asc = false) {
     const all = [...this.accts]
-      .map(([accountId, a]) => ({ accountId, name: a.name, points: a.lifetime ?? a.points }))
-      .filter((r) => r.points > 0)
-      .sort((x, y) => y.points - x.points || x.accountId.localeCompare(y.accountId))
+      .flatMap(([accountId, a]) => {
+        const points = value(a);
+        return points === null ? [] : [{ accountId, name: a.name, points }];
+      })
+      .sort((x, y) => (asc ? x.points - y.points : y.points - x.points) || x.accountId.localeCompare(y.accountId))
       .map((r, i) => ({ ...r, rank: i + 1 }));
     return { rows: all.slice(0, limit), mine: all.find((r) => r.accountId === me) ?? null };
+  }
+
+  async pointRank(limit: number, me: string | null, week?: string): Promise<{ rows: RankEntry[]; mine: RankEntry | null }> {
+    return this.board(limit, me, (a) => {
+      const v = week ? (a.weeks?.get(week) ?? 0) : (a.lifetime ?? a.points);
+      return v > 0 ? v : null;
+    });
+  }
+
+  async recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string): Promise<void> {
+    const a = this.acct(id);
+    const h = (a.hunt ??= { kills: 0, killsWeek: new Map(), best: new Map(), bestWeek: new Map() });
+    const kills = Math.max(0, Math.floor(run.kills));
+    if (kills > 0) {
+      h.kills += kills;
+      h.killsWeek.set(week, (h.killsWeek.get(week) ?? 0) + kills);
+    }
+    if (run.clearMs === null) return;
+    const ms = Math.round(run.clearMs);
+    const wk = `${zone}|${week}`;
+    if (ms < (h.best.get(zone) ?? Infinity)) h.best.set(zone, ms);
+    if (ms < (h.bestWeek.get(wk) ?? Infinity)) h.bestWeek.set(wk, ms);
+  }
+
+  async huntRank(
+    board: "kills" | "best",
+    limit: number,
+    me: string | null,
+    opts: { zone?: string; week?: string },
+  ): Promise<{ rows: RankEntry[]; mine: RankEntry | null }> {
+    const { week } = opts;
+    if (board === "kills")
+      return this.board(limit, me, (a) => {
+        const v = week ? (a.hunt?.killsWeek.get(week) ?? 0) : (a.hunt?.kills ?? 0);
+        return v > 0 ? v : null;
+      });
+    const zone = opts.zone ?? "easy";
+    return this.board(limit, me, (a) => (week ? a.hunt?.bestWeek.get(`${zone}|${week}`) : a.hunt?.best.get(zone)) ?? null, true);
   }
 
   async attend(id: string, ipHash: string, profile: Profile, day: string, yesterday: string): Promise<number> {

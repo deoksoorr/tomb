@@ -1,25 +1,9 @@
-import { handler, json, notFound } from "@/lib/http";
-import { rateLimit } from "@/lib/ratelimit";
-import { requireVisitor } from "@/lib/session";
-import { findVisible, getAccounts, getStore, pushActivity } from "@/lib/store";
-import { rewardReaction } from "@/lib/store/accounts";
-import type { ReviveResponse } from "@/lib/types";
+import { handler, HttpError } from "@/lib/http";
 
 /**
- * "이건 살려주세요" 토글. 다시 누르면 취소된다.
- * 포인트는 묘비마다 처음 누를 때 한 번만 (취소해도 회수하지 않고, 다시 눌러도 다시 주지 않는다)
+ * "살려주세요"는 49번에서 없어졌다 (묘비에서 할 수 있는 건 헌화뿐). 저장된 수는 보관만 한다.
+ * 옛 화면이 부르면 아무것도 바꾸지 않고 410으로 안내한다
  */
-export const POST = handler<{ id: string }>(async (req, { id }) => {
-  const visitorId = await requireVisitor(req);
-  await rateLimit("reaction", req, visitorId);
-  const store = getStore();
-  const grave = await findVisible(store, id);
-  const result = await store.toggleRevive(id, visitorId);
-  if (!result) throw notFound();
-  const first = result.revived && (await store.firstRevive(id, visitorId));
-  const earned = first ? await rewardReaction(getAccounts(), visitorId, grave.ownerAccountId, "revive", "gotRevive") : 0;
-  // 소식은 처음 눌렀을 때만 (토글을 반복해도 쌓이지 않게)
-  if (first && grave.ownerAccountId)
-    await pushActivity(grave.ownerAccountId, { kind: "revive", actorId: visitorId, targetId: id, targetName: grave.name });
-  return json<ReviveResponse>({ ...result, earned });
+export const POST = handler<{ id: string }>(async () => {
+  throw new HttpError(410, "GONE", "살려주세요는 이제 없어요. 대신 꽃을 놓아 주세요.");
 });

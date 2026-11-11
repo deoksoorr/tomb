@@ -5,8 +5,9 @@ import { HttpError } from "./http";
 import { assertAdminNotLocked, recordAdminFailure } from "./ratelimit";
 import type { ReportLogEntry } from "./reports";
 import { safeEqual } from "./session";
-import { byCreated, deleteGrave, getStore, sweepShrine, toPublicGrave, type GraveStore } from "./store";
-import type { PublicGrave } from "./types";
+import { byCreated, deleteGrave, getAccounts, getStore, releaseImage, sweepShrine, toPublicGrave, type GraveStore } from "./store";
+import { pagePassed, sweepPassing, toPassedEntry } from "./store/passing";
+import type { PassedEntry, PassReason, PublicGrave } from "./types";
 import type { ErrorGroup } from "./store/errors";
 import type { AdminAction } from "./validate";
 
@@ -15,6 +16,13 @@ import type { AdminAction } from "./validate";
 
 /** 관리자 목록 항목: 공개 형태 + 숨김 여부 + 신고 수(지금 세는 IP 수) + 최근 신고 기록(최신 먼저) */
 export type AdminGrave = PublicGrave & { hidden: boolean; reports: number; reportLog: ReportLogEntry[] };
+
+/** 관리자 성불 목록 항목 (숨김 포함, 성불 이유·주인 계정) */
+export type AdminPassed = PassedEntry & { hidden: boolean; reason: PassReason; ownerAccountId: string | null };
+/** GET /api/admin/graves/passed?q=&offset= */
+export type AdminPassedResponse = { entries: AdminPassed[]; next: number | null; total: number };
+/** GET·PATCH /api/admin/graves/settings — 성불 기간(일)과 묘역 정원(채널마다, 코드 상수) */
+export type AdminGraveSettings = { passDays: number; capacity: number };
 
 /** GET /api/admin/errors 응답: 오류 묶음(날짜를 합친 횟수, 며칠에 걸쳐 났는지) */
 export type AdminErrorsResponse = { errors: (ErrorGroup & { days: number })[] };
@@ -78,9 +86,16 @@ export async function requireAdmin(req: NextRequest): Promise<void> {
 
 /** 모든 채널, 숨김 포함 + 신고 요약. 등록 순 (각 항목에 channel) */
 export async function listAdminGraves(store: GraveStore = getStore()): Promise<AdminGrave[]> {
-  const [records, reports] = await Promise.all([store.listAll(), store.reportSummary(), sweepShrine(store)]);
+  const now = Date.now();
+  await sweepPassing(store, getAccounts(), now).catch((e: unknown) => console.error("[admin] 성불 정리 실패", e));
+  const [records, reports, settings] = await Promise.all([
+    store.listAll(),
+    store.reportSummary(),
+    store.settings(now),
+    sweepShrine(store),
+  ]);
   return records.sort(byCreated).map((r) => ({
-    ...toPublicGrave(r),
+    ...toPublicGrave(r, now, settings),
     hidden: !!r.hidden,
     reports: reports.get(r.id)?.count ?? 0,
     reportLog: reports.get(r.id)?.log ?? [],
@@ -99,4 +114,27 @@ export function applyAdminAction(store: GraveStore, id: string, action: AdminAct
     case "delete":
       return deleteGrave(store, id);
   }
+}
+
+/** 성불한 묘비 (숨김 포함) 한 쪽 */
+export async function listAdminPassed(q: string, offset: number, store: GraveStore = getStore()): Promise<AdminPassedResponse> {
+  const page = pagePassed(await store.passedAll(), { q, offset, includeHidden: true, limit: 100 });
+  return {
+    entries: page.items.map((p) => ({
+      ...toPassedEntry(p),
+      hidden: !!p.record.hidden,
+      reason: p.reason,
+      ownerAccountId: p.record.ownerAccountId ?? null,
+    })),
+    next: page.next,
+    total: page.total,
+  };
+}
+
+/** 성불한 묘비를 완전히 지운다 (사진 포함). 없으면 false */
+export async function deletePassed(id: string, store: GraveStore = getStore()): Promise<boolean> {
+  const removed = await store.removePassed(id);
+  if (!removed) return false;
+  await releaseImage(store, removed.imageUrl);
+  return true;
 }
