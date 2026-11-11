@@ -61,10 +61,10 @@ function contract(make: () => Kit) {
     expect((await accounts.get(id, "20261109", 0)).todayEarned).toBe(2);
   });
 
-  it("하루 전체 한도: 항목 한도 합보다 작은 500점에서 멈춘다 (사냥은 점수를 직접 준다)", async () => {
+  it("하루 전체 한도: 항목 한도 합보다 작은 하루 상한에서 멈춘다 (사냥은 점수를 직접 준다)", async () => {
     const id = newId();
     const plan = [
-      ["hunt", 1, 300],
+      ["hunt", 1, 600],
       ["attend", 1],
       ["streak", 1],
       ["flower", 10],
@@ -261,9 +261,9 @@ function contract(make: () => Kit) {
   it("같은 IP 합계는 항목 한도 × 3 (계정 여러 개로 농사 방지), IP를 안 주면 계정 한도만", async () => {
     const ip = `ip-${nanoid(6)}`;
     const got = [];
-    for (let i = 0; i < 4; i++) got.push(await accounts.earn(newId(), "hunt", DAY, { amount: 300, ipHash: ip }));
-    expect(got).toEqual([300, 300, 300, 0]);
-    expect(await accounts.earn(newId(), "hunt", DAY, { amount: 300 })).toBe(300);
+    for (let i = 0; i < 4; i++) got.push(await accounts.earn(newId(), "hunt", DAY, { amount: 600, ipHash: ip }));
+    expect(got).toEqual([600, 600, 600, 0]);
+    expect(await accounts.earn(newId(), "hunt", DAY, { amount: 600 })).toBe(600);
   });
 
   it("머무르기: 9.5분 간격, 하루 60점까지", async () => {

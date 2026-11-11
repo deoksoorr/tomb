@@ -314,7 +314,7 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
   });
 
   it("동시에 여러 번 사도 잔액이 음수가 되지 않는다 (가진 만큼만 산다)", async () => {
-    const id = await account(300 + 2 * 90);
+    const id = await account(300 + 2 * furnitureById("stone_lantern")!.price);
     await buyPlot(store, id, "집", "", "a");
     const results = await Promise.allSettled(Array.from({ length: 5 }, () => buyFurniture(store, id, "stone_lantern")));
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(2);
@@ -342,7 +342,7 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
     const before = await points(id);
     const sold = await sellFurniture(store, id, "desk");
     expect(sold.refunded).toBe(sellPrice(furnitureById("desk")!));
-    expect(await points(id)).toBe(before + 20);
+    expect(await points(id)).toBe(before + sellPrice(furnitureById("desk")!));
     await expect(sellFurniture(store, id, "desk")).rejects.toMatchObject({ code: "PLACED" });
     await expect(upgradePlot(store, id, "manor")).rejects.toMatchObject({ code: "BAD_TIER" });
     const up = await upgradePlot(store, id, "wide");

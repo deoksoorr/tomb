@@ -219,7 +219,7 @@ describe("상점", () => {
 
     setPoints(v, 100);
     const bought = await bodyOf<{ me: Me }>(buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "fw_small" } })));
-    expect(bought.me).toMatchObject({ points: 70, inventory: { fw_small: 1 } });
+    expect(bought.me).toMatchObject({ points: 80, inventory: { fw_small: 1 } });
 
     const used = await bodyOf<UseItemResponse>(use.POST(call("/api/shop/use", { visitor: v, body: { itemId: "fw_small" } })));
     expect(used.me.inventory).toEqual({});

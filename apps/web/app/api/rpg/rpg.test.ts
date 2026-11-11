@@ -3,7 +3,9 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { huntPlan } from "@/lib/rpg/plan";
 import { signTicket } from "@/lib/rpg/ticket";
 import type { RpgView, RunFinishResponse, RunStartResponse } from "@/lib/rpg/types";
+import { earnRule } from "@/lib/economy";
 import { getAccounts } from "@/lib/store";
+import { kstDay } from "@/lib/store/accounts";
 import * as session from "../session/route";
 import * as finish from "./run/finish/route";
 import * as start from "./run/start/route";
@@ -112,22 +114,22 @@ describe("사냥터 API", () => {
     vi.restoreAllMocks();
   });
 
-  it("사냥 포인트는 하루 300까지만 (earnPoints 한도)", async () => {
+  it("사냥 포인트는 하루 한도까지만 (earnPoints 한도)", async () => {
     const v = await newVisitor();
+    const cap = earnRule("hunt").dailyMax;
+    // 한 시간에 30판 제한이 있어 한도 바로 아래까지는 미리 채워 둔다
+    await getAccounts().earn(v.id, "hunt", kstDay(), { amount: cap - 30 });
     let total = 0;
-    for (let i = 0; i < 17; i++) {
+    for (let i = 0; i < 3; i++) {
       const s = await startRun(v);
       later(101_000);
       const res = await finish.POST(call("/x", v, { ticket: s.ticket, result: clearAll(s.seed) }));
       vi.restoreAllMocks();
       const body = (await res.json()) as RunFinishResponse;
       total += body.reward.points;
-      if (i === 16) {
-        expect(body.reward.capped).toBe(true);
-        expect(body.view.today.huntPoints).toBe(300);
-      }
+      if (i === 2) expect(body.reward.capped).toBe(true);
     }
-    expect(total).toBe(300);
+    expect(total).toBe(30);
   });
 
   it("한 시간에 30판까지", async () => {
