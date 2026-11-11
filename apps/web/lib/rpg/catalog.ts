@@ -6,7 +6,7 @@ export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
 export const STAT_LABELS: Record<StatKey, { name: string; desc: string }> = {
-  str: { name: "STR", desc: "공격력" },
+  str: { name: "STR", desc: "공격력 (1당 ATK +3)" },
   agi: { name: "AGI", desc: "공격속도·회피·이동속도" },
   vit: { name: "VIT", desc: "최대 HP·방어" },
   int: { name: "INT", desc: "최대 SP·스킬 위력" },
@@ -55,6 +55,8 @@ export type GearDef = {
   price: number;
   bonus: Bonus;
   art: IconArt;
+  /** 무기: 기본 공격 범위 (없으면 formulas DEFAULT_ATTACK_AREA). 40번 무기 특색에서 무기마다 채운다 */
+  area?: { range: number; arcDeg: number };
 };
 
 const gear = (
@@ -66,14 +68,15 @@ const gear = (
   price: number,
   bonus: Bonus,
   art: IconArt,
-): GearDef => ({ id, kind, name, desc, reqLevel, price, bonus, art });
+  area?: GearDef["area"],
+): GearDef => ({ id, kind, name, desc, reqLevel, price, bonus, art, ...(area ? { area } : {}) });
 
 export const GEAR: readonly GearDef[] = [
   // ── 무기 ──
   gear("w_ruler", "weapon", "나무 자", "책상 서랍에서 나온 30cm 자. 생각보다 아프다.", 1, 30, { atk: 6 }, { shape: "ruler", main: 0xc89a5a, accent: 0x5a3e22 }),
   gear("w_keyboard", "weapon", "기계식 키보드", "때릴 때마다 딸깍딸깍. 옆자리가 쳐다본다.", 5, 120, { atk: 15, aspd: 0.1 }, { shape: "keyboard", main: 0x3a3f4a, accent: 0xe8d9b0 }),
   gear("w_duck", "weapon", "삑삑 오리 망치", "때릴 때마다 삑. 사무실 스트레스 해소용.", 10, 260, { atk: 25, crit: 5 }, { shape: "duck", main: 0xf0c83c, accent: 0xe07a2a }),
-  gear("w_monitor_arm", "weapon", "장우산 창", "비 오는 출근길의 동반자. 길고 단단해서 멀리서 찌른다.", 15, 420, { atk: 35, hit: 10 }, { shape: "spear", main: 0x9aa3ad, accent: 0x2a2e36 }),
+  gear("w_monitor_arm", "weapon", "장우산 창", "비 오는 출근길의 동반자. 길고 단단해서 멀리서 찌른다.", 15, 420, { atk: 35, hit: 10 }, { shape: "spear", main: 0x9aa3ad, accent: 0x2a2e36 }, { range: 36, arcDeg: 70 }),
   gear("w_refactor", "weapon", "효율의 검", "같은 일을 더 적은 손짓으로 벤다.", 22, 700, { atk: 52, aspd: 0.15 }, { shape: "sword", main: 0xbcd8e8, accent: 0x5a7aa8 }),
   gear("w_legacy_axe", "weapon", "서류 정리 도끼", "무겁고 느리지만, 누구도 건드리지 못하던 서류 더미를 쪼갠다.", 30, 1000, { atk: 74, str: 3, aspd: -0.1 }, { shape: "axe", main: 0x8a6a4a, accent: 0xb0b8c0 }),
   gear("w_compiler", "weapon", "전설의 법인카드", "한도 없음. 전설로만 전해진다.", 40, 1600, { atk: 98, crit: 8, dex: 3 }, { shape: "chip", main: 0x55704f, accent: 0xffe39a }),
@@ -315,17 +318,17 @@ export type DifficultyDef = {
   miniPoints: number;
   /** 미니게임 한 판 최대 EXP */
   miniExp: number;
-  /** 드롭 확률 (굴림 1번당) */
+  /** 드롭 확률 (굴림 1번당, 43번에서 절반으로: 0.15/0.2/0.25/0.3 → 0.08/0.1/0.12/0.15). 우두머리 장비는 따로 확정 */
   dropChance: number;
   /** 드롭 장비의 요구 레벨 상한 */
   dropMaxLevel: number;
 };
 
 export const DIFFS: Record<Difficulty, DifficultyDef> = {
-  easy: { id: "easy", name: "쉬움", recLevel: 1, monsterLevel: 3, hpMul: 1, atkMul: 1, defMul: 1, expMul: 1, huntPoints: 20, miniPoints: 12, miniExp: 40, dropChance: 0.15, dropMaxLevel: 8 },
-  normal: { id: "normal", name: "보통", recLevel: 8, monsterLevel: 12, hpMul: 2.6, atkMul: 2.3, defMul: 2.5, expMul: 2.6, huntPoints: 35, miniPoints: 20, miniExp: 90, dropChance: 0.2, dropMaxLevel: 18 },
-  hard: { id: "hard", name: "어려움", recLevel: 18, monsterLevel: 24, hpMul: 6, atkMul: 4.6, defMul: 5, expMul: 5.5, huntPoints: 55, miniPoints: 30, miniExp: 180, dropChance: 0.25, dropMaxLevel: 30 },
-  hell: { id: "hell", name: "지옥", recLevel: 30, monsterLevel: 38, hpMul: 13, atkMul: 8.5, defMul: 9, expMul: 11, huntPoints: 80, miniPoints: 45, miniExp: 320, dropChance: 0.3, dropMaxLevel: 50 },
+  easy: { id: "easy", name: "쉬움", recLevel: 1, monsterLevel: 3, hpMul: 1, atkMul: 1, defMul: 1, expMul: 1, huntPoints: 20, miniPoints: 12, miniExp: 40, dropChance: 0.08, dropMaxLevel: 8 },
+  normal: { id: "normal", name: "보통", recLevel: 8, monsterLevel: 12, hpMul: 2.6, atkMul: 2.3, defMul: 2.5, expMul: 2.6, huntPoints: 35, miniPoints: 20, miniExp: 90, dropChance: 0.1, dropMaxLevel: 18 },
+  hard: { id: "hard", name: "어려움", recLevel: 18, monsterLevel: 24, hpMul: 6, atkMul: 4.6, defMul: 5, expMul: 5.5, huntPoints: 55, miniPoints: 30, miniExp: 180, dropChance: 0.12, dropMaxLevel: 30 },
+  hell: { id: "hell", name: "지옥", recLevel: 30, monsterLevel: 38, hpMul: 13, atkMul: 8.5, defMul: 9, expMul: 11, huntPoints: 80, miniPoints: 45, miniExp: 320, dropChance: 0.15, dropMaxLevel: 50 },
 };
 
 // ── 몬스터 ──
@@ -468,7 +471,7 @@ export const GAMES: Record<GameKind, { name: string; desc: string; how: string; 
   hunt: {
     name: "사냥터",
     desc: "다짐을 망치는 것들을 웨이브마다 물리친다. 장비·스킬·포션을 모두 쓴다.",
-    how: "WASD/방향키 이동 · Space/J 공격(쿨다운 중에 누르면 끝나는 순간 나감) · 1~6 스킬 · Q/E/R 포션 · Esc 멈춤",
+    how: "WASD/방향키 이동 · Space/J 공격(누르고 있으면 계속 공격, 앞쪽 부채꼴 안의 적을 모두 때림) · 마우스·손가락을 누르고 있으면 그쪽으로 계속 공격 · 1~6 스킬 · Q/E/R 포션 · Esc 멈춤",
     statNote: "모든 능력치와 장비가 그대로 쓰인다",
   },
   bugs: {

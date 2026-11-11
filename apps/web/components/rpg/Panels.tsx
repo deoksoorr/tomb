@@ -217,11 +217,16 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
         <dl className={s.derived}>
           {DERIVED_ROWS.map(([k, label, f]) => {
             const v = preview[k] as number;
-            const up = v !== (view.derived[k] as number);
+            const delta = v - (view.derived[k] as number);
+            const up = delta !== 0;
             return (
               <div key={k}>
                 <dt>{label}</dt>
-                <dd className={up ? s.up : undefined}>{f(v)}</dd>
+                <dd className={up ? s.up : undefined}>
+                  {f(v)}
+                  {/* 7번: 올리면 얼마나 느는지 바로 보이게 (예: STR +1 → ATK +3) */}
+                  {up && Number.isInteger(delta) && ` (${delta > 0 ? "+" : ""}${delta})`}
+                </dd>
               </div>
             );
           })}

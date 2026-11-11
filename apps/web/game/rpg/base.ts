@@ -101,10 +101,15 @@ export abstract class RpgScene extends Phaser.Scene {
 
   private handleTap(cx: number, cy: number): void {
     if (this.paused || this.ended) return;
-    const r = this.game.canvas.getBoundingClientRect();
-    const cam = this.cameras.main;
-    const p = cam.getWorldPoint(((cx - r.left) * this.game.canvas.width) / Math.max(1, r.width), ((cy - r.top) * this.game.canvas.height) / Math.max(1, r.height));
+    const p = this.toWorld(cx, cy);
     this.onTap(p.x, p.y);
+  }
+
+  /** 화면(client) 좌표 → 월드 좌표 (카메라가 움직이므로 쓸 때마다 다시 바꾼다) */
+  protected toWorld(cx: number, cy: number): { x: number; y: number } {
+    const r = this.game.canvas.getBoundingClientRect();
+    const p = this.cameras.main.getWorldPoint(((cx - r.left) * this.game.canvas.width) / Math.max(1, r.width), ((cy - r.top) * this.game.canvas.height) / Math.max(1, r.height));
+    return { x: p.x, y: p.y };
   }
 
   protected setPaused(p: boolean): void {

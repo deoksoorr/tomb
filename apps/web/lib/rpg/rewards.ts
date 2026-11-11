@@ -18,6 +18,10 @@ import type { BugsResult, Drop, HuntResult, RunResult, StarsResult } from "./typ
 // 판 결과 검증과 보상 계산 (서버 전용으로 쓰지만 순수 함수라 테스트가 쉽다).
 // 클라이언트가 보낸 결과는 얼마든지 꾸밀 수 있으므로, 시드로 다시 만든 출현 계획과 서버가 잰 경과 시간으로 상한을 둔다.
 
+/** 처치 몇 마리마다 드롭을 한 번 굴리나 (한 판 최대 HUNT_DROP_ROLLS번). 45번 출몰량에 맞춰 8 → 14 */
+export const KILLS_PER_DROP_ROLL = 14;
+export const HUNT_DROP_ROLLS = 2;
+
 /** 이보다 짧은 판은 보상이 없다 (시작하자마자 끝내기 반복 방지) */
 export const MIN_RUN_MS = 8000;
 /** 서버가 잰 시간보다 이만큼 넘게 길다고 하면 거짓으로 본다 (요청 왕복 여유) */
@@ -25,9 +29,12 @@ export const CLOCK_SLACK_MS = 3000;
 /** 시간 제한이 지나고도 이만큼은 결과를 받는다 (결과 화면·느린 네트워크) */
 export const FINISH_GRACE_SEC = 120;
 
-/** 레벨 대비 초당 처치 상한 (사냥터). 광역기로 몰아 잡는 경우까지 넉넉히 */
+/**
+ * 레벨 대비 초당 처치 상한 (사냥터). 광역기·여러 마리 동시 타격(42번)으로 몰아 잡는 경우까지 넉넉히.
+ * 45번에서 출몰량이 약 1.75배가 되면서 올렸다 (예전 0.9/0.75/0.6/0.5는 어려움·지옥을 시간 절반에 깨면 정직한 판도 거절했다).
+ */
 export function killRateCeiling(d: Difficulty, level: number): number {
-  const base = { easy: 0.9, normal: 0.75, hard: 0.6, hell: 0.5 }[d];
+  const base = { easy: 2, normal: 1.8, hard: 1.6, hell: 1.6 }[d];
   return base * (1 + Math.max(0, level - DIFFS[d].recLevel) / 10);
 }
 
@@ -97,7 +104,7 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
     xp *= 0.7;
   }
   const bossKilled = (r.kills[ZONES[t.difficulty].boss] ?? 0) > 0 && cleared;
-  const drops = rollDrops(t, Math.min(2, Math.floor(total / 8)), bossKilled);
+  const drops = rollDrops(t, Math.min(HUNT_DROP_ROLLS, Math.floor(total / KILLS_PER_DROP_ROLL)), bossKilled);
   return { ok: true, score: Math.round(exp), exp: Math.round(xp), points: Math.round(points), drops };
 }
 

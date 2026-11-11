@@ -75,6 +75,9 @@ export type Derived = {
   skillPower: number;
 };
 
+/** STR 1당 ATK (7번: 예전 2는 피해 흔들림 ±10%에 묻혀 STR을 올려도 티가 안 났다) */
+export const ATK_PER_STR = 3;
+
 export function derive(level: number, stats: Stats, equip: Partial<Record<GearSlot, string | null>>): Derived {
   const b = gearBonus(equip);
   const s = Object.fromEntries(STAT_KEYS.map((k) => [k, stats[k] + b[k]])) as Stats;
@@ -82,7 +85,7 @@ export function derive(level: number, stats: Stats, equip: Partial<Record<GearSl
     stats: s,
     maxHp: Math.round((90 + level * 14 + b.hp) * (1 + s.vit * 0.02)),
     maxSp: Math.round((24 + level * 3 + b.sp) * (1 + s.int * 0.02)),
-    atk: s.str * 2 + Math.floor(s.dex / 4) + Math.floor(s.luk / 5) + level + b.atk,
+    atk: s.str * ATK_PER_STR + Math.floor(s.dex / 4) + Math.floor(s.luk / 5) + level + b.atk,
     def: b.def + Math.floor(s.vit / 2),
     // 재미 위주: 기본 공격을 초당 3회로(후딜레이 약 0.33초). 어려움은 몬스터 패턴으로 준다
     aspd: round2(clamp(3 + s.agi * 0.03 + s.dex * 0.01 + b.aspd, 1, 6)),
@@ -111,6 +114,35 @@ export function damage(atk: number, mult: number, def: number, roll: number, cri
   return Math.max(1, Math.round(crit ? base * 1.5 : base * defFactor(def)));
 }
 
+/**
+ * 기본 공격 범위: 바라보는 쪽 부채꼴 (반지름 px, 펼친 각도 °). 안에 든 몬스터를 모두 때린다 (42번).
+ * 무기마다 다르게 줄 수 있다 (GearDef.area, 40번 무기 특색). 몸이 겹칠 만큼 가까우면 방향과 상관없이 맞는다.
+ */
+export type AttackArea = { range: number; arcDeg: number };
+export const DEFAULT_ATTACK_AREA: AttackArea = { range: 26, arcDeg: 120 };
+
+export function attackArea(equip: Partial<Record<GearSlot, string | null>>): AttackArea {
+  const w = equip.weapon ? gearById(equip.weapon) : undefined;
+  return w?.area ?? DEFAULT_ATTACK_AREA;
+}
+
+/** 부채꼴 판정: (dx,dy)는 나→몬스터, face는 단위 벡터, r은 몬스터 몸 반지름 */
+export function inAttackArea(area: AttackArea, face: { x: number; y: number }, dx: number, dy: number, r: number): boolean {
+  const d = Math.hypot(dx, dy);
+  if (d - r > area.range) return false;
+  if (d <= r + 6) return true;
+  const cos = (dx * face.x + dy * face.y) / d;
+  // 몸 반지름만큼 각도를 넓혀 준다 (가장자리에 걸친 몬스터도 맞게)
+  const half = (area.arcDeg / 2) * (Math.PI / 180) + Math.atan2(r, d);
+  return cos >= Math.cos(Math.min(Math.PI, half));
+}
+
+/**
+ * 45번(출몰량 약 1.75배) 때 한 단계 올린 몬스터: 체력 ×1.2, 공격력 ×1.15.
+ * 마리당 EXP는 ×0.6 (마리 수가 늘어도 한 판 총 EXP가 크게 늘지 않게).
+ */
+export const MONSTER_TIER = { hp: 1.2, atk: 1.15, exp: 0.6 } as const;
+
 export type MonsterStats = { maxHp: number; atk: number; def: number; hit: number; flee: number; speed: number; exp: number };
 
 /** 난이도를 반영한 몬스터 능력치 */
@@ -119,13 +151,13 @@ export function monsterStats(id: MonsterId, d: Difficulty): MonsterStats {
   const D = DIFFS[d];
   const lv = D.monsterLevel;
   return {
-    maxHp: Math.round(m.hp * D.hpMul),
-    atk: Math.round(m.atk * D.atkMul),
+    maxHp: Math.round(m.hp * D.hpMul * MONSTER_TIER.hp),
+    atk: Math.round(m.atk * D.atkMul * MONSTER_TIER.atk),
     def: Math.round(m.def * D.defMul),
     hit: 10 + lv * 2,
     flee: 6 + lv * 2,
     speed: m.speed * (d === "hell" ? 1.2 : d === "hard" ? 1.1 : 1),
-    exp: Math.round(m.exp * D.expMul),
+    exp: Math.max(1, Math.round(m.exp * D.expMul * MONSTER_TIER.exp)),
   };
 }
 

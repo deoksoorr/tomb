@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { GEAR, MONSTERS, SKILLS, ZONES } from "./catalog";
+import { DIFFICULTIES, DIFFS, GEAR, MONSTERS, SKILLS, ZONES } from "./catalog";
 import { addGear, allocStats, consumePotions, equip, gainExp, learnSkill, newCharacter, removeGearForSale, RpgError, setHotbar } from "./character";
-import { applyExp, damage, derive, expToNext, hitChance, MAX_LEVEL, monsterStats } from "./formulas";
-import { bugsCount, bugsPlan, comboMult, huntPlan, huntSpawnable, starsCount, starsPlan, starWindows } from "./plan";
+import { applyExp, ATK_PER_STR, attackArea, damage, DEFAULT_ATTACK_AREA, derive, expToNext, hitChance, inAttackArea, MAX_LEVEL, monsterStats } from "./formulas";
+import { bugsCount, bugsPlan, comboMult, huntPlan, huntSpawnable, huntTotal, starsCount, starsPlan, starWindows } from "./plan";
 import { evaluate, MIN_RUN_MS, type TicketInfo } from "./rewards";
 import { signTicket, verifyTicket } from "./ticket";
 import { MemoryRpgStore } from "./store";
@@ -27,6 +27,33 @@ describe("성장 공식", () => {
     const strong = derive(1, { ...c.stats, agi: 99, luk: 99 }, {});
     expect(strong.aspd).toBeLessThanOrEqual(6);
     expect(strong.crit).toBeLessThanOrEqual(60);
+  });
+
+  it("STR 1당 ATK +3 (7번: 올린 만큼 피해 숫자에 보이게)", () => {
+    const c = newCharacter();
+    const a = derive(1, c.stats, c.equip);
+    const b = derive(1, { ...c.stats, str: c.stats.str + 1 }, c.equip);
+    expect(b.atk - a.atk).toBe(ATK_PER_STR);
+    expect(ATK_PER_STR).toBe(3);
+    // 흔들림(±10%) 최저값으로도 STR 5 올린 쪽이 최고값보다 세다
+    const s5 = derive(1, { ...c.stats, str: c.stats.str + 5 }, c.equip);
+    expect(damage(s5.atk, 1, 0, 0, false)).toBeGreaterThan(damage(a.atk, 1, 0, 0.999, false));
+  });
+
+  it("기본 공격 범위: 앞쪽 부채꼴 안은 모두, 뒤는 안 맞고, 몸이 겹치면 방향 무관 (42번)", () => {
+    const A = DEFAULT_ATTACK_AREA;
+    const right = { x: 1, y: 0 };
+    expect(inAttackArea(A, right, 20, 0, 7)).toBe(true);
+    expect(inAttackArea(A, right, 18, 14, 7)).toBe(true); // 대각선 앞
+    expect(inAttackArea(A, right, -20, 0, 7)).toBe(false); // 뒤
+    expect(inAttackArea(A, right, 0, -24, 7)).toBe(false); // 옆 멀리
+    expect(inAttackArea(A, right, -5, 3, 7)).toBe(true); // 겹침
+    expect(inAttackArea(A, right, 40, 0, 7)).toBe(false); // 너무 멂
+    // 무기가 범위를 정할 수 있다 (장우산 창: 길고 좁게)
+    const spear = attackArea({ weapon: "w_monitor_arm" });
+    expect(spear.range).toBeGreaterThan(A.range);
+    expect(inAttackArea(spear, right, 40, 0, 7)).toBe(true);
+    expect(attackArea({ weapon: "w_ruler" })).toEqual(A);
   });
 
   it("피해: 방어가 높을수록 줄고, 치명타는 방어를 무시하고 1.5배, 최소 1", () => {
@@ -123,6 +150,27 @@ describe("출현 계획", () => {
     expect(huntSpawnable(a, 0)).not.toHaveProperty("legacy_golem");
   });
 
+  it("45번: 웨이브가 커지고 둘째 웨이브부터 무리가 섞인다, 마리당 EXP는 줄여 총량은 비슷", () => {
+    const old = { easy: 17, normal: 29, hard: 44, hell: 62 };
+    for (const d of DIFFICULTIES) {
+      const p = huntPlan(7, d);
+      expect(huntTotal(p) / old[d]).toBeGreaterThan(1.5);
+      expect(huntTotal(p) / old[d]).toBeLessThan(2);
+      expect(p[0].pack).toBe(0);
+      for (const w of p.slice(1)) {
+        expect(w.pack).toBeGreaterThanOrEqual(3);
+        const pack = w.monsters.slice(w.monsters.length - w.pack);
+        expect(new Set(pack).size).toBe(1);
+      }
+      expect(Math.max(...p.map((w) => w.monsters.length))).toBeLessThanOrEqual(20);
+    }
+    expect(monsterStats("scope_creep", "easy")).toMatchObject({ maxHp: 48, atk: 8, exp: 4 });
+  });
+
+  it("43번: 드롭 확률은 예전의 절반쯤", () => {
+    expect(DIFFICULTIES.map((d) => DIFFS[d].dropChance)).toEqual([0.08, 0.1, 0.12, 0.15]);
+  });
+
   it("버그·데드라인 계획은 시간 안에서만 나온다", () => {
     const b = bugsPlan(7, "hard", 60, { dex: 10, luk: 10 });
     expect(b.every((s) => s.t < 60_000)).toBe(true);
@@ -180,6 +228,18 @@ describe("결과 검증", () => {
     expect(v.points).toBe(20);
     expect(v.exp).toBeGreaterThan(0);
     expect(v.drops.some((d) => d.kind === "gear")).toBe(true);
+  });
+
+  it("정직한 판은 거절하지 않는다: 모든 난이도·시드에서 시간 절반에 다 잡아도 통과 (45번 출몰량)", () => {
+    for (const d of DIFFICULTIES) {
+      for (let seed = 1; seed <= 60; seed++) {
+        const p = huntPlan(seed, d);
+        const kills = huntSpawnable(p, Infinity) as Record<string, number>;
+        const ms = (ZONES[d].timeLimitSec * 1000) / 2;
+        const v = evaluate({ ...T, difficulty: d, seed, level: DIFFS[d].recLevel }, hunt({ kills, wavesCleared: p.length, durationMs: ms }), ms + 1000);
+        expect(v.ok, `${d} seed ${seed}`).toBe(true);
+      }
+    }
   });
 
   it("서버 시간보다 길다고 하면 TOO_FAST", () => {

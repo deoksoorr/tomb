@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { PHRASES } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { GAMES, POTIONS, SKILLS, type GameKind, type SkillId } from "@/lib/rpg/catalog";
 import { comboMult } from "@/lib/rpg/plan";
@@ -15,6 +14,7 @@ import RpgIcon from "./RpgIcon";
 import s from "./rpg.module.css";
 
 // 판 진행 중 오버레이: 캔버스 위 전체를 덮고(탭은 rpg:tap으로 게임에 넘긴다) 상태·버튼을 그린다.
+// 사냥터: 캔버스·공격 버튼을 누르고 있으면 rpg:action hold로 계속 공격 (36번). 말풍선 버튼은 없앴다 (26번).
 
 const BUFF_NAMES: Record<string, string> = {
   rollback: "못 들은 척",
@@ -89,8 +89,14 @@ function Joystick() {
 
 export default function RunHud({ game, hotbar, onPause }: { game: GameKind; hotbar: (SkillId | null)[]; onPause: () => void }) {
   const [hud, setHud] = useState<RpgHud | null>(null);
-  const [talk, setTalk] = useState(false);
   useBridgeEvent("rpg:hud", setHud);
+  const holding = useRef<number | null>(null);
+  const hunt = game === "hunt";
+  const release = (e: React.PointerEvent) => {
+    if (holding.current !== e.pointerId) return;
+    holding.current = null;
+    bridge.emit("rpg:action", { kind: "hold", on: false });
+  };
   const act = (e: React.PointerEvent, a: RpgAction) => {
     e.stopPropagation();
     e.preventDefault();
@@ -102,8 +108,20 @@ export default function RunHud({ game, hotbar, onPause }: { game: GameKind; hotb
     <div
       className={s.capture}
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget) bridge.emit("rpg:tap", { x: e.clientX, y: e.clientY });
+        if (e.target !== e.currentTarget) return;
+        bridge.emit("rpg:tap", { x: e.clientX, y: e.clientY });
+        if (!hunt || e.button !== 0) return;
+        // 누르고 있으면 그쪽으로 계속 공격 (뗄 때까지 포인터를 잡아 둔다)
+        holding.current = e.pointerId;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        bridge.emit("rpg:action", { kind: "hold", on: true, x: e.clientX, y: e.clientY });
       }}
+      onPointerMove={(e) => {
+        if (holding.current === e.pointerId) bridge.emit("rpg:action", { kind: "hold", on: true, x: e.clientX, y: e.clientY });
+      }}
+      onPointerUp={release}
+      onPointerCancel={release}
+      onLostPointerCapture={release}
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className={s.hudTop}>
@@ -156,31 +174,8 @@ export default function RunHud({ game, hotbar, onPause }: { game: GameKind; hotb
             <button type="button" className={cx(ui.button, ui.icon)} onPointerDown={stop} onClick={onPause} aria-label="멈춤">
               <PixelIcon name="pause" />
             </button>
-            {game === "hunt" && (
-              <button type="button" className={cx(ui.button, ui.icon)} onPointerDown={stop} onClick={() => setTalk((t) => !t)} aria-expanded={talk} aria-label="말풍선">
-                말
-              </button>
-            )}
           </div>
         </div>
-        {talk && game === "hunt" && (
-          <div className={s.phrases} role="group" aria-label="말풍선 보내기">
-            {PHRASES.filter((p) => ["hi", "nice", "thanks", "cheer", "follow", "bye"].includes(p.id)).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={cx(ui.button, s.small)}
-                onPointerDown={stop}
-                onClick={() => {
-                  bridge.emit("rpg:say", { id: p.id });
-                  setTalk(false);
-                }}
-              >
-                {p.text}
-              </button>
-            ))}
-          </div>
-        )}
         {hud?.boss && (
           <div className={s.boss}>
             <span>{hud.boss.name}</span>
@@ -241,8 +236,17 @@ export default function RunHud({ game, hotbar, onPause }: { game: GameKind; hotb
             <button
               type="button"
               className={cx(s.skillBtn, s.attack, s.touchOnly, hud?.attackBuffered && s.buffered)}
-              onPointerDown={(e) => act(e, { kind: "attack" })}
-              aria-label="공격"
+              onPointerDown={(e) => {
+                act(e, { kind: "attack" });
+                // 누르고 있으면 지금 방향으로 계속 공격
+                holding.current = e.pointerId;
+                e.currentTarget.setPointerCapture(e.pointerId);
+                bridge.emit("rpg:action", { kind: "hold", on: true });
+              }}
+              onPointerUp={release}
+              onPointerCancel={release}
+              onLostPointerCapture={release}
+              aria-label="공격 (누르고 있으면 계속)"
             >
               {(hud?.attack ?? 0) > 0 && <span className={s.cool} style={ring(hud!.attack!)} />}
               <span className={s.attackLabel}>공격</span>

@@ -129,6 +129,11 @@ export type RpgHud = {
 
 export type RpgAction =
   | { kind: "attack" }
+  /**
+   * 사냥터: 누르고 있는 동안 공격 속도대로 계속 공격 (36번). on=false면 뗌.
+   * x·y(화면 좌표)가 있으면 그쪽을 바라보고 친다 (캔버스를 누른 채 끌기), 없으면 지금 방향 (공격 버튼)
+   */
+  | { kind: "hold"; on: boolean; x?: number; y?: number }
   | { kind: "skill"; slot: number }
   | { kind: "potion"; id: string }
   /** 버그 잡기 칸 누르기 */

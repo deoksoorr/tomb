@@ -11,9 +11,15 @@ export const WAVE_MIN_GAP_SEC = 8;
 /** 다 못 잡아도 이 시간이 지나면 다음 웨이브가 나온다 */
 export const WAVE_MAX_GAP_SEC = 35;
 
-export type HuntWave = { index: number; monsters: MonsterId[]; earliestSec: number; boss: boolean };
+/** pack: monsters 중 끝의 pack마리는 한 자리에서 무리로 몰려 나온다 (같은 종류) */
+export type HuntWave = { index: number; monsters: MonsterId[]; earliestSec: number; boss: boolean; pack: number };
 
-const WAVE_BASE: Record<Difficulty, number> = { easy: 3, normal: 4, hard: 5, hell: 6 };
+// 45번: 여러 마리 동시 타격(42번)에 맞춰 약 1.75배. 예전은 3/4/5/6마리 + 웨이브마다 1, 최대 12
+const WAVE_BASE: Record<Difficulty, number> = { easy: 5, normal: 6, hard: 8, hell: 9 };
+const WAVE_GROWTH = 2;
+const WAVE_CAP = 20;
+/** 무리 크기 (최소, 최대) — 둘째 웨이브부터 */
+const PACK: Record<Difficulty, [number, number]> = { easy: [3, 4], normal: [3, 5], hard: [4, 6], hell: [5, 7] };
 
 export function huntPlan(seed: number, d: Difficulty): HuntWave[] {
   const zone = ZONES[d];
@@ -21,11 +27,17 @@ export function huntPlan(seed: number, d: Difficulty): HuntWave[] {
   const waves: HuntWave[] = [];
   for (let i = 0; i < zone.waves; i++) {
     const last = i === zone.waves - 1;
-    const n = Math.min(12, WAVE_BASE[d] + i);
+    const n = Math.min(WAVE_CAP, WAVE_BASE[d] + i * WAVE_GROWTH);
     const monsters: MonsterId[] = [];
     if (last) monsters.push(zone.boss);
-    for (let k = last ? 2 : 0; k < n; k++) monsters.push(zone.pool[Math.floor(r() * zone.pool.length)]);
-    waves.push({ index: i, monsters, earliestSec: i * WAVE_MIN_GAP_SEC, boss: last });
+    // 우두머리는 두 마리 몫
+    const room = n - (last ? 2 : 0);
+    const [lo, hi] = PACK[d];
+    const pack = i === 0 ? 0 : Math.min(room, lo + Math.floor(r() * (hi - lo + 1)));
+    for (let k = 0; k < room - pack; k++) monsters.push(zone.pool[Math.floor(r() * zone.pool.length)]);
+    const packId = zone.pool[Math.floor(r() * zone.pool.length)];
+    for (let k = 0; k < pack; k++) monsters.push(packId);
+    waves.push({ index: i, monsters, earliestSec: i * WAVE_MIN_GAP_SEC, boss: last, pack });
   }
   return waves;
 }
