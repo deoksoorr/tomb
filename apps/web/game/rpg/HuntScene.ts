@@ -142,6 +142,15 @@ export class HuntScene extends RpgScene {
     this.sp = play.derived.maxSp;
     this.px = W / 2;
     this.py = H / 2;
+    // 판 시간(elapsed) 기준 시각들: 씬 인스턴스는 판마다 재사용되고 elapsed는 0부터 다시 센다.
+    // 안 지우면 지난 판 막바지의 커피 브레이크(rootUntil)가 다음 판의 이동·공격을 그 시각까지 막는다.
+    this.rootUntil = 0;
+    this.hurtUntil = 0;
+    this.regenAt = 0;
+    this.messageUntil = 0;
+    this.gaugeFlashUntil = 0;
+    this.face = { x: 0, y: 1 };
+    this.dirRow = DIR_ROW.down;
 
     this.cameras.main.setBackgroundColor("#0e0d12");
     const floor = ensureFloor(this, play.difficulty, zone.floor[0], zone.floor[1], zone.deco, play.seed & 0xffff);
