@@ -151,7 +151,7 @@ export default function BuryForm({ mode, mourner, cache, channel, graveCount, on
 
         <div className={ui.field}>
           <label htmlFor={`${uid}-name`} className={ui.label}>
-            <span className={ui.required}>프로젝트 이름</span>
+            <span className={ui.required}>그만둔 것</span>
             <span className={ui.counter} aria-hidden="true">
               {charCount(name)}/{LIMITS.name}
             </span>
@@ -162,7 +162,7 @@ export default function BuryForm({ mode, mourner, cache, channel, graveCount, on
             value={name}
             maxLength={LIMITS.name * 2}
             onChange={(e) => setName(e.target.value)}
-            placeholder="예) 할 일 앱"
+            placeholder="예) 새해 다짐 헬스장"
             aria-invalid={errorFor("name") !== undefined}
             aria-describedby={errorFor("name") ? `${uid}-name-msg` : undefined}
           />
@@ -271,7 +271,7 @@ export default function BuryForm({ mode, mourner, cache, channel, graveCount, on
 
         <aside className={styles.preview} aria-label="미리보기">
           <div className={styles.stage}>
-            <span className={styles.stageName}>{name.trim() || "프로젝트 이름"}</span>
+            <span className={styles.stageName}>{name.trim() || "그만둔 것"}</span>
             <StyleArt style={style} ageDays={previewAge} scale={4} label={`${styleName(style)} 묘비`} />
           </div>
           <div className={styles.previewText}>

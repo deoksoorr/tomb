@@ -44,7 +44,7 @@ export function validateQuick(v: QuickValues): QuickErrors {
   const name = v.name.trim();
   const errors: QuickErrors = {
     name: !name
-      ? "프로젝트 이름을 적어 주세요."
+      ? "그만둔 것의 이름을 적어 주세요."
       : charCount(name) > LIMITS.name
         ? `${LIMITS.name}자까지 적을 수 있어요.`
         : undefined,

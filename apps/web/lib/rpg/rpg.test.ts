@@ -42,7 +42,7 @@ describe("성장 공식", () => {
   it("몬스터는 난이도마다 강해진다", () => {
     expect(monsterStats("scope_creep", "hell").maxHp).toBeGreaterThan(monsterStats("scope_creep", "easy").maxHp);
     expect(Object.keys(MONSTERS)).toContain("prod_dragon");
-    expect(ZONES.easy.name).toBe("기획 회의실");
+    expect(ZONES.easy.name).toBe("월요일 회의실");
   });
 });
 
@@ -62,7 +62,7 @@ describe("캐릭터 조작", () => {
     expect(c.hotbar[0]).toBe("refactor");
     expect(() => learnSkill(c, "refactor")).toThrow(/스킬 포인트/);
     c = gainExp(c, 1e6).state;
-    expect(() => learnSkill(c, "deploy")).toThrow(/리팩터링 3단계/);
+    expect(() => learnSkill(c, "deploy")).toThrow(/결재판 치기 3단계/);
     expect(() => setHotbar(c, ["hotfix", null, null, null, null, null])).toThrow(/배운 스킬/);
     expect(SKILLS).toHaveLength(10);
   });

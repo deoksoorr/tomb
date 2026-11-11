@@ -57,7 +57,11 @@ export default function EntryScreen({ start, focusGraveId, entering, stalled, on
       <NightSky ambience={ambience} />
       <div className={styles.content}>
         <h1 className={styles.title}>한때는...</h1>
-        <p className={styles.subtitle}>수많은 시작이 여기 잠들어 있습니다.</p>
+        <p className={styles.subtitle}>
+          끝내지 못한 것들이 잠든 도트 마을.
+          <br />
+          모닥불 앞에 앉고, 헤엄치고, 사냥하고, 내 집 한 칸을 꾸며 보세요.
+        </p>
         {/* 이름·색은 localStorage에 있으므로 하이드레이션 뒤에 그린다 */}
         {hydrated && !entering ? (
           <>

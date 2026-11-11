@@ -1,5 +1,5 @@
 // 사냥터(RPG) 카탈로그: 장비·포션·스킬·몬스터·사냥터·난이도. 서버(검증·보상)와 클라이언트(UI·게임)가 같이 쓴다.
-// 이름은 프로젝트가 흔히 망하는 사정과 회사가 프로젝트를 반대하던 장면에서 따왔다.
+// 이름은 회사 생활(월요병·야근·결재·회식)과 누구나 한 번쯤 그만둔 다짐에서 따왔다.
 
 export const STAT_KEYS = ["str", "agi", "vit", "int", "dex", "luk"] as const;
 export type StatKey = (typeof STAT_KEYS)[number];
@@ -10,8 +10,8 @@ export const STAT_LABELS: Record<StatKey, { name: string; desc: string }> = {
   agi: { name: "AGI", desc: "공격속도·회피·이동속도" },
   vit: { name: "VIT", desc: "최대 HP·방어" },
   int: { name: "INT", desc: "최대 SP·스킬 위력" },
-  dex: { name: "DEX", desc: "명중·공격력 조금 (버그 잡기: 버그가 오래 보임)" },
-  luk: { name: "LUK", desc: "치명타·회피 조금 (버그 잡기: 황금 버그)" },
+  dex: { name: "DEX", desc: "명중·공격력 조금 (벌레 잡기: 벌레가 오래 보임)" },
+  luk: { name: "LUK", desc: "치명타·회피 조금 (벌레 잡기: 황금 벌레)" },
 };
 
 /** 장비·버프가 더해 주는 값 */
@@ -71,30 +71,30 @@ const gear = (
 export const GEAR: readonly GearDef[] = [
   // ── 무기 ──
   gear("w_ruler", "weapon", "나무 자", "책상 서랍에서 나온 30cm 자. 생각보다 아프다.", 1, 30, { atk: 6 }, { shape: "ruler", main: 0xc89a5a, accent: 0x5a3e22 }),
-  gear("w_keyboard", "weapon", "기계식 키보드", "청축. 때릴 때마다 딸깍 소리가 난다.", 5, 120, { atk: 15, aspd: 0.1 }, { shape: "keyboard", main: 0x3a3f4a, accent: 0xe8d9b0 }),
-  gear("w_duck", "weapon", "고무오리 망치", "설명하다 보면 버그가 스스로 자백한다.", 10, 260, { atk: 25, crit: 5 }, { shape: "duck", main: 0xf0c83c, accent: 0xe07a2a }),
-  gear("w_monitor_arm", "weapon", "모니터암 창", "길고 단단하다. 멀리서 찌른다.", 15, 420, { atk: 35, hit: 10 }, { shape: "spear", main: 0x9aa3ad, accent: 0x2a2e36 }),
-  gear("w_refactor", "weapon", "리팩터링 검", "같은 일을 더 적은 줄로 벤다.", 22, 700, { atk: 52, aspd: 0.15 }, { shape: "sword", main: 0xbcd8e8, accent: 0x5a7aa8 }),
-  gear("w_legacy_axe", "weapon", "레거시 도끼", "무겁고 느리지만, 누구도 건드리지 못하던 걸 쪼갠다.", 30, 1000, { atk: 74, str: 3, aspd: -0.1 }, { shape: "axe", main: 0x8a6a4a, accent: 0xb0b8c0 }),
-  gear("w_compiler", "weapon", "무결점 컴파일러", "경고 0개. 전설로만 전해진다.", 40, 1600, { atk: 98, crit: 8, dex: 3 }, { shape: "chip", main: 0x55704f, accent: 0xffe39a }),
+  gear("w_keyboard", "weapon", "기계식 키보드", "때릴 때마다 딸깍딸깍. 옆자리가 쳐다본다.", 5, 120, { atk: 15, aspd: 0.1 }, { shape: "keyboard", main: 0x3a3f4a, accent: 0xe8d9b0 }),
+  gear("w_duck", "weapon", "삑삑 오리 망치", "때릴 때마다 삑. 사무실 스트레스 해소용.", 10, 260, { atk: 25, crit: 5 }, { shape: "duck", main: 0xf0c83c, accent: 0xe07a2a }),
+  gear("w_monitor_arm", "weapon", "장우산 창", "비 오는 출근길의 동반자. 길고 단단해서 멀리서 찌른다.", 15, 420, { atk: 35, hit: 10 }, { shape: "spear", main: 0x9aa3ad, accent: 0x2a2e36 }),
+  gear("w_refactor", "weapon", "효율의 검", "같은 일을 더 적은 손짓으로 벤다.", 22, 700, { atk: 52, aspd: 0.15 }, { shape: "sword", main: 0xbcd8e8, accent: 0x5a7aa8 }),
+  gear("w_legacy_axe", "weapon", "서류 정리 도끼", "무겁고 느리지만, 누구도 건드리지 못하던 서류 더미를 쪼갠다.", 30, 1000, { atk: 74, str: 3, aspd: -0.1 }, { shape: "axe", main: 0x8a6a4a, accent: 0xb0b8c0 }),
+  gear("w_compiler", "weapon", "전설의 법인카드", "한도 없음. 전설로만 전해진다.", 40, 1600, { atk: 98, crit: 8, dex: 3 }, { shape: "chip", main: 0x55704f, accent: 0xffe39a }),
   // ── 갑옷 ──
-  gear("a_hoodie", "armor", "후드티", "회색. 모든 개발자의 기본 방어구.", 1, 30, { def: 3, hp: 20 }, { shape: "hoodie", main: 0x6e7076, accent: 0x4a4c52 }),
-  gear("a_flannel", "armor", "체크 셔츠", "해커톤 3일째의 갑옷.", 6, 120, { def: 7, hp: 45 }, { shape: "shirt", main: 0xa83c3c, accent: 0x3a2020 }),
+  gear("a_hoodie", "armor", "후드티", "회색. 모든 재택근무자의 기본 방어구.", 1, 30, { def: 3, hp: 20 }, { shape: "hoodie", main: 0x6e7076, accent: 0x4a4c52 }),
+  gear("a_flannel", "armor", "체크 셔츠", "사흘째 야근 중인 사람의 갑옷.", 6, 120, { def: 7, hp: 45 }, { shape: "shirt", main: 0xa83c3c, accent: 0x3a2020 }),
   gear("a_laptop_bag", "armor", "방탄 노트북 가방", "충전기와 마우스와 희망이 들어 있다.", 12, 300, { def: 13, hp: 85 }, { shape: "bag", main: 0x2e3440, accent: 0x88c0d0 }),
   gear("a_standing_desk", "armor", "스탠딩 데스크 갑주", "서서 버티는 자세가 몸에 밴다.", 20, 600, { def: 21, hp: 140, vit: 2 }, { shape: "plate", main: 0x8a8f98, accent: 0xd0d4da }),
-  gear("a_server_rack", "armor", "서버랙 아머", "팬 소리가 요란하다. 아무것도 안 뚫린다.", 32, 1100, { def: 31, hp: 230 }, { shape: "rack", main: 0x24282e, accent: 0x6ad07a }),
+  gear("a_server_rack", "armor", "철제 캐비닛 아머", "서랍 여닫는 소리가 요란하다. 아무것도 안 뚫린다.", 32, 1100, { def: 31, hp: 230 }, { shape: "rack", main: 0x24282e, accent: 0x6ad07a }),
   // ── 머리 ──
   gear("h_cap", "head", "야구모자", "머리 안 감은 날의 친구.", 1, 20, { def: 1, flee: 3 }, { shape: "cap", main: 0x3c5a8a, accent: 0xe8d9b0 }),
-  gear("h_headset", "head", "노이즈캔슬링 헤드셋", "회의 소집 소리가 들리지 않는다.", 8, 150, { def: 3, sp: 20, int: 2 }, { shape: "headset", main: 0x2a2a30, accent: 0xc8a050 }),
+  gear("h_headset", "head", "노이즈캔슬링 헤드셋", "부장님 호출이 들리지 않는다.", 8, 150, { def: 3, sp: 20, int: 2 }, { shape: "headset", main: 0x2a2a30, accent: 0xc8a050 }),
   gear("h_vr", "head", "VR 고글", "앞이 더 잘 보인다고 주장한다.", 18, 380, { def: 5, hit: 12, dex: 3 }, { shape: "goggles", main: 0xe8e8ec, accent: 0x5a3e8a }),
-  gear("h_crown", "head", "릴리즈 왕관", "딱 한 번 정시에 배포한 자의 증표.", 28, 800, { def: 8, luk: 5, sp: 30 }, { shape: "crown", main: 0xe8b830, accent: 0xc83c5a }),
+  gear("h_crown", "head", "정시 퇴근 왕관", "딱 한 번 정시에 퇴근한 자의 증표.", 28, 800, { def: 8, luk: 5, sp: 30 }, { shape: "crown", main: 0xe8b830, accent: 0xc83c5a }),
   // ── 장신구 ──
   gear("c_earphones", "acc", "유선 이어폰", "꼬여 있지만 끊기지 않는다.", 1, 25, { agi: 1, flee: 2 }, { shape: "earphones", main: 0xf2f2f2, accent: 0x9aa3ad }),
   gear("c_sticker", "acc", "행운의 스티커", "노트북에 붙여 둔 고양이 스티커.", 3, 90, { luk: 4, crit: 2 }, { shape: "sticker", main: 0xffb0c8, accent: 0x5a3e4a }),
   gear("c_smartwatch", "acc", "스마트워치", "일어나라고 재촉한다. 덕분에 빠르다.", 7, 160, { agi: 3, flee: 5 }, { shape: "watch", main: 0x2a2e36, accent: 0x6ad0c8 }),
-  gear("c_ide_ring", "acc", "IDE 반지", "자동완성이 손끝에서 흐른다.", 14, 280, { dex: 4, hit: 8 }, { shape: "ring", main: 0xc8a050, accent: 0x5a8ac8 }),
+  gear("c_ide_ring", "acc", "단축키 반지", "복사·붙여넣기가 손끝에서 흐른다.", 14, 280, { dex: 4, hit: 8 }, { shape: "ring", main: 0xc8a050, accent: 0x5a8ac8 }),
   gear("c_mug", "acc", "끝없는 머그컵", "식지도 비지도 않는다.", 20, 420, { int: 3, sp: 40 }, { shape: "mug", main: 0xe8d9b0, accent: 0x6a4a30 }),
-  gear("c_grass_badge", "acc", "잔디 배지", "1년 내내 초록색이었던 기록.", 26, 600, { str: 3, vit: 3 }, { shape: "badge", main: 0x40a050, accent: 0x205028 }),
+  gear("c_grass_badge", "acc", "개근 배지", "1년 내내 지각 한 번 없던 기록.", 26, 600, { str: 3, vit: 3 }, { shape: "badge", main: 0x40a050, accent: 0x205028 }),
 ];
 
 export const gearById = (id: string): GearDef | undefined => GEAR.find((g) => g.id === id);
@@ -175,7 +175,7 @@ export const SKILL_FX = {
 export const SKILLS: readonly SkillDef[] = [
   {
     id: "refactor",
-    name: "리팩터링",
+    name: "결재판 치기",
     tag: "강타",
     maxLevel: 5,
     reqLevel: 1,
@@ -186,7 +186,7 @@ export const SKILLS: readonly SkillDef[] = [
   },
   {
     id: "hotfix",
-    name: "핫픽스",
+    name: "급한 불 끄기",
     tag: "회복",
     maxLevel: 5,
     reqLevel: 2,
@@ -197,7 +197,7 @@ export const SKILLS: readonly SkillDef[] = [
   },
   {
     id: "rollback",
-    name: "롤백",
+    name: "못 들은 척",
     tag: "잠깐 무적",
     maxLevel: 3,
     reqLevel: 8,
@@ -209,7 +209,7 @@ export const SKILLS: readonly SkillDef[] = [
   },
   {
     id: "cache_hit",
-    name: "캐시 히트",
+    name: "칼퇴 질주",
     tag: "이동속도",
     maxLevel: 5,
     reqLevel: 3,
@@ -220,7 +220,7 @@ export const SKILLS: readonly SkillDef[] = [
   },
   {
     id: "debugging",
-    name: "디버깅",
+    name: "매의 눈",
     tag: "치명타↑",
     maxLevel: 5,
     reqLevel: 5,
@@ -232,7 +232,7 @@ export const SKILLS: readonly SkillDef[] = [
   },
   {
     id: "pair_prog",
-    name: "페어 프로그래밍",
+    name: "입사 동기 소환",
     tag: "도우미 소환",
     maxLevel: 5,
     reqLevel: 12,
@@ -240,12 +240,12 @@ export const SKILLS: readonly SkillDef[] = [
     sp: () => 20,
     cooldownMs: () => 30_000,
     describe: (lv) =>
-      `${SKILL_FX.pair_prog(lv).durMs / 1000}초 동안 동료 유령이 곁에서 공격력의 ${pct(SKILL_FX.pair_prog(lv).atkPct)}로 함께 싸운다.`,
+      `${SKILL_FX.pair_prog(lv).durMs / 1000}초 동안 입사 동기 유령이 곁에서 공격력의 ${pct(SKILL_FX.pair_prog(lv).atkPct)}로 함께 싸운다.`,
     art: { shape: "sk_pair", main: 0xd9dccf, accent: 0x55704f },
   },
   {
     id: "code_review",
-    name: "코드 리뷰",
+    name: "빨간 펜 첨삭",
     tag: "적 약화",
     maxLevel: 5,
     reqLevel: 6,
@@ -268,7 +268,7 @@ export const SKILLS: readonly SkillDef[] = [
   },
   {
     id: "deploy",
-    name: "배포",
+    name: "전체 회신",
     tag: "광역",
     maxLevel: 5,
     reqLevel: 15,
@@ -373,18 +373,18 @@ export type MonsterDef = {
 };
 
 export const MONSTERS: Record<MonsterId, MonsterDef> = {
-  scope_creep: { id: "scope_creep", name: "스코프 크립", desc: "조금씩, 아주 조금씩 커진다.", hp: 40, atk: 7, def: 0, speed: 34, exp: 6, behavior: "chase", size: 14, color: 0x8ac85a, accent: 0x3a5a28 },
-  endless_meeting: { id: "endless_meeting", name: "무한 회의", desc: "끝날 듯 끝나지 않는다. 느리지만 질기다.", hp: 90, atk: 6, def: 3, speed: 20, exp: 10, behavior: "chase", size: 16, color: 0x9aa3ad, accent: 0x4a4f58 },
-  tech_debt_slime: { id: "tech_debt_slime", name: "기술 부채 슬라임", desc: "미뤄 둘수록 끈적해진다.", hp: 70, atk: 8, def: 2, speed: 26, exp: 9, behavior: "chase", size: 14, color: 0x6a8a3c, accent: 0x2e3e1a },
-  already_exists: { id: "already_exists", name: "\"그거 이미 있어요\" 유령", desc: "나타났다 사라지며 의욕을 빨아먹는다.", hp: 55, atk: 9, def: 0, speed: 40, exp: 11, behavior: "blink", size: 14, color: 0xd9dccf, accent: 0x6a6e78 },
-  req_change: { id: "req_change", name: "요구사항 변경", desc: "어디로 갈지 아무도 모른다.", hp: 50, atk: 10, def: 1, speed: 52, exp: 10, behavior: "wander", size: 12, color: 0xe07a2a, accent: 0x6a3010 },
-  merge_conflict: { id: "merge_conflict", name: "머지 컨플릭트", desc: "쓰러뜨리면 둘로 갈라진다.", hp: 80, atk: 9, def: 2, speed: 30, exp: 12, behavior: "split", size: 15, color: 0xc83c5a, accent: 0x3c8ac8 },
-  conflict_shard: { id: "conflict_shard", name: "<<<<<<< HEAD", desc: "갈라진 충돌 조각.", hp: 25, atk: 6, def: 0, speed: 46, exp: 3, behavior: "chase", size: 9, color: 0xc83c5a, accent: 0x3c8ac8 },
-  server_bill: { id: "server_bill", name: "서버비 폭탄", desc: "다가와서 터진다. 청구서는 늘 갑자기 온다.", hp: 35, atk: 22, def: 0, speed: 44, exp: 9, behavior: "explode", size: 13, color: 0x3a3f4a, accent: 0xe84040 },
-  opposing_lead: { id: "opposing_lead", name: "반대하는 팀장", desc: "\"그게 돈이 돼?\" 거리를 두고 반대 의견을 던진다.", hp: 160, atk: 11, def: 4, speed: 28, exp: 24, behavior: "ranged", size: 16, color: 0x5a6a8a, accent: 0xe8d9b0 },
-  legacy_golem: { id: "legacy_golem", name: "레거시 코드 골렘", desc: "10년 전 누군가 짠 코드. 단단하고 무겁다.", hp: 260, atk: 15, def: 8, speed: 18, exp: 30, behavior: "dash", size: 20, color: 0x8a7a5a, accent: 0x4a3e2a },
-  burnout_wraith: { id: "burnout_wraith", name: "번아웃 망령", desc: "닿기만 해도 기운이 빠진다.", hp: 120, atk: 14, def: 2, speed: 38, exp: 22, behavior: "blink", size: 16, color: 0x5a3e8a, accent: 0xc8a0e8 },
-  prod_dragon: { id: "prod_dragon", name: "프로덕션 장애 드래곤", desc: "금요일 저녁 6시에 깨어난다.", hp: 1400, atk: 20, def: 6, speed: 24, exp: 220, behavior: "boss", size: 32, color: 0xa83c3c, accent: 0xffb040 },
+  scope_creep: { id: "scope_creep", name: "추가 업무", desc: "\"이것만 하나 더\"가 조금씩, 아주 조금씩 불어난다.", hp: 40, atk: 7, def: 0, speed: 34, exp: 6, behavior: "chase", size: 14, color: 0x8ac85a, accent: 0x3a5a28 },
+  endless_meeting: { id: "endless_meeting", name: "끝없는 회의", desc: "끝날 듯 끝나지 않는다. 느리지만 질기다.", hp: 90, atk: 6, def: 3, speed: 20, exp: 10, behavior: "chase", size: 16, color: 0x9aa3ad, accent: 0x4a4f58 },
+  tech_debt_slime: { id: "tech_debt_slime", name: "미룬 일 슬라임", desc: "\"내일부터\"라고 미뤄 둘수록 끈적해진다.", hp: 70, atk: 8, def: 2, speed: 26, exp: 9, behavior: "chase", size: 14, color: 0x6a8a3c, accent: 0x2e3e1a },
+  already_exists: { id: "already_exists", name: "\"그거 해 봤는데\" 유령", desc: "나타났다 사라지며 의욕을 빨아먹는다.", hp: 55, atk: 9, def: 0, speed: 40, exp: 11, behavior: "blink", size: 14, color: 0xd9dccf, accent: 0x6a6e78 },
+  req_change: { id: "req_change", name: "오락가락 지시", desc: "아침 지시와 저녁 지시가 다르다. 어디로 갈지 아무도 모른다.", hp: 50, atk: 10, def: 1, speed: 52, exp: 10, behavior: "wander", size: 12, color: 0xe07a2a, accent: 0x6a3010 },
+  merge_conflict: { id: "merge_conflict", name: "겹친 약속", desc: "쓰러뜨리면 둘로 갈라진다. 둘 다 가야 한다.", hp: 80, atk: 9, def: 2, speed: 30, exp: 12, behavior: "split", size: 15, color: 0xc83c5a, accent: 0x3c8ac8 },
+  conflict_shard: { id: "conflict_shard", name: "반쪽 약속", desc: "갈라진 약속 조각.", hp: 25, atk: 6, def: 0, speed: 46, exp: 3, behavior: "chase", size: 9, color: 0xc83c5a, accent: 0x3c8ac8 },
+  server_bill: { id: "server_bill", name: "카드값 폭탄", desc: "다가와서 터진다. 청구서는 늘 갑자기 온다.", hp: 35, atk: 22, def: 0, speed: 44, exp: 9, behavior: "explode", size: 13, color: 0x3a3f4a, accent: 0xe84040 },
+  opposing_lead: { id: "opposing_lead", name: "잔소리 부장님", desc: "\"그게 돈이 돼?\" 거리를 두고 잔소리를 던진다.", hp: 160, atk: 11, def: 4, speed: 28, exp: 24, behavior: "ranged", size: 16, color: 0x5a6a8a, accent: 0xe8d9b0 },
+  legacy_golem: { id: "legacy_golem", name: "서류 더미 골렘", desc: "10년 치 서류가 뭉쳐 일어났다. 단단하고 무겁다.", hp: 260, atk: 15, def: 8, speed: 18, exp: 30, behavior: "dash", size: 20, color: 0x8a7a5a, accent: 0x4a3e2a },
+  burnout_wraith: { id: "burnout_wraith", name: "월요병 망령", desc: "닿기만 해도 기운이 빠진다.", hp: 120, atk: 14, def: 2, speed: 38, exp: 22, behavior: "blink", size: 16, color: 0x5a3e8a, accent: 0xc8a0e8 },
+  prod_dragon: { id: "prod_dragon", name: "칼퇴 방해 드래곤", desc: "금요일 저녁 6시, 퇴근 5분 전에 깨어난다.", hp: 1400, atk: 20, def: 6, speed: 24, exp: 220, behavior: "boss", size: 32, color: 0xa83c3c, accent: 0xffb040 },
 };
 
 export const MONSTER_IDS = Object.keys(MONSTERS) as MonsterId[];
@@ -412,8 +412,8 @@ export const ZONES: Record<Difficulty, ZoneDef> = {
   easy: {
     difficulty: "easy",
     slug: "meeting-room",
-    name: "기획 회의실",
-    desc: "아이디어가 처음으로 반대에 부딪히는 곳.",
+    name: "월요일 회의실",
+    desc: "새 다짐이 처음으로 반대에 부딪히는 곳.",
     pool: ["scope_creep", "endless_meeting", "req_change"],
     boss: "opposing_lead",
     waves: 4,
@@ -424,8 +424,8 @@ export const ZONES: Record<Difficulty, ZoneDef> = {
   normal: {
     difficulty: "normal",
     slug: "legacy-forest",
-    name: "레거시 숲",
-    desc: "아무도 손대지 못한 코드가 나무처럼 자라 있다.",
+    name: "야근 사무실",
+    desc: "아무도 손대지 못한 서류가 나무처럼 쌓여 있다.",
     pool: ["tech_debt_slime", "already_exists", "merge_conflict", "req_change", "scope_creep"],
     boss: "legacy_golem",
     waves: 5,
@@ -436,8 +436,8 @@ export const ZONES: Record<Difficulty, ZoneDef> = {
   hard: {
     difficulty: "hard",
     slug: "deadline-swamp",
-    name: "데드라인 늪",
-    desc: "발을 디딜수록 일정이 가라앉는다.",
+    name: "결재 늪",
+    desc: "올린 결재는 돌아오지 않고, 발을 디딜수록 일정이 가라앉는다.",
     pool: ["merge_conflict", "server_bill", "opposing_lead", "legacy_golem", "tech_debt_slime"],
     boss: "prod_dragon",
     waves: 6,
@@ -448,8 +448,8 @@ export const ZONES: Record<Difficulty, ZoneDef> = {
   hell: {
     difficulty: "hell",
     slug: "burnout-abyss",
-    name: "번아웃 심연",
-    desc: "모든 사이드프로젝트가 마지막으로 떨어지는 곳.",
+    name: "회식 3차",
+    desc: "모든 다짐이 마지막으로 무너지는 곳. 아무도 먼저 못 일어난다.",
     pool: ["burnout_wraith", "server_bill", "legacy_golem", "already_exists", "opposing_lead", "merge_conflict"],
     boss: "prod_dragon",
     waves: 7,
@@ -467,19 +467,19 @@ export type GameKind = (typeof GAME_KINDS)[number];
 export const GAMES: Record<GameKind, { name: string; desc: string; how: string; statNote: string }> = {
   hunt: {
     name: "사냥터",
-    desc: "프로젝트를 망치는 것들을 웨이브마다 물리친다. 장비·스킬·포션을 모두 쓴다.",
+    desc: "다짐을 망치는 것들을 웨이브마다 물리친다. 장비·스킬·포션을 모두 쓴다.",
     how: "WASD/방향키 이동 · Space/J 공격(쿨다운 중에 누르면 끝나는 순간 나감) · 1~6 스킬 · Q/E/R 포션 · Esc 멈춤",
     statNote: "모든 능력치와 장비가 그대로 쓰인다",
   },
   bugs: {
-    name: "버그 잡기",
-    desc: "코드 줄 사이로 튀어나오는 버그를 잡는다. 초록 '기능'과 줄 그어진 회색 '주석 처리된 버그'는 건드리지 말 것. 콤보가 쌓일수록 점수 배수가 오른다.",
+    name: "벌레 잡기",
+    desc: "아홉 개의 창에서 튀어나오는 벌레를 잡는다. 초록 체크 표시와 줄 그어진 회색 '이미 잡은 벌레'는 건드리지 말 것. 콤보가 쌓일수록 점수 배수가 오른다.",
     how: "클릭·탭, 또는 Q W E / A S D / Z X C 키로 칸을 누른다",
-    statNote: "DEX: 버그가 조금 더 오래 보임 · LUK: 황금 버그가 더 자주",
+    statNote: "DEX: 벌레가 조금 더 오래 보임 · LUK: 황금 벌레가 더 자주",
   },
   stars: {
     name: "별자리 잇기",
-    desc: "끝내지 못한 아이디어들이 밤하늘의 별로 떠오른다. 빛의 고리가 별에 닿는 순간 눌러 하나의 별자리로 잇는다.",
+    desc: "끝내지 못한 다짐들이 밤하늘의 별로 떠오른다. 빛의 고리가 별에 닿는 순간 눌러 하나의 별자리로 잇는다.",
     how: "고리가 별에 겹치는 순간 Space·J·클릭·탭 (어디를 눌러도 다음 별) · 너무 일찍 누르면 놓침",
     statNote: "DEX: 판정이 조금 너그러워짐",
   },

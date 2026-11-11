@@ -17,10 +17,10 @@ import s from "./rpg.module.css";
 // 판 진행 중 오버레이: 캔버스 위 전체를 덮고(탭은 rpg:tap으로 게임에 넘긴다) 상태·버튼을 그린다.
 
 const BUFF_NAMES: Record<string, string> = {
-  rollback: "롤백",
-  cache_hit: "캐시 히트",
-  debugging: "디버깅",
-  pair_prog: "페어",
+  rollback: "못 들은 척",
+  cache_hit: "칼퇴 질주",
+  debugging: "매의 눈",
+  pair_prog: "동기",
   overtime: "야근",
 };
 

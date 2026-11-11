@@ -29,7 +29,7 @@ export type FurnitureCategory = "furniture" | "dev" | "nature" | "mood" | "skin"
 
 export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   furniture: "가구",
-  dev: "개발 감성",
+  dev: "사무실",
   nature: "자연",
   mood: "분위기",
   skin: "바닥·담장",
@@ -65,19 +65,19 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "chair", name: "의자", desc: "삐걱거리지만 아직 앉을 만하다.", category: "furniture", price: 15, score: 3, w: 1, h: 1 },
   { id: "sofa", name: "소파", desc: "누우면 일어나기 싫어지는 소파.", category: "furniture", price: 55, score: 12, w: 2, h: 1, turn: true },
   { id: "bed", name: "침대", desc: "푹 자고 나면 다시 시작할 수 있을지도.", category: "furniture", price: 70, score: 15, w: 2, h: 2, turn: true },
-  { id: "bookshelf", name: "책장", desc: "읽다 만 기술 서적이 빼곡하다.", category: "furniture", price: 50, score: 10, w: 2, h: 1 },
+  { id: "bookshelf", name: "책장", desc: "읽다 만 자기계발서가 빼곡하다.", category: "furniture", price: 50, score: 10, w: 2, h: 1 },
   { id: "table", name: "둥근 탁자", desc: "찻잔 하나 놓기 좋은 크기.", category: "furniture", price: 20, score: 4, w: 1, h: 1 },
   { id: "rug", name: "러그", desc: "발이 따뜻해지는 낡은 러그. 위에 물건을 올릴 수 있다.", category: "furniture", price: 40, score: 8, w: 3, h: 2, floor: true, turn: true },
-  // ── 개발 감성 ──
-  { id: "monitor_desk", name: "모니터 책상", desc: "듀얼 모니터. 한쪽엔 아직 빌드가 돌고 있다.", category: "dev", price: 85, score: 18, w: 2, h: 1, light: { color: 0x8ac8ff, r: 26 } },
-  { id: "server_rack", name: "서버 랙", desc: "초록 불이 깜빡인다. 아무도 끄는 법을 모른다.", category: "dev", price: 105, score: 22, w: 1, h: 1, light: { color: 0x7fe0a0, r: 20 } },
-  { id: "whiteboard", name: "화이트보드", desc: "지워지지 않는 아키텍처 다이어그램.", category: "dev", price: 65, score: 12, w: 2, h: 1 },
-  { id: "postit_wall", name: "포스트잇 벽", desc: "TODO, TODO, 진짜 TODO.", category: "dev", price: 35, score: 8, w: 2, h: 1 },
-  { id: "duck_shelf", name: "고무오리 선반", desc: "디버깅을 들어 준 오리들이 줄지어 있다.", category: "dev", price: 40, score: 10, w: 1, h: 1 },
+  // ── 사무실 ──
+  { id: "monitor_desk", name: "모니터 책상", desc: "듀얼 모니터. 한쪽엔 아직 엑셀이 열려 있다.", category: "dev", price: 85, score: 18, w: 2, h: 1, light: { color: 0x8ac8ff, r: 26 } },
+  { id: "server_rack", name: "사무실 자판기", desc: "초록 불이 깜빡인다. 동전을 넣으면 가끔 뭔가 나온다.", category: "dev", price: 105, score: 22, w: 1, h: 1, light: { color: 0x7fe0a0, r: 20 } },
+  { id: "whiteboard", name: "화이트보드", desc: "지난 분기 회의 내용이 아직 안 지워졌다.", category: "dev", price: 65, score: 12, w: 2, h: 1 },
+  { id: "postit_wall", name: "메모지 벽", desc: "할 일, 할 일, 진짜 할 일.", category: "dev", price: 35, score: 8, w: 2, h: 1 },
+  { id: "duck_shelf", name: "오리 인형 선반", desc: "하소연을 들어 준 오리들이 줄지어 있다.", category: "dev", price: 40, score: 10, w: 1, h: 1 },
   { id: "coffee_machine", name: "커피 머신", desc: "야근의 동반자. 아직 따뜻하다.", category: "dev", price: 50, score: 9, w: 1, h: 1 },
-  { id: "frame_404", name: "404 액자", desc: "찾을 수 없는 그 무엇을 기리며.", category: "dev", price: 30, score: 6, w: 1, h: 1 },
+  { id: "frame_404", name: "사훈 액자", desc: "사훈은 \"404\". 무슨 뜻인지 아무도 모른다.", category: "dev", price: 30, score: 6, w: 1, h: 1 },
   // ── 자연 ──
-  { id: "pot", name: "화분", desc: "물만 주면 잘 자란다. 프로젝트와 달리.", category: "nature", price: 10, score: 2, w: 1, h: 1 },
+  { id: "pot", name: "화분", desc: "물만 주면 잘 자란다. 내 다짐과 달리.", category: "nature", price: 10, score: 2, w: 1, h: 1 },
   { id: "tree", name: "나무", desc: "그늘이 넓은 늙은 나무.", category: "nature", price: 85, score: 16, w: 2, h: 2 },
   { id: "pond", name: "연못", desc: "달이 비치는 작은 연못.", category: "nature", price: 110, score: 22, w: 3, h: 2, turn: true },
   { id: "flowerbed", name: "꽃밭", desc: "밤에도 은은하게 향이 난다. 밟아도 괜찮다.", category: "nature", price: 30, score: 7, w: 2, h: 1, floor: true, turn: true },

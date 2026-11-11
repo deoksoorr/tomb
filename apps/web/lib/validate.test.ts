@@ -32,11 +32,11 @@ describe("GraveInputSchema", () => {
     for (const k of ["lastTask", "causeDetail", "links", "stack", "imageUrl"]) expect(r.data?.[k as "links"]).toBeUndefined();
   });
 
-  it("프로젝트 이름: 필수, 40자(코드포인트 기준)까지, 줄바꿈은 공백으로", () => {
-    expect(message({ name: "   " })).toBe("프로젝트 이름을 적어 주세요.");
+  it("이름: 필수, 40자(코드포인트 기준)까지, 줄바꿈은 공백으로", () => {
+    expect(message({ name: "   " })).toBe("그만둔 것의 이름을 적어 주세요.");
     expect(parse({ name: "가".repeat(40) }).success).toBe(true);
     expect(parse({ name: "🪦".repeat(40) }).success).toBe(true);
-    expect(message({ name: "가".repeat(41) })).toBe("프로젝트 이름은 40자까지 적을 수 있어요.");
+    expect(message({ name: "가".repeat(41) })).toBe("이름은 40자까지 적을 수 있어요.");
     expect(parse({ name: "한 줄\n두 줄" }).data?.name).toBe("한 줄 두 줄");
   });
 

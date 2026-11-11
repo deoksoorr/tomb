@@ -4,7 +4,7 @@ import type { BugsResult, RpgAction, RpgHud } from "@/lib/rpg/types";
 import { RpgScene } from "./base";
 import { ensureRpgTextures, RTEX } from "./sprites";
 
-// 버그 잡기: 3×3 코드 창에서 튀어나오는 버그를 누른다. 초록 체크('그건 기능이에요')는 누르면 감점.
+// 벌레 잡기: 3×3 창에서 튀어나오는 벌레를 누른다. 초록 체크는 누르면 감점.
 // 출현은 서버가 준 시드의 계획(bugsPlan)대로이고, DEX는 버그가 보이는 시간을, LUK는 황금 버그 확률을 조금 늘린다.
 
 const COLS = 3;
@@ -121,7 +121,7 @@ export class BugsScene extends RpgScene {
       else this.decoy++;
       this.points += BUG_SCORE[a.s.kind];
       this.combo = 0;
-      this.floatText(cx, cy - 8, a.s.kind === "feature" ? `그건 기능이에요 ${BUG_SCORE.feature}` : `주석 처리된 버그 ${BUG_SCORE.decoy}`, "#ff6a6a", 11);
+      this.floatText(cx, cy - 8, a.s.kind === "feature" ? `체크는 잡지 마세요 ${BUG_SCORE.feature}` : `이미 잡은 벌레 ${BUG_SCORE.decoy}`, "#ff6a6a", 11);
       this.cameras.main.shake(100, 0.004);
       this.sfx.play("miss");
       this.tweens.add({ targets: a.sprite, alpha: 0, duration: 200, onComplete: () => a.sprite.destroy() });

@@ -1983,43 +1983,43 @@ function importExternal(s) {
 
 // ───────────────────────── 트랙 목록 ─────────────────────────
 const PLAYLISTS = [
-  { id: "orgel", title: "오르골" },
-  { id: "lofi", title: "로파이" },
-  { id: "rain", title: "빗소리 앰비언트" },
-  { id: "piano", title: "잔잔한 피아노" },
-  { id: "chiptune", title: "8비트" },
-  { id: "jazz", title: "재즈 카페" },
-  { id: "ambient", title: "몽환 앰비언트" },
-  { id: "acoustic", title: "어쿠스틱 기타" },
-  { id: "retro", title: "레트로 RPG 마을" },
+  { id: "orgel", title: "잠들기 전 오르골" },
+  { id: "lofi", title: "야근 로파이" },
+  { id: "rain", title: "비 오는 출근길" },
+  { id: "piano", title: "퇴근길 피아노" },
+  { id: "chiptune", title: "점심시간 오락실" },
+  { id: "jazz", title: "회사 앞 재즈 카페" },
+  { id: "ambient", title: "연차 날 낮잠" },
+  { id: "acoustic", title: "주말 캠핑 기타" },
+  { id: "retro", title: "퇴근 후 레트로 게임" },
 ];
 const M = (r, q) => [r, q];
 const SPECS = [
   // 오르골: tonic = 선율의 으뜸음(MIDI), progA = 앞악절 화음(으뜸음 기준 반음, 화음 종류), progB = B악절
   { pl: "orgel", file: "moonlit-orgel", title: "달빛 오르골", seed: 7, tonic: 72, scale: "majPent", bpm: 64, meter: 4, progA: [M(0, "M"), M(9, "m"), M(5, "M"), M(7, "M")], progB: [M(5, "M"), M(0, "M"), M(2, "m"), M(7, "M")], acc: "arp", counter: "line", timbre: "musicbox", dur: 112 },
   { pl: "orgel", file: "unfinished-lullaby", title: "끝내지 못한 자장가", seed: 21, tonic: 69, scale: "minPent", bpm: 60, meter: 3, progA: [M(0, "m"), M(8, "M"), M(3, "M"), M(10, "M")], progB: [M(5, "m"), M(0, "m"), M(8, "M"), M(10, "M")], acc: "waltz", counter: "echo", timbre: "musicbox", dur: 118 },
-  { pl: "orgel", file: "first-commit-waltz", title: "첫 커밋의 왈츠", seed: 33, tonic: 65, scale: "major", bpm: 72, meter: 3, progA: [M(0, "M"), M(5, "M"), M(0, "M"), M(7, "M")], progB: [M(9, "m"), M(5, "M"), M(0, "M"), M(7, "7")], acc: "waltz", counter: "thirds", timbre: "celesta", dur: 104 },
+  { pl: "orgel", file: "first-commit-waltz", title: "첫 출근 날의 왈츠", seed: 33, tonic: 65, scale: "major", bpm: 72, meter: 3, progA: [M(0, "M"), M(5, "M"), M(0, "M"), M(7, "M")], progB: [M(9, "m"), M(5, "M"), M(0, "M"), M(7, "7")], acc: "waltz", counter: "thirds", timbre: "celesta", dur: 104 },
   { pl: "orgel", file: "archived-dreams", title: "보관된 꿈", seed: 45, tonic: 74, scale: "dorian", bpm: 58, meter: 4, progA: [M(0, "m7"), M(5, "M"), M(0, "m7"), M(5, "M")], progB: [M(10, "M"), M(5, "M"), M(3, "M"), M(7, "m")], acc: "block", counter: "line", timbre: "musicbox", dur: 116, bass2: true },
-  { pl: "orgel", file: "hello-world", title: "안녕, 세상", seed: 52, tonic: 67, scale: "majPent", bpm: 76, meter: 4, progA: [M(0, "M"), M(7, "M"), M(9, "m"), M(5, "M")], progB: [M(5, "M"), M(0, "M"), M(5, "M"), M(7, "M")], acc: "pulse", counter: "echo", timbre: "musicbox", dur: 100 },
-  { pl: "orgel", file: "forgotten-readme", title: "잊힌 README", seed: 64, tonic: 64, scale: "minPent", bpm: 66, meter: 3, progA: [M(0, "m"), M(5, "m"), M(10, "M"), M(3, "M")], progB: [M(8, "M"), M(10, "M"), M(0, "m"), M(7, "m")], acc: "arp", counter: "line", timbre: "celesta", dur: 108 },
-  { pl: "orgel", file: "localhost-lullaby", title: "로컬호스트 자장가", seed: 71, tonic: 70, scale: "major", bpm: 56, meter: 4, progA: [M(0, "M"), M(4, "m"), M(5, "M"), M(7, "M")], progB: [M(9, "m"), M(5, "M"), M(2, "m"), M(7, "M")], acc: "arp", counter: "thirds", timbre: "musicbox", dur: 124 },
-  { pl: "orgel", file: "sleeping-prototype", title: "잠든 프로토타입", seed: 88, tonic: 65, scale: "lydian", bpm: 62, meter: 4, progA: [M(0, "M7"), M(2, "M"), M(0, "M7"), M(2, "M")], progB: [M(9, "m"), M(4, "m"), M(7, "M"), M(2, "M")], acc: "arp", counter: "echo", timbre: "celesta", dur: 114 },
-  { pl: "orgel", file: "deprecated-star", title: "지원 종료된 별", seed: 97, tonic: 67, scale: "minor", bpm: 70, meter: 3, progA: [M(0, "m"), M(5, "m"), M(0, "m"), M(7, "M")], progB: [M(8, "M"), M(10, "M"), M(3, "M"), M(7, "M")], acc: "waltz", counter: "line", timbre: "musicbox", dur: 110 },
-  { pl: "orgel", file: "version-zero-one", title: "v0.1의 기억", seed: 105, tonic: 69, scale: "majPent", bpm: 68, meter: 4, progA: [M(0, "M"), M(5, "M"), M(9, "m"), M(7, "M")], progB: [M(2, "m"), M(5, "M"), M(0, "M"), M(7, "M")], acc: "block", counter: "echo", timbre: "musicbox", dur: 106 },
+  { pl: "orgel", file: "hello-world", title: "안녕, 월요일", seed: 52, tonic: 67, scale: "majPent", bpm: 76, meter: 4, progA: [M(0, "M"), M(7, "M"), M(9, "m"), M(5, "M")], progB: [M(5, "M"), M(0, "M"), M(5, "M"), M(7, "M")], acc: "pulse", counter: "echo", timbre: "musicbox", dur: 100 },
+  { pl: "orgel", file: "forgotten-readme", title: "펼치지 않은 다이어리", seed: 64, tonic: 64, scale: "minPent", bpm: 66, meter: 3, progA: [M(0, "m"), M(5, "m"), M(10, "M"), M(3, "M")], progB: [M(8, "M"), M(10, "M"), M(0, "m"), M(7, "m")], acc: "arp", counter: "line", timbre: "celesta", dur: 108 },
+  { pl: "orgel", file: "localhost-lullaby", title: "알람 끄고 5분만", seed: 71, tonic: 70, scale: "major", bpm: 56, meter: 4, progA: [M(0, "M"), M(4, "m"), M(5, "M"), M(7, "M")], progB: [M(9, "m"), M(5, "M"), M(2, "m"), M(7, "M")], acc: "arp", counter: "thirds", timbre: "musicbox", dur: 124 },
+  { pl: "orgel", file: "sleeping-prototype", title: "서랍 속 사업 계획서", seed: 88, tonic: 65, scale: "lydian", bpm: 62, meter: 4, progA: [M(0, "M7"), M(2, "M"), M(0, "M7"), M(2, "M")], progB: [M(9, "m"), M(4, "m"), M(7, "M"), M(2, "M")], acc: "arp", counter: "echo", timbre: "celesta", dur: 114 },
+  { pl: "orgel", file: "deprecated-star", title: "유통기한 지난 별", seed: 97, tonic: 67, scale: "minor", bpm: 70, meter: 3, progA: [M(0, "m"), M(5, "m"), M(0, "m"), M(7, "M")], progB: [M(8, "M"), M(10, "M"), M(3, "M"), M(7, "M")], acc: "waltz", counter: "line", timbre: "musicbox", dur: 110 },
+  { pl: "orgel", file: "version-zero-one", title: "다짐 1일 차의 기억", seed: 105, tonic: 69, scale: "majPent", bpm: 68, meter: 4, progA: [M(0, "M"), M(5, "M"), M(9, "m"), M(7, "M")], progB: [M(2, "m"), M(5, "M"), M(0, "M"), M(7, "M")], acc: "block", counter: "echo", timbre: "musicbox", dur: 106 },
 
   // 로파이: key = 으뜸음(MIDI), prog = [박 수, 으뜸음 기준 근음, 보이싱]
-  { pl: "lofi", file: "late-commit", title: "늦은 커밋", seed: 3, key: 65, mode: "major", bpm: 74, prog: [[4, 2, "m9"], [4, 7, "13"], [4, 0, "M9"], [4, 9, "m9"]], comp: "push", comp2: "charleston", drums: "boom", snare: "snare", swing: 0.6, bass: "root", lead: "flute", dur: 118 },
-  { pl: "lofi", file: "todo-forever", title: "영원한 TODO", seed: 11, key: 62, mode: "major", bpm: 70, prog: [[4, 0, "M9"], [4, 5, "M9"], [4, 0, "M9"], [4, 5, "69"]], comp: "whole", comp2: "twoHit", drums: "lazy", snare: "rim", swing: 0.62, bass: "dotted", lead: "vibes", dur: 126, brkHats: true },
-  { pl: "lofi", file: "debugging-at-3am", title: "새벽 3시의 디버깅", seed: 19, key: 63, mode: "major", bpm: 82, prog: [[4, 9, "m9"], [4, 2, "m9"], [4, 7, "13"], [4, 0, "M9"]], comp: "charleston", comp2: "stab", drums: "bounce", snare: "snare", swing: 0.58, bass: "synco", lead: "musicbox", dur: 112 },
-  { pl: "lofi", file: "empty-repository", title: "빈 레포지토리", seed: 27, key: 60, mode: "major", bpm: 76, prog: [[4, 4, "m7"], [4, 9, "m9"], [4, 2, "m9"], [4, 7, "7b9"]], comp: "push", comp2: "whole", drums: "boom", snare: "rim", swing: 0.6, bass: "two", lead: "keys", dur: 120 },
-  { pl: "lofi", file: "sleeping-server-room", title: "잠든 서버실", seed: 36, key: 57, mode: "minor", bpm: 68, prog: [[4, 0, "m9"], [4, 8, "M7"], [4, 2, "m7b5"], [4, 7, "7b9"]], comp: "whole", comp2: "twoHit", drums: "half", snare: "snare", swing: 0.6, bass: "root", lead: "flute", dur: 132, keyCut: 2800 },
-  { pl: "lofi", file: "stale-branch", title: "오래된 브랜치", seed: 44, key: 62, mode: "minor", bpm: 86, prog: [[4, 0, "m9"], [4, 5, "9"], [4, 0, "m9"], [4, 5, "9"]], comp: "stab", comp2: "charleston", drums: "bounce", snare: "rim", swing: 0.57, bass: "synco", lead: "vibes", dur: 110, brkHats: true },
-  { pl: "lofi", file: "cold-coffee-stack-trace", title: "식은 커피와 스택 트레이스", seed: 58, key: 67, mode: "major", bpm: 72, prog: [[4, 0, "M7"], [4, 4, "m7"], [4, 5, "M9"], [4, 5, "m6"]], comp: "push", comp2: "twoHit", drums: "lazy", snare: "snare", swing: 0.63, bass: "root", lead: "flute", dur: 124, center: 60 },
-  { pl: "lofi", file: "stashed-summer", title: "git stash 속의 여름", seed: 61, key: 70, mode: "major", bpm: 80, prog: [[4, 5, "M9"], [4, 4, "m7"], [4, 2, "m9"], [4, 0, "M9"]], comp: "charleston", comp2: "push", drums: "boom", snare: "snare", swing: 0.6, bass: "two", lead: "musicbox", dur: 116, keyCut: 3600 },
-  { pl: "lofi", file: "expired-domain", title: "만료된 도메인", seed: 77, key: 64, mode: "major", bpm: 70, prog: [[4, 8, "M7"], [4, 10, "9"], [4, 0, "M9"], [4, 0, "69"]], comp: "whole", comp2: "stab", drums: "half", snare: "rim", swing: 0.61, bass: "dotted", lead: "vibes", dur: 128, brkHats: true },
-  { pl: "lofi", file: "sunday-side-project", title: "일요일의 사이드 프로젝트", seed: 83, key: 65, mode: "major", bpm: 88, prog: [[4, 2, "m9"], [4, 7, "9"], [4, 4, "m7"], [4, 9, "7b9"]], comp: "stab", comp2: "charleston", drums: "bounce", snare: "snare", swing: 0.58, bass: "synco", lead: "flute", dur: 108, keyCut: 3600 },
-  { pl: "lofi", file: "merge-tomorrow", title: "충돌은 내일 해결하기로", seed: 92, key: 60, mode: "minor", bpm: 76, prog: [[4, 0, "m9"], [4, 5, "m9"], [4, 10, "13"], [4, 3, "M9"]], comp: "twoHit", comp2: "push", drums: "boom", snare: "rim", swing: 0.62, bass: "two", lead: "keys", dur: 122 },
-  { pl: "lofi", file: "last-deploy", title: "마지막 배포", seed: 99, key: 68, mode: "major", bpm: 78, prog: [[2, 0, "M9"], [2, 9, "m7"], [2, 2, "m9"], [2, 7, "13"], [2, 4, "m7"], [2, 9, "m9"], [2, 2, "m9"], [2, 7, "7b9"]], comp: "whole", comp2: "stab", drums: "lazy", snare: "snare", swing: 0.6, bass: "root", lead: "musicbox", dur: 130, center: 60 },
+  { pl: "lofi", file: "late-commit", title: "늦은 퇴근", seed: 3, key: 65, mode: "major", bpm: 74, prog: [[4, 2, "m9"], [4, 7, "13"], [4, 0, "M9"], [4, 9, "m9"]], comp: "push", comp2: "charleston", drums: "boom", snare: "snare", swing: 0.6, bass: "root", lead: "flute", dur: 118 },
+  { pl: "lofi", file: "todo-forever", title: "영원한 할 일 목록", seed: 11, key: 62, mode: "major", bpm: 70, prog: [[4, 0, "M9"], [4, 5, "M9"], [4, 0, "M9"], [4, 5, "69"]], comp: "whole", comp2: "twoHit", drums: "lazy", snare: "rim", swing: 0.62, bass: "dotted", lead: "vibes", dur: 126, brkHats: true },
+  { pl: "lofi", file: "debugging-at-3am", title: "새벽 3시의 보고서", seed: 19, key: 63, mode: "major", bpm: 82, prog: [[4, 9, "m9"], [4, 2, "m9"], [4, 7, "13"], [4, 0, "M9"]], comp: "charleston", comp2: "stab", drums: "bounce", snare: "snare", swing: 0.58, bass: "synco", lead: "musicbox", dur: 112 },
+  { pl: "lofi", file: "empty-repository", title: "결제 안 한 장바구니", seed: 27, key: 60, mode: "major", bpm: 76, prog: [[4, 4, "m7"], [4, 9, "m9"], [4, 2, "m9"], [4, 7, "7b9"]], comp: "push", comp2: "whole", drums: "boom", snare: "rim", swing: 0.6, bass: "two", lead: "keys", dur: 120 },
+  { pl: "lofi", file: "sleeping-server-room", title: "불 꺼진 사무실", seed: 36, key: 57, mode: "minor", bpm: 68, prog: [[4, 0, "m9"], [4, 8, "M7"], [4, 2, "m7b5"], [4, 7, "7b9"]], comp: "whole", comp2: "twoHit", drums: "half", snare: "snare", swing: 0.6, bass: "root", lead: "flute", dur: 132, keyCut: 2800 },
+  { pl: "lofi", file: "stale-branch", title: "미뤄 둔 결재", seed: 44, key: 62, mode: "minor", bpm: 86, prog: [[4, 0, "m9"], [4, 5, "9"], [4, 0, "m9"], [4, 5, "9"]], comp: "stab", comp2: "charleston", drums: "bounce", snare: "rim", swing: 0.57, bass: "synco", lead: "vibes", dur: 110, brkHats: true },
+  { pl: "lofi", file: "cold-coffee-stack-trace", title: "식은 커피와 엑셀", seed: 58, key: 67, mode: "major", bpm: 72, prog: [[4, 0, "M7"], [4, 4, "m7"], [4, 5, "M9"], [4, 5, "m6"]], comp: "push", comp2: "twoHit", drums: "lazy", snare: "snare", swing: 0.63, bass: "root", lead: "flute", dur: 124, center: 60 },
+  { pl: "lofi", file: "stashed-summer", title: "서랍 속의 여름휴가", seed: 61, key: 70, mode: "major", bpm: 80, prog: [[4, 5, "M9"], [4, 4, "m7"], [4, 2, "m9"], [4, 0, "M9"]], comp: "charleston", comp2: "push", drums: "boom", snare: "snare", swing: 0.6, bass: "two", lead: "musicbox", dur: 116, keyCut: 3600 },
+  { pl: "lofi", file: "expired-domain", title: "만료된 헬스장 회원권", seed: 77, key: 64, mode: "major", bpm: 70, prog: [[4, 8, "M7"], [4, 10, "9"], [4, 0, "M9"], [4, 0, "69"]], comp: "whole", comp2: "stab", drums: "half", snare: "rim", swing: 0.61, bass: "dotted", lead: "vibes", dur: 128, brkHats: true },
+  { pl: "lofi", file: "sunday-side-project", title: "일요일 밤의 월요병", seed: 83, key: 65, mode: "major", bpm: 88, prog: [[4, 2, "m9"], [4, 7, "9"], [4, 4, "m7"], [4, 9, "7b9"]], comp: "stab", comp2: "charleston", drums: "bounce", snare: "snare", swing: 0.58, bass: "synco", lead: "flute", dur: 108, keyCut: 3600 },
+  { pl: "lofi", file: "merge-tomorrow", title: "다이어트는 내일부터", seed: 92, key: 60, mode: "minor", bpm: 76, prog: [[4, 0, "m9"], [4, 5, "m9"], [4, 10, "13"], [4, 3, "M9"]], comp: "twoHit", comp2: "push", drums: "boom", snare: "rim", swing: 0.62, bass: "two", lead: "keys", dur: 122 },
+  { pl: "lofi", file: "last-deploy", title: "마지막 출근", seed: 99, key: 68, mode: "major", bpm: 78, prog: [[2, 0, "M9"], [2, 9, "m7"], [2, 2, "m9"], [2, 7, "13"], [2, 4, "m7"], [2, 9, "m9"], [2, 2, "m9"], [2, 7, "7b9"]], comp: "whole", comp2: "stab", drums: "lazy", snare: "snare", swing: 0.6, bass: "root", lead: "musicbox", dur: 130, center: 60 },
 
   // 빗소리·앰비언트
   { pl: "rain", file: "rain-on-stones", title: "비석 위의 비", seed: 5, kind: "stones", dur: 126 },
@@ -2032,9 +2032,9 @@ const SPECS = [
   { pl: "rain", file: "foggy-dawn", title: "안개 낀 새벽", seed: 79, kind: "fog", dur: 132 },
 
   // 잔잔한 피아노: 오르골 엔진 + 펠트 피아노
-  { pl: "piano", file: "after-the-last-commit", title: "마지막 커밋 이후", seed: 201, inst: "piano", tonic: 74, scale: "major", bpm: 58, meter: 3, progA: [M(0, "M7"), M(5, "M7"), M(0, "M7"), M(5, "M7")], progB: [M(9, "m7"), M(4, "m7"), M(5, "M7"), M(7, "M")], acc: "waltz", counter: "line", dur: 92, wet: 0.32 },
-  { pl: "piano", file: "closed-issues", title: "닫힌 이슈들", seed: 207, inst: "piano", tonic: 69, scale: "minor", bpm: 64, meter: 4, progA: [M(0, "m"), M(8, "M"), M(3, "M"), M(10, "M")], progB: [M(5, "m"), M(0, "m"), M(8, "M"), M(7, "M")], acc: "arp", counter: "thirds", dur: 90, wet: 0.3 },
-  { pl: "piano", file: "commented-out-feelings", title: "주석 처리한 마음", seed: 213, inst: "piano", tonic: 68, scale: "majPent", bpm: 56, meter: 4, progA: [M(0, "M7"), M(4, "m7"), M(5, "M7"), M(5, "m")], progB: [M(9, "m7"), M(2, "m7"), M(7, "7"), M(7, "sus2")], acc: "block", counter: "echo", dur: 94, bass2: true, wet: 0.32 },
+  { pl: "piano", file: "after-the-last-commit", title: "사직서를 낸 뒤", seed: 201, inst: "piano", tonic: 74, scale: "major", bpm: 58, meter: 3, progA: [M(0, "M7"), M(5, "M7"), M(0, "M7"), M(5, "M7")], progB: [M(9, "m7"), M(4, "m7"), M(5, "M7"), M(7, "M")], acc: "waltz", counter: "line", dur: 92, wet: 0.32 },
+  { pl: "piano", file: "closed-issues", title: "반려된 결재들", seed: 207, inst: "piano", tonic: 69, scale: "minor", bpm: 64, meter: 4, progA: [M(0, "m"), M(8, "M"), M(3, "M"), M(10, "M")], progB: [M(5, "m"), M(0, "m"), M(8, "M"), M(7, "M")], acc: "arp", counter: "thirds", dur: 90, wet: 0.3 },
+  { pl: "piano", file: "commented-out-feelings", title: "임시 저장한 마음", seed: 213, inst: "piano", tonic: 68, scale: "majPent", bpm: 56, meter: 4, progA: [M(0, "M7"), M(4, "m7"), M(5, "M7"), M(5, "m")], progB: [M(9, "m7"), M(2, "m7"), M(7, "7"), M(7, "sus2")], acc: "block", counter: "echo", dur: 94, bass2: true, wet: 0.32 },
 
   // 8비트: 오르골 엔진 + 펄스·삼각파·소음 드럼
   { pl: "chiptune", file: "pixel-graveyard-walk", title: "픽셀 묘지 산책", seed: 301, inst: "chip", drums: 1, tonic: 72, scale: "majPent", bpm: 92, meter: 4, progA: [M(0, "M"), M(9, "m"), M(5, "M"), M(7, "M")], progB: [M(5, "M"), M(7, "M"), M(4, "m"), M(7, "M")], acc: "arp", counter: "echo", dur: 88, wet: 0.18 },
@@ -2043,31 +2043,31 @@ const SPECS = [
   { pl: "chiptune", file: "stuck-on-title-screen", title: "타이틀 화면에서 멈춤", seed: 317, inst: "chip", drums: 0.8, tonic: 67, scale: "major", bpm: 96, meter: 3, progA: [M(0, "M"), M(4, "m"), M(5, "M"), M(7, "M")], progB: [M(9, "m"), M(5, "M"), M(0, "M"), M(7, "7")], acc: "waltz", counter: "thirds", dur: 88, wet: 0.18 },
 
   // 재즈 카페: 로파이 엔진 + 피아노 컴핑·워킹 베이스·라이드/브러시
-  { pl: "jazz", file: "cafe-refactoring", title: "카페에서 리팩터링", seed: 401, style: "jazz", key: 65, mode: "major", bpm: 112, prog: [[4, 2, "m9"], [4, 7, "13"], [4, 0, "M9"], [4, 9, "7b9"]], comp: "charleston", comp2: "stab", snare: "snare", swing: 0.64, bass: "walk", lead: "vibes", dur: 92 },
-  { pl: "jazz", file: "blue-screen-blues", title: "블루 스크린 블루스", seed: 409, style: "jazz", key: 64, mode: "minor", bpm: 100, prog: [[2, 5, "m7"], [2, 10, "9"], [2, 3, "M7"], [2, 8, "M7"], [2, 2, "m7b5"], [2, 7, "7b9"], [4, 0, "m9"]], comp: "whole", comp2: "stab", snare: "snare", swing: 0.66, bass: "walk", lead: "vibes", dur: 96 },
-  { pl: "jazz", file: "closed-startup-cafe", title: "문 닫은 스타트업 카페", seed: 419, style: "jazz", key: 63, mode: "major", bpm: 88, prog: [[4, 0, "M9"], [4, 9, "m9"], [4, 2, "m9"], [4, 7, "13"]], comp: "twoHit", comp2: "charleston", snare: "snare", swing: 0.62, bass: "walk", lead: "keys", dur: 94 },
+  { pl: "jazz", file: "cafe-refactoring", title: "카페에서 쓰는 보고서", seed: 401, style: "jazz", key: 65, mode: "major", bpm: 112, prog: [[4, 2, "m9"], [4, 7, "13"], [4, 0, "M9"], [4, 9, "7b9"]], comp: "charleston", comp2: "stab", snare: "snare", swing: 0.64, bass: "walk", lead: "vibes", dur: 92 },
+  { pl: "jazz", file: "blue-screen-blues", title: "월요일 블루스", seed: 409, style: "jazz", key: 64, mode: "minor", bpm: 100, prog: [[2, 5, "m7"], [2, 10, "9"], [2, 3, "M7"], [2, 8, "M7"], [2, 2, "m7b5"], [2, 7, "7b9"], [4, 0, "m9"]], comp: "whole", comp2: "stab", snare: "snare", swing: 0.66, bass: "walk", lead: "vibes", dur: 96 },
+  { pl: "jazz", file: "closed-startup-cafe", title: "문 닫은 동네 카페", seed: 419, style: "jazz", key: 63, mode: "major", bpm: 88, prog: [[4, 0, "M9"], [4, 9, "m9"], [4, 2, "m9"], [4, 7, "13"]], comp: "twoHit", comp2: "charleston", snare: "snare", swing: 0.62, bass: "walk", lead: "keys", dur: 94 },
 
   // 2차 보강: 기존 장르
   { pl: "orgel", file: "last-star-on-the-graph", title: "잔디밭의 마지막 별", seed: 111, tonic: 71, scale: "major", bpm: 66, meter: 3, progA: [M(0, "M"), M(9, "m"), M(2, "m"), M(7, "M")], progB: [M(5, "M"), M(4, "m"), M(2, "m"), M(7, "7")], acc: "arp", counter: "echo", timbre: "celesta", dur: 104 },
-  { pl: "lofi", file: "rubber-duck-at-midnight", title: "자정의 러버덕", seed: 113, key: 61, mode: "major", bpm: 78, prog: [[4, 5, "M9"], [4, 7, "13"], [4, 4, "m7"], [4, 9, "m9"]], comp: "charleston", comp2: "push", drums: "lazy", snare: "rim", swing: 0.61, bass: "two", lead: "flute", dur: 112 },
-  { pl: "piano", file: "deprecated-docs", title: "지원 종료된 문서", seed: 219, inst: "piano", tonic: 66, scale: "dorian", bpm: 60, meter: 4, progA: [M(0, "m7"), M(5, "M"), M(0, "m7"), M(5, "M")], progB: [M(3, "M7"), M(10, "M"), M(8, "M7"), M(7, "m")], acc: "arp", counter: "line", dur: 90, wet: 0.32 },
-  { pl: "piano", file: "snow-on-the-server", title: "서버 위에 내린 눈", seed: 223, inst: "piano", tonic: 73, scale: "majPent", bpm: 54, meter: 3, progA: [M(0, "M"), M(5, "M"), M(9, "m"), M(7, "M")], progB: [M(5, "M7"), M(4, "m"), M(2, "m7"), M(7, "M")], acc: "waltz", counter: "echo", dur: 96, wet: 0.34 },
-  { pl: "jazz", file: "pull-request-bossa", title: "풀 리퀘스트 보사", seed: 421, style: "jazz", key: 62, mode: "major", bpm: 120, prog: [[4, 0, "M9"], [4, 2, "m9"], [4, 4, "m7"], [4, 3, "M7"]], comp: "stab", comp2: "charleston", snare: "rim", swing: 0.56, bass: "walk", lead: "vibes", dur: 90 },
+  { pl: "lofi", file: "rubber-duck-at-midnight", title: "자정의 혼잣말", seed: 113, key: 61, mode: "major", bpm: 78, prog: [[4, 5, "M9"], [4, 7, "13"], [4, 4, "m7"], [4, 9, "m9"]], comp: "charleston", comp2: "push", drums: "lazy", snare: "rim", swing: 0.61, bass: "two", lead: "flute", dur: 112 },
+  { pl: "piano", file: "deprecated-docs", title: "끝까지 못 읽은 책", seed: 219, inst: "piano", tonic: 66, scale: "dorian", bpm: 60, meter: 4, progA: [M(0, "m7"), M(5, "M"), M(0, "m7"), M(5, "M")], progB: [M(3, "M7"), M(10, "M"), M(8, "M7"), M(7, "m")], acc: "arp", counter: "line", dur: 90, wet: 0.32 },
+  { pl: "piano", file: "snow-on-the-server", title: "퇴근길에 내린 눈", seed: 223, inst: "piano", tonic: 73, scale: "majPent", bpm: 54, meter: 3, progA: [M(0, "M"), M(5, "M"), M(9, "m"), M(7, "M")], progB: [M(5, "M7"), M(4, "m"), M(2, "m7"), M(7, "M")], acc: "waltz", counter: "echo", dur: 96, wet: 0.34 },
+  { pl: "jazz", file: "pull-request-bossa", title: "월급날 보사노바", seed: 421, style: "jazz", key: 62, mode: "major", bpm: 120, prog: [[4, 0, "M9"], [4, 2, "m9"], [4, 4, "m7"], [4, 3, "M7"]], comp: "stab", comp2: "charleston", snare: "rim", swing: 0.56, bass: "walk", lead: "vibes", dur: 90 },
   { pl: "jazz", file: "late-shift-ballad", title: "야간 근무 발라드", seed: 431, style: "jazz", key: 58, mode: "major", bpm: 76, prog: [[4, 0, "M9"], [4, 4, "7b9"], [4, 9, "m9"], [2, 2, "m9"], [2, 7, "13"]], comp: "whole", comp2: "twoHit", snare: "snare", swing: 0.64, bass: "walk", lead: "keys", dur: 98 },
 
   // 몽환 앰비언트
-  { pl: "ambient", file: "dreaming-in-the-cloud", title: "클라우드 위에서 꾸는 꿈", seed: 601, kind: "dream", tonic: 77, scale: "lydian", chords: [[53, 60, 64, 69], [55, 62, 67, 71], [57, 64, 67, 72], [50, 57, 64, 69]], sparkle: "celesta", dur: 108 },
+  { pl: "ambient", file: "dreaming-in-the-cloud", title: "구름 위에서 꾸는 꿈", seed: 601, kind: "dream", tonic: 77, scale: "lydian", chords: [[53, 60, 64, 69], [55, 62, 67, 71], [57, 64, 67, 72], [50, 57, 64, 69]], sparkle: "celesta", dur: 108 },
   { pl: "ambient", file: "garbage-collected-memories", title: "수거된 기억들", seed: 607, kind: "dream", tonic: 74, scale: "minPent", chords: [[50, 57, 64, 65], [46, 53, 60, 65], [43, 55, 62, 65], [45, 52, 60, 64]], sparkle: "glass", drone: 38, dur: 112, gap: [2.5, 6] },
   { pl: "ambient", file: "sleep-mode", title: "절전 모드", seed: 613, kind: "dream", tonic: 72, scale: "majPent", chords: [[48, 55, 64, 67], [45, 52, 60, 64], [41, 53, 57, 64], [43, 50, 59, 62]], sparkle: "piano", dur: 104, gap: [3, 7], chordLen: 13 },
 
   // 어쿠스틱 기타: 오르골 엔진 + 뜯는 현
-  { pl: "acoustic", file: "campfire-standup", title: "모닥불 스탠드업", seed: 701, inst: "guitar", tonic: 64, scale: "majPent", bpm: 76, meter: 4, progA: [M(0, "M"), M(7, "M"), M(9, "m"), M(5, "M")], progB: [M(5, "M"), M(0, "M"), M(2, "m"), M(7, "M")], acc: "arp", counter: "line", dur: 92, wet: 0.22 },
-  { pl: "acoustic", file: "porch-of-the-old-repo", title: "오래된 저장소의 툇마루", seed: 707, inst: "guitar", tonic: 67, scale: "major", bpm: 66, meter: 3, progA: [M(0, "M"), M(5, "M"), M(0, "M"), M(7, "M")], progB: [M(9, "m"), M(4, "m"), M(5, "M"), M(7, "7")], acc: "arp", counter: "thirds", dur: 96, wet: 0.24 },
-  { pl: "acoustic", file: "autumn-backlog", title: "가을의 백로그", seed: 713, inst: "guitar", tonic: 69, scale: "dorian", bpm: 70, meter: 4, progA: [M(0, "m7"), M(5, "M"), M(0, "m7"), M(5, "M")], progB: [M(10, "M"), M(5, "M"), M(3, "M"), M(7, "m")], acc: "pulse", counter: "echo", dur: 90, bass2: true, wet: 0.24 },
+  { pl: "acoustic", file: "campfire-standup", title: "모닥불 앞 수다", seed: 701, inst: "guitar", tonic: 64, scale: "majPent", bpm: 76, meter: 4, progA: [M(0, "M"), M(7, "M"), M(9, "m"), M(5, "M")], progB: [M(5, "M"), M(0, "M"), M(2, "m"), M(7, "M")], acc: "arp", counter: "line", dur: 92, wet: 0.22 },
+  { pl: "acoustic", file: "porch-of-the-old-repo", title: "할머니 댁 툇마루", seed: 707, inst: "guitar", tonic: 67, scale: "major", bpm: 66, meter: 3, progA: [M(0, "M"), M(5, "M"), M(0, "M"), M(7, "M")], progB: [M(9, "m"), M(4, "m"), M(5, "M"), M(7, "7")], acc: "arp", counter: "thirds", dur: 96, wet: 0.24 },
+  { pl: "acoustic", file: "autumn-backlog", title: "가을로 미룬 계획", seed: 713, inst: "guitar", tonic: 69, scale: "dorian", bpm: 70, meter: 4, progA: [M(0, "m7"), M(5, "M"), M(0, "m7"), M(5, "M")], progB: [M(10, "M"), M(5, "M"), M(3, "M"), M(7, "m")], acc: "pulse", counter: "echo", dur: 90, bass2: true, wet: 0.24 },
 
   // 레트로 RPG 마을: 오르골 엔진 + 펄스 리드·하프·삼각파
   { pl: "retro", file: "item-shop-of-unfinished-swords", title: "미완성 검을 파는 상점", seed: 801, inst: "retro", drums: 0.6, tonic: 72, scale: "major", bpm: 100, meter: 4, progA: [M(0, "M"), M(5, "M"), M(2, "m"), M(7, "M")], progB: [M(9, "m"), M(4, "m"), M(5, "M"), M(7, "M")], acc: "arp", counter: "echo", dur: 88, wet: 0.2 },
-  { pl: "retro", file: "inn-at-version-zero", title: "버전 0의 여관", seed: 809, inst: "retro", tonic: 67, scale: "major", bpm: 84, meter: 3, progA: [M(0, "M"), M(9, "m"), M(5, "M"), M(7, "M")], progB: [M(4, "m"), M(9, "m"), M(2, "m"), M(7, "7")], acc: "waltz", counter: "thirds", dur: 92, wet: 0.22 },
+  { pl: "retro", file: "inn-at-version-zero", title: "첫날의 여관", seed: 809, inst: "retro", tonic: 67, scale: "major", bpm: 84, meter: 3, progA: [M(0, "M"), M(9, "m"), M(5, "M"), M(7, "M")], progB: [M(4, "m"), M(9, "m"), M(2, "m"), M(7, "7")], acc: "waltz", counter: "thirds", dur: 92, wet: 0.22 },
   { pl: "retro", file: "village-of-abandoned-quests", title: "버려진 퀘스트의 마을", seed: 811, inst: "retro", drums: 0.5, tonic: 69, scale: "dorian", bpm: 90, meter: 4, progA: [M(0, "m7"), M(5, "M"), M(0, "m7"), M(10, "M")], progB: [M(3, "M"), M(10, "M"), M(5, "M"), M(7, "m")], acc: "arp", counter: "line", dur: 90, bass2: true, wet: 0.2 },
 
   // 효과음(게임용, tracks.json에는 넣지 않는다)

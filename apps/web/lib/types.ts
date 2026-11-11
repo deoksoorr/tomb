@@ -16,12 +16,12 @@ export type CauseTag = (typeof CAUSE_TAGS)[number];
 export const CAUSE_LABELS: Record<CauseTag, string> = {
   time: "시간 부족",
   interest: "흥미 상실",
-  better_idea: "더 재밌는 아이디어 등장",
-  already_exists: "이미 있는 서비스 발견",
-  technical: "기술적 난관",
-  server_cost: "서버비",
-  team_split: "팀 해체",
-  no_users: "출시했지만 아무도 안 씀",
+  better_idea: "더 재밌는 게 생김",
+  already_exists: "누가 이미 하고 있었음",
+  technical: "생각보다 어려움",
+  server_cost: "돈이 너무 듦",
+  team_split: "같이 하던 사람이 떠남",
+  no_users: "보여 줬지만 아무도 관심 없음",
   other: "기타",
 };
 

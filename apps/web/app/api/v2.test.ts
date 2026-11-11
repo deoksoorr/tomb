@@ -190,7 +190,7 @@ describe("간단 묘비 세우기", () => {
   it("간단 입력 검증", async () => {
     const v = await newVisitor();
     expect(await errorOf(await quickBury(v, { lived: "forever" }))).toEqual({ code: "INVALID_INPUT", message: "얼마나 살았는지 골라 주세요." });
-    expect((await errorOf(await quickBury(v, { name: " " }))).message).toBe("프로젝트 이름을 적어 주세요.");
+    expect((await errorOf(await quickBury(v, { name: " " }))).message).toBe("그만둔 것의 이름을 적어 주세요.");
     expect((await errorOf(await quickBury(v, { epitaph: "가".repeat(31) }))).message).toBe("묘비명은 30자까지 적을 수 있어요.");
   });
 });

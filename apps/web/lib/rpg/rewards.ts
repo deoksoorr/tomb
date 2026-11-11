@@ -105,10 +105,10 @@ function evalBugs(t: TicketInfo, r: BugsResult, eff: number): Verdict {
   const limit = timeLimitSec("bugs", t.difficulty);
   const plan = bugsPlan(t.seed, t.difficulty, limit, t.st);
   const c = bugsCount(plan, eff);
-  if (r.caught > c.bug) return tooHigh("잡은 버그");
-  if (r.golden > c.golden) return tooHigh("황금 버그");
-  if (r.wrong > c.feature) return tooHigh("기능 누르기");
-  if (r.decoy > c.decoy) return tooHigh("가짜 버그 누르기");
+  if (r.caught > c.bug) return tooHigh("잡은 벌레");
+  if (r.golden > c.golden) return tooHigh("황금 벌레");
+  if (r.wrong > c.feature) return tooHigh("체크 누르기");
+  if (r.decoy > c.decoy) return tooHigh("이미 잡은 벌레 누르기");
   if (r.maxCombo > r.caught + r.golden) return tooHigh("콤보");
   // 콤보 배수 점수는 서버가 순서를 모르므로 "최대 콤보 배수를 모든 타격에 줬을 때"로 상한을 둔다
   const hits = r.caught * BUG_SCORE.bug + r.golden * BUG_SCORE.golden;

@@ -62,7 +62,7 @@ const userName = z.string().transform((s, ctx) => {
 
 export const GraveInputSchema = z
   .object({
-    name: requiredLine(40, "프로젝트 이름을 적어 주세요.", "프로젝트 이름은 40자까지 적을 수 있어요."),
+    name: requiredLine(40, "그만둔 것의 이름을 적어 주세요.", "이름은 40자까지 적을 수 있어요."),
     epitaph: requiredLine(30, "묘비명을 적어 주세요.", "묘비명은 30자까지 적을 수 있어요."),
     bornAt: ymd,
     diedAt: ymd,
@@ -120,7 +120,7 @@ const LIFESPAN_IDS = LIFESPAN_PRESETS.map((p) => p.id) as [LifespanId, ...Lifesp
  */
 export const QuickGraveInputSchema = z
   .object({
-    name: requiredLine(40, "프로젝트 이름을 적어 주세요.", "프로젝트 이름은 40자까지 적을 수 있어요."),
+    name: requiredLine(40, "그만둔 것의 이름을 적어 주세요.", "이름은 40자까지 적을 수 있어요."),
     lived: z.enum(LIFESPAN_IDS, "얼마나 살았는지 골라 주세요."),
     cause: z.enum(CAUSE_TAGS, "알 수 없는 사인이에요.").optional(),
     epitaph: optional(z.string().trim().overwrite(oneLine).refine(within(30), "묘비명은 30자까지 적을 수 있어요.")),

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 
 export const SITE_TITLE = "한때는...";
-export const SITE_DESCRIPTION = "수많은 시작이 여기 잠들어 있습니다.";
+export const SITE_DESCRIPTION =
+  "한때는...은 누구나 한때 시작했다 그만둔 것들이 잠든 공동묘지 컨셉의 도트 마을입니다. 다른 사람들과 실시간으로 모여 모닥불 앞에서 쉬고, 사냥과 미니게임으로 포인트를 모아 내 집을 꾸며 보세요. 설치 없이 브라우저에서 바로.";
 
 // 페이지가 openGraph를 덮어쓰면 레이아웃 값이 통째로 바뀌므로 공유 카드 필드는 매번 전부 채운다.
 export function shareMetadata(image: string): Metadata {

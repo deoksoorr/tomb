@@ -293,7 +293,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
           )}
           {grave.stack && grave.stack.length > 0 && (
             <div>
-              <dt>기술 스택</dt>
+              <dt>함께한 도구</dt>
               <dd>
                 <ul className={styles.tags}>
                   {grave.stack.map((s) => (
