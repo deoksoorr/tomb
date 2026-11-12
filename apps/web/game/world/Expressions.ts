@@ -109,7 +109,8 @@ export class Expressions {
   }
 
   private seated(pl: Player): boolean {
-    return pl.state === "sitChair" && !!pl.seat;
+    // 상호작용 중이면 벤치 상태를 쓸 수 있다: 의자·그네·나무·해먹·배·놀이기구·낚시 같은 자리, 또는 수영·잠수
+    return !!pl.seat || pl.anchored || pl.state === "swim" || pl.state === "dive";
   }
 
   private emit(pl: Player): void {

@@ -594,6 +594,8 @@ export class ChannelCore<C extends object> {
     if (p.ride && (state === STATE.swim || state === STATE.dive || held)) this.clearRide(p);
     const changed = state !== p.state || m.dir !== p.dir;
     p.state = state;
+    // 벤치 상태: 자리도 없고 물속도 아니면 푼다
+    if (p.mood && !p.seatId && state !== STATE.swim && state !== STATE.dive) this.clearMood(p);
     p.dir = m.dir;
     // 앉아 있는 동안 위치는 좌석 앵커에 고정한다 (움직이는 자리 — 조각배 — 는 보고된 위치를 따라간다)
     if (!p.seatId || held?.mobile) {
@@ -838,8 +840,7 @@ export class ChannelCore<C extends object> {
     }
     p.state = seat.state;
     p.dir = seat.facing;
-    // 벤치 상태는 의자·벤치에서만 (벤치 안에서 옆자리로 옮기면 그대로, 나무·그네 같은 자리로 옮기면 풀린다)
-    if (p.mood && seat.state !== STATE.sitChair) this.clearMood(p);
+    // 벤치 상태는 상호작용 중이면 유지 (의자·그네·나무·해먹·배·놀이기구·낚시 등 어떤 자리든)
     // 앉기·낚시·놀이기구·배 — 어떤 자리든 차지하면 타던 펫에서 내린다
     this.clearRide(p);
     this.chasing.delete(p.sid);
@@ -858,13 +859,15 @@ export class ChannelCore<C extends object> {
   }
 
   /**
-   * 24번 벤치 상태: 의자·벤치(sitChair 자리)에 앉아 있을 때만 받는다. 빈 문자열이면 푼다.
+   * 24번 벤치 상태: 상호작용 중(어떤 자리든 차지했거나 수영·잠수)일 때만 받는다. 빈 문자열이면 푼다.
    * 같은 채널 모두(보낸 사람 포함 — 서버가 받아들였다는 확인)에게 알리고, 늦게 온 사람은 PeerInfo.mood로 받는다
    */
   private onMood(p: Peer<C>, m: string): void {
     if (m === "") return this.clearMood(p);
     const seat = p.seatId ? seatSlot(p.seatId) : undefined;
-    if (!isSeatMood(m) || !seat || seat.state !== STATE.sitChair || p.mood === m) return;
+    // 상호작용 중이면 받는다: 어떤 자리든 차지했거나 수영·잠수 중
+    const engaged = !!seat || p.state === STATE.swim || p.state === STATE.dive;
+    if (!isSeatMood(m) || !engaged || p.mood === m) return;
     p.mood = m;
     this.save(p);
     this.host.liveChanged?.(true);
