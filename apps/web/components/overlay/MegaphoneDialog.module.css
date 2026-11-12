@@ -1,0 +1,53 @@
+.form {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.kinds {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.kind {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+  cursor: pointer;
+}
+
+.kind input {
+  accent-color: var(--candle);
+}
+
+.picked {
+  box-shadow: var(--px-border-strong);
+  background: var(--surface-hover);
+}
+
+.empty {
+  opacity: 0.6;
+}
+
+.kindText {
+  display: grid;
+  gap: 2px;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}

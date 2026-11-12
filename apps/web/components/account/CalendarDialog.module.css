@@ -1,0 +1,251 @@
+.wrap {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.summary {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.stay {
+  display: grid;
+  gap: 4px;
+}
+
+.stayLabel b,
+.streak b {
+  color: var(--candle);
+}
+
+.bar {
+  position: relative;
+  display: block;
+  height: 8px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--moss);
+  transition: width 0.4s ease;
+}
+
+.status,
+.streak {
+  margin: 0;
+  font-size: 13px;
+}
+
+.status {
+  color: var(--bone);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.month {
+  min-width: 9em;
+  margin: 0;
+  font-size: 16px;
+  text-align: center;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.week {
+  padding: 2px 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.sun {
+  color: var(--danger);
+}
+
+.sat {
+  color: #8fb3d9;
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 54px;
+  padding: 4px 2px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+  color: var(--text);
+  font: inherit;
+}
+
+.num {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cellNote {
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--candle);
+}
+
+/* 받은 날: 붉은 도장 */
+.stamp {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-top: 8px;
+  border: 2px solid #d4544a;
+  border-radius: 50%;
+  color: #e0645a;
+  font-size: 10px;
+  font-weight: bold;
+  transform: rotate(-14deg);
+  opacity: 0.92;
+}
+
+.stamped .cellNote {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  margin: 0;
+  font-size: 10px;
+}
+
+.fresh .stamp {
+  animation: stampIn 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+@keyframes stampIn {
+  from {
+    transform: rotate(-14deg) scale(2.2);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(-14deg) scale(1);
+    opacity: 0.92;
+  }
+}
+
+/* 못 받고 지난 날: 회색 */
+.missed {
+  background: var(--bg-deep);
+  color: var(--faint);
+  opacity: 0.55;
+}
+
+.future {
+  background: transparent;
+  opacity: 0.6;
+}
+
+.today {
+  cursor: pointer;
+  box-shadow: var(--px-border-strong);
+  background: var(--surface-hover);
+}
+
+.today .num {
+  color: var(--bone);
+}
+
+.ready {
+  background: var(--moss-deep);
+  animation: glow 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+  from {
+    box-shadow: var(--px-border-strong);
+  }
+  to {
+    box-shadow: var(--px-border-strong), 0 0 12px var(--moss);
+  }
+}
+
+.redDot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  background: #e0453a;
+  box-shadow: 0 0 6px #e0453a;
+}
+
+.rewards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rewards li {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+  font-size: 12px;
+  text-align: center;
+}
+
+.rewards b {
+  color: var(--candle);
+}
+
+.rewards .done b {
+  color: var(--moss);
+}
+
+.notice {
+  min-height: 1.4em;
+  margin: 0;
+  color: var(--bone);
+  font-size: 13px;
+}
+
+@media (max-width: 560px) {
+  .cell {
+    min-height: 46px;
+  }
+  .stamp {
+    width: 24px;
+    height: 24px;
+    font-size: 9px;
+  }
+  .rewards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ready,
+  .fresh .stamp {
+    animation: none;
+  }
+}

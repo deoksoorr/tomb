@@ -1,0 +1,79 @@
+.panel {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+  max-width: 640px;
+  padding: 14px 16px;
+}
+
+.targetBox {
+  display: grid;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.found {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.picked {
+  margin: 0;
+  color: var(--bone);
+  font-size: 13px;
+}
+
+.note {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.count {
+  width: 80px;
+}
+
+.lines {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lines li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.logBox {
+  display: grid;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.noteCell {
+  max-width: 360px;
+  overflow-wrap: anywhere;
+}
+
+.hiddenRow {
+  opacity: 0.45;
+  text-decoration: line-through;
+}

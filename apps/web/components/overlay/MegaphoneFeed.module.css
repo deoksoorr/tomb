@@ -1,0 +1,133 @@
+.feed {
+  display: grid;
+  gap: 6px;
+  width: min(320px, calc(100vw - 2 * var(--gutter)));
+  justify-items: start;
+}
+
+/* 터치: 위쪽 바(음악·채널) 아래 */
+.floating {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--safe-top) + 52px);
+  left: var(--safe-left);
+  width: min(260px, calc(100vw - 2 * var(--gutter)));
+  font-size: 12px;
+}
+
+.bar {
+  display: flex;
+  gap: 4px;
+}
+
+.toggle,
+.shout {
+  min-height: 30px;
+  padding: 2px 8px;
+  background: var(--panel);
+  font-size: 12px;
+}
+
+.caret {
+  color: var(--muted);
+}
+
+.log {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  max-height: 180px;
+  margin: 0;
+  padding: 6px 8px;
+  overflow-y: auto;
+  list-style: none;
+  background: var(--panel);
+  box-shadow: var(--px-border);
+  font-size: 12px;
+  pointer-events: auto;
+}
+
+.floating .log {
+  max-height: 120px;
+}
+
+.line {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.newLine {
+  background: rgba(224, 195, 106, 0.14);
+}
+
+.empty {
+  color: var(--muted);
+}
+
+.name {
+  margin-right: 6px;
+  color: var(--candle);
+}
+
+.text {
+  color: var(--bone);
+}
+
+.all {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 4px;
+  background: #b4473e;
+  color: #fff3e6;
+  font-size: 10px;
+}
+
+/* 방금 온 한마디: 몇 초간 크게 */
+.flash {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  background: rgba(36, 30, 18, 0.94);
+  box-shadow: var(--px-border-strong), 0 0 14px rgba(224, 195, 106, 0.35);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  animation: flashIn 7s ease both;
+}
+
+.flash > svg {
+  margin-top: 4px;
+  color: var(--candle);
+}
+
+.flashAll {
+  box-shadow: var(--px-border-strong), 0 0 16px rgba(224, 90, 80, 0.45);
+}
+
+.floating .flash {
+  font-size: 13px;
+}
+
+@keyframes flashIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  6%,
+  85% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flash {
+    animation: none;
+  }
+}

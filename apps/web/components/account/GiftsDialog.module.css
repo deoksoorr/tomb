@@ -1,0 +1,104 @@
+.wrap {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.empty {
+  margin: 24px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+  box-shadow: var(--px-border-strong);
+}
+
+.claimed {
+  box-shadow: var(--px-border);
+  opacity: 0.75;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.from {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--bone);
+}
+
+.date,
+.meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.note {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--bg-deep);
+  font-family: var(--font-read);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.contents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--moss-deep);
+  color: var(--bone);
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.actions .meta {
+  margin-right: auto;
+}
+
+.redDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: #e0453a;
+  box-shadow: 0 0 6px #e0453a;
+}
+
+.notice {
+  min-height: 1.4em;
+  margin: 0;
+  color: var(--bone);
+  font-size: 13px;
+}
