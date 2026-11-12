@@ -302,12 +302,15 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
     return id;
   }
   const points = async (id: string) => (await accounts.get(id, kstDay(), Date.now())).points;
+  /** 분양가·넓히기 값 (가격을 바꿔도 테스트가 따라가게) */
+  const PLOT = PLOT_TIERS[0].price;
+  const WIDE = PLOT_TIERS[1].price;
 
-  it("분양: 포인트가 모자라면 409, 있으면 300P를 쓰고 한 계정에 1채만", async () => {
-    const poor = await account(100);
+  it("분양: 포인트가 모자라면 409, 있으면 분양가를 쓰고 한 계정에 1채만", async () => {
+    const poor = await account(PLOT - 1);
     await expect(buyPlot(store, poor, "가난한 집", "", "a")).rejects.toMatchObject({ status: 409, code: "NOT_ENOUGH_POINTS" });
-    expect(await points(poor)).toBe(100);
-    const rich = await account(1000);
+    expect(await points(poor)).toBe(PLOT - 1);
+    const rich = await account(PLOT + 700);
     const r = await buyPlot(store, rich, "부자 집", "", "a");
     expect(r.house?.id).toBe(houseIdFor(rich));
     expect(r.points).toBe(700);
@@ -316,7 +319,7 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
   });
 
   it("동시에 여러 번 사도 잔액이 음수가 되지 않는다 (가진 만큼만 산다)", async () => {
-    const id = await account(300 + 2 * furnitureById("stone_lantern")!.price);
+    const id = await account(PLOT + 2 * furnitureById("stone_lantern")!.price);
     await buyPlot(store, id, "집", "", "a");
     const results = await Promise.allSettled(Array.from({ length: 5 }, () => buyFurniture(store, id, "stone_lantern")));
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(2);
@@ -325,7 +328,7 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
   });
 
   it("가방 상한을 넘으면 포인트를 쓰지 않는다", async () => {
-    const id = await account(9000);
+    const id = await account(PLOT + (MAX_OWN_PER_ITEM + 1) * furnitureById("stone_path")!.price);
     await buyPlot(store, id, "집", "", "a");
     for (let i = 0; i < MAX_OWN_PER_ITEM; i++) await buyFurniture(store, id, "stone_path");
     const before = await points(id);
@@ -334,7 +337,7 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
   });
 
   it("배치·되팔기·넓히기", async () => {
-    const id = await account(3000);
+    const id = await account(PLOT + WIDE + 2 * furnitureById("desk")!.price);
     await buyPlot(store, id, "집", "", "a");
     await buyFurniture(store, id, "desk");
     await buyFurniture(store, id, "desk");
@@ -354,7 +357,7 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
   });
 
   it("좋아요: 내 집은 안 되고, 하루 1번, 주인은 포인트를 받는다", async () => {
-    const owner = await account(400);
+    const owner = await account(PLOT + 100);
     const visitor = await account(0);
     await buyPlot(store, owner, "집", "", "a");
     const hid = houseIdFor(owner);
@@ -366,7 +369,7 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
   });
 
   it("방명록 하루 한도는 429", async () => {
-    const owner = await account(400);
+    const owner = await account(PLOT);
     await buyPlot(store, owner, "집", "", "a");
     const hid = houseIdFor(owner);
     const visitor = nanoid();
@@ -375,7 +378,7 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
   });
 
   it("외관: 산 것만 입히고, 꾸밈 점수에 더해지며, 입힌 외관 아이템은 되팔 수 없다", async () => {
-    const id = await account(2000);
+    const id = await account(PLOT + ["roof_red", "sign_neon", "pot"].reduce((n, f) => n + furnitureById(f)!.price, 0));
     await buyPlot(store, id, "집", "", "a");
     await expect(saveExterior(store, id, { roof: "roof_red" })).rejects.toMatchObject({ code: "NOT_OWNED" });
     await expect(saveExterior(store, id, { roof: "door_red" })).rejects.toMatchObject({ code: "BAD_EXTERIOR" });
@@ -395,13 +398,13 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
   });
 
   it("분양 때 번지를 고를 수 있고, 찬 번지는 포인트를 쓰지 않고 거절한다. 마을 목록에 외관과 함께 나온다", async () => {
-    const a = await account(1000);
-    const b = await account(1000);
+    const a = await account(PLOT);
+    const b = await account(PLOT);
     const free = (await village(store)).lots + 1;
     const ra = await buyPlot(store, a, "가", "", "a", free);
     expect(ra.house?.lot).toBe(free);
     await expect(buyPlot(store, b, "나", "", "b", free)).rejects.toMatchObject({ code: "LOT_TAKEN" });
-    expect(await points(b)).toBe(1000);
+    expect(await points(b)).toBe(PLOT);
     const v = await village(store);
     expect(v.houses.find((h) => h.lot === free)?.exterior.roof).toBe("roof_slate");
     expect(v.lots % 4).toBe(0);

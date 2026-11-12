@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { AdminAccountRow as AccountRow } from "@/app/api/admin/accounts/search/route";
 import { ApiRequestError, errorMessage } from "@/lib/api";
-import { CODE_RE, normalizeCode } from "@/lib/economy";
+import { BALANCE_CAP, CODE_RE, normalizeCode } from "@/lib/economy";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { adminApi } from "./adminApi";
@@ -198,8 +198,8 @@ function PointsForm({ toast, onAuthLost }: Props) {
         className={cx(ui.input, styles.pointsDelta)}
         type="number"
         inputMode="numeric"
-        min={-9999}
-        max={9999}
+        min={-BALANCE_CAP}
+        max={BALANCE_CAP}
         step={1}
         value={delta}
         onChange={(e) => setDelta(e.target.value)}

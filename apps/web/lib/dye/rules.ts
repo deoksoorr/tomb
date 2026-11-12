@@ -2,12 +2,12 @@ import { itemById, type DyePart, type DyeTicketSpec, type ItemDef } from "@tomb/
 import type { DyeTier } from "./palette";
 
 // 46·25번 꾸미기 서비스 값 (포인트). 염색권 가격은 카탈로그(packages/protocol items.ts)에 있다.
-//  - 하루 최대 적립 800P, 닉네임 변경 100P, 캐릭터 꾸미기 하루권 15~150P에 맞춰 잡았다.
+//  - I0d 재조정: 보통 유저 하루 약 200P, 닉네임 변경 300P, 캐릭터 꾸미기 하루권 60~480P에 맞춰 잡았다.
 
 /** 원래 색 되돌리기 (부위 하나) */
-export const DYE_RESET_PRICE = 50;
+export const DYE_RESET_PRICE = 150;
 /** 외형 바꾸기 (몸 모양 6종 중 다른 것으로, 부위 색은 그대로 따라간다) */
-export const RESHAPE_PRICE = 200;
+export const RESHAPE_PRICE = 600;
 
 /** 카탈로그의 무작위 염색권이면 등급, 아니면 null */
 export function randomTier(itemId: string): DyeTier | null {

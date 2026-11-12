@@ -22,6 +22,7 @@ import type { MyHouseResponse, VillageResponse } from "./types";
 
 const conn = env.redis();
 const PLOT = PLOT_TIERS[0].price;
+const WIDE = PLOT_TIERS[1].price;
 const accounts = getAccounts();
 
 async function account(points: number, id = nanoid()): Promise<string> {
@@ -119,7 +120,7 @@ describe.skipIf(!!conn)("채널별 분양 (서비스·라우트)", () => {
   });
 
   it("외관·배치·넓히기는 내 집 채널에서만 (다른 채널이면 WRONG_CHANNEL, 포인트 그대로)", async () => {
-    const a = await account(PLOT + 600);
+    const a = await account(PLOT + WIDE);
     const h = (await buyPlot(store, a, "3채널 집", "", "가", null, 3)).house!;
     await expect(saveExterior(store, a, {}, 2)).rejects.toMatchObject({ status: 409, code: "WRONG_CHANNEL" });
     await expect(saveLayout(store, a, "small", { items: [], floor: DEFAULT_FLOOR, wall: DEFAULT_WALL }, 1)).rejects.toMatchObject({
@@ -160,7 +161,7 @@ describe.skipIf(!!conn)("채널별 분양 (서비스·라우트)", () => {
 
   it("라우트: 분양은 ch가 꼭 있어야 하고, 마을은 ?ch=로 그 채널만, 외관·배치·넓히기는 다른 채널이면 409", async () => {
     const v = await visitor();
-    await account(PLOT + 600, v.visitorId);
+    await account(PLOT + WIDE, v.visitorId);
     expect((await meRoute.POST(call("/api/housing/me", v, "POST", { name: "라우트집", intro: "" }), noParams)).status).toBe(400);
     expect((await meRoute.POST(call("/api/housing/me", v, "POST", { name: "라우트집", intro: "", ch: 11 }), noParams)).status).toBe(400);
     const res = await meRoute.POST(call("/api/housing/me", v, "POST", { name: "라우트집", intro: "", ch: 6, lot: 2 }), noParams);

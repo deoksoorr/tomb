@@ -1,8 +1,8 @@
-import { MIN_CLIENT_VERSION, verifyGrant, verifyJoinToken } from "@tomb/protocol";
+import { itemById, MIN_CLIENT_VERSION, verifyGrant, verifyJoinToken } from "@tomb/protocol";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AdminGrave } from "@/lib/admin";
-import { CODE_RE } from "@/lib/economy";
+import { BALANCE_CAP, CODE_RE } from "@/lib/economy";
 import { todayKst } from "@/lib/epitaph";
 import { verifySession } from "@/lib/session";
 import { getAccounts } from "@/lib/store";
@@ -70,6 +70,8 @@ async function newVisitor(ip = `10.2.${Math.floor(++ipSeq / 250)}.${ipSeq % 250}
 }
 
 /** 테스트용: 메모리 계정의 잔액을 직접 맞춘다 */
+/** 카탈로그 가격 (가격을 바꿔도 테스트가 따라가게) */
+const price = (id: string) => itemById(id)!.price;
 function setPoints(v: Visitor, n: number) {
   (getAccounts() as unknown as { acct(id: string): { points: number } }).acct(v.visitorId).points = n;
 }
@@ -211,7 +213,7 @@ describe("상점", () => {
     expect(await errorOf(poor)).toEqual({ code: "NOT_ENOUGH_POINTS", message: "포인트가 모자라요." });
     expect((await buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "rocket" } }))).status).toBe(400);
 
-    setPoints(v, 100);
+    setPoints(v, price("fw_small") + 80);
     const bought = await bodyOf<{ me: Me }>(buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "fw_small" } })));
     expect(bought.me).toMatchObject({ points: 80, inventory: { fw_small: 1 } });
 
@@ -228,7 +230,7 @@ describe("상점", () => {
 
   it("캐릭터 꾸미기: 착용 증서, /api/me/look, 입장 토큰에 착용품", async () => {
     const v = await newVisitor();
-    setPoints(v, 100);
+    setPoints(v, price("hat_cat"));
     await buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "hat_cat" } }));
     const used = await bodyOf<UseItemResponse>(use.POST(call("/api/shop/use", { visitor: v, body: { itemId: "hat_cat" } })));
     expect(await verifyGrant(SECRET, used.lookGrant!)).toMatchObject({ kind: "look", visitorId: v.visitorId, look: ["hat_cat"] });
@@ -252,7 +254,7 @@ describe("상점", () => {
     const { grave } = await bodyOf<CreateGraveResponse>(quickBury(owner));
     const stranger = await newVisitor();
     for (const v of [owner, stranger]) {
-      setPoints(v, 100);
+      setPoints(v, price("decor_candles"));
       await buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "decor_candles" } }));
     }
     const steal = await use.POST(call("/api/shop/use", { visitor: stranger, body: { itemId: "decor_candles", graveId: grave.id } }));
@@ -304,7 +306,7 @@ describe("묘비 디자인", () => {
     expect((await getMe(v)).graves).toHaveLength(0);
     expect((await errorOf(await quickBury(v, { style: "unicorn" }))).code).toBe("INVALID_INPUT");
 
-    setPoints(v, 100);
+    setPoints(v, price("gs_coffee"));
     await buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "gs_coffee" } }));
     expect(await items(v)).toEqual({ gs_coffee: 1 });
     const { grave } = await bodyOf<CreateGraveResponse>(quickBury(v, { style: "coffee" }));
@@ -319,7 +321,7 @@ describe("묘비 디자인", () => {
 
   it("디자인권 1개로 동시에 묘비 2개를 세우면 하나만 성공한다", async () => {
     const v = await newVisitor();
-    setPoints(v, 100);
+    setPoints(v, price("gs_coffee"));
     await buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "gs_coffee" } }));
     const statuses = (await Promise.all([1, 2].map(() => quickBury(v, { style: "coffee" })))).map((r) => r.status).sort();
     expect(statuses).toEqual([201, 409]);
@@ -329,7 +331,7 @@ describe("묘비 디자인", () => {
 
   it("수정: style을 빼면 유지, 같은 디자인이면 소모 없음, 다른 유료 디자인은 디자인권 필요, 무료로는 자유", async () => {
     const v = await newVisitor();
-    setPoints(v, 1000);
+    setPoints(v, price("gs_gold"));
     await buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "gs_gold" } }));
     const { grave } = await bodyOf<CreateGraveResponse>(quickBury(v, { style: "gold" }));
     const full = { name: "고침", epitaph: "e", bornAt: grave.bornAt, diedAt: grave.diedAt, causes: ["time"], mourner: "새벽코더" };
@@ -349,7 +351,7 @@ describe("묘비 디자인", () => {
 
   it("디자인권은 상점에서 사고, 사용(use)으로는 쓸 수 없다", async () => {
     const v = await newVisitor();
-    setPoints(v, 200);
+    setPoints(v, price("gs_duck") + 80);
     const bought = await bodyOf<{ me: Me }>(buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "gs_duck" } })));
     expect(bought.me).toMatchObject({ points: 80, inventory: { gs_duck: 1 } });
     const used = await use.POST(call("/api/shop/use", { visitor: v, body: { itemId: "gs_duck" } }));
@@ -362,7 +364,7 @@ describe("관리자 포인트 지급", () => {
   const admin = (body: object, key = "dev-admin") =>
     adminPoints.POST(call("/api/admin/accounts/points", { body, headers: { "x-admin-key": key } }));
 
-  it("개인 코드(해시로 조회) 또는 계정 id로 지급·회수, 0~9,999로 자른다", async () => {
+  it("개인 코드(해시로 조회) 또는 계정 id로 지급·회수, 0~지갑 상한(BALANCE_CAP)으로 자른다", async () => {
     const v = await newVisitor();
     await attend.POST(call("/api/me/attend", { visitor: v, body: {} }));
     const { code: personal } = await bodyOf<CodeResponse>(code.POST(call("/api/me/code", { method: "POST", visitor: v })));
@@ -371,16 +373,17 @@ describe("관리자 포인트 지급", () => {
     const text = await byCode.text();
     expect(JSON.parse(text)).toEqual({ accountId: v.visitorId, points: 500 });
     expect(text).not.toContain(personal);
-    expect(await bodyOf(admin({ accountId: v.visitorId, delta: -9999 }))).toEqual({ accountId: v.visitorId, points: 0 });
-    await admin({ accountId: v.visitorId, delta: 9999 });
-    expect(await bodyOf(admin({ accountId: v.visitorId, delta: 9999 }))).toEqual({ accountId: v.visitorId, points: 9999 });
+    expect(BALANCE_CAP).toBe(99_999);
+    expect(await bodyOf(admin({ accountId: v.visitorId, delta: -BALANCE_CAP }))).toEqual({ accountId: v.visitorId, points: 0 });
+    await admin({ accountId: v.visitorId, delta: BALANCE_CAP });
+    expect(await bodyOf(admin({ accountId: v.visitorId, delta: BALANCE_CAP }))).toEqual({ accountId: v.visitorId, points: BALANCE_CAP });
     expect((await getMe(v)).todayEarned).toBe(0); // 관리자 지급은 하루 적립에 들지 않는다
   });
 
   it("검증·없는 계정·관리자 키", async () => {
     const v = await newVisitor();
     for (const body of [
-      { accountId: v.visitorId, delta: 10000 },
+      { accountId: v.visitorId, delta: BALANCE_CAP + 1 },
       { accountId: v.visitorId, delta: 1.5 },
       { accountId: v.visitorId, delta: 0 },
       { accountId: v.visitorId, code: "2222-2222-2222", delta: 1 },

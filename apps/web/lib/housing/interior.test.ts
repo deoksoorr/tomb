@@ -117,9 +117,10 @@ describe("새 가구 카탈로그", () => {
     const living = FURNITURE.filter((f) => f.category === "living");
     expect(living.map((f) => f.id).sort()).toEqual(["bathtub", "cat_cushion", "fireplace", "floor_lamp", "fridge", "grand_clock", "piano", "radio"]);
     for (const f of living) {
-      expect(f.price).toBeGreaterThanOrEqual(30);
-      expect(f.price).toBeLessThanOrEqual(130);
-      expect(f.score / f.price).toBeGreaterThan(0.15);
+      // I0c: 가구값은 4배로 올렸고 점수는 그대로라, 점수/가격 하한도 1/4
+      expect(f.price).toBeGreaterThanOrEqual(120);
+      expect(f.price).toBeLessThanOrEqual(520);
+      expect(f.score / f.price).toBeGreaterThan(0.15 / 4);
       expect(f.use).toBeTruthy();
     }
     // 써 볼 수 있는 가구 10종 이상

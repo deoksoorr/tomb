@@ -8,7 +8,7 @@ import * as villageRoute from "@/app/api/housing/village/route";
 import { env } from "../env";
 import { getAccounts } from "../store";
 import { kstDay } from "../store/accounts";
-import { defaultExterior, PLOT_TIERS } from "./catalog";
+import { defaultExterior, furnitureById, PLOT_TIERS } from "./catalog";
 import { buyFurniture, buyPlot, getHouseStore, houseIdFor, saveExterior, sellFurniture, village } from "./service";
 import { HK, RedisHouseStore } from "./store-redis";
 import type { MyHouseResponse, VillageResponse } from "./types";
@@ -71,7 +71,7 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
     const res = await session.POST(new NextRequest("http://localhost/api/session", { method: "POST", headers: { "x-forwarded-for": OPERATOR_IP } }));
     const cookie = res.headers.get("set-cookie")!.split(";")[0];
     const visitorId = ((await res.json()) as { visitorId: string }).visitorId;
-    await account(2000, visitorId);
+    await account(PLOT + 2 * furnitureById("roof_red")!.price, visitorId);
     await buyPlot(store, visitorId, "외관집", "", "주인");
     const put = (exterior: object) =>
       exteriorRoute.PUT(

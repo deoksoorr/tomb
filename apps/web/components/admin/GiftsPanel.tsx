@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { ITEMS, itemById, itemName } from "@tomb/protocol";
 import { ApiRequestError, errorMessage } from "@/lib/api";
+import { BALANCE_CAP } from "@/lib/economy";
 import type { AdminAccountRow } from "@/app/api/admin/accounts/search/route";
 import { KIND_LABELS } from "../account/items";
 import { cx } from "../ui/cx";
@@ -154,7 +155,7 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
         </label>
         <label className={ui.field}>
           <span className={ui.label}>포인트</span>
-          <input className={ui.input} type="number" min={0} max={9999} value={points} onChange={(e) => setPoints(Math.max(0, Math.min(9999, Math.floor(Number(e.target.value) || 0))))} />
+          <input className={ui.input} type="number" min={0} max={BALANCE_CAP} value={points} onChange={(e) => setPoints(Math.max(0, Math.min(BALANCE_CAP, Math.floor(Number(e.target.value) || 0))))} />
         </label>
         <div className={ui.field}>
           <span className={ui.label}>아이템 (코디·폭죽·확성기·염색권 등 카탈로그 아이템)</span>

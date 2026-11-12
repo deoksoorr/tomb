@@ -375,13 +375,14 @@ function contract(make: () => Kit) {
     }
   });
 
-  it("관리자 포인트 조정: 0~9,999로 자르고 하루 적립 한도와 무관, 없는 계정은 null", async () => {
+  it("관리자 포인트 조정: 0~지갑 상한(BALANCE_CAP)으로 자르고 하루 적립 한도와 무관, 없는 계정은 null", async () => {
     const id = newId();
     expect(await accounts.adjustPoints(id, 100)).toBeNull();
     await accounts.earn(id, "flower", DAY);
     expect(await accounts.adjustPoints(id, 500)).toBe(502);
-    expect(await accounts.adjustPoints(id, -9999)).toBe(0);
-    expect(await accounts.adjustPoints(id, 9999)).toBe(BALANCE_CAP);
+    expect(await accounts.adjustPoints(id, -BALANCE_CAP)).toBe(0);
+    expect(await accounts.adjustPoints(id, BALANCE_CAP - 1)).toBe(BALANCE_CAP - 1);
+    expect(await accounts.adjustPoints(id, BALANCE_CAP)).toBe(BALANCE_CAP);
     expect(await accounts.adjustPoints(id, 50)).toBe(BALANCE_CAP);
     expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(2);
   });

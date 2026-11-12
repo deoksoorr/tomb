@@ -17,15 +17,15 @@ function diff(a: ReturnType<typeof avatarFrameGrid>, b: ReturnType<typeof avatar
 }
 
 describe("F8 catalog", () => {
-  it("adds 30+ cosmetics over every slot, all drawable, priced 15–150", () => {
+  it("adds 30+ cosmetics over every slot, all drawable, priced 60–480 (I0d: ×4)", () => {
     expect(F8.length).toBeGreaterThanOrEqual(30);
     for (const slot of ["head", "neck", "hand", "back", "feet", "aura", "pet"]) expect(F8.some((i) => i.slot === slot), slot).toBe(true);
     for (const it of F8) {
       expect(SPRITE_COSMETICS as readonly string[]).toContain(it.id);
       expect(hasItemIcon(it.id), it.id).toBe(true);
       if (it.slot === "pet") continue; // 펫은 동물원 사육사가 영구로만 판다 (값은 ZOO_PETS, zoo.test.ts)
-      expect(it.price).toBeGreaterThanOrEqual(15);
-      expect(it.price).toBeLessThanOrEqual(150);
+      expect(it.price).toBeGreaterThanOrEqual(60);
+      expect(it.price).toBeLessThanOrEqual(480);
     }
     // 시트 그림과 따로 그리는 연출은 겹치지 않는다
     for (const id of GEAR_SHEET_IDS) expect(COSMETIC_FX_IDS).not.toContain(id);

@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { nanoid } from "nanoid";
 import { describe, expect, it } from "vitest";
+import { BALANCE_CAP } from "../economy";
 import { env } from "../env";
 import { MemoryAccounts } from "./accounts-memory";
 import { RedisAccounts } from "./accounts-redis";
@@ -69,14 +70,14 @@ function giftContract(make: () => { gifts: GiftStore; accounts: AccountStore; cl
   it("특정 계정 선물은 그 계정만, 지갑 상한에서 잘린다", async () => {
     const { gifts, accounts, cleanup } = make();
     const [me, other] = [`t-${nanoid(10)}`, `t-${nanoid(10)}`];
-    const g = gift({ target: me, targetName: "받는이", points: 9_999, items: [{ itemId: "mega_ch", count: 1 }] });
+    const g = gift({ target: me, targetName: "받는이", points: BALANCE_CAP, items: [{ itemId: "mega_ch", count: 1 }] });
     await gifts.send(g);
     await accounts.earn(me, "flower", "20261112");
     expect((await gifts.inbox(other, T0 - 1, T0 + 1)).map((x) => x.id)).not.toContain(g.id);
     expect(await gifts.claim(other, g.id, T0 - 1, T0 + 1)).toEqual({ ok: false, reason: "gone" });
     const r = await gifts.claim(me, g.id, T0 + 100, T0 + 1); // 특정 계정 선물은 처음 들어온 시각과 상관없다
-    expect(r).toMatchObject({ ok: true, points: 9_997 });
-    expect((await accounts.get(me, "20261112", T0)).points).toBe(9_999);
+    expect(r).toMatchObject({ ok: true, points: BALANCE_CAP - 2 });
+    expect((await accounts.get(me, "20261112", T0)).points).toBe(BALANCE_CAP);
     await cleanup([me, other], [g.id]);
   });
 }

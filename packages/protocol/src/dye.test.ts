@@ -5,6 +5,7 @@ import {
   ITEMS,
   itemById,
   packDye,
+  PERMANENT_MULTIPLIER,
   PERMANENT_UNTIL,
   permanentPrice,
   sanitizeDye,
@@ -59,8 +60,10 @@ describe("46번 염색권·30번 영구 코디 카탈로그", () => {
     expect(dyes[1].price).toBeLessThan(dyes[2].price);
   });
   it("영구 가격은 기간제의 7배(10 단위), 꾸미기만", () => {
-    expect(permanentPrice("hat_crown")).toBe(840);
-    expect(permanentPrice("neck_scarf")).toBe(110);
+    const perm = (id: string) => Math.round((itemById(id)!.price * PERMANENT_MULTIPLIER) / 10) * 10;
+    expect(PERMANENT_MULTIPLIER).toBe(7);
+    expect(permanentPrice("hat_crown")).toBe(perm("hat_crown"));
+    expect(permanentPrice("neck_scarf")).toBe(perm("neck_scarf"));
     expect(permanentPrice("fw_small")).toBeNull();
     expect(permanentPrice("hat_straw")).toBeNull();
     for (const it of ITEMS) {

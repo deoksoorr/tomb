@@ -1,4 +1,4 @@
-import { verifyGrant } from "@tomb/protocol";
+import { itemById, verifyGrant } from "@tomb/protocol";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { getAccounts } from "@/lib/store";
@@ -121,7 +121,7 @@ describe("벗어 둔 꾸미기", () => {
     const res = await buyItem(v, "hat_cat");
     expect(res.status).toBe(409);
     expect((await errorOf(res)).code).toBe("ALREADY_OWNED");
-    expect((await getMe(v)).points).toBe(1000 - 25);
+    expect((await getMe(v)).points).toBe(1000 - itemById("hat_cat")!.price);
   });
 
   it("다시 입기 409: stash에 없거나 이미 입고 있으면. 입력 검사 400, 세션 없으면 401", async () => {

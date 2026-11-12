@@ -41,115 +41,115 @@ function cosmetics(rows: readonly (readonly [string, CosmeticSlot, string, strin
 }
 
 export const ITEMS: readonly ItemDef[] = [
-  { id: "fw_small", kind: "firework", name: "작은 폭죽", desc: "밤하늘에 한 발. 채널 모두가 함께 봐요.", price: 20, power: 1 },
-  { id: "fw_heart", kind: "firework", name: "하트 폭죽", desc: "하트 모양으로 퍼지는 분홍 불꽃.", price: 40, power: 2 },
-  { id: "fw_triple", kind: "firework", name: "삼연발 폭죽", desc: "세 발이 연달아 터져요.", price: 65, power: 3 },
-  { id: "fw_big", kind: "firework", name: "대형 폭죽", desc: "화면을 가득 채우는 커다란 불꽃.", price: 125, power: 4 },
-  { id: "fw_meteor", kind: "firework", name: "별똥별", desc: "하늘을 가로지르는 별똥별 비가 쏟아져요.", price: 85, power: 3 },
-  { id: "fw_letter", kind: "firework", name: "글자 폭죽", desc: "내 이름이 불꽃 글자로 떠올라요.", price: 105, power: 3 },
-  { id: "fw_grand", kind: "firework", name: "밤하늘 피날레", desc: "채널 하늘 전체를 몇 초 동안 수놓아요.", price: 245, power: 5 },
+  { id: "fw_small", kind: "firework", name: "작은 폭죽", desc: "밤하늘에 한 발. 채널 모두가 함께 봐요.", price: 60, power: 1 },
+  { id: "fw_heart", kind: "firework", name: "하트 폭죽", desc: "하트 모양으로 퍼지는 분홍 불꽃.", price: 120, power: 2 },
+  { id: "fw_triple", kind: "firework", name: "삼연발 폭죽", desc: "세 발이 연달아 터져요.", price: 200, power: 3 },
+  { id: "fw_big", kind: "firework", name: "대형 폭죽", desc: "화면을 가득 채우는 커다란 불꽃.", price: 380, power: 4 },
+  { id: "fw_meteor", kind: "firework", name: "별똥별", desc: "하늘을 가로지르는 별똥별 비가 쏟아져요.", price: 260, power: 3 },
+  { id: "fw_letter", kind: "firework", name: "글자 폭죽", desc: "내 이름이 불꽃 글자로 떠올라요.", price: 320, power: 3 },
+  { id: "fw_grand", kind: "firework", name: "밤하늘 피날레", desc: "채널 하늘 전체를 몇 초 동안 수놓아요.", price: 740, power: 5 },
 
-  { id: "hat_straw", kind: "cosmetic", slot: "head", name: "밀짚모자", desc: "여름휴가 계획만 세 번 세웠다.", price: 20, durationMs: COSMETIC_DURATION_MS },
-  { id: "hat_cat", kind: "cosmetic", slot: "head", name: "고양이 귀", desc: "쫑긋.", price: 25, durationMs: COSMETIC_DURATION_MS },
-  { id: "hat_flower", kind: "cosmetic", slot: "head", name: "꽃 머리핀", desc: "헌화하다 하나 꽂았어요.", price: 20, durationMs: COSMETIC_DURATION_MS },
-  { id: "hand_lantern", kind: "cosmetic", slot: "hand", name: "손등불", desc: "내 주변이 더 환해져요.", price: 30, durationMs: COSMETIC_DURATION_MS },
-  { id: "aura_firefly", kind: "cosmetic", slot: "aura", name: "반딧불 오라", desc: "반딧불이 졸졸 따라와요.", price: 35, durationMs: COSMETIC_DURATION_MS },
-  { id: "neck_scarf", kind: "cosmetic", slot: "neck", name: "빨간 목도리", desc: "밤바람이 차요.", price: 15, durationMs: COSMETIC_DURATION_MS },
-  { id: "hat_halo", kind: "cosmetic", slot: "head", name: "후광", desc: "머리 위에 은은한 빛의 고리.", price: 40, durationMs: COSMETIC_DURATION_MS },
-  { id: "back_wings", kind: "cosmetic", slot: "back", name: "작은 날개", desc: "등에서 파닥이는 유령 날개.", price: 45, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_ghost", kind: "cosmetic", slot: "pet", name: "그림자 유령 친구", desc: "작은 그림자 유령이 졸졸 따라와요.", price: 60, durationMs: COSMETIC_DURATION_MS },
-  { id: "feet_flowers", kind: "cosmetic", slot: "feet", name: "발자국 꽃", desc: "걷는 자리마다 작은 꽃이 피어요.", price: 35, durationMs: COSMETIC_DURATION_MS },
-  { id: "aura_fog", kind: "cosmetic", slot: "aura", name: "안개 망토", desc: "발밑에 푸른 안개가 일렁여요.", price: 30, durationMs: COSMETIC_DURATION_MS },
+  { id: "hat_straw", kind: "cosmetic", slot: "head", name: "밀짚모자", desc: "여름휴가 계획만 세 번 세웠다.", price: 80, durationMs: COSMETIC_DURATION_MS },
+  { id: "hat_cat", kind: "cosmetic", slot: "head", name: "고양이 귀", desc: "쫑긋.", price: 100, durationMs: COSMETIC_DURATION_MS },
+  { id: "hat_flower", kind: "cosmetic", slot: "head", name: "꽃 머리핀", desc: "헌화하다 하나 꽂았어요.", price: 80, durationMs: COSMETIC_DURATION_MS },
+  { id: "hand_lantern", kind: "cosmetic", slot: "hand", name: "손등불", desc: "내 주변이 더 환해져요.", price: 120, durationMs: COSMETIC_DURATION_MS },
+  { id: "aura_firefly", kind: "cosmetic", slot: "aura", name: "반딧불 오라", desc: "반딧불이 졸졸 따라와요.", price: 140, durationMs: COSMETIC_DURATION_MS },
+  { id: "neck_scarf", kind: "cosmetic", slot: "neck", name: "빨간 목도리", desc: "밤바람이 차요.", price: 60, durationMs: COSMETIC_DURATION_MS },
+  { id: "hat_halo", kind: "cosmetic", slot: "head", name: "후광", desc: "머리 위에 은은한 빛의 고리.", price: 160, durationMs: COSMETIC_DURATION_MS },
+  { id: "back_wings", kind: "cosmetic", slot: "back", name: "작은 날개", desc: "등에서 파닥이는 유령 날개.", price: 180, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_ghost", kind: "cosmetic", slot: "pet", name: "그림자 유령 친구", desc: "작은 그림자 유령이 졸졸 따라와요.", price: 650, durationMs: COSMETIC_DURATION_MS },
+  { id: "feet_flowers", kind: "cosmetic", slot: "feet", name: "발자국 꽃", desc: "걷는 자리마다 작은 꽃이 피어요.", price: 140, durationMs: COSMETIC_DURATION_MS },
+  { id: "aura_fog", kind: "cosmetic", slot: "aura", name: "안개 망토", desc: "발밑에 푸른 안개가 일렁여요.", price: 120, durationMs: COSMETIC_DURATION_MS },
 
   // ── F8 캐릭터 꾸미기 추가분 (11/12): 사무실·일상 이름. 시트에 그려지는 것(머리·목·손·배낭·망토)과
   //    따로 붙는 연출(우산·풍선·날개·발자국·오라·펫)은 web game/sprites/avatarGear.ts · cosmeticFx.ts 참고
   ...cosmetics([
     // 머리
-    ["hat_beanie", "head", "털 비니", "안 감은 머리를 감쪽같이 숨겨 줘요.", 20],
-    ["hat_headphones", "head", "노이즈캔슬링 헤드폰", "팀장님 목소리만 골라서 막아 줘요. (아마도)", 40],
-    ["hat_crown", "head", "작은 왕관", "오늘만큼은 내가 이 구역 대표.", 120],
-    ["hat_ribbon", "head", "리본 머리띠", "회식 2차 노래방에서 받은 거예요.", 20],
-    ["hat_party", "head", "고깔모자", "누군가의 생일. 케이크는 이미 없어요.", 25],
-    ["hat_glasses", "head", "뿔테 안경", "엑셀 셀이 한 칸 더 잘 보여요.", 20],
-    ["hat_wizard", "head", "마법사 모자", "엑셀 매크로를 쓸 줄 알면 다 마법사.", 60],
-    ["hat_cap", "head", "체육대회 모자", "회사 체육대회 기념품. 팀 색깔은 파랑.", 20],
-    ["hat_sprout", "head", "새싹 머리핀", "물 주면 자랄지도 몰라요.", 15],
+    ["hat_beanie", "head", "털 비니", "안 감은 머리를 감쪽같이 숨겨 줘요.", 80],
+    ["hat_headphones", "head", "노이즈캔슬링 헤드폰", "팀장님 목소리만 골라서 막아 줘요. (아마도)", 160],
+    ["hat_crown", "head", "작은 왕관", "오늘만큼은 내가 이 구역 대표.", 480],
+    ["hat_ribbon", "head", "리본 머리띠", "회식 2차 노래방에서 받은 거예요.", 80],
+    ["hat_party", "head", "고깔모자", "누군가의 생일. 케이크는 이미 없어요.", 100],
+    ["hat_glasses", "head", "뿔테 안경", "엑셀 셀이 한 칸 더 잘 보여요.", 80],
+    ["hat_wizard", "head", "마법사 모자", "엑셀 매크로를 쓸 줄 알면 다 마법사.", 240],
+    ["hat_cap", "head", "체육대회 모자", "회사 체육대회 기념품. 팀 색깔은 파랑.", 80],
+    ["hat_sprout", "head", "새싹 머리핀", "물 주면 자랄지도 몰라요.", 60],
     // 목
-    ["neck_tie", "neck", "넥타이", "금요일엔 살짝 풀어도 돼요.", 20],
-    ["neck_badge", "neck", "사원증 목걸이", "삑. 출입이 허가되었습니다.", 15],
-    ["neck_bowtie", "neck", "나비넥타이", "결혼식 하객 모드 켜짐.", 25],
-    ["neck_bell", "neck", "방울 목걸이", "어디 있는지 다 들켜요. 땡그랑.", 20],
-    ["neck_lei", "neck", "꽃 목걸이", "휴가 사진에서만 본 그 목걸이.", 30],
+    ["neck_tie", "neck", "넥타이", "금요일엔 살짝 풀어도 돼요.", 80],
+    ["neck_badge", "neck", "사원증 목걸이", "삑. 출입이 허가되었습니다.", 60],
+    ["neck_bowtie", "neck", "나비넥타이", "결혼식 하객 모드 켜짐.", 100],
+    ["neck_bell", "neck", "방울 목걸이", "어디 있는지 다 들켜요. 땡그랑.", 80],
+    ["neck_lei", "neck", "꽃 목걸이", "휴가 사진에서만 본 그 목걸이.", 120],
     // 손
-    ["hand_coffee", "hand", "아이스 아메리카노", "얼음이 다 녹을 때까지 회의 중.", 15],
-    ["hand_umbrella", "hand", "편의점 우산", "비 오는 날 회사 앞에서 산 그 우산. 집에 일곱 개 있어요.", 30],
-    ["hand_briefcase", "hand", "서류 가방", "안에는 점심 도시락뿐.", 25],
-    ["hand_phone", "hand", "스마트폰", "알림 99+. 안 읽은 척하는 중.", 20],
-    ["hand_lantern_blue", "hand", "도깨비 등롱", "푸르스름한 불빛이 흔들흔들. 주변도 환해져요.", 45],
-    ["hand_balloon", "hand", "풍선", "창립기념일에 받은 풍선. 바람 따라 둥실.", 25],
+    ["hand_coffee", "hand", "아이스 아메리카노", "얼음이 다 녹을 때까지 회의 중.", 60],
+    ["hand_umbrella", "hand", "편의점 우산", "비 오는 날 회사 앞에서 산 그 우산. 집에 일곱 개 있어요.", 120],
+    ["hand_briefcase", "hand", "서류 가방", "안에는 점심 도시락뿐.", 100],
+    ["hand_phone", "hand", "스마트폰", "알림 99+. 안 읽은 척하는 중.", 80],
+    ["hand_lantern_blue", "hand", "도깨비 등롱", "푸르스름한 불빛이 흔들흔들. 주변도 환해져요.", 180],
+    ["hand_balloon", "hand", "풍선", "창립기념일에 받은 풍선. 바람 따라 둥실.", 100],
     // 등
-    ["back_backpack", "back", "출근 배낭", "노트북, 충전기, 그리고 한 줌의 희망.", 25],
-    ["back_cape", "back", "퇴근 망토", "6시 정각, 망토를 휘날리며 퇴근.", 40],
-    ["back_wings_bat", "back", "박쥐 날개", "야근 사흘째에 돋아났어요.", 50],
-    ["back_wings_butterfly", "back", "나비 날개", "봄바람 타고 출근하는 날개.", 80],
+    ["back_backpack", "back", "출근 배낭", "노트북, 충전기, 그리고 한 줌의 희망.", 100],
+    ["back_cape", "back", "퇴근 망토", "6시 정각, 망토를 휘날리며 퇴근.", 160],
+    ["back_wings_bat", "back", "박쥐 날개", "야근 사흘째에 돋아났어요.", 200],
+    ["back_wings_butterfly", "back", "나비 날개", "봄바람 타고 출근하는 날개.", 320],
     // 발
-    ["feet_prints", "feet", "발도장", "지나간 자리마다 콩콩 발자국.", 15],
-    ["feet_puddle", "feet", "첨벙 장화", "맑은 날에도 걸음마다 첨벙첨벙.", 25],
-    ["feet_sparkle", "feet", "반짝이 운동화", "새로 산 운동화라서 반짝반짝.", 40],
-    ["feet_leaves", "feet", "낙엽 산책", "바스락바스락, 가을 출근길.", 20],
-    ["feet_hearts", "feet", "하트 발자국", "월급날의 발걸음.", 30],
+    ["feet_prints", "feet", "발도장", "지나간 자리마다 콩콩 발자국.", 60],
+    ["feet_puddle", "feet", "첨벙 장화", "맑은 날에도 걸음마다 첨벙첨벙.", 100],
+    ["feet_sparkle", "feet", "반짝이 운동화", "새로 산 운동화라서 반짝반짝.", 160],
+    ["feet_leaves", "feet", "낙엽 산책", "바스락바스락, 가을 출근길.", 80],
+    ["feet_hearts", "feet", "하트 발자국", "월급날의 발걸음.", 120],
     // 오라
-    ["aura_sparkle", "aura", "반짝이 오라", "첫 출근 날의 반짝이는 기분.", 35],
-    ["aura_snow", "aura", "나만의 눈", "내 머리 위에만 펑펑 내리는 눈.", 40],
-    ["aura_petals", "aura", "벚꽃 바람", "벚꽃 엔딩이 흘러나올 것 같아요.", 45],
-    ["aura_raincloud", "aura", "월요병 먹구름", "머리 위에만 보슬보슬. 월요일 아침의 시각화.", 30],
-    ["aura_notes", "aura", "흥얼흥얼 음표", "이어폰 없이도 흥얼흥얼.", 30],
-    ["aura_zzz", "aura", "회의 시간 졸음", "회의만 시작하면 머리 위로 Zzz.", 20],
+    ["aura_sparkle", "aura", "반짝이 오라", "첫 출근 날의 반짝이는 기분.", 140],
+    ["aura_snow", "aura", "나만의 눈", "내 머리 위에만 펑펑 내리는 눈.", 160],
+    ["aura_petals", "aura", "벚꽃 바람", "벚꽃 엔딩이 흘러나올 것 같아요.", 180],
+    ["aura_raincloud", "aura", "월요병 먹구름", "머리 위에만 보슬보슬. 월요일 아침의 시각화.", 120],
+    ["aura_notes", "aura", "흥얼흥얼 음표", "이어폰 없이도 흥얼흥얼.", 120],
+    ["aura_zzz", "aura", "회의 시간 졸음", "회의만 시작하면 머리 위로 Zzz.", 80],
     // 펫
-    ["pet_cat", "pet", "사무실 고양이", "키보드 위가 제일 따뜻하대요.", 90],
-    ["pet_duck", "pet", "고무 오리", "디버깅 상담 전문 오리. 말없이 들어 줘요.", 50],
-    ["pet_slime", "pet", "말랑 슬라임", "말랑말랑. 스트레스 볼 대용.", 45],
-    ["pet_bird", "pet", "참새", "어깨에 앉고 싶어서 졸졸 날아와요.", 55],
-    ["pet_wisp", "pet", "도깨비불 친구", "푸른 불꽃이 둥실둥실 따라와요.", 60],
-    ["pet_dog", "pet", "퇴근 강아지", "퇴근하면 제일 먼저 반겨 주는 친구.", 150],
+    ["pet_cat", "pet", "사무실 고양이", "키보드 위가 제일 따뜻하대요.", 900],
+    ["pet_duck", "pet", "고무 오리", "디버깅 상담 전문 오리. 말없이 들어 줘요.", 450],
+    ["pet_slime", "pet", "말랑 슬라임", "말랑말랑. 스트레스 볼 대용.", 450],
+    ["pet_bird", "pet", "참새", "어깨에 앉고 싶어서 졸졸 날아와요.", 550],
+    ["pet_wisp", "pet", "도깨비불 친구", "푸른 불꽃이 둥실둥실 따라와요.", 700],
+    ["pet_dog", "pet", "퇴근 강아지", "퇴근하면 제일 먼저 반겨 주는 친구.", 900],
   ]),
   // ── 동물원 펫 (사육사에게서 영구로만 산다 — 가격은 아래 ZOO_PETS. price는 같은 값을 적어 둔다) ──
-  { id: "pet_fox", kind: "cosmetic", slot: "pet", name: "달빛 여우", desc: "야근하는 밤에만 슬그머니 따라오는 여우. 꼬리가 은은하게 빛나요.", price: 320, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_hound", kind: "cosmetic", slot: "pet", name: "듬직한 큰 개", desc: "등에 태워 주는 커다란 개. 출근길이 두 배로 즐거워요. (타고 다닐 수 있어요)", price: 450, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_goose", kind: "cosmetic", slot: "pet", name: "왕거위", desc: "아무도 못 말리는 거위. 등에 타면 뒤뚱뒤뚱 신나게 달려요. (타고 다닐 수 있어요)", price: 500, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_deer", kind: "cosmetic", slot: "pet", name: "달빛 사슴", desc: "별빛 뿔을 단 사슴. 등에 타면 바람처럼 가볍게 달려요. (타고 다닐 수 있어요)", price: 600, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_fox", kind: "cosmetic", slot: "pet", name: "달빛 여우", desc: "야근하는 밤에만 슬그머니 따라오는 여우. 꼬리가 은은하게 빛나요.", price: 1200, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_hound", kind: "cosmetic", slot: "pet", name: "듬직한 큰 개", desc: "등에 태워 주는 커다란 개. 출근길이 두 배로 즐거워요. (타고 다닐 수 있어요)", price: 1400, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_goose", kind: "cosmetic", slot: "pet", name: "왕거위", desc: "아무도 못 말리는 거위. 등에 타면 뒤뚱뒤뚱 신나게 달려요. (타고 다닐 수 있어요)", price: 1600, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_deer", kind: "cosmetic", slot: "pet", name: "달빛 사슴", desc: "별빛 뿔을 단 사슴. 등에 타면 바람처럼 가볍게 달려요. (타고 다닐 수 있어요)", price: 1800, durationMs: COSMETIC_DURATION_MS },
 
-  { id: "decor_candles", kind: "decor", name: "촛불 한 쌍", desc: "묘비 양옆에 작은 촛불.", price: 30, durationMs: DECOR_DURATION_MS },
-  { id: "decor_wreath", kind: "decor", name: "꽃 화환", desc: "묘비 앞에 둥근 화환.", price: 50, durationMs: DECOR_DURATION_MS },
-  { id: "decor_ribbon", kind: "decor", name: "추모 리본", desc: "검은 리본 하나.", price: 30, durationMs: DECOR_DURATION_MS },
-  { id: "decor_lantern", kind: "decor", name: "작은 석등", desc: "묘비 옆을 은은히 밝혀요.", price: 60, durationMs: DECOR_DURATION_MS },
-  { id: "decor_ghostcat", kind: "decor", name: "유령 고양이", desc: "묘비 위에서 졸고 있어요.", price: 80, durationMs: DECOR_DURATION_MS },
-  { id: "decor_stars", kind: "decor", name: "별빛", desc: "묘비 위로 별가루가 내려요.", price: 120, durationMs: DECOR_DURATION_MS },
-  { id: "decor_rainbow", kind: "decor", name: "무지개", desc: "묘비 위에 작은 무지개가 걸려요.", price: 100, durationMs: DECOR_DURATION_MS },
-  { id: "decor_butterfly", kind: "decor", name: "나비", desc: "나비 몇 마리가 묘비 둘레를 날아요.", price: 70, durationMs: DECOR_DURATION_MS },
-  { id: "decor_snowman", kind: "decor", name: "눈사람", desc: "묘비 옆을 지키는 작은 눈사람.", price: 50, durationMs: DECOR_DURATION_MS },
-  { id: "decor_flowerpot", kind: "decor", name: "화분", desc: "묘비 앞에 작은 화분 하나.", price: 30, durationMs: DECOR_DURATION_MS },
+  { id: "decor_candles", kind: "decor", name: "촛불 한 쌍", desc: "묘비 양옆에 작은 촛불.", price: 90, durationMs: DECOR_DURATION_MS },
+  { id: "decor_wreath", kind: "decor", name: "꽃 화환", desc: "묘비 앞에 둥근 화환.", price: 150, durationMs: DECOR_DURATION_MS },
+  { id: "decor_ribbon", kind: "decor", name: "추모 리본", desc: "검은 리본 하나.", price: 90, durationMs: DECOR_DURATION_MS },
+  { id: "decor_lantern", kind: "decor", name: "작은 석등", desc: "묘비 옆을 은은히 밝혀요.", price: 180, durationMs: DECOR_DURATION_MS },
+  { id: "decor_ghostcat", kind: "decor", name: "유령 고양이", desc: "묘비 위에서 졸고 있어요.", price: 240, durationMs: DECOR_DURATION_MS },
+  { id: "decor_stars", kind: "decor", name: "별빛", desc: "묘비 위로 별가루가 내려요.", price: 360, durationMs: DECOR_DURATION_MS },
+  { id: "decor_rainbow", kind: "decor", name: "무지개", desc: "묘비 위에 작은 무지개가 걸려요.", price: 300, durationMs: DECOR_DURATION_MS },
+  { id: "decor_butterfly", kind: "decor", name: "나비", desc: "나비 몇 마리가 묘비 둘레를 날아요.", price: 210, durationMs: DECOR_DURATION_MS },
+  { id: "decor_snowman", kind: "decor", name: "눈사람", desc: "묘비 옆을 지키는 작은 눈사람.", price: 150, durationMs: DECOR_DURATION_MS },
+  { id: "decor_flowerpot", kind: "decor", name: "화분", desc: "묘비 앞에 작은 화분 하나.", price: 90, durationMs: DECOR_DURATION_MS },
 
   // ── 23번 확성기: 지금 채널 / 모든 채널. 문장은 서버가 금칙어·도배를 거른 뒤 서명한 증서로만 퍼진다 ──
-  { id: "mega_ch", kind: "megaphone", name: "확성기", desc: "지금 채널 모두의 확성기 창에 한마디(60자)를 띄워요.", price: 30 },
-  { id: "mega_all", kind: "megaphone", name: "전체 확성기", desc: "모든 채널에 한마디(60자)를 크게 외쳐요.", price: 90 },
+  { id: "mega_ch", kind: "megaphone", name: "확성기", desc: "지금 채널 모두의 확성기 창에 한마디(60자)를 띄워요.", price: 100 },
+  { id: "mega_all", kind: "megaphone", name: "전체 확성기", desc: "모든 채널에 한마디(60자)를 크게 외쳐요.", price: 300 },
 
   // ── 46번 염색권: 부위(머리·몸·포인트) 하나를 무작위 팔레트에서 60초 안에 찾아 칠한다. 비쌀수록 조준점이 덜 흔들리고 색이 다양 ──
-  { id: "dye_basic", kind: "dye", name: "얼룩 염색권", desc: "물감이 몇 가지뿐인 팔레트. 조준점이 많이 흔들려요. 운이 좋으면 마음에 드는 색이!", price: 150, dye: { mode: "random", tier: 1 } },
-  { id: "dye_fine", kind: "dye", name: "고운 염색권", desc: "색이 꽤 다양한 팔레트. 조준점도 덜 흔들려요.", price: 300, dye: { mode: "random", tier: 2 } },
-  { id: "dye_rainbow", kind: "dye", name: "무지개 염색권", desc: "온갖 색이 다 있는 큰 팔레트. 조준점이 거의 흔들리지 않아요.", price: 500, dye: { mode: "random", tier: 3 } },
+  { id: "dye_basic", kind: "dye", name: "얼룩 염색권", desc: "물감이 몇 가지뿐인 팔레트. 조준점이 많이 흔들려요. 운이 좋으면 마음에 드는 색이!", price: 450, dye: { mode: "random", tier: 1 } },
+  { id: "dye_fine", kind: "dye", name: "고운 염색권", desc: "색이 꽤 다양한 팔레트. 조준점도 덜 흔들려요.", price: 900, dye: { mode: "random", tier: 2 } },
+  { id: "dye_rainbow", kind: "dye", name: "무지개 염색권", desc: "온갖 색이 다 있는 큰 팔레트. 조준점이 거의 흔들리지 않아요.", price: 1500, dye: { mode: "random", tier: 3 } },
 
   // 묘비 디자인권 (포인트로 만드는 특별 묘비). id = "gs_" + 디자인 id
-  { id: "gs_coffee", kind: "graveStyle", name: "식은 커피잔 묘비", desc: "마지막 한 모금은 끝내 마시지 못했다.", price: 100 },
-  { id: "gs_duck", kind: "graveStyle", name: "오리 인형 묘비", desc: "모니터 옆에서 하소연을 끝까지 들어 준 친구.", price: 120 },
-  { id: "gs_404", kind: "graveStyle", name: "404호 비석", desc: "아무리 찾아도 안 나오는 그 호실.", price: 120 },
-  { id: "gs_monitor", kind: "graveStyle", name: "모니터 묘비", desc: "퇴근하고도 안 끈 모니터. 커서가 아직 깜빡여요.", price: 150 },
-  { id: "gs_sakura", kind: "graveStyle", name: "벚꽃 비석", desc: "꽃잎이 내려앉는 비석.", price: 150 },
-  { id: "gs_server", kind: "graveStyle", name: "자판기 묘비", desc: "동전만 삼키고 끝내 아무것도 안 내줬다. 불은 아직 깜빡여요.", price: 180 },
-  { id: "gs_rocket", kind: "graveStyle", name: "못 쏜 로켓", desc: "카운트다운만 세 번 하고 멈춘 로켓.", price: 200 },
-  { id: "gs_angel", kind: "graveStyle", name: "대리석 천사상", desc: "날개를 접은 작은 천사.", price: 300 },
-  { id: "gs_crystal", kind: "graveStyle", name: "수정 묘비", desc: "밤에 은은하게 빛나요.", price: 400 },
-  { id: "gs_gold", kind: "graveStyle", name: "황금 비석", desc: "가장 빛나던 아이디어에게.", price: 500 },
+  { id: "gs_coffee", kind: "graveStyle", name: "식은 커피잔 묘비", desc: "마지막 한 모금은 끝내 마시지 못했다.", price: 300 },
+  { id: "gs_duck", kind: "graveStyle", name: "오리 인형 묘비", desc: "모니터 옆에서 하소연을 끝까지 들어 준 친구.", price: 360 },
+  { id: "gs_404", kind: "graveStyle", name: "404호 비석", desc: "아무리 찾아도 안 나오는 그 호실.", price: 360 },
+  { id: "gs_monitor", kind: "graveStyle", name: "모니터 묘비", desc: "퇴근하고도 안 끈 모니터. 커서가 아직 깜빡여요.", price: 450 },
+  { id: "gs_sakura", kind: "graveStyle", name: "벚꽃 비석", desc: "꽃잎이 내려앉는 비석.", price: 450 },
+  { id: "gs_server", kind: "graveStyle", name: "자판기 묘비", desc: "동전만 삼키고 끝내 아무것도 안 내줬다. 불은 아직 깜빡여요.", price: 540 },
+  { id: "gs_rocket", kind: "graveStyle", name: "못 쏜 로켓", desc: "카운트다운만 세 번 하고 멈춘 로켓.", price: 600 },
+  { id: "gs_angel", kind: "graveStyle", name: "대리석 천사상", desc: "날개를 접은 작은 천사.", price: 900 },
+  { id: "gs_crystal", kind: "graveStyle", name: "수정 묘비", desc: "밤에 은은하게 빛나요.", price: 1200 },
+  { id: "gs_gold", kind: "graveStyle", name: "황금 비석", desc: "가장 빛나던 아이디어에게.", price: 1500 },
 ];
 
 /**
@@ -231,7 +231,7 @@ export function sanitizeLook(raw: unknown): Look {
   return out.slice(0, 7);
 }
 
-// ── 30번 영구 소유 코디: 일부 꾸미기는 영구로도 산다 (기간제 가격의 7배). 영구 착용품·벗어 둔 것은 만료 시각이 PERMANENT_UNTIL ──
+// ── 30번 영구 소유 코디: 일부 꾸미기는 영구로도 산다 (기간제 가격의 7배 — 기간제는 I0d에서 4배로 올림). 영구 착용품·벗어 둔 것은 만료 시각이 PERMANENT_UNTIL ──
 
 /** 영구 소유의 "만료 시각" (2286년). 기간제와 같은 자리(착용·벗어 둠)에 저장되고, 이보다 크거나 같으면 영구로 표시한다 */
 export const PERMANENT_UNTIL = 9_999_999_999_999;
@@ -263,23 +263,23 @@ export function permanentPrice(id: string): number | null {
 // ── 동물원 펫: 버드나무 묘역 자리의 동물원 사육사에게서 영구로만 산다 (상점의 기간제 펫 판매는 멈췄다 — isShopListed) ──
 // 펫은 착용 부위 "pet" 하나라 한 번에 한 마리만 데리고 다닌다. 산 펫은 영구(PERMANENT_UNTIL)로 착용·벗어 둔 꾸미기에 들어가고,
 // 바꾸기·집에 두기는 다른 꾸미기와 같은 입기(/api/me/wear)·벗기(/api/me/unequip)로 한다.
-// 가격은 최종 콘텐츠급: 하루 최대 적립 800P(DAILY_EARN_CAP), 지갑 상한 9,999P(BALANCE_CAP) 안에서 며칠~열흘 넘게 모아야 하는 값.
+// 가격(I0d 경제 재조정): 보통 유저(하루 20~30분, 약 200P)가 입문 펫(450P)은 2~3번 플레이, 타는 펫(1,400~1,800P)은 1주쯤 모으는 값.
 
 /** 타는 펫 (ride = 타고 걷는 속도 배율 — 달리기 × 배율이 서버 속도 검증(MAX_VALID_SPEED) 안에 들도록 1.35 이하) */
 export type PetDef = { id: string; price: number; ride?: { speed: number } };
-/** 사육사 창 순서 (싼 것부터). 하우징이 최종 목표라 펫은 집터(300P~)보다 싸게 (11/12 사용자 요청) */
+/** 사육사 창 순서 (싼 것부터). 하우징이 최종 목표라 펫은 작은 집터(2,000P)보다 싸게 (11/12 사용자 요청) */
 export const ZOO_PETS: readonly PetDef[] = [
-  { id: "pet_slime", price: 150 },
-  { id: "pet_duck", price: 150 },
-  { id: "pet_bird", price: 180 },
-  { id: "pet_ghost", price: 200 },
-  { id: "pet_wisp", price: 220 },
-  { id: "pet_cat", price: 250 },
-  { id: "pet_dog", price: 250 },
-  { id: "pet_fox", price: 320 },
-  { id: "pet_hound", price: 450, ride: { speed: 1.25 } },
-  { id: "pet_goose", price: 500, ride: { speed: 1.2 } },
-  { id: "pet_deer", price: 600, ride: { speed: 1.35 } },
+  { id: "pet_slime", price: 450 },
+  { id: "pet_duck", price: 450 },
+  { id: "pet_bird", price: 550 },
+  { id: "pet_ghost", price: 650 },
+  { id: "pet_wisp", price: 700 },
+  { id: "pet_cat", price: 900 },
+  { id: "pet_dog", price: 900 },
+  { id: "pet_fox", price: 1200 },
+  { id: "pet_hound", price: 1400, ride: { speed: 1.25 } },
+  { id: "pet_goose", price: 1600, ride: { speed: 1.2 } },
+  { id: "pet_deer", price: 1800, ride: { speed: 1.35 } },
 ];
 const petMap = new Map(ZOO_PETS.map((p) => [p.id, p]));
 /** 동물원 펫이면 그 정의 */

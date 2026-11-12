@@ -337,7 +337,7 @@ export type ActivityItem = { id: string; kind: ActivityKind; at: number; who: st
 export type ActivityResponse = { items: ActivityItem[]; unread: number; lastSeenAt: number };
 
 /** POST /api/me/name { name } → 닉네임 변경. 첫 변경 무료, 이후 NAME_CHANGE_PRICE 포인트, NAME_CHANGE_COOLDOWN_DAYS일에 한 번 */
-export const NAME_CHANGE_PRICE = 100;
+export const NAME_CHANGE_PRICE = 300;
 export const NAME_CHANGE_COOLDOWN_DAYS = 7;
 export type NameChangeResponse = { me: Me; cost: number; nextAllowedAt: number };
 

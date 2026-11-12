@@ -15,6 +15,7 @@ import type {
   PointRankResponse,
   RoomJoinResponse,
 } from "@/lib/types";
+import { NAME_CHANGE_PRICE } from "@/lib/types";
 import * as adminPoints from "./admin/accounts/points/route";
 import * as adminEconomy from "./admin/economy/route";
 import * as adminErrors from "./admin/errors/route";
@@ -173,7 +174,7 @@ describe("내 소식", () => {
 describe("닉네임 변경", () => {
   const rename = (v: Visitor, name: string) => nameRoute.POST(call("/api/me/name", { visitor: v, body: { name } }));
 
-  it("첫 변경은 무료, 7일 쿨다운(429 + 다음 시각), 그다음은 100P. 묘비 상주명은 그대로, 랭킹은 새 이름", async () => {
+  it("첫 변경은 무료, 7일 쿨다운(429 + 다음 시각), 그다음은 NAME_CHANGE_PRICE. 묘비 상주명은 그대로, 랭킹은 새 이름", async () => {
     const v = await newVisitor();
     await attendAs(v, "옛이름");
     const grave = await bodyOf<CreateGraveResponse>(
@@ -186,7 +187,7 @@ describe("닉네임 변경", () => {
     expect(first.cost).toBe(0);
     expect(first.me.name).toBe("새이름");
     expect(first.me.points).toBe(startPoints);
-    expect(first.me.nameChange.cost).toBe(100);
+    expect(first.me.nameChange.cost).toBe(NAME_CHANGE_PRICE);
     expect(first.me.nameChange.nextAllowedAt).toBe(first.nextAllowedAt);
 
     const cool = await rename(v, "또바꿈");
@@ -198,9 +199,9 @@ describe("닉네임 변경", () => {
     const later = first.nextAllowedAt + 1000;
     vi.spyOn(Date, "now").mockReturnValue(later);
     expect((await errorOf(await rename(v, "또바꿈"))).code).toBe("NOT_ENOUGH_POINTS");
-    setPoints(v, 150);
+    setPoints(v, NAME_CHANGE_PRICE + 50);
     const second = await bodyOf<NameChangeResponse>(rename(v, "또바꿈"));
-    expect(second.cost).toBe(100);
+    expect(second.cost).toBe(NAME_CHANGE_PRICE);
     expect(second.me.points).toBe(50);
     vi.restoreAllMocks();
 
@@ -295,10 +296,10 @@ describe("경제 통계", () => {
     const first = (await getMe(v)).nameChange.nextAllowedAt;
     vi.spyOn(Date, "now").mockReturnValue(first + 1); // 7일 뒤: 통계도 그날 기준으로 본다
     const before = await economy();
-    setPoints(v, 200);
+    setPoints(v, NAME_CHANGE_PRICE + 100);
     expect((await nameRoute.POST(call("/api/me/name", { visitor: v, body: { name: "셋넷다섯" } }))).status).toBe(200);
     const after = await economy();
     vi.restoreAllMocks();
-    expect((today(after).spent.name ?? 0) - (today(before).spent.name ?? 0)).toBe(100);
+    expect((today(after).spent.name ?? 0) - (today(before).spent.name ?? 0)).toBe(NAME_CHANGE_PRICE);
   });
 });

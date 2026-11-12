@@ -23,15 +23,15 @@ import {
 // 동물원(버드나무 묘역 자리)·사육사 펫·타는 펫 공용 규칙
 
 describe("동물원 펫 카탈로그", () => {
-  it("펫 8종 이상, 모두 꾸미기 펫 부위이고 영구 가격은 최종 콘텐츠급(2,500~9,999P — 지갑 상한 안)", () => {
+  it("펫 8종 이상, 모두 꾸미기 펫 부위이고 영구 가격은 입문 펫 300P 이상, 작은 집터(2,000P)보다 싸게 (I0d)", () => {
     expect(ZOO_PETS.length).toBeGreaterThanOrEqual(8);
     expect(new Set(ZOO_PETS.map((p) => p.id)).size).toBe(ZOO_PETS.length);
     for (const p of ZOO_PETS) {
       const it = itemById(p.id);
       expect(it?.kind, p.id).toBe("cosmetic");
       expect(it?.slot, p.id).toBe("pet");
-      expect(p.price).toBeGreaterThanOrEqual(2_500);
-      expect(p.price).toBeLessThanOrEqual(9_999);
+      expect(p.price).toBeGreaterThanOrEqual(300);
+      expect(p.price).toBeLessThan(2_000);
       expect(petPrice(p.id)).toBe(p.price);
     }
     // 카탈로그의 모든 펫은 동물원에서 판다

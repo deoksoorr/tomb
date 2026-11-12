@@ -1,7 +1,7 @@
 import { checkName, isAvatarBody, isAvatarColor, isGraveStyle, itemById, ROOM_ID_RE, type CosmeticSlot } from "@tomb/protocol";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { CODE_RE, normalizeCode } from "./economy";
+import { BALANCE_CAP, CODE_RE, normalizeCode } from "./economy";
 import { GRAVE_CHANNELS } from "./store/channels";
 import { ageDays, parseYmd, suggestEpitaph, todayKst } from "./epitaph";
 import { isAllowedImageUrl } from "./blob";
@@ -230,7 +230,7 @@ export const AdminPointsSchema = z
   .object({
     code: z.string().max(40).transform(normalizeCode).optional(),
     accountId: z.string().regex(/^[A-Za-z0-9_-]{21}$/, "계정 id 형식이 올바르지 않아요.").optional(),
-    delta: z.number().int("정수로 적어 주세요.").min(-9999).max(9999).refine((d) => d !== 0, "0이 아닌 값을 적어 주세요."),
+    delta: z.number().int("정수로 적어 주세요.").min(-BALANCE_CAP).max(BALANCE_CAP).refine((d) => d !== 0, "0이 아닌 값을 적어 주세요."),
   })
   .refine((v) => !!v.code !== !!v.accountId, "개인 코드와 계정 id 중 하나만 적어 주세요.")
   .refine((v) => !v.code || CODE_RE.test(v.code), "코드는 XXXX-XXXX-XXXX 모양이에요.");
