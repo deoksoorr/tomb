@@ -190,7 +190,7 @@
 
 .qrBox {
   margin: 0;
-  padding: 18px;
+  padding: 6px;
   background: #fffaf0;
   box-shadow:
     0 0 0 4px #c9a24a,
@@ -222,4 +222,17 @@
 .payBadge b {
   font-weight: 800;
   margin-right: 1px;
+}
+
+/* 태블릿·좁은 화면·터치: 아래쪽은 메뉴 줄·조이스틱과 부딪히므로 위 가운데 채널 표시 바로 아래에 둔다 (위 규칙들보다 나중이라 이긴다) */
+@media (max-width: 1100px), (pointer: coarse) {
+  .button {
+    top: calc(var(--safe-top, 12px) + 44px);
+    bottom: auto;
+    left: 50%;
+    flex-direction: row;
+    gap: 6px;
+    padding: 6px 12px;
+    transform: translateX(-50%);
+  }
 }
