@@ -61,7 +61,8 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
   const [part, setPart] = useState<DyePart>(resume?.part ?? (ticket?.mode === "fixed" && ticket.parts?.length ? ticket.parts[0] : "body"));
   const [session, setSession] = useState<DyeSessionView | null>(resume ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ color: string; part: DyePart; late: boolean; kept: boolean } | null>(null);
+  /** 끝난 결과 (before = 염색 전 내 색 표기 — 결과 창에서 전·후를 나란히 보여 준다) */
+  const [result, setResult] = useState<{ part: DyePart; late: boolean; kept: boolean; before: string } | null>(null);
   /** 시간이 끝나 고르는 중인 후보 색 (decideBy = 내 시계 기준 마감) */
   const [candidate, setCandidate] = useState<DyeCandidate | null>(() =>
     resume?.candidate ? { color: resume.candidate.color, decideBy: Date.now() + (resume.candidate.decideBy - resume.serverNow) } : null,
@@ -83,7 +84,7 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
     if (!kept) setSpec(withDyePart(spec, p, color));
     if (res.me.body) setBody(res.me.body);
     setCandidate(null);
-    setResult({ color, part: p, late: late || !!res.late, kept });
+    setResult({ part: p, late: late || !!res.late, kept, before: spec });
     setPhase("done");
     onDone?.(kept ? `${DYE_PART_NAMES[p]} 색은 그대로 두었어요.` : `${DYE_PART_NAMES[p]}을(를) ${color}(으)로 염색했어요.`);
   }
@@ -92,7 +93,7 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
   function timedOut(res: DyeTimeoutResponse) {
     if (!res.candidate) {
       setCandidate(null);
-      setResult({ color: "", part: res.part, late: true, kept: true });
+      setResult({ part: res.part, late: true, kept: true, before: spec });
       setPhase("done");
       onDone?.(`시간이 지나 ${DYE_PART_NAMES[res.part]} 색은 그대로 두었어요.`);
       return;
@@ -146,12 +147,12 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
   const previewSpec = phase === "part" && fixedColor ? withDyePart(spec, part, fixedColor) : spec;
 
   return (
-    // 결과·비교(고르기) 단계는 내용 높이에 맞는 작은 창 (판을 도는 동안만 표준 창)
+    // 판을 도는 동안만 표준 창. 시작(부위 고르기)·비교(고르기)·결과 단계는 내용 크기에 맞는 작은 창
     // 판·고르기·결과 단계는 배경 클릭으로 닫히지 않는다. 판·고르기는 Esc가 그만두기 확인을 거친다 (× 만 바로 닫는다)
     <Dialog
       title={title}
       onClose={close}
-      kind={phase === "done" || phase === "choose" ? "confirm" : "window"}
+      kind={phase === "play" ? "window" : "confirm"}
       backdropClose={guard.backdrop}
       onEscape={guard.escConfirm ? () => setConfirmQuit((q) => !q) : undefined}
     >
@@ -182,34 +183,31 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
         ) : phase === "choose" && session && candidate ? (
           <DyeChoice session={session} candidate={candidate} spec={spec} body={body} look={look} onDone={finished} onError={(m) => setError(m)} />
         ) : phase === "done" && result ? (
-          <div className={styles.row}>
-            <div className={styles.figure}>
-              <OutfitCanvas color={spec} body={body} look={look} label="염색한 내 모습" dir={DIR.down} walking={false} />
-            </div>
-            <div className={styles.side}>
-              {result.kept ? (
-                <p className={styles.result} role="status">
-                  {DYE_PART_NAMES[result.part]} 색은 그대로예요{result.late ? " (고르는 시간이 지났어요)" : ""}.
-                </p>
-              ) : (
-                <>
-                  <p className={styles.result} role="status">
-                    <span className={styles.swatchBig} style={swatchStyle(result.color)} aria-hidden="true" />
-                    {DYE_PART_NAMES[result.part]} 염색 완료 · {colorLabel(result.color)}
-                  </p>
-                  <p className={styles.note}>다른 사람 화면에도 바로 이 색으로 보여요. 원래 색으로 되돌리기는 상점의 염색·외형에서 할 수 있어요.</p>
-                </>
-              )}
-              <div className={styles.actions}>
-                <button type="button" className={cx(ui.button, ui.primary)} onClick={close}>
-                  닫기
-                </button>
-              </div>
+          <div className={styles.choose}>
+            <p className={styles.note} role="status">
+              {result.kept
+                ? `${DYE_PART_NAMES[result.part]} 색은 그대로예요${result.late ? " (고르는 시간이 지났어요)" : ""}.`
+                : `${DYE_PART_NAMES[result.part]} 염색 완료! 다른 사람 화면에도 바로 이 색으로 보여요.`}
+            </p>
+            <DyeVersus
+              part={result.part}
+              before={result.before}
+              after={spec}
+              body={body}
+              look={look}
+              beforeTitle="이전"
+              afterTitle={result.kept ? "그대로" : "바꾼 뒤"}
+            />
+            {!result.kept && <p className={styles.note}>원래 색으로 되돌리기는 상점의 염색·외형에서 할 수 있어요.</p>}
+            <div className={styles.actions}>
+              <button type="button" className={cx(ui.button, ui.primary)} onClick={close}>
+                닫기
+              </button>
             </div>
           </div>
         ) : (
-          <div className={styles.row}>
-            <div className={styles.figure}>
+          <div className={cx(styles.row, styles.start)}>
+            <div className={cx(styles.figure, styles.figureSmall)}>
               <OutfitCanvas color={previewSpec} body={body} look={look} label={fixedColor ? "염색해 본 내 모습" : "지금 내 모습"} dir={DIR.down} walking={false} />
             </div>
             <div className={styles.side}>
@@ -754,6 +752,37 @@ function LookCard({
   );
 }
 
+/** 지금 모습 → 바꾼 뒤 모습을 나란히 (시간 끝 고르기·확정 결과가 같은 모양). 특수 색은 무대가 그 연출로 그린다 */
+function DyeVersus({
+  part,
+  before,
+  after,
+  body,
+  look,
+  beforeTitle = "지금",
+  afterTitle = "바꾼 뒤",
+}: {
+  part: DyePart;
+  /** 바꾸기 전 / 바꾼 뒤 색 표기 (spec) */
+  before: string;
+  after: string;
+  body: string;
+  look: readonly string[];
+  beforeTitle?: string;
+  afterTitle?: string;
+}) {
+  const name = DYE_PART_NAMES[part];
+  return (
+    <div className={styles.versus}>
+      <LookCard spec={before} body={body} look={look} label={`${beforeTitle} 내 모습`} title={`${beforeTitle} · ${name}`} color={partColor(before, part)} />
+      <span className={styles.arrow} aria-hidden="true">
+        →
+      </span>
+      <LookCard spec={after} body={body} look={look} label={`${afterTitle} 내 모습`} title={`${afterTitle} · ${name}`} color={partColor(after, part)} />
+    </div>
+  );
+}
+
 // ── 시간 끝: 지금 색 vs 새 색 ──
 
 function DyeChoice({
@@ -776,7 +805,6 @@ function DyeChoice({
   const [left, setLeft] = useState(() => Math.max(0, candidate.decideBy - Date.now()));
   const [sending, setSending] = useState(false);
   const sentRef = useRef(false);
-  const now = partColor(spec, session.part);
 
   async function choose(apply: boolean) {
     if (sentRef.current) return;
@@ -809,30 +837,20 @@ function DyeChoice({
   }, [candidate.decideBy]);
 
   const name = DYE_PART_NAMES[session.part];
-  // 지금 색 vs 새 색을 창을 꽉 채워 크게 나란히, 아래에 남은 시간 · 버튼
+  // [지금] → [바꾼 뒤] 아바타를 나란히, 아래에 남은 시간 · 버튼 (결과 창과 같은 모양)
   return (
     <div className={styles.choose}>
       <p className={styles.note} role="status">
-        시간이 끝났어요. {name}을(를) 새 색으로 바꿀까요? {Math.ceil(left / 1000)}초 안에 고르지 않으면 지금 색 그대로예요.
+        시간이 끝났어요. {name}을(를) 이 색으로 바꿀까요? {Math.ceil(left / 1000)}초 안에 고르지 않으면 지금 색 그대로예요.
       </p>
-      <div className={cx(styles.compare, styles.compareWide)}>
-        <LookCard spec={spec} body={body} look={look} label="지금 내 모습" title="지금 색" color={now} />
-        <LookCard
-          spec={withDyePart(spec, session.part, candidate.color)}
-          body={body}
-          look={look}
-          label="새 색으로 염색해 본 내 모습"
-          title="새 색"
-          color={candidate.color}
-        />
-      </div>
+      <DyeVersus part={session.part} before={spec} after={withDyePart(spec, session.part, candidate.color)} body={body} look={look} />
       <TimeLeft label="고르는 시간" left={left} total={DYE_DECIDE_MS} />
       <div className={styles.actions}>
+        <button type="button" className={cx(ui.button, ui.primary)} disabled={sending} onClick={() => void choose(true)}>
+          {sending ? "잠깐만요…" : "이 색으로 바꾸기"}
+        </button>
         <button type="button" className={ui.button} disabled={sending} onClick={() => void choose(false)}>
           지금 색 유지
-        </button>
-        <button type="button" className={cx(ui.button, ui.primary)} disabled={sending} onClick={() => void choose(true)}>
-          {sending ? "잠깐만요…" : "새 색으로 바꾸기"}
         </button>
       </div>
     </div>

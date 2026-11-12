@@ -1,4 +1,4 @@
-/* 46번 염색 창 (크기는 Dialog 기본값 — 안쪽만 나눈다) */
+/* 46번 염색 창 (판을 도는 동안만 표준 창, 나머지 단계는 kind="confirm" — 내용 크기만큼) */
 
 .wrap {
   display: flex;
@@ -6,21 +6,6 @@
   flex-grow: 1;
   gap: 10px;
   min-height: 0;
-}
-
-/* 고정 크기 창(760×660)을 채운다: 부위 고르기·결과·시간 끝 단계는 내용이 짧아
-   그림·설명 줄이 남는 높이를 받고, 버튼 줄은 창 아래에 붙인다 */
-.wrap > .row {
-  flex-grow: 1;
-}
-
-.wrap > .row > .side {
-  align-self: stretch;
-}
-
-.wrap > .row > .side > .actions:last-child,
-.wrap > .actions {
-  margin-top: auto;
 }
 
 .row {
@@ -254,11 +239,6 @@
   gap: 10px;
 }
 
-.compareWide {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: minmax(0, 1fr);
-}
-
 .look {
   margin: 0;
   min-width: 0;
@@ -320,20 +300,58 @@
   flex: 1;
 }
 
-/* 시간 끝 단계: 비교 칸이 남는 높이를 모두 받는다 */
+/* 시간 끝 고르기·결과 단계 (작은 창, 높이는 내용만큼) */
 .choose {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.result {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
+/* 시작 단계: 작은 창 너비에 맞춰 그림 위, 부위·설명·버튼 아래로 */
+.start {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.start > .figure {
+  align-self: center;
+}
+
+/* [지금] → [바꾼 뒤]: 두 아바타를 같은 크기로 나란히, 가운데 화살표 */
+.versus {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  /* 아래 글줄 길이가 달라도 두 아바타 윗줄을 맞춘다 */
+  align-items: start;
+  gap: 6px;
+}
+
+.versus .look {
+  grid-template-rows: auto auto;
+}
+
+/* 작은 창에서는 칸 높이가 없으니 무대 비율(72×64)로 높이를 잡는다 */
+.versus .stageBox {
+  aspect-ratio: 72 / 64;
+}
+
+.versus .caption {
+  justify-content: center;
+  text-align: center;
+}
+
+.versus .capTitle {
+  flex-basis: 100%;
+}
+
+.versus .hex {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.arrow {
+  align-self: center;
+  font-size: 20px;
   color: var(--bone);
 }
 
