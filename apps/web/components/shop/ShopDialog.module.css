@@ -86,8 +86,8 @@
   gap: 8px;
   min-height: 0;
   padding: 10px;
-  /* 높이가 모자라면 사기 버튼이 잘리지 않게 안쪽에서만 스크롤 */
-  overflow-y: auto;
+  /* 자세히 보기는 스크롤 없이 다 보이게 (무대를 작게 잡아 사기 버튼까지 들어간다) */
+  overflow: hidden;
 
 
   background: var(--bg-deep);
@@ -101,15 +101,9 @@
   }
 }
 
-@container (max-height: 520px) {
-  .detail .fitPreview {
-    --scale: 2;
-  }
-}
-
-/* 입어 보기 무대: 상점에서는 한 단계 작게 (2클래스로 OutfitPreview 기본값을 이긴다) */
+/* 입어 보기 무대: 상점에서는 작게 — 자세히 보기 칸이 스크롤 없이 사기 버튼까지 다 보이게 (2클래스로 OutfitPreview 기본값을 이긴다) */
 .detail .fitPreview {
-  --scale: 3;
+  --scale: 2;
 }
 
 /* 키보드 안내는 무대 이름표(aria)로 충분: 상점에서는 줄을 아낀다 */
