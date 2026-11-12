@@ -198,7 +198,8 @@
 }
 
 .qrBox {
-  margin: 0;
+  /* QR 위아래 간격 */
+  margin: 14px 0;
   padding: 14px;
   background: #fffaf0;
   box-shadow:
