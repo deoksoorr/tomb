@@ -31,6 +31,42 @@
   animation: appear 2.2s ease both;
 }
 
+.online {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: var(--bone);
+  font-size: 13px;
+  animation: appear 2.2s 0.8s ease both;
+}
+
+.online b {
+  color: var(--moss, #9bc47a);
+}
+
+/* 접속 중 표시 점: 천천히 깜빡 (움직임 줄이기면 멈춤) */
+.onlineDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--moss, #9bc47a);
+  box-shadow: 0 0 6px var(--moss, #9bc47a);
+  animation: onlinePulse 2s ease-in-out infinite;
+}
+
+@keyframes onlinePulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onlineDot {
+    animation: none;
+  }
+}
+
 .subtitle {
   margin-top: 12px;
   padding: 0 16px;

@@ -55,6 +55,18 @@ type Props = {
   onEnter: (choice: EntryChoice) => void;
 };
 
+/** 지금 마을에 있는 사람 수 (실시간 서버 로비, 채널 목록과 같은 주기로 갱신). 못 불러오면 그리지 않는다 */
+function OnlineCount() {
+  const { lobby } = useLobby();
+  if (!lobby) return null;
+  return (
+    <p className={styles.online} aria-live="polite">
+      <span className={styles.onlineDot} aria-hidden="true" />
+      지금 <b>{lobby.total.toLocaleString("ko-KR")}명</b>이 마을에 있어요
+    </p>
+  );
+}
+
 export default function EntryScreen({ start, focusGraveId, entering, stalled, onEnter }: Props) {
   const hydrated = useHydrated();
   const ambience = useAmbience();
@@ -72,6 +84,7 @@ export default function EntryScreen({ start, focusGraveId, entering, stalled, on
           <br />
           모닥불 앞에 앉고, 헤엄치고, 사냥하고, 내 집 한 칸을 꾸며 보세요.
         </p>
+        <OnlineCount />
         {/* 이름·색은 localStorage에 있으므로 하이드레이션 뒤에 그린다 */}
         {hydrated && !entering ? (
           <>
