@@ -1,6 +1,6 @@
 // web 안에서 공유하는 데이터 타입과 API 응답 형태 (계약). 바꿀 때는 모든 사용처를 같이 고친다.
 
-import type { AvatarDye } from "@tomb/protocol";
+import { itemById, type AvatarDye } from "@tomb/protocol";
 
 export const CAUSE_TAGS = [
   "time",
@@ -446,8 +446,29 @@ export type CalendarClaimResponse = {
   earned: { daily: number; streak: number; monthly: number };
 };
 
-/** 선물 아이템 (카탈로그 아이템 id × 개수) */
-export type GiftItem = { itemId: string; count: number };
+/**
+ * 선물 기간 (캐릭터 꾸미기만): 3일·7일·30일·영구. 없으면 기본 — 가방에 이용권으로 들어가 쓸 때부터 그 아이템 기본 기간(24시간).
+ * 기간을 고르면 받는 즉시 벗어 둔 꾸미기(입고 있으면 그 자리)에 그 기간만큼 늘어난다. 영구는 30번 영구 소장과 같다
+ */
+export const GIFT_TERMS = {
+  "3d": { label: "3일", ms: 3 * 86_400_000 },
+  "7d": { label: "7일", ms: 7 * 86_400_000 },
+  "30d": { label: "30일", ms: 30 * 86_400_000 },
+  perm: { label: "영구", ms: null },
+} as const;
+export type GiftTerm = keyof typeof GIFT_TERMS;
+export const isGiftTerm = (t: unknown): t is GiftTerm => t === "3d" || t === "7d" || t === "30d" || t === "perm";
+/** 기간을 고를 수 있는 선물 아이템: 부위가 있는 캐릭터 꾸미기 (묘비 꾸미기는 놓을 때 기간이 정해져 기본만) */
+export const giftHasTerm = (id: string) => {
+  const it = itemById(id);
+  return it?.kind === "cosmetic" && !!it.slot;
+};
+/** 한 선물에 넣는 아이템 종류 수·개수 상한 (관리자 화면과 서버 검증 공용) */
+export const GIFT_MAX_ITEMS = 10;
+export const GIFT_MAX_COUNT = 99;
+
+/** 선물 아이템 (카탈로그 아이템 id × 개수). term = 기간 (꾸미기만, 이때 개수는 1) — 옛 선물엔 없다 */
+export type GiftItem = { itemId: string; count: number; term?: GiftTerm };
 /** 내 선물함 한 통. claimedAt = 받은 시각 (없으면 아직), expiresAt = 이때까지 안 받으면 사라짐 */
 export type GiftEntry = {
   id: string;

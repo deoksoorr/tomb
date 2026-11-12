@@ -27,6 +27,11 @@ vi.mock("./AvatarView", () => ({
       this.calls.push({ kind: "staff", arg: on });
     }
     setDexBadge() {}
+    // 운영자면 내 이름표도 "운영자"로 바꾼다 (Player가 부른다)
+    shownName = "";
+    setName(n: string) {
+      this.shownName = n;
+    }
     setLook(look: string[]) {
       this.calls.push({ kind: "look", arg: look });
     }

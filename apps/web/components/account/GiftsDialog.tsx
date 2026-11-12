@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { itemName } from "@tomb/protocol";
+import { GIFT_TERMS, type GiftItem } from "@/lib/types";
 import { errorMessage } from "@/lib/api";
 import { giftsStore, useGifts } from "@/lib/hooks/useGifts";
 import { meStore } from "@/lib/hooks/useMe";
@@ -17,6 +18,8 @@ import ui from "../ui/ui.module.css";
 import styles from "./GiftsDialog.module.css";
 
 const DAY = 86_400_000;
+/** 선물 아이템 한 줄: 기간 선물은 "밀짚모자 (7일)", 기본은 "밀짚모자 ×2" */
+const giftItemText = (i: GiftItem) => `${itemName(i.itemId)} ${i.term ? `(${GIFT_TERMS[i.term].label})` : `×${i.count}`}`;
 const dateText = (t: number) => {
   const d = new Date(t + 9 * 3_600_000); // KST
   return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일`;
@@ -44,7 +47,7 @@ export default function GiftsDialog({ onClose, onOpenCalendar }: { onClose: () =
       giftsStore.replace(g.id, res.gift);
       const parts = [
         ...(g.points ? [`${res.points.toLocaleString("ko-KR")}P${res.points < g.points ? " (지갑이 가득 차 일부만)" : ""}`] : []),
-        ...g.items.map((i) => `${itemName(i.itemId)} ×${i.count}`),
+        ...g.items.map(giftItemText),
       ];
       const msg = `선물을 받았어요: ${parts.join(", ")}`;
       setNotice(msg);
@@ -102,9 +105,9 @@ export default function GiftsDialog({ onClose, onOpenCalendar }: { onClose: () =
                 <div className={styles.contents} aria-label="선물 내용">
                   {g.points > 0 && <span className={styles.chip}>{g.points.toLocaleString("ko-KR")}P</span>}
                   {g.items.map((i) => (
-                    <span key={i.itemId} className={styles.chip}>
+                    <span key={`${i.itemId}|${i.term ?? ""}`} className={styles.chip}>
                       <ItemIcon itemId={i.itemId} size={20} />
-                      {itemName(i.itemId)} ×{i.count}
+                      {giftItemText(i)}
                     </span>
                   ))}
                 </div>

@@ -1,3 +1,4 @@
+import { staffPublicName } from "@tomb/protocol";
 import { assertNotBanned, recordSeen } from "@/lib/ban";
 import { dexBadgeOf } from "@/lib/forage/service";
 import { handler, json } from "@/lib/http";
@@ -31,7 +32,7 @@ export const POST = handler(async (req) => {
     dexBadgeOf(visitorId),
   ]);
   // 25번 외형 바꾸기: 계정에 몸 모양이 있으면 그것이 정답 (요청 값은 입장 화면에서 처음 고른 몸)
-  // 31번: 운영자 표시는 여기(서버)에서만 넣는다
-  const claims = { visitorId, name, color, body: account.body ?? body ?? "hood", look: lookOf(account), dye: style.dye, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}) };
+  // 31번: 운영자 표시는 여기(서버)에서만 넣는다. 운영자는 다른 사람에게 닉네임 대신 "운영자"로 보인다
+  const claims = { visitorId, name: staffPublicName(name, staff), color, body: account.body ?? body ?? "hood", look: lookOf(account), dye: style.dye, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}) };
   return json<JoinResponse>(await issueJoin(channel, claims));
 });

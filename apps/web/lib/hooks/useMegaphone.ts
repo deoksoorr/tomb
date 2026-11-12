@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { MEGAPHONE_TTL_MS } from "@tomb/protocol";
 import { socialApi } from "@/lib/socialApi";
 import { readItem, writeItem } from "@/lib/storage";
 import type { MegaphoneEntry } from "@/lib/types";
@@ -22,6 +23,11 @@ export function flashEndsAt(startedAt: number, waiting: number): number {
 }
 const COLLAPSED_KEY = "tomb.ui.megaphoneCollapsed";
 
+/** 외친 지 5분이 안 된 한마디만 (기록 목록은 열려 있는 동안에도 5분이 지나면 빠진다) */
+export function liveMegaphones(entries: MegaphoneEntry[], now: number): MegaphoneEntry[] {
+  return entries.filter((e) => now - e.at < MEGAPHONE_TTL_MS);
+}
+
 export type MegaphoneState = {
   entries: MegaphoneEntry[];
   /** 지금 화면 가운데에 크게 떠 있는 한마디 */
@@ -40,6 +46,7 @@ class MegaphoneStore {
   private listeners = new Set<() => void>();
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private flashStartedAt = 0;
+  private expiryTimer: ReturnType<typeof setTimeout> | null = null;
   private loaded = false;
 
   subscribe = (fn: () => void) => {
@@ -55,8 +62,20 @@ class MegaphoneStore {
   getSnapshot = () => this.state;
 
   private update(patch: Partial<MegaphoneState>): void {
+    if (patch.entries) patch = { ...patch, entries: liveMegaphones(patch.entries, Date.now()) };
     this.state = { ...this.state, ...patch };
+    if (patch.entries) this.armExpiry();
     this.listeners.forEach((fn) => fn());
+  }
+
+  /** 가장 오래된 한마디가 5분을 채우는 때에 맞춰 목록을 다시 거른다 */
+  private armExpiry(): void {
+    if (this.expiryTimer) clearTimeout(this.expiryTimer);
+    this.expiryTimer = null;
+    if (!this.state.entries.length) return;
+    const oldest = Math.min(...this.state.entries.map((e) => e.at));
+    const ms = Math.max(0, oldest + MEGAPHONE_TTL_MS - Date.now()) + 50;
+    this.expiryTimer = setTimeout(() => this.update({ entries: this.state.entries }), ms);
   }
 
   /** 그 채널의 최근 기록으로 맞춘다 (관리자가 숨긴 것은 여기서 빠진다). 방금 온 것(1분 안)은 서버 목록에 아직 없어도 남긴다 */

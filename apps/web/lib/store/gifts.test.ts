@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { nanoid } from "nanoid";
+import { PERMANENT_UNTIL } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { BALANCE_CAP } from "../economy";
 import { env } from "../env";
@@ -8,7 +9,8 @@ import { RedisAccounts } from "./accounts-redis";
 import { MemoryGifts, RedisGifts, GIFT_KEEP_MS, type GiftRecord, type GiftStore } from "./gifts";
 import { K } from "./keys";
 import { MemoryStore } from "./memory";
-import { MemoryMegaphone, RedisMegaphone, type MegaphoneStore } from "./megaphone";
+import { MEGAPHONE_TTL_MS } from "@tomb/protocol";
+import { MEGA_KEEP, MemoryMegaphone, RedisMegaphone, type MegaphoneStore } from "./megaphone";
 import type { AccountStore } from "./types";
 
 // 11번 선물함·23번 확성기 저장소 계약 (RedisGifts/RedisMegaphone은 Redis 환경변수가 있을 때 같은 시나리오)
@@ -80,6 +82,48 @@ function giftContract(make: () => { gifts: GiftStore; accounts: AccountStore; cl
     expect((await accounts.get(me, "20261112", T0)).points).toBe(BALANCE_CAP);
     await cleanup([me, other], [g.id]);
   });
+
+  it("기간 선물(꾸미기): 3일·7일은 옷장에 기간을 더하고, 입고 있으면 그 자리에서, 영구는 영구, 기간 없는 옛 선물은 가방 이용권", async () => {
+    const { gifts, accounts, cleanup } = make();
+    const me = `t-${nanoid(10)}`;
+    const DAY = 86_400_000;
+    const until = async (itemId: string, now: number) => {
+      const a = await accounts.get(me, "20261112", now);
+      return [...a.equipped, ...a.stash].find((e) => e.itemId === itemId)?.until;
+    };
+    const g1 = gift({
+      target: me,
+      items: [
+        { itemId: "hat_straw", count: 1, term: "3d" },
+        { itemId: "neck_scarf", count: 1, term: "perm" },
+        { itemId: "hat_cat", count: 2 }, // 옛 선물 모양 (기간 없음)
+      ],
+    });
+    const g2 = gift({ target: me, items: [{ itemId: "hat_straw", count: 1, term: "7d" }] });
+    const g3 = gift({ target: me, items: [{ itemId: "hat_straw", count: 1, term: "30d" }, { itemId: "neck_scarf", count: 1, term: "3d" }] });
+    try {
+      for (const x of [g1, g2, g3]) await gifts.send(x);
+      expect(await gifts.claim(me, g1.id, 0, T0 + 1)).toMatchObject({ ok: true });
+      const a = await accounts.get(me, "20261112", T0 + 1);
+      expect(a.inventory.hat_cat).toBe(2);
+      expect(a.inventory.hat_straw ?? 0).toBe(0);
+      expect(a.stash).toEqual(expect.arrayContaining([{ itemId: "hat_straw", until: T0 + 1 + 3 * DAY }, { itemId: "neck_scarf", until: PERMANENT_UNTIL }]));
+      // 아직 남은 기간 위에 7일이 더해진다
+      expect(await gifts.claim(me, g2.id, 0, T0 + 2)).toMatchObject({ ok: true });
+      expect(await until("hat_straw", T0 + 2)).toBe(T0 + 1 + 10 * DAY);
+      // 입고 있으면 그 자리에서 늘어나고, 영구는 3일 선물로 줄지 않는다
+      expect(await accounts.wear(me, "hat_straw", "head", T0 + 3)).toBe(true);
+      expect(await gifts.claim(me, g3.id, 0, T0 + 4)).toMatchObject({ ok: true });
+      const b = await accounts.get(me, "20261112", T0 + 4);
+      expect(b.equipped).toContainEqual({ itemId: "hat_straw", until: T0 + 1 + 40 * DAY });
+      expect(b.stash.find((e) => e.itemId === "hat_straw")).toBeUndefined();
+      expect(await until("neck_scarf", T0 + 4)).toBe(PERMANENT_UNTIL);
+      await cleanup([me], [g1.id, g2.id, g3.id]);
+    } catch (e) {
+      await cleanup([me], [g1.id, g2.id, g3.id]);
+      throw e;
+    }
+  });
 }
 
 function megaContract(make: () => { store: MegaphoneStore; cleanup(ids: string[]): Promise<void> }) {
@@ -90,7 +134,7 @@ function megaContract(make: () => { store: MegaphoneStore; cleanup(ids: string[]
     expect(await store.cooldown(id, 30_000, 2_000)).toBeGreaterThan(0);
     await store.releaseCooldown(id);
     expect(await store.cooldown(id, 30_000, 3_000)).toBe(0);
-    const recs = [1, 2].map((n) => ({ id: `m-${nanoid(8)}`, name: "외침이", text: `한마디 ${n}`, scope: "channel" as const, ch: 1, at: n, accountId: id }));
+    const recs = [1, 2].map((n) => ({ id: `m-${nanoid(8)}`, name: "외침이", text: `한마디 ${n}`, scope: "channel" as const, ch: 1, at: Date.now() + n, accountId: id }));
     for (const r of recs) await store.push(r);
     const recent = await store.recent(2);
     expect(recent.map((r) => r.id)).toEqual([recs[1].id, recs[0].id]);
@@ -98,6 +142,25 @@ function megaContract(make: () => { store: MegaphoneStore; cleanup(ids: string[]
     expect((await store.recent(2)).find((r) => r.id === recs[0].id)?.hidden).toBe(true);
     expect(await store.setHidden(recs[0].id, false)).toBe(true);
     expect(await store.setHidden("nope", true)).toBe(false);
+    await cleanup([id]);
+  });
+
+  it("확성기: 외친 지 5분이 지난 기록은 목록에서 빠지고 저장소에서도 지워진다", async () => {
+    const { store, cleanup } = make();
+    const id = `t-${nanoid(10)}`;
+    const now = Date.now();
+    const rec = (at: number) => ({ id: `m-${nanoid(8)}`, name: "외침이", text: "한마디", scope: "all" as const, ch: 1, at, accountId: id });
+    const old = rec(now - MEGAPHONE_TTL_MS - 1);
+    const fresh = rec(now);
+    await store.push(old);
+    await store.push(fresh);
+    const ids = (await store.recent(MEGA_KEEP, now)).map((r) => r.id);
+    expect(ids).toContain(fresh.id);
+    expect(ids).not.toContain(old.id);
+    // 지워졌으니 숨기기도 찾지 못한다
+    expect(await store.setHidden(old.id, true)).toBe(false);
+    // 5분이 지나면 방금 것도 빠진다
+    expect((await store.recent(MEGA_KEEP, now + MEGAPHONE_TTL_MS)).some((r) => r.id === fresh.id)).toBe(false);
     await cleanup([id]);
   });
 }

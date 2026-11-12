@@ -187,6 +187,12 @@ export function bodyUnlockPrice(b: unknown): number | null {
 export function bodyLabel(b: unknown): string {
   return AVATAR_BODIES.find((x) => x.id === b)?.label ?? String(b ?? "");
 }
+/** 운영자 계정이 다른 사람에게 보이는 이름 (닉네임 대신). 관리자 페이지에서는 원래 닉네임 */
+export const STAFF_PUBLIC_NAME = "운영자";
+/** 운영자면 "운영자", 아니면 원래 이름 */
+export function staffPublicName(name: string, staff: boolean): string {
+  return staff ? STAFF_PUBLIC_NAME : name;
+}
 /** 운영자가 아니면 운영자 전용 몸은 후드 유령으로 (입장 토큰·실시간 서버가 쓴다) */
 export function staffGateBody<T extends string>(body: T, staff: boolean): T | "hood" {
   return !staff && isStaffBody(body) ? "hood" : body;

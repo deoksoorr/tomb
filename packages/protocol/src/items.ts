@@ -271,6 +271,8 @@ export function itemById(id: string): ItemDef | undefined {
 }
 /** 23번 확성기 한마디 최대 글자 수 (코드포인트) */
 export const MEGAPHONE_MAX = 60;
+/** 확성기 한마디가 보이는 시간 (외친 시각 기준 5분). 지나면 목록·기록에서 빠지고 저장소에서도 지운다 */
+export const MEGAPHONE_TTL_MS = 5 * 60_000;
 export type MegaphoneScope = "channel" | "all";
 /** 확성기 아이템이면 퍼지는 범위 (mega_all = 모든 채널), 아니면 null */
 export function megaphoneScope(id: unknown): MegaphoneScope | null {

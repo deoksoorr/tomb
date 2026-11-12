@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MegaphoneEntry } from "@/lib/types";
-import { flashEndsAt, MEGA_FLASH_MS, MEGA_FLASH_QUEUED_MS, MEGA_QUEUE_MAX, megaphoneStore } from "./useMegaphone";
+import { MEGAPHONE_TTL_MS } from "@tomb/protocol";
+import { flashEndsAt, liveMegaphones, MEGA_FLASH_MS, MEGA_FLASH_QUEUED_MS, MEGA_QUEUE_MAX, megaphoneStore } from "./useMegaphone";
 
 let n = 0;
 const entry = (text: string): MegaphoneEntry => ({ id: `m${++n}`, name: `이름${n}`, text, scope: "channel", ch: 1, at: Date.now() });
@@ -67,5 +68,17 @@ describe("확성기 가운데 표시 차례", () => {
     for (let i = 0; i < MEGA_QUEUE_MAX + 3; i++) megaphoneStore.push(entry(`줄 ${i}`));
     expect(megaphoneStore.getSnapshot().queue).toHaveLength(MEGA_QUEUE_MAX);
     expect(megaphoneStore.getSnapshot().queue.at(-1)?.text).toBe(`줄 ${MEGA_QUEUE_MAX + 2}`);
+  });
+
+  it("외친 지 5분이 지난 한마디는 기록 목록에서 빠진다 (열려 있는 동안에도 타이머로)", () => {
+    const now = Date.now();
+    const old = { ...entry("오래됨"), at: now - MEGAPHONE_TTL_MS };
+    const fresh = entry("방금");
+    expect(liveMegaphones([old, fresh], now).map((e) => e.id)).toEqual([fresh.id]);
+    megaphoneStore.push(fresh);
+    vi.advanceTimersByTime(MEGAPHONE_TTL_MS - 1_000);
+    expect(megaphoneStore.getSnapshot().entries.some((e) => e.id === fresh.id)).toBe(true);
+    vi.advanceTimersByTime(2_000);
+    expect(megaphoneStore.getSnapshot().entries.some((e) => e.id === fresh.id)).toBe(false);
   });
 });

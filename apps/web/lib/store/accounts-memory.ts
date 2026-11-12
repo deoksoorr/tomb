@@ -1,9 +1,10 @@
-import type { CosmeticSlot } from "@tomb/protocol";
+import { itemById, type CosmeticSlot } from "@tomb/protocol";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import { stayBonusSum, stayBonusTiers } from "../stayBonus";
-import type { ActivityItem, Grave, GraveDecor } from "../types";
+import type { ActivityItem, GiftItem, Grave, GraveDecor } from "../types";
 import { kstDay, weekOfDay } from "./accounts";
+import { giftTermUntil } from "./gifts";
 import type { MemoryStore } from "./memory";
 import {
   ACTIVITY_KEEP,
@@ -378,7 +379,7 @@ export class MemoryAccounts implements AccountStore {
    * 11번 선물 받기 (MemoryGifts가 부른다): 포인트(지갑 상한에서 잘림, 모은 포인트·랭킹에도 더한다)와 아이템을 가방에 넣는다.
    * accounts-redis.ts가 아니라 gifts.ts의 Lua(GIFT_CLAIM_LUA)와 같은 규칙. 실제로 들어간 포인트를 돌려준다
    */
-  deposit(id: string, points: number, items: readonly { itemId: string; count: number }[], now: number): number {
+  deposit(id: string, points: number, items: readonly GiftItem[], now: number): number {
     const a = this.acct(id);
     const before = a.points;
     a.points = Math.min(BALANCE_CAP, a.points + Math.max(0, points));
@@ -387,7 +388,21 @@ export class MemoryAccounts implements AccountStore {
       this.addLifetime(a, got);
       this.stat(kstDay(now), "earn:gift", got);
     }
-    for (const { itemId, count } of items) if (count > 0) a.inv.set(itemId, (a.inv.get(itemId) ?? 0) + count);
+    this.prune(a, now);
+    for (const { itemId, count, term } of items) {
+      const slot = term ? itemById(itemId)?.slot : undefined;
+      if (!term || !slot) {
+        if (count > 0) a.inv.set(itemId, (a.inv.get(itemId) ?? 0) + count);
+        continue;
+      }
+      // 기간 선물(꾸미기): 입고 있으면 그 자리, 아니면 벗어 둔 꾸미기의 만료 시각을 늘린다 (lib/store/gifts.ts GIFT_CLAIM_LUA와 같은 규칙)
+      const cur = a.look.get(slot);
+      const had = cur?.itemId === itemId ? cur.until : (this.stashOf(a).get(itemId) ?? 0);
+      const until = giftTermUntil(term, had, now);
+      if (until <= had) continue;
+      if (cur?.itemId === itemId) a.look.set(slot, { itemId, until });
+      else this.stashOf(a).set(itemId, until);
+    }
     return got;
   }
 

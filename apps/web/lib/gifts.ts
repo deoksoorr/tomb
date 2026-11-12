@@ -5,21 +5,30 @@ import { BALANCE_CAP } from "./economy";
 import { getAccounts, getGifts } from "./store";
 import { kstDay } from "./store/accounts";
 import { GIFT_KEEP_MS, type GiftRecord } from "./store/gifts";
+import { GIFT_MAX_COUNT, GIFT_MAX_ITEMS, giftHasTerm, isGiftTerm, type GiftItem, type GiftTerm } from "./types";
 
 // 11번 관리자 선물: 보내기 검증과 발송 (라우트·다른 기능 공용 — 예: 고정 색상 염색권을 선물함으로 보낼 때 sendGift를 부르면 된다)
 
 /** 선물에 넣을 수 있는 아이템: 상점 카탈로그(@tomb/protocol ITEMS)에 있는 것 */
 export const isGiftItem = (id: string) => !!itemById(id);
-/** 한 선물에 넣는 아이템 종류 수·개수 상한 */
-export const GIFT_MAX_ITEMS = 10;
-export const GIFT_MAX_COUNT = 99;
+export { GIFT_MAX_COUNT, GIFT_MAX_ITEMS, giftHasTerm };
 export const GIFT_NOTE_MAX = 200;
 export const GIFT_FROM_DEFAULT = "마을 관리인";
 
-const giftItem = z.object({
-  itemId: z.string().max(60).refine(isGiftItem, "없는 아이템이에요."),
-  count: z.number().int().min(1, "개수는 1 이상").max(GIFT_MAX_COUNT, `개수는 ${GIFT_MAX_COUNT}개까지`),
-});
+const giftItem = z
+  .object({
+    itemId: z.string().max(60).refine(isGiftItem, "없는 아이템이에요."),
+    count: z.number().int().min(1, "개수는 1 이상").max(GIFT_MAX_COUNT, `개수는 ${GIFT_MAX_COUNT}개까지`),
+    // 없거나 null = 기본 (가방 이용권). 정해진 값만 받는다
+    term: z
+      .string()
+      .refine(isGiftTerm, "고를 수 없는 기간이에요.")
+      .transform((t) => t as GiftTerm)
+      .nullish(),
+  })
+  .refine((v) => !v.term || giftHasTerm(v.itemId), "기간은 캐릭터 꾸미기에만 고를 수 있어요.")
+  // 기간 선물은 개수 대신 기간이다 (1개로 맞춘다)
+  .transform((v): GiftItem => (v.term ? { itemId: v.itemId, count: 1, term: v.term } : { itemId: v.itemId, count: v.count }));
 
 /** POST /api/admin/gifts: 대상(all 또는 계정 id) + 쪽지 + 포인트·아이템 (둘 중 하나는 있어야 한다) */
 export const GiftSendSchema = z
@@ -34,10 +43,14 @@ export const GiftSendSchema = z
       .max(GIFT_MAX_ITEMS, `아이템은 ${GIFT_MAX_ITEMS}종류까지`)
       .default([])
       .transform((list) => {
-        // 같은 아이템은 합친다
-        const m = new Map<string, number>();
-        for (const { itemId, count } of list) m.set(itemId, Math.min(GIFT_MAX_COUNT, (m.get(itemId) ?? 0) + count));
-        return [...m].map(([itemId, count]) => ({ itemId, count }));
+        // 같은 아이템·같은 기간은 합친다 (기간 선물은 한 줄만 — 기간끼리 더하지 않는다)
+        const m = new Map<string, GiftItem>();
+        for (const it of list) {
+          const key = `${it.itemId}|${it.term ?? ""}`;
+          const cur = m.get(key);
+          m.set(key, cur && !it.term ? { ...cur, count: Math.min(GIFT_MAX_COUNT, cur.count + it.count) } : (cur ?? it));
+        }
+        return [...m.values()];
       }),
   })
   .refine((v) => v.points > 0 || v.items.length > 0, "포인트나 아이템 중 하나는 넣어 주세요.");

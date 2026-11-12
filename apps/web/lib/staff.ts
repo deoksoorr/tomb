@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { itemById, PERMANENT_UNTIL, STAFF_ITEM_IDS } from "@tomb/protocol";
+import { itemById, PERMANENT_UNTIL, STAFF_ITEM_IDS, staffPublicName } from "@tomb/protocol";
 import { BALANCE_CAP } from "./economy";
 import { env } from "./env";
 import { clientIp, HttpError } from "./http";
@@ -38,6 +38,11 @@ export async function staffAccountId(now = Date.now()): Promise<string | null> {
 
 export async function isStaff(accountId: string): Promise<boolean> {
   return !!accountId && (await staffAccountId()) === accountId;
+}
+
+/** 다른 사람에게 보일 이름: 운영자 계정이면 닉네임 대신 "운영자" (관리자 페이지에서는 쓰지 않는다) */
+export async function publicNameOf(accountId: string, name: string): Promise<string> {
+  return staffPublicName(name, await isStaff(accountId));
 }
 
 export async function getStaff(): Promise<StaffRecord | null> {

@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
+import { itemById, PERMANENT_UNTIL } from "@tomb/protocol";
 import { BALANCE_CAP } from "../economy";
-import type { GiftEntry, GiftItem } from "../types";
+import { GIFT_TERMS, type GiftEntry, type GiftItem, type GiftTerm } from "../types";
 import { kstDay } from "./accounts";
 import type { MemoryAccounts } from "./accounts-memory";
 import { K } from "./keys";
@@ -19,6 +20,16 @@ export const GIFT_KEEP_MS = GIFT_KEEP_DAYS * 86_400_000;
 const STATE_TTL_SEC = (GIFT_KEEP_DAYS + 1) * 86_400;
 /** 관리자 발송 기록 보관 개수 */
 export const GIFT_LOG_KEEP = 200;
+
+/**
+ * 기간 선물(꾸미기)을 받은 뒤 만료 시각: 영구면 PERMANENT_UNTIL, 아니면 지금(또는 아직 남은 만료 시각)부터 그 기간만큼 늘린다.
+ * had = 지금 가진 그 꾸미기의 만료 시각 (없으면 0). 이미 영구면 그대로
+ */
+export function giftTermUntil(term: GiftTerm, had: number, now: number): number {
+  const ms = GIFT_TERMS[term].ms;
+  if (ms === null) return PERMANENT_UNTIL;
+  return Math.min(PERMANENT_UNTIL, Math.max(had, now) + ms);
+}
 
 /** 저장 형태. target = "all"(전체) 또는 받는 계정 id */
 export type GiftRecord = {
@@ -134,8 +145,10 @@ export class MemoryGifts implements GiftStore {
 
 // 받기: 상태 필드가 없을 때만 "받음"으로 바꾸고 포인트(지갑 상한, 모은 포인트·랭킹·경제 통계 earn:gift)와 아이템을 넣는다.
 // MemoryGifts.claim + MemoryAccounts.deposit과 같은 규칙. 이미 받았거나 지웠으면 -1, 아니면 실제로 들어간 포인트
-// KEYS: state, acct, inv, rank, econ, claims
-// ARGV: giftId, now, points, balanceCap, accountId, stateTtl, 아이템 수 n, (itemId, count) × n
+// 아이템: 기간 없음(옛 선물·기본) → 가방에 이용권 count개. 기간 있음(꾸미기) → 입고 있으면 그 자리(look), 아니면 벗어 둔 꾸미기(stash)의
+// 만료 시각을 giftTermUntil 규칙으로 늘린다 (MemoryAccounts.deposit과 같은 규칙)
+// KEYS: state, acct, inv, rank, econ, claims, look, stash
+// ARGV: giftId, now, points, balanceCap, accountId, stateTtl, 아이템 수 n, 영구 만료 ms, (itemId, count, 기간 ms|'0' 기본|'perm', 부위) × n
 const GIFT_CLAIM_LUA = `
 if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1 then return -1 end
 redis.call('HSET', KEYS[1], ARGV[1], 'c:' .. ARGV[2])
@@ -155,9 +168,27 @@ if pts > 0 then
   end
 end
 local n = tonumber(ARGV[7])
-for i = 1, n do
-  local c = tonumber(ARGV[7 + i * 2])
-  if c and c > 0 then redis.call('HINCRBY', KEYS[3], ARGV[6 + i * 2], c) end
+local now, perm = tonumber(ARGV[2]), tonumber(ARGV[8])
+for i = 0, n - 1 do
+  local id, c, t, slot = ARGV[9 + i * 4], tonumber(ARGV[10 + i * 4]), ARGV[11 + i * 4], ARGV[12 + i * 4]
+  if t == '0' then
+    if c and c > 0 then redis.call('HINCRBY', KEYS[3], id, c) end
+  else
+    local cur = redis.call('HGET', KEYS[7], slot)
+    local curItem, curUntil = nil, 0
+    if cur then
+      local ci, cu = string.match(cur, '^([^|]+)|(.+)$')
+      curItem, curUntil = ci, tonumber(cu) or 0
+    end
+    local wearing = curItem == id and curUntil > now
+    local had = curUntil
+    if not wearing then had = tonumber(redis.call('HGET', KEYS[8], id) or '0') end
+    local u = perm
+    if t ~= 'perm' then u = math.min(perm, math.max(had, now) + tonumber(t)) end
+    if u > had then
+      if wearing then redis.call('HSET', KEYS[7], slot, id .. '|' .. u) else redis.call('HSET', KEYS[8], id, u) end
+    end
+  end
 end
 redis.call('HINCRBY', KEYS[6], ARGV[1], 1)
 return got
@@ -244,7 +275,7 @@ export class RedisGifts implements GiftStore {
     const r = Number(
       await this.redis.eval<string[], number>(
         GIFT_CLAIM_LUA,
-        [K.giftState(accountId), K.acct(accountId), K.inv(accountId), K.rankPoints, K.econ(kstDay(now)), K.giftClaims],
+        [K.giftState(accountId), K.acct(accountId), K.inv(accountId), K.rankPoints, K.econ(kstDay(now)), K.giftClaims, K.look(accountId), K.stash(accountId)],
         [
           g.id,
           String(now),
@@ -253,7 +284,13 @@ export class RedisGifts implements GiftStore {
           accountId,
           String(STATE_TTL_SEC),
           String(g.items.length),
-          ...g.items.flatMap((i) => [i.itemId, String(i.count)]),
+          String(PERMANENT_UNTIL),
+          ...g.items.flatMap((i) => {
+            const slot = i.term ? itemById(i.itemId)?.slot : undefined;
+            // 기간이 있어도 부위가 없으면(카탈로그에서 바뀐 경우) 가방 이용권으로
+            const t = !slot || !i.term ? "0" : i.term === "perm" ? "perm" : String(GIFT_TERMS[i.term].ms);
+            return [i.itemId, String(i.count), t, slot ?? ""];
+          }),
         ],
       ),
     );

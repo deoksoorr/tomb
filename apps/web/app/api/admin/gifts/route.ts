@@ -14,7 +14,7 @@ export const GET = handler(async (req) => {
 });
 
 /**
- * 선물 보내기 `{ target: "all" | 계정 id, targetName?, from?, note, points?, items? }`.
+ * 선물 보내기 `{ target: "all" | 계정 id, targetName?, from?, note, points?, items?: { itemId, count, term? }[] }` (term = 꾸미기 기간 3d·7d·30d·perm).
  * 전체 발송은 선물 하나만 저장하고 계정마다 받을 때 상태가 생긴다 (보낸 시각 이전에 들어온 계정만 대상).
  */
 export const POST = handler(async (req) => {
