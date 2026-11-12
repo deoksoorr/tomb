@@ -183,6 +183,8 @@
 .body {
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 22px;
   min-height: 100%;
 }
 
@@ -201,4 +203,23 @@
   display: block;
   width: min(420px, 70vw, 60vh);
   height: auto;
+}
+
+/* 결제 수단 표시: 카카오페이 노란 배지 */
+.payBadge {
+  margin: 0;
+  padding: 8px 22px;
+  border-radius: 999px;
+  background: #ffeb00;
+  color: #191919;
+  font-family: system-ui, sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.payBadge b {
+  font-weight: 800;
+  margin-right: 1px;
 }

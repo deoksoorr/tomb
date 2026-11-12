@@ -22,6 +22,9 @@ export default function DonateButton() {
       {open && (
         <Dialog title="후원" onClose={() => setOpen(false)}>
           <div className={styles.body}>
+            <p className={styles.payBadge} aria-label="카카오페이로 후원">
+              <b>kakao</b>pay
+            </p>
             <figure className={styles.qrBox}>
               <img className={styles.qr} src="/donation.png" width={718} height={718} alt="카카오페이 후원 QR 코드" />
             </figure>
