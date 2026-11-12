@@ -7,9 +7,9 @@ import { getAccounts } from "../store";
 import { kstDay, lookGrant, lookOf, loadMe } from "../store/accounts";
 import { getStyleStore, type DyeSession, type FixedDyeDef, type StyleStore } from "../store/style";
 import type { Me } from "../types";
-import { buildPalette, colorAt, DYE_CENTER, DYE_GRACE_MS, DYE_TIME_MS } from "./palette";
-import { catalogDye, DYE_RESET_PRICE, fixedAllows, randomTier, RESHAPE_PRICE } from "./rules";
-import type { DyeSessionView, DyeStateResponse, StyleChangeResponse } from "./types";
+import { buildPalette, colorAt, DYE_GRACE_MS, DYE_TIME_MS } from "./palette";
+import { catalogDye, DYE_DECIDE_MS, DYE_RESET_PRICE, fixedAllows, randomTier, RESHAPE_PRICE } from "./rules";
+import type { DyeSessionView, DyeStateResponse, DyeTimeoutResponse, StyleChangeResponse } from "./types";
 
 // 46·25·30번 서버 로직 (라우트가 부른다). 포인트·가방이 바뀌는 일은 모두 저장소(lib/store/style.ts)에서 원자적으로.
 
@@ -27,22 +27,27 @@ export function judgeColor(s: Pick<DyeSession, "seed" | "tier">, x: number, y: n
   return colorAt(buildPalette(s.seed, s.tier), x, y);
 }
 
-/** 시간(+여유)이 지났는데 끝나지 않은 판 → 처음 조준점(판 가운데) 색으로 정한다. 정했으면 그 결과 */
-async function settleExpired(accountId: string, now: number): Promise<{ part: DyePart; color: string } | null> {
+/** 판이 끝났는지: 후보가 없으면 시간(+여유), 후보가 있으면 고르는 시간(+여유)이 지났다 */
+const expired = (s: DyeSession, now: number) => now > (s.candidate ? s.candidate.decideBy : s.endsAt) + DYE_GRACE_MS;
+
+/**
+ * 끝나지 않은 채 시간이 지난 판(창을 닫고 떠났거나 고르지 않음) → 색을 바꾸지 않고 끝낸다 (염색권은 쓴 것으로).
+ * 끝냈으면 그 부위
+ */
+async function settleExpired(accountId: string, now: number): Promise<{ part: DyePart } | null> {
   const st = style();
   const { session } = await st.get(accountId);
-  if (!session || now <= session.endsAt + DYE_GRACE_MS) return null;
-  const color = judgeColor(session, DYE_CENTER.x, DYE_CENTER.y);
-  return (await st.finish(accountId, session.seed, color)) ? { part: session.part, color } : null;
+  if (!session || !expired(session, now)) return null;
+  return (await st.cancel(accountId, session.seed)) ? { part: session.part } : null;
 }
 
 export async function dyeState(accountId: string, now = Date.now()): Promise<DyeStateResponse> {
-  const finalized = await settleExpired(accountId, now);
+  const ended = await settleExpired(accountId, now);
   const st = style();
   const [{ dye, session }, me] = await Promise.all([st.get(accountId), getAccounts().get(accountId, kstDay(now), now)]);
   const fixedIds = Object.keys(me.inventory).filter((id) => isFixedDyeId(id) && me.inventory[id] > 0);
   const tickets = fixedIds.length ? await st.fixedDefs(fixedIds) : {};
-  return { session: session ? view(session, now) : null, tickets, dye, ...(finalized ? { finalized } : {}) };
+  return { session: session ? view(session, now) : null, tickets, dye, ...(ended ? { ended } : {}) };
 }
 
 /** 무작위 염색 시작 (진행 중인 판이 있으면 그 판을 이어서 — 염색권을 더 쓰지 않는다) */
@@ -56,22 +61,65 @@ export async function startDye(accountId: string, itemId: string, part: DyePart,
   return { me: await loadMe(getAccounts(), accountId, now), session: view(r.session, now), resumed: r.resumed };
 }
 
+async function current(accountId: string, seed: string): Promise<DyeSession> {
+  const { session } = await style().get(accountId);
+  if (!session || session.seed !== seed) throw new HttpError(409, "NO_SESSION", "진행 중인 염색이 없어요. 이미 끝났을 수도 있어요.");
+  return session;
+}
+
+/** 색을 바꾸지 않고 판을 끝낸 결과 (kept) */
+async function keep(accountId: string, s: DyeSession, now: number, late = false): Promise<StyleChangeResponse> {
+  await style().cancel(accountId, s.seed);
+  return changed(accountId, now, { part: s.part, kept: true, ...(late ? { late } : {}) });
+}
+
 /**
- * 무작위 염색 끝내기: 클라이언트는 판 위 좌표만 보내고, 색은 서버가 그 판(시드)으로 계산한다.
- * 시간(+여유)이 지난 뒤에 온 좌표는 받지 않고 판 가운데 색으로 정한다 (late)
+ * 무작위 염색 끝내기 ([이 색으로 염색]): 클라이언트는 판 위 좌표만 보내고, 색은 서버가 그 판(시드)으로 계산한다.
+ * 시간(+여유)이 지난 뒤에 온 좌표는 받지 않고 색을 그대로 둔다 (late·kept). 시간이 끝나 후보가 생긴 판은 chooseDye로만
  */
 export async function finishDye(accountId: string, seed: string, x: number, y: number, now = Date.now()): Promise<StyleChangeResponse> {
-  const st = style();
-  const { session } = await st.get(accountId);
-  if (!session || session.seed !== seed) {
-    const settled = await settleExpired(accountId, now);
-    if (settled) return changed(accountId, now, { ...settled, late: true });
-    throw new HttpError(409, "NO_SESSION", "진행 중인 염색이 없어요. 이미 끝났을 수도 있어요.");
+  const session = await current(accountId, seed);
+  if (session.candidate) throw new HttpError(409, "DYE_DECIDING", "시간이 끝났어요. 새 색으로 바꿀지 지금 색을 유지할지 골라 주세요.");
+  if (now > session.endsAt + DYE_GRACE_MS) return keep(accountId, session, now, true);
+  const color = judgeColor(session, x, y);
+  if (!(await style().finish(accountId, seed, color))) throw new HttpError(409, "NO_SESSION", "이미 끝난 염색이에요.");
+  return changed(accountId, now, { color, part: session.part });
+}
+
+/**
+ * 시간이 끝난 순간 조준점 좌표 → 서버가 그 색을 후보로 판에 적는다 (색은 아직 그대로).
+ * 여유 시간까지 지나서 오면 후보 없이 끝낸다 (candidate: null, 색 그대로). 같은 판에 두 번 오면 처음 후보를 그대로 돌려준다
+ */
+export async function timeoutDye(accountId: string, seed: string, x: number, y: number, now = Date.now()): Promise<DyeTimeoutResponse> {
+  const session = await current(accountId, seed);
+  if (session.candidate) return { part: session.part, candidate: session.candidate, serverNow: now };
+  if (now < session.endsAt - DYE_GRACE_MS) throw new HttpError(409, "TOO_EARLY", "아직 시간이 남았어요.");
+  if (now > session.endsAt + DYE_GRACE_MS) {
+    await style().cancel(accountId, seed);
+    return { part: session.part, candidate: null, serverNow: now };
   }
-  const late = now > session.endsAt + DYE_GRACE_MS;
-  const color = late ? judgeColor(session, DYE_CENTER.x, DYE_CENTER.y) : judgeColor(session, x, y);
-  if (!(await st.finish(accountId, seed, color))) throw new HttpError(409, "NO_SESSION", "이미 끝난 염색이에요.");
-  return changed(accountId, now, { color, part: session.part, late });
+  const candidate = { color: judgeColor(session, x, y), decideBy: now + DYE_DECIDE_MS };
+  if (await style().propose(accountId, seed, candidate)) return { part: session.part, candidate, serverNow: now };
+  // 동시에 온 요청이 먼저 적었다 → 그 후보
+  const again = await current(accountId, seed);
+  if (!again.candidate) throw new HttpError(409, "NO_SESSION", "이미 끝난 염색이에요.");
+  return { part: again.part, candidate: again.candidate, serverNow: now };
+}
+
+/** 후보 고르기: apply = 새 색으로 바꾸기, 아니면 지금 색 유지. 고르는 시간(+여유)이 지났으면 유지 (late·kept) */
+export async function chooseDye(accountId: string, seed: string, apply: boolean, now = Date.now()): Promise<StyleChangeResponse> {
+  const session = await current(accountId, seed);
+  if (!session.candidate) throw new HttpError(409, "NO_CANDIDATE", "아직 고를 색이 없어요.");
+  if (!apply) return keep(accountId, session, now);
+  if (now > session.candidate.decideBy + DYE_GRACE_MS) return keep(accountId, session, now, true);
+  const { color } = session.candidate;
+  if (!(await style().finish(accountId, seed, color))) throw new HttpError(409, "NO_SESSION", "이미 끝난 염색이에요.");
+  return changed(accountId, now, { color, part: session.part });
+}
+
+/** 염색 포기 (창 닫기): 색은 그대로, 염색권은 돌려주지 않는다. 판이 없으면 아무 일도 없다 */
+export async function cancelDye(accountId: string, seed: string): Promise<{ cancelled: boolean }> {
+  return { cancelled: await style().cancel(accountId, seed) };
 }
 
 /** 고정 색 염색권 정의 (카탈로그 또는 관리자 발급분) */

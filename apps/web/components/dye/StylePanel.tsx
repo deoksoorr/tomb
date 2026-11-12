@@ -61,10 +61,8 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
         setTickets(s.tickets);
         // 서버 가방에는 있는데 내 정보에 없는 염색권(선물함에서 막 받음) → 내 정보를 다시 받는다
         const stale = Object.keys(s.tickets).some((id) => !invKey.split(",").includes(id));
-        if (s.finalized || stale) void meStore.refresh();
-        if (s.finalized) {
-          onNotice(`시간이 지난 염색은 ${DYE_PART_NAMES[s.finalized.part]} ${s.finalized.color}(으)로 정해졌어요.`);
-        }
+        if (stale) void meStore.refresh();
+        if (s.ended) onNotice(`시간이 지난 ${DYE_PART_NAMES[s.ended.part]} 염색은 끝났어요. 색은 그대로예요.`);
       })
       .catch(() => {});
     return () => {

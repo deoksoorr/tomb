@@ -51,7 +51,8 @@ describe.skipIf(!!env.redis())("동물원 펫 분양 (메모리)", () => {
   });
 
   it("이미 가족이면 다시 못 사고, 포인트가 모자라면 그대로 (차감 없음)", async () => {
-    const id = await account(9_999);
+    // 큰 개(450P)를 사고 나면 550P — 사슴(600P)에는 모자란다
+    const id = await account(1_000);
     const now = Date.now();
     await buyPet(id, "pet_hound", now);
     const before = (await accounts.get(id, kstDay(), now)).points;

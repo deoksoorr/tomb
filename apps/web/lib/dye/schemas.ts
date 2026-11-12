@@ -15,6 +15,10 @@ export const DyeFinishSchema = z.object({
   x: z.number().finite().min(0).lt(DYE_BOARD_W),
   y: z.number().finite().min(0).lt(DYE_BOARD_H),
 });
+/** 시간이 끝난 순간 조준점 좌표 (finish와 같은 모양) */
+export const DyeTimeoutSchema = DyeFinishSchema;
+export const DyeChooseSchema = z.object({ seed: DyeFinishSchema.shape.seed, apply: z.boolean() });
+export const DyeCancelSchema = z.object({ seed: DyeFinishSchema.shape.seed });
 export const DyeFixedSchema = z.object({ itemId: fixedTicket, part });
 export const DyeResetSchema = z.object({ part });
 export const ReshapeSchema = z.object({ body: z.enum(AVATAR_BODIES.map((b) => b.id) as [string, ...string[]]) });

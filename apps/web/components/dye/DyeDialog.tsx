@@ -7,7 +7,7 @@ import { errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
 import { buildPalette, cellColor, cellOf, DYE_BOARD_H, DYE_BOARD_W, DYE_TIERS, DYE_TIME_MS, paletteRgba, type DyeTier } from "@/lib/dye/palette";
 import { fixedAllows } from "@/lib/dye/rules";
-import type { DyeSessionView, StyleChangeResponse } from "@/lib/dye/types";
+import type { DyeCandidate, DyeSessionView, DyeTimeoutResponse, StyleChangeResponse } from "@/lib/dye/types";
 import { applyStyle } from "../account/actions";
 import { OutfitCanvas } from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
@@ -18,7 +18,8 @@ import styles from "./DyeDialog.module.css";
 
 // 46번 염색 창. 무작위 염색권: 부위 고르기 → 60초 동안 무작위 팔레트(일부만 보이는 연속 색 공간)를 드래그·휠(핀치)로 뒤진다.
 // 조준점은 마우스를 따라가고(폰은 화면 가운데) 흔들린다 — 그 아래 색이 바로 "지금 고른 색"(미리보기에 입혀짐).
-// [이 색으로 염색]·엔터를 누른 순간 또는 시간이 끝난 순간의 조준점 색으로 확정.
+// [이 색으로 염색]·엔터를 누른 순간의 조준점 색으로 확정. 시간이 끝나면 그 순간 조준점 색을 후보로 "지금 색 vs 새 색"을 고른다
+// (안 고르면 지금 색 유지). 도중에 창을 닫으면 포기 — 색은 그대로, 염색권은 쓴 것으로.
 // 고정 색 염색권: 부위만 고르면 미리 보고 바로 그 색. 결과 색은 서버가 정한다 (여기서는 판 좌표만 보낸다).
 
 export type DyeTicket =
@@ -38,7 +39,7 @@ type Props = {
   onDone?: (message: string) => void;
 };
 
-type Phase = "part" | "play" | "sending" | "done";
+type Phase = "part" | "play" | "choose" | "sending" | "done";
 type Picked = { x: number; y: number; color: string };
 
 const hexOf = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
@@ -52,11 +53,15 @@ function partColor(spec: string, part: DyePart): string | null {
 }
 
 export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDone }: Props) {
-  const [phase, setPhase] = useState<Phase>(resume ? "play" : "part");
+  const [phase, setPhase] = useState<Phase>(resume?.candidate ? "choose" : resume ? "play" : "part");
   const [part, setPart] = useState<DyePart>(resume?.part ?? (ticket?.mode === "fixed" && ticket.parts?.length ? ticket.parts[0] : "body"));
   const [session, setSession] = useState<DyeSessionView | null>(resume ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ color: string; part: DyePart; late: boolean } | null>(null);
+  const [result, setResult] = useState<{ color: string; part: DyePart; late: boolean; kept: boolean } | null>(null);
+  /** 시간이 끝나 고르는 중인 후보 색 (decideBy = 내 시계 기준 마감) */
+  const [candidate, setCandidate] = useState<DyeCandidate | null>(() =>
+    resume?.candidate ? { color: resume.candidate.color, decideBy: Date.now() + (resume.candidate.decideBy - resume.serverNow) } : null,
+  );
   const [spec, setSpec] = useState(avatar.color);
   const [body, setBody] = useState(avatar.body);
 
@@ -64,14 +69,39 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
   const allowed = (p: DyePart) => ticket?.mode !== "fixed" || fixedAllows(ticket.parts, p);
 
   function finished(res: StyleChangeResponse, late = false) {
+    // 내 정보 + 게임의 내 아바타(look:set)를 바로 바꾼다
     applyStyle(res);
     const p = res.part ?? part;
-    const color = res.color ?? "";
-    setSpec(withDyePart(spec, p, color));
+    const kept = !!res.kept || !res.color;
+    const color = kept ? "" : (res.color ?? "");
+    if (!kept) setSpec(withDyePart(spec, p, color));
     if (res.me.body) setBody(res.me.body);
-    setResult({ color, part: p, late: late || !!res.late });
+    setCandidate(null);
+    setResult({ color, part: p, late: late || !!res.late, kept });
     setPhase("done");
-    onDone?.(`${DYE_PART_NAMES[p]}을(를) ${color}(으)로 염색했어요.${res.late ? " (시간이 지나 처음 조준점 색으로 정해졌어요)" : ""}`);
+    onDone?.(kept ? `${DYE_PART_NAMES[p]} 색은 그대로 두었어요.` : `${DYE_PART_NAMES[p]}을(를) ${color}(으)로 염색했어요.`);
+  }
+
+  /** 시간 끝 → 후보 색 (없으면 너무 늦어 색 그대로 끝남) */
+  function timedOut(res: DyeTimeoutResponse) {
+    if (!res.candidate) {
+      setCandidate(null);
+      setResult({ color: "", part: res.part, late: true, kept: true });
+      setPhase("done");
+      onDone?.(`시간이 지나 ${DYE_PART_NAMES[res.part]} 색은 그대로 두었어요.`);
+      return;
+    }
+    setCandidate({ color: res.candidate.color, decideBy: Date.now() + (res.candidate.decideBy - res.serverNow) });
+    setPhase("choose");
+  }
+
+  /** 창 닫기: 판이 진행 중이거나 고르는 중이면 포기 (색 그대로, 염색권은 쓴 것으로) */
+  function close() {
+    if (session && (phase === "play" || phase === "choose")) {
+      void dyeApi.cancel(session.seed).catch(() => {});
+      onDone?.(`${DYE_PART_NAMES[session.part]} 염색을 그만뒀어요. 색은 그대로예요.`);
+    }
+    onClose();
   }
 
   async function begin() {
@@ -99,11 +129,11 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
     }
   }
 
-  const title = phase === "play" || phase === "sending" ? "염색 중" : "염색";
+  const title = phase === "choose" ? "색 고르기" : phase === "play" || phase === "sending" ? "염색 중" : "염색";
   const previewSpec = phase === "part" && fixedColor ? withDyePart(spec, part, fixedColor) : spec;
 
   return (
-    <Dialog title={title} onClose={onClose}>
+    <Dialog title={title} onClose={close}>
       <div className={styles.wrap}>
         {phase === "play" && session ? (
           <DyeBoard
@@ -112,22 +142,32 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
             body={body}
             look={look}
             onFinish={finished}
+            onTimeout={timedOut}
             onError={(m) => setError(m)}
           />
+        ) : phase === "choose" && session && candidate ? (
+          <DyeChoice session={session} candidate={candidate} spec={spec} body={body} look={look} onDone={finished} onError={(m) => setError(m)} />
         ) : phase === "done" && result ? (
           <div className={styles.row}>
             <div className={styles.figure}>
               <OutfitCanvas color={spec} body={body} look={look} label="염색한 내 모습" dir={DIR.down} walking={false} />
             </div>
             <div className={styles.side}>
-              <p className={styles.result} role="status">
-                <span className={styles.swatchBig} style={{ background: result.color }} aria-hidden="true" />
-                {DYE_PART_NAMES[result.part]} 염색 완료 · {result.color}
-              </p>
-              {result.late && <p className={styles.note}>시간이 지나서 처음 조준점(판 가운데) 아래 색으로 정해졌어요.</p>}
-              <p className={styles.note}>다른 사람 화면에도 바로 이 색으로 보여요. 원래 색으로 되돌리기는 상점의 염색·외형에서 할 수 있어요.</p>
+              {result.kept ? (
+                <p className={styles.result} role="status">
+                  {DYE_PART_NAMES[result.part]} 색은 그대로예요{result.late ? " (고르는 시간이 지났어요)" : ""}.
+                </p>
+              ) : (
+                <>
+                  <p className={styles.result} role="status">
+                    <span className={styles.swatchBig} style={{ background: result.color }} aria-hidden="true" />
+                    {DYE_PART_NAMES[result.part]} 염색 완료 · {result.color}
+                  </p>
+                  <p className={styles.note}>다른 사람 화면에도 바로 이 색으로 보여요. 원래 색으로 되돌리기는 상점의 염색·외형에서 할 수 있어요.</p>
+                </>
+              )}
               <div className={styles.actions}>
-                <button type="button" className={cx(ui.button, ui.primary)} onClick={onClose}>
+                <button type="button" className={cx(ui.button, ui.primary)} onClick={close}>
                   닫기
                 </button>
               </div>
@@ -173,12 +213,13 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
               {ticket?.mode === "random" && (
                 <p className={styles.note}>
                   시작하면 염색권 1장을 써요. 판은 일부만 보여요 — 끌어서 옮기고, 휠(폰은 두 손가락)로 확대·축소해 원하는 색을 찾으세요. 조준점 아래 색이 바로 고른
-                  색이 되고, [이 색으로 염색]을 누른 순간 정해져요. 시간이 끝나면 그 순간 조준점 아래 색으로 정해져요.
+                  색이 되고, [이 색으로 염색]을 누른 순간 정해져요. 시간이 끝나면 그 순간 조준점 아래 색과 지금 색 중에서 골라요. 도중에 창을
+                  닫으면 색은 그대로이고 염색권은 돌아오지 않아요.
                 </p>
               )}
               {error && <p className={ui.error}>{error}</p>}
               <div className={styles.actions}>
-                <button type="button" className={ui.button} onClick={onClose}>
+                <button type="button" className={ui.button} onClick={close}>
                   닫기
                 </button>
                 <button type="button" className={cx(ui.button, ui.primary)} disabled={!ticket || !allowed(part) || phase === "sending"} onClick={begin}>
@@ -188,7 +229,7 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
             </div>
           </div>
         )}
-        {phase === "play" && error && <p className={ui.error}>{error}</p>}
+        {(phase === "play" || phase === "choose") && error && <p className={ui.error}>{error}</p>}
       </div>
     </Dialog>
   );
@@ -205,6 +246,7 @@ function DyeBoard({
   body,
   look,
   onFinish,
+  onTimeout,
   onError,
 }: {
   session: DyeSessionView;
@@ -212,6 +254,7 @@ function DyeBoard({
   body: string;
   look: readonly string[];
   onFinish: (res: StyleChangeResponse, late?: boolean) => void;
+  onTimeout: (res: DyeTimeoutResponse) => void;
   onError: (m: string) => void;
 }) {
   const palette = useMemo(() => buildPalette(session.seed, session.tier), [session.seed, session.tier]);
@@ -235,7 +278,7 @@ function DyeBoard({
   /** 지금 조준점 아래 색 (미리보기 캐릭터에 입힌다 — 너무 자주 그리지 않게 간격을 둔다) */
   const [live, setLive] = useState<Picked | null>(null);
   const [sending, setSending] = useState(false);
-  /** 루프 안에서 부르는 최신 함수 (시간 끝 → 강제 확정) */
+  /** 루프 안에서 부르는 최신 함수 (시간 끝 → 그 순간 색을 후보로) */
   const timeoutRef = useRef<() => void>(() => {});
 
   // 판 그림 (칸 1개 = 1px) — 한 번만 만든다
@@ -272,6 +315,19 @@ function DyeBoard({
       onError(errorMessage(e));
       sentRef.current = false;
       setSending(false);
+    }
+  }
+
+  /** 시간 끝: 그 순간 조준점 좌표를 보내 후보 색을 받는다 (아직 칠하지 않는다) */
+  async function expire(at: Picked) {
+    if (sentRef.current) return;
+    sentRef.current = true;
+    setSending(true);
+    setLive(at);
+    try {
+      onTimeout(await dyeApi.timeout(session.seed, at.x, at.y));
+    } catch (e) {
+      onError(`${errorMessage(e)} 창을 다시 열면 이어서 고를 수 있어요.`);
     }
   }
 
@@ -347,7 +403,7 @@ function DyeBoard({
         const remain = Math.max(0, localEnds - Date.now());
         setLeft(remain);
         if (remain <= 0) {
-          // 시간 끝: 그 순간 조준점 아래 색으로 강제 확정
+          // 시간 끝: 그 순간 조준점 아래 색을 후보로 (지금 색과 비교해 고른다)
           timeoutRef.current();
           return;
         }
@@ -364,7 +420,7 @@ function DyeBoard({
   }, [sheet, palette, amp, localEnds]);
 
   useEffect(() => {
-    timeoutRef.current = () => void send(aimNow());
+    timeoutRef.current = () => void expire(aimNow());
   });
 
   // 휠 확대·축소 (passive가 아니어야 페이지가 스크롤되지 않는다)
@@ -495,7 +551,7 @@ function DyeBoard({
           </p>
           <p className={styles.note}>
             조준점 아래 색이 바로 고른 색이에요(폰은 화면 가운데 조준점). 흔들리니 원하는 색에서 잘 멈춰 확정하세요. 확대할수록 덜 흔들려요. 시간이 끝나면 그 순간 조준점
-            아래 색으로 정해져요.
+            아래 색과 지금 색 중에서 골라요.
           </p>
           <div className={styles.actions}>
             <button type="button" className={cx(ui.button, ui.primary)} disabled={sending} onClick={() => void send(aimNow())}>
@@ -503,6 +559,93 @@ function DyeBoard({
             </button>
           </div>
         </div>
+      </div>
+    </>
+  );
+}
+
+// ── 시간 끝: 지금 색 vs 새 색 ──
+
+function DyeChoice({
+  session,
+  candidate,
+  spec,
+  body,
+  look,
+  onDone,
+  onError,
+}: {
+  session: DyeSessionView;
+  candidate: DyeCandidate;
+  spec: string;
+  body: string;
+  look: readonly string[];
+  onDone: (res: StyleChangeResponse) => void;
+  onError: (m: string) => void;
+}) {
+  const [left, setLeft] = useState(() => Math.max(0, candidate.decideBy - Date.now()));
+  const [sending, setSending] = useState(false);
+  const sentRef = useRef(false);
+  const now = partColor(spec, session.part);
+
+  async function choose(apply: boolean) {
+    if (sentRef.current) return;
+    sentRef.current = true;
+    setSending(true);
+    try {
+      onDone(await dyeApi.choose(session.seed, apply));
+    } catch (e) {
+      onError(errorMessage(e));
+      sentRef.current = false;
+      setSending(false);
+    }
+  }
+  const chooseRef = useRef(choose);
+  useEffect(() => {
+    chooseRef.current = choose;
+  });
+
+  // 고르는 시간이 끝나면 지금 색 유지
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      const remain = Math.max(0, candidate.decideBy - Date.now());
+      setLeft(remain);
+      if (remain <= 0) {
+        window.clearInterval(t);
+        void chooseRef.current(false);
+      }
+    }, 250);
+    return () => window.clearInterval(t);
+  }, [candidate.decideBy]);
+
+  const name = DYE_PART_NAMES[session.part];
+  return (
+    <>
+      <p className={styles.note} role="status">
+        시간이 끝났어요. {name}을(를) 새 색으로 바꿀까요? {Math.ceil(left / 1000)}초 안에 고르지 않으면 지금 색 그대로예요.
+      </p>
+      <div className={styles.row}>
+        <div className={styles.figure}>
+          <OutfitCanvas color={spec} body={body} look={look} label="지금 내 모습" dir={DIR.down} walking={false} />
+          <p className={styles.pick}>
+            <span className={styles.swatchBig} style={{ background: now ?? "repeating-linear-gradient(45deg,#d9ceb2 0 4px,#e6a3b0 4px 8px)" }} aria-hidden="true" />
+            지금 색 · {now ?? "기본"}
+          </p>
+        </div>
+        <div className={styles.figure}>
+          <OutfitCanvas color={withDyePart(spec, session.part, candidate.color)} body={body} look={look} label="새 색으로 염색해 본 내 모습" dir={DIR.down} walking={false} />
+          <p className={styles.pick}>
+            <span className={styles.swatchBig} style={{ background: candidate.color }} aria-hidden="true" />새 색 · {candidate.color}
+          </p>
+        </div>
+      </div>
+      <div className={styles.actions}>
+        <button type="button" className={ui.button} disabled={sending} onClick={() => void choose(false)}>
+          지금 색 유지
+        </button>
+        <button type="button" className={cx(ui.button, ui.primary)} disabled={sending} onClick={() => void choose(true)}>
+          {sending ? "잠깐만요…" : "새 색으로 바꾸기"}
+        </button>
       </div>
     </>
   );

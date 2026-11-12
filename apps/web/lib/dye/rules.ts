@@ -25,3 +25,6 @@ export function catalogDye(itemId: string): (ItemDef & { dye: DyeTicketSpec }) |
 export function fixedAllows(parts: readonly DyePart[] | undefined, part: DyePart): boolean {
   return !parts || parts.length === 0 || parts.includes(part);
 }
+
+/** 시간이 끝난 뒤 "지금 색 vs 새 색"을 고를 수 있는 시간. 안 고르면 지금 색 그대로 (후보는 버린다) */
+export const DYE_DECIDE_MS = 30_000;

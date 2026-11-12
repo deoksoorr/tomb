@@ -21,7 +21,17 @@ const FIXED_KEY = "dye:fixed";
 const FIXED_LOG_KEY = "dye:fixed:log";
 
 /** 진행 중인 무작위 염색 한 판 */
-export type DyeSession = { seed: string; tier: DyeTier; part: DyePart; itemId: string; startedAt: number; endsAt: number };
+export type DyeSession = {
+  seed: string;
+  tier: DyeTier;
+  part: DyePart;
+  itemId: string;
+  startedAt: number;
+  endsAt: number;
+  /** 시간이 끝난 순간 조준점 색 (서버가 판정). decideBy까지 "새 색으로"/"지금 색 유지"를 고른다 */
+  candidate?: DyeCandidate;
+};
+export type DyeCandidate = { color: string; decideBy: number };
 /** 관리자가 만든 고정 색 염색권 */
 export type FixedDyeDef = { id: string; name: string; color: string; parts?: DyePart[]; createdAt: number };
 /** 관리자 발급 기록 (giftId = 선물함으로 보낸 선물) */
@@ -39,6 +49,10 @@ export interface StyleStore {
   begin(id: string, itemId: string, session: DyeSession): Promise<{ session: DyeSession; resumed: boolean } | null>;
   /** 진행 중인 판(seed)을 끝내고 그 판의 부위를 color로. 판이 없거나 다른 판이면 false (두 번 끝낼 수 없다) */
   finish(id: string, seed: string, color: string): Promise<boolean>;
+  /** 진행 중인 판(seed)에 후보 색을 적는다. 판이 없거나 다른 판이거나 이미 후보가 있으면 false */
+  propose(id: string, seed: string, candidate: DyeCandidate): Promise<boolean>;
+  /** 진행 중인 판(seed)을 색을 바꾸지 않고 끝낸다 (염색권은 돌려주지 않는다). 판이 없거나 다른 판이면 false */
+  cancel(id: string, seed: string): Promise<boolean>;
   /** 고정 색 염색권 1장을 쓰고 part를 color로. 가방에 없으면 false */
   applyFixed(id: string, itemId: string, part: DyePart, color: string): Promise<boolean>;
   /** price 포인트를 내고 part를 기본색으로 되돌린다. 이미 기본색이면 "same" (포인트를 쓰지 않는다) */
@@ -114,6 +128,20 @@ export class MemoryStyle implements StyleStore {
     const s = this.styles.get(id);
     if (!s?.session || s.session.seed !== seed) return false;
     s.dye = { ...s.dye, [s.session.part]: color };
+    s.session = null;
+    return true;
+  }
+
+  async propose(id: string, seed: string, candidate: DyeCandidate): Promise<boolean> {
+    const s = this.styles.get(id);
+    if (!s?.session || s.session.seed !== seed || s.session.candidate) return false;
+    s.session = { ...s.session, candidate: { ...candidate } };
+    return true;
+  }
+
+  async cancel(id: string, seed: string): Promise<boolean> {
+    const s = this.styles.get(id);
+    if (!s?.session || s.session.seed !== seed) return false;
     s.session = null;
     return true;
   }
@@ -216,6 +244,25 @@ redis.call('HSET', KEYS[1], part, ARGV[2])
 return 1
 `;
 
+// KEYS: style  ARGV: seed, candidateJson  (판 JSON 끝에 candidate를 붙인다 — 이미 있으면 0)
+const PROPOSE_LUA = `
+local cur = redis.call('HGET', KEYS[1], 'session')
+if not cur then return 0 end
+if string.match(cur, '"seed":"([^"]+)"') ~= ARGV[1] then return 0 end
+if string.find(cur, '"candidate"', 1, true) then return 0 end
+redis.call('HSET', KEYS[1], 'session', string.sub(cur, 1, -2) .. ',"candidate":' .. ARGV[2] .. '}')
+return 1
+`;
+
+// KEYS: style  ARGV: seed
+const CANCEL_LUA = `
+local cur = redis.call('HGET', KEYS[1], 'session')
+if not cur then return 0 end
+if string.match(cur, '"seed":"([^"]+)"') ~= ARGV[1] then return 0 end
+redis.call('HDEL', KEYS[1], 'session')
+return 1
+`;
+
 // KEYS: inv, style  ARGV: itemId, part, color
 const FIXED_LUA = `${TAKE_FN}
 if not take(KEYS[1], ARGV[1]) then return 0 end
@@ -283,6 +330,15 @@ export class RedisStyle implements StyleStore {
 
   async finish(id: string, seed: string, color: string): Promise<boolean> {
     return Number(await this.redis.eval<string[], number>(FINISH_LUA, [styleKey(id)], [seed, color])) === 1;
+  }
+
+  async propose(id: string, seed: string, candidate: DyeCandidate): Promise<boolean> {
+    const json = JSON.stringify({ color: candidate.color, decideBy: candidate.decideBy });
+    return Number(await this.redis.eval<string[], number>(PROPOSE_LUA, [styleKey(id)], [seed, json])) === 1;
+  }
+
+  async cancel(id: string, seed: string): Promise<boolean> {
+    return Number(await this.redis.eval<string[], number>(CANCEL_LUA, [styleKey(id)], [seed])) === 1;
   }
 
   async applyFixed(id: string, itemId: string, part: DyePart, color: string): Promise<boolean> {

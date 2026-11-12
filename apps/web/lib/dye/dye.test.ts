@@ -5,10 +5,10 @@ import { env } from "../env";
 import { getAccounts, getGifts } from "../store";
 import { kstDay, loadMe } from "../store/accounts";
 import { getStyleStore } from "../store/style";
-import { buildPalette, cellColor, cellRgb, colorAt, DYE_BOARD_H, DYE_BOARD_W, DYE_CENTER, DYE_GRACE_MS, DYE_TIERS, DYE_TIME_MS, samplePoints } from "./palette";
-import { DYE_RESET_PRICE, RESHAPE_PRICE } from "./rules";
+import { buildPalette, cellColor, cellRgb, colorAt, DYE_BOARD_H, DYE_BOARD_W, DYE_GRACE_MS, DYE_TIERS, DYE_TIME_MS, samplePoints } from "./palette";
+import { DYE_DECIDE_MS, DYE_RESET_PRICE, RESHAPE_PRICE } from "./rules";
 import { AdminDyeIssueSchema, DyeFinishSchema, DyeStartSchema } from "./schemas";
-import { applyFixedDye, buyPermanent, dyeState, finishDye, issueFixedDye, judgeColor, reshape, resetDye, startDye } from "./service";
+import { applyFixedDye, buyPermanent, cancelDye, chooseDye, dyeState, finishDye, issueFixedDye, judgeColor, reshape, resetDye, startDye, timeoutDye } from "./service";
 
 // node(V8)·크롬·사파리 엔진(JavaScriptCore, osascript)에서 같은 값임을 확인했다 (11/12)
 const GOLDEN = ["2eed5825", "a9808955", "f9608754"];
@@ -179,19 +179,67 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     await expect(startDye(id, "dye_fine", "head", t0 + 22_000)).rejects.toMatchObject({ code: "NO_ITEM" });
   });
 
-  it("시간이 지나 온 좌표는 무시하고 처음 조준점(판 가운데) 색으로 정한다, 안 끝낸 판도 다음에 열 때 정해진다", async () => {
-    const id = await account(0, { dye_basic: 2 });
+  it("시간이 지나 온 좌표는 무시하고 색 그대로, 안 끝낸 판도 다음에 열 때 색 그대로 끝난다, 창을 닫으면 포기", async () => {
+    const id = await account(0, { dye_basic: 3 });
     const t0 = Date.now();
     const s = await startDye(id, "dye_basic", "accent", t0);
     const late = await finishDye(id, s.session.seed, 5, 5, t0 + DYE_TIME_MS + DYE_GRACE_MS + 1);
-    expect(late.late).toBe(true);
-    expect(late.color).toBe(judgeColor(s.session, DYE_CENTER.x, DYE_CENTER.y));
-    // 창을 닫고 떠난 판 → 상태를 열면 가운데 색으로 정해진다 (무료로 다시 뽑기 막기)
-    const s2 = await startDye(id, "dye_basic", "head", t0 + 100_000);
+    expect(late).toMatchObject({ late: true, kept: true, part: "accent" });
+    expect(late.color).toBeUndefined();
+    expect(late.me.dye).toEqual({});
+    // 창을 닫고 떠난 판 → 상태를 열면 색을 바꾸지 않고 끝난다 (염색권은 쓴 것으로)
+    await startDye(id, "dye_basic", "head", t0 + 100_000);
     const st = await dyeState(id, t0 + 100_000 + DYE_TIME_MS + DYE_GRACE_MS + 5);
     expect(st.session).toBeNull();
-    expect(st.finalized).toEqual({ part: "head", color: judgeColor(s2.session, DYE_CENTER.x, DYE_CENTER.y) });
-    expect(st.dye.head).toBe(st.finalized!.color);
+    expect(st.ended).toEqual({ part: "head" });
+    expect(st.dye).toEqual({});
+    // 도중에 포기: 색 그대로, 염색권은 돌아오지 않는다
+    const s3 = await startDye(id, "dye_basic", "body", t0 + 200_000);
+    expect(s3.me.inventory.dye_basic ?? 0).toBe(0);
+    expect(await cancelDye(id, s3.session.seed)).toEqual({ cancelled: true });
+    expect(await cancelDye(id, s3.session.seed)).toEqual({ cancelled: false });
+    const after = await dyeState(id, t0 + 200_001);
+    expect(after.session).toBeNull();
+    expect(after.dye).toEqual({});
+    await expect(startDye(id, "dye_basic", "body", t0 + 200_002)).rejects.toMatchObject({ code: "NO_ITEM" });
+  });
+
+  it("시간이 끝나면 그 순간 조준점 색이 후보 → 새 색으로 바꾸기 / 지금 색 유지 / 안 고르면 유지", async () => {
+    const id = await account(0, { dye_fine: 4 });
+    const t0 = Date.now();
+    // 새 색으로 바꾸기
+    const a = await startDye(id, "dye_fine", "head", t0);
+    await expect(timeoutDye(id, a.session.seed, 10, 10, t0 + 1000)).rejects.toMatchObject({ code: "TOO_EARLY" });
+    const ta = await timeoutDye(id, a.session.seed, 12.5, 20.5, a.session.endsAt);
+    expect(ta.candidate).toEqual({ color: judgeColor(a.session, 12.5, 20.5), decideBy: a.session.endsAt + DYE_DECIDE_MS });
+    // 두 번 와도 처음 후보 그대로, 후보가 있는 판은 finish로 다른 좌표를 칠할 수 없다
+    expect((await timeoutDye(id, a.session.seed, 1, 1, a.session.endsAt + 10)).candidate).toEqual(ta.candidate);
+    await expect(finishDye(id, a.session.seed, 1, 1, a.session.endsAt + 20)).rejects.toMatchObject({ code: "DYE_DECIDING" });
+    // 다시 열면 고르는 중인 판이 그대로
+    expect((await dyeState(id, a.session.endsAt + 100)).session?.candidate).toEqual(ta.candidate);
+    const applied = await chooseDye(id, a.session.seed, true, a.session.endsAt + 5000);
+    expect(applied).toMatchObject({ color: ta.candidate!.color, part: "head" });
+    expect(applied.me.dye).toEqual({ head: ta.candidate!.color });
+    const g = await verifyGrant(env.joinSecret(), applied.lookGrant);
+    expect(g?.kind === "look" && g.dye).toEqual({ head: ta.candidate!.color });
+    await expect(chooseDye(id, a.session.seed, true, a.session.endsAt + 6000)).rejects.toMatchObject({ code: "NO_SESSION" });
+    // 지금 색 유지
+    const b = await startDye(id, "dye_fine", "head", t0 + 100_000);
+    await timeoutDye(id, b.session.seed, 30, 30, b.session.endsAt + 500);
+    const kept = await chooseDye(id, b.session.seed, false, b.session.endsAt + 1000);
+    expect(kept).toMatchObject({ kept: true, part: "head" });
+    expect(kept.me.dye).toEqual({ head: ta.candidate!.color });
+    // 안 고르면 유지 (고르는 시간이 지난 뒤에 와도, 상태를 열어도)
+    const c = await startDye(id, "dye_fine", "body", t0 + 200_000);
+    const tc = await timeoutDye(id, c.session.seed, 40, 40, c.session.endsAt);
+    const tooLate = await chooseDye(id, c.session.seed, true, tc.candidate!.decideBy + DYE_GRACE_MS + 1);
+    expect(tooLate).toMatchObject({ kept: true, late: true });
+    expect(tooLate.me.dye).toEqual({ head: ta.candidate!.color });
+    // 여유 시간까지 지나서 온 시간 끝 → 후보 없이 색 그대로
+    const d = await startDye(id, "dye_fine", "accent", t0 + 300_000);
+    const td = await timeoutDye(id, d.session.seed, 40, 40, d.session.endsAt + DYE_GRACE_MS + 1);
+    expect(td).toMatchObject({ part: "accent", candidate: null });
+    expect((await dyeState(id, d.session.endsAt + DYE_GRACE_MS + 2)).dye).toEqual({ head: ta.candidate!.color });
   });
 
   it("원래 색 되돌리기는 포인트, 이미 원래 색이면 포인트를 쓰지 않는다", async () => {
