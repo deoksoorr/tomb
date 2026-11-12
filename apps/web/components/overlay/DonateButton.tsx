@@ -20,8 +20,9 @@ export default function DonateButton() {
         </span>
       </button>
       {open && (
-        <Dialog title="커피 한 잔 값이면 유령들이 한 달 더 버팁니다" kind="confirm" onClose={() => setOpen(false)}>
+        <Dialog title="후원" kind="confirm" onClose={() => setOpen(false)}>
           <div className={styles.body}>
+            <p className={styles.plea}>커피 한 잔 값이면 유령들이 한 달 더 버팁니다</p>
             <p className={styles.payBadge} aria-label="카카오페이로 후원">
               <b>kakao</b>pay
             </p>

@@ -200,13 +200,7 @@
 .qrBox {
   /* QR 위아래 간격 */
   margin: 14px 0;
-  padding: 14px;
-  background: #fffaf0;
-  box-shadow:
-    0 0 0 4px #c9a24a,
-    0 0 0 8px #2a2217,
-    0 0 0 11px #c9a24a,
-    0 0 40px rgba(201, 162, 74, 0.45);
+  padding: 0;
 }
 
 .qr {
@@ -218,12 +212,12 @@
 /* 결제 수단 표시: 카카오페이 노란 배지 */
 .payBadge {
   margin: 0;
-  padding: 8px 22px;
+  padding: 4px 12px;
   border-radius: 999px;
   background: #ffeb00;
   color: #191919;
   font-family: system-ui, sans-serif;
-  font-size: 22px;
+  font-size: 14px;
   font-weight: 800;
   letter-spacing: -0.5px;
   line-height: 1;
