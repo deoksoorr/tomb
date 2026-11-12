@@ -3,6 +3,9 @@ import {
   CAMPFIRES,
   DOCK_DECK,
   FERRY_DOCK,
+  FISH_PIER,
+  FISH_PIER_HEAD,
+  FISH_YARD,
   FURNITURE,
   GRAVE_AREAS,
   HILL,
@@ -43,6 +46,7 @@ import {
   type GraveArea,
 } from "@tomb/protocol";
 import { facadeInfo } from "../housing/art";
+import { fishZoneColliders, inFishZone } from "./fishZone";
 import { stargazeColliders, stargazeInteractables } from "./life/stargazeLayout";
 import { RIDE_KEEPOUT, rideColliders, rideInteractables, WISH_FOUNTAIN } from "./rides";
 
@@ -209,7 +213,10 @@ export function waterCurrent(x: number, y: number): { vx: number; vy: number } {
  * 세로 판자(다리·나루터)는 좌우, 가로 판자(잔교)는 위아래에 둘러치고, 물 쪽 끝은 막는다. 뭍에 닿은 끝 8px은 비워 오르내린다.
  */
 export const RAIL = 2;
+/** 낚시터 판자 (데크 + 잔교): 서로 이어 붙어 있어 둘레 규칙으로 난간을 친다 (fishDeckRails) */
+const FISH_DECKS: readonly Rect[] = [FISH_PIER, FISH_PIER_HEAD];
 export function deckRails(d: Rect): Rect[] {
+  if (FISH_DECKS.some((f) => f.x === d.x && f.y === d.y && f.w === d.w && f.h === d.h)) return fishDeckRails(d);
   const vertical = d.h >= d.w;
   const wet = (x: number, y: number) => inWaterBody(x, y, 2);
   if (vertical) {
@@ -235,6 +242,38 @@ export function deckRails(d: Rect): Rect[] {
   ];
   if (leftWet) out.push({ x: d.x, y: d.y, w: RAIL, h: d.h });
   if (rightWet) out.push({ x: d.x + d.w - RAIL, y: d.y, w: RAIL, h: d.h });
+  return out;
+}
+/**
+ * 낚시터 판자 난간: 둘레를 따라가며 바깥 바로 옆이 물이고 다른 판자가 아닌 곳에만 친다.
+ * → 데크와 잔교가 만나는 곳은 열려 있고, 뭍에 닿은 쪽(둑)으로는 그냥 걸어 내려간다.
+ */
+function fishDeckRails(d: Rect): Rect[] {
+  const out: Rect[] = [];
+  const STEP = 2;
+  const wetOutside = (x: number, y: number) => inWaterBody(x, y, 0) && !DECKS.some((o) => o !== d && inRect(o, x, y));
+  const sides: { along: "x" | "y"; fixed: number; out: number; railAt: number }[] = [
+    { along: "x", fixed: d.y, out: d.y - 3, railAt: d.y },
+    { along: "x", fixed: d.y + d.h, out: d.y + d.h + 3, railAt: d.y + d.h - RAIL },
+    { along: "y", fixed: d.x, out: d.x - 3, railAt: d.x },
+    { along: "y", fixed: d.x + d.w, out: d.x + d.w + 3, railAt: d.x + d.w - RAIL },
+  ];
+  for (const side of sides) {
+    const len = side.along === "x" ? d.w : d.h;
+    const start = side.along === "x" ? d.x : d.y;
+    let runFrom = -1;
+    for (let k = 0; k <= len; k += STEP) {
+      const v = start + Math.min(k, len - 1);
+      const wet = k < len && (side.along === "x" ? wetOutside(v, side.out) : wetOutside(side.out, v));
+      if (wet && runFrom < 0) runFrom = start + k;
+      if ((!wet || k + STEP > len) && runFrom >= 0) {
+        const end = wet ? start + len : start + k;
+        if (side.along === "x") out.push({ x: runFrom, y: side.railAt, w: end - runFrom, h: RAIL });
+        else out.push({ x: side.railAt, y: runFrom, w: RAIL, h: end - runFrom });
+        runFrom = -1;
+      }
+    }
+  }
   return out;
 }
 export function allDeckRails(): Rect[] {
@@ -360,6 +399,11 @@ const HAND_PROPS: readonly PropDef[] = [
   P("reeds", 1330, 72, 1),
   P("reeds", 1332, 144, 0),
   P("mist", 1224, 100, 1),
+  // 까마귀가 내려앉는 마른 나무·오래된 비석 (life/crowSim.ts)
+  P("deadTree", 1150, 166, 1),
+  P("deadTree", 1300, 164, 0),
+  P("oldGrave", 1370, 150, 0),
+  P("oldGrave", 1086, 152, 1),
   // ── 별 보기 언덕 (F3) ── 소나무·마른 나무, 돗자리, 계단 석등, 언덕 위 오래된 비석
   P("pine", 52, 62, 0),
   P("snowPine", 112, 54, 1),
@@ -498,7 +542,6 @@ const HAND_PROPS: readonly PropDef[] = [
   P("lantern", 1222, 806),
   P("lantern", 1266, 806),
   P("reeds", 1150, 850, 1),
-  P("reeds", 1392, 860, 0),
   P("reeds", 1214, 994, 1),
   P("mist", 1300, 940, 1),
 ];
@@ -533,6 +576,7 @@ function freeForProp(placed: readonly PropDef[], x: number, y: number, gap: numb
   if (x < WALL_THICKNESS + 10 || x > MAP_WIDTH - WALL_THICKNESS - 10 || y < WALL_THICKNESS + 30 || y > MAP_HEIGHT - TILE - 12) return false;
   if (inWaterBody(x, y, 10) || inWaterBody(x, y - 10, 4)) return false;
   for (const d of DECKS) if (inRect(d, x, y, 14)) return false;
+  if (inFishZone(x, y, 10)) return false; // 낚시터 (장식·자리는 fishZone.ts)
   const k = groundKind(Math.floor(x / TILE), Math.floor(y / TILE));
   if (k !== "grass" && k !== "hill") return false;
   // 길 바로 옆도 피한다 (줄기가 길에 걸치지 않게)
@@ -745,6 +789,7 @@ export function staticColliders(): Rect[] {
   out.push(...allDeckRails()); // F13 다리·나루터·잔교 난간
   out.push(...stargazeColliders()); // 22번 별 보기 언덕 망원경 (life/stargazeLayout.ts)
   out.push(...rideColliders()); // 50번 광장 놀거리 받침 (rides.ts)
+  out.push(...fishZoneColliders()); // 낚시터 아치 기둥·노점 마당 장식 (fishZone.ts)
   return out;
 }
 
@@ -933,6 +978,9 @@ export function groundKind(tx: number, ty: number): GroundKind {
   // 호수: 나루터 선착장 길 (마지막 골목에서), 낚시 잔교 길 (호박밭에서)
   if (between(tx, T(DOCK_DECK.x), T(DOCK_DECK.x + DOCK_DECK.w) - 1) && between(ty, LAST_STREET_TY + 1, T(DOCK_DECK.y))) return "dirt";
   if (ty === T(LAKE_PIER.y + LAKE_PIER.h / 2) && between(tx, T(LAKE_PIER.x) - 4, T(LAKE_PIER.x) - 1)) return "dirt";
+  // 낚시터: 어부 노점 마당(자갈) → 아치 → 낚시 데크
+  if (between(tx, T(FISH_YARD.x), T(FISH_YARD.x + FISH_YARD.w) - 1) && between(ty, T(FISH_YARD.y), T(FISH_YARD.y + FISH_YARD.h) - 1)) return "gravel";
+  if (between(tx, T(FISH_PIER.x), T(FISH_PIER.x + FISH_PIER.w) - 1) && ty === T(FISH_YARD.y + FISH_YARD.h)) return "gravel";
   return "grass";
 }
 
@@ -1028,7 +1076,7 @@ export function bridgeAt(x: number, y: number): boolean {
 }
 
 /** 미니맵·안내용 주요 장소 (F17) */
-export type Landmark = { id: string; label: string; x: number; y: number; kind: "fire" | "grave" | "shop" | "hunt" | "housing" | "shrine" | "dock" | "telescope" | "wish" | "bell" };
+export type Landmark = { id: string; label: string; x: number; y: number; kind: "fire" | "grave" | "shop" | "hunt" | "housing" | "shrine" | "dock" | "telescope" | "wish" | "bell" | "fish" };
 export const LANDMARKS: readonly Landmark[] = [
   { id: "fire", label: "큰 모닥불", x: PLAZA_FIRE.x, y: PLAZA_FIRE.y, kind: "fire" },
   ...GRAVE_AREAS.map((a) => ({ id: `grave${a.id}`, label: a.name, x: a.aisleX, y: a.y0 + a.dy / 2, kind: "grave" as const })),
@@ -1037,6 +1085,7 @@ export const LANDMARKS: readonly Landmark[] = [
   { id: "housing", label: "분양 사무소", x: HOUSING_OFFICE.x, y: HOUSING_OFFICE.y, kind: "housing" },
   { id: "shrine", label: "성황당", x: SHRINE.x, y: SHRINE.y, kind: "shrine" },
   { id: "dock", label: "나루터", x: FERRY_DOCK.x, y: FERRY_DOCK.y, kind: "dock" },
+  { id: "fish", label: "낚시터", x: FISH_PIER.x + FISH_PIER.w / 2, y: FISH_PIER.y + 50, kind: "fish" },
   { id: "telescope", label: "망원경", x: TELESCOPE.x, y: TELESCOPE.y, kind: "telescope" },
   { id: "wish", label: "소원 분수", x: WISH_FOUNTAIN.x, y: WISH_FOUNTAIN.y, kind: "wish" },
 ];

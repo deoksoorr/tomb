@@ -11,7 +11,9 @@ export type HouseExterior = HouseExteriorMap;
 
 export type PublicHouse = {
   id: string;
-  /** 분양 마을 번지 (1부터) */
+  /** 집이 있는 채널 (채널마다 주거 구역이 따로다. 채널이 생기기 전에 분양된 집은 1) */
+  ch: number;
+  /** 그 채널 분양 마을의 번지 (1부터. 1..WORLD_LOTS는 메인 맵, 그보다 크면 2단지) */
   lot: number;
   exterior: HouseExterior;
   name: string;
@@ -30,6 +32,7 @@ export type PublicHouse = {
 
 export type HouseSummary = {
   id: string;
+  ch: number;
   lot: number;
   name: string;
   ownerName: string;
@@ -69,5 +72,5 @@ export type AdminHouse = HouseSummary & { hidden: boolean; ownerTail: string; re
 /** 마을에 서 있는 집 하나 (외관·문패) */
 export type VillageHouse = HouseSummary & { exterior: HouseExterior };
 
-/** 분양 마을: lots = 지금 그리는 필지 수, taken = 숨긴 집 등 정보 없이 자리만 찬 번지 */
-export type VillageResponse = { lots: number; houses: VillageHouse[]; taken: number[]; generatedAt: number };
+/** 한 채널의 분양 마을: ch = 그 채널, lots = 지금 그리는 필지 수, taken = 숨긴 집 등 정보 없이 자리만 찬 번지 */
+export type VillageResponse = { ch: number; lots: number; houses: VillageHouse[]; taken: number[]; generatedAt: number };

@@ -42,7 +42,7 @@ export default function ActivityDialog({ onGoToGrave, onOpenHousing, onClose }: 
   }, []);
 
   return (
-    <Dialog title="내 소식" onClose={onClose} size="sm">
+    <Dialog title="내 소식" onClose={onClose}>
       <div className={styles.bag}>
         {items === null ? (
           <p className={styles.state} role="status">

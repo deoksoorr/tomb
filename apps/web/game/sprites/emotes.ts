@@ -1,10 +1,12 @@
+import { HOUSE_ICON_ART, HOUSE_ICONS, type HouseIcon } from "./houseIcons";
 import { Grid } from "./pixel";
 
 // 머리 위 이모티콘 (손 흔들기·환호·헌화). 말풍선 안에 화면 픽셀 3배로 크게 그린다 (SpeechBubble.showIcon).
 // 순수 그리드라 테스트에서 크기·외곽선을 확인한다.
 
-export type EmoteIcon = "wave" | "cheer" | "flower";
-export const EMOTE_ICONS: readonly EmoteIcon[] = ["wave", "cheer", "flower"];
+/** 3번: 집 안 가구 이모티콘(간식·하트·음표 …, houseIcons.ts)도 같은 말풍선에 뜬다 */
+export type EmoteIcon = "wave" | "cheer" | "flower" | HouseIcon;
+export const EMOTE_ICONS: readonly EmoteIcon[] = ["wave", "cheer", "flower", ...HOUSE_ICONS];
 
 const LINE = 0x2a2420;
 
@@ -97,7 +99,7 @@ function flower(): Grid {
   return g;
 }
 
-const ART: Record<EmoteIcon, () => Grid> = { wave, cheer, flower };
+const ART: Record<EmoteIcon, () => Grid> = { wave, cheer, flower, ...HOUSE_ICON_ART };
 
 export function emoteGrid(kind: EmoteIcon): Grid {
   return ART[kind]();

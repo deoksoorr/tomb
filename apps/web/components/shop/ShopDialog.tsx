@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
-import { ITEMS, SHOP_KINDS, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { isPermanentUntil, ITEMS, permanentPrice, SHOP_KINDS, type ItemDef, type ItemKind } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
+import { dyeApi } from "@/lib/dye/client";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { readItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
+import { applyStyle } from "../account/actions";
 import { cosmeticBlock, currentLook, effectLabel, KIND_LABELS } from "../account/items";
+import StylePanel from "../dye/StylePanel";
 import { matchesSlot, resolveAvatar, SHOP_COSMETICS, SLOT_NAMES, SLOT_ORDER, slotCounts, type SlotFilter } from "../account/wardrobe";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -106,12 +109,47 @@ export default function ShopDialog({ onClose, avatar }: Props) {
     );
   }
 
+  /** 30번 영구로 사기 (기간제의 7배). 입고 있던 기간제는 그대로 영구가 된다 */
+  async function buyForever(item: ItemDef) {
+    setPending(`${item.id}:perm`);
+    setNotice(null);
+    try {
+      applyStyle(await dyeApi.buyPermanent(item.id));
+      setNotice(`${item.name}을(를) 영구로 가졌어요. 가방의 캐릭터 꾸미기에서 언제든 입을 수 있어요.`);
+    } catch (e) {
+      setNotice(errorMessage(e));
+    } finally {
+      setPending(null);
+    }
+  }
+
+  const forever = (item: ItemDef) =>
+    item.kind === "cosmetic" && !!me && [...me.equipped, ...(me.stash ?? [])].some((e) => e.itemId === item.id && isPermanentUntil(e.until));
+
+  function foreverButton(item: ItemDef) {
+    const price = permanentPrice(item.id);
+    if (price === null) return null;
+    const short = me !== null && me.points < price;
+    const has = forever(item);
+    return (
+      <button
+        type="button"
+        className={cx(ui.button, styles.buy)}
+        onClick={() => buyForever(item)}
+        disabled={!me || short || has || pending !== null}
+        aria-label={`${item.name}, ${price}포인트에 영구로 사기`}
+      >
+        {pending === `${item.id}:perm` ? "사는 중…" : has ? "영구 소유 중" : `영구 ${price}P${short ? " · 모자라요" : " · 사기"}`}
+      </button>
+    );
+  }
+
   const owned = (item: ItemDef) => me?.inventory[item.id] ?? 0;
   const stashed = (item: ItemDef) => item.kind === "cosmetic" && !!me?.stash?.some((e) => e.itemId === item.id && e.until > openedAt);
   const worn = (item: ItemDef) => item.kind === "cosmetic" && !!me?.equipped.some((e) => e.itemId === item.id && e.until > openedAt);
 
   return (
-    <Dialog title="상점" onClose={onClose} size="lg" fixed>
+    <Dialog title="상점" onClose={onClose}>
       <div className={styles.shop}>
         <div className={styles.top}>
           <p className={styles.balance}>
@@ -140,6 +178,11 @@ export default function ShopDialog({ onClose, avatar }: Props) {
         </div>
 
         <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={styles.panel} data-kind={tab}>
+          {tab === "dye" ? (
+            // 46·25번 염색·외형 (자세히 보기 + 목록을 따로 그린다)
+            <StylePanel me={me} avatar={{ color, body }} look={me ? currentLook(me.equipped, openedAt) : []} onNotice={setNotice} />
+          ) : (
+          <>
           {shown && (
             <section className={styles.detail} aria-label="자세히 보기" aria-live="polite">
               {shown.kind === "cosmetic" ? (
@@ -167,7 +210,8 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                   {stashed(shown) && " · 벗어 둠"}
                 </p>
                 {fitNote && shown.kind === "cosmetic" && <p className={styles.fitNote}>{fitNote}</p>}
-                {buyButton(shown)}
+                {forever(shown) ? null : buyButton(shown)}
+                {foreverButton(shown)}
               </div>
             </section>
           )}
@@ -215,7 +259,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                       <span className={styles.tileName}>{item.name}</span>
                       <span className={styles.tilePrice}>
                         {item.price}P
-                        {worn(item) ? <span className={styles.badge}>착용</span> : n > 0 || stashed(item) ? <span className={styles.badge}>보유</span> : null}
+                        {forever(item) ? <span className={styles.badge}>영구</span> : worn(item) ? <span className={styles.badge}>착용</span> : n > 0 || stashed(item) ? <span className={styles.badge}>보유</span> : null}
                       </span>
                     </button>
                   </li>
@@ -223,6 +267,8 @@ export default function ShopDialog({ onClose, avatar }: Props) {
               })}
             </ul>
           </div>
+          </>
+          )}
         </div>
 
         <p className={styles.notice} role="status">

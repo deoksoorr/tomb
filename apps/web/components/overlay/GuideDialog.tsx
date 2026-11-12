@@ -41,7 +41,7 @@ type Props = { onClose: () => void; onReplayTutorial: () => void };
 
 export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
   return (
-    <Dialog title="한때는... 안내" onClose={onClose} size="lg">
+    <Dialog title="한때는... 안내" onClose={onClose}>
       <div className={styles.guide}>
         <section>
           <h3>조작</h3>
@@ -72,6 +72,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
             <li>사냥터: 혼자 또는 함께 싸우고 미니게임을 하며 포인트를 모아요 (왼쪽 위 [사냥]으로도 열려요).</li>
             <li>분양 사무소: 나만의 집을 꾸미고 다른 사람의 집에 좋아요를 눌러요 (왼쪽 위 [집]으로도 열려요).</li>
             <li>유령 잡화점: 포인트로 꾸미기·폭죽·묘비 디자인권을 사요.</li>
+            <li>낚시터: 낚시는 낚시터에서 해요. 호수 북동쪽(나루터 옆) 나무 데크의 낚시 의자 앞에서 E — 잡은 물고기는 어부 영감에게 팔아요. 지도의 물고기 표시가 낚시터예요.</li>
             <li>작은 묘역: 끝내지 못한 것들이 잠든 곳이에요. 아래 &quot;묘역과 묘비&quot;를 보세요.</li>
             <li>자세한 건 각 장소에서 안내해요.</li>
           </ul>

@@ -21,9 +21,10 @@
   gap: 6px;
 }
 
+/* 바로 가기 줄·위 버튼과 같은 높이 */
 .zoomButton {
-  min-height: 32px;
-  min-width: 32px;
+  min-height: 36px;
+  min-width: 36px;
   background: var(--panel);
   opacity: 0.8;
 }

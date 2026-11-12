@@ -119,7 +119,7 @@ export default function NoticesPanel({ toast, onAuthLost }: Props) {
       </ul>
 
       {removing && (
-        <Dialog title="공지 삭제" size="sm" onClose={() => setRemoving(null)} closable={!busy}>
+        <Dialog kind="confirm" title="공지 삭제" onClose={() => setRemoving(null)} closable={!busy}>
           <div className={styles.confirm}>
             <p>「{removing.title}」 공지를 삭제할까요?</p>
             <div className={styles.actions}>

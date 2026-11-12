@@ -6,6 +6,7 @@ import {
   HOUSE_INTRO_MAX,
   HOUSE_NAME_MAX,
   LIKE_WEIGHT,
+  lotLabel,
   nextTier,
   PLOT_TIERS,
   SORT_LABELS,
@@ -35,13 +36,15 @@ type Props = {
   busy: boolean;
   visitError?: string | null;
   initialTab?: Tab;
-  /** 분양 마을로 (spawnLot: 그 번지 앞에서) */
-  onVillage: (spawnLot: number | null) => void;
+  /** 분양 마을로 (spawnLot: 그 번지 앞에서). mine=true면 내 집 번지 (내 집이 다른 채널이면 그 채널로 옮긴 뒤) */
+  onVillage: (spawnLot: number | null, mine?: boolean) => void;
   onExterior: () => void;
   /** 마을의 빈 필지 팻말에서 열었으면 그 번지 */
   presetLot?: number | null;
   /** 마을 안에서 열린 창이면 true ("마을로 가기" 대신 "마을로 돌아가기") */
   inVillage?: boolean;
+  /** 지금 채널 (채널마다 주거 구역이 따로다. 분양은 이 채널의 빈 필지에) */
+  channel: number;
 };
 
 /** 분양 사무소 창: 내 집(분양·넓히기·들어가기) + 분양지 둘러보기·랭킹 */
@@ -59,14 +62,17 @@ export default function OfficeDialog({
   onExterior,
   presetLot,
   inVillage,
+  channel,
 }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab ?? "mine");
   const id = useId();
   return (
-    <Dialog title="분양 사무소" onClose={onClose} size="lg">
+    <Dialog title="분양 사무소" onClose={onClose}>
       <div className={styles.stack}>
         <div className={styles.spread}>
-          <p className={styles.small}>광장 동쪽 주거 구역에 번지마다 집이 서 있어요. 빈 필지를 골라 분양받고, 외관을 꾸며 보세요.</p>
+          <p className={styles.small}>
+            광장 동쪽 주거 구역에 번지마다 집이 서 있어요. 채널마다 주거 구역이 따로라, 지금 {channel}채널의 빈 필지를 골라 분양받을 수 있어요.
+          </p>
           <button type="button" className={cx(ui.button, ui.primary)} onClick={() => (inVillage ? onClose() : onVillage(null))} disabled={busy}>
             {inVillage ? "마을로 돌아가기" : "주거 구역 보기"}
           </button>
@@ -96,6 +102,7 @@ export default function OfficeDialog({
               onEnter={onEnterMine}
               busy={busy}
               presetLot={presetLot ?? null}
+              channel={channel}
               onVillage={onVillage}
               onExterior={onExterior}
             />
@@ -120,6 +127,7 @@ function MyPlot({
   onEnter,
   busy,
   presetLot,
+  channel,
   onVillage,
   onExterior,
 }: {
@@ -129,7 +137,8 @@ function MyPlot({
   onEnter: (edit: boolean) => void;
   busy: boolean;
   presetLot: number | null;
-  onVillage: (spawnLot: number | null) => void;
+  channel: number;
+  onVillage: (spawnLot: number | null, mine?: boolean) => void;
   onExterior: () => void;
 }) {
   const [lot, setLot] = useState<number | null>(presetLot);
@@ -139,7 +148,7 @@ function MyPlot({
     if (!noHouse) return;
     let alive = true;
     housingApi
-      .village()
+      .village(channel)
       .then((v) => {
         if (!alive) return;
         const used = new Set([...v.houses.map((h) => h.lot), ...v.taken]);
@@ -152,7 +161,7 @@ function MyPlot({
     return () => {
       alive = false;
     };
-  }, [noHouse]);
+  }, [noHouse, channel]);
   const [name, setName] = useState("");
   const [intro, setIntro] = useState("");
   const [pending, setPending] = useState(false);
@@ -199,7 +208,7 @@ function MyPlot({
       </label>
       {withLot && (
         <label className={ui.field} htmlFor={`${fid}-lot`}>
-          <span className={ui.label}>번지 (주거 구역의 자리)</span>
+          <span className={ui.label}>번지 ({channel}채널 주거 구역의 자리)</span>
           <select
             id={`${fid}-lot`}
             className={ui.input}
@@ -236,13 +245,13 @@ function MyPlot({
             분양가 <strong>{fmt(plot.price)}P</strong> · 내 포인트 <strong>{fmt(my.points)}P</strong>
           </p>
           <TierCompare current="small" />
-          {lot !== null && <p className={styles.tag}>고른 자리: 주거 구역 {lot}번지</p>}
+          {lot !== null && <p className={styles.tag}>고른 자리: {lotLabel(channel, lot)}</p>}
           {short && <p className={styles.error}>포인트가 {fmt(plot.price - my.points)}P 모자라요. 출석·헌화로 모아 주세요.</p>}
         </div>
         {!short &&
           form(
-            `${lot ? `${lot}번지를 ` : ""}${fmt(plot.price)}P로 분양받기`,
-            () => run(() => housingApi.buyPlot(name, intro, lot), "분양을 축하해요! 마을에 내 집이 생겼어요."),
+            `${lot ? `${lotLabel(channel, lot)}를 ` : `${channel}채널에 `}${fmt(plot.price)}P로 분양받기`,
+            () => run(() => housingApi.buyPlot(channel, name, intro, lot), `분양을 축하해요! ${channel}채널 주거 구역에 내 집이 생겼어요.`),
             true,
           )}
         <p className={styles.notice} role="status">
@@ -255,6 +264,8 @@ function MyPlot({
   const tier = tierById(h.tier)!;
   const up = nextTier(h.tier);
   const tag = styleTag(h.layout);
+  /** 내 집이 지금 채널이 아닌 다른 채널에 있다 (보러 가기·들어가기·꾸미기는 그 채널로 옮긴 뒤) */
+  const away = h.ch !== channel;
   return (
     <div className={styles.stack}>
       <div className={styles.card}>
@@ -264,8 +275,13 @@ function MyPlot({
         </div>
         {h.intro && <p className={styles.muted}>{h.intro}</p>}
         <p className={styles.small}>
-          {h.lot}번지 · {tier.name} {tier.w}×{tier.h}칸 · 물건 {h.layout.items.length}/{tier.maxItems}개{tag ? ` · ${tag}` : ""}
+          {lotLabel(h.ch, h.lot)} · {tier.name} {tier.w}×{tier.h}칸 · 물건 {h.layout.items.length}/{tier.maxItems}개{tag ? ` · ${tag}` : ""}
         </p>
+        {away && (
+          <p className={styles.tag}>
+            내 집은 {h.ch}채널에 있어요 (지금 {channel}채널). 보러 가기·들어가기·꾸미기를 누르면 {h.ch}채널로 옮긴 뒤 가요.
+          </p>
+        )}
         <p className={styles.score}>
           꾸밈 점수 <strong>{fmt(h.score)}</strong>{" "}
           <span className={styles.small}>
@@ -283,8 +299,8 @@ function MyPlot({
           <button type="button" className={ui.button} onClick={onExterior} disabled={busy}>
             외관 꾸미기
           </button>
-          <button type="button" className={ui.button} onClick={() => onVillage(h.lot)} disabled={busy}>
-            내 집 보러 가기
+          <button type="button" className={ui.button} onClick={() => onVillage(h.lot, true)} disabled={busy}>
+            {away ? `${h.ch}채널 내 집 보러 가기` : "내 집 보러 가기"}
           </button>
           <button
             type="button"
@@ -314,10 +330,10 @@ function MyPlot({
             <button
               type="button"
               className={ui.button}
-              disabled={pending || busy || my.points < up.price}
-              onClick={() => run(() => housingApi.upgrade(up.id), `${up.name}으로 넓혔어요!`)}
+              disabled={pending || busy || my.points < up.price || away}
+              onClick={() => run(() => housingApi.upgrade(channel, up.id), `${up.name}으로 넓혔어요!`)}
             >
-              {fmt(up.price)}P로 {up.name} 만들기{my.points < up.price ? " · 모자라요" : ""}
+              {fmt(up.price)}P로 {up.name} 만들기{away ? ` · ${h.ch}채널에서 할 수 있어요` : my.points < up.price ? " · 모자라요" : ""}
             </button>
           </>
         ) : (
@@ -391,7 +407,7 @@ function HouseList({ onVisit, myId, busy }: { onVisit: (id: string) => void; myI
                   <span className={styles.row} style={{ gap: 6 }}>
                     <TitleBadge score={h.score} />
                     <span className={styles.small}>
-                      {h.lot}번지 · {h.ownerName} · {tierById(h.tier)?.name}
+                      {lotLabel(h.ch, h.lot)} · {h.ownerName} · {tierById(h.tier)?.name}
                     </span>
                   </span>
                 </span>

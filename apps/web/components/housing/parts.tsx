@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트라 next/image 최적화가 필요 없다 */
 import { useSyncExternalStore } from "react";
-import { facadePreview, furnitureIcon } from "@/game/housing/art";
+import { facadePreview, furnitureIcon, furniturePreview } from "@/game/housing/art";
 import { defaultExterior, HOUSE_TITLES, houseTitle, nextTitle, PLOT_TIERS, type HouseExteriorMap, type PlotTierId } from "@/lib/housing/catalog";
 import styles from "./housing.module.css";
 
@@ -19,6 +19,18 @@ export function FurnitureIcon({ itemId, size = 48 }: { itemId: string; size?: nu
   // 원본이 size보다 크면(외관 미리보기 128px) 비율대로 줄여 보여 준다
   const k = big > size * 1.5 ? size / big : 1;
   return <img src={icon.url} width={Math.round(icon.w * k)} height={Math.round(icon.h * k)} alt="" aria-hidden="true" style={{ imageRendering: "pixelated", flex: "none" }} />;
+}
+
+/** 3번 상점 "놓아 본 모습": 기본 벽·바닥 위에 놓은 그림 (스킨이면 그 벽지·바닥을 입힌 방 귀퉁이) */
+export function FurniturePreview({ itemId, height = 72 }: { itemId: string; height?: number }) {
+  const client = useSyncExternalStore(noop, () => true, () => false);
+  if (!client) return <span style={{ width: height, height, display: "inline-block" }} aria-hidden="true" />;
+  const base = furniturePreview(itemId, 1);
+  const scale = Math.max(1, Math.round(height / base.h));
+  const img = furniturePreview(itemId, scale);
+  // 정수 배율로 키운 뒤 칸에 맞게 줄인다 (픽셀이 뭉개지지 않게)
+  const k = img.h > height ? height / img.h : 1;
+  return <img src={img.url} width={Math.round(img.w * k)} height={Math.round(img.h * k)} alt="" aria-hidden="true" style={{ imageRendering: "pixelated", flex: "none", borderRadius: 4 }} />;
 }
 
 /** 꾸밈 점수 호칭 배지 */

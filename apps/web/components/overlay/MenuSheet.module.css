@@ -76,3 +76,9 @@
 .phrase:hover {
   background: var(--surface);
 }
+
+/* 10·11번: 받을 수 있는 출석 도장·선물 (빨간 점) */
+.redDot {
+  background: #e0453a;
+  box-shadow: 0 0 6px #e0453a;
+}

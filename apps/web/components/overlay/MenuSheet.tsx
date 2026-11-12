@@ -21,7 +21,10 @@ export type MenuTarget =
   | "activity"
   | "say"
   | "me"
-  | "guide";
+  | "guide"
+  // 10·11번
+  | "calendar"
+  | "gifts";
 
 type Props = {
   canBury: boolean;
@@ -31,11 +34,15 @@ type Props = {
   unreadNotice: boolean;
   activityUnread: number;
   points: number | null;
+  /** 10번: 오늘 출석 도장을 받을 수 있음 (빨간 점) */
+  calendarReady?: boolean;
+  /** 11번: 안 받은 선물 수 (빨간 점) */
+  giftCount?: number;
   onPick: (target: MenuTarget) => void;
   onClose: () => void;
 };
 
-type Entry = { target: MenuTarget; icon: IconName; label: string; badge?: string; dot?: boolean; primary?: boolean };
+type Entry = { target: MenuTarget; icon: IconName; label: string; badge?: string; dot?: boolean; redDot?: boolean; primary?: boolean };
 
 /**
  * 메뉴: 터치 화면은 아래쪽에 조이스틱·행동 버튼만 두고 나머지는 모두 여기에. 데스크톱도 [메뉴]로 연다.
@@ -49,6 +56,8 @@ export default function MenuSheet({
   unreadNotice,
   activityUnread,
   points,
+  calendarReady = false,
+  giftCount = 0,
   onPick,
   onClose,
 }: Props) {
@@ -65,6 +74,8 @@ export default function MenuSheet({
     ...(fireworkCount > 0
       ? [{ target: "fireworks" as const, icon: "spark" as const, label: "폭죽 쏘기", badge: String(fireworkCount) }]
       : []),
+    { target: "calendar", icon: "calendar", label: "출석 달력", redDot: calendarReady },
+    { target: "gifts", icon: "gift", label: "선물함", badge: giftCount ? String(giftCount) : undefined, redDot: giftCount > 0 },
     { target: "activity", icon: "heart", label: "내 소식", badge: activityUnread ? String(activityUnread) : undefined },
     { target: "say", icon: "chat", label: "말풍선" },
     { target: "ranking", icon: "list", label: "랭킹" },
@@ -88,11 +99,12 @@ export default function MenuSheet({
       <span className={styles.label}>{e.label}</span>
       {e.badge && <span className={styles.badge}>{e.badge}</span>}
       {e.dot && <span className={styles.dot} aria-label="새 공지" />}
+      {e.redDot && <span className={cx(styles.dot, styles.redDot)} aria-label="받을 것이 있어요" />}
     </button>
   );
 
   return (
-    <Dialog title="메뉴" onClose={onClose} size="sm">
+    <Dialog title="메뉴" onClose={onClose}>
       <div className={styles.grid}>{entries.map(button)}</div>
       <h3 className={styles.section}>묘역</h3>
       <div className={styles.grid} role="group" aria-label="묘역">

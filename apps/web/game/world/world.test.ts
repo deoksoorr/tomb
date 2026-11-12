@@ -598,3 +598,53 @@ describe("미니맵 (F17)", () => {
     }
   });
 });
+
+describe("낚시터 (호수 북동쪽 물가)", () => {
+  it("낚시 자리 20곳 이상, 그중 10곳 이상이 낚시터에 모여 있고 모두 걸어서 닿는다 (데크·마당)", async () => {
+    const { FISHING_SPOTS, FISHING_ZONE, FISHING_ZONE_SPOTS, FISH_ARCH, FISH_PIER, FISH_PIER_HEAD, inFishingZone } = await import("@tomb/protocol");
+    const { NPCS } = await import("@/lib/forage/catalog");
+    expect(FISHING_SPOTS.length).toBeGreaterThanOrEqual(20);
+    const zone = FISHING_SPOTS.filter((s) => inFishingZone(s.x, s.y));
+    expect(zone.length).toBeGreaterThanOrEqual(10);
+    expect(FISHING_SPOTS.slice(0, FISHING_ZONE_SPOTS).every((s) => inFishingZone(s.x, s.y))).toBe(true);
+    expect(ZONES.some((z) => z.id === "fishing" && z.name === "낚시터" && z.x === FISHING_ZONE.x && z.w === FISHING_ZONE.w)).toBe(true);
+    // 어부 영감은 낚시터 마당에
+    const monger = NPCS.find((n) => n.id === "fishmonger")!;
+    expect(inFishingZone(monger.x, monger.y)).toBe(true);
+    // 데크 위는 물이 아니고, 데크·아치·자리 모두 정문에서 걸어서 닿는다
+    expect(inWater(FISH_PIER.x + FISH_PIER.w / 2, FISH_PIER.y + FISH_PIER.h - 6)).toBe(false);
+    expect(inWater(FISH_PIER_HEAD.x + 8, FISH_PIER_HEAD.y + 12)).toBe(false);
+    const ok = reachable();
+    const miss = [...FISHING_SPOTS, { id: "arch", x: FISH_ARCH.x, y: FISH_ARCH.y + 6 }, { id: "monger", x: monger.x, y: monger.y + 10 }]
+      .filter((t) => !ok(t.x, t.y) && !ok(t.x, t.y + 4) && !ok(t.x - 4, t.y + 4) && !ok(t.x + 4, t.y + 4))
+      .map((t) => t.id);
+    expect(miss).toEqual([]);
+  });
+
+  it("데크와 가로 데크가 만나는 곳은 난간이 없어 지나가고, 물 쪽 가장자리는 난간이 막는다", async () => {
+    const { FISH_PIER, FISH_PIER_HEAD } = await import("@tomb/protocol");
+    const { allDeckRails } = await import("./layout");
+    const rails = allDeckRails();
+    const hit = (x: number, y: number) => rails.some((r) => inside(r, x, y));
+    // 이음매 (데크 가운데 아래 끝 = 가로 데크 윗변)
+    expect(hit(FISH_PIER.x + FISH_PIER.w / 2, FISH_PIER_HEAD.y)).toBe(false);
+    expect(hit(FISH_PIER.x + 1, FISH_PIER.y + 60)).toBe(true); // 데크 서쪽 가장자리 (물)
+    expect(hit(FISH_PIER_HEAD.x + 1, FISH_PIER_HEAD.y + 12)).toBe(true); // 가로 데크 서쪽 끝
+    expect(hit(FISH_PIER_HEAD.x + 20, FISH_PIER_HEAD.y + FISH_PIER_HEAD.h - 1)).toBe(true); // 가로 데크 남쪽 가장자리
+  });
+
+  it("강 어귀는 비어 있어 조각배가 호수에서 강으로 드나든다", async () => {
+    const { stepBoat, boatWater } = await import("../logic/boat");
+    const { BOATS } = await import("@tomb/protocol");
+    const m = { x: BOATS[0].x, y: BOATS[0].y, vx: 0, vy: 0 };
+    // 서쪽(강 어귀)으로 저어 강으로 들어간다: 막히면 위/아래로 비켜 간다
+    for (let i = 0; i < 4000 && m.x > 1000; i++) {
+      const px = m.x;
+      const py = m.y;
+      stepBoat(m, -1, 0, 16, { vx: 0, vy: 0 });
+      if (Math.hypot(m.x - px, m.y - py) < 0.05) stepBoat(m, -0.3, i % 400 < 200 ? -1 : 1, 16, { vx: 0, vy: 0 });
+    }
+    expect(m.x).toBeLessThanOrEqual(1000);
+    expect(boatWater(m.x, m.y)).toBe(true);
+  });
+});

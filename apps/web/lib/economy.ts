@@ -17,13 +17,17 @@ export type EarnSource =
   // ── 22번 황금 고블린(보너스 요정) (/api/goblin) ──
   | "goblin"
   // ── 50번 소원 분수 (lib/wish.ts, /api/plaza/wish) ──
-  | "wish";
+  | "wish"
+  // ── 10번 출석 달력: 한 달 개근 보상 (lib/calendar.ts) ──
+  | "monthly";
 
 export type EarnRule = { source: EarnSource; label: string; points: number; dailyMax: number; note: string };
 
 export const EARN_RULES: readonly EarnRule[] = [
-  { source: "attend", label: "출석", points: 10, dailyMax: 10, note: "하루 첫 입장 때 1번" },
-  { source: "streak", label: "7일 연속 출석", points: 30, dailyMax: 30, note: "연속 7일째마다 보너스" },
+  // 10번: 입장 때 자동으로 주지 않고, 그날 1시간 머문 뒤 출석 달력의 오늘 칸을 눌러 받는다 (lib/calendar.ts)
+  { source: "attend", label: "출석 도장", points: 10, dailyMax: 10, note: "그날 1시간 머문 뒤 출석 달력에서 오늘 칸을 눌러 받기" },
+  { source: "streak", label: "7일 연속 출석", points: 30, dailyMax: 30, note: "도장을 연속 7일째 찍을 때마다 보너스" },
+  { source: "monthly", label: "한 달 개근", points: 200, dailyMax: 200, note: "그달 1일부터 마지막 날까지 하루도 빠짐없이 도장을 찍으면" },
   { source: "flower", label: "헌화하기", points: 2, dailyMax: 20, note: "묘비마다 하루 1번, 하루 10번까지" },
   { source: "bury", label: "묘비 세우기", points: 20, dailyMax: 20, note: "하루 1개분만 지급" },
   { source: "gotFlower", label: "내 묘비가 헌화 받음", points: 1, dailyMax: 20, note: "다른 사람이 헌화할 때" },
@@ -31,7 +35,7 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "hunt", label: "사냥터·미니게임", points: 0, dailyMax: 600, note: "난이도와 성적에 따라 (한 판 보상은 게임 결과로)" },
   { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때" },
   // 낚시·채집은 잡을 때가 아니라 NPC에게 팔 때 들어온다 (값은 lib/forage/catalog.ts). 한도를 넘는 만큼은 가방에 남아 내일 팔 수 있다
-  { source: "fish", label: "물고기 팔기", points: 0, dailyMax: 200, note: "호수 잔교 옆 어부에게 (희귀할수록 비싸요)" },
+  { source: "fish", label: "물고기 팔기", points: 0, dailyMax: 200, note: "낚시터 어부에게 (희귀할수록 비싸요)" },
   { source: "gather", label: "채집물 팔기", points: 0, dailyMax: 150, note: "숲 빈터의 수집가에게 (약초·광석·발굴품·곤충)" },
   { source: "dex", label: "도감 달성 보상", points: 0, dailyMax: 300, note: "종류별 도감을 25·50·75·100% 채울 때 한 번씩" },
   // 실시간 서버가 "가장 먼저 잡은 한 명"에게 서명한 증서로만 받는다 (고블린 한 마리당 한 번, lib/goblin.ts)

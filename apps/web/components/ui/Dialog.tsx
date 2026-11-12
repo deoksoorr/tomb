@@ -11,14 +11,18 @@ type Props = {
   title: string;
   onClose: () => void;
   children: ReactNode;
-  size?: "sm" | "md" | "lg";
+  /**
+   * 창 종류. 게임 안의 모든 창은 크기가 같다.
+   * - "window"(기본): 표준 창 — 데스크톱 760×660 고정, 폰(560px 이하)은 화면 전체.
+   *   머리말은 위에 고정되고 본문만 스크롤된다. 자식이 `flex: 1; min-height: 0`이면 자식 안에서 스크롤을 나눌 수 있다.
+   * - "confirm": 예/아니요 확인·짧은 알림만. 작은 표준 크기(너비 360, 높이는 내용만큼).
+   */
+  kind?: "window" | "confirm";
   /** false면 ESC·배경·× 로 닫히지 않는다 (예: 저장 중) */
   closable?: boolean;
-  /**
-   * 탭이 있는 큰 창(상점·가방·사냥터 등): 탭을 바꿔도 창 크기가 그대로인 고정 높이.
-   * 내용은 본문 안에서 스크롤되고, 좁은 화면(폰)에서는 화면 전체를 쓴다.
-   * 자식이 `flex: 1; min-height: 0`이면 자식 안에서 스크롤을 나눌 수 있다.
-   */
+  /** @deprecated 창 크기는 `kind`로만 정한다 (값은 무시된다 — 예전 코드 호환용) */
+  size?: "sm" | "md" | "lg";
+  /** @deprecated 모든 표준 창이 고정 크기다 (값은 무시된다 — 예전 코드 호환용) */
   fixed?: boolean;
 };
 
@@ -27,7 +31,7 @@ type Props = {
  * 열릴 때 포커스를 가졌던 요소로 닫힐 때 돌려준다. 열려 있는 동안 게임 키 입력을 막는다.
  * 마운트 = 열림. 닫으려면 부모가 언마운트한다 (onClose).
  */
-export default function Dialog({ title, onClose, children, size = "md", closable = true, fixed = false }: Props) {
+export default function Dialog({ title, onClose, children, kind = "window", closable = true }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const pressedBackdrop = useRef(false);
   const titleId = useId();
@@ -60,8 +64,7 @@ export default function Dialog({ title, onClose, children, size = "md", closable
     <dialog
       ref={ref}
       className={styles.dialog}
-      data-size={size}
-      data-fixed={fixed || undefined}
+      data-kind={kind}
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault();

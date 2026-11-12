@@ -1,5 +1,6 @@
 import type * as Phaser from "phaser";
-import { DIR, isAvatarBody, STATE, type ActKind, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
+import { DIR, isAvatarBody, sanitizeDye, STATE, type ActKind, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
+import { avatarColorSpec } from "../sprites/avatar";
 import { bridge } from "../bridge";
 import type { AvatarView } from "../entities/AvatarView";
 import { RemoteAvatar } from "../entities/RemoteAvatar";
@@ -38,6 +39,11 @@ export type RoomPresenceOptions = {
   onAct?: (sid: Sid, kind: ActKind, x: number, y: number) => void;
   /** 다른 사람의 말풍선 (소리 등). 말풍선은 이미 뜬다 */
   onSay?: (sid: Sid, text: string) => void;
+  /** 3번 집 안 1인 자리: 내 점유 요청이 거절됐다 / 점유표가 바뀌었다 */
+  onSeatDenied?: (seatId: string) => void;
+  onSeats?: () => void;
+  /** 3번 다른 사람이 가구를 썼다 */
+  onUse?: (sid: Sid, u: string, a: number) => void;
   /** 테스트·디버그 */
   client?: RoomClientOptions;
 };
@@ -53,6 +59,10 @@ export class RoomPresence {
   private peerCheckAt = 0;
   private destroyed = false;
   private offLook: (() => void) | null = null;
+  /** 3번 집 안 1인 자리 점유표 (seatId → sid, 나 포함) */
+  readonly seats = new Map<string, Sid>();
+  /** 서버가 집 안 자리를 판정한다 (welcome spots). false면 이전 서버 → 혼자 앉는다 */
+  spots = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -71,8 +81,26 @@ export class RoomPresence {
         getPose: pose,
         onWelcome: (m) => {
           this.clear();
+          this.spots = m.spots;
           for (const p of m.peers) this.add(p);
+          this.setSeats(m.seats);
         },
+        onSeat: (seatId, sid) => {
+          const prev = this.seats.get(seatId);
+          if (sid === null) this.seats.delete(seatId);
+          else this.seats.set(seatId, sid);
+          if (prev !== undefined && prev !== sid) {
+            const r = this.remotes.get(prev);
+            if (r?.seatId === seatId) r.seatId = null;
+          }
+          if (sid !== null) {
+            const r = this.remotes.get(sid);
+            if (r) r.seatId = seatId;
+          }
+          o.onSeats?.();
+        },
+        onSeatDenied: (seatId) => o.onSeatDenied?.(seatId),
+        onUse: (sid, u, a) => o.onUse?.(sid, u, a),
         onJoin: (p) => this.add(p),
         onLeave: (sid) => {
           this.remotes.get(sid)?.destroy();
@@ -82,7 +110,11 @@ export class RoomPresence {
           const me = this.client.mySid;
           for (const e of entries) if (e.sid !== me) this.remotes.get(e.sid)?.push(t, e.x, e.y, e.state, e.dir);
         },
-        onLook: (sid, look) => this.remotes.get(sid)?.view.setLook(look),
+        onLook: (sid, look, extra) => {
+          const v = this.remotes.get(sid)?.view;
+          v?.setLook(look);
+          v?.applyAppearance(extra);
+        },
         onAct: (sid, kind, x, y) => {
           const r = this.remotes.get(sid);
           if (r?.visible) r.view.playAct(kind, performance.now());
@@ -94,7 +126,10 @@ export class RoomPresence {
           this.remotes.get(sid)?.view.say(text, performance.now());
           o.onSay?.(sid, text);
         },
-        onPeers: (peers) => this.reconcile(peers),
+        onPeers: (peers, seats) => {
+          this.reconcile(peers);
+          this.setSeats(seats);
+        },
         onReset: () => this.clear(),
         onStatus: (s) => o.onStatus?.(s),
       },
@@ -102,9 +137,10 @@ export class RoomPresence {
     );
     this.client.joinRoom(o.room);
     // 방 안에서 꾸미기를 바꾸면 내 아바타에 바로 입히고 방 사람들에게도 알린다
-    this.offLook = bridge.on("look:set", ({ look, lookGrant }) => {
+    this.offLook = bridge.on("look:set", ({ look, lookGrant, dye, body }) => {
       const clean = Array.isArray(look) ? look.filter((x): x is string => typeof x === "string") : [];
       o.me?.setLook(clean);
+      o.me?.applyAppearance({ dye, body });
       if (lookGrant) this.client.look(lookGrant);
     });
   }
@@ -116,6 +152,29 @@ export class RoomPresence {
 
   get status(): RoomStatus {
     return this.client.status;
+  }
+
+  /** 3번 집 안 1인 자리: 점유표를 통째로 맞춘다 (welcome·sync) */
+  private setSeats(seats: Record<string, Sid>): void {
+    this.seats.clear();
+    for (const r of this.remotes.values()) r.seatId = null;
+    for (const [id, sid] of Object.entries(seats)) {
+      this.seats.set(id, sid);
+      const r = this.remotes.get(sid);
+      if (r) r.seatId = id;
+    }
+    this.o.onSeats?.();
+  }
+
+  /** 3번 집 안 1인 자리 점유 요청 / 일어나기 / 가구 쓰기 (내 화면은 부르는 쪽이 먼저 반영한다) */
+  sit(seatId: string): void {
+    this.client.sit(seatId);
+  }
+  stand(): void {
+    this.client.stand();
+  }
+  use(u: string, a: number): void {
+    this.client.use(u, a);
   }
 
   /** 다른 방으로 (같은 씬에서 사냥터 난이도를 바꾸는 등) */
@@ -203,8 +262,9 @@ export class RoomPresence {
     if (p.sid === this.client.mySid) return;
     this.remotes.get(p.sid)?.destroy();
     const body = isAvatarBody(p.body) ? p.body : "hood";
-    const r = new RemoteAvatar(this.scene, this.o.atlas, p.sid, p.name, p.color, p, performance.now(), p.look ?? [], body);
+    const r = new RemoteAvatar(this.scene, this.o.atlas, p.sid, p.name, avatarColorSpec(p.color, sanitizeDye(p.dye)), p, performance.now(), p.look ?? [], body);
     this.remotes.set(p.sid, r);
+    for (const [id, sid] of this.seats) if (sid === p.sid) r.seatId = id;
   }
 
   /** sync 응답에 맞춘다 (없는 사람 추가, 사라진 사람 제거, 이름·색·몸 바뀌면 다시) */
@@ -214,7 +274,7 @@ export class RoomPresence {
       keep.add(p.sid);
       const r = this.remotes.get(p.sid);
       const body = isAvatarBody(p.body) ? p.body : "hood";
-      if (!r || r.name !== p.name || r.color !== p.color || r.body !== body) this.add(p);
+      if (!r || r.name !== p.name || r.view.colorSpec !== avatarColorSpec(p.color, sanitizeDye(p.dye)) || r.view.bodyId !== body) this.add(p);
       else r.view.setLook(p.look ?? []);
     }
     for (const [sid, r] of this.remotes) {

@@ -11,7 +11,6 @@ import {
   MAP_HEIGHT,
   MAP_WIDTH,
   SHOP,
-  SHRINE,
   TILE,
   WORLD_LOTS,
   ZONES,
@@ -29,9 +28,10 @@ import { DEPTH } from "../config";
 import { drawEmptyLot, drawHouseLot, type LotGfx } from "../housing/worldLots";
 import { CHUNK, CHUNK_COLS, CHUNK_ROWS, drawGroundChunk } from "../sprites/ground";
 import { SHOP_HUT_H } from "../sprites/extras";
-import { CAVE_H, CAVE_TORCHES, FIRE_FRAMES, OFFICE_H, TORCH_TINT, WP } from "../sprites/worldProps";
+import { CAVE_TORCHES, FIRE_FRAMES, OFFICE_H, TORCH_TINT, WP } from "../sprites/worldProps";
 import { BIG_FIRE_FRAMES, FENCE_H_W, GRAVE_GATE_H, GY } from "../sprites/graveyardProps";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
+import { FISH_ZONE_LIGHTS } from "./fishZone";
 import {
   allDeckRails,
   allProps,
@@ -139,33 +139,35 @@ export class WorldMap {
     scene.add.image(SHOP.x, SHOP.y + 2, TEX.shopHut).setOrigin(0.5, 1).setDepth(SHOP.y);
     this.addCollider(this.colliders, shopCollider());
     for (const dx of [-14, 14]) this.staticLights.push({ x: SHOP.x + dx, y: SHOP.y - 17, scale: 0.4, tint: 0xffc870, base: 0.5 });
-    this.addLabel(SHOP.x, SHOP.y - SHOP_HUT_H - 2, "유령 잡화점", 0xe8dcc0, 1);
+    this.addLabel(SHOP.x, SHOP.y - SHOP_HUT_H + 3, "유령 잡화점", 0xe8dcc0, 1); // 지붕(굴뚝) 바로 위
 
     // 분양 사무소 (주거 구역 어귀)
     const O = HOUSING_OFFICE;
     scene.add.image(O.x, O.y + 2, WP.office).setOrigin(0.5, 1).setDepth(O.y);
     this.addCollider(this.colliders, officeCollider());
     for (const dx of [-15, 14]) this.staticLights.push({ x: O.x + dx, y: O.y - 16, scale: 0.4, tint: 0xffd98a, base: 0.5 });
-    this.addLabel(O.x, O.y - OFFICE_H - 2, "분양 사무소", 0xd8e4ec, 1);
+    this.addLabel(O.x, O.y - OFFICE_H + 6, "분양 사무소", 0xd8e4ec, 1); // 지붕 바로 위
 
     // 사냥터 입구 (윗담의 바위 동굴 + 횃불)
     const caveY = HUNT_GATE.y - 8;
     scene.add.image(HUNT_GATE.x, caveY, WP.cave).setOrigin(0.5, 1).setDepth(caveY);
     for (const [dx, dy] of CAVE_TORCHES) this.staticLights.push({ x: HUNT_GATE.x + dx, y: caveY + dy - 1, scale: 0.55, tint: TORCH_TINT, base: 0.8 });
-    // 이름은 동굴 왼쪽 담 위에 (동굴 위는 화면 밖에 걸린다) + 길가 팻말 (F6: 스폰에서 바로 보이게)
-    this.addLabel(HUNT_GATE.x - 42, caveY - CAVE_H / 2 + 4, "사냥터", 0xf0c8a0, 0.5);
+    // 이름은 동굴 입구 안쪽 어둠 위에 + 길가 팻말 (F6: 스폰에서 바로 보이게)
+    this.addLabel(HUNT_GATE.x, caveY - 13, "사냥터", 0xf0c8a0, 0.5, 0.95); // 동굴 입구(어두운 굴 안)에 — 위쪽 화면 막대에 가리지 않게
     this.addLabel(HUNT_SIGN.x, HUNT_SIGN.y - 34, "사냥터 입구 ↗", 0xffd6a8, 1, 0.95);
 
     // 성황당 (나무·돌무더기는 소품)
-    this.addLabel(SHRINE.x, SHRINE_TREE.y - 42, "성황당", 0xe8d0c0, 1);
+    this.addLabel(SHRINE_TREE.x - 4, SHRINE_TREE.y - 33, "성황당", 0xe8d0c0, 1); // 천을 묶은 나무 꼭대기 바로 위 (종루와 겹치지 않게)
 
     // 구역 이름 (은은하게). 묘역 이름은 문 아치 팻말에 (addFences)
     for (const z of ZONES) {
-      if (z.id === "river" || z.id === "gate" || z.id === "graveyard") continue;
+      if (z.id === "river" || z.id === "gate" || z.id === "graveyard" || z.id === "fishing") continue; // 낚시터 이름은 아치 현판에
       const at = ZONE_LABEL_AT[z.name] ?? { x: z.x + z.w / 2, y: z.y + 10 };
       this.addLabel(at.x, at.y, z.name, z.id === "pond" ? 0xc8d8e0 : 0xd8ccb0, 1, 0.62);
     }
     this.addLabel(FERRY_DOCK.x, FERRY_DOCK.y - 44, "나루터", 0xd8ccb0, 1, 0.75);
+    // 낚시터 등불 (아치·잔교 끝·데크 남쪽 끝). 장식 그림과 "낚시터" 현판은 forage/FishZoneView
+    this.staticLights.push(...FISH_ZONE_LIGHTS);
 
     // 아래 담 (맵 맨 아래 줄은 바닥 타일이 담 면으로 그린다)
     this.applyBounds();
@@ -629,7 +631,7 @@ const ZONE_LABEL_AT: Partial<Record<string, { x: number; y: number }>> = {
   "별 보기 언덕": { x: 150, y: 92 },
   "모닥불 광장": { x: 720, y: 252 },
   "주거 구역": { x: 1200, y: 214 },
-  "호수": { x: 1300, y: 950 },
+  "호수": { x: 1236, y: 962 },
   "달빛 연못": { x: PONDS[0].x, y: PONDS[0].y + PONDS[0].ry + 26 },
   "까마귀 연못": { x: PONDS[1].x - 40, y: PONDS[1].y - 8 },
   "안개 연못": { x: PONDS[2].x, y: PONDS[2].y + 6 },

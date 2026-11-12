@@ -17,7 +17,19 @@ export async function fireFirework(itemId: string): Promise<void> {
 /** 바뀐 착용 상태를 내 정보에 넣고, 증서가 있으면 게임(→ 같은 방 모두)에 알린다 */
 function applyLook(res: { me: Me; lookGrant?: string }): void {
   meStore.set(res.me);
-  if (res.lookGrant) bridge.emit("look:set", { look: currentLook(res.me.equipped, Date.now()), lookGrant: res.lookGrant });
+  if (res.lookGrant)
+    bridge.emit("look:set", {
+      look: currentLook(res.me.equipped, Date.now()),
+      lookGrant: res.lookGrant,
+      // 46·25번: 지금 염색·몸 모양도 같이 (게임이 내 아바타에 입힌다)
+      dye: res.me.dye ?? {},
+      ...(res.me.body ? { body: res.me.body } : {}),
+    });
+}
+
+/** 46·25·30번 염색·외형 바꾸기·영구 코디 결과 반영 (내 정보 + 게임의 내 아바타 + 같은 방 사람들) */
+export function applyStyle(res: { me: Me; lookGrant: string }): void {
+  applyLook(res);
 }
 
 /** 가방의 새 꾸미기 입기: 이때부터 24시간. 같은 부위에 입던 것은 벗어 둔 쪽으로 간다 */
@@ -47,6 +59,6 @@ export async function decorateGrave(itemId: string, graveId: string, cache: Grav
 
 /** 입장할 때 지금 착용 상태를 게임에 알린다 */
 export async function restoreLook(): Promise<void> {
-  const { look, lookGrant } = await api.myLook();
-  if (lookGrant) bridge.emit("look:set", { look, lookGrant });
+  const { look, lookGrant, dye, body } = await api.myLook();
+  if (lookGrant) bridge.emit("look:set", { look, lookGrant, dye: dye ?? {}, ...(body ? { body } : {}) });
 }

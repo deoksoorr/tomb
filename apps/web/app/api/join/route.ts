@@ -3,6 +3,7 @@ import { issueJoin } from "@/lib/joinToken";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
 import { getAccounts } from "@/lib/store";
+import { getStyleStore } from "@/lib/store/style";
 import { kstDay, lookOf } from "@/lib/store/accounts";
 import type { JoinResponse } from "@/lib/types";
 import { JoinRequestSchema, readBody } from "@/lib/validate";
@@ -16,7 +17,9 @@ export const POST = handler(async (req) => {
   const { channel, name, color, body } = await readBody(req, JoinRequestSchema);
   await rateLimit("join", req, visitorId);
   const now = Date.now();
-  const account = await getAccounts().get(visitorId, kstDay(now), now);
-  const claims = { visitorId, name, color, body: body ?? account.body ?? "hood", look: lookOf(account) };
+  const accounts = getAccounts();
+  const [account, style] = await Promise.all([accounts.get(visitorId, kstDay(now), now), getStyleStore(accounts).get(visitorId)]);
+  // 25번 외형 바꾸기: 계정에 몸 모양이 있으면 그것이 정답 (요청 값은 입장 화면에서 처음 고른 몸)
+  const claims = { visitorId, name, color, body: account.body ?? body ?? "hood", look: lookOf(account), dye: style.dye };
   return json<JoinResponse>(await issueJoin(channel, claims));
 });

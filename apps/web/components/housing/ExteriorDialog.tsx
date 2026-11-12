@@ -5,7 +5,7 @@ import { useState, useSyncExternalStore } from "react";
 import { facadePreview } from "@/game/housing/art";
 import { errorMessage } from "@/lib/api";
 import { meStore } from "@/lib/hooks/useMe";
-import { EXT_SLOTS, FURNITURE, furnitureById, isExtBase, LIKE_WEIGHT, tierById, type ExtSlot } from "@/lib/housing/catalog";
+import { EXT_SLOTS, FURNITURE, furnitureById, isExtBase, LIKE_WEIGHT, lotLabel, tierById, type ExtSlot } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { designScore, exteriorScore } from "@/lib/housing/layout";
 import type { HouseExterior, MyHouseResponse } from "@/lib/housing/types";
@@ -21,7 +21,20 @@ const noop = () => () => undefined;
  * 외관 꾸미기: 지붕·벽·문·울타리·우편함·정원·간판. 마을에서 모두에게 보이고 꾸밈 점수에 더해진다.
  * F18: 안 산 아이템도 눌러(또는 마우스를 올려) 먼저 입혀 본다 → 마음에 들면 "사고 적용"으로 한 번에 사서 저장. 낮/밤으로 바꿔 볼 수 있다.
  */
-export default function ExteriorDialog({ my, onMy, onSaved, onClose }: { my: MyHouseResponse; onMy: (r: MyHouseResponse) => void; onSaved?: () => void; onClose: () => void }) {
+export default function ExteriorDialog({
+  my,
+  channel,
+  onMy,
+  onSaved,
+  onClose,
+}: {
+  my: MyHouseResponse;
+  /** 지금 채널 (서버는 내 집이 이 채널에 있을 때만 저장한다) */
+  channel: number;
+  onMy: (r: MyHouseResponse) => void;
+  onSaved?: () => void;
+  onClose: () => void;
+}) {
   const house = my.house!;
   const [draft, setDraft] = useState<HouseExterior>(house.exterior);
   const [hover, setHover] = useState<{ slot: ExtSlot; id: string } | null>(null);
@@ -45,7 +58,7 @@ export default function ExteriorDialog({ my, onMy, onSaved, onClose }: { my: MyH
     try {
       for (const id of toBuy) onMy(await housingApi.buyItem(id));
       if (toBuy.length) void meStore.refresh();
-      onMy(await housingApi.saveExterior(draft));
+      onMy(await housingApi.saveExterior(channel, draft));
       setMsg(toBuy.length ? `${toBuy.length}개를 사서 입혔어요. 마을에서 모두에게 보여요.` : "외관을 저장했어요. 마을에서 모두에게 보여요.");
       onSaved?.();
     } catch (e) {
@@ -67,7 +80,7 @@ export default function ExteriorDialog({ my, onMy, onSaved, onClose }: { my: MyH
   });
 
   return (
-    <Dialog title="외관 꾸미기" onClose={onClose} size="lg">
+    <Dialog title="외관 꾸미기" onClose={onClose}>
       <div className={styles.stack}>
         <div className={styles.extTop}>
           <div className={styles.extPreview} data-night={night}>
@@ -91,7 +104,7 @@ export default function ExteriorDialog({ my, onMy, onSaved, onClose }: { my: MyH
           </div>
           <div className={styles.stack} style={{ gap: 6 }}>
             <p className={styles.houseName}>
-              {house.lot}번지 · {house.name}
+              {lotLabel(house.ch, house.lot)} · {house.name}
             </p>
             <p className={styles.score}>
               꾸밈 점수 <strong>{fmt(score)}</strong> <span className={styles.small}>(외관 +{exteriorScore(view)})</span>

@@ -1,4 +1,4 @@
-import type { GraveEventKind, QueueStatus } from "@tomb/protocol";
+import type { AvatarDye, GraveEventKind, QueueStatus } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
@@ -84,6 +84,8 @@ export type GameEvents = {
   "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish"; houseId?: string; lot?: number };
   /** 22번 황금 고블린을 내가 가장 먼저 잡았다 → UI가 증서로 /api/goblin에 보상을 받는다 */
   "goblin:grant": { id: string; grant: string; points: number };
+  /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
+  "megaphone:heard": { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number };
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
   "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house" };
   /** 실시간 서버가 이 화면을 옛 버전이라 거절함(4010, 큰 패치) → UI가 업데이트 창을 띄운다 (sticky) */
@@ -161,7 +163,7 @@ export type UiEvents = {
   /** 정해진 문장 말풍선 (PHRASES id). 지금 있는 공간(채널·방)에 보낸다 */
   "input:say": { id: string };
   /** 첫 방문 안내: 월드의 한 지점을 화살표로 가리킨다 (null이면 지움). target이 있으면 게임이 그 대상의 좌표를 찾는다 */
-  "guide:point": { target: "nearestGrave" | "shop" | "hunt" | "housing" | "bench" | "campfire" | null; label?: string };
+  "guide:point": { target: "nearestGrave" | "shop" | "hunt" | "housing" | "bench" | "campfire" | "fishing" | null; label?: string };
   "input:interact": undefined;
   /** 모달·폼이 열려 있는 동안 게임 키보드 입력을 막는다 */
   "ui:blockKeys": { blocked: boolean };
@@ -172,9 +174,12 @@ export type UiEvents = {
   /** "여기서 다시 접속" (replaced/offline 상태에서) */
   "net:reconnect": undefined;
   /** 꾸미기 착용 변경: 내 아바타에 바로 반영하고 grant를 실시간 서버로 보낸다 (sticky) */
-  "look:set": { look: string[]; lookGrant: string };
+  /** 내 착용 상태 (+ 46·25번: 염색·몸 모양 — 있으면 내 아바타에도 바로 입힌다) */
+  "look:set": { look: string[]; lookGrant: string; dye?: AvatarDye; body?: string };
   /** 폭죽 발사: 내 위치에서 바로 터뜨리고 grant를 실시간 서버로 보낸다 */
   "firework:fire": { item: string; grant: string };
+  /** 23번 확성기: Vercel이 서명한 증서를 지금 채널의 실시간 서버로 보낸다 (서버가 채널·모든 채널에 방송) */
+  "megaphone:send": { grant: string };
   /** 내 계정이 세운 묘비 id들 (sticky). 게임은 이 묘비들에 "내 묘비" 표시를 띄운다 */
   "graves:mine": { ids: string[] };
   /** BGM 볼륨·음소거를 효과음에도 적용 (sticky) */

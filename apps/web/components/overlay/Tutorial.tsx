@@ -14,7 +14,7 @@ type Target = UiEvents["guide:point"]["target"];
 type Step = { title: string; text: string; point?: Target; waitFor?: "near" | "flowered" };
 
 /**
- * 48번 순서: 이동·앉기·모닥불 → 사냥 → 집 → 상점 → (묘비는 뒤쪽, 해 보라고 붙잡지 않는다)
+ * 48번 순서: 이동·앉기·모닥불 → 사냥 → 집 → 상점 → 낚시터 → (묘비는 뒤쪽, 해 보라고 붙잡지 않는다)
  */
 function tutorialSteps(touch: boolean): Step[] {
   return [
@@ -32,15 +32,20 @@ function tutorialSteps(touch: boolean): Step[] {
     { title: "모닥불", text: "모닥불 곁에 앉으면 잠시 불멍을 할 수 있어요. 다른 사람과 같이 앉아도 좋아요.", point: "campfire" },
     {
       title: "사냥터",
-      text: `사냥과 미니게임으로 포인트를 모으는 곳이에요. 하루 최대 ${earnRule("hunt").dailyMax}포인트. ${touch ? "메뉴" : "왼쪽 위 [사냥]"}으로도 열 수 있어요.`,
+      text: `사냥과 미니게임으로 포인트를 모으는 곳이에요. 하루 최대 ${earnRule("hunt").dailyMax}포인트. ${touch ? "아래 줄 [사냥]" : "왼쪽 아래 [사냥]"}으로도 열 수 있어요.`,
       point: "hunt",
     },
     {
       title: "분양 사무소",
-      text: `나만의 집을 얻어 가구로 꾸밀 수 있어요. ${touch ? "메뉴" : "왼쪽 위 [집]"}으로도 열 수 있어요.`,
+      text: `나만의 집을 얻어 가구로 꾸밀 수 있어요. ${touch ? "아래 줄 [집]" : "왼쪽 아래 [집]"}으로도 열 수 있어요.`,
       point: "housing",
     },
     { title: "상점", text: "유령 잡화점이에요. 주인장에게 말을 걸면 포인트로 꾸미기·폭죽을 살 수 있어요.", point: "shop" },
+    {
+      title: "낚시터",
+      text: `낚시는 호수 옆 낚시터에서 해요. 나무 데크의 낚시 의자 앞에서 ${touch ? "[상호작용]" : "E"}를 누르면 낚싯대를 드리우고, 잡은 물고기는 어부 영감에게 팔아요.`,
+      point: "fishing",
+    },
     {
       title: "작은 묘역",
       text: `끝내지 못한 것들이 잠든 곳이에요. 묘비 앞에서 ${touch ? "[상호작용]" : "E"}를 누르면 꽃을 놓을 수 있어요(+${earnRule("flower").points}P). 내 묘비는 메뉴에서 한 사람에 하나 쓸 수 있고, 시간이 지나면 성불해요.`,

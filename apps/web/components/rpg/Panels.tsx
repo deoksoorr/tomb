@@ -6,7 +6,6 @@ import {
   DIFFICULTIES,
   DIFFS,
   GAMES,
-  GAME_KINDS,
   GEAR,
   GEAR_SLOTS,
   gearById,
@@ -68,7 +67,6 @@ export function StartPanel({
   game,
   diff,
   zoneId,
-  onGame,
   onDiff,
   onZone,
   onStart,
@@ -79,7 +77,6 @@ export function StartPanel({
   diff: Difficulty;
   /** 40번: 고른 사냥터 (사냥만) */
   zoneId?: ZoneId;
-  onGame: (g: GameKind) => void;
   onDiff: (d: Difficulty) => void;
   onZone?: (z: ZoneDef) => void;
   onStart: () => void;
@@ -94,26 +91,8 @@ export function StartPanel({
   const monsters = [...new Set([...zone.pool])].map((id) => MONSTERS[id].name);
   return (
     <div className={s.lobby}>
-      <section className={s.section} aria-labelledby="rpg-games">
-        <h3 id="rpg-games" className={s.sectionTitle}>
-          어디로 갈까요
-        </h3>
-        <div className={s.cards} role="radiogroup" aria-labelledby="rpg-games">
-          {GAME_KINDS.filter((g) => !LOBBY_HIDDEN.has(g)).map((g) => (
-            <button key={g} type="button" role="radio" aria-checked={game === g} className={s.card} onClick={() => onGame(g)}>
-              <span className={s.cardName}>{GAMES[g].name}</span>
-              <span>{GAMES[g].desc}</span>
-              <span className={s.meta}>{GAMES[g].statNote}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
       {game === "hunt" && onZone ? (
-        <section className={s.section} aria-labelledby="rpg-zone">
-          <h3 id="rpg-zone" className={s.sectionTitle}>
-            사냥터 <span className={s.meta}>· 레벨이 오르면 다음 사냥터가 열려요</span>
-          </h3>
+        <section className={s.section} aria-label="사냥터 고르기">
           <ZonePicker level={c.level} zone={zone.id} onZone={onZone} />
           <ZoneInfo z={zone} />
           {zoneLocked && <p className={s.warn}>{zone.name}은(는) Lv.{zone.unlockLevel}부터 갈 수 있어요.</p>}
@@ -149,10 +128,11 @@ export function StartPanel({
       </section>
       )}
 
-      <div className={s.startRow}>
+      {/* 조작 안내는 목록 쪽에, 아래에 붙는 출발 줄은 짧게 (오늘 남은 포인트·판 + 출발) */}
+      <p className={s.meta}>{game === "hunt" ? GAMES.hunt.how : "끝나면 점수에 따라 포인트·EXP를 받아요."}</p>
+
+      <div className={cx(s.startRow, s.startDock)}>
         <p className={s.meta}>
-          {game === "hunt" ? GAMES.hunt.how : "끝나면 점수에 따라 포인트·EXP를 받아요."}
-          <br />
           오늘 사냥 포인트 {view.today.huntPoints} / {view.today.cap}
           {capLeft === 0 && " · 오늘 한도를 다 채워서 EXP와 드롭만 받아요"} · 이번 시간 남은 판 {view.today.runsPerHour}
         </p>

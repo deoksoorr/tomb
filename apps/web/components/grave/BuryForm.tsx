@@ -77,7 +77,7 @@ export default function BuryForm(props: Props) {
 
   if (gate.state === "open") return <BuryFormInner {...props} />;
   return (
-    <Dialog title="묘비 쓰기" onClose={props.onClose} size="sm">
+    <Dialog title="묘비 쓰기" onClose={props.onClose}>
       {gate.state === "checking" ? (
         <p className={ui.hint} role="status">
           내 묘비를 살피는 중…

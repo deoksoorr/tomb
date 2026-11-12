@@ -5,9 +5,11 @@ import {
   isAvatarColor,
   itemById,
   ITEMS,
+  type AvatarDye,
   type CosmeticSlot,
   type ItemDef,
 } from "@tomb/protocol";
+import { avatarColorSpec } from "@/game/sprites/avatar";
 import { remainingLabel } from "./items";
 
 // 캐릭터 꾸미기 "착용 부위" 순수 함수 (상점 부위 필터, 가방 장비창)
@@ -131,13 +133,16 @@ export function displaced(entries: readonly WardrobeEntry[], e: WardrobeEntry): 
   return wornBySlot(entries)[e.slot]?.item ?? null;
 }
 
-/** 내 아바타 색·몸: 게임 속 값 → 계정 → 이 기기에 남은 색 → 기본값 */
+/**
+ * 내 아바타 색·몸: 게임 속 값 → 계정 → 이 기기에 남은 색 → 기본값.
+ * color는 46번 염색까지 담은 색 표기(avatarColorSpec)다. 몸은 25번 외형 바꾸기가 계정에 남으므로 계정 값이 먼저
+ */
 export function resolveAvatar(
   avatar: { color?: string | null; body?: string | null } | undefined,
-  me: { color: string | null; body: string | null } | null,
+  me: { color: string | null; body: string | null; dye?: AvatarDye } | null,
   savedColor: string | null,
 ): { color: string; body: string } {
-  const color = [avatar?.color, me?.color, savedColor].find((c): c is string => isAvatarColor(c)) ?? AVATAR_COLORS[0];
-  const body = [avatar?.body, me?.body].find((b): b is string => isAvatarBody(b)) ?? "hood";
-  return { color, body };
+  const base = [avatar?.color, me?.color, savedColor].find((c): c is string => isAvatarColor(c)) ?? AVATAR_COLORS[0];
+  const body = [me?.body, avatar?.body].find((b): b is string => isAvatarBody(b)) ?? "hood";
+  return { color: avatarColorSpec(base, me?.dye), body };
 }

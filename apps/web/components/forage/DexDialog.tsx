@@ -97,7 +97,7 @@ export default function DexDialog({ accountId, name, onClose }: { accountId?: st
 
   const title = mine ? "도감" : `${other?.name ?? name ?? "이웃"}의 도감`;
   return (
-    <Dialog title={title} onClose={onClose} size="lg">
+    <Dialog title={title} onClose={onClose}>
       {!loaded ? (
         <p className={error ? ui.error : ui.hint}>{error ?? "도감을 펼치는 중…"}</p>
       ) : (

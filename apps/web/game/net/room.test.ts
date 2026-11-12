@@ -39,13 +39,23 @@ describe("room policy", () => {
     expect(parseRoomMessage(JSON.stringify({ t: "act", sid: 2, kind: "wave", x: 1, y: 2 }), 1)?.t).toBe("act");
     expect(parseRoomMessage(JSON.stringify({ t: "act", sid: 2, kind: "dance", x: 1, y: 2 }), 1)).toBeNull();
     expect(parseRoomMessage(JSON.stringify({ t: "act", sid: 2, kind: "wave", x: "1", y: 2 }), 1)).toBeNull();
-    expect(parseRoomMessage(JSON.stringify({ t: "seat", seatId: "a", sid: 2 }), 1)).toBeNull();
+    // 3번: 방에서도 집 안 1인 자리(seat/seatDenied)와 가구 쓰기(use)를 받는다
+    expect(parseRoomMessage(JSON.stringify({ t: "seat", seatId: "l_10_20", sid: 2 }), 1)).toEqual({ t: "seat", seatId: "l_10_20", sid: 2 });
+    expect(parseRoomMessage(JSON.stringify({ t: "seat", seatId: "l_10_20", sid: null }), 1)).toEqual({ t: "seat", seatId: "l_10_20", sid: null });
+    expect(parseRoomMessage(JSON.stringify({ t: "seat", seatId: "bad id!", sid: 2 }), 1)).toBeNull();
+    expect(parseRoomMessage(JSON.stringify({ t: "seatDenied", seatId: "c_1_2" }), 1)).toEqual({ t: "seatDenied", seatId: "c_1_2" });
+    expect(parseRoomMessage(JSON.stringify({ t: "use", sid: 2, u: "ab12", a: 4 }), 1)).toEqual({ t: "use", sid: 2, u: "ab12", a: 4 });
+    expect(parseRoomMessage(JSON.stringify({ t: "use", sid: 1, u: "ab12", a: 4 }), 1)).toBeNull();
+    expect(parseRoomMessage(JSON.stringify({ t: "use", sid: 2, u: "ab12", a: 300 }), 1)).toBeNull();
     expect(parseRoomMessage("not json", 1)).toBeNull();
     const w = parseRoomMessage(
       JSON.stringify({ t: "welcome", sid: 5, cap: 30, resumed: false, peers: [{ sid: 5, x: 0, y: 0, name: "me", color: "#fff" }, { sid: 6, x: 1, y: 2, name: "a", color: "#fff", state: 0, dir: 0 }, { bad: 1 }] }),
       null,
     );
     expect(w?.t === "welcome" && w.m.peers.map((p) => [p.sid, p.body, p.look])).toEqual([[6, "hood", []]]);
+    expect(w?.t === "welcome" && [w.m.spots, w.m.seats]).toEqual([false, {}]);
+    const w2 = parseRoomMessage(JSON.stringify({ t: "welcome", sid: 5, cap: 30, resumed: false, peers: [], spots: true, seats: { l_1_2: 6, "x y": 7 } }), null);
+    expect(w2?.t === "welcome" && [w2.m.spots, w2.m.seats]).toEqual([true, { l_1_2: 6 }]);
   });
 });
 

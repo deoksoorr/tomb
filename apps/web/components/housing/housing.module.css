@@ -453,14 +453,14 @@
 .extTop {
   /* F18: 아이템 목록을 내려도 미리보기가 위에 붙어 있게 */
   position: sticky;
-  top: -16px;
+  top: calc(-1 * var(--dialog-pad-y, 16px));
   z-index: 2;
   display: grid;
   grid-template-columns: minmax(0, 256px) 1fr;
   gap: 14px;
   align-items: center;
-  margin: -16px -16px 0;
-  padding: 16px 16px 10px;
+  margin: calc(-1 * var(--dialog-pad-y, 16px)) calc(-1 * var(--dialog-pad-x, 16px)) 0;
+  padding: var(--dialog-pad-y, 16px) var(--dialog-pad-x, 16px) 10px;
   background: var(--panel-solid);
   border-bottom: 2px solid var(--line);
 }

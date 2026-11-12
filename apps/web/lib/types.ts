@@ -1,5 +1,7 @@
 // web 안에서 공유하는 데이터 타입과 API 응답 형태 (계약). 바꿀 때는 모든 사용처를 같이 고친다.
 
+import type { AvatarDye } from "@tomb/protocol";
+
 export const CAUSE_TAGS = [
   "time",
   "interest",
@@ -203,7 +205,8 @@ export type Me = {
   points: number;
   /** 오늘 쌓은 포인트 (DAILY_EARN_CAP 대비) */
   todayEarned: number;
-  attendance: { today: boolean; streak: number };
+  /** today = 오늘 출석 도장을 받았는지, stayMinutes = 오늘 머문 시간(분, 10분 단위 — 60분이면 오늘 칸을 받을 수 있다) */
+  attendance: { today: boolean; streak: number; stayMinutes: number };
   /** 개인 코드를 발급받은 적이 있는지 (원문은 발급 때 한 번만 보여 준다) */
   hasCode: boolean;
   /** 가방: itemId → 개수 */
@@ -214,6 +217,8 @@ export type Me = {
   stash: { itemId: string; until: number }[];
   /** 내 계정이 세운 묘비 id */
   graves: string[];
+  /** 46번: 염색한 부위 색 (없으면 color 하나 — 머리 = 몸, 포인트는 몸마다 원래 색) */
+  dye?: AvatarDye;
 };
 
 /**
@@ -239,7 +244,8 @@ export type BuyResponse = { me: Me };
  */
 export type UseItemResponse = { me: Me; grant?: string; lookGrant?: string; grave?: PublicGrave };
 /** GET /api/me/look → 지금 착용 상태의 증서 (재접속 때) */
-export type LookGrantResponse = { look: string[]; lookGrant: string };
+/** dye·body = 46·25번 지금 염색·몸 모양 (게임이 내 아바타에 입힌다) */
+export type LookGrantResponse = { look: string[]; lookGrant: string; dye?: AvatarDye; body?: string | null };
 /** GET /api/version → 배포 식별자. 다르면 새 버전 안내 */
 /** version = 배포 id (다르면 평소 패치 배너), minClient = 이 배포가 요구하는 최소 클라이언트 버전 (내 CLIENT_VERSION보다 크면 강제 업데이트 창) */
 export type VersionResponse = { version: string; minClient: number };
@@ -394,3 +400,59 @@ export type RankResponse = {
   rows: RankRow[];
   mine: RankRow | null;
 };
+
+// ── 10번 출석 달력 · 11번 선물함 · 23번 확성기 ──
+
+/** 출석 달력 한 칸 상태: stamped = 도장, missed = 못 받고 지난 날(회색), today = 오늘(받을 수 있으면 claimable), future = 아직 */
+export type CalendarDayState = "stamped" | "missed" | "today" | "future";
+/**
+ * GET /api/me/calendar?month=YYYYMM (없으면 이번 달, 이번 달~2달 전까지) → 한 달 달력.
+ * days[i] = (i+1)일. points = 그날 받은 포인트(도장만 있으면 0)
+ */
+export type CalendarResponse = {
+  month: string;
+  /** 오늘 (KST YYYYMMDD) */
+  today: string;
+  /** 1일의 요일 (0 = 일요일) */
+  firstWeekday: number;
+  days: { day: number; state: CalendarDayState; points: number }[];
+  /** 오늘 칸을 지금 받을 수 있는지 (1시간 머묾 + 아직 안 받음) */
+  claimable: boolean;
+  stayMinutes: number;
+  needMinutes: number;
+  streak: number;
+  /** 한 달 개근 보상을 받았으면 그 포인트 */
+  monthBonus: number | null;
+  rewards: { daily: number; streak: number; streakEvery: number; monthly: number };
+};
+/** POST /api/me/calendar/claim → 오늘 칸 받기. 머문 시간이 모자라면 409 NOT_YET, 이미 받았으면 409 ALREADY */
+export type CalendarClaimResponse = {
+  calendar: CalendarResponse;
+  me: Me;
+  earned: { daily: number; streak: number; monthly: number };
+};
+
+/** 선물 아이템 (카탈로그 아이템 id × 개수) */
+export type GiftItem = { itemId: string; count: number };
+/** 내 선물함 한 통. claimedAt = 받은 시각 (없으면 아직), expiresAt = 이때까지 안 받으면 사라짐 */
+export type GiftEntry = {
+  id: string;
+  from: string;
+  note: string;
+  points: number;
+  items: GiftItem[];
+  createdAt: number;
+  expiresAt: number;
+  claimedAt: number | null;
+};
+/** GET /api/gifts → 내 선물함 (최신 먼저). unclaimed = 아직 안 받은 선물 수 (빨간 점) */
+export type GiftListResponse = { gifts: GiftEntry[]; unclaimed: number };
+/** POST /api/gifts/{id} → 받기 (한 번만). DELETE /api/gifts/{id} → 지우기 (안 받은 선물을 지우면 버려진다) */
+export type GiftClaimResponse = { gift: GiftEntry; me: Me; points: number };
+
+/** 확성기 기록 한 줄 */
+export type MegaphoneEntry = { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number };
+/** GET /api/megaphone?channel=N → 그 채널에서 보이는 최근 확성기 (모든 채널 확성기 포함, 숨긴 것 빼고, 오래된 것 먼저 최대 20개) */
+export type MegaphoneListResponse = { entries: MegaphoneEntry[] };
+/** POST /api/megaphone { itemId, text, channel } → 확성기 1개를 쓰고 증서를 받는다 (게임이 실시간 서버로 보낸다) */
+export type MegaphoneUseResponse = { entry: MegaphoneEntry; grant: string; me: Me };

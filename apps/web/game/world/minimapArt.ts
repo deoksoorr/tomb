@@ -60,7 +60,17 @@ export const LANDMARK_COLOR: Record<Landmark["kind"], string> = {
   telescope: "#fff2a0",
   wish: "#8ce0ff",
   bell: "#e0c070",
+  fish: "#7fe0ff",
 };
+
+/** 채집 지점 점 색 (약초·광석·발굴·곤충 수풀 — 게임의 발밑 빛 색과 같다) */
+export const NODE_DOT_COLOR: Record<string, string> = { herb: "#9cff8a", ore: "#9ad8ff", dig: "#ffd27a", bug: "#fff0a0" };
+
+/** 낚시터 물고기 아이콘 (미니맵 px, 가운데 기준 [dx, dy] — 오른쪽을 보는 물고기, 꼬리는 왼쪽) */
+export const FISH_ICON: readonly (readonly [number, number])[] = [
+  [-3, -1], [-3, 1], [-2, 0], // 꼬리
+  [-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 0], [0, 1], [1, -1], [1, 0], [1, 1], [2, 0], // 몸
+];
 
 /** 미니맵 좌표 (월드 → 미니맵 px) */
 export function toMinimap(x: number, y: number): { x: number; y: number } {

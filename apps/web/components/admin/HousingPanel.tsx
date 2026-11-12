@@ -175,7 +175,7 @@ export default function HousingPanel({ toast, onAuthLost }: Props) {
       </ul>
 
       {confirm && (
-        <Dialog title="삭제 확인" size="sm" onClose={() => setConfirm(null)} closable={!busy}>
+        <Dialog kind="confirm" title="삭제 확인" onClose={() => setConfirm(null)} closable={!busy}>
           <div className={styles.confirm}>
             <p>{confirm.label}을(를) 삭제할까요? 되돌릴 수 없어요.</p>
             <div className={styles.actions}>

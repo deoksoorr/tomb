@@ -134,7 +134,7 @@ export default function PassedPanel({ toast, onAuthLost, onChanged }: Props) {
       {data?.next !== null && data?.next !== undefined && <p className={ui.hint}>최근 100개만 보여요. 검색으로 좁혀 주세요.</p>}
 
       {confirm && (
-        <Dialog title="성불한 묘비 삭제" size="sm" onClose={() => setConfirm(null)}>
+        <Dialog kind="confirm" title="성불한 묘비 삭제" onClose={() => setConfirm(null)}>
           <div className={styles.confirm}>
             <p>「{confirm.name}」을(를) 성불 목록에서도 완전히 지울까요? 사진도 함께 지워지고 되돌릴 수 없어요.</p>
             <div className={styles.actions}>

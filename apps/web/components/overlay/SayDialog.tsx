@@ -12,7 +12,7 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
     bridge.emit("input:say", { id });
   }
   return (
-    <Dialog title="말풍선" onClose={onClose} size="sm">
+    <Dialog title="말풍선" onClose={onClose}>
       <div className={styles.phrases}>
         {PHRASES.map((p) => (
           <button key={p.id} type="button" className={styles.phrase} onClick={() => say(p.id)}>

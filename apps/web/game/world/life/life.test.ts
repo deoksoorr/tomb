@@ -101,3 +101,63 @@ describe("stargazing hill spots", () => {
     expect(spotKindOfState(SPOT_KINDS.hammock.state)).toBe("hammock");
   });
 });
+
+describe("까마귀 연못의 까마귀 (crowSim)", async () => {
+  const { CROW_COUNT, CROW_POND, CrowSim, crowPerches } = await import("./crowSim");
+  it("연못 둘레 마른 나무 가지·오래된 비석에 앉을 자리가 여럿 있고, 2~4마리", () => {
+    const perches = crowPerches();
+    expect(CROW_COUNT).toBeGreaterThanOrEqual(2);
+    expect(CROW_COUNT).toBeLessThanOrEqual(4);
+    expect(perches.length).toBeGreaterThanOrEqual(4);
+    expect(perches.some((p) => p.kind === "tree")).toBe(true);
+    expect(perches.some((p) => p.kind === "grave")).toBe(true);
+    for (const p of perches) expect(Math.hypot(p.x - CROW_POND.x, p.y - CROW_POND.y)).toBeLessThan(CROW_POND.rx + 120);
+  });
+
+  it("결정적: 두 브라우저(다른 순서로 묻기)가 같은 자리를 본다, 채널마다 다르다", () => {
+    const t0 = Date.UTC(2026, 10, 12, 3, 0, 0);
+    for (let i = 0; i < CROW_COUNT; i++) {
+      const a = new CrowSim(i, 1);
+      const b = new CrowSim(i, 1);
+      const times = Array.from({ length: 60 }, (_, k) => t0 + k * 1_337);
+      const ra = times.map((t) => ({ ...a.at(t) }));
+      const rb = [...times].reverse().map((t) => ({ ...b.at(t) })).reverse();
+      expect(rb).toEqual(ra);
+    }
+    const c1 = Array.from({ length: CROW_COUNT }, (_, i) => new CrowSim(i, 1).at(t0));
+    const c2 = Array.from({ length: CROW_COUNT }, (_, i) => new CrowSim(i, 2).at(t0));
+    expect(c1.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`)).not.toEqual(c2.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`));
+  });
+
+  it("앉았다가 연못 위를 돌며 날고, 끊김 없이 다음 자리에 내려앉는다 (튀는 순간이 없다)", () => {
+    const t0 = Date.UTC(2026, 10, 12, 3, 0, 0);
+    for (let i = 0; i < CROW_COUNT; i++) {
+      const sim = new CrowSim(i, 3);
+      let prev = sim.at(t0);
+      let flew = 0;
+      let sat = 0;
+      let tilted = 0;
+      let cawed = 0;
+      for (let t = t0 + 50; t < t0 + sim.legMs * 6; t += 50) {
+        const p = sim.at(t);
+        // 50ms 사이에 크게 튀지 않는다 (순간이동 없음)
+        expect(Math.hypot(p.x - prev.x, p.y - p.lift - (prev.y - prev.lift)), `crow${i} @${t - t0}`).toBeLessThan(12);
+        if (p.flying) {
+          flew++;
+          // 원을 도는 동안은 연못 근처 하늘
+          expect(Math.hypot(p.x - CROW_POND.x, p.y - CROW_POND.y)).toBeLessThan(CROW_POND.rx + 140);
+        } else {
+          sat++;
+          expect(p.perch).not.toBeNull();
+          if (p.tilt) tilted++;
+        }
+        if (p.cawAt >= 0) cawed++;
+        prev = p;
+      }
+      expect(flew).toBeGreaterThan(50);
+      expect(sat).toBeGreaterThan(50);
+      expect(tilted).toBeGreaterThan(0);
+      expect(cawed).toBeGreaterThan(0);
+    }
+  });
+});

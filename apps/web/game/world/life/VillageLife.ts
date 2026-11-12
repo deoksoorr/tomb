@@ -24,6 +24,7 @@ import type { Lighting } from "../Lighting";
 import type { Sfx } from "../Sfx";
 import { stargazeColliders } from "./stargazeLayout";
 import { CRITTERS, CritterSim, PERCH_FRONT_DY, type CritterPose } from "./critterSim";
+import { Crows } from "./Crows";
 import { playLife } from "./sounds";
 import { ensureLifeTextures, LTEX, type CatFrame } from "./sprites";
 
@@ -110,6 +111,8 @@ export class VillageLife {
   private petAt = -Infinity;
   private labelScale = 1 / 3;
   private destroyed = false;
+  /** 까마귀 연못의 까마귀 (crowSim — 고양이처럼 채널 시드 + 서버 시계) */
+  private readonly crows: Crows;
 
   constructor(private readonly d: LifeDeps) {
     const scene = (this.scene = d.scene);
@@ -142,6 +145,7 @@ export class VillageLife {
       emitting: false,
     });
     this.hearts.setDepth(DEPTH.bubble - 1);
+    this.crows = new Crows(scene, d.sfx, d.reduced);
     this.setSeed(d.channel());
   }
 
@@ -169,6 +173,7 @@ export class VillageLife {
     const seed = Number.isFinite(channel) && channel > 0 ? channel : 1;
     if (seed === this.seed) return;
     this.seed = seed;
+    this.crows.setSeed(seed);
     for (const c of this.critters) {
       c.img.destroy();
       c.label.destroy();
@@ -193,6 +198,8 @@ export class VillageLife {
     this.labelScale = labelScale;
     this.updateAmbience(t);
     this.updateCritters(t, pnow, dt, view, labelScale);
+    const pl = this.d.player();
+    this.crows.update(t, pnow, view, { x: pl.x, y: pl.y, rushing: pl.state === "run" || pl.state === "jump" });
     this.updateGoblin(t, pnow, labelScale);
     this.updateStars(pnow, view);
     this.updateHeld();
@@ -204,6 +211,7 @@ export class VillageLife {
     const a = ambienceAt(Date.now(), this.override);
     this.starry = a.phase === "night" && a.weather === "clear";
     this.ghostAlpha = a.phase === "night" ? 0.85 : a.phase === "day" ? 0.45 : 0.65;
+    this.crows.setNight(a.phase === "night" || a.phase === "dusk");
   }
 
   private updateCritters(t: number, pnow: number, dt: number, view: Phaser.Geom.Rectangle, labelScale: number): void {
@@ -555,6 +563,7 @@ export class VillageLife {
     if (this.destroyed) return;
     this.destroyed = true;
     this.clearGoblin(false);
+    this.crows.destroy();
     for (const c of this.critters) {
       c.img.destroy();
       c.label.destroy();

@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { MAX_DECOR_PER_GRAVE, type CosmeticSlot } from "@tomb/protocol";
+import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import type { ActivityItem, Grave, GraveDecor } from "../types";
 import { kstDay, WEEK_RANK_TTL_SEC, weekOfDay } from "./accounts";
@@ -108,30 +109,74 @@ return credit(c, ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4]), KEYS[6], tonumbe
 const PRESENCE_LUA = `${CREDIT_FN}
 if tonumber(ARGV[2]) - tonumber(redis.call('HGET', KEYS[1], 'presenceAt') or '0') < tonumber(ARGV[3]) then return -1 end
 redis.call('HSET', KEYS[1], 'presenceAt', ARGV[2])
+-- 10번: 머문 기록은 포인트 한도와 상관없이 센다 (출석 도장 조건)
+redis.call('HINCRBY', KEYS[2], '_stay', 1)
+redis.call('EXPIRE', KEYS[2], ARGV[8])
 local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[6]), balanceCap = tonumber(ARGV[7]), ttl = ARGV[8] }
 return credit(c, 'presence', tonumber(ARGV[4]), tonumber(ARGV[5]))
 `;
 
-// 출석. 이름·색·몸 모양은 계정에 값이 없을 때만 저장한다
-// KEYS: acct, earn, attendIp, rank, econ, week
-// ARGV: id, day, yesterday, name, perIp, ttl, attendPts, attendMax, streakPts, streakMax, dailyCap, balanceCap, now, color, body
-const ATTEND_LUA = `${CREDIT_FN}
-if ARGV[4] ~= '' then redis.call('HSETNX', KEYS[1], 'name', ARGV[4]) end
-if ARGV[14] ~= '' then redis.call('HSETNX', KEYS[1], 'color', ARGV[14]) end
-if ARGV[15] ~= '' then redis.call('HSETNX', KEYS[1], 'body', ARGV[15]) end
-redis.call('HSETNX', KEYS[1], 'createdAt', ARGV[13])
+// 입장 기록: 이름·색·몸 모양·처음 입장 시각은 계정에 값이 없을 때만 저장한다
+// KEYS: acct  ARGV: name, color, body, now
+const ENTER_LUA = `
+if ARGV[1] ~= '' then redis.call('HSETNX', KEYS[1], 'name', ARGV[1]) end
+if ARGV[2] ~= '' then redis.call('HSETNX', KEYS[1], 'color', ARGV[2]) end
+if ARGV[3] ~= '' then redis.call('HSETNX', KEYS[1], 'body', ARGV[3]) end
+redis.call('HSETNX', KEYS[1], 'createdAt', ARGV[4])
+return 1
+`;
+
+// 10번: 달력 개편 전 출석을 도장으로 옮긴다 (한 번만). 읽은 뒤 마지막 출석일이 바뀌었으면(그 사이 도장) 0 → 다시 읽어 시도.
+// KEYS: acct, cal(달)... ARGV: lastAttend(''=없음), ttl, 그다음 KEYS[i+1]마다 그 달의 DD 목록을 쉼표로
+const CAL_INIT_LUA = `
+if redis.call('HEXISTS', KEYS[1], 'calInit') == 1 then return 1 end
+if (redis.call('HGET', KEYS[1], 'lastAttend') or '') ~= ARGV[1] then return 0 end
+redis.call('HSET', KEYS[1], 'calInit', '1')
+for i = 2, #KEYS do
+  for dd in string.gmatch(ARGV[i + 1], '[^,]+') do redis.call('HSETNX', KEYS[i], dd, '0') end
+  redis.call('EXPIRE', KEYS[i], ARGV[2])
+end
+return 1
+`;
+
+// 10번 출석 달력 오늘 칸 받기. {-1}(오늘 이미 받음) | {-2, 머문 기록 수} | {1, 출석, 7일 연속, 한 달 개근, 연속 일수}
+// 달력 보상은 하루 전체 한도에 막히지 않는다(dailyCap을 크게) — MemoryAccounts.claimAttend와 같은 규칙
+// KEYS: acct, earn, attendIp, rank, econ, week, cal
+// ARGV: id, day, yesterday, perIp, ttl, attendPts, attendMax, streakPts, streakMax, monthlyPts, monthlyMax, balanceCap, needTicks, dd, monthDays, calTtl
+const CLAIM_LUA = `${CREDIT_FN}
 local last = redis.call('HGET', KEYS[1], 'lastAttend')
-if last == ARGV[2] then return 0 end
+if last == ARGV[2] then
+  redis.call('HSETNX', KEYS[7], ARGV[14], '0')
+  redis.call('EXPIRE', KEYS[7], ARGV[16])
+  return {-1, 0, 0, 0, 0}
+end
+local ticks = tonumber(redis.call('HGET', KEYS[2], '_stay') or '0')
+if ticks < tonumber(ARGV[13]) then return {-2, ticks, 0, 0, 0} end
 local streak = 1
 if last == ARGV[3] then streak = tonumber(redis.call('HGET', KEYS[1], 'streak') or '0') + 1 end
 redis.call('HSET', KEYS[1], 'lastAttend', ARGV[2], 'streak', streak)
-if redis.call('SISMEMBER', KEYS[3], ARGV[1]) == 0 and redis.call('SCARD', KEYS[3]) >= tonumber(ARGV[5]) then return 0 end
-redis.call('SADD', KEYS[3], ARGV[1])
-redis.call('EXPIRE', KEYS[3], ARGV[6])
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[4], econ = KEYS[5], week = KEYS[6], id = ARGV[1], dailyCap = tonumber(ARGV[11]), balanceCap = tonumber(ARGV[12]), ttl = ARGV[6] }
-local earned = credit(c, 'attend', tonumber(ARGV[7]), tonumber(ARGV[8]))
-if streak % 7 == 0 then earned = earned + credit(c, 'streak', tonumber(ARGV[9]), tonumber(ARGV[10])) end
-return earned
+local paid = redis.call('SISMEMBER', KEYS[3], ARGV[1]) == 1 or redis.call('SCARD', KEYS[3]) < tonumber(ARGV[4])
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[4], econ = KEYS[5], week = KEYS[6], id = ARGV[1], dailyCap = 1000000000, balanceCap = tonumber(ARGV[12]), ttl = ARGV[5] }
+local a, s, m = 0, 0, 0
+if paid then
+  redis.call('SADD', KEYS[3], ARGV[1])
+  redis.call('EXPIRE', KEYS[3], ARGV[5])
+  a = credit(c, 'attend', tonumber(ARGV[6]), tonumber(ARGV[7]))
+  if streak % 7 == 0 then s = credit(c, 'streak', tonumber(ARGV[8]), tonumber(ARGV[9])) end
+end
+redis.call('HSET', KEYS[7], ARGV[14], a + s)
+if paid and redis.call('HEXISTS', KEYS[7], '_month') == 0 then
+  local n = 0
+  for _, f in ipairs(redis.call('HKEYS', KEYS[7])) do
+    if string.sub(f, 1, 1) ~= '_' then n = n + 1 end
+  end
+  if n >= tonumber(ARGV[15]) then
+    m = credit(c, 'monthly', tonumber(ARGV[10]), tonumber(ARGV[11]))
+    redis.call('HSET', KEYS[7], '_month', m)
+  end
+end
+redis.call('EXPIRE', KEYS[7], ARGV[16])
+return {1, a, s, m, streak}
 `;
 
 // 구매. unique('1')면 가방에 있거나 지금 착용 중이거나 벗어 둔 것(만료 전)이 있을 때 -1. 잔액 부족은 0
@@ -335,7 +380,7 @@ export class RedisAccounts implements AccountStore {
   }
 
   async get(id: string, day: string, now: number): Promise<AccountRecord> {
-    const [acct, inv, look, graves, today, activity, stashRaw] = await this.redis
+    const [acct, inv, look, graves, today, activity, stashRaw, stay] = await this.redis
       .pipeline()
       .hgetall(K.acct(id))
       .hgetall(K.inv(id))
@@ -344,7 +389,8 @@ export class RedisAccounts implements AccountStore {
       .hget(K.earn(id, day), "_total")
       .lrange(K.activity(id), 0, -1)
       .hgetall(K.stash(id))
-      .exec<[string[] | null, string[] | null, string[] | null, string[], string | null, string[], string[] | null]>();
+      .hget(K.earn(id, day), "_stay")
+      .exec<[string[] | null, string[] | null, string[] | null, string[], string | null, string[], string[] | null, string | null]>();
     const a = pairs(acct);
     const equipped: EquippedItem[] = [...pairs(look).values()].flatMap((v) => {
       const [itemId, until] = v.split("|");
@@ -362,6 +408,8 @@ export class RedisAccounts implements AccountStore {
       body: a.get("body") ?? null,
       streak: Number(a.get("streak") ?? 0),
       lastAttend: a.get("lastAttend") ?? null,
+      stayTicks: Number(stay ?? 0),
+      createdAt: Number(a.get("createdAt") ?? 0),
       hasCode: a.has("codeHash"),
       inventory: Object.fromEntries([...pairs(inv)].map(([k, v]) => [k, Number(v)])),
       equipped,
@@ -483,31 +531,68 @@ export class RedisAccounts implements AccountStore {
     return this.board(opts.week ? K.rankHuntBestWeek(zone, opts.week) : K.rankHuntBest(zone), limit, me, true);
   }
 
-  async attend(id: string, ipHash: string, profile: Profile, day: string, yesterday: string): Promise<number> {
-    const attend = earnRule("attend");
-    const streak = earnRule("streak");
-    const r = await this.redis.eval<string[], number>(
-      ATTEND_LUA,
-      [K.acct(id), K.earn(id, day), K.attendIp(ipHash, day), K.rankPoints, K.econ(day), K.rankPointsWeek(weekOfDay(day))],
-      [
-        id,
-        day,
-        yesterday,
-        profile.name ?? "",
-        String(ATTEND_ACCOUNTS_PER_IP),
-        String(EARN_TTL_SEC),
-        String(attend.points),
-        String(attend.dailyMax),
-        String(streak.points),
-        String(streak.dailyMax),
-        String(DAILY_EARN_CAP),
-        String(BALANCE_CAP),
-        String(Date.now()),
-        profile.color ?? "",
-        profile.body ?? "",
-      ],
-    );
-    return Number(r);
+  async enter(id: string, profile: Profile, now: number): Promise<void> {
+    await this.redis.eval<string[], number>(ENTER_LUA, [K.acct(id)], [profile.name ?? "", profile.color ?? "", profile.body ?? "", String(now)]);
+  }
+
+  /** 달력 개편 전 출석을 도장으로 옮긴다 (한 번만, 경합하면 다시 읽어 시도) */
+  private async initCalendar(id: string): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      // automaticDeserialization: false라 필드 순서대로의 배열이 온다
+      const raw = (await this.redis.hmget(K.acct(id), "calInit", "lastAttend", "streak")) as unknown as (string | null)[] | null;
+      const [init, last, streak] = raw ?? [null, null, null];
+      if (init) return;
+      const byMonth = new Map<string, string[]>();
+      for (const d of legacyAttendDays(last, Number(streak ?? 0))) byMonth.set(d.slice(0, 6), [...(byMonth.get(d.slice(0, 6)) ?? []), d.slice(6)]);
+      const months = [...byMonth];
+      const ok = await this.redis.eval<string[], number>(
+        CAL_INIT_LUA,
+        [K.acct(id), ...months.map(([m]) => K.cal(id, m))],
+        [last ?? "", String(CALENDAR_TTL_SEC), ...months.map(([, dds]) => dds.join(","))],
+      );
+      if (Number(ok) === 1) return;
+    }
+  }
+
+  async attendCalendar(id: string, month: string): Promise<CalendarMonthRecord> {
+    await this.initCalendar(id);
+    const m = pairs((await this.redis.hgetall<Record<string, string>>(K.cal(id, month))) as unknown as string[] | null);
+    return {
+      days: Object.fromEntries([...m].filter(([k]) => !k.startsWith("_")).map(([k, v]) => [k, Number(v)])),
+      monthBonus: m.has("_month") ? Number(m.get("_month")) : null,
+    };
+  }
+
+  async claimAttend(id: string, ipHash: string, day: string, yesterday: string, monthDays: number, needTicks: number): Promise<AttendClaim> {
+    await this.initCalendar(id);
+    const [attend, streak, monthly] = [earnRule("attend"), earnRule("streak"), earnRule("monthly")];
+    const r = (
+      await this.redis.eval<string[], number[]>(
+        CLAIM_LUA,
+        [K.acct(id), K.earn(id, day), K.attendIp(ipHash, day), K.rankPoints, K.econ(day), K.rankPointsWeek(weekOfDay(day)), K.cal(id, day.slice(0, 6))],
+        [
+          id,
+          day,
+          yesterday,
+          String(ATTEND_ACCOUNTS_PER_IP),
+          String(EARN_TTL_SEC),
+          String(attend.points),
+          String(attend.dailyMax),
+          String(streak.points),
+          String(streak.dailyMax),
+          String(monthly.points),
+          String(monthly.dailyMax),
+          String(BALANCE_CAP),
+          String(needTicks),
+          day.slice(6),
+          String(monthDays),
+          String(CALENDAR_TTL_SEC),
+        ],
+      )
+    ).map(Number);
+    if (r[0] === -1) return { ok: false, reason: "already" };
+    if (r[0] === -2) return { ok: false, reason: "stay", stayTicks: r[1] };
+    return { ok: true, earned: { daily: r[1], streak: r[2], monthly: r[3] }, streak: r[4] };
   }
 
   async setCode(id: string, codeHash: string): Promise<void> {

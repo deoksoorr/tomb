@@ -1,4 +1,5 @@
 import { decodeSnapshot, DIR, encodeEvent, encodeMove, isPhraseId, PING, PONG, STATE, type ActKind, type C2S, type PeerInfo, type PeerState, type Sid } from "@tomb/protocol";
+import type { AppearanceChange } from "../sprites/avatar";
 import type { RoomJoinRequest, RoomJoinResponse } from "@/lib/types";
 import { bridge } from "../bridge";
 import { backoffDelay } from "./backoff";
@@ -27,11 +28,16 @@ export type RoomCallbacks = {
   onJoin?(p: PeerInfo): void;
   onLeave?(sid: Sid): void;
   onSnapshot?(entries: readonly PeerState[], t: number): void;
-  onLook?(sid: Sid, look: string[]): void;
+  onLook?(sid: Sid, look: string[], extra?: AppearanceChange): void;
   onAct?(sid: Sid, kind: ActKind, x: number, y: number): void;
   onSay?(sid: Sid, id: string): void;
-  /** sync 응답: 서버가 아는 방 인원 전체 (나 제외) */
-  onPeers?(peers: PeerInfo[]): void;
+  /** sync 응답: 서버가 아는 방 인원 전체 (나 제외)와 좌석 점유표 */
+  onPeers?(peers: PeerInfo[], seats: Record<string, Sid>): void;
+  /** 3번 집 안 1인 자리: 점유 변경 (sid null = 비었다) / 내 요청 거절 */
+  onSeat?(seatId: string, sid: Sid | null): void;
+  onSeatDenied?(seatId: string): void;
+  /** 3번 같은 방 사람이 가구를 썼다 */
+  onUse?(sid: Sid, u: string, a: number): void;
   /** 끊김·방 이동: 원격 아바타를 비운다 */
   onReset?(): void;
   onStatus?(s: RoomStatus): void;
@@ -173,6 +179,17 @@ export class RoomClient {
 
   act(kind: ActKind): void {
     this.send({ t: "act", kind });
+  }
+
+  /** 3번 집 안 1인 자리 점유 요청 / 일어나기 / 가구 쓰기 */
+  sit(seatId: string): void {
+    this.send({ t: "sit", seatId });
+  }
+  stand(): void {
+    this.send({ t: "stand" });
+  }
+  use(u: string, a: number): void {
+    this.send({ t: "use", u, a });
   }
 
   /** 정해진 문장 말풍선 (PHRASES id). 모르는 id는 보내지 않는다 */
@@ -318,7 +335,7 @@ export class RoomClient {
           this.emitStatus();
           break;
         case "look":
-          this.cb.onLook?.(ev.sid, ev.look);
+          this.cb.onLook?.(ev.sid, ev.look, { dye: ev.dye, body: ev.body });
           break;
         case "act":
           this.cb.onAct?.(ev.sid, ev.kind, ev.x, ev.y);
@@ -326,11 +343,20 @@ export class RoomClient {
         case "say":
           this.cb.onSay?.(ev.sid, ev.id);
           break;
+        case "seat":
+          this.cb.onSeat?.(ev.seatId, ev.sid);
+          break;
+        case "seatDenied":
+          this.cb.onSeatDenied?.(ev.seatId);
+          break;
+        case "use":
+          this.cb.onUse?.(ev.sid, ev.u, ev.a);
+          break;
         case "peers":
           this.syncPolicy.mark(performance.now());
           this.peers.clear();
           for (const p of ev.peers) this.peers.add(p.sid);
-          this.cb.onPeers?.(ev.peers);
+          this.cb.onPeers?.(ev.peers, ev.seats);
           this.emitStatus();
           break;
       }

@@ -65,7 +65,9 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 2 = 가을·겨울 마을 맵 개편(1·50번: 넓은 고정 맵·강·광장·주거 구역, 해먹 상태 STATE.hammock=10, 다시 피어날 자리 제거)
 // 3 = 조각배·광장 놀거리(50번: STATE.boat~carousel=11~14 — 옛 클라이언트는 모르는 상태 값이 든 SNAPSHOT을 통째로 버린다)
 // 4 = 컴팩트한 묘지 마을 맵(F1: 1440×1024, 좌석·낚시 자리·배·필지 좌표가 바뀜 — 옛 화면은 없는 좌석 id를 보낸다)
-export const CLIENT_VERSION = 4;
+// 5 = 집 안 개편(3번: STATE.lie~bath=15~17 — 옛 클라이언트는 모르는 상태 값이 든 SNAPSHOT을 통째로 버린다, 방 좌석·use 이벤트)
+// 6 = 낚시터(호수 북동쪽 데크·낚시 자리 재배치·벤치 lE 이동 — 옛 화면은 없어진 낚시 자리·옛 벤치 좌표로 앉기를 보낸다)
+export const CLIENT_VERSION = 6;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */

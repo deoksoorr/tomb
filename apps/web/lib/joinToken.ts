@@ -1,4 +1,4 @@
-import { pickChannel, signJoinToken, type LobbyInfo } from "@tomb/protocol";
+import { pickChannel, signJoinToken, type AvatarDye, type LobbyInfo } from "@tomb/protocol";
 import { z } from "zod";
 import { env } from "./env";
 import { HttpError } from "./http";
@@ -49,7 +49,8 @@ async function resolveChannel(requested: number | "auto"): Promise<number | null
 }
 
 /** 입장 토큰 내용. body = 아바타 몸 모양, look = 지금 착용 중인 꾸미기 (입장하자마자 다른 사람에게 보이게) */
-type Claims = { visitorId: string; name: string; color: string; body: string; look: string[] };
+/** dye = 46번 염색 */
+type Claims = { visitorId: string; name: string; color: string; body: string; look: string[]; dye?: AvatarDye };
 
 /**
  * 입장 토큰 발급. 전체 만석이면 대기열 주소를 준다: 클라이언트가 QUEUE_POLL_MS마다 GET하다가

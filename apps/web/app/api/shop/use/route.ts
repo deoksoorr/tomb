@@ -42,8 +42,10 @@ export const POST = handler(async (req) => {
     if (!(await accounts.equip(visitorId, itemId, item.slot!, now + (item.durationMs ?? COSMETIC_DURATION_MS), now)))
       throw noItem();
     const me = await loadMe(accounts, visitorId, now);
-    return json<UseItemResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now) });
+    return json<UseItemResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now, me) });
   }
+
+  if (item.kind === "dye") throw new HttpError(400, "INVALID_INPUT", "염색권은 가방이나 상점의 염색에서 부위를 골라 써요.");
 
   if (item.kind === "graveStyle")
     throw new HttpError(400, "INVALID_INPUT", "묘비 디자인권은 묘비를 세우거나 고칠 때 디자인으로 골라 써요.");

@@ -1,4 +1,5 @@
 import type { CosmeticSlot } from "@tomb/protocol";
+import type { AttendClaim, CalendarMonthRecord } from "../calendar";
 import type { EarnSource } from "../economy";
 import type { ReportLogEntry, ReportReason } from "../reports";
 import { SHRINE_KEEP_DAYS, type ActivityItem, type Grave, type GraveDecor, type PassReason } from "../types";
@@ -121,8 +122,12 @@ export type AccountRecord = {
   color: string | null;
   body: string | null;
   streak: number;
-  /** 마지막 출석일 (KST, YYYYMMDD) */
+  /** 마지막 출석일 (KST, YYYYMMDD) = 출석 달력에서 마지막으로 도장을 받은 날 */
   lastAttend: string | null;
+  /** 10번: 오늘 머무르기 기록 수 (1번 = 10분, 출석 도장 조건) */
+  stayTicks: number;
+  /** 처음 입장한 시각 (0 = 모름: 기록을 남기기 전에 만든 옛 계정). 전체 선물 대상 판정에 쓴다 */
+  createdAt: number;
   hasCode: boolean;
   inventory: Record<string, number>;
   /** 만료 전 착용품 (부위마다 하나) */
@@ -179,11 +184,22 @@ export interface AccountStore {
     opts: { zone?: string; week?: string },
   ): Promise<{ rows: RankEntry[]; mine: RankEntry | null }>;
   /**
-   * 출석. 오늘 처음이면 연속 일수를 갱신하고 출석(+7일째마다 보너스) 포인트를 준다.
-   * 같은 IP에서 오늘 이미 ATTEND_ACCOUNTS_PER_IP개 계정이 받았으면 출석만 기록하고 포인트는 주지 않는다.
-   * 이름·색·몸 모양은 계정에 아직 값이 없을 때만 저장한다 (코드로 시작·이어서 들어온 기기의 다른 값이 덮어쓰지 않게).
+   * 입장 기록: 이름·색·몸 모양은 계정에 아직 값이 없을 때만 저장한다 (코드로 시작·이어서 들어온 기기의 다른 값이
+   * 덮어쓰지 않게). 처음 입장한 시각도 한 번만 남긴다. 포인트는 주지 않는다 (10번: 출석은 달력에서 받는다)
    */
-  attend(id: string, ipHash: string, profile: Profile, day: string, yesterday: string): Promise<number>;
+  enter(id: string, profile: Profile, now: number): Promise<void>;
+  /**
+   * 10번 출석 달력 한 달 (month = YYYYMM). 처음 부르면 달력 개편 전 출석(마지막 출석일·연속 일수)을
+   * 도장으로 옮겨 둔다 (legacyAttendDays, 한 번만)
+   */
+  attendCalendar(id: string, month: string): Promise<CalendarMonthRecord>;
+  /**
+   * 오늘 칸 받기 (원자적): 오늘 이미 받았으면 "already"(달력 개편 전 자동 출석 포함), 머문 기록이 needTicks보다
+   * 적으면 "stay". 받으면 연속 일수를 갱신하고 도장을 찍은 뒤 출석·7일 연속·한 달 개근(그달 monthDays일을 모두
+   * 찍었을 때 한 번) 포인트를 준다. 달력 보상은 하루 전체 한도(DAILY_EARN_CAP)에 막히지 않는다 (항목 한도·지갑 한도는 지킨다).
+   * 같은 IP에서 오늘 이미 ATTEND_ACCOUNTS_PER_IP개 계정이 받았으면 도장만 찍고 포인트는 주지 않는다
+   */
+  claimAttend(id: string, ipHash: string, day: string, yesterday: string, monthDays: number, needTicks: number): Promise<AttendClaim>;
   /** 개인 코드 해시 교체 (이전 코드는 무효) */
   setCode(id: string, codeHash: string): Promise<void>;
   findByCode(codeHash: string): Promise<string | null>;

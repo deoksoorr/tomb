@@ -223,8 +223,9 @@ export const NPCS: readonly Npc[] = [
     id: "fishmonger",
     name: "어부 영감",
     title: "생선 삽니다",
-    x: 1120,
-    y: 800,
+    // 낚시터 마당 동쪽 끝 (노점은 왼쪽, 입구 아치 옆)
+    x: 1384,
+    y: 806,
     buys: ["fish"],
     hello: "허허, 오늘은 뭐 좀 낚았나? 신선한 놈이면 값 잘 쳐주지.",
   },

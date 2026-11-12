@@ -6,6 +6,8 @@ import { standPoint } from "../logic/sit";
 import type { NetPose } from "../net/sendThrottle";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
 import { AvatarView, SIT_CHAIR_LIFT } from "./AvatarView";
+import { bridge } from "../bridge";
+import { avatarColorSpec } from "../sprites/avatar";
 
 // 내 캐릭터. 입력은 즉시 로컬에서 반영한다 (서버를 기다리지 않음, 서버 보정도 없음).
 // 상태 머신: idle | walk | run | sitGround | sitChair | jump | hang | swing | swim | dive
@@ -29,7 +31,7 @@ export const SWIM_SPEED = 0.6;
 export const DIVE_SPEED = 0.45;
 
 /** 붙어 있는 자세(앵커): 나무·그네·해먹 + 50번 시소·트램펄린·회전목마 */
-export const ATTACH_KINDS = ["hang", "swing", "hammock", "seesaw", "trampoline", "carousel"] as const;
+export const ATTACH_KINDS = ["hang", "swing", "hammock", "seesaw", "trampoline", "carousel", "lie", "read", "bath"] as const;
 export type AttachKind = (typeof ATTACH_KINDS)[number];
 export function isAttachKind(k: string): k is AttachKind {
   return (ATTACH_KINDS as readonly string[]).includes(k);
@@ -84,7 +86,8 @@ export class Player {
     name: string,
     body = "hood",
   ) {
-    this.view = new AvatarView(scene, atlas, x, y, color, name, true, [], body);
+    // 46번: 내 염색은 마지막 착용 증서(look:set)에 실려 온다 → 어느 장면에서 만들어도 같은 색으로
+    this.view = new AvatarView(scene, atlas, x, y, avatarColorSpec(color, bridge.last("look:set")?.dye), name, true, [], body);
     scene.physics.add.existing(this.view.sprite);
     this.body = this.view.sprite.body as Phaser.Physics.Arcade.Body;
     const s = this.view.sprite;

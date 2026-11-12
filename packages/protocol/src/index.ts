@@ -9,3 +9,4 @@ export * from "./names";
 export * from "./items";
 export * from "./grants";
 export * from "./npc";
+export * from "./dye";

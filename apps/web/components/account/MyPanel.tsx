@@ -15,6 +15,8 @@ import type { MyGraveEntry } from "./items";
 import { InquiryButton } from "../notice/InquiryDialog";
 import MyGraves from "./MyGraves";
 import styles from "./MyPanel.module.css";
+import MyHouseLine from "../housing/MyHouseLine";
+import type { PublicHouse } from "@/lib/housing/types";
 
 type Props = {
   myGraves: { entries: MyGraveEntry[]; pending: number };
@@ -26,13 +28,28 @@ type Props = {
   onLoggedOut: () => void;
   /** 이장한 묘비를 다시 모시는 곳 */
   onOpenShrine: () => void;
+  /** 내 집 (채널마다 주거 구역이 따로다): 지금 채널, 내 집 가기(필요하면 채널을 옮긴 뒤), 분양 사무소 열기 */
+  houseChannel: number;
+  onGoToMyHouse: (house: PublicHouse) => void;
+  onOpenHousing: () => void;
   onClose: () => void;
 };
 
 type Ending = "leave" | "logout" | null;
 
 /** 내 정보: 포인트·출석, 내 묘비, 개인 코드, 접속 종료·로그아웃 (가방은 HUD의 [가방]) */
-export default function MyPanel({ myGraves, onGoToMyGrave, onBury, onLeave, onLoggedOut, onOpenShrine, onClose }: Props) {
+export default function MyPanel({
+  myGraves,
+  onGoToMyGrave,
+  onBury,
+  onLeave,
+  onLoggedOut,
+  onOpenShrine,
+  houseChannel,
+  onGoToMyHouse,
+  onOpenHousing,
+  onClose,
+}: Props) {
   const { me, error } = useMe();
   const [ending, setEnding] = useState<Ending>(null);
   const [pending, setPending] = useState(false);
@@ -96,6 +113,11 @@ export default function MyPanel({ myGraves, onGoToMyGrave, onBury, onLeave, onLo
         <section className={styles.section}>
           <h3 className={styles.heading}>내 묘비</h3>
           <MyGraves entries={myGraves.entries} pending={myGraves.pending} onGo={onGoToMyGrave} onBury={onBury} />
+        </section>
+
+        <section className={styles.section}>
+          <h3 className={styles.heading}>내 집</h3>
+          <MyHouseLine channel={houseChannel} onGo={onGoToMyHouse} onOffice={onOpenHousing} />
         </section>
 
         <CodeSection me={me} buttonId={codeButtonId} />

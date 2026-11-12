@@ -15,6 +15,11 @@ import {
   seatSlot,
   spotKindOfState,
   spotSeatId,
+  isIndoorSpot,
+  USE_INTERVAL_MS,
+  hasDye,
+  sameDye,
+  type AvatarDye,
   type C2S,
   type DirId,
   type Grant,
@@ -47,8 +52,10 @@ export type PeerRecord = {
   seatId: string | null;
   /** 착용 중인 꾸미기 (입장 토큰 → look 증서로 바뀜) */
   look: string[];
-  /** 아바타 몸 모양 (AVATAR_BODIES id, 입장 토큰) */
+  /** 아바타 몸 모양 (AVATAR_BODIES id, 입장 토큰 → 25번 외형 바꾸기면 look 증서로 바뀜) */
   body: string;
+  /** 46번 염색한 부위 색 (입장 토큰 → look 증서로 바뀜). 없으면 color 하나 */
+  dye?: AvatarDye;
   /** 이 연결로 자리를 잡은 시각. 로비의 채널 간 중복 정리(kick)가 더 새 연결을 내보내지 않게 비교한다 */
   joinedAt: number;
 };
@@ -71,6 +78,8 @@ export type JoinTicket = {
   look: string[];
   /** 아바타 몸 모양 (JoinClaims.body) */
   body: string;
+  /** 46번 염색 (JoinClaims.dye) */
+  dye?: AvatarDye;
 };
 
 /** ChannelCore가 바깥(DO)에 맡기는 부수 효과 */
@@ -104,6 +113,11 @@ export interface ChannelHost<C> {
   signGrant?(g: Grant): Promise<string | null>;
   /** 고블린 일정·상태가 바뀌었다 → 저장하고 알람을 다시 잡는다 */
   goblinChanged?(s: GoblinState): void;
+  // ── 23번 확성기 ──
+  /** 이 DO의 채널 번호 (확성기 증서의 ch와 맞춰 본다). 없으면(테스트) 채널 검사를 건너뛴다 */
+  channelNo?(): number;
+  /** 모든 채널 확성기: 이 채널에 방송한 메시지를 다른 열린 채널들에도 전한다 (nonce로 채널마다 한 번만) */
+  relayMegaphone?(nonce: string, until: number, data: string): void;
   /** 난수 (테스트에서 고정) */
   random?(): number;
 }
@@ -138,6 +152,8 @@ export const GRAVE_EVENT_INTERVAL_MS = 5_000;
 export const LOOK_INTERVAL_MS = 10_000;
 /** firework 증서 연결당 최소 간격 */
 export const FIREWORK_INTERVAL_MS = 3_000;
+/** megaphone 증서 연결당 최소 간격 (주된 도배 제한은 Vercel이 계정 단위로 한다) */
+export const MEGAPHONE_INTERVAL_MS = 3_000;
 /** sync(접속자 목록 다시 받기) 연결당 최소 간격. 클라이언트는 PEER_SYNC_MS(60초)마다 보낸다 */
 export const SYNC_INTERVAL_MS = 20_000;
 /** act(종 치기·손 흔들기 등) 연결당 최소 간격 */
@@ -169,6 +185,10 @@ type Peer<C> = PeerRecord & {
   lastSyncAt: number;
   lastActAt: number;
   lastSayAt: number;
+  /** 23번 확성기 (없으면 아직 안 씀) */
+  lastMegaphoneAt?: number;
+  /** 3번 집 안 가구 쓰기 (없으면 아직 안 씀) */
+  lastUseAt?: number;
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
   lastSeenAt: number;
   /** attachment가 최신인지 */
@@ -297,6 +317,7 @@ export class ChannelCore<C extends object> {
       seatId: null,
       look: t.look,
       body: t.body,
+      ...(hasDye(t.dye) ? { dye: t.dye } : {}),
       joinedAt: now,
     };
     const p = this.adoptNew(rec, conn, now);
@@ -322,11 +343,13 @@ export class ChannelCore<C extends object> {
     } else {
       this.host.dropReservation(p.sid);
     }
-    const renamed = p.name !== t.name || p.color !== t.color || p.body !== t.body || p.look.join() !== t.look.join();
+    const renamed =
+      p.name !== t.name || p.color !== t.color || p.body !== t.body || p.look.join() !== t.look.join() || !sameDye(p.dye, t.dye);
     p.name = t.name;
     p.color = t.color;
     p.look = t.look;
     p.body = t.body;
+    p.dye = hasDye(t.dye) ? t.dye : undefined;
     p.joinedAt = now;
     // 새 소켓을 붙이기 전에 옮긴다: 좌석 해제 알림은 다른 사람에게만 가고, 본인은 결과가 반영된 welcome을 처음으로 받는다
     if (t.spawn) this.relocate(p, t.spawn);
@@ -392,7 +415,8 @@ export class ChannelCore<C extends object> {
       seats: Object.fromEntries(this.seats),
       resumed,
       // 나무·그네도 좌석처럼 판정한다 (이 값이 없는 이전 서버에는 클라이언트가 소품 자리를 요청하지 않는다)
-      ...(this.cfg.room ? {} : { spots: true }),
+      // 방(집)도 3번 집 안 가구 자리를 같은 체계로 판정한다
+      spots: true,
       // 22번: 서버 시계(고양이·유령·고블린을 모두가 같은 시각으로) + 지금 나와 있는 고블린
       ...(this.cfg.room ? {} : { now }),
       ...(goblin ? { goblin } : {}),
@@ -507,9 +531,12 @@ export class ChannelCore<C extends object> {
       if (state === STATE.sitChair) state = STATE.sitGround;
       // 나무·그네 상태인데 자리가 없다: 자리를 요청하지 않는 이전 클라이언트(또는 거절된 뒤 늦게 온 MOVE).
       // 보고된 위치(= 앵커)의 소품 자리가 비어 있으면 대신 잡아 주고, 누가 있으면 그 옆에 서 있는 것으로 본다 → 한 자리에 한 명
-      else if (!this.cfg.room) {
+      // 3번: 집 안 자세(눕기·읽기·욕조)는 방(집)에서만 같은 규칙으로 잡아 주고, 월드에서는 서 있는 것으로 본다
+      else {
         const kind = spotKindOfState(state);
-        if (kind && !this.claimSpot(p, spotSeatId(kind, m.x, m.y))) state = STATE.idle;
+        const indoor = !!kind && isIndoorSpot(kind);
+        if (indoor && !this.cfg.room) state = STATE.idle;
+        else if (kind && indoor === !!this.cfg.room && !this.claimSpot(p, spotSeatId(kind, m.x, m.y))) state = STATE.idle;
       }
     }
     const changed = state !== p.state || m.dir !== p.dir;
@@ -546,7 +573,9 @@ export class ChannelCore<C extends object> {
   }
 
   private onEvent(p: Peer<C>, m: C2S, now: number): void {
-    if (this.cfg.room && (m.t === "sit" || m.t === "stand" || m.t === "emote" || m.t === "graveEvent" || m.t === "firework")) return;
+    // 3번: 방(집)도 1인 자리(집 안 가구)는 좌석처럼 판정한다 → sit/stand는 받는다 (월드 자리 id는 onSit이 거절)
+    if (!this.cfg.room && m.t === "use") return;
+    if (this.cfg.room && (m.t === "emote" || m.t === "graveEvent" || m.t === "firework" || m.t === "megaphone")) return;
     switch (m.t) {
       case "sit":
         return this.onSit(p, m.seatId);
@@ -581,12 +610,21 @@ export class ChannelCore<C extends object> {
         if (now - p.lastActAt < ACT_INTERVAL_MS) return;
         p.lastActAt = now;
         return this.broadcast(encodeEvent({ t: "act", sid: p.sid, kind: m.kind, x: p.x, y: p.y }));
+      case "use":
+        // 3번 집 안 가구 쓰기: 뜻은 클라이언트가 정한다 (피아노 음·불 켜기 …). 보낸 사람은 이미 화면에 반영했다
+        if (now - (p.lastUseAt ?? -Infinity) < USE_INTERVAL_MS) return;
+        p.lastUseAt = now;
+        return this.broadcast(encodeEvent({ t: "use", sid: p.sid, u: m.u, a: m.a }), p.sid);
       case "say":
         if (now - p.lastSayAt < SAY_INTERVAL_MS) return;
         p.lastSayAt = now;
         return this.broadcast(encodeEvent({ t: "say", sid: p.sid, id: m.id }));
       case "goblin":
         return this.onGoblinClaim(p, m.id, now);
+      case "megaphone":
+        if (now - (p.lastMegaphoneAt ?? -Infinity) < MEGAPHONE_INTERVAL_MS) return;
+        p.lastMegaphoneAt = now;
+        return this.verifyThenApply(p, "megaphone", m.grant);
     }
   }
 
@@ -614,13 +652,38 @@ export class ChannelCore<C extends object> {
     if (!p || g.visitorId !== p.visitorId) return;
     if (g.kind === "look") {
       p.look = g.look;
+      // 46·25번: 새 웹이 낸 증서는 염색·몸 모양도 싣는다 (옛 증서엔 없으니 그대로 둔다)
+      if (g.dye !== undefined) p.dye = hasDye(g.dye) ? g.dye : undefined;
+      if (g.body !== undefined) p.body = g.body;
       this.save(p);
       this.host.liveChanged?.(true);
-      return this.broadcast(encodeEvent({ t: "look", sid: p.sid, look: p.look }));
+      const extra = { ...(g.dye !== undefined ? { dye: p.dye ?? {} } : {}), ...(g.body !== undefined ? { body: p.body } : {}) };
+      return this.broadcast(encodeEvent({ t: "look", sid: p.sid, look: p.look, ...extra }));
     }
+    if (g.kind === "megaphone") return this.applyMegaphone(g);
     if (g.kind !== "firework") return; // 고블린 증서는 실시간 서버가 내주기만 한다 (받지 않는다)
     if (!this.host.claimNonce(g.nonce, g.exp * 1000)) return; // 이미 쏜 폭죽
     this.broadcast(encodeEvent({ t: "firework", sid: p.sid, item: g.item, x: p.x, y: p.y }));
+  }
+
+  /**
+   * 23번 확성기: 서명된 닉네임·문장을 그대로 이 채널 모두(보낸 사람 포함)에게 보낸다. nonce는 채널마다 한 번만.
+   * scope=channel이면 증서의 채널이 이 채널이어야 하고, all이면 다른 열린 채널에도 전한다(호스트가 nonce로 중복을 막는다)
+   */
+  private applyMegaphone(g: Extract<Grant, { kind: "megaphone" }>): void {
+    const ch = this.host.channelNo?.();
+    if (g.scope === "channel" && ch !== undefined && ch !== g.ch) return;
+    if (!this.host.claimNonce(`m:${g.nonce}`, g.exp * 1000)) return; // 이미 외친 확성기
+    const data = encodeEvent({ t: "megaphone", id: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, at: Date.now() });
+    this.broadcast(data);
+    if (g.scope === "all") this.host.relayMegaphone?.(g.nonce, g.exp * 1000, data);
+  }
+
+  /** 다른 채널에서 전해 온 모든 채널 확성기 (RPC). 같은 nonce는 한 번만 방송한다. 방은 받지 않는다 */
+  relayedMegaphone(nonce: string, until: number, data: string): boolean {
+    if (this.cfg.room || !this.host.claimNonce(`m:${nonce}`, until)) return false;
+    this.broadcast(data);
+    return true;
   }
 
   /** 채널 단위 중복 제거: 같은 키는 windowMs에 한 번만 true */
@@ -642,7 +705,9 @@ export class ChannelCore<C extends object> {
    * 한 자리에는 한 명: 이미 누가 있거나 멀면 seatDenied.
    */
   private onSit(p: Peer<C>, seatId: string): void {
-    const seat = seatSlot(seatId);
+    const found = seatSlot(seatId);
+    // 3번: 집 안 가구 자리는 방(집)에서만, 월드 자리(의자·나무 …)는 월드 채널에서만
+    const seat = found && isIndoorSpot(found.kind) === !!this.cfg.room ? found : undefined;
     const holder = this.seats.get(seatId);
     if (seat && holder === p.sid) return this.sendTo(p, { t: "seat", seatId, sid: p.sid }); // 재요청: 이미 내 자리
     // 긴 벤치에서 앉은 채 옆자리로: 같은 가구의 다른 좌석이면 거리와 상관없이 옮겨 앉는다
@@ -938,13 +1003,13 @@ export class ChannelCore<C extends object> {
   }
 
   private info(p: Peer<C>): PeerInfo {
-    return { ...this.state(p), name: p.name, color: p.color, look: p.look, body: p.body };
+    return { ...this.state(p), name: p.name, color: p.color, look: p.look, body: p.body, ...(hasDye(p.dye) ? { dye: p.dye } : {}) };
   }
 
   /** 저장 형태로 복사. 이전 버전 attachment·예약에는 look/body/joinedAt이 없을 수 있어 기본값을 채운다 */
   private record(r: PeerRecord): PeerRecord {
     const { sid, visitorId, name, color, x, y, state, dir, seatId } = r;
     const look = Array.isArray(r.look) ? r.look : [];
-    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", joinedAt: r.joinedAt ?? 0 };
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), joinedAt: r.joinedAt ?? 0 };
   }
 }

@@ -197,7 +197,8 @@ li:nth-child(-n + 3) .rank {
 
   .chip,
   .zone {
-    min-height: 36px;
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 

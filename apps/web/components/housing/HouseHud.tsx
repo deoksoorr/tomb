@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { bridge } from "@/game/bridge";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import { errorMessage } from "@/lib/api";
-import { DEFAULT_FLOOR, DEFAULT_WALL, FURNITURE, furnitureById, LIKE_WEIGHT, tierById } from "@/lib/housing/catalog";
+import { DEFAULT_FLOOR, DEFAULT_FLOOR_NAME, DEFAULT_WALL, DEFAULT_WALL_NAME, FURNITURE, furnitureById, LIKE_WEIGHT, tierById } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { layoutCounts, placedScore, styleTag, totalScore } from "@/lib/housing/layout";
 import type { MyHouseResponse, PublicHouse } from "@/lib/housing/types";
@@ -21,6 +21,8 @@ type Props = {
   house: PublicHouse;
   mine: boolean;
   my: MyHouseResponse | null;
+  /** 지금 채널 (배치 저장은 내 집이 이 채널에 있을 때만) */
+  channel: number;
   onMy: (r: MyHouseResponse) => void;
   onHouse: (h: PublicHouse) => void;
   /** toOffice=true면 분양 사무소 창으로 돌아간다 */
@@ -30,7 +32,7 @@ type Props = {
 type Modal = "guestbook" | "shop" | "leave" | null;
 
 /** 집 안 HUD: 위쪽 정보 막대(이름·호칭·점수·버튼) + 주인의 편집 도구. 게임 키 입력은 막지 않는다 */
-export default function HouseHud({ house, mine, my, onMy, onHouse, onLeave }: Props) {
+export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLeave }: Props) {
   const [edit, setEdit] = useState<HouseEditState | null>(null);
   const [liked, setLiked] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -89,7 +91,7 @@ export default function HouseHud({ house, mine, my, onMy, onHouse, onLeave }: Pr
     if (!edit) return;
     setSaving(true);
     try {
-      const r = await housingApi.saveLayout(house.tier, { items: edit.items, floor: edit.floor, wall: edit.wall });
+      const r = await housingApi.saveLayout(channel, house.tier, { items: edit.items, floor: edit.floor, wall: edit.wall });
       onMy(r);
       if (r.house) {
         onHouse(r.house);
@@ -166,7 +168,7 @@ export default function HouseHud({ house, mine, my, onMy, onHouse, onLeave }: Pr
         <FurnitureShop my={my} placed={edit ? layoutCounts({ items: edit.items, floor: edit.floor, wall: edit.wall }) : layoutCounts(house.layout)} onMy={onMy} onClose={() => setModal(null)} />
       )}
       {modal === "leave" && (
-        <Dialog title="저장하지 않은 변경" onClose={() => setModal(null)} size="sm">
+        <Dialog kind="confirm" title="저장하지 않은 변경" onClose={() => setModal(null)}>
           <div className={styles.stack}>
             <p>꾸민 내용을 저장하지 않았어요. 어떻게 할까요?</p>
             <div className={styles.row}>
@@ -222,7 +224,7 @@ function EditToolbar({
   const floors = [DEFAULT_FLOOR, ...FURNITURE.filter((f) => f.skin === "floor" && (my.inventory[f.id] ?? 0) > 0).map((f) => f.id)];
   const walls = [DEFAULT_WALL, ...FURNITURE.filter((f) => f.skin === "wall" && (my.inventory[f.id] ?? 0) > 0).map((f) => f.id)];
   const tool = (t: HouseTool) => bridge.emit("house:tool", t);
-  const skinName = (id: string) => (id === DEFAULT_FLOOR ? "풀밭" : id === DEFAULT_WALL ? "나무 울타리" : (furnitureById(id)?.name ?? id));
+  const skinName = (id: string) => (id === DEFAULT_FLOOR ? DEFAULT_FLOOR_NAME : id === DEFAULT_WALL ? DEFAULT_WALL_NAME : (furnitureById(id)?.name ?? id));
 
   return (
     <section className={cx(ui.panel, styles.toolbar)} aria-label="꾸미기 도구">
@@ -305,7 +307,7 @@ function EditToolbar({
             <span className={styles.paletteLabel}>{skinName(id)}</span>
           </button>
         ))}
-        <span className={styles.small}>담장</span>
+        <span className={styles.small}>벽지</span>
         {walls.map((id) => (
           <button key={id} type="button" className={styles.paletteItem} aria-pressed={edit.wall === id} onClick={() => tool({ action: "skin", wall: id })} style={{ width: 56, minHeight: 56 }}>
             <FurnitureIcon itemId={id} size={28} />

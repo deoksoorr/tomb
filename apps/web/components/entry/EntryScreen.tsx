@@ -9,6 +9,7 @@ import {
   isAvatarBody,
   isAvatarColor,
   pickChannel,
+  type AvatarDye,
 } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { useAmbience } from "@/lib/hooks/useAmbience";
@@ -24,6 +25,7 @@ import { latestNotice } from "../notice/notices";
 import NoticesDialog from "../notice/NoticesDialog";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
+import { avatarColorSpec } from "@/game/sprites/avatar";
 import AvatarSprite from "./AvatarSprite";
 import ChannelPicker, { type ChannelChoice } from "./ChannelPicker";
 import CodeStart from "./CodeStart";
@@ -96,7 +98,8 @@ export default function EntryScreen({ start, focusGraveId, entering, stalled, on
 /** 어떤 길로 들어왔나: 새로 시작 / 이어서 들어가기 / 코드로 시작(확인된 계정) */
 type Path = { kind: "new" } | { kind: "continue" } | { kind: "code"; me: Me };
 /** 들어갈 때의 모습 */
-type Look = { name: string; color: string; body: string | undefined };
+/** dye = 46번 계정에 남은 염색 (미리보기 그림에만 쓴다 — color는 입장 요청에 그대로 가는 프리셋 색) */
+type Look = { name: string; color: string; body: string | undefined; dye?: AvatarDye };
 type AccountPath = Exclude<Path, { kind: "new" }>;
 type Step =
   | { kind: "choose" }
@@ -116,12 +119,12 @@ const SUBMIT_LABELS: Record<Path["kind"], string> = {
 };
 
 /** 계정에 저장된 모습 (코드로 시작·이어서 들어가기에서는 바꾸지 않는다) */
-function lookOf(me: Pick<Me, "name" | "color" | "body"> | null, fallbackName: string): Look | null {
+function lookOf(me: Pick<Me, "name" | "color" | "body" | "dye"> | null, fallbackName: string): Look | null {
   const name = me?.name ?? fallbackName;
   if (!checkName(name).ok) return null;
   const saved = readItem(LS.color);
   const color = isAvatarColor(me?.color) ? me.color : isAvatarColor(saved) ? saved : AVATAR_COLORS[0];
-  return { name, color, body: me?.body && isAvatarBody(me.body) ? me.body : undefined };
+  return { name, color, body: me?.body && isAvatarBody(me.body) ? me.body : undefined, ...(me?.dye ? { dye: me.dye } : {}) };
 }
 
 /** 새로 시작의 처음 모습: 이 기기에 남은 색, 기본 몸 모양 */
@@ -444,7 +447,7 @@ function AccountStep({ path, fallbackName, onBack, onNext, onCustomize }: Accoun
       {saved ? (
         <div className={styles.profile}>
           <span className={styles.avatar}>
-            <AvatarSprite color={saved.color} body={saved.body} scale={2} />
+            <AvatarSprite color={avatarColorSpec(saved.color, saved.dye)} body={saved.body} scale={2} />
           </span>
           <span className={styles.profileText}>
             <span className={styles.lockedName}>{saved.name}</span>
@@ -535,7 +538,7 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter }: Cha
       />
       <div className={styles.profile}>
         <span className={styles.avatar}>
-          <AvatarSprite color={look.color} body={look.body} scale={2} />
+          <AvatarSprite color={avatarColorSpec(look.color, look.dye)} body={look.body} scale={2} />
         </span>
         <span className={styles.lockedName}>{look.name}</span>
       </div>

@@ -12,6 +12,8 @@ import { RedisAccounts } from "./accounts-redis";
 import { MemoryStore } from "./memory";
 import { mockGraves } from "./mock";
 import { MemoryErrors, RedisErrors, type ErrorStore } from "./errors";
+import { MemoryGifts, RedisGifts, type GiftStore } from "./gifts";
+import { MemoryMegaphone, RedisMegaphone, type MegaphoneStore } from "./megaphone";
 import { MemoryNotices, RedisNotices, type NoticeStore } from "./notices";
 import { RedisStore } from "./redis";
 import { passAtOf } from "./passing";
@@ -25,6 +27,8 @@ const g = globalThis as typeof globalThis & {
   __tombAccounts?: AccountStore;
   __tombNotices?: NoticeStore;
   __tombErrors?: ErrorStore;
+  __tombGifts?: GiftStore;
+  __tombMegaphone?: MegaphoneStore;
 };
 
 /** Redis 환경변수가 있으면 RedisStore, 없으면 (로컬 한정) 목업을 심은 MemoryStore */
@@ -133,6 +137,28 @@ export function getErrors(): ErrorStore {
   if (conn) return cur instanceof RedisErrors ? cur : (g.__tombErrors = new RedisErrors(conn));
   if (cur instanceof MemoryErrors) return cur;
   return (g.__tombErrors = cur ? Object.assign(new MemoryErrors(), cur) : new MemoryErrors());
+}
+
+/** 11번 선물함 (계정 저장소와 같은 백엔드). 로컬은 받을 때 MemoryAccounts에 포인트·아이템을 넣는다 */
+export function getGifts(): GiftStore {
+  const cur = g.__tombGifts;
+  const conn = env.redis();
+  if (conn) return cur instanceof RedisGifts ? cur : (g.__tombGifts = new RedisGifts(conn));
+  getStore(); // 운영에서 Redis가 없으면 여기서 실패한다
+  if (cur instanceof MemoryGifts) return cur;
+  const fresh = new MemoryGifts(() => getAccounts() as MemoryAccounts);
+  g.__tombGifts = cur ? Object.assign(fresh, cur, { accounts: () => getAccounts() as MemoryAccounts }) : fresh;
+  return g.__tombGifts;
+}
+
+/** 23번 확성기 기록 (계정 저장소와 같은 백엔드) */
+export function getMegaphone(): MegaphoneStore {
+  const cur = g.__tombMegaphone;
+  const conn = env.redis();
+  if (conn) return cur instanceof RedisMegaphone ? cur : (g.__tombMegaphone = new RedisMegaphone(conn));
+  getStore();
+  if (cur instanceof MemoryMegaphone) return cur;
+  return (g.__tombMegaphone = cur ? Object.assign(new MemoryMegaphone(), cur) : new MemoryMegaphone());
 }
 
 /** 공지사항 저장소 (묘비 저장소와 같은 백엔드) */

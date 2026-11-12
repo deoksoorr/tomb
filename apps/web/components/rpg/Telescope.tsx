@@ -147,7 +147,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
           </div>
         )}
         {phase === "paused" && (
-          <Dialog title="잠깐 멈춤" onClose={resume} size="sm">
+          <Dialog kind="confirm" title="잠깐 멈춤" onClose={resume}>
             <div className={s.result}>
               <p>멈춘 동안 별은 움직이지 않아요. 너무 오래(2분 넘게) 멈추면 결과를 받을 수 없어요.</p>
               <div className={s.buttons}>
@@ -178,7 +178,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
     const all = outcome.result.game === "stars" ? outcome.result.perfect + outcome.result.good + outcome.result.miss : 0;
     const clean = outcome.result.game === "stars" && all > 0 && outcome.result.miss === 0;
     return (
-      <Dialog title="별자리 잇기 결과" onClose={onClose} size="md">
+      <Dialog title="별자리 잇기 결과" onClose={onClose}>
         <div className={s.result}>
           <p className={s.resultBig}>{outcome.aborted ? "중간에 망원경에서 눈을 뗐어요" : clean ? "모든 별을 이었어요!" : "밤하늘이 흘러갔어요"}</p>
           {outcome.error ? (
@@ -237,7 +237,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
 
   const G = GAMES.stars;
   return (
-    <Dialog title="망원경" onClose={onClose} size="md">
+    <Dialog title="망원경" onClose={onClose}>
       <div className={s.lobby}>
         <p>
           <b>{G.name}</b> — {G.desc}

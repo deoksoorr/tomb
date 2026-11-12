@@ -34,6 +34,11 @@ import {
   signJoinToken,
   verifyJoinToken,
   type LobbyInfo,
+  isIndoorSpot,
+  seatSlot,
+  spotSeatId,
+  spotKindOfState,
+  STATE_NAMES,
 } from "./index";
 
 describe("binary", () => {
@@ -240,11 +245,42 @@ describe("1인 자리 (좌석 체계 공통)", () => {
     }
     expect(spotKindOfState(STATE.boat)).toBe("boat");
     // 새 상태 값은 바이너리로 오가고, 범위 밖은 여전히 거절
-    expect(STATE_NAMES.length).toBe(15);
+    expect(STATE_NAMES.length).toBe(18);
     expect(STATE_NAMES[STATE.carousel]).toBe("carousel");
     expect(isStateId(14)).toBe(true);
-    expect(isStateId(15)).toBe(false);
+    expect(isStateId(18)).toBe(false);
     const snap = decodeSnapshot(encodeSnapshot(1, [{ sid: 3, x: 1338, y: 868, state: STATE.boat, dir: DIR.right }]));
     expect(snap?.entries[0]).toEqual({ sid: 3, x: 1338, y: 868, state: STATE.boat, dir: DIR.right });
+  });
+});
+
+describe("3번 집 안 가구 자리·use 이벤트", () => {
+  it("집 안 자리는 형식만 맞으면 어느 좌표든 되고, 상태와 indoor 표시가 붙는다", () => {
+    const cases = [
+      ["chair", STATE.sitChair],
+      ["bed", STATE.lie],
+      ["book", STATE.read],
+      ["tub", STATE.bath],
+    ] as const;
+    for (const [k, st] of cases) {
+      const id = spotSeatId(k, 123, 45);
+      expect(seatSlot(id)).toMatchObject({ kind: k, state: st, x: 123, y: 45 });
+      expect(isIndoorSpot(k)).toBe(true);
+    }
+    expect(STATE_NAMES[STATE.lie]).toBe("lie");
+    expect(STATE_NAMES[STATE.bath]).toBe("bath");
+    // 의자 자리는 sitChair를 함께 쓰므로 MOVE 상태만으로는 자리를 고르지 않는다
+    expect(spotKindOfState(STATE.sitChair)).toBeNull();
+    expect(spotKindOfState(STATE.lie)).toBe("bed");
+    expect(isIndoorSpot("hang")).toBe(false);
+    expect(isIndoorSpot("seat")).toBe(false);
+  });
+
+  it("use 이벤트 검증: id 형식과 0..255 정수만", () => {
+    expect(parseC2S(JSON.stringify({ t: "use", u: "ab12", a: 7 }))).toEqual({ t: "use", u: "ab12", a: 7 });
+    expect(parseC2S(JSON.stringify({ t: "use", u: "AB", a: 7 }))).toBeNull();
+    expect(parseC2S(JSON.stringify({ t: "use", u: "ab", a: 256 }))).toBeNull();
+    expect(parseC2S(JSON.stringify({ t: "use", u: "ab", a: 1.5 }))).toBeNull();
+    expect(parseC2S(JSON.stringify({ t: "use", u: "abcdefghi", a: 1 }))).toBeNull();
   });
 });

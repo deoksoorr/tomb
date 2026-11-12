@@ -184,9 +184,8 @@ export default function ForageLayer() {
             }}
           />
           {paused && (
-            <Dialog
+            <Dialog kind="confirm"
               title="잠깐 멈춤"
-              size="sm"
               onClose={() => {
                 bridge.emit("rpg:pause", { paused: false });
                 setPaused(false);

@@ -30,6 +30,11 @@ const LIMITS = {
   rank: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   // 50번 소원 분수: 하루 3번 (lib/wish.ts WISH_DAILY). 같은 와이파이 여러 명을 생각해 IP는 넉넉히
   wish: { visitor: 3, ip: 30, windowSec: DAY, message: "소원은 하루에 세 번까지 빌 수 있어요. 내일 다시 와 주세요." },
+  // 10번 출석 달력 받기 · 11번 선물함 받기·지우기
+  calendar: { visitor: 10, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  gift: { visitor: 30, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  // 23번 확성기: 계정마다 간격(MEGAPHONE_COOLDOWN_MS)과 별개로 하루 상한 (도배 방지)
+  megaphone: { visitor: 20, ip: 60, windowSec: DAY, message: "확성기는 하루에 20번까지 쓸 수 있어요." },
 } as const;
 
 /** 관리자 키 대입 방지: IP당 분당 실패 10회 */

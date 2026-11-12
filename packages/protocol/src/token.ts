@@ -1,5 +1,6 @@
 import { JOIN_TOKEN_TTL_SEC, ROOM_ID_RE, isAvatarBody } from "./constants";
 import { sanitizeLook } from "./items";
+import { hasDye, packDye, unpackDye, type AvatarDye } from "./dye";
 
 // 입장 토큰: base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload, JOIN_SECRET))
 // Web Crypto만 사용하므로 Node(>=20, Vercel)와 Cloudflare Workers 양쪽에서 같은 코드가 돈다.
@@ -17,6 +18,8 @@ export type JoinClaims = {
   body?: string;
   /** 방 입장 토큰이면 방 id (이때 channel은 0). 채널 토큰엔 없다 */
   room?: string;
+  /** 46번 염색한 부위 색 (토큰 안에서는 짧은 형식 문자열, 염색 안 했으면 없음) */
+  dye?: AvatarDye;
   /** 만료 시각 (unix seconds) */
   exp: number;
 };
@@ -74,7 +77,8 @@ export async function signJoinToken(
   ttlSec = JOIN_TOKEN_TTL_SEC,
   nowSec = Math.floor(Date.now() / 1000),
 ): Promise<string> {
-  const payload: JoinClaims = { ...claims, exp: nowSec + ttlSec };
+  const { dye, ...rest } = claims;
+  const payload = { ...rest, ...(hasDye(dye) ? { dye: packDye(dye) } : {}), exp: nowSec + ttlSec };
   const body = b64urlEncode(enc.encode(JSON.stringify(payload)));
   return `${body}.${await hmacSign(secret, body)}`;
 }
@@ -100,7 +104,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp, look, body: rawBody, room } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye } = c as Record<string, unknown>;
   if (
     typeof visitorId !== "string" ||
     typeof name !== "string" ||
@@ -111,5 +115,5 @@ export async function verifyJoinToken(
   )
     return null;
   if (exp < nowSec) return null;
-  return { visitorId, name, color, channel, exp, look: sanitizeLook(look), body: isAvatarBody(rawBody) ? rawBody : "hood", ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}) };
+  return { visitorId, name, color, channel, exp, look: sanitizeLook(look), body: isAvatarBody(rawBody) ? rawBody : "hood", ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}) };
 }

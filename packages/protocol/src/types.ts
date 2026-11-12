@@ -1,3 +1,5 @@
+import type { AvatarDye } from "./dye";
+
 /** 캐릭터 상태 머신 값. 바이너리로 u8 전송. */
 export const STATE = {
   idle: 0,
@@ -26,10 +28,17 @@ export const STATE = {
   trampoline: 13,
   /** 회전목마 목마에 타고 빙글빙글 (자리마다 1인) */
   carousel: 14,
+  // ── 3번 집 안 가구 (1인 자리, 방 서버 좌석) ──
+  /** 침대에 누워 이불을 덮음 */
+  lie: 15,
+  /** 책장 앞에서 책을 펼쳐 읽음 */
+  read: 16,
+  /** 욕조에 들어가 있음 (어깨까지 거품) */
+  bath: 17,
 } as const;
 export type StateName = keyof typeof STATE;
 export type StateId = (typeof STATE)[StateName];
-export const STATE_NAMES: readonly StateName[] = ["idle", "walk", "run", "sitGround", "sitChair", "jump", "hang", "swim", "dive", "swing", "hammock", "boat", "seesaw", "trampoline", "carousel"];
+export const STATE_NAMES: readonly StateName[] = ["idle", "walk", "run", "sitGround", "sitChair", "jump", "hang", "swim", "dive", "swing", "hammock", "boat", "seesaw", "trampoline", "carousel", "lie", "read", "bath"];
 export function isStateId(n: number): n is StateId {
   return Number.isInteger(n) && n >= 0 && n < STATE_NAMES.length;
 }
@@ -65,4 +74,6 @@ export type PeerInfo = PeerState & {
   body: string;
   /** 착용 중인 꾸미기 아이템 id (items.ts). 입장 때와 바뀔 때만 보낸다 */
   look: string[];
+  /** 46번 염색한 부위 색 (없으면 color 하나로 칠한다). 옛 클라이언트는 모르는 필드라 무시한다 */
+  dye?: AvatarDye;
 };

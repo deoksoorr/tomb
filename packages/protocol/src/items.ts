@@ -5,10 +5,14 @@
 //  - 묘비 꾸미기: 내 묘비 하나에 놓는 순간 소모, 7일 동안 유지된다(묘비당 최대 3개).
 //  - 묘비 디자인권: 묘비를 세우거나 내 묘비의 디자인을 바꿀 때 소모, 그 묘비는 그 디자인으로 계속 남는다.
 
+import type { DyeTicketSpec } from "./dye";
+
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
-export type ItemKind = "firework" | "cosmetic" | "decor" | "graveStyle";
+// megaphone(23번): 확성기. 쓰는 순간 소모되고, 채널(또는 모든 채널) 사람들의 왼쪽 위 확성기 창에 한마디가 뜬다
+// dye(46번): 염색권. 쓰면 부위 하나의 색이 바뀐다 (random = 무작위 팔레트에서 찾기, fixed = 정해진 색)
+export type ItemKind = "firework" | "cosmetic" | "decor" | "graveStyle" | "megaphone" | "dye";
 export type CosmeticSlot = "head" | "hand" | "aura" | "neck" | "back" | "pet" | "feet";
 
 export type ItemDef = {
@@ -23,6 +27,8 @@ export type ItemDef = {
   durationMs?: number;
   /** 폭죽 세기 1~5: 비쌀수록 크게, 넓게, 오래 터진다 (게임이 반경·발수·지속을 이 값으로 정한다) */
   power?: number;
+  /** 46번 염색권 종류 (kind = "dye") */
+  dye?: DyeTicketSpec;
 };
 
 export const COSMETIC_DURATION_MS = DAY;
@@ -119,6 +125,15 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "decor_snowman", kind: "decor", name: "눈사람", desc: "묘비 옆을 지키는 작은 눈사람.", price: 50, durationMs: DECOR_DURATION_MS },
   { id: "decor_flowerpot", kind: "decor", name: "화분", desc: "묘비 앞에 작은 화분 하나.", price: 30, durationMs: DECOR_DURATION_MS },
 
+  // ── 23번 확성기: 지금 채널 / 모든 채널. 문장은 서버가 금칙어·도배를 거른 뒤 서명한 증서로만 퍼진다 ──
+  { id: "mega_ch", kind: "megaphone", name: "확성기", desc: "지금 채널 모두의 확성기 창에 한마디(60자)를 띄워요.", price: 30 },
+  { id: "mega_all", kind: "megaphone", name: "전체 확성기", desc: "모든 채널에 한마디(60자)를 크게 외쳐요.", price: 90 },
+
+  // ── 46번 염색권: 부위(머리·몸·포인트) 하나를 무작위 팔레트에서 60초 안에 찾아 칠한다. 비쌀수록 조준점이 덜 흔들리고 색이 다양 ──
+  { id: "dye_basic", kind: "dye", name: "얼룩 염색권", desc: "물감이 몇 가지뿐인 팔레트. 조준점이 많이 흔들려요. 운이 좋으면 마음에 드는 색이!", price: 150, dye: { mode: "random", tier: 1 } },
+  { id: "dye_fine", kind: "dye", name: "고운 염색권", desc: "색이 꽤 다양한 팔레트. 조준점도 덜 흔들려요.", price: 300, dye: { mode: "random", tier: 2 } },
+  { id: "dye_rainbow", kind: "dye", name: "무지개 염색권", desc: "온갖 색이 다 있는 큰 팔레트. 조준점이 거의 흔들리지 않아요.", price: 500, dye: { mode: "random", tier: 3 } },
+
   // 묘비 디자인권 (포인트로 만드는 특별 묘비). id = "gs_" + 디자인 id
   { id: "gs_coffee", kind: "graveStyle", name: "식은 커피잔 묘비", desc: "마지막 한 모금은 끝내 마시지 못했다.", price: 100 },
   { id: "gs_duck", kind: "graveStyle", name: "오리 인형 묘비", desc: "모니터 옆에서 하소연을 끝까지 들어 준 친구.", price: 120 },
@@ -171,7 +186,7 @@ export function styleItemId(id: string): string | null {
 /**
  * 상점에서 파는 종류 (F8: 묘비 꾸미기는 당분간 상점 목록에서 숨긴다 — 데이터·API·가방의 묘비에 놓기는 그대로).
  */
-export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle"];
+export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "megaphone", "dye"];
 export function isShopListed(item: Pick<ItemDef, "kind">): boolean {
   return SHOP_KINDS.includes(item.kind);
 }
@@ -179,6 +194,18 @@ export function isShopListed(item: Pick<ItemDef, "kind">): boolean {
 const byId = new Map(ITEMS.map((i) => [i.id, i]));
 export function itemById(id: string): ItemDef | undefined {
   return byId.get(id);
+}
+/** 23번 확성기 한마디 최대 글자 수 (코드포인트) */
+export const MEGAPHONE_MAX = 60;
+export type MegaphoneScope = "channel" | "all";
+/** 확성기 아이템이면 퍼지는 범위 (mega_all = 모든 채널), 아니면 null */
+export function megaphoneScope(id: unknown): MegaphoneScope | null {
+  if (typeof id !== "string" || byId.get(id)?.kind !== "megaphone") return null;
+  return id === "mega_all" ? "all" : "channel";
+}
+/** 화면에 보일 아이템 이름: 카탈로그 이름, 관리자가 만든 고정 색 염색권(dyefix_*)은 "고정 색 염색권", 모르면 id 그대로 */
+export function itemName(id: string): string {
+  return byId.get(id)?.name ?? (id.startsWith("dyefix_") ? "고정 색 염색권" : id);
 }
 export function isFireworkId(id: unknown): id is string {
   return typeof id === "string" && byId.get(id)?.kind === "firework";
@@ -196,4 +223,33 @@ export function sanitizeLook(raw: unknown): Look {
     out.push(it.id);
   }
   return out.slice(0, 7);
+}
+
+// ── 30번 영구 소유 코디: 일부 꾸미기는 영구로도 산다 (기간제 가격의 7배). 영구 착용품·벗어 둔 것은 만료 시각이 PERMANENT_UNTIL ──
+
+/** 영구 소유의 "만료 시각" (2286년). 기간제와 같은 자리(착용·벗어 둠)에 저장되고, 이보다 크거나 같으면 영구로 표시한다 */
+export const PERMANENT_UNTIL = 9_999_999_999_999;
+export function isPermanentUntil(until: number): boolean {
+  return until >= PERMANENT_UNTIL;
+}
+/** 영구로 살 수 있는 꾸미기 → 영구 가격 */
+const PERMANENT_IDS = [
+  "hat_cat", "hat_halo", "hat_crown", "hat_wizard", "hat_headphones",
+  "neck_scarf", "neck_bowtie",
+  "hand_lantern", "hand_umbrella",
+  "back_wings", "back_cape",
+  "aura_firefly", "aura_petals",
+  "feet_flowers",
+  "pet_ghost", "pet_cat",
+] as const;
+export const PERMANENT_MULTIPLIER = 7;
+const permanentPrices = new Map<string, number>(
+  PERMANENT_IDS.flatMap((id) => {
+    const it = byId.get(id);
+    return it?.kind === "cosmetic" ? [[id, Math.round((it.price * PERMANENT_MULTIPLIER) / 10) * 10] as const] : [];
+  }),
+);
+/** 영구로 살 수 있으면 그 가격, 아니면 null */
+export function permanentPrice(id: string): number | null {
+  return permanentPrices.get(id) ?? null;
 }

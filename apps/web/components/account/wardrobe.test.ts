@@ -103,4 +103,8 @@ describe("resolveAvatar", () => {
     expect(resolveAvatar(undefined, { color: "nope", body: null }, AVATAR_COLORS[1])).toEqual({ color: AVATAR_COLORS[1], body: "hood" });
     expect(resolveAvatar(undefined, null, null).color).toBe(AVATAR_COLORS[0]);
   });
+  it("46·25번: 계정의 염색이 색 표기에 실리고, 외형을 바꿨으면 계정 몸이 먼저", () => {
+    const c = AVATAR_COLORS[2];
+    expect(resolveAvatar({ color: c, body: "cat" }, { color: c, body: "bun", dye: { accent: "#f4a7b9" } }, null)).toEqual({ color: `${c}|||#f4a7b9`, body: "bun" });
+  });
 });

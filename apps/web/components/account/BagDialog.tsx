@@ -13,9 +13,11 @@ import { OutfitCanvas, useOutfitView, ViewControls } from "../shop/OutfitPreview
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ForageBag from "../forage/ForageBag";
+import BagDyeSection from "../dye/BagDyeSection";
 import ItemIcon from "../ui/ItemIcon";
 import { DollNote, DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
+import { openMegaphone } from "@/lib/hooks/useMegaphone";
 import { decorateGrave, fireFirework, takeOff, wearCosmetic, wearStashed } from "./actions";
 import { bagEntries, KIND_LABELS, remainingLabel, type MyGraveEntry } from "./items";
 import {
@@ -37,7 +39,7 @@ import {
 } from "./wardrobe";
 import styles from "./BagDialog.module.css";
 
-const OTHER_KINDS: ItemKind[] = ["firework", "decor", "graveStyle"];
+const OTHER_KINDS: ItemKind[] = ["firework", "megaphone", "decor", "graveStyle"];
 type BagTab = "wear" | "other" | "forage";
 
 /** 몸 위치에 맞춘 칸 배치: 등은 어깨 뒤, 목·손은 오른쪽, 오라는 몸 옆, 발은 아래, 펫은 발 옆 */
@@ -85,7 +87,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
 
   if (!me) {
     return (
-      <Dialog title="가방" onClose={onClose} size="lg" fixed>
+      <Dialog title="가방" onClose={onClose}>
         <p className={styles.state} role="status">
           {error ?? "불러오는 중…"}
         </p>
@@ -97,7 +99,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
   const wardrobe = wardrobeEntries(me, now);
 
   return (
-    <Dialog title="가방" onClose={onClose} size="lg" fixed>
+    <Dialog title="가방" onClose={onClose}>
       <div className={styles.bag}>
         <div className={styles.tabs} role="tablist" aria-label="가방 칸">
           {(
@@ -129,6 +131,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
             <ForageBag />
           ) : (
             <div className={styles.others}>
+              <BagDyeSection me={me} avatar={resolveAvatar(avatar, me, savedColor)} onNotice={setNotice} />
               {others.length === 0 && <p className={styles.empty}>폭죽·묘비 물건이 없어요. 상점에서 포인트로 살 수 있어요.</p>}
               {OTHER_KINDS.map((kind) => {
                 const items = others.filter((e) => e.item.kind === kind);
@@ -173,6 +176,18 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
                             </button>
                           )}
                           {kind === "graveStyle" && <span className={styles.meta}>묘비 세울 때 골라요</span>}
+                          {kind === "megaphone" && (
+                            <button
+                              type="button"
+                              className={ui.button}
+                              onClick={() => {
+                                onClose();
+                                openMegaphone();
+                              }}
+                            >
+                              외치기
+                            </button>
+                          )}
                         </li>
                       ))}
                     </ul>

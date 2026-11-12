@@ -65,7 +65,7 @@ const setPoints = (v: Visitor, n: number) =>
   ((getAccounts() as unknown as { acct(id: string): { points: number } }).acct(v.visitorId).points = n);
 
 describe("아바타 프로필", () => {
-  it("출석 때 색·몸 모양을 비어 있을 때만 저장하고, 입장 토큰의 몸 모양은 요청 > 계정 값", async () => {
+  it("출석 때 색·몸 모양을 비어 있을 때만 저장하고, 입장 토큰의 몸 모양은 계정 값 > 요청 (25번 외형 바꾸기가 계정에 남는다)", async () => {
     const v = await newVisitor();
     await attend.POST(call("/api/me/attend", { visitor: v, body: { name: "새벽코더", color: "#9fc5a8", body: "cat" } }));
     await attend.POST(call("/api/me/attend", { visitor: v, body: { color: "#e0c36a", body: "tall" } }));
@@ -79,7 +79,7 @@ describe("아바타 프로필", () => {
       return (await verifyJoinToken("dev-join-secret-change-me", res.token))?.body;
     };
     expect(await tokenBody({})).toBe("cat");
-    expect(await tokenBody({ body: "round" })).toBe("round");
+    expect(await tokenBody({ body: "round" })).toBe("cat");
   });
 });
 
@@ -108,7 +108,7 @@ describe("포인트 랭킹", () => {
     const list = (await anon.json()) as PointRankResponse;
     expect(list.mine).toBeNull();
     expect(list.rows.every((r) => !r.me)).toBe(true);
-    const top = list.rows.findIndex((r) => r.name === "랭커" && r.points === 310);
+    const top = list.rows.findIndex((r) => r.name === "랭커" && r.points === 300);
     expect(top).toBeGreaterThanOrEqual(0);
     expect(list.rows[top + 1]).toMatchObject({ name: "이름 없는 유령", points: 299 });
 

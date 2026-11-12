@@ -64,7 +64,7 @@
 /* 터치: 아래 양쪽 조이스틱·행동 버튼(높이 140px) 위로 */
 @media (pointer: coarse) {
   .banner:not(.top) {
-    bottom: calc(var(--safe-bottom) + 148px);
+    bottom: calc(var(--safe-bottom) + var(--dock-h, 0px) + 148px);
   }
 }
 

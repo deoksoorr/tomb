@@ -14,6 +14,8 @@ const CULL_MARGIN = 16;
 export const SWING_FRONT = 7;
 /** 해먹에 누운 사람 자리(천 가운데) → 해먹 그림(받침 − 2)보다 앞에 그릴 depth 오프셋 */
 export const HAMMOCK_FRONT = 6;
+/** 3번 집 안 자세(눕기·읽기·욕조): 자리 앵커 → 그 가구(앵커 + 1에 그린다)보다 앞에 그릴 depth 오프셋 */
+export const INDOOR_FRONT = 2;
 /** 발밑에서 이름표 위까지 (말풍선 포함) */
 const LABEL_TOP = 34;
 
@@ -83,6 +85,7 @@ export class RemoteAvatar {
     else if (o.state === STATE.swing) this.view.depthOverride = y + SWING_FRONT;
     else if (o.state === STATE.hang) this.view.depthOverride = y + 0.5;
     else if (o.state === STATE.hammock) this.view.depthOverride = y + HAMMOCK_FRONT;
+    else if (o.state === STATE.lie || o.state === STATE.read || o.state === STATE.bath) this.view.depthOverride = y + INDOOR_FRONT;
     this.x = x;
     this.y = y;
     this.view.apply(STATE_NAMES[o.state], o.dir, now);

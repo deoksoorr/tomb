@@ -61,6 +61,21 @@ export const K = {
   earn: (id: string, day: string) => `acct:${id}:earn:${day}`, // HASH source → 점수, `_total`. 2일 TTL
   code: (codeHash: string) => `code:${codeHash}`, // STRING → 계정 id
   attendIp: (ipHash: string, day: string) => `attend:${ipHash}:${day}`, // SET 그 IP에서 오늘 출석 포인트를 받은 계정. 2일 TTL
+  // ── 10번 출석 달력 ──
+  cal: (id: string, month: string) => `acct:${id}:cal:${month}`, // HASH DD → 그날 받은 포인트, `_month` → 한 달 개근 보상. 100일 TTL
+  // (계정 해시 `calInit` = 달력 개편 전 출석을 도장으로 옮겼음, 오늘 적립 해시 `_stay` = 오늘 머무르기 기록 수)
+
+  // ── 11번 선물함 (lib/store/gifts.ts) ──
+  giftsAll: "gifts:all", // HASH 선물 id → JSON (전체 발송, 받을 때 계정별 상태만 만든다)
+  giftsTo: (id: string) => `gifts:to:${id}`, // HASH 선물 id → JSON (그 계정 앞으로 보낸 것)
+  giftState: (id: string) => `gifts:st:${id}`, // HASH 선물 id → "c:{받은 시각}"(받음) | "d"(지움). 31일 TTL
+  giftLog: "gifts:log", // LIST 관리자 발송 기록 JSON, 최신 먼저 최대 200개
+  giftClaims: "gifts:claims", // HASH 선물 id → 받은 계정 수
+
+  // ── 23번 확성기 (lib/store/megaphone.ts) ──
+  megaLog: "mega:log", // LIST 확성기 기록 JSON, 최신 먼저 최대 MEGA_KEEP개
+  megaHidden: "mega:hidden", // SET 관리자가 숨긴 기록 id
+  megaCool: (id: string) => `mega:cool:${id}`, // STRING NX PX 계정별 도배 제한
 };
 
 export const HIDDEN = "hidden:";

@@ -155,7 +155,7 @@ describe("사냥터 API", () => {
     const short = await shop.POST(call("/x", v, { type: "buy", itemId: "w_keyboard" }));
     expect(await errCode(short)).toBe("NOT_ENOUGH_POINTS");
     await getAccounts().adjustPoints(v.id, 0); // 계정이 없으면 adjust가 무시되므로 먼저 만든다
-    await getAccounts().attend(v.id, "ip", { name: "사냥꾼" }, "20260101", "20251231");
+    await getAccounts().enter(v.id, { name: "사냥꾼" }, Date.now());
     await getAccounts().adjustPoints(v.id, 300);
     const before = ((await (await rpg.GET(call("/api/rpg", v))).json()) as RpgView).points;
     const bought = (await (await shop.POST(call("/x", v, { type: "buy", itemId: "w_keyboard" }))).json()) as RpgView;

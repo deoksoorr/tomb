@@ -1,4 +1,4 @@
-import { isAvatarBody, type AvatarBody } from "@tomb/protocol";
+import { hasDye, isAvatarBody, type AvatarBody, type AvatarDye } from "@tomb/protocol";
 import { darken, Grid, lighten, mix, parseHex, type Color } from "./pixel";
 import { COVERING_HATS, drawBackGear, drawHandGear, drawHandGlow, drawHeadGear, drawNeckGear, extraGearOf, GEAR_SHEET_IDS, type ExtraGear } from "./avatarGear";
 import { COSMETIC_FX_IDS } from "./cosmeticFx";
@@ -40,6 +40,10 @@ export const AV_ANIM = {
   seesaw: { col: 13, frames: 1, fps: 1 },
   trampoline: { col: 14, frames: 1, fps: 1 },
   carousel: { col: 13, frames: 1, fps: 1 },
+  // 3번 집 안 가구: 시트에는 서 있는 프레임만 두고(AV_ALIASES), 이불·책·거품은 AvatarView가 sprites/indoorPose로 덧그린다
+  lie: { col: 27, frames: 1, fps: 1 },
+  read: { col: 0, frames: 2, fps: 2 },
+  bath: { col: 27, frames: 1, fps: 1 },
 } as const;
 
 /** 다른 상태의 프레임을 그대로 쓰는 상태 (시트 열을 따로 차지하지 않는다) */
@@ -48,6 +52,9 @@ export const AV_ALIASES: Readonly<Partial<Record<keyof typeof AV_ANIM, keyof typ
   seesaw: "sitChair",
   trampoline: "jump",
   carousel: "sitChair",
+  lie: "hammock",
+  read: "idle",
+  bath: "hammock",
 };
 
 /** 한 번 하는 동작 애니메이션 (act) */
@@ -106,6 +113,13 @@ type Pal = {
   eye: Color;
   scarf: Color;
   scarfLo: Color;
+  /** 46번: 몸 부위 색을 머리와 같은 밝기로 (이불 유령 자락·동글이 배) */
+  bodyHi: Color;
+  bodyMid: Color;
+  bodyLo: Color;
+  /** 46번: 염색한 포인트 색 (null = 몸마다 원래 포인트 색: 목도리 베이지·분홍 귀 안쪽·흰 꼬리·새싹 초록) */
+  accent: Color | null;
+  accentLo: Color;
   feet: Color;
   muzzle: Color;
   /** 손 흔들기·환호 때 보이는 손 (몸보다 밝게) */
@@ -129,22 +143,67 @@ export function lookKey(look: readonly string[]): string {
   return (SHEET_COSMETICS as readonly string[]).filter((id) => look.includes(id)).join(".");
 }
 
-function palette(base: Color, body: AvatarBody): Pal {
-  // 이불 유령은 천처럼 밝게
-  const b = body === "sheet" ? lighten(base, 0.3) : base;
+/**
+ * 46번 아바타 3부위 색. 색 표기(spec)는 "#기본색" 하나이거나, 염색했으면 "#기본색|머리|몸|포인트"(빈 칸 = 기본).
+ * 게임·미리보기는 이 문자열 하나를 색으로 넘기고(텍스처 키에도 그대로 들어간다), 시트를 그릴 때만 3색으로 푼다.
+ */
+export type AvatarColors = { base: Color; head: Color; body: Color; accent: Color | null };
+
+/** 46·25번: 실시간 서버가 알리는 염색·몸 모양 변경 (look 이벤트에 실린다, 없는 값은 그대로) */
+export type AppearanceChange = { dye?: AvatarDye; body?: string };
+
+/** 기본색 + 염색 → 색 표기. 염색이 없으면 기본색 그대로 (옛 텍스처 키와 같다) */
+export function avatarColorSpec(base: string, dye?: AvatarDye | null): string {
+  const b = base.split("|")[0];
+  if (!hasDye(dye)) return b;
+  return [b, dye!.head ?? "", dye!.body ?? "", dye!.accent ?? ""].join("|");
+}
+
+/** 색 표기에 담긴 염색 (미리보기에서 한 부위만 바꿔 볼 때) */
+export function specDye(spec: string): AvatarDye {
+  const [, h, b, a] = spec.split("|");
+  return { ...(h ? { head: h } : {}), ...(b ? { body: b } : {}), ...(a ? { accent: a } : {}) };
+}
+
+/** 색 표기의 한 부위만 바꾼다 (color = null이면 그 부위를 기본색으로) */
+export function withDyePart(spec: string, part: keyof AvatarDye, color: string | null): string {
+  const d = specDye(spec);
+  if (color) d[part] = color;
+  else delete d[part];
+  return avatarColorSpec(spec, d);
+}
+
+/** 색 표기 → 3부위 색 (머리·몸은 염색 안 했으면 기본색) */
+export function avatarColors(spec: string): AvatarColors {
+  const [b, h, bo, a] = spec.split("|");
+  const base = parseHex(b ?? "");
+  return { base, head: h ? parseHex(h, base) : base, body: bo ? parseHex(bo, base) : base, accent: a ? parseHex(a) : null };
+}
+
+function palette(colors: AvatarColors, body: AvatarBody): Pal {
+  // 이불 유령은 천처럼 밝게. 명암은 부위마다 그 부위 색에서 계산한다 (염색 전에는 머리 = 몸 = 기본색이라 예전과 똑같다)
+  const h = body === "sheet" ? lighten(colors.head, 0.3) : colors.head;
+  const b = body === "sheet" ? lighten(colors.body, 0.3) : colors.body;
+  const accent = colors.accent;
   return {
-    hoodHi: lighten(b, 0.28),
-    hood: b,
-    hoodLo: darken(b, 0.22),
+    hoodHi: lighten(h, 0.28),
+    hood: h,
+    hoodLo: darken(h, 0.22),
     cloak: darken(b, 0.12),
     cloakLo: darken(b, 0.34),
-    line: mix(darken(base, 0.72), 0x15141b, 0.5),
+    bodyHi: lighten(b, 0.28),
+    bodyMid: b,
+    bodyLo: darken(b, 0.22),
+    accent,
+    accentLo: accent === null ? 0xb0a589 : darken(accent, 0.2),
+    // 외곽선은 염색과 무관하게 처음 고른 색에서 (발·눈과 함께 고정)
+    line: mix(darken(colors.base, 0.72), 0x15141b, 0.5),
     face: 0x17161d,
     eye: 0xf6efd4,
-    scarf: 0xd9ceb2,
-    scarfLo: 0xb0a589,
+    scarf: accent ?? 0xd9ceb2,
+    scarfLo: accent === null ? 0xb0a589 : darken(accent, 0.19),
     feet: 0x2a2520,
-    muzzle: lighten(base, 0.62),
+    muzzle: lighten(colors.head, 0.62),
     hand: mix(lighten(b, 0.5), 0xfff4dc, 0.45),
     handLo: darken(mix(lighten(b, 0.5), 0xfff4dc, 0.45), 0.14),
   };
@@ -325,14 +384,14 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     if (side) {
       line(g, cx - 4, 23, cx - 7, 21, pal.cloak);
       line(g, cx - 7, 21, cx - 7, 18, pal.cloak);
-      g.set(cx - 6, 17, pal.hoodHi);
+      g.set(cx - 6, 17, pal.accent ?? pal.hoodHi);
     } else if (view === "down") {
       line(g, cx + 4, 23, cx + 6, 21, pal.cloak);
       g.set(cx + 6, 20, pal.cloak);
-      g.set(cx + 5, 19, pal.hoodHi);
+      g.set(cx + 5, 19, pal.accent ?? pal.hoodHi);
     }
   } else if (body === "bun" && side) {
-    g.ellipse(cx - 5, 22, 1.6, 1.6, 0xf4efe6);
+    g.ellipse(cx - 5, 22, 1.6, 1.6, pal.accent ?? 0xf4efe6);
   }
 
   // ── 몸통 ──
@@ -342,23 +401,33 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     g.ellipse(cx, hy, 6, 6, pal.hood);
     for (let y = hy; y < hemY; y++) {
       const flare = y >= hemY - 3 ? 1 + (pose.sit === 1 ? 1 : 0) : 0;
-      for (let x = cx - 6 - flare; x < cx + 6 + flare; x++) g.set(x, y, x >= cx + 4 + flare ? pal.cloakLo : pal.hood);
+      // 46번: 얼굴 아래(hy+3)부터는 몸 부위 색 (천 자락)
+      for (let x = cx - 6 - flare; x < cx + 6 + flare; x++) g.set(x, y, x >= cx + 4 + flare ? pal.cloakLo : y < hy + 3 ? pal.hood : pal.bodyMid);
     }
     const flare = 1 + (pose.sit === 1 ? 1 : 0);
-    for (let x = cx - 6 - flare; x < cx + 6 + flare; x++) if ((x + pose.hem + 9) % 3 !== 2) g.set(x, hemY, pal.cloakLo);
+    // 포인트 = 밑단 물결·주름 (염색 전에는 몸 색의 그늘)
+    const hem = pal.accent ?? pal.cloakLo;
+    const fold = pal.accent === null ? pal.bodyLo : pal.accentLo;
+    for (let x = cx - 6 - flare; x < cx + 6 + flare; x++) if ((x + pose.hem + 9) % 3 !== 2) g.set(x, hemY, hem);
     g.recolor((x, y) => x - cx + (y - hy) < -5 && y < hy + 2, pal.hoodHi);
-    g.recolor((x, y) => y === hemY - 1 && (x + pose.hem) % 3 === 0, pal.hoodLo);
+    g.recolor((x, y) => y === hemY - 1 && (x + pose.hem) % 3 === 0, pal.accent ?? pal.bodyLo);
     // 천 주름
     if (view !== "side") {
-      g.vline(cx - 3, hy + 6, hemY - 2, pal.hoodLo);
-      g.vline(cx + 2, hy + 7, hemY - 1, pal.hoodLo);
-    } else g.vline(cx - 2, hy + 6, hemY - 1, pal.hoodLo);
+      g.vline(cx - 3, hy + 6, hemY - 2, fold);
+      g.vline(cx + 2, hy + 7, hemY - 1, fold);
+    } else g.vline(cx - 2, hy + 6, hemY - 1, fold);
   } else if (body === "round") {
     const ry = pose.sit ? 5.5 : 6;
     g.ellipse(cx, hy, 6.5, ry, pal.hood);
+    // 46번: 위쪽 = 머리 부위, 가운데 줄(hy)부터 아래 = 몸 부위(배). 공 모양 안쪽만 (뒤의 꾸미기·발은 그대로)
+    const inBall = (x: number, y: number) => ((x + 0.5 - cx) / 6.5) ** 2 + ((y + 0.5 - hy) / ry) ** 2 <= 1;
+    const lower = (y: number) => y >= hy;
+    g.recolor((x, y) => lower(y) && inBall(x, y), pal.bodyMid);
     g.recolor((x, y) => x - cx + (y - hy) < -6, pal.hoodHi);
+    g.recolor((x, y) => x - cx + (y - hy) < -6 && lower(y) && inBall(x, y), pal.bodyHi);
     g.recolor((x, y) => x - cx - (y - hy) > 3.5 || y >= hy + ry - 1, pal.hoodLo);
-    if (view === "down") g.ellipse(cx, hy + 3, 3.4, 2.2, pal.hoodHi);
+    g.recolor((x, y) => (x - cx - (y - hy) > 3.5 || y >= hy + ry - 1) && lower(y) && inBall(x, y), pal.bodyLo);
+    if (view === "down") g.ellipse(cx, hy + 3, 3.4, 2.2, pal.bodyHi);
   } else {
     // 망토 (사다리꼴)
     const tall = body === "tall";
@@ -437,10 +506,12 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     if (view === "up") g.vline(cx, hy - 2, hy + 2, pal.hoodLo);
   } else if (body === "round" && !hatCovers) {
     // 머리 위 새싹 (모자를 쓰면 모자 속에)
-    g.set(cx, hy - 7, 0x6f9a4c);
-    g.set(cx, hy - 8, 0x6f9a4c);
-    g.set(cx + 1, hy - 8, 0x9cc46a);
-    g.set(cx - 1, hy - 8, 0x86b25a);
+    // 포인트 = 새싹 (염색 전에는 초록)
+    const a = pal.accent;
+    g.set(cx, hy - 7, a === null ? 0x6f9a4c : pal.accentLo);
+    g.set(cx, hy - 8, a === null ? 0x6f9a4c : pal.accentLo);
+    g.set(cx + 1, hy - 8, a === null ? 0x9cc46a : lighten(a, 0.2));
+    g.set(cx - 1, hy - 8, a ?? 0x86b25a);
   }
 
   // ── 얼굴 ──
@@ -461,8 +532,8 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     if (body === "cat") {
       line(g, cx, 24, cx + 2, 21, pal.cloak);
       line(g, cx + 2, 21, cx + 2, 18, pal.cloak);
-      g.set(cx + 1, 17, pal.hoodHi);
-    } else if (body === "bun") g.ellipse(cx, 22, 1.6, 1.6, 0xf4efe6);
+      g.set(cx + 1, 17, pal.accent ?? pal.hoodHi);
+    } else if (body === "bun") g.ellipse(cx, 22, 1.6, 1.6, pal.accent ?? 0xf4efe6);
   }
 
   // ── 앉은 자세의 발 ──
@@ -790,7 +861,7 @@ function drawFace(g: Grid, body: AvatarBody, view: View, m: M, pal: Pal): void {
 
 function drawCatEars(g: Grid, view: View, m: M, pal: Pal): void {
   const { cx, hy } = m;
-  const inner = view === "up" ? pal.hoodLo : 0xe6a3b0;
+  const inner = view === "up" ? pal.hoodLo : (pal.accent ?? 0xe6a3b0);
   const ear = (x0: number, d: 1 | -1) => {
     g.set(x0, hy - 7, pal.hood);
     g.set(x0, hy - 6, pal.hood);
@@ -811,7 +882,7 @@ function drawCatEars(g: Grid, view: View, m: M, pal: Pal): void {
 
 function drawBunEars(g: Grid, view: View, m: M, pal: Pal): void {
   const { cx, hy } = m;
-  const inner = view === "up" ? pal.hoodLo : 0xeaa6b4;
+  const inner = view === "up" ? pal.hoodLo : (pal.accent ?? 0xeaa6b4);
   if (view === "side") {
     g.rect(cx - 4, hy - 9, 2, 5, pal.hoodLo);
     g.rect(cx - 2, hy - 11, 2, 7, pal.hood);
@@ -916,7 +987,7 @@ export function handAnchor(body: string, dir: "down" | "left" | "right" | "up"):
 /** 프레임 하나의 픽셀 (테스트·머리 위 높이 계산용). col = 시트 열, view = 앞·옆·뒤 */
 export function avatarFrameGrid(body: string, view: "down" | "side" | "up", col: number, color = "#9fb8d8", look: readonly string[] = []): Grid {
   const b = bodyOf(body);
-  return drawFrame(b, view, framesFor(view)[col], palette(parseHex(color), b), gearOf(look));
+  return drawFrame(b, view, framesFor(view)[col], palette(avatarColors(color), b), gearOf(look));
 }
 
 const artTopCache = new Map<string, number>();
@@ -961,7 +1032,7 @@ const VIEWS: readonly [number, View, boolean][] = [
 /** 색 + 꾸미기 + 몸 조합에 대한 전체 스프라이트 시트 (4행 × AV_COLS열) */
 export function buildAvatarSheet(color: string, look: readonly string[] = [], body: string = "hood"): HTMLCanvasElement {
   const b = bodyOf(body);
-  const pal = palette(parseHex(color), b);
+  const pal = palette(avatarColors(color), b);
   const gear = gearOf(look);
   const sheet = new Grid(AV_W * AV_COLS, AV_H * 4);
   for (const [row, view, flip] of VIEWS) {
@@ -995,7 +1066,7 @@ export function avatarPreview(body: string, color: string, scale = 3): string {
   const key = `${b}|${color}|${s}`;
   const hit = previewCache.get(key);
   if (hit) return hit;
-  const f = drawFrame(b, "down", framesFor("down")[0], palette(parseHex(color), b), gearOf([])).toCanvas();
+  const f = drawFrame(b, "down", framesFor("down")[0], palette(avatarColors(color), b), gearOf([])).toCanvas();
   const c = document.createElement("canvas");
   c.width = AV_W * s;
   c.height = AV_H * s;

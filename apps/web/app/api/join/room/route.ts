@@ -5,6 +5,7 @@ import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
 import { getAccounts, NO_NAME } from "@/lib/store";
+import { getStyleStore } from "@/lib/store/style";
 import { kstDay, lookOf } from "@/lib/store/accounts";
 import type { RoomJoinResponse } from "@/lib/types";
 import { readBody, RoomJoinSchema } from "@/lib/validate";
@@ -24,10 +25,11 @@ export const POST = handler(async (req) => {
     if (!house || house.hidden) throw new HttpError(404, "NOT_FOUND", "그 집을 찾을 수 없어요.");
   }
   const now = Date.now();
-  const a = await getAccounts().get(visitorId, kstDay(now), now);
+  const accounts = getAccounts();
+  const [a, style] = await Promise.all([accounts.get(visitorId, kstDay(now), now), getStyleStore(accounts).get(visitorId)]);
   const token = await signJoinToken(
     env.joinSecret(),
-    { visitorId, name: a.name ?? NO_NAME, color: a.color ?? AVATAR_COLORS[0], body: a.body ?? "hood", look: lookOf(a), channel: 0, room },
+    { visitorId, name: a.name ?? NO_NAME, color: a.color ?? AVATAR_COLORS[0], body: a.body ?? "hood", look: lookOf(a), dye: style.dye, channel: 0, room },
     ROOM_TOKEN_TTL_SEC,
   );
   return json<RoomJoinResponse>({ room, token, wsUrl: `${env.realtimeWsUrl()}/room/${encodeURIComponent(room)}?t=${encodeURIComponent(token)}` });

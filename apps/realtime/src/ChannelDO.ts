@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, ROOM_CAPACITY, TICK_MS, signGrant, verifyGrant } from "@tomb/protocol";
 import { TICKET_HEADER, decodeTicket, rejectSocket } from "./auth";
 import { ChannelCore, type PeerRecord, type Reservation } from "./channel";
-import { type Env, lobbyStub, readConfig } from "./config";
+import { type Env, channelStub, lobbyStub, readConfig } from "./config";
 
 // Channel DO (채널마다 하나, idFromName("ch-N")). 방(마을·집·사냥터)도 같은 클래스를 방 모드로 쓴다(idFromName("room:{id}")).
 // 판정은 ChannelCore(channel.ts)가 하고, 여기서는 Hibernation WebSocket·storage·타이머만 이어 준다.
@@ -13,6 +13,7 @@ import { type Env, lobbyStub, readConfig } from "./config";
 // - 재연결 유예 예약: storage("r:<sid>") + 알람. 소켓이 없으니 attachment에 둘 수 없고, hibernate 중에도 만료돼야 한다.
 // - 채널 번호: storage("channel"). 소켓이 하나도 없을 때 깨어난 알람도 로비에 보고할 수 있게.
 // - 쓴 폭죽 nonce: storage("n:<nonce>") → 증서 만료 시각. hibernate 뒤에도 같은 증서를 다시 쏘지 못하게.
+//   23번 확성기도 같은 곳("n:m:<nonce>")에 둔다. 모든 채널 확성기는 로비가 아는 열린 채널에 RPC(megaphoneRelay)로 전한다.
 // - 접속자 스냅샷: storage("live") = 접속 중인 사람 전체(PeerRecord[])를 키 하나에 묶어 쓴다(쓰기 1건 = 행 1개).
 //   실시간 서버를 재배포하면 DO가 재시작되며 소켓이 모두 끊기고 attachment도 사라진다. 그때 이 스냅샷으로
 //   모두를 유예 예약(RESTART_GRACE_MS)으로 되살려, 다시 붙는 클라이언트가 같은 sid·좌석을 이어받게 한다(takeOver).
@@ -163,6 +164,23 @@ export class ChannelDO extends DurableObject<Env> {
         },
         // 22번 황금 고블린 (월드 채널만 — 방은 ChannelCore가 끈다)
         signGrant: (g) => (env.JOIN_SECRET ? signGrant(env.JOIN_SECRET, g).catch(() => null) : Promise.resolve(null)),
+        // 23번 확성기
+        channelNo: () => this.channel,
+        relayMegaphone: (nonce, until, data) => {
+          if (room) return;
+          const self = this.channel;
+          const work = lobbyStub(env)
+            .info()
+            .then((info) =>
+              Promise.all(
+                info.channels
+                  .filter((c) => c.id !== self && c.count > 0)
+                  .map((c) => channelStub(env, c.id).megaphoneRelay(nonce, until, data)),
+              ),
+            )
+            .catch((e) => console.error("megaphone relay failed", e));
+          ctx.waitUntil(work);
+        },
         goblinChanged: (s) => {
           if (room) return;
           try {
@@ -216,6 +234,11 @@ export class ChannelDO extends DurableObject<Env> {
     const c = this.core.forceGoblin(Date.now());
     this.scheduleAlarm();
     return c ? { id: c.id, seed: c.seed, at: c.at, until: c.until, points: c.points } : null;
+  }
+
+  /** 23번: 다른 채널의 모든 채널 확성기 (RPC). 같은 nonce는 이 채널에 한 번만 */
+  megaphoneRelay(nonce: string, until: number, data: string): boolean {
+    return this.core.relayedMegaphone(nonce, until, data);
   }
 
   /** Lobby DO가 상태를 다시 맞출 때 부른다 (RPC) */

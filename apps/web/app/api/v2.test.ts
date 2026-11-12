@@ -89,7 +89,7 @@ describe("계정·출석", () => {
       points: 0,
       lifetimePoints: 0,
       todayEarned: 0,
-      attendance: { today: false, streak: 0 },
+      attendance: { today: false, streak: 0, stayMinutes: 0 },
       hasCode: false,
       inventory: {},
       equipped: [],
@@ -98,26 +98,16 @@ describe("계정·출석", () => {
       activityUnread: 0,
       nameChange: { nextAllowedAt: 0, cost: 0 },
       tutorialDone: false,
+      dye: {},
     });
   });
 
-  it("출석: +10, 같은 날 다시 하면 0, 이름을 저장한다", async () => {
+  it("입장 기록: 포인트는 주지 않고(10번: 출석은 달력에서) 이름을 저장한다", async () => {
     const v = await newVisitor();
     const first = await bodyOf<AttendResponse>(attend.POST(call("/api/me/attend", { visitor: v, body: { name: "새벽코더" } })));
-    expect(first.earned).toBe(10);
-    expect(first.me).toMatchObject({ points: 10, name: "새벽코더", attendance: { today: true, streak: 1 } });
-    const again = await bodyOf<AttendResponse>(attend.POST(call("/api/me/attend", { visitor: v, body: {} })));
-    expect(again.earned).toBe(0);
+    expect(first.earned).toBe(0);
+    expect(first.me).toMatchObject({ points: 0, name: "새벽코더", attendance: { today: false, streak: 0, stayMinutes: 0 } });
     expect((await attend.POST(call("/api/me/attend", { visitor: v, body: { name: "x" } }))).status).toBe(400);
-  });
-
-  it("같은 IP의 4번째 계정은 출석 포인트를 받지 못한다", async () => {
-    const earned = [];
-    for (let i = 0; i < 4; i++) {
-      const v = await newVisitor("10.3.3.3");
-      earned.push((await bodyOf<AttendResponse>(attend.POST(call("/api/me/attend", { visitor: v, body: {} })))).earned);
-    }
-    expect(earned).toEqual([10, 10, 10, 0]);
   });
 });
 
@@ -133,7 +123,7 @@ describe("개인 코드", () => {
     const typed = first.replaceAll("-", "").toLowerCase();
     const res = await login.POST(call("/api/me/login", { body: { code: typed }, headers: { "x-forwarded-for": "10.4.0.1" } }));
     expect(res.status).toBe(200);
-    expect(((await res.json()) as CodeLoginResponse).me).toMatchObject({ accountId: v.visitorId, name: "새벽코더", points: 10 });
+    expect(((await res.json()) as CodeLoginResponse).me).toMatchObject({ accountId: v.visitorId, name: "새벽코더", points: 0 });
     const cookie = res.headers.get("set-cookie")!.split(";")[0].replace(/^vid=/, "");
     expect(await verifySession(cookie)).toBe(v.visitorId);
 
@@ -379,12 +369,12 @@ describe("관리자 포인트 지급", () => {
 
     const byCode = await admin({ code: personal.replaceAll("-", "").toLowerCase(), delta: 500 });
     const text = await byCode.text();
-    expect(JSON.parse(text)).toEqual({ accountId: v.visitorId, points: 510 });
+    expect(JSON.parse(text)).toEqual({ accountId: v.visitorId, points: 500 });
     expect(text).not.toContain(personal);
     expect(await bodyOf(admin({ accountId: v.visitorId, delta: -9999 }))).toEqual({ accountId: v.visitorId, points: 0 });
     await admin({ accountId: v.visitorId, delta: 9999 });
     expect(await bodyOf(admin({ accountId: v.visitorId, delta: 9999 }))).toEqual({ accountId: v.visitorId, points: 9999 });
-    expect((await getMe(v)).todayEarned).toBe(10);
+    expect((await getMe(v)).todayEarned).toBe(0); // 관리자 지급은 하루 적립에 들지 않는다
   });
 
   it("검증·없는 계정·관리자 키", async () => {

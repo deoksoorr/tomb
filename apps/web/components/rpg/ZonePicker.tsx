@@ -6,7 +6,8 @@ import { DIFFICULTIES, DIFFS, gearById, MONSTERS, zonesOf, type ZoneDef, type Zo
 import { cx } from "../ui/cx";
 import s from "./rpg.module.css";
 
-// 40번 사냥터 고르기: 난이도마다 두세 곳, 카드마다 지도 미리보기(게임과 같은 그림)·권장 레벨·우두머리·지형 기믹.
+// 40번 사냥터 고르기: 난이도마다 두세 곳, 카드마다 지도 미리보기(게임과 같은 그림)·이름·입장 레벨·지형 기믹.
+// 난이도 줄은 창 너비를 다 쓰고, 그 난이도의 사냥터 카드가 한 줄에 모두 보인다 (카드 수만큼 균등 분할). 자세한 건 ZoneInfo.
 // 레벨이 모자라면 잠겨 있다 (로컬 개발 서버에서 localStorage["tomb.rpg.unlockAll"]="1"이면 모두 열림 — 검수용).
 
 const previews = new Map<string, string>();
@@ -69,10 +70,8 @@ function ZoneCard({ z, level, selected, all, onPick }: { z: ZoneDef; level: numb
         <span className={s.zoneTag}>{z.gimmick.name}</span>
         {!open && <span className={s.zoneLock}>Lv.{z.unlockLevel}부터</span>}
       </span>
-      <span className={s.cardName}>{z.name}</span>
-      <span className={s.meta}>
-        Lv.{z.unlockLevel}+ · 우두머리 {MONSTERS[z.boss].name}
-      </span>
+      <span className={cx(s.cardName, s.zoneName)}>{z.name}</span>
+      <span className={s.meta}>Lv.{z.unlockLevel}+</span>
     </button>
   );
 }

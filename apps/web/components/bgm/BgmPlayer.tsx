@@ -136,7 +136,7 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
 function BgmCredits({ playlists, onClose }: { playlists: Playlist[]; onClose: () => void }) {
   const withTracks = playlists.filter((p) => p.tracks.length > 0);
   return (
-    <Dialog title="음원 정보" onClose={onClose} size="sm">
+    <Dialog title="음원 정보" onClose={onClose}>
       {withTracks.length === 0 ? (
         <p className={styles.creditsEmpty}>아직 음원을 준비하고 있어요. 지금은 조용히 머물러 주세요.</p>
       ) : (

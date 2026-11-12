@@ -2,15 +2,24 @@
  * 오버레이 배치 (게임 캔버스 위). 컨테이너는 pointer-events: none 이라 빈 곳은 캔버스가 입력을 받는다.
  *  윗줄: 좌 BGM · 가운데 채널 HUD(폰 폭이면 아래 안내 줄 맨 아래로) · 우 [안내][내 정보][랭킹]
  *  아래 안내 줄(가운데): 토스트 · 대기열/연결 끊김 · 새 버전
- *  데스크톱 아랫줄: 좌 폭죽(+ 위에 내 묘비) · 가운데 [내 캐릭터로][묘비 세우기] · 우 줌
- *  터치 아랫줄: 좌 조이스틱(+ 위에 줌, 내 묘비) · 우 행동 버튼(+ 위에 묘비 세우기, 폭죽) · 가운데 [내 캐릭터로]
+ *  데스크톱 아랫줄: 좌 바로 가기 줄(dock: 메뉴·가방·사냥·도감·집·소식·공지·폭죽) · 가운데 [내 캐릭터로] · 우 줌
+ *    — 모든 HUD는 화면 가장자리에서 같은 여백(--safe-*)에 붙고, 버튼 높이(36px)·간격(6px)·배경(--panel)이 같다
+ *  터치: 맨 아래 한 줄 바로 가기 바(dock) · 그 위 좌 조이스틱 · 우 행동 버튼 · 위 가장자리 바 아래 [내 캐릭터로]
  * 화면 가운데(내 캐릭터와 이름표)는 비워 둔다.
  */
 
 .shell {
+  /* 아래 바로 가기 바가 차지하는 높이 (터치에서만). 조이스틱·행동 버튼·안내 줄·낚시 창이 이만큼 위로 */
+  --dock-h: 0px;
   position: fixed;
   inset: 0;
   background: var(--bg);
+}
+
+@media (pointer: coarse) {
+  .shell {
+    --dock-h: 60px;
+  }
 }
 
 /* 연결이 끊긴 탭: 화면을 살짝 어둡게 (입력은 막지 않는다) */
@@ -43,7 +52,7 @@
   opacity: 1;
 }
 
-.campfire .leftRow {
+.campfire .dock:not(.dockBar) {
   display: none;
 }
 
@@ -100,12 +109,8 @@
   min-width: 0;
 }
 
-.menuButton {
-  position: relative;
-  background: var(--panel);
-}
-
 .topButton {
+  position: relative;
   background: var(--panel);
 }
 
@@ -125,18 +130,60 @@
   transform: translateX(-50%);
 }
 
-/* [내 묘비][가방] 데스크톱: 왼쪽 아래 폭죽 버튼 위 · 터치: 왼쪽 줌 버튼 위 */
-.leftRow {
+/* 바로 가기 줄 (데스크톱): 왼쪽 아래 모서리에 붙는다 — 위 HUD·줌과 같은 가장자리 여백 */
+.dock {
   position: absolute;
   left: var(--safe-left);
-  bottom: calc(var(--safe-bottom) + 60px);
+  bottom: var(--safe-bottom);
   display: flex;
+  align-items: stretch;
   gap: 6px;
+  max-width: calc(100% - var(--safe-left) - var(--safe-right) - 56px);
 }
 
-.leftButton {
+.dockButton {
   position: relative;
+  flex: none;
   background: var(--panel);
+  white-space: nowrap;
+}
+
+/* 좁은 데스크톱 창: 글자를 줄이고 여백을 좁혀 한 줄 유지 */
+@media (max-width: 700px) {
+  .dock:not(.dockBar) .dockButton {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+}
+
+/* 터치(폰): 화면 맨 아래 한 줄 바 — 칸을 똑같이 나누고 아이콘 위·글자 아래 */
+.dockBar {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: none;
+  gap: 0;
+  padding: 4px max(4px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
+  background: var(--panel-solid);
+  box-shadow: 0 -2px 0 var(--line);
+}
+
+.dockBar .dockButton {
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 4px 2px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 10px;
+}
+
+.dockBar .badge {
+  position: absolute;
+  top: 2px;
+  right: calc(50% - 22px);
 }
 
 .dot {
@@ -162,14 +209,14 @@
 /* 터치: 안내 줄은 아래 조이스틱(≈136px)·행동 버튼(≈156px) 위 */
 @media (pointer: coarse) {
   .bottomCenter {
-    bottom: calc(var(--safe-bottom) + 168px);
+    bottom: calc(var(--safe-bottom) + var(--dock-h) + 168px);
   }
 }
 
 /* 가로 폰처럼 낮은 터치 화면: 조이스틱과 행동 버튼 사이 아래쪽에 */
 @media (pointer: coarse) and (max-height: 520px) {
   .bottomCenter {
-    bottom: calc(var(--safe-bottom) + 8px);
+    bottom: calc(var(--safe-bottom) + var(--dock-h) + 8px);
     width: min(420px, calc(100% - 2 * 180px));
   }
 }
@@ -183,4 +230,16 @@
 /* 집·사냥터 안: 월드 HUD를 숨긴다 (마운트는 유지해 BGM이 끊기지 않게) */
 .away {
   display: none;
+}
+
+/* 10·11번: 받을 수 있는 출석 도장·선물 (빨간 점) */
+.redDot {
+  background: #e0453a;
+  box-shadow: 0 0 6px #e0453a;
+}
+
+/* 같은 버튼에 점이 둘이면 빨간 점은 왼쪽 위로 */
+.dotSecond {
+  right: auto;
+  left: 4px;
 }

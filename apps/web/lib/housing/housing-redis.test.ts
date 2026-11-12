@@ -36,13 +36,13 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
   }
   const points = async (id: string) => (await accounts.get(id, kstDay(), Date.now())).points;
   const lotsHash = async () => {
-    const flat = ((await raw.hgetall(HK.lots)) as unknown as string[] | null) ?? [];
+    const flat = ((await raw.hgetall(HK.lots(1))) as unknown as string[] | null) ?? [];
     const m = new Map<number, string>();
     for (let i = 0; i < flat.length; i += 2) m.set(Number(flat[i]), flat[i + 1]);
     return m;
   };
 
-  it("동시 분양(자동 번지)은 번지가 겹치지 않고, houses:lots와 집의 lot이 서로 맞다", async () => {
+  it("동시 분양(자동 번지)은 번지가 겹치지 않고, houses:lots:1과 집의 lot이 서로 맞다", async () => {
     const ids = await Promise.all(Array.from({ length: 8 }, () => account(PLOT)));
     const res = await Promise.all(ids.map((id, i) => buyPlot(store, id, `집${i}`, "", "주인")));
     const lots = res.map((r) => r.house!.lot);
@@ -123,7 +123,7 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
     const olds = await Promise.all(Array.from({ length: 3 }, () => account(PLOT)));
     const ids = olds.map(houseIdFor);
     for (const [i, owner] of olds.entries()) {
-      // 마을 이전 형식: meta에 lot·exterior가 없고 houses:lots에도 없다
+      // 마을 이전 형식: meta에 ch·lot·exterior가 없고 번지 색인에도 없다
       await raw.hset(HK.meta(ids[i]), { owner, name: `옛집${i}`, intro: "", ownerName: "옛주인", tier: "small", createdAt: "1", updatedAt: "1", likes: "0", placedScore: "0", items: "0" });
       await raw.zadd(HK.all, { score: 1, member: ids[i] });
     }

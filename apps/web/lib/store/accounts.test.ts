@@ -16,6 +16,8 @@ type Kit = {
   graves: GraveStore;
   accounts: AccountStore;
   setPoints(id: string, n: number): Promise<void>;
+  /** 달력 개편 전 계정처럼 마지막 출석일·연속 일수만 넣는다 */
+  setLegacyAttend(id: string, lastAttend: string, streak: number): Promise<void>;
   cleanup(ids: string[]): Promise<void>;
 };
 
@@ -216,27 +218,98 @@ function contract(make: () => Kit) {
     expect(a.stash).toEqual([]);
   });
 
-  it("출석: 하루 1번, 연속이면 streak+1, 7일째 보너스(+30), 끊기면 1부터. 이름 저장", async () => {
+  // ── 10번 출석 달력 ──
+  /** 머무르기 기록을 n번 남긴다 (10분 간격, 계정마다 시계가 앞으로만 간다) */
+  const clock = new Map<string, number>();
+  async function stay(id: string, day: string, n: number) {
+    for (let i = 0; i < n; i++) {
+      const t = (clock.get(id) ?? 1_000_000_000) + 600_000;
+      clock.set(id, t);
+      expect(await accounts.presence(id, day, t)).not.toBeNull();
+    }
+  }
+  const claim = (id: string, ip: string, day: string, yesterday: string, monthDays = 30) =>
+    accounts.claimAttend(id, ip, day, yesterday, monthDays, 6);
+
+  it("출석 달력: 1시간(머무르기 6번) 전엔 못 받고, 하루 1번, 연속 7일째 +30, 끊기면 1부터", async () => {
     const id = newId();
-    const ip = `ip-${nanoid(6)}`;
     const d = days(9);
+    await accounts.enter(id, { name: "새벽코더" }, 1);
+    await stay(id, d[0], 5);
+    expect(await claim(id, "ip-a", d[0], "")).toEqual({ ok: false, reason: "stay", stayTicks: 5 });
+    expect((await accounts.get(id, d[0], 0)).stayTicks).toBe(5);
     const earned: number[] = [];
-    for (let i = 0; i < 7; i++) earned.push(await accounts.attend(id, ip + i, i === 0 ? { name: "새벽코더" } : {}, d[i], d[i - 1] ?? ""));
+    for (let i = 0; i < 7; i++) {
+      await stay(id, d[i], i === 0 ? 1 : 6);
+      const r = await claim(id, `ip-${nanoid(6)}`, d[i], d[i - 1] ?? "");
+      if (!r.ok) throw new Error(r.reason);
+      earned.push(r.earned.daily + r.earned.streak);
+    }
     expect(earned).toEqual([10, 10, 10, 10, 10, 10, 40]);
-    expect(await accounts.attend(id, ip, {}, d[6], d[5])).toBe(0);
+    expect(await claim(id, "ip-a", d[6], d[5])).toEqual({ ok: false, reason: "already" });
     expect(await accounts.get(id, d[6], 0)).toMatchObject({ streak: 7, name: "새벽코더", lastAttend: d[6] });
+    const cal = await accounts.attendCalendar(id, "202611");
+    expect(cal).toEqual({ days: { "01": 10, "02": 10, "03": 10, "04": 10, "05": 10, "06": 10, "07": 40 }, monthBonus: null });
     // 하루 건너뛰면 다시 1일째
-    expect(await accounts.attend(id, `${ip}-x`, {}, d[8], d[7])).toBe(10);
-    expect((await accounts.get(id, d[8], 0)).streak).toBe(1);
+    await stay(id, d[8], 6);
+    const again = await claim(id, "ip-b", d[8], d[7]);
+    expect(again).toMatchObject({ ok: true, streak: 1, earned: { daily: 10, streak: 0, monthly: 0 } });
   });
 
-  it(`같은 IP에서는 하루 ${ATTEND_ACCOUNTS_PER_IP}개 계정까지만 출석 포인트 (출석 기록은 남는다)`, async () => {
+  it("출석 달력 보상은 하루 전체 한도에 막히지 않는다 (항목 한도만)", async () => {
+    const id = newId();
+    await accounts.earn(id, "hunt", DAY, { amount: 600 });
+    await accounts.earn(id, "fish", DAY, { amount: 200 });
+    expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(DAILY_EARN_CAP);
+    await stay(id, DAY, 6); // 머무르기 포인트는 하루 한도에 막히지만 머문 기록은 쌓인다
+    expect((await accounts.get(id, DAY, 0)).stayTicks).toBe(6);
+    expect(await claim(id, "ip-c", DAY, "20261107")).toMatchObject({ ok: true, earned: { daily: 10 } });
+  });
+
+  it(`같은 IP에서는 하루 ${ATTEND_ACCOUNTS_PER_IP}개 계정까지만 출석 포인트 (도장은 남는다)`, async () => {
     const ip = `ip-${nanoid(6)}`;
     const ids = Array.from({ length: ATTEND_ACCOUNTS_PER_IP + 1 }, newId);
     const earned = [];
-    for (const id of ids) earned.push(await accounts.attend(id, ip, {}, DAY, "20261107"));
+    for (const id of ids) {
+      await stay(id, DAY, 6);
+      const r = await claim(id, ip, DAY, "20261107");
+      earned.push(r.ok ? r.earned.daily : -1);
+    }
     expect(earned).toEqual([...Array<number>(ATTEND_ACCOUNTS_PER_IP).fill(10), 0]);
     expect((await accounts.get(ids.at(-1)!, DAY, 0)).lastAttend).toBe(DAY);
+    expect((await accounts.attendCalendar(ids.at(-1)!, "202611")).days).toEqual({ "08": 0 });
+  });
+
+  it("한 달 개근: 그달 모든 날을 찍은 날 한 번 +200 (달력 개편 전 출석도 이어서 센다)", async () => {
+    const id = newId();
+    // 11/1~11/5는 개편 전 자동 출석으로 받았다 (마지막 출석 11/5, 5일 연속)
+    await kit.setLegacyAttend(id, "20261105", 5);
+    expect((await accounts.attendCalendar(id, "202611")).days).toEqual({ "01": 0, "02": 0, "03": 0, "04": 0, "05": 0 });
+    // 오늘(11/5)은 이미 받았다 → 옛 자동 출석과 겹쳐 두 번 주지 않는다
+    expect(await claim(id, "ip-x", "20261105", "20261104")).toEqual({ ok: false, reason: "already" });
+    const d = days(30);
+    let monthly = 0;
+    let streak = 0;
+    for (let i = 5; i < 30; i++) {
+      await stay(id, d[i], 6);
+      const r = await claim(id, `ip-${nanoid(6)}`, d[i], d[i - 1]);
+      if (!r.ok) throw new Error(r.reason);
+      monthly += r.earned.monthly;
+      if (i < 29) expect(r.earned.monthly).toBe(0);
+      streak = r.streak;
+    }
+    expect(monthly).toBe(200);
+    expect(streak).toBe(30);
+    const cal = await accounts.attendCalendar(id, "202611");
+    expect(Object.keys(cal.days)).toHaveLength(30);
+    expect(cal.monthBonus).toBe(200);
+  });
+
+  it("입장 기록: 이름·색·몸 모양·처음 입장 시각은 비어 있을 때만, 포인트는 주지 않는다", async () => {
+    const id = newId();
+    await accounts.enter(id, { name: "새벽코더", color: "#9fc5a8", body: "cat" }, 1234);
+    await accounts.enter(id, { name: "다른이름", color: "#e0c36a", body: "tall" }, 5678);
+    expect(await accounts.get(id, DAY, 0)).toMatchObject({ name: "새벽코더", color: "#9fc5a8", body: "cat", createdAt: 1234, points: 0, lastAttend: null });
   });
 
   it("개인 코드: 재발급하면 이전 코드로는 찾을 수 없다", async () => {
@@ -382,13 +455,6 @@ function contract(make: () => Kit) {
     expect((await accounts.get(id, DAY, 0)).points).toBe(1000 - 100 - 60);
   });
 
-  it("출석의 이름·색·몸 모양은 비어 있을 때만 저장", async () => {
-    const id = newId();
-    await accounts.attend(id, `ip-${nanoid(6)}`, { name: "새벽코더", color: "#9fc5a8", body: "cat" }, DAY, "20261107");
-    await accounts.attend(id, `ip-${nanoid(6)}`, { name: "다른이름", color: "#e0c36a", body: "tall" }, "20261109", DAY);
-    expect(await accounts.get(id, DAY, 0)).toMatchObject({ name: "새벽코더", color: "#9fc5a8", body: "cat" });
-  });
-
   it("v4 내 소식: 최신 50개, 읽음 시각은 되돌리지 않고, get()의 activityUnread", async () => {
     const id = newId();
     for (let i = 1; i <= 55; i++)
@@ -467,7 +533,7 @@ function contract(make: () => Kit) {
     await accounts.earn(a, "flower", DAY);
     await accounts.earn(b, "bury", DAY);
     await accounts.presence(a, DAY, 1_000_000_000);
-    await accounts.attend(b, `ip-${nanoid(6)}`, {}, DAY, "20261107");
+    await accounts.earn(b, "attend", DAY);
     // 다음 주 월요일
     await accounts.earn(a, "flower", "20261116");
     const mine = (await accounts.pointRank(10_000, a, week)).mine;
@@ -518,6 +584,9 @@ describe("MemoryAccounts", () =>
       async setPoints(id, n) {
         (accounts as unknown as { acct(id: string): { points: number } }).acct(id).points = n;
       },
+      async setLegacyAttend(id, lastAttend, streak) {
+        Object.assign((accounts as unknown as { acct(id: string): object }).acct(id), { lastAttend, streak });
+      },
       async cleanup() {},
     };
   }));
@@ -531,6 +600,9 @@ describe.skipIf(!redisEnv)("RedisAccounts (실제 Redis, 개발용 DB에서만 �
       accounts: new RedisAccounts(redisEnv!),
       async setPoints(id, n) {
         await raw.hset(K.acct(id), { points: String(n) });
+      },
+      async setLegacyAttend(id, lastAttend, streak) {
+        await raw.hset(K.acct(id), { lastAttend, streak: String(streak) });
       },
       async cleanup(ids) {
         const keys = (await Promise.all(ids.map((id) => (id.startsWith("code:") ? [id] : raw.keys(`acct:${id}*`))))).flat();

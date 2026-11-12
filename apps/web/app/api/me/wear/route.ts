@@ -21,5 +21,5 @@ export const POST = handler(async (req) => {
   if (!(await accounts.wear(visitorId, itemId, itemById(itemId)!.slot!, now)))
     throw new HttpError(409, "NO_ITEM", "벗어 둔 꾸미기 중에 그 아이템이 없어요.");
   const me = await loadMe(accounts, visitorId, now);
-  return json<WearResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now) });
+  return json<WearResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now, me) });
 });

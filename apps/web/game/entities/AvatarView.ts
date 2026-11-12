@@ -1,11 +1,12 @@
 import * as Phaser from "phaser";
-import { DIR, type ActKind, type DirId, type StateName } from "@tomb/protocol";
+import { DIR, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
-import { AV_ORIGIN_Y, avatarArtTop, BODY_METRICS, bodyOf, handAnchor, waterSink } from "../sprites/avatar";
+import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange } from "../sprites/avatar";
 import { CosmeticFxView } from "./CosmeticFxView";
 import type { EmoteIcon } from "../sprites/emotes";
 import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
+import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_H, POSE_W, type IndoorPose } from "../sprites/indoorPose";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { SpeechBubble } from "./SpeechBubble";
 
@@ -79,6 +80,9 @@ export class AvatarView {
   private lying = false;
   private lieKey = "";
   private lieFrame = -1;
+  /** 3번 집 안 자세(눕기·읽기·욕조) 그림을 쓰는 중 (텍스처가 sprites/indoorPose 시트) */
+  private pose: IndoorPose | null = null;
+  private poseFrame = -1;
   state: StateName = "idle";
   dir: DirId = DIR.down;
   /** 앉기 시작한 시각 (앉아 있지 않으면 0) */
@@ -123,7 +127,7 @@ export class AvatarView {
     private readonly atlas: GlyphAtlas,
     x: number,
     y: number,
-    private readonly color: string,
+    private color: string,
     name: string,
     isMe: boolean,
     look: readonly string[] = [],
@@ -158,12 +162,31 @@ export class AvatarView {
       this.texKey = key;
       this.anim = "";
       this.swingFrame = -1;
-      if (this.lying) {
+      if (this.lying || this.pose) {
         this.lying = false;
+        this.pose = null;
         this.sprite.setTexture(key, avatarFrame("idle", this.dir));
       } else this.sprite.setTexture(key, this.sprite.frame.name);
       this.apply(this.state, this.dir, 0);
     }
+  }
+
+  /** 46번: 색 표기 변경 (avatarColorSpec — 염색) */
+  setColor(spec: string): void {
+    if (spec === this.color) return;
+    this.color = spec;
+    this.retexture();
+  }
+
+  get colorSpec(): string {
+    return this.color;
+  }
+
+  /** 46·25번: 실시간 서버가 알린 염색·몸 모양 (없는 값은 그대로 둔다) */
+  applyAppearance(extra: AppearanceChange | undefined): void {
+    if (!extra) return;
+    if (typeof extra.body === "string") this.setBody(extra.body);
+    if (extra.dye !== undefined) this.setColor(avatarColorSpec(this.color, sanitizeDye(extra.dye)));
   }
 
   /** 몸 모양 변경 (AVATAR_BODIES id, 모르는 값은 hood) */
@@ -281,7 +304,11 @@ export class AvatarView {
       this.lieDown();
       return;
     }
-    if (this.lying) this.getUp(state, dir);
+    if (isIndoorPose(state)) {
+      this.indoorPose(state);
+      return;
+    }
+    if (this.lying || this.pose) this.getUp(state, dir);
     if (now < this.gestureUntil) return;
     // 놀거리가 잠깐 다른 자세 프레임을 쓰는 중 (sync가 고른다)
     if (this.altFrame >= 0 && this.ride?.alt && (state === "seesaw" || state === "carousel" || state === "trampoline" || state === "boat")) return;
@@ -322,8 +349,26 @@ export class AvatarView {
     this.applyOrigin();
   }
 
-  /** 해먹에서 일어남: 아바타 시트로 돌아온다 (애니메이션은 apply가 이어서 고른다) */
+  /** 3번 집 안 자세 그림으로 (프레임 크기·원점이 아바타와 같다) */
+  private indoorPose(kind: IndoorPose): void {
+    if (this.lying) this.getUp("idle", this.dir);
+    const key = indoorPoseKey(this.texKey, kind);
+    if (!this.scene.textures.exists(key)) {
+      addCanvasTexture(this.scene, key, { canvas: indoorPoseSheet(kind, this.body, this.color, this.look).toCanvas(), frameW: POSE_W, frameH: POSE_H });
+    }
+    if (this.pose === kind && this.sprite.texture.key === key) return;
+    this.pose = kind;
+    this.poseFrame = 0;
+    this.anim = "pose";
+    this.gestureUntil = 0;
+    this.sprite.stop();
+    this.sprite.setTexture(key, 0);
+    this.applyOrigin();
+  }
+
+  /** 해먹·집 안 자세에서 일어남: 아바타 시트로 돌아온다 (애니메이션은 apply가 이어서 고른다) */
   private getUp(state: StateName, dir: DirId): void {
+    this.pose = null;
     this.lying = false;
     this.anim = "";
     this.sprite.setTexture(this.texKey, avatarFrame(state === "swing" ? "swing" : "idle", dir));
@@ -332,7 +377,7 @@ export class AvatarView {
 
   /** 잠깐의 몸짓 (꽃 놓기: 쪼그려 앉기 프레임) */
   gesture(dir: DirId, ms: number, now: number): void {
-    if (this.lying) return;
+    if (this.lying || this.pose) return;
     this.gestureUntil = now + ms;
     this.anim = "";
     this.sprite.stop();
@@ -349,6 +394,7 @@ export class AvatarView {
     const s = this.state;
     if (s === "swim" || s === "dive" || s === "hang" || s === "swing" || s === "hammock" || s === "sitGround" || s === "sitChair" || s === "jump") return;
     if (s === "boat" || s === "seesaw" || s === "trampoline" || s === "carousel") return;
+    if (isIndoorPose(s)) return;
     const act = kind === "cheer" || kind === "splash" ? "cheer" : "wave";
     this.gestureUntil = now + ACT_MS;
     this.anim = "";
@@ -488,6 +534,15 @@ export class AvatarView {
         this.altFrame = -1;
         this.apply(st, this.dir, now);
       }
+    } else if (this.pose && isIndoorPose(st)) {
+      // 3번 집 안 자세: 숨쉬기(이불)·책장 넘기기·거품 방울을 천천히 번갈아
+      this.setPose(0, 0);
+      const period = INDOOR_POSE_PERIOD[this.pose];
+      const f = this.reduced ? 0 : (now % period) / period > 0.55 ? 1 : 0;
+      if (f !== this.poseFrame) {
+        this.poseFrame = f;
+        s.setFrame(f);
+      }
     } else this.setPose(0, 0);
     if (this.altFrame >= 0 && st !== "boat" && st !== "seesaw" && st !== "trampoline" && st !== "carousel") this.altFrame = -1;
     if (s.angle !== 0) s.setAngle(0);
@@ -527,7 +582,7 @@ export class AvatarView {
           headY,
           dir: d,
           moving: st === "walk" || st === "run",
-          hidden: st === "dive" || st === "hammock" || st === "swim" || st === "hang",
+          hidden: st === "dive" || st === "hammock" || st === "swim" || st === "hang" || st === "lie" || st === "bath",
           artTop: this.artTop,
           shoulder: this.shoulder,
           hand: handAnchor(this.body, d === DIR.left ? "left" : d === DIR.right ? "right" : d === DIR.up ? "up" : "down"),

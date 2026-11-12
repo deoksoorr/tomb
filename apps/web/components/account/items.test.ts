@@ -83,3 +83,11 @@ describe("cosmeticBlock", () => {
     expect(cosmeticBlock(itemById("fw_small")!, { fw_small: 3 }, [], 5)).toBeNull();
   });
 });
+
+describe("30번 영구 코디 표시", () => {
+  it("영구 소유는 남은 시간 대신 \"영구\"", async () => {
+    const { PERMANENT_UNTIL } = await import("@tomb/protocol");
+    const { remainingLabel } = await import("./items");
+    expect(remainingLabel(PERMANENT_UNTIL, Date.now())).toBe("영구");
+  });
+});

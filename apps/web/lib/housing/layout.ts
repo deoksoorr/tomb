@@ -15,12 +15,17 @@ import {
   type PlotTier,
   type PlotTierId,
 } from "./catalog";
+import { partitionViolation, roomPlan, type RoomPlan } from "./rooms";
 import type { HouseLayout, Placed } from "./types";
 
 // 배치 규칙 (서버 검증과 편집 화면이 같은 함수를 쓴다).
 //  - 물건은 집 안쪽 칸에만, 아래 가운데 문 2칸은 비워 둔다.
 //  - 바닥층(러그·돌길·꽃밭)끼리, 서 있는 물건끼리는 겹칠 수 없다. 바닥층 위에는 서 있는 물건을 올릴 수 있다.
 //  - 놓은 개수는 가진 개수를 넘을 수 없다 (바닥·담장 스킨도 1개를 쓴다).
+//  - 3번: 넓은 터·대저택은 칸막이 벽으로 방이 나뉜다(rooms.ts). 물건은 벽을 가로지를 수 없고 방 사이 문 앞은 비워 둔다.
+
+/** 터 크기 (id가 있으면 방 구조도 본다) */
+export type TierShape = Pick<PlotTier, "w" | "h"> & { id?: PlotTierId };
 
 export const emptyLayout = (): HouseLayout => ({ items: [], floor: DEFAULT_FLOOR, wall: DEFAULT_WALL });
 
@@ -49,7 +54,10 @@ const fail = (code: string, message: string): LayoutError => ({ ok: false, code,
 export class Occupancy {
   readonly floor = new Map<number, string>();
   readonly stand = new Map<number, string>();
-  constructor(readonly tier: Pick<PlotTier, "w" | "h">) {}
+  private readonly plan: RoomPlan | null;
+  constructor(readonly tier: TierShape) {
+    this.plan = tier.id ? roomPlan({ id: tier.id, w: tier.w, h: tier.h }) : null;
+  }
 
   private key(x: number, y: number) {
     return y * 1000 + x;
@@ -62,6 +70,8 @@ export class Occupancy {
     if (x < 0 || y < 0 || x + w > t.w || y + h > t.h) return "집 밖으로 나갔어요.";
     const gate = gateTiles(t);
     const layer = def.floor ? this.floor : this.stand;
+    const wall = this.plan && partitionViolation(this.plan, x, y, w, h, !def.floor);
+    if (wall) return wall;
     for (let j = 0; j < h; j++)
       for (let i = 0; i < w; i++) {
         if (gate.some((g) => g.x === x + i && g.y === y + j)) return "문 앞은 비워 두어야 해요.";
@@ -83,7 +93,7 @@ export class Occupancy {
   }
 }
 
-export function buildOccupancy(items: readonly Placed[], tier: Pick<PlotTier, "w" | "h">, skipU?: string): Occupancy {
+export function buildOccupancy(items: readonly Placed[], tier: TierShape, skipU?: string): Occupancy {
   const occ = new Occupancy(tier);
   for (const p of items) {
     if (p.u === skipU) continue;
@@ -156,7 +166,7 @@ export function styleTag(layout: HouseLayout): string | null {
 /** 새 물건을 놓을 빈자리: (cx,cy) 가까운 칸부터 찾는다. 없으면 null */
 export function findFreeSpot(
   items: readonly Placed[],
-  tier: Pick<PlotTier, "w" | "h">,
+  tier: TierShape,
   def: FurnitureDef,
   r: number,
   cx = Math.floor(tier.w / 2),

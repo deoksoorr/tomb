@@ -127,7 +127,7 @@
     right: auto;
     left: 50%;
     transform: translateX(-50%);
-    bottom: calc(var(--safe-bottom) + 150px);
+    bottom: calc(var(--safe-bottom) + var(--dock-h, 0px) + 150px);
   }
 }
 
@@ -319,7 +319,7 @@
 
 .dexTab {
   flex: 1 0 auto;
-  min-height: 40px;
+  min-height: 44px;
   padding: 4px 10px;
   border: 0;
   background: transparent;
@@ -355,6 +355,13 @@
   font-size: 11px;
   padding: 4px 8px;
   min-height: 30px;
+}
+
+/* 손가락으로 누르기 편하게 */
+@media (pointer: coarse) {
+  .tier {
+    min-height: 44px;
+  }
 }
 
 .tier[data-done="true"] {

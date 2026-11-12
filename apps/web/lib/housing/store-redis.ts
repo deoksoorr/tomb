@@ -1,5 +1,16 @@
 import { Redis } from "@upstash/redis";
-import { defaultExterior, GUEST_KEEP, GUEST_PER_DAY, GUEST_REPORT_HIDE, LIKE_WEIGHT, VILLAGE_MAX_LOTS, type HouseSort, type PlotTierId } from "./catalog";
+import {
+  defaultExterior,
+  GUEST_KEEP,
+  GUEST_PER_DAY,
+  GUEST_REPORT_HIDE,
+  housingChannelOf,
+  LEGACY_HOUSING_CHANNEL,
+  LIKE_WEIGHT,
+  VILLAGE_MAX_LOTS,
+  type HouseSort,
+  type PlotTierId,
+} from "./catalog";
 import { emptyLayout, normalizeExterior } from "./layout";
 import {
   GUEST_DAY_TTL_SEC,
@@ -13,11 +24,14 @@ import {
   type SaveResult,
   type StoredGuest,
 } from "./store";
+import { parsePlant, type PlantState } from "./plants";
 import type { HouseExterior, HouseLayout } from "./types";
 
 // Redis 키 (집 id = 계정 id의 HMAC. 계정 id는 키에도 공개 응답에도 드러나지 않는다)
-//  house:{id}                HASH owner, name, intro, ownerName, tier, lot, exterior(JSON), createdAt, updatedAt, likes, placedScore, items, hidden
-//  houses:lots               HASH 번지 → 집 id (분양 마을. 번지 배정은 HEXISTS 확인과 HSET을 Lua 하나로)
+//  house:{id}                HASH owner, name, intro, ownerName, tier, ch, lot, exterior(JSON), createdAt, updatedAt, likes, placedScore, items, hidden
+//                            (ch가 없으면 채널이 생기기 전에 분양된 집 → 1채널)
+//  houses:lots:{ch}          HASH 번지 → 집 id (채널마다 분양 마을이 따로. 번지 배정은 HEXISTS 확인과 HSET을 Lua 하나로)
+//  houses:lots               HASH 옛 번지 색인 (채널 없음). 1채널 색인을 쓰는 Lua가 먼저 houses:lots:1로 옮긴다 (MIGRATE_FN)
 //  house:{id}:layout         STRING 배치 JSON
 //  house:{id}:inv            HASH 물건 id → 가진 개수 (놓은 것 포함)
 //  house:{id}:placed         HASH 물건 id → 놓은 개수 (되팔기 판정용, 배치 저장과 같이 바뀐다)
@@ -25,6 +39,7 @@ import type { HouseExterior, HouseLayout } from "./types";
 //  house:{id}:guesthide      SET 가린 글 id
 //  house:{id}:guestrep       HASH 글 id → 신고 수
 //  house:{id}:guestrep:{eid} SET 신고한 IP 해시 (30일)
+//  house:{id}:plants         HASH 화분 배치 id → {n, at} JSON (3번 물 주기)
 //  house:{id}:like:{visitor}:{yyyymmdd}  STRING NX EX (하루 1회 좋아요)
 //  house:guestday:{visitor}:{yyyymmdd}   STRING 오늘 남긴 방명록 수
 //  houses:all                ZSET 분양 시각 (숨김 포함, 관리자 목록)
@@ -38,14 +53,20 @@ export const HK = {
   guestHide: (id: string) => `house:${id}:guesthide`,
   guestRep: (id: string) => `house:${id}:guestrep`,
   guestRepIps: (id: string, eid: string) => `house:${id}:guestrep:${eid}`,
+  plants: (id: string) => `house:${id}:plants`,
   like: (id: string, visitor: string, day: string) => `house:${id}:like:${visitor}:${day}`,
   guestDay: (visitor: string, day: string) => `house:guestday:${visitor}:${day}`,
   all: "houses:all",
   new: "houses:new",
   score: "houses:score",
   likes: "houses:likes",
-  lots: "houses:lots",
+  /** 채널 ch의 번지 색인 */
+  lots: (ch: number) => `houses:lots:${ch}`,
+  /** 옛 번지 색인 (채널이 생기기 전. 읽기 호환·이전용) */
+  legacyLots: "houses:lots",
 };
+
+const isLegacyCh = (ch: number) => (ch === LEGACY_HOUSING_CHANNEL ? "1" : "0");
 
 const SORT_KEY: Record<HouseSort, string> = { score: HK.score, likes: HK.likes, new: HK.new };
 
@@ -59,11 +80,47 @@ local function freeLot(lots, max)
 end
 `;
 
-// KEYS: meta, layout, all, new, score, likes, lots
-// ARGV: id, owner, name, intro, ownerName, tier, now, emptyLayout, lot(''=자동), maxLots, exteriorJson
+// 옛 번지 색인(houses:lots, 채널 없음)을 1채널 색인(houses:lots:1)으로 옮긴다. 같은 번지 그대로.
+//  - 1채널에 그 번지가 비어 있으면 옮기고, 이미 같은 집이면(이전에 옮김) 옛 칸만 지운다 → 몇 번을 돌아도 결과가 같다(멱등)
+//  - 1채널의 그 번지에 다른 집이 있으면(있어서는 안 되는 충돌) 옛 칸을 지우지 않고 남겨 둔다 (지우지 않는다. left로 알린다)
+//  - 1채널 색인을 쓰는 Lua(분양·번지 배정·마을 읽기) 안에서 먼저 불러, 옮기기와 그 동작이 한 번에(원자적으로) 일어난다
+const MIGRATE_FN = `
+local function migrateLegacy(legacy, lots1)
+  local flat = redis.call('HGETALL', legacy)
+  local moved = 0
+  for i = 1, #flat, 2 do
+    local cur = redis.call('HGET', lots1, flat[i])
+    if not cur then
+      redis.call('HSET', lots1, flat[i], flat[i + 1])
+      redis.call('HDEL', legacy, flat[i])
+      moved = moved + 1
+    elseif cur == flat[i + 1] then
+      redis.call('HDEL', legacy, flat[i])
+    end
+  end
+  return moved
+end
+`;
+
+// KEYS: legacyLots, lots:1  반환: {옮긴 수, 옛 색인에 남은 수(충돌)}
+const MIGRATE_LUA = `${MIGRATE_FN}
+local moved = migrateLegacy(KEYS[1], KEYS[2])
+return {moved, redis.call('HLEN', KEYS[1])}
+`;
+
+// 한 채널의 번지 색인 (1채널이면 옛 색인을 먼저 옮기고 읽는다)
+// KEYS: lots(ch), legacyLots  ARGV: legacy('1'|'0')
+const VILLAGE_LUA = `${MIGRATE_FN}
+if ARGV[1] == '1' then migrateLegacy(KEYS[2], KEYS[1]) end
+return redis.call('HGETALL', KEYS[1])
+`;
+
+// KEYS: meta, layout, all, new, score, likes, lots(ch), legacyLots
+// ARGV: id, owner, name, intro, ownerName, tier, now, emptyLayout, lot(''=자동), maxLots, exteriorJson, ch, legacy('1'|'0')
 // 반환: 번지, -1 이미 있음, -2 그 번지는 이미 분양됨, -3 빈 번지 없음
-const CREATE_LUA = `${FREE_LOT_FN}
+const CREATE_LUA = `${FREE_LOT_FN}${MIGRATE_FN}
 if redis.call('EXISTS', KEYS[1]) == 1 then return -1 end
+if ARGV[13] == '1' then migrateLegacy(KEYS[8], KEYS[7]) end
 local lot
 if ARGV[9] ~= '' then
   if redis.call('HEXISTS', KEYS[7], ARGV[9]) == 1 then return -2 end
@@ -74,7 +131,7 @@ else
 end
 redis.call('HSET', KEYS[7], tostring(lot), ARGV[1])
 redis.call('HSET', KEYS[1], 'owner', ARGV[2], 'name', ARGV[3], 'intro', ARGV[4], 'ownerName', ARGV[5], 'tier', ARGV[6],
-  'createdAt', ARGV[7], 'updatedAt', ARGV[7], 'likes', 0, 'placedScore', 0, 'items', 0, 'lot', lot, 'exterior', ARGV[11])
+  'createdAt', ARGV[7], 'updatedAt', ARGV[7], 'likes', 0, 'placedScore', 0, 'items', 0, 'ch', ARGV[12], 'lot', lot, 'exterior', ARGV[11])
 redis.call('SET', KEYS[2], ARGV[8])
 redis.call('ZADD', KEYS[3], ARGV[7], ARGV[1])
 redis.call('ZADD', KEYS[4], ARGV[7], ARGV[1])
@@ -83,9 +140,11 @@ redis.call('ZADD', KEYS[6], 0, ARGV[1])
 return lot
 `;
 
-// KEYS: meta, lots  ARGV: id, maxLots
-const ASSIGN_LOT_LUA = `${FREE_LOT_FN}
+// 번지가 없는 예전 집에 그 집 채널(ch 없으면 1)의 빈 번지를 준다
+// KEYS: meta, lots(ch), legacyLots  ARGV: id, maxLots, legacy('1'|'0')
+const ASSIGN_LOT_LUA = `${FREE_LOT_FN}${MIGRATE_FN}
 if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+if ARGV[3] == '1' then migrateLegacy(KEYS[3], KEYS[2]) end
 local cur = tonumber(redis.call('HGET', KEYS[1], 'lot') or '0')
 if cur > 0 then return cur end
 local lot = freeLot(KEYS[2], tonumber(ARGV[2]))
@@ -93,6 +152,14 @@ if not lot then return 0 end
 redis.call('HSET', KEYS[2], tostring(lot), ARGV[1])
 redis.call('HSET', KEYS[1], 'lot', lot)
 return lot
+`;
+
+// 집을 지울 때 번지 칸도 비운다 (그 칸이 이 집일 때만. 옛 색인에 남은 칸도)
+// KEYS: lots(ch), legacyLots  ARGV: lot, id
+const UNLOT_LUA = `
+if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then redis.call('HDEL', KEYS[1], ARGV[1]) end
+if redis.call('HGET', KEYS[2], ARGV[1]) == ARGV[2] then redis.call('HDEL', KEYS[2], ARGV[1]) end
+return 1
 `;
 
 // KEYS: meta  ARGV: from, to, now
@@ -245,6 +312,7 @@ function toRecord(id: string, m: Map<string, string>, layout: HouseLayout | null
   }
   return {
     id,
+    ch: housingChannelOf(m.get("ch")),
     lot: Number(m.get("lot") ?? 0),
     exterior: normalizeExterior(exterior),
     owner: m.get("owner")!,
@@ -293,10 +361,11 @@ export class RedisHouseStore implements HouseStore {
   }
 
   async create(n: NewHouse): Promise<CreateResult> {
+    const ch = housingChannelOf(n.ch ?? LEGACY_HOUSING_CHANNEL);
     const r = Number(
       await this.redis.eval<string[], number>(
         CREATE_LUA,
-        [HK.meta(n.id), HK.layout(n.id), HK.all, HK.new, HK.score, HK.likes, HK.lots],
+        [HK.meta(n.id), HK.layout(n.id), HK.all, HK.new, HK.score, HK.likes, HK.lots(ch), HK.legacyLots],
         [
           n.id,
           n.owner,
@@ -309,6 +378,8 @@ export class RedisHouseStore implements HouseStore {
           n.lot === null ? "" : String(n.lot),
           String(VILLAGE_MAX_LOTS),
           JSON.stringify(defaultExterior()),
+          String(ch),
+          isLegacyCh(ch),
         ],
       ),
     );
@@ -316,28 +387,36 @@ export class RedisHouseStore implements HouseStore {
   }
 
   async assignLot(id: string) {
-    const r = Number(await this.redis.eval<string[], number>(ASSIGN_LOT_LUA, [HK.meta(id), HK.lots], [id, String(VILLAGE_MAX_LOTS)]));
+    // 집의 채널은 바뀌지 않는다 (분양 때 정해진다). 먼저 읽고 그 채널 색인으로 Lua를 부른다
+    const ch = housingChannelOf(await this.redis.hget<string>(HK.meta(id), "ch"));
+    const r = Number(
+      await this.redis.eval<string[], number>(ASSIGN_LOT_LUA, [HK.meta(id), HK.lots(ch), HK.legacyLots], [id, String(VILLAGE_MAX_LOTS), isLegacyCh(ch)]),
+    );
     return r > 0 ? r : null;
   }
 
-  async village() {
-    const flat = (await this.redis.hgetall(HK.lots)) as unknown as string[] | null;
-    const byLot = [...pairs(flat)].map(([lot, id]) => ({ lot: Number(lot), id })).sort((a, b) => a.lot - b.lot);
-    const recs = await this.records(
-      byLot.map((x) => x.id),
-      false,
-    );
-    return recs.filter((r) => r.lot > 0);
+  /** 옛 번지 색인을 1채널로 옮긴다 (원자적·멱등. 1채널 색인을 쓰는 동작은 어차피 먼저 옮기므로, 운영자가 한 번에 끝내고 싶을 때) */
+  async migrateLegacyLots(): Promise<{ moved: number; left: number }> {
+    const r = await this.redis.eval<string[], number[]>(MIGRATE_LUA, [HK.legacyLots, HK.lots(LEGACY_HOUSING_CHANNEL)], []);
+    return { moved: Number(r[0]), left: Number(r[1]) };
+  }
+
+  async village(ch = LEGACY_HOUSING_CHANNEL) {
+    const flat = await this.redis.eval<string[], string[] | null>(VILLAGE_LUA, [HK.lots(ch), HK.legacyLots], [isLegacyCh(ch)]);
+    const byLot = new Map([...pairs(flat)].map(([lot, id]) => [id, Number(lot)]));
+    const recs = await this.records([...byLot.keys()], false);
+    // 색인과 집 기록이 서로 맞는 것만 (채널·번지가 다르면 색인이 낡은 것)
+    return recs.filter((r) => r.lot > 0 && r.ch === ch && byLot.get(r.id) === r.lot).sort((a, b) => a.lot - b.lot);
   }
 
   async remove(id: string) {
-    const [eids, lot] = await Promise.all([
+    const [eids, meta] = await Promise.all([
       this.guestbook(id, true).then((l) => l.map((g) => g.id)),
-      this.redis.hget<string>(HK.meta(id), "lot"),
+      this.redis.hmget<{ lot: string | null; ch: string | null }>(HK.meta(id), "lot", "ch"),
     ]);
+    if (meta?.lot) await this.redis.eval<string[], number>(UNLOT_LUA, [HK.lots(housingChannelOf(meta.ch)), HK.legacyLots], [String(meta.lot), id]);
     const p = this.redis.pipeline();
-    if (lot) p.hdel(HK.lots, String(lot));
-    p.del(HK.meta(id), HK.layout(id), HK.inv(id), HK.placed(id), HK.guest(id), HK.guestHide(id), HK.guestRep(id));
+    p.del(HK.meta(id), HK.layout(id), HK.inv(id), HK.placed(id), HK.guest(id), HK.guestHide(id), HK.guestRep(id), HK.plants(id));
     for (const e of eids) p.del(HK.guestRepIps(id, e));
     for (const z of [HK.all, HK.new, HK.score, HK.likes]) p.zrem(z, id);
     await p.exec();
@@ -401,6 +480,24 @@ export class RedisHouseStore implements HouseStore {
     if (!r) return null;
     if (Number(r[0]) === 0) return "already" as const;
     return { likes: Number(r[1]), score: Number(r[2]) };
+  }
+
+  async plants(id: string) {
+    const flat = (await this.redis.hgetall(HK.plants(id))) as unknown as string[] | null;
+    const out: Record<string, PlantState> = {};
+    for (const [u, raw] of pairs(flat)) {
+      try {
+        const st = parsePlant(JSON.parse(raw));
+        if (st) out[u] = st;
+      } catch {
+        // 깨진 기록은 버린다
+      }
+    }
+    return out;
+  }
+
+  async setPlant(id: string, u: string, st: PlantState) {
+    await this.redis.hset(HK.plants(id), { [u]: JSON.stringify(st) });
   }
 
   async likedToday(id: string, visitorId: string, day: string) {

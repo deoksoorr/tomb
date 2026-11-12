@@ -1,4 +1,5 @@
 import type { CosmeticSlot } from "@tomb/protocol";
+import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import type { ActivityItem, Grave, GraveDecor } from "../types";
 import { kstDay, weekOfDay } from "./accounts";
@@ -43,6 +44,12 @@ type Acct = {
   earned: Map<string, number>;
   /** 주(월요일 YYYYMMDD) → 그 주에 모은 포인트. 예전(HMR 전) 계정에는 없을 수 있다 */
   weeks?: Map<string, number>;
+  /** 10번 출석 달력: 달(YYYYMM) → (DD → 그날 받은 포인트, `_month` → 한 달 개근 보상). 예전 계정에는 없을 수 있다 */
+  calendar?: Map<string, Map<string, number>>;
+  /** 달력 개편 전 출석을 도장으로 옮겼는지 */
+  calInit?: boolean;
+  /** 처음 입장한 시각 (없으면 모름) */
+  createdAt?: number;
   /** 사냥 기록: 처치 수 합계(전체·주별), 사냥터별 최단 클리어 ms(전체·`${zone}|${week}`) */
   hunt?: { kills: number; killsWeek: Map<string, number>; best: Map<string, number>; bestWeek: Map<string, number> };
 };
@@ -111,17 +118,15 @@ export class MemoryAccounts implements AccountStore {
    * 항목별·하루 전체·지갑 한도(+ ipHash가 있으면 같은 IP의 그 항목 합계) 안에서 적립.
    * lib/store/accounts-redis.ts의 Lua credit과 같은 규칙
    */
-  private credit(a: Acct, source: EarnSource, day: string, opts: EarnOptions = {}): number {
-    if (a.earnDay !== day) {
-      a.earnDay = day;
-      a.earned = new Map();
-    }
+  private credit(a: Acct, source: EarnSource, day: string, opts: EarnOptions = {}, capless = false): number {
+    this.today(a, day);
     const rule = earnRule(source);
     const got = a.earned.get(source) ?? 0;
     const total = a.earned.get("_total") ?? 0;
     const ipKey = opts.ipHash ? `${opts.ipHash}:${day}:${source}` : null;
     const ipLeft = ipKey ? rule.dailyMax * ATTEND_ACCOUNTS_PER_IP - (this.ipEarned.get(ipKey) ?? 0) : Infinity;
-    const amount = Math.min(opts.amount ?? rule.points, rule.dailyMax - got, DAILY_EARN_CAP - total, BALANCE_CAP - a.points, ipLeft);
+    // capless: 출석 달력 보상은 하루 전체 한도에 막히지 않는다 (accounts-redis.ts CLAIM_LUA와 같은 규칙)
+    const amount = Math.min(opts.amount ?? rule.points, rule.dailyMax - got, capless ? Infinity : DAILY_EARN_CAP - total, BALANCE_CAP - a.points, ipLeft);
     if (!(amount > 0)) return 0;
     a.earned.set(source, got + amount);
     a.earned.set("_total", total + amount);
@@ -132,6 +137,14 @@ export class MemoryAccounts implements AccountStore {
     weeks.set(weekOfDay(day), (weeks.get(weekOfDay(day)) ?? 0) + amount);
     this.stat(day, `earn:${source}`, amount);
     return amount;
+  }
+
+  /** 오늘 적립 기록을 day로 맞춘다 (날짜가 바뀌었으면 비운다) */
+  private today(a: Acct, day: string): void {
+    if (a.earnDay !== day) {
+      a.earnDay = day;
+      a.earned = new Map();
+    }
   }
 
   private take(a: Acct, itemId: string): boolean {
@@ -176,6 +189,8 @@ export class MemoryAccounts implements AccountStore {
       body: a.body ?? null,
       streak: a.streak,
       lastAttend: a.lastAttend,
+      stayTicks: a.earnDay === day ? (a.earned.get("_stay") ?? 0) : 0,
+      createdAt: a.createdAt ?? 0,
       hasCode: !!a.codeHash,
       inventory: Object.fromEntries(a.inv),
       equipped: [...a.look.values()].filter((e) => e.until > now),
@@ -219,6 +234,9 @@ export class MemoryAccounts implements AccountStore {
     const a = this.acct(id);
     if (now - (a.presenceAt ?? 0) < PRESENCE_MIN_GAP_MS) return null;
     a.presenceAt = now;
+    // 10번: 머문 기록은 포인트 한도와 상관없이 센다 (출석 도장 조건)
+    this.today(a, day);
+    a.earned.set("_stay", (a.earned.get("_stay") ?? 0) + 1);
     return this.credit(a, "presence", day);
   }
 
@@ -272,24 +290,91 @@ export class MemoryAccounts implements AccountStore {
     return this.board(limit, me, (a) => (week ? a.hunt?.bestWeek.get(`${zone}|${week}`) : a.hunt?.best.get(zone)) ?? null, true);
   }
 
-  async attend(id: string, ipHash: string, profile: Profile, day: string, yesterday: string): Promise<number> {
+  async enter(id: string, profile: Profile, now: number): Promise<void> {
     const a = this.acct(id);
     a.name ??= profile.name || null;
     a.color ??= profile.color || null;
     a.body ??= profile.body || null;
-    if (a.lastAttend === day) return 0;
+    a.createdAt ??= now;
+  }
+
+  /** 달(YYYYMM) 기록. 없으면 만든다 */
+  private month(a: Acct, month: string): Map<string, number> {
+    const cal = (a.calendar ??= new Map());
+    let m = cal.get(month);
+    if (!m) cal.set(month, (m = new Map()));
+    return m;
+  }
+
+  /** 달력 개편 전 출석(마지막 출석일·연속 일수)을 도장으로 옮긴다 (한 번만) */
+  private initCalendar(a: Acct): void {
+    if (a.calInit) return;
+    a.calInit = true;
+    for (const d of legacyAttendDays(a.lastAttend, a.streak)) {
+      const m = this.month(a, d.slice(0, 6));
+      if (!m.has(d.slice(6))) m.set(d.slice(6), 0);
+    }
+  }
+
+  async attendCalendar(id: string, month: string): Promise<CalendarMonthRecord> {
+    const a = this.accts.get(id);
+    if (!a) return { days: {}, monthBonus: null };
+    this.initCalendar(a);
+    const m = a.calendar?.get(month) ?? new Map<string, number>();
+    return {
+      days: Object.fromEntries([...m].filter(([k]) => !k.startsWith("_"))),
+      monthBonus: m.has("_month") ? m.get("_month")! : null,
+    };
+  }
+
+  async claimAttend(id: string, ipHash: string, day: string, yesterday: string, monthDays: number, needTicks: number): Promise<AttendClaim> {
+    const a = this.acct(id);
+    this.initCalendar(a);
+    const m = this.month(a, day.slice(0, 6));
+    const dd = day.slice(6);
+    if (a.lastAttend === day) {
+      if (!m.has(dd)) m.set(dd, 0);
+      return { ok: false, reason: "already" };
+    }
+    const stayTicks = a.earnDay === day ? (a.earned.get("_stay") ?? 0) : 0;
+    if (stayTicks < needTicks) return { ok: false, reason: "stay", stayTicks };
     a.streak = a.lastAttend === yesterday ? a.streak + 1 : 1;
     a.lastAttend = day;
 
     const key = `${ipHash}:${day}`;
     const ids = this.attendIps.get(key) ?? new Set<string>();
-    if (!ids.has(id) && ids.size >= ATTEND_ACCOUNTS_PER_IP) return 0;
-    ids.add(id);
-    this.attendIps.set(key, ids);
+    const paid = ids.has(id) || ids.size < ATTEND_ACCOUNTS_PER_IP;
+    const earned = { daily: 0, streak: 0, monthly: 0 };
+    if (paid) {
+      ids.add(id);
+      this.attendIps.set(key, ids);
+      earned.daily = this.credit(a, "attend", day, {}, true);
+      if (a.streak % 7 === 0) earned.streak = this.credit(a, "streak", day, {}, true);
+    }
+    m.set(dd, earned.daily + earned.streak);
+    const stamped = [...m.keys()].filter((k) => !k.startsWith("_")).length;
+    if (paid && !m.has("_month") && stamped >= monthDays) {
+      earned.monthly = this.credit(a, "monthly", day, {}, true);
+      m.set("_month", earned.monthly);
+    }
+    return { ok: true, earned, streak: a.streak };
+  }
 
-    let earned = this.credit(a, "attend", day);
-    if (a.streak % 7 === 0) earned += this.credit(a, "streak", day);
-    return earned;
+  /**
+   * 11번 선물 받기 (MemoryGifts가 부른다): 포인트(지갑 상한에서 잘림, 모은 포인트·랭킹에도 더한다)와 아이템을 가방에 넣는다.
+   * accounts-redis.ts가 아니라 gifts.ts의 Lua(GIFT_CLAIM_LUA)와 같은 규칙. 실제로 들어간 포인트를 돌려준다
+   */
+  deposit(id: string, points: number, items: readonly { itemId: string; count: number }[], now: number): number {
+    const a = this.acct(id);
+    const before = a.points;
+    a.points = Math.min(BALANCE_CAP, a.points + Math.max(0, points));
+    const got = a.points - before;
+    if (got > 0) {
+      this.addLifetime(a, got);
+      this.stat(kstDay(now), "earn:gift", got);
+    }
+    for (const { itemId, count } of items) if (count > 0) a.inv.set(itemId, (a.inv.get(itemId) ?? 0) + count);
+    return got;
   }
 
   async setCode(id: string, codeHash: string): Promise<void> {
@@ -436,5 +521,46 @@ export class MemoryAccounts implements AccountStore {
   async walletTotals(): Promise<{ wallets: number; accounts: number }> {
     const all = [...this.accts.values()].filter((a) => a.points > 0 || (a.lifetime ?? 0) > 0);
     return { wallets: all.reduce((n, a) => n + a.points, 0), accounts: all.length };
+  }
+
+  // ── 46·25·30번 꾸미기 (MemoryStyle이 부른다, lib/store/style.ts). 모두 동기 → 한 번에 일어난다 ──
+
+  /** 가방에서 1개 꺼내기 (없으면 false) */
+  styleTake(id: string, itemId: string): boolean {
+    return this.take(this.acct(id), itemId);
+  }
+
+  /** 포인트 내기 (모자라면 false). 사용 기록·경제 통계(spend:{분류})도 남긴다 */
+  styleCharge(id: string, amount: number, reason: string, now: number): boolean {
+    const a = this.acct(id);
+    if (a.points < amount) return false;
+    a.points -= amount;
+    a.ledger = [{ at: now, amount: -amount, reason }, ...(a.ledger ?? [])].slice(0, 100);
+    this.stat(kstDay(now), `spend:${spendCategory(reason)}`, amount);
+    return true;
+  }
+
+  styleBody(id: string): string | null {
+    return this.accts.get(id)?.body ?? null;
+  }
+
+  styleSetBody(id: string, body: string): void {
+    this.acct(id).body = body;
+  }
+
+  /**
+   * 30번 영구 꾸미기 받기 상태: 이미 영구면 "owned", 가방에 같은 이용권이 있으면 "ticket", 아니면 "ok".
+   * apply면 영구로 바꾼다 — 입고 있으면 그대로 영구로, 아니면 벗어 둔 꾸미기에 영구로 넣는다 (lib/store/style.ts의 Lua와 같은 규칙)
+   */
+  stylePermanent(id: string, itemId: string, slot: CosmeticSlot, permUntil: number, now: number, apply: boolean): "ok" | "owned" | "ticket" {
+    const a = this.acct(id);
+    const stash = this.stashOf(a);
+    const cur = a.look.get(slot);
+    if ((cur?.itemId === itemId && cur.until >= permUntil) || (stash.get(itemId) ?? 0) >= permUntil) return "owned";
+    if ((a.inv.get(itemId) ?? 0) > 0) return "ticket";
+    if (!apply) return "ok";
+    if (cur?.itemId === itemId && cur.until > now) a.look.set(slot, { itemId, until: permUntil });
+    else stash.set(itemId, permUntil);
+    return "ok";
   }
 }

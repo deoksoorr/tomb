@@ -20,8 +20,9 @@ export const WALL_THICKNESS = 2 * TILE;
 /**
  * 맵 배치 버전. 좌표가 바뀌는 맵 개편마다 올린다 → 옛 맵에서 저장한 새로고침 자리 기록(lib/resume.ts)은 위치를 버리고 입구에서 시작한다.
  * 1 = 세로로 길던 공동묘지 맵, 2 = 가을·겨울 마을(가로로 넓은 맵), 3 = 컴팩트한 묘지 마을(F1: 큰 모닥불 광장·묘역 세 곳·연못 여럿)
+ * 4 = 낚시터(호수 북동쪽 데크·아치·노점 마당, 까마귀 연못 마른 나무·비석) — 데크·장식 자리에 옛 기록이 끼지 않게
  */
-export const MAP_VERSION = 3;
+export const MAP_VERSION = 4;
 
 const CX = MAP_WIDTH / 2; // 720
 
@@ -35,11 +36,11 @@ const CX = MAP_WIDTH / 2; // 720
 //         │ │ 철책·묘비  │═════│      ( 큰 모닥불 )        │ ║ 집 집 집      │
 //  y≈544  │ └────────────┘     │ 회전목마  해먹   시소      │ ║ 집 집 집      │
 //  y≈600  │ 묘지기 모닥불       └───────────────────────────┘ ╚═══════════════│
-//  y≈700  │ ~~~ 강 ~~[서쪽 다리]~~~~[징검다리]~~[가운데 다리]~~~╲  나루터       │
+//  y≈700  │ ~~~ 강 ~~[서쪽 다리]~~~~[징검다리]~~[가운데 다리]~~~╲  나루터·낚시터  │
 //  y≈784  │ ┌버드나무 묘역 8┐ (안개 연못) ┌다리 건너 묘역 8┐ 호박밭 ╲( 호수 ·배 )│
 //  y≈1008 └──────────────────────────────────────────────────────────────────────┘
 
-export type ZoneId = "hill" | "graveyard" | "plaza" | "housing" | "river" | "lake" | "pond" | "forest" | "meadow" | "gate";
+export type ZoneId = "hill" | "graveyard" | "plaza" | "housing" | "river" | "lake" | "pond" | "forest" | "meadow" | "gate" | "fishing";
 export type Zone = { id: ZoneId; name: string; x: number; y: number; w: number; h: number };
 /** 구역 사각형 (이름표·안내·앞으로의 콘텐츠 배치 기준. 충돌과는 상관없다) */
 export const ZONES: readonly Zone[] = [
@@ -56,6 +57,8 @@ export const ZONES: readonly Zone[] = [
   { id: "graveyard", name: "다리 건너 묘역", x: 600, y: 784, w: 256, h: 224 },
   { id: "graveyard", name: "버드나무 묘역", x: 48, y: 784, w: 352, h: 224 },
   { id: "meadow", name: "호박밭", x: 864, y: 864, w: 240, h: 144 },
+  // 낚시터 (호수 북동쪽 물가, 나루터 동쪽: 어부 노점 마당 + 호수로 뻗은 ㅜ자 낚시 데크). FISHING_ZONE과 같은 사각형
+  { id: "fishing", name: "낚시터", x: 1272, y: 784, w: 128, h: 192 },
 ];
 
 export const SPAWN = { x: CX, y: 60 } as const;
@@ -287,8 +290,22 @@ export const DOCK_DECK = { x: 1232, y: 800, w: 24, h: 56 } as const;
 export const BOAT_MOORING = { x: 1206, y: 862 } as const;
 /** 호수 낚시 잔교 (서쪽 둑에서 호수로 뻗은 판자) */
 export const LAKE_PIER = { x: 1108, y: 924, w: 72, h: 16 } as const;
-/** 낚시 잔교 전부 (호수 + 까마귀 연못). 판자 위는 물이 아니다 */
-export const PIERS: readonly { x: number; y: number; w: number; h: number }[] = [LAKE_PIER, { x: 1212, y: 126, w: 24, h: 46 }];
+// ── 낚시터 (사용자 요청: "낚시할 곳이 한눈에") ── 호수 북동쪽 물가(나루터 동쪽)를 낚시 전용 구역으로 꾸민다.
+// 북쪽 골목 바로 아래 어부 노점 마당(FISH_YARD) → 입구 아치(FISH_ARCH) → 호수로 곧게 뻗은 낚시 데크(FISH_PIER) → 끝의 가로 데크(FISH_PIER_HEAD).
+// 강 어귀(호수 북서쪽)는 비워 둬서 조각배가 그대로 강으로 드나든다. 데크 양옆·끝과 둑에 낚시 자리가 모여 있다 (FISHING_SPOTS 앞쪽 FISHING_ZONE_SPOTS곳).
+// 그림·장식·충돌은 클라이언트(game/world/fishZone.ts, game/world/forage/FishZoneView.ts)
+/** 낚시터 구역 (이름표·미니맵·안내). ZONES의 "낚시터"와 같다 */
+export const FISHING_ZONE = { x: 1272, y: 784, w: 128, h: 192 } as const;
+/** 어부 노점 마당 (자갈 바닥, 북쪽 골목 바로 아래) */
+export const FISH_YARD = { x: 1280, y: 784, w: 112, h: 32 } as const;
+/** 낚시 데크: 마당에서 호수 안쪽(남쪽)으로 곧게 뻗은 넓은 판자 */
+export const FISH_PIER = { x: 1312, y: 816, w: 24, h: 110 } as const;
+/** 낚시 데크 끝의 가로 데크 (ㅜ자 머리) */
+export const FISH_PIER_HEAD = { x: 1288, y: 926, w: 72, h: 24 } as const;
+/** 낚시터 입구 아치 (데크 북쪽 끝, 발 위치 = 아치 가운데 아래) */
+export const FISH_ARCH = { x: 1324, y: 826 } as const;
+/** 낚시 판자 전부 (호수 잔교 + 낚시터 데크 둘 + 까마귀 연못 잔교). 판자 위는 물이 아니다 */
+export const PIERS: readonly { x: number; y: number; w: number; h: number }[] = [LAKE_PIER, FISH_PIER, FISH_PIER_HEAD, { x: 1212, y: 126, w: 24, h: 46 }];
 
 // ── 낚시 자리 (4번·F13) ── 연못·호수 둑과 잔교·강 양쪽 둑. 자리마다 1인(SPOT_KINDS.fish, 서버 좌석 — 정해진 자리만).
 // 앵커(x,y) = 앉는 발 위치(물가 뭍 또는 잔교), facing = 물 쪽. 자리 id = spotSeatId("fish", x, y) — 예 "f_456_158".
@@ -298,44 +315,49 @@ const fishSpot = (water: FishingSpot["water"], x: number, y: number, facing: Dir
 /** 강 북쪽 둑(아래를 본다)·남쪽 둑(위를 본다) 낚시 자리 — 가운데 줄에서 27px */
 const riverSpot = (x: number, north: boolean) => fishSpot("river", x, Math.round(riverYAt(x) + (north ? -27 : 27)), north ? DIR.down : DIR.up);
 export const FISHING_SPOTS: readonly FishingSpot[] = [
+  // ── 낚시터 (12) ── 낚시 데크 양옆·가로 데크 위아래와 끝, 둘레 둑
+  fishSpot("lake", 1318, 850, DIR.left),
+  fishSpot("lake", 1330, 866, DIR.right),
+  fishSpot("lake", 1318, 882, DIR.left),
+  fishSpot("lake", 1330, 898, DIR.right),
+  fishSpot("lake", 1318, 914, DIR.left),
+  fishSpot("lake", 1294, 938, DIR.left),
+  fishSpot("lake", 1310, 943, DIR.down),
+  fishSpot("lake", 1330, 943, DIR.down),
+  fishSpot("lake", 1352, 934, DIR.up),
+  fishSpot("lake", 1366, 856, DIR.down),
+  fishSpot("lake", 1384, 872, DIR.down),
+  fishSpot("lake", 1398, 904, DIR.left),
+  // ── 다른 물가 (16) ── 연못·강·호수 서쪽에도 몇 자리씩 (낚시터가 붐빌 때)
   // 달빛 연못 (언덕 옆)
   fishSpot("lake", 456, 158, DIR.up),
-  fishSpot("lake", 412, 146, DIR.up),
-  fishSpot("lake", 456, 68, DIR.down),
   fishSpot("lake", 520, 116, DIR.left),
   fishSpot("lake", 392, 108, DIR.right),
   // 까마귀 연못 (주거 구역 위): 잔교 끝·둑
   fishSpot("lake", 1224, 134, DIR.up),
-  fishSpot("lake", 1150, 152, DIR.up),
-  fishSpot("lake", 1298, 152, DIR.up),
-  fishSpot("lake", 1176, 58, DIR.down),
-  fishSpot("lake", 1272, 58, DIR.down),
   fishSpot("lake", 1346, 108, DIR.left),
   fishSpot("lake", 1102, 108, DIR.right),
   // 강 양쪽 둑
-  riverSpot(264, true),
   riverSpot(420, true),
-  riverSpot(560, true),
   riverSpot(840, true),
   riverSpot(260, false),
-  riverSpot(440, false),
-  riverSpot(660, false),
   riverSpot(800, false),
   // 안개 연못
   fishSpot("lake", 500, 842, DIR.down),
   fishSpot("lake", 500, 934, DIR.up),
-  fishSpot("lake", 434, 888, DIR.right),
-  fishSpot("lake", 566, 888, DIR.left),
-  // 호수: 잔교 끝·옆, 둑
+  // 호수 서쪽 잔교·둑
   fishSpot("lake", 1172, 932, DIR.right),
   fishSpot("lake", 1148, 932, DIR.up),
   fishSpot("lake", 1180, 828, DIR.down),
-  fishSpot("lake", 1300, 826, DIR.down),
-  fishSpot("lake", 1398, 904, DIR.left),
-  fishSpot("lake", 1256, 994, DIR.up),
   fishSpot("lake", 1180, 982, DIR.up),
-  fishSpot("lake", 1340, 980, DIR.up),
 ];
+/** 낚시터 안의 낚시 자리 수 (FISHING_SPOTS 앞쪽) */
+export const FISHING_ZONE_SPOTS = 12;
+/** 이 낚시 자리가 낚시터 안에 있는지 */
+export function inFishingZone(x: number, y: number): boolean {
+  const z = FISHING_ZONE;
+  return x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
+}
 /** 이 좌석 id의 낚시 자리 (없으면 undefined) */
 export function fishingSpotById(id: string): FishingSpot | undefined {
   return FISHING_SPOTS.find((s) => s.id === id);
@@ -481,7 +503,7 @@ export const FURNITURE: readonly Furniture[] = [
   // ── 주거 구역 ── 골목 어귀, 호숫가
   { id: "bN", kind: "bench", x: 952, y: 262, facing: DIR.down, seatOffsets: two },
   { id: "bO", kind: "bench", x: 1060, y: 800, facing: DIR.down, seatOffsets: two },
-  { id: "lE", kind: "bench", x: 1368, y: 800, facing: DIR.down, seatOffsets: four },
+  { id: "lE", kind: "bench", x: 1144, y: 800, facing: DIR.down, seatOffsets: four }, // 낚시터가 생기며 나루터 서쪽 호숫가로 옮김
   // ── 사냥터 동굴 앞 ──
   { id: "bQ", kind: "bench", x: 912, y: 112, facing: DIR.down, seatOffsets: two },
   // ── 다리 건너 묘역 · 버드나무 묘역 ── 묘비를 바라보는 벤치
@@ -538,13 +560,38 @@ export function seatsNear(x: number, y: number, radius: number): Seat[] {
 //   `${code}_${x}_${y}` (예: 나무 "h_60_90", 그네 "s_140_96"). 앵커 = 그 자리를 차지한 캐릭터의 발 위치(MOVE x,y).
 // 서버는 형식(정규형: 같은 자리는 id가 하나뿐)과 플레이어와의 거리만 확인한다. 새 1인 자리는 SPOT_KINDS에 한 줄 더하면 된다.
 
-export type SpotKind = "hang" | "swing" | "hammock" | "boat" | "seesaw" | "trampoline" | "carousel" | "telescope" | "mat" | "fish";
+export type SpotKind =
+  | "hang"
+  | "swing"
+  | "hammock"
+  | "boat"
+  | "seesaw"
+  | "trampoline"
+  | "carousel"
+  | "telescope"
+  | "mat"
+  | "fish"
+  // 3번 집 안 가구 (indoor: 방(집) 서버에서만 받는다)
+  | "chair"
+  | "bed"
+  | "book"
+  | "tub";
 /**
  * mobile = 앉은 채 움직이는 자리(조각배): 서버는 위치를 앵커에 고정하지 않고 MOVE를 따라간다 (속도 검증은 그대로).
  * radius = 서버가 점유 요청을 받을 때 허용하는 거리 (없으면 SEAT_SERVER_RADIUS)
  * fixed = 정해진 자리만 (BOATS). 형식만 맞는 아무 좌표의 id는 받지 않는다
  */
-export type SpotKindDef = { code: string; state: StateId; facing: DirId; mobile?: boolean; radius?: number; fixed?: boolean; shared?: boolean };
+export type SpotKindDef = {
+  code: string;
+  state: StateId;
+  facing: DirId;
+  mobile?: boolean;
+  radius?: number;
+  fixed?: boolean;
+  shared?: boolean;
+  /** 집 안 가구 자리: 방(집) 서버에서만 받고, 월드 채널에서는 받지 않는다 (반대로 월드 자리는 방에서 받지 않는다) */
+  indoor?: boolean;
+};
 export const SPOT_KINDS: Readonly<Record<SpotKind, SpotKindDef>> = {
   /** 나무에 매달리기 (앵커 = 줄기 앞 발 위치) */
   hang: { code: "h", state: STATE.hang, facing: DIR.down },
@@ -569,6 +616,15 @@ export const SPOT_KINDS: Readonly<Record<SpotKind, SpotKindDef>> = {
   // ── 4번 낚시 ── 물가에 앉아 낚싯대를 드리운다 (바닥 앉기와 같은 상태라 shared). 정해진 자리(FISHING_SPOTS)만
   /** 낚시 자리 (앵커 = 앉는 발 위치, 방향은 자리마다 물 쪽) */
   fish: { code: "f", state: STATE.sitGround, facing: DIR.down, shared: true, fixed: true },
+  // ── 3번 집 안 가구 ── 앵커 = 집 씬 좌표의 발 위치(가구 배치에서 계산, game/housing/interact.ts). 집마다 배치가 달라 형식만 본다
+  /** 의자·소파·책상·피아노 의자에 앉기 (의자와 같은 sitChair라 shared — sit 요청으로만) */
+  chair: { code: "c", state: STATE.sitChair, facing: DIR.down, shared: true, indoor: true },
+  /** 침대에 눕기 */
+  bed: { code: "l", state: STATE.lie, facing: DIR.down, indoor: true },
+  /** 책장 앞에서 책 읽기 */
+  book: { code: "k", state: STATE.read, facing: DIR.down, indoor: true },
+  /** 욕조에 들어가기 */
+  tub: { code: "u", state: STATE.bath, facing: DIR.down, indoor: true },
 };
 const SPOT_BY_CODE = new Map(Object.entries(SPOT_KINDS).map(([kind, v]) => [v.code, kind as SpotKind]));
 const SPOT_BY_STATE = new Map<number, SpotKind>(
@@ -581,6 +637,11 @@ const SPOT_ID_RE = /^([a-z])_(0|[1-9]\d{0,4})_(0|[1-9]\d{0,4})$/;
 /** 소품 자리 id (좌표는 정수로 반올림) */
 export function spotSeatId(kind: SpotKind, x: number, y: number): string {
   return `${SPOT_KINDS[kind].code}_${Math.round(x)}_${Math.round(y)}`;
+}
+
+/** 집 안 가구 자리인지 (방 서버만 받는다) */
+export function isIndoorSpot(kind: SeatSlot["kind"]): boolean {
+  return kind !== "seat" && !!SPOT_KINDS[kind].indoor;
 }
 
 /** 이 상태(STATE)로 차지하는 소품 자리 종류 (hang → "hang"). 없으면 null */

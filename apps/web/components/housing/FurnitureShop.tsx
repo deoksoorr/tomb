@@ -10,9 +10,9 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import styles from "./housing.module.css";
-import { fmt, FurnitureIcon } from "./parts";
+import { fmt, FurnitureIcon, FurniturePreview } from "./parts";
 
-const CATS: FurnitureCategory[] = ["furniture", "dev", "nature", "mood", "skin", "exterior"];
+const CATS: FurnitureCategory[] = ["furniture", "living", "dev", "nature", "mood", "skin", "exterior"];
 
 type Props = {
   my: MyHouseResponse;
@@ -50,7 +50,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose }: Props) {
   }
 
   return (
-    <Dialog title="가구 상점" onClose={onClose} size="lg" fixed>
+    <Dialog title="가구 상점" onClose={onClose}>
       <div className={cx(styles.stack, styles.fsShop)}>
         <div className={styles.spread}>
           <p className={styles.points}>
@@ -82,13 +82,12 @@ export default function FurnitureShop({ my, placed, onMy, onClose }: Props) {
             const full = owned >= MAX_OWN_PER_ITEM;
             return (
               <li key={f.id} className={styles.item} title={`${f.name} — ${f.desc}`}>
-                <div className={styles.itemArt}>
-                  <FurnitureIcon itemId={f.id} size={f.ext ? 64 : 56} />
-                </div>
+                <div className={styles.itemArt}>{f.ext ? <FurnitureIcon itemId={f.id} size={64} /> : <FurniturePreview itemId={f.id} height={96} />}</div>
                 <p className={styles.itemName}>{f.name}</p>
                 <p className={cx(styles.small, styles.fsDesc)}>{f.desc}</p>
                 <p className={styles.itemMeta}>
-                  꾸밈 +{f.score} · {f.ext ? "외관 (외관 꾸미기에서 입힘)" : f.skin ? (f.skin === "floor" ? "바닥 전체" : "담장 전체") : `${f.w}×${f.h}칸`}
+                  꾸밈 +{f.score} · {f.ext ? "외관 (외관 꾸미기에서 입힘)" : f.skin ? (f.skin === "floor" ? "바닥 전체" : "벽 전체") : `${f.w}×${f.h}칸`}
+                  {f.use ? ` · E: ${f.use}` : ""}
                   {f.floor ? " · 밟고 지나감" : ""}
                   {f.light ? " · 밤에 빛남" : ""}
                   {owned > 0 ? ` · 가진 것 ${owned}` : ""}

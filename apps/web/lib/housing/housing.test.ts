@@ -412,7 +412,14 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
     expect(HK.meta("x")).toBe("house:x");
     expect(HK.layout("x")).toBe("house:x:layout");
     expect(HK.like("x", "v", "20261109")).toBe("house:x:like:v:20261109");
-    expect([HK.score, HK.new, HK.likes, HK.lots]).toEqual(["houses:score", "houses:new", "houses:likes", "houses:lots"]);
+    expect([HK.score, HK.new, HK.likes, HK.legacyLots, HK.lots(1), HK.lots(10)]).toEqual([
+      "houses:score",
+      "houses:new",
+      "houses:likes",
+      "houses:lots",
+      "houses:lots:1",
+      "houses:lots:10",
+    ]);
   });
 });
 

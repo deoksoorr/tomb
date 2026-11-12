@@ -20,6 +20,11 @@ export const SPOT_TAKEN_TOAST: Readonly<Record<SpotKind, string>> = {
   telescope: "누가 먼저 망원경을 보고 있어요",
   mat: "누가 먼저 앉아 있어요",
   fish: "누가 먼저 낚시하고 있어요",
+  // 3번 집 안 가구
+  chair: "누가 먼저 앉아 있어요",
+  bed: "누가 먼저 누워 있어요",
+  book: "누가 먼저 책을 읽고 있어요",
+  tub: "누가 먼저 들어가 있어요",
 };
 /** 누가 차지한 자리 앞의 회색 안내 (키 안내 대신) */
 export const SPOT_TAKEN_HINT: Readonly<Record<SpotKind, string>> = {
@@ -33,6 +38,10 @@ export const SPOT_TAKEN_HINT: Readonly<Record<SpotKind, string>> = {
   telescope: "누가 별을 보고 있어요",
   mat: "누가 앉아 있어요",
   fish: "누가 낚시하고 있어요",
+  chair: "누가 앉아 있어요",
+  bed: "누가 누워 있어요",
+  book: "누가 읽고 있어요",
+  tub: "누가 들어가 있어요",
 };
 
 /** forage = 4번 낚시 자리면 "fish:{자리 id}" (game/world/forage가 붙인 상호작용) */

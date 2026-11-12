@@ -30,7 +30,7 @@ export default function FireworkDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog title="폭죽 쏘기" onClose={onClose} size="sm">
+    <Dialog title="폭죽 쏘기" onClose={onClose}>
       <div className={styles.bag}>
         {stock.length === 0 ? (
           <p className={styles.empty}>가방에 폭죽이 없어요. 상점에서 살 수 있어요.</p>

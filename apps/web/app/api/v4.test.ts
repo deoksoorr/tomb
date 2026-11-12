@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AdminErrorsResponse } from "@/lib/admin";
 import { handler } from "@/lib/http";
 import { getHouseStore, houseIdFor } from "@/lib/housing/service";
-import { getAccounts, refundPoints, spendPoints } from "@/lib/store";
+import { earnPoints, getAccounts, refundPoints, spendPoints } from "@/lib/store";
 import type {
   ActivityResponse,
   ApiError,
@@ -263,7 +263,8 @@ describe("경제 통계", () => {
     const before = await economy();
     expect(before.days).toHaveLength(3);
     const v = await newVisitor();
-    await attendAs(v, "경제학자"); // +10 attend
+    await attendAs(v, "경제학자"); // 입장만 (10번: 출석 포인트는 달력에서)
+    await earnPoints(v.visitorId, "attend"); // +10 attend
     await adminPoints.POST(call("/api/admin/accounts/points", { headers: ADMIN, body: { accountId: v.visitorId, delta: 300 } }));
     await bodyOf(buy.POST(call("/api/shop/buy", { visitor: v, body: { itemId: "fw_small" } })));
     await spendPoints(v.visitorId, 30, "rpg:entry");

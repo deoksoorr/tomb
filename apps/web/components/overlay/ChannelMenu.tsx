@@ -27,7 +27,7 @@ export default function ChannelMenu({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog title="채널 이동" onClose={onClose} size="sm">
+    <Dialog title="채널 이동" onClose={onClose}>
       <form className={styles.form} onSubmit={submit}>
         <ChannelPicker
           lobby={lobby}

@@ -127,16 +127,16 @@
   font-size: 12px;
 }
 
-/* 폼이 대화상자보다 길어도 제출 버튼은 아래에 붙어 있게 (본문 여백 16px만큼 바깥으로) */
+/* 폼이 대화상자보다 길어도 제출 버튼은 아래에 붙어 있게 (본문 여백만큼 바깥으로 — Dialog의 --dialog-pad-*) */
 .footer {
   position: sticky;
-  bottom: -16px;
+  bottom: calc(-1 * var(--dialog-pad-y, 16px));
   z-index: 1;
   display: grid;
   gap: 8px;
   justify-items: center;
-  margin: 0 -16px -16px;
-  padding: 10px 16px 16px;
+  margin: 0 calc(-1 * var(--dialog-pad-x, 16px)) calc(-1 * var(--dialog-pad-y, 16px));
+  padding: 10px var(--dialog-pad-x, 16px) var(--dialog-pad-y, 16px);
   background: var(--panel-solid);
   box-shadow: 0 -2px 0 var(--line);
   text-align: center;

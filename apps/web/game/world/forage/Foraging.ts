@@ -9,6 +9,9 @@ import type { RealtimeClient } from "../../net/RealtimeClient";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../../text/GlyphAtlas";
 import type { Interactable } from "../layout";
 import { ensureForageTextures, ensureIconTexture, FTEX } from "./art";
+import { nodeWindow, windowEndsAt } from "@/lib/forage/rules";
+import { FishZoneView } from "./FishZoneView";
+import { destroyAura, ensureNodeFxTextures, gatheredFx, makeAura, spawnFx, updateAura, vanishFx, type NodeAura } from "./nodeFx";
 import { ForageSfx } from "./sounds";
 
 // 4·32번 낚시·채집 (월드 쪽). WorldScene은 이 클래스 하나만 들고 몇 군데(접속·좌석·E·매 프레임)에서 부른다.
@@ -34,11 +37,16 @@ export type ForageDeps = {
 
 /** 바라보는 방향 → 단위 벡터 */
 const STEP: Record<number, [number, number]> = { [DIR.down]: [0, 1], [DIR.up]: [0, -1], [DIR.left]: [-1, 0], [DIR.right]: [1, 0] };
+const NO_SEATS: ReadonlyMap<string, Sid> = new Map();
 /** 찌가 떨어지는 거리 */
 const CAST_DIST = 24;
 
 type Rod = { g: Phaser.GameObjects.Graphics; bob: Phaser.GameObjects.Image; spot: FishingSpot; mine: boolean };
-type NodeView = { node: GatherNode; img: Phaser.GameObjects.Image };
+type NodeView = { node: GatherNode; img: Phaser.GameObjects.Image; aura: NodeAura };
+/** 창(15분)이 끝나기 이만큼 전부터 지점이 깜빡인다 */
+const NODE_BLINK_MS = 10_000;
+/** "뿅" 소리가 들리는 거리 (새로 핀 지점이 이 안에 있을 때만) */
+const NODE_HEAR = 260;
 
 export class Foraging {
   private readonly scene: Phaser.Scene;
@@ -49,6 +57,12 @@ export class Foraging {
   private readonly npcImgs: { npc: Npc; img: Phaser.GameObjects.Image; label: Phaser.GameObjects.BitmapText; title: Phaser.GameObjects.BitmapText }[] = [];
   private readonly nodes = new Map<string, NodeView>();
   private nodeIds: string[] = [];
+  /** 지금 지점 목록을 받은 창 번호 (창이 바뀌었는데 아직 새 목록이 안 왔으면 깜빡임을 이어 간다) */
+  private nodesWindow = -1;
+  /** 처음 목록을 받았는지 (첫 목록은 소리 없이 피어난다) */
+  private nodesLoaded = false;
+  /** 방금 캐러 간 지점 (목록에서 빠지면 "캐서 없어짐" 연출) */
+  private usedNode: { id: string; at: number } | null = null;
   private readonly rods = new Map<string, Rod>();
   /** 내가 앉은 낚시 자리 */
   private fishing: FishingSpot | null = null;
@@ -64,16 +78,20 @@ export class Foraging {
   private checkAt = 0;
   private readonly offs: (() => void)[] = [];
   private destroyed = false;
+  /** 낚시터 장식·낚시 자리 표시 (의자·꽂아 둔 낚싯대·찌·물결·말풍선) */
+  private readonly zone: FishZoneView;
 
   constructor(private readonly d: ForageDeps) {
     const scene = (this.scene = d.scene);
     this.override = typeof window !== "undefined" ? parseAmbienceOverride(window.location.search) : {};
     this.night = this.isNight();
     ensureForageTextures(scene, this.night);
+    ensureNodeFxTextures(scene);
     d.atlas.ensure(NPCS.map((n) => n.name + n.title).join("") + "낚시하기" + Object.values(NODE_LABEL).join("") + "에게 팔기");
+    this.zone = new FishZoneView({ scene, atlas: d.atlas, reduced: d.reduced, addCollider: (x, y, w, h) => this.addCollider(x, y, w, h) });
     for (const npc of NPCS) {
       const img = scene.add.image(npc.x, npc.y + 1, FTEX.npc(npc.id, 0)).setOrigin(0.5, 1).setDepth(npc.y);
-      const stall = npc.id === "fishmonger" ? { dx: 22, dy: 2 } : { dx: -20, dy: 6 };
+      const stall = npc.id === "fishmonger" ? { dx: -22, dy: 2 } : { dx: -20, dy: 6 }; // 어부 노점은 낚시터 마당 동쪽 끝 (catalog NPCS)
       scene.add.image(npc.x + stall.dx, npc.y + stall.dy, FTEX.stall(npc.id)).setOrigin(0.5, 1).setDepth(npc.y + stall.dy);
       const label = scene.add.bitmapText(npc.x, npc.y - 27, FONT_KEY, npc.name, FONT_PX).setOrigin(0.5, 1).setTint(0xffe8b0).setDepth(DEPTH.labels - 1);
       const title = scene.add.bitmapText(npc.x, npc.y - 35, FONT_KEY, npc.title, FONT_PX).setOrigin(0.5, 1).setTint(0xc8d8b0).setAlpha(0.85).setDepth(DEPTH.labels - 1);
@@ -116,7 +134,7 @@ export class Foraging {
     for (const s of FISHING_SPOTS) {
       // 앉아 있는 동안은 낚시 창이 조작을 맡는다 (E 안내를 띄우지 않는다). 누가 앉은 자리의 회색 안내는 WorldScene이 (spots.ts spotOf)
       if (this.fishing?.id === s.id) continue;
-      items.push({ id: `forage:fish:${s.id}`, kind: "forage", forage: `fish:${s.id}`, x: s.x, y: s.y, r: 13, ax: s.x, ay: s.y, label: "낚시하기" });
+      items.push({ id: `forage:fish:${s.id}`, kind: "forage", forage: `fish:${s.id}`, x: s.x, y: s.y, r: 16, ax: s.x, ay: s.y, label: "낚시하기" });
     }
     for (const n of NPCS)
       items.push({ id: `forage:npc:${n.id}`, kind: "forage", forage: `npc:${n.id}`, x: n.x, y: n.y + 10, r: 20, ax: n.x, ay: n.y + 10, label: `${n.name}에게 팔기` });
@@ -130,23 +148,49 @@ export class Foraging {
 
   private setNodes(ids: string[]): void {
     this.nodeIds = ids.filter((id) => gatherNodeById(id));
+    this.nodesWindow = nodeWindow(Date.now());
     const keep = new Set(this.nodeIds);
+    const pl = this.d.player();
+    const now = this.scene.time.now;
+    let vanished = false;
     for (const [id, v] of this.nodes) {
       if (keep.has(id)) continue;
-      v.img.destroy();
+      destroyAura(v.aura);
       this.nodes.delete(id);
+      const used = this.usedNode && this.usedNode.id === id && now - this.usedNode.at < 60_000;
+      if (used) {
+        // 캐서(곤충을 잡아서) 없어짐: 반짝이가 터지고 오그라든다
+        gatheredFx(this.scene, v.node.x, v.node.y, v.node.kind, this.d.reduced);
+        this.shrink(v.img);
+      } else {
+        // 창이 바뀌어 없어짐: 연기처럼 흩어진다
+        vanishFx(this.scene, v.img, this.d.reduced);
+        if (Math.hypot(v.node.x - pl.x, v.node.y - pl.y) < NODE_HEAR) vanished = true;
+      }
     }
+    let heard = false;
     for (const id of this.nodeIds) {
       if (this.nodes.has(id)) continue;
       const node = gatherNodeById(id)!;
       const img = this.scene.add.image(node.x, node.y + 2, FTEX.node(node.kind, 0)).setOrigin(0.5, 1).setDepth(node.y);
       if (!this.d.reduced) {
         img.setScale(0.2);
-        this.scene.tweens.add({ targets: img, scale: 1, duration: 260, ease: "Back.easeOut" });
+        this.scene.tweens.add({ targets: img, scale: 1, duration: 260, delay: this.nodesLoaded ? 120 : 0, ease: "Back.easeOut" });
       }
-      this.nodes.set(id, { node, img });
+      // 새로 필 때: 빛 기둥·반짝이·먼지 (첫 목록도 빛 기둥은 보여 준다 — "저기 뭔가 있다")
+      spawnFx(this.scene, node.x, node.y, node.kind, this.d.reduced);
+      if (Math.hypot(node.x - pl.x, node.y - pl.y) < NODE_HEAR) heard = true;
+      this.nodes.set(id, { node, img, aura: makeAura(this.scene, node.x, node.y, node.kind) });
     }
+    if (this.nodesLoaded && heard) this.sfx.play("spawn", 0.7);
+    if (vanished) this.sfx.play("vanish", 0.6);
+    this.nodesLoaded = true;
     this.rebuildItems();
+  }
+
+  private shrink(img: Phaser.GameObjects.Image): void {
+    if (this.d.reduced) img.destroy();
+    else this.scene.tweens.add({ targets: img, alpha: 0, scaleY: 0.2, duration: 220, onComplete: () => img.destroy() });
   }
 
   /** E/탭: 낚시 자리·NPC·채집 지점 */
@@ -169,6 +213,7 @@ export class Foraging {
     if (kind === "node") {
       const n = gatherNodeById(id);
       if (!n || this.gauge) return;
+      this.usedNode = { id: n.id, at: now };
       if (pl.sitting) pl.stand(now, null);
       pl.faceTo(n.x, n.y - 4, now);
       bridge.emit("forage:use", { kind: "node", node: n.id });
@@ -423,12 +468,14 @@ export class Foraging {
     if (!ok) return this.rebuildItems();
     const v = this.nodes.get(node);
     if (!v) return;
-    const img = v.img;
     this.nodes.delete(node);
     this.nodeIds = this.nodeIds.filter((x) => x !== node);
     this.rebuildItems();
-    if (this.d.reduced) img.destroy();
-    else this.scene.tweens.add({ targets: img, alpha: 0, scaleY: 0.2, duration: 220, onComplete: () => img.destroy() });
+    // 캐서 없어짐: 반짝이가 터지고 오그라든다
+    destroyAura(v.aura);
+    gatheredFx(this.scene, v.node.x, v.node.y, v.node.kind, this.d.reduced);
+    this.sfx.play("gathered", 0.6);
+    this.shrink(v.img);
   }
 
   private drawGauge(now: number): void {
@@ -477,7 +524,7 @@ export class Foraging {
 
   // ── 매 프레임 ──
 
-  update(_dt: number, _view: Phaser.Geom.Rectangle, labelScale: number): void {
+  update(_dt: number, view: Phaser.Geom.Rectangle, labelScale: number): void {
     if (this.destroyed) return;
     const now = this.scene.time.now;
     if (labelScale !== this.labelScale) {
@@ -519,8 +566,29 @@ export class Foraging {
       this.sfx.play("reel", 0.5);
     }
     for (const r of this.rods.values()) this.drawRod(r, now);
+    this.updateNodeAuras(now);
+    const net = this.d.net();
+    this.zone.update(now, view, labelScale, net.online ? this.d.seats() : NO_SEATS, net.online ? net.mySid : null, this.fishing?.id ?? null, this.d.player());
     if (this.bang && this.fishing) this.bang.setPosition(this.d.player().x, this.bang.y);
     this.drawGauge(now);
+  }
+
+  /** 피어 있는 지점의 은은한 빛·반짝 별 (가까우면 더 밝게), 창이 끝나 가면 깜빡임 */
+  private updateNodeAuras(now: number): void {
+    if (this.nodes.size === 0) return;
+    const wall = Date.now();
+    const w = nodeWindow(wall);
+    // 창이 이미 바뀌었는데 새 목록이 아직이면 계속 깜빡인다 (곧 사라진다)
+    const remain = w !== this.nodesWindow ? 0 : windowEndsAt(w) - wall;
+    const blink = remain < NODE_BLINK_MS ? 1 - remain / NODE_BLINK_MS : 0;
+    const pl = this.d.player();
+    for (const v of this.nodes.values()) {
+      if (this.gauge?.node === v.node.id) continue;
+      const d = Math.hypot(v.node.x - pl.x, v.node.y - pl.y);
+      const near = d < 64 ? 1 - d / 64 : 0;
+      const a = updateAura(v.aura, now, near, blink, this.d.reduced);
+      if (v.img.alpha !== a && !this.scene.tweens.isTweening(v.img)) v.img.setAlpha(a);
+    }
   }
 
   destroy(): void {

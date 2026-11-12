@@ -228,7 +228,7 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
           </div>
         )}
         {phase === "paused" && (
-          <Dialog title="잠깐 멈춤" onClose={resume} size="sm">
+          <Dialog kind="confirm" title="잠깐 멈춤" onClose={resume}>
             <div className={s.result}>
               <p>멈춘 동안 게임 시간은 흐르지 않아요. 너무 오래(2분 넘게) 멈추면 결과를 받을 수 없어요.</p>
               <div className={s.buttons}>
@@ -256,7 +256,7 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
 
   if (phase === "result" && outcome) {
     return (
-      <Dialog title={`${GAMES[outcome.result.game].name} 결과`} onClose={() => setPhase("lobby")} size="md">
+      <Dialog title={`${GAMES[outcome.result.game].name} 결과`} onClose={() => setPhase("lobby")}>
         <ResultView outcome={outcome} view={view} />
         <div className={s.buttons} style={{ marginTop: 14 }}>
           <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void start(outcome.result.game, cur.diff)}>
@@ -276,7 +276,7 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
 
   const c = view?.character;
   return (
-    <Dialog title="사냥터" onClose={onClose} size="lg" fixed>
+    <Dialog title="사냥터" onClose={onClose}>
       <div className={s.lobby}>
         {view && c ? (
           <>
@@ -325,7 +325,6 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
                   view={view}
                   game={pick.game}
                   diff={cur.diff}
-                  onGame={(game) => setPick((p) => ({ ...p, game }))}
                   zoneId={cur.zone}
                   onDiff={(diff) => setPick((p) => ({ ...p, diff, zone: undefined }))}
                   onZone={(z) => setPick((p) => ({ ...p, diff: z.difficulty, zone: z.id }))}

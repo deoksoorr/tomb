@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
-import { CAMPFIRES, campfireOfSeat, DIR, FURNITURE, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
+import { CAMPFIRES, campfireOfSeat, DIR, FISH_ARCH, FURNITURE, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
+import { avatarColorSpec, type AppearanceChange } from "../sprites/avatar";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import type { PublicGrave } from "@/lib/types";
 import { TEX } from "../assets/manifest";
@@ -262,8 +263,8 @@ export class WorldScene extends Phaser.Scene {
 
     this.atmos.setStaticLights(this.map.staticLights);
     this.atmos.setGridLights(this.map.gridLights);
-    // 주거 구역의 집 (마을 정보를 받으면 세운다 → 창문 빛도 다시)
-    this.houses = new WorldHouses(this.map, () => this.atmos.setGridLights(this.map.gridLights));
+    // 주거 구역의 집 (지금 채널의 마을 정보를 받으면 세운다 → 창문 빛도 다시. 채널마다 주거 구역이 따로)
+    this.houses = new WorldHouses(this.map, () => this.atmos.setGridLights(this.map.gridLights), opts.channel);
     this.field.setMine(bridge.last("graves:mine")?.ids ?? []);
     const audio = bridge.last("audio:settings");
     if (audio) this.sfx.setSettings(audio.volume, audio.muted);
@@ -299,7 +300,7 @@ export class WorldScene extends Phaser.Scene {
       toast: (m) => this.toast(m),
     });
     const look = bridge.last("look:set");
-    if (look) this.applyLook(look.look, look.lookGrant);
+    if (look) this.applyLook(look.look, look.lookGrant, look);
     this.bindBridge();
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.onResize, this);
@@ -432,7 +433,11 @@ export class WorldScene extends Phaser.Scene {
           this.spotsJudged = false;
         },
         onPeers: (peers, seats) => this.reconcilePeers(peers, seats),
-        onLook: (sid, look) => this.remotes.get(sid)?.view.setLook(look ?? []),
+        onLook: (sid, look, extra) => {
+          const v = this.remotes.get(sid)?.view;
+          v?.setLook(look ?? []);
+          v?.applyAppearance(extra);
+        },
         onFirework: (sid, item, x, y) => this.fireworks.launch(item, x, y, this.fireworkView(), false, this.remotes.get(sid)?.name ?? ""),
         onAct: (sid, kind, x, y) => this.playAct(sid, kind, x, y),
         onSay: (sid, id) => {
@@ -447,6 +452,7 @@ export class WorldScene extends Phaser.Scene {
         onGoblinGone: (id) => this.life.onGoblinGone(id),
         onGoblinCaught: (id, sid, name, points) => this.life.onGoblinCaught(id, sid, name, points),
         onGoblinGrant: (id, grant, points) => this.life.onGoblinGrant(id, grant, points),
+        onMegaphone: (m) => bridge.emit("megaphone:heard", m),
         onSelfBody: (body) => {
           if (!isAvatarBody(body)) return;
           this.selfBody = body;
@@ -574,7 +580,7 @@ export class WorldScene extends Phaser.Scene {
     if (p.sid === this.net.mySid) return;
     const prev = this.remotes.get(p.sid);
     prev?.destroy();
-    const r = new RemoteAvatar(this, this.atlas, p.sid, p.name, p.color, p, performance.now(), p.look ?? [], isAvatarBody(p.body) ? p.body : "hood");
+    const r = new RemoteAvatar(this, this.atlas, p.sid, p.name, avatarColorSpec(p.color, sanitizeDye(p.dye)), p, performance.now(), p.look ?? [], isAvatarBody(p.body) ? p.body : "hood");
     // 같은 sid가 다시 들어오면(이름·색 변경) 앉아 있던 좌석을 이어받는다
     r.seatId = prev?.seatId ?? null;
     if (!r.seatId) for (const [seatId, owner] of this.seats) if (owner === p.sid) r.seatId = seatId;
@@ -589,7 +595,7 @@ export class WorldScene extends Phaser.Scene {
       if (p.sid === this.net.mySid) continue;
       keep.add(p.sid);
       const r = this.remotes.get(p.sid);
-      if (!r || r.name !== p.name || r.color !== p.color || r.body !== (isAvatarBody(p.body) ? p.body : "hood")) {
+      if (!r || r.name !== p.name || r.view.colorSpec !== avatarColorSpec(p.color, sanitizeDye(p.dye)) || r.view.bodyId !== (isAvatarBody(p.body) ? p.body : "hood")) {
         this.addRemote(p);
         continue;
       }
@@ -662,7 +668,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("camera:recenter", () => this.rig.recenter()));
     on.push(bridge.on("camera:zoom", ({ delta }) => this.rig.zoomBy(delta)));
     on.push(bridge.on("net:reconnect", () => this.net.reconnect()));
-    on.push(bridge.on("look:set", ({ look, lookGrant }) => this.applyLook(look, lookGrant)));
+    on.push(bridge.on("look:set", (e) => this.applyLook(e.look, e.lookGrant, e)));
     on.push(
       bridge.on("firework:fire", ({ item, grant }) => {
         // 누른 순간 내 자리에서 바로 터뜨리고, 서버에는 증서를 보낸다 (서버가 같은 채널에 알린다)
@@ -676,14 +682,17 @@ export class WorldScene extends Phaser.Scene {
         this.nearT.touch(); // 툴팁의 내 묘비 표시도 다시
       }),
     );
+    on.push(bridge.on("megaphone:send", ({ grant }) => this.net.megaphone(grant)));
     on.push(bridge.on("audio:settings", ({ volume, muted }) => this.sfx.setSettings(volume, muted)));
     on.push(bridge.on("shop:closed", () => this.hub.setBlocked(bridge.last("ui:blockKeys")?.blocked ?? false)));
     on.push(bridge.on("wish:thrown", () => this.onWishThrown()));
   }
 
-  private applyLook(look: string[], grant: string): void {
+  private applyLook(look: string[], grant: string, extra?: AppearanceChange): void {
     const clean = Array.isArray(look) ? look.filter((x): x is string => typeof x === "string") : [];
     this.player.view.setLook(clean);
+    // 46·25번: 염색·외형 바꾸기 (상점·가방에서 바꾸면 바로 내 아바타에도)
+    this.player.view.applyAppearance(extra);
     if (grant) this.net.look(grant);
   }
 
@@ -1125,6 +1134,9 @@ export class WorldScene extends Phaser.Scene {
         const c = near(CAMPFIRES);
         return c ? { x: c.x, y: c.y - 22, text: label ?? "모닥불" } : null;
       }
+      case "fishing":
+        // 낚시터 입구 아치 (현판 위)
+        return { x: FISH_ARCH.x, y: FISH_ARCH.y - 46, text: label ?? "낚시터" };
       default:
         return null;
     }

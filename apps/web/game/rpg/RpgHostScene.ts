@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import type { RpgPlay, RunResult } from "@/lib/rpg/types";
 import { bridge } from "../bridge";
+import { avatarColorSpec } from "../sprites/avatar";
 import { prefersReducedMotion } from "../config";
 import type { GameContext } from "../scenes/context";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
@@ -43,7 +44,8 @@ export class RpgHostScene extends Phaser.Scene {
     if (worldOn) this.scene.setVisible(false, "world");
     const data: RpgSceneData = {
       play,
-      color: ctx.opts.color,
+      // 46번: 내 염색 (마지막 착용 증서에 실려 온다)
+      color: avatarColorSpec(ctx.opts.color, bridge.last("look:set")?.dye),
       name: ctx.opts.name,
       // 입장 화면에서 고르지 않았으면 입장 토큰으로 받은 몸 → 월드의 내 아바타가 가진 값이 정답
       body: (this.scene.get("world") as unknown as { player?: { view?: { bodyId?: string } } } | null)?.player?.view?.bodyId ?? ctx.opts.body ?? "hood",

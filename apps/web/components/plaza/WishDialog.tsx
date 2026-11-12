@@ -44,7 +44,7 @@ export default function WishDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog title="소원 분수" onClose={onClose} size="sm">
+    <Dialog title="소원 분수" onClose={onClose}>
       <div className={styles.wrap}>
         <p className={styles.lead}>
           동전을 던지고 소원을 빌면 오늘의 운세가 나와요. 가끔은 동전이 반짝 튀어 돌아오기도 해요. (하루 {WISH_DAILY}번)

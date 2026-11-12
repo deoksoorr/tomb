@@ -16,5 +16,5 @@ export const POST = handler(async (req) => {
   const now = Date.now();
   if (!(await accounts.unequip(visitorId, slot, now))) throw new HttpError(409, "NO_ITEM", "그 부위에 입은 게 없어요.");
   const me = await loadMe(accounts, visitorId, now);
-  return json<WearResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now) });
+  return json<WearResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now, me) });
 });

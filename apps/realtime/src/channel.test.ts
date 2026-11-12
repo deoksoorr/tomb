@@ -477,6 +477,26 @@ describe("v2: look / firework / sync / join-loss guards", () => {
     expect(events(b)).toHaveLength(1);
   });
 
+  it("46·25번: 입장 토큰의 염색이 welcome/join에 실리고, look 증서의 dye·body가 모두에게 바뀐다", async () => {
+    const { core, join, conn } = setup();
+    const a = conn("a");
+    core.join(a, { visitorId: "a", name: "a", color: AVATAR_COLORS[0], channel: 1, look: [], body: "hood", dye: { head: "#f4a7b9" } }, 0);
+    const b = join("b");
+    expect(welcome(b).peers[0].dye).toEqual({ head: "#f4a7b9" });
+    expect(events(a).find((e) => e.t === "join")).not.toHaveProperty("dye"); // 염색 안 한 사람은 dye 없음 (옛 모양 그대로)
+    clear(a, b);
+    core.message(a, send({ t: "look", grant: grantToken({ kind: "look", visitorId: "a", look: [], exp: 9e9, dye: { body: "#112233" }, body: "cat" }) }), 0);
+    await flush();
+    expect(events(b)).toEqual([{ t: "look", sid: 1, look: [], dye: { body: "#112233" }, body: "cat" }]);
+    expect(a.att?.dye).toEqual({ body: "#112233" });
+    expect(a.att?.body).toBe("cat");
+    // 다시 들어와도(새 토큰에 염색 없음 → 기본색으로) join을 다시 보낸다
+    clear(a, b);
+    core.join(conn("a2"), { visitorId: "a", name: "a", color: AVATAR_COLORS[0], channel: 1, look: [], body: "cat" }, 20_000);
+    expect(events(b).find((e) => e.t === "join")).toMatchObject({ sid: 1, body: "cat" });
+    expect(events(b).find((e) => e.t === "join")).not.toHaveProperty("dye");
+  });
+
   it("fires a verified firework once per nonce at the sender's server position (3s per connection)", async () => {
     const { core, join } = setup();
     const a = join("a", 0, { x: 200, y: 300 });
@@ -805,9 +825,9 @@ describe("one spot, one person: tree hang / swing (39)", () => {
   const H = spotSeatId("hang", TREE.x, TREE.y);
   const S = spotSeatId("swing", SWING.x, SWING.y);
 
-  it("welcome advertises spot judging (channels only, not rooms)", () => {
+  it("welcome advertises spot judging (channels and rooms — 3번 집 안 가구 자리)", () => {
     expect(welcome(setup().join("a"))).toMatchObject({ spots: true });
-    expect(welcome(setup(3, 20_000, true).join("a")).spots).toBeUndefined();
+    expect(welcome(setup(3, 20_000, true).join("a"))).toMatchObject({ spots: true });
   });
 
   it("two players try the same tree at once → only the first hangs, the other gets seatDenied", () => {
@@ -1065,5 +1085,130 @@ describe("fishing spots are fixed one-person spots (4)", () => {
     expect(core.peer(1)).toMatchObject({ seatId: spot.id });
     core.message(a, move(spot.x - 3, spot.y, STATE.walk), 900);
     expect(core.peer(1)!.seatId).toBeNull();
+  });
+});
+
+describe("23번 확성기", () => {
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+  const mega = (nonce: string, scope: "channel" | "all" = "channel", ch = 1, visitorId = "a") =>
+    send({ t: "megaphone", grant: grantToken({ kind: "megaphone", visitorId, nonce, name: "새벽코더", text: "다들 안녕!", scope, ch, exp: 9e9 }) });
+
+  it("서명된 문장을 채널 모두(보낸 사람 포함)에게 한 번만, 연결당 3초 간격으로 방송한다", async () => {
+    const { core, join, host } = setup();
+    host.channelNo = () => 1;
+    const a = join("a");
+    const b = join("b");
+    clear(a, b);
+    core.message(a, mega("m1"), 0);
+    core.message(a, mega("m2"), 1_000); // 3초 안 → 무시
+    core.message(a, mega("m1"), 3_000); // 같은 nonce → 무시
+    core.message(a, mega("m3", "channel", 2), 6_000); // 다른 채널용 증서 → 무시
+    core.message(b, mega("m4", "channel", 1, "a"), 9_000); // 남의 증서 → 무시
+    await flush();
+    const got = events(b).filter((e) => e.t === "megaphone");
+    expect(got).toHaveLength(1);
+    expect(got[0]).toMatchObject({ t: "megaphone", id: "m1", name: "새벽코더", text: "다들 안녕!", scope: "channel", ch: 1 });
+    expect(events(a).filter((e) => e.t === "megaphone")).toHaveLength(1);
+  });
+
+  it("모든 채널 확성기는 호스트에 전달을 맡기고, 전해 받은 쪽도 nonce로 한 번만 방송한다", async () => {
+    const { core, join, host } = setup();
+    const relayed: string[] = [];
+    host.channelNo = () => 3;
+    host.relayMegaphone = (nonce) => void relayed.push(nonce);
+    const a = join("a");
+    clear(a);
+    core.message(a, mega("all1", "all", 1), 0); // 다른 채널에서 산 전체 확성기여도 받는다
+    await flush();
+    expect(relayed).toEqual(["all1"]);
+    const other = setup();
+    const c = other.join("c");
+    clear(c);
+    const data = events(a).find((e) => e.t === "megaphone")!;
+    expect(other.core.relayedMegaphone("all1", 9e12, JSON.stringify(data))).toBe(true);
+    expect(other.core.relayedMegaphone("all1", 9e12, JSON.stringify(data))).toBe(false);
+    expect(events(c).filter((e) => e.t === "megaphone")).toHaveLength(1);
+  });
+
+  it("방(room)은 확성기를 받지 않는다", async () => {
+    const { core, join } = setup(3, 20_000, true);
+    const a = join("a");
+    clear(a);
+    core.message(a, mega("r1"), 0);
+    await flush();
+    expect(events(a).some((e) => e.t === "megaphone")).toBe(false);
+    expect(core.relayedMegaphone("r1", 9e12, "{}")).toBe(false);
+  });
+});
+
+describe("3번 집 안 가구: 방(집)의 1인 자리와 use 중계", () => {
+  // 집 씬 좌표의 침대 자리·의자 자리 (앵커 = 발 위치). 서버는 형식과 거리만 본다
+  const BED = spotSeatId("bed", 200, 120);
+  const CHAIR = spotSeatId("chair", 120, 90);
+
+  it("한 침대에는 한 명: 먼저 온 사람만 눕고 다른 사람은 seatDenied", () => {
+    const { core, join } = setup(3, 20_000, true);
+    const a = join("a", 0, { x: 205, y: 128 });
+    const b = join("b", 0, { x: 195, y: 128 });
+    clear(a, b);
+    core.message(a, send({ t: "sit", seatId: BED }), 0);
+    core.message(b, send({ t: "sit", seatId: BED }), 0);
+    expect(events(a)).toEqual([{ t: "seat", seatId: BED, sid: 1 }]);
+    expect(events(b)).toEqual([
+      { t: "seat", seatId: BED, sid: 1 },
+      { t: "seatDenied", seatId: BED },
+    ]);
+    core.message(a, move(200, 120, STATE.lie), 10);
+    core.message(b, move(200, 120, STATE.lie), 10); // 거절된 사람이 늦게 보낸 눕기 MOVE도 자리를 빼앗지 못한다
+    core.tick(50);
+    expect(core.peer(1)).toMatchObject({ seatId: BED, state: STATE.lie });
+    expect(core.peer(2)?.state).toBe(STATE.idle);
+    // 일어나면(걷기 MOVE) 자리가 풀리고 다른 사람이 누울 수 있다
+    core.message(a, move(205, 130, STATE.walk), 200);
+    core.message(b, send({ t: "sit", seatId: BED }), 300);
+    expect(core.peer(2)?.seatId).toBe(BED);
+  });
+
+  it("의자 자리(shared sitChair)는 sit 요청으로만 잡힌다", () => {
+    const { core, join } = setup(3, 20_000, true);
+    const a = join("a", 0, { x: 120, y: 96 });
+    core.message(a, send({ t: "sit", seatId: CHAIR }), 0);
+    core.message(a, move(120, 90, STATE.sitChair), 10);
+    expect(core.peer(1)).toMatchObject({ seatId: CHAIR, state: STATE.sitChair });
+  });
+
+  it("집 안 자리는 월드 채널에서, 월드 자리는 방에서 받지 않는다", () => {
+    const world = setup();
+    const a = world.join("a", 0, { x: 200, y: 120 });
+    world.core.message(a, send({ t: "sit", seatId: BED }), 0);
+    expect(events(a)).toContainEqual({ t: "seatDenied", seatId: BED });
+    world.core.message(a, move(200, 120, STATE.lie), 10);
+    expect(world.core.peer(1)).toMatchObject({ seatId: null, state: STATE.idle });
+
+    const room = setup(3, 20_000, true);
+    const b = room.join("b", 0, { x: 60, y: 90 });
+    room.core.message(b, send({ t: "sit", seatId: spotSeatId("hang", 60, 90) }), 0);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: spotSeatId("hang", 60, 90) });
+  });
+
+  it("use: 방에서만 다른 사람에게 중계하고 USE_INTERVAL_MS 안의 연타는 버린다", () => {
+    const { core, join } = setup(3, 20_000, true);
+    const a = join("a");
+    const b = join("b");
+    clear(a, b);
+    core.message(a, send({ t: "use", u: "ab12cd", a: 3 }), 0);
+    core.message(a, send({ t: "use", u: "ab12cd", a: 4 }), 40);
+    core.message(a, send({ t: "use", u: "ab12cd", a: 5 }), 100);
+    expect(events(b)).toEqual([
+      { t: "use", sid: 1, u: "ab12cd", a: 3 },
+      { t: "use", sid: 1, u: "ab12cd", a: 5 },
+    ]);
+    expect(events(a)).toEqual([]);
+    const w = setup();
+    const c = w.join("c");
+    const d = w.join("d");
+    clear(c, d);
+    w.core.message(c, send({ t: "use", u: "ab12cd", a: 3 }), 0);
+    expect(events(d)).toEqual([]);
   });
 });

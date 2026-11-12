@@ -2,6 +2,7 @@ import { env } from "@/lib/env";
 import { handler, json } from "@/lib/http";
 import { requireVisitor } from "@/lib/session";
 import { getAccounts } from "@/lib/store";
+import { getStyleStore } from "@/lib/store/style";
 import { kstDay, lookGrant, lookOf } from "@/lib/store/accounts";
 import type { LookGrantResponse } from "@/lib/types";
 
@@ -9,6 +10,10 @@ import type { LookGrantResponse } from "@/lib/types";
 export const GET = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   const now = Date.now();
-  const look = lookOf(await getAccounts().get(visitorId, kstDay(now), now));
-  return json<LookGrantResponse>({ look, lookGrant: await lookGrant(env.joinSecret(), visitorId, look, now) });
+  const accounts = getAccounts();
+  const [a, style] = await Promise.all([accounts.get(visitorId, kstDay(now), now), getStyleStore(accounts).get(visitorId)]);
+  const look = lookOf(a);
+  // 46·25번: 염색·몸 모양도 같이 (게임이 내 아바타에 입히고, 증서로 다른 사람 화면에도)
+  const appearance = { dye: style.dye, body: a.body };
+  return json<LookGrantResponse>({ look, ...appearance, lookGrant: await lookGrant(env.joinSecret(), visitorId, look, now, appearance) });
 });

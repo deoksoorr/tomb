@@ -48,11 +48,21 @@ import Tutorial from "./Tutorial";
 import UpdateNotice from "./UpdateNotice";
 import styles from "./GameShell.module.css";
 import HousingOffice from "@/components/housing/HousingOffice";
+import { hopChannel } from "@/components/housing/channelHop";
+import { graveChannelFor } from "@/game/world/graveChannel";
+import type { PublicHouse } from "@/lib/housing/types";
+import { WORLD_LOTS } from "@tomb/protocol";
 import HuntLobby from "@/components/rpg/HuntLobby";
 import ForageLayer from "@/components/forage/ForageLayer";
 import WishDialog from "@/components/plaza/WishDialog";
 import Telescope from "@/components/rpg/Telescope";
 import GoblinClaim from "./GoblinClaim";
+// 10·11·23번: 출석 달력 · 선물함 · 확성기
+import CalendarDialog from "../account/CalendarDialog";
+import GiftsDialog from "../account/GiftsDialog";
+import MegaphoneLayer from "./MegaphoneDialog";
+import MegaphoneFeed from "./MegaphoneFeed";
+import { useSocial } from "./useSocial";
 
 const GameCanvas = dynamic(() => import("@/game/GameCanvas"), { ssr: false });
 
@@ -70,7 +80,7 @@ function useKeyHints(active: boolean) {
   }, [active]);
 }
 
-/** 입장: 내 계정·착용 상태를 불러오고, 월드가 보이면 출석 처리 (하루 1번만 포인트) */
+/** 입장: 내 계정·착용 상태를 불러오고, 월드가 보이면 입장 기록 (10번: 출석 포인트는 출석 달력에서 받는다 → earned는 0) */
 function useAccountOnEnter(ready: boolean, name: string, color: string, body: string | undefined) {
   useEffect(() => {
     void meStore.refresh();
@@ -132,7 +142,9 @@ type Panel =
   | "housing"
   | "activity"
   | "passed"
-  | "say";
+  | "say"
+  | "calendar"
+  | "gifts";
 
 /** 다른 담당이 만드는 장소 창 (사냥터·분양 사무소). 컴포넌트가 들어오기 전까지 자리만 */
 type Props = {
@@ -148,6 +160,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const status = useBridgeValue("net:status");
   // 채널마다 묘지가 따로다. 채널을 아직 모르면 고른 채널, 자동 배정이면 1채널
   const channel = status?.channel ?? (typeof options.channel === "number" ? options.channel : 1);
+  // 채널마다 주거 구역도 따로다. 게임이 지금 보여 주는 채널과 같게 (관람·오프라인이면 1채널)
+  const houseChannel = graveChannelFor(status, options.channel);
   const graves = useGraves(channel);
   const { me } = useMe();
   const myGraves = useMyGraves(me?.graves ?? [], graves);
@@ -171,6 +185,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const { unread: unreadNotice } = useNotices();
   useAccountOnEnter(ready, options.name, options.color, options.body);
   usePresencePoints(ready);
+  const { calendarReady, giftCount } = useSocial(ready);
   useBridgeEvent("portal:open", ({ kind, houseId, lot }) => {
     setHousingIntent(kind === "housing" && (houseId || lot) ? { houseId, lot } : null);
     setPanel(kind);
@@ -248,6 +263,23 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     bridge.emit("channel:switch", { channel: grave.channel });
   }
 
+  /** 내 집: 다른 채널에 있으면 그 채널로 옮긴 뒤 주거 구역의 그 번지를 비춘다 (2단지 번지는 분양 사무소로) */
+  function goToMyHouse(house: PublicHouse) {
+    setPanel(null);
+    hopChannel(
+      house.ch,
+      houseChannel,
+      () => {
+        if (house.lot >= 1 && house.lot <= WORLD_LOTS) bridge.emit("world:lot", { lot: house.lot, label: "내 집" });
+        else {
+          setHousingIntent(null);
+          setPanel("housing");
+        }
+      },
+      () => showToast(`${house.ch}채널로 옮기지 못했어요. 채널이 가득 찼을 수 있어요. 잠시 뒤 다시 해 주세요.`),
+    );
+  }
+
   /** 내 묘비가 하나뿐이면 바로 그 앞으로, 아니면 목록 */
   function openMyGraves() {
     const { entries, pending } = myGraves;
@@ -306,25 +338,17 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && (
         <div className={cx(styles.overlay, away && styles.away, campfire && styles.campfire)}>
           {coarse ? (
-            // 터치: 위 가장자리 바(음악 · 채널·날씨 · 메뉴) + 아래 조이스틱·행동 버튼만
+            // 터치: 위 가장자리 바(음악 · 채널·날씨) + 아래 바로 가기 바(dock) + 그 위 조이스틱·행동 버튼
             <div className={styles.touchBar}>
               <BgmPlayer compact />
               <Hud compact onOpenChannels={() => setPanel("channels")} />
-              <button
-                type="button"
-                className={cx(ui.button, ui.icon, styles.menuButton)}
-                onClick={() => setPanel("menu")}
-                aria-label={unreadNotice || (me?.activityUnread ?? 0) > 0 ? "메뉴 (새 소식 있음)" : "메뉴"}
-              >
-                <PixelIcon name="menu" size={18} />
-                {(unreadNotice || (me?.activityUnread ?? 0) > 0) && <span className={styles.dot} aria-hidden="true" />}
-              </button>
             </div>
           ) : (
             <>
               <div className={styles.topLeft}>
                 <BgmPlayer />
                 {options.debug && <NetHud />}
+                <MegaphoneFeed channel={channel} />
               </div>
               {!narrow && (
                 <div className={styles.topCenter}>
@@ -332,6 +356,26 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 </div>
               )}
               <div className={styles.topRight}>
+                <button
+                  type="button"
+                  className={cx(ui.button, ui.icon, styles.topButton)}
+                  onClick={() => setPanel("calendar")}
+                  aria-label={calendarReady ? "출석 달력 (오늘 도장을 받을 수 있어요)" : "출석 달력"}
+                  title="출석 달력"
+                >
+                  <PixelIcon name="calendar" />
+                  {calendarReady && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
+                </button>
+                <button
+                  type="button"
+                  className={cx(ui.button, ui.icon, styles.topButton)}
+                  onClick={() => setPanel("gifts")}
+                  aria-label={giftCount ? `선물함 (안 받은 선물 ${giftCount}개)` : "선물함"}
+                  title="선물함"
+                >
+                  <PixelIcon name="gift" />
+                  {giftCount > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
+                </button>
                 <button
                   type="button"
                   className={cx(ui.button, ui.icon, styles.topButton)}
@@ -349,44 +393,61 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 </button>
                 <RankingPanel graves={graves.graves} onPick={lookAtGrave} />
               </div>
-              <div className={styles.leftRow}>
-                <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("menu")}>
-                  <PixelIcon name="menu" />
-                  메뉴
-                </button>
-                <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("bag")}>
-                  <PixelIcon name="bag" />가방
-                  {bagCount > 0 && <span className={styles.badge}>{bagCount}</span>}
-                </button>
-                <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("hunt")}>
-                  <PixelIcon name="sword" />
-                  사냥
-                </button>
-                <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => bridge.emit("forage:dex", {})}>
-                  <PixelIcon name="book" />
-                  도감
-                </button>
-                <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("housing")}>
-                  <PixelIcon name="house" />집
-                </button>
-                <button type="button" className={cx(ui.button, styles.leftButton)} onClick={() => setPanel("activity")}>
-                  <PixelIcon name="heart" />
-                  소식
-                  {(me?.activityUnread ?? 0) > 0 && <span className={styles.badge}>{me?.activityUnread}</span>}
-                </button>
-                <button
-                  type="button"
-                  className={cx(ui.button, ui.icon, styles.leftButton)}
-                  onClick={() => setPanel("notices")}
-                  aria-label={unreadNotice ? "공지 (새 공지 있음)" : "공지"}
-                >
-                  <PixelIcon name="bell" />
-                  {unreadNotice && <span className={styles.dot} aria-hidden="true" />}
-                </button>
-              </div>
-              <FireworkButton onOpen={() => setPanel("fireworks")} />
             </>
           )}
+          {/* 23번 확성기 창: 터치는 위쪽 바 아래에 따로 (데스크톱은 왼쪽 위 음악 아래) */}
+          {coarse && <MegaphoneFeed channel={channel} floating />}
+          {/* 바로 가기 줄: 데스크톱은 왼쪽 아래 모서리, 터치(폰)는 화면 맨 아래 한 줄 바. 아이콘 + 짧은 글자 */}
+          <nav className={cx(styles.dock, coarse && styles.dockBar)} aria-label="바로 가기">
+            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("menu")}>
+              <PixelIcon name="menu" />
+              메뉴
+              {coarse && (calendarReady || giftCount > 0) && (
+                <>
+                  <span className={cx(styles.dot, styles.redDot, styles.dotSecond)} aria-hidden="true" />
+                  <span className="visually-hidden"> (받을 출석 도장·선물 있음)</span>
+                </>
+              )}
+              {coarse && (unreadNotice || (me?.activityUnread ?? 0) > 0) && (
+                <>
+                  <span className={styles.dot} aria-hidden="true" />
+                  <span className="visually-hidden"> (새 소식 있음)</span>
+                </>
+              )}
+            </button>
+            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("bag")}>
+              <PixelIcon name="bag" />
+              가방
+              {bagCount > 0 && <span className={styles.badge}>{bagCount}</span>}
+            </button>
+            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("hunt")}>
+              <PixelIcon name="sword" />
+              사냥
+            </button>
+            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => bridge.emit("forage:dex", {})}>
+              <PixelIcon name="book" />
+              도감
+            </button>
+            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("housing")}>
+              <PixelIcon name="house" />집
+            </button>
+            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("activity")}>
+              <PixelIcon name="heart" />
+              소식
+              {(me?.activityUnread ?? 0) > 0 && <span className={styles.badge}>{me?.activityUnread}</span>}
+            </button>
+            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("notices")}>
+              <PixelIcon name="bell" />
+              공지
+              {unreadNotice && (
+                <>
+                  <span className={styles.dot} aria-hidden="true" />
+                  <span className="visually-hidden"> (새 공지 있음)</span>
+                </>
+              )}
+            </button>
+            {!coarse && <FireworkButton onOpen={() => setPanel("fireworks")} />}
+          </nav>
           <div className={styles.bottomCenter}>
             {showTutorial && <Tutorial touch={coarse} onDone={() => setTutorialOn(false)} />}
             <ToastList toasts={toasts} />
@@ -437,11 +498,17 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           onLeave={onLeave}
           onLoggedOut={onLoggedOut}
           onOpenShrine={() => setPanel("shrine")}
+          houseChannel={houseChannel}
+          onGoToMyHouse={goToMyHouse}
+          onOpenHousing={() => {
+            setHousingIntent(null);
+            setPanel("housing");
+          }}
           onClose={closePanel}
         />
       )}
       {panel === "graves" && (
-        <Dialog title="내 묘비 가기" onClose={closePanel} size="sm">
+        <Dialog title="내 묘비 가기" onClose={closePanel}>
           <MyGraves entries={myGraves.entries} pending={myGraves.pending} onGo={goToMyGrave} onBury={startBury} />
         </Dialog>
       )}
@@ -459,24 +526,31 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           fireworkCount={fireworkCount}
           unreadNotice={unreadNotice}
           activityUnread={me?.activityUnread ?? 0}
+          calendarReady={calendarReady}
+          giftCount={giftCount}
           points={me ? me.points : null}
           onPick={pickFromMenu}
           onClose={closePanel}
         />
       )}
       {panel === "ranking" && (
-        <Dialog title="랭킹" onClose={closePanel} size="sm">
+        <Dialog title="랭킹" onClose={closePanel}>
           <RankingList graves={graves.graves} onPick={lookAtGrave} />
         </Dialog>
       )}
       {panel === "fireworks" && <FireworkDialog onClose={closePanel} />}
       {panel === "passed" && <PassedDialog onClose={closePanel} />}
       {panel === "shrine" && <ShrineDialog cache={graves.cache} onGo={goToMyGrave} onClose={closePanel} onOpenPassed={() => setPanel("passed")} />}
-      {panel === "housing" && <HousingOffice key={housingIntent?.houseId ?? housingIntent?.lot ?? "office"} intent={housingIntent} onClose={closePanel} />}
+      {panel === "housing" && (
+        <HousingOffice key={housingIntent?.houseId ?? housingIntent?.lot ?? "office"} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
+      )}
       {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       {panel === "wish" && <WishDialog onClose={closePanel} />}
       {panel === "telescope" && <Telescope onClose={closePanel} />}
       <GoblinClaim />
+      {panel === "calendar" && <CalendarDialog onClose={closePanel} />}
+      {panel === "gifts" && <GiftsDialog onClose={closePanel} />}
+      <MegaphoneLayer channel={channel} onOpenShop={() => setPanel("shop")} />
       {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
     </div>
   );

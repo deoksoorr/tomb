@@ -1,3 +1,5 @@
+import { DEFAULT_MAX_CHANNELS } from "@tomb/protocol";
+
 // 하우징(개인 집) 카탈로그와 밸런스 값. 서버(검증·가격)와 클라이언트(상점·게임 그림)가 같이 쓴다.
 // 가격·점수를 바꾸면 상점 화면과 서버 검증이 함께 바뀐다. 이미 놓인 물건의 점수는 다음 저장 때 다시 계산된다.
 
@@ -25,14 +27,15 @@ export const PLOT_TIERS: readonly PlotTier[] = [
 export const tierById = (id: string): PlotTier | undefined => PLOT_TIERS.find((t) => t.id === id);
 export const nextTier = (id: PlotTierId): PlotTier | undefined => PLOT_TIERS[PLOT_TIERS.findIndex((t) => t.id === id) + 1];
 
-export type FurnitureCategory = "furniture" | "dev" | "nature" | "mood" | "skin" | "exterior";
+export type FurnitureCategory = "furniture" | "living" | "dev" | "nature" | "mood" | "skin" | "exterior";
 
 export const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   furniture: "가구",
+  living: "생활",
   dev: "사무실",
   nature: "자연",
   mood: "분위기",
-  skin: "바닥·담장",
+  skin: "바닥·벽지",
   exterior: "외관",
 };
 
@@ -57,27 +60,38 @@ export type FurnitureDef = {
   skin?: "floor" | "wall";
   /** 외관 아이템: 마을에 보이는 집 바깥의 한 자리 (지붕·벽·울타리…). 칸에 놓지 않는다 */
   ext?: ExtSlot;
+  /** 집 안에서 E로 할 수 있는 일 (상점 안내용 짧은 말. 실제 동작은 game/housing/interact.ts) */
+  use?: string;
 };
 
 export const FURNITURE: readonly FurnitureDef[] = [
   // ── 가구 ──
-  { id: "desk", name: "책상", desc: "끝내지 못한 기획서가 올려져 있다.", category: "furniture", price: 30, score: 6, w: 2, h: 1, turn: true },
-  { id: "chair", name: "의자", desc: "삐걱거리지만 아직 앉을 만하다.", category: "furniture", price: 15, score: 3, w: 1, h: 1 },
-  { id: "sofa", name: "소파", desc: "누우면 일어나기 싫어지는 소파.", category: "furniture", price: 55, score: 12, w: 2, h: 1, turn: true },
-  { id: "bed", name: "침대", desc: "푹 자고 나면 다시 시작할 수 있을지도.", category: "furniture", price: 70, score: 15, w: 2, h: 2, turn: true },
-  { id: "bookshelf", name: "책장", desc: "읽다 만 자기계발서가 빼곡하다.", category: "furniture", price: 50, score: 10, w: 2, h: 1 },
+  { id: "desk", name: "책상", desc: "끝내지 못한 기획서가 올려져 있다. 앉으면 타닥타닥 자판 소리.", category: "furniture", price: 30, score: 6, w: 2, h: 1, turn: true, use: "앉아서 일하기" },
+  { id: "chair", name: "의자", desc: "삐걱거리지만 아직 앉을 만하다.", category: "furniture", price: 15, score: 3, w: 1, h: 1, use: "앉기" },
+  { id: "sofa", name: "소파", desc: "누우면 일어나기 싫어지는 소파. 둘이 나란히 앉을 수 있다.", category: "furniture", price: 55, score: 12, w: 2, h: 1, turn: true, use: "앉기 (2자리)" },
+  { id: "bed", name: "침대", desc: "푹 자고 나면 다시 시작할 수 있을지도.", category: "furniture", price: 70, score: 15, w: 2, h: 2, use: "눕기" },
+  { id: "bookshelf", name: "책장", desc: "읽다 만 자기계발서가 빼곡하다.", category: "furniture", price: 50, score: 10, w: 2, h: 1, use: "책 읽기" },
   { id: "table", name: "둥근 탁자", desc: "찻잔 하나 놓기 좋은 크기.", category: "furniture", price: 20, score: 4, w: 1, h: 1 },
   { id: "rug", name: "러그", desc: "발이 따뜻해지는 낡은 러그. 위에 물건을 올릴 수 있다.", category: "furniture", price: 40, score: 8, w: 3, h: 2, floor: true, turn: true },
+  // ── 생활 (3번 집 안 개편: 써 보는 가구) ──
+  { id: "piano", name: "피아노", desc: "건반을 누르면 방 안 모두에게 들린다. 숫자 1~8로 음을 고른다.", category: "living", price: 130, score: 26, w: 2, h: 1, use: "앉아서 연주" },
+  { id: "radio", name: "라디오", desc: "다이얼을 돌리면 지직, 노래가 바뀐다.", category: "living", price: 40, score: 8, w: 1, h: 1, use: "채널 돌리기" },
+  { id: "fireplace", name: "벽난로", desc: "불을 지피면 방이 주황빛으로 따뜻해진다. 타닥타닥.", category: "living", price: 120, score: 24, w: 2, h: 1, use: "불 켜기·끄기" },
+  { id: "floor_lamp", name: "스탠드 조명", desc: "딸깍 켜면 노란 빛이 동그랗게 번진다.", category: "living", price: 35, score: 7, w: 1, h: 1, use: "켜기·끄기" },
+  { id: "fridge", name: "냉장고", desc: "열 때마다 뭔가 하나씩 나온다. 누가 채워 두는 걸까.", category: "living", price: 65, score: 12, w: 1, h: 1, use: "간식 꺼내기" },
+  { id: "bathtub", name: "욕조", desc: "거품이 뽀글뽀글. 들어가면 나오기 싫다.", category: "living", price: 95, score: 18, w: 2, h: 1, use: "들어가기" },
+  { id: "cat_cushion", name: "고양이 쿠션", desc: "쿠션 위의 고양이. 쓰다듬으면 골골 소리를 낸다.", category: "living", price: 45, score: 10, w: 1, h: 1, use: "쓰다듬기" },
+  { id: "grand_clock", name: "괘종시계", desc: "지금 몇 시인지 댕— 하고 알려 준다.", category: "living", price: 60, score: 11, w: 1, h: 1, use: "시간 보기" },
   // ── 사무실 ──
-  { id: "monitor_desk", name: "모니터 책상", desc: "듀얼 모니터. 한쪽엔 아직 엑셀이 열려 있다.", category: "dev", price: 85, score: 18, w: 2, h: 1, light: { color: 0x8ac8ff, r: 26 } },
-  { id: "server_rack", name: "사무실 자판기", desc: "초록 불이 깜빡인다. 동전을 넣으면 가끔 뭔가 나온다.", category: "dev", price: 105, score: 22, w: 1, h: 1, light: { color: 0x7fe0a0, r: 20 } },
+  { id: "monitor_desk", name: "모니터 책상", desc: "듀얼 모니터. 한쪽엔 아직 엑셀이 열려 있다.", category: "dev", price: 85, score: 18, w: 2, h: 1, light: { color: 0x8ac8ff, r: 26 }, use: "앉아서 일하기" },
+  { id: "server_rack", name: "사무실 자판기", desc: "초록 불이 깜빡인다. 동전을 넣으면 가끔 뭔가 나온다.", category: "dev", price: 105, score: 22, w: 1, h: 1, light: { color: 0x7fe0a0, r: 20 }, use: "음료 뽑기" },
   { id: "whiteboard", name: "화이트보드", desc: "지난 분기 회의 내용이 아직 안 지워졌다.", category: "dev", price: 65, score: 12, w: 2, h: 1 },
   { id: "postit_wall", name: "메모지 벽", desc: "할 일, 할 일, 진짜 할 일.", category: "dev", price: 35, score: 8, w: 2, h: 1 },
   { id: "duck_shelf", name: "오리 인형 선반", desc: "하소연을 들어 준 오리들이 줄지어 있다.", category: "dev", price: 40, score: 10, w: 1, h: 1 },
-  { id: "coffee_machine", name: "커피 머신", desc: "야근의 동반자. 아직 따뜻하다.", category: "dev", price: 50, score: 9, w: 1, h: 1 },
+  { id: "coffee_machine", name: "커피 머신", desc: "야근의 동반자. 아직 따뜻하다.", category: "dev", price: 50, score: 9, w: 1, h: 1, use: "커피 내리기" },
   { id: "frame_404", name: "사훈 액자", desc: "사훈은 \"404\". 무슨 뜻인지 아무도 모른다.", category: "dev", price: 30, score: 6, w: 1, h: 1 },
   // ── 자연 ──
-  { id: "pot", name: "화분", desc: "물만 주면 잘 자란다. 내 다짐과 달리.", category: "nature", price: 10, score: 2, w: 1, h: 1 },
+  { id: "pot", name: "화분", desc: "물만 주면 잘 자란다. 내 다짐과 달리. 물을 주면 며칠에 걸쳐 꽃이 핀다.", category: "nature", price: 10, score: 2, w: 1, h: 1, use: "물 주기" },
   { id: "tree", name: "나무", desc: "그늘이 넓은 늙은 나무.", category: "nature", price: 85, score: 16, w: 2, h: 2 },
   { id: "pond", name: "연못", desc: "달이 비치는 작은 연못.", category: "nature", price: 110, score: 22, w: 3, h: 2, turn: true },
   { id: "flowerbed", name: "꽃밭", desc: "밤에도 은은하게 향이 난다. 밟아도 괜찮다.", category: "nature", price: 30, score: 7, w: 2, h: 1, floor: true, turn: true },
@@ -88,17 +102,19 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "stone_lantern", name: "석등", desc: "집을 지키는 돌 등불.", category: "mood", price: 65, score: 14, w: 1, h: 1, light: { color: 0xffc070, r: 34 } },
   { id: "candles", name: "촛대", desc: "세 갈래 촛불이 흔들린다.", category: "mood", price: 25, score: 5, w: 1, h: 1, light: { color: 0xffb060, r: 22 } },
   { id: "firefly_jar", name: "반딧불 병", desc: "잡아 둔 반딧불이 천천히 떠다닌다.", category: "mood", price: 40, score: 9, w: 1, h: 1, light: { color: 0xd8ff8a, r: 20 } },
-  { id: "wind_chime", name: "풍경", desc: "바람이 불면 맑은 소리가 난다.", category: "mood", price: 30, score: 7, w: 1, h: 1 },
+  { id: "wind_chime", name: "풍경", desc: "바람이 불면 맑은 소리가 난다.", category: "mood", price: 30, score: 7, w: 1, h: 1, use: "흔들기" },
   { id: "memorial", name: "추억 비석", desc: "내 집 마당에 세우는 작은 비석.", category: "mood", price: 35, score: 8, w: 1, h: 1 },
-  { id: "ghost_cat", name: "잠든 유령 고양이", desc: "방석 위에서 반투명하게 졸고 있다.", category: "mood", price: 75, score: 16, w: 1, h: 1 },
-  // ── 바닥·담장 스킨 (기본 풀밭·나무 울타리는 무료) ──
-  { id: "floor_moss", name: "이끼 바닥", desc: "폭신한 이끼가 깔린 바닥.", category: "skin", price: 55, score: 10, w: 1, h: 1, skin: "floor" },
-  { id: "floor_wood", name: "나무 마루", desc: "따뜻한 색의 마룻바닥.", category: "skin", price: 85, score: 14, w: 1, h: 1, skin: "floor" },
-  { id: "floor_stone", name: "돌바닥", desc: "반듯하게 다듬은 판석.", category: "skin", price: 70, score: 12, w: 1, h: 1, skin: "floor" },
-  { id: "floor_petal", name: "꽃잎 바닥", desc: "분홍 꽃잎이 흩날린 길.", category: "skin", price: 125, score: 20, w: 1, h: 1, skin: "floor" },
-  { id: "wall_stone", name: "돌담", desc: "이끼 낀 낮은 돌담.", category: "skin", price: 70, score: 12, w: 1, h: 1, skin: "wall" },
-  { id: "wall_hedge", name: "생울타리", desc: "잘 다듬은 초록 울타리.", category: "skin", price: 65, score: 10, w: 1, h: 1, skin: "wall" },
-  { id: "wall_iron", name: "철제 담장", desc: "고풍스러운 검은 철책.", category: "skin", price: 105, score: 18, w: 1, h: 1, skin: "wall" },
+  { id: "ghost_cat", name: "잠든 유령 고양이", desc: "방석 위에서 반투명하게 졸고 있다.", category: "mood", price: 75, score: 16, w: 1, h: 1, use: "쓰다듬기" },
+  // ── 바닥·벽지 스킨 (기본 낡은 장판·나무 판자 벽은 무료). id는 예전 마당 시절 그대로 (가진 것·저장된 배치 유지) ──
+  { id: "floor_moss", name: "초록 카펫", desc: "이끼처럼 폭신한 초록 카펫.", category: "skin", price: 55, score: 10, w: 1, h: 1, skin: "floor" },
+  { id: "floor_wood", name: "나무 마루", desc: "길쭉한 널을 엇갈려 깐 반들반들한 마루.", category: "skin", price: 85, score: 14, w: 1, h: 1, skin: "floor" },
+  { id: "floor_stone", name: "대리석 바닥", desc: "반듯하게 다듬은 회색 판석.", category: "skin", price: 70, score: 12, w: 1, h: 1, skin: "floor" },
+  { id: "floor_tile", name: "체크 타일", desc: "크림색과 갈색이 번갈아 깔린 타일.", category: "skin", price: 60, score: 11, w: 1, h: 1, skin: "floor" },
+  { id: "floor_petal", name: "꽃잎 카펫", desc: "분홍 꽃잎 무늬를 수놓은 카펫.", category: "skin", price: 125, score: 20, w: 1, h: 1, skin: "floor" },
+  { id: "wall_stone", name: "돌벽", desc: "회색 돌을 차곡차곡 쌓은 서늘한 벽.", category: "skin", price: 70, score: 12, w: 1, h: 1, skin: "wall" },
+  { id: "wall_hedge", name: "풀잎 벽지", desc: "연둣빛 잎사귀 무늬 벽지.", category: "skin", price: 65, score: 10, w: 1, h: 1, skin: "wall" },
+  { id: "wall_paper", name: "꽃무늬 벽지", desc: "크림색 바탕에 작은 장미가 흩어진 벽지.", category: "skin", price: 60, score: 11, w: 1, h: 1, skin: "wall" },
+  { id: "wall_iron", name: "남색 장식 벽지", desc: "짙은 남색 바탕에 금빛 무늬가 들어간 고풍스러운 벽지.", category: "skin", price: 105, score: 18, w: 1, h: 1, skin: "wall" },
   // ── 외관 (마을에서 보이는 집 바깥. 자리마다 하나씩 고른다) ──
   ...ext("roof", [
     ["roof_red", "붉은 기와 지붕", "멀리서도 눈에 띄는 붉은 기와.", 60, 8],
@@ -156,9 +172,12 @@ export const defaultExterior = (): HouseExteriorMap =>
   Object.fromEntries(EXT_SLOTS.map((s) => [s.slot, s.base])) as HouseExteriorMap;
 export const isExtBase = (id: string) => EXT_SLOTS.some((s) => s.base === id);
 
-/** 처음부터 깔려 있는 무료 스킨 (카탈로그에서 팔지 않고 점수도 없다) */
+/** 처음부터 깔려 있는 무료 스킨 (카탈로그에서 팔지 않고 점수도 없다). id는 마당 시절 그대로, 지금은 집 안 바닥·벽 */
 export const DEFAULT_FLOOR = "floor_grass";
 export const DEFAULT_WALL = "wall_fence";
+/** 기본 스킨 이름 (화면 표시용) */
+export const DEFAULT_FLOOR_NAME = "낡은 장판";
+export const DEFAULT_WALL_NAME = "나무 판자 벽";
 
 const BY_ID = new Map(FURNITURE.map((f) => [f.id, f]));
 export const furnitureById = (id: string): FurnitureDef | undefined => BY_ID.get(id);
@@ -202,6 +221,7 @@ export function nextTitle(score: number): HouseTitle | null {
 /** 가장 많이 놓은 갈래에 따라 붙는 별칭 (물건이 3개 이상일 때) */
 export const STYLE_TAGS: Record<Exclude<FurnitureCategory, "skin" | "exterior">, string> = {
   furniture: "살림꾼의 집",
+  living: "생활의 온기",
   dev: "야근 감성",
   nature: "숲속 정원",
   mood: "달빛 정취",
@@ -238,3 +258,18 @@ export function villageLots(maxLot: number, count: number): number {
   const need = Math.max(VILLAGE_MIN_LOTS, maxLot, count + 4);
   return Math.min(VILLAGE_MAX_LOTS, Math.ceil(need / VILLAGE_COLS) * VILLAGE_COLS);
 }
+
+// ── 채널별 주거 구역 ──
+
+/** 주거 구역이 따로 있는 채널 1..HOUSING_CHANNELS (묘지 채널 수와 같다. lib/store/channels.ts GRAVE_CHANNELS) */
+export const HOUSING_CHANNELS = DEFAULT_MAX_CHANNELS;
+/** 채널이 생기기 전에 분양된 집(채널 정보 없음)이 속하는 채널 */
+export const LEGACY_HOUSING_CHANNEL = 1;
+export const isHousingChannel = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= HOUSING_CHANNELS;
+/** 저장된 값 → 채널 (없거나 이상하면 LEGACY_HOUSING_CHANNEL) */
+export const housingChannelOf = (raw: unknown): number => {
+  const n = Number(raw);
+  return isHousingChannel(n) ? n : LEGACY_HOUSING_CHANNEL;
+};
+/** "3채널 5번지" */
+export const lotLabel = (ch: number, lot: number) => `${ch}채널 ${lot}번지`;

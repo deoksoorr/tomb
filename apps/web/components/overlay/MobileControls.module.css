@@ -1,7 +1,8 @@
 .joystick {
   position: absolute;
   left: var(--safe-left);
-  bottom: var(--safe-bottom);
+  /* 아래 바로 가기 바(--dock-h, GameShell) 위 */
+  bottom: calc(var(--safe-bottom) + var(--dock-h, 0px));
   width: 120px;
   height: 120px;
   display: grid;
@@ -30,7 +31,7 @@
 .actions {
   position: absolute;
   right: var(--safe-right);
-  bottom: var(--safe-bottom);
+  bottom: calc(var(--safe-bottom) + var(--dock-h, 0px));
   width: 148px;
   height: 140px;
 }

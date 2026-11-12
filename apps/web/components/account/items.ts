@@ -1,4 +1,4 @@
-import { itemById, plotLabel, sanitizeLook, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { isPermanentUntil, itemById, plotLabel, sanitizeLook, type ItemDef, type ItemKind } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 
 // 가방·착용·지속시간 표시용 순수 함수
@@ -12,6 +12,8 @@ export const KIND_LABELS: Record<ItemKind, string> = {
   cosmetic: "캐릭터 꾸미기",
   decor: "묘비 꾸미기",
   graveStyle: "묘비 디자인",
+  megaphone: "확성기",
+  dye: "염색·외형",
 };
 
 export type BagEntry = { item: ItemDef; count: number };
@@ -39,11 +41,14 @@ export function durationLabel(ms: number): string {
 /** 아이템 한 줄 설명: 꾸미기는 "24시간 유지", 폭죽은 "한 번 쏘면 사라져요", 디자인권은 "세울 때 1개 써요" */
 export function effectLabel(item: ItemDef): string {
   if (item.durationMs) return `${durationLabel(item.durationMs)} 유지`;
+  if (item.kind === "megaphone") return "한 번 외치면 사라져요";
   return item.kind === "graveStyle" ? "묘비를 세우거나 디자인을 바꿀 때 1개 써요" : "한 번 쏘면 사라져요";
 }
 
 /** 남은 시간: "6일 남음" · "13시간 남음" · "40분 남음" */
 export function remainingLabel(until: number, now: number): string {
+  // 30번 영구 소유 코디
+  if (isPermanentUntil(until)) return "영구";
   const left = until - now;
   if (left <= 0) return "끝났어요";
   if (left >= DAY) return `${Math.floor(left / DAY)}일 남음`;

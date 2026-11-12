@@ -1,5 +1,17 @@
-import { defaultExterior, GUEST_KEEP, GUEST_PER_DAY, GUEST_REPORT_HIDE, LIKE_WEIGHT, VILLAGE_MAX_LOTS, type HouseSort, type PlotTierId } from "./catalog";
+import {
+  defaultExterior,
+  GUEST_KEEP,
+  GUEST_PER_DAY,
+  GUEST_REPORT_HIDE,
+  housingChannelOf,
+  LEGACY_HOUSING_CHANNEL,
+  LIKE_WEIGHT,
+  VILLAGE_MAX_LOTS,
+  type HouseSort,
+  type PlotTierId,
+} from "./catalog";
 import { emptyLayout, normalizeExterior } from "./layout";
+import type { PlantState } from "./plants";
 import type { GuestEntry, HouseExterior, HouseLayout, PublicHouse } from "./types";
 
 // 하우징 저장소. 포인트는 여기서 다루지 않는다 (공용 spendPoints/earnPoints → lib/housing/points.ts).
@@ -11,8 +23,8 @@ export type HouseRecord = PublicHouse & { owner: string; hidden: boolean; items:
 /** 방명록 원본: author(계정 id)는 내보내지 않고 mine 판정에만 쓴다 */
 export type StoredGuest = GuestEntry & { author: string };
 
-/** lot: 고른 번지 (null이면 가장 앞의 빈 번지를 자동으로) */
-export type NewHouse = { id: string; owner: string; name: string; intro: string; ownerName: string; tier: PlotTierId; lot: number | null; now: number };
+/** ch: 분양받는 채널 (없으면 1), lot: 그 채널에서 고른 번지 (null이면 가장 앞의 빈 번지를 자동으로) */
+export type NewHouse = { id: string; owner: string; name: string; intro: string; ownerName: string; tier: PlotTierId; ch?: number; lot: number | null; now: number };
 
 export type CreateResult = { lot: number } | "exists" | "lot_taken" | "full";
 
@@ -27,12 +39,12 @@ export interface HouseStore {
   get(id: string): Promise<HouseRecord | null>;
   /** 가진 물건 (놓은 것 포함) */
   inventory(id: string): Promise<Record<string, number>>;
-  /** 집 만들기와 번지 배정을 한 번에 (같은 번지를 두 집이 받지 않는다) */
+  /** 집 만들기와 번지 배정을 한 번에 (같은 채널의 같은 번지를 두 집이 받지 않는다. 채널이 다르면 같은 번지도 따로) */
   create(h: NewHouse): Promise<CreateResult>;
-  /** 번지가 없는 (마을이 생기기 전) 집에 가장 앞의 빈 번지를 준다. 이미 있으면 그 번지 */
+  /** 번지가 없는 (마을이 생기기 전) 집에 그 집 채널의 가장 앞의 빈 번지를 준다. 이미 있으면 그 번지 */
   assignLot(id: string): Promise<number | null>;
-  /** 마을: 번지가 있는 모든 집 (숨김 포함, 번지 순) */
-  village(): Promise<HouseRecord[]>;
+  /** 한 채널의 마을: 그 채널에 번지가 있는 모든 집 (숨김 포함, 번지 순) */
+  village(ch?: number): Promise<HouseRecord[]>;
   /** 집과 딸린 키를 모두 지운다 (분양 결제 실패 보상·관리자 삭제) */
   remove(id: string): Promise<void>;
   setProfile(id: string, name: string, intro: string, now: number): Promise<boolean>;
@@ -73,6 +85,9 @@ export interface HouseStore {
   setGuestHidden(id: string, entryId: string, hidden: boolean): Promise<boolean>;
   /** 관리자: 신고가 있는 글 → 신고 수 */
   guestReports(id: string): Promise<Map<string, number>>;
+  /** 3번 화분: 배치 id → 물 준 기록 */
+  plants(id: string): Promise<Record<string, PlantState>>;
+  setPlant(id: string, u: string, st: PlantState): Promise<void>;
 }
 
 export const scoreOf = (placed: number, likes: number) => placed + likes * LIKE_WEIGHT;
@@ -90,15 +105,24 @@ type MemHouse = {
 
 export class MemoryHouseStore implements HouseStore {
   private houses = new Map<string, MemHouse>();
-  private lots = new Map<number, string>();
   private likes = new Set<string>();
   private guestDay = new Map<string, number>();
+  private plantMap = new Map<string, Record<string, PlantState>>();
+
+  async plants(id: string) {
+    return { ...(this.plantMap.get(id) ?? {}) };
+  }
+
+  async setPlant(id: string, u: string, st: PlantState) {
+    this.plantMap.set(id, { ...(this.plantMap.get(id) ?? {}), [u]: st });
+  }
 
   private view(h: MemHouse): HouseRecord {
     const r = h.rec;
     return {
       ...r,
       layout: structuredClone(r.layout),
+      ch: housingChannelOf(r.ch),
       lot: r.lot ?? 0,
       exterior: normalizeExterior(r.exterior),
       score: scoreOf(r.placedScore, r.likes),
@@ -115,20 +139,27 @@ export class MemoryHouseStore implements HouseStore {
     return Object.fromEntries(this.houses.get(id)?.inv ?? []);
   }
 
-  private freeLot(): number | null {
-    for (let l = 1; l <= VILLAGE_MAX_LOTS; l++) if (!this.lots.has(l)) return l;
+  /** 채널마다 번지 → 집 (메모리는 집 기록에서 바로 센다. 채널이 없는 예전 기록은 1채널로 본다) */
+  private lotTaken(ch: number, lot: number): boolean {
+    for (const h of this.houses.values()) if (h.rec.lot === lot && housingChannelOf(h.rec.ch) === ch) return true;
+    return false;
+  }
+
+  private freeLot(ch: number): number | null {
+    for (let l = 1; l <= VILLAGE_MAX_LOTS; l++) if (!this.lotTaken(ch, l)) return l;
     return null;
   }
 
   async create(n: NewHouse): Promise<CreateResult> {
     if (this.houses.has(n.id)) return "exists";
-    if (n.lot !== null && this.lots.has(n.lot)) return "lot_taken";
-    const lot = n.lot ?? this.freeLot();
+    const ch = housingChannelOf(n.ch ?? LEGACY_HOUSING_CHANNEL);
+    if (n.lot !== null && this.lotTaken(ch, n.lot)) return "lot_taken";
+    const lot = n.lot ?? this.freeLot(ch);
     if (lot === null) return "full";
-    this.lots.set(lot, n.id);
     this.houses.set(n.id, {
       rec: {
         id: n.id,
+        ch,
         lot,
         exterior: defaultExterior(),
         owner: n.owner,
@@ -156,23 +187,20 @@ export class MemoryHouseStore implements HouseStore {
     const h = this.houses.get(id);
     if (!h) return null;
     if (h.rec.lot) return h.rec.lot;
-    const lot = this.freeLot();
+    const lot = this.freeLot(housingChannelOf(h.rec.ch));
     if (lot === null) return null;
-    this.lots.set(lot, id);
     h.rec.lot = lot;
     return lot;
   }
 
-  async village() {
+  async village(ch = LEGACY_HOUSING_CHANNEL) {
     return [...this.houses.values()]
-      .filter((h) => h.rec.lot > 0)
+      .filter((h) => h.rec.lot > 0 && housingChannelOf(h.rec.ch) === ch)
       .map((h) => this.view(h))
       .sort((a, b) => a.lot - b.lot);
   }
 
   async remove(id: string) {
-    const h = this.houses.get(id);
-    if (h?.rec.lot && this.lots.get(h.rec.lot) === id) this.lots.delete(h.rec.lot);
     this.houses.delete(id);
   }
 

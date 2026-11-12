@@ -27,6 +27,7 @@ import {
   type Sid,
   type WelcomeMsg,
 } from "@tomb/protocol";
+import type { AppearanceChange } from "../sprites/avatar";
 import { fetchLobby } from "@/lib/realtime";
 import type { ApiError, JoinRequest, JoinResponse } from "@/lib/types";
 import { bridge, type NetMode } from "../bridge";
@@ -66,7 +67,8 @@ export type NetCallbacks = {
   onReset(): void;
   /** sync 응답: 서버가 아는 접속자 전체 (나 제외) */
   onPeers(peers: PeerInfo[], seats: Record<string, Sid>): void;
-  onLook(sid: Sid, look: string[]): void;
+  /** extra = 46·25번 염색·몸 모양 변경 (새 서버만 보낸다) */
+  onLook(sid: Sid, look: string[], extra?: AppearanceChange): void;
   onFirework(sid: Sid, item: string, x: number, y: number): void;
   /** 한 번 하는 동작 (종 치기·물 튀기기·손 흔들기·환호). 내 것은 오지 않는다 */
   onAct(sid: Sid, kind: ActKind, x: number, y: number): void;
@@ -83,6 +85,8 @@ export type NetCallbacks = {
   onGoblinCaught?(id: string, sid: Sid, name: string, points: number): void;
   /** 내가 잡았다: 보상 증서 */
   onGoblinGrant?(id: string, grant: string, points: number): void;
+  /** 23번 확성기 한마디 (내 것 포함, 서버가 서명된 문장만 보낸다) */
+  onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number }): void;
 };
 
 export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean; body?: string };
@@ -284,6 +288,11 @@ export class RealtimeClient {
     this.send({ t: "firework", grant });
   }
 
+  /** 23번 확성기 증서 (Vercel 서명). 접속 중이 아니면 버려진다 (증서는 60초짜리라 다시 보내지 않는다) */
+  megaphone(grant: string): void {
+    this.send({ t: "megaphone", grant });
+  }
+
   /** 한 번 하는 동작 (종 치기 등). 서버가 같은 채널에 중계한다 */
   act(kind: ActKind): void {
     this.send({ t: "act", kind });
@@ -472,7 +481,7 @@ export class RealtimeClient {
           if (m.sid !== this.mySid) this.cb.onGraveEvent(m.sid, m.kind, m.graveId);
           break;
         case "look":
-          if (m.sid !== this.mySid) this.cb.onLook(m.sid, m.look);
+          if (m.sid !== this.mySid) this.cb.onLook(m.sid, m.look, { dye: m.dye, body: m.body });
           break;
         case "act":
           if (m.sid !== this.mySid && (ACT_KINDS as readonly string[]).includes(m.kind) && Number.isFinite(m.x) && Number.isFinite(m.y))
@@ -497,6 +506,11 @@ export class RealtimeClient {
           break;
         case "goblinGrant":
           if (typeof m.grant === "string") this.cb.onGoblinGrant?.(m.id, m.grant, Number(m.points) || 0);
+          break;
+        // ── 23번 확성기 ──
+        case "megaphone":
+          if (typeof m.id === "string" && typeof m.text === "string" && typeof m.name === "string")
+            this.cb.onMegaphone?.({ id: m.id, name: m.name, text: m.text, scope: m.scope === "all" ? "all" : "channel", ch: Number(m.ch) || 0, at: Number(m.at) || Date.now() });
           break;
         case "peers": {
           this.peers.clear();

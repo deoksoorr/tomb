@@ -10,8 +10,11 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import AdminRow, { isReported } from "./AdminRow";
 import DashboardPanel from "./DashboardPanel";
+import DyePanel from "./DyePanel";
 import EconomyPanel from "./EconomyPanel";
 import ErrorsPanel from "./ErrorsPanel";
+import GiftsPanel from "./GiftsPanel";
+import MegaphonePanel from "./MegaphonePanel";
 import HousingPanel from "./HousingPanel";
 import MembersPanel from "./MembersPanel";
 import NoticesPanel from "./NoticesPanel";
@@ -22,16 +25,21 @@ import styles from "./Admin.module.css";
 type Filter = "all" | "reported" | "hidden";
 type Sort = "reports" | "recent" | "flowers";
 /** 48번 탭 순서: 대시보드 · 회원 · 신고 · 경제 · 하우징 · 공지 · 콘텐츠(묘비·성불) · 오류 */
-type Tab = "dashboard" | "members" | "reports" | "economy" | "housing" | "notices" | "content" | "errors";
+type Tab = "dashboard" | "members" | "reports" | "economy" | "housing" | "notices" | "content" | "errors" | "gifts" | "megaphone" | "dye";
 const TABS: [Tab, string][] = [
   ["dashboard", "대시보드"],
   ["members", "회원"],
+  // 46번 고정 색 염색권 (회원 탭 옆)
+  ["dye", "염색권"],
   ["reports", "신고"],
   ["economy", "경제"],
   ["housing", "하우징"],
   ["notices", "공지"],
   ["content", "콘텐츠"],
   ["errors", "오류"],
+  // 11·23번
+  ["gifts", "선물"],
+  ["megaphone", "확성기"],
 ];
 
 const FILTERS: [Filter, string][] = [
@@ -227,6 +235,7 @@ export default function AdminApp() {
           />
         )}
         {phase === "ready" && tab === "members" && <MembersPanel toast={toast} onAuthLost={authLost} />}
+        {phase === "ready" && tab === "dye" && <DyePanel toast={toast} onAuthLost={authLost} />}
         {phase === "ready" && tab === "content" && (
           <div className={styles.segmented} role="group" aria-label="콘텐츠">
             <button type="button" className={ui.button} aria-pressed={content === "graves"} onClick={() => setContent("graves")}>
@@ -245,6 +254,8 @@ export default function AdminApp() {
         {phase === "ready" && tab === "housing" && <HousingPanel toast={toast} onAuthLost={authLost} />}
         {phase === "ready" && tab === "economy" && <EconomyPanel toast={toast} onAuthLost={authLost} />}
         {phase === "ready" && tab === "errors" && <ErrorsPanel toast={toast} onAuthLost={authLost} />}
+        {phase === "ready" && tab === "gifts" && <GiftsPanel toast={toast} onAuthLost={authLost} />}
+        {phase === "ready" && tab === "megaphone" && <MegaphonePanel toast={toast} onAuthLost={authLost} />}
 
         {phase === "ready" && (tab === "reports" || (tab === "content" && content === "graves")) && (
           <>
@@ -378,7 +389,7 @@ export default function AdminApp() {
       </div>
 
       {confirmDelete && (
-        <Dialog title="묘비 삭제" size="sm" onClose={() => setConfirmDelete(null)} closable={!busy}>
+        <Dialog kind="confirm" title="묘비 삭제" onClose={() => setConfirmDelete(null)} closable={!busy}>
           <div className={styles.confirm}>
             <p>
               {deleteNames.length === 1 ? `「${deleteNames[0]}」` : `묘비 ${deleteNames.length}개`}를 삭제할까요? 사진도

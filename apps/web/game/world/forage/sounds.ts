@@ -2,8 +2,9 @@ import { AudioHost } from "../audioHost";
 
 // 4·32번 낚시·채집 효과음 (파일 없이 WebAudio로 합성, 아주 짧게). 볼륨·음소거는 UI의 audio:settings(BGM과 같은 값).
 // 던지기(휙) · 찌 퐁당 · 입질(톡톡) · 릴 감기(딸깍) · 줄 끊김(팅) · 잡았다(짜잔) · 풀 뜯기(바스락) · 광석(챙) · 땅 파기(퍽) · 판매(동전)
+// 채집 지점: 새로 핌(뿅) · 시간이 다 돼 사라짐(스르륵) · 캐서 없어짐(반짝)
 
-export type ForageSound = "cast" | "plop" | "bite" | "reel" | "snap" | "catch" | "herb" | "ore" | "dig" | "coin" | "miss";
+export type ForageSound = "cast" | "plop" | "bite" | "reel" | "snap" | "catch" | "herb" | "ore" | "dig" | "coin" | "miss" | "spawn" | "vanish" | "gathered";
 
 export class ForageSfx extends AudioHost {
   private noise: AudioBuffer | null = null;
@@ -99,6 +100,19 @@ export class ForageSfx extends AudioHost {
       case "dig":
         this.tone(ac, t, 0.14, 140, 60, v * 0.4);
         this.hiss(ac, t, 0.16, 600, 200, v * 0.25, "lowpass");
+        break;
+      case "spawn":
+        // 뿅: 짧게 솟는 음 + 반짝
+        this.tone(ac, t, 0.12, 420, 1250, v * 0.2, "sine");
+        this.tone(ac, t + 0.07, 0.16, 1760, 2350, v * 0.07, "triangle");
+        break;
+      case "vanish":
+        // 스르륵: 내려가는 바람 소리
+        this.hiss(ac, t, 0.5, 2600, 500, v * 0.12, "bandpass", 1.2);
+        this.tone(ac, t, 0.35, 880, 440, v * 0.04, "sine");
+        break;
+      case "gathered":
+        [1319, 1760].forEach((f, i) => this.tone(ac, t + i * 0.06, 0.2, f, f, v * 0.1, "triangle"));
         break;
       case "coin":
         this.tone(ac, t, 0.08, 988, 988, v * 0.18, "square");

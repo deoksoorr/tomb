@@ -4,6 +4,8 @@ import { COSMETIC_FX_IDS, fxIconGrid } from "./cosmeticFx";
 import { ghostCat, miniLantern } from "./extras";
 import { forageIconCanvas, isForageIcon } from "./forageIcons";
 import { GRAVE_STONE_H, graveCanvas } from "./graves";
+import { MEGAPHONE_ICON_IDS, megaphoneIcon } from "./megaphoneIcon";
+import { DYE_ICON_IDS, dyeIcon } from "./dyeIcons";
 import { Grid, type Color } from "./pixel";
 
 // 상점·가방 아이템 픽셀아트 아이콘 (UI용). Phaser 없이 캔버스만 쓴다 (브라우저 전용: document 사용).
@@ -706,7 +708,7 @@ function base(itemId: string): HTMLCanvasElement {
       return fwLetter().toCanvas();
     default: {
       // F8 추가 꾸미기 (시트 그림 → 문자 아이콘, 따로 그리는 연출 → 그 그림으로 만든 아이콘)
-      const f8 = gearIcon(itemId) ?? fxIconGrid(itemId);
+      const f8 = gearIcon(itemId) ?? fxIconGrid(itemId) ?? megaphoneIcon(itemId) ?? dyeIcon(itemId);
       if (f8) return f8.toCanvas();
       // 낚시·채집물 (4·32번: f_/b_/h_/o_/d_)
       return forageIconCanvas(itemId) ?? unknown().toCanvas();
@@ -724,6 +726,10 @@ export const ICON_IDS: readonly string[] = [
   // F8 추가 꾸미기
   ...GEAR_SHEET_IDS,
   ...COSMETIC_FX_IDS,
+  // 23번 확성기
+  ...MEGAPHONE_ICON_IDS,
+  // 46번 염색권
+  ...DYE_ICON_IDS,
 ];
 
 /** 이 아이템에 전용 아이콘이 있는지 (없으면 물음표 아이콘) */

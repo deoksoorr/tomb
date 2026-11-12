@@ -14,7 +14,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import type { LightSpot } from "../world/WorldMap";
-import { FACADE_H, FACADE_W, floorGrid } from "./art";
+import { FACADE_H, FACADE_W, yardGrid } from "./art";
 import { drawEmptyLot, drawHouseLot } from "./worldLots";
 
 // 분양 마을 씬. 분양 사무소에서 들어오는 밤 골목 마을이다.
@@ -178,7 +178,7 @@ export class VillageScene extends Phaser.Scene {
       c.width = this.W;
       c.height = this.H;
       const ctx = c.getContext("2d")!;
-      const grass = [0, 1, 2, 3].map((v) => floorGrid("floor_grass", v).toCanvas());
+      const grass = [0, 1, 2, 3].map((v) => yardGrid(v).toCanvas());
       for (let y = 0; y * T < this.H; y++) for (let x = 0; x * T < this.W; x++) ctx.drawImage(grass[(x * 7 + y * 3) % 4], x * T, y * T);
       ctx.fillStyle = "rgba(0,0,0,0.22)";
       ctx.fillRect(0, 0, this.W, this.H);
