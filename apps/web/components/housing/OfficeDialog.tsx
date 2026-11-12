@@ -8,11 +8,12 @@ import {
   LIKE_WEIGHT,
   lotLabel,
   nextTier,
-  PLOT_TIERS,
+  plotCost,
   SORT_LABELS,
   SORTS,
   tierById,
   type HouseSort,
+  type PlotTierId,
 } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { styleTag } from "@/lib/housing/layout";
@@ -22,7 +23,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import styles from "./housing.module.css";
-import { fmt, TierCompare, TitleBadge, TitleProgress } from "./parts";
+import { fmt, TierCompare, TierPicker, TitleBadge, TitleProgress } from "./parts";
 
 type Tab = "mine" | "browse";
 
@@ -167,11 +168,14 @@ function MyPlot({
   const [pending, setPending] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  /** 처음 분양받을 터 크기 (넓은 터·대저택도 바로 살 수 있다) */
+  const [pick, setPick] = useState<PlotTierId>("small");
   const fid = useId();
 
   if (!my) return <p className={styles.muted}>{error ?? "분양 장부를 펼치는 중…"}</p>;
 
-  const plot = PLOT_TIERS[0];
+  const plot = tierById(pick)!;
+  const cost = plotCost(pick);
   async function run(fn: () => Promise<MyHouseResponse>, done: string) {
     setPending(true);
     setMsg(null);
@@ -233,25 +237,25 @@ function MyPlot({
 
   const h = my.house;
   if (!h) {
-    const short = my.points < plot.price;
+    const short = my.points < cost;
     return (
       <div className={styles.stack}>
         <div className={styles.card}>
           <p className={styles.houseName}>나만의 집을 분양받아 보세요</p>
           <p className={styles.muted}>
-            주거 구역 한켠에 {plot.name}({plot.w}×{plot.h}칸)을 드려요. 가구와 소품으로 꾸미면 꾸밈 점수가 오르고, 사람들이 놀러 와 좋아요와 방명록을 남길 수 있어요.
+            주거 구역 한켠에 터를 드려요. 크기를 골라 바로 살 수도 있고, 작은 터로 시작해 나중에 넓힐 수도 있어요. 가구와 소품으로 꾸미면 꾸밈 점수가 오르고, 사람들이 놀러 와 좋아요와 방명록을 남길 수 있어요.
           </p>
+          <TierPicker value={pick} onChange={setPick} points={my.points} disabled={pending || busy} />
           <p className={styles.points}>
-            분양가 <strong>{fmt(plot.price)}P</strong> · 내 포인트 <strong>{fmt(my.points)}P</strong>
+            {plot.name} 분양가 <strong>{fmt(cost)}P</strong> · 내 포인트 <strong>{fmt(my.points)}P</strong>
           </p>
-          <TierCompare current="small" />
           {lot !== null && <p className={styles.tag}>고른 자리: {lotLabel(channel, lot)}</p>}
-          {short && <p className={styles.error}>포인트가 {fmt(plot.price - my.points)}P 모자라요. 출석·헌화로 모아 주세요.</p>}
+          {short && <p className={styles.error}>포인트가 {fmt(cost - my.points)}P 모자라요. 출석·헌화로 모으거나 더 작은 터를 골라 주세요.</p>}
         </div>
         {!short &&
           form(
-            `${lot ? `${lotLabel(channel, lot)}를 ` : `${channel}채널에 `}${fmt(plot.price)}P로 분양받기`,
-            () => run(() => housingApi.buyPlot(channel, name, intro, lot), `분양을 축하해요! ${channel}채널 주거 구역에 내 집이 생겼어요.`),
+            `${lot ? `${lotLabel(channel, lot)}에 ` : `${channel}채널에 `}${plot.name} 분양받기 (${fmt(cost)}P)`,
+            () => run(() => housingApi.buyPlot(channel, name, intro, lot, pick), `분양을 축하해요! ${channel}채널 주거 구역에 ${plot.name} 집이 생겼어요.`),
             true,
           )}
         <p className={styles.notice} role="status">
@@ -324,7 +328,7 @@ function MyPlot({
         {up ? (
           <>
             <p className={styles.muted}>
-              {up.name}({up.w}×{up.h}칸, 물건 {up.maxItems}개)으로 넓힐 수 있어요. 놓아 둔 물건은 그대로이고, 주거 구역에 선 집도 더 크게 바뀌어요.
+              이미 내 집이 있어서 새로 분양받는 대신 넓히기로 키워요. {up.name}({up.w}×{up.h}칸, 물건 {up.maxItems}개)으로 넓힐 수 있어요. 놓아 둔 물건은 그대로이고, 주거 구역에 선 집도 더 크게 바뀌어요.
             </p>
             <TierCompare exterior={h.exterior} current={h.tier} />
             <button

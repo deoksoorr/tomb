@@ -26,6 +26,12 @@ export const PLOT_TIERS: readonly PlotTier[] = [
 
 export const tierById = (id: string): PlotTier | undefined => PLOT_TIERS.find((t) => t.id === id);
 export const nextTier = (id: PlotTierId): PlotTier | undefined => PLOT_TIERS[PLOT_TIERS.findIndex((t) => t.id === id) + 1];
+/** 처음 분양 때 이 크기를 바로 살 때의 값: 작은 터 분양가 + 그 위 단계 넓히기 값의 누적 (업그레이드로 올린 것과 같은 합) */
+export const plotCost = (id: PlotTierId): number => {
+  const i = PLOT_TIERS.findIndex((t) => t.id === id);
+  if (i < 0) throw new Error(`unknown tier ${id}`);
+  return PLOT_TIERS.slice(0, i + 1).reduce((sum, t) => sum + t.price, 0);
+};
 
 export type FurnitureCategory = "furniture" | "living" | "dev" | "nature" | "mood" | "skin" | "exterior";
 

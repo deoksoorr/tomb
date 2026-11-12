@@ -31,9 +31,10 @@ export const housingChannel = z
 export const VillageQuerySchema = z.coerce.number("채널 번호가 올바르지 않아요.").pipe(housingChannel);
 
 export const ProfileSchema = z.object({ name: text(checkHouseName), intro: text(checkIntro) });
-/** 분양: ch 채널에서 lot을 주면 그 번지, 없으면 자동 배정 */
+/** 분양: ch 채널에서 lot을 주면 그 번지, 없으면 자동 배정. tier는 처음 살 터 크기 (없으면 작은 터: 예전 화면 호환) */
 export const CreateHouseSchema = ProfileSchema.extend({
   ch: housingChannel,
+  tier: tierId.optional(),
   lot: z.number("번지가 올바르지 않아요.").int().min(1).max(VILLAGE_MAX_LOTS, "번지가 올바르지 않아요.").nullish(),
 });
 export const ExteriorSchema = z.object({ ch: housingChannel, exterior: z.record(z.string(), z.string().max(40)) });

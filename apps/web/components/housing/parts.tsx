@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트라 next/image 최적화가 필요 없다 */
 import { useSyncExternalStore } from "react";
 import { facadePreview, furnitureIcon, furniturePreview } from "@/game/housing/art";
-import { defaultExterior, HOUSE_TITLES, houseTitle, nextTitle, PLOT_TIERS, type HouseExteriorMap, type PlotTierId } from "@/lib/housing/catalog";
+import { defaultExterior, HOUSE_TITLES, houseTitle, nextTitle, PLOT_TIERS, plotCost, type HouseExteriorMap, type PlotTierId } from "@/lib/housing/catalog";
 import styles from "./housing.module.css";
 
 const noop = () => () => undefined;
@@ -105,6 +105,59 @@ export function TierCompare({ exterior, current }: { exterior?: HouseExteriorMap
               {t.name} {t.w}×{t.h}칸{t.id === current ? " · 지금" : ""}
             </figcaption>
           </figure>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 업그레이드로 이 크기까지 오는 길 안내 (가격은 카탈로그에서 계산) */
+function tierHint(i: number): string {
+  if (i === 0) {
+    const up = PLOT_TIERS[1];
+    return up ? `분양 뒤 ${up.name}(+${fmt(up.price)}P)·더 큰 터로 넓힐 수 있어요` : "";
+  }
+  const steps = PLOT_TIERS.slice(0, i + 1).map((t) => `${fmt(t.price)}P`).join(" + ");
+  return `${PLOT_TIERS[0].name}에서 업그레이드로도 넓힐 수 있어요 (${steps})`;
+}
+
+/** 처음 분양할 터 크기 고르기: 세 크기를 카드로 나란히 (집 모습·방 크기·바로 사기 값) */
+export function TierPicker({ value, onChange, points, disabled }: { value: PlotTierId; onChange: (t: PlotTierId) => void; points: number; disabled?: boolean }) {
+  const client = useSyncExternalStore(noop, () => true, () => false);
+  const ext = defaultExterior();
+  return (
+    <div className={styles.tierRow} role="radiogroup" aria-label="분양받을 터 크기">
+      {PLOT_TIERS.map((t, i) => {
+        const img = client ? facadePreview(ext, t.id, 1) : null;
+        const cost = plotCost(t.id);
+        const short = points < cost;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="radio"
+            aria-checked={t.id === value}
+            className={styles.tierCard}
+            data-current={t.id === value}
+            data-pick="true"
+            disabled={disabled}
+            onClick={() => onChange(t.id)}
+          >
+            {img ? (
+              <img src={img.url} width={img.w} height={img.h} alt="" style={{ imageRendering: "pixelated" }} />
+            ) : (
+              <span style={{ width: 128, height: 104, display: "block" }} aria-hidden="true" />
+            )}
+            <strong>{t.name}</strong>
+            <span className={styles.small}>
+              방 {t.w}×{t.h}칸 · 물건 {t.maxItems}개
+            </span>
+            <span className={styles.points}>
+              <strong>{fmt(cost)}P</strong>
+              {short ? " · 모자라요" : ""}
+            </span>
+            <span className={styles.small}>{tierHint(i)}</span>
+          </button>
         );
       })}
     </div>

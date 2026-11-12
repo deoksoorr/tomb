@@ -18,6 +18,7 @@ import {
   MAX_OWN_PER_ITEM,
   nextTitle,
   PLOT_TIERS,
+  plotCost,
   sellPrice,
   villageLots,
 } from "./catalog";
@@ -57,6 +58,12 @@ describe("카탈로그", () => {
   });
   it("묘역 폭은 짝수 (문 2칸)", () => {
     for (const t of PLOT_TIERS) expect(t.w % 2).toBe(0);
+  });
+  it("바로 사기 값은 분양가 + 넓히기 값 누적 (업그레이드로 올린 합과 같다)", () => {
+    const [s, w, m] = PLOT_TIERS;
+    expect(plotCost("small")).toBe(s.price);
+    expect(plotCost("wide")).toBe(s.price + w.price);
+    expect(plotCost("manor")).toBe(s.price + w.price + m.price);
   });
 });
 
@@ -316,6 +323,36 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
     expect(r.points).toBe(700);
     await expect(buyPlot(store, rich, "두 번째", "", "a")).rejects.toMatchObject({ code: "ALREADY_OWNED" });
     expect(await points(rich)).toBe(700);
+  });
+
+  it("분양 때 크기를 골라 바로 산다: 크기별 누적 값을 쓰고 그 크기로 생긴다", async () => {
+    for (const t of PLOT_TIERS) {
+      const id = await account(plotCost(t.id) + 300);
+      const r = await buyPlot(store, id, `${t.name} 집`, "", "a", null, 1, t.id);
+      expect(r.house?.tier).toBe(t.id);
+      expect(r.points).toBe(300);
+    }
+  });
+
+  it("바로 사기: 잔액이 모자라면 409이고 포인트·집 그대로, 이미 집이 있으면 더 큰 터도 못 산다", async () => {
+    const poor = await account(plotCost("manor") - 1);
+    await expect(buyPlot(store, poor, "대저택", "", "a", null, 1, "manor")).rejects.toMatchObject({ status: 409, code: "NOT_ENOUGH_POINTS" });
+    expect(await points(poor)).toBe(plotCost("manor") - 1);
+    expect(await store.get(houseIdFor(poor))).toBeNull();
+    // 모자라도 작은 터는 살 수 있다
+    await buyPlot(store, poor, "작은 집", "", "a", null, 1, "small");
+    const left = await points(poor);
+    await expect(buyPlot(store, poor, "두 번째", "", "a", null, 1, "manor")).rejects.toMatchObject({ code: "ALREADY_OWNED" });
+    expect(await points(poor)).toBe(left);
+    // 이미 있는 집은 업그레이드로만 (작은→넓은은 넓히기 값만)
+    await upgradePlot(store, poor, "wide", 1);
+    expect(await points(poor)).toBe(left - WIDE);
+  });
+
+  it("바로 사기: 알 수 없는 크기는 400, 포인트를 쓰지 않는다", async () => {
+    const id = await account(plotCost("manor"));
+    await expect(buyPlot(store, id, "집", "", "a", null, 1, "castle" as never)).rejects.toMatchObject({ status: 400 });
+    expect(await points(id)).toBe(plotCost("manor"));
   });
 
   it("동시에 여러 번 사도 잔액이 음수가 되지 않는다 (가진 만큼만 산다)", async () => {

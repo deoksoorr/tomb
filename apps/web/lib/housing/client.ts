@@ -26,8 +26,8 @@ const house = (id: string, sub = "") => `/api/housing/houses/${encodeURIComponen
 export const housingApi = {
   mine: () => request<MyHouseResponse>("/api/housing/me", { cache: "no-store" }),
   // 채널마다 주거 구역이 따로다: ch = 지금 있는 채널 (서버가 다른 채널의 필지는 다루지 않는다)
-  buyPlot: (ch: number, name: string, intro: string, lot?: number | null) =>
-    request<MyHouseResponse>("/api/housing/me", send("POST", { ch, name, intro, lot: lot ?? null })),
+  buyPlot: (ch: number, name: string, intro: string, lot?: number | null, tier: PlotTierId = "small") =>
+    request<MyHouseResponse>("/api/housing/me", send("POST", { ch, name, intro, lot: lot ?? null, tier })),
   saveExterior: (ch: number, exterior: HouseExterior) => request<MyHouseResponse>("/api/housing/me/exterior", send("PUT", { ch, exterior })),
   /** ch 채널의 분양 마을. fresh=true: 방금 바꾼 내용을 보려고 CDN 캐시(15초)를 건너뛴다 */
   village: (ch: number, fresh = false) =>

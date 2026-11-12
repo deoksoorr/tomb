@@ -14,7 +14,7 @@ export const GET = handler(async (req) => {
 });
 
 /**
- * 분양 `{ name, intro, ch, lot? }`: 작은 터 가격을 쓰고 ch 채널 주거 구역에 내 집을 만든다 (계정 전체에서 1채).
+ * 분양 `{ name, intro, ch, lot?, tier? }`: 고른 터 크기(없으면 작은 터)의 바로 사기 값(분양가+넓히기 누적)을 쓰고 ch 채널 주거 구역에 내 집을 만든다 (계정 전체에서 1채).
  * lot이 없으면 그 채널의 가장 앞의 빈 번지. 다른 채널의 같은 번지와는 서로 다른 필지다 (채널마다 번지 색인이 따로)
  */
 export const POST = handler(async (req) => {
@@ -22,7 +22,7 @@ export const POST = handler(async (req) => {
   const body = await readBody(req, CreateHouseSchema);
   await rateLimit("shop", req, visitorId);
   const me = await myPoints(visitorId);
-  const house = await buyPlot(getHouseStore(), visitorId, body.name, body.intro, me.name ?? "이름 없는 유령", body.lot ?? null, body.ch);
+  const house = await buyPlot(getHouseStore(), visitorId, body.name, body.intro, me.name ?? "이름 없는 유령", body.lot ?? null, body.ch, body.tier);
   return json<MyHouseResponse>(house, { status: 201 });
 });
 

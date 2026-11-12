@@ -12,7 +12,9 @@ import {
   MAX_OWN_PER_ITEM,
   nextTier,
   PLOT_TIERS,
+  plotCost,
   sellPrice,
+  tierById,
   villageLots,
   VILLAGE_MAX_LOTS,
   type PlotTierId,
@@ -116,20 +118,24 @@ export async function buyPlot(
   ownerName: string,
   lot: number | null = null,
   ch: number = LEGACY_HOUSING_CHANNEL,
+  tierId: PlotTierId = PLOT_TIERS[0].id,
 ): Promise<MyHouseResponse> {
   const id = houseIdFor(accountId);
   if (!isHousingChannel(ch)) throw badChannel();
+  const tier = tierById(tierId);
+  if (!tier) throw new HttpError(400, "INVALID_INPUT", "알 수 없는 터 크기예요.");
+  // 바로 사기 값 = 작은 터 + 넓히기 값 누적 (업그레이드로 올린 것과 같은 값)
+  const cost = plotCost(tier.id);
   const had = await store.get(id);
   if (had) throw new HttpError(409, "ALREADY_OWNED", `이미 ${lotLabel(had.ch, had.lot)}에 내 집이 있어요. 한 계정에 하나만 분양받을 수 있어요.`);
   if (lot !== null && (!Number.isInteger(lot) || lot < 1 || lot > VILLAGE_MAX_LOTS))
     throw new HttpError(400, "INVALID_INPUT", `번지는 1~${VILLAGE_MAX_LOTS} 중에서 골라 주세요.`);
   if (lot !== null && (await store.village(ch)).some((h) => h.lot === lot)) throw lotTaken();
-  const tier = PLOT_TIERS[0];
-  await spend(accountId, tier.price, "plot");
+  await spend(accountId, cost, tier.id === PLOT_TIERS[0].id ? "plot" : `plot:${tier.id}`);
   const r = await store.create({ id, owner: accountId, name, intro, ownerName, tier: tier.id, ch, lot, now: Date.now() });
-  if (r === "exists") await refundAndThrow(accountId, tier.price, new HttpError(409, "ALREADY_OWNED", "이미 내 집이 있어요."));
-  if (r === "lot_taken") await refundAndThrow(accountId, tier.price, lotTaken());
-  if (r === "full") await refundAndThrow(accountId, tier.price, new HttpError(409, "VILLAGE_FULL", "마을에 빈 번지가 없어요."));
+  if (r === "exists") await refundAndThrow(accountId, cost, new HttpError(409, "ALREADY_OWNED", "이미 내 집이 있어요."));
+  if (r === "lot_taken") await refundAndThrow(accountId, cost, lotTaken());
+  if (r === "full") await refundAndThrow(accountId, cost, new HttpError(409, "VILLAGE_FULL", "마을에 빈 번지가 없어요."));
   return myHouse(store, accountId);
 }
 
