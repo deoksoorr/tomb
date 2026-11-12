@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { hmacSign, hmacVerify } from "@tomb/protocol";
 import { nanoid } from "nanoid";
 import type { NextRequest, NextResponse } from "next/server";
+import { assertNotBanned } from "./ban";
 import { env } from "./env";
 import { clientIp, HttpError } from "./http";
 
@@ -32,9 +33,11 @@ export function getVisitorId(req: NextRequest): Promise<string | null> {
   return verifySession(req.cookies.get(SESSION_COOKIE)?.value);
 }
 
+/** 방문자 쿠키 확인 + 47번 정지·IP 차단이면 403 BANNED (인스턴스에 캐시한 색인으로 판정, lib/ban.ts) */
 export async function requireVisitor(req: NextRequest): Promise<string> {
   const id = await getVisitorId(req);
   if (!id) throw new HttpError(401, "NO_SESSION", "방문 기록이 없어요. 새로고침한 뒤 다시 시도해 주세요.");
+  await assertNotBanned(req, id);
   return id;
 }
 

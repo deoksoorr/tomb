@@ -170,7 +170,7 @@ export class HuntScene extends RpgScene {
     const zone = zoneFor(play.difficulty, play.zone);
     this.zone = zone;
     ensureRpgTextures(this);
-    makePlayer(this, this.data0.color, this.data0.look);
+    makePlayer(this, this.data0.color, this.data0.look, this.data0.body);
     this.plan = huntPlan(play.seed, play.difficulty, zone.id);
     this.mons = [];
     this.shots = [];

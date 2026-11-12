@@ -29,7 +29,7 @@
   position: absolute;
   top: calc(100% + 10px);
   left: 0;
-  width: min(260px, calc(100vw - var(--safe-left) - var(--safe-right)));
+  width: min(290px, calc(100vw - var(--safe-left) - var(--safe-right)));
   display: grid;
   gap: 10px;
   padding: 12px;
@@ -44,6 +44,19 @@
 .rowLabel {
   flex: none;
   color: var(--muted);
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 13번: 소리 갈래 이름 (배경음악·환경음·효과음) — 슬라이더가 줄마다 같은 자리에서 시작하게 폭을 맞춘다 */
+.busLabel {
+  flex: none;
+  width: 4.5em;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .select {
@@ -84,11 +97,33 @@
 
 .creditsList {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 6px;
 }
 
 .creditsList li {
   display: grid;
+  align-content: start;
+  padding: 6px 8px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+/* 음원 정보 맨 위: 지금 재생 중 · 갈래·곡 수 */
+.creditsSummary {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border-strong);
+}
+
+.creditsNow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--candle);
+  font-size: 13px;
 }
 
 .creditsTitle {

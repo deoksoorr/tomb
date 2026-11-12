@@ -1,9 +1,8 @@
-import { bridge } from "../bridge";
 import { AmbientLoop } from "./ambientLoop";
 import { AudioHost } from "./audioHost";
 
 // 50번 조각배·광장 놀거리 효과음 (scripts/gen-bgm.mjs가 굽는다: /sfx/row·boat-board·seesaw·boing·wish·carousel-loop).
-// game/world/Sfx.ts와 같은 방식(HTMLAudio + 볼륨·음소거는 audio:settings). 파일이 없거나 재생이 막히면 조용히 넘어간다.
+// game/world/Sfx.ts와 같은 방식(HTMLAudio + 13번 효과음 갈래 sfx 버스). 파일이 없거나 재생이 막히면 조용히 넘어간다.
 
 export type RideSoundName = "row" | "boat-board" | "seesaw" | "boing" | "wish";
 const NAMES: readonly RideSoundName[] = ["row", "boat-board", "seesaw", "boing", "wish"];
@@ -15,16 +14,8 @@ export class RideSound extends AudioHost {
   private voices = 0;
   /** 회전목마 오르골 (내가 목마에 탔을 때만 — PlazaRides가 rides.carouselOrganLevel로 정한다) */
   private readonly organ = new AmbientLoop(this, "/sfx/carousel-loop.mp3", { gain: 0.55 });
-  private readonly off: () => void;
-
   constructor() {
-    super();
-    const s = bridge.last("audio:settings");
-    if (s) this.setVolume(s.volume, s.muted);
-    this.off = bridge.on("audio:settings", ({ volume, muted }) => {
-      this.setVolume(volume, muted);
-      this.organ.refresh();
-    });
+    super("sfx");
     if (typeof Audio === "undefined") return;
     for (const name of NAMES) {
       const a = new Audio();
@@ -33,6 +24,10 @@ export class RideSound extends AudioHost {
       a.src = `/sfx/${name}.mp3`;
       this.base.set(name, a);
     }
+  }
+
+  protected override onMixChanged(): void {
+    this.organ.refresh();
   }
 
   /** gain 0..1 (UI 볼륨에 곱한다), rate: 재생 속도 (살짝 바꿔 같은 소리가 덜 반복돼 들리게) */
@@ -61,7 +56,6 @@ export class RideSound extends AudioHost {
   }
 
   destroy(): void {
-    this.off();
     this.organ.destroy();
     this.closeAudio();
     for (const a of this.base.values()) a.src = "";

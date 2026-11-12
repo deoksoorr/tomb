@@ -35,6 +35,8 @@ const LIMITS = {
   gift: { visitor: 30, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   // 23번 확성기: 계정마다 간격(MEGAPHONE_COOLDOWN_MS)과 별개로 하루 상한 (도배 방지)
   megaphone: { visitor: 20, ip: 60, windowSec: DAY, message: "확성기는 하루에 20번까지 쓸 수 있어요." },
+  // 47번 방문 분석 기록 (방문·체류 신호). 넘치면 조용히 버린다
+  visit: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요." },
 } as const;
 
 /** 관리자 키 대입 방지: IP당 분당 실패 10회 */

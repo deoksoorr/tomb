@@ -1,14 +1,17 @@
 import * as Phaser from "phaser";
-import { DIR, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
+import { DIR, ridePetOfLook, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange } from "../sprites/avatar";
 import { CosmeticFxView } from "./CosmeticFxView";
+import { riderLift } from "../sprites/cosmeticFx";
 import type { EmoteIcon } from "../sprites/emotes";
 import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
 import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_H, POSE_W, type IndoorPose } from "../sprites/indoorPose";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { SpeechBubble } from "./SpeechBubble";
+import { MoodView } from "./MoodView";
+import { STAFF_COLOR, StaffFxView } from "./StaffFxView";
 
 // 아바타 한 명의 화면 표현 (스프라이트 + 이름 라벨 + "…" 말풍선). 내 캐릭터와 원격 아바타가 같이 쓴다.
 // 상태 값과 방향만 받아서 애니메이션을 고르고, 상태별 연출은 그림에만 얹는다 (논리 위치는 그대로):
@@ -96,6 +99,9 @@ export class AvatarView {
    */
   ride: { ox: number; lift: number; depth: number | null; dir?: DirId; alt?: StateName | null } | null = null;
   private altFrame = -1;
+  /** 동물원 타는 펫: 착용한 펫이 타는 펫이면 그 id, 올라타 있는지 (실시간 서버 ride 또는 내 캐릭터) */
+  private mountPet: string | null = null;
+  private riding = false;
 
   private readonly reduced = prefersReducedMotion();
   private lastNow = 0;
@@ -103,6 +109,11 @@ export class AvatarView {
   private haloGlow: Phaser.GameObjects.Image | null = null;
   /** F8 추가 꾸미기 연출 (우산·풍선·날개·발자국·오라·펫) — 처음 입을 때 만든다 */
   private cfx: CosmeticFxView | null = null;
+  /** 24번 벤치 상태 (머리 위 작은 아이콘 + 손 소품) — 처음 고를 때 만든다 */
+  private moodFx: MoodView | null = null;
+  /** 31번 운영자 저승사자 차림 (낫·안개·배지). 켜져 있는 동안 몸 색은 STAFF_COLOR, 원래 색은 staffBase에 둔다 */
+  private staffFx: StaffFxView | null = null;
+  private staffBase = "";
   private wings: Phaser.GameObjects.Image | null = null;
   private pet: Phaser.GameObjects.Image | null = null;
   private petX = 0;
@@ -173,20 +184,43 @@ export class AvatarView {
 
   /** 46번: 색 표기 변경 (avatarColorSpec — 염색) */
   setColor(spec: string): void {
+    if (this.staffFx) {
+      this.staffBase = spec;
+      return;
+    }
     if (spec === this.color) return;
     this.color = spec;
     this.retexture();
   }
 
   get colorSpec(): string {
-    return this.color;
+    return this.staffFx ? this.staffBase : this.color;
+  }
+
+  /** 31번 운영자 표시 켜기·끄기 (실시간 서버가 알린 staff, 내 캐릭터는 /api/me의 staff) */
+  setStaff(on: boolean): void {
+    if (on === !!this.staffFx) return;
+    if (on) {
+      this.staffBase = this.color;
+      this.staffFx = new StaffFxView(this.scene, this.atlas, this.label.depth);
+      this.color = STAFF_COLOR;
+    } else {
+      this.staffFx?.destroy();
+      this.staffFx = null;
+      this.color = this.staffBase;
+    }
+    this.retexture();
+  }
+
+  get staff(): boolean {
+    return !!this.staffFx;
   }
 
   /** 46·25번: 실시간 서버가 알린 염색·몸 모양 (없는 값은 그대로 둔다) */
   applyAppearance(extra: AppearanceChange | undefined): void {
     if (!extra) return;
     if (typeof extra.body === "string") this.setBody(extra.body);
-    if (extra.dye !== undefined) this.setColor(avatarColorSpec(this.color, sanitizeDye(extra.dye)));
+    if (extra.dye !== undefined) this.setColor(avatarColorSpec(this.colorSpec, sanitizeDye(extra.dye)));
   }
 
   /** 몸 모양 변경 (AVATAR_BODIES id, 모르는 값은 hood) */
@@ -210,10 +244,33 @@ export class AvatarView {
     return this.body;
   }
 
+  /** 동물원 타는 펫에 올라타기·내리기 (착용한 펫이 타는 펫일 때만 그림이 바뀐다) */
+  setRiding(on: boolean): void {
+    if (on === this.riding) return;
+    this.riding = on;
+    this.anim = "";
+    this.apply(this.state, this.dir, 0);
+  }
+
+  /** 올라타 있다고 표시된 상태 (펫이 타는 펫이 아니면 그림은 그대로) */
+  get ridingOn(): boolean {
+    return this.riding;
+  }
+
+  /** 이 자세에서 타는 펫 위에 앉아 보이는지 (서 있기·걷기·달리기·점프만 — 앉기·물·놀이기구는 내린 모습) */
+  private mountedIn(st: StateName): boolean {
+    return this.riding && this.mountPet !== null && (st === "idle" || st === "walk" || st === "run" || st === "jump");
+  }
+
   /** 꾸미기 착용 변경 (바로 반영) */
   setLook(look: readonly string[]): void {
     this.look = look.slice();
     this.lantern = look.includes("hand_lantern") || look.includes("hand_lantern_blue");
+    const mount = ridePetOfLook(look);
+    if (mount !== this.mountPet) {
+      this.mountPet = mount;
+      this.anim = "";
+    }
     if (this.cfx || look.length) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(look);
     this.relayout();
     this.retexture();
@@ -310,6 +367,16 @@ export class AvatarView {
     }
     if (this.lying || this.pose) this.getUp(state, dir);
     if (now < this.gestureUntil) return;
+    // 타는 펫 위: 서 있기·걷기·달리기·점프 모두 등에 앉은 자세 (높이는 sync가 올린다)
+    if (this.mountedIn(state)) {
+      const key = `mount:${dir}`;
+      if (this.anim !== key) {
+        this.anim = key;
+        this.sprite.stop();
+        this.sprite.setFrame(avatarFrame("sitChair", dir));
+      }
+      return;
+    }
     // 놀거리가 잠깐 다른 자세 프레임을 쓰는 중 (sync가 고른다)
     if (this.altFrame >= 0 && this.ride?.alt && (state === "seesaw" || state === "carousel" || state === "trampoline" || state === "boat")) return;
     this.altFrame = -1;
@@ -395,6 +462,7 @@ export class AvatarView {
     if (s === "swim" || s === "dive" || s === "hang" || s === "swing" || s === "hammock" || s === "sitGround" || s === "sitChair" || s === "jump") return;
     if (s === "boat" || s === "seesaw" || s === "trampoline" || s === "carousel") return;
     if (isIndoorPose(s)) return;
+    if (this.mountedIn(s)) return; // 타는 펫 위에서는 몸짓 없이 이모티콘만
     const act = kind === "cheer" || kind === "splash" ? "cheer" : "wave";
     this.gestureUntil = now + ACT_MS;
     this.anim = "";
@@ -463,10 +531,21 @@ export class AvatarView {
     this.speech.show(text, now);
   }
 
-  /** 이모티콘 (손 흔들기·환호·헌화·살려주세요): 말풍선 자리에 크게 잠깐 */
-  emote(kind: EmoteIcon, now: number): void {
+  /** 이모티콘 (손 흔들기·환호·헌화·5번 이모티콘 판): 말풍선 자리에 크게 잠깐 (ms 없으면 기본 길이) */
+  emote(kind: EmoteIcon, now: number, ms?: number): void {
     this.speech ??= new SpeechBubble(this.scene, this.atlas);
-    this.speech.showIcon(kind, now);
+    this.speech.showIcon(kind, now, ms);
+  }
+
+  /** 24번 벤치 상태 (SEAT_MOODS id, 없거나 ""면 푼다). 앉아 있는 동안만 보인다 */
+  setMood(mood: string | null | undefined): void {
+    if (!mood && !this.moodFx) return;
+    (this.moodFx ??= new MoodView(this.scene, this.reduced)).set(mood);
+  }
+
+  /** 지금 벤치 상태 (없으면 null) */
+  get mood(): string | null {
+    return this.moodFx?.current ?? null;
   }
 
   /** 지금 떠 있는 말풍선 (겹침 풀기용, 없으면 null) */
@@ -543,6 +622,10 @@ export class AvatarView {
         this.poseFrame = f;
         s.setFrame(f);
       }
+    } else if (this.mountedIn(st)) {
+      // 타는 펫 등 위로 들어 올린다 (걸으면 발걸음에 맞춰 1px 출렁)
+      const bob = (st === "walk" || st === "run") && !this.reduced ? Math.floor(now / (st === "run" ? 90 : 140)) % 2 : 0;
+      this.setPose(0, riderLift(this.mountPet) + bob);
     } else this.setPose(0, 0);
     if (this.altFrame >= 0 && st !== "boat" && st !== "seesaw" && st !== "trampoline" && st !== "carousel") this.altFrame = -1;
     if (s.angle !== 0) s.setAngle(0);
@@ -556,7 +639,10 @@ export class AvatarView {
     const headY = st === "hammock" && this.lying ? s.y - LIE_ORIGIN_Y + (lieTops.get(this.lieKey) ?? 8) - 2 + this.labelGap : s.y - this.hop - this.poseDy;
     // 매달리기는 두 팔이 머리 위로 올라가 그만큼 더 띄운다
     const armsUp = st === "hang" ? 3 : 0;
-    this.label.setPosition(Math.round(st === "hammock" ? s.x : s.x - this.poseDx), headY - this.labelGap + sitLift + waterDrop - armsUp);
+    // 24번 벤치 상태 아이콘이 있으면 머리와 이름표 사이에 끼운다 (그만큼 이름표를 올린다)
+    const labelY = headY - this.labelGap + sitLift + waterDrop - armsUp;
+    const moodLift = this.moodFx?.lift(st) ?? 0;
+    this.label.setPosition(Math.round(st === "hammock" ? s.x : s.x - this.poseDx), labelY - moodLift);
     if (this.shadow) this.shadow.setPosition(s.x, s.y - 1).setDepth((this.depthOverride ?? s.y) - 0.5);
     if (this.label.scaleX !== labelScale) this.label.setScale(labelScale);
     const vis = s.visible;
@@ -571,6 +657,25 @@ export class AvatarView {
 
     this.syncWater(now, bx, s.y, vis);
     this.syncCosmetics(now, dt, bx, headY, vis);
+    if (this.staffFx) {
+      const d = this.dir;
+      this.staffFx.sync(
+        {
+          now,
+          x: bx,
+          y: s.y - this.hop - this.poseDy,
+          dir: d,
+          hand: handAnchor(this.body, d === DIR.left ? "left" : d === DIR.right ? "right" : d === DIR.up ? "up" : "down"),
+          depth: this.depthOverride ?? s.y,
+          moving: st === "walk" || st === "run",
+          hidden: st === "dive" || st === "swim" || st === "hammock" || st === "hang" || st === "lie" || st === "bath" || st === "swing",
+          reduced: this.reduced,
+          label: this.label,
+          labelScale,
+        },
+        vis,
+      );
+    }
     if (this.cfx) {
       const d = this.dir;
       this.cfx.sync(
@@ -587,10 +692,14 @@ export class AvatarView {
           shoulder: this.shoulder,
           hand: handAnchor(this.body, d === DIR.left ? "left" : d === DIR.right ? "right" : d === DIR.up ? "up" : "down"),
           reduced: this.reduced,
+          riding: this.mountedIn(st),
+          hop: this.hop,
         },
         vis,
       );
     }
+
+    this.moodFx?.sync(now, bx, s.y, labelY, this.dir, this.body, this.depthOverride ?? s.y, st, vis);
 
     const speaking = !!this.speech?.active(now);
     // 이름표 높이(height)는 이미 배율이 들어간 월드 높이 (displayHeight는 배율이 한 번 더 곱해져 이름표에 겹쳤다)
@@ -769,6 +878,8 @@ export class AvatarView {
     this.wings?.setVisible(v);
     this.pet?.setVisible(v);
     this.cfx?.setVisible(v);
+    this.moodFx?.setVisible(v);
+    this.staffFx?.setVisible(v);
     for (const f of this.fog) f.setVisible(v);
     this.ripple?.setVisible(v);
     if (!v) for (const b of this.bubbles) b.setVisible(false);
@@ -799,6 +910,10 @@ export class AvatarView {
     this.pet = null;
     this.cfx?.destroy();
     this.cfx = null;
+    this.moodFx?.destroy();
+    this.moodFx = null;
+    this.staffFx?.destroy();
+    this.staffFx = null;
     for (const f of this.fog) f.destroy();
     this.fog = [];
     for (const f of this.flowers) f.destroy();

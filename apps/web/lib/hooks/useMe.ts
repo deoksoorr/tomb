@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { bridge } from "@/game/bridge";
 import { BALANCE_CAP } from "@/lib/economy";
 import { api, errorMessage } from "@/lib/api";
 import type { Me } from "@/lib/types";
@@ -27,11 +28,14 @@ class MeStore {
 
   set(me: Me): void {
     this.update({ me, error: null });
+    // 31번 운영자 표시를 게임에도 알린다 (바뀔 때만)
+    if (bridge.last("me:staff")?.on !== !!me.staff) bridge.emit("me:staff", { on: !!me.staff });
   }
 
   /** 새로 시작·로그아웃: 이전 계정 정보를 버린다 */
   reset(): void {
     this.update(INITIAL);
+    if (bridge.last("me:staff")?.on) bridge.emit("me:staff", { on: false });
   }
 
   async refresh(): Promise<Me | null> {

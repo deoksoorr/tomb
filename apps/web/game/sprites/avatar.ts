@@ -180,6 +180,20 @@ export function avatarColors(spec: string): AvatarColors {
   return { base, head: h ? parseHex(h, base) : base, body: bo ? parseHex(bo, base) : base, accent: a ? parseHex(a) : null };
 }
 
+/**
+ * 텍스처 키에 들어가는 색 부분: 염색이 없으면 기본색 hex 6자리(예전 키와 같다), 있으면 "기본_머리_몸_포인트"(빈 칸 = 기본).
+ * 색 표기 전체를 hex 하나로 읽으면 염색한 아바타가 모두 같은 키가 되어 낡은 그림을 다시 쓴다 (11/12 머리 염색 풀림)
+ */
+export function avatarColorKey(spec: string): string {
+  const hex = (c: number) => c.toString(16).padStart(6, "0");
+  const [b] = spec.split("|");
+  const base = hex(parseHex(b ?? ""));
+  const d = specDye(spec);
+  if (!hasDye(d)) return base;
+  const part = (c: string | undefined) => (c ? hex(parseHex(c)) : "");
+  return [base, part(d.head), part(d.body), part(d.accent)].join("_");
+}
+
 function palette(colors: AvatarColors, body: AvatarBody): Pal {
   // 이불 유령은 천처럼 밝게. 명암은 부위마다 그 부위 색에서 계산한다 (염색 전에는 머리 = 몸 = 기본색이라 예전과 똑같다)
   const h = body === "sheet" ? lighten(colors.head, 0.3) : colors.head;
@@ -232,9 +246,10 @@ function framesFor(view: View): Pose[] {
     else run.push(P(bob, [0, s > 0.3 ? -2 : 0], [0, s < -0.3 ? -2 : 0], 0, 0, i % 3));
   }
   const jump: Pose = side ? { ...P(0, [-2, -1], [2, -2]), air: true } : { ...P(0, [0, -1], [0, -1]), air: true };
+  // 17번: 두 손으로 가지를 잡고 매달려 다리를 번갈아 흔든다 (기본은 나무를 보는 뒷모습 — Player.attach)
   const hang: Pose[] = [
-    { ...P(0, [0, 1], [0, 1], 0, 0, 0), air: true, arms: "up" },
-    { ...P(0, side ? [-1, 1] : [0, 0], side ? [1, 0] : [0, 1], 0, 0, 1), air: true, arms: "up" },
+    { ...P(0, side ? [-1, 2] : [0, 2], side ? [1, 0] : [0, 0], 0, 0, 0), air: true, arms: "up" },
+    { ...P(0, side ? [1, 0] : [0, 0], side ? [-1, 2] : [0, 2], 0, 0, 1), air: true, arms: "up" },
   ];
   const swim: Pose[] = [
     { ...P(0), arms: "paddle0", sink: 2, air: true },
@@ -375,8 +390,10 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     const w = body === "round" ? 2 : 2;
     const lx = body === "round" ? 6 : 7;
     const rx = body === "round" ? 12 : 11;
-    g.rect(lx + pose.f0[0], footY + pose.f0[1], w, 2, side ? darken(pal.feet, 0.2) : pal.feet);
-    g.rect(rx + pose.f1[0], footY + pose.f1[1], w, 2, pal.feet);
+    // 매달리면 발이 밑단 아래로 늘어진다: 내려간 만큼 다리(발 색)로 잇는다
+    const hangLeg = pose.arms === "up";
+    g.rect(lx + pose.f0[0], footY + (hangLeg ? 0 : pose.f0[1]), w, 2 + (hangLeg ? pose.f0[1] : 0), side ? darken(pal.feet, 0.2) : pal.feet);
+    g.rect(rx + pose.f1[0], footY + (hangLeg ? 0 : pose.f1[1]), w, 2 + (hangLeg ? pose.f1[1] : 0), pal.feet);
   }
 
   // ── 몸 뒤에 있는 꼬리 (옆·앞모습) ──
@@ -561,6 +578,8 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     }
   }
 
+  // 17번 매달리기: 손으로 잡는 가지 (빈칸에만 → 몸·머리 뒤에 놓이고 외곽선이 함께 둘러진다)
+  if (pose.arms === "up") drawHangBranch(g, m, view);
   g.outline(pal.line);
   // 등불 창은 외곽선 뒤에도 밝게 (빛나는 점)
   if (gear.lantern && view !== "up") g.set(m.hx, m.hY + 1, 0xfff0b0);
@@ -601,7 +620,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
 function drawArms(g: Grid, view: View, pose: Pose, m: M, pal: Pal, water: boolean): void {
   const arms = pose.arms ?? "none";
   if (arms === "none") return;
-  const { cx, shY, shL, shR, top } = m;
+  const { cx, shY, shL, shR } = m;
   const c = pal.cloak;
   const hand = pal.hoodHi;
   const side = view === "side";
@@ -621,18 +640,8 @@ function drawArms(g: Grid, view: View, pose: Pose, m: M, pal: Pal, water: boolea
     }
     return;
   }
-  if (arms === "paddle0" || arms === "paddle1") return;
-  const arm = (x0: number, y0: number, x1: number, y1: number) => {
-    line(g, x0, y0, x1, y1, c);
-    g.set(x1, y1, hand);
-  };
-  if (arms === "up") {
-    if (side) arm(cx + 1, shY, cx + 2, top - 3);
-    else {
-      arm(shL, shY, cx - 5, top - 3);
-      arm(shR, shY, cx + 4, top - 3);
-    }
-  } else if (arms === "rope") {
+  // 매달리기(up) 팔·손은 외곽선 뒤에 drawHand로 (actHands "up")
+  if (arms === "rope") {
     // 줄을 잡은 손 (줄은 외곽선 뒤에 그린다)
     if (side) g.set(cx + 1, shY + 1, hand);
     else {
@@ -655,6 +664,17 @@ function actHands(view: View, arms: Arms | undefined, m: M): Hand[] {
   const L = Math.round(cx - rx) - 2;
   const side = view === "side";
   switch (arms) {
+    // 17번 매달리기: 두 손이 머리 위 가지를 잡는다 (옆모습은 뒷손이 앞손 뒤로 살짝)
+    case "up":
+      return side
+        ? [
+            { x: cx - 3, y: top - HANG_GRIP, back: true },
+            { x: cx, y: top - HANG_GRIP },
+          ]
+        : [
+            { x: L + 1, y: top - HANG_GRIP },
+            { x: R, y: top - HANG_GRIP },
+          ];
     case "wave0":
       return [{ x: R + 1, y: top }];
     case "wave1":
@@ -682,6 +702,32 @@ function actHands(view: View, arms: Arms | undefined, m: M): Hand[] {
     default:
       return [];
   }
+}
+
+/** 매달리기: 손(2×2 위쪽 줄)이 머리 윗면에서 이만큼 위 */
+const HANG_GRIP = 4;
+
+/** 매달리기 가지: 손 높이에 가로로 뻗은 나뭇가지 + 잔가지·잎 몇 장. 빈칸에만 칠해 몸·머리(귀) 뒤에 놓인다 */
+function drawHangBranch(g: Grid, m: M, view: View): void {
+  const bark = 0x6b4f32;
+  const barkHi = 0x8a6a44;
+  const leaf = 0x5f8f4a;
+  const put = (x: number, y: number, c: Color) => {
+    if (!g.filled(x, y)) g.set(x, y, c);
+  };
+  const y = Math.max(1, Math.round(m.top - HANG_GRIP));
+  const x0 = view === "side" ? Math.round(m.cx) - 7 : 1;
+  const x1 = view === "side" ? Math.round(m.cx) + 6 : AV_W - 2;
+  for (let x = x0; x <= x1; x++) {
+    put(x, y, barkHi);
+    // 끝은 한 줄로 가늘게
+    if (x > x0 && x < x1) put(x, y + 1, bark);
+  }
+  // 잔가지와 잎
+  put(x1 - 1, y - 1, bark);
+  put(x1, y - 2, leaf);
+  put(x0 + 1, y - 1, leaf);
+  put(x0 + 2, y + 2, leaf);
 }
 
 /** 기울이기: 발바닥(26줄)은 그대로, 위로 갈수록 tilt 쪽으로 밀린다 (8줄마다 1px) */
@@ -1076,4 +1122,18 @@ export function avatarPreview(body: string, color: string, scale = 3): string {
   const url = c.toDataURL("image/png");
   previewCache.set(key, url);
   return url;
+}
+
+/** 24번 벤치 상태 소품 자리 (의자에 앉은 자세, 발바닥 원점에서 위로 px): 머리 가운데·머리 윗면·머리 반지름·무릎(두 손) 높이 */
+export type SeatedAnchors = { headUp: number; headTop: number; headRx: number; lapUp: number };
+const seatedCache = new Map<AvatarBody, SeatedAnchors>();
+
+export function seatedAnchors(body: string): SeatedAnchors {
+  const b = bodyOf(body);
+  const hit = seatedCache.get(b);
+  if (hit) return hit;
+  const m = metrics(b, "down", framesFor("down")[AV_ANIM.sitChair.col]);
+  const out = { headUp: AV_H - 1 - m.hy, headTop: AV_H - 1 - m.top, headRx: m.rx, lapUp: AV_H - 1 - Math.min(m.shY + 3, 24) };
+  seatedCache.set(b, out);
+  return out;
 }

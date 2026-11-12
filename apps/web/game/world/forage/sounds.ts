@@ -1,6 +1,6 @@
 import { AudioHost } from "../audioHost";
 
-// 4·32번 낚시·채집 효과음 (파일 없이 WebAudio로 합성, 아주 짧게). 볼륨·음소거는 UI의 audio:settings(BGM과 같은 값).
+// 4·32번 낚시·채집 효과음 (파일 없이 WebAudio로 합성, 아주 짧게). 13번: 효과음 갈래(sfx 버스, audio:mix)를 따른다.
 // 던지기(휙) · 찌 퐁당 · 입질(톡톡) · 릴 감기(딸깍) · 줄 끊김(팅) · 잡았다(짜잔) · 풀 뜯기(바스락) · 광석(챙) · 땅 파기(퍽) · 판매(동전)
 // 채집 지점: 새로 핌(뿅) · 시간이 다 돼 사라짐(스르륵) · 캐서 없어짐(반짝)
 
@@ -8,10 +8,6 @@ export type ForageSound = "cast" | "plop" | "bite" | "reel" | "snap" | "catch" |
 
 export class ForageSfx extends AudioHost {
   private noise: AudioBuffer | null = null;
-
-  setSettings(volume: number, muted: boolean): void {
-    this.setVolume(volume, muted);
-  }
 
   private noiseBuf(ac: AudioContext): AudioBuffer {
     if (!this.noise) {

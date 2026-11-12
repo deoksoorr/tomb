@@ -113,6 +113,11 @@ export const ITEMS: readonly ItemDef[] = [
     ["pet_wisp", "pet", "도깨비불 친구", "푸른 불꽃이 둥실둥실 따라와요.", 60],
     ["pet_dog", "pet", "퇴근 강아지", "퇴근하면 제일 먼저 반겨 주는 친구.", 150],
   ]),
+  // ── 동물원 펫 (사육사에게서 영구로만 산다 — 가격은 아래 ZOO_PETS. price는 같은 값을 적어 둔다) ──
+  { id: "pet_fox", kind: "cosmetic", slot: "pet", name: "달빛 여우", desc: "야근하는 밤에만 슬그머니 따라오는 여우. 꼬리가 은은하게 빛나요.", price: 6_000, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_hound", kind: "cosmetic", slot: "pet", name: "듬직한 큰 개", desc: "등에 태워 주는 커다란 개. 출근길이 두 배로 즐거워요. (타고 다닐 수 있어요)", price: 8_000, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_goose", kind: "cosmetic", slot: "pet", name: "왕거위", desc: "아무도 못 말리는 거위. 등에 타면 뒤뚱뒤뚱 신나게 달려요. (타고 다닐 수 있어요)", price: 9_000, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_deer", kind: "cosmetic", slot: "pet", name: "달빛 사슴", desc: "별빛 뿔을 단 사슴. 등에 타면 바람처럼 가볍게 달려요. (타고 다닐 수 있어요)", price: 9_900, durationMs: COSMETIC_DURATION_MS },
 
   { id: "decor_candles", kind: "decor", name: "촛불 한 쌍", desc: "묘비 양옆에 작은 촛불.", price: 30, durationMs: DECOR_DURATION_MS },
   { id: "decor_wreath", kind: "decor", name: "꽃 화환", desc: "묘비 앞에 둥근 화환.", price: 50, durationMs: DECOR_DURATION_MS },
@@ -187,8 +192,9 @@ export function styleItemId(id: string): string | null {
  * 상점에서 파는 종류 (F8: 묘비 꾸미기는 당분간 상점 목록에서 숨긴다 — 데이터·API·가방의 묘비에 놓기는 그대로).
  */
 export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "megaphone", "dye"];
-export function isShopListed(item: Pick<ItemDef, "kind">): boolean {
-  return SHOP_KINDS.includes(item.kind);
+/** 상점 목록에 나오는지. 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — ZOO_PETS) */
+export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot }): boolean {
+  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet";
 }
 
 const byId = new Map(ITEMS.map((i) => [i.id, i]));
@@ -240,7 +246,7 @@ const PERMANENT_IDS = [
   "back_wings", "back_cape",
   "aura_firefly", "aura_petals",
   "feet_flowers",
-  "pet_ghost", "pet_cat",
+  // 펫(pet_ghost·pet_cat)은 동물원으로 옮겼다 — 상점에서 영구로 팔지 않는다 (ZOO_PETS)
 ] as const;
 export const PERMANENT_MULTIPLIER = 7;
 const permanentPrices = new Map<string, number>(
@@ -252,4 +258,53 @@ const permanentPrices = new Map<string, number>(
 /** 영구로 살 수 있으면 그 가격, 아니면 null */
 export function permanentPrice(id: string): number | null {
   return permanentPrices.get(id) ?? null;
+}
+
+// ── 동물원 펫: 버드나무 묘역 자리의 동물원 사육사에게서 영구로만 산다 (상점의 기간제 펫 판매는 멈췄다 — isShopListed) ──
+// 펫은 착용 부위 "pet" 하나라 한 번에 한 마리만 데리고 다닌다. 산 펫은 영구(PERMANENT_UNTIL)로 착용·벗어 둔 꾸미기에 들어가고,
+// 바꾸기·집에 두기는 다른 꾸미기와 같은 입기(/api/me/wear)·벗기(/api/me/unequip)로 한다.
+// 가격은 최종 콘텐츠급: 하루 최대 적립 800P(DAILY_EARN_CAP), 지갑 상한 9,999P(BALANCE_CAP) 안에서 며칠~열흘 넘게 모아야 하는 값.
+
+/** 타는 펫 (ride = 타고 걷는 속도 배율 — 달리기 × 배율이 서버 속도 검증(MAX_VALID_SPEED) 안에 들도록 1.35 이하) */
+export type PetDef = { id: string; price: number; ride?: { speed: number } };
+/** 사육사 창 순서 (싼 것부터) */
+export const ZOO_PETS: readonly PetDef[] = [
+  { id: "pet_slime", price: 2_500 },
+  { id: "pet_duck", price: 2_500 },
+  { id: "pet_bird", price: 3_000 },
+  { id: "pet_ghost", price: 3_500 },
+  { id: "pet_wisp", price: 4_000 },
+  { id: "pet_cat", price: 4_500 },
+  { id: "pet_dog", price: 4_500 },
+  { id: "pet_fox", price: 6_000 },
+  { id: "pet_hound", price: 8_000, ride: { speed: 1.25 } },
+  { id: "pet_goose", price: 9_000, ride: { speed: 1.2 } },
+  { id: "pet_deer", price: 9_900, ride: { speed: 1.35 } },
+];
+const petMap = new Map(ZOO_PETS.map((p) => [p.id, p]));
+/** 동물원 펫이면 그 정의 */
+export function petDef(id: string): PetDef | undefined {
+  return petMap.get(id);
+}
+/** 사육사에게서 사는 영구 가격 (동물원 펫이 아니면 null) */
+export function petPrice(id: string): number | null {
+  return petMap.get(id)?.price ?? null;
+}
+/** 타고 다닐 수 있는 펫인지 */
+export function isRideablePet(id: string | null | undefined): boolean {
+  return !!id && !!petMap.get(id)?.ride;
+}
+/** 착용 목록에서 데리고 다니는 펫 (없으면 null) */
+export function petOfLook(look: readonly string[] | null | undefined): string | null {
+  for (const id of look ?? []) if (byId.get(id)?.slot === "pet") return id;
+  return null;
+}
+/** 착용 목록의 펫이 타는 펫이면 그 id (아니면 null) */
+export function ridePetOfLook(look: readonly string[] | null | undefined): string | null {
+  const pet = petOfLook(look);
+  return isRideablePet(pet) ? pet : null;
+}
+/** 타고 걷는 속도 배율 (타는 펫이 아니면 1) */
+export function rideSpeed(id: string | null | undefined): number {
+  return (id && petMap.get(id)?.ride?.speed) || 1;
 }

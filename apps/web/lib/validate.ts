@@ -208,7 +208,8 @@ export const CodeLoginSchema = z.object({
 });
 
 const shopItem = z.string().refine((id) => !!itemById(id), "없는 아이템이에요.");
-export const ShopBuySchema = z.object({ itemId: shopItem });
+/** 상점에서 사기: 펫은 팔지 않는다 (동물원 사육사에게서 영구로만 — /api/zoo/buy). 이미 가진 펫 이용권은 그대로 쓸 수 있다 (ShopUseSchema) */
+export const ShopBuySchema = z.object({ itemId: shopItem.refine((id) => itemById(id)?.slot !== "pet", "펫은 동물원 사육사에게서만 데려올 수 있어요.") });
 export const ShopUseSchema = z.object({
   itemId: shopItem,
   graveId: z.string().refine((id) => isGraveId(id), "묘비 id 형식이 올바르지 않아요.").optional(),

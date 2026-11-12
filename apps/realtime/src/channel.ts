@@ -16,6 +16,8 @@ import {
   spotKindOfState,
   spotSeatId,
   isIndoorSpot,
+  isSeatMood,
+  ridePetOfLook,
   USE_INTERVAL_MS,
   hasDye,
   sameDye,
@@ -56,6 +58,12 @@ export type PeerRecord = {
   body: string;
   /** 46번 염색한 부위 색 (입장 토큰 → look 증서로 바뀜). 없으면 color 하나 */
   dye?: AvatarDye;
+  /** 24번 벤치 상태 (SEAT_MOODS id). 의자·벤치에 앉아 있는 동안만 있다 */
+  mood?: string;
+  /** 동물원 타는 펫에 올라타 있다 (착용 펫이 타는 펫이고 자리에 앉아 있지 않은 동안만) */
+  ride?: true;
+  /** 31번 운영자 계정 (입장 토큰에 Vercel이 넣은 것만) */
+  staff?: true;
   /** 이 연결로 자리를 잡은 시각. 로비의 채널 간 중복 정리(kick)가 더 새 연결을 내보내지 않게 비교한다 */
   joinedAt: number;
 };
@@ -80,6 +88,8 @@ export type JoinTicket = {
   body: string;
   /** 46번 염색 (JoinClaims.dye) */
   dye?: AvatarDye;
+  /** 31번 운영자 계정 (JoinClaims.staff) */
+  staff?: true;
 };
 
 /** ChannelCore가 바깥(DO)에 맡기는 부수 효과 */
@@ -160,6 +170,12 @@ export const SYNC_INTERVAL_MS = 20_000;
 export const ACT_INTERVAL_MS = 2_000;
 /** say(정해진 문장 말풍선) 연결당 최소 간격 */
 export const SAY_INTERVAL_MS = 3_000;
+/** 5번 이모티콘(emo) 연결당 최소 간격 — 도배 제한 (클라이언트 쿨다운과 같다) */
+export const EMO_INTERVAL_MS = 1_000;
+/** 타는 펫 올라타기·내리기(ride) 연결당 최소 간격 */
+export const RIDE_INTERVAL_MS = 400;
+/** 24번 벤치 상태(mood) 연결당 최소 간격 */
+export const MOOD_INTERVAL_MS = 800;
 /** warp 서버 쿨다운. 클라이언트(WARP_COOLDOWN_MS 1초)보다 짧게 둬서 네트워크 지터로 정상 요청이 버려지지 않게 한다 */
 export const SERVER_WARP_COOLDOWN_MS = 800;
 /** 입장·복귀 좌표가 다른 사람이 앉은 좌석 앵커에서 이 거리 안이면 그 좌석 앞(내려설 자리)으로 옮긴다 — 한 자리에 한 명 */
@@ -189,6 +205,11 @@ type Peer<C> = PeerRecord & {
   lastMegaphoneAt?: number;
   /** 3번 집 안 가구 쓰기 (없으면 아직 안 씀) */
   lastUseAt?: number;
+  /** 5번 이모티콘·24번 벤치 상태 (없으면 아직 안 씀) */
+  lastEmoAt?: number;
+  lastMoodAt?: number;
+  /** 타는 펫 올라타기·내리기 (없으면 아직 안 씀) */
+  lastRideAt?: number;
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
   lastSeenAt: number;
   /** attachment가 최신인지 */
@@ -318,6 +339,7 @@ export class ChannelCore<C extends object> {
       look: t.look,
       body: t.body,
       ...(hasDye(t.dye) ? { dye: t.dye } : {}),
+      ...(t.staff ? { staff: true as const } : {}),
       joinedAt: now,
     };
     const p = this.adoptNew(rec, conn, now);
@@ -344,12 +366,13 @@ export class ChannelCore<C extends object> {
       this.host.dropReservation(p.sid);
     }
     const renamed =
-      p.name !== t.name || p.color !== t.color || p.body !== t.body || p.look.join() !== t.look.join() || !sameDye(p.dye, t.dye);
+      p.name !== t.name || p.color !== t.color || p.body !== t.body || p.look.join() !== t.look.join() || !sameDye(p.dye, t.dye) || !!p.staff !== !!t.staff;
     p.name = t.name;
     p.color = t.color;
     p.look = t.look;
     p.body = t.body;
     p.dye = hasDye(t.dye) ? t.dye : undefined;
+    p.staff = t.staff ? true : undefined;
     p.joinedAt = now;
     // 새 소켓을 붙이기 전에 옮긴다: 좌석 해제 알림은 다른 사람에게만 가고, 본인은 결과가 반영된 welcome을 처음으로 받는다
     if (t.spawn) this.relocate(p, t.spawn);
@@ -503,6 +526,25 @@ export class ChannelCore<C extends object> {
   }
 
   /**
+   * 47번 운영자 내보내기·이용 제한: 이 방문자의 접속(또는 재연결 유예 예약)을 code로 정리한다. 유예 없음.
+   * 이 채널에 없으면 false
+   */
+  expel(visitorId: string, code: number, reason: string): boolean {
+    const sid = this.byVisitor.get(visitorId);
+    const p = sid === undefined ? undefined : this.peers.get(sid);
+    if (!p) return false;
+    if (!p.conn) this.host.dropReservation(p.sid);
+    this.kick(p, code, reason);
+    return true;
+  }
+
+  /** 47번 유저 신고: 이 채널·방의 sid가 누구인지 (지금 접속 중이거나 유예 중인 사람만) */
+  peerAt(sid: number): { visitorId: string; name: string } | null {
+    const p = this.peers.get(sid);
+    return p ? { visitorId: p.visitorId, name: p.name } : null;
+  }
+
+  /**
    * 유령 연결 정리: STALE_AFTER_MS 넘게 ping(런타임 자동 응답 시각)도 메시지도 없는 소켓을 4000으로 닫고 유예로 넘긴다.
    * DO가 이미 깨어 있을 때(틱 루프가 멈출 때, 알람)만 부른다 — 이것 때문에 DO를 깨우지 않는다.
    */
@@ -539,6 +581,8 @@ export class ChannelCore<C extends object> {
         else if (kind && indoor === !!this.cfg.room && !this.claimSpot(p, spotSeatId(kind, m.x, m.y))) state = STATE.idle;
       }
     }
+    // 타는 펫: 물에 들어가거나 자리에 앉으면 내린다 (클라이언트도 스스로 내리고 ride off를 보낸다)
+    if (p.ride && (state === STATE.swim || state === STATE.dive || held)) this.clearRide(p);
     const changed = state !== p.state || m.dir !== p.dir;
     p.state = state;
     p.dir = m.dir;
@@ -615,6 +659,19 @@ export class ChannelCore<C extends object> {
         if (now - (p.lastUseAt ?? -Infinity) < USE_INTERVAL_MS) return;
         p.lastUseAt = now;
         return this.broadcast(encodeEvent({ t: "use", sid: p.sid, u: m.u, a: m.a }), p.sid);
+      case "emo":
+        // 5번 이모티콘: 보낸 사람은 이미 화면에 띄웠다 → 나머지에게만
+        if (now - (p.lastEmoAt ?? -Infinity) < EMO_INTERVAL_MS) return;
+        p.lastEmoAt = now;
+        return this.broadcast(encodeEvent({ t: "emo", sid: p.sid, id: m.id }), p.sid);
+      case "ride":
+        if (now - (p.lastRideAt ?? -Infinity) < RIDE_INTERVAL_MS) return;
+        p.lastRideAt = now;
+        return this.onRide(p, m.on);
+      case "mood":
+        if (now - (p.lastMoodAt ?? -Infinity) < MOOD_INTERVAL_MS) return;
+        p.lastMoodAt = now;
+        return this.onMood(p, m.m);
       case "say":
         if (now - p.lastSayAt < SAY_INTERVAL_MS) return;
         p.lastSayAt = now;
@@ -658,7 +715,10 @@ export class ChannelCore<C extends object> {
       this.save(p);
       this.host.liveChanged?.(true);
       const extra = { ...(g.dye !== undefined ? { dye: p.dye ?? {} } : {}), ...(g.body !== undefined ? { body: p.body } : {}) };
-      return this.broadcast(encodeEvent({ t: "look", sid: p.sid, look: p.look, ...extra }));
+      this.broadcast(encodeEvent({ t: "look", sid: p.sid, look: p.look, ...extra }));
+      // 타던 펫을 집에 두거나 타지 못하는 펫으로 바꿨으면 내린다
+      if (p.ride && !ridePetOfLook(p.look)) this.clearRide(p);
+      return;
     }
     if (g.kind === "megaphone") return this.applyMegaphone(g);
     if (g.kind !== "firework") return; // 고블린 증서는 실시간 서버가 내주기만 한다 (받지 않는다)
@@ -769,6 +829,10 @@ export class ChannelCore<C extends object> {
     }
     p.state = seat.state;
     p.dir = seat.facing;
+    // 벤치 상태는 의자·벤치에서만 (벤치 안에서 옆자리로 옮기면 그대로, 나무·그네 같은 자리로 옮기면 풀린다)
+    if (p.mood && seat.state !== STATE.sitChair) this.clearMood(p);
+    // 앉기·낚시·놀이기구·배 — 어떤 자리든 차지하면 타던 펫에서 내린다
+    this.clearRide(p);
     this.chasing.delete(p.sid);
     this.markDirty(p);
     this.broadcast(encodeEvent({ t: "seat", seatId, sid: p.sid }));
@@ -784,13 +848,62 @@ export class ChannelCore<C extends object> {
     this.markDirty(p);
   }
 
-  /** 좌석을 비우고 모두에게 알린다. 상태(state)는 호출한 쪽이 정한다. */
+  /**
+   * 24번 벤치 상태: 의자·벤치(sitChair 자리)에 앉아 있을 때만 받는다. 빈 문자열이면 푼다.
+   * 같은 채널 모두(보낸 사람 포함 — 서버가 받아들였다는 확인)에게 알리고, 늦게 온 사람은 PeerInfo.mood로 받는다
+   */
+  private onMood(p: Peer<C>, m: string): void {
+    if (m === "") return this.clearMood(p);
+    const seat = p.seatId ? seatSlot(p.seatId) : undefined;
+    if (!isSeatMood(m) || !seat || seat.state !== STATE.sitChair || p.mood === m) return;
+    p.mood = m;
+    this.save(p);
+    this.host.liveChanged?.(true);
+    this.broadcast(encodeEvent({ t: "mood", sid: p.sid, m }));
+  }
+
+  /**
+   * 타는 펫 올라타기(on)·내리기. 월드 채널에서, 착용한 펫이 타는 펫이고 자리에 앉아 있지 않으며 물 밖일 때만 켠다.
+   * 같은 채널 모두(보낸 사람 포함 — 서버가 받아들였다는 확인)에게 알리고, 늦게 온 사람은 PeerInfo.ride로 받는다
+   */
+  private onRide(p: Peer<C>, on: boolean): void {
+    if (!on) return this.clearRide(p);
+    if (this.cfg.room || p.seatId || !ridePetOfLook(p.look)) return;
+    if (p.state === STATE.swim || p.state === STATE.dive) return;
+    // 이미 타고 있다 (재접속 복원·다시 보낸 요청): 보낸 사람에게만 다시 확인해 준다
+    if (p.ride) return this.sendTo(p, { t: "ride", sid: p.sid, on: true });
+    p.ride = true;
+    this.save(p);
+    this.host.liveChanged?.(true);
+    this.broadcast(encodeEvent({ t: "ride", sid: p.sid, on: true }));
+  }
+
+  /** 타는 펫에서 내리고 모두에게 알린다 (타고 있지 않으면 아무것도 안 한다) */
+  private clearRide(p: Peer<C>): void {
+    if (!p.ride) return;
+    p.ride = undefined;
+    p.saved = false;
+    this.host.liveChanged?.(true);
+    this.broadcast(encodeEvent({ t: "ride", sid: p.sid, on: false }));
+  }
+
+  /** 벤치 상태를 풀고 모두에게 알린다 (없으면 아무것도 안 한다) */
+  private clearMood(p: Peer<C>): void {
+    if (!p.mood) return;
+    p.mood = undefined;
+    p.saved = false;
+    this.host.liveChanged?.(true);
+    this.broadcast(encodeEvent({ t: "mood", sid: p.sid, m: "" }));
+  }
+
+  /** 좌석을 비우고 모두에게 알린다. 상태(state)는 호출한 쪽이 정한다. 벤치 상태도 함께 풀린다 */
   private releaseSeat(p: Peer<C>): void {
     const seatId = p.seatId;
     if (!seatId) return;
     this.seats.delete(seatId);
     p.seatId = null;
     p.saved = false;
+    this.clearMood(p);
     this.broadcast(encodeEvent({ t: "seat", seatId, sid: null }));
     this.host.liveChanged?.(true);
   }
@@ -946,6 +1059,7 @@ export class ChannelCore<C extends object> {
       if (!seatSlot(p.seatId) || this.seats.has(p.seatId)) p.seatId = null;
       else this.seats.set(p.seatId, p.sid);
     }
+    if (!p.seatId) p.mood = undefined;
     return true;
   }
 
@@ -1003,13 +1117,27 @@ export class ChannelCore<C extends object> {
   }
 
   private info(p: Peer<C>): PeerInfo {
-    return { ...this.state(p), name: p.name, color: p.color, look: p.look, body: p.body, ...(hasDye(p.dye) ? { dye: p.dye } : {}) };
+    return {
+      ...this.state(p),
+      name: p.name,
+      color: p.color,
+      look: p.look,
+      body: p.body,
+      ...(hasDye(p.dye) ? { dye: p.dye } : {}),
+      ...(p.mood ? { mood: p.mood } : {}),
+      ...(p.staff ? { staff: true as const } : {}),
+      ...(p.ride ? { ride: true as const } : {}),
+    };
   }
 
   /** 저장 형태로 복사. 이전 버전 attachment·예약에는 look/body/joinedAt이 없을 수 있어 기본값을 채운다 */
   private record(r: PeerRecord): PeerRecord {
     const { sid, visitorId, name, color, x, y, state, dir, seatId } = r;
     const look = Array.isArray(r.look) ? r.look : [];
-    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), joinedAt: r.joinedAt ?? 0 };
+    // 24번 벤치 상태는 좌석이 있을 때만 이어 간다
+    const mood = seatId && isSeatMood(r.mood) ? { mood: r.mood } : {};
+    // 타는 펫은 자리에 앉아 있지 않고 타는 펫을 입고 있을 때만 이어 간다
+    const ride = r.ride === true && !seatId && ridePetOfLook(look) ? { ride: true as const } : {};
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...(r.staff === true ? { staff: true as const } : {}), joinedAt: r.joinedAt ?? 0 };
   }
 }

@@ -108,6 +108,8 @@ export const api = {
     request<UpdateGraveResponse>(gravePath(id), jsonInit("PATCH", input, ownerHeaders(ownerToken))),
   deleteGrave: (id: string, ownerToken: string | null) =>
     request<unknown>(gravePath(id), { method: "DELETE", headers: ownerHeaders(ownerToken) }),
+  /** 31번 운영자 계정 전용 완전 삭제 (서버가 운영자 계정 + 관리자 IP를 확인한다) */
+  staffDeleteGrave: (id: string) => request<{ ok: true }>(gravePath(id, "/staff"), { method: "DELETE" }),
   flower: (id: string) => request<FlowerResponse>(gravePath(id, "/flower"), { method: "POST" }),
   report: (id: string, reason: ReportReason) =>
     request<ReportResponse>(gravePath(id, "/report"), jsonInit("POST", { reason })),

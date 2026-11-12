@@ -2,6 +2,8 @@ import {
   ACT_KINDS,
   CLIENT_VERSION,
   isPhraseId,
+  isEmoId,
+  isSeatMood,
   CLOSE,
   MAX_JOIN_RETRIES,
   QUEUE_POLL_MS,
@@ -18,6 +20,8 @@ import {
   type ActKind,
   type C2S,
   type PhraseId,
+  type EmoId,
+  type SeatMood,
   type EmoteKind,
   type GraveEventKind,
   type GoblinInfo,
@@ -46,6 +50,7 @@ import { bodyFromWsUrl, SYNC_EVERY_MS, SyncPolicy } from "./syncPolicy";
 //  - 4002 다른 탭에서 접속: "replaced", 재접속하지 않음 / 4003 토큰 만료: 새 토큰으로 바로 재접속 / 4008 과다 전송
 //  - 4004 잘못된 요청: 자동 배정으로 다시 / /api/join 400: 재시도해도 소용없으니 offline + 안내 1회
 //  - 4010 옛 버전(큰 패치): 재접속하지 않고 app:outdated → UI가 업데이트 창을 띄워 새로고침한다
+//  - 4011 운영자 강퇴: 재접속하지 않고 안내만 / 4012 이용 제한: 재접속하지 않고 app:banned → UI가 새로고침(제한 화면)
 //  - 클라이언트가 끊는 경우: 의도적 퇴장(stop·채널 이동)만 1000, 타임아웃 등은 4000
 //    (서버는 1000을 "떠남"으로 보고 재연결 유예 없이 자리를 비운다)
 //  - 대기열(/api/join → queue): 혼자 걸으며 queueUrl을 QUEUE_POLL_MS마다 확인, admitted면 그 채널로 입장
@@ -74,6 +79,12 @@ export type NetCallbacks = {
   onAct(sid: Sid, kind: ActKind, x: number, y: number): void;
   /** 정해진 문장 말풍선 (PHRASES id). 내 것은 오지 않는다 */
   onSay(sid: Sid, id: PhraseId): void;
+  /** 5번 이모티콘 (EMOS id). 내 것은 오지 않는다 */
+  onEmo?(sid: Sid, id: EmoId): void;
+  /** 24번 벤치 상태 (SEAT_MOODS id, "" = 풀림). 서버가 받아들인 내 것도 온다 */
+  onMood?(sid: Sid, mood: SeatMood | ""): void;
+  /** 동물원 타는 펫에 올라탐·내림. 서버가 받아들인 내 것도 온다 (자리에 앉거나 물에 들어가면 서버가 내리기도 한다) */
+  onRide?(sid: Sid, on: boolean): void;
   /** 입장 토큰에 든 내 아바타 몸 모양 (계정에 저장된 값) */
   onSelfBody?(body: string): void;
   // ── 22번 황금 고블린 ──
@@ -95,6 +106,8 @@ class JoinError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** 서버 오류 코드 (47번: BANNED = 이용 제한) */
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -317,6 +330,21 @@ export class RealtimeClient {
     this.send({ t: "say", id });
   }
 
+  /** 5번 이모티콘 (서버가 도배 제한을 지켜 같은 채널에 중계한다) */
+  emo(id: EmoId): void {
+    this.send({ t: "emo", id });
+  }
+
+  /** 24번 벤치 상태 ("" = 풀기). 앉아 있을 때만 서버가 받는다 */
+  mood(m: SeatMood | ""): void {
+    this.send({ t: "mood", m });
+  }
+
+  /** 동물원 타는 펫에 올라타기·내리기 (착용한 펫이 타는 펫이고 서 있을 때만 서버가 받는다) */
+  ride(on: boolean): void {
+    this.send({ t: "ride", on });
+  }
+
   /** 접속자 목록 다시 받기 (자가 복구) */
   sync(): void {
     this.syncPolicy.mark(performance.now());
@@ -386,7 +414,7 @@ export class RealtimeClient {
     }
     if (!r.ok) {
       const err = (await r.json().catch(() => null)) as ApiError | null;
-      throw new JoinError(r.status, err?.error?.message ?? `join failed (${r.status})`);
+      throw new JoinError(r.status, err?.error?.message ?? `join failed (${r.status})`, err?.error?.code);
     }
     const res = (await r.json()) as JoinResponse;
     if (res.mode === "channel") this.token = { channel: res.channel, at: Date.now(), res };
@@ -399,6 +427,8 @@ export class RealtimeClient {
       this.toast(e.message || "실시간 접속 정보를 확인할 수 없어 혼자 걷는 중이에요.");
       this.clearRetry();
       this.setMode("offline");
+      // 47번 이용 제한: UI가 새로고침해 제한 화면을 띄운다
+      if (e.code === "BANNED") bridge.emit("app:banned");
       return;
     }
     if (e instanceof JoinError && e.status >= 400 && e.status < 500 && e.status !== 408) {
@@ -489,6 +519,15 @@ export class RealtimeClient {
           break;
         case "say":
           if (m.sid !== this.mySid && isPhraseId(m.id)) this.cb.onSay(m.sid, m.id);
+          break;
+        case "emo":
+          if (m.sid !== this.mySid && isEmoId(m.id)) this.cb.onEmo?.(m.sid, m.id);
+          break;
+        case "mood":
+          if (m.m === "" || isSeatMood(m.m)) this.cb.onMood?.(m.sid, m.m);
+          break;
+        case "ride":
+          if (typeof m.on === "boolean") this.cb.onRide?.(m.sid, m.on);
           break;
         case "firework":
           // 내 폭죽은 누른 순간 이미 터뜨렸다 → 중복 재생하지 않는다
@@ -672,6 +711,20 @@ export class RealtimeClient {
         this.clearRetry();
         this.setMode("offline");
         bridge.emit("app:outdated", { source: "channel" });
+        return;
+      case CLOSE.KICKED:
+        // 47번 운영자가 내보냄 (정지 아님): 자동으로 다시 붙지 않는다. "여기서 다시 접속"으로 직접 돌아올 수 있다
+        this.clearRetry();
+        this.channel = null;
+        this.setMode("offline");
+        this.toast("운영자가 연결을 끊었어요.");
+        return;
+      case CLOSE.BANNED:
+        // 47번 이용 제한: 다시 붙어도 입장 토큰에서 막힌다 → 재시도하지 않고 제한 화면으로
+        this.clearRetry();
+        this.channel = null;
+        this.setMode("offline");
+        bridge.emit("app:banned");
         return;
       case CLOSE.BAD_REQUEST:
         this.token = null;

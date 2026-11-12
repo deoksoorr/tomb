@@ -19,16 +19,22 @@ import HousingPanel from "./HousingPanel";
 import MembersPanel from "./MembersPanel";
 import NoticesPanel from "./NoticesPanel";
 import PassedPanel from "./PassedPanel";
+import ReportsPanel from "./ReportsPanel";
+import type { BanTarget } from "./BanPanel";
+import { moderationApi } from "./moderationApi";
+import StaffPanel from "./StaffPanel";
 import { adminApi } from "./adminApi";
 import styles from "./Admin.module.css";
 
 type Filter = "all" | "reported" | "hidden";
 type Sort = "reports" | "recent" | "flowers";
 /** 48번 탭 순서: 대시보드 · 회원 · 신고 · 경제 · 하우징 · 공지 · 콘텐츠(묘비·성불) · 오류 */
-type Tab = "dashboard" | "members" | "reports" | "economy" | "housing" | "notices" | "content" | "errors" | "gifts" | "megaphone" | "dye";
+type Tab = "dashboard" | "members" | "reports" | "economy" | "housing" | "notices" | "content" | "errors" | "gifts" | "megaphone" | "dye" | "staff";
 const TABS: [Tab, string][] = [
   ["dashboard", "대시보드"],
   ["members", "회원"],
+  // 31번 운영자(슈퍼) 계정 지정
+  ["staff", "운영자 계정"],
   // 46번 고정 색 염색권 (회원 탭 옆)
   ["dye", "염색권"],
   ["reports", "신고"],
@@ -100,6 +106,10 @@ export default function AdminApp() {
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string[] | null>(null);
   const [toasts, toast] = useToastList();
+  /** 47번 신고 탭 배지(처리 대기 수, 묘비·방명록·유저·확성기 합계)와 "정지로 이동" 대상 */
+  const [reportsOpen, setReportsOpen] = useState<number | null>(null);
+  const [banPreset, setBanPreset] = useState<BanTarget | null>(null);
+  const clearBanPreset = useCallback(() => setBanPreset(null), []);
 
   const handleError = useCallback(
     (e: unknown) => {
@@ -137,8 +147,7 @@ export default function AdminApp() {
     };
   }, [version, toast]);
 
-  // 신고 탭은 신고된 묘비만 (같은 목록·같은 처리 버튼)
-  const shown: Filter = tab === "reports" ? "reported" : filter;
+  const shown: Filter = filter;
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return graves
@@ -174,8 +183,19 @@ export default function AdminApp() {
   };
 
   const allVisibleSelected = visible.length > 0 && visible.every((g) => selected.has(g.id));
-  const hiddenCount = graves.filter((g) => g.hidden).length;
   const reportedCount = graves.filter(isReported).length;
+  useEffect(() => {
+    if (phase !== "ready") return;
+    let alive = true;
+    moderationApi.reports("open").then(
+      (r) => alive && setReportsOpen(r.openCount),
+      () => {},
+    );
+    return () => {
+      alive = false;
+    };
+  }, [phase, version]);
+  const reportBadge = reportsOpen ?? reportedCount;
   const deleteNames = confirmDelete?.map((id) => graves.find((g) => g.id === id)?.name ?? id) ?? [];
 
   return (
@@ -218,7 +238,7 @@ export default function AdminApp() {
                 onClick={() => setTab(value)}
               >
                 {label}
-                {value === "reports" && reportedCount > 0 && ` ${reportedCount}`}
+                {value === "reports" && reportBadge > 0 && ` ${reportBadge}`}
               </button>
             ))}
           </div>
@@ -234,7 +254,21 @@ export default function AdminApp() {
             version={version}
           />
         )}
-        {phase === "ready" && tab === "members" && <MembersPanel toast={toast} onAuthLost={authLost} />}
+        {phase === "ready" && tab === "members" && (
+          <MembersPanel toast={toast} onAuthLost={authLost} banPreset={banPreset} onBanPresetUsed={clearBanPreset} />
+        )}
+        {phase === "ready" && tab === "reports" && (
+          <ReportsPanel
+            toast={toast}
+            onAuthLost={authLost}
+            onOpenCount={setReportsOpen}
+            onBan={(t) => {
+              setBanPreset(t);
+              setTab("members");
+            }}
+          />
+        )}
+        {phase === "ready" && tab === "staff" && <StaffPanel toast={toast} onAuthLost={authLost} />}
         {phase === "ready" && tab === "dye" && <DyePanel toast={toast} onAuthLost={authLost} />}
         {phase === "ready" && tab === "content" && (
           <div className={styles.segmented} role="group" aria-label="콘텐츠">
@@ -257,15 +291,10 @@ export default function AdminApp() {
         {phase === "ready" && tab === "gifts" && <GiftsPanel toast={toast} onAuthLost={authLost} />}
         {phase === "ready" && tab === "megaphone" && <MegaphonePanel toast={toast} onAuthLost={authLost} />}
 
-        {phase === "ready" && (tab === "reports" || (tab === "content" && content === "graves")) && (
+        {phase === "ready" && tab === "content" && content === "graves" && (
           <>
-            {tab === "reports" && (
-              <p className={ui.hint}>
-                신고된 묘비 {reportedCount}개 · 숨김 {hiddenCount}개. 방명록 신고는 하우징 탭에서 봐요.
-              </p>
-            )}
             <div className={styles.toolbar}>
-              <div className={styles.segmented} role="group" aria-label="보기" hidden={tab === "reports"}>
+              <div className={styles.segmented} role="group" aria-label="보기">
                 {FILTERS.map(([value, label]) => (
                   <button
                     key={value}

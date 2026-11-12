@@ -19,13 +19,16 @@ import {
   type DexTier,
   type LifeCat,
   type Species,
+  type Where,
 } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import type { DexEntry, PublicDex } from "@/lib/forage/types";
+import { useAmbience } from "@/lib/hooks/useAmbience";
 import { meStore } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
+import { FactGrid, InfoCard } from "../ui/InfoBlocks";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
 import { forageStore, useForage } from "./forageStore";
@@ -78,6 +81,7 @@ export default function DexDialog({ accountId, name, onClose }: { accountId?: st
   const got = list.filter((sp) => (dex[sp.id]?.n ?? 0) > 0).length;
   const pct = Math.floor((got * 100) / list.length);
   const pick = list.find((sp) => sp.id === sel) ?? null;
+  const ambience = useAmbience();
   const entry = pick ? dex[pick.id] : undefined;
   const loaded = mine ? !!state : !!other;
 
@@ -190,6 +194,7 @@ export default function DexDialog({ accountId, name, onClose }: { accountId?: st
                 );
               })}
             </div>
+            {!pick && <DexGuide list={list} dex={dex} ambience={ambience} />}
             {pick && (
               <div className={cx(s.detail, !entry && s.unknown)} role="status">
                 <ItemIcon itemId={pick.id} size={48} />
@@ -228,5 +233,37 @@ export default function DexDialog({ accountId, name, onClose }: { accountId?: st
         </div>
       )}
     </Dialog>
+  );
+}
+
+/** 아무 칸도 고르지 않았을 때: 이 종류를 모으는 곳(곳마다 모은 수)과 지금 시간·날씨·계절에 나오는 것 */
+function DexGuide({ list, dex, ambience }: { list: readonly Species[]; dex: Record<string, DexEntry>; ambience: ReturnType<typeof useAmbience> }) {
+  const where = new Map<Where, { got: number; all: number }>();
+  for (const sp of list)
+    for (const w of sp.where) {
+      const v = where.get(w) ?? { got: 0, all: 0 };
+      v.all += 1;
+      if ((dex[sp.id]?.n ?? 0) > 0) v.got += 1;
+      where.set(w, v);
+    }
+  const now = ambience
+    ? list.filter(
+        (sp) =>
+          (!sp.time || sp.time.includes(ambience.phase)) &&
+          (!sp.weather || sp.weather.includes(ambience.weather)) &&
+          (!sp.season || sp.season.includes(ambience.season)),
+      )
+    : [];
+  const newNow = now.filter((sp) => (dex[sp.id]?.n ?? 0) === 0);
+  return (
+    <InfoCard title="모으는 곳" icon="book" aside="칸을 누르면 그 종의 힌트가 보여요">
+      <FactGrid facts={[...where].map(([w, v]) => ({ label: WHERE_LABEL[w], value: `${v.got}/${v.all}`, tone: v.got === v.all ? ("good" as const) : undefined }))} />
+      {ambience && (
+        <p className={ui.hint}>
+          지금({PHASE_LABEL[ambience.phase]} · {WEATHER_LABEL[ambience.weather]} · {SEASON_LABEL[ambience.season]}) 나오는 것 {now.length}종 — 그중 아직 못 모은 것{" "}
+          {newNow.length}종
+        </p>
+      )}
+    </InfoCard>
   );
 }

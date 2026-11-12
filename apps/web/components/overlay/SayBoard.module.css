@@ -1,0 +1,131 @@
+/* 말풍선 탭: 최근 보낸 것 + 상황별 묶음 (문장 큰 버튼 + 어울리는 이모티콘) */
+
+.board {
+  display: grid;
+  gap: 12px;
+}
+
+.heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: var(--candle);
+  font-size: 12px;
+  font-weight: normal;
+}
+
+.desc,
+.muted {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.muted {
+  margin: 0;
+}
+
+.recent {
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.recentRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.recentPhrase {
+  min-height: 40px;
+  padding: 4px 12px;
+  border: 0;
+  background: var(--surface);
+  color: var(--bone);
+  box-shadow: var(--px-border);
+}
+
+.recentPhrase:hover,
+.recentPhrase:focus-visible {
+  background: var(--surface-hover);
+}
+
+.groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.group {
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.phrases {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.phrase {
+  min-height: 48px;
+  padding: 6px 10px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  box-shadow: var(--px-border);
+}
+
+.phrase:hover,
+.phrase:focus-visible {
+  background: var(--surface-hover);
+  color: var(--bone);
+}
+
+.emos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.emo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+  padding: 2px 8px 2px 4px;
+  border: 0;
+  background: var(--panel-solid);
+  color: var(--muted);
+  font-size: 11px;
+  box-shadow: var(--px-border);
+}
+
+.emo:hover,
+.emo:focus-visible {
+  background: var(--surface);
+  color: var(--bone);
+}
+
+.emo img {
+  image-rendering: pixelated;
+}
+
+@media (max-width: 560px) {
+  .groups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .phrase,
+  .recentPhrase,
+  .emo {
+    min-height: 44px;
+  }
+}

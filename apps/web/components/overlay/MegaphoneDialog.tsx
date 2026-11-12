@@ -10,9 +10,16 @@ import { showToast } from "@/lib/hooks/useToasts";
 import { socialApi } from "@/lib/socialApi";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
+import { InfoCard, InfoGrid, TipList } from "../ui/InfoBlocks";
 import ItemIcon from "../ui/ItemIcon";
+import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import styles from "./MegaphoneDialog.module.css";
+
+/** 최근 기록에서 보여 줄 줄 수 */
+const RECENT = 6;
+
+const timeText = (at: number) => new Date(at).toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
 
 const KINDS = ["mega_ch", "mega_all"] as const;
 
@@ -24,7 +31,10 @@ export default function MegaphoneLayer({ channel, onOpenShop }: { channel: numbe
 
 function MegaphoneDialog({ channel, onOpenShop, onClose }: { channel: number; onOpenShop: () => void; onClose: () => void }) {
   const { me } = useMe();
-  const owned = (id: string) => me?.inventory[id] ?? 0;
+  const { entries } = useMegaphone();
+  // 31번 운영자 계정은 확성기가 무료 (서버가 가방에서 꺼내지 않는다)
+  const staff = me?.staff === true;
+  const owned = (id: string) => (staff ? 1 : (me?.inventory[id] ?? 0));
   const [itemId, setItemId] = useState<string>(() => KINDS.find((k) => (meStore.getSnapshot().me?.inventory[k] ?? 0) > 0) ?? "mega_ch");
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
@@ -59,8 +69,8 @@ function MegaphoneDialog({ channel, onOpenShop, onClose }: { channel: number; on
     <Dialog title="확성기로 외치기" onClose={onClose} closable={!pending}>
       <form className={styles.form} onSubmit={(e) => void submit(e)}>
         <p className={ui.hint}>
-          내 닉네임과 한마디가 사람들의 왼쪽 위 확성기 창에 몇 초간 크게 뜨고, 기록에 남아요. 욕설·링크는 쓸 수 없고, 30초에 한 번만
-          외칠 수 있어요.
+          내 닉네임과 한마디가 사람들 화면 가운데에 몇 초간 크게 뜨고, 왼쪽 위 확성기 기록에 남아요. 욕설·링크는 쓸 수 없고, 30초에
+          한 번만 외칠 수 있어요.
         </p>
         <fieldset className={styles.kinds}>
           <legend className={ui.label}>어디에 외칠까요?</legend>
@@ -72,7 +82,7 @@ function MegaphoneDialog({ channel, onOpenShop, onClose }: { channel: number; on
                 <ItemIcon itemId={id} size={32} />
                 <span className={styles.kindText}>
                   <b>{item.name}</b>
-                  <span className={styles.meta}>{id === "mega_all" ? "모든 채널" : `지금 ${channel}채널`} · 가방에 {owned(id)}개</span>
+                  <span className={styles.meta}>{id === "mega_all" ? "모든 채널" : `지금 ${channel}채널`} · {staff ? "운영자 무료" : `가방에 ${owned(id)}개`}</span>
                 </span>
               </label>
             );
@@ -119,6 +129,54 @@ function MegaphoneDialog({ channel, onOpenShop, onClose }: { channel: number; on
           )}
         </div>
       </form>
+
+      <div className={styles.more}>
+        <InfoCard title="이렇게 떠요" icon="megaphone" aside="미리보기">
+          <div className={cx(styles.preview, itemId === "mega_all" && styles.previewAll)} aria-label="화면 가운데에 뜨는 모습 미리보기">
+            <span className={styles.previewTag}>{itemId === "mega_all" ? "전체 확성기" : `${channel}채널 확성기`}</span>
+            <span className={styles.previewName}>{me?.name ?? "내 닉네임"}</span>
+            <span className={styles.previewText}>{text.trim() || "여기에 내 한마디가 크게 보여요"}</span>
+          </div>
+        </InfoCard>
+        <InfoGrid>
+          <InfoCard title="최근 확성기" icon="list" aside={entries.length ? `${Math.min(RECENT, entries.length)}개` : undefined}>
+            {entries.length === 0 ? (
+              <p className={styles.meta}>아직 아무도 외치지 않았어요. 첫 한마디를 남겨 보세요.</p>
+            ) : (
+              <ol className={styles.recent}>
+                {entries
+                  .slice(-RECENT)
+                  .reverse()
+                  .map((e) => (
+                    <li key={e.id}>
+                      <span className={styles.recentHead}>
+                        {e.scope === "all" && <span className={styles.allTag}>전체</span>}
+                        <b>{e.name}</b>
+                        <span className={styles.meta}>{timeText(e.at)}</span>
+                      </span>
+                      <span className={styles.recentText}>{e.text}</span>
+                    </li>
+                  ))}
+              </ol>
+            )}
+          </InfoCard>
+          <InfoCard title="알아 두기" icon="info">
+            <TipList
+              tips={[
+                <>
+                  <b>확성기</b>는 지금 채널({channel}채널)에만, <b>전체 확성기</b>는 모든 채널에 들려요.
+                </>,
+                "여러 사람이 한꺼번에 외치면 온 차례대로 하나씩 가운데에 떠요.",
+                "외친 기록은 왼쪽 위 확성기 창에서 다시 볼 수 있고, 거기서 신고할 수 있어요.",
+                "만남 약속·모닥불 모임·사냥 동료 찾기에 쓰면 좋아요.",
+              ]}
+            />
+            <p className={styles.meta}>
+              <PixelIcon name="bag" /> 확성기는 상점의 [확성기] 칸에서 살 수 있어요.
+            </p>
+          </InfoCard>
+        </InfoGrid>
+      </div>
     </Dialog>
   );
 }

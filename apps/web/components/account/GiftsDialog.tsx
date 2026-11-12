@@ -10,6 +10,8 @@ import { socialApi } from "@/lib/socialApi";
 import type { GiftEntry } from "@/lib/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
+import { EmptyHero, InfoCard, Shortcuts, TipList } from "../ui/InfoBlocks";
+import TodayFacts from "../overlay/TodayFacts";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
 import styles from "./GiftsDialog.module.css";
@@ -21,7 +23,7 @@ const dateText = (t: number) => {
 };
 
 /** 11번 선물함: 운영자가 보낸 쪽지·포인트·아이템. 받기(한 번만)·지우기. 받지 않은 선물은 30일 보관 */
-export default function GiftsDialog({ onClose }: { onClose: () => void }) {
+export default function GiftsDialog({ onClose, onOpenCalendar }: { onClose: () => void; onOpenCalendar?: () => void }) {
   const { gifts } = useGifts();
   const [pending, setPending] = useState<string | null>(null);
   const [confirmDrop, setConfirmDrop] = useState<string | null>(null);
@@ -79,7 +81,11 @@ export default function GiftsDialog({ onClose }: { onClose: () => void }) {
       <div className={styles.wrap}>
         <p className={ui.hint}>마을 관리인이 보낸 선물이 여기로 와요. 받지 않은 선물은 보낸 날부터 30일 동안 보관돼요.</p>
         {gifts === null && <p className={ui.hint}>불러오는 중…</p>}
-        {gifts?.length === 0 && <p className={styles.empty}>선물함이 비어 있어요.</p>}
+        {gifts?.length === 0 && (
+          <EmptyHero icon="gift" title="선물함이 비어 있어요">
+            새 선물이 오면 위쪽 선물함 버튼과 메뉴에 빨간 점이 켜지고, 잠깐 알림도 떠요.
+          </EmptyHero>
+        )}
         <ul className={styles.list}>
           {gifts?.map((g) => {
             const left = Math.max(0, Math.ceil((g.expiresAt - now) / DAY));
@@ -125,6 +131,20 @@ export default function GiftsDialog({ onClose }: { onClose: () => void }) {
         <p className={styles.notice} role="status">
           {notice}
         </p>
+        <InfoCard title="다른 보상도 챙겨요" icon="calendar">
+          <TodayFacts show={["attend", "cap"]} />
+          {onOpenCalendar && <Shortcuts items={[{ label: "출석 달력 열기", icon: "calendar", onClick: onOpenCalendar }]} />}
+        </InfoCard>
+        <InfoCard title="선물은 이럴 때 와요" icon="info">
+          <TipList
+            tips={[
+              "예를 들어 점검·오류로 불편을 겪은 날, 마을 관리인이 사과의 뜻으로 보내요.",
+              "이벤트·명절·업데이트 기념 선물이 오기도 해요.",
+              "받은 포인트는 바로 내 포인트에, 아이템은 가방에 들어가요.",
+              "받은 선물 기록도 30일 동안 여기에 남아요. 필요 없으면 지워도 돼요.",
+            ]}
+          />
+        </InfoCard>
       </div>
     </Dialog>
   );

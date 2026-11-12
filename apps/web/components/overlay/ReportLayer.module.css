@@ -1,0 +1,72 @@
+.menu {
+  position: fixed;
+  z-index: 30;
+  width: 180px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  background: var(--panel-solid);
+  box-shadow: var(--px-border-strong);
+}
+
+.menuName {
+  margin: 0 0 2px;
+  color: var(--bone);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menuItem {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+}
+
+.who {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  color: var(--bone);
+}
+
+.quote {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.reasons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.reasons legend {
+  margin-bottom: 6px;
+}
+
+.reason {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+}
+
+.memo {
+  resize: none;
+  font: inherit;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

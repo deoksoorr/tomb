@@ -263,6 +263,7 @@ export class RoomPresence {
     this.remotes.get(p.sid)?.destroy();
     const body = isAvatarBody(p.body) ? p.body : "hood";
     const r = new RemoteAvatar(this.scene, this.o.atlas, p.sid, p.name, avatarColorSpec(p.color, sanitizeDye(p.dye)), p, performance.now(), p.look ?? [], body);
+    r.view.setStaff(p.staff === true); // 31번 운영자 차림
     this.remotes.set(p.sid, r);
     for (const [id, sid] of this.seats) if (sid === p.sid) r.seatId = id;
   }

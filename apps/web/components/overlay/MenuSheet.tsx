@@ -6,6 +6,7 @@ import Dialog from "../ui/Dialog";
 import PixelIcon, { type IconName } from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import styles from "./MenuSheet.module.css";
+import TodayFacts from "./TodayFacts";
 
 export type MenuTarget =
   | "bury"
@@ -42,11 +43,22 @@ type Props = {
   onClose: () => void;
 };
 
-type Entry = { target: MenuTarget; icon: IconName; label: string; badge?: string; dot?: boolean; redDot?: boolean; primary?: boolean };
+type Entry = {
+  target: MenuTarget;
+  icon: IconName;
+  label: string;
+  /** 타일 아래 한 줄 설명 */
+  desc: string;
+  badge?: string;
+  dot?: boolean;
+  redDot?: boolean;
+  primary?: boolean;
+};
 
 /**
  * 메뉴: 터치 화면은 아래쪽에 조이스틱·행동 버튼만 두고 나머지는 모두 여기에. 데스크톱도 [메뉴]로 연다.
- * 48번: 즐길 거리(가방·사냥·집)를 앞에, 묘비(내 묘비 가기·묘비 쓰기·성불한 이야기들)는 뒤쪽 묶음으로
+ * 48번: 즐길 거리(가방·사냥·집)를 앞에, 묘비(내 묘비 가기·묘비 쓰기·성불한 이야기들)는 뒤쪽 묶음으로.
+ * 큰 아이콘 타일 + 한 줄 설명 + 빨간 점, 아래에 오늘의 정보(출석·남은 포인트 한도·채널·날씨/시간대)
  */
 export default function MenuSheet({
   canBury,
@@ -67,26 +79,33 @@ export default function MenuSheet({
     bridge.emit("input:act", { kind });
   };
   const entries: Entry[] = [
-    { target: "bag", icon: "bag", label: "가방", badge: bagCount ? String(bagCount) : undefined },
-    { target: "hunt", icon: "sword", label: "사냥터" },
-    { target: "dex", icon: "book", label: "도감" },
-    { target: "housing", icon: "house", label: "집·분양 마을" },
+    { target: "bag", icon: "bag", label: "가방", desc: "꾸미기·폭죽·잡은 것 꺼내기", badge: bagCount ? String(bagCount) : undefined },
+    { target: "hunt", icon: "sword", label: "사냥터", desc: "몬스터 사냥 · 경험치와 포인트" },
+    { target: "dex", icon: "book", label: "도감", desc: "물고기·곤충·약초 모으기" },
+    { target: "housing", icon: "house", label: "집·분양 마을", desc: "내 집 분양받고 꾸미기" },
     ...(fireworkCount > 0
-      ? [{ target: "fireworks" as const, icon: "spark" as const, label: "폭죽 쏘기", badge: String(fireworkCount) }]
+      ? [{ target: "fireworks" as const, icon: "spark" as const, label: "폭죽 쏘기", desc: "채널 하늘에 불꽃 한 발", badge: String(fireworkCount) }]
       : []),
-    { target: "calendar", icon: "calendar", label: "출석 달력", redDot: calendarReady },
-    { target: "gifts", icon: "gift", label: "선물함", badge: giftCount ? String(giftCount) : undefined, redDot: giftCount > 0 },
-    { target: "activity", icon: "heart", label: "내 소식", badge: activityUnread ? String(activityUnread) : undefined },
-    { target: "say", icon: "chat", label: "말풍선" },
-    { target: "ranking", icon: "list", label: "랭킹" },
-    { target: "notices", icon: "bell", label: "공지", dot: unreadNotice },
-    { target: "me", icon: "user", label: "내 정보", badge: points !== null ? `${points.toLocaleString("ko-KR")}P` : undefined },
-    { target: "guide", icon: "info", label: "안내" },
+    { target: "calendar", icon: "calendar", label: "출석 달력", desc: calendarReady ? "오늘 도장을 받을 수 있어요!" : "1시간 머물면 오늘 도장", redDot: calendarReady },
+    {
+      target: "gifts",
+      icon: "gift",
+      label: "선물함",
+      desc: giftCount > 0 ? `안 받은 선물 ${giftCount}개` : "마을 관리인이 보낸 선물",
+      badge: giftCount ? String(giftCount) : undefined,
+      redDot: giftCount > 0,
+    },
+    { target: "activity", icon: "heart", label: "내 소식", desc: "헌화·방명록·좋아요 소식", badge: activityUnread ? String(activityUnread) : undefined },
+    { target: "say", icon: "chat", label: "말풍선·이모티콘", desc: "정해진 말로 인사하기 (T)" },
+    { target: "ranking", icon: "list", label: "랭킹", desc: "포인트·사냥·집·헌화 순위" },
+    { target: "notices", icon: "bell", label: "공지", desc: unreadNotice ? "새 공지가 있어요" : "업데이트·점검 소식", dot: unreadNotice },
+    { target: "me", icon: "user", label: "내 정보", desc: "닉네임·개인 코드·내 집", badge: points !== null ? `${points.toLocaleString("ko-KR")}P` : undefined },
+    { target: "guide", icon: "info", label: "안내", desc: "조작법·포인트 규칙·문의" },
   ];
   const graveEntries: Entry[] = [
-    { target: "graves", icon: "grave", label: "내 묘비 가기", badge: myGraveCount ? String(myGraveCount) : undefined },
-    ...(canBury ? [{ target: "bury" as const, icon: "grave" as const, label: "묘비 쓰기" }] : []),
-    { target: "passed", icon: "candle", label: "성불한 이야기들" },
+    { target: "graves", icon: "grave", label: "내 묘비 가기", desc: "내가 세운 묘비 앞으로 걸어가기", badge: myGraveCount ? String(myGraveCount) : undefined },
+    ...(canBury ? [{ target: "bury" as const, icon: "grave" as const, label: "묘비 쓰기", desc: "끝내지 못한 일을 묻어 주기" }] : []),
+    { target: "passed", icon: "candle", label: "성불한 이야기들", desc: "묘역을 떠난 묘비들의 기록" },
   ];
   const button = (e: Entry) => (
     <button
@@ -95,11 +114,18 @@ export default function MenuSheet({
       className={cx(ui.button, styles.entry, e.primary && ui.primary)}
       onClick={() => onPick(e.target)}
     >
-      <PixelIcon name={e.icon} size={18} />
-      <span className={styles.label}>{e.label}</span>
-      {e.badge && <span className={styles.badge}>{e.badge}</span>}
-      {e.dot && <span className={styles.dot} aria-label="새 공지" />}
-      {e.redDot && <span className={cx(styles.dot, styles.redDot)} aria-label="받을 것이 있어요" />}
+      <span className={styles.tileIcon} aria-hidden="true">
+        <PixelIcon name={e.icon} size={21} />
+      </span>
+      <span className={styles.text}>
+        <span className={styles.labelRow}>
+          <span className={styles.label}>{e.label}</span>
+          {e.badge && <span className={styles.badge}>{e.badge}</span>}
+        </span>
+        <span className={styles.desc}>{e.desc}</span>
+      </span>
+      {e.dot && <span className={cx(styles.dot, styles.corner)} aria-label="새 공지" />}
+      {e.redDot && <span className={cx(styles.dot, styles.redDot, styles.corner)} aria-label="받을 것이 있어요" />}
     </button>
   );
 
@@ -110,6 +136,12 @@ export default function MenuSheet({
       <div className={styles.grid} role="group" aria-label="묘역">
         {graveEntries.map(button)}
       </div>
+      <section className={styles.today} aria-labelledby="menu-today">
+        <h3 id="menu-today" className={styles.section}>
+          오늘
+        </h3>
+        <TodayFacts />
+      </section>
       <div className={styles.zoom} role="group" aria-label="감정 표현">
         <span>감정 표현</span>
         <button type="button" className={ui.button} onClick={() => act("wave")}>

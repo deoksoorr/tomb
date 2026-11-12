@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { preload } from "react-dom";
+import VisitTracker from "@/components/VisitTracker";
 import { SITE_DESCRIPTION, SITE_TITLE, shareMetadata } from "./seo";
 import "./globals.css";
 
@@ -33,7 +34,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   preload("/fonts/Galmuri11-Bold.woff2", { as: "font", type: "font/woff2", crossOrigin: "anonymous" });
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* 47번 방문 분석 (방문·체류 신호만, 화면에는 그리지 않는다) */}
+        <VisitTracker />
+      </body>
     </html>
   );
 }

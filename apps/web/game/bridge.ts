@@ -4,6 +4,7 @@ import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
 import type { RpgAction, RpgHud, RpgPlay, RunResult } from "@/lib/rpg/types";
 import type { ResumeState } from "@/lib/resume";
+import type { SoundMix } from "@/lib/soundMix";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
 // "sticky" 이벤트는 마지막 값을 기억해서, 늦게 구독한 쪽도 last()로 현재 값을 읽을 수 있다.
@@ -57,6 +58,8 @@ export type GameEvents = {
   "grave:near": { graveId: string } | null;
   /** 앉을 수 있는 빈 좌석 근처(없으면 null). 게임은 좌석 옆에 "X 앉기" 안내를, UI는 모바일 앉기 버튼을 강조한다 (sticky) */
   "seat:near": { seatId: string; kind: "bench" | "chair" } | null;
+  /** 24번 벤치 상태 (sticky): seated = 의자·벤치에 앉아 있어 고를 수 있음, mood = 지금 고른 상태 (SEAT_MOODS id, 없으면 "") */
+  "mood:state": { seated: boolean; mood: string };
   /** E/Space/탭으로 묘비 상세 모달을 열어 달라는 요청 */
   "grave:open": { graveId: string };
   /**
@@ -90,6 +93,10 @@ export type GameEvents = {
   "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house" };
   /** 실시간 서버가 이 화면을 옛 버전이라 거절함(4010, 큰 패치) → UI가 업데이트 창을 띄운다 (sticky) */
   "app:outdated": { source: "channel" | "room" };
+  /** 47번: 실시간 서버가 이용 제한으로 내보냄(4012) → UI가 새로고침해 제한 화면을 띄운다 */
+  "app:banned": undefined;
+  /** 47번: 다른 사람 캐릭터(또는 이름표)를 눌렀다 → UI가 작은 메뉴(신고하기)를 띄운다. ch = 월드 채널, room = 방 id */
+  "peer:menu": { sid: number; name: string; ch?: number; room?: string };
 
   // ── 하우징 ── (game/housing, components/housing)
   /** 집 안 편집 상태 (편집 모드에서 바뀔 때마다). UI가 가방 남은 개수·점수·저장 버튼에 쓴다 */
@@ -117,17 +124,27 @@ export type GameEvents = {
 
   /** F17 미니맵: 내 위치와 같은 채널 사람들 위치 [x0, y0, x1, y1, …] (월드에 있는 동안 0.25초마다) */
   "minimap:dots": { me: { x: number; y: number }; others: number[] };
+  /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고) */
+  "peers:list": { names: string[] };
 
   // ── 낚시·채집 (4·32번) ── (game/world/forage, components/forage)
   /** 낚시 자리에 앉음 / NPC 앞 / 채집 지점에서 E → UI가 낚시 창·판매 창·채집(게이지·곤충 미니게임)을 연다 */
   "forage:use": ForageUse;
   /** 낚시 자리에서 일어났거나 자리를 놓쳤다 → UI가 낚시 창을 닫는다 */
   "forage:left": undefined;
+
+  // ── 동물원 (game/world/zoo, components/zoo) ──
+  /** 사육사 앞에서 E → UI가 펫 분양 창을 연다 */
+  "zoo:open": undefined;
+  /** 타는 펫 (sticky): pet = 데리고 다니는 타는 펫 id(없으면 null), riding = 올라타 있음, can = 지금 올라탈 수 있음 (UI 타기 버튼) */
+  "ride:state": { pet: string | null; riding: boolean; can: boolean };
 };
 
 
 /** UI → Game */
 export type UiEvents = {
+  /** 동물원 타는 펫 올라타기·내리기 (모바일·HUD 버튼, 데스크톱은 R) */
+  "input:ride": undefined;
   /**
    * 지금 채널의 묘비 목록 (등록 순 = 격자 순서). 받을 때마다 월드를 다시 맞춘다.
    * 채널마다 묘지가 따로라, 게임은 channel이 자기 채널과 다른 목록은 무시하고 채널을 옮기면 묘비를 바로 비운다.
@@ -162,11 +179,17 @@ export type UiEvents = {
   "input:act": { kind: "wave" | "cheer" };
   /** 정해진 문장 말풍선 (PHRASES id). 지금 있는 공간(채널·방)에 보낸다 */
   "input:say": { id: string };
+  /** 5번 이모티콘 (EMOS id). 내 머리 위에 바로 띄우고 같은 채널에 보낸다 */
+  "input:emo": { id: string };
+  /** 24번 벤치 상태 고르기 (SEAT_MOODS id, "" = 풀기). 앉아 있을 때만 */
+  "input:mood": { mood: string };
   /** 첫 방문 안내: 월드의 한 지점을 화살표로 가리킨다 (null이면 지움). target이 있으면 게임이 그 대상의 좌표를 찾는다 */
-  "guide:point": { target: "nearestGrave" | "shop" | "hunt" | "housing" | "bench" | "campfire" | "fishing" | null; label?: string };
+  "guide:point": { target: "nearestGrave" | "shop" | "hunt" | "housing" | "bench" | "campfire" | "fishing" | "zoo" | null; label?: string };
   "input:interact": undefined;
   /** 모달·폼이 열려 있는 동안 게임 키보드 입력을 막는다 */
   "ui:blockKeys": { blocked: boolean };
+  /** 31번: 내 계정이 운영자 계정인지 (sticky). 내 캐릭터를 저승사자 차림·"운영자" 배지로 그린다 */
+  "me:staff": { on: boolean };
   /** 시점을 내 캐릭터로 되돌리고 다시 따라가기 */
   "camera:recenter": undefined;
   /** 줌 버튼(모바일 등). delta>0 확대, <0 축소. 휠과 같은 단계로 움직인다 */
@@ -184,6 +207,8 @@ export type UiEvents = {
   "graves:mine": { ids: string[] };
   /** BGM 볼륨·음소거를 효과음에도 적용 (sticky) */
   "audio:settings": { volume: number; muted: boolean };
+  /** 13번 소리 따로 조절 (sticky): 환경음(비·모닥불·물)·효과음(놀거리·낚시·폭죽 …) 볼륨과 끄기. BGM은 audio:settings */
+  "audio:mix": SoundMix;
   /** 상점 UI가 닫힘 → 게임 키 입력 복귀 등 */
   "shop:closed": undefined;
   /** 50번 소원 분수: 동전 던지기가 서버에서 처리됐다 → 게임이 동전이 날아가 퐁당하는 연출 + 같은 채널에 물 튀기기 */
@@ -240,6 +265,8 @@ export type UiEvents = {
   "forage:coin": undefined;
   /** 도감 열기 (UI 안에서 쓴다: HUD 버튼·메뉴·남의 도감) */
   "forage:dex": { accountId?: string; name?: string | null };
+  /** 채널 이동 창: 지금 채널에 있는 사람들 닉네임을 달라 (월드가 peers:list로 답한다) */
+  "peers:ask": undefined;
 };
 
 export type ForageUse = { kind: "fish"; spot: string; water: "lake" | "river" } | { kind: "npc"; npc: "fishmonger" | "collector" } | { kind: "node"; node: string };
@@ -265,6 +292,10 @@ const STICKY = new Set<keyof AllEvents>([
   "app:outdated",
   "village:data",
   "forage:nodes",
+  "me:staff",
+  "mood:state",
+  "audio:mix",
+  "ride:state",
 ]);
 
 class Bridge {

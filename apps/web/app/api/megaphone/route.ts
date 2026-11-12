@@ -11,6 +11,7 @@ import { kstDay, loadMe } from "@/lib/store/accounts";
 import { isGraveChannel } from "@/lib/store/channels";
 import { MEGA_KEEP, MEGA_SHOW, MEGAPHONE_COOLDOWN_MS } from "@/lib/store/megaphone";
 import type { MegaphoneEntry, MegaphoneListResponse, MegaphoneUseResponse } from "@/lib/types";
+import { isStaff } from "@/lib/staff";
 import { readBody } from "@/lib/validate";
 
 /**
@@ -53,7 +54,8 @@ export const POST = handler(async (req) => {
   const now = Date.now();
   const wait = await store.cooldown(visitorId, MEGAPHONE_COOLDOWN_MS, now);
   if (wait > 0) throw new HttpError(429, "RATE_LIMITED", `확성기는 ${Math.ceil(wait / 1000)}초 뒤에 다시 쓸 수 있어요.`);
-  if (!(await accounts.consume(visitorId, itemId))) {
+  // 31번 운영자 계정은 확성기를 가방에서 꺼내지 않는다 (무료)
+  if (!(await isStaff(visitorId)) && !(await accounts.consume(visitorId, itemId))) {
     await store.releaseCooldown(visitorId);
     throw new HttpError(409, "NO_ITEM", "가방에 확성기가 없어요. 상점에서 살 수 있어요.");
   }

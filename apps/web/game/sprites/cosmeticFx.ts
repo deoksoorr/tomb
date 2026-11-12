@@ -1,4 +1,5 @@
 import { DIR, type DirId } from "@tomb/protocol";
+import { foxSheet, MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountLift, mountSheet, type MountKind } from "./mountArt";
 import { Grid, type Color } from "./pixel";
 
 // F8 캐릭터 꾸미기 추가분 중 "아바타 시트 밖에 따로 그리는 연출" (날개 2종·우산·풍선·발자국 5종·오라 6종·펫 6종).
@@ -248,6 +249,11 @@ export const FX_ART = {
       g.outline(0x2a6a9a, false, 160);
     }),
   },
+  // ── 동물원 펫 (sprites/mountArt.ts) ── 달빛 여우 + 타는 펫 3종 (옆·앞·뒤 + 탄 사람 앞에 그리는 덧그림)
+  petFox: { w: 12, h: 10, frames: 2, build: foxSheet },
+  mountHound: { w: MOUNT_W, h: MOUNT_H, frames: MOUNT_FRAMES, build: () => mountSheet("hound") },
+  mountGoose: { w: MOUNT_W, h: MOUNT_H, frames: MOUNT_FRAMES, build: () => mountSheet("goose") },
+  mountDeer: { w: MOUNT_W, h: MOUNT_H, frames: MOUNT_FRAMES, build: () => mountSheet("deer") },
   /** 도깨비불 친구 둘레 빛 (더하기) */
   wispGlow: {
     w: 15,
@@ -389,7 +395,8 @@ function fill(w: number, h: number, c: Color, a: number): Grid {
 
 // ── 아이템 → 연출 규칙 ──
 
-type PetSpec = { kind: "pet"; art: FxArtId; hover: number; fps: number; idleFps: number; alpha?: number; squash?: boolean; glow?: boolean };
+/** mount = 타는 펫 (그림은 mountArt 시트, 따라올 때는 몸집만큼 far배 떨어져 걷는다) */
+type PetSpec = { kind: "pet"; art: FxArtId; hover: number; fps: number; idleFps: number; alpha?: number; squash?: boolean; glow?: boolean; mount?: MountKind; far?: number };
 type TrailSpec = { kind: "trail"; art: FxArtId; step: number; life: number; motion: "prints" | "splash" | "rise" | "scatter" | "pop"; light?: boolean };
 type AuraSpec = { kind: "aura"; motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" };
 type WingSpec = { kind: "wings"; art: FxArtId; flapMs: number; amp: number };
@@ -418,7 +425,22 @@ export const COSMETIC_FX: Readonly<Record<string, FxSpec>> = {
   pet_slime: { kind: "pet", art: "petSlime", hover: 0, fps: 5, idleFps: 1.6, squash: true },
   pet_bird: { kind: "pet", art: "petBird", hover: 10, fps: 10, idleFps: 4 },
   pet_wisp: { kind: "pet", art: "petWisp", hover: 7, fps: 6, idleFps: 3, alpha: 0.92, glow: true },
+  pet_fox: { kind: "pet", art: "petFox", hover: 0, fps: 8, idleFps: 2 },
+  pet_hound: { kind: "pet", art: "mountHound", hover: 0, fps: 7, idleFps: 2, mount: "hound", far: 1.7 },
+  pet_goose: { kind: "pet", art: "mountGoose", hover: 0, fps: 6, idleFps: 1.5, mount: "goose", far: 1.6 },
+  pet_deer: { kind: "pet", art: "mountDeer", hover: 0, fps: 7, idleFps: 1.5, mount: "deer", far: 1.7 },
 };
+
+/** 이 펫이 타는 펫이면 그 그림 종류 (아니면 null) */
+export function mountOf(petId: string | null | undefined): MountKind | null {
+  const s = petId ? COSMETIC_FX[petId] : undefined;
+  return s?.kind === "pet" && s.mount ? s.mount : null;
+}
+/** 타는 펫에 올라탄 사람을 들어 올리는 높이 (px, 타는 펫이 아니면 0) */
+export function riderLift(petId: string | null | undefined): number {
+  const m = mountOf(petId);
+  return m ? mountLift(m) : 0;
+}
 
 /** 따로 그리는 F8 꾸미기 id 전부 (SPRITE_COSMETICS에 들어간다) */
 export const COSMETIC_FX_IDS: readonly string[] = Object.keys(COSMETIC_FX);
@@ -468,6 +490,10 @@ export type FxInput = {
   reduced: boolean;
   /** 멈춘 그림 (입어 보기 미리보기의 움직임 줄이기): 시각 0의 모습 + 걷기면 발자국을 미리 깔아 둔다 */
   still?: boolean;
+  /** 타는 펫에 올라타 있다 (펫이 타는 펫일 때만 뜻이 있다): 펫을 발밑에 그리고 탄 사람 앞에 머리·엉덩이를 덧그린다 */
+  riding?: boolean;
+  /** 점프 높이 (타고 있을 때 펫도 같이 뛴다) */
+  hop?: number;
 };
 
 type Part = { x: number; y: number; born: number; frame: number; flip: boolean; vx: number };
@@ -628,9 +654,11 @@ export class CosmeticFxSim {
   }
 
   private pet(s: PetSpec, f: FxInput, t: number, out: FxCmd[]): void {
+    if (s.mount && f.riding) return this.mounted(s, f, t, out);
     const back = petBack(f.dir);
-    const tx = f.x + back[0];
-    const ty = f.y + back[1];
+    const far = s.far ?? 1;
+    const tx = f.x + back[0] * far;
+    const ty = f.y + back[1] * far;
     if (f.still) {
       const [hx, hy] = heading(f.dir);
       const lag = f.moving ? 12 : 0;
@@ -665,6 +693,24 @@ export class CosmeticFxSim {
     const flip = this.petX > f.x;
     if (s.glow) out.push(cmd("wispGlow", 0, px, py - 5, { oy: 0.5, alpha: 0.8, layer: "light", depth: 0 }));
     out.push(cmd(s.art, frame, px, py, { oy: 1, sx, sy, flip, alpha: s.alpha ?? 1, layer: "body", depth: this.petY }));
+  }
+
+  /**
+   * 타는 펫에 올라탄 모습: 펫을 발밑(점프하면 같이 뜬다)에 탄 사람 뒤로 그리고, 앞·뒷모습이면 머리·엉덩이를 탄 사람 앞에 덧그린다.
+   * 내리면 펫은 이 자리에서부터 다시 따라온다 (petX/petY를 발밑에 맞춰 둔다)
+   */
+  private mounted(s: PetSpec, f: FxInput, t: number, out: FxCmd[]): void {
+    this.petX = f.x;
+    this.petY = f.y;
+    this.petOn = true;
+    if (f.hidden) return;
+    const walking = f.moving;
+    const fr = walking ? Math.floor((t / 1000) * s.fps) % 2 : 0;
+    const x = Math.round(f.x);
+    const y = Math.round(f.y - (f.hop ?? 0));
+    const view = f.dir === DIR.down ? 2 : f.dir === DIR.up ? 4 : 0;
+    out.push(cmd(s.art, view + fr, x, y, { oy: 1, flip: f.dir === DIR.left, layer: "body", depth: f.y - 0.2 }));
+    if (view) out.push(cmd(s.art, (f.dir === DIR.down ? 6 : 8) + fr, x, y, { oy: 1, layer: "body", depth: f.y + 0.2 }));
   }
 
   private trail(s: TrailSpec, f: FxInput, out: FxCmd[]): void {
@@ -915,10 +961,29 @@ export function fxIconGrid(id: string): Grid | null {
     case "pet_duck":
     case "pet_slime":
     case "pet_bird":
-    case "pet_wisp": {
+    case "pet_wisp":
+    case "pet_fox": {
       const art = (COSMETIC_FX[id] as PetSpec).art;
       const a = FX_ART[art];
       blit(g, art, 0, Math.floor((16 - a.w) / 2), 15 - a.h);
+      return g;
+    }
+    case "pet_hound":
+    case "pet_goose":
+    case "pet_deer": {
+      // 24×22 옆모습을 16×16에 줄여 담는다 (칸마다 가장 가까운 픽셀)
+      const a = FX_ART[(COSMETIC_FX[id] as PetSpec).art];
+      const src = a.build();
+      const k = Math.max(a.w / 16, a.h / 15);
+      const ox = Math.floor((16 - a.w / k) / 2);
+      for (let y = 0; y < 16; y++)
+        for (let x = 0; x < 16; x++) {
+          const sx = Math.floor((x - ox + 0.5) * k);
+          const sy = Math.floor((y - (16 - a.h / k) + 0.5) * k);
+          if (sx < 0 || sy < 0 || sx >= a.w || sy >= a.h) continue;
+          const v = src.px[sy * src.w + sx];
+          if ((v & 255) > 0) g.px[y * 16 + x] = v;
+        }
       return g;
     }
     default:

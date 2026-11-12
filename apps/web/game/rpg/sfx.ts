@@ -1,7 +1,8 @@
+import { busGain, loadSoundMix } from "@/lib/soundMix";
 import { bridge } from "../bridge";
 
 // 사냥터 효과음. Phaser 오디오는 꺼 두었으므로 HTMLAudioElement를 직접 쓴다 (game/world/Sfx.ts와 같은 방식).
-// 파일이 아직 없거나 재생이 막히면 조용히 넘어가고, 볼륨·음소거는 audio:settings를 따른다.
+// 파일이 아직 없거나 재생이 막히면 조용히 넘어가고, 13번: 볼륨·끄기는 효과음 갈래(audio:mix sfx 버스)를 따른다.
 
 export type RpgSound =
   | "hit"
@@ -58,14 +59,14 @@ export class RpgSfx {
   private readonly base = new Map<RpgSound, HTMLAudioElement>();
   private readonly missing = new Set<RpgSound>();
   private voices = 0;
-  private volume = 0.7;
-  private muted = false;
+  /** 13번 효과음 갈래의 크기 (끄면 0) */
+  private volume = busGain(bridge.last("audio:mix") ?? loadSoundMix(), "sfx");
   private readonly off: () => void;
 
   constructor() {
-    const s = bridge.last("audio:settings");
-    if (s) this.set(s.volume, s.muted);
-    this.off = bridge.on("audio:settings", ({ volume, muted }) => this.set(volume, muted));
+    this.off = bridge.on("audio:mix", (m) => {
+      this.volume = busGain(m, "sfx");
+    });
     if (typeof Audio === "undefined") return;
     for (const name of NAMES) {
       const a = new Audio();
@@ -76,14 +77,8 @@ export class RpgSfx {
     }
   }
 
-  private set(volume: number, muted: boolean): void {
-    const v = Number.isFinite(volume) ? (volume > 1 ? volume / 100 : volume) : 0.7;
-    this.volume = Math.max(0, Math.min(1, v));
-    this.muted = muted;
-  }
-
   play(name: RpgSound, gain = 1): void {
-    if (this.muted || this.volume <= 0 || this.missing.has(name) || this.voices >= MAX_VOICES) return;
+    if (this.volume <= 0 || this.missing.has(name) || this.voices >= MAX_VOICES) return;
     const src = this.base.get(name);
     if (!src) return;
     const a = src.cloneNode(true) as HTMLAudioElement;
@@ -104,7 +99,7 @@ export class RpgSfx {
    * degree: 음계 단계 (별 순서), bright: 완벽 판정이면 조금 더 밝게
    */
   chime(degree: number, bright = false): void {
-    if (this.muted || this.volume <= 0 || typeof window === "undefined") return;
+    if (this.volume <= 0 || typeof window === "undefined") return;
     try {
       const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!Ctx) return;
@@ -149,9 +144,8 @@ export class RpgSfx {
 /** 씬 밖(결과 화면 등)에서 효과음 한 번 (볼륨·음소거 설정을 따른다). 레벨 업 소리에 쓴다 */
 export function playRpgSoundOnce(name: RpgSound, gain = 1): void {
   if (typeof Audio === "undefined") return;
-  const s = bridge.last("audio:settings");
-  const raw = s && Number.isFinite(s.volume) ? (s.volume > 1 ? s.volume / 100 : s.volume) : 0.7;
-  if (s?.muted || raw <= 0) return;
+  const raw = busGain(bridge.last("audio:mix") ?? loadSoundMix(), "sfx");
+  if (raw <= 0) return;
   const a = new Audio(`/sfx/${name}.mp3`);
   a.volume = Math.max(0, Math.min(1, raw * gain));
   a.play().catch(() => undefined);

@@ -1,30 +1,48 @@
-// 게임 소리의 바탕: WebAudio 컨텍스트 하나 + UI 볼륨·음소거(audio:settings, BGM과 같은 값) + 멈춘 컨텍스트 깨우기.
-// 효과음(Sfx)·날씨 소리(WeatherSound)가 이 위에 올라간다. 루프 소리는 AmbientLoop가 이 호스트를 쓴다.
+import { busGain, loadSoundMix, type SoundBus, type SoundMix } from "@/lib/soundMix";
+import { bridge } from "../bridge";
+
+// 게임 소리의 바탕: WebAudio 컨텍스트 하나 + 소리 갈래(버스) 볼륨·끄기(13번 audio:mix) + 멈춘 컨텍스트 깨우기.
+// 효과음(Sfx·RideSound·ForageSfx·HouseSfx)은 sfx 버스, 날씨 소리(WeatherSound)는 amb 버스가 기본이다.
+// 한 호스트 안에서도 소리마다 다른 버스를 쓸 수 있다 (Sfx의 모닥불·물소리 루프는 환경음: AmbientLoop의 bus 옵션).
+// BGM은 따로(components/bgm/engine)라 여기와 상관없다.
+
+export type { SoundBus };
 
 export class AudioHost {
   protected ac: AudioContext | null = null;
-  private vol = 0.7;
-  private mute = false;
+  private mix: SoundMix;
   private kickAt = -Infinity;
+  private readonly offMix: () => void;
 
+  constructor(protected readonly bus: SoundBus = "sfx") {
+    this.mix = bridge.last("audio:mix") ?? loadSoundMix();
+    this.offMix = bridge.on("audio:mix", (m) => {
+      this.mix = m;
+      this.onMixChanged();
+    });
+  }
+
+  /** 소리 설정이 바뀌었다 (루프 소리를 가진 호스트가 다시 맞춘다) */
+  protected onMixChanged(): void {}
+
+  /** 기본 버스 볼륨 0..1 */
   get volume(): number {
-    return this.vol;
+    return this.mix[this.bus].volume;
   }
 
+  /** 기본 버스를 껐는지 */
   get muted(): boolean {
-    return this.mute;
+    return this.mix[this.bus].muted;
   }
 
-  /** UI 볼륨: 0..1 (혹시 0..100이 오면 나눠서) */
-  protected setVolume(volume: number, muted: boolean): void {
-    const v = Number.isFinite(volume) ? (volume > 1 ? volume / 100 : volume) : 0.7;
-    this.vol = Math.max(0, Math.min(1, v));
-    this.mute = muted;
+  /** 그 버스의 실제 크기 0..1 (끄면 0) */
+  busGain(bus: SoundBus = this.bus): number {
+    return busGain(this.mix, bus);
   }
 
-  /** 소리를 낼 수 있으면 (필요하면 만들어서) 컨텍스트를 돌려준다. 음소거·볼륨 0이면 null */
-  audio(): AudioContext | null {
-    if (this.mute || this.vol <= 0) return null;
+  /** 소리를 낼 수 있으면 (필요하면 만들어서) 컨텍스트를 돌려준다. 그 버스를 껐거나 볼륨 0이면 null */
+  audio(bus: SoundBus = this.bus): AudioContext | null {
+    if (this.busGain(bus) <= 0) return null;
     if (!this.ac) {
       const AC =
         typeof window !== "undefined"
@@ -60,6 +78,7 @@ export class AudioHost {
   }
 
   protected closeAudio(): void {
+    this.offMix();
     void this.ac?.close().catch(() => undefined);
     this.ac = null;
   }

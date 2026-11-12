@@ -1,6 +1,7 @@
+/* 큰 아이콘 타일 격자: 데스크톱 세 줄, 폰 두 줄 */
 .grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 8px;
 }
 
@@ -8,9 +9,55 @@
   position: relative;
   justify-content: flex-start;
   gap: 10px;
-  min-height: 56px;
-  padding: 8px 12px;
+  min-height: 64px;
+  padding: 8px 10px;
   text-align: left;
+}
+
+.tileIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  background: var(--bg-deep);
+  color: var(--candle);
+  box-shadow: var(--px-border);
+}
+
+.text {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.desc {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 빨간 점·새 공지 점은 타일 오른쪽 위 모서리에 */
+.corner {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+.today {
+  margin-top: 4px;
 }
 
 /* 묘비 묶음 제목 (메뉴 뒤쪽) */
@@ -23,8 +70,11 @@
 }
 
 .label {
-  flex: 1;
   min-width: 0;
+  overflow: hidden;
+  color: var(--bone);
+  font-size: 13px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -57,24 +107,25 @@
   margin-right: auto;
 }
 
-.phrases {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
-.phrase {
-  min-height: 44px;
-  padding: 6px 10px;
-  border: 0;
-  background: var(--bg-deep);
-  color: var(--text);
-  text-align: left;
-  box-shadow: var(--px-border);
-}
+  .entry {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    min-height: 92px;
+  }
 
-.phrase:hover {
-  background: var(--surface);
+  .text {
+    width: 100%;
+  }
+
+  .desc {
+    white-space: normal;
+  }
 }
 
 /* 10·11번: 받을 수 있는 출석 도장·선물 (빨간 점) */

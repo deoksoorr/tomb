@@ -1,6 +1,6 @@
 import * as Phaser from "phaser";
 import { DIR, STATE_NAMES, type DirId, type StateName } from "@tomb/protocol";
-import { AV_ACT_ANIM, AV_ANIM, AV_COLS, AV_H, AV_W, bodyOf, buildAvatarSheet, lookKey, type AvatarActAnim } from "../sprites/avatar";
+import { AV_ACT_ANIM, AV_ANIM, AV_COLS, AV_H, AV_W, avatarColorKey, bodyOf, buildAvatarSheet, lookKey, type AvatarActAnim } from "../sprites/avatar";
 import * as fx from "../sprites/fx";
 import { SHAPE_SIZE, shapeVariants, type GraveShape } from "../graveShape";
 import { flowersCanvas, graveCanvas, graveTexKey, mineFlagCanvas, plotCanvas, upMarkerCanvas } from "../sprites/graves";
@@ -8,7 +8,6 @@ import * as props from "../sprites/props";
 import { WORLD_PROP_ART, WORLD_PROP_SHEETS } from "../sprites/worldProps";
 import { GY_ART, GY_SHEETS } from "../sprites/graveyardProps";
 import * as art from "../sprites/extras";
-import { parseHex } from "../sprites/pixel";
 
 // 텍스처 키 → 생성기. 지금은 전부 코드로 그린 플레이스홀더 픽셀아트이고,
 // 나중에 CC0 스프라이트시트로 바꾸려면 해당 항목을 { kind: "file", url, frameW?, frameH? } 로 바꾸면 된다
@@ -223,7 +222,8 @@ const DIR_IDS: readonly DirId[] = [DIR.down, DIR.left, DIR.right, DIR.up];
 /** 색 + (시트에 그려지는) 꾸미기 + 몸 조합마다 시트 하나 */
 export function avatarKey(color: string, look: readonly string[] = [], body: string = "hood"): string {
   const b = bodyOf(body);
-  const base = `avatar-${parseHex(color).toString(16).padStart(6, "0")}${b === "hood" ? "" : `@${b}`}`;
+  // 46번: 색 표기(염색 포함) 전체로 구분한다 — 기본색만 보면 염색한 아바타끼리 낡은 시트를 같이 쓴다
+  const base = `avatar-${avatarColorKey(color)}${b === "hood" ? "" : `@${b}`}`;
   const k = lookKey(look);
   return k ? `${base}~${k}` : base;
 }

@@ -1,35 +1,123 @@
 import { nanoid } from "nanoid";
 import { isPermanentUntil, PERMANENT_UNTIL, permanentPrice, verifyGrant } from "@tomb/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { env } from "../env";
 import { getAccounts, getGifts } from "../store";
 import { kstDay, loadMe } from "../store/accounts";
 import { getStyleStore } from "../store/style";
-import { buildPalette, cellColor, colorAt, DYE_BOARD_H, DYE_BOARD_W, DYE_CENTER, DYE_GRACE_MS, DYE_TIERS, DYE_TIME_MS } from "./palette";
+import { buildPalette, cellColor, cellRgb, colorAt, DYE_BOARD_H, DYE_BOARD_W, DYE_CENTER, DYE_GRACE_MS, DYE_TIERS, DYE_TIME_MS, samplePoints } from "./palette";
 import { DYE_RESET_PRICE, RESHAPE_PRICE } from "./rules";
 import { AdminDyeIssueSchema, DyeFinishSchema, DyeStartSchema } from "./schemas";
 import { applyFixedDye, buyPermanent, dyeState, finishDye, issueFixedDye, judgeColor, reshape, resetDye, startDye } from "./service";
 
+// node(V8)·크롬·사파리 엔진(JavaScriptCore, osascript)에서 같은 값임을 확인했다 (11/12)
+const GOLDEN = ["2eed5825", "a9808955", "f9608754"];
+
 // 46번 염색 · 25번 외형 바꾸기 · 30번 영구 코디 (로컬 메모리 저장소 — Redis Lua는 같은 규칙으로 style.ts에)
 
-const distinct = (seed: string, tier: 1 | 2 | 3) => new Set(buildPalette(seed, tier).blobs.map((b) => b.color)).size;
+/** 판 전체에서 서로 다른 색 수 */
+const distinct = (seed: string, tier: 1 | 2 | 3) => {
+  const p = buildPalette(seed, tier);
+  const set = new Set<number>();
+  for (let y = 0; y < DYE_BOARD_H; y++) for (let x = 0; x < DYE_BOARD_W; x++) set.add(cellRgb(p, x, y));
+  return set.size;
+};
+/** 판 전체 색의 해시 (FNV-1a) — 같은 함수면 어느 엔진에서나 같은 값 */
+const boardHash = (seed: string, tier: 1 | 2 | 3) => {
+  const p = buildPalette(seed, tier);
+  let h = 0x811c9dc5;
+  for (let y = 0; y < DYE_BOARD_H; y++) for (let x = 0; x < DYE_BOARD_W; x++) h = Math.imul(h ^ cellRgb(p, x, y), 0x01000193);
+  return (h >>> 0).toString(16);
+};
+const rgb = (v: number) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 
-describe("46번 팔레트", () => {
-  it("같은 시드·등급이면 같은 판, 시드가 다르면 색도 자리도 다르다", () => {
+describe("46번 팔레트 (11/12 개편: 연속 색 공간)", () => {
+  it("같은 시드·등급이면 같은 판, 시드가 다르면 칸 색이 다르다", () => {
     const a = buildPalette("seed-aaaa", 2);
     expect(buildPalette("seed-aaaa", 2)).toEqual(a);
     const b = buildPalette("seed-bbbb", 2);
-    expect(b.blobs.map((x) => x.color)).not.toEqual(a.blobs.map((x) => x.color));
-    // 같은 칸의 색이 판마다 다르다 (여러 칸 중 대부분)
     let same = 0;
-    for (let i = 0; i < 40; i++) if (colorAt(a, i * 4, (i * 7) % DYE_BOARD_H) === colorAt(b, i * 4, (i * 7) % DYE_BOARD_H)) same++;
-    expect(same).toBeLessThan(5);
+    for (let i = 0; i < 40; i++) if (colorAt(a, i * 7, (i * 11) % DYE_BOARD_H) === colorAt(b, i * 7, (i * 11) % DYE_BOARD_H)) same++;
+    expect(same).toBeLessThan(3);
+  });
+
+  it("정수 연산만: 삼각함수·지수·제곱근 없이 계산한다 (엔진마다 결과가 달라질 여지가 없다)", () => {
+    const names = ["sin", "cos", "tan", "atan2", "exp", "log", "pow", "sqrt", "hypot", "cbrt"] as const;
+    const saved = names.map((n) => [n, Math[n]] as const);
+    const spies = names.map((n) => vi.spyOn(Math, n).mockImplementation(() => {
+      throw new Error(`Math.${n} 사용`);
+    }));
+    try {
+      for (const t of [1, 2, 3] as const) {
+        const p = buildPalette("int-only", t);
+        for (let i = 0; i < 200; i++) cellColor(p, (i * 37) % DYE_BOARD_W, (i * 53) % DYE_BOARD_H);
+      }
+    } finally {
+      spies.forEach((s) => s.mockRestore());
+    }
+    expect(saved.every(([n, f]) => Math[n] === f)).toBe(true);
+  });
+
+  it("고정 시드의 판 전체가 기록해 둔 값과 한 칸도 다르지 않다 (클라이언트·서버가 같은 판을 본다)", () => {
+    // 이 값이 바뀌면 판 함수가 바뀐 것: 이미 열린 판의 색이 화면과 서버에서 달라질 수 있으니 CLIENT_VERSION도 함께 올린다
+    expect([boardHash("golden-seed", 1), boardHash("golden-seed", 2), boardHash("golden-seed", 3)]).toEqual(GOLDEN);
+    // 서버 판정(judgeColor)과 화면 그리기(cellColor)는 같은 칸에서 같은 색
+    const p = buildPalette("golden-seed", 3);
+    for (let i = 0; i < 100; i++) {
+      const x = (i * 31.7) % DYE_BOARD_W;
+      const y = (i * 17.3) % DYE_BOARD_H;
+      expect(judgeColor({ seed: "golden-seed", tier: 3 }, x, y)).toBe(cellColor(p, Math.floor(x), Math.floor(y)));
+    }
+  });
+
+  it("부드러운 그라데이션: 바로 옆 칸끼리 색이 조금씩만 다르고, 칸마다 색이 거의 다 다르다", () => {
+    for (const t of [1, 2, 3] as const) {
+      const p = buildPalette(`smooth-${t}`, t);
+      let maxStep = 0;
+      let sumStep = 0;
+      let n = 0;
+      for (let y = 0; y < DYE_BOARD_H; y++)
+        for (let x = 0; x + 1 < DYE_BOARD_W; x++) {
+          const a = rgb(cellRgb(p, x, y));
+          const b = rgb(cellRgb(p, x + 1, y));
+          const d = Math.max(...a.map((v, k) => Math.abs(v - b[k])));
+          maxStep = Math.max(maxStep, d);
+          sumStep += d;
+          n++;
+        }
+      // 단색 덩어리 경계처럼 뚝 끊기는 곳이 없다
+      expect(maxStep, `등급 ${t} 최대 차이`).toBeLessThan(40);
+      // 그렇다고 같은 색이 이어지지도 않는다 (평균 몇 단계씩 흐른다)
+      expect(sumStep / n, `등급 ${t} 평균 차이`).toBeGreaterThan(1.5);
+      expect(distinct(`smooth-${t}`, t), `등급 ${t} 색 수`).toBeGreaterThan(8000);
+      // 색 표본(격자점)은 수천 개
+      expect(samplePoints(p)).toBeGreaterThan(1000);
+    }
   });
 
   it("비싼 등급일수록 색이 다양하고 조준점이 덜 흔들린다 (시간은 모두 60초)", () => {
-    const avg = (t: 1 | 2 | 3) => [1, 2, 3, 4, 5].reduce((n, i) => n + distinct(`s${i}xxxx`, t), 0) / 5;
-    expect(avg(1)).toBeLessThan(avg(2));
-    expect(avg(2)).toBeLessThan(avg(3));
+    const hueSpan = (t: 1 | 2 | 3) => {
+      // 판 색을 색상 30도 칸 12개로 나눠, 채워진 칸 수 (5개 판 평균)
+      let total = 0;
+      for (let s = 0; s < 5; s++) {
+        const p = buildPalette(`span${s}xx`, t);
+        const bins = new Set<number>();
+        for (let y = 0; y < DYE_BOARD_H; y += 4)
+          for (let x = 0; x < DYE_BOARD_W; x += 4) {
+            const [r, g, b] = rgb(cellRgb(p, x, y));
+            const mx = Math.max(r, g, b);
+            const mn = Math.min(r, g, b);
+            if (mx - mn < 24) continue; // 거의 회색은 빼고
+            const d = mx - mn;
+            const h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+            bins.add(Math.floor(h * 2));
+          }
+        total += bins.size;
+      }
+      return total / 5;
+    };
+    expect(hueSpan(1)).toBeLessThan(hueSpan(3));
+    expect(hueSpan(2)).toBeLessThanOrEqual(hueSpan(3));
     expect(DYE_TIERS[1].wobblePx).toBeGreaterThan(DYE_TIERS[2].wobblePx);
     expect(DYE_TIERS[2].wobblePx).toBeGreaterThan(DYE_TIERS[3].wobblePx);
     expect(DYE_TIME_MS).toBe(60_000);
@@ -168,8 +256,10 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     expect(later.stash.find((e) => e.itemId === "hat_crown")?.until).toBe(PERMANENT_UNTIL);
     expect(isPermanentUntil(later.stash[0].until)).toBe(true);
     // 안 가진 꾸미기를 영구로 → 벗어 둔 꾸미기
-    const r2 = await buyPermanent(id, "pet_ghost", now);
-    expect(r2.me.stash.some((e) => e.itemId === "pet_ghost" && e.until === PERMANENT_UNTIL)).toBe(true);
+    const r2 = await buyPermanent(id, "neck_scarf", now);
+    expect(r2.me.stash.some((e) => e.itemId === "neck_scarf" && e.until === PERMANENT_UNTIL)).toBe(true);
+    // 펫은 상점에서 영구로 팔지 않는다 (동물원 사육사에게서만)
+    await expect(buyPermanent(id, "pet_ghost", now)).rejects.toMatchObject({ code: "INVALID_INPUT" });
     // 가방에 새 이용권이 있으면 먼저 입게 한다, 포인트 모자람
     await accounts.adjustPoints(id, 1000);
     await accounts.buy(id, "hat_halo", 40);

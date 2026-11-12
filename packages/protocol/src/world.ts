@@ -21,8 +21,9 @@ export const WALL_THICKNESS = 2 * TILE;
  * 맵 배치 버전. 좌표가 바뀌는 맵 개편마다 올린다 → 옛 맵에서 저장한 새로고침 자리 기록(lib/resume.ts)은 위치를 버리고 입구에서 시작한다.
  * 1 = 세로로 길던 공동묘지 맵, 2 = 가을·겨울 마을(가로로 넓은 맵), 3 = 컴팩트한 묘지 마을(F1: 큰 모닥불 광장·묘역 세 곳·연못 여럿)
  * 4 = 낚시터(호수 북동쪽 데크·아치·노점 마당, 까마귀 연못 마른 나무·비석) — 데크·장식 자리에 옛 기록이 끼지 않게
+ * 5 = 동물원(버드나무 묘역 자리 — 울타리·우리·사육사 노점, 묘비 자리는 옛 묘역·다리 건너 묘역으로 옮김) — 우리 안에 옛 기록이 끼지 않게
  */
-export const MAP_VERSION = 4;
+export const MAP_VERSION = 5;
 
 const CX = MAP_WIDTH / 2; // 720
 
@@ -32,15 +33,15 @@ const CX = MAP_WIDTH / 2; // 720
 //         │ ▲별 보기 언덕▲ (달빛 연못) 유령잡화점 SPAWN  ⚑팻말   분양사무소 (까마귀 연못)│
 //  y≈176  │ ▲망원경·벤치▲ ═══════════════ 북쪽 길 ═════════════════════════════════│
 //  y≈272  │ ▲절벽·계단▲    종루 ┌──────── 모닥불 광장 ────────┐ ║ 집 집 집      │
-//  y≈288  │ ┌─옛 묘역 16─┐ 성황당│ 분수  그네   트램펄린     │ ║ 집 집 집      │
+//  y≈288  │ ┌─옛 묘역 20─┐ 성황당│ 분수  그네   트램펄린     │ ║ 집 집 집      │
 //         │ │ 철책·묘비  │═════│      ( 큰 모닥불 )        │ ║ 집 집 집      │
 //  y≈544  │ └────────────┘     │ 회전목마  해먹   시소      │ ║ 집 집 집      │
 //  y≈600  │ 묘지기 모닥불       └───────────────────────────┘ ╚═══════════════│
 //  y≈700  │ ~~~ 강 ~~[서쪽 다리]~~~~[징검다리]~~[가운데 다리]~~~╲  나루터·낚시터  │
-//  y≈784  │ ┌버드나무 묘역 8┐ (안개 연못) ┌다리 건너 묘역 8┐ 호박밭 ╲( 호수 ·배 )│
+//  y≈784  │ ┌─ 동물원 (우리 5곳·사육사) ─┐ (안개 연못) ┌다리 건너 묘역 12┐ 호박밭 ╲( 호수 ·배 )│
 //  y≈1008 └──────────────────────────────────────────────────────────────────────┘
 
-export type ZoneId = "hill" | "graveyard" | "plaza" | "housing" | "river" | "lake" | "pond" | "forest" | "meadow" | "gate" | "fishing";
+export type ZoneId = "hill" | "graveyard" | "plaza" | "housing" | "river" | "lake" | "pond" | "forest" | "meadow" | "gate" | "fishing" | "zoo";
 export type Zone = { id: ZoneId; name: string; x: number; y: number; w: number; h: number };
 /** 구역 사각형 (이름표·안내·앞으로의 콘텐츠 배치 기준. 충돌과는 상관없다) */
 export const ZONES: readonly Zone[] = [
@@ -55,7 +56,8 @@ export const ZONES: readonly Zone[] = [
   { id: "pond", name: "까마귀 연못", x: 1108, y: 62, w: 232, h: 92 },
   { id: "forest", name: "안개 숲", x: 400, y: 784, w: 200, h: 224 },
   { id: "graveyard", name: "다리 건너 묘역", x: 600, y: 784, w: 256, h: 224 },
-  { id: "graveyard", name: "버드나무 묘역", x: 48, y: 784, w: 352, h: 224 },
+  // 동물원 (예전 버드나무 묘역 자리, 사용자 요청: 펫은 사육사에게서). ZOO와 같은 사각형
+  { id: "zoo", name: "동물원", x: 48, y: 784, w: 352, h: 224 },
   { id: "meadow", name: "호박밭", x: 864, y: 864, w: 240, h: 144 },
   // 낚시터 (호수 북동쪽 물가, 나루터 동쪽: 어부 노점 마당 + 호수로 뻗은 ㅜ자 낚시 데크). FISHING_ZONE과 같은 사각형
   { id: "fishing", name: "낚시터", x: 1272, y: 784, w: 128, h: 192 },
@@ -63,9 +65,10 @@ export const ZONES: readonly Zone[] = [
 
 export const SPAWN = { x: CX, y: 60 } as const;
 
-// ── 묘역 (F1·F4: 세 곳에 나눠 배치, 49번 성불과 같은 정원) ──
+// ── 묘역 (F1·F4: 두 곳에 나눠 배치, 49번 성불과 같은 정원) ──
 /**
- * 한 채널 묘역 세 곳에 동시에 놓일 수 있는 묘비 수 (GRAVE_AREAS 칸 수의 합 = 16 + 8 + 8).
+ * 한 채널 묘역 두 곳에 동시에 놓일 수 있는 묘비 수 (GRAVE_AREAS 칸 수의 합 = 20 + 12).
+ * 버드나무 묘역이 동물원이 되면서 그 8자리를 옛 묘역(16 → 20)과 다리 건너 묘역(8 → 12)으로 나눠 옮겼다 — 정원은 그대로 32.
  * 넘치면 가장 오래된 묘비부터 앞당겨 성불한다(서버 lib/store/passing.ts). 서버·클라이언트가 같은 값을 쓴다.
  */
 export const GRAVEYARD_CAPACITY = 32;
@@ -100,19 +103,21 @@ function area(id: GraveArea["id"], name: string, rect: GraveArea["rect"], cols: 
   const aisle = 32;
   return { id, name, rect, cols, rows, block: cols / 2, aisleX, aisle, dx, dy: 80, x0: aisleX - ((cols - 1) * dx + aisle) / 2, y0 };
 }
-/** 옛 묘역(언덕 아래, 16기) · 다리 건너 묘역(8기) · 버드나무 묘역(8기) */
+/**
+ * 옛 묘역(언덕 아래, 20기 = 10열 × 2줄) · 다리 건너 묘역(12기 = 6열 × 2줄).
+ * 예전 버드나무 묘역(C)은 동물원이 됐다 — 묘비 데이터는 그대로이고 자리(graveSlot)만 두 묘역으로 옮겨 놓인다.
+ */
 export const GRAVE_AREAS: readonly GraveArea[] = [
-  area("A", "옛 묘역", { x: 48, y: 288, w: 384, h: 256 }, 8, 2, 240, 40, 368),
-  area("B", "다리 건너 묘역", { x: 600, y: 784, w: 256, h: 224 }, 4, 2, 720, 44, 848),
-  area("C", "버드나무 묘역", { x: 48, y: 784, w: 352, h: 224 }, 4, 2, 176, 44, 864),
+  area("A", "옛 묘역", { x: 48, y: 288, w: 384, h: 256 }, 10, 2, 240, 34, 368),
+  area("B", "다리 건너 묘역", { x: 600, y: 784, w: 256, h: 224 }, 6, 2, 720, 34, 848),
 ];
 /**
- * 등록 순서(index % 32) → (묘역, 그 묘역의 칸). 묘역마다 골고루 먼저 차도록 A·B·A·C 순서를 되풀이한다
- * (묘비가 몇 개 없어도 세 묘역 모두에 사람이 세운 묘비가 보인다).
+ * 등록 순서(index % 32) → (묘역, 그 묘역의 칸). 묘역마다 골고루 먼저 차도록 A·B·A·B·A·A·B·A(정원 비율 5 : 3) 순서를 되풀이한다
+ * (묘비가 몇 개 없어도 두 묘역 모두에 사람이 세운 묘비가 보인다).
  */
 const SLOT_TABLE: readonly { area: GraveArea; k: number }[] = (() => {
-  const order = [0, 1, 0, 2];
-  const used = [0, 0, 0];
+  const order = [0, 1, 0, 1, 0, 0, 1, 0];
+  const used = [0, 0];
   const out: { area: GraveArea; k: number }[] = [];
   for (let i = 0; out.length < GRAVEYARD_CAPACITY; i++) {
     const a = order[i % order.length];
@@ -123,7 +128,7 @@ const SLOT_TABLE: readonly { area: GraveArea; k: number }[] = (() => {
   return out;
 })();
 
-/** @deprecated 예전 한 묘역 격자 이름 (호환용). 이제 묘역은 GRAVE_AREAS 세 곳 — 칸 수 합계만 같다 (8 × 4 = 32) */
+/** @deprecated 예전 한 묘역 격자 이름 (호환용). 이제 묘역은 GRAVE_AREAS 두 곳 — 칸 수 합계만 같다 (8 × 4 = 32) */
 export const GRID_COLS = 8;
 /** @deprecated GRID_COLS 참고 */
 export const GRID_ROWS = 4;
@@ -133,7 +138,7 @@ export const GRID_BLOCK = 4;
 export const GRID_Y0 = GRAVE_AREAS[0].y0;
 /** @deprecated 옛 묘역(A)의 값 */
 export const GRID_DX = GRAVE_AREAS[0].dx;
-/** @deprecated 묘역 줄 간격 (세 묘역 같다) */
+/** @deprecated 묘역 줄 간격 (두 묘역 같다) */
 export const GRID_DY = 80;
 /** @deprecated */
 export const GRID_WALK = 0;
@@ -304,6 +309,22 @@ export const FISH_PIER = { x: 1312, y: 816, w: 24, h: 110 } as const;
 export const FISH_PIER_HEAD = { x: 1288, y: 926, w: 72, h: 24 } as const;
 /** 낚시터 입구 아치 (데크 북쪽 끝, 발 위치 = 아치 가운데 아래) */
 export const FISH_ARCH = { x: 1324, y: 826 } as const;
+// ── 동물원 (사용자 요청: "버드나무 묘역을 동물원으로, 펫은 사육사한테 산다") ── 예전 버드나무 묘역 자리.
+// 나무 울타리로 두르고(위쪽 정문은 서쪽 다리와 줄을 맞추고, 동쪽 문은 안개 숲으로), 안에 우리 다섯 곳과 사육사 노점이 있다.
+// 우리·장식·동물 움직임(결정적 시뮬레이션)은 클라이언트(game/world/zoo), 펫 가격은 items.ts ZOO_PETS.
+/** 동물원 구역 (울타리 안쪽 땅). ZONES의 "동물원"과 같다 */
+export const ZOO = { x: 48, y: 784, w: 352, h: 224 } as const;
+/** 위쪽 정문 (울타리를 비우는 x 구간) — 서쪽 다리(x 176)에서 곧장 내려온다 */
+export const ZOO_GATE = { x0: 160, x1: 192, y: 784 } as const;
+/** 동쪽 문 (울타리를 비우는 y 구간) — 안개 숲으로 */
+export const ZOO_EAST_GATE = { x: 400, y0: 872, y1: 904 } as const;
+/** 사육사 (정문 안쪽 오른편 노점 앞, 발 위치). E → 펫 분양 창 */
+export const ZOOKEEPER = { x: 210, y: 826 } as const;
+/** 이 점이 동물원 사각형 안인지 (pad만큼 넓혀 본다) */
+export function inZoo(x: number, y: number, pad = 0): boolean {
+  return x >= ZOO.x - pad && x <= ZOO.x + ZOO.w + pad && y >= ZOO.y - pad && y <= ZOO.y + ZOO.h + pad;
+}
+
 /** 낚시 판자 전부 (호수 잔교 + 낚시터 데크 둘 + 까마귀 연못 잔교). 판자 위는 물이 아니다 */
 export const PIERS: readonly { x: number; y: number; w: number; h: number }[] = [LAKE_PIER, FISH_PIER, FISH_PIER_HEAD, { x: 1212, y: 126, w: 24, h: 46 }];
 
@@ -506,10 +527,11 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "lE", kind: "bench", x: 1144, y: 800, facing: DIR.down, seatOffsets: four }, // 낚시터가 생기며 나루터 서쪽 호숫가로 옮김
   // ── 사냥터 동굴 앞 ──
   { id: "bQ", kind: "bench", x: 912, y: 112, facing: DIR.down, seatOffsets: two },
-  // ── 다리 건너 묘역 · 버드나무 묘역 ── 묘비를 바라보는 벤치
+  // ── 다리 건너 묘역 ── 묘비를 바라보는 벤치
   { id: "bV", kind: "bench", x: 656, y: 984, facing: DIR.up, seatOffsets: two },
   { id: "bW", kind: "bench", x: 784, y: 984, facing: DIR.up, seatOffsets: two },
-  { id: "bX", kind: "bench", x: 116, y: 988, facing: DIR.up, seatOffsets: two },
+  // ── 동물원 ── 큰 개 놀이터 옆 쉼터 벤치 (예전 버드나무 묘역 벤치를 옮겼다, id 그대로)
+  { id: "bX", kind: "bench", x: 354, y: 990, facing: DIR.up, seatOffsets: two },
   // ── 안개 연못 · 호박밭 ──
   { id: "bS", kind: "bench", x: 440, y: 972, facing: DIR.up, seatOffsets: two },
   { id: "cE", kind: "chair", x: 1010, y: 960, facing: DIR.right, seatOffsets: [0] },

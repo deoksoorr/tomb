@@ -1,17 +1,24 @@
 import { AmbientLoop } from "./ambientLoop";
-import { AudioHost } from "./audioHost";
+import { AudioHost, type SoundBus } from "./audioHost";
 
-// 효과음 (폭죽). Phaser 오디오는 꺼 두었으므로 HTMLAudioElement를 직접 쓴다.
-// 파일이 아직 없거나 재생이 막히면 조용히 넘어간다. 볼륨·음소거는 UI의 audio:settings(BGM과 같은 값)를 따른다.
-// WebAudio 컨텍스트·볼륨·깨우기는 AudioHost, 모닥불 루프는 AmbientLoop (빗소리 WeatherSound와 같은 코드).
+// 월드 효과음 (폭죽·말풍선·종·물 튀기기·그네 삐걱). Phaser 오디오는 꺼 두었으므로 HTMLAudioElement를 직접 쓴다.
+// 파일이 아직 없거나 재생이 막히면 조용히 넘어간다. 13번: 효과음 갈래(sfx 버스)를 따르고,
+// 모닥불 루프·물소리(수영 물장구 루프·잠수 물방울)는 환경음 갈래(amb 버스)를 따른다.
+// WebAudio 컨텍스트·볼륨·깨우기는 AudioHost, 루프는 AmbientLoop (빗소리 WeatherSound와 같은 코드).
 
-export type SfxName = "launch" | "burst" | "say";
+export type SfxName = "launch" | "burst" | "say" | "swing" | "bubble";
 
 const FILES: Record<SfxName, string> = {
   launch: "/sfx/firework-launch.mp3",
   burst: "/sfx/firework-burst.mp3",
   say: "/sfx/say.mp3",
+  // 14번: 그네 삐걱(앞으로·뒤로 한 번씩, 약 1.4초) · 잠수 물방울 (scripts/gen-bgm.mjs가 굽는다)
+  swing: "/sfx/swing.mp3",
+  bubble: "/sfx/bubble.mp3",
 };
+
+/** 파일마다 따르는 소리 갈래 (없으면 효과음) */
+const FILE_BUS: Partial<Record<SfxName, SoundBus>> = { bubble: "amb" };
 
 /** 같은 소리가 너무 많이 겹치지 않게 (피날레·여러 사람이 동시에 쏠 때도 이 이상은 안 겹친다) */
 const MAX_VOICES = 12;
@@ -20,11 +27,15 @@ export class Sfx extends AudioHost {
   private readonly base = new Map<SfxName, HTMLAudioElement>();
   private readonly missing = new Set<SfxName>();
   private voices = 0;
-  /** 모닥불 타는 소리 (BGM 위에 은은한 루프) */
-  private readonly fire = new AmbientLoop(this, "/sfx/campfire.mp3", { gain: 0.75 });
+  /** 모닥불 타는 소리 (BGM 위에 은은한 루프, 환경음) */
+  private readonly fire = new AmbientLoop(this, "/sfx/campfire.mp3", { gain: 0.75, bus: "amb" });
+  /** 14번 물소리: 수영하는 동안 물장구 루프 (잠수하면 먹먹하게, 환경음) */
+  private readonly swim = new AmbientLoop(this, "/sfx/swim.mp3", { gain: 0.5, bus: "amb", filter: true });
+  /** 잠수 중 다음 물방울 소리 시각 */
+  private bubbleAt = 0;
 
   constructor() {
-    super();
+    super("sfx");
     if (typeof Audio === "undefined") return;
     for (const [name, url] of Object.entries(FILES) as [SfxName, string][]) {
       const a = new Audio();
@@ -35,10 +46,9 @@ export class Sfx extends AudioHost {
     }
   }
 
-  /** UI 볼륨: 0..1 (혹시 0..100이 오면 나눠서) */
-  setSettings(volume: number, muted: boolean): void {
-    this.setVolume(volume, muted);
+  protected override onMixChanged(): void {
     this.fire.refresh();
+    this.swim.refresh();
   }
 
   /**
@@ -46,11 +56,12 @@ export class Sfx extends AudioHost {
    * limit: 이미 이만큼 겹쳐 있으면 건너뛴다 (중요하지 않은 소리는 작게 줘서 자리를 남긴다)
    */
   play(name: SfxName, gain = 1, rate = 1, limit = MAX_VOICES): void {
-    if (this.muted || this.volume <= 0 || this.missing.has(name) || this.voices >= Math.min(limit, MAX_VOICES)) return;
+    const vol = this.busGain(FILE_BUS[name] ?? "sfx");
+    if (vol <= 0 || this.missing.has(name) || this.voices >= Math.min(limit, MAX_VOICES)) return;
     const src = this.base.get(name);
     if (!src) return;
     const a = src.cloneNode(true) as HTMLAudioElement;
-    a.volume = Math.max(0, Math.min(1, this.volume * gain));
+    a.volume = Math.max(0, Math.min(1, vol * gain));
     if (rate !== 1) {
       a.preservesPitch = false;
       a.playbackRate = Math.max(0.5, Math.min(2, rate));
@@ -73,7 +84,7 @@ export class Sfx extends AudioHost {
     if (!ac) return;
     const t = ac.currentTime + 0.01;
     const out = ac.createGain();
-    out.gain.value = Math.min(1, this.volume * gain) * 0.32;
+    out.gain.value = Math.min(1, this.busGain() * gain) * 0.32;
     out.connect(ac.destination);
     const base = 196;
     const partials: [number, number, number][] = [
@@ -108,7 +119,7 @@ export class Sfx extends AudioHost {
       const d = this.noise.getChannelData(0);
       for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
     }
-    const v = Math.min(1, this.volume * gain) * 0.5;
+    const v = Math.min(1, this.busGain() * gain) * 0.5;
     const src = ac.createBufferSource();
     src.buffer = this.noise;
     const bp = ac.createBiquadFilter();
@@ -141,14 +152,37 @@ export class Sfx extends AudioHost {
 
   /**
    * 모닥불 소리 크기 0..1 (거리·앉음은 campfireLevel()로). 매 프레임 불러도 된다 — 바뀔 때만 램프를 건다.
-   * audio:settings(볼륨·음소거)를 따르고, 탭이 숨으면 멈춘다.
+   * 13번 환경음 갈래(audio:mix amb)를 따르고, 탭이 숨으면 멈춘다.
    */
   campfire(level: number): void {
     this.fire.set(level);
   }
 
+  /**
+   * 14번 물소리 (내가 물에 있을 때, 매 프레임): moving = 헤엄치는 중, diving = 잠수.
+   * 수영은 물장구 루프(가만히 떠 있으면 작게), 잠수는 루프를 먹먹하게 줄이고 가끔 물방울. 물 밖이면 끈다
+   */
+  water(state: "swim" | "dive" | null, moving: boolean, now: number): void {
+    const level = state === "swim" ? (moving ? 1 : 0.35) : state === "dive" ? (moving ? 0.45 : 0.2) : 0;
+    this.swim.setMuffled(state === "dive");
+    this.swim.set(level);
+    if (state !== "dive") {
+      this.bubbleAt = 0;
+      return;
+    }
+    if (now < this.bubbleAt) return;
+    if (this.bubbleAt) this.play("bubble", 0.55, 0.9 + Math.random() * 0.25, 4);
+    this.bubbleAt = now + 1500 + Math.random() * 1400;
+  }
+
+  /** 14번 그네 삐걱 한 번 (앞으로·뒤로). 그네 진자 한 주기마다 씬이 부른다 */
+  swingCreak(gain = 0.6): void {
+    this.play("swing", gain, 0.95 + Math.random() * 0.1, 6);
+  }
+
   destroy(): void {
     this.fire.destroy();
+    this.swim.destroy();
     this.closeAudio();
     for (const a of this.base.values()) a.src = "";
     this.base.clear();

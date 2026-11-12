@@ -8,7 +8,7 @@ import { AudioHost } from "./audioHost";
 // 월드·마을·집의 Atmosphere가 매 프레임 지금 비 세기와 실내 여부를 알려 준다(report).
 // 아무도 알려 주지 않으면(유령 잡화점 등 Atmosphere 없는 씬) 화면 종류(scene:changed)로 정한다:
 //   잡화점·집 = 벽 너머로 먹먹하게, 사냥터·미니게임 = 다른 곳이라 끈다.
-// 볼륨·음소거는 audio:settings(BGM과 같은 값). 탭 전환 뒤 다시 깨우는 것은 AmbientLoop·AudioHost가 맡는다.
+// 13번: 환경음 갈래(amb 버스, audio:mix)를 따른다. 탭 전환 뒤 다시 깨우는 것은 AmbientLoop·AudioHost가 맡는다.
 
 const REGISTRY_KEY = "weatherSound";
 /** 이만큼 report가 없으면 Atmosphere가 없는 씬으로 본다 */
@@ -42,15 +42,7 @@ export class WeatherSound extends AudioHost {
   }
 
   private constructor(game: Phaser.Game) {
-    super();
-    const audio = bridge.last("audio:settings");
-    if (audio) this.setVolume(audio.volume, audio.muted);
-    this.offs.push(
-      bridge.on("audio:settings", ({ volume, muted }) => {
-        this.setVolume(volume, muted);
-        this.rain.refresh();
-      }),
-    );
+    super("amb");
     // Atmosphere가 없는 씬(잡화점·사냥터)에서는 화면 종류로 정한다
     game.events.on(Phaser.Core.Events.POST_STEP, this.onStep);
     this.offs.push(() => game.events.off(Phaser.Core.Events.POST_STEP, this.onStep));
@@ -58,6 +50,10 @@ export class WeatherSound extends AudioHost {
     const ctx = game.registry.get("ctx") as GameContext | undefined;
     ctx?.disposers.push(() => this.destroy());
     game.events.once(Phaser.Core.Events.DESTROY, () => this.destroy());
+  }
+
+  protected override onMixChanged(): void {
+    this.rain.refresh();
   }
 
   /** Atmosphere가 매 프레임: 지금 비 세기 0..1, 실내인지 */

@@ -3,6 +3,7 @@ import {
   COSMETIC_DURATION_MS,
   isAvatarBody,
   isAvatarColor,
+  isShopListed,
   itemById,
   ITEMS,
   type AvatarDye,
@@ -97,23 +98,26 @@ export function slotCounts(items: readonly { slot?: CosmeticSlot }[]): Record<Sl
 
 export const matchesSlot = (slot: CosmeticSlot | undefined, filter: SlotFilter) => filter === "all" || slot === filter;
 
-/** 상점 캐릭터 꾸미기 목록 (부위 필터) */
-export const SHOP_COSMETICS = ITEMS.filter((i) => i.kind === "cosmetic" && i.slot);
+/** 상점 캐릭터 꾸미기 목록 (부위 필터). 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만) */
+export const SHOP_COSMETICS = ITEMS.filter((i) => i.kind === "cosmetic" && i.slot && isShopListed(i));
 export function shopCosmetics(filter: SlotFilter): ItemDef[] {
   return SHOP_COSMETICS.filter((i) => matchesSlot(i.slot, filter));
 }
 
 /** 이 칸에서 누르면 하는 일: 새것은 spendItem(24시간 시작), 벗어 둔 것은 wear, 입은 것은 unequip */
 export type WearAction = { kind: "spend" | "wear" | "unequip"; label: string };
-export function wearAction(e: Pick<WardrobeEntry, "state">): WearAction {
-  if (e.state === "worn") return { kind: "unequip", label: "벗기" };
-  return { kind: e.state === "new" ? "spend" : "wear", label: "입기" };
+export function wearAction(e: Pick<WardrobeEntry, "state"> & { slot?: CosmeticSlot }): WearAction {
+  // 펫은 한 마리만 데리고 다닌다: 벗기 = 집에 두기, 입기 = 데리고 다니기
+  const pet = e.slot === "pet";
+  if (e.state === "worn") return { kind: "unequip", label: pet ? "집에 두기" : "벗기" };
+  return { kind: e.state === "new" ? "spend" : "wear", label: pet ? "데리고 다니기" : "입기" };
 }
 
 /** 목록 한 줄 상태: "착용 중 · 18시간 남음" · "벗어 둠 · 5시간 남음" · "새것 · 입으면 24시간" */
-export function entryStatus(e: Pick<WardrobeEntry, "state" | "until">, now: number): string {
+export function entryStatus(e: Pick<WardrobeEntry, "state" | "until"> & { slot?: CosmeticSlot }, now: number): string {
   if (e.state === "new") return `새것 · 입으면 ${Math.round(COSMETIC_DURATION_MS / 3_600_000)}시간`;
   const left = remainingLabel(e.until ?? now, now);
+  if (e.slot === "pet") return `${e.state === "worn" ? "데리고 다니는 중" : "집에서 쉬는 중"} · ${left}`;
   return `${e.state === "worn" ? "착용 중" : "벗어 둠"} · ${left}`;
 }
 

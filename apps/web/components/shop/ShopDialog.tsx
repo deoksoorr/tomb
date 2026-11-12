@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
-import { isPermanentUntil, ITEMS, permanentPrice, SHOP_KINDS, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { isPermanentUntil, isShopListed, ITEMS, permanentPrice, SHOP_KINDS, type ItemDef, type ItemKind } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
 import { meStore, useMe } from "@/lib/hooks/useMe";
@@ -17,6 +17,7 @@ import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
 import { fittingLook } from "./fitting";
 import OutfitPreview from "./OutfitPreview";
+import { takeShopTab } from "./shopTab";
 import styles from "./ShopDialog.module.css";
 
 // F8: 묘비 꾸미기(decor)는 당분간 상점에서 숨긴다 (SHOP_KINDS). 데이터·API·가방의 "묘비에 놓기"는 그대로.
@@ -28,7 +29,8 @@ const COSMETICS = SHOP_COSMETICS;
 const SLOT_COUNTS = slotCounts(COSMETICS);
 /** 착용 부위 필터 (물건이 없는 부위는 숨긴다) */
 const SLOT_FILTERS = (["all", ...SLOT_ORDER] as SlotFilter[]).filter((f) => SLOT_COUNTS[f] > 0);
-const byKind = (k: ItemKind) => ITEMS.filter((i) => i.kind === k);
+// 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — isShopListed). 이미 가진 펫은 가방에서 그대로 쓴다
+const byKind = (k: ItemKind) => ITEMS.filter((i) => i.kind === k && isShopListed(i));
 const FIRST: Partial<Record<ItemKind, string>> = Object.fromEntries(TABS.map((k) => [k, byKind(k)[0]?.id ?? ""]));
 
 type Props = {
@@ -40,7 +42,7 @@ type Props = {
 /** 상점 주인장 창. 산 물건은 가방으로 간다 (쓰는 곳: 폭죽 버튼·내 정보·내 묘비 상세) */
 export default function ShopDialog({ onClose, avatar }: Props) {
   const { me, error } = useMe();
-  const [tab, setTab] = useState<ItemKind>("firework");
+  const [tab, setTab] = useState<ItemKind>(() => takeShopTab() ?? "firework");
   const [slotFilter, setSlotFilter] = useState<SlotFilter>("all");
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);

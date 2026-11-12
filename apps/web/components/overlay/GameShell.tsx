@@ -44,6 +44,7 @@ import MenuSheet, { type MenuTarget } from "./MenuSheet";
 import MobileControls from "./MobileControls";
 import NetHud from "./NetHud";
 import SayDialog from "./SayDialog";
+import ReportLayer from "./ReportLayer";
 import Tutorial from "./Tutorial";
 import UpdateNotice from "./UpdateNotice";
 import styles from "./GameShell.module.css";
@@ -54,6 +55,7 @@ import type { PublicHouse } from "@/lib/housing/types";
 import { WORLD_LOTS } from "@tomb/protocol";
 import HuntLobby from "@/components/rpg/HuntLobby";
 import ForageLayer from "@/components/forage/ForageLayer";
+import ZooLayer from "@/components/zoo/ZooLayer";
 import WishDialog from "@/components/plaza/WishDialog";
 import Telescope from "@/components/rpg/Telescope";
 import GoblinClaim from "./GoblinClaim";
@@ -63,6 +65,12 @@ import GiftsDialog from "../account/GiftsDialog";
 import MegaphoneLayer from "./MegaphoneDialog";
 import MegaphoneFeed from "./MegaphoneFeed";
 import { useSocial } from "./useSocial";
+// 창 빈자리 채우기: 묘비·랭킹 안내, 채널 기록
+import GraveGuide from "../account/GraveGuide";
+import RankingGuide from "../grave/RankingGuide";
+import GraveyardNow from "../grave/GraveyardNow";
+import MySummary from "../account/MySummary";
+import { rememberChannel } from "@/lib/channelHistory";
 
 const GameCanvas = dynamic(() => import("@/game/GameCanvas"), { ssr: false });
 
@@ -186,6 +194,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   useAccountOnEnter(ready, options.name, options.color, options.body);
   usePresencePoints(ready);
   const { calendarReady, giftCount } = useSocial(ready);
+  // 채널 이동 창의 "마지막에 있던 채널" 표시용
+  const onlineChannel = status?.mode === "online" ? status.channel : null;
+  useEffect(() => {
+    if (onlineChannel) rememberChannel(onlineChannel);
+  }, [onlineChannel]);
   useBridgeEvent("portal:open", ({ kind, houseId, lot }) => {
     setHousingIntent(kind === "housing" && (houseId || lot) ? { houseId, lot } : null);
     setPanel(kind);
@@ -332,8 +345,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       <GameCanvas {...options} />
       {ready && disconnected && <div className={styles.dim} aria-hidden="true" />}
       {ready && <UpdateNotice />}
+      {/* 47번 다른 사람 캐릭터 메뉴(신고하기)·신고 창 */}
+      {ready && <ReportLayer />}
       {/* 4·32·51번 낚시·채집·판매·도감 (자기 창·HUD를 스스로 연다) */}
       {ready && <ForageLayer />}
+      {ready && <ZooLayer />}
 
       {ready && (
         <div className={cx(styles.overlay, away && styles.away, campfire && styles.campfire)}>
@@ -480,7 +496,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           onGoToGrave={goToActiveGrave}
         />
       )}
-      {panel === "channels" && <ChannelMenu onClose={closePanel} />}
+      {panel === "channels" && <ChannelMenu onClose={closePanel} graveChannels={myGraves.entries.map((e) => e.grave.channel)} />}
       {panel === "guide" && (
         <GuideDialog
           onClose={closePanel}
@@ -510,12 +526,20 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "graves" && (
         <Dialog title="내 묘비 가기" onClose={closePanel}>
           <MyGraves entries={myGraves.entries} pending={myGraves.pending} onGo={goToMyGrave} onBury={startBury} />
+          <GraveyardNow graves={graves.graves} channel={graves.channel} onPick={lookAtGrave} />
+          <GraveGuide onBury={myGraves.entries.length > 0 ? startBury : undefined} onShrine={() => setPanel("shrine")} onPassed={() => setPanel("passed")} />
         </Dialog>
       )}
       {panel === "bag" && <BagDialog cache={graves.cache} myGraves={myGraves.entries} onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       {panel === "notices" && <NoticesDialog onClose={closePanel} />}
       {panel === "activity" && (
-        <ActivityDialog onGoToGrave={goToGraveById} onOpenHousing={() => setPanel("housing")} onClose={closePanel} />
+        <ActivityDialog
+          onGoToGrave={goToGraveById}
+          onOpenHousing={() => setPanel("housing")}
+          onBury={startBury}
+          footer={<MySummary graves={myGraves.entries} onGraves={myGraves.entries.length ? openMyGraves : undefined} onHousing={() => setPanel("housing")} />}
+          onClose={closePanel}
+        />
       )}
       {panel === "say" && <SayDialog onClose={closePanel} />}
       {panel === "menu" && (
@@ -536,11 +560,20 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "ranking" && (
         <Dialog title="랭킹" onClose={closePanel}>
           <RankingList graves={graves.graves} onPick={lookAtGrave} />
+          <RankingGuide />
         </Dialog>
       )}
-      {panel === "fireworks" && <FireworkDialog onClose={closePanel} />}
-      {panel === "passed" && <PassedDialog onClose={closePanel} />}
-      {panel === "shrine" && <ShrineDialog cache={graves.cache} onGo={goToMyGrave} onClose={closePanel} onOpenPassed={() => setPanel("passed")} />}
+      {panel === "fireworks" && <FireworkDialog onClose={closePanel} onOpenShop={() => setPanel("shop")} />}
+      {panel === "passed" && <PassedDialog onClose={closePanel} footer={<GraveyardNow graves={graves.graves} channel={graves.channel} onPick={lookAtGrave} />} />}
+      {panel === "shrine" && (
+        <ShrineDialog
+          cache={graves.cache}
+          onGo={goToMyGrave}
+          onClose={closePanel}
+          onOpenPassed={() => setPanel("passed")}
+          footer={<GraveyardNow graves={graves.graves} channel={graves.channel} onPick={lookAtGrave} />}
+        />
+      )}
       {panel === "housing" && (
         <HousingOffice key={housingIntent?.houseId ?? housingIntent?.lot ?? "office"} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
       )}
@@ -549,7 +582,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "telescope" && <Telescope onClose={closePanel} />}
       <GoblinClaim />
       {panel === "calendar" && <CalendarDialog onClose={closePanel} />}
-      {panel === "gifts" && <GiftsDialog onClose={closePanel} />}
+      {panel === "gifts" && <GiftsDialog onClose={closePanel} onOpenCalendar={() => setPanel("calendar")} />}
       <MegaphoneLayer channel={channel} onOpenShop={() => setPanel("shop")} />
       {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
     </div>

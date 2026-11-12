@@ -1,0 +1,231 @@
+/* 47번 방문 분석 대시보드 (관리자). 색은 globals.css 토큰만 쓴다 */
+
+.wrap {
+  display: grid;
+  gap: 16px;
+}
+
+.section {
+  display: grid;
+  gap: 8px;
+}
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--bone);
+  font-size: 14px;
+}
+
+.sub {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.kpi {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.kpiValue {
+  color: var(--bone);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpiLabel {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.kpiNote {
+  color: var(--faint);
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.chart {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px 8px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  min-width: 0;
+}
+
+.chartHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chartTitle {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.chartValue {
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.grid {
+  stroke: var(--line);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.axisText {
+  fill: var(--faint);
+  font-family: var(--font-small);
+  font-size: 9px;
+}
+
+.bar {
+  fill: var(--moss);
+}
+
+.barActive {
+  fill: var(--bone);
+}
+
+.hit {
+  fill: transparent;
+  cursor: default;
+}
+
+.lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px;
+  list-style: none;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+  min-width: 0;
+}
+
+.listTitle {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  align-items: center;
+}
+
+.itemName {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemCount {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.track {
+  grid-column: 1 / -1;
+  height: 4px;
+  background: var(--bg-deep);
+}
+
+.fill {
+  height: 100%;
+  background: var(--candle);
+}
+
+.empty {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+
+.table th {
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.details summary {
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+@media (max-width: 480px) {
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

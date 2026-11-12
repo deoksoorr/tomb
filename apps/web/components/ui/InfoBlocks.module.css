@@ -1,0 +1,175 @@
+/* 표준 창의 빈 공간을 채우는 공용 조각 (설명·기록·팁·바로 가기) */
+
+.card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+/* .card 를 붙여 명시도를 높인다: 다른 창 안에 겹쳐 열려도(예: 안내 창의 h3 규칙) 모양이 같게 */
+.card > .cardTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--candle);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: normal;
+  line-height: 1.4;
+}
+
+.cardTitleText {
+  flex: 1;
+  min-width: 0;
+}
+
+.aside {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.tips {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.tips li {
+  position: relative;
+  padding-left: 12px;
+}
+
+.tips li::before {
+  content: "";
+  position: absolute;
+  top: 0.62em;
+  left: 0;
+  width: 4px;
+  height: 4px;
+  background: var(--moss);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.fact {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.fact dt {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.fact dd {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.factValue {
+  color: var(--bone);
+  font-size: 14px;
+}
+
+.fact[data-tone="good"] .factValue {
+  color: var(--status-ok);
+}
+
+.fact[data-tone="warn"] .factValue {
+  color: var(--candle);
+}
+
+.factNote {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hero {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 22px 12px 18px;
+  text-align: center;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.heroIcon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  color: var(--candle);
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.heroTitle {
+  margin: 0;
+  color: var(--bone);
+  font-size: 14px;
+}
+
+.heroText {
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.hero .shortcuts {
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.spaced {
+  margin-top: 16px;
+}
+
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (pointer: coarse) {
+  .shortcuts :global(button) {
+    min-height: 44px;
+  }
+}

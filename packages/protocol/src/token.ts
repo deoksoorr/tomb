@@ -20,6 +20,8 @@ export type JoinClaims = {
   room?: string;
   /** 46번 염색한 부위 색 (토큰 안에서는 짧은 형식 문자열, 염색 안 했으면 없음) */
   dye?: AvatarDye;
+  /** 31번 운영자 계정 (Vercel이 확인한 뒤에만 넣는다 → 저승사자 차림·"운영자" 배지). 일반 계정엔 없다 */
+  staff?: true;
   /** 만료 시각 (unix seconds) */
   exp: number;
 };
@@ -104,7 +106,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff } = c as Record<string, unknown>;
   if (
     typeof visitorId !== "string" ||
     typeof name !== "string" ||
@@ -115,5 +117,5 @@ export async function verifyJoinToken(
   )
     return null;
   if (exp < nowSec) return null;
-  return { visitorId, name, color, channel, exp, look: sanitizeLook(look), body: isAvatarBody(rawBody) ? rawBody : "hood", ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}) };
+  return { visitorId, name, color, channel, exp, look: sanitizeLook(look), body: isAvatarBody(rawBody) ? rawBody : "hood", ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}) };
 }

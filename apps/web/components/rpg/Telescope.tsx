@@ -17,6 +17,7 @@ import LevelUpSound from "./LevelUpSound";
 import RpgIcon from "./RpgIcon";
 import RunHud from "./RunHud";
 import s from "./rpg.module.css";
+import { readStarsRecords, saveStarsRecord, StarsInfo, StarsPreview } from "./TelescopeExtras";
 
 // 22번 별 보기 언덕의 망원경 (월드에서 망원경 앞 E → portal:open {kind:"telescope"}).
 // 사냥터 로비에 있던 "별자리 잇기"를 여기서 한다. 판 시작·결과 검증은 사냥터와 같은 /api/rpg/run (game "stars") —
@@ -45,6 +46,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [starry, setStarry] = useState(() => starryNight(Date.now()));
+  const [records, setRecords] = useState(readStarsRecords);
   const run = useRef<Run | null>(null);
   const phaseRef = useRef<Phase>("intro");
   phaseRef.current = phase;
@@ -132,6 +134,19 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
       .then((res) => {
         setOutcome({ result, aborted, reward: res.reward });
         void meStore.refresh();
+        // 이 기기의 최근 기록 (끝까지 본 판만)
+        if (!aborted && result.game === "stars") {
+          saveStarsRecord({
+            at: Date.now(),
+            diff: r.difficulty,
+            perfect: result.perfect,
+            good: result.good,
+            miss: result.miss,
+            points: res.reward.points,
+            night: !!res.reward.nightBonus,
+          });
+          setRecords(readStarsRecords());
+        }
       })
       .catch((e) => setOutcome({ result, aborted, error: errorMessage(e) }))
       .finally(() => setPhase("result"));
@@ -231,6 +246,9 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         {notice && <p className={s.notice}>{notice}</p>}
+        <div style={{ marginTop: 14 }}>
+          <StarsInfo records={records} />
+        </div>
       </Dialog>
     );
   }
@@ -276,6 +294,8 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
         <p className={s.notice} role="status">
           {notice}
         </p>
+        <StarsPreview starry={starry} />
+        <StarsInfo records={records} />
       </div>
     </Dialog>
   );

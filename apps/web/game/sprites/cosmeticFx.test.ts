@@ -23,6 +23,7 @@ describe("F8 catalog", () => {
     for (const it of F8) {
       expect(SPRITE_COSMETICS as readonly string[]).toContain(it.id);
       expect(hasItemIcon(it.id), it.id).toBe(true);
+      if (it.slot === "pet") continue; // 펫은 동물원 사육사가 영구로만 판다 (값은 ZOO_PETS, zoo.test.ts)
       expect(it.price).toBeGreaterThanOrEqual(15);
       expect(it.price).toBeLessThanOrEqual(150);
     }

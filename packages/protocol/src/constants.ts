@@ -51,6 +51,9 @@ export const CLOSE = {
   BAD_REQUEST: 4004,
   RATE_LIMITED: 4008,
   OUTDATED: 4010, // 클라이언트가 MIN_CLIENT_VERSION보다 낮다 → 새로고침해야 한다 (자동 재접속하지 않음)
+  // 47번 운영: 옛 클라이언트는 모르는 코드라 평소처럼 재접속을 시도하고, 입장 토큰 거절(403)에서 멈춘다
+  KICKED: 4011, // 운영자가 지금 내보냄 (정지는 아님) → 자동 재접속하지 않고 안내만
+  BANNED: 4012, // 이용 제한(정지·IP 차단) → 자동 재접속하지 않고 제한 화면으로
 } as const;
 export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 
@@ -67,7 +70,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 4 = 컴팩트한 묘지 마을 맵(F1: 1440×1024, 좌석·낚시 자리·배·필지 좌표가 바뀜 — 옛 화면은 없는 좌석 id를 보낸다)
 // 5 = 집 안 개편(3번: STATE.lie~bath=15~17 — 옛 클라이언트는 모르는 상태 값이 든 SNAPSHOT을 통째로 버린다, 방 좌석·use 이벤트)
 // 6 = 낚시터(호수 북동쪽 데크·낚시 자리 재배치·벤치 lE 이동 — 옛 화면은 없어진 낚시 자리·옛 벤치 좌표로 앉기를 보낸다)
-export const CLIENT_VERSION = 6;
+// 7 = 동물원(버드나무 묘역 자리 — 울타리·우리 충돌, 묘비 자리 재배치, 벤치 bX 이동)·타는 펫(ride 이벤트) — 옛 화면은 우리 안을 걷고 묘비를 옛 자리에 그린다
+export const CLIENT_VERSION = 7;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
@@ -128,6 +132,49 @@ export function isAvatarBody(b: unknown): b is AvatarBody {
 /** 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호 */
 export const ACT_KINDS = ["bell", "splash", "wave", "cheer"] as const;
 export type ActKind = (typeof ACT_KINDS)[number];
+
+/**
+ * 5번 이모티콘: 머리 위에 3~4초 뜨는 그림 (말풍선과 같은 자리·쌓기 규칙). id만 주고받고 그림은 클라이언트가 그린다.
+ * 옛 클라이언트는 모르는 이벤트(emo)라 그냥 버린다. 순서 = 이모티콘 판 순서 (손 흔들기·환호 다음 3번부터 단축키)
+ */
+export const EMOS = [
+  { id: "heart", label: "하트" },
+  { id: "laugh", label: "웃음" },
+  { id: "cry", label: "눈물" },
+  { id: "wow", label: "놀람" },
+  { id: "what", label: "물음표" },
+  { id: "bang", label: "느낌표" },
+  { id: "clap", label: "박수" },
+  { id: "angry", label: "화남" },
+  { id: "zzz", label: "졸려요" },
+  { id: "coffee", label: "커피" },
+  { id: "fire", label: "불꽃" },
+  { id: "note", label: "음표" },
+  { id: "sweat", label: "진땀" },
+  { id: "idea", label: "번뜩" },
+] as const;
+export type EmoId = (typeof EMOS)[number]["id"];
+export function isEmoId(id: unknown): id is EmoId {
+  return typeof id === "string" && EMOS.some((e) => e.id === id);
+}
+
+/**
+ * 24번 벤치 상태: 의자·벤치에 앉아 있는 동안 고르는 지금 하는 일. 머리 위 작은 아이콘 + 손에 든 소품으로 보인다.
+ * 서버가 앉은 사람만 받고, 자리에서 일어나면 저절로 풀린다(입장 정보 PeerInfo.mood로 늦게 온 사람에게도 보인다).
+ */
+export const SEAT_MOODS = [
+  { id: "study", label: "공부 중" },
+  { id: "work", label: "일하는 중" },
+  { id: "meal", label: "밥 먹는 중" },
+  { id: "rest", label: "쉬는 중" },
+  { id: "music", label: "음악 듣는 중" },
+  { id: "call", label: "통화 중" },
+  { id: "coffee", label: "커피 마시는 중" },
+] as const;
+export type SeatMood = (typeof SEAT_MOODS)[number]["id"];
+export function isSeatMood(id: unknown): id is SeatMood {
+  return typeof id === "string" && SEAT_MOODS.some((m) => m.id === id);
+}
 
 /**
  * 정해진 문장 말풍선 (채팅 대신). id만 주고받고 문장은 클라이언트가 이 표로 그린다 → 욕설·스팸이 원천적으로 없다.

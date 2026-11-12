@@ -76,6 +76,17 @@ const LUCK_WEIGHTS: readonly [WishLuck, number][] = [
   ["soso", 12],
 ];
 
+/** 운세 등급과 나올 확률(%) — 소원 분수 창의 "운세 종류" 표 */
+export const WISH_LUCK_TABLE: readonly { luck: WishLuck; title: string; chance: number }[] = LUCK_WEIGHTS.map(([luck, chance]) => ({
+  luck,
+  title: LUCK_TITLE[luck],
+  chance,
+}));
+
+/** 동전이 튀어 돌아올 확률: 대박(두 배 + 5) / 반짝(던진 것 + 1~5) */
+export const WISH_BONUS_JACKPOT = 0.05;
+export const WISH_BONUS_SPARKLE = 0.2;
+
 /** 0..1 난수 → 운세 하나 */
 export function pickFortune(r1: number, r2: number): WishFortune {
   let u = Math.max(0, Math.min(0.999999, r1)) * 100;
@@ -98,8 +109,8 @@ export function pickFortune(r1: number, r2: number): WishFortune {
  *  - 나머지: 0
  */
 export function rollBonus(amount: number, r1: number, r2: number): number {
-  if (r1 < 0.05) return amount * 2 + 5;
-  if (r1 < 0.25) return amount + 1 + Math.floor(Math.max(0, Math.min(0.999999, r2)) * 5);
+  if (r1 < WISH_BONUS_JACKPOT) return amount * 2 + 5;
+  if (r1 < WISH_BONUS_JACKPOT + WISH_BONUS_SPARKLE) return amount + 1 + Math.floor(Math.max(0, Math.min(0.999999, r2)) * 5);
   return 0;
 }
 

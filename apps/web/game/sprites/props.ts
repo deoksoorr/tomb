@@ -130,22 +130,32 @@ export function lantern(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
+/**
+ * 벤치. width = 좌석이 놓이는 폭(benchWidth). 14번: 그림만 조금 크게 — 양옆 3px씩 넓고 등받이가 2px 높다.
+ * 앉는 판 윗면은 바닥(원점)에서 예전과 같은 높이라 앉은 자세(좌석 앵커)와 맞는다.
+ */
 export function bench(width: number, w: WoodPal = WOOD): HTMLCanvasElement {
-  const g = new Grid(width, 16);
-  // 등받이
-  g.rect(2, 1, width - 4, 2, w.mid);
-  g.rect(2, 1, width - 4, 1, w.hi);
-  g.rect(3, 3, 2, 4, w.lo);
-  g.rect(width - 5, 3, 2, 4, w.lo);
+  const W = width + 6;
+  const g = new Grid(W, 18);
+  // 등받이 (판자 두 장 + 기둥)
+  g.rect(3, 3, 2, 6, w.lo);
+  g.rect(W - 5, 3, 2, 6, w.lo);
+  g.rect(2, 1, W - 4, 2, w.mid);
+  g.rect(2, 1, W - 4, 1, w.hi);
+  g.rect(2, 4, W - 4, 2, w.mid);
+  g.hline(2, W - 3, 4, w.hi);
   // 앉는 판
-  g.rect(1, 6, width - 2, 5, w.mid);
-  g.rect(1, 6, width - 2, 1, w.hi);
-  g.rect(1, 8, width - 2, 1, w.lo);
-  g.rect(1, 10, width - 2, 1, w.lo);
+  g.rect(1, 8, W - 2, 5, w.mid);
+  g.rect(1, 8, W - 2, 1, w.hi);
+  g.rect(1, 10, W - 2, 1, w.lo);
+  g.rect(1, 12, W - 2, 1, w.lo);
+  // 팔걸이 끝
+  g.rect(0, 7, 2, 2, w.lo);
+  g.rect(W - 2, 7, 2, 2, w.lo);
   // 다리
-  for (const x of [3, width - 5]) g.rect(x, 11, 2, 3, w.lo);
+  for (const x of [3, W - 5]) g.rect(x, 13, 2, 3, w.lo);
   g.outline(w.line);
-  shadow(g, width / 2, 14.5, width / 2 - 2, 1.4, 60);
+  shadow(g, W / 2, 16.5, W / 2 - 2, 1.4, 60);
   return g.toCanvas();
 }
 

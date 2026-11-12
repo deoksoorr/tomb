@@ -44,10 +44,22 @@ export function wobble(tSec: number, amp: number): { dx: number; dy: number } {
   return { dx: dx * amp, dy: dy * amp };
 }
 
-/** 조준점이 가리키는 판 좌표 (판 안으로 붙인다) */
+/** 조준점이 가리키는 판 좌표 (화면 가운데 기준, 판 안으로 붙인다) */
 export function aimPoint(v: BoardView, amp: number, tSec: number): { x: number; y: number } {
   const w = wobble(tSec, amp);
   const x = v.cx + w.dx / v.scale;
   const y = v.cy + w.dy / v.scale;
+  return { x: Math.min(DYE_BOARD_W - 0.001, Math.max(0, x)), y: Math.min(DYE_BOARD_H - 0.001, Math.max(0, y)) };
+}
+
+/**
+ * 11/12: 조준점이 포인터를 따라간다. at = 보드 요소 안 화면 좌표 (null이면 화면 가운데 — 폰·키보드).
+ * 포인터 자리 + 흔들림 → 판 좌표 (판 안으로 붙인다)
+ */
+export function aimAt(v: BoardView, viewW: number, viewH: number, at: { x: number; y: number } | null, amp: number, tSec: number): { x: number; y: number } {
+  const w = wobble(tSec, amp);
+  const p = at ? toBoard(v, viewW, viewH, at.x, at.y) : { x: v.cx, y: v.cy };
+  const x = p.x + w.dx / v.scale;
+  const y = p.y + w.dy / v.scale;
   return { x: Math.min(DYE_BOARD_W - 0.001, Math.max(0, x)), y: Math.min(DYE_BOARD_H - 0.001, Math.max(0, y)) };
 }

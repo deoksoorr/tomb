@@ -9,6 +9,8 @@
 
 .inner {
   display: grid;
+  /* 휴대폰 폭: 탭·차트 같은 넓은 자식이 격자를 밀어 가로로 넘치지 않게 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   max-width: 960px;
   margin: 0 auto;
@@ -130,6 +132,7 @@
 
 .segmented {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 

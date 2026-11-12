@@ -11,6 +11,7 @@ import { approach, cameraBounds, clampZoom, defaultZoom, parseStoredZoom, pinchZ
 //  - 한 손가락/왼클릭 탭은 onTap(월드 좌표)로 넘긴다 (묘비 클릭)
 //  - cinematic({x,y,zoom}): 모닥불 불멍 같은 연출 구도. 추적·드래그·휠·핀치를 잠시 멈추고 천천히 그 자리로 미끄러진다.
 //    cinematic(null)이면 원래 줌으로 돌아가며 캐릭터를 다시 따라간다 (연출 줌은 저장하지 않는다)
+//  - setAccent(k): 14번 물속·그네 연출 — 고른 줌에 k배를 살짝 곱한다 (천천히, 저장하지 않음, 연출 구도 중엔 1)
 // 입력은 Phaser 입력 시스템이 아닌 캔버스 DOM 포인터 이벤트로 직접 받는다 (오버레이 클릭과 섞이지 않게).
 
 const ZOOM_TAU_MS = 70;
@@ -22,6 +23,8 @@ const WHEEL_STEP = 50;
 /** 연출 구도로 들어가고 나올 때의 부드러움 */
 const CINE_PAN_TAU_MS = 340;
 const CINE_ZOOM_TAU_MS = 300;
+/** 14번 연출 확대가 들어가고 빠지는 부드러움 */
+const ACCENT_TAU_MS = 520;
 
 type Pt = { x: number; y: number };
 
@@ -53,6 +56,9 @@ export class CameraRig {
   private savedZoom = 0;
   /** 연출에서 나오는 중: 줌을 천천히 되돌린다 */
   private leavingCine = false;
+  /** 14번 연출 확대 배율 (지금 값·목표) */
+  private accent = 1;
+  private accentGoal = 1;
 
   constructor(
     scene: Phaser.Scene,
@@ -168,6 +174,11 @@ export class CameraRig {
     this.emitState();
   }
 
+  /** 14번: 물속·그네에서 살짝 확대 (1 = 원래대로). 매 프레임 불러도 된다 */
+  setAccent(k: number): void {
+    this.accentGoal = Number.isFinite(k) ? Math.max(1, Math.min(1.3, k)) : 1;
+  }
+
   /** 연출 구도 중인지 */
   get inCinematic(): boolean {
     return this.cine !== null;
@@ -180,8 +191,14 @@ export class CameraRig {
       this.zoom = approach(this.zoom, this.target, dt, slow ? CINE_ZOOM_TAU_MS : ZOOM_TAU_MS);
       if (Math.abs(this.zoom - this.target) < 0.003) this.zoom = this.target;
     }
-    if (cam.zoom !== this.zoom) {
-      cam.setZoom(this.zoom);
+    const ag = this.cine ? 1 : this.accentGoal;
+    if (this.accent !== ag) {
+      this.accent = approach(this.accent, ag, dt, ACCENT_TAU_MS);
+      if (Math.abs(this.accent - ag) < 0.002) this.accent = ag;
+    }
+    const eff = this.zoom * this.accent;
+    if (cam.zoom !== eff) {
+      cam.setZoom(eff);
       this.applyBounds();
     }
 

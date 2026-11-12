@@ -5,27 +5,41 @@ import { socialApi } from "@/lib/socialApi";
 import { readItem, writeItem } from "@/lib/storage";
 import type { MegaphoneEntry } from "@/lib/types";
 
-// 23번 확성기 창(왼쪽 위) 상태: 최근 20개 기록 + 방금 온 한마디(몇 초간 크게) + 접힘.
+// 23번 확성기 상태: 왼쪽 위 기록(최근 20개, 접힘) + 화면 가운데에 크게 뜨는 한마디(몇 초간, 여러 개면 차례로).
 // 기록은 서버 목록(/api/megaphone)이 기준이고, 실시간으로 온 것은 다음 목록에 실릴 때까지 덧붙여 둔다.
 
 export const MEGA_FEED_MAX = 20;
-/** 방금 온 한마디를 크게 보여 주는 시간 */
+/** 방금 온 한마디를 가운데에 크게 보여 주는 시간 (기다리는 것이 없을 때) */
 export const MEGA_FLASH_MS = 7_000;
+/** 뒤에 기다리는 한마디가 있으면 앞의 것은 이만큼만 보여 주고 넘긴다 */
+export const MEGA_FLASH_QUEUED_MS = 4_000;
+/** 가운데 표시를 기다리는 줄의 최대 길이 (넘치면 오래된 것부터 건너뛴다 — 기록에는 남는다) */
+export const MEGA_QUEUE_MAX = 5;
+
+/** 지금 보여 주는 한마디가 언제 내려가야 하는지 (뒤에 기다리는 것이 있으면 짧게) */
+export function flashEndsAt(startedAt: number, waiting: number): number {
+  return startedAt + (waiting > 0 ? MEGA_FLASH_QUEUED_MS : MEGA_FLASH_MS);
+}
 const COLLAPSED_KEY = "tomb.ui.megaphoneCollapsed";
 
 export type MegaphoneState = {
   entries: MegaphoneEntry[];
-  /** 지금 크게 떠 있는 한마디 */
+  /** 지금 화면 가운데에 크게 떠 있는 한마디 */
   flash: MegaphoneEntry | null;
+  /** 가운데 표시를 기다리는 한마디 (온 순서대로) */
+  queue: MegaphoneEntry[];
+  /** 지금 한마디가 내려가는 시각 (뒤에 기다리는 것이 생기면 당겨진다) */
+  flashUntil: number;
   collapsed: boolean;
   /** 외치기 창 열림 */
   composing: boolean;
 };
 
 class MegaphoneStore {
-  private state: MegaphoneState = { entries: [], flash: null, collapsed: false, composing: false };
+  private state: MegaphoneState = { entries: [], flash: null, queue: [], flashUntil: 0, collapsed: false, composing: false };
   private listeners = new Set<() => void>();
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
+  private flashStartedAt = 0;
   private loaded = false;
 
   subscribe = (fn: () => void) => {
@@ -57,12 +71,42 @@ class MegaphoneStore {
     }
   }
 
-  /** 새 한마디 (실시간 방송 또는 내가 방금 외친 것). 같은 id는 한 번만 */
+  /** 새 한마디 (실시간 방송 또는 내가 방금 외친 것). 같은 id는 한 번만. 가운데 표시는 앞의 것이 끝나면 차례로 */
   push(e: MegaphoneEntry): void {
     if (this.state.entries.some((x) => x.id === e.id)) return;
-    this.update({ entries: [...this.state.entries, e].slice(-MEGA_FEED_MAX), flash: e });
+    const entries = [...this.state.entries, e].slice(-MEGA_FEED_MAX);
+    if (!this.state.flash) {
+      this.update({ entries });
+      this.show(e);
+      return;
+    }
+    this.update({ entries, queue: [...this.state.queue, e].slice(-MEGA_QUEUE_MAX) });
+    // 앞의 것은 기다리는 줄이 생겼으니 짧게 줄인다 (이미 그만큼 지났으면 곧바로 넘긴다)
+    this.schedule(Math.max(300, flashEndsAt(this.flashStartedAt, 1) - Date.now()));
+  }
+
+  private show(e: MegaphoneEntry): void {
+    this.flashStartedAt = Date.now();
+    this.update({ flash: e });
+    this.schedule(flashEndsAt(this.flashStartedAt, this.state.queue.length) - this.flashStartedAt);
+  }
+
+  private schedule(ms: number): void {
     if (this.flashTimer) clearTimeout(this.flashTimer);
-    this.flashTimer = setTimeout(() => this.update({ flash: null }), MEGA_FLASH_MS);
+    this.flashTimer = setTimeout(() => this.next(), ms);
+    this.update({ flashUntil: Date.now() + ms });
+  }
+
+  /** 지금 것을 내리고 기다리던 다음 것을 띄운다 */
+  private next(): void {
+    this.flashTimer = null;
+    const [head, ...rest] = this.state.queue;
+    if (!head) {
+      this.update({ flash: null });
+      return;
+    }
+    this.update({ queue: rest });
+    this.show(head);
   }
 
   setCollapsed(collapsed: boolean): void {
@@ -80,7 +124,7 @@ export const megaphoneStore = new MegaphoneStore();
 /** 가방 등 다른 곳에서 외치기 창을 연다 */
 export const openMegaphone = () => megaphoneStore.compose(true);
 
-const SERVER: MegaphoneState = { entries: [], flash: null, collapsed: false, composing: false };
+const SERVER: MegaphoneState = { entries: [], flash: null, queue: [], flashUntil: 0, collapsed: false, composing: false };
 export function useMegaphone(): MegaphoneState {
   return useSyncExternalStore(megaphoneStore.subscribe, megaphoneStore.getSnapshot, () => SERVER);
 }

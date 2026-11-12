@@ -131,12 +131,9 @@
   box-shadow: var(--px-border-strong);
   overflow: hidden;
   touch-action: none;
-  cursor: grab;
+  /* 11/12: 흔들리는 조준점이 곧 포인터 (마우스 화살표는 감춘다) */
+  cursor: none;
   user-select: none;
-}
-
-.board:active {
-  cursor: grabbing;
 }
 
 .board:focus-visible {
@@ -157,6 +154,12 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.hex {
+  font-variant-numeric: tabular-nums;
+  min-width: 5.5em;
+  color: var(--bone);
 }
 
 .result {

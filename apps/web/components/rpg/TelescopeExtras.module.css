@@ -1,0 +1,121 @@
+/* 망원경 창: 밤하늘 미리보기 · 최근 기록 · 요령 */
+
+.sky {
+  position: relative;
+  height: 150px;
+  overflow: hidden;
+  background: linear-gradient(#0b1020, #1a2140 70%, #2a2a3c);
+  box-shadow: var(--px-border);
+}
+
+.sky[data-starry] {
+  box-shadow: var(--px-border-strong), 0 0 18px rgba(224, 195, 106, 0.25);
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.line {
+  fill: none;
+  stroke: rgba(224, 195, 106, 0.55);
+  stroke-width: 0.6;
+  stroke-dasharray: 2 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.star {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: #cfd6ee;
+  transform: translate(-50%, -50%);
+  animation: twinkle 2.4s steps(2) infinite;
+}
+
+.star[data-big] {
+  width: 6px;
+  height: 6px;
+  background: #f4e7b0;
+  box-shadow: 0 0 6px rgba(244, 231, 176, 0.8);
+}
+
+.ring {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--candle);
+  transform: translate(-50%, -50%);
+  animation: ring 1.6s ease-in infinite;
+}
+
+.caption {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  left: 8px;
+  margin: 0;
+  color: var(--bone);
+  font-size: 11px;
+  text-align: right;
+  text-shadow: 0 1px 0 #000;
+}
+
+@keyframes twinkle {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes ring {
+  from {
+    width: 40px;
+    height: 40px;
+    opacity: 0.2;
+  }
+  to {
+    width: 8px;
+    height: 8px;
+    opacity: 1;
+  }
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.records {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.recordHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--bone);
+}
+
+.recordStats {
+  display: block;
+  color: var(--text);
+  font-size: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .star,
+  .ring {
+    animation: none;
+  }
+}

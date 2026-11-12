@@ -73,6 +73,20 @@ describe("events", () => {
     expect(parseC2S("not json")).toBeNull();
     expect(parseC2S(JSON.stringify({ t: "sit", seatId: "x".repeat(600) }))).toBeNull();
   });
+
+  it("5번 이모티콘·24번 벤치 상태: 정해진 id만 받는다", async () => {
+    const { EMOS, SEAT_MOODS } = await import("./constants");
+    expect(EMOS.length).toBeGreaterThanOrEqual(12);
+    expect(new Set(EMOS.map((e) => e.id)).size).toBe(EMOS.length);
+    expect(parseC2S('{"t":"emo","id":"heart"}')).toEqual({ t: "emo", id: "heart" });
+    expect(parseC2S('{"t":"emo","id":"bomb"}')).toBeNull();
+    expect(parseC2S('{"t":"emo"}')).toBeNull();
+    expect(SEAT_MOODS.length).toBeGreaterThanOrEqual(6);
+    expect(parseC2S('{"t":"mood","m":"study"}')).toEqual({ t: "mood", m: "study" });
+    expect(parseC2S('{"t":"mood","m":""}')).toEqual({ t: "mood", m: "" });
+    expect(parseC2S('{"t":"mood","m":"dance"}')).toBeNull();
+    expect(parseC2S('{"t":"mood"}')).toBeNull();
+  });
 });
 
 describe("token", () => {
@@ -96,7 +110,8 @@ describe("token", () => {
 });
 
 describe("world", () => {
-  it("묘역 세 곳: 칸 수 합계 = 정원, 묘역마다 가운데 통로 기준 좌우 대칭, 결정적", () => {
+  it("묘역 두 곳(버드나무 묘역은 동물원): 칸 수 합계 = 정원, 묘역마다 가운데 통로 기준 좌우 대칭, 결정적", () => {
+    expect(GRAVE_AREAS.map((a) => a.cols * a.rows)).toEqual([20, 12]);
     expect(GRAVE_AREAS.reduce((n, a) => n + a.cols * a.rows, 0)).toBe(GRAVEYARD_CAPACITY);
     expect(GRID_COLS * GRID_ROWS).toBe(GRAVEYARD_CAPACITY); // 옛 이름 호환
     expect(graveSlot(0)).toMatchObject({ x: GRAVE_AREAS[0].x0, y: GRAVE_AREAS[0].y0, col: 0, row: 0, area: "A" });
@@ -118,7 +133,8 @@ describe("world", () => {
   it("plot labels: 묘역 이름 + 1부터 세는 줄·자리", () => {
     expect(plotLabel(0)).toBe("옛 묘역 1번째 줄 · 1번 자리");
     expect(plotLabel(1)).toBe("다리 건너 묘역 1번째 줄 · 1번 자리");
-    expect(plotLabel(3)).toBe("버드나무 묘역 1번째 줄 · 1번 자리");
+    expect(plotLabel(3)).toBe("다리 건너 묘역 1번째 줄 · 2번 자리");
+    expect(Array.from({ length: GRAVEYARD_CAPACITY }, (_, i) => plotLabel(i)).some((l) => l.includes("버드나무"))).toBe(false);
   });
   it("맵 크기는 고정 (묘비 수와 상관없다), 서버 범위도 맵 안", () => {
     expect(mapHeight(0)).toBe(MAP_HEIGHT);

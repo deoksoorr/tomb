@@ -13,6 +13,8 @@ import {
   fountainSheet,
   horse,
   HORSE_COLORS,
+  HORSE_POLE_H,
+  horsePole,
   RIDE_TEX,
   seesawBase,
   seesawPlank,
@@ -32,6 +34,9 @@ import {
   carouselSeats,
   horseAngle,
   horseBob,
+  horseDepths,
+  horseFacesLeft,
+  horsePoleSpan,
   rideSpotIds,
   ringPoint,
   SEESAW_HALF,
@@ -59,6 +64,8 @@ import {
 //    착지하면 쿵 + 먼지. 한 명이면 그쪽이 땅에 앉아 톡톡. 타고 내릴 때 판이 튀지 않게 잠깐 섞는다
 //  - 트램펄린(F14): 내리려 하면(Player.offWish) 튀던 한 번이 매트에 닿는 순간 옆 땅으로 폴짝 (Player.hopOff)
 //  - 회전목마(F15): 가운데 기둥은 받침 가운데 y 깊이로 따로 그려 앞쪽으로 도는 목마·사람이 기둥 앞에 보인다. 지붕만 맨 앞
+//    목마마다 지붕 술 장식에서 바닥까지 이어지는 기둥을 따로 세운다 (목마는 기둥을 타고 오르내린다).
+//    그리는 순서는 목마 자리 y 둘레로 기둥 < 목마 < 탄 사람 (rides.horseDepths). 목마·탄 사람은 가는 방향 옆모습 (rides.horseFacesLeft)
 
 /** WorldScene이 놀거리·조각배에 넘겨주는 것 (씬 안쪽을 직접 만지지 않게) */
 export type RideHost = {
@@ -113,6 +120,8 @@ export class PlazaRides {
   private readonly planks: Phaser.GameObjects.Image[] = [];
   private readonly tramps: Phaser.GameObjects.Image[] = [];
   private readonly horses: Phaser.GameObjects.Image[][] = [];
+  /** 목마마다 지붕까지 이어지는 기둥 */
+  private readonly horsePoles: Phaser.GameObjects.Image[][] = [];
   /** 이번 프레임 자리 → 탄 사람 (나는 -1) */
   private readonly riders = new Map<string, number>();
   private readonly seesaws: SeesawView[] = [];
@@ -151,8 +160,13 @@ export class PlazaRides {
       scene.add.image(c.x, c.y + 1, RIDE_TEX.carouselPole).setOrigin(0.5, 1).setDepth(carouselPoleDepth(c));
       scene.add.image(c.x, c.y + 1, RIDE_TEX.carouselTop).setOrigin(0.5, 1).setDepth(c.y + 40);
       const hs: Phaser.GameObjects.Image[] = [];
-      for (let h = 0; h < CAROUSEL_HORSES; h++) hs.push(scene.add.image(c.x, c.y, RIDE_TEX.horse(h % HORSE_COLORS.length, false)).setOrigin(0.5, 1));
+      const ps: Phaser.GameObjects.Image[] = [];
+      for (let h = 0; h < CAROUSEL_HORSES; h++) {
+        ps.push(scene.add.image(c.x, c.y, RIDE_TEX.horsePole).setOrigin(0.5, 1));
+        hs.push(scene.add.image(c.x, c.y, RIDE_TEX.horse(h % HORSE_COLORS.length, false)).setOrigin(0.5, 1));
+      }
       this.horses.push(hs);
+      this.horsePoles.push(ps);
       carouselSeats(c).forEach((p, h) => this.spots.set(spotSeatId("carousel", p.x, p.y), { kind: "carousel", ride: i, horse: h, ax: p.x, ay: p.y }));
     });
   }
@@ -307,9 +321,16 @@ export class PlazaRides {
       };
     }
     if (ref.kind === "trampoline") return { ox: 0, lift: TRAMPOLINE_MAT + trampolineHeight(wall), depth: ref.ay + 1 };
+    // 회전목마: 목마 안장 위, 목마 기둥 앞 (horseDepths), 가는 방향 옆모습
     const c = CAROUSELS[ref.ride];
-    const p = ringPoint(c, horseAngle(ref.horse, wall));
-    return { ox: p.x - ref.ax, lift: ref.ay - p.y + HORSE_LIFT + horseBob(ref.horse, wall), depth: p.y + 0.6 };
+    const a = horseAngle(ref.horse, wall);
+    const p = ringPoint(c, a);
+    return {
+      ox: p.x - ref.ax,
+      lift: ref.ay - p.y + HORSE_LIFT + horseBob(ref.horse, wall),
+      depth: horseDepths(p.y).rider,
+      dir: horseFacesLeft(a) ? DIR.left : DIR.right,
+    };
   }
 
   /** 매 프레임 (아바타 갱신 뒤): 놀거리 그림과 소리 */
@@ -353,16 +374,22 @@ export class PlazaRides {
       }
       this.trampLowPrev[i] = low;
     });
-    // 회전목마: 목마가 돈다 (뒤쪽 목마는 기둥 뒤, 앞쪽은 앞). 오르골은 내가 목마에 탔을 때만 (옆·모닥불에서는 0)
+    // 회전목마: 목마가 돈다 (뒤쪽 목마는 가운데 기둥 뒤, 앞쪽은 앞). 오르골은 내가 목마에 탔을 때만 (옆·모닥불에서는 0)
     CAROUSELS.forEach((c, i) => {
       const hs = this.horses[i];
+      const ps = this.horsePoles[i];
       for (let k = 0; k < hs.length; k++) {
         const a = horseAngle(k, wall);
         const p = ringPoint(c, a);
-        // 오른쪽으로 도는 쪽(앞)은 오른쪽을, 뒤쪽은 왼쪽을 본다
-        const left = Math.cos(a) < 0;
-        hs[k].setTexture(RIDE_TEX.horse(k % HORSE_COLORS.length, left));
-        hs[k].setPosition(Math.round(p.x), Math.round(p.y - horseBob(k, wall))).setDepth(p.y);
+        const x = Math.round(p.x);
+        const d = horseDepths(p.y);
+        // 앞쪽 반원은 오른쪽으로, 뒤쪽 반원은 왼쪽으로 간다 → 가는 쪽을 보는 옆모습
+        hs[k].setTexture(RIDE_TEX.horse(k % HORSE_COLORS.length, horseFacesLeft(a)));
+        hs[k].setPosition(x, Math.round(p.y - horseBob(k, wall))).setDepth(d.horse);
+        // 기둥: 지붕 술 장식에서 이 자리 바닥까지 (위를 잘라 길이를 맞춘다). 목마가 오르내려도 그대로
+        const span = horsePoleSpan(c, p);
+        const len = Math.min(HORSE_POLE_H, span.bottom - span.top + 1);
+        ps[k].setPosition(x, span.bottom + 1).setCrop(0, HORSE_POLE_H - len, ps[k].width, len).setDepth(d.pole);
       }
     });
     h.sound.carousel(carouselOrganLevel(mine?.kind === "carousel"));
@@ -413,6 +440,7 @@ export function ensureRideTextures(scene: Phaser.Scene): void {
   addCanvasTexture(scene, RIDE_TEX.carouselFloor, { canvas: carouselFloor() });
   addCanvasTexture(scene, RIDE_TEX.carouselTop, { canvas: carouselTop() });
   addCanvasTexture(scene, RIDE_TEX.carouselPole, { canvas: carouselPole() });
+  addCanvasTexture(scene, RIDE_TEX.horsePole, { canvas: horsePole() });
   HORSE_COLORS.forEach((c, v) => {
     addCanvasTexture(scene, RIDE_TEX.horse(v, false), { canvas: horse(c, false) });
     addCanvasTexture(scene, RIDE_TEX.horse(v, true), { canvas: horse(c, true) });

@@ -1,0 +1,218 @@
+/* 동물원 사육사 분양 창 + 타기 버튼. 다른 창과 같은 조용한 어두운 픽셀 스타일 (ui.module.css 변수) */
+
+/* 창 전체 (고정 크기 창 안: 목록만 스크롤) */
+.zoo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.hello {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.hello img {
+  flex: none;
+}
+
+.hello p {
+  margin: 0;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.balance {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.balance strong {
+  color: var(--candle);
+  font-variant-numeric: tabular-nums;
+}
+
+.body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--surface);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.stage {
+  display: grid;
+  place-items: center;
+  height: 124px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.name {
+  margin: 4px 0 0;
+  font-size: 16px;
+  color: var(--bone);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  color: #1e140c;
+  background: #ffc890;
+}
+
+.desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.price {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.price strong {
+  color: var(--candle);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.state {
+  margin: 0;
+  font-size: 12px;
+  color: var(--moss);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-auto-rows: min-content;
+  gap: 6px;
+  margin: 0;
+  padding: 2px;
+  list-style: none;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--surface);
+  border: 0;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.card > :first-child {
+  grid-row: 1 / 3;
+}
+
+.card:hover {
+  background: var(--surface-hover);
+}
+
+.card[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px var(--candle);
+}
+
+.cardName {
+  font-size: 13px;
+  color: var(--bone);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cardMeta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* 폰: 위에 자세히 보기, 아래 목록 */
+@media (max-width: 560px) {
+  .body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .stage {
+    height: 96px;
+  }
+}
+
+/* ── 타기 버튼 (타는 펫을 데리고 있을 때만, 화면 오른쪽 아래 줌 버튼 위) ── */
+.ride {
+  position: fixed;
+  right: var(--safe-right, 12px);
+  bottom: calc(var(--safe-bottom, 12px) + 170px);
+  z-index: 29;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 6px 12px;
+  background: var(--panel);
+  box-shadow: var(--px-border-strong, var(--px-border));
+  color: var(--bone);
+  border: 0;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ride[aria-pressed="true"] {
+  background: #5a3a1a;
+  color: #ffe0b0;
+}
+
+.ride:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.ride kbd {
+  font-size: 11px;
+  color: var(--muted);
+}

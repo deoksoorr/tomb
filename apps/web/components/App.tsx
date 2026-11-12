@@ -37,6 +37,22 @@ export default function App({ initialGraveId, debug }: Props) {
 
   // ready는 값 없는 sticky 이벤트라 last()로는 도착 여부를 알 수 없어서, 게임을 띄우기 전부터 구독해 둔다
   useEffect(() => bridge.on("ready", () => setReady(true)), []);
+  // 47번 이용 제한(실시간 서버 4012·입장 거절): 새로고침하면 첫 화면이 제한 화면으로 바뀐다 (30초에 한 번만, 되풀이 방지)
+  useEffect(
+    () =>
+      bridge.on("app:banned", () => {
+        const KEY = "tomb.banReloadAt";
+        let last = 0;
+        try {
+          last = Number(sessionStorage.getItem(KEY)) || 0;
+          sessionStorage.setItem(KEY, String(Date.now()));
+        } catch {
+          // 저장소를 못 쓰면 그냥 새로고침
+        }
+        if (Date.now() - last > 30_000) window.location.reload();
+      }),
+    [],
+  );
   // 잡히지 않은 오류를 운영자에게 알린다 (같은 메시지는 한 번, 분당 5건까지)
   useEffect(installErrorReporting, []);
   // 입장 클릭 제스처 안에서 바로 재생하려면 곡 목록이 미리 와 있어야 한다

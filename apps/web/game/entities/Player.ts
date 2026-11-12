@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { DIR, JUMP_MS, STATE, type DirId, type Seat, type StateName } from "@tomb/protocol";
+import { DIR, isAvatarBody, JUMP_MS, STATE, type DirId, type Seat, type StateName } from "@tomb/protocol";
 import { canJump, jumpHeight, shadowScale } from "../logic/jump";
 import { emptyMove, faceToward, resolveMove, type MoveInput } from "../logic/movement";
 import { standPoint } from "../logic/sit";
@@ -72,10 +72,15 @@ export class Player {
   private moveFrom: Seat | null = null;
   /** 조각배(50번)에 타고 있으면 그 배 자리 id. 위치는 씬의 BoatRide가 물 위로 옮긴다 (물리 바디 끔) */
   boatSeatId: string | null = null;
+  /** 동물원 타는 펫에 올라타 걸을 때의 속도 배율 (타지 않으면 1 — 씬의 zoo/Riding이 정한다, 물속에서는 쓰지 않는다) */
+  rideMul = 1;
   /** 트램펄린에서 내리려는 방향(입력 벡터)과 누른 시각. 씬이 매트에 닿는 순간 hopOff를 부른다 (F14) */
   offWish: { ax: number; ay: number; at: number } | null = null;
   /** 뛰어내리기(hopOff) 점프의 시작 높이 — 매트 위 높이에서 땅까지 포물선에 섞어 내린다 */
   private hopBase = 0;
+
+  private readonly offStaff: () => void;
+  private readonly offLook: () => void;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -86,8 +91,19 @@ export class Player {
     name: string,
     body = "hood",
   ) {
-    // 46번: 내 염색은 마지막 착용 증서(look:set)에 실려 온다 → 어느 장면에서 만들어도 같은 색으로
-    this.view = new AvatarView(scene, atlas, x, y, avatarColorSpec(color, bridge.last("look:set")?.dye), name, true, [], body);
+    // 46·25번: 내 염색·몸 모양의 출처는 마지막 착용 증서(look:set) 하나 → 어느 장면(월드·상점·집·마을)에서 만들어도 같은 모습
+    const last = bridge.last("look:set");
+    this.view = new AvatarView(scene, atlas, x, y, avatarColorSpec(color, last?.dye), name, true, [], isAvatarBody(last?.body) ? last.body : body);
+    // 그 장면 안에 있는 동안 염색·외형 바꾸기·꾸미기를 바꿔도 바로 (예전엔 상점 안에서는 나가야 바뀌었다)
+    this.offLook = bridge.on("look:set", (e) => {
+      // 장면이 정리돼 그림이 사라졌으면 (게임 종료 등) 더 듣지 않는다
+      if (!this.view.sprite.scene) return this.offLook();
+      if (Array.isArray(e.look)) this.view.setLook(e.look.filter((v): v is string => typeof v === "string"));
+      this.view.applyAppearance({ dye: e.dye, body: e.body });
+    });
+    // 31번 운영자 계정이면 내 캐릭터도 저승사자 차림 (/api/me가 알려 준 값, 바뀌면 바로)
+    this.view.setStaff(bridge.last("me:staff")?.on === true);
+    this.offStaff = bridge.on("me:staff", ({ on }) => this.view.setStaff(on));
     scene.physics.add.existing(this.view.sprite);
     this.body = this.view.sprite.body as Phaser.Physics.Arcade.Body;
     const s = this.view.sprite;
@@ -231,7 +247,7 @@ export class Player {
     }
     const wet = this.water?.(this.x, this.y) ?? false;
     if (!wet) this.diving = false;
-    const mul = wet ? (this.diving ? DIVE_SPEED : SWIM_SPEED) : 1;
+    const mul = wet ? (this.diving ? DIVE_SPEED : SWIM_SPEED) : this.rideMul;
     // 강물에 떠내려가는 만큼 (가만히 있어도 흘러간다)
     const cur = wet && this.current ? this.current(this.x, this.y) : null;
     const cvx = cur ? cur.vx : 0;
@@ -305,7 +321,8 @@ export class Player {
     this.spotId = spotId;
     this.offWish = null;
     this.state = kind;
-    this.dir = DIR.down;
+    // 17번: 나무에는 가지를 잡고 나무 쪽을 보며 매달린다 (뒷모습). 나머지는 앞을 본다
+    this.dir = kind === "hang" ? DIR.up : DIR.down;
     this.body.setVelocity(0, 0);
     this.body.enable = false;
     this.view.depthOverride = depth;
@@ -532,6 +549,8 @@ export class Player {
   }
 
   destroy(): void {
+    this.offStaff();
+    this.offLook();
     this.snap?.stop();
     this.view.destroy();
   }

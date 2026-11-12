@@ -1,4 +1,5 @@
 import { nanoid } from "nanoid";
+import { recordEvent } from "../analyticsService";
 import { earnPoints, getAccounts, refundPoints, spendPoints } from "../store";
 import { kstDay, kstWeek } from "../store/accounts";
 import { earnRule } from "../economy";
@@ -195,6 +196,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
   const earned = pointsRaw > 0 ? (await earnPoints(acct, "hunt", pointsRaw, ipHash)).earned : 0;
   await store.addDaily(acct, kstDay(now), { points: earned, runs: 1, exp: v.exp });
+  if (t.g === "hunt") await recordEvent("hunt", now); // 47번 방문 분석: 사냥 판 수
   // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터)
   if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null))
     await getAccounts().recordHunt(acct, t.d, v.hunt, kstWeek(now));

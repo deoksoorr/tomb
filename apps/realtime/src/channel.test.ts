@@ -1212,3 +1212,73 @@ describe("3번 집 안 가구: 방(집)의 1인 자리와 use 중계", () => {
     expect(events(d)).toEqual([]);
   });
 });
+
+describe("5번 이모티콘 / 24번 벤치 상태", () => {
+  it("emo: 보낸 사람 빼고 중계, 연결당 1초에 한 번 (도배 제한)", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const b = join("b");
+    clear(a, b);
+    core.message(a, send({ t: "emo", id: "heart" }), 0);
+    core.message(a, send({ t: "emo", id: "laugh" }), 999);
+    core.message(a, send({ t: "emo", id: "laugh" }), 1_000);
+    core.message(a, '{"t":"emo","id":"bomb"}', 5_000);
+    expect(events(b)).toEqual([
+      { t: "emo", sid: 1, id: "heart" },
+      { t: "emo", sid: 1, id: "laugh" },
+    ]);
+    expect(events(a)).toEqual([]);
+  });
+
+  it("emo는 방(마을·집)에서도 중계한다", () => {
+    const { core, join } = setup(3, 20_000, true);
+    const a = join("a");
+    const b = join("b");
+    clear(a, b);
+    core.message(a, send({ t: "emo", id: "zzz" }), 0);
+    expect(events(b)).toEqual([{ t: "emo", sid: 1, id: "zzz" }]);
+  });
+
+  it("mood: 의자·벤치에 앉아 있을 때만 받고, 늦게 온 사람은 입장 정보로, 일어나면 풀린다", () => {
+    const { core, join } = setup(5);
+    const a = join("a", 0, { x: bA0.x + 4, y: bA0.y + 4 });
+    const b = join("b");
+    // 서 있으면 무시
+    core.message(a, send({ t: "mood", m: "study" }), 0);
+    expect(events(b).filter((e) => e.t === "mood")).toEqual([]);
+    core.message(a, send({ t: "sit", seatId: "bA-0" }), 100);
+    clear(a, b);
+    core.message(a, send({ t: "mood", m: "study" }), 1_000);
+    expect(events(b)).toEqual([{ t: "mood", sid: 1, m: "study" }]);
+    expect(events(a)).toEqual([{ t: "mood", sid: 1, m: "study" }]);
+    // 간격 안의 연타는 버린다
+    core.message(a, send({ t: "mood", m: "work" }), 1_100);
+    expect(core.peer(1)?.mood).toBe("study");
+    // 늦게 온 사람
+    const c = join("c", 1_200);
+    expect(welcome(c).peers.find((p) => p.sid === 1)?.mood).toBe("study");
+    clear(a, b, c);
+    // 일어나면 자리 해제와 함께 풀린다
+    core.message(a, send({ t: "stand" }), 3_000);
+    expect(events(b)).toContainEqual({ t: "mood", sid: 1, m: "" });
+    expect(core.peer(1)?.mood).toBeUndefined();
+    const d = join("d", 3_100);
+    expect(welcome(d).peers.find((p) => p.sid === 1)?.mood).toBeUndefined();
+  });
+
+  it("mood: 걸어서 일어나도(sitChair가 아닌 MOVE) 풀리고, 직접 빈 문자열로 풀 수 있다", () => {
+    const { core, join } = setup();
+    const a = join("a", 0, { x: bA0.x + 4, y: bA0.y + 4 });
+    const b = join("b");
+    core.message(a, send({ t: "sit", seatId: "bA-0" }), 0);
+    core.message(a, send({ t: "mood", m: "music" }), 1_000);
+    core.message(a, send({ t: "mood", m: "" }), 2_000);
+    expect(core.peer(1)?.mood).toBeUndefined();
+    core.message(a, send({ t: "mood", m: "call" }), 3_000);
+    expect(core.peer(1)?.mood).toBe("call");
+    clear(b);
+    core.message(a, move(bA0.x + 8, bA0.y + 9, STATE.walk), 4_000);
+    expect(events(b)).toContainEqual({ t: "mood", sid: 1, m: "" });
+    expect(core.peer(1)?.mood).toBeUndefined();
+  });
+});

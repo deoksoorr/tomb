@@ -1,8 +1,7 @@
-import { bridge } from "../bridge";
 import { AudioHost } from "../world/audioHost";
 import { pianoFreq } from "./interact";
 
-// 3번 집 안 가구 소리 (파일 없이 WebAudio로 합성). 볼륨·음소거는 UI의 audio:settings(BGM과 같은 값).
+// 3번 집 안 가구 소리 (파일 없이 WebAudio로 합성). 13번: 효과음 갈래(sfx 버스, audio:mix)를 따른다.
 // gain = 거리 감쇠까지 곱한 크기 (내가 낸 소리는 1, 방의 다른 사람이 낸 소리는 멀수록 작게).
 
 export type HouseSound =
@@ -37,13 +36,8 @@ export function hearGain(d: number): number {
 
 export class HouseSfx extends AudioHost {
   private noise: AudioBuffer | null = null;
-  private readonly off: () => void;
-
   constructor() {
-    super();
-    const s = bridge.last("audio:settings");
-    if (s) this.setVolume(s.volume, s.muted);
-    this.off = bridge.on("audio:settings", ({ volume, muted }) => this.setVolume(volume, muted));
+    super("sfx");
   }
 
   private noiseBuf(ac: AudioContext): AudioBuffer {
@@ -191,7 +185,6 @@ export class HouseSfx extends AudioHost {
   }
 
   destroy(): void {
-    this.off();
     this.closeAudio();
   }
 }

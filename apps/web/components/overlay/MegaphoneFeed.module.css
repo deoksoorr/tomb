@@ -56,8 +56,22 @@
   overflow-wrap: anywhere;
 }
 
+/* 방금 와서 가운데에 떠 있는 한마디의 기록 줄 */
 .newLine {
   background: rgba(224, 195, 106, 0.14);
+  animation: lineIn 0.6s ease-out both;
+}
+
+@keyframes lineIn {
+  from {
+    background: rgba(224, 195, 106, 0.4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .newLine {
+    animation: none;
+  }
 }
 
 .empty {
@@ -82,52 +96,42 @@
   font-size: 10px;
 }
 
-/* 방금 온 한마디: 몇 초간 크게 */
-.flash {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  width: 100%;
-  margin: 0;
-  padding: 8px 10px;
-  background: rgba(36, 30, 18, 0.94);
-  box-shadow: var(--px-border-strong), 0 0 14px rgba(224, 195, 106, 0.35);
-  font-size: 14px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-  animation: flashIn 7s ease both;
+/* 47번 확성기 신고: 줄 오른쪽 끝에 겹쳐 두고 마우스를 올리거나 포커스가 갈 때만 보인다 (줄 높이를 바꾸지 않게).
+   터치 화면(hover 없음)은 늘 보인다 */
+.line {
+  position: relative;
 }
 
-.flash > svg {
-  margin-top: 4px;
-  color: var(--candle);
+.report {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: none;
+  padding: 0 6px;
+  border: 0;
+  background: var(--panel-solid);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
 }
 
-.flashAll {
-  box-shadow: var(--px-border-strong), 0 0 16px rgba(224, 90, 80, 0.45);
+.line:hover .report,
+.line:focus-within .report {
+  display: block;
 }
 
-.floating .flash {
-  font-size: 13px;
+.report:hover,
+.report:focus-visible {
+  color: var(--danger);
+  text-decoration: underline;
 }
 
-@keyframes flashIn {
-  0% {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  6%,
-  85% {
-    opacity: 1;
-    transform: none;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .flash {
-    animation: none;
+@media (hover: none) {
+  .report {
+    position: static;
+    display: inline;
+    margin-left: 6px;
+    background: none;
   }
 }

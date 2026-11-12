@@ -1,12 +1,13 @@
+import { EMO_ART_IDS, emoArtGrid, type EmoArtId } from "./emoArt";
 import { HOUSE_ICON_ART, HOUSE_ICONS, type HouseIcon } from "./houseIcons";
 import { Grid } from "./pixel";
 
 // 머리 위 이모티콘 (손 흔들기·환호·헌화). 말풍선 안에 화면 픽셀 3배로 크게 그린다 (SpeechBubble.showIcon).
 // 순수 그리드라 테스트에서 크기·외곽선을 확인한다.
 
-/** 3번: 집 안 가구 이모티콘(간식·하트·음표 …, houseIcons.ts)도 같은 말풍선에 뜬다 */
-export type EmoteIcon = "wave" | "cheer" | "flower" | HouseIcon;
-export const EMOTE_ICONS: readonly EmoteIcon[] = ["wave", "cheer", "flower", ...HOUSE_ICONS];
+/** 3번: 집 안 가구 이모티콘(간식·하트·음표 …, houseIcons.ts)도 같은 말풍선에 뜬다. 5번: 이모티콘 판 그림(emoArt.ts) */
+export type EmoteIcon = "wave" | "cheer" | "flower" | HouseIcon | EmoArtId;
+export const EMOTE_ICONS: readonly EmoteIcon[] = ["wave", "cheer", "flower", ...HOUSE_ICONS, ...EMO_ART_IDS];
 
 const LINE = 0x2a2420;
 
@@ -99,10 +100,29 @@ function flower(): Grid {
   return g;
 }
 
-const ART: Record<EmoteIcon, () => Grid> = { wave, cheer, flower, ...HOUSE_ICON_ART };
+const ART: Record<Exclude<EmoteIcon, EmoArtId>, () => Grid> = { wave, cheer, flower, ...HOUSE_ICON_ART };
 
 export function emoteGrid(kind: EmoteIcon): Grid {
-  return ART[kind]();
+  return kind in ART ? ART[kind as keyof typeof ART]() : emoArtGrid(kind as EmoArtId);
+}
+
+const urlCache = new Map<string, string>();
+
+/** UI(이모티콘 판)용 그림 dataURL — 게임과 같은 그림을 정수 배율로 (브라우저 전용, 같은 인자면 캐시) */
+export function emoteDataUrl(kind: EmoteIcon, scale = 3): string {
+  const key = `${kind}|${scale}`;
+  const hit = urlCache.get(key);
+  if (hit) return hit;
+  const src = emoteGrid(kind).toCanvas();
+  const c = document.createElement("canvas");
+  c.width = src.width * scale;
+  c.height = src.height * scale;
+  const ctx = c.getContext("2d")!;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(src, 0, 0, c.width, c.height);
+  const url = c.toDataURL("image/png");
+  urlCache.set(key, url);
+  return url;
 }
 
 export const emoteTexKey = (kind: EmoteIcon) => `emote-${kind}`;

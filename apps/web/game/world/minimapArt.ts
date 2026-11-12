@@ -61,7 +61,14 @@ export const LANDMARK_COLOR: Record<Landmark["kind"], string> = {
   wish: "#8ce0ff",
   bell: "#e0c070",
   fish: "#7fe0ff",
+  zoo: "#ffc890",
 };
+
+/** 동물원 발바닥 아이콘 (미니맵 px, 가운데 기준 [dx, dy] — 발가락 셋 + 발바닥) */
+export const PAW_ICON: readonly (readonly [number, number])[] = [
+  [-2, -2], [0, -3], [2, -2], // 발가락
+  [-1, 0], [0, 0], [1, 0], [-1, 1], [0, 1], [1, 1], // 발바닥
+];
 
 /** 채집 지점 점 색 (약초·광석·발굴·곤충 수풀 — 게임의 발밑 빛 색과 같다) */
 export const NODE_DOT_COLOR: Record<string, string> = { herb: "#9cff8a", ore: "#9ad8ff", dig: "#ffd27a", bug: "#fff0a0" };

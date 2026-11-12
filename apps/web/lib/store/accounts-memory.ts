@@ -523,6 +523,14 @@ export class MemoryAccounts implements AccountStore {
     return { wallets: all.reduce((n, a) => n + a.points, 0), accounts: all.length };
   }
 
+  /** 31번 운영자 계정: 잔액을 to까지 채운다 (적립이 아니라 모은 포인트·랭킹·경제 통계와 무관). 없는 계정이면 false */
+  staffFill(id: string, to: number): boolean {
+    const a = this.accts.get(id);
+    if (!a) return false;
+    if (a.points < to) a.points = to;
+    return true;
+  }
+
   // ── 46·25·30번 꾸미기 (MemoryStyle이 부른다, lib/store/style.ts). 모두 동기 → 한 번에 일어난다 ──
 
   /** 가방에서 1개 꺼내기 (없으면 false) */

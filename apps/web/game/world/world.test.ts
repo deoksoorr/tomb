@@ -35,6 +35,7 @@ import {
   ZONES,
   campfireOfSeat,
   graveSlot,
+  inZoo,
   houseLot,
   mapHeight,
   plotLabel,
@@ -181,13 +182,13 @@ describe("컴팩트한 묘지 마을 맵 (F1)", () => {
     expect(trees).toBeLessThan(140);
   });
 
-  it("무덤 컨셉이 맵 곳곳에: 오래된 묘비·촛불·땅안개·납골당·철책·종루가 묘역 세 곳 모두에 있다", () => {
+  it("무덤 컨셉이 맵 곳곳에: 오래된 묘비·촛불·땅안개·철책·종루가 묘역 두 곳 모두에 있다 (버드나무 묘역 자리는 동물원)", () => {
     const props = allProps();
     const count = (k: string) => props.filter((p) => p.kind === k).length;
-    expect(count("oldGrave")).toBeGreaterThanOrEqual(25);
-    expect(count("candle")).toBeGreaterThanOrEqual(10);
-    expect(count("mist")).toBeGreaterThanOrEqual(12);
-    expect(count("crypt")).toBe(1);
+    expect(count("oldGrave")).toBeGreaterThanOrEqual(18);
+    expect(count("candle")).toBeGreaterThanOrEqual(8);
+    expect(count("mist")).toBeGreaterThanOrEqual(10);
+    expect(count("crypt")).toBe(0); // 납골당은 버드나무 묘역과 함께 없어졌다
     expect(count("bell")).toBe(1);
     for (const a of GRAVE_AREAS) {
       const inA = props.filter((p) => inside(a.rect, p.x, p.y, 24));
@@ -364,9 +365,9 @@ describe("길찾기 격자 / 옛 좌표", () => {
   });
 });
 
-describe("묘역 세 곳 (F4: 정원 합계 = 49번 성불의 GRAVEYARD_CAPACITY)", () => {
+describe("묘역 두 곳 (버드나무 묘역은 동물원 — 정원 합계 = 49번 성불의 GRAVEYARD_CAPACITY)", () => {
   it("묘역 칸 수의 합 = GRAVEYARD_CAPACITY, 모든 자리가 제 묘역 안, 겹치지 않는다", () => {
-    expect(GRAVE_AREAS.length).toBe(3);
+    expect(GRAVE_AREAS.length).toBe(2);
     expect(GRAVE_AREAS.reduce((n, a) => n + a.cols * a.rows, 0)).toBe(GRAVEYARD_CAPACITY);
     expect(GRID_COLS * GRID_ROWS).toBe(GRAVEYARD_CAPACITY); // 옛 이름 호환
     for (let i = 0; i < GRAVEYARD_CAPACITY; i++) {
@@ -379,16 +380,24 @@ describe("묘역 세 곳 (F4: 정원 합계 = 49번 성불의 GRAVEYARD_CAPACITY
     expect(GRAVEYARD_RECT).toEqual(GRAVE_AREAS[0].rect);
   });
 
-  it("등록 순서대로 결정적으로, 세 묘역에 골고루 (A·B·A·C …) 놓인다", () => {
-    expect([0, 1, 2, 3, 4, 5, 6, 7].map((i) => graveSlot(i).area)).toEqual(["A", "B", "A", "C", "A", "B", "A", "C"]);
+  it("등록 순서대로 결정적으로, 두 묘역에 정원 비율(5 : 3)대로 골고루 (A·B·A·B·A·A·B·A …) 놓인다", () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 7].map((i) => graveSlot(i).area)).toEqual(["A", "B", "A", "B", "A", "A", "B", "A"]);
     expect(graveSlot(0)).toEqual(graveSlot(GRAVEYARD_CAPACITY)); // 돌려 쓴다
-    const per = { A: 0, B: 0, C: 0 };
+    const per: Record<string, number> = { A: 0, B: 0 };
     for (let i = 0; i < GRAVEYARD_CAPACITY; i++) per[graveSlot(i).area]++;
-    expect(per).toEqual({ A: 16, B: 8, C: 8 });
+    expect(per).toEqual({ A: 20, B: 12 });
     expect(plotLabel(0)).toBe("옛 묘역 1번째 줄 · 1번 자리");
     expect(plotLabel(1)).toBe("다리 건너 묘역 1번째 줄 · 1번 자리");
-    expect(plotLabel(3)).toBe("버드나무 묘역 1번째 줄 · 1번 자리");
+    expect(plotLabel(3)).toBe("다리 건너 묘역 1번째 줄 · 2번 자리");
     expect(plotLabel(2)).toBe("옛 묘역 1번째 줄 · 2번 자리");
+  });
+
+  it("묘비 데이터는 그대로, 자리만 옮겨 놓인다: 32기 모두 동물원 밖 묘역 안", () => {
+    for (let i = 0; i < GRAVEYARD_CAPACITY; i++) {
+      const s = graveSlot(i);
+      expect(inZoo(s.x, s.y, 8), `${i}`).toBe(false);
+      expect(["A", "B"]).toContain(s.area);
+    }
   });
 
   it("등록 순서대로 결정적으로 놓이고, 넘치면 가장 최근 32기만 자리를 돌려 쓴다", () => {

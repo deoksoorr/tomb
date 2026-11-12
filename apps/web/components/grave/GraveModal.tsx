@@ -63,7 +63,8 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   const [mine, setMine] = useState<Mine | null>(null);
   const [missing, setMissing] = useState(false);
   const [pending, setPending] = useState<Partial<Record<Action, boolean>>>({});
-  const [confirming, setConfirming] = useState<"report" | "remove" | null>(null);
+  /** staffDelete = 31번 운영자 삭제 확인 */
+  const [confirming, setConfirming] = useState<"report" | "remove" | "staffDelete" | null>(null);
   const [reportReason, setReportReason] = useState<ReportReason>("other");
   const [notice, setNotice] = useState<string | null>(null);
   const [ownerToken] = useState(() => getOwnerToken(graveId));
@@ -145,6 +146,17 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
       cache.remove(graveId);
       bridge.emit("grave:changed", { graveId, kind: "removed" });
       showToast(`묘비를 이장했어요. 성황당에 ${SHRINE_KEEP_DAYS}일 동안 모셔져요.`);
+      onClose();
+    });
+
+  /** 31번 운영자 계정: 누구의 묘비든 완전히 지운다 (서버가 운영자 계정 + 관리자 IP를 다시 확인한다) */
+  const staffDelete = () =>
+    run("remove", async () => {
+      setConfirming(null);
+      await api.staffDeleteGrave(graveId);
+      cache.remove(graveId);
+      bridge.emit("grave:changed", { graveId, kind: "removed" });
+      showToast("운영자 권한으로 묘비를 지웠어요.");
       onClose();
     });
 
@@ -306,7 +318,13 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
 
         {confirming ? (
           <div className={styles.confirm} role="group" aria-label="확인">
-            <p>{confirming === "report" ? "이 묘비를 신고할까요?" : `이 묘비를 이장할까요? 성황당에 ${SHRINE_KEEP_DAYS}일 동안 모셔져요. 그 안에는 다시 모실 수 있어요.`}</p>
+            <p>
+              {confirming === "report"
+                ? "이 묘비를 신고할까요?"
+                : confirming === "staffDelete"
+                  ? "운영자 권한으로 이 묘비를 완전히 지울까요? 사진도 함께 지워지고 되돌릴 수 없어요."
+                  : `이 묘비를 이장할까요? 성황당에 ${SHRINE_KEEP_DAYS}일 동안 모셔져요. 그 안에는 다시 모실 수 있어요.`}
+            </p>
             {confirming === "report" && (
               <fieldset className={styles.reasons}>
                 <legend className={ui.hint}>신고 사유</legend>
@@ -328,10 +346,10 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
               <button
                 type="button"
                 className={cx(ui.button, ui.danger)}
-                onClick={confirming === "report" ? report : remove}
+                onClick={confirming === "report" ? report : confirming === "staffDelete" ? staffDelete : remove}
                 autoFocus
               >
-                {confirming === "report" ? "신고하기" : "이장하기"}
+                {confirming === "report" ? "신고하기" : confirming === "staffDelete" ? "완전히 지우기" : "이장하기"}
               </button>
               <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirming(null)}>
                 그만두기
@@ -381,6 +399,17 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
                   이장(삭제)
                 </button>
               </>
+            )}
+            {me?.staff && (
+              <button
+                type="button"
+                className={cx(ui.button, ui.quiet, ui.danger)}
+                onClick={() => setConfirming("staffDelete")}
+                disabled={pending.remove}
+                title="운영자 계정 전용 (관리자 IP에서만)"
+              >
+                삭제 (운영자)
+              </button>
             )}
           </div>
         )}

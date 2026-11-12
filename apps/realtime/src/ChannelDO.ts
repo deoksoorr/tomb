@@ -246,6 +246,19 @@ export class ChannelDO extends DurableObject<Env> {
     return { count: this.core.count, seq: this.nextSeq() };
   }
 
+  /** 47번: Worker의 /internal/kick → 이 채널·방에 있는 그 방문자들을 code로 내보낸다. 내보낸 수 (RPC) */
+  expel(visitorIds: string[], code: number): number {
+    const reason = code === CLOSE.BANNED ? "banned" : "kicked";
+    let n = 0;
+    for (const v of visitorIds) if (this.core.expel(v, code, reason)) n++;
+    return n;
+  }
+
+  /** 47번: Worker의 /internal/peer → sid의 방문자 (유저 신고 대상 확인, RPC) */
+  peerAt(sid: number): { visitorId: string; name: string } | null {
+    return this.core.peerAt(sid);
+  }
+
   /** Lobby DO → 같은 방문자가 claimedAt에 다른 채널에 들어갔다. 여기 자리(접속·유예 예약)를 4002로 정리한다 (RPC) */
   kick(visitorId: string, claimedAt: number): void {
     this.core.evict(visitorId, claimedAt);

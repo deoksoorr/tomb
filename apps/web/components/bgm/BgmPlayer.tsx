@@ -1,6 +1,8 @@
 "use client";
 
-import { useId, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { bridge } from "@/game/bridge";
+import { soundMix, type SoundBus } from "@/lib/soundMix";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import PixelIcon from "../ui/PixelIcon";
@@ -15,6 +17,11 @@ import styles from "./BgmPlayer.module.css";
  */
 export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
   const state = useSyncExternalStore(bgm.subscribe, bgm.getSnapshot, () => INITIAL_BGM_STATE);
+  // 13번: 환경음·효과음 따로 (기기에 저장, 게임에는 audio:mix로)
+  const mix = useSyncExternalStore(soundMix.subscribe, soundMix.getSnapshot, soundMix.getServerSnapshot);
+  useEffect(() => {
+    if (!bridge.last("audio:mix")) bridge.emit("audio:mix", soundMix.getSnapshot());
+  }, []);
   const [expanded, setExpanded] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -96,12 +103,13 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
             </select>
           </label>
           <div className={styles.row}>
+            <span className={styles.busLabel}>배경음악</span>
             <button
               type="button"
               className={cx(ui.button, ui.quiet, ui.icon)}
               onClick={() => bgm.toggleMute()}
               aria-pressed={state.muted}
-              aria-label="음소거"
+              aria-label="배경음악 끄기"
             >
               <PixelIcon name={state.muted ? "mute" : "sound"} />
             </button>
@@ -112,8 +120,40 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
               max={100}
               value={state.muted ? 0 : Math.round(state.volume * 100)}
               onChange={(e) => bgm.setVolume(Number(e.target.value) / 100)}
-              aria-label="볼륨"
+              aria-label="배경음악 볼륨"
+              data-bus="bgm"
             />
+          </div>
+          {BUSES.map(([bus, label, hint]) => {
+            const b = mix[bus];
+            return (
+              <div key={bus} className={styles.row} title={hint}>
+                <span className={styles.busLabel}>{label}</span>
+                <button
+                  type="button"
+                  className={cx(ui.button, ui.quiet, ui.icon)}
+                  onClick={() => soundMix.set(bus, { muted: !b.muted })}
+                  aria-pressed={b.muted}
+                  aria-label={`${label} 끄기`}
+                  data-bus-mute={bus}
+                >
+                  <PixelIcon name={b.muted ? "mute" : "sound"} />
+                </button>
+                <input
+                  type="range"
+                  className={styles.volume}
+                  min={0}
+                  max={100}
+                  value={b.muted ? 0 : Math.round(b.volume * 100)}
+                  onChange={(e) => soundMix.set(bus, { volume: Number(e.target.value) / 100, muted: false })}
+                  aria-label={`${label} 볼륨`}
+                  data-bus={bus}
+                />
+              </div>
+            );
+          })}
+          <div className={styles.row}>
+            <p className={cx(styles.now, styles.grow)}>{track ? `♪ ${track.title}` : "음원 준비 중 · 지금은 조용히 머물러요"}</p>
             <button
               type="button"
               className={cx(ui.button, ui.quiet, ui.icon)}
@@ -123,27 +163,44 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
               <PixelIcon name="info" />
             </button>
           </div>
-          <p className={styles.now}>{track ? `♪ ${track.title}` : "음원 준비 중 · 지금은 조용히 머물러요"}</p>
         </div>
       )}
 
-      {creditsOpen && <BgmCredits playlists={state.playlists} onClose={() => setCreditsOpen(false)} />}
+      {creditsOpen && <BgmCredits playlists={state.playlists} now={track?.title ?? null} onClose={() => setCreditsOpen(false)} />}
     </section>
   );
 }
 
+/** 13번 소리 갈래: [버스, 이름, 설명] */
+const BUSES: readonly [SoundBus, string, string][] = [
+  ["amb", "환경음", "비·천둥·모닥불·물소리"],
+  ["sfx", "효과음", "폭죽·종·놀거리·낚시·채집·사냥 등"],
+];
+
 /** CC BY 계열만 저작자·출처를 밝힌다. 그 밖의 곡은 제목과 라이선스만 */
-function BgmCredits({ playlists, onClose }: { playlists: Playlist[]; onClose: () => void }) {
+function BgmCredits({ playlists, now, onClose }: { playlists: Playlist[]; now: string | null; onClose: () => void }) {
   const withTracks = playlists.filter((p) => p.tracks.length > 0);
+  const total = withTracks.reduce((n, p) => n + p.tracks.length, 0);
   return (
     <Dialog title="음원 정보" onClose={onClose}>
       {withTracks.length === 0 ? (
         <p className={styles.creditsEmpty}>아직 음원을 준비하고 있어요. 지금은 조용히 머물러 주세요.</p>
       ) : (
         <div className={styles.credits}>
+          <div className={styles.creditsSummary}>
+            <p className={styles.creditsNow}>
+              <PixelIcon name="note" /> {now ? `지금 재생 중 · ${now}` : "지금은 음악이 멈춰 있어요"}
+            </p>
+            <p className={styles.creditsMeta}>
+              {withTracks.length}개 갈래 · 모두 {total}곡. 왼쪽 위 음악 창에서 갈래를 골라 들을 수 있어요. 저작자 표시가 필요한 곡은 저작자와 출처를 함께
+              적었어요.
+            </p>
+          </div>
           {withTracks.map((p) => (
             <section key={p.id}>
-              <h3 className={styles.creditsHeading}>{p.title}</h3>
+              <h3 className={styles.creditsHeading}>
+                {p.title} <span className={styles.creditsMeta}>{p.tracks.length}곡</span>
+              </h3>
               <ul className={styles.creditsList}>
                 {p.tracks.map((t) => (
                   <li key={t.file}>

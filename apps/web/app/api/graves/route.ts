@@ -1,4 +1,5 @@
 import { nanoid } from "nanoid";
+import { recordEvent } from "@/lib/analyticsService";
 import { assertImageUsable } from "@/lib/blob";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
@@ -61,6 +62,7 @@ export const POST = handler(async (req) => {
     channel: input.channel ?? 1,
   };
   await saveGrave(store, accounts, visitorId, grave, true);
+  await recordEvent("grave", now); // 47번 방문 분석: 묘비 작성 수
   const [earned] = await Promise.all([
     accounts.earn(visitorId, "bury", kstDay(grave.createdAt)),
     accounts.addGrave(visitorId, grave.id),

@@ -5,6 +5,7 @@ import { STAY_TICK_MINUTES } from "../calendar";
 import { CODE_ALPHABET, type EarnSource } from "../economy";
 import { parseYmd, todayKst } from "../epitaph";
 import { NAME_CHANGE_COOLDOWN_DAYS, NAME_CHANGE_PRICE, type Me } from "../types";
+import { topUpIfStaff } from "../staff";
 import { getStyleStore } from "./style";
 import type { AccountRecord, AccountStore } from "./types";
 
@@ -51,9 +52,11 @@ export function toMe(accountId: string, a: AccountRecord, day: string, now: numb
 
 export async function loadMe(accounts: AccountStore, accountId: string, now = Date.now()): Promise<Me> {
   const day = kstDay(now);
+  // 31번 운영자 계정은 잔액을 지갑 상한까지 채운 뒤 읽는다 (포인트가 줄지 않는다)
+  const staff = await topUpIfStaff(accounts, accountId);
   // 46번 염색은 따로 저장한다 (lib/store/style.ts)
   const [a, style] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId)]);
-  return { ...toMe(accountId, a, day, now), dye: style.dye };
+  return { ...toMe(accountId, a, day, now), dye: style.dye, ...(staff ? { staff: true } : {}) };
 }
 
 /**

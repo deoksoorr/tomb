@@ -4,8 +4,12 @@ import { boatWater, joinSeat, JOIN_REACH, pickBoatSeat, shorePoint, stepBoat, RO
 import { furnitureCollider, houseCollider, inWater, interactables, standable, staticColliders, walkableGrid, WALK, waterCurrent, type Rect } from "./layout";
 import {
   bystanderGain,
+  CAROUSEL_ROOF_DROP,
   CAROUSEL_RY,
   carouselOrganLevel,
+  horseDepths,
+  horseFacesLeft,
+  horsePoleSpan,
   carouselPoleDepth,
   CAROUSELS,
   carouselSeats,
@@ -293,6 +297,40 @@ describe("F15 회전목마 그리는 순서", () => {
       expect(frontHorse.y).toBeCloseTo(c.y + CAROUSEL_RY);
       expect(frontHorse.y).toBeGreaterThan(pole);
       expect(backHorse.y).toBeLessThan(pole);
+    }
+  });
+});
+
+describe("회전목마 옆모습·목마 기둥", () => {
+  it("앞쪽 반원은 오른쪽, 뒤쪽 반원은 왼쪽을 본다 (가는 방향 = x가 커지는 쪽)", () => {
+    const c = CAROUSELS[0];
+    for (let k = 0; k < 64; k++) {
+      const a = (k / 64) * Math.PI * 2 + 0.01;
+      const dx = ringPoint(c, a + 0.001).x - ringPoint(c, a).x;
+      expect(horseFacesLeft(a)).toBe(dx < 0);
+    }
+    expect(horseFacesLeft(0)).toBe(false);
+    expect(horseFacesLeft(Math.PI)).toBe(true);
+  });
+  it("목마 기둥은 늘 지붕에서 그 자리 바닥까지 (목마가 오르내려도 같다)", () => {
+    const c = CAROUSELS[0];
+    for (let k = 0; k < 16; k++) {
+      const p = ringPoint(c, (k / 16) * Math.PI * 2);
+      const s = horsePoleSpan(c, p);
+      expect(s.top).toBe(c.y - CAROUSEL_ROOF_DROP);
+      expect(s.bottom).toBeGreaterThan(s.top + 20);
+      expect(s.bottom).toBeLessThanOrEqual(Math.round(p.y));
+    }
+  });
+  it("그리는 순서: 기둥 < 목마 < 탄 사람, 앞쪽 반원은 셋 다 가운데 기둥 앞, 뒤쪽은 뒤", () => {
+    const c = CAROUSELS[0];
+    for (const a of [0, Math.PI]) {
+      const p = ringPoint(c, a);
+      const d = horseDepths(p.y);
+      expect(d.pole).toBeLessThan(d.horse);
+      expect(d.horse).toBeLessThan(d.rider);
+      const front = a === 0;
+      for (const v of [d.pole, d.horse, d.rider]) expect(v > carouselPoleDepth(c)).toBe(front);
     }
   });
 });

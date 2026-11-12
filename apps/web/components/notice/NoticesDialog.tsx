@@ -4,6 +4,8 @@ import { useEffect, useId, useState } from "react";
 import { todayKst } from "@/lib/epitaph";
 import { markNoticesSeen, refreshNotices, useNotices } from "@/lib/hooks/useNotices";
 import Dialog from "../ui/Dialog";
+import { EmptyHero, InfoCard, TipList } from "../ui/InfoBlocks";
+import { InquiryButton } from "./InquiryDialog";
 import styles from "./notice.module.css";
 
 /**
@@ -34,7 +36,9 @@ export default function NoticesDialog({ onClose }: { onClose: () => void }) {
           불러오는 중…
         </p>
       ) : notices.length === 0 ? (
-        <p className={styles.state}>아직 공지가 없어요.</p>
+        <EmptyHero icon="bell" title="아직 공지가 없어요">
+          업데이트·점검 소식이 생기면 여기에 올라와요.
+        </EmptyHero>
       ) : (
         <ol className={styles.notices}>
           {notices.map((n) => {
@@ -60,6 +64,20 @@ export default function NoticesDialog({ onClose }: { onClose: () => void }) {
           })}
         </ol>
       )}
+      <InfoCard title="공지 안내" icon="info" className={styles.guide}>
+        <TipList
+          tips={[
+            "새 공지가 올라오면 [공지] 버튼에 노란 점이 켜져요. 이 창을 열면 꺼져요.",
+            "제목을 누르면 내용이 펼쳐져요. [고정] 공지는 늘 맨 위에 있어요.",
+            "점검은 미리 공지해요. 점검 중에는 잠시 들어올 수 없어요.",
+            "새 버전이 나오면 새로고침 안내가 떠요. 누르면 지금 자리 그대로 이어져요.",
+            "버그·제안은 아래 [문의하기]로 보내 주세요.",
+          ]}
+        />
+        <div>
+          <InquiryButton />
+        </div>
+      </InfoCard>
     </Dialog>
   );
 }

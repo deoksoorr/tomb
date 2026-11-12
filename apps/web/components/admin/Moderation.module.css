@@ -1,0 +1,150 @@
+/* 47번 정지·차단·신고 탭 (Admin.module.css에 덧붙이는 것만) */
+
+.form {
+  display: grid;
+  gap: 14px;
+}
+
+.group {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.group legend {
+  margin-bottom: 4px;
+}
+
+.radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 28px;
+}
+
+.radio input {
+  margin-top: 3px;
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.days {
+  width: 88px;
+}
+
+.memo {
+  resize: vertical;
+  font: inherit;
+}
+
+.ipLine {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+}
+
+.ipCount {
+  color: var(--muted);
+}
+
+.warn {
+  color: var(--danger);
+}
+
+.section {
+  display: grid;
+  gap: 8px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.ended {
+  opacity: 0.6;
+}
+
+.reasonCell {
+  min-width: 180px;
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
+
+.small {
+  min-height: 28px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.history {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.editBox {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* ── 신고 탭 ── */
+
+.case {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.caseNew {
+  box-shadow: var(--px-border-strong);
+}
+
+.caseHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  color: var(--bone);
+}
+
+.type {
+  padding: 0 6px;
+  background: var(--moss-deep);
+  color: var(--bone);
+  font-size: 12px;
+}
+
+.newTag {
+  padding: 0 6px;
+  background: var(--candle);
+  color: var(--bg-deep);
+  font-size: 12px;
+}
+
+.preview {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--bg-deep);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notes {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 13px;
+}

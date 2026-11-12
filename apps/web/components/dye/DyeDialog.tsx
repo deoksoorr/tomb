@@ -5,7 +5,7 @@ import { DIR, DYE_PART_NAMES, DYE_PARTS, type DyePart } from "@tomb/protocol";
 import { avatarColors, specDye, withDyePart } from "@/game/sprites/avatar";
 import { errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
-import { buildPalette, cellColor, DYE_BOARD_H, DYE_BOARD_W, DYE_TIERS, DYE_TIME_MS, type DyeTier } from "@/lib/dye/palette";
+import { buildPalette, cellColor, cellOf, DYE_BOARD_H, DYE_BOARD_W, DYE_TIERS, DYE_TIME_MS, paletteRgba, type DyeTier } from "@/lib/dye/palette";
 import { fixedAllows } from "@/lib/dye/rules";
 import type { DyeSessionView, StyleChangeResponse } from "@/lib/dye/types";
 import { applyStyle } from "../account/actions";
@@ -13,11 +13,12 @@ import { OutfitCanvas } from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
-import { aimPoint, clampView, minScale, toBoard, zoomAt, type BoardView } from "./board";
+import { aimAt, clampView, minScale, toBoard, zoomAt, type BoardView } from "./board";
 import styles from "./DyeDialog.module.css";
 
-// 46번 염색 창. 무작위 염색권: 부위 고르기 → 60초 동안 무작위 팔레트(일부만 보임)를 드래그·휠(핀치)로 뒤져
-// 흔들리는 조준점으로 색을 골라 확정 (시간이 끝나면 그 순간 조준점 아래 색으로 강제 확정).
+// 46번 염색 창. 무작위 염색권: 부위 고르기 → 60초 동안 무작위 팔레트(일부만 보이는 연속 색 공간)를 드래그·휠(핀치)로 뒤진다.
+// 조준점은 마우스를 따라가고(폰은 화면 가운데) 흔들린다 — 그 아래 색이 바로 "지금 고른 색"(미리보기에 입혀짐).
+// [이 색으로 염색]·엔터를 누른 순간 또는 시간이 끝난 순간의 조준점 색으로 확정.
 // 고정 색 염색권: 부위만 고르면 미리 보고 바로 그 색. 결과 색은 서버가 정한다 (여기서는 판 좌표만 보낸다).
 
 export type DyeTicket =
@@ -171,8 +172,8 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
               )}
               {ticket?.mode === "random" && (
                 <p className={styles.note}>
-                  시작하면 염색권 1장을 써요. 판은 일부만 보여요 — 끌어서 옮기고, 휠(폰은 두 손가락)로 확대·축소해 원하는 색을 찾아 누르세요. 시간이 끝나면 그 순간 조준점
-                  아래 색으로 정해져요.
+                  시작하면 염색권 1장을 써요. 판은 일부만 보여요 — 끌어서 옮기고, 휠(폰은 두 손가락)로 확대·축소해 원하는 색을 찾으세요. 조준점 아래 색이 바로 고른
+                  색이 되고, [이 색으로 염색]을 누른 순간 정해져요. 시간이 끝나면 그 순간 조준점 아래 색으로 정해져요.
                 </p>
               )}
               {error && <p className={ui.error}>{error}</p>}
@@ -195,6 +196,9 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
 
 // ── 판 (60초) ──
 
+/** 미리보기 캐릭터를 다시 그리는 최소 간격 (색이 거의 매 프레임 바뀌므로) */
+const PREVIEW_MS = 120;
+
 function DyeBoard({
   session,
   spec,
@@ -215,22 +219,20 @@ function DyeBoard({
   const boxRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const liveRef = useRef<HTMLSpanElement>(null);
+  const liveTextRef = useRef<HTMLSpanElement>(null);
   const viewRef = useRef<BoardView | null>(null);
   const sizeRef = useRef({ w: 1, h: 1 });
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ moved: number; startedAt: number } | null>(null);
+  /** 조준 기준 (보드 안 화면 좌표). 마우스는 포인터 자리, 폰·키보드는 null = 화면 가운데 */
+  const aimBase = useRef<{ x: number; y: number } | null>(null);
   const t0 = useRef(0);
   const sentRef = useRef(false);
   // 서버 시계 기준 마감 → 내 시계로 (요청 지연만큼 조금 이르게 끝난다)
   const [localEnds] = useState(() => Date.now() + (session.endsAt - session.serverNow));
   const [left, setLeft] = useState(() => Math.max(0, session.endsAt - session.serverNow));
-  const [picked, setPickedState] = useState<Picked | null>(null);
-  /** 그리기 루프가 읽는 고른 자리 (루프를 다시 걸지 않게 ref로도 둔다) */
-  const pickedRef = useRef<Picked | null>(null);
-  const setPicked = (p: Picked) => {
-    pickedRef.current = p;
-    setPickedState(p);
-  };
+  /** 지금 조준점 아래 색 (미리보기 캐릭터에 입힌다 — 너무 자주 그리지 않게 간격을 둔다) */
+  const [live, setLive] = useState<Picked | null>(null);
   const [sending, setSending] = useState(false);
   /** 루프 안에서 부르는 최신 함수 (시간 끝 → 강제 확정) */
   const timeoutRef = useRef<() => void>(() => {});
@@ -244,27 +246,27 @@ function DyeBoard({
     const ctx = c.getContext("2d");
     if (!ctx) return null;
     const img = ctx.createImageData(DYE_BOARD_W, DYE_BOARD_H);
-    for (let y = 0; y < DYE_BOARD_H; y++)
-      for (let x = 0; x < DYE_BOARD_W; x++) {
-        const v = parseInt(cellColor(palette, x, y).slice(1), 16);
-        const i = (y * DYE_BOARD_W + x) * 4;
-        img.data[i] = (v >> 16) & 255;
-        img.data[i + 1] = (v >> 8) & 255;
-        img.data[i + 2] = v & 255;
-        img.data[i + 3] = 255;
-      }
+    img.data.set(paletteRgba(palette));
     ctx.putImageData(img, 0, 0);
     return c;
   }, [palette]);
 
-  const aim = () => aimPoint(viewRef.current ?? { cx: DYE_BOARD_W / 2, cy: DYE_BOARD_H / 2, scale: 1 }, amp, (performance.now() - t0.current) / 1000);
+  /** 지금 조준점이 가리키는 칸과 그 색 (확정·미리보기·그리기가 모두 이 값) */
+  const aimNow = (now = performance.now()): Picked => {
+    const v = viewRef.current ?? { cx: DYE_BOARD_W / 2, cy: DYE_BOARD_H / 2, scale: 1 };
+    const { w, h } = sizeRef.current;
+    const a = aimAt(v, w, h, aimBase.current, amp, (now - t0.current) / 1000);
+    const c = cellOf(a.x, a.y);
+    return { x: a.x, y: a.y, color: cellColor(palette, c.cx, c.cy) };
+  };
 
-  async function send(at: { x: number; y: number }, timeout: boolean) {
+  async function send(at: Picked) {
     if (sentRef.current) return;
     sentRef.current = true;
     setSending(true);
+    setLive(at);
     try {
-      onFinish(await dyeApi.finish(session.seed, at.x, at.y), timeout);
+      onFinish(await dyeApi.finish(session.seed, at.x, at.y), false);
     } catch (e) {
       onError(errorMessage(e));
       sentRef.current = false;
@@ -272,7 +274,7 @@ function DyeBoard({
     }
   }
 
-  // 그리기 루프 + 남은 시간
+  // 그리기 루프 + 남은 시간 + 조준점 아래 색 (포인터를 움직이면 그 색이 바로 "지금 고른 색")
   useEffect(() => {
     const canvas = canvasRef.current;
     const box = boxRef.current;
@@ -281,6 +283,8 @@ function DyeBoard({
     let raf = 0;
     let lastTick = 0;
     let lastLive = "";
+    let lastPreview = 0;
+    let shown = "";
     const fit = () => {
       const r = box.getBoundingClientRect();
       const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -296,7 +300,7 @@ function DyeBoard({
     const loop = (now: number) => {
       const ctx = canvas.getContext("2d");
       const v = viewRef.current;
-      if (ctx && v) {
+      if (ctx && v && !sentRef.current) {
         const { w, h } = sizeRef.current;
         const k = canvas.width / w;
         ctx.setTransform(k, 0, 0, k, 0, 0);
@@ -306,17 +310,8 @@ function DyeBoard({
         const left0 = w / 2 - v.cx * v.scale;
         const top0 = h / 2 - v.cy * v.scale;
         ctx.drawImage(sheet, left0, top0, DYE_BOARD_W * v.scale, DYE_BOARD_H * v.scale);
-        // 고른 자리
-        const pk = pickedRef.current;
-        if (pk) {
-          const px = left0 + pk.x * v.scale;
-          const py = top0 + pk.y * v.scale;
-          ctx.strokeStyle = "#ffffff";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(px - 5, py - 5, 10, 10);
-        }
-        // 흔들리는 조준점 (화면 가운데 + 흔들림)
-        const a = aimPoint(v, amp, (now - t0.current) / 1000);
+        // 흔들리는 조준점 (마우스 자리 또는 화면 가운데 + 흔들림)
+        const a = aimNow(now);
         const ax = left0 + a.x * v.scale;
         const ay = top0 + a.y * v.scale;
         ctx.lineWidth = 3;
@@ -335,10 +330,15 @@ function DyeBoard({
         ctx.lineWidth = 1.5;
         ctx.strokeStyle = "#fff8e0";
         ctx.stroke();
-        const live = cellColor(palette, Math.floor(a.x), Math.floor(a.y));
-        if (live !== lastLive && liveRef.current) {
-          lastLive = live;
-          liveRef.current.style.background = live;
+        if (a.color !== lastLive) {
+          lastLive = a.color;
+          if (liveRef.current) liveRef.current.style.background = a.color;
+          if (liveTextRef.current) liveTextRef.current.textContent = a.color;
+        }
+        if (a.color !== shown && now - lastPreview > PREVIEW_MS) {
+          lastPreview = now;
+          shown = a.color;
+          setLive(a);
         }
       }
       if (now - lastTick > 200) {
@@ -358,10 +358,12 @@ function DyeBoard({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
+    // aimNow는 ref만 읽는다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheet, palette, amp, localEnds]);
 
   useEffect(() => {
-    timeoutRef.current = () => void send(aim(), true);
+    timeoutRef.current = () => void send(aimNow());
   });
 
   // 휠 확대·축소 (passive가 아니어야 페이지가 스크롤되지 않는다)
@@ -379,12 +381,6 @@ function DyeBoard({
     return () => box.removeEventListener("wheel", onWheel);
   }, []);
 
-  /** 지금 조준점 아래 색을 고른다 (미리보기) */
-  function pickNow() {
-    const a = aim();
-    setPicked({ x: a.x, y: a.y, color: cellColor(palette, Math.floor(a.x), Math.floor(a.y)) });
-  }
-
   function local(e: ReactPointerEvent) {
     const r = boxRef.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -392,17 +388,25 @@ function DyeBoard({
 
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     if (sending) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* 이미 끝난 포인터 (붙잡기 없이도 움직임은 받는다) */
+    }
     pointers.current.set(e.pointerId, local(e));
+    // 폰(손가락)은 화면 가운데 조준점 기준
+    if (e.pointerType !== "mouse") aimBase.current = null;
     if (pointers.current.size === 1) gesture.current = { moved: 0, startedAt: performance.now() };
     else if (gesture.current) gesture.current.moved = 99; // 두 손가락 = 확대·축소 (누르기가 아니다)
   }
 
   function onPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const cur = local(e);
+    // 마우스는 누르지 않아도 조준점이 포인터를 따라간다 → 그 아래 색이 바로 "지금 고른 색"
+    if (e.pointerType === "mouse") aimBase.current = cur;
     const prev = pointers.current.get(e.pointerId);
     const v = viewRef.current;
     if (!prev || !v) return;
-    const cur = local(e);
     const { w, h } = sizeRef.current;
     if (pointers.current.size >= 2) {
       const others = [...pointers.current.entries()].filter(([id]) => id !== e.pointerId).map(([, p]) => p);
@@ -422,14 +426,13 @@ function DyeBoard({
     pointers.current.delete(e.pointerId);
     const g = gesture.current;
     if (pointers.current.size === 0) gesture.current = null;
-    if (!at || !g || g.moved > 6 || sending) return;
-    // 누르기: 그 자리를 조준점(가운데)으로 옮기고, 흔들리는 조준점 아래 색을 고른다
+    if (!at || !g || g.moved > 6 || sending || e.pointerType === "mouse") return;
+    // 폰에서 짧게 누르기: 그 자리를 화면 가운데(조준점)로 옮긴다
     const v = viewRef.current;
     if (!v) return;
     const { w, h } = sizeRef.current;
     const p = toBoard(v, w, h, at.x, at.y);
     viewRef.current = clampView({ ...v, cx: p.x, cy: p.y }, w, h);
-    pickNow();
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
@@ -440,19 +443,19 @@ function DyeBoard({
     const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
     if (moves[e.key]) {
       e.preventDefault();
+      aimBase.current = null; // 키보드는 화면 가운데 조준점
       viewRef.current = clampView({ ...v, cx: v.cx + moves[e.key][0], cy: v.cy + moves[e.key][1] }, w, h);
     } else if (e.key === "+" || e.key === "=" || e.key === "-") {
       e.preventDefault();
       viewRef.current = zoomAt(v, w, h, w / 2, h / 2, e.key === "-" ? 1 / 1.25 : 1.25);
-    } else if (e.key === " " || e.key === "Enter") {
+    } else if (e.key === "Enter") {
       e.preventDefault();
-      if (e.key === "Enter" && picked) void send(picked, false);
-      else pickNow();
+      void send(aimNow());
     }
   }
 
   const secs = Math.ceil(left / 1000);
-  const preview = picked ? withDyePart(spec, session.part, picked.color) : spec;
+  const preview = live ? withDyePart(spec, session.part, live.color) : spec;
 
   return (
     <>
@@ -470,7 +473,7 @@ function DyeBoard({
         className={styles.board}
         tabIndex={0}
         role="application"
-        aria-label="염색 팔레트. 끌어서 옮기고 휠이나 두 손가락으로 확대·축소, 누르면 조준점 아래 색을 골라요. 키보드: 화살표 이동, +/- 확대, 스페이스 고르기, 엔터 확정"
+        aria-label="염색 팔레트. 조준점 아래 색이 바로 고른 색이 돼요. 끌어서 옮기고 휠이나 두 손가락으로 확대·축소. 키보드: 화살표 이동, +/- 확대, 엔터 확정"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -481,23 +484,22 @@ function DyeBoard({
       </div>
       <div className={styles.row}>
         <div className={cx(styles.figure, styles.figureSmall)}>
-          <OutfitCanvas color={preview} body={body} look={look} label={picked ? "고른 색으로 염색해 본 내 모습" : "지금 내 모습"} dir={DIR.down} walking={false} />
+          <OutfitCanvas color={preview} body={body} look={look} label="지금 고른 색으로 염색해 본 내 모습" dir={DIR.down} walking={false} />
         </div>
         <div className={styles.side}>
           <p className={styles.pick}>
-            조준점 <span ref={liveRef} className={styles.swatch} aria-hidden="true" />
-            {picked ? (
-              <>
-                · 고른 색 <span className={styles.swatchBig} style={{ background: picked.color }} aria-hidden="true" /> {picked.color}
-              </>
-            ) : (
-              " · 판을 눌러 색을 골라 보세요"
-            )}
+            지금 고른 색 <span ref={liveRef} className={styles.swatchBig} aria-hidden="true" />
+            <span ref={liveTextRef} className={styles.hex} data-testid="dye-live">
+              {live?.color ?? ""}
+            </span>
           </p>
-          <p className={styles.note}>확대할수록 조준점이 정확해지지만 보이는 곳이 좁아져요. 창을 닫아도 시간은 흘러요 — 시간이 끝나면 처음 조준점(판 가운데) 색으로 정해져요.</p>
+          <p className={styles.note}>
+            조준점 아래 색이 바로 고른 색이에요(폰은 화면 가운데 조준점). 흔들리니 원하는 색에서 잘 멈춰 확정하세요. 확대할수록 덜 흔들려요. 시간이 끝나면 그 순간 조준점
+            아래 색으로 정해져요.
+          </p>
           <div className={styles.actions}>
-            <button type="button" className={cx(ui.button, ui.primary)} disabled={!picked || sending} onClick={() => picked && send(picked, false)}>
-              {sending ? "염색하는 중…" : picked ? "이 색으로 염색" : "색을 먼저 골라요"}
+            <button type="button" className={cx(ui.button, ui.primary)} disabled={sending} onClick={() => void send(aimNow())}>
+              {sending ? "염색하는 중…" : "이 색으로 염색"}
             </button>
           </div>
         </div>

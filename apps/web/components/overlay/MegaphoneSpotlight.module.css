@@ -1,0 +1,181 @@
+/* 23번 확성기 한마디: 화면 가운데(캐릭터보다 조금 위)에 크게. 포인터는 통과 */
+
+.layer {
+  position: fixed;
+  z-index: 5;
+  top: 22vh;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--gutter);
+  pointer-events: none;
+}
+
+.spot {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: min(560px, 100%);
+  padding: 14px 22px 16px;
+  background: rgba(30, 25, 14, 0.94);
+  box-shadow:
+    var(--px-border-strong),
+    0 0 0 4px rgba(9, 10, 8, 0.55),
+    0 0 36px rgba(224, 195, 106, 0.4);
+  text-align: center;
+  pointer-events: none;
+  animation:
+    spotIn 0.42s cubic-bezier(0.2, 1.4, 0.4, 1) both,
+    spotShake 0.5s 0.42s ease-in-out both;
+}
+
+.all {
+  background: rgba(46, 18, 16, 0.94);
+  box-shadow:
+    0 -2px 0 0 #b4473e,
+    0 2px 0 0 #b4473e,
+    -2px 0 0 0 #b4473e,
+    2px 0 0 0 #b4473e,
+    0 0 0 4px rgba(9, 10, 8, 0.55),
+    0 0 40px rgba(224, 90, 80, 0.5);
+}
+
+.leaving {
+  animation: spotOut 0.45s ease-in both;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.horn {
+  display: grid;
+  color: var(--candle);
+  animation: horn 0.9s 0.4s steps(2) 3;
+}
+
+.all .horn {
+  color: #ff8a7a;
+}
+
+.tag {
+  padding: 1px 6px;
+  background: rgba(224, 195, 106, 0.16);
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.all .tag {
+  background: #b4473e;
+  color: #fff3e6;
+}
+
+.name {
+  margin: 2px 0 0;
+  color: var(--candle);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.text {
+  margin: 0;
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 22px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+@keyframes spotIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes spotShake {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-4px) rotate(-0.6deg);
+  }
+  40% {
+    transform: translateX(4px) rotate(0.6deg);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes spotOut {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+}
+
+@keyframes horn {
+  50% {
+    transform: scale(1.18);
+  }
+}
+
+/* 폰: 위쪽 바·확성기 기록 아래, 캐릭터보다 위 */
+@media (max-width: 560px) {
+  .layer {
+    top: 30vh;
+  }
+
+  .spot {
+    padding: 10px 14px 12px;
+  }
+
+  .name {
+    font-size: 13px;
+  }
+
+  .text {
+    font-size: 17px;
+  }
+}
+
+/* 낮은 화면(가로로 든 폰 등): 위쪽에 바짝 */
+@media (max-height: 500px) {
+  .layer {
+    top: 16vh;
+  }
+
+  .text {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spot,
+  .leaving,
+  .horn {
+    animation: none;
+  }
+
+  .leaving {
+    opacity: 0;
+  }
+}

@@ -1,21 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { lifespanLabel, todayKst } from "@/lib/epitaph";
-import type { PassedEntry } from "@/lib/types";
+import { DEFAULT_PASS_DAYS, type PassedEntry } from "@/lib/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
+import { EmptyHero } from "../ui/InfoBlocks";
 import ui from "../ui/ui.module.css";
 import StyleArt from "./StyleArt";
 import styles from "./PassedDialog.module.css";
 
-type Props = { onClose: () => void };
+type Props = {
+  onClose: () => void;
+  /** 목록 아래에 덧붙일 내용 (게임 안: 지금 채널 묘역 현황) */
+  footer?: ReactNode;
+};
 
 const SEARCH_DELAY_MS = 300;
 
 /** 성불한 이야기들 (49번): 묘역을 떠난 묘비들. 최신 성불 순, 이름·묘비명·상주 검색, 받은 헌화 수 */
-export default function PassedDialog({ onClose }: Props) {
+export default function PassedDialog({ onClose, footer }: Props) {
   const [query, setQuery] = useState("");
   const [q, setQ] = useState("");
   /** 받은 결과와 그 검색어 (검색어가 바뀌면 새 결과가 올 때까지 "불러오는 중") */
@@ -83,7 +88,14 @@ export default function PassedDialog({ onClose }: Props) {
             불러오는 중…
           </p>
         ) : entries.length === 0 ? (
-          <p className={styles.state}>{error ?? (q ? "찾는 이야기가 없어요." : "아직 성불한 이야기가 없어요.")}</p>
+          error || q ? (
+            <p className={styles.state}>{error ?? "찾는 이야기가 없어요."}</p>
+          ) : (
+            <EmptyHero icon="candle" title="아직 성불한 이야기가 없어요">
+              묘비는 세운 지 {DEFAULT_PASS_DAYS}일이 지나면 성불해 묘역을 떠나요. 떠난 묘비의 묘비명·상주의 한마디·받은 헌화가 이곳에
+              남아, 이름이나 상주로 다시 찾아볼 수 있어요.
+            </EmptyHero>
+          )
         ) : (
           <>
             {q && <p className={ui.hint}>{total}개 찾았어요.</p>}
@@ -126,6 +138,7 @@ export default function PassedDialog({ onClose }: Props) {
             )}
           </>
         )}
+        {footer}
       </div>
     </Dialog>
   );

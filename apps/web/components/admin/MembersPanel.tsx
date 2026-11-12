@@ -1,21 +1,34 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { AdminAccountRow as AccountRow } from "@/app/api/admin/accounts/search/route";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { CODE_RE, normalizeCode } from "@/lib/economy";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { adminApi } from "./adminApi";
+import { BanDialog, BanList, KickButton, type BanTarget } from "./BanPanel";
 import styles from "./Admin.module.css";
 
-type Props = { toast: (message: string) => void; onAuthLost: () => void };
+type Props = {
+  toast: (message: string) => void;
+  onAuthLost: () => void;
+  /** 47번 신고 탭의 "정지로 이동": 이 대상으로 정지 창을 바로 연다 (열고 나면 onBanPresetUsed) */
+  banPreset?: BanTarget | null;
+  onBanPresetUsed?: () => void;
+};
 
 /**
  * 48번 회원 탭: 닉네임으로 계정 찾기 → 코드 재발급(분실 문의), 포인트 지급·회수.
- * 정지·IP 차단은 47번에서 붙인다
+ * 47번: 찾은 계정마다 [지금 내보내기]·[정지], IP로 바로 차단, 정지·차단 목록(기간 수정·조기 해제·처리 기록)
  */
-export default function MembersPanel({ toast, onAuthLost }: Props) {
+export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPresetUsed }: Props) {
+  // 신고 탭에서 넘어오면 회원 탭이 새로 열리므로 처음 값으로 정지 창을 연다
+  const [banTarget, setBanTarget] = useState<BanTarget | null>(() => banPreset ?? null);
+  const [banVersion, setBanVersion] = useState(0);
+  useEffect(() => {
+    if (banPreset) onBanPresetUsed?.();
+  }, [banPreset, onBanPresetUsed]);
   const [name, setName] = useState("");
   const [rows, setRows] = useState<AccountRow[] | null>(null);
   const [pending, setPending] = useState(false);
@@ -109,6 +122,10 @@ export default function MembersPanel({ toast, onAuthLost }: Props) {
                     <button type="button" className={ui.button} onClick={() => setConfirm(r)} disabled={pending}>
                       코드 재발급
                     </button>
+                    <KickButton accountId={r.accountId} name={r.name} toast={toast} onAuthLost={onAuthLost} />
+                    <button type="button" className={cx(ui.button, ui.danger)} onClick={() => setBanTarget({ accountId: r.accountId, name: r.name })}>
+                      정지
+                    </button>
                   </div>
                 )}
               </li>
@@ -117,6 +134,25 @@ export default function MembersPanel({ toast, onAuthLost }: Props) {
         ))}
 
       <PointsForm toast={toast} onAuthLost={onAuthLost} />
+
+      <div className={styles.actions}>
+        <button type="button" className={ui.button} onClick={() => setBanTarget({})}>
+          IP로 바로 차단
+        </button>
+      </div>
+      <BanList toast={toast} onAuthLost={onAuthLost} version={banVersion} onChanged={() => setBanVersion((v) => v + 1)} />
+      {banTarget && (
+        <BanDialog
+          target={banTarget}
+          toast={toast}
+          onAuthLost={onAuthLost}
+          onClose={() => setBanTarget(null)}
+          onDone={() => {
+            setBanTarget(null);
+            setBanVersion((v) => v + 1);
+          }}
+        />
+      )}
     </section>
   );
 }

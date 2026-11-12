@@ -1,6 +1,6 @@
 import type { Sfx } from "../Sfx";
 
-// 22번 마을 생물 소리 (파일 없이 WebAudio 합성). 볼륨·음소거는 월드 효과음(Sfx = UI의 audio:settings)을 따른다.
+// 22번 마을 생물 소리 (파일 없이 WebAudio 합성). 볼륨·끄기는 월드 효과음(Sfx = 13번 효과음 갈래 audio:mix sfx)을 따른다.
 //  purr: 고양이 골골 (낮은 웅웅 + 25Hz 떨림) · meow: 야옹 · coo: 유령 "우우~" · sparkle: 고블린 반짝 · fanfare: 고블린 잡음
 //  caw: 까마귀 "까악" (거친 톱니파 두 마디, 띠 통과) · flap: 푸드덕 (잡음 펄스 네 번)
 

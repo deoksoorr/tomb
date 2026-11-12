@@ -218,7 +218,7 @@ export function carouselTop(): HTMLCanvasElement {
       g.set(x, y, stripe ? 0xe05a4a : 0xf2e2c4);
     }
   }
-  // 지붕 아래 술 장식
+  // 지붕 아래 술 장식 (y=23 줄 = 받침 가운데에서 rides.CAROUSEL_ROOF_DROP 위. 목마 기둥 윗끝이 여기 숨는다)
   for (let x = cx - 30; x <= cx + 30; x++) {
     g.set(x, 23, 0xd8b850);
     if (x % 4 === 0) g.set(x, 24, 0xe05a4a);
@@ -230,38 +230,83 @@ export function carouselTop(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-/** 가운데 기둥 (지붕과 같은 64×66 칸·같은 원점: 지붕 아래 술 장식 밑에서 원판 가운데까지) */
+/**
+ * 가운데 기둥 (지붕과 같은 64×66 칸·같은 원점: 지붕 안쪽에서 원판 가운데까지).
+ * 윗끝을 지붕 술 장식 위(지붕이 덮는 곳)까지 올려 기둥 끝 테두리가 보이지 않게 — 늘 지붕에 붙어 보인다
+ */
 export function carouselPole(): HTMLCanvasElement {
   const g = new Grid(CAROUSEL_TOP_W, CAROUSEL_TOP_H);
   const cx = 32;
-  g.rect(cx - 1, 25, 3, CAROUSEL_TOP_H - 26, 0xd8c070);
-  g.vline(cx - 1, 25, CAROUSEL_TOP_H - 2, 0xf0dc90);
+  g.rect(cx - 1, 20, 3, CAROUSEL_TOP_H - 21, 0xd8c070);
+  g.vline(cx - 1, 20, CAROUSEL_TOP_H - 2, 0xf0dc90);
   g.outline(OUT);
   return g.toCanvas();
 }
-/** 목마 (16×16, 받침 = 아래 가운데. 오른쪽을 본다): 몸통 + 머리 + 장대. variant마다 색 */
+/**
+ * 목마 (24×16, 받침 = 아래 가운데. 오른쪽을 보는 옆모습, mirror면 왼쪽): 몸통 + 휜 목 + 머리 + 앞뒤로 뻗은 다리 + 안장. variant마다 색.
+ * 기둥은 그리지 않는다 — 지붕까지 이어지는 목마 기둥(horsePole)을 목마 뒤에 따로 세운다. 안장 가운데 = 기둥 자리(x 11~12)
+ */
+export const HORSE_W = 24;
+export const HORSE_H = 16;
 export const HORSE_COLORS: readonly Color[] = [0xf2ead8, 0xe0b070, 0xc8d8f0, 0xe8b0c0];
 export function horse(color: Color, mirror: boolean): HTMLCanvasElement {
-  const g = new Grid(16, 16);
-  // 장대 (지붕까지 이어지는 금색 기둥의 아랫부분)
-  g.vline(8, 0, 13, 0xe8c860);
+  const g = new Grid(HORSE_W, HORSE_H);
+  const hi = lighten(color, 0.25);
+  const lo = darken(color, 0.18);
+  const leg = darken(color, 0.28);
+  const mane = 0x8a5a3a;
+  // 꼬리 (뒤로 흩날린다)
+  line(g, 5, 7, 2, 10, mane);
+  line(g, 5, 8, 3, 11, mane);
+  g.set(1, 11, mane);
+  // 다리: 뒷다리는 뒤로, 앞다리는 앞으로 접어 뻗은 회전목마 자세
+  line(g, 7, 10, 4, 13, leg);
+  line(g, 8, 10, 7, 13, leg);
+  line(g, 15, 10, 18, 12, leg);
+  line(g, 16, 10, 19, 11, leg);
+  g.set(19, 12, leg);
+  for (const [x, y] of [[4, 13], [7, 13], [18, 13], [20, 11]] as const) g.set(x, y, 0x3a3028);
   // 몸통
-  g.rect(3, 7, 9, 4, color);
-  g.hline(3, 11, 7, lighten(color, 0.25));
-  // 머리·목
-  g.rect(11, 4, 2, 4, color);
-  g.rect(12, 3, 3, 3, color);
-  g.set(14, 4, 0x2a2420);
-  // 갈기·꼬리
-  g.vline(11, 3, 6, 0x8a5a3a);
-  g.vline(2, 7, 10, 0x8a5a3a);
-  // 다리 (앞뒤로 뻗은 자세)
-  line(g, 4, 11, 2, 13, darken(color, 0.25));
-  line(g, 11, 11, 13, 13, darken(color, 0.25));
-  // 안장
-  g.rect(6, 6, 3, 2, 0xc84a3a);
+  g.ellipse(11.5, 8.5, 6.5, 2.6, color);
+  g.hline(7, 15, 6, hi);
+  g.hline(8, 15, 10, lo);
+  // 목 (앞으로 휘어 올라간다)
+  g.rect(15, 4, 3, 4, color);
+  g.rect(16, 2, 3, 3, color);
+  g.set(15, 4, hi);
+  // 머리 (주둥이는 앞 아래로)
+  g.rect(18, 2, 3, 3, color);
+  g.rect(20, 3, 2, 2, color);
+  g.set(21, 4, lo);
+  g.set(17, 1, color); // 귀
+  g.set(19, 2, 0x2a2420); // 눈
+  // 갈기
+  g.set(16, 1, mane);
+  g.vline(15, 2, 3, mane);
+  g.vline(14, 4, 5, mane);
+  // 굴레 (금줄)
+  g.set(20, 4, 0xd8b850);
+  // 안장 + 안장 깔개
+  g.rect(10, 5, 4, 2, 0xc84a3a);
+  g.hline(10, 13, 5, 0xe06a58);
+  g.hline(9, 14, 7, 0xd8b850);
   g.outline(OUT);
   return (mirror ? g.mirrored() : g).toCanvas();
+}
+
+/** 목마 기둥 (4×HORSE_POLE_H, 받침 = 아래 가운데): 금빛 꽈배기 막대. 그릴 때 위를 잘라(setCrop) 지붕 술 장식에서 바닥까지만 보인다 */
+export const HORSE_POLE_W = 4;
+export const HORSE_POLE_H = 60;
+export function horsePole(): HTMLCanvasElement {
+  const g = new Grid(HORSE_POLE_W, HORSE_POLE_H);
+  for (let y = 0; y < HORSE_POLE_H; y++) {
+    const twist = y % 4 < 2;
+    g.set(1, y, twist ? 0xf6e2a0 : 0xe0c060);
+    g.set(2, y, twist ? 0xc8a040 : 0xb08a30);
+  }
+  g.vline(0, 0, HORSE_POLE_H - 1, OUT);
+  g.vline(3, 0, HORSE_POLE_H - 1, OUT);
+  return g.toCanvas();
 }
 
 // ── 텍스처 키 ──
@@ -276,4 +321,5 @@ export const RIDE_TEX = {
   carouselTop: "ride-carousel-top",
   carouselPole: "ride-carousel-pole",
   horse: (v: number, left: boolean) => `ride-horse-${v}-${left ? "l" : "r"}`,
+  horsePole: "ride-horse-pole",
 } as const;

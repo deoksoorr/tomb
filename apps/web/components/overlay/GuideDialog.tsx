@@ -10,6 +10,7 @@ import {
   isShopListed,
   ITEMS,
   MAX_DECOR_PER_GRAVE,
+  ZOO_PETS,
 } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES } from "@/lib/economy";
 import { DEFAULT_PASS_DAYS, PRESENCE_INTERVAL_MS, SHRINE_KEEP_DAYS } from "@/lib/types";
@@ -29,8 +30,10 @@ const CONTROLS: [string, string, string][] = [
   ["말 걸기·살펴보기 (상점·묘비 등)", "E", "상호작용 버튼"],
   ["나무에 매달리기·그네·종 치기·잠수", "가까이 가서 E (화면 안내를 따라)", "상호작용 버튼"],
   ["수영·잠수", "물에 들어가면 헤엄쳐요 (잠수도 돼요)", "조이스틱으로 물에"],
-  ["감정 표현", "1 손 흔들기 · 2 환호", "메뉴 → 감정 표현"],
-  ["말풍선", "T → 문장 고르기", "메뉴 → 말풍선"],
+  ["감정 표현", "1 손 흔들기 · 2 환호 · 3~9 이모티콘", "메뉴 → 말풍선·이모티콘"],
+  ["말풍선·이모티콘", "T → 이모티콘·문장 고르기", "메뉴 → 말풍선·이모티콘"],
+  ["벤치 상태", "앉아서 T → 벤치 상태", "앉아서 메뉴 → 말풍선·이모티콘 → 벤치 상태"],
+  ["타는 펫 타기·내리기", "R (타는 펫을 데리고 있을 때)", "타기 버튼"],
   ["확대·축소", "마우스 휠 · ＋/－", "＋/－ 버튼"],
   ["둘러보기", "오른쪽 버튼으로 끌기", "—"],
   ["시점 되돌리기", "내 캐릭터로 버튼", "내 캐릭터로 버튼"],
@@ -73,6 +76,12 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
             <li>분양 사무소: 나만의 집을 꾸미고 다른 사람의 집에 좋아요를 눌러요 (왼쪽 위 [집]으로도 열려요).</li>
             <li>유령 잡화점: 포인트로 꾸미기·폭죽·묘비 디자인권을 사요.</li>
             <li>낚시터: 낚시는 낚시터에서 해요. 호수 북동쪽(나루터 옆) 나무 데크의 낚시 의자 앞에서 E — 잡은 물고기는 어부 영감에게 팔아요. 지도의 물고기 표시가 낚시터예요.</li>
+            <li>
+              동물원: 마을 왼쪽 아래(서쪽 다리를 건너 바로)예요. 우리 안의 동물들을 구경하고, 정문 옆 사육사에게서 펫을 영구로 분양 받아요(
+              {Math.min(...ZOO_PETS.map((p) => p.price)).toLocaleString("ko-KR")}~{Math.max(...ZOO_PETS.map((p) => p.price)).toLocaleString("ko-KR")}P). 펫은 한 번에
+              한 마리만 데리고 다니고, 큰 개·왕거위·달빛 사슴은 R(모바일은 타기 버튼)로 올라타요. 앉기·낚시·놀이기구·배·물에 들어가면 저절로 내려요. 지도의 발바닥 표시가
+              동물원이에요.
+            </li>
             <li>작은 묘역: 끝내지 못한 것들이 잠든 곳이에요. 아래 &quot;묘역과 묘비&quot;를 보세요.</li>
             <li>자세한 건 각 장소에서 안내해요.</li>
           </ul>
@@ -190,7 +199,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               있어요)이 지나면 성불해 묘역을 떠나요. 성불하면 소식으로 알려 드리고, 그 뒤에 새 묘비를 쓸 수 있어요.
             </li>
             <li>
-              묘역은 마을에 세 곳(언덕 아래 옛 묘역, 다리 건너 묘역, 버드나무 묘역)이고, 채널마다 묘비 {GRAVEYARD_CAPACITY}개까지
+              묘역은 마을에 두 곳(언덕 아래 옛 묘역, 다리 건너 묘역)이고, 채널마다 묘비 {GRAVEYARD_CAPACITY}개까지
               세운 순서대로 골고루 놓여요. 자리가 모자라면 가장 오래된 묘비부터 조금 일찍 성불해요.
             </li>
             <li>성불한 묘비는 메뉴 → 성불한 이야기들에 남아요(최신 순·검색, 받은 헌화 수).</li>

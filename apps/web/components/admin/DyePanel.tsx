@@ -166,7 +166,7 @@ export default function DyePanel({ toast, onAuthLost }: Props) {
         <button type="submit" className={cx(ui.button, armed ? ui.danger : ui.primary)} disabled={busy || !ready}>
           {armed ? "정말 전체에게 보낼까요? (한 번 더 누르기)" : "만들어서 선물함으로 보내기"}
         </button>
-        <p className={ui.hint}>유저는 선물함에서 받은 뒤 가방(폭죽·묘비 칸)이나 상점 염색·외형에서 부위만 골라 써요.</p>
+        <p className={ui.hint}>유저는 선물함에서 받은 뒤 가방(염색권 칸)이나 상점 염색·외형에서 부위만 골라 써요.</p>
       </form>
 
       <div className={social.logBox}>

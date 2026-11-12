@@ -19,8 +19,10 @@
  *   GET /room/:id?t=&x=&y=&v= 방(마을·집·사냥터) WebSocket. 토큰의 room이 id와 같아야 한다. 상한 ROOM_CAPACITY
  *   (v < MIN_CLIENT_VERSION이면 DO까지 가지 않고 4010으로 거절 → 클라이언트가 새로고침 창을 띄운다)
  *   POST /dev/goblin?ch=N    (개발용, DEV_HOOKS=1일 때만) 그 채널에 황금 고블린을 지금 나오게 한다. 운영에서는 404
+ *   POST /internal/kick      47번 Vercel → 이 서버: 방문자들을 지금 내보낸다(강퇴 4011·이용 제한 4012). 본문 서명(JOIN_SECRET) 필수
+ *   POST /internal/peer      47번 Vercel → 이 서버: 채널·방의 sid가 누구인지 (유저 신고). 본문 서명 필수
  */
-import { CLOSE, LOBBY_CACHE_SEC, ROOM_ID_RE } from "@tomb/protocol";
+import { CLOSE, INTERNAL_SIG_HEADER, LOBBY_CACHE_SEC, ROOM_ID_RE, verifyInternal } from "@tomb/protocol";
 import type { JoinTicket } from "./channel";
 import {
   TICKET_HEADER,
@@ -49,6 +51,7 @@ export default {
     if (ch) return channel(req, env, url, ch[1]);
     const rm = /^\/room\/([^/]*)$/.exec(url.pathname);
     if (rm) return room(req, env, url, rm[1]);
+    if (url.pathname === "/internal/kick" || url.pathname === "/internal/peer") return internal(req, env, url.pathname);
     if (url.pathname === "/dev/goblin" && env.DEV_HOOKS === "1" && req.method === "POST") {
       const n = parseChannel(url.searchParams.get("ch") ?? "1", readConfig(env).maxChannels);
       if (n === null) return new Response("bad channel", { status: 400 });
@@ -57,6 +60,36 @@ export default {
     return new Response("not found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
+
+// ── POST /internal/* (47번, 서버끼리) ──
+// 브라우저가 부르는 경로가 아니라 CORS가 없다. 서명이 틀리면 경로가 없는 것처럼 404.
+
+async function internal(req: Request, env: Env, path: string): Promise<Response> {
+  const notFound = new Response("not found", { status: 404 });
+  if (req.method !== "POST") return notFound;
+  const r = await verifyInternal(env.JOIN_SECRET, await req.text(), req.headers.get(INTERNAL_SIG_HEADER));
+  if (!r || `/internal/${r.op}` !== path) return notFound;
+  if (r.op === "kick") {
+    if (r.code !== CLOSE.KICKED && r.code !== CLOSE.BANNED) return new Response("bad code", { status: 400 });
+    // 방문자가 어느 채널에 있는지 로비 등록이 늦거나 비어 있을 수 있어, 열린 채널 전부에 묻는다 (채널 수가 적다).
+    // 방(마을·집·사냥터)은 로비가 모른다 → 월드 소켓이 닫히면 클라이언트가 방도 정리한다
+    const info = await lobbyStub(env).info();
+    const counts = await Promise.all(
+      info.channels.map((c) =>
+        channelStub(env, c.id)
+          .expel(r.visitorIds, r.code)
+          .catch((e) => {
+            console.error("expel failed", c.id, e);
+            return 0;
+          }),
+      ),
+    );
+    return Response.json({ expelled: counts.reduce((a, b) => a + b, 0) });
+  }
+  const stub = r.ch !== undefined ? (parseChannel(String(r.ch), readConfig(env).maxChannels) === null ? null : channelStub(env, r.ch)) : roomStub(env, r.room!);
+  if (!stub) return Response.json({ peer: null });
+  return Response.json({ peer: await stub.peerAt(r.sid) });
+}
 
 // ── GET /ch/:n ──
 

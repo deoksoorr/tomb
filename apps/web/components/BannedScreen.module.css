@@ -1,0 +1,48 @@
+.page {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+  background: var(--bg);
+}
+
+.card {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 24px 20px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--px-border-strong);
+}
+
+.title {
+  margin: 0;
+  color: var(--bone);
+  font-size: 22px;
+  text-align: center;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 14px;
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}

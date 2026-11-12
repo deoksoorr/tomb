@@ -1,4 +1,4 @@
-import type { AudioHost } from "./audioHost";
+import type { AudioHost, SoundBus } from "./audioHost";
 
 // BGM 위에 은은하게 깔리는 루프 소리 하나 (모닥불·빗소리).
 // MP3는 앞뒤에 인코더 무음이 몇 ms 붙는다 → <audio loop> 대신 AudioBufferSourceNode(loop)로, 앞뒤 20ms를 잘라 이음새가 안 들리게.
@@ -9,6 +9,8 @@ export type LoopOptions = {
   gain: number;
   /** 로우패스 필터를 끼워 둔다 (실내에서 먹먹하게: setMuffled) */
   filter?: boolean;
+  /** 13번: 따를 소리 갈래 (없으면 호스트의 기본 버스) */
+  bus?: SoundBus;
 };
 
 /** 먹먹할 때 로우패스 주파수 (Hz) */
@@ -43,7 +45,7 @@ export class AmbientLoop {
     if (Math.abs(lv - this.level) < 0.01 && lv > 0 === this.level > 0) {
       this.maybeStop();
       // 들려야 하는데 멈춰 있다(창을 바꿨다 돌아옴 등): 컨텍스트를 깨우고, 숨을 때 멈춘 루프를 다시 튼다
-      if (lv > 0 && !this.hidden && !this.host.muted) {
+      if (lv > 0 && !this.hidden && this.busGain > 0) {
         this.host.kick();
         if (!this.src && this.buf) this.apply();
       }
@@ -66,13 +68,18 @@ export class AmbientLoop {
     if (!this.dead) this.apply();
   }
 
+  /** 이 루프가 따르는 버스의 크기 (끄면 0) */
+  private get busGain(): number {
+    return this.host.busGain(this.opts.bus);
+  }
+
   /** 지금 재생 중인지 (테스트·QA) */
   get playing(): boolean {
     return this.src !== null;
   }
 
   private apply(): void {
-    const want = this.hidden || this.host.muted ? 0 : this.level * this.host.volume * this.opts.gain;
+    const want = this.hidden ? 0 : this.level * this.busGain * this.opts.gain;
     if (want <= 0.001) {
       const ac = this.host.context;
       if (this.gain && ac) this.gain.gain.setTargetAtTime(0, ac.currentTime, 0.35);
@@ -80,7 +87,7 @@ export class AmbientLoop {
       return;
     }
     this.quietAt = 0;
-    const ac = this.host.audio();
+    const ac = this.host.audio(this.opts.bus);
     if (!ac) return;
     this.bindVisibility();
     if (!this.buf) {
@@ -160,7 +167,7 @@ export class AmbientLoop {
   }
 
   private readonly onWake = (): void => {
-    if (this.level <= 0 || this.host.muted) return;
+    if (this.level <= 0 || this.busGain <= 0) return;
     this.hidden = document.hidden;
     if (this.hidden) return;
     this.host.kick(true);

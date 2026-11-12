@@ -1,3 +1,4 @@
+import { runAfter, sampleConcurrency } from "@/lib/analyticsService";
 import { handler, json } from "@/lib/http";
 import { serverNow } from "@/lib/devClock";
 import { rateLimit } from "@/lib/ratelimit";
@@ -17,5 +18,7 @@ export const POST = handler(async (req) => {
   const accounts = getAccounts();
   const now = serverNow(visitorId); // 운영은 Date.now() (개발 QA만 시계를 앞당길 수 있다)
   const earned = (await accounts.presence(visitorId, kstDay(now), now)) ?? 0;
+  // 47번: 누군가 머무는 동안 동시 접속을 1분에 한 번씩 찍어 둔다 (cron 없이)
+  runAfter(() => sampleConcurrency());
   return json<PresenceResponse>({ earned, me: await loadMe(accounts, visitorId, now) });
 });

@@ -1,4 +1,4 @@
-import { ACT_KINDS, MAX_MESSAGE_BYTES, isPhraseId, type ActKind, type PhraseId } from "./constants";
+import { ACT_KINDS, MAX_MESSAGE_BYTES, isEmoId, isPhraseId, isSeatMood, type ActKind, type EmoId, type PhraseId, type SeatMood } from "./constants";
 import { MAX_GRANT_LEN } from "./grants";
 import type { MegaphoneScope } from "./items";
 import { GOBLIN_ID_RE, type GoblinInfo } from "./npc";
@@ -41,7 +41,13 @@ export type C2S =
    * 3번 집 안 가구 쓰기 (방 전용): u = 가구 배치 id(또는 창문 "w0"…), a = 동작 값 0..255 (피아노 음·불 켜짐·간식 번호 …).
    * 서버는 같은 방 다른 사람에게 그대로 중계한다 (USE_INTERVAL_MS 간격). 뜻은 클라이언트(game/housing/interact.ts)가 정한다
    */
-  | { t: "use"; u: string; a: number };
+  | { t: "use"; u: string; a: number }
+  /** 5번 이모티콘 (EMOS id). 서버가 연결당 간격(도배 제한)을 지켜 같은 채널·방에 중계한다 */
+  | { t: "emo"; id: EmoId }
+  /** 24번 벤치 상태: 앉아 있을 때만 받는다. 빈 문자열 = 풀기 */
+  | { t: "mood"; m: SeatMood | "" }
+  /** 동물원 타는 펫에 올라타기(on)·내리기. 서버는 착용 중인 펫이 타는 펫이고 앉아 있지 않을 때만 켠다 (월드 채널만) */
+  | { t: "ride"; on: boolean };
 
 // ── 서버 → 클라이언트 ──
 export type WelcomeMsg = {
@@ -94,7 +100,13 @@ export type S2C =
   /** 확성기 한마디. id = 확성기 기록 id(중복 표시 방지), ch = 외친 채널, scope = all이면 모든 채널에 퍼졌다 */
   | MegaphoneMsg
   /** 3번: 같은 방 사람이 집 안 가구를 썼다 (옛 클라이언트는 모르는 t라 버린다) */
-  | { t: "use"; sid: Sid; u: string; a: number };
+  | { t: "use"; sid: Sid; u: string; a: number }
+  /** 5번: 이모티콘 (보낸 사람 빼고. 옛 클라이언트는 모르는 t라 버린다) */
+  | { t: "emo"; sid: Sid; id: EmoId }
+  /** 24번: 벤치 상태가 바뀌었다 (빈 문자열 = 풀림 — 일어나면 서버가 알린다) */
+  | { t: "mood"; sid: Sid; m: SeatMood | "" }
+  /** 타는 펫에 올라탔다·내렸다 (보낸 사람 포함 모두. 늦게 온 사람은 PeerInfo.ride로 받는다. 옛 클라이언트는 모르는 t라 버린다) */
+  | { t: "ride"; sid: Sid; on: boolean };
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number };
@@ -156,6 +168,12 @@ export function parseC2S(text: string): C2S | null {
       return typeof m.grant === "string" && m.grant.length <= MAX_GRANT_LEN ? { t: "megaphone", grant: m.grant } : null;
     case "act":
       return typeof m.kind === "string" && (ACT_KINDS as readonly string[]).includes(m.kind) ? { t: "act", kind: m.kind as ActKind } : null;
+    case "emo":
+      return isEmoId(m.id) ? { t: "emo", id: m.id } : null;
+    case "mood":
+      return m.m === "" || isSeatMood(m.m) ? { t: "mood", m: m.m } : null;
+    case "ride":
+      return typeof m.on === "boolean" ? { t: "ride", on: m.on } : null;
     case "use":
       return typeof m.u === "string" && USE_ID_RE.test(m.u) && typeof m.a === "number" && Number.isInteger(m.a) && m.a >= 0 && m.a <= 255
         ? { t: "use", u: m.u, a: m.a }

@@ -1,0 +1,78 @@
+/* 지금 채널 묘역 현황 */
+.card {
+  margin-top: 12px;
+}
+
+.sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+  font-weight: normal;
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: minmax(0, 10em) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  box-shadow: var(--px-border);
+}
+
+.item:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.name {
+  overflow: hidden;
+  color: var(--bone);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.epitaph {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.left {
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+@media (max-width: 560px) {
+  .item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 44px;
+  }
+
+  .epitaph {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

@@ -100,10 +100,7 @@ export class Foraging {
       this.addCollider(npc.x - 6, npc.y - 5, 12, 5);
       this.addCollider(npc.x + stall.dx - 12, npc.y + stall.dy - 6, 24, 6);
     }
-    const audio = bridge.last("audio:settings");
-    if (audio) this.sfx.setSettings(audio.volume, audio.muted);
     this.offs.push(
-      bridge.on("audio:settings", ({ volume, muted }) => this.sfx.setSettings(volume, muted)),
       bridge.on("forage:nodes", ({ ids }) => this.setNodes(ids)),
       bridge.on("forage:rod", ({ phase, tension }) => this.setRod(phase, tension ?? 0)),
       bridge.on("forage:gauge", (e) => (e.phase === "start" ? this.startGauge(e.ms, e.kind, e.node) : this.endGauge(e.ok, e.node))),

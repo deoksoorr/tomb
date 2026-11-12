@@ -255,6 +255,25 @@ export function carouselPoleDepth(c: { x: number; y: number }): number {
   return c.y;
 }
 
+// ── 회전목마 목마 기둥·방향 (사용자 요청: 도는 방향 옆모습, 목마 기둥은 지붕까지, 탄 사람은 기둥 앞) ──
+/** 받침 가운데 y에서 지붕 술 장식 줄까지 높이 (px). 목마 기둥 윗끝 — 지붕(rideProps.carouselTop)이 이음매를 덮는다 */
+export const CAROUSEL_ROOF_DROP = 42;
+
+/** 목마가 가는 쪽이 왼쪽인지: 앞쪽 반원은 오른쪽으로, 뒤쪽 반원은 왼쪽으로 돈다 (ringPoint x의 변화 = cos) */
+export function horseFacesLeft(angle: number): boolean {
+  return Math.cos(angle) < 0;
+}
+
+/** 목마 기둥 윗끝·아랫끝 (y). 지붕에서 그 목마 자리 바닥까지 — 목마가 오르내려도 기둥은 그대로 (목마가 기둥을 타고 미끄러진다) */
+export function horsePoleSpan(c: { x: number; y: number }, p: { x: number; y: number }): { top: number; bottom: number } {
+  return { top: c.y - CAROUSEL_ROOF_DROP, bottom: Math.round(p.y) - 1 };
+}
+
+/** 한 목마 자리(y)의 그리는 순서: 기둥 < 목마 < 탄 사람. 셋 다 그 자리 y 둘레라 가운데 기둥(c.y)과의 앞뒤는 같이 움직인다 */
+export function horseDepths(y: number): { pole: number; horse: number; rider: number } {
+  return { pole: y - 0.2, horse: y, rider: y + 0.6 };
+}
+
 // ── 상호작용 대상 (layout.interactables()가 더한다) ──
 export function rideInteractables(): Interactable[] {
   const out: Interactable[] = [

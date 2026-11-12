@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { bridge } from "@/game/bridge";
-import { FISH_ICON, LANDMARK_COLOR, LANDMARKS, MINIMAP_H, MINIMAP_W, minimapPixels, NODE_DOT_COLOR, toMinimap } from "@/game/world/minimapArt";
+import { FISH_ICON, LANDMARK_COLOR, LANDMARKS, MINIMAP_H, MINIMAP_W, minimapPixels, NODE_DOT_COLOR, PAW_ICON, toMinimap } from "@/game/world/minimapArt";
 import { gatherNodeById } from "@/lib/forage/catalog";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import styles from "./Minimap.module.css";
@@ -51,6 +51,16 @@ export default function Minimap({ compact = false }: { compact?: boolean }) {
         for (const [dx, dy] of FISH_ICON) ctx.fillRect(px + dx, py + dy, 1, 1);
         ctx.fillStyle = "#10202a";
         ctx.fillRect(px + 1, py - 1, 1, 1); // 눈
+        continue;
+      }
+      if (l.kind === "zoo") {
+        // 동물원: 테두리를 두른 발바닥
+        const px = Math.round(p.x);
+        const py = Math.round(p.y);
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        for (const [dx, dy] of PAW_ICON) ctx.fillRect(px + dx - 1, py + dy - 1, 3, 3);
+        ctx.fillStyle = LANDMARK_COLOR.zoo;
+        for (const [dx, dy] of PAW_ICON) ctx.fillRect(px + dx, py + dy, 1, 1);
         continue;
       }
       ctx.fillStyle = "rgba(0,0,0,0.6)";

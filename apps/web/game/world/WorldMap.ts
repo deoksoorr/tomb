@@ -32,6 +32,7 @@ import { CAVE_TORCHES, FIRE_FRAMES, OFFICE_H, TORCH_TINT, WP } from "../sprites/
 import { BIG_FIRE_FRAMES, FENCE_H_W, GRAVE_GATE_H, GY } from "../sprites/graveyardProps";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { FISH_ZONE_LIGHTS } from "./fishZone";
+import { ZOO_LIGHTS } from "./zoo/zooLayout";
 import {
   allDeckRails,
   allProps,
@@ -77,6 +78,8 @@ const CULL_PAD = 96;
 const SWING_BEHIND = 8;
 /** 납작한 바닥 소품은 바닥 장식 높이에 (아바타·묘비가 항상 위로) */
 const FLAT = new Set<PropDef["kind"]>(["flowers", "mushroom", "leaves", "mat"]);
+/** 14번: 작은 모닥불 그림 배율 (돌 고리·불꽃. 충돌·둘레 자리 좌표는 그대로) */
+const CAMPFIRE_ART_SCALE = 1.2;
 
 type Culled = Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
 
@@ -161,13 +164,15 @@ export class WorldMap {
 
     // 구역 이름 (은은하게). 묘역 이름은 문 아치 팻말에 (addFences)
     for (const z of ZONES) {
-      if (z.id === "river" || z.id === "gate" || z.id === "graveyard" || z.id === "fishing") continue; // 낚시터 이름은 아치 현판에
+      if (z.id === "river" || z.id === "gate" || z.id === "graveyard" || z.id === "fishing" || z.id === "zoo") continue; // 낚시터·동물원 이름은 아치 현판에
       const at = ZONE_LABEL_AT[z.name] ?? { x: z.x + z.w / 2, y: z.y + 10 };
       this.addLabel(at.x, at.y, z.name, z.id === "pond" ? 0xc8d8e0 : 0xd8ccb0, 1, 0.62);
     }
     this.addLabel(FERRY_DOCK.x, FERRY_DOCK.y - 44, "나루터", 0xd8ccb0, 1, 0.75);
     // 낚시터 등불 (아치·잔교 끝·데크 남쪽 끝). 장식 그림과 "낚시터" 현판은 forage/FishZoneView
     this.staticLights.push(...FISH_ZONE_LIGHTS);
+    // 동물원 등불 (정문 석등·아치·분양 노점). 울타리·우리·동물·사육사 그림은 zoo/ZooView
+    this.staticLights.push(...ZOO_LIGHTS);
 
     // 아래 담 (맵 맨 아래 줄은 바닥 타일이 담 면으로 그린다)
     this.applyBounds();
@@ -415,8 +420,9 @@ export class WorldMap {
         this.addBigFire(c);
         continue;
       }
-      scene.add.image(c.x, c.y + 1, WP.fireRing).setOrigin(0.5, 0.5).setDepth(DEPTH.decal + 2);
-      const fire = scene.add.sprite(c.x, c.y + 2, WP.fire, 0).setOrigin(0.5, 1).setDepth(c.y);
+      // 14번: 그림만 조금 크게 (충돌·둘레 자리 좌표는 protocol 그대로)
+      scene.add.image(c.x, c.y + 1, WP.fireRing).setOrigin(0.5, 0.5).setDepth(DEPTH.decal + 2).setScale(CAMPFIRE_ART_SCALE);
+      const fire = scene.add.sprite(c.x, c.y + 2, WP.fire, 0).setOrigin(0.5, 1).setDepth(c.y).setScale(CAMPFIRE_ART_SCALE);
       fire.play({ key: "fx-campfire-burn", startFrame: Math.floor(Math.random() * FIRE_FRAMES) });
       this.addCollider(this.colliders, campfireCollider(c));
       this.staticLights.push({ x: c.x, y: c.y + CAMPFIRE_LIGHT.dy, scale: CAMPFIRE_LIGHT.scale, tint: CAMPFIRE_LIGHT.tint, base: CAMPFIRE_LIGHT.base });
@@ -451,10 +457,11 @@ export class WorldMap {
   /** 광장의 아주 큰 모닥불 (F1): 넓은 돌 화덕 + 키 큰 불꽃 두 겹 + 많은 불티·연기 + 광장을 덮는 따뜻한 빛 */
   private addBigFire(c: (typeof CAMPFIRES)[number]): void {
     const scene = this.scene;
-    scene.add.image(c.x, c.y + 2, GY.bigRing).setOrigin(0.5, 0.5).setDepth(DEPTH.decal + 2).setScale(1.15);
-    const back = scene.add.sprite(c.x - 7, c.y - 2, GY.bigFire, 0).setOrigin(0.5, 1).setDepth(c.y - 1).setScale(1.1).setAlpha(0.85);
+    // 14번: 큰 불도 조금 더 크게 (화덕 1.15→1.25, 불꽃 1.1/1.35→1.2/1.45 — 충돌·둘레 자리는 그대로)
+    scene.add.image(c.x, c.y + 2, GY.bigRing).setOrigin(0.5, 0.5).setDepth(DEPTH.decal + 2).setScale(1.25);
+    const back = scene.add.sprite(c.x - 8, c.y - 2, GY.bigFire, 0).setOrigin(0.5, 1).setDepth(c.y - 1).setScale(1.2).setAlpha(0.85);
     back.play({ key: "fx-bigfire-burn", startFrame: 3 });
-    const fire = scene.add.sprite(c.x + 2, c.y + 5, GY.bigFire, 0).setOrigin(0.5, 1).setDepth(c.y).setScale(1.35);
+    const fire = scene.add.sprite(c.x + 2, c.y + 5, GY.bigFire, 0).setOrigin(0.5, 1).setDepth(c.y).setScale(1.45);
     fire.play({ key: "fx-bigfire-burn", startFrame: 0 });
     this.addCollider(this.colliders, campfireCollider(c));
     this.staticLights.push({ x: c.x, y: c.y + BIG_FIRE_LIGHT.dy, scale: BIG_FIRE_LIGHT.scale, tint: BIG_FIRE_LIGHT.tint, base: BIG_FIRE_LIGHT.base });

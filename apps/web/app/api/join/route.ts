@@ -1,7 +1,9 @@
+import { assertNotBanned, recordSeen } from "@/lib/ban";
 import { handler, json } from "@/lib/http";
 import { issueJoin } from "@/lib/joinToken";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
+import { isStaff } from "@/lib/staff";
 import { getAccounts } from "@/lib/store";
 import { getStyleStore } from "@/lib/store/style";
 import { kstDay, lookOf } from "@/lib/store/accounts";
@@ -16,10 +18,18 @@ export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   const { channel, name, color, body } = await readBody(req, JoinRequestSchema);
   await rateLimit("join", req, visitorId);
+  // 47번: 실시간 서버로 들어가는 문이라 캐시 없이 다시 판정하고, 계정의 접속 IP(해시)를 가볍게 남긴다
+  await assertNotBanned(req, visitorId, true);
   const now = Date.now();
+  await recordSeen(req, visitorId, now);
   const accounts = getAccounts();
-  const [account, style] = await Promise.all([accounts.get(visitorId, kstDay(now), now), getStyleStore(accounts).get(visitorId)]);
+  const [account, style, staff] = await Promise.all([
+    accounts.get(visitorId, kstDay(now), now),
+    getStyleStore(accounts).get(visitorId),
+    isStaff(visitorId),
+  ]);
   // 25번 외형 바꾸기: 계정에 몸 모양이 있으면 그것이 정답 (요청 값은 입장 화면에서 처음 고른 몸)
-  const claims = { visitorId, name, color, body: account.body ?? body ?? "hood", look: lookOf(account), dye: style.dye };
+  // 31번: 운영자 표시는 여기(서버)에서만 넣는다
+  const claims = { visitorId, name, color, body: account.body ?? body ?? "hood", look: lookOf(account), dye: style.dye, ...(staff ? { staff: true as const } : {}) };
   return json<JoinResponse>(await issueJoin(channel, claims));
 });

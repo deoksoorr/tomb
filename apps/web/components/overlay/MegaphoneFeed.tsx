@@ -3,20 +3,23 @@
 import { useEffect, useRef } from "react";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { megaphoneStore, openMegaphone, useMegaphone } from "@/lib/hooks/useMegaphone";
+import { reportStore } from "@/lib/reportClient";
 import { cx } from "../ui/cx";
 import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import styles from "./MegaphoneFeed.module.css";
+import MegaphoneSpotlight from "./MegaphoneSpotlight";
 
 /** 기록을 다시 받는 간격 (관리자 숨김 반영·놓친 방송 보충) */
 const RELOAD_MS = 2 * 60_000;
 
 /**
- * 23번 확성기 창 (화면 왼쪽 위). 새 한마디는 몇 초간 크게 뜨고, 최근 20개는 펼쳐 볼 수 있다(접기 가능).
+ * 23번 확성기 창 (화면 왼쪽 위). 최근 20개는 펼쳐 볼 수 있다(접기 가능).
+ * 새 한마디는 화면 가운데에 몇 초간 크게 뜨고(여러 개면 차례로), 기록의 그 줄도 잠깐 밝게 표시된다.
  * floating = 터치 화면: 위쪽 바 아래에 따로 띄운다
  */
 export default function MegaphoneFeed({ channel, floating = false }: { channel: number; floating?: boolean }) {
-  const { entries, flash, collapsed } = useMegaphone();
+  const { entries, flash, flashUntil, collapsed } = useMegaphone();
   const logRef = useRef<HTMLOListElement>(null);
 
   useBridgeEvent("megaphone:heard", (m) => megaphoneStore.push(m));
@@ -59,17 +62,21 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
               {e.scope === "all" && <span className={styles.all}>전체</span>}
               <b className={styles.name}>{e.name}</b>
               <span className={styles.text}>{e.text}</span>
+              {/* 47번 확성기 신고 */}
+              <button
+                type="button"
+                className={styles.report}
+                aria-label={`${e.name}의 확성기 신고`}
+                title="신고"
+                onClick={() => reportStore.open({ type: "megaphone", id: e.id, name: e.name, text: e.text })}
+              >
+                신고
+              </button>
             </li>
           ))}
         </ol>
       )}
-      {flash && (
-        <p key={flash.id} className={cx(styles.flash, flash.scope === "all" && styles.flashAll)} role="status">
-          <PixelIcon name="megaphone" />
-          <b className={styles.name}>{flash.name}</b>
-          <span className={styles.text}>{flash.text}</span>
-        </p>
-      )}
+      <MegaphoneSpotlight entry={flash} until={flashUntil} />
     </section>
   );
 }
