@@ -81,6 +81,8 @@ export class StaffFxView {
   private readonly scythe: Phaser.GameObjects.Image;
   private readonly fog: Phaser.GameObjects.Image[] = [];
   private readonly badge: Phaser.GameObjects.BitmapText;
+  /** 마지막으로 본 이름표 글자 ("운영자"면 배지를 숨긴다) */
+  private lastLabel = "";
 
   constructor(scene: Phaser.Scene, atlas: GlyphAtlas, labelDepth: number) {
     this.scythe = scene.add.image(0, 0, ensureScythe(scene));
@@ -120,14 +122,16 @@ export class StaffFxView {
     }
 
     const l = s.label;
+    this.lastLabel = l.text;
     if (this.badge.scaleX !== s.labelScale) this.badge.setScale(s.labelScale);
-    this.badge.setPosition(Math.round(l.x - l.width / 2 - 3 * s.labelScale), l.y).setVisible(vis && l.visible);
+    // 이름표가 이미 "운영자"이므로 배지를 함께 띄우면 "운영자 운영자"가 된다 → 이름이 "운영자"면 배지는 숨긴다
+    this.badge.setPosition(Math.round(l.x - l.width / 2 - 3 * s.labelScale), l.y).setVisible(vis && l.visible && l.text !== STAFF_BADGE);
   }
 
   setVisible(v: boolean): void {
     this.scythe.setVisible(v);
     for (const f of this.fog) f.setVisible(v);
-    this.badge.setVisible(v);
+    this.badge.setVisible(v && this.lastLabel !== STAFF_BADGE);
   }
 
   destroy(): void {
