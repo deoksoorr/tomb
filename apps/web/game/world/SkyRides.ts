@@ -342,7 +342,7 @@ export class SkyRides {
     const h = this.host;
     r.sky = true;
     r.skyAt = now;
-    r.gl = this.view.supported && !h.reduced;
+    r.gl = false; // 기울어진 판 시점은 사용자 의견으로 끔 (2D 애니메이션으로 교체 예정)
     if (r.gl) {
       h.atmos.skyView = true;
       h.player().view.setVisible(false);
