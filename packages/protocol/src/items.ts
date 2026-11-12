@@ -114,10 +114,10 @@ export const ITEMS: readonly ItemDef[] = [
     ["pet_dog", "pet", "퇴근 강아지", "퇴근하면 제일 먼저 반겨 주는 친구.", 150],
   ]),
   // ── 동물원 펫 (사육사에게서 영구로만 산다 — 가격은 아래 ZOO_PETS. price는 같은 값을 적어 둔다) ──
-  { id: "pet_fox", kind: "cosmetic", slot: "pet", name: "달빛 여우", desc: "야근하는 밤에만 슬그머니 따라오는 여우. 꼬리가 은은하게 빛나요.", price: 6_000, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_hound", kind: "cosmetic", slot: "pet", name: "듬직한 큰 개", desc: "등에 태워 주는 커다란 개. 출근길이 두 배로 즐거워요. (타고 다닐 수 있어요)", price: 8_000, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_goose", kind: "cosmetic", slot: "pet", name: "왕거위", desc: "아무도 못 말리는 거위. 등에 타면 뒤뚱뒤뚱 신나게 달려요. (타고 다닐 수 있어요)", price: 9_000, durationMs: COSMETIC_DURATION_MS },
-  { id: "pet_deer", kind: "cosmetic", slot: "pet", name: "달빛 사슴", desc: "별빛 뿔을 단 사슴. 등에 타면 바람처럼 가볍게 달려요. (타고 다닐 수 있어요)", price: 9_900, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_fox", kind: "cosmetic", slot: "pet", name: "달빛 여우", desc: "야근하는 밤에만 슬그머니 따라오는 여우. 꼬리가 은은하게 빛나요.", price: 320, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_hound", kind: "cosmetic", slot: "pet", name: "듬직한 큰 개", desc: "등에 태워 주는 커다란 개. 출근길이 두 배로 즐거워요. (타고 다닐 수 있어요)", price: 450, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_goose", kind: "cosmetic", slot: "pet", name: "왕거위", desc: "아무도 못 말리는 거위. 등에 타면 뒤뚱뒤뚱 신나게 달려요. (타고 다닐 수 있어요)", price: 500, durationMs: COSMETIC_DURATION_MS },
+  { id: "pet_deer", kind: "cosmetic", slot: "pet", name: "달빛 사슴", desc: "별빛 뿔을 단 사슴. 등에 타면 바람처럼 가볍게 달려요. (타고 다닐 수 있어요)", price: 600, durationMs: COSMETIC_DURATION_MS },
 
   { id: "decor_candles", kind: "decor", name: "촛불 한 쌍", desc: "묘비 양옆에 작은 촛불.", price: 30, durationMs: DECOR_DURATION_MS },
   { id: "decor_wreath", kind: "decor", name: "꽃 화환", desc: "묘비 앞에 둥근 화환.", price: 50, durationMs: DECOR_DURATION_MS },
@@ -267,19 +267,19 @@ export function permanentPrice(id: string): number | null {
 
 /** 타는 펫 (ride = 타고 걷는 속도 배율 — 달리기 × 배율이 서버 속도 검증(MAX_VALID_SPEED) 안에 들도록 1.35 이하) */
 export type PetDef = { id: string; price: number; ride?: { speed: number } };
-/** 사육사 창 순서 (싼 것부터) */
+/** 사육사 창 순서 (싼 것부터). 하우징이 최종 목표라 펫은 집터(300P~)보다 싸게 (11/12 사용자 요청) */
 export const ZOO_PETS: readonly PetDef[] = [
-  { id: "pet_slime", price: 2_500 },
-  { id: "pet_duck", price: 2_500 },
-  { id: "pet_bird", price: 3_000 },
-  { id: "pet_ghost", price: 3_500 },
-  { id: "pet_wisp", price: 4_000 },
-  { id: "pet_cat", price: 4_500 },
-  { id: "pet_dog", price: 4_500 },
-  { id: "pet_fox", price: 6_000 },
-  { id: "pet_hound", price: 8_000, ride: { speed: 1.25 } },
-  { id: "pet_goose", price: 9_000, ride: { speed: 1.2 } },
-  { id: "pet_deer", price: 9_900, ride: { speed: 1.35 } },
+  { id: "pet_slime", price: 150 },
+  { id: "pet_duck", price: 150 },
+  { id: "pet_bird", price: 180 },
+  { id: "pet_ghost", price: 200 },
+  { id: "pet_wisp", price: 220 },
+  { id: "pet_cat", price: 250 },
+  { id: "pet_dog", price: 250 },
+  { id: "pet_fox", price: 320 },
+  { id: "pet_hound", price: 450, ride: { speed: 1.25 } },
+  { id: "pet_goose", price: 500, ride: { speed: 1.2 } },
+  { id: "pet_deer", price: 600, ride: { speed: 1.35 } },
 ];
 const petMap = new Map(ZOO_PETS.map((p) => [p.id, p]));
 /** 동물원 펫이면 그 정의 */
