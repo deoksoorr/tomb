@@ -1,4 +1,5 @@
 import type { Ambience, TimePhase } from "@/lib/ambience";
+import { gradeAt } from "./skyGrade";
 
 // 하늘 톤·날씨 값을 게임 연출 수치로 바꾸고, 바뀔 때 2~3초에 걸쳐 부드럽게 섞는다 (순수).
 
@@ -14,26 +15,42 @@ export type Levels = {
   cloud: number;
   /** 떨어지는 낙엽 0..1 */
   leaves: number;
+  /** 어둠 덮개 색 0xRRGGBB (Lighting) */
+  shade: number;
+  /** 톤 아래 옅은 막 세기 0..1 (흐림·안개·눈) */
+  haze: number;
+  hazeColor: number;
 };
+
+/** 실내·입장 화면의 예전 어둠 색 */
+export const INDOOR_SHADE = 0x070812;
 
 export const TRANSITION_MS = 2500;
 
 const BASE_FOG: Record<TimePhase, number> = { night: 0.1, dawn: 0.16, day: 0.04, dusk: 0.08 };
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
-export function levelsFor(a: Ambience): Levels {
+/**
+ * outdoor: 바깥(마을·묘지)은 skyGrade의 강한 색 보정(밤은 확실히 어둡게)을 쓴다.
+ * 기본(false)은 실내·입장 화면용 부드러운 값 (lib/ambience 팔레트 그대로).
+ */
+export function levelsFor(a: Ambience, outdoor = false): Levels {
   const k = clamp01(a.intensity);
   const w = a.weather;
+  const g = outdoor ? gradeAt(a.kstHour, w, k) : null;
   return {
-    tint: a.palette.worldTint >>> 0,
-    darkness: clamp01(a.palette.darkness),
-    glow: clamp01(a.palette.lightGlow),
+    tint: g ? g.tint : a.palette.worldTint >>> 0,
+    darkness: clamp01(g ? g.darkness : a.palette.darkness),
+    glow: clamp01(g ? g.glow : a.palette.lightGlow),
     fireflies: clamp01(a.palette.fireflies),
     fog: clamp01(BASE_FOG[a.phase] + (w === "fog" ? 0.2 + 0.3 * k : w === "rain" ? 0.03 : 0)),
     rain: w === "rain" ? k : 0,
     snow: w === "snow" ? k : 0,
     cloud: w === "cloudy" ? 0.4 + 0.4 * k : w === "rain" ? 0.25 : 0,
     leaves: clamp01(a.leaves),
+    shade: g ? g.shade : INDOOR_SHADE,
+    haze: g ? clamp01(g.haze) : 0,
+    hazeColor: g ? g.hazeColor : 0x808080,
   };
 }
 
@@ -54,6 +71,9 @@ export function mixLevels(a: Levels, b: Levels, t: number, out: Levels): Levels 
   out.snow = l(a.snow, b.snow);
   out.cloud = l(a.cloud, b.cloud);
   out.leaves = l(a.leaves, b.leaves);
+  out.shade = mixColor(a.shade, b.shade, k);
+  out.haze = l(a.haze, b.haze);
+  out.hazeColor = mixColor(a.hazeColor, b.hazeColor, k);
   return out;
 }
 
@@ -98,6 +118,9 @@ function sameLevels(a: Levels, b: Levels): boolean {
     Math.abs(a.rain - b.rain) < 1e-3 &&
     Math.abs(a.snow - b.snow) < 1e-3 &&
     Math.abs(a.cloud - b.cloud) < 1e-3 &&
-    Math.abs(a.leaves - b.leaves) < 1e-3
+    Math.abs(a.leaves - b.leaves) < 1e-3 &&
+    a.shade === b.shade &&
+    Math.abs(a.haze - b.haze) < 1e-3 &&
+    a.hazeColor === b.hazeColor
   );
 }

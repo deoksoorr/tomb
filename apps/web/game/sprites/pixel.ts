@@ -13,7 +13,8 @@ export function makeCanvas(w: number, h: number): { canvas: HTMLCanvasElement; c
 }
 
 export function parseHex(hex: string, fallback: Color = 0xe8d9b0): Color {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  // 46번 특수 색("#rrggbb~g")은 바탕 hex만 읽는다 (연출은 dyeFx가 따로)
+  const m = /^#?([0-9a-f]{6})(?:~[a-z])?$/i.exec(hex.trim());
   return m ? parseInt(m[1], 16) : fallback;
 }
 

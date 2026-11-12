@@ -35,10 +35,15 @@ export const STATE = {
   read: 16,
   /** 욕조에 들어가 있음 (어깨까지 거품) */
   bath: 17,
+  // ── 놀이기구 2 (관람차·열기구, 1인 자리·서버 좌석) ──
+  /** 관람차 칸에 앉아 한 바퀴 (칸마다 2자리). 서버 위치는 타는 곳 앵커 그대로, 칸 위치는 서버 시계로 모두 같게 */
+  ferris: 18,
+  /** 열기구 바구니에 서서 맵 위를 날기 (기구마다 4자리). 서버 위치는 출발장 앵커 그대로, 비행 경로는 운항 시간표로 모두 같게 */
+  balloon: 19,
 } as const;
 export type StateName = keyof typeof STATE;
 export type StateId = (typeof STATE)[StateName];
-export const STATE_NAMES: readonly StateName[] = ["idle", "walk", "run", "sitGround", "sitChair", "jump", "hang", "swim", "dive", "swing", "hammock", "boat", "seesaw", "trampoline", "carousel", "lie", "read", "bath"];
+export const STATE_NAMES: readonly StateName[] = ["idle", "walk", "run", "sitGround", "sitChair", "jump", "hang", "swim", "dive", "swing", "hammock", "boat", "seesaw", "trampoline", "carousel", "lie", "read", "bath", "ferris", "balloon"];
 export function isStateId(n: number): n is StateId {
   return Number.isInteger(n) && n >= 0 && n < STATE_NAMES.length;
 }

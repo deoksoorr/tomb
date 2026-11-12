@@ -1,6 +1,7 @@
 import { DIR, WALK_SPEED, type DirId } from "@tomb/protocol";
 import { AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, BODY_METRICS, bodyOf, buildAvatarSheet, handAnchor, lookKey } from "@/game/sprites/avatar";
 import { CosmeticFxSim, FX_ART, type FxArtId, type FxCmd } from "@/game/sprites/cosmeticFx";
+import { buildPartMask, drawDyeFx, specSpecials } from "@/game/sprites/dyeFx";
 import * as fx from "@/game/sprites/fx";
 import { grassTile } from "@/game/sprites/ground";
 import { css, makeCanvas, type Color } from "@/game/sprites/pixel";
@@ -238,10 +239,17 @@ export class OutfitStage {
     const body = bodyOf(l.body);
     const m = BODY_METRICS[body];
     const sprites: Sprite[] = [];
+    // 46번 특수 색 부위: 몸 위에 가면을 색칠해 겹친다 (무지개·금빛 광택·반짝이·야광 — 미리보기는 야광을 늘 켠다)
+    const dyeFx = specSpecials(l.color);
+    const masks = new Map(dyeFx.map((f) => [f.part, buildPartMask(l.color, l.look, l.body, f.part)] as const));
     sprites.push({
       depth: this.ay,
-      draw: () =>
-        ctx.drawImage(sheet, (col % AV_COLS) * AV_W, Math.floor(col / AV_COLS) * AV_H, AV_W, AV_H, sx(this.ax) - 10, sy(this.ay) - (AV_H - 1), AV_W, AV_H),
+      draw: () => {
+        const dx = sx(this.ax) - 10;
+        const dy = sy(this.ay) - (AV_H - 1);
+        ctx.drawImage(sheet, (col % AV_COLS) * AV_W, Math.floor(col / AV_COLS) * AV_H, AV_W, AV_H, dx, dy, AV_W, AV_H);
+        if (dyeFx.length) drawDyeFx(ctx, dyeFx, masks, col, dx, dy, still ? 0 : now);
+      },
     });
 
     if (l.look.includes("back_wings")) {

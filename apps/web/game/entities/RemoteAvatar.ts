@@ -132,7 +132,11 @@ export class RemoteAvatar {
     const label = this.view.label;
     const mx = Math.max(CULL_MARGIN, label.width / 2 + 4);
     const my = label.height + LABEL_TOP;
-    const visible = !view || (x > view.x - mx && x < view.right + mx && y > view.y - my && y < view.bottom + CULL_MARGIN);
+    // 놀이기구(관람차 칸·하늘을 나는 열기구)에 탄 사람은 앵커에서 옮겨 그린 자리로 잰다
+    const ride = this.view.ride;
+    const cx = ride ? x + ride.ox : x;
+    const cy = ride ? y - ride.lift : y;
+    const visible = !view || (cx > view.x - mx && cx < view.right + mx && cy > view.y - my && cy < view.bottom + CULL_MARGIN);
     this.view.setVisible(visible);
     if (visible) this.view.sync(now, labelScale);
   }

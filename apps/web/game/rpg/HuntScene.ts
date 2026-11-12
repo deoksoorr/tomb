@@ -5,6 +5,7 @@ import { bossPhaseIndex, bossPhaseList, monsterPatterns, type PatternId } from "
 import { attackCooldownMs, CHAIN_GRACE_MS, FINISHER_EVERY, weaponStyleOf, type WeaponStyle, type WeaponStyleId } from "@/lib/rpg/weapons";
 import { gearById } from "@/lib/rpg/catalog";
 import { ELITE, huntPlan, STREAM_GAP_MS, WAVE_FORMATION_LABEL, WAVE_MAX_GAP_SEC, type HuntWave } from "@/lib/rpg/plan";
+import { POTION_CURES, rollStatus, STATUS_IDS, StatusBook, STATUSES, type StatusId } from "@/lib/rpg/status";
 import type { HuntResult, RpgAction, RpgHud } from "@/lib/rpg/types";
 import { DIR, STATE, type DirId } from "@tomb/protocol";
 import { AvatarView } from "../entities/AvatarView";
@@ -89,7 +90,9 @@ const SWING_SFX: Record<WeaponStyleId, RpgSound> = { swing: "swish", smash: "thu
 /** 타격 옵션: 넉백 배율, 추가 경직, 묵직한 타격(내려찍기) */
 type HitOpts = { kb?: number; stun?: number; heavy?: boolean };
 
-type Shot = { x: number; y: number; vx: number; vy: number; dmg: number; until: number; sprite: Phaser.GameObjects.Image };
+/** 누가 어떤 패턴으로 쳤나 (상태 이상 굴림용) */
+type HitSrc = { id: MonsterId; pat?: PatternId };
+type Shot = { x: number; y: number; vx: number; vy: number; dmg: number; until: number; sprite: Phaser.GameObjects.Image; src?: HitSrc };
 type Obstacle = { x: number; y: number; r: number };
 
 export class HuntScene extends RpgScene {
@@ -125,6 +128,14 @@ export class HuntScene extends RpgScene {
   private atkReadyAt = 0;
   private hurtUntil = 0;
   private rootUntil = 0;
+  /** 몬스터가 건 상태 이상 (lib/rpg/status) */
+  private status = new StatusBook();
+  private statusFxAt = 0;
+  private statusFxI = 0;
+  /** 맞아서 빨갛게 번쩍이는 동안은 상태 색을 덮어쓰지 않는다 */
+  private hurtFlashUntil = 0;
+  private tintNow = -1;
+  private statusIcons = new Map<StatusId, Phaser.GameObjects.Image>();
   private regenAt = 0;
   private player!: Phaser.GameObjects.Sprite;
   /** 월드와 같은 아바타 (이름표·몸 모양·말풍선). 아틀라스가 없으면 null → 단순 스프라이트 */
@@ -213,6 +224,12 @@ export class HuntScene extends RpgScene {
     // 안 지우면 지난 판 막바지의 커피 브레이크(rootUntil)가 다음 판의 이동·공격을 그 시각까지 막는다.
     this.rootUntil = 0;
     this.hurtUntil = 0;
+    this.status.clear();
+    this.statusFxAt = 0;
+    this.hurtFlashUntil = 0;
+    this.tintNow = -1;
+    // 씬을 다시 시작하면 그림은 지워진다 → 장부만 비운다
+    this.statusIcons.clear();
     this.regenAt = 0;
     this.messageUntil = 0;
     this.gaugeFlashUntil = 0;
@@ -401,7 +418,7 @@ export class HuntScene extends RpgScene {
    * 간격 안에 이어 치면 1→2→3, 세 번째는 마무리(FINISHER_EVERY).
    */
   private attack(press: boolean): void {
-    if (this.died) return;
+    if (this.died || this.status.has("freeze", this.now)) return;
     if (this.now < this.atkReadyAt || this.now < this.rootUntil) {
       if (press) this.atkBuffered = true;
       return;
@@ -680,7 +697,7 @@ export class HuntScene extends RpgScene {
       haste: (m) => (m.phase > 0 ? (bossPhaseList(MONSTERS[m.id])[m.phase - 1]?.haste ?? 1) : 1),
       boss: (m) => m.boss,
       bite: (m, mult) => sc.monsterAttackRoll(m, mult),
-      strikePlayer: (m, mult) => sc.hurtPlayer(damage(m.st.atk, mult, sc.play.derived.def, Math.random(), false)),
+      strikePlayer: (m, mult) => sc.hurtPlayer(damage(m.st.atk, mult, sc.play.derived.def, Math.random(), false), { id: m.id, pat: m.cast?.id }),
       shoot: (m, angle, speed, mult) => sc.shoot(m, angle, speed, Math.max(1, Math.round(m.st.atk * mult)), m.boss ? RTEX.fire : RTEX.orb),
       moveMon: (m, dx, dy) => sc.moveMon(m, dx, dy),
       explode: (m) => {
@@ -745,6 +762,12 @@ export class HuntScene extends RpgScene {
     const def = skillById(id);
     if (!def || lv < 1) return;
     if ((this.skillReady[id] ?? 0) > this.now) return;
+    if (this.status.has("freeze", this.now)) return;
+    if (this.status.has("silence", this.now)) {
+      this.flash("침묵: 지금은 스킬을 못 써요", 900);
+      this.sfx.play("miss", 0.4);
+      return;
+    }
     const cost = def.sp(lv);
     if (this.sp < cost) {
       this.flash("SP가 모자라요", 900);
@@ -1001,11 +1024,18 @@ export class HuntScene extends RpgScene {
     if (p.hp) this.hp = Math.min(d.maxHp, this.hp + p.hp);
     if (p.sp) this.sp = Math.min(d.maxSp, this.sp + p.sp);
     this.floatText(this.px, this.py - 20, p.name, "#ffe39a", 11);
+    // 상태 이상 풀기 (커피: 독·화상·출혈, 에너지드링크: 둔화·빙결·혼란·침묵, 도시락: 전부)
+    const cured = this.status.cure(POTION_CURES[id] ?? [], this.now);
+    if (cured.length) {
+      this.floatText(this.px, this.py - 30, `${cured.map((c) => STATUSES[c].name).join("·")} 풀림`, "#e8f0ff", 9);
+      this.ringFx(0xe8f0ff, 22);
+    }
     this.sfx.play("potion", 0.7);
   }
 
-  private hurtPlayer(dmg: number): void {
-    if (this.died || this.now < this.hurtUntil || this.buff("rollback")) return;
+  /** 맞으면 true (무적·회피 시간·보호막이 다 막으면 false). src가 있으면 상태 이상을 굴린다 */
+  private hurtPlayer(dmg: number, src?: HitSrc): boolean {
+    if (this.died || this.now < this.hurtUntil || this.buff("rollback")) return false;
     this.hurtUntil = this.now + HURT_IFRAME_MS;
     // 11/12 부재중 자동응답: 보호막이 먼저 받는다
     if (this.shield > 0 && this.buff("auto_reply")) {
@@ -1014,15 +1044,20 @@ export class HuntScene extends RpgScene {
       dmg -= take;
       this.floatText(this.px, this.py - 22, `-${Math.round(take)}`, "#6ad0c8", 9);
       if (this.shield <= 0) this.buffs.delete("auto_reply");
-      if (dmg <= 0) return;
+      if (dmg <= 0) return false;
     }
     this.hp -= dmg;
     this.fx.playerHurt(this.px, this.py - 18, dmg);
     this.player.setTintFill(0xff6a6a);
-    this.time.delayedCall(90, () => this.player.clearTint());
+    // 번쩍임이 끝나면 drawStatus가 상태 색(없으면 원래 색)으로 되돌린다
+    this.hurtFlashUntil = this.now + 90;
+    this.tintNow = -1;
     this.fx.shake(90, 0.003);
     this.combo = 0;
-    if (this.hp > 0) return;
+    if (this.hp > 0) {
+      if (src) this.inflict(src);
+      return true;
+    }
     if (!this.cookieUsed && (this.play.potions.p_cookie ?? 0) > 0) {
       // 부활 쿠키: 자동으로 먹고 반쯤 회복, 잠깐 무적
       this.cookieUsed = true;
@@ -1032,14 +1067,79 @@ export class HuntScene extends RpgScene {
       this.flash("부활 쿠키를 먹고 다시 일어났어요", 2000);
       this.sfx.play("potion");
       this.ringFx(0xffe39a, 36);
-      return;
+      // 다시 일어나면 상태 이상도 털어 낸다
+      this.status.cure(STATUS_IDS, this.now);
+      return true;
     }
     this.hp = 0;
     this.died = true;
+    this.status.clear();
     this.sfx.play("defeat");
     this.flash("쓰러졌어요…", 1500);
     this.player.setAlpha(0.5);
     this.time.delayedCall(900, () => this.finish());
+    return true;
+  }
+
+  /** 몬스터 공격이 맞은 뒤: 그 몬스터·패턴의 상태 이상을 굴려 건다 (같은 상태는 갱신, 면역이면 무시) */
+  private inflict(src: HitSrc): void {
+    const now = this.now;
+    for (const h of rollStatus(src.id, src.pat, this.play.difficulty)) {
+      const r = this.status.apply(h, now);
+      if (r === "immune") continue;
+      const def = STATUSES[h.id];
+      if (r === "new") {
+        this.floatText(this.px, this.py - 30, def.name, `#${def.color.toString(16).padStart(6, "0")}`, 10);
+        this.ringFx(def.color, 18);
+      }
+      if (h.id === "freeze") this.atkBuffered = false;
+    }
+  }
+
+  /** 상태 이상 그림: 캐릭터 색, 머리 옆 아이콘, 작은 입자 */
+  private drawStatus(now: number): void {
+    const list = this.died ? [] : this.status.list(now);
+    // 색: 가장 센 것 하나 (빙결 > 혼란 > 침묵 > 화상 > 출혈 > 독 > 둔화)
+    if (now >= this.hurtFlashUntil) {
+      const order: StatusId[] = ["freeze", "confuse", "silence", "burn", "bleed", "poison", "slow"];
+      const top = order.find((id) => list.some((x) => x.id === id));
+      const want = top ? STATUSES[top].color : 0xffffff;
+      if (want !== this.tintNow) {
+        this.tintNow = want;
+        if (top) this.player.setTint(want);
+        else this.player.clearTint();
+      }
+    }
+    // 머리 옆 아이콘 (8×8): 위로 쌓는다. 끝나기 1초 전부터 깜빡
+    for (const [id, img] of this.statusIcons) {
+      if (!list.some((x) => x.id === id)) {
+        img.destroy();
+        this.statusIcons.delete(id);
+      }
+    }
+    list.forEach((st, i) => {
+      let img = this.statusIcons.get(st.id);
+      if (!img) {
+        const key = `rpg-st-${st.id}`;
+        if (!this.textures.exists(key)) this.textures.addCanvas(key, iconCanvas(STATUSES[st.id].art));
+        img = this.add.image(0, 0, key).setScale(0.5).setDepth(1e5);
+        this.statusIcons.set(st.id, img);
+      }
+      img.setPosition(Math.round(this.px + 10), Math.round(this.py - 22 - i * 9));
+      img.setAlpha(st.leftMs < 1000 && Math.floor(now / 120) % 2 ? 0.35 : 1);
+    });
+    // 입자: 걸린 상태를 돌아가며 하나씩
+    if (list.length && now >= this.statusFxAt) {
+      this.statusFxAt = now + 240;
+      const st = list[this.statusFxI++ % list.length];
+      const def = STATUSES[st.id];
+      const tex = st.id === "burn" ? RTEX.fire : RTEX.spark;
+      const x = this.px + (Math.random() - 0.5) * 10;
+      const y = this.py - 6 - Math.random() * 8;
+      const fall = st.id === "bleed" || st.id === "slow";
+      const o = this.add.image(x, y, tex).setTint(def.color).setDepth(1e5).setScale(st.id === "burn" ? 0.5 : 0.7).setAlpha(0.9);
+      this.tweens.add({ targets: o, y: y + (fall ? 8 : -12), alpha: 0, duration: 520, onComplete: () => o.destroy() });
+    }
   }
 
   /** 내 발밑 공격 쿨다운 게이지: 차오르다 다 차면 반짝, 버퍼에 공격이 있으면 초록 */
@@ -1238,7 +1338,7 @@ export class HuntScene extends RpgScene {
 
   private shoot(m: Mon, angle: number, speed: number, dmg: number, tex: string): void {
     const sprite = this.add.image(m.x, m.y - 8, tex).setDepth(1e4);
-    this.shots.push({ x: m.x, y: m.y - 8, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, dmg, until: this.now + 4000, sprite });
+    this.shots.push({ x: m.x, y: m.y - 8, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, dmg, until: this.now + 4000, sprite, src: { id: m.id, pat: m.cast?.id } });
   }
 
   private monsterAttackRoll(m: Mon, mult = 1): void {
@@ -1246,7 +1346,7 @@ export class HuntScene extends RpgScene {
       this.floatText(this.px, this.py - 18, "회피", "#9aa3ad", 10);
       return;
     }
-    this.hurtPlayer(damage(m.st.atk, mult, this.play.derived.def, Math.random(), false));
+    this.hurtPlayer(damage(m.st.atk, mult, this.play.derived.def, Math.random(), false), { id: m.id, pat: m.cast?.id ?? "bite" });
   }
 
   /**
@@ -1386,13 +1486,26 @@ export class HuntScene extends RpgScene {
       const dinner = this.buffs.get("team_dinner_regen");
       if (dinner && dinner.until > now && !this.died) this.hp = Math.min(d.maxHp, this.hp + d.maxHp * dinner.v);
     }
+    // 상태 이상: 끝난 것 정리 + 지속 피해 (무적이면 안 받고, 이걸로는 쓰러지지 않는다 — HP 1에서 멈춤)
+    const sd = this.status.update(now, d.maxHp, this.movingNow);
+    if (!this.died && !this.buff("rollback")) {
+      for (const x of sd.dmg) {
+        const before = this.hp;
+        this.hp = Math.max(1, this.hp - x.amount);
+        const lost = Math.round(before - this.hp);
+        if (lost > 0) this.floatText(this.px + 6, this.py - 16, `-${lost}`, `#${STATUSES[x.id].color.toString(16).padStart(6, "0")}`, 8);
+      }
+    }
 
     // 이동
     if (!this.died) {
-      const a = this.axis();
-      const moving = Math.hypot(a.x, a.y) > 0.15 && now >= this.rootUntil;
+      // 상태 이상: 빙결은 제자리, 혼란은 방향이 거꾸로, 둔화는 느리게
+      const frozen = this.status.has("freeze", now);
+      const a0 = this.axis();
+      const a = this.status.has("confuse", now) ? { x: -a0.x, y: -a0.y } : a0;
+      const moving = Math.hypot(a.x, a.y) > 0.15 && now >= this.rootUntil && !frozen;
       // 40번 지형: 늪·덩굴은 느리게, 웅덩이는 미끄럽게, 컨베이어·문·바람은 밀어낸다
-      const spd = moving ? d.move * (1 + this.buff("cache_hit")) * this.arena.speedMul(this.px, this.py) : 0;
+      const spd = moving ? d.move * (1 + this.buff("cache_hit")) * this.status.moveMul(now) * this.arena.speedMul(this.px, this.py) : 0;
       const v = this.arena.playerVelocity(a.x * spd, a.y * spd, this.px, this.py, dt, now);
       if (v.x || v.y) {
         this.px = Phaser.Math.Clamp(this.px + v.x * dt, WALL + PLAYER_R, W - WALL - PLAYER_R);
@@ -1412,7 +1525,7 @@ export class HuntScene extends RpgScene {
       else this.player.setFrame(avFrame(this.dirRow, moving ? 2 + (Math.floor(this.walkT / 120) % 4) : Math.floor(now / 500) % 2));
       // 버퍼에 한 번 있거나, 공격 키·마우스·손가락을 누르고 있으면 쿨다운이 끝나는 순간 친다
       const held = this.holdOn || this.keys.has("Space") || this.keys.has("KeyJ");
-      if ((held || this.atkBuffered) && now >= this.atkReadyAt && now >= this.rootUntil) {
+      if ((held || this.atkBuffered) && now >= this.atkReadyAt && now >= this.rootUntil && !frozen) {
         if (this.holdOn && this.holdAim) {
           const p = this.toWorld(this.holdAim.x, this.holdAim.y);
           if (Math.hypot(p.x - this.px, p.y - this.py) > 2) this.setFace(p.x - this.px, p.y - this.py);
@@ -1428,6 +1541,7 @@ export class HuntScene extends RpgScene {
     this.player.setAlpha(this.died ? 0.5 : this.buff("rollback") ? 0.55 + 0.3 * Math.sin(now / 60) : 1);
     this.pShadow.setPosition(this.px, this.py);
     this.drawGauge(now);
+    this.drawStatus(now);
 
     // 도우미 유령
     const h = this.helper;
@@ -1487,7 +1601,7 @@ export class HuntScene extends RpgScene {
       s.sprite.setPosition(s.x, s.y);
       if (Math.hypot(s.x - this.px, s.y - (this.py - 8)) < 8) {
         s.until = 0;
-        this.hurtPlayer(damage(s.dmg, 1, d.def, Math.random(), false));
+        this.hurtPlayer(damage(s.dmg, 1, d.def, Math.random(), false), s.src);
       }
       if (s.x < 0 || s.x > W || s.y < 0 || s.y > H) s.until = 0;
     }
@@ -1530,6 +1644,7 @@ export class HuntScene extends RpgScene {
       attackBuffered: this.atkBuffered,
       potions: Object.fromEntries(Object.keys(this.play.potions).map((id) => [id, this.potionLeft(id)])),
       buffs: [...this.buffs].filter(([, b]) => b.until > now).map(([id, b]) => ({ id, leftMs: b.until - now })),
+      statuses: this.status.list(now),
       boss: boss ? { name: MONSTERS[boss.id].name, ratio: Math.max(0, boss.hp / boss.st.maxHp) } : null,
       message: now < this.messageUntil ? this.message : undefined,
     };

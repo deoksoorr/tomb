@@ -5,6 +5,10 @@ import {
   CLOSE,
   DIR,
   FISHING_SPOTS,
+  FERRIS_SEATS,
+  BALLOON_SEATS,
+  BALLOON_BOARD_MS,
+  BALLOON_CYCLE_MS,
   SPAWN,
   STATE,
   decodeSnapshot,
@@ -495,6 +499,18 @@ describe("v2: look / firework / sync / join-loss guards", () => {
     core.join(conn("a2"), { visitorId: "a", name: "a", color: AVATAR_COLORS[0], channel: 1, look: [], body: "cat" }, 20_000);
     expect(events(b).find((e) => e.t === "join")).toMatchObject({ sid: 1, body: "cat" });
     expect(events(b).find((e) => e.t === "join")).not.toHaveProperty("dye");
+  });
+
+  it("46번 특수 색(\"#rrggbb~종류\")도 welcome·look으로 그대로 실린다 (옛 클라이언트는 그 부위를 기본 색으로 본다)", async () => {
+    const { core, join, conn } = setup();
+    const a = conn("a");
+    core.join(a, { visitorId: "a", name: "a", color: AVATAR_COLORS[0], channel: 1, look: [], body: "hood", dye: { head: "#e8b84a~g" } }, 0);
+    const b = join("b");
+    expect(welcome(b).peers[0].dye).toEqual({ head: "#e8b84a~g" });
+    clear(a, b);
+    core.message(a, send({ t: "look", grant: grantToken({ kind: "look", visitorId: "a", look: [], exp: 9e9, dye: { head: "#e8b84a~g", accent: "#ff00aa~r" } }) }), 0);
+    await flush();
+    expect(events(b)).toEqual([{ t: "look", sid: 1, look: [], dye: { head: "#e8b84a~g", accent: "#ff00aa~r" } }]);
   });
 
   it("fires a verified firework once per nonce at the sender's server position (3s per connection)", async () => {
@@ -1061,6 +1077,49 @@ describe("plaza rides: seesaw / trampoline / carousel are one-person spots (50)"
     core.message(b, move(880, 676, STATE.walk), 3_000);
     core.message(b, send({ t: "sit", seatId: r }), 3_000);
     expect(core.peer(2)).toMatchObject({ seatId: r, state: STATE.carousel, x: 880, y: 652 });
+  });
+});
+
+describe("ferris wheel and hot-air balloon seats (놀이기구 2)", () => {
+  it("ferris car seats are fixed one-person spots; the position stays at the boarding anchor", () => {
+    const { core, join } = setup();
+    const w = FERRIS_SEATS[0];
+    const a = join("a", 0, { x: w.x, y: w.y + 4 });
+    const b = join("b", 0, { x: w.x + 2, y: w.y + 4 });
+    core.message(a, send({ t: "sit", seatId: w.id }), 0);
+    core.message(b, send({ t: "sit", seatId: w.id }), 0);
+    expect(core.peer(1)).toMatchObject({ seatId: w.id, state: STATE.ferris, x: w.x, y: w.y });
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: w.id });
+    // 같은 칸 옆자리는 다른 사람이 탄다
+    core.message(b, send({ t: "sit", seatId: FERRIS_SEATS[1].id }), 0);
+    expect(core.peer(2)).toMatchObject({ seatId: FERRIS_SEATS[1].id, state: STATE.ferris });
+    // 타고 있는 동안 MOVE(ferris)는 자리를 지키고, 내려서 걸으면 놓는다
+    core.message(a, move(w.x, w.y, STATE.ferris), 1_000);
+    expect(core.peer(1)).toMatchObject({ seatId: w.id, x: w.x, y: w.y });
+    core.message(a, move(w.x, w.y + 3, STATE.walk), 40_000);
+    expect(core.peer(1)!.seatId).toBeNull();
+  });
+
+  it("balloon seats are taken only while that balloon waits at the pad (timetable = server clock)", () => {
+    const { core, join } = setup();
+    const s0 = BALLOON_SEATS.find((s) => s.balloon === 0)!;
+    const a = join("a", 0, { x: s0.x, y: s0.y + 2 });
+    core.message(a, send({ t: "sit", seatId: s0.id }), 10_000);
+    expect(core.peer(1)).toMatchObject({ seatId: s0.id, state: STATE.balloon });
+    // 기구 0이 떠난 뒤: 그 기구의 다른 자리는 거절
+    const s1 = BALLOON_SEATS.find((s) => s.balloon === 0 && s.index === 1)!;
+    const b = join("b", 0, { x: s1.x, y: s1.y + 2 });
+    core.message(b, send({ t: "sit", seatId: s1.id }), BALLOON_BOARD_MS + 5_000);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: s1.id });
+    expect(core.peer(2)!.seatId).toBeNull();
+    // MOVE(balloon 상태)로도 떠난 기구의 자리는 잡지 못한다
+    core.message(b, move(s1.x, s1.y, STATE.balloon), BALLOON_BOARD_MS + 6_000);
+    expect(core.peer(2)).toMatchObject({ seatId: null, state: STATE.idle });
+    // 기구 1이 내려와 있을 때(반 주기 뒤)는 탄다
+    const t1 = BALLOON_CYCLE_MS / 2 + 5_000;
+    const s2 = BALLOON_SEATS.find((s) => s.balloon === 1)!;
+    core.message(b, send({ t: "sit", seatId: s2.id }), t1);
+    expect(core.peer(2)).toMatchObject({ seatId: s2.id, state: STATE.balloon });
   });
 });
 

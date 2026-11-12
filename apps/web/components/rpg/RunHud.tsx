@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { GAMES, POTIONS, SKILLS, type GameKind, type SkillId } from "@/lib/rpg/catalog";
 import { comboMult } from "@/lib/rpg/plan";
+import { STATUSES } from "@/lib/rpg/status";
 import type { RpgAction, RpgHud } from "@/lib/rpg/types";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -162,6 +163,24 @@ export default function RunHud({ game, hotbar, onPause, title }: { game: GameKin
             {game === "hunt" && hud && (
               <>
                 <Bar value={hud.hp} max={hud.maxHp} className={s.hp} label="HP" />
+                {(hud.statuses?.length ?? 0) > 0 && (
+                  <div className={s.statuses} role="status" aria-label="걸린 상태 이상">
+                    {hud.statuses!.map((x) => {
+                      const def = STATUSES[x.id];
+                      return (
+                        <span
+                          key={x.id}
+                          className={cx(s.statusChip, x.leftMs < 1000 && s.statusEnding)}
+                          style={{ color: `#${def.color.toString(16).padStart(6, "0")}` }}
+                          title={def.desc}
+                        >
+                          <RpgIcon art={def.art} size={16} />
+                          {def.name} {(x.leftMs / 1000).toFixed(1)}초
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
                 <Bar value={hud.sp} max={hud.maxSp} className={s.sp} label="SP" />
                 {hud.buffs.length > 0 && (
                   <div className={s.buffs}>

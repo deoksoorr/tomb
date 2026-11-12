@@ -7,7 +7,7 @@ import { isQuietHour, THUNDER_MIN_RAIN, thunderDelaySec, thunderFlash, thunderGa
 import { WeatherSound } from "./WeatherSound";
 import type { LightSpot } from "./WorldMap";
 
-// 분위기 레이어: KST 시간대 톤(곱하기 틴트) → [어둠·빛 구멍은 Lighting] → 빛(가산) → 반딧불 → 날씨(비·눈·낙엽) → 안개 → 번개 → 비네트.
+// 분위기 레이어: [날씨 막(일반 섞기)] → KST 시간대 톤(곱하기 틴트) → [어둠·빛 구멍은 Lighting] → 빛(가산) → 반딧불 → 날씨(비·눈·낙엽) → 안개 → 번개 → 비네트.
 // 톤·날씨는 lib/ambience(공용, 시계 기반)로 1분마다 다시 계산하고 바뀌면 2.5초 동안 섞는다.
 // 모든 레이어는 화면 고정 오브젝트 몇 개와 작은 풀(pool)로만 그려서 프레임당 비용이 일정하다.
 // 소리: 비 세기·실내 여부를 게임 하나에 하나인 WeatherSound에 알려 주고(빗소리 루프), 센 비에는 가끔 천둥(번개 + 소리).
@@ -18,6 +18,8 @@ export type AtmosphereOptions = {
   sound?: boolean;
   /** 집 안: 비·눈·낙엽·번개를 그리지 않고 소리는 벽 너머로 먹먹하게. 기본 false */
   indoor?: boolean;
+  /** 바깥 색 보정(skyGrade: 7구간 색 온도·밤은 확실히 어둡게·날씨 막). 기본: 실내가 아니면 켬 */
+  grade?: boolean;
 };
 
 const RECHECK_MS = 60_000;
@@ -47,6 +49,9 @@ export class Atmosphere {
   private readonly blender: LevelBlender;
   private nextCheck = 0;
   private readonly tint: Phaser.GameObjects.Image;
+  /** 톤 아래 옅은 막 (흐림·안개의 채도·대비 낮추기, 눈의 흰빛) */
+  private readonly haze: Phaser.GameObjects.Image;
+  private readonly grade: boolean;
   private readonly vignette: Phaser.GameObjects.Image;
   private readonly fogNear: Phaser.GameObjects.TileSprite;
   private readonly fogFar: Phaser.GameObjects.TileSprite;
@@ -70,6 +75,9 @@ export class Atmosphere {
   private thunderAt = 0;
   private flashAt = -Infinity;
   private flashPower = 0;
+  /** 놀이기구 하늘 시점 중 (SkyRides가 켠다): 화면에 붙은 날씨 층을 숨긴다 */
+  skyView = false;
+  private skyWas = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -79,14 +87,16 @@ export class Atmosphere {
   ) {
     this.override = parseAmbienceOverride(search);
     this.indoor = opts.indoor ?? false;
+    this.grade = opts.grade ?? !this.indoor;
     this.forceThunder = new URLSearchParams(search).get("thunder") === "1";
     this.sound = opts.sound === false ? null : WeatherSound.of(scene);
-    this.blender = new LevelBlender(levelsFor(ambienceAt(Date.now(), this.override)), TRANSITION_MS);
+    this.blender = new LevelBlender(this.targetLevels(), TRANSITION_MS);
 
     const fixed = (o: Phaser.GameObjects.Image | Phaser.GameObjects.TileSprite, depth: number) =>
       o.setScrollFactor(0).setDepth(depth).setOrigin(0.5, 0.5);
 
     this.tint = fixed(scene.add.image(0, 0, TEX.pixel), DEPTH.tint).setBlendMode(Phaser.BlendModes.MULTIPLY) as Phaser.GameObjects.Image;
+    this.haze = fixed(scene.add.image(0, 0, TEX.pixel), DEPTH.tint - 0.5).setVisible(false) as Phaser.GameObjects.Image;
     this.vignette = fixed(scene.add.image(0, 0, TEX.vignette), DEPTH.vignette) as Phaser.GameObjects.Image;
 
     const tile = (key: string, depth: number) => {
@@ -160,6 +170,7 @@ export class Atmosphere {
     const cx = cam.width / 2;
     const cy = cam.height / 2;
     this.tint.setPosition(cx, cy).setDisplaySize(w, h);
+    this.haze.setPosition(cx, cy).setDisplaySize(w, h);
     this.flash.setPosition(cx, cy).setDisplaySize(w, h);
     for (const t of [this.cloud, this.rainFar, this.rainNear, this.snowFar, this.snowNear, this.fogFar, this.fogNear]) {
       t.setPosition(cx, cy).setSize(Math.ceil(w / TS_SCALE), Math.ceil(h / TS_SCALE));
@@ -191,6 +202,10 @@ export class Atmosphere {
     this.gatherTarget = target;
   }
 
+  private targetLevels(): Levels {
+    return levelsFor(ambienceAt(Date.now(), this.override), this.grade);
+  }
+
   get levels(): Levels {
     return this.blender.current;
   }
@@ -198,7 +213,7 @@ export class Atmosphere {
   update(time: number, dt: number, view: Phaser.Geom.Rectangle): void {
     if (time >= this.nextCheck) {
       this.nextCheck = time + RECHECK_MS;
-      this.blender.setTarget(levelsFor(ambienceAt(Date.now(), this.override)), time);
+      this.blender.setTarget(this.targetLevels(), time);
     }
     const L = this.blender.update(time);
     const cam = this.scene.cameras.main;
@@ -208,16 +223,19 @@ export class Atmosphere {
     // ── 톤 ──
     this.tint.setTint(L.tint);
     this.tint.setVisible(L.tint !== 0xffffff);
+    this.haze.setTint(L.hazeColor).setAlpha(L.haze).setVisible(L.haze > 0.005);
     // 어둠은 Lighting이 그린다 (빛 구멍을 뚫기 위해)
     this.vignette
       .setPosition(cam.width / 2, cam.height / 2)
       .setDisplaySize(cam.width / cam.zoom + 2, cam.height / cam.zoom + 2)
       .setAlpha(0.12 + 0.5 * L.darkness);
 
-    // ── 빛 ── (밤에 또렷, 낮에는 거의 안 보임)
-    const glow = 0.12 + 0.88 * L.glow;
-    this.updateLights(this.staticLights, time, glow, view);
-    this.updateLights(this.gridLights, time, glow, view);
+    // ── 빛 ── (밤에 또렷, 낮에는 거의 안 보임). 어두울수록 빛 무리가 더 크고 따뜻하게 번진다
+    const dk = this.grade ? L.darkness : 0; // 실내·입장 화면은 예전 그대로
+    const glow = (0.12 + 0.88 * L.glow) * (1 + 0.7 * dk);
+    const spread = 1 + 0.35 * dk;
+    this.updateLights(this.staticLights, time, glow, view, spread);
+    this.updateLights(this.gridLights, time, glow, view, spread);
 
     // ── 월드에 붙은 화면 고정 타일: 타일 위치 = 카메라가 보는 월드 좌표 ──
     const ox = cam.scrollX + cam.width / 2;
@@ -257,6 +275,18 @@ export class Atmosphere {
       this.snowFar.tilePositionX = Math.sin(s * 0.7) * 4;
       this.snowNear.tilePositionY -= dt * 0.024 * k;
       this.snowNear.tilePositionX = Math.sin(s * 0.9 + 1) * 7;
+    }
+
+    if (this.skyView) {
+      // 놀이기구 하늘 시점: 화면에 붙은 비·눈·안개·구름·가장자리 어둠은 SkyView가 따로 그린다 (땅바닥 판 그림에 찍히지 않게).
+      // 시간대 색은 맵 전체를 덮도록 넓힌다 (하늘 시점은 아주 멀리까지 담는다)
+      for (const o of [this.rainFar, this.rainNear, this.snowFar, this.snowNear, this.fogFar, this.fogNear, this.cloud, this.vignette]) o.setVisible(false);
+      this.tint.setPosition(cam.width / 2, cam.height / 2).setDisplaySize(cam.width / cam.zoom + 64, cam.height / cam.zoom + 64);
+      this.skyWas = true;
+    } else if (this.skyWas) {
+      this.skyWas = false;
+      this.vignette.setVisible(true);
+      this.resize();
     }
 
     this.updateSplashes(time, dt, rain, view);
@@ -343,14 +373,16 @@ export class Atmosphere {
     t.setTilePosition((ox - hw) * par + dx, (oy - hh) * par + dy);
   }
 
-  private updateLights(lights: Light[], time: number, glow: number, view: Phaser.Geom.Rectangle): void {
+  private updateLights(lights: Light[], time: number, glow: number, view: Phaser.Geom.Rectangle, spread: number): void {
     for (const l of lights) {
       const { x, y } = l.spot;
       const vis = x > view.x - 40 && x < view.right + 40 && y > view.y - 40 && y < view.bottom + 40;
       l.img.setVisible(vis);
       if (!vis) continue;
       const flicker = this.reduced ? 1 : 0.86 + 0.08 * Math.sin(time / 210 + l.phase) + 0.06 * Math.sin(time / 67 + l.phase * 3);
-      l.img.setAlpha(l.spot.base * glow * flicker);
+      l.img.setAlpha(Math.min(1, l.spot.base * glow * flicker));
+      // 바깥 밤: 빛 무리 크기도 살짝 일렁인다 (실내는 spread=1이라 예전 그대로)
+      if (spread !== 1) l.img.setScale(l.spot.scale * spread * (0.97 + 0.03 * flicker));
     }
   }
 

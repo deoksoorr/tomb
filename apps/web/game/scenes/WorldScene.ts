@@ -44,8 +44,10 @@ import { Sfx } from "../world/Sfx";
 import { WorldMap } from "../world/WorldMap";
 import { BoatRide } from "../world/BoatRide";
 import { PlazaRides, type RideHost } from "../world/PlazaRides";
+import { SkyRides } from "../world/SkyRides";
 import { RideSound } from "../world/RideSound";
 import { VillageLife } from "../world/life/VillageLife";
+import { HauntHouseView } from "../haunt/HauntHouseView";
 import { Foraging } from "../world/forage/Foraging";
 import { Riding } from "../world/zoo/Riding";
 import { ZOO_ARCH_AT, ZooView } from "../world/zoo/ZooView";
@@ -184,6 +186,8 @@ export class WorldScene extends Phaser.Scene {
   private rideSound!: RideSound;
   private rides!: PlazaRides;
   private boats!: BoatRide;
+  /** 놀이기구 2: 관람차·열기구 (하늘 시점 포함) */
+  private sky!: SkyRides;
 
   constructor() {
     super("world");
@@ -298,6 +302,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.net = this.createNet();
     this.seatReq = { sit: (id) => this.net.sit(id), stand: () => this.net.stand() };
+    new HauntHouseView(this, this.map.colliders, this.reduced); // 귀신의집 건물 (game/haunt)
     this.life = new VillageLife({
       scene: this,
       atlas: this.atlas,
@@ -962,6 +967,8 @@ export class WorldScene extends Phaser.Scene {
     const now = this.time.now;
     const occupied = this.net.online ? this.seats : EMPTY_SEATS;
     const mySid = this.net.online ? this.net.mySid : null;
+    // 놀이기구 2: 관람차가 돌거나 열기구가 떠 있는 동안 X·E·스페이스는 두 번 눌러 내리기 (SkyRides)
+    if (this.sky.onAction(a)) return;
     if (a === "jump") {
       pl.jump(now, this.seatReq);
       return;
@@ -1103,6 +1110,11 @@ export class WorldScene extends Phaser.Scene {
         break;
       case "carousel":
         this.rides.useCarousel(o);
+        break;
+      // 놀이기구 2: 관람차(맨 아래로 내려온 칸의 빈자리)·열기구(출발장에 내려와 있는 기구의 빈자리)
+      case "ferris":
+      case "balloon":
+        this.sky.use(o);
         break;
       case "wish":
         pl.faceTo(o.x, o.y - 12, now);
@@ -1405,6 +1417,8 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
+    // 놀이기구 2: 하늘 시점이면 월드 카메라를 보이는 땅 전체에 맞춘다 (rig.update는 그동안 멈춘다)
+    this.sky.preCamera(dt);
     this.rig.update(dt);
     // 모닥불 좌석에 앉으면 불멍 구도 (카메라·레터박스), 일어나면 원래대로. 불 타는 소리는 거리에 따라
     const fire = pl.state === "sitChair" && pl.seat ? campfireOfSeat(pl.seat.id) : null;
@@ -1423,6 +1437,7 @@ export class WorldScene extends Phaser.Scene {
     const view = this.rig.frameView(this.view);
     this.rides.prepare();
     this.boats.prepare();
+    this.sky.prepare();
     this.expr.update(now);
     if (!this.awayScene) this.meScreen.update(pl.x, pl.y);
     pl.view.sync(now, s);
@@ -1459,6 +1474,7 @@ export class WorldScene extends Phaser.Scene {
     }
     this.boats.update(dt);
     this.rides.update();
+    this.sky.update(dt);
 
     this.declutterLabels(now, pnow);
     this.updateNear();
@@ -1490,17 +1506,19 @@ export class WorldScene extends Phaser.Scene {
       .setScale((r * 1.6) / 64)
       .setAlpha((0.05 + 0.13 * L.glow) * (lantern ? 1.5 : 1) * Math.min(1, L.darkness * 3));
     // 큰 폭죽(대형·피날레)이 터지는 동안은 화면 전체 어둠이 걷힌다
-    lit.begin(view, L.darkness * (1 - 0.6 * this.fireworks.lift));
+    lit.begin(view, L.darkness * (1 - 0.6 * this.fireworks.lift), L.shade);
     if (L.darkness > 0.004) {
       lit.add(pl.x, pl.y - 8, r, 0.92);
       for (const a of this.remotes.values()) {
         if (!a.visible) continue;
-        if (a.view.lantern) lit.add(a.x, a.y - 8, 40, 0.65);
-        else lit.add(a.x, a.y - 8, 22, 0.35);
+        // 다른 사람도 어둠 속에서 알아볼 수 있게 작은 빛
+        if (a.view.lantern) lit.add(a.x, a.y - 8, 40, 0.7);
+        else lit.add(a.x, a.y - 8, 26, 0.5);
       }
       const lr = 38 + 22 * L.glow;
-      for (const sp of this.map.staticLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.3, 0.55);
-      for (const sp of this.map.gridLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.3, 0.55);
+      // 가로등·모닥불·횃불·촛불: 깊은 밤에도 둘레가 또렷하게
+      for (const sp of this.map.staticLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.4, 0.85);
+      for (const sp of this.map.gridLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.4, 0.85);
       const vis = this.field.visibleViews;
       for (let i = 0; i < vis.length; i++) {
         const v = vis[i];
@@ -1512,6 +1530,7 @@ export class WorldScene extends Phaser.Scene {
       }
       this.fireworks.addLights(lit);
       this.life.addLights(lit);
+      this.sky.addLights(lit);
     }
     lit.end();
   }
@@ -1705,6 +1724,8 @@ export class WorldScene extends Phaser.Scene {
       h.text = pl.state === "swim" ? `${pre}잠수` : `${pre}떠오르기`;
       return h;
     }
+    // 관람차·열기구가 떠 있는 동안은 위 안내(sky:hud)가 대신한다
+    if (pl.rideLock) return null;
     if (pl.anchored) {
       h.x = pl.x;
       h.y = pl.y + 2;
@@ -1743,6 +1764,12 @@ export class WorldScene extends Phaser.Scene {
       } else if (o.obj.kind === "carousel" && this.rides.carouselFull(o.obj)) {
         h.text = "목마가 모두 찼어요";
         h.dim = true;
+      } else if (o.obj.kind === "ferris" || o.obj.kind === "balloon") {
+        const s = this.sky.hint(o.obj, pre);
+        if (s) {
+          h.text = s.text;
+          h.dim = s.dim;
+        }
       }
       return h;
     }
@@ -1778,6 +1805,20 @@ export class WorldScene extends Phaser.Scene {
     };
     this.rides = new PlazaRides(host);
     this.boats = new BoatRide(host);
+    // 놀이기구 2: 카메라·날씨는 이 뒤에 만들어지므로 그때그때 읽는다
+    const rig = () => this.rig;
+    const atmos = () => this.atmos;
+    this.sky = new SkyRides({
+      ...host,
+      get rig() {
+        return rig();
+      },
+      get atmos() {
+        return atmos();
+      },
+      move: () => this.move,
+      canvas: this.game.canvas,
+    });
   }
 
   /** 새로고침 복원: 조각배·시소·트램펄린·회전목마 (자리 판정은 welcome에서) */
@@ -1816,6 +1857,7 @@ export class WorldScene extends Phaser.Scene {
     this.houses = null;
     this.boats?.destroy();
     this.rides?.destroy();
+    this.sky?.destroy();
     this.rideSound?.destroy();
     this.expr?.destroy();
     this.life?.destroy();

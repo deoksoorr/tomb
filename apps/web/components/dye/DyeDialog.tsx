@@ -5,7 +5,8 @@ import { DIR, DYE_PART_NAMES, DYE_PARTS, type DyePart } from "@tomb/protocol";
 import { avatarColors, specDye, withDyePart } from "@/game/sprites/avatar";
 import { errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
-import { buildPalette, cellColor, cellOf, DYE_BOARD_H, DYE_BOARD_W, DYE_TIERS, DYE_TIME_MS, paletteRgba, type DyeTier } from "@/lib/dye/palette";
+import { colorLabel, swatchStyle } from "@/lib/dye/look";
+import { buildPalette, cellColor, cellOf, DYE_BOARD_H, DYE_BOARD_W, DYE_TIERS, DYE_TIME_MS, paletteRgba, specialLabel, wobbleLabel, type DyeTier } from "@/lib/dye/palette";
 import { DYE_DECIDE_MS, fixedAllows } from "@/lib/dye/rules";
 import type { DyeCandidate, DyeSessionView, DyeTimeoutResponse, StyleChangeResponse } from "@/lib/dye/types";
 import { applyStyle } from "../account/actions";
@@ -14,6 +15,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import { aimAt, clampView, minScale, toBoard, zoomAt, type BoardView } from "./board";
+import { drawSpots } from "./spots";
 import styles from "./DyeDialog.module.css";
 
 // 46번 염색 창. 무작위 염색권: 부위 고르기 → 60초 동안 무작위 팔레트(일부만 보이는 연속 색 공간)를 드래그·휠(핀치)로 뒤진다.
@@ -160,8 +162,8 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
               ) : (
                 <>
                   <p className={styles.result} role="status">
-                    <span className={styles.swatchBig} style={{ background: result.color }} aria-hidden="true" />
-                    {DYE_PART_NAMES[result.part]} 염색 완료 · {result.color}
+                    <span className={styles.swatchBig} style={swatchStyle(result.color)} aria-hidden="true" />
+                    {DYE_PART_NAMES[result.part]} 염색 완료 · {colorLabel(result.color)}
                   </p>
                   <p className={styles.note}>다른 사람 화면에도 바로 이 색으로 보여요. 원래 색으로 되돌리기는 상점의 염색·외형에서 할 수 있어요.</p>
                 </>
@@ -183,7 +185,7 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
                 {ticket?.name ?? "염색권"} ·{" "}
                 {ticket?.mode === "fixed"
                   ? "정해진 색으로 바로 염색해요."
-                  : `60초 안에 무작위 팔레트에서 색을 찾아요. 흔들림 ${ticket ? ["", "큼", "보통", "적음"][ticket.tier] : ""}.`}
+                  : `60초 안에 무작위 팔레트에서 색을 찾아요. 흔들림 ${ticket ? wobbleLabel(ticket.tier) : ""} · 특수 색 ${ticket ? specialLabel(ticket.tier) : ""}.`}
               </p>
               <div className={styles.parts} role="group" aria-label="염색할 부위">
                 {DYE_PARTS.map((p) => {
@@ -197,7 +199,7 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
                       disabled={!allowed(p) || phase === "sending"}
                       onClick={() => setPart(p)}
                     >
-                      <span className={styles.swatch} style={{ background: c ?? DEFAULT_SWATCH }} aria-hidden="true" />
+                      <span className={styles.swatch} style={c ? swatchStyle(c) : { background: DEFAULT_SWATCH }} aria-hidden="true" />
                       {DYE_PART_NAMES[p]}
                       {!c && <span className={styles.note}>기본</span>}
                     </button>
@@ -369,6 +371,8 @@ function DyeBoard({
         const left0 = w / 2 - v.cx * v.scale;
         const top0 = h / 2 - v.cy * v.scale;
         ctx.drawImage(sheet, left0, top0, DYE_BOARD_W * v.scale, DYE_BOARD_H * v.scale);
+        // 특수 색 무리 연출 (판에 숨은 희귀 색 — 금빛 광택·반짝이·무지개·야광)
+        drawSpots(ctx, palette, left0, top0, v.scale, w, h, now);
         // 흔들리는 조준점 (마우스 자리 또는 화면 가운데 + 흔들림)
         const a = aimNow(now);
         const ax = left0 + a.x * v.scale;
@@ -391,8 +395,12 @@ function DyeBoard({
         ctx.stroke();
         if (a.color !== lastLive) {
           lastLive = a.color;
-          if (liveRef.current) liveRef.current.style.background = a.color;
-          if (liveTextRef.current) liveTextRef.current.textContent = a.color;
+          if (liveRef.current) {
+            const st = swatchStyle(a.color);
+            liveRef.current.style.background = String(st.background ?? "");
+            liveRef.current.style.boxShadow = String(st.boxShadow ?? "");
+          }
+          if (liveTextRef.current) liveTextRef.current.textContent = colorLabel(a.color);
         }
         if (a.color !== shown && now - lastPreview > PREVIEW_MS) {
           lastPreview = now;
@@ -622,11 +630,11 @@ function LookCard({
         <span
           ref={swatchRef}
           className={styles.swatchBig}
-          style={live ? undefined : { background: color ?? DEFAULT_SWATCH }}
+          style={live ? undefined : color ? swatchStyle(color) : { background: DEFAULT_SWATCH }}
           aria-hidden="true"
         />
         <span ref={hexRef} className={styles.hex} data-testid={hexTestId}>
-          {color ?? (live ? "" : "기본")}
+          {color ? colorLabel(color) : live ? "" : "기본"}
         </span>
       </figcaption>
     </figure>

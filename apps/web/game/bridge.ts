@@ -75,7 +75,12 @@ export type GameEvents = {
   /** 카메라 상태. detached=true면 우클릭 드래그로 시점을 옮겨서 내 캐릭터를 따라가지 않는 중 (UI가 "내 캐릭터로" 버튼 표시) */
   "camera:state": { detached: boolean; zoom: number };
   /** 화면 연출 모드 (sticky). campfire = 모닥불에 앉아 카메라가 불멍 구도로 바뀐 상태 → UI는 HUD를 은은하게 줄인다 */
-  "view:mode": { mode: "normal" | "campfire" };
+  "view:mode": { mode: "normal" | "campfire" | "sky" };
+  /**
+   * 놀이기구 2 하늘 시점 안내 (sticky, null = 숨김). sky = 관람차·열기구 하늘 시점이라 UI가 HUD를 줄이고 이 안내를 띄운다.
+   * place = 지나가는 곳 이름(열기구), hint = 조작 안내, left = 내릴 때까지 남은 초
+   */
+  "sky:hud": { kind: "ferris" | "balloon"; title: string; place: string | null; hint: string; left: number; sky: boolean } | null;
   /** 대기열 순번 (sticky) */
   "queue:status": QueueStatus;
   /** 상점 맵 안에서 주인장과 상호작용 → UI가 상점 창을 연다 */
@@ -84,7 +89,7 @@ export type GameEvents = {
    * 월드의 특별한 장소와 상호작용: 사냥터 입구 / 분양 사무소(하우징) / 성황당 → UI가 해당 창을 연다.
    * 주거 구역(메인 맵의 분양 마을): 집 문이면 houseId(그 집으로 들어가기), 빈 필지 팻말이면 lot(그 번지로 분양 문의)
    */
-  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish"; houseId?: string; lot?: number };
+  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt"; houseId?: string; lot?: number };
   /** 22번 황금 고블린을 내가 가장 먼저 잡았다 → UI가 증서로 /api/goblin에 보상을 받는다 */
   "goblin:grant": { id: string; grant: string; points: number };
   /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
@@ -121,6 +126,10 @@ export type GameEvents = {
   "rpg:hud": RpgHud;
   /** 판이 끝남 (시간 끝·전멸·클리어·포기). UI가 결과를 서버로 보내고 결과 창을 연다. 월드는 이미 다시 보인다 */
   "rpg:ended": { result: RunResult; aborted: boolean };
+  /** 귀신의집 미로 진행 (초당 4번): 걸린 시간·놀란 횟수 (game/haunt → components/haunt) */
+  "haunt:hud": { ms: number; scares: number };
+  /** 귀신의집이 끝남 (출구로 빠져나옴 = escaped, 아니면 중간에 나감). 월드는 이미 다시 보인다 */
+  "haunt:ended": { escaped: boolean; ms: number; scares: number };
 
   /** F17 미니맵: 내 위치와 같은 채널 사람들 위치 [x0, y0, x1, y1, …] (월드에 있는 동안 0.25초마다) */
   "minimap:dots": { me: { x: number; y: number }; others: number[] };
@@ -256,6 +265,14 @@ export type UiEvents = {
   /** 함께 사냥: 정해진 문장 말풍선 (PHRASES id) — 내 머리 위에 띄우고 같은 방에 보낸다 */
   "rpg:say": { id: string };
 
+  // ── 귀신의집 ── (game/haunt, components/haunt)
+  /** 미로 시작 (들어갈 때마다 새 시드). 월드는 어두워진 뒤 숨는다 (연결 유지, 내 아바타는 문 앞에 멈춤) */
+  "haunt:play": { seed: number };
+  /** 중간에 나가기 → haunt:ended(escaped=false) */
+  "haunt:quit": undefined;
+  /** 모바일 가상 조이스틱 -1..1 */
+  "haunt:joystick": { x: number; y: number };
+
   // ── 낚시·채집 (4·32번) ──
   /** 지금 나에게 피어 있는 채집 지점 id (sticky). 게임이 그 지점만 그리고 상호작용을 붙인다 */
   "forage:nodes": { ids: string[] };
@@ -306,6 +323,7 @@ const STICKY = new Set<keyof AllEvents>([
   "audio:mix",
   "ride:state",
   "ui:radial",
+  "sky:hud",
 ]);
 
 class Bridge {

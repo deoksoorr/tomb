@@ -159,9 +159,9 @@ export type PotionDef = {
 };
 
 export const POTIONS: readonly PotionDef[] = [
-  { id: "p_coffee", name: "커피", desc: "HP 150 회복", price: 8, hp: 150, key: "Q", art: { shape: "cup", main: 0x6a4a30, accent: 0xe8d9b0 } },
-  { id: "p_energy", name: "에너지드링크", desc: "SP 60 회복", price: 10, sp: 60, key: "E", art: { shape: "can", main: 0x3c8ac8, accent: 0xf0f0f0 } },
-  { id: "p_lunchbox", name: "야근 도시락", desc: "HP 400·SP 120 회복", price: 30, hp: 400, sp: 120, key: "R", art: { shape: "box", main: 0xc85a3c, accent: 0xf2ead3 } },
+  { id: "p_coffee", name: "커피", desc: "HP 150 회복 · 독·화상·출혈 풀기", price: 8, hp: 150, key: "Q", art: { shape: "cup", main: 0x6a4a30, accent: 0xe8d9b0 } },
+  { id: "p_energy", name: "에너지드링크", desc: "SP 60 회복 · 둔화·빙결·혼란·침묵 풀기", price: 10, sp: 60, key: "E", art: { shape: "can", main: 0x3c8ac8, accent: 0xf0f0f0 } },
+  { id: "p_lunchbox", name: "야근 도시락", desc: "HP 400·SP 120 회복 · 상태 이상 모두 풀기", price: 30, hp: 400, sp: 120, key: "R", art: { shape: "box", main: 0xc85a3c, accent: 0xf2ead3 } },
   { id: "p_cookie", name: "부활 쿠키", desc: "쓰러지면 자동으로 먹고 HP 50%로 일어나요 (한 판에 1번)", price: 60, revive: true, art: { shape: "cookie", main: 0xc89a5a, accent: 0x5a3e22 } },
 ];
 
@@ -478,7 +478,7 @@ export type DifficultyDef = {
    * 드롭 확률 (굴림 1번당). 43번에서 0.15~0.3 → 0.08~0.15, 11/12에 다시 절반쯤(0.04~0.07): 장비·포션이 너무 잘 나왔다
    */
   dropChance: number;
-  /** 우두머리를 잡고 다 깼을 때 장비 확률 (11/12: 예전엔 확정) */
+  /** 우두머리를 잡고 다 깼을 때 장비 확률 (11/12: 예전엔 확정, 0.3~0.2 → 이번에 절반: 0.15~0.1) */
   bossDropChance: number;
   /** 다 깼을 때 기간제 코디(캐릭터 꾸미기 하루권)가 나올 확률 — 아주 가끔. 서버가 계정 가방에 넣는다 */
   cosmeticChance: number;
@@ -487,10 +487,10 @@ export type DifficultyDef = {
 };
 
 export const DIFFS: Record<Difficulty, DifficultyDef> = {
-  easy: { id: "easy", name: "쉬움", recLevel: 1, monsterLevel: 3, hpMul: 1, atkMul: 1, defMul: 1, expMul: 1, huntPoints: 20, miniPoints: 12, miniExp: 40, dropChance: 0.04, bossDropChance: 0.3, cosmeticChance: 0.006, dropMaxLevel: 8 },
-  normal: { id: "normal", name: "보통", recLevel: 8, monsterLevel: 12, hpMul: 2.6, atkMul: 2.3, defMul: 2.5, expMul: 2.6, huntPoints: 35, miniPoints: 20, miniExp: 90, dropChance: 0.05, bossDropChance: 0.27, cosmeticChance: 0.009, dropMaxLevel: 18 },
-  hard: { id: "hard", name: "어려움", recLevel: 18, monsterLevel: 24, hpMul: 6, atkMul: 4.6, defMul: 5, expMul: 5.5, huntPoints: 55, miniPoints: 30, miniExp: 180, dropChance: 0.06, bossDropChance: 0.24, cosmeticChance: 0.012, dropMaxLevel: 30 },
-  hell: { id: "hell", name: "지옥", recLevel: 30, monsterLevel: 38, hpMul: 13, atkMul: 8.5, defMul: 9, expMul: 11, huntPoints: 80, miniPoints: 45, miniExp: 320, dropChance: 0.07, bossDropChance: 0.2, cosmeticChance: 0.015, dropMaxLevel: 50 },
+  easy: { id: "easy", name: "쉬움", recLevel: 1, monsterLevel: 3, hpMul: 1, atkMul: 1, defMul: 1, expMul: 1, huntPoints: 20, miniPoints: 12, miniExp: 40, dropChance: 0.04, bossDropChance: 0.15, cosmeticChance: 0.006, dropMaxLevel: 8 },
+  normal: { id: "normal", name: "보통", recLevel: 8, monsterLevel: 12, hpMul: 2.6, atkMul: 2.3, defMul: 2.5, expMul: 2.6, huntPoints: 35, miniPoints: 20, miniExp: 90, dropChance: 0.05, bossDropChance: 0.135, cosmeticChance: 0.009, dropMaxLevel: 18 },
+  hard: { id: "hard", name: "어려움", recLevel: 18, monsterLevel: 24, hpMul: 6, atkMul: 4.6, defMul: 5, expMul: 5.5, huntPoints: 55, miniPoints: 30, miniExp: 180, dropChance: 0.06, bossDropChance: 0.12, cosmeticChance: 0.012, dropMaxLevel: 30 },
+  hell: { id: "hell", name: "지옥", recLevel: 30, monsterLevel: 38, hpMul: 13, atkMul: 8.5, defMul: 9, expMul: 11, huntPoints: 80, miniPoints: 45, miniExp: 320, dropChance: 0.07, bossDropChance: 0.1, cosmeticChance: 0.015, dropMaxLevel: 50 },
 };
 
 // ── 몬스터 ──

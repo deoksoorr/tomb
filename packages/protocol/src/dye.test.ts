@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  DYE_SPECIAL_NAMES,
+  DYE_SPECIALS,
+  dyeHex,
+  dyeSpecialOf,
   hasDye,
+  isDyeColor,
+  normalizeDyeColor,
+  withDyeSpecial,
   isPermanentUntil,
   ITEMS,
   itemById,
@@ -24,6 +31,28 @@ describe("46번 염색 형식", () => {
     expect(unpackDye("zzzzzz.112233")).toEqual({ body: "#112233" });
     expect(hasDye({})).toBe(false);
     expect(hasDye({ body: "#000000" })).toBe(true);
+  });
+  it("특수 색은 \"#rrggbb~종류\"로 왕복하고, 모르는 종류 글자는 바탕 색만 쓴다", () => {
+    expect(isDyeColor("#e8b84a~g")).toBe(true);
+    expect(isDyeColor("#e8b84a~")).toBe(false);
+    expect(isDyeColor("#e8b84a~gg")).toBe(false);
+    expect(isDyeColor("#E8B84A~g")).toBe(false);
+    const d = { head: "#e8b84a~g", body: "#112233", accent: "#ff00aa~r" };
+    expect(packDye(d)).toBe("e8b84a~g.112233.ff00aa~r");
+    expect(unpackDye(packDye(d))).toEqual(d);
+    expect(sanitizeDye(d)).toEqual(d);
+    expect(dyeSpecialOf("#e8b84a~g")).toBe("g");
+    expect(dyeSpecialOf("#e8b84a~z")).toBeNull();
+    expect(dyeSpecialOf("#e8b84a")).toBeNull();
+    expect(dyeHex("#e8b84a~s")).toBe("#e8b84a");
+    expect(withDyeSpecial("#e8b84a", "n")).toBe("#e8b84a~n");
+    expect(withDyeSpecial("#e8b84a", null)).toBe("#e8b84a");
+    for (const k of DYE_SPECIALS) expect(DYE_SPECIAL_NAMES[k]).toBeTruthy();
+    // 관리자 고정 색 입력은 바탕 색만
+    expect(normalizeDyeColor("#e8b84a~g")).toBeNull();
+    // 옛 클라이언트의 검사(6자리 hex만)는 특수 부위를 버리고 기본 색으로 본다 — 나머지 부위는 그대로
+    const oldUnpack = (s: string) => Object.fromEntries(s.split(".").flatMap((v, i) => (/^[0-9a-f]{6}$/.test(v) ? [[["head", "body", "accent"][i], `#${v}`]] : [])));
+    expect(oldUnpack(packDye(d))).toEqual({ body: "#112233" });
   });
   it("틀린 색·모르는 부위는 버린다 (대문자·# 없는 값도 받지 않는다)", () => {
     expect(sanitizeDye({ head: "#AABBCC", body: "red", accent: "#123456", hat: "#ffffff" })).toEqual({ accent: "#123456" });
@@ -49,15 +78,16 @@ describe("46번 염색 형식", () => {
 });
 
 describe("46번 염색권·30번 영구 코디 카탈로그", () => {
-  it("무작위 염색권 세 등급, 비쌀수록 등급이 높다", () => {
+  it("무작위 염색권 여덟 종류, 값 순으로 놓이고 처음 세 등급은 비쌀수록 높다", () => {
     const dyes = ITEMS.filter((i) => i.kind === "dye");
-    expect(dyes.map((i) => i.dye)).toEqual([
-      { mode: "random", tier: 1 },
-      { mode: "random", tier: 2 },
-      { mode: "random", tier: 3 },
-    ]);
-    expect(dyes[0].price).toBeLessThan(dyes[1].price);
-    expect(dyes[1].price).toBeLessThan(dyes[2].price);
+    expect(dyes.map((i) => i.dye?.mode === "random" && i.dye.tier)).toEqual([1, 4, 5, 6, 2, 7, 3, 8]);
+    for (let i = 1; i < dyes.length; i++) expect(dyes[i].price).toBeGreaterThanOrEqual(dyes[i - 1].price);
+    const price = (t: number) => dyes.find((d) => d.dye?.mode === "random" && d.dye.tier === t)!.price;
+    expect(price(1)).toBeLessThan(price(2));
+    expect(price(2)).toBeLessThan(price(3));
+    // 경제 표: 450 ~ 1,800P 안
+    expect(Math.min(...dyes.map((d) => d.price))).toBe(450);
+    expect(Math.max(...dyes.map((d) => d.price))).toBeLessThanOrEqual(1800);
   });
   it("영구 가격은 기간제의 7배(10 단위), 꾸미기만", () => {
     const perm = (id: string) => Math.round((itemById(id)!.price * PERMANENT_MULTIPLIER) / 10) * 10;

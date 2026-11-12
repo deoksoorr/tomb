@@ -186,15 +186,29 @@ export type AmbienceOverride = { hour?: number; weather?: Weather; season?: Seas
 /** 계절 덮어쓰기를 그 계절의 대표 달로 */
 const SEASON_MONTH: Record<Season, number> = { spring: 4, summer: 7, autumn: 10, winter: 1 };
 
+/** 바깥 색 보정 7구간(새벽·아침·낮·노을·저녁·밤·깊은 밤) → 대표 KST 시각 (QA `?tod=`) */
+export const TOD_HOURS = {
+  dawn: 5.7,
+  morning: 8,
+  day: 12,
+  sunset: 18.1,
+  evening: 19.9,
+  night: 22,
+  deepnight: 2,
+} as const;
+
 /**
  * QA용 덮어쓰기: `?time=dawn|day|dusk|night|0~23` , `?weather=clear|cloudy|fog|rain|snow` , `?season=spring|summer|autumn|winter`
+ * `?tod=dawn|morning|day|sunset|evening|night|deepnight` 는 time 보다 먼저 본다 (바깥 7구간 색 확인용)
  */
 export function parseAmbienceOverride(search: string): AmbienceOverride {
   const q = new URLSearchParams(search);
   const out: AmbienceOverride = {};
+  const tod = q.get("tod");
   const t = q.get("time");
   const presetHour: Record<TimePhase, number> = { dawn: 6, day: 12, dusk: 18.5, night: 23 };
-  if (t && t in presetHour) out.hour = presetHour[t as TimePhase];
+  if (tod && Object.hasOwn(TOD_HOURS, tod)) out.hour = TOD_HOURS[tod as keyof typeof TOD_HOURS];
+  else if (t && t in presetHour) out.hour = presetHour[t as TimePhase];
   else if (t && /^\d{1,2}(\.\d+)?$/.test(t) && +t < 24) out.hour = +t;
   const w = q.get("weather");
   if (w && (WEATHERS as readonly string[]).includes(w)) out.weather = w as Weather;

@@ -43,6 +43,8 @@ import {
   GRAVEYARD_CAPACITY,
   inZoo,
   ZOOKEEPER,
+  FERRIS,
+  BALLOON_PAD,
   type Campfire,
   type Furniture,
   type GraveArea,
@@ -51,7 +53,9 @@ import { facadeInfo } from "../housing/art";
 import { fishZoneColliders, inFishZone } from "./fishZone";
 import { stargazeColliders, stargazeInteractables } from "./life/stargazeLayout";
 import { RIDE_KEEPOUT, rideColliders, rideInteractables, WISH_FOUNTAIN } from "./rides";
+import { SKY_KEEPOUT, skyColliders, skyInteractables } from "./skyMath";
 import { zooColliders, zooGround, ZOOKEEPER_SPOT } from "./zoo/zooLayout";
+import { HAUNT_HOUSE, hauntColliders, hauntInteractables } from "../haunt/hauntLayout";
 
 // 정적 맵 배치 (순수 데이터). 좌석·스폰·특별한 장소·강·연못·필지·묘역 좌표는 packages/protocol/src/world.ts가 원본이고,
 // 여기서는 그 사이를 채우는 나무·석등·오래된 묘비·철책·촛불·안개·종루·납골당 등 소품과 바닥 종류, 물(강·호수·연못), 물살, 충돌, 상호작용 대상을 정한다.
@@ -462,7 +466,6 @@ const HAND_PROPS: readonly PropDef[] = [
   P("lantern", 912, 628),
   P("pumpkin", 640, 612, 0),
   P("pumpkin", 652, 620, 1),
-  P("pumpkin", 800, 616, 1),
   P("leaves", 660, 560, 0),
   P("leaves", 780, 560, 1),
   P("flowers", 690, 612, 2),
@@ -575,6 +578,7 @@ function freeForProp(placed: readonly PropDef[], x: number, y: number, gap: numb
   for (const p of placed) if (Math.hypot(p.x - x, p.y - y) < (isTree(p.kind) ? gap : 12)) return false;
   for (const p of HAND_PROPS) if (Math.hypot(p.x - x, p.y - y) < (isTree(p.kind) || p.kind === "hammock" || p.kind === "swing" || p.kind === "crypt" || p.kind === "mat" || p.kind === "oldGrave" ? gap : 14)) return false;
   for (const k of RIDE_KEEPOUT) if (Math.hypot(k.x - x, k.y - y) < k.r) return false; // 50번 광장 놀거리 (rides.ts)
+  for (const k of SKY_KEEPOUT) if (Math.hypot(k.x - x, k.y - y) < k.r) return false; // 관람차·열기구 출발장 (skyRides.ts)
   for (const p of [SHOP, HOUSING_OFFICE, HUNT_SIGN, SHRINE, TELESCOPE, FERRY_DOCK, WISH_FOUNTAIN]) if (Math.hypot(p.x - x, p.y - y) < 44) return false;
   if (Math.hypot(HUNT_GATE.x - x, HUNT_GATE.y - y) < 50) return false;
   return true;
@@ -773,8 +777,10 @@ export function staticColliders(): Rect[] {
   out.push(...allDeckRails()); // F13 다리·나루터·잔교 난간
   out.push(...stargazeColliders()); // 22번 별 보기 언덕 망원경 (life/stargazeLayout.ts)
   out.push(...rideColliders()); // 50번 광장 놀거리 받침 (rides.ts)
+  out.push(...skyColliders()); // 관람차 다리·받침, 열기구 출발장 팻말 (skyRides.ts)
   out.push(...fishZoneColliders()); // 낚시터 아치 기둥·노점 마당 장식 (fishZone.ts)
   out.push(...zooColliders()); // 동물원 울타리·우리·노점·사육사 (zoo/zooLayout.ts)
+  out.push(...hauntColliders()); // 귀신의집 건물 몸체 (haunt/hauntLayout.ts)
   return out;
 }
 
@@ -971,8 +977,8 @@ export function groundKind(tx: number, ty: number): GroundKind {
 }
 
 // ── 상호작용 오브젝트 (E/탭) ── WorldScene이 가장 가까운 것을 골라 안내 문구를 띄우고 상호작용한다.
-export type InteractKind = "tree" | "swing" | "hammock" | "bell" | "well" | "water" | "portal" | "door" | "lot" | "dock" | "wish" | "seesaw" | "trampoline" | "carousel" | "telescope" | "mat" | "forage" | "zoo";
-export type PortalKind = "hunt" | "housing" | "shrine";
+export type InteractKind = "tree" | "swing" | "hammock" | "bell" | "well" | "water" | "portal" | "door" | "lot" | "dock" | "wish" | "seesaw" | "trampoline" | "carousel" | "telescope" | "mat" | "forage" | "zoo" | "ferris" | "balloon";
+export type PortalKind = "hunt" | "housing" | "shrine" | "haunt";
 export type Interactable = {
   id: string;
   kind: InteractKind;
@@ -1038,6 +1044,8 @@ export function interactables(): Interactable[] {
     }
     out.push(...stargazeInteractables()); // 22번 망원경 (life/stargazeLayout.ts)
     out.push(...rideInteractables()); // 50번 소원 분수·시소·트램펄린·회전목마 (rides.ts)
+    out.push(...skyInteractables()); // 관람차·열기구 (skyRides.ts)
+    out.push(...hauntInteractables()); // 귀신의집 문 (haunt/hauntLayout.ts)
     fixedItems = out;
   }
   return fixedItems.slice();
@@ -1064,7 +1072,7 @@ export function bridgeAt(x: number, y: number): boolean {
 }
 
 /** 미니맵·안내용 주요 장소 (F17) */
-export type Landmark = { id: string; label: string; x: number; y: number; kind: "fire" | "grave" | "shop" | "hunt" | "housing" | "shrine" | "dock" | "telescope" | "wish" | "bell" | "fish" | "zoo" };
+export type Landmark = { id: string; label: string; x: number; y: number; kind: "fire" | "grave" | "shop" | "hunt" | "housing" | "shrine" | "dock" | "telescope" | "wish" | "bell" | "fish" | "zoo" | "haunt" | "ferris" | "balloon" };
 export const LANDMARKS: readonly Landmark[] = [
   { id: "fire", label: "큰 모닥불", x: PLAZA_FIRE.x, y: PLAZA_FIRE.y, kind: "fire" },
   ...GRAVE_AREAS.map((a) => ({ id: `grave${a.id}`, label: a.name, x: a.aisleX, y: a.y0 + a.dy / 2, kind: "grave" as const })),
@@ -1077,4 +1085,7 @@ export const LANDMARKS: readonly Landmark[] = [
   { id: "zoo", label: "동물원", x: ZOOKEEPER.x - 16, y: ZOOKEEPER.y + 40, kind: "zoo" },
   { id: "telescope", label: "망원경", x: TELESCOPE.x, y: TELESCOPE.y, kind: "telescope" },
   { id: "wish", label: "소원 분수", x: WISH_FOUNTAIN.x, y: WISH_FOUNTAIN.y, kind: "wish" },
+  { id: "haunt", label: "귀신의집", x: HAUNT_HOUSE.x, y: HAUNT_HOUSE.y - 8, kind: "haunt" },
+  { id: "ferris", label: "관람차", x: FERRIS.x, y: FERRIS.y - 30, kind: "ferris" },
+  { id: "balloon", label: "열기구 타는 곳", x: BALLOON_PAD.x, y: BALLOON_PAD.y - 4, kind: "balloon" },
 ];

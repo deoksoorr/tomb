@@ -1,0 +1,75 @@
+/* 귀신의집: 미로 동안의 작은 HUD(어둠을 해치지 않게 흐리게), 입장 경고, 결과 */
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 0;
+}
+
+.stat {
+  padding: 4px 8px;
+  background: rgba(8, 7, 10, 0.55);
+  color: rgba(232, 226, 212, 0.7);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat strong {
+  color: rgba(224, 195, 106, 0.85);
+  font-weight: normal;
+}
+
+.quit {
+  pointer-events: auto;
+  opacity: 0.8;
+}
+
+.hint {
+  justify-self: center;
+  margin: 0 12px;
+  padding: 6px 12px;
+  background: rgba(8, 7, 10, 0.6);
+  color: rgba(232, 226, 212, 0.8);
+  font-size: 12px;
+  text-align: center;
+}
+
+.warn {
+  padding: 10px 12px;
+  background: rgba(120, 20, 20, 0.18);
+  box-shadow: 0 0 0 1px rgba(208, 138, 118, 0.6);
+  color: var(--bone);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: left;
+}
+
+.warn strong {
+  margin-right: 6px;
+  color: var(--danger);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.stats div {
+  padding: 8px 4px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.stats strong {
+  display: block;
+  color: var(--candle);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.record {
+  color: var(--candle);
+}

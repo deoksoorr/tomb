@@ -28,6 +28,7 @@ export class Lighting {
   private n = 0;
   private view = new Phaser.Geom.Rectangle();
   private darkness = 0;
+  private color = DARK;
 
   constructor(private readonly scene: Phaser.Scene) {
     for (const d of BRUSHES) {
@@ -63,10 +64,11 @@ export class Lighting {
     this.rt = this.makeRT();
   }
 
-  /** 프레임 시작: 화면(월드 좌표)과 어둠 세기 */
-  begin(view: Phaser.Geom.Rectangle, darkness: number): void {
+  /** 프레임 시작: 화면(월드 좌표)과 어둠 세기·색 (바깥은 시간대별 남색·보라 어둠, 실내는 기본색) */
+  begin(view: Phaser.Geom.Rectangle, darkness: number, color: number = DARK): void {
     this.view.setTo(view.x, view.y, view.width, view.height);
     this.darkness = darkness;
+    this.color = color;
     this.n = 0;
   }
 
@@ -93,7 +95,7 @@ export class Lighting {
     rt.setVisible(true);
     rt.setPosition(cam.width / 2, cam.height / 2).setDisplaySize(cam.width / cam.zoom + 2, cam.height / cam.zoom + 2);
     rt.clear();
-    rt.fill(DARK, this.darkness);
+    rt.fill(this.color, this.darkness);
     if (!this.n) return;
     const v = this.view;
     const kx = this.rtW / v.width;

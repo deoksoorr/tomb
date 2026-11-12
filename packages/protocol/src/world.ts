@@ -425,6 +425,81 @@ export function boatSeatById(id: string): BoatSeat | undefined {
   return BOAT_SEATS.find((s) => s.id === id);
 }
 
+// ── 놀이기구 2: 관람차·열기구 ── 둘 다 정해진 1인 자리(서버 좌석)만 쓰고, 움직임은 서버 시계로 모두에게 같게 그린다 (네트워크 추가 없음).
+// 서버 위치는 앵커(타는 곳) 그대로다 — 그림(칸·기구 위치)은 클라이언트가 시계로 계산한다 (game/world/skyRides.ts).
+
+/**
+ * 관람차: 광장 남쪽 (큰 모닥불 아래, 다리로 가는 길과 시소 사이). 받침 가운데 = 바닥(발 위치).
+ * 칸 FERRIS_CARS개 × 칸마다 2자리. 앵커 = 받침 앞 타는 곳에 한 줄로 (자리마다 x가 다르다 — 내리면 그 자리에 선다).
+ * 칸 c는 서버 시계 t에 각도 2π·(c/칸 수 + t/FERRIS_PERIOD_MS)에 있다 (각 0 = 맨 아래 타는 곳)
+ */
+export const FERRIS = { x: 788, y: 628 } as const;
+export const FERRIS_CARS = 6;
+export const FERRIS_CAR_SEATS = 2;
+/** 한 바퀴 시간 (탄 사람은 자기 칸이 한 바퀴 돌아 타는 곳으로 내려오면 내린다) */
+export const FERRIS_PERIOD_MS = 48_000;
+export type FerrisSeat = { id: string; car: number; index: 0 | 1; x: number; y: number };
+/** 관람차 자리 전부 (칸 c의 왼쪽 자리 index 0, 오른쪽 1). id = spotSeatId("ferris", x, y) — 예 "w_777_638" */
+export const FERRIS_SEATS: readonly FerrisSeat[] = Array.from({ length: FERRIS_CARS * FERRIS_CAR_SEATS }, (_, i) => {
+  const x = FERRIS.x - 11 + i * 2;
+  const y = FERRIS.y + 10;
+  return { id: `w_${x}_${y}`, car: Math.floor(i / FERRIS_CAR_SEATS), index: (i % FERRIS_CAR_SEATS) as 0 | 1, x, y };
+});
+
+/**
+ * 열기구: 별 보기 언덕 위 출발장 (마을 북서쪽 끝). 기구 BALLOON_COUNT대가 출발장 하나를 번갈아 쓴다 — 운항 시간표(서버 시계):
+ * 기구 b는 주기 BALLOON_CYCLE_MS마다 BALLOON_BOARD_MS 동안 출발장에서 태우고, BALLOON_FLIGHT_MS 동안 정해진 항로를 날아 돌아온다.
+ * 두 대는 반 주기 어긋나 있어 출발장에서 오래 기다리지 않는다. 자리 = 기구마다 BALLOON_SEATS_EACH개, 앵커는 바구니 앞 (내리면 선다)
+ */
+export const BALLOON_PAD = { x: 200, y: 100 } as const;
+export const BALLOON_COUNT = 2;
+export const BALLOON_SEATS_EACH = 4;
+export const BALLOON_BOARD_MS = 30_000;
+export const BALLOON_FLIGHT_MS = 110_000;
+export const BALLOON_CYCLE_MS = BALLOON_BOARD_MS + BALLOON_FLIGHT_MS;
+/** 서버가 탑승을 받는 여유: 출발 시각 뒤 이만큼까지 (시계 차이·지연) */
+export const BALLOON_BOARD_GRACE_MS = 1_500;
+export type BalloonSeat = { id: string; balloon: number; index: number; x: number; y: number };
+/** 열기구 자리 전부 (기구 b, 자리 k). 앵커는 기구마다 한 줄씩 (b = 0 위 줄, 1 아래 줄) */
+export const BALLOON_SEATS: readonly BalloonSeat[] = Array.from({ length: BALLOON_COUNT * BALLOON_SEATS_EACH }, (_, i) => {
+  const balloon = Math.floor(i / BALLOON_SEATS_EACH);
+  const index = i % BALLOON_SEATS_EACH;
+  const x = BALLOON_PAD.x - 6 + index * 4 + balloon;
+  const y = BALLOON_PAD.y + 9 + balloon * 3;
+  return { id: `o_${x}_${y}`, balloon, index, x, y };
+});
+export type BalloonPhase = {
+  /** board = 출발장에서 태우는 중, fly = 비행 중 */
+  phase: "board" | "fly";
+  /** 이번 단계가 시작된 뒤 흐른 시간 (ms) */
+  ms: number;
+  /** 이번 주기가 시작된 시각 (= 태우기 시작) */
+  start: number;
+  /** 이번 주기의 이륙 시각 */
+  departAt: number;
+};
+/** 기구 b의 운항 상태 (t = 서버 시계 ms) */
+export function balloonPhase(b: number, t: number): BalloonPhase {
+  const off = (b * BALLOON_CYCLE_MS) / BALLOON_COUNT;
+  const k = Math.floor((t - off) / BALLOON_CYCLE_MS);
+  const start = off + k * BALLOON_CYCLE_MS;
+  const u = t - start;
+  const departAt = start + BALLOON_BOARD_MS;
+  return u < BALLOON_BOARD_MS ? { phase: "board", ms: u, start, departAt } : { phase: "fly", ms: u - BALLOON_BOARD_MS, start, departAt };
+}
+/** 지금 기구 b에 탈 수 있는지 (출발장에 있다). grace = 이륙 뒤에도 받아 주는 여유 (서버) */
+export function balloonBoarding(b: number, t: number, grace = 0): boolean {
+  const p = balloonPhase(b, t);
+  return p.phase === "board" || p.ms < grace;
+}
+/** 이 좌석 id의 관람차·열기구 자리 */
+export function ferrisSeatById(id: string): FerrisSeat | undefined {
+  return FERRIS_SEATS.find((s) => s.id === id);
+}
+export function balloonSeatById(id: string): BalloonSeat | undefined {
+  return BALLOON_SEATS.find((s) => s.id === id);
+}
+
 // ── 별 보기 언덕 ── 북서쪽 구석의 높은 대지 (F3). 남쪽은 두 칸 높이 절벽, 동쪽은 바위 비탈이고 계단(HILL_STAIRS)으로만 오른다.
 // 계단은 옛 묘역 북문과 줄을 맞춘다 (언덕 위에서 묘역을 내려다본다)
 export const HILL = { x: 32, y: 32, w: 336, h: 208 } as const;
@@ -609,6 +684,8 @@ export type SpotKind =
   | "telescope"
   | "mat"
   | "fish"
+  | "ferris"
+  | "balloon"
   // 3번 집 안 가구 (indoor: 방(집) 서버에서만 받는다)
   | "chair"
   | "bed"
@@ -654,6 +731,11 @@ export const SPOT_KINDS: Readonly<Record<SpotKind, SpotKindDef>> = {
   // ── 4번 낚시 ── 물가에 앉아 낚싯대를 드리운다 (바닥 앉기와 같은 상태라 shared). 정해진 자리(FISHING_SPOTS)만
   /** 낚시 자리 (앵커 = 앉는 발 위치, 방향은 자리마다 물 쪽) */
   fish: { code: "f", state: STATE.sitGround, facing: DIR.down, shared: true, fixed: true },
+  // ── 놀이기구 2 ── 정해진 자리(FERRIS_SEATS·BALLOON_SEATS)만. 앵커는 타는 곳이고 칸·기구 위치는 클라이언트가 시계로 그린다
+  /** 관람차 칸 자리 (앵커 = 받침 앞 타는 곳) */
+  ferris: { code: "w", state: STATE.ferris, facing: DIR.down, fixed: true },
+  /** 열기구 바구니 자리 (앵커 = 출발장 바구니 앞). 비행 중 탑승은 서버가 거절한다 (balloonBoarding) */
+  balloon: { code: "o", state: STATE.balloon, facing: DIR.down, fixed: true },
   // ── 3번 집 안 가구 ── 앵커 = 집 씬 좌표의 발 위치(가구 배치에서 계산, game/housing/interact.ts). 집마다 배치가 달라 형식만 본다
   /** 의자·소파·책상·피아노 의자에 앉기 (의자와 같은 sitChair라 shared — sit 요청으로만) */
   chair: { code: "c", state: STATE.sitChair, facing: DIR.down, shared: true, indoor: true },
@@ -713,6 +795,9 @@ for (const b of BOAT_SEATS) {
   seatSlots.set(b.id, { id: b.id, kind: "boat", x: b.x, y: b.y, facing: b.facing, state: k.state, furnitureId: b.boatId, mobile: true, radius: k.radius });
 }
 for (const f of FISHING_SPOTS) seatSlots.set(f.id, { id: f.id, kind: "fish", x: f.x, y: f.y, facing: f.facing, state: SPOT_KINDS.fish.state, furnitureId: null });
+// 같은 칸·같은 기구 안에서는 옮겨 앉기(furnitureId가 같다)
+for (const w of FERRIS_SEATS) seatSlots.set(w.id, { id: w.id, kind: "ferris", x: w.x, y: w.y, facing: DIR.down, state: STATE.ferris, furnitureId: `ferris${w.car}` });
+for (const o of BALLOON_SEATS) seatSlots.set(o.id, { id: o.id, kind: "balloon", x: o.x, y: o.y, facing: DIR.down, state: STATE.balloon, furnitureId: `balloon${o.balloon}` });
 
 /** id → 자리 (의자·벤치 좌석 또는 형식이 맞는 소품 자리). 모르는 id면 undefined */
 export function seatSlot(id: string): SeatSlot | undefined {

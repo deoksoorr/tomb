@@ -377,7 +377,7 @@ export class VillageScene extends Phaser.Scene {
       .setPosition(this.player.x, this.player.y - 9)
       .setScale((r * 1.6) / 64)
       .setAlpha((0.05 + 0.13 * L.glow) * Math.min(1, L.darkness * 3));
-    this.lighting.begin(this.view, L.darkness);
+    this.lighting.begin(this.view, L.darkness, L.shade);
     if (L.darkness > 0.004) {
       this.lighting.add(this.player.x, this.player.y - 8, r, 0.92);
       for (const l of this.glow) this.lighting.add(l.x, l.y, l.r * 1.8, 0.8);

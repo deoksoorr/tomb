@@ -60,7 +60,9 @@ import ForageLayer from "@/components/forage/ForageLayer";
 import RideButton from "@/components/zoo/RideButton";
 import ZooLayer from "@/components/zoo/ZooLayer";
 import WishDialog from "@/components/plaza/WishDialog";
+import SkyHud from "@/components/sky/SkyHud";
 import Telescope from "@/components/rpg/Telescope";
+import HauntDialog from "@/components/haunt/HauntDialog";
 import GoblinClaim from "./GoblinClaim";
 // 10·11·23번: 출석 달력 · 선물함 · 확성기
 import CalendarDialog from "../account/CalendarDialog";
@@ -154,7 +156,8 @@ type Panel =
   | "activity"
   | "passed"
   | "calendar"
-  | "gifts";
+  | "gifts"
+  | "haunt";
 
 /** 다른 담당이 만드는 장소 창 (사냥터·분양 사무소). 컴포넌트가 들어오기 전까지 자리만 */
 type Props = {
@@ -220,7 +223,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     if (status === "unreachable") showToast("길을 찾지 못했어요. 조금 움직인 뒤 다시 눌러 주세요.");
   });
   // 불멍(모닥불) 중에는 HUD를 은은하게
-  const campfire = useBridgeValue("view:mode")?.mode === "campfire";
+  // 불멍·놀이기구 하늘 시점(관람차·열기구)에서는 HUD를 은은하게 줄인다
+  const viewMode = useBridgeValue("view:mode")?.mode;
+  const campfire = viewMode === "campfire" || viewMode === "sky";
   // 첫 방문 안내: 계정이 아직 안 봤으면 저절로, 안내(ⓘ)에서 다시 보기
   const [tutorialOn, setTutorialOn] = useState<boolean | null>(null);
   const showTutorial = ready && !away && (tutorialOn ?? (me ? !me.tutorialDone : false));
@@ -389,6 +394,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {/* 4·32·51번 낚시·채집·판매·도감 (자기 창·HUD를 스스로 연다) */}
       {ready && <ForageLayer />}
       {ready && <ZooLayer />}
+      {/* 놀이기구 2: 관람차·열기구 안내 (지나가는 곳·남은 시간) */}
+      {ready && <SkyHud />}
 
       {ready && (
         <div className={cx(styles.overlay, away && styles.away, campfire && styles.campfire)}>
@@ -637,6 +644,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       {panel === "wish" && <WishDialog onClose={closePanel} />}
       {panel === "telescope" && <Telescope onClose={closePanel} />}
+      {panel === "haunt" && <HauntDialog onClose={closePanel} />}
       <GoblinClaim />
       {panel === "calendar" && <CalendarDialog onClose={closePanel} />}
       {panel === "gifts" && <GiftsDialog onClose={closePanel} onOpenCalendar={() => setPanel("calendar")} />}

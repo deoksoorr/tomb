@@ -59,6 +59,8 @@ export class CameraRig {
   /** 14번 연출 확대 배율 (지금 값·목표) */
   private accent = 1;
   private accentGoal = 1;
+  /** 놀이기구 하늘 시점: 이 맵 사각형을 화면에 꽉 차게 그린다 (SkyRides → SkyView가 그 화면을 땅바닥 판으로 쓴다) */
+  private air: { x: number; y: number; w: number; h: number } | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -174,6 +176,44 @@ export class CameraRig {
     this.emitState();
   }
 
+  /**
+   * 놀이기구 하늘 시점: 이 맵 사각형이 화면에 꽉 차게 바로 맞춘다 (추적·카메라 경계·휠·드래그를 멈춘다). 매 프레임 불러도 된다.
+   * null이면 원래 줌으로 캐릭터를 바로 다시 따라간다
+   */
+  aerial(rect: { x: number; y: number; w: number; h: number } | null): void {
+    const cam = this.cam;
+    if (rect) {
+      if (!this.air) {
+        cam.stopFollow();
+        this.following = false;
+        this.returning = false;
+        this.panGoal = null;
+        this.rightDrag = null;
+        this.pinch = null;
+      }
+      this.air = rect;
+      const z = Math.max(0.25, Math.min(4, Math.min(cam.width / Math.max(1, rect.w), cam.height / Math.max(1, rect.h))));
+      cam.useBounds = false;
+      cam.setZoom(z);
+      cam.centerOn(rect.x + rect.w / 2, rect.y + rect.h / 2);
+      return;
+    }
+    if (!this.air) return;
+    this.air = null;
+    cam.setZoom(this.zoom * this.accent);
+    this.applyBounds();
+    cam.startFollow(this.follow, true, CAMERA_LERP, CAMERA_LERP, 0, CAMERA_FOLLOW_OFFSET_Y);
+    cam.centerOn(this.follow.x, this.follow.y - CAMERA_FOLLOW_OFFSET_Y);
+    this.following = true;
+    this.detached = false;
+    this.emitState();
+  }
+
+  /** 하늘 시점 중인지 */
+  get inAerial(): boolean {
+    return this.air !== null;
+  }
+
   /** 14번: 물속·그네에서 살짝 확대 (1 = 원래대로). 매 프레임 불러도 된다 */
   setAccent(k: number): void {
     this.accentGoal = Number.isFinite(k) ? Math.max(1, Math.min(1.3, k)) : 1;
@@ -186,6 +226,7 @@ export class CameraRig {
 
   update(dt: number): void {
     const cam = this.cam;
+    if (this.air) return;
     if (this.zoom !== this.target && !this.pinch) {
       const slow = this.cine !== null || this.leavingCine;
       this.zoom = approach(this.zoom, this.target, dt, slow ? CINE_ZOOM_TAU_MS : ZOOM_TAU_MS);
@@ -233,6 +274,11 @@ export class CameraRig {
    */
   frameView(out: Phaser.Geom.Rectangle): Phaser.Geom.Rectangle {
     const cam = this.cam;
+    if (this.air) {
+      const dw = cam.width / cam.zoom;
+      const dh = cam.height / cam.zoom;
+      return out.setTo(cam.scrollX + cam.width / 2 - dw / 2, cam.scrollY + cam.height / 2 - dh / 2, dw, dh);
+    }
     let sx = cam.scrollX;
     let sy = cam.scrollY;
     if (this.following) {
@@ -299,7 +345,7 @@ export class CameraRig {
   }
 
   private onDown(e: PointerEvent): void {
-    if (!this.enabled) return;
+    if (!this.enabled || this.air) return;
     // 불멍 구도 중엔 우클릭 드래그를 받지 않는다 (탭은 그대로)
     if (this.cine && e.pointerType === "mouse" && e.button !== 0) return;
     if (e.pointerType === "mouse") {
@@ -382,7 +428,7 @@ export class CameraRig {
 
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
-    if (!this.enabled || this.cine) return;
+    if (!this.enabled || this.cine || this.air) return;
     const now = performance.now();
     // 트랙패드는 작은 delta가 연달아 오므로 모아서 한 칸씩, 너무 빠르게 넘기지 않게 80ms 간격
     if (now - this.wheelLast > 250) this.wheelAcc = 0;

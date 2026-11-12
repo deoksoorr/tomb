@@ -573,6 +573,45 @@ button.hotSlot:disabled {
   color: var(--moss);
 }
 
+/* 몬스터가 건 상태 이상: HP 막대 바로 아래 (아이콘 + 이름 + 남은 초, 글자색은 상태 색) */
+.statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.statusChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px 1px 2px;
+  background: rgba(10, 11, 9, 0.7);
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 1px currentColor;
+}
+
+/* 끝나기 1초 전: 깜빡 */
+.statusEnding {
+  animation: statusBlink 0.24s steps(1) infinite alternate;
+}
+
+@keyframes statusBlink {
+  to {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .statusEnding {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+
 .hudBottom {
   position: absolute;
   left: var(--safe-left);
@@ -1506,6 +1545,14 @@ button.hotSlot:disabled {
   margin: 0 auto;
   image-rendering: pixelated;
   box-shadow: var(--px-border);
+}
+
+/* 안내서 쪽 안의 작은 제목 (예: 몬스터가 거는 상태 이상) */
+.guideSub {
+  margin-top: 4px;
+  color: var(--bone);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .guideLead {

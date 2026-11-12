@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  BALLOON_BOARD_GRACE_MS,
+  BALLOON_BOARD_MS,
+  BALLOON_CYCLE_MS,
+  BALLOON_FLIGHT_MS,
+  BALLOON_SEATS,
+  balloonBoarding,
+  balloonPhase,
+  balloonSeatById,
+  FERRIS_SEATS,
+  ferrisSeatById,
   GRAVE_AREAS,
   AVATAR_COLORS,
   CLOSE,
@@ -263,12 +273,55 @@ describe("1인 자리 (좌석 체계 공통)", () => {
     }
     expect(spotKindOfState(STATE.boat)).toBe("boat");
     // 새 상태 값은 바이너리로 오가고, 범위 밖은 여전히 거절
-    expect(STATE_NAMES.length).toBe(18);
+    expect(STATE_NAMES.length).toBe(20);
     expect(STATE_NAMES[STATE.carousel]).toBe("carousel");
     expect(isStateId(14)).toBe(true);
-    expect(isStateId(18)).toBe(false);
+    expect(isStateId(20)).toBe(false);
     const snap = decodeSnapshot(encodeSnapshot(1, [{ sid: 3, x: 1338, y: 868, state: STATE.boat, dir: DIR.right }]));
     expect(snap?.entries[0]).toEqual({ sid: 3, x: 1338, y: 868, state: STATE.boat, dir: DIR.right });
+  });
+});
+
+describe("놀이기구 2: 관람차·열기구 자리와 운항 시간표", () => {
+  it("관람차·열기구는 정해진 자리만 (칸·기구 안에서는 같은 furnitureId)", () => {
+    expect(FERRIS_SEATS).toHaveLength(12);
+    expect(BALLOON_SEATS).toHaveLength(8);
+    const ids = [...FERRIS_SEATS, ...BALLOON_SEATS].map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const s of FERRIS_SEATS) {
+      expect(s.id).toBe(spotSeatId("ferris", s.x, s.y));
+      expect(seatSlot(s.id)).toMatchObject({ kind: "ferris", state: STATE.ferris, furnitureId: `ferris${s.car}` });
+      expect(ferrisSeatById(s.id)).toBe(s);
+    }
+    for (const s of BALLOON_SEATS) {
+      expect(s.id).toBe(spotSeatId("balloon", s.x, s.y));
+      expect(seatSlot(s.id)).toMatchObject({ kind: "balloon", state: STATE.balloon, furnitureId: `balloon${s.balloon}` });
+      expect(balloonSeatById(s.id)).toBe(s);
+    }
+    // 아무 좌표의 자리는 없다
+    expect(seatSlot(spotSeatId("ferris", 100, 100))).toBeUndefined();
+    expect(seatSlot(spotSeatId("balloon", 100, 100))).toBeUndefined();
+    expect(spotKindOfState(STATE.ferris)).toBe("ferris");
+    expect(spotKindOfState(STATE.balloon)).toBe("balloon");
+    expect(STATE_NAMES[STATE.ferris]).toBe("ferris");
+    expect(STATE_NAMES[STATE.balloon]).toBe("balloon");
+  });
+
+  it("열기구 두 대는 반 주기 어긋나 출발장을 번갈아 쓴다 (동시에 태우지 않는다)", () => {
+    for (let t = 0; t < BALLOON_CYCLE_MS * 3; t += 997) {
+      const a = balloonPhase(0, t);
+      const b = balloonPhase(1, t);
+      expect(a.phase === "board" && b.phase === "board").toBe(false);
+      expect(a.ms).toBeGreaterThanOrEqual(0);
+      expect(a.departAt - a.start).toBe(BALLOON_BOARD_MS);
+    }
+    const p = balloonPhase(0, 10_000);
+    expect(p).toMatchObject({ phase: "board", ms: 10_000, departAt: BALLOON_BOARD_MS });
+    expect(balloonBoarding(0, BALLOON_BOARD_MS - 1)).toBe(true);
+    expect(balloonBoarding(0, BALLOON_BOARD_MS + 500)).toBe(false);
+    expect(balloonBoarding(0, BALLOON_BOARD_MS + 500, BALLOON_BOARD_GRACE_MS)).toBe(true);
+    expect(balloonPhase(0, BALLOON_BOARD_MS + 1000)).toMatchObject({ phase: "fly", ms: 1000 });
+    expect(BALLOON_CYCLE_MS).toBe(BALLOON_BOARD_MS + BALLOON_FLIGHT_MS);
   });
 });
 

@@ -31,7 +31,7 @@ export const SWIM_SPEED = 0.6;
 export const DIVE_SPEED = 0.45;
 
 /** 붙어 있는 자세(앵커): 나무·그네·해먹 + 50번 시소·트램펄린·회전목마 */
-export const ATTACH_KINDS = ["hang", "swing", "hammock", "seesaw", "trampoline", "carousel", "lie", "read", "bath"] as const;
+export const ATTACH_KINDS = ["hang", "swing", "hammock", "seesaw", "trampoline", "carousel", "lie", "read", "bath", "ferris", "balloon"] as const;
 export type AttachKind = (typeof ATTACH_KINDS)[number];
 export function isAttachKind(k: string): k is AttachKind {
   return (ATTACH_KINDS as readonly string[]).includes(k);
@@ -76,6 +76,8 @@ export class Player {
   rideMul = 1;
   /** 트램펄린에서 내리려는 방향(입력 벡터)과 누른 시각. 씬이 매트에 닿는 순간 hopOff를 부른다 (F14) */
   offWish: { ax: number; ay: number; at: number } | null = null;
+  /** 놀이기구 2: 관람차가 돌거나 열기구가 떠 있는 동안 — 이동·점프로 내려오지 않는다 (내리기는 SkyRides가 정한다) */
+  rideLock = false;
   /** 뛰어내리기(hopOff) 점프의 시작 높이 — 매트 위 높이에서 땅까지 포물선에 섞어 내린다 */
   private hopBase = 0;
 
@@ -167,7 +169,7 @@ export class Player {
       return false;
     }
     if (this.anchor) {
-      this.leaveAnchor(now);
+      if (!this.rideLock) this.leaveAnchor(now);
       return false;
     }
     if (this.inWater || this.inBoat) return false;
@@ -227,7 +229,7 @@ export class Player {
     // 조각배: 이동은 씬(BoatRide)이 노 젓기로 처리한다
     if (this.boatSeatId) return false;
     if (this.anchor) {
-      if (!this.move.moving) {
+      if (!this.move.moving || this.rideLock) {
         this.view.apply(this.state, this.dir, now);
         return false;
       }
@@ -409,6 +411,7 @@ export class Player {
     this.anchor = null;
     this.spotId = null;
     this.offWish = null;
+    this.rideLock = false;
     this.snap?.stop();
     this.snap = null;
     this.view.depthOverride = null;

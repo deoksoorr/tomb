@@ -6,6 +6,8 @@ import { BODY_TIER_INFO, bodyLabel, bodyUnlockPrice, DYE_PART_NAMES, DYE_PARTS, 
 import { specDye, withDyePart } from "@/game/sprites/avatar";
 import { api, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
+import { swatchStyle } from "@/lib/dye/look";
+import { specialLabel, wobbleLabel } from "@/lib/dye/palette";
 import { DYE_RESET_PRICE } from "@/lib/dye/rules";
 import type { DyeSessionView, FixedDyeDef } from "@/lib/dye/types";
 import { meStore } from "@/lib/hooks/useMe";
@@ -131,7 +133,8 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
     const item = DYE_ITEMS.find((i) => i.id === sel.itemId) ?? DYE_ITEMS[0];
     const n = owned(item.id);
     title = item.name;
-    desc = `${item.desc} 제한 시간은 모두 60초예요.`;
+    const tier = item.dye?.mode === "random" ? item.dye.tier : 1;
+    desc = `${item.desc} 흔들림 ${wobbleLabel(tier)} · 특수 색 ${specialLabel(tier)} — 판에 드물게 숨은 특수 색(금빛 광택·반짝이·무지개·야광) 칸을 고르면 그 부위가 빛나요. 제한 시간은 모두 60초예요.`;
     action = (
       <>
         <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={!me || pending || short(item.price)} onClick={() => buyTicket(item)}>
@@ -325,7 +328,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
               <li key={p}>
                 <button type="button" className={shop.tile} aria-pressed={sel.kind === "reset" && sel.part === p} onClick={() => setSel({ kind: "reset", part: p })}>
                   <span className={shop.thumb}>
-                    <span className={styles.swatch} style={{ background: dye[p] ?? "transparent" }} data-empty={!dye[p] || undefined} aria-hidden="true" />
+                    <span className={styles.swatch} style={dye[p] ? swatchStyle(dye[p]) : { background: "transparent" }} data-empty={!dye[p] || undefined} aria-hidden="true" />
                   </span>
                   <span className={shop.tileName}>{DYE_PART_NAMES[p]}</span>
                   <span className={shop.tilePrice}>{dye[p] ? `${DYE_RESET_PRICE}P` : "원래 색"}</span>

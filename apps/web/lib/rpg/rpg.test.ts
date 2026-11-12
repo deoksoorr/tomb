@@ -196,8 +196,10 @@ describe("출현 계획", () => {
 
   it("11/12: 드롭 확률은 43번의 절반쯤, 우두머리 장비도 확률, 기간제 코디는 아주 가끔", () => {
     expect(DIFFICULTIES.map((d) => DIFFS[d].dropChance)).toEqual([0.04, 0.05, 0.06, 0.07]);
+    // 우두머리 장비는 0.3·0.27·0.24·0.2에서 절반으로 (난이도별 비율 유지)
+    expect(DIFFICULTIES.map((d) => DIFFS[d].bossDropChance)).toEqual([0.15, 0.135, 0.12, 0.1]);
     for (const d of DIFFICULTIES) {
-      expect(DIFFS[d].bossDropChance).toBeLessThan(0.35);
+      expect(DIFFS[d].bossDropChance).toBeLessThanOrEqual(0.15);
       expect(DIFFS[d].cosmeticChance).toBeLessThanOrEqual(0.02);
     }
   });

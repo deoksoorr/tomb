@@ -20,6 +20,9 @@ export const SPOT_TAKEN_TOAST: Readonly<Record<SpotKind, string>> = {
   telescope: "누가 먼저 망원경을 보고 있어요",
   mat: "누가 먼저 앉아 있어요",
   fish: "누가 먼저 낚시하고 있어요",
+  // 놀이기구 2
+  ferris: "그 칸에는 누가 먼저 탔어요",
+  balloon: "열기구가 막 떠났거나 자리가 찼어요. 다음 기구를 기다려 주세요",
   // 3번 집 안 가구
   chair: "누가 먼저 앉아 있어요",
   bed: "누가 먼저 누워 있어요",
@@ -38,6 +41,8 @@ export const SPOT_TAKEN_HINT: Readonly<Record<SpotKind, string>> = {
   telescope: "누가 별을 보고 있어요",
   mat: "누가 앉아 있어요",
   fish: "누가 낚시하고 있어요",
+  ferris: "칸이 다 찼어요",
+  balloon: "열기구가 다 찼어요",
   chair: "누가 앉아 있어요",
   bed: "누가 누워 있어요",
   book: "누가 읽고 있어요",

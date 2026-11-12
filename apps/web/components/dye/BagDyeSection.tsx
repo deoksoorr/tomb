@@ -5,6 +5,8 @@ import { DYE_PART_NAMES, DYE_PARTS, isFixedDyeId, ITEMS } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { specDye } from "@/game/sprites/avatar";
 import { dyeApi } from "@/lib/dye/client";
+import { colorLabel, swatchStyle } from "@/lib/dye/look";
+import { specialLabel, wobbleLabel } from "@/lib/dye/palette";
 import type { DyeSessionView, FixedDyeDef } from "@/lib/dye/types";
 import { meStore } from "@/lib/hooks/useMe";
 import type { Me } from "@/lib/types";
@@ -58,7 +60,7 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
     ...RANDOM.flatMap((item) => {
       const n = me.inventory[item.id] ?? 0;
       const t = ticketOf(item);
-      return n > 0 && t ? [{ key: item.id, name: item.name, desc: item.desc, count: n, icon: <ItemIcon itemId={item.id} size={32} />, ticket: t }] : [];
+      return n > 0 && t ? [{ key: item.id, name: item.name, desc: t.mode === "random" ? `${item.desc} (흔들림 ${wobbleLabel(t.tier)} · 특수 색 ${specialLabel(t.tier)})` : item.desc, count: n, icon: <ItemIcon itemId={item.id} size={32} />, ticket: t }] : [];
     }),
     ...Object.values(tickets).flatMap((d) => {
       const n = me.inventory[d.id] ?? 0;
@@ -122,10 +124,10 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
         <ul className={bag.list} aria-label="부위별 지금 색">
           {DYE_PARTS.map((p) => (
             <li key={p} className={bag.row}>
-              <span className={styles.swatch} data-empty={dye[p] ? undefined : ""} style={{ background: dye[p] ?? undefined, width: 24, height: 24 }} aria-hidden="true" />
+              <span className={styles.swatch} data-empty={dye[p] ? undefined : ""} style={{ ...(dye[p] ? swatchStyle(dye[p]) : {}), width: 24, height: 24 }} aria-hidden="true" />
               <span className={bag.main}>
                 <span className={bag.name}>{DYE_PART_NAMES[p]}</span>
-                <span className={bag.meta}>{dye[p] ?? "원래 색"}</span>
+                <span className={bag.meta}>{dye[p] ? colorLabel(dye[p]) : "원래 색"}</span>
               </span>
             </li>
           ))}

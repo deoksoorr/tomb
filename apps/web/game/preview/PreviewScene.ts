@@ -58,8 +58,8 @@ export class PreviewScene extends Phaser.Scene {
     const atlas = new GlyphAtlas(this);
     this.map = new WorldMap(this, atlas);
     this.map.setRows(0, 0);
-    // 소리는 내지 않는다 (입장 화면 음악은 BGM만)
-    this.atmos = new Atmosphere(this, this.data0.reduced, window.location.search, { sound: false });
+    // 소리는 내지 않는다 (입장 화면 음악은 BGM만). 입장 화면 글자가 읽히게 밤 어둠은 예전처럼 옅게 (grade 끔)
+    this.atmos = new Atmosphere(this, this.data0.reduced, window.location.search, { sound: false, grade: false });
     this.atmos.setStaticLights(this.map.staticLights);
     this.atmos.setGridLights(this.map.gridLights);
     this.lighting = new Lighting(this);

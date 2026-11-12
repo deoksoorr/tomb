@@ -476,6 +476,72 @@ const P: Record<string, Painter> = {
     g.rect(6, 4, 4, 1, a);
     g.rect(6, 6, 4, 1, a);
   },
+
+  // ── 몬스터가 거는 상태 이상 (lib/rpg/status) ──
+  /** 독: 거품 이는 물방울 */
+  st_poison(g, m, a) {
+    g.ellipse(8, 10, 4.5, 4.5, m);
+    for (let i = 0; i < 4; i++) g.hline(8 - Math.floor(i / 2), 8 + Math.floor(i / 2), 3 + i, m);
+    g.rect(6, 9, 2, 2, a);
+    g.set(10, 12, a);
+    g.set(12, 3, lighten(m, 0.3));
+    g.set(13, 1, lighten(m, 0.3));
+  },
+  /** 화상: 불꽃 */
+  st_burn(g, m, a) {
+    g.ellipse(8, 11, 5, 4, m);
+    for (let i = 0; i < 6; i++) g.hline(8 - Math.floor((6 - i) / 2), 8 + Math.floor((6 - i) / 3), 2 + i, m);
+    g.ellipse(8, 12, 2.5, 2.5, a);
+    g.vline(8, 8, 10, a);
+  },
+  /** 출혈: 두 방울 */
+  st_bleed(g, m, a) {
+    g.ellipse(6, 10, 3.5, 3.5, m);
+    for (let i = 0; i < 3; i++) g.hline(6 - Math.floor(i / 2), 6 + Math.floor(i / 2), 4 + i, m);
+    g.ellipse(11, 6, 2.5, 2.5, m);
+    g.set(11, 2, m);
+    g.vline(11, 2, 4, m);
+    g.set(5, 9, lighten(m, 0.35));
+    g.rect(4, 13, 5, 1, a);
+  },
+  /** 둔화: 달팽이 */
+  st_slow(g, m, a) {
+    g.ellipse(9, 8, 4.5, 4.5, m);
+    g.ellipse(9, 8, 2, 2, a);
+    g.set(9, 8, m);
+    g.rect(2, 12, 12, 2, darken(m, 0.2));
+    g.vline(3, 8, 11, darken(m, 0.2));
+    g.set(2, 7, a);
+  },
+  /** 빙결: 눈 결정 */
+  st_freeze(g, m, a) {
+    g.vline(8, 1, 15, m);
+    g.hline(1, 15, 8, m);
+    for (let i = -4; i <= 4; i++) {
+      g.set(8 + i, 8 + i, m);
+      g.set(8 + i, 8 - i, m);
+    }
+    g.rect(7, 7, 3, 3, a);
+    g.set(8, 8, 0xffffff);
+  },
+  /** 혼란: 소용돌이 */
+  st_confuse(g, m, a) {
+    g.ellipse(8, 8, 6, 6, m);
+    g.ellipse(8, 8, 4, 4, a);
+    g.ellipse(9, 8, 2.5, 2.5, m);
+    g.rect(9, 7, 2, 2, a);
+    g.set(13, 2, lighten(m, 0.3));
+  },
+  /** 침묵: 엑스 친 말풍선 */
+  st_silence(g, m, a) {
+    g.rect(2, 3, 12, 8, m);
+    g.rect(4, 11, 3, 2, m);
+    g.set(4, 13, m);
+    for (let i = 0; i < 5; i++) {
+      g.set(5 + i, 4 + i, a);
+      g.set(10 - i, 4 + i, a);
+    }
+  },
 };
 
 /** 아이콘 그림 (16×16 캔버스) */

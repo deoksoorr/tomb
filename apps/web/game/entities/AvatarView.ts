@@ -4,6 +4,7 @@ import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureA
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange, isDyedSpec } from "../sprites/avatar";
 import { CosmeticFxView } from "./CosmeticFxView";
+import { DyeFxView } from "./DyeFxView";
 import { bodyFx, riderLift } from "../sprites/cosmeticFx";
 import type { EmoteIcon } from "../sprites/emotes";
 import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
@@ -115,6 +116,8 @@ export class AvatarView {
   private haloGlow: Phaser.GameObjects.Image | null = null;
   /** F8 추가 꾸미기 연출 (우산·풍선·날개·발자국·오라·펫) — 처음 입을 때 만든다 */
   private cfx: CosmeticFxView | null = null;
+  /** 46번 특수 색(금빛 광택·반짝이·무지개·야광) 부위 연출 — 특수 색 부위가 있을 때만 */
+  private dyeFx: DyeFxView | null = null;
   /** 24번 벤치 상태 (머리 위 작은 아이콘 + 손 소품) — 처음 고를 때 만든다 */
   private moodFx: MoodView | null = null;
   /** 31번 운영자 저승사자 차림 (낫·안개·배지). 켜져 있는 동안 몸 색은 염색했으면 그 색, 아니면 STAFF_COLOR. 원래 색은 staffBase에 둔다 */
@@ -188,6 +191,16 @@ export class AvatarView {
         this.sprite.setTexture(key, avatarFrame("idle", this.dir));
       } else this.sprite.setTexture(key, this.sprite.frame.name);
       this.apply(this.state, this.dir, 0);
+    }
+    this.refreshDyeFx();
+  }
+
+  /** 46번 특수 색 부위 연출을 지금 색 표기에 맞춘다 (텍스처 키는 바탕 색만 보므로 특수 표시만 바뀌어도 여기서) */
+  private refreshDyeFx(): void {
+    if (DyeFxView.wants(this.color)) (this.dyeFx ??= new DyeFxView(this.scene)).set(this.color, this.look, this.body, this.texKey);
+    else if (this.dyeFx) {
+      this.dyeFx.destroy();
+      this.dyeFx = null;
     }
   }
 
@@ -407,7 +420,7 @@ export class AvatarView {
       return;
     }
     // 놀거리가 잠깐 다른 자세 프레임을 쓰는 중 (sync가 고른다)
-    if (this.altFrame >= 0 && this.ride?.alt && (state === "seesaw" || state === "carousel" || state === "trampoline" || state === "boat")) return;
+    if (this.altFrame >= 0 && this.ride?.alt && (state === "seesaw" || state === "carousel" || state === "trampoline" || state === "boat" || state === "ferris" || state === "balloon")) return;
     this.altFrame = -1;
     if (state === "swing") {
       // 그네 프레임은 진자 위상에 맞춰 sync에서 고른다
@@ -619,7 +632,7 @@ export class AvatarView {
         this.lieFrame = f;
         s.setFrame(f);
       }
-    } else if (st === "boat" || st === "seesaw" || st === "trampoline" || st === "carousel") {
+    } else if (st === "boat" || st === "seesaw" || st === "trampoline" || st === "carousel" || st === "ferris" || st === "balloon") {
       // 놀거리 연출은 씬이 정해 준다 (회전목마는 앵커 둘레를 돌고, 트램펄린은 통통, 시소는 오르락내리락, 배는 물결에 살짝)
       const r = this.ride;
       this.setPose(r ? -Math.round(r.ox) : 0, r ? Math.round(r.lift) : 0);
@@ -656,7 +669,7 @@ export class AvatarView {
       const bob = (st === "walk" || st === "run") && !this.reduced ? Math.floor(now / (st === "run" ? 90 : 140)) % 2 : 0;
       this.setPose(0, riderLift(this.mountPet) + bob);
     } else this.setPose(0, 0);
-    if (this.altFrame >= 0 && st !== "boat" && st !== "seesaw" && st !== "trampoline" && st !== "carousel") this.altFrame = -1;
+    if (this.altFrame >= 0 && st !== "boat" && st !== "seesaw" && st !== "trampoline" && st !== "carousel" && st !== "ferris" && st !== "balloon") this.altFrame = -1;
     if (s.angle !== 0) s.setAngle(0);
     if (st !== "swing" && s.scaleX !== 1) s.setScale(1);
 
@@ -702,6 +715,7 @@ export class AvatarView {
 
     this.syncWater(now, bx, s.y, vis);
     this.syncCosmetics(now, dt, bx, headY, vis);
+    this.dyeFx?.sync(now, s);
     if (this.staffFx) {
       const d = this.dir;
       this.staffFx.sync(
@@ -927,6 +941,7 @@ export class AvatarView {
     this.wings?.setVisible(v);
     this.pet?.setVisible(v);
     this.cfx?.setVisible(v);
+    this.dyeFx?.setVisible(v);
     this.moodFx?.setVisible(v);
     this.staffFx?.setVisible(v);
     this.dexBadge?.setVisible(v);
@@ -961,6 +976,8 @@ export class AvatarView {
     this.pet = null;
     this.cfx?.destroy();
     this.cfx = null;
+    this.dyeFx?.destroy();
+    this.dyeFx = null;
     this.moodFx?.destroy();
     this.moodFx = null;
     this.staffFx?.destroy();

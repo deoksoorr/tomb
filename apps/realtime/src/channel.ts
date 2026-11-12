@@ -19,6 +19,9 @@ import {
   isSeatMood,
   ridePetOfLook,
   boatSeatById,
+  balloonBoarding,
+  balloonSeatById,
+  BALLOON_BOARD_GRACE_MS,
   USE_INTERVAL_MS,
   hasDye,
   sameDye,
@@ -607,7 +610,7 @@ export class ChannelCore<C extends object> {
         const kind = spotKindOfState(state);
         const indoor = !!kind && isIndoorSpot(kind);
         if (indoor && !this.cfg.room) state = STATE.idle;
-        else if (kind && indoor === !!this.cfg.room && !this.claimSpot(p, spotSeatId(kind, m.x, m.y))) state = STATE.idle;
+        else if (kind && indoor === !!this.cfg.room && !this.claimSpot(p, spotSeatId(kind, m.x, m.y), now)) state = STATE.idle;
       }
     }
     // 타는 펫: 물에 들어가거나 자리에 앉으면 내린다 (클라이언트도 스스로 내리고 ride off를 보낸다)
@@ -653,7 +656,7 @@ export class ChannelCore<C extends object> {
     if (this.cfg.room && (m.t === "emote" || m.t === "graveEvent" || m.t === "firework" || m.t === "megaphone")) return;
     switch (m.t) {
       case "sit":
-        return this.onSit(p, m.seatId);
+        return this.onSit(p, m.seatId, now);
       case "stand":
         return this.onStand(p);
       case "warp":
@@ -804,8 +807,13 @@ export class ChannelCore<C extends object> {
    * 1인 자리 점유 (의자·벤치 좌석과 나무·그네 같은 소품 자리 공통, world.ts seatSlot).
    * 한 자리에는 한 명: 이미 누가 있거나 멀면 seatDenied.
    */
-  private onSit(p: Peer<C>, seatId: string): void {
+  private onSit(p: Peer<C>, seatId: string, now = Date.now()): void {
     const found = seatSlot(seatId);
+    // 열기구: 출발장에 있을 때(태우는 동안)만 탄다 — 날아가 있는 기구의 자리는 거절 (운항 시간표 = 서버 시계)
+    const air = found?.kind === "balloon" ? balloonSeatById(seatId) : undefined;
+    if (air && this.seats.get(seatId) !== p.sid && !balloonBoarding(air.balloon, now, BALLOON_BOARD_GRACE_MS)) {
+      return this.sendTo(p, { t: "seatDenied", seatId });
+    }
     // 3번: 집 안 가구 자리는 방(집)에서만, 월드 자리(의자·나무 …)는 월드 채널에서만
     const seat = found && isIndoorSpot(found.kind) === !!this.cfg.room ? found : undefined;
     const holder = this.seats.get(seatId);
@@ -837,11 +845,14 @@ export class ChannelCore<C extends object> {
   }
 
   /** MOVE로 들어온 나무·그네 상태의 자리 잡기 (이전 클라이언트용). 잡았으면(이미 내 자리 포함) true. 거절 알림은 보내지 않는다 */
-  private claimSpot(p: Peer<C>, seatId: string): boolean {
+  private claimSpot(p: Peer<C>, seatId: string, now = Date.now()): boolean {
     const seat = seatSlot(seatId);
     if (!seat) return false;
     const holder = this.seats.get(seatId);
     if (holder === p.sid) return true;
+    // 열기구: 날아가 있는 기구의 자리는 MOVE로도 잡지 않는다 (onSit과 같은 운항 시간표)
+    const air = seat.kind === "balloon" ? balloonSeatById(seatId) : undefined;
+    if (air && !balloonBoarding(air.balloon, now, BALLOON_BOARD_GRACE_MS)) return false;
     if (holder !== undefined || dist(seat, { x: p.tx, y: p.ty }) > (seat.radius ?? SEAT_SERVER_RADIUS)) return false;
     this.occupy(p, seat);
     return true;

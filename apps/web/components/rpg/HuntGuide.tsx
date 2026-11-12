@@ -6,16 +6,19 @@ import {
   DIFFS,
   GEAR,
   HOTBAR_SIZE,
+  MONSTERS,
   POTION_COOLDOWN_MS,
   POTIONS,
   SKILL_FX,
   SKILLS,
   skillById,
   type IconArt,
+  type MonsterId,
   type SkillId,
 } from "@/lib/rpg/catalog";
 import { DEFAULT_BOSS_PHASES, MIN_WINDUP_MS, PATTERNS, type TelegraphShape } from "@/lib/rpg/patterns";
 import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL, MIN_RUN_MS } from "@/lib/rpg/rewards";
+import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { cx } from "../ui/cx";
@@ -43,11 +46,15 @@ function HuntDemo({ page, title }: { page: number; title: string }) {
       void document.fonts?.ready.then(still);
       return;
     }
-    const t0 = performance.now();
+    // 시작 시각은 첫 프레임의 시각으로 잡는다. rAF 시각은 그 프레임이 시작된 때라서
+    // effect 안에서 잰 performance.now()보다 앞설 수 있다(파이어폭스·사파리) → 경과가 음수가 되면
+    // 쪽 3·4·6 시연이 배열을 -1로 읽고 멈춰, 그림이 떴다 안 떴다 했다
+    let t0 = -1;
     let raf = 0;
     const loop = (now: number) => {
-      drawDemo(ctx, page, now - t0, false);
+      if (t0 < 0) t0 = now;
       raf = requestAnimationFrame(loop);
+      drawDemo(ctx, page, Math.max(0, now - t0), false);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
@@ -64,7 +71,8 @@ function HuntDemo({ page, title }: { page: number; title: string }) {
   );
 }
 
-const pct = (n: number) => `${Math.round(n * 100)}%`;
+/** 비율 → 퍼센트 (13.5%처럼 소수 한 자리까지) */
+const pct = (n: number) => `${Number((n * 100).toFixed(1))}%`;
 const sec = (ms: number) => `${Number((ms / 1000).toFixed(2))}초`;
 const skillArt = (id: SkillId): IconArt | undefined => skillById(id)?.art;
 const skillName = (id: SkillId) => skillById(id)?.name ?? id;
@@ -105,6 +113,18 @@ const patternsOf = (k: TelegraphShape["kind"]) =>
     .join("·");
 
 const keyedPotions = POTIONS.filter((p) => p.key);
+
+/** 이 상태를 거는 몬스터 이름 (MONSTER_STATUS에서 읽는다) */
+const statusMonsters = (id: StatusId) =>
+  [...new Set(Object.entries(MONSTER_STATUS).filter(([, rules]) => rules?.some((r) => r.status === id)).map(([m]) => m))]
+    .map((m) => MONSTERS[m as MonsterId].name)
+    .slice(0, 3)
+    .join("·");
+/** 이 상태를 푸는 포션 이름 */
+const curers = (id: StatusId) =>
+  POTIONS.filter((p) => POTION_CURES[p.id]?.includes(id))
+    .map((p) => (p.key ? `${p.name}(${p.key})` : p.name))
+    .join("·");
 const autoPotions = POTIONS.filter((p) => !p.key);
 
 function Keys({ k }: { k: string[] }) {
@@ -272,36 +292,61 @@ function pages(): Page[] {
     },
     {
       title: "상태 이상",
-      lead: "화면 위에 지금 걸린 효과와 남은 시간이 떠요.",
+      lead: "화면 위에 지금 걸린 효과와 남은 시간이 떠요. 몬스터가 거는 나쁜 상태는 HP 막대 아래와 머리 옆에 아이콘으로 보여요.",
       body: (
-        <ul className={cx(s.guideList, s.guideGrid)}>
-          <Item art={skillArt("rollback")} title="무적">
-            {skillName("rollback")}({sec(rb.durMs)}~), 부활 쿠키(2초): 몸이 깜빡이며 어떤 피해도 안 받아요.
-          </Item>
-          <Item art={skillArt("cache_hit")} title="빨라짐·치명타↑">
-            {skillName("cache_hit")}는 이동속도, {skillName("debugging")}는 치명타 확률을 잠깐 올려요.
-          </Item>
-          <Item art={skillArt("pair_prog")} title="도우미">
-            {skillName("pair_prog")}: 동기 유령이 곁에서 같이 때려요.
-          </Item>
-          <Item art={skillArt("overtime")} title="야근 (공격↑·HP↓)">
-            공격력이 오르는 대신 매초 최대 HP의 {pct(ot.hpDrainPct)}를 잃어요. 이걸로 쓰러지지는 않아요 (HP 1에서 멈춤).
-          </Item>
-          <Item art={skillArt("coffee_break")} title="멈춰 섬">
-            {skillName("coffee_break")}를 쓰면 {sec(cb.rootMs)} 동안 움직이지도 공격하지도 못해요.
-          </Item>
-          <Item art={skillArt("code_review")} title="약화 (몬스터)">
-            {skillName("code_review")}: 주변 적이 {sec(cr.durMs)} 동안 받는 피해↑, 이동속도 -{pct(cr.slow)}.
-          </Item>
-          <Item art={skillArt("refactor")} title="경직·넉백 (몬스터)">
-            맞은 몬스터는 잠깐 밀려나고 멈춰요. 치명타는 더 오래.
-            {stunStyles.length > 0 && ` ${stunStyles.join("·")}는 경직이 더 길고,`}
-            {pushStyles.length > 0 && ` ${pushStyles.join("·")}는 멀리 밀쳐요.`}
-          </Item>
-          <Item pic={<span className={s.guideMud} />} title="지형">
-            늪·덩굴은 느려지고, 컨베이어·바람은 밀고, 웅덩이는 미끄러워요. 사냥터 설명의 기믹을 확인해요.
-          </Item>
-        </ul>
+        <>
+          <ul className={cx(s.guideList, s.guideGrid)}>
+            <Item art={skillArt("rollback")} title="무적">
+              {skillName("rollback")}({sec(rb.durMs)}~), 부활 쿠키(2초): 몸이 깜빡이며 어떤 피해도 안 받아요.
+            </Item>
+            <Item art={skillArt("cache_hit")} title="빨라짐·치명타↑">
+              {skillName("cache_hit")}는 이동속도, {skillName("debugging")}는 치명타 확률을 잠깐 올려요.
+            </Item>
+            <Item art={skillArt("pair_prog")} title="도우미">
+              {skillName("pair_prog")}: 동기 유령이 곁에서 같이 때려요.
+            </Item>
+            <Item art={skillArt("overtime")} title="야근 (공격↑·HP↓)">
+              공격력이 오르는 대신 매초 최대 HP의 {pct(ot.hpDrainPct)}를 잃어요. 이걸로 쓰러지지는 않아요 (HP 1에서 멈춤).
+            </Item>
+            <Item art={skillArt("coffee_break")} title="멈춰 섬">
+              {skillName("coffee_break")}를 쓰면 {sec(cb.rootMs)} 동안 움직이지도 공격하지도 못해요.
+            </Item>
+            <Item art={skillArt("code_review")} title="약화 (몬스터)">
+              {skillName("code_review")}: 주변 적이 {sec(cr.durMs)} 동안 받는 피해↑, 이동속도 -{pct(cr.slow)}.
+            </Item>
+            <Item art={skillArt("refactor")} title="경직·넉백 (몬스터)">
+              맞은 몬스터는 잠깐 밀려나고 멈춰요. 치명타는 더 오래.
+              {stunStyles.length > 0 && ` ${stunStyles.join("·")}는 경직이 더 길고,`}
+              {pushStyles.length > 0 && ` ${pushStyles.join("·")}는 멀리 밀쳐요.`}
+            </Item>
+            <Item pic={<span className={s.guideMud} />} title="지형">
+              늪·덩굴은 느려지고, 컨베이어·바람은 밀고, 웅덩이는 미끄러워요. 사냥터 설명의 기믹을 확인해요.
+            </Item>
+          </ul>
+          <h4 className={s.guideSub}>몬스터가 거는 상태 이상</h4>
+          <ul className={cx(s.guideList, s.guideGrid)}>
+            {STATUS_IDS.map((id) => {
+              const st = STATUSES[id];
+              const f = statusFor(id, "normal");
+              const who = statusMonsters(id);
+              return (
+                <Item key={id} art={st.art} title={`${st.name} (${sec(f.durMs)})`}>
+                  {st.desc}
+                  {id === "slow" && ` 이동속도 -${pct(st.slow ?? 0)}.`}
+                  {st.dotPct && ` 초당 최대 HP의 ${pct(st.dotPct)}.`}
+                  {who && ` ${who} 등이 걸어요.`}
+                  <br />
+                  <small>풀기: {curers(id) || "시간이 지나면"}</small>
+                </Item>
+              );
+            })}
+          </ul>
+          <p className={s.meta}>
+            몇몇 몬스터의 공격과 우두머리의 큰 기술이 맞으면 확률로 걸려요. 같은 상태는 겹치지 않고 남은 시간만 새로 채워지고, 풀린 직후엔 잠깐 같은 상태에 안 걸려요. 지속
+            피해로는 쓰러지지 않아요(HP 1에서 멈춤). 어려운 사냥터일수록 더 자주·오래·세게 걸려요 (지옥: 확률 ×{STATUS_DIFF.hell.chance}, 세기 ×
+            {STATUS_DIFF.hell.power}, 둔화는 최대 -{pct(MAX_SLOW)}). 무적 중에는 안 걸리고, 부활 쿠키로 일어나면 모두 풀려요.
+          </p>
+        </>
       ),
     },
     {

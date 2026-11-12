@@ -1,5 +1,6 @@
 import type { Difficulty, DropKind, GameKind, GearSlot, MonsterId, SkillId, Stats, ZoneId } from "./catalog";
 import type { Derived } from "./formulas";
+import type { StatusId } from "./status";
 
 // 사냥터(RPG) 데이터 형태: 저장 원본, API 응답, 게임 ↔ UI 브리지 페이로드.
 
@@ -134,6 +135,8 @@ export type RpgHud = {
   attackBuffered?: boolean;
   potions: Record<string, number>;
   buffs: { id: string; leftMs: number }[];
+  /** 사냥터: 몬스터가 건 상태 이상 (lib/rpg/status) — 체력바 옆에 아이콘·남은 시간 */
+  statuses?: { id: StatusId; leftMs: number }[];
   /** 보스 HP 비율 (없으면 null) */
   boss: { name: string; ratio: number } | null;
   /** 쓰러졌다가 쿠키로 일어남 등 짧은 알림 */

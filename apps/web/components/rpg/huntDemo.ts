@@ -761,6 +761,7 @@ export function drawDemo(ctx: CanvasRenderingContext2D, page: number, now: numbe
   if (!s) return;
   ctx.setTransform(DEMO_SCALE, 0, 0, DEMO_SCALE, 0, 0);
   ctx.imageSmoothingEnabled = false;
-  const t = reduced ? s.still : now % s.period;
+  // 음수 시각이 와도 0..period 안으로 (음수 나머지는 장면 배열을 -1로 읽어 예외가 난다)
+  const t = reduced ? s.still : ((now % s.period) + s.period) % s.period;
   s.draw(ctx, t, reduced ? s.still : now);
 }
