@@ -302,7 +302,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.net = this.createNet();
     this.seatReq = { sit: (id) => this.net.sit(id), stand: () => this.net.stand() };
-    new HauntHouseView(this, this.map.colliders, this.reduced); // 귀신의집 건물 (game/haunt)
+    new HauntHouseView(this, this.map.colliders, this.reduced, () => this.player); // 귀신의집 건물·간판·등불·안개·근처 소리 (game/haunt)
     this.life = new VillageLife({
       scene: this,
       atlas: this.atlas,

@@ -33,6 +33,7 @@ import { BIG_FIRE_FRAMES, FENCE_H_W, GRAVE_GATE_H, GY } from "../sprites/graveya
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { FISH_ZONE_LIGHTS } from "./fishZone";
 import { ZOO_LIGHTS } from "./zoo/zooLayout";
+import { HAUNT_LIGHTS } from "../haunt/hauntLayout";
 import {
   allDeckRails,
   allProps,
@@ -173,6 +174,8 @@ export class WorldMap {
     this.staticLights.push(...FISH_ZONE_LIGHTS);
     // 동물원 등불 (정문 석등·아치·분양 노점). 울타리·우리·동물·사육사 그림은 zoo/ZooView
     this.staticLights.push(...ZOO_LIGHTS);
+    // 귀신의집 보라·초록 벽등·간판·깨진 창 (그림은 haunt/HauntHouseView)
+    this.staticLights.push(...HAUNT_LIGHTS);
 
     // 아래 담 (맵 맨 아래 줄은 바닥 타일이 담 면으로 그린다)
     this.applyBounds();

@@ -3,12 +3,19 @@ import { makeCanvas } from "../sprites/pixel";
 import { HAUNT_TILE, isWall, mulberry as mulberryCanvasSeed, type GhostLook, type Maze } from "./maze";
 
 // 귀신의집 그림 (코드로 그리는 픽셀아트). 브라우저에서만 부른다.
-//  - 마을의 귀신의집 건물 (HauntHouseView)
+//  - 마을의 귀신의집 건물·간판·벽등·문틈 안개·창 얼굴 (HauntHouseView)
 //  - 미로 바닥·벽·장식 한 장, 귀신 3종(2프레임), 놀래키는 얼굴, 어둠 가리개, 촛불·달빛 번짐, 스치는 그림자
 
 export const HTEX = {
   house: "haunt-house",
   houseGlow: "haunt-house-glow",
+  lampP: "haunt-lamp-purple",
+  lampG: "haunt-lamp-green",
+  lampGlow: "haunt-lamp-glow",
+  mist: "haunt-door-mist",
+  windowFace: "haunt-window-face",
+  sign: "haunt-sign",
+  signGlow: "haunt-sign-glow",
   ghost: (look: GhostLook) => `haunt-ghost-${look}`,
   face: "haunt-face",
   dark: "haunt-dark",
@@ -48,88 +55,124 @@ function add(scene: Phaser.Scene, key: string, canvas: HTMLCanvasElement, frame?
   for (let i = 0; i < cols; i++) tex.add(i, 0, i * frame.w, 0, frame.w, frame.h);
 }
 
+
 // ── 마을의 건물 ──
 
-/** 귀신의집 건물 (가로 72, 세로 68, 바닥 가운데가 원점). 문은 아래 가운데 */
-export const HOUSE_W = 72;
-export const HOUSE_H = 68;
+/** 귀신의집 건물 (가로 92, 세로 88, 바닥 가운데가 원점). 문은 아래 가운데. 간판·벽등·안개·얼굴은 HauntHouseView가 따로 올린다 */
+export const HOUSE_W = 92;
+export const HOUSE_H = 88;
+/** 깨진 창(주황 불빛) 가운데 — 그림 왼쪽 위 기준 */
+export const HOUSE_LIT_WINDOW = { x: 77, y: 68 } as const;
+/** 가끔 귀신 얼굴이 비치는 창 가운데 (탑 둥근 창, 지붕창, 왼쪽 아래 창) — 그림 왼쪽 위 기준 */
+export const HOUSE_FACE_WINDOWS: readonly { x: number; y: number }[] = [
+  { x: 24, y: 27 },
+  { x: 65, y: 29 },
+  { x: 15, y: 68 },
+];
+/** 간판을 매다는 처마 높이 (그림 위에서부터) */
+export const HOUSE_SIGN_Y = 39;
 
 function houseCanvas(): HTMLCanvasElement {
   const { canvas, ctx } = makeCanvas(HOUSE_W, HOUSE_H);
   const r = mulberryCanvasSeed(77);
   const W = HOUSE_W;
+  const H = HOUSE_H;
   // 몸체 (비틀린 판자벽)
-  px(ctx, 6, 30, W - 12, 38, 0x3c3644);
+  px(ctx, 6, 40, W - 12, H - 40, 0x3c3644);
   for (let x = 7; x < W - 6; x += 4) {
-    px(ctx, x, 30, 1, 38, 0x2c2734);
-    if (r() < 0.4) px(ctx, x + 1, 32 + Math.floor(r() * 30), 2, 3, 0x4a4352);
+    px(ctx, x, 40, 1, H - 40, 0x2c2734);
+    if (r() < 0.4) px(ctx, x + 1, 42 + Math.floor(r() * 40), 2, 3, 0x4a4352);
   }
+  // 아랫단 이끼 낀 돌 기초
+  px(ctx, 5, H - 5, W - 10, 5, 0x2a2830);
+  for (let x = 6; x < W - 6; x += 7) px(ctx, x, H - 4, 5, 3, r() < 0.5 ? 0x34323c : 0x2e3a30);
   // 2층 탑 (왼쪽 뾰족 지붕)
-  px(ctx, 10, 14, 22, 18, 0x413a4a);
-  for (let x = 11; x < 32; x += 4) px(ctx, x, 14, 1, 18, 0x2f2a38);
-  // 지붕들 (짙은 슬레이트, 아래로 처진 끝)
-  for (let i = 0; i < 14; i++) px(ctx, 21 - i, 1 + i, 1 + i * 2, 1, i % 3 === 0 ? 0x1d1a24 : 0x26222e);
-  px(ctx, 8, 14, 26, 2, 0x1a1720);
-  for (let i = 0; i < 12; i++) {
-    const l = Math.round(30 - i * 2.3);
+  px(ctx, 10, 16, 28, 26, 0x413a4a);
+  for (let x = 11; x < 38; x += 4) px(ctx, x, 16, 1, 26, 0x2f2a38);
+  for (let i = 0; i < 16; i++) px(ctx, 24 - i, i, 1 + i * 2, 1, i % 3 === 0 ? 0x1d1a24 : 0x26222e);
+  px(ctx, 7, 16, 34, 2, 0x1a1720);
+  // 탑 꼭대기 풍향계 (부러진 화살)
+  px(ctx, 24, 0, 1, 1, 0x1a1720);
+  // 큰 지붕 (짙은 슬레이트, 아래로 처진 끝)
+  for (let i = 0; i < 14; i++) {
+    const l = Math.round(38 - i * 2.4);
     const rr = Math.round(W - 8 + i * 0.5);
-    px(ctx, l, 18 + i, rr - l, 1, i % 3 === 0 ? 0x1d1a24 : 0x2a2532);
+    px(ctx, l, 24 + i, rr - l, 1, i % 3 === 0 ? 0x1d1a24 : 0x2a2532);
   }
-  px(ctx, 2, 29, W - 4, 3, 0x17141c);
+  px(ctx, 2, 37, W - 4, 3, 0x17141c);
   // 처진 처마 조각
-  px(ctx, 4, 32, 3, 2, 0x17141c);
-  px(ctx, W - 9, 32, 4, 3, 0x17141c);
+  px(ctx, 4, 40, 3, 2, 0x17141c);
+  px(ctx, W - 9, 40, 4, 3, 0x17141c);
   // 굴뚝
-  px(ctx, W - 20, 10, 6, 14, 0x3a2c2c);
-  px(ctx, W - 21, 9, 8, 2, 0x241c1c);
-  // 창문: 위 탑 동그란 창(희미한 초록빛), 아래 판자로 막은 창 둘, 깨진 창 하나(주황빛)
-  oval(ctx, 21, 22, 3, 3, 0x0d0b10);
-  oval(ctx, 21, 22, 2, 2, 0x6a9a72);
-  const win = (x: number, y: number, lit: number | null) => {
-    px(ctx, x - 1, y - 1, 12, 13, 0x1a1720);
-    px(ctx, x, y, 10, 11, lit ?? 0x0c0b0f);
-    if (lit) {
+  px(ctx, W - 18, 8, 6, 18, 0x3a2c2c);
+  px(ctx, W - 19, 7, 8, 2, 0x241c1c);
+  // 지붕창 (얼굴이 비치는 창)
+  px(ctx, 59, 23, 12, 11, 0x1a1720);
+  px(ctx, 58, 21, 14, 2, 0x17141c);
+  px(ctx, 60, 25, 10, 8, 0x0c0b0f);
+  px(ctx, 60, 31, 10, 2, 0x1c3024);
+  // 탑 동그란 창 (희미한 초록빛)
+  oval(ctx, 24, 27, 4, 4, 0x0d0b10);
+  oval(ctx, 24, 27, 3, 3, 0x1c3024);
+  px(ctx, 23, 25, 1, 1, 0x6a9a72);
+  const win = (x: number, y: number, kind: "lit" | "dark" | "boards") => {
+    px(ctx, x - 1, y - 1, 14, 14, 0x1a1720);
+    px(ctx, x, y, 12, 12, kind === "lit" ? 0xb86a2a : 0x0c0b0f);
+    if (kind === "lit") {
       // 깨진 유리 조각
-      px(ctx, x + 2, y + 2, 2, 5, 0x0c0b0f);
-      px(ctx, x + 6, y + 6, 3, 2, 0x0c0b0f);
+      px(ctx, x + 2, y + 2, 2, 6, 0x0c0b0f);
+      px(ctx, x + 7, y + 7, 3, 2, 0x0c0b0f);
+      px(ctx, x + 5, y, 1, 4, 0x0c0b0f);
+    } else if (kind === "dark") {
+      // 십자 창살 + 바닥에 고인 초록 기운
+      px(ctx, x + 5, y, 2, 12, 0x1a1720);
+      px(ctx, x, y + 5, 12, 2, 0x1a1720);
+      px(ctx, x, y + 10, 12, 2, 0x1c3024);
     } else {
       // 엇갈려 박은 판자
-      for (let i = 0; i < 10; i++) px(ctx, x + i, y + 2 + Math.floor(i * 0.6), 1, 2, 0x5a4a3a);
-      px(ctx, x, y + 7, 10, 2, 0x4e3f32);
+      for (let i = 0; i < 12; i++) px(ctx, x + i, y + 2 + Math.floor(i * 0.6), 1, 2, 0x5a4a3a);
+      px(ctx, x, y + 8, 12, 2, 0x4e3f32);
     }
   };
-  win(10, 40, null);
-  win(W - 22, 40, 0xb86a2a);
-  win(W - 34, 40, null);
+  win(9, 62, "dark");
+  win(HOUSE_LIT_WINDOW.x - 6, HOUSE_LIT_WINDOW.y - 6, "lit");
   // 문 (아치형, 반쯤 열려 안이 새까맣다)
-  const dx = W / 2 - 6;
-  px(ctx, dx - 2, 48, 16, 20, 0x1a1210);
-  px(ctx, dx - 1, 46, 14, 2, 0x1a1210);
-  px(ctx, dx, 49, 12, 19, 0x050406);
-  px(ctx, dx, 49, 4, 19, 0x3a2418);
-  px(ctx, dx + 1, 57, 1, 2, 0xb08a40);
-  // 문 위 해골 장식 대신 부적 한 장 (빨간 글씨 줄무늬)
-  px(ctx, W / 2 - 2, 42, 4, 6, 0xd8c88a);
-  px(ctx, W / 2 - 1, 43, 2, 4, 0xa02020);
-  // 계단 두 단
-  px(ctx, dx - 4, 66, 20, 2, 0x2a2630);
+  const dx = W / 2 - 8;
+  px(ctx, dx - 2, 63, 20, H - 63, 0x1a1210);
+  px(ctx, dx, 61, 16, 2, 0x1a1210);
+  px(ctx, dx + 2, 60, 12, 1, 0x1a1210);
+  px(ctx, dx, 64, 16, H - 64, 0x050406);
+  px(ctx, dx, 64, 5, H - 64, 0x3a2418);
+  px(ctx, dx + 1, 74, 1, 2, 0xb08a40);
+  // 문틈 안쪽에 고인 초록 안개
+  px(ctx, dx + 5, H - 4, 11, 4, 0x1c3a2a);
+  px(ctx, dx + 8, H - 6, 7, 2, 0x163024);
+  // 문 위 부적 한 장
+  px(ctx, W / 2 + 4, 66, 4, 6, 0xd8c88a);
+  px(ctx, W / 2 + 5, 67, 2, 4, 0xa02020);
+  // 계단
+  px(ctx, dx - 4, H - 2, 24, 2, 0x2a2630);
   // 거미줄 (오른쪽 처마 아래)
   ctx.globalAlpha = 0.55;
   ctx.strokeStyle = "#c8c8d0";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(W - 6.5, 32.5);
-  ctx.lineTo(W - 14.5, 40.5);
-  ctx.moveTo(W - 6.5, 32.5);
-  ctx.lineTo(W - 6.5, 42.5);
-  ctx.moveTo(W - 6.5, 32.5);
-  ctx.lineTo(W - 16.5, 33.5);
-  ctx.moveTo(W - 10.5, 32.5);
-  ctx.lineTo(W - 6.5, 37.5);
+  ctx.moveTo(W - 6.5, 40.5);
+  ctx.lineTo(W - 14.5, 48.5);
+  ctx.moveTo(W - 6.5, 40.5);
+  ctx.lineTo(W - 6.5, 50.5);
+  ctx.moveTo(W - 6.5, 40.5);
+  ctx.lineTo(W - 16.5, 41.5);
+  ctx.moveTo(W - 10.5, 40.5);
+  ctx.lineTo(W - 6.5, 45.5);
+  ctx.moveTo(8.5, 40.5);
+  ctx.lineTo(14.5, 46.5);
+  ctx.moveTo(8.5, 40.5);
+  ctx.lineTo(8.5, 47.5);
   ctx.stroke();
   ctx.globalAlpha = 1;
   // 이끼·얼룩
-  for (let i = 0; i < 40; i++) px(ctx, 6 + Math.floor(r() * (W - 12)), 30 + Math.floor(r() * 38), 1, 1, r() < 0.5 ? 0x2a3a2a : 0x221e28);
+  for (let i = 0; i < 56; i++) px(ctx, 6 + Math.floor(r() * (W - 12)), 40 + Math.floor(r() * (H - 46)), 1, 1, r() < 0.5 ? 0x2a3a2a : 0x221e28);
   return canvas;
 }
 
@@ -144,9 +187,112 @@ function glowCanvas(size: number, color: string): HTMLCanvasElement {
   return canvas;
 }
 
+/** 벽등 (7×12, 위가 원점 근처): 쇠 받침 + 뚜껑 + 색유리 + 바닥 */
+function lampCanvas(glass: number, core: number): HTMLCanvasElement {
+  const { canvas, ctx } = makeCanvas(7, 12);
+  px(ctx, 3, 0, 1, 2, 0x17141c);
+  px(ctx, 1, 2, 5, 1, 0x17141c);
+  px(ctx, 0, 3, 7, 1, 0x241f2a);
+  px(ctx, 1, 4, 5, 6, 0x17141c);
+  px(ctx, 2, 4, 3, 6, glass);
+  px(ctx, 3, 6, 1, 2, core);
+  px(ctx, 1, 10, 5, 1, 0x241f2a);
+  px(ctx, 3, 11, 1, 1, 0x17141c);
+  return canvas;
+}
+
+/** 문틈에서 새어 나오는 안개 한 덩이 (부드러운 납작한 타원) */
+function mistCanvas(): HTMLCanvasElement {
+  const { canvas, ctx } = makeCanvas(28, 12);
+  ctx.setTransform(1, 0, 0, 12 / 28, 0, 0);
+  const g = ctx.createRadialGradient(14, 14, 0, 14, 14, 14);
+  g.addColorStop(0, "rgba(210,255,230,0.9)");
+  g.addColorStop(0.55, "rgba(180,235,210,0.45)");
+  g.addColorStop(1, "rgba(160,220,200,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 28, 28);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  return canvas;
+}
+
+/** 창에 비치는 창백한 얼굴 (5×6): 퀭한 두 눈 + 벌린 입 */
+function windowFaceCanvas(): HTMLCanvasElement {
+  const { canvas, ctx } = makeCanvas(5, 6);
+  px(ctx, 1, 0, 3, 1, 0xd8e4e0);
+  px(ctx, 0, 1, 5, 4, 0xe8eef0);
+  px(ctx, 1, 5, 3, 1, 0xd8e4e0);
+  px(ctx, 1, 2, 1, 1, 0x0a080c);
+  px(ctx, 3, 2, 1, 1, 0x0a080c);
+  px(ctx, 2, 4, 1, 1, 0x3a0a10);
+  return canvas;
+}
+
 export function ensureHouseTextures(scene: Phaser.Scene): void {
   add(scene, HTEX.house, houseCanvas());
   add(scene, HTEX.houseGlow, glowCanvas(32, "rgba(255,150,60,0.9)"));
+  add(scene, HTEX.lampP, lampCanvas(0x9a52e8, 0xf0d8ff));
+  add(scene, HTEX.lampG, lampCanvas(0x3ad88a, 0xe0fff0));
+  add(scene, HTEX.lampGlow, glowCanvas(32, "rgba(255,255,255,0.85)"));
+  add(scene, HTEX.mist, mistCanvas());
+  add(scene, HTEX.windowFace, windowFaceCanvas());
+}
+
+/** 간판 글꼴 (픽셀 글꼴 Galmuri를 이진화해 판에 새긴다). 글꼴을 불러온 뒤(whenSignFont) 그린다 */
+const SIGN_FONT = `11px "Galmuri11", "Galmuri9", monospace`;
+export const SIGN_TEXT = "귀신의집";
+
+/** 간판 (나무판 + 쇠사슬 두 줄) 과 글씨만 있는 빛 층. 원점은 위 가운데(사슬을 거는 곳) */
+export function ensureSignTextures(scene: Phaser.Scene): void {
+  if (scene.textures.exists(HTEX.sign)) return;
+  const probe = makeCanvas(8, 8).ctx;
+  probe.font = SIGN_FONT;
+  const tw = Math.ceil(probe.measureText(SIGN_TEXT).width);
+  const bw = tw + 10;
+  const bh = 15;
+  const chain = 4;
+  const w = bw + 2;
+  const h = chain + bh + 4;
+  // 글씨 한 장 (이진화) — 판·빛 층 둘 다에 쓴다
+  const tctx = makeCanvas(w, h).ctx;
+  tctx.font = SIGN_FONT;
+  tctx.textBaseline = "alphabetic";
+  tctx.fillStyle = "#ffffff";
+  tctx.fillText(SIGN_TEXT, Math.round((w - tw) / 2), chain + 12);
+  const img = tctx.getImageData(0, 0, w, h);
+  const on = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && img.data[(y * w + x) * 4 + 3] >= 110;
+  // 판
+  const { canvas, ctx } = makeCanvas(w, h);
+  const bx = 1;
+  const by = chain;
+  px(ctx, bx + 4, 0, 1, chain, 0x5a5660);
+  px(ctx, bx + bw - 5, 0, 1, chain, 0x5a5660);
+  px(ctx, bx, by, bw, bh, 0x1a1210);
+  px(ctx, bx + 1, by + 1, bw - 2, bh - 2, 0x2e1e18);
+  for (let y = by + 4; y < by + bh - 1; y += 4) px(ctx, bx + 1, y, bw - 2, 1, 0x24170f);
+  // 한쪽 귀퉁이가 떨어져 나간 판
+  ctx.clearRect(bx + bw - 2, by + bh - 2, 2, 2);
+  // 글씨: 어두운 테두리 + 창백한 초록
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (on(x, y)) continue;
+      if (on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1)) px(ctx, x, y, 1, 1, 0x0a0608);
+    }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (on(x, y)) px(ctx, x, y, 1, 1, 0xc8ffd8);
+  // 판 아래로 흘러내린 붉은 자국 (글씨는 또렷하게 두고 판 가장자리에서만)
+  const r = mulberryCanvasSeed(13);
+  for (let x = bx + 3; x < bx + bw - 3; x++) if (r() < 0.16) px(ctx, x, by + bh, 1, 1 + Math.floor(r() * 3), 0x8a1820);
+  add(scene, HTEX.sign, canvas);
+  // 빛 층: 글씨만 (ADD로 깜빡인다)
+  const { canvas: gc, ctx: gctx } = makeCanvas(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (on(x, y)) px(gctx, x, y, 1, 1, 0x9affc8);
+  add(scene, HTEX.signGlow, gc);
+}
+
+/** 간판 글꼴을 불러온 뒤 한 번 부른다 (이미 있으면 바로) */
+export function whenSignFont(cb: () => void): void {
+  if (typeof document === "undefined" || !document.fonts) return cb();
+  if (document.fonts.check(SIGN_FONT, SIGN_TEXT)) return cb();
+  document.fonts.load(SIGN_FONT, SIGN_TEXT).then(cb, cb);
 }
 
 // ── 미로 안 ──
