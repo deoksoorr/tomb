@@ -37,6 +37,7 @@ import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import CameraControls from "./CameraControls";
 import ChannelMenu from "./ChannelMenu";
+import DonateButton from "./DonateButton";
 import FireworkButton from "./FireworkButton";
 import GuideDialog from "./GuideDialog";
 import Hud, { StatusBanners, ToastList } from "./Hud";
@@ -479,6 +480,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           <Minimap compact={coarse} />
           <CameraControls showZoom={!coarse} />
           {coarse && <MobileControls />}
+          <DonateButton />
         </div>
       )}
 

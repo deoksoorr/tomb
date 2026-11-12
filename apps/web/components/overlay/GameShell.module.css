@@ -216,7 +216,8 @@
 /* 가로 폰처럼 낮은 터치 화면: 조이스틱과 행동 버튼 사이 아래쪽에 */
 @media (pointer: coarse) and (max-height: 520px) {
   .bottomCenter {
-    bottom: calc(var(--safe-bottom) + var(--dock-h) + 8px);
+    /* 아래 가운데 [서버비 보태기](높이 ≈50px, DonateButton) 위 */
+    bottom: calc(var(--safe-bottom) + var(--dock-h) + 62px);
     width: min(420px, calc(100% - 2 * 180px));
   }
 }

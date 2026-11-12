@@ -1,0 +1,164 @@
+/*
+ * 아래 가운데 작은 [서버비 보태기] 버튼. GameShell.module.css 배치 규칙과 맞춘다
+ *  데스크톱: 맨 아래 가운데. 창이 좁아 왼쪽 바로 가기 줄(≈500px)에 닿으면 그 오른쪽으로 밀린다
+ *  좁은 데스크톱(700px 이하): 바로 가기 줄 바로 위 왼쪽
+ *  터치: 아래 바로 가기 바 위, 조이스틱(120px)과 행동 버튼(148px) 사이 가운데
+ */
+.button {
+  position: absolute;
+  left: max(50%, calc(var(--safe-left) + 562px));
+  bottom: var(--safe-bottom);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 4px 9px 4px 7px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(20, 21, 17, 0.78);
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow:
+    0 -2px 0 0 rgba(224, 195, 106, 0.55),
+    0 2px 0 0 rgba(224, 195, 106, 0.55),
+    -2px 0 0 0 rgba(224, 195, 106, 0.55),
+    2px 0 0 0 rgba(224, 195, 106, 0.55),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+  opacity: 0.85;
+  transform: translateX(-50%);
+  touch-action: manipulation;
+  user-select: none;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
+}
+
+.button:hover,
+.button:focus-visible {
+  color: var(--bone);
+  opacity: 1;
+}
+
+.button:active {
+  translate: 0 1px;
+}
+
+/* 동전 대신 촛불색 하트가 살짝 들썩인다 (짠함 담당) */
+.coin {
+  display: grid;
+  animation: beg 2.4s step-end infinite;
+}
+
+.label {
+  display: inline;
+}
+
+@keyframes beg {
+  0%,
+  70% {
+    translate: 0 0;
+  }
+  85% {
+    translate: 0 -2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coin {
+    animation: none;
+  }
+}
+
+/* 좁은 데스크톱 창: 가운데에 자리가 없어 바로 가기 줄 바로 위 왼쪽으로 */
+@media (max-width: 700px) {
+  .button {
+    left: var(--safe-left);
+    bottom: calc(var(--safe-bottom) + 44px);
+    transform: none;
+  }
+}
+
+/* 터치: 조이스틱과 행동 버튼 사이 (행동 버튼 칸이 28px 더 넓어 가운데에서 14px 왼쪽) — 두 줄로 작게 */
+@media (pointer: coarse) {
+  .button {
+    left: calc(50% - 14px);
+    bottom: calc(var(--safe-bottom) + var(--dock-h, 0px) + 6px);
+    flex-direction: column;
+    gap: 2px;
+    padding: 5px 6px;
+    font-size: 10px;
+    text-align: center;
+    transform: translateX(-50%);
+  }
+
+  .label {
+    display: grid;
+    line-height: 1.15;
+  }
+}
+
+/* ── 창 본문 ── */
+.body {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 520px;
+  margin: 0 auto;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.7;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.body p {
+  margin: 0;
+}
+
+.lead {
+  color: var(--bone);
+  font-size: 18px;
+}
+
+.qrBox {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+/* 픽셀화하지 않는다 (기본 보간으로 또렷하게). 폰에서 길게 눌러 저장할 수 있게 */
+.qr {
+  display: block;
+  width: min(240px, 70vw);
+  height: auto;
+  padding: 8px;
+  background: #fff;
+  image-rendering: auto;
+  user-select: auto;
+  -webkit-user-select: auto;
+  -webkit-touch-callout: default;
+  box-shadow: var(--px-border);
+}
+
+.caption {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.thanks {
+  color: var(--moss);
+}
+
+.sign {
+  color: var(--muted);
+  font-size: 12px;
+}
