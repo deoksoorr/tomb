@@ -14,6 +14,8 @@ class_name = "LobbyDO"
 # Workers Logs (console.error, 요청·DO 이벤트의 CPU 시간). LOADTEST.md의 운영 지표 확인에 쓴다.
 [observability]
 enabled = true
+# 무료 플랜 일일 로그 한도를 넘지 않게 요청 기록은 5%만 남긴다 (오류 확인용으로는 충분)
+head_sampling_rate = 0.05
 
 # SQLite 백엔드 (동기 KV API 사용, Workers Paid에서 권장되는 저장소)
 [[migrations]]
