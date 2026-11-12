@@ -39,7 +39,7 @@ export const CRITTERS: readonly CritterDef[] = [
   { id: "samsaek", kind: "cat", name: "삼색이", variant: 3, home: { x: 720, y: 128, r: 110 }, perches: ["bG", "bH", "bQ"], grass: 4, legMs: 36_000, speed: 24 },
   { id: "tux", kind: "cat", name: "턱시도", variant: 4, home: { x: 1000, y: 960, r: 110 }, perches: ["bO", "lE", "cE", "cF"], grass: 4, legMs: 44_000, speed: 20 },
   { id: "boo", kind: "ghost", name: "꼬마 유령", variant: 0, home: { x: 240, y: 430, r: 160 }, perches: ["bI", "bJ"], grass: 5, legMs: 30_000, speed: 14 },
-  { id: "starlet", kind: "ghost", name: "별 유령", variant: 1, home: { x: 200, y: 140, r: 120 }, perches: ["lB", "bF", "bL"], grass: 4, legMs: 34_000, speed: 12 },
+  { id: "starlet", kind: "ghost", name: "별 유령", variant: 1, home: { x: 200, y: 140, r: 120 }, perches: ["lB", "bL"], grass: 4, legMs: 34_000, speed: 12 },
   { id: "moss", kind: "ghost", name: "이끼 유령", variant: 2, home: { x: 500, y: 960, r: 130 }, perches: ["bS", "bV", "bW", "bX"], grass: 6, legMs: 32_000, speed: 13 },
 ];
 

@@ -601,7 +601,6 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "bH", kind: "bench", x: 784, y: 100, facing: DIR.down, seatOffsets: two },
   // ── 별 보기 언덕 ── 묘역을 내려다보는 긴 벤치, 망원경 옆 벤치
   { id: "lB", kind: "bench", x: 128, y: 216, facing: DIR.down, seatOffsets: four },
-  { id: "bF", kind: "bench", x: 88, y: 112, facing: DIR.down, seatOffsets: two },
   { id: "bL", kind: "bench", x: 340, y: 132, facing: DIR.down, seatOffsets: two },
   // ── 성황당 아래 (옛 묘역 동문 밖, 광장 쪽을 바라본다) ──
   { id: "bA", kind: "bench", x: 466, y: 446, facing: DIR.down, seatOffsets: two },
