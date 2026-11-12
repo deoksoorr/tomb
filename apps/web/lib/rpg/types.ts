@@ -26,6 +26,9 @@ export type CharacterState = {
 
 export type DailyStats = { points: number; runs: number; exp: number };
 
+/** 되팔기 결과: 받은 포인트(환불+사냥 수입), 한도에 닿았는지, 실제로 판 개수 (한도에 막혀 못 판 것은 가방에 그대로) */
+export type SoldInfo = { value: number; capped: boolean; count: number };
+
 export type RpgView = {
   character: CharacterState;
   derived: Derived;

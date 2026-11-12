@@ -2,18 +2,20 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
+import { speciesOf } from "@/lib/forage/catalog";
 import { DIFFICULTIES, ZONES, type Difficulty } from "@/lib/rpg/catalog";
 import type { PublicGrave, RankBoard, RankPeriod, RankResponse } from "@/lib/types";
 import styles from "./RankingPanel.module.css";
 
 // 49번: 랭킹은 포인트·사냥 중심. 묘비(헌화 순)는 작은 탭 하나로만 남긴다 (살려주세요 순위는 없어졌다).
 
-type Tab = "points" | "hunt" | "house" | "flower";
+type Tab = "points" | "hunt" | "fish" | "house" | "flower";
 type HuntMode = "huntKills" | "huntBest";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "points", label: "포인트" },
   { id: "hunt", label: "사냥" },
+  { id: "fish", label: "낚시" },
   { id: "house", label: "집 꾸미기" },
   { id: "flower", label: "헌화" },
 ];
@@ -26,7 +28,10 @@ const EMPTY: Record<RankBoard, string> = {
   huntKills: "아직 사냥 기록이 없어요.",
   huntBest: "아직 이 사냥터를 끝까지 깬 사람이 없어요.",
   house: "아직 꾸민 집이 없어요. 분양 사무소에서 집을 분양받아 보세요.",
+  fish: "아직 이 물고기를 낚은 사람이 없어요.",
 };
+/** 최대어 랭킹 물고기 고르기 (크기가 있는 물고기만) */
+const FISH_OPTIONS = speciesOf("fish").filter((sp) => sp.size);
 const EMPTY_HOUSE_WEEK = "이번 주에 꾸민 집이 아직 없어요.";
 
 const LIMIT = 20;
@@ -43,6 +48,7 @@ export function rankValue(board: RankBoard, value: number): string {
   if (board === "huntBest") return clearTime(value);
   if (board === "huntKills") return `${value.toLocaleString("ko-KR")}마리`;
   if (board === "house") return `${value.toLocaleString("ko-KR")}점`;
+  if (board === "fish") return `${(value / 10).toFixed(1)}cm`;
   return `${value.toLocaleString("ko-KR")}P`;
 }
 
@@ -53,18 +59,19 @@ type Props = {
   onPick: (graveId: string) => void;
 };
 
-/** 탭 4개: 포인트(이번 주·전체) · 사냥(처치 수·사냥터별 최단 클리어) · 집 꾸미기(F11 꾸밈 점수) · 헌화(지금 채널 묘비) */
+/** 탭 5개: 포인트(이번 주·전체) · 사냥(처치 수·사냥터별 최단 클리어) · 낚시(물고기별·전체 최대어) · 집 꾸미기(F11 꾸밈 점수) · 헌화(지금 채널 묘비) */
 export default function RankingList({ graves, onPick }: Props) {
   const [tab, setTab] = useState<Tab>("points");
   const [period, setPeriod] = useState<RankPeriod>("week");
   const [hunt, setHunt] = useState<HuntMode>("huntBest");
   const [zone, setZone] = useState<Difficulty>(DIFFICULTIES[0]);
+  const [fish, setFish] = useState("all");
   const baseId = useId();
   const flowered = useMemo(
     () => (tab === "flower" ? graves.filter((g) => g.flowers > 0).sort((a, b) => b.flowers - a.flowers).slice(0, LIMIT) : []),
     [graves, tab],
   );
-  const board: RankBoard = tab === "hunt" ? hunt : tab === "house" ? "house" : "points";
+  const board: RankBoard = tab === "hunt" ? hunt : tab === "house" ? "house" : tab === "fish" ? "fish" : "points";
 
   return (
     <>
@@ -94,6 +101,16 @@ export default function RankingList({ graves, onPick }: Props) {
             ))}
           </div>
           {tab === "house" && <span className={styles.hint}>꾸밈 점수 = 안팎 물건 점수 + 좋아요 × 3</span>}
+          {tab === "fish" && (
+            <select className={styles.zone} value={fish} onChange={(e) => setFish(e.target.value)} aria-label="물고기">
+              <option value="all">모든 물고기</option>
+              {FISH_OPTIONS.map((sp) => (
+                <option key={sp.id} value={sp.id}>
+                  {sp.name}
+                </option>
+              ))}
+            </select>
+          )}
           {tab === "hunt" && (
             <>
               <div className={styles.chips} role="group" aria-label="사냥 기록">
@@ -135,7 +152,7 @@ export default function RankingList({ graves, onPick }: Props) {
             </ol>
           )
         ) : (
-          <BoardRanking key={`${board}-${period}-${board === "huntBest" ? zone : ""}`} board={board} period={period} zone={zone} />
+          <BoardRanking key={`${board}-${period}-${board === "huntBest" ? zone : board === "fish" ? fish : ""}`} board={board} period={period} zone={zone} fish={fish} />
         )}
       </div>
     </>
@@ -143,20 +160,20 @@ export default function RankingList({ graves, onPick }: Props) {
 }
 
 /** 서버 랭킹 한 판. 내 줄은 강조하고, 50위 밖이면 맨 아래에 따로 */
-function BoardRanking({ board, period, zone }: { board: RankBoard; period: RankPeriod; zone: Difficulty }) {
+function BoardRanking({ board, period, zone, fish }: { board: RankBoard; period: RankPeriod; zone: Difficulty; fish: string }) {
   const [data, setData] = useState<RankResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     api
-      .rank(board, period, board === "huntBest" ? zone : undefined)
+      .rank(board, period, board === "huntBest" ? zone : undefined, board === "fish" ? fish : undefined)
       .then((r) => alive && setData(r))
       .catch((e: unknown) => alive && setError(errorMessage(e)));
     return () => {
       alive = false;
     };
-  }, [board, period, zone]);
+  }, [board, period, zone, fish]);
 
   if (!data) return <p className={styles.empty}>{error ?? "불러오는 중…"}</p>;
   if (data.rows.length === 0) return <p className={styles.empty}>{board === "house" && period === "week" ? EMPTY_HOUSE_WEEK : EMPTY[board]}</p>;

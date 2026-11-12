@@ -1,10 +1,11 @@
 import * as Phaser from "phaser";
-import { DIR, FISHING_SPOTS, fishingSpotById, type DirId, type FishingSpot, type Sid, type WelcomeMsg } from "@tomb/protocol";
+import { boatFishingSpotId, DIR, FISHING_SPOTS, fishingSpotById, STATE, type DirId, type FishingSpot, type PeerInfo, type Sid, type WelcomeMsg } from "@tomb/protocol";
 import { ambienceAt, parseAmbienceOverride, type AmbienceOverride } from "@/lib/ambience";
 import { gatherNodeById, NODE_LABEL, NPCS, type GatherNode, type Npc } from "@/lib/forage/catalog";
 import { bridge, type ForageRodPhase } from "../../bridge";
 import { DEPTH } from "../../config";
 import type { Player } from "../../entities/Player";
+import type { RemoteAvatar } from "../../entities/RemoteAvatar";
 import type { RealtimeClient } from "../../net/RealtimeClient";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../../text/GlyphAtlas";
 import type { Interactable } from "../layout";
@@ -21,6 +22,8 @@ import { ForageSfx } from "./sounds";
 // - NPC 둘(어부 영감·수집가 유령): E → 판매 창. 발밑 충돌이 있다.
 // - 채집 지점: 서버가 알려 준 "지금 나에게 피어 있는" 것만 그린다 (forage:nodes). E → UI가 게이지/곤충 미니게임을 돌린다.
 //   게이지는 머리 위 막대로 그린다 (forage:gauge).
+// - 배 위 낚시: 조각배에 탄 채 물 한가운데서 E → 배가 떠 있는 물(강·호수)의 가상 자리(boat:river·boat:lake)로 같은 낚시 창을 연다.
+//   낚싯대는 배를 따라 움직이고, 다른 사람에게는 실시간 서버의 rod 표시(조각배 자리에 앉아 있을 때만)로 보인다.
 
 export type ForageDeps = {
   scene: Phaser.Scene;
@@ -30,6 +33,8 @@ export type ForageDeps = {
   player: () => Player;
   net: () => RealtimeClient;
   seats: () => ReadonlyMap<string, Sid>;
+  /** 다른 사람 아바타 (배 위 낚싯대를 그 사람 배에 붙여 그린다) */
+  remotes: () => ReadonlyMap<Sid, RemoteAvatar>;
   /** 상호작용 대상 덧붙이기 (WorldMap.setExtraItems) */
   setItems: (items: Interactable[]) => void;
   toast: (message: string) => void;
@@ -41,7 +46,12 @@ const NO_SEATS: ReadonlyMap<string, Sid> = new Map();
 /** 찌가 떨어지는 거리 */
 const CAST_DIST = 24;
 
-type Rod = { g: Phaser.GameObjects.Graphics; bob: Phaser.GameObjects.Image; spot: FishingSpot; mine: boolean };
+/** follow = 배 위 낚싯대: 매 프레임 낚는 사람의 위치·방향으로 자리를 옮긴다 (null이면 숨긴다) */
+type Rod = { g: Phaser.GameObjects.Graphics; bob: Phaser.GameObjects.Image; spot: FishingSpot; mine: boolean; follow?: () => { x: number; y: number; facing: DirId } | null };
+/** 배 위 낚싯대 드리우기를 서버가 확인하지 않았으면 이만큼마다 다시 보낸다 (배 자리를 다시 잡는 중일 수 있다) */
+const ROD_RETRY_MS = 1500;
+/** 배에서는 좌우로만 앉는다 → 낚싯대도 좌우로 */
+const sideOf = (dir: number): DirId => (dir === DIR.left ? DIR.left : DIR.right);
 type NodeView = { node: GatherNode; img: Phaser.GameObjects.Image; aura: NodeAura };
 /** 창(15분)이 끝나기 이만큼 전부터 지점이 깜빡인다 */
 const NODE_BLINK_MS = 10_000;
@@ -66,6 +76,13 @@ export class Foraging {
   private readonly rods = new Map<string, Rod>();
   /** 내가 앉은 낚시 자리 */
   private fishing: FishingSpot | null = null;
+  /** 지금 낚시가 배 위 낚시인지 (fishing은 매 프레임 배를 따라 옮기는 가상 자리) */
+  private boatFish = false;
+  /** 서버가 내 배 위 낚싯대(rod)를 받아들였는지, 다시 보낼 시각 */
+  private rodConfirmed = false;
+  private rodRetryAt = 0;
+  /** 배 위에서 낚싯대를 드리운 다른 사람들 */
+  private readonly boatRods = new Set<Sid>();
   private rodPhase: ForageRodPhase = "idle";
   private tension = 0;
   private phaseAt = 0;
@@ -245,12 +262,46 @@ export class Foraging {
   private leave(): void {
     if (!this.fishing) return;
     const pl = this.d.player();
-    if (pl.sitting) pl.stand(this.scene.time.now, null);
+    if (!this.boatFish && pl.sitting) pl.stand(this.scene.time.now, null);
     this.dropFishing();
+  }
+
+  /**
+   * 배 위 낚시 시작 (WorldScene: 조각배에서 물가가 아닌 곳에서 E). at = BoatRide.fishingSpot().
+   * 이미 낚시 중이면 아무것도 안 한다
+   */
+  fishFromBoat(at: { x: number; y: number; water: "river" | "lake" }): void {
+    if (this.fishing) return;
+    const pl = this.d.player();
+    const now = this.scene.time.now;
+    const id = boatFishingSpotId(at.water);
+    this.fishing = { id, water: at.water, x: at.x, y: at.y, facing: sideOf(pl.dir) };
+    this.boatFish = true;
+    this.rodConfirmed = false;
+    this.rodRetryAt = 0;
+    this.rodPhase = "idle";
+    this.phaseAt = now;
+    this.syncRods();
+    bridge.emit("forage:use", { kind: "fish", spot: id, water: at.water });
+  }
+
+  /** 배 위에서 낚시 중인지 (노를 저으면 WorldScene이 낚시를 그만두게 한다) */
+  get fishingFromBoat(): boolean {
+    return this.boatFish;
+  }
+
+  /** 배 위 낚시 그만 (노 젓기·배에서 내리기) */
+  stopBoatFishing(): void {
+    if (this.boatFish) this.dropFishing();
   }
 
   private dropFishing(): void {
     if (!this.fishing) return;
+    if (this.boatFish) {
+      this.boatFish = false;
+      this.rodConfirmed = false;
+      if (this.d.net().online) this.d.net().rod(false);
+    }
     this.fishing = null;
     this.rodPhase = "idle";
     this.bang?.destroy();
@@ -264,6 +315,11 @@ export class Foraging {
 
   onWelcome(m: WelcomeMsg): void {
     this.serverKnows = m.spots === true;
+    // 배 위 낚싯대: 다시 붙었으면 다시 알리고(배 자리를 다시 잡은 뒤 서버가 받는다), 다른 사람 것은 입장 정보로 맞춘다
+    this.rodConfirmed = false;
+    this.rodRetryAt = 0;
+    this.boatRods.clear();
+    for (const p of m.peers) if (p.rod === true && p.sid !== m.sid) this.boatRods.add(p.sid);
     // 낚시 중에 다시 붙었다 (재연결·재배포): 자리가 비었으면 다시 잡고, 남이 앉았으면 일어난다
     const f = this.fishing;
     if (f && this.serverKnows) {
@@ -279,6 +335,27 @@ export class Foraging {
     if (!seatId.startsWith("f_")) return;
     if (sid !== null && this.fishing?.id === seatId && sid !== this.d.net().mySid) this.lost();
     // 점유표(WorldScene.seats)는 이 호출 뒤에 바뀐다 → 다음 프레임에 다시 그린다
+    this.checkAt = 0;
+  }
+
+  /** 서버 알림: 배 위 낚싯대를 드리움·거둠 (보낸 사람 포함 모두) */
+  onRod(sid: Sid, on: boolean): void {
+    const net = this.d.net();
+    if (sid === net.mySid) {
+      if (on && !this.boatFish) net.rod(false); // 이미 그만뒀다 (늦게 온 확인)
+      // 서버가 거뒀다 (배 자리를 놓쳤다 등) → 확인을 기다리며 다시 보낸다. 진짜로 배에서 내렸으면 update가 낚시를 그만둔다
+      this.rodConfirmed = on && this.boatFish;
+      return;
+    }
+    if (on) this.boatRods.add(sid);
+    else this.boatRods.delete(sid);
+    this.checkAt = 0;
+  }
+
+  /** 늦게 들어왔거나 다시 맞출 때: 입장 정보의 rod */
+  applyPeer(p: Pick<PeerInfo, "sid" | "rod">): void {
+    if (p.rod === true) this.boatRods.add(p.sid);
+    else this.boatRods.delete(p.sid);
     this.checkAt = 0;
   }
 
@@ -347,6 +424,11 @@ export class Foraging {
   private bobberHome(pull = 0): { x: number; y: number } {
     const f = this.fishing;
     if (!f) return { x: 0, y: 0 };
+    if (this.boatFish) {
+      const pl = this.d.player();
+      f.x = pl.x;
+      f.y = pl.y;
+    }
     const [dx, dy] = STEP[f.facing];
     const dist = CAST_DIST * (1 - pull);
     return { x: f.x + dx * dist, y: f.y + dy * dist - (dy === 0 ? 2 : 0) };
@@ -368,6 +450,13 @@ export class Foraging {
     if (this.d.net().online) {
       const me = this.d.net().mySid;
       for (const [id, sid] of this.d.seats()) if (id.startsWith("f_") && sid !== me && fishingSpotById(id)) want.set(id, false);
+      // 배 위에서 낚는 다른 사람 (지금 배에 타 있고 보이는 사람만)
+      const remotes = this.d.remotes();
+      for (const sid of [...this.boatRods]) {
+        const r = remotes.get(sid);
+        if (!r) this.boatRods.delete(sid);
+        else if (sid !== me && r.stateId === STATE.boat && !r.away) want.set(`boat@${sid}`, false);
+      }
     }
     for (const [id, r] of this.rods) {
       if (want.get(id) === r.mine) continue;
@@ -377,15 +466,52 @@ export class Foraging {
     }
     for (const [id, mine] of want) {
       if (this.rods.has(id)) continue;
+      const bob = this.scene.add.image(0, 0, FTEX.bobber).setOrigin(0.5, 1).setVisible(false);
+      if (mine && this.boatFish && this.fishing) {
+        // 내 배 위 낚싯대: 낚시 자리(가상)를 매 프레임 내 위치로 옮긴다
+        const g = this.scene.add.graphics();
+        this.rods.set(id, { g, bob, spot: this.fishing, mine, follow: () => this.myBoatPose() });
+        continue;
+      }
+      if (id.startsWith("boat@")) {
+        const sid = Number(id.slice(5));
+        const g = this.scene.add.graphics();
+        const spot: FishingSpot = { id, water: "lake", x: 0, y: 0, facing: DIR.right };
+        this.rods.set(id, { g, bob, spot, mine, follow: () => this.remoteBoatPose(sid) });
+        continue;
+      }
       const spot = fishingSpotById(id)!;
       const g = this.scene.add.graphics().setDepth(spot.y + (spot.facing === DIR.up ? -1 : 1));
-      const bob = this.scene.add.image(0, 0, FTEX.bobber).setOrigin(0.5, 1).setVisible(false);
       this.rods.set(id, { g, bob, spot, mine });
     }
   }
 
+  private myBoatPose(): { x: number; y: number; facing: DirId } | null {
+    const pl = this.d.player();
+    return pl.inBoat ? { x: pl.x, y: pl.y, facing: sideOf(pl.dir) } : null;
+  }
+
+  private remoteBoatPose(sid: Sid): { x: number; y: number; facing: DirId } | null {
+    const r = this.d.remotes().get(sid);
+    if (!r || r.stateId !== STATE.boat || r.away) return null;
+    const at = r.posOverride ?? r;
+    return { x: at.x, y: at.y, facing: sideOf(r.view.dir) };
+  }
+
   private drawRod(r: Rod, now: number): void {
     const { spot, g, bob } = r;
+    if (r.follow) {
+      const at = r.follow();
+      if (!at) {
+        g.clear();
+        bob.setVisible(false);
+        return;
+      }
+      spot.x = Math.round(at.x);
+      spot.y = Math.round(at.y);
+      spot.facing = at.facing;
+      g.setDepth(spot.y + 2); // 배 앞 그림(y + 1.5) 위
+    }
     const [dx, dy] = STEP[spot.facing];
     // 손 → 낚싯대 끝
     const hx = spot.x + dx * 3 + (dy !== 0 ? 4 : 0);
@@ -556,7 +682,19 @@ export class Foraging {
     const f = this.fishing;
     if (f) {
       const pl = this.d.player();
-      if (pl.state !== "sitGround" || Math.hypot(pl.x - f.x, pl.y - f.y) > 6) this.dropFishing();
+      if (this.boatFish) {
+        // 배 위 낚시: 배에서 내렸으면 그만, 아니면 서버가 확인할 때까지 낚싯대 드리우기를 알린다
+        if (!pl.inBoat) this.dropFishing();
+        else {
+          f.x = pl.x;
+          f.y = pl.y;
+          const net = this.d.net();
+          if (!this.rodConfirmed && net.online && now >= this.rodRetryAt) {
+            this.rodRetryAt = now + ROD_RETRY_MS;
+            net.rod(true);
+          }
+        }
+      } else if (pl.state !== "sitGround" || Math.hypot(pl.x - f.x, pl.y - f.y) > 6) this.dropFishing();
     }
     if (this.rodPhase === "reel" && now >= this.reelTickAt) {
       this.reelTickAt = now + 110 - this.tension * 40;

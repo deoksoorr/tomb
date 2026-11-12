@@ -1,3 +1,5 @@
+import { speciesById } from "@/lib/forage/catalog";
+import { getFishRank, type FishRankEntry } from "@/lib/forage/fishRank";
 import { DIFFICULTIES } from "@/lib/rpg/catalog";
 import { handler, HttpError, json } from "@/lib/http";
 import { getHouseStore, houseRank } from "@/lib/housing/service";
@@ -16,6 +18,7 @@ const RANK_SIZE = 50;
  *  - huntKills: 사냥터 처치 수 합계
  *  - huntBest: 그 사냥터를 쓰러지지 않고 끝까지 깬 가장 짧은 시간 (value = ms)
  *  - house: 하우징 꾸밈 점수 (F11. 전체 = 모든 집, 주간 = 이번 주에 꾸민 집. name = 집 이름, sub = 번지 · 주인)
+ *  - fish: 최대어 `&fish=<물고기 id>|all` (value = 크기 cm×10. all이면 sub = 그 물고기 이름)
  * 기본은 방문자와 무관한 응답이라 CDN에 30초 캐시하고, `?me=1`이면 내 줄·내 순위를 넣고 캐시하지 않는다
  */
 export const GET = handler(async (req) => {
@@ -30,6 +33,19 @@ export const GET = handler(async (req) => {
   const personal = params.get("me") === "1";
   const me = personal ? await getVisitorId(req) : null;
   const week = period === "week" ? kstWeek() : undefined;
+  if (board === "fish") {
+    const fish = params.get("fish") ?? "all";
+    if (fish !== "all" && speciesById(fish)?.cat !== "fish") throw new HttpError(400, "INVALID_INPUT", "모르는 물고기예요.");
+    const r = await getFishRank().board(fish === "all" ? null : fish, week ?? null, RANK_SIZE, me);
+    const row = (e: FishRankEntry): RankRow => ({
+      rank: e.rank,
+      name: e.name ?? NO_NAME,
+      value: e.size,
+      me: e.accountId === me,
+      ...(e.sp ? { sub: speciesById(e.sp)?.name ?? e.sp } : {}),
+    });
+    return json<RankResponse>({ board, period, fish, rows: r.rows.map(row), mine: r.mine ? row(r.mine) : null }, { headers: cacheHeaders(personal) });
+  }
   if (board === "house") {
     const r = await houseRank(getHouseStore(), period, me, RANK_SIZE);
     return json<RankResponse>({ board, period, rows: r.rows, mine: r.mine }, { headers: cacheHeaders(personal) });

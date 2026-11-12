@@ -44,6 +44,7 @@ import Hud, { StatusBanners, ToastList } from "./Hud";
 import MenuSheet, { type MenuTarget } from "./MenuSheet";
 import MobileControls from "./MobileControls";
 import NetHud from "./NetHud";
+import ExprRadial, { ExprButton } from "./ExprRadial";
 import SayDialog from "./SayDialog";
 import ReportLayer from "./ReportLayer";
 import Tutorial from "./Tutorial";
@@ -76,7 +77,7 @@ import { rememberChannel } from "@/lib/channelHistory";
 
 const GameCanvas = dynamic(() => import("@/game/GameCanvas"), { ssr: false });
 
-const KEY_HINTS = ["Space 점프 · E 살펴보기", "휠: 확대·축소 · 우클릭 드래그: 둘러보기"];
+const KEY_HINTS = ["Space 점프 · E 살펴보기", "T 표현(말풍선·이모티콘) · U 즐겨찾기 표현 원형", "휠: 확대·축소 · 우클릭 드래그: 둘러보기"];
 
 /** 데스크톱에서 처음 입장했을 때 한 번만 키 조작 힌트를 띄운다 */
 function useKeyHints(active: boolean) {
@@ -152,7 +153,6 @@ type Panel =
   | "housing"
   | "activity"
   | "passed"
-  | "say"
   | "calendar"
   | "gifts";
 
@@ -183,6 +183,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const [openGraveId, setOpenGraveId] = useState<string | null>(null);
   const [bury, setBury] = useState<BuryMode | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
+  /** 표현 창(T: 말풍선·이모티콘·벤치 상태)과 즐겨찾기 원형 목록(U). 집·마을 HUD(panel "housing") 위에서도 열리게 panel과 따로 둔다 */
+  const [sayOpen, setSayOpen] = useState(false);
+  const [radial, setRadial] = useState(false);
   /** 주거 구역의 집 문·빈 필지에서 하우징 창을 열었으면 그 집/번지 */
   const [housingIntent, setHousingIntent] = useState<{ houseId?: string; lot?: number } | null>(null);
   const coarse = useMediaQuery("(pointer: coarse)");
@@ -222,21 +225,43 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const [tutorialOn, setTutorialOn] = useState<boolean | null>(null);
   const showTutorial = ready && !away && (tutorialOn ?? (me ? !me.tutorialDone : false));
 
-  // 데스크톱 T 키: 말풍선 고르기, I 키: 가방 (입력칸·열린 창이 없을 때만)
-  const quiet = panel === null && openGraveId === null && bury === null;
+  // 즐겨찾기 원형 목록은 내 캐릭터가 보이는 월드·마을·집에서만 (상점·사냥터·미니게임 제외)
+  const canRadial = !scene || scene === "world" || scene === "house";
+  /** 터치 메뉴·마을/집 버튼에서 원형 목록 열기 */
+  const openRadial = () => {
+    if (!canRadial) return;
+    setPanel((p) => (p === "housing" ? p : null));
+    setSayOpen(false);
+    setRadial(true);
+  };
+
+  // 데스크톱 T 키: 표현 창, U 키: 즐겨찾기 원형 목록, I 키: 가방 (입력칸·열린 창이 없을 때만)
+  // 마을·집 안(panel "housing" — 위쪽 HUD만 떠 있다)에서도 T·U는 된다
+  const quiet = panel === null && openGraveId === null && bury === null && !sayOpen;
+  const roomQuiet = panel === "housing" && scene === "house" && openGraveId === null && bury === null && !sayOpen;
   useEffect(() => {
-    if (!ready || !quiet) return;
+    if (!ready || (!quiet && !roomQuiet)) return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.code !== "KeyT" && e.code !== "KeyI") || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((e.code !== "KeyT" && e.code !== "KeyI" && e.code !== "KeyU") || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (roomQuiet && e.code === "KeyI") return;
       const el = document.activeElement;
       if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]")) return;
+      // 하우징 안의 방명록·분양 사무소 같은 창이 떠 있으면 그 창 몫
+      if (document.querySelector("dialog[open]")) return;
+      if (e.code === "KeyU") {
+        if (!canRadial) return;
+        e.preventDefault();
+        setRadial(true);
+        return;
+      }
       e.preventDefault();
-      // T: 말풍선 고르기, I: 가방
-      setPanel(e.code === "KeyI" ? "bag" : "say");
+      setRadial(false);
+      if (e.code === "KeyI") setPanel("bag");
+      else setSayOpen(true);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [ready, quiet]);
+  }, [ready, quiet, roomQuiet, canRadial]);
 
   // 게임이 맵에 내 묘비를 표시한다 (sticky)
   const myGraveIds = me?.graves;
@@ -341,6 +366,12 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     else if (target === "dex") {
       setPanel(null);
       bridge.emit("forage:dex", {});
+    } else if (target === "say") {
+      setPanel(null);
+      setSayOpen(true);
+    } else if (target === "favs") {
+      setPanel(null);
+      openRadial();
     } else setPanel(target);
   }
 
@@ -439,6 +470,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 </>
               )}
             </button>
+            <ExprButton className={cx(ui.button, styles.dockButton)} onOpen={() => setSayOpen(true)} onRadial={openRadial}>
+              <PixelIcon name="chat" />
+              표현
+              {!coarse && <span className={styles.dockKey}>T</span>}
+            </ExprButton>
             <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("bag")}>
               <PixelIcon name="bag" />
               가방
@@ -552,7 +588,17 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           onClose={closePanel}
         />
       )}
-      {panel === "say" && <SayDialog onClose={closePanel} />}
+      {sayOpen && <SayDialog onClose={() => setSayOpen(false)} />}
+      {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
+      {/* 마을·집 안: 월드 바로 가기 줄이 숨으니 [표현] 버튼만 왼쪽 아래에 따로 */}
+      {ready && scene === "house" && (
+        <div className={styles.roomExpr}>
+          <ExprButton className={cx(ui.button, styles.dockButton)} onOpen={() => setSayOpen(true)} onRadial={openRadial}>
+            <PixelIcon name="chat" />
+            표현
+          </ExprButton>
+        </div>
+      )}
       {panel === "menu" && (
         <MenuSheet
           canBury={!inShop}

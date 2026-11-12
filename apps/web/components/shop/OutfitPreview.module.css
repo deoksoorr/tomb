@@ -63,6 +63,30 @@
   }
 }
 
+/* 작게: 방향(앞·옆·뒤)과 자세(서 있기·걷기)를 한 줄에, 글씨·높이를 줄인다 (무대 폭 안에서) */
+.preview[data-compact] .controls {
+  grid-template-columns: 3fr 2fr;
+  gap: 4px;
+}
+
+.preview[data-compact] .segment {
+  gap: 2px;
+}
+
+.preview[data-compact] .seg {
+  min-width: 0;
+  min-height: 26px;
+  padding: 2px 3px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+@media (pointer: coarse) {
+  .preview[data-compact] .seg {
+    min-height: 34px;
+  }
+}
+
 @media (max-width: 640px) {
   .preview {
     --scale: 3;

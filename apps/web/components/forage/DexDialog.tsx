@@ -21,7 +21,7 @@ import {
   type Species,
   type Where,
 } from "@/lib/forage/catalog";
-import { forageApi } from "@/lib/forage/client";
+import { forageApi, type DexPeer } from "@/lib/forage/client";
 import type { DexEntry, PublicDex } from "@/lib/forage/types";
 import { useAmbience } from "@/lib/hooks/useAmbience";
 import { meStore } from "@/lib/hooks/useMe";
@@ -49,8 +49,9 @@ function hints(sp: Species): string[] {
   return out;
 }
 
-export default function DexDialog({ accountId, name, onClose }: { accountId?: string; name?: string | null; onClose: () => void }) {
-  const mine = !accountId;
+export default function DexDialog({ accountId, peer, name, onClose }: { accountId?: string; peer?: DexPeer; name?: string | null; onClose: () => void }) {
+  const mine = !accountId && !peer;
+  const peerKey = peer ? `${peer.ch ?? ""}:${peer.room ?? ""}:${peer.sid}` : "";
   const { state } = useForage();
   const [other, setOther] = useState<PublicDex | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,14 +66,15 @@ export default function DexDialog({ accountId, name, onClose }: { accountId?: st
       return;
     }
     let alive = true;
-    forageApi
-      .dexOf(accountId)
+    (peer ? forageApi.dexOfPeer(peer) : forageApi.dexOf(accountId!))
       .then((d) => alive && setOther(d))
       .catch((e) => alive && setError(errorMessage(e)));
     return () => {
       alive = false;
     };
-  }, [mine, accountId]);
+    // peer는 peerKey로만 비교한다 (매번 새 객체라도 같은 사람이면 다시 받지 않게)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mine, accountId, peerKey]);
 
   const dex: Record<string, DexEntry> = (mine ? state?.dex : other?.dex) ?? {};
   const titles = (mine ? state?.titles : other?.titles) ?? [];

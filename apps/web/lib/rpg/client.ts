@@ -2,7 +2,7 @@ import type { HuntRoomsInfo } from "@tomb/protocol";
 import { request } from "../api";
 import { REALTIME_HTTP_URL } from "../realtime";
 import { HUNT_ZONES, isZoneId, type Difficulty, type GameKind, type GearSlot, type SkillId, type Stats, type ZoneId } from "./catalog";
-import type { RpgView, RunFinishResponse, RunResult, RunStartResponse } from "./types";
+import type { RpgView, RunFinishResponse, RunResult, RunStartResponse, SoldInfo } from "./types";
 
 // 브라우저 → 사냥터 API. 실패하면 서버의 한국어 메시지를 담은 ApiRequestError를 던진다 (lib/api의 request).
 
@@ -14,13 +14,13 @@ export type CharacterAction =
   | { type: "hotbar"; slots: (SkillId | null)[] }
   | { type: "equip"; slot: GearSlot; itemId: string | null };
 
-export type ShopResponse = RpgView & { sold?: { value: number; capped: boolean } };
+export type ShopResponse = RpgView & { sold?: SoldInfo };
 
 export const rpgApi = {
   view: () => request<RpgView>("/api/rpg", { cache: "no-store" }),
   character: (a: CharacterAction) => request<RpgView>("/api/rpg/character", post(a)),
   buy: (itemId: string, qty = 1) => request<ShopResponse>("/api/rpg/shop", post({ type: "buy", itemId, qty })),
-  sell: (itemId: string) => request<ShopResponse>("/api/rpg/shop", post({ type: "sell", itemId })),
+  sell: (itemId: string, count = 1) => request<ShopResponse>("/api/rpg/shop", post({ type: "sell", itemId, count })),
   start: (game: GameKind, difficulty: Difficulty, zone?: ZoneId) => request<RunStartResponse>("/api/rpg/run/start", post({ game, difficulty, ...(game === "hunt" && zone ? { zone } : {}) })),
   finish: (ticket: string, result: RunResult) => request<RunFinishResponse>("/api/rpg/run/finish", post({ ticket, result })),
 };

@@ -1,10 +1,10 @@
 import * as Phaser from "phaser";
-import { DIR, ridePetOfLook, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
+import { dexBadgeCats, DIR, ridePetOfLook, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange, isDyedSpec } from "../sprites/avatar";
 import { CosmeticFxView } from "./CosmeticFxView";
-import { riderLift } from "../sprites/cosmeticFx";
+import { bodyFx, riderLift } from "../sprites/cosmeticFx";
 import type { EmoteIcon } from "../sprites/emotes";
 import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
 import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_H, POSE_W, type IndoorPose } from "../sprites/indoorPose";
@@ -12,6 +12,10 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { SpeechBubble } from "./SpeechBubble";
 import { MoodView } from "./MoodView";
 import { STAFF_COLOR, StaffFxView } from "./StaffFxView";
+
+/** 도감 100% 배지: 종류마다 별 하나 (금빛) */
+const DEX_BADGE_STAR = "★";
+const DEX_BADGE_TINT = 0xffd45e;
 
 // 아바타 한 명의 화면 표현 (스프라이트 + 이름 라벨 + "…" 말풍선). 내 캐릭터와 원격 아바타가 같이 쓴다.
 // 상태 값과 방향만 받아서 애니메이션을 고르고, 상태별 연출은 그림에만 얹는다 (논리 위치는 그대로):
@@ -116,6 +120,9 @@ export class AvatarView {
   /** 31번 운영자 저승사자 차림 (낫·안개·배지). 켜져 있는 동안 몸 색은 염색했으면 그 색, 아니면 STAFF_COLOR. 원래 색은 staffBase에 둔다 */
   private staffFx: StaffFxView | null = null;
   private staffBase = "";
+  /** 도감 100% 배지 (이름표 오른쪽 별) */
+  private dexBadge: Phaser.GameObjects.BitmapText | null = null;
+  private dexBadgeN = 0;
   private wings: Phaser.GameObjects.Image | null = null;
   private pet: Phaser.GameObjects.Image | null = null;
   private petX = 0;
@@ -216,6 +223,26 @@ export class AvatarView {
     return !!this.staffFx;
   }
 
+  /** 도감 100% 배지 (종류별 비트, 0이면 없음): 이름표 오른쪽에 종류마다 작은 별 하나 */
+  setDexBadge(bits: number | undefined): void {
+    const n = dexBadgeCats(bits).length;
+    if (n === this.dexBadgeN) return;
+    this.dexBadgeN = n;
+    if (!n) {
+      this.dexBadge?.destroy();
+      this.dexBadge = null;
+      return;
+    }
+    const text = DEX_BADGE_STAR.repeat(n);
+    this.atlas.ensure(text);
+    if (this.dexBadge) this.dexBadge.setText(text);
+    else this.dexBadge = this.scene.add.bitmapText(0, 0, FONT_KEY, text, FONT_PX).setOrigin(0, 1).setDepth(this.label.depth).setTint(DEX_BADGE_TINT);
+  }
+
+  get dexBadgeCount(): number {
+    return this.dexBadgeN;
+  }
+
   /** 46·25번: 실시간 서버가 알린 염색·몸 모양 (없는 값은 그대로 둔다) */
   applyAppearance(extra: AppearanceChange | undefined): void {
     if (!extra) return;
@@ -229,6 +256,8 @@ export class AvatarView {
     if (b === this.body) return;
     this.body = b;
     this.shoulder = BODY_METRICS[b].shoulder;
+    // 25번 프리미엄 외형 등급 연출은 몸에 딸린다 (다른 사람 화면에서도 몸 id로 똑같이)
+    if (this.cfx || bodyFx(b)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, b);
     this.relayout();
     this.retexture();
   }
@@ -271,7 +300,7 @@ export class AvatarView {
       this.mountPet = mount;
       this.anim = "";
     }
-    if (this.cfx || look.length) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(look);
+    if (this.cfx || look.length || bodyFx(this.body)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(look, this.body);
     this.relayout();
     this.retexture();
     const vis = this.sprite.visible;
@@ -650,13 +679,25 @@ export class AvatarView {
     const fa = this.fade;
     if (s.alpha !== fa) s.setAlpha(fa);
     if (this.label.alpha !== fa) this.label.setAlpha(fa);
+    if (this.dexBadge) {
+      const l = this.label;
+      if (this.dexBadge.scaleX !== labelScale) this.dexBadge.setScale(labelScale);
+      this.dexBadge.setPosition(Math.round(l.x + l.width / 2 + 2 * labelScale), l.y).setAlpha(fa).setVisible(vis && l.visible);
+    }
     if (this.shadow && this.shadow.alpha !== fa) this.shadow.setAlpha(fa);
 
     for (let i = 0; i < this.aura.length; i++) {
-      // 반딧불 세 마리가 몸 둘레를 천천히 돈다
+      // 반딧불 세 마리가 몸 둘레를 천천히 돈다: 뒤쪽 반원은 몸 뒤(depth 아래)에 작고 어둡게 → 입체감
       const a = now / 900 + (i * Math.PI * 2) / this.aura.length;
+      const z = Math.sin(a);
       const blink = 0.45 + 0.55 * Math.max(0, Math.sin(now / 350 + i * 2.1));
-      this.aura[i].setPosition(bx + Math.cos(a) * 10, headY - 9 + Math.sin(a * 1.3) * 5).setAlpha(blink);
+      const d = this.depthOverride ?? s.y;
+      // 앞쪽은 예전처럼 밤 어둠 위(반딧불 층), 뒤쪽은 몸 뒤
+      this.aura[i]
+        .setPosition(bx + Math.cos(a) * 10, headY - 9 + z * 3 + Math.sin(a * 2 + i) * 2)
+        .setAlpha(blink * (z < 0 ? 0.55 + 0.45 * (1 + z) : 1))
+        .setScale(z < 0 ? 1 + 0.22 * z : 1)
+        .setDepth(z < 0 ? d - 0.2 : DEPTH.fireflies + 1);
     }
 
     this.syncWater(now, bx, s.y, vis);
@@ -888,6 +929,7 @@ export class AvatarView {
     this.cfx?.setVisible(v);
     this.moodFx?.setVisible(v);
     this.staffFx?.setVisible(v);
+    this.dexBadge?.setVisible(v);
     for (const f of this.fog) f.setVisible(v);
     this.ripple?.setVisible(v);
     if (!v) for (const b of this.bubbles) b.setVisible(false);
@@ -900,6 +942,7 @@ export class AvatarView {
   destroy(): void {
     this.sprite.destroy();
     this.label.destroy();
+    this.dexBadge?.destroy();
     this.bubble?.destroy();
     this.bubble = null;
     this.speech?.destroy();

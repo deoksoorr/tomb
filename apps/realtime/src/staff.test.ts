@@ -99,3 +99,29 @@ describe("31번 운영자 표시", () => {
     expect(u.att?.body).toBe("king");
   });
 });
+
+describe("도감 100% 배지 (입장 토큰의 dex)", () => {
+  it("서명 안의 dex만 입장 정보가 되고 다른 사람의 join·welcome·저장 형태에 실린다. 이상한 값은 버린다", async () => {
+    const t1 = await signJoinToken(SECRET, { visitorId: "fan", name: "도감", color: AVATAR_COLORS[0], channel: 1, look: [], dex: 5 });
+    expect((await admit(SECRET, t1, 1, undefined))?.dex).toBe(5);
+    const t2 = await signJoinToken(SECRET, { visitorId: "odd", name: "이상", color: AVATAR_COLORS[0], channel: 1, look: [], dex: 999 });
+    expect((await admit(SECRET, t2, 1, undefined))?.dex).toBeUndefined();
+    const core = setup();
+    const u = conn("u");
+    core.join(u, ticket("u"), 0);
+    const fan = conn("fan");
+    core.join(fan, { ...ticket("fan"), dex: 5 }, 0);
+    const joined = events(u).find((e) => e.t === "join") as (PeerInfo & { t: "join" }) | undefined;
+    expect(joined?.dex).toBe(5);
+    expect(fan.att?.dex).toBe(5);
+    const late = conn("late");
+    core.join(late, ticket("late"), 0);
+    const welcome = events(late).find((e) => e.t === "welcome") as { peers: PeerInfo[] } | undefined;
+    expect(welcome?.peers.find((p) => p.name === "fan")?.dex).toBe(5);
+    expect(welcome?.peers.find((p) => p.name === "u")?.dex).toBeUndefined();
+    // 다시 들어올 때 배지가 늘면 join을 다시 보낸다
+    u.out.length = 0;
+    core.join(conn("fan2"), { ...ticket("fan"), dex: 7 }, 10);
+    expect((events(u).find((e) => e.t === "join") as (PeerInfo & { t: "join" }) | undefined)?.dex).toBe(7);
+  });
+});

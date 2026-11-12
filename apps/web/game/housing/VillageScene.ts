@@ -7,6 +7,7 @@ import { DEPTH } from "../config";
 import { Player, type SeatRequester } from "../entities/Player";
 import type { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
+import { emoSlotOfKey } from "../logic/emoBoard";
 import type { MoveInput } from "../logic/movement";
 import { RoomPresence } from "../net/RoomPresence";
 import type { NetPose } from "../net/sendThrottle";
@@ -137,6 +138,7 @@ export class VillageScene extends Phaser.Scene {
       atlas: this.d.atlas,
       room: "village",
       me: this.player.view,
+      expressions: true,
       getPose: () => this.player.netPose(this.pose),
     });
     this.player.dir = spawnSpot ? DIR.down : DIR.up;
@@ -299,6 +301,13 @@ export class VillageScene extends Phaser.Scene {
     if (a === "interact") {
       const s = this.nearest();
       if (s) this.use(s);
+      return;
+    }
+    // 1·2 손 흔들기·환호, 3~9 이모티콘 판 (월드와 같은 키)
+    if (a === "wave" || a === "cheer") return this.presence?.act(a);
+    if (a.startsWith("emo")) {
+      const slot = emoSlotOfKey(Number(a.slice(3)));
+      if (slot?.kind === "emo") this.presence?.emo(slot.id);
       return;
     }
     if (a === "jump") this.player.jump(this.time.now, NO_SEATS);

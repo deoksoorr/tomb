@@ -1,11 +1,12 @@
 import { z } from "zod";
-import { FISHING_SPOTS } from "@tomb/protocol";
+import { BOAT_FISHING_SPOTS, FISHING_SPOTS } from "@tomb/protocol";
 import { DEX_TIERS, GATHER_NODES, LIFE_CATS, NPCS, SPECIES, type DexTier } from "./catalog";
 
 // 낚시·채집·판매·도감 API 입력 검증 (zod)
 
 const ticket = z.string().min(10).max(1000);
-const spotId = z.enum(FISHING_SPOTS.map((s) => s.id) as [string, ...string[]], "여기서는 낚시를 할 수 없어요.");
+// 정해진 낚시 자리 + 배 위 가상 자리 (boat:river·boat:lake)
+const spotId = z.enum([...FISHING_SPOTS.map((s) => s.id), ...Object.keys(BOAT_FISHING_SPOTS)] as [string, ...string[]], "여기서는 낚시를 할 수 없어요.");
 const nodeId = z.enum(GATHER_NODES.map((n) => n.id) as [string, ...string[]], "여기서는 캘 게 없어요.");
 const speciesId = z.enum(SPECIES.map((s) => s.id) as [string, ...string[]], "모르는 물건이에요.");
 

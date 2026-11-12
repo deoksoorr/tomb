@@ -244,3 +244,26 @@
   right: auto;
   left: 4px;
 }
+
+/* 바로 가기 [표현] 버튼의 단축키 표시 (데스크톱) */
+.dockKey {
+  margin-left: 2px;
+  padding: 0 3px;
+  background: var(--line);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+/* 마을·집 안: 월드 바로 가기 줄 대신 [표현] 버튼 하나 (왼쪽 아래) */
+.roomExpr {
+  position: fixed;
+  z-index: 5;
+  left: var(--safe-left);
+  bottom: var(--safe-bottom);
+  display: flex;
+}
+
+.roomExpr .dockButton {
+  background: var(--panel-solid);
+}

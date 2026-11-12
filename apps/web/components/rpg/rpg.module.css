@@ -986,6 +986,27 @@ button.hotSlot:disabled {
   font-weight: 400;
 }
 
+/* 여러 개 되팔기: [− n + 모두] [n개 팔기 합계] */
+.sellQty {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.sellCount {
+  min-width: 28px;
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+  line-height: 32px;
+  text-align: center;
+}
+
+.stepper .sellAll {
+  padding: 0 8px;
+}
+
 .sellNote {
   flex: 1 1 0;
   align-self: center;

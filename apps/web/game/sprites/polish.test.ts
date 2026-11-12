@@ -65,7 +65,8 @@ describe("17번 나무 매달리기 뒷모습", () => {
   it("6종 모두 뒷모습에서 두 손이 머리 위(가지 높이)에 보이고 가지가 그려진다", () => {
     for (const b of AVATAR_BODIES) {
       const g = avatarFrameGrid(b.id, "up", col);
-      const idle = avatarFrameGrid(b.id, "up", AV_ANIM.idle.col);
+      // 우산 유령은 서 있을 때 머리 위에 우산을 펴고 매달리면 내려놓는다 → 바탕(두건) 몸의 서 있는 모습과 비교
+      const idle = avatarFrameGrid(b.id === "umbrella" ? "hood" : b.id, "up", AV_ANIM.idle.col);
       // 서 있는 뒷모습과 달리 머리 위쪽(위 8줄)에 손·가지가 칠해져 있다
       expect(filledRows(g, 0, 8), b.id).toBeGreaterThan(filledRows(idle, 0, 8) + 8);
       // 가지 나무색이 손 높이에 가로로 걸쳐 있다

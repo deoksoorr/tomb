@@ -32,7 +32,8 @@ const SLOT_COUNTS = slotCounts(COSMETICS);
 const SLOT_FILTERS = (["all", ...SLOT_ORDER] as SlotFilter[]).filter((f) => SLOT_COUNTS[f] > 0);
 // 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — isShopListed). 이미 가진 펫은 가방에서 그대로 쓴다
 // 31번 운영자에게는 운영자 전용 꾸미기도 보인다 (값 0, 영구로만 받는다 — 서버가 운영자인지 확인)
-const listed = (k: ItemKind, staff: boolean) => ITEMS.filter((i) => i.kind === k && (isShopListed(i) || (staff && !!i.staff)));
+// 운영자 전용 아이템은 상점에 내놓지 않는다 (운영자 계정 가방에 자동으로 들어온다)
+const listed = (k: ItemKind, _staff: boolean) => ITEMS.filter((i) => i.kind === k && isShopListed(i));
 const byKind = (k: ItemKind) => listed(k, false);
 const FIRST: Partial<Record<ItemKind, string>> = Object.fromEntries(TABS.map((k) => [k, byKind(k)[0]?.id ?? ""]));
 

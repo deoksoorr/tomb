@@ -31,7 +31,8 @@ describe("동물원 펫 카탈로그", () => {
       expect(it?.kind, p.id).toBe("cosmetic");
       expect(it?.slot, p.id).toBe("pet");
       expect(p.price).toBeGreaterThanOrEqual(300);
-      expect(p.price).toBeLessThan(2_000);
+      // 타는 펫은 집과 함께 엔드 콘텐츠(4,000~6,000P), 나머지 펫은 2,000P 미만
+      expect(p.price).toBeLessThan(p.ride ? 10_000 : 2_000);
       expect(petPrice(p.id)).toBe(p.price);
     }
     // 카탈로그의 모든 펫은 동물원에서 판다

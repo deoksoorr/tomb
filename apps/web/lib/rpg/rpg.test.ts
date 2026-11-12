@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { itemById } from "@tomb/protocol";
 import { COSMETIC_DROPS, DIFFICULTIES, DIFFS, GEAR, MONSTERS, SKILLS, ZONES } from "./catalog";
-import { addGear, allocStats, consumePotions, equip, gainExp, learnSkill, newCharacter, removeGearForSale, RpgError, setHotbar } from "./character";
+import { addGear, allocStats, consumePotions, equip, gainExp, learnSkill, newCharacter, removeForSale, removeGearForSale, returnUnsold, RpgError, setHotbar } from "./character";
 import { applyExp, ATK_PER_STR, attackArea, damage, DEFAULT_ATTACK_AREA, derive, expToNext, hitChance, inAttackArea, MAX_LEVEL, monsterStats } from "./formulas";
 import { bugsCount, bugsPlan, comboMult, eliteBonusExp, huntPlan, huntSpawnable, huntTotal, starsCount, starsPlan, starWindows } from "./plan";
 import { evaluate, MIN_RUN_MS, type TicketInfo } from "./rewards";
@@ -120,6 +120,29 @@ describe("캐릭터 조작", () => {
     const second = removeGearForSale(first.state, "w_keyboard");
     expect(second.bought).toBe(false);
     expect(second.state.inv.w_keyboard).toBeUndefined();
+  });
+
+  it("여러 개 되팔기: 산 것부터 세고, 모자라면 하나도 빼지 않는다 · 포션도 판다", () => {
+    let c = newCharacter();
+    c = addGear(c, "w_keyboard", false);
+    c = addGear(c, "w_keyboard", true);
+    c = addGear(c, "w_keyboard", false);
+    const r = removeForSale(c, "w_keyboard", 2);
+    expect(r).toMatchObject({ kind: "gear", bought: 1, drop: 1, unit: 60 });
+    expect(r.state.inv.w_keyboard).toBe(1);
+    expect(r.state.bought.w_keyboard).toBeUndefined();
+    expect(() => removeForSale(c, "w_keyboard", 4)).toThrow(/3개뿐/);
+    expect(() => removeForSale(c, "w_ruler", 1)).toThrow(/장착/); // 처음 자는 장착 중
+    expect(() => removeForSale(c, "w_keyboard", 0)).toThrow(RpgError);
+
+    const p = removeForSale(c, "p_coffee", 2); // 커피 3개
+    expect(p).toMatchObject({ kind: "potion", bought: 0, drop: 2, unit: 4 });
+    expect(p.state.potions.p_coffee).toBe(1);
+    expect(removeForSale(c, "p_coffee", 3).state.potions.p_coffee).toBeUndefined();
+    expect(() => removeForSale(c, "p_coffee", 4)).toThrow(/3개뿐/);
+
+    expect(returnUnsold(p.state, "p_coffee", 2).potions.p_coffee).toBe(3);
+    expect(returnUnsold(r.state, "w_keyboard", 1).inv.w_keyboard).toBe(2);
   });
 
   it("포션 사용은 가진 만큼만 뺀다", () => {

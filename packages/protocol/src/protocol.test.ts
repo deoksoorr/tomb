@@ -302,3 +302,23 @@ describe("3번 집 안 가구 자리·use 이벤트", () => {
     expect(parseC2S(JSON.stringify({ t: "use", u: "abcdefghi", a: 1 }))).toBeNull();
   });
 });
+
+describe("배 위 낚시 (4번)", () => {
+  it("rod 메시지는 on이 boolean일 때만 받는다", async () => {
+    const { parseC2S } = await import("./events");
+    expect(parseC2S(JSON.stringify({ t: "rod", on: true }))).toEqual({ t: "rod", on: true });
+    expect(parseC2S(JSON.stringify({ t: "rod", on: false }))).toEqual({ t: "rod", on: false });
+    expect(parseC2S(JSON.stringify({ t: "rod", on: "yes" }))).toBeNull();
+  });
+
+  it("가상 배 자리와 정해진 낚시 자리의 물 종류", async () => {
+    const { boatFishingSpotId, fishingWaterOf, FISHING_SPOTS } = await import("./world");
+    expect(boatFishingSpotId("lake")).toBe("boat:lake");
+    expect(boatFishingSpotId("river")).toBe("boat:river");
+    expect(fishingWaterOf("boat:lake")).toBe("lake");
+    expect(fishingWaterOf("boat:river")).toBe("river");
+    expect(fishingWaterOf("boat:sea")).toBeNull();
+    expect(fishingWaterOf("toString")).toBeNull();
+    expect(fishingWaterOf(FISHING_SPOTS[0].id)).toBe(FISHING_SPOTS[0].water);
+  });
+});

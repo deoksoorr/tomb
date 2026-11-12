@@ -14,6 +14,8 @@ import type {
 
 // 브라우저 → 낚시·채집 API. 실패하면 서버의 한국어 메시지를 담은 ApiRequestError를 던진다 (lib/api의 request).
 
+export type DexPeer = { sid: number; ch?: number; room?: string };
+
 const post = (data: unknown): RequestInit => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) });
 
 export const forageApi = {
@@ -24,5 +26,7 @@ export const forageApi = {
   gatherFinish: (ticket: string, result?: BugsResult) => request<GatherFinishResponse>("/api/forage/gather/finish", post({ ticket, result })),
   sell: (npc: NpcId, items: Record<string, number>) => request<SellResponse>("/api/forage/sell", post({ npc, items })),
   claimDex: (cat: LifeCat, tier: DexTier) => request<DexClaimResponse>("/api/forage/dex/claim", post({ cat, tier })),
+  /** 게임 안에서 누른 사람 (채널·방 + sid). 계정은 서버가 푼다 */
+  dexOfPeer: (peer: DexPeer) => request<PublicDex>("/api/forage/dex/peer", post(peer)),
   dexOf: (accountId: string) => request<PublicDex>(`/api/forage/dex/${encodeURIComponent(accountId)}`, { cache: "no-store" }),
 };

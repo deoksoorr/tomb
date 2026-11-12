@@ -25,6 +25,7 @@ import {
   type StoredGuest,
 } from "./store";
 import { parsePlant, type PlantState } from "./plants";
+import { parseState, stateSigs, WINDOW_SIG, type HouseState } from "./states";
 import type { HouseExterior, HouseLayout } from "./types";
 
 // Redis 키 (집 id = 계정 id의 HMAC. 계정 id는 키에도 공개 응답에도 드러나지 않는다)
@@ -40,6 +41,7 @@ import type { HouseExterior, HouseLayout } from "./types";
 //  house:{id}:guestrep       HASH 글 id → 신고 수
 //  house:{id}:guestrep:{eid} SET 신고한 IP 해시 (30일)
 //  house:{id}:plants         HASH 화분 배치 id → {n, at} JSON (3번 물 주기)
+//  house:{id}:states         HASH 가구 배치 id(창문 "w0"…) → {a, s} JSON (3번 불·스탠드·라디오·창문. s = 서명, states.ts)
 //  house:{id}:like:{visitor}:{yyyymmdd}  STRING NX EX (하루 1회 좋아요)
 //  house:guestday:{visitor}:{yyyymmdd}   STRING 오늘 남긴 방명록 수
 //  houses:all                ZSET 분양 시각 (숨김 포함, 관리자 목록)
@@ -54,6 +56,7 @@ export const HK = {
   guestRep: (id: string) => `house:${id}:guestrep`,
   guestRepIps: (id: string, eid: string) => `house:${id}:guestrep:${eid}`,
   plants: (id: string) => `house:${id}:plants`,
+  states: (id: string) => `house:${id}:states`,
   like: (id: string, visitor: string, day: string) => `house:${id}:like:${visitor}:${day}`,
   guestDay: (visitor: string, day: string) => `house:guestday:${visitor}:${day}`,
   all: "houses:all",
@@ -187,19 +190,37 @@ return 1
 `;
 
 // 가진 개수 확인과 배치·놓은 개수·점수 갱신을 한 번에 (되팔기와 경합해 가진 것보다 많이 놓이지 않게)
-// KEYS: meta, layout, inv, placed, score
-// ARGV: id, tier, layoutJson(''=그대로), placedScore, itemsCount, now, likeWeight, exteriorJson(''=그대로), [itemId, count]...
+// 배치가 바뀌면 같은 Lua에서 치우거나 옮긴 가구 상태(서명이 다른 것)와 없어진 화분 기록을 지운다 (states.ts keepState와 같은 규칙)
+// KEYS: meta, layout, inv, placed, score, states, plants
+// ARGV: id, tier, layoutJson(''=그대로), placedScore, itemsCount, now, likeWeight, exteriorJson(''=그대로),
+//       sigsJson(배치 id → 서명, 상태 없는 가구는 ''), potsJson(화분 배치 id → true), [itemId, count]...
 const SAVE_LUA = `
 if redis.call('EXISTS', KEYS[1]) == 0 then return -1 end
 if redis.call('HGET', KEYS[1], 'tier') ~= ARGV[2] then return -2 end
-for i = 9, #ARGV, 2 do
+for i = 11, #ARGV, 2 do
   if tonumber(redis.call('HGET', KEYS[3], ARGV[i]) or '0') < tonumber(ARGV[i + 1]) then return -3 end
 end
 redis.call('DEL', KEYS[4])
-for i = 9, #ARGV, 2 do redis.call('HSET', KEYS[4], ARGV[i], ARGV[i + 1]) end
+for i = 11, #ARGV, 2 do redis.call('HSET', KEYS[4], ARGV[i], ARGV[i + 1]) end
 if ARGV[3] ~= '' then
   redis.call('SET', KEYS[2], ARGV[3])
   redis.call('HSET', KEYS[1], 'items', ARGV[5])
+  local sigs = cjson.decode(ARGV[9])
+  local st = redis.call('HGETALL', KEYS[6])
+  for i = 1, #st, 2 do
+    local ok, v = pcall(cjson.decode, st[i + 1])
+    local keep = false
+    if ok and type(v) == 'table' and type(v.s) == 'string' then
+      local sig = sigs[st[i]]
+      if sig ~= nil then keep = sig ~= '' and sig == v.s else keep = v.s == '${WINDOW_SIG}' end
+    end
+    if not keep then redis.call('HDEL', KEYS[6], st[i]) end
+  end
+  local pots = cjson.decode(ARGV[10])
+  local pl = redis.call('HKEYS', KEYS[7])
+  for i = 1, #pl do
+    if not pots[pl[i]] then redis.call('HDEL', KEYS[7], pl[i]) end
+  end
 end
 if ARGV[8] ~= '' then redis.call('HSET', KEYS[1], 'exterior', ARGV[8]) end
 redis.call('HSET', KEYS[1], 'placedScore', ARGV[4], 'updatedAt', ARGV[6])
@@ -416,7 +437,7 @@ export class RedisHouseStore implements HouseStore {
     ]);
     if (meta?.lot) await this.redis.eval<string[], number>(UNLOT_LUA, [HK.lots(housingChannelOf(meta.ch)), HK.legacyLots], [String(meta.lot), id]);
     const p = this.redis.pipeline();
-    p.del(HK.meta(id), HK.layout(id), HK.inv(id), HK.placed(id), HK.guest(id), HK.guestHide(id), HK.guestRep(id), HK.plants(id));
+    p.del(HK.meta(id), HK.layout(id), HK.inv(id), HK.placed(id), HK.guest(id), HK.guestHide(id), HK.guestRep(id), HK.plants(id), HK.states(id));
     for (const e of eids) p.del(HK.guestRepIps(id, e));
     for (const z of [HK.all, HK.new, HK.score, HK.likes]) p.zrem(z, id);
     await p.exec();
@@ -454,7 +475,7 @@ export class RedisHouseStore implements HouseStore {
     const r = Number(
       await this.redis.eval<string[], number>(
         SAVE_LUA,
-        [HK.meta(id), HK.layout(id), HK.inv(id), HK.placed(id), HK.score],
+        [HK.meta(id), HK.layout(id), HK.inv(id), HK.placed(id), HK.score, HK.states(id), HK.plants(id)],
         [
           id,
           tier,
@@ -464,6 +485,8 @@ export class RedisHouseStore implements HouseStore {
           String(now),
           String(LIKE_WEIGHT),
           exterior ? JSON.stringify(exterior) : "",
+          layout ? JSON.stringify(stateSigs(layout)) : "",
+          layout ? JSON.stringify(Object.fromEntries(layout.items.filter((p) => p.i === "pot").map((p) => [p.u, true]))) : "",
           ...Object.entries(counts).flatMap(([k, v]) => [k, String(v)]),
         ],
       ),
@@ -498,6 +521,25 @@ export class RedisHouseStore implements HouseStore {
 
   async setPlant(id: string, u: string, st: PlantState) {
     await this.redis.hset(HK.plants(id), { [u]: JSON.stringify(st) });
+  }
+
+  async states(id: string) {
+    const flat = (await this.redis.hgetall(HK.states(id))) as unknown as string[] | null;
+    const out: Record<string, HouseState> = {};
+    for (const [u, raw] of pairs(flat)) {
+      try {
+        const st = parseState(JSON.parse(raw));
+        if (st) out[u] = st;
+      } catch {
+        // 깨진 기록은 버린다
+      }
+    }
+    return out;
+  }
+
+  async setState(id: string, u: string, st: HouseState | null) {
+    if (st && st.a !== 0) await this.redis.hset(HK.states(id), { [u]: JSON.stringify(st) });
+    else await this.redis.hdel(HK.states(id), u);
   }
 
   async likedToday(id: string, visitorId: string, day: string) {

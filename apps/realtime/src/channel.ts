@@ -18,11 +18,13 @@ import {
   isIndoorSpot,
   isSeatMood,
   ridePetOfLook,
+  boatSeatById,
   USE_INTERVAL_MS,
   hasDye,
   sameDye,
   staffGateBody,
   staffGateLook,
+  isDexBadge,
   type AvatarDye,
   type C2S,
   type DirId,
@@ -64,10 +66,14 @@ export type PeerRecord = {
   mood?: string;
   /** 동물원 타는 펫에 올라타 있다 (착용 펫이 타는 펫이고 자리에 앉아 있지 않은 동안만) */
   ride?: true;
+  /** 4번 배 위 낚시: 낚싯대를 드리우고 있다 (조각배 자리에 앉아 있는 동안만) */
+  rod?: true;
   /** 실내(상점·집·사냥터 등 하위 장면)에 들어가 있다 → 다른 사람 화면에서 숨긴다 (월드 채널만). 재접속 유예 동안에도 이어 간다 */
   away?: true;
   /** 31번 운영자 계정 (입장 토큰에 Vercel이 넣은 것만) */
   staff?: true;
+  /** 도감 100% 배지 (JoinClaims.dex) */
+  dex?: number;
   /** 이 연결로 자리를 잡은 시각. 로비의 채널 간 중복 정리(kick)가 더 새 연결을 내보내지 않게 비교한다 */
   joinedAt: number;
 };
@@ -94,6 +100,8 @@ export type JoinTicket = {
   dye?: AvatarDye;
   /** 31번 운영자 계정 (JoinClaims.staff) */
   staff?: true;
+  /** 도감 100% 배지 (JoinClaims.dex) */
+  dex?: number;
 };
 
 /** ChannelCore가 바깥(DO)에 맡기는 부수 효과 */
@@ -178,6 +186,8 @@ export const SAY_INTERVAL_MS = 3_000;
 export const EMO_INTERVAL_MS = 1_000;
 /** 타는 펫 올라타기·내리기(ride) 연결당 최소 간격 */
 export const RIDE_INTERVAL_MS = 400;
+/** 배 위 낚싯대 드리우기·거두기(rod) 연결당 최소 간격 */
+export const ROD_INTERVAL_MS = 300;
 /** 실내 들어가기·나오기(away) 연결당 최소 간격 (상점을 바로 나왔다 들어가도 마지막 상태는 다음 welcome·sync로 맞는다) */
 export const AWAY_INTERVAL_MS = 150;
 /** 24번 벤치 상태(mood) 연결당 최소 간격 */
@@ -216,6 +226,7 @@ type Peer<C> = PeerRecord & {
   lastMoodAt?: number;
   /** 타는 펫 올라타기·내리기 (없으면 아직 안 씀) */
   lastRideAt?: number;
+  lastRodAt?: number;
   lastAwayAt?: number;
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
   lastSeenAt: number;
@@ -347,6 +358,7 @@ export class ChannelCore<C extends object> {
       body: t.body,
       ...(hasDye(t.dye) ? { dye: t.dye } : {}),
       ...(t.staff ? { staff: true as const } : {}),
+      ...(t.dex ? { dex: t.dex } : {}),
       joinedAt: now,
     };
     const p = this.adoptNew(rec, conn, now);
@@ -373,13 +385,14 @@ export class ChannelCore<C extends object> {
       this.host.dropReservation(p.sid);
     }
     const renamed =
-      p.name !== t.name || p.color !== t.color || p.body !== t.body || p.look.join() !== t.look.join() || !sameDye(p.dye, t.dye) || !!p.staff !== !!t.staff;
+      p.name !== t.name || p.color !== t.color || p.body !== t.body || p.look.join() !== t.look.join() || !sameDye(p.dye, t.dye) || !!p.staff !== !!t.staff || (p.dex ?? 0) !== (t.dex ?? 0);
     p.name = t.name;
     p.color = t.color;
     p.look = t.look;
     p.body = t.body;
     p.dye = hasDye(t.dye) ? t.dye : undefined;
     p.staff = t.staff ? true : undefined;
+    p.dex = t.dex || undefined;
     p.joinedAt = now;
     // 새 소켓을 붙이기 전에 옮긴다: 좌석 해제 알림은 다른 사람에게만 가고, 본인은 결과가 반영된 welcome을 처음으로 받는다
     if (t.spawn) this.relocate(p, t.spawn);
@@ -686,6 +699,10 @@ export class ChannelCore<C extends object> {
         if (now - (p.lastRideAt ?? -Infinity) < RIDE_INTERVAL_MS) return;
         p.lastRideAt = now;
         return this.onRide(p, m.on);
+      case "rod":
+        if (now - (p.lastRodAt ?? -Infinity) < ROD_INTERVAL_MS) return;
+        p.lastRodAt = now;
+        return this.onRod(p, m.on);
       case "away":
         if (now - (p.lastAwayAt ?? -Infinity) < AWAY_INTERVAL_MS) return;
         p.lastAwayAt = now;
@@ -855,6 +872,8 @@ export class ChannelCore<C extends object> {
     // 벤치 상태는 상호작용 중이면 유지 (의자·그네·나무·해먹·배·놀이기구·낚시 등 어떤 자리든)
     // 앉기·낚시·놀이기구·배 — 어떤 자리든 차지하면 타던 펫에서 내린다
     this.clearRide(p);
+    // 배 위 낚싯대는 조각배 자리 사이를 옮겨 앉을 때만 이어 간다
+    if (!boatSeatById(seatId)) this.clearRod(p);
     this.chasing.delete(p.sid);
     this.markDirty(p);
     this.broadcast(encodeEvent({ t: "seat", seatId, sid: p.sid }));
@@ -903,6 +922,30 @@ export class ChannelCore<C extends object> {
   }
 
   /**
+   * 4번 배 위 낚싯대 드리우기(on)·거두기. 월드 채널에서 조각배 자리에 앉아 있을 때만 켠다 (자리를 놓으면 releaseSeat이 끈다).
+   * 같은 채널 모두(보낸 사람 포함 — 받아들였다는 확인)에게 알리고, 늦게 온 사람은 PeerInfo.rod로 받는다
+   */
+  private onRod(p: Peer<C>, on: boolean): void {
+    if (!on) return this.clearRod(p);
+    if (this.cfg.room || !p.seatId || !boatSeatById(p.seatId)) return;
+    // 이미 드리우고 있다 (재접속 복원·다시 보낸 요청): 보낸 사람에게만 다시 확인해 준다
+    if (p.rod) return this.sendTo(p, { t: "rod", sid: p.sid, on: true });
+    p.rod = true;
+    this.save(p);
+    this.host.liveChanged?.(true);
+    this.broadcast(encodeEvent({ t: "rod", sid: p.sid, on: true }));
+  }
+
+  /** 배 위 낚싯대를 거두고 모두에게 알린다 (드리우고 있지 않으면 아무것도 안 한다) */
+  private clearRod(p: Peer<C>): void {
+    if (!p.rod) return;
+    p.rod = undefined;
+    p.saved = false;
+    this.host.liveChanged?.(true);
+    this.broadcast(encodeEvent({ t: "rod", sid: p.sid, on: false }));
+  }
+
+  /**
    * 실내에 들어감(on)·나옴. 월드 채널만 (방은 그 자체가 실내). 같은 채널의 다른 사람에게 알리고, 늦게 온 사람은 PeerInfo.away로 받는다.
    * 옛 클라이언트는 보내지 않으니 언제나 보인다
    */
@@ -940,6 +983,7 @@ export class ChannelCore<C extends object> {
     p.seatId = null;
     p.saved = false;
     this.clearMood(p);
+    this.clearRod(p);
     this.broadcast(encodeEvent({ t: "seat", seatId, sid: null }));
     this.host.liveChanged?.(true);
   }
@@ -1095,7 +1139,10 @@ export class ChannelCore<C extends object> {
       if (!seatSlot(p.seatId) || this.seats.has(p.seatId)) p.seatId = null;
       else this.seats.set(p.seatId, p.sid);
     }
-    if (!p.seatId) p.mood = undefined;
+    if (!p.seatId) {
+      p.mood = undefined;
+      p.rod = undefined;
+    }
     return true;
   }
 
@@ -1162,7 +1209,9 @@ export class ChannelCore<C extends object> {
       ...(hasDye(p.dye) ? { dye: p.dye } : {}),
       ...(p.mood ? { mood: p.mood } : {}),
       ...(p.staff ? { staff: true as const } : {}),
+      ...(p.dex ? { dex: p.dex } : {}),
       ...(p.ride ? { ride: true as const } : {}),
+      ...(p.rod ? { rod: true as const } : {}),
       ...(p.away ? { away: true as const } : {}),
     };
   }
@@ -1175,6 +1224,8 @@ export class ChannelCore<C extends object> {
     const mood = seatId && isSeatMood(r.mood) ? { mood: r.mood } : {};
     // 타는 펫은 자리에 앉아 있지 않고 타는 펫을 입고 있을 때만 이어 간다
     const ride = r.ride === true && !seatId && ridePetOfLook(look) ? { ride: true as const } : {};
-    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...(r.away === true ? { away: true as const } : {}), ...(r.staff === true ? { staff: true as const } : {}), joinedAt: r.joinedAt ?? 0 };
+    // 배 위 낚싯대는 조각배 자리에 앉아 있을 때만 이어 간다
+    const rod = r.rod === true && seatId && boatSeatById(seatId) ? { rod: true as const } : {};
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), joinedAt: r.joinedAt ?? 0 };
   }
 }

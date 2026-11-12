@@ -1,12 +1,14 @@
 import type * as Phaser from "phaser";
-import { DIR, isAvatarBody, sanitizeDye, STATE, type ActKind, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
+import { DIR, isAvatarBody, isEmoId, sanitizeDye, STATE, type ActKind, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
 import { avatarColorSpec } from "../sprites/avatar";
 import { bridge } from "../bridge";
 import type { AvatarView } from "../entities/AvatarView";
 import { RemoteAvatar } from "../entities/RemoteAvatar";
 import { phraseOf } from "../entities/SpeechBubble";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
+import { EMO_COOLDOWN_MS, EMO_SHOW_MS, emoIcon } from "../logic/emoBoard";
 import { declutter, type LabelBox } from "../world/labels";
+import { MeScreen } from "../world/MeScreen";
 import { RoomClient, type RoomClientOptions, type RoomStatus } from "./RoomClient";
 import type { NetPose } from "./sendThrottle";
 
@@ -44,9 +46,17 @@ export type RoomPresenceOptions = {
   onSeats?: () => void;
   /** 3번 다른 사람이 가구를 썼다 */
   onUse?: (sid: Sid, u: string, a: number) => void;
+  /**
+   * 표현 창(T)·즐겨찾기 원형 목록(U)의 말풍선·이모티콘을 이 방에서 받는다 (bridge input:say·input:emo)
+   * + 원형 목록이 열려 있으면 내 화면 위치를 UI에 알린다. 마을·집처럼 월드 HUD 대신 쓰는 방에서 켠다 (몸짓은 씬의 키 처리가 받는다)
+   */
+  expressions?: boolean;
   /** 테스트·디버그 */
   client?: RoomClientOptions;
 };
+
+/** 내 말풍선 연타 간격 (서버 SAY_INTERVAL_MS보다 짧으면 서버가 버린다 — 월드와 같은 1초로 내 화면만 묶는다) */
+const SAY_COOLDOWN_MS = 1000;
 
 /** 인원 불일치 확인 주기 (어긋나면 sync 1회, 서버는 깨우지 않는다) */
 const PEER_CHECK_MS = 5000;
@@ -59,6 +69,10 @@ export class RoomPresence {
   private peerCheckAt = 0;
   private destroyed = false;
   private offLook: (() => void) | null = null;
+  private readonly offs: (() => void)[] = [];
+  private meScreen: MeScreen | null = null;
+  private sayAt = -Infinity;
+  private emoAt = -Infinity;
   /** 3번 집 안 1인 자리 점유표 (seatId → sid, 나 포함) */
   readonly seats = new Map<string, Sid>();
   /** 서버가 집 안 자리를 판정한다 (welcome spots). false면 이전 서버 → 혼자 앉는다 */
@@ -126,6 +140,11 @@ export class RoomPresence {
           this.remotes.get(sid)?.view.say(text, performance.now());
           o.onSay?.(sid, text);
         },
+        onEmo: (sid, id) => {
+          const r = this.remotes.get(sid);
+          if (!r || !isEmoId(id)) return;
+          r.view.emote(emoIcon(id), performance.now(), EMO_SHOW_MS);
+        },
         onPeers: (peers, seats) => {
           this.reconcile(peers);
           this.setSeats(seats);
@@ -143,6 +162,13 @@ export class RoomPresence {
       o.me?.applyAppearance({ dye, body });
       if (lookGrant) this.client.look(lookGrant);
     });
+    if (o.expressions) {
+      this.meScreen = new MeScreen(scene);
+      this.offs.push(
+        bridge.on("input:say", ({ id }) => this.say(id)),
+        bridge.on("input:emo", ({ id }) => this.emo(id)),
+      );
+    }
   }
 
   /** 나를 포함한 방 인원 (접속 전이면 1) */
@@ -185,9 +211,20 @@ export class RoomPresence {
   /** 정해진 문장 말풍선: 내 머리 위에 바로 띄우고 방에 보낸다 */
   say(id: string): void {
     const text = phraseOf(id);
-    if (!text) return;
+    const now = performance.now();
+    if (!text || this.destroyed || now - this.sayAt < SAY_COOLDOWN_MS) return;
+    this.sayAt = now;
     this.o.me?.say(text, performance.now());
     this.client.say(id);
+  }
+
+  /** 5번 이모티콘: 내 머리 위에 바로 띄우고 방에 보낸다 (연타는 EMO_COOLDOWN_MS로 묶는다 — 서버도 같은 간격) */
+  emo(id: string): void {
+    const now = performance.now();
+    if (!isEmoId(id) || this.destroyed || now - this.emoAt < EMO_COOLDOWN_MS) return;
+    this.emoAt = now;
+    this.o.me?.emote(emoIcon(id), now, EMO_SHOW_MS);
+    this.client.emo(id);
   }
 
   /** 몸짓 (손 흔들기·환호 등): 내 아바타가 바로 하고 방에 보낸다 */
@@ -209,6 +246,8 @@ export class RoomPresence {
       if (depth !== undefined) r.view.sprite.setDepth(depth);
     }
     this.declutter(now);
+    const me = this.o.me?.sprite;
+    if (this.meScreen && me) this.meScreen.update(me.x, me.y);
     if (this.client.online && now >= this.peerCheckAt) {
       this.peerCheckAt = now + PEER_CHECK_MS;
       if (this.remotes.size !== this.client.peerCount) this.client.requestSync();
@@ -295,6 +334,9 @@ export class RoomPresence {
     this.destroyed = true;
     this.offLook?.();
     this.offLook = null;
+    for (const off of this.offs.splice(0)) off();
+    this.meScreen?.destroy();
+    this.meScreen = null;
     this.client.leave();
     this.clear();
   }

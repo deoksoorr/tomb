@@ -100,6 +100,20 @@ describe("낚시", () => {
     expect(await errCode(again)).toBe("TICKET_USED");
   });
 
+  it("배 위 낚시: boat:lake·boat:river 가상 자리로 던지면 그 물의 물고기가 잡힌다 (모르는 배 자리는 400)", async () => {
+    const v = await newVisitor();
+    expect((await cast.POST(call("/x", v, { spot: "boat:sea" }))).status).toBe(400);
+    for (const [spot, water] of [["boat:lake", "lake"], ["boat:river", "river"]] as const) {
+      vi.restoreAllMocks();
+      const c = await body<CastResponse>(await cast.POST(call("/x", v, { spot })));
+      later(c.biteInMs + reelMinMs(c.power) + 50);
+      const got = await body<ReelResponse>(await reel.POST(call("/x", v, { ticket: c.ticket, ok: true })));
+      const sp = speciesById(got.result!.id)!;
+      expect(sp.cat).toBe("fish");
+      expect(sp.where).toContain(water);
+    }
+  });
+
   it("입질 전·너무 빠른 감기·위조·남의 티켓·새로 던진 뒤 옛 티켓은 거절", async () => {
     const v = await newVisitor();
     const w = await newVisitor();

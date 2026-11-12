@@ -261,3 +261,12 @@ export const DEX_TITLES: Record<LifeCat, Partial<Record<DexTier, string>>> = {
   dig: { 50: "보물 사냥꾼", 100: "고고학자" },
 };
 export const dexClaimKey = (cat: LifeCat, tier: DexTier) => `${cat}:${tier}`;
+
+/** 도감 100% 배지 비트 묶음 (protocol DEX_BADGE_CATS 순서 = LIFE_CATS 순서). 하나도 없으면 0 */
+export function dexBadgeBits(dex: Record<string, { n: number }>): number {
+  let bits = 0;
+  LIFE_CATS.forEach((cat, i) => {
+    if (speciesOf(cat).every((s) => (dex[s.id]?.n ?? 0) > 0)) bits |= 1 << i;
+  });
+  return bits;
+}

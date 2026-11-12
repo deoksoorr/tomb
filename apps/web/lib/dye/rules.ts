@@ -6,8 +6,8 @@ import type { DyeTier } from "./palette";
 
 /** 원래 색 되돌리기 (부위 하나) */
 export const DYE_RESET_PRICE = 150;
-/** 외형 바꾸기 (몸 모양 6종 중 다른 것으로, 부위 색은 그대로 따라간다) */
-export const RESHAPE_PRICE = 600;
+// 25번 외형 바꾸기: 소장한 외형(처음 6종 · 선택권으로 해금한 프리미엄)끼리는 무료 (예전 600P 요금은 없앴다).
+// 해금 전 프리미엄 외형만 선택권 값(packages/protocol BODY_TIER_INFO)을 낸다.
 
 /** 카탈로그의 무작위 염색권이면 등급, 아니면 null */
 export function randomTier(itemId: string): DyeTier | null {

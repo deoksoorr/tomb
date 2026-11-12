@@ -21,6 +21,8 @@ export type MenuTarget =
   | "notices"
   | "activity"
   | "say"
+  /** 즐겨찾기 표현 원형 목록 (U) */
+  | "favs"
   | "me"
   | "guide"
   // 10·11번
@@ -79,6 +81,8 @@ export default function MenuSheet({
     bridge.emit("input:act", { kind });
   };
   const entries: Entry[] = [
+    { target: "say", icon: "chat", label: "표현 (T)", desc: "말풍선·이모티콘으로 인사하기" },
+    { target: "favs", icon: "spark", label: "즐겨찾기 표현 (U)", desc: "별 표시한 표현을 내 둘레에 펼치기" },
     { target: "bag", icon: "bag", label: "가방", desc: "꾸미기·폭죽·잡은 것 꺼내기", badge: bagCount ? String(bagCount) : undefined },
     { target: "hunt", icon: "sword", label: "사냥터", desc: "몬스터 사냥 · 경험치와 포인트" },
     { target: "dex", icon: "book", label: "도감", desc: "물고기·곤충·약초 모으기" },
@@ -96,7 +100,6 @@ export default function MenuSheet({
       redDot: giftCount > 0,
     },
     { target: "activity", icon: "heart", label: "내 소식", desc: "헌화·방명록·좋아요 소식", badge: activityUnread ? String(activityUnread) : undefined },
-    { target: "say", icon: "chat", label: "말풍선·이모티콘", desc: "정해진 말로 인사하기 (T)" },
     { target: "ranking", icon: "list", label: "랭킹", desc: "포인트·사냥·집·헌화 순위" },
     { target: "notices", icon: "bell", label: "공지", desc: unreadNotice ? "새 공지가 있어요" : "업데이트·점검 소식", dot: unreadNotice },
     { target: "me", icon: "user", label: "내 정보", desc: "닉네임·개인 코드·내 집", badge: points !== null ? `${points.toLocaleString("ko-KR")}P` : undefined },

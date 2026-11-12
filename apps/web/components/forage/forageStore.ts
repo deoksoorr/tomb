@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
+import { dexBadgeBits } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import type { ForageState } from "@/lib/forage/types";
 
@@ -29,6 +30,9 @@ class ForageStore {
   set(state: ForageState): void {
     this.snap = { state, error: null };
     bridge.emit("forage:nodes", { ids: state.nodes.ids });
+    // 도감 100% 배지: 바뀔 때만 게임에 알린다 (내 캐릭터 이름표 옆)
+    const bits = dexBadgeBits(state.dex);
+    if (bridge.last("me:dex")?.bits !== bits) bridge.emit("me:dex", { bits });
     this.schedule(state.nodes.refreshAt);
     this.listeners.forEach((fn) => fn());
   }

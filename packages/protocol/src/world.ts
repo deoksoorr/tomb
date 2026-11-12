@@ -384,6 +384,22 @@ export function fishingSpotById(id: string): FishingSpot | undefined {
   return FISHING_SPOTS.find((s) => s.id === id);
 }
 
+/**
+ * 배 위 낚시 (50번 조각배): 자리가 정해져 있지 않으니 "배가 떠 있는 물" 가상 자리 id로 던진다.
+ * 서버(웹 /api/forage/fish/cast)는 물 종류로 물고기를 고르고 나머지 규칙(하루 한도·시간당 시작 수·티켓)은 그대로다.
+ * 다른 사람에게는 실시간 서버의 rod 표시(배 자리에 앉아 있을 때만)로 낚싯대를 보여 준다
+ */
+export const BOAT_FISHING_SPOTS = { "boat:river": "river", "boat:lake": "lake" } as const satisfies Record<string, FishingSpot["water"]>;
+export type BoatFishingSpotId = keyof typeof BOAT_FISHING_SPOTS;
+export function boatFishingSpotId(water: FishingSpot["water"]): BoatFishingSpotId {
+  return water === "lake" ? "boat:lake" : "boat:river";
+}
+/** 낚시 자리 id(정해진 자리 또는 배 위 가상 자리) → 물 종류. 모르는 id면 null */
+export function fishingWaterOf(id: string): FishingSpot["water"] | null {
+  if (Object.prototype.hasOwnProperty.call(BOAT_FISHING_SPOTS, id)) return BOAT_FISHING_SPOTS[id as BoatFishingSpotId];
+  return fishingSpotById(id)?.water ?? null;
+}
+
 // ── 조각배 (50번) ── 나루터(FERRY_DOCK)에서 E → 배에 탄다. 자리마다 1인(SPOT_KINDS.boat, 서버 좌석).
 // 1인승 2척(선착장 양옆) + 2인승 1척(선착장 끝 앞, 앞자리 = 노 젓는 사람, 뒷자리 = 같이 타는 사람). 모두 호수에 매어 둔다.
 // 앵커(x,y) = 나루터에 매어 둔 자리. 타면 위치는 클라이언트가 물 위로 옮기고(서버는 mobile 자리라 따라간다),

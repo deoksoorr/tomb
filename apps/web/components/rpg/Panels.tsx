@@ -340,14 +340,19 @@ export function GearPanel({
   onSell,
   figure,
 }: Common & {
-  onSell: (id: string) => void;
+  onSell: (id: string, count?: number) => void;
   figure: { color: string; body: string; look: readonly string[] };
 }) {
   const c = view.character;
   const [pick, setPick] = useState<Pick>(null);
   const [filter, setFilter] = useState<GearFilter>("all");
   const [confirming, setConfirming] = useState<string | null>(null);
+  // 여러 개 되팔기: 아이템 id → 고른 개수 (0부터. 가진 것보다 많으면 가진 만큼으로 본다)
+  const [qty, setQty] = useState<Record<string, number>>({});
+  const qtyOf = (id: string, max: number) => Math.min(qty[id] ?? 0, max);
+  const setQtyOf = (id: string, n: number) => setQty((q) => ({ ...q, [id]: Math.max(0, n) }));
   const bag = bagGear(c);
+  const potions = POTIONS.flatMap((p) => ((c.potions[p.id] ?? 0) > 0 ? [{ potion: p, count: c.potions[p.id] }] : []));
   const shownBag = bag.filter((b) => filter === "all" || b.gear.kind === filter);
   const total = bag.reduce((n, b) => n + b.count, 0);
 
@@ -382,14 +387,22 @@ export function GearPanel({
     setFilter(slotKind(slot));
   }
 
-  function sell(g: GearDef) {
-    if (confirming !== g.id && sellWarning(c, g)) {
+  function sell(g: GearDef, n = 1) {
+    if (n < 1) return;
+    if (confirming !== g.id && sellWarning(c, g, n)) {
       setConfirming(g.id);
       return;
     }
     setConfirming(null);
-    if (pick?.type === "item" && pick.id === g.id && sellable(c, g.id) <= 1) setPick(null);
-    onSell(g.id);
+    if (pick?.type === "item" && pick.id === g.id && sellable(c, g.id) <= n) setPick(null);
+    setQtyOf(g.id, 0);
+    onSell(g.id, n);
+  }
+
+  function sellPotion(id: string, n: number) {
+    if (n < 1) return;
+    setQtyOf(id, 0);
+    onSell(id, n);
   }
 
   return (
@@ -526,7 +539,9 @@ export function GearPanel({
             const cmp = free > 0 ? gearDiff(c, target, g.id).slice(0, 3) : [];
             const picked = pick?.type === "item" && pick.id === g.id;
             const price = sellValue(g.price);
-            const warn = confirming === g.id ? sellWarning(c, g) : null;
+            // 남는 것이 2개 이상이면 개수를 골라 한 번에 판다
+            const n = free > 1 ? qtyOf(g.id, free) : 1;
+            const warn = confirming === g.id ? sellWarning(c, g, n) : null;
             return (
               <li key={g.id} className={s.bagCell} data-picked={picked || undefined} data-grade={grade.id} style={{ "--grade": grade.color } as CSSProperties}>
                 <button
@@ -569,8 +584,9 @@ export function GearPanel({
                   <div className={s.confirm} role="alert">
                     <p>{warn}</p>
                     <div className={s.cellActions}>
-                      <button type="button" className={cx(ui.button, s.sellBtn)} disabled={busy} onClick={() => sell(g)}>
-                        {pts(price)}에 팔기
+                      <button type="button" className={cx(ui.button, s.sellBtn)} disabled={busy || n < 1} onClick={() => sell(g, n)}>
+                        {n > 1 ? `${n}개 ` : ""}
+                        {pts(price * n)}에 팔기
                       </button>
                       <button type="button" className={cx(ui.button, s.small)} onClick={() => setConfirming(null)}>
                         그만두기
@@ -594,7 +610,9 @@ export function GearPanel({
                         장착
                       </button>
                     )}
-                    {free > 0 ? (
+                    {free > 1 ? (
+                      <SellQty name={g.name} max={free} unit={price} value={n} busy={busy} onChange={(v) => setQtyOf(g.id, v)} onSell={() => sell(g, n)} />
+                    ) : free > 0 ? (
                       <button
                         type="button"
                         className={cx(ui.button, s.sellBtn)}
@@ -614,6 +632,97 @@ export function GearPanel({
           })}
         </ul>
       </section>
+
+      {potions.length > 0 && (
+        <section className={s.section} aria-labelledby="rpg-potions">
+          <h3 id="rpg-potions" className={s.sectionTitle}>
+            물약 <span className={s.meta}>· 되팔면 값의 50% (오늘 사냥 포인트 한도 안에서, 한도에 막힌 것은 가방에 남아요)</span>
+          </h3>
+          <ul className={s.bagGrid}>
+            {potions.map(({ potion: p, count }) => {
+              const price = sellValue(p.price);
+              const n = count > 1 ? qtyOf(p.id, count) : 1;
+              return (
+                <li key={p.id} className={s.bagCell}>
+                  <div className={s.bagPick}>
+                    <span className={s.bagIcon}>
+                      <RpgIcon art={p.art} size={48} />
+                      {count > 1 && <span className={s.qty}>×{count}</span>}
+                    </span>
+                    <span className={s.bagInfo}>
+                      <span className={s.bagName}>{p.name}</span>
+                      <span className={s.meta}>{p.desc}</span>
+                      <span className={s.meta}>{p.key ? `단축키 ${p.key}` : "자동으로 먹어요"}</span>
+                    </span>
+                  </div>
+                  <div className={s.cellActions}>
+                    {count > 1 ? (
+                      <SellQty name={p.name} max={count} unit={price} value={n} busy={busy} onChange={(v) => setQtyOf(p.id, v)} onSell={() => sellPotion(p.id, n)} />
+                    ) : (
+                      <button
+                        type="button"
+                        className={cx(ui.button, s.sellBtn)}
+                        disabled={busy}
+                        onClick={() => sellPotion(p.id, 1)}
+                        aria-label={`${p.name} 1개 팔기, ${price}포인트`}
+                      >
+                        팔기 <b>{pts(price)}</b>
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/** 여러 개 되팔기: 0개부터 −/+·모두로 개수를 고르고, 팔기 버튼에 합계를 보여 준다 */
+function SellQty({
+  name,
+  max,
+  unit,
+  value,
+  busy,
+  onChange,
+  onSell,
+}: {
+  name: string;
+  max: number;
+  unit: number;
+  value: number;
+  busy: boolean;
+  onChange: (n: number) => void;
+  onSell: () => void;
+}) {
+  return (
+    <div className={s.sellQty}>
+      <span className={s.stepper} role="group" aria-label={`${name} 팔 개수 (최대 ${max}개)`}>
+        <button type="button" className={cx(ui.button, ui.quiet)} disabled={value <= 0} onClick={() => onChange(value - 1)} aria-label="1개 줄이기">
+          −
+        </button>
+        <output className={s.sellCount} aria-live="polite">
+          {value}
+        </output>
+        <button type="button" className={ui.button} disabled={value >= max} onClick={() => onChange(value + 1)} aria-label="1개 늘리기">
+          +
+        </button>
+        <button type="button" className={cx(ui.button, s.sellAll)} disabled={value >= max} onClick={() => onChange(max)} aria-label={`모두(${max}개) 고르기`}>
+          모두
+        </button>
+      </span>
+      <button
+        type="button"
+        className={cx(ui.button, s.sellBtn)}
+        disabled={busy || value < 1}
+        onClick={onSell}
+        aria-label={`${name} ${value}개 팔기, 합계 ${unit * value}포인트`}
+      >
+        {value}개 팔기 <b>합계 {pts(unit * value)}</b>
+      </button>
     </div>
   );
 }

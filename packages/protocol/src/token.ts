@@ -1,4 +1,4 @@
-import { JOIN_TOKEN_TTL_SEC, ROOM_ID_RE, isAvatarBody, staffGateBody } from "./constants";
+import { JOIN_TOKEN_TTL_SEC, ROOM_ID_RE, isAvatarBody, isDexBadge, staffGateBody } from "./constants";
 import { sanitizeLook, staffGateLook } from "./items";
 import { hasDye, packDye, unpackDye, type AvatarDye } from "./dye";
 
@@ -22,6 +22,8 @@ export type JoinClaims = {
   dye?: AvatarDye;
   /** 31번 운영자 계정 (Vercel이 확인한 뒤에만 넣는다 → 저승사자 차림·"운영자" 배지). 일반 계정엔 없다 */
   staff?: true;
+  /** 도감 100% 달성 종류 (DEX_BADGE_BITS 비트 묶음, 1~31). Vercel이 도감 기록을 확인한 뒤에만 넣는다. 없으면 0 */
+  dex?: number;
   /** 만료 시각 (unix seconds) */
   exp: number;
 };
@@ -106,7 +108,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff, dex } = c as Record<string, unknown>;
   if (
     typeof visitorId !== "string" ||
     typeof name !== "string" ||
@@ -119,5 +121,5 @@ export async function verifyJoinToken(
   if (exp < nowSec) return null;
   // 운영자 전용 몸·꾸미기는 토큰에 운영자 표시(staff)가 있을 때만 (없으면 후드 유령·빼고)
   const isStaff = staff === true;
-  return { visitorId, name, color, channel, exp, look: staffGateLook(sanitizeLook(look), isStaff), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}) };
+  return { visitorId, name, color, channel, exp, look: staffGateLook(sanitizeLook(look), isStaff), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}) };
 }

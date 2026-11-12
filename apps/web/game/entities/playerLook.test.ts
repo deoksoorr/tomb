@@ -26,6 +26,7 @@ vi.mock("./AvatarView", () => ({
     setStaff(on: boolean) {
       this.calls.push({ kind: "staff", arg: on });
     }
+    setDexBadge() {}
     setLook(look: string[]) {
       this.calls.push({ kind: "look", arg: look });
     }

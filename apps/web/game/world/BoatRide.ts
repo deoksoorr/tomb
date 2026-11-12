@@ -20,7 +20,7 @@ import { bystanderGain } from "./rides";
 //    물가에서 배가 가까이 오면 E로 같이 탄다 (서버는 같은 배의 다른 자리에 앉은 사람 곁이면 받아 준다)
 //  - 다른 사람에게는 노 젓는 사람의 위치(보간)에 배를 그리고, 뒷자리 사람은 그 배에 붙여 그린다
 //  - 새로고침(자리 복원)·실시간 서버 재배포: 서버가 배 자리를 기억하면 그대로, 놓쳤으면 가까운 뭍(없으면 나루터)에 내려 준다
-//  - (나중에) 배 위 낚시: fishingSpot()이 지금 배가 떠 있는 물(강·호수)과 자리를 알려 준다
+//  - 배 위 낚시(4번): 물가가 아닌 물 위에서 E → fishingSpot()이 알려 준 물(강·호수)로 낚시 (world/forage Foraging.fishFromBoat)
 
 /** 빈 배가 나루터로 돌아오기 시작하기까지 (내린 자리에서 잠시 떠 있다가) */
 export const BOAT_RETURN_DELAY_MS = 3000;
@@ -451,8 +451,8 @@ export class BoatRide {
     if (!pl.inBoat) return this.joinTarget() ? `${prefix}뒷자리에 같이 타기` : null;
     const ref = boatOf(pl.boatSeatId!);
     const shore = shorePoint(pl.x, pl.y, standable) !== null;
-    if (ref?.seat.index === 1) return shore ? `${prefix}내리기 · 같이 타는 중` : "같이 타는 중 (물가에서 내릴 수 있어요)";
-    return shore ? `${prefix}내리기 · 방향키로 노 젓기` : "방향키로 노 젓기 · 물가에서 내려요";
+    if (ref?.seat.index === 1) return shore ? `${prefix}내리기 · 같이 타는 중` : `${prefix}낚시하기 · 같이 타는 중`;
+    return shore ? `${prefix}내리기 · 방향키로 노 젓기` : `${prefix}낚시하기 · 방향키로 노 젓기`;
   }
 
   /** 나루터 안내: 탈 배가 없으면 회색, 2인승에서 기다리는 사람이 있으면 같이 타기 */
@@ -465,7 +465,13 @@ export class BoatRide {
     return { text: seat.index === 1 ? `${prefix}뒷자리에 같이 타기` : `${prefix}조각배 타기`, dim: false };
   }
 
-  /** 다음 작업(배 위 낚시)용: 지금 내 배가 떠 있는 물과 자리. 배에 타고 있지 않으면 null */
+  /** 물가(둑·나루터·잔교) 가까이라 E로 내릴 수 있는지 (아니면 E = 배 위 낚시) */
+  nearShore(): boolean {
+    const pl = this.host.player();
+    return pl.inBoat && shorePoint(pl.x, pl.y, standable) !== null;
+  }
+
+  /** 배 위 낚시: 지금 내 배가 떠 있는 물과 자리. 배에 타고 있지 않으면 null */
   fishingSpot(): { x: number; y: number; water: "river" | "lake" } | null {
     const pl = this.host.player();
     if (!pl.inBoat) return null;

@@ -24,8 +24,9 @@ export class CosmeticFxView {
 
   constructor(private readonly scene: Phaser.Scene) {}
 
-  setLook(look: readonly string[]): void {
-    this.sim.setLook(look);
+  /** body = 몸 id (프리미엄 외형 등급 연출) */
+  setLook(look: readonly string[], body?: string): void {
+    this.sim.setLook(look, body);
     if (this.sim.empty) this.clear();
   }
 
@@ -49,6 +50,12 @@ export class CosmeticFxView {
         this.pool.push(img);
       } else if (img.texture.key !== key || String(img.frame.name) !== String(c.frame)) img.setTexture(key, c.frame);
       const depth = c.layer === "ground" ? DEPTH.decal + 2 : c.layer === "light" ? DEPTH.lights + 3 : c.depth;
+      // 몸 뒤로 돈 입자는 어둡게 (곱하기 색), 앞은 그대로
+      const dim = c.dim ?? 1;
+      if (dim < 1) {
+        const v = Math.round(255 * Math.max(0, dim));
+        img.setTint((v << 16) | (v << 8) | v);
+      } else if (img.isTinted) img.clearTint();
       img
         .setOrigin(c.ox, c.oy)
         .setPosition(c.x, c.y)
@@ -56,7 +63,7 @@ export class CosmeticFxView {
         .setRotation(c.rot)
         .setFlipX(c.flip)
         .setAlpha(c.alpha * fade)
-        .setBlendMode(c.layer === "light" ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL)
+        .setBlendMode(c.layer === "light" || c.add ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL)
         .setDepth(depth)
         .setVisible(visible);
       // 물에 잠긴 펫: 아래쪽 crop줄을 잘라 수면 아래로 (crop이 없으면 되돌린다 — 이미지를 돌려 쓰므로)

@@ -284,8 +284,8 @@ export const BOOK_LINES = [
   "추리 소설의 마지막 장을 먼저 읽어 버렸다.",
 ];
 
-/** 라디오 채널 (0 = 꺼짐). 켜면 BGM 플레이리스트를 차례로 돌린다 */
-export const RADIO_CHANNELS = 4;
+/** 라디오 채널 (0 = 꺼짐). 켜면 BGM 플레이리스트를 차례로 돌린다. 서버 저장 범위와 같은 값 (lib/housing/states.ts) */
+export { RADIO_CHANNELS } from "@/lib/housing/states";
 
 /** KST 시각 안내 (괘종시계) */
 export function clockText(now: number): string {

@@ -141,8 +141,8 @@ export const api = {
   /** me=1: 내 순위까지 (개인화 응답이라 CDN 캐시를 타지 않는다) */
   pointRank: () => request<PointRankResponse>("/api/rank/points?me=1", { cache: "no-store" }),
   /** 49번 랭킹 (포인트·사냥). zone은 huntBest의 사냥터(난이도 id) */
-  rank: (board: RankBoard, period: RankPeriod, zone?: string) =>
-    request<RankResponse>(`/api/rank?${new URLSearchParams({ board, period, me: "1", ...(zone ? { zone } : {}) })}`, { cache: "no-store" }),
+  rank: (board: RankBoard, period: RankPeriod, zone?: string, fish?: string) =>
+    request<RankResponse>(`/api/rank?${new URLSearchParams({ board, period, me: "1", ...(zone ? { zone } : {}), ...(fish ? { fish } : {}) })}`, { cache: "no-store" }),
   /** 성불한 이야기들 (최신 성불 순, 검색) */
   passed: (q: string, offset = 0) =>
     request<PassedListResponse>(`/api/graves/passed?${new URLSearchParams({ ...(q ? { q } : {}), ...(offset ? { offset: String(offset) } : {}) })}`),

@@ -2,12 +2,13 @@
 
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트라 next/image 최적화가 필요 없다 */
 import { useState } from "react";
-import { PHRASES } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
-import { EMO_BOARD, type EmoSlot } from "@/game/logic/emoBoard";
+import type { EmoSlot } from "@/game/logic/emoBoard";
 import { emoteDataUrl } from "@/game/sprites/emotes";
 import { readItem, writeItem } from "@/lib/storage";
+import FavStar from "./FavStar";
 import styles from "./SayBoard.module.css";
+import { phraseText, slotKey, slotOf } from "./sayFavorites";
 import { SAY_GROUPS } from "./sayGroups";
 
 // 말풍선 탭: 정해진 문장을 상황별 묶음(sayGroups.ts)으로, 묶음마다 어울리는 이모티콘을 곁들인다.
@@ -18,9 +19,6 @@ const RECENT_MAX = 6;
 
 /** "p:hi" = 문장, "e:heart" = 이모티콘, "a:wave" = 몸짓 */
 type RecentKey = `p:${string}` | `e:${string}` | `a:${string}`;
-
-const phraseText = (id: string) => PHRASES.find((p) => p.id === id)?.text ?? id;
-const slotOf = (id: string): EmoSlot | undefined => EMO_BOARD.find((s) => s.id === id);
 
 function readRecent(): RecentKey[] {
   try {
@@ -51,12 +49,22 @@ export default function SayBoard({ onSent }: { onSent: () => void }) {
     else bridge.emit("input:emo", { id: slot.id });
   }
 
-  const emoButton = (slot: EmoSlot) => (
-    <button key={`${slot.kind}-${slot.id}`} type="button" className={styles.emo} onClick={() => sendEmo(slot)} title={slot.label}>
-      <img src={emoteDataUrl(slot.icon, 2)} width={26} height={26} alt="" aria-hidden="true" />
-      <span>{slot.label}</span>
-    </button>
-  );
+  const emoButton = (slot: EmoSlot, star = false) => {
+    const button = (
+      <button key={`${slot.kind}-${slot.id}`} type="button" className={styles.emo} onClick={() => sendEmo(slot)} title={slot.label}>
+        <img src={emoteDataUrl(slot.icon, 2)} width={26} height={26} alt="" aria-hidden="true" />
+        <span>{slot.label}</span>
+      </button>
+    );
+    return star ? (
+      <span key={`${slot.kind}-${slot.id}`} className={styles.withStar}>
+        {button}
+        <FavStar favKey={slotKey(slot)} label={slot.label} />
+      </span>
+    ) : (
+      button
+    );
+  };
 
   return (
     <div className={styles.board}>
@@ -90,12 +98,20 @@ export default function SayBoard({ onSent }: { onSent: () => void }) {
             </h3>
             <div className={styles.phrases}>
               {g.phrases.map((id) => (
-                <button key={id} type="button" className={styles.phrase} onClick={() => sayPhrase(id)}>
-                  {phraseText(id)}
-                </button>
+                <span key={id} className={styles.phraseCell}>
+                  <button type="button" className={styles.phrase} onClick={() => sayPhrase(id)}>
+                    {phraseText(id)}
+                  </button>
+                  <FavStar favKey={`p:${id}`} label={phraseText(id)} className={styles.phraseStar} />
+                </span>
               ))}
             </div>
-            <div className={styles.emos}>{g.emos.map((id) => slotOf(id)).filter((s): s is EmoSlot => !!s).map(emoButton)}</div>
+            <div className={styles.emos}>
+              {g.emos
+                .map((id) => slotOf(id))
+                .filter((s): s is EmoSlot => !!s)
+                .map((s) => emoButton(s, true))}
+            </div>
           </section>
         ))}
       </div>

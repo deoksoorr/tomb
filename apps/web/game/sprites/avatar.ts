@@ -1,4 +1,4 @@
-import { hasDye, isAvatarBody, type AvatarBody, type AvatarDye } from "@tomb/protocol";
+import { hasDye, isAvatarBody, premiumBody, type AvatarBody, type AvatarDye } from "@tomb/protocol";
 import { darken, Grid, lighten, mix, parseHex, type Color } from "./pixel";
 import { COVERING_HATS, drawBackGear, drawHandGear, drawHandGlow, drawHeadGear, drawNeckGear, extraGearOf, GEAR_SHEET_IDS, type ExtraGear } from "./avatarGear";
 import { COSMETIC_FX_IDS } from "./cosmeticFx";
@@ -14,9 +14,12 @@ import { COSMETIC_FX_IDS } from "./cosmeticFx";
 //
 // 25번 프리미엄 외형(PREMIUM_BODIES)·운영자 외형(STAFF_BODIES)은 위 6종 중 하나를 바탕(BODY_BASE)으로 뼈대·자세·동작을 그대로 쓰고
 // 몸통·머리에 덧그린다 (drawBodyExtra) → 앞·옆·뒤 모든 자세·동작·별칭 프레임이 저절로 맞는다.
-//  suit 정장(두건+양복·셔츠·넥타이)  box 박스(두건 머리 + 택배 상자)  umbrella 우산(이불 유령 + 우산 갓)
-//  catmask 고양이 탈 직장인(고양이 머리 + 셔츠·사원증 줄, 꼬리 없음)  cup 커피잔(동글이 + 머그잔)  tube 오리 튜브(동글이 + 튜브)
-//  king 왕관(두건 + 왕관·담비털 망토)  reaper 저승사자(키다리 + 갓·검은 도포·갓끈)
+//  suit 정장(두건 + 반듯한 각진 양복·셔츠·넥타이)  box 박스(두건 머리 + 택배 상자)
+//  umbrella 우산(두건 + 노란 비옷·장화 + 머리 위로 활짝 편 큰 우산 — 이불 유령과 실루엣부터 다르다)
+//  catmask 고양이 탈 직장인(고양이 머리 + 밖으로 뻗은 수염·볼터치 + 셔츠·사원증 줄 + 서류 가방, 꼬리 없음)
+//  cup 커피잔(동글이 + 머그잔)  tube 오리 튜브(동글이 + 튜브)
+//  king 왕관(두건 + 왕관 + 바닥까지 퍼지는 담비털 망토)  reaper 저승사자(키다리 + 갓·검은 도포·갓끈)
+// 등급 연출: 희귀 = 금 외곽선, 전설 = 무지개 외곽선 (시트에 굽는다). 빛·반짝이 입자는 cosmeticFx bodyFx
 
 /** 처음 6종 (그림의 뼈대) */
 export type BaseBody = "hood" | "cat" | "bun" | "sheet" | "tall" | "round";
@@ -30,7 +33,7 @@ export const BODY_BASE: Readonly<Record<AvatarBody, BaseBody>> = {
   round: "round",
   suit: "hood",
   box: "hood",
-  umbrella: "sheet",
+  umbrella: "hood",
   catmask: "cat",
   cup: "round",
   tube: "round",
@@ -38,7 +41,7 @@ export const BODY_BASE: Readonly<Record<AvatarBody, BaseBody>> = {
   reaper: "tall",
 };
 /** 염색하지 않은 몸 부위의 원래 색 (몸 부위 = 상자·머그잔·망토·도포. 없으면 고른 색) */
-const BODY_DEFAULT: Partial<Record<AvatarBody, Color>> = { suit: 0x3e465c, box: 0xc89a5e, cup: 0xf0ebe2, king: 0xb02a3a, reaper: 0x2c2a34 };
+const BODY_DEFAULT: Partial<Record<AvatarBody, Color>> = { suit: 0x3e465c, box: 0xc89a5e, umbrella: 0xe8b83a, cup: 0xf0ebe2, king: 0xb02a3a, reaper: 0x2c2a34 };
 
 export const AV_W = 20;
 export const AV_H = 28;
@@ -104,7 +107,7 @@ export const BODY_METRICS: Record<AvatarBody, { top: number; shoulder: number }>
   round: { top: 16, shoulder: 9 },
   suit: { top: 18, shoulder: 7 },
   box: { top: 18, shoulder: 7 },
-  umbrella: { top: 23, shoulder: 9 },
+  umbrella: { top: 25, shoulder: 7 },
   catmask: { top: 19, shoulder: 7 },
   cup: { top: 16, shoulder: 9 },
   tube: { top: 16, shoulder: 9 },
@@ -376,7 +379,7 @@ function metrics(body: AvatarBody, view: View, pose: Pose): M {
   const m = baseMetrics(BODY_BASE[body], view, pose);
   // 머리 위에 늘 쓰는 것이 있는 몸은 후광을 그 위로 (crown = 맨 위)
   if (body === "king") return { ...m, crown: m.hy - 9 };
-  if (body === "umbrella") return { ...m, crown: m.hy - 11 };
+  if (body === "umbrella") return { ...m, crown: m.hy - 13 };
   return m;
 }
 
@@ -649,6 +652,8 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   // 17번 매달리기: 손으로 잡는 가지 (빈칸에만 → 몸·머리 뒤에 놓이고 외곽선이 함께 둘러진다)
   if (pose.arms === "up") drawHangBranch(g, m, view);
   g.outline(pal.line);
+  // 25번: 외곽선 밖으로 가늘게 뻗는 덧그림 (고양이 탈 수염)
+  drawBodyAfterOutline(g, body, view, pose, m);
   // 등불 창은 외곽선 뒤에도 밝게 (빛나는 점)
   if (gear.lantern && view !== "up") g.set(m.hx, m.hY + 1, 0xfff0b0);
   if (gear.extra.hand) drawHandGlow(g, view, gear.extra.hand, m);
@@ -678,11 +683,58 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     drawArms(g, view, pose, m, pal, true);
   }
 
+  // 25번 등급 외곽선: 희귀 = 금, 전설 = 무지개 (어두운 외곽선 바깥에 한 줄 더)
+  const tier = premiumBody(body)?.tier;
+  if (tier === "rare" || tier === "legend") tierRim(g, tier === "legend");
+
   // 발밑 그림자 (외곽선 뒤, 투명한 곳에만). 공중·물·의자에서는 그리지 않는다
   if (pose.sit !== 2 && !pose.air) {
     for (let x = 5; x < 15; x++) if (!g.filled(x, 27)) g.set(x, 27, 0x000000, x === 5 || x === 14 ? 40 : 80);
   }
   return g;
+}
+
+/** 무지개 외곽선 색 (대각선 띠) */
+const RAINBOW: readonly Color[] = [0xff6a7a, 0xffaa4a, 0xffe85a, 0x7ae88a, 0x5ac8ff, 0xb48aff];
+
+/** 등급 외곽선: 지금 그림의 바깥 테두리에 한 줄 (희귀 금, 전설 무지개) */
+function tierRim(g: Grid, rainbow: boolean): void {
+  const add: number[] = [];
+  for (let y = 0; y < g.h; y++)
+    for (let x = 0; x < g.w; x++) {
+      if (g.filled(x, y)) continue;
+      if (g.filled(x - 1, y) || g.filled(x + 1, y) || g.filled(x, y - 1) || g.filled(x, y + 1)) add.push(x, y);
+    }
+  for (let i = 0; i < add.length; i += 2) {
+    const x = add[i];
+    const y = add[i + 1];
+    if (rainbow) g.set(x, y, RAINBOW[Math.floor((x + y) / 2) % RAINBOW.length], 215);
+    else g.set(x, y, (x + y) % 4 === 0 ? 0xfff2b0 : 0xe8b440, 200);
+  }
+}
+
+/** 외곽선 다음에 그리는 가는 선 (외곽선에 묻히지 않게): 고양이 탈의 밖으로 뻗은 수염 */
+function drawBodyAfterOutline(g: Grid, body: AvatarBody, view: View, pose: Pose, m: M): void {
+  if (body !== "catmask" || pose.lie || view === "up") return;
+  const { cx } = m;
+  const hy = Math.round(m.hy);
+  const w = 0xf4efe6;
+  if (view === "down") {
+    for (const [d, x0] of [[-1, cx - 6], [1, cx + 5]] as const) {
+      g.set(x0, hy + 1, w, 230);
+      g.set(x0 + d, hy + 1, w, 230);
+      g.set(x0 + d * 2, hy, w, 200);
+      g.set(x0, hy + 3, w, 230);
+      g.set(x0 + d, hy + 3, w, 200);
+      g.set(x0 + d * 2, hy + 4, w, 170);
+    }
+  } else {
+    g.set(cx + 5, hy + 1, w, 230);
+    g.set(cx + 6, hy + 1, w, 230);
+    g.set(cx + 7, hy, w, 200);
+    g.set(cx + 5, hy + 3, w, 230);
+    g.set(cx + 6, hy + 3, w, 200);
+  }
 }
 
 // ── 25번 프리미엄·운영자 외형 덧그림 ──
@@ -701,6 +753,21 @@ function drawBodyExtra(g: Grid, body: AvatarBody, phase: "torso" | "front", view
   if (phase === "torso") {
     switch (body) {
       case "suit": {
+        // 각진 양복: 두건 망토(아래로 퍼지는 사다리꼴) 대신 어깨가 반듯한 직사각형 → 실루엣부터 다르다
+        if (!pose.lie) {
+          const half = side ? 4 : 5;
+          for (let y = neck; y <= cloakBot; y++)
+            for (let x = 0; x < AV_W; x++) {
+              const inside = x >= cx - half && x < cx + half;
+              if (inside) g.set(x, y, y === cloakBot || x >= cx + half - 2 ? pal.cloakLo : pal.cloak);
+              else if (y < 25 && (g.get(x, y) === Grid.rgba(pal.cloak) || g.get(x, y) === Grid.rgba(pal.cloakLo))) g.set(x, y, 0, 0);
+            }
+          // 소매 끝 흰 셔츠 단
+          if (!side) {
+            g.set(cx - half, cloakBot - 1, shirt);
+            g.set(cx + half - 1, cloakBot - 1, shirt);
+          } else g.set(cx + half - 1, cloakBot - 1, shirt);
+        }
         // 흰 셔츠 V + 넥타이 (포인트, 원래 빨강) + 옷깃 그늘
         const tie = accent(0xb8323c);
         const tieLo = accentLo(0x8a2430);
@@ -749,7 +816,39 @@ function drawBodyExtra(g: Grid, body: AvatarBody, phase: "torso" | "front", view
         }
         return;
       }
+      case "umbrella": {
+        // 노란 비옷 (몸 부위 색): 가운데 여밈·단추 + 장화 (포인트 색 = 우산과 같은 색)
+        const boot = accentLo(0xa8303a);
+        const feet = [Grid.rgba(pal.feet), Grid.rgba(darken(pal.feet, 0.2))];
+        for (let y = 24; y < AV_H; y++) for (let x = 0; x < AV_W; x++) if (feet.includes(g.get(x, y))) g.set(x, y, boot);
+        if (view === "down") {
+          g.vline(cx - 1, neck + 1, cloakBot - 1, pal.cloakLo);
+          g.set(cx, neck + 2, 0xf4efe6);
+          g.set(cx, neck + 4, 0xf4efe6);
+        } else if (side) {
+          g.hline(cx - 1, cx + 1, neck + 3, pal.cloakLo);
+        }
+        return;
+      }
       case "king": {
+        // 망토가 아래로 넓게 퍼져 바닥에 끌린다 (옆모습은 뒤로 긴 자락) → 두건 유령과 실루엣부터 다르다
+        if (!pose.lie) {
+          const top = 18 + sitDrop;
+          for (let y = top + 1; y <= cloakBot; y++) {
+            let l = AV_W;
+            let r = -1;
+            for (let x = 0; x < AV_W; x++)
+              if (g.filled(x, y)) {
+                l = Math.min(l, x);
+                r = Math.max(r, x);
+              }
+            if (r < 0) continue;
+            const e = Math.min(2, Math.floor((y - top) / 2));
+            const back = side ? e + Math.min(2, Math.floor((y - top) / 3)) : e;
+            for (let i = 1; i <= back; i++) g.set(l - i, y, i === back ? pal.cloakLo : pal.cloak);
+            for (let i = 1; i <= (side ? Math.min(1, e) : e); i++) g.set(r + i, y, pal.cloakLo);
+          }
+        }
         // 담비털 옷깃·밑단 (흰 바탕에 까만 점) + 금 걸쇠
         const ermine = (y: number) => {
           for (let x = 0; x < AV_W; x++) if (g.filled(x, y)) g.set(x, y, (x + y) % 3 === 0 ? 0x1e1c22 : 0xf4f0e6);
@@ -851,47 +950,93 @@ function drawBodyExtra(g: Grid, body: AvatarBody, phase: "torso" | "front", view
       return;
     }
     case "catmask": {
-      // 고양이 탈: 볼 수염 + (옆·뒤) 탈 끈
-      const w = 0x3a3440;
+      // 고양이 탈: 볼터치 + (옆·뒤) 탈 끈 (수염은 외곽선 다음에 밖으로 뻗게 — drawBodyAfterOutline)
+      const blush = 0xf08a98;
       if (view === "down") {
-        g.set(cx - 5, hy + 1, w);
-        g.set(cx - 4, hy + 2, w);
-        g.set(cx + 4, hy + 1, w);
-        g.set(cx + 3, hy + 2, w);
+        g.set(cx - 4, hy + 2, blush);
+        g.set(cx + 3, hy + 2, blush);
       } else if (side) {
-        g.set(cx + 1, hy + 2, w);
+        g.set(cx + 2, hy + 2, blush);
         g.hline(cx - 4, cx - 2, hy, 0x5a4a3a);
       } else {
         g.hline(cx - 4, cx + 3, hy, 0x5a4a3a);
         g.rect(cx - 1, hy - 1, 2, 2, 0x5a4a3a);
       }
+      // 서류 가방 (손에 들고 다닌다 — 매달리기·그네·해먹·물에서는 내려놓는다)
+      if (pose.lie || pose.sink || pose.arms === "up" || pose.arms === "rope") return;
+      const hy0 = Math.round(hy);
+      const bx = view === "down" ? cx + 4 : up ? cx - 9 : cx - 2;
+      const by = hy0 + 5;
+      g.rect(bx, by, 5, 4, 0x5a3a24);
+      g.hline(bx, bx + 4, by, 0x7a5232);
+      g.vline(bx + 4, by + 1, by + 3, 0x40281a);
+      g.set(bx + 2, by + 1, 0xd8b058);
+      g.set(bx + 1, by - 1, 0x40281a);
+      g.set(bx + 3, by - 1, 0x40281a);
+      g.set(bx + 2, by - 1, pal.hand);
+      return;
+    }
+    case "umbrella": {
+      // 우산: 매달리기·그네·해먹에서는 내려놓는다
+      if (pose.lie || pose.arms === "up" || pose.arms === "rope") return;
+      // 손 흔들기·환호는 손이 우산 밑에 묻히지 않게 잠깐 접어 옆에 낀다
+      const act = pose.arms === "wave0" || pose.arms === "wave1" || pose.arms === "cheer0" || pose.arms === "cheer1";
+      const red = accent(0xd8434f);
+      const redLo = accentLo(0xa8303a);
+      const redHi = pal.accent === null ? 0xf0808a : lighten(pal.accent, 0.3);
+      const white = 0xf4efe6;
+      const whiteLo = 0xcfc8bb;
+      const stick = 0x3a3a48;
+      const hy0 = Math.round(hy);
+      if (headWorn || act) {
+        // 머리 꾸미기를 쓰면(또는 손을 흔드는 동안) 우산을 접어 지팡이처럼 옆에 든다
+        const sx = up ? cx - 7 : side ? cx + 5 : cx + 6;
+        const d = up ? 1 : -1;
+        g.set(sx, hy0 - 3, stick);
+        g.set(sx + d, hy0 - 3, stick);
+        g.set(sx + d, hy0 - 2, stick);
+        g.vline(sx, hy0 - 2, hy0, stick);
+        g.rect(sx - 1, hy0 + 1, 2, 7, red);
+        g.vline(sx, hy0 + 2, hy0 + 7, redLo);
+        g.vline(sx, hy0 + 8, 25, stick);
+        if (!up && !act) g.set(sx - 1, hy0, pal.hand);
+        return;
+      }
+      // 머리 위로 활짝 편 큰 우산: 포인트 색(원래 빨강)과 흰 칸이 번갈아, 아래 가장자리는 살 끝마다 물결
+      const ty = hy0 - 13;
+      const ucx = side ? cx + 3 : cx;
+      const halves = side ? [2, 4, 6, 7, 7] : [2, 5, 7, 9, 9];
+      g.set(ucx - 1, ty, stick);
+      g.set(ucx, ty, stick);
+      halves.forEach((h, i) => {
+        const y = ty + 1 + i;
+        const edge = i === halves.length - 1;
+        for (let x = ucx - h; x < ucx + h; x++) {
+          const k = x - ucx + 12;
+          if (edge && k % 3 === 1) continue;
+          const seg = Math.floor(k / 3) % 2 === 0;
+          const shade = edge || x >= ucx + h - 2;
+          const hi = i <= 1 && x < ucx - 1;
+          g.set(x, y, seg ? (shade ? redLo : hi ? redHi : red) : shade ? whiteLo : white);
+        }
+      });
+      // 손잡이 대: 우산 밑에서 머리 위까지 (머리 뒤로 지나간다) + 앞·옆모습은 가슴 앞에서 손으로 잡은 J자 손잡이
+      const sx = side ? cx + 5 : cx - 1;
+      for (let y = ty + 6; y <= hy0 + 8; y++) {
+        const inFront = side || (!up && y >= hy0 + 5);
+        if (inFront || !g.filled(sx, y)) g.set(sx, y, stick);
+      }
+      if (up) return;
+      const hy2 = hy0 + 8;
+      g.set(sx + 1, hy2 + 1, stick);
+      g.set(sx + 2, hy2, stick);
+      g.rect(sx - (side ? 1 : 0), hy0 + 5, 2, 2, pal.hand);
+      g.set(sx + (side ? 0 : 1), hy0 + 6, pal.handLo);
       return;
     }
   }
   if (headWorn) return;
   switch (body) {
-    case "umbrella": {
-      // 우산 갓: 포인트 색(원래 빨강)과 흰 칸이 번갈아, 꼭지는 검게
-      const ty = hy - 11;
-      const red = accent(0xd8434f);
-      const redLo = accentLo(0xa8303a);
-      const white = 0xf4efe6;
-      const ucx = side ? cx - 1 : cx;
-      g.set(ucx, ty, 0x3a3a48);
-      g.set(ucx - 1, ty, 0x3a3a48);
-      const halves = [2, 4, 5, 6];
-      halves.forEach((h, i) => {
-        const y = ty + 1 + i;
-        for (let x = ucx - h; x < ucx + h; x++) {
-          const seg = Math.floor((x - ucx + 9) / 3) % 2 === 0;
-          const edge = i === halves.length - 1;
-          if (edge && (x - ucx + 9) % 3 === 2) continue;
-          g.set(x, y, seg ? (x >= ucx + h - 2 || edge ? redLo : red) : edge ? 0xd8d2c6 : white);
-        }
-      });
-      g.vline(ucx - 1, ty + 5, hy - 6, 0x3a3a48);
-      return;
-    }
     case "king": {
       // 왕관: 포인트 색(원래 금색), 보석 셋
       const gold = accent(0xf2c43a);

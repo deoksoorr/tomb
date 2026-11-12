@@ -61,12 +61,14 @@ describe("wave / cheer hands (NEXT 38)", () => {
   it("draws bright hands outside the body on all 6 bodies x front/side/back", () => {
     for (const b of AVATAR_BODIES)
       for (const view of ["down", "side", "up"] as const) {
-        const idle = avatarFrameGrid(b.id, view, AV_ANIM.idle.col, COLOR);
+        // 우산 유령은 서 있을 때 머리 위에 편 우산을 손 흔들 때 접는다 → 바탕(두건) 몸의 서 있는 모습과 비교
+        const idle = avatarFrameGrid(b.id === "umbrella" ? "hood" : b.id, view, AV_ANIM.idle.col, COLOR);
         for (const col of [W0, W0 + 1, C0, C0 + 1]) {
           const hands = handPixels(b.id, view, col);
           expect(hands.length, `${b.id} ${view} ${col}`).toBeGreaterThanOrEqual(2);
           // 손은 서 있을 때 몸 그림 밖 (몸 위에 겹쳐 묻히지 않는다)
-          expect(hands.some(([x, y]) => !idle.filled(x, y)), `${b.id} ${view} ${col}`).toBe(true);
+          // (반투명한 등급 외곽선 — 희귀 금·전설 무지개 — 은 몸이 아니다)
+          expect(hands.some(([x, y]) => (idle.get(x, y) & 255) < 255), `${b.id} ${view} ${col}`).toBe(true);
         }
         // 두 프레임 사이 손이 크게 움직인다 (최소 3px)
         const a = handPixels(b.id, view, W0)[0];

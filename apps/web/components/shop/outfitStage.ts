@@ -106,11 +106,23 @@ function drawFx(ctx: CanvasRenderingContext2D, c: FxCmd, x: number, y: number): 
   }
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, c.alpha));
+  // 몸 둘레를 도는 빛 입자(body 층 + add)는 더해 그리고, 몸 뒤로 돈 입자는 어둡게 (게임의 setTint와 같은 뜻)
+  if (c.add) ctx.globalCompositeOperation = "lighter";
+  if (c.dim !== undefined && c.dim < 1) ctx.filter = `brightness(${Math.max(0, c.dim).toFixed(2)})`;
   ctx.translate(x, y);
   if (c.rot) ctx.rotate(c.rot);
   ctx.scale((c.flip ? -1 : 1) * c.sx, c.sy);
   ctx.drawImage(art, c.frame * a.w, 0, a.w, a.h, -c.ox * a.w, -c.oy * a.h, a.w, a.h);
   ctx.restore();
+}
+
+/** 반딧불 세 마리 궤도 (게임 AvatarView와 같은 식). z < 0 = 몸 뒤쪽 반원 */
+function fireflies(t: number, still: boolean): { dx: number; dy: number; z: number; alpha: number }[] {
+  return [0, 1, 2].map((i) => {
+    const ang = t / 900 + (i * Math.PI * 2) / 3;
+    const z = Math.sin(ang);
+    return { dx: Math.cos(ang) * 10, dy: -9 + z * 3 + Math.sin(ang * 2 + i) * 2, z, alpha: still ? 0.9 : 0.45 + 0.55 * Math.max(0, Math.sin(t / 350 + i * 2.1)) };
+  });
 }
 
 function dirName(dir: DirId): "down" | "left" | "right" | "up" {
@@ -288,10 +300,11 @@ export class OutfitStage {
     }
 
     // ── F8 연출 (우산·풍선·날개·발자국·오라·펫): 게임과 같은 CosmeticFxSim ──
-    const fxKey = l.look.join(",");
+    // 몸도 함께: 프리미엄 외형 등급 연출 (빛·반짝이)
+    const fxKey = `${body}|${l.look.join(",")}`;
     if (fxKey !== this.fxKey) {
       this.fxKey = fxKey;
-      this.fx.setLook(l.look);
+      this.fx.setLook(l.look, body);
     }
     const fxCmds: FxCmd[] = [];
     if (!this.fx.empty) {
@@ -321,6 +334,26 @@ export class OutfitStage {
       }
     }
 
+    if (l.look.includes("aura_firefly")) {
+      // 반딧불 뒤쪽 반원: 몸 뒤에 작고 어둡게 (게임 AvatarView와 같은 궤도)
+      for (const ff of fireflies(t, still)) {
+        if (ff.z >= 0) continue;
+        const k = 1 + 0.22 * ff.z;
+        sprites.push({
+          depth: this.ay - 0.2,
+          draw: () => {
+            ctx.save();
+            ctx.globalCompositeOperation = "lighter";
+            ctx.globalAlpha = ff.alpha * (0.55 + 0.45 * (1 + ff.z));
+            const w = a.firefly.width * k;
+            const h = a.firefly.height * k;
+            ctx.drawImage(a.firefly, Math.round(sx(this.ax) + ff.dx - w / 2), Math.round(sy(this.ay) + ff.dy - h / 2), w, h);
+            ctx.restore();
+          },
+        });
+      }
+    }
+
     sprites.sort((p, q) => p.depth - q.depth);
     for (const s of sprites) s.draw();
 
@@ -337,10 +370,11 @@ export class OutfitStage {
       ctx.imageSmoothingEnabled = false;
     }
     if (l.look.includes("aura_firefly")) {
-      for (let i = 0; i < 3; i++) {
-        const ang = t / 900 + (i * Math.PI * 2) / 3;
-        ctx.globalAlpha = still ? 0.9 : 0.45 + 0.55 * Math.max(0, Math.sin(t / 350 + i * 2.1));
-        ctx.drawImage(a.firefly, Math.round(bx + Math.cos(ang) * 10) - 2, Math.round(headY - 9 + Math.sin(ang * 1.3) * 5) - 2);
+      // 앞쪽 반원만 여기(맨 위 빛). 뒤쪽 반원은 위에서 몸 뒤에 그렸다
+      for (const ff of fireflies(t, still)) {
+        if (ff.z < 0) continue;
+        ctx.globalAlpha = ff.alpha;
+        ctx.drawImage(a.firefly, Math.round(bx + ff.dx) - 2, Math.round(headY + ff.dy) - 2);
       }
     }
     for (const c of fxCmds) if (c.layer === "light") drawFx(ctx, c, sx(c.x), sy(c.y));

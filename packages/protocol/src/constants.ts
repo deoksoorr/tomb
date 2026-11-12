@@ -132,7 +132,7 @@ export const STARTER_BODIES = [
 
 /**
  * 프리미엄 외형 등급과 선택권 값 (포인트). 선택권 = 영구 해금 + 그 외형으로 바꾸기 한 번.
- * 해금한 외형끼리(처음 6종 포함)는 그 뒤로 외형 바꾸기 요금(web lib/dye/rules RESHAPE_PRICE)만 낸다.
+ * 해금한 외형끼리(처음 6종 포함)는 그 뒤로 무료로 바꾼다 (소장).
  * I0d 경제 기준(하루 약 200P): 일반 ≈ 1주, 고급 ≈ 작은 집값, 희귀 ≈ 2주 반, 전설 ≈ 한 달
  */
 export const BODY_TIERS = ["common", "fine", "rare", "legend"] as const;
@@ -148,7 +148,7 @@ export const BODY_TIER_INFO: Readonly<Record<BodyTier, { label: string; price: n
 export const PREMIUM_BODIES = [
   { id: "suit", label: "정장 유령", tier: "common", desc: "넥타이까지 맨 출근 완성형. 포인트 색은 넥타이예요." },
   { id: "box", label: "박스 유령", tier: "common", desc: "택배 상자에서 나오기 싫은 날. 포인트 색은 테이프예요." },
-  { id: "umbrella", label: "우산 유령", tier: "fine", desc: "비 예보만 보면 우산을 쓰고 출근하는 이불 유령. 포인트 색은 우산이에요." },
+  { id: "umbrella", label: "우산 유령", tier: "fine", desc: "비 예보만 보면 노란 비옷에 장화, 큰 우산까지 펴 들고 출근하는 유령. 포인트 색은 우산과 장화예요." },
   { id: "catmask", label: "고양이 탈 직장인", tier: "fine", desc: "고양이 탈을 쓰면 아무도 일을 안 시킬 거라 믿는 직장인. 포인트 색은 사원증 줄이에요." },
   { id: "cup", label: "커피잔 유령", tier: "rare", desc: "커피잔에 몸을 담그고 하루를 버텨요. 포인트 색은 컵 띠예요." },
   { id: "tube", label: "오리 튜브 유령", tier: "rare", desc: "마음만은 이미 휴가지. 포인트 색은 오리 튜브예요." },
@@ -268,4 +268,20 @@ export const ROOM_CAPACITY = 30;
 export const ROOM_ID_RE = /^(village|house:[A-Za-z0-9_-]{4,24}|hunt:[a-z0-9_-]{1,24}:[a-z]{1,10})$/;
 export function isAvatarColor(c: unknown): c is AvatarColor {
   return typeof c === "string" && (AVATAR_COLORS as readonly string[]).includes(c);
+}
+
+/**
+ * 도감 100% 배지: 종류별 비트 (입장 토큰·PeerInfo의 dex). 이름표 옆 작은 배지로 그린다.
+ * 순서는 web lib/forage/catalog의 LIFE_CATS와 같다 (물고기·곤충·약초·광석·발굴품)
+ */
+export const DEX_BADGE_CATS = ["fish", "bug", "herb", "ore", "dig"] as const;
+export type DexBadgeCat = (typeof DEX_BADGE_CATS)[number];
+export const DEX_BADGE_ICON: Record<DexBadgeCat, string> = { fish: "🐟", bug: "🦋", herb: "🌿", ore: "💎", dig: "🏺" };
+export const DEX_BADGE_ALL = (1 << DEX_BADGE_CATS.length) - 1;
+export function isDexBadge(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v > 0 && v <= DEX_BADGE_ALL;
+}
+/** 비트 묶음 → 달성한 종류 (순서대로) */
+export function dexBadgeCats(v: number | undefined): DexBadgeCat[] {
+  return isDexBadge(v) ? DEX_BADGE_CATS.filter((_, i) => v & (1 << i)) : [];
 }

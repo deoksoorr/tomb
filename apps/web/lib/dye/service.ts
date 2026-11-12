@@ -9,7 +9,7 @@ import { kstDay, lookGrant, lookOf, loadMe } from "../store/accounts";
 import { getStyleStore, type DyeSession, type FixedDyeDef, type StyleStore } from "../store/style";
 import type { Me } from "../types";
 import { buildPalette, colorAt, DYE_GRACE_MS, DYE_TIME_MS } from "./palette";
-import { catalogDye, DYE_DECIDE_MS, DYE_RESET_PRICE, fixedAllows, randomTier, RESHAPE_PRICE } from "./rules";
+import { catalogDye, DYE_DECIDE_MS, DYE_RESET_PRICE, fixedAllows, randomTier } from "./rules";
 import type { DyeSessionView, DyeStateResponse, DyeTimeoutResponse, StyleChangeResponse } from "./types";
 
 // 46·25·30번 서버 로직 (라우트가 부른다). 포인트·가방이 바뀌는 일은 모두 저장소(lib/store/style.ts)에서 원자적으로.
@@ -151,18 +151,18 @@ export async function resetDye(accountId: string, part: DyePart, now = Date.now(
 }
 
 /**
- * 25번 외형 바꾸기. 처음 6종·이미 해금한 프리미엄 외형은 RESHAPE_PRICE, 해금 전 프리미엄 외형은 등급별 선택권 값(해금 + 바꾸기),
+ * 25번 외형 바꾸기. 소장한 외형(처음 6종 · 해금한 프리미엄)끼리는 무료, 해금 전 프리미엄 외형은 등급별 선택권 값(영구 해금 + 바꾸기),
  * 운영자 전용 몸(저승사자)은 운영자만 (값 없음). unlocked = 이번에 새로 해금했다
  */
 export async function reshape(accountId: string, body: string, now = Date.now()): Promise<StyleChangeResponse> {
   if (isStaffBody(body)) {
     if (!(await isStaff(accountId))) throw new HttpError(403, "FORBIDDEN", "운영자만 쓸 수 있는 외형이에요.");
-    charged(await style().reshape(accountId, body, 0, `shop:외형 바꾸기(${body})`, now), "지금 그 모습이에요.");
+    charged(await style().reshape(accountId, body, now), "지금 그 모습이에요.");
     return changed(accountId, now);
   }
   const unlockPrice = bodyUnlockPrice(body);
   const unlock = unlockPrice === null ? undefined : { price: unlockPrice, reason: `shop:외형 선택권(${bodyLabel(body)})` };
-  const r = await style().reshape(accountId, body, RESHAPE_PRICE, `shop:외형 바꾸기(${body})`, now, unlock);
+  const r = await style().reshape(accountId, body, now, unlock);
   charged(r, "지금 그 모습이에요.");
   return changed(accountId, now, r === "unlocked" ? { unlocked: true } : {});
 }

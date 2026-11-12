@@ -1,13 +1,15 @@
 import { nanoid } from "nanoid";
-import { fishingSpotById } from "@tomb/protocol";
+import { fishingWaterOf } from "@tomb/protocol";
 import { BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import { env } from "../env";
+import { peerOf } from "../ban";
 import { HttpError } from "../http";
 import { earnPoints, getAccounts } from "../store";
-import { kstDay, loadMe } from "../store/accounts";
+import { kstDay, kstWeek, loadMe } from "../store/accounts";
 import type { BugsResult } from "../rpg/types";
 import {
   DAILY_CATCH_MAX,
+  dexBadgeBits,
   DEX_REWARD,
   DEX_TIERS,
   DEX_TITLES,
@@ -47,6 +49,7 @@ import {
   verifyBugs,
   windowEndsAt,
 } from "./rules";
+import { getFishRank } from "./fishRank";
 import { getForageStore, type GrantItem, type ForageStore, type Snapshot } from "./store";
 import { signForageTicket, verifyForageTicket, type ForageTicket } from "./ticket";
 import type {
@@ -136,12 +139,13 @@ type FishPayload = { k: "fish"; sp: string; sz: number };
 
 export async function castLine(acct: string, spotId: string, now = Date.now()): Promise<CastResponse> {
   const store = getForageStore();
-  const spot = fishingSpotById(spotId);
-  if (!spot) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
+  // 정해진 낚시 자리 또는 배 위 가상 자리(boat:river·boat:lake) — 물 종류로 물고기를 고른다
+  const water = fishingWaterOf(spotId);
+  if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
   const snap = await store.snapshot(acct, kstDay(now), nodeWindow(now));
   if (snap.day.fish >= DAILY_CATCH_MAX.fish) throw new HttpError(429, "DAILY_LIMIT", "오늘은 물고기를 충분히 잡았어요. 내일 또 와요.");
   const cond = conditionsAt(now);
-  const s = pickWeighted(candidates("fish", spot.water, cond), rand());
+  const s = pickWeighted(candidates("fish", water, cond), rand());
   if (!s) throw new HttpError(409, "NO_FISH", "지금은 아무것도 물지 않아요.");
   const size = rollSize10(s, rand());
   const power = fishPower(s, size);
@@ -151,7 +155,7 @@ export async function castLine(acct: string, spotId: string, now = Date.now()): 
   const ttl = Math.ceil((bite - now + HOOK_WINDOW_MS + REEL_MAX_MS) / 1000) + 30;
   if (!(await store.begin(acct, nonce, JSON.stringify(payload), ttl, hourBucket(now), FORAGE_STARTS_PER_HOUR)))
     throw new HttpError(429, "RATE_LIMITED", "조금 쉬었다 해요. 한 시간에 낚시·채집을 너무 많이 했어요.");
-  const ticket = await signForageTicket(env.sessionSecret(), { n: nonce, a: acct, k: "fish", x: spot.id, t: now, b: bite, p: power });
+  const ticket = await signForageTicket(env.sessionSecret(), { n: nonce, a: acct, k: "fish", x: spotId, t: now, b: bite, p: power });
   return { ticket, biteInMs: bite - now, power, reelMs: reelMinMs(power), hookMs: HOOK_WINDOW_MS };
 }
 
@@ -166,6 +170,11 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
   if (since > HOOK_WINDOW_MS + REEL_MAX_MS) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래 걸려서 물고기가 도망갔어요.");
   const day = kstDay(now);
   const got = await store.grant(acct, day, "fish", [{ id: payload.sp, size: payload.sz }], STACK_MAX);
+  // 최대어 랭킹: 크기는 시작할 때 서버가 굴린 값 (가방이 가득 차 못 넣었어도 잡은 기록은 남는다). 랭킹 저장 실패가 낚시를 막지는 않는다
+  if (got?.[0] && payload.sz > 0)
+    await getFishRank()
+      .record(acct, payload.sp, payload.sz, kstWeek(now))
+      .catch((e) => console.error("[forage] 최대어 기록 실패", e));
   return { result: got?.[0] ?? null, state: await forageState(acct, now, store) };
 }
 
@@ -317,4 +326,24 @@ export async function claimDexReward(acct: string, cat: LifeCat, tier: DexTier, 
 export async function publicDex(accountId: string, now = Date.now()): Promise<PublicDex> {
   const [d, acc] = await Promise.all([getForageStore().dex(accountId), getAccounts().get(accountId, kstDay(now), now)]);
   return { accountId, name: acc.name, dex: d.dex, titles: titlesOf(d.claims) };
+}
+
+/**
+ * 게임 안에서 누른 다른 사람의 도감: 채널·방과 sid로 실시간 서버에 누구인지 물어(서명된 /internal/peer) 서버에서만 계정을 푼다.
+ * 응답에는 계정 id를 넣지 않는다 (브라우저는 sid만 안다)
+ */
+export async function peerDex(where: { ch: number } | { room: string }, sid: number, now = Date.now()): Promise<PublicDex> {
+  const peer = await peerOf(where, sid);
+  if (!peer) throw new HttpError(404, "NOT_FOUND", "그 사람을 찾지 못했어요. 이미 나갔을 수 있어요.");
+  const d = await publicDex(peer.visitorId, now);
+  return { ...d, accountId: "", name: d.name ?? peer.name };
+}
+
+/** 입장 토큰에 넣을 도감 100% 배지 (종류별 비트). 읽지 못하면 0 — 입장 자체를 막지 않는다 */
+export async function dexBadgeOf(acct: string): Promise<number> {
+  try {
+    return dexBadgeBits((await getForageStore().dex(acct)).dex);
+  } catch {
+    return 0;
+  }
 }

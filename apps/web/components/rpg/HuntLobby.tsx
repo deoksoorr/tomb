@@ -197,16 +197,26 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
       `${gearById(id)?.name ?? potionById(id)?.name}${qty > 1 ? ` ${qty}개` : ""}을(를) 샀어요.`,
     );
 
-  const onSell = (id: string) => {
+  const onSell = (id: string, count = 1) => {
     setBusy(true);
     setNotice(null);
     rpgApi
-      .sell(id)
+      .sell(id, count)
       .then((v) => {
         setView(v);
         void meStore.refresh();
-        const name = gearById(id)?.name ?? id;
-        setNotice(v.sold?.capped ? `${name}을(를) 팔았어요. 오늘 사냥 포인트 한도라 일부만 받았어요.` : `${name}을(를) ${pts(v.sold?.value ?? 0)}에 팔았어요.`);
+        const name = gearById(id)?.name ?? potionById(id)?.name ?? id;
+        const n = v.sold?.count ?? count;
+        const what = `${name}${n > 1 ? ` ${n}개` : ""}`;
+        // 한도에 막혀 못 판 것은 가방에 그대로 남는다 (서버가 되돌린다)
+        const left = count - n;
+        setNotice(
+          n <= 0
+            ? `오늘 사냥 포인트 한도라 ${name}을(를) 팔지 못했어요. 가방에 그대로 있어요.`
+            : v.sold?.capped
+              ? `${what}을(를) ${pts(v.sold.value)}에 팔았어요. 오늘 사냥 포인트 한도라 일부만 받았어요${left > 0 ? ` (${left}개는 가방에 그대로)` : ""}.`
+              : `${what}을(를) ${pts(v.sold?.value ?? 0)}에 팔았어요.`,
+        );
       })
       .catch((e) => setNotice(errorMessage(e)))
       .finally(() => setBusy(false));

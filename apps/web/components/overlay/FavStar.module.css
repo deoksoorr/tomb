@@ -1,0 +1,39 @@
+/* 표현 즐겨찾기 별 (켜지면 촛불색, 꺼지면 흐릿하게) */
+
+.star {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.shape {
+  width: 16px;
+  height: 16px;
+  background: var(--line);
+  clip-path: polygon(50% 0, 62% 36%, 100% 38%, 70% 60%, 80% 98%, 50% 76%, 20% 98%, 30% 60%, 0 38%, 38% 36%);
+}
+
+.star:hover .shape,
+.star:focus-visible .shape {
+  background: var(--muted);
+}
+
+.on .shape,
+.on:hover .shape,
+.on:focus-visible .shape {
+  background: var(--candle);
+}
+
+@media (pointer: coarse) {
+  .star {
+    width: 36px;
+    height: 36px;
+  }
+}

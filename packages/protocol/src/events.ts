@@ -48,6 +48,8 @@ export type C2S =
   | { t: "mood"; m: SeatMood | "" }
   /** 동물원 타는 펫에 올라타기(on)·내리기. 서버는 착용 중인 펫이 타는 펫이고 앉아 있지 않을 때만 켠다 (월드 채널만) */
   | { t: "ride"; on: boolean }
+  /** 4번 배 위 낚시: 낚싯대를 드리웠다(on)·거뒀다. 서버는 조각배 자리에 앉아 있을 때만 켠다 (월드 채널만). 옛 서버는 모르는 t라 버린다 */
+  | { t: "rod"; on: boolean }
   /**
    * 실내(상점·집·분양 마을·사냥터·미니게임 같은 하위 장면)에 들어가 있다(on)·나왔다. 월드 채널만.
    * 메인 맵에서는 문 앞에 멈춰 있으니 다른 사람 화면에서는 숨긴다. 옛 서버는 모르는 t라 버린다(그러면 예전처럼 문 앞에 보인다)
@@ -112,6 +114,8 @@ export type S2C =
   | { t: "mood"; sid: Sid; m: SeatMood | "" }
   /** 타는 펫에 올라탔다·내렸다 (보낸 사람 포함 모두. 늦게 온 사람은 PeerInfo.ride로 받는다. 옛 클라이언트는 모르는 t라 버린다) */
   | { t: "ride"; sid: Sid; on: boolean }
+  /** 배 위 낚싯대를 드리웠다·거뒀다 (보낸 사람 포함 모두. 늦게 온 사람은 PeerInfo.rod로 받는다. 옛 클라이언트는 모르는 t라 버린다) */
+  | { t: "rod"; sid: Sid; on: boolean }
   /** 실내에 들어갔다·나왔다 (보낸 사람 빼고. 늦게 온 사람은 PeerInfo.away로 받는다. 옛 클라이언트는 모르는 t라 버린다 → 문 앞에 보인다) */
   | { t: "away"; sid: Sid; on: boolean }
   /** 받는 사람에게만: 서버에서 내 계정(포인트·선물함)이 바뀌었다 → /api/me를 다시 받는다 (관리자 지급 등. 옛 클라이언트는 버린다) */
@@ -183,6 +187,8 @@ export function parseC2S(text: string): C2S | null {
       return m.m === "" || isSeatMood(m.m) ? { t: "mood", m: m.m } : null;
     case "ride":
       return typeof m.on === "boolean" ? { t: "ride", on: m.on } : null;
+    case "rod":
+      return typeof m.on === "boolean" ? { t: "rod", on: m.on } : null;
     case "away":
       return typeof m.on === "boolean" ? { t: "away", on: m.on } : null;
     case "use":

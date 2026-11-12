@@ -2,7 +2,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/admin";
 import { BALANCE_CAP } from "@/lib/economy";
 import { handler, HttpError, json } from "@/lib/http";
-import { getStaff, getStaffStore, setStaff } from "@/lib/staff";
+import { getStaff, getStaffStore, grantStaffItems, setStaff } from "@/lib/staff";
 import { getAccounts } from "@/lib/store";
 import { kstDay } from "@/lib/store/accounts";
 import { readBody } from "@/lib/validate";
@@ -28,7 +28,7 @@ const SetSchema = z.object({ accountId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/
 
 /**
  * 31번 운영자 계정 지정 `{ accountId }` / 해제 `{ accountId: null }`. 운영자는 한 명이라 새로 지정하면 이전 계정은 풀린다.
- * 관리자 키 + 관리자 IP(proxy.ts)에서만 부를 수 있다. 지정하자마자 잔액을 지갑 상한까지 채운다 (없는 계정이면 404).
+ * 관리자 키 + 관리자 IP(proxy.ts)에서만 부를 수 있다. 지정하자마자 잔액을 지갑 상한까지 채우고 운영자 전용 꾸미기를 영구로 넣는다 (없는 계정이면 404).
  * 저승사자 차림은 그 계정이 다음에 입장(또는 채널 이동·새로고침)할 때부터 다른 사람에게 보인다
  */
 export const POST = handler(async (req) => {
@@ -39,5 +39,6 @@ export const POST = handler(async (req) => {
   const now = Date.now();
   const name = accountId ? (await getAccounts().get(accountId, kstDay(now), now)).name : null;
   await setStaff(accountId, now, name);
+  if (accountId) await grantStaffItems(getAccounts(), accountId);
   return json<AdminStaffResponse>(await view());
 });

@@ -12,6 +12,7 @@ import {
 } from "./catalog";
 import { emptyLayout, normalizeExterior } from "./layout";
 import type { PlantState } from "./plants";
+import { keepState, stateSigs, type HouseState } from "./states";
 import type { GuestEntry, HouseExterior, HouseLayout, PublicHouse } from "./types";
 
 // 하우징 저장소. 포인트는 여기서 다루지 않는다 (공용 spendPoints/earnPoints → lib/housing/points.ts).
@@ -56,7 +57,7 @@ export interface HouseStore {
   takeItem(id: string, itemId: string): Promise<"ok" | "placed" | "none">;
   /**
    * 배치·외관 저장 (null인 쪽은 그대로). tier가 그대로이고 counts(안+밖 전체)가 가진 개수 안일 때만.
-   * 검증·점수 계산은 호출자가 먼저 한다
+   * 검증·점수 계산은 호출자가 먼저 한다. 배치가 바뀌면 같은 단계에서 치우거나 옮긴 가구의 상태·없어진 화분 기록을 지운다
    */
   saveDesign(
     id: string,
@@ -88,6 +89,10 @@ export interface HouseStore {
   /** 3번 화분: 배치 id → 물 준 기록 */
   plants(id: string): Promise<Record<string, PlantState>>;
   setPlant(id: string, u: string, st: PlantState): Promise<void>;
+  /** 3번 가구 상태 (불·스탠드·라디오·창문): 배치 id → {값, 서명}. 읽는 쪽이 지금 배치와 서명을 맞춰 본다 (states.ts) */
+  states(id: string): Promise<Record<string, HouseState>>;
+  /** st가 null이거나 값이 0이면 지운다 */
+  setState(id: string, u: string, st: HouseState | null): Promise<void>;
 }
 
 export const scoreOf = (placed: number, likes: number) => placed + likes * LIKE_WEIGHT;
@@ -108,6 +113,28 @@ export class MemoryHouseStore implements HouseStore {
   private likes = new Set<string>();
   private guestDay = new Map<string, number>();
   private plantMap = new Map<string, Record<string, PlantState>>();
+  private stateMap = new Map<string, Record<string, HouseState>>();
+
+  async states(id: string) {
+    return { ...(this.stateMap.get(id) ?? {}) };
+  }
+
+  async setState(id: string, u: string, st: HouseState | null) {
+    const cur = { ...(this.stateMap.get(id) ?? {}) };
+    if (st && st.a !== 0) cur[u] = { ...st };
+    else delete cur[u];
+    this.stateMap.set(id, cur);
+  }
+
+  /** 배치 저장과 같은 단계: 서명이 달라진(치우거나 옮긴) 가구 상태와 없어진 화분 기록을 지운다. 창문 상태는 남긴다 */
+  private pruneFor(id: string, layout: HouseLayout): void {
+    const sigs = stateSigs(layout);
+    const st = this.stateMap.get(id);
+    if (st) this.stateMap.set(id, Object.fromEntries(Object.entries(st).filter(([u, v]) => keepState(sigs, u, v))));
+    const pots = new Set(layout.items.filter((p) => p.i === "pot").map((p) => p.u));
+    const pl = this.plantMap.get(id);
+    if (pl) this.plantMap.set(id, Object.fromEntries(Object.entries(pl).filter(([u]) => pots.has(u))));
+  }
 
   async plants(id: string) {
     return { ...(this.plantMap.get(id) ?? {}) };
@@ -202,6 +229,8 @@ export class MemoryHouseStore implements HouseStore {
 
   async remove(id: string) {
     this.houses.delete(id);
+    this.plantMap.delete(id);
+    this.stateMap.delete(id);
   }
 
   async setProfile(id: string, name: string, intro: string, now: number) {
@@ -251,7 +280,10 @@ export class MemoryHouseStore implements HouseStore {
     if (h.rec.tier !== tier) return "tier" as const;
     for (const [item, n] of Object.entries(counts)) if ((h.inv.get(item) ?? 0) < n) return "not_owned" as const;
     h.placed = new Map(Object.entries(counts));
-    if (layout) h.rec.layout = structuredClone(layout);
+    if (layout) {
+      h.rec.layout = structuredClone(layout);
+      this.pruneFor(id, layout);
+    }
     if (exterior) h.rec.exterior = { ...exterior };
     Object.assign(h.rec, { placedScore, updatedAt: now });
     return "ok" as const;

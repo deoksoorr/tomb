@@ -5,7 +5,7 @@ import { BODY_TIER_INFO, bodyLabel, bodyUnlockPrice, DYE_PART_NAMES, DYE_PARTS, 
 import { specDye, withDyePart } from "@/game/sprites/avatar";
 import { api, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
-import { DYE_RESET_PRICE, RESHAPE_PRICE } from "@/lib/dye/rules";
+import { DYE_RESET_PRICE } from "@/lib/dye/rules";
 import type { DyeSessionView, FixedDyeDef } from "@/lib/dye/types";
 import { meStore } from "@/lib/hooks/useMe";
 import type { Me } from "@/lib/types";
@@ -20,7 +20,7 @@ import DyeDialog, { type DyeTicket } from "./DyeDialog";
 import styles from "./StylePanel.module.css";
 
 // 상점 "염색·외형" 탭: 46번 염색권(사기·쓰기) · 진행 중인 염색 이어서 하기 · 25번 외형 바꾸기 · 프리미엄 외형 선택권 · 원래 색 되돌리기.
-// 프리미엄 외형: 등급(일반·고급·희귀·전설)별 선택권 값을 한 번 내면 영구 해금 + 그 외형으로. 해금한 외형끼리는 외형 바꾸기 요금만.
+// 프리미엄 외형: 등급(일반·고급·희귀·전설)별 선택권 값을 한 번 내면 영구 해금(소장) + 그 외형으로. 소장한 외형끼리는 무료로 바꾼다.
 // 왼쪽(폰은 위) 자세히 보기 = 바꾸면 어떻게 보이는지 미리 보기, 오른쪽 = 고를 것들.
 
 const DYE_ITEMS = ITEMS.filter((i) => i.kind === "dye" && i.dye?.mode === "random");
@@ -100,14 +100,14 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
       applyStyle(res);
       onNotice(
         res.unlocked
-          ? `${bodyLabel(body)} 선택권으로 외형을 해금하고 바꿨어요. 이제 외형 바꾸기 요금만으로 언제든 돌아올 수 있어요.`
+          ? `${bodyLabel(body)}을(를) 소장했어요. 이제 언제든 무료로 이 모습으로 돌아올 수 있어요.`
           : `${bodyLabel(body)}(으)로 바꿨어요. 염색한 색은 그대로 따라가요.`,
       );
     });
-  // 25번: 해금한 프리미엄 외형 (지금 그 몸이면 해금한 것과 같다)
+  // 25번: 소장한 프리미엄 외형 (지금 그 몸이면 소장한 것과 같다 — 서버도 바꿀 때 소장 기록을 채운다)
   const unlocked = (id: string) => id === myBody || !!me?.bodies?.includes(id);
-  /** 그 몸으로 바꾸는 값: 운영자 외형 0, 해금 전 프리미엄은 선택권 값, 나머지는 외형 바꾸기 요금 */
-  const bodyPrice = (id: string) => (isStaffBody(id) ? 0 : !unlocked(id) ? (bodyUnlockPrice(id) ?? RESHAPE_PRICE) : RESHAPE_PRICE);
+  /** 그 몸으로 바꾸는 값: 해금 전 프리미엄만 선택권 값, 소장한 외형(처음 6종 포함)·운영자 외형은 무료 */
+  const bodyPrice = (id: string) => (unlocked(id) ? 0 : (bodyUnlockPrice(id) ?? 0));
   const ownedBodies = [...STARTER_BODIES, ...PREMIUM_BODIES.filter((b) => unlocked(b.id))];
   const lockedBodies = PREMIUM_BODIES.filter((b) => !unlocked(b.id));
 
@@ -161,19 +161,22 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
     const staffBody = isStaffBody(sel.body);
     const fresh = !!prem && !unlocked(sel.body);
     const price = bodyPrice(sel.body);
-    title = `${fresh ? "외형 선택권" : "외형 바꾸기"} · ${bodyLabel(sel.body)}${prem ? ` (${BODY_TIER_INFO[prem.tier].label})` : ""}`;
+    // 등급은 제목 옆 배지로 (tierTag)
+    title = `${fresh ? "외형 선택권" : "외형 바꾸기"} · ${bodyLabel(sel.body)}`;
     desc = staffBody
       ? (STAFF_BODIES.find((b) => b.id === sel.body)?.desc ?? "")
       : prem
-        ? `${prem.desc} ${fresh ? `선택권(${price.toLocaleString("ko-KR")}P)을 한 번 사면 영구로 해금되고, 그다음부터는 외형 바꾸기 요금(${RESHAPE_PRICE}P)만 내요.` : "해금한 외형이에요."} 염색한 색은 새 몸의 같은 부위로 따라가요.`
-        : "몸 모양을 바꿔요. 염색한 머리·몸·포인트 색은 새 몸의 같은 부위로 그대로 따라가요.";
+        ? `${prem.desc} ${fresh ? `선택권(${price.toLocaleString("ko-KR")}P)을 한 번 사면 영구 소장이라, 그다음부터는 언제든 무료로 바꿔요.` : "소장 중인 외형이에요. 언제든 무료로 바꿀 수 있어요."} 염색한 색은 새 몸의 같은 부위로 따라가요.`
+        : "기본 외형이라 무료로 바꿔요. 염색한 머리·몸·포인트 색은 새 몸의 같은 부위로 그대로 따라가요.";
     action = (
       <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={!me || pending || same || short(price)} onClick={() => doReshape(sel.body)}>
         {same
           ? "지금 이 모습이에요"
           : staffBody
             ? "운영자 전용 · 이 모습으로"
-            : `${price.toLocaleString("ko-KR")}P${short(price) ? " · 모자라요" : fresh ? " · 선택권 사고 바꾸기" : " · 이 모습으로"}`}
+            : fresh
+              ? `${price.toLocaleString("ko-KR")}P${short(price) ? " · 모자라요" : " · 선택권 사고 바꾸기"}`
+              : "무료 · 이 모습으로"}
       </button>
     );
   } else {
@@ -188,11 +191,19 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
     );
   }
 
+  const selTier = sel.kind === "body" ? premiumBody(sel.body)?.tier : undefined;
   const fixedOwned = Object.values(tickets).filter((d) => owned(d.id) > 0);
 
+  // 프리미엄 외형은 카드 테두리·썸네일 빛을 등급 색으로 (ShopDialog.module.css .tile[data-tier])
   const bodyTile = (id: string, label: string, price: ReactNode) => (
     <li key={id}>
-      <button type="button" className={shop.tile} aria-pressed={sel.kind === "body" && sel.body === id} onClick={() => setSel({ kind: "body", body: id })}>
+      <button
+        type="button"
+        className={shop.tile}
+        data-tier={premiumBody(id)?.tier}
+        aria-pressed={sel.kind === "body" && sel.body === id}
+        onClick={() => setSel({ kind: "body", body: id })}
+      >
         <span className={shop.thumb}>
           <AvatarSprite color={avatar.color} body={id} scale={2} />
         </span>
@@ -207,7 +218,14 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
       <section className={shop.detail} aria-label="자세히 보기" aria-live="polite">
         <OutfitPreview className={shop.fitPreview} color={previewColor} body={previewBody} look={look} label={`${title} 미리 보기`} />
         <div className={shop.info}>
-          <p className={shop.name}>{title}</p>
+          <p className={shop.name}>
+            {title}
+            {selTier && (
+              <span className={shop.tierTag} data-tier={selTier}>
+                {BODY_TIER_INFO[selTier].label}
+              </span>
+            )}
+          </p>
           <p className={shop.desc}>{desc}</p>
           {action}
         </div>
@@ -253,9 +271,23 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
             ))}
           </ul>
 
-          <h3 className={styles.heading}>외형 바꾸기 · {RESHAPE_PRICE}P</h3>
-          <ul className={shop.grid} aria-label="몸 모양">
-            {ownedBodies.map((b) => bodyTile(b.id, b.label, b.id === myBody ? <span className={shop.badge}>지금</span> : `${RESHAPE_PRICE}P`))}
+          <h3 className={styles.heading}>내 외형 · 소장한 외형끼리는 무료로 바꿔요</h3>
+          <ul className={shop.grid} aria-label="소장한 몸 모양">
+            {ownedBodies.map((b) =>
+              bodyTile(
+                b.id,
+                b.label,
+                b.id === myBody ? (
+                  <span className={shop.badge}>지금</span>
+                ) : premiumBody(b.id) ? (
+                  <>
+                    무료<span className={shop.badge}>소장 중</span>
+                  </>
+                ) : (
+                  "무료"
+                ),
+              ),
+            )}
           </ul>
 
           {lockedBodies.length > 0 && (

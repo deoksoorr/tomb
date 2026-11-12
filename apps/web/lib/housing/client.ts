@@ -1,6 +1,7 @@
 import { request } from "../api";
 import type { HouseSort, PlotTierId } from "./catalog";
 import type { PlantsResponse } from "./plants";
+import type { HouseStatesResponse } from "./states";
 import type {
   GuestbookResponse,
   HouseExterior,
@@ -50,6 +51,9 @@ export const housingApi = {
   /** 3번 화분 물 준 기록 / 물 주기 */
   plants: (id: string) => request<PlantsResponse>(house(id, "/plants"), { cache: "no-store" }),
   water: (id: string, u: string) => request<PlantsResponse>(house(id, "/plants"), send("POST", { u })),
+  /** 3번 가구 상태 (불·스탠드·라디오·창문): 방 입장 때 받기 / 바꾼 값 저장 */
+  states: (id: string) => request<HouseStatesResponse>(house(id, "/states"), { cache: "no-store" }),
+  setState: (id: string, u: string, a: number) => request<{ ok: true }>(house(id, "/states"), send("POST", { u, a })),
   reportGuest: (id: string, entryId: string) =>
     request<{ ok: true; duplicate: boolean }>(house(id, `/guestbook/${encodeURIComponent(entryId)}/report`), { method: "POST" }),
 };

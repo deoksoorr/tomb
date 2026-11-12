@@ -6,8 +6,9 @@ import { getAccounts, getGifts } from "../store";
 import { kstDay, loadMe } from "../store/accounts";
 import { setStaff } from "../staff";
 import { getStyleStore } from "../store/style";
+import type { MemoryAccounts } from "../store/accounts-memory";
 import { buildPalette, cellColor, cellRgb, colorAt, DYE_BOARD_H, DYE_BOARD_W, DYE_GRACE_MS, DYE_TIERS, DYE_TIME_MS, samplePoints } from "./palette";
-import { DYE_DECIDE_MS, DYE_RESET_PRICE, RESHAPE_PRICE } from "./rules";
+import { DYE_DECIDE_MS, DYE_RESET_PRICE } from "./rules";
 import { AdminDyeIssueSchema, DyeFinishSchema, DyeStartSchema } from "./schemas";
 import { applyFixedDye, buyPermanent, cancelDye, chooseDye, dyeState, finishDye, issueFixedDye, judgeColor, reshape, resetDye, startDye, timeoutDye } from "./service";
 
@@ -273,8 +274,8 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     await expect(applyFixedDye(id, "dyefix_nonexist1", "head")).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
-  it("외형 바꾸기: 포인트를 내고 몸 모양만 바뀌고 염색은 그대로, 증서에 몸이 실린다", async () => {
-    const id = await account(RESHAPE_PRICE, { dye_basic: 1 });
+  it("외형 바꾸기: 처음 6종끼리는 무료, 몸 모양만 바뀌고 염색은 그대로, 증서에 몸이 실린다", async () => {
+    const id = await account(0, { dye_basic: 1 });
     const t0 = Date.now();
     const s = await startDye(id, "dye_basic", "body", t0);
     const dyed = await finishDye(id, s.session.seed, 50, 50, t0 + 100);
@@ -285,29 +286,49 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     expect(await pts(id)).toBe(0);
     const g = await verifyGrant(env.joinSecret(), r.lookGrant);
     expect(g?.kind === "look" && g.body).toBe("cat");
-    await expect(reshape(id, "bun")).rejects.toMatchObject({ code: "NOT_ENOUGH_POINTS" });
+    expect((await reshape(id, "bun")).me.body).toBe("bun");
+    expect(await pts(id)).toBe(0);
   });
 
-  it("프리미엄 외형: 처음엔 등급별 선택권 값(해금 + 바꾸기), 해금한 뒤엔 외형 바꾸기 요금만", async () => {
+  it("프리미엄 외형: 처음엔 등급별 선택권 값(해금 + 바꾸기), 소장한 뒤엔 기본 외형과 오가도 무료", async () => {
     const unlock = bodyUnlockPrice("suit")!;
     expect(unlock).toBe(BODY_TIER_INFO.common.price);
     expect(bodyUnlockPrice("king")).toBe(BODY_TIER_INFO.legend.price);
     expect(bodyUnlockPrice("hood")).toBeNull();
-    const id = await account(unlock + RESHAPE_PRICE * 2);
+    const id = await account(unlock);
     const r = await reshape(id, "suit");
     expect(r.unlocked).toBe(true);
     expect(r.me.body).toBe("suit");
     expect(r.me.bodies).toEqual(["suit"]);
-    expect(await pts(id)).toBe(RESHAPE_PRICE * 2);
+    expect(await pts(id)).toBe(0);
     const g = await verifyGrant(env.joinSecret(), r.lookGrant);
     expect(g?.kind === "look" && g.body).toBe("suit");
-    // 처음 6종으로 돌아갔다가 다시 정장으로: 외형 바꾸기 요금만
-    expect((await reshape(id, "cat")).unlocked).toBeUndefined();
+    // 버그 재현: 원래 캐릭터(후드)로 돌아갔다가 다시 정장으로 — 선택권 값을 다시 내지 않고 무료 (포인트 0이어도 된다)
+    const hood = await reshape(id, "hood");
+    expect(hood.unlocked).toBeUndefined();
+    expect(hood.me.bodies).toEqual(["suit"]);
+    expect((await loadMe(accounts, id)).bodies).toEqual(["suit"]);
     const back = await reshape(id, "suit");
     expect(back.unlocked).toBeUndefined();
+    expect(back.me.body).toBe("suit");
+    expect(back.me.bodies).toEqual(["suit"]);
     expect(await pts(id)).toBe(0);
     // 해금 안 한 다른 외형은 선택권 값이 모자라다
     await expect(reshape(id, "king")).rejects.toMatchObject({ code: "NOT_ENOUGH_POINTS" });
+    expect((await loadMe(accounts, id)).body).toBe("suit");
+  });
+
+  it("프리미엄 외형: 입고 있던 외형이 소장 기록에 빠져 있어도 바꿀 때 채워서, 돌아올 때 다시 값을 받지 않는다", async () => {
+    const id = await account(0);
+    // 소장 기록 없이 이미 정장을 입고 있는 계정 (옛 기록·누락)
+    (accounts as MemoryAccounts).styleSetBody(id, "suit");
+    expect((await loadMe(accounts, id)).bodies).toBeUndefined();
+    const hood = await reshape(id, "hood");
+    expect(hood.me.bodies).toEqual(["suit"]);
+    const back = await reshape(id, "suit");
+    expect(back.unlocked).toBeUndefined();
+    expect(back.me.body).toBe("suit");
+    expect(await pts(id)).toBe(0);
   });
 
   it("운영자 전용: 저승사자 몸·운영자 꾸미기는 운영자만 (일반 계정은 403)", async () => {
@@ -319,8 +340,9 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     try {
       const r = await reshape(op, "reaper");
       expect(r.me.body).toBe("reaper");
-      const w = await buyPermanent(op, "staff_crown");
-      expect(w.me.stash.some((e) => e.itemId === "staff_crown" && isPermanentUntil(e.until))).toBe(true);
+      // 운영자는 내 정보를 불러올 때 운영자 전용 꾸미기가 영구로 자동으로 들어온다 → 다시 받기는 이미 가짐
+      expect(r.me.stash.some((e) => e.itemId === "staff_crown" && isPermanentUntil(e.until))).toBe(true);
+      await expect(buyPermanent(op, "staff_crown")).rejects.toMatchObject({ code: "ALREADY_OWNED" });
     } finally {
       await setStaff(null);
     }

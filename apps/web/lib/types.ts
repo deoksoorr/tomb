@@ -389,7 +389,7 @@ export type MyGraveStatusResponse = { active: PublicGrave | null; passDays: numb
 
 /** 랭킹 (49번: 포인트·사냥 중심). huntKills = 사냥터 처치 수 합계, huntBest = 사냥터(zone)별 최단 클리어 시간(ms, 작을수록 위) */
 /** house = 하우징 꾸밈 점수 (F11: 주간 = 이번 주에 꾸민 집, 전체 = 모든 집) */
-export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house"] as const;
+export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish"] as const;
 export type RankBoard = (typeof RANK_BOARDS)[number];
 /** week = 이번 주(KST 월요일 0시부터), all = 전체 */
 export type RankPeriod = "week" | "all";
@@ -401,6 +401,8 @@ export type RankResponse = {
   period: RankPeriod;
   /** huntBest의 사냥터 (난이도 id) */
   zone?: string;
+  /** fish(최대어)의 물고기 id, 모든 물고기면 "all" */
+  fish?: string;
   rows: RankRow[];
   mine: RankRow | null;
 };

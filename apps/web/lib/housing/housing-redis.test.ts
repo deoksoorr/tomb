@@ -9,7 +9,8 @@ import { env } from "../env";
 import { getAccounts } from "../store";
 import { kstDay } from "../store/accounts";
 import { defaultExterior, furnitureById, PLOT_TIERS } from "./catalog";
-import { buyFurniture, buyPlot, getHouseStore, houseIdFor, saveExterior, sellFurniture, village } from "./service";
+import { buyFurniture, buyPlot, getHouseStore, houseIdFor, houseStates, saveExterior, sellFurniture, setHouseState, village } from "./service";
+import { placedSig, WINDOW_SIG } from "./states";
 import { HK, RedisHouseStore } from "./store-redis";
 import type { MyHouseResponse, VillageResponse } from "./types";
 
@@ -144,5 +145,32 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
     }
     const again = await village(store);
     expect(ids.map((id) => again.houses.find((h) => h.id === id)?.lot)).toEqual(lots);
+  });
+  it("3번 가구 상태: 저장·0이면 지움, 배치 저장 Lua가 치우거나 옮긴 가구 상태·없어진 화분 기록을 같이 지운다", async () => {
+    const id = nanoid(12).toLowerCase().replace(/[^a-z0-9]/g, "a");
+    await store.create({ id, owner: nanoid(), name: "상태", intro: "", ownerName: "주인", tier: "small", lot: null, now: 1 });
+    const fire = { u: "f1", i: "fireplace", x: 1, y: 1, r: 0 };
+    const lamp = { u: "l1", i: "floor_lamp", x: 5, y: 1, r: 0 };
+    const radio = { u: "r1", i: "radio", x: 3, y: 4, r: 0 };
+    const pot = { u: "p1", i: "pot", x: 6, y: 4, r: 0 };
+    const lay = (items: (typeof fire)[]) => ({ items, floor: "floor_grass", wall: "wall_fence" });
+    for (const p of [fire, lamp, radio, pot]) await store.addItem(id, p.i, 20);
+    expect(await store.saveDesign(id, "small", lay([fire, lamp, radio, pot]), null, {}, 1, 2)).toBe("ok");
+    await setHouseState(store, id, "f1", 1);
+    await setHouseState(store, id, "l1", 1);
+    await setHouseState(store, id, "r1", 3);
+    await setHouseState(store, id, "w0", 1);
+    await store.setPlant(id, "p1", { n: 1, at: 5 });
+    expect((await houseStates(store, id)).states).toEqual({ f1: 1, l1: 1, r1: 3, w0: 1 });
+    await setHouseState(store, id, "r1", 0);
+    expect(await raw.hexists(HK.states(id), "r1")).toBe(0);
+    await raw.hset(HK.states(id), { junk: "{깨짐" });
+    // 벽난로는 그대로, 스탠드는 옮기고, 화분은 치운다
+    expect(await store.saveDesign(id, "small", lay([fire, { ...lamp, x: 6 }]), null, {}, 1, 3)).toBe("ok");
+    expect(await store.states(id)).toEqual({ f1: { a: 1, s: placedSig(fire) }, w0: { a: 1, s: WINDOW_SIG } });
+    expect(await store.plants(id)).toEqual({});
+    expect((await houseStates(store, id)).states).toEqual({ f1: 1, w0: 1 });
+    await store.remove(id);
+    expect(await raw.exists(HK.states(id))).toBe(0);
   });
 });

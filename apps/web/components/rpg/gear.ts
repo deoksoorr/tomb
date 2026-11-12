@@ -68,9 +68,9 @@ export function deltaText(d: number): string {
  * 팔기 전에 한 번 더 물어볼 이유 (없으면 null).
  * 장착 중인 것과 같은 장비(남는 것을 판다)거나, 희귀 이상이면 묻는다.
  */
-export function sellWarning(c: Pick<CharacterState, "equip" | "inv">, g: GearDef): string | null {
+export function sellWarning(c: Pick<CharacterState, "equip" | "inv">, g: GearDef, qty = 1): string | null {
   const eq = wornCount(c, g.id);
-  if (eq > 0) return `${g.name} ${eq}개는 장착 중이에요. 남는 1개를 팔아요.`;
+  if (eq > 0) return `${g.name} ${eq}개는 장착 중이에요. 남는 것 중 ${qty}개를 팔아요.`;
   const grade = gearGrade(g);
   if (grade.id === "rare" || grade.id === "legend") return `${grade.label} 장비예요. 정말 팔까요?`;
   return null;

@@ -19,6 +19,7 @@ import {
 } from "./catalog";
 import { designCounts, designScore, validateExterior, validateLayout } from "./layout";
 import { waterWait, watered, type PlantsResponse } from "./plants";
+import { liveStates, stateTarget, type HouseStatesResponse } from "./states";
 import { myPoints, refundAndThrow, rewardLike, spend, refund } from "./points";
 import { MemoryHouseStore, type HouseRecord, type HouseStore } from "./store";
 import { RedisHouseStore } from "./store-redis";
@@ -266,6 +267,23 @@ export async function waterPlant(store: HouseStore, houseId: string, u: string, 
   }
   await store.setPlant(h.id, u, watered(all[u], now));
   return housePlants(store, houseId, now);
+}
+
+// ── 3번 가구 상태 (벽난로 불·스탠드·라디오 채널·창문) ──
+
+/** 지금 배치와 맞는 켜짐·채널 값만 (0·꺼짐은 빠진다) */
+export async function houseStates(store: HouseStore, houseId: string): Promise<HouseStatesResponse> {
+  const h = await findVisibleHouse(store, houseId);
+  return { states: liveStates(h.layout, h.tier, await store.states(h.id)) };
+}
+
+/** 가구 u의 상태를 a로 (방에 들어온 누구든 — 방 중계 use와 같은 권한). 0이면 지운다 */
+export async function setHouseState(store: HouseStore, houseId: string, u: string, a: number): Promise<void> {
+  const h = await findVisibleHouse(store, houseId);
+  const t = stateTarget(h.layout, h.tier, u);
+  if (!t) throw new HttpError(404, "NO_TARGET", "그 가구를 찾을 수 없어요.");
+  if (!Number.isInteger(a) || a < 0 || a > t.max) throw new HttpError(400, "BAD_REQUEST", "알 수 없는 값이에요.");
+  await store.setState(h.id, u, a ? { a, s: t.s } : null);
 }
 
 export async function postGuest(

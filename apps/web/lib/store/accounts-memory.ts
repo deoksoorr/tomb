@@ -531,6 +531,27 @@ export class MemoryAccounts implements AccountStore {
     return true;
   }
 
+  /** 31번 운영자 전용 꾸미기를 영구로 채운다 (lib/store/staff.ts GRANT_LUA와 같은 규칙). 새로 채운 수, 없는 계정이면 -1 */
+  staffGrant(id: string, items: readonly { itemId: string; slot: string }[], permUntil: number): number {
+    const a = this.accts.get(id);
+    if (!a) return -1;
+    const stash = this.stashOf(a);
+    let added = 0;
+    for (const { itemId, slot } of items) {
+      const cur = a.look.get(slot as CosmeticSlot);
+      if (cur?.itemId === itemId) {
+        if (cur.until < permUntil) {
+          a.look.set(slot as CosmeticSlot, { itemId, until: permUntil });
+          added++;
+        }
+      } else if ((stash.get(itemId) ?? 0) < permUntil) {
+        stash.set(itemId, permUntil);
+        added++;
+      }
+    }
+    return added;
+  }
+
   // ── 46·25·30번 꾸미기 (MemoryStyle이 부른다, lib/store/style.ts). 모두 동기 → 한 번에 일어난다 ──
 
   /** 가방에서 1개 꺼내기 (없으면 false) */

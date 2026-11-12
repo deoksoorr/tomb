@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { afterAll, describe, expect, it } from "vitest";
 import { earnRule } from "../economy";
 import { env } from "../env";
-import { getAccounts, refundPoints } from "../store";
+import { earnPoints, getAccounts, refundPoints } from "../store";
 import { kstDay } from "../store/accounts";
 import { gearById } from "./catalog";
 import { huntPlan } from "./plan";
@@ -97,6 +97,34 @@ describe(`사냥터 서비스 (${redisEnv ? "redis" : "memory"})`, () => {
     await shopAction(a, { type: "sell", itemId: ruler.id }, "ip");
     // 남은 1개는 장착 중이라 못 판다
     await expect(shopAction(a, { type: "sell", itemId: ruler.id }, "ip")).rejects.toMatchObject({ status: 409, code: "NOT_OWNED" });
+  });
+
+  it("여러 개 되팔기: 산 장비는 한 번에 환불, 모자라면 하나도 안 팔린다", async () => {
+    const a = acct();
+    const kb = gearById("w_keyboard")!;
+    await refundPoints(a, kb.price * 3, "test");
+    for (let i = 0; i < 3; i++) await shopAction(a, { type: "buy", itemId: kb.id, qty: 1 }, "ip");
+    expect(await points(a)).toBe(0);
+    await expect(shopAction(a, { type: "sell", itemId: kb.id, count: 4 }, "ip")).rejects.toMatchObject({ status: 409, code: "NOT_OWNED" });
+    expect((await getRpgStore().get(a)).inv[kb.id]).toBe(3);
+    const sold = await shopAction(a, { type: "sell", itemId: kb.id, count: 3 }, "ip");
+    expect(sold.sold).toEqual({ value: 3 * Math.floor(kb.price / 2), capped: false, count: 3 });
+    expect(await points(a)).toBe(3 * Math.floor(kb.price / 2));
+    expect((await getRpgStore().get(a)).inv[kb.id]).toBeUndefined();
+  });
+
+  it("포션 여러 개 되팔기는 사냥 포인트 하루 한도 안에서만, 못 받은 것은 가방에 남는다", async () => {
+    const a = acct();
+    const cap = earnRule("hunt").dailyMax;
+    await getRpgStore().update(a, (s) => ({ state: { ...s, potions: { ...s.potions, p_coffee: 10 } }, result: null }));
+    await earnPoints(a, "hunt", cap - 4, "ip"); // 남은 한도 4P = 커피 1개 값
+    const sold = await shopAction(a, { type: "sell", itemId: "p_coffee", count: 10 }, "ip");
+    expect(sold.sold).toEqual({ value: 4, capped: true, count: 1 });
+    expect((await getRpgStore().get(a)).potions.p_coffee).toBe(9);
+    // 한도가 다 찼으면 하나도 팔리지 않고 그대로
+    const none = await shopAction(a, { type: "sell", itemId: "p_coffee", count: 9 }, "ip");
+    expect(none.sold).toEqual({ value: 0, capped: true, count: 0 });
+    expect((await getRpgStore().get(a)).potions.p_coffee).toBe(9);
   });
 
   it("판 끝내기: 티켓 재사용 409, 하루 사냥 포인트 한도에서 멈춘다", async () => {

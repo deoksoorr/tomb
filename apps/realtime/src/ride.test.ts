@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, DIR, STATE, encodeEvent, encodeMove, seatById, type C2S, type Grant, type S2C, type StateId } from "@tomb/protocol";
+import { AVATAR_COLORS, BOAT_SEATS, DIR, FERRY_DOCK, STATE, encodeEvent, encodeMove, seatById, type C2S, type Grant, type S2C, type StateId } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { ChannelCore, type ChannelHost, type PeerRecord } from "./channel";
 
@@ -118,5 +118,45 @@ describe("타는 펫 (ride)", () => {
     core.message(a, send({ t: "ride", on: true }), 0);
     expect(a.att?.ride).toBe(true);
     expect(core.liveRecords().find((r) => r.sid === 1)?.ride).toBe(true);
+  });
+});
+
+describe("배 위 낚싯대 (rod)", () => {
+  const A = BOAT_SEATS.find((b) => b.boatId === "boatA")!;
+  const rods = (c: Conn) => events(c).filter((e) => e.t === "rod");
+
+  it("조각배 자리에 앉아 있을 때만 켜고, 모두에게 알리고, 늦게 온 사람은 입장 정보로 본다. 배에서 내리면 꺼진다", () => {
+    const { core, join } = setup();
+    const a = join("a", [], { x: FERRY_DOCK.x, y: FERRY_DOCK.y });
+    const b = join("b");
+    // 배에 타지 않았으면 무시
+    core.message(a, send({ t: "rod", on: true }), 0);
+    expect(core.peer(1)?.rod).toBeUndefined();
+    core.message(a, send({ t: "sit", seatId: A.id }), 0);
+    clear(a, b);
+    core.message(a, send({ t: "rod", on: true }), 1_000);
+    expect(rods(a)).toEqual([{ t: "rod", sid: 1, on: true }]);
+    expect(rods(b)).toEqual([{ t: "rod", sid: 1, on: true }]);
+    const c = join("c", [], undefined, 1_100);
+    expect(welcome(c).peers.find((p) => p.sid === 1)?.rod).toBe(true);
+    // 배에서 내리면 (자리를 놓는 MOVE) 낚싯대도 거둔다
+    clear(a, b);
+    core.message(a, move(FERRY_DOCK.x, FERRY_DOCK.y, STATE.idle), 2_000);
+    expect(core.peer(1)?.seatId).toBeNull();
+    expect(core.peer(1)?.rod).toBeUndefined();
+    expect(rods(b)).toEqual([{ t: "rod", sid: 1, on: false }]);
+  });
+
+  it("거두기(off)는 언제나 받고, 방(집·사냥터)에서는 켜지 않는다", () => {
+    const { core, join } = setup();
+    const a = join("a", [], { x: FERRY_DOCK.x, y: FERRY_DOCK.y });
+    core.message(a, send({ t: "sit", seatId: A.id }), 0);
+    core.message(a, send({ t: "rod", on: true }), 1_000);
+    core.message(a, send({ t: "rod", on: false }), 2_000);
+    expect(core.peer(1)?.rod).toBeUndefined();
+    const room = setup(true);
+    const r = room.join("r");
+    room.core.message(r, send({ t: "rod", on: true }), 0);
+    expect(room.core.peer(1)?.rod).toBeUndefined();
   });
 });

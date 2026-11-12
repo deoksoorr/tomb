@@ -19,9 +19,9 @@ export type PlotTier = {
 
 /** 폭은 짝수로 둔다 (아래 가운데 문 2칸) */
 export const PLOT_TIERS: readonly PlotTier[] = [
-  { id: "small", name: "작은 터", w: 10, h: 8, price: 2_000, maxItems: 30 },
-  { id: "wide", name: "넓은 터", w: 14, h: 10, price: 3_000, maxItems: 50 },
-  { id: "manor", name: "대저택", w: 18, h: 12, price: 5_000, maxItems: 80 },
+  { id: "small", name: "작은 터", w: 10, h: 8, price: 5_000, maxItems: 30 },
+  { id: "wide", name: "넓은 터", w: 14, h: 10, price: 6_000, maxItems: 50 },
+  { id: "manor", name: "대저택", w: 18, h: 12, price: 10_000, maxItems: 80 },
 ];
 
 export const tierById = (id: string): PlotTier | undefined => PLOT_TIERS.find((t) => t.id === id);

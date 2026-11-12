@@ -2,10 +2,12 @@
 
 import { useEffect, useId, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { checkName } from "@tomb/protocol";
+import { checkName, dexBadgeCats } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { DAILY_EARN_CAP } from "@/lib/economy";
+import { CAT_LABEL, dexBadgeBits } from "@/lib/forage/catalog";
 import { meStore, useMe } from "@/lib/hooks/useMe";
+import { useForage } from "../forage/forageStore";
 import { forgetMyCode, readMyCode, saveMyCode, writeItem } from "@/lib/storage";
 import { LS, type Me } from "@/lib/types";
 import { cx } from "../ui/cx";
@@ -109,6 +111,8 @@ export default function MyPanel({
         </section>
 
         <NameSection me={me} />
+
+        <DexBadgeLine />
 
         <section className={styles.section}>
           <h3 className={styles.heading}>내 묘비</h3>
@@ -373,6 +377,19 @@ function NameSection({ me }: { me: Me }) {
           {message}
         </p>
       )}
+    </section>
+  );
+}
+
+/** 도감 100% 배지: 다 채운 종류 (이름표 옆 별과 같다. 다른 사람에게는 다음 입장부터 보인다) */
+function DexBadgeLine() {
+  const { state } = useForage();
+  const cats = dexBadgeCats(state ? dexBadgeBits(state.dex) : 0);
+  if (!cats.length) return null;
+  return (
+    <section className={styles.section} aria-label="도감 배지">
+      <h3 className={styles.heading}>도감 배지 {"★".repeat(cats.length)}</h3>
+      <p className={styles.sub}>{cats.map((c) => `${CAT_LABEL[c]} 100%`).join(" · ")}</p>
     </section>
   );
 }

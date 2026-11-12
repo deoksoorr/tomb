@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { bridge, type ForageUse } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { gatherNodeById, NODE_LABEL, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
-import { forageApi } from "@/lib/forage/client";
+import { forageApi, type DexPeer } from "@/lib/forage/client";
 import { BUG_DIFFICULTY } from "@/lib/forage/rules";
 import type { CatchResult } from "@/lib/forage/types";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
@@ -58,7 +58,7 @@ function insectPlay(seed: number, timeLimitSec: number, night: boolean): RpgPlay
 export default function ForageLayer() {
   const [fishing, setFishing] = useState<{ spot: string; water: "lake" | "river" } | null>(null);
   const [npc, setNpc] = useState<NpcId | null>(null);
-  const [dex, setDex] = useState<{ accountId?: string; name?: string | null } | null>(null);
+  const [dex, setDex] = useState<{ accountId?: string; peer?: DexPeer; name?: string | null } | null>(null);
   const [gather, setGather] = useState<Gather | null>(null);
   const [insect, setInsect] = useState<Insect | null>(null);
   const [paused, setPaused] = useState(false);
@@ -221,7 +221,7 @@ export default function ForageLayer() {
       )}
       {card && <CatchCard card={card} />}
       {npc && <NpcShop npcId={npc} onClose={() => setNpc(null)} />}
-      {dex && <DexDialog accountId={dex.accountId} name={dex.name} onClose={() => setDex(null)} />}
+      {dex && <DexDialog accountId={dex.accountId} peer={dex.peer} name={dex.name} onClose={() => setDex(null)} />}
     </>
   );
 }

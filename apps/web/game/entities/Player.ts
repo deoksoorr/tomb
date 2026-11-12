@@ -80,6 +80,7 @@ export class Player {
   private hopBase = 0;
 
   private readonly offStaff: () => void;
+  private readonly offDex: () => void;
   private readonly offLook: () => void;
 
   constructor(
@@ -104,6 +105,9 @@ export class Player {
     // 31번 운영자 계정이면 내 캐릭터도 저승사자 차림 (/api/me가 알려 준 값, 바뀌면 바로)
     this.view.setStaff(bridge.last("me:staff")?.on === true);
     this.offStaff = bridge.on("me:staff", ({ on }) => this.view.setStaff(on));
+    // 도감 100% 배지 (내 도감 상태가 바뀌면 바로)
+    this.view.setDexBadge(bridge.last("me:dex")?.bits);
+    this.offDex = bridge.on("me:dex", ({ bits }) => this.view.setDexBadge(bits));
     scene.physics.add.existing(this.view.sprite);
     this.body = this.view.sprite.body as Phaser.Physics.Arcade.Body;
     const s = this.view.sprite;
@@ -550,6 +554,7 @@ export class Player {
 
   destroy(): void {
     this.offStaff();
+    this.offDex();
     this.offLook();
     this.snap?.stop();
     this.view.destroy();

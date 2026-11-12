@@ -6,6 +6,7 @@ import { housingApi } from "@/lib/housing/client";
 import { buildOccupancy, findFreeSpot, footprint, gateTiles, newUid } from "@/lib/housing/layout";
 import { GROW_MS, plantStage, type PlantState } from "@/lib/housing/plants";
 import { roomPlan, type RoomPlan } from "@/lib/housing/rooms";
+import { placedSig } from "@/lib/housing/states";
 import type { HouseLayout, Placed, PublicHouse } from "@/lib/housing/types";
 import { errorMessage } from "@/lib/api";
 import { bridge } from "../bridge";
@@ -15,6 +16,7 @@ import { INDOOR_FRONT } from "../entities/RemoteAvatar";
 import type { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
 import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST } from "../logic/spots";
+import { emoSlotOfKey } from "../logic/emoBoard";
 import type { MoveInput } from "../logic/movement";
 import { RoomPresence } from "../net/RoomPresence";
 import type { NetPose } from "../net/sendThrottle";
@@ -149,6 +151,11 @@ export class HouseScene extends Phaser.Scene {
   private using: Using | null = null;
   /** 켜고 끄는 가구·창문 상태 (u → 값). 방 사람들과 use 이벤트로 맞춘다 */
   private toggles = new Map<string, number>();
+  /** 방 입장 뒤 내가 바꿨거나 중계로 받은 u (늦게 온 저장값이 덮어쓰지 않게) */
+  private stateTouched = new Set<string>();
+  /** 저장 대기 중인 상태 (u → 값). 연타는 모아서 한 번에 보낸다 */
+  private statePending = new Map<string, number>();
+  private stateTimer: ReturnType<typeof setTimeout> | null = null;
   /** 냉장고 문이 열려 있는 동안 (u → 닫힐 시각) */
   private openUntil = new Map<string, number>();
   private plants: Record<string, PlantState> = {};
@@ -195,6 +202,9 @@ export class HouseScene extends Phaser.Scene {
     this.using = null;
     this.target = null;
     this.toggles = new Map();
+    this.stateTouched = new Set();
+    this.statePending = new Map();
+    this.stateTimer = null;
     this.openUntil = new Map();
     this.plants = {};
     this.windows = [];
@@ -258,6 +268,7 @@ export class HouseScene extends Phaser.Scene {
       atlas: this.data0.atlas,
       room: `house:${this.data0.house.id}`,
       me: this.player.view,
+      expressions: true,
       getPose: () => this.player.netPose(this.pose),
       onSeatDenied: (id) => this.onSeatDenied(id),
       onUse: (sid, u, a) => this.onRemoteUse(sid, u, a),
@@ -293,6 +304,8 @@ export class HouseScene extends Phaser.Scene {
       bridge.on("house:tool", (t2) => this.tool(t2)),
     );
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      // 방을 나가도 마지막으로 바꾼 상태는 저장한다
+      this.flushStates();
       canvas.removeEventListener("pointerdown", this.onDown);
       window.removeEventListener("pointermove", this.onMove);
       window.removeEventListener("pointerup", this.onUp);
@@ -308,6 +321,7 @@ export class HouseScene extends Phaser.Scene {
     });
 
     this.loadPlants();
+    this.loadStates();
     if (this.data0.editing && this.data0.mine) this.setEditing(true, false);
     else this.emitState();
   }
@@ -759,6 +773,7 @@ export class HouseScene extends Phaser.Scene {
         this.sfx.play("static");
         if (ch > 0) this.sfx.play("tune");
         this.emitUse(t.u, ch);
+        this.saveState(t.u, ch);
         // 내 BGM 채널을 바꾼다 (다른 사람에게는 지직 소리만)
         const st = bgm.getSnapshot();
         if (ch > 0 && st.playlists.length) {
@@ -775,6 +790,7 @@ export class HouseScene extends Phaser.Scene {
         const on = this.toggles.get(t.u) ? 0 : 1;
         this.applyToggle(t.u, t.use, on, 1);
         this.emitUse(t.u, on);
+        this.saveState(t.u, on);
         return;
       }
       case "fridge": {
@@ -851,6 +867,40 @@ export class HouseScene extends Phaser.Scene {
         this.emitUse(u, 1);
       })
       .catch((e) => this.notice(errorMessage(e)));
+  }
+
+  /** 방 입장: 저장된 불·스탠드·라디오·창문 상태를 받아 조용히 맞춘다 */
+  private loadStates(): void {
+    housingApi
+      .states(this.data0.house.id)
+      .then((r) => {
+        if (!this.scene.isActive()) return;
+        let win = false;
+        for (const [u, a] of Object.entries(r.states)) {
+          const use = this.useByU.get(u);
+          if (this.stateTouched.has(u) || (use !== "radio" && use !== "fire" && use !== "lamp" && use !== "window")) continue;
+          this.toggles.set(u, a);
+          if (use === "window") win = true;
+          else this.refreshVariant(u);
+        }
+        if (win) this.updateWindows();
+      })
+      .catch(() => undefined);
+  }
+
+  /** 바꾼 상태를 서버에 남긴다 (나갔다 와도·나중에 온 사람도 그대로). 600ms 안의 연타는 마지막 값만 */
+  private saveState(u: string, a: number): void {
+    this.stateTouched.add(u);
+    this.statePending.set(u, a);
+    if (this.stateTimer === null) this.stateTimer = setTimeout(() => this.flushStates(), 600);
+  }
+
+  private flushStates(): void {
+    if (this.stateTimer !== null) clearTimeout(this.stateTimer);
+    this.stateTimer = null;
+    const id = this.data0.house.id;
+    for (const [u, a] of this.statePending) housingApi.setState(id, u, a).catch(() => undefined);
+    this.statePending.clear();
   }
 
   private loadPlants(): void {
@@ -937,6 +987,7 @@ export class HouseScene extends Phaser.Scene {
         this.sfx.play("page", gain);
         return;
       case "radio":
+        this.stateTouched.add(u);
         this.toggles.set(u, a);
         this.refreshVariant(u);
         this.sfx.play("static", gain);
@@ -945,6 +996,7 @@ export class HouseScene extends Phaser.Scene {
       case "fire":
       case "lamp":
       case "window":
+        this.stateTouched.add(u);
         this.applyToggle(u, use, a ? 1 : 0, gain);
         return;
       case "fridge":
@@ -1080,6 +1132,12 @@ export class HouseScene extends Phaser.Scene {
     }
     if (a === "wave" || a === "cheer") {
       this.presence?.act(a);
+      return;
+    }
+    // 3~9 이모티콘 판 (월드와 같은 키)
+    if (a.startsWith("emo")) {
+      const slot = emoSlotOfKey(Number(a.slice(3)));
+      if (slot?.kind === "emo") this.presence?.emo(slot.id);
       return;
     }
     if (a === "jump") this.player.jump(now, NO_SEATS);
@@ -1497,6 +1555,10 @@ export class HouseScene extends Phaser.Scene {
 
   /** 저장 뒤: 새 기준으로 */
   markSaved(house: PublicHouse): void {
+    // 치우거나 옮긴 가구의 켜짐 상태는 서버처럼 지운다 (창문 "w0"…은 배치가 아니라 그대로)
+    const before = new Map((JSON.parse(this.baseline) as HouseLayout).items.map((p) => [p.u, placedSig(p)]));
+    const after = new Map(house.layout.items.map((p) => [p.u, placedSig(p)]));
+    for (const u of [...this.toggles.keys()]) if ((before.has(u) || after.has(u)) && before.get(u) !== after.get(u)) this.toggles.delete(u);
     this.work = structuredClone(house.layout);
     this.baseline = JSON.stringify(this.work);
     this.refreshAll();

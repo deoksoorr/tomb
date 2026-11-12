@@ -175,3 +175,35 @@
 .tips {
   margin-top: 14px;
 }
+
+/* 즐겨찾기 별: 칸 오른쪽 위 (단축키 숫자는 왼쪽 위) */
+.cell {
+  position: relative;
+  display: grid;
+}
+
+.cellStar {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+/* 즐겨찾기 안내 한 줄 */
+.favLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 10px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.favStar {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background: var(--candle);
+  clip-path: polygon(50% 0, 62% 36%, 100% 38%, 70% 60%, 80% 98%, 50% 76%, 20% 98%, 30% 60%, 0 38%, 38% 36%);
+}

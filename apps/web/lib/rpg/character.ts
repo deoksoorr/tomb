@@ -157,20 +157,60 @@ export function addGear(s: CharacterState, id: string, bought: boolean): Charact
  * 드롭으로 얻은 것을 팔면 sellValue를 사냥 포인트(하루 한도 안)로 준다 → 드롭 되팔기로 한도를 넘지 못한다.
  */
 export function removeGearForSale(s: CharacterState, id: string): { state: CharacterState; bought: boolean; value: number } {
+  if (!gearById(id)) throw new RpgError(400, "INVALID_INPUT", "없는 장비예요.");
+  const r = removeForSale(s, id, 1);
+  return { state: r.state, bought: r.bought > 0, value: r.unit };
+}
+
+/** 한 번에 팔 수 있는 최대 개수 (포션 한 칸 최대치. 장비 가방은 이보다 작다) */
+export const SELL_MAX = POTION_MAX_STACK;
+
+/**
+ * 여러 개 되팔기 (장비·포션): count개를 한 번에 뺀다. 모자라면 하나도 빼지 않고 409.
+ * 장비는 장착하지 않은 것만, 산 것부터 판 것으로 친다(bought = 환불할 개수, drop = 사냥 수입으로 칠 개수).
+ * 포션은 산 기록이 없으니 모두 drop(사냥 포인트 하루 한도 안)으로 친다 → 사서 되팔아도 남는 장사가 없다.
+ */
+export function removeForSale(
+  s: CharacterState,
+  id: string,
+  count: number,
+): { state: CharacterState; kind: "gear" | "potion"; bought: number; drop: number; unit: number } {
+  if (!Number.isInteger(count) || count < 1 || count > SELL_MAX) throw new RpgError(400, "INVALID_INPUT", "팔 개수가 맞지 않아요.");
   const g = gearById(id);
-  if (!g) throw new RpgError(400, "INVALID_INPUT", "없는 장비예요.");
-  const owned = s.inv[id] ?? 0;
-  if (owned - equippedCount(s, id) < 1)
-    throw new RpgError(409, "NOT_OWNED", owned ? "장착 중인 장비는 먼저 빼고 팔아 주세요." : "가방에 그 장비가 없어요.");
+  const p = g ? undefined : potionById(id);
+  if (!g && !p) throw new RpgError(400, "INVALID_INPUT", "없는 물건이에요.");
   const next = clone(s);
-  const bought = (s.bought[id] ?? 0) > 0;
-  if (owned === 1) delete next.inv[id];
-  else next.inv[id] = owned - 1;
-  if (bought) {
-    if (s.bought[id] === 1) delete next.bought[id];
-    else next.bought[id] -= 1;
+  if (p) {
+    const owned = s.potions[id] ?? 0;
+    if (owned < count) throw new RpgError(409, "NOT_OWNED", owned ? `포션이 ${owned}개뿐이에요.` : "가방에 그 포션이 없어요.");
+    if (owned === count) delete next.potions[id];
+    else next.potions[id] = owned - count;
+    return { state: next, kind: "potion", bought: 0, drop: count, unit: sellValue(p.price) };
   }
-  return { state: next, bought, value: sellValue(g.price) };
+  const owned = s.inv[id] ?? 0;
+  const free = owned - equippedCount(s, id);
+  if (free < count) {
+    if (free < 1) throw new RpgError(409, "NOT_OWNED", owned ? "장착 중인 장비는 먼저 빼고 팔아 주세요." : "가방에 그 장비가 없어요.");
+    throw new RpgError(409, "NOT_OWNED", `팔 수 있는 건 ${free}개뿐이에요.`);
+  }
+  if (owned === count) delete next.inv[id];
+  else next.inv[id] = owned - count;
+  const had = s.bought[id] ?? 0;
+  const bought = Math.min(had, count);
+  if (bought) {
+    if (had === bought) delete next.bought[id];
+    else next.bought[id] = had - bought;
+  }
+  return { state: next, kind: "gear", bought, drop: count - bought, unit: sellValue(g!.price) };
+}
+
+/** 한도에 막혀 값을 못 받은 (드롭) 물건을 가방에 되돌린다. 방금 뺀 것이라 칸 한도는 보지 않는다 (포션은 한 칸 최대치까지) */
+export function returnUnsold(s: CharacterState, id: string, n: number): CharacterState {
+  if (n <= 0) return s;
+  const next = clone(s);
+  if (gearById(id)) next.inv[id] = (next.inv[id] ?? 0) + n;
+  else if (potionById(id)) next.potions[id] = Math.min(POTION_MAX_STACK, (next.potions[id] ?? 0) + n);
+  return next;
 }
 
 export const sellValue = (price: number) => Math.floor(price * SELL_RATE);

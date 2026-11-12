@@ -15,7 +15,8 @@ import {
   equip,
   gainExp,
   learnSkill,
-  removeGearForSale,
+  removeForSale,
+  returnUnsold,
   RpgError,
   setHotbar,
 } from "./character";
@@ -26,7 +27,7 @@ import type { z } from "zod";
 import type { CharacterActionSchema, ShopActionSchema } from "./schemas";
 import { getRpgStore, RUNS_PER_HOUR, type RpgStore } from "./store";
 import { signTicket, verifyTicket } from "./ticket";
-import type { CharacterState, Drop, RpgView, RunFinishResponse, RunResult, RunStartResponse } from "./types";
+import type { CharacterState, Drop, RpgView, SoldInfo, RunFinishResponse, RunResult, RunStartResponse } from "./types";
 
 // 사냥터 서버 로직 (라우트는 세션 확인·입력 검증·레이트리밋만 하고 여기로 넘긴다).
 // 포인트는 백엔드 공용 함수(earnPoints/spendPoints)로만 움직인다. 사냥터 자체에는 포인트 장부가 없다.
@@ -82,15 +83,15 @@ export async function characterAction(acct: string, a: z.output<typeof Character
   return rpgView(acct, store, Date.now(), state);
 }
 
-// ── 상점 (장비·포션 사기, 장비 되팔기) ──
+// ── 상점 (장비·포션 사기, 장비·포션 되팔기 — 여러 개 한 번에) ──
 
-export async function shopAction(acct: string, a: z.output<typeof ShopActionSchema>, ipHash: string): Promise<RpgView & { sold?: { value: number; capped: boolean } }> {
+export async function shopAction(acct: string, a: z.input<typeof ShopActionSchema>, ipHash: string): Promise<RpgView & { sold?: SoldInfo }> {
   const store = getRpgStore();
   if (a.type === "buy") {
     const gear = gearById(a.itemId);
     const potion = potionById(a.itemId);
     if (!gear && !potion) throw new HttpError(400, "INVALID_INPUT", "없는 물건이에요.");
-    const qty = gear ? 1 : a.qty;
+    const qty = gear ? 1 : (a.qty ?? 1);
     const add = (s: CharacterState) => (gear ? addGear(s, gear.id, true) : addPotions(s, potion!.id, qty));
     // 가방이 가득 찼는지 먼저 본다 (포인트를 빼고 나서 실패하는 일을 줄인다)
     await http(store.get(acct).then(add));
@@ -105,25 +106,38 @@ export async function shopAction(acct: string, a: z.output<typeof ShopActionSche
       throw e;
     }
   }
-  const { state, result } = await http(
+  // 1) 가방에서 count개를 한 번에 뺀다 (CAS: 모자라면 하나도 빼지 않는다). count가 없으면 예전처럼 1개
+  const count = a.count ?? 1;
+  const { state: removed, result } = await http(
     store.update(acct, (s) => {
-      const r = removeGearForSale(s, a.itemId);
+      const r = removeForSale(s, a.itemId, count);
       return { state: r.state, result: r };
     }),
   );
+  const name = gearById(a.itemId)?.name ?? potionById(a.itemId)?.name ?? a.itemId;
+  const label = `${name}${count > 1 ? ` ×${count}` : ""}`;
+  let state = removed;
+  let value = 0;
   let capped = false;
-  if (result.value > 0) {
-    if (result.bought) {
-      // 산 물건 되팔기는 환불이라 하루 적립 한도와 무관하다 (산 값보다 늘 적어서 남는 장사가 없다)
-      await refundPoints(acct, result.value, `사냥터 되팔기: ${gearById(a.itemId)?.name ?? a.itemId}`);
-    } else {
-      // 드롭 장비 되팔기는 사냥 수입이다 → 사냥 포인트 하루 한도 안에서만
-      const { earned } = await earnPoints(acct, "hunt", result.value, ipHash);
-      capped = earned < result.value;
-      if (earned > 0) await store.addDaily(acct, kstDay(), { points: earned });
-    }
+  let unsold = 0;
+  // 2) 산 장비 되팔기는 환불이라 하루 적립 한도와 무관하다 (산 값보다 늘 적어서 남는 장사가 없다)
+  const refund = result.bought * result.unit;
+  if (refund > 0) {
+    await refundPoints(acct, refund, `사냥터 되팔기: ${label}`);
+    value += refund;
   }
-  return { ...(await rpgView(acct, store, Date.now(), state)), sold: { value: result.value, capped } };
+  // 3) 드롭 장비·포션 되팔기는 사냥 수입이다 → 사냥 포인트 하루 한도 안에서만 (원자적으로 한도까지만 적립)
+  const want = result.drop * result.unit;
+  if (want > 0) {
+    const { earned } = await earnPoints(acct, "hunt", want, ipHash);
+    capped = earned < want;
+    value += earned;
+    if (earned > 0) await store.addDaily(acct, kstDay(), { points: earned });
+    // 한도에 막혀 값을 한 푼도 못 받은 만큼은 가방에 되돌린다 (일부만 받은 1개는 판 것으로 친다)
+    unsold = Math.min(result.drop, Math.floor((want - earned) / result.unit));
+    if (unsold > 0) state = (await http(store.update(acct, (s) => ({ state: returnUnsold(s, a.itemId, unsold), result: null })))).state;
+  }
+  return { ...(await rpgView(acct, store, Date.now(), state)), sold: { value, capped, count: count - unsold } };
 }
 
 // ── 판 시작·끝 ──

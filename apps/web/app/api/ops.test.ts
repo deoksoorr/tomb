@@ -1,11 +1,11 @@
-import { verifyJoinToken } from "@tomb/protocol";
+import { isPermanentUntil, isShopListed, ITEMS, STAFF_ITEM_IDS, verifyJoinToken } from "@tomb/protocol";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { BALANCE_CAP } from "@/lib/economy";
 import { getAnalytics } from "@/lib/analyticsService";
 import type { AnalyticsReport } from "@/lib/analyticsReport";
 import { adminActor } from "@/lib/ban";
-import { setStaff } from "@/lib/staff";
+import { grantStaffItems, setStaff } from "@/lib/staff";
 import { getAccounts, getStore } from "@/lib/store";
 import type { ApiError, CreateGraveResponse, JoinResponse, Me } from "@/lib/types";
 import type { AdminStaffResponse } from "./admin/staff/route";
@@ -122,10 +122,33 @@ describe("31번 운영자 계정", () => {
     const mine = await bodyOf<Me>(me.GET(call("/api/me", { visitor: v })));
     expect(mine.staff).toBe(true);
     expect(mine.points).toBe(BALANCE_CAP);
+    // 지정하자마자 운영자 전용 꾸미기가 전부 영구로 벗어 둔 꾸미기에 들어온다
+    for (const id of STAFF_ITEM_IDS) expect(mine.stash.some((e) => e.itemId === id && isPermanentUntil(e.until))).toBe(true);
     // 해제
     const off = await bodyOf<AdminStaffResponse>(adminStaff.POST(call("/api/admin/staff", { body: { accountId: null }, headers: ADMIN })));
     expect(off.staff).toBeNull();
     expect((await bodyOf<Me>(me.GET(call("/api/me", { visitor: v })))).staff).toBeUndefined();
+  });
+
+  it("운영자 전용 꾸미기: 상점 목록에 없고, 운영자로 입장하면 빠진 것만 영구로 다시 채운다", async () => {
+    expect(STAFF_ITEM_IDS.length).toBeGreaterThan(0);
+    expect(ITEMS.filter((i) => i.staff).some(isShopListed)).toBe(false);
+    const op = await newVisitor();
+    await setStaff(op.visitorId);
+    try {
+      expect(await grantStaffItems(getAccounts(), op.visitorId)).toBe(STAFF_ITEM_IDS.length);
+      // 이미 다 있으면 더 넣지 않는다
+      expect(await grantStaffItems(getAccounts(), op.visitorId)).toBe(0);
+      // 하나가 빠지면(벗어 둔 꾸미기에서 사라짐) 내 정보를 불러올 때 그것만 채운다
+      const mem = getAccounts() as unknown as { accts: Map<string, { stash?: Map<string, number> }> };
+      mem.accts.get(op.visitorId)?.stash?.delete("staff_crown");
+      const mine = await bodyOf<Me>(me.GET(call("/api/me", { visitor: op })));
+      expect(mine.stash.filter((e) => STAFF_ITEM_IDS.includes(e.itemId) && isPermanentUntil(e.until))).toHaveLength(STAFF_ITEM_IDS.length);
+      // 없는 계정
+      expect(await grantStaffItems(getAccounts(), "nobody-here")).toBe(-1);
+    } finally {
+      await setStaff(null);
+    }
   });
 
   it("관리자 처리 기록의 처리자 이름: 운영자 계정 브라우저면 관리자(닉네임)", async () => {

@@ -85,6 +85,8 @@ export type NetCallbacks = {
   onMood?(sid: Sid, mood: SeatMood | ""): void;
   /** 동물원 타는 펫에 올라탐·내림. 서버가 받아들인 내 것도 온다 (자리에 앉거나 물에 들어가면 서버가 내리기도 한다) */
   onRide?(sid: Sid, on: boolean): void;
+  /** 4번 배 위 낚싯대를 드리움·거둠. 서버가 받아들인 내 것도 온다 (배에서 내리면 서버가 거두기도 한다) */
+  onRod?(sid: Sid, on: boolean): void;
   /** 다른 사람이 실내(상점·집·사냥터 등)에 들어감·나옴. 내 것은 오지 않는다 (늦게 온 사람 것은 PeerInfo.away) */
   onAway?(sid: Sid, on: boolean): void;
   /** 입장 토큰에 든 내 아바타 몸 모양 (계정에 저장된 값) */
@@ -351,6 +353,11 @@ export class RealtimeClient {
     this.send({ t: "ride", on });
   }
 
+  /** 4번 배 위 낚싯대 드리우기·거두기 (조각배 자리에 앉아 있을 때만 서버가 받는다) */
+  rod(on: boolean): void {
+    this.send({ t: "rod", on });
+  }
+
   /**
    * 실내(하위 장면)에 들어감·나옴. 연결이 바뀌어도 이어 가도록 기억해 두고 welcome 때 다시 알린다.
    * 옛 서버는 모르는 메시지라 버린다 (그러면 예전처럼 문 앞에 보인다)
@@ -544,6 +551,9 @@ export class RealtimeClient {
           break;
         case "ride":
           if (typeof m.on === "boolean") this.cb.onRide?.(m.sid, m.on);
+          break;
+        case "rod":
+          if (typeof m.on === "boolean") this.cb.onRod?.(m.sid, m.on);
           break;
         case "away":
           if (m.sid !== this.mySid && typeof m.on === "boolean") this.cb.onAway?.(m.sid, m.on);

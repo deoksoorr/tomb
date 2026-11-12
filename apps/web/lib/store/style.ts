@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { DYE_PARTS, type AvatarDye, type CosmeticSlot, type DyePart } from "@tomb/protocol";
+import { DYE_PARTS, premiumBody, PREMIUM_BODIES, type AvatarDye, type CosmeticSlot, type DyePart } from "@tomb/protocol";
 import { env } from "../env";
 import type { DyeTier } from "../dye/palette";
 import { kstDay } from "./accounts";
@@ -41,10 +41,12 @@ export type FixedDyeIssue = { at: number; defId: string; name: string; color: st
 /** bodies = 선택권으로 영구 해금한 프리미엄 외형 */
 export type StyleState = { dye: AvatarDye; session: DyeSession | null; bodies: string[] };
 export type ChargeResult = "ok" | "insufficient" | "same";
-/** 외형 바꾸기 결과: unlocked = 프리미엄 외형을 이번에 해금하면서 바꿨다 (선택권 값을 냈다) */
+/** 외형 바꾸기 결과: ok = 소장한 외형으로 무료로 바꿨다, unlocked = 프리미엄 외형을 이번에 해금하면서 바꿨다 (선택권 값을 냈다) */
 export type ReshapeResult = ChargeResult | "unlocked";
-/** 아직 해금하지 않은 프리미엄 외형이면 이 값·사유로 해금하면서 바꾼다 (이미 해금했으면 보통 요금) */
+/** 아직 해금하지 않은 프리미엄 외형이면 이 값·사유로 해금하면서 바꾼다 (이미 소장했으면 무료) */
 export type ReshapeUnlock = { price: number; reason: string };
+/** 선택권으로 해금하는(소장 기록이 남는) 외형 id — 쉼표로 이어 Lua에 넘긴다 */
+const PREMIUM_IDS = PREMIUM_BODIES.map((b) => b.id).join(",");
 
 export interface StyleStore {
   get(id: string): Promise<StyleState>;
@@ -64,10 +66,11 @@ export interface StyleStore {
   /** price 포인트를 내고 part를 기본색으로 되돌린다. 이미 기본색이면 "same" (포인트를 쓰지 않는다) */
   reset(id: string, part: DyePart, price: number, reason: string, now: number): Promise<ChargeResult>;
   /**
-   * price 포인트를 내고 몸 모양을 바꾼다 (부위 색은 그대로 따라간다). 이미 그 몸이면 "same".
-   * unlock이 있으면 프리미엄 외형: 아직 해금 전이면 unlock.price를 내고 해금까지 한 번에 ("unlocked")
+   * 몸 모양을 바꾼다 (부위 색은 그대로 따라간다). 이미 그 몸이면 "same".
+   * 소장한 외형(처음 6종 · 해금한 프리미엄)끼리는 무료. unlock이 있고 아직 해금 전인 프리미엄 외형이면
+   * unlock.price를 내고 영구 해금까지 한 번에 ("unlocked"). 입고 있던 프리미엄 외형이 소장 기록에 빠져 있으면 함께 채운다
    */
-  reshape(id: string, body: string, price: number, reason: string, now: number, unlock?: ReshapeUnlock): Promise<ReshapeResult>;
+  reshape(id: string, body: string, now: number, unlock?: ReshapeUnlock): Promise<ReshapeResult>;
   /**
    * 영구 꾸미기 구매: 이미 영구로 가졌으면 "owned", 가방에 같은 꾸미기 이용권(새것)이 있으면 "ticket",
    * 포인트가 모자라면 "insufficient". 사면 입고 있던 기간제는 그대로 영구가 되고, 아니면 벗어 둔 꾸미기에 영구로 들어간다
@@ -172,12 +175,15 @@ export class MemoryStyle implements StyleStore {
     return "ok";
   }
 
-  async reshape(id: string, body: string, price: number, reason: string, now: number, unlock?: ReshapeUnlock): Promise<ReshapeResult> {
+  async reshape(id: string, body: string, now: number, unlock?: ReshapeUnlock): Promise<ReshapeResult> {
     const accts = this.accounts();
-    if ((accts.styleBody(id) ?? "hood") === body) return "same";
+    const cur = accts.styleBody(id) ?? "hood";
+    if (cur === body) return "same";
     const s = this.st(id);
+    // 입고 있던 프리미엄 외형은 소장한 것 (기록이 빠졌어도 되살린다 — RESHAPE_LUA와 같은 규칙)
+    if (premiumBody(cur) && !(s.bodies ?? []).includes(cur)) s.bodies = [...(s.bodies ?? []), cur];
     const fresh = !!unlock && !(s.bodies ?? []).includes(body);
-    if (!accts.styleCharge(id, fresh ? unlock.price : price, fresh ? unlock.reason : reason, now)) return "insufficient";
+    if (fresh && !accts.styleCharge(id, unlock.price, unlock.reason, now)) return "insufficient";
     if (fresh) s.bodies = [...(s.bodies ?? []), body];
     accts.styleSetBody(id, body);
     return fresh ? "unlocked" : "ok";
@@ -290,18 +296,23 @@ redis.call('HDEL', KEYS[4], ARGV[1])
 return 1
 `;
 
-// KEYS: acct, ledger, econ  ARGV: body, price, entry, field  → -1 같음 | 0 부족 | 1
-// KEYS: acct, ledger, econ, style  ARGV: body, price, entry, field, unlockPrice('' = 프리미엄 아님), unlockEntry
-// → -1 같은 몸 | 0 부족 | 1 바꿈 | 2 해금하면서 바꿈
+// 소장한 외형(처음 6종 · bodies에 적힌 프리미엄)끼리는 무료. 해금 전 프리미엄만 선택권 값을 내고 bodies에 더한다.
+// 입고 있던 프리미엄 외형이 bodies에 빠져 있으면 함께 채운다 (입고 있었다 = 소장한 것)
+// KEYS: acct, ledger, econ, style  ARGV: body, premiumIds(쉼표), unlockPrice('' = 프리미엄 아님), unlockEntry, field
+// → -1 같은 몸 | 0 부족 | 1 바꿈(무료) | 2 해금하면서 바꿈
 const RESHAPE_LUA = `${CHARGE_FN}
-if (redis.call('HGET', KEYS[1], 'body') or 'hood') == ARGV[1] then return -1 end
-local price, entry, fresh = tonumber(ARGV[2]), ARGV[3], false
+local function has(list, id) return string.find(',' .. list .. ',', ',' .. id .. ',', 1, true) ~= nil end
+local cur = redis.call('HGET', KEYS[1], 'body') or 'hood'
+if cur == ARGV[1] then return -1 end
 local owned = redis.call('HGET', KEYS[4], 'bodies') or ''
-if ARGV[5] ~= '' and not string.find(',' .. owned .. ',', ',' .. ARGV[1] .. ',', 1, true) then
-  price, entry, fresh = tonumber(ARGV[5]), ARGV[6], true
-end
-if not charge(KEYS[1], KEYS[2], KEYS[3], price, entry, ARGV[4]) then return 0 end
-if fresh then redis.call('HSET', KEYS[4], 'bodies', owned == '' and ARGV[1] or (owned .. ',' .. ARGV[1])) end
+local function own(id) owned = owned == '' and id or (owned .. ',' .. id) end
+local before = owned
+if has(ARGV[2], cur) and not has(owned, cur) then own(cur) end
+local fresh = ARGV[3] ~= '' and not has(owned, ARGV[1])
+local ok = (not fresh) or charge(KEYS[1], KEYS[2], KEYS[3], tonumber(ARGV[3]), ARGV[4], ARGV[5])
+if ok and fresh then own(ARGV[1]) end
+if owned ~= before then redis.call('HSET', KEYS[4], 'bodies', owned) end
+if not ok then return 0 end
 redis.call('HSET', KEYS[1], 'body', ARGV[1])
 if fresh then return 2 end
 return 1
@@ -382,15 +393,14 @@ export class RedisStyle implements StyleStore {
     return r === 1 ? "ok" : r === 0 ? "insufficient" : "same";
   }
 
-  async reshape(id: string, body: string, price: number, reason: string, now: number, unlock?: ReshapeUnlock): Promise<ReshapeResult> {
+  async reshape(id: string, body: string, now: number, unlock?: ReshapeUnlock): Promise<ReshapeResult> {
     const r = Number(
       await this.redis.eval<string[], number>(RESHAPE_LUA, [K.acct(id), K.ledger(id), K.econ(kstDay(now)), styleKey(id)], [
         body,
-        String(price),
-        this.entry(price, reason, now),
-        `spend:${spendCategory(reason)}`,
+        PREMIUM_IDS,
         unlock ? String(unlock.price) : "",
         unlock ? this.entry(unlock.price, unlock.reason, now) : "",
+        unlock ? `spend:${spendCategory(unlock.reason)}` : "",
       ]),
     );
     return r === 2 ? "unlocked" : r === 1 ? "ok" : r === 0 ? "insufficient" : "same";

@@ -1,0 +1,133 @@
+/* 즐겨찾기 표현 원형 목록 (U 키): 내 캐릭터 둘레에 칸들이 둥글게. 가운데(캐릭터)는 비워 둔다 */
+
+.root {
+  position: fixed;
+  z-index: 40;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  animation: pop 0.12s ease-out;
+}
+
+.ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  border: 2px dashed color-mix(in srgb, var(--candle) 45%, transparent);
+  border-radius: 50%;
+}
+
+.item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel-solid);
+  color: var(--bone);
+  box-shadow: var(--px-border);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 0.08s;
+}
+
+.item img {
+  image-rendering: pixelated;
+}
+
+.phrase {
+  width: 64px;
+  border-radius: 14px;
+}
+
+.item:hover,
+.item:focus-visible {
+  z-index: 1;
+  background: var(--surface-hover);
+  box-shadow:
+    var(--px-border),
+    0 0 0 3px var(--candle);
+}
+
+.item:active {
+  background: var(--surface);
+}
+
+.text {
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  word-break: keep-all;
+}
+
+/* 숫자 키 1~8 */
+.num {
+  position: absolute;
+  top: -4px;
+  left: -2px;
+  min-width: 16px;
+  padding: 0 3px;
+  background: var(--line);
+  color: var(--bone);
+  font-size: 10px;
+  line-height: 15px;
+  text-align: center;
+}
+
+.empty {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200px;
+  margin: 0;
+  padding: 8px 10px;
+  transform: translate(-50%, -50%);
+  background: var(--panel-solid);
+  color: var(--text);
+  box-shadow: var(--px-border);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: auto;
+}
+
+/* 바로 가기 줄 [표현] 버튼: 길게 누를 때 글자 선택·기본 메뉴가 뜨지 않게 */
+.exprButton {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root {
+    animation: none;
+  }
+
+  .item {
+    transition: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .item {
+    width: 56px;
+    height: 56px;
+  }
+
+  .phrase {
+    width: 68px;
+  }
+}

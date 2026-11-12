@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { CAMPFIRES, campfireOfSeat, DIR, FISH_ARCH, FURNITURE, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
+import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, FISH_ARCH, FURNITURE, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
 import { avatarColorSpec, type AppearanceChange } from "../sprites/avatar";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import type { PublicGrave } from "@/lib/types";
@@ -50,6 +50,7 @@ import { Foraging } from "../world/forage/Foraging";
 import { Riding } from "../world/zoo/Riding";
 import { ZOO_ARCH_AT, ZooView } from "../world/zoo/ZooView";
 import { Expressions } from "../world/Expressions";
+import { MeScreen } from "../world/MeScreen";
 import type { GameContext } from "./context";
 import type { ShopContext } from "./ShopScene";
 
@@ -99,6 +100,10 @@ export class WorldScene extends Phaser.Scene {
   private sfx!: Sfx;
   /** 5번 이모티콘·24번 벤치 상태·14번 물속·그네 연출 */
   private expr!: Expressions;
+  /** 즐겨찾기 표현 원형 목록(U 키)이 열려 있으면 내 화면 위치를 UI에 */
+  private meScreen!: MeScreen;
+  /** 마을·집·사냥터 안 (말풍선·이모티콘은 그 방이 받는다) */
+  private awayScene = false;
   private rig!: CameraRig;
   private player!: Player;
   private playerGlow!: Phaser.GameObjects.Image;
@@ -313,6 +318,7 @@ export class WorldScene extends Phaser.Scene {
       player: () => this.player,
       net: () => this.net,
       seats: () => this.seats,
+      remotes: () => this.remotes,
       setItems: (items) => this.map.setExtraItems(items),
       toast: (m) => this.toast(m),
     });
@@ -471,6 +477,7 @@ export class WorldScene extends Phaser.Scene {
         onEmo: (sid, id) => this.expr.onRemoteEmo(sid, id),
         onMood: (sid, mood) => this.expr.onRemoteMood(sid, mood),
         onRide: (sid, on) => this.riding.onRide(sid, on),
+        onRod: (sid, on) => this.forage.onRod(sid, on), // 4번 배 위 낚싯대
         // 실내(상점·집·사냥터 등)에 들어감·나옴: 문으로 들어가듯 흐려지며 사라지고, 나오면 문 앞에서 나타난다
         onAway: (sid, on) => this.remotes.get(sid)?.setAway(on, performance.now()),
         onSay: (sid, id) => {
@@ -615,11 +622,13 @@ export class WorldScene extends Phaser.Scene {
     const prev = this.remotes.get(p.sid);
     prev?.destroy();
     const r = new RemoteAvatar(this, this.atlas, p.sid, p.name, avatarColorSpec(p.color, sanitizeDye(p.dye)), p, performance.now(), p.look ?? [], isAvatarBody(p.body) ? p.body : "hood");
+    r.view.setDexBadge(p.dex); // 도감 100% 배지 (입장 토큰에 서버가 넣은 것만 온다)
     r.view.setStaff(p.staff === true); // 31번 운영자: 저승사자 차림·"운영자" 배지 (서버가 넣은 표시만 온다)
     // 같은 sid가 다시 들어오면(이름·색 변경) 앉아 있던 좌석을 이어받는다
     r.seatId = prev?.seatId ?? null;
     r.view.setMood(p.mood); // 24번: 늦게 온 사람도 앉아 있는 사람의 상태를 본다
     this.riding?.applyPeer(r, p); // 동물원 타는 펫: 늦게 온 사람도 탄 모습을 본다
+    this.forage?.applyPeer(p); // 4번 배 위 낚싯대: 늦게 온 사람도 본다
     r.setAway(p.away === true, performance.now(), true); // 이미 실내에 있는 사람은 연출 없이 숨긴다
     if (!r.seatId) for (const [seatId, owner] of this.seats) if (owner === p.sid) r.seatId = seatId;
     this.remotes.set(p.sid, r);
@@ -633,13 +642,14 @@ export class WorldScene extends Phaser.Scene {
       if (p.sid === this.net.mySid) continue;
       keep.add(p.sid);
       const r = this.remotes.get(p.sid);
-      if (!r || r.name !== p.name || r.view.colorSpec !== avatarColorSpec(p.color, sanitizeDye(p.dye)) || r.view.bodyId !== (isAvatarBody(p.body) ? p.body : "hood") || r.view.staff !== (p.staff === true)) {
+      if (!r || r.name !== p.name || r.view.colorSpec !== avatarColorSpec(p.color, sanitizeDye(p.dye)) || r.view.bodyId !== (isAvatarBody(p.body) ? p.body : "hood") || r.view.staff !== (p.staff === true) || r.view.dexBadgeCount !== dexBadgeCats(p.dex).length) {
         this.addRemote(p);
         continue;
       }
       r.view.setLook(p.look ?? []);
       r.view.setMood(p.mood ?? null);
       this.riding.applyPeer(r, p);
+      this.forage.applyPeer(p);
       r.setAway(p.away === true, now);
       // 놓친 스냅샷 때문에 위치가 크게 어긋나 있으면 맞춘다
       const last = r.interp.latest;
@@ -662,6 +672,8 @@ export class WorldScene extends Phaser.Scene {
 
   private bindBridge(): void {
     const on = this.unsubs;
+    this.meScreen = new MeScreen(this);
+    on.push(() => this.meScreen.destroy());
     on.push(
       bridge.on("graves:set", ({ channel, graves, reviveTop, passed }) => {
         // 다른 채널 묘지 목록은 무시 (채널을 옮기는 사이에 늦게 온 응답 등)
@@ -693,14 +705,20 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("grave:flowered", ({ graveId }) => this.playMyFlower(graveId)));
     on.push(bridge.on("channel:switch", ({ channel }) => this.switchChannel(channel)));
     // 실내(상점·집·분양 마을·사냥터·미니게임)에 들어가 있는 동안은 다른 사람 화면에서 숨긴다 (메인 맵의 나는 문 앞에 멈춰 있다)
-    on.push(bridge.on("scene:changed", ({ scene }) => this.net.setAway(scene !== "world")));
+    on.push(
+      bridge.on("scene:changed", ({ scene }) => {
+        this.awayScene = scene !== "world" && scene !== "shop";
+        this.net.setAway(scene !== "world");
+      }),
+    );
     on.push(bridge.on("input:joystick", ({ x, y }) => this.hub.setJoystick(x, y)));
     on.push(bridge.on("input:runToggle", ({ on: v }) => this.hub.setRunToggle(v)));
     on.push(bridge.on("input:sit", () => this.hub.dispatch("sit")));
     on.push(bridge.on("input:interact", () => this.hub.dispatch("interact")));
     on.push(bridge.on("input:jump", () => this.hub.dispatch("jump")));
-    on.push(bridge.on("input:say", ({ id }) => this.doSay(id)));
-    on.push(bridge.on("input:emo", ({ id }) => !this.cleaned && !this.inShop && this.expr.emo(id, this.time.now)));
+    // 마을·집 안이면 그 방(RoomPresence)이 받는다
+    on.push(bridge.on("input:say", ({ id }) => !this.awayScene && this.doSay(id)));
+    on.push(bridge.on("input:emo", ({ id }) => !this.cleaned && !this.inShop && !this.awayScene && this.expr.emo(id, this.time.now)));
     on.push(bridge.on("input:mood", ({ mood }) => !this.cleaned && this.expr.setMood(mood)));
     on.push(bridge.on("input:ride", () => !this.cleaned && !this.inShop && this.riding.toggle()));
     on.push(bridge.on("guide:point", ({ target, label }) => this.guide.set(target ? this.resolveGuide(target, label) : null)));
@@ -955,6 +973,12 @@ export class WorldScene extends Phaser.Scene {
     if (this.expr.key(a, now)) return;
     if (a === "wave" || a === "cheer") {
       this.doAct(a);
+      return;
+    }
+    // 4번 배 위 낚시: 물가가 아닌 물 위에서 E → 낚싯대를 드리운다 (물가에서는 그대로 내리기)
+    if (a === "interact" && pl.inBoat && !this.boats.nearShore()) {
+      const at = this.boats.fishingSpot();
+      if (at) this.forage.fishFromBoat(at);
       return;
     }
     // 조각배 위: E = 물가에서 내리기, 앉기·점프 없음
@@ -1400,6 +1424,7 @@ export class WorldScene extends Phaser.Scene {
     this.rides.prepare();
     this.boats.prepare();
     this.expr.update(now);
+    if (!this.awayScene) this.meScreen.update(pl.x, pl.y);
     pl.view.sync(now, s);
 
     this.map.update(view);

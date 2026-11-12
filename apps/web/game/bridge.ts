@@ -138,6 +138,8 @@ export type GameEvents = {
   "zoo:open": undefined;
   /** 타는 펫 (sticky): pet = 데리고 다니는 타는 펫 id(없으면 null), riding = 올라타 있음, can = 지금 올라탈 수 있음 (UI 타기 버튼) */
   "ride:state": { pet: string | null; riding: boolean; can: boolean };
+  /** 내 캐릭터의 화면 위치 (CSS px, 뷰포트 기준). ui:radial이 열려 있는 동안 움직일 때만 */
+  "me:screen": { x: number; y: number };
 };
 
 
@@ -190,6 +192,8 @@ export type UiEvents = {
   "ui:blockKeys": { blocked: boolean };
   /** 31번: 내 계정이 운영자 계정인지 (sticky). 내 캐릭터를 저승사자 차림·"운영자" 배지로 그린다 */
   "me:staff": { on: boolean };
+  /** 내 도감 100% 배지 (종류별 비트, sticky). 내 캐릭터 이름표 옆에 그린다 (다른 사람에겐 입장 토큰으로 간다) */
+  "me:dex": { bits: number };
   /** 실시간 서버: 서버에서 내 계정(포인트·선물함)이 바뀌었다(관리자 지급 등) → UI가 내 정보·선물함을 다시 받는다 */
   "me:stale": undefined;
   /** 시점을 내 캐릭터로 되돌리고 다시 따라가기 */
@@ -266,9 +270,11 @@ export type UiEvents = {
   /** 판매 동전 소리 */
   "forage:coin": undefined;
   /** 도감 열기 (UI 안에서 쓴다: HUD 버튼·메뉴·남의 도감) */
-  "forage:dex": { accountId?: string; name?: string | null };
+  "forage:dex": { accountId?: string; peer?: { sid: number; ch?: number; room?: string }; name?: string | null };
   /** 채널 이동 창: 지금 채널에 있는 사람들 닉네임을 달라 (월드가 peers:list로 답한다) */
   "peers:ask": undefined;
+  /** 즐겨찾기 표현 원형 목록(U 키)이 열렸다/닫혔다. 열려 있는 동안 게임이 내 캐릭터 화면 위치를 me:screen으로 알린다 */
+  "ui:radial": { open: boolean };
 };
 
 export type ForageUse = { kind: "fish"; spot: string; water: "lake" | "river" } | { kind: "npc"; npc: "fishmonger" | "collector" } | { kind: "node"; node: string };
@@ -295,9 +301,11 @@ const STICKY = new Set<keyof AllEvents>([
   "village:data",
   "forage:nodes",
   "me:staff",
+  "me:dex",
   "mood:state",
   "audio:mix",
   "ride:state",
+  "ui:radial",
 ]);
 
 class Bridge {

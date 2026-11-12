@@ -1,4 +1,4 @@
-import { DIR, type DirId } from "@tomb/protocol";
+import { DIR, premiumBody, type DirId } from "@tomb/protocol";
 import { foxSheet, MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountLift, mountSheet, type MountKind } from "./mountArt";
 import { Grid, type Color } from "./pixel";
 
@@ -538,6 +538,28 @@ export const FX_ART = {
       for (let i = 0; i < g.px.length; i++) if (g.px[i] & 255) g.px[i] = (g.px[i] & ~255) | 150;
     }),
   },
+  // 25번 프리미엄 외형 등급 연출: 몸 뒤 은은한 빛 (0 희귀 보라·1 전설 금), 반짝이 알갱이 (0 금·1 분홍·2 하늘·3 흰)
+  tierGlow: {
+    w: 26,
+    h: 32,
+    frames: 2,
+    build: frames(26, 32, 2, (g, f) => {
+      const c = f ? [0xffc84a, 0xffe08a, 0xfff4c8] : [0x9a6ae8, 0xc49af8, 0xeedcff];
+      g.ellipse(13, 16, 13, 16, c[0], 34);
+      g.ellipse(13, 16, 10, 13, c[1], 40);
+      g.ellipse(13, 16, 6.5, 9, c[2], 46);
+    }),
+  },
+  tierMote: {
+    w: 3,
+    h: 3,
+    frames: 4,
+    build: frames(3, 3, 4, (g, f) => {
+      const c = [0xffd65a, 0xffa8e0, 0x9ae4ff, 0xffffff][f];
+      g.set(1, 1, 0xffffff);
+      for (const [x, y] of [[1, 0], [0, 1], [2, 1], [1, 2]]) g.set(x, y, c, 200);
+    }),
+  },
 } satisfies Record<string, ArtDef>;
 
 export type FxArtId = keyof typeof FX_ART;
@@ -554,7 +576,13 @@ function fill(w: number, h: number, c: Color, a: number): Grid {
 type PetSpec = { kind: "pet"; art: FxArtId; hover: number; fps: number; idleFps: number; alpha?: number; squash?: boolean; glow?: boolean; mount?: MountKind; far?: number };
 type TrailSpec = { kind: "trail"; art: FxArtId; step: number; life: number; motion: "prints" | "splash" | "rise" | "scatter" | "pop"; light?: boolean };
 /** 추가분 2: fall = 머리 위에서 떨어짐, float = 옆에서 떠오름, steam = 머리 위로 김, ring = 몸 둘레를 돈다 (art로 그림을 고른다) */
-type AuraSpec = { kind: "aura"; motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring"; art?: FxArtId; light?: boolean };
+type AuraSpec = {
+  kind: "aura";
+  /** tier* = 25번 프리미엄 외형 등급 연출 (꾸미기가 아니라 몸에 딸린다) */
+  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend";
+  art?: FxArtId;
+  light?: boolean;
+};
 type WingSpec = { kind: "wings"; art: FxArtId; flapMs: number; amp: number };
 type HeldSpec = { kind: "held"; item: "umbrella" | "balloon" };
 export type FxSpec = PetSpec | TrailSpec | AuraSpec | WingSpec | HeldSpec;
@@ -619,6 +647,22 @@ export function riderLift(petId: string | null | undefined): number {
 /** 따로 그리는 F8 꾸미기 id 전부 (SPRITE_COSMETICS에 들어간다) */
 export const COSMETIC_FX_IDS: readonly string[] = Object.keys(COSMETIC_FX);
 
+/**
+ * 25번 프리미엄 외형 등급 연출 (몸 id만 알면 되므로 내 화면·다른 사람 화면·상점 미리보기가 똑같다).
+ * 고급 = 가끔 반짝, 희귀 = 보랏빛 + 금 반짝이가 몸 둘레를 돈다, 전설 = 금빛 + 무지개 반짝이가 나선으로 피어오른다. 일반은 없음
+ */
+const TIER_FX: Readonly<Record<string, AuraSpec>> = {
+  fine: { kind: "aura", motion: "tierFine", light: true },
+  rare: { kind: "aura", motion: "tierRare", light: true },
+  legend: { kind: "aura", motion: "tierLegend", light: true },
+};
+
+/** 몸에 딸린 등급 연출 (없으면 null) */
+export function bodyFx(body: string | null | undefined): FxSpec | null {
+  const tier = premiumBody(body)?.tier;
+  return (tier && TIER_FX[tier]) || null;
+}
+
 // ── 그리기 명령 ──
 
 /**
@@ -639,6 +683,10 @@ export type FxCmd = {
   flip: boolean;
   layer: "ground" | "body" | "light";
   depth: number;
+  /** body 층이지만 빛처럼 더해 그린다 (몸 둘레를 도는 빛 입자: 뒤쪽 반원은 몸 뒤에 가려진다) */
+  add?: boolean;
+  /** 밝기 (1 = 그대로). 몸 뒤쪽으로 돈 입자는 조금 어둡게 → 입체감 */
+  dim?: number;
   /** 아래쪽에서 잘라 낼 줄 수 (물에 잠긴 펫). 없으면 0 — 캔버스 미리보기는 물이 없어 쓰지 않는다 */
   crop?: number;
 };
@@ -727,8 +775,11 @@ export class CosmeticFxSim {
   private balY = 0;
   private balOn = false;
 
-  setLook(look: readonly string[]): void {
+  /** body = 몸 id (프리미엄 외형 등급 연출을 함께 건다) */
+  setLook(look: readonly string[], body?: string | null): void {
     const next = look.filter((id) => id in COSMETIC_FX).map((id) => [id, COSMETIC_FX[id]] as [string, FxSpec]);
+    const tier = bodyFx(body);
+    if (tier) next.push(["@body", tier]);
     const had = new Set(this.specs.map(([id]) => id));
     if (!next.some(([, s]) => s.kind === "pet")) {
       this.petOn = false;
@@ -1009,21 +1060,65 @@ export class CosmeticFxSim {
     const front = f.y + 0.2;
     switch (s.motion) {
       case "orbit":
+        // 기울어진 고리를 따라 돈다: 위아래로 출렁이며 뒤쪽 반원은 몸 뒤로
         for (let i = 0; i < 4; i++) {
           const a = t / 1100 + (i * Math.PI) / 2;
           const tw = f.reduced ? 0.85 : 0.3 + 0.7 * Math.max(0, Math.sin(t / 260 + i * 1.7));
-          out.push(
-            cmd("sparkStar", i % 3, Math.round(bx + Math.cos(a) * 11), Math.round(f.headY - f.artTop * 0.5 + Math.sin(a * 1.3) * 6), {
-              oy: 0.5,
-              sx: 0.7 + 0.4 * tw,
-              sy: 0.7 + 0.4 * tw,
-              alpha: tw,
-              layer: "light",
-              depth: 0,
-            }),
-          );
+          const z = Math.sin(a);
+          const y = f.headY - f.artTop * 0.5 + z * 3 + Math.sin(a * 2 + i) * 3;
+          out.push(cmd("sparkStar", i % 3, Math.round(bx + Math.cos(a) * 11), Math.round(y), around(f, z, { oy: 0.5, sx: 0.7 + 0.4 * tw, sy: 0.7 + 0.4 * tw, alpha: tw }, true)));
         }
         break;
+      case "tierFine": {
+        // 고급: 몸 가장자리 어딘가에서 1.6초마다 한 번 반짝
+        const n = Math.floor(t / 1600);
+        const ph = (t % 1600) / 1600;
+        const tw = f.reduced ? 0.7 : Math.max(0, Math.sin(Math.min(1, ph * 3) * Math.PI));
+        if (tw > 0.02) {
+          const z = h01(n, 6) * 2 - 1;
+          const x = bx + (h01(n, 7) < 0.5 ? -1 : 1) * (5 + h01(n, 8) * 4);
+          const y = f.headY - f.artTop * (0.25 + h01(n, 9) * 0.65);
+          out.push(cmd("sparkStar", 0, Math.round(x), Math.round(y), around(f, z, { sx: 0.5 + 0.6 * tw, sy: 0.5 + 0.6 * tw, alpha: tw }, true)));
+        }
+        break;
+      }
+      case "tierRare":
+      case "tierLegend": {
+        const legend = s.motion === "tierLegend";
+        // 몸 뒤 은은한 빛 (숨 쉬듯)
+        const breathe = f.reduced ? 0.8 : 0.7 + 0.3 * Math.sin(t / 900);
+        out.push(cmd("tierGlow", legend ? 1 : 0, bx, Math.round(f.headY - f.artTop * 0.45), { alpha: breathe, sx: 1 + 0.04 * breathe, sy: 1 + 0.04 * breathe, layer: "body", depth: f.y - 0.3, add: true }));
+        if (legend) {
+          // 전설: 무지개 반짝이가 몸 둘레를 나선으로 돌며 피어오른다
+          const n = 7;
+          for (let i = 0; i < n; i++) {
+            const ph = (t / 2600 + i / n) % 1;
+            const a = t / 700 + (i * Math.PI * 2) / n + ph * 2;
+            const z = Math.sin(a);
+            const r = 9 + 2 * Math.sin(ph * Math.PI);
+            const y = f.headY - 2 - ph * (f.artTop + 6) + z * 2;
+            const al = Math.sin(ph * Math.PI);
+            out.push(cmd("tierMote", i % 4, Math.round(bx + Math.cos(a) * r), Math.round(y), around(f, z, { alpha: al }, true)));
+          }
+          // 왕관 높이에서 큰 별 둘이 반짝
+          for (let i = 0; i < 2; i++) {
+            const tw = f.reduced ? 0.8 : Math.max(0, Math.sin(t / 340 + i * 2.4));
+            const a = t / 1500 + i * Math.PI;
+            const z = Math.sin(a);
+            out.push(cmd("sparkStar", 0, Math.round(bx + Math.cos(a) * 12), Math.round(f.headY - f.artTop + 2 + z * 2), around(f, z, { sx: 0.8 + 0.5 * tw, sy: 0.8 + 0.5 * tw, alpha: tw }, true)));
+          }
+        } else {
+          // 희귀: 금 반짝이 셋이 기울어진 고리를 따라 돈다
+          for (let i = 0; i < 3; i++) {
+            const a = t / 1300 + (i * Math.PI * 2) / 3;
+            const z = Math.sin(a);
+            const tw = f.reduced ? 0.85 : 0.45 + 0.55 * Math.max(0, Math.sin(t / 300 + i * 2.1));
+            const y = f.headY - f.artTop * 0.5 + z * 3 + Math.cos(a) * 3;
+            out.push(cmd(i === 1 ? "tierMote" : "sparkStar", 0, Math.round(bx + Math.cos(a) * 11), Math.round(y), around(f, z, { sx: 0.7 + 0.4 * tw, sy: 0.7 + 0.4 * tw, alpha: tw }, true)));
+          }
+        }
+        break;
+      }
       case "snow":
       case "petals": {
         const petals = s.motion === "petals";
@@ -1032,12 +1127,14 @@ export class CosmeticFxSim {
         const fallH = f.artTop + 10;
         for (let i = 0; i < n; i++) {
           const ph = (t / period + i / n + h01(i) * 0.13) % 1;
-          const sway = Math.sin(t / (petals ? 420 : 650) + i * 1.9) * (petals ? 3 : 1.5);
-          const x = bx + (h01(i, 1) * 2 - 1) * 12 + sway;
-          const y = top - 10 + ph * fallH;
+          // 몸 둘레를 천천히 돌며 내려온다 (꽃잎은 빙글빙글, 눈은 느리게) — 뒤쪽은 몸 뒤로
+          const ang = h01(i, 1) * Math.PI * 2 + t / (petals ? 1500 : 4000) + ph * (petals ? 3 : 1);
+          const z = Math.sin(ang);
+          const x = bx + Math.cos(ang) * (8 + h01(i, 10) * 4);
+          const y = top - 10 + ph * fallH + z * 2;
           const a = ph < 0.12 ? ph / 0.12 : ph > 0.85 ? (1 - ph) / 0.15 : 1;
           const frame = petals ? Math.floor(t / 260 + i) % 2 : i % 2;
-          out.push(cmd(petals ? "petal" : "snowflake", frame, Math.round(x), Math.round(y), { oy: 0.5, alpha: a * 0.95, flip: petals && i % 2 === 0, layer: "body", depth: i % 3 === 0 ? f.y - 0.2 : front }));
+          out.push(cmd(petals ? "petal" : "snowflake", frame, Math.round(x), Math.round(y), around(f, z, { oy: 0.5, alpha: a * 0.95, flip: petals && i % 2 === 0 })));
         }
         break;
       }
@@ -1053,12 +1150,14 @@ export class CosmeticFxSim {
         break;
       }
       case "notes":
+        // 몸 둘레를 나선으로 돌며 떠오른다
         for (let i = 0; i < 3; i++) {
           const ph = (t / 2000 + i / 3) % 1;
-          const side = i % 2 ? 1 : -1;
-          const x = bx + side * (7 + ph * 4) + Math.sin(ph * 6 + i) * 1.5;
-          const y = f.headY - f.artTop * 0.6 - ph * 14;
-          out.push(cmd("note", i % 2, Math.round(x), Math.round(y), { oy: 1, alpha: Math.sin(ph * Math.PI), layer: "body", depth: front }));
+          const ang = (i * Math.PI * 2) / 3 + ph * Math.PI * 1.5 + t / 3000;
+          const z = Math.sin(ang);
+          const x = bx + Math.cos(ang) * (8 + ph * 3);
+          const y = f.headY - f.artTop * 0.6 - ph * 14 + z * 2;
+          out.push(cmd("note", i % 2, Math.round(x), Math.round(y), around(f, z, { oy: 1, alpha: Math.sin(ph * Math.PI) })));
         }
         break;
       case "zzz":
@@ -1077,11 +1176,13 @@ export class CosmeticFxSim {
         const fallH = f.artTop + 10;
         for (let i = 0; i < n; i++) {
           const ph = (t / 2500 + i / n + h01(i, 4) * 0.13) % 1;
-          const sway = Math.sin(t / 480 + i * 1.7) * 2.5;
-          const x = bx + (h01(i, 5) * 2 - 1) * 12 + sway;
-          const y = top - 10 + ph * fallH;
+          // 흔들리며 몸 둘레를 반 바퀴쯤 돌아 내려온다 — 뒤쪽은 몸 뒤로
+          const ang = h01(i, 5) * Math.PI * 2 + ph * 2.5 + Math.sin(t / 480 + i * 1.7) * 0.3;
+          const z = Math.sin(ang);
+          const x = bx + Math.cos(ang) * (9 + h01(i, 11) * 3);
+          const y = top - 10 + ph * fallH + z * 2;
           const a = ph < 0.12 ? ph / 0.12 : ph > 0.85 ? (1 - ph) / 0.15 : 1;
-          out.push(cmd(art, (i + Math.floor(t / 300)) % frames, Math.round(x), Math.round(y), { oy: 0.5, alpha: a, flip: i % 2 === 0, layer: "body", depth: i % 3 === 0 ? f.y - 0.2 : front }));
+          out.push(cmd(art, (i + Math.floor(t / 300)) % frames, Math.round(x), Math.round(y), around(f, z, { oy: 0.5, alpha: a, flip: i % 2 === 0 })));
         }
         break;
       }
@@ -1091,10 +1192,12 @@ export class CosmeticFxSim {
         const frames = FX_ART[art].frames;
         for (let i = 0; i < 4; i++) {
           const ph = (t / 2200 + i / 4) % 1;
-          const sd = i % 2 ? 1 : -1;
-          const x = bx + sd * (6 + ph * 5) + Math.sin(ph * 7 + i) * 1.5;
-          const y = f.headY - f.artTop * 0.4 - ph * 16;
-          out.push(cmd(art, i % frames, Math.round(x), Math.round(y), { oy: 1, alpha: Math.sin(ph * Math.PI), layer: s.light ? "light" : "body", depth: front }));
+          // 몸 둘레를 느린 나선으로 돌며 떠오른다 — 뒤쪽은 몸 뒤로
+          const ang = (i * Math.PI) / 2 + ph * Math.PI + t / 4000;
+          const z = Math.sin(ang);
+          const x = bx + Math.cos(ang) * (7 + ph * 4);
+          const y = f.headY - f.artTop * 0.4 - ph * 16 + z * 2;
+          out.push(cmd(art, i % frames, Math.round(x), Math.round(y), around(f, z, { oy: 1, alpha: Math.sin(ph * Math.PI) }, s.light)));
         }
         break;
       }
@@ -1117,21 +1220,34 @@ export class CosmeticFxSim {
           const a = t / 1400 + (i * Math.PI * 2) / 3;
           const x = bx + Math.cos(a) * 12;
           const y = f.headY - f.artTop * 0.55 + Math.sin(a) * 3 + Math.sin(t / 300 + i) * 1;
-          const near = Math.sin(a) > 0;
-          out.push(
-            cmd(art, Math.floor(t / 280 + i) % frames, Math.round(x), Math.round(y), {
-              oy: 0.5,
-              flip: Math.cos(a) < 0,
-              alpha: s.light ? 0.9 : near ? 1 : 0.8,
-              layer: s.light ? "light" : "body",
-              depth: near ? front : f.y - 0.2,
-            }),
-          );
+          out.push(cmd(art, Math.floor(t / 280 + i) % frames, Math.round(x), Math.round(y), around(f, Math.sin(a), { oy: 0.5, flip: Math.cos(a) < 0, alpha: s.light ? 0.9 : 1 }, s.light)));
         }
         break;
       }
     }
   }
+}
+
+/**
+ * 몸 둘레를 도는 입자의 앞뒤 처리. z = 앞뒤 (-1 바로 뒤 … 1 바로 앞, 보통 sin(각도)).
+ * 앞쪽 반원은 몸 앞(depth 위), 뒤쪽 반원은 몸 뒤(depth 아래)에 그리고, 뒤로 갈수록 조금 작고 어둡게 → 입체감.
+ * light = 빛 입자 (더해 그린다: 앞쪽은 light 층, 뒤쪽은 몸에 가려지게 body 층 + add)
+ */
+export function around(f: Pick<FxInput, "y">, z: number, o: Partial<FxCmd>, light = false): Partial<FxCmd> {
+  const back = z < 0;
+  const k = back ? 1 + 0.22 * z : 1;
+  const dim = back ? 1 + 0.4 * z : 1;
+  return {
+    ...o,
+    sx: (o.sx ?? 1) * k,
+    sy: (o.sy ?? 1) * k,
+    alpha: (o.alpha ?? 1) * (light && back ? 0.55 + 0.45 * (1 + z) : 1),
+    dim,
+    // 앞쪽 빛은 맨 위 빛 층 (밤 어둠에 묻히지 않게), 뒤쪽 빛은 몸 뒤에서 더해 그린다
+    layer: light && !back ? "light" : "body",
+    add: (light && back) || undefined,
+    depth: back ? f.y - 0.2 : f.y + 0.2,
+  };
 }
 
 function cmd(art: FxArtId, frame: number, x: number, y: number, o: Partial<FxCmd> = {}): FxCmd {

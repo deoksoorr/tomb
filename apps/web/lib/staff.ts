@@ -1,16 +1,18 @@
 import type { NextRequest } from "next/server";
+import { itemById, PERMANENT_UNTIL, STAFF_ITEM_IDS } from "@tomb/protocol";
 import { BALANCE_CAP } from "./economy";
 import { env } from "./env";
 import { clientIp, HttpError } from "./http";
 import { isAdminIp } from "./ipAllow";
 import { getVisitorId } from "./session";
-import { MemoryStaff, RedisStaff, type StaffRecord, type StaffStore } from "./store/staff";
+import { MemoryStaff, RedisStaff, type StaffGrantItem, type StaffRecord, type StaffStore } from "./store/staff";
 import type { AccountStore } from "./store/types";
 
 // 31번 운영자(슈퍼) 계정. 판정은 언제나 서버가 한다:
 //  - 입장 토큰의 staff 표시는 이 모듈이 확인한 뒤에만 넣는다 (실시간 서버가 다른 사람 화면에 저승사자 차림·"운영자" 배지로 그린다)
 //  - 포인트: 내 정보를 불러올 때마다 잔액을 지갑 상한까지 채운다 (써도 줄지 않는 것처럼 보인다. 랭킹·경제 통계와 무관)
 //  - 확성기: 가방에서 꺼내지 않는다
+//  - 운영자 전용 꾸미기(staff_*): 지정할 때와 내 정보를 불러올 때(입장) 빠진 것을 영구로 채운다 (상점에는 나오지 않는다 — isShopListed)
 //  - 묘비 삭제: 운영자 계정 + 관리자 IP(ADMIN_ALLOWED_IPS) 둘 다 맞아야 한다
 
 const g = globalThis as typeof globalThis & { __tombStaff?: StaffStore; __tombStaffCache?: { id: string | null; at: number } };
@@ -54,8 +56,22 @@ export async function setStaff(accountId: string | null, now = Date.now(), name:
  */
 export async function topUpIfStaff(accounts: AccountStore, accountId: string): Promise<boolean> {
   if (!(await isStaff(accountId))) return false;
-  await getStaffStore().fill(accounts, accountId, BALANCE_CAP);
+  await Promise.all([getStaffStore().fill(accounts, accountId, BALANCE_CAP), grantStaffItems(accounts, accountId)]);
   return true;
+}
+
+/** 운영자 전용 꾸미기 전부 (id·착용 부위) */
+export const STAFF_GRANTS: readonly StaffGrantItem[] = STAFF_ITEM_IDS.flatMap((id) => {
+  const slot = itemById(id)?.slot;
+  return slot ? [{ itemId: id, slot }] : [];
+});
+
+/**
+ * 운영자 전용 꾸미기 중 빠진 것을 영구로 채운다 (서버에서 한 번에 — Redis는 Lua 한 번). 새로 채운 수, 없는 계정이면 -1.
+ * 운영자인지는 부르는 쪽이 확인한다 (topUpIfStaff·관리자 지정)
+ */
+export async function grantStaffItems(accounts: AccountStore, accountId: string): Promise<number> {
+  return getStaffStore().grant(accounts, accountId, STAFF_GRANTS, PERMANENT_UNTIL);
 }
 
 /**

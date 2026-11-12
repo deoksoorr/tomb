@@ -1,4 +1,4 @@
-import { decodeSnapshot, DIR, encodeEvent, encodeMove, isPhraseId, PING, PONG, STATE, type ActKind, type C2S, type PeerInfo, type PeerState, type Sid } from "@tomb/protocol";
+import { decodeSnapshot, DIR, encodeEvent, encodeMove, isEmoId, isPhraseId, PING, PONG, STATE, type ActKind, type C2S, type PeerInfo, type PeerState, type Sid } from "@tomb/protocol";
 import type { AppearanceChange } from "../sprites/avatar";
 import type { RoomJoinRequest, RoomJoinResponse } from "@/lib/types";
 import { bridge } from "../bridge";
@@ -31,6 +31,8 @@ export type RoomCallbacks = {
   onLook?(sid: Sid, look: string[], extra?: AppearanceChange): void;
   onAct?(sid: Sid, kind: ActKind, x: number, y: number): void;
   onSay?(sid: Sid, id: string): void;
+  /** 5번 이모티콘 (방 안에서도 서버가 중계한다) */
+  onEmo?(sid: Sid, id: string): void;
   /** sync 응답: 서버가 아는 방 인원 전체 (나 제외)와 좌석 점유표 */
   onPeers?(peers: PeerInfo[], seats: Record<string, Sid>): void;
   /** 3번 집 안 1인 자리: 점유 변경 (sid null = 비었다) / 내 요청 거절 */
@@ -197,6 +199,11 @@ export class RoomClient {
     if (isPhraseId(id)) this.send({ t: "say", id });
   }
 
+  /** 5번 이모티콘 (EMOS id). 모르는 id는 보내지 않는다. 도배 제한은 서버(EMO_INTERVAL_MS) */
+  emo(id: string): void {
+    if (isEmoId(id)) this.send({ t: "emo", id });
+  }
+
   /** 꾸미기 변경 증서 (Vercel 서명). 서버 간격(10초) 안이면 버리지 않고 간격이 지나자마자 최신 것을 보낸다 */
   look(grant: string): void {
     this.lookGrant = grant;
@@ -342,6 +349,9 @@ export class RoomClient {
           break;
         case "say":
           this.cb.onSay?.(ev.sid, ev.id);
+          break;
+        case "emo":
+          this.cb.onEmo?.(ev.sid, ev.id);
           break;
         case "seat":
           this.cb.onSeat?.(ev.seatId, ev.sid);

@@ -12,8 +12,10 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import { InfoCard, TipList } from "../ui/InfoBlocks";
 import ui from "../ui/ui.module.css";
+import FavStar from "./FavStar";
 import SayBoard from "./SayBoard";
 import styles from "./SayDialog.module.css";
+import { FAV_MAX, slotKey, useFavs } from "./sayFavorites";
 
 type Tab = "emo" | "say" | "mood";
 const TABS: readonly [Tab, string][] = [
@@ -29,7 +31,8 @@ const rememberTab = (t: Tab) => {
 };
 
 /**
- * 말풍선·이모티콘·벤치 상태 고르기 (데스크톱 T 키 · 메뉴).
+ * 표현 창: 말풍선·이모티콘·벤치 상태 고르기 (데스크톱 T 키 · 바로 가기 [표현] · 메뉴).
+ * - 말풍선·이모티콘마다 별(즐겨찾기, 최대 8개) → U 키(폰은 [표현] 길게 누르기)로 내 캐릭터 둘레에 펼친다
  * - 이모티콘(5번): 손 흔들기·환호 + 이모티콘 14종. 창 안에서도 숫자 1~9로 바로 고른다 (게임 화면에서도 같은 숫자 키)
  * - 말풍선: 정해진 문장만 보낸다
  * - 벤치 상태(24번): 의자·벤치에 앉아 있을 때만 — 머리 위 아이콘과 손 소품이 같은 채널 모두에게 보이고, 일어나면 풀린다
@@ -40,6 +43,7 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
   const moodState = useBridgeValue("mood:state");
   const seated = moodState?.seated ?? false;
   const current = moodState?.mood ?? "";
+  const favCount = useFavs().length;
 
   const setTab = (t: Tab) => {
     rememberTab(t);
@@ -75,7 +79,7 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
   }, [tab, onClose]);
 
   return (
-    <Dialog title="말풍선·이모티콘" onClose={onClose}>
+    <Dialog title="표현 (말풍선·이모티콘)" onClose={onClose}>
       <div className={styles.tabs} role="tablist" aria-label="고르기">
         {TABS.map(([k, label]) => (
           <button
@@ -93,6 +97,13 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
         ))}
       </div>
 
+      {tab !== "mood" && (
+        <p className={styles.favLine}>
+          <span className={styles.favStar} aria-hidden="true" />
+          즐겨찾기 {favCount}/{FAV_MAX} · 별을 누르면 U 키(폰은 [표현] 길게 누르기)로 내 캐릭터 둘레에 펼쳐져요
+        </p>
+      )}
+
       <div
         id={`${baseId}-panel`}
         role="tabpanel"
@@ -103,16 +114,19 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
           <>
             <div className={styles.board}>
               {EMO_BOARD.map((slot, i) => (
-                <button key={`${slot.kind}-${slot.id}`} type="button" className={styles.emo} onClick={() => pick(slot)} data-emo={slot.id}>
-                  {i < EMO_HOTKEYS && (
-                    <span className={styles.key} aria-hidden="true">
-                      {i + 1}
-                    </span>
-                  )}
-                  <img src={emoteDataUrl(slot.icon, 3)} width={39} height={39} alt="" aria-hidden="true" />
-                  <span>{slot.label}</span>
-                  {i < EMO_HOTKEYS && <span className="visually-hidden"> (단축키 {i + 1})</span>}
-                </button>
+                <div key={`${slot.kind}-${slot.id}`} className={styles.cell}>
+                  <button type="button" className={styles.emo} onClick={() => pick(slot)} data-emo={slot.id}>
+                    {i < EMO_HOTKEYS && (
+                      <span className={styles.key} aria-hidden="true">
+                        {i + 1}
+                      </span>
+                    )}
+                    <img src={emoteDataUrl(slot.icon, 3)} width={39} height={39} alt="" aria-hidden="true" />
+                    <span>{slot.label}</span>
+                    {i < EMO_HOTKEYS && <span className="visually-hidden"> (단축키 {i + 1})</span>}
+                  </button>
+                  <FavStar favKey={slotKey(slot)} label={slot.label} className={styles.cellStar} />
+                </div>
               ))}
             </div>
             <p className={styles.hint}>머리 위에 3~4초 떠요. 게임 화면에서도 숫자 1~9로 바로 보낼 수 있어요.</p>
@@ -121,6 +135,7 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
                 tips={[
                   "1 손 흔들기·2 환호는 캐릭터가 직접 몸짓을 해요. 3번부터는 머리 위에 그림이 떠요.",
                   "데스크톱은 T 키로 이 창을 열고, 숫자 키로 창을 거치지 않고 바로 보낼 수 있어요.",
+                  "자주 쓰는 건 별을 눌러 즐겨찾기 — U 키(폰은 [표현] 길게 누르기)로 내 둘레에 펼쳐 한 번에 보내요.",
                   "정해진 문장이 필요하면 [말풍선] 탭, 벤치에 앉아 있다면 [벤치 상태] 탭을 써 보세요.",
                   "너무 빨리 연달아 누르면 1초 동안은 다시 뜨지 않아요.",
                 ]}

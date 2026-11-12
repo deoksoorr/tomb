@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DIFFICULTIES, GAME_KINDS, GEAR_SLOTS, HOTBAR_SIZE, MONSTER_IDS, SKILLS, STAT_KEYS, ZONE_IDS, type SkillId } from "./catalog";
+import { DIFFICULTIES, GAME_KINDS, GEAR_SLOTS, HOTBAR_SIZE, MONSTER_IDS, POTION_MAX_STACK, SKILLS, STAT_KEYS, ZONE_IDS, type SkillId } from "./catalog";
 
 // 사냥터 API 입력 검증 (zod). 메시지는 lib/validate.ts가 켜 둔 한국어 로케일을 따른다.
 
@@ -43,5 +43,6 @@ export const CharacterActionSchema = z.discriminatedUnion("type", [
 
 export const ShopActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("buy"), itemId, qty: z.number().int().min(1).max(20).default(1) }),
-  z.object({ type: z.literal("sell"), itemId }),
+  // count: 한 번에 여러 개 되팔기 (없으면 1개, 예전 요청 그대로)
+  z.object({ type: z.literal("sell"), itemId, count: z.number().int().min(1).max(POTION_MAX_STACK).default(1) }),
 ]);
