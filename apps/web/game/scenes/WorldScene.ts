@@ -1421,7 +1421,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    // 놀이기구 2: 하늘 시점이면 월드 카메라를 보이는 땅 전체에 맞춘다 (rig.update는 그동안 멈춘다)
+    // 놀이기구 2: 탑승 상태 맞추기 · 맵 위 보기면 칸·기구를 따라가는 카메라 목표 (rig.update 전에)
     this.sky.preCamera(dt);
     this.rig.update(dt);
     // 모닥불 좌석에 앉으면 불멍 구도 (카메라·레터박스), 일어나면 원래대로. 불 타는 소리는 거리에 따라
@@ -1811,10 +1811,14 @@ export class WorldScene extends Phaser.Scene {
     this.boats = new BoatRide(host);
     // 놀이기구 2: 날씨는 이 뒤에 만들어지므로 그때그때 읽는다
     const atmos = () => this.atmos;
+    const rig = () => this.rig;
     this.sky = new SkyRides({
       ...host,
       get atmos() {
         return atmos();
+      },
+      get rig() {
+        return rig();
       },
     });
   }

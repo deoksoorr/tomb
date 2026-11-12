@@ -26,6 +26,7 @@ import {
   BASKET_H,
 } from "../sprites/skyProps";
 import type { Atmosphere } from "./Atmosphere";
+import type { CameraRig } from "./CameraRig";
 import type { Interactable } from "./layout";
 import type { Lighting } from "./Lighting";
 import type { RideHost } from "./PlazaRides";
@@ -56,11 +57,18 @@ import { SkyStage, type StageRider } from "./SkyStage";
 // 누구 화면에서나 같은 모습이다 (주고받는 것은 앉기·일어서기뿐).
 //  - 다른 사람 화면: 관람차 칸에 앉은 모습 / 하늘을 떠다니는 열기구 바구니에 선 모습(이름표가 따라간다) — AvatarView.ride로 앵커에서 옮겨 그린다
 //  - 내 화면: 관람차는 타자마자, 열기구는 이륙할 때 옆에서 본 2D 장면(SkyStage)으로 바뀐다. 장면이 화면을 다 덮는 동안 월드 카메라는 쉰다
+//  - [시점 변경하기](SkyHud 버튼·V): 2D 장면 ↔ 장면 없이 칸·기구를 따라가며 확대해 마을 맵 위를 떠다니는 보기. 짧게 어두워졌다 밝아지며 바뀌고,
+//    마지막 선택은 localStorage(tomb.skyView)에 남아 다음 탑승에 쓴다. 움직임 줄이기면 처음 기본은 맵 위 보기
 //  - 관람차는 칸이 한 바퀴 돌아 내려오면, 열기구는 출발장에 내려앉으면 내린다. 도중에는 X·E·스페이스를 두 번 누르면 바로 내린다
 
 export type SkyHost = RideHost & {
   atmos: Atmosphere;
+  /** 맵 위 보기에서 칸·기구를 따라가는 월드 카메라 */
+  rig: CameraRig;
 };
+
+/** 탑승 중 보기: scene = 옆에서 본 2D 장면, map = 마을 맵 위를 떠다니는 보기 */
+export type SkyView = "scene" | "map";
 
 type MyRide = {
   kind: "ferris" | "balloon";
@@ -80,11 +88,38 @@ type MyRide = {
   leaveAt: number;
   /** 도중에 내리기: 한 번 누른 때 */
   armAt: number;
+  /** 지금 보이는 보기 (탑승 장면 중일 때) */
+  mode: SkyView;
+  /** 시점 바꾸기 시작한 때 (씬 시간, 0 = 아님) */
+  swapAt: number;
 };
 
 /** 탑승 장면 들어갈 때 검은 화면에서 밝아지는 시간 · 나갈 때 어두워지는 시간 */
 const FADE_IN_MS = 900;
 const LEAVE_MS = 650;
+/** 시점 바꾸기: 어두워지는 시간 = 밝아지는 시간 */
+const SWAP_HALF_MS = 220;
+/** 맵 위 보기 줌 */
+const MAP_ZOOM = 3.5;
+const LS_VIEW = "tomb.skyView";
+
+function loadView(reduced: boolean): SkyView {
+  try {
+    const v = window.localStorage.getItem(LS_VIEW);
+    if (v === "scene" || v === "map") return v;
+  } catch {
+    // 저장소를 못 쓰면 기본값
+  }
+  return reduced ? "map" : "scene";
+}
+
+function saveView(v: SkyView): void {
+  try {
+    window.localStorage.setItem(LS_VIEW, v);
+  } catch {
+    // 저장 못 해도 이번 탑승에는 적용된다
+  }
+}
 /** 하늘을 나는 열기구 depth (밤 어둠 아래, 모든 월드 그림 위) */
 const SKY_DEPTH = 99_000;
 
@@ -112,11 +147,15 @@ export class SkyRides {
   private hudKey = "";
   private burnShown = 0;
   private readonly off: (() => void)[] = [];
+  /** 고른 보기 (다음 탑승에도) */
+  private view: SkyView;
 
   constructor(private readonly host: SkyHost) {
     const scene = host.scene;
     ensureSkyTextures(scene);
     this.stage = new SkyStage(scene.game, host.reduced);
+    this.view = loadView(host.reduced);
+    this.off.push(bridge.on("sky:view", () => this.toggleView()));
     // 관람차: 다리·발판 (바퀴 뒤) · 바퀴 테·살 (돌아간다) · 칸 (뒤 판·앞 판 사이에 탄 사람)
     this.legs = scene.add.image(FERRIS.x, FERRIS.y + 1, SKY_TEX.ferrisFrame).setOrigin(0.5, 1).setDepth(FERRIS.y + 0.3);
     this.wheel = scene.add.image(WHEEL_HUB.x, WHEEL_HUB.y, SKY_TEX.ferrisWheel, 0).setOrigin(0.5, 0.5).setDepth(FERRIS.y + 0.5);
@@ -276,7 +315,19 @@ export class SkyRides {
       if (!r.sky && !r.leaveAt) this.skyOn(r, now);
     }
     if (!r.leaveAt && t >= r.end) this.startLeave(now);
-    if (r.leaveAt && (now - r.leaveAt >= LEAVE_MS || !r.sky)) this.finish();
+    if (r.leaveAt && (now - r.leaveAt >= LEAVE_MS || !r.sky)) {
+      this.finish();
+      return;
+    }
+    if (!r.sky) return;
+    // 시점 바꾸기 · 맵 위 보기 (rig.update 전에 카메라 목표를 맞춘다)
+    const lit = this.stepSwap(r, now, t);
+    if (r.mode === "map") {
+      this.followUnit(r, t, true);
+      const fadeIn = clamp01((now - r.skyAt) / FADE_IN_MS);
+      const fadeOut = r.leaveAt ? 1 - clamp01((now - r.leaveAt) / LEAVE_MS) : 1;
+      this.stage.veil(1 - Math.min(lit, fadeIn, fadeOut) ** 1.4);
+    }
   }
 
   private beginRide(kind: "ferris" | "balloon", seatId: string, t: number): void {
@@ -294,14 +345,65 @@ export class SkyRides {
   }
 
   private newRide(kind: MyRide["kind"], s: FerrisSeat | BalloonSeat, unit: number, end: number, departAt: number): MyRide {
-    return { kind, seatId: s.id, unit, index: s.index, end, departAt, sky: false, skyAt: 0, leaveAt: 0, armAt: -Infinity };
+    return { kind, seatId: s.id, unit, index: s.index, end, departAt, sky: false, skyAt: 0, leaveAt: 0, armAt: -Infinity, mode: this.view, swapAt: 0 };
   }
 
   private skyOn(r: MyRide, now: number): void {
     r.sky = true;
     r.skyAt = now;
-    this.stage.begin(r.kind, r.unit);
+    r.mode = this.view;
+    r.swapAt = 0;
+    if (r.mode === "scene") this.stage.begin(r.kind, r.unit);
+    else this.followUnit(r, this.clock(), true);
     bridge.emit("view:mode", { mode: "sky" });
+  }
+
+  /** [시점 변경하기]: 탑승 장면 중이면 짧게 어두워졌다 밝아지며 바꾼다 */
+  private toggleView(): void {
+    const r = this.ride;
+    if (!r || !r.sky || r.leaveAt || r.swapAt) return;
+    this.view = r.mode === "scene" ? "map" : "scene";
+    saveView(this.view);
+    r.swapAt = this.host.scene.time.now;
+  }
+
+  /** 시점 바꾸기 진행: 가운데(가장 어두울 때) 보기를 바꾼다. 반환 = 밝기 (1 = 막 없음) */
+  private stepSwap(r: MyRide, now: number, t: number): number {
+    if (!r.swapAt) return 1;
+    const e = now - r.swapAt;
+    if (e >= SWAP_HALF_MS && r.mode !== this.view) {
+      r.mode = this.view;
+      if (r.mode === "scene") {
+        this.host.rig.cinematic(null, true);
+        this.stage.begin(r.kind, r.unit);
+      } else {
+        this.stage.end(1);
+        this.host.scene.cameras.main.setVisible(true);
+        this.followUnit(r, t, true);
+      }
+    }
+    if (e >= SWAP_HALF_MS * 2) {
+      r.swapAt = 0;
+      return 1;
+    }
+    return Math.abs(e / SWAP_HALF_MS - 1);
+  }
+
+  /** 맵 위 보기: 내 칸·바구니를 화면 가운데에 두고 확대 (cut = 미끄러지지 않고 바로) */
+  private followUnit(r: MyRide, t: number, cut: boolean): void {
+    let x: number;
+    let y: number;
+    if (r.kind === "ferris") {
+      const fs = ferrisSeat(r.seatId);
+      const p = fs ? ferrisRiderPoint(fs, t) : rimPoint(carAngle(r.unit, t));
+      x = p.x;
+      y = p.y - 8;
+    } else {
+      const st = balloonState(r.unit, t);
+      x = st.x;
+      y = st.y - st.alt - BASKET_H;
+    }
+    this.host.rig.cinematic({ x, y, zoom: MAP_ZOOM }, cut);
   }
 
   private startLeave(now: number): void {
@@ -328,6 +430,7 @@ export class SkyRides {
     pl.rideLock = false;
     if (r?.sky) {
       this.stage.end(arrived ? 1 : 0.6);
+      if (r.mode === "map" || r.swapAt) h.rig.cinematic(null, true);
       h.scene.cameras.main.setVisible(true);
       bridge.emit("view:mode", { mode: "normal" });
     }
@@ -350,12 +453,13 @@ export class SkyRides {
     }
     const fadeIn = clamp01((now - r.skyAt) / FADE_IN_MS);
     const fadeOut = r.leaveAt ? 1 - clamp01((now - r.leaveAt) / LEAVE_MS) : 1;
+    const swap = r.swapAt ? Math.abs((now - r.swapAt) / SWAP_HALF_MS - 1) : 1;
     this.stage.frame({
       now,
       dt,
       t,
       levels: h.atmos.levels,
-      fade: Math.min(fadeIn, fadeOut) ** 1.4,
+      fade: Math.min(fadeIn, fadeOut, swap) ** 1.4,
       riders: this.riders(r),
       balloon,
     });
@@ -448,7 +552,7 @@ export class SkyRides {
         .setScale(1 - 0.35 * k)
         .setAlpha(0.9 - 0.55 * k);
     }
-    if (r?.sky) this.drive(r, t, this.host.scene.time.now, dt);
+    if (r?.sky && r.mode === "scene") this.drive(r, t, this.host.scene.time.now, dt);
     this.updateSound(dt, t);
     this.updateHud(t);
   }
@@ -483,9 +587,9 @@ export class SkyRides {
     const left = Math.max(0, Math.ceil(((r.kind === "balloon" && t < r.departAt ? r.departAt : r.end) - t) / 1000));
     let hud: NonNullable<Parameters<typeof bridge.emit<"sky:hud">>[1]>;
     if (r.kind === "ferris") {
-      hud = { kind: "ferris", title: "관람차", place: null, hint: "X 두 번: 내리기", left, sky: r.sky };
+      hud = { kind: "ferris", title: "관람차", place: null, hint: "X 두 번: 내리기", left, sky: r.sky, view: this.view };
     } else if (t < r.departAt) {
-      hud = { kind: "balloon", title: "열기구", place: null, hint: "곧 떠나요 · 움직이면 내려요", left, sky: false };
+      hud = { kind: "balloon", title: "열기구", place: null, hint: "곧 떠나요 · 움직이면 내려요", left, sky: false, view: this.view };
     } else {
       const st = this.balloons[r.unit]?.state;
       hud = {
@@ -495,9 +599,10 @@ export class SkyRides {
         hint: "X 두 번: 내리기",
         left,
         sky: r.sky,
+        view: this.view,
       };
     }
-    const key = `${hud.kind}|${hud.place}|${hud.hint}|${hud.left}|${hud.sky}`;
+    const key = `${hud.kind}|${hud.place}|${hud.hint}|${hud.left}|${hud.sky}|${hud.view}`;
     if (key === this.hudKey) return;
     this.hudKey = key;
     bridge.emit("sky:hud", hud);

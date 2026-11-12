@@ -78,9 +78,10 @@ export type GameEvents = {
   "view:mode": { mode: "normal" | "campfire" | "sky" };
   /**
    * 놀이기구 2 하늘 시점 안내 (sticky, null = 숨김). sky = 관람차·열기구 하늘 시점이라 UI가 HUD를 줄이고 이 안내를 띄운다.
-   * place = 지나가는 곳 이름(열기구), hint = 조작 안내, left = 내릴 때까지 남은 초
+   * place = 지나가는 곳 이름(열기구), hint = 조작 안내, left = 내릴 때까지 남은 초,
+   * view = 탑승 중 보기 (scene = 옆에서 본 2D 장면, map = 칸·기구를 따라가며 마을 맵 위를 떠다니는 보기)
    */
-  "sky:hud": { kind: "ferris" | "balloon"; title: string; place: string | null; hint: string; left: number; sky: boolean } | null;
+  "sky:hud": { kind: "ferris" | "balloon"; title: string; place: string | null; hint: string; left: number; sky: boolean; view: "scene" | "map" } | null;
   /** 대기열 순번 (sticky) */
   "queue:status": QueueStatus;
   /** 상점 맵 안에서 주인장과 상호작용 → UI가 상점 창을 연다 */
@@ -154,6 +155,8 @@ export type GameEvents = {
 
 /** UI → Game */
 export type UiEvents = {
+  /** 관람차·열기구 탑승 중 [시점 변경하기] (버튼·V): 2D 장면 ↔ 맵 위 보기 */
+  "sky:view": undefined;
   /** 동물원 타는 펫 올라타기·내리기 (모바일·HUD 버튼, 데스크톱은 R) */
   "input:ride": undefined;
   /**

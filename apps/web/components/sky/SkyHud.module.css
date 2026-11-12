@@ -31,11 +31,46 @@
   }
 }
 
-.bar {
+/* 아래 가운데: [시점 변경하기] 버튼 + 안내 줄 (가장자리 HUD와 겹치지 않게 가운데 세로로) */
+.dock {
   position: fixed;
   bottom: calc(var(--safe-bottom, 0px) + 84px);
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+  z-index: 11;
+}
+
+.view {
+  pointer-events: auto;
+  min-height: 44px;
+  min-width: 132px;
+  padding: 8px 18px;
+  border: 1px solid rgba(255, 210, 122, 0.55);
+  border-radius: 8px;
+  background: rgba(10, 12, 20, 0.72);
+  color: #ffd27a;
+  font: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.view:hover {
+  background: rgba(30, 32, 44, 0.85);
+}
+
+.view:focus-visible {
+  outline: 2px solid #ffd27a;
+  outline-offset: 2px;
+}
+
+.bar {
   display: flex;
   gap: 10px;
   align-items: baseline;
@@ -49,7 +84,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  z-index: 11;
 }
 
 .title {
@@ -67,11 +101,14 @@
 }
 
 @media (max-width: 520px) {
+  .dock {
+    bottom: calc(var(--safe-bottom, 0px) + 150px);
+  }
+
   .bar {
     flex-wrap: wrap;
     white-space: normal;
     justify-content: center;
-    bottom: calc(var(--safe-bottom, 0px) + 150px);
   }
 }
 

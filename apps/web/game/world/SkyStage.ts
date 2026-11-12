@@ -167,6 +167,13 @@ export class SkyStage {
     this.sync();
   }
 
+  /** 장면 없이(맵 위 보기) 월드 화면 위 검은 막을 직접 맞춘다 (0~1, 시점 바꾸기·내리기 전환) */
+  veil(a: number): void {
+    if (this.kind) return;
+    this.cover = clamp01(a);
+    this.sync();
+  }
+
   hide(): void {
     this.scene.cameras?.main?.setVisible(false);
   }
