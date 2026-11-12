@@ -77,7 +77,7 @@ import { rememberChannel } from "@/lib/channelHistory";
 
 const GameCanvas = dynamic(() => import("@/game/GameCanvas"), { ssr: false });
 
-const KEY_HINTS = ["Space 점프 · E 살펴보기", "T 표현(말풍선·이모티콘) · U 즐겨찾기 표현 원형", "휠: 확대·축소 · 우클릭 드래그: 둘러보기"];
+const KEY_HINTS = ["Space 점프 · E 살펴보기", "T 표현(말풍선·이모티콘) · Y 즐겨찾기 표현 원형", "휠: 확대·축소 · 우클릭 드래그: 둘러보기"];
 
 /** 데스크톱에서 처음 입장했을 때 한 번만 키 조작 힌트를 띄운다 */
 function useKeyHints(active: boolean) {
@@ -183,7 +183,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const [openGraveId, setOpenGraveId] = useState<string | null>(null);
   const [bury, setBury] = useState<BuryMode | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
-  /** 표현 창(T: 말풍선·이모티콘·벤치 상태)과 즐겨찾기 원형 목록(U). 집·마을 HUD(panel "housing") 위에서도 열리게 panel과 따로 둔다 */
+  /** 표현 창(T: 말풍선·이모티콘·벤치 상태)과 즐겨찾기 원형 목록(Y). 집·마을 HUD(panel "housing") 위에서도 열리게 panel과 따로 둔다 */
   const [sayOpen, setSayOpen] = useState(false);
   const [radial, setRadial] = useState(false);
   /** 주거 구역의 집 문·빈 필지에서 하우징 창을 열었으면 그 집/번지 */
@@ -242,13 +242,13 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   useEffect(() => {
     if (!ready || (!quiet && !roomQuiet)) return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.code !== "KeyT" && e.code !== "KeyI" && e.code !== "KeyU") || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((e.code !== "KeyT" && e.code !== "KeyI" && e.code !== "KeyY") || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       if (roomQuiet && e.code === "KeyI") return;
       const el = document.activeElement;
       if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]")) return;
       // 하우징 안의 방명록·분양 사무소 같은 창이 떠 있으면 그 창 몫
       if (document.querySelector("dialog[open]")) return;
-      if (e.code === "KeyU") {
+      if (e.code === "KeyY") {
         if (!canRadial) return;
         e.preventDefault();
         setRadial(true);

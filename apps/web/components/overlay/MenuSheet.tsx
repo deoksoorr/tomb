@@ -21,7 +21,7 @@ export type MenuTarget =
   | "notices"
   | "activity"
   | "say"
-  /** 즐겨찾기 표현 원형 목록 (U) */
+  /** 즐겨찾기 표현 원형 목록 (Y) */
   | "favs"
   | "me"
   | "guide"
@@ -82,7 +82,7 @@ export default function MenuSheet({
   };
   const entries: Entry[] = [
     { target: "say", icon: "chat", label: "표현 (T)", desc: "말풍선·이모티콘으로 인사하기" },
-    { target: "favs", icon: "spark", label: "즐겨찾기 표현 (U)", desc: "별 표시한 표현을 내 둘레에 펼치기" },
+    { target: "favs", icon: "spark", label: "즐겨찾기 표현 (Y)", desc: "별 표시한 표현을 내 둘레에 펼치기" },
     { target: "bag", icon: "bag", label: "가방", desc: "꾸미기·폭죽·잡은 것 꺼내기", badge: bagCount ? String(bagCount) : undefined },
     { target: "hunt", icon: "sword", label: "사냥터", desc: "몬스터 사냥 · 경험치와 포인트" },
     { target: "dex", icon: "book", label: "도감", desc: "물고기·곤충·약초 모으기" },

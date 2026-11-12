@@ -54,7 +54,7 @@ export default function ExprRadial({ onClose }: { onClose: () => void }) {
         sendFav(key);
         return;
       }
-      if (e.code === "KeyU" || e.key === "Escape") {
+      if (e.code === "KeyY" || e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
         if (!e.repeat) closeRef.current();
@@ -128,7 +128,7 @@ export default function ExprRadial({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * 바로 가기 줄의 [표현] 버튼: 누르면 표현 창(T), 길게 누르면(폰) 즐겨찾기 원형 목록(U).
+ * 바로 가기 줄의 [표현] 버튼: 누르면 표현 창(T), 길게 누르면(폰) 즐겨찾기 원형 목록(Y).
  * 마우스 오른쪽 클릭도 원형 목록을 연다.
  */
 export function ExprButton({ className, onOpen, onRadial, children }: { className?: string; onOpen: () => void; onRadial: () => void; children: ReactNode }) {
@@ -143,8 +143,8 @@ export function ExprButton({ className, onOpen, onRadial, children }: { classNam
     <button
       type="button"
       className={cx(styles.exprButton, className)}
-      title="표현 (T) · 길게 누르면 즐겨찾기 (U)"
-      aria-label="표현: 말풍선·이모티콘 (T). 길게 누르면 즐겨찾기 원형 목록 (U)"
+      title="표현 (T) · 길게 누르면 즐겨찾기 (Y)"
+      aria-label="표현: 말풍선·이모티콘 (T). 길게 누르면 즐겨찾기 원형 목록 (Y)"
       onPointerDown={(e) => {
         if (e.pointerType === "mouse") return;
         longFired.current = false;

@@ -47,7 +47,7 @@ export type RoomPresenceOptions = {
   /** 3번 다른 사람이 가구를 썼다 */
   onUse?: (sid: Sid, u: string, a: number) => void;
   /**
-   * 표현 창(T)·즐겨찾기 원형 목록(U)의 말풍선·이모티콘을 이 방에서 받는다 (bridge input:say·input:emo)
+   * 표현 창(T)·즐겨찾기 원형 목록(Y)의 말풍선·이모티콘을 이 방에서 받는다 (bridge input:say·input:emo)
    * + 원형 목록이 열려 있으면 내 화면 위치를 UI에 알린다. 마을·집처럼 월드 HUD 대신 쓰는 방에서 켠다 (몸짓은 씬의 키 처리가 받는다)
    */
   expressions?: boolean;
