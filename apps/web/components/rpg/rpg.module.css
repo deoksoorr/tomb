@@ -1474,6 +1474,19 @@ button.hotSlot:disabled {
   animation: zoneOpen 0.16s ease-out both;
 }
 
+/* 쪽마다 도는 시연 그림 (논리 176×96을 2배로 그린 캔버스 — 좁으면 비율대로 줄어든다) */
+.guideDemo {
+  display: block;
+  flex: none;
+  width: 100%;
+  max-width: 352px;
+  height: auto;
+  aspect-ratio: 176 / 96;
+  margin: 0 auto;
+  image-rendering: pixelated;
+  box-shadow: var(--px-border);
+}
+
 .guideLead {
   color: var(--text);
   line-height: 1.6;

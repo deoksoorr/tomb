@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   DIFFICULTIES,
   DIFFS,
@@ -17,14 +17,52 @@ import {
 import { DEFAULT_BOSS_PHASES, MIN_WINDUP_MS, PATTERNS, type TelegraphShape } from "@/lib/rpg/patterns";
 import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL, MIN_RUN_MS } from "@/lib/rpg/rewards";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
+import { DEMO_H, DEMO_SCALE, DEMO_W, drawDemo } from "./huntDemo";
 import RpgIcon from "./RpgIcon";
 import s from "./rpg.module.css";
 
 // 사냥 안내서: 사냥 로비·멈춤 창에서 연다. 짧은 페이지를 넘겨 본다 (←/→ 키도 된다).
 // 숫자·이름은 catalog·patterns·weapons·rewards에서 읽는다 → 스킬·무기·패턴이 늘어도 안내가 따라간다.
+// 쪽마다 위에 게임 그림으로 움직이는 짧은 반복 시연이 돈다 (huntDemo). 지금 보는 쪽 것만 돌고, 움직임 줄이기면 정지 그림.
+
+/** 이 쪽의 반복 시연 캔버스 */
+function HuntDemo({ page, title }: { page: number; title: string }) {
+  const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const ctx = ref.current?.getContext("2d");
+    if (!ctx) return;
+    if (reduced) {
+      const still = () => drawDemo(ctx, page, 0, true);
+      still();
+      // 픽셀 글꼴이 늦게 오면 한 번 더 그린다
+      void document.fonts?.ready.then(still);
+      return;
+    }
+    const t0 = performance.now();
+    let raf = 0;
+    const loop = (now: number) => {
+      drawDemo(ctx, page, now - t0, false);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [page, reduced]);
+  return (
+    <canvas
+      ref={ref}
+      width={DEMO_W * DEMO_SCALE}
+      height={DEMO_H * DEMO_SCALE}
+      className={s.guideDemo}
+      role="img"
+      aria-label={`${title} 시연 그림${reduced ? "" : " (반복 재생)"}`}
+    />
+  );
+}
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const sec = (ms: number) => `${Number((ms / 1000).toFixed(2))}초`;
@@ -353,6 +391,7 @@ export default function HuntGuide({ onClose }: { onClose: () => void }) {
           <h3 className={s.sectionTitle}>
             {i + 1}. {p.title}
           </h3>
+          <HuntDemo page={i} title={p.title} />
           <p className={s.guideLead}>{p.lead}</p>
           {p.body}
         </section>

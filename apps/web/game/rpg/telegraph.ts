@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { inTelegraph, type TelegraphShape } from "@/lib/rpg/patterns";
+import { TELEGRAPH_COLOR, TELEGRAPH_FLASH_FILL, TELEGRAPH_FLASH_LINE, TELEGRAPH_FLASH_MS, telegraphAlpha, telegraphFlash } from "./telegraphArt";
 
 // 2번 범위 미리 표시: 바닥에 깔리는 경고 모양. 테두리는 처음부터 다 보이고, 안쪽이 빨갛게 차오르다
 // 다 차면 번쩍이며 판정한다 (판정은 lib/rpg/patterns.ts inTelegraph — 보이는 모양 그대로).
@@ -21,7 +22,7 @@ export type Telegraph = {
   cancelled: boolean;
 };
 
-const FLASH_MS = 160;
+const FLASH_MS = TELEGRAPH_FLASH_MS;
 /** 땅바닥 위, 그림자 위 */
 const DEPTH = -450;
 
@@ -33,7 +34,7 @@ export class TelegraphLayer {
     this.g = scene.add.graphics().setDepth(DEPTH);
   }
 
-  add(shape: TelegraphShape, x: number, y: number, angle: number, now: number, windupMs: number, onFire?: (t: Telegraph) => void, color = 0xff3b30): Telegraph {
+  add(shape: TelegraphShape, x: number, y: number, angle: number, now: number, windupMs: number, onFire?: (t: Telegraph) => void, color = TELEGRAPH_COLOR): Telegraph {
     const t: Telegraph = { shape, x, y, angle, start: now, end: now + windupMs, color, onFire, flashUntil: 0, fired: false, cancelled: false };
     this.list.push(t);
     return t;
@@ -73,15 +74,14 @@ export class TelegraphLayer {
     g.clear();
     for (const t of this.list) {
       if (t.fired) {
-        const a = Math.max(0, (t.flashUntil - now) / FLASH_MS);
-        this.shape(g, t, 1, 0xffe0d0, 0.55 * a, 0xffffff, 0.9 * a);
+        const f = telegraphFlash(Math.max(0, (t.flashUntil - now) / FLASH_MS));
+        this.shape(g, t, 1, TELEGRAPH_FLASH_FILL, f.fill, TELEGRAPH_FLASH_LINE, f.line);
         continue;
       }
       const p = Phaser.Math.Clamp((now - t.start) / Math.max(1, t.end - t.start), 0, 1);
-      // 끝나기 직전엔 테두리가 깜빡인다
-      const blink = p > 0.75 ? 0.55 + 0.45 * Math.abs(Math.sin(now / 45)) : 0.75;
-      this.shape(g, t, 1, t.color, 0.1, t.color, blink);
-      this.shape(g, t, Math.max(0.02, p), t.color, 0.22 + 0.2 * p, 0, 0);
+      const a = telegraphAlpha(p, now);
+      this.shape(g, t, 1, t.color, a.base, t.color, a.line);
+      this.shape(g, t, Math.max(0.02, p), t.color, a.fill, 0, 0);
     }
   }
 

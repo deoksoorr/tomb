@@ -222,51 +222,6 @@
   font-size: 13px;
 }
 
-/* ── 가구 상점 ── */
-
-.shopGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 8px;
-}
-
-.item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px;
-  background: var(--bg-deep);
-  box-shadow: var(--px-border);
-}
-
-.itemArt {
-  display: grid;
-  place-items: center;
-  min-height: 72px;
-  background: radial-gradient(ellipse at 50% 90%, rgba(85, 112, 79, 0.25), transparent 70%);
-}
-
-.itemName {
-  color: var(--bone);
-  font-size: 13px;
-}
-
-.itemMeta {
-  color: var(--muted);
-  font-family: var(--font-small);
-  font-size: 10px;
-}
-
-.itemActions {
-  display: flex;
-  gap: 6px;
-  margin-top: auto;
-}
-
-.itemActions > button {
-  flex: 1;
-}
-
 /* ── 집 안 HUD (게임 위, 키 입력은 막지 않는다) ── */
 
 .hudTop {
@@ -466,10 +421,6 @@
   .hudButtons > button {
     padding: 6px 8px;
   }
-
-  .shopGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 /* ── 외관 꾸미기 ── */
@@ -611,47 +562,239 @@
   }
 }
 
-/* ── F12 가구 상점: 고정 크기 창(Dialog fixed) 안에서 탭은 그대로, 목록만 스크롤 · 카드 작게 ── */
+/* ── 가구 상점: 표준 창 안에서 위(포인트·탭)는 그대로, 왼쪽 자세히 보기 + 오른쪽 썸네일 격자(목록만 스크롤) ── */
 .fsShop {
   display: flex;
   flex: 1;
   flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.fsTop {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+.fsTabs {
+  display: flex;
+  flex: none;
+  overflow-x: auto;
+  border-bottom: 2px solid var(--line);
+  scrollbar-width: none;
+}
+
+.fsTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.fsTabs > .tab {
+  flex: 1 0 auto;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.fsTabCount {
+  margin-left: 3px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 9px;
+}
+
+.fsPanel {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 236px minmax(0, 1fr);
+  /* 줄 높이를 창에 묶어 목록이 길어도 칸이 늘지 않게 (목록 안에서만 스크롤) */
+  grid-template-rows: minmax(0, 1fr);
   gap: 10px;
   min-height: 0;
 }
 
-.fsShop > .tabs {
-  flex: none;
-}
-
-.fsGrid {
-  flex: 1;
-  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-  grid-auto-rows: min-content;
+.fsDetail {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 8px;
   min-height: 0;
-  padding: 2px;
+  padding: 10px;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
 }
 
-/* 설명은 두 줄까지 (전체는 마우스를 올리면 툴팁) */
-.fsDesc {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+.fsDetailArt {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 4px 0;
+  background: radial-gradient(ellipse at 50% 90%, rgba(85, 112, 79, 0.25), transparent 70%);
 }
 
-.fsGrid .itemActions > button {
+.fsInfo {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.fsName {
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 15px;
+}
+
+.fsText {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.fsScore {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fsScore strong {
+  color: var(--candle);
+}
+
+.fsAbilities {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.5;
+  list-style: none;
+}
+
+.fsAbilities > li::before {
+  content: "· ";
+}
+
+.fsActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fsActions > button {
+  flex: 1 1 100%;
+  min-width: 0;
   min-height: 44px;
 }
 
+.fsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  grid-auto-rows: min-content;
+  gap: 6px;
+  min-height: 0;
+  margin: 0;
+  padding: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.fsTile {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  padding: 6px 4px;
+  border: 0;
+  background: var(--bg-deep);
+  color: var(--text);
+  box-shadow: var(--px-border);
+  touch-action: manipulation;
+}
+
+.fsTile:hover {
+  background: var(--surface);
+}
+
+.fsTile[aria-pressed="true"] {
+  background: var(--surface);
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 2px var(--candle);
+}
+
+.fsTileName {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--bone);
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.fsTilePrice {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fsBadge {
+  padding: 0 3px;
+  background: var(--moss-deep);
+  color: var(--bone);
+}
+
+/* 폰: 자세히 보기를 위에 가로로 작게(그림 | 글), 격자가 남은 높이를 채운다 */
 @media (max-width: 560px) {
-  .fsGrid {
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  .fsPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
-  .fsShop > .spread {
-    flex-wrap: wrap;
+  .fsDetail {
+    flex: none;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    justify-items: stretch;
+    max-height: 42dvh;
+    padding: 8px;
+  }
+
+  .fsDetailArt {
+    width: auto;
+    padding: 0;
+  }
+
+  .fsText {
+    font-size: 12px;
+  }
+
+  .fsActions > button {
+    flex: 1 1 0;
+  }
+
+  .fsGrid {
+    flex: 1;
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  }
+
+  .fsHint {
+    display: none;
   }
 }
