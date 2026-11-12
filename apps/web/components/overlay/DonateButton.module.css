@@ -183,14 +183,23 @@
 .body {
   display: grid;
   place-items: center;
-  align-content: center;
-  gap: 22px;
-  min-height: 100%;
+  align-content: start;
+  gap: 12px;
+  /* 창과 QR 상자 사이 빈칸을 줄이고 QR을 창에 맞게 크게 */
+  padding-top: 4px;
+}
+
+.plea {
+  margin: 0;
+  text-align: center;
+  color: var(--bone);
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 .qrBox {
   margin: 0;
-  padding: 6px;
+  padding: 14px;
   background: #fffaf0;
   box-shadow:
     0 0 0 4px #c9a24a,
@@ -201,7 +210,7 @@
 
 .qr {
   display: block;
-  width: min(420px, 70vw, 60vh);
+  width: min(520px, 78vw, 66vh);
   height: auto;
 }
 
