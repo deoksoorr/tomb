@@ -1,0 +1,507 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { DIR, DYE_PART_NAMES, DYE_PARTS, type DyePart } from "@tomb/protocol";
+import { avatarColors, specDye, withDyePart } from "@/game/sprites/avatar";
+import { errorMessage } from "@/lib/api";
+import { dyeApi } from "@/lib/dye/client";
+import { buildPalette, cellColor, DYE_BOARD_H, DYE_BOARD_W, DYE_TIERS, DYE_TIME_MS, type DyeTier } from "@/lib/dye/palette";
+import { fixedAllows } from "@/lib/dye/rules";
+import type { DyeSessionView, StyleChangeResponse } from "@/lib/dye/types";
+import { applyStyle } from "../account/actions";
+import { OutfitCanvas } from "../shop/OutfitPreview";
+import { cx } from "../ui/cx";
+import Dialog from "../ui/Dialog";
+import ui from "../ui/ui.module.css";
+import { aimPoint, clampView, minScale, toBoard, zoomAt, type BoardView } from "./board";
+import styles from "./DyeDialog.module.css";
+
+// 46번 염색 창. 무작위 염색권: 부위 고르기 → 60초 동안 무작위 팔레트(일부만 보임)를 드래그·휠(핀치)로 뒤져
+// 흔들리는 조준점으로 색을 골라 확정 (시간이 끝나면 그 순간 조준점 아래 색으로 강제 확정).
+// 고정 색 염색권: 부위만 고르면 미리 보고 바로 그 색. 결과 색은 서버가 정한다 (여기서는 판 좌표만 보낸다).
+
+export type DyeTicket =
+  | { itemId: string; name: string; mode: "random"; tier: DyeTier }
+  | { itemId: string; name: string; mode: "fixed"; color: string; parts?: DyePart[] };
+
+type Props = {
+  /** 쓸 염색권 (진행 중인 판을 이어서 할 때는 null) */
+  ticket: DyeTicket | null;
+  /** 진행 중인 판 (있으면 바로 판으로) */
+  resume?: DyeSessionView | null;
+  /** 내 아바타 (색 표기에 지금 염색이 들어 있다) */
+  avatar: { color: string; body: string };
+  look: readonly string[];
+  onClose: () => void;
+  /** 끝났을 때 한 줄 안내 (부모의 알림 줄) */
+  onDone?: (message: string) => void;
+};
+
+type Phase = "part" | "play" | "sending" | "done";
+type Picked = { x: number; y: number; color: string };
+
+const hexOf = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
+/** 지금 그 부위 색 (기본 포인트는 몸마다 달라 "기본"으로 보인다) */
+function partColor(spec: string, part: DyePart): string | null {
+  const d = specDye(spec)[part];
+  if (d) return d;
+  if (part === "accent") return null;
+  const c = avatarColors(spec);
+  return hexOf(part === "head" ? c.head : c.body);
+}
+
+export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDone }: Props) {
+  const [phase, setPhase] = useState<Phase>(resume ? "play" : "part");
+  const [part, setPart] = useState<DyePart>(resume?.part ?? (ticket?.mode === "fixed" && ticket.parts?.length ? ticket.parts[0] : "body"));
+  const [session, setSession] = useState<DyeSessionView | null>(resume ?? null);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ color: string; part: DyePart; late: boolean } | null>(null);
+  const [spec, setSpec] = useState(avatar.color);
+  const [body, setBody] = useState(avatar.body);
+
+  const fixedColor = ticket?.mode === "fixed" ? ticket.color : null;
+  const allowed = (p: DyePart) => ticket?.mode !== "fixed" || fixedAllows(ticket.parts, p);
+
+  function finished(res: StyleChangeResponse, late = false) {
+    applyStyle(res);
+    const p = res.part ?? part;
+    const color = res.color ?? "";
+    setSpec(withDyePart(spec, p, color));
+    if (res.me.body) setBody(res.me.body);
+    setResult({ color, part: p, late: late || !!res.late });
+    setPhase("done");
+    onDone?.(`${DYE_PART_NAMES[p]}을(를) ${color}(으)로 염색했어요.${res.late ? " (시간이 지나 처음 조준점 색으로 정해졌어요)" : ""}`);
+  }
+
+  async function begin() {
+    if (!ticket) return;
+    setError(null);
+    if (ticket.mode === "fixed") {
+      setPhase("sending");
+      try {
+        finished(await dyeApi.fixed(ticket.itemId, part));
+      } catch (e) {
+        setError(errorMessage(e));
+        setPhase("part");
+      }
+      return;
+    }
+    setPhase("sending");
+    try {
+      const res = await dyeApi.start(ticket.itemId, part);
+      setSession(res.session);
+      setPart(res.session.part);
+      setPhase("play");
+    } catch (e) {
+      setError(errorMessage(e));
+      setPhase("part");
+    }
+  }
+
+  const title = phase === "play" || phase === "sending" ? "염색 중" : "염색";
+  const previewSpec = phase === "part" && fixedColor ? withDyePart(spec, part, fixedColor) : spec;
+
+  return (
+    <Dialog title={title} onClose={onClose}>
+      <div className={styles.wrap}>
+        {phase === "play" && session ? (
+          <DyeBoard
+            session={session}
+            spec={spec}
+            body={body}
+            look={look}
+            onFinish={finished}
+            onError={(m) => setError(m)}
+          />
+        ) : phase === "done" && result ? (
+          <div className={styles.row}>
+            <div className={styles.figure}>
+              <OutfitCanvas color={spec} body={body} look={look} label="염색한 내 모습" dir={DIR.down} walking={false} />
+            </div>
+            <div className={styles.side}>
+              <p className={styles.result} role="status">
+                <span className={styles.swatchBig} style={{ background: result.color }} aria-hidden="true" />
+                {DYE_PART_NAMES[result.part]} 염색 완료 · {result.color}
+              </p>
+              {result.late && <p className={styles.note}>시간이 지나서 처음 조준점(판 가운데) 아래 색으로 정해졌어요.</p>}
+              <p className={styles.note}>다른 사람 화면에도 바로 이 색으로 보여요. 원래 색으로 되돌리기는 상점의 염색·외형에서 할 수 있어요.</p>
+              <div className={styles.actions}>
+                <button type="button" className={cx(ui.button, ui.primary)} onClick={onClose}>
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className={styles.row}>
+            <div className={styles.figure}>
+              <OutfitCanvas color={previewSpec} body={body} look={look} label={fixedColor ? "염색해 본 내 모습" : "지금 내 모습"} dir={DIR.down} walking={false} />
+            </div>
+            <div className={styles.side}>
+              <p className={styles.note}>
+                {ticket?.name ?? "염색권"} ·{" "}
+                {ticket?.mode === "fixed"
+                  ? "정해진 색으로 바로 염색해요."
+                  : `60초 안에 무작위 팔레트에서 색을 찾아요. 흔들림 ${ticket ? ["", "큼", "보통", "적음"][ticket.tier] : ""}.`}
+              </p>
+              <div className={styles.parts} role="group" aria-label="염색할 부위">
+                {DYE_PARTS.map((p) => {
+                  const c = partColor(spec, p);
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      className={cx(ui.button, styles.part)}
+                      aria-pressed={part === p}
+                      disabled={!allowed(p) || phase === "sending"}
+                      onClick={() => setPart(p)}
+                    >
+                      <span className={styles.swatch} style={{ background: c ?? "repeating-linear-gradient(45deg,#d9ceb2 0 4px,#e6a3b0 4px 8px)" }} aria-hidden="true" />
+                      {DYE_PART_NAMES[p]}
+                      {!c && <span className={styles.note}>기본</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {fixedColor && (
+                <p className={styles.pick}>
+                  <span className={styles.swatchBig} style={{ background: fixedColor }} aria-hidden="true" />
+                  {fixedColor} — 왼쪽은 염색해 본 모습이에요.
+                </p>
+              )}
+              {ticket?.mode === "random" && (
+                <p className={styles.note}>
+                  시작하면 염색권 1장을 써요. 판은 일부만 보여요 — 끌어서 옮기고, 휠(폰은 두 손가락)로 확대·축소해 원하는 색을 찾아 누르세요. 시간이 끝나면 그 순간 조준점
+                  아래 색으로 정해져요.
+                </p>
+              )}
+              {error && <p className={ui.error}>{error}</p>}
+              <div className={styles.actions}>
+                <button type="button" className={ui.button} onClick={onClose}>
+                  닫기
+                </button>
+                <button type="button" className={cx(ui.button, ui.primary)} disabled={!ticket || !allowed(part) || phase === "sending"} onClick={begin}>
+                  {phase === "sending" ? "잠깐만요…" : ticket?.mode === "fixed" ? `${DYE_PART_NAMES[part]}을(를) 이 색으로` : `${DYE_PART_NAMES[part]} 염색 시작 (60초)`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {phase === "play" && error && <p className={ui.error}>{error}</p>}
+      </div>
+    </Dialog>
+  );
+}
+
+// ── 판 (60초) ──
+
+function DyeBoard({
+  session,
+  spec,
+  body,
+  look,
+  onFinish,
+  onError,
+}: {
+  session: DyeSessionView;
+  spec: string;
+  body: string;
+  look: readonly string[];
+  onFinish: (res: StyleChangeResponse, late?: boolean) => void;
+  onError: (m: string) => void;
+}) {
+  const palette = useMemo(() => buildPalette(session.seed, session.tier), [session.seed, session.tier]);
+  const amp = DYE_TIERS[session.tier].wobblePx;
+  const boxRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const liveRef = useRef<HTMLSpanElement>(null);
+  const viewRef = useRef<BoardView | null>(null);
+  const sizeRef = useRef({ w: 1, h: 1 });
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const gesture = useRef<{ moved: number; startedAt: number } | null>(null);
+  const t0 = useRef(0);
+  const sentRef = useRef(false);
+  // 서버 시계 기준 마감 → 내 시계로 (요청 지연만큼 조금 이르게 끝난다)
+  const [localEnds] = useState(() => Date.now() + (session.endsAt - session.serverNow));
+  const [left, setLeft] = useState(() => Math.max(0, session.endsAt - session.serverNow));
+  const [picked, setPickedState] = useState<Picked | null>(null);
+  /** 그리기 루프가 읽는 고른 자리 (루프를 다시 걸지 않게 ref로도 둔다) */
+  const pickedRef = useRef<Picked | null>(null);
+  const setPicked = (p: Picked) => {
+    pickedRef.current = p;
+    setPickedState(p);
+  };
+  const [sending, setSending] = useState(false);
+  /** 루프 안에서 부르는 최신 함수 (시간 끝 → 강제 확정) */
+  const timeoutRef = useRef<() => void>(() => {});
+
+  // 판 그림 (칸 1개 = 1px) — 한 번만 만든다
+  const sheet = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = DYE_BOARD_W;
+    c.height = DYE_BOARD_H;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    const img = ctx.createImageData(DYE_BOARD_W, DYE_BOARD_H);
+    for (let y = 0; y < DYE_BOARD_H; y++)
+      for (let x = 0; x < DYE_BOARD_W; x++) {
+        const v = parseInt(cellColor(palette, x, y).slice(1), 16);
+        const i = (y * DYE_BOARD_W + x) * 4;
+        img.data[i] = (v >> 16) & 255;
+        img.data[i + 1] = (v >> 8) & 255;
+        img.data[i + 2] = v & 255;
+        img.data[i + 3] = 255;
+      }
+    ctx.putImageData(img, 0, 0);
+    return c;
+  }, [palette]);
+
+  const aim = () => aimPoint(viewRef.current ?? { cx: DYE_BOARD_W / 2, cy: DYE_BOARD_H / 2, scale: 1 }, amp, (performance.now() - t0.current) / 1000);
+
+  async function send(at: { x: number; y: number }, timeout: boolean) {
+    if (sentRef.current) return;
+    sentRef.current = true;
+    setSending(true);
+    try {
+      onFinish(await dyeApi.finish(session.seed, at.x, at.y), timeout);
+    } catch (e) {
+      onError(errorMessage(e));
+      sentRef.current = false;
+      setSending(false);
+    }
+  }
+
+  // 그리기 루프 + 남은 시간
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const box = boxRef.current;
+    if (!canvas || !box || !sheet) return;
+    t0.current = performance.now();
+    let raf = 0;
+    let lastTick = 0;
+    let lastLive = "";
+    const fit = () => {
+      const r = box.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      sizeRef.current = { w: r.width, h: r.height };
+      canvas.width = Math.round(r.width * dpr);
+      canvas.height = Math.round(r.height * dpr);
+      const v = viewRef.current ?? { cx: DYE_BOARD_W / 2, cy: DYE_BOARD_H / 2, scale: minScale(r.width, r.height) * 1.4 };
+      viewRef.current = clampView(v, r.width, r.height);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(box);
+    const loop = (now: number) => {
+      const ctx = canvas.getContext("2d");
+      const v = viewRef.current;
+      if (ctx && v) {
+        const { w, h } = sizeRef.current;
+        const k = canvas.width / w;
+        ctx.setTransform(k, 0, 0, k, 0, 0);
+        ctx.imageSmoothingEnabled = false;
+        ctx.fillStyle = "#0b0a10";
+        ctx.fillRect(0, 0, w, h);
+        const left0 = w / 2 - v.cx * v.scale;
+        const top0 = h / 2 - v.cy * v.scale;
+        ctx.drawImage(sheet, left0, top0, DYE_BOARD_W * v.scale, DYE_BOARD_H * v.scale);
+        // 고른 자리
+        const pk = pickedRef.current;
+        if (pk) {
+          const px = left0 + pk.x * v.scale;
+          const py = top0 + pk.y * v.scale;
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(px - 5, py - 5, 10, 10);
+        }
+        // 흔들리는 조준점 (화면 가운데 + 흔들림)
+        const a = aimPoint(v, amp, (now - t0.current) / 1000);
+        const ax = left0 + a.x * v.scale;
+        const ay = top0 + a.y * v.scale;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(0,0,0,0.75)";
+        ctx.beginPath();
+        ctx.arc(ax, ay, 9, 0, Math.PI * 2);
+        ctx.moveTo(ax - 15, ay);
+        ctx.lineTo(ax - 5, ay);
+        ctx.moveTo(ax + 5, ay);
+        ctx.lineTo(ax + 15, ay);
+        ctx.moveTo(ax, ay - 15);
+        ctx.lineTo(ax, ay - 5);
+        ctx.moveTo(ax, ay + 5);
+        ctx.lineTo(ax, ay + 15);
+        ctx.stroke();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "#fff8e0";
+        ctx.stroke();
+        const live = cellColor(palette, Math.floor(a.x), Math.floor(a.y));
+        if (live !== lastLive && liveRef.current) {
+          lastLive = live;
+          liveRef.current.style.background = live;
+        }
+      }
+      if (now - lastTick > 200) {
+        lastTick = now;
+        const remain = Math.max(0, localEnds - Date.now());
+        setLeft(remain);
+        if (remain <= 0) {
+          // 시간 끝: 그 순간 조준점 아래 색으로 강제 확정
+          timeoutRef.current();
+          return;
+        }
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [sheet, palette, amp, localEnds]);
+
+  useEffect(() => {
+    timeoutRef.current = () => void send(aim(), true);
+  });
+
+  // 휠 확대·축소 (passive가 아니어야 페이지가 스크롤되지 않는다)
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const v = viewRef.current;
+      if (!v) return;
+      const r = box.getBoundingClientRect();
+      viewRef.current = zoomAt(v, r.width, r.height, e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0016));
+    };
+    box.addEventListener("wheel", onWheel, { passive: false });
+    return () => box.removeEventListener("wheel", onWheel);
+  }, []);
+
+  /** 지금 조준점 아래 색을 고른다 (미리보기) */
+  function pickNow() {
+    const a = aim();
+    setPicked({ x: a.x, y: a.y, color: cellColor(palette, Math.floor(a.x), Math.floor(a.y)) });
+  }
+
+  function local(e: ReactPointerEvent) {
+    const r = boxRef.current!.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    if (sending) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, local(e));
+    if (pointers.current.size === 1) gesture.current = { moved: 0, startedAt: performance.now() };
+    else if (gesture.current) gesture.current.moved = 99; // 두 손가락 = 확대·축소 (누르기가 아니다)
+  }
+
+  function onPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const prev = pointers.current.get(e.pointerId);
+    const v = viewRef.current;
+    if (!prev || !v) return;
+    const cur = local(e);
+    const { w, h } = sizeRef.current;
+    if (pointers.current.size >= 2) {
+      const others = [...pointers.current.entries()].filter(([id]) => id !== e.pointerId).map(([, p]) => p);
+      const o = others[0];
+      const d0 = Math.hypot(prev.x - o.x, prev.y - o.y);
+      const d1 = Math.hypot(cur.x - o.x, cur.y - o.y);
+      if (d0 > 4) viewRef.current = zoomAt(v, w, h, (cur.x + o.x) / 2, (cur.y + o.y) / 2, d1 / d0);
+    } else {
+      viewRef.current = clampView({ cx: v.cx - (cur.x - prev.x) / v.scale, cy: v.cy - (cur.y - prev.y) / v.scale, scale: v.scale }, w, h);
+      if (gesture.current) gesture.current.moved += Math.abs(cur.x - prev.x) + Math.abs(cur.y - prev.y);
+    }
+    pointers.current.set(e.pointerId, cur);
+  }
+
+  function onPointerUp(e: ReactPointerEvent<HTMLDivElement>) {
+    const at = pointers.current.get(e.pointerId);
+    pointers.current.delete(e.pointerId);
+    const g = gesture.current;
+    if (pointers.current.size === 0) gesture.current = null;
+    if (!at || !g || g.moved > 6 || sending) return;
+    // 누르기: 그 자리를 조준점(가운데)으로 옮기고, 흔들리는 조준점 아래 색을 고른다
+    const v = viewRef.current;
+    if (!v) return;
+    const { w, h } = sizeRef.current;
+    const p = toBoard(v, w, h, at.x, at.y);
+    viewRef.current = clampView({ ...v, cx: p.x, cy: p.y }, w, h);
+    pickNow();
+  }
+
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    const v = viewRef.current;
+    if (!v || sending) return;
+    const { w, h } = sizeRef.current;
+    const step = 24 / v.scale;
+    const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    if (moves[e.key]) {
+      e.preventDefault();
+      viewRef.current = clampView({ ...v, cx: v.cx + moves[e.key][0], cy: v.cy + moves[e.key][1] }, w, h);
+    } else if (e.key === "+" || e.key === "=" || e.key === "-") {
+      e.preventDefault();
+      viewRef.current = zoomAt(v, w, h, w / 2, h / 2, e.key === "-" ? 1 / 1.25 : 1.25);
+    } else if (e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      if (e.key === "Enter" && picked) void send(picked, false);
+      else pickNow();
+    }
+  }
+
+  const secs = Math.ceil(left / 1000);
+  const preview = picked ? withDyePart(spec, session.part, picked.color) : spec;
+
+  return (
+    <>
+      <div className={styles.hud}>
+        <span>{DYE_PART_NAMES[session.part]} 염색</span>
+        <div className={styles.timer} data-low={secs <= 10 || undefined} role="progressbar" aria-label="남은 시간" aria-valuemin={0} aria-valuemax={60} aria-valuenow={secs}>
+          <div className={styles.timerFill} style={{ width: `${Math.min(100, (left / DYE_TIME_MS) * 100)}%` }} />
+        </div>
+        <span className={styles.secs} aria-live={secs <= 10 ? "polite" : "off"}>
+          {secs}초
+        </span>
+      </div>
+      <div
+        ref={boxRef}
+        className={styles.board}
+        tabIndex={0}
+        role="application"
+        aria-label="염색 팔레트. 끌어서 옮기고 휠이나 두 손가락으로 확대·축소, 누르면 조준점 아래 색을 골라요. 키보드: 화살표 이동, +/- 확대, 스페이스 고르기, 엔터 확정"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onKeyDown={onKeyDown}
+      >
+        <canvas ref={canvasRef} />
+      </div>
+      <div className={styles.row}>
+        <div className={cx(styles.figure, styles.figureSmall)}>
+          <OutfitCanvas color={preview} body={body} look={look} label={picked ? "고른 색으로 염색해 본 내 모습" : "지금 내 모습"} dir={DIR.down} walking={false} />
+        </div>
+        <div className={styles.side}>
+          <p className={styles.pick}>
+            조준점 <span ref={liveRef} className={styles.swatch} aria-hidden="true" />
+            {picked ? (
+              <>
+                · 고른 색 <span className={styles.swatchBig} style={{ background: picked.color }} aria-hidden="true" /> {picked.color}
+              </>
+            ) : (
+              " · 판을 눌러 색을 골라 보세요"
+            )}
+          </p>
+          <p className={styles.note}>확대할수록 조준점이 정확해지지만 보이는 곳이 좁아져요. 창을 닫아도 시간은 흘러요 — 시간이 끝나면 처음 조준점(판 가운데) 색으로 정해져요.</p>
+          <div className={styles.actions}>
+            <button type="button" className={cx(ui.button, ui.primary)} disabled={!picked || sending} onClick={() => picked && send(picked, false)}>
+              {sending ? "염색하는 중…" : picked ? "이 색으로 염색" : "색을 먼저 골라요"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

@@ -1,0 +1,45 @@
+/* 상점 "염색·외형" 탭 오른쪽 목록 (격자·칸 모양은 ShopDialog.module.css를 같이 쓴다) */
+
+.scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.scroll > ul {
+  flex: none;
+}
+
+.heading {
+  margin: 4px 0 0;
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+  color: var(--bone);
+  font-size: 12px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  box-shadow: var(--px-border);
+}
+
+.swatch[data-empty] {
+  background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(255, 255, 255, 0.12) 4px 8px) !important;
+}
