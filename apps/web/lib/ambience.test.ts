@@ -25,10 +25,10 @@ describe("ambience", () => {
     const b = ambienceAt(at(18.0), { weather: "clear" }).palette.darkness;
     expect(Math.abs(a - b)).toBeLessThan(0.05);
   });
-  it("weather is shared within a 2h block and changes across blocks", () => {
-    const w1 = weatherAt(at(2.1));
-    expect(weatherAt(at(3.9)).weather).toBe(w1.weather);
-    expect(w1.nextWeatherAt).toBe(at(4));
+  it("날씨는 30분 블록 안에서 같고 블록마다 바뀐다", () => {
+    const w1 = weatherAt(at(2.05));
+    expect(weatherAt(at(2.45)).weather).toBe(w1.weather);
+    expect(w1.nextWeatherAt).toBe(at(2.5));
     const seen = new Set(Array.from({ length: 200 }, (_, i) => weatherAt(at(0) + i * WEATHER_BLOCK_MS).weather));
     expect(seen.size).toBeGreaterThanOrEqual(3);
   });

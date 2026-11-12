@@ -3,8 +3,8 @@
 
 const HOUR = 3_600_000;
 const KST_OFFSET = 9 * HOUR;
-/** 날씨가 바뀌는 단위 (KST 기준 2시간 블록) */
-export const WEATHER_BLOCK_MS = 2 * HOUR;
+/** 날씨가 바뀌는 단위 (KST 기준 30분 블록 — 2시간은 안개·비가 너무 오래 간다는 의견) */
+export const WEATHER_BLOCK_MS = HOUR / 2;
 
 export type TimePhase = "dawn" | "day" | "dusk" | "night";
 export type Weather = "clear" | "cloudy" | "fog" | "rain" | "snow";
@@ -112,14 +112,14 @@ function hash01(n: number, salt: number): number {
 }
 
 /**
- * 2시간 블록마다 바뀌는 결정적 랜덤 날씨.
+ * 30분 블록마다 바뀌는 결정적 랜덤 날씨. 맑음이 가장 잦고 안개는 드물게.
  * 눈은 11~3월에만 온다 (그 밖의 달에는 흐림). 한겨울(12~2월)에는 비 오는 블록의 절반이 눈으로 바뀐다.
  * month: QA용 계절 덮어쓰기 (없으면 KST 달)
  */
 export function weatherAt(now: number, month: number = kstMonth(now)): { weather: Weather; intensity: number; nextWeatherAt: number } {
   const block = Math.floor((now + KST_OFFSET) / WEATHER_BLOCK_MS);
   const u = hash01(block, 1);
-  let weather: Weather = u < 0.38 ? "clear" : u < 0.58 ? "cloudy" : u < 0.72 ? "fog" : u < 0.92 ? "rain" : "snow";
+  let weather: Weather = u < 0.45 ? "clear" : u < 0.65 ? "cloudy" : u < 0.73 ? "fog" : u < 0.92 ? "rain" : "snow";
   const deepWinter = month === 12 || month <= 2;
   const snowy = deepWinter || month === 11 || month === 3;
   if (weather === "snow" && !snowy) weather = "cloudy";
