@@ -107,7 +107,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
         disabled={!me || short || blocked !== null || pending !== null}
         aria-label={`${item.name}, ${item.price}포인트에 사기`}
       >
-        {pending === item.id ? "사는 중…" : blocked ? blocked : `${item.price}P${short ? " · 모자라요" : " · 사기"}`}
+        {pending === item.id ? "사는 중…" : blocked ? blocked : `${item.kind === "cosmetic" ? "⏱ 24시간 이용권 · " : ""}${item.price}P${short ? " · 모자라요" : " · 사기"}`}
       </button>
     );
   }
@@ -137,12 +137,12 @@ export default function ShopDialog({ onClose, avatar }: Props) {
     return (
       <button
         type="button"
-        className={cx(ui.button, styles.buy)}
+        className={cx(ui.button, styles.buy, styles.buyForever)}
         onClick={() => buyForever(item)}
         disabled={!me || short || has || pending !== null}
         aria-label={`${item.name}, ${price}포인트에 영구로 사기`}
       >
-        {pending === `${item.id}:perm` ? "사는 중…" : has ? "영구 소유 중" : item.staff ? "운영자 전용 · 받기" : `영구 ${price}P${short ? " · 모자라요" : " · 사기"}`}
+        {pending === `${item.id}:perm` ? "사는 중…" : has ? "영구 소유 중" : item.staff ? "운영자 전용 · 받기" : `♾ 영구 소장 · ${price}P${short ? " · 모자라요" : " · 사기"}`}
       </button>
     );
   }

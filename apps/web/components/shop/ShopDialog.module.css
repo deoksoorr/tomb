@@ -378,3 +378,11 @@
     display: none;
   }
 }
+
+/* 영구 소장 버튼: 금색으로 24시간 이용권과 확실히 구분 */
+.buyForever {
+  background: linear-gradient(#e8c36a, #b8902f);
+  color: #1d1708;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 2px #fff0b8;
+}
