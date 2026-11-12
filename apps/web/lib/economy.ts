@@ -1,6 +1,8 @@
 // 포인트 정책 (서버가 강제하고, UI의 ⓘ 가이드가 그대로 보여 준다). 바꾸면 가이드도 자동으로 바뀐다.
 // 날짜 기준은 한국 시간(KST) 자정. 모든 아이템은 1회성(items.ts).
 
+import { STAY_BONUS_DAILY_MAX, STAY_BONUS_EVERY_MINUTES } from "./stayBonus";
+
 export type EarnSource =
   | "attend"
   | "streak"
@@ -19,7 +21,9 @@ export type EarnSource =
   // ── 50번 소원 분수 (lib/wish.ts, /api/plaza/wish) ──
   | "wish"
   // ── 10번 출석 달력: 한 달 개근 보상 (lib/calendar.ts) ──
-  | "monthly";
+  | "monthly"
+  // ── 접속 시간 보너스: 30분 구간마다 구석 창에서 받기 (lib/stayBonus.ts, /api/me/stay-bonus) ──
+  | "stayBonus";
 
 export type EarnRule = { source: EarnSource; label: string; points: number; dailyMax: number; note: string };
 
@@ -32,6 +36,8 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "bury", label: "묘비 세우기", points: 20, dailyMax: 20, note: "하루 1개분만 지급" },
   { source: "gotFlower", label: "내 묘비가 헌화 받음", points: 1, dailyMax: 20, note: "다른 사람이 헌화할 때" },
   { source: "presence", label: "묘지에 머무르기", points: 5, dailyMax: 60, note: "접속해 있는 10분마다 (다른 일을 해도 OK)" },
+  // 출석 도장과 같은 머문 시간(서버의 머무르기 기록)으로 판정. 10→15→20→25P(이후 고정), 하루 7구간 145P. 머무르기처럼 하루 상한(800P)에 포함
+  { source: "stayBonus", label: "접속 시간 보너스", points: 0, dailyMax: STAY_BONUS_DAILY_MAX, note: `${STAY_BONUS_EVERY_MINUTES}분 머물 때마다 10→15→20→25P (구석 창의 [받기], 안 받으면 쌓여요)` },
   { source: "hunt", label: "사냥터·미니게임", points: 0, dailyMax: 600, note: "난이도와 성적에 따라 (한 판 보상은 게임 결과로)" },
   { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때" },
   // 낚시·채집은 잡을 때가 아니라 NPC에게 팔 때 들어온다 (값은 lib/forage/catalog.ts). 한도를 넘는 만큼은 가방에 남아 내일 팔 수 있다
@@ -45,7 +51,7 @@ export const EARN_RULES: readonly EarnRule[] = [
 ];
 
 /**
- * 하루에 쌓을 수 있는 전체 포인트. 위 항목 한도의 합(1,430)보다 작게 잡아 하루 상한을 둔다 — 사냥만 해도(600) 닿기 쉽고,
+ * 하루에 쌓을 수 있는 전체 포인트. 위 항목 한도의 합(1,575 — 접속 보너스 145 포함)보다 작게 잡아 하루 상한을 둔다 — 사냥만 해도(600) 닿기 쉽고,
  * 출석·머무르기(70) + 낚시(200) + 채집(150)처럼 골고루 하면 420쯤. 낚시·채집을 더해도 하루 최대는 그대로 800
  */
 export const DAILY_EARN_CAP = 800;
@@ -53,7 +59,7 @@ export const DAILY_EARN_CAP = 800;
  * 지갑 상한 (I0b: 9,999 → 99,999). 관리자 지급·선물·운영자 채우기·검증 스키마·Redis Lua 인자가 모두 이 값을 쓴다.
  *
  * I0d 경제 기준 (가격을 바꿀 때 이 표를 함께 본다): 보통 유저 = 하루 한 번 20~30분 → 약 200P
- * (머무르기 10~15 · 헌화 10~20 · 쉬움 사냥 3~4판 60~80 · 낚시 10분 80~120 · 채집 몇 곳 20~40 · 초반 도감 보상).
+ * (머무르기 10~15 · 접속 보너스 10 (30분 머물면 첫 구간) · 헌화 10~20 · 쉬움 사냥 3~4판 60~80 · 낚시 10분 80~120 · 채집 몇 곳 20~40 · 초반 도감 보상).
  *  - 기본 코디(하루권 60~100P): 첫 플레이에 하나
  *  - 입문 펫(450P, 동물원 ZOO_PETS): 2~3번째 플레이
  *  - 프리미엄 외형 선택권(영구, protocol BODY_TIER_INFO): 일반 1,200 · 고급 2,000 · 희귀 3,200 · 전설 5,000P (약 6일 ~ 25일)

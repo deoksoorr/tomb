@@ -442,6 +442,51 @@ function contract(make: () => Kit) {
     expect(total).toBe(60);
   });
 
+  // 접속 시간 보너스 (lib/stayBonus.ts): 머무르기 기록 3번(30분)마다 한 구간, 10→15→20→25P 고정, 하루 7구간 145P
+  async function stayTicks(id: string, day: string, t0: number, ticks: number): Promise<number> {
+    for (let i = 0; i < ticks; i++) expect(await accounts.presence(id, day, t0 + i * PRESENCE_MIN_GAP_MS)).not.toBeNull();
+    return t0 + ticks * PRESENCE_MIN_GAP_MS;
+  }
+
+  it("접속 보너스: 30분마다 구간이 열리고, 안 받으면 쌓였다가 한꺼번에 받는다", async () => {
+    const id = newId();
+    expect(await accounts.claimStayBonus(id, DAY)).toBeNull();
+    let t = await stayTicks(id, DAY, 1_000_000_000, 2);
+    expect(await accounts.claimStayBonus(id, DAY)).toBeNull(); // 20분: 아직
+    t = await stayTicks(id, DAY, t, 1);
+    expect(await accounts.claimStayBonus(id, DAY)).toEqual({ earned: 10, count: 1 });
+    expect(await accounts.claimStayBonus(id, DAY)).toBeNull(); // 같은 구간 두 번 받기 불가
+    await stayTicks(id, DAY, t, 6); // 90분: 2·3구간이 쌓임
+    expect((await accounts.get(id, DAY, 0)).bonusClaimed).toBe(1);
+    expect(await accounts.claimStayBonus(id, DAY)).toEqual({ earned: 15 + 20, count: 2 });
+    expect(await accounts.get(id, DAY, 0)).toMatchObject({ bonusClaimed: 3, stayTicks: 9 });
+  });
+
+  it("접속 보너스: 하루 145P(7구간)까지, 동시에 눌러도 한 번만, 한국 시간 자정에 처음부터", async () => {
+    const id = newId();
+    let t = await stayTicks(id, DAY, 1_000_000_000, 30); // 5시간
+    const many = await Promise.all(Array.from({ length: 5 }, () => accounts.claimStayBonus(id, DAY)));
+    expect(many.filter(Boolean)).toEqual([{ earned: 145, count: 7 }]);
+    t = await stayTicks(id, DAY, t, 3);
+    expect(await accounts.claimStayBonus(id, DAY)).toBeNull();
+    // 다음 날: 머문 기록·받은 구간이 0부터
+    const next = "20261109";
+    expect(await accounts.get(id, next, 0)).toMatchObject({ bonusClaimed: 0, stayTicks: 0 });
+    expect(await accounts.claimStayBonus(id, next)).toBeNull();
+    await stayTicks(id, next, t, 3);
+    expect(await accounts.claimStayBonus(id, next)).toEqual({ earned: 10, count: 1 });
+  });
+
+  it("접속 보너스: 하루 전체 한도(800)에 포함 — 다 찼으면 구간은 받은 것으로 치고 0P", async () => {
+    const id = newId();
+    expect(await accounts.earn(id, "hunt", DAY, { amount: 600 })).toBe(600);
+    expect(await accounts.earn(id, "fish", DAY, { amount: 190 })).toBe(190);
+    await stayTicks(id, DAY, 1_000_000_000, 3); // 머무르기 +5 +5 → 800
+    expect(await accounts.claimStayBonus(id, DAY)).toEqual({ earned: 0, count: 1 });
+    expect(await accounts.claimStayBonus(id, DAY)).toBeNull();
+    expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(DAILY_EARN_CAP);
+  });
+
   it("캐릭터 꾸미기 중복 구매 금지: 가방에 있거나 착용 중이면 owned (동시에 사도 하나만), 다른 건 여러 개", async () => {
     const id = newId();
     await kit.setPoints(id, 1000);

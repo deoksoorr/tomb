@@ -2,6 +2,7 @@ import { Redis } from "@upstash/redis";
 import { MAX_DECOR_PER_GRAVE, type CosmeticSlot } from "@tomb/protocol";
 import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
+import { STAY_BONUS_AMOUNTS, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
 import type { ActivityItem, Grave, GraveDecor } from "../types";
 import { kstDay, WEEK_RANK_TTL_SEC, weekOfDay } from "./accounts";
 import { chKeys, DECOR, K } from "./keys";
@@ -114,6 +115,23 @@ redis.call('HINCRBY', KEYS[2], '_stay', 1)
 redis.call('EXPIRE', KEYS[2], ARGV[8])
 local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[6]), balanceCap = tonumber(ARGV[7]), ttl = ARGV[8] }
 return credit(c, 'presence', tonumber(ARGV[4]), tonumber(ARGV[5]))
+`;
+
+// 접속 시간 보너스: 오늘 머문 기록(_stay)으로 열린 구간 중 안 받은 구간(_bonus 다음부터)을 한 번에. 없으면 -1.
+// 받은 구간 수를 먼저 올리므로 동시에 눌러도 한 번만 나간다. lib/stayBonus.ts·MemoryAccounts.claimStayBonus와 같은 규칙
+// KEYS: acct, earn, rank, econ, week  ARGV: id, every(기록 수/구간), dailyMax, dailyCap, balanceCap, ttl, 구간별 보너스...
+const STAY_BONUS_LUA = `${CREDIT_FN}
+local amounts = {}
+for i = 7, #ARGV do amounts[#amounts + 1] = tonumber(ARGV[i]) end
+local tiers = math.min(math.floor(tonumber(redis.call('HGET', KEYS[2], '_stay') or '0') / tonumber(ARGV[2])), #amounts)
+local claimed = tonumber(redis.call('HGET', KEYS[2], '_bonus') or '0')
+if tiers <= claimed then return {-1, 0} end
+local sum = 0
+for i = claimed + 1, tiers do sum = sum + amounts[i] end
+redis.call('HSET', KEYS[2], '_bonus', tiers)
+redis.call('EXPIRE', KEYS[2], ARGV[6])
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[4]), balanceCap = tonumber(ARGV[5]), ttl = ARGV[6] }
+return { credit(c, 'stayBonus', sum, tonumber(ARGV[3])), tiers - claimed }
 `;
 
 // 입장 기록: 이름·색·몸 모양·처음 입장 시각은 계정에 값이 없을 때만 저장한다
@@ -380,7 +398,7 @@ export class RedisAccounts implements AccountStore {
   }
 
   async get(id: string, day: string, now: number): Promise<AccountRecord> {
-    const [acct, inv, look, graves, today, activity, stashRaw, stay] = await this.redis
+    const [acct, inv, look, graves, today, activity, stashRaw, stay, bonus] = await this.redis
       .pipeline()
       .hgetall(K.acct(id))
       .hgetall(K.inv(id))
@@ -390,7 +408,8 @@ export class RedisAccounts implements AccountStore {
       .lrange(K.activity(id), 0, -1)
       .hgetall(K.stash(id))
       .hget(K.earn(id, day), "_stay")
-      .exec<[string[] | null, string[] | null, string[] | null, string[], string | null, string[], string[] | null, string | null]>();
+      .hget(K.earn(id, day), "_bonus")
+      .exec<[string[] | null, string[] | null, string[] | null, string[], string | null, string[], string[] | null, string | null, string | null]>();
     const a = pairs(acct);
     const equipped: EquippedItem[] = [...pairs(look).values()].flatMap((v) => {
       const [itemId, until] = v.split("|");
@@ -409,6 +428,7 @@ export class RedisAccounts implements AccountStore {
       streak: Number(a.get("streak") ?? 0),
       lastAttend: a.get("lastAttend") ?? null,
       stayTicks: Number(stay ?? 0),
+      bonusClaimed: Number(bonus ?? 0),
       createdAt: Number(a.get("createdAt") ?? 0),
       hasCode: a.has("codeHash"),
       inventory: Object.fromEntries([...pairs(inv)].map(([k, v]) => [k, Number(v)])),
@@ -484,6 +504,23 @@ export class RedisAccounts implements AccountStore {
       ]),
     );
     return r < 0 ? null : r;
+  }
+
+  async claimStayBonus(id: string, day: string): Promise<{ earned: number; count: number } | null> {
+    const [earned, count] = await this.redis.eval<string[], [number, number]>(
+      STAY_BONUS_LUA,
+      [K.acct(id), K.earn(id, day), K.rankPoints, K.econ(day), K.rankPointsWeek(weekOfDay(day))],
+      [
+        id,
+        String(STAY_BONUS_EVERY_TICKS),
+        String(earnRule("stayBonus").dailyMax),
+        String(DAILY_EARN_CAP),
+        String(BALANCE_CAP),
+        String(EARN_TTL_SEC),
+        ...STAY_BONUS_AMOUNTS.map(String),
+      ],
+    );
+    return Number(earned) < 0 ? null : { earned: Number(earned), count: Number(count) };
   }
 
   /** ZRANGE 1회 + (상위 limit명 이름, 내 순위·점수) 파이프라인 1회. asc면 점수가 작을수록 위 (최단 기록) */

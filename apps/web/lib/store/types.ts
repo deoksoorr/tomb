@@ -126,6 +126,8 @@ export type AccountRecord = {
   lastAttend: string | null;
   /** 10번: 오늘 머무르기 기록 수 (1번 = 10분, 출석 도장 조건) */
   stayTicks: number;
+  /** 접속 시간 보너스: 오늘 받은 구간 수 (lib/stayBonus.ts) */
+  bonusClaimed: number;
   /** 처음 입장한 시각 (0 = 모름: 기록을 남기기 전에 만든 옛 계정). 전체 선물 대상 판정에 쓴다 */
   createdAt: number;
   hasCode: boolean;
@@ -166,6 +168,11 @@ export interface AccountStore {
   refund(id: string, amount: number, reason: string, now: number): Promise<number>;
   /** 머무르기: 직전 지급 후 PRESENCE_MIN_GAP_MS가 지났으면 적립(한도 안에서). 너무 이르면 null */
   presence(id: string, day: string, now: number): Promise<number | null>;
+  /**
+   * 접속 시간 보너스 받기 (원자적): 오늘 머문 기록으로 열린 구간 중 아직 안 받은 구간을 한꺼번에 받는다.
+   * 받을 구간이 없으면 null. 받은 구간은 하루 상한(DAILY_EARN_CAP)에 막혀 덜 들어와도 받은 것으로 친다
+   */
+  claimStayBonus(id: string, day: string): Promise<{ earned: number; count: number } | null>;
   /**
    * 모은 포인트 상위 limit명 + me의 순위(없으면 null). week(그 주 월요일 YYYYMMDD)를 주면 그 주에 모은 포인트 순위.
    * RankEntry.points = 순위 값

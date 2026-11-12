@@ -27,6 +27,7 @@ import BuryForm, { type BuryMode } from "../grave/BuryForm";
 import GraveModal from "../grave/GraveModal";
 import PassedDialog from "../grave/PassedDialog";
 import Minimap from "./Minimap";
+import StayBonus from "./StayBonus";
 import NoticesDialog from "../notice/NoticesDialog";
 import RankingList from "../grave/RankingList";
 import RankingPanel from "../grave/RankingPanel";
@@ -527,6 +528,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           {!coarse && <RideButton variant="desktop" className={ui.button} />}
           {coarse && <MobileControls />}
           <DonateButton />
+          {/* 접속 시간 보너스: 사냥·귀신의 집·실내에서도 서버 기록은 쌓이고, 창은 마을에서만 띄운다 */}
+          {(!scene || scene === "world") && <StayBonus />}
         </div>
       )}
 

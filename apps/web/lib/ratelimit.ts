@@ -25,6 +25,8 @@ const LIMITS = {
   shop: { visitor: 20, ip: 60, windowSec: MIN, message: "상점 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   inquiry: { visitor: 3, ip: 3, windowSec: DAY, message: "문의는 하루에 3번까지 보낼 수 있어요." },
   presence: { visitor: 2, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요." },
+  // 접속 시간 보너스 받기 (구간은 30분마다라 넉넉해도 된다)
+  stayBonus: { visitor: 10, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   room: { visitor: 20, ip: 120, windowSec: MIN, message: "방 입장 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   errors: { visitor: null, ip: 10, windowSec: MIN, message: "오류 보고가 너무 많아요." },
   rank: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },

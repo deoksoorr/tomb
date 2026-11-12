@@ -63,7 +63,7 @@ export const K = {
   attendIp: (ipHash: string, day: string) => `attend:${ipHash}:${day}`, // SET 그 IP에서 오늘 출석 포인트를 받은 계정. 2일 TTL
   // ── 10번 출석 달력 ──
   cal: (id: string, month: string) => `acct:${id}:cal:${month}`, // HASH DD → 그날 받은 포인트, `_month` → 한 달 개근 보상. 100일 TTL
-  // (계정 해시 `calInit` = 달력 개편 전 출석을 도장으로 옮겼음, 오늘 적립 해시 `_stay` = 오늘 머무르기 기록 수)
+  // (계정 해시 `calInit` = 달력 개편 전 출석을 도장으로 옮겼음, 오늘 적립 해시 `_stay` = 오늘 머무르기 기록 수, `_bonus` = 오늘 받은 접속 보너스 구간 수)
 
   // ── 11번 선물함 (lib/store/gifts.ts) ──
   giftsAll: "gifts:all", // HASH 선물 id → JSON (전체 발송, 받을 때 계정별 상태만 만든다)

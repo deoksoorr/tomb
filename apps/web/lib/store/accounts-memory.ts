@@ -1,6 +1,7 @@
 import type { CosmeticSlot } from "@tomb/protocol";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
+import { stayBonusSum, stayBonusTiers } from "../stayBonus";
 import type { ActivityItem, Grave, GraveDecor } from "../types";
 import { kstDay, weekOfDay } from "./accounts";
 import type { MemoryStore } from "./memory";
@@ -190,6 +191,7 @@ export class MemoryAccounts implements AccountStore {
       streak: a.streak,
       lastAttend: a.lastAttend,
       stayTicks: a.earnDay === day ? (a.earned.get("_stay") ?? 0) : 0,
+      bonusClaimed: a.earnDay === day ? (a.earned.get("_bonus") ?? 0) : 0,
       createdAt: a.createdAt ?? 0,
       hasCode: !!a.codeHash,
       inventory: Object.fromEntries(a.inv),
@@ -238,6 +240,16 @@ export class MemoryAccounts implements AccountStore {
     this.today(a, day);
     a.earned.set("_stay", (a.earned.get("_stay") ?? 0) + 1);
     return this.credit(a, "presence", day);
+  }
+
+  async claimStayBonus(id: string, day: string): Promise<{ earned: number; count: number } | null> {
+    const a = this.acct(id);
+    this.today(a, day);
+    const tiers = stayBonusTiers(a.earned.get("_stay") ?? 0);
+    const claimed = a.earned.get("_bonus") ?? 0;
+    if (tiers <= claimed) return null;
+    a.earned.set("_bonus", tiers);
+    return { earned: this.credit(a, "stayBonus", day, { amount: stayBonusSum(claimed, tiers) }), count: tiers - claimed };
   }
 
   /** value가 null인 계정은 순위에서 뺀다. asc면 작을수록 위 */

@@ -19,7 +19,7 @@ function syncAttendance(c: CalendarResponse): void {
   const me = meStore.getSnapshot().me;
   if (!me || c.month !== c.today.slice(0, 6)) return;
   const today = c.days[Number(c.today.slice(6)) - 1]?.state === "stamped";
-  meStore.set({ ...me, attendance: { today, streak: c.streak, stayMinutes: c.stayMinutes } });
+  meStore.set({ ...me, attendance: { ...me.attendance, today, streak: c.streak, stayMinutes: c.stayMinutes } });
 }
 const monthLabel = (m: string) => `${m.slice(0, 4)}년 ${Number(m.slice(4))}월`;
 

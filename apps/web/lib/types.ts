@@ -205,8 +205,11 @@ export type Me = {
   points: number;
   /** 오늘 쌓은 포인트 (DAILY_EARN_CAP 대비) */
   todayEarned: number;
-  /** today = 오늘 출석 도장을 받았는지, stayMinutes = 오늘 머문 시간(분, 10분 단위 — 60분이면 오늘 칸을 받을 수 있다) */
-  attendance: { today: boolean; streak: number; stayMinutes: number };
+  /**
+   * today = 오늘 출석 도장을 받았는지, stayMinutes = 오늘 머문 시간(분, 10분 단위 — 60분이면 오늘 칸을 받을 수 있다),
+   * bonusClaimed = 오늘 받은 접속 시간 보너스 구간 수 (lib/stayBonus.ts)
+   */
+  attendance: { today: boolean; streak: number; stayMinutes: number; bonusClaimed: number };
   /** 개인 코드를 발급받은 적이 있는지 (원문은 발급 때 한 번만 보여 준다) */
   hasCode: boolean;
   /** 가방: itemId → 개수 */
@@ -317,11 +320,14 @@ export type ShrineRestoreResponse = { grave: PublicGrave };
 
 /** GET /api/rank/points → 모은 포인트(lifetimePoints) 상위 50명과 내 순위 */
 export type PointRankRow = { rank: number; name: string; points: number; me: boolean };
-export type PointRankResponse = { rows: PointRankRow[]; mine: PointRankRow | null };
+/** staff: 보는 사람이 운영자 (운영자는 순위에 들지 않는다) */
+export type PointRankResponse = { rows: PointRankRow[]; mine: PointRankRow | null; staff?: true };
 
 /** POST /api/me/presence (화면이 켜져 있는 동안 10분마다) → 머무르기 포인트 */
 export const PRESENCE_INTERVAL_MS = 10 * 60_000;
 export type PresenceResponse = { earned: number; me: Me };
+/** POST /api/me/stay-bonus → 접속 시간 보너스 받기 (earned = 실제 들어온 포인트, count = 받은 구간 수) */
+export type StayBonusResponse = { earned: number; count: number; me: Me };
 
 // ── v4: 방 입장·소식·닉네임·오류·경제 ──
 
@@ -405,6 +411,8 @@ export type RankResponse = {
   fish?: string;
   rows: RankRow[];
   mine: RankRow | null;
+  /** 보는 사람이 운영자 (운영자는 순위에 들지 않는다 — 내 순위 대신 안내) */
+  staff?: true;
 };
 
 // ── 10번 출석 달력 · 11번 선물함 · 23번 확성기 ──

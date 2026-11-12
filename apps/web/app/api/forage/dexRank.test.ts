@@ -5,6 +5,7 @@ import { dexBadgeBits, speciesOf } from "@/lib/forage/catalog";
 import { getFishRank, MemoryFishRank } from "@/lib/forage/fishRank";
 import { reelMinMs } from "@/lib/forage/rules";
 import { getForageStore } from "@/lib/forage/store";
+import { setStaff } from "@/lib/staff";
 import type { CastResponse, PublicDex, ReelResponse } from "@/lib/forage/types";
 import { kstDay, kstWeek } from "@/lib/store/accounts";
 import type { JoinResponse, RankResponse } from "@/lib/types";
@@ -145,5 +146,23 @@ describe("최대어 랭킹", () => {
     expect(r.mine).toMatchObject({ value: expect.any(Number), me: true });
     expect(r.mine!.sub).toBeTruthy();
     expect((await rank.GET(call(`/api/rank?board=fish&fish=b_nope`))).status).toBe(400);
+  });
+
+  it("운영자 계정은 최대어를 잡아도 기록되지 않고, 내 순위 대신 staff 표시", async () => {
+    const v = await newVisitor();
+    await setStaff(v.id);
+    try {
+      const c = await body<CastResponse>(await cast.POST(call("/x", v, { spot: "f_1172_932" })));
+      vi.spyOn(Date, "now").mockReturnValue(realNow() + c.biteInMs + reelMinMs(c.power) + 50);
+      const got = await body<ReelResponse>(await reel.POST(call("/x", v, { ticket: c.ticket, ok: true })));
+      vi.restoreAllMocks();
+      expect(got.result).toBeTruthy();
+      expect((await getFishRank().board(null, kstWeek(), 50, v.id)).mine).toBeNull();
+      const r = await body<RankResponse>(await rank.GET(call(`/api/rank?board=fish&period=week&fish=all&me=1`, v)));
+      expect(r).toMatchObject({ mine: null, staff: true });
+      expect(r.rows.some((x) => x.me)).toBe(false);
+    } finally {
+      await setStaff(null);
+    }
   });
 });

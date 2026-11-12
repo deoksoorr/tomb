@@ -32,6 +32,7 @@ const EMPTY: Record<RankBoard, string> = {
 };
 /** 최대어 랭킹 물고기 고르기 (크기가 있는 물고기만) */
 const FISH_OPTIONS = speciesOf("fish").filter((sp) => sp.size);
+const STAFF_RANK_NOTE = "운영자는 순위에 들지 않아요.";
 const EMPTY_HOUSE_WEEK = "이번 주에 꾸민 집이 아직 없어요.";
 
 const LIMIT = 20;
@@ -176,21 +177,32 @@ function BoardRanking({ board, period, zone, fish }: { board: RankBoard; period:
   }, [board, period, zone, fish]);
 
   if (!data) return <p className={styles.empty}>{error ?? "불러오는 중…"}</p>;
-  if (data.rows.length === 0) return <p className={styles.empty}>{board === "house" && period === "week" ? EMPTY_HOUSE_WEEK : EMPTY[board]}</p>;
+  // 운영자 본인 화면: 내 순위 대신 안내 (운영자는 어느 순위에도 들지 않는다)
+  const staffNote = data.staff ? <p className={styles.empty}>{STAFF_RANK_NOTE}</p> : null;
+  if (data.rows.length === 0)
+    return (
+      <>
+        <p className={styles.empty}>{board === "house" && period === "week" ? EMPTY_HOUSE_WEEK : EMPTY[board]}</p>
+        {staffNote}
+      </>
+    );
   const mineOutside = data.mine && !data.rows.some((r) => r.me) ? data.mine : null;
   return (
-    <ol className={styles.list}>
-      {[...data.rows, ...(mineOutside ? [mineOutside] : [])].map((r) => (
-        <li key={`${r.rank}-${r.name}`} className={styles.pointRow} data-me={r.me}>
-          <span className={styles.rank}>{r.rank}</span>
-          <span className={styles.name}>
-            {r.name}
-            {r.me && (board === "house" ? " (내 집)" : " (나)")}
-            {r.sub && <span className={styles.sub}>{r.sub}</span>}
-          </span>
-          <span className={styles.metric}>{rankValue(board, r.value)}</span>
-        </li>
-      ))}
-    </ol>
+    <>
+      <ol className={styles.list}>
+        {[...data.rows, ...(mineOutside ? [mineOutside] : [])].map((r) => (
+          <li key={`${r.rank}-${r.name}`} className={styles.pointRow} data-me={r.me}>
+            <span className={styles.rank}>{r.rank}</span>
+            <span className={styles.name}>
+              {r.name}
+              {r.me && (board === "house" ? " (내 집)" : " (나)")}
+              {r.sub && <span className={styles.sub}>{r.sub}</span>}
+            </span>
+            <span className={styles.metric}>{rankValue(board, r.value)}</span>
+          </li>
+        ))}
+      </ol>
+      {staffNote}
+    </>
   );
 }

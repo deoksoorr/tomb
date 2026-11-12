@@ -12,6 +12,7 @@ import type {
   Me,
   MegaphoneListResponse,
   MegaphoneUseResponse,
+  StayBonusResponse,
 } from "@/lib/types";
 import * as adminGifts from "./admin/gifts/route";
 import * as adminMega from "./admin/megaphone/route";
@@ -22,6 +23,7 @@ import * as attend from "./me/attend/route";
 import * as calendar from "./me/calendar/route";
 import * as claim from "./me/calendar/claim/route";
 import * as presence from "./me/presence/route";
+import * as stayBonus from "./me/stay-bonus/route";
 import * as megaphone from "./megaphone/route";
 import * as session from "./session/route";
 
@@ -64,6 +66,22 @@ const setPoints = (v: Visitor, n: number) => {
 };
 
 describe("10번 출석 달력", () => {
+  it("접속 시간 보너스: 서버 머무르기 기록 30분마다 받기, 안 받으면 쌓이고 같은 구간은 한 번만", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOON);
+    const v = await newVisitor("보너스지기");
+    const post = () => stayBonus.POST(call("/api/me/stay-bonus", { method: "POST", visitor: v }));
+    expect(await errOf(post())).toBe("NOT_YET");
+    await devClock.POST(call("/api/dev/clock", { visitor: v, body: { minutes: 30 } }));
+    const first = await bodyOf<StayBonusResponse>(post());
+    expect(first).toMatchObject({ earned: 10, count: 1 });
+    expect(first.me.attendance.bonusClaimed).toBe(1);
+    expect(await errOf(post())).toBe("NOT_YET");
+    await devClock.POST(call("/api/dev/clock", { visitor: v, body: { minutes: 60 } }));
+    const second = await bodyOf<StayBonusResponse>(post());
+    expect(second).toMatchObject({ earned: 35, count: 2 });
+    expect(second.me.points).toBe(first.me.points + 6 * 5 + 35); // 그 사이 머무르기 +5 × 6번 + 보너스 2구간
+  });
+
   it("1시간 머물러야 오늘 칸을 받고(+10), 하루 한 번만. 입장만으로는 포인트가 없다", async () => {
     vi.spyOn(Date, "now").mockReturnValue(NOON);
     const v = await newVisitor("달력지기");
@@ -83,7 +101,7 @@ describe("10번 출석 달력", () => {
     expect(pres.me.attendance.stayMinutes).toBe(50);
     expect(await errOf(claim.POST(call("/api/me/calendar/claim", { method: "POST", visitor: v })))).toBe("NOT_YET");
     const { me: after } = await bodyOf<{ me: Me }>(devClock.POST(call("/api/dev/clock", { visitor: v, body: { minutes: 10 } })));
-    expect(after.attendance).toEqual({ today: false, streak: 0, stayMinutes: 60 });
+    expect(after.attendance).toEqual({ today: false, streak: 0, stayMinutes: 60, bonusClaimed: 0 });
     const before = after.points;
 
     const res = await bodyOf<CalendarClaimResponse>(claim.POST(call("/api/me/calendar/claim", { method: "POST", visitor: v })));

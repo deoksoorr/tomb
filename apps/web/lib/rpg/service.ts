@@ -5,6 +5,7 @@ import { kstDay, kstWeek } from "../store/accounts";
 import { earnRule } from "../economy";
 import { env } from "../env";
 import { HttpError } from "../http";
+import { isStaff } from "../staff";
 import { COSMETIC_DROPS, gearById, potionById, timeLimitSec, zoneFor, type Difficulty, type GameKind, type ZoneId } from "./catalog";
 import {
   addDrops,
@@ -240,8 +241,8 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   const earned = pointsRaw > 0 ? (await earnPoints(acct, "hunt", pointsRaw, ipHash)).earned : 0;
   await store.addDaily(acct, kstDay(now), { points: earned, runs: 1, exp: v.exp });
   if (t.g === "hunt") await recordEvent("hunt", now); // 47번 방문 분석: 사냥 판 수
-  // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터)
-  if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null))
+  // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터). 운영자 계정은 순위에 남기지 않는다
+  if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null) && !(await isStaff(acct)))
     await getAccounts().recordHunt(acct, t.d, v.hunt, kstWeek(now));
   return {
     reward: {

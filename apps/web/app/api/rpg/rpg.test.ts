@@ -5,8 +5,9 @@ import { getRpgStore } from "@/lib/rpg/store";
 import { signTicket } from "@/lib/rpg/ticket";
 import type { RpgView, RunFinishResponse, RunStartResponse } from "@/lib/rpg/types";
 import { earnRule } from "@/lib/economy";
+import { setStaff } from "@/lib/staff";
 import { getAccounts } from "@/lib/store";
-import { kstDay } from "@/lib/store/accounts";
+import { kstDay, kstWeek } from "@/lib/store/accounts";
 import type { RankResponse } from "@/lib/types";
 import * as rank from "../rank/route";
 import * as session from "../session/route";
@@ -187,6 +188,37 @@ describe("사냥터 API", () => {
     expect(l.character.skills.refactor).toBe(1);
     const bad = await character.POST(call("/x", v, { type: "learn", skill: "deploy" }));
     expect(bad.status).toBe(409);
+  });
+});
+
+describe("운영자 계정은 순위에 들지 않는다", () => {
+  it("사냥을 깨도 사냥 순위에 기록되지 않고, 포인트 순위에서도 걸러진다 (순번 연속)", async () => {
+    const [op, a] = [await newVisitor(), await newVisitor()];
+    await getAccounts().recordHunt(a.id, "easy", { kills: 1, clearMs: null }, kstWeek());
+    await setStaff(op.id);
+    try {
+      const s = await startRun(op);
+      later(101_000);
+      const res = await finish.POST(call("/api/rpg/run/finish", op, { ticket: s.ticket, result: clearAll(s.seed) }));
+      vi.restoreAllMocks();
+      expect(res.status).toBe(200);
+      expect((await getAccounts().huntRank("kills", 1, op.id, {})).mine).toBeNull();
+      expect((await getAccounts().huntRank("best", 1, op.id, { zone: "easy" })).mine).toBeNull();
+      // 포인트는 기록 쪽(지급)에서 막지 않으므로 읽을 때 거른다
+      expect((await getAccounts().pointRank(500, op.id, kstWeek())).mine).not.toBeNull();
+      const board = async (q: string, v: Visitor) => (await (await rank.GET(call(`/api/rank?${q}&me=1`, v))).json()) as RankResponse;
+      for (const q of ["board=points&period=week", "board=points", "board=huntKills", "board=huntBest&zone=easy"]) {
+        const r = await board(q, op);
+        expect(r).toMatchObject({ mine: null, staff: true });
+        expect(r.rows.some((x) => x.me)).toBe(false);
+        expect(r.rows.map((x) => x.rank)).toEqual(r.rows.map((_, i) => i + 1));
+      }
+      const other = await board("board=points&period=week", a);
+      expect(other.staff).toBeUndefined();
+      expect(other.rows.map((x) => x.rank)).toEqual(other.rows.map((_, i) => i + 1));
+    } finally {
+      await setStaff(null);
+    }
   });
 });
 

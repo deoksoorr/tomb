@@ -336,6 +336,7 @@ export type HouseRankRow = { rank: number; name: string; sub: string; value: num
 /**
  * 꾸밈 점수 순위. all = 숨기지 않은 모든 집, week = 이번 주에 분양·꾸미기(배치·외관·넓히기·이름)를 한 집.
  * mine: 내 집이 순위(size) 밖이면 그 줄 (후보 안에 있을 때만), 안이면 null (rows의 me로 표시)
+ * staffId: 운영자 계정의 집은 순위를 매기기 전에 뺀다 (순번이 비지 않게. 후보가 넉넉해 size명은 찬다)
  */
 export async function houseRank(
   store: HouseStore,
@@ -343,9 +344,13 @@ export async function houseRank(
   accountId: string | null,
   size: number,
   now = Date.now(),
+  staffId: string | null = null,
 ): Promise<{ rows: HouseRankRow[]; mine: HouseRankRow | null }> {
   const since = period === "week" ? kstWeekStart(now) : 0;
-  const pool = (await store.list("score", HOUSE_RANK_POOL)).filter((h) => !h.hidden && Math.max(h.updatedAt, h.createdAt) >= since);
+  const staffHouse = staffId ? houseIdFor(staffId) : null;
+  const pool = (await store.list("score", HOUSE_RANK_POOL)).filter(
+    (h) => !h.hidden && h.id !== staffHouse && Math.max(h.updatedAt, h.createdAt) >= since,
+  );
   const myId = accountId ? houseIdFor(accountId) : null;
   const all = pool.map((h, i) => ({ rank: i + 1, name: h.name, sub: `${lotLabel(h.ch, h.lot)} · ${h.ownerName}`, value: h.score, me: h.id === myId }));
   const mineAt = all.findIndex((r) => r.me);

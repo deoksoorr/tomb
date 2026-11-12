@@ -91,7 +91,7 @@ describe("계정·출석", () => {
       points: 0,
       lifetimePoints: 0,
       todayEarned: 0,
-      attendance: { today: false, streak: 0, stayMinutes: 0 },
+      attendance: { today: false, streak: 0, stayMinutes: 0, bonusClaimed: 0 },
       hasCode: false,
       inventory: {},
       equipped: [],

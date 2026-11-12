@@ -4,6 +4,7 @@ import { BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../econo
 import { env } from "../env";
 import { peerOf } from "../ban";
 import { HttpError } from "../http";
+import { isStaff } from "../staff";
 import { earnPoints, getAccounts } from "../store";
 import { kstDay, kstWeek, loadMe } from "../store/accounts";
 import type { BugsResult } from "../rpg/types";
@@ -171,7 +172,8 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
   const day = kstDay(now);
   const got = await store.grant(acct, day, "fish", [{ id: payload.sp, size: payload.sz }], STACK_MAX);
   // 최대어 랭킹: 크기는 시작할 때 서버가 굴린 값 (가방이 가득 차 못 넣었어도 잡은 기록은 남는다). 랭킹 저장 실패가 낚시를 막지는 않는다
-  if (got?.[0] && payload.sz > 0)
+  // 운영자 계정은 순위에 남기지 않는다
+  if (got?.[0] && payload.sz > 0 && !(await isStaff(acct)))
     await getFishRank()
       .record(acct, payload.sp, payload.sz, kstWeek(now))
       .catch((e) => console.error("[forage] 최대어 기록 실패", e));
