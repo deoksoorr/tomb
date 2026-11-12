@@ -5,6 +5,8 @@ import { bridge } from "@/game/bridge";
 import { BALLOON_ICON, FERRIS_ICON, FISH_ICON, LANDMARK_COLOR, LANDMARKS, MINIMAP_H, MINIMAP_W, minimapPixels, NODE_DOT_COLOR, PAW_ICON, toMinimap } from "@/game/world/minimapArt";
 import { gatherNodeById } from "@/lib/forage/catalog";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
+import { cx } from "../ui/cx";
+import ui from "../ui/ui.module.css";
 import styles from "./Minimap.module.css";
 
 // F17 미니맵: 화면 오른쪽 위에 늘 떠 있는 작은 지도 (맵 모양·물·주요 장소·나·같은 채널 사람). 접기/펴기는 이 브라우저에 기억한다.
@@ -13,11 +15,33 @@ import styles from "./Minimap.module.css";
 
 const STORE_KEY = "tomb.minimap";
 
-let baseCache: ImageData | null = null;
-function baseImage(): ImageData {
-  baseCache ??= new ImageData(minimapPixels() as unknown as Uint8ClampedArray<ArrayBuffer>, MINIMAP_W, MINIMAP_H);
+/** 캔버스 해상도 배율: 지도 1칸을 3×3 픽셀로 그려 화면에서 크게 늘려도 점이 또렷하게 (바탕 그림은 같은 그림을 그대로 확대) */
+const SCALE = 3;
+
+let baseCache: HTMLCanvasElement | null = null;
+function baseImage(): HTMLCanvasElement {
+  if (!baseCache) {
+    baseCache = document.createElement("canvas");
+    baseCache.width = MINIMAP_W;
+    baseCache.height = MINIMAP_H;
+    baseCache.getContext("2d")?.putImageData(new ImageData(minimapPixels() as unknown as Uint8ClampedArray<ArrayBuffer>, MINIMAP_W, MINIMAP_H), 0, 0);
+  }
   return baseCache;
 }
+
+/** 테두리 두른 동그란 점 (지도 칸 단위 좌표·반지름) */
+function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, line: number, fill: string, edge: string) {
+  ctx.beginPath();
+  ctx.arc(x, y, r + line, 0, Math.PI * 2);
+  ctx.fillStyle = edge;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+}
+
+const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function readOpen(): boolean {
   try {
@@ -27,7 +51,7 @@ function readOpen(): boolean {
   }
 }
 
-export default function Minimap({ compact = false }: { compact?: boolean }) {
+export default function Minimap() {
   const [open, setOpen] = useState(readOpen);
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const last = useRef<{ me: { x: number; y: number }; others: number[] } | null>(null);
@@ -38,7 +62,10 @@ export default function Minimap({ compact = false }: { compact?: boolean }) {
     const c = canvas.current;
     const ctx = c?.getContext("2d");
     if (!c || !ctx) return;
-    ctx.putImageData(baseImage(), 0, 0);
+    // 지도 칸 좌표로 그리고 캔버스는 SCALE배 해상도
+    ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(baseImage(), 0, 0);
     for (const l of LANDMARKS) {
       const p = toMinimap(l.x, l.y);
       if (l.kind === "fish") {
@@ -95,16 +122,25 @@ export default function Minimap({ compact = false }: { compact?: boolean }) {
     }
     const d = last.current;
     if (!d) return;
-    ctx.fillStyle = "#f2ead3";
+    // 점 크기는 화면 픽셀 기준으로 정한다 (지도 칸 1개가 화면에서 몇 px인지로 나눈다 — 데스크톱·폰 크기가 달라도 같은 크기로 보이게)
+    const unit = c.clientWidth / MINIMAP_W || 1;
+    const px = (n: number) => n / unit;
+    // 다른 사람: 하늘색 점 + 검은 테두리 (어두운 바탕에서도 또렷하게)
     for (let i = 0; i + 1 < d.others.length; i += 2) {
       const p = toMinimap(d.others[i], d.others[i + 1]);
-      ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 2, 2);
+      dot(ctx, p.x, p.y, px(3), px(1.5), "#6fe3ff", "rgba(8,10,14,0.9)");
     }
+    // 나: 더 큰 노란 점 + 검은 테두리 + 흰 속점, 1.2초마다 깜빡이는 밝은 고리
     const m = toMinimap(d.me.x, d.me.y);
-    ctx.fillStyle = "#1a1612";
-    ctx.fillRect(Math.round(m.x) - 2, Math.round(m.y) - 2, 5, 5);
-    ctx.fillStyle = "#ffe14a";
-    ctx.fillRect(Math.round(m.x) - 1, Math.round(m.y) - 1, 3, 3);
+    if (reducedMotion() || Math.floor(Date.now() / 600) % 2 === 0) {
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, px(9), 0, Math.PI * 2);
+      ctx.lineWidth = px(2);
+      ctx.strokeStyle = "rgba(255,241,170,0.95)";
+      ctx.stroke();
+    }
+    dot(ctx, m.x, m.y, px(4.5), px(2), "#ffe14a", "#14110d");
+    dot(ctx, m.x, m.y, px(1.5), 0, "#fffbe6", "#fffbe6");
   };
 
   useBridgeEvent("forage:nodes", ({ ids }) => {
@@ -128,11 +164,11 @@ export default function Minimap({ compact = false }: { compact?: boolean }) {
   }, [open]);
 
   return (
-    <div className={`${styles.wrap} ${compact ? styles.compact : ""}`}>
-      <button type="button" className={styles.toggle} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label={open ? "지도 접기" : "지도 펴기"}>
+    <div className={styles.wrap}>
+      <button type="button" className={cx(ui.top, styles.toggle)} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label={open ? "지도 접기" : "지도 펴기"}>
         지도 {open ? "▴" : "▾"}
       </button>
-      {open && <canvas ref={canvas} className={styles.map} width={MINIMAP_W} height={MINIMAP_H} aria-label="마을 지도 (노란 점이 나)" role="img" />}
+      {open && <canvas ref={canvas} className={styles.map} width={MINIMAP_W * SCALE} height={MINIMAP_H * SCALE} aria-label="마을 지도 (노란 점이 나)" role="img" />}
     </div>
   );
 }

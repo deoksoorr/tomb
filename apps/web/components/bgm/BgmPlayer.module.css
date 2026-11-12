@@ -2,25 +2,41 @@
   position: relative;
 }
 
+/* 위쪽 줄 한 칸: 높이·패널·글자 크기를 다른 위쪽 버튼(ui.top)과 같은 --top-* 값으로 */
 .bar {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  height: var(--top-h);
   background: var(--panel);
   box-shadow: var(--px-border);
   pointer-events: auto;
 }
 
+/* 바 안 버튼: 바 높이를 꽉 채우고 (터치 44px 규칙보다 이긴다) */
+.bar > button {
+  height: var(--top-h);
+  min-height: var(--top-h);
+  padding: 0 var(--top-pad);
+  font-size: var(--top-font);
+}
+
+/* ⏸ ⏭ 와 모바일 ♪ 한 개: 정사각형 아이콘 칸 */
+.bar > button:not(.titleButton),
+.bar > button:only-child {
+  width: var(--top-h);
+  min-width: var(--top-h);
+  padding: 0;
+}
+
 .titleButton {
   max-width: 200px;
-  gap: 8px;
+  gap: 6px;
 }
 
 .title {
   overflow: hidden;
-  font-family: var(--font-small);
-  font-size: 10px;
+  font-size: var(--top-font);
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

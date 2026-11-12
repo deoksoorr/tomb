@@ -37,7 +37,7 @@
 /* 터치: 아래는 조이스틱·행동 버튼 자리라 위 가장자리 바 바로 아래에 */
 @media (pointer: coarse) {
   .recenter {
-    top: calc(var(--safe-top) + 52px);
+    top: calc(var(--safe-top) + var(--top-h) + var(--top-gap));
     bottom: auto;
   }
 }

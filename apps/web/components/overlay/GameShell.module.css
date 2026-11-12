@@ -1,6 +1,7 @@
 /*
  * 오버레이 배치 (게임 캔버스 위). 컨테이너는 pointer-events: none 이라 빈 곳은 캔버스가 입력을 받는다.
  *  윗줄: 좌 BGM · 가운데 채널 HUD(폰 폭이면 아래 안내 줄 맨 아래로) · 우 [안내][내 정보][랭킹]
+ *    — 윗줄 칸은 모두 ui.top(높이 --top-h·간격 --top-gap, globals.css)으로 같은 높이·패널·글자 크기
  *  아래 안내 줄(가운데): 토스트 · 대기열/연결 끊김 · 새 버전
  *  데스크톱 아랫줄: 좌 바로 가기 줄(dock: 메뉴·가방·사냥·도감·집·소식·공지·폭죽) · 가운데 [내 캐릭터로] · 우 줌
  *    — 모든 HUD는 화면 가장자리에서 같은 여백(--safe-*)에 붙고, 버튼 높이(36px)·간격(6px)·배경(--panel)이 같다
@@ -67,7 +68,7 @@
   top: var(--safe-top);
   left: var(--safe-left);
   display: grid;
-  gap: 8px;
+  gap: var(--top-gap);
   justify-items: start;
 }
 
@@ -88,7 +89,7 @@
   right: var(--safe-right);
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--top-gap);
 }
 
 /* 터치: 위 가장자리 바 (좌 음악 · 가운데 채널·날씨 · 우 메뉴) */
@@ -101,17 +102,16 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--top-gap);
 }
 
 .touchLeft {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--top-gap);
 }
 
 .touchBar > :nth-child(2) {
-  align-self: center;
   min-width: 0;
 }
 

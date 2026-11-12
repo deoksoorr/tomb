@@ -41,7 +41,7 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
         : MODE_TEXT[mode === "online" ? "connecting" : mode];
     const sky = ambience ? ` · ${PHASE_LABELS[ambience.phase]}·${WEATHER_LABELS[ambience.weather]}` : "";
     return mode === "online" && channel !== null ? (
-      <button type="button" className={styles.line} onClick={onOpenChannels} aria-haspopup="dialog">
+      <button type="button" className={cx(ui.top, styles.line)} onClick={onOpenChannels} aria-haspopup="dialog">
         <span className={styles.live} aria-hidden="true" />
         <span className={styles.lineText}>
           {where}
@@ -50,7 +50,7 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
         <span className="visually-hidden">, 채널 이동</span>
       </button>
     ) : (
-      <span className={styles.line} data-mode={mode} role="status">
+      <span className={cx(ui.top, styles.line)} data-mode={mode} role="status">
         <span className={styles.lineText}>
           {where}
           {sky}
@@ -63,18 +63,18 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
     <div className={styles.hud}>
       <div className={styles.row}>
         {mode === "online" && channel !== null ? (
-          <button type="button" className={cx(ui.button, styles.pill)} onClick={onOpenChannels} aria-haspopup="dialog">
+          <button type="button" className={cx(ui.button, ui.top, styles.pill)} onClick={onOpenChannels} aria-haspopup="dialog">
             <span className={styles.live} aria-hidden="true" />
             {channel}채널 · {status?.count}/{status?.cap}명<span className="visually-hidden">, 채널 이동</span>
           </button>
         ) : (
-          <span className={styles.pill} data-mode={mode} role="status">
+          <span className={cx(ui.top, styles.pill)} data-mode={mode} role="status">
             {mode === "reconnecting" && channel !== null && `${channel}채널 · `}
             {MODE_TEXT[mode === "online" ? "connecting" : mode]}
           </span>
         )}
         {ambience && (
-          <span className={styles.ambience} title="한국 시간 기준">
+          <span className={cx(ui.top, styles.ambience)} title="한국 시간 기준">
             {PHASE_LABELS[ambience.phase]} · {WEATHER_LABELS[ambience.weather]}
           </span>
         )}

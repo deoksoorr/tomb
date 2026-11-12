@@ -14,17 +14,10 @@
   gap: 8px;
 }
 
+/* 높이·패널·여백·글자 크기는 ui.top (위쪽 줄 공용) */
 .pill {
-  display: inline-flex;
-  align-items: center;
   gap: 8px;
-  min-height: 32px;
-  padding: 4px 12px;
-  background: var(--panel);
   color: var(--text);
-  font-size: 12px;
-  box-shadow: var(--px-border);
-  white-space: nowrap;
 }
 
 .pill[data-mode="connecting"],
@@ -46,13 +39,7 @@
 }
 
 .ambience {
-  padding: 3px 8px;
-  background: rgba(20, 21, 17, 0.7);
   color: var(--muted);
-  font-family: var(--font-small);
-  font-size: 10px;
-  box-shadow: 0 0 0 1px var(--line);
-  white-space: nowrap;
 }
 
 .banner {
@@ -123,21 +110,13 @@
   }
 }
 
-/* 터치 화면 위 가장자리 바 가운데: 채널·날씨 한 줄 */
+/* 터치 화면 위 가장자리 바: 채널·날씨 한 줄 (높이·패널·글자 크기는 ui.top) */
 .line {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   min-width: 0;
   max-width: 100%;
-  min-height: 36px;
-  padding: 4px 10px;
   border: 0;
-  background: rgba(20, 21, 17, 0.72);
   color: var(--text);
-  font-family: var(--font-small);
-  font-size: 10px;
-  box-shadow: 0 0 0 1px var(--line);
+  font-family: inherit;
   pointer-events: auto;
 }
 

@@ -425,7 +425,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
               <div className={styles.topRight}>
                 <button
                   type="button"
-                  className={cx(ui.button, ui.icon, styles.topButton)}
+                  className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
                   onClick={() => setPanel("calendar")}
                   aria-label={calendarReady ? "출석 달력 (오늘 도장을 받을 수 있어요)" : "출석 달력"}
                   title="출석 달력"
@@ -435,7 +435,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 </button>
                 <button
                   type="button"
-                  className={cx(ui.button, ui.icon, styles.topButton)}
+                  className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
                   onClick={() => setPanel("gifts")}
                   aria-label={giftCount ? `선물함 (안 받은 선물 ${giftCount}개)` : "선물함"}
                   title="선물함"
@@ -445,13 +445,13 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 </button>
                 <button
                   type="button"
-                  className={cx(ui.button, ui.icon, styles.topButton)}
+                  className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
                   onClick={() => setPanel("guide")}
                   aria-label="안내"
                 >
                   <PixelIcon name="info" />
                 </button>
-                <button type="button" className={cx(ui.button, styles.topButton)} onClick={() => setPanel("me")}>
+                <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => setPanel("me")}>
                   <PixelIcon name="user" />
                   <span className={styles.meLabel}>
                     {me ? `${me.points.toLocaleString("ko-KR")}P` : "내 정보"}
@@ -526,7 +526,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
             <StatusBanners />
             {narrow && !coarse && <Hud onOpenChannels={() => setPanel("channels")} />}
           </div>
-          <Minimap compact={coarse} />
+          <Minimap />
           <CameraControls showZoom={!coarse} />
           {/* 타는 펫 타기·내리기: 데스크톱은 오른쪽 아래 확대·축소 버튼 왼쪽, 터치는 행동 버튼 묶음 안(MobileControls) */}
           {!coarse && <RideButton variant="desktop" className={ui.button} />}

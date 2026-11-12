@@ -2,42 +2,31 @@
 .wrap {
   position: absolute;
   z-index: 1;
-  top: calc(var(--safe-top) + 46px);
+  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap));
   right: var(--safe-right);
   display: grid;
   justify-items: end;
-  gap: 2px;
+  gap: 6px;
   pointer-events: none;
 }
 
+/* "지도 ▴" 버튼: 높이·패널·여백은 ui.top (위쪽 줄과 같은 규칙) */
 .toggle {
   pointer-events: auto;
-  padding: 1px 6px;
-  border: 1px solid rgba(232, 220, 192, 0.35);
-  background: rgba(20, 18, 16, 0.72);
-  color: var(--text, #e8dcc0);
-  font: inherit;
-  font-size: 11px;
-  line-height: 16px;
+  border: 0;
+  color: var(--text);
+  font-family: inherit;
   cursor: pointer;
 }
 
+/* 크기는 --minimap-w/h (globals.css, 터치에서 작게). 바탕 그림은 그대로 늘려 그린다 */
 .map {
-  width: 180px;
-  height: 128px;
+  width: var(--minimap-w);
+  height: var(--minimap-h);
   border: 1px solid rgba(232, 220, 192, 0.4);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
   background: #24221f;
-  image-rendering: pixelated;
+  /* 캔버스는 3배 해상도라 부드럽게 줄여 그린다 */
+  image-rendering: auto;
   opacity: 0.92;
-}
-
-/* 터치(폰): 위 바 아래, 작게 */
-.compact {
-  top: calc(var(--safe-top) + 52px);
-}
-
-.compact .map {
-  width: 112px;
-  height: 80px;
 }

@@ -9,9 +9,10 @@
 .floating {
   position: absolute;
   z-index: 1;
-  top: calc(var(--safe-top) + 52px);
+  top: calc(var(--safe-top) + var(--top-h) + var(--top-gap));
   left: var(--safe-left);
-  width: min(260px, calc(100vw - 2 * var(--gutter)));
+  /* 오른쪽 미니맵(--minimap-w)과 겹치지 않게 */
+  width: min(260px, calc(100vw - var(--safe-left) - var(--safe-right) - var(--minimap-w) - var(--top-gap)));
   font-size: 12px;
 }
 

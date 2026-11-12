@@ -183,3 +183,31 @@ textarea.input {
     min-height: 44px;
   }
 }
+
+/* 화면 위쪽 줄 공용 칸: 높이·패널 배경·테두리·안쪽 여백·글자 크기를 --top-* 변수로 맞춘다 (두 클래스라 .button·터치 규칙보다 이긴다) */
+.top,
+.button.top {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--top-h);
+  min-height: var(--top-h);
+  padding: 0 var(--top-pad);
+  background: var(--panel);
+  font-size: var(--top-font);
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: var(--px-border);
+}
+
+.button.top:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.top.icon,
+.button.top.icon {
+  width: var(--top-h);
+  min-width: var(--top-h);
+  padding: 0;
+}

@@ -71,12 +71,30 @@
   --safe-bottom: max(var(--gutter), env(safe-area-inset-bottom));
   --safe-left: max(var(--gutter), env(safe-area-inset-left));
 
+  /* 화면 위쪽 줄(노래·채널/날씨·오른쪽 버튼·후원·지도 버튼) 공용 크기: 모두 이 값을 쓴다 */
+  --top-h: 36px;
+  --top-gap: 8px;
+  --top-pad: 10px;
+  --top-font: 12px;
+  /* 미니맵 지도 칸 크기 (지도 아래에 놓이는 요소도 이 값으로 자리를 잡는다) */
+  --minimap-w: 270px;
+  --minimap-h: 192px;
+
   /* 모서리가 비는 2px 픽셀 테두리 (box-shadow 4방향) */
   --px-border: 0 -2px 0 0 var(--line), 0 2px 0 0 var(--line), -2px 0 0 0 var(--line), 2px 0 0 0 var(--line);
   --px-border-strong: 0 -2px 0 0 var(--line-strong), 0 2px 0 0 var(--line-strong), -2px 0 0 0 var(--line-strong),
     2px 0 0 0 var(--line-strong);
 
   color-scheme: dark;
+}
+
+/* 터치: 위쪽 줄은 손가락에 맞게 조금 높게, 지도는 화면을 덜 가리게 작게 */
+@media (pointer: coarse) {
+  :root {
+    --top-h: 40px;
+    --minimap-w: 154px;
+    --minimap-h: 110px;
+  }
 }
 
 *,

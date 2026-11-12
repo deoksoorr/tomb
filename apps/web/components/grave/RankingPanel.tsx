@@ -25,7 +25,7 @@ export default function RankingPanel({ graves, onPick }: Props) {
       <button
         ref={toggleRef}
         type="button"
-        className={cx(ui.button, styles.toggle)}
+        className={cx(ui.button, ui.top, styles.toggle)}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={panelId}
