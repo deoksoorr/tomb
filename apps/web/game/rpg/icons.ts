@@ -61,6 +61,29 @@ const P: Record<string, Painter> = {
     }
     g.rect(6, 6, 4, 4, a);
   },
+  /** 고무줄 총: 나무젓가락 Y자 + 팽팽한 고무줄 */
+  slingshot(g, m, a) {
+    for (let i = 0; i < 6; i++) g.rect(7, 9 + i, 2, 1, darken(m, 0.15));
+    for (let i = 0; i < 6; i++) {
+      g.set(7 - i * 0.7, 9 - i, m);
+      g.set(8 - i * 0.7, 9 - i, m);
+      g.set(8 + i * 0.7, 9 - i, m);
+      g.set(9 + i * 0.7, 9 - i, m);
+    }
+    g.hline(3, 12, 3, a);
+    g.hline(4, 11, 4, darken(a, 0.25));
+    g.rect(7, 4, 2, 2, lighten(a, 0.3));
+  },
+  /** 보드마커 지팡이: 비스듬한 마커 + 뚜껑 + 잉크 방울 */
+  marker(g, m, a) {
+    for (let i = 0; i < 9; i++) g.rect(3 + i, 12 - i, 3, 2, a);
+    for (let i = 0; i < 9; i++) g.set(4 + i, 12 - i, darken(a, 0.12));
+    for (let i = 0; i < 3; i++) g.rect(10 + i, 5 - i, 3, 2, m);
+    g.rect(12, 2, 2, 2, lighten(m, 0.25));
+    g.rect(2, 13, 2, 2, m);
+    g.set(13, 8, m);
+    g.set(14, 10, lighten(m, 0.3));
+  },
   // ── 갑옷 ──
   hoodie(g, m, a) {
     g.rect(3, 5, 10, 9, m);

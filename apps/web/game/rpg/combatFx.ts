@@ -1,0 +1,604 @@
+import * as Phaser from "phaser";
+import type { WeaponStyleId } from "@/lib/rpg/weapons";
+import { darken, Grid, lighten, type Color } from "../sprites/pixel";
+
+// 16번 타격·처치 이펙트 (옛 2D MMORPG의 손맛을 참고한 자체 그림 — 다른 게임 그림·소리는 쓰지 않는다).
+//  - 맞으면: 흰 번쩍임 + 별 모양 충격 + 파편, 숫자가 튀어 올랐다 떠오른다 (치명타는 크고 주황, "치명!" 꼬리표)
+//  - 빗나가면: MISS가 옆으로 흘러간다
+//  - 처치: 몸 색 파편이 터지고 고리가 퍼진 뒤, 동전·경험치 구슬이 튀어나왔다가 나에게 빨려 온다
+//  - 연속 타격: 머리 위 "N 콤보" (10·25·50에서 색이 바뀐다)
+//  - 무기 동작: 공격 방식마다 다른 궤적 (휘두르기 초승달, 내려찍기 두꺼운 호 + 바닥 금, 찌르기 긴 줄, 연타 X자, 쏘기 총구 연기, 마법 잉크)
+//  - 화면 흔들림은 움직임 줄이기(prefers-reduced-motion)면 끈다
+
+export const FXT = {
+  impact: "fx-impact",
+  shard: "fx-shard",
+  coin: "fx-coin",
+  orb: "fx-orb",
+  arc: "fx-arc",
+  heavy: "fx-heavy",
+  crack: "fx-crack",
+  streak: "fx-streak",
+  cross: "fx-cross",
+  puff: "fx-puff",
+  band: "fx-band",
+  card: "fx-card",
+  ink: "fx-ink",
+  inkBolt: "fx-ink-bolt",
+} as const;
+
+const FONT = '"Galmuri11", "Galmuri9", monospace';
+const DEPTH_TOP = 1e6;
+
+function addSheet(scene: Phaser.Scene, key: string, g: Grid, fw: number, fh: number): void {
+  if (scene.textures.exists(key)) return;
+  const tex = scene.textures.addCanvas(key, g.toCanvas());
+  if (!tex) return;
+  const cols = Math.floor(g.w / fw);
+  for (let c = 0; c < cols; c++) tex.add(c, 0, c * fw, 0, fw, fh);
+}
+
+/** 별 모양 충격: 4프레임 (작은 십자 → 큰 별 + 빛줄기 → 깨진 고리 → 흩어진 점) */
+function impactSheet(): Grid {
+  const S = 24;
+  const sheet = new Grid(S * 4, S);
+  const c = S / 2;
+  for (let f = 0; f < 4; f++) {
+    const g = new Grid(S, S);
+    if (f === 0) {
+      for (let i = -4; i <= 4; i++) {
+        g.set(c + i, c, 0xffffff);
+        g.set(c, c + i, 0xffffff);
+      }
+      g.ellipse(c + 0.5, c + 0.5, 2, 2, 0xffffff);
+    } else if (f === 1) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const len = k % 2 ? 6 : 10;
+        for (let r = 2; r < len; r++) g.set(c + Math.cos(a) * r, c + Math.sin(a) * r, r < len - 3 ? 0xffffff : 0xffe39a);
+      }
+      g.ellipse(c + 0.5, c + 0.5, 3.2, 3.2, 0xffffff);
+    } else if (f === 2) {
+      for (let t = 0; t < 48; t++) {
+        if (t % 6 < 2) continue;
+        const a = (t / 48) * Math.PI * 2;
+        g.set(c + Math.cos(a) * 8, c + Math.sin(a) * 8, 0xfff3c8);
+      }
+      for (let k = 0; k < 4; k++) {
+        const a = (k / 4) * Math.PI * 2 + 0.4;
+        g.set(c + Math.cos(a) * 10, c + Math.sin(a) * 10, 0xffffff);
+      }
+    } else {
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2 + 0.2;
+        g.set(c + Math.cos(a) * 10, c + Math.sin(a) * 10, 0xfff3c8, 200);
+      }
+    }
+    sheet.draw(g, f * S, 0);
+  }
+  return sheet;
+}
+
+function shardTex(): Grid {
+  const g = new Grid(3, 3);
+  g.rect(0, 1, 3, 1, 0xffffff);
+  g.set(1, 0, 0xffffff);
+  g.set(1, 2, 0xffffff);
+  return g;
+}
+
+/** 동전: 2프레임 (앞면, 옆면) */
+function coinSheet(): Grid {
+  const sheet = new Grid(14, 7);
+  const a = new Grid(7, 7);
+  a.ellipse(3.5, 3.5, 3, 3, 0xe8b830);
+  a.ellipse(3.2, 3.2, 1.6, 1.6, 0xffe39a);
+  a.set(4, 4, 0xa87a20);
+  a.outline(0x5a3e10);
+  const b = new Grid(7, 7);
+  b.rect(3, 1, 2, 5, 0xe8b830);
+  b.set(3, 2, 0xffe39a);
+  b.outline(0x5a3e10);
+  sheet.draw(a, 0, 0);
+  sheet.draw(b, 7, 0);
+  return sheet;
+}
+
+/** 경험치 구슬: 연두빛 + 반짝임 */
+function orbTex(): Grid {
+  const g = new Grid(7, 7);
+  g.ellipse(3.5, 3.5, 2.6, 2.6, 0x8ae07a);
+  g.ellipse(3, 3, 1.2, 1.2, 0xeaffd8);
+  g.outline(0x2e6a3a);
+  return g;
+}
+
+/** 휘두르기 초승달: 4프레임 (호가 앞에서 뒤로 쓸고 지나간다). 오른쪽(0rad)을 보는 그림 */
+function arcSheet(thick: number, key: Color, edge: Color): Grid {
+  const S = 40;
+  const sheet = new Grid(S * 4, S);
+  const c = S / 2;
+  const R = 16;
+  for (let f = 0; f < 4; f++) {
+    const g = new Grid(S, S);
+    const from = -1.25 + f * 0.25;
+    const to = Math.min(1.25, -0.35 + f * 0.75);
+    const steps = 70;
+    for (let t = 0; t <= steps; t++) {
+      const a = from + ((to - from) * t) / steps;
+      const lead = t / steps;
+      const w = Math.max(1, Math.round(thick * (0.35 + lead * 0.65)));
+      for (let r = R - w; r <= R; r++) g.set(c + Math.cos(a) * r, c + Math.sin(a) * r, r === R ? edge : key, f === 3 ? 140 : 235);
+    }
+    sheet.draw(g, f * S, 0);
+  }
+  return sheet;
+}
+
+/** 바닥 금 + 먼지: 3프레임 */
+function crackSheet(): Grid {
+  const S = 32;
+  const sheet = new Grid(S * 3, S);
+  const c = S / 2;
+  for (let f = 0; f < 3; f++) {
+    const g = new Grid(S, S);
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2 + 0.3;
+      const len = 5 + f * 4 + (k % 2) * 3;
+      for (let r = 2; r < len; r++) g.set(c + Math.cos(a + Math.sin(r) * 0.15) * r, c + Math.sin(a) * r * 0.55, 0x1a1612, 200 - f * 40);
+    }
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2;
+      const r = 6 + f * 4;
+      g.ellipse(c + Math.cos(a) * r, c + Math.sin(a) * r * 0.55, 1.3, 1, 0xd9cdb0, 180 - f * 50);
+    }
+    sheet.draw(g, f * S, 0);
+  }
+  return sheet;
+}
+
+/** 찌르기 줄: 3프레임 (늘어나는 긴 빛줄기 + 밝은 끝) */
+function streakSheet(): Grid {
+  const W = 56;
+  const H = 8;
+  const sheet = new Grid(W, H * 3);
+  for (let f = 0; f < 3; f++) {
+    const g = new Grid(W, H);
+    const len = [24, 52, 52][f];
+    for (let x = 0; x < len; x++) {
+      const u = x / len;
+      const a = f === 2 ? 110 : 230;
+      g.set(x, 4, 0xd9e8f2, a);
+      if (u > 0.3) g.set(x, 3, 0xffffff, a);
+      if (u > 0.6) g.set(x, 5, 0xbcd8e8, a);
+    }
+    g.rect(len - 3, 2, 3, 5, 0xffffff, f === 2 ? 120 : 255);
+    g.set(len, 4, 0xffffff);
+    sheet.draw(g, 0, f * H);
+  }
+  return sheet;
+}
+
+/** 연타 X자: 2프레임 */
+function crossSheet(): Grid {
+  const S = 16;
+  const sheet = new Grid(S * 2, S);
+  for (let f = 0; f < 2; f++) {
+    const g = new Grid(S, S);
+    for (let i = 2; i < 14; i++) {
+      g.set(i, f ? 15 - i : i, 0xffffff);
+      g.set(i + 1, f ? 15 - i : i, 0xd9e8f2, 200);
+    }
+    sheet.draw(g, f * S, 0);
+  }
+  return sheet;
+}
+
+/** 총구 연기: 3프레임 */
+function puffSheet(): Grid {
+  const S = 12;
+  const sheet = new Grid(S * 3, S);
+  for (let f = 0; f < 3; f++) {
+    const g = new Grid(S, S);
+    const r = 2 + f * 1.6;
+    g.ellipse(6, 6, r, r, 0xf2ead3, 220 - f * 70);
+    if (f === 0) g.ellipse(6, 6, 1.2, 1.2, 0xffffff);
+    sheet.draw(g, f * S, 0);
+  }
+  return sheet;
+}
+
+/** 고무줄: 작은 고리 */
+function bandTex(): Grid {
+  const g = new Grid(7, 5);
+  g.ellipse(3.5, 2.5, 3.2, 2.2, 0xe07a6a);
+  g.ellipse(3.5, 2.5, 1.6, 0.8, 0x000000, 0);
+  for (let x = 2; x < 5; x++) g.set(x, 2, 0x000000, 0);
+  return g;
+}
+
+/** 법인카드: 2프레임 (앞면, 옆면) */
+function cardSheet(): Grid {
+  const sheet = new Grid(16, 6);
+  const a = new Grid(8, 6);
+  a.rect(0, 0, 8, 6, 0x55704f);
+  a.rect(1, 1, 2, 2, 0xffe39a);
+  a.rect(0, 4, 8, 1, 0x2e3e2a);
+  const b = new Grid(8, 6);
+  b.rect(3, 0, 2, 6, 0xffe39a);
+  sheet.draw(a, 0, 0);
+  sheet.draw(b, 8, 0);
+  return sheet;
+}
+
+/** 잉크 터짐: 4프레임 */
+function inkSheet(): Grid {
+  const S = 40;
+  const sheet = new Grid(S * 4, S);
+  const c = S / 2;
+  const ink: Color = 0x2a5ac8;
+  for (let f = 0; f < 4; f++) {
+    const g = new Grid(S, S);
+    const r = [5, 11, 15, 16][f];
+    const a = [255, 235, 170, 90][f];
+    g.ellipse(c, c, r, r * 0.7, ink, a);
+    g.ellipse(c - r * 0.25, c - r * 0.2, r * 0.45, r * 0.3, lighten(ink, 0.35), a);
+    for (let k = 0; k < 8; k++) {
+      const ang = (k / 8) * Math.PI * 2 + f * 0.2;
+      const d = r + 2 + (k % 3) * 2;
+      g.ellipse(c + Math.cos(ang) * d, c + Math.sin(ang) * d * 0.7, 1.4, 1.2, darken(ink, 0.1), a);
+    }
+    sheet.draw(g, f * S, 0);
+  }
+  return sheet;
+}
+
+function inkBoltTex(): Grid {
+  const g = new Grid(6, 6);
+  g.ellipse(3, 3, 2.5, 2.5, 0x2a5ac8);
+  g.ellipse(2.5, 2.5, 1, 1, 0xbcd8ff);
+  return g;
+}
+
+export function ensureFxTextures(scene: Phaser.Scene): void {
+  addSheet(scene, FXT.impact, impactSheet(), 24, 24);
+  addSheet(scene, FXT.shard, shardTex(), 3, 3);
+  addSheet(scene, FXT.coin, coinSheet(), 7, 7);
+  addSheet(scene, FXT.orb, orbTex(), 7, 7);
+  addSheet(scene, FXT.arc, arcSheet(4, 0xd9e8f2, 0xffffff), 40, 40);
+  addSheet(scene, FXT.heavy, arcSheet(7, 0xffd9a0, 0xffffff), 40, 40);
+  addSheet(scene, FXT.crack, crackSheet(), 32, 32);
+  const st = streakSheet();
+  if (!scene.textures.exists(FXT.streak)) {
+    const tex = scene.textures.addCanvas(FXT.streak, st.toCanvas());
+    if (tex) for (let f = 0; f < 3; f++) tex.add(f, 0, 0, f * 8, 56, 8);
+  }
+  addSheet(scene, FXT.cross, crossSheet(), 16, 16);
+  addSheet(scene, FXT.puff, puffSheet(), 12, 12);
+  addSheet(scene, FXT.band, bandTex(), 7, 5);
+  addSheet(scene, FXT.card, cardSheet(), 8, 6);
+  addSheet(scene, FXT.ink, inkSheet(), 40, 40);
+  addSheet(scene, FXT.inkBolt, inkBoltTex(), 6, 6);
+}
+
+/** 프레임을 차례로 넘기고 사라지는 스프라이트 (애니메이션 등록 없이 타이머로) */
+function playFrames(scene: Phaser.Scene, s: Phaser.GameObjects.Sprite, frames: number, frameMs: number, fadeLast = true): void {
+  let f = 0;
+  s.setFrame(0);
+  const ev = scene.time.addEvent({
+    delay: frameMs,
+    repeat: frames - 1,
+    callback: () => {
+      f++;
+      if (f >= frames) {
+        if (fadeLast) scene.tweens.add({ targets: s, alpha: 0, duration: frameMs, onComplete: () => s.destroy() });
+        else s.destroy();
+        ev.remove();
+        return;
+      }
+      if (s.active) s.setFrame(f);
+    },
+  });
+}
+
+export type ComboTier = { at: number; color: string };
+export const COMBO_TIERS: readonly ComboTier[] = [
+  { at: 50, color: "#ff8ad0" },
+  { at: 25, color: "#ff9a3c" },
+  { at: 10, color: "#ffd04a" },
+  { at: 0, color: "#f2ead3" },
+];
+/** 마지막으로 맞힌 뒤 이 시간이 지나면 콤보가 끊긴다 */
+export const COMBO_RESET_MS = 2200;
+
+export class CombatFx {
+  private comboText: Phaser.GameObjects.Text | null = null;
+  private comboShown = 0;
+
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly reduced: boolean,
+  ) {
+    ensureFxTextures(scene);
+  }
+
+  private get zoom(): number {
+    return this.scene.cameras.main.zoom || 1;
+  }
+
+  private text(x: number, y: number, s: string, color: string, px: number, stroke = "#0a0b10"): Phaser.GameObjects.Text {
+    return this.scene.add
+      .text(x, y, s, { fontFamily: FONT, fontSize: `${px}px`, color, stroke, strokeThickness: 3, resolution: 1 })
+      .setOrigin(0.5, 1)
+      .setScale(1 / this.zoom)
+      .setDepth(DEPTH_TOP);
+  }
+
+  /** 작은 흔들림 (움직임 줄이기면 안 흔든다) */
+  shake(ms: number, intensity: number): void {
+    if (this.reduced) return;
+    this.scene.cameras.main.shake(ms, intensity);
+  }
+
+  /** 피해 숫자: 튀어 올랐다가(팝) 살짝 옆으로 흐르며 떠오른다. crit이면 크고 주황 + "치명!" */
+  damage(x: number, y: number, n: number, crit: boolean, nth = 0): void {
+    const base = 1 / this.zoom;
+    const drift = ((nth % 3) - 1) * 4 + (Math.random() - 0.5) * 3;
+    const t = this.text(x + ((nth % 3) - 1) * 3, y - (nth % 2) * 4, String(n), crit ? "#ffb02e" : "#fff7e6", crit ? 17 : 12, crit ? "#3a1004" : "#0a0b10");
+    t.setScale(base * (crit ? 2 : 1.5));
+    this.scene.tweens.add({ targets: t, scale: base, duration: crit ? 140 : 90, ease: "Back.easeOut" });
+    this.scene.tweens.add({ targets: t, x: t.x + drift, y: t.y - (crit ? 18 : 14), alpha: { from: 1, to: 0 }, delay: crit ? 260 : 160, duration: crit ? 640 : 520, ease: "Quad.easeIn", onComplete: () => t.destroy() });
+    if (crit) {
+      const tag = this.text(x, y - 11, "치명!", "#ff5a3c", 9, "#2a0804");
+      tag.setScale(base * 0.4);
+      this.scene.tweens.add({ targets: tag, scale: base, duration: 120, ease: "Back.easeOut" });
+      this.scene.tweens.add({ targets: tag, y: tag.y - 16, alpha: 0, delay: 280, duration: 600, onComplete: () => tag.destroy() });
+    }
+  }
+
+  /** 빗나감 */
+  miss(x: number, y: number): void {
+    const t = this.text(x, y, "MISS", "#9ab8d8", 10);
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    this.scene.tweens.add({ targets: t, x: x + dir * 10, y: y - 8, alpha: 0, duration: 620, ease: "Sine.easeOut", onComplete: () => t.destroy() });
+  }
+
+  /** 내가 맞음 */
+  playerHurt(x: number, y: number, n: number): void {
+    const t = this.text(x, y, `-${n}`, "#ff6a6a", 13, "#2a0606");
+    t.setScale((1 / this.zoom) * 1.6);
+    this.scene.tweens.add({ targets: t, scale: 1 / this.zoom, duration: 100, ease: "Back.easeOut" });
+    this.scene.tweens.add({ targets: t, y: y - 14, alpha: 0, delay: 200, duration: 560, onComplete: () => t.destroy() });
+  }
+
+  /** 맞은 자리 충격 (별 + 파편). heavy면 크게 */
+  impact(x: number, y: number, crit: boolean, heavy = false, tint = 0xffffff): void {
+    const s = this.scene.add.sprite(x, y, FXT.impact, 0).setDepth(DEPTH_TOP - 10).setBlendMode(Phaser.BlendModes.ADD);
+    s.setScale(crit || heavy ? 1.15 : 0.75).setRotation(Math.random() * Math.PI);
+    if (tint !== 0xffffff) s.setTint(tint);
+    playFrames(this.scene, s, 4, crit ? 45 : 35);
+    const n = crit ? 7 : heavy ? 6 : 3;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = (crit ? 14 : 9) + Math.random() * 6;
+      const p = this.scene.add.image(x, y, FXT.shard).setDepth(DEPTH_TOP - 9).setTint(crit ? 0xffd04a : 0xffffff);
+      this.scene.tweens.add({ targets: p, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, alpha: 0, scale: 0.4, duration: 220 + Math.random() * 120, ease: "Quad.easeOut", onComplete: () => p.destroy() });
+    }
+  }
+
+  /** 처치: 몸 색 파편 + 고리 + 번쩍임, 동전·경험치 구슬이 튀어나왔다가 to(나)에게 날아온다 */
+  killBurst(x: number, y: number, color: Color, accent: Color, size: number, to: () => { x: number; y: number }, coins: number, orbs: number, onCollect?: () => void): void {
+    const sc = this.scene;
+    const flash = sc.add.image(x, y - size / 2, FXT.impact, 1).setDepth(DEPTH_TOP - 8).setScale(size / 12).setBlendMode(Phaser.BlendModes.ADD);
+    sc.tweens.add({ targets: flash, alpha: 0, scale: size / 8, duration: 220, onComplete: () => flash.destroy() });
+    const ring = sc.add.graphics().setDepth(DEPTH_TOP - 8);
+    const ringR = { r: size * 0.3, a: 1 };
+    sc.tweens.add({
+      targets: ringR,
+      r: size * 1.3,
+      a: 0,
+      duration: 320,
+      ease: "Quad.easeOut",
+      onUpdate: () => ring.clear().lineStyle(2, 0xfff3c8, ringR.a).strokeCircle(x, y - size / 2, ringR.r),
+      onComplete: () => ring.destroy(),
+    });
+    const n = Math.min(16, 8 + Math.round(size / 3));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.4;
+      const d = size * 0.8 + Math.random() * size * 0.7;
+      const p = sc.add.image(x, y - size / 2, FXT.shard).setDepth(DEPTH_TOP - 7).setTint(i % 3 === 0 ? accent : color).setScale(1 + Math.random() * 0.8);
+      sc.tweens.add({
+        targets: p,
+        x: x + Math.cos(a) * d,
+        y: y - size / 2 + Math.sin(a) * d * 0.7 + 4,
+        angle: Math.random() * 360,
+        alpha: 0,
+        duration: 380 + Math.random() * 220,
+        ease: "Cubic.easeOut",
+        onComplete: () => p.destroy(),
+      });
+    }
+    // 동전·구슬: 튀어나와 잠깐 떠 있다가 나에게 빨려 온다
+    const items: { tex: string; frame: number }[] = [];
+    for (let i = 0; i < coins; i++) items.push({ tex: FXT.coin, frame: 0 });
+    for (let i = 0; i < orbs; i++) items.push({ tex: FXT.orb, frame: 0 });
+    let collected = 0;
+    items.forEach((it, i) => {
+      const a = -Math.PI / 2 + (i - (items.length - 1) / 2) * 0.6 + (Math.random() - 0.5) * 0.3;
+      const o = sc.add.sprite(x, y - size / 2, it.tex, it.frame).setDepth(DEPTH_TOP - 6);
+      const hop = { x: x + Math.cos(a) * (8 + Math.random() * 6), y: y - size / 2 + Math.sin(a) * 10 };
+      sc.tweens.add({
+        targets: o,
+        x: hop.x,
+        y: hop.y,
+        duration: 220,
+        ease: "Quad.easeOut",
+        onComplete: () => {
+          if (it.tex === FXT.coin) {
+            const spin = sc.time.addEvent({ delay: 90, loop: true, callback: () => o.active && o.setFrame((Number(o.frame.name) + 1) % 2) });
+            o.once(Phaser.GameObjects.Events.DESTROY, () => spin.remove());
+          }
+          sc.tweens.add({ targets: o, y: hop.y + 3, duration: 160, yoyo: true, ease: "Sine.easeInOut" });
+          const state = { t: 0 };
+          const sx = hop.x;
+          const sy = hop.y;
+          sc.tweens.add({
+            targets: state,
+            t: 1,
+            delay: 260 + i * 50,
+            duration: 300,
+            ease: "Quad.easeIn",
+            onUpdate: () => {
+              const p = to();
+              o.setPosition(sx + (p.x - sx) * state.t, sy + (p.y - 10 - sy) * state.t);
+            },
+            onComplete: () => {
+              const sp = sc.add.image(o.x, o.y, FXT.impact, 3).setDepth(DEPTH_TOP - 5).setScale(0.5).setTint(it.tex === FXT.coin ? 0xffe39a : 0xbaffb0);
+              sc.tweens.add({ targets: sp, alpha: 0, scale: 0.8, duration: 160, onComplete: () => sp.destroy() });
+              o.destroy();
+              if (++collected === 1) onCollect?.();
+            },
+          });
+        },
+      });
+    });
+    this.shake(90, 0.0025);
+  }
+
+  /** 머리 위 "N 콤보" (늘 때마다 톡 튄다). n<2면 숨김 */
+  combo(n: number, x: number, y: number): void {
+    if (n < 2) {
+      if (this.comboText) {
+        const t = this.comboText;
+        this.comboText = null;
+        this.scene.tweens.add({ targets: t, alpha: 0, duration: 200, onComplete: () => t.destroy() });
+      }
+      this.comboShown = 0;
+      return;
+    }
+    const color = COMBO_TIERS.find((c) => n >= c.at)!.color;
+    if (!this.comboText) this.comboText = this.text(x, y, "", color, 11);
+    const t = this.comboText;
+    t.setPosition(x, y);
+    if (n !== this.comboShown) {
+      this.comboShown = n;
+      t.setText(`${n} 콤보`).setColor(color).setAlpha(1);
+      const base = 1 / this.zoom;
+      t.setScale(base * (n % 10 === 0 ? 1.8 : 1.35));
+      this.scene.tweens.killTweensOf(t);
+      this.scene.tweens.add({ targets: t, scale: base, duration: 140, ease: "Back.easeOut" });
+    }
+  }
+
+  /** 무기 동작 궤적. (x,y)는 손 위치, ang은 바라보는 각도, reach는 범위(px) */
+  motion(style: WeaponStyleId, x: number, y: number, ang: number, reach: number, finisher: boolean, arcDeg = 120): void {
+    const sc = this.scene;
+    switch (style) {
+      case "swing":
+      case "smash": {
+        const heavy = style === "smash";
+        const s = sc.add.sprite(x, y, heavy ? FXT.heavy : FXT.arc, 0).setRotation(ang).setDepth(DEPTH_TOP - 20);
+        // 범위·펼친 각도에 맞춰 크기를 맞춘다 (그림의 호 반지름 16px)
+        const k = Math.max(0.8, reach / 18);
+        s.setScale(k, k * Math.min(1.5, Math.max(0.8, arcDeg / 130)));
+        if (finisher) s.setTint(heavy ? 0xffb060 : 0xbfe8ff);
+        playFrames(sc, s, 4, heavy ? 40 : 30);
+        break;
+      }
+      case "thrust": {
+        const s = sc.add.sprite(x, y, FXT.streak, 0).setOrigin(0, 0.5).setRotation(ang).setDepth(DEPTH_TOP - 20);
+        s.setScale(reach / 52, finisher ? 1.6 : 1);
+        if (finisher) s.setTint(0xbfe8ff);
+        playFrames(sc, s, 3, 40);
+        break;
+      }
+      case "combo": {
+        const s = sc.add.sprite(x + Math.cos(ang) * reach * 0.55, y + Math.sin(ang) * reach * 0.55, FXT.cross, 0).setDepth(DEPTH_TOP - 20);
+        s.setScale(reach / 16).setRotation(ang);
+        playFrames(sc, s, 2, 45);
+        break;
+      }
+      case "shot":
+      case "card": {
+        const s = sc.add.sprite(x + Math.cos(ang) * 6, y + Math.sin(ang) * 6, FXT.puff, 0).setDepth(DEPTH_TOP - 20);
+        playFrames(sc, s, 3, 50);
+        break;
+      }
+      case "magic": {
+        const s = sc.add.sprite(x, y - 4, FXT.impact, 0).setDepth(DEPTH_TOP - 20).setTint(0x7aa8ff).setScale(0.6);
+        playFrames(sc, s, 4, 40);
+        break;
+      }
+    }
+  }
+
+  /** 내려찍기: 바닥 금 + 먼지 */
+  crack(x: number, y: number, scale = 1): void {
+    const s = this.scene.add.sprite(x, y, FXT.crack, 0).setDepth(-450).setScale(scale);
+    playFrames(this.scene, s, 3, 70);
+  }
+
+  /** 마무리 땅 울리기: 퍼지는 충격 고리 */
+  shockwave(x: number, y: number, r: number, color = 0xffd9a0): void {
+    const g = this.scene.add.graphics().setDepth(-440);
+    const st = { r: 4, a: 0.9 };
+    this.scene.tweens.add({
+      targets: st,
+      r,
+      a: 0,
+      duration: 260,
+      ease: "Quad.easeOut",
+      onUpdate: () => g.clear().lineStyle(3, color, st.a).strokeEllipse(x, y, st.r * 2, st.r * 1.3),
+      onComplete: () => g.destroy(),
+    });
+    this.crack(x, y, r / 18);
+  }
+
+  /** 잉크 터짐 (마법) */
+  ink(x: number, y: number, r: number): void {
+    const s = this.scene.add.sprite(x, y, FXT.ink, 0).setDepth(-430).setScale(r / 15);
+    playFrames(this.scene, s, 4, 55);
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const p = this.scene.add.image(x, y - 4, FXT.inkBolt).setDepth(DEPTH_TOP - 9).setScale(0.6);
+      this.scene.tweens.add({ targets: p, x: x + Math.cos(a) * r, y: y - 4 + Math.sin(a) * r * 0.6 - 6, alpha: 0, duration: 300, ease: "Quad.easeOut", onComplete: () => p.destroy() });
+    }
+  }
+
+  /** 마법 시전 표시: 목표 지점에 파란 원이 차오른다 (내 공격 미리 보기) */
+  castMark(x: number, y: number, r: number, ms: number): void {
+    const g = this.scene.add.graphics().setDepth(-440);
+    const st = { p: 0 };
+    this.scene.tweens.add({
+      targets: st,
+      p: 1,
+      duration: ms,
+      onUpdate: () => g.clear().lineStyle(1, 0x7aa8ff, 0.9).strokeEllipse(x, y, r * 2, r * 1.4).fillStyle(0x2a5ac8, 0.35).fillEllipse(x, y, r * 2 * st.p, r * 1.4 * st.p),
+      onComplete: () => g.destroy(),
+    });
+  }
+
+  /** 우두머리 단계 바뀜: 붉은 번쩍임 + 흔들림 */
+  bossPhase(x: number, y: number, size: number): void {
+    const sc = this.scene;
+    const cam = sc.cameras.main;
+    if (!this.reduced) cam.flash(180, 120, 20, 20);
+    this.shake(260, 0.006);
+    const g = sc.add.graphics().setDepth(DEPTH_TOP - 8);
+    const st = { r: size * 0.4, a: 1 };
+    sc.tweens.add({
+      targets: st,
+      r: size * 2.4,
+      a: 0,
+      duration: 500,
+      ease: "Cubic.easeOut",
+      onUpdate: () => g.clear().lineStyle(3, 0xff5a3c, st.a).strokeCircle(x, y - size / 2, st.r),
+      onComplete: () => g.destroy(),
+    });
+  }
+
+  destroy(): void {
+    this.comboText?.destroy();
+    this.comboText = null;
+  }
+}

@@ -2,6 +2,7 @@ import type * as Phaser from "phaser";
 import { MONSTERS, type MonsterId } from "@/lib/rpg/catalog";
 import { AV_COLS, AV_H, AV_W, buildAvatarSheet } from "../sprites/avatar";
 import { darken, Grid, lighten, type Color } from "../sprites/pixel";
+import { monsterFrameSize, monsterSheet } from "./monsterArt";
 
 // 사냥터·미니게임 텍스처 (코드로 그린 픽셀아트). 씬이 처음 뜰 때 한 번 만들고 게임이 끝날 때까지 둔다.
 
@@ -55,134 +56,7 @@ export function makePlayer(scene: Phaser.Scene, color: string, look: readonly st
 }
 export const avFrame = (dirRow: number, col: number) => dirRow * AV_COLS + col;
 
-// ── 몬스터 (2프레임: 위아래로 살짝 흔들림) ──
-
-type MPaint = (g: Grid, s: number, m: Color, a: Color, f: number) => void;
-
-const M: Record<MonsterId, MPaint> = {
-  scope_creep(g, s, m, a, f) {
-    g.ellipse(s / 2, s / 2 + 2 - f, 5.5, 4.5 + f * 0.5, m);
-    for (let i = 0; i < 3; i++) g.vline(3 + i * 4, s - 3, s - 1, a);
-    g.set(s / 2 - 2, s / 2, OUT);
-    g.set(s / 2 + 2, s / 2, OUT);
-    g.set(s / 2 + 3, 2, a);
-    g.set(s / 2 + 4, 1, a);
-  },
-  endless_meeting(g, s, m, a, f) {
-    g.rect(2, 3 - f, s - 4, s - 5, m);
-    g.rect(2, 3 - f, s - 4, 3, 0xc83c3c);
-    g.ellipse(s / 2, s / 2 + 2 - f, 4, 4, 0xf2ead3);
-    g.vline(s / 2, s / 2 - 1 - f, s / 2 + 2 - f, OUT);
-    g.hline(s / 2, s / 2 + 2, s / 2 + 2 - f, OUT);
-    g.rect(4, s - 2, 2, 2, a);
-    g.rect(s - 6, s - 2, 2, 2, a);
-  },
-  tech_debt_slime(g, s, m, a, f) {
-    g.ellipse(s / 2, s - 5 + f * 0.5, 6.5 + f * 0.5, 4.5 - f * 0.5, m);
-    g.ellipse(s / 2 - 1, s - 8, 3, 2, lighten(m, 0.25));
-    g.vline(3, s - 3, s - 1 + f, a);
-    g.set(s / 2 - 2, s - 6, OUT);
-    g.set(s / 2 + 2, s - 6, OUT);
-    g.hline(s / 2 - 1, s / 2 + 1, s - 4, a);
-  },
-  already_exists(g, s, m, a, f) {
-    g.ellipse(s / 2, s / 2 - f, 5, 5, m);
-    g.rect(s / 2 - 5, s / 2 - f, 10, 5, m);
-    for (let x = 0; x < 10; x += 3) g.set(s / 2 - 5 + x + f, s / 2 + 5 - f, m);
-    g.rect(s / 2 - 3, s / 2 - 2 - f, 2, 2, OUT);
-    g.rect(s / 2 + 1, s / 2 - 2 - f, 2, 2, OUT);
-    g.hline(s / 2 - 1, s / 2, s / 2 + 2 - f, a);
-  },
-  req_change(g, s, m, a, f) {
-    g.ellipse(s / 2, s / 2, 4.5, 4.5, m);
-    const spikes = f ? [[0, -6], [6, 0], [0, 6], [-6, 0]] : [[4, -4], [4, 4], [-4, 4], [-4, -4]];
-    for (const [dx, dy] of spikes) {
-      g.set(s / 2 + dx, s / 2 + dy, a);
-      g.set(s / 2 + dx * 0.7, s / 2 + dy * 0.7, m);
-    }
-    g.set(s / 2 - 1, s / 2 - 1, OUT);
-    g.set(s / 2 + 1, s / 2 - 1, OUT);
-  },
-  merge_conflict(g, s, m, a, f) {
-    g.ellipse(s / 2, s / 2 + 1 - f, 6, 5.5, m);
-    for (let y = 0; y < s; y++) for (let x = Math.ceil(s / 2); x < s; x++) if (g.filled(x, y)) g.set(x, y, a);
-    g.hline(2, s - 3, s / 2 + 1 - f, 0xf2ead3);
-    g.set(s / 2 - 3, s / 2 - 2 - f, OUT);
-    g.set(s / 2 + 3, s / 2 - 2 - f, OUT);
-  },
-  conflict_shard(g, s, m, a, f) {
-    for (let i = 0; i < 4; i++) g.hline(s / 2 - i, s / 2 + i, 1 + i + f, i % 2 ? m : a);
-    for (let i = 0; i < 4; i++) g.hline(s / 2 - 3 + i, s / 2 + 3 - i, 5 + i + f, i % 2 ? a : m);
-  },
-  server_bill(g, s, m, a, f) {
-    g.ellipse(s / 2, s / 2 + 2, 5, 5, m);
-    g.rect(s / 2 - 1, 2, 3, 2, 0x6a6e78);
-    g.set(s / 2 + 2, 1, f ? 0xffe39a : a);
-    g.set(s / 2 + 3, 0, a);
-    g.rect(s / 2 - 2, s / 2 + 1, 4, 1, a);
-    g.set(s / 2 - 2, s / 2 - 1, lighten(m, 0.4));
-  },
-  opposing_lead(g, s, m, a, f) {
-    g.ellipse(s / 2, 4 - f * 0.5, 3, 3, a);
-    g.rect(s / 2 - 4, 7 - f * 0.5, 8, 7, m);
-    g.vline(s / 2, 7, 11, 0xc83c3c);
-    g.set(s / 2 - 1, 4, OUT);
-    g.set(s / 2 + 1, 4, OUT);
-    g.hline(s / 2 - 1, s / 2 + 1, 6, OUT);
-    g.rect(s / 2 - 3, s - 2, 2, 2, OUT);
-    g.rect(s / 2 + 1, s - 2, 2, 2, OUT);
-    g.rect(s / 2 + 4, 8 + f, 2, 4, 0xf2ead3);
-  },
-  legacy_golem(g, s, m, a, f) {
-    g.rect(4, 3 + f, s - 8, 6, m);
-    g.rect(2, 9 + f, s - 4, 8, darken(m, 0.1));
-    g.rect(0, 9 + f, 3, 7, m);
-    g.rect(s - 3, 9 + f, 3, 7, m);
-    g.rect(5, s - 3, 4, 3, a);
-    g.rect(s - 9, s - 3, 4, 3, a);
-    g.rect(7, 5 + f, 2, 2, 0xffe39a);
-    g.rect(s - 9, 5 + f, 2, 2, 0xffe39a);
-    for (let y = 11; y < 16; y += 2) g.hline(5, s - 6, y + f, a);
-  },
-  burnout_wraith(g, s, m, a, f) {
-    g.ellipse(s / 2, 6 - f, 5, 5, m);
-    g.rect(s / 2 - 5, 6 - f, 10, 7, m);
-    for (let x = 0; x < 10; x++) if ((x + f) % 3 !== 0) g.set(s / 2 - 5 + x, 13 - f + (x % 2), m);
-    g.rect(s / 2 - 3, 4 - f, 2, 3, a);
-    g.rect(s / 2 + 1, 4 - f, 2, 3, a);
-    g.hline(s / 2 - 2, s / 2 + 2, 9 - f, OUT);
-  },
-  prod_dragon(g, s, m, a, f) {
-    // 날개
-    for (let i = 0; i < 9; i++) {
-      g.vline(3 + i, 6 + i - f * 2, 14, darken(m, 0.25));
-      g.vline(s - 4 - i, 6 + i - f * 2, 14, darken(m, 0.25));
-    }
-    g.ellipse(s / 2, 19, 9, 8, m);
-    g.ellipse(s / 2, 21, 5, 5, a);
-    g.ellipse(s / 2, 9, 6, 5, m);
-    g.rect(s / 2 - 5, 3, 2, 3, 0xf2ead3);
-    g.rect(s / 2 + 3, 3, 2, 3, 0xf2ead3);
-    g.rect(s / 2 - 3, 8, 2, 2, 0xffe39a);
-    g.rect(s / 2 + 1, 8, 2, 2, 0xffe39a);
-    g.hline(s / 2 - 3, s / 2 + 3, 12, OUT);
-    g.rect(s / 2 - 6, s - 4, 4, 3, darken(m, 0.3));
-    g.rect(s / 2 + 2, s - 4, 4, 3, darken(m, 0.3));
-  },
-};
-
-function monsterSheet(id: MonsterId): HTMLCanvasElement {
-  const def = MONSTERS[id];
-  const s = def.size;
-  const sheet = new Grid(s * 2, s);
-  for (let f = 0; f < 2; f++) {
-    const g = new Grid(s, s);
-    M[id](g, s, def.color, def.accent, f);
-    g.outline(OUT);
-    sheet.draw(g, f * s, 0);
-  }
-  return sheet.toCanvas();
-}
+// ── 몬스터: 40번에서 동작별 12프레임 시트로 (game/rpg/monsterArt.ts) ──
 
 // ── 효과·지형 ──
 
@@ -368,8 +242,8 @@ function glowTex(): HTMLCanvasElement {
 /** 씬 공용 텍스처를 한 번만 만든다 */
 export function ensureRpgTextures(scene: Phaser.Scene): void {
   for (const id of Object.keys(MONSTERS) as MonsterId[]) {
-    const s = MONSTERS[id].size;
-    addOnce(scene, RTEX.monster(id), () => monsterSheet(id), s, s);
+    const fs = monsterFrameSize(id);
+    addOnce(scene, RTEX.monster(id), () => monsterSheet(id), fs, fs);
   }
   addOnce(scene, RTEX.slash, slash);
   addOnce(scene, RTEX.spark, () => dot(2, 0xffe39a, 0xc87a2a));

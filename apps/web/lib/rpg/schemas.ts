@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DIFFICULTIES, GAME_KINDS, GEAR_SLOTS, HOTBAR_SIZE, MONSTER_IDS, SKILLS, STAT_KEYS, type SkillId } from "./catalog";
+import { DIFFICULTIES, GAME_KINDS, GEAR_SLOTS, HOTBAR_SIZE, MONSTER_IDS, SKILLS, STAT_KEYS, ZONE_IDS, type SkillId } from "./catalog";
 
 // 사냥터 API 입력 검증 (zod). 메시지는 lib/validate.ts가 켜 둔 한국어 로케일을 따른다.
 
@@ -10,6 +10,8 @@ const itemId = z.string().regex(/^[a-z]_[a-z_]{1,30}$/, "아이템 id 형식이 
 export const RunStartSchema = z.object({
   game: z.enum(GAME_KINDS),
   difficulty: z.enum(DIFFICULTIES),
+  /** 40번 테마 사냥터 (사냥만, 없으면 그 난이도의 기본 사냥터) */
+  zone: z.enum(ZONE_IDS).optional(),
 });
 
 const duration = z.number().int().min(0).max(30 * 60_000);

@@ -1,4 +1,6 @@
 // 사냥터(RPG) 카탈로그: 장비·포션·스킬·몬스터·사냥터·난이도. 서버(검증·보상)와 클라이언트(UI·게임)가 같이 쓴다.
+import type { BossPhase, PatternId } from "./patterns";
+import type { WeaponStyleId } from "./weapons";
 // 이름은 회사 생활(월요병·야근·결재·회식)과 누구나 한 번쯤 그만둔 다짐에서 따왔다.
 
 export const STAT_KEYS = ["str", "agi", "vit", "int", "dex", "luk"] as const;
@@ -55,8 +57,10 @@ export type GearDef = {
   price: number;
   bonus: Bonus;
   art: IconArt;
-  /** 무기: 기본 공격 범위 (없으면 formulas DEFAULT_ATTACK_AREA). 40번 무기 특색에서 무기마다 채운다 */
+  /** 무기: 기본 공격 범위 (없으면 공격 방식 style의 기본 범위, lib/rpg/weapons.ts) */
   area?: { range: number; arcDeg: number };
+  /** 무기: 공격 방식 (40번 무기 특색 — 휘두르기·내려찍기·찌르기·연타·쏘기·범위 마법·던지기). 없으면 휘두르기 */
+  style?: WeaponStyleId;
 };
 
 const gear = (
@@ -69,17 +73,21 @@ const gear = (
   bonus: Bonus,
   art: IconArt,
   area?: GearDef["area"],
-): GearDef => ({ id, kind, name, desc, reqLevel, price, bonus, art, ...(area ? { area } : {}) });
+  style?: WeaponStyleId,
+): GearDef => ({ id, kind, name, desc, reqLevel, price, bonus, art, ...(area ? { area } : {}), ...(style ? { style } : {}) });
 
 export const GEAR: readonly GearDef[] = [
   // ── 무기 ──
-  gear("w_ruler", "weapon", "나무 자", "책상 서랍에서 나온 30cm 자. 생각보다 아프다.", 1, 30, { atk: 6 }, { shape: "ruler", main: 0xc89a5a, accent: 0x5a3e22 }),
-  gear("w_keyboard", "weapon", "기계식 키보드", "때릴 때마다 딸깍딸깍. 옆자리가 쳐다본다.", 5, 120, { atk: 15, aspd: 0.1 }, { shape: "keyboard", main: 0x3a3f4a, accent: 0xe8d9b0 }),
-  gear("w_duck", "weapon", "삑삑 오리 망치", "때릴 때마다 삑. 사무실 스트레스 해소용.", 10, 260, { atk: 25, crit: 5 }, { shape: "duck", main: 0xf0c83c, accent: 0xe07a2a }),
-  gear("w_monitor_arm", "weapon", "장우산 창", "비 오는 출근길의 동반자. 길고 단단해서 멀리서 찌른다.", 15, 420, { atk: 35, hit: 10 }, { shape: "spear", main: 0x9aa3ad, accent: 0x2a2e36 }, { range: 36, arcDeg: 70 }),
-  gear("w_refactor", "weapon", "효율의 검", "같은 일을 더 적은 손짓으로 벤다.", 22, 700, { atk: 52, aspd: 0.15 }, { shape: "sword", main: 0xbcd8e8, accent: 0x5a7aa8 }),
-  gear("w_legacy_axe", "weapon", "서류 정리 도끼", "무겁고 느리지만, 누구도 건드리지 못하던 서류 더미를 쪼갠다.", 30, 1000, { atk: 74, str: 3, aspd: -0.1 }, { shape: "axe", main: 0x8a6a4a, accent: 0xb0b8c0 }),
-  gear("w_compiler", "weapon", "전설의 법인카드", "한도 없음. 전설로만 전해진다.", 40, 1600, { atk: 98, crit: 8, dex: 3 }, { shape: "chip", main: 0x55704f, accent: 0xffe39a }),
+  // 무기마다 공격 방식(style)이 다르다 (40번): 범위를 따로 적지 않으면 방식의 기본 범위
+  gear("w_ruler", "weapon", "나무 자", "책상 서랍에서 나온 30cm 자. 생각보다 아프다.", 1, 30, { atk: 6 }, { shape: "ruler", main: 0xc89a5a, accent: 0x5a3e22 }, undefined, "swing"),
+  gear("w_keyboard", "weapon", "기계식 키보드", "때릴 때마다 딸깍딸깍. 옆자리가 쳐다본다.", 5, 120, { atk: 15, aspd: 0.1 }, { shape: "keyboard", main: 0x3a3f4a, accent: 0xe8d9b0 }, undefined, "combo"),
+  gear("w_rubber_band", "weapon", "고무줄 총", "나무젓가락과 고무줄로 만든 사무실 저격총. 멀리서 딱.", 8, 200, { atk: 18, hit: 6 }, { shape: "slingshot", main: 0xc89a5a, accent: 0xe07a6a }, undefined, "shot"),
+  gear("w_duck", "weapon", "삑삑 오리 망치", "때릴 때마다 삑. 사무실 스트레스 해소용.", 10, 260, { atk: 25, crit: 5 }, { shape: "duck", main: 0xf0c83c, accent: 0xe07a2a }, undefined, "smash"),
+  gear("w_marker", "weapon", "보드마커 지팡이", "회의실 화이트보드의 주인. 휘두르면 잉크가 터진다.", 12, 330, { atk: 22, int: 3, sp: 15 }, { shape: "marker", main: 0x2a5ac8, accent: 0xf2f2f2 }, undefined, "magic"),
+  gear("w_monitor_arm", "weapon", "장우산 창", "비 오는 출근길의 동반자. 길고 단단해서 멀리서 찌른다.", 15, 420, { atk: 35, hit: 10 }, { shape: "spear", main: 0x9aa3ad, accent: 0x2a2e36 }, { range: 44, arcDeg: 22 }, "thrust"),
+  gear("w_refactor", "weapon", "효율의 검", "같은 일을 더 적은 손짓으로 벤다.", 22, 700, { atk: 52, aspd: 0.15 }, { shape: "sword", main: 0xbcd8e8, accent: 0x5a7aa8 }, { range: 30, arcDeg: 150 }, "swing"),
+  gear("w_legacy_axe", "weapon", "서류 정리 도끼", "무겁고 느리지만, 누구도 건드리지 못하던 서류 더미를 쪼갠다.", 30, 1000, { atk: 74, str: 3, aspd: -0.1 }, { shape: "axe", main: 0x8a6a4a, accent: 0xb0b8c0 }, { range: 28, arcDeg: 170 }, "smash"),
+  gear("w_compiler", "weapon", "전설의 법인카드", "한도 없음. 전설로만 전해진다. 던지면 지나가는 모든 것을 긁는다.", 40, 1600, { atk: 98, crit: 8, dex: 3 }, { shape: "chip", main: 0x55704f, accent: 0xffe39a }, undefined, "card"),
   // ── 갑옷 ──
   gear("a_hoodie", "armor", "후드티", "회색. 모든 재택근무자의 기본 방어구.", 1, 30, { def: 3, hp: 20 }, { shape: "hoodie", main: 0x6e7076, accent: 0x4a4c52 }),
   gear("a_flannel", "armor", "체크 셔츠", "사흘째 야근 중인 사람의 갑옷.", 6, 120, { def: 7, hp: 45 }, { shape: "shirt", main: 0xa83c3c, accent: 0x3a2020 }),
@@ -355,7 +363,35 @@ export type MonsterId =
   | "opposing_lead"
   | "legacy_golem"
   | "burnout_wraith"
-  | "prod_dragon";
+  | "prod_dragon"
+  // 40번 테마 사냥터 (출근길 지하철·헬스장·도서관·장바구니 정글·방학 숙제 사막·12월 31일 밤 축제장·회식 3차 우두머리)
+  | "rush_commuter"
+  | "phone_zombie"
+  | "backpack_turtle"
+  | "express_train"
+  | "dumbbell_imp"
+  | "protein_shaker"
+  | "treadmill_ghost"
+  | "membership_titan"
+  | "flying_book"
+  | "night_owl"
+  | "eraser_crumb"
+  | "eraser_bit"
+  | "exam_paper"
+  | "sale_tag"
+  | "impulse_vine"
+  | "runaway_cart"
+  | "black_friday"
+  | "diary_mummy"
+  | "essay_cactus"
+  | "sand_worm"
+  | "homework_sphinx"
+  | "firecracker_kid"
+  | "resolution_card"
+  | "countdown_clock"
+  | "party_popper"
+  | "midnight_bell"
+  | "endless_toast";
 
 export type MonsterDef = {
   id: MonsterId;
@@ -373,6 +409,18 @@ export type MonsterDef = {
   size: number;
   color: number;
   accent: number;
+  /** 쓰러지면 이것 n마리로 갈라진다 (서버 출현 상한도 같이 센다) */
+  split?: { id: MonsterId; n: number };
+  /** 갈라진 조각처럼 웨이브 마릿수에 들지 않는 졸개 */
+  minion?: boolean;
+  // ── 2번 공격 패턴 (combat feel 담당 구역 — lib/rpg/patterns.ts) ──
+  /**
+   * 공격 패턴 이름 (PATTERNS: bite·slam·charge·aimed_shot·fan_volley·self_destruct·ambush·nova·rain·cross·breath).
+   * 없으면 behavior마다 기본 패턴 (BEHAVIOR_PATTERNS). 예: patterns: ["bite", "charge"]
+   */
+  patterns?: PatternId[];
+  /** 우두머리 단계: HP 문턱마다 붙는 패턴 (없으면 DEFAULT_BOSS_PHASES — 70% 돌진·충격파, 35% 낙하·십자) */
+  phases?: BossPhase[];
 };
 
 export const MONSTERS: Record<MonsterId, MonsterDef> = {
@@ -381,86 +429,282 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
   tech_debt_slime: { id: "tech_debt_slime", name: "미룬 일 슬라임", desc: "\"내일부터\"라고 미뤄 둘수록 끈적해진다.", hp: 70, atk: 8, def: 2, speed: 26, exp: 9, behavior: "chase", size: 14, color: 0x6a8a3c, accent: 0x2e3e1a },
   already_exists: { id: "already_exists", name: "\"그거 해 봤는데\" 유령", desc: "나타났다 사라지며 의욕을 빨아먹는다.", hp: 55, atk: 9, def: 0, speed: 40, exp: 11, behavior: "blink", size: 14, color: 0xd9dccf, accent: 0x6a6e78 },
   req_change: { id: "req_change", name: "오락가락 지시", desc: "아침 지시와 저녁 지시가 다르다. 어디로 갈지 아무도 모른다.", hp: 50, atk: 10, def: 1, speed: 52, exp: 10, behavior: "wander", size: 12, color: 0xe07a2a, accent: 0x6a3010 },
-  merge_conflict: { id: "merge_conflict", name: "겹친 약속", desc: "쓰러뜨리면 둘로 갈라진다. 둘 다 가야 한다.", hp: 80, atk: 9, def: 2, speed: 30, exp: 12, behavior: "split", size: 15, color: 0xc83c5a, accent: 0x3c8ac8 },
-  conflict_shard: { id: "conflict_shard", name: "반쪽 약속", desc: "갈라진 약속 조각.", hp: 25, atk: 6, def: 0, speed: 46, exp: 3, behavior: "chase", size: 9, color: 0xc83c5a, accent: 0x3c8ac8 },
+  merge_conflict: { id: "merge_conflict", name: "겹친 약속", desc: "쓰러뜨리면 둘로 갈라진다. 둘 다 가야 한다.", hp: 80, atk: 9, def: 2, speed: 30, exp: 12, behavior: "split", size: 15, color: 0xc83c5a, accent: 0x3c8ac8, split: { id: "conflict_shard", n: 2 } },
+  conflict_shard: { id: "conflict_shard", name: "반쪽 약속", desc: "갈라진 약속 조각.", hp: 25, atk: 6, def: 0, speed: 46, exp: 3, behavior: "chase", size: 9, color: 0xc83c5a, accent: 0x3c8ac8, minion: true },
   server_bill: { id: "server_bill", name: "카드값 폭탄", desc: "다가와서 터진다. 청구서는 늘 갑자기 온다.", hp: 35, atk: 22, def: 0, speed: 44, exp: 9, behavior: "explode", size: 13, color: 0x3a3f4a, accent: 0xe84040 },
   opposing_lead: { id: "opposing_lead", name: "잔소리 부장님", desc: "\"그게 돈이 돼?\" 거리를 두고 잔소리를 던진다.", hp: 160, atk: 11, def: 4, speed: 28, exp: 24, behavior: "ranged", size: 16, color: 0x5a6a8a, accent: 0xe8d9b0 },
   legacy_golem: { id: "legacy_golem", name: "서류 더미 골렘", desc: "10년 치 서류가 뭉쳐 일어났다. 단단하고 무겁다.", hp: 260, atk: 15, def: 8, speed: 18, exp: 30, behavior: "dash", size: 20, color: 0x8a7a5a, accent: 0x4a3e2a },
   burnout_wraith: { id: "burnout_wraith", name: "월요병 망령", desc: "닿기만 해도 기운이 빠진다.", hp: 120, atk: 14, def: 2, speed: 38, exp: 22, behavior: "blink", size: 16, color: 0x5a3e8a, accent: 0xc8a0e8 },
   prod_dragon: { id: "prod_dragon", name: "칼퇴 방해 드래곤", desc: "금요일 저녁 6시, 퇴근 5분 전에 깨어난다.", hp: 1400, atk: 20, def: 6, speed: 24, exp: 220, behavior: "boss", size: 32, color: 0xa83c3c, accent: 0xffb040 },
+
+  // ── 출근길 지하철 ──
+  rush_commuter: { id: "rush_commuter", name: "밀치는 출근 인파", desc: "\"내릴게요!\" 소리와 함께 어깨부터 들어온다.", hp: 48, atk: 8, def: 1, speed: 38, exp: 7, behavior: "chase", size: 14, color: 0x34405a, accent: 0xd8c8a8 },
+  phone_zombie: { id: "phone_zombie", name: "폰만 보는 좀비", desc: "고개를 숙인 채 아무 데로나 걷는다. 앞을 안 본다.", hp: 60, atk: 9, def: 1, speed: 30, exp: 8, behavior: "wander", size: 14, color: 0x7a8a6a, accent: 0x7ad0f0 },
+  backpack_turtle: { id: "backpack_turtle", name: "백팩 거북이", desc: "뒤돌 때마다 등에 멘 가방이 휘두르는 망치가 된다.", hp: 85, atk: 12, def: 4, speed: 22, exp: 11, behavior: "dash", size: 16, color: 0x5a8a4a, accent: 0xc87a3a },
+  express_train: { id: "express_train", name: "지각 직전 급행열차", desc: "8시 59분, 문이 닫히기 직전에 달려든다. 화날수록 칸이 늘어난다.", hp: 520, atk: 14, def: 4, speed: 22, exp: 64, behavior: "boss", size: 36, color: 0x3a9a8a, accent: 0xf0d050 },
+
+  // ── 새해 다짐 헬스장 ──
+  dumbbell_imp: { id: "dumbbell_imp", name: "3일차 아령", desc: "1월 3일에 구석으로 밀려난 아령. 서운해서 쫓아온다.", hp: 55, atk: 9, def: 2, speed: 34, exp: 7, behavior: "chase", size: 13, color: 0x5a5f6a, accent: 0xd04a4a },
+  protein_shaker: { id: "protein_shaker", name: "흔들린 프로틴", desc: "너무 흔들어서 뚜껑이 곧 날아간다.", hp: 40, atk: 20, def: 0, speed: 42, exp: 8, behavior: "explode", size: 13, color: 0xe8e0d0, accent: 0x8a5ac8 },
+  treadmill_ghost: { id: "treadmill_ghost", name: "안 쓴 회원권 유령", desc: "결제만 하고 한 번도 안 온 회원권. 보였다 안 보였다 한다.", hp: 65, atk: 10, def: 0, speed: 40, exp: 10, behavior: "blink", size: 14, color: 0xc8f0e8, accent: 0x3a8a7a },
+  membership_titan: { id: "membership_titan", name: "1년 회원권 거인", desc: "1월 1일에 끊은 1년 회원권의 원한. 아령을 불러 모은다.", hp: 600, atk: 15, def: 5, speed: 20, exp: 72, behavior: "boss", size: 36, color: 0xd8885a, accent: 0x2a2e48 },
+
+  // ── 시험 전날 도서관 ──
+  flying_book: { id: "flying_book", name: "펄럭이는 전공책", desc: "한 번도 안 편 전공책이 드디어 펼쳐졌다. 정신없이 날아다닌다.", hp: 45, atk: 10, def: 1, speed: 54, exp: 9, behavior: "wander", size: 13, color: 0x8a3a3a, accent: 0xf2ead3 },
+  night_owl: { id: "night_owl", name: "밤샘 올빼미", desc: "\"딱 한 장만 더…\" 멀리서 요점 정리 쪽지를 던진다.", hp: 90, atk: 11, def: 2, speed: 28, exp: 14, behavior: "ranged", size: 15, color: 0x7a5a3a, accent: 0xffd04a },
+  eraser_crumb: { id: "eraser_crumb", name: "지우개 똥 뭉치", desc: "밤새 지운 흔적. 때리면 가루로 흩어진다.", hp: 75, atk: 9, def: 2, speed: 30, exp: 11, behavior: "split", size: 15, color: 0xe88a9a, accent: 0x5a8ac8, split: { id: "eraser_bit", n: 2 } },
+  eraser_bit: { id: "eraser_bit", name: "지우개 가루", desc: "흩어진 지우개 가루.", hp: 22, atk: 6, def: 0, speed: 48, exp: 3, behavior: "chase", size: 9, color: 0xe88a9a, accent: 0x5a8ac8, minion: true },
+  exam_paper: { id: "exam_paper", name: "빨간 줄 시험지", desc: "내일 볼 시험지가 미리 와서 채점부터 한다. 화날수록 빨간 줄이 늘어난다.", hp: 700, atk: 16, def: 5, speed: 22, exp: 110, behavior: "boss", size: 36, color: 0xf2ead3, accent: 0xd03030 },
+
+  // ── 장바구니 정글 ──
+  sale_tag: { id: "sale_tag", name: "1+1 스티커", desc: "붙는 순간 필요 없던 물건이 두 개가 된다. 작고 빠르다.", hp: 38, atk: 9, def: 0, speed: 50, exp: 7, behavior: "chase", size: 11, color: 0xf0d040, accent: 0xd03030 },
+  impulse_vine: { id: "impulse_vine", name: "충동구매 덩굴", desc: "\"오늘만 이 가격\" 씨앗을 멀리서 쏜다.", hp: 95, atk: 11, def: 3, speed: 20, exp: 13, behavior: "ranged", size: 16, color: 0x3a8a3a, accent: 0xf080b0 },
+  runaway_cart: { id: "runaway_cart", name: "폭주 카트", desc: "바퀴 하나가 고장 난 카트. 멈췄다가 갑자기 돌진한다.", hp: 110, atk: 14, def: 5, speed: 24, exp: 14, behavior: "dash", size: 17, color: 0xb0b8c0, accent: 0xd03030 },
+  black_friday: { id: "black_friday", name: "블랙 프라이데이 쇼핑백", desc: "\"전 품목 90%\" 문구로 정신을 빼놓는 거대한 쇼핑백.", hp: 760, atk: 17, def: 6, speed: 21, exp: 120, behavior: "boss", size: 38, color: 0x2a2a30, accent: 0xf0c040 },
+
+  // ── 방학 숙제 사막 ──
+  diary_mummy: { id: "diary_mummy", name: "밀린 그림일기 미라", desc: "한 달 치 일기를 하루에 쓰다 붕대가 됐다. 질기다.", hp: 140, atk: 12, def: 4, speed: 24, exp: 16, behavior: "chase", size: 16, color: 0xe8dcc0, accent: 0x6a5a3a },
+  essay_cactus: { id: "essay_cactus", name: "독후감 선인장", desc: "읽지도 않은 책의 독후감. 가시 돋친 문장을 쏜다.", hp: 110, atk: 13, def: 3, speed: 18, exp: 15, behavior: "ranged", size: 16, color: 0x4a9a4a, accent: 0xf0e0a0 },
+  sand_worm: { id: "sand_worm", name: "탐구 보고서 모래벌레", desc: "모래 속으로 숨었다가 발밑에서 튀어나온다.", hp: 100, atk: 14, def: 2, speed: 36, exp: 15, behavior: "blink", size: 16, color: 0xc8a060, accent: 0x8a4a2a },
+  homework_sphinx: { id: "homework_sphinx", name: "개학 전날 스핑크스", desc: "\"숙제는 다 했니?\" 대답을 못 하면 지나갈 수 없다.", hp: 1300, atk: 19, def: 7, speed: 22, exp: 200, behavior: "boss", size: 38, color: 0xd8b060, accent: 0x3a5aa8 },
+
+  // ── 12월 31일 밤 축제장 ──
+  firecracker_kid: { id: "firecracker_kid", name: "성급한 폭죽", desc: "자정까지 못 참고 먼저 터지러 온다.", hp: 40, atk: 22, def: 0, speed: 46, exp: 9, behavior: "explode", size: 12, color: 0xd03a3a, accent: 0xf0d050 },
+  resolution_card: { id: "resolution_card", name: "작심삼일 다짐 카드", desc: "올해도 썼던 그 다짐. 나타났다 사라지길 반복한다.", hp: 110, atk: 13, def: 2, speed: 38, exp: 18, behavior: "blink", size: 15, color: 0xf2ead3, accent: 0x3a6ac8 },
+  countdown_clock: { id: "countdown_clock", name: "카운트다운 시계", desc: "10초 남았을 때 가장 빠르다. 째깍째깍 돌진한다.", hp: 180, atk: 16, def: 6, speed: 22, exp: 22, behavior: "dash", size: 18, color: 0xc8a050, accent: 0x2a2e48 },
+  party_popper: { id: "party_popper", name: "고깔모자 파티꾼", desc: "멀리서 꽃가루 폭탄을 쏜다. 신났다.", hp: 120, atk: 14, def: 3, speed: 28, exp: 20, behavior: "ranged", size: 15, color: 0x8a4ac8, accent: 0xf0d050 },
+  midnight_bell: { id: "midnight_bell", name: "제야의 종 대마왕", desc: "자정에 서른세 번 울린다. 한 번 울릴 때마다 한 해의 후회가 쏟아진다.", hp: 1700, atk: 21, def: 7, speed: 20, exp: 250, behavior: "boss", size: 40, color: 0xb07a3a, accent: 0xf0d050 },
+
+  // ── 회식 3차 우두머리 ──
+  endless_toast: { id: "endless_toast", name: "끝나지 않는 건배사", desc: "\"마지막으로 한마디만\"이 한 시간째. 잔을 들 때마다 졸개가 늘어난다.", hp: 1500, atk: 20, def: 6, speed: 22, exp: 230, behavior: "boss", size: 36, color: 0x3a8a4a, accent: 0xf2ead3 },
 };
 
 export const MONSTER_IDS = Object.keys(MONSTERS) as MonsterId[];
 
-// ── 사냥터 (난이도마다 장소가 다르다) ──
+// ── 사냥터 (40번: 난이도마다 두 곳 이상, 캐릭터 레벨로 차례로 열린다) ──
+
+export const ZONE_IDS = [
+  "meeting-room",
+  "subway",
+  "gym",
+  "legacy-forest",
+  "library",
+  "cart-jungle",
+  "deadline-swamp",
+  "homework-desert",
+  "burnout-abyss",
+  "new-year-eve",
+] as const;
+export type ZoneId = (typeof ZONE_IDS)[number];
 
 export type ZoneDef = {
+  /** 사냥터 id = 함께 사냥 방 id에 쓰는 영문 이름 (`hunt:{slug}:{difficulty}`). 처음 네 곳은 예전 이름 그대로 */
+  id: ZoneId;
   difficulty: Difficulty;
-  /** 함께 사냥 방 id에 쓰는 영문 이름 (`hunt:{slug}:{difficulty}`) */
-  slug: string;
+  slug: ZoneId;
   name: string;
   desc: string;
+  /** 이 레벨부터 갈 수 있다 */
+  unlockLevel: number;
+  /** 같은 난이도 안에서 몬스터 체력·공격력·EXP 배율 (뒤에 열리는 곳이 조금 더 세고 보상도 조금 더) */
+  power: number;
+  /** 지형 기믹 (로비 카드·입장 안내) */
+  gimmick: { name: string; desc: string };
   /** 일반 웨이브에 나오는 몬스터 */
   pool: MonsterId[];
   /** 마지막 웨이브 우두머리 */
   boss: MonsterId;
+  /** 우두머리가 화날 때(체력 60%·30%)마다 불러내는 졸개. 서버 출현 상한에 2번 몫이 더해진다 */
+  summon: { id: MonsterId; n: number };
+  /** 이 사냥터에서 더 잘 나오는 장비 (드롭 장비 굴림에서 가중치 ×3) */
+  favor: string[];
   waves: number;
   timeLimitSec: number;
-  /** 바닥 두 색, 장식 색 */
+  /** 로비 카드·지도 바탕색: 바닥 두 색, 장식 색 */
   floor: [number, number];
   deco: number;
 };
 
-export const ZONES: Record<Difficulty, ZoneDef> = {
-  easy: {
+const TIER_WAVES: Record<Difficulty, { waves: number; timeLimitSec: number }> = {
+  easy: { waves: 4, timeLimitSec: 150 },
+  normal: { waves: 5, timeLimitSec: 180 },
+  hard: { waves: 6, timeLimitSec: 210 },
+  hell: { waves: 7, timeLimitSec: 240 },
+};
+
+const zone = (z: Omit<ZoneDef, "slug" | "waves" | "timeLimitSec">): ZoneDef => ({ ...z, slug: z.id, ...TIER_WAVES[z.difficulty] });
+
+export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
+  "meeting-room": zone({
+    id: "meeting-room",
     difficulty: "easy",
-    slug: "meeting-room",
     name: "월요일 회의실",
     desc: "새 다짐이 처음으로 반대에 부딪히는 곳.",
+    unlockLevel: 1,
+    power: 1,
+    gimmick: { name: "발표 조명", desc: "천천히 움직이는 프로젝터 조명 안에 서 있으면 HP가 차오른다." },
     pool: ["scope_creep", "endless_meeting", "req_change"],
     boss: "opposing_lead",
-    waves: 4,
-    timeLimitSec: 150,
+    summon: { id: "scope_creep", n: 2 },
+    favor: ["w_ruler", "h_headset"],
     floor: [0x3a3830, 0x34322b],
     deco: 0x8a7a5a,
-  },
-  normal: {
+  }),
+  subway: zone({
+    id: "subway",
+    difficulty: "easy",
+    name: "출근길 지하철",
+    desc: "8시 40분, 한 칸에 이백 명. 내릴 역은 아직 멀었다.",
+    unlockLevel: 3,
+    power: 1.15,
+    gimmick: { name: "문이 열립니다", desc: "역에 설 때마다 문이 열리고 인파가 밀려 들어와 문 앞을 밀어낸다. 문 위 불이 깜빡이면 비켜서자." },
+    pool: ["rush_commuter", "phone_zombie", "backpack_turtle", "scope_creep"],
+    boss: "express_train",
+    summon: { id: "rush_commuter", n: 2 },
+    favor: ["c_earphones", "h_cap"],
+    floor: [0x8a8f98, 0x7a8088],
+    deco: 0x3a9a8a,
+  }),
+  gym: zone({
+    id: "gym",
+    difficulty: "easy",
+    name: "새해 다짐 헬스장",
+    desc: "1월 2일엔 줄을 섰는데, 1월 4일부터 텅 비었다.",
+    unlockLevel: 5,
+    power: 1.3,
+    gimmick: { name: "러닝머신 컨베이어", desc: "러닝머신 위에서는 몸이 한쪽으로 끌려간다. 화살표가 깜빡이면 방향이 바뀐다." },
+    pool: ["dumbbell_imp", "protein_shaker", "treadmill_ghost", "req_change"],
+    boss: "membership_titan",
+    summon: { id: "dumbbell_imp", n: 2 },
+    favor: ["c_smartwatch", "a_hoodie"],
+    floor: [0x3a3f48, 0x30353e],
+    deco: 0xd8885a,
+  }),
+  "legacy-forest": zone({
+    id: "legacy-forest",
     difficulty: "normal",
-    slug: "legacy-forest",
     name: "야근 사무실",
-    desc: "아무도 손대지 못한 서류가 나무처럼 쌓여 있다.",
+    desc: "아무도 손대지 못한 서류가 나무처럼 쌓여 있다. 칸막이 사이로 길을 찾아야 한다.",
+    unlockLevel: 8,
+    power: 1,
+    gimmick: { name: "칸막이 미로·엘리베이터", desc: "책상 칸막이가 미로처럼 막고 있다. 양쪽 끝 엘리베이터에 타면 반대편 엘리베이터로 순간 이동." },
     pool: ["tech_debt_slime", "already_exists", "merge_conflict", "req_change", "scope_creep"],
     boss: "legacy_golem",
-    waves: 5,
-    timeLimitSec: 180,
+    summon: { id: "tech_debt_slime", n: 2 },
+    favor: ["w_keyboard", "a_flannel"],
     floor: [0x2c3a2a, 0x283524],
     deco: 0x55704f,
-  },
-  hard: {
+  }),
+  library: zone({
+    id: "library",
+    difficulty: "normal",
+    name: "시험 전날 도서관",
+    desc: "열람실 불이 하나둘 꺼진다. 아직 1단원도 못 봤다.",
+    unlockLevel: 11,
+    power: 1.15,
+    gimmick: { name: "정전", desc: "가끔 불이 나가 내 주변만 보인다. 불빛이 깜빡이면 곧 꺼진다는 신호." },
+    pool: ["flying_book", "night_owl", "eraser_crumb", "already_exists"],
+    boss: "exam_paper",
+    summon: { id: "flying_book", n: 2 },
+    favor: ["h_headset", "c_ide_ring"],
+    floor: [0x5a3e2e, 0x4e3628],
+    deco: 0xe8c070,
+  }),
+  "cart-jungle": zone({
+    id: "cart-jungle",
+    difficulty: "normal",
+    name: "장바구니 정글",
+    desc: "\"구경만 할게요\"라고 들어왔다가 길을 잃은 쇼핑몰.",
+    unlockLevel: 14,
+    power: 1.3,
+    gimmick: { name: "충동구매 덩굴밭", desc: "바닥의 덩굴밭에서는 발이 묶여 느려진다. 덩굴은 숨을 쉬듯 커졌다 작아진다." },
+    pool: ["sale_tag", "impulse_vine", "runaway_cart", "server_bill"],
+    boss: "black_friday",
+    summon: { id: "sale_tag", n: 3 },
+    favor: ["w_duck", "a_laptop_bag"],
+    floor: [0x2e5a34, 0x284e2e],
+    deco: 0xf080b0,
+  }),
+  "deadline-swamp": zone({
+    id: "deadline-swamp",
     difficulty: "hard",
-    slug: "deadline-swamp",
     name: "결재 늪",
     desc: "올린 결재는 돌아오지 않고, 발을 디딜수록 일정이 가라앉는다.",
+    unlockLevel: 18,
+    power: 1,
+    gimmick: { name: "끓는 늪", desc: "늪에서는 느려지고, 거품이 크게 일면 곧 끓어올라 안에 있는 모두가 다친다." },
     pool: ["merge_conflict", "server_bill", "opposing_lead", "legacy_golem", "tech_debt_slime"],
     boss: "prod_dragon",
-    waves: 6,
-    timeLimitSec: 210,
+    summon: { id: "tech_debt_slime", n: 2 },
+    favor: ["w_legacy_axe", "a_standing_desk"],
     floor: [0x26302e, 0x222a28],
     deco: 0x4a6a5a,
-  },
-  hell: {
+  }),
+  "homework-desert": zone({
+    id: "homework-desert",
+    difficulty: "hard",
+    name: "방학 숙제 사막",
+    desc: "개학까지 사흘. 한 달 치 숙제가 모래처럼 쌓여 있다.",
+    unlockLevel: 22,
+    power: 1.15,
+    gimmick: { name: "모래 폭풍", desc: "모래 폭풍이 불면 앞이 흐려지고 바람 부는 쪽으로 밀린다. 지평선이 흔들리면 곧 분다." },
+    pool: ["diary_mummy", "essay_cactus", "sand_worm", "server_bill"],
+    boss: "homework_sphinx",
+    summon: { id: "diary_mummy", n: 2 },
+    favor: ["c_mug", "w_monitor_arm"],
+    floor: [0xd8b878, 0xc8a868],
+    deco: 0x8a6a3a,
+  }),
+  "burnout-abyss": zone({
+    id: "burnout-abyss",
     difficulty: "hell",
-    slug: "burnout-abyss",
     name: "회식 3차",
     desc: "모든 다짐이 마지막으로 무너지는 곳. 아무도 먼저 못 일어난다.",
+    unlockLevel: 30,
+    power: 1,
+    gimmick: { name: "미끄러운 바닥", desc: "엎질러진 술 웅덩이에서는 미끄러져 멈추기 어렵다." },
     pool: ["burnout_wraith", "server_bill", "legacy_golem", "already_exists", "opposing_lead", "merge_conflict"],
-    boss: "prod_dragon",
-    waves: 7,
-    timeLimitSec: 240,
+    boss: "endless_toast",
+    summon: { id: "burnout_wraith", n: 2 },
+    favor: ["w_compiler"],
     floor: [0x241e2c, 0x201a28],
     deco: 0x5a3e8a,
-  },
+  }),
+  "new-year-eve": zone({
+    id: "new-year-eve",
+    difficulty: "hell",
+    name: "12월 31일 밤 축제장",
+    desc: "올해의 다짐이 전부 몰려나오는 마지막 밤. 자정까지 버텨라.",
+    unlockLevel: 36,
+    power: 1.15,
+    gimmick: { name: "불꽃놀이", desc: "하늘에서 폭죽이 떨어진다. 바닥에 빨간 원이 보이면 피하자 — 몬스터도 맞는다." },
+    pool: ["firecracker_kid", "resolution_card", "countdown_clock", "party_popper", "burnout_wraith"],
+    boss: "midnight_bell",
+    summon: { id: "firecracker_kid", n: 3 },
+    favor: ["a_server_rack", "w_compiler"],
+    floor: [0x2a2a44, 0x24243c],
+    deco: 0xf0d050,
+  }),
 };
+
+/** 난이도마다 처음 열리는 사냥터 (예전 API·저장된 선택이 사냥터 없이 난이도만 보낼 때) */
+export const ZONES: Record<Difficulty, ZoneDef> = {
+  easy: HUNT_ZONES["meeting-room"],
+  normal: HUNT_ZONES["legacy-forest"],
+  hard: HUNT_ZONES["deadline-swamp"],
+  hell: HUNT_ZONES["burnout-abyss"],
+};
+
+export const isZoneId = (v: unknown): v is ZoneId => typeof v === "string" && (ZONE_IDS as readonly string[]).includes(v);
+
+/** 난이도 + (있으면) 사냥터 id → 사냥터. 난이도가 다른 id면 그 난이도의 기본 사냥터 */
+export function zoneFor(d: Difficulty, id?: string | null): ZoneDef {
+  const z = isZoneId(id) ? HUNT_ZONES[id] : undefined;
+  return z && z.difficulty === d ? z : ZONES[d];
+}
+
+/** 난이도별 사냥터 (열리는 레벨 순) */
+export const zonesOf = (d: Difficulty): ZoneDef[] => ZONE_IDS.map((id) => HUNT_ZONES[id]).filter((z) => z.difficulty === d);
 
 // ── 미니게임 ──
 
@@ -491,4 +735,4 @@ export const GAMES: Record<GameKind, { name: string; desc: string; how: string; 
 /** 미니게임 시간 (초) */
 export const MINI_TIME_SEC: Record<Exclude<GameKind, "hunt">, number> = { bugs: 60, stars: 75 };
 
-export const timeLimitSec = (game: GameKind, d: Difficulty) => (game === "hunt" ? ZONES[d].timeLimitSec : MINI_TIME_SEC[game]);
+export const timeLimitSec = (game: GameKind, d: Difficulty, zone?: string | null) => (game === "hunt" ? zoneFor(d, zone).timeLimitSec : MINI_TIME_SEC[game]);

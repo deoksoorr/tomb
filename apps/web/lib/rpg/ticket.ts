@@ -1,5 +1,5 @@
 import { b64urlDecode, b64urlEncode, hmacSign, hmacVerify } from "@tomb/protocol";
-import { DIFFICULTIES, GAME_KINDS, type Difficulty, type GameKind } from "./catalog";
+import { DIFFICULTIES, GAME_KINDS, HUNT_ZONES, isZoneId, type Difficulty, type GameKind, type ZoneId } from "./catalog";
 
 // 런 티켓: 서버가 판을 시작할 때 서명해 주고, 끝낼 때 그대로 돌려받는다.
 // `${base64url(JSON)}.${HMAC(SESSION_SECRET, "rpg:" + payload)}` — 서명이 맞아도 한 번만 쓸 수 있다 (저장소의 claimRun).
@@ -17,6 +17,8 @@ export type TicketClaims = {
   lv: number;
   /** 시작할 때의 능력치 (미니게임 출현 계획이 DEX·LUK에 따라 달라진다) */
   st: { agi: number; dex: number; luk: number };
+  /** 사냥터 id (40번, 사냥만). 없으면 그 난이도의 기본 사냥터 */
+  z?: ZoneId;
 };
 
 const enc = new TextEncoder();
@@ -47,7 +49,8 @@ export async function verifyTicket(secret: string, token: string): Promise<Ticke
       Number.isInteger(c.s) &&
       Number.isInteger(c.lv) &&
       typeof c.st === "object" &&
-      c.st !== null;
+      c.st !== null &&
+      (c.z === undefined || (isZoneId(c.z) && HUNT_ZONES[c.z].difficulty === c.d));
     return ok ? c : null;
   } catch {
     return null;

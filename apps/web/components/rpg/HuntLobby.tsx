@@ -6,7 +6,7 @@ import { errorMessage } from "@/lib/api";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { meStore, useMe } from "@/lib/hooks/useMe";
-import { DIFFS, GAMES, gearById, potionById, ZONES, type Difficulty, type GameKind, type SkillId } from "@/lib/rpg/catalog";
+import { DIFFS, GAMES, gearById, HUNT_ZONES, isZoneId, potionById, ZONE_IDS, ZONES, type Difficulty, type GameKind, type SkillId, type ZoneId } from "@/lib/rpg/catalog";
 import { rpgApi, type CharacterAction } from "@/lib/rpg/client";
 import type { RpgView, RunReward, RunResult } from "@/lib/rpg/types";
 import { readItem } from "@/lib/storage";
@@ -18,6 +18,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import { pts } from "./format";
 import { CharacterPanel, GearPanel, LOBBY_HIDDEN, ShopPanel, SkillPanel, StartPanel } from "./Panels";
+import LevelUpSound from "./LevelUpSound";
 import RpgIcon from "./RpgIcon";
 import RunHud from "./RunHud";
 import s from "./rpg.module.css";
@@ -41,10 +42,16 @@ type Outcome = { result: RunResult; aborted: boolean; difficulty: Difficulty; re
 
 const LS_PICK = "tomb.rpg.pick";
 
-function readPick(): { game: GameKind; diff: Difficulty } {
+/** 40번: zone = 고른 사냥터 (난이도와 맞아야 한다). 없으면 로비가 열린 사냥터 중 가장 높은 곳을 골라 준다 */
+type Pick = { game: GameKind; diff: Difficulty; zone?: ZoneId };
+
+function readPick(): Pick {
   try {
-    const v = JSON.parse(localStorage.getItem(LS_PICK) ?? "null") as { game: GameKind; diff: Difficulty } | null;
-    if (v && v.game in GAMES && !LOBBY_HIDDEN.has(v.game) && v.diff in DIFFS) return v;
+    const v = JSON.parse(localStorage.getItem(LS_PICK) ?? "null") as Pick | null;
+    if (v && v.game in GAMES && !LOBBY_HIDDEN.has(v.game) && v.diff in DIFFS) {
+      const zone = isZoneId(v.zone) && HUNT_ZONES[v.zone].difficulty === v.diff ? v.zone : undefined;
+      return { game: v.game, diff: v.diff, ...(zone ? { zone } : {}) };
+    }
   } catch {
     /* 저장소를 못 쓰면 기본값 */
   }
@@ -69,6 +76,10 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
   const phaseRef = useRef<Phase>("lobby");
   phaseRef.current = phase;
   const baseId = useId();
+  // 40번: 사냥터를 고른 적이 없으면 지금 레벨로 갈 수 있는 가장 높은 사냥터
+  const level = view?.character.level;
+  const auto = !pick.zone && level !== undefined ? ([...ZONE_IDS].reverse().find((id) => HUNT_ZONES[id].unlockLevel <= level) ?? ZONES.easy.id) : undefined;
+  const cur: Pick = auto ? { ...pick, diff: HUNT_ZONES[auto].difficulty, zone: auto } : pick;
 
   // 판이 진행되는 동안(대화상자가 없을 때)도 월드 키 입력을 막아 둔다 → 월드의 내 아바타는 입구에 멈춰 있다
   useBlockingLayer(phase === "playing" || phase === "submitting");
@@ -159,11 +170,11 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
       .finally(() => setBusy(false));
   };
 
-  async function start(game = pick.game, difficulty = pick.diff) {
+  async function start(game = cur.game, difficulty = cur.diff) {
     setPhase("starting");
     setNotice(null);
     try {
-      const res = await rpgApi.start(game, difficulty);
+      const res = await rpgApi.start(game, difficulty, cur.zone);
       const c = res.view.character;
       setView(res.view);
       run.current = { ticket: res.ticket, game, difficulty, hotbar: c.hotbar, seed: res.seed };
@@ -172,6 +183,7 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
       bridge.emit("rpg:play", {
         game,
         difficulty,
+        ...(res.zone ? { zone: res.zone } : {}),
         seed: res.seed,
         timeLimitSec: res.timeLimitSec,
         level: c.level,
@@ -247,7 +259,7 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
       <Dialog title={`${GAMES[outcome.result.game].name} 결과`} onClose={() => setPhase("lobby")} size="md">
         <ResultView outcome={outcome} view={view} />
         <div className={s.buttons} style={{ marginTop: 14 }}>
-          <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void start(outcome.result.game, pick.diff)}>
+          <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void start(outcome.result.game, cur.diff)}>
             한 판 더
           </button>
           <button type="button" className={ui.button} onClick={() => setPhase("lobby")}>
@@ -264,7 +276,7 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
 
   const c = view?.character;
   return (
-    <Dialog title="사냥터" onClose={onClose} size="lg">
+    <Dialog title="사냥터" onClose={onClose} size="lg" fixed>
       <div className={s.lobby}>
         {view && c ? (
           <>
@@ -312,9 +324,11 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
                 <StartPanel
                   view={view}
                   game={pick.game}
-                  diff={pick.diff}
+                  diff={cur.diff}
                   onGame={(game) => setPick((p) => ({ ...p, game }))}
-                  onDiff={(diff) => setPick((p) => ({ ...p, diff }))}
+                  zoneId={cur.zone}
+                  onDiff={(diff) => setPick((p) => ({ ...p, diff, zone: undefined }))}
+                  onZone={(z) => setPick((p) => ({ ...p, diff: z.difficulty, zone: z.id }))}
                   onStart={() => void start()}
                   busy={phase === "starting"}
                 />
@@ -376,6 +390,7 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
           {r.levelsGained > 0 && (
             <p className={s.levelUp} role="status">
               레벨 업! Lv.{r.newLevel} · 능력치·스킬 포인트를 받았어요
+              <LevelUpSound level={r.newLevel} />
             </p>
           )}
           {r.drops.length > 0 && (

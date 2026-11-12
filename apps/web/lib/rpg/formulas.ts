@@ -1,4 +1,5 @@
 import { DIFFS, gearById, GEAR_SLOTS, MONSTERS, STAT_KEYS, type Bonus, type Difficulty, type GearSlot, type MonsterId, type Stats } from "./catalog";
+import { weaponArea } from "./weapons";
 
 // 성장·전투 공식 (서버 검증과 게임이 같은 함수를 쓴다). 숫자는 라그나로크 느낌을 살리되 단순하게.
 
@@ -116,14 +117,14 @@ export function damage(atk: number, mult: number, def: number, roll: number, cri
 
 /**
  * 기본 공격 범위: 바라보는 쪽 부채꼴 (반지름 px, 펼친 각도 °). 안에 든 몬스터를 모두 때린다 (42번).
- * 무기마다 다르게 줄 수 있다 (GearDef.area, 40번 무기 특색). 몸이 겹칠 만큼 가까우면 방향과 상관없이 맞는다.
+ * 무기마다 다르다 (GearDef.area, 없으면 공격 방식 style의 기본 — 40번 무기 특색). 몸이 겹칠 만큼 가까우면 방향과 상관없이 맞는다.
  */
 export type AttackArea = { range: number; arcDeg: number };
 export const DEFAULT_ATTACK_AREA: AttackArea = { range: 26, arcDeg: 120 };
 
 export function attackArea(equip: Partial<Record<GearSlot, string | null>>): AttackArea {
   const w = equip.weapon ? gearById(equip.weapon) : undefined;
-  return w?.area ?? DEFAULT_ATTACK_AREA;
+  return w ? weaponArea(w) : DEFAULT_ATTACK_AREA;
 }
 
 /** 부채꼴 판정: (dx,dy)는 나→몬스터, face는 단위 벡터, r은 몬스터 몸 반지름 */
@@ -145,19 +146,19 @@ export const MONSTER_TIER = { hp: 1.2, atk: 1.15, exp: 0.6 } as const;
 
 export type MonsterStats = { maxHp: number; atk: number; def: number; hit: number; flee: number; speed: number; exp: number };
 
-/** 난이도를 반영한 몬스터 능력치 */
-export function monsterStats(id: MonsterId, d: Difficulty): MonsterStats {
+/** 난이도를 반영한 몬스터 능력치. power: 사냥터 배율 (40번, 같은 난이도에서 뒤에 열리는 곳일수록 조금 세다 — ZoneDef.power) */
+export function monsterStats(id: MonsterId, d: Difficulty, power = 1): MonsterStats {
   const m = MONSTERS[id];
   const D = DIFFS[d];
   const lv = D.monsterLevel;
   return {
-    maxHp: Math.round(m.hp * D.hpMul * MONSTER_TIER.hp),
-    atk: Math.round(m.atk * D.atkMul * MONSTER_TIER.atk),
+    maxHp: Math.round(m.hp * D.hpMul * MONSTER_TIER.hp * power),
+    atk: Math.round(m.atk * D.atkMul * MONSTER_TIER.atk * power),
     def: Math.round(m.def * D.defMul),
     hit: 10 + lv * 2,
     flee: 6 + lv * 2,
     speed: m.speed * (d === "hell" ? 1.2 : d === "hard" ? 1.1 : 1),
-    exp: Math.max(1, Math.round(m.exp * D.expMul * MONSTER_TIER.exp)),
+    exp: Math.max(1, Math.round(m.exp * D.expMul * MONSTER_TIER.exp * power)),
   };
 }
 

@@ -884,6 +884,17 @@ button.card:hover {
   font-size: 11px;
 }
 
+/* 40번 무기 공격 방식 꼬리표 (휘두르기·찌르기·쏘기…) */
+.styleTag {
+  justify-self: start;
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, var(--grade, #d9d4c3) 55%, transparent);
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 10px;
+  line-height: 15px;
+}
+
 .equippedTag {
   justify-self: start;
   padding: 0 6px;
@@ -961,4 +972,115 @@ button.card:hover {
   .bagGrid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* ── 40번 사냥터 고르기 (ZonePicker) ── */
+
+.zoneTiers {
+  display: grid;
+  gap: 10px;
+}
+
+.zoneTier {
+  display: grid;
+  gap: 6px;
+}
+
+.zoneTierHead {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.zoneTierHead b {
+  color: var(--bone);
+  font-weight: 400;
+}
+
+.zoneGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 8px;
+}
+
+.zoneCard {
+  padding: 6px 6px 8px;
+  cursor: pointer;
+}
+
+.zoneLocked {
+  cursor: not-allowed;
+}
+
+.zoneLocked .zonePreview img {
+  filter: grayscale(0.85) brightness(0.55);
+}
+
+.zoneLocked .cardName {
+  color: var(--muted);
+}
+
+.zonePreview {
+  position: relative;
+  display: block;
+  aspect-ratio: 14 / 9;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 40%);
+}
+
+.zonePreview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
+.zoneTag {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  background: rgb(10 11 16 / 78%);
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.zoneLock {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 14px;
+  text-shadow: 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000;
+}
+
+.zoneInfo {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.zoneGimmick {
+  color: var(--candle);
+  font-weight: 400;
+}
+
+@media (max-width: 480px) {
+  .zoneGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── F12 사냥터 로비: 고정 크기 창(Dialog fixed)에서 탭을 바꿔도 크기 그대로, 스크롤해도 탭은 위에 ── */
+.lobby > .tabs {
+  position: sticky;
+  top: -12px;
+  z-index: 2;
+  background: var(--panel-solid);
 }

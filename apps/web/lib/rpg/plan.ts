@@ -1,4 +1,4 @@
-import { DIFFS, MONSTERS, ZONES, type Difficulty, type MonsterId } from "./catalog";
+import { DIFFS, MONSTERS, zoneFor, type Difficulty, type MonsterId } from "./catalog";
 import { clamp, seeded } from "./formulas";
 
 // 한 판의 출현 계획. 시드(서버가 런 티켓에 넣어 준다)로 정해져서, 게임은 이대로 내보내고
@@ -11,8 +11,14 @@ export const WAVE_MIN_GAP_SEC = 8;
 /** 다 못 잡아도 이 시간이 지나면 다음 웨이브가 나온다 */
 export const WAVE_MAX_GAP_SEC = 35;
 
-/** pack: monsters 중 끝의 pack마리는 한 자리에서 무리로 몰려 나온다 (같은 종류) */
-export type HuntWave = { index: number; monsters: MonsterId[]; earliestSec: number; boss: boolean; pack: number };
+/**
+ * pack: monsters 중 끝의 pack마리는 한 자리에서 무리로 몰려 나온다 (같은 종류).
+ * summon: 우두머리 웨이브에서 우두머리가 화날 때(2번) 불러낼 수 있는 졸개 — 웨이브 마릿수에는 들지 않는다 (40번)
+ */
+export type HuntWave = { index: number; monsters: MonsterId[]; earliestSec: number; boss: boolean; pack: number; summon?: { id: MonsterId; n: number } };
+
+/** 우두머리가 화나는 횟수 (체력 60%·30%) — 게임(HuntScene)과 서버 상한이 같이 쓴다 */
+export const BOSS_RAGES = 2;
 
 // 45번: 여러 마리 동시 타격(42번)에 맞춰 약 1.75배. 예전은 3/4/5/6마리 + 웨이브마다 1, 최대 12
 const WAVE_BASE: Record<Difficulty, number> = { easy: 5, normal: 6, hard: 8, hell: 9 };
@@ -21,8 +27,9 @@ const WAVE_CAP = 20;
 /** 무리 크기 (최소, 최대) — 둘째 웨이브부터 */
 const PACK: Record<Difficulty, [number, number]> = { easy: [3, 4], normal: [3, 5], hard: [4, 6], hell: [5, 7] };
 
-export function huntPlan(seed: number, d: Difficulty): HuntWave[] {
-  const zone = ZONES[d];
+/** zone: 사냥터 id (없거나 난이도가 다르면 그 난이도의 기본 사냥터) */
+export function huntPlan(seed: number, d: Difficulty, zoneId?: string | null): HuntWave[] {
+  const zone = zoneFor(d, zoneId);
   const r = seeded(seed ^ 0x48554e54);
   const waves: HuntWave[] = [];
   for (let i = 0; i < zone.waves; i++) {
@@ -37,19 +44,24 @@ export function huntPlan(seed: number, d: Difficulty): HuntWave[] {
     for (let k = 0; k < room - pack; k++) monsters.push(zone.pool[Math.floor(r() * zone.pool.length)]);
     const packId = zone.pool[Math.floor(r() * zone.pool.length)];
     for (let k = 0; k < pack; k++) monsters.push(packId);
-    waves.push({ index: i, monsters, earliestSec: i * WAVE_MIN_GAP_SEC, boss: last, pack });
+    waves.push({ index: i, monsters, earliestSec: i * WAVE_MIN_GAP_SEC, boss: last, pack, ...(last ? { summon: { ...zone.summon } } : {}) });
   }
   return waves;
 }
 
-/** effSec초 안에 나올 수 있었던 몬스터 수 (머지 컨플릭트가 갈라진 조각 포함) */
+/** effSec초 안에 나올 수 있었던 몬스터 수 (갈라진 조각·우두머리가 불러낸 졸개 포함) */
 export function huntSpawnable(plan: HuntWave[], effSec: number): Partial<Record<MonsterId, number>> {
   const out: Partial<Record<MonsterId, number>> = {};
+  const add = (id: MonsterId, n: number, depth = 0) => {
+    out[id] = (out[id] ?? 0) + n;
+    const sp = MONSTERS[id].split;
+    if (sp && depth < 3) add(sp.id, n * sp.n, depth + 1);
+  };
   for (const w of plan) {
     if (w.earliestSec > effSec) continue;
-    for (const m of w.monsters) out[m] = (out[m] ?? 0) + 1;
+    for (const m of w.monsters) add(m, 1);
+    if (w.summon) add(w.summon.id, w.summon.n * BOSS_RAGES);
   }
-  if (out.merge_conflict) out.conflict_shard = (out.conflict_shard ?? 0) + out.merge_conflict * 2;
   return out;
 }
 

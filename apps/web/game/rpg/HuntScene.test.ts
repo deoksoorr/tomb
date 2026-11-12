@@ -30,6 +30,8 @@ vi.mock("phaser", () => {
     Scene,
     Math: { Clamp: (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v)), RandomDataGenerator: stub() },
     Display: stub(),
+    // 40번 사냥터 지도(arena/Arena.ts)의 조명·입자 혼합 모드
+    BlendModes: stub(),
     Scale: { Events: { RESIZE: "resize" } },
     Scenes: { Events: { SHUTDOWN: "shutdown", DESTROY: "destroy" } },
   };

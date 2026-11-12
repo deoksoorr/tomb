@@ -1,4 +1,4 @@
-import type { Difficulty, GameKind, GearSlot, MonsterId, SkillId, Stats } from "./catalog";
+import type { Difficulty, GameKind, GearSlot, MonsterId, SkillId, Stats, ZoneId } from "./catalog";
 import type { Derived } from "./formulas";
 
 // 사냥터(RPG) 데이터 형태: 저장 원본, API 응답, 게임 ↔ UI 브리지 페이로드.
@@ -55,6 +55,8 @@ export type RunStartResponse = {
   ticket: string;
   game: GameKind;
   difficulty: Difficulty;
+  /** 사냥터 id (40번, 사냥만) */
+  zone?: ZoneId;
   seed: number;
   timeLimitSec: number;
   view: RpgView;
@@ -87,6 +89,8 @@ export type RunFinishResponse = { reward: RunReward; view: RpgView };
 export type RpgPlay = {
   game: GameKind;
   difficulty: Difficulty;
+  /** 사냥터 id (40번). 없으면 그 난이도의 기본 사냥터 */
+  zone?: ZoneId;
   seed: number;
   timeLimitSec: number;
   level: number;

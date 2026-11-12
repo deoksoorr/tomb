@@ -13,6 +13,7 @@ import { STARRY_NIGHT_BONUS, starryNight } from "@/lib/stargaze";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
+import LevelUpSound from "./LevelUpSound";
 import RpgIcon from "./RpgIcon";
 import RunHud from "./RunHud";
 import s from "./rpg.module.css";
@@ -200,6 +201,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
               {r.levelsGained > 0 && (
                 <p className={s.levelUp} role="status">
                   레벨 업! Lv.{r.newLevel}
+                  <LevelUpSound level={r.newLevel} />
                 </p>
               )}
               {r.drops.length > 0 && (

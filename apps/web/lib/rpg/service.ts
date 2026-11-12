@@ -4,7 +4,7 @@ import { kstDay, kstWeek } from "../store/accounts";
 import { earnRule } from "../economy";
 import { env } from "../env";
 import { HttpError } from "../http";
-import { gearById, potionById, timeLimitSec, type Difficulty, type GameKind } from "./catalog";
+import { gearById, potionById, timeLimitSec, zoneFor, type Difficulty, type GameKind, type ZoneId } from "./catalog";
 import {
   addDrops,
   addGear,
@@ -133,11 +133,21 @@ function newSeed(): number {
   return a[0] & 0x7fffffff;
 }
 
-export async function startRun(acct: string, game: GameKind, difficulty: Difficulty, now = Date.now()): Promise<RunStartResponse> {
+/**
+ * 40번: 사냥터는 캐릭터 레벨로 차례로 열린다. 로컬 개발 서버(next dev)에서는 검수용으로 모두 열어 둔다
+ * (화면은 `localStorage["tomb.rpg.unlockAll"]="1"`일 때만 잠금을 풀어 보여 준다)
+ */
+export const zoneUnlockBypass = () => process.env.NODE_ENV === "development";
+
+export async function startRun(acct: string, game: GameKind, difficulty: Difficulty, now = Date.now(), zoneId?: ZoneId): Promise<RunStartResponse> {
   const store = getRpgStore();
   const c = await store.get(acct);
   const d = derive(c.level, c.stats, c.equip);
-  const limit = timeLimitSec(game, difficulty);
+  const zone = game === "hunt" ? zoneFor(difficulty, zoneId) : null;
+  if (zone && zoneId && zone.id !== zoneId) throw new HttpError(400, "INVALID_INPUT", "그 사냥터는 이 난이도에 없어요.");
+  if (zone && c.level < zone.unlockLevel && !zoneUnlockBypass())
+    throw new HttpError(403, "ZONE_LOCKED", `${zone.name}은(는) Lv.${zone.unlockLevel}부터 갈 수 있어요.`);
+  const limit = timeLimitSec(game, difficulty, zone?.id);
   const nonce = nanoid(16);
   if (!(await store.startRun(acct, nonce, limit + FINISH_GRACE_SEC, hourBucket(now))))
     throw new HttpError(429, "RATE_LIMITED", `한 시간에 ${RUNS_PER_HOUR}판까지 할 수 있어요. 잠시 쉬었다 와요.`);
@@ -151,8 +161,9 @@ export async function startRun(acct: string, game: GameKind, difficulty: Difficu
     s: seed,
     lv: c.level,
     st: { agi: d.stats.agi, dex: d.stats.dex, luk: d.stats.luk },
+    ...(zone ? { z: zone.id } : {}),
   });
-  return { ticket, game, difficulty, seed, timeLimitSec: limit, view: await rpgView(acct, store, now, c) };
+  return { ticket, game, difficulty, ...(zone ? { zone: zone.id } : {}), seed, timeLimitSec: limit, view: await rpgView(acct, store, now, c) };
 }
 
 export async function finishRun(acct: string, token: string, result: RunResult, ipHash: string, now = Date.now()): Promise<RunFinishResponse> {
@@ -161,13 +172,13 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   if (!t) throw new HttpError(400, "BAD_TICKET", "판 기록이 올바르지 않아요. 다시 시작해 주세요.");
   if (t.a !== acct) throw new HttpError(403, "BAD_TICKET", "다른 계정으로 시작한 판이에요.");
   const elapsed = now - t.t;
-  const expired = elapsed > (timeLimitSec(t.g, t.d) + FINISH_GRACE_SEC) * 1000 || elapsed < 0;
+  const expired = elapsed > (timeLimitSec(t.g, t.d, t.z) + FINISH_GRACE_SEC) * 1000 || elapsed < 0;
   const claim = await store.claimRun(acct, t.n);
   if (claim === "reused") throw new HttpError(409, "TICKET_USED", "이미 결과를 받은 판이에요.");
   if (expired) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래된 판이라 결과를 받을 수 없어요.");
   if (claim === "stale") throw new HttpError(409, "TICKET_STALE", "그 뒤에 새 판을 시작해서 이 판은 끝났어요.");
 
-  const v = evaluate({ game: t.g, difficulty: t.d, seed: t.s, level: t.lv, st: t.st }, result, elapsed);
+  const v = evaluate({ game: t.g, difficulty: t.d, seed: t.s, level: t.lv, st: t.st, ...(t.z ? { zone: t.z } : {}) }, result, elapsed);
   if (!v.ok) throw new HttpError(422, v.code, v.message);
 
   const { state, result: applied } = await http(

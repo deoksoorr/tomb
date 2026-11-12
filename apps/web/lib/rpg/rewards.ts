@@ -1,4 +1,4 @@
-import { DIFFS, GEAR, MONSTER_IDS, MONSTERS, timeLimitSec, ZONES, type Difficulty, type GameKind, type MonsterId } from "./catalog";
+import { DIFFS, GEAR, MONSTER_IDS, MONSTERS, timeLimitSec, zoneFor, type Difficulty, type GameKind, type MonsterId } from "./catalog";
 import { clamp, levelPenalty, monsterStats, seeded } from "./formulas";
 import {
   BUG_SCORE,
@@ -34,7 +34,8 @@ export const FINISH_GRACE_SEC = 120;
  * 45번에서 출몰량이 약 1.75배가 되면서 올렸다 (예전 0.9/0.75/0.6/0.5는 어려움·지옥을 시간 절반에 깨면 정직한 판도 거절했다).
  */
 export function killRateCeiling(d: Difficulty, level: number): number {
-  const base = { easy: 2, normal: 1.8, hard: 1.6, hell: 1.6 }[d];
+  // 40번: 졸개(우두머리가 화날 때)·갈라지는 몬스터가 많은 사냥터도 시간 절반 클리어에 20% 넘게 여유가 있게 (lib/rpg/zones.test.ts)
+  const base = { easy: 2, normal: 1.8, hard: 1.8, hell: 1.9 }[d];
   return base * (1 + Math.max(0, level - DIFFS[d].recLevel) / 10);
 }
 
@@ -44,6 +45,8 @@ export type TicketInfo = {
   seed: number;
   level: number;
   st: { agi: number; dex: number; luk: number };
+  /** 사냥터 id (40번). 없으면 그 난이도의 기본 사냥터 */
+  zone?: string;
 };
 
 export type Verdict =
@@ -61,7 +64,7 @@ const tooHigh = (what: string) => reject("RESULT_REJECTED", `${what} 기록이 �
 export function evaluate(t: TicketInfo, result: RunResult, serverElapsedMs: number): Verdict {
   if (result.game !== t.game) return reject("INVALID_RESULT", "결과가 시작한 게임과 달라요.");
   if (result.durationMs > serverElapsedMs + CLOCK_SLACK_MS) return reject("TOO_FAST", "기록된 시간이 실제로 흐른 시간보다 길어요.");
-  const limitMs = timeLimitSec(t.game, t.difficulty) * 1000;
+  const limitMs = timeLimitSec(t.game, t.difficulty, t.zone) * 1000;
   const eff = Math.min(result.durationMs, serverElapsedMs, limitMs + CLOCK_SLACK_MS);
   if (eff < MIN_RUN_MS) return { ok: true, score: 0, exp: 0, points: 0, drops: [] };
   switch (result.game) {
@@ -75,7 +78,8 @@ export function evaluate(t: TicketInfo, result: RunResult, serverElapsedMs: numb
 }
 
 function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
-  const plan = huntPlan(t.seed, t.difficulty);
+  const zone = zoneFor(t.difficulty, t.zone);
+  const plan = huntPlan(t.seed, t.difficulty, zone.id);
   const effSec = eff / 1000;
   const can = huntSpawnable(plan, effSec);
   let total = 0;
@@ -84,7 +88,7 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
     if (!MONSTER_IDS.includes(id) || !Number.isInteger(n) || n < 0) return reject("INVALID_RESULT", "처치 기록 형식이 맞지 않아요.");
     if (n > (can[id] ?? 0)) return tooHigh(MONSTERS[id].name);
     total += n;
-    exp += n * monsterStats(id, t.difficulty).exp;
+    exp += n * monsterStats(id, t.difficulty, zone.power).exp;
   }
   if (total > 3 + effSec * killRateCeiling(t.difficulty, t.level)) return tooHigh("처치 수");
   // 웨이브를 k개 깼다면 그 웨이브들의 몬스터를 모두 잡았어야 하고, 마지막으로 깬 웨이브가 나올 시간이 지났어야 한다
@@ -98,13 +102,14 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
   const D = DIFFS[t.difficulty];
   const cleared = k === plan.length;
   const progress = clamp((k + (total / Math.max(1, huntTotal(plan))) * 0.999) / (plan.length + 1), 0, 1);
-  let points = total > 0 ? D.huntPoints * (0.15 + 0.85 * (cleared ? 1 : progress)) : 0;
+  // 같은 난이도에서 뒤에 열리는 사냥터는 포인트도 조금 더 (power 1.3 → ×1.15)
+  let points = total > 0 ? D.huntPoints * (1 + (zone.power - 1) / 2) * (0.15 + 0.85 * (cleared ? 1 : progress)) : 0;
   let xp = exp * levelPenalty(t.level, t.difficulty);
   if (r.died) {
     points *= 0.5;
     xp *= 0.7;
   }
-  const bossKilled = (r.kills[ZONES[t.difficulty].boss] ?? 0) > 0 && cleared;
+  const bossKilled = (r.kills[zone.boss] ?? 0) > 0 && cleared;
   const drops = rollDrops(t, Math.min(HUNT_DROP_ROLLS, Math.floor(total / KILLS_PER_DROP_ROLL)), bossKilled);
   return {
     ok: true,
@@ -162,8 +167,9 @@ export function rollDrops(t: TicketInfo, rolls: number, bossKilled: boolean, pot
   const drops: Drop[] = [];
   const pickGear = (): Drop => {
     const pool = GEAR.filter((g) => g.reqLevel <= D.dropMaxLevel && g.reqLevel >= D.dropMaxLevel - 20);
-    // 싼 장비가 더 잘 나온다
-    const weights = pool.map((g) => 1 / Math.sqrt(g.price));
+    // 싼 장비가 더 잘 나온다. 사냥터마다 잘 나오는 장비(ZoneDef.favor)는 ×3 (40번)
+    const favor = t.game === "hunt" ? zoneFor(t.difficulty, t.zone).favor : [];
+    const weights = pool.map((g) => (favor.includes(g.id) ? 3 : 1) / Math.sqrt(g.price));
     let x = r() * weights.reduce((a, b) => a + b, 0);
     for (let i = 0; i < pool.length; i++) if ((x -= weights[i]) <= 0) return { kind: "gear", id: pool[i].id, qty: 1 };
     return { kind: "gear", id: pool[pool.length - 1].id, qty: 1 };

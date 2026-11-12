@@ -14,9 +14,44 @@ export type RpgSound =
   | "defeat"
   | "victory"
   | "tick"
-  | "miss";
+  | "miss"
+  // 2·16·40번 사냥 손맛: 처치, 무기마다 공격 소리, 몬스터 경고·내려찍기, 우두머리 단계
+  | "kill"
+  | "swish"
+  | "thud"
+  | "stab"
+  | "clack"
+  | "twang"
+  | "flick"
+  | "ink"
+  | "warn"
+  | "slam"
+  | "roar";
 
-const NAMES: RpgSound[] = ["hit", "crit", "monster-die", "levelup", "potion", "skill", "coin-drop", "defeat", "victory", "tick", "miss"];
+const NAMES: RpgSound[] = [
+  "hit",
+  "crit",
+  "monster-die",
+  "levelup",
+  "potion",
+  "skill",
+  "coin-drop",
+  "defeat",
+  "victory",
+  "tick",
+  "miss",
+  "kill",
+  "swish",
+  "thud",
+  "stab",
+  "clack",
+  "twang",
+  "flick",
+  "ink",
+  "warn",
+  "slam",
+  "roar",
+];
 const MAX_VOICES = 8;
 
 export class RpgSfx {
@@ -109,4 +144,15 @@ export class RpgSfx {
     void this.ctx?.close().catch(() => undefined);
     this.ctx = null;
   }
+}
+
+/** 씬 밖(결과 화면 등)에서 효과음 한 번 (볼륨·음소거 설정을 따른다). 레벨 업 소리에 쓴다 */
+export function playRpgSoundOnce(name: RpgSound, gain = 1): void {
+  if (typeof Audio === "undefined") return;
+  const s = bridge.last("audio:settings");
+  const raw = s && Number.isFinite(s.volume) ? (s.volume > 1 ? s.volume / 100 : s.volume) : 0.7;
+  if (s?.muted || raw <= 0) return;
+  const a = new Audio(`/sfx/${name}.mp3`);
+  a.volume = Math.max(0, Math.min(1, raw * gain));
+  a.play().catch(() => undefined);
 }

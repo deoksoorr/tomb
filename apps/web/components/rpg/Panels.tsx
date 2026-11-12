@@ -20,6 +20,7 @@ import {
   STAT_KEYS,
   STAT_LABELS,
   ZONES,
+  zoneFor,
   type Difficulty,
   type GameKind,
   type GearDef,
@@ -27,11 +28,14 @@ import {
   type GearSlot,
   type SkillId,
   type Stats,
+  type ZoneDef,
+  type ZoneId,
 } from "@/lib/rpg/catalog";
 import { GEAR_INV_MAX, sellValue } from "@/lib/rpg/character";
 import type { CharacterAction } from "@/lib/rpg/client";
 import { derive, STAT_MAX, type Derived } from "@/lib/rpg/formulas";
 import type { RpgView } from "@/lib/rpg/types";
+import { weaponStyleOf, weaponStyleText } from "@/lib/rpg/weapons";
 import { OutfitCanvas } from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
 import { DollSlot, PaperDoll } from "../ui/PaperDoll";
@@ -39,6 +43,7 @@ import ui from "../ui/ui.module.css";
 import { bonusText, pts } from "./format";
 import { bagGear, deltaText, equipTarget, gearDiff, gearGrade, sellable, sellWarning, slotAccepts } from "./gear";
 import RpgIcon from "./RpgIcon";
+import ZonePicker, { ZoneInfo, zoneOpen, zoneUnlockAll } from "./ZonePicker";
 import s from "./rpg.module.css";
 
 // 사냥터 로비의 탭들: 출발 · 캐릭터 · 장비 · 스킬 · 상점
@@ -62,23 +67,29 @@ export function StartPanel({
   view,
   game,
   diff,
+  zoneId,
   onGame,
   onDiff,
+  onZone,
   onStart,
   busy,
 }: {
   view: RpgView;
   game: GameKind;
   diff: Difficulty;
+  /** 40번: 고른 사냥터 (사냥만) */
+  zoneId?: ZoneId;
   onGame: (g: GameKind) => void;
   onDiff: (d: Difficulty) => void;
+  onZone?: (z: ZoneDef) => void;
   onStart: () => void;
   busy: boolean;
 }) {
   const c = view.character;
-  const zone = ZONES[diff];
+  const zone = zoneFor(diff, zoneId);
   const D = DIFFS[diff];
   const low = c.level < D.recLevel;
+  const zoneLocked = game === "hunt" && !zoneOpen(zone, c.level, zoneUnlockAll());
   const capLeft = Math.max(0, view.today.cap - view.today.huntPoints);
   const monsters = [...new Set([...zone.pool])].map((id) => MONSTERS[id].name);
   return (
@@ -98,6 +109,17 @@ export function StartPanel({
         </div>
       </section>
 
+      {game === "hunt" && onZone ? (
+        <section className={s.section} aria-labelledby="rpg-zone">
+          <h3 id="rpg-zone" className={s.sectionTitle}>
+            사냥터 <span className={s.meta}>· 레벨이 오르면 다음 사냥터가 열려요</span>
+          </h3>
+          <ZonePicker level={c.level} zone={zone.id} onZone={onZone} />
+          <ZoneInfo z={zone} />
+          {zoneLocked && <p className={s.warn}>{zone.name}은(는) Lv.{zone.unlockLevel}부터 갈 수 있어요.</p>}
+          {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
+        </section>
+      ) : (
       <section className={s.section} aria-labelledby="rpg-diff">
         <h3 id="rpg-diff" className={s.sectionTitle}>
           난이도
@@ -125,6 +147,7 @@ export function StartPanel({
         )}
         {low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
       </section>
+      )}
 
       <div className={s.startRow}>
         <p className={s.meta}>
@@ -133,7 +156,7 @@ export function StartPanel({
           오늘 사냥 포인트 {view.today.huntPoints} / {view.today.cap}
           {capLeft === 0 && " · 오늘 한도를 다 채워서 EXP와 드롭만 받아요"} · 이번 시간 남은 판 {view.today.runsPerHour}
         </p>
-        <button type="button" className={cx(ui.button, ui.primary, s.start)} onClick={onStart} disabled={busy || view.today.runsPerHour <= 0}>
+        <button type="button" className={cx(ui.button, ui.primary, s.start)} onClick={onStart} disabled={busy || view.today.runsPerHour <= 0 || zoneLocked}>
           {busy ? "준비 중…" : `${GAMES[game].name} 출발`}
         </button>
       </div>
@@ -351,7 +374,7 @@ export function GearPanel({
                 silhouette={<RpgIcon art={gearById(GEAR_SILHOUETTE[slot])?.art ?? GEAR[0].art} size={32} />}
                 sub={g ? bonusText(g.bonus) : null}
                 tone={grade?.color}
-                tip={g ? { title: `${g.name} (${grade!.label})`, body: `${bonusText(g.bonus)} · ${g.desc}` } : { title: `${SLOT_LABELS[slot]} · 비어 있어요`, body: "눌러서 이 칸에 낄 장비를 골라요." }}
+                tip={g ? { title: `${g.name} (${grade!.label})`, body: `${bonusText(g.bonus)} · ${g.desc}${g.kind === "weapon" ? ` · ${weaponStyleText(g)}` : ""}` } : { title: `${SLOT_LABELS[slot]} · 비어 있어요`, body: "눌러서 이 칸에 낄 장비를 골라요." }}
                 selected={pick?.type === "slot" && pick.slot === slot}
                 highlight={pick?.type === "item" && pickedSlot === slot}
                 ariaLabel={`${SLOT_LABELS[slot]} 칸, ${g ? `${g.name} 장착 중` : "비어 있음"}. 누르면 이 칸에 낄 장비 목록`}
@@ -393,6 +416,7 @@ export function GearPanel({
                   {slotGear && slotGear.id !== pickedGear.id ? `${SLOT_LABELS[pickedSlot!]}의 ${slotGear.name} 대신 끼면` : `${SLOT_LABELS[pickedSlot!]}에 끼면`}
                   {diff.length === 0 && " 달라지는 게 없어요"}
                 </p>
+                {pickedGear.kind === "weapon" && <p className={s.meta}>공격 방식: {weaponStyleText(pickedGear)}</p>}
               </>
             ) : pick?.type === "slot" ? (
               <>
@@ -466,6 +490,11 @@ export function GearPanel({
                       <span className={s.grade}>{grade.label}</span> · {KIND_LABELS[g.kind]} · Lv.{g.reqLevel}
                     </span>
                     <span className={s.bagBonus}>{bonusText(g.bonus)}</span>
+                    {g.kind === "weapon" && (
+                      <span className={s.styleTag} title={weaponStyleText(g) ?? undefined}>
+                        {weaponStyleOf(g).name}
+                      </span>
+                    )}
                     {equipped > 0 && <span className={s.equippedTag}>장착 중{count > 1 ? ` ${equipped}개` : ""}</span>}
                     {cmp.length > 0 && (
                       <span className={s.cmp}>
@@ -680,6 +709,7 @@ export function ShopPanel({ view, busy, onBuy }: { view: RpgView; busy: boolean;
                     <p className={s.meta}>
                       Lv.{g.reqLevel} · {bonusText(g.bonus)}
                     </p>
+                    {g.kind === "weapon" && <p className={s.meta}>공격 방식: {weaponStyleText(g)}</p>}
                     <p className={s.meta}>{g.desc}</p>
                     {c.level < g.reqLevel && <p className={s.warn}>레벨 {g.reqLevel}부터 낄 수 있어요</p>}
                   </div>
