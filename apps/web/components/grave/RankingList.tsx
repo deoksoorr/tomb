@@ -8,12 +8,13 @@ import styles from "./RankingPanel.module.css";
 
 // 49번: 랭킹은 포인트·사냥 중심. 묘비(헌화 순)는 작은 탭 하나로만 남긴다 (살려주세요 순위는 없어졌다).
 
-type Tab = "points" | "hunt" | "flower";
+type Tab = "points" | "hunt" | "house" | "flower";
 type HuntMode = "huntKills" | "huntBest";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "points", label: "포인트" },
   { id: "hunt", label: "사냥" },
+  { id: "house", label: "집 꾸미기" },
   { id: "flower", label: "헌화" },
 ];
 const PERIODS: { id: RankPeriod; label: string }[] = [
@@ -24,7 +25,9 @@ const EMPTY: Record<RankBoard, string> = {
   points: "아직 포인트를 모은 사람이 없어요.",
   huntKills: "아직 사냥 기록이 없어요.",
   huntBest: "아직 이 사냥터를 끝까지 깬 사람이 없어요.",
+  house: "아직 꾸민 집이 없어요. 분양 사무소에서 집을 분양받아 보세요.",
 };
+const EMPTY_HOUSE_WEEK = "이번 주에 꾸민 집이 아직 없어요.";
 
 const LIMIT = 20;
 
@@ -39,6 +42,7 @@ export function clearTime(ms: number): string {
 export function rankValue(board: RankBoard, value: number): string {
   if (board === "huntBest") return clearTime(value);
   if (board === "huntKills") return `${value.toLocaleString("ko-KR")}마리`;
+  if (board === "house") return `${value.toLocaleString("ko-KR")}점`;
   return `${value.toLocaleString("ko-KR")}P`;
 }
 
@@ -49,7 +53,7 @@ type Props = {
   onPick: (graveId: string) => void;
 };
 
-/** 탭 3개: 포인트(이번 주·전체) · 사냥(처치 수·사냥터별 최단 클리어) · 헌화(지금 채널 묘비) */
+/** 탭 4개: 포인트(이번 주·전체) · 사냥(처치 수·사냥터별 최단 클리어) · 집 꾸미기(F11 꾸밈 점수) · 헌화(지금 채널 묘비) */
 export default function RankingList({ graves, onPick }: Props) {
   const [tab, setTab] = useState<Tab>("points");
   const [period, setPeriod] = useState<RankPeriod>("week");
@@ -60,7 +64,7 @@ export default function RankingList({ graves, onPick }: Props) {
     () => (tab === "flower" ? graves.filter((g) => g.flowers > 0).sort((a, b) => b.flowers - a.flowers).slice(0, LIMIT) : []),
     [graves, tab],
   );
-  const board: RankBoard = tab === "hunt" ? hunt : "points";
+  const board: RankBoard = tab === "hunt" ? hunt : tab === "house" ? "house" : "points";
 
   return (
     <>
@@ -85,10 +89,11 @@ export default function RankingList({ graves, onPick }: Props) {
           <div className={styles.chips} role="group" aria-label="기간">
             {PERIODS.map((p) => (
               <button key={p.id} type="button" className={styles.chip} aria-pressed={period === p.id} onClick={() => setPeriod(p.id)}>
-                {p.label}
+                {tab === "house" && p.id === "week" ? "이번 주 꾸민 집" : p.label}
               </button>
             ))}
           </div>
+          {tab === "house" && <span className={styles.hint}>꾸밈 점수 = 안팎 물건 점수 + 좋아요 × 3</span>}
           {tab === "hunt" && (
             <>
               <div className={styles.chips} role="group" aria-label="사냥 기록">
@@ -154,7 +159,7 @@ function BoardRanking({ board, period, zone }: { board: RankBoard; period: RankP
   }, [board, period, zone]);
 
   if (!data) return <p className={styles.empty}>{error ?? "불러오는 중…"}</p>;
-  if (data.rows.length === 0) return <p className={styles.empty}>{EMPTY[board]}</p>;
+  if (data.rows.length === 0) return <p className={styles.empty}>{board === "house" && period === "week" ? EMPTY_HOUSE_WEEK : EMPTY[board]}</p>;
   const mineOutside = data.mine && !data.rows.some((r) => r.me) ? data.mine : null;
   return (
     <ol className={styles.list}>
@@ -163,7 +168,8 @@ function BoardRanking({ board, period, zone }: { board: RankBoard; period: RankP
           <span className={styles.rank}>{r.rank}</span>
           <span className={styles.name}>
             {r.name}
-            {r.me && " (나)"}
+            {r.me && (board === "house" ? " (내 집)" : " (나)")}
+            {r.sub && <span className={styles.sub}>{r.sub}</span>}
           </span>
           <span className={styles.metric}>{rankValue(board, r.value)}</span>
         </li>

@@ -140,6 +140,23 @@ li:nth-child(-n + 3) .rank {
   white-space: nowrap;
 }
 
+/* F11 집 꾸미기: 집 이름 아래 "번지 · 주인" */
+.sub {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+
+.hint {
+  align-self: center;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
 .metric {
   flex: none;
   color: var(--muted);

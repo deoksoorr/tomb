@@ -27,6 +27,8 @@ import {
   buyPlot,
   getHouseStore,
   houseIdFor,
+  houseRank,
+  kstWeekStart,
   likeHouse,
   postGuest,
   saveLayout,
@@ -112,7 +114,7 @@ describe("점수·호칭", () => {
   it("구간별 호칭과 다음 호칭", () => {
     expect(houseTitle(0).name).toBe(HOUSE_TITLES[0].name);
     expect(houseTitle(49).name).toBe("쓸쓸한 터");
-    expect(houseTitle(50).name).toBe("아늑한 묘역");
+    expect(houseTitle(50).name).toBe("아늑한 보금자리");
     expect(houseTitle(10_000).name).toBe("전설의 명당");
     expect(nextTitle(160)?.name).toBe("소문난 별장");
     expect(nextTitle(900)).toBeNull();
@@ -411,5 +413,40 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
     expect(HK.layout("x")).toBe("house:x:layout");
     expect(HK.like("x", "v", "20261109")).toBe("house:x:like:v:20261109");
     expect([HK.score, HK.new, HK.likes, HK.lots]).toEqual(["houses:score", "houses:new", "houses:likes", "houses:lots"]);
+  });
+});
+
+// ── F11 꾸밈 점수 랭킹 ──
+
+describe("꾸밈 점수 랭킹 (houseRank)", () => {
+  const mk = async (store: MemoryHouseStore, owner: string, name: string, score: number, now: number) => {
+    const id = houseIdFor(owner);
+    await store.create({ id, owner, name, intro: "", ownerName: `${name} 주인`, tier: "small", lot: null, now });
+    expect(await store.saveDesign(id, "small", null, null, {}, score, now)).toBe("ok");
+    return id;
+  };
+
+  it("전체 = 점수 순, 주간 = 이번 주에 꾸민 집만, 내 집은 순위 밖이면 mine으로", async () => {
+    const store = new MemoryHouseStore();
+    const now = Date.UTC(2026, 10, 12, 3); // 2026-11-12 (목) 12시 KST
+    const weekStart = kstWeekStart(now);
+    expect(new Date(weekStart).toISOString()).toBe("2026-11-08T15:00:00.000Z"); // 11/9(월) 0시 KST
+    await mk(store, "old", "지난주 집", 500, weekStart - 1000);
+    await mk(store, "a", "가", 300, now);
+    await mk(store, "b", "나", 100, now);
+    const all = await houseRank(store, "all", "b", 50, now);
+    expect(all.rows.map((r) => [r.rank, r.name, r.value])).toEqual([
+      [1, "지난주 집", 500],
+      [2, "가", 300],
+      [3, "나", 100],
+    ]);
+    expect(all.rows[2]).toMatchObject({ me: true, sub: expect.stringContaining("나 주인") });
+    expect(all.mine).toBeNull();
+    const week = await houseRank(store, "week", null, 50, now);
+    expect(week.rows.map((r) => r.name)).toEqual(["가", "나"]);
+    expect(week.rows.every((r) => !r.me)).toBe(true);
+    const short = await houseRank(store, "all", "b", 1, now);
+    expect(short.rows).toHaveLength(1);
+    expect(short.mine).toMatchObject({ rank: 3, name: "나", me: true });
   });
 });

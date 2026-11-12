@@ -7,13 +7,13 @@ import { requireVisitor } from "@/lib/session";
 import { myPoints } from "@/lib/housing/points";
 import { readBody } from "@/lib/validate";
 
-/** 내 묘역 + 가진 물건 + 포인트 (방문자별이라 캐시하지 않는다) */
+/** 내 집 + 가진 물건 + 포인트 (방문자별이라 캐시하지 않는다) */
 export const GET = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   return json<MyHouseResponse>(await myHouse(getHouseStore(), visitorId));
 });
 
-/** 분양 `{ name, intro, lot? }`: 작은 터 가격을 쓰고 내 묘역을 만든다 (계정당 1채). lot이 없으면 가장 앞의 빈 번지 */
+/** 분양 `{ name, intro, lot? }`: 작은 터 가격을 쓰고 내 집을 만든다 (계정당 1채). lot이 없으면 가장 앞의 빈 번지 */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   const { name, intro, lot } = await readBody(req, CreateHouseSchema);

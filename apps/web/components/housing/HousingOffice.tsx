@@ -23,7 +23,7 @@ type Overlay = { kind: "office"; lot: number | null } | { kind: "exterior" } | n
 
 /**
  * 하우징 입구. 월드의 "분양 사무소"와 상호작용하면 UI가 이 컴포넌트를 연다 (portal:open {kind:"housing"}).
- *  - 분양 사무소 창: 내 묘역 분양(번지 고르기)·넓히기·외관·들어가기, 분양지 둘러보기·랭킹, 분양 마을로 가기
+ *  - 분양 사무소 창: 내 집 분양(번지 고르기)·넓히기·외관·들어가기, 분양지 둘러보기·랭킹, 분양 마을로 가기
  *  - 분양 마을: 게임은 village:enter로 마을 씬을 열고, 이 컴포넌트는 위쪽 막대(HUD)만 보여 준다
  *  - 집: 마을의 문이나 사무소 창에서 들어간다. 나오면 들어온 곳(마을 또는 월드)으로
  *  - 월드로 돌아오면 onClose (월드의 분양 사무소 앞). 집 안 "분양 사무소" 버튼은 창으로 돌아온다
@@ -94,17 +94,19 @@ export default function HousingOffice({ onClose, intent = null }: { onClose: () 
       const hadHouse = !!myRef.current?.house;
       const extChanged = JSON.stringify(myRef.current?.house?.exterior) !== JSON.stringify(r.house?.exterior);
       const nameChanged = myRef.current?.house?.name !== r.house?.name;
+      // F2: 터를 넓히면 주거 구역의 집 그림도 바로 커져야 한다 (예전엔 다음 주기까지 그대로였다)
+      const tierChanged = !!myRef.current?.house && myRef.current.house.tier !== r.house?.tier;
       myRef.current = r;
       setMy(r);
       void meStore.refresh();
-      // 메인 맵 주거 구역도 바로 다시 세운다 (분양·외관·이름이 바뀌었을 때)
-      if (r.house && (!hadHouse || extChanged || nameChanged))
+      // 메인 맵 주거 구역도 바로 다시 세운다 (분양·외관·이름·터 크기가 바뀌었을 때)
+      if (r.house && (!hadHouse || extChanged || nameChanged || tierChanged))
         void housingApi
           .village(true)
           .then((village) => bridge.emit("village:data", { village, myHouseId: r.house?.id ?? null }))
           .catch(() => undefined);
       // 마을에 있는 동안 분양·외관이 바뀌면 마을을 다시 그린다
-      if (inScene.current && mode.kind === "village" && (!hadHouse || extChanged) && r.house) void goVillage(null, true);
+      if (inScene.current && mode.kind === "village" && (!hadHouse || extChanged || tierChanged) && r.house) void goVillage(null, true);
     },
     [goVillage, mode.kind],
   );

@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { nanoid } from "nanoid";
 import { env } from "../env";
 import { HttpError } from "../http";
-import { kstDay } from "../store/accounts";
+import { kstDay, kstWeek } from "../store/accounts";
 import type { Me } from "../types";
 import {
   furnitureById,
@@ -45,7 +45,7 @@ const HOUSE_ID_RE = /^[A-Za-z0-9_-]{12}$/;
 export const isHouseId = (id: string) => HOUSE_ID_RE.test(id);
 
 export const houseNotFound = () => new HttpError(404, "NOT_FOUND", "그 집을 찾을 수 없어요.");
-const noHouse = () => new HttpError(409, "NO_HOUSE", "먼저 분양 사무소에서 내 묘역을 분양받아 주세요.");
+const noHouse = () => new HttpError(409, "NO_HOUSE", "먼저 분양 사무소에서 내 집을 분양받아 주세요.");
 
 export function toPublicHouse(r: HouseRecord): PublicHouse {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -99,14 +99,14 @@ export async function buyPlot(
   lot: number | null = null,
 ): Promise<MyHouseResponse> {
   const id = houseIdFor(accountId);
-  if (await store.get(id)) throw new HttpError(409, "ALREADY_OWNED", "이미 내 묘역이 있어요. 한 계정에 하나만 분양받을 수 있어요.");
+  if (await store.get(id)) throw new HttpError(409, "ALREADY_OWNED", "이미 내 집이 있어요. 한 계정에 하나만 분양받을 수 있어요.");
   if (lot !== null && (!Number.isInteger(lot) || lot < 1 || lot > VILLAGE_MAX_LOTS))
     throw new HttpError(400, "INVALID_INPUT", `번지는 1~${VILLAGE_MAX_LOTS} 중에서 골라 주세요.`);
   if (lot !== null && (await store.village()).some((h) => h.lot === lot)) throw lotTaken();
   const tier = PLOT_TIERS[0];
   await spend(accountId, tier.price, "plot");
   const r = await store.create({ id, owner: accountId, name, intro, ownerName, tier: tier.id, lot, now: Date.now() });
-  if (r === "exists") await refundAndThrow(accountId, tier.price, new HttpError(409, "ALREADY_OWNED", "이미 내 묘역이 있어요."));
+  if (r === "exists") await refundAndThrow(accountId, tier.price, new HttpError(409, "ALREADY_OWNED", "이미 내 집이 있어요."));
   if (r === "lot_taken") await refundAndThrow(accountId, tier.price, lotTaken());
   if (r === "full") await refundAndThrow(accountId, tier.price, new HttpError(409, "VILLAGE_FULL", "마을에 빈 번지가 없어요."));
   return myHouse(store, accountId);
@@ -140,10 +140,10 @@ export async function editProfile(store: HouseStore, accountId: string, name: st
 export async function upgradePlot(store: HouseStore, accountId: string, to: PlotTierId): Promise<MyHouseResponse> {
   const h = await mustHave(store, accountId);
   const next = nextTier(h.tier);
-  if (!next || next.id !== to) throw new HttpError(409, "BAD_TIER", "지금 묘역에서 바로 올릴 수 있는 크기가 아니에요.");
+  if (!next || next.id !== to) throw new HttpError(409, "BAD_TIER", "지금 터에서 바로 올릴 수 있는 크기가 아니에요.");
   await spend(accountId, next.price, `upgrade:${to}`);
   if (!(await store.upgrade(h.id, h.tier, to, Date.now())))
-    await refundAndThrow(accountId, next.price, new HttpError(409, "CONFLICT", "묘역 크기가 이미 바뀌었어요. 다시 확인해 주세요."));
+    await refundAndThrow(accountId, next.price, new HttpError(409, "CONFLICT", "터 크기가 이미 바뀌었어요. 다시 확인해 주세요."));
   return myHouse(store, accountId);
 }
 
@@ -170,7 +170,7 @@ export async function sellFurniture(store: HouseStore, accountId: string, itemId
   const h = await mustHave(store, accountId);
   const r = await store.takeItem(h.id, itemId);
   if (r === "none") throw new HttpError(409, "NO_ITEM", "그 물건을 가지고 있지 않아요.");
-  if (r === "placed") throw new HttpError(409, "PLACED", "모두 놓여 있어요. 먼저 묘역에서 치운 뒤 저장해 주세요.");
+  if (r === "placed") throw new HttpError(409, "PLACED", "모두 놓여 있어요. 먼저 집에서 치운 뒤 저장해 주세요.");
   const refunded = sellPrice(def);
   const me = await refund(accountId, refunded);
   return { ...(await myHouse(store, accountId, me)), refunded };
@@ -178,13 +178,13 @@ export async function sellFurniture(store: HouseStore, accountId: string, itemId
 
 export async function saveLayout(store: HouseStore, accountId: string, tier: PlotTierId, layout: HouseLayout): Promise<MyHouseResponse> {
   const h = await mustHave(store, accountId);
-  if (h.tier !== tier) throw new HttpError(409, "CONFLICT", "묘역 크기가 바뀌었어요. 다시 열어 주세요.");
+  if (h.tier !== tier) throw new HttpError(409, "CONFLICT", "터 크기가 바뀌었어요. 다시 열어 주세요.");
   const v = validateLayout(layout, tier, await store.inventory(h.id));
   if (!v.ok) throw new HttpError(400, v.code, v.message);
   // 놓은 개수·점수는 안(배치) + 밖(지금 외관)을 함께 센다 (외관에 쓴 아이템을 되팔지 못하게)
   const r = await store.saveDesign(h.id, tier, layout, null, designCounts(layout, h.exterior), designScore(layout, h.exterior), Date.now());
   if (r === "no_house") throw noHouse();
-  if (r === "tier") throw new HttpError(409, "CONFLICT", "묘역 크기가 바뀌었어요. 다시 열어 주세요.");
+  if (r === "tier") throw new HttpError(409, "CONFLICT", "터 크기가 바뀌었어요. 다시 열어 주세요.");
   if (r === "not_owned") throw new HttpError(409, "NOT_OWNED", "가진 것보다 많이 놓았어요. 가방을 다시 확인해 주세요.");
   return myHouse(store, accountId);
 }
@@ -196,7 +196,7 @@ export async function saveExterior(store: HouseStore, accountId: string, exterio
   const ext: HouseExterior = v.exterior;
   const r = await store.saveDesign(h.id, h.tier, null, ext, designCounts(h.layout, ext), designScore(h.layout, ext), Date.now());
   if (r === "no_house") throw noHouse();
-  if (r === "tier") throw new HttpError(409, "CONFLICT", "묘역 크기가 바뀌었어요. 다시 열어 주세요.");
+  if (r === "tier") throw new HttpError(409, "CONFLICT", "터 크기가 바뀌었어요. 다시 열어 주세요.");
   if (r === "not_owned") throw new HttpError(409, "NOT_OWNED", "가진 것보다 많이 썼어요. 가방을 다시 확인해 주세요.");
   return myHouse(store, accountId);
 }
@@ -244,3 +244,35 @@ export async function deleteGuest(store: HouseStore, houseId: string, entryId: s
   await store.removeGuest(h.id, entryId);
 }
 
+
+// ── F11 꾸밈 점수 랭킹 (GET /api/rank?board=house) ──
+
+/** 랭킹을 고르는 후보 수 (꾸밈 점수 상위). 주간은 이 안에서 이번 주에 꾸민 집만 남긴다 */
+export const HOUSE_RANK_POOL = 300;
+
+/** 이번 주(KST 월요일 0시) 시작 시각 (epoch ms) */
+export function kstWeekStart(now = Date.now()): number {
+  const w = kstWeek(now);
+  return Date.UTC(Number(w.slice(0, 4)), Number(w.slice(4, 6)) - 1, Number(w.slice(6, 8))) - 9 * 3_600_000;
+}
+
+export type HouseRankRow = { rank: number; name: string; sub: string; value: number; me: boolean };
+
+/**
+ * 꾸밈 점수 순위. all = 숨기지 않은 모든 집, week = 이번 주에 분양·꾸미기(배치·외관·넓히기·이름)를 한 집.
+ * mine: 내 집이 순위(size) 밖이면 그 줄 (후보 안에 있을 때만), 안이면 null (rows의 me로 표시)
+ */
+export async function houseRank(
+  store: HouseStore,
+  period: "week" | "all",
+  accountId: string | null,
+  size: number,
+  now = Date.now(),
+): Promise<{ rows: HouseRankRow[]; mine: HouseRankRow | null }> {
+  const since = period === "week" ? kstWeekStart(now) : 0;
+  const pool = (await store.list("score", HOUSE_RANK_POOL)).filter((h) => !h.hidden && Math.max(h.updatedAt, h.createdAt) >= since);
+  const myId = accountId ? houseIdFor(accountId) : null;
+  const all = pool.map((h, i) => ({ rank: i + 1, name: h.name, sub: `${h.lot}번지 · ${h.ownerName}`, value: h.score, me: h.id === myId }));
+  const mineAt = all.findIndex((r) => r.me);
+  return { rows: all.slice(0, size), mine: mineAt >= size ? all[mineAt] : null };
+}

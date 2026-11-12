@@ -1,6 +1,6 @@
 import * as Phaser from "phaser";
 import { DIR } from "@tomb/protocol";
-import { houseTitle, VILLAGE_COLS } from "@/lib/housing/catalog";
+import { VILLAGE_COLS } from "@/lib/housing/catalog";
 import type { VillageHouse, VillageResponse } from "@/lib/housing/types";
 import { bridge } from "../bridge";
 import { DEPTH } from "../config";
@@ -14,7 +14,8 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import type { LightSpot } from "../world/WorldMap";
-import { FACADE_H, facadeGrid, facadeInfo, floorGrid } from "./art";
+import { FACADE_H, FACADE_W, floorGrid } from "./art";
+import { drawEmptyLot, drawHouseLot } from "./worldLots";
 
 // 분양 마을 씬. 분양 사무소에서 들어오는 밤 골목 마을이다.
 //  - 번지(필지)마다 그 집의 외관이 서 있고, 지붕 위에 문패(집 이름 · 주인 · 호칭 · 꾸밈 점수)가 뜬다.
@@ -42,8 +43,8 @@ export type VillageSceneData = {
 };
 
 const T = 16;
-const LOT_W = 128;
-const LOT_H = 112;
+const LOT_W = FACADE_W;
+const LOT_H = FACADE_H + 8;
 const GAP = 16;
 const MARGIN_X = 48;
 const TOP = 64;
@@ -236,55 +237,26 @@ export class VillageScene extends Phaser.Scene {
     this.add.ellipse(x - 3, y - 17, 12, 10, 0x3c5e3a).setDepth(y + 0.2);
   }
 
-  private facadeKey(h: VillageHouse): string {
-    const key = `village-facade-${h.tier}-${Object.values(h.exterior).join("-")}`;
-    if (!this.textures.exists(key)) this.textures.addCanvas(key, facadeGrid(h.exterior, h.tier).toCanvas());
-    return key;
-  }
-
   private drawHouse(h: VillageHouse): void {
     const o = lotOrigin(h.lot);
-    const ox = o.x;
-    const oy = o.y + LOT_H - FACADE_H;
-    const info = facadeInfo(h.exterior, h.tier);
-    const baseY = oy + info.body.y + info.body.h;
-    this.add.image(ox, oy, this.facadeKey(h)).setOrigin(0, 0).setDepth(baseY);
+    const spot = { lot: h.lot, x: o.x, y: o.y + LOT_H - FACADE_H };
+    const d = drawHouseLot(this, this.d.atlas, spot, { w: FACADE_W, h: FACADE_H }, h, h.id === this.d.myHouseId, { reduced: this.d.reduced, labelDepth: DEPTH.labels });
     // 충돌: 몸체 (문 앞은 막지 않게 아래 4px 남김)
-    const b = info.body;
-    const z = this.add.zone(ox + b.x + b.w / 2, oy + b.y + b.h / 2 + 2, b.w, b.h - 4);
+    const b = d.body!;
+    const z = this.add.zone(b.x + b.w / 2, b.y + b.h / 2 - 2, b.w, b.h - 4);
     z.removeFromDisplayList();
     this.bodies.add(z);
-    for (const l of info.lights) this.glow.push({ x: ox + l.x, y: oy + l.y, r: l.r });
-    // 문패: 지붕 위 두 줄
-    const mine = h.id === this.d.myHouseId;
-    const t = houseTitle(h.score);
-    const line1 = `${h.lot}번지 · ${h.name}${mine ? " (내 집)" : ""}`;
-    const line2 = `${h.ownerName} · ${t.name} · ${h.score}점`;
-    this.d.atlas.ensure(line1 + line2);
-    const top = oy + b.y - 30;
-    this.labels.push(
-      this.add.bitmapText(ox + LOT_W / 2, top, FONT_KEY, line1, FONT_PX).setOrigin(0.5, 1).setTint(mine ? 0xffe39a : 0xf2ead3).setDepth(DEPTH.labels),
-      this.add.bitmapText(ox + LOT_W / 2, top + 9, FONT_KEY, line2, FONT_PX).setOrigin(0.5, 1).setTint(0xb9b4a4).setDepth(DEPTH.labels),
-    );
-    this.spots.push({ kind: "door", house: h, x: ox + info.door.x, y: oy + info.door.y });
+    for (const l of d.lights) this.glow.push({ x: l.x, y: l.y, r: l.scale * 40 });
+    this.labels.push(...d.labels);
+    this.spots.push({ kind: "door", house: h, x: d.door!.x, y: d.door!.y });
   }
 
   private drawEmptyLot(lot: number, taken: boolean): void {
     const o = lotOrigin(lot);
-    const x = o.x + LOT_W / 2;
-    const y = o.y + LOT_H - 24;
-    // 팻말
-    this.add.rectangle(x, y, 2, 12, 0x553722).setOrigin(0.5, 1).setDepth(y);
-    this.add.rectangle(x, y - 10, 22, 11, taken ? 0x5f5d57 : 0x9c6d45).setOrigin(0.5, 1).setDepth(y + 0.1).setStrokeStyle(1, 0x1a1612);
-    this.add.rectangle(x, y - 15, 14, 1, 0x3a2c22).setDepth(y + 0.2);
-    // 말뚝·줄 (분양 터 표시)
-    const g = this.add.graphics().setDepth(DEPTH.decal);
-    g.lineStyle(1, 0xd9d4c3, 0.25);
-    g.strokeRect(o.x + 10, o.y + 18, LOT_W - 20, LOT_H - 28);
-    const text = taken ? `${lot}번지 · 공사 중` : `${lot}번지 · 분양 중`;
-    this.d.atlas.ensure(text);
-    this.labels.push(this.add.bitmapText(x, y - 24, FONT_KEY, text, FONT_PX).setOrigin(0.5, 1).setTint(taken ? 0x908b7b : 0xd9d4c3).setDepth(DEPTH.labels));
-    if (!taken) this.spots.push({ kind: "lot", lot, x, y: y + 6 });
+    const spot = { lot, x: o.x, y: o.y + LOT_H - FACADE_H };
+    const d = drawEmptyLot(this, this.d.atlas, spot, { w: FACADE_W, h: FACADE_H }, taken, { reduced: this.d.reduced, labelDepth: DEPTH.labels });
+    this.labels.push(...d.labels);
+    if (!taken) this.spots.push({ kind: "lot", lot, x: spot.x + FACADE_W / 2, y: spot.y + FACADE_H - 16 });
   }
 
   private fitCamera(): void {

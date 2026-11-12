@@ -2,8 +2,8 @@
 
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트라 next/image 최적화가 필요 없다 */
 import { useSyncExternalStore } from "react";
-import { furnitureIcon } from "@/game/housing/art";
-import { HOUSE_TITLES, houseTitle, nextTitle } from "@/lib/housing/catalog";
+import { facadePreview, furnitureIcon } from "@/game/housing/art";
+import { defaultExterior, HOUSE_TITLES, houseTitle, nextTitle, PLOT_TIERS, type HouseExteriorMap, type PlotTierId } from "@/lib/housing/catalog";
 import styles from "./housing.module.css";
 
 const noop = () => () => undefined;
@@ -50,3 +50,28 @@ export function TitleProgress({ score }: { score: number }) {
 }
 
 export const fmt = (n: number) => n.toLocaleString("ko-KR");
+
+/** 터 크기별로 마을에 서는 집 그림 (F2: 넓히면 집도 커지는 걸 미리 보여 준다) */
+export function TierCompare({ exterior, current }: { exterior?: HouseExteriorMap; current?: PlotTierId | null }) {
+  const client = useSyncExternalStore(noop, () => true, () => false);
+  const ext = exterior ?? defaultExterior();
+  return (
+    <div className={styles.tierRow} role="list" aria-label="터 크기별 집 모습">
+      {PLOT_TIERS.map((t) => {
+        const img = client ? facadePreview(ext, t.id, 1) : null;
+        return (
+          <figure key={t.id} className={styles.tierCard} data-current={t.id === current} role="listitem" style={{ margin: 0 }}>
+            {img ? (
+              <img src={img.url} width={img.w} height={img.h} alt={`${t.name} 집 모습`} style={{ imageRendering: "pixelated" }} />
+            ) : (
+              <span style={{ width: 128, height: 104, display: "block" }} aria-hidden="true" />
+            )}
+            <figcaption className={styles.small}>
+              {t.name} {t.w}×{t.h}칸{t.id === current ? " · 지금" : ""}
+            </figcaption>
+          </figure>
+        );
+      })}
+    </div>
+  );
+}

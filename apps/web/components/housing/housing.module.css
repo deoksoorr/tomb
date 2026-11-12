@@ -451,15 +451,24 @@
 /* ── 외관 꾸미기 ── */
 
 .extTop {
+  /* F18: 아이템 목록을 내려도 미리보기가 위에 붙어 있게 */
+  position: sticky;
+  top: -16px;
+  z-index: 2;
   display: grid;
   grid-template-columns: minmax(0, 256px) 1fr;
   gap: 14px;
   align-items: center;
+  margin: -16px -16px 0;
+  padding: 16px 16px 10px;
+  background: var(--panel-solid);
+  border-bottom: 2px solid var(--line);
 }
 
 .extPreview {
   display: grid;
   place-items: center;
+  gap: 6px;
   padding: 6px;
   background: radial-gradient(ellipse at 50% 80%, rgba(224, 195, 106, 0.12), transparent 70%), var(--bg-deep);
   box-shadow: var(--px-border);
@@ -499,6 +508,66 @@
 .extBuy {
   background: transparent;
   color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* 안 산 아이템을 입혀 보는 중 */
+.extBuy[aria-pressed="true"] {
+  color: var(--bone);
+  box-shadow:
+    inset 0 0 0 1px var(--line),
+    0 -2px 0 0 var(--moss),
+    0 2px 0 0 var(--moss),
+    -2px 0 0 0 var(--moss),
+    2px 0 0 0 var(--moss);
+}
+
+.extPreview[data-night="true"] {
+  background: radial-gradient(ellipse at 50% 80%, rgba(255, 200, 110, 0.1), transparent 70%), #0d0f14;
+}
+
+.chips {
+  display: flex;
+  gap: 2px;
+}
+
+.chip {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 0;
+  background: var(--surface);
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--moss-deep);
+  color: var(--bone);
+}
+
+/* 분양 사무소: 터 크기별 집 그림 비교 */
+.tierRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tierCard {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.tierCard[data-current="true"] {
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
 }
 
 .extOption:disabled {
@@ -507,6 +576,58 @@
 
 @media (max-width: 480px) {
   .extTop {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .extPreview img {
+    max-height: 120px;
+    width: auto !important;
+  }
+}
+
+/* ── F12 가구 상점: 고정 크기 창(Dialog fixed) 안에서 탭은 그대로, 목록만 스크롤 · 카드 작게 ── */
+.fsShop {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.fsShop > .tabs {
+  flex: none;
+}
+
+.fsGrid {
+  flex: 1;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  grid-auto-rows: min-content;
+  min-height: 0;
+  padding: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 설명은 두 줄까지 (전체는 마우스를 올리면 툴팁) */
+.fsDesc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.fsGrid .itemActions > button {
+  min-height: 44px;
+}
+
+@media (max-width: 560px) {
+  .fsGrid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  }
+
+  .fsShop > .spread {
+    flex-wrap: wrap;
   }
 }

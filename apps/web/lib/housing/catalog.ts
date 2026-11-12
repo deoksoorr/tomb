@@ -1,4 +1,4 @@
-// 하우징(개인 묘역) 카탈로그와 밸런스 값. 서버(검증·가격)와 클라이언트(상점·게임 그림)가 같이 쓴다.
+// 하우징(개인 집) 카탈로그와 밸런스 값. 서버(검증·가격)와 클라이언트(상점·게임 그림)가 같이 쓴다.
 // 가격·점수를 바꾸면 상점 화면과 서버 검증이 함께 바뀐다. 이미 놓인 물건의 점수는 다음 저장 때 다시 계산된다.
 
 export type PlotTierId = "small" | "wide" | "manor";
@@ -53,7 +53,7 @@ export type FurnitureDef = {
   turn?: boolean;
   /** 밤에 빛을 내는 물건 (색, 반지름 px) */
   light?: { color: number; r: number };
-  /** 바닥·담장 스킨: 칸에 놓지 않고 묘역 전체에 입힌다 */
+  /** 바닥·담장 스킨: 칸에 놓지 않고 집 전체에 입힌다 */
   skin?: "floor" | "wall";
   /** 외관 아이템: 마을에 보이는 집 바깥의 한 자리 (지붕·벽·울타리…). 칸에 놓지 않는다 */
   ext?: ExtSlot;
@@ -85,11 +85,11 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "bush", name: "덤불", desc: "동글동글한 작은 덤불.", category: "nature", price: 20, score: 3, w: 1, h: 1 },
   { id: "mushrooms", name: "버섯 무리", desc: "어둠 속에서 살짝 빛난다.", category: "nature", price: 15, score: 3, w: 1, h: 1, floor: true, light: { color: 0x9fe8d0, r: 10 } },
   // ── 분위기 ──
-  { id: "stone_lantern", name: "석등", desc: "묘역을 지키는 돌 등불.", category: "mood", price: 65, score: 14, w: 1, h: 1, light: { color: 0xffc070, r: 34 } },
+  { id: "stone_lantern", name: "석등", desc: "집을 지키는 돌 등불.", category: "mood", price: 65, score: 14, w: 1, h: 1, light: { color: 0xffc070, r: 34 } },
   { id: "candles", name: "촛대", desc: "세 갈래 촛불이 흔들린다.", category: "mood", price: 25, score: 5, w: 1, h: 1, light: { color: 0xffb060, r: 22 } },
   { id: "firefly_jar", name: "반딧불 병", desc: "잡아 둔 반딧불이 천천히 떠다닌다.", category: "mood", price: 40, score: 9, w: 1, h: 1, light: { color: 0xd8ff8a, r: 20 } },
   { id: "wind_chime", name: "풍경", desc: "바람이 불면 맑은 소리가 난다.", category: "mood", price: 30, score: 7, w: 1, h: 1 },
-  { id: "memorial", name: "추억 비석", desc: "내 묘역에 세우는 작은 비석.", category: "mood", price: 35, score: 8, w: 1, h: 1 },
+  { id: "memorial", name: "추억 비석", desc: "내 집 마당에 세우는 작은 비석.", category: "mood", price: 35, score: 8, w: 1, h: 1 },
   { id: "ghost_cat", name: "잠든 유령 고양이", desc: "방석 위에서 반투명하게 졸고 있다.", category: "mood", price: 75, score: 16, w: 1, h: 1 },
   // ── 바닥·담장 스킨 (기본 풀밭·나무 울타리는 무료) ──
   { id: "floor_moss", name: "이끼 바닥", desc: "폭신한 이끼가 깔린 바닥.", category: "skin", price: 55, score: 10, w: 1, h: 1, skin: "floor" },
@@ -182,7 +182,7 @@ export type HouseTitle = { min: number; name: string; desc: string };
 /** 꾸밈 점수 구간별 호칭 (낮은 것부터) */
 export const HOUSE_TITLES: readonly HouseTitle[] = [
   { min: 0, name: "쓸쓸한 터", desc: "아직 바람 소리만 머무는 곳" },
-  { min: 50, name: "아늑한 묘역", desc: "누군가 머문 온기가 느껴지는 곳" },
+  { min: 50, name: "아늑한 보금자리", desc: "누군가 머문 온기가 느껴지는 곳" },
   { min: 150, name: "정갈한 정원", desc: "손길이 닿은 티가 나는 곳" },
   { min: 400, name: "소문난 별장", desc: "지나가던 유령도 들르는 곳" },
   { min: 900, name: "전설의 명당", desc: "묘지 사람들이 입을 모아 말하는 곳" },

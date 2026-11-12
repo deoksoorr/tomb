@@ -14,7 +14,7 @@ const text = (check: (raw: unknown) => TextCheck) =>
     return z.NEVER;
   });
 
-const tierId = z.enum(PLOT_TIERS.map((t) => t.id) as ["small", "wide", "manor"], "알 수 없는 묘역 크기예요.");
+const tierId = z.enum(PLOT_TIERS.map((t) => t.id) as ["small", "wide", "manor"], "알 수 없는 터 크기예요.");
 const itemId = z
   .string()
   .max(40)

@@ -18,7 +18,7 @@ import {
 import type { HouseLayout, Placed } from "./types";
 
 // 배치 규칙 (서버 검증과 편집 화면이 같은 함수를 쓴다).
-//  - 물건은 묘역 안쪽 칸에만, 아래 가운데 문 2칸은 비워 둔다.
+//  - 물건은 집 안쪽 칸에만, 아래 가운데 문 2칸은 비워 둔다.
 //  - 바닥층(러그·돌길·꽃밭)끼리, 서 있는 물건끼리는 겹칠 수 없다. 바닥층 위에는 서 있는 물건을 올릴 수 있다.
 //  - 놓은 개수는 가진 개수를 넘을 수 없다 (바닥·담장 스킨도 1개를 쓴다).
 
@@ -59,7 +59,7 @@ export class Occupancy {
   check(def: FurnitureDef, x: number, y: number, r: number, ignoreU?: string): string | null {
     const { w, h } = footprint(def, r);
     const t = this.tier;
-    if (x < 0 || y < 0 || x + w > t.w || y + h > t.h) return "묘역 밖으로 나갔어요.";
+    if (x < 0 || y < 0 || x + w > t.w || y + h > t.h) return "집 밖으로 나갔어요.";
     const gate = gateTiles(t);
     const layer = def.floor ? this.floor : this.stand;
     for (let j = 0; j < h; j++)
@@ -116,7 +116,7 @@ export const totalScore = (placed: number, likes: number) => placed + likes * LI
  */
 export function validateLayout(layout: HouseLayout, tierId: PlotTierId, owned: Record<string, number> | null): LayoutOk | LayoutError {
   const tier = tierById(tierId);
-  if (!tier) return fail("BAD_TIER", "묘역 크기를 알 수 없어요.");
+  if (!tier) return fail("BAD_TIER", "터 크기를 알 수 없어요.");
   if (!isFloorSkin(layout.floor)) return fail("BAD_SKIN", "알 수 없는 바닥이에요.");
   if (!isWallSkin(layout.wall)) return fail("BAD_SKIN", "알 수 없는 담장이에요.");
   if (layout.items.length > tier.maxItems)

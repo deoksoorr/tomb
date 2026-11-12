@@ -18,7 +18,7 @@ import type { LightSpot } from "../world/WorldMap";
 import { artUp, floorGrid, furnitureGrid, WALL_H, wallGrid } from "./art";
 import type { HouseEditState, HouseTool } from "./events";
 
-// 개인 묘역(하우징) 씬. 혼자 들어오는 공간이다 (방문자끼리 서로 보이지 않는다).
+// 개인 집(하우징) 씬. 혼자 들어오는 공간이다 (방문자끼리 서로 보이지 않는다).
 //  - 월드와 같은 밤 분위기(Atmosphere·Lighting)를 그대로 쓴다. 석등·촛대 같은 물건은 빛을 낸다.
 //  - 아래 문 밖에서 시작하고, 문 밖으로 걸어 내려가면 월드(분양 사무소 앞)로 돌아간다.
 //  - 주인은 편집 모드에서 물건을 끌어 옮기고(마우스·터치), 방향키로 한 칸씩 옮기고, R 돌리기, Delete 치우기.
@@ -131,7 +131,7 @@ export class HouseScene extends Phaser.Scene {
 
     // 이름표 (위 담장 위) + 방명록 팻말 (문 밖 왼쪽)
     const title = `${house.name}`;
-    atlas.ensure(title + "E · 방명록 보기" + house.ownerName + "의 묘역");
+    atlas.ensure(title + "E · 방명록 보기" + house.ownerName + "의 집");
     this.titleLabel = this.add
       .bitmapText(this.W / 2, this.oy - T - 4, FONT_KEY, title, FONT_PX)
       .setOrigin(0.5, 1)
@@ -492,7 +492,7 @@ export class HouseScene extends Phaser.Scene {
       this.drawGrid();
       if (this.player.sitting) this.player.stand(this.time.now, NO_SEATS);
       this.cameras.main.stopFollow();
-      // 위 정보 막대(약 90px)와 아래 편집 도구(화면 높이의 약 40%) 사이에 묘역이 들어오게 줌·위치를 맞춘다
+      // 위 정보 막대(약 90px)와 아래 편집 도구(화면 높이의 약 40%) 사이에 집이 들어오게 줌·위치를 맞춘다
       const cam = this.cameras.main;
       cam.removeBounds();
       const top = 90;

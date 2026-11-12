@@ -21,7 +21,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import styles from "./housing.module.css";
-import { fmt, TitleBadge, TitleProgress } from "./parts";
+import { fmt, TierCompare, TitleBadge, TitleProgress } from "./parts";
 
 type Tab = "mine" | "browse";
 
@@ -44,7 +44,7 @@ type Props = {
   inVillage?: boolean;
 };
 
-/** 분양 사무소 창: 내 묘역(분양·넓히기·들어가기) + 분양지 둘러보기·랭킹 */
+/** 분양 사무소 창: 내 집(분양·넓히기·들어가기) + 분양지 둘러보기·랭킹 */
 export default function OfficeDialog({
   my,
   myError,
@@ -83,7 +83,7 @@ export default function OfficeDialog({
               className={styles.tab}
               onClick={() => setTab(t)}
             >
-              {t === "mine" ? "내 묘역" : "둘러보기 · 랭킹"}
+              {t === "mine" ? "내 집" : "둘러보기 · 랭킹"}
             </button>
           ))}
         </div>
@@ -228,13 +228,14 @@ function MyPlot({
     return (
       <div className={styles.stack}>
         <div className={styles.card}>
-          <p className={styles.houseName}>나만의 묘역을 분양받아 보세요</p>
+          <p className={styles.houseName}>나만의 집을 분양받아 보세요</p>
           <p className={styles.muted}>
-            공동묘지 한켠에 {plot.name}({plot.w}×{plot.h}칸)을 드려요. 가구와 소품으로 꾸미면 꾸밈 점수가 오르고, 사람들이 놀러 와 좋아요와 방명록을 남길 수 있어요.
+            주거 구역 한켠에 {plot.name}({plot.w}×{plot.h}칸)을 드려요. 가구와 소품으로 꾸미면 꾸밈 점수가 오르고, 사람들이 놀러 와 좋아요와 방명록을 남길 수 있어요.
           </p>
           <p className={styles.points}>
             분양가 <strong>{fmt(plot.price)}P</strong> · 내 포인트 <strong>{fmt(my.points)}P</strong>
           </p>
+          <TierCompare current="small" />
           {lot !== null && <p className={styles.tag}>고른 자리: 주거 구역 {lot}번지</p>}
           {short && <p className={styles.error}>포인트가 {fmt(plot.price - my.points)}P 모자라요. 출석·헌화로 모아 주세요.</p>}
         </div>
@@ -274,7 +275,7 @@ function MyPlot({
         <TitleProgress score={h.score} />
         <div className={styles.row}>
           <button type="button" className={cx(ui.button, ui.primary)} onClick={() => onEnter(false)} disabled={busy}>
-            내 묘역 들어가기
+            내 집 들어가기
           </button>
           <button type="button" className={ui.button} onClick={() => onEnter(true)} disabled={busy}>
             들어가서 꾸미기
@@ -307,8 +308,9 @@ function MyPlot({
         {up ? (
           <>
             <p className={styles.muted}>
-              {up.name}({up.w}×{up.h}칸, 물건 {up.maxItems}개)으로 넓힐 수 있어요. 놓아 둔 물건은 그대로예요.
+              {up.name}({up.w}×{up.h}칸, 물건 {up.maxItems}개)으로 넓힐 수 있어요. 놓아 둔 물건은 그대로이고, 주거 구역에 선 집도 더 크게 바뀌어요.
             </p>
+            <TierCompare exterior={h.exterior} current={h.tier} />
             <button
               type="button"
               className={ui.button}
@@ -319,7 +321,10 @@ function MyPlot({
             </button>
           </>
         ) : (
-          <p className={styles.muted}>가장 넓은 {tier.name}이에요.</p>
+          <>
+            <p className={styles.muted}>가장 넓은 {tier.name}이에요.</p>
+            <TierCompare exterior={h.exterior} current={h.tier} />
+          </>
         )}
       </div>
       <p className={styles.notice} role="status">
@@ -359,11 +364,11 @@ function HouseList({ onVisit, myId, busy }: { onVisit: (id: string) => void; myI
         ))}
       </div>
       <p className={styles.small}>
-        {sort === "new" ? "최근에 분양된 묘역이에요." : `${SORT_LABELS[sort]} 순 상위 50곳. 꾸밈 점수 = 놓은 물건 점수 + 좋아요 × ${LIKE_WEIGHT}`}
+        {sort === "new" ? "최근에 분양된 집이에요." : `${SORT_LABELS[sort]} 순 상위 50곳. 꾸밈 점수 = 놓은 물건 점수 + 좋아요 × ${LIKE_WEIGHT}`}
       </p>
       {error && <p className={styles.error}>{error}</p>}
       {!houses && !error && <p className={styles.muted}>불러오는 중…</p>}
-      {houses?.length === 0 && <p className={styles.muted}>아직 분양된 묘역이 없어요. 첫 주인이 되어 보세요.</p>}
+      {houses?.length === 0 && <p className={styles.muted}>아직 분양된 집이 없어요. 첫 주인이 되어 보세요.</p>}
       {houses && houses.length > 0 && (
         <ol className={styles.list}>
           {houses.map((h, i) => (
@@ -373,7 +378,7 @@ function HouseList({ onVisit, myId, busy }: { onVisit: (id: string) => void; myI
                 className={styles.listItem}
                 onClick={() => onVisit(h.id)}
                 disabled={busy}
-                aria-label={`${i + 1}위 ${h.name}, ${h.ownerName}의 묘역, 꾸밈 점수 ${h.score}, 좋아요 ${h.likes}. 놀러 가기`}
+                aria-label={`${i + 1}위 ${h.name}, ${h.ownerName}의 집, 꾸밈 점수 ${h.score}, 좋아요 ${h.likes}. 놀러 가기`}
               >
                 <span className={styles.rank} data-top={sort !== "new" && i < 3}>
                   {sort === "new" ? "·" : i + 1}

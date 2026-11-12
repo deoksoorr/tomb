@@ -50,8 +50,8 @@ export default function FurnitureShop({ my, placed, onMy, onClose }: Props) {
   }
 
   return (
-    <Dialog title="가구 상점" onClose={onClose} size="lg">
-      <div className={styles.stack}>
+    <Dialog title="가구 상점" onClose={onClose} size="lg" fixed>
+      <div className={cx(styles.stack, styles.fsShop)}>
         <div className={styles.spread}>
           <p className={styles.points}>
             내 포인트 <strong>{fmt(my.points)}P</strong>
@@ -74,19 +74,19 @@ export default function FurnitureShop({ my, placed, onMy, onClose }: Props) {
             </button>
           ))}
         </div>
-        <ul id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${cat}`} className={styles.shopGrid}>
+        <ul id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${cat}`} className={cx(styles.shopGrid, styles.fsGrid)}>
           {FURNITURE.filter((f) => f.category === cat).map((f) => {
             const owned = my.inventory[f.id] ?? 0;
             const free = owned - (placed[f.id] ?? 0);
             const short = my.points < f.price;
             const full = owned >= MAX_OWN_PER_ITEM;
             return (
-              <li key={f.id} className={styles.item}>
+              <li key={f.id} className={styles.item} title={`${f.name} — ${f.desc}`}>
                 <div className={styles.itemArt}>
                   <FurnitureIcon itemId={f.id} size={f.ext ? 64 : 56} />
                 </div>
                 <p className={styles.itemName}>{f.name}</p>
-                <p className={styles.small}>{f.desc}</p>
+                <p className={cx(styles.small, styles.fsDesc)}>{f.desc}</p>
                 <p className={styles.itemMeta}>
                   꾸밈 +{f.score} · {f.ext ? "외관 (외관 꾸미기에서 입힘)" : f.skin ? (f.skin === "floor" ? "바닥 전체" : "담장 전체") : `${f.w}×${f.h}칸`}
                   {f.floor ? " · 밟고 지나감" : ""}
