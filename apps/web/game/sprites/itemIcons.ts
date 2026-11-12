@@ -508,6 +508,107 @@ function fwMeteor(): Grid {
   return g;
 }
 
+/** 폭죽 꼬리 (아래에서 솟는 금빛 줄) */
+function fwTail(g: Grid, x: number, top: number) {
+  g.vline(x, top, 14, 0xffb860);
+  g.set(x, 15, 0xffe08a, 140);
+}
+
+function fwFountain(): Grid {
+  const g = blank();
+  // 땅에 놓인 통 + 위로 뿜는 금빛 불티
+  g.rect(6, 12, 4, 4, 0xd84a3a);
+  g.hline(6, 9, 12, 0xf07a6a);
+  const pts: [number, number, number][] = [[8, 10, 0xffffff], [7, 8, 0xfff4d0], [9, 7, 0xffe08a], [8, 5, 0xffe08a], [6, 4, 0xffb860], [10, 4, 0xffb860], [5, 7, 0xffd060], [11, 7, 0xffd060], [4, 10, 0xffb860], [12, 10, 0xffb860], [8, 2, 0xfff4d0], [3, 13, 0xffb860], [13, 13, 0xffb860]];
+  for (const [x, y, c] of pts) g.set(x, y, c);
+  g.outline(OUT, false, 140);
+  return g;
+}
+
+function fwRing(): Grid {
+  const g = blank();
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    g.set(Math.round(8 + Math.cos(a) * 5.5), Math.round(6 + Math.sin(a) * 5), i % 2 ? 0x8fe0ff : 0xd8f6ff);
+  }
+  g.set(8, 6, 0xffffff);
+  fwTail(g, 8, 12);
+  g.outline(OUT, false, 120);
+  return g;
+}
+
+function fwStar(): Grid {
+  const g = blank();
+  const rows = [".....1.....", ".....1.....", "....111....", "11111111111", ".111111111.", "..1111111..", "..111.111..", ".111...111.", ".11.....11."];
+  rows.forEach((r, y) => [...r].forEach((v, x) => v === "1" && g.set(x + 2, y + 2, y < 4 ? 0xfff6b0 : 0xffe45a)));
+  g.set(7, 6, 0xffffff);
+  g.outline(0x6a5010);
+  for (const [x, y] of [[1, 1], [14, 2], [1, 13], [14, 12]]) g.set(x, y, 0xfff6b0);
+  return g;
+}
+
+function fwSpiral(): Grid {
+  const g = blank();
+  // 가운데에서 풀려 나오는 팔 두 개 (보라·청록)
+  for (let i = 0; i < 14; i++) {
+    const f = i / 13;
+    for (const [arm, c] of [[0, 0xd0a0ff], [Math.PI, 0x8fe0ff]] as const) {
+      const a = arm + f * 3.4;
+      g.set(Math.round(8 + Math.cos(a) * (1 + f * 6)), Math.round(7 + Math.sin(a) * (1 + f * 6)), c, 120 + Math.round(f * 135));
+    }
+  }
+  g.set(8, 7, 0xffffff);
+  g.outline(OUT, false, 120);
+  return g;
+}
+
+function fwWillow(): Grid {
+  const g = blank();
+  // 위에서 퍼져 축 늘어지는 금빛 가지
+  for (const dir of [-1, 1]) {
+    for (const [dx, dy, a] of [[1, 0, 255], [2, 0, 255], [3, 1, 240], [4, 2, 220], [5, 4, 200], [5, 6, 170], [5, 8, 140], [5, 10, 110]] as const) g.set(8 + dir * dx, 3 + dy, 0xffd060, a);
+    for (const [dx, dy, a] of [[1, 1, 255], [2, 3, 220], [2, 5, 180], [2, 7, 140], [2, 9, 100]] as const) g.set(8 + dir * dx, 3 + dy, 0xffb860, a);
+  }
+  g.set(8, 2, 0xffffff);
+  g.set(8, 3, 0xfff4d0);
+  g.outline(OUT, false, 110);
+  return g;
+}
+
+function fwCrossette(): Grid {
+  const g = blank();
+  // 가운데 빨간 불꽃 + 네 끝에서 다시 터진 작은 십자
+  rays(g, 8, 7, 3, 0xffc0a8, 0xff7a62, 0xff4a4a);
+  for (const [x, y] of [[3, 2], [13, 2], [3, 12], [13, 12]]) star(g, x, y, 0xe2ecff);
+  g.outline(OUT, false, 120);
+  return g;
+}
+
+function fwSmile(): Grid {
+  const g = blank();
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    g.set(Math.round(8 + Math.cos(a) * 6.4), Math.round(8 + Math.sin(a) * 6.4), 0xffe45a);
+  }
+  g.rect(5, 5, 2, 2, 0xffffff);
+  g.rect(10, 5, 2, 2, 0xffffff);
+  for (const [x, y] of [[4, 9], [5, 10], [6, 11], [7, 11], [8, 11], [9, 11], [10, 10], [11, 9]]) g.set(x, y, 0xfff0c0);
+  g.outline(0x6a5010, false, 160);
+  return g;
+}
+
+function fwWaterfall(): Grid {
+  const g = blank();
+  // 위쪽 가로 불꽃 줄 + 아래로 흘러내리는 은빛 줄기
+  g.hline(1, 14, 2, 0xffffff);
+  for (let x = 1; x <= 14; x += 2) {
+    const len = 6 + ((x * 7) % 5);
+    for (let d = 1; d <= len; d++) g.set(x, 2 + d, d % 3 === 0 ? 0xffffff : 0xbcd0ff, Math.max(60, 255 - d * 18));
+  }
+  g.outline(OUT, false, 120);
+  return g;
+}
+
 function fwLetter(): Grid {
   const g = blank();
   // 불꽃 점으로 쓴 "Hi" + 아래 로켓 꼬리
@@ -799,6 +900,22 @@ function base(itemId: string): HTMLCanvasElement {
       return fwMeteor().toCanvas();
     case "fw_letter":
       return fwLetter().toCanvas();
+    case "fw_fountain":
+      return fwFountain().toCanvas();
+    case "fw_ring":
+      return fwRing().toCanvas();
+    case "fw_star":
+      return fwStar().toCanvas();
+    case "fw_spiral":
+      return fwSpiral().toCanvas();
+    case "fw_willow":
+      return fwWillow().toCanvas();
+    case "fw_crossette":
+      return fwCrossette().toCanvas();
+    case "fw_smile":
+      return fwSmile().toCanvas();
+    case "fw_waterfall":
+      return fwWaterfall().toCanvas();
     default: {
       // F8 추가 꾸미기 (시트 그림 → 문자 아이콘, 따로 그리는 연출 → 그 그림으로 만든 아이콘)
       const f8 = gearIcon(itemId) ?? fxIconGrid(itemId) ?? megaphoneIcon(itemId) ?? dyeIcon(itemId);
@@ -812,6 +929,7 @@ function base(itemId: string): HTMLCanvasElement {
 /** 전용 그림이 있는 아이템 id (묘비 디자인권 gs_*는 따로). 테스트: 모든 ITEMS가 여기 있거나 gs_여야 한다 */
 export const ICON_IDS: readonly string[] = [
   "fw_small", "fw_heart", "fw_triple", "fw_big", "fw_grand", "fw_meteor", "fw_letter",
+  "fw_fountain", "fw_ring", "fw_star", "fw_spiral", "fw_willow", "fw_crossette", "fw_smile", "fw_waterfall",
   "hat_straw", "hat_cat", "hat_flower", "hat_halo", "hand_lantern", "aura_firefly", "aura_fog", "neck_scarf",
   "back_wings", "pet_ghost", "feet_flowers",
   "decor_candles", "decor_wreath", "decor_ribbon", "decor_lantern", "decor_ghostcat", "decor_stars",

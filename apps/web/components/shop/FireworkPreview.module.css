@@ -1,0 +1,9 @@
+/* 폭죽 미리보기 무대 (논리 220×150 → 폭에 맞춰 키운다) */
+.stage {
+  display: block;
+  width: 100%;
+  aspect-ratio: 22 / 15;
+  height: auto;
+  background: #0a0c22;
+  box-shadow: var(--px-border);
+}

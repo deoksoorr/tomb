@@ -44,8 +44,16 @@ function cosmetics(rows: readonly (readonly [string, CosmeticSlot, string, strin
 
 export const ITEMS: readonly ItemDef[] = [
   { id: "fw_small", kind: "firework", name: "작은 폭죽", desc: "밤하늘에 한 발. 채널 모두가 함께 봐요.", price: 60, power: 1 },
+  { id: "fw_fountain", kind: "firework", name: "분수 폭죽", desc: "발밑에서 금빛 불티가 솟구쳐요. 탕비실 커피 머신보다 화끈하게.", price: 80, power: 1 },
+  { id: "fw_ring", kind: "firework", name: "고리 폭죽", desc: "청록 고리가 동그랗게 퍼져요. 회의실 원형 테이블 같은 평화.", price: 100, power: 1 },
   { id: "fw_heart", kind: "firework", name: "하트 폭죽", desc: "하트 모양으로 퍼지는 분홍 불꽃.", price: 120, power: 2 },
+  { id: "fw_star", kind: "firework", name: "별 폭죽", desc: "노란 오각별이 반짝. 이번 달 고과는 별 다섯 개.", price: 140, power: 2 },
+  { id: "fw_spiral", kind: "firework", name: "나선 폭죽", desc: "불꽃이 빙글빙글 돌며 풀려요. 결재 라인처럼 돌고 돌아.", price: 170, power: 2 },
   { id: "fw_triple", kind: "firework", name: "삼연발 폭죽", desc: "세 발이 연달아 터져요.", price: 200, power: 3 },
+  { id: "fw_willow", kind: "firework", name: "버드나무 폭죽", desc: "금빛 가지가 축 늘어지며 오래 남아요. 금요일 오후의 어깨처럼.", price: 220, power: 3 },
+  { id: "fw_crossette", kind: "firework", name: "이중 폭발", desc: "한 번 터지고, 그 끝에서 또 터져요. 회식 2차처럼.", price: 240, power: 3 },
+  { id: "fw_smile", kind: "firework", name: "스마일 폭죽", desc: "하늘에 웃는 얼굴이 떠요. 월급날 표정 그대로.", price: 280, power: 3 },
+  { id: "fw_waterfall", kind: "firework", name: "폭포 폭죽", desc: "불꽃 줄에서 은빛 불티가 커튼처럼 쏟아져요.", price: 300, power: 3 },
   { id: "fw_big", kind: "firework", name: "대형 폭죽", desc: "화면을 가득 채우는 커다란 불꽃.", price: 380, power: 4 },
   { id: "fw_meteor", kind: "firework", name: "별똥별", desc: "하늘을 가로지르는 별똥별 비가 쏟아져요.", price: 260, power: 3 },
   { id: "fw_letter", kind: "firework", name: "글자 폭죽", desc: "내 이름이 불꽃 글자로 떠올라요.", price: 320, power: 3 },

@@ -9,6 +9,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import { EmptyHero, InfoCard, InfoGrid, TipList } from "../ui/InfoBlocks";
 import ItemIcon from "../ui/ItemIcon";
+import FireworkPreview from "../shop/FireworkPreview";
 import ui from "../ui/ui.module.css";
 import { fireFirework } from "./actions";
 import { bagEntries } from "./items";
@@ -51,6 +52,9 @@ export default function FireworkDialog({ onClose, onOpenShop }: { onClose: () =>
   const [history] = useState(readHistory);
   const stock = me ? bagEntries(me.inventory, "firework") : [];
   const owned = (id: string) => me?.inventory[id] ?? 0;
+  // 미리보기할 폭죽: 고른 것 → 가방의 첫 폭죽 → 첫 종류
+  const [picked, setPicked] = useState<string | null>(null);
+  const shown = FIREWORKS.find((f) => f.id === picked) ?? stock[0]?.item ?? FIREWORKS[0];
   const shop = onOpenShop ? [{ label: "상점에서 폭죽 사기", icon: "bag" as const, onClick: onOpenShop, primary: stock.length === 0 }] : [];
 
   async function fire(itemId: string) {
@@ -69,6 +73,14 @@ export default function FireworkDialog({ onClose, onOpenShop }: { onClose: () =>
   return (
     <Dialog title="폭죽 쏘기" onClose={onClose}>
       <div className={fw.wrap}>
+        <section className={fw.preview} aria-label="폭죽 미리보기">
+          <FireworkPreview className={fw.previewStage} itemId={shown.id} label={me?.name ?? ""} />
+          <p className={fw.previewText}>
+            <span className={fw.kindName}>{shown.name}</span>
+            <span className={fw.kindDesc}>{shown.desc}</span>
+            <span className={fw.kindMeta}>아래에서 폭죽을 고르면 여기서 터지는 모습을 미리 볼 수 있어요.</span>
+          </p>
+        </section>
         {stock.length === 0 ? (
           <EmptyHero icon="spark" title="가방에 폭죽이 없어요" actions={shop}>
             상점 [폭죽] 칸에서 살 수 있어요. 쏘면 지금 채널 하늘에 터지고, 같은 채널 사람들이 모두 함께 봐요.
@@ -76,7 +88,7 @@ export default function FireworkDialog({ onClose, onOpenShop }: { onClose: () =>
         ) : (
           <ul className={styles.list} aria-label="가방의 폭죽">
             {stock.map(({ item, count }) => (
-              <li key={item.id} className={styles.row}>
+              <li key={item.id} className={styles.row} onClick={() => setPicked(item.id)}>
                 <ItemIcon itemId={item.id} size={32} />
                 <span className={styles.main}>
                   <span className={styles.name}>
@@ -100,15 +112,23 @@ export default function FireworkDialog({ onClose, onOpenShop }: { onClose: () =>
         <InfoCard title="폭죽 종류" icon="spark" aside={`${FIREWORKS.length}가지`}>
           <ul className={fw.kinds}>
             {FIREWORKS.map((item) => (
-              <li key={item.id} className={fw.kind} data-owned={owned(item.id) > 0 || undefined}>
-                <ItemIcon itemId={item.id} size={32} />
-                <span className={fw.kindText}>
-                  <span className={fw.kindName}>{item.name}</span>
-                  <span className={fw.kindDesc}>{item.desc}</span>
-                  <span className={fw.kindMeta}>
-                    {item.price}P{owned(item.id) > 0 ? ` · 가방에 ${owned(item.id)}개` : ""}
+              <li key={item.id}>
+                <button
+                  type="button"
+                  className={fw.kind}
+                  data-owned={owned(item.id) > 0 || undefined}
+                  aria-pressed={item.id === shown.id}
+                  onClick={() => setPicked(item.id)}
+                >
+                  <ItemIcon itemId={item.id} size={32} />
+                  <span className={fw.kindText}>
+                    <span className={fw.kindName}>{item.name}</span>
+                    <span className={fw.kindDesc}>{item.desc}</span>
+                    <span className={fw.kindMeta}>
+                      {item.price}P{owned(item.id) > 0 ? ` · 가방에 ${owned(item.id)}개` : ""}
+                    </span>
                   </span>
-                </span>
+                </button>
               </li>
             ))}
           </ul>

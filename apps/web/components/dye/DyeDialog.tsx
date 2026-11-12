@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type Ref } from "react";
 import { DIR, DYE_PART_NAMES, DYE_PARTS, type DyePart } from "@tomb/protocol";
 import { avatarColors, specDye, withDyePart } from "@/game/sprites/avatar";
 import { errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
 import { buildPalette, cellColor, cellOf, DYE_BOARD_H, DYE_BOARD_W, DYE_TIERS, DYE_TIME_MS, paletteRgba, type DyeTier } from "@/lib/dye/palette";
-import { fixedAllows } from "@/lib/dye/rules";
+import { DYE_DECIDE_MS, fixedAllows } from "@/lib/dye/rules";
 import type { DyeCandidate, DyeSessionView, DyeTimeoutResponse, StyleChangeResponse } from "@/lib/dye/types";
 import { applyStyle } from "../account/actions";
 import { OutfitCanvas } from "../shop/OutfitPreview";
@@ -197,7 +197,7 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
                       disabled={!allowed(p) || phase === "sending"}
                       onClick={() => setPart(p)}
                     >
-                      <span className={styles.swatch} style={{ background: c ?? "repeating-linear-gradient(45deg,#d9ceb2 0 4px,#e6a3b0 4px 8px)" }} aria-hidden="true" />
+                      <span className={styles.swatch} style={{ background: c ?? DEFAULT_SWATCH }} aria-hidden="true" />
                       {DYE_PART_NAMES[p]}
                       {!c && <span className={styles.note}>기본</span>}
                     </button>
@@ -344,6 +344,8 @@ function DyeBoard({
     let shown = "";
     const fit = () => {
       const r = box.getBoundingClientRect();
+      // 창이 아직 안 열려(이어 하기 — 자식 효과가 창 열기보다 먼저 돈다) 크기가 0이면 건너뛴다 (배율 0 → NaN 방지). 열리면 ResizeObserver가 다시 부른다
+      if (r.width < 1 || r.height < 1) return;
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       sizeRef.current = { w: r.width, h: r.height };
       canvas.width = Math.round(r.width * dpr);
@@ -510,20 +512,12 @@ function DyeBoard({
     }
   }
 
-  const secs = Math.ceil(left / 1000);
   const preview = live ? withDyePart(spec, session.part, live.color) : spec;
+  const now = partColor(spec, session.part);
 
+  // 판은 남는 자리를 모두 쓰고(데스크톱은 왼쪽, 폰은 위), 옆(아래) 칸에 남은 시간 · 지금 색 vs 새 색 · 확정 버튼
   return (
-    <>
-      <div className={styles.hud}>
-        <span>{DYE_PART_NAMES[session.part]} 염색</span>
-        <div className={styles.timer} data-low={secs <= 10 || undefined} role="progressbar" aria-label="남은 시간" aria-valuemin={0} aria-valuemax={60} aria-valuenow={secs}>
-          <div className={styles.timerFill} style={{ width: `${Math.min(100, (left / DYE_TIME_MS) * 100)}%` }} />
-        </div>
-        <span className={styles.secs} aria-live={secs <= 10 ? "polite" : "off"}>
-          {secs}초
-        </span>
-      </div>
+    <div className={styles.play}>
       <div
         ref={boxRef}
         className={styles.board}
@@ -538,29 +532,104 @@ function DyeBoard({
       >
         <canvas ref={canvasRef} />
       </div>
-      <div className={styles.row}>
-        <div className={cx(styles.figure, styles.figureSmall)}>
-          <OutfitCanvas color={preview} body={body} look={look} label="지금 고른 색으로 염색해 본 내 모습" dir={DIR.down} walking={false} />
+      <div className={styles.panel}>
+        <TimeLeft label={`${DYE_PART_NAMES[session.part]} 염색`} left={left} total={DYE_TIME_MS} />
+        <div className={styles.compare}>
+          <LookCard spec={spec} body={body} look={look} label="지금 내 모습" title="지금 색" color={now} />
+          <LookCard
+            spec={preview}
+            body={body}
+            look={look}
+            label="지금 고른 색으로 염색해 본 내 모습"
+            title="새 색"
+            color={live?.color ?? null}
+            swatchRef={liveRef}
+            hexRef={liveTextRef}
+            hexTestId="dye-live"
+          />
         </div>
-        <div className={styles.side}>
-          <p className={styles.pick}>
-            지금 고른 색 <span ref={liveRef} className={styles.swatchBig} aria-hidden="true" />
-            <span ref={liveTextRef} className={styles.hex} data-testid="dye-live">
-              {live?.color ?? ""}
-            </span>
-          </p>
-          <p className={styles.note}>
-            조준점 아래 색이 바로 고른 색이에요(폰은 화면 가운데 조준점). 흔들리니 원하는 색에서 잘 멈춰 확정하세요. 확대할수록 덜 흔들려요. 시간이 끝나면 그 순간 조준점
-            아래 색과 지금 색 중에서 골라요.
-          </p>
-          <div className={styles.actions}>
-            <button type="button" className={cx(ui.button, ui.primary)} disabled={sending} onClick={() => void send(aimNow())}>
-              {sending ? "염색하는 중…" : "이 색으로 염색"}
-            </button>
-          </div>
+        <p className={cx(styles.note, styles.tip)}>
+          조준점 아래 색이 바로 고른 색이에요(폰은 화면 가운데 조준점). 흔들리니 원하는 색에서 잘 멈춰 확정하세요. 확대할수록 덜 흔들려요. 시간이 끝나면 그 순간 조준점
+          아래 색과 지금 색 중에서 골라요.
+        </p>
+        <div className={styles.actions}>
+          <button type="button" className={cx(ui.button, ui.primary)} disabled={sending} onClick={() => void send(aimNow())}>
+            {sending ? "염색하는 중…" : "이 색으로 염색"}
+          </button>
         </div>
       </div>
-    </>
+    </div>
+  );
+}
+
+/** 남은 시간: 이름 · 초(크게) + 줄어드는 막대 */
+function TimeLeft({ label, left, total }: { label: string; left: number; total: number }) {
+  const secs = Math.ceil(left / 1000);
+  return (
+    <div className={styles.hud}>
+      <span className={styles.hudLabel}>{label}</span>
+      <span className={styles.secs} aria-live={secs <= 10 ? "polite" : "off"}>
+        {secs}초
+      </span>
+      <div
+        className={styles.timer}
+        data-low={secs <= 10 || undefined}
+        role="progressbar"
+        aria-label="남은 시간"
+        aria-valuemin={0}
+        aria-valuemax={Math.round(total / 1000)}
+        aria-valuenow={secs}
+      >
+        <div className={styles.timerFill} style={{ width: `${Math.min(100, (left / total) * 100)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+const DEFAULT_SWATCH = "repeating-linear-gradient(45deg,#d9ceb2 0 4px,#e6a3b0 4px 8px)";
+
+/** 비교 칸 하나: 그 색을 입은 내 모습(칸을 꽉 채워 크게) + 이름 · 견본 · 색 코드 */
+function LookCard({
+  spec,
+  body,
+  look,
+  label,
+  title,
+  color,
+  swatchRef,
+  hexRef,
+  hexTestId,
+}: {
+  spec: string;
+  body: string;
+  look: readonly string[];
+  label: string;
+  title: string;
+  /** null이면 기본 색 (판에서는 아직 고른 색이 없을 때 — 견본·코드는 ref로 바로 바뀐다) */
+  color: string | null;
+  swatchRef?: Ref<HTMLSpanElement>;
+  hexRef?: Ref<HTMLSpanElement>;
+  hexTestId?: string;
+}) {
+  const live = !!swatchRef;
+  return (
+    <figure className={styles.look}>
+      <div className={styles.stageBox}>
+        <OutfitCanvas color={spec} body={body} look={look} label={label} dir={DIR.down} walking={false} />
+      </div>
+      <figcaption className={styles.caption}>
+        <span className={styles.capTitle}>{title}</span>
+        <span
+          ref={swatchRef}
+          className={styles.swatchBig}
+          style={live ? undefined : { background: color ?? DEFAULT_SWATCH }}
+          aria-hidden="true"
+        />
+        <span ref={hexRef} className={styles.hex} data-testid={hexTestId}>
+          {color ?? (live ? "" : "기본")}
+        </span>
+      </figcaption>
+    </figure>
   );
 }
 
@@ -619,26 +688,24 @@ function DyeChoice({
   }, [candidate.decideBy]);
 
   const name = DYE_PART_NAMES[session.part];
+  // 지금 색 vs 새 색을 창을 꽉 채워 크게 나란히, 아래에 남은 시간 · 버튼
   return (
-    <>
+    <div className={styles.choose}>
       <p className={styles.note} role="status">
         시간이 끝났어요. {name}을(를) 새 색으로 바꿀까요? {Math.ceil(left / 1000)}초 안에 고르지 않으면 지금 색 그대로예요.
       </p>
-      <div className={styles.row}>
-        <div className={styles.figure}>
-          <OutfitCanvas color={spec} body={body} look={look} label="지금 내 모습" dir={DIR.down} walking={false} />
-          <p className={styles.pick}>
-            <span className={styles.swatchBig} style={{ background: now ?? "repeating-linear-gradient(45deg,#d9ceb2 0 4px,#e6a3b0 4px 8px)" }} aria-hidden="true" />
-            지금 색 · {now ?? "기본"}
-          </p>
-        </div>
-        <div className={styles.figure}>
-          <OutfitCanvas color={withDyePart(spec, session.part, candidate.color)} body={body} look={look} label="새 색으로 염색해 본 내 모습" dir={DIR.down} walking={false} />
-          <p className={styles.pick}>
-            <span className={styles.swatchBig} style={{ background: candidate.color }} aria-hidden="true" />새 색 · {candidate.color}
-          </p>
-        </div>
+      <div className={cx(styles.compare, styles.compareWide)}>
+        <LookCard spec={spec} body={body} look={look} label="지금 내 모습" title="지금 색" color={now} />
+        <LookCard
+          spec={withDyePart(spec, session.part, candidate.color)}
+          body={body}
+          look={look}
+          label="새 색으로 염색해 본 내 모습"
+          title="새 색"
+          color={candidate.color}
+        />
       </div>
+      <TimeLeft label="고르는 시간" left={left} total={DYE_DECIDE_MS} />
       <div className={styles.actions}>
         <button type="button" className={ui.button} disabled={sending} onClick={() => void choose(false)}>
           지금 색 유지
@@ -647,6 +714,6 @@ function DyeChoice({
           {sending ? "잠깐만요…" : "새 색으로 바꾸기"}
         </button>
       </div>
-    </>
+    </div>
   );
 }

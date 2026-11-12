@@ -3,18 +3,21 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { getAccounts } from "@/lib/store";
 import { kstDay } from "@/lib/store/accounts";
 import type { ApiError } from "@/lib/types";
-import { isWishAmount, pickFortune, rollBonus, WISH_DAILY, type WishResponse } from "@/lib/wish";
+import { isWishAmount, msUntilKstMidnight, pickFortune, rollBonus, WISH_DAILY, type WishResponse } from "@/lib/wish";
 import * as session from "../session/route";
 import * as wish from "./wish/route";
 
-// 50번 소원 분수 (메모리 구성): 동전 차감 → 운세 → 가끔 보너스(적립 한도), 하루 3번 (실패한 시도는 세지 않는다)
+// 50번 소원 분수 (메모리 구성): 동전 차감 → 운세 → 가끔 보너스(적립 한도), 계정당 하루(KST) 1번 — 운영자도 (실패한 시도는 세지 않는다)
 
 beforeAll(() => {
   for (const k of ["KV_REST_API_URL", "UPSTASH_REDIS_REST_URL", "BLOB_READ_WRITE_TOKEN", "BLOB_STORE_ID", "SESSION_SECRET", "JOIN_SECRET", "ADMIN_ALLOWED_IPS"])
     vi.stubEnv(k, "");
   vi.stubEnv("MOCK_GRAVES", "0");
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.stubEnv("ADMIN_ALLOWED_IPS", "");
+});
 
 type Visitor = { cookie: string; ip: string; visitorId: string };
 let ipSeq = 0;
@@ -56,10 +59,17 @@ describe("소원 분수 규칙", () => {
     }
     expect([0, 1, 5, 6, 2.5, "3"].map(isWishAmount)).toEqual([false, true, true, false, false, false]);
   });
+
+  it("다음 KST 자정까지 남은 시간", () => {
+    const kstMidnight = Date.UTC(2026, 10, 12, 15, 0, 0); // 11/13 00:00 KST
+    expect(msUntilKstMidnight(kstMidnight)).toBe(24 * 3_600_000);
+    expect(msUntilKstMidnight(kstMidnight - 1)).toBe(1);
+    expect(msUntilKstMidnight(kstMidnight - 3_600_000)).toBe(3_600_000);
+  });
 });
 
 describe("POST /api/plaza/wish", () => {
-  it("동전만큼 차감하고 운세를 준다, 보너스는 적립(하루 한도 안), 하루 3번까지", async () => {
+  it("동전만큼 차감하고 운세를 준다, 보너스는 적립(하루 한도 안), 하루 1번까지", async () => {
     const v = await newVisitor();
     const accounts = getAccounts();
     await accounts.earn(v.visitorId, "hunt", kstDay(), { amount: 100 });
@@ -92,9 +102,40 @@ describe("POST /api/plaza/wish", () => {
     expect((await throwCoin(v, 0)).status).toBe(400);
     expect((await throwCoin(v, 6)).status).toBe(400);
     expect((await throwCoin(v, 2.5)).status).toBe(400);
-    // 포인트를 채우면 여전히 3번 던질 수 있다
+    // 포인트를 채우면 오늘 몫을 그대로 던질 수 있다
     await accounts.earn(v.visitorId, "hunt", kstDay(), { amount: 50 });
     for (let i = 0; i < WISH_DAILY; i++) expect((await throwCoin(v, 1)).status).toBe(200);
+  });
+
+  it("운영자 IP도 하루 1번, KST 자정이 지나면 다시 던질 수 있다", async () => {
+    const v = await newVisitor();
+    vi.stubEnv("ADMIN_ALLOWED_IPS", v.ip);
+    const accounts = getAccounts();
+    await accounts.earn(v.visitorId, "hunt", kstDay(), { amount: 50 });
+    // 오늘 KST 23:59:59에 던지고 → 같은 날은 막히고 → 1초 뒤(자정)에는 다시
+    const real = Date.now();
+    const lastSec = real + msUntilKstMidnight(real) - 1000;
+    vi.spyOn(Date, "now").mockReturnValue(lastSec);
+    expect((await throwCoin(v, 1)).status).toBe(200);
+    const again = await throwCoin(v, 1);
+    expect(again.status).toBe(429);
+    expect(Number(again.headers.get("Retry-After"))).toBe(1);
+    vi.spyOn(Date, "now").mockReturnValue(lastSec + 1000);
+    expect((await throwCoin(v, 1)).status).toBe(200);
+    expect((await throwCoin(v, 1)).status).toBe(429);
+  });
+
+  it("동시에 여러 번 눌러도 한 번만 통과하고 한 번만 차감한다", async () => {
+    const v = await newVisitor();
+    const accounts = getAccounts();
+    await accounts.earn(v.visitorId, "hunt", kstDay(), { amount: 50 });
+    const before = (await accounts.get(v.visitorId, kstDay(), Date.now())).points;
+    const res = await Promise.all([1, 2, 3, 4].map(() => throwCoin(v, 1)));
+    const ok = res.filter((r) => r.status === 200);
+    expect(ok.length).toBe(WISH_DAILY);
+    expect(res.filter((r) => r.status === 429).length).toBe(4 - WISH_DAILY);
+    const body = (await ok[0].json()) as WishResponse;
+    expect((await accounts.get(v.visitorId, kstDay(), Date.now())).points).toBe(before - 1 + body.bonus);
   });
 
   it("세션 없이는 401", async () => {

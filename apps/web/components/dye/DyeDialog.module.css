@@ -106,43 +106,30 @@
   justify-content: flex-end;
 }
 
-/* ── 판 ── */
+/* ── 판 단계: 판이 남는 자리를 모두 쓰고(데스크톱은 왼쪽, 폰은 위) 옆(아래) 칸에 시간·비교·확정 ── */
 
-.hud {
+.play {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 216px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.panel {
+  min-width: 0;
+  min-height: 0;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 10px;
 }
 
-.timer {
-  flex: 1;
-  height: 10px;
-  background: var(--bg-deep);
-  box-shadow: var(--px-border);
-  overflow: hidden;
-}
-
-.timerFill {
-  height: 100%;
-  background: var(--candle);
-  transition: width 0.2s linear;
-}
-
-.timer[data-low] .timerFill {
-  background: var(--danger);
-}
-
-.secs {
-  min-width: 3.5em;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--bone);
-}
-
+/* 판은 보이는 창(일부만 보이는 색 공간)이라 어떤 비율로 늘어나도 그림이 찌그러지지 않는다 */
 .board {
   position: relative;
-  width: 100%;
-  height: clamp(220px, 46vh, 380px);
+  min-width: 0;
+  min-height: 0;
   background: var(--bg-deep);
   box-shadow: var(--px-border-strong);
   overflow: hidden;
@@ -165,6 +152,107 @@
   image-rendering: pixelated;
 }
 
+/* 남은 시간: 이름 · 초 한 줄 + 막대 */
+.hud {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+
+.hudLabel {
+  min-width: 0;
+  color: var(--bone);
+  overflow-wrap: anywhere;
+}
+
+.hud > .timer {
+  grid-column: 1 / -1;
+}
+
+.timer {
+  height: 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  overflow: hidden;
+}
+
+.timerFill {
+  height: 100%;
+  background: var(--candle);
+  transition: width 0.2s linear;
+}
+
+.timer[data-low] .timerFill {
+  background: var(--danger);
+}
+
+.secs {
+  font-size: 20px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--bone);
+}
+
+.hud:has(.timer[data-low]) .secs {
+  color: var(--danger);
+}
+
+/* 지금 색 vs 새 색: 데스크톱 판 옆에서는 위아래, 폰·시간 끝 단계에서는 좌우로 나란히. 칸을 꽉 채운다 */
+.compare {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.compareWide {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.look {
+  margin: 0;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+/* 입어 보기 무대(72×64)를 칸에 맞춰 비율 그대로 크게. 무대는 칸 크기에 영향을 주지 않게 띄우고,
+   캐릭터가 작으니 가운데를 조금 당겨 보인다(가장자리 땅은 잘린다) */
+.stageBox {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.stageBox > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  box-shadow: none;
+  transform: scale(1.4);
+}
+
+.caption {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.capTitle {
+  color: var(--bone);
+}
+
 .pick {
   display: flex;
   align-items: center;
@@ -174,8 +262,24 @@
 
 .hex {
   font-variant-numeric: tabular-nums;
-  min-width: 5.5em;
   color: var(--bone);
+}
+
+.panel > .actions {
+  margin-top: auto;
+}
+
+.panel > .actions > button {
+  flex: 1;
+}
+
+/* 시간 끝 단계: 비교 칸이 남는 높이를 모두 받는다 */
+.choose {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .result {
@@ -184,6 +288,13 @@
   gap: 10px;
   font-size: 14px;
   color: var(--bone);
+}
+
+/* 낮은 창(가로 폰 등): 안내 글은 빼고 판·비교에 자리를 준다 */
+@media (max-height: 560px) {
+  .tip {
+    display: none;
+  }
 }
 
 @media (max-width: 560px) {
@@ -201,7 +312,31 @@
     --scale: 2;
   }
 
-  .board {
-    height: clamp(200px, 42vh, 340px);
+  /* 폰: 판은 위에서 남는 높이를 모두, 아래 칸에 시간 · 지금 색 vs 새 색(좌우) · 확정 */
+  .play {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(200px, 1fr) auto;
+    gap: 10px;
+  }
+
+  .panel {
+    gap: 8px;
+  }
+
+  .panel > .compare {
+    flex: none;
+    height: clamp(120px, 24dvh, 220px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .tip {
+    display: none;
+  }
+
+  .actions > button {
+    flex: 1;
+    min-height: 44px;
   }
 }

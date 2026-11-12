@@ -18,13 +18,54 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  height: 100%;
   padding: 6px 8px;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   background: var(--surface);
   box-shadow: var(--px-border);
+  cursor: pointer;
 }
 
 .kind[data-owned] {
   box-shadow: var(--px-border-strong);
+}
+
+.kind[aria-pressed="true"] {
+  outline: 2px solid var(--candle);
+  outline-offset: -2px;
+}
+
+.kind:focus-visible {
+  outline: 2px solid var(--candle);
+  outline-offset: 2px;
+}
+
+/* 고른 폭죽 미리보기: 넓으면 무대 | 설명, 좁으면 위아래 */
+.preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.previewStage {
+  width: 100%;
+}
+
+.previewText {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .kindText {

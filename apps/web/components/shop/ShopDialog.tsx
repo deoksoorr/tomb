@@ -16,6 +16,7 @@ import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
 import { fittingLook } from "./fitting";
+import FireworkPreview from "./FireworkPreview";
 import OutfitPreview from "./OutfitPreview";
 import { takeShopTab } from "./shopTab";
 import styles from "./ShopDialog.module.css";
@@ -195,6 +196,8 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                   look={fitting.look}
                   label={`내 아바타가 ${shown.name}을(를) 입어 본 모습`}
                 />
+              ) : shown.kind === "firework" ? (
+                <FireworkPreview className={styles.fwPreview} itemId={shown.id} label={me?.name ?? ""} />
               ) : (
                 <div className={styles.bigIcon}>
                   <ItemIcon itemId={shown.id} size={shown.id.startsWith("gs_") ? 96 : 64} />
