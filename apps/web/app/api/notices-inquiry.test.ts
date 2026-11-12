@@ -61,11 +61,11 @@ describe("공지사항", () => {
     expect(ids.slice(0, 3)).toEqual([pinned.notice.id, second.notice.id, first.notice.id]);
   });
 
-  it("검증: 제목 1~60, 본문 1~2000", async () => {
+  it("검증: 제목 1~60, 본문 1~4000", async () => {
     expect((await errorOf(await create({ title: " ", body: "b" }))).message).toBe("제목을 적어 주세요.");
     expect((await errorOf(await create({ title: "가".repeat(61), body: "b" }))).message).toBe("제목은 60자까지 적을 수 있어요.");
-    expect((await errorOf(await create({ title: "t", body: "가".repeat(2001) }))).message).toBe("본문은 2000자까지 적을 수 있어요.");
-    expect((await create({ title: "가".repeat(60), body: "가".repeat(2000) })).status).toBe(201);
+    expect((await errorOf(await create({ title: "t", body: "가".repeat(4001) }))).message).toBe("본문은 4000자까지 적을 수 있어요.");
+    expect((await create({ title: "가".repeat(60), body: "가".repeat(4000) })).status).toBe(201);
   });
 
   it("수정(바꿀 것만·고정 토글)·삭제, 없는 공지는 404", async () => {

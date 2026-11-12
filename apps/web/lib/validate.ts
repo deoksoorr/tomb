@@ -246,7 +246,7 @@ export const AdminPointsSchema = z
 
 // ── 공지사항 (관리자) ──
 const noticeTitle = z.string().trim().overwrite(oneLine).min(1, "제목을 적어 주세요.").refine(within(60), "제목은 60자까지 적을 수 있어요.");
-const noticeBody = z.string().trim().min(1, "본문을 적어 주세요.").refine(within(2000), "본문은 2000자까지 적을 수 있어요.");
+const noticeBody = z.string().trim().min(1, "본문을 적어 주세요.").refine(within(4000), "본문은 4000자까지 적을 수 있어요.");
 export const NoticeInputSchema = z.object({ title: noticeTitle, body: noticeBody, pinned: z.boolean().optional() });
 /** 수정: 바꿀 것만 (고정 토글만 보내도 된다) */
 export const NoticePatchSchema = z
