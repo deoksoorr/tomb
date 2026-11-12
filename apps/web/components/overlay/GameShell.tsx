@@ -401,10 +401,26 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && (
         <div className={cx(styles.overlay, away && styles.away, campfire && styles.campfire)}>
           {coarse ? (
-            // 터치: 위 가장자리 바(음악 · 채널·날씨) + 아래 바로 가기 바(dock) + 그 위 조이스틱·행동 버튼
+            // 터치: 위 가장자리 바(메뉴 · 음악 · 후원 · 채널·날씨) + 아래 조이스틱(그 위 확성기)·행동 버튼. 바로 가기 줄은 없고 모두 메뉴 시트에
             <div className={styles.touchBar}>
-              {/* 노래 버튼 바로 오른쪽에 후원 버튼 (사용자 요청) */}
+              {/* 맨 왼쪽 [메뉴], 그 오른쪽에 노래 버튼·후원 버튼 (사용자 요청) */}
               <div className={styles.touchLeft}>
+                <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => setPanel("menu")}>
+                  <PixelIcon name="menu" />
+                  메뉴
+                  {(calendarReady || giftCount > 0) && (
+                    <>
+                      <span className={cx(styles.dot, styles.redDot, styles.dotSecond)} aria-hidden="true" />
+                      <span className="visually-hidden"> (받을 출석 도장·선물 있음)</span>
+                    </>
+                  )}
+                  {(unreadNotice || (me?.activityUnread ?? 0) > 0) && (
+                    <>
+                      <span className={styles.dot} aria-hidden="true" />
+                      <span className="visually-hidden"> (새 소식 있음)</span>
+                    </>
+                  )}
+                </button>
                 <BgmPlayer compact />
                 <DonateButton inline />
               </div>
@@ -462,64 +478,54 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
               </div>
             </>
           )}
-          {/* 23번 확성기 창: 터치는 위쪽 바 아래에 따로 (데스크톱은 왼쪽 위 음악 아래) */}
+          {/* 23번 확성기 창: 터치는 왼쪽 아래 조이스틱 위에 따로 (데스크톱은 왼쪽 위 음악 아래) */}
           {coarse && <MegaphoneFeed channel={channel} floating />}
-          {/* 바로 가기 줄: 데스크톱은 왼쪽 아래 모서리, 터치(폰)는 화면 맨 아래 한 줄 바. 아이콘 + 짧은 글자 */}
-          <nav className={cx(styles.dock, coarse && styles.dockBar)} aria-label="바로 가기">
-            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("menu")}>
-              <PixelIcon name="menu" />
-              메뉴
-              {coarse && (calendarReady || giftCount > 0) && (
-                <>
-                  <span className={cx(styles.dot, styles.redDot, styles.dotSecond)} aria-hidden="true" />
-                  <span className="visually-hidden"> (받을 출석 도장·선물 있음)</span>
-                </>
-              )}
-              {coarse && (unreadNotice || (me?.activityUnread ?? 0) > 0) && (
-                <>
-                  <span className={styles.dot} aria-hidden="true" />
-                  <span className="visually-hidden"> (새 소식 있음)</span>
-                </>
-              )}
-            </button>
-            <ExprButton className={cx(ui.button, styles.dockButton)} onOpen={() => setSayOpen(true)} onRadial={openRadial}>
-              <PixelIcon name="chat" />
-              표현
-              {!coarse && <span className={styles.dockKey}>T</span>}
-            </ExprButton>
-            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("bag")}>
-              <PixelIcon name="bag" />
-              가방
-              {bagCount > 0 && <span className={styles.badge}>{bagCount}</span>}
-            </button>
-            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("hunt")}>
-              <PixelIcon name="sword" />
-              사냥
-            </button>
-            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => bridge.emit("forage:dex", {})}>
-              <PixelIcon name="book" />
-              도감
-            </button>
-            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("housing")}>
-              <PixelIcon name="house" />집
-            </button>
-            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("activity")}>
-              <PixelIcon name="heart" />
-              소식
-              {(me?.activityUnread ?? 0) > 0 && <span className={styles.badge}>{me?.activityUnread}</span>}
-            </button>
-            <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("notices")}>
-              <PixelIcon name="bell" />
-              공지
-              {unreadNotice && (
-                <>
-                  <span className={styles.dot} aria-hidden="true" />
-                  <span className="visually-hidden"> (새 공지 있음)</span>
-                </>
-              )}
-            </button>
-            {!coarse && <FireworkButton onOpen={() => setPanel("fireworks")} />}
-          </nav>
+          {/* 바로 가기 줄: 데스크톱만 왼쪽 아래 모서리. 터치는 위쪽 [메뉴] 시트에 모두 있고 [표현]만 행동 버튼 옆(MobileControls) */}
+          {!coarse && (
+            <nav className={styles.dock} aria-label="바로 가기">
+              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("menu")}>
+                <PixelIcon name="menu" />
+                메뉴
+              </button>
+              <ExprButton className={cx(ui.button, styles.dockButton)} onOpen={() => setSayOpen(true)} onRadial={openRadial}>
+                <PixelIcon name="chat" />
+                표현
+                <span className={styles.dockKey}>T</span>
+              </ExprButton>
+              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("bag")}>
+                <PixelIcon name="bag" />
+                가방
+                {bagCount > 0 && <span className={styles.badge}>{bagCount}</span>}
+              </button>
+              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("hunt")}>
+                <PixelIcon name="sword" />
+                사냥
+              </button>
+              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => bridge.emit("forage:dex", {})}>
+                <PixelIcon name="book" />
+                도감
+              </button>
+              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("housing")}>
+                <PixelIcon name="house" />집
+              </button>
+              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("activity")}>
+                <PixelIcon name="heart" />
+                소식
+                {(me?.activityUnread ?? 0) > 0 && <span className={styles.badge}>{me?.activityUnread}</span>}
+              </button>
+              <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("notices")}>
+                <PixelIcon name="bell" />
+                공지
+                {unreadNotice && (
+                  <>
+                    <span className={styles.dot} aria-hidden="true" />
+                    <span className="visually-hidden"> (새 공지 있음)</span>
+                  </>
+                )}
+              </button>
+              <FireworkButton onOpen={() => setPanel("fireworks")} />
+            </nav>
+          )}
           <div className={styles.bottomCenter}>
             {showTutorial && <Tutorial touch={coarse} onDone={() => setTutorialOn(false)} />}
             <ToastList toasts={toasts} />
@@ -530,7 +536,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           <CameraControls showZoom={!coarse} />
           {/* 타는 펫 타기·내리기: 데스크톱은 오른쪽 아래 확대·축소 버튼 왼쪽, 터치는 행동 버튼 묶음 안(MobileControls) */}
           {!coarse && <RideButton variant="desktop" className={ui.button} />}
-          {coarse && <MobileControls />}
+          {coarse && <MobileControls onSay={() => setSayOpen(true)} onRadial={openRadial} />}
           {!coarse && <DonateButton />}
           {/* 접속 시간 보너스: 사냥·귀신의 집·실내에서도 서버 기록은 쌓이고, 창은 마을에서만 띄운다 */}
           {(!scene || scene === "world") && <StayBonus />}

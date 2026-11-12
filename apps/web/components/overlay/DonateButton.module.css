@@ -90,7 +90,7 @@
 @media (pointer: coarse) {
   .button {
     left: calc(50% - 14px);
-    bottom: calc(var(--safe-bottom) + var(--dock-h, 0px) + 6px);
+    bottom: calc(var(--safe-bottom) + 6px);
     flex-direction: column;
     gap: 2px;
     padding: 5px 6px;

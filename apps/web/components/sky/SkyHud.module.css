@@ -100,9 +100,10 @@
   text-overflow: ellipsis;
 }
 
+/* 좁은 화면: 터치는 조이스틱·그 위 확성기 창·행동 버튼 위 (GameShell .shell --hud-bottom), 좁은 데스크톱 창은 150px */
 @media (max-width: 520px) {
   .dock {
-    bottom: calc(var(--safe-bottom, 0px) + 150px);
+    bottom: var(--hud-bottom, calc(var(--safe-bottom, 0px) + 150px));
   }
 
   .bar {

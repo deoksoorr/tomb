@@ -14,9 +14,9 @@ import MegaphoneSpotlight from "./MegaphoneSpotlight";
 const RELOAD_MS = 2 * 60_000;
 
 /**
- * 23번 확성기 창 (화면 왼쪽 위). 최근 20개는 펼쳐 볼 수 있다(접기 가능).
+ * 23번 확성기 창 (데스크톱은 화면 왼쪽 위). 최근 20개는 펼쳐 볼 수 있다(접기 가능).
  * 새 한마디는 화면 가운데에 몇 초간 크게 뜨고(여러 개면 차례로), 기록의 그 줄도 잠깐 밝게 표시된다.
- * floating = 터치 화면: 위쪽 바 아래에 따로 띄운다
+ * floating = 터치 화면: 왼쪽 아래 조이스틱 위에 따로 띄운다 (펼친 기록은 위로)
  */
 export default function MegaphoneFeed({ channel, floating = false }: { channel: number; floating?: boolean }) {
   const { entries, flash, flashUntil, collapsed } = useMegaphone();
@@ -40,7 +40,12 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
   };
 
   return (
-    <section className={cx(styles.feed, floating && styles.floating)} aria-label="확성기">
+    <section
+      className={cx(styles.feed, floating && styles.floating)}
+      aria-label="확성기"
+      // 터치: 기록을 펼치면 아래 가운데 안내 줄·낚시 창 등이 그 위로 올라간다 (GameShell .shell --hud-bottom)
+      data-megaphone-open={floating && !collapsed ? "" : undefined}
+    >
       <div className={styles.bar}>
         <button type="button" className={cx(ui.button, styles.toggle)} onClick={toggle} aria-expanded={!collapsed}>
           <PixelIcon name="megaphone" />

@@ -1,8 +1,8 @@
 .joystick {
   position: absolute;
   left: var(--safe-left);
-  /* 아래 바로 가기 바(--dock-h, GameShell) 위 */
-  bottom: calc(var(--safe-bottom) + var(--dock-h, 0px));
+  /* 화면 아래 가장자리 여백 바로 위 (위에는 확성기 창, MegaphoneFeed .floating) */
+  bottom: var(--safe-bottom);
   width: 120px;
   height: 120px;
   display: grid;
@@ -31,7 +31,7 @@
 .actions {
   position: absolute;
   right: var(--safe-right);
-  bottom: calc(var(--safe-bottom) + var(--dock-h, 0px));
+  bottom: var(--safe-bottom);
   width: 148px;
   height: 140px;
   /* 조이스틱을 잡은 채 버튼을 눌러도 두 손가락 확대·스크롤로 보지 않게 */
@@ -121,6 +121,18 @@
   height: 52px;
   font-size: 12px;
   font-family: var(--font-body);
+}
+
+/* [표현]: 점프 왼쪽 아래에 작게 (행동 버튼 칸 148px 밖 — 폰 세로 폭에서도 조이스틱 120px과 떨어져 있다) */
+.expr {
+  right: 150px;
+  bottom: 2px;
+  width: 46px;
+  height: 46px;
+  gap: 0;
+  align-content: center;
+  font-size: 10px;
+  line-height: 1.1;
 }
 
 .action[aria-pressed="true"] {

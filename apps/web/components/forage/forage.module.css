@@ -127,7 +127,14 @@
     right: auto;
     left: 50%;
     transform: translateX(-50%);
-    bottom: calc(var(--safe-bottom) + var(--dock-h, 0px) + 150px);
+    bottom: calc(var(--safe-bottom) + 150px);
+  }
+}
+
+/* 터치: 조이스틱·그 위 확성기 창·행동 버튼 위 (가로 폰은 둘 사이 맨 아래) — GameShell .shell --hud-bottom */
+@media (pointer: coarse) {
+  .dock {
+    bottom: var(--hud-bottom, calc(var(--safe-bottom) + 168px));
   }
 }
 

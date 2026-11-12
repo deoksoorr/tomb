@@ -61,10 +61,10 @@
   line-height: 1.6;
 }
 
-/* 터치: 아래 양쪽 조이스틱·행동 버튼(높이 140px) 위로 */
+/* 터치: 아래 조이스틱(그 위 확성기 창)·행동 버튼 위 — GameShell 안내 줄과 같은 높이 (.shell --hud-bottom) */
 @media (pointer: coarse) {
   .banner:not(.top) {
-    bottom: calc(var(--safe-bottom) + var(--dock-h, 0px) + 148px);
+    bottom: var(--hud-bottom, calc(var(--safe-bottom) + 168px));
   }
 }
 

@@ -57,7 +57,7 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <section className={styles.player} aria-label="배경 음악">
+    <section className={cx(styles.player, compact && styles.compact)} aria-label="배경 음악">
       <div className={styles.bar}>
         {!compact && transport}
         <button

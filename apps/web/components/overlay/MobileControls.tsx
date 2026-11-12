@@ -3,15 +3,21 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
+import { cx } from "../ui/cx";
+import PixelIcon from "../ui/PixelIcon";
 import RideButton from "../zoo/RideButton";
+import { ExprButton } from "./ExprRadial";
 import { pressProps } from "./pressProps";
 import styles from "./MobileControls.module.css";
 
 /** 손잡이가 바닥 원 반지름의 몇 배까지 움직이는지 */
 const KNOB_TRAVEL = 0.55;
 
-/** 터치 기기 전용: 좌하단 아날로그 조이스틱 + 우하단 [상호작용] [점프] [달리기] [앉기] */
-export default function MobileControls() {
+/**
+ * 터치 기기 전용: 좌하단 아날로그 조이스틱 + 우하단 [상호작용] [점프] [달리기] [앉기]
+ * + 점프 왼쪽에 작은 [표현] (누르면 표현 창, 길게 누르면 즐겨찾기 원형 — 아래 바로 가기 줄이 없어져 여기로)
+ */
+export default function MobileControls({ onSay, onRadial }: { onSay: () => void; onRadial: () => void }) {
   const [running, setRunning] = useState(false);
   // sticky라 마운트 전에 다가간 묘비·좌석도 바로 반영된다
   const nearGrave = useBridgeValue("grave:near") != null;
@@ -58,6 +64,10 @@ export default function MobileControls() {
         >
           달리기
         </button>
+        <ExprButton className={cx(styles.action, styles.expr)} onOpen={onSay} onRadial={onRadial}>
+          <PixelIcon name="chat" />
+          표현
+        </ExprButton>
         {/* 탈 수 있는 펫을 데리고 있을 때만 (달리기 위) */}
         <RideButton variant="touch" className={styles.action} />
       </div>

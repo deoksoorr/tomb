@@ -5,21 +5,34 @@
  *  아래 안내 줄(가운데): 토스트 · 대기열/연결 끊김 · 새 버전
  *  데스크톱 아랫줄: 좌 바로 가기 줄(dock: 메뉴·가방·사냥·도감·집·소식·공지·폭죽) · 가운데 [내 캐릭터로] · 우 줌
  *    — 모든 HUD는 화면 가장자리에서 같은 여백(--safe-*)에 붙고, 버튼 높이(36px)·간격(6px)·배경(--panel)이 같다
- *  터치: 맨 아래 한 줄 바로 가기 바(dock) · 그 위 좌 조이스틱 · 우 행동 버튼 · 위 가장자리 바 아래 [내 캐릭터로]
+ *  터치: 위 가장자리 바(좌 [메뉴]·노래·후원 · 우 채널) · 아래 좌 조이스틱(그 위 확성기) · 우 행동 버튼(+작은 [표현])
+ *    — 바로 가기 줄(dock)은 없고 가방·사냥·도감·집·소식·공지·폭죽은 모두 [메뉴] 시트(MenuSheet)에
  * 화면 가운데(내 캐릭터와 이름표)는 비워 둔다.
  */
 
 .shell {
-  /* 아래 바로 가기 바가 차지하는 높이 (터치에서만). 조이스틱·행동 버튼·안내 줄·낚시 창이 이만큼 위로 */
-  --dock-h: 0px;
   position: fixed;
   inset: 0;
   background: var(--bg);
 }
 
+/* 터치: 아래 가운데 안내 줄·새 버전 안내·낚시 창·관람차 안내가 놓이는 높이 (--hud-bottom).
+   세로 폰은 조이스틱(120px) 위 확성기 버튼 줄(≈30px) 위, 확성기 기록을 펼치면 그 기록(≤120px) 위까지 */
 @media (pointer: coarse) {
   .shell {
-    --dock-h: 60px;
+    --hud-bottom: calc(var(--safe-bottom) + 168px);
+  }
+
+  .shell:has([data-megaphone-open]) {
+    --hud-bottom: calc(var(--safe-bottom) + 296px);
+  }
+}
+
+/* 가로 폰처럼 낮은 터치 화면: 조이스틱과 행동 버튼 사이 맨 아래 (확성기 창은 조이스틱 위 왼쪽이라 닿지 않는다) */
+@media (pointer: coarse) and (max-height: 520px) {
+  .shell,
+  .shell:has([data-megaphone-open]) {
+    --hud-bottom: var(--safe-bottom);
   }
 }
 
@@ -53,7 +66,7 @@
   opacity: 1;
 }
 
-.campfire .dock:not(.dockBar) {
+.campfire .dock {
   display: none;
 }
 
@@ -92,7 +105,7 @@
   gap: var(--top-gap);
 }
 
-/* 터치: 위 가장자리 바 (좌 음악 · 가운데 채널·날씨 · 우 메뉴) */
+/* 터치: 위 가장자리 바 (좌 메뉴·음악·후원 · 우 채널·날씨) */
 .touchBar {
   position: absolute;
   z-index: 2;
@@ -156,40 +169,10 @@
 
 /* 좁은 데스크톱 창: 글자를 줄이고 여백을 좁혀 한 줄 유지 */
 @media (max-width: 700px) {
-  .dock:not(.dockBar) .dockButton {
+  .dock .dockButton {
     padding: 4px 8px;
     font-size: 11px;
   }
-}
-
-/* 터치(폰): 화면 맨 아래 한 줄 바 — 칸을 똑같이 나누고 아이콘 위·글자 아래 */
-.dockBar {
-  left: 0;
-  right: 0;
-  bottom: 0;
-  max-width: none;
-  gap: 0;
-  padding: 4px max(4px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
-  background: var(--panel-solid);
-  box-shadow: 0 -2px 0 var(--line);
-}
-
-.dockBar .dockButton {
-  flex: 1 1 0;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  min-height: 52px;
-  padding: 4px 2px;
-  background: transparent;
-  box-shadow: none;
-  font-size: 10px;
-}
-
-.dockBar .badge {
-  position: absolute;
-  top: 2px;
-  right: calc(50% - 22px);
 }
 
 .dot {
@@ -212,19 +195,17 @@
   text-align: center;
 }
 
-/* 터치: 안내 줄은 아래 조이스틱(≈136px)·행동 버튼(≈156px) 위 */
+/* 터치: 안내 줄은 조이스틱·확성기·행동 버튼 위 (--hud-bottom, .shell) */
 @media (pointer: coarse) {
   .bottomCenter {
-    bottom: calc(var(--safe-bottom) + var(--dock-h) + 168px);
+    bottom: var(--hud-bottom);
   }
 }
 
-/* 가로 폰처럼 낮은 터치 화면: 조이스틱과 행동 버튼 사이 아래쪽에 */
+/* 가로 폰처럼 낮은 터치 화면: 조이스틱과 행동 버튼(+[표현]) 사이 맨 아래 */
 @media (pointer: coarse) and (max-height: 520px) {
   .bottomCenter {
-    /* 아래 가운데 [서버비 보태기](높이 ≈50px, DonateButton) 위 */
-    bottom: calc(var(--safe-bottom) + var(--dock-h) + 62px);
-    width: min(420px, calc(100% - 2 * 180px));
+    width: min(420px, calc(100% - 2 * 214px));
   }
 }
 
