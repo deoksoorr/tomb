@@ -62,7 +62,9 @@ function Joystick() {
     setKnob({ x, y });
     bridge.emit("rpg:joystick", { x, y });
   };
-  const end = () => {
+  // 멀티터치: 조이스틱을 잡은 손가락(pointerId) 하나만 따른다 — 다른 손가락이 떼어져도 멈추지 않는다
+  const end = (e: React.PointerEvent) => {
+    if (e.pointerId !== id.current) return;
     id.current = null;
     setKnob({ x: 0, y: 0 });
     bridge.emit("rpg:joystick", { x: 0, y: 0 });
@@ -74,6 +76,7 @@ function Joystick() {
       aria-hidden="true"
       onPointerDown={(e) => {
         e.stopPropagation();
+        if (id.current !== null) return;
         id.current = e.pointerId;
         e.currentTarget.setPointerCapture(e.pointerId);
         move(e);
@@ -81,6 +84,7 @@ function Joystick() {
       onPointerMove={(e) => id.current === e.pointerId && move(e)}
       onPointerUp={end}
       onPointerCancel={end}
+      onLostPointerCapture={end}
     >
       <span className={s.knob} style={{ transform: `translate(${knob.x * 34}px, ${knob.y * 34}px)` }} />
     </div>

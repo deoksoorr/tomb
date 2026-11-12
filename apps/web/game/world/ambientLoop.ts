@@ -1,8 +1,9 @@
+import { audioLife, type AudioLifeState } from "@/lib/audioLife";
 import type { AudioHost, SoundBus } from "./audioHost";
 
 // BGM 위에 은은하게 깔리는 루프 소리 하나 (모닥불·빗소리).
 // MP3는 앞뒤에 인코더 무음이 몇 ms 붙는다 → <audio loop> 대신 AudioBufferSourceNode(loop)로, 앞뒤 20ms를 잘라 이음새가 안 들리게.
-// 크기는 매 프레임 set()으로 줘도 된다 — 바뀔 때만 램프를 건다. 탭이 숨으면 멈추고, 돌아오면(창 전환·bfcache·다음 입력) 다시 깨운다.
+// 크기는 매 프레임 set()으로 줘도 된다 — 바뀔 때만 램프를 건다. 탭이 숨으면 멈추고, 돌아오면(창 전환·bfcache·다음 입력) 다시 튼다 — 숨김·복귀 신호는 lib/audioLife가 모든 소리에 함께 보낸다.
 
 export type LoopOptions = {
   /** UI 볼륨에 곱하는 크기 */
@@ -27,8 +28,7 @@ export class AmbientLoop {
   private level = 0;
   /** 소리가 0이 된 시각 (한동안 0이면 재생을 멈춘다) */
   private quietAt = 0;
-  private hidden = false;
-  private bound = false;
+  private offLife: (() => void) | null = null;
   private muffled = false;
   private dead = false;
 
@@ -66,6 +66,11 @@ export class AmbientLoop {
   /** 볼륨·음소거가 바뀌었다 */
   refresh(): void {
     if (!this.dead) this.apply();
+  }
+
+  /** 탭이 숨었는지 (lib/audioLife가 모든 소리에 같은 값을 준다) */
+  private get hidden(): boolean {
+    return audioLife.hidden;
   }
 
   /** 이 루프가 따르는 버스의 크기 (끄면 0) */
@@ -156,42 +161,26 @@ export class AmbientLoop {
   }
 
   private bindVisibility(): void {
-    if (this.bound || typeof document === "undefined") return;
-    this.bound = true;
-    document.addEventListener("visibilitychange", this.onVisibility);
-    // 창 전환(탭은 그대로 보이는 경우 포함)·bfcache 복귀·다음 입력 때 컨텍스트를 다시 깨운다 (6번: 불멍 중 창을 바꾸면 소리가 사라짐)
-    window.addEventListener("focus", this.onWake);
-    window.addEventListener("pageshow", this.onWake);
-    window.addEventListener("pointerdown", this.onWake, true);
-    window.addEventListener("keydown", this.onWake, true);
+    this.offLife ??= audioLife.on(this.onLife);
   }
 
-  private readonly onWake = (): void => {
+  /** 탭이 숨으면 바로 멈추고(소스를 내린다), 돌아오면(또는 복귀 뒤 첫 입력) 컨텍스트를 깨워 다시 튼다 */
+  private readonly onLife = (state: AudioLifeState): void => {
+    if (state === "hidden") {
+      this.apply();
+      this.quietAt = performance.now() - 4000;
+      this.maybeStop();
+      return;
+    }
     if (this.level <= 0 || this.busGain <= 0) return;
-    this.hidden = document.hidden;
-    if (this.hidden) return;
     this.host.kick(true);
     this.apply();
   };
 
-  private readonly onVisibility = (): void => {
-    this.hidden = document.hidden;
-    if (!this.hidden) this.host.kick(true);
-    this.apply();
-    if (this.hidden) this.quietAt = performance.now() - 4000;
-    this.maybeStop();
-  };
-
   destroy(): void {
     this.dead = true;
-    if (this.bound) {
-      document.removeEventListener("visibilitychange", this.onVisibility);
-      window.removeEventListener("focus", this.onWake);
-      window.removeEventListener("pageshow", this.onWake);
-      window.removeEventListener("pointerdown", this.onWake, true);
-      window.removeEventListener("keydown", this.onWake, true);
-    }
-    this.bound = false;
+    this.offLife?.();
+    this.offLife = null;
     this.stopSource();
     this.gain = null;
     this.lp = null;

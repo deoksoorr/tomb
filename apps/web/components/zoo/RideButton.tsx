@@ -1,8 +1,10 @@
 "use client";
 
 import { isRideablePet, itemById } from "@tomb/protocol";
+import type { MouseEvent } from "react";
 import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
+import { pressProps } from "../overlay/pressProps";
 import { cx } from "../ui/cx";
 import s from "./zoo.module.css";
 
@@ -24,10 +26,15 @@ export default function RideButton({ variant, className }: { variant: "desktop" 
       data-slot={variant === "touch" ? "ride" : undefined}
       aria-pressed={ride.riding}
       disabled={!ride.riding && !ride.can}
-      onClick={(e) => {
-        e.currentTarget.blur();
-        bridge.emit("input:ride");
-      }}
+      // 터치: 조이스틱을 잡은 채로도 눌리게 누르는 순간 반응 (overlay/pressProps — 멀티터치)
+      {...(variant === "touch"
+        ? pressProps(() => bridge.emit("input:ride"))
+        : {
+            onClick: (e: MouseEvent<HTMLButtonElement>) => {
+              e.currentTarget.blur();
+              bridge.emit("input:ride");
+            },
+          })}
       aria-label={ride.riding ? `${name}에서 내리기` : `${name}에 올라타기`}
       title={ride.riding ? "내리기 (R)" : ride.can ? "올라타기 (R)" : "지금은 탈 수 없어요 (물·자리·놀이기구에서 내린 뒤)"}
     >

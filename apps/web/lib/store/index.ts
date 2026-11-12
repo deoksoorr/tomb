@@ -15,6 +15,7 @@ import { MemoryErrors, RedisErrors, type ErrorStore } from "./errors";
 import { MemoryGifts, RedisGifts, type GiftStore } from "./gifts";
 import { MemoryMegaphone, RedisMegaphone, type MegaphoneStore } from "./megaphone";
 import { MemoryNotices, RedisNotices, type NoticeStore } from "./notices";
+import { MemoryWishDay, RedisWishDay, type WishDayStore } from "./wishDay";
 import { RedisStore } from "./redis";
 import { passAtOf } from "./passing";
 import type { AccountStore, GraveRecord, GraveSettings, GraveStore } from "./types";
@@ -29,6 +30,7 @@ const g = globalThis as typeof globalThis & {
   __tombErrors?: ErrorStore;
   __tombGifts?: GiftStore;
   __tombMegaphone?: MegaphoneStore;
+  __tombWishDay?: WishDayStore;
 };
 
 /** Redis 환경변수가 있으면 RedisStore, 없으면 (로컬 한정) 목업을 심은 MemoryStore */
@@ -159,6 +161,16 @@ export function getMegaphone(): MegaphoneStore {
   getStore();
   if (cur instanceof MemoryMegaphone) return cur;
   return (g.__tombMegaphone = cur ? Object.assign(new MemoryMegaphone(), cur) : new MemoryMegaphone());
+}
+
+/** 50번 소원 분수 하루 한 번 표 (묘비 저장소와 같은 백엔드) */
+export function getWishDay(): WishDayStore {
+  const cur = g.__tombWishDay;
+  const conn = env.redis();
+  if (conn) return cur instanceof RedisWishDay ? cur : (g.__tombWishDay = new RedisWishDay(conn));
+  getStore();
+  if (cur instanceof MemoryWishDay) return cur;
+  return (g.__tombWishDay = cur ? Object.assign(new MemoryWishDay(), cur) : new MemoryWishDay());
 }
 
 /** 공지사항 저장소 (묘비 저장소와 같은 백엔드) */

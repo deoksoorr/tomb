@@ -34,6 +34,8 @@
   bottom: calc(var(--safe-bottom) + var(--dock-h, 0px));
   width: 148px;
   height: 140px;
+  /* 조이스틱을 잡은 채 버튼을 눌러도 두 손가락 확대·스크롤로 보지 않게 */
+  touch-action: none;
 }
 
 .action {
@@ -51,7 +53,7 @@
   font-family: var(--font-small);
   box-shadow: inset 0 0 0 2px rgba(93, 97, 79, 0.8);
   pointer-events: auto;
-  touch-action: manipulation;
+  touch-action: none;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import RideButton from "../zoo/RideButton";
+import { pressProps } from "./pressProps";
 import styles from "./MobileControls.module.css";
 
 /** 손잡이가 바닥 원 반지름의 몇 배까지 움직이는지 */
@@ -32,11 +33,11 @@ export default function MobileControls() {
           className={styles.action}
           data-slot="interact"
           data-near={nearGrave}
-          onClick={() => bridge.emit("input:interact")}
+          {...pressProps(() => bridge.emit("input:interact"))}
         >
           {inShop ? "말 걸기" : nearGrave ? "살펴보기" : "상호작용"}
         </button>
-        <button type="button" className={styles.action} data-slot="jump" onClick={() => bridge.emit("input:jump")}>
+        <button type="button" className={styles.action} data-slot="jump" {...pressProps(() => bridge.emit("input:jump"))}>
           점프
         </button>
         <button
@@ -44,7 +45,7 @@ export default function MobileControls() {
           className={styles.action}
           data-slot="sit"
           data-near={nearSeat != null}
-          onClick={() => bridge.emit("input:sit")}
+          {...pressProps(() => bridge.emit("input:sit"))}
         >
           {nearSeat ? (nearSeat.kind === "bench" ? "벤치에 앉기" : "의자에 앉기") : "앉기"}
         </button>
@@ -53,7 +54,7 @@ export default function MobileControls() {
           className={styles.action}
           data-slot="run"
           aria-pressed={running}
-          onClick={toggleRun}
+          {...pressProps(toggleRun)}
         >
           달리기
         </button>

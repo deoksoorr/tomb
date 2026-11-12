@@ -76,6 +76,9 @@ export const K = {
   megaLog: "mega:log", // LIST 확성기 기록 JSON, 최신 먼저 최대 MEGA_KEEP개
   megaHidden: "mega:hidden", // SET 관리자가 숨긴 기록 id
   megaCool: (id: string) => `mega:cool:${id}`, // STRING NX PX 계정별 도배 제한
+
+  // ── 50번 소원 분수 (lib/store/wishDay.ts) ──
+  wishDay: (id: string, day: string) => `wish:day:${day}:${id}`, // STRING NX EX 계정별 그날(KST) 한 번
 };
 
 export const HIDDEN = "hidden:";

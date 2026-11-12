@@ -1,3 +1,4 @@
+import { audioLife } from "@/lib/audioLife";
 import { AmbientLoop } from "./ambientLoop";
 import { AudioHost } from "./audioHost";
 
@@ -32,7 +33,7 @@ export class RideSound extends AudioHost {
 
   /** gain 0..1 (UI 볼륨에 곱한다), rate: 재생 속도 (살짝 바꿔 같은 소리가 덜 반복돼 들리게) */
   play(name: RideSoundName, gain = 1, rate = 1): void {
-    if (this.muted || this.volume <= 0 || gain <= 0.01 || this.missing.has(name) || this.voices >= MAX_VOICES) return;
+    if (this.muted || this.volume <= 0 || this.hidden || gain <= 0.01 || this.missing.has(name) || this.voices >= MAX_VOICES) return;
     const src = this.base.get(name);
     if (!src) return;
     const a = src.cloneNode(true) as HTMLAudioElement;
@@ -47,6 +48,7 @@ export class RideSound extends AudioHost {
     };
     a.addEventListener("ended", done, { once: true });
     a.addEventListener("error", done, { once: true });
+    audioLife.trackMedia(a);
     a.play().catch(done);
   }
 

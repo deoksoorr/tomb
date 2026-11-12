@@ -1,3 +1,4 @@
+import { audioLife } from "@/lib/audioLife";
 import { AmbientLoop } from "./ambientLoop";
 import { AudioHost, type SoundBus } from "./audioHost";
 
@@ -57,7 +58,7 @@ export class Sfx extends AudioHost {
    */
   play(name: SfxName, gain = 1, rate = 1, limit = MAX_VOICES): void {
     const vol = this.busGain(FILE_BUS[name] ?? "sfx");
-    if (vol <= 0 || this.missing.has(name) || this.voices >= Math.min(limit, MAX_VOICES)) return;
+    if (vol <= 0 || this.hidden || this.missing.has(name) || this.voices >= Math.min(limit, MAX_VOICES)) return;
     const src = this.base.get(name);
     if (!src) return;
     const a = src.cloneNode(true) as HTMLAudioElement;
@@ -72,6 +73,7 @@ export class Sfx extends AudioHost {
     };
     a.addEventListener("ended", done, { once: true });
     a.addEventListener("error", done, { once: true });
+    audioLife.trackMedia(a);
     a.play().catch(done);
   }
 

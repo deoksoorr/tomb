@@ -1,4 +1,5 @@
 import { bridge } from "@/game/bridge";
+import { audioLife, type AudioLifeState } from "@/lib/audioLife";
 import { readItem, writeItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
 import { nextIndex, parseManifest, randomStart, type Playlist, type Track } from "./manifest";
@@ -8,6 +9,7 @@ import { silentWav } from "./silence";
 // <audio> 두 개(덱 A/B)를 번갈아 쓰며, 곡을 바꿀 때 한쪽을 1.5초 동안 줄이고 다른 쪽을 키운다.
 // iOS는 사용자 제스처 안에서 한 번이라도 play()된 <audio>만 나중에 스스로 재생할 수 있다.
 // 그래서 첫 제스처(입장 클릭) 때 두 덱 모두 무음으로 잠깐 재생해 깨워 두고, 이후 곡 넘김·크로스페이드는 제스처 없이 한다.
+// 탭이 숨으면 게임 소리와 함께 멈추고 돌아오면 함께 이어서 튼다 (lib/audioLife가 컨텍스트를 suspend·resume, 덱은 여기서 pause·play).
 
 const MANIFEST_URL = "/bgm/tracks.json";
 const CROSSFADE_SEC = 1.5;
@@ -55,6 +57,8 @@ class BgmEngine {
   private loading: Promise<void> | null = null;
   private failures = 0;
   private unlocked = false;
+  /** 탭이 숨을 때 멈춘 덱 (돌아오면 이어서 튼다) */
+  private readonly hiddenPaused = new Set<Deck>();
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -183,8 +187,38 @@ class BgmEngine {
     });
     this.ctx = ctx;
     this.master = master;
+    audioLife.registerContext(ctx);
+    audioLife.on(this.onLife);
     this.applyVolume();
   }
+
+  /** 탭 숨김: 울리는 덱을 멈춰 둔다. 복귀(또는 복귀 뒤 첫 입력): 재생 중이었으면 그 덱들을 이어서 튼다 */
+  private readonly onLife = (state: AudioLifeState): void => {
+    if (state === "hidden") {
+      for (const deck of this.decks) {
+        if (!deck.audio.paused && !deck.audio.ended) {
+          deck.audio.pause();
+          this.hiddenPaused.add(deck);
+        }
+      }
+      return;
+    }
+    if (!this.state.playing) {
+      this.hiddenPaused.clear();
+      return;
+    }
+    for (const deck of [...this.hiddenPaused]) {
+      // 크로스페이드 중에 숨었으면 줄어들던 덱은 그대로 둔다 (지금 곡 덱만 이어서)
+      if (deck !== this.decks[this.active] || deck.audio.ended || !deck.audio.paused) {
+        this.hiddenPaused.delete(deck);
+        continue;
+      }
+      deck.audio
+        .play()
+        .then(() => this.hiddenPaused.delete(deck))
+        .catch(() => undefined); // 막히면 다음 입력 때 audioLife가 다시 부른다
+    }
+  };
 
   /** 두 덱을 무음으로 재생했다가 멈춘다 (gain 0). 그 사이 진짜 곡이 걸리면(token 변경) 멈추지 않는다 */
   private unlockDecks(): void {

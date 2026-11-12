@@ -1,3 +1,4 @@
+import { audioLife } from "@/lib/audioLife";
 import { busGain, loadSoundMix } from "@/lib/soundMix";
 import { bridge } from "../bridge";
 
@@ -78,7 +79,7 @@ export class RpgSfx {
   }
 
   play(name: RpgSound, gain = 1): void {
-    if (this.volume <= 0 || this.missing.has(name) || this.voices >= MAX_VOICES) return;
+    if (this.volume <= 0 || audioLife.hidden || this.missing.has(name) || this.voices >= MAX_VOICES) return;
     const src = this.base.get(name);
     if (!src) return;
     const a = src.cloneNode(true) as HTMLAudioElement;
@@ -89,23 +90,28 @@ export class RpgSfx {
     };
     a.addEventListener("ended", done, { once: true });
     a.addEventListener("error", done, { once: true });
+    audioLife.trackMedia(a);
     a.play().catch(done);
   }
 
   private ctx: AudioContext | null = null;
+  private offLife: (() => void) | null = null;
 
   /**
    * 은은한 종소리 (별자리 잇기). 파일 없이 WebAudio로 합성한다: 펜타토닉 음계의 사인파 + 한 옥타브 위 약한 배음, 천천히 사라진다.
    * degree: 음계 단계 (별 순서), bright: 완벽 판정이면 조금 더 밝게
    */
   chime(degree: number, bright = false): void {
-    if (this.volume <= 0 || typeof window === "undefined") return;
+    if (this.volume <= 0 || audioLife.hidden || typeof window === "undefined") return;
     try {
       const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!Ctx) return;
-      this.ctx ??= new Ctx();
+      if (!this.ctx) {
+        this.ctx = new Ctx();
+        this.offLife = audioLife.registerContext(this.ctx);
+      }
       const ctx = this.ctx;
-      if (ctx.state === "suspended") void ctx.resume();
+      if (ctx.state !== "running") void ctx.resume().catch(() => undefined);
       const scale = [0, 2, 4, 7, 9];
       const step = scale[((degree % 5) + 5) % 5] + 12 * Math.floor(degree / 5);
       const freq = 523.25 * 2 ** (step / 12);
@@ -136,6 +142,8 @@ export class RpgSfx {
 
   destroy(): void {
     this.off();
+    this.offLife?.();
+    this.offLife = null;
     void this.ctx?.close().catch(() => undefined);
     this.ctx = null;
   }
@@ -145,8 +153,9 @@ export class RpgSfx {
 export function playRpgSoundOnce(name: RpgSound, gain = 1): void {
   if (typeof Audio === "undefined") return;
   const raw = busGain(bridge.last("audio:mix") ?? loadSoundMix(), "sfx");
-  if (raw <= 0) return;
+  if (raw <= 0 || audioLife.hidden) return;
   const a = new Audio(`/sfx/${name}.mp3`);
   a.volume = Math.max(0, Math.min(1, raw * gain));
+  audioLife.trackMedia(a);
   a.play().catch(() => undefined);
 }
