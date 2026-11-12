@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { isPermanentUntil, isShopListed, ITEMS, permanentPrice, SHOP_KINDS, type ItemDef, type ItemKind } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
@@ -94,9 +94,6 @@ export default function ShopDialog({ onClose, avatar }: Props) {
     listRef.current?.scrollTo({ top: 0 });
   }
 
-  const hover = (id: string | null) => (e: PointerEvent) => {
-    if (e.pointerType === "mouse") setHoverId(id);
-  };
 
   function buyButton(item: ItemDef) {
     const short = me !== null && me.points < item.price;
@@ -247,7 +244,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                 const isPicked = picked[tab] === item.id;
                 const n = owned(item);
                 return (
-                  <li key={item.id} onPointerEnter={hover(item.id)} onPointerLeave={hover(null)}>
+                  <li key={item.id}>
                     <button
                       type="button"
                       className={styles.tile}
@@ -255,8 +252,6 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                       title={`${item.name} — ${item.desc}`}
                       aria-label={`${item.name}, ${item.price}포인트${item.kind === "cosmetic" ? ", 눌러서 입어 보기" : ""}`}
                       onClick={() => pick(item.id)}
-                      onFocus={() => setHoverId(item.id)}
-                      onBlur={() => setHoverId(null)}
                     >
                       <span className={styles.thumb}>
                         <ItemIcon itemId={item.id} size={item.id.startsWith("gs_") ? 32 : 48} />
