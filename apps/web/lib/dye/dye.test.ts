@@ -7,13 +7,13 @@ import { kstDay, loadMe } from "../store/accounts";
 import { setStaff } from "../staff";
 import { getStyleStore } from "../store/style";
 import type { MemoryAccounts } from "../store/accounts-memory";
-import { buildPalette, cellColor, cellHex, cellRgb, cellSpecial, colorAt, DYE_BOARD_H, DYE_BOARD_W, DYE_GRACE_MS, DYE_TIERS, DYE_TIME_MS, samplePoints, type DyeTier } from "./palette";
-import { DYE_DECIDE_MS, DYE_RESET_PRICE } from "./rules";
+import { boardColor, boardRgb, boardSpecial, buildBoard, buildPalette, cellColor, cellHex, cellRgb, cellSpecial, chunkAt, colorAt, DYE_BOARD_H, DYE_BOARD_W, DYE_GRACE_MS, DYE_LIMIT, DYE_TIERS, DYE_TIME_MS, samplePoints, specialLabel, type DyeTier } from "./palette";
+import { DYE_DECIDE_MS, DYE_RESET_PRICE, dyeCountsDiffer } from "./rules";
 import { AdminDyeIssueSchema, DyeFinishSchema, DyeStartSchema } from "./schemas";
 import { applyFixedDye, buyPermanent, cancelDye, chooseDye, dyeState, finishDye, issueFixedDye, judgeColor, reshape, resetDye, startDye, timeoutDye } from "./service";
 
-// node(V8)·사파리 엔진(JavaScriptCore, osascript)에서 같은 값임을 확인했다 (11/12 개편 2: 무늬 구역·색 계열·특수 색, 등급 1~8)
-const GOLDEN = ["a929804f", "d04df9bf", "54bb9d36", "4184b72", "b9a4360a", "9183ac7d", "42377504", "a78dd314"];
+// node(V8)·사파리 엔진(JavaScriptCore, osascript)에서 같은 값임을 확인했다 (11/12 개편 3: 특수 색 극악 확률·이음매 여백 + 끝없는 판, 등급 1~8)
+const GOLDEN = ["2c7f169b", "521a0d91", "a839e088", "1ff89314", "b9a4360a", "f6fe5ce1", "28e64551", "26f254d6"];
 const TIERS = [1, 2, 3, 4, 5, 6, 7, 8] as const satisfies readonly DyeTier[];
 
 // 46번 염색 · 25번 외형 바꾸기 · 30번 영구 코디 (로컬 메모리 저장소 — Redis Lua는 같은 규칙으로 style.ts에)
@@ -32,15 +32,25 @@ const boardHash = (seed: string, tier: DyeTier) => {
   for (let y = 0; y < DYE_BOARD_H; y++) for (let x = 0; x < DYE_BOARD_W; x++) h = Math.imul(h ^ cellRgb(p, x, y), 0x01000193);
   return (h >>> 0).toString(16);
 };
+/** 끝없는 판 해시: 원점 이음매 둘레 48×48 + 먼 구역 이음매 둘레 16×16 */
+const endlessHash = (seed: string, tier: DyeTier) => {
+  const b = buildBoard(seed, tier);
+  let h = 0x811c9dc5;
+  for (let y = -24; y < 24; y++) for (let x = -24; x < 24; x++) h = Math.imul(h ^ boardRgb(b, x, y), 0x01000193);
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) h = Math.imul(h ^ boardRgb(b, 999_990 + x - 8 * DYE_BOARD_W, -999_808 + y), 0x01000193);
+  return (h >>> 0).toString(16);
+};
+const ENDLESS_GOLDEN = ["cc15045", "edcef682", "87a568cf", "ba95e8d8", "56eb49b5", "6bccfc73", "7dd2e0af", "19fda686"];
 const rgb = (v: number) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 
 describe("46번 팔레트 (11/12 개편: 연속 색 공간)", () => {
   it("같은 시드·등급이면 같은 판, 시드가 다르면 칸 색이 다르다", () => {
     const a = buildPalette("seed-aaaa", 2);
     expect(buildPalette("seed-aaaa", 2)).toEqual(a);
-    const b = buildPalette("seed-bbbb", 2);
+    const ba = buildBoard("seed-aaaa", 2);
+    const bb = buildBoard("seed-bbbb", 2);
     let same = 0;
-    for (let i = 0; i < 40; i++) if (colorAt(a, i * 7, (i * 11) % DYE_BOARD_H) === colorAt(b, i * 7, (i * 11) % DYE_BOARD_H)) same++;
+    for (let i = 0; i < 40; i++) if (colorAt(ba, i * 7, (i * 11) % DYE_BOARD_H) === colorAt(bb, i * 7, (i * 11) % DYE_BOARD_H)) same++;
     expect(same).toBeLessThan(3);
   });
 
@@ -64,12 +74,12 @@ describe("46번 팔레트 (11/12 개편: 연속 색 공간)", () => {
   it("고정 시드의 판 전체가 기록해 둔 값과 한 칸도 다르지 않다 (클라이언트·서버가 같은 판을 본다)", () => {
     // 이 값이 바뀌면 판 함수가 바뀐 것: 이미 열린 판의 색이 화면과 서버에서 달라질 수 있으니 CLIENT_VERSION도 함께 올린다
     expect(TIERS.map((t) => boardHash("golden-seed", t))).toEqual(GOLDEN);
-    // 서버 판정(judgeColor)과 화면 그리기(cellColor)는 같은 칸에서 같은 색
-    const p = buildPalette("golden-seed", 3);
+    // 서버 판정(judgeColor)과 화면 그리기(boardColor — 끝없는 판, 음수·구역 밖 포함)는 같은 칸에서 같은 색
+    const b = buildBoard("golden-seed", 3);
     for (let i = 0; i < 100; i++) {
-      const x = (i * 31.7) % DYE_BOARD_W;
-      const y = (i * 17.3) % DYE_BOARD_H;
-      expect(judgeColor({ seed: "golden-seed", tier: 3 }, x, y)).toBe(cellColor(p, Math.floor(x), Math.floor(y)));
+      const x = ((i * 31.7) % (DYE_BOARD_W * 3)) - DYE_BOARD_W;
+      const y = ((i * 17.3) % (DYE_BOARD_H * 3)) - DYE_BOARD_H;
+      expect(judgeColor({ seed: "golden-seed", tier: 3 }, x, y)).toBe(boardColor(b, Math.floor(x), Math.floor(y)));
     }
   });
 
@@ -126,26 +136,83 @@ describe("46번 팔레트 (11/12 개편: 연속 색 공간)", () => {
     expect(vivid.sat).toBeGreaterThan(pastel.sat);
   });
 
-  it("특수 색 무리: 드물게 숨어 있고(반짝 염색권은 여럿), 그 칸의 색은 \"#rrggbb~종류\"", () => {
-    const spots = (t: DyeTier) => Array.from({ length: 40 }, (_, i) => buildPalette(`spot${i}`, t).spots.length).reduce((a, b) => a + b, 0) / 40;
-    expect(spots(1)).toBeLessThan(1);
-    expect(spots(8)).toBeGreaterThan(4);
-    expect(spots(8)).toBeGreaterThan(spots(3));
-    expect(spots(7)).toBeGreaterThan(spots(1));
+  it("특수 색 무리: 극악의 확률 (일반은 수백~천 구역에 1개, 반짝도 몇십 구역에 1개), 그 칸의 색은 \"#rrggbb~종류\"", () => {
+    const N = 1500;
+    const spotted = (t: DyeTier) => Array.from({ length: N }, (_, i) => buildPalette(`spot${i}`, t).spots.length).reduce((a, b) => a + b, 0);
+    const basic = spotted(1);
+    const sparkle = spotted(8);
+    expect(basic).toBeLessThan(8); // 기대값 1.5 (1/1000)
+    expect(sparkle).toBeGreaterThan(25); // 기대값 50 (1/30)
+    expect(sparkle).toBeLessThan(90);
+    for (const t of [1, 2, 3, 4, 5, 6, 7, 8] as const) expect(DYE_TIERS[t].special.rate).toBeLessThanOrEqual(t === 8 ? 400 : 100);
+    expect(specialLabel(1)).toBe("약 1000구역에 1번");
+    expect(specialLabel(8)).toBe("약 30구역에 1번");
     // 금속 염색권은 금빛 광택이 가장 흔하다
     const kinds = new Map<string, number>();
-    for (let i = 0; i < 60; i++) for (const s of buildPalette(`metal${i}`, 7).spots) kinds.set(s.kind, (kinds.get(s.kind) ?? 0) + 1);
+    for (let i = 0; i < N; i++) for (const s of buildPalette(`metal${i}`, 7).spots) kinds.set(s.kind, (kinds.get(s.kind) ?? 0) + 1);
     expect(Math.max(...kinds.values())).toBe(kinds.get("g"));
-    // 무리 칸: 색 문자열에 종류가 붙고, 서버 판정도 같다. 무리 밖은 바탕 색 그대로
-    const p = buildPalette("spot-check", 8);
+    // 끝없는 판에서 무리가 있는 구역을 찾아: 색 문자열에 종류가 붙고, 서버 판정도 같다. 무리 밖은 바탕 색 그대로
+    const board = buildBoard("spot-check", 8);
+    let ci = 0;
+    while (!chunkAt(board, ci, 0).spots.length) ci++;
+    const p = chunkAt(board, ci, 0);
     const s = p.spots[0];
+    const gx = ci * DYE_BOARD_W + s.x;
+    expect(boardSpecial(board, gx, s.y)).toBe(s.kind);
+    expect(boardColor(board, gx, s.y)).toBe(`#${boardRgb(board, gx, s.y).toString(16).padStart(6, "0")}~${s.kind}`);
+    expect(judgeColor({ seed: "spot-check", tier: 8 }, gx + 0.5, s.y + 0.5)).toBe(boardColor(board, gx, s.y));
     expect(cellSpecial(p, s.x, s.y)).toBe(s.kind);
     expect(cellColor(p, s.x, s.y)).toBe(`${cellHex(p, s.x, s.y)}~${s.kind}`);
-    expect(judgeColor({ seed: "spot-check", tier: 8 }, s.x + 0.5, s.y + 0.5)).toBe(cellColor(p, s.x, s.y));
     let plain = 0;
     for (let y = 0; y < DYE_BOARD_H; y++) for (let x = 0; x < DYE_BOARD_W; x++) if (!cellSpecial(p, x, y)) plain++;
-    // 반짝 염색권이어도 무리는 판의 몇 %뿐
-    expect(plain / (DYE_BOARD_W * DYE_BOARD_H)).toBeGreaterThan(0.95);
+    expect(plain / (DYE_BOARD_W * DYE_BOARD_H)).toBeGreaterThan(0.99);
+  }, 30_000);
+
+  it("끝없는 판: 구역마다 새 팔레트, 이음매는 부드럽게, 좌표 한계(±DYE_LIMIT)까지 같은 정수 계산", () => {
+    const b = buildBoard("endless", 3);
+    const p = buildPalette("endless", 3);
+    // (0, 0) 구역 안쪽은 예전 판과 같다
+    for (let k = 0; k < 60; k++) {
+      const x = 8 + ((k * 37) % (DYE_BOARD_W - 16));
+      const y = 8 + ((k * 23) % (DYE_BOARD_H - 16));
+      expect(boardRgb(b, x, y)).toBe(cellRgb(p, x, y));
+    }
+    // 이웃 구역은 다른 색
+    let same = 0;
+    for (let k = 0; k < 40; k++) if (boardRgb(b, 40 + k * 5, 100) === boardRgb(b, DYE_BOARD_W + 40 + k * 5, 100)) same++;
+    expect(same).toBeLessThan(3);
+    // 이음매를 건너는 이웃 칸 차이 ≈ 구역 안 이웃 칸 차이 (끊긴 선이 보이지 않는다)
+    const diff = (x0: number, y0: number, x1: number, y1: number) => {
+      const a = boardRgb(b, x0, y0);
+      const c = boardRgb(b, x1, y1);
+      return Math.abs(((a >> 16) & 255) - ((c >> 16) & 255)) + Math.abs(((a >> 8) & 255) - ((c >> 8) & 255)) + Math.abs((a & 255) - (c & 255));
+    };
+    let seamD = 0;
+    let innerD = 0;
+    for (let k = 0; k < 400; k++) {
+      const i = (k % 20) - 10;
+      const y = ((k * 13) % 1000) - 500;
+      seamD += diff(i * DYE_BOARD_W - 1, y, i * DYE_BOARD_W, y);
+      innerD += diff(i * DYE_BOARD_W + 150, y, i * DYE_BOARD_W + 151, y);
+      const j = (k % 16) - 8;
+      seamD += diff(k * 7, j * DYE_BOARD_H - 1, k * 7, j * DYE_BOARD_H);
+      innerD += diff(k * 7, j * DYE_BOARD_H + 90, k * 7, j * DYE_BOARD_H + 91);
+    }
+    expect(seamD).toBeLessThan(innerD * 2.5 + 400);
+    // 한계 근처·음수 좌표도 색이 나오고 서버 판정과 같다, 한계 밖은 붙인다
+    for (const [x, y] of [[-1, -1], [-DYE_LIMIT, -DYE_LIMIT], [DYE_LIMIT - 1, DYE_LIMIT - 1], [-777_777.5, 654_321.25]] as const) {
+      expect(colorAt(b, x, y)).toMatch(/^#[0-9a-f]{6}(~[gsrn])?$/);
+      expect(judgeColor({ seed: "endless", tier: 3 }, x, y)).toBe(colorAt(b, x, y));
+    }
+    expect(colorAt(b, 1e9, -1e9)).toBe(boardColor(b, DYE_LIMIT - 1, -DYE_LIMIT));
+    expect(colorAt(b, NaN, Infinity)).toBe(boardColor(b, 0, 0));
+    // 구역 팔레트는 기억해 두되 한도까지만
+    for (let i = 0; i < 100; i++) chunkAt(b, i, i);
+    expect(b.chunks.size).toBeLessThanOrEqual(48);
+  });
+
+  it("끝없는 판 해시 (이음매·음수·먼 좌표) — 엔진이 달라도 같은 값", () => {
+    expect(TIERS.map((t) => endlessHash("golden-seed", t))).toEqual(ENDLESS_GOLDEN);
   });
 
   it("비싼 등급일수록 색이 다양하고 조준점이 덜 흔들린다 (시간은 모두 60초)", () => {
@@ -180,13 +247,18 @@ describe("46번 팔레트 (11/12 개편: 연속 색 공간)", () => {
     const p = buildPalette("edge-test", 3);
     for (let i = 0; i < 50; i++) expect(cellColor(p, i * 3, i)).toMatch(/^#[0-9a-f]{6}(~[gsrn])?$/);
     for (let i = 0; i < 50; i++) expect(cellHex(p, i * 3, i)).toMatch(/^#[0-9a-f]{6}$/);
-    expect(colorAt(p, -5, -5)).toBe(cellColor(p, 0, 0));
-    expect(colorAt(p, 1e9, 1e9)).toBe(cellColor(p, DYE_BOARD_W - 1, DYE_BOARD_H - 1));
+    const b = buildBoard("edge-test", 3);
+    expect(colorAt(b, 1e9, 1e9)).toBe(boardColor(b, DYE_LIMIT - 1, DYE_LIMIT - 1));
+    expect(colorAt(b, -1e9, -1e9)).toBe(boardColor(b, -DYE_LIMIT, -DYE_LIMIT));
   });
 
   it("요청 검증: 좌표는 판 안, 무작위 염색권만, 색 값을 받는 필드는 없다", () => {
     expect(DyeFinishSchema.safeParse({ seed: "abcdefgh", x: 10, y: 10 }).success).toBe(true);
-    expect(DyeFinishSchema.safeParse({ seed: "abcdefgh", x: DYE_BOARD_W, y: 10 }).success).toBe(false);
+    // 11/12 끝없는 판: 구역 밖·음수도 받고, 좌표 한계 밖은 거절
+    expect(DyeFinishSchema.safeParse({ seed: "abcdefgh", x: DYE_BOARD_W, y: -10 }).success).toBe(true);
+    expect(DyeFinishSchema.safeParse({ seed: "abcdefgh", x: -DYE_LIMIT, y: 10 }).success).toBe(true);
+    expect(DyeFinishSchema.safeParse({ seed: "abcdefgh", x: DYE_LIMIT, y: 10 }).success).toBe(false);
+    expect(DyeFinishSchema.safeParse({ seed: "abcdefgh", x: 10, y: -DYE_LIMIT - 1 }).success).toBe(false);
     expect(DyeStartSchema.safeParse({ itemId: "dye_basic", part: "head" }).success).toBe(true);
     expect(DyeStartSchema.safeParse({ itemId: "hat_cat", part: "head" }).success).toBe(false);
     expect(DyeStartSchema.safeParse({ itemId: "dye_basic", part: "feet" }).success).toBe(false);
@@ -209,6 +281,36 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     return id;
   }
   const pts = async (id: string) => (await accounts.get(id, kstDay(), Date.now())).points;
+
+  it("11/12 제보: 염색 중 나가도(창 닫기·새로고침) 가방 개수는 서버와 같고, 다시 누르면 진행 중인 판을 이어서 연다", async () => {
+    const id = await account(0, { dye_basic: 2 });
+    const t0 = Date.now();
+    const s = await startDye(id, "dye_basic", "head", t0);
+    // 시작하면 1장이 빠진다 → 상태의 counts·내 정보 모두 1
+    const st = await dyeState(id, t0 + 1000);
+    expect(st.session?.seed).toBe(s.session.seed);
+    expect(st.counts).toEqual({ dye_basic: 1 });
+    const me = await loadMe(accounts, id, t0 + 1000);
+    expect(dyeCountsDiffer(me.inventory, st.counts)).toBe(false);
+    // 예전 화면: 시작 응답의 내 정보를 버려 가방이 2장으로 남아 있었다 → 서버 개수와 다름을 알아챈다
+    expect(dyeCountsDiffer({ dye_basic: 2 }, st.counts)).toBe(true);
+    // 다시 누르면(새로고침 뒤 가방에서) 염색권을 더 쓰지 않고 그 판
+    const again = await startDye(id, "dye_basic", "body", t0 + 2000);
+    expect(again.resumed).toBe(true);
+    expect(again.session.seed).toBe(s.session.seed);
+    expect(again.me.inventory.dye_basic).toBe(1);
+    // 시간이 지나 정리되면 판이 없고 개수는 그대로 1 (색 그대로)
+    const late = await dyeState(id, s.session.endsAt + DYE_GRACE_MS + 10);
+    expect(late.session).toBeNull();
+    expect(late.ended).toEqual({ part: "head" });
+    expect(late.counts).toEqual({ dye_basic: 1 });
+    // 남은 1장으로 새 판을 열 수 있다 · 마지막 장을 쓰면 counts에서 빠진다
+    const next = await startDye(id, "dye_basic", "head", s.session.endsAt + DYE_GRACE_MS + 20);
+    expect(next.resumed).toBe(false);
+    expect((await dyeState(id, s.session.endsAt + DYE_GRACE_MS + 30)).counts).toEqual({});
+    await cancelDye(id, next.session.seed);
+    await expect(startDye(id, "dye_basic", "head", s.session.endsAt + DYE_GRACE_MS + 40)).rejects.toMatchObject({ code: "NO_ITEM" });
+  });
 
   it("무작위 염색: 염색권 1장 → 판, 좌표만 보내면 서버가 그 판의 색으로 칠한다 (두 번 끝낼 수 없다)", async () => {
     const id = await account(0, { dye_fine: 1 });

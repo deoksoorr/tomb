@@ -9,11 +9,15 @@ export type { DyeCandidate, DyeSession, FixedDyeDef, FixedDyeIssue };
 /** 진행 중인 무작위 염색 + 서버 시각 (남은 시간은 화면이 serverNow와 endsAt으로 계산한다) */
 export type DyeSessionView = DyeSession & { serverNow: number };
 
-/** GET /api/dye: 진행 중인 판 + 내 가방의 고정 색 염색권 정의. ended = 시간이 지나 방금 끝낸 판 (색은 그대로) */
+/**
+ * GET /api/dye: 진행 중인 판 + 내 가방의 고정 색 염색권 정의. ended = 시간이 지나 방금 끝낸 판 (색은 그대로).
+ * counts = 서버 가방의 염색권 개수 (진행 중인 판에 쓴 1장은 빠진 값)
+ */
 export type DyeStateResponse = {
   session: DyeSessionView | null;
   tickets: Record<string, FixedDyeDef>;
   dye: AvatarDye;
+  counts: Record<string, number>;
   ended?: { part: DyePart };
 };
 /** POST /api/dye/timeout: 시간이 끝난 순간 조준점 색 = 후보 (null이면 너무 늦어 색 그대로 끝남) */

@@ -77,7 +77,7 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 6 = 낚시터(호수 북동쪽 데크·낚시 자리 재배치·벤치 lE 이동 — 옛 화면은 없어진 낚시 자리·옛 벤치 좌표로 앉기를 보낸다)
 // 7 = 동물원(버드나무 묘역 자리 — 울타리·우리 충돌, 묘비 자리 재배치, 벤치 bX 이동)·타는 펫(ride 이벤트) — 옛 화면은 우리 안을 걷고 묘비를 옛 자리에 그린다
 // 8 = 관람차·열기구(STATE.ferris·balloon=18·19 — 옛 클라이언트는 모르는 상태 값이 든 SNAPSHOT을 통째로 버린다, 광장 남쪽 관람차 받침 충돌)
-export const CLIENT_VERSION = 8;
+export const CLIENT_VERSION = 9;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */

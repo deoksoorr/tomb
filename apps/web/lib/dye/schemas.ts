@@ -1,6 +1,6 @@
 import { AVATAR_BODIES, DYE_PARTS, isFixedDyeId, itemById, normalizeDyeColor, permanentPrice } from "@tomb/protocol";
 import { z } from "zod";
-import { DYE_BOARD_H, DYE_BOARD_W } from "./palette";
+import { DYE_LIMIT } from "./palette";
 
 // 46·25·30번 요청 검증. 사용자가 색 값을 직접 보내는 경로는 없다 (무작위 = 판 좌표, 고정 = 아이템 id).
 
@@ -12,8 +12,9 @@ export const DyeStartSchema = z.object({ itemId: randomTicket, part });
 /** 판 위 좌표 (칸 단위 실수). 판 밖이면 거절 */
 export const DyeFinishSchema = z.object({
   seed: z.string().regex(/^[A-Za-z0-9_-]{6,32}$/),
-  x: z.number().finite().min(0).lt(DYE_BOARD_W),
-  y: z.number().finite().min(0).lt(DYE_BOARD_H),
+  // 11/12 끝없는 판: 좌표 한계 ±DYE_LIMIT칸
+  x: z.number().finite().min(-DYE_LIMIT).lt(DYE_LIMIT),
+  y: z.number().finite().min(-DYE_LIMIT).lt(DYE_LIMIT),
 });
 /** 시간이 끝난 순간 조준점 좌표 (finish와 같은 모양) */
 export const DyeTimeoutSchema = DyeFinishSchema;

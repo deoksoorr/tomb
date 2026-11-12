@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { DYE_PART_NAMES, DYE_PARTS, isFixedDyeId, ITEMS } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { specDye } from "@/game/sprites/avatar";
 import { dyeApi } from "@/lib/dye/client";
 import { colorLabel, swatchStyle } from "@/lib/dye/look";
 import { specialLabel, wobbleLabel } from "@/lib/dye/palette";
+import { dyeCountsDiffer } from "@/lib/dye/rules";
 import type { DyeSessionView, FixedDyeDef } from "@/lib/dye/types";
 import { meStore } from "@/lib/hooks/useMe";
 import type { Me } from "@/lib/types";
@@ -36,25 +37,30 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
   const [open, setOpen] = useState<{ ticket: DyeTicket | null; resume: DyeSessionView | null } | null>(null);
   const invKey = Object.keys(me.inventory).join(",");
   const [openedAt] = useState(() => Date.now());
+  const alive = useRef(true);
 
-  useEffect(() => {
-    let alive = true;
+  /** 서버 기준으로 진행 중인 판·염색권 개수를 다시 받는다 (개수가 내 정보와 다르면 내 정보를 다시 받아 가방 표시를 맞춘다) */
+  const sync = useCallback(() => {
     dyeApi
       .state()
       .then((s) => {
-        if (!alive) return;
+        if (!alive.current) return;
         setSession(s.session);
         setTickets(s.tickets);
-        // 서버 가방에는 있는데 내 정보에 없는 염색권(선물함에서 막 받음) → 내 정보를 다시 받는다
-        const stale = Object.keys(s.tickets).some((id) => !invKey.split(",").includes(id));
-        if (stale) void meStore.refresh();
+        // 선물함에서 막 받음 · 시작하며 1장 씀 · 만료로 정리됨 → 서버 개수와 다르면 내 정보를 다시 받는다
+        if (dyeCountsDiffer(meStore.getSnapshot().me?.inventory ?? {}, s.counts ?? {})) void meStore.refresh();
         if (s.ended) onNotice(`시간이 지난 ${DYE_PART_NAMES[s.ended.part]} 염색은 끝났어요. 색은 그대로예요.`);
       })
       .catch(() => {});
+  }, [onNotice]);
+
+  useEffect(() => {
+    alive.current = true;
+    sync();
     return () => {
-      alive = false;
+      alive.current = false;
     };
-  }, [invKey, open, onNotice]);
+  }, [invKey, sync]);
 
   const rows: { key: string; name: string; desc: string; count: number; icon: ReactNode; ticket: DyeTicket }[] = [
     ...RANDOM.flatMap((item) => {
@@ -111,8 +117,9 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
                   </span>
                   <span className={bag.meta}>{r.desc}</span>
                 </span>
-                <button type="button" className={ui.button} disabled={!!session} onClick={() => setOpen({ ticket: r.ticket, resume: null })}>
-                  쓰기
+                {/* 진행 중인 판이 있으면 새 염색권을 쓰지 않고 그 판을 이어서 연다 (서버도 같은 규칙) */}
+                <button type="button" className={ui.button} onClick={() => setOpen(session ? { ticket: null, resume: session } : { ticket: r.ticket, resume: null })}>
+                  {session ? "이어서" : "쓰기"}
                 </button>
               </li>
             ))}
@@ -145,7 +152,11 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
           resume={open.resume}
           avatar={avatar}
           look={look}
-          onClose={() => setOpen(null)}
+          onClose={(pending) => {
+            setOpen(null);
+            // 포기 요청이 끝난 뒤에 상태를 받아야 이미 끝난 판이 "진행 중"으로 남지 않는다
+            void (pending ?? Promise.resolve()).then(sync);
+          }}
           onDone={(m) => {
             onNotice(m);
             setSession(null);

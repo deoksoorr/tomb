@@ -1,4 +1,4 @@
-import { itemById, type DyePart, type DyeTicketSpec, type ItemDef } from "@tomb/protocol";
+import { isFixedDyeId, itemById, type DyePart, type DyeTicketSpec, type ItemDef } from "@tomb/protocol";
 import type { DyeTier } from "./palette";
 
 // 46·25번 꾸미기 서비스 값 (포인트). 염색권 가격은 카탈로그(packages/protocol items.ts)에 있다.
@@ -30,3 +30,23 @@ export function fixedAllows(parts: readonly DyePart[] | undefined, part: DyePart
 /** 기본 외형(처음 고르는 6종)으로 바꾸는 값 — 싸게 (프리미엄 소장 외형은 무료) */
 export const BASE_RESHAPE_PRICE = 150;
 export const DYE_DECIDE_MS = 30_000;
+
+/** 염색권인지 (카탈로그 염색권 · 관리자 발급 고정 색 dyefix_*) */
+export function isDyeTicketId(id: string): boolean {
+  return !!catalogDye(id) || isFixedDyeId(id);
+}
+
+/** 가방에서 염색권만 (개수 1 이상) */
+export function dyeTicketCounts(inventory: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [id, n] of Object.entries(inventory)) if (n > 0 && isDyeTicketId(id)) out[id] = n;
+  return out;
+}
+
+/** 내 정보의 염색권 개수가 서버 개수와 다른지 (다르면 내 정보를 다시 받아 가방 표시를 맞춘다) */
+export function dyeCountsDiffer(inventory: Record<string, number>, server: Record<string, number>): boolean {
+  const mine = dyeTicketCounts(inventory);
+  const ids = new Set([...Object.keys(mine), ...Object.keys(server)]);
+  for (const id of ids) if ((mine[id] ?? 0) !== (server[id] ?? 0)) return true;
+  return false;
+}

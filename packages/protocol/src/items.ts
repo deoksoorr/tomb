@@ -205,7 +205,7 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "dye_fine", kind: "dye", name: "고운 염색권", desc: "색이 꽤 다양한 팔레트. 조준점도 덜 흔들려요.", price: 900, dye: { mode: "random", tier: 2 } },
   { id: "dye_metal", kind: "dye", name: "금속 염색권", desc: "금·은·동과 흑백의 금속 팔레트. 번쩍이는 금빛 광택이 비교적 잘 나와요.", price: 1100, dye: { mode: "random", tier: 7 } },
   { id: "dye_rainbow", kind: "dye", name: "무지개 염색권", desc: "온갖 색이 다 있는 큰 팔레트. 조준점이 거의 흔들리지 않아요.", price: 1500, dye: { mode: "random", tier: 3 } },
-  { id: "dye_sparkle", kind: "dye", name: "반짝 염색권", desc: "특수 색(금빛 광택·반짝이·무지개·야광)이 여기저기 숨은 팔레트. 조준점은 덜 흔들려요.", price: 1800, dye: { mode: "random", tier: 8 } },
+  { id: "dye_sparkle", kind: "dye", name: "반짝 염색권", desc: "특수 색(금빛 광택·반짝이·무지개·야광)이 다른 염색권보다 자주(그래도 수십 구역에 1번) 숨은 팔레트. 조준점은 덜 흔들려요.", price: 1800, dye: { mode: "random", tier: 8 } },
 
   // 묘비 디자인권 (포인트로 만드는 특별 묘비). id = "gs_" + 디자인 id
   { id: "gs_coffee", kind: "graveStyle", name: "식은 커피잔 묘비", desc: "마지막 한 모금은 끝내 마시지 못했다.", price: 300 },

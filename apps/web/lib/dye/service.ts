@@ -8,8 +8,8 @@ import { getAccounts } from "../store";
 import { kstDay, lookGrant, lookOf, loadMe } from "../store/accounts";
 import { getStyleStore, type DyeSession, type FixedDyeDef, type StyleStore } from "../store/style";
 import type { Me } from "../types";
-import { buildPalette, colorAt, DYE_GRACE_MS, DYE_TIME_MS } from "./palette";
-import { BASE_RESHAPE_PRICE, catalogDye, DYE_DECIDE_MS, DYE_RESET_PRICE, fixedAllows, randomTier } from "./rules";
+import { buildBoard, colorAt, DYE_GRACE_MS, DYE_TIME_MS } from "./palette";
+import { BASE_RESHAPE_PRICE, catalogDye, DYE_DECIDE_MS, DYE_RESET_PRICE, dyeTicketCounts, fixedAllows, randomTier } from "./rules";
 import type { DyeSessionView, DyeStateResponse, DyeTimeoutResponse, StyleChangeResponse } from "./types";
 
 // 46·25·30번 서버 로직 (라우트가 부른다). 포인트·가방이 바뀌는 일은 모두 저장소(lib/store/style.ts)에서 원자적으로.
@@ -23,9 +23,9 @@ async function changed(accountId: string, now: number, extra: Partial<StyleChang
   return { me, lookGrant: await lookGrant(env.joinSecret(), accountId, lookOf(me), now, me), ...extra };
 }
 
-/** 판의 좌표 → 서버가 판정한 색 */
+/** 끝없는 판의 좌표 → 서버가 판정한 색 (그 칸과 이음매 이웃 구역만 계산한다) */
 export function judgeColor(s: Pick<DyeSession, "seed" | "tier">, x: number, y: number): string {
-  return colorAt(buildPalette(s.seed, s.tier), x, y);
+  return colorAt(buildBoard(s.seed, s.tier), x, y);
 }
 
 /** 판이 끝났는지: 후보가 없으면 시간(+여유), 후보가 있으면 고르는 시간(+여유)이 지났다 */
@@ -48,7 +48,8 @@ export async function dyeState(accountId: string, now = Date.now()): Promise<Dye
   const [{ dye, session }, me] = await Promise.all([st.get(accountId), getAccounts().get(accountId, kstDay(now), now)]);
   const fixedIds = Object.keys(me.inventory).filter((id) => isFixedDyeId(id) && me.inventory[id] > 0);
   const tickets = fixedIds.length ? await st.fixedDefs(fixedIds) : {};
-  return { session: session ? view(session, now) : null, tickets, dye, ...(ended ? { ended } : {}) };
+  // counts: 서버 가방의 염색권 개수 (진행 중인 판에 쓴 1장은 이미 빠져 있다) → 화면이 가방 표시를 이 값에 맞춘다
+  return { session: session ? view(session, now) : null, tickets, dye, counts: dyeTicketCounts(me.inventory), ...(ended ? { ended } : {}) };
 }
 
 /** 무작위 염색 시작 (진행 중인 판이 있으면 그 판을 이어서 — 염색권을 더 쓰지 않는다) */

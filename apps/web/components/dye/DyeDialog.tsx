@@ -3,18 +3,19 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type Ref } from "react";
 import { DIR, DYE_PART_NAMES, DYE_PARTS, type DyePart } from "@tomb/protocol";
 import { avatarColors, specDye, withDyePart } from "@/game/sprites/avatar";
-import { errorMessage } from "@/lib/api";
+import { ApiRequestError, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
 import { colorLabel, swatchStyle } from "@/lib/dye/look";
-import { buildPalette, cellColor, cellOf, DYE_BOARD_H, DYE_BOARD_W, DYE_TIERS, DYE_TIME_MS, paletteRgba, specialLabel, wobbleLabel, type DyeTier } from "@/lib/dye/palette";
+import { boardColor, buildBoard, cellOf, chunkRgba, chunkSpots, DYE_BOARD_H, DYE_BOARD_W, DYE_TIERS, DYE_TIME_MS, specialLabel, wobbleLabel, type DyeTier } from "@/lib/dye/palette";
 import { DYE_DECIDE_MS, fixedAllows } from "@/lib/dye/rules";
 import type { DyeCandidate, DyeSessionView, DyeTimeoutResponse, StyleChangeResponse } from "@/lib/dye/types";
+import { meStore } from "@/lib/hooks/useMe";
 import { applyStyle } from "../account/actions";
 import { OutfitCanvas } from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
-import { aimAt, clampView, minScale, toBoard, zoomAt, type BoardView } from "./board";
+import { aimAt, BoardPointers, clampView, minScale, toBoard, wheelFactor, zoomAt, type BoardView } from "./board";
 import { drawSpots } from "./spots";
 import styles from "./DyeDialog.module.css";
 
@@ -36,7 +37,8 @@ type Props = {
   /** 내 아바타 (색 표기에 지금 염색이 들어 있다) */
   avatar: { color: string; body: string };
   look: readonly string[];
-  onClose: () => void;
+  /** 창 닫기. pending = 닫으며 보낸 포기 요청 (끝난 뒤에 가방 상태를 다시 받아야 진행 중 판이 남아 보이지 않는다) */
+  onClose: (pending?: Promise<unknown>) => void;
   /** 끝났을 때 한 줄 안내 (부모의 알림 줄) */
   onDone?: (message: string) => void;
 };
@@ -100,8 +102,10 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
   /** 창 닫기: 판이 진행 중이거나 고르는 중이면 포기 (색 그대로, 염색권은 쓴 것으로) */
   function close() {
     if (session && (phase === "play" || phase === "choose")) {
-      void dyeApi.cancel(session.seed).catch(() => {});
+      const pending = dyeApi.cancel(session.seed).catch(() => {});
       onDone?.(`${DYE_PART_NAMES[session.part]} 염색을 그만뒀어요. 색은 그대로예요.`);
+      onClose(pending);
+      return;
     }
     onClose();
   }
@@ -122,12 +126,16 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
     setPhase("sending");
     try {
       const res = await dyeApi.start(ticket.itemId, part);
+      // 서버가 염색권 1장을 뺐다(또는 진행 중인 판을 이어 줌) → 가방 표시를 서버 값으로
+      meStore.set(res.me);
       setSession(res.session);
       setPart(res.session.part);
       setPhase("play");
     } catch (e) {
       setError(errorMessage(e));
       setPhase("part");
+      // 가방에 없다(표시가 서버와 어긋남) → 내 정보를 다시 받아 개수를 맞춘다
+      if (e instanceof ApiRequestError && e.code === "NO_ITEM") void meStore.refresh();
     }
   }
 
@@ -135,7 +143,8 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
   const previewSpec = phase === "part" && fixedColor ? withDyePart(spec, part, fixedColor) : spec;
 
   return (
-    <Dialog title={title} onClose={close}>
+    // 결과·비교(고르기) 단계는 내용 높이에 맞는 작은 창 (판을 도는 동안만 표준 창)
+    <Dialog title={title} onClose={close} kind={phase === "done" || phase === "choose" ? "confirm" : "window"}>
       <div className={styles.wrap}>
         {phase === "play" && session ? (
           <DyeBoard
@@ -259,7 +268,8 @@ function DyeBoard({
   onTimeout: (res: DyeTimeoutResponse) => void;
   onError: (m: string) => void;
 }) {
-  const palette = useMemo(() => buildPalette(session.seed, session.tier), [session.seed, session.tier]);
+  // 11/12 끝없는 판: 구역(판 한 장)이 상하좌우로 이어진다. 서버도 같은 함수로 색을 정한다
+  const palette = useMemo(() => buildBoard(session.seed, session.tier), [session.seed, session.tier]);
   // 조준점은 판 정가운데에 고정, 흔들림은 염색권 등급대로(얼룩 많이 · 고운 덜 · 무지개 거의 없음)
   const amp = DYE_TIERS[session.tier].wobblePx;
   const boxRef = useRef<HTMLDivElement>(null);
@@ -268,8 +278,7 @@ function DyeBoard({
   const liveTextRef = useRef<HTMLSpanElement>(null);
   const viewRef = useRef<BoardView | null>(null);
   const sizeRef = useRef({ w: 1, h: 1 });
-  const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const gesture = useRef<{ moved: number; startedAt: number } | null>(null);
+  const pointers = useRef(new BoardPointers());
   /** 조준 기준 (보드 안 화면 좌표). 마우스는 포인터 자리, 폰·키보드는 null = 화면 가운데 */
   const aimBase = useRef<{ x: number; y: number } | null>(null);
   const t0 = useRef(0);
@@ -283,18 +292,27 @@ function DyeBoard({
   /** 루프 안에서 부르는 최신 함수 (시간 끝 → 그 순간 색을 후보로) */
   const timeoutRef = useRef<() => void>(() => {});
 
-  // 판 그림 (칸 1개 = 1px) — 한 번만 만든다
+  // 판 그림 타일 (구역 하나 = 칸 1개 1px 캔버스) — 보이는 구역만 그려 두고 다시 쓴다 (오래된 것부터 버린다)
   const sheet = useMemo(() => {
     if (typeof document === "undefined") return null;
-    const c = document.createElement("canvas");
-    c.width = DYE_BOARD_W;
-    c.height = DYE_BOARD_H;
-    const ctx = c.getContext("2d");
-    if (!ctx) return null;
-    const img = ctx.createImageData(DYE_BOARD_W, DYE_BOARD_H);
-    img.data.set(paletteRgba(palette));
-    ctx.putImageData(img, 0, 0);
-    return c;
+    const tiles = new Map<string, HTMLCanvasElement>();
+    /** 구역 (i, j) 타일. make = false면 없을 때 만들지 않는다 (한 프레임에 하나만 새로 만들어 끊김을 줄인다) */
+    return (i: number, j: number, make: boolean): HTMLCanvasElement | null => {
+      const key = `${i},${j}`;
+      const hit = tiles.get(key);
+      if (hit || !make) return hit ?? null;
+      const c = document.createElement("canvas");
+      c.width = DYE_BOARD_W;
+      c.height = DYE_BOARD_H;
+      const ctx = c.getContext("2d");
+      if (!ctx) return null;
+      const img = ctx.createImageData(DYE_BOARD_W, DYE_BOARD_H);
+      img.data.set(chunkRgba(palette, i, j));
+      ctx.putImageData(img, 0, 0);
+      tiles.set(key, c);
+      if (tiles.size > 16) tiles.delete(tiles.keys().next().value!);
+      return c;
+    };
   }, [palette]);
 
   /** 지금 조준점이 가리키는 칸과 그 색 (확정·미리보기·그리기가 모두 이 값) */
@@ -303,7 +321,7 @@ function DyeBoard({
     const { w, h } = sizeRef.current;
     const a = aimAt(v, w, h, aimBase.current, amp, (now - t0.current) / 1000);
     const c = cellOf(a.x, a.y);
-    return { x: a.x, y: a.y, color: cellColor(palette, c.cx, c.cy) };
+    return { x: a.x, y: a.y, color: boardColor(palette, c.cx, c.cy) };
   };
 
   async function send(at: Picked) {
@@ -359,6 +377,30 @@ function DyeBoard({
     const ro = new ResizeObserver(fit);
     ro.observe(box);
     const loop = (now: number) => {
+      // 다음 프레임을 먼저 예약한다 — 그리기에서 예외가 나도 루프가 죽지 않는다 (시간 끝이면 아래에서 취소)
+      raf = requestAnimationFrame(loop);
+      try {
+        draw(now);
+      } catch (err) {
+        console.error("[dye] 판 그리기 실패", err);
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.globalAlpha = 1;
+          ctx.globalCompositeOperation = "source-over";
+        }
+      }
+      if (now - lastTick > 200) {
+        lastTick = now;
+        const remain = Math.max(0, localEnds - Date.now());
+        setLeft(remain);
+        if (remain <= 0) {
+          // 시간 끝: 그 순간 조준점 아래 색을 후보로 (지금 색과 비교해 고른다)
+          cancelAnimationFrame(raf);
+          timeoutRef.current();
+        }
+      }
+    };
+    const draw = (now: number) => {
       const ctx = canvas.getContext("2d");
       const v = viewRef.current;
       if (ctx && v && !sentRef.current) {
@@ -370,9 +412,25 @@ function DyeBoard({
         ctx.fillRect(0, 0, w, h);
         const left0 = w / 2 - v.cx * v.scale;
         const top0 = h / 2 - v.cy * v.scale;
-        ctx.drawImage(sheet, left0, top0, DYE_BOARD_W * v.scale, DYE_BOARD_H * v.scale);
-        // 특수 색 무리 연출 (판에 숨은 희귀 색 — 금빛 광택·반짝이·무지개·야광)
-        drawSpots(ctx, palette, left0, top0, v.scale, w, h, now);
+        // 보이는 구역 타일만 (한 프레임에 새 타일은 하나만 만든다 — 아직 없는 구역은 바탕색)
+        const i0 = Math.floor((v.cx - w / 2 / v.scale) / DYE_BOARD_W);
+        const i1 = Math.floor((v.cx + w / 2 / v.scale) / DYE_BOARD_W);
+        const j0 = Math.floor((v.cy - h / 2 / v.scale) / DYE_BOARD_H);
+        const j1 = Math.floor((v.cy + h / 2 / v.scale) / DYE_BOARD_H);
+        let budget = 1;
+        const spots: ReturnType<typeof chunkSpots> = [];
+        for (let j = j0; j <= j1; j++)
+          for (let i = i0; i <= i1; i++) {
+            const had = sheet(i, j, false);
+            const tile = had ?? sheet(i, j, budget > 0);
+            if (!had && tile) budget--;
+            if (tile) {
+              ctx.drawImage(tile, left0 + i * DYE_BOARD_W * v.scale, top0 + j * DYE_BOARD_H * v.scale, DYE_BOARD_W * v.scale, DYE_BOARD_H * v.scale);
+              spots.push(...chunkSpots(palette, i, j));
+            }
+          }
+        // 특수 색 무리 연출 (판에 아주 드물게 숨은 희귀 색 — 금빛 광택·반짝이·무지개·야광)
+        drawSpots(ctx, spots, left0, top0, v.scale, w, h, now);
         // 흔들리는 조준점 (마우스 자리 또는 화면 가운데 + 흔들림)
         const a = aimNow(now);
         const ax = left0 + a.x * v.scale;
@@ -408,17 +466,6 @@ function DyeBoard({
           setLive(a);
         }
       }
-      if (now - lastTick > 200) {
-        lastTick = now;
-        const remain = Math.max(0, localEnds - Date.now());
-        setLeft(remain);
-        if (remain <= 0) {
-          // 시간 끝: 그 순간 조준점 아래 색을 후보로 (지금 색과 비교해 고른다)
-          timeoutRef.current();
-          return;
-        }
-      }
-      raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => {
@@ -441,65 +488,60 @@ function DyeBoard({
       e.preventDefault();
       const v = viewRef.current;
       if (!v) return;
-      const r = box.getBoundingClientRect();
-      viewRef.current = zoomAt(v, r.width, r.height, e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0016));
+      // 조준점은 가운데 고정 → 커서 자리와 상관없이 화면 가운데를 기준으로 확대·축소 (한계에서 멈춘다)
+      const { w, h } = sizeRef.current;
+      viewRef.current = zoomAt(v, w, h, w / 2, h / 2, wheelFactor(e.deltaY, e.deltaMode));
     };
     box.addEventListener("wheel", onWheel, { passive: false });
     return () => box.removeEventListener("wheel", onWheel);
   }, []);
 
   function local(e: ReactPointerEvent) {
-    const r = boxRef.current!.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    const r = boxRef.current?.getBoundingClientRect();
+    return r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: NaN, y: NaN };
   }
 
+  // 커서 자리·클릭은 판에 영향이 없다: 끌기(왼쪽 버튼·손가락)·두 손가락·휠·키만 판을 옮긴다 (BoardPointers)
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     if (sending) return;
+    const p = local(e);
+    if (!pointers.current.down(e.pointerId, e.pointerType, e.button, p.x, p.y)) return;
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       /* 이미 끝난 포인터 (붙잡기 없이도 움직임은 받는다) */
     }
-    pointers.current.set(e.pointerId, local(e));
-    // 폰(손가락)은 화면 가운데 조준점 기준
-    aimBase.current = null;
-    if (pointers.current.size === 1) gesture.current = { moved: 0, startedAt: performance.now() };
-    else if (gesture.current) gesture.current.moved = 99; // 두 손가락 = 확대·축소 (누르기가 아니다)
   }
 
   function onPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
-    const cur = local(e);
-    // 조준점은 늘 판 정가운데에 고정. 드래그로 판을 움직이면 가운데 아래 색이 바로 "지금 고른 색"
-    const prev = pointers.current.get(e.pointerId);
-    const v = viewRef.current;
-    if (!prev || !v) return;
+    const p = local(e);
     const { w, h } = sizeRef.current;
-    if (pointers.current.size >= 2) {
-      const others = [...pointers.current.entries()].filter(([id]) => id !== e.pointerId).map(([, p]) => p);
-      const o = others[0];
-      const d0 = Math.hypot(prev.x - o.x, prev.y - o.y);
-      const d1 = Math.hypot(cur.x - o.x, cur.y - o.y);
-      if (d0 > 4) viewRef.current = zoomAt(v, w, h, (cur.x + o.x) / 2, (cur.y + o.y) / 2, d1 / d0);
-    } else {
-      viewRef.current = clampView({ cx: v.cx - (cur.x - prev.x) / v.scale, cy: v.cy - (cur.y - prev.y) / v.scale, scale: v.scale }, w, h);
-      if (gesture.current) gesture.current.moved += Math.abs(cur.x - prev.x) + Math.abs(cur.y - prev.y);
-    }
-    pointers.current.set(e.pointerId, cur);
+    const next = pointers.current.move(e.pointerId, e.pointerType, e.buttons, p.x, p.y, viewRef.current, w, h);
+    if (next) viewRef.current = next;
   }
 
   function onPointerUp(e: ReactPointerEvent<HTMLDivElement>) {
-    const at = pointers.current.get(e.pointerId);
-    pointers.current.delete(e.pointerId);
-    const g = gesture.current;
-    if (pointers.current.size === 0) gesture.current = null;
-    if (!at || !g || g.moved > 6 || sending || e.pointerType === "mouse") return;
-    // 폰에서 짧게 누르기: 그 자리를 화면 가운데(조준점)로 옮긴다
+    const at = pointers.current.up(e.pointerId);
+    if (!at || sending) return;
+    // 폰에서 짧게 누르기: 그 자리를 화면 가운데(조준점)로 옮긴다 (마우스 클릭은 at = null)
     const v = viewRef.current;
     if (!v) return;
     const { w, h } = sizeRef.current;
-    const p = toBoard(v, w, h, at.x, at.y);
-    viewRef.current = clampView({ ...v, cx: p.x, cy: p.y }, w, h);
+    const q = toBoard(v, w, h, at.x, at.y);
+    viewRef.current = clampView({ ...v, cx: q.x, cy: q.y }, w, h);
   }
+
+  /** 취소·붙잡기 풀림: 그 포인터만 잊는다 (판은 그대로) */
+  function onPointerDrop(e: ReactPointerEvent<HTMLDivElement>) {
+    pointers.current.drop(e.pointerId);
+  }
+
+  // 창 초점을 잃으면 끌기 기록을 모두 지운다 (버튼을 창 밖에서 놓아도 끌기가 이어지지 않게)
+  useEffect(() => {
+    const forget = () => pointers.current.clear();
+    window.addEventListener("blur", forget);
+    return () => window.removeEventListener("blur", forget);
+  }, []);
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     const v = viewRef.current;
@@ -535,7 +577,9 @@ function DyeBoard({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+        onPointerCancel={onPointerDrop}
+        onLostPointerCapture={onPointerDrop}
+        onContextMenu={(e) => e.preventDefault()}
         onKeyDown={onKeyDown}
       >
         <canvas ref={canvasRef} />

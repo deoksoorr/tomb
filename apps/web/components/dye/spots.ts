@@ -1,11 +1,26 @@
-import type { DyePalette } from "@/lib/dye/palette";
+import type { DyeSpot } from "@/lib/dye/palette";
 
 // 46번 염색 판 위 특수 색 무리(금빛 광택·반짝이·무지개·야광) 연출 — 캔버스 2D, 그리기만 (색 판정은 서버가 칸으로)
 
+const unit = (n: number) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
+
+/**
+ * 금빛 광택 빛줄기의 색 멈춤 위치 3개 (모두 0~1). addColorStop은 0~1 밖이면 예외를 던진다 —
+ * 예전엔 u-0.15가 1을 넘거나 u+0.15가 0보다 작은 순간이 있어, 금빛 무리가 화면에 들어오면(축소) 그리기 루프가 죽어 판이 멈췄다
+ */
+export function glintStops(t: number): [number, number, number] {
+  const u = (((t * 0.6) % 1.6) + 1.6) % 1.6 - 0.3;
+  return [unit(u - 0.15), unit(u), unit(u + 0.15)];
+}
+
+/** 화면 좌표·크기가 모두 유한한지 (그라디언트·arc는 NaN·무한대에 예외를 던진다) */
+const finite = (...ns: number[]) => ns.every(Number.isFinite);
+
 /** 판 위 특수 색 무리 연출 (그리기만 — 색 판정은 서버가 칸으로). 화면 밖 무리는 건너뛴다 */
-export function drawSpots(ctx: CanvasRenderingContext2D, p: DyePalette, left0: number, top0: number, scale: number, w: number, h: number, now: number): void {
-  for (let i = 0; i < p.spots.length; i++) {
-    const s = p.spots[i];
+export function drawSpots(ctx: CanvasRenderingContext2D, spots: readonly DyeSpot[], left0: number, top0: number, scale: number, w: number, h: number, now: number): void {
+  if (!finite(left0, top0, scale, w, h, now) || scale <= 0) return;
+  for (let i = 0; i < spots.length; i++) {
+    const s = spots[i];
     const x = left0 + (s.x + 0.5) * scale;
     const y = top0 + (s.y + 0.5) * scale;
     const r = (s.r + 0.5) * scale;
@@ -39,11 +54,11 @@ export function drawSpots(ctx: CanvasRenderingContext2D, p: DyePalette, left0: n
         }
       } else if (s.kind === "g") {
         // 금빛 광택: 빛줄기가 비스듬히 지나간다
-        const u = ((t * 0.6) % 1.6) - 0.3;
+        const [s0, s1, s2] = glintStops(t);
         const g = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
-        g.addColorStop(Math.max(0, u - 0.15), "rgba(255,255,255,0)");
-        g.addColorStop(Math.min(1, Math.max(0, u)), "rgba(255,250,220,0.85)");
-        g.addColorStop(Math.min(1, u + 0.15), "rgba(255,255,255,0)");
+        g.addColorStop(s0, "rgba(255,255,255,0)");
+        g.addColorStop(s1, "rgba(255,250,220,0.85)");
+        g.addColorStop(s2, "rgba(255,255,255,0)");
         ctx.globalCompositeOperation = "lighter";
         ctx.fillStyle = g;
         ctx.fillRect(x - r, y - r, r * 2, r * 2);

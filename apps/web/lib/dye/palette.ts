@@ -14,8 +14,13 @@ import { withDyeSpecial, type DyeSpecial, type DyeTierId } from "@tomb/protocol"
 // 모든 계산은 정수(좌표는 1/256칸 고정소수점)와 사칙연산뿐이라 브라우저(사파리 포함)와 서버에서 결과가 한 칸도 다르지 않다
 // (삼각함수·지수·제곱근 같은 엔진마다 다를 수 있는 함수는 쓰지 않는다 — 방향은 정수 표, 거리는 팔각형 근사, 각도는 마름모 각도).
 
+/** 구역 하나(예전 판 한 장)의 크기 (칸). 11/12: 판은 이 구역이 상하좌우로 끝없이 이어진다 */
 export const DYE_BOARD_W = 320;
 export const DYE_BOARD_H = 200;
+/** 끝없는 판의 좌표 한계 (칸, ±). 1/256칸 고정소수점으로도 32비트 정수 안이다 (구역 안 좌표만 고정소수점으로 계산) */
+export const DYE_LIMIT = 1_000_000;
+/** 구역 이음매를 섞는 폭 (이음매 양쪽 칸) */
+const SEAM = 8;
 /** 제한 시간 (모든 염색권 같음, 11/11 사용자 지시) */
 export const DYE_TIME_MS = 60_000;
 /** 시간이 끝난 뒤 마지막 좌표가 서버에 닿기까지 봐주는 여유 */
@@ -49,7 +54,7 @@ type TierSpec = {
   warp: number;
   /** 조준점 흔들림 (화면 px, 확대해도 같은 px → 확대할수록 판 위에서는 덜 흔들린다) */
   wobblePx: number;
-  /** 특수 색 무리: 판마다 평균 개수 ×100, 종류 비중, 반지름(칸) */
+  /** 특수 색 무리: 구역(판 한 장 크기)마다 생길 확률 (1/10000 단위, 구역마다 많아야 1개), 종류 비중, 반지름(칸) */
   special: { rate: number; kinds: readonly (readonly [DyeSpecial, number])[]; radius: readonly [number, number] };
 };
 
@@ -62,7 +67,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["muted", 6], ["vivid", 2], ["pastel", 2], ["deep", 1], ["mono", 1]],
     patterns: [["blot", 6], ["wave", 2], ["stripe", 1], ["marble", 1]],
     zones: [2, 2], band: null, tint: 16, grain: 6, warp: 14, wobblePx: 16,
-    special: { rate: 45, kinds: ALL_SPECIAL, radius: [3, 4] },
+    special: { rate: 10, kinds: ALL_SPECIAL, radius: [3, 4] },
   },
   // 고운: 물감 10가지, 계열이 고루, 무늬도 고루
   2: {
@@ -70,7 +75,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["muted", 3], ["vivid", 3], ["pastel", 3], ["neon", 1], ["deep", 2], ["metal", 1], ["mono", 1]],
     patterns: [["blot", 4], ["wave", 2], ["stripe", 2], ["swirl", 1], ["check", 1], ["marble", 1]],
     zones: [3, 2], band: [0.75, 0.55], tint: 22, grain: 7, warp: 11, wobblePx: 9,
-    special: { rate: 70, kinds: ALL_SPECIAL, radius: [3, 5] },
+    special: { rate: 12, kinds: ALL_SPECIAL, radius: [3, 5] },
   },
   // 무지개: 모든 계열·모든 무늬, 물감 제한 없음
   3: {
@@ -78,7 +83,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["muted", 2], ["vivid", 3], ["neon", 2], ["pastel", 3], ["deep", 2], ["metal", 2], ["mono", 2]],
     patterns: [["blot", 3], ["wave", 2], ["stripe", 3], ["swirl", 2], ["check", 2], ["marble", 2]],
     zones: [4, 2], band: [0.9, 0.55], tint: 26, grain: 8, warp: 11, wobblePx: 3,
-    special: { rate: 120, kinds: ALL_SPECIAL, radius: [3, 5] },
+    special: { rate: 20, kinds: ALL_SPECIAL, radius: [3, 5] },
   },
   // 원색: 쨍한 원색 + 흑백
   4: {
@@ -86,7 +91,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["vivid", 8], ["deep", 1], ["mono", 2]],
     patterns: [["blot", 3], ["stripe", 3], ["check", 3], ["swirl", 1], ["wave", 1]],
     zones: [3, 2], band: [1, 0.5], tint: 14, grain: 6, warp: 10, wobblePx: 11,
-    special: { rate: 60, kinds: [["s", 2], ["r", 3], ["g", 1]], radius: [3, 5] },
+    special: { rate: 16, kinds: [["s", 2], ["r", 3], ["g", 1]], radius: [3, 5] },
   },
   // 파스텔: 부드럽게 밝은 색 (흰빛 조금)
   5: {
@@ -94,7 +99,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["pastel", 9], ["mono", 1]],
     patterns: [["blot", 4], ["wave", 3], ["swirl", 2], ["marble", 2], ["stripe", 1], ["check", 1]],
     zones: [3, 2], band: [0.8, 0.84], tint: 12, grain: 5, warp: 12, wobblePx: 11,
-    special: { rate: 60, kinds: [["s", 3], ["r", 3], ["n", 1]], radius: [3, 5] },
+    special: { rate: 16, kinds: [["s", 3], ["r", 3], ["n", 1]], radius: [3, 5] },
   },
   // 형광: 형광 위주 + 어두운 바탕색, 야광이 잘 나온다
   6: {
@@ -102,7 +107,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["neon", 8], ["deep", 2], ["vivid", 1]],
     patterns: [["stripe", 3], ["swirl", 2], ["wave", 2], ["blot", 2], ["check", 1]],
     zones: [3, 2], band: [1, 0.55], tint: 16, grain: 6, warp: 11, wobblePx: 9,
-    special: { rate: 90, kinds: [["n", 5], ["s", 2], ["r", 1]], radius: [3, 5] },
+    special: { rate: 70, kinds: [["n", 5], ["s", 2], ["r", 1]], radius: [3, 5] },
   },
   // 금속: 금·은·동 + 흑백, 금빛 광택이 잘 나온다
   7: {
@@ -110,7 +115,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["metal", 7], ["mono", 3]],
     patterns: [["marble", 3], ["blot", 3], ["stripe", 2], ["wave", 2], ["check", 1]],
     zones: [3, 2], band: null, tint: 8, grain: 6, warp: 11, wobblePx: 7,
-    special: { rate: 150, kinds: [["g", 6], ["s", 2]], radius: [3, 5] },
+    special: { rate: 80, kinds: [["g", 6], ["s", 2]], radius: [3, 5] },
   },
   // 반짝: 모든 계열, 특수 색 무리가 여럿이고 조금 크다
   8: {
@@ -118,7 +123,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["muted", 1], ["vivid", 2], ["neon", 1], ["pastel", 2], ["metal", 2], ["mono", 1], ["deep", 1]],
     patterns: [["blot", 3], ["wave", 2], ["stripe", 2], ["swirl", 2], ["check", 1], ["marble", 2]],
     zones: [4, 2], band: [0.9, 0.6], tint: 20, grain: 7, warp: 11, wobblePx: 6,
-    special: { rate: 520, kinds: ALL_SPECIAL, radius: [4, 7] },
+    special: { rate: 330, kinds: ALL_SPECIAL, radius: [4, 7] },
   },
 };
 
@@ -128,10 +133,12 @@ export function wobbleLabel(tier: DyeTier): string {
   return px >= 14 ? "큼" : px >= 8 ? "보통" : "적음";
 }
 
-/** 화면 안내용: 특수 색이 나올 가능성 */
+/** 화면 안내용: 특수 색이 나올 가능성 (구역 = 판 한 장 크기, 끝없이 이어진다) */
 export function specialLabel(tier: DyeTier): string {
   const r = DYE_TIERS[tier]?.special.rate ?? 0;
-  return r >= 300 ? "아주 높음" : r >= 100 ? "높음" : r >= 60 ? "보통" : "드묾";
+  if (r <= 0) return "없음";
+  const n = Math.round(10_000 / r);
+  return `약 ${n >= 100 ? Math.round(n / 50) * 50 : n >= 20 ? Math.round(n / 5) * 5 : n}구역에 1번`;
 }
 
 const FP = 8; // 고정소수점 자리 (1칸 = 256)
@@ -479,24 +486,25 @@ export function buildPalette(seed: string, tier: DyeTier): DyePalette {
     }),
   );
 
-  // 특수 색 무리 (평균 rate/100개)
+  // 특수 색 무리 (구역마다 rate/10000 확률로 1개). 구역 이음매(SEAM)에 걸리지 않게 안쪽에만 둔다
   const sp = spec.special;
-  const count = Math.floor(sp.rate / 100) + (below(next, 100) < sp.rate % 100 ? 1 : 0);
+  const count = below(next, 10_000) < sp.rate ? 1 : 0;
   const spots: DyeSpot[] = [];
   for (let n = 0; n < count; n++) {
     const kind = pickW(next, sp.kinds);
     const r = sp.radius[0] + below(next, sp.radius[1] - sp.radius[0] + 1);
-    const x = 10 + below(next, DYE_BOARD_W - 20);
-    const y = 10 + below(next, DYE_BOARD_H - 20);
+    const m = SEAM + r + 2;
+    const x = m + below(next, DYE_BOARD_W - 2 * m);
+    const y = m + below(next, DYE_BOARD_H - 2 * m);
     const g = NEON[below(next, NEON.length)];
     spots.push({ x, y, r, kind, glow: (g[0] << 16) | (g[1] << 8) | g[2] });
   }
   return { seed, tier, base, tint, grain, warp, zones, gap, spots };
 }
 
-/** 판 안의 칸 좌표인지 (서버가 받는 좌표 검사) */
+/** 판 좌표 한계 안인지 (서버가 받는 좌표 검사) */
 export function inBoard(x: number, y: number): boolean {
-  return Number.isFinite(x) && Number.isFinite(y) && x >= 0 && y >= 0 && x < DYE_BOARD_W && y < DYE_BOARD_H;
+  return Number.isFinite(x) && Number.isFinite(y) && x >= -DYE_LIMIT && y >= -DYE_LIMIT && x < DYE_LIMIT && y < DYE_LIMIT;
 }
 
 const buf3 = new Int32Array(3);
@@ -602,8 +610,15 @@ function spotRgb(s: DyeSpot, cx: number, cy: number, v: number): number {
   }
 }
 
-/** 칸(cx, cy 정수)의 바탕 색 → 0xrrggbb (특수 색 무리 칸이면 그 무리의 바탕 색) */
+/** 칸(cx, cy 정수)의 바탕 색 → 0xrrggbb (특수 색 무리 칸이면 그 무리의 바탕 색) — 구역 하나 안의 좌표 */
 export function cellRgb(p: DyePalette, cx: number, cy: number): number {
+  const v = cellBase(p, cx, cy);
+  const s = p.spots.length ? spotAt(p, cx | 0, cy | 0) : null;
+  return s ? spotRgb(s, cx | 0, cy | 0, v) : v;
+}
+
+/** 칸의 밑 색 (특수 색 무리 없이). 구역 밖 좌표(이음매 섞기 — 구역 밖 SEAM칸까지)도 격자 여유(PAD) 안이라 그대로 계산된다 */
+function cellBase(p: DyePalette, cx: number, cy: number): number {
   cx |= 0;
   cy |= 0;
   // 칸 가운데 (1/256칸)
@@ -649,9 +664,7 @@ export function cellRgb(p: DyePalette, cx: number, cy: number): number {
   sample(p.grain, X, Y, buf1);
   const g = buf1[0];
   const ch = (k: number) => clamp255((buf3[k] + buf3b[k] + g) >> 8);
-  const v = (ch(0) << 16) | (ch(1) << 8) | ch(2);
-  const s = p.spots.length ? spotAt(p, cx, cy) : null;
-  return s ? spotRgb(s, cx, cy, v) : v;
+  return (ch(0) << 16) | (ch(1) << 8) | ch(2);
 }
 
 /** 칸의 특수 색 종류 (없으면 null) */
@@ -669,18 +682,18 @@ export function cellColor(p: DyePalette, cx: number, cy: number): string {
   return withDyeSpecial(cellHex(p, cx, cy), cellSpecial(p, cx, cy));
 }
 
-/** 판 위 좌표(실수)의 칸 (판 밖이면 가장자리로 붙인다) */
+/** 판 위 좌표(실수)의 칸 (좌표 한계 ±DYE_LIMIT 밖이면 한계로 붙인다) */
 export function cellOf(x: number, y: number): { cx: number; cy: number } {
   return {
-    cx: Math.min(DYE_BOARD_W - 1, Math.max(0, Math.floor(Number.isFinite(x) ? x : 0))),
-    cy: Math.min(DYE_BOARD_H - 1, Math.max(0, Math.floor(Number.isFinite(y) ? y : 0))),
+    cx: Math.min(DYE_LIMIT - 1, Math.max(-DYE_LIMIT, Math.floor(Number.isFinite(x) ? x : 0))),
+    cy: Math.min(DYE_LIMIT - 1, Math.max(-DYE_LIMIT, Math.floor(Number.isFinite(y) ? y : 0))),
   };
 }
 
-/** 판 위 좌표(실수)의 염색 색 (특수 표시 포함). 판 밖이면 가장자리로 붙인다 */
-export function colorAt(p: DyePalette, x: number, y: number): string {
+/** 판 위 좌표(실수)의 염색 색 (특수 표시 포함). 한계 밖이면 한계로 붙인다 */
+export function colorAt(b: DyeBoard, x: number, y: number): string {
   const { cx, cy } = cellOf(x, y);
-  return cellColor(p, cx, cy);
+  return boardColor(b, cx, cy);
 }
 
 /** 판 전체를 RGBA로 (화면이 한 번 그린다 — 특수 색 무리는 화면이 그 위에 연출을 더한다) */
@@ -705,3 +718,110 @@ export function samplePoints(p: DyePalette): number {
 
 /** 시간이 지나도록 아무 좌표도 오지 않은 판은 처음 조준점(판 가운데) 색으로 정한다 */
 export const DYE_CENTER = { x: DYE_BOARD_W / 2, y: DYE_BOARD_H / 2 } as const;
+
+// ── 11/12 끝없는 판: 구역(i, j)마다 시드+구역 좌표로 새 팔레트, 이음매는 양쪽 SEAM칸을 정수로 섞는다 ──
+
+/** 끝없는 판 (구역 팔레트를 만들어 두고 다시 쓴다) */
+export type DyeBoard = { seed: string; tier: DyeTier; chunks: Map<string, DyePalette> };
+/** 구역 팔레트를 기억해 두는 수 (넘으면 오래된 것부터 버린다) */
+const CHUNK_CACHE = 48;
+
+export function buildBoard(seed: string, tier: DyeTier): DyeBoard {
+  return { seed, tier, chunks: new Map() };
+}
+
+/** 구역 (i, j)의 팔레트. (0, 0)은 예전 판과 같은 시드 */
+export function chunkAt(b: DyeBoard, i: number, j: number): DyePalette {
+  const key = `${i},${j}`;
+  let p = b.chunks.get(key);
+  if (p) {
+    b.chunks.delete(key);
+    b.chunks.set(key, p);
+    return p;
+  }
+  p = buildPalette(i === 0 && j === 0 ? b.seed : `${b.seed}@${key}`, b.tier);
+  b.chunks.set(key, p);
+  if (b.chunks.size > CHUNK_CACHE) b.chunks.delete(b.chunks.keys().next().value!);
+  return p;
+}
+
+/** 두 색을 w/256 : (256-w)/256로 섞는다 (정수) */
+function mixRgb(a: number, b: number, w: number): number {
+  const ch = (sh: number) => {
+    const ca = (a >> sh) & 255;
+    const cb = (b >> sh) & 255;
+    return cb + (((ca - cb) * w) >> 8);
+  };
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+}
+
+/** 구역 안 좌표 → [이웃 방향(-1·0·1), 이웃 구역 안 좌표, 내 구역 무게(128~256)] */
+function seam(l: number, size: number): [number, number, number] {
+  if (l < SEAM) return [-1, l + size, 128 + Math.floor(((2 * l + 1) * 128) / (2 * SEAM))];
+  if (l >= size - SEAM) {
+    const k = size - 1 - l;
+    return [1, l - size, 128 + Math.floor(((2 * k + 1) * 128) / (2 * SEAM))];
+  }
+  return [0, l, 256];
+}
+
+/** 끝없는 판의 칸 → [구역 i, j, 구역 안 x, y] */
+function split(cx: number, cy: number): [number, number, number, number] {
+  const i = Math.floor(cx / DYE_BOARD_W);
+  const j = Math.floor(cy / DYE_BOARD_H);
+  return [i, j, cx - i * DYE_BOARD_W, cy - j * DYE_BOARD_H];
+}
+
+/** 끝없는 판 칸의 밑 색 (이음매 섞기 포함, 특수 색 없이) */
+function boardBase(b: DyeBoard, i: number, j: number, lx: number, ly: number): number {
+  const own = cellBase(chunkAt(b, i, j), lx, ly);
+  const [di, nx, wx] = seam(lx, DYE_BOARD_W);
+  const [dj, ny, wy] = seam(ly, DYE_BOARD_H);
+  const rowA = wx < 256 ? mixRgb(own, cellBase(chunkAt(b, i + di, j), nx, ly), wx) : own;
+  if (wy === 256) return rowA;
+  const vb = cellBase(chunkAt(b, i, j + dj), lx, ny);
+  const rowB = wx < 256 ? mixRgb(vb, cellBase(chunkAt(b, i + di, j + dj), nx, ny), wx) : vb;
+  return mixRgb(rowA, rowB, wy);
+}
+
+/** 끝없는 판 칸(정수)의 바탕 색 → 0xrrggbb (특수 색 무리 칸이면 그 무리의 바탕 색) */
+export function boardRgb(b: DyeBoard, cx: number, cy: number): number {
+  const [i, j, lx, ly] = split(cx, cy);
+  const v = boardBase(b, i, j, lx, ly);
+  const p = chunkAt(b, i, j);
+  const s = p.spots.length ? spotAt(p, lx, ly) : null;
+  return s ? spotRgb(s, lx, ly, v) : v;
+}
+
+/** 끝없는 판 칸의 특수 색 종류 (없으면 null) */
+export function boardSpecial(b: DyeBoard, cx: number, cy: number): DyeSpecial | null {
+  const [i, j, lx, ly] = split(cx, cy);
+  return cellSpecial(chunkAt(b, i, j), lx, ly);
+}
+
+/** 끝없는 판 칸의 염색 색: "#rrggbb" 또는 "#rrggbb~종류" (서버가 저장하는 값) */
+export function boardColor(b: DyeBoard, cx: number, cy: number): string {
+  return withDyeSpecial(`#${boardRgb(b, cx, cy).toString(16).padStart(6, "0")}`, boardSpecial(b, cx, cy));
+}
+
+/** 구역 (i, j) 한 장을 RGBA로 (화면 타일 — 보이는 구역만 그려 캐시한다) */
+export function chunkRgba(b: DyeBoard, i: number, j: number): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(DYE_BOARD_W * DYE_BOARD_H * 4);
+  const x0 = i * DYE_BOARD_W;
+  const y0 = j * DYE_BOARD_H;
+  for (let y = 0; y < DYE_BOARD_H; y++)
+    for (let x = 0; x < DYE_BOARD_W; x++) {
+      const v = boardRgb(b, x0 + x, y0 + y);
+      const k = (y * DYE_BOARD_W + x) * 4;
+      out[k] = (v >> 16) & 255;
+      out[k + 1] = (v >> 8) & 255;
+      out[k + 2] = v & 255;
+      out[k + 3] = 255;
+    }
+  return out;
+}
+
+/** 구역 (i, j)의 특수 색 무리 (끝없는 판 좌표) */
+export function chunkSpots(b: DyeBoard, i: number, j: number): DyeSpot[] {
+  return chunkAt(b, i, j).spots.map((s) => ({ ...s, x: s.x + i * DYE_BOARD_W, y: s.y + j * DYE_BOARD_H }));
+}
