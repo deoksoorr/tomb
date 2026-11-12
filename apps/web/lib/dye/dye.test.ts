@@ -274,8 +274,8 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     await expect(applyFixedDye(id, "dyefix_nonexist1", "head")).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
-  it("외형 바꾸기: 처음 6종끼리는 무료, 몸 모양만 바뀌고 염색은 그대로, 증서에 몸이 실린다", async () => {
-    const id = await account(0, { dye_basic: 1 });
+  it("외형 바꾸기: 처음 6종끼리는 150P씩, 몸 모양만 바뀌고 염색은 그대로, 증서에 몸이 실린다", async () => {
+    const id = await account(300, { dye_basic: 1 });
     const t0 = Date.now();
     const s = await startDye(id, "dye_basic", "body", t0);
     const dyed = await finishDye(id, s.session.seed, 50, 50, t0 + 100);
@@ -283,7 +283,7 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     const r = await reshape(id, "cat");
     expect(r.me.body).toBe("cat");
     expect(r.me.dye).toEqual(dyed.me.dye);
-    expect(await pts(id)).toBe(0);
+    expect(await pts(id)).toBe(150);
     const g = await verifyGrant(env.joinSecret(), r.lookGrant);
     expect(g?.kind === "look" && g.body).toBe("cat");
     expect((await reshape(id, "bun")).me.body).toBe("bun");
@@ -295,12 +295,12 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     expect(unlock).toBe(BODY_TIER_INFO.common.price);
     expect(bodyUnlockPrice("king")).toBe(BODY_TIER_INFO.legend.price);
     expect(bodyUnlockPrice("hood")).toBeNull();
-    const id = await account(unlock);
+    const id = await account(unlock + 150);
     const r = await reshape(id, "suit");
     expect(r.unlocked).toBe(true);
     expect(r.me.body).toBe("suit");
     expect(r.me.bodies).toEqual(["suit"]);
-    expect(await pts(id)).toBe(0);
+    expect(await pts(id)).toBe(150);
     const g = await verifyGrant(env.joinSecret(), r.lookGrant);
     expect(g?.kind === "look" && g.body).toBe("suit");
     // 버그 재현: 원래 캐릭터(후드)로 돌아갔다가 다시 정장으로 — 선택권 값을 다시 내지 않고 무료 (포인트 0이어도 된다)
@@ -319,7 +319,7 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
   });
 
   it("프리미엄 외형: 입고 있던 외형이 소장 기록에 빠져 있어도 바꿀 때 채워서, 돌아올 때 다시 값을 받지 않는다", async () => {
-    const id = await account(0);
+    const id = await account(150);
     // 소장 기록 없이 이미 정장을 입고 있는 계정 (옛 기록·누락)
     (accounts as MemoryAccounts).styleSetBody(id, "suit");
     expect((await loadMe(accounts, id)).bodies).toBeUndefined();

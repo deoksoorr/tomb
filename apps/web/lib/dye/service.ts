@@ -9,7 +9,7 @@ import { kstDay, lookGrant, lookOf, loadMe } from "../store/accounts";
 import { getStyleStore, type DyeSession, type FixedDyeDef, type StyleStore } from "../store/style";
 import type { Me } from "../types";
 import { buildPalette, colorAt, DYE_GRACE_MS, DYE_TIME_MS } from "./palette";
-import { catalogDye, DYE_DECIDE_MS, DYE_RESET_PRICE, fixedAllows, randomTier } from "./rules";
+import { BASE_RESHAPE_PRICE, catalogDye, DYE_DECIDE_MS, DYE_RESET_PRICE, fixedAllows, randomTier } from "./rules";
 import type { DyeSessionView, DyeStateResponse, DyeTimeoutResponse, StyleChangeResponse } from "./types";
 
 // 46·25·30번 서버 로직 (라우트가 부른다). 포인트·가방이 바뀌는 일은 모두 저장소(lib/store/style.ts)에서 원자적으로.
@@ -162,7 +162,17 @@ export async function reshape(accountId: string, body: string, now = Date.now())
   }
   const unlockPrice = bodyUnlockPrice(body);
   const unlock = unlockPrice === null ? undefined : { price: unlockPrice, reason: `shop:외형 선택권(${bodyLabel(body)})` };
+  // 기본 외형(처음 6종)으로 바꿀 때는 싸게 값을 받는다 (프리미엄 소장 외형은 무료)
+  let paid = 0;
+  if (unlockPrice === null) {
+    const cur = await getAccounts().get(accountId, kstDay(now), now);
+    if (cur.body === body) throw new HttpError(409, "NO_CHANGE", "지금 그 모습이에요.");
+    if ((await getAccounts().spend(accountId, BASE_RESHAPE_PRICE, `shop:외형 바꾸기(${bodyLabel(body)})`, now)) === null)
+      throw new HttpError(409, "NOT_ENOUGH_POINTS", "포인트가 모자라요.");
+    paid = BASE_RESHAPE_PRICE;
+  }
   const r = await style().reshape(accountId, body, now, unlock);
+  if (paid && r !== "ok") await getAccounts().refund(accountId, paid, "refund:외형 바꾸기", now);
   charged(r, "지금 그 모습이에요.");
   return changed(accountId, now, r === "unlocked" ? { unlocked: true } : {});
 }

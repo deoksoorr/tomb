@@ -1,5 +1,6 @@
 "use client";
 
+import { BASE_RESHAPE_PRICE } from "@/lib/dye/rules";
 import { useEffect, useState, type ReactNode } from "react";
 import { BODY_TIER_INFO, bodyLabel, bodyUnlockPrice, DYE_PART_NAMES, DYE_PARTS, isStaffBody, ITEMS, PREMIUM_BODIES, premiumBody, STAFF_BODIES, STARTER_BODIES, type DyePart, type ItemDef } from "@tomb/protocol";
 import { specDye, withDyePart } from "@/game/sprites/avatar";
@@ -106,8 +107,8 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
     });
   // 25번: 소장한 프리미엄 외형 (지금 그 몸이면 소장한 것과 같다 — 서버도 바꿀 때 소장 기록을 채운다)
   const unlocked = (id: string) => id === myBody || !!me?.bodies?.includes(id);
-  /** 그 몸으로 바꾸는 값: 해금 전 프리미엄만 선택권 값, 소장한 외형(처음 6종 포함)·운영자 외형은 무료 */
-  const bodyPrice = (id: string) => (unlocked(id) ? 0 : (bodyUnlockPrice(id) ?? 0));
+  /** 그 몸으로 바꾸는 값: 기본 6종은 싸게, 해금 전 프리미엄은 선택권 값, 소장한 프리미엄·운영자 외형은 무료 */
+  const bodyPrice = (id: string) => (premiumBody(id) ? (unlocked(id) ? 0 : (bodyUnlockPrice(id) ?? 0)) : id === myBody ? 0 : BASE_RESHAPE_PRICE);
   const ownedBodies = [...STARTER_BODIES, ...PREMIUM_BODIES.filter((b) => unlocked(b.id))];
   const lockedBodies = PREMIUM_BODIES.filter((b) => !unlocked(b.id));
 
@@ -167,7 +168,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
       ? (STAFF_BODIES.find((b) => b.id === sel.body)?.desc ?? "")
       : prem
         ? `${prem.desc} ${fresh ? `선택권(${price.toLocaleString("ko-KR")}P)을 한 번 사면 영구 소장이라, 그다음부터는 언제든 무료로 바꿔요.` : "소장 중인 외형이에요. 언제든 무료로 바꿀 수 있어요."} 염색한 색은 새 몸의 같은 부위로 따라가요.`
-        : "기본 외형이라 무료로 바꿔요. 염색한 머리·몸·포인트 색은 새 몸의 같은 부위로 그대로 따라가요.";
+        : `기본 외형은 ${BASE_RESHAPE_PRICE}P로 바꿔요. 염색한 머리·몸·포인트 색은 새 몸의 같은 부위로 그대로 따라가요.`;
     action = (
       <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={!me || pending || same || short(price)} onClick={() => doReshape(sel.body)}>
         {same
@@ -176,7 +177,9 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
             ? "운영자 전용 · 이 모습으로"
             : fresh
               ? `${price.toLocaleString("ko-KR")}P${short(price) ? " · 모자라요" : " · 선택권 사고 바꾸기"}`
-              : "무료 · 이 모습으로"}
+              : price > 0
+                ? `${price.toLocaleString("ko-KR")}P${short(price) ? " · 모자라요" : " · 이 모습으로"}`
+                : "무료 · 이 모습으로"}
       </button>
     );
   } else {
@@ -271,7 +274,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
             ))}
           </ul>
 
-          <h3 className={styles.heading}>내 외형 · 소장한 외형끼리는 무료로 바꿔요</h3>
+          <h3 className={styles.heading}>내 외형 · 기본 외형은 {BASE_RESHAPE_PRICE}P, 소장한 프리미엄은 무료</h3>
           <ul className={shop.grid} aria-label="소장한 몸 모양">
             {ownedBodies.map((b) =>
               bodyTile(
@@ -284,7 +287,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
                     무료<span className={shop.badge}>소장 중</span>
                   </>
                 ) : (
-                  "무료"
+                  `${BASE_RESHAPE_PRICE}P`
                 ),
               ),
             )}

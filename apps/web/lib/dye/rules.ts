@@ -27,4 +27,6 @@ export function fixedAllows(parts: readonly DyePart[] | undefined, part: DyePart
 }
 
 /** 시간이 끝난 뒤 "지금 색 vs 새 색"을 고를 수 있는 시간. 안 고르면 지금 색 그대로 (후보는 버린다) */
+/** 기본 외형(처음 고르는 6종)으로 바꾸는 값 — 싸게 (프리미엄 소장 외형은 무료) */
+export const BASE_RESHAPE_PRICE = 150;
 export const DYE_DECIDE_MS = 30_000;
