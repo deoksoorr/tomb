@@ -19,9 +19,9 @@ const SHORT = 5;
 const short = (text: string) => (text.length > SHORT ? `${text.slice(0, SHORT)}…` : text);
 
 /**
- * 즐겨찾기 표현 원형 목록 (U 키 · 폰은 표현 버튼 길게 누르기).
+ * 즐겨찾기 표현 원형 목록 (Y 키 · 폰은 표현 버튼 길게 누르기).
  * 내 캐릭터 둘레에 펼쳐지고 캐릭터를 따라다닌다 (게임이 me:screen으로 화면 위치를 알린다).
- * 하나를 누르면(또는 숫자 1~8) 바로 닫히고 그 표현을 보낸다. U·Esc·바깥 누르기면 닫힌다. 도배 제한은 게임·서버가 그대로.
+ * 하나를 누르면(또는 숫자 1~8) 바로 닫히고 그 표현을 보낸다. Y·Esc·바깥 누르기면 닫힌다. 도배 제한은 게임·서버가 그대로.
  */
 export default function ExprRadial({ onClose }: { onClose: () => void }) {
   const favs = useFavs();
@@ -39,7 +39,7 @@ export default function ExprRadial({ onClose }: { onClose: () => void }) {
   }, []);
   useBridgeEvent("me:screen", (p) => setPos(p));
 
-  // 키: 1~8 고르기, U·Esc 닫기 (게임 키보드보다 먼저 받아 숫자 키 이모티콘이 따로 나가지 않게)
+  // 키: 1~8 고르기, Y·Esc 닫기 (게임 키보드보다 먼저 받아 숫자 키 이모티콘이 따로 나가지 않게)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
@@ -91,7 +91,7 @@ export default function ExprRadial({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div ref={rootRef} className={styles.root} style={{ left: cxp, top: cyp }} role="menu" aria-label="즐겨찾기 표현 (숫자 1~8로 고르기, U·Esc로 닫기)">
+    <div ref={rootRef} className={styles.root} style={{ left: cxp, top: cyp }} role="menu" aria-label="즐겨찾기 표현 (숫자 1~8로 고르기, Y·Esc로 닫기)">
       <span className={styles.ring} style={{ width: R * 2, height: R * 2 }} aria-hidden="true" />
       {n === 0 ? (
         <p className={styles.empty}>즐겨찾기가 없어요. T(표현 창)에서 별을 눌러 넣어 보세요.</p>

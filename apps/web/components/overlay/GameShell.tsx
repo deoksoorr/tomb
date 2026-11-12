@@ -240,7 +240,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     setRadial(true);
   };
 
-  // 데스크톱 T 키: 표현 창, U 키: 즐겨찾기 원형 목록, I 키: 가방 (입력칸·열린 창이 없을 때만)
+  // 데스크톱 T 키: 표현 창, Y 키: 즐겨찾기 원형 목록, I 키: 가방 (입력칸·열린 창이 없을 때만)
   // 마을·집 안(panel "housing" — 위쪽 HUD만 떠 있다)에서도 T·U는 된다
   const quiet = panel === null && openGraveId === null && bury === null && !sayOpen;
   const roomQuiet = panel === "housing" && scene === "house" && openGraveId === null && bury === null && !sayOpen;

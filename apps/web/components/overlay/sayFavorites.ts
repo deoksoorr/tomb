@@ -4,7 +4,7 @@ import { bridge } from "@/game/bridge";
 import { EMO_BOARD, type EmoSlot } from "@/game/logic/emoBoard";
 import { readItem, writeItem } from "@/lib/storage";
 
-// 표현 즐겨찾기: 표현 창(T)에서 별로 고르고, U 키(폰은 표현 버튼 길게 누르기)로 내 캐릭터 둘레에 원형으로 펼친다.
+// 표현 즐겨찾기: 표현 창(T)에서 별로 고르고, Y 키(폰은 표현 버튼 길게 누르기)로 내 캐릭터 둘레에 원형으로 펼친다.
 // 이 기기에만 기억한다 (lib/storage — 저장소를 못 쓰면 기본값으로). 보내는 건 기존 이모티콘·말풍선과 같은 길(서버 도배 제한 그대로).
 
 /** "p:hi" = 문장, "e:heart" = 이모티콘, "a:wave" = 몸짓 */
