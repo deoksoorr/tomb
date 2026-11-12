@@ -3,6 +3,7 @@
 import { useEffect, useEffectEvent, useId, useRef, type ReactNode } from "react";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { cx } from "./cx";
+import { backdropCloses, escapeAction } from "./dialogDismiss";
 import PixelIcon from "./PixelIcon";
 import styles from "./Dialog.module.css";
 import ui from "./ui.module.css";
@@ -20,6 +21,10 @@ type Props = {
   kind?: "window" | "confirm";
   /** false면 ESC·배경·× 로 닫히지 않는다 (예: 저장 중) */
   closable?: boolean;
+  /** false면 배경(창 바깥) 클릭·터치로는 닫히지 않는다 (Esc·×는 그대로). 실수로 닫히면 안 되는 진행 중 창용 */
+  backdropClose?: boolean;
+  /** 주면 Esc가 바로 닫지 않고 이걸 부른다 (예: "그만둘까요?" 확인). ×는 그대로 onClose */
+  onEscape?: () => void;
   /** @deprecated 창 크기는 `kind`로만 정한다 (값은 무시된다 — 예전 코드 호환용) */
   size?: "sm" | "md" | "lg";
   /** @deprecated 모든 표준 창이 고정 크기다 (값은 무시된다 — 예전 코드 호환용) */
@@ -31,7 +36,7 @@ type Props = {
  * 열릴 때 포커스를 가졌던 요소로 닫힐 때 돌려준다. 열려 있는 동안 게임 키 입력을 막는다.
  * 마운트 = 열림. 닫으려면 부모가 언마운트한다 (onClose).
  */
-export default function Dialog({ title, onClose, children, kind = "window", closable = true }: Props) {
+export default function Dialog({ title, onClose, children, kind = "window", closable = true, backdropClose = true, onEscape }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const pressedBackdrop = useRef(false);
   const titleId = useId();
@@ -39,8 +44,11 @@ export default function Dialog({ title, onClose, children, kind = "window", clos
 
   // 크롬은 ESC를 거듭 누르면 cancel을 막아도 대화상자를 직접 닫는다. 마운트된 채 닫히면 상태를 맞춘다
   const onBrowserClose = useEffectEvent((dialog: HTMLDialogElement) => {
-    if (closable) onClose();
-    else dialog.showModal();
+    if (closable && !onEscape) onClose();
+    else {
+      dialog.showModal();
+      if (closable) onEscape?.();
+    }
   });
 
   useEffect(() => {
@@ -68,13 +76,15 @@ export default function Dialog({ title, onClose, children, kind = "window", clos
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault();
-        if (closable) onClose();
+        const act = escapeAction(closable, !!onEscape);
+        if (act === "escape") onEscape?.();
+        else if (act === "close") onClose();
       }}
       onPointerDown={(e) => {
         pressedBackdrop.current = e.target === e.currentTarget;
       }}
       onClick={(e) => {
-        if (closable && pressedBackdrop.current && e.target === e.currentTarget) onClose();
+        if (backdropCloses({ closable, backdropClose, pressedBackdrop: pressedBackdrop.current, clickedBackdrop: e.target === e.currentTarget })) onClose();
       }}
     >
       <div className={styles.frame}>

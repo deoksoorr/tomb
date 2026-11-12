@@ -6,12 +6,75 @@ import { DYE_BOARD_H, DYE_BOARD_W, DYE_LIMIT } from "@/lib/dye/palette";
 
 export type BoardView = { cx: number; cy: number; scale: number };
 
-/** 가장 멀리 봐도 구역(판 한 장) 너비의 이 비율만 보인다 (보이는 구역은 많아야 2×2 — 그리기가 가볍다) */
-export const MAX_VISIBLE = 0.45;
+/**
+ * 가장 멀리 보면 구역(판 한 장) 너비의 이 배수까지 보인다 (11/12: 0.45 → 4, 최소 배율이 예전의 약 1/9 — 여러 구역이 한눈에).
+ * 보이는 구역만 타일로 그리므로 많아야 6×6 정도라 가볍다
+ */
+export const MAX_VISIBLE = 4;
 export const MAX_SCALE = 30;
+/** 처음 열 때 보이는 폭 (예전 기본 화면 그대로: 구역 너비의 0.45 ÷ 1.4) */
+const START_VISIBLE = 0.45 / 1.4;
 
 export function minScale(viewW: number, viewH: number): number {
   return Math.max(viewW / (DYE_BOARD_W * MAX_VISIBLE), viewH / (DYE_BOARD_H * MAX_VISIBLE));
+}
+
+/** 처음 배율 (예전과 같은 확대 정도로 시작한다) */
+export function startScale(viewW: number, viewH: number): number {
+  return Math.min(MAX_SCALE, Math.max(viewW / (DYE_BOARD_W * START_VISIBLE), viewH / (DYE_BOARD_H * START_VISIBLE)));
+}
+
+/** 키로 판을 옮기는 빠르기 (화면 px/초 — 배율과 상관없이 화면에서 같은 빠르기). Shift면 FAST배 */
+export const KEY_PAN_PX = 360;
+export const KEY_PAN_FAST = 3;
+
+/** 판 이동 키 (e.code — 한글 자판에서도 WASD 자리 그대로) → 방향 */
+export const PAN_KEYS: Readonly<Record<string, readonly [number, number]>> = {
+  KeyW: [0, -1],
+  KeyA: [-1, 0],
+  KeyS: [0, 1],
+  KeyD: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowLeft: [-1, 0],
+  ArrowDown: [0, 1],
+  ArrowRight: [1, 0],
+};
+
+/**
+ * 누르고 있는 키들 → 이번 프레임에 옮길 판 좌표 (칸). 대각선은 같은 빠르기로 맞춘다, 반대 키는 서로 지운다.
+ * dtMs는 프레임 사이 시간 (탭을 오래 비웠다 돌아와도 한 번에 멀리 튀지 않게 100ms로 자른다)
+ */
+export function keyPan(held: Iterable<string>, fast: boolean, dtMs: number, scale: number): { dx: number; dy: number } {
+  let x = 0;
+  let y = 0;
+  for (const code of new Set(held)) {
+    const d = PAN_KEYS[code];
+    if (d) {
+      x += d[0];
+      y += d[1];
+    }
+  }
+  x = Math.sign(x);
+  y = Math.sign(y);
+  const len = Math.hypot(x, y);
+  const dt = Number.isFinite(dtMs) ? Math.min(100, Math.max(0, dtMs)) : 0;
+  if (!len || !dt || !(scale > 0)) return { dx: 0, dy: 0 };
+  const dist = (KEY_PAN_PX * (fast ? KEY_PAN_FAST : 1) * dt) / 1000 / scale;
+  return { dx: (x / len) * dist, dy: (y / len) * dist };
+}
+
+/**
+ * 염색 창 닫힘 보호 (11/12 제보: 판 도중 바깥을 눌러 창이 꺼짐).
+ * 판·고르기·보내는 중·결과 단계는 배경 클릭으로 닫히지 않고, 판·고르기는 Esc가 "그만두기" 확인을 거친다. 닫기(×)만 바로 닫는다
+ */
+export function dyeCloseGuard(phase: string): {
+  backdrop: boolean;
+  escConfirm: boolean;
+} {
+  return {
+    backdrop: phase === "part",
+    escConfirm: phase === "play" || phase === "choose",
+  };
 }
 
 /** 배율·가운데를 판 안으로 맞춘다 (화면 가장자리가 판 밖으로 너무 나가지 않게) */

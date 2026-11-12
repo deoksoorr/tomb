@@ -145,8 +145,10 @@ describe("46번 팔레트 (11/12 개편: 연속 색 공간)", () => {
     expect(sparkle).toBeGreaterThan(25); // 기대값 50 (1/30)
     expect(sparkle).toBeLessThan(90);
     for (const t of [1, 2, 3, 4, 5, 6, 7, 8] as const) expect(DYE_TIERS[t].special.rate).toBeLessThanOrEqual(t === 8 ? 400 : 100);
-    expect(specialLabel(1)).toBe("약 1000구역에 1번");
-    expect(specialLabel(8)).toBe("약 30구역에 1번");
+    // 안내 문구에는 숫자(확률)를 쓰지 않는다
+    expect(specialLabel(1)).toBe("아주 드물게 나와요");
+    expect(specialLabel(8)).toBe("조금 더 잘 나와요");
+    for (const t of [1, 2, 3, 4, 5, 6, 7, 8] as const) expect(specialLabel(t)).not.toMatch(/\d/);
     // 금속 염색권은 금빛 광택이 가장 흔하다
     const kinds = new Map<string, number>();
     for (let i = 0; i < N; i++) for (const s of buildPalette(`metal${i}`, 7).spots) kinds.set(s.kind, (kinds.get(s.kind) ?? 0) + 1);

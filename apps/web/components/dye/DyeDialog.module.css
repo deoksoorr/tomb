@@ -125,6 +125,53 @@
   gap: 10px;
 }
 
+/* 판 + 그 아래 조작 안내 (안내는 판을 가리지 않는다) */
+.stage {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stage > .board {
+  flex: 1;
+}
+
+.keys {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-small);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.keysTouch {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .keysMouse {
+    display: none;
+  }
+
+  .keysTouch {
+    display: inline;
+  }
+}
+
+/* Esc로 띄우는 그만두기 확인 */
+.quit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border-strong);
+}
+
 /* 판은 보이는 창(일부만 보이는 색 공간)이라 어떤 비율로 늘어나도 그림이 찌그러지지 않는다 */
 .board {
   position: relative;

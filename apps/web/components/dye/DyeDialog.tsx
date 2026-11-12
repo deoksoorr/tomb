@@ -15,7 +15,7 @@ import { OutfitCanvas } from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
-import { aimAt, BoardPointers, clampView, minScale, toBoard, wheelFactor, zoomAt, type BoardView } from "./board";
+import { aimAt, BoardPointers, clampView, dyeCloseGuard, keyPan, PAN_KEYS, startScale, toBoard, wheelFactor, zoomAt, type BoardView } from "./board";
 import { drawSpots } from "./spots";
 import styles from "./DyeDialog.module.css";
 
@@ -68,6 +68,8 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
   );
   const [spec, setSpec] = useState(avatar.color);
   const [body, setBody] = useState(avatar.body);
+  /** Esc로 띄운 "그만둘까요?" 확인 (판·고르기 단계) */
+  const [confirmQuit, setConfirmQuit] = useState(false);
 
   const fixedColor = ticket?.mode === "fixed" ? ticket.color : null;
   const allowed = (p: DyePart) => ticket?.mode !== "fixed" || fixedAllows(ticket.parts, p);
@@ -140,12 +142,33 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
   }
 
   const title = phase === "choose" ? "색 고르기" : phase === "play" || phase === "sending" ? "염색 중" : "염색";
+  const guard = dyeCloseGuard(phase);
   const previewSpec = phase === "part" && fixedColor ? withDyePart(spec, part, fixedColor) : spec;
 
   return (
     // 결과·비교(고르기) 단계는 내용 높이에 맞는 작은 창 (판을 도는 동안만 표준 창)
-    <Dialog title={title} onClose={close} kind={phase === "done" || phase === "choose" ? "confirm" : "window"}>
+    // 판·고르기·결과 단계는 배경 클릭으로 닫히지 않는다. 판·고르기는 Esc가 그만두기 확인을 거친다 (× 만 바로 닫는다)
+    <Dialog
+      title={title}
+      onClose={close}
+      kind={phase === "done" || phase === "choose" ? "confirm" : "window"}
+      backdropClose={guard.backdrop}
+      onEscape={guard.escConfirm ? () => setConfirmQuit((q) => !q) : undefined}
+    >
       <div className={styles.wrap}>
+        {confirmQuit && guard.escConfirm && (
+          <div className={styles.quit} role="alertdialog" aria-label="염색 그만두기 확인">
+            <p className={styles.note}>염색을 그만둘까요? 색은 그대로이고 염색권은 쓴 것으로 쳐요.</p>
+            <div className={styles.actions}>
+              <button type="button" className={ui.button} autoFocus onClick={() => setConfirmQuit(false)}>
+                계속하기
+              </button>
+              <button type="button" className={cx(ui.button, ui.danger)} onClick={close}>
+                그만두기
+              </button>
+            </div>
+          </div>
+        )}
         {phase === "play" && session ? (
           <DyeBoard
             session={session}
@@ -194,7 +217,7 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
                 {ticket?.name ?? "염색권"} ·{" "}
                 {ticket?.mode === "fixed"
                   ? "정해진 색으로 바로 염색해요."
-                  : `60초 안에 무작위 팔레트에서 색을 찾아요. 흔들림 ${ticket ? wobbleLabel(ticket.tier) : ""} · 특수 색 ${ticket ? specialLabel(ticket.tier) : ""}.`}
+                  : `60초 안에 무작위 팔레트에서 색을 찾아요. 흔들림 ${ticket ? wobbleLabel(ticket.tier) : ""} · 특수 색은 ${ticket ? specialLabel(ticket.tier) : ""}.`}
               </p>
               <div className={styles.parts} role="group" aria-label="염색할 부위">
                 {DYE_PARTS.map((p) => {
@@ -289,6 +312,9 @@ function DyeBoard({
   /** 지금 조준점 아래 색 (미리보기 캐릭터에 입힌다 — 너무 자주 그리지 않게 간격을 둔다) */
   const [live, setLive] = useState<Picked | null>(null);
   const [sending, setSending] = useState(false);
+  /** 누르고 있는 판 이동 키 (e.code) · Shift */
+  const heldRef = useRef(new Set<string>());
+  const fastRef = useRef(false);
   /** 루프 안에서 부르는 최신 함수 (시간 끝 → 그 순간 색을 후보로) */
   const timeoutRef = useRef<() => void>(() => {});
 
@@ -310,7 +336,8 @@ function DyeBoard({
       img.data.set(chunkRgba(palette, i, j));
       ctx.putImageData(img, 0, 0);
       tiles.set(key, c);
-      if (tiles.size > 16) tiles.delete(tiles.keys().next().value!);
+      // 넓게 볼 때 보이는 구역(많아야 6×6)이 모두 남도록 넉넉히 둔다
+      if (tiles.size > 64) tiles.delete(tiles.keys().next().value!);
       return c;
     };
   }, [palette]);
@@ -370,15 +397,28 @@ function DyeBoard({
       sizeRef.current = { w: r.width, h: r.height };
       canvas.width = Math.round(r.width * dpr);
       canvas.height = Math.round(r.height * dpr);
-      const v = viewRef.current ?? { cx: DYE_BOARD_W / 2, cy: DYE_BOARD_H / 2, scale: minScale(r.width, r.height) * 1.4 };
+      const v = viewRef.current ?? { cx: DYE_BOARD_W / 2, cy: DYE_BOARD_H / 2, scale: startScale(r.width, r.height) };
       viewRef.current = clampView(v, r.width, r.height);
     };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(box);
+    let lastFrame = 0;
     const loop = (now: number) => {
       // 다음 프레임을 먼저 예약한다 — 그리기에서 예외가 나도 루프가 죽지 않는다 (시간 끝이면 아래에서 취소)
       raf = requestAnimationFrame(loop);
+      // WASD·방향키를 누르고 있는 동안 판을 부드럽게 옮긴다 (조준점은 가운데 고정 → 조준 위치가 바뀐다)
+      const dt = lastFrame ? now - lastFrame : 0;
+      lastFrame = now;
+      const v0 = viewRef.current;
+      if (v0 && heldRef.current.size && !sentRef.current) {
+        const d = keyPan(heldRef.current, fastRef.current, dt, v0.scale);
+        if (d.dx || d.dy) {
+          const { w, h } = sizeRef.current;
+          aimBase.current = null;
+          viewRef.current = clampView({ ...v0, cx: v0.cx + d.dx, cy: v0.cy + d.dy }, w, h);
+        }
+      }
       try {
         draw(now);
       } catch (err) {
@@ -536,24 +576,46 @@ function DyeBoard({
     pointers.current.drop(e.pointerId);
   }
 
-  // 창 초점을 잃으면 끌기 기록을 모두 지운다 (버튼을 창 밖에서 놓아도 끌기가 이어지지 않게)
+  // 창 초점을 잃으면 끌기 기록·누른 키를 모두 지운다 (버튼·키를 창 밖에서 놓아도 계속 움직이지 않게)
   useEffect(() => {
-    const forget = () => pointers.current.clear();
+    const forget = () => {
+      pointers.current.clear();
+      heldRef.current.clear();
+    };
     window.addEventListener("blur", forget);
     return () => window.removeEventListener("blur", forget);
+  }, []);
+
+  // WASD·방향키: 창 어디에 포커스가 있든 판을 옮긴다. 가장 먼저(window 캡처) 받아 게임 이동 키로 새지 않게 막는다 (입력칸은 제외)
+  useEffect(() => {
+    const field = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || t.matches("input, textarea, select"));
+    const onDown = (e: globalThis.KeyboardEvent) => {
+      fastRef.current = e.shiftKey;
+      if (!PAN_KEYS[e.code] || e.ctrlKey || e.metaKey || e.altKey || field(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      heldRef.current.add(e.code);
+    };
+    const onUp = (e: globalThis.KeyboardEvent) => {
+      fastRef.current = e.shiftKey;
+      if (!PAN_KEYS[e.code]) return;
+      heldRef.current.delete(e.code);
+      if (!field(e.target)) e.stopPropagation();
+    };
+    window.addEventListener("keydown", onDown, true);
+    window.addEventListener("keyup", onUp, true);
+    return () => {
+      window.removeEventListener("keydown", onDown, true);
+      window.removeEventListener("keyup", onUp, true);
+    };
   }, []);
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     const v = viewRef.current;
     if (!v || sending) return;
     const { w, h } = sizeRef.current;
-    const step = 24 / v.scale;
-    const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-    if (moves[e.key]) {
-      e.preventDefault();
-      aimBase.current = null; // 키보드는 화면 가운데 조준점
-      viewRef.current = clampView({ ...v, cx: v.cx + moves[e.key][0], cy: v.cy + moves[e.key][1] }, w, h);
-    } else if (e.key === "+" || e.key === "=" || e.key === "-") {
+    // 방향키·WASD는 위 window 리스너가 누르는 동안 부드럽게 옮긴다
+    if (e.key === "+" || e.key === "=" || e.key === "-") {
       e.preventDefault();
       viewRef.current = zoomAt(v, w, h, w / 2, h / 2, e.key === "-" ? 1 / 1.25 : 1.25);
     } else if (e.key === "Enter") {
@@ -568,21 +630,28 @@ function DyeBoard({
   // 판은 남는 자리를 모두 쓰고(데스크톱은 왼쪽, 폰은 위), 옆(아래) 칸에 남은 시간 · 지금 색 vs 새 색 · 확정 버튼
   return (
     <div className={styles.play}>
-      <div
-        ref={boxRef}
-        className={styles.board}
-        tabIndex={0}
-        role="application"
-        aria-label="염색 팔레트. 조준점 아래 색이 바로 고른 색이 돼요. 끌어서 옮기고 휠이나 두 손가락으로 확대·축소. 키보드: 화살표 이동, +/- 확대, 엔터 확정"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerDrop}
-        onLostPointerCapture={onPointerDrop}
-        onContextMenu={(e) => e.preventDefault()}
-        onKeyDown={onKeyDown}
-      >
-        <canvas ref={canvasRef} />
+      <div className={styles.stage}>
+        <div
+          ref={boxRef}
+          className={styles.board}
+          tabIndex={0}
+          role="application"
+          aria-label="염색 팔레트. 조준점 아래 색이 바로 고른 색이 돼요. 끌어서 옮기고 휠이나 두 손가락으로 확대·축소. 키보드: WASD·화살표 이동(Shift 빠르게), +/- 확대, 엔터 확정"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerDrop}
+          onLostPointerCapture={onPointerDrop}
+          onContextMenu={(e) => e.preventDefault()}
+          onKeyDown={onKeyDown}
+        >
+          <canvas ref={canvasRef} />
+        </div>
+        {/* 조작 안내 — 판 아래 늘 보인다 (터치 기기는 CSS로 터치 안내만) */}
+        <p className={styles.keys}>
+          <span className={styles.keysMouse}>WASD·방향키: 판 이동 (Shift 빠르게) · 휠: 확대·축소 · 끌기: 판 이동 · 가운데 조준점 색이 골라져요</span>
+          <span className={styles.keysTouch}>끌기: 판 이동 · 두 손가락: 확대·축소 · 가운데 조준점 색이 골라져요</span>
+        </p>
       </div>
       <div className={styles.panel}>
         <TimeLeft label={`${DYE_PART_NAMES[session.part]} 염색`} left={left} total={DYE_TIME_MS} />

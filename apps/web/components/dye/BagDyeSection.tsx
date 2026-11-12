@@ -66,7 +66,7 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
     ...RANDOM.flatMap((item) => {
       const n = me.inventory[item.id] ?? 0;
       const t = ticketOf(item);
-      return n > 0 && t ? [{ key: item.id, name: item.name, desc: t.mode === "random" ? `${item.desc} (흔들림 ${wobbleLabel(t.tier)} · 특수 색 ${specialLabel(t.tier)})` : item.desc, count: n, icon: <ItemIcon itemId={item.id} size={32} />, ticket: t }] : [];
+      return n > 0 && t ? [{ key: item.id, name: item.name, desc: t.mode === "random" ? `${item.desc} (흔들림 ${wobbleLabel(t.tier)} · 특수 색은 ${specialLabel(t.tier)})` : item.desc, count: n, icon: <ItemIcon itemId={item.id} size={32} />, ticket: t }] : [];
     }),
     ...Object.values(tickets).flatMap((d) => {
       const n = me.inventory[d.id] ?? 0;

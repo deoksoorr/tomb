@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DYE_LIMIT } from "@/lib/dye/palette";
-import { BoardPointers, clampView, MAX_SCALE, minScale, wheelFactor, zoomAt, type BoardView } from "./board";
+import { DYE_BOARD_H, DYE_BOARD_W, DYE_LIMIT } from "@/lib/dye/palette";
+import { BoardPointers, clampView, dyeCloseGuard, KEY_PAN_FAST, KEY_PAN_PX, keyPan, MAX_SCALE, minScale, startScale, wheelFactor, zoomAt, type BoardView } from "./board";
 import { glintStops } from "./spots";
 
 // 46번 염색 판 화면 계산: 빠른 휠·한계·판 밖 입력에도 화면 값이 늘 유한하고 한계 안이다
@@ -112,5 +112,57 @@ describe("46번 염색 판 포인터: 커서 자리·마우스 클릭은 판에 
     const p = new BoardPointers();
     expect(p.down(1, "mouse", 0, NaN, 10)).toBe(false);
     expect(p.size).toBe(0);
+  });
+});
+
+describe("11/12 염색 판: 넓게 축소 · WASD 이동 · 닫힘 보호", () => {
+  it("최소 배율이 예전(구역 0.45배)의 1/8 이하 — 여러 구역이 한눈에, 처음 배율은 예전 그대로", () => {
+    const old = Math.max(W / (DYE_BOARD_W * 0.45), H / (DYE_BOARD_H * 0.45));
+    expect(minScale(W, H)).toBeLessThanOrEqual(old / 8);
+    expect(startScale(W, H)).toBeCloseTo(old * 1.4);
+    // 휠을 아무리 굴려도 최소 배율에서 멈춘다
+    let v: BoardView = clampView(
+      { cx: 160, cy: 100, scale: startScale(W, H) },
+      W,
+      H,
+    );
+    for (let k = 0; k < 200; k++)
+      v = zoomAt(v, W, H, W / 2, H / 2, wheelFactor(400));
+    expect(v.scale).toBeCloseTo(minScale(W, H));
+    expect(W / v.scale / DYE_BOARD_W).toBeGreaterThanOrEqual(3); // 가로로 구역 3장 이상
+  });
+
+  it("키 이동: 화면 px/초로 일정, Shift는 빠르게, 대각선은 같은 빠르기, 반대 키는 지운다", () => {
+    const s = 2;
+    const right = keyPan(["KeyD"], false, 100, s);
+    expect(right.dx).toBeCloseTo((KEY_PAN_PX * 0.1) / s);
+    expect(right.dy).toBe(0);
+    expect(keyPan(["ArrowUp"], false, 100, s).dy).toBeCloseTo(
+      (-KEY_PAN_PX * 0.1) / s,
+    );
+    expect(keyPan(["KeyD"], true, 100, s).dx).toBeCloseTo(
+      (KEY_PAN_PX * KEY_PAN_FAST * 0.1) / s,
+    );
+    const diag = keyPan(["KeyW", "KeyA"], false, 100, s);
+    expect(diag.dx).toBeLessThan(0);
+    expect(diag.dy).toBeLessThan(0);
+    expect(Math.hypot(diag.dx, diag.dy)).toBeCloseTo(right.dx);
+    expect(keyPan(["KeyA", "KeyD"], false, 100, s)).toEqual({ dx: 0, dy: 0 });
+    expect(keyPan(["KeyQ", "Space"], false, 100, s)).toEqual({ dx: 0, dy: 0 });
+    // 오래 비운 프레임은 100ms로 자르고, NaN·0 배율은 움직이지 않는다
+    expect(keyPan(["KeyD"], false, 5000, s).dx).toBeCloseTo(right.dx);
+    expect(keyPan(["KeyD"], false, NaN, s)).toEqual({ dx: 0, dy: 0 });
+    expect(keyPan(["KeyD"], false, 16, 0)).toEqual({ dx: 0, dy: 0 });
+  });
+
+  it("판·고르기·결과 단계는 배경 클릭으로 안 닫히고, 판·고르기의 Esc는 그만두기 확인", () => {
+    expect(dyeCloseGuard("part")).toEqual({
+      backdrop: true,
+      escConfirm: false,
+    });
+    for (const p of ["play", "choose"])
+      expect(dyeCloseGuard(p)).toEqual({ backdrop: false, escConfirm: true });
+    for (const p of ["sending", "done"])
+      expect(dyeCloseGuard(p).backdrop).toBe(false);
   });
 });

@@ -133,12 +133,11 @@ export function wobbleLabel(tier: DyeTier): string {
   return px >= 14 ? "큼" : px >= 8 ? "보통" : "적음";
 }
 
-/** 화면 안내용: 특수 색이 나올 가능성 (구역 = 판 한 장 크기, 끝없이 이어진다) */
+/** 화면 안내용: 특수 색이 나올 가능성 — 11/12 요청: 숫자(확률) 없이 말로만 */
 export function specialLabel(tier: DyeTier): string {
   const r = DYE_TIERS[tier]?.special.rate ?? 0;
-  if (r <= 0) return "없음";
-  const n = Math.round(10_000 / r);
-  return `약 ${n >= 100 ? Math.round(n / 50) * 50 : n >= 20 ? Math.round(n / 5) * 5 : n}구역에 1번`;
+  if (r <= 0) return "나오지 않아요";
+  return r >= 200 ? "조금 더 잘 나와요" : r >= 50 ? "드물게 나와요" : "아주 드물게 나와요";
 }
 
 const FP = 8; // 고정소수점 자리 (1칸 = 256)

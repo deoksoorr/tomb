@@ -134,7 +134,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
     const n = owned(item.id);
     title = item.name;
     const tier = item.dye?.mode === "random" ? item.dye.tier : 1;
-    desc = `${item.desc} 흔들림 ${wobbleLabel(tier)} · 특수 색 ${specialLabel(tier)} — 끝없이 이어지는 판에 아주 드물게 숨은 특수 색(금빛 광택·반짝이·무지개·야광) 칸을 고르면 그 부위가 빛나요. 제한 시간은 모두 60초예요.`;
+    desc = `${item.desc} 흔들림 ${wobbleLabel(tier)} · 특수 색은 ${specialLabel(tier)} — 끝없이 이어지는 판에 아주 드물게 숨은 특수 색(금빛 광택·반짝이·무지개·야광) 칸을 고르면 그 부위가 빛나요. 제한 시간은 모두 60초예요.`;
     action = (
       <>
         <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={!me || pending || short(item.price)} onClick={() => buyTicket(item)}>
