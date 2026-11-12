@@ -210,7 +210,7 @@
 
 .qr {
   display: block;
-  width: min(520px, 78vw, 66vh);
+  width: min(240px, 62vw, 40vh);
   height: auto;
 }
 
@@ -256,4 +256,12 @@
     padding: 5px 10px;
     font-size: 12px;
   }
+}
+
+.note {
+  margin: 0;
+  text-align: center;
+  color: var(--bone-dim, #a9a28f);
+  font-size: 12px;
+  line-height: 1.5;
 }
