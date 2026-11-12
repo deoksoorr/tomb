@@ -2,7 +2,7 @@ import * as Phaser from "phaser";
 import { DIR, ridePetOfLook, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
-import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange } from "../sprites/avatar";
+import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange, isDyedSpec } from "../sprites/avatar";
 import { CosmeticFxView } from "./CosmeticFxView";
 import { riderLift } from "../sprites/cosmeticFx";
 import type { EmoteIcon } from "../sprites/emotes";
@@ -111,7 +111,7 @@ export class AvatarView {
   private cfx: CosmeticFxView | null = null;
   /** 24번 벤치 상태 (머리 위 작은 아이콘 + 손 소품) — 처음 고를 때 만든다 */
   private moodFx: MoodView | null = null;
-  /** 31번 운영자 저승사자 차림 (낫·안개·배지). 켜져 있는 동안 몸 색은 STAFF_COLOR, 원래 색은 staffBase에 둔다 */
+  /** 31번 운영자 저승사자 차림 (낫·안개·배지). 켜져 있는 동안 몸 색은 염색했으면 그 색, 아니면 STAFF_COLOR. 원래 색은 staffBase에 둔다 */
   private staffFx: StaffFxView | null = null;
   private staffBase = "";
   private wings: Phaser.GameObjects.Image | null = null;
@@ -184,12 +184,10 @@ export class AvatarView {
 
   /** 46번: 색 표기 변경 (avatarColorSpec — 염색) */
   setColor(spec: string): void {
-    if (this.staffFx) {
-      this.staffBase = spec;
-      return;
-    }
-    if (spec === this.color) return;
-    this.color = spec;
+    if (this.staffFx) this.staffBase = spec;
+    const next = this.staffFx ? staffColorOf(spec) : spec;
+    if (next === this.color) return;
+    this.color = next;
     this.retexture();
   }
 
@@ -203,7 +201,7 @@ export class AvatarView {
     if (on) {
       this.staffBase = this.color;
       this.staffFx = new StaffFxView(this.scene, this.atlas, this.label.depth);
-      this.color = STAFF_COLOR;
+      this.color = staffColorOf(this.color);
     } else {
       this.staffFx?.destroy();
       this.staffFx = null;
@@ -924,3 +922,6 @@ export class AvatarView {
     this.bubbles = [];
   }
 }
+
+/** 운영자 차림의 몸 색: 염색했으면 그 색을 그대로, 아니면 저승사자 검은 망토 */
+const staffColorOf = (spec: string): string => (isDyedSpec(spec) ? spec : STAFF_COLOR);

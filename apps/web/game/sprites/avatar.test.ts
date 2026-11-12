@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AVATAR_BODIES, ITEMS, STATE_NAMES } from "@tomb/protocol";
-import { AV_ACT_ANIM, AV_ALIASES, AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, avatarFrameGrid, BODY_METRICS, bodyOf, gearOf, lookKey, SPRITE_COSMETICS, waterSink } from "./avatar";
+import { avatarColorSpec, isDyedSpec, AV_ACT_ANIM, AV_ALIASES, AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, avatarFrameGrid, BODY_METRICS, bodyOf, gearOf, lookKey, SPRITE_COSMETICS, waterSink } from "./avatar";
 import { EMOTE_ICONS, emoteGrid } from "./emotes";
 import { lighten, mix, parseHex } from "./pixel";
 
@@ -109,5 +109,13 @@ describe("above-head stack (NEXT 21/20)", () => {
       for (let i = 0; i < g.px.length; i++) if (g.px[i] & 255) n++;
       expect(n, k).toBeGreaterThan(40);
     }
+  });
+});
+
+describe("staff costume vs dye", () => {
+  it("a dyed spec is recognised so the operator costume keeps the dye", () => {
+    expect(isDyedSpec(avatarColorSpec("#9fb8d8"))).toBe(false);
+    expect(isDyedSpec(avatarColorSpec("#9fb8d8", { body: "#e0504a" }))).toBe(true);
+    expect(isDyedSpec(avatarColorSpec("#9fb8d8", {}))).toBe(false);
   });
 });

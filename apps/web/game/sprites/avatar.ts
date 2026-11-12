@@ -159,6 +159,11 @@ export function avatarColorSpec(base: string, dye?: AvatarDye | null): string {
   return [b, dye!.head ?? "", dye!.body ?? "", dye!.accent ?? ""].join("|");
 }
 
+/** 염색한 색 표기인지 (avatarColorSpec은 염색이 없으면 기본색 하나만 돌려준다) */
+export function isDyedSpec(spec: string): boolean {
+  return hasDye(specDye(spec));
+}
+
 /** 색 표기에 담긴 염색 (미리보기에서 한 부위만 바꿔 볼 때) */
 export function specDye(spec: string): AvatarDye {
   const [, h, b, a] = spec.split("|");
