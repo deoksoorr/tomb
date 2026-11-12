@@ -136,18 +136,18 @@ describe("46번 팔레트 (11/12 개편: 연속 색 공간)", () => {
     expect(vivid.sat).toBeGreaterThan(pastel.sat);
   });
 
-  it("특수 색 무리: 극악의 확률 (일반은 수백~천 구역에 1개, 반짝도 몇십 구역에 1개), 그 칸의 색은 \"#rrggbb~종류\"", () => {
+  it("특수 색 무리: 드문 확률 (얼룩 약 200구역에 1개, 반짝 약 17구역에 1개), 그 칸의 색은 \"#rrggbb~종류\"", () => {
     const N = 1500;
     const spotted = (t: DyeTier) => Array.from({ length: N }, (_, i) => buildPalette(`spot${i}`, t).spots.length).reduce((a, b) => a + b, 0);
     const basic = spotted(1);
     const sparkle = spotted(8);
-    expect(basic).toBeLessThan(8); // 기대값 1.5 (1/1000)
-    expect(sparkle).toBeGreaterThan(25); // 기대값 50 (1/30)
-    expect(sparkle).toBeLessThan(90);
-    for (const t of [1, 2, 3, 4, 5, 6, 7, 8] as const) expect(DYE_TIERS[t].special.rate).toBeLessThanOrEqual(t === 8 ? 400 : 100);
+    expect(basic).toBeLessThan(20); // 기대값 7.5 (1/200)
+    expect(sparkle).toBeGreaterThan(50); // 기대값 90 (약 1/17)
+    expect(sparkle).toBeLessThan(140);
+    for (const t of [1, 2, 3, 4, 5, 6, 7, 8] as const) expect(DYE_TIERS[t].special.rate).toBeLessThanOrEqual(t === 8 ? 800 : 300);
     // 안내 문구에는 숫자(확률)를 쓰지 않는다
-    expect(specialLabel(1)).toBe("아주 드물게 나와요");
-    expect(specialLabel(8)).toBe("조금 더 잘 나와요");
+    expect(specialLabel(1)).toBe("드물게 나와요");
+    expect(specialLabel(8)).toBe("잘 나와요");
     for (const t of [1, 2, 3, 4, 5, 6, 7, 8] as const) expect(specialLabel(t)).not.toMatch(/\d/);
     // 금속 염색권은 금빛 광택이 가장 흔하다
     const kinds = new Map<string, number>();

@@ -232,7 +232,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
               </span>
             )}
           </p>
-          <p className={shop.desc}>{desc}</p>
+          <p className={cx(shop.desc, styles.fullDesc)}>{desc}</p>
           {action}
         </div>
       </section>

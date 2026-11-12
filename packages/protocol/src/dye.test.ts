@@ -85,9 +85,9 @@ describe("46번 염색권·30번 영구 코디 카탈로그", () => {
     const price = (t: number) => dyes.find((d) => d.dye?.mode === "random" && d.dye.tier === t)!.price;
     expect(price(1)).toBeLessThan(price(2));
     expect(price(2)).toBeLessThan(price(3));
-    // 경제 표: 450 ~ 1,800P 안
-    expect(Math.min(...dyes.map((d) => d.price))).toBe(450);
-    expect(Math.max(...dyes.map((d) => d.price))).toBeLessThanOrEqual(1800);
+    // 경제 표: 100 ~ 600P 안 (입문 허들 낮춤)
+    expect(Math.min(...dyes.map((d) => d.price))).toBe(100);
+    expect(Math.max(...dyes.map((d) => d.price))).toBeLessThanOrEqual(600);
   });
   it("영구 가격은 기간제의 7배(10 단위), 꾸미기만", () => {
     const perm = (id: string) => Math.round((itemById(id)!.price * PERMANENT_MULTIPLIER) / 10) * 10;

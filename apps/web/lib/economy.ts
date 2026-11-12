@@ -22,7 +22,7 @@ export type EarnSource =
   | "wish"
   // ── 10번 출석 달력: 한 달 개근 보상 (lib/calendar.ts) ──
   | "monthly"
-  // ── 접속 시간 보너스: 30분 구간마다 구석 창에서 받기 (lib/stayBonus.ts, /api/me/stay-bonus) ──
+  // ── 접속 시간 보너스: 30분 구간마다 구석 창에서 받기 (lib/stayBonus.ts, /api/me/stay-bonus). 하루 전체 한도(DAILY_EARN_CAP)와 별개 ──
   | "stayBonus";
 
 export type EarnRule = { source: EarnSource; label: string; points: number; dailyMax: number; note: string };
@@ -51,8 +51,9 @@ export const EARN_RULES: readonly EarnRule[] = [
 ];
 
 /**
- * 하루에 쌓을 수 있는 전체 포인트. 위 항목 한도의 합(1,575 — 접속 보너스 145 포함)보다 작게 잡아 하루 상한을 둔다 — 사냥만 해도(600) 닿기 쉽고,
+ * 하루에 쌓을 수 있는 전체 포인트. 위 항목 한도의 합(접속 보너스 145 빼고 1,430)보다 작게 잡아 하루 상한을 둔다 — 사냥만 해도(600) 닿기 쉽고,
  * 출석·머무르기(70) + 낚시(200) + 채집(150)처럼 골고루 하면 420쯤. 낚시·채집을 더해도 하루 최대는 그대로 800
+ * 접속 보너스(stayBonus)는 이 한도와 별개: 800에 닿아도 받고 오늘 합계(_total)에도 더하지 않는다 (자기 하루 145P·지갑 상한만). 출석 달력 보상도 이 한도에 막히지 않는다
  */
 export const DAILY_EARN_CAP = 800;
 /**

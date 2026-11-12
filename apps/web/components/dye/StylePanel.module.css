@@ -48,3 +48,12 @@
 .swatch[data-empty] {
   background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(255, 255, 255, 0.12) 4px 8px) !important;
 }
+
+/* 자세히 보기 설명: 상점 .desc의 3줄 말줄임을 풀어 염색권 설명을 끝까지 (아주 길면 이 칸 안에서만 스크롤) */
+p.fullDesc {
+  display: block;
+  max-height: 9.8em;
+  overflow-y: auto;
+  -webkit-line-clamp: unset;
+  line-clamp: none;
+}

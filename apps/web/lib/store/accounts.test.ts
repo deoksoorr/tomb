@@ -477,14 +477,23 @@ function contract(make: () => Kit) {
     expect(await accounts.claimStayBonus(id, next)).toEqual({ earned: 10, count: 1 });
   });
 
-  it("접속 보너스: 하루 전체 한도(800)에 포함 — 다 찼으면 구간은 받은 것으로 치고 0P", async () => {
+  it("접속 보너스: 하루 전체 한도(800)와 별개 — 다 찬 뒤에도 받고, _total에도 더하지 않는다", async () => {
     const id = newId();
     expect(await accounts.earn(id, "hunt", DAY, { amount: 600 })).toBe(600);
     expect(await accounts.earn(id, "fish", DAY, { amount: 190 })).toBe(190);
-    await stayTicks(id, DAY, 1_000_000_000, 3); // 머무르기 +5 +5 → 800
-    expect(await accounts.claimStayBonus(id, DAY)).toEqual({ earned: 0, count: 1 });
+    const t = await stayTicks(id, DAY, 1_000_000_000, 3); // 머무르기 +5 +5 → 800
+    expect(await accounts.claimStayBonus(id, DAY)).toEqual({ earned: 10, count: 1 });
     expect(await accounts.claimStayBonus(id, DAY)).toBeNull();
     expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(DAILY_EARN_CAP);
+    // 나머지 6구간도 그대로 → 보너스 하루 145P
+    await stayTicks(id, DAY, t, 18);
+    expect(await accounts.claimStayBonus(id, DAY)).toEqual({ earned: 135, count: 6 });
+    expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(DAILY_EARN_CAP);
+    // 지갑 상한은 그대로 적용
+    const rich = newId();
+    await stayTicks(rich, DAY, 1_000_000_000, 3);
+    await kit.setPoints(rich, BALANCE_CAP - 3);
+    expect(await accounts.claimStayBonus(rich, DAY)).toEqual({ earned: 3, count: 1 });
   });
 
   it("캐릭터 꾸미기 중복 구매 금지: 가방에 있거나 착용 중이면 owned (동시에 사도 하나만), 다른 건 여러 개", async () => {

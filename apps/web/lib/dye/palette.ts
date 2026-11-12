@@ -67,7 +67,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["muted", 6], ["vivid", 2], ["pastel", 2], ["deep", 1], ["mono", 1]],
     patterns: [["blot", 6], ["wave", 2], ["stripe", 1], ["marble", 1]],
     zones: [2, 2], band: null, tint: 16, grain: 6, warp: 14, wobblePx: 16,
-    special: { rate: 10, kinds: ALL_SPECIAL, radius: [3, 4] },
+    special: { rate: 50, kinds: ALL_SPECIAL, radius: [3, 4] },
   },
   // 고운: 물감 10가지, 계열이 고루, 무늬도 고루
   2: {
@@ -75,7 +75,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["muted", 3], ["vivid", 3], ["pastel", 3], ["neon", 1], ["deep", 2], ["metal", 1], ["mono", 1]],
     patterns: [["blot", 4], ["wave", 2], ["stripe", 2], ["swirl", 1], ["check", 1], ["marble", 1]],
     zones: [3, 2], band: [0.75, 0.55], tint: 22, grain: 7, warp: 11, wobblePx: 9,
-    special: { rate: 12, kinds: ALL_SPECIAL, radius: [3, 5] },
+    special: { rate: 120, kinds: ALL_SPECIAL, radius: [3, 5] },
   },
   // 무지개: 모든 계열·모든 무늬, 물감 제한 없음
   3: {
@@ -83,7 +83,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["muted", 2], ["vivid", 3], ["neon", 2], ["pastel", 3], ["deep", 2], ["metal", 2], ["mono", 2]],
     patterns: [["blot", 3], ["wave", 2], ["stripe", 3], ["swirl", 2], ["check", 2], ["marble", 2]],
     zones: [4, 2], band: [0.9, 0.55], tint: 26, grain: 8, warp: 11, wobblePx: 3,
-    special: { rate: 20, kinds: ALL_SPECIAL, radius: [3, 5] },
+    special: { rate: 250, kinds: ALL_SPECIAL, radius: [3, 5] },
   },
   // 원색: 쨍한 원색 + 흑백
   4: {
@@ -91,7 +91,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["vivid", 8], ["deep", 1], ["mono", 2]],
     patterns: [["blot", 3], ["stripe", 3], ["check", 3], ["swirl", 1], ["wave", 1]],
     zones: [3, 2], band: [1, 0.5], tint: 14, grain: 6, warp: 10, wobblePx: 11,
-    special: { rate: 16, kinds: [["s", 2], ["r", 3], ["g", 1]], radius: [3, 5] },
+    special: { rate: 80, kinds: [["s", 2], ["r", 3], ["g", 1]], radius: [3, 5] },
   },
   // 파스텔: 부드럽게 밝은 색 (흰빛 조금)
   5: {
@@ -99,7 +99,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["pastel", 9], ["mono", 1]],
     patterns: [["blot", 4], ["wave", 3], ["swirl", 2], ["marble", 2], ["stripe", 1], ["check", 1]],
     zones: [3, 2], band: [0.8, 0.84], tint: 12, grain: 5, warp: 12, wobblePx: 11,
-    special: { rate: 16, kinds: [["s", 3], ["r", 3], ["n", 1]], radius: [3, 5] },
+    special: { rate: 80, kinds: [["s", 3], ["r", 3], ["n", 1]], radius: [3, 5] },
   },
   // 형광: 형광 위주 + 어두운 바탕색, 야광이 잘 나온다
   6: {
@@ -107,7 +107,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["neon", 8], ["deep", 2], ["vivid", 1]],
     patterns: [["stripe", 3], ["swirl", 2], ["wave", 2], ["blot", 2], ["check", 1]],
     zones: [3, 2], band: [1, 0.55], tint: 16, grain: 6, warp: 11, wobblePx: 9,
-    special: { rate: 70, kinds: [["n", 5], ["s", 2], ["r", 1]], radius: [3, 5] },
+    special: { rate: 150, kinds: [["n", 5], ["s", 2], ["r", 1]], radius: [3, 5] },
   },
   // 금속: 금·은·동 + 흑백, 금빛 광택이 잘 나온다
   7: {
@@ -115,7 +115,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["metal", 7], ["mono", 3]],
     patterns: [["marble", 3], ["blot", 3], ["stripe", 2], ["wave", 2], ["check", 1]],
     zones: [3, 2], band: null, tint: 8, grain: 6, warp: 11, wobblePx: 7,
-    special: { rate: 80, kinds: [["g", 6], ["s", 2]], radius: [3, 5] },
+    special: { rate: 200, kinds: [["g", 6], ["s", 2]], radius: [3, 5] },
   },
   // 반짝: 모든 계열, 특수 색 무리가 여럿이고 조금 크다
   8: {
@@ -123,7 +123,7 @@ export const DYE_TIERS: Record<DyeTier, TierSpec> = {
     families: [["muted", 1], ["vivid", 2], ["neon", 1], ["pastel", 2], ["metal", 2], ["mono", 1], ["deep", 1]],
     patterns: [["blot", 3], ["wave", 2], ["stripe", 2], ["swirl", 2], ["check", 1], ["marble", 2]],
     zones: [4, 2], band: [0.9, 0.6], tint: 20, grain: 7, warp: 11, wobblePx: 6,
-    special: { rate: 330, kinds: ALL_SPECIAL, radius: [4, 7] },
+    special: { rate: 600, kinds: ALL_SPECIAL, radius: [4, 7] },
   },
 };
 
@@ -137,7 +137,7 @@ export function wobbleLabel(tier: DyeTier): string {
 export function specialLabel(tier: DyeTier): string {
   const r = DYE_TIERS[tier]?.special.rate ?? 0;
   if (r <= 0) return "나오지 않아요";
-  return r >= 200 ? "조금 더 잘 나와요" : r >= 50 ? "드물게 나와요" : "아주 드물게 나와요";
+  return r >= 400 ? "잘 나와요" : r >= 150 ? "조금 더 잘 나와요" : "드물게 나와요";
 }
 
 const FP = 8; // 고정소수점 자리 (1칸 = 256)

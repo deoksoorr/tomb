@@ -198,14 +198,14 @@ export const ITEMS: readonly ItemDef[] = [
   // ── 46번 염색권: 부위(머리·몸·포인트) 하나를 무작위 팔레트에서 60초 안에 찾아 칠한다. 종류마다 색 범위·흔들림·특수 색 확률이 다르다 ──
   // 11/12: 원색·파스텔·형광·금속·반짝 추가 (값 순). 특수 색(금빛 광택·반짝이·무지개·야광)은 판 어딘가에 드물게 숨어 있다.
   // 값은 economy.ts 경제 표 기준 (하루 약 200P): 얼룩 450 ~ 무지개 1,500 사이에 끼우고, 특수 색이 잘 나오는 반짝만 1,800
-  { id: "dye_basic", kind: "dye", name: "얼룩 염색권", desc: "물감이 몇 가지뿐인 팔레트. 조준점이 많이 흔들려요. 운이 좋으면 마음에 드는 색이!", price: 450, dye: { mode: "random", tier: 1 } },
-  { id: "dye_vivid", kind: "dye", name: "원색 염색권", desc: "새빨강·샛노랑·새파랑처럼 쨍한 원색과 흑백이 가득한 팔레트. 조준점은 조금 흔들려요.", price: 600, dye: { mode: "random", tier: 4 } },
-  { id: "dye_pastel", kind: "dye", name: "파스텔 염색권", desc: "솜사탕처럼 부드러운 파스텔 색 팔레트. 조준점은 조금 흔들려요.", price: 600, dye: { mode: "random", tier: 5 } },
-  { id: "dye_neon", kind: "dye", name: "형광 염색권", desc: "눈이 번쩍 뜨이는 형광 색 팔레트. 어두운 곳에서 빛나는 야광 색이 가끔 숨어 있어요.", price: 750, dye: { mode: "random", tier: 6 } },
-  { id: "dye_fine", kind: "dye", name: "고운 염색권", desc: "색이 꽤 다양한 팔레트. 조준점도 덜 흔들려요.", price: 900, dye: { mode: "random", tier: 2 } },
-  { id: "dye_metal", kind: "dye", name: "금속 염색권", desc: "금·은·동과 흑백의 금속 팔레트. 번쩍이는 금빛 광택이 비교적 잘 나와요.", price: 1100, dye: { mode: "random", tier: 7 } },
-  { id: "dye_rainbow", kind: "dye", name: "무지개 염색권", desc: "온갖 색이 다 있는 큰 팔레트. 조준점이 거의 흔들리지 않아요.", price: 1500, dye: { mode: "random", tier: 3 } },
-  { id: "dye_sparkle", kind: "dye", name: "반짝 염색권", desc: "특수 색(금빛 광택·반짝이·무지개·야광)이 다른 염색권보다 조금 더 잘 나오는 팔레트. 조준점은 덜 흔들려요.", price: 1800, dye: { mode: "random", tier: 8 } },
+  { id: "dye_basic", kind: "dye", name: "얼룩 염색권", desc: "물감이 몇 가지뿐인 팔레트. 조준점이 많이 흔들려요. 운이 좋으면 마음에 드는 색이!", price: 100, dye: { mode: "random", tier: 1 } },
+  { id: "dye_vivid", kind: "dye", name: "원색 염색권", desc: "새빨강·샛노랑·새파랑처럼 쨍한 원색과 흑백이 가득한 팔레트. 조준점은 조금 흔들려요.", price: 150, dye: { mode: "random", tier: 4 } },
+  { id: "dye_pastel", kind: "dye", name: "파스텔 염색권", desc: "솜사탕처럼 부드러운 파스텔 색 팔레트. 조준점은 조금 흔들려요.", price: 150, dye: { mode: "random", tier: 5 } },
+  { id: "dye_neon", kind: "dye", name: "형광 염색권", desc: "눈이 번쩍 뜨이는 형광 색 팔레트. 어두운 곳에서 빛나는 야광 색이 가끔 숨어 있어요.", price: 200, dye: { mode: "random", tier: 6 } },
+  { id: "dye_fine", kind: "dye", name: "고운 염색권", desc: "색이 꽤 다양한 팔레트. 조준점도 덜 흔들려요.", price: 250, dye: { mode: "random", tier: 2 } },
+  { id: "dye_metal", kind: "dye", name: "금속 염색권", desc: "금·은·동과 흑백의 금속 팔레트. 번쩍이는 금빛 광택이 비교적 잘 나와요.", price: 300, dye: { mode: "random", tier: 7 } },
+  { id: "dye_rainbow", kind: "dye", name: "무지개 염색권", desc: "온갖 색이 다 있는 큰 팔레트. 조준점이 거의 흔들리지 않아요.", price: 400, dye: { mode: "random", tier: 3 } },
+  { id: "dye_sparkle", kind: "dye", name: "반짝 염색권", desc: "특수 색(금빛 광택·반짝이·무지개·야광)이 다른 염색권보다 조금 더 잘 나오는 팔레트. 조준점은 덜 흔들려요.", price: 600, dye: { mode: "random", tier: 8 } },
 
   // 묘비 디자인권 (포인트로 만드는 특별 묘비). id = "gs_" + 디자인 id
   { id: "gs_coffee", kind: "graveStyle", name: "식은 커피잔 묘비", desc: "마지막 한 모금은 끝내 마시지 못했다.", price: 300 },

@@ -301,6 +301,7 @@ function Wardrobe({
     <div className={styles.wardrobe}>
       <section className={styles.dollPane} aria-label="착용 부위">
         <PaperDoll
+          className={styles.doll}
           areas={DOLL_AREAS}
           label="착용 부위"
           figure={

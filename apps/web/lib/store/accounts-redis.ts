@@ -40,11 +40,12 @@ local function credit(c, source, points, dailyMax, ipKey, ipMax)
   local got = tonumber(redis.call('HGET', c.earn, source) or '0')
   local total = tonumber(redis.call('HGET', c.earn, '_total') or '0')
   local bal = tonumber(redis.call('HGET', c.acct, 'points') or '0')
-  local amount = math.min(points, dailyMax - got, c.dailyCap - total, c.balanceCap - bal)
+  -- c.outsideTotal: 하루 전체 한도(_total)에 막히지도, 더하지도 않는다 (접속 보너스)
+  local amount = math.min(points, dailyMax - got, c.outsideTotal and points or c.dailyCap - total, c.balanceCap - bal)
   if ipKey then amount = math.min(amount, ipMax - tonumber(redis.call('HGET', ipKey, source) or '0')) end
   if amount <= 0 then return 0 end
   redis.call('HINCRBY', c.earn, source, amount)
-  redis.call('HINCRBY', c.earn, '_total', amount)
+  if not c.outsideTotal then redis.call('HINCRBY', c.earn, '_total', amount) end
   redis.call('EXPIRE', c.earn, c.ttl)
   if ipKey then
     redis.call('HINCRBY', ipKey, source, amount)
@@ -130,7 +131,8 @@ local sum = 0
 for i = claimed + 1, tiers do sum = sum + amounts[i] end
 redis.call('HSET', KEYS[2], '_bonus', tiers)
 redis.call('EXPIRE', KEYS[2], ARGV[6])
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[4]), balanceCap = tonumber(ARGV[5]), ttl = ARGV[6] }
+-- 하루 전체 한도(800)와 별개: 자기 하루 상한(dailyMax)·지갑 상한만 본다
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[4]), balanceCap = tonumber(ARGV[5]), ttl = ARGV[6], outsideTotal = true }
 return { credit(c, 'stayBonus', sum, tonumber(ARGV[3])), tiers - claimed }
 `;
 

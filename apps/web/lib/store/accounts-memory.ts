@@ -119,7 +119,7 @@ export class MemoryAccounts implements AccountStore {
    * 항목별·하루 전체·지갑 한도(+ ipHash가 있으면 같은 IP의 그 항목 합계) 안에서 적립.
    * lib/store/accounts-redis.ts의 Lua credit과 같은 규칙
    */
-  private credit(a: Acct, source: EarnSource, day: string, opts: EarnOptions = {}, capless = false): number {
+  private credit(a: Acct, source: EarnSource, day: string, opts: EarnOptions = {}, capless = false, outsideTotal = false): number {
     this.today(a, day);
     const rule = earnRule(source);
     const got = a.earned.get(source) ?? 0;
@@ -130,7 +130,8 @@ export class MemoryAccounts implements AccountStore {
     const amount = Math.min(opts.amount ?? rule.points, rule.dailyMax - got, capless ? Infinity : DAILY_EARN_CAP - total, BALANCE_CAP - a.points, ipLeft);
     if (!(amount > 0)) return 0;
     a.earned.set(source, got + amount);
-    a.earned.set("_total", total + amount);
+    // 접속 보너스는 하루 전체 한도와 별개라 _total에 더하지 않는다 (accounts-redis.ts credit의 outsideTotal)
+    if (!outsideTotal) a.earned.set("_total", total + amount);
     if (ipKey) this.ipEarned.set(ipKey, (this.ipEarned.get(ipKey) ?? 0) + amount);
     a.points += amount;
     this.addLifetime(a, amount);
@@ -249,7 +250,8 @@ export class MemoryAccounts implements AccountStore {
     const claimed = a.earned.get("_bonus") ?? 0;
     if (tiers <= claimed) return null;
     a.earned.set("_bonus", tiers);
-    return { earned: this.credit(a, "stayBonus", day, { amount: stayBonusSum(claimed, tiers) }), count: tiers - claimed };
+    // 하루 전체 한도(800)와 별개: 자기 하루 상한(145P)·지갑 상한만 본다
+    return { earned: this.credit(a, "stayBonus", day, { amount: stayBonusSum(claimed, tiers) }, true, true), count: tiers - claimed };
   }
 
   /** value가 null인 계정은 순위에서 뺀다. asc면 작을수록 위 */

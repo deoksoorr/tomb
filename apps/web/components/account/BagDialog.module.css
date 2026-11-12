@@ -151,7 +151,19 @@
   position: sticky;
   top: 0;
   display: grid;
-  gap: 8px;
+  gap: 6px;
+}
+
+/* 가방 장비창은 조금 작게 (아바타 ×3, 부위 칸 낮게) → 1280×720에서도 아래 방향·자세 버튼까지 스크롤 없이 보인다 */
+.dollPane .doll {
+  --scale: 3;
+  gap: 6px;
+  padding: 8px;
+}
+
+/* 부위 칸(PaperDoll .slot 버튼) 높이 96 → 80 */
+.dollPane .doll button {
+  min-height: 80px;
 }
 
 .figNote {
@@ -165,6 +177,23 @@
 .viewControls {
   justify-self: center;
   width: min(100%, 300px);
+}
+
+/* 방향(앞·옆·뒤)과 자세(서 있기·걷기)를 한 줄에 (상점 미리보기 data-compact와 같은 모양) */
+.dollPane .viewControls {
+  grid-template-columns: 3fr 2fr;
+  gap: 4px;
+}
+
+.dollPane .viewControls > * {
+  gap: 2px;
+}
+
+.dollPane .viewControls button {
+  min-width: 0;
+  min-height: 32px;
+  padding: 2px 3px;
+  white-space: nowrap;
 }
 
 .hint {
