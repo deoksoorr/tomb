@@ -1,4 +1,5 @@
 // 사냥터(RPG) 카탈로그: 장비·포션·스킬·몬스터·사냥터·난이도. 서버(검증·보상)와 클라이언트(UI·게임)가 같이 쓴다.
+import { isShopListed, itemById, ITEMS } from "@tomb/protocol";
 import type { BossPhase, PatternId } from "./patterns";
 import type { WeaponStyleId } from "./weapons";
 // 이름은 회사 생활(월요병·야근·결재·회식)과 누구나 한 번쯤 그만둔 다짐에서 따왔다.
@@ -76,7 +77,7 @@ const gear = (
   style?: WeaponStyleId,
 ): GearDef => ({ id, kind, name, desc, reqLevel, price, bonus, art, ...(area ? { area } : {}), ...(style ? { style } : {}) });
 
-export const GEAR: readonly GearDef[] = [
+const GEAR_RAW: GearDef[] = [
   // ── 무기 ──
   // 무기마다 공격 방식(style)이 다르다 (40번): 범위를 따로 적지 않으면 방식의 기본 범위
   gear("w_ruler", "weapon", "나무 자", "책상 서랍에서 나온 30cm 자. 생각보다 아프다.", 1, 30, { atk: 6 }, { shape: "ruler", main: 0xc89a5a, accent: 0x5a3e22 }, undefined, "swing"),
@@ -88,17 +89,39 @@ export const GEAR: readonly GearDef[] = [
   gear("w_refactor", "weapon", "효율의 검", "같은 일을 더 적은 손짓으로 벤다.", 22, 700, { atk: 52, aspd: 0.15 }, { shape: "sword", main: 0xbcd8e8, accent: 0x5a7aa8 }, { range: 30, arcDeg: 150 }, "swing"),
   gear("w_legacy_axe", "weapon", "서류 정리 도끼", "무겁고 느리지만, 누구도 건드리지 못하던 서류 더미를 쪼갠다.", 30, 1000, { atk: 74, str: 3, aspd: -0.1 }, { shape: "axe", main: 0x8a6a4a, accent: 0xb0b8c0 }, { range: 28, arcDeg: 170 }, "smash"),
   gear("w_compiler", "weapon", "전설의 법인카드", "한도 없음. 전설로만 전해진다. 던지면 지나가는 모든 것을 긁는다.", 40, 1600, { atk: 98, crit: 8, dex: 3 }, { shape: "chip", main: 0x55704f, accent: 0xffe39a }, undefined, "card"),
+  // 11/12 추가분: 공격 방식 7종이 3개씩 고루 (가격은 기존 곡선 — 대략 요구 레벨 × 35~40P, I0d 경제 기준 하루 약 200P)
+  gear("w_namecard", "weapon", "명함 한 뭉치", "첫 만남에 건네던 명함. 손목 스냅으로 날리면 종이에 베인다.", 3, 70, { atk: 8, dex: 1 }, { shape: "namecard", main: 0xf2f2f2, accent: 0x3c5a8a }, undefined, "card"),
+  gear("w_laser", "weapon", "레이저 포인터", "발표 화면 위 빨간 점. 가리키는 곳이 펑 터진다.", 4, 90, { atk: 9, int: 2, sp: 10 }, { shape: "marker", main: 0xe84040, accent: 0x3a3f4a }, undefined, "magic"),
+  gear("w_pen", "weapon", "삼색 볼펜 창", "딸깍 소리와 함께 길게 뻗어 찌른다. 빨강·파랑·검정.", 6, 150, { atk: 16, hit: 4 }, { shape: "pen", main: 0xe8e8ec, accent: 0x2a5ac8 }, { range: 40, arcDeg: 22 }, "thrust"),
+  gear("w_mouse", "weapon", "무선 마우스 너클", "더블클릭, 트리플클릭. 손이 쉬지 않는다.", 16, 500, { atk: 36, aspd: 0.15 }, { shape: "mouse", main: 0x2a2e36, accent: 0x6ad0c8 }, undefined, "combo"),
+  gear("w_tie", "weapon", "회식 넥타이", "회식 3차에 머리에 묶었던 그 넥타이. 휘두르면 바람 소리가 난다.", 18, 560, { atk: 42, agi: 2 }, { shape: "tie", main: 0xc83c5a, accent: 0x2a2e48 }, { range: 32, arcDeg: 140 }, "swing"),
+  gear("w_stapler", "weapon", "스테이플러 연발총", "철컥철컥. 서류 대신 적을 철해 버린다.", 20, 640, { atk: 46, hit: 8 }, { shape: "stapler", main: 0x3a3f4a, accent: 0xc8ccd2 }, undefined, "shot"),
+  gear("w_giftcard", "weapon", "명절 상품권", "손을 떠나는 순간 모두가 탐낸다. 날아가며 스친 자리를 긁는다.", 24, 820, { atk: 58, crit: 6, luk: 2 }, { shape: "namecard", main: 0xe8b830, accent: 0xa83c3c }, undefined, "card"),
+  gear("w_ppt", "weapon", "파워포인트 마법서", "애니메이션 효과를 넣을 때마다 폭발이 커진다.", 28, 950, { atk: 64, int: 5, sp: 40 }, { shape: "book", main: 0xd0502a, accent: 0xf2ead3 }, undefined, "magic"),
+  gear("w_calculator", "weapon", "공학용 계산기", "두드릴수록 숫자가 맞아 간다. 결산 시즌의 무기.", 33, 1150, { atk: 80, aspd: 0.12, dex: 3 }, { shape: "calculator", main: 0x4a4f58, accent: 0xf0a040 }, undefined, "combo"),
+  gear("w_selfie", "weapon", "워크숍 셀카봉", "단체 사진을 찍던 그 셀카봉. 끝까지 늘리면 무척 길다.", 36, 1300, { atk: 88, hit: 14, agi: 2 }, { shape: "spear", main: 0xffb0c8, accent: 0x2a2e36 }, { range: 48, arcDeg: 20 }, "thrust"),
+  gear("w_tumbler", "weapon", "텀블러 캐논", "샷 추가. 멀리서 뜨겁게 맞힌다.", 42, 1800, { atk: 105, hit: 12, crit: 5 }, { shape: "tumbler", main: 0x40a050, accent: 0xf2f2f2 }, undefined, "shot"),
+  gear("w_stamp", "weapon", "최종 결재 도장", "대표님 책상 위의 그 도장. 한 번 찍히면 되돌릴 수 없다.", 45, 2000, { atk: 118, str: 4, crit: 4, aspd: -0.08 }, { shape: "stamp", main: 0xa83c3c, accent: 0xe8b830 }, { range: 30, arcDeg: 170 }, "smash"),
   // ── 갑옷 ──
   gear("a_hoodie", "armor", "후드티", "회색. 모든 재택근무자의 기본 방어구.", 1, 30, { def: 3, hp: 20 }, { shape: "hoodie", main: 0x6e7076, accent: 0x4a4c52 }),
   gear("a_flannel", "armor", "체크 셔츠", "사흘째 야근 중인 사람의 갑옷.", 6, 120, { def: 7, hp: 45 }, { shape: "shirt", main: 0xa83c3c, accent: 0x3a2020 }),
   gear("a_laptop_bag", "armor", "방탄 노트북 가방", "충전기와 마우스와 희망이 들어 있다.", 12, 300, { def: 13, hp: 85 }, { shape: "bag", main: 0x2e3440, accent: 0x88c0d0 }),
   gear("a_standing_desk", "armor", "스탠딩 데스크 갑주", "서서 버티는 자세가 몸에 밴다.", 20, 600, { def: 21, hp: 140, vit: 2 }, { shape: "plate", main: 0x8a8f98, accent: 0xd0d4da }),
   gear("a_server_rack", "armor", "철제 캐비닛 아머", "서랍 여닫는 소리가 요란하다. 아무것도 안 뚫린다.", 32, 1100, { def: 31, hp: 230 }, { shape: "rack", main: 0x24282e, accent: 0x6ad07a }),
+  gear("a_cardigan", "armor", "사무실 카디건", "에어컨 바람 막이. 의자 등받이에 늘 걸려 있다.", 3, 70, { def: 5, hp: 30, flee: 2 }, { shape: "hoodie", main: 0xd8c8a8, accent: 0x8a7a5a }),
+  gear("a_vest", "armor", "등산 조끼", "주머니가 열두 개. 부장님 워크숍 필수품.", 9, 220, { def: 10, hp: 60, agi: 2 }, { shape: "vest", main: 0x5a8a4a, accent: 0xe8d9b0 }),
+  gear("a_padding", "armor", "무릎까지 롱패딩", "출근길 영하 10도도 버틴다. 걸음은 조금 느려진다.", 16, 450, { def: 17, hp: 110, move: -4 }, { shape: "padding", main: 0x2a2e36, accent: 0x6a6e78 }),
+  gear("a_suit", "armor", "면접 정장", "단추 하나까지 긴장한 옷. 입으면 운이 따른다는 소문.", 26, 850, { def: 26, hp: 180, luk: 3 }, { shape: "suit", main: 0x2a3a5a, accent: 0xf2f2f2 }),
+  gear("a_hazmat", "armor", "마감 주간 방호복", "마감 주간에만 꺼내 입는다. 어떤 요청도 스며들지 않는다.", 42, 1700, { def: 40, hp: 320, vit: 3 }, { shape: "plate", main: 0xf0c83c, accent: 0x3a3f4a }),
   // ── 머리 ──
   gear("h_cap", "head", "야구모자", "머리 안 감은 날의 친구.", 1, 20, { def: 1, flee: 3 }, { shape: "cap", main: 0x3c5a8a, accent: 0xe8d9b0 }),
   gear("h_headset", "head", "노이즈캔슬링 헤드셋", "부장님 호출이 들리지 않는다.", 8, 150, { def: 3, sp: 20, int: 2 }, { shape: "headset", main: 0x2a2a30, accent: 0xc8a050 }),
   gear("h_vr", "head", "VR 고글", "앞이 더 잘 보인다고 주장한다.", 18, 380, { def: 5, hit: 12, dex: 3 }, { shape: "goggles", main: 0xe8e8ec, accent: 0x5a3e8a }),
   gear("h_crown", "head", "정시 퇴근 왕관", "딱 한 번 정시에 퇴근한 자의 증표.", 28, 800, { def: 8, luk: 5, sp: 30 }, { shape: "crown", main: 0xe8b830, accent: 0xc83c5a }),
+  gear("h_glasses", "head", "블루라이트 안경", "모니터 열 시간째. 그래도 눈은 지켜 준다.", 4, 80, { def: 2, hit: 4 }, { shape: "glasses", main: 0x2a2e36, accent: 0x7ad0f0 }),
+  gear("h_eyemask", "head", "점심시간 수면 안대", "12시 30분부터 1시까지는 아무도 못 깨운다.", 12, 280, { def: 4, hp: 30, flee: 4 }, { shape: "goggles", main: 0x5a3e8a, accent: 0xffb0c8 }),
+  gear("h_helmet", "head", "자전거 출근 헬멧", "지옥철 대신 페달을 밟는 자의 투구.", 22, 560, { def: 7, hp: 60, agi: 2 }, { shape: "helmet", main: 0x3a9a8a, accent: 0xf2f2f2 }),
+  gear("h_halo", "head", "연차 쓴 날의 후광", "아무 연락도 오지 않는 하루. 머리 위가 환하다.", 38, 1300, { def: 11, int: 4, sp: 50, luk: 3 }, { shape: "halo", main: 0xffe39a, accent: 0xe8b830 }),
   // ── 장신구 ──
   gear("c_earphones", "acc", "유선 이어폰", "꼬여 있지만 끊기지 않는다.", 1, 25, { agi: 1, flee: 2 }, { shape: "earphones", main: 0xf2f2f2, accent: 0x9aa3ad }),
   gear("c_sticker", "acc", "행운의 스티커", "노트북에 붙여 둔 고양이 스티커.", 3, 90, { luk: 4, crit: 2 }, { shape: "sticker", main: 0xffb0c8, accent: 0x5a3e4a }),
@@ -106,7 +129,16 @@ export const GEAR: readonly GearDef[] = [
   gear("c_ide_ring", "acc", "단축키 반지", "복사·붙여넣기가 손끝에서 흐른다.", 14, 280, { dex: 4, hit: 8 }, { shape: "ring", main: 0xc8a050, accent: 0x5a8ac8 }),
   gear("c_mug", "acc", "끝없는 머그컵", "식지도 비지도 않는다.", 20, 420, { int: 3, sp: 40 }, { shape: "mug", main: 0xe8d9b0, accent: 0x6a4a30 }),
   gear("c_grass_badge", "acc", "개근 배지", "1년 내내 지각 한 번 없던 기록.", 26, 600, { str: 3, vit: 3 }, { shape: "badge", main: 0x40a050, accent: 0x205028 }),
+  gear("c_lanyard", "acc", "사원증 목걸이", "삑. 출입이 허가되었습니다.", 2, 50, { hp: 15, def: 1 }, { shape: "lanyard", main: 0x3c5a8a, accent: 0xf2f2f2 }),
+  gear("c_tumbler", "acc", "보온 텀블러", "아침에 담은 커피가 퇴근까지 따뜻하다.", 11, 250, { sp: 25, vit: 2 }, { shape: "tumbler", main: 0x9aa3ad, accent: 0x2a2e36 }),
+  gear("c_pedometer", "acc", "만보기", "점심 산책 만 보. 다리가 가벼워진다.", 17, 380, { agi: 3, move: 6 }, { shape: "watch", main: 0xf0d050, accent: 0x2a2e36 }),
+  gear("c_gold_card", "acc", "골드 카드 지갑", "포인트 적립은 생명이다.", 34, 1150, { crit: 6, luk: 4, str: 2 }, { shape: "badge", main: 0xe8b830, accent: 0x5a3e22 }),
+  gear("c_bonus", "acc", "성과급 봉투", "1년을 버틴 보상. 생각보다 얇지만 든든하다.", 44, 1700, { str: 4, dex: 4, crit: 4 }, { shape: "envelope", main: 0xf2ead3, accent: 0xc83c5a }),
 ];
+
+const KIND_ORDER: Record<GearKind, number> = { weapon: 0, armor: 1, head: 2, acc: 3 };
+/** 종류 → 요구 레벨 순 (상점·가방 목록이 이 순서를 그대로 쓴다) */
+export const GEAR: readonly GearDef[] = [...GEAR_RAW].sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.reqLevel - b.reqLevel);
 
 export const gearById = (id: string): GearDef | undefined => GEAR.find((g) => g.id === id);
 
@@ -150,7 +182,16 @@ export type SkillId =
   | "code_review"
   | "overtime"
   | "deploy"
-  | "coffee_break";
+  | "coffee_break"
+  // 11/12 추가분: 이동기·원거리·끌어모으기·소환·버프·지연 폭발·보호막
+  | "sprint"
+  | "afk"
+  | "stapler_burst"
+  | "urgent_meeting"
+  | "printer"
+  | "team_dinner"
+  | "report_bomb"
+  | "auto_reply";
 
 export type SkillDef = {
   id: SkillId;
@@ -181,6 +222,14 @@ export const SKILL_FX = {
   overtime: (lv: number) => ({ atk: 0.15 * lv, hpDrainPct: 0.02, durMs: 10_000 }),
   deploy: (lv: number) => ({ mult: 1.2 + 0.25 * lv, radius: 64 }),
   coffee_break: (lv: number) => ({ spPct: 0.2 + 0.1 * lv, rootMs: 800 }),
+  sprint: (lv: number) => ({ dist: 60 + 6 * lv, mult: 0.9 + 0.2 * lv, width: 16 }),
+  afk: (lv: number) => ({ dist: 72, safeMs: 600 + 200 * lv }),
+  stapler_burst: (lv: number) => ({ n: 3 + lv, mult: 0.6 + 0.12 * lv, range: 110 }),
+  urgent_meeting: (lv: number) => ({ radius: 100, stunMs: 500 + 150 * lv, vuln: 0.05 * lv }),
+  printer: (lv: number) => ({ durMs: 8000 + 1500 * lv, atkPct: 0.4 + 0.1 * lv, everyMs: 700, range: 110 }),
+  team_dinner: (lv: number) => ({ aspd: 0.15 + 0.05 * lv, regenPct: 0.01 + 0.004 * lv, durMs: 10_000 }),
+  report_bomb: (lv: number) => ({ mult: 2 + 0.4 * lv, radius: 46, delayMs: 800, reach: 120 }),
+  auto_reply: (lv: number) => ({ shieldPct: 0.15 + 0.05 * lv, durMs: 8000 }),
 } as const;
 
 export const SKILLS: readonly SkillDef[] = [
@@ -300,6 +349,105 @@ export const SKILLS: readonly SkillDef[] = [
     describe: (lv) => `잠깐 멈춰 서서 최대 SP의 ${pct(SKILL_FX.coffee_break(lv).spPct)}를 회복한다.`,
     art: { shape: "sk_cup", main: 0x6a4a30, accent: 0xe8d9b0 },
   },
+  {
+    id: "stapler_burst",
+    name: "스테이플러 난사",
+    tag: "부채꼴 연사",
+    maxLevel: 5,
+    reqLevel: 6,
+    sp: (lv) => 9 + lv,
+    cooldownMs: () => 5000,
+    describe: (lv) => `앞쪽 부채꼴로 철심 ${SKILL_FX.stapler_burst(lv).n}발을 쏜다. 한 발에 공격력의 ${pct(SKILL_FX.stapler_burst(lv).mult)}.`,
+    art: { shape: "sk_staple", main: 0xc8ccd2, accent: 0x3a3f4a },
+  },
+  {
+    id: "sprint",
+    name: "지각 직전 돌파",
+    tag: "돌진",
+    maxLevel: 5,
+    reqLevel: 7,
+    requires: [{ id: "cache_hit", level: 1 }],
+    sp: () => 10,
+    cooldownMs: () => 7000,
+    describe: (lv) =>
+      `바라보는 쪽으로 ${SKILL_FX.sprint(lv).dist}px 순식간에 달려 나가며, 지나친 적에게 공격력의 ${pct(SKILL_FX.sprint(lv).mult)} 피해. 달리는 동안은 맞지 않는다.`,
+    art: { shape: "sk_dash", main: 0x7ad0f0, accent: 0x2a5ac8 },
+  },
+  {
+    id: "afk",
+    name: "자리 비움",
+    tag: "순간이동",
+    maxLevel: 3,
+    reqLevel: 9,
+    requires: [{ id: "sprint", level: 1 }],
+    sp: () => 8,
+    cooldownMs: () => 12_000,
+    describe: (lv) => `가장 가까운 적의 반대쪽으로 순간이동하고 ${(SKILL_FX.afk(lv).safeMs / 1000).toFixed(1)}초 동안 아무도 나를 못 찾는다(피해 없음).`,
+    art: { shape: "sk_blink", main: 0xd9dccf, accent: 0x6a6e78 },
+  },
+  {
+    id: "team_dinner",
+    name: "팀 회식",
+    tag: "공속↑·재생",
+    maxLevel: 5,
+    reqLevel: 11,
+    requires: [{ id: "coffee_break", level: 1 }],
+    sp: () => 15,
+    cooldownMs: () => 24_000,
+    describe: (lv) =>
+      `10초 동안 공격 속도 +${pct(SKILL_FX.team_dinner(lv).aspd)}, 매초 최대 HP의 ${(SKILL_FX.team_dinner(lv).regenPct * 100).toFixed(1)}% 회복.`,
+    art: { shape: "sk_cheers", main: 0xf0d050, accent: 0xf2ead3 },
+  },
+  {
+    id: "urgent_meeting",
+    name: "긴급 회의 소집",
+    tag: "끌어모으기",
+    maxLevel: 5,
+    reqLevel: 13,
+    requires: [{ id: "code_review", level: 2 }],
+    sp: () => 16,
+    cooldownMs: () => 16_000,
+    describe: (lv) =>
+      `주변 적을 내 앞으로 끌어모으고 ${(SKILL_FX.urgent_meeting(lv).stunMs / 1000).toFixed(2)}초 동안 묶어 둔다. 모인 적이 받는 피해 +${pct(SKILL_FX.urgent_meeting(lv).vuln)}.`,
+    art: { shape: "sk_pull", main: 0xe07a2a, accent: 0x2a2e48 },
+  },
+  {
+    id: "auto_reply",
+    name: "부재중 자동응답",
+    tag: "보호막",
+    maxLevel: 5,
+    reqLevel: 14,
+    requires: [{ id: "rollback", level: 1 }],
+    sp: () => 14,
+    cooldownMs: () => 22_000,
+    describe: (lv) => `8초 동안 최대 HP의 ${pct(SKILL_FX.auto_reply(lv).shieldPct)}만큼 피해를 대신 받아 주는 보호막.`,
+    art: { shape: "sk_shield", main: 0x6ad0c8, accent: 0x205050 },
+  },
+  {
+    id: "printer",
+    name: "복합기 설치",
+    tag: "포탑 소환",
+    maxLevel: 5,
+    reqLevel: 18,
+    requires: [{ id: "pair_prog", level: 1 }],
+    sp: () => 22,
+    cooldownMs: () => 25_000,
+    describe: (lv) =>
+      `그 자리에 복합기를 놓는다. ${SKILL_FX.printer(lv).durMs / 1000}초 동안 가까운 적에게 종이를 뱉어 공격력의 ${pct(SKILL_FX.printer(lv).atkPct)} 피해.`,
+    art: { shape: "sk_printer", main: 0xe8e8ec, accent: 0x3a3f4a },
+  },
+  {
+    id: "report_bomb",
+    name: "보고서 폭탄",
+    tag: "지연 폭발",
+    maxLevel: 5,
+    reqLevel: 20,
+    requires: [{ id: "deploy", level: 1 }],
+    sp: (lv) => 24 + 2 * lv,
+    cooldownMs: () => 11_000,
+    describe: (lv) => `가장 가까운 적 자리에 두꺼운 보고서를 던진다. 0.8초 뒤 터져 둘레 적에게 공격력의 ${pct(SKILL_FX.report_bomb(lv).mult)} 피해.`,
+    art: { shape: "sk_bomb", main: 0xf2ead3, accent: 0xd03030 },
+  },
 ];
 
 export const skillById = (id: string): SkillDef | undefined => SKILLS.find((s) => s.id === id);
@@ -326,17 +474,23 @@ export type DifficultyDef = {
   miniPoints: number;
   /** 미니게임 한 판 최대 EXP */
   miniExp: number;
-  /** 드롭 확률 (굴림 1번당, 43번에서 절반으로: 0.15/0.2/0.25/0.3 → 0.08/0.1/0.12/0.15). 우두머리 장비는 따로 확정 */
+  /**
+   * 드롭 확률 (굴림 1번당). 43번에서 0.15~0.3 → 0.08~0.15, 11/12에 다시 절반쯤(0.04~0.07): 장비·포션이 너무 잘 나왔다
+   */
   dropChance: number;
+  /** 우두머리를 잡고 다 깼을 때 장비 확률 (11/12: 예전엔 확정) */
+  bossDropChance: number;
+  /** 다 깼을 때 기간제 코디(캐릭터 꾸미기 하루권)가 나올 확률 — 아주 가끔. 서버가 계정 가방에 넣는다 */
+  cosmeticChance: number;
   /** 드롭 장비의 요구 레벨 상한 */
   dropMaxLevel: number;
 };
 
 export const DIFFS: Record<Difficulty, DifficultyDef> = {
-  easy: { id: "easy", name: "쉬움", recLevel: 1, monsterLevel: 3, hpMul: 1, atkMul: 1, defMul: 1, expMul: 1, huntPoints: 20, miniPoints: 12, miniExp: 40, dropChance: 0.08, dropMaxLevel: 8 },
-  normal: { id: "normal", name: "보통", recLevel: 8, monsterLevel: 12, hpMul: 2.6, atkMul: 2.3, defMul: 2.5, expMul: 2.6, huntPoints: 35, miniPoints: 20, miniExp: 90, dropChance: 0.1, dropMaxLevel: 18 },
-  hard: { id: "hard", name: "어려움", recLevel: 18, monsterLevel: 24, hpMul: 6, atkMul: 4.6, defMul: 5, expMul: 5.5, huntPoints: 55, miniPoints: 30, miniExp: 180, dropChance: 0.12, dropMaxLevel: 30 },
-  hell: { id: "hell", name: "지옥", recLevel: 30, monsterLevel: 38, hpMul: 13, atkMul: 8.5, defMul: 9, expMul: 11, huntPoints: 80, miniPoints: 45, miniExp: 320, dropChance: 0.15, dropMaxLevel: 50 },
+  easy: { id: "easy", name: "쉬움", recLevel: 1, monsterLevel: 3, hpMul: 1, atkMul: 1, defMul: 1, expMul: 1, huntPoints: 20, miniPoints: 12, miniExp: 40, dropChance: 0.04, bossDropChance: 0.3, cosmeticChance: 0.006, dropMaxLevel: 8 },
+  normal: { id: "normal", name: "보통", recLevel: 8, monsterLevel: 12, hpMul: 2.6, atkMul: 2.3, defMul: 2.5, expMul: 2.6, huntPoints: 35, miniPoints: 20, miniExp: 90, dropChance: 0.05, bossDropChance: 0.27, cosmeticChance: 0.009, dropMaxLevel: 18 },
+  hard: { id: "hard", name: "어려움", recLevel: 18, monsterLevel: 24, hpMul: 6, atkMul: 4.6, defMul: 5, expMul: 5.5, huntPoints: 55, miniPoints: 30, miniExp: 180, dropChance: 0.06, bossDropChance: 0.24, cosmeticChance: 0.012, dropMaxLevel: 30 },
+  hell: { id: "hell", name: "지옥", recLevel: 30, monsterLevel: 38, hpMul: 13, atkMul: 8.5, defMul: 9, expMul: 11, huntPoints: 80, miniPoints: 45, miniExp: 320, dropChance: 0.07, bossDropChance: 0.2, cosmeticChance: 0.015, dropMaxLevel: 50 },
 };
 
 // ── 몬스터 ──
@@ -736,3 +890,31 @@ export const GAMES: Record<GameKind, { name: string; desc: string; how: string; 
 export const MINI_TIME_SEC: Record<Exclude<GameKind, "hunt">, number> = { bugs: 60, stars: 75 };
 
 export const timeLimitSec = (game: GameKind, d: Difficulty, zone?: string | null) => (game === "hunt" ? zoneFor(d, zone).timeLimitSec : MINI_TIME_SEC[game]);
+
+// ── 드롭 표시 (11/12: 기간제 코디 드롭) ──
+
+/**
+ * 사냥터를 다 깼을 때 아주 가끔 나오는 기간제 코디 = 상점에서 파는 캐릭터 꾸미기(펫 제외) 중 200P 이하.
+ * 서버가 계정 가방에 넣는다 (이미 가방·착용·벗어 둔 꾸미기에 있으면 다음 후보, 상점 중복 구매 금지 규칙과 같다)
+ */
+export const COSMETIC_DROPS: readonly string[] = ITEMS.filter((i) => i.kind === "cosmetic" && isShopListed(i) && i.price <= 200).map((i) => i.id);
+
+/** 코디 드롭 아이콘 (선물 상자) */
+export const COSMETIC_DROP_ART: IconArt = { shape: "gift", main: 0xffb0c8, accent: 0xe8b830 };
+
+export type DropKind = "gear" | "potion" | "cosmetic";
+export type DropInfo = { name: string; art: IconArt; kind: DropKind; note?: string };
+
+/** 판 결과 드롭 한 줄 → 이름·아이콘 (UI가 결과 화면에 그대로 쓴다). 모르는 id면 null */
+export function dropInfo(d: { kind: DropKind; id: string }): DropInfo | null {
+  if (d.kind === "gear") {
+    const g = gearById(d.id);
+    return g ? { name: g.name, art: g.art, kind: "gear" } : null;
+  }
+  if (d.kind === "potion") {
+    const p = potionById(d.id);
+    return p ? { name: p.name, art: p.art, kind: "potion" } : null;
+  }
+  const it = itemById(d.id);
+  return it ? { name: it.name, art: COSMETIC_DROP_ART, kind: "cosmetic", note: "캐릭터 꾸미기 하루권 · 상점 가방에 들어갔어요" } : null;
+}

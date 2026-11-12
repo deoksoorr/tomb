@@ -19,7 +19,7 @@ export type ChannelRec = {
 /** 채널 id → 기록. storage에 그대로 스냅샷한다 */
 export type LobbyState = { channels: Record<number, ChannelRec> };
 
-export type LobbyConfig = Pick<Config, "capacity" | "maxChannels" | "threshold">;
+export type LobbyConfig = Pick<Config, "capacity" | "maxChannels" | "threshold"> & Partial<Pick<Config, "baseChannels">>;
 
 export const emptyLobby = (): LobbyState => ({ channels: {} });
 
@@ -63,16 +63,28 @@ export const hasRecentChannels = (s: LobbyState, cfg: LobbyConfig, now: number) 
   );
 
 /**
- * GET /lobby 응답. 채널 10개는 항상 열려 있다(open=true).
+ * GET /lobby 응답. 목록에 보이는 채널(open):
+ *  - 1..baseChannels는 늘 열려 있다
+ *  - 그 위 채널은 사람이 있거나(대기열이 잡아 둔 자리 포함) 최근(LOBBY_REFRESH_MS 안)에 있었던 동안 (금방 닫혔다 열렸다 하지 않게)
+ *  - 열린 채널이 모두 혼잡(threshold 이상)하면 닫힌 채널 중 가장 낮은 번호 하나를 더 연다 (자동 배정 pickChannel과 같은 규칙)
+ * 닫힌 채널도 번호가 maxChannels 안이면 직접 들어갈 수 있다 (채널별 주거 구역의 집 주인이 자기 채널로 가는 길).
  * 인원에는 대기열이 잡아 둔 자리(held)를 더한다: 그 자리는 새 입장자가 쓸 수 없으므로 자동 배정(pickChannel)이 피하게.
  */
-export function computeLobby(s: LobbyState, cfg: LobbyConfig, held: (id: number) => number = () => 0): LobbyInfo {
+export function computeLobby(s: LobbyState, cfg: LobbyConfig, held: (id: number) => number = () => 0, now = Date.now()): LobbyInfo {
   const channels: ChannelInfo[] = [];
+  const base = Math.min(cfg.maxChannels, cfg.baseChannels ?? cfg.maxChannels);
   let total = 0;
   for (let id = 1; id <= cfg.maxChannels; id++) {
     const count = Math.min(cfg.capacity, countOf(s, id) + held(id));
-    channels.push({ id, count, cap: cfg.capacity, open: true });
+    const r = s.channels[id];
+    const recent = !!r && now - r.lastNonEmptyAt < LOBBY_REFRESH_MS;
+    channels.push({ id, count, cap: cfg.capacity, open: id <= base || count > 0 || recent });
     total += count;
+  }
+  const open = channels.filter((c) => c.open);
+  if (open.every((c) => c.count >= c.cap * cfg.threshold)) {
+    const next = channels.find((c) => !c.open);
+    if (next) next.open = true;
   }
   return { channels, total, totalCap: cfg.capacity * cfg.maxChannels, maxChannels: cfg.maxChannels, threshold: cfg.threshold };
 }

@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, ROOM_CAPACITY, TICK_MS, signGrant, verifyGrant } from "@tomb/protocol";
+import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, ROOM_CAPACITY, TICK_MS, isHuntRoom, signGrant, verifyGrant } from "@tomb/protocol";
 import { TICKET_HEADER, decodeTicket, rejectSocket } from "./auth";
 import { ChannelCore, type PeerRecord, type Reservation } from "./channel";
 import { type Env, channelStub, lobbyStub, readConfig } from "./config";
@@ -137,7 +137,8 @@ export class ChannelDO extends DurableObject<Env> {
           else this.livePosDirty = true;
         },
         countChanged: () => {
-          if (!room) this.scheduleReport();
+          // 11/12: 사냥터 방도 인원을 로비에 알린다 (사냥터 고르는 화면의 "n명 사냥 중")
+          if (!room || isHuntRoom(this.room)) this.scheduleReport();
         },
         lastPing: (ws) => ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0,
         visitorJoined: (visitorId, at) => {
@@ -308,7 +309,7 @@ export class ChannelDO extends DurableObject<Env> {
       this.reapDueAt = null;
       this.core.reap(now);
       // 어차피 깨어난 김에 인원을 push한다 → 로비의 5분 재확인이 이 채널을 건너뛴다(유휴 채널을 두 번 깨우지 않게)
-      if (this.room === null) this.reportNow();
+      if (this.room === null || isHuntRoom(this.room)) this.reportNow();
     }
     this.scheduleAlarm();
   }
@@ -396,6 +397,13 @@ export class ChannelDO extends DurableObject<Env> {
   }
 
   private reportNow(): void {
+    if (this.room !== null) {
+      if (!isHuntRoom(this.room)) return;
+      lobbyStub(this.env)
+        .reportRoom(this.room, this.core.count, this.nextSeq())
+        .catch((e) => console.error("lobby room report failed", e));
+      return;
+    }
     lobbyStub(this.env)
       .report(this.channel, this.core.count, this.nextSeq())
       .catch((e) => console.error("lobby report failed", e));

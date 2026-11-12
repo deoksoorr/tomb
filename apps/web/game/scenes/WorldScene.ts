@@ -471,6 +471,8 @@ export class WorldScene extends Phaser.Scene {
         onEmo: (sid, id) => this.expr.onRemoteEmo(sid, id),
         onMood: (sid, mood) => this.expr.onRemoteMood(sid, mood),
         onRide: (sid, on) => this.riding.onRide(sid, on),
+        // 실내(상점·집·사냥터 등)에 들어감·나옴: 문으로 들어가듯 흐려지며 사라지고, 나오면 문 앞에서 나타난다
+        onAway: (sid, on) => this.remotes.get(sid)?.setAway(on, performance.now()),
         onSay: (sid, id) => {
           const text = phraseOf(id);
           const r = this.remotes.get(sid);
@@ -618,6 +620,7 @@ export class WorldScene extends Phaser.Scene {
     r.seatId = prev?.seatId ?? null;
     r.view.setMood(p.mood); // 24번: 늦게 온 사람도 앉아 있는 사람의 상태를 본다
     this.riding?.applyPeer(r, p); // 동물원 타는 펫: 늦게 온 사람도 탄 모습을 본다
+    r.setAway(p.away === true, performance.now(), true); // 이미 실내에 있는 사람은 연출 없이 숨긴다
     if (!r.seatId) for (const [seatId, owner] of this.seats) if (owner === p.sid) r.seatId = seatId;
     this.remotes.set(p.sid, r);
   }
@@ -637,6 +640,7 @@ export class WorldScene extends Phaser.Scene {
       r.view.setLook(p.look ?? []);
       r.view.setMood(p.mood ?? null);
       this.riding.applyPeer(r, p);
+      r.setAway(p.away === true, now);
       // 놓친 스냅샷 때문에 위치가 크게 어긋나 있으면 맞춘다
       const last = r.interp.latest;
       if (!last || Math.hypot(last.x - p.x, last.y - p.y) > TELEPORT_DIST / 2) r.push(now, p.x, p.y, p.state, p.dir);
@@ -688,6 +692,8 @@ export class WorldScene extends Phaser.Scene {
     );
     on.push(bridge.on("grave:flowered", ({ graveId }) => this.playMyFlower(graveId)));
     on.push(bridge.on("channel:switch", ({ channel }) => this.switchChannel(channel)));
+    // 실내(상점·집·분양 마을·사냥터·미니게임)에 들어가 있는 동안은 다른 사람 화면에서 숨긴다 (메인 맵의 나는 문 앞에 멈춰 있다)
+    on.push(bridge.on("scene:changed", ({ scene }) => this.net.setAway(scene !== "world")));
     on.push(bridge.on("input:joystick", ({ x, y }) => this.hub.setJoystick(x, y)));
     on.push(bridge.on("input:runToggle", ({ on: v }) => this.hub.setRunToggle(v)));
     on.push(bridge.on("input:sit", () => this.hub.dispatch("sit")));
@@ -1148,7 +1154,7 @@ export class WorldScene extends Phaser.Scene {
   /** F17 미니맵: 내 위치와 같은 채널 사람들 위치 (원격 아바타 보간 위치) */
   private emitMinimap(): void {
     const others: number[] = [];
-    for (const r of this.remotes.values()) others.push(Math.round(r.x), Math.round(r.y));
+    for (const r of this.remotes.values()) if (!r.away) others.push(Math.round(r.x), Math.round(r.y));
     bridge.emit("minimap:dots", { me: { x: Math.round(this.player.x), y: Math.round(this.player.y) }, others });
   }
 

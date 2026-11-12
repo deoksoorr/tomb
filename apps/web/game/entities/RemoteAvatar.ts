@@ -4,6 +4,7 @@ import { jumpHeight, shadowScale } from "../logic/jump";
 import { Interpolator, type InterpOut } from "../net/Interpolator";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
 import { AvatarView } from "./AvatarView";
+import { awayFade } from "./awayFade";
 
 // 원격 아바타: 받은 상태 값만으로 같은 상태 머신·애니메이션을 재생한다.
 // 위치는 Interpolator(경로 따라가기 + 적응형 버퍼, 짧은 외삽, 96px 스냅)가 정한다.
@@ -18,7 +19,6 @@ export const HAMMOCK_FRONT = 6;
 export const INDOOR_FRONT = 2;
 /** 발밑에서 이름표 위까지 (말풍선 포함) */
 const LABEL_TOP = 34;
-
 export class RemoteAvatar {
   readonly view: AvatarView;
   readonly interp = new Interpolator();
@@ -40,6 +40,10 @@ export class RemoteAvatar {
    */
   private jumpBase = 0;
   private prevState: StateId = STATE.idle;
+  /** 실내(상점·집·사냥터 등)에 들어가 있다 → 메인 맵에서 숨긴다 */
+  private awayOn = false;
+  /** 실내 표시가 바뀐 (내 시계) 시각. -Infinity면 연출 없이 바로 */
+  private awayAt = -Infinity;
 
   constructor(
     scene: Phaser.Scene,
@@ -55,6 +59,18 @@ export class RemoteAvatar {
     this.view = new AvatarView(scene, atlas, init.x, init.y, color, name, false, look, body);
     this.push(now, init.x, init.y, init.state, init.dir);
     this.update(now, null, 1);
+  }
+
+  /** 실내에 들어감(on)·나옴. instant면 연출 없이 (늦게 들어와서 이미 안에 있는 사람) */
+  setAway(on: boolean, now: number, instant = false): void {
+    if (on === this.awayOn) return;
+    this.awayOn = on;
+    this.awayAt = instant ? -Infinity : now;
+  }
+
+  /** 실내에 들어가 있다 (미니맵·누르기에서 뺀다) */
+  get away(): boolean {
+    return this.awayOn;
   }
 
   push(t: number, x: number, y: number, state: StateId, dir: DirId): void {
@@ -88,8 +104,16 @@ export class RemoteAvatar {
     else if (o.state === STATE.lie || o.state === STATE.read || o.state === STATE.bath) this.view.depthOverride = y + INDOOR_FRONT;
     this.x = x;
     this.y = y;
+    // 실내: 다 들어갔으면 그리지 않는다 (위치 갱신은 계속 — 나오면 문 앞에서 나타난다)
+    const fade = awayFade(this.awayOn, this.awayAt, now);
+    if (fade.hidden) {
+      this.view.setVisible(false);
+      this.prevState = o.state;
+      return;
+    }
+    this.view.fade = fade.alpha;
     this.view.apply(STATE_NAMES[o.state], o.dir, now);
-    this.view.place(x, y);
+    this.view.place(x, y - fade.dy);
     if (o.state === STATE.jump) {
       if (this.jumpAt < 0) {
         this.jumpAt = now;

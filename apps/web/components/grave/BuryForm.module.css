@@ -163,8 +163,11 @@
 }
 
 /* 1인 1묘비 안내 (49번) */
+/* 짧은 안내라 고정 크기 창(760×660)의 남는 높이를 채우고 위아래 가운데에 둔다 */
 .blocked {
   display: grid;
+  flex-grow: 1;
+  align-content: center;
   gap: 12px;
   text-align: center;
   line-height: 1.6;

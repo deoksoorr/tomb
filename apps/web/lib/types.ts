@@ -221,6 +221,8 @@ export type Me = {
   dye?: AvatarDye;
   /** 31번 운영자 계정 (관리자 화면에서 지정). 포인트가 줄지 않고 확성기가 무료, 묘비 상세에 운영자 삭제 버튼 */
   staff?: boolean;
+  /** 25번: 선택권으로 영구 해금한 프리미엄 외형 id (PREMIUM_BODIES). 없으면 처음 6종만 */
+  bodies?: string[];
 };
 
 /**

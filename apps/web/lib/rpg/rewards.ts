@@ -1,10 +1,11 @@
-import { DIFFS, GEAR, MONSTER_IDS, MONSTERS, timeLimitSec, zoneFor, type Difficulty, type GameKind, type MonsterId } from "./catalog";
+import { COSMETIC_DROPS, DIFFS, GEAR, MONSTER_IDS, MONSTERS, timeLimitSec, zoneFor, type Difficulty, type GameKind, type MonsterId } from "./catalog";
 import { clamp, levelPenalty, monsterStats, seeded } from "./formulas";
 import {
   BUG_SCORE,
   bugsCount,
   bugsPlan,
   comboMult,
+  eliteBonusExp,
   huntPlan,
   huntSpawnable,
   huntTotal,
@@ -99,6 +100,8 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
   for (const w of plan.slice(0, k)) for (const m of w.monsters) need[m] = (need[m] ?? 0) + 1;
   for (const [id, n] of Object.entries(need) as [MonsterId, number][]) if ((r.kills[id] ?? 0) < n) return tooHigh("웨이브");
 
+  // 11/12 정예: 깬 웨이브의 정예만 (다 잡았다는 게 검증된 몫)
+  exp += eliteBonusExp(plan, k, t.difficulty, zone.power);
   const D = DIFFS[t.difficulty];
   const cleared = k === plan.length;
   const progress = clamp((k + (total / Math.max(1, huntTotal(plan))) * 0.999) / (plan.length + 1), 0, 1);
@@ -110,7 +113,7 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
     xp *= 0.7;
   }
   const bossKilled = (r.kills[zone.boss] ?? 0) > 0 && cleared;
-  const drops = rollDrops(t, Math.min(HUNT_DROP_ROLLS, Math.floor(total / KILLS_PER_DROP_ROLL)), bossKilled);
+  const drops = rollDrops(t, Math.min(HUNT_DROP_ROLLS, Math.floor(total / KILLS_PER_DROP_ROLL)), bossKilled, false, cleared && !r.died);
   return {
     ok: true,
     score: Math.round(exp),
@@ -160,8 +163,12 @@ function miniReward(t: TicketInfo, score: number, perf: number): Verdict {
   return { ok: true, score, exp, points, drops };
 }
 
-/** 드롭은 시드로 정해진다 (같은 판 결과를 다시 보내 다시 굴릴 수 없다) */
-export function rollDrops(t: TicketInfo, rolls: number, bossKilled: boolean, potionsOnly = false): Drop[] {
+/**
+ * 드롭은 시드로 정해진다 (같은 판 결과를 다시 보내 다시 굴릴 수 없다).
+ * 11/12: 확률을 다시 절반쯤으로, 우두머리 장비도 확률(bossDropChance), 포션은 1개씩.
+ * clearedClean(사냥터를 쓰러지지 않고 다 깼다)이면 기간제 코디를 아주 낮은 확률(cosmeticChance)로 굴린다
+ */
+export function rollDrops(t: TicketInfo, rolls: number, bossKilled: boolean, potionsOnly = false, clearedClean = false): Drop[] {
   const D = DIFFS[t.difficulty];
   const r = seeded(t.seed ^ 0x44524f50);
   const drops: Drop[] = [];
@@ -177,12 +184,17 @@ export function rollDrops(t: TicketInfo, rolls: number, bossKilled: boolean, pot
   const pickPotion = (): Drop => {
     const x = r();
     const id = x < 0.5 ? "p_coffee" : x < 0.85 ? "p_energy" : "p_lunchbox";
-    return { kind: "potion", id, qty: id === "p_lunchbox" ? 1 : 1 + Math.floor(r() * 2) };
+    return { kind: "potion", id, qty: 1 };
   };
-  if (bossKilled) drops.push(pickGear());
+  if (bossKilled && r() < D.bossDropChance) drops.push(pickGear());
   for (let i = 0; i < rolls; i++) {
     if (r() >= D.dropChance) continue;
     drops.push(potionsOnly || r() < 0.55 ? pickPotion() : pickGear());
+  }
+  if (clearedClean && COSMETIC_DROPS.length > 0) {
+    // 따로 굴린다 (위 굴림 수와 상관없이 같은 시드면 같은 결과)
+    const rc = seeded(t.seed ^ 0x434f4459);
+    if (rc() < D.cosmeticChance) drops.push({ kind: "cosmetic", id: COSMETIC_DROPS[Math.floor(rc() * COSMETIC_DROPS.length)], qty: 1 });
   }
   return drops;
 }

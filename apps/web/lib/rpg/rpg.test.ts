@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { DIFFICULTIES, DIFFS, GEAR, MONSTERS, SKILLS, ZONES } from "./catalog";
+import { itemById } from "@tomb/protocol";
+import { COSMETIC_DROPS, DIFFICULTIES, DIFFS, GEAR, MONSTERS, SKILLS, ZONES } from "./catalog";
 import { addGear, allocStats, consumePotions, equip, gainExp, learnSkill, newCharacter, removeGearForSale, RpgError, setHotbar } from "./character";
 import { applyExp, ATK_PER_STR, attackArea, damage, DEFAULT_ATTACK_AREA, derive, expToNext, hitChance, inAttackArea, MAX_LEVEL, monsterStats } from "./formulas";
-import { bugsCount, bugsPlan, comboMult, huntPlan, huntSpawnable, huntTotal, starsCount, starsPlan, starWindows } from "./plan";
+import { bugsCount, bugsPlan, comboMult, eliteBonusExp, huntPlan, huntSpawnable, huntTotal, starsCount, starsPlan, starWindows } from "./plan";
 import { evaluate, MIN_RUN_MS, type TicketInfo } from "./rewards";
 import { signTicket, verifyTicket } from "./ticket";
 import { MemoryRpgStore } from "./store";
@@ -91,7 +92,10 @@ describe("캐릭터 조작", () => {
     c = gainExp(c, 1e6).state;
     expect(() => learnSkill(c, "deploy")).toThrow(/결재판 치기 3단계/);
     expect(() => setHotbar(c, ["hotfix", null, null, null, null, null])).toThrow(/배운 스킬/);
-    expect(SKILLS).toHaveLength(10);
+    // 11/12: 16개 이상, 선행 스킬은 모두 있는 스킬, 이름은 겹치지 않는다
+    expect(SKILLS.length).toBeGreaterThanOrEqual(16);
+    expect(new Set(SKILLS.map((x) => x.name)).size).toBe(SKILLS.length);
+    for (const sk of SKILLS) for (const r of sk.requires ?? []) expect(SKILLS.some((x) => x.id === r.id && x.reqLevel <= sk.reqLevel)).toBe(true);
   });
 
   it("장착: 종류·레벨·보유를 확인하고, 같은 장신구는 가진 수만큼만 낀다", () => {
@@ -167,8 +171,12 @@ describe("출현 계획", () => {
     expect(monsterStats("scope_creep", "easy")).toMatchObject({ maxHp: 48, atk: 8, exp: 4 });
   });
 
-  it("43번: 드롭 확률은 예전의 절반쯤", () => {
-    expect(DIFFICULTIES.map((d) => DIFFS[d].dropChance)).toEqual([0.08, 0.1, 0.12, 0.15]);
+  it("11/12: 드롭 확률은 43번의 절반쯤, 우두머리 장비도 확률, 기간제 코디는 아주 가끔", () => {
+    expect(DIFFICULTIES.map((d) => DIFFS[d].dropChance)).toEqual([0.04, 0.05, 0.06, 0.07]);
+    for (const d of DIFFICULTIES) {
+      expect(DIFFS[d].bossDropChance).toBeLessThan(0.35);
+      expect(DIFFS[d].cosmeticChance).toBeLessThanOrEqual(0.02);
+    }
   });
 
   it("버그·데드라인 계획은 시간 안에서만 나온다", () => {
@@ -221,13 +229,75 @@ describe("결과 검증", () => {
   };
   const hunt = (over: object = {}) => ({ game: "hunt" as const, durationMs: 120_000, kills: allKills(), wavesCleared: plan.length, died: false, potionsUsed: {}, ...over });
 
-  it("정상 클리어는 보상을 받는다 (우두머리를 잡으면 장비 1개)", () => {
+  it("정상 클리어는 보상을 받는다 (우두머리 장비는 확률, 코디는 아주 가끔 — 시드로 정해진다)", () => {
     const v = evaluate(T, hunt(), 121_000);
     expect(v.ok).toBe(true);
     if (!v.ok) return;
     expect(v.points).toBe(20);
     expect(v.exp).toBeGreaterThan(0);
-    expect(v.drops.some((d) => d.kind === "gear")).toBe(true);
+    expect(evaluate(T, hunt(), 121_000)).toEqual(v);
+    let gear = 0;
+    let cosmetic = 0;
+    let potions = 0;
+    const N = 2000;
+    for (let seed = 1; seed <= N; seed++) {
+      const p = huntPlan(seed, "easy");
+      const kills: Record<string, number> = {};
+      for (const w of p) for (const m of w.monsters) kills[m] = (kills[m] ?? 0) + 1;
+      const r = evaluate({ ...T, seed }, hunt({ kills, wavesCleared: p.length }), 121_000);
+      if (!r.ok) throw new Error(String(seed));
+      gear += r.drops.filter((x) => x.kind === "gear").length;
+      potions += r.drops.filter((x) => x.kind === "potion").reduce((n, x) => n + x.qty, 0);
+      for (const x of r.drops.filter((x) => x.kind === "cosmetic")) {
+        cosmetic++;
+        expect(COSMETIC_DROPS).toContain(x.id);
+      }
+    }
+    // 판당 장비 약 0.3(우두머리) + 0.04 미만, 포션 0.05 미만, 코디 0.6% 안팎
+    expect(gear / N).toBeGreaterThan(0.2);
+    expect(gear / N).toBeLessThan(0.4);
+    expect(potions / N).toBeLessThan(0.08);
+    expect(cosmetic).toBeGreaterThan(0);
+    expect(cosmetic / N).toBeLessThan(0.02);
+  });
+
+  it("11/12 기간제 코디 드롭 후보: 상점에서 파는 캐릭터 꾸미기(펫 제외) 중 싼 것만", () => {
+    expect(COSMETIC_DROPS.length).toBeGreaterThan(10);
+    for (const id of COSMETIC_DROPS) {
+      const it = itemById(id)!;
+      expect(it.kind).toBe("cosmetic");
+      expect(it.slot).not.toBe("pet");
+      expect(it.price).toBeLessThanOrEqual(200);
+    }
+  });
+
+  it("11/12 웨이브 모양·정예: 시드 결정적, 첫 웨이브는 흩어져서, 정예를 낀 웨이브를 깨면 EXP 보너스", () => {
+    const shapes = new Set<string>();
+    let elites = 0;
+    for (const d of DIFFICULTIES) {
+      for (let seed = 1; seed <= 80; seed++) {
+        const p = huntPlan(seed, d);
+        expect(huntPlan(seed, d)).toEqual(p);
+        expect(p[0].formation).toBe("scatter");
+        expect(p[0].elite).toBeUndefined();
+        expect(p.at(-1)!.elite).toBeUndefined();
+        for (const w of p) {
+          shapes.add(w.formation);
+          if (w.elite === undefined) continue;
+          elites++;
+          expect(w.elite).toBeLessThan(w.monsters.length - w.pack);
+          expect(MONSTERS[w.monsters[w.elite]].minion).toBeFalsy();
+        }
+      }
+    }
+    expect([...shapes].sort()).toEqual(["pincer", "scatter", "stream", "surround", "swarm"]);
+    expect(elites).toBeGreaterThan(50);
+    // 정예 보너스는 깬 웨이브 몫만
+    const seed = Array.from({ length: 200 }, (_, i) => i + 1).find((s) => huntPlan(s, "hell").some((w) => w.elite !== undefined))!;
+    const p = huntPlan(seed, "hell");
+    const k = p.findIndex((w) => w.elite !== undefined) + 1;
+    expect(eliteBonusExp(p, k, "hell", 1)).toBeGreaterThan(0);
+    expect(eliteBonusExp(p, k - 1, "hell", 1)).toBe(0);
   });
 
   it("정직한 판은 거절하지 않는다: 모든 난이도·시드에서 시간 절반에 다 잡아도 통과 (45번 출몰량)", () => {

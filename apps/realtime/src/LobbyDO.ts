@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { LOBBY_SNAPSHOT_MS, type LobbyInfo, type QueueStatus } from "@tomb/protocol";
+import { LOBBY_SNAPSHOT_MS, type HuntRoomsInfo, type LobbyInfo, type QueueStatus } from "@tomb/protocol";
 import { type Config, type Env, channelStub, readConfig } from "./config";
 import {
   LOBBY_REFRESH_MS,
@@ -13,6 +13,7 @@ import {
   type LobbyState,
 } from "./lobbyState";
 import { AdmissionQueue, type QueueSnapshot } from "./queue";
+import { applyHuntReport, huntRoomsInfo, pruneHunt, type HuntRoomsState } from "./huntRooms";
 
 // Lobby DO (전체에 하나, idFromName("lobby")).
 // - 각 Channel DO가 인원 변화를 1초 단위로 디바운스해 RPC(report)로 알려 준다(push).
@@ -26,12 +27,15 @@ import { AdmissionQueue, type QueueSnapshot } from "./queue";
 
 const SNAPSHOT_KEY = "lobby";
 const QUEUE_KEY = "queue";
+const HUNT_KEY = "hunt";
 
 export class LobbyDO extends DurableObject<Env> {
   private readonly cfg: Config;
   private readonly state: LobbyState;
   private readonly visitors: VisitorRegistry;
   private readonly queue: AdmissionQueue;
+  /** 11/12 사냥터 방 인원 (방 DO가 보고, 바뀔 때마다 저장 — 몇 바이트) */
+  private readonly hunt: HuntRoomsState;
   private dirty = false;
   private snapshotDueAt: number | null = null;
   private refreshDueAt: number;
@@ -43,6 +47,7 @@ export class LobbyDO extends DurableObject<Env> {
     this.cfg = readConfig(env);
     this.visitors = new VisitorRegistry(this.cfg.capacity * this.cfg.maxChannels * 4);
     this.state = ctx.storage.kv.get<LobbyState>(SNAPSHOT_KEY) ?? emptyLobby();
+    this.hunt = ctx.storage.kv.get<HuntRoomsState>(HUNT_KEY) ?? {};
     this.queue = new AdmissionQueue(this.cfg, ctx.storage.kv.get<QueueSnapshot>(QUEUE_KEY), Date.now());
     this.refreshDueAt = Date.now() + LOBBY_REFRESH_MS;
     // 새로 떴다 = 메모리를 잃었다(유휴 DO는 로컬 workerd에서 약 10초, 운영에서 70~140초 뒤 내려간다).
@@ -56,6 +61,18 @@ export class LobbyDO extends DurableObject<Env> {
     if (!this.validChannel(channel) || !Number.isInteger(count) || count < 0 || !Number.isFinite(seq)) return;
     if (applyReport(this.state, channel, count, seq, Date.now(), true)) this.markDirty();
     this.settleQueue();
+  }
+
+  /** 11/12 사냥터 방 DO → 인원 보고 (변화 시 1초 디바운스 + 5분마다). 사냥터 방이 아니면 무시 */
+  reportRoom(room: string, count: number, seq: number): void {
+    const now = Date.now();
+    const pruned = pruneHunt(this.hunt, now);
+    if (applyHuntReport(this.hunt, room, count, seq, now) || pruned) this.ctx.storage.kv.put(HUNT_KEY, this.hunt);
+  }
+
+  /** Worker → GET /hunt-rooms */
+  huntRooms(): HuntRoomsInfo {
+    return huntRoomsInfo(this.hunt, Date.now());
   }
 
   /**

@@ -1,12 +1,29 @@
 "use client";
 
+import { itemName } from "@tomb/protocol";
 import { useEffect, useId, useRef, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { meStore, useMe } from "@/lib/hooks/useMe";
-import { DIFFS, GAMES, gearById, HUNT_ZONES, isZoneId, potionById, ZONE_IDS, ZONES, type Difficulty, type GameKind, type SkillId, type ZoneId } from "@/lib/rpg/catalog";
+import {
+  DIFFS,
+  GAMES,
+  gearById,
+  HUNT_ZONES,
+  isZoneId,
+  MONSTERS,
+  potionById,
+  ZONE_IDS,
+  ZONES,
+  zoneFor,
+  type Difficulty,
+  type GameKind,
+  type MonsterId,
+  type SkillId,
+  type ZoneId,
+} from "@/lib/rpg/catalog";
 import { rpgApi, type CharacterAction } from "@/lib/rpg/client";
 import type { RpgView, RunReward, RunResult } from "@/lib/rpg/types";
 import { readItem } from "@/lib/storage";
@@ -16,10 +33,13 @@ import { resolveAvatar } from "../account/wardrobe";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
-import { pts } from "./format";
+import { mmss, pts } from "./format";
+import { gearGrade } from "./gear";
+import HuntGuide from "./HuntGuide";
 import { CharacterPanel, GearPanel, LOBBY_HIDDEN, ShopPanel, SkillPanel, StartPanel } from "./Panels";
 import LevelUpSound from "./LevelUpSound";
 import RpgIcon from "./RpgIcon";
+import ItemIcon from "../ui/ItemIcon";
 import RunHud from "./RunHud";
 import s from "./rpg.module.css";
 
@@ -37,8 +57,22 @@ const TABS: [Tab, string][] = [
 ];
 
 type Phase = "lobby" | "starting" | "playing" | "paused" | "submitting" | "result";
-type Run = { ticket: string; game: GameKind; difficulty: Difficulty; hotbar: (SkillId | null)[]; seed: number };
-type Outcome = { result: RunResult; aborted: boolean; difficulty: Difficulty; reward?: RunReward; error?: string };
+type Run = {
+  ticket: string;
+  game: GameKind;
+  difficulty: Difficulty;
+  zone?: ZoneId;
+  hotbar: (SkillId | null)[];
+  seed: number;
+};
+type Outcome = {
+  result: RunResult;
+  aborted: boolean;
+  difficulty: Difficulty;
+  zone?: ZoneId;
+  reward?: RunReward;
+  error?: string;
+};
 
 const LS_PICK = "tomb.rpg.pick";
 
@@ -64,7 +98,10 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
   const { me } = useMe();
   const [savedColor] = useState(() => readItem(LS.color));
   const [openedAt] = useState(() => Date.now());
-  const figure = { ...resolveAvatar(avatar, me, savedColor), look: me ? currentLook(me.equipped, openedAt) : [] };
+  const figure = {
+    ...resolveAvatar(avatar, me, savedColor),
+    look: me ? currentLook(me.equipped, openedAt) : [],
+  };
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("start");
   const [pick, setPick] = useState(readPick);
@@ -72,6 +109,8 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // 사냥 안내서 (로비·멈춤 창 대신 같은 크기 창으로 띄운다)
+  const [guide, setGuide] = useState(false);
   const run = useRef<Run | null>(null);
   const phaseRef = useRef<Phase>("lobby");
   phaseRef.current = phase;
@@ -149,11 +188,14 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
   const onCharacter = (a: CharacterAction, ok?: string) => void act(() => rpgApi.character(a), ok);
 
   const onBuy = (id: string, qty: number) =>
-    void act(async () => {
-      const v = await rpgApi.buy(id, qty);
-      void meStore.refresh();
-      return v;
-    }, `${gearById(id)?.name ?? potionById(id)?.name}${qty > 1 ? ` ${qty}개` : ""}을(를) 샀어요.`);
+    void act(
+      async () => {
+        const v = await rpgApi.buy(id, qty);
+        void meStore.refresh();
+        return v;
+      },
+      `${gearById(id)?.name ?? potionById(id)?.name}${qty > 1 ? ` ${qty}개` : ""}을(를) 샀어요.`,
+    );
 
   const onSell = (id: string) => {
     setBusy(true);
@@ -177,7 +219,14 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
       const res = await rpgApi.start(game, difficulty, cur.zone);
       const c = res.view.character;
       setView(res.view);
-      run.current = { ticket: res.ticket, game, difficulty, hotbar: c.hotbar, seed: res.seed };
+      run.current = {
+        ticket: res.ticket,
+        game,
+        difficulty,
+        ...(res.zone ? { zone: res.zone } : {}),
+        hotbar: c.hotbar,
+        seed: res.seed,
+      };
       setOutcome(null);
       setPhase("playing");
       bridge.emit("rpg:play", {
@@ -208,10 +257,24 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
       .finish(r.ticket, result)
       .then((res) => {
         setView(res.view);
-        setOutcome({ result, aborted, difficulty: r.difficulty, reward: res.reward });
+        setOutcome({
+          result,
+          aborted,
+          difficulty: r.difficulty,
+          zone: r.zone,
+          reward: res.reward,
+        });
         void meStore.refresh();
       })
-      .catch((e) => setOutcome({ result, aborted, difficulty: r.difficulty, error: errorMessage(e) }))
+      .catch((e) =>
+        setOutcome({
+          result,
+          aborted,
+          difficulty: r.difficulty,
+          zone: r.zone,
+          error: errorMessage(e),
+        }),
+      )
       .finally(() => setPhase("result"));
   });
 
@@ -227,7 +290,8 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
             결과를 정리하는 중…
           </div>
         )}
-        {phase === "paused" && (
+        {phase === "paused" && guide && <HuntGuide onClose={() => setGuide(false)} />}
+        {phase === "paused" && !guide && (
           <Dialog kind="confirm" title="잠깐 멈춤" onClose={resume}>
             <div className={s.result}>
               <p>멈춘 동안 게임 시간은 흐르지 않아요. 너무 오래(2분 넘게) 멈추면 결과를 받을 수 없어요.</p>
@@ -247,6 +311,9 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
                   그만하고 나가기
                 </button>
               </div>
+              <button type="button" className={s.linkBtn} onClick={() => setGuide(true)}>
+                사냥 안내서 보기
+              </button>
             </div>
           </Dialog>
         )}
@@ -257,27 +324,31 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
   if (phase === "result" && outcome) {
     return (
       <Dialog title={`${GAMES[outcome.result.game].name} 결과`} onClose={() => setPhase("lobby")}>
-        <ResultView outcome={outcome} view={view} />
-        <div className={s.buttons} style={{ marginTop: 14 }}>
-          <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void start(outcome.result.game, cur.diff)}>
-            한 판 더
-          </button>
-          <button type="button" className={ui.button} onClick={() => setPhase("lobby")}>
-            로비로
-          </button>
-          <button type="button" className={cx(ui.button, ui.quiet)} onClick={onClose}>
-            월드로 나가기
-          </button>
+        <div className={s.resultFill}>
+          <ResultView outcome={outcome} view={view} />
+          {notice && <p className={s.notice}>{notice}</p>}
+          <div className={cx(s.buttons, s.resultDock)}>
+            <button type="button" className={cx(ui.button, ui.primary, s.start)} onClick={() => void start(outcome.result.game, cur.diff)}>
+              한 판 더
+            </button>
+            <button type="button" className={ui.button} onClick={() => setPhase("lobby")}>
+              로비로
+            </button>
+            <button type="button" className={cx(ui.button, ui.quiet)} onClick={onClose}>
+              월드로 나가기
+            </button>
+          </div>
         </div>
-        {notice && <p className={s.notice}>{notice}</p>}
       </Dialog>
     );
   }
 
+  if (guide) return <HuntGuide onClose={() => setGuide(false)} />;
+
   const c = view?.character;
   return (
     <Dialog title="사냥터" onClose={onClose}>
-      <div className={s.lobby}>
+      <div className={cx(s.lobby, s.lobbyFill)}>
         {view && c ? (
           <>
             <div className={s.summary}>
@@ -294,9 +365,16 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
               <span>
                 오늘 사냥 <strong>{view.today.huntPoints}</strong> / {view.today.cap}P
               </span>
+              <button type="button" className={cx(ui.button, s.small, s.guideOpen)} onClick={() => setGuide(true)}>
+                사냥 안내서
+              </button>
             </div>
             <div className={s.expBar} role="meter" aria-label="경험치" aria-valuenow={c.exp} aria-valuemin={0} aria-valuemax={view.expToNext || 1}>
-              <span style={{ width: `${view.expToNext ? Math.min(100, (c.exp / view.expToNext) * 100) : 100}%` }} />
+              <span
+                style={{
+                  width: `${view.expToNext ? Math.min(100, (c.exp / view.expToNext) * 100) : 100}%`,
+                }}
+              />
             </div>
             <div className={s.tabs} role="tablist" aria-label="사냥터 메뉴">
               {TABS.map(([k, label]) => (
@@ -319,7 +397,7 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
                 </button>
               ))}
             </div>
-            <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`}>
+            <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={s.tabPanel}>
               {tab === "start" && (
                 <StartPanel
                   view={view}
@@ -330,6 +408,7 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
                   onZone={(z) => setPick((p) => ({ ...p, diff: z.difficulty, zone: z.id }))}
                   onStart={() => void start()}
                   busy={phase === "starting"}
+                  onGuide={() => setGuide(true)}
                 />
               )}
               {tab === "character" && <CharacterPanel view={view} busy={busy} onCharacter={onCharacter} />}
@@ -354,7 +433,7 @@ function headline(o: Outcome): string {
   if (r.game === "hunt") {
     if (r.died) return "쓰러졌어요…";
     if (o.aborted) return "중간에 나왔어요";
-    return r.wavesCleared >= ZONES[o.difficulty].waves ? "모든 웨이브를 막아 냈어요!" : "시간이 다 됐어요";
+    return r.wavesCleared >= zoneFor(o.difficulty, o.zone).waves ? "모든 웨이브를 막아 냈어요!" : "시간이 다 됐어요";
   }
   if (r.game === "stars") {
     if (o.aborted) return "중간에 나왔어요";
@@ -364,11 +443,51 @@ function headline(o: Outcome): string {
   return o.aborted ? "중간에 나왔어요" : "시간 끝!";
 }
 
+/** 판 기록 칸 (게임마다) */
+function runStats(o: Outcome): [string, string][] {
+  const r = o.result;
+  const time = mmss(r.durationMs);
+  if (r.game === "hunt") {
+    const kills = Object.values(r.kills).reduce((a, b) => a + (b ?? 0), 0);
+    const potions = Object.values(r.potionsUsed).reduce((a, b) => a + b, 0);
+    return [
+      ["웨이브", `${r.wavesCleared} / ${zoneFor(o.difficulty, o.zone).waves}`],
+      ["처치", `${kills}마리`],
+      ["걸린 시간", time],
+      ["먹은 포션", `${potions}개`],
+    ];
+  }
+  if (r.game === "stars")
+    return [
+      ["완벽", String(r.perfect)],
+      ["좋음", String(r.good)],
+      ["놓침", String(r.miss)],
+      ["최대 콤보", String(r.maxCombo)],
+    ];
+  return [
+    ["잡은 벌레", String(r.caught)],
+    ["황금 벌레", String(r.golden)],
+    ["최대 콤보", String(r.maxCombo)],
+    ["시간", time],
+  ];
+}
+
 function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null }) {
   const r = outcome.reward;
+  const res = outcome.result;
+  const zone = res.game === "hunt" ? zoneFor(outcome.difficulty, outcome.zone) : null;
+  const kills = res.game === "hunt" ? (Object.entries(res.kills) as [MonsterId, number][]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]) : [];
+  const c = view?.character;
+  const tone = res.game === "hunt" && res.died ? "lose" : outcome.aborted ? "quit" : "win";
   return (
-    <div className={s.result}>
-      <p className={s.resultBig}>{headline(outcome)}</p>
+    <div className={s.resultMain}>
+      <header className={s.resultHead} data-tone={tone}>
+        <p className={s.resultBig}>{headline(outcome)}</p>
+        <p className={s.meta}>
+          {zone ? `${zone.name} · ` : ""}
+          {DIFFS[outcome.difficulty].name}
+        </p>
+      </header>
       {outcome.error ? (
         <p className={ui.error}>{outcome.error}</p>
       ) : r ? (
@@ -382,42 +501,118 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
             </div>
             <div>
               <strong>{r.score.toLocaleString("ko-KR")}</strong>
-              {outcome.result.game === "hunt" ? "처치 점수" : "점수"}
+              {res.game === "hunt" ? "처치 점수" : "점수"}
             </div>
           </div>
-          {r.capped && <p className={ui.hint}>오늘 사냥 포인트 한도(또는 하루 전체 한도)에 닿아서 {r.pointsRaw}P 중 {r.points}P만 받았어요.</p>}
+          {r.capped && (
+            <p className={ui.hint}>
+              오늘 사냥 포인트 한도(또는 하루 전체 한도)에 닿아서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
+            </p>
+          )}
           {r.levelsGained > 0 && (
             <p className={s.levelUp} role="status">
               레벨 업! Lv.{r.newLevel} · 능력치·스킬 포인트를 받았어요
               <LevelUpSound level={r.newLevel} />
             </p>
           )}
-          {r.drops.length > 0 && (
-            <div>
-              <p className={ui.hint}>주운 것</p>
-              <div className={s.drops}>
-                {r.drops.map((d, i) => {
-                  const def = d.kind === "gear" ? gearById(d.id) : potionById(d.id);
-                  if (!def) return null;
-                  return (
-                    <span key={i} className={s.drop}>
-                      <RpgIcon art={def.art} size={32} />
-                      {def.name}
-                      {d.qty > 1 && ` ×${d.qty}`}
-                    </span>
-                  );
-                })}
-              </div>
-              {r.lostDrops > 0 && <p className={s.warn}>가방이 가득 차서 {r.lostDrops}개는 못 챙겼어요.</p>}
-            </div>
-          )}
-          {view && (
-            <p className={ui.hint}>
-              Lv.{view.character.level} · EXP {view.character.exp}/{view.expToNext || "MAX"} · 오늘 사냥 포인트 {view.today.huntPoints}/{view.today.cap}
-            </p>
-          )}
         </>
       ) : null}
+
+      <dl className={s.runStats}>
+        {runStats(outcome).map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className={s.resultCols}>
+        <section className={s.resultBox} aria-label="주운 것">
+          <h3 className={s.resultBoxTitle}>주운 것</h3>
+          {r && r.drops.length > 0 ? (
+            <div className={s.drops}>
+              {r.drops.map((d, i) => {
+                // 11/12 기간제 코디(꾸미기 하루권): 상점 아이템 이름·아이콘, 꾸미기 가방으로 들어간다
+                if (d.kind === "cosmetic")
+                  return (
+                    <span key={i} className={s.drop}>
+                      <ItemIcon itemId={d.id} size={32} />
+                      <span>{itemName(d.id)}</span>
+                      <span className={s.meta}>기간제 코디 · 꾸미기 가방</span>
+                    </span>
+                  );
+                const def = d.kind === "gear" ? gearById(d.id) : potionById(d.id);
+                const gear = d.kind === "gear" ? gearById(d.id) : undefined;
+                return (
+                  <span key={i} className={s.drop} style={gear ? { borderColor: gearGrade(gear).color } : undefined}>
+                    {def ? <RpgIcon art={def.art} size={32} /> : <span className={s.slotEmpty} aria-hidden="true" />}
+                    <span>
+                      {def?.name ?? d.id}
+                      {d.qty > 1 && ` ×${d.qty}`}
+                    </span>
+                    {gear && (
+                      <span className={s.meta} style={{ color: gearGrade(gear).color }}>
+                        {gearGrade(gear).label} · Lv.{gear.reqLevel}
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          ) : (
+            <p className={s.meta}>이번 판엔 주운 게 없어요. 많이 잡을수록, 우두머리까지 잡으면 더 잘 나와요.</p>
+          )}
+          {r && r.lostDrops > 0 && <p className={s.warn}>가방이 가득 차서 {r.lostDrops}개는 못 챙겼어요.</p>}
+        </section>
+        {kills.length > 0 && (
+          <section className={s.resultBox} aria-label="잡은 몬스터">
+            <h3 className={s.resultBoxTitle}>잡은 몬스터</h3>
+            <ul className={s.killList}>
+              {kills.map(([id, n]) => (
+                <li key={id}>
+                  <span>
+                    {MONSTERS[id]?.name ?? id}
+                    {zone?.boss === id && <b className={s.bossTag}>우두머리</b>}
+                  </span>
+                  <span>×{n}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+
+      {view && c && (
+        <div className={s.resultProgress}>
+          <div className={s.barLabel}>
+            <span>Lv.{c.level} 경험치</span>
+            <span>
+              {c.exp.toLocaleString("ko-KR")} / {view.expToNext ? view.expToNext.toLocaleString("ko-KR") : "MAX"}
+            </span>
+          </div>
+          <div className={s.expBar}>
+            <span
+              style={{
+                width: `${view.expToNext ? Math.min(100, (c.exp / view.expToNext) * 100) : 100}%`,
+              }}
+            />
+          </div>
+          <div className={s.barLabel}>
+            <span>오늘 사냥 포인트</span>
+            <span>
+              {view.today.huntPoints} / {view.today.cap}
+            </span>
+          </div>
+          <div className={cx(s.expBar, s.capBar)}>
+            <span
+              style={{
+                width: `${view.today.cap ? Math.min(100, (view.today.huntPoints / view.today.cap) * 100) : 100}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

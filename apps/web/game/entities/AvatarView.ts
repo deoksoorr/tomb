@@ -92,6 +92,8 @@ export class AvatarView {
   sitSince = 0;
   /** 의자 위처럼 y 정렬을 덮어써야 할 때 */
   depthOverride: number | null = null;
+  /** 실내로 들어가며 흐려지는·문에서 나타나는 정도 (1 = 그대로). 원격 아바타(RemoteAvatar)가 넣는다 */
+  fade = 1;
   /**
    * 50번 조각배·시소·트램펄린·회전목마: 씬(PlazaRides·BoatRide)이 매 프레임 넣어 주는 그림 연출.
    * ox = 앵커에서 옆으로(회전목마), lift = 위로 띄우는 높이, depth = 그릴 순서 (null이면 그대로). 논리 위치는 그대로다.
@@ -645,6 +647,10 @@ export class AvatarView {
     if (this.label.scaleX !== labelScale) this.label.setScale(labelScale);
     const vis = s.visible;
     const bx = s.x - this.poseDx;
+    const fa = this.fade;
+    if (s.alpha !== fa) s.setAlpha(fa);
+    if (this.label.alpha !== fa) this.label.setAlpha(fa);
+    if (this.shadow && this.shadow.alpha !== fa) this.shadow.setAlpha(fa);
 
     for (let i = 0; i < this.aura.length; i++) {
       // 반딧불 세 마리가 몸 둘레를 천천히 돈다
@@ -692,8 +698,10 @@ export class AvatarView {
           reduced: this.reduced,
           riding: this.mountedIn(st),
           hop: this.hop,
+          water: st === "swim" || st === "dive" ? st : null,
         },
         vis,
+        fa,
       );
     }
 
@@ -806,6 +814,7 @@ export class AvatarView {
         .setPosition(Math.round(this.petX), Math.round(this.petY - 4 + bob))
         .setFlipX(this.petX > s.x)
         .setDepth(this.petY)
+        .setAlpha(0.72 * this.fade)
         .setVisible(vis);
     }
     if (this.sparkle) {

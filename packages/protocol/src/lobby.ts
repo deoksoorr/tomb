@@ -62,3 +62,21 @@ export function pickChannel(lobby: LobbyInfo, exclude: ReadonlySet<number> = new
   const rest = usable.sort((a, b) => a.count - b.count || a.id - b.id);
   return rest.length ? rest[0].id : null;
 }
+
+// ── 11/12 사냥터별 지금 사냥 중인 인원 (GET /hunt-rooms) ──
+
+/** 사냥터 방 id: "hunt:{zone}:{difficulty}" (ROOM_ID_RE의 사냥터 형식) */
+export const HUNT_ROOM_RE = /^hunt:[a-z0-9_-]{1,24}:[a-z]{1,10}$/;
+export const isHuntRoom = (id: string | null | undefined): id is string => typeof id === "string" && HUNT_ROOM_RE.test(id);
+/** 엣지·메모리 캐시 (사냥터 고르는 화면이 가끔 묻는다 — 가볍게) */
+export const HUNT_ROOMS_CACHE_SEC = 10;
+/**
+ * 방 DO가 보고한 지 이보다 오래된 기록은 비었다고 본다. 사람이 있는 방은 5분마다(유령 연결 정리 알람) 다시 보고하므로
+ * 그 두 배 + 여유
+ */
+export const HUNT_ROOM_STALE_MS = 11 * 60_000;
+/** 한 번에 기억하는 사냥터 방 수 상한 (이상한 방 id가 쌓이지 않게) */
+export const HUNT_ROOMS_MAX = 200;
+
+/** GET /hunt-rooms 응답: 사람이 있는 사냥터 방만 (방 id → 인원). at = 만든 시각 */
+export type HuntRoomsInfo = { rooms: Record<string, number>; at: number };

@@ -4,9 +4,9 @@ import { useEffect, useState, type FormEvent } from "react";
 import { channelStatus, type ChannelInfo, type ChannelStatus } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { lastChannel } from "@/lib/channelHistory";
-import { housingApi } from "@/lib/housing/client";
 import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
-import { isChannelSelectable, useLobby } from "@/lib/hooks/useLobby";
+import { isChannelSelectable, useLobby, visibleChannels } from "@/lib/hooks/useLobby";
+import { useMyHouseChannel } from "@/lib/hooks/useMyHouseChannel";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import { InfoCard, TipList } from "../ui/InfoBlocks";
@@ -25,22 +25,6 @@ type Props = {
   /** 내 묘비가 있는 채널들 (묘비마다 하나, 겹칠 수 있다) */
   graveChannels?: readonly number[];
 };
-
-/** 내 집이 있는 채널 (없으면 null, 모르면 undefined) */
-function useMyHouseChannel(): number | null | undefined {
-  const [ch, setCh] = useState<number | null | undefined>(undefined);
-  useEffect(() => {
-    let alive = true;
-    housingApi
-      .mine()
-      .then((r) => alive && setCh(r.house?.ch ?? null))
-      .catch(() => alive && setCh(null));
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return ch;
-}
 
 /** 지금 같은 채널에 보이는 사람들 닉네임 (게임에 물어본다) */
 function usePeerNames(): string[] | null {
@@ -66,9 +50,11 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
   const [previous] = useState(() => lastChannel(current));
   const houseCh = useMyHouseChannel();
   const peers = usePeerNames();
+  // 평소에는 채널 몇 개만 열려 있다(붐비면 자동으로 더 열린다). 닫힌 채널이라도 내 집·내 묘비·지금 채널은 보여 준다
+  const mine = [houseCh, current, ...graveChannels];
 
   // 골라 둔 채널이 그사이 가득 차면 선택을 푼다
-  if (choice !== null && lobby.lobby && !isChannelSelectable(lobby.lobby, choice)) setChoice(null);
+  if (choice !== null && lobby.lobby && !isChannelSelectable(lobby.lobby, choice, mine)) setChoice(null);
 
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -77,7 +63,7 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
     onClose();
   }
 
-  const channels = lobby.lobby?.channels.filter((c) => c.open) ?? [];
+  const channels = visibleChannels(lobby.lobby, mine);
   const threshold = lobby.lobby?.threshold;
   const graveCount = (id: number) => graveChannels.filter((c) => c === id).length;
 
@@ -138,7 +124,7 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
             <span>채널 고르기</span>
             {lobby.lobby && (
               <span className={styles.total}>
-                지금 마을 전체 {lobby.lobby.total}명 · 채널 {channels.length}개
+                지금 마을 전체 {lobby.lobby.total}명 · 열린 채널 {lobby.lobby.channels.filter((c) => c.open).length}개
               </span>
             )}
           </div>
@@ -153,11 +139,12 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
             <TipList
               tips={[
                 "채널마다 묘역·주거 구역·모닥불이 따로예요. 같은 채널에 있는 사람끼리만 서로 보여요.",
+                "평소에는 채널 몇 개만 열려 있고, 사람이 많아지면 다음 채널이 저절로 열려요.",
                 "채널을 옮겨도 캐릭터는 지금 서 있던 자리 그대로예요. 가방·포인트도 그대로 따라가요.",
                 <>
                   <b>혼잡</b>은 곧 찰 수 있다는 뜻이고, <b>만석</b>인 채널은 자리가 날 때까지 고를 수 없어요.
                 </>,
-                "내 집과 내 묘비는 세운 채널에만 있어요. 카드의 표시를 보고 찾아가세요.",
+                "내 집과 내 묘비는 세운 채널에만 있어요. 그 채널이 닫혀 있어도 목록에 보이니 카드의 표시를 보고 찾아가세요.",
                 "확성기는 그 채널에만, 전체 확성기는 모든 채널에 들려요.",
               ]}
             />

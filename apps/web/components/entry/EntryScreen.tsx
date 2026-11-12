@@ -4,6 +4,7 @@ import { useEffect, useId, useState, type CSSProperties, type FormEvent } from "
 import Link from "next/link";
 import {
   AVATAR_BODIES,
+  STARTER_BODIES,
   AVATAR_COLORS,
   checkName,
   isAvatarBody,
@@ -15,6 +16,7 @@ import { api, errorMessage } from "@/lib/api";
 import { useAmbience } from "@/lib/hooks/useAmbience";
 import { prefetchGraves } from "@/lib/hooks/useGraves";
 import { isChannelSelectable, useLobby } from "@/lib/hooks/useLobby";
+import { useMyHouseChannel } from "@/lib/hooks/useMyHouseChannel";
 import { useHydrated } from "@/lib/hooks/useMedia";
 import { meStore } from "@/lib/hooks/useMe";
 import { useNotices } from "@/lib/hooks/useNotices";
@@ -358,7 +360,8 @@ function LookStep({ draft, onBack, onNext }: DraftProps & { onBack: (draft: Look
       <fieldset className={styles.colors}>
         <legend className={ui.label}>몸 모양</legend>
         <div className={styles.bodies}>
-          {AVATAR_BODIES.map((b) => (
+          {/* 처음엔 무료 6종만 (프리미엄 외형은 상점 「염색·외형」에서 선택권으로) */}
+          {STARTER_BODIES.map((b) => (
             <label key={b.id} className={styles.bodyOption}>
               <input
                 type="radio"
@@ -483,6 +486,8 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter }: Cha
   const [existing, setExisting] = useState<Me | null>(null);
   const [confirmFresh, setConfirmFresh] = useState(false);
   const lobby = useLobby();
+  // 내 집 채널: 평소 닫혀 있는 채널에 집이 있어도 목록에 보여 준다 (새로 시작이면 집이 없다)
+  const houseCh = useMyHouseChannel(path.kind !== "new");
 
   useEffect(() => {
     if (path.kind !== "new") return;
@@ -495,7 +500,7 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter }: Cha
   }, [path.kind]);
 
   // 골라 둔 채널이 그사이 가득 차면 자동 배정으로 되돌린다
-  if (typeof channel === "number" && lobby.lobby && !isChannelSelectable(lobby.lobby, channel)) setChannel("auto");
+  if (typeof channel === "number" && lobby.lobby && !isChannelSelectable(lobby.lobby, channel, [houseCh])) setChannel("auto");
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -546,7 +551,7 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter }: Cha
       {sharedChannel ? (
         <p className={styles.shared}>공유받은 묘비가 있는 {sharedChannel}채널로 들어가요.</p>
       ) : (
-        <ChannelPicker lobby={lobby} value={channel} onChange={setChannel} allowAuto />
+        <ChannelPicker lobby={lobby} value={channel} onChange={setChannel} allowAuto houseChannel={houseCh ?? null} />
       )}
 
       {confirmFresh && (

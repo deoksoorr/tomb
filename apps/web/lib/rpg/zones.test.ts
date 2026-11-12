@@ -141,8 +141,8 @@ describe("40번 출현 계획·서버 검증 (사냥터마다)", () => {
       expect(clear(zs.at(-1)!.id).points).toBeGreaterThan(clear(zs[0].id).points);
     }
     expect(monsterStats("rush_commuter", "easy", 1.15).maxHp).toBeGreaterThan(monsterStats("rush_commuter", "easy").maxHp);
-    // 우두머리를 잡고 다 깨면 장비 하나 확정
-    expect(clear("gym").drops.some((x) => x.kind === "gear")).toBe(true);
+    // 11/12: 우두머리 장비는 확률 — 시드 몇 개 중엔 나온다
+    expect(Array.from({ length: 40 }, (_, i) => clear("gym", i + 1)).some((v) => v.drops.some((x) => x.kind === "gear"))).toBe(true);
   });
 
   it("런 티켓: 사냥터 id는 그 난이도의 것만", async () => {

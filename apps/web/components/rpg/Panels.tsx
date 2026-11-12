@@ -14,6 +14,7 @@ import {
   MONSTERS,
   POTIONS,
   SKILLS,
+  skillById,
   SLOT_LABELS,
   slotKind,
   STAT_KEYS,
@@ -25,6 +26,7 @@ import {
   type GearDef,
   type GearKind,
   type GearSlot,
+  type SkillDef,
   type SkillId,
   type Stats,
   type ZoneDef,
@@ -71,6 +73,7 @@ export function StartPanel({
   onZone,
   onStart,
   busy,
+  onGuide,
 }: {
   view: RpgView;
   game: GameKind;
@@ -81,6 +84,8 @@ export function StartPanel({
   onZone?: (z: ZoneDef) => void;
   onStart: () => void;
   busy: boolean;
+  /** 사냥 안내서 열기 */
+  onGuide?: () => void;
 }) {
   const c = view.character;
   const zone = zoneFor(diff, zoneId);
@@ -89,16 +94,60 @@ export function StartPanel({
   const zoneLocked = game === "hunt" && !zoneOpen(zone, c.level, zoneUnlockAll());
   const capLeft = Math.max(0, view.today.cap - view.today.huntPoints);
   const monsters = [...new Set([...zone.pool])].map((id) => MONSTERS[id].name);
+  const canStart = !busy && view.today.runsPerHour > 0 && !zoneLocked;
+  const todayLine = (
+    <p className={s.meta}>
+      오늘 사냥 포인트 {view.today.huntPoints} / {view.today.cap}
+      {capLeft === 0 && " · 오늘 한도를 다 채워서 EXP와 드롭만 받아요"} · 이번 시간 남은 판 {view.today.runsPerHour}
+    </p>
+  );
+  const startButton = (
+    <button type="button" className={cx(ui.button, ui.primary, s.start)} onClick={onStart} disabled={!canStart}>
+      {busy ? "준비 중…" : zoneLocked ? `Lv.${zone.unlockLevel}부터` : `${game === "hunt" ? zone.name : GAMES[game].name} 출발`}
+    </button>
+  );
+
+  // 사냥: 카드를 누르면 그 줄 바로 아래에 설명이 펼쳐지고, 설명 끝에 출발 버튼이 이어진다 (시선 이동 최소)
+  if (game === "hunt" && onZone) {
+    return (
+      <div className={s.lobby}>
+        <section className={s.section} aria-label="사냥터 고르기">
+          <ZonePicker
+            level={c.level}
+            zone={zone.id}
+            onZone={onZone}
+            detail={
+              <>
+                <ZoneInfo z={zone} />
+                {zoneLocked && (
+                  <p className={s.warn}>
+                    {zone.name}은(는) Lv.{zone.unlockLevel}부터 갈 수 있어요.
+                  </p>
+                )}
+                {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
+                <div className={s.zoneGo}>
+                  {todayLine}
+                  {startButton}
+                </div>
+              </>
+            }
+          />
+        </section>
+        {onGuide && (
+          <p className={s.meta}>
+            조작·몬스터 패턴·보상이 궁금하면{" "}
+            <button type="button" className={s.linkBtn} onClick={onGuide}>
+              사냥 안내서
+            </button>
+            를 펼쳐 보세요.
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={s.lobby}>
-      {game === "hunt" && onZone ? (
-        <section className={s.section} aria-label="사냥터 고르기">
-          <ZonePicker level={c.level} zone={zone.id} onZone={onZone} />
-          <ZoneInfo z={zone} />
-          {zoneLocked && <p className={s.warn}>{zone.name}은(는) Lv.{zone.unlockLevel}부터 갈 수 있어요.</p>}
-          {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
-        </section>
-      ) : (
       <section className={s.section} aria-labelledby="rpg-diff">
         <h3 id="rpg-diff" className={s.sectionTitle}>
           난이도
@@ -126,19 +175,12 @@ export function StartPanel({
         )}
         {low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
       </section>
-      )}
 
-      {/* 조작 안내는 목록 쪽에, 아래에 붙는 출발 줄은 짧게 (오늘 남은 포인트·판 + 출발) */}
       <p className={s.meta}>{game === "hunt" ? GAMES.hunt.how : "끝나면 점수에 따라 포인트·EXP를 받아요."}</p>
 
       <div className={cx(s.startRow, s.startDock)}>
-        <p className={s.meta}>
-          오늘 사냥 포인트 {view.today.huntPoints} / {view.today.cap}
-          {capLeft === 0 && " · 오늘 한도를 다 채워서 EXP와 드롭만 받아요"} · 이번 시간 남은 판 {view.today.runsPerHour}
-        </p>
-        <button type="button" className={cx(ui.button, ui.primary, s.start)} onClick={onStart} disabled={busy || view.today.runsPerHour <= 0 || zoneLocked}>
-          {busy ? "준비 중…" : `${GAMES[game].name} 출발`}
-        </button>
+        {todayLine}
+        {startButton}
       </div>
     </div>
   );
@@ -182,10 +224,22 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
                 <span className={s.statVal}>
                   {c.stats[k] + add}
                   {add > 0 && <span className={s.plus}> (+{add})</span>}
-                  {gear !== 0 && <span className={s.meta}> 장비 {gear > 0 ? "+" : ""}{gear}</span>}
+                  {gear !== 0 && (
+                    <span className={s.meta}>
+                      {" "}
+                      장비 {gear > 0 ? "+" : ""}
+                      {gear}
+                    </span>
+                  )}
                 </span>
                 <span className={s.stepper}>
-                  <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => bump(k, -1)} disabled={!add} aria-label={`${STAT_LABELS[k].name} 1 내리기`}>
+                  <button
+                    type="button"
+                    className={cx(ui.button, ui.quiet)}
+                    onClick={() => bump(k, -1)}
+                    disabled={!add}
+                    aria-label={`${STAT_LABELS[k].name} 1 내리기`}
+                  >
                     −
                   </button>
                   <button
@@ -202,9 +256,7 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
             );
           })}
         </div>
-        <p className={s.meta}>
-          {STAT_KEYS.map((k) => `${STAT_LABELS[k].name}: ${STAT_LABELS[k].desc}`).join(" · ")}
-        </p>
+        <p className={s.meta}>{STAT_KEYS.map((k) => `${STAT_LABELS[k].name}: ${STAT_LABELS[k].desc}`).join(" · ")}</p>
         <div className={s.startRow}>
           <span className={s.meta}>레벨이 오를 때마다 능력치 포인트 3개 (5의 배수 레벨엔 5개)</span>
           <button
@@ -251,7 +303,13 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
 /** 칸 배치: 머리는 위, 무기는 손 옆, 갑옷은 몸통 옆, 장신구는 양쪽 아래 */
 const GEAR_AREAS = `". head ." "weapon fig armor" "acc1 fig acc2"`;
 /** 빈 칸에 흐리게 깔리는 그림 */
-const GEAR_SILHOUETTE: Record<GearSlot, string> = { weapon: "w_ruler", armor: "a_hoodie", head: "h_cap", acc1: "c_ide_ring", acc2: "c_earphones" };
+const GEAR_SILHOUETTE: Record<GearSlot, string> = {
+  weapon: "w_ruler",
+  armor: "a_hoodie",
+  head: "h_cap",
+  acc1: "c_ide_ring",
+  acc2: "c_earphones",
+};
 const TOTAL_ROWS: [keyof Omit<Derived, "stats">, string, (v: number) => string][] = [
   ["atk", "ATK", String],
   ["def", "DEF", String],
@@ -281,7 +339,10 @@ export function GearPanel({
   onCharacter,
   onSell,
   figure,
-}: Common & { onSell: (id: string) => void; figure: { color: string; body: string; look: readonly string[] } }) {
+}: Common & {
+  onSell: (id: string) => void;
+  figure: { color: string; body: string; look: readonly string[] };
+}) {
   const c = view.character;
   const [pick, setPick] = useState<Pick>(null);
   const [filter, setFilter] = useState<GearFilter>("all");
@@ -354,7 +415,17 @@ export function GearPanel({
                 silhouette={<RpgIcon art={gearById(GEAR_SILHOUETTE[slot])?.art ?? GEAR[0].art} size={32} />}
                 sub={g ? bonusText(g.bonus) : null}
                 tone={grade?.color}
-                tip={g ? { title: `${g.name} (${grade!.label})`, body: `${bonusText(g.bonus)} · ${g.desc}${g.kind === "weapon" ? ` · ${weaponStyleText(g)}` : ""}` } : { title: `${SLOT_LABELS[slot]} · 비어 있어요`, body: "눌러서 이 칸에 낄 장비를 골라요." }}
+                tip={
+                  g
+                    ? {
+                        title: `${g.name} (${grade!.label})`,
+                        body: `${bonusText(g.bonus)} · ${g.desc}${g.kind === "weapon" ? ` · ${weaponStyleText(g)}` : ""}`,
+                      }
+                    : {
+                        title: `${SLOT_LABELS[slot]} · 비어 있어요`,
+                        body: "눌러서 이 칸에 낄 장비를 골라요.",
+                      }
+                }
                 selected={pick?.type === "slot" && pick.slot === slot}
                 highlight={pick?.type === "item" && pickedSlot === slot}
                 ariaLabel={`${SLOT_LABELS[slot]} 칸, ${g ? `${g.name} 장착 중` : "비어 있음"}. 누르면 이 칸에 낄 장비 목록`}
@@ -393,7 +464,9 @@ export function GearPanel({
                   {pickedGear.name}
                 </p>
                 <p className={s.meta}>
-                  {slotGear && slotGear.id !== pickedGear.id ? `${SLOT_LABELS[pickedSlot!]}의 ${slotGear.name} 대신 끼면` : `${SLOT_LABELS[pickedSlot!]}에 끼면`}
+                  {slotGear && slotGear.id !== pickedGear.id
+                    ? `${SLOT_LABELS[pickedSlot!]}의 ${slotGear.name} 대신 끼면`
+                    : `${SLOT_LABELS[pickedSlot!]}에 끼면`}
                   {diff.length === 0 && " 달라지는 게 없어요"}
                 </p>
                 {pickedGear.kind === "weapon" && <p className={s.meta}>공격 방식: {weaponStyleText(pickedGear)}</p>}
@@ -428,7 +501,10 @@ export function GearPanel({
       <section className={s.section} aria-labelledby="rpg-inv">
         <div className={s.bagHead}>
           <h3 id="rpg-inv" className={s.sectionTitle}>
-            가방 <span className={s.meta}>· {total}/{GEAR_INV_MAX}개 · 되팔면 산 값의 50% (주운 장비는 오늘 사냥 포인트 한도 안에서)</span>
+            가방{" "}
+            <span className={s.meta}>
+              · {total}/{GEAR_INV_MAX}개 · 되팔면 산 값의 50% (주운 장비는 오늘 사냥 포인트 한도 안에서)
+            </span>
           </h3>
           <div className={s.filter} role="group" aria-label="장비 종류로 거르기">
             {GEAR_FILTERS.map(([k, label]) => (
@@ -504,13 +580,7 @@ export function GearPanel({
                 ) : (
                   <div className={s.cellActions}>
                     {free < 1 ? (
-                      <button
-                        type="button"
-                        className={cx(ui.button, s.equipBtn)}
-                        disabled={busy}
-                        onClick={() => unequipAll(g)}
-                        aria-label={`${g.name} 빼기`}
-                      >
+                      <button type="button" className={cx(ui.button, s.equipBtn)} disabled={busy} onClick={() => unequipAll(g)} aria-label={`${g.name} 빼기`}>
                         빼기
                       </button>
                     ) : (
@@ -525,7 +595,13 @@ export function GearPanel({
                       </button>
                     )}
                     {free > 0 ? (
-                      <button type="button" className={cx(ui.button, s.sellBtn)} disabled={busy} onClick={() => sell(g)} aria-label={`${g.name} 1개 팔기, ${price}포인트`}>
+                      <button
+                        type="button"
+                        className={cx(ui.button, s.sellBtn)}
+                        disabled={busy}
+                        onClick={() => sell(g)}
+                        aria-label={`${g.name} 1개 팔기, ${price}포인트`}
+                      >
                         팔기 <b>{pts(price)}</b>
                       </button>
                     ) : (
@@ -543,166 +619,339 @@ export function GearPanel({
 }
 
 // ── 스킬 ──
+// 위: 단축키 칸 6개 (고른 스킬을 칸에 놓는다) · 아래 왼쪽: 스킬 아이콘 격자 (배운 것 / 아직 못 배운 것)
+// 오른쪽: 마우스를 올리거나 탭한 스킬 설명 + 배우기·단축키 놓기. 스킬 목록은 catalog(SKILLS)를 그대로 읽는다
+
+type SkillState = {
+  sk: SkillDef;
+  lv: number;
+  locked: boolean;
+  maxed: boolean;
+  why: string;
+  learnable: boolean;
+};
+
+function skillState(c: RpgView["character"], sk: SkillDef): SkillState {
+  const lv = c.skills[sk.id] ?? 0;
+  const reqs = (sk.requires ?? []).filter((r) => (c.skills[r.id] ?? 0) < r.level);
+  const locked = c.level < sk.reqLevel || reqs.length > 0;
+  const maxed = lv >= sk.maxLevel;
+  const why = [c.level < sk.reqLevel ? `Lv.${sk.reqLevel}부터` : "", ...reqs.map((r) => `${skillById(r.id)?.name ?? r.id} ${r.level}단계 필요`)]
+    .filter(Boolean)
+    .join(" · ");
+  return {
+    sk,
+    lv,
+    locked,
+    maxed,
+    why,
+    learnable: !locked && !maxed && c.skillPoints > 0,
+  };
+}
 
 export function SkillPanel({ view, busy, onCharacter }: Common) {
   const c = view.character;
+  const all = SKILLS.map((sk) => skillState(c, sk));
+  const learned = all.filter((x) => x.lv > 0);
+  const notYet = all.filter((x) => x.lv === 0);
+  const [picked, setPicked] = useState<SkillId>(() => (learned[0] ?? all[0]).sk.id);
+  const [hover, setHover] = useState<SkillId | null>(null);
+  const shown = all.find((x) => x.sk.id === (hover ?? picked)) ?? all[0];
+  const pickedState = all.find((x) => x.sk.id === picked);
   const setKey = (id: SkillId, slot: number | null) => {
     const next = c.hotbar.map((h) => (h === id ? null : h));
     if (slot !== null) next[slot] = id;
     onCharacter({ type: "hotbar", slots: next }, slot === null ? "단축키에서 뺐어요." : `${slot + 1}번 단축키에 놓았어요.`);
   };
+  const cell = (x: SkillState) => {
+    const slot = c.hotbar.indexOf(x.sk.id);
+    return (
+      <button
+        key={x.sk.id}
+        type="button"
+        className={s.skCell}
+        aria-pressed={picked === x.sk.id}
+        data-locked={x.locked || undefined}
+        data-learnable={x.learnable || undefined}
+        aria-label={`${x.sk.name} ${x.lv}/${x.sk.maxLevel}단계${x.locked ? ` (${x.why})` : ""}`}
+        onClick={() => setPicked(x.sk.id)}
+        onPointerEnter={(e) => e.pointerType === "mouse" && setHover(x.sk.id)}
+        onPointerLeave={() => setHover(null)}
+        onFocus={() => setHover(x.sk.id)}
+        onBlur={() => setHover(null)}
+      >
+        <RpgIcon art={x.sk.art} size={32} />
+        <span className={s.skPips} aria-hidden="true">
+          {Array.from({ length: x.sk.maxLevel }, (_, i) => (
+            <i key={i} data-on={i < x.lv || undefined} />
+          ))}
+        </span>
+        <span className={s.skCellName}>{x.sk.name}</span>
+        {slot >= 0 && <span className={s.skKey}>{slot + 1}</span>}
+        {x.learnable && <span className={s.skNew}>+</span>}
+      </button>
+    );
+  };
+  const d = shown;
+  const lvShow = Math.max(1, d.lv);
+  const dSlot = c.hotbar.indexOf(d.sk.id);
   return (
-    <div className={s.lobby}>
-      <section className={s.section} aria-labelledby="rpg-hotbar">
+    <div className={cx(s.lobby, s.skillTab)}>
+      <section className={s.skHotbar} aria-labelledby="rpg-hotbar">
         <h3 id="rpg-hotbar" className={s.sectionTitle}>
-          단축키 <span className={s.meta}>· 스킬 포인트 {c.skillPoints} · 직업 없이 모든 스킬을 배울 수 있어요</span>
+          단축키{" "}
+          <span className={s.meta}>
+            · 스킬 포인트 <b className={s.points}>{c.skillPoints}</b> ·{" "}
+            {pickedState && pickedState.lv > 0 ? `${pickedState.sk.name}을(를) 놓을 칸을 누르세요` : "배운 스킬을 고르고 칸을 누르면 놓여요"}
+          </span>
         </h3>
         <div className={s.hotbar}>
           {Array.from({ length: HOTBAR_SIZE }, (_, i) => {
-            const sk = SKILLS.find((x) => x.id === c.hotbar[i]);
+            const sk = skillById(c.hotbar[i] ?? "");
+            const canPut = !!pickedState && pickedState.lv > 0 && c.hotbar[i] !== picked;
             return (
-              <div key={i} className={s.hotSlot}>
-                <span>{i + 1}</span>
+              <button
+                key={i}
+                type="button"
+                className={s.hotSlot}
+                data-target={canPut || undefined}
+                disabled={busy || (!canPut && !sk)}
+                aria-label={canPut ? `${i + 1}번 칸에 ${pickedState!.sk.name} 놓기` : sk ? `${i + 1}번 칸 ${sk.name} 보기` : `${i + 1}번 칸 비어 있음`}
+                onClick={() => (canPut ? setKey(picked, i) : sk && setPicked(sk.id))}
+              >
+                <span className={s.skKeyNum}>{i + 1}</span>
                 {sk ? <RpgIcon art={sk.art} size={32} /> : <span className={s.slotEmpty} aria-hidden="true" />}
-                <span>{sk?.name ?? "—"}</span>
-              </div>
+                <span>{sk?.name ?? "비어 있음"}</span>
+              </button>
             );
           })}
         </div>
       </section>
-      <ul className={s.list} aria-label="스킬 목록">
-        {SKILLS.map((sk) => {
-          const lv = c.skills[sk.id] ?? 0;
-          const reqs = (sk.requires ?? []).filter((r) => (c.skills[r.id] ?? 0) < r.level);
-          const locked = c.level < sk.reqLevel || reqs.length > 0;
-          const maxed = lv >= sk.maxLevel;
-          const slot = c.hotbar.indexOf(sk.id);
-          return (
-            <li key={sk.id} className={s.row}>
-              <RpgIcon art={sk.art} size={32} />
-              <div>
-                <p className={s.rowName}>
-                  {sk.name} <span className={s.meta}>({sk.tag}) · {lv}/{sk.maxLevel}단계</span>
-                </p>
-                <p className={s.meta}>
-                  {lv > 0 ? sk.describe(lv) : sk.describe(1)} · SP {sk.sp(Math.max(1, lv))} · 쿨타임 {sk.cooldownMs(Math.max(1, lv)) / 1000}초
-                </p>
-                {lv > 0 && !maxed && <p className={s.meta}>다음 단계: {sk.describe(lv + 1)}</p>}
-                {locked && (
-                  <p className={s.warn}>
-                    {c.level < sk.reqLevel ? `레벨 ${sk.reqLevel}부터` : ""}
-                    {reqs.map((r) => ` ${SKILLS.find((x) => x.id === r.id)!.name} ${r.level}단계 필요`).join(",")}
-                  </p>
-                )}
-              </div>
-              <div className={s.rowActions}>
-                {lv > 0 && (
-                  <select
-                    className={s.select}
-                    value={slot}
-                    disabled={busy}
-                    aria-label={`${sk.name} 단축키`}
-                    onChange={(e) => setKey(sk.id, Number(e.target.value) < 0 ? null : Number(e.target.value))}
-                  >
-                    <option value={-1}>단축키 없음</option>
-                    {Array.from({ length: HOTBAR_SIZE }, (_, i) => (
-                      <option key={i} value={i}>
-                        {i + 1}번
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <button
-                  type="button"
-                  className={cx(ui.button, s.small)}
-                  disabled={busy || locked || maxed || c.skillPoints < 1}
-                  onClick={() => onCharacter({ type: "learn", skill: sk.id }, `${sk.name} ${lv + 1}단계를 배웠어요.`)}
-                >
-                  {maxed ? "최고 단계" : lv ? "단계 올리기" : "배우기"}
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+
+      <div className={s.skBody}>
+        <div className={s.skGrids}>
+          <section aria-label="배운 스킬">
+            <h4 className={s.skGroup}>
+              배운 스킬 <span>{learned.length}</span>
+            </h4>
+            {learned.length > 0 ? (
+              <div className={s.skGrid}>{learned.map(cell)}</div>
+            ) : (
+              <p className={s.meta}>아직 배운 스킬이 없어요. 아래에서 골라 배워 보세요.</p>
+            )}
+          </section>
+          <section aria-label="아직 못 배운 스킬">
+            <h4 className={s.skGroup}>
+              아직 못 배운 스킬 <span>{notYet.length}</span>
+            </h4>
+            {notYet.length > 0 ? <div className={s.skGrid}>{notYet.map(cell)}</div> : <p className={s.meta}>모든 스킬을 배웠어요!</p>}
+          </section>
+          <p className={s.meta}>직업 없이 모든 스킬을 배울 수 있어요. 레벨이 오를 때마다 스킬 포인트를 받아요.</p>
+        </div>
+
+        <aside className={s.skDetail} aria-live="polite">
+          <div className={s.skDetailHead}>
+            <RpgIcon art={d.sk.art} size={48} />
+            <div>
+              <p className={s.cardName}>{d.sk.name}</p>
+              <p className={s.meta}>
+                {d.sk.tag} · {d.lv}/{d.sk.maxLevel}단계
+              </p>
+            </div>
+          </div>
+          <p>{d.sk.describe(lvShow)}</p>
+          <dl className={s.skFacts}>
+            <div>
+              <dt>SP</dt>
+              <dd>{d.sk.sp(lvShow)}</dd>
+            </div>
+            <div>
+              <dt>쿨타임</dt>
+              <dd>{d.sk.cooldownMs(lvShow) / 1000}초</dd>
+            </div>
+            <div>
+              <dt>단축키</dt>
+              <dd>{dSlot >= 0 ? `${dSlot + 1}번` : "—"}</dd>
+            </div>
+          </dl>
+          {d.lv > 0 && !d.maxed && <p className={s.meta}>다음 단계: {d.sk.describe(d.lv + 1)}</p>}
+          {d.locked && <p className={s.warn}>{d.why}</p>}
+          <div className={s.skActions}>
+            <button
+              type="button"
+              className={cx(ui.button, d.learnable && ui.primary)}
+              disabled={busy || !d.learnable}
+              onClick={() => onCharacter({ type: "learn", skill: d.sk.id }, `${d.sk.name} ${d.lv + 1}단계를 배웠어요.`)}
+            >
+              {d.maxed ? "최고 단계" : d.lv ? "단계 올리기" : "배우기"}
+              {!d.maxed && " (1포인트)"}
+            </button>
+            {dSlot >= 0 && (
+              <button type="button" className={cx(ui.button, ui.quiet)} disabled={busy} onClick={() => setKey(d.sk.id, null)}>
+                단축키에서 빼기
+              </button>
+            )}
+          </div>
+          {hover && hover !== picked && <p className={s.meta}>누르면 이 스킬을 골라요.</p>}
+        </aside>
+      </div>
     </div>
   );
 }
 
 // ── 상점 ──
+// 사내 매점(편의점) 느낌: 차양 간판 + 지갑, 구역(무기·방어구·장신구·물약) 통로 표지, 선반 위 상품 카드
+// (썸네일 · 가격표 · 지금 장비와 능력치 비교). 장비 종류가 늘면(catalog GEAR의 새 kind) 구역이 저절로 생긴다
 
-type ShopTab = "potion" | GearKind;
-const SHOP_TABS: [ShopTab, string][] = [
-  ["potion", "포션"],
-  ["weapon", "무기"],
-  ["armor", "갑옷"],
-  ["head", "머리"],
-  ["acc", "장신구"],
+type Aisle = { id: string; label: string; sign: string; kinds: GearKind[] } | { id: "potion"; label: string; sign: string; kinds: [] };
+const KNOWN_AISLES: Aisle[] = [
+  { id: "weapon", label: "무기", sign: "A1", kinds: ["weapon"] },
+  { id: "armor", label: "방어구", sign: "A2", kinds: ["armor", "head"] },
+  { id: "acc", label: "장신구", sign: "A3", kinds: ["acc"] },
 ];
+function shopAisles(): Aisle[] {
+  const known = new Set<string>(KNOWN_AISLES.flatMap((x) => x.kinds));
+  const extra = [...new Set(GEAR.map((g) => g.kind))].filter((k) => !known.has(k));
+  return [
+    ...KNOWN_AISLES,
+    ...extra.map((k, i) => ({
+      id: k,
+      label: KIND_LABELS[k] ?? k,
+      sign: `B${i + 1}`,
+      kinds: [k],
+    })),
+    { id: "potion", label: "물약", sign: "냉장", kinds: [] },
+  ];
+}
 
 export function ShopPanel({ view, busy, onBuy }: { view: RpgView; busy: boolean; onBuy: (id: string, qty: number) => void }) {
-  const [tab, setTab] = useState<ShopTab>("potion");
+  const aisles = shopAisles();
+  const [tab, setTab] = useState<string>(aisles[0].id);
+  const aisle = aisles.find((x) => x.id === tab) ?? aisles[0];
   const c = view.character;
   return (
-    <div className={s.lobby}>
-      <div className={s.startRow}>
-        <p className={s.summary}>
-          내 포인트 <strong className={s.points}>{pts(view.points)}</strong>
-        </p>
-        <div className={s.filter} role="group" aria-label="물건 종류">
-          {SHOP_TABS.map(([k, label]) => (
-            <button key={k} type="button" className={cx(ui.button, s.small)} aria-pressed={tab === k} onClick={() => setTab(k)}>
-              {label}
-            </button>
-          ))}
+    <div className={cx(s.lobby, s.shop)}>
+      <header className={s.shopSign}>
+        <span className={s.shopAwning} aria-hidden="true" />
+        <div className={s.shopSignRow}>
+          <p className={s.shopName}>
+            사내 매점 <span className={s.meta}>· 24시 · 법카 불가</span>
+          </p>
+          <p className={s.shopWallet}>
+            내 포인트 <strong className={s.points}>{pts(view.points)}</strong>
+          </p>
         </div>
+      </header>
+      <div className={s.aisles} role="tablist" aria-label="매점 구역">
+        {aisles.map((x) => (
+          <button key={x.id} type="button" role="tab" aria-selected={tab === x.id} className={s.aisle} onClick={() => setTab(x.id)}>
+            <span className={s.aisleSign}>{x.sign}</span>
+            {x.label}
+          </button>
+        ))}
       </div>
-      <ul className={s.list}>
-        {tab === "potion"
-          ? POTIONS.map((p) => (
-              <li key={p.id} className={s.row}>
-                <RpgIcon art={p.art} size={32} />
-                <div>
-                  <p className={s.rowName}>
-                    {p.name} <span className={s.meta}>· 가진 것 {c.potions[p.id] ?? 0}개{p.key ? ` · 단축키 ${p.key}` : " · 자동"}</span>
-                  </p>
-                  <p className={s.meta}>{p.desc}</p>
-                </div>
-                <div className={s.rowActions}>
+      <div className={s.shelf} role="tabpanel" aria-label={aisle.label}>
+        {aisle.id === "potion" ? (
+          <div className={s.shelfRow}>
+            {POTIONS.map((p) => (
+              <article key={p.id} className={s.product}>
+                <span className={s.thumb}>
+                  <RpgIcon art={p.art} size={48} />
+                  {p.key && <span className={s.thumbKey}>{p.key}</span>}
+                </span>
+                <p className={s.productName}>{p.name}</p>
+                <p className={s.meta}>{p.desc}</p>
+                <p className={s.meta}>
+                  가진 것 {c.potions[p.id] ?? 0}개{p.key ? ` · 단축키 ${p.key}` : " · 자동으로 먹어요"}
+                </p>
+                <span className={s.priceTag}>{pts(p.price)}</span>
+                <div className={s.productBuy}>
                   {[1, 5].map((q) => (
-                    <button key={q} type="button" className={cx(ui.button, s.small)} disabled={busy || view.points < p.price * q} onClick={() => onBuy(p.id, q)}>
-                      {q}개 {pts(p.price * q)}
+                    <button
+                      key={q}
+                      type="button"
+                      className={cx(ui.button, s.small)}
+                      disabled={busy || view.points < p.price * q}
+                      onClick={() => onBuy(p.id, q)}
+                      aria-label={`${p.name} ${q}개, ${p.price * q}포인트에 사기`}
+                    >
+                      {q}개
                     </button>
                   ))}
                 </div>
-              </li>
-            ))
-          : GEAR.filter((g) => g.kind === tab).map((g) => {
-              const n = c.inv[g.id] ?? 0;
-              return (
-                <li key={g.id} className={s.row}>
-                  <RpgIcon art={g.art} size={32} />
-                  <div>
-                    <p className={s.rowName}>
-                      {g.name} {n > 0 && <span className={s.meta}>· 가진 것 {n}개</span>}
-                    </p>
-                    <p className={s.meta}>
-                      Lv.{g.reqLevel} · {bonusText(g.bonus)}
-                    </p>
-                    {g.kind === "weapon" && <p className={s.meta}>공격 방식: {weaponStyleText(g)}</p>}
-                    <p className={s.meta}>{g.desc}</p>
-                    {c.level < g.reqLevel && <p className={s.warn}>레벨 {g.reqLevel}부터 낄 수 있어요</p>}
-                  </div>
-                  <div className={s.rowActions}>
-                    <button type="button" className={cx(ui.button, s.small)} disabled={busy || view.points < g.price} onClick={() => onBuy(g.id, 1)} aria-label={`${g.name}, ${g.price}포인트에 사기`}>
-                      {pts(g.price)} 사기
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-      </ul>
+              </article>
+            ))}
+          </div>
+        ) : (
+          aisle.kinds.map((kind) => {
+            const items = GEAR.filter((g) => g.kind === kind);
+            if (items.length === 0) return null;
+            const slot = equipTarget(c, kind);
+            const worn = gearById(c.equip[slot] ?? "");
+            return (
+              <section key={kind} className={s.shelfSection} aria-label={KIND_LABELS[kind]}>
+                {aisle.kinds.length > 1 && <h4 className={s.skGroup}>{KIND_LABELS[kind]}</h4>}
+                <p className={s.meta}>
+                  비교 기준: 지금 {SLOT_LABELS[slot]} 칸 — {worn ? worn.name : "비어 있음"}
+                </p>
+                <div className={s.shelfRow}>
+                  {items.map((g) => {
+                    const n = c.inv[g.id] ?? 0;
+                    const grade = gearGrade(g);
+                    const low = c.level < g.reqLevel;
+                    const diff = worn?.id === g.id ? [] : gearDiff(c, slot, g.id);
+                    const style = weaponStyleText(g);
+                    return (
+                      <article key={g.id} className={s.product} style={{ "--grade": grade.color } as CSSProperties} data-low={low || undefined}>
+                        <span className={s.thumb}>
+                          <RpgIcon art={g.art} size={48} />
+                          <span className={s.grade} style={{ color: grade.color }}>
+                            {grade.label}
+                          </span>
+                        </span>
+                        <p className={s.productName} title={g.desc}>
+                          {g.name}
+                        </p>
+                        <p className={s.meta}>
+                          Lv.{g.reqLevel} · {bonusText(g.bonus)}
+                        </p>
+                        {style && <p className={s.meta}>{style.split(" — ")[0]}</p>}
+                        <div className={s.cmpRow} aria-label="지금 장비와 비교">
+                          {worn?.id === g.id ? (
+                            <span className={s.meta}>지금 끼고 있어요</span>
+                          ) : diff.length === 0 ? (
+                            <span className={s.meta}>능력치 변화 없음</span>
+                          ) : (
+                            diff.map((x) => (
+                              <span key={x.key} className={x.delta > 0 ? s.deltaUp : s.deltaDown}>
+                                {x.label} {deltaText(x.delta)}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        {n > 0 && <p className={s.meta}>가진 것 {n}개</p>}
+                        {low && <p className={s.warn}>Lv.{g.reqLevel}부터 낄 수 있어요</p>}
+                        <span className={s.priceTag}>{pts(g.price)}</span>
+                        <div className={s.productBuy}>
+                          <button
+                            type="button"
+                            className={cx(ui.button, s.small)}
+                            disabled={busy || view.points < g.price}
+                            onClick={() => onBuy(g.id, 1)}
+                            aria-label={`${g.name}, ${g.price}포인트에 사기`}
+                          >
+                            사기
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
-

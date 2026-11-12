@@ -68,7 +68,8 @@ describe("46번 염색권·30번 영구 코디 카탈로그", () => {
     expect(permanentPrice("hat_straw")).toBeNull();
     for (const it of ITEMS) {
       const p = permanentPrice(it.id);
-      if (p !== null) {
+      if (it.staff) expect(p).toBe(0);
+      else if (p !== null) {
         expect(itemById(it.id)?.kind).toBe("cosmetic");
         expect(p / it.price).toBeGreaterThanOrEqual(6);
         expect(p / it.price).toBeLessThanOrEqual(8);

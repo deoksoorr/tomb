@@ -34,7 +34,8 @@ export class CosmeticFxView {
     return this.sim.labelTop(artTop, shoulder);
   }
 
-  sync(input: FxInput, visible: boolean): void {
+  /** fade = 실내로 들어가며 흐려지는 정도 (1 = 그대로) */
+  sync(input: FxInput, visible: boolean, fade = 1): void {
     if (this.sim.empty) return;
     this.cmds.length = 0;
     this.sim.step(input, this.cmds);
@@ -54,10 +55,15 @@ export class CosmeticFxView {
         .setScale(c.sx, c.sy)
         .setRotation(c.rot)
         .setFlipX(c.flip)
-        .setAlpha(c.alpha)
+        .setAlpha(c.alpha * fade)
         .setBlendMode(c.layer === "light" ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL)
         .setDepth(depth)
         .setVisible(visible);
+      // 물에 잠긴 펫: 아래쪽 crop줄을 잘라 수면 아래로 (crop이 없으면 되돌린다 — 이미지를 돌려 쓰므로)
+      if (c.crop) {
+        const a = FX_ART[c.art];
+        img.setCrop(0, 0, a.w, Math.max(0, a.h - c.crop));
+      } else if (img.isCropped) img.setCrop();
     }
     for (; i < this.pool.length; i++) if (this.pool[i].visible) this.pool[i].setVisible(false);
   }

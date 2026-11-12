@@ -101,12 +101,14 @@ describe("admitRoom", () => {
 
 describe("readConfig", () => {
   it("uses defaults and rejects invalid values", () => {
-    expect(readConfig({})).toEqual({ capacity: 40, maxChannels: 10, threshold: 0.8, graceMs: 20_000 });
+    expect(readConfig({})).toEqual({ capacity: 40, maxChannels: 10, baseChannels: 2, threshold: 0.8, graceMs: 20_000 });
     expect(
-      readConfig({ CHANNEL_CAPACITY: "25", MAX_CHANNELS: "3", AUTO_OPEN_THRESHOLD: "0.5", RECONNECT_GRACE_SEC: "0" }),
-    ).toEqual({ capacity: 25, maxChannels: 3, threshold: 0.5, graceMs: 0 });
-    expect(readConfig({ CHANNEL_CAPACITY: "abc", MAX_CHANNELS: "2.5", AUTO_OPEN_THRESHOLD: "3", RECONNECT_GRACE_SEC: "-1" })).toEqual(
-      readConfig({}),
-    );
+      readConfig({ CHANNEL_CAPACITY: "25", MAX_CHANNELS: "3", BASE_CHANNELS: "3", AUTO_OPEN_THRESHOLD: "0.5", RECONNECT_GRACE_SEC: "0" }),
+    ).toEqual({ capacity: 25, maxChannels: 3, baseChannels: 3, threshold: 0.5, graceMs: 0 });
+    expect(
+      readConfig({ CHANNEL_CAPACITY: "abc", MAX_CHANNELS: "2.5", BASE_CHANNELS: "11", AUTO_OPEN_THRESHOLD: "3", RECONNECT_GRACE_SEC: "-1" }),
+    ).toEqual(readConfig({}));
+    // 평소 채널 수는 채널 상한을 넘지 않는다
+    expect(readConfig({ MAX_CHANNELS: "1" }).baseChannels).toBe(1);
   });
 });

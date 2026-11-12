@@ -82,7 +82,7 @@ describe("부위", () => {
   it("상점 부위별 개수와 필터", () => {
     const counts = slotCounts(SHOP_COSMETICS);
     expect(counts.all).toBe(SHOP_COSMETICS.length);
-    expect(counts.head).toBe(13); // 기본 4 + F8 추가 9
+    expect(counts.head).toBe(18); // 기본 4 + F8 추가 9 + 추가분 2의 5 (운영자 전용 왕관은 상점 목록에 없다)
     expect(SLOT_ORDER.reduce((n, s) => n + counts[s], 0)).toBe(counts.all);
     expect(shopCosmetics("aura").map((i) => i.id).slice(0, 2)).toEqual(["aura_firefly", "aura_fog"]);
     expect(shopCosmetics("aura").map((i) => i.id)).toContain("aura_raincloud");

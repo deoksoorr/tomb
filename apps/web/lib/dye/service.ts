@@ -1,8 +1,9 @@
 import { customAlphabet, nanoid } from "nanoid";
-import { isFixedDyeId, itemById, PERMANENT_UNTIL, permanentPrice, type CosmeticSlot, type DyePart } from "@tomb/protocol";
+import { bodyLabel, bodyUnlockPrice, isFixedDyeId, isStaffBody, itemById, PERMANENT_UNTIL, permanentPrice, type CosmeticSlot, type DyePart } from "@tomb/protocol";
 import { env } from "../env";
 import { sendGift } from "../gifts";
 import { HttpError } from "../http";
+import { isStaff } from "../staff";
 import { getAccounts } from "../store";
 import { kstDay, lookGrant, lookOf, loadMe } from "../store/accounts";
 import { getStyleStore, type DyeSession, type FixedDyeDef, type StyleStore } from "../store/style";
@@ -139,7 +140,7 @@ export async function applyFixedDye(accountId: string, itemId: string, part: Dye
   return changed(accountId, now, { color: def.color, part });
 }
 
-const charged = (r: "ok" | "insufficient" | "same", same: string) => {
+const charged = (r: "ok" | "insufficient" | "same" | "unlocked", same: string) => {
   if (r === "insufficient") throw new HttpError(409, "NOT_ENOUGH_POINTS", "포인트가 모자라요.");
   if (r === "same") throw new HttpError(409, "NO_CHANGE", same);
 };
@@ -149,9 +150,21 @@ export async function resetDye(accountId: string, part: DyePart, now = Date.now(
   return changed(accountId, now, { part });
 }
 
+/**
+ * 25번 외형 바꾸기. 처음 6종·이미 해금한 프리미엄 외형은 RESHAPE_PRICE, 해금 전 프리미엄 외형은 등급별 선택권 값(해금 + 바꾸기),
+ * 운영자 전용 몸(저승사자)은 운영자만 (값 없음). unlocked = 이번에 새로 해금했다
+ */
 export async function reshape(accountId: string, body: string, now = Date.now()): Promise<StyleChangeResponse> {
-  charged(await style().reshape(accountId, body, RESHAPE_PRICE, `shop:외형 바꾸기(${body})`, now), "지금 그 모습이에요.");
-  return changed(accountId, now);
+  if (isStaffBody(body)) {
+    if (!(await isStaff(accountId))) throw new HttpError(403, "FORBIDDEN", "운영자만 쓸 수 있는 외형이에요.");
+    charged(await style().reshape(accountId, body, 0, `shop:외형 바꾸기(${body})`, now), "지금 그 모습이에요.");
+    return changed(accountId, now);
+  }
+  const unlockPrice = bodyUnlockPrice(body);
+  const unlock = unlockPrice === null ? undefined : { price: unlockPrice, reason: `shop:외형 선택권(${bodyLabel(body)})` };
+  const r = await style().reshape(accountId, body, RESHAPE_PRICE, `shop:외형 바꾸기(${body})`, now, unlock);
+  charged(r, "지금 그 모습이에요.");
+  return changed(accountId, now, r === "unlocked" ? { unlocked: true } : {});
 }
 
 /** 30번 영구 꾸미기 사기 → 바뀐 내 정보 (입고 있던 기간제는 그대로 영구가 되므로 착용 증서도 준다) */
@@ -159,6 +172,7 @@ export async function buyPermanent(accountId: string, itemId: string, now = Date
   const item = itemById(itemId);
   const price = permanentPrice(itemId);
   if (!item || item.kind !== "cosmetic" || !item.slot || price === null) throw new HttpError(400, "INVALID_INPUT", "영구로 살 수 없는 꾸미기예요.");
+  if (item.staff && !(await isStaff(accountId))) throw new HttpError(403, "FORBIDDEN", "운영자만 받을 수 있는 꾸미기예요.");
   const r = await style().buyPermanent(accountId, itemId, item.slot as CosmeticSlot, price, PERMANENT_UNTIL, `shop:영구 ${itemId}`, now);
   if (r === "owned") throw new HttpError(409, "ALREADY_OWNED", "이미 영구로 가지고 있어요.");
   if (r === "ticket") throw new HttpError(409, "HAS_TICKET", "가방에 같은 꾸미기 이용권이 있어요. 먼저 입은 뒤에 영구로 바꿀 수 있어요.");

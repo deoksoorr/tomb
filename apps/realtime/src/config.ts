@@ -1,5 +1,6 @@
 import {
   DEFAULT_AUTO_OPEN_THRESHOLD,
+  DEFAULT_BASE_CHANNELS,
   DEFAULT_CHANNEL_CAPACITY,
   DEFAULT_MAX_CHANNELS,
   DEFAULT_RECONNECT_GRACE_SEC,
@@ -20,6 +21,8 @@ export interface Env {
   ALLOWED_ORIGINS?: string;
   CHANNEL_CAPACITY?: string;
   MAX_CHANNELS?: string;
+  /** 평소 열어 두는 채널 수 (1..MAX_CHANNELS) */
+  BASE_CHANNELS?: string;
   AUTO_OPEN_THRESHOLD?: string;
   RECONNECT_GRACE_SEC?: string;
   /** "1"이면 개발용 훅(POST /dev/goblin)을 연다. 로컬 wrangler dev에서만 --var DEV_HOOKS:1 로 준다 (운영에는 두지 않는다) */
@@ -30,13 +33,15 @@ export type Config = {
   /** 채널당 최대 인원 (접속 중 + 재연결 유예 예약) */
   capacity: number;
   maxChannels: number;
+  /** 평소 열어 두는 채널 수. 그 위는 붐비면 자동으로 열린다 (maxChannels까지) */
+  baseChannels: number;
   /** 열린 채널이 모두 이 비율 이상 차면 다음 채널을 연다 */
   threshold: number;
   /** 재연결 유예 (ms) */
   graceMs: number;
 };
 
-type ConfigVars = Pick<Env, "CHANNEL_CAPACITY" | "MAX_CHANNELS" | "AUTO_OPEN_THRESHOLD" | "RECONNECT_GRACE_SEC">;
+type ConfigVars = Pick<Env, "CHANNEL_CAPACITY" | "MAX_CHANNELS" | "BASE_CHANNELS" | "AUTO_OPEN_THRESHOLD" | "RECONNECT_GRACE_SEC">;
 
 /** 숫자가 아니거나 범위를 벗어난 값은 기본값으로 되돌린다 (잘못된 설정으로 서버가 죽지 않게) */
 function num(raw: string | undefined, def: number, min: number, max: number, int: boolean): number {
@@ -47,9 +52,11 @@ function num(raw: string | undefined, def: number, min: number, max: number, int
 }
 
 export function readConfig(env: ConfigVars): Config {
+  const maxChannels = num(env.MAX_CHANNELS, DEFAULT_MAX_CHANNELS, 1, 100, true);
   return {
     capacity: num(env.CHANNEL_CAPACITY, DEFAULT_CHANNEL_CAPACITY, 1, 1000, true),
-    maxChannels: num(env.MAX_CHANNELS, DEFAULT_MAX_CHANNELS, 1, 100, true),
+    maxChannels,
+    baseChannels: num(env.BASE_CHANNELS, Math.min(DEFAULT_BASE_CHANNELS, maxChannels), 1, maxChannels, true),
     threshold: num(env.AUTO_OPEN_THRESHOLD, DEFAULT_AUTO_OPEN_THRESHOLD, 0.05, 1, false),
     graceMs: num(env.RECONNECT_GRACE_SEC, DEFAULT_RECONNECT_GRACE_SEC, 0, 600, false) * 1000,
   };

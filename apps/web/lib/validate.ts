@@ -1,4 +1,4 @@
-import { checkName, isAvatarBody, isAvatarColor, isGraveStyle, itemById, ROOM_ID_RE, type CosmeticSlot } from "@tomb/protocol";
+import { checkName, isAvatarBody, isAvatarColor, isGraveStyle, isStarterBody, itemById, ROOM_ID_RE, type CosmeticSlot } from "@tomb/protocol";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { BALANCE_CAP, CODE_RE, normalizeCode } from "./economy";
@@ -55,7 +55,12 @@ const graveStyle = z.string().refine((s) => isGraveStyle(s), "알 수 없는 묘
 /** 상주의 한마디 (선택, 한 줄 100자) */
 const graveComment = optional(z.string().trim().overwrite(oneLine).refine(within(100), "한마디는 100자까지 적을 수 있어요."));
 const avatarColor = z.string().refine(isAvatarColor, "고를 수 있는 색이 아니에요.");
-const avatarBody = z.string().refine(isAvatarBody, "고를 수 있는 모양이 아니에요.");
+// 입장·출석 때 보내는 몸: 아는 몸이면 받되(이미 프리미엄 외형인 계정의 입장 화면도 보낸다), 계정에 새로 저장되는 건 처음 6종뿐
+// (프리미엄·운영자 외형은 상점 외형 바꾸기로만 — 모르는 값은 거절, 프리미엄 값은 버린다)
+const avatarBody = z
+  .string()
+  .refine(isAvatarBody, "고를 수 있는 모양이 아니에요.")
+  .transform((b) => (isStarterBody(b) ? b : undefined));
 
 /** 묘비를 세울 채널 (채널마다 묘지가 따로다) */
 export const graveChannel = z.number("채널 번호가 올바르지 않아요.").int().min(1, `채널은 1~${GRAVE_CHANNELS} 중 하나예요.`).max(GRAVE_CHANNELS, `채널은 1~${GRAVE_CHANNELS} 중 하나예요.`);
@@ -209,7 +214,11 @@ export const CodeLoginSchema = z.object({
 
 const shopItem = z.string().refine((id) => !!itemById(id), "없는 아이템이에요.");
 /** 상점에서 사기: 펫은 팔지 않는다 (동물원 사육사에게서 영구로만 — /api/zoo/buy). 이미 가진 펫 이용권은 그대로 쓸 수 있다 (ShopUseSchema) */
-export const ShopBuySchema = z.object({ itemId: shopItem.refine((id) => itemById(id)?.slot !== "pet", "펫은 동물원 사육사에게서만 데려올 수 있어요.") });
+export const ShopBuySchema = z.object({
+  itemId: shopItem
+    .refine((id) => itemById(id)?.slot !== "pet", "펫은 동물원 사육사에게서만 데려올 수 있어요.")
+    .refine((id) => !itemById(id)?.staff, "운영자 전용 꾸미기는 살 수 없어요."),
+});
 export const ShopUseSchema = z.object({
   itemId: shopItem,
   graveId: z.string().refine((id) => isGraveId(id), "묘비 id 형식이 올바르지 않아요.").optional(),

@@ -312,6 +312,18 @@
   color: var(--bone);
 }
 
+/* 25번 프리미엄 외형 등급 */
+.badge[data-tier="fine"] {
+  background: #3a6a9a;
+}
+.badge[data-tier="rare"] {
+  background: #7a4aa8;
+}
+.badge[data-tier="legend"] {
+  background: #b8862a;
+  color: #1e1a10;
+}
+
 .notice {
   flex: none;
   min-height: 1.4em;

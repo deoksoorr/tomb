@@ -337,15 +337,45 @@ button.card:hover {
 }
 
 .hotSlot {
+  position: relative;
   display: grid;
   justify-items: center;
   gap: 2px;
-  padding: 4px 2px;
+  min-width: 0;
+  padding: 6px 2px 4px;
+  border: 0;
   background: var(--bg-deep);
   box-shadow: 0 0 0 1px var(--line);
   color: var(--muted);
+  font: inherit;
   font-size: 10px;
   text-align: center;
+}
+
+.hotSlot > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+button.hotSlot:not(:disabled) {
+  cursor: pointer;
+}
+
+button.hotSlot:disabled {
+  opacity: 1;
+}
+
+/* 고른 스킬을 놓을 수 있는 칸: 점선 금테 */
+.hotSlot[data-target] {
+  box-shadow: inset 0 0 0 1px var(--candle);
+  outline: 1px dashed var(--candle);
+  outline-offset: -4px;
+}
+
+.hotSlot[data-target]:hover {
+  background: var(--surface);
 }
 
 /* ── 결과 ── */
@@ -1084,15 +1114,80 @@ button.card:hover {
   color: var(--bone);
   font-family: var(--font-read);
   font-size: 14px;
-  text-shadow: 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000;
+  text-shadow:
+    0 1px 0 #000,
+    0 -1px 0 #000,
+    1px 0 0 #000,
+    -1px 0 0 #000;
+}
+
+/* 고른 카드 바로 아래에 펼쳐지는 설명 + 출발. 위 꼭지(--caret)가 고른 카드를 가리킨다 */
+.zoneDetail {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+  animation: zoneOpen 0.16s ease-out both;
+}
+
+.zoneDetail::before {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: var(--caret, 50%);
+  width: 0;
+  height: 0;
+  border: 7px solid transparent;
+  border-top: 0;
+  border-bottom-color: var(--candle);
+  transform: translateX(-50%);
+}
+
+@keyframes zoneOpen {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 
 .zoneInfo {
   display: grid;
   gap: 4px;
-  padding: 8px 10px;
-  background: var(--bg-deep);
-  box-shadow: var(--px-border);
+}
+
+.zoneInfoHead b {
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-weight: 400;
+}
+
+/* 설명 끝에 이어지는 출발 줄 */
+.zoneGo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.linkBtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--candle);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 
 .zoneGimmick {
@@ -1120,4 +1215,808 @@ button.card:hover {
   top: calc(-1 * var(--dialog-pad-y, 12px));
   z-index: 2;
   background: var(--panel-solid);
+}
+
+/* ── 로비 높이 채우기: 탭 내용이 창 아래까지 늘어난다 (짧은 탭도 아래가 비지 않게) ── */
+.lobbyFill {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.lobbyFill > * {
+  flex-shrink: 0;
+}
+
+.tabPanel {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+.tabPanel > .lobby {
+  flex: 1 0 auto;
+  align-content: start;
+}
+
+.guideOpen {
+  margin-left: auto;
+  min-height: 30px;
+  padding: 2px 10px;
+  font-size: 11px;
+}
+
+/* ── 결과 창: 위(결과·보상) · 가운데(판 기록·주운 것·잡은 몬스터) · 아래(진행 막대) · 맨 아래 버튼 ── */
+.resultFill {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.resultMain {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.resultHead {
+  display: grid;
+  gap: 2px;
+  padding: 14px 12px 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  text-align: center;
+}
+
+.resultHead[data-tone="win"] {
+  box-shadow:
+    var(--px-border),
+    inset 0 3px 0 var(--candle);
+}
+
+.resultHead[data-tone="lose"] {
+  box-shadow:
+    var(--px-border),
+    inset 0 3px 0 var(--danger);
+}
+
+.resultMain .rewards strong {
+  font-size: 22px;
+}
+
+.resultMain .rewards div {
+  display: grid;
+  gap: 2px;
+  padding: 10px 4px;
+  text-align: center;
+}
+
+.resultMain > p {
+  text-align: center;
+}
+
+.runStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.runStats div {
+  display: grid;
+  gap: 2px;
+  padding: 6px 4px;
+  box-shadow: 0 0 0 1px var(--line);
+  text-align: center;
+}
+
+.runStats dt {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.runStats dd {
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 가운데 두 칸이 남는 높이를 나눠 갖는다 */
+.resultCols {
+  display: grid;
+  flex: 1 0 auto;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+  min-height: 140px;
+}
+
+.resultBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.resultBoxTitle {
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.resultBox .drops {
+  justify-content: flex-start;
+}
+
+.resultBox .drop {
+  justify-items: center;
+  width: 92px;
+  max-width: none;
+  padding: 6px 4px;
+  border: 1px solid var(--line);
+  text-align: center;
+}
+
+.killList {
+  display: grid;
+  gap: 2px;
+  list-style: none;
+  font-size: 12px;
+}
+
+.killList li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.killList li > span:last-child {
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+
+.bossTag {
+  margin-left: 6px;
+  padding: 0 4px;
+  background: var(--danger);
+  color: var(--bg-deep);
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.resultGrow {
+  flex: 1 0 auto;
+}
+
+.resultProgress {
+  display: grid;
+  gap: 4px;
+}
+
+.capBar > span {
+  background: var(--candle);
+}
+
+.resultDock {
+  position: sticky;
+  bottom: calc(-1 * var(--dialog-pad-y, 12px));
+  z-index: 2;
+  margin: 0 calc(-1 * var(--dialog-pad-x, 14px)) calc(-1 * var(--dialog-pad-y, 12px));
+  padding: 8px var(--dialog-pad-x, 14px) var(--dialog-pad-y, 12px);
+  background: var(--panel-solid);
+  box-shadow: 0 -2px 0 var(--line);
+}
+
+@media (max-width: 560px) {
+  .runStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── 사냥 안내서 (HuntGuide): 차례 · 페이지(남는 높이를 채움) · 아래 넘기기 ── */
+.guide {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.guideToc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.guideTocBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 2px 8px;
+  border: 0;
+  background: var(--bg-deep);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  box-shadow: 0 0 0 1px var(--line);
+  cursor: pointer;
+}
+
+.guideTocBtn > span {
+  color: var(--candle);
+  font-family: var(--font-small);
+}
+
+.guideTocBtn[aria-selected="true"] {
+  color: var(--bone);
+  box-shadow:
+    inset 0 -2px 0 var(--candle),
+    0 0 0 1px var(--line);
+}
+
+.guidePage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  animation: zoneOpen 0.16s ease-out both;
+}
+
+.guideLead {
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.guideList {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+}
+
+.guideGrid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.guideItem {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.guidePic {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+}
+
+.guideKeys {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+}
+
+.guideKeys kbd {
+  min-width: 18px;
+  padding: 1px 4px;
+  background: var(--surface);
+  color: var(--bone);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-align: center;
+  box-shadow:
+    inset 0 -2px 0 var(--line),
+    0 0 0 1px var(--line);
+}
+
+.guideIcons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.guideHot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.guideHot > span {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.guideSp {
+  padding: 2px 6px;
+  background: #3c6ac8;
+  color: #fff;
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.guideCool,
+.guideGauge,
+.guideMud {
+  display: block;
+  width: 32px;
+  height: 32px;
+}
+
+.guideCool {
+  background: conic-gradient(rgba(10, 11, 9, 0.85) 220deg, var(--candle) 0deg);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.guideGauge {
+  height: 8px;
+  background: linear-gradient(90deg, #e0c36a 65%, var(--surface) 0);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.guideMud {
+  border-radius: 50%;
+  background: radial-gradient(#6a5a3a 40%, #4a3e28);
+}
+
+.guideShape {
+  display: block;
+}
+
+.guidePhases {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px;
+  list-style: none;
+}
+
+.guidePhases li {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.guidePhases li:nth-child(2) {
+  box-shadow:
+    inset 3px 0 0 var(--candle),
+    0 0 0 1px var(--line);
+}
+
+.guidePhases li:nth-child(3) {
+  box-shadow:
+    inset 3px 0 0 var(--danger),
+    0 0 0 1px var(--line);
+}
+
+.guidePhases b {
+  color: var(--bone);
+  font-weight: 400;
+}
+
+.guideTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: center;
+}
+
+.guideTable th,
+.guideTable td {
+  padding: 4px;
+  border: 1px solid var(--line);
+  font-weight: 400;
+}
+
+.guideTable th {
+  color: var(--muted);
+}
+
+.guideNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .guideItem {
+    grid-template-columns: 56px 1fr;
+  }
+}
+
+/* ── 스킬 탭: 단축키 칸 · 아이콘 격자(배운 것/못 배운 것) · 설명 ── */
+.skillTab {
+  grid-template-rows: auto 1fr;
+}
+
+.skHotbar {
+  display: grid;
+  gap: 6px;
+}
+
+.skKeyNum {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  color: var(--candle);
+  font-family: var(--font-small);
+}
+
+.skBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.skGrids {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.skGroup {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.skGroup span {
+  color: var(--bone);
+}
+
+.skGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
+}
+
+.skCell {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 4px 6px;
+  border: 0;
+  background: var(--bg-deep);
+  color: var(--text);
+  font: inherit;
+  box-shadow: 0 0 0 1px var(--line);
+  cursor: pointer;
+}
+
+.skCell:hover {
+  background: var(--surface);
+}
+
+.skCell[aria-pressed="true"] {
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}
+
+.skCell[data-locked] img {
+  filter: grayscale(1) brightness(0.55);
+}
+
+.skCell[data-locked] .skCellName {
+  color: var(--muted);
+}
+
+.skCellName {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.skPips {
+  display: flex;
+  gap: 2px;
+}
+
+.skPips i {
+  width: 6px;
+  height: 4px;
+  background: var(--line);
+}
+
+.skPips i[data-on] {
+  background: var(--candle);
+}
+
+.skKey {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  padding: 0 3px;
+  background: var(--surface);
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 지금 배울 수 있는 스킬 (스킬 포인트가 있을 때) */
+.skNew {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  width: 14px;
+  height: 14px;
+  background: var(--moss);
+  color: var(--bg-deep);
+  font-family: var(--font-small);
+  font-size: 11px;
+  line-height: 14px;
+  text-align: center;
+  animation: glow 1.4s ease-in-out infinite;
+}
+
+.skDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  line-height: 1.5;
+}
+
+.skDetailHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.skFacts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.skFacts div {
+  display: grid;
+  gap: 1px;
+  padding: 4px;
+  box-shadow: 0 0 0 1px var(--line);
+  text-align: center;
+}
+
+.skFacts dt {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.skFacts dd {
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+
+.skActions {
+  display: grid;
+  gap: 6px;
+  margin-top: auto;
+}
+
+@media (max-width: 640px) {
+  .skBody {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── 상점: 사내 매점 (차양 간판 · 구역 표지 · 선반 상품 카드) ── */
+.shop {
+  grid-template-rows: auto auto 1fr;
+  gap: 0;
+}
+
+.shopSign {
+  display: grid;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+/* 편의점 줄무늬 차양 */
+.shopAwning {
+  display: block;
+  height: 12px;
+  background: linear-gradient(180deg, transparent 70%, rgb(0 0 0 / 35%)), repeating-linear-gradient(90deg, var(--candle) 0 16px, var(--moss) 16px 32px);
+}
+
+.shopSignRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 8px 12px;
+}
+
+.shopName {
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 15px;
+}
+
+.shopWallet {
+  padding: 2px 8px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.aisles {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.aisle {
+  display: inline-flex;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 4px 10px;
+  border: 0;
+  background: var(--bg-deep);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  box-shadow: 0 0 0 1px var(--line);
+  cursor: pointer;
+}
+
+.aisle[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--bone);
+  box-shadow:
+    inset 0 -3px 0 var(--candle),
+    0 0 0 1px var(--line);
+}
+
+/* 통로 번호 표지판 */
+.aisleSign {
+  padding: 0 4px;
+  background: var(--candle);
+  color: var(--bg-deep);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.shelf {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 10px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.shelfSection {
+  display: grid;
+  gap: 6px;
+}
+
+/* 선반: 카드 아래 나무 선반 줄 */
+.shelfRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px 8px;
+}
+
+.product {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 8px 10px;
+  background: var(--panel-solid);
+  box-shadow:
+    0 0 0 1px var(--line),
+    inset 0 2px 0 var(--grade, var(--line)),
+    0 6px 0 -2px #5a4630;
+}
+
+.product[data-low] .thumb img {
+  filter: grayscale(0.7) brightness(0.7);
+}
+
+.thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 64px;
+  background: radial-gradient(circle at 50% 60%, var(--surface), var(--bg-deep) 70%);
+}
+
+.thumbKey,
+.thumb .grade {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.thumbKey {
+  padding: 0 3px;
+  background: var(--surface);
+  color: var(--candle);
+}
+
+.productName {
+  overflow: hidden;
+  color: var(--bone);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cmpRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 2px;
+  min-height: 15px;
+}
+
+.cmpRow .deltaUp,
+.cmpRow .deltaDown {
+  margin: 0 4px 0 0;
+}
+
+/* 노란 가격표 */
+.priceTag {
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 1px 6px;
+  background: #f2d64a;
+  color: #2a2410;
+  font-family: var(--font-small);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  clip-path: polygon(6px 0, 100% 0, 100% 100%, 6px 100%, 0 50%);
+  padding-left: 9px;
+}
+
+.productBuy {
+  display: flex;
+  gap: 4px;
+}
+
+.productBuy button {
+  flex: 1;
+  min-height: 32px;
+  padding: 2px 6px;
+  font-size: 12px;
 }

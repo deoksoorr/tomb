@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AVATAR_BODIES, ITEMS, STATE_NAMES } from "@tomb/protocol";
-import { avatarColorSpec, isDyedSpec, AV_ACT_ANIM, AV_ALIASES, AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, avatarFrameGrid, BODY_METRICS, bodyOf, gearOf, lookKey, SPRITE_COSMETICS, waterSink } from "./avatar";
+import { avatarColorSpec, isDyedSpec, AV_ACT_ANIM, AV_ALIASES, AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, avatarFrameGrid, BODY_BASE, BODY_METRICS, bodyOf, gearOf, lookKey, SPRITE_COSMETICS, waterSink } from "./avatar";
 import { EMOTE_ICONS, emoteGrid } from "./emotes";
 import { lighten, mix, parseHex } from "./pixel";
 
@@ -45,7 +45,7 @@ describe("wave / cheer hands (NEXT 38)", () => {
   const COLOR = "#9fb8d8";
   const handColor = (body: string) => {
     const base = parseHex(COLOR);
-    const b = body === "sheet" ? lighten(base, 0.3) : base;
+    const b = BODY_BASE[bodyOf(body)] === "sheet" ? lighten(base, 0.3) : base;
     return mix(lighten(b, 0.5), 0xfff4dc, 0.45);
   };
   const handPixels = (body: string, view: "down" | "side" | "up", col: number) => {

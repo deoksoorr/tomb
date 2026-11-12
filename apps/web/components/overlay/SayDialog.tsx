@@ -93,7 +93,12 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
         ))}
       </div>
 
-      <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`}>
+      <div
+        id={`${baseId}-panel`}
+        role="tabpanel"
+        aria-labelledby={`${baseId}-${tab}`}
+        className={tab === "mood" && seated ? styles.panelFill : undefined}
+      >
         {tab === "emo" && (
           <>
             <div className={styles.board}>

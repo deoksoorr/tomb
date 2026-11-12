@@ -26,7 +26,12 @@ import { readStarsRecords, saveStarsRecord, StarsInfo, StarsPreview } from "./Te
 
 type Phase = "intro" | "starting" | "playing" | "paused" | "submitting" | "result";
 type Run = { ticket: string; difficulty: Difficulty };
-type Outcome = { result: RunResult; aborted: boolean; reward?: RunReward; error?: string };
+type Outcome = {
+  result: RunResult;
+  aborted: boolean;
+  reward?: RunReward;
+  error?: string;
+};
 
 const LS_DIFF = "tomb.stars.diff";
 
@@ -194,60 +199,67 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
     const clean = outcome.result.game === "stars" && all > 0 && outcome.result.miss === 0;
     return (
       <Dialog title="별자리 잇기 결과" onClose={onClose}>
-        <div className={s.result}>
-          <p className={s.resultBig}>{outcome.aborted ? "중간에 망원경에서 눈을 뗐어요" : clean ? "모든 별을 이었어요!" : "밤하늘이 흘러갔어요"}</p>
-          {outcome.error ? (
-            <p className={ui.error}>{outcome.error}</p>
-          ) : r ? (
-            <>
-              <div className={s.rewards}>
-                <div>
-                  <strong>+{r.exp.toLocaleString("ko-KR")}</strong>EXP
+        {/* 결과 · 기록이 창 높이를 채우고 버튼 줄은 창 아래에 붙는다 */}
+        <div className={s.resultFill}>
+          <div className={s.result}>
+            <p className={s.resultBig}>{outcome.aborted ? "중간에 망원경에서 눈을 뗐어요" : clean ? "모든 별을 이었어요!" : "밤하늘이 흘러갔어요"}</p>
+            {outcome.error ? (
+              <p className={ui.error}>{outcome.error}</p>
+            ) : r ? (
+              <>
+                <div className={s.rewards}>
+                  <div>
+                    <strong>+{r.exp.toLocaleString("ko-KR")}</strong>EXP
+                  </div>
+                  <div>
+                    <strong>+{r.points}</strong>포인트
+                  </div>
+                  <div>
+                    <strong>{r.score.toLocaleString("ko-KR")}</strong>점수
+                  </div>
                 </div>
-                <div>
-                  <strong>+{r.points}</strong>포인트
-                </div>
-                <div>
-                  <strong>{r.score.toLocaleString("ko-KR")}</strong>점수
-                </div>
-              </div>
-              {r.nightBonus && <p className={s.levelUp}>맑은 밤 보너스 ×{STARRY_NIGHT_BONUS} — 진짜 별이 잘 보이는 밤이었어요</p>}
-              {r.capped && <p className={ui.hint}>오늘 사냥·미니게임 포인트 한도(또는 하루 전체 한도)에 닿아서 {r.pointsRaw}P 중 {r.points}P만 받았어요.</p>}
-              {r.levelsGained > 0 && (
-                <p className={s.levelUp} role="status">
-                  레벨 업! Lv.{r.newLevel}
-                  <LevelUpSound level={r.newLevel} />
-                </p>
-              )}
-              {r.drops.length > 0 && (
-                <div className={s.drops}>
-                  {r.drops.map((d, i) => {
-                    const def = potionById(d.id);
-                    if (!def) return null;
-                    return (
-                      <span key={i} className={s.drop}>
-                        <RpgIcon art={def.art} size={32} />
-                        {def.name}
-                        {d.qty > 1 && ` ×${d.qty}`}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          ) : null}
-        </div>
-        <div className={s.buttons} style={{ marginTop: 14 }}>
-          <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void start()}>
-            한 번 더 보기
-          </button>
-          <button type="button" className={cx(ui.button, ui.quiet)} onClick={onClose}>
-            망원경에서 물러나기
-          </button>
-        </div>
-        {notice && <p className={s.notice}>{notice}</p>}
-        <div style={{ marginTop: 14 }}>
-          <StarsInfo records={records} />
+                {r.nightBonus && <p className={s.levelUp}>맑은 밤 보너스 ×{STARRY_NIGHT_BONUS} — 진짜 별이 잘 보이는 밤이었어요</p>}
+                {r.capped && (
+                  <p className={ui.hint}>
+                    오늘 사냥·미니게임 포인트 한도(또는 하루 전체 한도)에 닿아서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
+                  </p>
+                )}
+                {r.levelsGained > 0 && (
+                  <p className={s.levelUp} role="status">
+                    레벨 업! Lv.{r.newLevel}
+                    <LevelUpSound level={r.newLevel} />
+                  </p>
+                )}
+                {r.drops.length > 0 && (
+                  <div className={s.drops}>
+                    {r.drops.map((d, i) => {
+                      const def = potionById(d.id);
+                      if (!def) return null;
+                      return (
+                        <span key={i} className={s.drop}>
+                          <RpgIcon art={def.art} size={32} />
+                          {def.name}
+                          {d.qty > 1 && ` ×${d.qty}`}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+          <div className={s.resultGrow}>
+            <StarsInfo records={records} />
+          </div>
+          {notice && <p className={s.notice}>{notice}</p>}
+          <div className={cx(s.buttons, s.resultDock)}>
+            <button type="button" className={cx(ui.button, ui.primary, s.start)} onClick={() => void start()}>
+              한 번 더 보기
+            </button>
+            <button type="button" className={cx(ui.button, ui.quiet)} onClick={onClose}>
+              망원경에서 물러나기
+            </button>
+          </div>
         </div>
       </Dialog>
     );

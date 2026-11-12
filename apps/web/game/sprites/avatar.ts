@@ -11,6 +11,34 @@ import { COSMETIC_FX_IDS } from "./cosmeticFx";
 //  tall  키다리 유령 (가늘고 길쭉, 뾰족한 두건 끝)
 //  round 동글 유령 (공처럼 둥근 몸, 얼굴 구멍, 머리 위 새싹)
 // 프레임 20×28, 발바닥(원점) y=27. 시트 = 4행(DIR: down,left,right,up) × AV_COLS열.
+//
+// 25번 프리미엄 외형(PREMIUM_BODIES)·운영자 외형(STAFF_BODIES)은 위 6종 중 하나를 바탕(BODY_BASE)으로 뼈대·자세·동작을 그대로 쓰고
+// 몸통·머리에 덧그린다 (drawBodyExtra) → 앞·옆·뒤 모든 자세·동작·별칭 프레임이 저절로 맞는다.
+//  suit 정장(두건+양복·셔츠·넥타이)  box 박스(두건 머리 + 택배 상자)  umbrella 우산(이불 유령 + 우산 갓)
+//  catmask 고양이 탈 직장인(고양이 머리 + 셔츠·사원증 줄, 꼬리 없음)  cup 커피잔(동글이 + 머그잔)  tube 오리 튜브(동글이 + 튜브)
+//  king 왕관(두건 + 왕관·담비털 망토)  reaper 저승사자(키다리 + 갓·검은 도포·갓끈)
+
+/** 처음 6종 (그림의 뼈대) */
+export type BaseBody = "hood" | "cat" | "bun" | "sheet" | "tall" | "round";
+/** 몸마다 뼈대가 되는 처음 6종 */
+export const BODY_BASE: Readonly<Record<AvatarBody, BaseBody>> = {
+  hood: "hood",
+  cat: "cat",
+  bun: "bun",
+  sheet: "sheet",
+  tall: "tall",
+  round: "round",
+  suit: "hood",
+  box: "hood",
+  umbrella: "sheet",
+  catmask: "cat",
+  cup: "round",
+  tube: "round",
+  king: "hood",
+  reaper: "tall",
+};
+/** 염색하지 않은 몸 부위의 원래 색 (몸 부위 = 상자·머그잔·망토·도포. 없으면 고른 색) */
+const BODY_DEFAULT: Partial<Record<AvatarBody, Color>> = { suit: 0x3e465c, box: 0xc89a5e, cup: 0xf0ebe2, king: 0xb02a3a, reaper: 0x2c2a34 };
 
 export const AV_W = 20;
 export const AV_H = 28;
@@ -74,6 +102,14 @@ export const BODY_METRICS: Record<AvatarBody, { top: number; shoulder: number }>
   sheet: { top: 18, shoulder: 9 },
   tall: { top: 24, shoulder: 12 },
   round: { top: 16, shoulder: 9 },
+  suit: { top: 18, shoulder: 7 },
+  box: { top: 18, shoulder: 7 },
+  umbrella: { top: 23, shoulder: 9 },
+  catmask: { top: 19, shoulder: 7 },
+  cup: { top: 16, shoulder: 9 },
+  tube: { top: 16, shoulder: 9 },
+  king: { top: 21, shoulder: 7 },
+  reaper: { top: 24, shoulder: 12 },
 };
 
 export function bodyOf(body: string | null | undefined): AvatarBody {
@@ -100,6 +136,8 @@ type Pose = {
   hem: number;
   /** 팔 없는 몸(동글이·이불 유령)의 몸짓: 몸 전체를 좌우로 기울인다 (-1 왼쪽, 1 오른쪽) */
   tilt?: number;
+  /** 해먹·눕기 자세 (25번: 옆으로 삐져나온 덧그림을 줄여 천 위로 몸이 보이게) */
+  lie?: boolean;
 };
 
 type Pal = {
@@ -201,8 +239,14 @@ export function avatarColorKey(spec: string): string {
 
 function palette(colors: AvatarColors, body: AvatarBody): Pal {
   // 이불 유령은 천처럼 밝게. 명암은 부위마다 그 부위 색에서 계산한다 (염색 전에는 머리 = 몸 = 기본색이라 예전과 똑같다)
-  const h = body === "sheet" ? lighten(colors.head, 0.3) : colors.head;
-  const b = body === "sheet" ? lighten(colors.body, 0.3) : colors.body;
+  const fb = BODY_BASE[body];
+  const h = fb === "sheet" ? lighten(colors.head, 0.3) : colors.head;
+  // 25번: 상자·머그잔·망토·도포는 몸을 염색하기 전까지 원래 색 (기본색으로 칠한 것도 염색 전과 같게 본다)
+  const bodyDefault = BODY_DEFAULT[body];
+  const b0 = bodyDefault !== undefined && colors.body === colors.base ? bodyDefault : colors.body;
+  const b = fb === "sheet" ? lighten(b0, 0.3) : b0;
+  // 손(손 흔들기·환호)은 원래 몸 색에서 (상자·도포 색이 아니라 유령 손)
+  const bh = fb === "sheet" ? lighten(colors.body, 0.3) : colors.body;
   const accent = colors.accent;
   return {
     hoodHi: lighten(h, 0.28),
@@ -223,8 +267,8 @@ function palette(colors: AvatarColors, body: AvatarBody): Pal {
     scarfLo: accent === null ? 0xb0a589 : darken(accent, 0.19),
     feet: 0x2a2520,
     muzzle: lighten(colors.head, 0.62),
-    hand: mix(lighten(b, 0.5), 0xfff4dc, 0.45),
-    handLo: darken(mix(lighten(b, 0.5), 0xfff4dc, 0.45), 0.14),
+    hand: mix(lighten(bh, 0.5), 0xfff4dc, 0.45),
+    handLo: darken(mix(lighten(bh, 0.5), 0xfff4dc, 0.45), 0.14),
   };
 }
 
@@ -277,7 +321,7 @@ function framesFor(view: View): Pose[] {
     { ...P(-1, [0, -1], [0, -1], 0, 0, 1), arms: "cheer1", air: true, tilt: 1 },
   ];
   // 해먹에 누운 자세 (그림자 없음). 시트에서는 서 있는 모양, 화면에서 눕혀 그린다
-  const lie: Pose = { ...P(0), air: true };
+  const lie: Pose = { ...P(0), air: true, lie: true };
   return [...idle, ...walk, ...run, P(0, [0, 0], [0, 0], 0, 1), P(0, [0, 0], [0, 0], 0, 2), jump, ...hang, ...swim, ...dive, ...swing, ...wave, ...cheer, lie];
 }
 
@@ -329,6 +373,14 @@ type M = {
 };
 
 function metrics(body: AvatarBody, view: View, pose: Pose): M {
+  const m = baseMetrics(BODY_BASE[body], view, pose);
+  // 머리 위에 늘 쓰는 것이 있는 몸은 후광을 그 위로 (crown = 맨 위)
+  if (body === "king") return { ...m, crown: m.hy - 9 };
+  if (body === "umbrella") return { ...m, crown: m.hy - 11 };
+  return m;
+}
+
+function baseMetrics(body: BaseBody, view: View, pose: Pose): M {
   const sitDrop = pose.sit === 1 ? 3 : pose.sit === 2 ? 2 : 0;
   const by = pose.bob + sitDrop;
   const cx = 10 + (view === "side" ? pose.lean : 0);
@@ -362,7 +414,7 @@ function metrics(body: AvatarBody, view: View, pose: Pose): M {
  * AvatarView가 이름표를 같은 만큼 내린다.
  */
 export function waterSink(body: string, state: "swim" | "dive"): number {
-  switch (bodyOf(body)) {
+  switch (BODY_BASE[bodyOf(body)]) {
     case "tall":
       return state === "swim" ? 6 : 10;
     case "sheet":
@@ -383,18 +435,22 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   if (gear.scarf) pal = { ...pal, scarf: 0xc8463c, scarfLo: 0x8e2a25 };
   const m = metrics(body, view, pose);
   const { cx, hy } = m;
+  // 25번: 뼈대 (프리미엄 외형은 처음 6종 중 하나)
+  const fb = BODY_BASE[body];
+  const headWorn = !!gear.hat || (!!gear.extra.head && gear.extra.head !== "hat_glasses");
   const side = view === "side";
   const sitDrop = pose.sit === 1 ? 3 : pose.sit === 2 ? 2 : 0;
 
   // F8 등 꾸미기: 몸 뒤로 삐져나오는 부분 (배낭·망토)
-  if (gear.extra.back) drawBackGear(g, view, gear.extra.back, m, body, "back", pose.hem, pose.sit);
+  if (gear.extra.back) drawBackGear(g, view, gear.extra.back, m, fb, "back", pose.hem, pose.sit);
 
   // ── 발 (망토 밑단 아래로 살짝). 이불 유령은 발이 없다 ──
   const footY = 25;
-  if (pose.sit === 0 && body !== "sheet") {
-    const w = body === "round" ? 2 : 2;
-    const lx = body === "round" ? 6 : 7;
-    const rx = body === "round" ? 12 : 11;
+  // 머그잔 유령은 잔에 잠겨 발이 안 보인다 (매달릴 때만 잔 밑으로 대롱대롱)
+  if (pose.sit === 0 && fb !== "sheet" && (body !== "cup" || pose.arms === "up")) {
+    const w = 2;
+    const lx = fb === "round" ? 6 : 7;
+    const rx = fb === "round" ? 12 : 11;
     // 매달리면 발이 밑단 아래로 늘어진다: 내려간 만큼 다리(발 색)로 잇는다
     const hangLeg = pose.arms === "up";
     g.rect(lx + pose.f0[0], footY + (hangLeg ? 0 : pose.f0[1]), w, 2 + (hangLeg ? pose.f0[1] : 0), side ? darken(pal.feet, 0.2) : pal.feet);
@@ -417,7 +473,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   }
 
   // ── 몸통 ──
-  if (body === "sheet") {
+  if (fb === "sheet") {
     // 머리와 몸이 한 덩어리인 천: 둥근 윗머리 + 아래로 살짝 퍼지는 자락 + 물결 밑단
     const hemY = pose.sit === 1 ? 26 : pose.sit === 2 ? 24 : 25;
     g.ellipse(cx, hy, 6, 6, pal.hood);
@@ -438,7 +494,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
       g.vline(cx - 3, hy + 6, hemY - 2, fold);
       g.vline(cx + 2, hy + 7, hemY - 1, fold);
     } else g.vline(cx - 2, hy + 6, hemY - 1, fold);
-  } else if (body === "round") {
+  } else if (fb === "round") {
     const ry = pose.sit ? 5.5 : 6;
     g.ellipse(cx, hy, 6.5, ry, pal.hood);
     // 46번: 위쪽 = 머리 부위, 가운데 줄(hy)부터 아래 = 몸 부위(배). 공 모양 안쪽만 (뒤의 꾸미기·발은 그대로)
@@ -452,7 +508,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     if (view === "down") g.ellipse(cx, hy + 3, 3.4, 2.2, pal.bodyHi);
   } else {
     // 망토 (사다리꼴)
-    const tall = body === "tall";
+    const tall = fb === "tall";
     const cloakTop = (tall ? 13 : 18) + sitDrop;
     const cloakBot = pose.sit === 1 ? 26 : 24 + (pose.sit === 2 ? 1 : 0);
     const spread = pose.sit === 1 ? (tall ? 0.55 : 0.75) : tall ? 0.3 : 0.5;
@@ -473,16 +529,19 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     }
   }
 
+  // 25번: 몸통 덧그림 (정장·고양이 탈 셔츠·왕관 망토·저승사자 도포)
+  drawBodyExtra(g, body, "torso", view, pose, m, pal, headWorn);
+
   // ── 팔 (머리보다 먼저: 머리와 겹치는 곳은 머리가 덮는다) ──
   drawArms(g, view, pose, m, pal, false);
   // F8 등 꾸미기: 뒷모습에서 등을 덮는 부분·앞모습 어깨끈 (머리보다 먼저)
-  if (gear.extra.back) drawBackGear(g, view, gear.extra.back, m, body, "front", pose.hem, pose.sit);
+  if (gear.extra.back) drawBackGear(g, view, gear.extra.back, m, fb, "front", pose.hem, pose.sit);
 
   // ── 목도리 (두건·키다리는 기본 천 목도리, 나머지는 목도리를 했을 때만) ──
   const plainNeck = body === "hood" || body === "tall";
   if (plainNeck || gear.scarf) {
     const sy = m.neck;
-    const half = body === "round" ? 6 : body === "sheet" ? 6 : body === "tall" ? 3 : 4;
+    const half = fb === "round" ? 6 : fb === "sheet" ? 6 : fb === "tall" ? 3 : 4;
     for (let x = cx - half; x < cx + half; x++) if (g.filled(x, sy) || x >= cx - half + 1) g.set(x, sy, pal.scarf);
     if (view === "down") {
       g.set(cx + 2, sy + 1, pal.scarfLo);
@@ -497,15 +556,15 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   }
 
   // ── 머리 ──
-  if (body === "hood" || body === "tall" || body === "cat" || body === "bun") {
+  if (fb === "hood" || fb === "tall" || fb === "cat" || fb === "bun") {
     g.ellipse(cx, hy, m.rx, m.ry, pal.hood);
     g.recolor((x, y) => x - cx + (y - hy) < -m.rx + 1 && y < hy + m.ry, pal.hoodHi);
     g.recolor((x, y) => x - cx - (y - hy) > m.rx / 2 && y < hy + m.ry && y > hy - m.ry, pal.hoodLo);
-    if (body === "hood" || body === "tall") g.recolor((x, y) => y === Math.floor(hy + m.ry - 1) && Math.abs(x + 0.5 - cx) < m.rx - 1, pal.hoodLo);
+    if (fb === "hood" || fb === "tall") g.recolor((x, y) => y === Math.floor(hy + m.ry - 1) && Math.abs(x + 0.5 - cx) < m.rx - 1, pal.hoodLo);
   }
 
   const hatCovers = COVERING_HATS.has(gear.hat ?? "") || COVERING_HATS.has(gear.extra.head ?? "");
-  if (body === "hood" && !hatCovers) {
+  if ((body === "hood" || body === "suit" || body === "box") && !hatCovers) {
     // 두건 끝: 새싹처럼 접힌 꼭지
     if (view === "down") {
       g.set(cx + 2, hy - 5, pal.hood);
@@ -526,7 +585,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     g.set(cx - 1 + (d > 0 ? 1 : 0), hy - 7, pal.hoodHi);
     g.set(cx + d, hy - 8, pal.hood);
     if (view === "up") g.vline(cx, hy - 2, hy + 2, pal.hoodLo);
-  } else if (body === "round" && !hatCovers) {
+  } else if (fb === "round" && !hatCovers) {
     // 머리 위 새싹 (모자를 쓰면 모자 속에)
     // 포인트 = 새싹 (염색 전에는 초록)
     const a = pal.accent;
@@ -537,17 +596,21 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   }
 
   // ── 얼굴 ──
-  drawFace(g, body, view, m, pal);
+  drawFace(g, fb, view, m, pal);
+  // 25번: 머리·앞 덧그림 (상자·머그잔·튜브는 머리 아래를 가리고, 갓·왕관·우산은 머리 위에)
+  drawBodyExtra(g, body, "front", view, pose, m, pal, headWorn);
+  // 앞을 가리는 몸(상자·머그잔·튜브)이면 뒷모습 등 꾸미기를 그 위에 다시 (배낭이 상자에 묻히지 않게)
+  if (gear.extra.back && view !== "side" && (body === "box" || body === "cup" || body === "tube")) drawBackGear(g, view, gear.extra.back, m, fb, "front", pose.hem, pose.sit);
 
-  drawGear(g, view, gear, m, pal, body);
+  drawGear(g, view, gear, m, pal, fb);
   // F8 머리·목·손 꾸미기 (avatarGear.ts)
-  if (gear.extra.neck) drawNeckGear(g, view, gear.extra.neck, m, body);
-  if (gear.extra.head) drawHeadGear(g, view, gear.extra.head, m, body, body === "round" ? m.top - 1 : m.top);
+  if (gear.extra.neck) drawNeckGear(g, view, gear.extra.neck, m, fb);
+  if (gear.extra.head) drawHeadGear(g, view, gear.extra.head, m, fb, fb === "round" ? m.top - 1 : m.top);
   if (gear.extra.hand) drawHandGear(g, view, gear.extra.hand, m);
 
-  // 귀는 모자 위로 튀어나오게 모자 다음에
-  if (body === "cat") drawCatEars(g, view, m, pal);
-  else if (body === "bun") drawBunEars(g, view, m, pal);
+  // 귀는 모자 위로 튀어나오게 모자 다음에 (고양이 탈의 귀 안쪽은 늘 분홍 — 포인트 색은 사원증 줄)
+  if (fb === "cat") drawCatEars(g, view, m, body === "catmask" ? { ...pal, accent: null } : pal);
+  else if (fb === "bun") drawBunEars(g, view, m, pal);
 
   // 뒷모습 꼬리 (몸 앞에 보인다)
   if (view === "up") {
@@ -559,7 +622,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   }
 
   // ── 앉은 자세의 발 ──
-  if (body !== "sheet") {
+  if (fb !== "sheet" && body !== "cup") {
     if (pose.sit === 1) {
       if (view === "down") {
         g.set(cx - 3, 26, pal.feet);
@@ -591,7 +654,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   if (gear.extra.hand) drawHandGlow(g, view, gear.extra.hand, m);
   if (gear.hat === "hat_halo") drawHalo(g, m, view);
   // 손 흔들기·환호: 팔 없는 몸은 몸 전체를 기울이고, 손은 밝은 색 + 외곽선으로 몸 밖에 크게 그린다
-  const tilt = (body === "round" || body === "sheet") && pose.tilt ? pose.tilt : 0;
+  const tilt = (fb === "round" || fb === "sheet") && pose.tilt ? pose.tilt : 0;
   if (tilt) g = shear(g, tilt);
   for (const h of actHands(view, pose.arms, m)) drawHand(g, h, tilt, m, view, pal);
   if (pose.arms === "rope") drawRopes(g, view, m, pose);
@@ -620,6 +683,252 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     for (let x = 5; x < 15; x++) if (!g.filled(x, 27)) g.set(x, 27, 0x000000, x === 5 || x === 14 ? 40 : 80);
   }
   return g;
+}
+
+// ── 25번 프리미엄·운영자 외형 덧그림 ──
+// phase "torso" = 망토(몸통) 위·팔과 머리 전 (셔츠·넥타이·담비털·띠), "front" = 얼굴 다음·꾸미기 전 (상자·머그잔·튜브·갓·왕관·우산·수염)
+// 머리 위에 늘 쓰는 것(우산·왕관·갓)은 머리 꾸미기를 쓰면(headWorn) 벗는다.
+
+function drawBodyExtra(g: Grid, body: AvatarBody, phase: "torso" | "front", view: View, pose: Pose, m: M, pal: Pal, headWorn: boolean): void {
+  const { cx, hy, neck, top } = m;
+  const side = view === "side";
+  const up = view === "up";
+  const sitDrop = pose.sit === 1 ? 3 : pose.sit === 2 ? 2 : 0;
+  const cloakBot = pose.sit === 1 ? 26 : 24 + (pose.sit === 2 ? 1 : 0);
+  const accent = (c: Color) => pal.accent ?? c;
+  const accentLo = (c: Color) => (pal.accent === null ? c : pal.accentLo);
+  const shirt = 0xf2efe6;
+  if (phase === "torso") {
+    switch (body) {
+      case "suit": {
+        // 흰 셔츠 V + 넥타이 (포인트, 원래 빨강) + 옷깃 그늘
+        const tie = accent(0xb8323c);
+        const tieLo = accentLo(0x8a2430);
+        if (view === "down") {
+          g.hline(cx - 3, cx + 2, neck, shirt);
+          g.hline(cx - 2, cx + 1, neck + 1, shirt);
+          g.set(cx - 3, neck + 1, pal.cloakLo);
+          g.set(cx + 2, neck + 1, pal.cloakLo);
+          g.set(cx - 2, neck + 2, pal.cloakLo);
+          g.set(cx + 1, neck + 2, pal.cloakLo);
+          g.rect(cx - 1, neck, 2, 3, tie);
+          g.set(cx, neck + 1, tieLo);
+          g.set(cx - 1, neck + 3, tie);
+          g.set(cx, cloakBot - 1, shirt);
+        } else if (side) {
+          g.vline(cx + 2, neck, neck + 1, shirt);
+          g.vline(cx + 3, neck, neck + 3, tie);
+          g.set(cx + 3, neck + 1, tieLo);
+          g.vline(cx + 1, neck + 1, neck + 3, pal.cloakLo);
+        } else {
+          g.hline(cx - 2, cx + 1, neck, shirt);
+          g.vline(cx, neck + 2, cloakBot - 1, pal.cloakLo);
+        }
+        return;
+      }
+      case "catmask": {
+        // 셔츠 V + 사원증 목줄(포인트, 원래 파랑) + 사원증
+        const cord = accent(0x3a8ae8);
+        if (view === "down") {
+          g.hline(cx - 2, cx + 1, neck, shirt);
+          g.hline(cx - 1, cx, neck + 1, shirt);
+          g.set(cx - 3, neck, cord);
+          g.set(cx + 2, neck, cord);
+          g.set(cx - 3, neck + 1, cord);
+          g.set(cx + 2, neck + 1, cord);
+          g.rect(cx - 2, neck + 2, 4, 2, 0xf6f6f2);
+          g.hline(cx - 2, cx + 1, neck + 2, cord);
+          g.set(cx - 2, neck + 3, 0x8a7a6a);
+        } else if (side) {
+          g.vline(cx + 2, neck, neck + 1, shirt);
+          g.set(cx + 1, neck, cord);
+          g.set(cx + 2, neck + 2, cord);
+          g.rect(cx + 2, neck + 3, 2, 2, 0xf6f6f2);
+        } else {
+          g.hline(cx - 3, cx + 2, neck, cord);
+        }
+        return;
+      }
+      case "king": {
+        // 담비털 옷깃·밑단 (흰 바탕에 까만 점) + 금 걸쇠
+        const ermine = (y: number) => {
+          for (let x = 0; x < AV_W; x++) if (g.filled(x, y)) g.set(x, y, (x + y) % 3 === 0 ? 0x1e1c22 : 0xf4f0e6);
+        };
+        ermine(cloakBot);
+        if (view === "down") g.rect(cx - 1, neck + 1, 2, 1, 0xf2c43a);
+        else if (side) g.set(cx + 2, neck + 1, 0xf2c43a);
+        return;
+      }
+      case "reaper": {
+        // 흰 동정(V 옷깃) + 붉은 띠
+        const sash = 0x9a2a2a;
+        const sy = m.shY + 3;
+        for (let x = 0; x < AV_W; x++) if (g.filled(x, sy)) g.set(x, sy, sash);
+        if (view === "down") {
+          g.set(cx - 2, neck, shirt);
+          g.set(cx + 1, neck, shirt);
+          g.set(cx - 1, neck + 1, shirt);
+          g.set(cx, neck + 1, shirt);
+          g.set(cx + 1, sy + 1, sash);
+          g.set(cx + 1, sy + 2, sash);
+        } else if (side) {
+          g.vline(cx + 2, neck, neck + 1, shirt);
+          g.set(cx - 2, sy + 1, sash);
+        }
+        return;
+      }
+    }
+    return;
+  }
+  switch (body) {
+    case "box": {
+      // 택배 상자: 몸 부위 색(원래 골판지), 위 날개는 바깥으로 벌어지고, 포인트 = 테이프
+      const y0 = 18 + sitDrop;
+      const x0 = side ? cx - 5 : cx - 6;
+      const x1 = side ? cx + 4 : cx + 5;
+      for (let y = y0; y <= cloakBot; y++)
+        for (let x = x0; x <= x1; x++) g.set(x, y, y === y0 ? pal.bodyHi : x >= x1 - 1 || y === cloakBot ? pal.bodyLo : pal.bodyMid);
+      const flap = pal.bodyHi;
+      const out = pose.lie ? 0 : 1;
+      g.set(x0 - out, y0 - 1, flap);
+      g.set(x0 - 2 * out, y0 - 2, flap);
+      g.set(x0, y0 - 1, flap);
+      g.set(x1 + out, y0 - 1, pal.bodyMid);
+      g.set(x1 + 2 * out, y0 - 2, pal.bodyMid);
+      g.set(x1, y0 - 1, pal.bodyMid);
+      const tape = accent(0xe6d6a6);
+      const tx = side ? cx - 1 : cx - 1;
+      g.rect(tx, y0, 2, cloakBot - y0 + 1, tape);
+      if (view === "down") {
+        // 송장 + 이쪽이 위 화살표
+        g.rect(cx + 2, y0 + 2, 3, 2, 0xf6f4ec);
+        g.hline(cx + 2, cx + 4, y0 + 3, 0x9a9488);
+        g.vline(cx - 4, y0 + 2, y0 + 4, 0x6a4a2a);
+        g.set(cx - 5, y0 + 3, 0x6a4a2a);
+        g.set(cx - 3, y0 + 3, 0x6a4a2a);
+      } else if (up) g.hline(x0 + 1, x1 - 1, y0 + 3, 0x8a6a3a);
+      return;
+    }
+    case "cup": {
+      // 머그잔: 몸 부위 색(원래 흰 사기), 포인트 = 컵 띠, 손잡이는 앞모습 오른쪽·옆모습 뒤쪽
+      const y0 = Math.round(hy) + 1;
+      const y1 = Math.min(26, y0 + 6);
+      for (let y = y0; y <= y1; y++) {
+        const h = y >= y1 - 1 ? 6 : 7;
+        for (let x = cx - h; x < cx + h; x++) g.set(x, y, y === y0 ? pal.bodyHi : x === cx - h ? pal.bodyHi : x >= cx + h - 2 || y === y1 ? pal.bodyLo : pal.bodyMid);
+      }
+      const band = accent(0x8a5a3a);
+      for (let x = cx - 7; x < cx + 7; x++) {
+        g.set(x, y0 + 2, band);
+        g.set(x, y0 + 3, x >= cx + 5 ? accentLo(0x6a4028) : band);
+      }
+      if (view === "down") g.rect(cx - 1, y0 + 2, 2, 2, 0xf6efe0);
+      if (pose.lie) return;
+      const hx = view === "down" ? cx + 7 : cx - 9;
+      g.vline(hx + (view === "down" ? 1 : 0), y0 + 1, y0 + 4, pal.bodyMid);
+      g.set(view === "down" ? hx : hx + 1, y0 + 1, pal.bodyMid);
+      g.set(view === "down" ? hx : hx + 1, y0 + 4, pal.bodyMid);
+      return;
+    }
+    case "tube": {
+      // 오리 튜브: 포인트 색(원래 노랑) 고리 + 앞쪽 오리 머리
+      const c = accent(0xf6d23a);
+      const lo = accentLo(0xd4a020);
+      const hi = pal.accent === null ? 0xfff09a : lighten(pal.accent, 0.3);
+      // 해먹에 누울 때는 튜브를 잠깐 벗어 둔다
+      if (pose.lie) return;
+      const y0 = Math.round(hy) + 1;
+      g.hline(cx - 7, cx + 6, y0, hi);
+      g.hline(cx - 8, cx + 7, y0 + 1, c);
+      g.hline(cx - 7, cx + 6, y0 + 2, lo);
+      if (up) return;
+      const dx = side ? cx + 7 : cx + 5;
+      g.ellipse(dx, y0 - 2, 1.8, 1.8, c);
+      g.set(dx - 1, y0 - 3, hi);
+      g.set(dx + 2, y0 - 2, 0xf08a2a);
+      g.set(dx + 2, y0 - 1, 0xd8701a);
+      g.set(dx, y0 - 3, 0x1e1a14);
+      return;
+    }
+    case "catmask": {
+      // 고양이 탈: 볼 수염 + (옆·뒤) 탈 끈
+      const w = 0x3a3440;
+      if (view === "down") {
+        g.set(cx - 5, hy + 1, w);
+        g.set(cx - 4, hy + 2, w);
+        g.set(cx + 4, hy + 1, w);
+        g.set(cx + 3, hy + 2, w);
+      } else if (side) {
+        g.set(cx + 1, hy + 2, w);
+        g.hline(cx - 4, cx - 2, hy, 0x5a4a3a);
+      } else {
+        g.hline(cx - 4, cx + 3, hy, 0x5a4a3a);
+        g.rect(cx - 1, hy - 1, 2, 2, 0x5a4a3a);
+      }
+      return;
+    }
+  }
+  if (headWorn) return;
+  switch (body) {
+    case "umbrella": {
+      // 우산 갓: 포인트 색(원래 빨강)과 흰 칸이 번갈아, 꼭지는 검게
+      const ty = hy - 11;
+      const red = accent(0xd8434f);
+      const redLo = accentLo(0xa8303a);
+      const white = 0xf4efe6;
+      const ucx = side ? cx - 1 : cx;
+      g.set(ucx, ty, 0x3a3a48);
+      g.set(ucx - 1, ty, 0x3a3a48);
+      const halves = [2, 4, 5, 6];
+      halves.forEach((h, i) => {
+        const y = ty + 1 + i;
+        for (let x = ucx - h; x < ucx + h; x++) {
+          const seg = Math.floor((x - ucx + 9) / 3) % 2 === 0;
+          const edge = i === halves.length - 1;
+          if (edge && (x - ucx + 9) % 3 === 2) continue;
+          g.set(x, y, seg ? (x >= ucx + h - 2 || edge ? redLo : red) : edge ? 0xd8d2c6 : white);
+        }
+      });
+      g.vline(ucx - 1, ty + 5, hy - 6, 0x3a3a48);
+      return;
+    }
+    case "king": {
+      // 왕관: 포인트 색(원래 금색), 보석 셋
+      const gold = accent(0xf2c43a);
+      const lo = accentLo(0xb88a1a);
+      const hi = pal.accent === null ? 0xfff0a0 : lighten(pal.accent, 0.35);
+      // 옆모습은 뒤로 살짝 (손 흔들 때 손이 왕관에 묻히지 않게)
+      const x0 = side ? cx - 5 : cx - 4;
+      const w = side ? 6 : 8;
+      g.rect(x0, top - 2, w, 2, gold);
+      g.hline(x0, x0 + w - 1, top - 1, lo);
+      const spikes = side ? [x0, x0 + 3, x0 + w - 1] : [x0, x0 + 3, x0 + 4, x0 + w - 1];
+      for (const x of spikes) {
+        g.set(x, top - 3, gold);
+        g.set(x, top - 4, hi);
+      }
+      if (!up) {
+        g.set(x0 + 1, top - 2, 0xe0405a);
+        g.set(x0 + w - 2, top - 2, 0x4a8ae8);
+        if (!side) g.set(x0 + 3, top - 2, 0x5ad07a);
+      }
+      return;
+    }
+    case "reaper": {
+      // 갓: 검은 통 + 넓은 챙(성긴 말총 결) + 갓끈 구슬(포인트, 원래 호박색)
+      const ink = 0x1c1b22;
+      const ucx = side ? cx - 1 : cx;
+      g.rect(ucx - 2, top - 3, 4, 4, ink);
+      g.hline(ucx - 2, ucx + 1, top - 3, 0x2e2c38);
+      g.set(ucx - 2, top - 2, 0x3a3846);
+      for (let x = ucx - 5; x < ucx + 5; x++) g.set(x, top + 1, (x + 20) % 2 ? 0x24232c : 0x3a3846);
+      const bead = accent(0xd09a3a);
+      const beadLo = accentLo(0x9a6a22);
+      const strings = side ? [cx + 3] : [cx - 5, cx + 4];
+      for (const sx of strings) for (let y = top + 2; y <= hy + 2; y++) g.set(sx, y, (y + 20) % 2 ? bead : beadLo);
+      return;
+    }
+  }
 }
 
 function drawArms(g: Grid, view: View, pose: Pose, m: M, pal: Pal, water: boolean): void {
@@ -832,7 +1141,7 @@ function drawRopes(g: Grid, view: View, m: M, pose: Pose): void {
   }
 }
 
-function drawFace(g: Grid, body: AvatarBody, view: View, m: M, pal: Pal): void {
+function drawFace(g: Grid, body: BaseBody, view: View, m: M, pal: Pal): void {
   const { cx, hy } = m;
   if (view === "up") return;
   const side = view === "side";
@@ -960,7 +1269,7 @@ function drawHalo(g: Grid, m: M, view: View): void {
 }
 
 /** 머리·손 꾸미기 (외곽선 전에 그려 같이 테두리를 두른다) */
-function drawGear(g: Grid, view: View, gear: Gear, m: M, pal: Pal, body: AvatarBody): void {
+function drawGear(g: Grid, view: View, gear: Gear, m: M, pal: Pal, body: BaseBody): void {
   const { cx } = m;
   // 동글이는 얼굴이 머리 위쪽까지 올라와 있어 모자를 조금 더 얹는다
   const top = body === "round" ? m.top - 1 : m.top;

@@ -3,8 +3,24 @@
 .wrap {
   display: flex;
   flex-direction: column;
+  flex-grow: 1;
   gap: 10px;
   min-height: 0;
+}
+
+/* 고정 크기 창(760×660)을 채운다: 부위 고르기·결과·시간 끝 단계는 내용이 짧아
+   그림·설명 줄이 남는 높이를 받고, 버튼 줄은 창 아래에 붙인다 */
+.wrap > .row {
+  flex-grow: 1;
+}
+
+.wrap > .row > .side {
+  align-self: stretch;
+}
+
+.wrap > .row > .side > .actions:last-child,
+.wrap > .actions {
+  margin-top: auto;
 }
 
 .row {

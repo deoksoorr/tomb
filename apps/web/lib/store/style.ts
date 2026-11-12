@@ -11,7 +11,8 @@ import { ECON_TTL_SEC, spendCategory, type AccountStore } from "./types";
 // (Redis는 Lua 한 번, 메모리는 await 없는 구간 — 계정 상태는 MemoryAccounts의 style* 메서드로 바꾼다).
 //
 // Redis 키
-//  - acct:{id}:style   HASH  head/body/accent → "#rrggbb"(염색한 부위만), session → 진행 중인 무작위 염색 JSON
+//  - acct:{id}:style   HASH  head/body/accent → "#rrggbb"(염색한 부위만), session → 진행 중인 무작위 염색 JSON,
+//                            bodies → 선택권으로 해금한 프리미엄 외형 id (쉼표로 이음)
 //  - dye:fixed         HASH  고정 색 염색권 id(dyefix_*) → 정의 JSON {name, color, parts?, createdAt}
 //  - dye:fixed:log     LIST  관리자 발급 기록 JSON (최신 먼저 최대 100개)
 // 계정 포인트·가방·착용 키(acct:{id}, :inv, :look, :stash, :ledger)와 경제 통계(econ:{날짜})는 accounts-redis.ts와 같이 쓴다.
@@ -37,8 +38,13 @@ export type FixedDyeDef = { id: string; name: string; color: string; parts?: Dye
 /** 관리자 발급 기록 (giftId = 선물함으로 보낸 선물) */
 export type FixedDyeIssue = { at: number; defId: string; name: string; color: string; count: number; target: "all" | string; giftId: string };
 
-export type StyleState = { dye: AvatarDye; session: DyeSession | null };
+/** bodies = 선택권으로 영구 해금한 프리미엄 외형 */
+export type StyleState = { dye: AvatarDye; session: DyeSession | null; bodies: string[] };
 export type ChargeResult = "ok" | "insufficient" | "same";
+/** 외형 바꾸기 결과: unlocked = 프리미엄 외형을 이번에 해금하면서 바꿨다 (선택권 값을 냈다) */
+export type ReshapeResult = ChargeResult | "unlocked";
+/** 아직 해금하지 않은 프리미엄 외형이면 이 값·사유로 해금하면서 바꾼다 (이미 해금했으면 보통 요금) */
+export type ReshapeUnlock = { price: number; reason: string };
 
 export interface StyleStore {
   get(id: string): Promise<StyleState>;
@@ -57,8 +63,11 @@ export interface StyleStore {
   applyFixed(id: string, itemId: string, part: DyePart, color: string): Promise<boolean>;
   /** price 포인트를 내고 part를 기본색으로 되돌린다. 이미 기본색이면 "same" (포인트를 쓰지 않는다) */
   reset(id: string, part: DyePart, price: number, reason: string, now: number): Promise<ChargeResult>;
-  /** price 포인트를 내고 몸 모양을 바꾼다 (부위 색은 그대로 따라간다). 이미 그 몸이면 "same" */
-  reshape(id: string, body: string, price: number, reason: string, now: number): Promise<ChargeResult>;
+  /**
+   * price 포인트를 내고 몸 모양을 바꾼다 (부위 색은 그대로 따라간다). 이미 그 몸이면 "same".
+   * unlock이 있으면 프리미엄 외형: 아직 해금 전이면 unlock.price를 내고 해금까지 한 번에 ("unlocked")
+   */
+  reshape(id: string, body: string, price: number, reason: string, now: number, unlock?: ReshapeUnlock): Promise<ReshapeResult>;
   /**
    * 영구 꾸미기 구매: 이미 영구로 가졌으면 "owned", 가방에 같은 꾸미기 이용권(새것)이 있으면 "ticket",
    * 포인트가 모자라면 "insufficient". 사면 입고 있던 기간제는 그대로 영구가 되고, 아니면 벗어 둔 꾸미기에 영구로 들어간다
@@ -97,7 +106,7 @@ function parseSession(raw: string | undefined | null): DyeSession | null {
 // ── 메모리 (로컬 개발) ──
 
 export class MemoryStyle implements StyleStore {
-  private styles = new Map<string, { dye: AvatarDye; session: DyeSession | null }>();
+  private styles = new Map<string, { dye: AvatarDye; session: DyeSession | null; bodies?: string[] }>();
   private fixed = new Map<string, FixedDyeDef>();
   private log: FixedDyeIssue[] = [];
   /** 계정 저장소 (HMR로 바뀌어도 최신 것을 쓰게 매번 받는다) */
@@ -113,7 +122,7 @@ export class MemoryStyle implements StyleStore {
 
   async get(id: string): Promise<StyleState> {
     const s = this.styles.get(id);
-    return { dye: { ...(s?.dye ?? {}) }, session: s?.session ? { ...s.session } : null };
+    return { dye: { ...(s?.dye ?? {}) }, session: s?.session ? { ...s.session } : null, bodies: [...(s?.bodies ?? [])] };
   }
 
   async begin(id: string, itemId: string, session: DyeSession) {
@@ -163,12 +172,15 @@ export class MemoryStyle implements StyleStore {
     return "ok";
   }
 
-  async reshape(id: string, body: string, price: number, reason: string, now: number): Promise<ChargeResult> {
+  async reshape(id: string, body: string, price: number, reason: string, now: number, unlock?: ReshapeUnlock): Promise<ReshapeResult> {
     const accts = this.accounts();
     if ((accts.styleBody(id) ?? "hood") === body) return "same";
-    if (!accts.styleCharge(id, price, reason, now)) return "insufficient";
+    const s = this.st(id);
+    const fresh = !!unlock && !(s.bodies ?? []).includes(body);
+    if (!accts.styleCharge(id, fresh ? unlock.price : price, fresh ? unlock.reason : reason, now)) return "insufficient";
+    if (fresh) s.bodies = [...(s.bodies ?? []), body];
     accts.styleSetBody(id, body);
-    return "ok";
+    return fresh ? "unlocked" : "ok";
   }
 
   async buyPermanent(id: string, itemId: string, slot: CosmeticSlot, price: number, permUntil: number, reason: string, now: number) {
@@ -279,10 +291,19 @@ return 1
 `;
 
 // KEYS: acct, ledger, econ  ARGV: body, price, entry, field  → -1 같음 | 0 부족 | 1
+// KEYS: acct, ledger, econ, style  ARGV: body, price, entry, field, unlockPrice('' = 프리미엄 아님), unlockEntry
+// → -1 같은 몸 | 0 부족 | 1 바꿈 | 2 해금하면서 바꿈
 const RESHAPE_LUA = `${CHARGE_FN}
 if (redis.call('HGET', KEYS[1], 'body') or 'hood') == ARGV[1] then return -1 end
-if not charge(KEYS[1], KEYS[2], KEYS[3], tonumber(ARGV[2]), ARGV[3], ARGV[4]) then return 0 end
+local price, entry, fresh = tonumber(ARGV[2]), ARGV[3], false
+local owned = redis.call('HGET', KEYS[4], 'bodies') or ''
+if ARGV[5] ~= '' and not string.find(',' .. owned .. ',', ',' .. ARGV[1] .. ',', 1, true) then
+  price, entry, fresh = tonumber(ARGV[5]), ARGV[6], true
+end
+if not charge(KEYS[1], KEYS[2], KEYS[3], price, entry, ARGV[4]) then return 0 end
+if fresh then redis.call('HSET', KEYS[4], 'bodies', owned == '' and ARGV[1] or (owned .. ',' .. ARGV[1])) end
 redis.call('HSET', KEYS[1], 'body', ARGV[1])
+if fresh then return 2 end
 return 1
 `;
 
@@ -318,7 +339,7 @@ export class RedisStyle implements StyleStore {
 
   async get(id: string): Promise<StyleState> {
     const h = hashOf(await this.redis.hgetall(styleKey(id)));
-    return { dye: dyeOf(h), session: parseSession(h.session) };
+    return { dye: dyeOf(h), session: parseSession(h.session), bodies: h.bodies ? h.bodies.split(",").filter(Boolean) : [] };
   }
 
   async begin(id: string, itemId: string, session: DyeSession) {
@@ -361,16 +382,18 @@ export class RedisStyle implements StyleStore {
     return r === 1 ? "ok" : r === 0 ? "insufficient" : "same";
   }
 
-  async reshape(id: string, body: string, price: number, reason: string, now: number): Promise<ChargeResult> {
+  async reshape(id: string, body: string, price: number, reason: string, now: number, unlock?: ReshapeUnlock): Promise<ReshapeResult> {
     const r = Number(
-      await this.redis.eval<string[], number>(RESHAPE_LUA, [K.acct(id), K.ledger(id), K.econ(kstDay(now))], [
+      await this.redis.eval<string[], number>(RESHAPE_LUA, [K.acct(id), K.ledger(id), K.econ(kstDay(now)), styleKey(id)], [
         body,
         String(price),
         this.entry(price, reason, now),
         `spend:${spendCategory(reason)}`,
+        unlock ? String(unlock.price) : "",
+        unlock ? this.entry(unlock.price, unlock.reason, now) : "",
       ]),
     );
-    return r === 1 ? "ok" : r === 0 ? "insufficient" : "same";
+    return r === 2 ? "unlocked" : r === 1 ? "ok" : r === 0 ? "insufficient" : "same";
   }
 
   async buyPermanent(id: string, itemId: string, slot: CosmeticSlot, price: number, permUntil: number, reason: string, now: number) {

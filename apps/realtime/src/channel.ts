@@ -21,6 +21,8 @@ import {
   USE_INTERVAL_MS,
   hasDye,
   sameDye,
+  staffGateBody,
+  staffGateLook,
   type AvatarDye,
   type C2S,
   type DirId,
@@ -62,6 +64,8 @@ export type PeerRecord = {
   mood?: string;
   /** 동물원 타는 펫에 올라타 있다 (착용 펫이 타는 펫이고 자리에 앉아 있지 않은 동안만) */
   ride?: true;
+  /** 실내(상점·집·사냥터 등 하위 장면)에 들어가 있다 → 다른 사람 화면에서 숨긴다 (월드 채널만). 재접속 유예 동안에도 이어 간다 */
+  away?: true;
   /** 31번 운영자 계정 (입장 토큰에 Vercel이 넣은 것만) */
   staff?: true;
   /** 이 연결로 자리를 잡은 시각. 로비의 채널 간 중복 정리(kick)가 더 새 연결을 내보내지 않게 비교한다 */
@@ -174,6 +178,8 @@ export const SAY_INTERVAL_MS = 3_000;
 export const EMO_INTERVAL_MS = 1_000;
 /** 타는 펫 올라타기·내리기(ride) 연결당 최소 간격 */
 export const RIDE_INTERVAL_MS = 400;
+/** 실내 들어가기·나오기(away) 연결당 최소 간격 (상점을 바로 나왔다 들어가도 마지막 상태는 다음 welcome·sync로 맞는다) */
+export const AWAY_INTERVAL_MS = 150;
 /** 24번 벤치 상태(mood) 연결당 최소 간격 */
 export const MOOD_INTERVAL_MS = 800;
 /** warp 서버 쿨다운. 클라이언트(WARP_COOLDOWN_MS 1초)보다 짧게 둬서 네트워크 지터로 정상 요청이 버려지지 않게 한다 */
@@ -210,6 +216,7 @@ type Peer<C> = PeerRecord & {
   lastMoodAt?: number;
   /** 타는 펫 올라타기·내리기 (없으면 아직 안 씀) */
   lastRideAt?: number;
+  lastAwayAt?: number;
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
   lastSeenAt: number;
   /** attachment가 최신인지 */
@@ -679,6 +686,10 @@ export class ChannelCore<C extends object> {
         if (now - (p.lastRideAt ?? -Infinity) < RIDE_INTERVAL_MS) return;
         p.lastRideAt = now;
         return this.onRide(p, m.on);
+      case "away":
+        if (now - (p.lastAwayAt ?? -Infinity) < AWAY_INTERVAL_MS) return;
+        p.lastAwayAt = now;
+        return this.onAway(p, m.on);
       case "mood":
         if (now - (p.lastMoodAt ?? -Infinity) < MOOD_INTERVAL_MS) return;
         p.lastMoodAt = now;
@@ -719,10 +730,11 @@ export class ChannelCore<C extends object> {
     const p = sid === undefined ? undefined : this.peers.get(sid);
     if (!p || g.visitorId !== p.visitorId) return;
     if (g.kind === "look") {
-      p.look = g.look;
+      // 31번: 운영자 전용 꾸미기·몸은 입장 토큰이 운영자(staff)인 연결만 (아니면 빼고 후드 유령)
+      p.look = staffGateLook(g.look, !!p.staff);
       // 46·25번: 새 웹이 낸 증서는 염색·몸 모양도 싣는다 (옛 증서엔 없으니 그대로 둔다)
       if (g.dye !== undefined) p.dye = hasDye(g.dye) ? g.dye : undefined;
-      if (g.body !== undefined) p.body = g.body;
+      if (g.body !== undefined) p.body = staffGateBody(g.body, !!p.staff);
       this.save(p);
       this.host.liveChanged?.(true);
       const extra = { ...(g.dye !== undefined ? { dye: p.dye ?? {} } : {}), ...(g.body !== undefined ? { body: p.body } : {}) };
@@ -888,6 +900,18 @@ export class ChannelCore<C extends object> {
     this.save(p);
     this.host.liveChanged?.(true);
     this.broadcast(encodeEvent({ t: "ride", sid: p.sid, on: true }));
+  }
+
+  /**
+   * 실내에 들어감(on)·나옴. 월드 채널만 (방은 그 자체가 실내). 같은 채널의 다른 사람에게 알리고, 늦게 온 사람은 PeerInfo.away로 받는다.
+   * 옛 클라이언트는 보내지 않으니 언제나 보인다
+   */
+  private onAway(p: Peer<C>, on: boolean): void {
+    if (this.cfg.room || !!p.away === on) return;
+    p.away = on ? true : undefined;
+    this.save(p);
+    this.host.liveChanged?.(true);
+    this.broadcast(encodeEvent({ t: "away", sid: p.sid, on }), p.sid);
   }
 
   /** 타는 펫에서 내리고 모두에게 알린다 (타고 있지 않으면 아무것도 안 한다) */
@@ -1139,6 +1163,7 @@ export class ChannelCore<C extends object> {
       ...(p.mood ? { mood: p.mood } : {}),
       ...(p.staff ? { staff: true as const } : {}),
       ...(p.ride ? { ride: true as const } : {}),
+      ...(p.away ? { away: true as const } : {}),
     };
   }
 
@@ -1150,6 +1175,6 @@ export class ChannelCore<C extends object> {
     const mood = seatId && isSeatMood(r.mood) ? { mood: r.mood } : {};
     // 타는 펫은 자리에 앉아 있지 않고 타는 펫을 입고 있을 때만 이어 간다
     const ride = r.ride === true && !seatId && ridePetOfLook(look) ? { ride: true as const } : {};
-    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...(r.staff === true ? { staff: true as const } : {}), joinedAt: r.joinedAt ?? 0 };
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...(r.away === true ? { away: true as const } : {}), ...(r.staff === true ? { staff: true as const } : {}), joinedAt: r.joinedAt ?? 0 };
   }
 }

@@ -1,7 +1,8 @@
-import { itemById } from "@tomb/protocol";
+import { isStaffItem, itemById } from "@tomb/protocol";
 import { env } from "@/lib/env";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
+import { isStaff } from "@/lib/staff";
 import { requireVisitor } from "@/lib/session";
 import { getAccounts } from "@/lib/store";
 import { lookGrant, lookOf, loadMe } from "@/lib/store/accounts";
@@ -16,6 +17,8 @@ export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   const { itemId } = await readBody(req, WearSchema);
   await rateLimit("shop", req, visitorId);
+  // 31번 운영자 전용 꾸미기는 운영자만 입는다 (운영자에서 풀리면 벗어 둔 채로)
+  if (isStaffItem(itemId) && !(await isStaff(visitorId))) throw new HttpError(403, "FORBIDDEN", "운영자만 입을 수 있는 꾸미기예요.");
   const accounts = getAccounts();
   const now = Date.now();
   if (!(await accounts.wear(visitorId, itemId, itemById(itemId)!.slot!, now)))

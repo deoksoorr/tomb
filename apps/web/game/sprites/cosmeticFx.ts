@@ -254,6 +254,31 @@ export const FX_ART = {
   mountHound: { w: MOUNT_W, h: MOUNT_H, frames: MOUNT_FRAMES, build: () => mountSheet("hound") },
   mountGoose: { w: MOUNT_W, h: MOUNT_H, frames: MOUNT_FRAMES, build: () => mountSheet("goose") },
   mountDeer: { w: MOUNT_W, h: MOUNT_H, frames: MOUNT_FRAMES, build: () => mountSheet("deer") },
+  /** 물에 들어간 펫 둘레 물결 고리 (아바타 물결보다 작게) */
+  petRipple: {
+    w: 12,
+    h: 4,
+    frames: 1,
+    build: () => {
+      const g = new Grid(12, 4);
+      g.ellipse(6, 2, 6, 2, 0xd8f0fa, 170);
+      g.ellipse(6, 2, 4.5, 1.1, 0x000000, 0);
+      for (let i = 0; i < g.px.length; i++) if ((g.px[i] & 255) === 0) g.px[i] = 0;
+      return g;
+    },
+  },
+  /** 잠수한 펫 자리에서 올라오는 물방울 */
+  petBubble: {
+    w: 3,
+    h: 3,
+    frames: 1,
+    build: () => {
+      const g = new Grid(3, 3);
+      for (const [x, y] of [[1, 0], [0, 1], [2, 1], [1, 2]] as const) g.set(x, y, 0xd8f0fa, 220);
+      g.set(1, 1, 0xffffff, 90);
+      return g;
+    },
+  },
   /** 도깨비불 친구 둘레 빛 (더하기) */
   wispGlow: {
     w: 15,
@@ -383,6 +408,136 @@ export const FX_ART = {
       for (let i = 1; i < n - 1; i++) g.set(o + n - 1 - i, o + i, c);
     }),
   },
+  // ── 추가분 2 (11/12): 날개 2종·발자국 6종·오라 6종 + 31번 운영자(저승길 발자국·혼불) ──
+  wingsAngel: {
+    w: 26,
+    h: 12,
+    frames: 2,
+    build: wings(
+      0xf8f8ff,
+      0xc8d0e8,
+      0xffffff,
+      0x7a80a0,
+      (i, len) => [Math.max(0, 4 - Math.round(Math.sin((i / len) * Math.PI * 0.85) * 4)), Math.max(2, 9 - Math.floor(i / 2) + (i % 2))],
+      (_g, _x, y, i) => (i % 3 === 2 && y >= 5 ? 0xdde2f2 : null),
+    ),
+  },
+  wingsDragon: {
+    w: 26,
+    h: 12,
+    frames: 2,
+    build: wings(
+      0x3a8a5a,
+      0x2a5a3a,
+      0x8ad08a,
+      0x14241a,
+      (i, len) => [3 - Math.round(Math.sin((i / len) * Math.PI * 0.9) * 3), Math.max(3, 9 - Math.floor(i / 2.5) - (i % 3 === 2 ? 2 : 0))],
+      (_g, _x, y, i) => (i % 3 === 0 && y > 3 ? 0x2a6a44 : null),
+    ),
+  },
+  snowPrint: {
+    w: 3,
+    h: 4,
+    frames: 2,
+    build: frames(3, 4, 2, (g, f) => {
+      g.rect(f ? 1 : 0, 1, 2, 3, 0xeaf4ff, 225);
+      g.set(f ? 0 : 2, 0, 0xffffff, 210);
+      g.set(1, 0, 0xffffff, 180);
+    }),
+  },
+  paw: {
+    w: 4,
+    h: 4,
+    frames: 2,
+    build: frames(4, 4, 2, (g, f) => {
+      rows(g, f ? [".t.t", "t...", ".pp.", ".pp."] : ["t.t.", "...t", ".pp.", ".pp."], { t: 0xffb8cc, p: 0xff8aa8 });
+    }),
+  },
+  bubble: {
+    w: 5,
+    h: 5,
+    frames: 2,
+    build: frames(5, 5, 2, (g, f) => {
+      const r = f ? 1.8 : 2.4;
+      const tmp = new Grid(5, 5);
+      tmp.ellipse(2.5, 2.5, r, r, 0xffffff);
+      tmp.ellipse(2.5, 2.5, r - 1, r - 1, 0x000000, 0);
+      for (let i = 0; i < tmp.px.length; i++) if ((tmp.px[i] & 255) === 255) g.px[i] = Grid.rgba(0xbfe8ff, 210);
+      g.set(f ? 2 : 1, 1, 0xffffff, 240);
+    }),
+  },
+  confetti: {
+    w: 2,
+    h: 2,
+    frames: 3,
+    build: frames(2, 2, 3, (g, f) => {
+      const c = [0xff6a8a, 0x5ab8e8, 0xffd04a][f];
+      if (f === 1) g.rect(0, 0, 2, 1, c);
+      else if (f === 2) g.rect(0, 0, 1, 2, c);
+      else g.rect(0, 0, 2, 2, c);
+    }),
+  },
+  coin: {
+    w: 4,
+    h: 4,
+    frames: 2,
+    build: frames(4, 4, 2, (g, f) => {
+      if (f === 0) {
+        g.ellipse(2, 2, 2, 2, 0xf2c43a);
+        g.set(1, 1, 0xfff0a0);
+        g.set(2, 2, 0xb88a1a);
+      } else {
+        g.rect(1, 0, 2, 4, 0xe0b030);
+        g.set(1, 0, 0xfff0a0);
+      }
+      g.outline(0x6a4a10, false, 150);
+    }),
+  },
+  steam: {
+    w: 3,
+    h: 5,
+    frames: 2,
+    build: frames(3, 5, 2, (g, f) => {
+      rows(g, f ? [".w.", "w..", ".w.", "..w", ".w."] : [".w.", "..w", ".w.", "w..", ".w."], { w: 0xf4f4f4 });
+    }),
+  },
+  bill: {
+    w: 6,
+    h: 3,
+    frames: 2,
+    build: frames(6, 3, 2, (g, f) => {
+      g.rect(0, 0, 6, 3, f ? 0x7ac87a : 0x8ad88a);
+      g.set(f ? 3 : 2, 1, 0x3a7a3a);
+      g.set(0, 0, 0xc8f0c8);
+      g.outline(0x2a5a2a, false, 140);
+    }),
+  },
+  miniGhost: {
+    w: 5,
+    h: 6,
+    frames: 2,
+    build: frames(5, 6, 2, (g, f) => {
+      rows(g, [".www.", "wwwww", "wewew", "wwwww", "wwwww", f ? "w.w.w" : ".w.w."], { w: 0xf4f6ff, e: 0x2a2a3a });
+      g.outline(0x6a7090, false, 150);
+    }),
+  },
+  soulFlame: {
+    w: 4,
+    h: 6,
+    frames: 2,
+    build: frames(4, 6, 2, (g, f) => {
+      rows(g, f ? ["..b.", ".bb.", ".bwb", "bwwb", "bwwb", ".bb."] : [".b..", ".bb.", "bwb.", "bwwb", "bwwb", ".bb."], { b: 0x5ad8ff, w: 0xd8faff });
+    }),
+  },
+  soulMist: {
+    w: 5,
+    h: 3,
+    frames: 2,
+    build: frames(5, 3, 2, (g, f) => {
+      rows(g, f ? [".mm..", "mmmm.", ".mmmm"] : ["..mm.", ".mmmm", "mmmm."], { m: 0x7ad8ff });
+      for (let i = 0; i < g.px.length; i++) if (g.px[i] & 255) g.px[i] = (g.px[i] & ~255) | 150;
+    }),
+  },
 } satisfies Record<string, ArtDef>;
 
 export type FxArtId = keyof typeof FX_ART;
@@ -398,7 +553,8 @@ function fill(w: number, h: number, c: Color, a: number): Grid {
 /** mount = 타는 펫 (그림은 mountArt 시트, 따라올 때는 몸집만큼 far배 떨어져 걷는다) */
 type PetSpec = { kind: "pet"; art: FxArtId; hover: number; fps: number; idleFps: number; alpha?: number; squash?: boolean; glow?: boolean; mount?: MountKind; far?: number };
 type TrailSpec = { kind: "trail"; art: FxArtId; step: number; life: number; motion: "prints" | "splash" | "rise" | "scatter" | "pop"; light?: boolean };
-type AuraSpec = { kind: "aura"; motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" };
+/** 추가분 2: fall = 머리 위에서 떨어짐, float = 옆에서 떠오름, steam = 머리 위로 김, ring = 몸 둘레를 돈다 (art로 그림을 고른다) */
+type AuraSpec = { kind: "aura"; motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring"; art?: FxArtId; light?: boolean };
 type WingSpec = { kind: "wings"; art: FxArtId; flapMs: number; amp: number };
 type HeldSpec = { kind: "held"; item: "umbrella" | "balloon" };
 export type FxSpec = PetSpec | TrailSpec | AuraSpec | WingSpec | HeldSpec;
@@ -419,6 +575,24 @@ export const COSMETIC_FX: Readonly<Record<string, FxSpec>> = {
   aura_raincloud: { kind: "aura", motion: "cloud" },
   aura_notes: { kind: "aura", motion: "notes" },
   aura_zzz: { kind: "aura", motion: "zzz" },
+  // 추가분 2
+  back_wings_angel: { kind: "wings", art: "wingsAngel", flapMs: 260, amp: 0.22 },
+  back_wings_dragon: { kind: "wings", art: "wingsDragon", flapMs: 140, amp: 0.25 },
+  feet_snowprints: { kind: "trail", art: "snowPrint", step: 7, life: 3000, motion: "prints" },
+  feet_paws: { kind: "trail", art: "paw", step: 8, life: 2400, motion: "prints" },
+  feet_bubbles: { kind: "trail", art: "bubble", step: 9, life: 1100, motion: "rise" },
+  feet_confetti: { kind: "trail", art: "confetti", step: 5, life: 1400, motion: "scatter" },
+  feet_coins: { kind: "trail", art: "coin", step: 10, life: 1300, motion: "pop" },
+  feet_stars: { kind: "trail", art: "sparkStar", step: 8, life: 1200, motion: "pop", light: true },
+  aura_steam: { kind: "aura", motion: "steam", art: "steam" },
+  aura_bubbles: { kind: "aura", motion: "float", art: "bubble" },
+  aura_leaves: { kind: "aura", motion: "fall", art: "leaf" },
+  aura_hearts: { kind: "aura", motion: "float", art: "heart" },
+  aura_ghosts: { kind: "aura", motion: "ring", art: "miniGhost" },
+  aura_money: { kind: "aura", motion: "fall", art: "bill" },
+  // 31번 운영자 전용
+  staff_steps: { kind: "trail", art: "soulMist", step: 8, life: 1600, motion: "rise", light: true },
+  staff_souls: { kind: "aura", motion: "ring", art: "soulFlame", light: true },
   pet_cat: { kind: "pet", art: "petCat", hover: 0, fps: 7, idleFps: 1.5 },
   pet_dog: { kind: "pet", art: "petDog", hover: 0, fps: 8, idleFps: 3 },
   pet_duck: { kind: "pet", art: "petDuck", hover: 0, fps: 5, idleFps: 1 },
@@ -465,6 +639,8 @@ export type FxCmd = {
   flip: boolean;
   layer: "ground" | "body" | "light";
   depth: number;
+  /** 아래쪽에서 잘라 낼 줄 수 (물에 잠긴 펫). 없으면 0 — 캔버스 미리보기는 물이 없어 쓰지 않는다 */
+  crop?: number;
 };
 
 export type FxInput = {
@@ -494,12 +670,26 @@ export type FxInput = {
   riding?: boolean;
   /** 점프 높이 (타고 있을 때 펫도 같이 뛴다) */
   hop?: number;
+  /** 주인이 물에서 수영(swim)·잠수(dive) 중: 걷는 펫도 따라 들어가 헤엄치거나 수면 아래로 (나는 펫은 물 위를 그대로 난다) */
+  water?: "swim" | "dive" | null;
 };
 
 type Part = { x: number; y: number; born: number; frame: number; flip: boolean; vx: number };
 
 const TRAIL_POOL = 14;
 const PET_LAG_MS = 240;
+/** 펫이 물에 들어가거나 나오는 데 걸리는 시간 (뒤따라오느라 주인보다 조금 늦게 잠긴다) */
+const PET_WADE_MS = 260;
+/** 헤엄칠 때 몸이 잠기는 비율 (머리·등만 보인다) */
+const PET_SWIM_SINK = 0.55;
+/** 잠수한 펫 물방울 하나가 올라오는 시간 */
+const PET_BUBBLE_MS = 900;
+
+/** 펫이 물에 잠기는 줄 수 (그림 높이 h). 나는 펫(hover)은 잠기지 않는다. dive = 그림 전체 + 1 → 수면 아래 */
+export function petSinkTarget(water: FxInput["water"], hover: number, h: number): number {
+  if (!water || hover > 0) return 0;
+  return water === "dive" ? h + 1 : Math.round(h * PET_SWIM_SINK);
+}
 
 /** 몸 뒤쪽으로 조금 떨어진 펫 자리 (그림자 유령 친구와 같은 값) */
 export function petBack(dir: DirId): [number, number] {
@@ -525,6 +715,8 @@ export class CosmeticFxSim {
   private petX = 0;
   private petY = 0;
   private petOn = false;
+  /** 펫이 물에 잠긴 줄 수 (부드럽게 따라간다) */
+  private petSink = 0;
   private parts: Part[] = [];
   private partNext = 0;
   private walked = 0;
@@ -538,7 +730,10 @@ export class CosmeticFxSim {
   setLook(look: readonly string[]): void {
     const next = look.filter((id) => id in COSMETIC_FX).map((id) => [id, COSMETIC_FX[id]] as [string, FxSpec]);
     const had = new Set(this.specs.map(([id]) => id));
-    if (!next.some(([, s]) => s.kind === "pet")) this.petOn = false;
+    if (!next.some(([, s]) => s.kind === "pet")) {
+      this.petOn = false;
+      this.petSink = 0;
+    }
     if (!next.some(([, s]) => s.kind === "trail") || next.some(([id, s]) => s.kind === "trail" && !had.has(id))) {
       this.parts = [];
       this.partNext = 0;
@@ -676,14 +871,22 @@ export class CosmeticFxSim {
     }
     const gap = Math.hypot(tx - this.petX, ty - this.petY);
     const walking = f.moving || gap > 2;
+    // 물: 주인을 따라 들어가 잠긴다 (뒤따라오는 만큼 조금 늦게). 미리보기·움직임 줄이기는 바로
+    const h = FX_ART[s.art].h;
+    const sinkTo = petSinkTarget(f.water, s.hover, h);
+    if (f.still || f.reduced) this.petSink = sinkTo;
+    else this.petSink += (sinkTo - this.petSink) * (1 - Math.exp(-f.dt / PET_WADE_MS));
+    const sink = Math.round(this.petSink);
+    const wet = sink > 0;
     const fps = walking ? s.fps : s.idleFps;
-    const frame = Math.floor((t / 1000) * fps) % 2;
+    const frame = Math.floor((t / 1000) * (wet ? fps * 0.6 : fps)) % 2;
     let lift = s.hover;
     let sx = 1;
     let sy = 1;
     if (s.hover) lift += f.reduced ? 0 : Math.sin(t / 420) * 1.5;
+    else if (wet) lift += f.reduced ? 0 : Math.round(Math.sin(t / 380) * 0.6); // 물에 떠서 천천히 출렁
     else if (walking && !f.reduced) lift += Math.abs(Math.sin(t / 110)) * (s.squash ? 2 : 1.2);
-    if (s.squash && !f.reduced) {
+    if (s.squash && !f.reduced && !wet) {
       const q = Math.sin(t / (walking ? 110 : 260));
       sx = 1 + 0.1 * q;
       sy = 1 - 0.1 * q;
@@ -691,8 +894,22 @@ export class CosmeticFxSim {
     const px = Math.round(this.petX);
     const py = Math.round(this.petY - lift);
     const flip = this.petX > f.x;
+    if (wet) {
+      // 수면(발밑 1px 위) 물결 고리. 잠수면 물방울이 올라온다
+      const k = f.reduced ? 0 : (Math.sin(t / 420) + 1) / 2;
+      out.push(cmd("petRipple", 0, px, py - 1, { sx: 1 + 0.15 * k, sy: 1 + 0.1 * k, alpha: 0.85 - 0.3 * k, layer: "body", depth: this.petY + 0.1 }));
+      if (sink > h) {
+        for (let i = 0; i < 2; i++) {
+          const u = (((t + i * PET_BUBBLE_MS * 0.5) % PET_BUBBLE_MS) + PET_BUBBLE_MS) % PET_BUBBLE_MS / PET_BUBBLE_MS;
+          const bx = px + (i ? 2 : -1) + Math.round(Math.sin(u * 9) * 0.6);
+          out.push(cmd("petBubble", 0, bx, Math.round(py - 2 - u * 9), { alpha: 1 - u, layer: "body", depth: this.petY + 0.2 }));
+        }
+        return; // 수면 아래: 몸·빛은 그리지 않는다
+      }
+    }
     if (s.glow) out.push(cmd("wispGlow", 0, px, py - 5, { oy: 0.5, alpha: 0.8, layer: "light", depth: 0 }));
-    out.push(cmd(s.art, frame, px, py, { oy: 1, sx, sy, flip, alpha: s.alpha ?? 1, layer: "body", depth: this.petY }));
+    // 잠긴 만큼 내려 그리고 그 줄 수만큼 아래를 잘라 낸다 → 수면(py) 위로 머리·등만
+    out.push(cmd(s.art, frame, px, py + sink, { oy: 1, sx, sy, flip, alpha: s.alpha ?? 1, layer: "body", depth: this.petY, ...(sink ? { crop: sink } : {}) }));
   }
 
   /**
@@ -703,6 +920,7 @@ export class CosmeticFxSim {
     this.petX = f.x;
     this.petY = f.y;
     this.petOn = true;
+    this.petSink = 0;
     if (f.hidden) return;
     const walking = f.moving;
     const fr = walking ? Math.floor((t / 1000) * s.fps) % 2 : 0;
@@ -851,6 +1069,67 @@ export class CosmeticFxSim {
           out.push(cmd("zee", 2 - Math.min(2, Math.floor(ph * 3)), Math.round(x), Math.round(y), { oy: 1, alpha: Math.sin(ph * Math.PI), layer: "body", depth: front }));
         }
         break;
+      case "fall": {
+        // 머리 위에서 흔들리며 떨어진다 (낙엽·지폐)
+        const art = s.art ?? "leaf";
+        const frames = FX_ART[art].frames;
+        const n = 7;
+        const fallH = f.artTop + 10;
+        for (let i = 0; i < n; i++) {
+          const ph = (t / 2500 + i / n + h01(i, 4) * 0.13) % 1;
+          const sway = Math.sin(t / 480 + i * 1.7) * 2.5;
+          const x = bx + (h01(i, 5) * 2 - 1) * 12 + sway;
+          const y = top - 10 + ph * fallH;
+          const a = ph < 0.12 ? ph / 0.12 : ph > 0.85 ? (1 - ph) / 0.15 : 1;
+          out.push(cmd(art, (i + Math.floor(t / 300)) % frames, Math.round(x), Math.round(y), { oy: 0.5, alpha: a, flip: i % 2 === 0, layer: "body", depth: i % 3 === 0 ? f.y - 0.2 : front }));
+        }
+        break;
+      }
+      case "float": {
+        // 몸 양옆에서 둥실 떠오른다 (하트·비눗방울)
+        const art = s.art ?? "heart";
+        const frames = FX_ART[art].frames;
+        for (let i = 0; i < 4; i++) {
+          const ph = (t / 2200 + i / 4) % 1;
+          const sd = i % 2 ? 1 : -1;
+          const x = bx + sd * (6 + ph * 5) + Math.sin(ph * 7 + i) * 1.5;
+          const y = f.headY - f.artTop * 0.4 - ph * 16;
+          out.push(cmd(art, i % frames, Math.round(x), Math.round(y), { oy: 1, alpha: Math.sin(ph * Math.PI), layer: s.light ? "light" : "body", depth: front }));
+        }
+        break;
+      }
+      case "steam": {
+        // 머리 위로 김이 모락모락
+        const art = s.art ?? "steam";
+        for (let i = 0; i < 3; i++) {
+          const ph = (t / 1800 + i / 3) % 1;
+          const x = bx - 3 + i * 3 + Math.sin(t / 400 + i) * 1;
+          const y = top - 1 - ph * 9;
+          out.push(cmd(art, Math.floor(t / 350 + i) % 2, Math.round(x), Math.round(y), { oy: 1, alpha: 0.85 * Math.sin(ph * Math.PI), layer: "body", depth: front }));
+        }
+        break;
+      }
+      case "ring": {
+        // 몸 둘레를 빙글빙글 (앞쪽은 몸 앞, 뒤쪽은 몸 뒤)
+        const art = s.art ?? "miniGhost";
+        const frames = FX_ART[art].frames;
+        for (let i = 0; i < 3; i++) {
+          const a = t / 1400 + (i * Math.PI * 2) / 3;
+          const x = bx + Math.cos(a) * 12;
+          const y = f.headY - f.artTop * 0.55 + Math.sin(a) * 3 + Math.sin(t / 300 + i) * 1;
+          const near = Math.sin(a) > 0;
+          out.push(
+            cmd(art, Math.floor(t / 280 + i) % frames, Math.round(x), Math.round(y), {
+              oy: 0.5,
+              flip: Math.cos(a) < 0,
+              alpha: s.light ? 0.9 : near ? 1 : 0.8,
+              layer: s.light ? "light" : "body",
+              depth: near ? front : f.y - 0.2,
+            }),
+          );
+        }
+        break;
+      }
     }
   }
 }
@@ -891,9 +1170,11 @@ export function fxIconGrid(id: string): Grid | null {
       g.vline(7, 13, 15, 0xeae6dc);
       return g;
     case "back_wings_bat":
-    case "back_wings_butterfly": {
+    case "back_wings_butterfly":
+    case "back_wings_angel":
+    case "back_wings_dragon": {
       // 앞모습 날개 한 쌍을 가운데에 (26칸 중 가운데 16칸)
-      const a = FX_ART[id === "back_wings_bat" ? "wingsBat" : "wingsButterfly"].build();
+      const a = FX_ART[(COSMETIC_FX[id] as WingSpec).art].build();
       for (let y = 0; y < 12; y++) for (let x = 0; x < 16; x++) g.px[(y + 2) * 16 + x] = a.px[y * a.w + x + 5];
       g.rect(7, 6, 2, 6, 0x6a6a7a);
       return g;
@@ -955,6 +1236,62 @@ export function fxIconGrid(id: string): Grid | null {
       blit(g, "zee", 1, 7, 5);
       blit(g, "zee", 2, 11, 1);
       g.outline(0x3a4466, false, 200);
+      return g;
+    case "feet_snowprints":
+      for (const [x, y, f] of [[3, 12, 0], [9, 9, 1], [4, 5, 0], [10, 1, 1]] as const) blit(g, "snowPrint", f, x, y);
+      g.outline(0x6a7a9a, false, 200);
+      return g;
+    case "feet_paws":
+      for (const [x, y, f] of [[2, 11, 0], [9, 8, 1], [3, 4, 0], [10, 1, 1]] as const) blit(g, "paw", f, x, y);
+      return g;
+    case "feet_bubbles":
+      for (const [x, y, f] of [[1, 9, 0], [8, 10, 1], [5, 4, 0], [11, 2, 1], [11, 6, 1]] as const) blit(g, "bubble", f, x, y);
+      return g;
+    case "feet_confetti":
+      for (const [x, y, f] of [[2, 3, 0], [7, 1, 1], [12, 4, 2], [4, 8, 1], [10, 9, 0], [1, 13, 2], [7, 12, 0], [13, 13, 1]] as const) blit(g, "confetti", f, x, y);
+      return g;
+    case "feet_coins":
+      for (const [x, y, f] of [[2, 10, 0], [8, 11, 0], [5, 5, 1], [11, 3, 0]] as const) blit(g, "coin", f, x, y);
+      return g;
+    case "feet_stars":
+      g.hline(2, 13, 14, 0x5a5a7a);
+      for (const [x, y, f] of [[1, 8, 0], [6, 4, 1], [10, 9, 2], [11, 1, 0]] as const) blit(g, "sparkStar", f, x, y);
+      return g;
+    case "staff_steps":
+      for (const [x, y, f] of [[1, 11, 0], [8, 8, 1], [3, 4, 0], [10, 1, 1]] as const) blit(g, "soulMist", f, x, y);
+      g.recolor(() => true, 0x5ad8ff);
+      return g;
+    case "aura_steam":
+      g.rect(4, 11, 8, 4, 0xf0ebe2);
+      g.hline(4, 11, 11, 0x8a5a3a);
+      g.vline(12, 12, 13, 0xf0ebe2);
+      blit(g, "steam", 0, 4, 4);
+      blit(g, "steam", 1, 8, 2);
+      g.outline(0x4a4a5a, false, 170);
+      return g;
+    case "aura_bubbles":
+      for (const [x, y, f] of [[1, 2, 0], [9, 1, 1], [5, 7, 0], [11, 9, 0], [2, 11, 1]] as const) blit(g, "bubble", f, x, y);
+      return g;
+    case "aura_leaves":
+      for (const [x, y, f] of [[1, 1, 0], [9, 3, 1], [4, 7, 2], [11, 10, 0], [2, 12, 1]] as const) blit(g, "leaf", f, x, y);
+      return g;
+    case "aura_hearts":
+      blit(g, "heart", 0, 1, 8);
+      blit(g, "heart", 1, 9, 3);
+      blit(g, "heart", 0, 6, 12);
+      return g;
+    case "aura_ghosts":
+      blit(g, "miniGhost", 0, 1, 6);
+      blit(g, "miniGhost", 1, 10, 2);
+      blit(g, "miniGhost", 0, 7, 10);
+      return g;
+    case "aura_money":
+      for (const [x, y, f] of [[1, 2, 0], [9, 1, 1], [4, 7, 1], [10, 9, 0], [2, 12, 0]] as const) blit(g, "bill", f, x, y);
+      return g;
+    case "staff_souls":
+      blit(g, "soulFlame", 0, 2, 8);
+      blit(g, "soulFlame", 1, 10, 2);
+      blit(g, "soulFlame", 0, 7, 10);
       return g;
     case "pet_cat":
     case "pet_dog":

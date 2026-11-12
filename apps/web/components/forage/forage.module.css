@@ -286,8 +286,10 @@
   text-align: right;
 }
 
+/* 팔 것이 없어 목록이 짧아도 합계·버튼 줄은 창 아래에 붙인다 */
 .sellFoot {
   display: flex;
+  margin-top: auto;
   align-items: center;
   justify-content: space-between;
   gap: 8px;

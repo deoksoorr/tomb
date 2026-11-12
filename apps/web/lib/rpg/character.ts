@@ -210,11 +210,13 @@ export function gainExp(s: CharacterState, exp: number): { state: CharacterState
 /** 드롭 장비는 가방이 가득 차면 버린다 (판 결과는 그대로 받는다) */
 export function addDrops(
   s: CharacterState,
-  drops: { kind: "gear" | "potion"; id: string; qty: number }[],
+  drops: { kind: "gear" | "potion" | "cosmetic"; id: string; qty: number }[],
 ): { state: CharacterState; lost: number } {
   let cur = s;
   let lost = 0;
   for (const d of drops) {
+    // 기간제 코디는 계정 가방으로 (service.finishRun)
+    if (d.kind === "cosmetic") continue;
     try {
       if (d.kind === "gear") cur = addGear(cur, d.id, false);
       else cur = addPotions(cur, d.id, Math.min(d.qty, POTION_MAX_STACK - (cur.potions[d.id] ?? 0)) || 0);

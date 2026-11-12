@@ -25,7 +25,11 @@ new_sqlite_classes = ["ChannelDO", "LobbyDO"]
 # ([vars]에 같은 이름이 있으면 secret과 충돌해 배포가 실패한다). 로컬은 package.json dev 스크립트의 --var.
 [vars]
 CHANNEL_CAPACITY = "40"
+# MAX_CHANNELS = 채널 번호 상한(채널별 주거 구역이 1..10채널에 있어 줄이지 않는다), BASE_CHANNELS = 평소 목록에 열어 두는 채널 수.
+# 그 위 채널은 열린 채널이 모두 AUTO_OPEN_THRESHOLD 이상 차면 하나씩 열리고, 사람이 있는(또는 5분 안에 있었던) 동안 열려 있다.
+# 닫힌 채널도 직접 들어갈 수 있다 (집 주인의 "내 집 가기" 채널 이동·채널 창의 내 집·내 묘비 채널)
 MAX_CHANNELS = "10"
+BASE_CHANNELS = "2"
 AUTO_OPEN_THRESHOLD = "0.8"
 RECONNECT_GRACE_SEC = "20"
 

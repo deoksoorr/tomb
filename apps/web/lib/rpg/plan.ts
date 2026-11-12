@@ -1,5 +1,5 @@
 import { DIFFS, MONSTERS, zoneFor, type Difficulty, type MonsterId } from "./catalog";
-import { clamp, seeded } from "./formulas";
+import { clamp, monsterStats, seeded } from "./formulas";
 
 // 한 판의 출현 계획. 시드(서버가 런 티켓에 넣어 준다)로 정해져서, 게임은 이대로 내보내고
 // 서버는 같은 계획으로 "그 시간 안에 나올 수 있었던 것보다 많이 잡았는지"를 검사한다.
@@ -15,7 +15,45 @@ export const WAVE_MAX_GAP_SEC = 35;
  * pack: monsters 중 끝의 pack마리는 한 자리에서 무리로 몰려 나온다 (같은 종류).
  * summon: 우두머리 웨이브에서 우두머리가 화날 때(2번) 불러낼 수 있는 졸개 — 웨이브 마릿수에는 들지 않는다 (40번)
  */
-export type HuntWave = { index: number; monsters: MonsterId[]; earliestSec: number; boss: boolean; pack: number; summon?: { id: MonsterId; n: number } };
+export type HuntWave = {
+  index: number;
+  monsters: MonsterId[];
+  earliestSec: number;
+  boss: boolean;
+  pack: number;
+  summon?: { id: MonsterId; n: number };
+  /** 11/12 웨이브 모양 (어디서·어떻게 나오나). 마릿수·종류는 같고 나오는 자리·시간만 다르다 → 서버 상한은 그대로 */
+  formation: WaveFormation;
+  /** 정예: monsters[elite]가 더 크고 질기다 (ELITE). 그 웨이브를 깨면 서버가 EXP 보너스를 더한다 */
+  elite?: number;
+};
+
+/**
+ * scatter: 입구 여기저기서 하나씩 · swarm: 끝의 pack마리가 한 점에서 무리로 · pincer: 무리가 둘로 나뉘어 양쪽에서 ·
+ * surround: 모두가 나를 빙 둘러싸고 · stream: 한 입구에서 한 마리씩 줄지어 돌격 (STREAM_GAP_MS 간격, 무리는 맨 끝에 한꺼번에)
+ */
+export type WaveFormation = "scatter" | "swarm" | "pincer" | "surround" | "stream";
+export const WAVE_FORMATION_LABEL: Record<WaveFormation, string> = {
+  scatter: "",
+  swarm: "무리!",
+  pincer: "양쪽에서 협공!",
+  surround: "포위당했다!",
+  stream: "줄지어 돌격!",
+};
+/** stream: 한 마리씩 나오는 간격 */
+export const STREAM_GAP_MS = 420;
+
+/** 정예 몬스터 배율 — 게임(HuntScene)과 서버(EXP 보너스)가 같이 쓴다 */
+export const ELITE = { hp: 3, atk: 1.3, def: 1.2, exp: 3, scale: 1.3 } as const;
+/** 셋째 웨이브부터(우두머리 웨이브 제외) 정예가 섞일 확률 */
+const ELITE_CHANCE: Record<Difficulty, number> = { easy: 0.25, normal: 0.35, hard: 0.45, hell: 0.55 };
+/** 가운데 웨이브 모양 가중치 (합 1) */
+const FORMATION_W: [WaveFormation, number][] = [
+  ["swarm", 0.3],
+  ["pincer", 0.25],
+  ["surround", 0.2],
+  ["stream", 0.25],
+];
 
 /** 우두머리가 화나는 횟수 (체력 60%·30%) — 게임(HuntScene)과 서버 상한이 같이 쓴다 */
 export const BOSS_RAGES = 2;
@@ -31,6 +69,8 @@ const PACK: Record<Difficulty, [number, number]> = { easy: [3, 4], normal: [3, 5
 export function huntPlan(seed: number, d: Difficulty, zoneId?: string | null): HuntWave[] {
   const zone = zoneFor(d, zoneId);
   const r = seeded(seed ^ 0x48554e54);
+  // 모양·정예는 따로 굴린다 (몬스터 구성 시퀀스는 예전 그대로)
+  const rf = seeded(seed ^ 0x464f524d);
   const waves: HuntWave[] = [];
   for (let i = 0; i < zone.waves; i++) {
     const last = i === zone.waves - 1;
@@ -44,7 +84,27 @@ export function huntPlan(seed: number, d: Difficulty, zoneId?: string | null): H
     for (let k = 0; k < room - pack; k++) monsters.push(zone.pool[Math.floor(r() * zone.pool.length)]);
     const packId = zone.pool[Math.floor(r() * zone.pool.length)];
     for (let k = 0; k < pack; k++) monsters.push(packId);
-    waves.push({ index: i, monsters, earliestSec: i * WAVE_MIN_GAP_SEC, boss: last, pack, ...(last ? { summon: { ...zone.summon } } : {}) });
+    let formation: WaveFormation = i === 0 ? "scatter" : "swarm";
+    let elite: number | undefined;
+    if (i > 0 && !last) {
+      let x = rf();
+      formation = FORMATION_W.find(([, w]) => (x -= w) < 0)?.[0] ?? "swarm";
+      const solo = monsters.length - pack;
+      if (i >= 2 && solo > 0 && rf() < ELITE_CHANCE[d]) {
+        const k = Math.floor(rf() * solo);
+        if (!MONSTERS[monsters[k]].minion) elite = k;
+      }
+    }
+    waves.push({
+      index: i,
+      monsters,
+      earliestSec: i * WAVE_MIN_GAP_SEC,
+      boss: last,
+      pack,
+      formation,
+      ...(elite !== undefined ? { elite } : {}),
+      ...(last ? { summon: { ...zone.summon } } : {}),
+    });
   }
   return waves;
 }
@@ -66,6 +126,13 @@ export function huntSpawnable(plan: HuntWave[], effSec: number): Partial<Record<
 }
 
 export const huntTotal = (plan: HuntWave[]) => plan.reduce((n, w) => n + w.monsters.length, 0);
+
+/** 앞에서부터 k개 웨이브를 깼을 때 정예 EXP 보너스 (정예 한 마리 = 보통의 ELITE.exp배 → 더해지는 몫은 ELITE.exp − 1배) */
+export function eliteBonusExp(plan: HuntWave[], k: number, d: Difficulty, power: number): number {
+  let exp = 0;
+  for (const w of plan.slice(0, k)) if (w.elite !== undefined) exp += (ELITE.exp - 1) * monsterStats(w.monsters[w.elite], d, power).exp;
+  return exp;
+}
 
 // ── 공용: 콤보 배수 ──
 

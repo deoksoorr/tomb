@@ -71,6 +71,8 @@ describe("events", () => {
     expect(parseC2S('{"t":"emote","kind":"flower","graveId":"abc_123"}')).toEqual({ t: "emote", kind: "flower", graveId: "abc_123" });
     expect(parseC2S('{"t":"emote","kind":"bomb","graveId":"a"}')).toBeNull();
     expect(parseC2S("not json")).toBeNull();
+    expect(parseC2S('{"t":"away","on":true}')).toEqual({ t: "away", on: true });
+    expect(parseC2S('{"t":"away","on":"yes"}')).toBeNull();
     expect(parseC2S(JSON.stringify({ t: "sit", seatId: "x".repeat(600) }))).toBeNull();
   });
 

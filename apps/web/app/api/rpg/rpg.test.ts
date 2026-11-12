@@ -77,7 +77,9 @@ describe("사냥터 API", () => {
     expect(body.reward.points).toBe(20);
     expect(body.reward.exp).toBeGreaterThan(50);
     expect(body.view.character.level).toBeGreaterThan(1);
-    expect(body.view.character.potions.p_coffee).toBe(2);
+    // 마신 1개를 빼고, 드롭(시드가 무작위라 가끔)으로 들어온 만큼 더한다
+    const coffeeDrops = body.reward.drops.filter((d) => d.id === "p_coffee").reduce((n, d) => n + d.qty, 0);
+    expect(body.view.character.potions.p_coffee).toBe(2 + coffeeDrops);
     expect(body.view.today.huntPoints).toBe(20);
     // 49번 랭킹: 그 사냥터의 최단 클리어(서버가 잰 시간과 결과 중 짧은 쪽)와 처치 수
     const board = async (q: string) => (await (await rank.GET(call(`/api/rank?${q}&me=1`, v))).json()) as RankResponse;
@@ -216,5 +218,26 @@ describe("40번 테마 사냥터 API", () => {
     // 헬스장은 쉬움 중 세 번째 곳: 기본(20P)보다 조금 더
     expect(body.reward.points).toBe(23);
     vi.restoreAllMocks();
+  });
+});
+
+describe("11/12 기간제 코디 드롭", () => {
+  it("계정 가방에 0P로 넣고, 이미 가진(가방·착용) 코디면 다음 후보를 준다", async () => {
+    const { COSMETIC_DROPS } = await import("@/lib/rpg/catalog");
+    const { grantCosmetics } = await import("@/lib/rpg/service");
+    const v = await newVisitor();
+    const accounts = getAccounts();
+    const now = Date.now();
+    const before = (await accounts.get(v.id, kstDay(now), now)).points;
+    const [first, second] = COSMETIC_DROPS;
+    const got = await grantCosmetics(v.id, [{ kind: "potion", id: "p_coffee", qty: 1 }, { kind: "cosmetic", id: first, qty: 1 }], now);
+    expect(got).toEqual([{ kind: "potion", id: "p_coffee", qty: 1 }, { kind: "cosmetic", id: first, qty: 1 }]);
+    // 같은 걸 또 받으면 (가방에 있다) 다음 후보
+    const again = await grantCosmetics(v.id, [{ kind: "cosmetic", id: first, qty: 1 }], now);
+    expect(again).toEqual([{ kind: "cosmetic", id: second, qty: 1 }]);
+    const me = await accounts.get(v.id, kstDay(now), now);
+    expect(me.inventory[first]).toBe(1);
+    expect(me.inventory[second]).toBe(1);
+    expect(me.points).toBe(before);
   });
 });

@@ -1,4 +1,4 @@
-import type { Difficulty, GameKind, GearSlot, MonsterId, SkillId, Stats, ZoneId } from "./catalog";
+import type { Difficulty, DropKind, GameKind, GearSlot, MonsterId, SkillId, Stats, ZoneId } from "./catalog";
 import type { Derived } from "./formulas";
 
 // 사냥터(RPG) 데이터 형태: 저장 원본, API 응답, 게임 ↔ UI 브리지 페이로드.
@@ -62,7 +62,8 @@ export type RunStartResponse = {
   view: RpgView;
 };
 
-export type Drop = { kind: "gear" | "potion"; id: string; qty: number };
+/** cosmetic = 기간제 코디(캐릭터 꾸미기 하루권). 사냥 캐릭터 가방이 아니라 계정 가방(상점 꾸미기)에 들어간다 */
+export type Drop = { kind: DropKind; id: string; qty: number };
 
 export type RunReward = {
   score: number;

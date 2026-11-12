@@ -2,6 +2,11 @@
 
 export const DEFAULT_CHANNEL_CAPACITY = 40;
 export const DEFAULT_MAX_CHANNELS = 10;
+/**
+ * 평소 열어 두는 채널 수 (1..BASE). 그 위 채널은 열린 채널이 모두 혼잡(AUTO_OPEN_THRESHOLD)하면 하나씩 열리고,
+ * 사람이 있거나 최근(로비 재확인 간격 안)에 있었던 동안 열려 있다. 닫힌 채널도 직접 들어갈 수는 있다(채널별 주거 구역의 집 주인)
+ */
+export const DEFAULT_BASE_CHANNELS = 2;
 export const DEFAULT_AUTO_OPEN_THRESHOLD = 0.8;
 export const DEFAULT_RECONNECT_GRACE_SEC = 20;
 
@@ -115,8 +120,8 @@ export const AVATAR_COLORS = [
 ] as const;
 export type AvatarColor = (typeof AVATAR_COLORS)[number];
 
-/** 아바타 몸 모양 (새로 시작할 때 고른다. 계정에 저장되어 코드·이어서 들어가기에선 그대로) */
-export const AVATAR_BODIES = [
+/** 처음 고르는 몸 모양 6종 (무료. 새로 시작할 때 고른다. 계정에 저장되어 코드·이어서 들어가기에선 그대로) */
+export const STARTER_BODIES = [
   { id: "hood", label: "후드 유령" },
   { id: "cat", label: "고양이 유령" },
   { id: "bun", label: "토끼 유령" },
@@ -124,9 +129,66 @@ export const AVATAR_BODIES = [
   { id: "tall", label: "키다리 유령" },
   { id: "round", label: "동글 유령" },
 ] as const;
+
+/**
+ * 프리미엄 외형 등급과 선택권 값 (포인트). 선택권 = 영구 해금 + 그 외형으로 바꾸기 한 번.
+ * 해금한 외형끼리(처음 6종 포함)는 그 뒤로 외형 바꾸기 요금(web lib/dye/rules RESHAPE_PRICE)만 낸다.
+ * I0d 경제 기준(하루 약 200P): 일반 ≈ 1주, 고급 ≈ 작은 집값, 희귀 ≈ 2주 반, 전설 ≈ 한 달
+ */
+export const BODY_TIERS = ["common", "fine", "rare", "legend"] as const;
+export type BodyTier = (typeof BODY_TIERS)[number];
+export const BODY_TIER_INFO: Readonly<Record<BodyTier, { label: string; price: number }>> = {
+  common: { label: "일반", price: 1200 },
+  fine: { label: "고급", price: 2000 },
+  rare: { label: "희귀", price: 3200 },
+  legend: { label: "전설", price: 5000 },
+};
+
+/** 상점 「염색·외형」에서 선택권으로 해금하는 몸. 그림은 처음 6종 중 하나를 바탕(web sprites/avatar BODY_BASE)으로 덧그린다 */
+export const PREMIUM_BODIES = [
+  { id: "suit", label: "정장 유령", tier: "common", desc: "넥타이까지 맨 출근 완성형. 포인트 색은 넥타이예요." },
+  { id: "box", label: "박스 유령", tier: "common", desc: "택배 상자에서 나오기 싫은 날. 포인트 색은 테이프예요." },
+  { id: "umbrella", label: "우산 유령", tier: "fine", desc: "비 예보만 보면 우산을 쓰고 출근하는 이불 유령. 포인트 색은 우산이에요." },
+  { id: "catmask", label: "고양이 탈 직장인", tier: "fine", desc: "고양이 탈을 쓰면 아무도 일을 안 시킬 거라 믿는 직장인. 포인트 색은 사원증 줄이에요." },
+  { id: "cup", label: "커피잔 유령", tier: "rare", desc: "커피잔에 몸을 담그고 하루를 버텨요. 포인트 색은 컵 띠예요." },
+  { id: "tube", label: "오리 튜브 유령", tier: "rare", desc: "마음만은 이미 휴가지. 포인트 색은 오리 튜브예요." },
+  { id: "king", label: "왕관 유령", tier: "legend", desc: "망토와 왕관을 두른 이 구역의 진짜 주인. 포인트 색은 왕관이에요." },
+] as const;
+
+/** 운영자(31번) 계정만 쓸 수 있는 몸. 서버(web 외형 바꾸기·입장 토큰, 실시간 서버)가 운영자가 아니면 막는다 */
+export const STAFF_BODIES = [{ id: "reaper", label: "저승사자", desc: "갓과 검은 도포의 저승사자. 운영자 전용이에요. 포인트 색은 갓끈 구슬이에요." }] as const;
+
+/** 아바타 몸 모양 전부 (검증·그리기용). 옛 클라이언트는 모르는 몸을 후드 유령으로 그린다 */
+export const AVATAR_BODIES = [...STARTER_BODIES, ...PREMIUM_BODIES, ...STAFF_BODIES] as const;
 export type AvatarBody = (typeof AVATAR_BODIES)[number]["id"];
+export type PremiumBody = (typeof PREMIUM_BODIES)[number];
 export function isAvatarBody(b: unknown): b is AvatarBody {
   return typeof b === "string" && AVATAR_BODIES.some((x) => x.id === b);
+}
+/** 처음 고를 수 있는(무료) 몸인지 */
+export function isStarterBody(b: unknown): b is (typeof STARTER_BODIES)[number]["id"] {
+  return typeof b === "string" && STARTER_BODIES.some((x) => x.id === b);
+}
+/** 프리미엄 외형이면 그 정의 */
+export function premiumBody(b: unknown): PremiumBody | undefined {
+  return PREMIUM_BODIES.find((x) => x.id === b);
+}
+/** 운영자 전용 몸인지 */
+export function isStaffBody(b: unknown): boolean {
+  return typeof b === "string" && STAFF_BODIES.some((x) => x.id === b);
+}
+/** 프리미엄 외형 선택권 값 (프리미엄이 아니면 null) */
+export function bodyUnlockPrice(b: unknown): number | null {
+  const p = premiumBody(b);
+  return p ? BODY_TIER_INFO[p.tier].price : null;
+}
+/** 화면에 보일 몸 이름 */
+export function bodyLabel(b: unknown): string {
+  return AVATAR_BODIES.find((x) => x.id === b)?.label ?? String(b ?? "");
+}
+/** 운영자가 아니면 운영자 전용 몸은 후드 유령으로 (입장 토큰·실시간 서버가 쓴다) */
+export function staffGateBody<T extends string>(body: T, staff: boolean): T | "hood" {
+  return !staff && isStaffBody(body) ? "hood" : body;
 }
 
 /** 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호 */

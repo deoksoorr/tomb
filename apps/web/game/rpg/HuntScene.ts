@@ -4,11 +4,13 @@ import { attackArea, damage, hitChance, inAttackArea, monsterStats, type AttackA
 import { bossPhaseIndex, bossPhaseList, monsterPatterns, type PatternId } from "@/lib/rpg/patterns";
 import { attackCooldownMs, CHAIN_GRACE_MS, FINISHER_EVERY, weaponStyleOf, type WeaponStyle, type WeaponStyleId } from "@/lib/rpg/weapons";
 import { gearById } from "@/lib/rpg/catalog";
-import { huntPlan, WAVE_MAX_GAP_SEC, type HuntWave } from "@/lib/rpg/plan";
+import { ELITE, huntPlan, STREAM_GAP_MS, WAVE_FORMATION_LABEL, WAVE_MAX_GAP_SEC, type HuntWave } from "@/lib/rpg/plan";
 import type { HuntResult, RpgAction, RpgHud } from "@/lib/rpg/types";
 import { DIR, STATE, type DirId } from "@tomb/protocol";
 import { AvatarView } from "../entities/AvatarView";
 import { RoomPresence } from "../net/RoomPresence";
+import type { RemoteAvatar } from "../entities/RemoteAvatar";
+import { iconCanvas } from "./icons";
 import { RpgScene } from "./base";
 import { CombatFx, COMBO_RESET_MS, FXT } from "./combatFx";
 import { cancelCast, seedPatternTimers, tryStartPattern, updateCast, type Cast, type PatternHost } from "./monsterPatterns";
@@ -30,6 +32,8 @@ const H = 288;
 const WALL = 10;
 const PLAYER_R = 5;
 const HURT_IFRAME_MS = 450;
+/** 같은 방 다른 사람 아바타 투명도 */
+const GHOST_ALPHA = 0.42;
 const DIR_ROW = { down: 0, left: 1, right: 2, up: 3 } as const;
 
 type Mon = {
@@ -73,6 +77,8 @@ type Mon = {
   phase: number;
   /** 40번: 우두머리가 부른 졸개 (웨이브 마릿수에 들지 않는다) */
   minion?: boolean;
+  /** 11/12 정예 (plan ELITE: 크고 질기고 EXP 많이) */
+  elite?: boolean;
 };
 
 /** 내 투사체 (40번 쏘기·던지기) */
@@ -129,6 +135,14 @@ export class HuntScene extends RpgScene {
   private movingNow = false;
   private pShadow!: Phaser.GameObjects.Image;
   private helper: { sprite: Phaser.GameObjects.Sprite; until: number; nextAtk: number } | null = null;
+  /** 11/12 복합기 설치 (포탑 소환) */
+  private turret: { sprite: Phaser.GameObjects.Image; until: number; nextAtk: number; atkPct: number; everyMs: number; range: number } | null = null;
+  /** 11/12 부재중 자동응답 보호막 남은 양 (buffs.auto_reply가 끝나면 사라진다) */
+  private shield = 0;
+  /** 11/12 줄지어 돌격(stream) 웨이브에서 아직 안 나온 몬스터 수 (다 나오기 전엔 웨이브가 끝난 게 아니다) */
+  private pendingSpawns = 0;
+  /** 11/12 같은 방 다른 사람: 반투명 + "사냥 중" 표시를 붙인 아바타 */
+  private ghosted = new WeakSet<RemoteAvatar>();
   private walkT = 0;
   /** 쿨다운 중에 새로 누른 공격 (끝나는 순간 한 번 나간다). 누르고 있는 동안은 여기에 넣지 않는다 */
   private atkBuffered = false;
@@ -187,6 +201,10 @@ export class HuntScene extends RpgScene {
     this.cookieUsed = false;
     this.victoryAt = 0;
     this.helper = null;
+    this.turret = null;
+    this.shield = 0;
+    this.pendingSpawns = 0;
+    this.ghosted = new WeakSet();
     this.hp = play.derived.maxHp;
     this.sp = play.derived.maxSp;
     this.px = W / 2;
@@ -390,7 +408,7 @@ export class HuntScene extends RpgScene {
     }
     this.atkBuffered = false;
     const st = this.wstyle;
-    this.atkCdMs = attackCooldownMs(this.play.derived.aspd, st);
+    this.atkCdMs = attackCooldownMs(this.play.derived.aspd * (1 + this.buff("team_dinner")), st);
     this.atkReadyAt = this.now + this.atkCdMs;
     this.wasReady = false;
     this.chain = this.now - this.lastAtkAt <= this.atkCdMs + CHAIN_GRACE_MS ? (this.chain % FINISHER_EVERY) + 1 : 1;
@@ -803,7 +821,167 @@ export class HuntScene extends RpgScene {
         this.floatText(this.px, this.py - 20, `SP +${gain}`, "#7ab0f0", 12);
         break;
       }
+      // ── 11/12 추가 스킬 ──
+      case "sprint": {
+        // 돌진: 바라보는 쪽으로 미끄러지듯, 지나친 적을 한 번씩 친다 (달리는 동안 무적)
+        const fx = SKILL_FX.sprint(lv);
+        const from = { x: this.px, y: this.py };
+        const to = this.slide(this.face.x * fx.dist, this.face.y * fx.dist);
+        this.buffs.set("rollback", { until: now + 250, v: 1 });
+        this.fx.motion("thrust", from.x, from.y - 6, Math.atan2(this.face.y, this.face.x), Math.hypot(to.x - from.x, to.y - from.y), true, 150);
+        this.sfx.play("swish", 0.6);
+        let nth = 0;
+        for (const m of [...this.mons]) {
+          if (!m.alive || m.hidden) continue;
+          if (segDist(m.x, m.y, from.x, from.y, to.x, to.y) < fx.width + MONSTERS[m.id].size / 2) this.strike(m, fx.mult * pow, true, nth++, { kb: 1.4 });
+        }
+        break;
+      }
+      case "afk": {
+        // 자리 비움: 가장 가까운 적의 반대쪽으로 순간이동 + 잠깐 피해 없음
+        const fx = SKILL_FX.afk(lv);
+        const t = this.nearest(400);
+        const dx = t ? this.px - t.x : -this.face.x;
+        const dy = t ? this.py - t.y : -this.face.y;
+        const k = Math.hypot(dx, dy) || 1;
+        this.ringFx(0xd9dccf, 18);
+        this.slide((dx / k) * fx.dist, (dy / k) * fx.dist);
+        this.buffs.set("rollback", { until: now + fx.safeMs, v: 1 });
+        this.ringFx(0xd9dccf, 24);
+        this.floatText(this.px, this.py - 22, "자리 비움", "#d9dccf", 10);
+        break;
+      }
+      case "stapler_burst": {
+        // 앞쪽 부채꼴로 철심 n발 (관통 없음)
+        const fx = SKILL_FX.stapler_burst(lv);
+        const t = this.nearest(fx.range);
+        if (t) this.setFace(t.x - this.px, t.y - this.py);
+        const base = Math.atan2(this.face.y, this.face.x);
+        for (let i = 0; i < fx.n; i++) {
+          const ang = base + (i - (fx.n - 1) / 2) * 0.16;
+          const x = this.px + Math.cos(ang) * 6;
+          const y = this.py - 7 + Math.sin(ang) * 4;
+          const sprite = this.add.sprite(x, y, FXT.band, 0).setRotation(ang).setDepth(1e5).setTint(0xc8ccd2);
+          this.pshots.push({ x, y, vx: Math.cos(ang) * 260, vy: Math.sin(ang) * 260, left: fx.range, pierce: 0, mult: fx.mult * pow, hit: new Set(), sprite, spin: false });
+        }
+        this.sfx.play("twang", 0.6);
+        break;
+      }
+      case "urgent_meeting": {
+        // 긴급 회의 소집: 둘레 적을 내 앞으로 끌어모아 묶는다
+        const fx = SKILL_FX.urgent_meeting(lv);
+        const cx = this.px + this.face.x * 16;
+        const cy = this.py + this.face.y * 16;
+        for (const m of this.mons) {
+          if (!m.alive || m.hidden || Math.hypot(m.x - this.px, m.y - this.py) > fx.radius) continue;
+          const boss = m.boss || MONSTERS[m.id].behavior === "boss";
+          const pull = boss ? 0.15 : 0.8;
+          this.moveMon(m, (cx - m.x) * pull, (cy - m.y) * pull);
+          m.stunUntil = Math.max(m.stunUntil, now + (boss ? fx.stunMs / 3 : fx.stunMs));
+          m.kbx = m.kby = 0;
+          if (fx.vuln > 0) {
+            m.vulnUntil = now + fx.stunMs + 2000;
+            m.vuln = Math.max(m.vulnUntil > now ? m.vuln : 0, fx.vuln);
+          }
+        }
+        this.fx.shockwave(this.px, this.py, fx.radius, 0xe07a2a);
+        this.flash("긴급 회의입니다! 모두 모이세요", 900);
+        break;
+      }
+      case "printer": {
+        // 복합기 설치: 그 자리에 포탑
+        const fx = SKILL_FX.printer(lv);
+        this.turret?.sprite.destroy();
+        const key = "rpg-skill-printer";
+        if (!this.textures.exists(key)) this.textures.addCanvas(key, iconCanvas(skillById("printer")!.art));
+        const sprite = this.add.image(this.px + this.face.x * 12, this.py + this.face.y * 8, key).setOrigin(0.5, 1).setDepth(this.py);
+        this.turret = { sprite, until: now + fx.durMs, nextAtk: now + 300, atkPct: fx.atkPct, everyMs: fx.everyMs, range: fx.range };
+        this.ringFx(0xe8e8ec, 16);
+        break;
+      }
+      case "team_dinner": {
+        // 팀 회식: 공격 속도↑ + 매초 재생 (재생은 regen 틱에서)
+        const fx = SKILL_FX.team_dinner(lv);
+        this.buffs.set("team_dinner", { until: now + fx.durMs, v: fx.aspd });
+        this.buffs.set("team_dinner_regen", { until: now + fx.durMs, v: fx.regenPct });
+        this.ringFx(0xf0d050, 26);
+        this.floatText(this.px, this.py - 22, "위하여!", "#f0d050", 11);
+        break;
+      }
+      case "report_bomb": {
+        // 보고서 폭탄: 가장 가까운 적 자리(없으면 앞)에 던지고 잠시 뒤 폭발
+        const fx = SKILL_FX.report_bomb(lv);
+        const t = this.nearest(fx.reach);
+        const pt = this.patHost.clampPoint(t ? t.x : this.px + this.face.x * 50, t ? t.y : this.py + this.face.y * 50);
+        this.fx.castMark(pt.x, pt.y, fx.radius, fx.delayMs);
+        const key = "rpg-skill-report";
+        if (!this.textures.exists(key)) this.textures.addCanvas(key, iconCanvas(skillById("report_bomb")!.art));
+        const paper = this.add.image(this.px, this.py - 8, key).setDepth(1e5);
+        this.tweens.add({ targets: paper, x: pt.x, y: pt.y - 4, angle: 360, duration: Math.min(400, fx.delayMs), ease: "Quad.easeOut" });
+        const mult = fx.mult * pow;
+        this.later(fx.delayMs, () => {
+          paper.destroy();
+          this.fx.shockwave(pt.x, pt.y, fx.radius, 0xd03030);
+          this.fx.shake(140, 0.005);
+          this.sfx.play("thud", 0.7);
+          let k = 0;
+          for (const m of [...this.mons]) if (m.alive && !m.hidden && Math.hypot(m.x - pt.x, m.y - pt.y) < fx.radius + MONSTERS[m.id].size / 2) this.strike(m, mult, true, k++, { kb: 1.6, heavy: true });
+        });
+        break;
+      }
+      case "auto_reply": {
+        // 부재중 자동응답: 보호막
+        const fx = SKILL_FX.auto_reply(lv);
+        this.shield = Math.round(this.play.derived.maxHp * fx.shieldPct * pow);
+        this.buffs.set("auto_reply", { until: now + fx.durMs, v: 1 });
+        this.ringFx(0x6ad0c8, 22);
+        this.floatText(this.px, this.py - 22, `보호막 ${this.shield}`, "#6ad0c8", 10);
+        break;
+      }
     }
+  }
+
+  /** 순간 이동(돌진·자리 비움): 벽·장애물을 넘지 않게 조금씩 밀어 본다. 도착한 곳 */
+  private slide(dx: number, dy: number): { x: number; y: number } {
+    const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 6));
+    for (let i = 0; i < steps; i++) {
+      const p = { x: Phaser.Math.Clamp(this.px + dx / steps, WALL + PLAYER_R, W - WALL - PLAYER_R), y: Phaser.Math.Clamp(this.py + dy / steps, WALL + PLAYER_R + 8, H - WALL - 2) };
+      for (const o of this.obstacles) this.pushOut(p, o, PLAYER_R);
+      this.arena.collide(p, PLAYER_R);
+      this.px = p.x;
+      this.py = p.y;
+    }
+    return { x: this.px, y: this.py };
+  }
+
+  /** 복합기 포탑: 사거리 안 가장 가까운 적에게 종이를 뱉는다 */
+  private updateTurret(now: number): void {
+    const t = this.turret;
+    if (!t) return;
+    if (now > t.until || this.died) {
+      const sp = t.sprite;
+      this.tweens.add({ targets: sp, alpha: 0, duration: 200, onComplete: () => sp.destroy() });
+      this.turret = null;
+      return;
+    }
+    t.sprite.setDepth(t.sprite.y);
+    if (now < t.nextAtk) return;
+    let best: Mon | null = null;
+    let bd = t.range;
+    for (const m of this.mons) {
+      if (!m.alive || m.hidden) continue;
+      const d = Math.hypot(m.x - t.sprite.x, m.y - t.sprite.y);
+      if (d < bd) {
+        bd = d;
+        best = m;
+      }
+    }
+    if (!best) return;
+    t.nextAtk = now + t.everyMs;
+    const target = best;
+    const o = this.add.image(t.sprite.x, t.sprite.y - 10, RTEX.spark).setDepth(1e4).setTint(0xf2f2f2);
+    this.tweens.add({ targets: o, x: target.x, y: target.y - 6, duration: 120, onComplete: () => o.destroy() });
+    this.hurtMonster(target, damage(this.atk() * t.atkPct * this.play.derived.skillPower, 1, target.st.def, Math.random(), false), false);
   }
 
   private potionLeft(id: string): number {
@@ -829,6 +1007,15 @@ export class HuntScene extends RpgScene {
   private hurtPlayer(dmg: number): void {
     if (this.died || this.now < this.hurtUntil || this.buff("rollback")) return;
     this.hurtUntil = this.now + HURT_IFRAME_MS;
+    // 11/12 부재중 자동응답: 보호막이 먼저 받는다
+    if (this.shield > 0 && this.buff("auto_reply")) {
+      const take = Math.min(this.shield, dmg);
+      this.shield -= take;
+      dmg -= take;
+      this.floatText(this.px, this.py - 22, `-${Math.round(take)}`, "#6ad0c8", 9);
+      if (this.shield <= 0) this.buffs.delete("auto_reply");
+      if (dmg <= 0) return;
+    }
     this.hp -= dmg;
     this.fx.playerHurt(this.px, this.py - 18, dmg);
     this.player.setTintFill(0xff6a6a);
@@ -888,8 +1075,12 @@ export class HuntScene extends RpgScene {
 
   // ── 몬스터 ──
 
-  private spawn(id: MonsterId, x: number, y: number, wave: number): void {
-    const st = monsterStats(id, this.play.difficulty, this.zone.power);
+  private spawn(id: MonsterId, x: number, y: number, wave: number, elite = false): void {
+    const base = monsterStats(id, this.play.difficulty, this.zone.power);
+    // 11/12 정예: 더 크고 질기다. EXP는 서버가 그 웨이브를 깼을 때 보너스로 더한다 (plan.eliteBonusExp)
+    const st = elite
+      ? { ...base, maxHp: Math.round(base.maxHp * ELITE.hp), atk: Math.round(base.atk * ELITE.atk), def: Math.round(base.def * ELITE.def), exp: Math.round(base.exp * ELITE.exp) }
+      : base;
     const size = MONSTERS[id].size;
     // 40번: 장애물 위에 나오지 않게 가까운 빈자리로
     const at = this.arena.place(x, y, size / 2);
@@ -934,6 +1125,12 @@ export class HuntScene extends RpgScene {
     });
     // 2번: 패턴 준비 (마지막 웨이브 첫 몬스터 = 우두머리, 단계 패턴이 붙는다)
     const m = this.mons[this.mons.length - 1];
+    if (elite) {
+      m.elite = true;
+      sprite.setScale(ELITE.scale);
+      m.bar.setFillStyle(0xe8b830);
+      this.floatText(x, y - size * ELITE.scale - 6, "정예", "#ffd04a", 10);
+    }
     const w = this.plan[wave];
     m.boss = MONSTERS[id].behavior === "boss" || (!!w?.boss && w.monsters[0] === id && !this.mons.some((o) => o !== m && o.boss && o.wave === wave));
     m.pats = monsterPatterns(MONSTERS[id], { boss: m.boss, hpRatio: 1, difficulty: this.play.difficulty });
@@ -945,25 +1142,66 @@ export class HuntScene extends RpgScene {
     return this.arena.edgePoint(this.px, this.py, r);
   }
 
+  /**
+   * 11/12 웨이브 모양 (plan.formation): 마릿수·종류는 계획 그대로, 나오는 자리·시간만 다르다.
+   * scatter 입구 여기저기 · swarm 한 점에 무리 · pincer 무리가 양쪽에서 · surround 나를 빙 둘러 · stream 한 입구에서 줄지어
+   */
   private spawnWave(): void {
     const w = this.plan[this.nextWave];
     this.lastWaveAt = this.now;
     this.waveAlive[w.index] = w.monsters.length;
     const solo = w.monsters.length - w.pack;
-    w.monsters.forEach((id, i) => {
-      if (i < solo) {
-        const p = this.edgePoint(MONSTERS[id].size / 2);
-        return this.spawn(id, p.x, p.y, w.index);
-      }
-      // 무리: 한 점 둘레에 모여서 나온다
-      if (i === solo) this.packAt = this.edgePoint();
+    const f = w.formation ?? (w.pack ? "swarm" : "scatter");
+    const cx = (x: number) => Phaser.Math.Clamp(x, WALL + 10, W - WALL - 10);
+    const cy = (y: number) => Phaser.Math.Clamp(y, WALL + 14, H - WALL - 4);
+    const near = (c: { x: number; y: number }) => {
       const a = Math.random() * Math.PI * 2;
       const r = 6 + Math.random() * 14;
-      this.spawn(id, Phaser.Math.Clamp(this.packAt.x + Math.cos(a) * r, WALL + 10, W - WALL - 10), Phaser.Math.Clamp(this.packAt.y + Math.sin(a) * r, WALL + 14, H - WALL - 4), w.index);
+      return { x: cx(c.x + Math.cos(a) * r), y: cy(c.y + Math.sin(a) * r) };
+    };
+    const packA = this.edgePoint();
+    this.packAt = packA;
+    // 협공: 무리 반쪽은 첫 무리에서 가장 먼 입구로
+    let packB = packA;
+    if (f === "pincer") {
+      for (let k = 0; k < 4; k++) {
+        const p = this.edgePoint();
+        if (Math.hypot(p.x - packA.x, p.y - packA.y) > Math.hypot(packB.x - packA.x, packB.y - packA.y)) packB = p;
+      }
+    }
+    const gate = this.edgePoint();
+    const phase = Math.random() * Math.PI * 2;
+    const n = w.monsters.length;
+    w.monsters.forEach((id, i) => {
+      const elite = w.elite === i;
+      const go = (p: { x: number; y: number }) => this.spawn(id, p.x, p.y, w.index, elite);
+      if (f === "surround") {
+        const a = phase + (i / n) * Math.PI * 2;
+        const R = 88 + (i % 2) * 16;
+        return go({ x: cx(this.px + Math.cos(a) * R), y: cy(this.py + Math.sin(a) * R * 0.8) });
+      }
+      if (f === "stream") {
+        // 한 마리씩 (무리는 맨 끝에 한꺼번에)
+        const at = Math.min(i, solo) * STREAM_GAP_MS;
+        if (at <= 0) return go(i < solo ? gate : near(packA));
+        this.pendingSpawns++;
+        return this.later(at, () => {
+          this.pendingSpawns--;
+          go(i < solo ? near(gate) : near(packA));
+        });
+      }
+      if (i < solo) return go(this.edgePoint(MONSTERS[id].size / 2));
+      go(near(f === "pincer" && (i - solo) % 2 === 1 ? packB : packA));
     });
     this.nextWave++;
-    this.flash(w.boss ? `마지막 웨이브 · ${MONSTERS[w.monsters[0]].name} 등장!` : w.pack ? `웨이브 ${w.index + 1} / ${this.plan.length} · ${MONSTERS[w.monsters[solo]].name} 무리!` : `웨이브 ${w.index + 1} / ${this.plan.length}`, 1600);
-    if (w.boss || w.pack) this.sfx.play("tick");
+    const label = f === "swarm" && w.pack ? `${MONSTERS[w.monsters[solo]].name} 무리!` : WAVE_FORMATION_LABEL[f];
+    const eliteNote = w.elite !== undefined ? ` · 정예 ${MONSTERS[w.monsters[w.elite]].name}` : "";
+    this.flash(
+      w.boss ? `마지막 웨이브 · ${MONSTERS[w.monsters[0]].name} 등장!` : `웨이브 ${w.index + 1} / ${this.plan.length}${label ? ` · ${label}` : ""}${eliteNote}`,
+      1800,
+    );
+    if (w.boss || w.pack || w.elite !== undefined) this.sfx.play("tick");
+    if (f === "surround") this.fx.shake(90, 0.002);
   }
 
   /** 몬스터끼리 살짝 밀어내기 (무리가 한 점으로 뭉쳐 보이지 않게). n²이지만 수십 마리라 가볍다 */
@@ -1090,6 +1328,20 @@ export class HuntScene extends RpgScene {
     this.step(delta);
     // 내 view.sync 다음에 (이름표 겹침 풀기가 내 위치를 쓴다). 같은 방 사람들은 멈춤·히트스톱과 상관없이 계속 움직인다
     this.presence?.update(performance.now(), this.cameras.main.worldView, 1 / this.cameras.main.zoom);
+    if (this.presence) for (const r of this.presence.remotes.values()) this.ghost(r);
+  }
+
+  /**
+   * 11/12 함께 사냥: 공간은 같이 쓰지만 스테이지(몬스터·전투)는 각자 → 다른 사람은 연하게, 머리 위에 "사냥 중".
+   * 몸(시트에 그려진 꾸미기 포함)과 이름표만 연하게 한다. 이름이 바뀌어 다시 만들어진 아바타는 새 객체라 다시 붙는다
+   */
+  private ghost(r: RemoteAvatar): void {
+    const v = r.view;
+    if (v.sprite.alpha !== GHOST_ALPHA) v.sprite.setAlpha(GHOST_ALPHA);
+    if (this.ghosted.has(r)) return;
+    this.ghosted.add(r);
+    v.setName(`사냥 중\n${r.name}`);
+    v.label.setCenterAlign().setAlpha(0.75);
   }
 
   private step(delta: number): void {
@@ -1109,7 +1361,7 @@ export class HuntScene extends RpgScene {
     }
 
     // 웨이브
-    const aliveAll = this.mons.some((m) => m.alive);
+    const aliveAll = this.pendingSpawns > 0 || this.mons.some((m) => m.alive);
     if (this.nextWave < this.plan.length) {
       const w = this.plan[this.nextWave];
       const prevDone = !aliveAll;
@@ -1131,6 +1383,8 @@ export class HuntScene extends RpgScene {
       this.sp = Math.min(d.maxSp, this.sp + 1 + d.maxSp * 0.01);
       this.hp = Math.min(d.maxHp, this.hp + d.maxHp * 0.004);
       if (this.buff("overtime") && !this.died) this.hp = Math.max(1, this.hp - d.maxHp * SKILL_FX.overtime(1).hpDrainPct);
+      const dinner = this.buffs.get("team_dinner_regen");
+      if (dinner && dinner.until > now && !this.died) this.hp = Math.min(d.maxHp, this.hp + d.maxHp * dinner.v);
     }
 
     // 이동
@@ -1196,6 +1450,8 @@ export class HuntScene extends RpgScene {
       }
     }
 
+    this.updateTurret(now);
+
     // 몬스터
     for (const m of this.mons) {
       if (!m.alive) continue;
@@ -1209,8 +1465,10 @@ export class HuntScene extends RpgScene {
       m.sprite.setPosition(Math.round(m.x), Math.round(m.y)).setDepth(m.y).setFrame(monsterFrame(m, now)).setFlipX(this.px < m.x);
       m.shadow.setPosition(m.x, m.y);
       const top = m.y - size - 3;
-      m.barBg.setPosition(m.x, top).setVisible(m.hp < m.st.maxHp && !m.hidden);
-      m.bar.setPosition(m.x - size / 2, top).setSize(Math.max(0, (size * m.hp) / m.st.maxHp), 2).setVisible(m.hp < m.st.maxHp && !m.hidden);
+      const showBar = (m.elite || m.hp < m.st.maxHp) && !m.hidden;
+      const eTop = m.elite ? m.y - size * ELITE.scale - 3 : top;
+      m.barBg.setPosition(m.x, eTop).setVisible(showBar);
+      m.bar.setPosition(m.x - size / 2, eTop).setSize(Math.max(0, (size * m.hp) / m.st.maxHp), 2).setVisible(showBar);
     }
     this.mons = this.mons.filter((m) => m.alive);
     this.separate();
@@ -1287,4 +1545,13 @@ export class HuntScene extends RpgScene {
       potionsUsed: { ...this.potionsUsed },
     };
   }
+}
+
+/** 점 (px,py)와 선분 (ax,ay)-(bx,by) 사이 거리 */
+function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const vx = bx - ax;
+  const vy = by - ay;
+  const l2 = vx * vx + vy * vy;
+  const u = l2 > 0 ? Phaser.Math.Clamp(((px - ax) * vx + (py - ay) * vy) / l2, 0, 1) : 0;
+  return Math.hypot(px - (ax + vx * u), py - (ay + vy * u));
 }

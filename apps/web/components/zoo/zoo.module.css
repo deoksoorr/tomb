@@ -181,38 +181,40 @@
   }
 }
 
-/* ── 타기 버튼 (타는 펫을 데리고 있을 때만, 화면 오른쪽 아래 줌 버튼 위) ── */
-.ride {
-  position: fixed;
-  right: var(--safe-right, 12px);
-  bottom: calc(var(--safe-bottom, 12px) + 170px);
-  z-index: 29;
-  pointer-events: auto;
+/* ── 타기 버튼 (RideButton: 탈 수 있는 펫을 데리고 있을 때만) ── */
+/* 데스크톱: 오른쪽 아래 확대·축소 버튼(36px 한 줄) 왼쪽. 아래 가운데 기부 버튼·왼쪽 바로 가기 줄과 떨어져 있다 */
+.rideDesk {
+  position: absolute;
+  right: calc(var(--safe-right) + 44px);
+  bottom: var(--safe-bottom);
+  min-height: 36px;
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 40px;
-  padding: 6px 12px;
-  background: var(--panel);
-  box-shadow: var(--px-border-strong, var(--px-border));
   color: var(--bone);
-  border: 0;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
+  box-shadow:
+    var(--px-border-strong, var(--px-border)),
+    0 0 10px rgba(224, 195, 106, 0.3);
 }
 
-.ride[aria-pressed="true"] {
+.rideDesk kbd {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* 터치: 행동 버튼 묶음(MobileControls .actions) 안, 달리기 버튼 위 — 위치는 MobileControls.module.css의 data-slot="ride" */
+.rideTouch {
+  color: var(--bone);
+}
+
+.rideDesk[aria-pressed="true"],
+.rideTouch[aria-pressed="true"] {
   background: #5a3a1a;
   color: #ffe0b0;
 }
 
-.ride:disabled {
+.rideDesk:disabled,
+.rideTouch:disabled {
   opacity: 0.55;
   cursor: default;
-}
-
-.ride kbd {
-  font-size: 11px;
-  color: var(--muted);
 }

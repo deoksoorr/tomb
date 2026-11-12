@@ -24,7 +24,7 @@ export type DyeStartResponse = { me: Me; session: DyeSessionView; resumed: boole
  * 바뀐 염색·몸 모양 + 착용 증서 (게임이 내 아바타에 입히고 실시간 서버로 보낸다).
  * finish·choose: color = 서버가 정한 새 색, kept = 색을 바꾸지 않고 끝냄(지금 색 유지), late = 시간이 지나 유지됨
  */
-export type StyleChangeResponse = { me: Me; lookGrant: string; color?: string; part?: DyePart; late?: boolean; kept?: boolean };
+export type StyleChangeResponse = { me: Me; lookGrant: string; color?: string; part?: DyePart; late?: boolean; kept?: boolean; unlocked?: boolean };
 /** 관리자: 고정 색 염색권 정의·발급 기록 */
 export type AdminDyeResponse = { defs: FixedDyeDef[]; issues: FixedDyeIssue[] };
 export type AdminDyeIssueResponse = { def: FixedDyeDef; giftId: string };

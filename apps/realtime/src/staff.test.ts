@@ -71,4 +71,31 @@ describe("31번 운영자 표시", () => {
     expect(again).toBeTruthy();
     expect(again?.staff).toBeUndefined();
   });
+
+  it("운영자 전용 꾸미기·몸은 운영자 연결만 (토큰·착용 증서 모두, 아니면 빼고 후드 유령)", async () => {
+    // 입장 토큰: 서명이 맞아도 staff가 없으면 운영자 전용은 뺀다
+    const look = ["hat_beret", "staff_armband", "staff_souls"];
+    const tu = await signJoinToken(SECRET, { visitorId: "u", name: "유저", color: AVATAR_COLORS[0], channel: 1, look, body: "reaper" });
+    const to = await signJoinToken(SECRET, { visitorId: "op", name: "운영", color: AVATAR_COLORS[0], channel: 1, look, body: "reaper", staff: true });
+    const au = await admit(SECRET, tu, 1, undefined);
+    const ao = await admit(SECRET, to, 1, undefined);
+    expect(au?.look).toEqual(["hat_beret"]);
+    expect(au?.body).toBe("hood");
+    expect(ao?.look).toEqual(look);
+    expect(ao?.body).toBe("reaper");
+    // 착용 증서: 연결의 staff로 거른다 (프리미엄 외형은 누구나)
+    const core = setup();
+    const u = conn("u");
+    const op = conn("op");
+    core.join(u, ticket("u"), 0);
+    core.join(op, ticket("op", true), 0);
+    core.applyGrant(u, { kind: "look", visitorId: "u", look, exp: 9e9, body: "reaper" });
+    core.applyGrant(op, { kind: "look", visitorId: "op", look, exp: 9e9, body: "reaper" });
+    expect(u.att?.look).toEqual(["hat_beret"]);
+    expect(u.att?.body).toBe("hood");
+    expect(op.att?.look).toEqual(look);
+    expect(op.att?.body).toBe("reaper");
+    core.applyGrant(u, { kind: "look", visitorId: "u", look: [], exp: 9e9, body: "king" });
+    expect(u.att?.body).toBe("king");
+  });
 });

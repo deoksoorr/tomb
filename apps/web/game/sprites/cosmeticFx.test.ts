@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AVATAR_BODIES, DIR, ITEMS, sanitizeLook } from "@tomb/protocol";
 import { AV_H, AV_W, avatarArtTop, avatarFrameGrid, handAnchor, lookKey, SPRITE_COSMETICS } from "./avatar";
 import { GEAR_HAND, GEAR_HEAD, GEAR_SHEET_IDS } from "./avatarGear";
-import { COSMETIC_FX, COSMETIC_FX_IDS, CosmeticFxSim, FX_ART, fxIconGrid, type FxCmd, type FxInput } from "./cosmeticFx";
+import { COSMETIC_FX, COSMETIC_FX_IDS, CosmeticFxSim, FX_ART, fxIconGrid, petSinkTarget, type FxCmd, type FxInput } from "./cosmeticFx";
 import { hasItemIcon } from "./itemIcons";
 
 // F8 캐릭터 꾸미기 추가분: 시트 그림(6몸 × 앞·옆·뒤)·따로 그리는 연출(CosmeticFxSim)·아이콘·원격 착용(sanitizeLook)
@@ -24,6 +24,7 @@ describe("F8 catalog", () => {
       expect(SPRITE_COSMETICS as readonly string[]).toContain(it.id);
       expect(hasItemIcon(it.id), it.id).toBe(true);
       if (it.slot === "pet") continue; // 펫은 동물원 사육사가 영구로만 판다 (값은 ZOO_PETS, zoo.test.ts)
+      if (it.staff) continue; // 31번 운영자 전용은 값 0 (운영자만 영구로 받는다)
       expect(it.price).toBeGreaterThanOrEqual(60);
       expect(it.price).toBeLessThanOrEqual(480);
     }
@@ -177,6 +178,37 @@ describe("F8 effects (CosmeticFxSim)", () => {
     expect(pet.x).toBeLessThan(x);
     expect(x - pet.x).toBeLessThan(40);
     expect(pet.flip).toBe(false); // 오른쪽으로 걷는 주인을 본다
+  });
+
+  it("pets follow their owner into the water: half sunk while swimming, under the surface while diving; flying pets stay up", () => {
+    const step = (sim: CosmeticFxSim, water: FxInput["water"], n = 40) => {
+      let out: FxCmd[] = [];
+      for (let i = 0; i < n; i++) {
+        out = [];
+        sim.step(input({ now: 1000 + i * 33, dt: 33, water, hidden: !!water }), out);
+      }
+      return out;
+    };
+    const sim = new CosmeticFxSim();
+    sim.setLook(["pet_dog"]);
+    const dry = step(sim, null).find((c) => c.art === "petDog")!;
+    expect(dry.crop ?? 0).toBe(0);
+    const swim = step(sim, "swim");
+    const dog = swim.find((c) => c.art === "petDog")!;
+    expect(dog.crop).toBe(petSinkTarget("swim", 0, FX_ART.petDog.h));
+    expect(dog.crop!).toBeLessThan(FX_ART.petDog.h);
+    expect(swim.some((c) => c.art === "petRipple")).toBe(true);
+    const dive = step(sim, "dive");
+    expect(dive.some((c) => c.art === "petDog")).toBe(false); // 수면 아래
+    expect(dive.some((c) => c.art === "petBubble")).toBe(true);
+    for (const c of dive) valid(c);
+    // 물에서 나오면 다시 보인다
+    expect(step(sim, null).find((c) => c.art === "petDog")!.crop ?? 0).toBe(0);
+    // 나는 펫(새)은 물 위를 그대로 난다
+    const bird = new CosmeticFxSim();
+    bird.setLook(["pet_bird"]);
+    const b = step(bird, "dive").find((c) => c.art === "petBird")!;
+    expect(b.crop ?? 0).toBe(0);
   });
 
   it("umbrella, rain cloud and wings lift the name tag; hidden states hide body effects", () => {

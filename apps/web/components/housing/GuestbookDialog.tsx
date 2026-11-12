@@ -44,7 +44,7 @@ export default function GuestbookDialog({ houseId, houseName, mine, onClose }: {
 
   return (
     <Dialog title={`${houseName} 방명록`} onClose={onClose}>
-      <div className={styles.stack}>
+      <div className={styles.guestbook}>
         {!mine && (
           <form
             className={styles.stack}

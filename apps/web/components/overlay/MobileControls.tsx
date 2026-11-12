@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
+import RideButton from "../zoo/RideButton";
 import styles from "./MobileControls.module.css";
 
 /** 손잡이가 바닥 원 반지름의 몇 배까지 움직이는지 */
@@ -56,6 +57,8 @@ export default function MobileControls() {
         >
           달리기
         </button>
+        {/* 탈 수 있는 펫을 데리고 있을 때만 (달리기 위) */}
+        <RideButton variant="touch" className={styles.action} />
       </div>
     </>
   );

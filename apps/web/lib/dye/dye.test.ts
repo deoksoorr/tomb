@@ -1,9 +1,10 @@
 import { nanoid } from "nanoid";
-import { isPermanentUntil, PERMANENT_UNTIL, permanentPrice, verifyGrant } from "@tomb/protocol";
+import { BODY_TIER_INFO, bodyUnlockPrice, isPermanentUntil, PERMANENT_UNTIL, permanentPrice, verifyGrant } from "@tomb/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { env } from "../env";
 import { getAccounts, getGifts } from "../store";
 import { kstDay, loadMe } from "../store/accounts";
+import { setStaff } from "../staff";
 import { getStyleStore } from "../store/style";
 import { buildPalette, cellColor, cellRgb, colorAt, DYE_BOARD_H, DYE_BOARD_W, DYE_GRACE_MS, DYE_TIERS, DYE_TIME_MS, samplePoints } from "./palette";
 import { DYE_DECIDE_MS, DYE_RESET_PRICE, RESHAPE_PRICE } from "./rules";
@@ -285,6 +286,44 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     const g = await verifyGrant(env.joinSecret(), r.lookGrant);
     expect(g?.kind === "look" && g.body).toBe("cat");
     await expect(reshape(id, "bun")).rejects.toMatchObject({ code: "NOT_ENOUGH_POINTS" });
+  });
+
+  it("프리미엄 외형: 처음엔 등급별 선택권 값(해금 + 바꾸기), 해금한 뒤엔 외형 바꾸기 요금만", async () => {
+    const unlock = bodyUnlockPrice("suit")!;
+    expect(unlock).toBe(BODY_TIER_INFO.common.price);
+    expect(bodyUnlockPrice("king")).toBe(BODY_TIER_INFO.legend.price);
+    expect(bodyUnlockPrice("hood")).toBeNull();
+    const id = await account(unlock + RESHAPE_PRICE * 2);
+    const r = await reshape(id, "suit");
+    expect(r.unlocked).toBe(true);
+    expect(r.me.body).toBe("suit");
+    expect(r.me.bodies).toEqual(["suit"]);
+    expect(await pts(id)).toBe(RESHAPE_PRICE * 2);
+    const g = await verifyGrant(env.joinSecret(), r.lookGrant);
+    expect(g?.kind === "look" && g.body).toBe("suit");
+    // 처음 6종으로 돌아갔다가 다시 정장으로: 외형 바꾸기 요금만
+    expect((await reshape(id, "cat")).unlocked).toBeUndefined();
+    const back = await reshape(id, "suit");
+    expect(back.unlocked).toBeUndefined();
+    expect(await pts(id)).toBe(0);
+    // 해금 안 한 다른 외형은 선택권 값이 모자라다
+    await expect(reshape(id, "king")).rejects.toMatchObject({ code: "NOT_ENOUGH_POINTS" });
+  });
+
+  it("운영자 전용: 저승사자 몸·운영자 꾸미기는 운영자만 (일반 계정은 403)", async () => {
+    const user = await account(100_000);
+    await expect(reshape(user, "reaper")).rejects.toMatchObject({ status: 403 });
+    await expect(buyPermanent(user, "staff_crown")).rejects.toMatchObject({ status: 403 });
+    const op = await account(0);
+    await setStaff(op);
+    try {
+      const r = await reshape(op, "reaper");
+      expect(r.me.body).toBe("reaper");
+      const w = await buyPermanent(op, "staff_crown");
+      expect(w.me.stash.some((e) => e.itemId === "staff_crown" && isPermanentUntil(e.until))).toBe(true);
+    } finally {
+      await setStaff(null);
+    }
   });
 
   it("영구 코디: 입고 있던 기간제가 영구로, 아니면 벗어 둔 꾸미기에 영구로 — 다시 사거나 하루권을 살 수 없다", async () => {

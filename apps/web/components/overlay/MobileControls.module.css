@@ -111,6 +111,16 @@
   height: 52px;
 }
 
+/* 타는 펫 타기·내리기 (데리고 있을 때만): 달리기 위, 조이스틱·아래 가운데 기부 버튼과 떨어진 오른쪽 */
+.action[data-slot="ride"] {
+  right: 10px;
+  bottom: 144px;
+  width: 52px;
+  height: 52px;
+  font-size: 12px;
+  font-family: var(--font-body);
+}
+
 .action[aria-pressed="true"] {
   color: var(--bone);
   background: rgba(47, 66, 52, 0.85);

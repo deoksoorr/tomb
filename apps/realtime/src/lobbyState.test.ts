@@ -1,16 +1,45 @@
 import { describe, expect, it } from "vitest";
 import { LOBBY_REFRESH_MS, VisitorRegistry, applyReport, computeLobby, emptyLobby, hasRecentChannels, refreshTargets, type LobbyState } from "./lobbyState";
 
-const cfg = { capacity: 40, maxChannels: 10, threshold: 0.8 };
+const cfg = { capacity: 40, maxChannels: 10, baseChannels: 2, threshold: 0.8 };
+const openIds = (s: LobbyState, now: number, held?: (id: number) => number) =>
+  computeLobby(s, cfg, held, now).channels.filter((c) => c.open).map((c) => c.id);
 /** 채널 DO의 push 보고 (seq는 시각 기반이라 now를 그대로 쓴다) */
 const push = (s: LobbyState, id: number, count: number, now: number) => applyReport(s, id, count, now, now, true);
 
 describe("computeLobby", () => {
-  it("always lists all 10 channels as open", () => {
-    const info = computeLobby(emptyLobby(), cfg);
+  it("lists all 10 channels but keeps only the base ones open when quiet", () => {
+    const info = computeLobby(emptyLobby(), cfg, undefined, 0);
     expect(info.channels.map((c) => c.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(info.channels.every((c) => c.open && c.count === 0 && c.cap === 40)).toBe(true);
+    expect(info.channels.every((c) => c.count === 0 && c.cap === 40)).toBe(true);
+    expect(openIds(emptyLobby(), 0)).toEqual([1, 2]);
     expect(info).toMatchObject({ total: 0, totalCap: 400, maxChannels: 10, threshold: 0.8 });
+    // baseChannels가 없으면(예전 설정) 모두 열려 있다
+    expect(computeLobby(emptyLobby(), { capacity: 40, maxChannels: 3, threshold: 0.8 }).channels.every((c) => c.open)).toBe(true);
+  });
+
+  it("opens the next channel when every open one is busy, and keeps it open while used (then 5 more minutes)", () => {
+    const s = emptyLobby();
+    push(s, 1, 32, 0);
+    push(s, 2, 31, 0);
+    expect(openIds(s, 0)).toEqual([1, 2]);
+    push(s, 2, 32, 1);
+    expect(openIds(s, 1)).toEqual([1, 2, 3]);
+    // 3채널에 사람이 들어온 뒤 1·2채널이 한산해져도 3채널은 사람이 있는 동안 열려 있다
+    push(s, 3, 4, 2);
+    push(s, 1, 10, 2);
+    push(s, 2, 10, 2);
+    expect(openIds(s, 3)).toEqual([1, 2, 3]);
+    push(s, 3, 0, 10);
+    expect(openIds(s, 10 + LOBBY_REFRESH_MS - 1)).toEqual([1, 2, 3]);
+    expect(openIds(s, 10 + LOBBY_REFRESH_MS)).toEqual([1, 2]);
+  });
+
+  it("a closed channel with someone in it (a house owner) shows up as open; seats held for the queue count too", () => {
+    const s = emptyLobby();
+    push(s, 7, 1, 0);
+    expect(openIds(s, LOBBY_REFRESH_MS * 2)).toEqual([1, 2, 7]);
+    expect(openIds(emptyLobby(), 0, (id) => (id === 5 ? 1 : 0))).toEqual([1, 2, 5]);
   });
 
   it("counts seats held for the queue as taken (capped at the channel capacity)", () => {

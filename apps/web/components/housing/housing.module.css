@@ -403,6 +403,30 @@
 
 /* ── 방명록 ── */
 
+/* 방명록 창 전체 (고정 크기 창 안: 글 목록이 남는 높이를 채우고 그 안에서만 스크롤) */
+.guestbook {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.guestbook > .guestList {
+  flex: 1;
+  align-content: start;
+  min-height: 0;
+  max-height: none;
+}
+
+/* 불러오는 중·아직 글 없음: 남는 칸 가운데에 */
+.guestbook > .muted {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  margin: 0;
+}
+
 .guestList {
   display: grid;
   gap: 8px;

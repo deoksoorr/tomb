@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LobbyInfo } from "@tomb/protocol";
-import { INITIAL_LOBBY, isChannelSelectable, nextLobbyState } from "./useLobby";
+import { INITIAL_LOBBY, isChannelSelectable, nextLobbyState, visibleChannels } from "./useLobby";
 
 const lobby: LobbyInfo = {
   channels: [
@@ -38,5 +38,14 @@ describe("isChannelSelectable", () => {
     expect(isChannelSelectable(lobby, 3)).toBe(false);
     expect(isChannelSelectable(lobby, 9)).toBe(false);
     expect(isChannelSelectable(null, 2)).toBe(false);
+    // 닫힌 채널이라도 내 집(묘비) 채널이면 고를 수 있다
+    expect(isChannelSelectable(lobby, 3, [3])).toBe(true);
+    expect(isChannelSelectable(lobby, 1, [1])).toBe(false);
+  });
+
+  it("목록에는 열린 채널과 내 채널(닫혀 있어도)만 보인다", () => {
+    expect(visibleChannels(lobby).map((c) => c.id)).toEqual([1, 2]);
+    expect(visibleChannels(lobby, [null, 3, undefined]).map((c) => c.id)).toEqual([1, 2, 3]);
+    expect(visibleChannels(null, [3])).toEqual([]);
   });
 });

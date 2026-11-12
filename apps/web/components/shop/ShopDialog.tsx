@@ -30,7 +30,9 @@ const SLOT_COUNTS = slotCounts(COSMETICS);
 /** 착용 부위 필터 (물건이 없는 부위는 숨긴다) */
 const SLOT_FILTERS = (["all", ...SLOT_ORDER] as SlotFilter[]).filter((f) => SLOT_COUNTS[f] > 0);
 // 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — isShopListed). 이미 가진 펫은 가방에서 그대로 쓴다
-const byKind = (k: ItemKind) => ITEMS.filter((i) => i.kind === k && isShopListed(i));
+// 31번 운영자에게는 운영자 전용 꾸미기도 보인다 (값 0, 영구로만 받는다 — 서버가 운영자인지 확인)
+const listed = (k: ItemKind, staff: boolean) => ITEMS.filter((i) => i.kind === k && (isShopListed(i) || (staff && !!i.staff)));
+const byKind = (k: ItemKind) => listed(k, false);
 const FIRST: Partial<Record<ItemKind, string>> = Object.fromEntries(TABS.map((k) => [k, byKind(k)[0]?.id ?? ""]));
 
 type Props = {
@@ -60,8 +62,9 @@ export default function ShopDialog({ onClose, avatar }: Props) {
   }, []);
 
   const { color, body } = resolveAvatar(avatar, me, savedColor);
-  const items = byKind(tab).filter((item) => tab !== "cosmetic" || matchesSlot(item.slot, slotFilter));
-  const all = byKind(tab);
+  const staffView = me?.staff === true;
+  const all = listed(tab, staffView);
+  const items = all.filter((item) => tab !== "cosmetic" || matchesSlot(item.slot, slotFilter));
   const shown = all.find((i) => i.id === (hoverId ?? picked[tab])) ?? all[0];
   const fitting = fittingLook(me ? currentLook(me.equipped, openedAt) : [], shown?.kind === "cosmetic" ? shown.id : null);
   const fitNote = fitting.wearing ? "지금 착용 중이에요." : fitting.replaced ? `입으면 지금 입은 ${fitting.replaced.name}은(는) 벗어 둬요.` : null;
@@ -141,7 +144,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
         disabled={!me || short || has || pending !== null}
         aria-label={`${item.name}, ${price}포인트에 영구로 사기`}
       >
-        {pending === `${item.id}:perm` ? "사는 중…" : has ? "영구 소유 중" : `영구 ${price}P${short ? " · 모자라요" : " · 사기"}`}
+        {pending === `${item.id}:perm` ? "사는 중…" : has ? "영구 소유 중" : item.staff ? "운영자 전용 · 받기" : `영구 ${price}P${short ? " · 모자라요" : " · 사기"}`}
       </button>
     );
   }
@@ -174,7 +177,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
               onClick={() => switchTab(k)}
             >
               {KIND_LABELS[k]}
-              <span className={styles.tabCount}>{byKind(k).length}</span>
+              <span className={styles.tabCount}>{listed(k, staffView).length}</span>
             </button>
           ))}
         </div>
@@ -212,7 +215,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                   {stashed(shown) && " · 벗어 둠"}
                 </p>
                 {fitNote && shown.kind === "cosmetic" && <p className={styles.fitNote}>{fitNote}</p>}
-                {forever(shown) ? null : buyButton(shown)}
+                {forever(shown) || shown.staff ? null : buyButton(shown)}
                 {foreverButton(shown)}
               </div>
             </section>
@@ -260,7 +263,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                       </span>
                       <span className={styles.tileName}>{item.name}</span>
                       <span className={styles.tilePrice}>
-                        {item.price}P
+                        {item.staff ? "운영자" : `${item.price}P`}
                         {forever(item) ? <span className={styles.badge}>영구</span> : worn(item) ? <span className={styles.badge}>착용</span> : n > 0 || stashed(item) ? <span className={styles.badge}>보유</span> : null}
                       </span>
                     </button>

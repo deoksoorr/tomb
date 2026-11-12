@@ -4,7 +4,8 @@ import { ITEMS, sanitizeLook, signGrant, signJoinToken, verifyGrant, verifyJoinT
 describe("items", () => {
   it("ids are unique and prices positive", () => {
     expect(new Set(ITEMS.map((i) => i.id)).size).toBe(ITEMS.length);
-    expect(ITEMS.every((i) => i.price > 0)).toBe(true);
+    // 31번 운영자 전용 꾸미기만 값 0 (운영자만 영구로 받는다)
+    expect(ITEMS.every((i) => i.price > 0 || i.staff)).toBe(true);
   });
   it("sanitizeLook keeps one cosmetic per slot and drops unknown/non-cosmetic ids", () => {
     expect(sanitizeLook(["hat_cat", "hat_straw", "fw_small", "nope", "aura_firefly"])).toEqual(["hat_cat", "aura_firefly"]);
@@ -75,5 +76,30 @@ describe("23번 확성기 증서·이벤트", () => {
     expect(megaphoneScope("mega_all")).toBe("all");
     expect(megaphoneScope("fw_small")).toBeNull();
     expect(isShopListed(itemById("mega_ch")!)).toBe(true);
+  });
+});
+
+describe("25번 프리미엄 외형 · 31번 운영자 외형", () => {
+  it("처음 6종은 무료, 프리미엄은 등급마다 값이 오르고, 운영자 몸은 따로", async () => {
+    const c = await import("./constants");
+    expect(c.STARTER_BODIES).toHaveLength(6);
+    expect(c.PREMIUM_BODIES.length).toBeGreaterThanOrEqual(6);
+    const prices = c.BODY_TIERS.map((t) => c.BODY_TIER_INFO[t].price);
+    expect([...prices].sort((a, b) => a - b)).toEqual(prices);
+    for (const t of c.BODY_TIERS) expect(c.PREMIUM_BODIES.some((b) => b.tier === t), t).toBe(true);
+    for (const b of c.AVATAR_BODIES) expect(c.isAvatarBody(b.id)).toBe(true);
+    expect(new Set(c.AVATAR_BODIES.map((b) => b.id)).size).toBe(c.AVATAR_BODIES.length);
+    expect(c.isStarterBody("suit")).toBe(false);
+    expect(c.bodyUnlockPrice("reaper")).toBeNull();
+    expect(c.staffGateBody("reaper", false)).toBe("hood");
+    expect(c.staffGateBody("reaper", true)).toBe("reaper");
+    expect(c.staffGateBody("king", false)).toBe("king");
+  });
+  it("운영자 전용 꾸미기는 상점 목록에 없고, 운영자가 아니면 착용 목록에서 빠진다", async () => {
+    const it2 = await import("./items");
+    expect(it2.STAFF_ITEM_IDS.length).toBeGreaterThanOrEqual(4);
+    for (const id of it2.STAFF_ITEM_IDS) expect(it2.isShopListed(it2.itemById(id)!)).toBe(false);
+    expect(it2.staffGateLook(["staff_crown", "neck_tie"], false)).toEqual(["neck_tie"]);
+    expect(it2.staffGateLook(["staff_crown", "neck_tie"], true)).toEqual(["staff_crown", "neck_tie"]);
   });
 });

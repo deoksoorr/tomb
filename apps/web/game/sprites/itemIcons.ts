@@ -609,6 +609,99 @@ const GEAR_ICONS: Record<string, Ascii> = {
     rows: ["", "..yy........yy", "..rrrrrrrrrrrr", "..rhrrrrrrrrrl", ".rhrrrrrrrrrrrl", ".rhrrrrrrrrrrrl", "rhrrrrrrrrrrrrrl", "rhrrrrrrrrrrrrrl", "rhrrrrrrrrrrrrrl", "rhrrrrrrrrrrrrrl", "r.rr.rr.rr.rr.rl"],
     pal: { r: 0xb83a4a, h: 0xd85a68, l: 0x8a2a38, y: 0xf2c43a },
   },
+  // ── 추가분 2 (11/12) ──
+  hat_beret: {
+    rows: ["", "", "", "......d", "....rrrrrr", "...hrrrrrrrr", "..rrrrrrrrrrr", ".rrrrrrrrrrrrr", "..dddddddddd"],
+    pal: { r: 0xc8404e, h: 0xe06a74, d: 0x8e2a36 },
+  },
+  hat_hardhat: {
+    rows: ["", "", "", ".....yyyyy", "....yyhyyyl", "...yyyhyyyll", "..yyyyhyygyll", "..yyyyhyyyyll", ".llllllllllllll"],
+    pal: { y: 0xf2c43a, h: 0xfff09a, l: 0xc8961a, g: 0x3aa86a },
+  },
+  hat_chef: {
+    rows: ["...wwww.wwww", "..wwwwwwwwwws", "..wwwwwwwwwws", "..wwwwwwwwwws", "...wwwwwwwws", "...wwwwwwwws", "...eeeeeeeee", "...wwwwwwwww"],
+    pal: { w: 0xfbfbf6, s: 0xdcdcd2, e: 0xe0e0d6 },
+  },
+  hat_horns: {
+    rows: ["", "", "..t.........t", "...t.......t", "...cc.....cc", "..ccc.....ccc", "..ccc.....ccc", "..ggggggggggg", "..ggggggggggg"],
+    pal: { t: 0xfff0c0, c: 0xe8603a, g: 0x9fc5a8 },
+  },
+  hat_santa: {
+    rows: ["", "...........ww", "..........rww", "........rrrr", "......rrrrrr", ".....rrrrrrr", "....rrrrrrrrl", "...rrrrrrrrrl", "..wwwwwwwwwwww", "..wwwwwwwwwwww"],
+    pal: { r: 0xd8323c, l: 0xa02430, w: 0xf8f6f0 },
+  },
+  staff_crown: {
+    rows: ["", "", "..s....bb....s", "..k...kkkk...k", "..kk.kkkkkk.kk", "..kkkkkkkkkkkk", "..kkkkkbkkkkkk", "..kkkkkkkkkkkk", "..llllllllllll"],
+    pal: { k: 0x2a2838, l: 0x4a4660, s: 0xc8d0e0, b: 0x6ae0ff },
+  },
+  neck_collar: {
+    rows: ["", "", "..wwww....wwww", "...wwww..wwww", "....wwwwwwww", ".....llllll", "......l..l"],
+    pal: { w: 0xf8f8f4, l: 0xc8c8c0 },
+  },
+  neck_whistle: {
+    rows: ["..r..........r", "...r........r", "....r......r", ".....r....r", "......rrrr", ".....mmmmmmm", ".....mmmmmmd", "......mmmmd"],
+    pal: { r: 0xe84a5a, m: 0xc8ccd8, d: 0x8a90a0 },
+  },
+  neck_camera: {
+    rows: ["..s..........s", "...s........s", "....s......s", "...kkkkkkkkkk", "...kggggggwgk", "...kkkbbbkkkk", "...kkbllbkkkk", "...kkbllbkkkk", "...kkkbbbkkkk", "...kkkkkkkkkk"],
+    pal: { s: 0x2a2a34, k: 0x3a3a46, g: 0x5a5a68, w: 0xf4f4f4, b: 0x4a7aa8, l: 0x8ad0f0 },
+  },
+  neck_pearl: {
+    rows: ["", ".p............p", "..s..........s", "...p........p", "....s......s", ".....pspspsp", ".......kk", ".......kk"],
+    pal: { p: 0xf8f4ec, s: 0xc8c0b4, k: 0xf0a8bc },
+  },
+  neck_medal: {
+    rows: ["..rr......bb", "...rr....bb", "....rr..bb", ".....rrbb", "......rb", ".....gggg", "....gghggg", "....ghgggg", "....gggggl", ".....gggl"],
+    pal: { r: 0xd8404a, b: 0x3a6ac8, g: 0xf2c43a, h: 0xfff0a0, l: 0xb88a1a },
+  },
+  staff_armband: {
+    rows: ["", "", "", "..rrrrrrrrrrrr", "..rrrrrrrrrrrr", "..rryyryyryyrr", "..rryryyryyyrr", "..rryyrryyryrr", "..rrrrrrrrrrrr", "..dddddddddddd"],
+    pal: { r: 0xd8323c, y: 0xf2d04a, d: 0x9a2028 },
+  },
+  hand_donut: {
+    rows: ["", "", "....pppppp", "...pbpppcpp", "..ppppppppbp", "..pppkkkkppp", "..dddkkkkddd", "..ddddddddd", "...ddddddd", "....dddddd"],
+    pal: { p: 0xf08ab0, b: 0x9ae0ff, c: 0xffffff, d: 0xd8a060, k: 0x5a3a20 },
+  },
+  hand_clipboard: {
+    rows: ["......ss", ".....smms", "..bbbbbbbbbb", "..bwwwwwwwwb", "..bwllllllwb", "..bwwwwwwwwb", "..bwlllllwwb", "..bwwwwwwwwb", "..bwllllllwb", "..bwwwwwwwwb", "..bbbbbbbbbb"],
+    pal: { b: 0x9a6a32, w: 0xf6f4ec, l: 0x9a9488, s: 0x8a8e9a, m: 0xc8ccd8 },
+  },
+  hand_mic: {
+    rows: ["......hgg", ".....hgggg", ".....ggggg", ".....ggggg", "......ggg", ".......k", ".......k", ".......k", ".......k", ".......k", ".......k"],
+    pal: { g: 0x8a8a98, h: 0xc8c8d8, k: 0x2a2a34 },
+  },
+  hand_bouquet: {
+    rows: ["......p", ".....ppp.y", "..r...p.yyy", ".rrr.www.y", "..r.wwwww", "..gg.www.gg", "...ggggggg", "....kkkkk", "....kkkkk", ".....kkk", ".....kkk", "......k"],
+    pal: { p: 0xff9ac0, y: 0xffd04a, r: 0xe84a5a, w: 0xffffff, g: 0x5aa84a, k: 0xe8d4b0 },
+  },
+  hand_wand: {
+    rows: [".......y", ".......y", "....yyywyyy", ".....yyyyy", "......yyy", ".....yy.yy", ".......p", ".......p", ".......p", ".......p", ".......p", ".......p"],
+    pal: { y: 0xffe066, w: 0xfffbe0, p: 0xd88ab8 },
+  },
+  staff_ledger: {
+    rows: ["", "..ssssssssssw", "..sbbbbbbbbbw", "..sbbrrrrbbbw", "..sbbrrrrbbbw", "..sbbbbbbbbbw", "..sbbbbbbbbbw", "..sbbbbbbbbbw", "..sbbbbbbbbbw", "..sbbbbbbbbbw", "..ssssssssssw"],
+    pal: { s: 0x3a3446, b: 0x1e1c24, r: 0xc83a3a, w: 0xe8e0d0 },
+  },
+  staff_lamp: {
+    rows: [".......k", ".......k", ".....kkkkk", "....wwwwwww", "...wwllllwww", "...wllggllww", "...wllggllww", "...wwllllwww", "....wwwwwww", ".....kkkkk", ".......r"],
+    pal: { k: 0x2a2a34, w: 0xe8f0f8, l: 0x9af0ff, g: 0xd8faff, r: 0xc83a3a },
+  },
+  back_shell: {
+    rows: ["", ".....gggggg", "...ggpppgpppg", "..gpppgggpppgg", "..gpppgpgpppgg", "..ggggpppggggg", "..gpppgpgpppgg", "..gpppgggpppgg", "...ggpppgpppg", ".....gggggg", "....yyyyyyyy"],
+    pal: { g: 0x3a6a32, p: 0x8aba6a, y: 0xd8c87a },
+  },
+  back_guitar: {
+    rows: ["...........kk", "..........kk", ".........n", "........n", ".......n", "....www.n", "...wwwwwn", "..wwwwwnww", "..wwwwhwww", "..wwwwwwww", "...wwwwww", "....wwww"],
+    pal: { k: 0x3a2414, n: 0x5a3a20, w: 0xc8803a, h: 0x2a1a0a },
+  },
+  back_jetpack: {
+    rows: ["...rr....rr", "...mm....mm", "...ml....ml", "...mlkkkkml", "...ml....ml", "...ml....ml", "...ml....ml", "...oo....oo", "...yy....yy", "....o.....o"],
+    pal: { r: 0xd8403a, m: 0xb8c0cc, l: 0x7a8292, k: 0x4a4a58, o: 0xffb03a, y: 0xfff07a },
+  },
+  staff_robe: {
+    rows: ["", "..bb........bb", "..kkkkkkkkkkkk", "..kskkkkkkkkkr", ".kskkkkkkkkkkkr", ".kskkkkkkkkkkkr", "kskkkkkkkkkkkkkr", "kskkkkkkkkkkkkkr", "kskkkkkkkkkkkkkr", "kskkkkkkkkkkkkkr", "k.kk.kk.kk.kk.kr"],
+    pal: { k: 0x24222c, s: 0x3a3846, r: 0x8a2430, b: 0x6ae0ff },
+  },
 };
 
 function gearIcon(id: string): Grid | null {

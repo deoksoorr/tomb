@@ -29,6 +29,8 @@ export type ItemDef = {
   power?: number;
   /** 46번 염색권 종류 (kind = "dye") */
   dye?: DyeTicketSpec;
+  /** 운영자(31번) 전용 꾸미기: 상점 목록에 없고, 운영자만 영구로 받아 입는다 (서버·실시간 서버가 운영자가 아니면 뺀다) */
+  staff?: true;
 };
 
 export const COSMETIC_DURATION_MS = DAY;
@@ -113,6 +115,57 @@ export const ITEMS: readonly ItemDef[] = [
     ["pet_wisp", "pet", "도깨비불 친구", "푸른 불꽃이 둥실둥실 따라와요.", 700],
     ["pet_dog", "pet", "퇴근 강아지", "퇴근하면 제일 먼저 반겨 주는 친구.", 900],
   ]),
+  // ── 캐릭터 꾸미기 추가분 2 (11/12): 부위마다 5~6종. 그림은 avatarGear.ts(머리·목·손·등 시트) · cosmeticFx.ts(날개·발자국·오라) ──
+  ...cosmetics([
+    // 머리
+    ["hat_beret", "head", "베레모", "디자인팀 막내의 상징. 시안은 백 번째.", 120],
+    ["hat_hardhat", "head", "안전모", "현장 점검 나왔습니다. 안전제일!", 100],
+    ["hat_chef", "head", "요리사 모자", "구내식당 셰프님께 잠깐 빌려 왔어요.", 140],
+    ["hat_horns", "head", "도깨비 뿔", "마감 사흘 전부터 슬슬 돋아나요.", 180],
+    ["hat_santa", "head", "산타 모자", "연말 파티 사회는 결국 내 차지.", 200],
+    // 목
+    ["neck_collar", "neck", "셔츠 깃", "목 위만 보면 완벽한 출근룩.", 60],
+    ["neck_whistle", "neck", "호루라기", "체육대회 심판은 늘 신입 몫.", 80],
+    ["neck_camera", "neck", "목걸이 카메라", "워크숍 사진 담당. 정작 내 사진은 없어요.", 160],
+    ["neck_pearl", "neck", "진주 목걸이", "돌잔치 하객룩 완성.", 200],
+    ["neck_medal", "neck", "금메달", "이달의 사원. 진짜예요.", 300],
+    // 손
+    ["hand_donut", "hand", "도넛", "탕비실 마지막 도넛. 눈치 싸움 승리.", 60],
+    ["hand_clipboard", "hand", "결재판", "결재 부탁드립니다… (세 번째)", 80],
+    ["hand_mic", "hand", "마이크", "회식 2차 노래방 마이크 독점.", 120],
+    ["hand_bouquet", "hand", "꽃다발", "승진 축하 꽃다발. 남의 거 아니에요.", 160],
+    ["hand_wand", "hand", "요술봉", "야근을 없애 주는 요술봉. (효과는 아직)", 240],
+    // 등
+    ["back_shell", "back", "거북 등껍질", "느긋하게, 그래도 지각은 안 하게.", 140],
+    ["back_guitar", "back", "통기타", "퇴근 후엔 밴드 동아리 기타리스트.", 200],
+    ["back_jetpack", "back", "제트팩", "지각 1분 전 비상 출근용.", 360],
+    ["back_wings_angel", "back", "천사 날개", "칼퇴를 허락받은 자의 날개.", 400],
+    ["back_wings_dragon", "back", "용 날개", "결재 반려 세 번이면 돋아나요.", 480],
+    // 발
+    ["feet_snowprints", "feet", "눈 발자국", "첫눈 온 날 출근길, 뽀득뽀득.", 80],
+    ["feet_paws", "feet", "젤리 발도장", "고양이 발바닥 젤리 도장, 꾹꾹.", 100],
+    ["feet_bubbles", "feet", "비눗방울 걸음", "걸을 때마다 퐁퐁.", 120],
+    ["feet_confetti", "feet", "색종이 걸음", "퇴근길이 매일 축하 파티.", 160],
+    ["feet_coins", "feet", "짤랑 동전", "주머니에 구멍이 났어요. 월급날 한정.", 240],
+    ["feet_stars", "feet", "별가루 걸음", "밟는 곳마다 별이 반짝.", 300],
+    // 오라
+    ["aura_steam", "aura", "커피 김", "카페인 충전 완료. 머리에서 김이 모락모락.", 100],
+    ["aura_bubbles", "aura", "비눗방울 오라", "머리 위로 비눗방울이 둥실둥실.", 120],
+    ["aura_leaves", "aura", "낙엽 비", "내 머리 위에만 가을.", 140],
+    ["aura_hearts", "aura", "하트 뿅뿅", "사내 연애 들킴.", 180],
+    ["aura_ghosts", "aura", "꼬마 유령 친구들", "꼬마 유령들이 머리 둘레를 빙글빙글.", 300],
+    ["aura_money", "aura", "보너스 비", "성과급이 들어왔어요! (꿈)", 480],
+  ]),
+  // ── 31번 운영자 전용 꾸미기 (값 0: 운영자만 상점에서 영구로 받는다. 일반 계정은 사거나 입을 수 없다) ──
+  ...cosmetics([
+    ["staff_crown", "head", "운영자 왕관", "마을을 지키는 운영자의 검은 왕관. 운영자 전용.", 0],
+    ["staff_armband", "neck", "관리자 완장", "\"관리\"가 박힌 빨간 완장. 운영자 전용.", 0],
+    ["staff_ledger", "hand", "저승 명부", "이름이 적혀 있는지 확인해 볼까요? 운영자 전용.", 0],
+    ["staff_lamp", "hand", "저승 등불", "길 잃은 유령을 비추는 푸른 등불. 운영자 전용.", 0],
+    ["staff_robe", "back", "저승 도포", "붉은 안감의 검은 도포 자락. 운영자 전용.", 0],
+    ["staff_steps", "feet", "저승길 발자국", "지나간 자리에 푸른 안개 발자국. 운영자 전용.", 0],
+    ["staff_souls", "aura", "혼불", "푸른 혼불이 둘레를 맴돌아요. 운영자 전용.", 0],
+  ]).map((it) => ({ ...it, staff: true as const })),
   // ── 동물원 펫 (사육사에게서 영구로만 산다 — 가격은 아래 ZOO_PETS. price는 같은 값을 적어 둔다) ──
   { id: "pet_fox", kind: "cosmetic", slot: "pet", name: "달빛 여우", desc: "야근하는 밤에만 슬그머니 따라오는 여우. 꼬리가 은은하게 빛나요.", price: 1200, durationMs: COSMETIC_DURATION_MS },
   { id: "pet_hound", kind: "cosmetic", slot: "pet", name: "듬직한 큰 개", desc: "등에 태워 주는 커다란 개. 출근길이 두 배로 즐거워요. (타고 다닐 수 있어요)", price: 1400, durationMs: COSMETIC_DURATION_MS },
@@ -193,8 +246,8 @@ export function styleItemId(id: string): string | null {
  */
 export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "megaphone", "dye"];
 /** 상점 목록에 나오는지. 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — ZOO_PETS) */
-export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot }): boolean {
-  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet";
+export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true }): boolean {
+  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff;
 }
 
 const byId = new Map(ITEMS.map((i) => [i.id, i]));
@@ -212,6 +265,16 @@ export function megaphoneScope(id: unknown): MegaphoneScope | null {
 /** 화면에 보일 아이템 이름: 카탈로그 이름, 관리자가 만든 고정 색 염색권(dyefix_*)은 "고정 색 염색권", 모르면 id 그대로 */
 export function itemName(id: string): string {
   return byId.get(id)?.name ?? (id.startsWith("dyefix_") ? "고정 색 염색권" : id);
+}
+/** 운영자 전용 꾸미기인지 */
+export function isStaffItem(id: unknown): boolean {
+  return typeof id === "string" && byId.get(id)?.staff === true;
+}
+/** 운영자 전용 꾸미기 id (상점의 운영자 칸·검증용) */
+export const STAFF_ITEM_IDS: readonly string[] = ITEMS.filter((i) => i.staff).map((i) => i.id);
+/** 운영자가 아니면 착용 목록에서 운영자 전용 꾸미기를 뺀다 (입장 토큰·실시간 서버) */
+export function staffGateLook(look: Look, staff: boolean): Look {
+  return staff ? look : look.filter((id) => !isStaffItem(id));
 }
 export function isFireworkId(id: unknown): id is string {
   return typeof id === "string" && byId.get(id)?.kind === "firework";
@@ -246,6 +309,8 @@ const PERMANENT_IDS = [
   "back_wings", "back_cape",
   "aura_firefly", "aura_petals",
   "feet_flowers",
+  // 추가분 2
+  "hat_beret", "hat_horns", "neck_pearl", "hand_wand", "back_wings_angel", "aura_hearts",
   // 펫(pet_ghost·pet_cat)은 동물원으로 옮겼다 — 상점에서 영구로 팔지 않는다 (ZOO_PETS)
 ] as const;
 export const PERMANENT_MULTIPLIER = 7;
@@ -255,7 +320,9 @@ const permanentPrices = new Map<string, number>(
     return it?.kind === "cosmetic" ? [[id, Math.round((it.price * PERMANENT_MULTIPLIER) / 10) * 10] as const] : [];
   }),
 );
-/** 영구로 살 수 있으면 그 가격, 아니면 null */
+// 운영자 전용 꾸미기는 값 0으로 영구로만 받는다 (운영자인지는 web 서버가 확인한다)
+for (const id of STAFF_ITEM_IDS) permanentPrices.set(id, 0);
+/** 영구로 살 수 있으면 그 가격, 아니면 null (운영자 전용은 0) */
 export function permanentPrice(id: string): number | null {
   return permanentPrices.get(id) ?? null;
 }

@@ -56,7 +56,7 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
   const staff = await topUpIfStaff(accounts, accountId);
   // 46번 염색은 따로 저장한다 (lib/store/style.ts)
   const [a, style] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId)]);
-  return { ...toMe(accountId, a, day, now), dye: style.dye, ...(staff ? { staff: true } : {}) };
+  return { ...toMe(accountId, a, day, now), dye: style.dye, ...(staff ? { staff: true } : {}), ...(style.bodies?.length ? { bodies: style.bodies } : {}) };
 }
 
 /**

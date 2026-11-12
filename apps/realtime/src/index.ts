@@ -14,6 +14,7 @@
  * ── 경로 ──
  *   GET /health              상태 확인
  *   GET /lobby               채널 목록과 인원(LobbyInfo). CORS는 ALLOWED_ORIGINS만, 엣지 캐시 2초
+ *   GET /hunt-rooms          11/12 사냥터 방별 지금 인원(HuntRoomsInfo). CORS는 ALLOWED_ORIGINS만, 메모리·엣지 캐시 10초
  *   GET /queue?t=            대기열 자리 확인(QueueStatus). 대기열 토큰(channel 0)만 받는다. 캐시 없음
  *   GET /ch/:n?t=&x=&y=&v=   채널 WebSocket. Origin·클라이언트 버전·토큰(그 채널용)을 검증한 뒤 Channel DO로 넘긴다
  *   GET /room/:id?t=&x=&y=&v= 방(마을·집·사냥터) WebSocket. 토큰의 room이 id와 같아야 한다. 상한 ROOM_CAPACITY
@@ -23,7 +24,7 @@
  *   POST /internal/kick      47번 Vercel → 이 서버: 방문자들을 지금 내보낸다(강퇴 4011·이용 제한 4012). 본문 서명(JOIN_SECRET) 필수
  *   POST /internal/peer      47번 Vercel → 이 서버: 채널·방의 sid가 누구인지 (유저 신고). 본문 서명 필수
  */
-import { CLOSE, INTERNAL_SIG_HEADER, LOBBY_CACHE_SEC, ROOM_ID_RE, verifyInternal } from "@tomb/protocol";
+import { CLOSE, HUNT_ROOMS_CACHE_SEC, INTERNAL_SIG_HEADER, LOBBY_CACHE_SEC, ROOM_ID_RE, verifyInternal } from "@tomb/protocol";
 import type { JoinTicket } from "./channel";
 import {
   TICKET_HEADER,
@@ -47,6 +48,7 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === "/health") return Response.json({ ok: true });
     if (url.pathname === "/lobby") return lobby(req, env, ctx);
+    if (url.pathname === "/hunt-rooms") return huntRooms(req, env);
     if (url.pathname === "/queue") return queue(req, env, url);
     const ch = /^\/ch\/([^/]*)$/.exec(url.pathname);
     if (ch) return channel(req, env, url, ch[1]);
@@ -216,6 +218,27 @@ async function lobbyBody(req: Request, env: Env, ctx: ExecutionContext): Promise
   });
   ctx.waitUntil(caches.default.put(key, cached));
   return body;
+}
+
+// ── GET /hunt-rooms (11/12) ──
+// 사냥터 고르는 화면이 "n명 사냥 중"을 보여 주려고 묻는다. 방 DO들이 로비에 보고해 둔 값을 그대로 돌려준다(방을 깨우지 않는다).
+// 아이솔레이트 메모리에 10초 + 브라우저·엣지 Cache-Control 10초 → 로비 DO 호출은 아이솔레이트마다 10초에 한 번.
+
+let huntMemo: { body: string; at: number } | null = null;
+
+async function huntRooms(req: Request, env: Env): Promise<Response> {
+  const { cors, early } = corsFor(req, env);
+  if (early) return early;
+  const now = Date.now();
+  try {
+    if (!huntMemo || now - huntMemo.at >= HUNT_ROOMS_CACHE_SEC * 1000) huntMemo = { body: JSON.stringify(await lobbyStub(env).huntRooms()), at: now };
+    return new Response(huntMemo.body, {
+      headers: { ...cors, "Content-Type": "application/json", "Cache-Control": `public, max-age=${HUNT_ROOMS_CACHE_SEC}` },
+    });
+  } catch (e) {
+    console.error("hunt-rooms failed", e);
+    return Response.json({ error: { code: "HUNT_ROOMS_UNAVAILABLE", message: "사냥터 인원을 불러오지 못했어요." } }, { status: 503, headers: cors });
+  }
 }
 
 // ── GET /queue ──

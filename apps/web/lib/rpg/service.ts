@@ -5,7 +5,7 @@ import { kstDay, kstWeek } from "../store/accounts";
 import { earnRule } from "../economy";
 import { env } from "../env";
 import { HttpError } from "../http";
-import { gearById, potionById, timeLimitSec, zoneFor, type Difficulty, type GameKind, type ZoneId } from "./catalog";
+import { COSMETIC_DROPS, gearById, potionById, timeLimitSec, zoneFor, type Difficulty, type GameKind, type ZoneId } from "./catalog";
 import {
   addDrops,
   addGear,
@@ -26,7 +26,7 @@ import type { z } from "zod";
 import type { CharacterActionSchema, ShopActionSchema } from "./schemas";
 import { getRpgStore, RUNS_PER_HOUR, type RpgStore } from "./store";
 import { signTicket, verifyTicket } from "./ticket";
-import type { CharacterState, RpgView, RunFinishResponse, RunResult, RunStartResponse } from "./types";
+import type { CharacterState, Drop, RpgView, RunFinishResponse, RunResult, RunStartResponse } from "./types";
 
 // 사냥터 서버 로직 (라우트는 세션 확인·입력 검증·레이트리밋만 하고 여기로 넘긴다).
 // 포인트는 백엔드 공용 함수(earnPoints/spendPoints)로만 움직인다. 사냥터 자체에는 포인트 장부가 없다.
@@ -167,6 +167,34 @@ export async function startRun(acct: string, game: GameKind, difficulty: Difficu
   return { ticket, game, difficulty, ...(zone ? { zone: zone.id } : {}), seed, timeLimitSec: limit, view: await rpgView(acct, store, now, c) };
 }
 
+/** 코디 드롭 하나에 시도해 볼 후보 수 (이미 가진 것이면 다음 것) */
+const COSMETIC_TRIES = 8;
+
+/**
+ * 11/12 기간제 코디 드롭 → 계정 가방. 상점 구매와 같은 원자적 확인을 0P로 한다 (unique: 가방·착용 중·벗어 둔 꾸미기에 이미 있으면
+ * "owned" → 목록의 다음 후보). 후보를 다 가졌으면 그 드롭은 없던 것으로 한다. 판 기록은 이미 claim했으므로 두 번 받을 수 없다
+ */
+export async function grantCosmetics(acct: string, drops: Drop[], now: number): Promise<Drop[]> {
+  if (!drops.some((d) => d.kind === "cosmetic")) return drops;
+  const accounts = getAccounts();
+  const out: Drop[] = [];
+  for (const d of drops) {
+    if (d.kind !== "cosmetic") {
+      out.push(d);
+      continue;
+    }
+    const start = Math.max(0, COSMETIC_DROPS.indexOf(d.id));
+    for (let i = 0; i < Math.min(COSMETIC_TRIES, COSMETIC_DROPS.length); i++) {
+      const id = COSMETIC_DROPS[(start + i) % COSMETIC_DROPS.length];
+      if ((await accounts.buy(acct, id, 0, { unique: true, now })) === "ok") {
+        out.push({ kind: "cosmetic", id, qty: 1 });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 export async function finishRun(acct: string, token: string, result: RunResult, ipHash: string, now = Date.now()): Promise<RunFinishResponse> {
   const store = getRpgStore();
   const t = await verifyTicket(env.sessionSecret(), token);
@@ -191,6 +219,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       return { state: { ...dr.state, runs: dr.state.runs + 1 }, result: { levelsGained: g.levelsGained, lost: dr.lost } };
     }),
   );
+  const drops = await grantCosmetics(acct, v.drops, now);
   // 22번: 별자리 잇기를 진짜 맑은 밤(판 시작 시각, KST)에 했으면 포인트 보너스
   const nightBonus = t.g === "stars" && starryNight(t.t);
   const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
@@ -208,7 +237,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       points: earned,
       capped: earned < pointsRaw,
       ...(nightBonus ? { nightBonus: true } : {}),
-      drops: v.drops,
+      drops,
       levelsGained: applied.levelsGained,
       newLevel: state.level,
       lostDrops: applied.lost,

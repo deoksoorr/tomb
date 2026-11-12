@@ -126,6 +126,42 @@
   margin-top: 12px;
 }
 
+/* 앉은 뒤 벤치 상태 탭: 고를 것만 남아 짧으므로 고정 크기 창을 채운다 —
+   카드를 키우고(아이콘 위·이름 아래), 안내·상태 풀기는 창 아래에 붙인다 */
+.panelFill {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.panelFill .moods {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.panelFill .mood {
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  min-height: 112px;
+  text-align: center;
+}
+
+.panelFill .hint {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.panelFill .clear {
+  align-self: flex-start;
+}
+
+@media (max-width: 480px) {
+  .panelFill .mood {
+    min-height: 88px;
+  }
+}
+
 /* 앉기 전: 고를 수 있는 상태를 흐리게 미리 보여 준다 */
 .moodOff {
   cursor: default;

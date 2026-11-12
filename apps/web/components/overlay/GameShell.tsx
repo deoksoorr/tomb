@@ -56,6 +56,7 @@ import type { PublicHouse } from "@/lib/housing/types";
 import { isRideablePet, WORLD_LOTS } from "@tomb/protocol";
 import HuntLobby from "@/components/rpg/HuntLobby";
 import ForageLayer from "@/components/forage/ForageLayer";
+import RideButton from "@/components/zoo/RideButton";
 import ZooLayer from "@/components/zoo/ZooLayer";
 import WishDialog from "@/components/plaza/WishDialog";
 import Telescope from "@/components/rpg/Telescope";
@@ -479,6 +480,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           </div>
           <Minimap compact={coarse} />
           <CameraControls showZoom={!coarse} />
+          {/* 타는 펫 타기·내리기: 데스크톱은 오른쪽 아래 확대·축소 버튼 왼쪽, 터치는 행동 버튼 묶음 안(MobileControls) */}
+          {!coarse && <RideButton variant="desktop" className={ui.button} />}
           {coarse && <MobileControls />}
           <DonateButton />
         </div>
