@@ -133,13 +133,13 @@ export function useOutfitView(initialWalking = true) {
 }
 
 /** 상점 입어 보기: 내 아바타가 고른 꾸미기를 입은 모습 (게임과 같은 그림, 정수 배율 캔버스) */
-export default function OutfitPreview({ color, body, look, label }: Props) {
+export default function OutfitPreview({ color, body, look, label, className }: Props & { className?: string }) {
   const { dir, setDir, walking, setWalking, rotate } = useOutfitView();
   const hintId = useId();
   const flowersIdle = look.includes("feet_flowers") && !walking;
 
   return (
-    <div className={styles.preview} role="group" aria-label="입어 보기">
+    <div className={cx(styles.preview, className)} role="group" aria-label="입어 보기">
       <OutfitCanvas color={color} body={body} look={look} label={label} dir={dir} walking={walking} onRotate={rotate} describedBy={hintId} />
       <ViewControls dir={dir} walking={walking} onDir={setDir} onWalking={setWalking} />
       <p id={hintId} className={styles.hint} data-keys={flowersIdle ? undefined : ""}>

@@ -5,7 +5,8 @@ import { bridge } from "@/game/bridge";
 import { api, errorMessage } from "@/lib/api";
 import type { GraveCache } from "@/lib/hooks/useGraves";
 import { meStore } from "@/lib/hooks/useMe";
-import { SHRINE_KEEP_DAYS, type PublicGrave, type ShrineEntry } from "@/lib/types";
+import { DEFAULT_PASS_DAYS, SHRINE_KEEP_DAYS, type PublicGrave, type ShrineEntry } from "@/lib/types";
+import { GRAVEYARD_CAPACITY } from "@tomb/protocol";
 import StyleArt from "../grave/StyleArt";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
@@ -17,10 +18,12 @@ type Props = {
   /** 다시 모신 묘비로 가기 (다른 채널이면 채널을 옮긴다) */
   onGo: (entry: MyGraveEntry) => void;
   onClose: () => void;
+  /** 성불한 이야기들 열기 (없으면 버튼을 숨긴다) */
+  onOpenPassed?: () => void;
 };
 
 /** 성황당: 내가 이장한 묘비가 잠시 머무는 곳. 보관 기간 안에는 다시 모실(복구) 수 있다 */
-export default function ShrineDialog({ cache, onGo, onClose }: Props) {
+export default function ShrineDialog({ cache, onGo, onClose, onOpenPassed }: Props) {
   const [entries, setEntries] = useState<ShrineEntry[] | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [restored, setRestored] = useState<PublicGrave | null>(null);
@@ -68,8 +71,18 @@ export default function ShrineDialog({ cache, onGo, onClose }: Props) {
     <Dialog title="성황당" onClose={onClose}>
       <div className={styles.bag}>
         <p className={ui.hint}>
-          이장한 묘비는 {SHRINE_KEEP_DAYS}일 동안 이곳에 모셔져요. 그 안에 다시 모시면 원래 채널 맨 뒤 자리로 돌아가요.
+          성황당은 묘역을 떠난 묘비들이 머무는 곳이에요. 이장한 내 묘비는 {SHRINE_KEEP_DAYS}일 동안 이곳에 모셔지고, 그 안에 다시
+          모시면 원래 채널 맨 뒤 자리로 돌아가요(지나면 지워져요).
         </p>
+        <p className={ui.hint}>
+          세운 지 {DEFAULT_PASS_DAYS}일이 지난 묘비는 성불해 묘역을 떠나요. 묘역(채널마다 {GRAVEYARD_CAPACITY}자리)이 꽉 차면 가장
+          오래된 묘비부터 조금 일찍 성불해요. 성불한 묘비는 &quot;성불한 이야기들&quot;에 남아요.
+        </p>
+        {onOpenPassed && (
+          <button type="button" className={ui.button} onClick={onOpenPassed}>
+            성불한 이야기들 보기
+          </button>
+        )}
         {entries === null ? (
           <p className={styles.state} role="status">
             불러오는 중…

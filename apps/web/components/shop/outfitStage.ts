@@ -1,5 +1,6 @@
 import { DIR, WALK_SPEED, type DirId } from "@tomb/protocol";
-import { AV_ANIM, AV_COLS, AV_H, AV_W, BODY_METRICS, bodyOf, buildAvatarSheet, lookKey } from "@/game/sprites/avatar";
+import { AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, BODY_METRICS, bodyOf, buildAvatarSheet, handAnchor, lookKey } from "@/game/sprites/avatar";
+import { CosmeticFxSim, FX_ART, type FxArtId, type FxCmd } from "@/game/sprites/cosmeticFx";
 import * as fx from "@/game/sprites/fx";
 import { grassTile } from "@/game/sprites/ground";
 import { css, makeCanvas, type Color } from "@/game/sprites/pixel";
@@ -93,6 +94,29 @@ function petBack(dir: DirId): [number, number] {
 
 type Sprite = { depth: number; draw: () => void };
 
+const fxCanvases = new Map<FxArtId, HTMLCanvasElement>();
+
+/** F8 연출 명령 하나를 그린다 (Phaser 이미지와 같은 규칙: 원점 기준 회전·뒤집기·배율) */
+function drawFx(ctx: CanvasRenderingContext2D, c: FxCmd, x: number, y: number): void {
+  const a = FX_ART[c.art];
+  let art = fxCanvases.get(c.art);
+  if (!art) {
+    art = a.build().toCanvas();
+    fxCanvases.set(c.art, art);
+  }
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, c.alpha));
+  ctx.translate(x, y);
+  if (c.rot) ctx.rotate(c.rot);
+  ctx.scale((c.flip ? -1 : 1) * c.sx, c.sy);
+  ctx.drawImage(art, c.frame * a.w, 0, a.w, a.h, -c.ox * a.w, -c.oy * a.h, a.w, a.h);
+  ctx.restore();
+}
+
+function dirName(dir: DirId): "down" | "left" | "right" | "up" {
+  return dir === DIR.left ? "left" : dir === DIR.right ? "right" : dir === DIR.up ? "up" : "down";
+}
+
 /** 무대 하나 (미리보기 컴포넌트마다 하나). 아바타 위치는 가상의 월드 좌표로 움직이고 화면은 아바타를 따라간다 */
 export class OutfitStage {
   private ax = 0;
@@ -104,6 +128,10 @@ export class OutfitStage {
   private flowerNext = 0;
   private last = 0;
   private started = false;
+  // F8 추가 꾸미기 연출 (게임과 같은 계산)
+  private fx = new CosmeticFxSim();
+  private fxKey = "";
+  private fxLast = 0;
 
   /**
    * 한 장면을 그린다. now: ms (performance.now), still: 움직임 줄이기 (첫 프레임에 멈춘 그림 + 걷기면 꽃 몇 송이를 미리 깔아 둔다)
@@ -259,6 +287,40 @@ export class OutfitStage {
       });
     }
 
+    // ── F8 연출 (우산·풍선·날개·발자국·오라·펫): 게임과 같은 CosmeticFxSim ──
+    const fxKey = l.look.join(",");
+    if (fxKey !== this.fxKey) {
+      this.fxKey = fxKey;
+      this.fx.setLook(l.look);
+    }
+    const fxCmds: FxCmd[] = [];
+    if (!this.fx.empty) {
+      const fdt = this.fxLast ? Math.min(100, Math.max(0, now - this.fxLast)) : 16;
+      this.fxLast = now;
+      this.fx.step(
+        {
+          now,
+          dt: fdt,
+          x: this.ax,
+          y: this.ay,
+          headY: this.ay,
+          dir,
+          moving: walking,
+          hidden: false,
+          artTop: avatarArtTop(body, l.look),
+          shoulder: m.shoulder,
+          hand: handAnchor(body, dirName(dir)),
+          reduced: still,
+          still,
+        },
+        fxCmds,
+      );
+      for (const c of fxCmds) {
+        if (c.layer === "ground") drawFx(ctx, c, sx(c.x), sy(c.y));
+        else if (c.layer === "body") sprites.push({ depth: c.depth, draw: () => drawFx(ctx, c, sx(c.x), sy(c.y)) });
+      }
+    }
+
     sprites.sort((p, q) => p.depth - q.depth);
     for (const s of sprites) s.draw();
 
@@ -281,6 +343,7 @@ export class OutfitStage {
         ctx.drawImage(a.firefly, Math.round(bx + Math.cos(ang) * 10) - 2, Math.round(headY - 9 + Math.sin(ang * 1.3) * 5) - 2);
       }
     }
+    for (const c of fxCmds) if (c.layer === "light") drawFx(ctx, c, sx(c.x), sy(c.y));
     ctx.restore();
   }
 
@@ -290,6 +353,7 @@ export class OutfitStage {
     this.ay = 0;
     this.petX -= ax;
     this.petY -= ay;
+    this.fx.shift(-ax, -ay);
     for (const f of this.flowers) {
       f.x -= ax;
       f.y -= ay;

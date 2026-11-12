@@ -36,7 +36,8 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
       .sort((a, b) => LIFE_CATS.indexOf(a.sp.cat) - LIFE_CATS.indexOf(b.sp.cat) || b.sp.price - a.sp.price);
   }, [state, npc]);
 
-  const qty = (id: string, owned: number) => Math.min(owned, pick?.[id] ?? owned);
+  // F16: 처음엔 아무것도 고르지 않은 상태(0개) → [고른 것 팔기]는 −/+로 고른 만큼, [전부 팔기]는 가진 것 전부
+  const qty = (id: string, owned: number) => Math.min(owned, pick?.[id] ?? 0);
   const total = rows.reduce((n, r) => n + qty(r.sp.id, r.n) * r.sp.price, 0);
   const source = npc.id === "fishmonger" ? "fish" : "gather";
   const soldToday = state ? (source === "fish" ? state.today.fishP : state.today.gatherP) : 0;
@@ -75,8 +76,8 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
   }
 
   return (
-    <Dialog title={`${npc.name} · ${npc.title}`} onClose={onClose} size="md">
-      <div style={{ display: "grid", gap: 12 }}>
+    <Dialog title={`${npc.name} · ${npc.title}`} onClose={onClose} size="md" fixed>
+      <div className={s.sellShop}>
         <div className={s.npcHello}>
           {portrait && <img src={portrait} width={48} height={52} alt="" style={{ imageRendering: "pixelated" }} />}
           <p style={{ margin: 0 }}>{npc.hello}</p>
@@ -109,9 +110,20 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
                     <button type="button" className={ui.button} onClick={() => setQty(sp.id, n, q - 1)} disabled={busy || q <= 0} aria-label={`${sp.name} 하나 덜`}>
                       −
                     </button>
-                    <span aria-label="팔 개수">{q}</span>
+                    <span className={s.qtyNum} aria-label={`${sp.name} 팔 개수`} aria-live="polite">
+                      {q}
+                    </span>
                     <button type="button" className={ui.button} onClick={() => setQty(sp.id, n, q + 1)} disabled={busy || q >= n} aria-label={`${sp.name} 하나 더`}>
                       +
+                    </button>
+                    <button
+                      type="button"
+                      className={cx(ui.button, ui.quiet, s.qtyAll)}
+                      onClick={() => setQty(sp.id, n, q >= n ? 0 : n)}
+                      disabled={busy}
+                      aria-label={q >= n ? `${sp.name} 고른 것 비우기` : `${sp.name} ${n}개 모두 고르기`}
+                    >
+                      {q >= n ? "0" : "모두"}
                     </button>
                   </span>
                   <span className={s.price}>{q * sp.price}P</span>
@@ -129,7 +141,7 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
               전부 팔기
             </button>
             <button type="button" className={cx(ui.button, ui.primary)} disabled={busy || total <= 0} onClick={() => void sell(false)}>
-              {busy ? "파는 중…" : "고른 것 팔기"}
+              {busy ? "파는 중…" : total > 0 ? `고른 것 팔기 (${total}P)` : "고른 것 팔기"}
             </button>
           </span>
         </div>

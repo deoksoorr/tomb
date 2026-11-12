@@ -85,7 +85,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
 
   if (!me) {
     return (
-      <Dialog title="가방" onClose={onClose}>
+      <Dialog title="가방" onClose={onClose} size="lg" fixed>
         <p className={styles.state} role="status">
           {error ?? "불러오는 중…"}
         </p>
@@ -97,7 +97,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
   const wardrobe = wardrobeEntries(me, now);
 
   return (
-    <Dialog title="가방" onClose={onClose} size="lg">
+    <Dialog title="가방" onClose={onClose} size="lg" fixed>
       <div className={styles.bag}>
         <div className={styles.tabs} role="tablist" aria-label="가방 칸">
           {(
@@ -122,7 +122,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
           ))}
         </div>
 
-        <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`}>
+        <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={styles.panel}>
           {tab === "wear" ? (
             <Wardrobe entries={wardrobe} now={now} pending={pending} act={act} avatar={resolveAvatar(avatar, me, savedColor)} />
           ) : tab === "forage" ? (

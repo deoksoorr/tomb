@@ -1,6 +1,18 @@
+/* 고정 크기 창(Dialog fixed): 탭은 위에 그대로, 칸 내용만 스크롤 */
 .bag {
-  display: grid;
-  gap: 16px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.panel {
+  flex: 1;
+  min-height: 0;
+  padding: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .state,
@@ -99,6 +111,7 @@
 /* ── 가방 칸 탭 ── */
 .tabs {
   display: flex;
+  flex: none;
   border-bottom: 2px solid var(--line);
 }
 

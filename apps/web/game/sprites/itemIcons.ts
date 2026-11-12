@@ -1,4 +1,6 @@
 import { isPaidShape, type GraveShape } from "../graveShape";
+import { GEAR_SHEET_IDS } from "./avatarGear";
+import { COSMETIC_FX_IDS, fxIconGrid } from "./cosmeticFx";
 import { ghostCat, miniLantern } from "./extras";
 import { forageIconCanvas, isForageIcon } from "./forageIcons";
 import { GRAVE_STONE_H, graveCanvas } from "./graves";
@@ -524,6 +526,114 @@ function fwLetter(): Grid {
   return g;
 }
 
+// ── F8 캐릭터 꾸미기 추가분 (시트에 그려지는 머리·목·손·등): 문자 그림 16×16 ──
+
+type Ascii = { rows: readonly string[]; pal: Record<string, Color> };
+
+const GEAR_ICONS: Record<string, Ascii> = {
+  hat_beanie: {
+    rows: ["", ".......ww", "......wwww", ".......ww", ".....oooooo", "...oooooooooo", "..oooooooooooo", "..oooooooooool", "..ooooooooooll", "..rrrrrrrrrrrr", "..rorororororo", "..rrrrrrrrrrrr"],
+    pal: { o: 0xd8743a, l: 0xa8522a, r: 0xf0a060, w: 0xf6efe0 },
+  },
+  hat_headphones: {
+    rows: ["", ".....bbbbbb", "....b......b", "...b........b", "..b..........b", "..b..........b", ".cc..........cc", ".cpc........cpc", ".ccc........ccc", ".ccc........ccc", "..c..........c"],
+    pal: { b: 0x5a5a6e, c: 0x7a7a92, p: 0xff7aa0 },
+  },
+  hat_crown: {
+    rows: ["", "", "..h....hh....h", "..g...gggg...g", "..gg.gggggg.gg", "..gggggggggggg", "..ggggrggbgggg", "..gggggggggggg", "..llllllllllll"],
+    pal: { g: 0xf2c43a, l: 0xb88a1a, h: 0xfff0a0, r: 0xe0405a, b: 0x4a8ae8 },
+  },
+  hat_ribbon: {
+    rows: ["", "..ppp......ppp", "..pppp....pppp", "..ppppp..ppppp", "..pppppkkppppp", "..ppppp..ppppp", "..pppd....dppp", "..pdd......ddp", "", "....dddddddd", "...d........d", "..d..........d"],
+    pal: { p: 0xff7aa8, d: 0xd04a7a, k: 0xffc8dc },
+  },
+  hat_party: {
+    rows: [".......pp", ".......pp", ".......ab", "......abba", "......bbaa", ".....aabbaa", ".....bbaabb", "....aabbaabb", "....bbaabbaa", "...aabbaabbaa", "...bbaabbaabb", "..aabbaabbaabb"],
+    pal: { a: 0x5ab8e8, b: 0xffd04a, p: 0xff6a9a },
+  },
+  hat_glasses: {
+    rows: ["", "", "", "", "f", "fffffff..fffffff", ".fllllf..fllllf", ".fllwlffffllwlf", ".fllllf..fllllf", ".ffffff..ffffff"],
+    pal: { f: 0xc8904a, l: 0x9ad0e8, w: 0xffffff },
+  },
+  hat_wizard: {
+    rows: [".........pp", "........ppp", ".......pppp", ".......ppppp", "......ppsppp", "......pppppp", ".....ppppppp", ".....pppppppp", "....yyyyyyyyy", "....ppppppppp", ".bbbbbbbbbbbbbb", "..bbbbbbbbbbbb"],
+    pal: { p: 0x6a3aa8, s: 0xfff07a, y: 0xffd04a, b: 0x4a2a7a },
+  },
+  hat_cap: {
+    rows: ["", "", "", "......d", "....hhccccc", "...hhcccccccc", "..hhcccwwcccc", "..hccccwwccccc", "..cccccccccccc", "..dddddddddddddd", "............ddd"],
+    pal: { c: 0x3a6ac8, h: 0x6a9ae8, d: 0x2a4a98, w: 0xffffff },
+  },
+  hat_sprout: {
+    rows: ["", "...aa......bbb", "..aaaa....bbbbb", "..aaaaa..bbbbb", "...aaaas.bbbb", ".....aasbb", ".......s", ".......s", ".......s", "......sss", ".....ccccc", "....cc...cc"],
+    pal: { a: 0x9cd46a, b: 0x7ab84a, s: 0x5a8a3c, c: 0xb0b0c0 },
+  },
+  neck_tie: {
+    rows: ["", "....wwwwwwww", ".....ww..ww", "......nnnn", ".......nn", "......nnnn", "......nsnn", "......nnsn", "......nnns", "......nsnn", "......nnsn", ".......nn"],
+    pal: { w: 0xf0f0f0, n: 0x2a4a9a, s: 0x6a8ad8 },
+  },
+  neck_badge: {
+    rows: ["..bb........bb", "...bb......bb", "....bb....bb", ".....bb..bb", "......bbbb", ".......mm", "....wwwwwwww", "....bbbbbbbb", "....wwwwwwww", "....wkkwwggw", "....wkkwwwww", "....wwwwgggw", "....wwwwwwww"],
+    pal: { b: 0x3a8ae8, m: 0x9a9aa8, w: 0xf4f4f4, k: 0x8a7a6a, g: 0x9a9aa8 },
+  },
+  neck_bowtie: {
+    rows: ["", "", "", "..rr........rr", "..rrrr....rrrr", "..rrrrrkkrrrrr", "..rrrrkkkkrrrr", "..rrrrrkkrrrrr", "..rrrr....rrrr", "..rr........rr"],
+    pal: { r: 0xd8405a, k: 0xa02a40 },
+  },
+  neck_bell: {
+    rows: ["", "cccccccccccccccc", "cccccccccccccccc", ".......kk", "......gggg", ".....gghggg", ".....ghgggg", "....gggggggg", "....gggggggg", "....llllllll", ".......dd"],
+    pal: { c: 0xc8463c, g: 0xf2c43a, h: 0xfff0a0, l: 0xb88a1a, k: 0x7a5a1a, d: 0x7a5a1a },
+  },
+  hand_coffee: {
+    rows: [".........g", "........g", ".......g", "....wwwwwww", "....wwwwwww", ".....eiiie", ".....ebibe", ".....ebbbe", ".....essse", ".....essse", ".....ebbbe", "......bbb"],
+    pal: { g: 0x3aa86a, w: 0xf4f4f4, e: 0xdde8ee, i: 0xcfe8f4, b: 0x4a2a18, s: 0x2a6a4a },
+  },
+  hand_briefcase: {
+    rows: ["", "", "......kkkk", ".....k....k", "..llllllllllll", "..bbbbbbbbbbbb", "..bbbbbbggbbbb", "..bbbbbbggbbbb", "..dddddddddddd", "..bbbbbbbbbbbb", "..bbbbbbbbbbbb", "..bbbbbbbbbbbb", "..dddddddddddd"],
+    pal: { k: 0x3a2414, l: 0x9a6a3a, b: 0x7a4a2a, g: 0xf2c43a, d: 0x5a3420 },
+  },
+  hand_phone: {
+    rows: ["", "..........r", ".....kkkkkk", ".....kssssk", ".....ksbbsk", ".....kssssk", ".....kbbssk", ".....kssssk", ".....ksbbsk", ".....kssssk", ".....kkkkkk", ".....kkwwkk", ".....kkkkkk"],
+    pal: { k: 0x2a2a34, s: 0x9ad8ff, b: 0xffffff, w: 0x6a6a7a, r: 0xe84a5a },
+  },
+  hand_lantern_blue: {
+    rows: [".......kk", "......k..k", ".......kk", ".....tttttt", "....tccccccT", "....tcllllcT", "....tclwwlcT", "....tclwwlcT", "....tcllllcT", "....tccccccT", ".....tttttt"],
+    pal: { t: 0x2a4a5a, T: 0x1e3640, c: 0x4a8aa0, l: 0x8ae8ff, w: 0xe8ffff, k: 0x2a3a4a },
+  },
+  back_backpack: {
+    rows: [".....ssssss", "....s......s", "...pppppppppp", "..pphhhhhhhhpp", "..pphhhhhhhhpp", "..pppppppppppp", "..pppppppppppp", "..pplllllllppp", "..ppl.....lppp", "..ppl..k..lppp", "..pplllllllppp", "..pppppppppppp", "...pppppppppp"],
+    pal: { p: 0x7a8a4a, h: 0x9aaa6a, l: 0x5a6a32, k: 0xd8c8a0, s: 0x5a4a32 },
+  },
+  back_cape: {
+    rows: ["", "..yy........yy", "..rrrrrrrrrrrr", "..rhrrrrrrrrrl", ".rhrrrrrrrrrrrl", ".rhrrrrrrrrrrrl", "rhrrrrrrrrrrrrrl", "rhrrrrrrrrrrrrrl", "rhrrrrrrrrrrrrrl", "rhrrrrrrrrrrrrrl", "r.rr.rr.rr.rr.rl"],
+    pal: { r: 0xb83a4a, h: 0xd85a68, l: 0x8a2a38, y: 0xf2c43a },
+  },
+};
+
+function gearIcon(id: string): Grid | null {
+  if (id === "neck_lei") {
+    // U자로 늘어진 꽃 목걸이
+    const g = blank();
+    const cols = [0xff8ab0, 0xffe066, 0xffffff, 0xff9a5a];
+    for (let i = 0; i <= 6; i++) {
+      const t = i / 6;
+      const x = Math.round(2 + 11 * t);
+      const y = Math.round(3 + 8 * Math.sin(Math.PI * t));
+      const c = cols[i % cols.length];
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) g.set(x + dx, y + dy, c);
+      g.set(x, y, 0xffd84a);
+    }
+    g.outline(OUT, false, 170);
+    return g;
+  }
+  const a = GEAR_ICONS[id];
+  if (!a) return null;
+  const g = blank();
+  const oy = Math.max(0, Math.floor((16 - a.rows.length) / 2) + 1);
+  a.rows.forEach((r, y) => [...r].forEach((ch, x) => ch !== "." && a.pal[ch] !== undefined && g.set(x, y + oy, a.pal[ch])));
+  g.outline(OUT, false, 170);
+  return g;
+}
+
 function unknown(): Grid {
   const g = blank();
   g.rect(3, 3, 10, 10, 0x5a5660);
@@ -594,9 +704,13 @@ function base(itemId: string): HTMLCanvasElement {
       return fwMeteor().toCanvas();
     case "fw_letter":
       return fwLetter().toCanvas();
-    default:
+    default: {
+      // F8 추가 꾸미기 (시트 그림 → 문자 아이콘, 따로 그리는 연출 → 그 그림으로 만든 아이콘)
+      const f8 = gearIcon(itemId) ?? fxIconGrid(itemId);
+      if (f8) return f8.toCanvas();
       // 낚시·채집물 (4·32번: f_/b_/h_/o_/d_)
       return forageIconCanvas(itemId) ?? unknown().toCanvas();
+    }
   }
 }
 
@@ -607,6 +721,9 @@ export const ICON_IDS: readonly string[] = [
   "back_wings", "pet_ghost", "feet_flowers",
   "decor_candles", "decor_wreath", "decor_ribbon", "decor_lantern", "decor_ghostcat", "decor_stars",
   "decor_rainbow", "decor_butterfly", "decor_snowman", "decor_flowerpot",
+  // F8 추가 꾸미기
+  ...GEAR_SHEET_IDS,
+  ...COSMETIC_FX_IDS,
 ];
 
 /** 이 아이템에 전용 아이콘이 있는지 (없으면 물음표 아이콘) */

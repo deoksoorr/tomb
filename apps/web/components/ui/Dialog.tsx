@@ -14,6 +14,12 @@ type Props = {
   size?: "sm" | "md" | "lg";
   /** false면 ESC·배경·× 로 닫히지 않는다 (예: 저장 중) */
   closable?: boolean;
+  /**
+   * 탭이 있는 큰 창(상점·가방·사냥터 등): 탭을 바꿔도 창 크기가 그대로인 고정 높이.
+   * 내용은 본문 안에서 스크롤되고, 좁은 화면(폰)에서는 화면 전체를 쓴다.
+   * 자식이 `flex: 1; min-height: 0`이면 자식 안에서 스크롤을 나눌 수 있다.
+   */
+  fixed?: boolean;
 };
 
 /**
@@ -21,7 +27,7 @@ type Props = {
  * 열릴 때 포커스를 가졌던 요소로 닫힐 때 돌려준다. 열려 있는 동안 게임 키 입력을 막는다.
  * 마운트 = 열림. 닫으려면 부모가 언마운트한다 (onClose).
  */
-export default function Dialog({ title, onClose, children, size = "md", closable = true }: Props) {
+export default function Dialog({ title, onClose, children, size = "md", closable = true, fixed = false }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const pressedBackdrop = useRef(false);
   const titleId = useId();
@@ -55,6 +61,7 @@ export default function Dialog({ title, onClose, children, size = "md", closable
       ref={ref}
       className={styles.dialog}
       data-size={size}
+      data-fixed={fixed || undefined}
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault();

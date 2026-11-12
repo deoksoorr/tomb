@@ -29,6 +29,11 @@ export const COSMETIC_DURATION_MS = DAY;
 export const DECOR_DURATION_MS = 7 * DAY;
 export const MAX_DECOR_PER_GRAVE = 3;
 
+/** 캐릭터 꾸미기 줄 [id, 부위, 이름, 설명, 가격] → ItemDef (지속 시간은 모두 24시간) */
+function cosmetics(rows: readonly (readonly [string, CosmeticSlot, string, string, number])[]): ItemDef[] {
+  return rows.map(([id, slot, name, desc, price]) => ({ id, kind: "cosmetic", slot, name, desc, price, durationMs: COSMETIC_DURATION_MS }));
+}
+
 export const ITEMS: readonly ItemDef[] = [
   { id: "fw_small", kind: "firework", name: "작은 폭죽", desc: "밤하늘에 한 발. 채널 모두가 함께 봐요.", price: 20, power: 1 },
   { id: "fw_heart", kind: "firework", name: "하트 폭죽", desc: "하트 모양으로 퍼지는 분홍 불꽃.", price: 40, power: 2 },
@@ -49,6 +54,59 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "pet_ghost", kind: "cosmetic", slot: "pet", name: "그림자 유령 친구", desc: "작은 그림자 유령이 졸졸 따라와요.", price: 60, durationMs: COSMETIC_DURATION_MS },
   { id: "feet_flowers", kind: "cosmetic", slot: "feet", name: "발자국 꽃", desc: "걷는 자리마다 작은 꽃이 피어요.", price: 35, durationMs: COSMETIC_DURATION_MS },
   { id: "aura_fog", kind: "cosmetic", slot: "aura", name: "안개 망토", desc: "발밑에 푸른 안개가 일렁여요.", price: 30, durationMs: COSMETIC_DURATION_MS },
+
+  // ── F8 캐릭터 꾸미기 추가분 (11/12): 사무실·일상 이름. 시트에 그려지는 것(머리·목·손·배낭·망토)과
+  //    따로 붙는 연출(우산·풍선·날개·발자국·오라·펫)은 web game/sprites/avatarGear.ts · cosmeticFx.ts 참고
+  ...cosmetics([
+    // 머리
+    ["hat_beanie", "head", "털 비니", "안 감은 머리를 감쪽같이 숨겨 줘요.", 20],
+    ["hat_headphones", "head", "노이즈캔슬링 헤드폰", "팀장님 목소리만 골라서 막아 줘요. (아마도)", 40],
+    ["hat_crown", "head", "작은 왕관", "오늘만큼은 내가 이 구역 대표.", 120],
+    ["hat_ribbon", "head", "리본 머리띠", "회식 2차 노래방에서 받은 거예요.", 20],
+    ["hat_party", "head", "고깔모자", "누군가의 생일. 케이크는 이미 없어요.", 25],
+    ["hat_glasses", "head", "뿔테 안경", "엑셀 셀이 한 칸 더 잘 보여요.", 20],
+    ["hat_wizard", "head", "마법사 모자", "엑셀 매크로를 쓸 줄 알면 다 마법사.", 60],
+    ["hat_cap", "head", "체육대회 모자", "회사 체육대회 기념품. 팀 색깔은 파랑.", 20],
+    ["hat_sprout", "head", "새싹 머리핀", "물 주면 자랄지도 몰라요.", 15],
+    // 목
+    ["neck_tie", "neck", "넥타이", "금요일엔 살짝 풀어도 돼요.", 20],
+    ["neck_badge", "neck", "사원증 목걸이", "삑. 출입이 허가되었습니다.", 15],
+    ["neck_bowtie", "neck", "나비넥타이", "결혼식 하객 모드 켜짐.", 25],
+    ["neck_bell", "neck", "방울 목걸이", "어디 있는지 다 들켜요. 땡그랑.", 20],
+    ["neck_lei", "neck", "꽃 목걸이", "휴가 사진에서만 본 그 목걸이.", 30],
+    // 손
+    ["hand_coffee", "hand", "아이스 아메리카노", "얼음이 다 녹을 때까지 회의 중.", 15],
+    ["hand_umbrella", "hand", "편의점 우산", "비 오는 날 회사 앞에서 산 그 우산. 집에 일곱 개 있어요.", 30],
+    ["hand_briefcase", "hand", "서류 가방", "안에는 점심 도시락뿐.", 25],
+    ["hand_phone", "hand", "스마트폰", "알림 99+. 안 읽은 척하는 중.", 20],
+    ["hand_lantern_blue", "hand", "도깨비 등롱", "푸르스름한 불빛이 흔들흔들. 주변도 환해져요.", 45],
+    ["hand_balloon", "hand", "풍선", "창립기념일에 받은 풍선. 바람 따라 둥실.", 25],
+    // 등
+    ["back_backpack", "back", "출근 배낭", "노트북, 충전기, 그리고 한 줌의 희망.", 25],
+    ["back_cape", "back", "퇴근 망토", "6시 정각, 망토를 휘날리며 퇴근.", 40],
+    ["back_wings_bat", "back", "박쥐 날개", "야근 사흘째에 돋아났어요.", 50],
+    ["back_wings_butterfly", "back", "나비 날개", "봄바람 타고 출근하는 날개.", 80],
+    // 발
+    ["feet_prints", "feet", "발도장", "지나간 자리마다 콩콩 발자국.", 15],
+    ["feet_puddle", "feet", "첨벙 장화", "맑은 날에도 걸음마다 첨벙첨벙.", 25],
+    ["feet_sparkle", "feet", "반짝이 운동화", "새로 산 운동화라서 반짝반짝.", 40],
+    ["feet_leaves", "feet", "낙엽 산책", "바스락바스락, 가을 출근길.", 20],
+    ["feet_hearts", "feet", "하트 발자국", "월급날의 발걸음.", 30],
+    // 오라
+    ["aura_sparkle", "aura", "반짝이 오라", "첫 출근 날의 반짝이는 기분.", 35],
+    ["aura_snow", "aura", "나만의 눈", "내 머리 위에만 펑펑 내리는 눈.", 40],
+    ["aura_petals", "aura", "벚꽃 바람", "벚꽃 엔딩이 흘러나올 것 같아요.", 45],
+    ["aura_raincloud", "aura", "월요병 먹구름", "머리 위에만 보슬보슬. 월요일 아침의 시각화.", 30],
+    ["aura_notes", "aura", "흥얼흥얼 음표", "이어폰 없이도 흥얼흥얼.", 30],
+    ["aura_zzz", "aura", "회의 시간 졸음", "회의만 시작하면 머리 위로 Zzz.", 20],
+    // 펫
+    ["pet_cat", "pet", "사무실 고양이", "키보드 위가 제일 따뜻하대요.", 90],
+    ["pet_duck", "pet", "고무 오리", "디버깅 상담 전문 오리. 말없이 들어 줘요.", 50],
+    ["pet_slime", "pet", "말랑 슬라임", "말랑말랑. 스트레스 볼 대용.", 45],
+    ["pet_bird", "pet", "참새", "어깨에 앉고 싶어서 졸졸 날아와요.", 55],
+    ["pet_wisp", "pet", "도깨비불 친구", "푸른 불꽃이 둥실둥실 따라와요.", 60],
+    ["pet_dog", "pet", "퇴근 강아지", "퇴근하면 제일 먼저 반겨 주는 친구.", 150],
+  ]),
 
   { id: "decor_candles", kind: "decor", name: "촛불 한 쌍", desc: "묘비 양옆에 작은 촛불.", price: 30, durationMs: DECOR_DURATION_MS },
   { id: "decor_wreath", kind: "decor", name: "꽃 화환", desc: "묘비 앞에 둥근 화환.", price: 50, durationMs: DECOR_DURATION_MS },
@@ -108,6 +166,14 @@ export function isFreeStyle(id: string): boolean {
 /** 유료 디자인의 디자인권 아이템 id (무료면 null) */
 export function styleItemId(id: string): string | null {
   return isGraveStyle(id) && !isFreeStyle(id) ? `gs_${id}` : null;
+}
+
+/**
+ * 상점에서 파는 종류 (F8: 묘비 꾸미기는 당분간 상점 목록에서 숨긴다 — 데이터·API·가방의 묘비에 놓기는 그대로).
+ */
+export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle"];
+export function isShopListed(item: Pick<ItemDef, "kind">): boolean {
+  return SHOP_KINDS.includes(item.kind);
 }
 
 const byId = new Map(ITEMS.map((i) => [i.id, i]));
