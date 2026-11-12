@@ -86,8 +86,10 @@
   gap: 8px;
   min-height: 0;
   padding: 10px;
-  /* 자세히 보기는 고정 (스크롤 없음). 높이가 모자라면 아래 @container가 무대를 한 단계 줄인다 */
-  overflow: hidden;
+  /* 높이가 모자라면 사기 버튼이 잘리지 않게 안쪽에서만 스크롤 */
+  overflow-y: auto;
+
+
   background: var(--bg-deep);
   box-shadow: var(--px-border);
 }
