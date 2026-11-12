@@ -395,15 +395,14 @@ function DyeBoard({
     }
     pointers.current.set(e.pointerId, local(e));
     // 폰(손가락)은 화면 가운데 조준점 기준
-    if (e.pointerType !== "mouse") aimBase.current = null;
+    aimBase.current = null;
     if (pointers.current.size === 1) gesture.current = { moved: 0, startedAt: performance.now() };
     else if (gesture.current) gesture.current.moved = 99; // 두 손가락 = 확대·축소 (누르기가 아니다)
   }
 
   function onPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
     const cur = local(e);
-    // 마우스는 누르지 않아도 조준점이 포인터를 따라간다 → 그 아래 색이 바로 "지금 고른 색"
-    if (e.pointerType === "mouse") aimBase.current = cur;
+    // 조준점은 늘 판 정가운데에 고정. 드래그로 판을 움직이면 가운데 아래 색이 바로 "지금 고른 색"
     const prev = pointers.current.get(e.pointerId);
     const v = viewRef.current;
     if (!prev || !v) return;

@@ -52,7 +52,7 @@ import HousingOffice from "@/components/housing/HousingOffice";
 import { hopChannel } from "@/components/housing/channelHop";
 import { graveChannelFor } from "@/game/world/graveChannel";
 import type { PublicHouse } from "@/lib/housing/types";
-import { WORLD_LOTS } from "@tomb/protocol";
+import { isRideablePet, WORLD_LOTS } from "@tomb/protocol";
 import HuntLobby from "@/components/rpg/HuntLobby";
 import ForageLayer from "@/components/forage/ForageLayer";
 import ZooLayer from "@/components/zoo/ZooLayer";
@@ -172,6 +172,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const houseChannel = graveChannelFor(status, options.channel);
   const graves = useGraves(channel);
   const { me } = useMe();
+  // 탈 수 있는 펫을 데리고 다니기 시작하면 R 키 탑승을 알려 준다
+  const ridePet = me?.equipped.find((e) => isRideablePet(e.itemId))?.itemId ?? null;
+  useEffect(() => {
+    if (ridePet) showToast("R 키를 누르면 펫에 탑승해요 (다시 R을 누르면 내려요)", 7_000);
+  }, [ridePet]);
   const myGraves = useMyGraves(me?.graves ?? [], graves);
   const [openGraveId, setOpenGraveId] = useState<string | null>(null);
   const [bury, setBury] = useState<BuryMode | null>(null);
