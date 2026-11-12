@@ -172,6 +172,14 @@ export async function kickNow(visitorIds: string[], code: typeof CLOSE.KICKED | 
   return r ? r.expelled : null;
 }
 
+/** 접속 중이면 그 계정 화면에 "내 정보 새로 받기"를 보낸다 (관리자 포인트 지급 등). 보낸 연결 수, 실시간 서버에 닿지 못하면 null */
+export async function notifyMe(accountIds: string[]): Promise<number | null> {
+  const ids = [...new Set(accountIds)].slice(0, 50);
+  if (!ids.length) return 0;
+  const r = await internal<{ sent: number }>("/internal/me", { op: "me", visitorIds: ids }, 2000);
+  return r ? r.sent : null;
+}
+
 /** 채널·방의 sid가 누구인지 (유저 신고). 없거나 실시간 서버에 닿지 못하면 null */
 export async function peerOf(where: { ch: number } | { room: string }, sid: number): Promise<{ visitorId: string; name: string } | null> {
   const r = await internal<{ peer: { visitorId: string; name: string } | null }>("/internal/peer", { op: "peer", ...where, sid });

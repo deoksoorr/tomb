@@ -12,6 +12,8 @@ describe("내부 요청 서명", () => {
     expect(await verifyInternal(S, body, sig, now)).toEqual({ op: "kick", visitorIds: ["abc_DEF-1"], code: 4012, exp: now + 20 });
     const peer = await signInternal(S, { op: "peer", room: "village", sid: 3, exp: now + 20 });
     expect(await verifyInternal(S, peer.body, peer.sig, now)).toEqual({ op: "peer", room: "village", sid: 3, exp: now + 20 });
+    const me = await signInternal(S, { op: "me", visitorIds: ["abc_DEF-1"], exp: now + 20 });
+    expect(await verifyInternal(S, me.body, me.sig, now)).toEqual({ op: "me", visitorIds: ["abc_DEF-1"], exp: now + 20 });
   });
 
   it("다른 키·바뀐 본문·만료·너무 먼 만료는 거절", async () => {
@@ -34,6 +36,8 @@ describe("내부 요청 서명", () => {
       { op: "peer", sid: 1, exp: now + 5 },
       { op: "peer", ch: 1, room: "village", sid: 1, exp: now + 5 },
       { op: "peer", room: "아무 방", sid: 1, exp: now + 5 },
+      { op: "me", visitorIds: [], exp: now + 5 },
+      { op: "me", visitorIds: ["a b"], exp: now + 5 },
       { op: "zap", exp: now + 5 },
     ];
     for (const b of bad) {

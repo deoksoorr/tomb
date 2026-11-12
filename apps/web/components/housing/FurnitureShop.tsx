@@ -10,7 +10,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import styles from "./housing.module.css";
-import { fmt, FurnitureIcon, FurniturePreview } from "./parts";
+import { fmt, FurnitureThumb } from "./parts";
 
 const CATS: FurnitureCategory[] = ["furniture", "living", "dev", "nature", "mood", "skin", "exterior"];
 
@@ -82,7 +82,9 @@ export default function FurnitureShop({ my, placed, onMy, onClose }: Props) {
             const full = owned >= MAX_OWN_PER_ITEM;
             return (
               <li key={f.id} className={styles.item} title={`${f.name} — ${f.desc}`}>
-                <div className={styles.itemArt}>{f.ext ? <FurnitureIcon itemId={f.id} size={64} /> : <FurniturePreview itemId={f.id} height={96} />}</div>
+                <div className={styles.itemArt}>
+                  <FurnitureThumb itemId={f.id} ext={!!f.ext} />
+                </div>
                 <p className={styles.itemName}>{f.name}</p>
                 <p className={cx(styles.small, styles.fsDesc)}>{f.desc}</p>
                 <p className={styles.itemMeta}>

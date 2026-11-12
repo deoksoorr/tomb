@@ -10,6 +10,7 @@ import type { WorldMap } from "./WorldMap";
 //  - 내 집 표시("(내 집)")를 위해 처음 한 번 /api/housing/me를 물어본다 (로그인 전이면 조용히 건너뛴다)
 //  - 채널마다 주거 구역이 따로다: 묘지와 같은 규칙(graveChannelFor)으로 지금 채널을 정하고 그 채널 마을만 받는다.
 //    채널이 바뀌면 곧바로 빈 필지로 비우고 새 채널 마을을 받는다. 다른 채널 마을 정보(늦게 온 응답 등)는 버린다
+//  - 지금 가진 것보다 먼저 만든 마을 정보(generatedAt)는 버린다 → 저장 직후 받은 새 정보를 주기 갱신의 CDN 캐시가 덮지 못한다
 
 const REFRESH_MS = 60_000;
 
@@ -71,6 +72,8 @@ export class WorldHouses {
   private use(v: VillageResponse | null, myHouseId: string | null): void {
     // 다른 채널 마을(채널을 옮기는 사이에 늦게 온 응답·분양 사무소가 보낸 다른 채널 정보)은 버린다
     if (v && (v.ch ?? 1) !== this.ch) return;
+    // 늦게 온 옛 정보(CDN 캐시·stale-while-revalidate 응답, 분양 사무소가 저장 직후 보낸 것보다 먼저 만든 것)는 버린다
+    if (v && this.village && (this.village.ch ?? 1) === (v.ch ?? 1) && (v.generatedAt ?? 0) < (this.village.generatedAt ?? 0)) return;
     if (v) this.village = v;
     this.myHouseId = myHouseId ?? this.myHouseId;
     if (this.map.setHouses(this.village, this.myHouseId)) this.onChange();

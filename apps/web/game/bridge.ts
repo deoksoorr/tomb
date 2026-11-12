@@ -190,6 +190,8 @@ export type UiEvents = {
   "ui:blockKeys": { blocked: boolean };
   /** 31번: 내 계정이 운영자 계정인지 (sticky). 내 캐릭터를 저승사자 차림·"운영자" 배지로 그린다 */
   "me:staff": { on: boolean };
+  /** 실시간 서버: 서버에서 내 계정(포인트·선물함)이 바뀌었다(관리자 지급 등) → UI가 내 정보·선물함을 다시 받는다 */
+  "me:stale": undefined;
   /** 시점을 내 캐릭터로 되돌리고 다시 따라가기 */
   "camera:recenter": undefined;
   /** 줌 버튼(모바일 등). delta>0 확대, <0 축소. 휠과 같은 단계로 움직인다 */

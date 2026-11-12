@@ -215,7 +215,8 @@ function DyeBoard({
   onError: (m: string) => void;
 }) {
   const palette = useMemo(() => buildPalette(session.seed, session.tier), [session.seed, session.tier]);
-  const amp = DYE_TIERS[session.tier].wobblePx;
+  // 조준점은 흔들리지 않고 판 정가운데에 고정 (사용자 요청)
+  const amp = 0;
   const boxRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const liveRef = useRef<HTMLSpanElement>(null);

@@ -538,6 +538,15 @@ export class ChannelCore<C extends object> {
     return true;
   }
 
+  /** 관리자 포인트 지급 등: 접속 중인 그 방문자에게만 "내 정보 새로 받기"를 보낸다. 보냈으면 true */
+  nudgeMe(visitorId: string): boolean {
+    const sid = this.byVisitor.get(visitorId);
+    const p = sid === undefined ? undefined : this.peers.get(sid);
+    if (!p?.conn) return false;
+    this.sendTo(p, { t: "me" });
+    return true;
+  }
+
   /** 47번 유저 신고: 이 채널·방의 sid가 누구인지 (지금 접속 중이거나 유예 중인 사람만) */
   peerAt(sid: number): { visitorId: string; name: string } | null {
     const p = this.peers.get(sid);

@@ -1,4 +1,6 @@
 import { requireAdmin } from "@/lib/admin";
+import { runAfter } from "@/lib/analyticsService";
+import { notifyMe } from "@/lib/ban";
 import { GiftSendSchema, sendGift } from "@/lib/gifts";
 import { handler, json } from "@/lib/http";
 import { getGifts } from "@/lib/store";
@@ -18,5 +20,8 @@ export const GET = handler(async (req) => {
 export const POST = handler(async (req) => {
   await requireAdmin(req);
   const input = await readBody(req, GiftSendSchema);
-  return json<{ gift: GiftRecord }>({ gift: await sendGift(input) }, { status: 201 });
+  const gift = await sendGift(input);
+  // 한 사람에게 보낸 선물: 접속 중이면 그 화면의 선물함(빨간 점)을 바로 맞춘다
+  if (input.target !== "all") runAfter(() => notifyMe([input.target]));
+  return json<{ gift: GiftRecord }>({ gift }, { status: 201 });
 });

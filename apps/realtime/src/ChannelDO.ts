@@ -254,6 +254,13 @@ export class ChannelDO extends DurableObject<Env> {
     return n;
   }
 
+  /** Worker의 /internal/me → 이 채널에 접속 중인 그 방문자들에게 "내 정보 새로 받기". 보낸 수 (RPC) */
+  nudgeMe(visitorIds: string[]): number {
+    let n = 0;
+    for (const v of visitorIds) if (this.core.nudgeMe(v)) n++;
+    return n;
+  }
+
   /** 47번: Worker의 /internal/peer → sid의 방문자 (유저 신고 대상 확인, RPC) */
   peerAt(sid: number): { visitorId: string; name: string } | null {
     return this.core.peerAt(sid);

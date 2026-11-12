@@ -69,4 +69,16 @@ describe("expel / peerAt", () => {
     core.expel("b", CLOSE.KICKED, "kicked");
     expect(core.peerAt(2)).toBeNull();
   });
+
+  it("nudgeMe: 접속 중인 그 사람에게만 {t:'me'}를 보낸다. 없거나 유예 중이면 false", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const b = join("b");
+    expect(core.nudgeMe("a")).toBe(true);
+    expect(events(a)).toContainEqual({ t: "me" });
+    expect(events(b)).not.toContainEqual({ t: "me" });
+    expect(core.nudgeMe("nobody")).toBe(false);
+    core.disconnect(a, 1006, 0);
+    expect(core.nudgeMe("a")).toBe(false);
+  });
 });

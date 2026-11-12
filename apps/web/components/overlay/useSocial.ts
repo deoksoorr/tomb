@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { bridge } from "@/game/bridge";
 import { ATTEND_STAY_MINUTES } from "@/lib/calendar";
 import { giftsStore, useGifts } from "@/lib/hooks/useGifts";
-import { useMe } from "@/lib/hooks/useMe";
+import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
 
 /** 선물함을 다시 확인하는 간격 */
@@ -24,6 +25,16 @@ export function useSocial(ready: boolean): { calendarReady: boolean; giftCount: 
     const t = setInterval(() => void giftsStore.refresh(), GIFT_POLL_MS);
     return () => clearInterval(t);
   }, [ready]);
+
+  // 관리자 포인트 지급·선물 등 서버에서 내 계정이 바뀌면 실시간 서버가 알려 준다 → 바로 다시 받는다
+  useEffect(
+    () =>
+      bridge.on("me:stale", () => {
+        void meStore.refresh();
+        void giftsStore.refresh();
+      }),
+    [],
+  );
 
   const wasReady = useRef(false);
   useEffect(() => {

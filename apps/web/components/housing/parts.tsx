@@ -33,6 +33,29 @@ export function FurniturePreview({ itemId, height = 72 }: { itemId: string; heig
   return <img src={img.url} width={Math.round(img.w * k)} height={Math.round(img.h * k)} alt="" aria-hidden="true" style={{ imageRendering: "pixelated", flex: "none", borderRadius: 4 }} />;
 }
 
+/**
+ * 가구 상점 썸네일: 모든 상품을 같은 고정 칸(w×h) 가운데에 담는다. 칸보다 작으면 정수 배율로 키우고(픽셀 그대로),
+ * 크면 비율대로 줄인다. 칸 크기는 렌더 전·이미지 로드 전후 모두 같다 (상품마다 썸네일 크기가 달라 보이던 문제)
+ */
+export function FurnitureThumb({ itemId, ext, w = 120, h = 96 }: { itemId: string; ext?: boolean; w?: number; h?: number }) {
+  const client = useSyncExternalStore(noop, () => true, () => false);
+  const box = { width: w, height: h, flex: "none", display: "grid", placeItems: "center", overflow: "hidden" } as const;
+  if (!client) return <span style={box} aria-hidden="true" />;
+  const draw = ext ? furnitureIcon : furniturePreview;
+  const base = draw(itemId, 1);
+  const fit = Math.min(w / base.w, h / base.h);
+  const n = fit >= 1 ? Math.floor(fit) : 1;
+  const img = n > 1 ? draw(itemId, n) : base;
+  const k = fit >= 1 ? 1 : fit;
+  const iw = Math.max(1, Math.round(img.w * k));
+  const ih = Math.max(1, Math.round(img.h * k));
+  return (
+    <span style={box} aria-hidden="true">
+      <img src={img.url} width={iw} height={ih} alt="" style={{ width: iw, height: ih, maxWidth: "none", imageRendering: "pixelated", borderRadius: ext ? 0 : 4 }} />
+    </span>
+  );
+}
+
 /** 꾸밈 점수 호칭 배지 */
 export function TitleBadge({ score }: { score: number }) {
   const t = houseTitle(score);

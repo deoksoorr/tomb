@@ -484,6 +484,7 @@ export class WorldScene extends Phaser.Scene {
         onGoblinCaught: (id, sid, name, points) => this.life.onGoblinCaught(id, sid, name, points),
         onGoblinGrant: (id, grant, points) => this.life.onGoblinGrant(id, grant, points),
         onMegaphone: (m) => bridge.emit("megaphone:heard", m),
+        onMeStale: () => bridge.emit("me:stale"),
         onSelfBody: (body) => {
           if (!isAvatarBody(body)) return;
           this.selfBody = body;

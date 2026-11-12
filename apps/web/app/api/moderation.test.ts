@@ -6,6 +6,8 @@ import type { AdminBan, BanLookup } from "@/lib/banAdmin";
 import { getHouseStore } from "@/lib/housing/service";
 import { getMegaphone, getStore } from "@/lib/store";
 import type { ApiError } from "@/lib/types";
+import * as adminPoints from "./admin/accounts/points/route";
+import * as attend from "./me/attend/route";
 import * as banById from "./admin/bans/[id]/route";
 import * as bans from "./admin/bans/route";
 import * as banLookup from "./admin/bans/lookup/route";
@@ -64,6 +66,7 @@ function fakeRealtime(peers: Record<number, { visitorId: string; name: string }>
     if (!r) return new Response("not found", { status: 404 });
     calls.push({ op: r.op, body: JSON.parse(body) as Record<string, unknown> });
     if (r.op === "kick") return Response.json({ expelled: r.visitorIds.length });
+    if (r.op === "me") return Response.json({ sent: r.visitorIds.length });
     return Response.json({ peer: r.ch === 1 ? (peers[r.sid] ?? null) : null });
   });
   return calls;
@@ -182,6 +185,14 @@ describe("47번 정지·IP 차단", () => {
     expect((await errOf(meAs(a))).message).toContain("2차");
     await banById.PATCH(call("/x", { admin: true, method: "PATCH", body: { action: "lift" } }), ctx(second.id));
     expect((await meAs(a)).status).toBe(200);
+  });
+
+  it("관리자 포인트 지급: 접속 중인 그 계정에 \"내 정보 새로 받기\"(/internal/me)를 보낸다", async () => {
+    const calls = fakeRealtime();
+    const a = await newVisitor();
+    await attend.POST(call("/api/me/attend", { visitor: a, body: {} })); // 계정이 생긴다
+    expect((await adminPoints.POST(call("/x", { admin: true, body: { accountId: a.id, delta: 50 } }))).status).toBe(200);
+    await vi.waitFor(() => expect(calls.at(-1)).toMatchObject({ op: "me", body: { visitorIds: [a.id] } }));
   });
 
   it("지금 내보내기: 정지 없이 4011로 끊고, 실시간 서버에 닿지 못하면 null", async () => {

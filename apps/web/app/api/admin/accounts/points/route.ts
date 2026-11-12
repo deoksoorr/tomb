@@ -1,3 +1,5 @@
+import { runAfter } from "@/lib/analyticsService";
+import { notifyMe } from "@/lib/ban";
 import { requireAdmin, type AdminPointsResponse } from "@/lib/admin";
 import { handler, HttpError, json } from "@/lib/http";
 import { getAccounts } from "@/lib/store";
@@ -15,5 +17,7 @@ export const POST = handler(async (req) => {
   const accountId = given ?? (await accounts.findByCode(codeHash(code!)));
   const points = accountId ? await accounts.adjustPoints(accountId, delta) : null;
   if (!accountId || points === null) throw new HttpError(404, "NOT_FOUND", "그 계정을 찾을 수 없어요.");
+  // 접속 중이면 그 사람 화면의 포인트를 바로 맞춘다 (응답 뒤에 보낸다. 실시간 서버에 못 닿아도 지급은 끝났다)
+  runAfter(() => notifyMe([accountId]));
   return json<AdminPointsResponse>({ accountId, points });
 });

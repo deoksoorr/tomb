@@ -106,7 +106,9 @@ export type S2C =
   /** 24번: 벤치 상태가 바뀌었다 (빈 문자열 = 풀림 — 일어나면 서버가 알린다) */
   | { t: "mood"; sid: Sid; m: SeatMood | "" }
   /** 타는 펫에 올라탔다·내렸다 (보낸 사람 포함 모두. 늦게 온 사람은 PeerInfo.ride로 받는다. 옛 클라이언트는 모르는 t라 버린다) */
-  | { t: "ride"; sid: Sid; on: boolean };
+  | { t: "ride"; sid: Sid; on: boolean }
+  /** 받는 사람에게만: 서버에서 내 계정(포인트·선물함)이 바뀌었다 → /api/me를 다시 받는다 (관리자 지급 등. 옛 클라이언트는 버린다) */
+  | { t: "me" };
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number };

@@ -7,7 +7,7 @@ import { errorMessage } from "@/lib/api";
 import { meStore } from "@/lib/hooks/useMe";
 import { lotLabel } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
-import type { MyHouseResponse, PublicHouse } from "@/lib/housing/types";
+import type { MyHouseResponse, PublicHouse, VillageResponse } from "@/lib/housing/types";
 import { cx } from "../ui/cx";
 import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
@@ -20,6 +20,16 @@ import OfficeDialog from "./OfficeDialog";
 type Mode = { kind: "office" } | { kind: "pending" } | { kind: "village" } | { kind: "house"; house: PublicHouse; mine: boolean; edit: boolean };
 /** 메인 맵 주거 구역에서 열었을 때: 그 집 문(houseId) 또는 빈 필지(lot) */
 export type HousingIntent = { houseId?: string; lot?: number } | null;
+/**
+ * 마을 정보를 게임(메인 맵 집·마을 씬)에 넘긴다. 저장 직후 연달아 받은 응답이 순서가 뒤바뀌어 와도
+ * 이미 보낸 것보다 먼저 만든 정보(generatedAt)는 버린다 (업그레이드 뒤 외관 저장이 옛 그림으로 덮이던 문제)
+ */
+function emitVillage(village: VillageResponse, myHouseId: string | null): void {
+  const last = bridge.last("village:data")?.village;
+  if (last && last.ch === village.ch && village.generatedAt < last.generatedAt) return;
+  bridge.emit("village:data", { village, myHouseId });
+}
+
 /** 마을 위에 띄우는 창 */
 type Overlay = { kind: "office"; lot: number | null } | { kind: "exterior" } | null;
 
@@ -61,7 +71,8 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
     let alive = true;
     housingApi
       .mine()
-      .then((r) => alive && setMy(r))
+      // 늦게 온 첫 응답이 그 사이 저장(분양·업그레이드·외관) 결과를 덮지 않게: 아직 없을 때만
+      .then((r) => alive && setMy((prev) => prev ?? r))
       .catch((e) => alive && setMyError(errorMessage(e)));
     return () => {
       alive = false;
@@ -79,13 +90,13 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
       // 메인 맵 주거 구역의 번지면: 창을 닫고 월드가 그 번지를 비춘다 (분양 마을 씬으로 가지 않는다)
       const lot = spawnLot ?? (mine?.ch === ch ? mine.lot : null);
       if (!inScene.current && (lot === null || lot <= WORLD_LOTS)) {
-        bridge.emit("village:data", { village, myHouseId });
+        emitVillage(village, myHouseId);
         if (lot !== null) bridge.emit("world:lot", { lot, label: mine?.ch === ch && mine.lot === lot ? "내 집" : `${lot}번지` });
         else bridge.emit("world:lot", { lot: 1, label: "주거 구역" });
         onCloseRef.current();
         return;
       }
-      if (inScene.current && !spawnLot && fresh) bridge.emit("village:data", { village, myHouseId });
+      if (inScene.current && !spawnLot && fresh) emitVillage(village, myHouseId);
       else bridge.emit("village:enter", { village, myHouseId, spawnLot });
       inScene.current = true;
       setOverlay(null);
@@ -163,7 +174,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
       if (r.house && (!hadHouse || extChanged || nameChanged || tierChanged) && r.house.ch === chRef.current)
         void housingApi
           .village(r.house.ch, true)
-          .then((village) => bridge.emit("village:data", { village, myHouseId: r.house?.id ?? null }))
+          .then((village) => emitVillage(village, r.house?.id ?? null))
           .catch(() => undefined);
       // 마을에 있는 동안 분양·외관이 바뀌면 마을을 다시 그린다
       if (inScene.current && mode.kind === "village" && (!hadHouse || extChanged || tierChanged) && r.house) void goVillage(null, true);

@@ -7,11 +7,16 @@
   gap: 6px;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-right: 2px;
 }
 
+/* 안쪽 격자는 스크롤 칸이 아니다: 상점 .grid의 overflow·overscroll-behavior: contain이 남아 있으면
+   격자 위에서 굴린 휠이 (1px 넘침 등) 격자에 갇혀 바깥 목록(.scroll)이 잘 안 내려갔다 */
 .scroll > ul {
   flex: none;
+  overflow: visible;
+  overscroll-behavior: auto;
 }
 
 .heading {

@@ -73,6 +73,8 @@
   display: grid;
   flex: 1;
   grid-template-columns: 236px minmax(0, 1fr);
+  /* 줄 높이를 창 높이에 묶는다: 목록이 길어도 칸이 늘지 않고 목록 안에서만 스크롤한다 */
+  grid-template-rows: minmax(0, 1fr);
   gap: 10px;
   min-height: 0;
 }
@@ -84,9 +86,23 @@
   gap: 8px;
   min-height: 0;
   padding: 10px;
-  overflow-y: auto;
+  /* 자세히 보기는 고정 (스크롤 없음). 높이가 모자라면 아래 @container가 무대를 한 단계 줄인다 */
+  overflow: hidden;
   background: var(--bg-deep);
   box-shadow: var(--px-border);
+}
+
+/* 넓은 화면: 자세히 보기 칸 높이에 맞춰 무대 크기를 고른다 (칸 높이는 창이 정한다 → 크기 격리해도 안전) */
+@media (min-width: 561px) {
+  .detail {
+    container-type: size;
+  }
+}
+
+@container (max-height: 520px) {
+  .detail .fitPreview {
+    --scale: 2;
+  }
 }
 
 /* 입어 보기 무대: 상점에서는 한 단계 작게 (2클래스로 OutfitPreview 기본값을 이긴다) */
@@ -107,10 +123,17 @@
   background: radial-gradient(ellipse at 50% 90%, rgba(85, 112, 79, 0.25), transparent 70%);
 }
 
+/* 글은 한 줄씩, 사기·쓰기 버튼은 한 줄에 나란히 (자세히 보기가 스크롤 없이 들어가게) */
 .info {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   width: 100%;
+}
+
+.info > :not(.buy) {
+  flex: 1 1 100%;
+  min-width: 0;
 }
 
 .name {
@@ -120,6 +143,11 @@
 }
 
 .desc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
   color: var(--text);
   font-size: 13px;
   line-height: 1.5;
@@ -137,7 +165,8 @@
 }
 
 .buy {
-  width: 100%;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 44px;
 }
 
@@ -307,7 +336,6 @@
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
     justify-items: stretch;
-    max-height: 46%;
     padding: 8px;
   }
 

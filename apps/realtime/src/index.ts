@@ -19,6 +19,7 @@
  *   GET /room/:id?t=&x=&y=&v= 방(마을·집·사냥터) WebSocket. 토큰의 room이 id와 같아야 한다. 상한 ROOM_CAPACITY
  *   (v < MIN_CLIENT_VERSION이면 DO까지 가지 않고 4010으로 거절 → 클라이언트가 새로고침 창을 띄운다)
  *   POST /dev/goblin?ch=N    (개발용, DEV_HOOKS=1일 때만) 그 채널에 황금 고블린을 지금 나오게 한다. 운영에서는 404
+ *   POST /internal/me        Vercel → 이 서버: 접속 중인 그 방문자들에게 "내 정보 새로 받기"를 보낸다 (관리자 포인트 지급 등). 서명 필수
  *   POST /internal/kick      47번 Vercel → 이 서버: 방문자들을 지금 내보낸다(강퇴 4011·이용 제한 4012). 본문 서명(JOIN_SECRET) 필수
  *   POST /internal/peer      47번 Vercel → 이 서버: 채널·방의 sid가 누구인지 (유저 신고). 본문 서명 필수
  */
@@ -51,7 +52,7 @@ export default {
     if (ch) return channel(req, env, url, ch[1]);
     const rm = /^\/room\/([^/]*)$/.exec(url.pathname);
     if (rm) return room(req, env, url, rm[1]);
-    if (url.pathname === "/internal/kick" || url.pathname === "/internal/peer") return internal(req, env, url.pathname);
+    if (url.pathname === "/internal/kick" || url.pathname === "/internal/peer" || url.pathname === "/internal/me") return internal(req, env, url.pathname);
     if (url.pathname === "/dev/goblin" && env.DEV_HOOKS === "1" && req.method === "POST") {
       const n = parseChannel(url.searchParams.get("ch") ?? "1", readConfig(env).maxChannels);
       if (n === null) return new Response("bad channel", { status: 400 });
@@ -85,6 +86,21 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
       ),
     );
     return Response.json({ expelled: counts.reduce((a, b) => a + b, 0) });
+  }
+  if (r.op === "me") {
+    // 방에 있어도 월드 채널 소켓은 열려 있다 → 열린 채널에만 알린다
+    const info = await lobbyStub(env).info();
+    const counts = await Promise.all(
+      info.channels.map((c) =>
+        channelStub(env, c.id)
+          .nudgeMe(r.visitorIds)
+          .catch((e) => {
+            console.error("nudgeMe failed", c.id, e);
+            return 0;
+          }),
+      ),
+    );
+    return Response.json({ sent: counts.reduce((a, b) => a + b, 0) });
   }
   const stub = r.ch !== undefined ? (parseChannel(String(r.ch), readConfig(env).maxChannels) === null ? null : channelStub(env, r.ch)) : roomStub(env, r.room!);
   if (!stub) return Response.json({ peer: null });

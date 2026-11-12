@@ -97,6 +97,8 @@ export type NetCallbacks = {
   /** 내가 잡았다: 보상 증서 */
   onGoblinGrant?(id: string, grant: string, points: number): void;
   /** 23번 확성기 한마디 (내 것 포함, 서버가 서명된 문장만 보낸다) */
+  /** 서버에서 내 계정(포인트·선물함)이 바뀌었다 → UI가 /api/me를 다시 받는다 */
+  onMeStale?(): void;
   onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number }): void;
 };
 
@@ -550,6 +552,9 @@ export class RealtimeClient {
         case "megaphone":
           if (typeof m.id === "string" && typeof m.text === "string" && typeof m.name === "string")
             this.cb.onMegaphone?.({ id: m.id, name: m.name, text: m.text, scope: m.scope === "all" ? "all" : "channel", ch: Number(m.ch) || 0, at: Number(m.at) || Date.now() });
+          break;
+        case "me":
+          this.cb.onMeStale?.();
           break;
         case "peers": {
           this.peers.clear();
