@@ -1,4 +1,4 @@
-// 모든 소리의 생명 주기를 한곳에서: 탭이 숨으면 함께 멈추고, 돌아오면 함께 재개한다.
+// 모든 소리의 생명 주기를 한곳에서: 페이지를 떠나면 함께 멈추고, 돌아오면 함께 재개한다 (탭 숨김으로는 멈추지 않음 — KEEP_PLAYING_IN_BACKGROUND).
 //  - 오디오 컨텍스트(BGM·게임 소리 호스트·사냥 종소리)는 숨을 때 suspend(), 돌아오면 resume()
 //  - 한 번 재생하는 <audio>(효과음)는 숨을 때 일시정지했다가 돌아오면 이어서 재생
 //  - 루프 소리(AmbientLoop)·BGM 덱은 onAudioLife로 "hidden"/"visible"을 받아 스스로 멈추고 다시 튼다
@@ -7,6 +7,11 @@
 
 export type AudioLifeState = "hidden" | "visible";
 type Listener = (state: AudioLifeState) => void;
+
+// 사용자 요청: 같은 창의 다른 탭으로 옮겨도 소리(BGM·환경음·효과음)는 계속 난다.
+//  → 탭 숨김(visibilitychange)으로는 멈추지 않고, 페이지를 떠날 때(pagehide)만 멈춘다.
+const KEEP_PLAYING_IN_BACKGROUND = true;
+const isHidden = (): boolean => !KEEP_PLAYING_IN_BACKGROUND && document.hidden;
 
 const RETRY_MS = 1000;
 const RETRY_MAX = 15;
@@ -72,7 +77,7 @@ class AudioLife {
   private bind(): void {
     if (this.bound || typeof document === "undefined" || typeof window === "undefined") return;
     this.bound = true;
-    this.hiddenNow = document.hidden;
+    this.hiddenNow = isHidden();
     document.addEventListener("visibilitychange", this.sync);
     window.addEventListener("pagehide", this.onPageHide);
     window.addEventListener("pageshow", this.sync);
@@ -82,7 +87,7 @@ class AudioLife {
 
   private readonly onPageHide = (): void => this.setHidden(true);
 
-  private readonly sync = (): void => this.setHidden(document.hidden);
+  private readonly sync = (): void => this.setHidden(isHidden());
 
   private readonly onInput = (): void => {
     if (this.hiddenNow) return;
