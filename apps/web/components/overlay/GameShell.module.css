@@ -104,6 +104,12 @@
   gap: 8px;
 }
 
+.touchLeft {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .touchBar > :nth-child(2) {
   align-self: center;
   min-width: 0;

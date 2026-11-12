@@ -7,11 +7,12 @@ import PixelIcon from "../ui/PixelIcon";
 import styles from "./DonateButton.module.css";
 
 /** 화면 아래 가운데의 작은 [서버비 보태기] 버튼 + 카카오페이 QR 창 */
-export default function DonateButton() {
+/** inline: 터치 화면 위쪽 줄에서 노래 버튼 옆에 끼워 넣을 때 (떠 있는 위치 규칙을 끈다) */
+export default function DonateButton({ inline = false }: { inline?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button type="button" className={styles.button} onClick={() => setOpen(true)}>
+      <button type="button" className={inline ? `${styles.button} ${styles.inline}` : styles.button} onClick={() => setOpen(true)}>
         <span className={styles.coin} aria-hidden="true">
           <PixelIcon name="heart" size={12} />
         </span>

@@ -403,7 +403,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           {coarse ? (
             // 터치: 위 가장자리 바(음악 · 채널·날씨) + 아래 바로 가기 바(dock) + 그 위 조이스틱·행동 버튼
             <div className={styles.touchBar}>
-              <BgmPlayer compact />
+              {/* 노래 버튼 바로 오른쪽에 후원 버튼 (사용자 요청) */}
+              <div className={styles.touchLeft}>
+                <BgmPlayer compact />
+                <DonateButton inline />
+              </div>
               <Hud compact onOpenChannels={() => setPanel("channels")} />
             </div>
           ) : (
@@ -527,7 +531,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           {/* 타는 펫 타기·내리기: 데스크톱은 오른쪽 아래 확대·축소 버튼 왼쪽, 터치는 행동 버튼 묶음 안(MobileControls) */}
           {!coarse && <RideButton variant="desktop" className={ui.button} />}
           {coarse && <MobileControls />}
-          <DonateButton />
+          {!coarse && <DonateButton />}
           {/* 접속 시간 보너스: 사냥·귀신의 집·실내에서도 서버 기록은 쌓이고, 창은 마을에서만 띄운다 */}
           {(!scene || scene === "world") && <StayBonus />}
         </div>
