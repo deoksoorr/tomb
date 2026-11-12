@@ -9,7 +9,7 @@ export const WISH_COINS = [1, 3, 5] as const;
 export const WISH_MIN = 1;
 export const WISH_MAX = 5;
 /** 하루에 던질 수 있는 횟수 */
-export const WISH_DAILY = 3;
+export const WISH_DAILY = 1;
 
 export type WishLuck = "great" | "good" | "fair" | "small" | "soso";
 export type WishFortune = { luck: WishLuck; title: string; text: string };

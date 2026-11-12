@@ -77,7 +77,7 @@ describe("POST /api/plaza/wish", () => {
     }
     const over = await throwCoin(v, 1);
     expect(over.status).toBe(429);
-    expect(((await over.json()) as ApiError).error.message).toContain("세 번");
+    expect(((await over.json()) as ApiError).error.message).toContain("한 번");
     expect((await accounts.get(v.visitorId, kstDay(), Date.now())).points).toBe(points);
   });
 
