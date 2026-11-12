@@ -39,3 +39,23 @@ RECONNECT_GRACE_SEC = "20"
 # routes = [
 #   { pattern = "rt.example.com", custom_domain = true }
 # ]
+
+# ── 테스트 서버 (패치 전 확인용) ── `npx wrangler deploy --env staging` → tomb-realtime-staging.daveki.workers.dev
+# 바인딩·vars는 환경마다 따로 적어야 한다 (상속되지 않음). secret(JOIN_SECRET·ALLOWED_ORIGINS)도 --env staging으로 따로 넣는다.
+[env.staging]
+name = "tomb-realtime-staging"
+
+[[env.staging.durable_objects.bindings]]
+name = "CHANNEL"
+class_name = "ChannelDO"
+
+[[env.staging.durable_objects.bindings]]
+name = "LOBBY"
+class_name = "LobbyDO"
+
+[env.staging.vars]
+CHANNEL_CAPACITY = "40"
+MAX_CHANNELS = "10"
+BASE_CHANNELS = "2"
+AUTO_OPEN_THRESHOLD = "0.8"
+RECONNECT_GRACE_SEC = "20"
