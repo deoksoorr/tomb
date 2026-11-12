@@ -38,6 +38,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {children}
         {/* 47번 방문 분석 (방문·체류 신호만, 화면에는 그리지 않는다) */}
         <VisitTracker />
+        {/* 테스트 서버(staging 갈래 배포)에서만: 실제 서버와 헷갈리지 않게 왼쪽 위 작은 표시 */}
+        {process.env.VERCEL_GIT_COMMIT_REF === "staging" && (
+          <div
+            style={{ position: "fixed", left: 0, top: 0, zIndex: 9999, padding: "2px 8px", background: "#c2453f", color: "#fff", font: "700 12px/1.4 system-ui, sans-serif", pointerEvents: "none" }}
+          >
+            테스트 서버
+          </div>
+        )}
       </body>
     </html>
   );
