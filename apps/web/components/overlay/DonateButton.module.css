@@ -245,3 +245,15 @@
     transform: translateX(-50%);
   }
 }
+
+/* 모바일(터치): 오른쪽 위 미니맵 바로 아래 (미니맵 위치 52px + 머리줄 16px + 지도 80px + 여백) */
+@media (pointer: coarse) {
+  .button {
+    top: calc(var(--safe-top) + 160px);
+    left: auto;
+    right: var(--safe-right);
+    transform: none;
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+}
