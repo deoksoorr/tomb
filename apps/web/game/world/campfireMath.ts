@@ -39,10 +39,16 @@ export function campfireLevel(dist: number, seated: boolean): number {
   return CAMPFIRE_NEAR_MAX * s * s * (3 - 2 * s);
 }
 
-/** 불멍 줌: 둘러앉은 자리(가로 약 120, 세로 약 100 월드 px)가 레터박스 안에 들어오게, 4~5 */
-export function cineZoom(camW: number, camH: number): number {
-  const fit = Math.min(camW / 124, (camH * (1 - 2 * LETTERBOX)) / 100);
-  return Math.max(CINE_ZOOM_MIN, Math.min(CINE_ZOOM_MAX, Math.floor(fit * 4) / 4));
+/** 큰 모닥불(광장) 불멍 줌 하한: 둘러앉은 자리가 넓어서 좁은 화면에서도 불과 맞은편 사람이 같이 보이게 */
+export const CINE_ZOOM_MIN_BIG = 2.5;
+
+/**
+ * 불멍 줌: 둘러앉은 자리(가로 약 120, 세로 약 100 월드 px)가 레터박스 안에 들어오게, 4~5.
+ * big = 광장의 아주 큰 모닥불 (가로 약 180, 세로 약 140 월드 px — 2.5~5)
+ */
+export function cineZoom(camW: number, camH: number, big = false): number {
+  const fit = Math.min(camW / (big ? 184 : 124), (camH * (1 - 2 * LETTERBOX)) / (big ? 140 : 100));
+  return Math.max(big ? CINE_ZOOM_MIN_BIG : CINE_ZOOM_MIN, Math.min(CINE_ZOOM_MAX, Math.floor(fit * 4) / 4));
 }
 
 /** 불멍 카메라 중심: 불보다 살짝 위 (위쪽 통나무에 앉은 사람 머리·이름표까지 프레임에) */

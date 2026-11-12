@@ -7,6 +7,7 @@ import {
   DEFAULT_MAX_CHANNELS,
   GRAVE_STYLES,
   GRAVEYARD_CAPACITY,
+  isShopListed,
   ITEMS,
   MAX_DECOR_PER_GRAVE,
 } from "@tomb/protocol";
@@ -126,7 +127,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               </tr>
             </thead>
             <tbody>
-              {ITEMS.map((item) => (
+              {ITEMS.filter(isShopListed).map((item) => (
                 <tr key={item.id}>
                   <th scope="row">
                     <span className={styles.itemName}>
@@ -188,7 +189,8 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               있어요)이 지나면 성불해 묘역을 떠나요. 성불하면 소식으로 알려 드리고, 그 뒤에 새 묘비를 쓸 수 있어요.
             </li>
             <li>
-              묘역에는 채널마다 묘비 {GRAVEYARD_CAPACITY}개까지 놓여요. 자리가 모자라면 가장 오래된 묘비부터 조금 일찍 성불해요.
+              묘역은 마을에 세 곳(언덕 아래 옛 묘역, 다리 건너 묘역, 버드나무 묘역)이고, 채널마다 묘비 {GRAVEYARD_CAPACITY}개까지
+              세운 순서대로 골고루 놓여요. 자리가 모자라면 가장 오래된 묘비부터 조금 일찍 성불해요.
             </li>
             <li>성불한 묘비는 메뉴 → 성불한 이야기들에 남아요(최신 순·검색, 받은 헌화 수).</li>
             <li>메뉴 → 내 묘비 가기를 누르면 캐릭터가 내 묘비 앞까지 걸어가요. 걷는 중에 움직이거나 점프하면 멈춰요.</li>
@@ -204,8 +206,9 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               )을 세우거나 바꿀 때 1개 써요. 세운 뒤에도 내 묘비 상세의 &quot;디자인 바꾸기&quot;로 바꿀 수 있어요.
             </li>
             <li>
-              성황당: 이장한 내 묘비가 {SHRINE_KEEP_DAYS}일 동안 머무는 곳이에요. 그 안에 다시 모실 수 있어요(내 정보에서
-              열어요). 다시 모시면 성불 기간은 그때부터 다시 세요.
+              성황당(옛 묘역 동문 옆): 묘역을 떠난 묘비들이 머무는 곳이에요. 이장한 내 묘비는 {SHRINE_KEEP_DAYS}일 동안 모셔지고 그 안에
+              다시 모실 수 있어요(성황당 앞에서 E, 또는 내 정보에서 열어요). 다시 모시면 성불 기간은 그때부터 다시 세요. 세운 지{" "}
+              {DEFAULT_PASS_DAYS}일이 지난 묘비는 성불해 성불한 이야기들에 남아요.
             </li>
           </ul>
         </section>

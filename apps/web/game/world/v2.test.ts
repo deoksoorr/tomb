@@ -59,7 +59,7 @@ describe("cosmetics", () => {
   it("sheet key is stable and ignores order and non-sprite items", () => {
     expect(lookKey(["neck_scarf", "hat_cat", "aura_firefly"])).toBe(lookKey(["aura_firefly", "hat_cat", "neck_scarf"]));
     expect(lookKey(["aura_firefly"])).toBe("");
-    expect(gearOf(["hat_straw", "hand_lantern"])).toEqual({ hat: "hat_straw", lantern: true, scarf: false });
+    expect(gearOf(["hat_straw", "hand_lantern"])).toEqual({ hat: "hat_straw", lantern: true, scarf: false, extra: { head: null, neck: null, hand: null, back: null } });
   });
 });
 

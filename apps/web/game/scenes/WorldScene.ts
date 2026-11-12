@@ -78,6 +78,8 @@ const RESTORE_SIT_DELAY_MS = 300;
 const LOT_GUIDE_MS = 45_000;
 /** 같은 안내 토스트를 연달아 띄우지 않는 간격 */
 const TOAST_REPEAT_MS = 1500;
+/** F17 미니맵에 내 위치·다른 사람 위치를 알리는 간격 */
+const MINIMAP_MS = 250;
 
 export class WorldScene extends Phaser.Scene {
   private ctx!: GameContext;
@@ -113,6 +115,8 @@ export class WorldScene extends Phaser.Scene {
   private pendingBury: { id: string; at: number } | null = null;
   private readonly remoteBuried = new Map<string, number>();
   private recenterAt = 0;
+  /** F17 미니맵 다음 알림 시각 (performance.now) */
+  private minimapAt = 0;
   private dustAt = 0;
   private netStarted = false;
   private cleaned = false;
@@ -1080,6 +1084,13 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** 첫 방문 안내 대상 → 화살표를 띄울 월드 좌표 (대상 그림 위쪽) */
+  /** F17 미니맵: 내 위치와 같은 채널 사람들 위치 (원격 아바타 보간 위치) */
+  private emitMinimap(): void {
+    const others: number[] = [];
+    for (const r of this.remotes.values()) others.push(Math.round(r.x), Math.round(r.y));
+    bridge.emit("minimap:dots", { me: { x: Math.round(this.player.x), y: Math.round(this.player.y) }, others });
+  }
+
   private resolveGuide(target: GuideTarget, label?: string): { x: number; y: number; text: string } | null {
     const pl = this.player;
     const near = <T extends { x: number; y: number }>(list: Iterable<T>): T | null => {
@@ -1268,6 +1279,10 @@ export class WorldScene extends Phaser.Scene {
       // 이상 징후만 확인 (서버는 깨우지 않는다): HUD 인원과 원격 아바타 수가 다르면 목록을 한 번 다시 받는다
       this.peerCheckAt = pnow + PEER_CHECK_MS;
       if (this.remotes.size !== this.net.peerCount) this.net.requestSync();
+    }
+    if (pnow >= this.minimapAt) {
+      this.minimapAt = pnow + MINIMAP_MS;
+      this.emitMinimap();
     }
     if (started && this.rig.detached) {
       this.rig.recenter();
@@ -1637,6 +1652,8 @@ export class WorldScene extends Phaser.Scene {
       stand: () => this.net.stand(),
       seatReq: () => this.seatReq,
       toast: (m) => this.toast(m),
+      // 놀거리 위상(시소 박자·트램펄린·회전목마)을 모두에게 같게: 서버 시계
+      clock: () => this.net?.serverNow() ?? Date.now(),
     };
     this.rides = new PlazaRides(host);
     this.boats = new BoatRide(host);

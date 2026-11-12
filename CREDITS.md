@@ -82,4 +82,5 @@
 
 ## 효과음 (SFX)
 - `apps/web/public/sfx/` 26개: campfire(모닥불 16초 루프, 약 -20 LUFS), say(말풍선 '뿅', 0.2초), firework-launch, firework-burst, coin, flower, bell(산사 종), splash, swim(물장구 루프), bubble(잠수), swing(삐걱), wave(휘파람), cheer, hit, crit, monster-die, levelup, potion, skill, coin-drop, defeat, victory, tick, miss, rain-loop(날씨 비 12초 루프, 약 -21 LUFS, 56kbps), thunder(천둥 한 번 8초, 56kbps)
+- 사냥 손맛(NEXT 2·16·40번) 11개: kill(처치), swish·thud·stab·clack·twang·flick·ink(무기 방식마다 공격 소리), warn(몬스터 경고), slam(몬스터 내려찍기·폭발), roar(우두머리 단계) — 64kbps, 각 1.5~10KB. hit·crit·miss·levelup은 같은 때 다시 만들었다.
 - 모두 `scripts/gen-bgm.mjs`가 코드로 합성한 자체 제작 음원이며 **CC0**입니다. 대부분 약 -16 LUFS(봉우리가 날카로운 splash·swing은 약 -17~-18, 아주 짧은 tick은 -21), true peak ≤ -1.6 dBTP로 맞췄습니다.

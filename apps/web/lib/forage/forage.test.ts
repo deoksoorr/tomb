@@ -107,7 +107,7 @@ describe("맵 배치", () => {
     // 바닥 앉기(sitGround)만으로 낚시 자리를 잡아 주지 않는다 (shared)
     expect(spotKindOfState(STATE.sitGround)).not.toBe("fish");
     // 월드의 낚시 자리 상호작용은 1인 자리로 판정된다 (누가 앉았으면 회색 안내)
-    expect(spotOf({ kind: "forage", forage: "fish:f_1646_1100", ax: 1646, ay: 1100 })).toEqual({ kind: "fish", id: "f_1646_1100" });
+    expect(spotOf({ kind: "forage", forage: "fish:f_1172_932", ax: 1172, ay: 932 })).toEqual({ kind: "fish", id: "f_1172_932" });
     expect(spotOf({ kind: "forage", forage: "npc:fishmonger", ax: 0, ay: 0 })).toBeNull();
   });
 

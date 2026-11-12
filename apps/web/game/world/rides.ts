@@ -9,15 +9,15 @@ import type { Interactable, Rect } from "./layout";
 // 회전·시소 위상은 모든 사람의 벽시계(Date.now)로 정해서 따로 주고받지 않아도 같은 모습으로 보인다.
 // 충돌은 작은 받침만 (분수 수반·목마 기둥·시소 받침) — 앉는 자리 위에는 충돌이 없다 (world.test가 확인).
 
-/** 소원 분수 (수반 아래 가운데) */
-export const WISH_FOUNTAIN = { x: 1024, y: 304 } as const;
+/** 소원 분수 (수반 아래 가운데). 놀거리 자리는 F1 맵(모닥불 광장 네 귀퉁이)에 맞춘다 */
+export const WISH_FOUNTAIN = { x: 720, y: 300 } as const;
 /** 시소 (받침 가운데). 앉는 자리는 양 끝 ±SEESAW_HALF */
-export const SEESAWS: readonly { x: number; y: number }[] = [{ x: 966, y: 648 }];
+export const SEESAWS: readonly { x: number; y: number }[] = [{ x: 864, y: 596 }];
 export const SEESAW_HALF = 18;
 /** 트램펄린 (매트 가운데) */
-export const TRAMPOLINES: readonly { x: number; y: number }[] = [{ x: 1084, y: 640 }];
+export const TRAMPOLINES: readonly { x: number; y: number }[] = [{ x: 872, y: 300 }];
 /** 회전목마 (받침 가운데) */
-export const CAROUSELS: readonly { x: number; y: number }[] = [{ x: 856, y: 668 }];
+export const CAROUSELS: readonly { x: number; y: number }[] = [{ x: 584, y: 592 }];
 /** 회전목마 목마 수 · 도는 반지름(가로·세로, 위에서 비스듬히 본 타원) · 한 바퀴 시간 */
 export const CAROUSEL_HORSES = 4;
 export const CAROUSEL_RX = 24;
@@ -93,6 +93,166 @@ export function trampolineHeight(phaseMs: number): number {
   if (u < 0.12) return -2 * Math.sin((u / 0.12) * Math.PI);
   const v = (u - 0.12) / 0.88;
   return TRAMPOLINE_HEIGHT * 4 * v * (1 - v);
+}
+
+// ── 시소 움직임 (F5 묶음 · 사용자 요청: 메트로놈 말고 불규칙한 박자·세기, 그래도 모두에게 같은 모습) ──
+// 둘이 타면 "블록"(SEESAW_BLOCK_MS) 단위로 반 번 오르내림(구간)들을 시드 난수로 만든다: 시드 = 시소 자리 + 블록 번호,
+// 시각 = 서버 시계 → 같은 시각이면 누구 화면에서나 같은 기울기. 블록은 늘 왼쪽이 땅에 닿은 채 시작·끝나서 이어진다.
+//  - 구간 = 땅에 닿은 쪽이 무릎을 굽혀 버티다(hold, push) → 박차고 반대쪽으로 넘어가 쿵(착지). 넘어가는 빠르기·버티는 시간이 매번 다르다
+//  - 가끔 약하게 차서 덜 올라갔다 같은 쪽으로 다시 내려앉는다(stutter)
+//  - 착지 순간 위로 올라간 사람은 자리에서 살짝 튀어 오른다(pop) — 빨리 넘어갈수록 크게
+export const SEESAW_BLOCK_MS = 8_000;
+type SeesawSeg = { t0: number; hold: number; travel: number; from: 0 | 1; to: 0 | 1; amp: number; pop: number; strength: number };
+export type SeesawMotion = {
+  /** −1(왼쪽 땅) … +1(오른쪽 땅). seesawEndHeight에 넣는다 */
+  tilt: number;
+  /** 무릎을 굽혀 땅을 차고 있는 쪽 (없으면 null) */
+  push: 0 | 1 | null;
+  /** 자리에서 튀어 오른 높이 (px, 쪽마다) */
+  pop: [number, number];
+  /** 가장 최근 착지: 고유 번호·시각·쪽·세기(0..1) — 쿵 소리·먼지 */
+  landId: number;
+  landAt: number;
+  landSide: 0 | 1;
+  landStrength: number;
+};
+
+function mulberry(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const blockCache = new Map<string, SeesawSeg[]>();
+
+/** 한 블록의 구간들 (시드 고정). 시작·끝 모두 왼쪽(0)이 땅 */
+export function seesawBlock(seed: number, block: number): SeesawSeg[] {
+  const key = `${seed}:${block}`;
+  const hit = blockCache.get(key);
+  if (hit) return hit;
+  const r = mulberry(Math.imul(seed | 0, 0x9e3779b1) ^ Math.imul(block | 0, 0x85ebca6b) ^ 0x5eed);
+  const crossings = r() < 0.65 ? 4 : 6;
+  const stutterAt = r() < 0.55 ? Math.floor(r() * crossings) : -1;
+  const raw: { hold: number; travel: number; full: boolean; amp: number }[] = [];
+  for (let i = 0; i < crossings; i++) {
+    if (i === stutterAt) raw.push({ hold: 0.12 + r() * 0.2, travel: 0.38 + r() * 0.2, full: false, amp: 0.3 + r() * 0.3 });
+    raw.push({ hold: 0.15 + r() * 0.5, travel: 0.55 + r() * 0.5, full: true, amp: 1 });
+  }
+  const total = raw.reduce((a, g) => a + g.hold + g.travel, 0);
+  const k = SEESAW_BLOCK_MS / total;
+  const minTravel = 0.55 * k;
+  const segs: SeesawSeg[] = [];
+  let t = 0;
+  let down: 0 | 1 = 0;
+  for (const g of raw) {
+    const hold = g.hold * k;
+    const travel = g.travel * k;
+    const to: 0 | 1 = g.full ? (down === 0 ? 1 : 0) : down;
+    const speed = minTravel / travel; // 0.5..1
+    segs.push({ t0: t, hold, travel, from: down, to, amp: g.amp, pop: g.full ? 0.6 + 1.6 * speed * speed : 0, strength: g.full ? 0.55 + 0.45 * speed : 0.3 });
+    t += hold + travel;
+    down = to;
+  }
+  if (blockCache.size > 64) blockCache.clear();
+  blockCache.set(key, segs);
+  return segs;
+}
+
+const downTilt = (side: 0 | 1) => (side === 0 ? -1 : 1);
+/** 넘어가는 동안의 진행 (0..1): 박차는 순간과 쿵 닿는 순간에도 속도가 남아 있다 */
+const travelEase = (v: number) => 0.6 * v + 0.4 * (0.5 - 0.5 * Math.cos(Math.PI * v));
+const POP_MS = 240;
+
+/**
+ * 시소 움직임. seed = 시소 자리(seesawSeed), t = 서버 시계(ms).
+ * 둘 다 탔을 때만 오르내리고, 한 명이면 그쪽이 땅에 앉아 살짝 들썩(idle), 아무도 없으면 왼쪽이 내려앉아 있다
+ */
+export function seesawMotion(seed: number, left: boolean, right: boolean, t: number): SeesawMotion {
+  const out: SeesawMotion = { tilt: -1, push: null, pop: [0, 0], landId: 0, landAt: 0, landSide: 0, landStrength: 0 };
+  if (!(left && right)) {
+    if (!left && !right) return out;
+    const side: 0 | 1 = left ? 0 : 1;
+    // 혼자: 발로 땅을 톡톡 — 끝이 아주 살짝 들렸다 내려앉는다
+    const w = Math.max(0, Math.sin(t / 420 + seed * 0.37)) ** 3;
+    out.tilt = downTilt(side) * (1 - 0.14 * w);
+    out.push = w > 0.2 ? side : null;
+    return out;
+  }
+  const block = Math.floor(t / SEESAW_BLOCK_MS);
+  const bt = t - block * SEESAW_BLOCK_MS;
+  const segs = seesawBlock(seed, block);
+  let i = segs.length - 1;
+  while (i > 0 && segs[i].t0 > bt) i--;
+  const g = segs[i];
+  const u = bt - g.t0;
+  // 바로 앞 착지 (이 구간의 시작 = 앞 구간의 끝). 블록 첫 구간이면 앞 블록의 마지막 구간
+  const prev = i > 0 ? segs[i - 1] : seesawBlock(seed, block - 1)[seesawBlock(seed, block - 1).length - 1];
+  const prevIndex = i > 0 ? i - 1 : -1;
+  if (u < g.hold) {
+    out.tilt = downTilt(g.from);
+    out.push = g.from;
+    out.landId = block * 16 + prevIndex;
+    out.landAt = t - u;
+    out.landSide = g.from;
+    out.landStrength = prev.strength;
+    // 방금 위로 올라간 쪽(앞 구간에서 박찬 쪽)이 살짝 튄다
+    if (prev.pop > 0 && u < POP_MS) out.pop[prev.from] = prev.pop * Math.sin((u / POP_MS) * Math.PI);
+    return out;
+  }
+  const v = Math.min(1, (u - g.hold) / g.travel);
+  const a = downTilt(g.from);
+  if (g.to !== g.from) {
+    out.tilt = a + (downTilt(g.to) - a) * travelEase(v);
+  } else {
+    // 약하게 차서 덜 올라갔다 같은 쪽으로 다시
+    out.tilt = a - a * 2 * g.amp * Math.sin(Math.PI * v);
+  }
+  out.landId = block * 16 + prevIndex;
+  out.landAt = g.t0 + block * SEESAW_BLOCK_MS;
+  out.landSide = g.from;
+  out.landStrength = prev.strength;
+  return out;
+}
+
+/** 시소 시드 (자리 좌표 — 옮겨 놓으면 박자도 달라진다) */
+export function seesawSeed(s: { x: number; y: number }): number {
+  return (Math.imul(s.x | 0, 73856093) ^ Math.imul(s.y | 0, 19349663)) >>> 0;
+}
+
+// ── 트램펄린에서 내리기 (F14) ──
+/** 뛰어내리는 자리: 매트 가운데(앵커보다 4px 위)에서 이 타원 위 (옆 땅) */
+export const TRAMP_OFF_RX = 27;
+export const TRAMP_OFF_RY = 12;
+
+/**
+ * 뛰어내릴 수 있는 순간: 매트를 밟고 다시 튀어 오르는 때 (한 번 튀는 주기의 처음 쪽).
+ * 트램펄린 높이는 서버 시계로 정해져서, 이 순간에 뛰면 다른 사람 화면에서도 매트 높이에서 이어진다
+ */
+export function trampolineLaunch(t: number): boolean {
+  const u = (((t % TRAMPOLINE_PERIOD_MS) + TRAMPOLINE_PERIOD_MS) % TRAMPOLINE_PERIOD_MS) / TRAMPOLINE_PERIOD_MS;
+  return u >= 0.03 && u < 0.12;
+}
+
+/** 뛰어내릴 자리 후보: 누른 방향(ax, ay — 없으면 아래)부터 가까운 각도 순으로 8곳 */
+export function trampolineLandings(t: { x: number; y: number }, ax: number, ay: number): { x: number; y: number }[] {
+  const base = Math.hypot(ax, ay) > 0.1 ? Math.atan2(ay, ax) : Math.PI / 2;
+  const out: { x: number; y: number }[] = [];
+  for (const k of [0, 1, -1, 2, -2, 3, -3, 4]) {
+    const a = base + (k * Math.PI) / 4;
+    out.push({ x: Math.round(t.x + Math.cos(a) * TRAMP_OFF_RX), y: Math.round(t.y - 4 + Math.sin(a) * TRAMP_OFF_RY) });
+  }
+  return out;
+}
+
+// ── 회전목마 그리는 순서 (F15) ──
+/** 가운데 기둥의 depth = 받침 가운데 y. 앞쪽(아래)으로 도는 목마·사람(y > 가운데)은 기둥 앞, 뒤쪽은 뒤 */
+export function carouselPoleDepth(c: { x: number; y: number }): number {
+  return c.y;
 }
 
 // ── 상호작용 대상 (layout.interactables()가 더한다) ──

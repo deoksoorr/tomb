@@ -1,0 +1,43 @@
+/* F17 미니맵: 오른쪽 위 버튼 줄 바로 아래에 고정. 랭킹 패널 등 펼친 창(z-index 2)보다 아래 */
+.wrap {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--safe-top) + 46px);
+  right: var(--safe-right);
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.toggle {
+  pointer-events: auto;
+  padding: 1px 6px;
+  border: 1px solid rgba(232, 220, 192, 0.35);
+  background: rgba(20, 18, 16, 0.72);
+  color: var(--text, #e8dcc0);
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.map {
+  width: 180px;
+  height: 128px;
+  border: 1px solid rgba(232, 220, 192, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  background: #24221f;
+  image-rendering: pixelated;
+  opacity: 0.92;
+}
+
+/* 터치(폰): 위 바 아래, 작게 */
+.compact {
+  top: calc(var(--safe-top) + 52px);
+}
+
+.compact .map {
+  width: 112px;
+  height: 80px;
+}

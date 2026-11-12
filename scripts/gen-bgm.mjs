@@ -1932,15 +1932,20 @@ const SFX2 = {
     return { fadeOut: 0.5 };
   },
   hit: (bus, rng) => {
-    glide(bus, 0, 0.12, (t) => 140 * Math.exp(-t * 14) + 55, 0.7, 0, { atk: 0.001, rel: 0.06 });
-    place(bus, noiseHit(rng, 0.08, "bp", 1500, 0.8, 50), 0, 0.45, 0);
-    return { fadeOut: 0.05 };
+    // 16번 타격: 짧은 딸깍(어택) + 퍽(낮은 몸통) + 톡(나무 같은 중음) — 빨리 반복해도 귀가 안 아프게 짧게
+    place(bus, noiseHit(rng, 0.012, "hp", 3500, 0.7, 300), 0, 0.35, 0);
+    glide(bus, 0, 0.11, (t) => 175 * Math.exp(-t * 22) + 58, 0.75, 0, { atk: 0.0008, rel: 0.05 });
+    place(bus, noiseHit(rng, 0.07, "bp", 1900, 0.9, 60), 0.002, 0.42, 0);
+    partial(bus, 0.003, 820, 0.18, 45, 0, 0.0008, 0.15);
+    return { fadeOut: 0.04 };
   },
   crit: (bus, rng) => {
-    glide(bus, 0, 0.16, (t) => 170 * Math.exp(-t * 12) + 55, 0.7, 0, { atk: 0.001, rel: 0.08 });
-    place(bus, noiseHit(rng, 0.12, "bp", 2200, 0.7, 30), 0, 0.5, 0);
-    [1850, 2770, 3700].forEach((f, k) => partial(bus, 0.01, f, 0.12 / (k + 1), 9, (k - 1) * 0.3, 0.001));
-    glide(bus, 0.02, 0.3, (t) => 900 + 2600 * (t / 0.3), 0.06, 0, { duty: 0.5, rel: 0.1 });
+    // 치명타: 더 깊은 쿵 + 갈라지는 소리 + 쇳소리 울림 + 위로 솟는 반짝 꼬리
+    place(bus, noiseHit(rng, 0.015, "hp", 3000, 0.7, 250), 0, 0.45, 0);
+    glide(bus, 0, 0.2, (t) => 210 * Math.exp(-t * 15) + 45, 0.85, 0, { atk: 0.0008, rel: 0.08 });
+    place(bus, noiseHit(rng, 0.14, "bp", 2600, 0.6, 26), 0.004, 0.5, 0);
+    [1760, 2640, 3520, 4400].forEach((f, k) => partial(bus, 0.012, f, 0.13 / (k + 1), 8 + k * 2, (k - 1.5) * 0.3, 0.001, 0.5));
+    glide(bus, 0.03, 0.28, (t) => 1100 + 3000 * (t / 0.28) ** 0.7, 0.05, 0, { duty: 0.5, rel: 0.12 });
     reverb(bus, { room: 0.5, damp: 0.5, wet: 0.12 });
     return { fadeOut: 0.1 };
   },
@@ -1952,10 +1957,13 @@ const SFX2 = {
     return { fadeOut: 0.15 };
   },
   levelup: (bus, rng) => {
-    notes(bus, [[0, 72, 0.6, 0.12], [0.1, 76, 0.6, 0.12], [0.2, 79, 0.6, 0.12], [0.3, 84, 0.7, 0.5]], chipNote);
-    notes(bus, [[0.3, 88, 0.25, 0.6, 0.4], [0.32, 91, 0.2, 0.6, -0.4]], bellNote);
-    for (let k = 0; k < 10; k++) partial(bus, 0.35 + k * 0.06, rng.range(3000, 5000), 0.05, 25, rng.range(-0.8, 0.8), 0.001);
-    reverb(bus, { room: 0.6, damp: 0.5, wet: 0.15 });
+    // 레벨 업: 위로 오르는 아르페지오 → 밝은 화음 + 종 + 반짝이 비
+    notes(bus, [[0, 67, 0.55, 0.09], [0.08, 72, 0.55, 0.09], [0.16, 76, 0.6, 0.09], [0.24, 79, 0.6, 0.09], [0.34, 84, 0.75, 0.6]], chipNote);
+    notes(bus, [[0.34, 76, 0.35, 0.6, -0.35], [0.34, 79, 0.35, 0.6, 0.35]], (b, t, m, v, d, p) => pulse(b, t, m, v * 0.3, p, d, 0.125, { dec: 0.2, sus: 0.5 }));
+    notes(bus, [[0.34, 88, 0.3, 0.7, 0.4], [0.37, 91, 0.25, 0.7, -0.4], [0.42, 96, 0.18, 0.7, 0]], bellNote);
+    [[0, 48, 0.3], [0.34, 48, 0.6]].forEach(([t, m, d]) => tri(bus, t, m, 0.28, d));
+    for (let k = 0; k < 14; k++) partial(bus, 0.38 + k * 0.045, rng.range(3000, 5600), 0.05, 25, rng.range(-0.8, 0.8), 0.001);
+    reverb(bus, { room: 0.6, damp: 0.5, wet: 0.16 });
     return { fadeOut: 0.25 };
   },
   potion: (bus, rng) => {
@@ -2069,9 +2077,18 @@ const SFX2 = {
     glide(bus, 0, 0.12, (t) => 520 + 900 * (1 - Math.exp(-t * 35)), 0.5, 0, { atk: 0.003, rel: 0.07 });
     return { fadeOut: 0.02, target: -21 };
   },
-  miss: (bus) => {
-    notes(bus, [[0, 64, 0.5, 0.12], [0.16, 59, 0.5, 0.22]], (b, t, m, v, d, p) => pulse(b, t, m, v * 0.35, p, d, 0.5, { dec: 0.1, sus: 0.5 }));
-    return { fadeOut: 0.06 };
+  miss: (bus, rng, n) => {
+    // 헛손질: 바람 가르는 '휙' (위로 쓸리는 대역 잡음) + 아주 작은 내림 음
+    const x = white(n, rng), fc = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const u = i / n;
+      fc[i] = 500 * 5 ** Math.min(1, u * 1.6);
+      x[i] *= Math.sin(Math.PI * Math.min(1, u * 1.4)) ** 2;
+    }
+    svf(x, fc, 3, "bp");
+    place(bus, x, 0, 0.55, 0);
+    glide(bus, 0.05, 0.14, (t) => 520 - 900 * t, 0.06, 0, { duty: 0.5, rel: 0.06 });
+    return { fadeOut: 0.06, target: -18 };
   },
   // ── 50번 조각배·광장 놀거리 ──
   row: (bus, rng) => {
@@ -2166,6 +2183,120 @@ const SFX2 = {
     });
     reverb(bus, { room: 0.6, damp: 0.5, wet: 0.18 });
     return { fadeIn: 0.005, fadeOut: 0.06, lp: 7000 };
+  },
+  // ── 사냥 손맛 (40번 무기마다 소리 · 2번 경고·보스 · 16번 처치) ──
+  kill: (bus, rng) => {
+    // 처치: '퐁' 터지는 소리 + 내려가는 짧은 삑 + 동전 두 알 짤랑
+    place(bus, noiseHit(rng, 0.25, "lp", 1400, 0.7, 22, 0.002), 0, 0.5, 0);
+    glide(bus, 0, 0.16, (t) => 260 * Math.exp(-t * 18) + 70, 0.55, 0, { atk: 0.001, rel: 0.06 });
+    glide(bus, 0.02, 0.18, (t) => 1500 - 4500 * t, 0.07, 0, { duty: 0.25, rel: 0.05 });
+    [[0.16, 1568, -0.2], [0.23, 2093, 0.2]].forEach(([t, f, p]) => {
+      partial(bus, t, f, 0.22, 14, p, 0.001, 0.4);
+      partial(bus, t, f * 2.76, 0.06, 26, p, 0.001, 0.3);
+    });
+    reverb(bus, { room: 0.45, damp: 0.5, wet: 0.1 });
+    return { fadeOut: 0.08 };
+  },
+  swish: (bus, rng, n) => {
+    // 휘두르기: 짧게 쓸리는 바람 소리
+    const x = white(n, rng), fc = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const u = i / n;
+      fc[i] = 800 * 4.5 ** Math.min(1, u * 1.8);
+      x[i] *= Math.sin(Math.PI * Math.min(1, u * 1.6)) ** 1.5;
+    }
+    svf(x, fc, 2.5, "bp");
+    place(bus, x, 0, 0.6, 0);
+    return { fadeOut: 0.03, target: -18 };
+  },
+  thud: (bus, rng) => {
+    // 내려찍기: 무거운 쿵 + 나무 울림 + 흙먼지
+    glide(bus, 0, 0.28, (t) => 130 * Math.exp(-t * 10) + 38, 0.9, 0, { atk: 0.001, rel: 0.1 });
+    place(bus, noiseHit(rng, 0.3, "lp", 500, 0.7, 14, 0.003), 0, 0.55, 0);
+    partial(bus, 0.002, 230, 0.25, 18, 0, 0.001, 0.3);
+    place(bus, noiseHit(rng, 0.2, "bp", 1800, 0.6, 20, 0.01), 0.03, 0.12, 0);
+    return { fadeOut: 0.08 };
+  },
+  stab: (bus, rng) => {
+    // 찌르기: 날카롭게 '슉' + 끝에 쇳소리 '틱'
+    const x = noiseHit(rng, 0.09, "hp", 2200, 0.8, 30, 0.012);
+    place(bus, x, 0, 0.5, 0);
+    glide(bus, 0, 0.08, (t) => 1600 + 9000 * t, 0.08, 0, { duty: 0.5, rel: 0.03 });
+    partial(bus, 0.07, 3300, 0.2, 55, 0, 0.0008, 0.15);
+    partial(bus, 0.07, 5100, 0.07, 80, 0, 0.0008, 0.1);
+    return { fadeOut: 0.04, target: -18 };
+  },
+  clack: (bus, rng) => {
+    // 연타(키보드): 기계식 키 두 번 '딸깍'
+    for (const [t, f] of [[0, 2300], [0.045, 2650]]) {
+      place(bus, noiseHit(rng, 0.012, "hp", 3800, 0.7, 380), t, 0.5, 0);
+      partial(bus, t, f, 0.3, 160, 0, 0.0005, 0.06);
+      partial(bus, t + 0.004, 420, 0.25, 90, 0, 0.0008, 0.06);
+    }
+    return { fadeIn: 0.0005, fadeOut: 0.02, target: -19 };
+  },
+  twang: (bus, rng) => {
+    // 고무줄 총: 퉁 하고 떨리는 고무줄
+    const [L, R] = bus, len = Math.round(0.28 * SR);
+    let ph = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / SR, f = 210 + 260 * Math.exp(-t * 30) + 14 * Math.sin(TAU * 32 * t) * Math.exp(-t * 8);
+      ph += f / SR;
+      const y = (Math.sin(TAU * ph) + 0.35 * Math.sin(2 * TAU * ph)) * Math.exp(-t * 14) * Math.min(1, i / 30) * 0.5;
+      L[i] += y;
+      R[i] += y;
+    }
+    place(bus, noiseHit(rng, 0.02, "bp", 2500, 1, 200), 0, 0.3, 0);
+    return { fadeOut: 0.04 };
+  },
+  flick: (bus, rng) => {
+    // 카드 던지기: 손끝 '탁' + 날아가는 '휙'
+    place(bus, noiseHit(rng, 0.015, "bp", 3200, 1.2, 250), 0, 0.5, 0);
+    const x = noiseHit(rng, 0.16, "bp", 2400, 1.5, 18, 0.03);
+    place(bus, x, 0.01, 0.3, 0.2);
+    glide(bus, 0.01, 0.12, (t) => 900 + 9000 * t, 0.04, 0, { rel: 0.05 });
+    return { fadeOut: 0.04, target: -18.5 };
+  },
+  ink: (bus, rng) => {
+    // 범위 마법(잉크): 낮은 '뽀옹' + 철퍽 + 방울
+    glide(bus, 0, 0.22, (t) => 320 * Math.exp(-t * 9) + 110, 0.45, 0, { atk: 0.004, rel: 0.08 });
+    place(bus, noiseHit(rng, 0.3, "bp", 950, 0.6, 13, 0.01), 0.02, 0.5, 0);
+    for (let k = 0; k < 4; k++) place(bus, plink(rng, 600, 1500), 0.06 + k * 0.05 + rng.range(0, 0.03), 0.12, rng.range(-0.6, 0.6));
+    reverb(bus, { room: 0.4, damp: 0.6, wet: 0.1 });
+    return { fadeOut: 0.08 };
+  },
+  warn: (bus) => {
+    // 몬스터 경고: 낮게 차오르는 '우웅' (귀에 거슬리지 않게 작고 둥글게)
+    glide(bus, 0, 0.22, (t) => 190 + 160 * (t / 0.22), 0.3, 0, { duty: 0.5, atk: 0.02, rel: 0.08 });
+    glide(bus, 0, 0.22, (t) => 380 + 320 * (t / 0.22), 0.08, 0, { atk: 0.02, rel: 0.08 });
+    return { fadeOut: 0.04, lp: 3000, target: -21 };
+  },
+  slam: (bus, rng) => {
+    // 몬스터 내려찍기·폭발: 깊은 쿵 + 바스러짐
+    const boom = biquad(biquad(brown(Math.round(0.5 * SR), rng), "lp", 180, 0.7), "lp", 180, 0.7);
+    normPeak(boom);
+    for (let i = 0; i < boom.length; i++) boom[i] *= Math.min(1, i / 60) * Math.exp((-i / SR) * 7);
+    place(bus, boom, 0, 0.6, 0);
+    glide(bus, 0, 0.3, (t) => 95 * Math.exp(-t * 6) + 34, 0.6, 0, { atk: 0.001, rel: 0.1 });
+    place(bus, noiseHit(rng, 0.18, "bp", 1300, 0.6, 22), 0.005, 0.25, 0);
+    reverb(bus, { room: 0.6, damp: 0.5, wet: 0.14, lowCut: 90 });
+    return { fadeOut: 0.12, hp: 30 };
+  },
+  roar: (bus, rng, n) => {
+    // 우두머리 단계 바뀜: 낮게 으르렁 (떨리는 톱니 + 거친 숨)
+    const [L, R] = bus, len = Math.round(1.0 * SR);
+    let ph = 0;
+    for (let i = 0; i < len && i < n; i++) {
+      const t = i / SR, f = 92 - 26 * t + 6 * Math.sin(TAU * 7 * t);
+      ph += f / SR;
+      const saw = 2 * (ph % 1) - 1, env = Math.min(1, t / 0.08) * Math.min(1, (1.0 - t) / 0.3) * (0.75 + 0.25 * Math.sin(TAU * 13 * t));
+      L[i] += saw * env * 0.22;
+      R[i] += saw * env * 0.22;
+    }
+    filt(bus, "lp", 900, 0.9);
+    place(bus, noiseHit(rng, 0.9, "bp", 420, 0.8, 3.5, 0.08), 0, 0.35, 0);
+    reverb(bus, { room: 0.7, damp: 0.5, wet: 0.2, lowCut: 70 });
+    return { fadeOut: 0.2, hp: 35 };
   },
 };
 
@@ -2445,6 +2576,8 @@ const SPECS = [
   ].map(([kind, dur], k) => ({ pl: "sfx", file: kind, kind, seed: 520 + k, dur })),
   // 50번 조각배·광장 놀거리
   ...[["row", 0.9], ["boat-board", 0.75], ["seesaw", 0.5], ["boing", 0.6], ["wish", 1.6], ["carousel-loop", 9.6]].map(([kind, dur], k) => ({ pl: "sfx", file: kind, kind, seed: 600 + k, dur, kbps: kind === "carousel-loop" ? 64 : undefined })),
+  // 사냥 손맛 (2·16·40번): 짧아서 64kbps면 충분하다
+  ...[["kill", 0.6], ["swish", 0.2], ["thud", 0.4], ["stab", 0.2], ["clack", 0.12], ["twang", 0.32], ["flick", 0.22], ["ink", 0.45], ["warn", 0.26], ["slam", 0.6], ["roar", 1.2]].map(([kind, dur], k) => ({ pl: "sfx", file: kind, kind, seed: 700 + k, dur, kbps: 64 })),
   // 날씨(비·천둥): 용량을 아끼려고 56kbps
   { pl: "sfx", file: "rain-loop", kind: "rain-loop", seed: 560, dur: 12, kbps: 56 },
   { pl: "sfx", file: "thunder", kind: "thunder", seed: 562, dur: 8, kbps: 56 },

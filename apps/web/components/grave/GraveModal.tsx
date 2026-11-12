@@ -411,7 +411,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
             {decor.length >= MAX_DECOR_PER_GRAVE ? (
               <p>묘비 하나에는 {MAX_DECOR_PER_GRAVE}개까지 놓을 수 있어요. 기간이 끝나면 다시 놓을 수 있어요.</p>
             ) : decorInBag.length === 0 ? (
-              <p>가방에 묘비 꾸미기가 없어요. 상점에서 살 수 있어요.</p>
+              <p>가방에 묘비 꾸미기가 없어요. (묘비 꾸미기는 지금 상점에서 팔지 않아요.)</p>
             ) : (
               <>
                 <p className={ui.hint}>

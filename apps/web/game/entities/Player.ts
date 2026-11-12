@@ -17,6 +17,8 @@ import { AvatarView, SIT_CHAIR_LIFT } from "./AvatarView";
 //  - 긴 벤치에 앉은 채 ←/→: 옆 좌석으로 옮겨 앉기 (moveSeat, 서버가 같은 가구 안 이동을 원자적으로 처리)
 //  - 매달리기(나무)·그네: 그 자리에 붙어 있고(물리 바디 끔) 이동 입력이 들어오면 내려온다
 //  - 해먹: 매달리기·그네처럼 그 자리에 붙어 누워 흔들흔들 (1인 자리)
+//  - 트램펄린에서 내리기(F14): 바로 내려앉지 않고 내리려는 방향(offWish)만 기억 → 씬(PlazaRides)이 지금 튀는 한 번이
+//    매트에 닿는 순간 hopOff로 옆 땅에 폴짝 뛰어내리게 한다 (점프 상태라 다른 사람에게도 같은 포물선으로 보인다)
 //  - 물(강·호수) 안: 자동으로 수영, E로 잠수 토글. 물속에서는 느리고 점프·앉기가 안 된다. 강에서는 물살(current)에 살짝 떠내려간다
 
 const BODY_W = 8;
@@ -68,6 +70,10 @@ export class Player {
   private moveFrom: Seat | null = null;
   /** 조각배(50번)에 타고 있으면 그 배 자리 id. 위치는 씬의 BoatRide가 물 위로 옮긴다 (물리 바디 끔) */
   boatSeatId: string | null = null;
+  /** 트램펄린에서 내리려는 방향(입력 벡터)과 누른 시각. 씬이 매트에 닿는 순간 hopOff를 부른다 (F14) */
+  offWish: { ax: number; ay: number; at: number } | null = null;
+  /** 뛰어내리기(hopOff) 점프의 시작 높이 — 매트 위 높이에서 땅까지 포물선에 섞어 내린다 */
+  private hopBase = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -171,6 +177,7 @@ export class Player {
     if (!this.airborne) return;
     this.airborne = false;
     this.landedAt = now;
+    this.hopBase = 0;
     this.setHop(0);
   }
 
@@ -185,7 +192,7 @@ export class Player {
     if (this.airborne) {
       const t = now - this.jumpStart;
       if (t < JUMP_MS) {
-        this.setHop(jumpHeight(t));
+        this.setHop(jumpHeight(t) + this.hopBase * (1 - t / JUMP_MS));
         this.body.setVelocity(this.jumpVx, this.jumpVy);
         return false;
       }
@@ -198,6 +205,13 @@ export class Player {
     if (this.boatSeatId) return false;
     if (this.anchor) {
       if (!this.move.moving) {
+        this.view.apply(this.state, this.dir, now);
+        return false;
+      }
+      if (this.state === "trampoline") {
+        // 트램펄린: 내리려는 방향만 기억하고 그쪽을 본다 (뛰어내리기는 씬이 매트에 닿는 순간에)
+        this.offWish = { ax: input.ax, ay: input.ay, at: this.offWish?.at ?? now };
+        this.dir = this.move.dir;
         this.view.apply(this.state, this.dir, now);
         return false;
       }
@@ -286,6 +300,7 @@ export class Player {
     this.cancelSnap();
     this.anchor = { x: ax, y: ay };
     this.spotId = spotId;
+    this.offWish = null;
     this.state = kind;
     this.dir = DIR.down;
     this.body.setVelocity(0, 0);
@@ -356,12 +371,20 @@ export class Player {
     this.body.reset(x, y);
   }
 
-  /** 나무·그네에서 내려온다 */
-  leaveAnchor(now: number): void {
+  /**
+   * 나무·그네에서 내려온다. 트램펄린은 hard가 아니면 바로 내리지 않고 내릴 뜻만 남긴다
+   * (씬이 튀던 한 번을 마치고 hopOff로 옆에 뛰어내리게 한다 — 이동·E·X·스페이스 모두 같은 길)
+   */
+  leaveAnchor(now: number, hard = false): void {
     const a = this.anchor;
     if (!a) return;
+    if (!hard && this.state === "trampoline") {
+      this.offWish ??= { ax: 0, ay: 0, at: now };
+      return;
+    }
     this.anchor = null;
     this.spotId = null;
+    this.offWish = null;
     this.snap?.stop();
     this.snap = null;
     this.view.depthOverride = null;
@@ -370,6 +393,34 @@ export class Player {
     this.syncPose();
     this.body.enable = true;
     this.body.reset(a.x, a.y);
+  }
+
+  /**
+   * 트램펄린에서 옆 땅(to)으로 뛰어내린다 (F14): 점프 상태로 JUMP_MS 동안 앵커 → to, 높이는 지금 높이(base)에서
+   * 땅까지 포물선. 서버·다른 사람에게는 점프로 보이고(트램펄린 자리는 이 MOVE로 풀린다), 착지하면 onLand
+   */
+  hopOff(to: { x: number; y: number }, base: number, now: number): void {
+    const a = this.anchor;
+    if (!a) return;
+    this.anchor = null;
+    this.spotId = null;
+    this.offWish = null;
+    this.snap?.stop();
+    this.snap = null;
+    this.view.depthOverride = null;
+    this.view.ride = null;
+    this.state = "jump";
+    this.view.apply(this.state, this.dir, now);
+    this.syncPose();
+    this.body.enable = true;
+    this.body.reset(a.x, a.y);
+    this.airborne = true;
+    this.jumpStart = now;
+    this.hopBase = Math.max(0, base);
+    const sec = JUMP_MS / 1000;
+    this.jumpVx = (to.x - a.x) / sec;
+    this.jumpVy = (to.y - a.y) / sec;
+    this.setHop(this.hopBase);
   }
 
   /** 물속에서 E: 잠수 ↔ 떠오르기 */
@@ -451,6 +502,7 @@ export class Player {
   /** 순간이동 (랭킹 클릭 등) */
   warp(x: number, y: number, now: number, seats: SeatRequester | null): void {
     this.endJump(now);
+    this.offWish = null;
     if (this.anchor) {
       this.anchor = null;
       this.spotId = null;

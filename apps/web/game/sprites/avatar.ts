@@ -1,5 +1,7 @@
 import { isAvatarBody, type AvatarBody } from "@tomb/protocol";
 import { darken, Grid, lighten, mix, parseHex, type Color } from "./pixel";
+import { COVERING_HATS, drawBackGear, drawHandGear, drawHandGlow, drawHeadGear, drawNeckGear, extraGearOf, GEAR_SHEET_IDS, type ExtraGear } from "./avatarGear";
+import { COSMETIC_FX_IDS } from "./cosmeticFx";
 
 // 방문자 아바타 6종 (모두 오리지널 디자인, 같은 색 팔레트 규칙):
 //  hood  두건 쓴 작은 순례자 (두건 끝이 새싹처럼 접힘, 어두운 얼굴 구멍에 눈 두 점)
@@ -112,14 +114,14 @@ type Pal = {
 };
 
 /** 시트에 그려지는 꾸미기 (같은 조합이면 텍스처를 같이 쓴다) */
-const SHEET_COSMETICS = ["hat_straw", "hat_cat", "hat_flower", "hat_halo", "hand_lantern", "neck_scarf"] as const;
+const SHEET_COSMETICS = ["hat_straw", "hat_cat", "hat_flower", "hat_halo", "hand_lantern", "neck_scarf", ...GEAR_SHEET_IDS] as const;
 /** 아바타가 그리는 꾸미기 전체: 시트에 그려지는 것 + AvatarView가 따로 붙이는 것(날개·유령 친구·발자국 꽃·안개) */
-export const SPRITE_COSMETICS = [...SHEET_COSMETICS, "back_wings", "pet_ghost", "feet_flowers", "aura_fog"] as const;
-type Gear = { hat: "hat_straw" | "hat_cat" | "hat_flower" | "hat_halo" | null; lantern: boolean; scarf: boolean };
+export const SPRITE_COSMETICS = [...SHEET_COSMETICS, "back_wings", "pet_ghost", "feet_flowers", "aura_fog", ...COSMETIC_FX_IDS] as const;
+type Gear = { hat: "hat_straw" | "hat_cat" | "hat_flower" | "hat_halo" | null; lantern: boolean; scarf: boolean; /** F8 추가분 (avatarGear.ts) */ extra: ExtraGear };
 
 export function gearOf(look: readonly string[]): Gear {
   const hat = look.find((id) => id === "hat_straw" || id === "hat_cat" || id === "hat_flower" || id === "hat_halo") as Gear["hat"] | undefined;
-  return { hat: hat ?? null, lantern: look.includes("hand_lantern"), scarf: look.includes("neck_scarf") };
+  return { hat: hat ?? null, lantern: look.includes("hand_lantern"), scarf: look.includes("neck_scarf"), extra: extraGearOf(look) };
 }
 
 /** 시트 키에 들어가는 꾸미기 부분 (같은 조합이면 텍스처를 같이 쓴다) */
@@ -305,6 +307,9 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   const side = view === "side";
   const sitDrop = pose.sit === 1 ? 3 : pose.sit === 2 ? 2 : 0;
 
+  // F8 등 꾸미기: 몸 뒤로 삐져나오는 부분 (배낭·망토)
+  if (gear.extra.back) drawBackGear(g, view, gear.extra.back, m, body, "back", pose.hem, pose.sit);
+
   // ── 발 (망토 밑단 아래로 살짝). 이불 유령은 발이 없다 ──
   const footY = 25;
   if (pose.sit === 0 && body !== "sheet") {
@@ -379,6 +384,8 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
 
   // ── 팔 (머리보다 먼저: 머리와 겹치는 곳은 머리가 덮는다) ──
   drawArms(g, view, pose, m, pal, false);
+  // F8 등 꾸미기: 뒷모습에서 등을 덮는 부분·앞모습 어깨끈 (머리보다 먼저)
+  if (gear.extra.back) drawBackGear(g, view, gear.extra.back, m, body, "front", pose.hem, pose.sit);
 
   // ── 목도리 (두건·키다리는 기본 천 목도리, 나머지는 목도리를 했을 때만) ──
   const plainNeck = body === "hood" || body === "tall";
@@ -406,7 +413,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     if (body === "hood" || body === "tall") g.recolor((x, y) => y === Math.floor(hy + m.ry - 1) && Math.abs(x + 0.5 - cx) < m.rx - 1, pal.hoodLo);
   }
 
-  const hatCovers = gear.hat === "hat_straw" || gear.hat === "hat_cat";
+  const hatCovers = COVERING_HATS.has(gear.hat ?? "") || COVERING_HATS.has(gear.extra.head ?? "");
   if (body === "hood" && !hatCovers) {
     // 두건 끝: 새싹처럼 접힌 꼭지
     if (view === "down") {
@@ -440,6 +447,10 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   drawFace(g, body, view, m, pal);
 
   drawGear(g, view, gear, m, pal, body);
+  // F8 머리·목·손 꾸미기 (avatarGear.ts)
+  if (gear.extra.neck) drawNeckGear(g, view, gear.extra.neck, m, body);
+  if (gear.extra.head) drawHeadGear(g, view, gear.extra.head, m, body, body === "round" ? m.top - 1 : m.top);
+  if (gear.extra.hand) drawHandGear(g, view, gear.extra.hand, m);
 
   // 귀는 모자 위로 튀어나오게 모자 다음에
   if (body === "cat") drawCatEars(g, view, m, pal);
@@ -482,6 +493,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   g.outline(pal.line);
   // 등불 창은 외곽선 뒤에도 밝게 (빛나는 점)
   if (gear.lantern && view !== "up") g.set(m.hx, m.hY + 1, 0xfff0b0);
+  if (gear.extra.hand) drawHandGlow(g, view, gear.extra.hand, m);
   if (gear.hat === "hat_halo") drawHalo(g, m, view);
   // 손 흔들기·환호: 팔 없는 몸은 몸 전체를 기울이고, 손은 밝은 색 + 외곽선으로 몸 밖에 크게 그린다
   const tilt = (body === "round" || body === "sheet") && pose.tilt ? pose.tilt : 0;
@@ -880,6 +892,25 @@ function drawGear(g: Grid, view: View, gear: Gear, m: M, pal: Pal, body: AvatarB
     g.rect(lx - 1, ly, 3, 3, 0x6b4f32);
     g.set(lx, ly + 1, 0xffd77a);
   }
+}
+
+const handCache = new Map<string, { dx: number; up: number }>();
+
+/**
+ * 손 자리: 발바닥 원점에서 옆으로 dx, 위로 up (px). 손에 드는 따로 그리는 꾸미기(우산·풍선, cosmeticFx)가 쓴다.
+ * 뒷모습은 손이 몸에 가려 앞모습의 반대편에 둔다.
+ */
+export function handAnchor(body: string, dir: "down" | "left" | "right" | "up"): { dx: number; up: number } {
+  const b = bodyOf(body);
+  const key = `${b}|${dir}`;
+  const hit = handCache.get(key);
+  if (hit) return hit;
+  const view: View = dir === "left" || dir === "right" ? "side" : "down";
+  const m = metrics(b, view, framesFor(view)[0]);
+  const dx = m.hx - AV_W / 2 + 0.5;
+  const out = { dx: dir === "left" || dir === "up" ? -dx : dx, up: AV_H - 1 - m.hY };
+  handCache.set(key, out);
+  return out;
 }
 
 /** 프레임 하나의 픽셀 (테스트·머리 위 높이 계산용). col = 시트 열, view = 앞·옆·뒤 */

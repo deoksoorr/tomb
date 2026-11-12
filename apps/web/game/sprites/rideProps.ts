@@ -201,7 +201,10 @@ export function carouselFloor(): HTMLCanvasElement {
   g.outline(OUT);
   return g.toCanvas();
 }
-/** 기둥 + 지붕 (64×66, 받침 = 아래 가운데 = 받침 원판 가운데). 지붕은 사람들 앞에 그린다 */
+/**
+ * 지붕 (64×66, 받침 = 아래 가운데 = 받침 원판 가운데). 지붕은 사람들 앞에 그린다.
+ * 가운데 기둥은 carouselPole로 따로 — 받침 가운데 y 깊이로 그려 앞쪽으로 도는 목마·사람이 기둥 앞에 보인다 (F15)
+ */
 export const CAROUSEL_TOP_W = 64;
 export const CAROUSEL_TOP_H = 66;
 export function carouselTop(): HTMLCanvasElement {
@@ -223,7 +226,14 @@ export function carouselTop(): HTMLCanvasElement {
   // 꼭대기 깃발
   g.vline(cx, 0, 4, 0x6a5a4a);
   g.rect(cx + 1, 0, 4, 2, 0xf0c040);
-  // 가운데 기둥 (원판 가운데까지)
+  g.outline(OUT);
+  return g.toCanvas();
+}
+
+/** 가운데 기둥 (지붕과 같은 64×66 칸·같은 원점: 지붕 아래 술 장식 밑에서 원판 가운데까지) */
+export function carouselPole(): HTMLCanvasElement {
+  const g = new Grid(CAROUSEL_TOP_W, CAROUSEL_TOP_H);
+  const cx = 32;
   g.rect(cx - 1, 25, 3, CAROUSEL_TOP_H - 26, 0xd8c070);
   g.vline(cx - 1, 25, CAROUSEL_TOP_H - 2, 0xf0dc90);
   g.outline(OUT);
@@ -264,5 +274,6 @@ export const RIDE_TEX = {
   trampoline: "ride-trampoline",
   carouselFloor: "ride-carousel-floor",
   carouselTop: "ride-carousel-top",
+  carouselPole: "ride-carousel-pole",
   horse: (v: number, left: boolean) => `ride-horse-${v}-${left ? "l" : "r"}`,
 } as const;

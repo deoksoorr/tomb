@@ -59,7 +59,7 @@ const body = async <T>(res: Response) => (await res.json()) as T;
 const realNow = Date.now.bind(Date);
 const later = (ms: number) => vi.spyOn(Date, "now").mockReturnValue(realNow() + ms);
 
-const PIER = "f_1646_1100";
+const PIER = "f_1172_932"; // 호수 낚시 잔교 끝
 
 async function state(v: Visitor) {
   const res = await forage.GET(call("/api/forage", v));
@@ -121,7 +121,7 @@ describe("낚시", () => {
     expect(await errCode(await reel.POST(call("/x", v, { ticket: c2.ticket, ok: true })))).toBe("TICKET_STALE");
     vi.restoreAllMocks();
     // 놓침 (ok=false): 결과 없이 끝
-    const c3 = await body<CastResponse>(await cast.POST(call("/x", v, { spot: "f_700_862" })));
+    const c3 = await body<CastResponse>(await cast.POST(call("/x", v, { spot: "f_420_675" })));
     const miss = await body<ReelResponse>(await reel.POST(call("/x", v, { ticket: c3.ticket, ok: false })));
     expect(miss.result).toBeNull();
     // 너무 오래

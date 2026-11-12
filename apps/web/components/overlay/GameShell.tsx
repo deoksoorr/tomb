@@ -26,6 +26,7 @@ import BgmPlayer from "../bgm/BgmPlayer";
 import BuryForm, { type BuryMode } from "../grave/BuryForm";
 import GraveModal from "../grave/GraveModal";
 import PassedDialog from "../grave/PassedDialog";
+import Minimap from "./Minimap";
 import NoticesDialog from "../notice/NoticesDialog";
 import RankingList from "../grave/RankingList";
 import RankingPanel from "../grave/RankingPanel";
@@ -392,6 +393,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
             <StatusBanners />
             {narrow && !coarse && <Hud onOpenChannels={() => setPanel("channels")} />}
           </div>
+          <Minimap compact={coarse} />
           <CameraControls showZoom={!coarse} />
           {coarse && <MobileControls />}
         </div>
@@ -469,7 +471,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       )}
       {panel === "fireworks" && <FireworkDialog onClose={closePanel} />}
       {panel === "passed" && <PassedDialog onClose={closePanel} />}
-      {panel === "shrine" && <ShrineDialog cache={graves.cache} onGo={goToMyGrave} onClose={closePanel} />}
+      {panel === "shrine" && <ShrineDialog cache={graves.cache} onGo={goToMyGrave} onClose={closePanel} onOpenPassed={() => setPanel("passed")} />}
       {panel === "housing" && <HousingOffice key={housingIntent?.houseId ?? housingIntent?.lot ?? "office"} intent={housingIntent} onClose={closePanel} />}
       {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
       {panel === "wish" && <WishDialog onClose={closePanel} />}

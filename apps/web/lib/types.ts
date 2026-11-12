@@ -378,11 +378,13 @@ export type PassedListResponse = { entries: PassedEntry[]; next: number | null; 
 export type MyGraveStatusResponse = { active: PublicGrave | null; passDays: number };
 
 /** 랭킹 (49번: 포인트·사냥 중심). huntKills = 사냥터 처치 수 합계, huntBest = 사냥터(zone)별 최단 클리어 시간(ms, 작을수록 위) */
-export const RANK_BOARDS = ["points", "huntKills", "huntBest"] as const;
+/** house = 하우징 꾸밈 점수 (F11: 주간 = 이번 주에 꾸민 집, 전체 = 모든 집) */
+export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house"] as const;
 export type RankBoard = (typeof RANK_BOARDS)[number];
 /** week = 이번 주(KST 월요일 0시부터), all = 전체 */
 export type RankPeriod = "week" | "all";
-export type RankRow = { rank: number; name: string; value: number; me: boolean };
+/** sub: 보조 줄 (house 랭킹은 "번지 · 주인 이름") */
+export type RankRow = { rank: number; name: string; value: number; me: boolean; sub?: string };
 /** GET /api/rank?board=&period=&zone=&me=1 */
 export type RankResponse = {
   board: RankBoard;

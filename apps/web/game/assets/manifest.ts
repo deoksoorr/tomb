@@ -6,6 +6,7 @@ import { SHAPE_SIZE, shapeVariants, type GraveShape } from "../graveShape";
 import { flowersCanvas, graveCanvas, graveTexKey, mineFlagCanvas, plotCanvas, upMarkerCanvas } from "../sprites/graves";
 import * as props from "../sprites/props";
 import { WORLD_PROP_ART, WORLD_PROP_SHEETS } from "../sprites/worldProps";
+import { GY_ART, GY_SHEETS } from "../sprites/graveyardProps";
 import * as art from "../sprites/extras";
 import { parseHex } from "../sprites/pixel";
 
@@ -170,6 +171,9 @@ function buildManifest(): Record<string, TextureSource> {
   // v3 월드 소품·특별한 장소 (sprites/worldProps.ts)
   for (const [key, build] of Object.entries(WORLD_PROP_ART)) m[key] = proc(build);
   for (const [key, sh] of Object.entries(WORLD_PROP_SHEETS)) m[key] = proc(sh.build, { frameW: sh.frameW, frameH: sh.frameH });
+  // F1 묘지 마을 소품 (sprites/graveyardProps.ts)
+  for (const [key, build] of Object.entries(GY_ART)) m[key] = proc(build);
+  for (const [key, sh] of Object.entries(GY_SHEETS)) m[key] = proc(sh.build, { frameW: sh.frameW, frameH: sh.frameH });
   for (const shape of Object.keys(SHAPE_SIZE) as GraveShape[])
     for (let v = 0; v < shapeVariants(shape); v++) m[graveTexKey(shape, v)] = proc(() => graveCanvas(shape, v));
   for (let n = 1; n <= 8; n++) m[flowersKey(n)] = proc(() => flowersCanvas(n));

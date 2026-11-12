@@ -45,6 +45,8 @@ export class CampfireView {
       .setVisible(false);
   }
 
+  private warmScale = 2.6;
+
   /** 지금 불멍 중인 모닥불 (없으면 null) */
   get active(): Campfire | null {
     return this.fire;
@@ -57,10 +59,11 @@ export class CampfireView {
     this.dir = 1;
     const cam = this.scene.cameras.main;
     const c = cineCenter(fire);
-    this.rig.cinematic({ x: c.x, y: c.y, zoom: cineZoom(cam.width, cam.height) }, this.reduced);
+    this.rig.cinematic({ x: c.x, y: c.y, zoom: cineZoom(cam.width, cam.height, !!fire.big) }, this.reduced);
     this.map.boostCampfire(fire.id);
     this.warmX = fire.x;
     this.warmY = fire.y - 6;
+    this.warmScale = fire.big ? 4.4 : 2.6;
     if (this.reduced) this.t = 1;
   }
 
@@ -79,7 +82,7 @@ export class CampfireView {
     if (!this.fire) return;
     const cam = this.scene.cameras.main;
     const c = cineCenter(this.fire);
-    this.rig.cinematic({ x: c.x, y: c.y, zoom: cineZoom(cam.width, cam.height) }, true);
+    this.rig.cinematic({ x: c.x, y: c.y, zoom: cineZoom(cam.width, cam.height, !!this.fire.big) }, true);
   }
 
   update(now: number, dt: number): void {
@@ -103,7 +106,7 @@ export class CampfireView {
     this.bottom.setPosition(ox, oy + (cam.height - oy) / z - lh / 2 + 1).setSize(w, lh);
     this.tint.setPosition(ox, oy).setSize(w, cam.height / z + 4).setAlpha(0.045 * t);
     const flick = this.reduced ? 1 : 0.88 + 0.08 * Math.sin(now / 170) + 0.05 * Math.sin(now / 63);
-    this.warm.setPosition(this.warmX, this.warmY).setScale(2.6 * (0.96 + 0.04 * flick)).setAlpha(0.42 * t * flick);
+    this.warm.setPosition(this.warmX, this.warmY).setScale(this.warmScale * (0.96 + 0.04 * flick)).setAlpha(0.42 * t * flick);
   }
 
   destroy(): void {

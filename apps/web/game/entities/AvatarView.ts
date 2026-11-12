@@ -1,9 +1,11 @@
 import * as Phaser from "phaser";
 import { DIR, type ActKind, type DirId, type StateName } from "@tomb/protocol";
-import { avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
+import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
-import { AV_ORIGIN_Y, avatarArtTop, BODY_METRICS, bodyOf, waterSink } from "../sprites/avatar";
+import { AV_ORIGIN_Y, avatarArtTop, BODY_METRICS, bodyOf, handAnchor, waterSink } from "../sprites/avatar";
+import { CosmeticFxView } from "./CosmeticFxView";
 import type { EmoteIcon } from "../sprites/emotes";
+import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { SpeechBubble } from "./SpeechBubble";
 
@@ -11,7 +13,7 @@ import { SpeechBubble } from "./SpeechBubble";
 // 상태 값과 방향만 받아서 애니메이션을 고르고, 상태별 연출은 그림에만 얹는다 (논리 위치는 그대로):
 //  - hang: HANG_LIFT만큼 들어 올리고 살짝 흔들린다     - swing: 그네처럼 좌우로 왕복 (진자)
 //  - swim: 수면 물결 고리                              - dive: 물결 + 물방울이 올라온다
-//  - hammock: 몸 가운데를 축으로 90° 눕혀(머리가 왼쪽) 해먹 천 위에서 천천히 흔들린다
+//  - hammock: 해먹 천 안에 누운 그림(sprites/hammockArt — 천 곡선을 따라 휜 몸 + 앞 천)으로 바꿔 천천히 흔들린다 (F5)
 // 꾸미기: 모자·후광 고리·목도리·손등불은 시트에 함께 그려지고, 날개·후광 빛·그림자 유령 친구·발자국 꽃·
 // 안개 망토·반딧불 오라는 따로 붙는 오브젝트다. 몸 모양(AVATAR_BODIES)은 시트를 바꾼다.
 // 머리 위는 아래에서부터 머리 꾸미기(귀·모자·후광·날개 끝) → 이름표 → 말풍선/이모티콘 순으로 쌓는다:
@@ -24,9 +26,10 @@ export const HANG_LIFT = 13;
 /** 그네 진자 폭 (px)과 주기 (ms) */
 const SWING_AMP = 3;
 const SWING_PERIOD = 1600;
-/** 해먹: 눕힐 때 회전 축 = 발바닥에서 이만큼 위(몸 가운데). 흔들림 주기 */
-const LIE_PIVOT = 9;
+/** 해먹 흔들림 주기 (몸이 천 안으로 1px 가라앉았다 올라온다) */
 const LIE_PERIOD = 2400;
+/** 해먹 누운 그림: 텍스처마다 몸 맨 윗줄 (이름표 자리) */
+const lieTops = new Map<string, number>();
 /** 수면 줄: 발바닥에서 위로 */
 const WATER_LINE = 5;
 const ACT_MS = 1200;
@@ -72,6 +75,10 @@ export class AvatarView {
   private anim = "";
   private gestureUntil = 0;
   private swingFrame = -1;
+  /** 해먹 누운 그림을 쓰는 중 (텍스처가 아바타 시트가 아니다) */
+  private lying = false;
+  private lieKey = "";
+  private lieFrame = -1;
   state: StateName = "idle";
   dir: DirId = DIR.down;
   /** 앉기 시작한 시각 (앉아 있지 않으면 0) */
@@ -80,14 +87,18 @@ export class AvatarView {
   depthOverride: number | null = null;
   /**
    * 50번 조각배·시소·트램펄린·회전목마: 씬(PlazaRides·BoatRide)이 매 프레임 넣어 주는 그림 연출.
-   * ox = 앵커에서 옆으로(회전목마), lift = 위로 띄우는 높이, depth = 그릴 순서 (null이면 그대로). 논리 위치는 그대로다
+   * ox = 앵커에서 옆으로(회전목마), lift = 위로 띄우는 높이, depth = 그릴 순서 (null이면 그대로). 논리 위치는 그대로다.
+   * dir = 보는 방향을 덮어쓴다(시소: 마주 보는 옆모습), alt = 잠깐 다른 자세 프레임(시소에서 땅을 찰 때 무릎 굽힘)
    */
-  ride: { ox: number; lift: number; depth: number | null } | null = null;
+  ride: { ox: number; lift: number; depth: number | null; dir?: DirId; alt?: StateName | null } | null = null;
+  private altFrame = -1;
 
   private readonly reduced = prefersReducedMotion();
   private lastNow = 0;
   // 꾸미기 연출 오브젝트 (착용할 때만 만든다)
   private haloGlow: Phaser.GameObjects.Image | null = null;
+  /** F8 추가 꾸미기 연출 (우산·풍선·날개·발자국·오라·펫) — 처음 입을 때 만든다 */
+  private cfx: CosmeticFxView | null = null;
   private wings: Phaser.GameObjects.Image | null = null;
   private pet: Phaser.GameObjects.Image | null = null;
   private petX = 0;
@@ -147,7 +158,10 @@ export class AvatarView {
       this.texKey = key;
       this.anim = "";
       this.swingFrame = -1;
-      this.sprite.setTexture(key, this.sprite.frame.name);
+      if (this.lying) {
+        this.lying = false;
+        this.sprite.setTexture(key, avatarFrame("idle", this.dir));
+      } else this.sprite.setTexture(key, this.sprite.frame.name);
       this.apply(this.state, this.dir, 0);
     }
   }
@@ -166,7 +180,7 @@ export class AvatarView {
   private relayout(): void {
     this.artTop = avatarArtTop(this.body, this.look);
     const wings = this.look.includes("back_wings") ? this.shoulder + WING_TIP : 0;
-    this.labelGap = Math.max(this.artTop, wings) + 2;
+    this.labelGap = Math.max(this.artTop, wings, this.cfx?.labelTop(this.artTop, this.shoulder) ?? 0) + 2;
   }
 
   get bodyId(): string {
@@ -176,7 +190,8 @@ export class AvatarView {
   /** 꾸미기 착용 변경 (바로 반영) */
   setLook(look: readonly string[]): void {
     this.look = look.slice();
-    this.lantern = look.includes("hand_lantern");
+    this.lantern = look.includes("hand_lantern") || look.includes("hand_lantern_blue");
+    if (this.cfx || look.length) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(look);
     this.relayout();
     this.retexture();
     const vis = this.sprite.visible;
@@ -262,7 +277,15 @@ export class AvatarView {
     if (!sitting) this.sitSince = 0;
     this.state = state;
     this.dir = dir;
+    if (state === "hammock") {
+      this.lieDown();
+      return;
+    }
+    if (this.lying) this.getUp(state, dir);
     if (now < this.gestureUntil) return;
+    // 놀거리가 잠깐 다른 자세 프레임을 쓰는 중 (sync가 고른다)
+    if (this.altFrame >= 0 && this.ride?.alt && (state === "seesaw" || state === "carousel" || state === "trampoline" || state === "boat")) return;
+    this.altFrame = -1;
     if (state === "swing") {
       // 그네 프레임은 진자 위상에 맞춰 sync에서 고른다
       if (this.anim !== "swing") {
@@ -280,8 +303,36 @@ export class AvatarView {
     }
   }
 
+  /** 해먹 누운 그림으로 (F5). 천이 해먹 소품과 픽셀 1:1로 겹치도록 표시 원점을 맞춘다 */
+  private lieDown(): void {
+    const key = hammockLieKey(this.texKey);
+    if (!this.scene.textures.exists(key)) {
+      const lie = hammockLieSheet(this.body, this.color, this.look);
+      addCanvasTexture(this.scene, key, { canvas: lie.grid.toCanvas(), frameW: HAMMOCK_W, frameH: HAMMOCK_H });
+      lieTops.set(key, lie.top);
+    }
+    if (this.lying && this.lieKey === key) return;
+    this.lying = true;
+    this.lieKey = key;
+    this.lieFrame = 0;
+    this.anim = "lie";
+    this.gestureUntil = 0;
+    this.sprite.stop();
+    this.sprite.setTexture(key, 0);
+    this.applyOrigin();
+  }
+
+  /** 해먹에서 일어남: 아바타 시트로 돌아온다 (애니메이션은 apply가 이어서 고른다) */
+  private getUp(state: StateName, dir: DirId): void {
+    this.lying = false;
+    this.anim = "";
+    this.sprite.setTexture(this.texKey, avatarFrame(state === "swing" ? "swing" : "idle", dir));
+    this.applyOrigin();
+  }
+
   /** 잠깐의 몸짓 (꽃 놓기: 쪼그려 앉기 프레임) */
   gesture(dir: DirId, ms: number, now: number): void {
+    if (this.lying) return;
     this.gestureUntil = now + ms;
     this.anim = "";
     this.sprite.stop();
@@ -324,7 +375,8 @@ export class AvatarView {
   }
 
   private applyOrigin(): void {
-    this.sprite.setDisplayOrigin(this.baseOriginX + this.poseDx, this.baseOriginY + this.hop + this.poseDy);
+    if (this.lying) this.sprite.setDisplayOrigin(LIE_ORIGIN_X + this.poseDx, LIE_ORIGIN_Y + this.hop + this.poseDy);
+    else this.sprite.setDisplayOrigin(this.baseOriginX + this.poseDx, this.baseOriginY + this.hop + this.poseDy);
   }
 
   /**
@@ -406,26 +458,47 @@ export class AvatarView {
         s.setFrame(avatarFrame("swing", this.dir, f));
       }
     } else if (st === "hammock") {
-      // 눕힌 그림에서 원점 x 이동은 화면 세로 움직임이 된다 → 1px 오르내림 + 아주 작은 기울기로 흔들흔들
-      const ph = ((now % LIE_PERIOD) / LIE_PERIOD) * Math.PI * 2;
-      this.setPose(this.reduced ? 0 : Math.round(Math.sin(ph)), -LIE_PIVOT);
-      const tilt = this.reduced ? -90 : -90 + Math.round(Math.sin(ph) * 2);
-      if (s.angle !== tilt) s.setAngle(tilt);
+      // 천 안에서 몸이 천천히 1px 가라앉았다 올라온다 (천은 그대로라 밑의 해먹 소품과 어긋나지 않는다)
+      this.setPose(0, 0);
+      const f = this.reduced ? 0 : Math.sin(((now % LIE_PERIOD) / LIE_PERIOD) * Math.PI * 2) > 0.2 ? 1 : 0;
+      if (this.lying && f !== this.lieFrame) {
+        this.lieFrame = f;
+        s.setFrame(f);
+      }
     } else if (st === "boat" || st === "seesaw" || st === "trampoline" || st === "carousel") {
       // 놀거리 연출은 씬이 정해 준다 (회전목마는 앵커 둘레를 돌고, 트램펄린은 통통, 시소는 오르락내리락, 배는 물결에 살짝)
       const r = this.ride;
       this.setPose(r ? -Math.round(r.ox) : 0, r ? Math.round(r.lift) : 0);
       if (r && r.depth !== null) this.depthOverride = r.depth;
+      if (r?.dir !== undefined && r.dir !== this.dir) {
+        this.dir = r.dir;
+        this.altFrame = -1;
+        this.anim = "";
+        this.apply(st, r.dir, now);
+      }
+      const alt = r?.alt && now >= this.gestureUntil ? avatarFrame(r.alt, this.dir) : -1;
+      if (alt >= 0) {
+        if (alt !== this.altFrame) {
+          this.altFrame = alt;
+          this.anim = "";
+          s.stop();
+          s.setFrame(alt);
+        }
+      } else if (this.altFrame >= 0) {
+        this.altFrame = -1;
+        this.apply(st, this.dir, now);
+      }
     } else this.setPose(0, 0);
-    if (st !== "hammock" && s.angle !== 0) s.setAngle(0);
+    if (this.altFrame >= 0 && st !== "boat" && st !== "seesaw" && st !== "trampoline" && st !== "carousel") this.altFrame = -1;
+    if (s.angle !== 0) s.setAngle(0);
     if (st !== "swing" && s.scaleX !== 1) s.setScale(1);
 
     s.setDepth(this.depthOverride ?? s.y);
     const sitLift = st === "sitGround" ? 3 : st === "sitChair" ? 1 : 0;
     // 물에 잠긴 만큼 이름표도 내린다
     const waterDrop = st === "swim" || st === "dive" ? waterSink(this.body, st) : 0;
-    // 해먹에 누우면 머리 꼭대기 = 누운 몸 위쪽 (몸 두께의 절반 남짓)
-    const headY = st === "hammock" ? s.y + this.labelGap - 8 : s.y - this.hop - this.poseDy;
+    // 해먹에 누우면 머리 꼭대기 = 누운 몸 맨 윗줄 (그 2px 위에 이름표)
+    const headY = st === "hammock" && this.lying ? s.y - LIE_ORIGIN_Y + (lieTops.get(this.lieKey) ?? 8) - 2 + this.labelGap : s.y - this.hop - this.poseDy;
     // 매달리기는 두 팔이 머리 위로 올라가 그만큼 더 띄운다
     const armsUp = st === "hang" ? 3 : 0;
     this.label.setPosition(Math.round(st === "hammock" ? s.x : s.x - this.poseDx), headY - this.labelGap + sitLift + waterDrop - armsUp);
@@ -443,6 +516,26 @@ export class AvatarView {
 
     this.syncWater(now, bx, s.y, vis);
     this.syncCosmetics(now, dt, bx, headY, vis);
+    if (this.cfx) {
+      const d = this.dir;
+      this.cfx.sync(
+        {
+          now,
+          dt,
+          x: bx,
+          y: s.y,
+          headY,
+          dir: d,
+          moving: st === "walk" || st === "run",
+          hidden: st === "dive" || st === "hammock" || st === "swim" || st === "hang",
+          artTop: this.artTop,
+          shoulder: this.shoulder,
+          hand: handAnchor(this.body, d === DIR.left ? "left" : d === DIR.right ? "right" : d === DIR.up ? "up" : "down"),
+          reduced: this.reduced,
+        },
+        vis,
+      );
+    }
 
     const speaking = !!this.speech?.active(now);
     // 이름표 높이(height)는 이미 배율이 들어간 월드 높이 (displayHeight는 배율이 한 번 더 곱해져 이름표에 겹쳤다)
@@ -620,6 +713,7 @@ export class AvatarView {
     if (!v) this.sparkle?.setVisible(false);
     this.wings?.setVisible(v);
     this.pet?.setVisible(v);
+    this.cfx?.setVisible(v);
     for (const f of this.fog) f.setVisible(v);
     this.ripple?.setVisible(v);
     if (!v) for (const b of this.bubbles) b.setVisible(false);
@@ -648,6 +742,8 @@ export class AvatarView {
     this.wings = null;
     this.pet?.destroy();
     this.pet = null;
+    this.cfx?.destroy();
+    this.cfx = null;
     for (const f of this.fog) f.destroy();
     this.fog = [];
     for (const f of this.flowers) f.destroy();

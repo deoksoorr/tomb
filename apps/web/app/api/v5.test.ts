@@ -208,4 +208,14 @@ describe("랭킹 (포인트·사냥)", () => {
     expect(pub.headers.get("vercel-cdn-cache-control")).toContain("s-maxage=30");
     expect((await bodyOf<RankResponse>(pub)).mine).toBeNull();
   });
+
+  it("F11 집 꾸미기 보드: board=house (전체·이번 주)", async () => {
+    for (const period of ["all", "week"]) {
+      const res = await rank.GET(call(`/api/rank?board=house&period=${period}`));
+      expect(res.status).toBe(200);
+      const body = await bodyOf<RankResponse>(res);
+      expect(body).toMatchObject({ board: "house", period, mine: null });
+      expect(Array.isArray(body.rows)).toBe(true);
+    }
+  });
 });

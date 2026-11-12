@@ -33,14 +33,14 @@ export type CritterDef = {
 };
 
 export const CRITTERS: readonly CritterDef[] = [
-  { id: "cheese", kind: "cat", name: "치즈", variant: 0, home: { x: 1024, y: 470, r: 160 }, perches: ["bB", "bC", "bD", "bE"], grass: 5, legMs: 38_000, speed: 22 },
-  { id: "kkam", kind: "cat", name: "까망이", variant: 1, home: { x: 670, y: 490, r: 100 }, perches: ["bA", "cC", "cD"], grass: 4, legMs: 42_000, speed: 20 },
-  { id: "godeung", kind: "cat", name: "고등어", variant: 2, home: { x: 560, y: 740, r: 210 }, perches: ["bK", "lC", "bM"], grass: 5, legMs: 40_000, speed: 22 },
-  { id: "samsaek", kind: "cat", name: "삼색이", variant: 3, home: { x: 1024, y: 128, r: 110 }, perches: ["bG", "bH"], grass: 4, legMs: 36_000, speed: 24 },
-  { id: "tux", kind: "cat", name: "턱시도", variant: 4, home: { x: 1660, y: 720, r: 150 }, perches: ["bO", "bP"], grass: 4, legMs: 44_000, speed: 20 },
-  { id: "boo", kind: "ghost", name: "꼬마 유령", variant: 0, home: { x: 304, y: 560, r: 170 }, perches: ["bI", "bJ"], grass: 5, legMs: 30_000, speed: 14 },
-  { id: "starlet", kind: "ghost", name: "별 유령", variant: 1, home: { x: 230, y: 180, r: 140 }, perches: ["lB", "bF", "bL"], grass: 4, legMs: 34_000, speed: 12 },
-  { id: "moss", kind: "ghost", name: "이끼 유령", variant: 2, home: { x: 330, y: 1120, r: 170 }, perches: [], grass: 6, legMs: 32_000, speed: 13 },
+  { id: "cheese", kind: "cat", name: "치즈", variant: 0, home: { x: 720, y: 560, r: 150 }, perches: ["bB", "bC", "lA"], grass: 5, legMs: 38_000, speed: 22 },
+  { id: "kkam", kind: "cat", name: "까망이", variant: 1, home: { x: 476, y: 470, r: 90 }, perches: ["bA"], grass: 4, legMs: 42_000, speed: 20 },
+  { id: "godeung", kind: "cat", name: "고등어", variant: 2, home: { x: 420, y: 620, r: 150 }, perches: ["lC", "bK"], grass: 5, legMs: 40_000, speed: 22 },
+  { id: "samsaek", kind: "cat", name: "삼색이", variant: 3, home: { x: 720, y: 128, r: 110 }, perches: ["bG", "bH", "bQ"], grass: 4, legMs: 36_000, speed: 24 },
+  { id: "tux", kind: "cat", name: "턱시도", variant: 4, home: { x: 1000, y: 960, r: 110 }, perches: ["bO", "lE", "cE", "cF"], grass: 4, legMs: 44_000, speed: 20 },
+  { id: "boo", kind: "ghost", name: "꼬마 유령", variant: 0, home: { x: 240, y: 430, r: 160 }, perches: ["bI", "bJ"], grass: 5, legMs: 30_000, speed: 14 },
+  { id: "starlet", kind: "ghost", name: "별 유령", variant: 1, home: { x: 200, y: 140, r: 120 }, perches: ["lB", "bF", "bL"], grass: 4, legMs: 34_000, speed: 12 },
+  { id: "moss", kind: "ghost", name: "이끼 유령", variant: 2, home: { x: 500, y: 960, r: 130 }, perches: ["bS", "bV", "bW", "bX"], grass: 6, legMs: 32_000, speed: 13 },
 ];
 
 /** 쉬는 자세 (고양이: 앉기·식빵·그루밍·낮잠 / 유령: 둥실) */

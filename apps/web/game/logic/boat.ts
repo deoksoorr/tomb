@@ -20,6 +20,8 @@ const STONE_PAD = 12;
 export const SHORE_REACH = 34;
 /** 2인승 뒷자리 손님이 같이 탈 수 있는 거리 (배가 나루터에 이만큼 가까울 때) */
 export const DOCKED_DIST = 26;
+/** 물가에서 2인승의 빈자리에 같이 탈 수 있는 거리 (내 발 ↔ 배 앞·뒷자리 중 가까운 쪽, F13) */
+export const JOIN_REACH = 30;
 
 function nearRect(r: Rect, x: number, y: number, px: number, py: number): boolean {
   return x >= r.x - px && x <= r.x + r.w + px && y >= r.y - py && y <= r.y + r.h + py;
@@ -110,7 +112,33 @@ export type BoatPresence = {
   rower: Sid | null;
   /** 노 젓는 사람이 있는 지금 배 자리 (rower가 있을 때) */
   at: { x: number; y: number } | null;
+  /** 뱃머리가 왼쪽 (뒷자리 위치 계산용, 없으면 오른쪽) */
+  left?: boolean;
 };
+
+/**
+ * 물가에서 E (F13): 다른 사람이 노 젓고 있는 2인승의 빈 뒷자리가 가까우면 그 자리 (어디서든 — 나루터가 아니어도).
+ * 2인승은 "먼저 탄 사람 = 앞자리 = 노 젓기" (노 젓던 사람이 내리면 남은 사람이 앞자리로 옮겨 앉는다)라서
+ * 한 명만 탄 배의 빈자리는 늘 뒷자리다. 앞자리가 비고 뒷자리만 찬 순간(옮겨 앉는 중)에는 같이 타지 않는다
+ */
+export function joinSeat(px: number, py: number, occupied: ReadonlyMap<string, Sid>, presence: (boatId: string) => BoatPresence, reach = JOIN_REACH): BoatSeat | null {
+  let best: BoatSeat | null = null;
+  let bd = Infinity;
+  for (const b of BOATS) {
+    if (b.seats !== 2) continue;
+    const seats = seatsOf(b.id);
+    const back = seats[1];
+    const p = presence(b.id);
+    if (!back || p.rower === null || !p.at || occupied.has(back.id) || !occupied.has(seats[0].id)) continue;
+    const bx = p.at.x + backSeatOffset(!!p.left);
+    const d = Math.min(Math.hypot(p.at.x - px, p.at.y - py), Math.hypot(bx - px, p.at.y - py));
+    if (d <= reach && d < bd) {
+      bd = d;
+      best = back;
+    }
+  }
+  return best;
+}
 
 /**
  * 나루터에서 E: 탈 자리를 고른다. 같이 타기(2인승에 노 젓는 사람이 나루터에서 기다림)가 먼저, 그다음 가까운 빈 배.

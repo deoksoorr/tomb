@@ -1,11 +1,11 @@
 import * as Phaser from "phaser";
-import { BOATS, DIR, FERRY_DOCK, STATE, type Boat, type DirId, type Sid, type WelcomeMsg } from "@tomb/protocol";
+import { BOATS, DIR, FERRY_DOCK, STATE, type Boat, type BoatSeat, type DirId, type Sid, type WelcomeMsg } from "@tomb/protocol";
 import type { ResumeState } from "@/lib/resume";
 import { TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
 import type { MoveInput } from "../logic/movement";
 import { DEADZONE_ENTER } from "../logic/movement";
-import { backSeatOffset, boatOf, DOCKED_DIST, pickBoatSeat, seatsOf, shorePoint, stepBoat, type BoatMotion, type BoatPresence } from "../logic/boat";
+import { backSeatOffset, boatOf, DOCKED_DIST, joinSeat, pickBoatSeat, seatsOf, shorePoint, stepBoat, type BoatMotion, type BoatPresence } from "../logic/boat";
 import { spotVerdict } from "../logic/restore";
 import { BOAT_FEET_Y, BOAT_FRAMES, BOAT_H, BOAT_TINTS, boatRowerX, boatSheet, boatW, RIDE_TEX } from "../sprites/rideProps";
 import { inWater, standable, waterCurrent } from "./layout";
@@ -16,6 +16,8 @@ import { falloff } from "./RideSound";
 //  - 노 젓기: 방향키·조이스틱, 물 위로만, 강에서는 물살(layout.waterCurrent)에 떠내려간다. 호수까지 갈 수 있다
 //  - 내리기: 물가(둑·나루터·잔교) 가까이에서 E. 빈 배는 잠시 뒤 나루터로 돌아온다(모두의 화면에서 같은 규칙)
 //  - 2인승: 뒷자리 사람은 노 젓는 사람을 따라간다. 노 젓던 사람이 내리면 뒷자리 사람이 앞자리로 옮겨 앉는다
+//    → 먼저 탄 사람이 늘 앞자리에서 노를 젓는다 (F13). 한 명만 탄 2인승의 빈 뒷자리에는 나루터가 아니어도
+//    물가에서 배가 가까이 오면 E로 같이 탄다 (서버는 같은 배의 다른 자리에 앉은 사람 곁이면 받아 준다)
 //  - 다른 사람에게는 노 젓는 사람의 위치(보간)에 배를 그리고, 뒷자리 사람은 그 배에 붙여 그린다
 //  - 새로고침(자리 복원)·실시간 서버 재배포: 서버가 배 자리를 기억하면 그대로, 놓쳤으면 가까운 뭍(없으면 나루터)에 내려 준다
 //  - (나중에) 배 위 낚시: fishingSpot()이 지금 배가 떠 있는 물(강·호수)과 자리를 알려 준다
@@ -112,8 +114,16 @@ export class BoatRide {
     const v = this.views.find((w) => w.def.id === boatId)!;
     const rowerSeat = seatsOf(boatId)[0];
     const who = this.occupant(rowerSeat.id);
-    return { docked: v.mode === "docked", rower: who === null || who === -1 ? null : who, at: v.mode === "out" ? { x: v.x, y: v.y } : null };
+    return { docked: v.mode === "docked", rower: who === null || who === -1 ? null : who, at: v.mode === "out" ? { x: v.x, y: v.y } : null, left: v.left };
   };
+
+  /** 물가에서 같이 탈 수 있는 2인승 뒷자리 (F13). 배에 탔거나·앉았거나·매달렸거나·물속·공중이면 null */
+  private joinTarget() {
+    const h = this.host;
+    const pl = h.player();
+    if (!h.judged() || pl.inBoat || pl.sitting || pl.anchored || pl.airborne || pl.inWater) return null;
+    return joinSeat(pl.x, pl.y, h.seats(), this.presence);
+  }
 
   // ── 입력 ──
 
@@ -128,13 +138,20 @@ export class BoatRide {
       h.toast("배가 모두 나가 있어요. 빈 배는 곧 나루터로 돌아와요");
       return;
     }
+    this.boardSeat(seat);
+  }
+
+  /** 배 자리에 탄다 (나루터·물가 공통). 노 젓는 사람이 있는 배의 뒷자리면 지금 배 자리 뒤로 */
+  private boardSeat(seat: BoatSeat): void {
+    const h = this.host;
+    const pl = h.player();
     const v = this.views.find((w) => w.def.id === seat.boatId)!;
     const now = h.scene.time.now;
     let x = seat.x;
     let y = seat.y;
     let dir: DirId = seat.facing;
     if (seat.index === 1 && v.mode === "out") {
-      // 기다리는 배의 뒷자리 (배가 나루터에서 살짝 떠 있을 수 있다)
+      // 기다리는 배의 뒷자리 (배가 나루터에서 살짝 떠 있거나, 물가에 와 있다)
       x = v.x + backSeatOffset(v.left);
       y = v.y;
       dir = v.left ? DIR.left : DIR.right;
@@ -156,7 +173,13 @@ export class BoatRide {
    */
   onAction(a: string): boolean {
     const pl = this.host.player();
-    if (!pl.inBoat) return false;
+    if (!pl.inBoat) {
+      // 물가에 온 2인승의 빈 뒷자리에 같이 타기 (F13)
+      const join = a === "interact" ? this.joinTarget() : null;
+      if (!join) return false;
+      this.boardSeat(join);
+      return true;
+    }
     if (a === "interact") this.disembark(false);
     return a === "interact" || a === "sit" || a === "jump";
   }
@@ -424,7 +447,7 @@ export class BoatRide {
   /** 배 위 안내 문구 (null = 배에 타고 있지 않다) */
   hint(prefix: string): string | null {
     const pl = this.host.player();
-    if (!pl.inBoat) return null;
+    if (!pl.inBoat) return this.joinTarget() ? `${prefix}뒷자리에 같이 타기` : null;
     const ref = boatOf(pl.boatSeatId!);
     const shore = shorePoint(pl.x, pl.y, standable) !== null;
     if (ref?.seat.index === 1) return shore ? `${prefix}내리기 · 같이 타는 중` : "같이 타는 중 (물가에서 내릴 수 있어요)";

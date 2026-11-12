@@ -7,7 +7,7 @@ import {
   HOUSE_LOTS,
   HOUSING_OFFICE,
   HUNT_GATE,
-  LAKE,
+  HUNT_SIGN,
   MAP_HEIGHT,
   MAP_WIDTH,
   SHOP,
@@ -16,22 +16,33 @@ import {
   WORLD_LOTS,
   ZONES,
   FERRY_DOCK,
+  GRAVE_AREAS,
+  PONDS,
+  RIVER_PATH,
+  riverYAt,
   playerBounds,
   type Furniture,
 } from "@tomb/protocol";
-import { houseTitle } from "@/lib/housing/catalog";
 import type { VillageHouse, VillageResponse } from "@/lib/housing/types";
 import { addCanvasTexture, TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
-import { facadeGrid, facadeInfo, FACADE_H } from "../housing/art";
+import { drawEmptyLot, drawHouseLot, type LotGfx } from "../housing/worldLots";
 import { CHUNK, CHUNK_COLS, CHUNK_ROWS, drawGroundChunk } from "../sprites/ground";
 import { SHOP_HUT_H } from "../sprites/extras";
 import { CAVE_H, CAVE_TORCHES, FIRE_FRAMES, OFFICE_H, TORCH_TINT, WP } from "../sprites/worldProps";
+import { BIG_FIRE_FRAMES, FENCE_H_W, GRAVE_GATE_H, GY } from "../sprites/graveyardProps";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import {
+  allDeckRails,
   allProps,
+  ARCH_GATES,
   benchWidth,
+  BIG_FIRE_LIGHT,
   CAMPFIRE_LIGHT,
+  ELLIPSES,
+  FENCE_RUNS,
+  fenceCollider,
+  gateCenter,
   campfireCollider,
   cliffColliders,
   furnitureCollider,
@@ -98,7 +109,7 @@ export class WorldMap {
   /** 그네 줄·판 (받침 좌표 x*65536+y → 이미지) */
   private readonly swingSeats = new Map<number, Phaser.GameObjects.Image>();
   /** 모닥불 id → 불티·연기 이미터 */
-  private readonly fires = new Map<string, { embers: Phaser.GameObjects.Particles.ParticleEmitter; smoke: Phaser.GameObjects.Particles.ParticleEmitter }>();
+  private readonly fires = new Map<string, { embers: Phaser.GameObjects.Particles.ParticleEmitter; smoke: Phaser.GameObjects.Particles.ParticleEmitter; big?: boolean }>();
   private readonly reduced: boolean;
 
   constructor(
@@ -119,6 +130,8 @@ export class WorldMap {
     }
     for (const f of FURNITURE) this.addFurniture(f);
     for (const r of cliffColliders()) this.addCollider(this.colliders, r);
+    this.addFences();
+    for (const r of allDeckRails()) this.addCollider(this.colliders, r); // F13 다리·나루터·잔교 난간
     this.addCampfires();
     this.addWaterShimmer();
 
@@ -139,22 +152,56 @@ export class WorldMap {
     const caveY = HUNT_GATE.y - 8;
     scene.add.image(HUNT_GATE.x, caveY, WP.cave).setOrigin(0.5, 1).setDepth(caveY);
     for (const [dx, dy] of CAVE_TORCHES) this.staticLights.push({ x: HUNT_GATE.x + dx, y: caveY + dy - 1, scale: 0.55, tint: TORCH_TINT, base: 0.8 });
-    // 이름은 동굴 왼쪽 담 위에 (동굴 위는 화면 밖에 걸린다)
+    // 이름은 동굴 왼쪽 담 위에 (동굴 위는 화면 밖에 걸린다) + 길가 팻말 (F6: 스폰에서 바로 보이게)
     this.addLabel(HUNT_GATE.x - 42, caveY - CAVE_H / 2 + 4, "사냥터", 0xf0c8a0, 0.5);
+    this.addLabel(HUNT_SIGN.x, HUNT_SIGN.y - 34, "사냥터 입구 ↗", 0xffd6a8, 1, 0.95);
 
     // 성황당 (나무·돌무더기는 소품)
     this.addLabel(SHRINE.x, SHRINE_TREE.y - 42, "성황당", 0xe8d0c0, 1);
 
-    // 구역 이름 (은은하게)
+    // 구역 이름 (은은하게). 묘역 이름은 문 아치 팻말에 (addFences)
     for (const z of ZONES) {
-      if (z.id === "river" || z.id === "gate") continue;
-      const at = ZONE_LABEL_AT[z.id] ?? { x: z.x + z.w / 2, y: z.y + 10 };
-      this.addLabel(at.x, at.y, z.name, 0xd8ccb0, 1, 0.62);
+      if (z.id === "river" || z.id === "gate" || z.id === "graveyard") continue;
+      const at = ZONE_LABEL_AT[z.name] ?? { x: z.x + z.w / 2, y: z.y + 10 };
+      this.addLabel(at.x, at.y, z.name, z.id === "pond" ? 0xc8d8e0 : 0xd8ccb0, 1, 0.62);
     }
     this.addLabel(FERRY_DOCK.x, FERRY_DOCK.y - 44, "나루터", 0xd8ccb0, 1, 0.75);
 
     // 아래 담 (맵 맨 아래 줄은 바닥 타일이 담 면으로 그린다)
     this.applyBounds();
+  }
+
+  /** 묘역 철책 (가로 칸·세로 칸·모서리 돌기둥) + 묘역 문 아치와 이름 팻말 (F1·F4) */
+  private addFences(): void {
+    const scene = this.scene;
+    const posts = new Set<string>();
+    const post = (x: number, y: number) => {
+      const k = `${x},${y}`;
+      if (posts.has(k)) return;
+      posts.add(k);
+      this.cull(x, y, scene.add.image(x, y + 2, GY.fencePost).setOrigin(0.5, 1).setDepth(y + 1));
+    };
+    for (const f of FENCE_RUNS) {
+      this.addCollider(this.colliders, fenceCollider(f));
+      if (f.y0 === f.y1) {
+        for (let x = f.x0; x < f.x1; x += FENCE_H_W) {
+          const w = Math.min(FENCE_H_W, f.x1 - x);
+          const img = scene.add.image(x, f.y0 + 1, GY.fenceH).setOrigin(0, 1).setDepth(f.y0);
+          if (w < FENCE_H_W) img.setCrop(0, 0, w, img.height);
+          this.cull(x + w / 2, f.y0, img);
+        }
+      } else {
+        for (let y = f.y0 + 8; y <= f.y1; y += 8) this.cull(f.x0, y, scene.add.image(f.x0, y + 1, GY.fenceV).setOrigin(0.5, 1).setDepth(y));
+      }
+      post(f.x0, f.y0);
+      post(f.x1, f.y1);
+    }
+    for (const g of ARCH_GATES) {
+      const c = gateCenter(g);
+      this.cull(c.x, c.y, scene.add.image(c.x, c.y + 2, GY.gate).setOrigin(0.5, 1).setDepth(c.y + 2));
+      const area = GRAVE_AREAS.find((a) => a.id === g.area)!;
+      this.addLabel(c.x, c.y - GRAVE_GATE_H + 2, area.name, 0xe6dcc8, 1, 0.92);
+    }
   }
 
   private applyBounds(): void {
@@ -247,6 +294,19 @@ export class WorldMap {
         return WP.boat;
       case "shrineTree":
         return WP.shrineTree;
+      // ── F1 묘지 마을 (sprites/graveyardProps.ts) ──
+      case "willow":
+        return v % 2 ? GY.willow1 : GY.willow0;
+      case "oldGrave":
+        return [GY.old0, GY.old1, GY.old2, GY.old3, GY.old4][v % 5];
+      case "candle":
+        return v % 2 ? GY.candle1 : GY.candle0;
+      case "crypt":
+        return GY.crypt;
+      case "mist":
+        return v % 2 ? GY.mist1 : GY.mist0;
+      case "sign":
+        return GY.sign;
     }
   }
 
@@ -264,6 +324,13 @@ export class WorldMap {
       // 물 위에 떠 있는 배: 살짝 오르내린다
       const img = this.scene.add.image(p.x, p.y + 2, WP.boat).setOrigin(0.5, 1).setDepth(p.y);
       if (!this.reduced) this.scene.tweens.add({ targets: img, y: p.y + 3, duration: 1700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      return img;
+    }
+    if (p.kind === "mist") {
+      // 땅안개: 바닥에 깔려 천천히 흘러가며 옅어졌다 짙어진다 (묘비 받침을 살짝 덮는다)
+      const img = this.scene.add.image(p.x, p.y, this.propTexture(p)).setOrigin(0.5, 0.5).setDepth(p.y + 6).setAlpha(0.7).setScale(1.25);
+      if (!this.reduced)
+        this.scene.tweens.add({ targets: img, x: p.x + 14, alpha: 0.35, duration: 5200 + (p.x % 7) * 600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       return img;
     }
     // 해먹: 누운 사람(받침 + 1)보다 뒤에
@@ -333,7 +400,19 @@ export class WorldMap {
         repeat: -1,
       });
     }
+    if (!scene.anims.exists("fx-bigfire-burn")) {
+      scene.anims.create({
+        key: "fx-bigfire-burn",
+        frames: Array.from({ length: BIG_FIRE_FRAMES }, (_, i) => ({ key: GY.bigFire, frame: i })),
+        frameRate: this.reduced ? 4 : 11,
+        repeat: -1,
+      });
+    }
     for (const c of CAMPFIRES) {
+      if (c.big) {
+        this.addBigFire(c);
+        continue;
+      }
       scene.add.image(c.x, c.y + 1, WP.fireRing).setOrigin(0.5, 0.5).setDepth(DEPTH.decal + 2);
       const fire = scene.add.sprite(c.x, c.y + 2, WP.fire, 0).setOrigin(0.5, 1).setDepth(c.y);
       fire.play({ key: "fx-campfire-burn", startFrame: Math.floor(Math.random() * FIRE_FRAMES) });
@@ -367,19 +446,62 @@ export class WorldMap {
     }
   }
 
+  /** 광장의 아주 큰 모닥불 (F1): 넓은 돌 화덕 + 키 큰 불꽃 두 겹 + 많은 불티·연기 + 광장을 덮는 따뜻한 빛 */
+  private addBigFire(c: (typeof CAMPFIRES)[number]): void {
+    const scene = this.scene;
+    scene.add.image(c.x, c.y + 2, GY.bigRing).setOrigin(0.5, 0.5).setDepth(DEPTH.decal + 2).setScale(1.15);
+    const back = scene.add.sprite(c.x - 7, c.y - 2, GY.bigFire, 0).setOrigin(0.5, 1).setDepth(c.y - 1).setScale(1.1).setAlpha(0.85);
+    back.play({ key: "fx-bigfire-burn", startFrame: 3 });
+    const fire = scene.add.sprite(c.x + 2, c.y + 5, GY.bigFire, 0).setOrigin(0.5, 1).setDepth(c.y).setScale(1.35);
+    fire.play({ key: "fx-bigfire-burn", startFrame: 0 });
+    this.addCollider(this.colliders, campfireCollider(c));
+    this.staticLights.push({ x: c.x, y: c.y + BIG_FIRE_LIGHT.dy, scale: BIG_FIRE_LIGHT.scale, tint: BIG_FIRE_LIGHT.tint, base: BIG_FIRE_LIGHT.base });
+    this.staticLights.push({ x: c.x, y: c.y - 30, scale: 1.4, tint: 0xffd070, base: 0.9 });
+    const embers = scene.add
+      .particles(c.x, c.y - 34, TEX.spark, {
+        lifespan: { min: 1200, max: 2400 },
+        speedX: { min: -14, max: 14 },
+        speedY: { min: -46, max: -22 },
+        accelerationX: { min: -8, max: 8 },
+        scale: { start: 0.55, end: 0.08 },
+        alpha: { start: 1, end: 0 },
+        tint: [0xffd060, 0xff9a40, 0xff6a2a],
+        blendMode: Phaser.BlendModes.ADD,
+        frequency: this.reduced ? 320 : 70,
+        x: { min: -12, max: 12 },
+      })
+      .setDepth(DEPTH.lights + 3);
+    const smoke = scene.add
+      .particles(c.x, c.y - 66, WP.smoke, {
+        lifespan: { min: 3000, max: 4400 },
+        speedX: { min: -4, max: 7 },
+        speedY: { min: -16, max: -9 },
+        scale: { start: 0.6, end: 2.4 },
+        alpha: { start: 0.2, end: 0 },
+        frequency: this.reduced ? 1200 : 420,
+      })
+      .setDepth(c.y + 60);
+    this.fires.set(c.id, { embers, smoke, big: true });
+  }
+
   /** 불멍 중인 모닥불은 불티를 더 많이 (null이면 모두 평소대로) */
   boostCampfire(id: string | null): void {
     for (const [k, f] of this.fires) {
       const on = k === id;
-      f.embers.frequency = on ? (this.reduced ? 260 : 60) : this.reduced ? 520 : 180;
+      f.embers.frequency = f.big ? (on ? (this.reduced ? 200 : 40) : this.reduced ? 320 : 70) : on ? (this.reduced ? 260 : 60) : this.reduced ? 520 : 180;
     }
   }
 
   /** 강·호수 물결 반짝임: 강은 하류 쪽으로 천천히 흐르고, 호수는 제자리에서 반짝인다 */
   private addWaterShimmer(): void {
     const spots: [number, number, boolean][] = [];
-    for (let x = 80; x < 1560; x += 92) spots.push([x, 870 + ((x * 7) % 11) - 5 + (x > 1300 ? 14 : 0), true]);
-    for (let i = 0; i < 8; i++) spots.push([LAKE.x - 150 + i * 42, LAKE.y - 50 + ((i * 37) % 90), false]);
+    const riverEnd = RIVER_PATH[RIVER_PATH.length - 3].x;
+    for (let x = 60; x < riverEnd; x += 84) spots.push([x, Math.round(riverYAt(x)) + ((x * 7) % 11) - 5, true]);
+    // 호수·연못: 크기에 맞춰 몇 개씩 제자리에서
+    for (const e of ELLIPSES) {
+      const n = Math.max(2, Math.round((e.rx * e.ry) / 1800));
+      for (let i = 0; i < n; i++) spots.push([Math.round(e.x - e.rx * 0.6 + ((i * 53) % Math.round(e.rx * 1.2))), Math.round(e.y - e.ry * 0.5 + ((i * 37) % Math.round(e.ry))), false]);
+    }
     const drift = RIVER_CURRENT * 1.6;
     for (let i = 0; i < spots.length; i++) {
       const [x, y, river] = spots[i];
@@ -423,43 +545,21 @@ export class WorldMap {
     return true;
   }
 
+  // 필지 그림은 game/housing/worldLots.ts (F2: 터 크기별 집·마당·울타리·밤 창 불빛·굴뚝 연기)
   private drawHouse(h: VillageHouse, lot: (typeof HOUSE_LOTS)[number], mine: boolean): void {
-    const tex = `village-facade-${h.tier}-${Object.values(h.exterior).join("-")}`;
-    if (!this.scene.textures.exists(tex)) addCanvasTexture(this.scene, tex, { canvas: facadeGrid(h.exterior, h.tier).toCanvas() });
-    const info = facadeInfo(h.exterior, h.tier);
-    const baseY = lot.y + info.body.y + info.body.h;
-    const img = this.scene.add.image(lot.x, lot.y + HOUSE_LOT_H - FACADE_H, tex).setOrigin(0, 0).setDepth(baseY);
-    this.houseObjs.push(img);
-    this.cull(lot.x + HOUSE_LOT_W / 2, baseY, img);
+    this.addLotGfx(drawHouseLot(this.scene, this.atlas, lot, { w: HOUSE_LOT_W, h: HOUSE_LOT_H }, h, mine, { reduced: this.reduced }), lot);
     this.addCollider(this.gridColliders, houseCollider(lot, h.tier));
-    for (const l of info.lights) this.gridLights.push({ x: lot.x + l.x, y: lot.y + l.y, scale: l.r / 40, tint: l.color, base: 0.5 });
-    const t = houseTitle(h.score);
-    const line1 = `${lot.lot}번지 · ${h.name}${mine ? " (내 집)" : ""}`;
-    const line2 = `${h.ownerName} · ${t.name} · ${h.score}점`;
-    this.atlas.ensure(line1 + line2);
-    const top = lot.y + info.body.y - 26;
-    const cx = lot.x + HOUSE_LOT_W / 2;
-    this.houseLabels.push(
-      this.scene.add.bitmapText(cx, top, FONT_KEY, line1, FONT_PX).setOrigin(0.5, 1).setTint(mine ? 0xffe39a : 0xf2ead3).setAlpha(0.92).setDepth(DEPTH.labels - 1),
-      this.scene.add.bitmapText(cx, top + 9, FONT_KEY, line2, FONT_PX).setOrigin(0.5, 1).setTint(0xb9b4a4).setAlpha(0.85).setDepth(DEPTH.labels - 1),
-    );
   }
 
   private drawEmptyLot(lot: (typeof HOUSE_LOTS)[number], taken: boolean): void {
-    const x = lot.x + HOUSE_LOT_W / 2;
-    const y = lot.y + HOUSE_LOT_H - 24;
-    const g = this.scene.add.graphics().setDepth(y);
-    // 팻말 (말뚝 + 판) — 받침이 y
-    g.fillStyle(0x553722).fillRect(x - 1, y - 12, 2, 12);
-    g.fillStyle(taken ? 0x5f5d57 : 0x9c6d45).fillRect(x - 11, y - 21, 22, 11);
-    g.lineStyle(1, 0x1a1612).strokeRect(x - 11, y - 21, 22, 11);
-    g.fillStyle(0x3a2c22).fillRect(x - 7, y - 16, 14, 1);
-    const fence = this.scene.add.graphics().setDepth(DEPTH.decal + 2);
-    fence.lineStyle(1, 0xd9d4c3, 0.22).strokeRect(lot.x + 10, lot.y + 28, HOUSE_LOT_W - 20, HOUSE_LOT_H - 34);
-    this.houseObjs.push(g, fence);
-    const text = taken ? `${lot.lot}번지 · 공사 중` : `${lot.lot}번지 · 분양 중`;
-    this.atlas.ensure(text);
-    this.houseLabels.push(this.scene.add.bitmapText(x, y - 24, FONT_KEY, text, FONT_PX).setOrigin(0.5, 1).setTint(taken ? 0x908b7b : 0xd9d4c3).setAlpha(0.8).setDepth(DEPTH.labels - 1));
+    this.addLotGfx(drawEmptyLot(this.scene, this.atlas, lot, { w: HOUSE_LOT_W, h: HOUSE_LOT_H }, taken, { reduced: this.reduced }), lot);
+  }
+
+  private addLotGfx(d: LotGfx, lot: (typeof HOUSE_LOTS)[number]): void {
+    this.houseObjs.push(...d.objs);
+    for (const img of d.images) this.cull(lot.x + HOUSE_LOT_W / 2, lot.y + HOUSE_LOT_H, img);
+    this.houseLabels.push(...d.labels);
+    this.gridLights.push(...d.lights);
   }
 
   /** @deprecated 묘비 수에 따라 맵이 늘어나던 시절의 호출. 이제 맵은 고정이라 경계만 다시 맞춘다 */
@@ -526,12 +626,13 @@ export class WorldMap {
 
 /** 구역 이름표 자리 (없으면 구역 위쪽 가운데) */
 const ZONE_LABEL_AT: Partial<Record<string, { x: number; y: number }>> = {
-  hill: { x: 240, y: 104 },
-  graveyard: { x: 304, y: 394 },
-  rest: { x: 648, y: 432 },
-  plaza: { x: 1024, y: 262 },
-  housing: { x: 1660, y: 214 },
-  lake: { x: LAKE.x, y: LAKE.y - LAKE.ry + 26 },
-  forest: { x: 330, y: 1120 },
-  meadow: { x: 1000, y: 1068 },
+  "별 보기 언덕": { x: 150, y: 92 },
+  "모닥불 광장": { x: 720, y: 252 },
+  "주거 구역": { x: 1200, y: 214 },
+  "호수": { x: 1300, y: 950 },
+  "달빛 연못": { x: PONDS[0].x, y: PONDS[0].y + PONDS[0].ry + 26 },
+  "까마귀 연못": { x: PONDS[1].x - 40, y: PONDS[1].y - 8 },
+  "안개 연못": { x: PONDS[2].x, y: PONDS[2].y + 6 },
+  "안개 숲": { x: 500, y: 800 },
+  "호박밭": { x: 990, y: 1000 },
 };

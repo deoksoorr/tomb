@@ -113,6 +113,9 @@ export type GameEvents = {
   /** 판이 끝남 (시간 끝·전멸·클리어·포기). UI가 결과를 서버로 보내고 결과 창을 연다. 월드는 이미 다시 보인다 */
   "rpg:ended": { result: RunResult; aborted: boolean };
 
+  /** F17 미니맵: 내 위치와 같은 채널 사람들 위치 [x0, y0, x1, y1, …] (월드에 있는 동안 0.25초마다) */
+  "minimap:dots": { me: { x: number; y: number }; others: number[] };
+
   // ── 낚시·채집 (4·32번) ── (game/world/forage, components/forage)
   /** 낚시 자리에 앉음 / NPC 앞 / 채집 지점에서 E → UI가 낚시 창·판매 창·채집(게이지·곤충 미니게임)을 연다 */
   "forage:use": ForageUse;

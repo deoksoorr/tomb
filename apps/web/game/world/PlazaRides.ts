@@ -1,11 +1,12 @@
 import * as Phaser from "phaser";
-import { spotSeatId, STATE, type Sid } from "@tomb/protocol";
+import { DIR, spotSeatId, STATE, type Sid } from "@tomb/protocol";
 import { addCanvasTexture } from "../assets/manifest";
 import { DEPTH } from "../config";
 import type { Player, SeatRequester } from "../entities/Player";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
 import {
   carouselFloor,
+  carouselPole,
   carouselTop,
   FOUNTAIN_H,
   FOUNTAIN_W,
@@ -20,11 +21,12 @@ import {
   trampolineSheet,
 } from "../sprites/rideProps";
 import type { Effects } from "./Effects";
-import type { Interactable } from "./layout";
+import { inWater, standable, type Interactable } from "./layout";
 import { falloff, type RideSound } from "./RideSound";
 import {
   CAROUSEL_HORSES,
   CAROUSELS,
+  carouselPoleDepth,
   carouselSeats,
   horseAngle,
   horseBob,
@@ -33,20 +35,28 @@ import {
   SEESAW_HALF,
   SEESAW_PIVOT,
   seesawEndHeight,
+  seesawMotion,
   seesawSeats,
-  seesawTilt,
+  seesawSeed,
   SEESAWS,
   TRAMPOLINE_MAT,
   TRAMPOLINE_PERIOD_MS,
   trampolineHeight,
+  trampolineLandings,
+  trampolineLaunch,
   TRAMPOLINES,
+  type SeesawMotion,
   WISH_FOUNTAIN,
 } from "./rides";
 
 // 50번 광장 놀거리 (소원 분수·시소·트램펄린·회전목마)의 그림·연출·소리.
 // 자리 점유는 다른 1인 자리(그네 등)와 똑같이 서버 좌석으로 판정하고(WorldScene.useSpot / useCarousel),
 // 여기서는 매 프레임 탄 사람(나·원격)에게 그림 연출(AvatarView.ride)을 넣고 놀거리 그림을 움직인다.
-// 회전·시소 위상은 벽시계(Date.now)라 모두에게 같은 모습으로 보인다.
+// 회전·시소·트램펄린 위상은 서버 시계(host.clock — 없으면 벽시계)라 모두에게 같은 모습으로 보인다.
+//  - 시소(F5 묶음): 마주 보는 옆모습, 불규칙한 박자·세기(rides.seesawMotion), 땅을 찰 때 무릎 굽힘, 위에서 살짝 튐,
+//    착지하면 쿵 + 먼지. 한 명이면 그쪽이 땅에 앉아 톡톡. 타고 내릴 때 판이 튀지 않게 잠깐 섞는다
+//  - 트램펄린(F14): 내리려 하면(Player.offWish) 튀던 한 번이 매트에 닿는 순간 옆 땅으로 폴짝 (Player.hopOff)
+//  - 회전목마(F15): 가운데 기둥은 받침 가운데 y 깊이로 따로 그려 앞쪽으로 도는 목마·사람이 기둥 앞에 보인다. 지붕만 맨 앞
 
 /** WorldScene이 놀거리·조각배에 넘겨주는 것 (씬 안쪽을 직접 만지지 않게) */
 export type RideHost = {
@@ -66,6 +76,8 @@ export type RideHost = {
   stand(): void;
   seatReq(): SeatRequester;
   toast(message: string): void;
+  /** 서버 시계 (ms, 접속 전이면 벽시계). 없으면 Date.now — 놀거리 위상을 모두에게 같게 */
+  clock?: () => number;
 };
 
 type SpotRef =
@@ -75,6 +87,23 @@ type SpotRef =
 
 const RIDE_STATES = new Set<number>([STATE.seesaw, STATE.trampoline, STATE.carousel]);
 const HORSE_LIFT = 7;
+/** 시소: 타고 내릴 때 판 기울기를 이 시간에 걸쳐 섞는다 */
+const SEESAW_BLEND_MS = 450;
+/** 시소: 착지한 쪽이 꾹 눌리는 시간 */
+const SEESAW_SQUASH_MS = 130;
+/** 트램펄린: 내리려고 한 뒤 이만큼 지나도 순간이 안 오면(시계가 튀는 등) 그냥 뛰어내린다 */
+const TRAMP_OFF_MAX_MS = 1_400;
+
+type SeesawView = {
+  seed: number;
+  /** 지금 화면 기울기 (섞기 포함) */
+  shown: number;
+  mode: number;
+  blendFrom: number;
+  blendAt: number;
+  landId: number;
+  motion: SeesawMotion;
+};
 
 export class PlazaRides {
   private readonly spots = new Map<string, SpotRef>();
@@ -84,7 +113,7 @@ export class PlazaRides {
   private readonly horses: Phaser.GameObjects.Image[][] = [];
   /** 이번 프레임 자리 → 탄 사람 (나는 -1) */
   private readonly riders = new Map<string, number>();
-  private readonly tiltPrev: number[] = [];
+  private readonly seesaws: SeesawView[] = [];
   private trampLowPrev: boolean[] = [];
 
   constructor(private readonly host: RideHost) {
@@ -103,7 +132,8 @@ export class PlazaRides {
       scene.add.image(s.x, s.y + 1, RIDE_TEX.seesawBase).setOrigin(0.5, 1).setDepth(s.y - 0.4);
       this.planks.push(scene.add.image(s.x, s.y - SEESAW_PIVOT, RIDE_TEX.seesawPlank).setOrigin(0.5, 0.5).setDepth(s.y - 0.2));
       seesawSeats(s).forEach((p, side) => this.spots.set(spotSeatId("seesaw", p.x, p.y), { kind: "seesaw", ride: i, side: side as 0 | 1, ax: p.x, ay: p.y }));
-      this.tiltPrev.push(-1);
+      const seed = seesawSeed(s);
+      this.seesaws.push({ seed, shown: -1, mode: 0, blendFrom: -1, blendAt: -Infinity, landId: 0, motion: seesawMotion(seed, false, false, 0) });
     });
 
     // 트램펄린
@@ -113,9 +143,10 @@ export class PlazaRides {
     });
     this.trampLowPrev = TRAMPOLINES.map(() => false);
 
-    // 회전목마: 바닥 원판(바닥 장식 높이) + 목마(돌며 y 정렬) + 기둥·지붕(사람들 앞)
+    // 회전목마: 바닥 원판(바닥 장식 높이) + 목마(돌며 y 정렬) + 가운데 기둥(받침 가운데 y — 앞쪽 목마·사람은 그 앞) + 지붕(맨 앞)
     CAROUSELS.forEach((c, i) => {
       scene.add.image(c.x, c.y, RIDE_TEX.carouselFloor).setOrigin(0.5, 0.45).setDepth(DEPTH.decal + 4);
+      scene.add.image(c.x, c.y + 1, RIDE_TEX.carouselPole).setOrigin(0.5, 1).setDepth(carouselPoleDepth(c));
       scene.add.image(c.x, c.y + 1, RIDE_TEX.carouselTop).setOrigin(0.5, 1).setDepth(c.y + 40);
       const hs: Phaser.GameObjects.Image[] = [];
       for (let h = 0; h < CAROUSEL_HORSES; h++) hs.push(scene.add.image(c.x, c.y, RIDE_TEX.horse(h % HORSE_COLORS.length, false)).setOrigin(0.5, 1));
@@ -140,7 +171,7 @@ export class PlazaRides {
     const judged = h.judged();
     const occupied = h.seats();
     const me = h.mySid();
-    const wall = Date.now();
+    const wall = this.clock();
     let best: string | null = null;
     let bd = Infinity;
     for (const id of ids) {
@@ -186,8 +217,9 @@ export class PlazaRides {
    */
   prepare(): void {
     const h = this.host;
-    const wall = Date.now();
+    const wall = this.clock();
     const pl = h.player();
+    this.dismount(wall);
     this.riders.clear();
     const mine = RIDE_STATES.has(STATE[pl.state]) ? this.spotRef(pl.spotId) : undefined;
     if (mine && pl.spotId) this.riders.set(pl.spotId, -1);
@@ -195,7 +227,11 @@ export class PlazaRides {
       const ref = RIDE_STATES.has(r.stateId) ? this.spotRef(r.seatId) : undefined;
       if (ref && r.seatId) this.riders.set(r.seatId, r.sid);
     }
+    this.stepSeesaws(wall);
     pl.view.ride = mine ? this.offset(mine, wall) : pl.state === "boat" ? pl.view.ride : null;
+    // 시소: 내 캐릭터도 마주 보는 옆모습으로 (방향은 MOVE로 다른 사람에게 간다)
+    const face = pl.view.ride?.dir;
+    if (face !== undefined && pl.dir !== face) pl.dir = face;
     for (const r of h.remotes().values()) {
       const ref = RIDE_STATES.has(r.stateId) ? this.spotRef(r.seatId) : undefined;
       if (ref) r.view.ride = this.offset(ref, wall);
@@ -203,15 +239,70 @@ export class PlazaRides {
     }
   }
 
+  private clock(): number {
+    return this.host.clock ? this.host.clock() : Date.now();
+  }
+
+  /**
+   * 트램펄린에서 내리기 (F14): 내리려 한 뒤 튀던 한 번이 매트에 닿아 다시 차오르는 순간, 누른 쪽 옆 땅으로 뛰어내린다.
+   * 설 수 없는 쪽이면 가까운 각도의 다른 쪽으로
+   */
+  private dismount(t: number): void {
+    const h = this.host;
+    const pl = h.player();
+    const wish = pl.offWish;
+    if (!wish || pl.state !== "trampoline") return;
+    const ref = this.spotRef(pl.spotId);
+    const now = h.scene.time.now;
+    if (!ref || ref.kind !== "trampoline") {
+      pl.leaveAnchor(now, true);
+      return;
+    }
+    if (!trampolineLaunch(t) && now - wish.at < TRAMP_OFF_MAX_MS) return;
+    const T = TRAMPOLINES[ref.ride];
+    const to = trampolineLandings(T, wish.ax, wish.ay).find((p) => standable(p.x, p.y) && !inWater(p.x, p.y)) ?? { x: T.x, y: T.y + 10 };
+    if (wish.ax !== 0 || wish.ay !== 0) pl.dir = Math.abs(wish.ax) >= Math.abs(wish.ay) ? (wish.ax < 0 ? DIR.left : DIR.right) : wish.ay < 0 ? DIR.up : DIR.down;
+    pl.hopOff(to, TRAMPOLINE_MAT + trampolineHeight(t), now);
+    h.sound.play("boing", 0.4, 1.15 + Math.random() * 0.1);
+  }
+
+  /** 시소마다: 이번 프레임 움직임 + 타고 내릴 때 섞기 */
+  private stepSeesaws(t: number): void {
+    this.seesaws.forEach((v, i) => {
+      const left = this.occupiedSide(i, 0);
+      const right = this.occupiedSide(i, 1);
+      const mode = (left ? 1 : 0) + (right ? 2 : 0);
+      v.motion = seesawMotion(v.seed, left, right, t);
+      if (mode !== v.mode) {
+        v.mode = mode;
+        v.blendFrom = v.shown;
+        v.blendAt = t;
+      }
+      const k = Math.min(1, Math.max(0, (t - v.blendAt) / SEESAW_BLEND_MS));
+      const e = k * k * (3 - 2 * k);
+      v.shown = v.blendFrom + (v.motion.tilt - v.blendFrom) * e;
+    });
+  }
+
   private occupiedSide(ride: number, side: 0 | 1): boolean {
     const p = seesawSeats(SEESAWS[ride])[side];
     return this.riders.has(spotSeatId("seesaw", p.x, p.y));
   }
 
-  private offset(ref: SpotRef, wall: number): { ox: number; lift: number; depth: number | null } {
+  private offset(ref: SpotRef, wall: number): NonNullable<Player["view"]["ride"]> {
     if (ref.kind === "seesaw") {
-      const tilt = seesawTilt(this.occupiedSide(ref.ride, 0), this.occupiedSide(ref.ride, 1), wall);
-      return { ox: 0, lift: seesawEndHeight(ref.side, tilt) - 2, depth: ref.ay + 0.5 };
+      const v = this.seesaws[ref.ride];
+      const m = v.motion;
+      // 착지한 쪽은 잠깐 꾹 눌리고(−1px), 위로 올라간 쪽은 살짝 튄다(pop). 땅을 차는 동안 무릎 굽힘(바닥 앉기 프레임)
+      const squash = m.landSide === ref.side && wall - m.landAt < SEESAW_SQUASH_MS && m.landStrength > 0 ? 1 : 0;
+      const pushing = m.push === ref.side;
+      return {
+        ox: 0,
+        lift: seesawEndHeight(ref.side, v.shown) - 2 + m.pop[ref.side] - squash,
+        depth: ref.ay + 0.5,
+        dir: ref.side === 0 ? DIR.right : DIR.left,
+        alt: pushing ? "sitGround" : null,
+      };
     }
     if (ref.kind === "trampoline") return { ox: 0, lift: TRAMPOLINE_MAT + trampolineHeight(wall), depth: ref.ay + 1 };
     const c = CAROUSELS[ref.ride];
@@ -222,21 +313,25 @@ export class PlazaRides {
   /** 매 프레임 (아바타 갱신 뒤): 놀거리 그림과 소리 */
   update(): void {
     const h = this.host;
-    const wall = Date.now();
+    const wall = this.clock();
     const pl = h.player();
-    // 시소 판 기울기 + 땅에 닿는 소리
+    // 시소 판 기울기 + 땅에 닿으면 쿵 + 먼지
     SEESAWS.forEach((s, i) => {
-      const left = this.occupiedSide(i, 0);
-      const right = this.occupiedSide(i, 1);
-      const tilt = seesawTilt(left, right, wall);
+      const v = this.seesaws[i];
+      const tilt = v.shown;
       const rise = seesawEndHeight(0, tilt) - seesawEndHeight(1, tilt); // 왼쪽이 더 높으면 +
       this.planks[i].setRotation(Math.atan2(rise, SEESAW_HALF * 2)); // 화면 좌표: + = 시계 방향 = 왼쪽 끝이 올라감
-      const prev = this.tiltPrev[i];
-      if (left && right && Math.abs(tilt) >= 0.999 && Math.abs(prev) < 0.999) {
-        const g = falloff(Math.hypot(s.x - pl.x, s.y - pl.y), 40, 260);
-        if (g > 0) h.sound.play("seesaw", 0.55 * g, 0.95 + Math.random() * 0.1);
+      const m = v.motion;
+      if (m.landId !== v.landId) {
+        const fresh = v.landId !== 0 && v.mode === 3 && wall - m.landAt < 250;
+        v.landId = m.landId;
+        if (fresh) {
+          const ex = s.x + (m.landSide === 0 ? -1 : 1) * (SEESAW_HALF + 2);
+          const g = falloff(Math.hypot(ex - pl.x, s.y - pl.y), 40, 260);
+          if (g > 0) h.sound.play("seesaw", (0.35 + 0.35 * m.landStrength) * g, 0.82 + 0.16 * m.landStrength + Math.random() * 0.06);
+          if (!h.reduced) for (let k = 0; k < (m.landStrength > 0.6 ? 3 : 2); k++) h.fx.dust(ex - 3 + k * 3, s.y + 2);
+        }
       }
-      this.tiltPrev[i] = tilt;
     });
     // 트램펄린: 착지하면 매트가 눌리고 "통"
     TRAMPOLINES.forEach((t, i) => {
@@ -316,6 +411,7 @@ export function ensureRideTextures(scene: Phaser.Scene): void {
   addCanvasTexture(scene, RIDE_TEX.trampoline, { canvas: trampolineSheet(), frameW: TRAMP_W, frameH: TRAMP_H });
   addCanvasTexture(scene, RIDE_TEX.carouselFloor, { canvas: carouselFloor() });
   addCanvasTexture(scene, RIDE_TEX.carouselTop, { canvas: carouselTop() });
+  addCanvasTexture(scene, RIDE_TEX.carouselPole, { canvas: carouselPole() });
   HORSE_COLORS.forEach((c, v) => {
     addCanvasTexture(scene, RIDE_TEX.horse(v, false), { canvas: horse(c, false) });
     addCanvasTexture(scene, RIDE_TEX.horse(v, true), { canvas: horse(c, true) });

@@ -1,9 +1,10 @@
-import { HILL, HOUSE_LOT_H, HOUSE_LOT_W, HOUSE_LOTS, LAKE, MAP_HEIGHT, MAP_WIDTH, RIVER_HALF_W, STEP_STONE_R, STEP_STONES, TILE } from "@tomb/protocol";
-import { BRIDGE_DECKS, DECKS, GRAVEYARD_RECT, groundKind, PLAZA_RECT, PLAZA_TREES, PLAZA_WELL, riverDist, type GroundKind, type Rect } from "../world/layout";
+import { GRAVE_AREAS, HILL, HILL_CLIFF, HILL_STAIRS, HOUSE_LOT_H, HOUSE_LOT_W, HOUSE_LOTS, MAP_HEIGHT, MAP_WIDTH, PONDS, RIVER_HALF_W, RIVER_PATH, STEP_STONE_R, STEP_STONES, TELESCOPE, TILE } from "@tomb/protocol";
+import { DECKS, deckRails, ELLIPSES, ellipseD, groundKind, PLAZA_FIRE, PLAZA_RECT, PLAZA_TREES, riverDist, type GroundKind, type Rect } from "../world/layout";
 import { css, darken, hash2, lighten, makeCanvas, rng, type Color } from "./pixel";
 
-// 바닥 타일을 캔버스에 미리 구워 둔다. 맵이 가로·세로로 넓어서 CHUNK × CHUNK 정사각 덩어리로 나눠 굽고,
-// 화면 근처 덩어리만 만든다 (WorldMap). 가을~초겨울 기준의 차분한 색으로 그리고(마른 풀·낙엽·언덕의 눈), 밤 톤은 월드 틴트가 입힌다.
+// 바닥 타일을 캔버스에 미리 구워 둔다. CHUNK × CHUNK 정사각 덩어리로 나눠 굽고, 화면 근처 덩어리만 만든다 (WorldMap).
+// 가을~초겨울 기준의 차분한 색(마른 풀·낙엽·이끼 낀 묘역 흙·자갈길)으로 그리고, 밤 톤은 월드 틴트가 입힌다.
+// 별 보기 언덕(F3)은 서리 내린 높은 대지: 가장자리 밝은 턱 + 두 칸 높이 바위 절벽 + 절벽 아래 그림자 + 꼭대기 돌 마당.
 // 물(강·호수)·판자(다리·나루터·잔교)·징검다리도 바닥에 함께 굽는다 (물결 반짝임만 WorldMap이 따로 움직인다).
 
 export const CHUNK = 512;
@@ -20,10 +21,11 @@ const C = {
   grassDark: 0x4e4d32,
   grassLight: 0x6a6745,
   blade: 0x7b744c,
-  // 언덕: 서리 내린 잿빛 풀 + 눈
-  hill: 0x5f6458,
-  hillDark: 0x52574c,
-  hillLight: 0x6e7366,
+  // 언덕: 서리 내린 높은 풀밭 (아래 풀밭보다 밝고 차가운 초록)
+  hill: 0x646d4f,
+  hillDark: 0x565f43,
+  hillLight: 0x737c5b,
+  hillFrost: 0x929c80,
   snow: 0xdfe6ea,
   snowShade: 0xbfcad2,
   dirt: 0x6c5b46,
@@ -36,10 +38,14 @@ const C = {
   cobble: 0x5a554c,
   cobbleStone: 0x77716a,
   moss: 0x5d6b4a,
-  // 묘역: 이끼 낀 짙은 땅
-  grave: 0x46493a,
-  graveDark: 0x3c3f32,
-  graveLight: 0x525642,
+  // 묘역: 이끼 낀 짙은 땅 (풀밭보다 차갑고 어둡게)
+  grave: 0x3e4236,
+  graveDark: 0x33372d,
+  graveLight: 0x4b5040,
+  // 묘역 자갈길
+  gravel: 0x77736a,
+  gravelDark: 0x5e5b54,
+  gravelLight: 0x908c82,
   wall: 0x76736a,
   wallFace: 0x625f57,
   wallLine: 0x45433d,
@@ -144,10 +150,35 @@ function cliffTile(seed: number): TileCanvas {
   for (let y = 4; y < TILE; y += 4) px(ctx, 0, y, C.cliffDark, TILE, 1);
   for (let i = 0; i < 6; i++) px(ctx, Math.floor(r() * 15), 4 + Math.floor(r() * 11), C.cliffLight, 2, 1);
   for (let i = 0; i < 3; i++) px(ctx, Math.floor(r() * 16), 5 + Math.floor(r() * 10), C.cliffDark, 1, 3);
-  px(ctx, 0, 0, C.snow, TILE, 2);
-  px(ctx, 0, 2, C.snowShade, TILE, 1);
-  for (let x = 0; x < TILE; x += 3) if (r() < 0.6) px(ctx, x, 3, C.snowShade, 2, 1);
-  px(ctx, 0, TILE - 2, darken(C.cliff, 0.35), TILE, 2);
+  // 위 턱: 서리 낀 풀이 걸친 밝은 가장자리
+  px(ctx, 0, 0, lighten(C.hill, 0.18), TILE, 2);
+  px(ctx, 0, 2, C.cliffLight, TILE, 1);
+  for (let x = 0; x < TILE; x += 3) if (r() < 0.6) px(ctx, x, 3, lighten(C.hill, 0.05), 2, 1);
+  return canvas;
+}
+
+/** 절벽 아랫단 (두 칸 높이 절벽의 아래 칸): 더 어둡고, 맨 아래는 땅에 박힌 바위 */
+function cliffLowTile(seed: number): TileCanvas {
+  const { canvas, ctx } = makeCanvas(TILE, TILE);
+  const r = rng(seed);
+  px(ctx, 0, 0, darken(C.cliff, 0.12), TILE, TILE);
+  for (let y = 3; y < TILE; y += 4) px(ctx, 0, y, darken(C.cliffDark, 0.1), TILE, 1);
+  for (let i = 0; i < 5; i++) px(ctx, Math.floor(r() * 15), Math.floor(r() * 12), C.cliffLight, 2, 1);
+  for (let i = 0; i < 4; i++) px(ctx, Math.floor(r() * 16), Math.floor(r() * 12), C.cliffDark, 1, 3);
+  for (let x = 0; x < TILE; x += 4) px(ctx, x + Math.floor(r() * 2), TILE - 4, darken(C.cliff, 0.3), 3, 2);
+  px(ctx, 0, TILE - 2, darken(C.cliff, 0.5), TILE, 2);
+  return canvas;
+}
+
+/** 동쪽 비탈 (세로 바위 결) */
+function cliffSideTile(seed: number): TileCanvas {
+  const { canvas, ctx } = makeCanvas(TILE, TILE);
+  const r = rng(seed);
+  px(ctx, 0, 0, C.cliff, TILE, TILE);
+  for (let x = 3; x < TILE; x += 4) px(ctx, x, 0, C.cliffDark, 1, TILE);
+  for (let i = 0; i < 6; i++) px(ctx, Math.floor(r() * 14), Math.floor(r() * 15), C.cliffLight, 1, 2);
+  px(ctx, 0, 0, lighten(C.cliffLight, 0.15), 2, TILE);
+  px(ctx, TILE - 3, 0, darken(C.cliff, 0.4), 3, TILE);
   return canvas;
 }
 
@@ -156,10 +187,29 @@ function stairsTile(seed: number): TileCanvas {
   const r = rng(seed);
   px(ctx, 0, 0, C.cliffDark, TILE, TILE);
   for (let y = 0; y < TILE; y += 4) {
-    px(ctx, 1, y, C.stoneAlt, TILE - 2, 3);
-    px(ctx, 1, y, lighten(C.stoneAlt, 0.15), TILE - 2, 1);
-    if (r() < 0.5) px(ctx, 2 + Math.floor(r() * 10), y + 1, C.snow, 3, 1);
+    px(ctx, 2, y, C.stoneAlt, TILE - 4, 3);
+    px(ctx, 2, y, lighten(C.stoneAlt, 0.18), TILE - 4, 1);
+    px(ctx, 2, y + 3, darken(C.stoneAlt, 0.35), TILE - 4, 1);
+    if (r() < 0.3) px(ctx, 3 + Math.floor(r() * 9), y + 1, C.moss, 2, 1);
   }
+  // 양옆 돌 난간
+  px(ctx, 0, 0, darken(C.cliff, 0.2), 2, TILE);
+  px(ctx, TILE - 2, 0, darken(C.cliff, 0.2), 2, TILE);
+  return canvas;
+}
+
+/** 묘역 자갈길 */
+function gravelTile(seed: number): TileCanvas {
+  const { canvas, ctx } = makeCanvas(TILE, TILE);
+  const r = rng(seed);
+  px(ctx, 0, 0, C.gravel, TILE, TILE);
+  for (let i = 0; i < 34; i++) {
+    const x = Math.floor(r() * 15);
+    const y = Math.floor(r() * 15);
+    const c = r() < 0.45 ? C.gravelDark : C.gravelLight;
+    px(ctx, x, y, c, r() < 0.3 ? 2 : 1, 1);
+  }
+  for (let i = 0; i < 3; i++) px(ctx, Math.floor(r() * 15), Math.floor(r() * 15), C.moss);
   return canvas;
 }
 
@@ -204,12 +254,17 @@ function buildTiles(): Map<string, TileCanvas[]> {
   m.set("wallSide", v((s) => wallTile("wallSide", s), 7));
   m.set("cobble", v(cobbleTile, 8));
   m.set("grave", v((s) => speckled(s, C.grave, C.graveDark, C.graveLight, C.moss, 30), 9));
-  m.set("hill", v((s) => speckled(s, C.hill, C.hillDark, C.hillLight, C.snowShade, 24), 10));
+  m.set("hill", v((s) => speckled(s, C.hill, C.hillDark, C.hillLight, C.hillFrost, 22), 10));
   m.set("cliff", v(cliffTile, 11));
+  m.set("cliffLow", v(cliffLowTile, 13));
+  m.set("cliffSide", v(cliffSideTile, 14));
+  m.set("gravel", v(gravelTile, 15));
   m.set("stairs", v(stairsTile, 12));
   return m;
 }
 
+const CLIFF_TY0 = (HILL.y + HILL.h) / TILE;
+const CLIFF_TX = (HILL.x + HILL.w) / TILE;
 const isSoft = (k: GroundKind) => k === "grass" || k === "hill" || k === "grave";
 const isWall = (k: GroundKind) => k === "wallTop" || k === "wallFace" || k === "wallSide";
 const edgeColor = (k: GroundKind): Color => (k === "hill" ? C.hill : k === "grave" ? C.grave : C.grass);
@@ -228,7 +283,9 @@ export function drawGroundChunk(cx: number, cy = 0): HTMLCanvasElement {
     for (let i = 0; i < n; i++) {
       const tx = tx0 + i;
       const k = groundKind(tx, ty);
-      const list = tiles.get(k)!;
+      // 절벽은 두 칸 높이 (아랫단은 더 어둡게), 동쪽 비탈은 세로 결
+      const key = k === "cliff" ? (tx === CLIFF_TX && ty < CLIFF_TY0 ? "cliffSide" : ty > CLIFF_TY0 ? "cliffLow" : "cliff") : k;
+      const list = tiles.get(key)!;
       ctx.drawImage(list[Math.floor(hash2(tx, ty, 11) * list.length)], i * TILE, j * TILE);
     }
   }
@@ -265,15 +322,26 @@ export function drawGroundChunk(cx: number, cy = 0): HTMLCanvasElement {
       }
       if (!isWall(k)) {
         const up = groundKind(tx, ty - 1);
-        if ((isWall(up) && ty - 1 <= 1) || up === "cliff") {
+        if (up === "cliff" || up === "stairs") {
+          // 절벽이 드리운 그림자 (높이감): 짙게 시작해 아래로 옅어진다
+          for (let s = 0; s < 10; s++) {
+            ctx.fillStyle = `rgba(0,0,0,${(0.42 * (1 - s / 10)).toFixed(3)})`;
+            ctx.fillRect(x0, y0 + s, TILE, 1);
+          }
+        } else if (isWall(up) && ty - 1 <= 1) {
           ctx.fillStyle = "rgba(0,0,0,0.28)";
           ctx.fillRect(x0, y0, TILE, 3);
           ctx.fillStyle = "rgba(0,0,0,0.14)";
           ctx.fillRect(x0, y0 + 3, TILE, 2);
         }
-        if (groundKind(tx - 1, ty) === "wallSide" || groundKind(tx - 1, ty) === "cliff") {
+        if (groundKind(tx - 1, ty) === "wallSide") {
           ctx.fillStyle = "rgba(0,0,0,0.22)";
           ctx.fillRect(x0, y0, 3, TILE);
+        } else if (groundKind(tx - 1, ty) === "cliff" && k !== "cliff") {
+          for (let s = 0; s < 8; s++) {
+            ctx.fillStyle = `rgba(0,0,0,${(0.36 * (1 - s / 8)).toFixed(3)})`;
+            ctx.fillRect(x0 + s, y0, 1, TILE);
+          }
         }
         if (groundKind(tx + 1, ty) === "wallSide") {
           ctx.fillStyle = "rgba(0,0,0,0.12)";
@@ -305,7 +373,8 @@ export function drawGroundChunk(cx: number, cy = 0): HTMLCanvasElement {
   shadeSoftGround(ctx, area, tx0, ty0);
   drawPlaza(ctx, area);
   drawLots(ctx, area);
-  drawGraveyardBorder(ctx, area);
+  drawGraveyards(ctx, area);
+  drawHill(ctx, area);
   drawWater(ctx, area);
   drawDecks(ctx, area);
   return canvas;
@@ -331,7 +400,7 @@ function vnoise(x: number, y: number, scale: number, salt: number): number {
 /**
  * 풀밭·묘역·언덕 바닥에 큰 얼룩을 입힌다 (넓은 풀밭이 한 가지 색으로 밋밋하지 않게):
  *  - 풀밭: 누런 마른 풀 / 짙은 풀 얼룩 (4px 블록 단위 명암)
- *  - 언덕: 노이즈가 높은 곳에 눈이 쌓인다 (가장자리는 그늘진 눈), 언덕 위쪽일수록 많이
+ *  - 언덕: 서리 내린 높은 대지 (눈 얼룩 없음 — F3), 가장자리로 갈수록 살짝 어둡게
  */
 function shadeSoftGround(ctx: CanvasRenderingContext2D, area: Rect, tx0: number, ty0: number): void {
   const img = ctx.getImageData(0, 0, area.w, area.h);
@@ -339,8 +408,6 @@ function shadeSoftGround(ctx: CanvasRenderingContext2D, area: Rect, tx0: number,
   const n = CHUNK / TILE;
   const kinds: GroundKind[] = [];
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) kinds.push(groundKind(tx0 + i, ty0 + j));
-  const snow = [(C.snow >> 16) & 255, (C.snow >> 8) & 255, C.snow & 255];
-  const shade = [(C.snowShade >> 16) & 255, (C.snowShade >> 8) & 255, C.snowShade & 255];
   for (let by = 0; by < area.h; by += 4)
     for (let bx = 0; bx < area.w; bx += 4) {
       const k = kinds[Math.floor(by / TILE) * n + Math.floor(bx / TILE)];
@@ -348,17 +415,16 @@ function shadeSoftGround(ctx: CanvasRenderingContext2D, area: Rect, tx0: number,
       const wx = area.x + bx;
       const wy = area.y + by;
       if (k === "hill") {
-        const t = 1 - (wy - HILL.y) / HILL.h; // 위쪽일수록 1
-        const v = vnoise(wx, wy, 36, 61) * 0.7 + vnoise(wx, wy, 11, 67) * 0.3 + 0.1 * t - 0.04;
+        // 높은 대지: 달빛을 받아 아래 땅보다 밝고 차갑게, 가장자리(절벽 쪽)로 갈수록 살짝 어두워져 둥근 언덕처럼 보인다
+        const edge = Math.min(HILL.y + HILL.h - wy, HILL.x + HILL.w - wx, wx - HILL.x + 40, wy - HILL.y + 40);
+        const v = vnoise(wx, wy, 40, 61) - 0.5;
+        const m = 1.05 + v * 0.12 - (edge < 28 ? (28 - edge) * 0.004 : 0);
         for (let yy = 0; yy < 4; yy++)
           for (let xx = 0; xx < 4; xx++) {
-            const e = v + (hash2(wx + xx, wy + yy, 71) - 0.5) * 0.06;
-            if (e < 0.6) continue;
-            const c = e < 0.64 ? shade : snow;
             const i = ((by + yy) * area.w + bx + xx) * 4;
-            d[i] = c[0];
-            d[i + 1] = c[1];
-            d[i + 2] = c[2];
+            d[i] = Math.min(255, d[i] * m);
+            d[i + 1] = Math.min(255, d[i + 1] * m + 2);
+            d[i + 2] = Math.min(255, d[i + 2] * m + 5);
           }
         continue;
       }
@@ -392,10 +458,10 @@ function drawPlaza(ctx: CanvasRenderingContext2D, area: Rect): void {
   px(ctx, P.x + TILE - ox, P.y + P.h - 3 - oy, edge, P.w - 2 * TILE, 3);
   px(ctx, P.x - ox, P.y + TILE - oy, edge, 3, P.h - 2 * TILE);
   px(ctx, P.x + P.w - 3 - ox, P.y + TILE - oy, edge, 3, P.h - 2 * TILE);
-  // 우물 둘레 둥근 무늬 (밝은 원판 + 두 겹 고리 + 방사형 줄눈)
-  const cx = PLAZA_WELL.x;
-  const cy = PLAZA_WELL.y - 4;
-  const R = 64;
+  // 큰 모닥불 둘레 둥근 무늬 (밝은 원판 + 두 겹 고리 + 방사형 줄눈) — 통나무 의자가 이 원 안에 둘러 있다
+  const cx = PLAZA_FIRE.x;
+  const cy = PLAZA_FIRE.y + 4;
+  const R = 92;
   for (let y = -R - 2; y <= R + 2; y++)
     for (let x = -R - 2; x <= R + 2; x++) {
       const r = Math.hypot(x, y * 1.25);
@@ -407,8 +473,8 @@ function drawPlaza(ctx: CanvasRenderingContext2D, area: Rect): void {
       if (r > R - 1.5) c = 0x4e4d47;
       else if (r > R - 4.5) c = (Math.floor(Math.atan2(y, x) * 12) & 1) ? 0x9c988a : 0x8a877b;
       else if (r > R - 6) c = 0x4e4d47;
-      else if (r < 30 && r > 27) c = 0x6e6a5e;
-      else if (r < 27) c = hash2(wx, wy, 81) < 0.5 ? 0x8f8b7e : 0x868276;
+      else if (r < 42 && r > 39) c = 0x6e6a5e;
+      else if (r < 39) c = hash2(wx, wy, 81) < 0.5 ? 0x7f7a6e : 0x767166; // 그을린 화덕 둘레
       else {
         const a = Math.atan2(y, x);
         if (Math.abs(((a / (Math.PI * 2)) * 16) % 1) < 0.08) c = 0x5c5a52;
@@ -450,30 +516,89 @@ function drawLots(ctx: CanvasRenderingContext2D, area: Rect): void {
   }
 }
 
-/** 묘역 둘레 낮은 돌 테두리 (북문·동문은 비운다) */
-function drawGraveyardBorder(ctx: CanvasRenderingContext2D, area: Rect): void {
-  const g = GRAVEYARD_RECT;
-  if (!overlaps({ x: g.x - 4, y: g.y - 4, w: g.w + 8, h: g.h + 8 }, area)) return;
-  const kerb = (x: number, y: number, w: number, h: number) => {
-    px(ctx, x - area.x, y - area.y, 0x7d7a70, w, h);
-    px(ctx, x - area.x, y - area.y, 0x9a978c, w, 1);
-    px(ctx, x - area.x, y + h - area.y, 0x3a3934, w, 1);
-  };
-  const gapN = [g.x + 186, g.x + 230];
-  const gapE = [g.y + 116, g.y + 152];
-  kerb(g.x, g.y, gapN[0] - g.x, 3);
-  kerb(gapN[1], g.y, g.x + g.w - gapN[1], 3);
-  kerb(g.x, g.y + g.h - 3, g.w, 3);
-  for (let y = g.y; y < g.y + g.h; y += 1) {
-    px(ctx, g.x - area.x, y - area.y, 0x7d7a70, 3, 1);
-    if (y < gapE[0] || y > gapE[1]) px(ctx, g.x + g.w - 3 - area.x, y - area.y, 0x7d7a70, 3, 1);
+/** 묘역 땅: 철책 안쪽 가장자리 그늘 + 묘비 자리마다 살짝 솟은 흙 봉분 (철책·문은 소품) */
+function drawGraveyards(ctx: CanvasRenderingContext2D, area: Rect): void {
+  for (const a of GRAVE_AREAS) {
+    const g = a.rect;
+    if (!overlaps({ x: g.x - 4, y: g.y - 4, w: g.w + 8, h: g.h + 8 }, area)) continue;
+    for (let s = 0; s < 6; s++) {
+      ctx.fillStyle = `rgba(0,0,0,${(0.16 * (1 - s / 6)).toFixed(3)})`;
+      ctx.fillRect(g.x + s - area.x, g.y + s - area.y, g.w - 2 * s, 1);
+      ctx.fillRect(g.x + s - area.x, g.y + s - area.y, 1, g.h - 2 * s);
+      ctx.fillRect(g.x + g.w - 1 - s - area.x, g.y + s - area.y, 1, g.h - 2 * s);
+    }
+    // 봉분 (묘비 받침 뒤, 위쪽으로 길쭉한 흙더미)
+    for (let r = 0; r < a.rows; r++)
+      for (let c = 0; c < a.cols; c++) {
+        const x = a.x0 + c * a.dx + (c >= a.block ? a.aisle : 0);
+        const y = a.y0 + r * a.dy;
+        for (let yy = -16; yy <= 12; yy++)
+          for (let xx = -9; xx <= 9; xx++) {
+            const e = (xx * xx) / 81 + ((yy + 2) * (yy + 2)) / 196;
+            if (e > 1) continue;
+            const wx = x + xx;
+            const wy = y + yy;
+            if (wx < area.x || wy < area.y || wx >= area.x + area.w || wy >= area.y + area.h) continue;
+            const shade = e > 0.7 ? 0x2f332a : yy < -6 ? 0x4a4e3c : 0x40443a;
+            px(ctx, wx - area.x, wy - area.y, hash2(wx, wy, 87) < 0.08 ? C.moss : shade);
+          }
+      }
   }
 }
 
-/** 물(강·호수) 픽셀. 이미지 데이터로 한 번에 쓴다 */
+/** 별 보기 언덕 (F3): 절벽 위 밝은 턱, 꼭대기 돌 마당(망원경 자리) */
+function drawHill(ctx: CanvasRenderingContext2D, area: Rect): void {
+  const H = { x: HILL.x, y: HILL.y, w: HILL.w, h: HILL.h };
+  if (!overlaps({ x: H.x, y: H.y, w: H.w + TILE, h: H.h + HILL_CLIFF }, area)) return;
+  const bottom = H.y + H.h;
+  const right = H.x + H.w;
+  // 가장자리 턱 (남쪽·동쪽) — 계단 자리만 비운다
+  for (let x = H.x; x < right; x++) {
+    if (x >= HILL_STAIRS.x && x < HILL_STAIRS.x + HILL_STAIRS.w) continue;
+    if (x < area.x || x >= area.x + area.w) continue;
+    for (const [dy, c] of [[-3, 0x8e9888], [-2, 0xa6b0a0], [-1, 0x7a8474]] as const) {
+      const y = bottom + dy;
+      if (y >= area.y && y < area.y + area.h) px(ctx, x - area.x, y - area.y, c);
+    }
+  }
+  for (let y = H.y; y < bottom; y++) {
+    if (y < area.y || y >= area.y + area.h) continue;
+    for (const [dx, c] of [[-3, 0x8e9888], [-2, 0xa6b0a0], [-1, 0x7a8474]] as const) {
+      const x = right + dx;
+      if (x >= area.x && x < area.x + area.w) px(ctx, x - area.x, y - area.y, c);
+    }
+  }
+  // 꼭대기 돌 마당: 둥글게 깐 납작 돌 + 테두리
+  const cx = TELESCOPE.x;
+  const cy = TELESCOPE.y - 2;
+  const R = 30;
+  for (let y = -R; y <= R; y++)
+    for (let x = -R; x <= R; x++) {
+      const r = Math.hypot(x, y * 1.4);
+      if (r > R) continue;
+      const wx = cx + x;
+      const wy = cy + y;
+      if (wx < area.x || wy < area.y || wx >= area.x + area.w || wy >= area.y + area.h) continue;
+      let c: Color;
+      if (r > R - 2) c = 0x5c5e56;
+      else if (r > R - 4) c = 0x9a9c92;
+      else {
+        const cell = (Math.floor((wx + (Math.floor(wy / 5) % 2) * 3) / 6) * 7 + Math.floor(wy / 5) * 13) % 5;
+        c = (wx % 6 === 0 || wy % 5 === 0) ? 0x5e5f58 : cell < 2 ? 0x8a8c84 : cell < 4 ? 0x7e8078 : 0x939589;
+      }
+      px(ctx, wx - area.x, wy - area.y, c);
+    }
+}
+
+/** 물(강·호수·연못) 픽셀. 이미지 데이터로 한 번에 쓴다 (물이 걸치는 덩어리만) */
+const RIVER_Y0 = Math.min(...RIVER_PATH.map((p) => p.y)) - RIVER_HALF_W - 4;
+const RIVER_Y1 = Math.max(...RIVER_PATH.map((p) => p.y)) + RIVER_HALF_W + 4;
 function drawWater(ctx: CanvasRenderingContext2D, area: Rect): void {
-  const y0 = Math.max(area.y, 820);
-  const y1 = Math.min(area.y + area.h, LAKE.y + LAKE.ry + 6);
+  const boxes: Rect[] = [{ x: 0, y: RIVER_Y0, w: MAP_WIDTH, h: RIVER_Y1 - RIVER_Y0 }, ...ELLIPSES.map((e) => ({ x: e.x - e.rx - 6, y: e.y - e.ry - 6, w: e.rx * 2 + 12, h: e.ry * 2 + 12 }))];
+  const hit = boxes.filter((b) => overlaps(b, area));
+  if (!hit.length) return;
+  const y0 = Math.max(area.y, Math.min(...hit.map((b) => b.y)));
+  const y1 = Math.min(area.y + area.h, Math.max(...hit.map((b) => b.y + b.h)));
   if (y1 <= y0) return;
   const w = area.w;
   const h = y1 - y0;
@@ -490,9 +615,16 @@ function drawWater(ctx: CanvasRenderingContext2D, area: Rect): void {
     for (let x = 0; x < w; x++) {
       const wx = area.x + x + 0.5;
       const rd = riverDist(wx, wy);
-      const ldx = (wx - LAKE.x) / LAKE.rx;
-      const ldy = (wy - LAKE.y) / LAKE.ry;
-      const ld = ldx * ldx + ldy * ldy;
+      // 가장 가까운(정규화 거리가 가장 작은) 타원 물
+      let ld = Infinity;
+      let ldy = 0;
+      for (const e of ELLIPSES) {
+        const v = ellipseD(e, wx, wy);
+        if (v < ld) {
+          ld = v;
+          ldy = (wy - e.y) / e.ry;
+        }
+      }
       const i = (y * w + x) * 4;
       if (rd <= RIVER_HALF_W || ld <= 1) {
         let c: Color;
@@ -500,8 +632,7 @@ function drawWater(ctx: CanvasRenderingContext2D, area: Rect): void {
           // 가장자리 얕은 물 → 가운데 깊은 물, 경계는 디더링으로 부드럽게
           const j = (hash2(Math.floor(wx), Math.floor(wy), 49) - 0.5) * 0.18;
           c = ldy < -0.7 && ld > 0.55 ? C.waterLight : ld + j < 0.35 ? C.waterDark : ld + j > 0.86 ? lighten(C.water, 0.06) : C.water;
-        }
-        else {
+        } else {
           const t = rd / RIVER_HALF_W;
           c = t > 0.82 ? C.waterLight : t < 0.38 ? C.waterDark : C.water;
           // 물살 무늬 (짧은 가로 줄)
@@ -509,13 +640,28 @@ function drawWater(ctx: CanvasRenderingContext2D, area: Rect): void {
         }
         if (hash2(Math.floor(wx), Math.floor(wy), 41) < 0.025) c = C.waterLight;
         put(i, c);
-      } else if (rd <= RIVER_HALF_W + 2.5 || (ld <= 1.06 && ld > 1)) {
+      } else if (rd <= RIVER_HALF_W + 2.5 || (ld <= 1.07 && ld > 1)) {
         // 둑 테두리 (젖은 돌·모래)
         put(i, hash2(Math.floor(wx), Math.floor(wy), 43) < 0.5 ? C.rim : C.rimDark);
       }
     }
   }
   ctx.putImageData(img, 0, y0 - area.y);
+  // 연못 수련잎 (작은 연못만, 결정적 자리)
+  for (const p of PONDS)
+    for (let k = 0; k < 7; k++) {
+      const a = hash2(k, p.x, 91) * Math.PI * 2;
+      const rr = 0.45 + hash2(k, p.y, 93) * 0.4;
+      const lx = Math.round(p.x + Math.cos(a) * p.rx * rr);
+      const ly = Math.round(p.y + Math.sin(a) * p.ry * rr);
+      if (!overlaps({ x: lx - 4, y: ly - 3, w: 8, h: 6 }, area)) continue;
+      for (let yy = -2; yy <= 2; yy++)
+        for (let xx = -3; xx <= 3; xx++) {
+          if ((xx * xx) / 9 + (yy * yy) / 4 > 1 || (xx > 0 && yy === 0)) continue;
+          px(ctx, lx + xx - area.x, ly + yy - area.y, yy < 0 ? 0x5f7a4a : 0x4a6238);
+        }
+      if (k % 3 === 0) px(ctx, lx - 1 - area.x, ly - 1 - area.y, 0xe8d8e0, 2, 1);
+    }
   // 징검다리 돌
   for (const s of STEP_STONES) {
     if (!overlaps({ x: s.x - 8, y: s.y - 8, w: 16, h: 16 }, area)) continue;
@@ -543,20 +689,17 @@ function drawDecks(ctx: CanvasRenderingContext2D, area: Rect): void {
         px(ctx, x, y + yy, C.plankLine, dk.w, 1);
         px(ctx, x, y + yy + 1, lighten(C.plank, 0.1), dk.w, 1);
       }
-      // 난간 (다리만)
-      if (BRIDGE_DECKS.includes(dk)) {
-        px(ctx, x, y, C.plankDark, 2, dk.h);
-        px(ctx, x + dk.w - 2, y, C.plankDark, 2, dk.h);
-        for (let yy = 2; yy < dk.h; yy += 12) {
-          px(ctx, x - 1, y + yy, C.plankLine, 3, 3);
-          px(ctx, x + dk.w - 2, y + yy, C.plankLine, 3, 3);
-        }
-      }
     } else {
       for (let xx = 0; xx < dk.w; xx += 4) {
         px(ctx, x + xx, y, C.plankLine, 1, dk.h);
         px(ctx, x + xx + 1, y, lighten(C.plank, 0.1), 1, dk.h);
       }
+    }
+    // 난간 (F13: layout.deckRails와 같은 자리 — 다리 옆·나루터·잔교 끝에서 물에 빠지지 않는다) + 기둥
+    for (const r of deckRails(dk)) {
+      px(ctx, r.x - area.x, r.y - area.y, C.plankDark, r.w, r.h);
+      const along = r.h >= r.w;
+      for (let k = 0; k < (along ? r.h : r.w); k += 10) px(ctx, r.x - area.x + (along ? -1 : k), r.y - area.y + (along ? k : -1), C.plankLine, along ? 4 : 3, along ? 3 : 4);
     }
     // 물에 비친 그림자
     ctx.fillStyle = "rgba(0,0,0,0.25)";

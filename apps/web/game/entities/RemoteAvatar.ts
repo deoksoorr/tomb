@@ -1,5 +1,5 @@
 import type * as Phaser from "phaser";
-import { DIR, STATE, STATE_NAMES, seatSlot, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
+import { DIR, JUMP_MS, STATE, STATE_NAMES, seatSlot, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
 import { jumpHeight, shadowScale } from "../logic/jump";
 import { Interpolator, type InterpOut } from "../net/Interpolator";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
@@ -32,6 +32,12 @@ export class RemoteAvatar {
   dustAt = 0;
   /** 점프를 시작한 (내 시계) 시각. 보간과 따로, 상태가 jump로 바뀐 순간부터 같은 포물선을 그린다 */
   private jumpAt = -1;
+  /**
+   * 트램펄린에서 뛰어내리는 점프(F14)면 그 순간 보이던 높이(트램펄린 연출 높이)에서 시작해 땅까지 섞어 내린다
+   * (내 화면의 Player.hopOff와 같은 모양. 보간 지연 때문에 원격 화면의 튀는 위상이 조금 다를 수 있어 지금 높이에서 잇는다)
+   */
+  private jumpBase = 0;
+  private prevState: StateId = STATE.idle;
 
   constructor(
     scene: Phaser.Scene,
@@ -82,13 +88,18 @@ export class RemoteAvatar {
     this.view.apply(STATE_NAMES[o.state], o.dir, now);
     this.view.place(x, y);
     if (o.state === STATE.jump) {
-      if (this.jumpAt < 0) this.jumpAt = now;
-      const h = jumpHeight(now - this.jumpAt);
+      if (this.jumpAt < 0) {
+        this.jumpAt = now;
+        this.jumpBase = this.prevState === STATE.trampoline ? Math.max(0, this.view.poseLift) : 0;
+      }
+      const t = now - this.jumpAt;
+      const h = jumpHeight(t) + this.jumpBase * Math.max(0, 1 - t / JUMP_MS);
       this.view.setHop(h, shadowScale(h));
     } else if (this.jumpAt >= 0) {
       this.jumpAt = -1;
       this.view.setHop(0, 1);
     }
+    this.prevState = o.state;
 
     // 여유 = 이름표 폭/높이 (이름표는 화면 픽셀 크기라 줌아웃하면 월드에서 넓어진다)
     const label = this.view.label;

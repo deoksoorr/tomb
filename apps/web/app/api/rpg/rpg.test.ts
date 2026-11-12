@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { huntPlan } from "@/lib/rpg/plan";
+import { huntPlan, huntSpawnable } from "@/lib/rpg/plan";
+import { getRpgStore } from "@/lib/rpg/store";
 import { signTicket } from "@/lib/rpg/ticket";
 import type { RpgView, RunFinishResponse, RunStartResponse } from "@/lib/rpg/types";
 import { earnRule } from "@/lib/economy";
@@ -40,8 +41,8 @@ async function newVisitor(): Promise<Visitor> {
 
 const errCode = async (res: Response) => ((await res.json()) as { error: { code: string } }).error.code;
 
-async function startRun(v: Visitor, game = "hunt", difficulty = "easy") {
-  const res = await start.POST(call("/api/rpg/run/start", v, { game, difficulty }));
+async function startRun(v: Visitor, game = "hunt", difficulty = "easy", zone?: string) {
+  const res = await start.POST(call("/api/rpg/run/start", v, { game, difficulty, ...(zone ? { zone } : {}) }));
   expect(res.status).toBe(200);
   return (await res.json()) as RunStartResponse;
 }
@@ -184,5 +185,36 @@ describe("사냥터 API", () => {
     expect(l.character.skills.refactor).toBe(1);
     const bad = await character.POST(call("/x", v, { type: "learn", skill: "deploy" }));
     expect(bad.status).toBe(409);
+  });
+});
+
+describe("40번 테마 사냥터 API", () => {
+  it("사냥터는 레벨로 열리고, 고른 사냥터가 티켓에 실려 결과 검증까지 이어진다", async () => {
+    const v = await newVisitor();
+    // Lv.1: 헬스장(Lv.5)은 아직 잠김, 난이도와 안 맞는 사냥터는 거절
+    const locked = await start.POST(call("/api/rpg/run/start", v, { game: "hunt", difficulty: "easy", zone: "gym" }));
+    expect(locked.status).toBe(403);
+    expect(await errCode(locked)).toBe("ZONE_LOCKED");
+    const wrong = await start.POST(call("/api/rpg/run/start", v, { game: "hunt", difficulty: "easy", zone: "library" }));
+    expect(wrong.status).toBe(400);
+    const unknown = await start.POST(call("/api/rpg/run/start", v, { game: "hunt", difficulty: "easy", zone: "nowhere" }));
+    expect(unknown.status).toBe(400);
+    // 지옥 기본 사냥터(회식 3차)도 Lv.30부터
+    const hell = await start.POST(call("/api/rpg/run/start", v, { game: "hunt", difficulty: "hell" }));
+    expect(await errCode(hell)).toBe("ZONE_LOCKED");
+
+    // Lv.5가 되면 헬스장 → 헬스장 계획대로 다 잡으면 통과
+    await getRpgStore().update(v.id, (s) => ({ state: { ...s, level: 5 }, result: null }));
+    const s = await startRun(v, "hunt", "easy", "gym");
+    expect(s.zone).toBe("gym");
+    const plan = huntPlan(s.seed, "easy", "gym");
+    const kills = huntSpawnable(plan, Infinity) as Record<string, number>;
+    later(101_000);
+    const res = await finish.POST(call("/api/rpg/run/finish", v, { ticket: s.ticket, result: { game: "hunt", durationMs: 100_000, kills, wavesCleared: plan.length, died: false, potionsUsed: {} } }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as RunFinishResponse;
+    // 헬스장은 쉬움 중 세 번째 곳: 기본(20P)보다 조금 더
+    expect(body.reward.points).toBe(23);
+    vi.restoreAllMocks();
   });
 });

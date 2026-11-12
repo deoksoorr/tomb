@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  GRAVE_AREAS,
   AVATAR_COLORS,
   CLOSE,
   DIR,
@@ -18,9 +19,6 @@ import {
   ALTAR,
   GRID_COLS,
   GRID_ROWS,
-  GRID_X0,
-  GRID_Y0,
-  GRAVEYARD_AISLE_X,
   GRAVEYARD_CAPACITY,
   MAP_HEIGHT,
   MAP_MIN_HEIGHT,
@@ -93,14 +91,16 @@ describe("token", () => {
 });
 
 describe("world", () => {
-  it("작은 묘역: 8×4 격자, 가운데 통로 기준 좌우 대칭, 결정적", () => {
-    expect(GRID_COLS).toBe(8);
-    expect(GRID_COLS * GRID_ROWS).toBe(GRAVEYARD_CAPACITY);
-    expect(graveSlot(0)).toMatchObject({ x: GRID_X0, y: GRID_Y0, col: 0, row: 0 });
-    for (let c = 0; c < GRID_COLS / 2; c++) expect(graveSlot(c).x + graveSlot(GRID_COLS - 1 - c).x).toBe(2 * GRAVEYARD_AISLE_X);
-    expect(graveSlot(1).x - graveSlot(0).x).toBe(44);
-    expect(graveSlot(4).x - graveSlot(3).x).toBe(84);
-    expect(graveSlot(11)).toMatchObject({ col: 3, row: 1 });
+  it("묘역 세 곳: 칸 수 합계 = 정원, 묘역마다 가운데 통로 기준 좌우 대칭, 결정적", () => {
+    expect(GRAVE_AREAS.reduce((n, a) => n + a.cols * a.rows, 0)).toBe(GRAVEYARD_CAPACITY);
+    expect(GRID_COLS * GRID_ROWS).toBe(GRAVEYARD_CAPACITY); // 옛 이름 호환
+    expect(graveSlot(0)).toMatchObject({ x: GRAVE_AREAS[0].x0, y: GRAVE_AREAS[0].y0, col: 0, row: 0, area: "A" });
+    for (const a of GRAVE_AREAS) {
+      const slots = Array.from({ length: GRAVEYARD_CAPACITY }, (_, i) => graveSlot(i)).filter((s) => s.area === a.id && s.row === 0);
+      const xs = slots.map((s) => s.x).sort((p, q) => p - q);
+      expect(xs.length).toBe(a.cols);
+      for (let c = 0; c < a.cols / 2; c++) expect(xs[c] + xs[a.cols - 1 - c]).toBe(2 * a.aisleX);
+    }
     // 묘역이 넘치면 자리를 돌려 쓴다 (index % 32)
     expect(graveSlot(GRAVEYARD_CAPACITY + 5)).toEqual(graveSlot(5));
     expect(graveVisible(0, GRAVEYARD_CAPACITY + 1)).toBe(false);
@@ -110,9 +110,10 @@ describe("world", () => {
       expect(graveSlot(i).y).toBeLessThan(MAP_HEIGHT);
     }
   });
-  it("plot labels are 1-based row/column", () => {
-    expect(plotLabel(0)).toBe("1번째 줄 · 1번 자리");
-    expect(plotLabel(GRID_COLS + 6)).toBe("2번째 줄 · 7번 자리");
+  it("plot labels: 묘역 이름 + 1부터 세는 줄·자리", () => {
+    expect(plotLabel(0)).toBe("옛 묘역 1번째 줄 · 1번 자리");
+    expect(plotLabel(1)).toBe("다리 건너 묘역 1번째 줄 · 1번 자리");
+    expect(plotLabel(3)).toBe("버드나무 묘역 1번째 줄 · 1번 자리");
   });
   it("맵 크기는 고정 (묘비 수와 상관없다), 서버 범위도 맵 안", () => {
     expect(mapHeight(0)).toBe(MAP_HEIGHT);

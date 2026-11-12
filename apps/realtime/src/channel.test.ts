@@ -1,6 +1,7 @@
 import {
   AVATAR_COLORS,
   BOAT_SEATS,
+  FERRY_DOCK,
   CLOSE,
   DIR,
   FISHING_SPOTS,
@@ -914,7 +915,7 @@ describe("rowboat: a moving one-person seat (50)", () => {
   const A = BOAT_SEATS.find((b) => b.boatId === "boatA")!;
   const C0 = BOAT_SEATS.find((b) => b.boatId === "boatC" && b.index === 0)!;
   const C1 = BOAT_SEATS.find((b) => b.boatId === "boatC" && b.index === 1)!;
-  const DOCK = { x: 1302, y: 876 };
+  const DOCK = { x: FERRY_DOCK.x, y: FERRY_DOCK.y }; // 맵 개편으로 나루터가 옮겨져도 (위치는 protocol에서)
 
   it("board from the dock (wider radius), one per boat seat; the server follows the rowing boat instead of pinning it", () => {
     const { core, join } = setup();
@@ -961,6 +962,45 @@ describe("rowboat: a moving one-person seat (50)", () => {
     core.message(r, move(C0.x - 30, C0.y - 30, STATE.idle), 3_000);
     core.message(p, send({ t: "sit", seatId: C0.id }), 3_000);
     expect(core.peer(2)).toMatchObject({ seatId: C0.id, state: STATE.boat, x: C1.x - 30, y: C1.y + 6 });
+  });
+
+  it("two-seat boat away from the dock (F13): someone on the shore beside the rower boards the free back seat; strangers far away or beside another boat cannot", () => {
+    const { core, join } = setup();
+    const r = join("r", 0, DOCK);
+    core.message(r, send({ t: "sit", seatId: C0.id }), 0);
+    // 노 젓는 사람이 나루터에서 멀리 (앵커 반경 72px 밖) 저어 간다
+    for (let i = 1; i <= 4; i++) {
+      core.message(r, move(C0.x - 50 * i, C0.y + 4, STATE.boat, DIR.left), i * 1_000);
+      core.tick(i * 1_000 + 50);
+    }
+    const boatAt = { x: C0.x - 200, y: C0.y + 4 };
+    expect(core.peer(1)).toMatchObject({ seatId: C0.id, x: boatAt.x, y: boatAt.y });
+    // 물가에서 배 곁에 선 사람 → 뒷자리 (위치는 순간이동하지 않는다 — 다음 MOVE로 배 위로)
+    const shore = { x: boatAt.x + 10, y: boatAt.y - 24 };
+    const p = join("p", 5_000, shore);
+    core.message(p, send({ t: "sit", seatId: C1.id }), 5_000);
+    expect(core.peer(2)).toMatchObject({ seatId: C1.id, state: STATE.boat, x: shore.x, y: shore.y });
+    expect(events(r)).toContainEqual({ t: "seat", seatId: C1.id, sid: 2 });
+    // 자리는 한 명씩: 뒷자리가 찼으니 다른 사람은 안 된다, 앞자리(노 젓는 자리)도 안 된다
+    const q = join("q", 5_100, shore);
+    core.message(q, send({ t: "sit", seatId: C1.id }), 5_100);
+    core.message(q, send({ t: "sit", seatId: C0.id }), 5_100);
+    expect(events(q).filter((e) => e.t === "seatDenied")).toHaveLength(2);
+    // 다른 배(1인승) 곁이라고 2인승 자리를 잡을 수는 없다: 1인승 사공 곁에서 C1 요청 → 거절
+    const { core: core2, join: join2 } = setup();
+    const a = join2("a", 0, DOCK);
+    core2.message(a, send({ t: "sit", seatId: A.id }), 0);
+    for (let i = 1; i <= 4; i++) {
+      core2.message(a, move(A.x - 50 * i, A.y + 8, STATE.boat, DIR.left), i * 1_000);
+      core2.tick(i * 1_000 + 50);
+    }
+    const s2 = join2("s", 5_000, { x: A.x - 200, y: A.y - 16 });
+    core2.message(s2, send({ t: "sit", seatId: C1.id }), 5_000);
+    expect(events(s2)).toContainEqual({ t: "seatDenied", seatId: C1.id });
+    // 아무 배 곁도 아니고 나루터에서도 멀면 → 거절
+    const f2 = join2("f", 5_000, { x: A.x - 420, y: A.y - 16 });
+    core2.message(f2, send({ t: "sit", seatId: C1.id }), 5_000);
+    expect(events(f2)).toContainEqual({ t: "seatDenied", seatId: C1.id });
   });
 
   it("reload (grace) and redeploy keep the boat seat where the boat is, and nobody is nudged off a moving seat's anchor", () => {

@@ -649,10 +649,26 @@ export class ChannelCore<C extends object> {
     const old = p.seatId ? seatSlot(p.seatId) : undefined;
     const slide = !!seat && !!old && old.furnitureId !== null && old.furnitureId === seat.furnitureId;
     // 위치는 클라이언트가 마지막으로 보고한 지점으로 잰다 (서버 위치가 속도 예산 때문에 잠깐 뒤처져 있어도 거절하지 않게)
-    if (!seat || holder !== undefined || (!slide && dist(seat, { x: p.tx, y: p.ty }) > (seat.radius ?? SEAT_SERVER_RADIUS))) {
+    const at = { x: p.tx, y: p.ty };
+    // 2인승 조각배(F13): 같은 배의 다른 자리에 앉은 사람 곁이면 나루터(앵커)에서 멀어도 같이 탄다 — 배가 물가에 와 있다
+    const beside = !!seat && !slide && holder === undefined && this.besideCompanion(seat, at, p.sid);
+    if (!seat || holder !== undefined || (!slide && !beside && dist(seat, at) > (seat.radius ?? SEAT_SERVER_RADIUS))) {
       return this.sendTo(p, { t: "seatDenied", seatId });
     }
-    this.occupy(p, seat, slide);
+    this.occupy(p, seat, slide || beside);
+  }
+
+  /** 움직이는 자리(조각배)에서: 같은 배(furnitureId)의 다른 자리에 앉은 사람이 at 가까이 있는지 */
+  private besideCompanion(seat: SeatSlot, at: Point, self: number): boolean {
+    if (!seat.mobile || seat.furnitureId === null) return false;
+    const r = seat.radius ?? SEAT_SERVER_RADIUS;
+    for (const [id, sid] of this.seats) {
+      if (sid === self || id === seat.id) continue;
+      if (seatSlot(id)?.furnitureId !== seat.furnitureId) continue;
+      const q = this.peers.get(sid);
+      if (q && dist(q, at) <= r) return true;
+    }
+    return false;
   }
 
   /** MOVE로 들어온 나무·그네 상태의 자리 잡기 (이전 클라이언트용). 잡았으면(이미 내 자리 포함) true. 거절 알림은 보내지 않는다 */
@@ -666,7 +682,10 @@ export class ChannelCore<C extends object> {
     return true;
   }
 
-  /** slide = 같은 배·벤치 안에서 옮겨 앉기. 움직이는 자리(조각배)로 옮겨 앉으면 위치는 그대로 둔다 (배가 물 위에 있다) */
+  /**
+   * slide = 같은 배·벤치 안에서 옮겨 앉기, 또는 물가에서 같은 배에 탄 사람 곁으로 타기(F13).
+   * 움직이는 자리(조각배)면 위치는 그대로 둔다 (배가 물 위에 있다 — 클라이언트가 다음 MOVE로 알려 준다)
+   */
   private occupy(p: Peer<C>, seat: SeatSlot, slide = false): void {
     const seatId = seat.id;
     // 한 사람당 한 자리. DO는 한 번에 한 이벤트만 처리하므로 점유와 해제 사이에 다른 요청이 끼어들 수 없다
