@@ -305,3 +305,28 @@ export const RIDE_KEEPOUT: readonly { x: number; y: number; r: number }[] = [
   ...TRAMPOLINES.map((t) => ({ ...t, r: 22 })),
   ...CAROUSELS.map((c) => ({ ...c, r: 40 })),
 ];
+
+// ── 놀거리 소리가 들리는 범위 ──
+// 탄 사람에게는 그대로, 타지 않은 사람에게는 바로 옆(1칸까지 그대로, 2.5칸 밖이면 0)에서만 작게.
+// 예전에는 260~360px(16~22칸)까지 퍼져 광장 가운데 모닥불에 앉아 있어도 들렸다.
+
+/** 구경꾼에게 놀거리 효과음이 그대로 들리는 거리 (px, 1칸) */
+export const RIDE_HEAR_NEAR = 16;
+/** 구경꾼에게 놀거리 효과음이 완전히 사라지는 거리 (px, 2.5칸) */
+export const RIDE_HEAR_FAR = 40;
+/** 구경꾼에게 들리는 크기 (탄 사람 대비) */
+export const RIDE_BYSTANDER_GAIN = 0.5;
+/** 회전목마 오르골 크기 (탄 사람에게만) */
+export const CAROUSEL_ORGAN_LEVEL = 0.8;
+
+/** 타지 않은 사람에게 놀거리 효과음이 들리는 크기 0..RIDE_BYSTANDER_GAIN (d: 소리 난 곳까지 거리 px) */
+export function bystanderGain(d: number): number {
+  if (!Number.isFinite(d) || d >= RIDE_HEAR_FAR) return 0;
+  const k = d <= RIDE_HEAR_NEAR ? 1 : 1 - (d - RIDE_HEAR_NEAR) / (RIDE_HEAR_FAR - RIDE_HEAR_NEAR);
+  return RIDE_BYSTANDER_GAIN * k;
+}
+
+/** 회전목마 오르골 크기: 내가 목마에 타고 있을 때만 들린다 (옆에 서 있거나 모닥불에 앉아 있으면 0) */
+export function carouselOrganLevel(riding: boolean): number {
+  return riding ? CAROUSEL_ORGAN_LEVEL : 0;
+}

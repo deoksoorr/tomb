@@ -22,10 +22,12 @@ import {
 } from "../sprites/rideProps";
 import type { Effects } from "./Effects";
 import { inWater, standable, type Interactable } from "./layout";
-import { falloff, type RideSound } from "./RideSound";
+import type { RideSound } from "./RideSound";
 import {
+  bystanderGain,
   CAROUSEL_HORSES,
   CAROUSELS,
+  carouselOrganLevel,
   carouselPoleDepth,
   carouselSeats,
   horseAngle,
@@ -315,6 +317,8 @@ export class PlazaRides {
     const h = this.host;
     const wall = this.clock();
     const pl = h.player();
+    // 내가 지금 탄 놀거리 (소리: 탄 사람은 그대로, 구경꾼은 바로 옆에서만 작게 — rides.bystanderGain)
+    const mine = RIDE_STATES.has(STATE[pl.state]) ? this.spotRef(pl.spotId) : undefined;
     // 시소 판 기울기 + 땅에 닿으면 쿵 + 먼지
     SEESAWS.forEach((s, i) => {
       const v = this.seesaws[i];
@@ -327,7 +331,8 @@ export class PlazaRides {
         v.landId = m.landId;
         if (fresh) {
           const ex = s.x + (m.landSide === 0 ? -1 : 1) * (SEESAW_HALF + 2);
-          const g = falloff(Math.hypot(ex - pl.x, s.y - pl.y), 40, 260);
+          const onIt = mine?.kind === "seesaw" && mine.ride === i;
+          const g = onIt ? 1 : bystanderGain(Math.hypot(ex - pl.x, s.y - pl.y));
           if (g > 0) h.sound.play("seesaw", (0.35 + 0.35 * m.landStrength) * g, 0.82 + 0.16 * m.landStrength + Math.random() * 0.06);
           if (!h.reduced) for (let k = 0; k < (m.landStrength > 0.6 ? 3 : 2); k++) h.fx.dust(ex - 3 + k * 3, s.y + 2);
         }
@@ -341,15 +346,14 @@ export class PlazaRides {
       const low = busy && trampolineHeight(wall) < 1 && ph < TRAMPOLINE_PERIOD_MS * 0.2;
       this.tramps[i].setFrame(low ? 1 : 0);
       if (low && !this.trampLowPrev[i]) {
-        const mine = this.riders.get(id) === -1;
-        const g = mine ? 1 : falloff(Math.hypot(t.x - pl.x, t.y - pl.y), 40, 280);
-        if (g > 0) h.sound.play("boing", (mine ? 0.6 : 0.4) * g, 0.92 + Math.random() * 0.16);
-        if (!h.reduced && mine) h.fx.dust(t.x, t.y + 2);
+        const onIt = this.riders.get(id) === -1;
+        const g = onIt ? 1 : bystanderGain(Math.hypot(t.x - pl.x, t.y - pl.y));
+        if (g > 0) h.sound.play("boing", 0.6 * g, 0.92 + Math.random() * 0.16);
+        if (!h.reduced && onIt) h.fx.dust(t.x, t.y + 2);
       }
       this.trampLowPrev[i] = low;
     });
-    // 회전목마: 목마가 돈다 (뒤쪽 목마는 기둥 뒤, 앞쪽은 앞). 탄 사람이 있으면 오르골
-    let organ = 0;
+    // 회전목마: 목마가 돈다 (뒤쪽 목마는 기둥 뒤, 앞쪽은 앞). 오르골은 내가 목마에 탔을 때만 (옆·모닥불에서는 0)
     CAROUSELS.forEach((c, i) => {
       const hs = this.horses[i];
       for (let k = 0; k < hs.length; k++) {
@@ -360,11 +364,8 @@ export class PlazaRides {
         hs[k].setTexture(RIDE_TEX.horse(k % HORSE_COLORS.length, left));
         hs[k].setPosition(Math.round(p.x), Math.round(p.y - horseBob(k, wall))).setDepth(p.y);
       }
-      let busy = false;
-      for (const p of carouselSeats(c)) if (this.riders.has(spotSeatId("carousel", p.x, p.y))) busy = true;
-      if (busy) organ = Math.max(organ, falloff(Math.hypot(c.x - pl.x, c.y - pl.y), 50, 320));
     });
-    h.sound.carousel(organ * 0.8);
+    h.sound.carousel(carouselOrganLevel(mine?.kind === "carousel"));
   }
 
   /** 소원 분수에 동전 (내가 던짐: UI가 서버 결과를 받은 뒤). 동전이 날아가 퐁당 */

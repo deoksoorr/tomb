@@ -13,7 +13,7 @@ export class RideSound extends AudioHost {
   private readonly base = new Map<RideSoundName, HTMLAudioElement>();
   private readonly missing = new Set<RideSoundName>();
   private voices = 0;
-  /** 회전목마 오르골 (가까이 있고 누가 타고 있을 때만) */
+  /** 회전목마 오르골 (내가 목마에 탔을 때만 — PlazaRides가 rides.carouselOrganLevel로 정한다) */
   private readonly organ = new AmbientLoop(this, "/sfx/carousel-loop.mp3", { gain: 0.55 });
   private readonly off: () => void;
 
@@ -67,11 +67,4 @@ export class RideSound extends AudioHost {
     for (const a of this.base.values()) a.src = "";
     this.base.clear();
   }
-}
-
-/** 거리 → 소리 크기 (가까우면 1, far 밖이면 0) */
-export function falloff(d: number, near = 60, far = 360): number {
-  if (d <= near) return 1;
-  if (d >= far) return 0;
-  return 1 - (d - near) / (far - near);
 }

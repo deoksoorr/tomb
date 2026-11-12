@@ -3,11 +3,14 @@ import { BOAT_SEATS, BOATS, FERRY_DOCK, FURNITURE, LAKE, seatSlot, spotSeatId, S
 import { boatWater, joinSeat, JOIN_REACH, pickBoatSeat, shorePoint, stepBoat, ROW_SPEED, type BoatPresence } from "../logic/boat";
 import { furnitureCollider, houseCollider, inWater, interactables, standable, staticColliders, walkableGrid, WALK, waterCurrent, type Rect } from "./layout";
 import {
+  bystanderGain,
   CAROUSEL_RY,
+  carouselOrganLevel,
   carouselPoleDepth,
   CAROUSELS,
   carouselSeats,
   horseAngle,
+  RIDE_HEAR_FAR,
   rideInteractables,
   rideSpotIds,
   ringPoint,
@@ -28,7 +31,7 @@ import {
   TRAMPOLINES,
   WISH_FOUNTAIN,
 } from "./rides";
-import { HOUSE_LOTS } from "@tomb/protocol";
+import { CAMPFIRES, HOUSE_LOTS, TILE } from "@tomb/protocol";
 
 // 50번 조각배·광장 놀거리: 자리·충돌·물 위 이동·연출 수식
 
@@ -291,5 +294,27 @@ describe("F15 회전목마 그리는 순서", () => {
       expect(frontHorse.y).toBeGreaterThan(pole);
       expect(backHorse.y).toBeLessThan(pole);
     }
+  });
+});
+
+describe("놀거리 소리 범위", () => {
+  it("회전목마 오르골은 목마에 탄 사람에게만 들린다", () => {
+    expect(carouselOrganLevel(true)).toBeGreaterThan(0);
+    expect(carouselOrganLevel(false)).toBe(0);
+  });
+
+  it("구경꾼에게는 바로 옆(2.5칸 안)에서만 작게, 그 밖은 0", () => {
+    expect(RIDE_HEAR_FAR).toBeLessThanOrEqual(TILE * 2.5);
+    expect(bystanderGain(0)).toBeGreaterThan(0);
+    expect(bystanderGain(0)).toBeLessThanOrEqual(0.5);
+    expect(bystanderGain(TILE * 2)).toBeLessThan(bystanderGain(TILE));
+    expect(bystanderGain(RIDE_HEAR_FAR)).toBe(0);
+    expect(bystanderGain(TILE * 5)).toBe(0);
+    expect(bystanderGain(Number.NaN)).toBe(0);
+  });
+
+  it("어느 모닥불에 앉아 있어도 놀거리 효과음이 들리지 않는다", () => {
+    const sources = [...CAROUSELS, ...SEESAWS, ...TRAMPOLINES];
+    for (const f of CAMPFIRES) for (const r of sources) expect(bystanderGain(Math.hypot(f.x - r.x, f.y - r.y)), `${f.id}`).toBe(0);
   });
 });

@@ -11,6 +11,9 @@
 
 .photo {
   position: relative;
+  /* 표준 창(760)에서 사진이 창을 다 차지하지 않게 너비 상한 */
+  justify-self: center;
+  width: min(100%, 512px);
   aspect-ratio: 16 / 10;
   overflow: hidden;
   background: var(--bg-deep);
@@ -113,13 +116,16 @@
 
 .reactions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
-.reaction {
-  min-height: 44px;
-  padding-inline: 8px;
+/* 헌화하기: 창 너비 가득, 손가락으로 누르기 넉넉하게 (터치 44px 이상). ui.button보다 앞서도록 두 클래스로 */
+.reactions .reaction {
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 12px;
+  font-size: 14px;
 }
 
 .reaction[aria-pressed="true"] {
@@ -202,10 +208,6 @@
 }
 
 @media (max-width: 380px) {
-  .reactions {
-    grid-template-columns: 1fr;
-  }
-
   .facts > div {
     grid-template-columns: 1fr;
     gap: 2px;

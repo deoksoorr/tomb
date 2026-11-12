@@ -10,7 +10,7 @@ import { spotVerdict } from "../logic/restore";
 import { BOAT_FEET_Y, BOAT_FRAMES, BOAT_H, BOAT_TINTS, boatRowerX, boatSheet, boatW, RIDE_TEX } from "../sprites/rideProps";
 import { inWater, standable, waterCurrent } from "./layout";
 import { ensureRideTextures, type RideHost } from "./PlazaRides";
-import { falloff } from "./RideSound";
+import { bystanderGain } from "./rides";
 
 // 조각배 (50번). 나루터(FERRY_DOCK)에서 E → 빈 배의 앞자리(노 젓기) 또는 2인승 뒷자리(같이 타기). 자리는 서버 좌석(1인 1자리).
 //  - 노 젓기: 방향키·조이스틱, 물 위로만, 강에서는 물살(layout.waterCurrent)에 떠내려간다. 호수까지 갈 수 있다
@@ -385,7 +385,8 @@ export class BoatRide {
         if (now - v.strokeAt >= STROKE_MS) {
           v.strokeAt = now;
           const mine = pl.boatSeatId !== null && seatsOf(v.def.id).some((s) => s.id === pl.boatSeatId);
-          const g = mine ? 0.55 : 0.35 * falloff(Math.hypot(v.x - pl.x, v.y - pl.y), 50, 300);
+          // 노 젓는 소리: 탄 사람은 그대로, 물가 구경꾼은 바로 옆에서만 작게
+          const g = mine ? 0.55 : 0.55 * bystanderGain(Math.hypot(v.x - pl.x, v.y - pl.y));
           if (g > 0.01) h.sound.play("row", g, 0.9 + Math.random() * 0.2);
         }
       }
