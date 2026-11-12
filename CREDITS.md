@@ -18,14 +18,14 @@
 | 플레이리스트 | 곡 수 | 파일 (`apps/web/public/bgm/…`) |
 |---|---|---|
 | 오르골 | 11 | `orgel/`: moonlit-orgel, unfinished-lullaby, first-commit-waltz, archived-dreams, hello-world, forgotten-readme, localhost-lullaby, sleeping-prototype, deprecated-star, version-zero-one, last-star-on-the-graph |
-| 로파이 | 12 | `lofi/`: late-commit, todo-forever, debugging-at-3am, empty-repository, sleeping-server-room, stale-branch, cold-coffee-stack-trace, stashed-summer, expired-domain, sunday-side-project, merge-tomorrow, last-deploy, rubber-duck-at-midnight |
-| 빗소리 앰비언트 | 8 | `rain/`: rain-on-stones, distant-thunder, rainy-night-etude, night-crickets, wind-in-the-trees, tin-roof, drizzle-far-bell, foggy-dawn |
-| 잔잔한 피아노 | 5 | `piano/`: after-the-last-commit, closed-issues, commented-out-feelings, deprecated-docs, snow-on-the-server |
+| 로파이 | 13 | `lofi/`: late-commit, todo-forever, debugging-at-3am, empty-repository, sleeping-server-room, stale-branch, cold-coffee-stack-trace, stashed-summer, expired-domain, sunday-side-project, merge-tomorrow, last-deploy, rubber-duck-at-midnight |
+| 빗소리 | 8 | `rain/`: rain-on-stones, distant-thunder, rainy-night-etude, night-crickets, wind-in-the-trees, tin-roof, drizzle-far-bell, foggy-dawn |
+| 피아노 | 5 | `piano/`: after-the-last-commit, closed-issues, commented-out-feelings, deprecated-docs, snow-on-the-server |
 | 8비트 | 4 | `chiptune/`: pixel-graveyard-walk, save-point, no-extra-life, stuck-on-title-screen |
 | 재즈 카페 | 5 | `jazz/`: cafe-refactoring, blue-screen-blues, closed-startup-cafe, pull-request-bossa, late-shift-ballad |
-| 몽환 앰비언트 | 3 | `ambient/`: dreaming-in-the-cloud, garbage-collected-memories, sleep-mode |
+| 앰비언트 | 3 | `ambient/`: dreaming-in-the-cloud, garbage-collected-memories, sleep-mode |
 | 어쿠스틱 기타 | 3 | `acoustic/`: campfire-standup, porch-of-the-old-repo, autumn-backlog |
-| 레트로 RPG 마을 | 3 | `retro/`: item-shop-of-unfinished-swords, inn-at-version-zero, village-of-abandoned-quests |
+| 레트로 RPG | 3 | `retro/`: item-shop-of-unfinished-swords, inn-at-version-zero, village-of-abandoned-quests |
 
 **3차 보강 — 96곡** (플레이리스트마다 20곡을 채우려고 추가). 용량을 아끼려고 기존 곡(128kbps)과 달리 64kbps(잡음이 많은 빗소리·몽환 앰비언트는 80kbps)로, 길이는 66~84초로 구웠습니다. 기존 파일은 그대로 두고 `node scripts/gen-bgm.mjs --missing`으로 없는 파일만 굽습니다.
 
@@ -33,13 +33,28 @@
 |---|---|---|---|
 | 오르골 | 5 | 64kbps | `orgel/`: sunday-eleven-pm, payday-night-music-box, first-snow-commute, after-the-dishes, saturday-no-alarm |
 | 로파이 | 3 | 64kbps | `lofi/`: friday-six-pm, cup-noodle-overtime, last-subway-home |
-| 빗소리 앰비언트 | 12 | 80kbps | `rain/`: umbrella-crosswalk, bus-stop-downpour, cafe-window-seat, meeting-room-monsoon, rainy-monday-morning, wet-sneakers, waiting-under-the-eaves, no-umbrella-going-home, convenience-store-awning, thunder-overtime, foggy-bus-window, monsoon-office-afternoon |
-| 잔잔한 피아노 | 12 | 64kbps | `piano/`: back-seat-of-the-bus, convenience-store-light, empty-elevator, ten-pm-laundry, payday-sunset, letter-back-in-the-drawer, holiday-train-home, ten-minutes-on-the-roof, month-end-closing, after-the-farewell-party, sunday-shirt-ironing, first-workday-of-the-year |
+| 빗소리 | 12 | 80kbps | `rain/`: umbrella-crosswalk, bus-stop-downpour, cafe-window-seat, meeting-room-monsoon, rainy-monday-morning, wet-sneakers, waiting-under-the-eaves, no-umbrella-going-home, convenience-store-awning, thunder-overtime, foggy-bus-window, monsoon-office-afternoon |
+| 피아노 | 12 | 64kbps | `piano/`: back-seat-of-the-bus, convenience-store-light, empty-elevator, ten-pm-laundry, payday-sunset, letter-back-in-the-drawer, holiday-train-home, ten-minutes-on-the-roof, month-end-closing, after-the-farewell-party, sunday-shirt-ironing, first-workday-of-the-year |
 | 8비트 | 13 | 64kbps | `chiptune/`: lunch-menu-dilemma, last-meal-ticket, elevator-mind-game, coffee-ladder-game, afternoon-meeting-boss, pantry-snack-raid, clock-out-speedrun, punch-in-combo, weekly-report-quest, employee-badge-level-up, post-lunch-walk-stage, vending-machine-jackpot, parcel-arrived-alert |
 | 재즈 카페 | 10 | 64kbps | `jazz/`: morning-americano, lunch-break-bossa, rainy-day-latte, friday-happy-hour, promotion-news-bossa, espresso-before-overtime, rooftop-sunset-swing, cancelled-field-meeting, year-end-party-ballad, monday-cafe-bossa |
-| 몽환 앰비언트 | 14 | 80kbps | `ambient/`: first-morning-of-leave, rainy-day-off, four-pm-wake-up, waiting-for-the-parcel, saturday-sleep-in, sunny-window-sofa, after-work-bath, folding-laundry-sunday, payday-night-walk, no-meeting-friday, airplane-mode-day, dangerous-outside-the-blanket, last-night-of-leave, half-day-off-nap |
+| 앰비언트 | 14 | 80kbps | `ambient/`: first-morning-of-leave, rainy-day-off, four-pm-wake-up, waiting-for-the-parcel, saturday-sleep-in, sunny-window-sofa, after-work-bath, folding-laundry-sunday, payday-night-walk, no-meeting-friday, airplane-mode-day, dangerous-outside-the-blanket, last-night-of-leave, half-day-off-nap |
 | 어쿠스틱 기타 | 14 | 64kbps | `acoustic/`: saturday-tent-morning, highway-to-the-campsite, toasted-marshmallow, weekend-farm-lettuce, riverside-picnic-mat, trailhead-gimbap, feet-in-the-stream, nap-in-the-camping-chair, stargazing-sunday-night, night-before-monday, sunday-bike-ride, car-camping-by-the-sea, autumn-leaves-drive, watering-the-garden |
-| 레트로 RPG 마을 | 13 | 64kbps | `retro/`: first-login-after-work, guild-meetup-friday, pajama-dungeon, late-night-snack-buff, daily-login-reward, quest-do-the-dishes, weekend-raid-lobby, blacksmith-overtime, nap-at-the-inn, convenience-store-checkpoint, max-level-monday, alarm-before-the-boss, credits-and-cup-noodles |
+| 레트로 RPG | 13 | 64kbps | `retro/`: first-login-after-work, guild-meetup-friday, pajama-dungeon, late-night-snack-buff, daily-login-reward, quest-do-the-dishes, weekend-raid-lobby, blacksmith-overtime, nap-at-the-inn, convenience-store-checkpoint, max-level-monday, alarm-before-the-boss, credits-and-cup-noodles |
+
+**중복 정리 (2026-11) — 42곡 다시 만듦.** "이름만 다르고 같은 곡 같다"는 피드백에 따라 전체 180곡을 검사했습니다. tracks.json 파일 경로 중복 0건, mp3 해시 중복 0건, 시드 중복 0건이었고, 디코딩한 PCM 지문(앞 70초 크로마·대역 에너지, 마디 단위 크로마)과 생성 설정(진행의 근음열·조·템포·반주·드럼·빗소리 구성) 비교에서 '들으면 사실상 같은 곡'으로 판정된 곡만 새 설정(시드 1001 이상, 다른 진행·조·템포·패턴)으로 다시 구웠습니다. 파일 경로와 비트레이트(기존 128kbps, 3차 64/80kbps)는 그대로 두고 덮어썼고, 외부 곡은 건드리지 않았습니다.
+
+| 플레이리스트 | 다시 만든 곡 (`apps/web/public/bgm/…`) |
+|---|---|
+| 오르골 | `orgel/`: last-star-on-the-graph, sunday-eleven-pm |
+| 로파이 | `lofi/`: debugging-at-3am, stale-branch, expired-domain, sunday-side-project, merge-tomorrow, friday-six-pm, cup-noodle-overtime, last-subway-home |
+| 빗소리 | `rain/`: bus-stop-downpour, cafe-window-seat, wet-sneakers, convenience-store-awning, thunder-overtime, foggy-bus-window |
+| 8비트 | `chiptune/`: save-point, weekly-report-quest, vending-machine-jackpot |
+| 재즈 카페 | `jazz/`: cafe-refactoring, morning-americano, promotion-news-bossa, cancelled-field-meeting, year-end-party-ballad, monday-cafe-bossa |
+| 앰비언트 | `ambient/`: sunny-window-sofa, payday-night-walk, no-meeting-friday, airplane-mode-day, half-day-off-nap |
+| 어쿠스틱 기타 | `acoustic/`: autumn-backlog, toasted-marshmallow, stargazing-sunday-night, sunday-bike-ride, watering-the-garden |
+| 레트로 RPG | `retro/`: first-login-after-work, guild-meetup-friday, pajama-dungeon, late-night-snack-buff, nap-at-the-inn, convenience-store-checkpoint, credits-and-cup-noodles |
+
+같은 정리 때 플레이리스트 이름을 장르명(오르골·로파이·빗소리·피아노·8비트·재즈 카페·앰비언트·어쿠스틱 기타·레트로 RPG)으로 되돌리고, 자체 제작곡 제목을 목록 분위기에 맞는 회사원 일상 이름으로 바꿨습니다(외부 곡은 원제 유지).
 
 ### 외부 무료 음원 — 29곡
 원본 페이지에서 라이선스를 직접 확인한 곡만 넣었습니다(2026-11 확인, 여러 라이선스가 걸린 곡은 CC0로 사용). 받은 원본을 44.1kHz 스테레오 128kbps로 다시 인코딩하고 음량을 다른 곡과 같은 -19 LUFS로 맞췄습니다(변경 사항). happy lofi day, Dimly lit, Apple Cider는 고역을 살짝 깎았습니다. 다시 받으려면 `node scripts/gen-bgm.mjs --fetch`(출처 목록은 스크립트의 `EXTERNAL`).
@@ -54,9 +69,9 @@
 | 로파이 | `lofi/happy-lofi-day.mp3` | happy lofi day | Tarush Singhal | https://opengameart.org/content/happy-lofi-day | CC0 |
 | 로파이 | `lofi/in-the-lobby.mp3` | In the Lobby | Umplix | https://opengameart.org/content/in-the-lobby | CC0 |
 | 로파이 | `lofi/dimly-lit.mp3` | Dimly lit | iamoneabe | https://opengameart.org/content/dimly-lit | CC0 |
-| 잔잔한 피아노 | `piano/calm-piano-vaporware.mp3` | Calm Piano 1 (Vaporware) | The Cynic Project (cynicmusic.com / pixelsphere.org) | https://opengameart.org/content/calm-piano-1-vaporware | CC0 |
-| 잔잔한 피아노 | `piano/calmant.mp3` | Calmant | Kevin MacLeod (incompetech.com) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100859 | CC BY 4.0 |
-| 잔잔한 피아노 | `piano/dreamer.mp3` | Dreamer | Kevin MacLeod (incompetech.com) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600043 | CC BY 4.0 |
+| 피아노 | `piano/calm-piano-vaporware.mp3` | Calm Piano 1 (Vaporware) | The Cynic Project (cynicmusic.com / pixelsphere.org) | https://opengameart.org/content/calm-piano-1-vaporware | CC0 |
+| 피아노 | `piano/calmant.mp3` | Calmant | Kevin MacLeod (incompetech.com) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100859 | CC BY 4.0 |
+| 피아노 | `piano/dreamer.mp3` | Dreamer | Kevin MacLeod (incompetech.com) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600043 | CC BY 4.0 |
 | 8비트 | `chiptune/apple-cider.mp3` | Apple Cider | Zane Little Music | https://opengameart.org/content/apple-cider | CC0 |
 | 8비트 | `chiptune/napping-on-a-cloud.mp3` | Napping on a Cloud | congusbongus | https://opengameart.org/content/napping-on-a-cloud | CC0 |
 | 8비트 | `chiptune/8bit-bossa.mp3` | 8bit Bossa | Joth | https://opengameart.org/content/bossa-nova | CC0 |
@@ -65,16 +80,16 @@
 | 재즈 카페 | `jazz/once-in-a-while.mp3` | Once In a While | Alex McCulloch (Pro Sensory) | https://opengameart.org/content/once-in-a-while | CC0 |
 | 재즈 카페 | `jazz/coffee-house-bump.mp3` | Coffee House Bump | OatCog | https://opengameart.org/content/coffee-house-bump | CC0 |
 | 재즈 카페 | `jazz/lobby-time.mp3` | Lobby Time | Kevin MacLeod (incompetech.com) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600054 | CC BY 4.0 |
-| 몽환 앰비언트 | `ambient/waking-states.mp3` | Waking States | Tsorthan Grove | https://opengameart.org/content/waking-states | CC0 |
-| 몽환 앰비언트 | `ambient/dream-ambience.mp3` | Dream (Ambience) | TokyoGeisha | https://opengameart.org/content/dream-ambience | CC0 |
-| 몽환 앰비언트 | `ambient/contemplation.mp3` | Contemplation | Joth | https://opengameart.org/content/contemplation-0 | CC0 |
+| 앰비언트 | `ambient/waking-states.mp3` | Waking States | Tsorthan Grove | https://opengameart.org/content/waking-states | CC0 |
+| 앰비언트 | `ambient/dream-ambience.mp3` | Dream (Ambience) | TokyoGeisha | https://opengameart.org/content/dream-ambience | CC0 |
+| 앰비언트 | `ambient/contemplation.mp3` | Contemplation | Joth | https://opengameart.org/content/contemplation-0 | CC0 |
 | 어쿠스틱 기타 | `acoustic/a-small-fire-will-do.mp3` | A Small Fire Will Do | Cal McEachern (Trex0n) | https://opengameart.org/content/a-small-fire-will-do-calming-loop | CC0 |
 | 어쿠스틱 기타 | `acoustic/just-you-and-me.mp3` | Just You and Me (Guitar) | Alex McCulloch (Pro Sensory) | https://opengameart.org/content/just-you-and-me-guitar | CC0 |
 | 어쿠스틱 기타 | `acoustic/ladada-guitar.mp3` | LaDaDa Guitar | Alex McCulloch (Pro Sensory) | https://opengameart.org/content/ladada-guitar | CC0 |
-| 레트로 RPG 마을 | `retro/welcome-to-the-item-shop.mp3` | Welcome to the Item Shop | congusbongus | https://opengameart.org/content/welcome-to-the-item-shop | CC0 |
-| 레트로 RPG 마을 | `retro/quaint-town.mp3` | Quaint Town | neonarkade | https://opengameart.org/content/quaint-town | CC0 |
-| 레트로 RPG 마을 | `retro/a-new-town.mp3` | A New Town | The Cynic Project (cynicmusic.com / pixelsphere.org) | https://opengameart.org/content/a-new-town-rpg-theme | CC0 |
-| 레트로 RPG 마을 | `retro/magic-town.mp3` | Magic Town | controllerhead | https://opengameart.org/content/magic-town | CC0 |
+| 레트로 RPG | `retro/welcome-to-the-item-shop.mp3` | Welcome to the Item Shop | congusbongus | https://opengameart.org/content/welcome-to-the-item-shop | CC0 |
+| 레트로 RPG | `retro/quaint-town.mp3` | Quaint Town | neonarkade | https://opengameart.org/content/quaint-town | CC0 |
+| 레트로 RPG | `retro/a-new-town.mp3` | A New Town | The Cynic Project (cynicmusic.com / pixelsphere.org) | https://opengameart.org/content/a-new-town-rpg-theme | CC0 |
+| 레트로 RPG | `retro/magic-town.mp3` | Magic Town | controllerhead | https://opengameart.org/content/magic-town | CC0 |
 
 - Kevin MacLeod 곡 저작자 표시: "<곡명>" Kevin MacLeod (incompetech.com), Licensed under Creative Commons: By Attribution 4.0 License — http://creativecommons.org/licenses/by/4.0/
 - CC0 곡이라도 작가가 표기를 부탁한 경우(The Cynic Project, Alex McCulloch 등)를 포함해 모든 외부 곡의 작가를 이 표와 tracks.json에 적어 둡니다.
