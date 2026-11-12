@@ -160,7 +160,7 @@ function NoticeEditor({
   const [title, setTitle] = useState(notice?.title ?? "");
   const [body, setBody] = useState(notice?.body ?? "");
   const [pinned, setPinned] = useState(notice?.pinned ?? false);
-  const valid = title.trim().length > 0 && [...title.trim()].length <= 60 && body.trim().length > 0 && [...body].length <= 2000;
+  const valid = title.trim().length > 0 && [...title.trim()].length <= 60 && body.trim().length > 0 && [...body].length <= 4000;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -177,7 +177,7 @@ function NoticeEditor({
       </label>
       <label className={ui.field}>
         <span className={ui.label}>
-          본문 <span className={ui.counter}>{[...body].length}/2000</span>
+          본문 <span className={ui.counter}>{[...body].length}/4000</span>
         </span>
         <textarea className={ui.input} value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
       </label>
