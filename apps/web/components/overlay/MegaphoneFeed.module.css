@@ -127,11 +127,25 @@
   text-decoration: underline;
 }
 
+/* 터치 화면: 신고 버튼을 줄 오른쪽 끝으로 몰아 둔다 (글이 길면 글이 줄바꿈되고 버튼은 끝에 그대로) */
 @media (hover: none) {
+  .line {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+
+  .text {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
   .report {
     position: static;
     display: inline;
-    margin-left: 6px;
+    flex: none;
+    margin-left: auto;
+    padding-left: 8px;
     background: none;
   }
 }
