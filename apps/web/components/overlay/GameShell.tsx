@@ -220,16 +220,17 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const [tutorialOn, setTutorialOn] = useState<boolean | null>(null);
   const showTutorial = ready && !away && (tutorialOn ?? (me ? !me.tutorialDone : false));
 
-  // 데스크톱 T 키: 말풍선 고르기 (입력칸·열린 창이 없을 때만)
+  // 데스크톱 T 키: 말풍선 고르기, I 키: 가방 (입력칸·열린 창이 없을 때만)
   const quiet = panel === null && openGraveId === null && bury === null;
   useEffect(() => {
     if (!ready || !quiet) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "KeyT" || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((e.code !== "KeyT" && e.code !== "KeyI") || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       const el = document.activeElement;
       if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]")) return;
       e.preventDefault();
-      setPanel("say");
+      // T: 말풍선 고르기, I: 가방
+      setPanel(e.code === "KeyI" ? "bag" : "say");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

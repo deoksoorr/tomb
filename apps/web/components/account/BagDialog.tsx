@@ -54,7 +54,7 @@ type Props = {
   avatar?: { color: string; body?: string };
 };
 
-/** 가방: [꾸미기] 장비창(입은 것) + 부위별 목록, [폭죽·묘비] 쓰기·묘비에 놓기 */
+/** 가방: [꾸미기] 장비창(입은 것) + 부위별 목록, [소모품: 폭죽·확성기·묘비 꾸미기] 쓰기·묘비에 놓기 */
 export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
   const { me, error } = useMe();
   const [tab, setTab] = useState<BagTab>("wear");
@@ -106,7 +106,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
           {(
             [
               ["wear", `캐릭터 꾸미기 ${wardrobe.length}`],
-              ["other", `폭죽·묘비 ${others.reduce((n, e) => n + e.count, 0)}`],
+              ["other", `소모품 ${others.reduce((n, e) => n + e.count, 0)}`],
               ["dye", `염색권 ${dyeTicketCount(me.inventory)}`],
               ["forage", "물고기·채집물"],
             ] as const
@@ -135,7 +135,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
             <ForageBag />
           ) : (
             <div className={styles.others}>
-              {others.length === 0 && <p className={styles.empty}>폭죽·묘비 물건이 없어요. 상점에서 포인트로 살 수 있어요.</p>}
+              {others.length === 0 && <p className={styles.empty}>폭죽·확성기·묘비 꾸미기 같은 소모품이 없어요. 상점에서 포인트로 살 수 있어요.</p>}
               {OTHER_KINDS.map((kind) => {
                 const items = others.filter((e) => e.item.kind === kind);
                 if (items.length === 0) return null;

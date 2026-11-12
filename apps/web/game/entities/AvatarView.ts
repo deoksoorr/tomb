@@ -703,7 +703,8 @@ export class AvatarView {
     // 이름표 높이(height)는 이미 배율이 들어간 월드 높이 (displayHeight는 배율이 한 번 더 곱해져 이름표에 겹쳤다)
     const labelTop = this.label.y - this.label.height;
     if (this.speech) this.speech.place(this.label.x, labelTop - labelScale, labelScale, now, vis);
-    const longSit = !speaking && this.sitSince > 0 && now - this.sitSince > SIT_IDLE_MS;
+    // 벤치 상태를 고르면 기본 "…"은 띄우지 않는다
+    const longSit = !speaking && !this.mood && this.sitSince > 0 && now - this.sitSince > SIT_IDLE_MS;
     if (longSit) {
       if (!this.bubble) {
         this.bubble = this.scene.add.image(0, 0, TEX.bubble).setOrigin(0.5, 1).setDepth(DEPTH.bubble).setAlpha(0);
