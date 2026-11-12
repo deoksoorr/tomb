@@ -3,7 +3,7 @@ import Link from "next/link";
 import { SHRINE_KEEP_DAYS } from "@/lib/types";
 import styles from "../legal.module.css";
 
-export const metadata: Metadata = { title: "개인정보처리방침 · 한때는..." };
+export const metadata: Metadata = { title: "개인정보처리방침 · 한때는...", alternates: { canonical: "/privacy" } };
 
 const EFFECTIVE = "2026년 11월 12일";
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import styles from "../legal.module.css";
 
-export const metadata: Metadata = { title: "이용약관 · 한때는..." };
+export const metadata: Metadata = { title: "이용약관 · 한때는...", alternates: { canonical: "/terms" } };
 
 const EFFECTIVE = "2026년 11월 9일";
 

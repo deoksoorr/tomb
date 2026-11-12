@@ -2,21 +2,16 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { preload } from "react-dom";
 import VisitTracker from "@/components/VisitTracker";
-import { SITE_DESCRIPTION, SITE_TITLE, shareMetadata } from "./seo";
+import { IS_PRODUCTION, SITE_DESCRIPTION, SITE_TITLE, shareMetadata, siteUrl } from "./seo";
 import "./globals.css";
-
-function siteUrl(): URL {
-  const host =
-    process.env.NEXT_PUBLIC_SITE_URL ?? process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
-  if (!host) return new URL("http://localhost:3000");
-  return new URL(/^https?:\/\//.test(host) ? host : `https://${host}`);
-}
 
 export const metadata: Metadata = {
   metadataBase: siteUrl(),
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   ...shareMetadata("/api/og"),
+  // 운영이 아닌 배포(미리보기·테스트 서버)는 검색에 올리지 않는다
+  ...(IS_PRODUCTION ? {} : { robots: { index: false, follow: false } }),
 };
 
 // 입력칸 글자를 16px 이상으로 둬서 iOS 확대를 막으므로 maximumScale로 확대를 막지 않는다 (접근성).

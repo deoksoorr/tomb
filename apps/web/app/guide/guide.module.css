@@ -1,0 +1,58 @@
+/* 안내 페이지 덧붙임 (바탕은 legal.module.css를 그대로 쓴다) */
+.lead {
+  margin: 12px 0 0;
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 16px;
+}
+
+.caption {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.steps li {
+  color: var(--text);
+}
+
+.cta {
+  display: inline-block;
+  margin: 28px 0 8px;
+  padding: 10px 18px;
+  background: var(--moss-deep);
+  box-shadow: var(--px-border-strong);
+  color: var(--bone);
+  text-decoration: none;
+}
+
+.cta:hover,
+.cta:focus-visible {
+  background: var(--surface-hover);
+}
+
+.related {
+  color: var(--moss);
+}
+
+.qa {
+  margin: 0;
+}
+
+.qa dt {
+  margin: 20px 0 4px;
+  color: var(--bone);
+  font-family: var(--font-read);
+}
+
+.qa dd {
+  margin: 0;
+  color: var(--text);
+}
