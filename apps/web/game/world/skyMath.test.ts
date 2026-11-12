@@ -16,20 +16,19 @@ import { inWater, standable } from "./layout";
 import { CAROUSELS, SEESAWS, SEESAW_HALF } from "./rides";
 import {
   BALLOON_ROUTE,
-  balloonPose,
+  balloonRouteS,
   balloonSeatsOf,
   balloonState,
   boardingBalloon,
   carAngle,
-  ferrisPose,
+  ferrisLift,
   ferrisRideEnd,
-  groundHit,
   nextBoardingIn,
   pickFerrisSeat,
   placeName,
   rimPoint,
   routeLength,
-  skyFootprint,
+  routeSegments,
   WHEEL_R,
 } from "./skyMath";
 
@@ -76,20 +75,12 @@ describe("놀이기구 2: 관람차", () => {
     }
   });
 
-  it("하늘 시점: 꼭대기에서 높고 더 아래를 본다, 보이는 땅은 맵 안", () => {
-    const low = ferrisPose(0, 0);
-    const high = ferrisPose(0, FERRIS_PERIOD_MS / 2);
-    expect(high.h).toBeGreaterThan(low.h + 200);
-    expect(high.pitch).toBeLessThan(low.pitch);
-    for (const p of [low, high]) {
-      const r = skyFootprint(p, 16 / 9, 820);
-      expect(r.x).toBeGreaterThanOrEqual(0);
-      expect(r.y).toBeGreaterThanOrEqual(0);
-      expect(r.x + r.w).toBeLessThanOrEqual(MAP_WIDTH);
-      expect(r.y + r.h).toBeLessThanOrEqual(MAP_HEIGHT);
-      // 북쪽(광장·마을)을 본다: 화면 가운데 시선은 관람차보다 위쪽 땅에 닿는다
-      expect(groundHit(p, 0, 0, 16 / 9, 820).y).toBeLessThan(FERRIS.y);
-    }
+  it("탑승 장면 높이: 맨 아래 0, 꼭대기 근처에서는 1로 잠시 머문다", () => {
+    expect(ferrisLift(0)).toBe(0);
+    expect(ferrisLift(Math.PI)).toBe(1);
+    expect(ferrisLift(Math.PI - 0.4)).toBe(1);
+    expect(ferrisLift(Math.PI / 2)).toBeLessThan(0.6);
+    expect(ferrisLift(Math.PI / 2)).toBeGreaterThan(0.45);
   });
 });
 
@@ -160,12 +151,20 @@ describe("놀이기구 2: 열기구", () => {
     expect(maxWait).toBeLessThanOrEqual(BALLOON_CYCLE_MS / 2 - BALLOON_BOARD_MS + 1);
   });
 
-  it("하늘 시점: 주로 아래를 내려다보고, 보이는 땅은 맵 안", () => {
-    const s = balloonState(0, BALLOON_BOARD_MS + 40_000);
-    const p = balloonPose(s, 40_000);
-    expect(p.pitch).toBeLessThan(-0.3);
-    const r = skyFootprint(p, 16 / 9, 980);
-    expect(r.w).toBeGreaterThan(100);
-    expect(r.x + r.w).toBeLessThanOrEqual(MAP_WIDTH);
+  it("장면 땅 띠: 항로 구역 차례가 HUD 이름과 같고, 진행 거리는 출발 0 → 착륙 항로 끝", () => {
+    const segs = routeSegments();
+    expect(segs[0].s0).toBe(0);
+    expect(segs[segs.length - 1].s1).toBeCloseTo(routeLength(), 0);
+    for (let i = 1; i < segs.length; i++) expect(segs[i].s0).toBeCloseTo(segs[i - 1].s1, 5);
+    const names = segs.map((g) => g.name);
+    for (const n of ["옛 묘역", "모닥불 광장", "강", "호수", "동물원", "별 보기 언덕"]) expect(names).toContain(n);
+    for (const ms of [20_000, 50_000, 80_000]) {
+      const st = balloonState(0, BALLOON_BOARD_MS + ms);
+      const s = balloonRouteS(st);
+      const seg = segs.find((g) => s >= g.s0 && s <= g.s1);
+      expect(seg?.name ?? null).toBe(placeName(st.x, st.y));
+    }
+    expect(balloonRouteS(balloonState(0, 5_000))).toBe(0);
+    expect(balloonRouteS(balloonState(0, BALLOON_CYCLE_MS - 1))).toBeCloseTo(routeLength(), 0);
   });
 });

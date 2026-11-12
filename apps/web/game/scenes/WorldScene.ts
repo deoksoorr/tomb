@@ -477,7 +477,10 @@ export class WorldScene extends Phaser.Scene {
           v?.setLook(look ?? []);
           v?.applyAppearance(extra);
         },
-        onFirework: (sid, item, x, y) => this.fireworks.launch(item, x, y, this.fireworkView(), false, this.remotes.get(sid)?.name ?? ""),
+        onFirework: (sid, item, x, y) => {
+          this.fireworks.launch(item, x, y, this.fireworkView(), false, this.remotes.get(sid)?.name ?? "");
+          this.sky?.firework();
+        },
         onAct: (sid, kind, x, y) => this.playAct(sid, kind, x, y),
         onEmo: (sid, id) => this.expr.onRemoteEmo(sid, id),
         onMood: (sid, mood) => this.expr.onRemoteMood(sid, mood),
@@ -742,6 +745,7 @@ export class WorldScene extends Phaser.Scene {
       bridge.on("firework:fire", ({ item, grant }) => {
         // 누른 순간 내 자리에서 바로 터뜨리고, 서버에는 증서를 보낸다 (서버가 같은 채널에 알린다)
         this.fireworks.launch(item, this.player.x, this.player.y, this.fireworkView(), true, this.ctx.opts.name);
+        this.sky?.firework();
         this.net.firework(grant);
       }),
     );
@@ -1805,19 +1809,13 @@ export class WorldScene extends Phaser.Scene {
     };
     this.rides = new PlazaRides(host);
     this.boats = new BoatRide(host);
-    // 놀이기구 2: 카메라·날씨는 이 뒤에 만들어지므로 그때그때 읽는다
-    const rig = () => this.rig;
+    // 놀이기구 2: 날씨는 이 뒤에 만들어지므로 그때그때 읽는다
     const atmos = () => this.atmos;
     this.sky = new SkyRides({
       ...host,
-      get rig() {
-        return rig();
-      },
       get atmos() {
         return atmos();
       },
-      move: () => this.move,
-      canvas: this.game.canvas,
     });
   }
 

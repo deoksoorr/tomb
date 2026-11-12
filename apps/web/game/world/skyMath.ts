@@ -9,19 +9,16 @@ import {
   FERRIS_CARS,
   FERRIS_PERIOD_MS,
   FERRIS_SEATS,
-  MAP_HEIGHT,
-  MAP_WIDTH,
   ZONES,
   type BalloonSeat,
   type FerrisSeat,
 } from "@tomb/protocol";
 import type { Interactable, Rect } from "./layout";
 
-// 놀이기구 2 (관람차·열기구) — 순수 데이터와 수식. 그림·탑승·소리는 SkyRides.ts, 3D처럼 보이는 하늘 시점은 SkyView.ts.
+// 놀이기구 2 (관람차·열기구) — 순수 데이터와 수식. 그림·탑승·소리는 SkyRides.ts, 탑승 중 옆에서 본 2D 장면은 SkyStage.ts.
 //  - 관람차: 칸 위치 = 서버 시계로 돈다 (회전목마처럼 따로 주고받지 않는다). 탄 사람은 자기 칸이 한 바퀴 돌아 내려오면 내린다
 //  - 열기구: 운항 시간표(protocol balloonPhase) + 정해진 항로 → 시각만 알면 누구 화면에서나 같은 자리
-//  - 하늘 시점 카메라(SkyPose): 맵을 땅바닥 판(X = 맵 x, Z = 맵 y, Y = 높이 px)으로 보고 원근 카메라를 둔다.
-//    yaw 0 = 북쪽(맵 위쪽)을 본다, + = 오른쪽(동쪽)으로. pitch − = 아래를 본다. roll = 바람·흔들림 기울기
+//  - 탑승 중 장면: 관람차는 칸 높이(ferrisLift), 열기구는 항로 위 거리(balloonRouteS)·높이(flightLift)로 층을 움직인다
 
 // ── 관람차 (2D 그림 치수) ──
 /** 바퀴 반지름 (그림 px) · 바닥에서 바퀴 축까지 높이 */
@@ -96,7 +93,7 @@ export function ferrisRideEnd(car: number, t0: number): number {
 export const BALLOON_BASKET = { x: BALLOON_PAD.x, y: BALLOON_PAD.y } as const;
 /** 비행 중 그림에서 땅 그림자보다 위로 뜨는 높이 (px) */
 export const BALLOON_ALT_2D = 64;
-/** 하늘 시점 높이 (3D px): 순항 · 바구니 눈높이 */
+/** 높이 (px, 바람 소리 세기에 쓴다): 순항 · 바구니 눈높이 */
 export const BALLOON_CRUISE_H = 280;
 export const BALLOON_EYE_H = 12;
 /** 이륙·착륙에 쓰는 비행 시간 비율 */
@@ -209,7 +206,7 @@ export type BalloonState = {
   y: number;
   /** 그림에서 뜬 높이 (px) */
   alt: number;
-  /** 하늘 시점 높이 (3D px) */
+  /** 높이 (px, 바람 소리 세기) */
   h: number;
   /** 가는 방향 (rad, yaw와 같은 기준: 0 = 북쪽, + = 동쪽으로) */
   heading: number;
@@ -306,132 +303,66 @@ export function basketSeatDx(index: number): number {
 
 /** 지나가는 곳 이름 (땅 위 점이 들어 있는 가장 작은 구역) */
 export function placeName(x: number, y: number): string | null {
-  let best: string | null = null;
+  return zoneAt(x, y)?.name ?? null;
+}
+
+// ── 탑승 중 화면 (옆에서 본 2D 장면, SkyStage) ──
+
+/**
+ * 관람차 칸 높이 → 장면 높이 0..1. 칸 높이((1 − cos)/2)를 조금 키워 잘라서, 꼭대기 근처(±약 27°, 3초 남짓)에서는
+ * 장면이 멈춘 듯 머문다 (넓은 전경). 서버 시계 각도만 쓰므로 시작·꼭대기·내리는 때가 실제와 같다
+ */
+export function ferrisLift(angle: number): number {
+  const up = (1 - Math.cos(angle)) / 2;
+  return Math.min(1, up * 1.06);
+}
+
+export type RouteSeg = {
+  /** 항로 위 거리 (px) 시작·끝 */
+  s0: number;
+  s1: number;
+  /** 구역 종류 (ZONES id, 구역 밖이면 null) · 이름 */
+  id: string | null;
+  name: string | null;
+};
+
+/** 땅 위 점이 들어 있는 가장 작은 구역 */
+export function zoneAt(x: number, y: number): (typeof ZONES)[number] | null {
+  let best: (typeof ZONES)[number] | null = null;
   let area = Infinity;
   for (const z of ZONES) {
     if (x < z.x || x > z.x + z.w || y < z.y || y > z.y + z.h) continue;
     const a = z.w * z.h;
     if (a < area) {
       area = a;
-      best = z.name;
+      best = z;
     }
   }
   return best;
 }
 
-// ── 하늘 시점 카메라 ──
-export type SkyPose = { x: number; z: number; h: number; yaw: number; pitch: number; roll: number };
-const DEG = Math.PI / 180;
-/** 세로 시야각 */
-export const SKY_FOV_Y = 52 * DEG;
-
-/**
- * 관람차 칸에서의 시점: 칸 높이를 따라 오르내리고(바닥 근처 22 → 꼭대기 272), 북쪽(광장·마을)을 본다.
- * 오를수록 더 아래를 내려다보고, 꼭대기 근처에서는 천천히 왼쪽에서 오른쪽으로 둘러본다
- */
-export function ferrisPose(car: number, t: number): SkyPose {
-  const a = carAngle(car, t);
-  const up = (1 - Math.cos(a)) / 2; // 0 아래 … 1 꼭대기
-  const top = up * up * up;
-  const look = Math.sin((a - Math.PI) * 1.6) * 0.42 * top;
-  return {
-    x: FERRIS.x - Math.sin(a) * 60,
-    z: FERRIS.y - 6,
-    h: 22 + 250 * up,
-    yaw: look,
-    pitch: -(7 + 31 * up) * DEG,
-    roll: Math.sin(t / 1700) * 0.6 * DEG,
-  };
+let segs: RouteSeg[] | null = null;
+/** 항로를 지나가는 구역 차례 (열기구 장면의 땅 띠를 이 차례로 그린다 — HUD 이름 placeName과 같은 판정) */
+export function routeSegments(): readonly RouteSeg[] {
+  if (segs) return segs;
+  const L = routeLength();
+  const out: RouteSeg[] = [];
+  const STEP = 6;
+  for (let s = 0; s <= L; s += STEP) {
+    const p = routeAt(s);
+    const z = zoneAt(p.x, p.y);
+    const name = z?.name ?? null;
+    const last = out[out.length - 1];
+    if (last && last.name === name) last.s1 = Math.min(L, s + STEP);
+    else out.push({ s0: s, s1: Math.min(L, s + STEP), id: z?.id ?? null, name });
+  }
+  segs = out;
+  return out;
 }
 
-/**
- * 열기구 바구니에서의 시점: 가는 쪽을 보며 주로 아래를 내려다보고, 가끔(약 26초마다 7초) 지평선 쪽으로 고개를 든다.
- * 바람에 살짝 흔들린다 (roll·yaw)
- */
-export function balloonPose(s: BalloonState, flightMs: number): SkyPose {
-  const cycle = 26_000;
-  const ph = (((flightMs % cycle) + cycle) % cycle) / cycle;
-  const raise = ph > 0.62 && ph < 0.9 ? Math.sin(((ph - 0.62) / 0.28) * Math.PI) : 0;
-  const lift = flightLift(s.u);
-  return {
-    x: s.x,
-    z: s.y + 30 * lift,
-    h: s.h,
-    yaw: s.heading + Math.sin(flightMs / 5200) * 0.08,
-    pitch: (-(14 + 30 * lift) + 24 * raise * lift) * DEG,
-    roll: (Math.sin(flightMs / 1900) * 1.1 + Math.sin(flightMs / 830) * 0.4) * DEG * lift,
-  };
-}
-
-/** 카메라 축 (right, up, fwd) — 셰이더와 같은 식 */
-export function poseBasis(p: SkyPose): { r: [number, number, number]; u: [number, number, number]; f: [number, number, number] } {
-  const cp = Math.cos(p.pitch);
-  const f: [number, number, number] = [Math.sin(p.yaw) * cp, Math.sin(p.pitch), -Math.cos(p.yaw) * cp];
-  const r0: [number, number, number] = [Math.cos(p.yaw), 0, Math.sin(p.yaw)];
-  // up = right × fwd
-  const u0: [number, number, number] = [r0[1] * f[2] - r0[2] * f[1], r0[2] * f[0] - r0[0] * f[2], r0[0] * f[1] - r0[1] * f[0]];
-  const c = Math.cos(p.roll);
-  const s = Math.sin(p.roll);
-  const r: [number, number, number] = [r0[0] * c + u0[0] * s, r0[1] * c + u0[1] * s, r0[2] * c + u0[2] * s];
-  const u: [number, number, number] = [u0[0] * c - r0[0] * s, u0[1] * c - r0[1] * s, u0[2] * c - r0[2] * s];
-  return { r, u, f };
-}
-
-/** 화면 점(nx, ny ∈ −1..1, y 위가 +)에서 나간 시선이 땅에 닿는 곳 (맵 좌표). 땅에 안 닿거나 far보다 멀면 far 거리의 점 */
-export function groundHit(p: SkyPose, nx: number, ny: number, aspect: number, far: number): { x: number; y: number; hit: boolean } {
-  const B = poseBasis(p);
-  const ty = Math.tan(SKY_FOV_Y / 2);
-  const tx = ty * aspect;
-  const d = [0, 1, 2].map((i) => B.f[i] + B.r[i] * nx * tx + B.u[i] * ny * ty);
-  const len = Math.hypot(d[0], d[1], d[2]);
-  const dir = d.map((v) => v / len);
-  if (dir[1] < -1e-4) {
-    const t = p.h / -dir[1];
-    const hx = dir[0] * t;
-    const hz = dir[2] * t;
-    const hd = Math.hypot(hx, hz);
-    if (hd <= far) return { x: p.x + hx, y: p.z + hz, hit: true };
-  }
-  const hl = Math.hypot(dir[0], dir[2]) || 1;
-  return { x: p.x + (dir[0] / hl) * far, y: p.z + (dir[2] / hl) * far, hit: false };
-}
-
-/**
- * 이 시점에서 보이는 땅을 다 담는 맵 사각형 (월드 카메라를 이 사각형에 맞춰 그리고 그 화면을 땅바닥 판 그림으로 쓴다).
- * 맵 밖은 잘라낸다 (셰이더가 맵 밖을 따로 칠한다). 너무 작으면 min 크기로
- */
-export function skyFootprint(p: SkyPose, aspect: number, far: number, min = 160): Rect {
-  let x0 = p.x;
-  let x1 = p.x;
-  let y0 = p.z;
-  let y1 = p.z;
-  const N = 6;
-  for (let i = 0; i <= N; i++) {
-    for (let j = 0; j <= N; j++) {
-      if (i !== 0 && i !== N && j !== 0 && j !== N) continue;
-      const g = groundHit(p, (i / N) * 2 - 1, (j / N) * 2 - 1, aspect, far);
-      x0 = Math.min(x0, g.x);
-      x1 = Math.max(x1, g.x);
-      y0 = Math.min(y0, g.y);
-      y1 = Math.max(y1, g.y);
-    }
-  }
-  const pad = 24;
-  x0 = Math.max(0, x0 - pad);
-  y0 = Math.max(0, y0 - pad);
-  x1 = Math.min(MAP_WIDTH, x1 + pad);
-  y1 = Math.min(MAP_HEIGHT, y1 + pad);
-  if (x1 - x0 < min) {
-    const c = Math.max(min / 2, Math.min(MAP_WIDTH - min / 2, (x0 + x1) / 2));
-    x0 = c - min / 2;
-    x1 = c + min / 2;
-  }
-  if (y1 - y0 < min) {
-    const c = Math.max(min / 2, Math.min(MAP_HEIGHT - min / 2, (y0 + y1) / 2));
-    y0 = c - min / 2;
-    y1 = c + min / 2;
-  }
-  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+/** 열기구가 지금 항로 위 어디쯤인지 (px, 0..routeLength) */
+export function balloonRouteS(s: BalloonState): number {
+  return s.boarding ? 0 : flightProgress(s.u) * routeLength();
 }
 
 // ── 상호작용·충돌 (layout.ts가 더한다) ──

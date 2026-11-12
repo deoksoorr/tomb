@@ -75,9 +75,6 @@ export class Atmosphere {
   private thunderAt = 0;
   private flashAt = -Infinity;
   private flashPower = 0;
-  /** 놀이기구 하늘 시점 중 (SkyRides가 켠다): 화면에 붙은 날씨 층을 숨긴다 */
-  skyView = false;
-  private skyWas = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -275,18 +272,6 @@ export class Atmosphere {
       this.snowFar.tilePositionX = Math.sin(s * 0.7) * 4;
       this.snowNear.tilePositionY -= dt * 0.024 * k;
       this.snowNear.tilePositionX = Math.sin(s * 0.9 + 1) * 7;
-    }
-
-    if (this.skyView) {
-      // 놀이기구 하늘 시점: 화면에 붙은 비·눈·안개·구름·가장자리 어둠은 SkyView가 따로 그린다 (땅바닥 판 그림에 찍히지 않게).
-      // 시간대 색은 맵 전체를 덮도록 넓힌다 (하늘 시점은 아주 멀리까지 담는다)
-      for (const o of [this.rainFar, this.rainNear, this.snowFar, this.snowNear, this.fogFar, this.fogNear, this.cloud, this.vignette]) o.setVisible(false);
-      this.tint.setPosition(cam.width / 2, cam.height / 2).setDisplaySize(cam.width / cam.zoom + 64, cam.height / cam.zoom + 64);
-      this.skyWas = true;
-    } else if (this.skyWas) {
-      this.skyWas = false;
-      this.vignette.setVisible(true);
-      this.resize();
     }
 
     this.updateSplashes(time, dt, rain, view);
