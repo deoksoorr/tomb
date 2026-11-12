@@ -10,15 +10,17 @@
   bottom: var(--safe-bottom);
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 26px;
-  padding: 4px 9px 4px 7px;
+  gap: 7px;
+  min-height: 38px;
+  padding: 7px 14px 7px 11px;
   border: 0;
   border-radius: 0;
-  background: rgba(20, 21, 17, 0.78);
-  color: var(--candle);
+  background: linear-gradient(#c2453f, #8f2a2a);
+  color: #fff6e0;
   font-family: var(--font-small);
-  font-size: 11px;
+  font-size: 14px;
+  font-weight: 700;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
   line-height: 1.2;
   white-space: nowrap;
   box-shadow:
@@ -26,8 +28,11 @@
     0 2px 0 0 rgba(224, 195, 106, 0.55),
     -2px 0 0 0 rgba(224, 195, 106, 0.55),
     2px 0 0 0 rgba(224, 195, 106, 0.55),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.35);
-  opacity: 0.85;
+    inset 0 -2px 0 rgba(0, 0, 0, 0.35),
+    0 0 16px rgba(255, 120, 100, 0.55);
+  opacity: 1;
+  /* 눈에 띄게: 은은하게 빛나며 숨쉬기 (움직임 줄이기면 멈춤) */
+  animation: donateGlow 2.4s ease-in-out infinite;
   transform: translateX(-50%);
   touch-action: manipulation;
   user-select: none;
@@ -161,4 +166,15 @@
 .sign {
   color: var(--muted);
   font-size: 12px;
+}
+
+@keyframes donateGlow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.25); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    animation: none;
+  }
 }
