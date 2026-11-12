@@ -178,3 +178,27 @@
     animation: none;
   }
 }
+
+/* 후원 창: 문구 없이 QR만 크게, 금색 이중 테두리로 공식 느낌 */
+.body {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+}
+
+.qrBox {
+  margin: 0;
+  padding: 18px;
+  background: #fffaf0;
+  box-shadow:
+    0 0 0 4px #c9a24a,
+    0 0 0 8px #2a2217,
+    0 0 0 11px #c9a24a,
+    0 0 40px rgba(201, 162, 74, 0.45);
+}
+
+.qr {
+  display: block;
+  width: min(420px, 70vw, 60vh);
+  height: auto;
+}
