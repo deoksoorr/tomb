@@ -176,7 +176,7 @@ export default function HauntDialog({ onClose }: { onClose: () => void }) {
 
   if (phase === "result" && outcome) {
     return (
-      <Dialog title="귀신의집" onClose={onClose}>
+      <Dialog title="귀신의집" kind="confirm" onClose={onClose}>
         <div className={s.result}>
           <p className={s.resultBig}>{outcome.escaped ? "살아서 빠져나왔어요!" : "중간에 도망쳐 나왔어요"}</p>
           <div className={h.stats}>
@@ -207,7 +207,7 @@ export default function HauntDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog title="귀신의집" onClose={onClose}>
+    <Dialog title="귀신의집" kind="confirm" onClose={onClose}>
       <div className={s.result}>
         <p>
           낡은 집 안은 촛불 하나로는 앞이 잘 보이지 않는 미로예요. 들어갈 때마다 길이 조금씩 바뀌고,
