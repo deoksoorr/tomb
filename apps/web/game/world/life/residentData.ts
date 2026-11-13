@@ -38,7 +38,7 @@ const [BONE, MOSS, MIST, OCHRE, LAVENDER, CANDLE] = AVATAR_COLORS;
 export const RESIDENTS: readonly ResidentDef[] = [
   {
     id: "kimdr",
-    name: "야근하는 김대리",
+    name: "김대리",
     body: "suit",
     color: MIST,
     look: [],
@@ -59,7 +59,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "parkjj",
-    name: "퇴사 고민 중인 박주임",
+    name: "박주임",
     body: "hood",
     color: BONE,
     look: ["neck_scarf"],
@@ -80,7 +80,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "firekeeper",
-    name: "모닥불 지킴이",
+    name: "불지기",
     body: "sheet",
     color: CANDLE,
     look: ["hand_lantern"],
@@ -101,7 +101,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "leegj",
-    name: "커피 수혈 중인 이과장",
+    name: "이과장",
     body: "cup",
     color: OCHRE,
     look: [],
@@ -121,7 +121,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "choisw",
-    name: "칼퇴 요정 최사원",
+    name: "최사원",
     body: "bun",
     color: LAVENDER,
     look: ["hat_flower"],
@@ -142,7 +142,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "jungcj",
-    name: "별 보는 정차장",
+    name: "정차장",
     body: "tall",
     color: MIST,
     look: ["hat_halo"],
@@ -162,7 +162,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "handr",
-    name: "강변 산책하는 한대리",
+    name: "한대리",
     body: "umbrella",
     color: CANDLE,
     look: [],
@@ -182,7 +182,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "ohbj",
-    name: "낚시 구경꾼 오부장",
+    name: "오부장",
     body: "box",
     color: MOSS,
     look: ["hat_straw"],
@@ -202,7 +202,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "yoonjj",
-    name: "서쪽 모닥불의 윤주임",
+    name: "윤주임",
     body: "round",
     color: OCHRE,
     look: [],
@@ -222,7 +222,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "seogj",
-    name: "남쪽 모닥불의 서과장",
+    name: "서과장",
     body: "catmask",
     color: BONE,
     look: [],
@@ -242,7 +242,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "jangin",
-    name: "묘역 산책하는 장인턴",
+    name: "장인턴",
     body: "cat",
     color: LAVENDER,
     look: ["hat_cat"],
@@ -262,7 +262,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "kangdr",
-    name: "동굴 앞 탐험가 강대리",
+    name: "강대리",
     body: "hood",
     color: MOSS,
     look: ["hand_lantern"],
@@ -282,7 +282,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "limtj",
-    name: "골목 어귀 임팀장",
+    name: "임팀장",
     body: "suit",
     color: OCHRE,
     look: [],
@@ -302,7 +302,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "songjj",
-    name: "호박밭 농부 송주임",
+    name: "송주임",
     body: "round",
     color: CANDLE,
     look: ["hat_straw"],
@@ -322,7 +322,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "baeksw",
-    name: "다리 건너 백사원",
+    name: "백사원",
     body: "bun",
     color: MOSS,
     look: ["neck_scarf"],
