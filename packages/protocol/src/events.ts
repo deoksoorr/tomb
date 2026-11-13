@@ -4,6 +4,7 @@ import { MAX_GRANT_LEN } from "./grants";
 import type { MegaphoneScope } from "./items";
 import { GOBLIN_ID_RE, type GoblinInfo } from "./npc";
 import type { AvatarDye } from "./dye";
+import { isAwayPlace, type AwayPlace } from "./friends";
 import type { PeerInfo, Sid } from "./types";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
@@ -55,7 +56,7 @@ export type C2S =
    * 실내(상점·집·분양 마을·사냥터·미니게임 같은 하위 장면)에 들어가 있다(on)·나왔다. 월드 채널만.
    * 메인 맵에서는 문 앞에 멈춰 있으니 다른 사람 화면에서는 숨긴다. 옛 서버는 모르는 t라 버린다(그러면 예전처럼 문 앞에 보인다)
    */
-  | { t: "away"; on: boolean }
+  | { t: "away"; on: boolean; /** 친구: 어느 실내인지 (옛 클라이언트는 없다) */ p?: AwayPlace }
   /** 말풍선 자유 채팅 (CHAT_MAX자). 서버가 토큰 버킷으로 도배를 막고 가려서(maskChat) 같은 채널·방에만 중계한다. 저장하지 않는다 */
   | { t: "chat"; text: string };
 
@@ -198,7 +199,8 @@ export function parseC2S(text: string): C2S | null {
     case "rod":
       return typeof m.on === "boolean" ? { t: "rod", on: m.on } : null;
     case "away":
-      return typeof m.on === "boolean" ? { t: "away", on: m.on } : null;
+      // p(어느 실내)는 모르는 값이면 p만 빼고 받는다 (장소가 늘어난 새 클라이언트도 실내 표시는 된다)
+      return typeof m.on === "boolean" ? { t: "away", on: m.on, ...(m.on && isAwayPlace(m.p) ? { p: m.p } : {}) } : null;
     case "chat": {
       const text = normalizeChat(m.text);
       return text ? { t: "chat", text } : null;

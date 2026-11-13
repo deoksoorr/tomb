@@ -12,6 +12,12 @@ const speciesId = z.enum(SPECIES.map((s) => s.id) as [string, ...string[]], "모
 
 export const CastSchema = z.object({ spot: spotId });
 export const ReelSchema = z.object({ ticket, ok: z.boolean() });
+/** 자동 낚시: 켜기(자리·채널) / 정산 / 끄기 */
+export const AutoFishSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("start"), spot: spotId, ch: z.number().int().min(0).max(999).nullish() }),
+  z.object({ action: z.literal("sync") }),
+  z.object({ action: z.literal("stop") }),
+]);
 export const GatherStartSchema = z.object({ node: nodeId });
 const count = z.number().int().min(0).max(10_000);
 /** 곤충 수풀 미니게임 결과 (옛 사냥터 "벌레 잡기"와 같은 모양) */

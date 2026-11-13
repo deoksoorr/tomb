@@ -67,6 +67,7 @@ function fakeRealtime(peers: Record<number, { visitorId: string; name: string }>
     calls.push({ op: r.op, body: JSON.parse(body) as Record<string, unknown> });
     if (r.op === "kick") return Response.json({ expelled: r.visitorIds.length });
     if (r.op === "me") return Response.json({ sent: r.visitorIds.length });
+    if (r.op === "where") return Response.json({ where: {} });
     return Response.json({ peer: r.ch === 1 ? (peers[r.sid] ?? null) : null });
   });
   return calls;

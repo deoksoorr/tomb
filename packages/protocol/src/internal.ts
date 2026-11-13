@@ -1,4 +1,5 @@
 import { ROOM_ID_RE } from "./constants";
+import { WHERE_MAX_IDS } from "./friends";
 import { hmacSign, hmacVerify } from "./token";
 
 // 47번: Vercel(웹 서버) → 실시간 서버 내부 요청 서명. 브라우저를 거치지 않는 서버끼리의 호출이라
@@ -6,6 +7,7 @@ import { hmacSign, hmacVerify } from "./token";
 //  - POST /internal/kick  { visitorIds, code, exp }       → 열린 채널에서 그 방문자들을 code로 내보낸다
 //  - POST /internal/peer  { ch | room, sid, exp }        → 그 채널·방의 sid가 누구인지 (유저 신고 대상 확인)
 //  - POST /internal/me    { visitorIds, exp }              → 접속 중인 그 방문자들에게 "내 정보 새로 받기"(관리자 포인트 지급 등)
+//  - POST /internal/where { visitorIds, fresh?, exp }      → 친구: 그 방문자들이 지금 어느 채널·자리에 있는지 (접속 안 했으면 빠진다)
 
 export const INTERNAL_SIG_HEADER = "X-Tomb-Internal";
 /** 내부 요청 유효 시간 (초). 서버끼리라 짧게 */
@@ -16,7 +18,9 @@ export const INTERNAL_KICK_MAX = 50;
 export type InternalKick = { op: "kick"; visitorIds: string[]; code: number; exp: number };
 export type InternalPeer = { op: "peer"; ch?: number; room?: string; sid: number; exp: number };
 export type InternalMe = { op: "me"; visitorIds: string[]; exp: number };
-export type InternalRequest = InternalKick | InternalPeer | InternalMe;
+/** fresh = 실시간 서버의 위치 기억(WHERE_CACHE_MS)을 건너뛰고 지금 채널들에 묻는다 (친구한테 가기) */
+export type InternalWhere = { op: "where"; visitorIds: string[]; fresh?: boolean; exp: number };
+export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere;
 
 const sigData = (body: string) => "internal:" + body;
 
@@ -56,6 +60,12 @@ export async function verifyInternal(
     if (!Array.isArray(ids) || ids.length < 1 || ids.length > INTERNAL_KICK_MAX) return null;
     if (!ids.every((v) => typeof v === "string" && VISITOR_RE.test(v))) return null;
     return { op: "me", visitorIds: ids as string[], exp: r.exp };
+  }
+  if (r.op === "where") {
+    const ids = r.visitorIds;
+    if (!Array.isArray(ids) || ids.length < 1 || ids.length > WHERE_MAX_IDS) return null;
+    if (!ids.every((v) => typeof v === "string" && VISITOR_RE.test(v))) return null;
+    return { op: "where", visitorIds: ids as string[], ...(r.fresh === true ? { fresh: true } : {}), exp: r.exp };
   }
   if (r.op === "peer") {
     if (typeof r.sid !== "number" || !Number.isInteger(r.sid) || r.sid < 0) return null;

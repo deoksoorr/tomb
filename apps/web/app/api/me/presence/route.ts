@@ -1,6 +1,7 @@
 import { runAfter, sampleConcurrency } from "@/lib/analyticsService";
 import { handler, json } from "@/lib/http";
 import { serverNow } from "@/lib/devClock";
+import { beatAutoFish } from "@/lib/forage/autoSettle";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
 import { getAccounts } from "@/lib/store";
@@ -18,6 +19,8 @@ export const POST = handler(async (req) => {
   const accounts = getAccounts();
   const now = serverNow(visitorId); // 운영은 Date.now() (개발 QA만 시계를 앞당길 수 있다)
   const earned = (await accounts.presence(visitorId, kstDay(now), now)) ?? 0;
+  // 자동 낚시: 숨은 탭에서도 오는 이 기록을 "접속해 있음" 신호로 쓴다 (끊긴 구간은 세지 않게). 실패해도 머무르기는 그대로
+  await beatAutoFish(visitorId, now).catch((e) => console.error("[forage] 자동 낚시 신호 실패", e));
   // 47번: 누군가 머무는 동안 동시 접속을 1분에 한 번씩 찍어 둔다 (cron 없이)
   runAfter(() => sampleConcurrency());
   return json<PresenceResponse>({ earned, me: await loadMe(accounts, visitorId, now) });

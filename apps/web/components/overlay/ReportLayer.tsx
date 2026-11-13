@@ -5,6 +5,7 @@ import { bridge } from "@/game/bridge";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { errorMessage } from "@/lib/api";
 import { showToast } from "@/lib/hooks/useToasts";
+import { friendsApi, friendsStore } from "@/lib/hooks/useFriends";
 import { reportStore, submitReport, useReportTarget, type ReportTarget } from "@/lib/reportClient";
 import { REPORT_MEMO_MAX, USER_REPORT_REASON_LABELS, USER_REPORT_REASONS, type UserReportReason } from "@/lib/reports";
 import { cx } from "../ui/cx";
@@ -14,10 +15,10 @@ import styles from "./ReportLayer.module.css";
 
 type Menu = { sid: number; name: string; ch?: number; room?: string; chat?: string; x: number; y: number };
 const MENU_W = 180;
-const MENU_H = 136;
+const MENU_H = 172;
 
 /**
- * 47번 게임 안 신고: 다른 사람 캐릭터(이름표)를 누르면 누른 자리 옆에 작은 메뉴 → "도감 보기" / "신고하기"(사유 + 메모 100자).
+ * 47번 게임 안 신고: 다른 사람 캐릭터(이름표)를 누르면 누른 자리 옆에 작은 메뉴 → "친구 신청" / "도감 보기" / "신고하기"(사유 + 메모 100자).
  * 확성기 창의 신고 버튼도 같은 신고 창을 연다 (reportStore.open)
  */
 export default function ReportLayer() {
@@ -60,6 +61,25 @@ export default function ReportLayer() {
       {menu && (
         <div ref={menuRef} className={styles.menu} style={{ left: menu.x, top: menu.y }} role="menu" aria-label={`${menu.name} 메뉴`}>
           <p className={styles.menuName}>{menu.name}</p>
+          <button
+            type="button"
+            role="menuitem"
+            className={cx(ui.button, styles.menuItem)}
+            onClick={() => {
+              // 친구 신청: 계정은 서버가 채널·방 + sid로 푼다. 상대가 먼저 신청해 뒀으면 바로 친구
+              const { name, sid, room, ch } = menu;
+              setMenu(null);
+              friendsApi
+                .request({ sid, ...(room ? { room } : { ch }) })
+                .then((r) => {
+                  showToast(r.result === "accepted" ? `${r.name}님과 친구가 됐어요!` : `${r.name}님에게 친구 신청을 보냈어요.`);
+                  void friendsStore.refresh();
+                })
+                .catch((e: unknown) => showToast(errorMessage(e) || `${name}님에게 신청하지 못했어요.`));
+            }}
+          >
+            친구 신청
+          </button>
           <button
             type="button"
             role="menuitem"

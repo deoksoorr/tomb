@@ -17,6 +17,9 @@ import { STAFF_COLOR, StaffFxView } from "./StaffFxView";
 
 /** 도감 100% 배지: 종류마다 별 하나 (금빛) */
 const DEX_BADGE_STAR = "★";
+/** 친구 표시: 이름표 왼쪽 작은 하트 (분홍) */
+const FRIEND_HEART = "♥";
+const FRIEND_TINT = 0xff8fb8;
 const DEX_BADGE_TINT = 0xffd45e;
 
 // 아바타 한 명의 화면 표현 (스프라이트 + 이름 라벨 + "…" 말풍선). 내 캐릭터와 원격 아바타가 같이 쓴다.
@@ -129,6 +132,8 @@ export class AvatarView {
   /** 도감 100% 배지 (이름표 오른쪽 별) */
   private dexBadge: Phaser.GameObjects.BitmapText | null = null;
   private dexBadgeN = 0;
+  /** 친구 하트 (이름표 왼쪽). 친구일 때만 만든다 */
+  private friendMark: Phaser.GameObjects.BitmapText | null = null;
   private wings: Phaser.GameObjects.Image | null = null;
   private pet: Phaser.GameObjects.Image | null = null;
   private petX = 0;
@@ -257,6 +262,22 @@ export class AvatarView {
 
   get dexBadgeCount(): number {
     return this.dexBadgeN;
+  }
+
+  /** 친구면 이름표 왼쪽에 작은 하트 (UI가 알려 준 같은 채널 친구) */
+  setFriend(on: boolean): void {
+    if (on === !!this.friendMark) return;
+    if (!on) {
+      this.friendMark?.destroy();
+      this.friendMark = null;
+      return;
+    }
+    this.atlas.ensure(FRIEND_HEART);
+    this.friendMark = this.scene.add.bitmapText(0, 0, FONT_KEY, FRIEND_HEART, FONT_PX).setOrigin(1, 1).setDepth(this.label.depth).setTint(FRIEND_TINT);
+  }
+
+  get friend(): boolean {
+    return !!this.friendMark;
   }
 
   /** 46·25번: 실시간 서버가 알린 염색·몸 모양 (없는 값은 그대로 둔다) */
@@ -714,6 +735,11 @@ export class AvatarView {
       if (this.dexBadge.scaleX !== labelScale) this.dexBadge.setScale(labelScale);
       this.dexBadge.setPosition(Math.round(l.x + l.width / 2 + 2 * labelScale), l.y).setAlpha(fa).setVisible(vis && l.visible);
     }
+    if (this.friendMark) {
+      const l = this.label;
+      if (this.friendMark.scaleX !== labelScale) this.friendMark.setScale(labelScale);
+      this.friendMark.setPosition(Math.round(l.x - l.width / 2 - 2 * labelScale), l.y).setAlpha(fa).setVisible(vis && l.visible);
+    }
     if (this.shadow && this.shadow.alpha !== fa) this.shadow.setAlpha(fa);
 
     for (let i = 0; i < this.aura.length; i++) {
@@ -965,6 +991,7 @@ export class AvatarView {
     this.moodFx?.setVisible(v);
     this.staffFx?.setVisible(v);
     this.dexBadge?.setVisible(v);
+    this.friendMark?.setVisible(v);
     for (const f of this.fog) f.setVisible(v);
     this.ripple?.setVisible(v);
     if (!v) for (const b of this.bubbles) b.setVisible(false);
@@ -978,6 +1005,7 @@ export class AvatarView {
     this.sprite.destroy();
     this.label.destroy();
     this.dexBadge?.destroy();
+    this.friendMark?.destroy();
     this.bubble?.destroy();
     this.bubble = null;
     this.speech?.destroy();

@@ -23,8 +23,9 @@
  *   POST /internal/me        Vercel → 이 서버: 접속 중인 그 방문자들에게 "내 정보 새로 받기"를 보낸다 (관리자 포인트 지급 등). 서명 필수
  *   POST /internal/kick      47번 Vercel → 이 서버: 방문자들을 지금 내보낸다(강퇴 4011·이용 제한 4012). 본문 서명(JOIN_SECRET) 필수
  *   POST /internal/peer      47번 Vercel → 이 서버: 채널·방의 sid가 누구인지 (유저 신고). 본문 서명 필수
+ *   POST /internal/where     친구 Vercel → 이 서버: 그 방문자들이 지금 어느 채널·자리에 있는지 (WHERE_CACHE_MS 기억). 본문 서명 필수
  */
-import { CLOSE, HUNT_ROOMS_CACHE_SEC, INTERNAL_SIG_HEADER, LOBBY_CACHE_SEC, ROOM_ID_RE, verifyInternal } from "@tomb/protocol";
+import { CLOSE, HUNT_ROOMS_CACHE_SEC, INTERNAL_SIG_HEADER, LOBBY_CACHE_SEC, ROOM_ID_RE, WHERE_CACHE_MS, verifyInternal, type PeerWhere } from "@tomb/protocol";
 import type { JoinTicket } from "./channel";
 import {
   TICKET_HEADER,
@@ -54,7 +55,8 @@ export default {
     if (ch) return channel(req, env, url, ch[1]);
     const rm = /^\/room\/([^/]*)$/.exec(url.pathname);
     if (rm) return room(req, env, url, rm[1]);
-    if (url.pathname === "/internal/kick" || url.pathname === "/internal/peer" || url.pathname === "/internal/me") return internal(req, env, url.pathname);
+    if (url.pathname === "/internal/kick" || url.pathname === "/internal/peer" || url.pathname === "/internal/me" || url.pathname === "/internal/where")
+      return internal(req, env, url.pathname);
     if (url.pathname === "/dev/goblin" && env.DEV_HOOKS === "1" && req.method === "POST") {
       const n = parseChannel(url.searchParams.get("ch") ?? "1", readConfig(env).maxChannels);
       if (n === null) return new Response("bad channel", { status: 400 });
@@ -104,9 +106,48 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
     );
     return Response.json({ sent: counts.reduce((a, b) => a + b, 0) });
   }
+  if (r.op === "where") {
+    const map = await whereMap(env, r.fresh === true);
+    const where: Record<string, PeerWhere> = {};
+    for (const v of r.visitorIds) {
+      const w = map.get(v);
+      if (w) where[v] = w;
+    }
+    return Response.json({ where });
+  }
   const stub = r.ch !== undefined ? (parseChannel(String(r.ch), readConfig(env).maxChannels) === null ? null : channelStub(env, r.ch)) : roomStub(env, r.room!);
   if (!stub) return Response.json({ peer: null });
   return Response.json({ peer: await stub.peerAt(r.sid) });
+}
+
+// ── 친구 위치 (/internal/where) ──
+// 사람이 있는 채널들의 접속자 자리를 아이솔레이트 메모리에 WHERE_CACHE_MS 동안 기억한다.
+// 친구 창·접속 알림이 자주 물어도 채널 DO는 그 간격에 한 번만 깨운다. fresh(친구한테 가기)면 바로 다시 묻는다.
+// 방(집·사냥터)은 로비가 모르지만, 방에 있어도 월드 채널 자리는 실내(away)로 남아 있어 채널 쪽에서 찾는다.
+
+let whereMemo: { at: number; map: Map<string, PeerWhere> } | null = null;
+
+async function whereMap(env: Env, fresh: boolean): Promise<Map<string, PeerWhere>> {
+  const now = Date.now();
+  if (!fresh && whereMemo && now - whereMemo.at < WHERE_CACHE_MS) return whereMemo.map;
+  const info = await lobbyStub(env).info();
+  const ids = info.channels.filter((c) => c.count > 0).map((c) => c.id);
+  const rosters = await Promise.all(
+    ids.map((id) =>
+      channelStub(env, id)
+        .roster()
+        .catch((e) => {
+          console.error("roster failed", id, e);
+          return [];
+        }),
+    ),
+  );
+  const map = new Map<string, PeerWhere>();
+  ids.forEach((ch, i) => {
+    for (const { visitorId, ...at } of rosters[i]) map.set(visitorId, { ch, ...at });
+  });
+  whereMemo = { at: now, map };
+  return map;
 }
 
 // ── GET /ch/:n ──

@@ -18,6 +18,8 @@ import { InquiryButton } from "../notice/InquiryDialog";
 import MyGraves from "./MyGraves";
 import styles from "./MyPanel.module.css";
 import MyHouseLine from "../housing/MyHouseLine";
+import { isOnline, useFriends } from "@/lib/hooks/useFriends";
+import PixelIcon from "../ui/PixelIcon";
 import type { PublicHouse } from "@/lib/housing/types";
 
 type Props = {
@@ -30,6 +32,8 @@ type Props = {
   onLoggedOut: () => void;
   /** 이장한 묘비를 다시 모시는 곳 */
   onOpenShrine: () => void;
+  /** 친구 창 (목록·받은 신청·보낸 신청) */
+  onOpenFriends?: () => void;
   /** 내 집 (채널마다 주거 구역이 따로다): 지금 채널, 내 집 가기(필요하면 채널을 옮긴 뒤), 분양 사무소 열기 */
   houseChannel: number;
   onGoToMyHouse: (house: PublicHouse) => void;
@@ -47,6 +51,7 @@ export default function MyPanel({
   onLeave,
   onLoggedOut,
   onOpenShrine,
+  onOpenFriends,
   houseChannel,
   onGoToMyHouse,
   onOpenHousing,
@@ -123,6 +128,8 @@ export default function MyPanel({
           <h3 className={styles.heading}>내 집</h3>
           <MyHouseLine channel={houseChannel} onGo={onGoToMyHouse} onOffice={onOpenHousing} />
         </section>
+
+        {onOpenFriends && <FriendsLine onOpen={onOpenFriends} />}
 
         <CodeSection me={me} buttonId={codeButtonId} />
 
@@ -202,6 +209,25 @@ const MASKED_CODE = "••••-••••-••••";
  * 개인 코드. 서버는 해시만 들고 있어 원문을 다시 못 보여 준다 → 이 기기에서 발급받았거나 코드로 들어왔으면
  * 기기 저장본을 보여 주고(가리기·보기·복사), 없으면 새로 발급하게 한다 (예전 코드는 바로 못 쓰게 된다)
  */
+/** 친구: 접속 중인 친구 수 · 받은 신청 + [친구 창] */
+function FriendsLine({ onOpen }: { onOpen: () => void }) {
+  const { friends, incoming } = useFriends();
+  const online = friends?.filter((f) => isOnline(f.where)).length ?? 0;
+  return (
+    <section className={styles.section}>
+      <h3 className={styles.heading}>친구</h3>
+      <p className={styles.sub}>
+        {friends === null ? "불러오는 중…" : friends.length ? `친구 ${friends.length}명 · 지금 접속 ${online}명` : "아직 친구가 없어요"}
+        {incoming > 0 && ` · 받은 신청 ${incoming}개`}
+      </p>
+      <button type="button" className={cx(ui.button, styles.leave)} onClick={onOpen}>
+        <PixelIcon name="friends" />
+        친구 창 열기
+      </button>
+    </section>
+  );
+}
+
 function CodeSection({ me, buttonId }: { me: Me; buttonId: string }) {
   const [code, setCode] = useState<string | null>(() => readMyCode(me.accountId));
   const [shown, setShown] = useState(false);

@@ -267,6 +267,11 @@ export class ChannelDO extends DurableObject<Env> {
     return this.core.peerAt(sid);
   }
 
+  /** 친구 위치 (Worker의 /internal/where가 채널마다 묻는다). 이 채널 접속자 전부 — 웹 서버가 친구만 골라 낸다 */
+  roster(): ReturnType<ChannelCore<WebSocket>["roster"]> {
+    return this.core.roster();
+  }
+
   /** Lobby DO → 같은 방문자가 claimedAt에 다른 채널에 들어갔다. 여기 자리(접속·유예 예약)를 4002로 정리한다 (RPC) */
   kick(visitorId: string, claimedAt: number): void {
     this.core.evict(visitorId, claimedAt);

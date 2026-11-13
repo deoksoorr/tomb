@@ -18,6 +18,7 @@ import { escape, overlaps, type Box } from "../logic/jump";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { nearestObject, pickInteraction } from "../logic/interact";
 import { anchorAt, nudgeSpot, restoreAfterDenied, spotVerdict, standBesideSpot } from "../logic/restore";
+import { besideFriend } from "../logic/friendSpot";
 import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST, spotOf, spotTaken } from "../logic/spots";
 import { neighborSeat, pickSeat, sideIntent, standPoint } from "../logic/sit";
 import { RealtimeClient } from "../net/RealtimeClient";
@@ -135,6 +136,8 @@ export class WorldScene extends Phaser.Scene {
   private recenterAt = 0;
   /** F17 미니맵 다음 알림 시각 (performance.now) */
   private minimapAt = 0;
+  /** 친구: UI가 알려 준 이 채널의 친구 (sid → 이름). sid와 이름이 둘 다 맞는 사람만 친구로 그린다 */
+  private friends: { ch: number; bySid: Map<Sid, string> } = { ch: 0, bySid: new Map() };
   private dustAt = 0;
   private netStarted = false;
   private cleaned = false;
@@ -641,6 +644,7 @@ export class WorldScene extends Phaser.Scene {
     this.riding?.applyPeer(r, p); // 동물원 타는 펫: 늦게 온 사람도 탄 모습을 본다
     this.forage?.applyPeer(p); // 4번 배 위 낚싯대: 늦게 온 사람도 본다
     r.setAway(p.away === true, performance.now(), true); // 이미 실내에 있는 사람은 연출 없이 숨긴다
+    r.view.setFriend(this.isFriend(r)); // 친구: 이름표 옆 하트
     if (!r.seatId) for (const [seatId, owner] of this.seats) if (owner === p.sid) r.seatId = seatId;
     this.remotes.set(p.sid, r);
   }
@@ -721,11 +725,21 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("channel:switch", ({ channel }) => this.switchChannel(channel)));
     // 실내(상점·집·분양 마을·사냥터·미니게임)에 들어가 있는 동안은 다른 사람 화면에서 숨긴다 (메인 맵의 나는 문 앞에 멈춰 있다)
     on.push(
-      bridge.on("scene:changed", ({ scene }) => {
+      bridge.on("scene:changed", ({ scene, place }) => {
         this.awayScene = scene !== "world" && scene !== "shop";
-        this.net.setAway(scene !== "world");
+        // 친구 위치용 장소 (친구 창에 "집 안"·"사냥터"처럼 보인다)
+        const where = scene === "shop" ? "shop" : scene === "hunt" ? "hunt" : scene === "minigame" ? "game" : (place ?? "house");
+        this.net.setAway(scene !== "world", where);
       }),
     );
+    // 친구: 이 채널의 친구 표시 (이름표 하트·미니맵 하트)와 친구한테 가기
+    on.push(
+      bridge.on("friends:here", ({ ch, list }) => {
+        this.friends = { ch, bySid: new Map(list.map((f) => [f.sid, f.name])) };
+        for (const r of this.remotes.values()) r.view.setFriend(this.isFriend(r));
+      }),
+    );
+    on.push(bridge.on("friend:goto", ({ sid, name, x, y }) => this.goToFriend(sid, name, x, y)));
     on.push(bridge.on("input:joystick", ({ x, y }) => this.hub.setJoystick(x, y)));
     on.push(bridge.on("input:runToggle", ({ on: v }) => this.hub.setRunToggle(v)));
     on.push(bridge.on("input:sit", () => this.hub.dispatch("sit")));
@@ -1202,9 +1216,44 @@ export class WorldScene extends Phaser.Scene {
   /** F17 미니맵: 내 위치와 같은 채널 사람들 위치 (원격 아바타 보간 위치) */
   private emitMinimap(): void {
     const others: number[] = [];
-    for (const r of this.remotes.values()) if (!r.away) others.push(Math.round(r.x), Math.round(r.y));
+    const friends: number[] = [];
+    for (const r of this.remotes.values()) if (!r.away) (r.view.friend ? friends : others).push(Math.round(r.x), Math.round(r.y));
     // 마을 주민: 작은 회색 점 (서버에 없는 클라이언트 시뮬레이션)
-    bridge.emit("minimap:dots", { me: { x: Math.round(this.player.x), y: Math.round(this.player.y) }, others, residents: this.life.residentDots() });
+    bridge.emit("minimap:dots", { me: { x: Math.round(this.player.x), y: Math.round(this.player.y) }, others, residents: this.life.residentDots(), friends });
+  }
+
+  /** 이 채널의 친구인지 (UI가 알려 준 sid와 이름이 둘 다 맞아야 — 나갔다가 다른 사람이 같은 sid를 받아도 하트가 옮겨 붙지 않게) */
+  private isFriend(r: RemoteAvatar): boolean {
+    return this.net.channel === this.friends.ch && this.friends.bySid.get(r.sid) === r.name;
+  }
+
+  /**
+   * 친구한테 가기 (같은 채널 마을): 친구 둘레의 걸을 수 있는 칸(담·소품·묘비·물·다른 사람 피하기)으로 순간이동한다.
+   * 이동은 기존 warp 그대로 — 서버가 범위·쿨다운을 보고 속도 검증은 건너뛴다(그 사이 MOVE는 보내지 않는다).
+   * 화면에 친구가 보이면 지금 위치, 아니면 서버가 알려 준 위치(x, y) 둘레로
+   */
+  private goToFriend(sid: Sid, name: string, fx: number, fy: number): void {
+    if (this.cleaned || !this.net.online) return;
+    if (this.awayScene) return this.toast("마을로 나온 뒤에 친구한테 갈 수 있어요.");
+    const r = this.remotes.get(sid);
+    const live = r && r.name === name ? r : null;
+    if (live?.away) return this.toast(`${name}님은 지금 실내에 있어요.`);
+    const at = live ? { x: live.x, y: live.y } : { x: fx, y: fy };
+    if (this.inShop) this.exitShop();
+    this.walker.cancel();
+    this.leaveCampfire();
+    this.beforeAutoWalk();
+    const feet = this.graveBoxes();
+    const hitsLow = (x: number, y: number) => feet.some((b) => x - 4 < b.x + b.w && x + 4 > b.x && y - 5 < b.y + b.h && y > b.y);
+    const others = [...this.remotes.values()].filter((o) => !o.away).map((o) => ({ x: o.x, y: o.y }));
+    const spot = besideFriend(at, others, (x, y) => !standable(x, y) || inWater(x, y) || hitsLow(x, y));
+    const now = this.time.now;
+    this.player.warp(spot.x, spot.y, now, this.seatReq);
+    this.player.faceTo(at.x, at.y, now);
+    this.net.warp(spot.x, spot.y);
+    this.rig.recenter();
+    this.recenterAt = 0;
+    this.toast(`${name}님 옆으로 왔어요.`);
   }
 
   private resolveGuide(target: GuideTarget, label?: string): { x: number; y: number; text: string } | null {

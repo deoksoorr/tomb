@@ -18,6 +18,7 @@ import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
 import DexDialog from "./DexDialog";
+import { toastAutoCatch } from "./autoToast";
 import FishingPanel from "./FishingPanel";
 import { forageStore } from "./forageStore";
 import NpcShop from "./NpcShop";
@@ -69,6 +70,17 @@ export default function ForageLayer() {
   // 처음: 내 가방·도감·피어 있는 지점
   useEffect(() => {
     void forageStore.refresh();
+    // 지난번에 자동 낚시를 켠 채 떠났으면 접속해 있던 동안 낚은 것을 정산하고 끈다 (지금은 앉아 있지 않으니)
+    forageApi
+      .autoStop()
+      .then((r) => {
+        if (!r.items.length) return;
+        forageStore.set(r.state);
+        toastAutoCatch(r, true);
+      })
+      .catch(() => {
+        // 다음 입장 때 다시
+      });
     return () => forageStore.stop();
   }, []);
 

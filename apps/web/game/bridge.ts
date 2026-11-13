@@ -97,7 +97,7 @@ export type GameEvents = {
   /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
   "megaphone:heard": { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; /** 운영자 계정이 외친 것 → 이름 금색 */ staff?: true };
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
-  "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house" };
+  "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house"; /** 친구 위치용: "house" 장면 중 분양 마을인지 집 안인지 */ place?: "village" | "house" };
   /** 실시간 서버가 이 화면을 옛 버전이라 거절함(4010, 큰 패치) → UI가 업데이트 창을 띄운다 (sticky) */
   "app:outdated": { source: "channel" | "room" };
   /** 47번: 실시간 서버가 이용 제한으로 내보냄(4012) → UI가 새로고침해 제한 화면을 띄운다 */
@@ -138,7 +138,7 @@ export type GameEvents = {
   "haunt:ended": { escaped: boolean; ms: number; scares: number };
 
   /** F17 미니맵: 내 위치와 같은 채널 사람들 위치 [x0, y0, x1, y1, …] (월드에 있는 동안 0.25초마다) */
-  "minimap:dots": { me: { x: number; y: number }; others: number[]; residents?: number[] };
+  "minimap:dots": { me: { x: number; y: number }; others: number[]; residents?: number[]; /** 친구 (others에서 뺀 같은 채널 친구 위치, 하트로 그린다) */ friends?: number[] };
   /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고) */
   "peers:list": { names: string[] };
 
@@ -290,8 +290,8 @@ export type UiEvents = {
   "forage:rod": { phase: ForageRodPhase; tension?: number };
   /** 채집 게이지: start(ms 동안 머리 위 막대) / end(ok면 그 지점을 지운다) */
   "forage:gauge": { phase: "start"; ms: number; kind: string; node: string } | { phase: "end"; ok: boolean; node: string };
-  /** 잡은 것·캔 것을 머리 위로 띄운다 */
-  "forage:pop": { itemId: string };
+  /** 잡은 것·캔 것을 머리 위로 띄운다. sparkle = 반짝 효과 (물에 빠진 사냥 장비 — itemId가 장비 id) */
+  "forage:pop": { itemId: string; sparkle?: boolean };
   /** 낚시 그만하기 (일어난다) */
   "forage:leave": undefined;
   /** 판매 동전 소리 */
@@ -302,6 +302,10 @@ export type UiEvents = {
   "peers:ask": undefined;
   /** 즐겨찾기 표현 원형 목록(U 키)이 열렸다/닫혔다. 열려 있는 동안 게임이 내 캐릭터 화면 위치를 me:screen으로 알린다 */
   "ui:radial": { open: boolean };
+  /** 친구: 지금 채널에 있는 친구들 (그 채널의 sid·이름) → 게임이 이름표 옆 하트·미니맵 하트로 그린다 (sticky) */
+  "friends:here": { ch: number; list: { sid: number; name: string }[] };
+  /** 친구한테 가기 (같은 채널 마을): 친구 옆 걸을 수 있는 칸으로 순간이동. x,y = 서버가 알려 준 위치 (화면에 친구가 없을 때 쓴다) */
+  "friend:goto": { sid: number; name: string; x: number; y: number };
 };
 
 export type ForageUse = { kind: "fish"; spot: string; water: "lake" | "river" } | { kind: "npc"; npc: "fishmonger" | "collector" } | { kind: "node"; node: string };
@@ -334,6 +338,7 @@ const STICKY = new Set<keyof AllEvents>([
   "ride:state",
   "ui:radial",
   "sky:hud",
+  "friends:here",
 ]);
 
 class Bridge {

@@ -69,6 +69,9 @@ import GoblinClaim from "./GoblinClaim";
 // 10·11·23번: 출석 달력 · 선물함 · 확성기
 import CalendarDialog from "../account/CalendarDialog";
 import GiftsDialog from "../account/GiftsDialog";
+// 친구 (목록·신청·위치·접속 알림)
+import FriendsDialog from "../account/FriendsDialog";
+import { useFriendPresence } from "./useFriendPresence";
 import MegaphoneLayer from "./MegaphoneDialog";
 import MegaphoneFeed from "./MegaphoneFeed";
 import { useSocial } from "./useSocial";
@@ -159,6 +162,7 @@ type Panel =
   | "passed"
   | "calendar"
   | "gifts"
+  | "friends"
   | "haunt";
 
 /** 다른 담당이 만드는 장소 창 (사냥터·분양 사무소). 컴포넌트가 들어오기 전까지 자리만 */
@@ -211,6 +215,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   useAccountOnEnter(ready, options.name, options.color, options.body);
   usePresencePoints(ready);
   const { calendarReady, giftCount } = useSocial(ready);
+  const { friendIncoming } = useFriendPresence(ready);
   // 채널 이동 창의 "마지막에 있던 채널" 표시용
   const onlineChannel = status?.mode === "online" ? status.channel : null;
   useEffect(() => {
@@ -421,10 +426,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => setPanel("menu")}>
                   <PixelIcon name="menu" />
                   메뉴
-                  {(calendarReady || giftCount > 0) && (
+                  {(calendarReady || giftCount > 0 || friendIncoming > 0) && (
                     <>
                       <span className={cx(styles.dot, styles.redDot, styles.dotSecond)} aria-hidden="true" />
-                      <span className="visually-hidden"> (받을 출석 도장·선물 있음)</span>
+                      <span className="visually-hidden"> (받을 출석 도장·선물·친구 신청 있음)</span>
                     </>
                   )}
                   {(unreadNotice || (me?.activityUnread ?? 0) > 0) && (
@@ -470,6 +475,16 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 >
                   <PixelIcon name="gift" />
                   {giftCount > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
+                </button>
+                <button
+                  type="button"
+                  className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
+                  onClick={() => setPanel("friends")}
+                  aria-label={friendIncoming ? `친구 (받은 신청 ${friendIncoming}개)` : "친구"}
+                  title="친구"
+                >
+                  <PixelIcon name="friends" />
+                  {friendIncoming > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
                 </button>
                 <button
                   type="button"
@@ -599,6 +614,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           onLeave={onLeave}
           onLoggedOut={onLoggedOut}
           onOpenShrine={() => setPanel("shrine")}
+          onOpenFriends={() => setPanel("friends")}
           houseChannel={houseChannel}
           onGoToMyHouse={goToMyHouse}
           onOpenHousing={() => {
@@ -650,6 +666,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           activityUnread={me?.activityUnread ?? 0}
           calendarReady={calendarReady}
           giftCount={giftCount}
+          friendIncoming={friendIncoming}
           points={me ? me.points : null}
           onPick={pickFromMenu}
           onClose={closePanel}
@@ -682,6 +699,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       <GoblinClaim />
       {panel === "calendar" && <CalendarDialog onClose={closePanel} />}
       {panel === "gifts" && <GiftsDialog onClose={closePanel} onOpenCalendar={() => setPanel("calendar")} />}
+      {panel === "friends" && <FriendsDialog onClose={closePanel} />}
       <MegaphoneLayer channel={channel} onOpenShop={() => setPanel("shop")} />
       {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
     </div>

@@ -41,6 +41,23 @@ function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, lin
   ctx.fill();
 }
 
+/** 친구: 테두리 두른 분홍 하트 (지도 칸 단위 좌표·크기) */
+function heart(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, line: number) {
+  const path = (s: number) => {
+    ctx.beginPath();
+    ctx.moveTo(x, y + s * 0.95);
+    ctx.bezierCurveTo(x - s * 1.7, y - s * 0.15, x - s * 0.75, y - s * 1.45, x, y - s * 0.45);
+    ctx.bezierCurveTo(x + s * 0.75, y - s * 1.45, x + s * 1.7, y - s * 0.15, x, y + s * 0.95);
+    ctx.closePath();
+  };
+  path(r + line);
+  ctx.fillStyle = "rgba(8,10,14,0.9)";
+  ctx.fill();
+  path(r);
+  ctx.fillStyle = "#ff8fb8";
+  ctx.fill();
+}
+
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function readOpen(): boolean {
@@ -54,7 +71,7 @@ function readOpen(): boolean {
 export default function Minimap() {
   const [open, setOpen] = useState(readOpen);
   const canvas = useRef<HTMLCanvasElement | null>(null);
-  const last = useRef<{ me: { x: number; y: number }; others: number[]; residents?: number[] } | null>(null);
+  const last = useRef<{ me: { x: number; y: number }; others: number[]; residents?: number[]; friends?: number[] } | null>(null);
   /** 나에게 피어 있는 채집 지점 (forage:nodes) */
   const nodes = useRef<string[]>(bridge.last("forage:nodes")?.ids ?? []);
 
@@ -136,6 +153,12 @@ export default function Minimap() {
       const p = toMinimap(d.others[i], d.others[i + 1]);
       dot(ctx, p.x, p.y, px(3), px(1.5), "#6fe3ff", "rgba(8,10,14,0.9)");
     }
+    // 친구: 분홍 하트 (다른 사람 점보다 조금 크게, 그 위에)
+    const fs = d.friends ?? [];
+    for (let i = 0; i + 1 < fs.length; i += 2) {
+      const p = toMinimap(fs[i], fs[i + 1]);
+      heart(ctx, p.x, p.y, px(4.5), px(1.5));
+    }
     // 나: 더 큰 노란 점 + 검은 테두리 + 흰 속점, 1.2초마다 깜빡이는 밝은 고리
     const m = toMinimap(d.me.x, d.me.y);
     if (reducedMotion() || Math.floor(Date.now() / 600) % 2 === 0) {
@@ -174,7 +197,7 @@ export default function Minimap() {
       <button type="button" className={cx(ui.top, styles.toggle)} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label={open ? "지도 접기" : "지도 펴기"}>
         지도 {open ? "▴" : "▾"}
       </button>
-      {open && <canvas ref={canvas} className={styles.map} width={MINIMAP_W * SCALE} height={MINIMAP_H * SCALE} aria-label="마을 지도 (노란 점이 나)" role="img" />}
+      {open && <canvas ref={canvas} className={styles.map} width={MINIMAP_W * SCALE} height={MINIMAP_H * SCALE} aria-label="마을 지도 (노란 점이 나, 분홍 하트가 친구)" role="img" />}
     </div>
   );
 }

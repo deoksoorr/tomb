@@ -14,6 +14,7 @@ import type { DexEntry, LifeDay } from "./types";
 //  - forage:{a}:hour:{h}    STRING 이번 한 시간 동안 시작한 수 (INCR, 1시간)
 //  - forage:{a}:day:{KST}   HASH  fishP/gatherP/dexP(판 포인트) · fish/gather(잡은 수) (2일)
 //  - forage:{a}:took:{w}    SET   이 창(15분)에 캔 채집 지점 id (2시간)
+//  - forage:{a}:auto        STRING 자동 낚시 세션 JSON (lib/forage/auto.ts, 바꿀 때는 이전 값과 같을 때만 = 비교 후 교체)
 
 export type ClaimResult = { status: "ok"; payload: string } | { status: "reused" | "stale" };
 export type GrantItem = { id: string; size: number };
@@ -30,6 +31,8 @@ export type DayField = keyof LifeDay;
 const USED_TTL_SEC = 86_400;
 const DAY_TTL_SEC = 2 * 86_400;
 const TOOK_TTL_SEC = 2 * 3_600;
+/** 자동 낚시 세션 보관 (켜 둔 채 떠나도 다음 날 돌아와 정산할 수 있게) */
+export const AUTO_TTL_SEC = 2 * 86_400;
 
 export interface ForageStore {
   /** 가방·도감·보상·오늘 기록·이번 창에 캔 지점 */
@@ -59,6 +62,16 @@ export interface ForageStore {
   addDay(acct: string, day: string, field: DayField, n: number): Promise<void>;
   /** 도감 보상 받음 표시 (한 번만 true) */
   claimDex(acct: string, key: string, day: string): Promise<boolean>;
+  /** 자동 낚시 세션 (없으면 null) */
+  autoGet(acct: string): Promise<string | null>;
+  /** 비교 후 교체 (원자적): 지금 값이 expected(null = 없음)와 같을 때만 next(null = 지움)로 바꾸고 true */
+  autoSwap(acct: string, expected: string | null, next: string | null): Promise<boolean>;
+  /**
+   * 자동 낚시로 낚은 것 넣기 (원자적): 오늘 자동 한도(autoCap − 오늘 auto)와 하루 전체 낚시 한도(fishCap − 오늘 fish) 중
+   * 남은 만큼만 앞에서부터 넣고 fish·auto를 그만큼 올린다. 도감은 수·처음 날만 (최대 크기 기록은 직접 낚은 것만).
+   * id가 "@"로 시작하면(물에 빠진 장비 자리) 한도만 세고 가방·도감은 건드리지 않는다
+   */
+  grantAuto(acct: string, day: string, items: GrantItem[], stackMax: number, autoCap: number, fishCap: number): Promise<Granted[]>;
 }
 
 export const lk = {
@@ -70,9 +83,10 @@ export const lk = {
   hour: (a: string, h: string) => `forage:${a}:hour:${h}`,
   day: (a: string, d: string) => `forage:${a}:day:${d}`,
   took: (a: string, w: number) => `forage:${a}:took:${w}`,
+  auto: (a: string) => `forage:${a}:auto`,
 };
 
-const emptyDay = (): LifeDay => ({ fishP: 0, gatherP: 0, dexP: 0, fish: 0, gather: 0 });
+const emptyDay = (): LifeDay => ({ fishP: 0, gatherP: 0, dexP: 0, fish: 0, gather: 0, auto: 0 });
 
 /** dex 해시(n:/max:/first: 필드) → 칸별 기록 */
 export function dexFromHash(h: Record<string, string>): Record<string, DexEntry> {
@@ -112,6 +126,7 @@ export class MemoryForageStore implements ForageStore {
   private hours = new Map<string, number>();
   private days = new Map<string, LifeDay>();
   private took = new Map<string, Set<string>>();
+  private autos = new Map<string, string>();
 
   private acct(a: string): Acct {
     let x = this.accts.get(a);
@@ -221,6 +236,38 @@ export class MemoryForageStore implements ForageStore {
     a.claims.set(key, day);
     return true;
   }
+
+  async autoGet(acct: string) {
+    return this.autos.get(acct) ?? null;
+  }
+
+  async autoSwap(acct: string, expected: string | null, next: string | null) {
+    if ((this.autos.get(acct) ?? null) !== expected) return false;
+    if (next === null) this.autos.delete(acct);
+    else this.autos.set(acct, next);
+    return true;
+  }
+
+  async grantAuto(acct: string, day: string, items: GrantItem[], stackMax: number, autoCap: number, fishCap: number) {
+    const dk = lk.day(acct, day);
+    const d = this.days.get(dk) ?? emptyDay();
+    const room = Math.max(0, Math.min(autoCap - d.auto, fishCap - d.fish));
+    const take = items.slice(0, room);
+    d.fish += take.length;
+    d.auto += take.length;
+    this.days.set(dk, d);
+    const a = this.acct(acct);
+    return take.map(({ id, size }) => {
+      if (id.startsWith("@")) return { id, size, kept: false, isNew: false, record: false };
+      const have = a.bag.get(id) ?? 0;
+      const kept = have < stackMax;
+      if (kept) a.bag.set(id, have + 1);
+      const n = Number(a.dex.get(`n:${id}`) ?? 0) + 1;
+      a.dex.set(`n:${id}`, String(n));
+      if (n === 1) a.dex.set(`first:${id}`, day);
+      return { id, size, kept, isNew: n === 1, record: false };
+    });
+  }
 }
 
 // ── Redis (운영) ──
@@ -313,6 +360,50 @@ end
 return 1
 `;
 
+// KEYS: auto  ARGV: expected('' = 없음), next('' = 지움), ttl
+export const AUTO_SWAP_LUA = `
+local cur = redis.call('GET', KEYS[1])
+if ARGV[1] == '' then
+  if cur then return 0 end
+elseif cur ~= ARGV[1] then
+  return 0
+end
+if ARGV[2] == '' then redis.call('DEL', KEYS[1]) else redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3])) end
+return 1
+`;
+
+// KEYS: bag, dex, day  ARGV: day, stackMax, autoCap, fishCap, dayTtl, (id, size)...
+// 남은 한도만큼만 앞에서부터. 돌려주는 값: 넣은 아이템마다 "id:{kept}{isNew}0" (최대 크기는 기록하지 않는다).
+// "@"로 시작하는 id(물에 빠진 장비 자리)는 한도만 센다 → "id:000"
+export const GRANT_AUTO_LUA = `
+local auto = tonumber(redis.call('HGET', KEYS[3], 'auto') or '0')
+local fish = tonumber(redis.call('HGET', KEYS[3], 'fish') or '0')
+local room = math.min(tonumber(ARGV[3]) - auto, tonumber(ARGV[4]) - fish, (#ARGV - 5) / 2)
+local out = {}
+if room <= 0 then return out end
+redis.call('HINCRBY', KEYS[3], 'fish', room)
+redis.call('HINCRBY', KEYS[3], 'auto', room)
+redis.call('EXPIRE', KEYS[3], tonumber(ARGV[5]))
+local stackMax = tonumber(ARGV[2])
+for j = 0, room - 1 do
+  local id = ARGV[6 + j * 2]
+  local kept = '0'
+  local isNew = '0'
+  if string.sub(id, 1, 1) ~= '@' then
+    if tonumber(redis.call('HGET', KEYS[1], id) or '0') < stackMax then
+      redis.call('HINCRBY', KEYS[1], id, 1)
+      kept = '1'
+    end
+    if redis.call('HINCRBY', KEYS[2], 'n:' .. id, 1) == 1 then
+      isNew = '1'
+      redis.call('HSET', KEYS[2], 'first:' .. id, ARGV[1])
+    end
+  end
+  out[#out + 1] = id .. ':' .. kept .. isNew .. '0'
+end
+return out
+`;
+
 /** GRANT_LUA 결과 한 줄 → 기록 (크기는 넘긴 값) */
 export function parseGranted(lines: unknown, items: GrantItem[]): Granted[] | null {
   if (lines === "taken" || !Array.isArray(lines)) return null;
@@ -398,6 +489,25 @@ export class RedisForageStore implements ForageStore {
 
   async claimDex(acct: string, key: string, day: string) {
     return Number(await this.redis.hsetnx(lk.claims(acct), key, day)) === 1;
+  }
+
+  async autoGet(acct: string) {
+    const v = await this.redis.get<string>(lk.auto(acct));
+    return v == null ? null : String(v);
+  }
+
+  async autoSwap(acct: string, expected: string | null, next: string | null) {
+    const r = await this.redis.eval<string[], number>(AUTO_SWAP_LUA, [lk.auto(acct)], [expected ?? "", next ?? "", String(AUTO_TTL_SEC)]);
+    return Number(r) === 1;
+  }
+
+  async grantAuto(acct: string, day: string, items: GrantItem[], stackMax: number, autoCap: number, fishCap: number) {
+    if (!items.length) return [];
+    const argv = [day, String(stackMax), String(autoCap), String(fishCap), String(DAY_TTL_SEC)];
+    for (const it of items) argv.push(it.id, String(Math.max(0, Math.round(it.size))));
+    const r = await this.redis.eval<string[], unknown>(GRANT_AUTO_LUA, [lk.bag(acct), lk.dex(acct), lk.day(acct, day)], argv);
+    if (!Array.isArray(r)) return [];
+    return parseGranted(r, items.slice(0, r.length)) ?? [];
   }
 }
 

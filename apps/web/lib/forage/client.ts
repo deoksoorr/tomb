@@ -2,6 +2,7 @@ import { request } from "../api";
 import type { BugsResult } from "../rpg/types";
 import type { DexTier, LifeCat, NpcId } from "./catalog";
 import type {
+  AutoFishResponse,
   CastResponse,
   DexClaimResponse,
   GatherFinishResponse,
@@ -22,6 +23,17 @@ export const forageApi = {
   state: () => request<ForageState>("/api/forage", { cache: "no-store" }),
   cast: (spot: string) => request<CastResponse>("/api/forage/fish/cast", post({ spot })),
   reel: (ticket: string, ok: boolean) => request<ReelResponse>("/api/forage/fish/reel", post({ ticket, ok })),
+  autoStart: (spot: string, ch: number | null) => request<AutoFishResponse>("/api/forage/auto", post({ action: "start", spot, ch })),
+  autoSync: () => request<AutoFishResponse>("/api/forage/auto", post({ action: "sync" })),
+  autoStop: () => request<AutoFishResponse>("/api/forage/auto", post({ action: "stop" })),
+  /** 페이지를 떠날 때: 응답을 기다리지 않는 끄기 (keepalive) */
+  autoStopBeacon: () => {
+    try {
+      void fetch("/api/forage/auto", { ...post({ action: "stop" }), keepalive: true }).catch(() => {});
+    } catch {
+      // 떠나는 중이라 무시
+    }
+  },
   gatherStart: (node: string) => request<GatherStartResponse>("/api/forage/gather/start", post({ node })),
   gatherFinish: (ticket: string, result?: BugsResult) => request<GatherFinishResponse>("/api/forage/gather/finish", post({ ticket, result })),
   sell: (npc: NpcId, items: Record<string, number>) => request<SellResponse>("/api/forage/sell", post({ npc, items })),

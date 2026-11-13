@@ -50,10 +50,16 @@ import {
   verifyBugs,
   windowEndsAt,
 } from "./rules";
+import { AUTO_FISH_DAILY_MAX, newAutoSession } from "./auto";
+import { autoStatus, settleAuto, type AutoSettled } from "./autoSettle";
 import { getFishRank } from "./fishRank";
+import { pickSunkenGear, SUNKEN_GEAR_CHANCE, sunkenFallbackFish, sunkenName } from "./sunken";
+import { grantSunkenGear } from "./sunkenGrant";
+import { gearById } from "../rpg/catalog";
 import { getForageStore, type GrantItem, type ForageStore, type Snapshot } from "./store";
 import { signForageTicket, verifyForageTicket, type ForageTicket } from "./ticket";
 import type {
+  AutoFishResponse,
   CastResponse,
   CatchResult,
   DexClaimResponse,
@@ -104,7 +110,7 @@ function toState(acct: string, snap: Snapshot, now: number): ForageState {
     dex: snap.dex,
     claims: snap.claims,
     titles: titlesOf(snap.claims),
-    today: { ...snap.day, fishCap: earnRule("fish").dailyMax, gatherCap: earnRule("gather").dailyMax, dexCap: earnRule("dex").dailyMax },
+    today: { ...snap.day, fishCap: earnRule("fish").dailyMax, gatherCap: earnRule("gather").dailyMax, dexCap: earnRule("dex").dailyMax, autoCap: AUTO_FISH_DAILY_MAX },
     nodes: { ids: activeNodes(acct, now, new Set(snap.taken)).map((n) => n.id), refreshAt: windowEndsAt(w) },
   };
 }
@@ -136,13 +142,16 @@ async function claimOrThrow(store: ForageStore, acct: string, nonce: string): Pr
 
 // ── 낚시 ──
 
-type FishPayload = { k: "fish"; sp: string; sz: number };
+/** g = 물에 빠진 장비 id (아주 드물게, 던질 때 서버가 정한다), alt = 장비 칸이 가득일 때 대신 줄 물고기 */
+type FishPayload = { k: "fish"; sp: string; sz: number; g?: string; alt?: string };
 
 export async function castLine(acct: string, spotId: string, now = Date.now()): Promise<CastResponse> {
   const store = getForageStore();
   // 정해진 낚시 자리 또는 배 위 가상 자리(boat:river·boat:lake) — 물 종류로 물고기를 고른다
   const water = fishingWaterOf(spotId);
   if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
+  // 직접 던지면 자동 낚시는 끝난다 (둘을 한꺼번에 할 수 없다). 그때까지 낚은 것은 정산해 넣는다
+  if (await store.autoGet(acct)) await settleAuto(store, acct, now, true);
   const snap = await store.snapshot(acct, kstDay(now), nodeWindow(now));
   if (snap.day.fish >= DAILY_CATCH_MAX.fish) throw new HttpError(429, "DAILY_LIMIT", "오늘은 물고기를 충분히 잡았어요. 내일 또 와요.");
   const cond = conditionsAt(now);
@@ -153,6 +162,11 @@ export async function castLine(acct: string, spotId: string, now = Date.now()): 
   const bite = now + biteDelayMs(rand(), cond);
   const nonce = nanoid(16);
   const payload: FishPayload = { k: "fish", sp: s.id, sz: size };
+  // 아주 드물게 물고기 대신 사냥 장비 (손맛·입질은 물고기 그대로 → 미리 알 수 없다)
+  if (rand() < SUNKEN_GEAR_CHANCE) {
+    payload.g = pickSunkenGear(rand(), rand()).id;
+    payload.alt = sunkenFallbackFish(water, cond, rand(), s).id;
+  }
   const ttl = Math.ceil((bite - now + HOOK_WINDOW_MS + REEL_MAX_MS) / 1000) + 30;
   if (!(await store.begin(acct, nonce, JSON.stringify(payload), ttl, hourBucket(now), FORAGE_STARTS_PER_HOUR)))
     throw new HttpError(429, "RATE_LIMITED", "조금 쉬었다 해요. 한 시간에 낚시·채집을 너무 많이 했어요.");
@@ -170,6 +184,7 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
   if (since < reelMinMs(t.p ?? 1) - REEL_SLACK_MS) throw new HttpError(422, "TOO_FAST", "입질도 전에, 또는 너무 빨리 감았어요. 이번 물고기는 놓쳤어요.");
   if (since > HOOK_WINDOW_MS + REEL_MAX_MS) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래 걸려서 물고기가 도망갔어요.");
   const day = kstDay(now);
+  if (payload.g) return reelSunken(store, acct, payload, now);
   const got = await store.grant(acct, day, "fish", [{ id: payload.sp, size: payload.sz }], STACK_MAX);
   // 최대어 랭킹: 크기는 시작할 때 서버가 굴린 값 (가방이 가득 차 못 넣었어도 잡은 기록은 남는다). 랭킹 저장 실패가 낚시를 막지는 않는다
   // 운영자 계정은 순위에 남기지 않는다
@@ -178,6 +193,65 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
       .record(acct, payload.sp, payload.sz, kstWeek(now))
       .catch((e) => console.error("[forage] 최대어 기록 실패", e));
   return { result: got?.[0] ?? null, state: await forageState(acct, now, store) };
+}
+
+// ── 자동 낚시 (lib/forage/auto.ts) ──
+
+async function autoResponse(store: ForageStore, acct: string, r: AutoSettled, now: number): Promise<AutoFishResponse> {
+  const snap = await store.snapshot(acct, kstDay(now), nodeWindow(now));
+  return {
+    auto: r.session ? autoStatus(r.session, snap.day, now) : null,
+    items: r.items,
+    dropped: r.dropped,
+    gear: r.gear,
+    ...(r.ended ? { ended: r.ended } : {}),
+    state: toState(acct, snap, now),
+  };
+}
+
+/** 켜기: 낚시 자리(배 위 포함)에서. 이미 켜 둔 세션이 있으면 정산하고 새로 시작한다 */
+export async function startAutoFish(acct: string, spotId: string, ch: number | null, now = Date.now()): Promise<AutoFishResponse> {
+  const store = getForageStore();
+  const water = fishingWaterOf(spotId);
+  if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
+  const prev = await settleAuto(store, acct, now, true);
+  const day = (await store.snapshot(acct, kstDay(now), nodeWindow(now))).day;
+  if (day.fish >= DAILY_CATCH_MAX.fish) throw new HttpError(429, "DAILY_LIMIT", "오늘은 물고기를 충분히 잡았어요. 내일 또 와요.");
+  if (day.auto >= AUTO_FISH_DAILY_MAX) throw new HttpError(429, "AUTO_LIMIT", `자동 낚시는 하루 ${AUTO_FISH_DAILY_MAX}마리까지예요. 직접 낚거나 내일 또 와요.`);
+  const session = newAutoSession(newSeed(), spotId, water, ch, now);
+  // 그 사이 다른 탭이 먼저 켰으면 그쪽을 정산하고 다시
+  for (let i = 0; i < 3 && !(await store.autoSwap(acct, null, JSON.stringify(session))); i++) {
+    const more = await settleAuto(store, acct, now, true);
+    prev.items.push(...more.items);
+    prev.gear.push(...more.gear);
+    prev.dropped += more.dropped;
+  }
+  return autoResponse(store, acct, { ...prev, session, ended: undefined }, now);
+}
+
+/** 정산 (보이는 동안 주기적으로, 숨었다가 돌아오면). 세션이 없으면 auto: null */
+export async function syncAutoFish(acct: string, now = Date.now()): Promise<AutoFishResponse> {
+  const store = getForageStore();
+  return autoResponse(store, acct, await settleAuto(store, acct, now, false), now);
+}
+
+/** 끄기 (움직임·일어남·장면 떠남): 정산하고 끝낸다 */
+export async function stopAutoFish(acct: string, now = Date.now()): Promise<AutoFishResponse> {
+  const store = getForageStore();
+  return autoResponse(store, acct, await settleAuto(store, acct, now, true), now);
+}
+
+/** 물에 빠진 장비를 건졌다: 사냥 장비로 지급(낚시 1회로 셈, 도감·최대어 기록 없음). 장비 칸이 가득이면 대신 희귀 물고기 */
+async function reelSunken(store: ForageStore, acct: string, p: FishPayload, now: number): Promise<ReelResponse> {
+  const g = gearById(p.g!)!;
+  const day = kstDay(now);
+  if (await grantSunkenGear(acct, g.id)) {
+    await store.addDay(acct, day, "fish", 1);
+    return { result: null, gear: { id: g.id, name: sunkenName(g), kept: true }, state: await forageState(acct, now, store) };
+  }
+  const alt = p.alt ?? p.sp;
+  const got = await store.grant(acct, day, "fish", [{ id: alt, size: 0 }], STACK_MAX);
+  return { result: got?.[0] ?? null, gear: { id: g.id, name: sunkenName(g), kept: false, instead: alt }, state: await forageState(acct, now, store) };
 }
 
 // ── 채집 ──

@@ -19,7 +19,7 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
   it("빈 계정은 빈 가방·빈 도감·0인 오늘 기록", async () => {
     const a = acct();
     const s = await store.snapshot(a, DAY, 1);
-    expect(s).toEqual({ bag: {}, dex: {}, claims: {}, day: { fishP: 0, gatherP: 0, dexP: 0, fish: 0, gather: 0 }, taken: [] });
+    expect(s).toEqual({ bag: {}, dex: {}, claims: {}, day: { fishP: 0, gatherP: 0, dexP: 0, fish: 0, gather: 0, auto: 0 }, taken: [] });
     expect(await store.dex(a)).toEqual({ dex: {}, claims: {} });
   });
 
@@ -104,6 +104,56 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     expect(await store.claimDex(a, "fish:25", DAY)).toBe(true);
     expect(await store.claimDex(a, "fish:25", DAY)).toBe(false);
     expect((await store.dex(a)).claims).toEqual({ "fish:25": DAY });
+  });
+
+  it("자동 낚시 세션: 이전 값과 같을 때만 바꾼다 (없음 → 만들기, 다른 값이면 거절, null이면 지움)", async () => {
+    const a = acct();
+    expect(await store.autoGet(a)).toBeNull();
+    expect(await store.autoSwap(a, "x", "y")).toBe(false);
+    expect(await store.autoSwap(a, null, "s1")).toBe(true);
+    expect(await store.autoSwap(a, null, "s2")).toBe(false);
+    expect(await store.autoGet(a)).toBe("s1");
+    expect(await store.autoSwap(a, "s1", "s2")).toBe(true);
+    expect(await store.autoSwap(a, "s1", "s3")).toBe(false);
+    expect(await store.autoSwap(a, "s2", null)).toBe(true);
+    expect(await store.autoGet(a)).toBeNull();
+    // 동시에 같은 값에서 바꾸면 하나만
+    await store.autoSwap(a, null, "base");
+    const r = await Promise.all(Array.from({ length: 5 }, (_, i) => store.autoSwap(a, "base", `n${i}`)));
+    expect(r.filter(Boolean)).toHaveLength(1);
+  });
+
+  it("자동 낚시 넣기: 자동 한도·하루 전체 한도 안에서 앞에서부터, 최대 크기는 기록하지 않는다", async () => {
+    const a = acct();
+    const fish = (n: number, size = 500) => Array.from({ length: n }, () => ({ id: "f_carp", size }));
+    const g1 = await store.grantAuto(a, DAY, fish(3), 99, 5, 150);
+    expect(g1).toEqual([
+      { id: "f_carp", size: 500, kept: true, isNew: true, record: false },
+      { id: "f_carp", size: 500, kept: true, isNew: false, record: false },
+      { id: "f_carp", size: 500, kept: true, isNew: false, record: false },
+    ]);
+    expect(await store.grantAuto(a, DAY, fish(4), 99, 5, 150)).toHaveLength(2); // 자동 한도 5
+    expect(await store.grantAuto(a, DAY, fish(1), 99, 5, 150)).toEqual([]);
+    let s = await store.snapshot(a, DAY, 1);
+    expect(s.day).toMatchObject({ fish: 5, auto: 5 });
+    expect(s.dex.f_carp).toEqual({ n: 5, max: 0, first: DAY });
+    expect(s.bag.f_carp).toBe(5);
+    // 하루 전체 한도: 직접 낚은 것과 합쳐서
+    await store.grant(a, "20261113", "fish", fish(8, 300), 99);
+    expect(await store.grantAuto(a, "20261113", fish(5), 99, 75, 10)).toHaveLength(2);
+    s = await store.snapshot(a, "20261113", 1);
+    expect(s.day).toMatchObject({ fish: 10, auto: 2 });
+    expect(s.dex.f_carp.max).toBe(300); // 직접 낚은 크기만 기록
+    // "@"(물에 빠진 장비 자리)는 한도만 세고 가방·도감은 그대로
+    const b = acct();
+    expect(await store.grantAuto(b, DAY, [{ id: "@w_ruler", size: 0 }, { id: "f_carp", size: 1 }], 99, 75, 150)).toEqual([
+      { id: "@w_ruler", size: 0, kept: false, isNew: false, record: false },
+      { id: "f_carp", size: 1, kept: true, isNew: true, record: false },
+    ]);
+    const sb = await store.snapshot(b, DAY, 1);
+    expect(sb.day).toMatchObject({ fish: 2, auto: 2 });
+    expect(sb.bag).toEqual({ f_carp: 1 });
+    expect(Object.keys(sb.dex)).toEqual(["f_carp"]);
   });
 
   it("동시에 같은 티켓을 내도 하나만 ok", async () => {

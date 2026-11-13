@@ -32,7 +32,9 @@ import {
   staffGateBody,
   staffGateLook,
   isDexBadge,
+  isAwayPlace,
   type AvatarDye,
+  type AwayPlace,
   type C2S,
   type DirId,
   type Grant,
@@ -78,6 +80,8 @@ export type PeerRecord = {
   rod?: true;
   /** 실내(상점·집·사냥터 등 하위 장면)에 들어가 있다 → 다른 사람 화면에서 숨긴다 (월드 채널만). 재접속 유예 동안에도 이어 간다 */
   away?: true;
+  /** 친구: 실내에 있으면 어디인지 (집 안·사냥터 …). 다른 사람 화면에는 보내지 않고 친구 위치 조회(roster)에만 쓴다 */
+  place?: AwayPlace;
   /** 31번 운영자 계정 (입장 토큰에 Vercel이 넣은 것만) */
   staff?: true;
   /** 도감 100% 배지 (JoinClaims.dex) */
@@ -586,6 +590,21 @@ export class ChannelCore<C extends object> {
     return true;
   }
 
+  /**
+   * 친구 위치: 이 채널에 자리를 가진 모든 사람(접속 중 + 재연결 유예 중)의 방문자 id·sid·서버 위치·실내 여부.
+   * 실시간 서버 안(Worker)에서만 쓰고, 웹 서버는 친구 사이인 계정만 골라 브라우저에 넘긴다
+   */
+  roster(): { visitorId: string; sid: number; x: number; y: number; away?: true; place?: AwayPlace }[] {
+    return [...this.peers.values()].map((p) => ({
+      visitorId: p.visitorId,
+      sid: p.sid,
+      x: Math.round(p.x),
+      y: Math.round(p.y),
+      ...(p.away ? { away: true as const } : {}),
+      ...(p.away && p.place ? { place: p.place } : {}),
+    }));
+  }
+
   /** 47번 유저 신고: 이 채널·방의 sid가 누구인지 (지금 접속 중이거나 유예 중인 사람만) */
   peerAt(sid: number): { visitorId: string; name: string } | null {
     const p = this.peers.get(sid);
@@ -725,7 +744,7 @@ export class ChannelCore<C extends object> {
       case "away":
         if (now - (p.lastAwayAt ?? -Infinity) < AWAY_INTERVAL_MS) return;
         p.lastAwayAt = now;
-        return this.onAway(p, m.on, now);
+        return this.onAway(p, m.on, now, m.p);
       case "mood":
         if (now - (p.lastMoodAt ?? -Infinity) < MOOD_INTERVAL_MS) return;
         p.lastMoodAt = now;
@@ -982,9 +1001,19 @@ export class ChannelCore<C extends object> {
    * 실내에 들어감(on)·나옴. 월드 채널만 (방은 그 자체가 실내). 같은 채널의 다른 사람에게 알리고, 늦게 온 사람은 PeerInfo.away로 받는다.
    * 옛 클라이언트는 보내지 않으니 언제나 보인다
    */
-  private onAway(p: Peer<C>, on: boolean, now = Date.now()): void {
-    if (this.cfg.room || !!p.away === on) return;
+  private onAway(p: Peer<C>, on: boolean, now = Date.now(), place?: AwayPlace): void {
+    if (this.cfg.room) return;
+    const where = on ? place : undefined;
+    if (!!p.away === on) {
+      // 실내 안에서 장소만 바뀌었다 (분양 마을 → 집): 다른 사람 화면은 그대로, 친구 위치용으로만 기억한다
+      if (on && p.place !== where) {
+        p.place = where;
+        this.save(p);
+      }
+      return;
+    }
     p.away = on ? true : undefined;
+    p.place = where;
     this.save(p);
     this.host.liveChanged?.(true);
     this.broadcast(encodeEvent({ t: "away", sid: p.sid, on }), p.sid);
@@ -1261,6 +1290,6 @@ export class ChannelCore<C extends object> {
     const ride = r.ride === true && !seatId && ridePetOfLook(look) ? { ride: true as const } : {};
     // 배 위 낚싯대는 조각배 자리에 앉아 있을 때만 이어 간다
     const rod = r.rod === true && seatId && boatSeatById(seatId) ? { rod: true as const } : {};
-    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), joinedAt: r.joinedAt ?? 0 };
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), joinedAt: r.joinedAt ?? 0 };
   }
 }

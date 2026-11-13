@@ -291,6 +291,23 @@ describe("speed validation", () => {
     core.tick(SERVER_WARP_COOLDOWN_MS + 100);
     expect(entriesOf(b).at(-1)).toMatchObject({ x: 100, y: 100 });
   });
+
+  it("친구 옆 순간이동: 멀리 있는 친구 옆으로 warp하면 서버 위치가 바로 거기, 이어 걷는 MOVE도 속도 검증을 통과한다", () => {
+    const { core, join } = setup();
+    const me = join("me", 0, { x: 120, y: 160 });
+    join("friend", 0, { x: 900, y: 700 });
+    const at = core.roster().find((r) => r.visitorId === "friend")!;
+    // 클라이언트가 친구 둘레의 걸을 수 있는 칸(친구 위치 + 16px)을 골라 기존 warp로 보낸다
+    core.message(me, send({ t: "warp", x: at.x + 16, y: at.y }), 1_000);
+    expect(core.peer(1)).toMatchObject({ x: 916, y: 700 });
+    // 바로 이어 걷는 MOVE: 옛 자리(120,160)에서 온 것으로 보지 않는다 → 조금 걸은 만큼만 움직인다
+    core.message(me, move(920, 700), 1_100);
+    core.tick(1_150);
+    expect(core.peer(1)).toMatchObject({ x: 920, y: 700 });
+    // 쿨다운 안에 또 누르면 무시 (연타로 맵을 뛰어다니지 못한다)
+    core.message(me, send({ t: "warp", x: 100, y: 100 }), 1_200);
+    expect(core.peer(1)).toMatchObject({ x: 920, y: 700 });
+  });
 });
 
 describe("seats (server authority)", () => {

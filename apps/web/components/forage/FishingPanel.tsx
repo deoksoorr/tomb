@@ -3,12 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { bridge, type ForageRodPhase } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
-import { DAILY_CATCH_MAX } from "@/lib/forage/catalog";
+import { AUTO_SYNC_MS, autoNextLabel } from "@/lib/forage/auto";
+import { DAILY_CATCH_MAX, speciesById } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
-import type { CastResponse, CatchResult } from "@/lib/forage/types";
+import { sunkenText } from "@/lib/forage/sunken";
+import type { AutoFishResponse, AutoFishStatus, CastResponse, CatchResult } from "@/lib/forage/types";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
+import { showToast } from "@/lib/hooks/useToasts";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
+import { toastAutoCatch } from "./autoToast";
 import { forageStore, useForage } from "./forageStore";
 import s from "./forage.module.css";
 
@@ -25,6 +29,7 @@ const KEYS = new Set(["Space", "KeyE", "KeyJ", "Enter"]);
 const SNAP_AT = 1;
 /** 손을 놓고 이만큼 지나면 물고기가 도망간다 */
 const SLACK_MS = 3_200;
+
 
 export default function FishingPanel({
   spot,
@@ -48,6 +53,12 @@ export default function FishingPanel({
   const reel = useRef({ progress: 0, tension: 0, last: 0, slackSince: 0, surgeUntil: 0, nextSurge: 0, sentAt: 0 });
   const raf = useRef(0);
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 자동 낚시: 상태(서버가 준 값)와 다음 한 마리 예상 시각(performance.now 기준, 보이는 동안 표시용)
+  const [auto, setAuto] = useState<AutoFishStatus | null>(null);
+  const [autoBusy, setAutoBusy] = useState(false);
+  const autoRef = useRef<AutoFishStatus | null>(null);
+  const [nextAt, setNextAt] = useState(0);
+  const [clock, setClock] = useState(0);
 
   const go = (p: Phase) => {
     phaseRef.current = p;
@@ -77,6 +88,15 @@ export default function FishingPanel({
       .reel(c.ticket, ok)
       .then((r) => {
         forageStore.set(r.state);
+        if (r.gear) {
+          // 물고기 대신 물에 빠진 사냥 장비 (아주 드물게)
+          bridge.emit("forage:pop", { itemId: r.gear.id, sparkle: true });
+          const text = sunkenText(r.gear, (id) => speciesById(id)?.name ?? id);
+          setMsg({ text, tone: "hot" });
+          showToast(text, 6_000);
+          if (r.result) onCatch(r.result);
+          return;
+        }
         if (r.result) {
           onCatch(r.result);
           bridge.emit("forage:pop", { itemId: r.result.id });
@@ -110,6 +130,7 @@ export default function FishingPanel({
 
   /** 누름 (키 down / 버튼 down) */
   function press() {
+    if (autoRef.current) return;
     const p = phaseRef.current;
     if (p === "ready" || p === "done") return throwLine();
     if (p === "wait") return finish(false, "너무 일찍 당겼어요. 물고기가 놀라 도망갔어요", "bad", "escape");
@@ -133,6 +154,115 @@ export default function FishingPanel({
   function release() {
     holding.current = false;
   }
+
+  /** 서버 응답 반영 (켜짐·꺼짐·정산) */
+  function applyAuto(r: AutoFishResponse, away: boolean) {
+    forageStore.set(r.state);
+    toastAutoCatch(r, away);
+    if (r.gear.length) bridge.emit("forage:pop", { itemId: r.gear[0].id, sparkle: true });
+    else for (const it of r.items.slice(0, 3)) bridge.emit("forage:pop", { itemId: it.id });
+    autoRef.current = r.auto;
+    setAuto(r.auto);
+    if (r.auto?.nextInMs != null) {
+      const now = performance.now();
+      setClock(now);
+      setNextAt(now + r.auto.nextInMs);
+    }
+    if (!r.auto) {
+      rod("idle");
+      go("ready");
+      if (r.ended === "time") setMsg({ text: "자동 낚시 시간이 다 됐어요 (한 번에 최대 6시간)" });
+      else setMsg({ text: "자동 낚시를 껐어요. 찌를 던져 보세요" });
+    }
+  }
+
+  function toggleAuto() {
+    if (autoBusy) return;
+    const p = phaseRef.current;
+    if (!autoRef.current && p !== "ready" && p !== "done") return;
+    setAutoBusy(true);
+    if (autoRef.current) {
+      forageApi
+        .autoStop()
+        .then((r) => applyAuto(r, false))
+        .catch((e) => setMsg({ text: errorMessage(e), tone: "bad" }))
+        .finally(() => setAutoBusy(false));
+      return;
+    }
+    if (doneTimer.current) clearTimeout(doneTimer.current);
+    rod("cast");
+    forageApi
+      .autoStart(spot, bridge.last("net:status")?.channel ?? null)
+      .then((r) => {
+        applyAuto(r, false);
+        if (!r.auto) return;
+        go("ready");
+        rod("wait");
+        setMsg({ text: "자동 낚시 중… 움직이거나 일어나면 꺼져요", tone: "good" });
+      })
+      .catch((e) => {
+        rod("idle");
+        setMsg({ text: errorMessage(e), tone: "bad" });
+      })
+      .finally(() => setAutoBusy(false));
+  }
+
+  // 자동 낚시 정산: 보이는 동안 AUTO_SYNC_MS마다, 숨었다가 돌아오면 바로. 숨은 동안은 부르지 않는다 (서버가 접속 시간으로 센다)
+  const autoOn = auto !== null;
+  useEffect(() => {
+    if (!autoOn) return;
+    let hiddenSince = document.hidden ? Date.now() : 0;
+    const sync = (away: boolean) =>
+      forageApi
+        .autoSync()
+        .then((r) => applyAuto(r, away))
+        .catch(() => {
+          // 다음 주기에 다시
+        });
+    const timer = setInterval(() => {
+      if (!document.hidden) void sync(false);
+    }, AUTO_SYNC_MS);
+    const tick = setInterval(() => setClock(performance.now()), 5_000);
+    const onVis = () => {
+      if (document.hidden) hiddenSince = Date.now();
+      else if (hiddenSince) {
+        hiddenSince = 0;
+        void sync(true);
+      }
+    };
+    // 탭·창을 닫으면 끈다 (응답은 못 받는다 — 다음에 들어오면 ForageLayer가 남은 세션을 정산한다)
+    const onHide = (e: PageTransitionEvent) => {
+      if (!e.persisted && autoRef.current) forageApi.autoStopBeacon();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      clearInterval(timer);
+      clearInterval(tick);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("pagehide", onHide);
+    };
+    // applyAuto는 ref·setter만 쓴다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOn]);
+
+  // 창이 닫히면(움직임·일어남·배 젓기·장면 떠남) 자동 낚시를 끄고 그때까지 낚은 것을 정산한다
+  useEffect(
+    () => () => {
+      if (!autoRef.current) return;
+      autoRef.current = null;
+      forageApi
+        .autoStop()
+        .then((r) => {
+          forageStore.set(r.state);
+          toastAutoCatch(r, false);
+        })
+        .catch(() => {
+          // 다음에 들어오면 ForageLayer가 정산한다
+        });
+    },
+    [],
+  );
 
   // 키보드 (월드 키는 막혀 있다)
   useEffect(() => {
@@ -228,8 +358,8 @@ export default function FishingPanel({
     [],
   );
 
-  const busy = phase === "casting" || phase === "sending";
-  const label = phase === "bite" ? "지금 당기기!" : phase === "reel" ? "누르고 있으면 감기" : phase === "wait" ? "기다리는 중…" : busy ? "…" : "찌 던지기";
+  const busy = phase === "casting" || phase === "sending" || autoBusy || auto !== null;
+  const label = auto ? "자동 낚시 중" : phase === "bite" ? "지금 당기기!" : phase === "reel" ? "누르고 있으면 감기" : phase === "wait" ? "기다리는 중…" : busy ? "…" : "찌 던지기";
   const caught = state?.today.fish ?? 0;
 
   return (
@@ -243,6 +373,13 @@ export default function FishingPanel({
       <p className={s.status} data-tone={msg.tone} role="status" aria-live="polite">
         {msg.text}
       </p>
+      {auto && (
+        <p className={s.keys} role="status">
+          {auto.limited
+            ? `자동 낚시 중 · 오늘 ${auto.today}/${auto.cap} · 오늘 한도를 다 채웠어요`
+            : `자동 낚시 중 · 오늘 ${auto.today}/${auto.cap} · 다음 한 마리까지 ${auto.nextInMs == null ? "—" : autoNextLabel(Math.max(0, nextAt - clock))}`}
+        </p>
+      )}
       {phase === "reel" && (
         <>
           <div className={s.meter}>
@@ -275,6 +412,16 @@ export default function FishingPanel({
           onContextMenu={(e) => e.preventDefault()}
         >
           {label}
+        </button>
+        <button
+          type="button"
+          className={cx(ui.button, auto ? ui.primary : ui.quiet)}
+          onClick={toggleAuto}
+          disabled={autoBusy || (!auto && phase !== "ready" && phase !== "done")}
+          aria-pressed={auto !== null}
+          title="자리를 비워도 접속해 있는 동안 천천히 낚아요"
+        >
+          {auto ? "자동 낚시 끄기" : "자동 낚시 켜기"}
         </button>
         <button type="button" className={cx(ui.button, ui.quiet)} onClick={onLeave} disabled={phase === "reel"}>
           일어나기

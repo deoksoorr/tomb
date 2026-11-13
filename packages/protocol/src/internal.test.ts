@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CLOSE } from "./constants";
+import { WHERE_MAX_IDS } from "./friends";
 import { INTERNAL_KICK_MAX, signInternal, verifyInternal } from "./internal";
 
 // 47번 서버 간 내부 요청 서명
@@ -14,6 +15,11 @@ describe("내부 요청 서명", () => {
     expect(await verifyInternal(S, peer.body, peer.sig, now)).toEqual({ op: "peer", room: "village", sid: 3, exp: now + 20 });
     const me = await signInternal(S, { op: "me", visitorIds: ["abc_DEF-1"], exp: now + 20 });
     expect(await verifyInternal(S, me.body, me.sig, now)).toEqual({ op: "me", visitorIds: ["abc_DEF-1"], exp: now + 20 });
+    // 친구 위치 조회 (fresh는 true일 때만 남는다)
+    const where = await signInternal(S, { op: "where", visitorIds: ["abc_DEF-1", "x"], fresh: true, exp: now + 20 });
+    expect(await verifyInternal(S, where.body, where.sig, now)).toEqual({ op: "where", visitorIds: ["abc_DEF-1", "x"], fresh: true, exp: now + 20 });
+    const plain = await signInternal(S, { op: "where", visitorIds: ["x"], exp: now + 20 });
+    expect(await verifyInternal(S, plain.body, plain.sig, now)).toEqual({ op: "where", visitorIds: ["x"], exp: now + 20 });
   });
 
   it("다른 키·바뀐 본문·만료·너무 먼 만료는 거절", async () => {
@@ -38,6 +44,9 @@ describe("내부 요청 서명", () => {
       { op: "peer", room: "아무 방", sid: 1, exp: now + 5 },
       { op: "me", visitorIds: [], exp: now + 5 },
       { op: "me", visitorIds: ["a b"], exp: now + 5 },
+      { op: "where", visitorIds: [], exp: now + 5 },
+      { op: "where", visitorIds: Array.from({ length: WHERE_MAX_IDS + 1 }, (_, i) => `v${i}`), exp: now + 5 },
+      { op: "where", visitorIds: ["a b"], exp: now + 5 },
       { op: "zap", exp: now + 5 },
     ];
     for (const b of bad) {

@@ -78,6 +78,11 @@ export const K = {
   megaHidden: "mega:hidden", // SET 관리자가 숨긴 기록 id
   megaCool: (id: string) => `mega:cool:${id}`, // STRING NX PX 계정별 도배 제한
 
+  // ── 친구 (lib/store/friends.ts) ──
+  friends: (id: string) => `fr:${id}`, // ZSET 친구 계정 id → 맺은 시각 (양쪽에 똑같이)
+  friendsIn: (id: string) => `fr:in:${id}`, // ZSET 나에게 신청한 계정 → 신청 시각. 답하지 않은 신청 보관 기간 + 1일 TTL
+  friendsOut: (id: string) => `fr:out:${id}`, // ZSET 내가 신청한 계정 → 신청 시각. 같은 TTL
+
   // ── 50번 소원 분수 (lib/store/wishDay.ts) ──
   wishDay: (id: string, day: string) => `wish:day:${day}:${id}`, // STRING NX EX 계정별 그날(KST) 한 번
 };

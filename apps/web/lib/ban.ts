@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { CLOSE, INTERNAL_SIG_HEADER, INTERNAL_TTL_SEC, signInternal, type InternalRequest } from "@tomb/protocol";
+import { CLOSE, INTERNAL_SIG_HEADER, INTERNAL_TTL_SEC, signInternal, WHERE_MAX_IDS, type InternalRequest, type PeerWhere } from "@tomb/protocol";
 import type { NextRequest } from "next/server";
 import { env } from "./env";
 import { clientIp, HttpError } from "./http";
@@ -184,4 +184,15 @@ export async function notifyMe(accountIds: string[]): Promise<number | null> {
 export async function peerOf(where: { ch: number } | { room: string }, sid: number): Promise<{ visitorId: string; name: string } | null> {
   const r = await internal<{ peer: { visitorId: string; name: string } | null }>("/internal/peer", { op: "peer", ...where, sid });
   return r?.peer ?? null;
+}
+
+/**
+ * 친구 위치: 그 계정들이 지금 어느 채널·자리에 있는지 (접속 안 한 계정은 빠진다). 실시간 서버가 WHERE_CACHE_MS 동안 기억한 값이고,
+ * fresh면 지금 다시 묻는다. 실시간 서버에 닿지 못하면 null
+ */
+export async function whereOf(visitorIds: string[], fresh = false): Promise<Record<string, PeerWhere> | null> {
+  const ids = [...new Set(visitorIds)].slice(0, WHERE_MAX_IDS);
+  if (!ids.length) return {};
+  const r = await internal<{ where: Record<string, PeerWhere> }>("/internal/where", { op: "where", visitorIds: ids, ...(fresh ? { fresh: true } : {}) }, 3000);
+  return r ? r.where : null;
 }

@@ -14,6 +14,8 @@ import { nodeWindow, windowEndsAt } from "@/lib/forage/rules";
 import { FishZoneView } from "./FishZoneView";
 import { destroyAura, ensureNodeFxTextures, gatheredFx, makeAura, spawnFx, updateAura, vanishFx, type NodeAura } from "./nodeFx";
 import { ForageSfx } from "./sounds";
+import { gearById } from "@/lib/rpg/catalog";
+import { iconCanvas } from "../../rpg/icons";
 
 // 4·32번 낚시·채집 (월드 쪽). WorldScene은 이 클래스 하나만 들고 몇 군데(접속·좌석·E·매 프레임)에서 부른다.
 //
@@ -121,7 +123,7 @@ export class Foraging {
       bridge.on("forage:nodes", ({ ids }) => this.setNodes(ids)),
       bridge.on("forage:rod", ({ phase, tension }) => this.setRod(phase, tension ?? 0)),
       bridge.on("forage:gauge", (e) => (e.phase === "start" ? this.startGauge(e.ms, e.kind, e.node) : this.endGauge(e.ok, e.node))),
-      bridge.on("forage:pop", ({ itemId }) => this.pop(itemId)),
+      bridge.on("forage:pop", ({ itemId, sparkle }) => this.pop(itemId, sparkle)),
       bridge.on("forage:leave", () => this.leave()),
       bridge.on("forage:coin", () => this.sfx.play("coin", 0.8)),
     );
@@ -434,6 +436,26 @@ export class Foraging {
     return { x: f.x + dx * dist, y: f.y + dy * dist - (dy === 0 ? 2 : 0) };
   }
 
+  /** 물에 빠진 사냥 장비 아이콘 (사냥터 장비 그림을 그대로) */
+  private gearIconTexture(id: string): string | null {
+    const g = gearById(id);
+    if (!g) return null;
+    const key = `forage-gear-${id}`;
+    if (!this.scene.textures.exists(key)) this.scene.textures.addCanvas(key, iconCanvas(g.art));
+    return key;
+  }
+
+  /** 반짝 (물에 빠진 장비를 건졌을 때) */
+  private sparkleAt(x: number, y: number): void {
+    this.sfx.play("catch", 0.9);
+    if (this.d.reduced) return;
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI * 2 * i) / 8;
+      const dot = this.scene.add.rectangle(x, y, 2, 2, i % 2 ? 0xffe39a : 0xffffff).setDepth(DEPTH.bubble + 1);
+      this.scene.tweens.add({ targets: dot, x: x + Math.cos(a) * 14, y: y + Math.sin(a) * 10, alpha: 0, duration: 700, ease: "Quad.easeOut", onComplete: () => dot.destroy() });
+    }
+  }
+
   private splashAt(p: { x: number; y: number }): void {
     if (this.d.reduced) return;
     for (let i = 0; i < 5; i++) {
@@ -631,10 +653,11 @@ export class Foraging {
   }
 
   /** 잡은 것을 머리 위로 띄운다 */
-  private pop(itemId: string): void {
-    const key = ensureIconTexture(this.scene, itemId);
+  private pop(itemId: string, sparkle = false): void {
+    const key = ensureIconTexture(this.scene, itemId) ?? this.gearIconTexture(itemId);
     if (!key) return;
     const pl = this.d.player();
+    if (sparkle) this.sparkleAt(pl.x, pl.y - 26);
     const img = this.scene.add.image(pl.x, pl.y - 18, key).setOrigin(0.5, 1).setDepth(DEPTH.bubble);
     if (this.d.reduced) {
       this.scene.time.delayedCall(1200, () => img.destroy());

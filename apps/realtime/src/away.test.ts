@@ -88,4 +88,30 @@ describe("실내 표시 (away)", () => {
     core.message(a, send({ t: "away", on: true }), 0);
     expect(core.peer(1)?.away).toBeUndefined();
   });
+
+  it("친구 위치: 어느 실내인지 기억하고(장소만 바뀌면 알리지 않는다) 접속자 목록(roster)에 싣는다", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const b = join("b");
+    expect(core.roster()).toEqual([
+      expect.objectContaining({ visitorId: "a", sid: 1 }),
+      expect.objectContaining({ visitorId: "b", sid: 2 }),
+    ]);
+    expect(core.roster()[0].away).toBeUndefined();
+    clear(a, b);
+    core.message(a, send({ t: "away", on: true, p: "village" }), 0);
+    expect(core.roster()[0]).toMatchObject({ visitorId: "a", away: true, place: "village" });
+    expect(a.att?.place).toBe("village");
+    // 분양 마을 → 집: 다른 사람에게는 다시 알리지 않는다
+    core.message(a, send({ t: "away", on: true, p: "house" }), 1_000);
+    expect(aways(b)).toEqual([{ t: "away", sid: 1, on: true }]);
+    expect(core.roster()[0].place).toBe("house");
+    // 다른 사람 화면(입장 정보)에는 장소를 보내지 않는다
+    const c = join("c", 1_100);
+    expect(JSON.stringify(welcome(c))).not.toContain("house");
+    // 나오면 장소도 지운다
+    core.message(a, send({ t: "away", on: false }), 2_000);
+    expect(core.roster()[0].place).toBeUndefined();
+    expect(core.roster()[0].away).toBeUndefined();
+  });
 });

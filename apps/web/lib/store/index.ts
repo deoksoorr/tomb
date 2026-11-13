@@ -14,6 +14,7 @@ import { MemoryStore } from "./memory";
 import { mockGraves } from "./mock";
 import { MemoryErrors, RedisErrors, type ErrorStore } from "./errors";
 import { MemoryGifts, RedisGifts, type GiftStore } from "./gifts";
+import { MemoryFriends, RedisFriends, type FriendStore } from "./friends";
 import { MemoryMegaphone, RedisMegaphone, type MegaphoneStore } from "./megaphone";
 import { MemoryNotices, RedisNotices, type NoticeStore } from "./notices";
 import { MemoryWishDay, RedisWishDay, type WishDayStore } from "./wishDay";
@@ -32,6 +33,7 @@ const g = globalThis as typeof globalThis & {
   __tombGifts?: GiftStore;
   __tombMegaphone?: MegaphoneStore;
   __tombWishDay?: WishDayStore;
+  __tombFriends?: FriendStore;
 };
 
 /** Redis 환경변수가 있으면 RedisStore, 없으면 (로컬 한정) 목업을 심은 MemoryStore */
@@ -152,6 +154,18 @@ export function getGifts(): GiftStore {
   const fresh = new MemoryGifts(() => getAccounts() as MemoryAccounts);
   g.__tombGifts = cur ? Object.assign(fresh, cur, { accounts: () => getAccounts() as MemoryAccounts }) : fresh;
   return g.__tombGifts;
+}
+
+/** 친구 (계정 저장소와 같은 백엔드). 로컬은 닉네임을 MemoryAccounts에서 읽는다 */
+export function getFriends(): FriendStore {
+  const cur = g.__tombFriends;
+  const conn = env.redis();
+  if (conn) return cur instanceof RedisFriends ? cur : (g.__tombFriends = new RedisFriends(conn));
+  getStore(); // 운영에서 Redis가 없으면 여기서 실패한다
+  if (cur instanceof MemoryFriends) return cur;
+  const fresh = new MemoryFriends(() => getAccounts() as MemoryAccounts);
+  g.__tombFriends = cur ? Object.assign(fresh, cur, { accounts: () => getAccounts() as MemoryAccounts }) : fresh;
+  return g.__tombFriends;
 }
 
 /** 23번 확성기 기록 (계정 저장소와 같은 백엔드) */

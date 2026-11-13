@@ -19,6 +19,7 @@ import {
   parseS2C,
   pickChannel,
   type ActKind,
+  type AwayPlace,
   type C2S,
   type PhraseId,
   type EmoId,
@@ -158,6 +159,8 @@ export class RealtimeClient {
   private redirected = false;
   /** 실내(하위 장면)에 들어가 있다 (setAway) */
   private away = false;
+  /** 친구 위치용: 어느 실내인지 (setAway) */
+  private awayPlace: AwayPlace | undefined;
   private consecutiveInvalid = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private spectatorTimer: ReturnType<typeof setInterval> | null = null;
@@ -373,10 +376,17 @@ export class RealtimeClient {
    * 실내(하위 장면)에 들어감·나옴. 연결이 바뀌어도 이어 가도록 기억해 두고 welcome 때 다시 알린다.
    * 옛 서버는 모르는 메시지라 버린다 (그러면 예전처럼 문 앞에 보인다)
    */
-  setAway(on: boolean): void {
-    if (this.away === on) return;
+  setAway(on: boolean, place?: AwayPlace): void {
+    const p = on ? place : undefined;
+    if (this.away === on && this.awayPlace === p) return;
     this.away = on;
-    this.send({ t: "away", on });
+    this.awayPlace = p;
+    this.send(this.awayMsg());
+  }
+
+  /** 실내 알림 (친구 위치용 장소 p는 실내일 때만. 옛 서버는 p를 버리고 on만 본다) */
+  private awayMsg(): C2S {
+    return { t: "away", on: this.away, ...(this.away && this.awayPlace ? { p: this.awayPlace } : {}) };
   }
 
   /** 접속자 목록 다시 받기 (자가 복구) */
@@ -662,7 +672,7 @@ export class RealtimeClient {
     this.setMode("online");
     this.cb.onWelcome({ ...m, peers: m.peers.filter((p) => p.sid !== m.sid) });
     // 실내 표시: 들어가 있으면 새 연결에 다시 알린다. 유예 안에 자리를 되찾았으면 서버가 옛 값을 들고 있을 수 있어 나와 있어도 알린다
-    if (this.away || m.resumed) this.send({ t: "away", on: this.away });
+    if (this.away || m.resumed) this.send(this.awayMsg());
     // 새 연결: 서버 간격이 처음부터라 지금 착용 증서를 바로 보낸다 (기다리던 것도 함께 정리)
     if (this.lookGrant) this.lookPacer.push(this.lookGrant);
     this.lookPacer.reset();

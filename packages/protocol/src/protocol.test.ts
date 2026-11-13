@@ -83,6 +83,10 @@ describe("events", () => {
     expect(parseC2S("not json")).toBeNull();
     expect(parseC2S('{"t":"away","on":true}')).toEqual({ t: "away", on: true });
     expect(parseC2S('{"t":"away","on":"yes"}')).toBeNull();
+    // 친구: 어느 실내인지 (모르는 장소·나올 때는 p를 뺀다)
+    expect(parseC2S('{"t":"away","on":true,"p":"house"}')).toEqual({ t: "away", on: true, p: "house" });
+    expect(parseC2S('{"t":"away","on":true,"p":"moon"}')).toEqual({ t: "away", on: true });
+    expect(parseC2S('{"t":"away","on":false,"p":"hunt"}')).toEqual({ t: "away", on: false });
     expect(parseC2S(JSON.stringify({ t: "sit", seatId: "x".repeat(600) }))).toBeNull();
   });
 
