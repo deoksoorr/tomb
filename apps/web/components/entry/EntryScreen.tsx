@@ -89,11 +89,7 @@ export default function EntryScreen({ start, focusGraveId, entering, stalled, on
         {hydrated && !entering ? (
           <>
             <EntryFlow start={start} focusGraveId={focusGraveId} onEnter={onEnter} />
-            <p className={styles.nonprofit}>
-              게임을 한 번도 만들어 본 적 없는 개인이 만든 포트폴리오입니다.
-              <br />
-              후원, 광고, 유료 재화는 없습니다.
-            </p>
+            <p className={styles.nonprofit}>개인 포트폴리오 · 후원·광고·유료 재화 없음</p>
             <p className={styles.legal}>
               <Link href="/privacy">개인정보처리방침</Link> · <Link href="/terms">이용약관</Link> · <Link href="/faq">자주 묻는 질문</Link>
             </p>
