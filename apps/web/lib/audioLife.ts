@@ -28,6 +28,8 @@ class AudioLife {
   private needsWake = false;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private retries = 0;
+  /** 입력으로 마지막에 "visible"을 보낸 시각 */
+  private inputEmitAt = -Infinity;
 
   /** 탭이 숨어 있는지 (숨어 있으면 새 소리를 내지 않는다) */
   get hidden(): boolean {
@@ -92,9 +94,15 @@ class AudioLife {
   private readonly onInput = (): void => {
     if (this.hiddenNow) return;
     if (!this.needsWake && this.allRunning()) return;
+    // resume()은 입력마다 시도한다 (아이폰은 touchend 같은 제스처 안에서만 받아 준다). 이미 running인 컨텍스트는 건드리지 않는다
     this.wake();
     this.resumeMedia();
-    this.emit("visible");
+    // 컨텍스트가 계속 깨어나지 않을 때(다른 앱이 소리를 쥐고 있음 등) 타자·터치마다 모든 소리를 다시 맞추지 않게: 1초에 한 번만
+    const now = performance.now();
+    if (now - this.inputEmitAt >= RETRY_MS) {
+      this.inputEmitAt = now;
+      this.emit("visible");
+    }
     this.needsWake = !this.allRunning();
   };
 

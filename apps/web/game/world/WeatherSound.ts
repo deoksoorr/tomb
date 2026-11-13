@@ -109,7 +109,7 @@ export class WeatherSound extends AudioHost {
       lp.connect(g);
       head = lp;
     }
-    g.connect(ac.destination);
+    g.connect(this.output);
     src.connect(head);
     src.start(t);
     src.onended = () => {

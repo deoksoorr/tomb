@@ -62,7 +62,7 @@ export class HouseSfx extends AudioHost {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(gain, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(bp).connect(g).connect(ac.destination);
+    src.connect(bp).connect(g).connect(this.output);
     src.start(t, Math.random() * 0.3);
     src.stop(t + dur + 0.02);
   }
@@ -76,7 +76,7 @@ export class HouseSfx extends AudioHost {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(gain, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
-    o.connect(g).connect(ac.destination);
+    o.connect(g).connect(this.output);
     o.start(t);
     o.stop(t + dur + 0.02);
   }

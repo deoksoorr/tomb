@@ -1,8 +1,9 @@
 import { audioLife } from "@/lib/audioLife";
+import { sharedAudioContext } from "@/lib/sharedAudio";
 import { busGain, loadSoundMix, type SoundBus, type SoundMix } from "@/lib/soundMix";
 import { bridge } from "../bridge";
 
-// 게임 소리의 바탕: WebAudio 컨텍스트 하나 + 소리 갈래(버스) 볼륨·끄기(13번 audio:mix) + 멈춘 컨텍스트 깨우기.
+// 게임 소리의 바탕: 앱 공용 WebAudio 컨텍스트(lib/sharedAudio) 위의 호스트 출력 노드 하나 + 소리 갈래(버스) 볼륨·끄기(13번 audio:mix) + 멈춘 컨텍스트 깨우기.
 // 효과음(Sfx·RideSound·ForageSfx·HouseSfx)은 sfx 버스, 날씨 소리(WeatherSound)는 amb 버스가 기본이다.
 // 한 호스트 안에서도 소리마다 다른 버스를 쓸 수 있다 (Sfx의 모닥불·물소리 루프는 환경음: AmbientLoop의 bus 옵션).
 // 탭 숨김·복귀 때 멈추고 깨우는 것은 BGM·다른 소리와 함께 lib/audioLife가 한곳에서 한다 (컨텍스트를 거기 맡긴다).
@@ -11,10 +12,11 @@ export type { SoundBus };
 
 export class AudioHost {
   protected ac: AudioContext | null = null;
+  /** 이 호스트의 소리가 모두 지나가는 출력 (공용 컨텍스트는 닫지 않고, 호스트가 사라지면 이것만 뗀다) */
+  private outNode: GainNode | null = null;
   private mix: SoundMix;
   private kickAt = -Infinity;
   private readonly offMix: () => void;
-  private offLife: (() => void) | null = null;
 
   constructor(protected readonly bus: SoundBus = "sfx") {
     this.mix = bridge.last("audio:mix") ?? loadSoundMix();
@@ -51,20 +53,24 @@ export class AudioHost {
   audio(bus: SoundBus = this.bus): AudioContext | null {
     if (this.busGain(bus) <= 0 || audioLife.hidden) return null;
     if (!this.ac) {
-      const AC =
-        typeof window !== "undefined"
-          ? (window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
-          : undefined;
-      if (!AC) return null;
+      const ac = sharedAudioContext();
+      if (!ac) return null;
       try {
-        this.ac = new AC();
-        this.offLife = audioLife.registerContext(this.ac);
+        const out = ac.createGain();
+        out.connect(ac.destination);
+        this.outNode = out;
       } catch {
         return null;
       }
+      this.ac = ac;
     }
     this.kick(true);
     return this.ac;
+  }
+
+  /** 소리를 연결할 곳 (ac.destination 대신). audio()가 컨텍스트를 돌려준 뒤에만 쓴다 */
+  get output(): AudioNode {
+    return this.outNode ?? (this.ac as AudioContext).destination;
   }
 
   /** 이미 만든 컨텍스트 (없으면 null). 새로 만들지 않는다 */
@@ -78,6 +84,7 @@ export class AudioHost {
    */
   kick(force = false): void {
     const ac = this.ac;
+    // 이미 깨어 있으면 아무것도 안 한다 (아이폰은 불필요한 resume()도 오디오 세션을 건드린다)
     if (!ac || ac.state === "running" || ac.state === "closed" || audioLife.hidden) return;
     const now = performance.now();
     if (!force && now - this.kickAt < 1000) return;
@@ -85,11 +92,15 @@ export class AudioHost {
     void ac.resume().catch(() => undefined);
   }
 
+  /** 호스트를 닫는다: 출력만 떼어 이 호스트의 소리를 끊는다 (공용 컨텍스트는 다른 소리가 쓰므로 닫지 않는다). 루프 소스는 각자 먼저 멈춘다 */
   protected closeAudio(): void {
     this.offMix();
-    this.offLife?.();
-    this.offLife = null;
-    void this.ac?.close().catch(() => undefined);
+    try {
+      this.outNode?.disconnect();
+    } catch {
+      // 이미 뗐다
+    }
+    this.outNode = null;
     this.ac = null;
   }
 }

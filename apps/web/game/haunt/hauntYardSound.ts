@@ -15,7 +15,7 @@ export class HauntYardSound extends AudioHost {
     if (!this.master) {
       const g = ac.createGain();
       g.gain.value = (this.muted ? 0 : this.volume) * YARD_GAIN;
-      g.connect(ac.destination);
+      g.connect(this.output);
       this.master = g;
     }
     return this.master;

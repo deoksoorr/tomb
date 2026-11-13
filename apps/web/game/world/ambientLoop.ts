@@ -102,7 +102,7 @@ export class AmbientLoop {
     if (!this.gain) {
       this.gain = ac.createGain();
       this.gain.gain.value = 0;
-      this.gain.connect(ac.destination);
+      this.gain.connect(this.host.output);
       if (this.opts.filter) {
         this.lp = ac.createBiquadFilter();
         this.lp.type = "lowpass";

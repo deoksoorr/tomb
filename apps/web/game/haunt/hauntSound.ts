@@ -22,7 +22,7 @@ export class HauntSound extends AudioHost {
       comp.release.value = 0.2;
       const g = ac.createGain();
       g.gain.value = this.volume;
-      g.connect(comp).connect(ac.destination);
+      g.connect(comp).connect(this.output);
       this.master = g;
     }
     return this.master;

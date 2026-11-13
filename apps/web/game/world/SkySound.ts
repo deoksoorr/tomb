@@ -68,7 +68,7 @@ export class SkySound extends AudioHost {
       filter.frequency.value = 500;
       const gain = ac.createGain();
       gain.gain.value = 0;
-      src.connect(filter).connect(gain).connect(ac.destination);
+      src.connect(filter).connect(gain).connect(this.output);
       src.start();
       this.wind = { src, filter, gain };
     }
@@ -90,7 +90,7 @@ export class SkySound extends AudioHost {
       gain.gain.value = 0;
       src.connect(band).connect(gain);
       low.connect(lowGain).connect(gain);
-      gain.connect(ac.destination);
+      gain.connect(this.output);
       src.start();
       low.start();
       this.burner = { src, low, gain };
@@ -124,7 +124,7 @@ export class SkySound extends AudioHost {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(0.06 * gain * vol, t + 0.03);
     g.gain.exponentialRampToValueAtTime(0.0005, t + 0.26);
-    o.connect(g).connect(ac.destination);
+    o.connect(g).connect(this.output);
     o.start(t);
     o.stop(t + 0.3);
   }

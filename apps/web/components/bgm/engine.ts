@@ -1,5 +1,6 @@
 import { bridge } from "@/game/bridge";
 import { audioLife, type AudioLifeState } from "@/lib/audioLife";
+import { sharedAudioContext } from "@/lib/sharedAudio";
 import { readItem, writeItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
 import { nextIndex, parseManifest, randomStart, type Playlist, type Track } from "./manifest";
@@ -10,6 +11,8 @@ import { silentWav } from "./silence";
 // iOS는 사용자 제스처 안에서 한 번이라도 play()된 <audio>만 나중에 스스로 재생할 수 있다.
 // 그래서 첫 제스처(입장 클릭) 때 두 덱 모두 무음으로 잠깐 재생해 깨워 두고, 이후 곡 넘김·크로스페이드는 제스처 없이 한다.
 // 탭이 숨으면 게임 소리와 함께 멈추고 돌아오면 함께 이어서 튼다 (lib/audioLife가 컨텍스트를 suspend·resume, 덱은 여기서 pause·play).
+// 컨텍스트는 게임 소리와 같은 공용 하나(lib/sharedAudio), <audio>는 이 두 덱뿐이다 — 효과음은 모두 WebAudio 버퍼.
+// 아이폰 잠금 화면·다이내믹 아일랜드에는 mediaSession으로 지금 곡 하나만 보인다 (곡이 바뀔 때만 메타데이터를 바꾼다).
 
 const MANIFEST_URL = "/bgm/tracks.json";
 const CROSSFADE_SEC = 1.5;
@@ -94,7 +97,7 @@ class BgmEngine {
   /** 사용자 제스처(입장 클릭, 재생 버튼) 안에서 불러야 한다. tracks.json이 아직 안 왔어도 덱을 깨워 두고 도착하면 시작한다 */
   play(): void {
     this.ensureGraph();
-    void this.ctx?.resume();
+    if (this.ctx && this.ctx.state !== "running") void this.ctx.resume().catch(() => undefined);
     this.unlockDecks();
     this.set({ playing: true });
     if (!this.state.loaded) {
@@ -105,12 +108,15 @@ class BgmEngine {
     }
     const deck = this.decks[this.active];
     const track = this.tracks()[this.state.index];
-    if (deck && track && deck.file === track.file && !deck.audio.ended) this.resumeDeck(deck);
-    else this.startTrack();
+    if (deck && track && deck.file === track.file && !deck.audio.ended) {
+      this.updateMediaSession(track);
+      this.resumeDeck(deck);
+    } else this.startTrack();
   }
 
   pause(): void {
     this.set({ playing: false });
+    this.updateMediaSession(null);
     this.decks.forEach((deck) => this.fadeOut(deck, PAUSE_FADE_SEC));
   }
 
@@ -122,7 +128,7 @@ class BgmEngine {
   next(): void {
     this.set({ index: nextIndex(this.state.index, this.tracks().length) });
     if (this.state.playing) {
-      void this.ctx?.resume();
+      if (this.ctx && this.ctx.state !== "running") void this.ctx.resume().catch(() => undefined);
       this.startTrack();
     }
   }
@@ -166,8 +172,9 @@ class BgmEngine {
   }
 
   private ensureGraph(): void {
-    if (this.ctx || typeof AudioContext === "undefined") return;
-    const ctx = new AudioContext();
+    if (this.ctx) return;
+    const ctx = sharedAudioContext();
+    if (!ctx) return;
     const master = ctx.createGain();
     master.connect(ctx.destination);
     this.decks = [0, 1].map(() => {
@@ -187,9 +194,42 @@ class BgmEngine {
     });
     this.ctx = ctx;
     this.master = master;
-    audioLife.registerContext(ctx);
     audioLife.on(this.onLife);
     this.applyVolume();
+    this.bindMediaSession();
+  }
+
+  /** 잠금 화면·다이내믹 아일랜드의 재생/일시정지/다음 곡 버튼 (한 번만) */
+  private bindMediaSession(): void {
+    const ms = typeof navigator !== "undefined" ? navigator.mediaSession : undefined;
+    if (!ms) return;
+    const on = (action: MediaSessionAction, fn: () => void) => {
+      try {
+        ms.setActionHandler(action, fn);
+      } catch {
+        // 지원하지 않는 동작
+      }
+    };
+    on("play", () => this.play());
+    on("pause", () => this.pause());
+    on("nexttrack", () => this.next());
+  }
+
+  private sessionFile = "";
+
+  /** 지금 곡을 시스템에 알린다 (같은 곡이면 그대로 둔다 — 자꾸 바꾸면 아일랜드가 깜빡인다) */
+  private updateMediaSession(track: Track | null): void {
+    const ms = typeof navigator !== "undefined" ? navigator.mediaSession : undefined;
+    if (!ms) return;
+    try {
+      ms.playbackState = this.state.playing ? "playing" : "paused";
+      if (!track || track.file === this.sessionFile || typeof MediaMetadata === "undefined") return;
+      this.sessionFile = track.file;
+      const list = this.state.playlists.find((p) => p.id === this.state.playlistId);
+      ms.metadata = new MediaMetadata({ title: track.title, artist: track.artist || "한때는", album: list?.title ?? "한때는" });
+    } catch {
+      // mediaSession을 못 쓰면 조용히
+    }
   }
 
   /** 탭 숨김: 울리는 덱을 멈춰 둔다. 복귀(또는 복귀 뒤 첫 입력): 재생 중이었으면 그 덱들을 이어서 튼다 */
@@ -254,6 +294,7 @@ class BgmEngine {
     this.fadeOut(from, CROSSFADE_SEC);
     const track = this.tracks()[this.state.index];
     if (!track) return;
+    this.updateMediaSession(track);
     this.active = 1 - this.active;
     const to = this.decks[this.active];
     to.token++;

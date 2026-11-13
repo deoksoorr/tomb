@@ -13,7 +13,7 @@ export function playLife(sfx: Sfx, kind: LifeSound, gain = 1): void {
   const t = ac.currentTime + 0.01;
   const out = ac.createGain();
   out.gain.value = Math.min(1, sfx.volume * gain);
-  out.connect(ac.destination);
+  out.connect(sfx.output);
   const tone = (type: OscillatorType, f0: number, at: number, dur: number, peak: number, f1?: number, f2?: number) => {
     const o = ac.createOscillator();
     const g = ac.createGain();

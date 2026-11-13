@@ -1,8 +1,9 @@
-import { audioLife } from "@/lib/audioLife";
+import { playBuffer, preloadSound, soundMissing } from "@/lib/sharedAudio";
 import { AmbientLoop } from "./ambientLoop";
 import { AudioHost, type SoundBus } from "./audioHost";
 
-// 월드 효과음 (폭죽·말풍선·종·물 튀기기·그네 삐걱). Phaser 오디오는 꺼 두었으므로 HTMLAudioElement를 직접 쓴다.
+// 월드 효과음 (폭죽·말풍선·종·물 튀기기·그네 삐걱). Phaser 오디오는 꺼 두었으므로 공용 WebAudio 컨텍스트에 미리 디코딩한 버퍼로 낸다
+// (아이폰 홈 화면 앱에서 <audio>를 매번 재생하면 '지금 재생 중'이 켜졌다 꺼지며 버벅인다 — lib/sharedAudio).
 // 파일이 아직 없거나 재생이 막히면 조용히 넘어간다. 13번: 효과음 갈래(sfx 버스)를 따르고,
 // 모닥불 루프·물소리(수영 물장구 루프·잠수 물방울)는 환경음 갈래(amb 버스)를 따른다.
 // WebAudio 컨텍스트·볼륨·깨우기는 AudioHost, 루프는 AmbientLoop (빗소리 WeatherSound와 같은 코드).
@@ -25,8 +26,6 @@ const FILE_BUS: Partial<Record<SfxName, SoundBus>> = { bubble: "amb" };
 const MAX_VOICES = 12;
 
 export class Sfx extends AudioHost {
-  private readonly base = new Map<SfxName, HTMLAudioElement>();
-  private readonly missing = new Set<SfxName>();
   private voices = 0;
   /** 모닥불 타는 소리 (BGM 위에 은은한 루프, 환경음) */
   private readonly fire = new AmbientLoop(this, "/sfx/campfire.mp3", { gain: 0.75, bus: "amb" });
@@ -37,14 +36,7 @@ export class Sfx extends AudioHost {
 
   constructor() {
     super("sfx");
-    if (typeof Audio === "undefined") return;
-    for (const [name, url] of Object.entries(FILES) as [SfxName, string][]) {
-      const a = new Audio();
-      a.preload = "auto";
-      a.addEventListener("error", () => this.missing.add(name), { once: true });
-      a.src = url;
-      this.base.set(name, a);
-    }
+    for (const url of Object.values(FILES)) void preloadSound(url);
   }
 
   protected override onMixChanged(): void {
@@ -57,24 +49,20 @@ export class Sfx extends AudioHost {
    * limit: 이미 이만큼 겹쳐 있으면 건너뛴다 (중요하지 않은 소리는 작게 줘서 자리를 남긴다)
    */
   play(name: SfxName, gain = 1, rate = 1, limit = MAX_VOICES): void {
-    const vol = this.busGain(FILE_BUS[name] ?? "sfx");
-    if (vol <= 0 || this.hidden || this.missing.has(name) || this.voices >= Math.min(limit, MAX_VOICES)) return;
-    const src = this.base.get(name);
-    if (!src) return;
-    const a = src.cloneNode(true) as HTMLAudioElement;
-    a.volume = Math.max(0, Math.min(1, vol * gain));
-    if (rate !== 1) {
-      a.preservesPitch = false;
-      a.playbackRate = Math.max(0.5, Math.min(2, rate));
-    }
-    this.voices++;
-    const done = () => {
-      this.voices = Math.max(0, this.voices - 1);
-    };
-    a.addEventListener("ended", done, { once: true });
-    a.addEventListener("error", done, { once: true });
-    audioLife.trackMedia(a);
-    a.play().catch(done);
+    const bus = FILE_BUS[name] ?? "sfx";
+    const vol = this.busGain(bus);
+    const url = FILES[name];
+    if (vol <= 0 || this.hidden || soundMissing(url) || this.voices >= Math.min(limit, MAX_VOICES)) return;
+    const ac = this.audio(bus);
+    if (!ac) return;
+    const started = playBuffer(ac, this.output, url, {
+      gain: Math.max(0, Math.min(1, vol * gain)),
+      rate,
+      onEnded: () => {
+        this.voices = Math.max(0, this.voices - 1);
+      },
+    });
+    if (started) this.voices++;
   }
 
   // ── 합성음 (파일 없이 WebAudio로): 종소리·물소리 ──
@@ -87,7 +75,7 @@ export class Sfx extends AudioHost {
     const t = ac.currentTime + 0.01;
     const out = ac.createGain();
     out.gain.value = Math.min(1, this.busGain() * gain) * 0.32;
-    out.connect(ac.destination);
+    out.connect(this.output);
     const base = 196;
     const partials: [number, number, number][] = [
       [1, 1, 3.2],
@@ -133,7 +121,7 @@ export class Sfx extends AudioHost {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(v, t + 0.015);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
-    src.connect(bp).connect(g).connect(ac.destination);
+    src.connect(bp).connect(g).connect(this.output);
     src.start(t);
     src.stop(t + 0.45);
     for (let i = 0; i < 3; i++) {
@@ -146,7 +134,7 @@ export class Sfx extends AudioHost {
       og.gain.setValueAtTime(0, at);
       og.gain.linearRampToValueAtTime(v * 0.25, at + 0.005);
       og.gain.exponentialRampToValueAtTime(0.001, at + 0.08);
-      o.connect(og).connect(ac.destination);
+      o.connect(og).connect(this.output);
       o.start(at);
       o.stop(at + 0.1);
     }
@@ -186,7 +174,5 @@ export class Sfx extends AudioHost {
     this.fire.destroy();
     this.swim.destroy();
     this.closeAudio();
-    for (const a of this.base.values()) a.src = "";
-    this.base.clear();
   }
 }
