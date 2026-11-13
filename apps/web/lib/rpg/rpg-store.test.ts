@@ -130,7 +130,8 @@ describe(`사냥터 서비스 (${redisEnv ? "redis" : "memory"})`, () => {
   it("판 끝내기: 티켓 재사용 409, 하루 사냥 포인트 한도에서 멈춘다", async () => {
     const a = acct();
     const cap = earnRule("hunt").dailyMax;
-    let now = Date.now();
+    // 판을 30번 넘게 2분 간격으로 돌리므로 자정 직전에 돌리면 하루가 바뀐다 → 한낮(한국 시간 12시)에 고정
+    let now = Date.parse("2026-03-10T03:00:00Z");
     let total = 0;
     let last = { points: -1, capped: false };
     for (let i = 0; i < cap / 20 + 1; i++) {
