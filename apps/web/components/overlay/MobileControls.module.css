@@ -135,6 +135,24 @@
   line-height: 1.1;
 }
 
+/* [채팅]: [표현] 바로 위에 같은 크기 (앉기 버튼 왼쪽 — 같은 세로줄이라 조이스틱 쪽으로 넓어지지 않는다) */
+.chat {
+  right: 150px;
+  bottom: 54px;
+  width: 46px;
+  height: 46px;
+  gap: 0;
+  align-content: center;
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+/* 채팅 입력 중: 키보드 위 입력칸과 겹치지 않게 숨긴다 (펼침 상태는 그대로 두려고 지우지 않는다) */
+.joystick[data-hidden],
+.actions[data-hidden] {
+  visibility: hidden;
+}
+
 .action[aria-pressed="true"] {
   color: var(--bone);
   background: rgba(47, 66, 52, 0.85);

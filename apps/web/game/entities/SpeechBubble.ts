@@ -22,6 +22,11 @@ const ICON_PX = 3;
 const PAD_X = 5;
 const PAD_Y = 3;
 const TAIL = 3;
+/** 자유 채팅 말풍선 글꼴 (app/globals.css --font-chat와 같은 Pretendard Medium). 화면 CHAT_PX px로 1:1 그린다 */
+export const CHAT_FONT = '"Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+const CHAT_PX = 16;
+const CHAT_WEIGHT = "500";
+const CHAT_LINE_GAP = 3;
 
 /** 이모티콘 텍스처 (게임 전체에 한 번) */
 export function ensureEmoteTextures(scene: Phaser.Scene): void {
@@ -38,7 +43,9 @@ export class SpeechBubble {
   private readonly border: Phaser.GameObjects.Image;
   private readonly tail: Phaser.GameObjects.Image;
   private readonly tailIn: Phaser.GameObjects.Image;
-  private mode: "text" | "icon" = "text";
+  /** 자유 채팅 글자: 비트맵 대신 Pretendard를 안티앨리어싱 그대로(이진화 없이) 그린다. 채팅할 때 처음 만든다 */
+  private chatText: Phaser.GameObjects.Text | null = null;
+  private mode: "text" | "icon" | "chat" = "text";
   private until = 0;
   private born = 0;
   private scale = 0;
@@ -64,10 +71,44 @@ export class SpeechBubble {
     this.atlas.ensure(text);
     this.text.setText(text);
     this.icon.setVisible(false);
+    this.chatText?.setVisible(false);
     this.mode = "text";
     this.born = now;
     this.until = now + ms;
     this.scale = 0;
+  }
+
+  /** 자유 채팅 말풍선 (Pretendard). 주민 대사·정해진 문장은 show()로 Galmuri 그대로 */
+  showChat(text: string, now: number, ms: number): void {
+    const t = (this.chatText ??= this.scene.add
+      .text(0, 0, "", { fontFamily: CHAT_FONT, fontSize: `${CHAT_PX}px`, fontStyle: CHAT_WEIGHT, color: "#f8f0d8", align: "center", lineSpacing: CHAT_LINE_GAP })
+      .setDepth(DEPTH.bubble + 4)
+      .setVisible(false));
+    t.setText(text);
+    this.centerChat();
+    // 글꼴(필요한 글자 묶음)이 아직 안 왔으면 받은 뒤 다시 그린다 (그 전엔 대체 글꼴로 보인다)
+    const font = `${CHAT_WEIGHT} ${CHAT_PX}px ${CHAT_FONT}`;
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+    if (fonts && !fonts.check(font, text)) {
+      void fonts.load(font, text).then(() => {
+        if (this.chatText !== t || !t.active || t.text !== text) return;
+        t.style.update(true);
+        this.centerChat();
+        this.scale = 0; // 크기가 바뀌었으니 다음 place에서 상자를 다시 잰다
+      }, () => {});
+    }
+    this.text.setVisible(false);
+    this.icon.setVisible(false);
+    this.mode = "chat";
+    this.born = now;
+    this.until = now + ms;
+    this.scale = 0;
+  }
+
+  /** 가운데 원점을 정수 픽셀에 맞춘다 (반 픽셀에 걸리면 글자가 번진다) */
+  private centerChat(): void {
+    const t = this.chatText;
+    if (t && t.width > 0) t.setOrigin(Math.round(t.width / 2) / t.width, 1);
   }
 
   /** 이모티콘 (같은 자리, 말풍선을 대신한다) */
@@ -75,6 +116,7 @@ export class SpeechBubble {
     ensureEmoteTextures(this.scene);
     this.icon.setTexture(emoteTexKey(kind));
     this.text.setVisible(false);
+    this.chatText?.setVisible(false);
     this.mode = "icon";
     this.born = now;
     this.until = now + ms;
@@ -100,11 +142,14 @@ export class SpeechBubble {
       this.pop = pop;
       this.text.setScale(labelScale * TEXT_SCALE);
       this.icon.setScale(labelScale * ICON_PX * pop);
+      // 채팅 글자는 화면 픽셀 1:1 (글자 텍스처 1px = 화면 1px)
+      this.chatText?.setScale(labelScale);
     }
     const s = labelScale;
-    const content = this.mode === "text" ? this.text : this.icon;
-    const cw = this.mode === "text" ? this.text.width : this.icon.width * s * ICON_PX;
-    const ch = this.mode === "text" ? this.text.height : this.icon.height * s * ICON_PX;
+    const chat = this.mode === "chat" ? this.chatText : null;
+    const content = chat ?? (this.mode === "text" ? this.text : this.icon);
+    const cw = chat ? chat.displayWidth : this.mode === "text" ? this.text.width : this.icon.width * s * ICON_PX;
+    const ch = chat ? chat.displayHeight : this.mode === "text" ? this.text.height : this.icon.height * s * ICON_PX;
     this.box.x = Math.round(x);
     this.box.w = cw + (PAD_X * 2 + 2) * s;
     this.box.h = ch + (PAD_Y * 2 + 2 + TAIL) * s;
@@ -127,16 +172,20 @@ export class SpeechBubble {
     this.tail.setPosition(x, b).setDisplaySize(3 * s, s);
     this.tailIn.setPosition(x, b + s).setDisplaySize(s, (TAIL - 1) * s);
     const cy = b - s - PAD_Y * s;
-    if (this.mode === "text") this.text.setPosition(x, cy);
+    if (this.mode === "chat") this.chatText?.setPosition(x, cy);
+    else if (this.mode === "text") this.text.setPosition(x, cy);
     else this.icon.setPosition(x, cy + (this.icon.displayHeight - this.icon.height * s * ICON_PX) / 2);
   }
 
   hide(): void {
     if (!this.border.visible) return;
     for (const o of [this.border, this.bg, this.tail, this.tailIn, this.text, this.icon]) o.setVisible(false);
+    this.chatText?.setVisible(false);
   }
 
   destroy(): void {
     for (const o of [this.border, this.bg, this.tail, this.tailIn, this.text, this.icon]) o.destroy();
+    this.chatText?.destroy();
+    this.chatText = null;
   }
 }

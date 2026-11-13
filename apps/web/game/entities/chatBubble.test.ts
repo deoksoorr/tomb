@@ -26,9 +26,15 @@ function fakeObject() {
 async function bubble() {
   const { SpeechBubble, SAY_MS } = await import("./SpeechBubble");
   const texts: Record<string, unknown>[] = [];
+  const chats: Record<string, unknown>[] = [];
   const scene = {
     add: {
       image: () => fakeObject(),
+      text: () => {
+        const t = fakeObject();
+        chats.push(t);
+        return t;
+      },
       bitmapText: () => {
         const t = fakeObject();
         texts.push(t);
@@ -39,7 +45,7 @@ async function bubble() {
   };
   const atlas = { ensure: () => {} };
   const b = new SpeechBubble(scene as never, atlas as never);
-  return { b, text: () => texts[0].text as string, SAY_MS };
+  return { b, text: () => texts[0].text as string, chats, texts, SAY_MS };
 }
 
 describe("말풍선 교체", () => {
@@ -71,6 +77,22 @@ describe("말풍선 교체", () => {
     b.show("다시", 3_000, CHAT_SHOW_MS);
     expect(text()).toBe("다시");
     expect(b.active(3_000 + CHAT_SHOW_MS - 1)).toBe(true);
+  });
+});
+
+describe("말풍선 글꼴", () => {
+  it("자유 채팅만 Pretendard 글자(따로 만든 글자 오브젝트)로, 정해진 문장은 비트맵 글자로 그린다", async () => {
+    const { b, chats, texts } = await bubble();
+    b.show("정해진 문장", 0);
+    expect(chats).toHaveLength(0);
+    b.showChat("안녕하세요", 1_000, CHAT_SHOW_MS);
+    expect(chats).toHaveLength(1);
+    expect(chats[0].text).toBe("안녕하세요");
+    expect(texts[0].visible).toBe(false);
+    expect(b.active(1_000 + CHAT_SHOW_MS - 1)).toBe(true);
+    b.show("다시 정해진 문장", 2_000);
+    expect(chats[0].visible).toBe(false);
+    expect(texts[0].text).toBe("다시 정해진 문장");
   });
 });
 

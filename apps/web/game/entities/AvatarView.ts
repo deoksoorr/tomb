@@ -580,7 +580,7 @@ export class AvatarView {
   /** 말풍선 자유 채팅 (가린 글, CHAT_SHOW_MS). 떠 있던 말풍선·이모티콘은 바로 바뀐다 (한 자리 하나) */
   chat(text: string, now: number): void {
     this.speech ??= new SpeechBubble(this.scene, this.atlas);
-    this.speech.show(wrapChat(text), now, CHAT_SHOW_MS);
+    this.speech.showChat(wrapChat(text), now, CHAT_SHOW_MS);
     this.chatShown = { text, until: now + CHAT_SHOW_MS };
   }
 

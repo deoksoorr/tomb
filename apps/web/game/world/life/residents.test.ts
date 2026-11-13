@@ -1,12 +1,12 @@
 import { MAP_HEIGHT, MAP_WIDTH, SEATS } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { RESIDENTS_MAX } from "@/lib/residents";
-import { walkableGrid, WALK, inWater } from "../layout";
+import { walkableGrid, WALK, inWater, inWaterBody } from "../layout";
 import { critterGrid, restable } from "./critterSim";
 import { pickLine, RESIDENTS, type LineContext } from "./residentData";
-import { ResidentSim, residentSpots, restActOf } from "./residentSim";
+import { ResidentSim, residentSpots, restActOf, swimSites } from "./residentSim";
 
-// 돌아다니는 마을 주민: 결정성(같은 채널·시각 = 같은 자리), 걷기 가능 영역, 보기에만 앉기(사람이 앉으면 비켜 섬), 대사 고르기
+// 돌아다니는 마을 주민: 결정성(같은 채널·시각 = 같은 자리), 걷기 가능 영역, 걷기 위주 비율, 수영(물속에서만), 보기에만 앉기(사람이 앉으면 비켜 섬), 대사 고르기
 
 const T0 = Date.UTC(2026, 10, 13, 3, 0, 0);
 
@@ -22,6 +22,8 @@ describe("resident roster", () => {
         r.id,
       ).toBe(true);
     }
+    // 성향이 조금씩 다르다 (산책·수영·모닥불)
+    for (const taste of ["walk", "swim", "fire"]) expect(RESIDENTS.some((r) => r.taste === taste)).toBe(true);
   });
 
   it("every resident has several rest spots on open dry ground, including a seat", () => {
@@ -76,15 +78,98 @@ describe("resident simulation", () => {
           sat++;
           continue;
         }
+        // 헤엄은 물속에서만
+        if (p.state === "swim") {
+          expect(inWater(p.x, p.y), `${def.id} swim at ${Math.round(p.x)},${Math.round(p.y)}`).toBe(true);
+          continue;
+        }
         const c = w.cells[Math.floor(p.y / 8) * w.cols + Math.floor(p.x / 8)];
         // 좌석 앞에서 자리로 옮겨 앉는 몇 걸음은 벤치 칸을 지난다
         if (c !== WALK.open && p.state === "walk" && SEATS.some((s) => Math.hypot(s.x - p.x, s.y - p.y) <= 26)) continue;
+        // 물가에서 물로 걸어 들어가고 나오는 몇 걸음
+        if (c !== WALK.open && p.state === "walk" && inWaterBody(p.x, p.y, 8)) continue;
         expect(c, `${def.id} ${p.state} at ${Math.round(p.x)},${Math.round(p.y)}`).toBe(WALK.open);
-        if (p.state === "walk") walked++;
+        if (p.state === "walk" || p.state === "run") walked++;
       }
     });
     expect(walked).toBeGreaterThan(50);
     expect(sat).toBeGreaterThan(10);
+  });
+
+  it("mostly walks around (about 3/4 of the time), sits only a little, and sometimes runs and swims", () => {
+    const n: Record<string, number> = {};
+    let all = 0;
+    for (const seed of [1, 6]) {
+      RESIDENTS.forEach((def, i) => {
+        const sim = new ResidentSim(def, i, seed);
+        for (let t = T0; t < T0 + 40 * 60_000; t += 1_000) {
+          const st = sim.at(t).state;
+          n[st] = (n[st] ?? 0) + 1;
+          all++;
+        }
+      });
+    }
+    const share = (...s: string[]) => s.reduce((a, k) => a + (n[k] ?? 0), 0) / all;
+    expect(share("walk", "run")).toBeGreaterThan(0.68);
+    expect(share("walk", "run")).toBeLessThan(0.88);
+    expect(share("sitChair", "sitGround")).toBeGreaterThan(0.05);
+    expect(share("sitChair", "sitGround")).toBeLessThan(0.2);
+    expect(share("run")).toBeGreaterThan(0.01);
+    expect(share("swim")).toBeGreaterThan(0.01);
+  });
+
+  it("sits briefly: one sitting lasts at most ~15s", () => {
+    RESIDENTS.forEach((def, i) => {
+      const sim = new ResidentSim(def, i, 2);
+      let run = 0;
+      for (let t = T0; t < T0 + 30 * 60_000; t += 500) {
+        const st = sim.at(t).state;
+        run = st === "sitChair" || st === "sitGround" ? run + 500 : 0;
+        expect(run, def.id).toBeLessThanOrEqual(15_500);
+      }
+    });
+  });
+
+  it("swim sites: shore on dry open ground, every swim stroke inside water (river·lake·ponds)", () => {
+    const g = critterGrid();
+    const sites = swimSites(g);
+    expect(sites.length).toBeGreaterThan(10);
+    for (const s of sites) {
+      expect(inWater(s.shore.x, s.shore.y)).toBe(false);
+      expect(g.blocked(Math.floor(s.shore.x / 8), Math.floor(s.shore.y / 8))).toBe(false);
+      for (let i = 1; i < s.loop.length; i++) {
+        const a = s.loop[i - 1];
+        const b = s.loop[i];
+        for (let f = 0; f <= 1; f += 0.1) expect(inWater(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f), `${s.shore.x},${s.shore.y}`).toBe(true);
+      }
+    }
+  });
+
+  it("swimming is deterministic and swim-lovers swim more than fire-lovers", () => {
+    const swims = (taste: string) => {
+      let c = 0;
+      RESIDENTS.forEach((def, i) => {
+        if (def.taste !== taste) return;
+        const sim = new ResidentSim(def, i, 9);
+        for (let t = T0; t < T0 + 40 * 60_000; t += 1_000) if (sim.at(t).state === "swim") c++;
+      });
+      return c / RESIDENTS.filter((d) => d.taste === taste).length;
+    };
+    expect(swims("swim")).toBeGreaterThan(swims("fire") * 2);
+    // 헤엄치는 시각을 찾아, 다른 순서로 묻는 두 브라우저가 같은 자리를 보는지
+    const i = RESIDENTS.findIndex((d) => d.taste === "swim");
+    const a = new ResidentSim(RESIDENTS[i], i, 9);
+    const times: number[] = [];
+    for (let t = T0; t < T0 + 60 * 60_000 && times.length < 12; t += 700) if (a.at(t).state === "swim") times.push(t);
+    expect(times.length).toBeGreaterThan(0);
+    const b = new ResidentSim(RESIDENTS[i], i, 9);
+    const ra = times.map((t) => ({ ...a.at(t) }));
+    const rb = [...times]
+      .reverse()
+      .map((t) => ({ ...b.at(t) }))
+      .reverse();
+    expect(rb).toEqual(ra);
+    for (const p of ra) expect(inWater(p.x, p.y)).toBe(true);
   });
 
   it("gets up and steps aside when a person sits in that seat (seat is never claimed on the server)", () => {

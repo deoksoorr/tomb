@@ -6,6 +6,8 @@ import { AVATAR_COLORS } from "@tomb/protocol";
 
 /** 대사가 어울리는 때 (없으면 언제나) */
 export type LineWhen = "night" | "day" | "dawn" | "dusk" | "rain" | "snow" | "fog";
+/** 주민 성향 — walk: 멀리 산책·가끔 달리기, swim: 물가에서 자주 헤엄, fire: 조금 더 자주·오래 앉아 쉼 */
+export type ResidentTaste = "walk" | "swim" | "fire";
 export type ResidentLine = { t: string; when?: LineWhen };
 
 export type ResidentDef = {
@@ -29,6 +31,8 @@ export type ResidentDef = {
   speed: number;
   /** 벤치에 앉으면 머리 위에 띄우는 상태 (SEAT_MOODS id) */
   moods: readonly string[];
+  /** 성향 (모두 걷는 비중이 크고, 조금씩만 다르다): 산책·수영·모닥불(앉아 쉬기) 좋아함 */
+  taste: ResidentTaste;
   lines: readonly ResidentLine[];
 };
 
@@ -48,6 +52,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 40_000,
     speed: 30,
     moods: ["work", "coffee"],
+    taste: "fire",
     lines: [
       { t: "오늘도 보고서가 안 끝나요…" },
       { t: "광장 모닥불 보면 좀 살 것 같아요" },
@@ -69,6 +74,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 44_000,
     speed: 28,
     moods: ["rest", "call"],
+    taste: "walk",
     lines: [
       { t: "사직서… 오늘은 진짜 낼까요?" },
       { t: "성황당 가면 떠난 묘비들이 있어요" },
@@ -90,6 +96,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 50_000,
     speed: 24,
     moods: ["rest", "music"],
+    taste: "fire",
     lines: [
       { t: "불은 제가 지키고 있을게요" },
       { t: "같이 앉아서 불멍해요" },
@@ -111,6 +118,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 38_000,
     speed: 32,
     moods: ["coffee", "work"],
+    taste: "walk",
     lines: [
       { t: "벌써 세 잔째예요" },
       { t: "잡화점에서 염색권도 팔아요" },
@@ -131,6 +139,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 34_000,
     speed: 36,
     moods: ["music", "meal"],
+    taste: "swim",
     lines: [
       { t: "6시 땡 하면 사라질 거예요" },
       { t: "광장 입구에 귀신의집 있어요!" },
@@ -152,6 +161,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 46_000,
     speed: 26,
     moods: ["rest", "music"],
+    taste: "walk",
     lines: [
       { t: "언덕 망원경으로 별자리 이어 봐요" },
       { t: "열기구는 언덕 출발장에서 타요" },
@@ -172,6 +182,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 36_000,
     speed: 32,
     moods: ["music", "rest"],
+    taste: "swim",
     lines: [
       { t: "강바람 쐬니까 좀 낫네요" },
       { t: "나루터에서 조각배 탈 수 있어요" },
@@ -192,6 +203,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 48_000,
     speed: 24,
     moods: ["rest", "meal"],
+    taste: "swim",
     lines: [
       { t: "낚시 의자 앞에서 E 눌러 봐요" },
       { t: "잡은 물고기는 수집가가 사 가요" },
@@ -212,6 +224,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 42_000,
     speed: 28,
     moods: ["rest", "study"],
+    taste: "fire",
     lines: [
       { t: "여긴 조용해서 좋아요" },
       { t: "옛 묘역 산책 코스 추천해요" },
@@ -232,6 +245,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 44_000,
     speed: 26,
     moods: ["call", "rest"],
+    taste: "swim",
     lines: [
       { t: "탈 쓰면 일 안 시킬 줄 알았죠" },
       { t: "호박밭 옆 의자가 명당이에요" },
@@ -252,6 +266,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 36_000,
     speed: 34,
     moods: ["study", "music"],
+    taste: "walk",
     lines: [
       { t: "인턴 3개월 차예요, 잘 부탁해요" },
       { t: "고양이들이 여기 자주 와요" },
@@ -272,6 +287,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 40_000,
     speed: 30,
     moods: ["rest", "meal"],
+    taste: "walk",
     lines: [
       { t: "사냥터는 메뉴에서 들어가요" },
       { t: "같이 사냥 가면 훨씬 쉬워요" },
@@ -292,6 +308,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 42_000,
     speed: 28,
     moods: ["call", "work"],
+    taste: "swim",
     lines: [
       { t: "회의는 짧게, 퇴근은 빠르게" },
       { t: "분양 마을에 내 집 하나 어때요?" },
@@ -312,6 +329,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 46_000,
     speed: 24,
     moods: ["meal", "rest"],
+    taste: "fire",
     lines: [
       { t: "회사 그만두고 호박 키워요" },
       { t: "숲에서 약초도 캘 수 있어요" },
@@ -332,6 +350,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     legMs: 38_000,
     speed: 32,
     moods: ["music", "coffee"],
+    taste: "walk",
     lines: [
       { t: "관람차는 맨 아래 칸에서 E예요" },
       { t: "관람차 한 칸에 둘이 타요" },

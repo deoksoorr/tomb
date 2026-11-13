@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { flushSync } from "react-dom";
 import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -16,8 +17,20 @@ const KNOB_TRAVEL = 0.55;
 /**
  * 터치 기기 전용: 좌하단 아날로그 조이스틱 + 우하단 [상호작용] [점프] [달리기] [앉기]
  * + 점프 왼쪽에 작은 [표현] (누르면 표현 창, 길게 누르면 즐겨찾기 원형 — 아래 바로 가기 줄이 없어져 여기로)
+ * + 그 위 같은 크기 [채팅] (누르면 키보드 위 한 줄 입력칸, ChatSheet). 채팅 중에는 조이스틱·버튼을 숨긴다.
  */
-export default function MobileControls({ onSay, onRadial }: { onSay: () => void; onRadial: () => void }) {
+export default function MobileControls({
+  onSay,
+  onRadial,
+  onChat,
+  chatOpen = false,
+}: {
+  onSay: () => void;
+  onRadial: () => void;
+  /** 없으면 [채팅] 버튼을 안 보인다 (상점·사냥터 등 말풍선이 없는 곳) */
+  onChat?: () => void;
+  chatOpen?: boolean;
+}) {
   const [running, setRunning] = useState(false);
   // sticky라 마운트 전에 다가간 묘비·좌석도 바로 반영된다
   const nearGrave = useBridgeValue("grave:near") != null;
@@ -32,8 +45,8 @@ export default function MobileControls({ onSay, onRadial }: { onSay: () => void;
 
   return (
     <>
-      <Joystick />
-      <div className={styles.actions}>
+      <Joystick hidden={chatOpen} />
+      <div className={styles.actions} data-hidden={chatOpen || undefined}>
         <button
           type="button"
           className={styles.action}
@@ -68,6 +81,19 @@ export default function MobileControls({ onSay, onRadial }: { onSay: () => void;
           <PixelIcon name="chat" />
           표현
         </ExprButton>
+        {onChat && (
+          <button
+            type="button"
+            className={cx(styles.action, styles.chat)}
+            aria-label="채팅: 머리 위 말풍선으로 한마디"
+            // pressProps(누르는 순간) 대신 click: iOS는 탭 처리 안에서 포커스해야 키보드를 띄운다.
+            // flushSync로 입력칸을 바로 그려 같은 탭 안에서 포커스한다 (ChatInput autoFocus는 레이아웃 효과)
+            onClick={() => flushSync(onChat)}
+          >
+            <PixelIcon name="type" />
+            채팅
+          </button>
+        )}
         {/* 탈 수 있는 펫을 데리고 있을 때만 (달리기 위) */}
         <RideButton variant="touch" className={styles.action} />
       </div>
@@ -75,7 +101,7 @@ export default function MobileControls({ onSay, onRadial }: { onSay: () => void;
   );
 }
 
-function Joystick() {
+function Joystick({ hidden = false }: { hidden?: boolean }) {
   const baseRef = useRef<HTMLDivElement>(null);
   const knobRef = useRef<HTMLDivElement>(null);
   const pointerId = useRef<number | null>(null);
@@ -119,6 +145,7 @@ function Joystick() {
     <div
       ref={baseRef}
       className={styles.joystick}
+      data-hidden={hidden || undefined}
       role="application"
       aria-label="이동 조이스틱"
       onPointerDown={(e) => {

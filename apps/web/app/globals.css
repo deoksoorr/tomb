@@ -64,6 +64,8 @@
   --font-body: "Galmuri11", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --font-small: "Galmuri9", var(--font-body);
   --font-read: "Galmuri14", var(--font-body);
+  /* 채팅(말풍선·입력칸)만 Pretendard — 나머지 화면 글자는 Galmuri 그대로 (게임 말풍선은 game/entities/SpeechBubble.ts의 CHAT_FONT와 맞춘다) */
+  --font-chat: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 
   --gutter: 16px;
   --safe-top: max(var(--gutter), env(safe-area-inset-top));

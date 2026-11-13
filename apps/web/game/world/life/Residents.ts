@@ -156,7 +156,7 @@ export class Residents {
         if (Math.abs(r.ox) < 0.3 && Math.abs(r.oy) < 0.3) r.ox = r.oy = 0;
         x += r.ox;
         y += r.oy;
-        if (state !== "walk" && (r.ox || r.oy)) state = "walk";
+        if (state !== "walk" && state !== "run" && state !== "swim" && (r.ox || r.oy)) state = "walk";
       }
       r.x = x;
       r.y = y;
@@ -200,7 +200,7 @@ export class Residents {
       return;
     }
     const a = r.act;
-    if (a && !this.reduced && !talking && state !== "walk" && r.prevRest < a.atMs && p.restMs >= a.atMs) {
+    if (a && !this.reduced && !talking && (state === "idle" || state === "sitGround" || state === "sitChair") && r.prevRest < a.atMs && p.restMs >= a.atMs) {
       if (a.icon === "wave") v.playAct("wave", now);
       else v.emote(a.icon, now);
     }
@@ -231,12 +231,12 @@ export class Residents {
     if (pnow - this.talkAt < 700) return true;
     this.talkAt = pnow;
     const now = this.scene.time.now;
-    // 멈춰 서서 나를 본다 (벤치에 앉아 있었으면 앉은 채로)
+    // 멈춰 서서 나를 본다 (벤치에 앉아 있었으면 앉은 채로, 헤엄치던 중이면 물에 뜬 채로)
     const sitting = r.pose.state === "sitChair" || r.pose.state === "sitGround";
     if (pnow >= r.talkUntil) {
       r.holdX = r.x;
       r.holdY = r.y;
-      r.holdState = sitting ? r.pose.state : "idle";
+      r.holdState = sitting || r.pose.state === "swim" ? r.pose.state : "idle";
       r.holdDir = sitting && r.pose.state === "sitChair" ? r.pose.dir : faceToward(r.x, r.y, pl.x, pl.y, r.pose.dir);
     }
     r.talkUntil = pnow + SAY_MS + 600;

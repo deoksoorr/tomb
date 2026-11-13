@@ -47,7 +47,7 @@ import MobileControls from "./MobileControls";
 import NetHud from "./NetHud";
 import ExprRadial, { ExprButton } from "./ExprRadial";
 import SayDialog from "./SayDialog";
-import { ChatBar } from "./ChatInput";
+import { ChatBar, ChatSheet } from "./ChatInput";
 import ReportLayer from "./ReportLayer";
 import Tutorial from "./Tutorial";
 import UpdateNotice from "./UpdateNotice";
@@ -191,7 +191,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   /** 표현 창(T: 말풍선·이모티콘·벤치 상태)과 즐겨찾기 원형 목록(Y). 집·마을 HUD(panel "housing") 위에서도 열리게 panel과 따로 둔다 */
   const [sayOpen, setSayOpen] = useState(false);
   const [radial, setRadial] = useState(false);
-  /** 데스크톱 Enter 말풍선 채팅 막대 */
+  /** 말풍선 채팅 입력: 데스크톱 Enter 막대 · 터치 [채팅] 버튼 한 줄 입력칸 */
   const [chatOpen, setChatOpen] = useState(false);
   /** 주거 구역의 집 문·빈 필지에서 하우징 창을 열었으면 그 집/번지 */
   const [housingIntent, setHousingIntent] = useState<{ houseId?: string; lot?: number } | null>(null);
@@ -548,7 +548,14 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           <CameraControls showZoom={!coarse} />
           {/* 타는 펫 타기·내리기: 데스크톱은 오른쪽 아래 확대·축소 버튼 왼쪽, 터치는 행동 버튼 묶음 안(MobileControls) */}
           {!coarse && <RideButton variant="desktop" className={ui.button} />}
-          {coarse && <MobileControls onSay={() => setSayOpen(true)} onRadial={openRadial} />}
+          {coarse && (
+            <MobileControls
+              onSay={() => setSayOpen(true)}
+              onRadial={openRadial}
+              onChat={canRadial ? () => setChatOpen(true) : undefined}
+              chatOpen={chatOpen && canRadial && !sayOpen}
+            />
+          )}
           {!coarse && <DonateButton />}
           {/* 접속 시간 보너스: 사냥·귀신의 집·실내에서도 서버 기록은 쌓이고, 창은 마을에서만 띄운다 */}
           {(!scene || scene === "world") && <StayBonus />}
@@ -621,7 +628,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         />
       )}
       {sayOpen && <SayDialog onClose={() => setSayOpen(false)} />}
-      {chatOpen && canRadial && !sayOpen && <ChatBar onClose={() => setChatOpen(false)} />}
+      {chatOpen &&
+        canRadial &&
+        !sayOpen &&
+        (coarse ? <ChatSheet onClose={() => setChatOpen(false)} /> : <ChatBar onClose={() => setChatOpen(false)} />)}
       {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
       {/* 마을·집 안: 월드 바로 가기 줄이 숨으니 [표현] 버튼만 왼쪽 아래에 따로 */}
       {ready && scene === "house" && (

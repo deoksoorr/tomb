@@ -4,6 +4,7 @@ import { preload } from "react-dom";
 import VisitTracker from "@/components/VisitTracker";
 import { IS_PRODUCTION, SITE_DESCRIPTION, SITE_TITLE, shareMetadata, siteUrl } from "./seo";
 import "./globals.css";
+import "./pretendard.css";
 
 export const metadata: Metadata = {
   metadataBase: siteUrl(),

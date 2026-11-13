@@ -624,7 +624,10 @@ export class WorldMap {
 
   private makeChunk(cx: number, cy: number): void {
     const key = `ground2-${cx}-${cy}`;
-    if (!this.scene.textures.exists(key)) addCanvasTexture(this.scene, key, { canvas: drawGroundChunk(cx, cy) });
+    if (!this.scene.textures.exists(key)) {
+      addCanvasTexture(this.scene, key, { canvas: drawGroundChunk(cx, cy) });
+      clampEdges(this.scene, key);
+    }
     const img = this.scene.add.image(cx * CHUNK, cy * CHUNK, key).setOrigin(0, 0).setDepth(DEPTH.ground);
     this.chunks.set(cy * CHUNK_COLS + cx, img);
   }
@@ -634,6 +637,18 @@ export class WorldMap {
     this.gridColliders.clear(true, true);
     this.furnitureColliders.clear(true, true);
   }
+}
+
+/**
+ * 512×512처럼 2의 거듭제곱 크기 캔버스는 Phaser가 REPEAT 감기로 올린다. 배율이 소수(1.5·2.5·줌 전환 중)면
+ * 청크 가장자리 픽셀이 텍스처 경계(v≈1)를 살짝 넘겨 반대편 첫 줄(돌길 등 밝은 색)을 집어 와 1px 흰 줄이 깜빡인다.
+ * 바닥 청크는 이어 붙이는 그림이라 반복할 일이 없으니 CLAMP_TO_EDGE로 다시 올린다.
+ */
+function clampEdges(scene: Phaser.Scene, key: string): void {
+  const r = scene.renderer;
+  if (!(r instanceof Phaser.Renderer.WebGL.WebGLRenderer)) return;
+  const src = scene.textures.get(key).source[0];
+  if (src?.glTexture && src.image instanceof HTMLCanvasElement) r.canvasToTexture(src.image, src.glTexture, true, src.flipY);
 }
 
 /** 구역 이름표 자리 (없으면 구역 위쪽 가운데) */
