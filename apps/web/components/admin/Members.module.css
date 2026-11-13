@@ -1,0 +1,106 @@
+/* 회원 제재 탭: 회원 전체 목록 · 접속 코드 재발급 */
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.search {
+  display: flex;
+  flex: 1 1 260px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.search input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.search button,
+.head > button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.nameCell {
+  min-width: 140px;
+}
+
+.id {
+  display: block;
+  color: var(--faint);
+  font-family: var(--font-small);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.normal {
+  color: var(--status-ok);
+}
+
+.banned {
+  color: var(--danger);
+}
+
+.dormant {
+  color: var(--muted);
+}
+
+.staff {
+  color: var(--candle);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.actions button {
+  white-space: nowrap;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.code {
+  display: block;
+  padding: 10px 12px;
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  color: var(--bone);
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  user-select: all;
+}
+
+.dialogBody {
+  display: grid;
+  gap: 12px;
+}
+
+.dialogButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}

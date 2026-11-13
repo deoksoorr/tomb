@@ -18,6 +18,7 @@ import {
   type VisitResult,
   type AccountRecord,
   type AccountStore,
+  type AccountSummary,
   type EarnOptions,
   type EquippedItem,
   type Profile,
@@ -982,4 +983,39 @@ export class RedisAccounts implements AccountStore {
     const pts = await p.exec<(string | null)[]>();
     return { wallets: pts.reduce((n, v) => n + Number(v ?? 0), 0), accounts: ids.length };
   }
+
+  /** 계정 해시 HMGET 한 번씩을 파이프라인 한 번으로 (관리자 회원 목록) */
+  async summaries(ids: readonly string[]): Promise<(AccountSummary | null)[]> {
+    if (!ids.length) return [];
+    const p = this.redis.pipeline();
+    for (const id of ids) p.hmget(K.acct(id), ...SUMMARY_FIELDS);
+    const rows = await p.exec<((string | null)[] | null)[]>();
+    return ids.map((id, i) => summaryOf(id, rows[i]));
+  }
+
+  /** SCAN acct:* (해시만) → 계정 해시(acct:{id})만 골라 요약. 부속 키(acct:{id}:inv 등)는 거른다 */
+  async scanAccounts(cursor: string, count: number): Promise<{ next: string; accounts: AccountSummary[] }> {
+    const [next, keys] = await this.redis.scan(cursor, { match: "acct:*", count, type: "hash" });
+    const ids = keys.filter((k) => /^acct:[^:]+$/.test(k)).map((k) => k.slice("acct:".length));
+    const rows = await this.summaries(ids);
+    return { next: String(next), accounts: rows.filter((r): r is AccountSummary => r !== null) };
+  }
+}
+
+const SUMMARY_FIELDS = ["name", "createdAt", "seenAt", "presenceAt", "points", "renameRequired", "codeHash"] as const;
+
+/** HMGET 결과 → 요약. 필드가 하나도 없으면 없는 계정 */
+function summaryOf(accountId: string, v: (string | null)[] | null): AccountSummary | null {
+  if (!v || v.every((x) => x === null || x === undefined)) return null;
+  const [name, createdAt, seenAt, presenceAt, points, again, code] = v;
+  const created = Number(createdAt ?? 0) || 0;
+  return {
+    accountId,
+    name: name ?? null,
+    createdAt: created,
+    lastSeenAt: Math.max(Number(seenAt ?? 0) || 0, Number(presenceAt ?? 0) || 0, created),
+    points: Number(points ?? 0) || 0,
+    renameRequired: again === "1",
+    hasCode: !!code,
+  };
 }

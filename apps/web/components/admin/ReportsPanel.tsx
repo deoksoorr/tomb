@@ -21,7 +21,7 @@ type Props = {
   onAuthLost: () => void;
   /** 처리 대기 수가 바뀌면 (탭 배지) */
   onOpenCount: (n: number) => void;
-  /** 정지로 이동 → 회원 탭의 정지 창 */
+  /** 정지로 이동 → 회원 제재 탭의 정지 창 */
   onBan: (target: BanTarget) => void;
 };
 

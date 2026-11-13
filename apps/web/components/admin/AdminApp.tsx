@@ -29,14 +29,15 @@ import styles from "./Admin.module.css";
 
 type Filter = "all" | "reported" | "hidden";
 type Sort = "reports" | "recent" | "flowers";
-/** 48번 탭 순서: 대시보드 · 회원 · 신고 · 경제 · 하우징 · 공지 · 콘텐츠(묘비·성불) · 오류 */
+/** 48번 탭 순서: 대시보드 · 회원 제재 · 신고 · 경제 · 하우징 · 공지 · 콘텐츠(묘비·성불) · 오류 */
 type Tab = "dashboard" | "members" | "reports" | "economy" | "housing" | "notices" | "content" | "errors" | "gifts" | "megaphone" | "dye" | "staff" | "residents";
 const TABS: [Tab, string][] = [
   ["dashboard", "대시보드"],
-  ["members", "회원"],
+  // 정지·차단·강퇴·코드 재발급 + 회원 전체 목록 (포인트 지급은 '선물' 탭)
+  ["members", "회원 제재"],
   // 31번 운영자(슈퍼) 계정 지정
   ["staff", "운영자 계정"],
-  // 46번 고정 색 염색권 (회원 탭 옆)
+  // 46번 고정 색 염색권 (회원 제재 탭 옆)
   ["dye", "염색권"],
   ["reports", "신고"],
   ["economy", "경제"],

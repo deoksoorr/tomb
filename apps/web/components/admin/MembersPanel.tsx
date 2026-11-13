@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
-import type { AdminAccountRow as AccountRow } from "@/app/api/admin/accounts/search/route";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import type { AdminMemberRow, AdminMembersResponse } from "@/lib/adminMembers";
+import type { AdminAuditEntry } from "@/lib/store/adminAudit";
 import { ApiRequestError, errorMessage } from "@/lib/api";
-import { BALANCE_CAP, CODE_RE, normalizeCode } from "@/lib/economy";
 import { cx } from "../ui/cx";
+import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import { adminApi } from "./adminApi";
 import { BanDialog, BanList, KickButton, type BanTarget } from "./BanPanel";
+import { fullTime, joinDate, relativeTime, STATUS_LABEL } from "./memberFormat";
 import styles from "./Admin.module.css";
+import mm from "./Members.module.css";
+import m from "./Moderation.module.css";
 
 type Props = {
   toast: (message: string) => void;
@@ -18,129 +22,262 @@ type Props = {
   onBanPresetUsed?: () => void;
 };
 
+type Issued = { accountId: string; name: string | null; code: string };
+
 /**
- * 48번 회원 탭: 닉네임으로 계정 찾기 → 코드 재발급(분실 문의), 포인트 지급·회수.
- * 47번: 찾은 계정마다 [지금 내보내기]·[정지], IP로 바로 차단, 정지·차단 목록(기간 수정·조기 해제·처리 기록)
+ * 회원 제재 탭: 회원 전체 목록(최근 접속 순 50명씩, 이름 검색) — 줄마다 [코드 재발급]·[지금 내보내기]·[정지].
+ * 아래에 IP로 바로 차단, 정지·차단 목록(기간 수정·조기 해제·처리 기록), 코드 재발급 기록.
+ * 포인트 지급은 '선물' 탭에서 한다 (이 탭에서는 뺐다).
  */
 export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPresetUsed }: Props) {
-  // 신고 탭에서 넘어오면 회원 탭이 새로 열리므로 처음 값으로 정지 창을 연다
+  // 신고 탭에서 넘어오면 이 탭이 새로 열리므로 처음 값으로 정지 창을 연다
   const [banTarget, setBanTarget] = useState<BanTarget | null>(() => banPreset ?? null);
   const [banVersion, setBanVersion] = useState(0);
   useEffect(() => {
     if (banPreset) onBanPresetUsed?.();
   }, [banPreset, onBanPresetUsed]);
-  const [name, setName] = useState("");
-  const [rows, setRows] = useState<AccountRow[] | null>(null);
-  const [pending, setPending] = useState(false);
-  const [confirm, setConfirm] = useState<AccountRow | null>(null);
-  const [issued, setIssued] = useState<{ accountId: string; name: string | null; code: string } | null>(null);
 
-  const fail = (e: unknown) => {
-    if (e instanceof ApiRequestError && e.status === 401) onAuthLost();
-    else toast(errorMessage(e));
-  };
+  const [query, setQuery] = useState("");
+  /** 지금 목록의 검색어 (입력 중인 값과 따로) */
+  const [q, setQ] = useState("");
+  /** 페이지마다 그 페이지를 부른 커서 (첫 페이지 = null) */
+  const [cursors, setCursors] = useState<(string | null)[]>([null]);
+  const [data, setData] = useState<AdminMembersResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [confirm, setConfirm] = useState<AdminMemberRow | null>(null);
+  const [issued, setIssued] = useState<Issued | null>(null);
+  const [reissuing, setReissuing] = useState(false);
+  const [log, setLog] = useState<AdminAuditEntry[] | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
+  const fail = useCallback(
+    (e: unknown) => {
+      if (e instanceof ApiRequestError && e.status === 401) onAuthLost();
+      else toast(errorMessage(e));
+    },
+    [onAuthLost, toast],
+  );
+
+  const load = useCallback(
+    async (search: string, cursor: string | null, fresh = false) => {
+      setLoading(true);
+      try {
+        const r = await adminApi.members(search, cursor, fresh);
+        setData(r);
+        setNow(Date.now());
+        return true;
+      } catch (e) {
+        fail(e);
+        return false;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fail],
+  );
+
+  const loadLog = useCallback(() => {
+    adminApi.codeLog().then((r) => setLog(r.log), fail);
+  }, [fail]);
+
+  // 처음 열 때 첫 페이지와 재발급 기록
+  useEffect(() => {
+    let alive = true;
+    adminApi.members("", null).then(
+      (r) => {
+        if (!alive) return;
+        setData(r);
+        setNow(Date.now());
+      },
+      (e: unknown) => alive && fail(e),
+    );
+    loadLog();
+    return () => {
+      alive = false;
+    };
+  }, [fail, loadLog]);
+
+  const page = cursors.length - 1;
   const search = async (e: FormEvent) => {
     e.preventDefault();
-    setPending(true);
-    try {
-      setRows((await adminApi.searchAccounts(name)).accounts);
-    } catch (err) {
-      fail(err);
-    } finally {
-      setPending(false);
+    const s = query.trim();
+    if (await load(s, null)) {
+      setQ(s);
+      setCursors([null]);
     }
   };
+  const next = async () => {
+    if (!data?.next) return;
+    const c = data.next;
+    if (await load(q, c)) setCursors((cs) => [...cs, c]);
+  };
+  const prev = async () => {
+    if (page === 0) return;
+    const before = cursors.slice(0, -1);
+    if (await load(q, before[before.length - 1])) setCursors(before);
+  };
+  const refresh = () => void load(q, cursors[page], true);
 
-  const reissue = async (row: AccountRow) => {
-    setConfirm(null);
-    setPending(true);
+  const reissue = async (row: AdminMemberRow) => {
+    setReissuing(true);
     try {
       setIssued(await adminApi.reissueCode(row.accountId));
-    } catch (err) {
-      fail(err);
+      setConfirm(null);
+      loadLog();
+    } catch (e) {
+      setConfirm(null);
+      fail(e);
     } finally {
-      setPending(false);
+      setReissuing(false);
     }
   };
 
-  return (
-    <section className={styles.notices} aria-label="회원">
-      <form className={styles.pointsForm} onSubmit={(e) => void search(e)} aria-label="계정 찾기">
-        <span className={styles.statLabel}>계정 찾기</span>
-        <input
-          className={cx(ui.input, styles.pointsTarget)}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="닉네임 일부 (포인트를 모은 적 있는 계정)"
-          aria-label="닉네임"
-          autoComplete="off"
-        />
-        <button type="submit" className={ui.button} disabled={pending || !name.trim()}>
-          찾기
-        </button>
-      </form>
+  const copy = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast("새 코드를 복사했어요.");
+    } catch {
+      toast("복사하지 못했어요. 코드를 직접 골라 복사해 주세요.");
+    }
+  };
 
-      {issued && (
-        <div className={styles.notice} role="status">
-          <p className={styles.noticeTitle}>
-            <strong>{issued.name ?? "이름 없음"}</strong> 새 코드 (지금 한 번만 보여요, 이전 코드는 막혔어요)
-          </p>
-          <p className={styles.noticeBody}>
-            <code>{issued.code}</code>
-          </p>
-          <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setIssued(null)}>
-            닫기
+  const members = data?.members ?? [];
+
+  return (
+    <section className={styles.notices} aria-label="회원 제재">
+      <div className={mm.head}>
+        <form className={mm.search} onSubmit={(e) => void search(e)} role="search" aria-label="회원 찾기">
+          <input
+            className={ui.input}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="이름 일부 또는 계정 id (비우면 전체)"
+            aria-label="이름 또는 계정 id"
+            autoComplete="off"
+            maxLength={64}
+          />
+          <button type="submit" className={ui.button} disabled={loading}>
+            찾기
           </button>
+        </form>
+        <button type="button" className={cx(ui.button, ui.quiet)} onClick={refresh} disabled={loading}>
+          새로고침
+        </button>
+      </div>
+
+      <p className={styles.meta} aria-live="polite">
+        {data
+          ? `${q ? `"${q}" 검색 결과 ` : "전체 회원 "}${data.total.toLocaleString("ko-KR")}명 · 최근 접속 순 · ${page + 1}페이지` +
+            ` · ${relativeTime(data.scannedAt, now)} 기준${data.partial ? " · 회원이 너무 많아 일부만 훑었어요" : ""}`
+          : "불러오는 중…"}
+      </p>
+
+      {data && members.length === 0 ? (
+        <p className={styles.empty}>{q ? "찾는 회원이 없어요." : "아직 회원이 없어요."}</p>
+      ) : (
+        <div className={m.tableWrap}>
+          <table className={styles.table} aria-label="회원 목록" aria-busy={loading}>
+            <thead>
+              <tr>
+                <th scope="col">이름</th>
+                <th scope="col">가입일</th>
+                <th scope="col">마지막 접속</th>
+                <th scope="col">포인트</th>
+                <th scope="col">상태</th>
+                <th scope="col">사냥 레벨</th>
+                <th scope="col">
+                  <span className={styles.meta}>제재</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.map((r) => (
+                <tr key={r.accountId}>
+                  <td className={mm.nameCell}>
+                    {r.name ?? "이름 없음"}
+                    <span className={mm.id}>{r.accountId}</span>
+                  </td>
+                  <td title={fullTime(r.createdAt)}>{joinDate(r.createdAt)}</td>
+                  <td title={fullTime(r.lastSeenAt)}>{relativeTime(r.lastSeenAt, now)}</td>
+                  <td>{r.points.toLocaleString("ko-KR")}</td>
+                  <td>
+                    <span
+                      className={cx(mm.status, mm[r.status])}
+                      title={r.status === "banned" ? (r.banUntil ? `해제 ${fullTime(r.banUntil)}` : "영구 정지") : undefined}
+                    >
+                      {STATUS_LABEL[r.status]}
+                    </span>
+                  </td>
+                  <td>{r.huntLevel ? `Lv.${r.huntLevel}` : "—"}</td>
+                  <td>
+                    <div className={mm.actions}>
+                      <button
+                        type="button"
+                        className={ui.button}
+                        onClick={() => setConfirm(r)}
+                        disabled={r.status === "staff"}
+                        title={r.status === "staff" ? "운영자 계정은 실수 방지로 재발급할 수 없어요 ('운영자 계정' 탭에서 지정을 풀면 돼요)" : undefined}
+                      >
+                        코드 재발급
+                      </button>
+                      <KickButton accountId={r.accountId} name={r.name} toast={toast} onAuthLost={onAuthLost} />
+                      <button type="button" className={cx(ui.button, ui.danger)} onClick={() => setBanTarget({ accountId: r.accountId, name: r.name })}>
+                        정지
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {rows !== null &&
-        (rows.length === 0 ? (
-          <p className={styles.empty}>찾는 계정이 없어요.</p>
-        ) : (
-          <ul className={styles.list}>
-            {rows.map((r) => (
-              <li key={r.accountId} className={styles.notice}>
-                <div className={styles.noticeTitle}>
-                  <strong>{r.name ?? "이름 없음"}</strong>
-                  <span className={styles.meta}>
-                    모은 포인트 {r.points.toLocaleString("ko-KR")} · {r.rank}위 · {r.accountId}
-                  </span>
-                </div>
-                {confirm?.accountId === r.accountId ? (
-                  <div className={styles.segmented}>
-                    <button type="button" className={cx(ui.button, ui.danger)} onClick={() => void reissue(r)} disabled={pending}>
-                      새 코드 발급 (이전 코드 무효)
-                    </button>
-                    <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirm(null)}>
-                      그만두기
-                    </button>
-                  </div>
-                ) : (
-                  <div className={styles.segmented}>
-                    <button type="button" className={ui.button} onClick={() => setConfirm(r)} disabled={pending}>
-                      코드 재발급
-                    </button>
-                    <KickButton accountId={r.accountId} name={r.name} toast={toast} onAuthLost={onAuthLost} />
-                    <button type="button" className={cx(ui.button, ui.danger)} onClick={() => setBanTarget({ accountId: r.accountId, name: r.name })}>
-                      정지
-                    </button>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        ))}
-
-      <PointsForm toast={toast} onAuthLost={onAuthLost} />
+      {data && (page > 0 || data.next) && (
+        <nav className={mm.pager} aria-label="회원 목록 페이지">
+          <button type="button" className={ui.button} onClick={() => void prev()} disabled={loading || page === 0}>
+            ← 이전 50명
+          </button>
+          <span className={styles.meta}>{page + 1}페이지</span>
+          <button type="button" className={ui.button} onClick={() => void next()} disabled={loading || !data.next}>
+            다음 50명 →
+          </button>
+        </nav>
+      )}
 
       <div className={styles.actions}>
         <button type="button" className={ui.button} onClick={() => setBanTarget({})}>
           IP로 바로 차단
         </button>
       </div>
-      <BanList toast={toast} onAuthLost={onAuthLost} version={banVersion} onChanged={() => setBanVersion((v) => v + 1)} />
+      <BanList
+        toast={toast}
+        onAuthLost={onAuthLost}
+        version={banVersion}
+        onChanged={() => {
+          setBanVersion((v) => v + 1);
+          void load(q, cursors[page]);
+        }}
+      />
+
+      <details className={styles.noticeFold}>
+        <summary className={styles.statLabel}>코드 재발급 기록 {log ? log.length : ""}</summary>
+        {log === null ? (
+          <p className={styles.empty}>불러오는 중…</p>
+        ) : log.length === 0 ? (
+          <p className={styles.empty}>아직 재발급한 적이 없어요.</p>
+        ) : (
+          <ul className={styles.log}>
+            {log.map((e) => (
+              <li key={`${e.at}-${e.accountId}`}>
+                <time dateTime={new Date(e.at).toISOString()}>{fullTime(e.at)}</time> {e.by} → {e.name ?? "이름 없음"}{" "}
+                <span className={styles.meta}>({e.accountId})</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
+
       {banTarget && (
         <BanDialog
           target={banTarget}
@@ -150,65 +287,52 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
           onDone={() => {
             setBanTarget(null);
             setBanVersion((v) => v + 1);
+            void load(q, cursors[page]);
           }}
         />
       )}
+
+      {confirm && (
+        <Dialog title="접속 코드 재발급" kind="confirm" onClose={() => setConfirm(null)} closable={!reissuing}>
+          <div className={mm.dialogBody}>
+            <p>
+              <strong>{confirm.name ?? "이름 없음"}</strong> <span className={styles.meta}>({confirm.accountId})</span>에게 새 접속 코드를 만들어요.
+            </p>
+            <p className={m.warn}>이 회원의 옛 코드는 더 이상 쓸 수 없어요.</p>
+            <p className={styles.meta}>새 코드는 다음 창에서 딱 한 번만 보여요. 본인 확인을 마친 뒤에만 재발급해 주세요.</p>
+            <div className={mm.dialogButtons}>
+              <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirm(null)} disabled={reissuing}>
+                그만두기
+              </button>
+              <button type="button" className={cx(ui.button, ui.danger)} onClick={() => void reissue(confirm)} disabled={reissuing}>
+                새 코드 발급
+              </button>
+            </div>
+          </div>
+        </Dialog>
+      )}
+
+      {issued && (
+        <Dialog title="새 접속 코드" kind="confirm" onClose={() => setIssued(null)} backdropClose={false}>
+          <div className={mm.dialogBody}>
+            <p>
+              <strong>{issued.name ?? "이름 없음"}</strong> 회원의 새 코드예요.
+            </p>
+            <code className={mm.code} aria-label="새 접속 코드">
+              {issued.code}
+            </code>
+            <p className={m.warn}>이 창을 닫으면 다시 볼 수 없어요. 지금 복사해 회원에게 전해 주세요.</p>
+            <div className={mm.dialogButtons}>
+              <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void copy(issued.code)}>
+                복사
+              </button>
+              <button type="button" className={ui.button} onClick={() => setIssued(null)}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </Dialog>
+      )}
     </section>
-  );
-}
-
-/** 포인트 지급·회수: 개인 코드(XXXX-XXXX-XXXX) 또는 계정 id + 증감 */
-function PointsForm({ toast, onAuthLost }: Props) {
-  const [target, setTarget] = useState("");
-  const [delta, setDelta] = useState("");
-  const [pending, setPending] = useState(false);
-  const amount = Number(delta);
-  const valid = target.trim() !== "" && Number.isInteger(amount) && amount !== 0;
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    const code = normalizeCode(target);
-    setPending(true);
-    try {
-      const r = await adminApi.points(CODE_RE.test(code) ? { code } : { accountId: target.trim() }, amount);
-      toast(`${r.accountId.slice(0, 6)}… 계정 잔액 ${r.points}점`);
-      setTarget("");
-      setDelta("");
-    } catch (err) {
-      if (err instanceof ApiRequestError && err.status === 401) onAuthLost();
-      else toast(errorMessage(err));
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <form className={styles.pointsForm} onSubmit={(e) => void submit(e)} aria-label="포인트 지급">
-      <span className={styles.statLabel}>포인트 지급</span>
-      <input
-        className={cx(ui.input, styles.pointsTarget)}
-        value={target}
-        onChange={(e) => setTarget(e.target.value)}
-        placeholder="개인 코드 또는 계정 id"
-        aria-label="개인 코드 또는 계정 id"
-        autoComplete="off"
-        spellCheck={false}
-      />
-      <input
-        className={cx(ui.input, styles.pointsDelta)}
-        type="number"
-        inputMode="numeric"
-        min={-BALANCE_CAP}
-        max={BALANCE_CAP}
-        step={1}
-        value={delta}
-        onChange={(e) => setDelta(e.target.value)}
-        placeholder="+100 / -50"
-        aria-label="지급량 (빼려면 음수)"
-      />
-      <button type="submit" className={ui.button} disabled={pending || !valid}>
-        지급
-      </button>
-    </form>
   );
 }

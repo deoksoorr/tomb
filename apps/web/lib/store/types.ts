@@ -304,7 +304,27 @@ export interface AccountStore {
   economy(days: string[]): Promise<{ date: string; fields: Record<string, number> }[]>;
   /** 포인트를 가진 적 있는 계정 수와 지갑 잔액 합계. exclude(운영자 계정)는 빼고 센다 */
   walletTotals(exclude?: string | null): Promise<{ wallets: number; accounts: number }>;
+
+  // ── 관리자 회원 목록 (lib/adminMembers.ts) ──
+  /** 계정 요약 (ids 순서대로, 없는 계정은 null). 계정 해시만 읽는다 */
+  summaries(ids: readonly string[]): Promise<(AccountSummary | null)[]>;
+  /** 모든 계정을 cursor부터 count개 안팎씩 훑는다 (Redis SCAN과 같은 약속: next = "0"이면 끝, 한 번에 나오는 수는 count와 다를 수 있다) */
+  scanAccounts(cursor: string, count: number): Promise<{ next: string; accounts: AccountSummary[] }>;
 }
+
+/** 관리자 회원 목록 한 줄의 원재료 (계정 해시에서 바로 읽는 값) */
+export type AccountSummary = {
+  accountId: string;
+  name: string | null;
+  /** 처음 입장 시각 (0 = 모름: 기록 전 옛 계정) */
+  createdAt: number;
+  /** 마지막 접속 = 입장 seenAt·머무르기 presenceAt·처음 입장 createdAt 중 가장 늦은 것 (0 = 기록 없음) */
+  lastSeenAt: number;
+  points: number;
+  /** 휴면에서 돌아와 닉네임을 다시 정해야 한다 */
+  renameRequired: boolean;
+  hasCode: boolean;
+};
 
 /** 포인트 사용 사유 → 경제 통계 분류 (사유 앞부분으로 나눈다) */
 export function spendCategory(reason: string): string {

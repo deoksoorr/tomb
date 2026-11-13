@@ -40,6 +40,8 @@ export interface HuntLevelStore {
   countAbove(score: number): Promise<number>;
   /** 이름·무기 (표시용) */
   info(ids: readonly string[], now: number): Promise<Map<string, { name: string | null; weapon: string | null }>>;
+  /** 랭킹에 기록된 점수 (ids 순서대로, 없으면 null — 운영자·한 판도 안 한 캐릭터). 관리자 회원 목록의 사냥 레벨용 */
+  scoresOf(ids: readonly string[]): Promise<(number | null)[]>;
 }
 
 export class MemoryHuntLevel implements HuntLevelStore {
@@ -62,6 +64,9 @@ export class MemoryHuntLevel implements HuntLevelStore {
     let n = 0;
     for (const s of this.scores.values()) if (s > score) n++;
     return n;
+  }
+  async scoresOf(ids: readonly string[]): Promise<(number | null)[]> {
+    return ids.map((id) => this.scores.get(id) ?? null);
   }
   async info(ids: readonly string[], now: number) {
     const accounts = this.accounts();
@@ -92,6 +97,13 @@ export class RedisHuntLevel implements HuntLevelStore {
   }
   async countAbove(score: number): Promise<number> {
     return Number(await this.redis.zcount(ZKEY, `(${score}`, "+inf"));
+  }
+  async scoresOf(ids: readonly string[]): Promise<(number | null)[]> {
+    if (!ids.length) return [];
+    const p = this.redis.pipeline();
+    for (const id of ids) p.zscore(ZKEY, id);
+    const res = (await p.exec()) as unknown[];
+    return res.map((v) => (v === null || v === undefined ? null : Number(v)));
   }
   async info(ids: readonly string[]) {
     const out = new Map<string, { name: string | null; weapon: string | null }>();

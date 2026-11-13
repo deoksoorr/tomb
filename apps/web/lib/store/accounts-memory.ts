@@ -17,6 +17,7 @@ import {
   type VisitResult,
   type AccountRecord,
   type AccountStore,
+  type AccountSummary,
   type EarnOptions,
   type EquippedItem,
   type Profile,
@@ -665,6 +666,21 @@ export class MemoryAccounts implements AccountStore {
     return { wallets: all.reduce((n, a) => n + a.points, 0), accounts: all.length };
   }
 
+  async summaries(ids: readonly string[]): Promise<(AccountSummary | null)[]> {
+    return ids.map((id) => {
+      const a = this.accts.get(id);
+      return a ? summaryOf(id, a) : null;
+    });
+  }
+
+  /** Redis SCAN과 같은 약속: cursor = 다음에 볼 순번, 끝이면 "0" */
+  async scanAccounts(cursor: string, count: number): Promise<{ next: string; accounts: AccountSummary[] }> {
+    const all = [...this.accts];
+    const start = Number(cursor) || 0;
+    const end = start + Math.max(1, count);
+    return { next: end >= all.length ? "0" : String(end), accounts: all.slice(start, end).map(([id, a]) => summaryOf(id, a)) };
+  }
+
   /** 31번 운영자 계정: 잔액을 to까지 채운다 (적립이 아니라 모은 포인트·랭킹·경제 통계와 무관). 없는 계정이면 false */
   staffFill(id: string, to: number): boolean {
     const a = this.accts.get(id);
@@ -734,4 +750,18 @@ export class MemoryAccounts implements AccountStore {
     else stash.set(itemId, permUntil);
     return "ok";
   }
+}
+
+/** accounts-redis.ts summaryOf와 같은 규칙 */
+function summaryOf(accountId: string, a: Acct): AccountSummary {
+  const createdAt = a.createdAt ?? 0;
+  return {
+    accountId,
+    name: a.name,
+    createdAt,
+    lastSeenAt: Math.max(a.seenAt ?? 0, a.presenceAt ?? 0, createdAt),
+    points: a.points,
+    renameRequired: !!a.renameRequired,
+    hasCode: !!a.codeHash,
+  };
 }
