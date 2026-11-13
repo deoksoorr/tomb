@@ -5,9 +5,10 @@ import type { AdminAccountRow as AccountRow } from "@/app/api/admin/accounts/sea
 import type { AdminStaffResponse } from "@/app/api/admin/staff/route";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { cx } from "../ui/cx";
-import ui from "../ui/ui.module.css";
+import ui from "./AdminUi.module.css";
 import { adminApi } from "./adminApi";
 import styles from "./Admin.module.css";
+import { Empty } from "./PanelState";
 import { opsAdminApi } from "./opsAdminApi";
 import { usePanelData } from "./usePanelData";
 
@@ -107,7 +108,7 @@ export default function StaffPanel({ toast, onAuthLost }: Props) {
 
       {rows !== null &&
         (rows.length === 0 ? (
-          <p className={styles.empty}>찾는 계정이 없어요.</p>
+          <Empty>찾는 계정이 없어요.</Empty>
         ) : (
           <ul className={styles.list}>
             {rows.map((r) => (

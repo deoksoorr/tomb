@@ -6,10 +6,11 @@ import { ApiRequestError, errorMessage } from "@/lib/api";
 import { adminDyeApi } from "@/lib/dye/client";
 import type { AdminAccountRow } from "@/app/api/admin/accounts/search/route";
 import { cx } from "../ui/cx";
-import ui from "../ui/ui.module.css";
+import ui from "./AdminUi.module.css";
 import { adminApi } from "./adminApi";
 import styles from "./Admin.module.css";
 import social from "./SocialPanels.module.css";
+import { Empty, Loading } from "./PanelState";
 import { usePanelData } from "./usePanelData";
 
 type Props = { toast: (message: string) => void; onAuthLost: () => void };
@@ -171,33 +172,37 @@ export default function DyePanel({ toast, onAuthLost }: Props) {
 
       <div className={social.logBox}>
         <h2 className={styles.subTitle}>발급 기록</h2>
-        {!data && <p className={ui.hint}>불러오는 중…</p>}
-        {data?.issues.length === 0 && <p className={ui.hint}>아직 발급한 염색권이 없어요.</p>}
+        {!data && <Loading />}
+        {data?.issues.length === 0 && <Empty>아직 발급한 염색권이 없어요.</Empty>}
         {data && data.issues.length > 0 && (
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>보낸 때</th>
-                <th>염색권</th>
-                <th>색</th>
-                <th>수량</th>
-                <th>대상</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.issues.map((i) => (
-                <tr key={`${i.defId}-${i.at}`}>
-                  <td>{when(i.at)}</td>
-                  <td>{i.name}</td>
-                  <td>
-                    <span style={{ display: "inline-block", width: 14, height: 14, background: i.color, verticalAlign: "middle" }} aria-hidden="true" /> {i.color}
-                  </td>
-                  <td>{i.count}</td>
-                  <td>{i.target === "all" ? "전체" : i.target.slice(0, 8)}</td>
+          <div className={styles.tableWrap}>
+            <table className={styles.table} aria-label="염색권 발급 기록">
+              <thead>
+                <tr>
+                  <th scope="col">보낸 때</th>
+                  <th scope="col">염색권</th>
+                  <th scope="col">색</th>
+                  <th scope="col" className={styles.num}>
+                    수량
+                  </th>
+                  <th scope="col">대상</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.issues.map((i) => (
+                  <tr key={`${i.defId}-${i.at}`}>
+                    <td className={styles.nowrap}>{when(i.at)}</td>
+                    <td>{i.name}</td>
+                    <td>
+                      <span style={{ display: "inline-block", width: 14, height: 14, borderRadius: 3, background: i.color, verticalAlign: "middle" }} aria-hidden="true" /> {i.color}
+                    </td>
+                    <td className={styles.num}>{i.count}</td>
+                    <td>{i.target === "all" ? "전체" : i.target.slice(0, 8)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </section>

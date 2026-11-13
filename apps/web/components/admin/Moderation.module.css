@@ -35,11 +35,11 @@
   gap: 6px;
 }
 
-.days {
+.inline .days {
   width: 88px;
 }
 
-.memo {
+.form .memo {
   resize: vertical;
   font: inherit;
 }
@@ -78,12 +78,6 @@
   overflow-wrap: anywhere;
 }
 
-.small {
-  min-height: 28px;
-  padding: 2px 8px;
-  font-size: 12px;
-}
-
 .history {
   margin: 4px 0 0;
   padding-left: 16px;
@@ -101,42 +95,50 @@
 
 .case {
   display: grid;
-  gap: 8px;
-  padding: 12px;
-  background: var(--surface);
-  box-shadow: var(--px-border);
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius);
+  background: var(--ad-surface);
 }
 
+/* 마지막으로 본 뒤 들어온 신고: 왼쪽 금색 띠 */
 .caseNew {
-  box-shadow: var(--px-border-strong);
+  border-left: 3px solid var(--ad-gold);
+  padding-left: 14px;
 }
 
 .caseHead {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 6px 10px;
   color: var(--bone);
 }
 
 .type {
-  padding: 0 6px;
-  background: var(--moss-deep);
-  color: var(--bone);
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--ad-info-soft);
+  color: var(--ad-info);
   font-size: 12px;
+  font-weight: 600;
 }
 
 .newTag {
-  padding: 0 6px;
-  background: var(--candle);
-  color: var(--bg-deep);
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--ad-gold-soft);
+  color: var(--ad-gold);
   font-size: 12px;
+  font-weight: 600;
 }
 
 .preview {
   margin: 0;
-  padding: 8px 10px;
-  background: var(--bg-deep);
+  padding: 10px 12px;
+  border-radius: var(--ad-radius-sm);
+  background: var(--ad-inset);
   color: var(--text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;

@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { cx } from "../ui/cx";
-import ui from "../ui/ui.module.css";
+import ui from "./AdminUi.module.css";
 import { adminApi } from "./adminApi";
 import styles from "./Admin.module.css";
-import { usePanelData } from "./usePanelData";
+import { Empty, LoadState } from "./PanelState";
+import { usePanelLoad } from "./usePanelData";
 
 type Props = { toast: (message: string) => void; onAuthLost: () => void };
 
@@ -19,7 +20,8 @@ const when = (ms: number) => {
 export default function ErrorsPanel({ toast, onAuthLost }: Props) {
   const [days, setDays] = useState(7);
   const [version, setVersion] = useState(0);
-  const data = usePanelData(() => adminApi.errors(days), [days, version], toast, onAuthLost);
+  const load = usePanelLoad(() => adminApi.errors(days), [days, version], toast, onAuthLost);
+  const data = load.data;
 
   return (
     <section className={styles.notices} aria-label="오류">
@@ -31,12 +33,12 @@ export default function ErrorsPanel({ toast, onAuthLost }: Props) {
             </button>
           ))}
         </div>
-        <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setVersion((v) => v + 1)}>
+        <button type="button" className={cx(ui.button, ui.quiet, styles.toolbarEnd)} onClick={() => setVersion((v) => v + 1)}>
           새로고침
         </button>
       </div>
-      {!data && <p className={styles.empty}>불러오는 중…</p>}
-      {data && !data.errors.length && <p className={styles.empty}>이 기간에 모인 오류가 없어요.</p>}
+      <LoadState {...load} />
+      {data && !data.errors.length && <Empty>이 기간에 모인 오류가 없어요.</Empty>}
       <ul className={styles.list}>
         {data?.errors.map((e) => (
           <li key={e.hash} className={styles.notice}>
@@ -44,7 +46,7 @@ export default function ErrorsPanel({ toast, onAuthLost }: Props) {
               <span className={cx(styles.badge, e.source === "server" ? styles.badgeHidden : styles.badgeOpen)}>
                 {e.source === "server" ? "서버" : e.kind}
               </span>
-              <strong className={styles.alert}>{e.count}회</strong>
+              <strong className={styles.alert}>{e.count.toLocaleString("ko-KR")}회</strong>
               <span className={styles.meta}>
                 마지막 {when(e.lastAt)}
                 {e.days > 1 && ` · ${e.days}일에 걸쳐`}

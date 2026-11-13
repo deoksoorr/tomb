@@ -18,12 +18,13 @@ import { effectLabel, KIND_LABELS } from "../account/items";
 import { SLOT_NAMES, SLOT_ORDER } from "../account/wardrobe";
 import ItemIcon from "../ui/ItemIcon";
 import { cx } from "../ui/cx";
-import ui from "../ui/ui.module.css";
+import ui from "./AdminUi.module.css";
 import { adminApi } from "./adminApi";
 import styles from "./Admin.module.css";
 import g from "./GiftsPanel.module.css";
 import social from "./SocialPanels.module.css";
 import { socialAdminApi } from "./socialAdminApi";
+import { Empty, Loading } from "./PanelState";
 import { usePanelData } from "./usePanelData";
 
 type Props = { toast: (message: string) => void; onAuthLost: () => void };
@@ -525,44 +526,46 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
 
       <div className={social.logBox}>
         <h2 className={styles.subTitle}>발송 기록</h2>
-        {!log && <p className={ui.hint}>불러오는 중…</p>}
-        {log?.gifts.length === 0 && (
-          <p className={ui.hint}>아직 보낸 선물이 없어요.</p>
-        )}
+        {!log && <Loading />}
+        {log?.gifts.length === 0 && <Empty>아직 보낸 선물이 없어요.</Empty>}
         {log && log.gifts.length > 0 && (
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>보낸 때</th>
-                <th>대상</th>
-                <th>쪽지</th>
-                <th>내용</th>
-                <th>받음</th>
-              </tr>
-            </thead>
-            <tbody>
-              {log.gifts.map((r) => (
-                <tr key={r.id}>
-                  <td>{when(r.createdAt)}</td>
-                  <td>
-                    {r.target === "all"
-                      ? "전체"
-                      : (r.targetName ?? r.target.slice(0, 8))}
-                  </td>
-                  <td className={social.noteCell} title={r.note}>
-                    <b>{r.from}</b> {r.note}
-                  </td>
-                  <td>
-                    {[
-                      ...(r.points ? [`${r.points}P`] : []),
-                      ...r.items.map(lineText),
-                    ].join(", ")}
-                  </td>
-                  <td>{r.claims}</td>
+          <div className={styles.tableWrap}>
+            <table className={styles.table} aria-label="선물 발송 기록">
+              <thead>
+                <tr>
+                  <th scope="col">보낸 때</th>
+                  <th scope="col">대상</th>
+                  <th scope="col">쪽지</th>
+                  <th scope="col">내용</th>
+                  <th scope="col" className={styles.num}>
+                    받음
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {log.gifts.map((r) => (
+                  <tr key={r.id}>
+                    <td className={styles.nowrap}>{when(r.createdAt)}</td>
+                    <td>
+                      {r.target === "all"
+                        ? "전체"
+                        : (r.targetName ?? r.target.slice(0, 8))}
+                    </td>
+                    <td className={social.noteCell} title={r.note}>
+                      <b>{r.from}</b> {r.note}
+                    </td>
+                    <td>
+                      {[
+                        ...(r.points ? [`${r.points}P`] : []),
+                        ...r.items.map(lineText),
+                      ].join(", ")}
+                    </td>
+                    <td className={styles.num}>{r.claims.toLocaleString("ko-KR")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </section>

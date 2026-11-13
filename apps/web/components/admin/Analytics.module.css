@@ -1,81 +1,83 @@
-/* 47번 방문 분석 대시보드 (관리자). 색은 globals.css 토큰만 쓴다 */
+/* 47번 대시보드·유입 분석 (관리자). 색은 Admin.module.css의 --ad-* 토큰만 쓴다 */
 
 .wrap {
   display: grid;
-  gap: 16px;
+  gap: 22px;
 }
 
 .section {
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
 .sectionHead {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
+  min-height: 38px;
   justify-content: space-between;
-  gap: 4px 12px;
+  gap: 6px 12px;
 }
 
 .sectionTitle {
   margin: 0;
-  color: var(--bone);
-  font-size: 14px;
+  color: var(--ad-strong);
+  font-size: 15px;
+  font-weight: 650;
 }
 
 .sub {
-  color: var(--muted);
-  font-family: var(--font-small);
-  font-size: 10px;
+  color: var(--ad-muted);
+  font-size: 12px;
 }
 
 .kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
 }
 
 .kpi {
   display: grid;
   gap: 2px;
-  padding: 10px 12px;
-  background: var(--surface);
-  box-shadow: var(--px-border);
+  padding: 12px 14px;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius);
+  background: var(--ad-surface);
 }
 
 .kpiValue {
-  color: var(--bone);
+  color: var(--ad-strong);
   font-size: 20px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
 .kpiLabel {
-  color: var(--muted);
-  font-family: var(--font-small);
-  font-size: 10px;
+  color: var(--ad-muted);
+  font-size: 12px;
 }
 
 .kpiNote {
-  color: var(--faint);
-  font-family: var(--font-small);
-  font-size: 10px;
+  color: var(--ad-faint);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
 .charts {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
 }
 
 .chart {
   display: grid;
-  gap: 4px;
-  padding: 10px 12px 8px;
-  background: var(--bg-deep);
-  box-shadow: var(--px-border);
+  gap: 6px;
   min-width: 0;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius);
+  background: var(--ad-surface);
 }
 
 .chartHead {
@@ -86,15 +88,17 @@
 }
 
 .chartTitle {
-  color: var(--text);
-  font-size: 12px;
+  color: var(--ad-text);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .chartValue {
-  color: var(--bone);
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
+  color: var(--ad-strong);
+  font-size: 13px;
+  font-weight: 600;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .svg {
@@ -105,23 +109,24 @@
 }
 
 .grid {
-  stroke: var(--line);
+  stroke: var(--ad-line);
   stroke-width: 1;
   shape-rendering: crispEdges;
 }
 
 .axisText {
-  fill: var(--faint);
-  font-family: var(--font-small);
-  font-size: 9px;
+  fill: var(--ad-faint);
+  font-family: var(--ad-font);
+  font-size: 8.5px;
 }
 
 .bar {
-  fill: var(--moss);
+  fill: var(--ad-info);
+  opacity: 0.85;
 }
 
 .barActive {
-  fill: var(--bone);
+  fill: var(--ad-gold);
 }
 
 .hit {
@@ -132,74 +137,92 @@
 .lists {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 8px;
+  gap: 12px;
 }
 
 .list {
   display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 10px 12px;
-  list-style: none;
-  background: var(--surface);
-  box-shadow: var(--px-border);
+  align-content: start;
+  gap: 8px;
   min-width: 0;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius);
+  background: var(--ad-surface);
+  list-style: none;
 }
 
 .listTitle {
-  color: var(--text);
-  font-size: 12px;
+  margin-bottom: 2px;
+  color: var(--ad-strong);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 2px 8px;
+  gap: 3px 10px;
   align-items: center;
 }
 
 .itemName {
   overflow: hidden;
-  color: var(--text);
-  font-size: 12px;
+  color: var(--ad-text);
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .itemCount {
-  color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  color: var(--ad-text);
+  font-size: 13px;
+  font-weight: 600;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.itemPct {
+  display: inline-block;
+  min-width: 34px;
+  color: var(--ad-faint);
+  font-weight: 400;
+  text-align: right;
 }
 
 .track {
   grid-column: 1 / -1;
   height: 4px;
-  background: var(--bg-deep);
+  border-radius: 2px;
+  background: var(--ad-inset);
+  overflow: hidden;
 }
 
 .fill {
   height: 100%;
-  background: var(--candle);
+  border-radius: 2px;
+  background: var(--ad-gold);
+  opacity: 0.8;
 }
 
 .empty {
-  color: var(--faint);
-  font-size: 11px;
+  color: var(--ad-faint);
+  font-size: 12.5px;
 }
 
 .table {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
 }
 
 .table th,
 .table td {
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--line);
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--ad-line);
   text-align: right;
   white-space: nowrap;
 }
@@ -210,22 +233,39 @@
 }
 
 .table th {
-  color: var(--muted);
-  font-weight: normal;
+  position: sticky;
+  top: 0;
+  background: var(--ad-surface-2);
+  color: var(--ad-muted);
+  font-weight: 600;
+}
+
+.table tbody tr:nth-child(even) td {
+  background: var(--ad-zebra);
 }
 
 .tableWrap {
-  overflow-x: auto;
+  max-height: 420px;
+  margin-top: 8px;
+  overflow: auto;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius);
+  background: var(--ad-surface);
 }
 
 .details summary {
-  color: var(--muted);
-  font-size: 12px;
+  width: fit-content;
+  color: var(--ad-info);
+  font-size: 13px;
   cursor: pointer;
 }
 
 @media (max-width: 480px) {
   .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .charts {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

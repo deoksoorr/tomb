@@ -8,7 +8,7 @@ import { REPORT_REASON_LABELS } from "@/lib/reports";
 import { CAUSE_LABELS } from "@/lib/types";
 import type { AdminAction } from "@/lib/validate";
 import { cx } from "../ui/cx";
-import ui from "../ui/ui.module.css";
+import ui from "./AdminUi.module.css";
 import styles from "./Admin.module.css";
 
 type Props = {

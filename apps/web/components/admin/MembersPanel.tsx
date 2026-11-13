@@ -2,17 +2,17 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { AdminMemberRow, AdminMembersResponse } from "@/lib/adminMembers";
-import type { AdminAuditEntry } from "@/lib/store/adminAudit";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
-import ui from "../ui/ui.module.css";
+import ui from "./AdminUi.module.css";
 import { adminApi } from "./adminApi";
-import { BanDialog, BanList, KickButton, type BanTarget } from "./BanPanel";
+import { BanDialog, KickButton, type BanTarget } from "./BanPanel";
 import { fullTime, joinDate, relativeTime, STATUS_LABEL } from "./memberFormat";
 import styles from "./Admin.module.css";
 import mm from "./Members.module.css";
 import m from "./Moderation.module.css";
+import { Empty, Loading } from "./PanelState";
 
 type Props = {
   toast: (message: string) => void;
@@ -25,14 +25,13 @@ type Props = {
 type Issued = { accountId: string; name: string | null; code: string };
 
 /**
- * 회원 제재 탭: 회원 전체 목록(최근 접속 순 50명씩, 이름 검색) — 줄마다 [코드 재발급]·[지금 내보내기]·[정지].
- * 아래에 IP로 바로 차단, 정지·차단 목록(기간 수정·조기 해제·처리 기록), 코드 재발급 기록.
- * 포인트 지급은 '선물' 탭에서 한다 (이 탭에서는 뺐다).
+ * 회원 제재: 회원 전체 목록(최근 접속 순 50명씩, 이름 검색) — 줄마다 [코드 재발급]·[지금 내보내기]·[정지].
+ * 정지·차단 목록과 IP로 바로 차단은 '정지·차단 기록', 재발급 기록은 '코드 재발급 기록' 메뉴에 있다.
+ * 포인트 지급은 '선물' 메뉴에서 한다 (여기서는 뺐다).
  */
 export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPresetUsed }: Props) {
   // 신고 탭에서 넘어오면 이 탭이 새로 열리므로 처음 값으로 정지 창을 연다
   const [banTarget, setBanTarget] = useState<BanTarget | null>(() => banPreset ?? null);
-  const [banVersion, setBanVersion] = useState(0);
   useEffect(() => {
     if (banPreset) onBanPresetUsed?.();
   }, [banPreset, onBanPresetUsed]);
@@ -47,7 +46,6 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
   const [confirm, setConfirm] = useState<AdminMemberRow | null>(null);
   const [issued, setIssued] = useState<Issued | null>(null);
   const [reissuing, setReissuing] = useState(false);
-  const [log, setLog] = useState<AdminAuditEntry[] | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   const fail = useCallback(
@@ -76,11 +74,7 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
     [fail],
   );
 
-  const loadLog = useCallback(() => {
-    adminApi.codeLog().then((r) => setLog(r.log), fail);
-  }, [fail]);
-
-  // 처음 열 때 첫 페이지와 재발급 기록
+  // 처음 열 때 첫 페이지
   useEffect(() => {
     let alive = true;
     adminApi.members("", null).then(
@@ -91,11 +85,10 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
       },
       (e: unknown) => alive && fail(e),
     );
-    loadLog();
     return () => {
       alive = false;
     };
-  }, [fail, loadLog]);
+  }, [fail]);
 
   const page = cursors.length - 1;
   const search = async (e: FormEvent) => {
@@ -123,7 +116,6 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
     try {
       setIssued(await adminApi.reissueCode(row.accountId));
       setConfirm(null);
-      loadLog();
     } catch (e) {
       setConfirm(null);
       fail(e);
@@ -161,7 +153,7 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
           </button>
         </form>
         <button type="button" className={cx(ui.button, ui.quiet)} onClick={refresh} disabled={loading}>
-          새로고침
+          목록 새로 훑기
         </button>
       </div>
 
@@ -172,21 +164,27 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
           : "불러오는 중…"}
       </p>
 
-      {data && members.length === 0 ? (
-        <p className={styles.empty}>{q ? "찾는 회원이 없어요." : "아직 회원이 없어요."}</p>
+      {!data ? (
+        <Loading />
+      ) : members.length === 0 ? (
+        <Empty>{q ? "찾는 회원이 없어요." : "아직 회원이 없어요."}</Empty>
       ) : (
-        <div className={m.tableWrap}>
-          <table className={styles.table} aria-label="회원 목록" aria-busy={loading}>
+        <div className={styles.tableWrap}>
+          <table className={cx(styles.table, styles.stackTable)} aria-label="회원 목록" aria-busy={loading}>
             <thead>
               <tr>
                 <th scope="col">이름</th>
                 <th scope="col">가입일</th>
                 <th scope="col">마지막 접속</th>
-                <th scope="col">포인트</th>
+                <th scope="col" className={styles.num}>
+                  포인트
+                </th>
                 <th scope="col">상태</th>
-                <th scope="col">사냥 레벨</th>
-                <th scope="col">
-                  <span className={styles.meta}>제재</span>
+                <th scope="col" className={styles.num}>
+                  사냥 레벨
+                </th>
+                <th scope="col" className={styles.num}>
+                  제재
                 </th>
               </tr>
             </thead>
@@ -197,10 +195,16 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
                     {r.name ?? "이름 없음"}
                     <span className={mm.id}>{r.accountId}</span>
                   </td>
-                  <td title={fullTime(r.createdAt)}>{joinDate(r.createdAt)}</td>
-                  <td title={fullTime(r.lastSeenAt)}>{relativeTime(r.lastSeenAt, now)}</td>
-                  <td>{r.points.toLocaleString("ko-KR")}</td>
-                  <td>
+                  <td className={styles.nowrap} data-label="가입일" title={fullTime(r.createdAt)}>
+                    {joinDate(r.createdAt)}
+                  </td>
+                  <td className={styles.nowrap} data-label="마지막 접속" title={fullTime(r.lastSeenAt)}>
+                    {relativeTime(r.lastSeenAt, now)}
+                  </td>
+                  <td className={styles.num} data-label="포인트">
+                    {r.points.toLocaleString("ko-KR")}
+                  </td>
+                  <td data-label="상태">
                     <span
                       className={cx(mm.status, mm[r.status])}
                       title={r.status === "banned" ? (r.banUntil ? `해제 ${fullTime(r.banUntil)}` : "영구 정지") : undefined}
@@ -208,20 +212,22 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
                       {STATUS_LABEL[r.status]}
                     </span>
                   </td>
-                  <td>{r.huntLevel ? `Lv.${r.huntLevel}` : "—"}</td>
+                  <td className={styles.num} data-label="사냥 레벨">
+                    {r.huntLevel ? `Lv.${r.huntLevel}` : "—"}
+                  </td>
                   <td>
                     <div className={mm.actions}>
                       <button
                         type="button"
-                        className={ui.button}
+                        className={cx(ui.button, ui.small)}
                         onClick={() => setConfirm(r)}
                         disabled={r.status === "staff"}
-                        title={r.status === "staff" ? "운영자 계정은 실수 방지로 재발급할 수 없어요 ('운영자 계정' 탭에서 지정을 풀면 돼요)" : undefined}
+                        title={r.status === "staff" ? "운영자 계정은 실수 방지로 재발급할 수 없어요 ('운영자 지정' 메뉴에서 지정을 풀면 돼요)" : undefined}
                       >
                         코드 재발급
                       </button>
-                      <KickButton accountId={r.accountId} name={r.name} toast={toast} onAuthLost={onAuthLost} />
-                      <button type="button" className={cx(ui.button, ui.danger)} onClick={() => setBanTarget({ accountId: r.accountId, name: r.name })}>
+                      <KickButton accountId={r.accountId} name={r.name} toast={toast} onAuthLost={onAuthLost} small />
+                      <button type="button" className={cx(ui.button, ui.danger, ui.small)} onClick={() => setBanTarget({ accountId: r.accountId, name: r.name })}>
                         정지
                       </button>
                     </div>
@@ -245,39 +251,6 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
         </nav>
       )}
 
-      <div className={styles.actions}>
-        <button type="button" className={ui.button} onClick={() => setBanTarget({})}>
-          IP로 바로 차단
-        </button>
-      </div>
-      <BanList
-        toast={toast}
-        onAuthLost={onAuthLost}
-        version={banVersion}
-        onChanged={() => {
-          setBanVersion((v) => v + 1);
-          void load(q, cursors[page]);
-        }}
-      />
-
-      <details className={styles.noticeFold}>
-        <summary className={styles.statLabel}>코드 재발급 기록 {log ? log.length : ""}</summary>
-        {log === null ? (
-          <p className={styles.empty}>불러오는 중…</p>
-        ) : log.length === 0 ? (
-          <p className={styles.empty}>아직 재발급한 적이 없어요.</p>
-        ) : (
-          <ul className={styles.log}>
-            {log.map((e) => (
-              <li key={`${e.at}-${e.accountId}`}>
-                <time dateTime={new Date(e.at).toISOString()}>{fullTime(e.at)}</time> {e.by} → {e.name ?? "이름 없음"}{" "}
-                <span className={styles.meta}>({e.accountId})</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </details>
-
       {banTarget && (
         <BanDialog
           target={banTarget}
@@ -286,7 +259,6 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
           onClose={() => setBanTarget(null)}
           onDone={() => {
             setBanTarget(null);
-            setBanVersion((v) => v + 1);
             void load(q, cursors[page]);
           }}
         />

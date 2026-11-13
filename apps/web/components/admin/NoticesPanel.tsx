@@ -5,9 +5,10 @@ import { ApiRequestError, errorMessage } from "@/lib/api";
 import type { Notice } from "@/lib/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
-import ui from "../ui/ui.module.css";
+import ui from "./AdminUi.module.css";
 import { adminApi } from "./adminApi";
 import styles from "./Admin.module.css";
+import { Empty, Loading } from "./PanelState";
 
 type Props = { toast: (message: string) => void; onAuthLost: () => void };
 
@@ -83,8 +84,8 @@ export default function NoticesPanel({ toast, onAuthLost }: Props) {
         />
       )}
 
-      {notices === null && <p className={styles.empty}>불러오는 중…</p>}
-      {notices?.length === 0 && <p className={styles.empty}>공지가 없어요.</p>}
+      {notices === null && <Loading />}
+      {notices?.length === 0 && <Empty>공지가 없어요.</Empty>}
       <ul className={styles.list}>
         {notices?.map((n) => (
           <li key={n.id} className={styles.notice}>

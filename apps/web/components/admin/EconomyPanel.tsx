@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { EARN_RULES, ECON_STAFF_EXCLUDED_FROM } from "@/lib/economy";
-import ui from "../ui/ui.module.css";
+import ui from "./AdminUi.module.css";
 import { adminApi } from "./adminApi";
 import styles from "./Admin.module.css";
-import { usePanelData } from "./usePanelData";
+import { LoadState } from "./PanelState";
+import { usePanelLoad } from "./usePanelData";
 
 type Props = { toast: (message: string) => void; onAuthLost: () => void };
 
@@ -37,8 +38,11 @@ function Bars({ title, totals, labels }: { title: string; totals: Record<string,
   const rows = Object.entries(totals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   const max = Math.max(1, ...rows.map(([, v]) => v));
   return (
-    <div className={styles.noticePreview}>
-      <span className={styles.subTitle}>{title}</span>
+    <div className={styles.card}>
+      <div className={styles.cardHead}>
+        <h2 className={styles.cardTitle}>{title}</h2>
+        <span className={styles.meta}>합계 {fmt(sum(totals))}</span>
+      </div>
       {!rows.length && <span className={ui.hint}>기록이 없어요.</span>}
       {rows.map(([k, v]) => (
         <div key={k} className={styles.barRow}>
@@ -56,7 +60,8 @@ function Bars({ title, totals, labels }: { title: string; totals: Record<string,
 /** 경제 탭: 날짜별 적립·사용 합계, 항목별 막대, 지갑 잔액 합계·계정 수 */
 export default function EconomyPanel({ toast, onAuthLost }: Props) {
   const [days, setDays] = useState(14);
-  const data = usePanelData(() => adminApi.economy(days), [days], toast, onAuthLost);
+  const load = usePanelLoad(() => adminApi.economy(days), [days], toast, onAuthLost);
+  const data = load.data;
   const earnedTotal: Record<string, number> = {};
   const spentTotal: Record<string, number> = {};
   for (const d of data?.days ?? []) {
@@ -75,7 +80,7 @@ export default function EconomyPanel({ toast, onAuthLost }: Props) {
           ))}
         </div>
       </div>
-      {!data && <p className={styles.empty}>불러오는 중…</p>}
+      <LoadState {...load} />
       {data && (
         <>
           <div className={styles.summary}>
@@ -96,26 +101,39 @@ export default function EconomyPanel({ toast, onAuthLost }: Props) {
           {data.days.some((d) => d.date < ECON_STAFF_EXCLUDED_FROM) && (
             <p className={ui.hint}>운영자 제외는 {STAFF_FROM_LABEL}부터 적용, 이전 날짜에는 운영자 활동이 섞여 있어요.</p>
           )}
-          <Bars title="적립 (항목별)" totals={earnedTotal} labels={EARN_LABELS} />
-          <Bars title="사용 (분류별)" totals={spentTotal} labels={SPEND_LABELS} />
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>날짜</th>
-                <th>적립</th>
-                <th>사용</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.days.map((d) => (
-                <tr key={d.date}>
-                  <td>{dateLabel(d.date)}</td>
-                  <td>{fmt(sum(d.earned))}</td>
-                  <td>{fmt(sum(d.spent))}</td>
+          <div className={styles.split}>
+            <Bars title="적립 (항목별)" totals={earnedTotal} labels={EARN_LABELS} />
+            <Bars title="사용 (분류별)" totals={spentTotal} labels={SPEND_LABELS} />
+          </div>
+          <h2 className={styles.subTitle}>날짜별</h2>
+          <div className={styles.tableWrap}>
+            <table className={styles.table} aria-label="날짜별 적립·사용">
+              <thead>
+                <tr>
+                  <th scope="col">날짜</th>
+                  <th scope="col" className={styles.num}>
+                    적립
+                  </th>
+                  <th scope="col" className={styles.num}>
+                    사용
+                  </th>
+                  <th scope="col" className={styles.num}>
+                    순증가
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.days.map((d) => (
+                  <tr key={d.date}>
+                    <td>{dateLabel(d.date)}</td>
+                    <td className={styles.num}>{fmt(sum(d.earned))}</td>
+                    <td className={styles.num}>{fmt(sum(d.spent))}</td>
+                    <td className={styles.num}>{fmt(sum(d.earned) - sum(d.spent))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </section>

@@ -6,9 +6,10 @@ import type { AdminBan, BanIpInfo, BanLookup } from "@/lib/banAdmin";
 import type { BanKind } from "@/lib/store/bans";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
-import ui from "../ui/ui.module.css";
+import ui from "./AdminUi.module.css";
 import styles from "./Admin.module.css";
 import m from "./Moderation.module.css";
+import { Empty, Loading } from "./PanelState";
 import { expelledText, moderationApi } from "./moderationApi";
 
 // 47번 회원 제재 탭: 지금 내보내기(강퇴) · 정지(계정 / IP / 둘 다) · 정지·차단 목록(기간 수정·조기 해제·처리 기록)
@@ -32,13 +33,13 @@ function useFail({ toast, onAuthLost }: Common) {
 }
 
 /** [지금 내보내기] — 정지 없이 접속만 끊는다 */
-export function KickButton({ accountId, name, toast, onAuthLost }: Common & { accountId: string; name?: string | null }) {
+export function KickButton({ accountId, name, small, toast, onAuthLost }: Common & { accountId: string; name?: string | null; small?: boolean }) {
   const [pending, setPending] = useState(false);
   const fail = useFail({ toast, onAuthLost });
   return (
     <button
       type="button"
-      className={ui.button}
+      className={cx(ui.button, small && ui.small)}
       disabled={pending}
       onClick={async () => {
         setPending(true);
@@ -309,7 +310,7 @@ export function BanList({ version, onChanged, ...common }: Common & { version: n
   return (
     <section className={m.section} aria-label="정지·차단 목록">
       <div className={styles.noticesHead}>
-        <span className={styles.statLabel}>정지·차단 목록</span>
+        <h2 className={styles.subTitle}>정지·차단 목록</h2>
         <div className={styles.segmented} role="group" aria-label="보기">
           <button type="button" className={ui.button} aria-pressed={show === "active"} onClick={() => setShow("active")}>
             진행 중 {activeCount}
@@ -320,11 +321,11 @@ export function BanList({ version, onChanged, ...common }: Common & { version: n
         </div>
       </div>
       {bans === null ? (
-        <p className={styles.empty}>불러오는 중…</p>
+        <Loading />
       ) : shown.length === 0 ? (
-        <p className={styles.empty}>{show === "active" ? "지금 걸린 정지·차단이 없어요." : "정지·차단 기록이 없어요."}</p>
+        <Empty>{show === "active" ? "지금 걸린 정지·차단이 없어요." : "정지·차단 기록이 없어요."}</Empty>
       ) : (
-        <div className={m.tableWrap}>
+        <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
               <tr>
@@ -348,11 +349,11 @@ export function BanList({ version, onChanged, ...common }: Common & { version: n
                       </div>
                     )}
                   </td>
-                  <td>{KIND_LABEL[b.kind]}</td>
+                  <td className={styles.nowrap}>{KIND_LABEL[b.kind]}</td>
                   <td className={m.reasonCell}>
                     <div>{b.reason}</div>
                     <div className={styles.meta}>메모: {b.memo}</div>
-                    <button type="button" className={cx(ui.button, ui.quiet, m.small)} onClick={() => setOpen(open === b.id ? null : b.id)} aria-expanded={open === b.id}>
+                    <button type="button" className={cx(ui.button, ui.quiet, ui.small)} onClick={() => setOpen(open === b.id ? null : b.id)} aria-expanded={open === b.id}>
                       처리 기록 {b.history.length}
                     </button>
                     {open === b.id && (
@@ -365,11 +366,11 @@ export function BanList({ version, onChanged, ...common }: Common & { version: n
                       </ol>
                     )}
                   </td>
-                  <td>{KST.format(b.startAt)}</td>
-                  <td>{b.liftedAt !== null ? `${KST.format(b.liftedAt)} 해제` : when(b.until)}</td>
+                  <td className={styles.nowrap}>{KST.format(b.startAt)}</td>
+                  <td className={styles.nowrap}>{b.liftedAt !== null ? `${KST.format(b.liftedAt)} 해제` : when(b.until)}</td>
                   <td>{b.by}</td>
                   <td>
-                    {STATUS_LABEL[b.status]}
+                    <span className={cx(styles.badge, b.status === "active" && styles.badgeHidden)}>{STATUS_LABEL[b.status]}</span>
                     {b.status === "active" &&
                       (editing?.id === b.id ? (
                         <div className={m.editBox}>
@@ -393,7 +394,7 @@ export function BanList({ version, onChanged, ...common }: Common & { version: n
                           <div className={m.inline}>
                             <button
                               type="button"
-                              className={ui.button}
+                              className={cx(ui.button, ui.primary, ui.small)}
                               disabled={pending || (!editing.forever && !(Number(editing.days) >= 1))}
                               onClick={() =>
                                 void run(
@@ -404,19 +405,19 @@ export function BanList({ version, onChanged, ...common }: Common & { version: n
                             >
                               지금부터로 저장
                             </button>
-                            <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setEditing(null)}>
+                            <button type="button" className={cx(ui.button, ui.quiet, ui.small)} onClick={() => setEditing(null)}>
                               취소
                             </button>
                           </div>
                         </div>
                       ) : (
                         <div className={m.inline}>
-                          <button type="button" className={cx(ui.button, m.small)} disabled={pending} onClick={() => setEditing({ id: b.id, days: "7", forever: false })}>
+                          <button type="button" className={cx(ui.button, ui.small)} disabled={pending} onClick={() => setEditing({ id: b.id, days: "7", forever: false })}>
                             기간 수정
                           </button>
                           <button
                             type="button"
-                            className={cx(ui.button, ui.danger, m.small)}
+                            className={cx(ui.button, ui.danger, ui.small)}
                             disabled={pending}
                             onClick={() => void run(() => moderationApi.editBan(b.id, { action: "lift" }), "조기 해제했어요.")}
                           >

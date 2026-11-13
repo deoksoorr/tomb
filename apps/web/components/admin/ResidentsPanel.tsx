@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { RESIDENTS_MAX, type ResidentSettings } from "@/lib/residents";
 import { cx } from "../ui/cx";
-import ui from "../ui/ui.module.css";
+import ui from "./AdminUi.module.css";
 import styles from "./Admin.module.css";
 import { opsAdminApi } from "./opsAdminApi";
 import { usePanelData } from "./usePanelData";

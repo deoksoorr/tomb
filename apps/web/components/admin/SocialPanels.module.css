@@ -6,9 +6,9 @@
 
 .form {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   max-width: 640px;
-  padding: 14px 16px;
+  padding: 18px 20px;
 }
 
 .targetBox {
@@ -34,16 +34,16 @@
 
 .picked {
   margin: 0;
-  color: var(--bone);
+  color: var(--muted);
   font-size: 13px;
 }
 
-.note {
+.form .note {
   min-height: 72px;
   resize: vertical;
 }
 
-.count {
+.form .count {
   width: 80px;
 }
 
@@ -64,8 +64,8 @@
 
 .logBox {
   display: grid;
-  gap: 8px;
-  overflow-x: auto;
+  gap: 10px;
+  min-width: 0;
 }
 
 .noteCell {
@@ -73,7 +73,10 @@
   overflow-wrap: anywhere;
 }
 
-.hiddenRow {
-  opacity: 0.45;
+.hiddenRow td {
+  color: var(--ad-faint);
+}
+
+.hiddenRow td:not(:last-child) {
   text-decoration: line-through;
 }

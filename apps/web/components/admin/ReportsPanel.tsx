@@ -8,9 +8,10 @@ import { USER_REPORT_REASON_LABELS } from "@/lib/reports";
 import { readItem, writeItem } from "@/lib/storage";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
-import ui from "../ui/ui.module.css";
+import ui from "./AdminUi.module.css";
 import type { BanTarget } from "./BanPanel";
 import styles from "./Admin.module.css";
+import { Empty, Loading } from "./PanelState";
 import m from "./Moderation.module.css";
 import { expelledText, moderationApi } from "./moderationApi";
 
@@ -101,15 +102,15 @@ export default function ReportsPanel({ toast, onAuthLost, onOpenCount, onBan }: 
             </button>
           ))}
         </div>
-        <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setVersion((v) => v + 1)} disabled={busy}>
+        <button type="button" className={cx(ui.button, ui.quiet, styles.toolbarEnd)} onClick={() => setVersion((v) => v + 1)} disabled={busy}>
           새로고침
         </button>
       </div>
 
       {reports === null ? (
-        <p className={styles.empty}>불러오는 중…</p>
+        <Loading />
       ) : shown.length === 0 ? (
-        <p className={styles.empty}>{status === "open" ? "처리할 신고가 없어요." : "처리한 신고가 없어요."}</p>
+        <Empty>{status === "open" ? "처리할 신고가 없어요." : "처리한 신고가 없어요."}</Empty>
       ) : (
         <ul className={styles.list}>
           {shown.map((r) => {

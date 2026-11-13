@@ -6,6 +6,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius);
+  background: var(--ad-surface);
 }
 
 .search {
@@ -28,38 +32,46 @@
 
 .nameCell {
   min-width: 140px;
+  color: var(--ad-strong);
+  font-weight: 600;
 }
 
 .id {
   display: block;
-  color: var(--faint);
-  font-family: var(--font-small);
-  font-size: 10px;
+  color: var(--ad-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 
 .status {
   display: inline-block;
-  padding: 1px 6px;
-  font-size: 11px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--ad-surface-3);
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
-  box-shadow: 0 0 0 1px var(--line);
 }
 
 .normal {
-  color: var(--status-ok);
+  background: var(--ad-ok-soft);
+  color: var(--ad-ok);
 }
 
 .banned {
-  color: var(--danger);
+  background: var(--ad-danger-bg);
+  color: var(--ad-danger);
 }
 
 .dormant {
-  color: var(--muted);
+  color: var(--ad-muted);
 }
 
 .staff {
-  color: var(--candle);
+  background: var(--ad-gold-soft);
+  color: var(--ad-gold);
 }
 
 .actions {
@@ -83,7 +95,9 @@
 
 .code {
   display: block;
-  padding: 10px 12px;
+  padding: 12px 14px;
+  border-radius: var(--ad-radius-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 22px;
   letter-spacing: 0.08em;
   text-align: center;
@@ -103,4 +117,15 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .nameCell {
+    font-size: 15px;
+  }
 }

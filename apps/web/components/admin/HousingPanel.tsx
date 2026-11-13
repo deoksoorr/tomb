@@ -6,9 +6,10 @@ import { tierById } from "@/lib/housing/catalog";
 import type { AdminHouse } from "@/lib/housing/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
-import ui from "../ui/ui.module.css";
+import ui from "./AdminUi.module.css";
 import { adminApi, type ModAction } from "./adminApi";
 import styles from "./Admin.module.css";
+import { Empty, Loading } from "./PanelState";
 
 type Props = { toast: (message: string) => void; onAuthLost: () => void };
 type Filter = "all" | "reported" | "hidden";
@@ -99,8 +100,8 @@ export default function HousingPanel({ toast, onAuthLost }: Props) {
         />
       </div>
 
-      {houses === null && <p className={styles.empty}>불러오는 중…</p>}
-      {houses && !visible.length && <p className={styles.empty}>조건에 맞는 집이 없어요.</p>}
+      {houses === null && <Loading />}
+      {houses && !visible.length && <Empty>조건에 맞는 집이 없어요.</Empty>}
 
       <ul className={styles.list}>
         {visible.map((h) => (

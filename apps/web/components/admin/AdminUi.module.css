@@ -1,0 +1,248 @@
+/*
+ * 관리자 화면 전용 기본 부품 (버튼·입력칸·필드·안내 문구).
+ * components/ui/ui.module.css와 클래스 이름을 똑같이 맞춰, 관리자 패널은 import 경로만 바꿔 쓴다 (게임 화면에는 영향 없음).
+ * 색·크기는 Admin.module.css의 .page에 정의한 --ad-* 토큰만 쓴다.
+ */
+
+/* ── 버튼: 기본(보조) · primary(주) · danger(위험) · quiet(조용한) ── */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--ad-control-h);
+  padding: 0 14px;
+  border: 1px solid var(--ad-line-strong);
+  border-radius: var(--ad-radius-sm);
+  background: var(--ad-surface-2);
+  color: var(--ad-text);
+  font-family: var(--ad-font);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-decoration: none;
+  touch-action: manipulation;
+  user-select: none;
+  transition:
+    background-color 0.12s,
+    border-color 0.12s,
+    color 0.12s;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--ad-faint);
+  background: var(--ad-surface-3);
+  color: var(--ad-strong);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--ad-focus);
+  outline-offset: 2px;
+}
+
+/* 주 버튼: 화면마다 한두 개 (금색 포인트) */
+.primary {
+  border-color: var(--ad-gold);
+  background: var(--ad-gold);
+  color: var(--ad-on-gold);
+  font-weight: 600;
+}
+
+.primary:hover:not(:disabled) {
+  border-color: var(--ad-gold-hover);
+  background: var(--ad-gold-hover);
+  color: var(--ad-on-gold);
+}
+
+/* 위험: 삭제·정지·차단처럼 되돌리기 어려운 동작 (되돌릴 수 없는 건 확인 창을 거친다) */
+.danger {
+  border-color: var(--ad-danger-line);
+  background: var(--ad-danger-bg);
+  color: var(--ad-danger);
+}
+
+.danger:hover:not(:disabled) {
+  border-color: var(--ad-danger);
+  background: var(--ad-danger);
+  color: #fff;
+}
+
+/* 조용한 버튼: 취소·그만두기·보조 동작 */
+.quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ad-muted);
+}
+
+.quiet:hover:not(:disabled) {
+  border-color: var(--ad-line);
+  background: var(--ad-surface-2);
+  color: var(--ad-text);
+}
+
+/* quiet + danger (예: 완전 삭제) → 빨간 글자만 */
+.quiet.danger {
+  color: var(--ad-danger);
+}
+
+.quiet.danger:hover:not(:disabled) {
+  border-color: var(--ad-danger-line);
+  background: var(--ad-danger-bg);
+  color: var(--ad-danger);
+}
+
+.icon {
+  min-width: var(--ad-control-h);
+  padding: 0;
+}
+
+.small {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+/* ── 카드 패널 ── */
+
+.panel {
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius);
+  background: var(--ad-surface);
+  box-shadow: var(--ad-shadow);
+}
+
+/* ── 입력 ── */
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--ad-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.required::after {
+  content: " *";
+  color: var(--ad-gold);
+}
+
+.counter {
+  color: var(--ad-faint);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 휴대폰에서 확대되지 않게 16px, 넓은 화면은 14px */
+.input {
+  width: 100%;
+  min-height: var(--ad-control-h);
+  padding: 7px 10px;
+  border: 1px solid var(--ad-line-strong);
+  border-radius: var(--ad-radius-sm);
+  background: var(--ad-inset);
+  color: var(--ad-text);
+  font-family: var(--ad-font);
+  font-size: 16px;
+  line-height: 1.4;
+  transition: border-color 0.12s;
+}
+
+@media (min-width: 861px) {
+  .input {
+    font-size: 14px;
+  }
+}
+
+.input::placeholder {
+  color: var(--ad-faint);
+}
+
+.input:hover:not(:disabled) {
+  border-color: var(--ad-faint);
+}
+
+.input:focus-visible {
+  outline: none;
+  border-color: var(--ad-focus);
+  box-shadow: 0 0 0 3px var(--ad-focus-ring);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--ad-danger);
+}
+
+.input:disabled {
+  opacity: 0.5;
+}
+
+select.input {
+  padding-right: 28px;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ad-muted) 50%),
+    linear-gradient(135deg, var(--ad-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 15px) 50%,
+    calc(100% - 10px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+textarea.input {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.hint {
+  color: var(--ad-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.error {
+  color: var(--ad-danger);
+  font-size: 13px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--ad-line);
+  border-radius: 999px;
+  background: var(--ad-surface-2);
+  color: var(--ad-text);
+  font-size: 12px;
+}
+
+/* 손가락으로 누르기 편하게 */
+@media (pointer: coarse) {
+  .button,
+  .input {
+    min-height: 42px;
+  }
+
+  .small {
+    min-height: 34px;
+  }
+}

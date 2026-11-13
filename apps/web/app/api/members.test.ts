@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { NAV } from "@/components/admin/adminNav";
+import BansPanel from "@/components/admin/BansPanel";
 import MembersPanel from "@/components/admin/MembersPanel";
 import { relativeTime } from "@/components/admin/memberFormat";
 import { memberCursor, pageMembers, type AdminMembersResponse, type CodeReissueLogResponse, type CodeReissueResponse } from "@/lib/adminMembers";
@@ -284,7 +286,7 @@ describe("접속 코드 재발급 (POST /api/admin/accounts/code)", () => {
 });
 
 describe("회원 제재 탭 화면", () => {
-  it("포인트 지급 칸이 없고, 회원 목록·차단이 있다", () => {
+  it("포인트 지급 칸이 없고, 회원 목록이 있다 (IP 차단·재발급 기록은 옆 메뉴로)", () => {
     const html = renderToStaticMarkup(
       createElement(MembersPanel, {
         toast: () => undefined,
@@ -292,8 +294,13 @@ describe("회원 제재 탭 화면", () => {
       }),
     );
     expect(html).toContain('aria-label="회원 제재"');
-    expect(html).toContain("IP로 바로 차단");
-    expect(html).toContain("코드 재발급 기록");
+    expect(html).toContain('aria-label="회원 찾기"');
+    const bans = renderToStaticMarkup(
+      createElement(BansPanel, { toast: () => undefined, onAuthLost: () => undefined, version: 0, onChanged: () => undefined }),
+    );
+    expect(bans).toContain("IP로 바로 차단");
+    const menu = NAV.flatMap((g) => g.items.map((i) => i.label));
+    expect(menu).toEqual(expect.arrayContaining(["회원 제재", "코드 재발급 기록", "정지·차단 기록"]));
     expect(html).not.toContain("포인트 지급");
     expect(html).not.toContain("+100 / -50");
     expect(html).not.toContain("개인 코드 또는 계정 id");
