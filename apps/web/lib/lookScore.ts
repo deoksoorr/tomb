@@ -1,4 +1,4 @@
-import { bodyUnlockPrice, DYE_PARTS, dyeSpecialOf, itemById, PERMANENT_MULTIPLIER, petPrice, type AvatarDye } from "@tomb/protocol";
+import { bodyLabel, bodyUnlockPrice, DYE_PARTS, dyeSpecialOf, itemById, PERMANENT_MULTIPLIER, petPrice, premiumBody, type AvatarDye, type CosmeticSlot } from "@tomb/protocol";
 
 // 외형 꾸미기 점수 (서버 랭킹·내 정보·가방이 함께 쓰는 순수 계산. 서버 전용 모듈을 들이지 않는다).
 // 지금 "착용 중이고 만료 전"인 꾸미기만 센다 → 기간제가 끝나면 그 파츠 점수도 바로 사라진다.
@@ -65,10 +65,27 @@ export function lookScore(input: LookScoreInput, now: number): number {
   return parts + body + dye;
 }
 
-/** 랭킹에 보여 줄 대표 파츠 (점수 높은 순 n개, 0점 파츠는 뺀다) */
-export function topParts(input: Pick<LookScoreInput, "equipped">, now: number, n = 3): string[] {
-  return scoredParts(input, now)
-    .filter((p) => p.score > 0)
-    .slice(0, n)
-    .map((p) => p.itemId);
+/** 랭킹 줄에 착용 파츠를 늘어놓는 부위 순서 (머리 → 목 → 등 → 손 → 오라 → 발 → 펫, 그 뒤에 프리미엄 외형) */
+export const LOOK_SLOT_ORDER: Readonly<Record<CosmeticSlot, number>> = { head: 0, neck: 1, back: 2, hand: 3, aura: 4, feet: 5, pet: 6 };
+/** 파츠 목록에서 프리미엄 외형을 나타내는 id 접두사 ("body:king") — 아이콘은 game/sprites/itemIcons가 몸 그림으로 그린다 */
+export const BODY_PART_PREFIX = "body:";
+
+/**
+ * 랭킹에 보여 줄 지금 착용 파츠 전부: 만료 전 착용품(부위마다 하나, 점수와 상관없이)을 부위 순으로,
+ * 프리미엄 외형이면 맨 끝에 "body:{id}"
+ */
+export function wornParts(input: Pick<LookScoreInput, "equipped" | "body">, now: number): string[] {
+  const bySlot = new Map<CosmeticSlot, string>();
+  for (const e of input.equipped) {
+    const slot = itemById(e.itemId)?.slot;
+    if (e.until > now && slot && !bySlot.has(slot)) bySlot.set(slot, e.itemId);
+  }
+  const parts = [...bySlot].sort(([a], [b]) => LOOK_SLOT_ORDER[a] - LOOK_SLOT_ORDER[b]).map(([, id]) => id);
+  return premiumBody(input.body) ? [...parts, `${BODY_PART_PREFIX}${input.body}`] : parts;
+}
+
+/** 파츠 이름 (마우스를 올리면 보이는 이름. 프리미엄 외형은 몸 이름) */
+export function lookPartName(partId: string): string {
+  if (partId.startsWith(BODY_PART_PREFIX)) return bodyLabel(partId.slice(BODY_PART_PREFIX.length));
+  return itemById(partId)?.name ?? partId;
 }

@@ -4,6 +4,7 @@ import { kickNow, peerOf } from "./ban";
 import { listAdminGraves } from "./admin";
 import { getHouseStore } from "./housing/service";
 import { HttpError } from "./http";
+import { isStaff } from "./staff";
 import { REPORT_REASON_LABELS } from "./reports";
 import { deleteGrave, displayName, getMegaphone, getStore, NO_NAME } from "./store";
 import { kstDay } from "./store/accounts";
@@ -49,6 +50,8 @@ export const UserReportSchema = z.discriminatedUnion("type", [
 export type UserReportInput = z.output<typeof UserReportSchema>;
 
 const notFound = (msg: string) => new HttpError(404, "NOT_FOUND", msg);
+/** 운영자는 신고 대상이 아니다 (화면에서도 운영자 캐릭터·확성기에는 신고 버튼이 없다) */
+const staffTarget = () => new HttpError(403, "STAFF_TARGET", "운영자는 신고할 수 없어요.");
 
 /** 신고 하나 받기. 같은 대상은 하루 한 번(409), 자기 자신은 안 된다(400) */
 export async function submitReport(reporterId: string, input: UserReportInput, now = Date.now()): Promise<void> {
@@ -59,12 +62,14 @@ export async function submitReport(reporterId: string, input: UserReportInput, n
     const peer = await peerOf(where, input.sid);
     if (!peer) throw notFound("그 사람을 찾지 못했어요. 이미 나갔을 수 있어요.");
     if (peer.visitorId === reporterId) throw new HttpError(400, "INVALID_INPUT", "자기 자신은 신고할 수 없어요.");
+    if (await isStaff(peer.visitorId)) throw staffTarget();
     const name = await displayName(peer.visitorId, now).catch(() => peer.name);
     meta = { type: "user", targetId: peer.visitorId, accountId: peer.visitorId, name: name === NO_NAME ? peer.name : name, preview: peer.name };
   } else {
     const rec = (await getMegaphone().recent(MEGA_KEEP)).find((r) => r.id === input.id);
     if (!rec) throw notFound("그 확성기 기록을 찾지 못했어요.");
     if (rec.accountId === reporterId) throw new HttpError(400, "INVALID_INPUT", "자기 확성기는 신고할 수 없어요.");
+    if (await isStaff(rec.accountId)) throw staffTarget();
     meta = { type: "megaphone", targetId: rec.id, accountId: rec.accountId, name: rec.name, preview: rec.text };
   }
   const chat = input.type === "user" && input.chat ? input.chat : undefined;

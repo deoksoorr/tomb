@@ -18,6 +18,7 @@ import {
   SEATS,
   STATE,
   checkName,
+  nameKey,
   decodeMove,
   decodeSnapshot,
   encodeMove,
@@ -220,6 +221,14 @@ describe("names", () => {
     expect(checkName("운영자").ok).toBe(false);
     expect(checkName("Fu_ck").ok).toBe(false);
     expect(checkName("dev_kim 2").ok).toBe(true);
+  });
+  it("중복 비교 키: 공백·_·대소문자·한글 조합 차이는 같은 이름", () => {
+    expect(nameKey("홍길동")).toBe(nameKey("홍 길동"));
+    expect(nameKey("홍_길 동 ")).toBe("홍길동");
+    expect(nameKey("Dev Kim")).toBe(nameKey("devkim"));
+    // 풀어 쓴 자모(NFD)도 완성형과 같은 키
+    expect(nameKey("홍길동".normalize("NFD"))).toBe("홍길동");
+    expect(nameKey("홍길동")).not.toBe(nameKey("홍길순"));
   });
   it("close codes", () => {
     expect(CLOSE.CHANNEL_FULL).toBe(4001);

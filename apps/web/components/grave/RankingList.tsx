@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
+import { lookPartName } from "@/lib/lookScore";
 import { speciesOf } from "@/lib/forage/catalog";
 import { DIFFICULTIES, gearById, ZONES, type Difficulty } from "@/lib/rpg/catalog";
 import type { PublicGrave, RankBoard, RankPeriod, RankResponse } from "@/lib/types";
@@ -221,17 +222,11 @@ function BoardRanking({ board, period, zone, fish }: { board: RankBoard; period:
               {r.name}
               {r.me && (board === "house" ? " (내 집)" : " (나)")}
               {r.sub && <span className={styles.sub}>{r.sub}</span>}
+              {r.items && r.items.length > 0 && <WornParts items={r.items} />}
             </span>
             {r.gear && gearById(r.gear) && (
               <span className={styles.parts} title={gearById(r.gear)!.name}>
                 <RpgIcon art={gearById(r.gear)!.art} size={16} />
-              </span>
-            )}
-            {r.items && r.items.length > 0 && (
-              <span className={styles.parts} aria-hidden="true">
-                {r.items.map((id) => (
-                  <ItemIcon key={id} itemId={id} size={16} />
-                ))}
               </span>
             )}
             <span className={styles.metric}>{rankValue(board, r.value)}</span>
@@ -240,5 +235,19 @@ function BoardRanking({ board, period, zone, fish }: { board: RankBoard; period:
       </ol>
       {staffNote}
     </>
+  );
+}
+
+/** 꾸미기 랭킹: 이름 아래 줄에 지금 착용한 파츠 전부 (부위 순, 같은 크기). 마우스를 올리면 이름, 화면 읽기에는 목록으로 */
+function WornParts({ items }: { items: readonly string[] }) {
+  const names = items.map(lookPartName);
+  return (
+    <span className={styles.worn} role="img" aria-label={`착용: ${names.join(", ")}`}>
+      {items.map((id, i) => (
+        <span key={id} className={styles.wornIcon} title={names[i]}>
+          <ItemIcon itemId={id} size={16} />
+        </span>
+      ))}
+    </span>
   );
 }

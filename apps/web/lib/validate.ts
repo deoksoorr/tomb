@@ -235,6 +235,12 @@ export const UnequipSchema = z.object({
 });
 
 /** 관리자 포인트 조정: 개인 코드 또는 계정 id 중 하나 + 정수 증감 */
+/** 관리자: 닉네임 색인 일괄 채우기 (cursor = 이전 응답의 next, 처음은 "0") */
+export const AdminNameReindexSchema = z.object({
+  cursor: z.string().max(40).regex(/^\d+$/, "cursor가 올바르지 않아요.").default("0"),
+  count: z.number().int().min(1).max(500).default(200),
+});
+
 export const AdminPointsSchema = z
   .object({
     code: z.string().max(40).transform(normalizeCode).optional(),

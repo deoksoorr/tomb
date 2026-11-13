@@ -226,7 +226,20 @@ export type Me = {
   staff?: boolean;
   /** 25번: 선택권으로 영구 해금한 프리미엄 외형 id (PREMIUM_BODIES). 없으면 처음 6종만 */
   bodies?: string[];
+  /** 휴면(90일 넘게 안 들어옴)에서 돌아왔다 → 닉네임을 다시 정해야(POST /api/names) 마을에 들어갈 수 있다 */
+  renameRequired?: true;
 };
+
+/** 휴면 계정이 돌아왔을 때 (입장 화면 안내·입장 거절 문구) */
+export const DORMANT_RENAME_MESSAGE = "오래 접속하지 않아 휴면 계정이 되었어요. 닉네임을 다시 정해 주세요";
+
+/** GET /api/names?name= → 쓸 수 있는 이름인지 (규칙 + 다른 계정이 쓰는지). 내 계정이 이미 쓰는 이름이면 ok */
+export type NameCheckResponse = { ok: true; name: string } | { ok: false; reason: string };
+/**
+ * POST /api/names { name } → 이 계정 이름 등록 (이름이 아직 없을 때 · 휴면 재설정). 무료, 대기 기간 없음.
+ * 다른 계정이 쓰는 이름이면 409 NAME_TAKEN, 이미 이름이 있으면 409 NAME_ALREADY_SET (바꾸기는 /api/me/name)
+ */
+export type NameClaimResponse = { me: Me };
 
 /**
  * POST /api/me/wear `{ itemId }` → 벗어 둔 꾸미기를 다시 입기 (같은 부위에 입던 것은 벗어 둔 쪽으로)
@@ -401,7 +414,7 @@ export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish", 
 export type RankBoard = (typeof RANK_BOARDS)[number];
 /** week = 이번 주(KST 월요일 0시부터), all = 전체 */
 export type RankPeriod = "week" | "all";
-/** sub: 보조 줄 (house 랭킹은 "번지 · 주인 이름"). items: look 랭킹의 대표 파츠 아이템 id (점수 높은 순 최대 3개). gear: huntLevel 랭킹의 장착 무기 id */
+/** sub: 보조 줄 (house 랭킹은 "번지 · 주인 이름"). items: look 랭킹의 지금 착용 파츠 전부 (부위 순, 프리미엄 외형은 "body:{id}" — lib/lookScore.wornParts). gear: huntLevel 랭킹의 장착 무기 id */
 export type RankRow = { rank: number; name: string; value: number; me: boolean; sub?: string; items?: string[]; gear?: string };
 /** GET /api/rank?board=&period=&zone=&me=1 */
 export type RankResponse = {

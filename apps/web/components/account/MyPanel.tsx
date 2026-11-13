@@ -7,6 +7,7 @@ import { api, errorMessage } from "@/lib/api";
 import { DAILY_EARN_CAP } from "@/lib/economy";
 import { CAT_LABEL, dexBadgeBits } from "@/lib/forage/catalog";
 import { meStore, useMe } from "@/lib/hooks/useMe";
+import { useNameTaken } from "@/lib/hooks/useNameTaken";
 import { lookScore } from "@/lib/lookScore";
 import { useForage } from "../forage/forageStore";
 import { forgetMyCode, readMyCode, saveMyCode, writeItem } from "@/lib/storage";
@@ -342,11 +343,13 @@ function NameSection({ me }: { me: Me }) {
   const { nextAllowedAt, cost } = me.nameChange;
   const waiting = nextAllowedAt > openedAt;
   const check = checkName(name);
+  // 닉네임 중복: 입력 중 가볍게 미리 확인 (지금 내 이름은 묻지 않는다). 저장 때 서버가 다시 판정한다
+  const taken = useNameTaken(open ? name : "", me.name);
   const price = cost === 0 ? "이번 변경은 무료예요." : `바꾸면 ${cost.toLocaleString("ko-KR")} 포인트가 들어요.`;
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!check.ok || pending) return;
+    if (!check.ok || taken || pending) return;
     setPending(true);
     setMessage(null);
     try {
@@ -373,15 +376,15 @@ function NameSection({ me }: { me: Me }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             aria-label="새 닉네임"
-            aria-invalid={!check.ok}
+            aria-invalid={!check.ok || taken !== null}
             aria-describedby={`${id}-hint`}
             autoFocus
           />
-          <p id={`${id}-hint`} className={check.ok ? ui.hint : ui.error}>
-            {check.ok ? price : check.reason}
+          <p id={`${id}-hint`} className={check.ok && !taken ? ui.hint : ui.error}>
+            {!check.ok ? check.reason : (taken ?? price)}
           </p>
           <div className={styles.confirmButtons}>
-            <button type="submit" className={cx(ui.button, ui.primary)} disabled={!check.ok || pending}>
+            <button type="submit" className={cx(ui.button, ui.primary)} disabled={!check.ok || taken !== null || pending}>
               {pending ? "바꾸는 중…" : "바꾸기"}
             </button>
             <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setOpen(false)}>

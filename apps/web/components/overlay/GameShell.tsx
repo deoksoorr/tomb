@@ -217,6 +217,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   usePresencePoints(ready);
   const { calendarReady, giftCount } = useSocial(ready);
   const { friendIncoming } = useFriendPresence(ready);
+  // 운영자 계정은 친구를 맺을 수 없다 → 친구 버튼·메뉴를 숨긴다 (서버도 막는다)
+  const iAmStaff = useBridgeValue("me:staff")?.on === true;
   // 채널 이동 창의 "마지막에 있던 채널" 표시용
   const onlineChannel = status?.mode === "online" ? status.channel : null;
   useEffect(() => {
@@ -225,6 +227,13 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   useBridgeEvent("portal:open", ({ kind, houseId, lot }) => {
     setHousingIntent(kind === "housing" && (houseId || lot) ? { houseId, lot } : null);
     setPanel(kind);
+    // 집으로 바로 들어갈 때(친구 창 [집 놀러 가기]·[친구한테 가기]·집 문): 떠 있던 다른 창·목록은 닫는다
+    if (kind === "housing" && houseId) {
+      setOpenGraveId(null);
+      setSayOpen(false);
+      setRadial(false);
+      setChatOpen(false);
+    }
   });
   useBridgeEvent("grave:open", ({ graveId }) => setOpenGraveId(graveId));
   useBridgeEvent("shop:open", () => setPanel("shop"));
@@ -443,6 +452,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   )}
                 </button>
                 <BgmPlayer compact />
+                {/* 불멍·놀이기구 중: 폭죽이 있으면 위쪽 줄에서 바로 쏘기 (메뉴 시트를 안 거쳐도) */}
+                {campfire && <FireworkButton variant="top" onOpen={() => setPanel("fireworks")} />}
               </div>
               <Hud compact onOpenChannels={() => setPanel("channels")} />
             </div>
@@ -459,6 +470,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 </div>
               )}
               <div className={styles.topRight}>
+                {/* 불멍·놀이기구 중엔 아래 바로 가기 줄(폭죽 포함)이 숨으니 폭죽만 위쪽 줄 맨 앞에 */}
+                {campfire && <FireworkButton variant="top" onOpen={() => setPanel("fireworks")} />}
                 <button
                   type="button"
                   className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
@@ -479,18 +492,20 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   <PixelIcon name="gift" />
                   {giftCount > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
                 </button>
-                {/* 친구: 위쪽 버튼 줄에 글자와 함께 바로 (받은 신청이 있으면 빨간 점) */}
-                <button
-                  type="button"
-                  className={cx(ui.button, ui.top, styles.topButton)}
-                  onClick={() => setPanel("friends")}
-                  aria-label={friendIncoming ? `친구 (받은 신청 ${friendIncoming}개)` : "친구"}
-                  title="친구"
-                >
-                  <PixelIcon name="heart" />
-                  친구
-                  {friendIncoming > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
-                </button>
+                {/* 친구: 위쪽 버튼 줄에 글자와 함께 바로 (받은 신청이 있으면 빨간 점). 운영자 계정은 친구 기능이 없다 */}
+                {!iAmStaff && (
+                  <button
+                    type="button"
+                    className={cx(ui.button, ui.top, styles.topButton)}
+                    onClick={() => setPanel("friends")}
+                    aria-label={friendIncoming ? `친구 (받은 신청 ${friendIncoming}개)` : "친구"}
+                    title="친구"
+                  >
+                    <PixelIcon name="heart" />
+                    친구
+                    {friendIncoming > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
+                  </button>
+                )}
                 <button
                   type="button"
                   className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
@@ -619,7 +634,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           onLeave={onLeave}
           onLoggedOut={onLoggedOut}
           onOpenShrine={() => setPanel("shrine")}
-          onOpenFriends={() => setPanel("friends")}
+          onOpenFriends={iAmStaff ? undefined : () => setPanel("friends")}
           houseChannel={houseChannel}
           onGoToMyHouse={goToMyHouse}
           onOpenHousing={() => {
@@ -672,6 +687,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           calendarReady={calendarReady}
           giftCount={giftCount}
           friendIncoming={friendIncoming}
+          noFriends={iAmStaff}
           points={me ? me.points : null}
           onPick={pickFromMenu}
           onClose={closePanel}

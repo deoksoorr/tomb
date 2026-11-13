@@ -76,6 +76,8 @@ export class SkillMoves {
   private wardG: Phaser.GameObjects.Graphics | null = null;
   private drainAt = 0;
   private brittleAt = 0;
+  /** 여러 발이 한꺼번에 맞을 때 폭발 꽃을 너무 많이 피우지 않게 (마지막으로 피운 시각) */
+  private bloomAt = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -84,6 +86,14 @@ export class SkillMoves {
 
   private get add() {
     return this.scene.add;
+  }
+
+  /** 폭발 꽃을 피워도 되나 (gap ms 안에 이미 피웠으면 건너뛴다) */
+  private bloomReady(gap: number): boolean {
+    const now = performance.now();
+    if (now - this.bloomAt < gap) return false;
+    this.bloomAt = now;
+    return true;
   }
 
   /** 불꽃 혀 하나 (바닥에서 솟아 흔들리며 사그라짐) */
@@ -113,7 +123,8 @@ export class SkillMoves {
   /** 불씨 튕기기: 불씨가 포물선으로 튕겨 날아가며 불꼬리를 남긴다 (ms 동안) */
   kindleFly(from: Pt, to: Pt, ms: number): void {
     const f = this.fx;
-    const ball = this.add.image(from.x, from.y - 8, SKT.glow).setDepth(DEPTH_FX + 3).setTint(0xffb040).setBlendMode(Phaser.BlendModes.ADD).setScale(0.45);
+    const ball = this.add.image(from.x, from.y - 8, SKT.glow).setDepth(DEPTH_FX + 3).setTint(0xffb040).setBlendMode(Phaser.BlendModes.ADD).setScale(0.8);
+    const halo = this.add.image(from.x, from.y - 8, SKT.glow).setDepth(DEPTH_FX + 2).setTint(E.dark).setBlendMode(Phaser.BlendModes.ADD).setScale(1.6).setAlpha(0.7);
     const core = this.add.image(from.x, from.y - 8, SKT.star).setDepth(DEPTH_FX + 4).setTint(0xfff0b0).setBlendMode(Phaser.BlendModes.ADD).setScale(0.55);
     const st = { t: 0 };
     let lx = from.x;
@@ -127,7 +138,11 @@ export class SkillMoves {
         const x = from.x + (to.x - from.x) * st.t;
         const y = from.y - 8 + (to.y - 4 - (from.y - 8)) * st.t - Math.sin(st.t * Math.PI) * 26;
         ball.setPosition(x, y);
+        halo.setPosition(x, y);
         core.setPosition(x, y).setRotation(st.t * 12);
+        // 굵은 꼬리: 큰 불꽃 혀가 뒤로 늘어지며 사그라진다 + 광원
+        f.emit({ x, y, tex: SKT.bigFlame, life: 220, s0: 0.16, s1: 0.04, rot: Math.atan2(y - ly, x - lx) - Math.PI / 2, fade: 1.2 });
+        f.emit({ x, y, tex: SKT.glow, tint: E.main, life: 200, s0: 0.5, s1: 0.2, alpha: 0.6 });
         // 꼬리: 불꽃 + 불티가 지나간 자리에 남아 사그라진다
         f.emit({ x, y, tex: SKT.flame, tint: pick(FIRE.slice(1)), life: 260, s0: 0.42, s1: 0.1, rot: Math.atan2(y - ly, x - lx) - Math.PI / 2, vy: -20 });
         f.emit({ x: (x + lx) / 2, y: (y + ly) / 2, tex: SKT.streak, tint: 0xffd27a, vx: (x - lx) * 30, vy: (y - ly) * 30, drag: 6, life: 200, s0: 0.5, s1: 0.2, stretch: 0.006 });
@@ -136,6 +151,7 @@ export class SkillMoves {
       },
       onComplete: () => {
         ball.destroy();
+        halo.destroy();
         core.destroy();
       },
     });
@@ -144,6 +160,7 @@ export class SkillMoves {
   /** 불씨 튕기기 착탄: 여섯 잎 불꽃 꽃이 피고 불티가 튄다 */
   kindleHit(x: number, y: number, r: number): void {
     const f = this.fx;
+    f.bloom(x, y - 6, r * 1.7, "ember", 1);
     f.glow(x, y - 6, r * 1.6, E.main, 300, 0.3, 0.65);
     f.glow(x, y - 6, r * 0.5, 0xffffff, 140, 0.4, 0.5);
     f.light(x, y, r * 1.6, E.main, 520);
@@ -208,6 +225,7 @@ export class SkillMoves {
   /** 불의 고리 폭발: 둘레를 따라 불기둥이 솟고 불 물결이 바깥으로 밀려난다 */
   ringBlast(x: number, y: number, r: number): void {
     const f = this.fx;
+    f.bloom(x, y - 8, r * 0.9, "ember", 2);
     const n = 16;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * TAU;
@@ -275,6 +293,7 @@ export class SkillMoves {
   /** 별똥 장작 대폭발: 하얀 번쩍 → 불 돔 → 불기둥 → 장작 파편·불티 → 연기 → 불씨 남은 구덩이 */
   meteorImpact(x: number, y: number, r: number): void {
     const f = this.fx;
+    f.bloom(x, y - 10, r * 1.3, "ember", 3);
     f.glow(x, y - 10, r * 1.2, 0xffffff, 180, 0.4, 0.6);
     f.glow(x, y - 10, r * 1.8, E.dark, 520, 0.3, 0.75);
     f.emit({ x, y: y + 4, tex: SKT.pillar, tint: E.main, life: 520, s0: 1.4, s1: 2.2, sy: 1.1, originY: 1, alpha: 0.85 });
@@ -325,6 +344,7 @@ export class SkillMoves {
   /** 큰 모닥불 (궁극) 한 번: 거대한 불기둥 + 둘레를 따라 솟는 불길 + 불 물결 */
   bonfirePulse(x: number, y: number, r: number, i: number, last: boolean): void {
     const f = this.fx;
+    f.bloom(x, y - 16, r * (last ? 1.1 : 0.8), "ember", last ? 3 : 2);
     f.emit({ x, y: y + 4, tex: SKT.pillar, tint: E.main, life: 620, s0: 1 + i * 0.4, s1: 1.8 + i * 0.5, sy: 1.6, originY: 1, alpha: 0.75 });
     f.emit({ x, y: y + 4, tex: SKT.pillar, tint: 0xffd27a, life: 420, s0: 0.5, s1: 1 + i * 0.3, sy: 1.8, originY: 1, alpha: 0.6 });
     for (let k = 0; k < 9; k++) this.tongue(x + (k - 4) * 5, y + 2, 34 + (4 - Math.abs(k - 4)) * 12 + i * 10, 640, k * 12);
@@ -391,13 +411,17 @@ export class SkillMoves {
   /** 고드름 꼬리 (투사체가 날아가는 매 프레임) */
   icicleTrail(x: number, y: number, vx: number, vy: number): void {
     const f = this.fx;
-    f.emit({ x, y, tex: SKT.streak, tint: 0xe8f8ff, vx: vx * 0.25, vy: vy * 0.25, drag: 8, life: 160, s0: 0.7, s1: 0.3, stretch: 0.012 });
+    // 굵은 꼬리: 푸른 바깥 줄 + 흰 심지 + 광원
+    f.emit({ x, y, tex: SKT.streak, tint: F.main, vx: vx * 0.25, vy: vy * 0.25, drag: 8, life: 200, s0: 1.1, s1: 0.4, sy: 1.8, stretch: 0.014, alpha: 0.6 });
+    f.emit({ x, y, tex: SKT.streak, tint: 0xffffff, vx: vx * 0.25, vy: vy * 0.25, drag: 8, life: 140, s0: 0.8, s1: 0.3, sy: 0.7, stretch: 0.012 });
+    f.emit({ x, y, tex: SKT.glow, tint: F.main, life: 160, s0: 0.45, s1: 0.2, alpha: 0.5 });
     if (Math.random() < 0.35) f.emit({ x, y, tex: SKT.star, tint: 0xffffff, life: 300, s0: 0.25, s1: 0.05, vy: 10 });
   }
 
   /** 고드름이 맞고 깨짐 */
   icicleHit(x: number, y: number): void {
     const f = this.fx;
+    if (this.bloomReady(70)) f.bloom(x, y, 20, "frost", 1);
     f.glow(x, y, 12, F.main, 180, 0.3);
     this.debris(x, y, 6, SKT.shard, ICE, 120, false, 1);
     f.emit({ x, y, tex: SKT.star, tint: 0xffffff, life: 200, s0: 0.3, s1: 1.1, fade: 1 });
@@ -466,6 +490,7 @@ export class SkillMoves {
   /** 서리꽃 폭발: 발밑에서 거대한 서리꽃이 피고, 얼음 가시가 바깥으로 줄지어 돋는다 */
   novaBloom(x: number, y: number, r: number): void {
     const f = this.fx;
+    f.bloom(x, y - 8, r, "frost", 2);
     f.emit({ x, y, tex: SKT.flower, tint: F.main, life: 800, s0: 0.1, s1: (r * 2.1) / 128, sy: 0.62, vr: 0.6, depth: DEPTH_GROUND + 5, fade: 2, alpha: 0.9 });
     f.emit({ x, y, tex: SKT.flower, tint: 0x5a9ae0, life: 600, s0: 0.1, s1: (r * 1.5) / 128, sy: 0.62, rot: Math.PI / 6, vr: -0.8, depth: DEPTH_GROUND + 5 });
     f.emit({ x, y: y - 14, tex: SKT.flower, tint: F.light, life: 420, s0: 0.05, s1: 0.5, vr: 2, fade: 1.2, alpha: 0.9 });
@@ -552,6 +577,7 @@ export class SkillMoves {
       [r * 0.58, -1, 20],
     ];
     crystals.forEach(([dx, dy, h], i) => this.spikeUp(x + dx, y + dy, h * 1.2, 700, i * 18, (dx / r) * 0.5));
+    f.bloom(x, y - 20, r * 1.2, "frost", 3);
     f.glow(x, y - 20, r * 1.4, F.dark, 520, 0.3, 0.8);
     f.glow(x, y - 20, r * 0.5, 0xffffff, 220, 0.3, 0.4);
     f.emit({ x, y: y + 4, tex: SKT.pillar, tint: F.main, life: 420, s0: 1.4, s1: 2, sy: 0.9, originY: 1, alpha: 0.7 });
@@ -646,12 +672,14 @@ export class SkillMoves {
     const f = this.fx;
     const a = Math.atan2(vy, vx);
     f.emit({ x, y, tex: SKT.flame, tint: pale ? 0xf2ecff : pick([0x9ff0dc, 0xb98aff]), life: 240, s0: 0.38, s1: 0.08, rot: a - Math.PI / 2, vx: -vx * 0.1, vy: -vy * 0.1 - 10, fade: 1.2 });
+    f.emit({ x, y, tex: SKT.glow, tint: pale ? 0xf2ecff : S.main, life: 180, s0: 0.45, s1: 0.15, alpha: 0.6 });
     if (Math.random() < 0.5) f.emit({ x: x + rnd(-3, 3), y: y + rnd(-3, 3), tex: SKT.wisp, tint: pick(SOUL), vy: -18, life: 380, s0: 0.35, s1: 0.1 });
   }
 
   /** 넋불이 맞음: 넋 빛이 터지고 작은 넋이 나선으로 피어오른다 */
-  wispHit(x: number, y: number): void {
+  wispHit(x: number, y: number, big = true): void {
     const f = this.fx;
+    if (big && this.bloomReady(70)) f.bloom(x, y, 20, "soul", 1);
     f.glow(x, y, 16, S.main, 260, 0.3);
     f.emit({ x, y, tex: SKT.ringThin, tint: S.light, life: 260, s0: 0.05, s1: 0.4, sy: 0.7 });
     for (let i = 0; i < 6; i++) f.emit({ x, y, tex: SKT.wisp, tint: pick(SOUL), orb: { ox: x, oy: y, r: 3, a: (i / 6) * TAU, v: 7, dr: 22, lift: 30 }, life: 500, s0: 0.5, s1: 0.1 });
@@ -665,7 +693,7 @@ export class SkillMoves {
     const vy = (y1 - y0) / (ms / 1000);
     f.emit({ x: x0, y: y0, tex: SKT.flame, tint: pale ? 0xf2ecff : 0x9ff0dc, vx, vy, life: ms, s0: 0.5, s1: 0.5, rot: Math.atan2(vy, vx) + Math.PI / 2, fade: 8 });
     f.emit({ x: x0, y: y0, tex: SKT.streak, tint: pale ? 0xffffff : S.light, vx, vy, life: ms, s0: 0.8, s1: 0.8, stretch: 0.006, fade: 8 });
-    this.scene.time.delayedCall(ms, () => this.wispHit(x1, y1));
+    this.scene.time.delayedCall(ms, () => this.wispHit(x1, y1, false));
   }
 
   /** 등불 기도: 위에서 따뜻한 빛기둥이 내려오고, 발밑 후광 + 빛 알갱이가 오른다 */
@@ -723,12 +751,14 @@ export class SkillMoves {
       f.emit({ x: p0.x, y: p0.y, tex: SKT.wisp, tint: 0xffffff, vx: (t.x - p0.x) / (hop / 1000), vy: (t.y - p0.y) / (hop / 1000), life: hop, delay: d, s0: 1.2, s1: 1.2, fade: 8 });
       f.emit({ x: p0.x, y: p0.y, tex: SKT.streak, tint: S.light, vx: (t.x - p0.x) / (hop / 1000), vy: (t.y - p0.y) / (hop / 1000), life: hop, delay: d, s0: 1.2, s1: 1.2, stretch: 0.004, fade: 8 });
       f.glow(t.x, t.y, 16, S.main, 300, 0.3, 1, DEPTH_FX, d + hop);
+      this.scene.time.delayedCall(d + hop, () => f.bloom(t.x, t.y, 18, "soul", 1));
       f.emit({ x: t.x, y: t.y, tex: SKT.hand, tint: S.light, life: 420, delay: d + hop, s0: 0.4, s1: 0.8, vy: -20, fade: 1.6 });
       prev = { x: t.x, y: t.y };
     });
     const end = targets.length * hop + 60;
     f.implode(gather.x, gather.y, 46, S.light, 260, end);
     this.scene.time.delayedCall(end + 240, () => {
+      f.bloom(gather.x, gather.y - 8, 40, "soul", 2);
       f.glow(gather.x, gather.y - 8, 34, S.main, 360, 0.3);
       f.glow(gather.x, gather.y - 8, 16, 0xffffff, 160, 0.3);
       f.ring(gather.x, gather.y, 40, S.light, 360, 3, 0, DEPTH_GROUND + 4);
@@ -782,6 +812,7 @@ export class SkillMoves {
       f.emit({ x: v.x, y: v.y, tex: SKT.streak, tint: S.light, vx: (x - v.x) * 3, vy: (y - 8 - v.y) * 3, drag: 1, life: 320, s0: 0.9, s1: 0.3, stretch: 0.01 });
     }
     if (last) {
+      this.scene.time.delayedCall(160, () => f.bloom(x, y - 8, r, "soul", 3));
       f.ring(x, y, r * 1.3, 0xffffff, 420, 3, 160, DEPTH_GROUND + 4);
       f.sparks(x, y - 8, 26, SOUL, r * 6, { life: 460, delay: 160 });
       f.glow(x, y - 8, r * 1.5, S.light, 360, 0.3, 0.9, DEPTH_FX, 160);
@@ -818,6 +849,7 @@ export class SkillMoves {
   /** 별빛 행렬 (궁극) 한 번 휩쓸기: 넋 행렬이 둘레를 가로지르고, 별빛 기둥이 쏟아진다 */
   processionSweep(x: number, y: number, r: number, dir: 1 | -1): void {
     const f = this.fx;
+    f.bloom(x, y - 12, r * 0.7, "soul", 2);
     const rows = 4;
     for (let row = 0; row < rows; row++) {
       const yy = y + (row / (rows - 1) - 0.5) * r * 1.1;

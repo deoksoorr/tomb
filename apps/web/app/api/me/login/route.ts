@@ -19,7 +19,10 @@ export const POST = handler(async (req) => {
     await recordCodeLoginFailure(req);
     throw new HttpError(404, "INVALID_CODE", "이 코드에 맞는 계정이 없어요. 다시 확인해 주세요.");
   }
-  const res = json<CodeLoginResponse>({ me: await loadMe(accounts, accountId) });
+  // 새 기기 입장: 휴면이면 닉네임 재설정 표시(me.renameRequired), 색인에 없는 옛 이름은 색인에 채운다
+  const now = Date.now();
+  await accounts.visit(accountId, now, false);
+  const res = json<CodeLoginResponse>({ me: await loadMe(accounts, accountId, now) });
   await setSessionCookie(res, accountId);
   return res;
 });

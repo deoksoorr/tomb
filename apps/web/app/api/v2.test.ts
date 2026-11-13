@@ -116,7 +116,7 @@ describe("계정·출석", () => {
 describe("개인 코드", () => {
   it("발급 → 다른 기기에서 그 코드로 들어오면 같은 계정, 재발급하면 이전 코드는 무효", async () => {
     const v = await newVisitor();
-    await attend.POST(call("/api/me/attend", { visitor: v, body: { name: "새벽코더" } }));
+    await attend.POST(call("/api/me/attend", { visitor: v, body: { name: "코드주인" } }));
     const { code: first } = await bodyOf<CodeResponse>(code.POST(call("/api/me/code", { method: "POST", visitor: v })));
     expect(first).toMatch(CODE_RE);
     expect((await getMe(v)).hasCode).toBe(true);
@@ -125,7 +125,7 @@ describe("개인 코드", () => {
     const typed = first.replaceAll("-", "").toLowerCase();
     const res = await login.POST(call("/api/me/login", { body: { code: typed }, headers: { "x-forwarded-for": "10.4.0.1" } }));
     expect(res.status).toBe(200);
-    expect(((await res.json()) as CodeLoginResponse).me).toMatchObject({ accountId: v.visitorId, name: "새벽코더", points: 0 });
+    expect(((await res.json()) as CodeLoginResponse).me).toMatchObject({ accountId: v.visitorId, name: "코드주인", points: 0 });
     const cookie = res.headers.get("set-cookie")!.split(";")[0].replace(/^vid=/, "");
     expect(await verifySession(cookie)).toBe(v.visitorId);
 
@@ -243,7 +243,8 @@ describe("상점", () => {
 
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no lobby"));
     const joined = await bodyOf<JoinResponse>(
-      join.POST(call("/api/join", { visitor: v, body: { channel: "auto", name: "새벽코더", color: "#9fc5a8" } })),
+      // 닉네임 중복 금지: 다른 테스트 계정이 쓴 이름과 겹치지 않게
+      join.POST(call("/api/join", { visitor: v, body: { channel: "auto", name: "꾸미기손님", color: "#9fc5a8" } })),
     );
     if (joined.mode !== "channel") throw new Error("channel 모드여야 한다");
     expect((await verifyJoinToken(SECRET, joined.token))?.look).toEqual(["hat_cat"]);

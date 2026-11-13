@@ -61,6 +61,10 @@ export const K = {
   acctGraves: (id: string) => `acct:${id}:graves`, // SET 세운 묘비 id
   earn: (id: string, day: string) => `acct:${id}:earn:${day}`, // HASH source → 점수, `_total`. 2일 TTL
   code: (codeHash: string) => `code:${codeHash}`, // STRING → 계정 id
+  // 닉네임 중복 금지: HASH 이름 비교 키(@tomb/protocol nameKey) → 계정 id. 계정 해시의 `nameKey` = 이 계정이 차지한 키,
+  // `nameDup` = 색인을 채울 때 이미 다른 계정이 그 이름을 차지해 있었다(기존 중복, 이름은 그대로), `seenAt` = 마지막 입장,
+  // `renameRequired` = 휴면(90일)에서 돌아와 닉네임을 다시 정해야 한다
+  names: "names",
   attendIp: (ipHash: string, day: string) => `attend:${ipHash}:${day}`, // SET 그 IP에서 오늘 출석 포인트를 받은 계정. 2일 TTL
   // ── 10번 출석 달력 ──
   cal: (id: string, month: string) => `acct:${id}:cal:${month}`, // HASH DD → 그날 받은 포인트, `_month` → 한 달 개근 보상. 100일 TTL

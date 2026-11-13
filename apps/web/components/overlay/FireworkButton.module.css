@@ -28,3 +28,19 @@
   line-height: 20px;
   text-align: center;
 }
+
+/* 위쪽 줄 칸 (ui.top·ui.icon이 높이·너비를 --top-h로 맞춘다) */
+.top {
+  position: relative;
+  flex: none;
+}
+
+.topBadge {
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 18px;
+}

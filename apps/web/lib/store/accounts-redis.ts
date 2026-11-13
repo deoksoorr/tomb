@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { MAX_DECOR_PER_GRAVE, type CosmeticSlot } from "@tomb/protocol";
+import { MAX_DECOR_PER_GRAVE, nameKey, type CosmeticSlot } from "@tomb/protocol";
 import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import { STAY_BONUS_AMOUNTS, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
@@ -9,10 +9,13 @@ import { chKeys, DECOR, K } from "./keys";
 import { encode } from "./redis";
 import {
   ACTIVITY_KEEP,
+  DORMANT_MS,
   ECON_TTL_SEC,
   PRESENCE_MIN_GAP_MS,
   spendCategory,
   type NameChangeResult,
+  type NameClaimResult,
+  type VisitResult,
   type AccountRecord,
   type AccountStore,
   type EarnOptions,
@@ -330,12 +333,93 @@ redis.call('EXPIRE', KEYS[3], ${ECON_TTL_SEC})
 return bal
 `;
 
-// 닉네임 변경: 쿨다운 → (두 번째부터) 비용 차감 → 이름·시각·횟수. {-2, 다음 가능 시각} | {-1, 0}(포인트 부족) | {비용, 0}
-// KEYS: acct, ledger, econ  ARGV: name, now, price, cooldownMs, entryJson
-const NAME_LUA = `
+// ── 닉네임 중복 금지: 이름 색인(names: 비교 키 → 계정 id) Lua 공용 함수 ──
+// 점유자 계정 키는 TS가 먼저 읽어 KEYS로 넘기고(expected), Lua 안에서 그대로인지 다시 본다 → 바뀌었으면 -9(다시 읽고 시도)
+const NAME_FNS = `
+-- 마지막 접속 = seenAt·presenceAt·createdAt 중 가장 늦은 것 (0 = 기록 없음 → 휴면으로 보지 않는다)
+local function dormant(acct, now, ms)
+  local v = redis.call('HMGET', acct, 'seenAt', 'presenceAt', 'createdAt')
+  local last = 0
+  for i = 1, 3 do
+    local n = tonumber(v[i] or '0') or 0
+    if n > last then last = n end
+  end
+  return last > 0 and now - last > ms
+end
+-- id가 그 키를 가질 수 있나: 1 = 비었거나 내 것이거나 점유자가 휴면, 0 = 다른 계정이 쓰는 중, -9 = 점유자가 바뀜
+local function canTake(names, key, id, expected, ownerAcct, now, ms)
+  local owner = redis.call('HGET', names, key)
+  if not owner or owner == id then return 1 end
+  if owner ~= expected then return -9 end
+  if dormant(ownerAcct, now, ms) then return 1 end
+  return 0
+end
+-- id가 그 키를 차지한다: 내 옛 키는 풀고, 휴면 점유자에게서 가져오면 그 계정의 nameKey를 지운다
+local function take(acct, names, key, id, ownerAcct)
+  local old = redis.call('HGET', acct, 'nameKey')
+  if old and old ~= key and redis.call('HGET', names, old) == id then redis.call('HDEL', names, old) end
+  local owner = redis.call('HGET', names, key)
+  if owner and owner ~= id and redis.call('HGET', ownerAcct, 'nameKey') == key then redis.call('HDEL', ownerAcct, 'nameKey') end
+  redis.call('HSET', names, key, id)
+  redis.call('HSET', acct, 'nameKey', key)
+  redis.call('HDEL', acct, 'nameDup', 'renameRequired')
+end
+`;
+
+// 이름 등록 (이름이 없거나 휴면 재설정 중일 때). 1 = 등록(또는 이미 이 이름), 0 = 다른 계정이 씀, 2 = 이미 이름이 있음, -9 = 다시 시도
+// KEYS: acct, names, ownerAcct  ARGV: id, name, key, expected, now, dormantMs, onlyEmpty('1' = 휴면 재설정도 하지 않음)
+const CLAIM_NAME_LUA = `${NAME_FNS}
+if redis.call('HGET', KEYS[1], 'name') and (ARGV[7] == '1' or redis.call('HGET', KEYS[1], 'renameRequired') ~= '1') then
+  if redis.call('HGET', KEYS[1], 'nameKey') == ARGV[3] then return 1 end
+  return 2
+end
+local c = canTake(KEYS[2], ARGV[3], ARGV[1], ARGV[4], KEYS[3], tonumber(ARGV[5]), tonumber(ARGV[6]))
+if c ~= 1 then return c end
+take(KEYS[1], KEYS[2], ARGV[3], ARGV[1], KEYS[3])
+redis.call('HSET', KEYS[1], 'name', ARGV[2], 'seenAt', ARGV[5])
+return 1
+`;
+
+// 입장·계정 확인: 휴면이면 재설정 표시 + 내 이름 색인 해제, 아니면(touch) 마지막 입장 시각. {휴면 재설정 중 1/0, 색인 채울 필요 1/0, 이름}
+// KEYS: acct, names  ARGV: id, now, dormantMs, touch('1')
+const VISIT_LUA = `${NAME_FNS}
+local name = redis.call('HGET', KEYS[1], 'name')
+local again = redis.call('HGET', KEYS[1], 'renameRequired') == '1'
+if name and not again and dormant(KEYS[1], tonumber(ARGV[2]), tonumber(ARGV[3])) then
+  again = true
+  local old = redis.call('HGET', KEYS[1], 'nameKey')
+  if old and redis.call('HGET', KEYS[2], old) == ARGV[1] then redis.call('HDEL', KEYS[2], old) end
+  redis.call('HDEL', KEYS[1], 'nameKey', 'nameDup')
+  redis.call('HSET', KEYS[1], 'renameRequired', '1')
+end
+if not again and ARGV[4] == '1' then redis.call('HSET', KEYS[1], 'seenAt', ARGV[2]) end
+local need = 0
+if name and not again and not redis.call('HGET', KEYS[1], 'nameKey') then need = 1 end
+return { again and 1 or 0, need, name or '' }
+`;
+
+// 옛 계정 이름을 색인에 채운다. 1 = 채움(또는 이미 있음), 2 = 다른 계정이 차지 → nameDup 표시만, 3 = 그 사이 이름이 바뀜, -9 = 다시 시도
+// KEYS: acct, names, ownerAcct  ARGV: id, name(읽은 이름), key, expected, now, dormantMs
+const INDEX_NAME_LUA = `${NAME_FNS}
+if redis.call('HGET', KEYS[1], 'name') ~= ARGV[2] or redis.call('HGET', KEYS[1], 'renameRequired') == '1' then return 3 end
+if redis.call('HGET', KEYS[1], 'nameKey') then return 1 end
+local c = canTake(KEYS[2], ARGV[3], ARGV[1], ARGV[4], KEYS[3], tonumber(ARGV[5]), tonumber(ARGV[6]))
+if c == -9 then return -9 end
+if c == 0 then redis.call('HSET', KEYS[1], 'nameDup', '1'); return 2 end
+take(KEYS[1], KEYS[2], ARGV[3], ARGV[1], KEYS[3])
+return 1
+`;
+
+// 닉네임 변경: 쿨다운 → 중복 → (두 번째부터) 비용 차감 → 이름 색인·이름·시각·횟수.
+// {-2, 다음 가능 시각} | {-3, 0}(다른 계정이 쓰는 이름) | {-9, 0}(점유자가 바뀜, 다시 시도) | {-1, 0}(포인트 부족) | {비용, 0}
+// KEYS: acct, ledger, econ, names, ownerAcct  ARGV: name, now, price, cooldownMs, entryJson, key, expected, dormantMs, id
+const NAME_LUA = `${NAME_FNS}
 local now = tonumber(ARGV[2])
 local changed = tonumber(redis.call('HGET', KEYS[1], 'nameChangedAt') or '0')
 if changed > 0 and now < changed + tonumber(ARGV[4]) then return {-2, changed + tonumber(ARGV[4])} end
+local can = canTake(KEYS[4], ARGV[6], ARGV[9], ARGV[7], KEYS[5], now, tonumber(ARGV[8]))
+if can == 0 then return {-3, 0} end
+if can == -9 then return {-9, 0} end
 local cost = 0
 if tonumber(redis.call('HGET', KEYS[1], 'nameChanges') or '0') > 0 then cost = tonumber(ARGV[3]) end
 if cost > 0 then
@@ -346,6 +430,7 @@ if cost > 0 then
   redis.call('HINCRBY', KEYS[3], 'spend:name', cost)
   redis.call('EXPIRE', KEYS[3], ${ECON_TTL_SEC})
 end
+take(KEYS[1], KEYS[4], ARGV[6], ARGV[9], KEYS[5])
 redis.call('HSET', KEYS[1], 'name', ARGV[1], 'nameChangedAt', now)
 redis.call('HINCRBY', KEYS[1], 'nameChanges', 1)
 return {cost, 0}
@@ -445,6 +530,7 @@ export class RedisAccounts implements AccountStore {
       nameChangedAt: Number(a.get("nameChangedAt") ?? 0),
       nameChanges: Number(a.get("nameChanges") ?? 0),
       tutorialDone: a.get("tutorialDone") === "1",
+      renameRequired: a.get("renameRequired") === "1",
     };
   }
 
@@ -571,7 +657,9 @@ export class RedisAccounts implements AccountStore {
   }
 
   async enter(id: string, profile: Profile, now: number): Promise<void> {
-    await this.redis.eval<string[], number>(ENTER_LUA, [K.acct(id)], [profile.name ?? "", profile.color ?? "", profile.body ?? "", String(now)]);
+    // 이름은 이름 색인과 함께 등록한다 (다른 계정이 쓰는 이름이면 저장하지 않는다). 휴면 재설정은 여기서 하지 않는다
+    if (profile.name) await this.claim(id, profile.name, now, true);
+    await this.redis.eval<string[], number>(ENTER_LUA, [K.acct(id)], ["", profile.color ?? "", profile.body ?? "", String(now)]);
   }
 
   /** 달력 개편 전 출석을 도장으로 옮긴다 (한 번만, 경합하면 다시 읽어 시도) */
@@ -759,18 +847,118 @@ export class RedisAccounts implements AccountStore {
 
   async changeName(id: string, name: string, now: number, price: number, cooldownMs: number): Promise<NameChangeResult> {
     const entry = JSON.stringify({ at: now, amount: -price, reason: "name" });
-    const [code, next] = (
-      await this.redis.eval<string[], [number, number]>(NAME_LUA, [K.acct(id), K.ledger(id), await econKeyFor(id, kstDay(now))], [
-        name,
-        String(now),
-        String(price),
-        String(cooldownMs),
-        entry,
-      ])
-    ).map(Number);
+    const key = nameKey(name);
+    const econ = await econKeyFor(id, kstDay(now));
+    const [code, next] = await this.withOwner(
+      key,
+      id,
+      async (expected, ownerAcct) =>
+        (
+          await this.redis.eval<string[], [number, number]>(NAME_LUA, [K.acct(id), K.ledger(id), econ, K.names, ownerAcct], [
+            name,
+            String(now),
+            String(price),
+            String(cooldownMs),
+            entry,
+            key,
+            expected,
+            String(DORMANT_MS),
+            id,
+          ])
+        ).map(Number),
+      ([c]) => c === -9,
+    );
     if (code === -2) return { ok: false, reason: "cooldown", nextAllowedAt: next };
+    if (code === -3 || code === -9) return { ok: false, reason: "taken" };
     if (code === -1) return { ok: false, reason: "points" };
     return { ok: true, cost: code };
+  }
+
+  // ── 닉네임 중복 금지 (이름 색인) ──
+
+  /** 이름 색인 Lua를 지금 점유자(expected, 그 계정 키)와 함께 부른다. 그 사이 점유자가 바뀌면 다시 읽어 시도 */
+  private async withOwner<T>(key: string, id: string, run: (expected: string, ownerAcct: string) => Promise<T>, again: (r: T) => boolean): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      const owner = (await this.redis.hget<string>(K.names, key)) ?? "";
+      const r = await run(owner, K.acct(owner || id));
+      if (!again(r) || attempt >= 4) return r;
+    }
+  }
+
+  async nameOwner(key: string, now: number): Promise<string | null> {
+    const owner = await this.redis.hget<string>(K.names, key);
+    if (!owner) return null;
+    const v = (await this.redis.hmget(K.acct(owner), "seenAt", "presenceAt", "createdAt")) as unknown as (string | null)[] | null;
+    const last = Math.max(0, ...(v ?? []).map((x) => Number(x ?? 0) || 0));
+    return last > 0 && now - last > DORMANT_MS ? null : owner;
+  }
+
+  private async claim(id: string, name: string, now: number, onlyEmpty: boolean): Promise<NameClaimResult> {
+    const key = nameKey(name);
+    const r = await this.withOwner(
+      key,
+      id,
+      async (expected, ownerAcct) =>
+        Number(
+          await this.redis.eval<string[], number>(CLAIM_NAME_LUA, [K.acct(id), K.names, ownerAcct], [
+            id,
+            name,
+            key,
+            expected,
+            String(now),
+            String(DORMANT_MS),
+            onlyEmpty ? "1" : "0",
+          ]),
+        ),
+      (c) => c === -9,
+    );
+    return r === 1 ? "ok" : r === 2 ? "has" : "taken";
+  }
+
+  claimName(id: string, name: string, now: number): Promise<NameClaimResult> {
+    return this.claim(id, name, now, false);
+  }
+
+  /** 옛 계정 이름을 색인에 채운다: indexed = 채움, dup = 다른 계정이 이미 차지(nameDup 표시만), none = 할 일 없음 */
+  private async indexName(id: string, name: string, now: number): Promise<"indexed" | "dup" | "none"> {
+    const key = nameKey(name);
+    const r = await this.withOwner(
+      key,
+      id,
+      async (expected, ownerAcct) =>
+        Number(
+          await this.redis.eval<string[], number>(INDEX_NAME_LUA, [K.acct(id), K.names, ownerAcct], [id, name, key, expected, String(now), String(DORMANT_MS)]),
+        ),
+      (c) => c === -9,
+    );
+    return r === 1 ? "indexed" : r === 2 || r === -9 ? "dup" : "none";
+  }
+
+  async visit(id: string, now: number, touch: boolean): Promise<VisitResult> {
+    const [again, need, name] = await this.redis.eval<string[], [number, number, string]>(VISIT_LUA, [K.acct(id), K.names], [
+      id,
+      String(now),
+      String(DORMANT_MS),
+      touch ? "1" : "0",
+    ]);
+    if (Number(need) === 1 && name) await this.indexName(id, String(name), now);
+    return { renameRequired: Number(again) === 1 };
+  }
+
+  async reindexNames(cursor: string, count: number, now: number): Promise<{ next: string; indexed: number; dup: number }> {
+    const [next, keys] = await this.redis.scan(cursor, { match: "acct:*", count, type: "hash" });
+    const ids = keys.filter((k) => /^acct:[^:]+$/.test(k)).map((k) => k.slice("acct:".length));
+    let indexed = 0;
+    let dup = 0;
+    for (const id of ids) {
+      const v = (await this.redis.hmget(K.acct(id), "name", "nameKey", "renameRequired")) as unknown as (string | null)[] | null;
+      const [name, key, again] = v ?? [null, null, null];
+      if (!name || key || again === "1") continue;
+      const r = await this.indexName(id, name, now);
+      if (r === "indexed") indexed++;
+      else if (r === "dup") dup++;
+    }
+    return { next: String(next), indexed, dup };
   }
 
   async setTutorialDone(id: string): Promise<void> {

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { FRIEND_MAX, FRIEND_PENDING_MAX, STAFF_PUBLIC_NAME, verifyInternal, type PeerWhere } from "@tomb/protocol";
+import { FRIEND_MAX, FRIEND_PENDING_MAX, verifyInternal, type PeerWhere } from "@tomb/protocol";
 import { createBan } from "@/lib/banAdmin";
 import { invalidateBanCache } from "@/lib/ban";
 import { friendKeyFor, requestFriendById } from "@/lib/friends";
@@ -211,16 +211,79 @@ describe("정지 계정·운영자 이름", () => {
     expect((await reply(a, key, true)).status).toBe(403);
   });
 
-  it("운영자는 친구 목록에서도 공개 이름(대장)으로", async () => {
+  it("운영자와는 친구를 맺을 수 없다: 유저 → 운영자 신청, 운영자 → 유저 신청 모두 403 (이유 안내)", async () => {
     const [a, staff] = [await newVisitor(), await newVisitor("진짜이름")];
     await setStaff(staff.id);
     try {
-      fakeRealtime({ 9: staff });
-      expect(await body<FriendRequestResponse>(await ask(a, 9))).toEqual({ result: "sent", name: STAFF_PUBLIC_NAME });
-      expect((await list(a)).outgoing[0].name).toBe(STAFF_PUBLIC_NAME);
+      fakeRealtime({ 9: staff, 4: a });
+      const r1 = await ask(a, 9);
+      expect(r1.status).toBe(403);
+      expect((await body<ApiError>(r1)).error.message).toBe("운영자와는 친구를 맺을 수 없어요.");
+      expect(await errCode(await ask(staff, 4))).toBe("STAFF");
+      expect((await list(a)).outgoing).toEqual([]);
+      // 운영자 본인 화면: 친구 기능을 쓸 수 없다는 표시 + 빈 목록
+      const ls = await list(staff);
+      expect(ls.staff).toBe(true);
+      expect(ls.friends).toEqual([]);
     } finally {
       await setStaff(null);
     }
+  });
+
+  it("운영자로 지정되기 전에 맺은 친구·신청은 목록에서 빠지고 저장소에서도 지워진다. 일반 유저끼리는 그대로", async () => {
+    const [a, b, c, s] = [await newVisitor("가"), await newVisitor("나"), await newVisitor("다"), await newVisitor("곧운영자")];
+    fakeRealtime({ 1: a, 2: b, 3: c, 4: s });
+    // s와 a는 친구, b → s 신청, s → c 신청, b → a 신청 (일반 유저끼리)
+    await ask(a, 4);
+    await reply(s, (await list(s)).incoming[0].key, true);
+    await ask(b, 4);
+    await ask(s, 3);
+    await ask(b, 1);
+    await setStaff(s.id);
+    try {
+      const la = await list(a);
+      expect(la.friends).toEqual([]);
+      expect(la.incoming.map((r) => r.name)).toEqual(["나"]);
+      expect((await list(b)).outgoing.map((r) => r.name)).toEqual(["가"]);
+      expect((await list(c)).incoming).toEqual([]);
+      const p = await body<FriendPresenceResponse>(await presence.GET(call("/api/friends/presence", c)));
+      expect(p.incoming).toBe(0);
+      // 운영자 본인이 읽으면 남은 관계를 모두 정리한다
+      expect((await list(s)).staff).toBe(true);
+      const left = await getFriends().lists(s.id, Date.now());
+      expect([...left.friends, ...left.incoming, ...left.outgoing]).toEqual([]);
+      expect(await getFriends().isFriend(a.id, s.id)).toBe(false);
+      // 운영자 위치는 볼 수 없다
+      const res = await friendByKey.GET(call(`/api/friends/${friendKeyFor(s.id)}`, a), params(friendKeyFor(s.id)));
+      expect(res.status).toBe(403);
+    } finally {
+      await setStaff(null);
+    }
+  });
+
+  it("친구 한 명의 자랑거리·이름 읽기가 실패해도 목록·받은 신청은 보인다", async () => {
+    const [a, b, c, d] = [await newVisitor("묘지"), await newVisitor("슈퍼"), await newVisitor("친구3"), await newVisitor("으에")];
+    fakeRealtime({ 2: b, 3: c, 1: a });
+    for (const sid of [2, 3]) await ask(a, sid);
+    for (const v of [b, c]) await reply(v, (await list(v)).incoming[0].key, true);
+    await ask(d, 1);
+    forgetFriendCard();
+    // b의 계정 읽기가 망가졌다 (자랑거리 계산이 throw)
+    const accounts = getAccounts();
+    const orig = accounts.get.bind(accounts);
+    vi.spyOn(accounts, "get").mockImplementation((id, ...rest) => (id === b.id ? Promise.reject(new Error("boom")) : orig(id, ...rest)));
+    vi.spyOn(getFriends(), "names").mockRejectedValueOnce(new Error("names boom"));
+    // 개발 서버 HMR로 옛 저장소 인스턴스가 남아 메서드가 없을 때처럼 동기로 throw해도
+    vi.spyOn(getFriends(), "seenAt").mockImplementationOnce(() => {
+      throw new TypeError("store.seenAt is not a function");
+    });
+    const res = await friends.GET(call("/api/friends", a));
+    expect(res.status).toBe(200);
+    const la = await body<FriendListResponse>(res);
+    expect(la.friends).toHaveLength(2);
+    expect(la.incoming).toHaveLength(1);
+    expect(la.friends.find((f) => !f.card)).toBeTruthy();
+    forgetFriendCard();
   });
 });
 
@@ -299,16 +362,17 @@ describe("친구 창 한 줄 (마지막 접속·자랑거리·정렬)", () => {
 
 describe("친구 들고 남 밀어 주기 등록", () => {
   it("입장 토큰을 줄 때 친구가 있으면 실시간 서버에 친구들을 맡기고(키·이름), 친구가 없으면 묻지 않는다. 수락하면 바로 두 사람 다 다시 맡긴다", async () => {
-    const [a, b, c] = [await newVisitor("가람"), await newVisitor("보리"), await newVisitor("혼자")];
+    // 닉네임 중복 금지: 이 파일의 다른 테스트가 쓰는 이름("보리")과 겹치지 않게
+    const [a, b, c] = [await newVisitor("가람"), await newVisitor("들고남보리"), await newVisitor("혼자")];
     const calls = fakeRealtime({ 2: b });
     await ask(a, 2);
     await reply(b, (await list(b)).incoming[0].key, true);
     const accepted = calls.filter((x) => x.op === "hello");
     expect(accepted.map((x) => x.visitorId).sort()).toEqual([a.id, b.id].sort());
     calls.length = 0;
-    const res = await join.POST(call("/api/join", b, { channel: 1, name: "보리", color: "#9fc5a8" }));
+    const res = await join.POST(call("/api/join", b, { channel: 1, name: "들고남보리", color: "#9fc5a8" }));
     expect(res.status).toBe(200);
-    expect(calls.filter((x) => x.op === "hello")).toEqual([{ op: "hello", visitorId: b.id, name: "보리", key: friendKeyFor(b.id), ids: [a.id] }]);
+    expect(calls.filter((x) => x.op === "hello")).toEqual([{ op: "hello", visitorId: b.id, name: "들고남보리", key: friendKeyFor(b.id), ids: [a.id] }]);
     calls.length = 0;
     await join.POST(call("/api/join", c, { channel: 1, name: "혼자", color: "#9fc5a8" }));
     expect(calls.filter((x) => x.op === "hello")).toEqual([]);

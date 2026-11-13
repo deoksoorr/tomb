@@ -65,6 +65,8 @@ export type FriendListResponse = {
   max: number;
   /** 창 맨 위 내 요약 (내 집 점수·사냥 레벨·도감·최대어) */
   me?: FriendCard;
+  /** 내가 운영자 계정이라 친구 기능을 쓸 수 없다 (목록은 비어 온다) */
+  staff?: true;
 };
 
 /** GET /api/friends/presence (접속 알림·지도 하트·빨간 점, 주기적으로) */

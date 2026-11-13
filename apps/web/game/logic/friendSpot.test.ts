@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { standable } from "../world/layout";
-import { besideFriend } from "./friendSpot";
+import { besideFriend, findFollowed, FRIEND_ARRIVED, followDeadline } from "./friendSpot";
 
 // 친구한테 가기: 친구 둘레에서 걸을 수 있고 다른 사람과 겹치지 않는 칸
 
@@ -32,5 +32,30 @@ describe("친구 옆 설 자리", () => {
         n++;
       }
     expect(n).toBeGreaterThan(20);
+  });
+});
+
+describe("친구 따라 집에 들어가기", () => {
+  it("기다리는 끝 시각은 게임 루프 시각 기준 (씬 시계가 멈춰 있던 옛 값이어도 바로 끝나지 않는다)", () => {
+    // 집 씬 시계는 처음 더해질 때(게임 시작 ~1초)에 멈춰 있고, 루프는 이미 30초다
+    const staleSceneClock = 1_000;
+    const loop = 30_000;
+    expect(staleSceneClock + 12_000 < loop).toBe(true); // 예전 계산: 시작하자마자 "못 찾았어요"
+    expect(followDeadline(loop, 12_000)).toBe(42_000);
+    expect(followDeadline(loop, 12_000) > loop).toBe(true);
+  });
+
+  it("방 사람 목록에서 이름으로 친구를 찾는다 (앞뒤 공백 무시, 없으면 null)", () => {
+    const remotes = [
+      { sid: 1, name: "보리별" },
+      { sid: 2, name: " 가람 " },
+    ];
+    expect(findFollowed(remotes, "가람")?.sid).toBe(2);
+    expect(findFollowed(remotes, "없는사람")).toBeNull();
+    expect(findFollowed(remotes, "  ")).toBeNull();
+  });
+
+  it("도착 안내는 한 문구로 한 번만", () => {
+    expect(FRIEND_ARRIVED).toBe("도착했어요!");
   });
 });

@@ -80,6 +80,8 @@ class FriendsStore {
   private state = INITIAL;
   private listeners = new Set<() => void>();
   private inflight: Promise<FriendsState | null> | null = null;
+  /** 받는 중에 다시 받으라는 부탁이 왔다 (예: 친구 신청 알림이 주기 조회 도중에 옴) → 끝나면 한 번 더 (여러 번 와도 한 번) */
+  private next: Promise<FriendsState | null> | null = null;
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -94,9 +96,20 @@ class FriendsStore {
     this.listeners.forEach((fn) => fn());
   }
 
-  /** 다시 받는다 (동시에 여러 번 불러도 한 번). 실패하면 null — 다음 주기에 다시 */
+  /**
+   * 다시 받는다 (동시에 여러 번 불러도 한 번). 실패하면 null — 다음 주기에 다시.
+   * 받는 도중에 또 부르면 그 응답은 부탁보다 먼저 시작된 옛 값일 수 있어, 끝난 뒤 한 번 더 받는다
+   * (예전엔 그 옛 값으로 끝나 새 친구 신청이 다음 주기(최대 3분)까지 안 보였다)
+   */
   refresh(): Promise<FriendsState | null> {
-    this.inflight ??= friendsApi
+    if (this.inflight) {
+      this.next ??= this.inflight.then(() => {
+        this.next = null;
+        return this.refresh();
+      });
+      return this.next;
+    }
+    this.inflight = friendsApi
       .presence()
       .then((r) => {
         const next = { friends: r.friends, incoming: r.incoming };

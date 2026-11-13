@@ -5,13 +5,13 @@ import { BRANCH_INFO, type BranchId } from "@/lib/rpg/skillTree";
 //  - 입자는 풀(재사용 이미지)에서 꺼내 한 번의 update 루프로 움직인다 (트윈을 입자마다 만들지 않는다 → 휴대폰도 60fps 목표)
 //    속도·중력·끌림·늘어남(속도 방향으로 길게 = 불티 줄)·궤도(소용돌이·회오리) 를 입자 하나가 다 한다
 //  - 부드러운 빛(빛 덩어리·불꽃·안개·고리)은 선형 필터로 만들어 크게 키워도 계단이 지지 않는다 (게임은 pixelArt라 기본이 최근접)
-//  - 화면 전체 연출: 테두리 어두워짐 → 전체 번쩍 → 큰 문양·이름 컷인 → 화면 가득 폭발/눈보라/넋 폭풍 (궁극기 동시에 1개)
+//  - 화면 전체 연출 (궁극기·범위기, 글자 없음): 암전 → 대형 광원 플래시 → 화면을 가로지르는 큰 그림(불기둥 벽·얼음 결정·넋 소용돌이) → 가루 → 밝기 복귀
+//    큰 그림은 런타임에 캔버스로 한 번 그려 캐시한 텍스처(색을 구워 둠)를 크기·회전·흔들림으로 움직인다 (bigs 층)
 // 움직임 줄이기면: 흔들림·번쩍·줌 없이 입자도 적게. 휴대폰(손가락 기기·작은 화면)은 입자 상한을 낮게.
 
 export const DEPTH_FX = 1e5 + 50;
 export const DEPTH_GROUND = -440;
 const DEPTH_SCREEN = 2e6;
-const FONT = '"Galmuri11", "Galmuri9", monospace';
 /** 번쩍임 사이 최소 간격 (초당 3번 이하) */
 const FLASH_GAP_MS = 340;
 
@@ -41,6 +41,19 @@ export const SKT = {
   emEmber: "skfx-emblem-ember",
   emFrost: "skfx-emblem-frost",
   emSoul: "skfx-emblem-soul",
+  // 큰 그림 텍스처 (색을 구워 둔다 · 한 번만 그려 캐시): 화면 전체 연출·폭발 꽃
+  bigFlame: "skfx-big-flame",
+  bigFlame2: "skfx-big-flame-2",
+  flameWave: "skfx-flame-wave",
+  crystal: "skfx-crystal",
+  cluster: "skfx-crystal-cluster",
+  ghost: "skfx-ghost",
+  rays: "skfx-rays",
+  streakH: "skfx-streak-h",
+  shock: "skfx-shock",
+  swirl: "skfx-swirl",
+  smoke: "skfx-smoke",
+  vigW: "skfx-vignette-white",
 } as const;
 
 type Pal = { main: number; light: number; dark: number; parts: number[]; tex: string; blend: boolean };
@@ -99,8 +112,305 @@ function starPath(c: CanvasRenderingContext2D, cx: number, cy: number, r: number
   c.closePath();
 }
 
+/** 바닥이 둥글고 끝이 휘는 불꽃 혀 경로 (bend: 끝이 옆으로 휘는 정도) */
+function tonguePath(c: CanvasRenderingContext2D, cx: number, base: number, w: number, h: number, bend: number): void {
+  c.beginPath();
+  c.moveTo(cx + bend, base - h);
+  c.bezierCurveTo(cx + bend * 0.3 + w * 0.22, base - h * 0.62, cx + w * 0.62, base - h * 0.42, cx + w * 0.5, base - w * 0.5);
+  c.arc(cx, base - w * 0.5, w * 0.5, 0, Math.PI, false);
+  c.bezierCurveTo(cx - w * 0.62, base - h * 0.42, cx + bend * 0.3 - w * 0.22, base - h * 0.62, cx + bend, base - h);
+  c.closePath();
+}
+
+/** 세 겹 불꽃 혀 (바깥 붉은 혀 → 주황 → 노랑·흰 심지). 색을 구워 넣어 가산 섞기로 겹치면 뜨겁게 보인다 */
+function fireTongue(c: CanvasRenderingContext2D, cx: number, base: number, w: number, h: number, bend: number): void {
+  const layers: [number, number, number, string[]][] = [
+    [1, 1, 1, ["rgba(190,30,8,0)", "rgba(225,60,14,0.75)", "rgba(255,105,28,0.95)"]],
+    [0.68, 0.74, 0.7, ["rgba(255,130,30,0)", "rgba(255,160,50,0.85)", "rgba(255,200,80,1)"]],
+    [0.38, 0.44, 0.4, ["rgba(255,236,150,0)", "rgba(255,246,200,0.9)", "rgba(255,255,240,1)"]],
+  ];
+  for (const [kw, kh, kb, cols] of layers) {
+    const g = c.createLinearGradient(0, base - h * kh, 0, base);
+    g.addColorStop(0, cols[0]);
+    g.addColorStop(0.45, cols[1]);
+    g.addColorStop(1, cols[2]);
+    c.fillStyle = g;
+    tonguePath(c, cx, base, w * kw, h * kh, bend * kb);
+    c.fill();
+  }
+}
+
+/** 얼음 결정 하나 (바닥 base, 끝이 뾰족한 육각 기둥): 남색 테두리 + 밝은 왼쪽 면 / 어두운 오른쪽 면 + 반짝 줄 */
+function iceCrystal(c: CanvasRenderingContext2D, cx: number, base: number, w: number, h: number): void {
+  const sh = w * 0.85;
+  const path = () => {
+    c.beginPath();
+    c.moveTo(cx, base - h);
+    c.lineTo(cx + w * 0.5, base - h + sh);
+    c.lineTo(cx + w * 0.4, base);
+    c.lineTo(cx - w * 0.4, base);
+    c.lineTo(cx - w * 0.5, base - h + sh);
+    c.closePath();
+  };
+  path();
+  c.lineWidth = Math.max(2, w * 0.07);
+  c.strokeStyle = "#14325a";
+  c.stroke();
+  const g = c.createLinearGradient(0, base - h, 0, base);
+  g.addColorStop(0, "#ffffff");
+  g.addColorStop(0.3, "#dcf5ff");
+  g.addColorStop(0.75, "rgba(120,190,240,0.92)");
+  g.addColorStop(1, "rgba(70,140,215,0.8)");
+  c.fillStyle = g;
+  path();
+  c.fill();
+  // 어두운 오른쪽 면
+  c.fillStyle = "rgba(36,92,160,0.5)";
+  c.beginPath();
+  c.moveTo(cx, base - h);
+  c.lineTo(cx + w * 0.5, base - h + sh);
+  c.lineTo(cx + w * 0.4, base);
+  c.lineTo(cx + w * 0.06, base);
+  c.closePath();
+  c.fill();
+  // 반짝 줄 (왼쪽 모서리 · 가운데 능선)
+  c.strokeStyle = "rgba(255,255,255,0.95)";
+  c.lineWidth = Math.max(1.5, w * 0.06);
+  c.beginPath();
+  c.moveTo(cx - w * 0.1, base - h + sh * 0.5);
+  c.lineTo(cx - w * 0.3, base - h * 0.2);
+  c.stroke();
+  c.strokeStyle = "rgba(255,255,255,0.55)";
+  c.lineWidth = 1;
+  c.beginPath();
+  c.moveTo(cx, base - h + 2);
+  c.lineTo(cx + w * 0.06, base);
+  c.stroke();
+  // 안쪽 금 두 줄
+  c.strokeStyle = "rgba(255,255,255,0.4)";
+  c.beginPath();
+  c.moveTo(cx - w * 0.3, base - h * 0.45);
+  c.lineTo(cx + w * 0.15, base - h * 0.32);
+  c.moveTo(cx - w * 0.2, base - h * 0.18);
+  c.lineTo(cx + w * 0.25, base - h * 0.1);
+  c.stroke();
+}
+
+/** 화면 연출용 큰 텍스처 (색을 구워 둔다). 게임 텍스처 관리자에 한 번만 만들어 씬이 바뀌어도 재사용 */
+function ensureBigTextures(scene: Phaser.Scene): void {
+  // 큰 불꽃 혀 (양옆 작은 혀 + 가운데 큰 혀)
+  ensure(scene, SKT.bigFlame, () =>
+    canvas(96, 192, (c) => {
+      fireTongue(c, 24, 190, 26, 86, -12);
+      fireTongue(c, 74, 190, 28, 104, 12);
+      fireTongue(c, 34, 190, 40, 140, -10);
+      fireTongue(c, 62, 190, 40, 128, 9);
+      fireTongue(c, 48, 190, 60, 182, 6);
+    }),
+  );
+  // 다른 모양 (두 갈래로 갈라진 큰 혀): 불기둥 벽이 한 그림처럼 반복돼 보이지 않게
+  ensure(scene, SKT.bigFlame2, () =>
+    canvas(96, 192, (c) => {
+      fireTongue(c, 20, 190, 24, 70, -8);
+      fireTongue(c, 78, 190, 24, 80, 10);
+      fireTongue(c, 36, 190, 46, 172, -14);
+      fireTongue(c, 60, 190, 46, 150, 13);
+      fireTongue(c, 48, 190, 40, 110, 0);
+    }),
+  );
+  // 불꽃 파도 (가로로 이어진 불꽃 혀 줄 + 아래 달아오른 띠)
+  ensure(scene, SKT.flameWave, () =>
+    canvas(256, 128, (c) => {
+      const band = c.createLinearGradient(0, 40, 0, 128);
+      band.addColorStop(0, "rgba(255,80,20,0)");
+      band.addColorStop(0.6, "rgba(255,110,30,0.55)");
+      band.addColorStop(1, "rgba(255,170,60,0.95)");
+      c.fillStyle = band;
+      c.fillRect(0, 40, 256, 88);
+      let seed = 11;
+      const r = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+      for (let i = 0; i < 9; i++) {
+        const x = 8 + i * 30 + r() * 8;
+        fireTongue(c, x, 128, 30 + r() * 16, 62 + r() * 62, (r() - 0.5) * 14);
+      }
+    }),
+  );
+  // 얼음 결정 하나 · 결정 무리 (여러 개가 부채꼴로 돋은 덩어리)
+  ensure(scene, SKT.crystal, () => canvas(72, 220, (c) => iceCrystal(c, 36, 218, 62, 214)));
+  ensure(scene, SKT.cluster, () =>
+    canvas(256, 256, (c) => {
+      const glow = c.createRadialGradient(128, 240, 0, 128, 240, 120);
+      glow.addColorStop(0, "rgba(200,240,255,0.55)");
+      glow.addColorStop(1, "rgba(200,240,255,0)");
+      c.fillStyle = glow;
+      c.fillRect(0, 100, 256, 156);
+      for (const [dx, ang, w, h] of [
+        [-58, -0.62, 38, 120],
+        [60, 0.6, 40, 128],
+        [-30, -0.3, 48, 176],
+        [34, 0.32, 46, 166],
+        [-8, -0.08, 60, 236],
+        [16, 0.14, 34, 140],
+      ] as const) {
+        c.save();
+        c.translate(128 + dx * 0.4, 252);
+        c.rotate(ang);
+        iceCrystal(c, 0, 0, w, h);
+        c.restore();
+      }
+    }),
+  );
+  // 넋 (둥근 머리 + 물결 꼬리 + 뚫린 눈): 머리가 위
+  ensure(scene, SKT.ghost, () =>
+    canvas(96, 160, (c) => {
+      const g = c.createLinearGradient(0, 10, 0, 160);
+      g.addColorStop(0, "rgba(255,255,255,1)");
+      g.addColorStop(0.3, "rgba(225,255,250,0.95)");
+      g.addColorStop(0.62, "rgba(159,240,220,0.62)");
+      g.addColorStop(1, "rgba(185,138,255,0)");
+      c.shadowColor = "rgba(200,255,245,0.9)";
+      c.shadowBlur = 10;
+      c.fillStyle = g;
+      c.beginPath();
+      c.arc(48, 48, 32, Math.PI, 0);
+      c.bezierCurveTo(82, 92, 76, 122, 72, 156);
+      c.quadraticCurveTo(64, 132, 56, 150);
+      c.quadraticCurveTo(49, 126, 41, 152);
+      c.quadraticCurveTo(34, 130, 24, 156);
+      c.bezierCurveTo(20, 122, 14, 92, 16, 48);
+      c.closePath();
+      c.fill();
+      c.shadowBlur = 0;
+      c.globalCompositeOperation = "destination-out";
+      c.fillStyle = "rgba(0,0,0,0.85)";
+      for (const ex of [36, 60]) {
+        c.beginPath();
+        c.ellipse(ex, 46, 6, 9, 0, 0, TAU);
+        c.fill();
+      }
+      c.fillStyle = "rgba(0,0,0,0.6)";
+      c.beginPath();
+      c.ellipse(48, 68, 5, 6, 0, 0, TAU);
+      c.fill();
+    }),
+  );
+  // 방사선 빛줄기 (폭발 꽃 · 광원 플래시)
+  ensure(scene, SKT.rays, () =>
+    canvas(256, 256, (c) => {
+      c.translate(128, 128);
+      let seed = 5;
+      const r = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+      for (let i = 0; i < 22; i++) {
+        const a = (i / 22) * TAU + r() * 0.2;
+        const len = 64 + r() * 62;
+        const wd = 0.03 + r() * 0.05;
+        const g = c.createRadialGradient(0, 0, 0, 0, 0, len);
+        g.addColorStop(0, "rgba(255,255,255,1)");
+        g.addColorStop(0.5, "rgba(255,255,255,0.45)");
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        c.fillStyle = g;
+        c.beginPath();
+        c.moveTo(0, 0);
+        c.lineTo(Math.cos(a - wd) * len, Math.sin(a - wd) * len);
+        c.lineTo(Math.cos(a + wd) * len, Math.sin(a + wd) * len);
+        c.closePath();
+        c.fill();
+      }
+      const core = c.createRadialGradient(0, 0, 0, 0, 0, 44);
+      core.addColorStop(0, "rgba(255,255,255,1)");
+      core.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = core;
+      c.fillRect(-44, -44, 88, 88);
+    }),
+  );
+  // 가로 빛살 (렌즈 번짐)
+  ensure(scene, SKT.streakH, () =>
+    canvas(256, 32, (c) => {
+      c.translate(128, 16);
+      c.scale(1, 0.12);
+      const g = c.createRadialGradient(0, 0, 0, 0, 0, 128);
+      g.addColorStop(0, "rgba(255,255,255,1)");
+      g.addColorStop(0.35, "rgba(255,255,255,0.5)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = g;
+      c.fillRect(-128, -134, 256, 268);
+    }),
+  );
+  // 충격파 (안쪽 가장자리가 밝은 두꺼운 고리)
+  ensure(scene, SKT.shock, () =>
+    canvas(256, 256, (c) => {
+      const g = c.createRadialGradient(128, 128, 0, 128, 128, 128);
+      g.addColorStop(0, "rgba(255,255,255,0)");
+      g.addColorStop(0.6, "rgba(255,255,255,0.06)");
+      g.addColorStop(0.8, "rgba(255,255,255,0.45)");
+      g.addColorStop(0.9, "rgba(255,255,255,1)");
+      g.addColorStop(0.96, "rgba(255,255,255,0.35)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = g;
+      c.fillRect(0, 0, 256, 256);
+    }),
+  );
+  // 소용돌이 (휘감기는 팔 세 개): 눈보라 휘몰이 · 넋 소용돌이
+  ensure(scene, SKT.swirl, () =>
+    canvas(256, 256, (c) => {
+      c.translate(128, 128);
+      c.lineCap = "round";
+      for (let arm = 0; arm < 3; arm++) {
+        const steps = 48;
+        for (let s = 0; s < steps; s++) {
+          const t0 = s / steps;
+          const t1 = (s + 1) / steps;
+          const pt = (t: number) => {
+            const a = (arm / 3) * TAU + t * 3.4;
+            const rr = 8 + t * 114;
+            return [Math.cos(a) * rr, Math.sin(a) * rr] as const;
+          };
+          const [x0, y0] = pt(t0);
+          const [x1, y1] = pt(t1);
+          const k = Math.sin(t0 * Math.PI);
+          c.strokeStyle = `rgba(255,255,255,${(0.95 * Math.pow(k, 0.6)).toFixed(3)})`;
+          c.lineWidth = 2 + 13 * k;
+          c.beginPath();
+          c.moveTo(x0, y0);
+          c.lineTo(x1, y1);
+          c.stroke();
+        }
+      }
+    }),
+  );
+  // 연기 뭉치
+  ensure(scene, SKT.smoke, () =>
+    canvas(128, 128, (c) => {
+      let seed = 3;
+      const r = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+      for (let i = 0; i < 10; i++) {
+        const x = 34 + r() * 60;
+        const y = 34 + r() * 60;
+        const rr = 18 + r() * 26;
+        const g = c.createRadialGradient(x, y, 0, x, y, rr);
+        g.addColorStop(0, `rgba(255,255,255,${(0.28 + r() * 0.2).toFixed(2)})`);
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        c.fillStyle = g;
+        c.fillRect(0, 0, 128, 128);
+      }
+    }),
+  );
+  // 하얀 테두리 빛 (틴트로 갈래 색 · 가산): 서리가 화면 가장자리를 덮는다
+  ensure(scene, SKT.vigW, () =>
+    canvas(128, 128, (c) => {
+      const g = c.createRadialGradient(64, 64, 30, 64, 64, 92);
+      g.addColorStop(0, "rgba(255,255,255,0)");
+      g.addColorStop(0.6, "rgba(255,255,255,0.35)");
+      g.addColorStop(1, "rgba(255,255,255,1)");
+      c.fillStyle = g;
+      c.fillRect(0, 0, 128, 128);
+    }),
+  );
+}
+
 /** 연출 텍스처 (흰색으로 그리고 색은 틴트로) */
 export function ensureSkillTextures(scene: Phaser.Scene): void {
+  ensureBigTextures(scene);
   ensure(scene, SKT.glow, () =>
     canvas(64, 64, (c) => {
       const g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -772,16 +1082,89 @@ type Part = {
   orb: Emit["orb"] | null;
 };
 
+/** 큰 그림 하나 (불기둥·결정·넋·빛줄기). screen이면 화면 px 좌표(카메라에 고정), 아니면 월드 좌표 */
+export type BigOpts = {
+  tex: string;
+  x: number;
+  y: number;
+  /** 도착점: 수명 동안 path 곡선으로 (x,y) → (x1,y1) */
+  x1?: number;
+  y1?: number;
+  path?: Ease;
+  screen?: boolean;
+  tint?: number;
+  /** 가산 섞기 (기본 true) */
+  add?: boolean;
+  depth?: number;
+  life: number;
+  delay?: number;
+  /** 크기 처음 → 끝 (grow 곡선) */
+  s0: number;
+  s1: number;
+  grow?: Ease;
+  /** 가로·세로 배율 */
+  sx?: number;
+  sy?: number;
+  alpha?: number;
+  /** 처음 이 비율 동안 나타나고, 마지막 이 비율 동안 사라진다 */
+  fadeIn?: number;
+  fadeOut?: number;
+  rot?: number;
+  /** 초당 회전 (rad) */
+  vr?: number;
+  /** 좌우 흔들림 (rad) · 초당 횟수 */
+  sway?: number;
+  swayHz?: number;
+  /** 크기 일렁임 비율 (불꽃) */
+  flick?: number;
+  ox?: number;
+  oy?: number;
+  /** 궤도: (x,y) 둘레를 반지름 r0 → r1, 각 a0에서 초당 v rad로 돈다 */
+  orbit?: { r0: number; r1: number; a0: number; v: number; flat?: number };
+  /** 움직이는 쪽을 보게 돌린다 (그림이 위를 보면 PI/2) */
+  face?: number;
+};
+
+type Ease = "out" | "back" | "in" | "lin" | "inout";
+
+const ease = (k: Ease | undefined, t: number): number => {
+  switch (k) {
+    case "in":
+      return t * t;
+    case "lin":
+      return t;
+    case "back": {
+      const u = t - 1;
+      return 1 + 2.4 * u * u * u + 1.4 * u * u;
+    }
+    case "inout":
+      return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    default:
+      return 1 - (1 - t) * (1 - t) * (1 - t);
+  }
+};
+
+type Big = { img: Phaser.GameObjects.Image; o: BigOpts; age: number; delay: number; seed: number; px: number; py: number };
+
+/** 화면 연출 층: 어둠은 월드 연출 바로 아래(빛은 어둠 위에서 빛난다), 큰 그림은 연출 위 · 피해 숫자(1e6) 아래 */
+const DEPTH_DIM = DEPTH_FX - 60;
+const DEPTH_CINE = 5e5;
+
 export class SkillFx {
   /** 동시에 떠 있는 입자 수 상한 (휴대폰은 낮게, 움직임 줄이기면 더 낮게) */
   readonly cap: number;
   readonly mobile: boolean;
   private parts: Part[] = [];
   private pool: Phaser.GameObjects.Image[] = [];
+  /** 큰 그림 (화면 연출·폭발 꽃). 상한: 휴대폰 50 · 데스크톱 120 */
+  private bigs: Big[] = [];
+  private readonly bigCap: number;
   private lastFlash = -1e9;
   private baseZoom = 0;
   /** 궁극기 화면 연출이 도는 중 (동시에 1개) */
   private ultUntil = 0;
+  /** 범위기 화면 연출이 도는 중 (겹치면 화면 층만 건너뛴다) */
+  private cineUntil = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -790,6 +1173,64 @@ export class SkillFx {
     ensureSkillTextures(scene);
     this.mobile = coarse();
     this.cap = Math.round((this.mobile ? 150 : 380) * (reduced ? 0.4 : 1));
+    this.bigCap = Math.round((this.mobile ? 50 : 120) * (reduced ? 0.5 : 1));
+  }
+
+  /** 큰 그림 하나 (상한을 넘으면 그리지 않는다) */
+  big(o: BigOpts): boolean {
+    if (this.bigs.length >= this.bigCap) return false;
+    const img = this.scene.add.image(0, 0, o.tex).setOrigin(o.ox ?? 0.5, o.oy ?? 0.5);
+    img.setTint(o.tint ?? 0xffffff).setBlendMode(o.add === false ? Phaser.BlendModes.NORMAL : Phaser.BlendModes.ADD);
+    img.setDepth(o.depth ?? (o.screen ? DEPTH_CINE : DEPTH_FX + 4)).setAlpha(0).setVisible(false);
+    if (o.screen) img.setScrollFactor(0);
+    const b: Big = { img, o, age: 0, delay: o.delay ?? 0, seed: Math.random() * 100, px: o.x, py: o.y };
+    this.bigs.push(b);
+    this.stepBig(b, 0);
+    return true;
+  }
+
+  /** 큰 그림 한 프레임 (false면 끝) */
+  private stepBig(b: Big, dms: number): boolean {
+    if (b.delay > 0) {
+      b.delay -= dms;
+      if (b.delay > 0) return true;
+      dms = 0;
+    }
+    b.age += dms;
+    const o = b.o;
+    const t = Math.min(1, b.age / o.life);
+    if (b.age >= o.life || !b.img.scene) return false;
+    let x = o.x;
+    let y = o.y;
+    if (o.orbit) {
+      const r = o.orbit.r0 + (o.orbit.r1 - o.orbit.r0) * ease("inout", t);
+      const a = o.orbit.a0 + (o.orbit.v * b.age) / 1000;
+      x += Math.cos(a) * r;
+      y += Math.sin(a) * r * (o.orbit.flat ?? 1);
+    } else if (o.x1 !== undefined || o.y1 !== undefined) {
+      const k = ease(o.path, t);
+      x += ((o.x1 ?? o.x) - o.x) * k;
+      y += ((o.y1 ?? o.y) - o.y) * k;
+    }
+    const sec = b.age / 1000;
+    let rot = (o.rot ?? 0) + (o.vr ?? 0) * sec;
+    if (o.face !== undefined && Math.hypot(x - b.px, y - b.py) > 0.01) rot = Math.atan2(y - b.py, x - b.px) + o.face;
+    if (o.sway) rot += Math.sin(sec * TAU * (o.swayHz ?? 2) + b.seed) * o.sway;
+    b.px = x;
+    b.py = y;
+    let s = o.s0 + (o.s1 - o.s0) * ease(o.grow, t);
+    if (o.flick) s *= 1 + o.flick * (Math.sin(sec * 31 + b.seed) * 0.6 + Math.sin(sec * 53 + b.seed * 2) * 0.4);
+    const fi = o.fadeIn ? Math.min(1, t / o.fadeIn) : 1;
+    const fo = o.fadeOut ? Math.min(1, (1 - t) / o.fadeOut) : 1;
+    const img = b.img;
+    img.setVisible(true).setAlpha(Math.max(0, (o.alpha ?? 1) * fi * fo));
+    img.setRotation(rot);
+    if (o.screen) {
+      const z = this.zoom;
+      const p = this.screenPos(x, y);
+      img.setPosition(p.x, p.y).setScale((s * (o.sx ?? 1)) / z, (s * (o.sy ?? 1)) / z);
+    } else img.setPosition(x, y).setScale(s * (o.sx ?? 1), s * (o.sy ?? 1));
+    return true;
   }
 
   private get zoom(): number {
@@ -820,11 +1261,14 @@ export class SkillFx {
     img.setRotation(o.rot ?? 0);
     const s0 = o.s0 ?? 1;
     img.setScale(s0, s0 * (o.sy ?? 1)).setAlpha(o.fadeIn ? 0 : (o.alpha ?? 1));
-    img.setPosition(o.x, o.y);
+    // 궤도 입자는 처음부터 궤도 위에서 시작한다 (가운데에서 첫 프레임에 튀어 나가면 늘이기가 화면을 가로지르는 긴 줄이 된다)
+    const sx0 = o.orb ? o.orb.ox + Math.cos(o.orb.a) * o.orb.r : o.x;
+    const sy0 = o.orb ? o.orb.oy + Math.sin(o.orb.a) * o.orb.r * (o.orb.flat ?? 0.62) : o.y;
+    img.setPosition(sx0, sy0);
     this.parts.push({
       img,
-      x: o.x,
-      y: o.y,
+      x: sx0,
+      y: sy0,
       vx: o.vx ?? 0,
       vy: o.vy ?? 0,
       dx: o.vx ?? 0,
@@ -900,7 +1344,7 @@ export class SkillFx {
       let sx = s;
       if (p.stretch) {
         const sp = Math.hypot(p.dx, p.dy);
-        sx = s * Math.max(1, sp * p.stretch);
+        sx = s * Math.min(8, Math.max(1, sp * p.stretch));
         if (sp > 1) p.img.setRotation(Math.atan2(p.dy, p.dx));
       } else if (p.vr) {
         p.rot += p.vr * dt;
@@ -912,14 +1356,28 @@ export class SkillFx {
         .setScale(sx, s * p.sy)
         .setAlpha(p.a0 * fin * (1 - Math.pow(t, p.fade)));
     }
+    const bs = this.bigs;
+    for (let i = bs.length - 1; i >= 0; i--) {
+      if (this.stepBig(bs[i], dms)) continue;
+      if (bs[i].img.scene) bs[i].img.destroy();
+      bs[i] = bs[bs.length - 1];
+      bs.pop();
+    }
+  }
+
+  /** 떠 있는 큰 그림 수 (검수용) */
+  get bigCount(): number {
+    return this.bigs.length;
   }
 
   /** 씬이 끝날 때 */
   clear(): void {
     for (const p of this.parts) if (p.img.scene) p.img.destroy();
     for (const img of this.pool) if (img.scene) img.destroy();
+    for (const b of this.bigs) if (b.img.scene) b.img.destroy();
     this.parts = [];
     this.pool = [];
+    this.bigs = [];
   }
 
   // ── 기본 조각 ──
@@ -1213,69 +1671,11 @@ export class SkillFx {
     return performance.now() < this.ultUntil;
   }
 
-  /**
-   * 궁극기 화면 연출 (약 1.4초): 테두리 어두워짐 → 전체 색 번쩍 → 큰 문양 + 이름 띠 컷인 → 화면 가득 폭풍.
-   * 동시에 1개만 (이미 돌고 있으면 false — 판정은 그대로, 화면 연출만 건너뛴다)
-   */
-  ultimate(b: BranchId, title: string, sub = "궁극기"): boolean {
-    if (this.ultBusy) return false;
-    this.ultUntil = performance.now() + 1500;
-    const sc = this.scene;
-    const p = PALETTES[b];
-    const cam = sc.cameras.main;
+  /** 월드 좌표 → 화면 px */
+  toScreen(wx: number, wy: number): { x: number; y: number } {
+    const v = this.scene.cameras.main.worldView;
     const z = this.zoom;
-    const W = cam.width;
-    const H = cam.height;
-    // 1) 어두워짐 + 테두리
-    this.screenTint(0x05040a, this.reduced ? 0.25 : 0.42, 120, 900, 380);
-    this.vignette(140, 950, 400, 0.95);
-    // 2) 전체 번쩍 (갈래 색)
-    sc.time.delayedCall(70, () => this.screenFlash(p.light, 0.55, 220));
-    // 3) 큰 문양 (화면 가운데, 돌며 커졌다가 크게 번져 사라짐)
-    const emKey = b === "ember" ? SKT.emEmber : b === "frost" ? SKT.emFrost : SKT.emSoul;
-    const c = this.screenPos(W / 2, H * 0.44);
-    const size = Math.min(W, H) * 0.62;
-    const k = size / 160 / z;
-    const halo = sc.add.image(c.x, c.y, SKT.glow).setScrollFactor(0).setDepth(DEPTH_SCREEN - 5).setTint(p.main).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setScale(((size / 64) * 0.4) / z);
-    const em = sc.add.image(c.x, c.y, emKey).setScrollFactor(0).setDepth(DEPTH_SCREEN - 4).setTint(p.light).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setScale(k * 0.25).setRotation(-0.6);
-    const em2 = sc.add.image(c.x, c.y, emKey).setScrollFactor(0).setDepth(DEPTH_SCREEN - 4).setTint(p.main).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setScale(k * 1.6).setRotation(0.4);
-    sc.tweens.add({ targets: halo, alpha: 0.8, scale: ((size / 64) * 1.1) / z, duration: 260, delay: 60, ease: "Cubic.easeOut" });
-    sc.tweens.add({ targets: halo, alpha: 0, duration: 400, delay: 820, onComplete: () => halo.destroy() });
-    sc.tweens.add({ targets: em, alpha: 1, scale: k, rotation: 0, duration: 300, delay: 80, ease: "Back.easeOut" });
-    sc.tweens.add({ targets: em, rotation: 0.35, duration: 700, delay: 380 });
-    sc.tweens.add({ targets: em, alpha: 0, scale: k * 2.6, duration: 320, delay: 820, ease: "Cubic.easeIn", onComplete: () => em.destroy() });
-    sc.tweens.add({ targets: em2, alpha: 0.45, scale: k * 1.05, rotation: 0, duration: 380, delay: 100, ease: "Cubic.easeOut" });
-    sc.tweens.add({ targets: em2, alpha: 0, rotation: -0.4, duration: 420, delay: 760, onComplete: () => em2.destroy() });
-    // 4) 이름 띠 컷인 (띠가 펼쳐지고 글자가 미끄러져 들어왔다 나간다)
-    const by = this.screenPos(W / 2, H * 0.74);
-    const bandH = Math.max(46, Math.min(84, H * 0.13));
-    const band = sc.add.image(by.x, by.y, SKT.band).setScrollFactor(0).setDepth(DEPTH_SCREEN - 3).setTint(p.dark).setAlpha(0.88).setDisplaySize(1, bandH / z);
-    const edge = sc.add.image(by.x, by.y, SKT.band).setScrollFactor(0).setDepth(DEPTH_SCREEN - 2).setTint(p.light).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9).setDisplaySize(1, (bandH * 0.12) / z);
-    sc.tweens.add({ targets: band, displayWidth: (W * 1.2) / z, duration: 200, delay: 90, ease: "Cubic.easeOut" });
-    sc.tweens.add({ targets: edge, displayWidth: (W * 1.2) / z, duration: 260, delay: 60, ease: "Cubic.easeOut" });
-    sc.tweens.add({ targets: [band, edge], alpha: 0, duration: 260, delay: 1050, onComplete: () => (band.destroy(), edge.destroy()) });
-    const fs = Math.round(Math.max(24, Math.min(46, W * 0.05)));
-    const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
-    const name = sc.add
-      .text(by.x + W / z, by.y + 4 / z, title, { fontFamily: FONT, fontSize: `${fs}px`, fontStyle: "bold", color: "#ffffff", stroke: hex(p.dark), strokeThickness: Math.round(fs / 6), resolution: 1 })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(DEPTH_SCREEN)
-      .setScale(1 / z)
-      .setShadow(0, 3, "#000000", 0, true, true);
-    const subT = sc.add
-      .text(by.x - W / z, by.y - (fs * 0.72) / z, sub, { fontFamily: FONT, fontSize: `${Math.round(fs * 0.42)}px`, color: hex(p.light), stroke: "#000000", strokeThickness: 3, resolution: 1 })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(DEPTH_SCREEN)
-      .setScale(1 / z);
-    sc.tweens.add({ targets: name, x: by.x, duration: 240, delay: 110, ease: "Cubic.easeOut" });
-    sc.tweens.add({ targets: subT, x: by.x, duration: 240, delay: 150, ease: "Cubic.easeOut" });
-    sc.tweens.add({ targets: name, x: by.x - 18 / z, duration: 650, delay: 350 });
-    sc.tweens.add({ targets: [name, subT], x: `-=${W / z}`, alpha: 0, duration: 220, delay: 1000, ease: "Cubic.easeIn", onComplete: () => (name.destroy(), subT.destroy()) });
-    // 5) 화면 가득 폭풍
-    sc.time.delayedCall(260, () => this.storm(b));
-    return true;
+    return { x: (wx - v.x) * z, y: (wy - v.y) * z };
   }
 
   /** 지금 화면(월드 좌표)에 보이는 범위 */
@@ -1284,56 +1684,292 @@ export class SkillFx {
     return { x: v.x, y: v.y, w: v.width || 1, h: v.height || 1 };
   }
 
-  /** 화면 가득 폭풍 (궁극기 뒤 약 1초): 모닥불 = 불기둥이 사방에서 솟고 불티 비 / 서리 = 비스듬한 눈보라 줄 / 넋 = 넋 행렬이 화면을 가로지르고 별이 반짝 */
-  storm(b: BranchId): void {
+  /** 화면 크기 (px) · 대각선 · 큰 그림 밀도 */
+  private frame(): { W: number; H: number; D: number; Hc: number; dens: number; a: number } {
+    const cam = this.scene.cameras.main;
+    const W = cam.width;
+    const H = cam.height;
+    // Hc: 큰 그림 높이 기준 (세로로 긴 휴대폰 화면에서 불기둥·결정이 화면을 하얗게 덮지 않게 너비로 묶는다)
+    return { W, H, D: Math.hypot(W, H), Hc: Math.min(H, W * 1.4), dens: (this.mobile ? 0.6 : 1) * (this.reduced ? 0.6 : 1), a: this.reduced ? 0.5 : 1 };
+  }
+
+  /** 암전: 배경이 어두워지고(inMs) 머물다 걷힌다. 빛(연출)은 어둠 위에서 빛난다. 움직임 줄이기면 안 함 */
+  private dim(alpha: number, inMs: number, holdMs: number, outMs: number): void {
+    if (this.reduced) return;
+    const cam = this.scene.cameras.main;
+    const r = this.scene.add
+      .rectangle(cam.width / 2, cam.height / 2, cam.width * 3, cam.height * 3, 0x03020a, 1)
+      .setScrollFactor(0)
+      .setDepth(DEPTH_DIM)
+      .setAlpha(0);
+    this.scene.tweens.chain({
+      targets: r,
+      tweens: [
+        { alpha, duration: inMs, ease: "Quad.easeOut" },
+        { alpha, duration: holdMs },
+        { alpha: 0, duration: outMs, ease: "Sine.easeInOut", onComplete: () => r.destroy() },
+      ],
+    });
+  }
+
+  /** 대형 광원 플래시 (화면 px): 방사선 빛줄기 두 겹 + 흰 핵 + 갈래 색 후광 + 가로 빛살 + 충격파 */
+  private flare(sx: number, sy: number, b: BranchId, k = 1, delay = 0): void {
+    const p = PALETTES[b];
+    const { W, D, a } = this.frame();
+    const base = { screen: true, x: sx, y: sy, delay } as const;
+    // 움직임 줄이기: 번쩍이는 빛줄기·충격파 없이 은은한 후광만
+    if (this.reduced) {
+      this.big({ ...base, tex: SKT.glow, tint: p.main, life: 700, s0: (D * 0.1 * k) / 64, s1: (D * 0.4 * k) / 64, alpha: 0.35, fadeIn: 0.3, fadeOut: 0.7 });
+      return;
+    }
+    this.big({ ...base, tex: SKT.rays, tint: p.light, life: 620, s0: (D * 0.12 * k) / 256, s1: (D * 0.9 * k) / 256, rot: Math.random() * TAU, vr: 0.9, alpha: 0.8 * a, fadeOut: 0.6 });
+    this.big({ ...base, tex: SKT.rays, tint: p.main, life: 760, delay: delay + 40, s0: (D * 0.2 * k) / 256, s1: (D * 1.25 * k) / 256, rot: Math.random() * TAU, vr: -0.5, alpha: 0.6 * a, fadeOut: 0.7 });
+    this.big({ ...base, tex: SKT.glow, tint: 0xffffff, life: 220, s0: (D * 0.04 * k) / 64, s1: (D * 0.14 * k) / 64, alpha: 0.85 * a, fadeOut: 0.8 });
+    this.big({ ...base, tex: SKT.glow, tint: p.dark, life: 700, s0: (D * 0.1 * k) / 64, s1: (D * 0.6 * k) / 64, alpha: 0.5 * a, fadeOut: 0.75 });
+    this.big({ ...base, tex: SKT.streakH, tint: p.light, life: 400, s0: (W * 0.3) / 256, s1: (W * 1.7 * k) / 256, sy: 2.6, alpha: 0.9 * a, fadeOut: 0.7 });
+    this.big({ ...base, tex: SKT.shock, tint: p.light, life: 560, delay: delay + 30, s0: (D * 0.04) / 256, s1: (D * 1.1 * k) / 256, sy: 0.72, alpha: 0.9 * a, fadeOut: 0.8 });
+  }
+
+  /** 잔불·서리·빛 가루가 화면 전체에 흩날린다 (월드 입자, from ms 뒤부터 span ms에 걸쳐) */
+  private dust(b: BranchId, n: number, from: number, span: number): void {
     const v = this.view();
     const p = PALETTES[b];
-    const dens = this.mobile ? 0.55 : 1;
-    if (b === "ember") {
-      this.screenTint(0xff5a1a, 0.16, 120, 700, 400, true);
-      const cols = Math.round(14 * dens);
-      for (let i = 0; i < cols; i++) {
-        const x = v.x + rnd(0, v.w);
-        const y = v.y + rnd(v.h * 0.15, v.h);
-        const d = rnd(0, 700);
-        this.emit({ x, y, tex: SKT.flame, tint: pick([0xff7a2e, 0xffb040, 0xff5a1a]), life: 560, delay: d, s0: 0.6, s1: 1.6, sy: 2.4, originY: 1, vy: -30, fade: 1.6, alpha: 0.95 });
-        this.emit({ x, y, tex: SKT.flame, tint: 0xfff0b0, life: 420, delay: d, s0: 0.3, s1: 0.8, sy: 2.2, originY: 1, vy: -30, fade: 1.6 });
-        this.light(x, y, 30, 0xff7a2e, 600, 0.6, d);
-        this.sparks(x, y - 20, 4, p.parts, 220, { ang: -Math.PI / 2, spread: 1.2, delay: d, life: 500 });
-      }
-      for (let i = 0; i < this.n(60) * dens; i++)
-        this.emit({ x: v.x + rnd(0, v.w), y: v.y + v.h + 4, tex: SKT.streak, tint: pick(p.parts), vx: rnd(-30, 30), vy: rnd(-260, -140), life: rnd(700, 1100), delay: rnd(0, 800), s0: 0.6, s1: 0.2, stretch: 0.01 });
-    } else if (b === "frost") {
-      this.screenTint(0xe8f6ff, 0.22, 160, 700, 500);
-      const n = this.n(110) * dens;
-      for (let i = 0; i < n; i++) {
-        const x = v.x + rnd(-v.w * 0.3, v.w);
-        const y = v.y + rnd(-v.h * 0.4, v.h * 0.8);
-        const sp = rnd(320, 520);
-        this.emit({ x, y, tex: SKT.streak, tint: pick([0xffffff, 0xd8f4ff, 0x9fdcff]), vx: sp, vy: sp * 0.42, life: rnd(500, 900), delay: rnd(0, 900), s0: rnd(0.5, 1), s1: 0.4, stretch: 0.006, alpha: 0.9 });
-      }
-      for (let i = 0; i < this.n(26) * dens; i++)
-        this.emit({ x: v.x + rnd(0, v.w), y: v.y + rnd(0, v.h), tex: SKT.cloud, tint: 0xffffff, add: false, vx: rnd(120, 200), vy: rnd(30, 60), life: rnd(800, 1200), delay: rnd(0, 600), s0: rnd(1, 1.8), s1: 2.6, alpha: 0.5, fadeIn: 0.25 });
-      for (let i = 0; i < this.n(18) * dens; i++) this.twinkle(v.x + rnd(0, v.w), v.y + rnd(0, v.h), 1, 4, 0xffffff, 700, 0.7);
-    } else {
-      this.screenTint(0x3a1a6a, 0.22, 120, 750, 450, true);
-      const rows = 5;
-      for (let r = 0; r < rows; r++) {
-        const y0 = v.y + ((r + 0.5) / rows) * v.h;
-        const dir = r % 2 ? -1 : 1;
-        const n = Math.round(this.n(16) * dens);
-        for (let i = 0; i < n; i++) {
-          const x = dir > 0 ? v.x - 20 - i * 14 : v.x + v.w + 20 + i * 14;
-          this.emit({ x, y: y0, tex: SKT.flame, tint: i % 3 ? 0x9ff0dc : 0xd8c0ff, vx: dir * rnd(260, 340), orb: { ox: x, oy: y0, r: 6, a: i, v: 9, flat: 1 }, life: 1100, delay: r * 90, s0: 0.5, s1: 0.35, sy: 1.2, rot: dir > 0 ? Math.PI / 2 : -Math.PI / 2 });
-          this.emit({ x, y: y0, tex: SKT.wisp, tint: 0xf2ecff, vx: dir * rnd(260, 340), life: 1100, delay: r * 90 + 30, s0: 0.7, s1: 0.4 });
+    for (let i = 0; i < this.n(n); i++) {
+      const x = v.x + rnd(0, v.w);
+      const y = v.y + rnd(0, v.h);
+      const delay = from + rnd(0, span);
+      if (b === "ember") this.emit({ x, y: y + v.h * 0.2, tex: i % 3 ? SKT.ember : SKT.streak, tint: pick(p.parts), vx: rnd(-25, 25), vy: rnd(-110, -40), drag: 0.4, life: rnd(900, 1600), delay, s0: i % 3 ? rnd(1.2, 2.2) : 0.6, s1: 0.3, stretch: i % 3 ? 0 : 0.01, fade: 1.6 });
+      else if (b === "frost") this.emit({ x: x - v.w * 0.2, y: y - v.h * 0.2, tex: i % 4 ? SKT.shard : SKT.star, add: i % 4 === 0, tint: 0xffffff, vx: rnd(50, 110), vy: rnd(35, 70), life: rnd(1200, 1800), delay, s0: rnd(0.8, 1.4), s1: 0.5, vr: rnd(-4, 4), fade: 2, fadeIn: 0.15 });
+      else this.emit({ x, y, tex: i % 3 ? SKT.wisp : SKT.star, tint: pick([0xfff3c8, 0x9ff0dc, 0xd8c0ff, 0xffffff]), vx: rnd(-14, 14), vy: rnd(-45, -15), life: rnd(1100, 1800), delay, s0: i % 3 ? rnd(0.4, 0.8) : 0.45, s1: 0.1, vr: 2, fade: 1.4, fadeIn: 0.2 });
+    }
+  }
+
+  /**
+   * 궁극기 화면 연출 (약 1.8초, 글자 없음): 암전(0.15초) → 갈래 색 대형 광원 플래시 → 화면을 가로지르는 거대한 형태
+   * (모닥불: 불기둥 벽 + 용솟음 화염 파도 / 서리: 화면 가득 얼음 결정이 돋아 깨짐 + 눈보라 휘몰이 / 넋: 넋들이 소용돌이치며 휩쓰는 행렬)
+   * → 잔불·서리·빛 가루 → 서서히 원래 밝기. 동시에 1개만 (이미 돌고 있으면 false — 판정은 그대로, 화면 연출만 건너뛴다)
+   */
+  ultimate(b: BranchId, at: { x: number; y: number }): boolean {
+    if (this.ultBusy) return false;
+    this.ultUntil = performance.now() + 1700;
+    this.cineUntil = this.ultUntil;
+    const o = this.toScreen(at.x, at.y - 10);
+    this.dim(0.62, 150, 950, 650);
+    this.scene.time.delayedCall(130, () => this.screenFlash(PALETTES[b].light, 0.38, 240));
+    this.flare(o.x, o.y, b, 1, 120);
+    if (b === "ember") this.emberWall(o, true);
+    else if (b === "frost") this.frostBloom(o, true);
+    else this.soulVortex(o, true);
+    return true;
+  }
+
+  /**
+   * 범위기 화면 연출 (약 1초): full = 궁극기처럼 암전 + 플래시 + 화면을 덮는 형태(조금 짧고 가볍게),
+   * sweep = 짧은 부채꼴 스킬용 (암전 없이 바라보는 쪽으로 화면 끝까지 휩쓸기). 다른 화면 연출이 돌고 있으면 건너뛴다
+   */
+  areaCine(b: BranchId, at: { x: number; y: number }, mode: "full" | "sweep" = "full", ang = 0): boolean {
+    const now = performance.now();
+    if (now < this.cineUntil) return false;
+    const o = this.toScreen(at.x, at.y - 8);
+    if (mode === "sweep") {
+      this.cineUntil = now + 450;
+      this.flare(o.x, o.y, b, 0.4);
+      this.sweep(o, b, ang);
+      return true;
+    }
+    this.cineUntil = now + 1000;
+    this.dim(0.5, 150, 420, 480);
+    this.scene.time.delayedCall(110, () => this.screenFlash(PALETTES[b].light, 0.32, 200));
+    this.flare(o.x, o.y, b, 0.7, 100);
+    if (b === "ember") this.emberWall(o, false);
+    else if (b === "frost") this.frostBloom(o, false);
+    else this.soulVortex(o, false);
+    return true;
+  }
+
+  /** 모닥불: 화면 아래에서 불기둥 벽이 시전자부터 바깥으로 차례로 솟고, 화염 파도가 용솟음친다 */
+  private emberWall(o: { x: number; y: number }, ult: boolean): void {
+    const { W, H, Hc, dens, a } = this.frame();
+    const K = Math.max(4, Math.round((ult ? 11 : 8) * dens));
+    // 불기둥은 늘 화면 아래 가장자리에서 솟는다 (중간에서 솟으면 바닥이 잘린 띠처럼 보인다)
+    const baseY = H * 1.04;
+    const life = ult ? 1050 : 820;
+    for (let i = 0; i < K; i++) {
+      const x = ((i + 0.5) / K) * W + rnd(-0.02, 0.02) * W;
+      const near = 1 - Math.min(1, Math.abs(x - o.x) / W);
+      const h = Hc * (ult ? 0.72 + 0.42 * near : 0.5 + 0.32 * near) * rnd(0.88, 1.06);
+      const d = 150 + (Math.abs(x - o.x) / W) * (ult ? 420 : 260);
+      const k = h / 192;
+      const sx = Phaser.Math.Clamp(((W / K) * 2.1) / (96 * k), 0.6, 1.25) * (Math.random() < 0.5 ? -1 : 1);
+      const tex = i % 2 ? SKT.bigFlame : SKT.bigFlame2;
+      // 뒤 붉은 층 (반 칸 어긋나게 · 더 크고 어둡게)
+      this.big({ screen: true, tex: i % 2 ? SKT.bigFlame2 : SKT.bigFlame, x: x + (W / K) * 0.5, y: baseY, oy: 1, tint: 0xff3a10, life: life + 60, delay: d + 50, s0: k * 0.12, s1: k * rnd(1.0, 1.2), grow: "back", sx: -sx * 1.15, alpha: 0.6 * a, fadeIn: 0.1, fadeOut: 0.45, sway: 0.07, swayHz: 2.2, flick: 0.09 });
+      this.big({ screen: true, tex, x, y: baseY, oy: 1, life, delay: d, s0: k * 0.12, s1: k, grow: "back", sx, alpha: 0.88 * a, fadeIn: 0.08, fadeOut: 0.42, sway: 0.05, swayHz: 2.8, flick: 0.08 });
+      this.big({ screen: true, tex: SKT.glow, x, y: baseY - h * 0.15, tint: 0xff6a1e, life: life * 0.9, delay: d, s0: W / K / 64, s1: ((W / K) * 3) / 64, sy: 1.4, alpha: 0.4 * a, fadeOut: 0.6 });
+      // 불길 위로 피어오르는 검붉은 연기 (보통 섞기: 밝은 불 사이에 깊이를 준다)
+      if (i % 2 === 0) this.big({ screen: true, tex: SKT.smoke, add: false, x: x + rnd(-0.3, 0.3) * (W / K), y: baseY - h * 0.85, y1: baseY - h * 1.25, tint: 0x2a0c06, life: life + 300, delay: d + 200, s0: (h * 0.3) / 128, s1: (h * 0.75) / 128, vr: rnd(-0.6, 0.6), alpha: 0.55 * a, fadeIn: 0.25, fadeOut: 0.5, depth: DEPTH_CINE - 1 });
+    }
+    // 용솟음 화염 파도: 화면 아래에서 솟구쳐 화면 아래쪽을 덮었다가 가라앉는다
+    const th = Hc * (ult ? 0.6 : 0.4);
+    const ks = th / 128;
+    const tw = 256 * ks;
+    const n = Math.ceil(W / (tw * 0.75)) + 1;
+    for (let i = 0; i < n; i++) {
+      const x = i * tw * 0.75;
+      const flip = i % 2 ? -1 : 1;
+      this.big({ screen: true, tex: SKT.flameWave, x, y: baseY + th, y1: baseY + th * 0.02, x1: x + W * 0.06 * flip, path: "out", oy: 1, life: ult ? 950 : 700, delay: (ult ? 360 : 230) + i * 45, s0: ks * 0.85, s1: ks * 1.05, sx: flip, alpha: 0.7 * a, fadeIn: 0.1, fadeOut: 0.45, flick: 0.05 });
+    }
+    // 위로 솟는 굵은 불티 줄
+    const v = this.view();
+    for (let i = 0; i < this.n(ult ? 60 : 30) * dens; i++)
+      this.emit({ x: v.x + rnd(0, v.w), y: v.y + v.h + 6, tex: SKT.streak, tint: pick(PALETTES.ember.parts), vx: rnd(-40, 40), vy: rnd(-420, -220), drag: 0.6, life: rnd(600, 1000), delay: rnd(150, 800), s0: rnd(0.8, 1.4), s1: 0.3, stretch: 0.012 });
+    this.screenTint(0xff5a1a, ult ? 0.14 : 0.08, 160, ult ? 650 : 350, 600, true);
+    this.dust("ember", ult ? 70 : 36, ult ? 500 : 300, ult ? 1200 : 700);
+  }
+
+  /** 서리: 화면 가득 얼음 결정 무리가 돋아나(아래 · 위에서) 산산이 깨지고, 눈보라가 휘몰아친다 */
+  private frostBloom(o: { x: number; y: number }, ult: boolean): void {
+    const { W, H, D, Hc, dens, a } = this.frame();
+    const F = PALETTES.frost;
+    const K = Math.max(4, Math.round((ult ? 10 : 7) * dens));
+    const baseY = ult ? H * 1.03 : Math.min(H * 1.03, o.y + H * 0.3);
+    const grow = ult ? 640 : 460;
+    const rows: { y: number; rot: number; hk: number; n: number }[] = [{ y: baseY, rot: 0, hk: ult ? 1 : 0.7, n: K }];
+    if (ult) rows.push({ y: -H * 0.03, rot: Math.PI, hk: 0.5, n: Math.max(3, K - 3) });
+    for (const row of rows) {
+      for (let i = 0; i < row.n; i++) {
+        const x = ((i + 0.5) / row.n) * W + rnd(-0.03, 0.03) * W;
+        const near = 1 - Math.min(1, Math.abs(x - o.x) / W);
+        const h = Hc * (0.36 + 0.3 * near) * row.hk * rnd(0.88, 1.08);
+        const d = 130 + (Math.abs(x - o.x) / W) * (ult ? 380 : 240);
+        const k = h / 256;
+        const end = d + grow;
+        // 결정 뒤 차가운 빛
+        this.big({ screen: true, tex: SKT.glow, x, y: row.y + (row.rot ? h * 0.3 : -h * 0.3), tint: F.main, life: grow + 260, delay: d, s0: (h * 0.3) / 64, s1: (h * 1.3) / 64, alpha: 0.6 * a, fadeOut: 0.5 });
+        // 결정 무리 (돋아남 → 끝에 살짝 부풀며 깨짐)
+        this.big({ screen: true, tex: SKT.cluster, add: false, x, y: row.y, oy: 1, rot: row.rot + rnd(-0.08, 0.08), life: grow, delay: d, s0: k * 0.08, s1: k * 1.05, grow: "back", sx: rnd(0.85, 1.15) * (i % 2 ? -1 : 1), alpha: 0.98 * a, fadeIn: 0.06, fadeOut: 0.12 });
+        // 깨지는 순간: 흰 번쩍 + 큰 얼음 조각이 튄다
+        this.big({ screen: true, tex: SKT.glow, x, y: row.y + (row.rot ? h * 0.45 : -h * 0.45), tint: 0xffffff, life: 260, delay: end - 30, s0: (h * 0.4) / 64, s1: (h * 1.4) / 64, alpha: 0.9 * a, fadeOut: 0.9 });
+        const m = Math.max(2, Math.round((this.mobile ? 3 : 5) * (this.reduced ? 0.5 : 1)));
+        for (let j = 0; j < m; j++) {
+          const sy0 = row.y + (row.rot ? 1 : -1) * h * rnd(0.15, 0.85);
+          const s = (h * rnd(0.1, 0.2)) / 220;
+          this.big({ screen: true, tex: SKT.crystal, add: false, x: x + rnd(-0.15, 0.15) * h, y: sy0, x1: x + rnd(-1, 1) * W * 0.14, y1: sy0 + rnd(-0.08, 0.3) * H, path: "out", rot: rnd(0, TAU), vr: rnd(-9, 9), life: rnd(420, 620), delay: end - 20, s0: s, s1: s * 0.6, alpha: a, fadeOut: 0.5 });
         }
       }
-      for (let i = 0; i < this.n(30) * dens; i++) this.twinkle(v.x + rnd(0, v.w), v.y + rnd(0, v.h), 1, 4, pick([0xfff3c8, 0x9ff0dc, 0xd8c0ff]), 900, 0.7);
-      for (let i = 0; i < Math.round(8 * dens); i++) {
-        const x = v.x + rnd(0, v.w);
-        const y = v.y + rnd(v.h * 0.3, v.h);
-        this.emit({ x, y, tex: SKT.pillar, tint: pick([0xfff3c8, 0x9ff0dc]), life: 600, delay: rnd(0, 700), s0: 0.5, s1: 1, sy: 2.6, originY: 1, alpha: 0.85 });
+    }
+    // 화면 가장자리에 서리가 낀다
+    this.big({ screen: true, tex: SKT.vigW, x: W / 2, y: H / 2, tint: F.main, life: ult ? 1900 : 1100, s0: 1, s1: 1, sx: (W * 1.12) / 128, sy: (H * 1.12) / 128, alpha: (ult ? 0.85 : 0.6) * a, fadeIn: 0.15, fadeOut: 0.45, depth: DEPTH_CINE - 2 });
+    // 눈보라 휘몰이 (시전자를 중심으로 소용돌이 두 겹)
+    const sw = { screen: true, tex: SKT.swirl, x: o.x, y: o.y, fadeIn: 0.2, fadeOut: 0.45 } as const;
+    this.big({ ...sw, tint: 0xe8f8ff, life: ult ? 1600 : 1000, delay: 200, s0: (D * 0.3) / 256, s1: (D * (ult ? 1.15 : 0.8)) / 256, vr: 3.4, sy: 0.75, alpha: 0.5 * a });
+    if (ult) this.big({ ...sw, tint: F.main, life: 1400, delay: 320, s0: (D * 0.5) / 256, s1: (D * 1.4) / 256, vr: 2.4, rot: 1, sy: 0.7, alpha: 0.4 * a });
+    // 비스듬한 눈보라 줄
+    const v = this.view();
+    for (let i = 0; i < this.n(ult ? 100 : 50) * dens; i++) {
+      const sp = rnd(320, 560);
+      this.emit({ x: v.x + rnd(-v.w * 0.3, v.w), y: v.y + rnd(-v.h * 0.4, v.h * 0.8), tex: SKT.streak, tint: pick([0xffffff, 0xd8f4ff, 0x9fdcff]), vx: sp, vy: sp * 0.4, life: rnd(500, 900), delay: rnd(200, ult ? 1200 : 700), s0: rnd(0.4, 0.7), s1: 0.3, sy: 1.6, stretch: 0.0035, alpha: 0.85 });
+    }
+    if (!this.reduced) this.scene.time.delayedCall(ult ? 780 : 600, () => this.screenFlash(0xffffff, ult ? 0.35 : 0.22, 180));
+    this.screenTint(0xcfefff, ult ? 0.12 : 0.07, 160, ult ? 700 : 350, 600, true);
+    this.dust("frost", ult ? 60 : 30, ult ? 700 : 450, ult ? 1100 : 600);
+  }
+
+  /** 넋: 넋들이 시전자를 중심으로 소용돌이치며 화면을 휩쓸고(궁극기), 두 줄 행렬로 가로지른다(범위기). 하늘에서 빛기둥 */
+  private soulVortex(o: { x: number; y: number }, ult: boolean): void {
+    const { W, H, D, Hc, dens, a } = this.frame();
+    const S = PALETTES.soul;
+    const gh = (Hc * (ult ? 0.22 : 0.17)) / 160;
+    const tints = [0xffffff, 0x9ff0dc, 0xd8c0ff, 0xf2ecff];
+    if (ult) {
+      // 넋 소용돌이: 화면 밖에서부터 감아 들어와 시전자에게 모인다
+      const N = Math.max(8, Math.round(22 * dens));
+      for (let i = 0; i < N; i++) {
+        this.big({ screen: true, tex: SKT.ghost, x: o.x, y: o.y, orbit: { r0: D * rnd(0.5, 0.72), r1: D * 0.03, a0: (i / N) * TAU, v: 3.3, flat: 0.72 }, face: Math.PI / 2, tint: pick(tints), life: rnd(1150, 1350), delay: 150 + (i % 5) * 50, s0: gh * rnd(0.8, 1.05), s1: gh * 0.4, alpha: 0.95 * a, fadeIn: 0.15, fadeOut: 0.22, flick: 0.04 });
       }
+      // 모인 넋이 터진다
+      this.flare(o.x, o.y, "soul", 0.8, 1300);
+      if (!this.reduced) this.scene.time.delayedCall(1300, () => this.screenFlash(S.light, 0.3, 200));
+    } else {
+      // 넋 행렬: 위 줄은 왼쪽→오른쪽, 아래 줄은 오른쪽→왼쪽으로 물결치며 가로지른다
+      const n = Math.max(4, Math.round(8 * dens));
+      for (const [ry, dir] of [
+        [o.y - H * 0.17, 1],
+        [o.y + H * 0.15, -1],
+      ] as const) {
+        for (let j = 0; j < n; j++) {
+          const x0 = dir > 0 ? -W * 0.1 : W * 1.1;
+          const yy = ry + Math.sin(j * 1.3) * H * 0.04;
+          this.big({ screen: true, tex: SKT.ghost, x: x0, y: yy, x1: x0 + dir * W * 1.25, y1: yy + rnd(-0.05, 0.05) * H, path: "lin", face: Math.PI / 2, tint: pick(tints), life: 760, delay: 120 + j * 55, s0: gh, s1: gh * 0.85, alpha: 0.95 * a, fadeIn: 0.1, fadeOut: 0.2, flick: 0.05 });
+        }
+      }
+    }
+    // 소용돌이 두 겹
+    const sw = { screen: true, tex: SKT.swirl, x: o.x, y: o.y, fadeIn: 0.2, fadeOut: 0.4 } as const;
+    this.big({ ...sw, tint: S.main, life: ult ? 1500 : 900, delay: 150, s0: (D * 0.25) / 256, s1: (D * (ult ? 1.0 : 0.6)) / 256, vr: 3, sy: 0.72, alpha: 0.55 * a });
+    this.big({ ...sw, tint: S.light, life: ult ? 1300 : 800, delay: 260, s0: (D * 0.4) / 256, s1: (D * (ult ? 1.3 : 0.8)) / 256, vr: -2.2, rot: 2, sy: 0.7, alpha: 0.35 * a });
+    // 하늘에서 내리꽂히는 빛기둥
+    const P = Math.max(3, Math.round((ult ? 8 : 4) * dens));
+    for (let i = 0; i < P; i++) {
+      const x = ((i + 0.5) / P) * W + rnd(-0.04, 0.04) * W;
+      const gy = H * rnd(0.55, 0.95);
+      const s = (gy * 1.5) / 96;
+      this.big({ screen: true, tex: SKT.pillar, x, y: gy, oy: 1, tint: pick([0xfff3c8, 0x9ff0dc, 0xd8c0ff]), life: 620, delay: (ult ? 350 : 200) + rnd(0, ult ? 700 : 300), s0: s * 0.9, s1: s, sx: (W * 0.05) / (32 * s), alpha: 0.85 * a, fadeIn: 0.12, fadeOut: 0.6 });
+      this.big({ screen: true, tex: SKT.glow, x, y: gy, tint: S.light, life: 700, delay: (ult ? 350 : 200) + 60, s0: (W * 0.04) / 64, s1: (W * 0.14) / 64, sy: 0.5, alpha: 0.7 * a, fadeOut: 0.7 });
+    }
+    this.screenTint(0x3a1a6a, ult ? 0.16 : 0.09, 140, ult ? 750 : 350, 600, true);
+    this.dust("soul", ult ? 60 : 30, ult ? 500 : 300, ult ? 1300 : 700);
+  }
+
+  /** 짧은 부채꼴 범위기: 바라보는 쪽으로 화면 끝까지 큰 형태가 휩쓸고 지나간다 (암전 없음) */
+  private sweep(o: { x: number; y: number }, b: BranchId, ang: number): void {
+    const { D, a, dens } = this.frame();
+    const dx = Math.cos(ang);
+    const dy = Math.sin(ang) * 0.75;
+    const n = Math.max(3, Math.round(5 * dens));
+    for (let i = 0; i < n; i++) {
+      const spread = (i / (n - 1) - 0.5) * 0.8;
+      const ca = Math.atan2(dy, dx) + spread;
+      const far = D * rnd(0.45, 0.65);
+      const tx = o.x + Math.cos(ca) * far;
+      const ty = o.y + Math.sin(ca) * far;
+      if (b === "ember") {
+        // 화염 방사: 뿌리는 시전자에 두고 혀끝이 화면 끝까지 뻗는다
+        this.big({ screen: true, tex: i % 2 ? SKT.bigFlame2 : SKT.bigFlame, x: o.x + Math.cos(ca) * D * 0.02, y: o.y + Math.sin(ca) * D * 0.02, oy: 1, rot: ca + Math.PI / 2, life: 480, delay: i * 22, s0: (D * 0.06) / 192, s1: far / 192, grow: "out", sx: 0.75 * (i % 2 ? -1 : 1), alpha: 0.9 * a, fadeIn: 0.05, fadeOut: 0.5, flick: 0.08, sway: 0.04, swayHz: 4 });
+        this.big({ screen: true, tex: SKT.glow, x: (o.x + tx) / 2, y: (o.y + ty) / 2, tint: 0xff6a1e, life: 420, delay: i * 22, s0: (far * 0.2) / 64, s1: (far * 0.7) / 64, alpha: 0.35 * a, fadeOut: 0.6 });
+      }
+      else if (b === "frost") {
+        this.big({ screen: true, tex: SKT.smoke, x: o.x, y: o.y, x1: tx, y1: ty, tint: 0xd8f4ff, life: 520, delay: i * 25, s0: (D * 0.05) / 128, s1: (D * 0.32) / 128, vr: rnd(-2, 2), alpha: 0.75 * a, fadeOut: 0.6 });
+        this.big({ screen: true, tex: SKT.crystal, add: false, x: o.x + Math.cos(ca) * far * 0.35, y: o.y + Math.sin(ca) * far * 0.35, oy: 1, rot: ca + Math.PI / 2, life: 420, delay: 60 + i * 30, s0: 0.05, s1: (D * 0.14) / 220, grow: "back", alpha: a, fadeOut: 0.35 });
+      } else this.big({ screen: true, tex: SKT.ghost, x: o.x, y: o.y, x1: tx, y1: ty, face: Math.PI / 2, tint: pick([0xffffff, 0x9ff0dc, 0xd8c0ff]), life: 520, delay: i * 30, s0: (D * 0.04) / 160, s1: (D * 0.12) / 160, alpha: a, fadeOut: 0.5 });
+    }
+  }
+
+  /**
+   * 폭발 꽃 (월드 좌표, 맞는 지점): 방사선 빛줄기 → 흰 핵 → 겹겹 충격파 → 가로 빛살 → 갈래 모양
+   * (모닥불: 바깥으로 뻗는 불꽃 혀 / 서리: 사방으로 돋는 얼음 결정 / 넋: 퍼져 오르는 넋) → 바닥 광원. power 1~3
+   */
+  bloom(x: number, y: number, r: number, b: BranchId, power = 1): void {
+    const p = PALETTES[b];
+    const k = r / 128;
+    const d = DEPTH_FX + 5;
+    this.big({ tex: SKT.rays, x, y, tint: p.light, life: 260 + power * 70, s0: k * 0.3, s1: k * (1.5 + power * 0.35), rot: Math.random() * TAU, vr: 1.5, alpha: 0.95, fadeOut: 0.6, depth: d });
+    this.big({ tex: SKT.shock, x, y, tint: 0xffffff, life: 220 + power * 40, s0: k * 0.2, s1: k * 1.4, sy: 0.8, alpha: 0.9, fadeOut: 0.8, depth: d });
+    this.big({ tex: SKT.shock, x, y, tint: p.main, life: 340 + power * 60, delay: 50, s0: k * 0.3, s1: k * (1.9 + power * 0.25), sy: 0.72, alpha: 0.85, fadeOut: 0.8, depth: d });
+    if (power >= 2) this.big({ tex: SKT.shock, x, y, tint: p.dark, life: 460 + power * 60, delay: 110, s0: k * 0.4, s1: k * (2.4 + power * 0.3), sy: 0.65, alpha: 0.7, fadeOut: 0.8, depth: d });
+    this.big({ tex: SKT.streakH, x, y, tint: p.light, life: 200 + power * 30, s0: k * 0.8, s1: k * (2.2 + power * 0.5), sy: 0.8, alpha: 0.9, fadeOut: 0.9, depth: d + 1 });
+    this.glow(x, y, r * 0.5, 0xffffff, 160, 0.4, 0.8, d + 2);
+    this.glow(x, y, r * 1.4, p.main, 340 + power * 60, 0.3, 0.55);
+    this.light(x, y + r * 0.35, r * 1.8, p.main, 600 + power * 100, 0.9);
+    const n = this.reduced ? 3 : this.mobile ? 5 : 7;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + rnd(-0.25, 0.25);
+      const far = r * rnd(0.7, 1.1);
+      const tx = x + Math.cos(a) * far;
+      const ty = y + Math.sin(a) * far * 0.7;
+      if (b === "ember") this.big({ tex: SKT.bigFlame, x, y, x1: tx, y1: ty, oy: 0.9, rot: a + Math.PI / 2, life: 320 + power * 50, s0: (r * 0.2) / 192, s1: (r * 0.9) / 192, sx: 0.8, alpha: 0.95, fadeOut: 0.6, flick: 0.1, depth: d });
+      else if (b === "frost") this.big({ tex: SKT.crystal, add: false, x: x + Math.cos(a) * r * 0.1, y: y + Math.sin(a) * r * 0.07, oy: 1, rot: a + Math.PI / 2, life: 380 + power * 60, s0: 0.02, s1: (r * rnd(0.55, 0.85)) / 220, grow: "back", alpha: 1, fadeOut: 0.3, depth: d - 1 });
+      else this.big({ tex: SKT.ghost, x, y, x1: tx, y1: ty - r * 0.5, face: Math.PI / 2, tint: pick([0xffffff, 0x9ff0dc, 0xd8c0ff]), life: 420 + power * 60, s0: (r * 0.15) / 160, s1: (r * 0.45) / 160, alpha: 0.95, fadeOut: 0.5, depth: d });
     }
   }
 
@@ -1355,7 +1991,7 @@ export class SkillFx {
       cam.setZoom(z * [1, 1, 1.045, 1.08, 1.11][level]);
       this.scene.tweens.add({ targets: cam, zoom: z, duration: level >= 3 ? 280 : 180, ease: "Quad.easeOut" });
     }
-    if (level >= 3) this.screenFlash(PALETTES[b].light, level === 4 ? 0.4 : 0.3, 140);
+    if (level >= 3) this.screenFlash(PALETTES[b].light, level === 4 ? 0.3 : 0.24, 140);
   }
 
   /** 줌 펀치 중 화면 크기가 바뀌면 (applyZoom) 기준 배율을 다시 잡는다 */

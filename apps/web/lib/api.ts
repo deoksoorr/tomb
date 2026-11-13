@@ -17,6 +17,8 @@ import type {
   LookGrantResponse,
   Me,
   NameChangeResponse,
+  NameCheckResponse,
+  NameClaimResponse,
   MyGraveStatusResponse,
   NoticeListResponse,
   PassedListResponse,
@@ -139,6 +141,11 @@ export const api = {
   activity: () => request<ActivityResponse>("/api/me/activity", { cache: "no-store" }),
   activitySeen: (at: number) => request<unknown>("/api/me/activity/seen", jsonInit("POST", { at })),
   changeName: (name: string) => request<NameChangeResponse>("/api/me/name", jsonInit("POST", { name })),
+  /** 닉네임 미리 확인 (규칙 + 다른 계정이 쓰는지) */
+  checkName: (name: string, init?: RequestInit) =>
+    request<NameCheckResponse>(`/api/names?name=${encodeURIComponent(name)}`, { cache: "no-store", ...init }),
+  /** 이름 등록: 계정에 이름이 없을 때·휴면에서 돌아와 다시 정할 때 (무료). 다른 계정이 쓰면 409 NAME_TAKEN */
+  claimName: (name: string) => request<NameClaimResponse>("/api/names", jsonInit("POST", { name })),
   finishTutorial: () => request<unknown>("/api/me/tutorial", { method: "POST" }),
   /** me=1: 내 순위까지 (개인화 응답이라 CDN 캐시를 타지 않는다) */
   pointRank: () => request<PointRankResponse>("/api/rank/points?me=1", { cache: "no-store" }),

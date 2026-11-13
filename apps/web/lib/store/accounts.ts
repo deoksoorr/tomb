@@ -57,6 +57,7 @@ export function toMe(accountId: string, a: AccountRecord, day: string, now: numb
     // 첫 변경은 무료, 그다음부터 NAME_CHANGE_PRICE
     nameChange: { nextAllowedAt: nextAllowedAt > now ? nextAllowedAt : 0, cost: a.nameChanges ? NAME_CHANGE_PRICE : 0 },
     tutorialDone: a.tutorialDone,
+    ...(a.renameRequired ? { renameRequired: true as const } : {}),
   };
 }
 

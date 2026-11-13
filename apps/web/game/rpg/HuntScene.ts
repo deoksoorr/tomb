@@ -1033,6 +1033,8 @@ export class HuntScene extends RpgScene {
         this.aimNearest(fx.range);
         this.cutIn("ember", false, id);
         mv.fan(this.px, this.py - 4, ang(), fx.range, fx.arcDeg);
+        // 범위기 화면 연출: 바라보는 쪽으로 화면 끝까지 불길이 휩쓴다
+        this.skfx.areaCine("ember", { x: this.px, y: this.py }, "sweep", ang());
         this.sfx.play("swish", 0.6);
         const g = this.hitGroup(id, this.px + this.face.x * fx.range * 0.5, this.py - 34);
         this.later(90, () => {
@@ -1057,6 +1059,7 @@ export class HuntScene extends RpgScene {
         const g = this.hitGroup(id, this.px, this.py - 40);
         this.later(200, () => {
           mv.ringBlast(this.px, this.py, fx.radius);
+          this.skfx.areaCine("ember", { x: this.px, y: this.py });
           this.sfx.play("slam", 0.7);
           this.sfx.burst("ember", 2, SKILL_LOOK[id].tone);
           this.aoeAt(this.px, this.py, fx.radius, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 1.8, heavy: true }));
@@ -1073,6 +1076,7 @@ export class HuntScene extends RpgScene {
         const g = this.hitGroup(id, pt.x, pt.y - 34);
         this.later(fx.delayMs, () => {
           mv.meteorImpact(pt.x, pt.y, fx.radius);
+          this.skfx.areaCine("ember", pt);
           this.sfx.play("slam", 0.9);
           this.sfx.burst("ember", 3, SKILL_LOOK[id].tone);
           this.aoeAt(pt.x, pt.y, fx.radius, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 2.2, heavy: true, stun: 200 }));
@@ -1088,6 +1092,7 @@ export class HuntScene extends RpgScene {
         const x = this.px + this.face.x * 14;
         const y = this.py + this.face.y * 10;
         mv.brazierPlace(x, y, fx.radius);
+        this.skfx.areaCine("ember", { x, y });
         this.addField("brazier", "ember", x, y, fx.radius, fx.durMs, fx.everyMs, fx.mult * pow, 0, false, "em_brazier");
         break;
       }
@@ -1095,7 +1100,7 @@ export class HuntScene extends RpgScene {
         // 큰 모닥불 (궁극): 화면 전체 컷인 → 점점 넓어지는 불길이 세 번 솟는다
         const fx = SKILL_FX.em_bonfire(lv);
         this.cutIn("ember", true, id);
-        this.skfx.ultimate("ember", skillById(id)?.name ?? "큰 모닥불");
+        this.skfx.ultimate("ember", { x: this.px, y: this.py });
         this.skfx.punch(2, "ember");
         this.skfx.circle(this.px, this.py, fx.radius[2], "ember", 260);
         this.hitstop = Math.max(this.hitstop, 120);
@@ -1122,6 +1127,7 @@ export class HuntScene extends RpgScene {
         const fx = SKILL_FX.fr_breath(lv);
         this.aimNearest(fx.range);
         mv.breath(this.px, this.py - 4, ang(), fx.range, fx.arcDeg);
+        this.skfx.areaCine("frost", { x: this.px, y: this.py }, "sweep", ang());
         this.sfx.burst("frost", 1, SKILL_LOOK[id].tone);
         const g = this.hitGroup(id, this.px + this.face.x * fx.range * 0.5, this.py - 34);
         this.later(80, () => {
@@ -1160,6 +1166,7 @@ export class HuntScene extends RpgScene {
         const g = this.hitGroup(id, this.px, this.py - 40);
         this.later(180, () => {
           mv.novaBloom(this.px, this.py, fx.radius);
+          this.skfx.areaCine("frost", { x: this.px, y: this.py });
           this.sfx.play("slam", 0.6);
           this.sfx.burst("frost", 2, SKILL_LOOK[id].tone);
           this.aoeAt(this.px, this.py, fx.radius, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 0.6 }), (m) => {
@@ -1207,6 +1214,7 @@ export class HuntScene extends RpgScene {
         const g = this.hitGroup(id, pt.x, pt.y - 40);
         this.later(fx.delayMs, () => {
           mv.tombRise(pt.x, pt.y, fx.radius);
+          this.skfx.areaCine("frost", pt);
           this.sfx.play("slam", 0.9);
           this.sfx.burst("frost", 3, SKILL_LOOK[id].tone);
           this.aoeAt(pt.x, pt.y, fx.radius, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 0.4, heavy: true }), (m) => {
@@ -1224,13 +1232,14 @@ export class HuntScene extends RpgScene {
         const fx = SKILL_FX.fr_field(lv);
         this.cutIn("frost", false, id);
         this.addField("field", "frost", this.px, this.py, fx.radius, fx.durMs, fx.everyMs, fx.mult * pow, fx.vuln, false, undefined, id);
+        this.skfx.areaCine("frost", { x: this.px, y: this.py });
         break;
       }
       case "fr_blizzard": {
         // 한겨울 눈보라 (궁극): 화면 전체 컷인 → 화면 가득 눈보라 → 나를 따라 몰아친다
         const fx = SKILL_FX.fr_blizzard(lv);
         this.cutIn("frost", true, id);
-        this.skfx.ultimate("frost", skillById(id)?.name ?? "한겨울 눈보라");
+        this.skfx.ultimate("frost", { x: this.px, y: this.py });
         this.skfx.circle(this.px, this.py, fx.radius, "frost", 240);
         this.skfx.punch(3, "frost");
         this.hitstop = Math.max(this.hitstop, 120);
@@ -1300,6 +1309,7 @@ export class HuntScene extends RpgScene {
           caught.map((m) => ({ x: m.x, y: m.y - MONSTERS[m.id].size / 2 })),
           { x: cx, y: cy },
         );
+        this.skfx.areaCine("soul", { x: cx, y: cy });
         let k = 0;
         for (const m of caught) {
           const boss = m.boss || MONSTERS[m.id].behavior === "boss";
@@ -1338,6 +1348,7 @@ export class HuntScene extends RpgScene {
         const pt = this.targetPoint(fx.reach);
         this.cutIn("soul", true, id);
         mv.vortexOpen(pt.x, pt.y, fx.radius, 220);
+        this.skfx.areaCine("soul", pt);
         const g = this.hitGroup(id, pt.x, pt.y - 40, 600);
         let healed = 0;
         for (let i = 0; i < fx.ticks; i++) {
@@ -1379,7 +1390,7 @@ export class HuntScene extends RpgScene {
         // 별빛 행렬 (궁극): 화면 전체 컷인 → 넋 행렬이 둘레를 두 번 휩쓸고 지나간다 + 회복
         const fx = SKILL_FX.so_procession(lv);
         this.cutIn("soul", true, id);
-        this.skfx.ultimate("soul", skillById(id)?.name ?? "별빛 행렬");
+        this.skfx.ultimate("soul", { x: this.px, y: this.py });
         this.skfx.circle(this.px, this.py, fx.radius, "soul", 300);
         this.skfx.punch(2, "soul");
         this.hitstop = Math.max(this.hitstop, 120);

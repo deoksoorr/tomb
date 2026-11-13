@@ -479,7 +479,9 @@ describe("관리자", () => {
 });
 
 describe("POST /api/join", () => {
-  const body = { channel: "auto", name: "새벽코더", color: "#9fc5a8" };
+  // 닉네임 중복 금지: 테스트마다 새 계정이므로 이름도 테스트마다 다르게 (같은 이름이면 두 번째 계정은 409 NAME_TAKEN)
+  let nameSeq = 0;
+  let body = { channel: "auto", name: "새벽코더", color: "#9fc5a8" };
   const lobby = (counts: number[]): LobbyInfo => ({
     channels: counts.map((count, i) => ({ id: i + 1, count, cap: 40, open: true })),
     total: counts.reduce((a, b) => a + b, 0),
@@ -489,6 +491,7 @@ describe("POST /api/join", () => {
   });
   // 기본은 로비 무응답. 로비가 필요한 테스트는 mockResolvedValueOnce로 덮는다
   beforeEach(() => {
+    body = { ...body, name: `새벽코더${++nameSeq}` };
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no lobby"));
   });
 
@@ -500,7 +503,7 @@ describe("POST /api/join", () => {
     expect(res.channel).toBe(2);
     expect(res.wsUrl).toBe(`${REALTIME_WS_URL}/ch/2?t=${encodeURIComponent(res.token)}`);
     const claims = await verifyJoinToken("dev-join-secret-change-me", res.token);
-    expect(claims).toMatchObject({ visitorId: v.visitorId, name: "새벽코더", color: "#9fc5a8", channel: 2 });
+    expect(claims).toMatchObject({ visitorId: v.visitorId, name: body.name, color: "#9fc5a8", channel: 2 });
     expect(claims!.exp - Math.floor(Date.now() / 1000)).toBeLessThanOrEqual(60);
   });
 

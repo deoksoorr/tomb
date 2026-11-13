@@ -16,7 +16,7 @@ import { INDOOR_FRONT } from "../entities/RemoteAvatar";
 import type { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
 import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST } from "../logic/spots";
-import { besideFriend } from "../logic/friendSpot";
+import { besideFriend, findFollowed, FRIEND_ARRIVED, followDeadline } from "../logic/friendSpot";
 import { emoSlotOfKey } from "../logic/emoBoard";
 import type { MoveInput } from "../logic/movement";
 import { RoomPresence } from "../net/RoomPresence";
@@ -29,6 +29,7 @@ import type { LightSpot } from "../world/WorldMap";
 import { artUp, floorGrid, furnitureGrid, sconceGrid, wallCapColor, wallFaceColor, WALL_H, wallGrid, windowGrid, WINDOW_W, yardGrid } from "./art";
 import type { HouseEditState, HouseTool } from "./events";
 import { HouseSfx, hearGain, type HouseSound } from "./houseSfx";
+import { HouseZoom } from "./houseZoom";
 import {
   BOOK_LINES,
   clockText,
@@ -184,6 +185,8 @@ export class HouseScene extends Phaser.Scene {
   private selected: string | null = null;
   private drag: { u: string; offX: number; offY: number; from: { x: number; y: number }; to: { x: number; y: number } } | null = null;
   private pan: { sx: number; sy: number; cx: number; cy: number } | null = null;
+  /** 마우스 휠·두 손가락 확대·축소 (마을과 같은 규칙·한계) */
+  private zoomer: HouseZoom | null = null;
   private unsubs: (() => void)[] = [];
 
   constructor() {
@@ -217,6 +220,7 @@ export class HouseScene extends Phaser.Scene {
     this.sconces = [];
     this.glows = [];
     this.remoteTick = new Map();
+    this.follow = null;
     this.work = structuredClone(data.house.layout);
     this.baseline = JSON.stringify(this.work);
   }
@@ -282,7 +286,8 @@ export class HouseScene extends Phaser.Scene {
     this.player.dir = DIR.up;
     // 친구 창의 [친구한테 가기]로 이 집에 따라 들어왔으면 친구를 찾아 옆으로 (30초 넘게 지난 부탁은 버린다)
     const f = bridge.last("house:follow");
-    if (f && f.houseId === this.data0.house.id && Date.now() - f.at < 30_000) this.follow = { name: f.name, until: this.time.now + FOLLOW_WAIT_MS };
+    // 기다림의 기준은 게임 루프 시각: 씬 시계(this.time.now)는 create 때 아직 옛 값이다 (followDeadline 설명)
+    this.follow = f && f.houseId === this.data0.house.id && Date.now() - f.at < 30_000 ? { name: f.name, until: followDeadline(this.game.loop.time, FOLLOW_WAIT_MS) } : null;
     if (f) bridge.emit("house:follow", null);
     this.physics.add.collider(this.player.sprite, this.wallBodies);
     this.physics.add.collider(this.player.sprite, this.itemBodies);
@@ -305,6 +310,8 @@ export class HouseScene extends Phaser.Scene {
     this.data0.input.setHandler((a) => this.onAction(a));
     const canvas = this.game.canvas;
     canvas.addEventListener("pointerdown", this.onDown);
+    // 휠·핀치 줌: 창이 떠 있어 게임 키가 막혀 있으면 받지 않는다. 두 손가락이 닿으면 편집 끌기는 그만둔다
+    this.zoomer = new HouseZoom(canvas, cam.zoom, () => !this.data0.input.isBlocked, () => this.cancelDrag());
     window.addEventListener("pointermove", this.onMove);
     window.addEventListener("pointerup", this.onUp);
     window.addEventListener("keydown", this.onKey, true);
@@ -321,6 +328,8 @@ export class HouseScene extends Phaser.Scene {
       window.removeEventListener("pointerup", this.onUp);
       window.removeEventListener("keydown", this.onKey, true);
       this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this);
+      this.zoomer?.destroy();
+      this.zoomer = null;
       for (const u of this.unsubs.splice(0)) u();
       this.atmos.destroy();
       this.lighting.destroy();
@@ -698,6 +707,13 @@ export class HouseScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const fit = Math.min(cam.width / this.W, cam.height / this.H);
     cam.setZoom(Math.max(ZOOM_MIN, Math.min(4, Math.floor(fit * 2) / 2)));
+    this.zoomer?.reset(cam.zoom);
+    this.applyBounds();
+  }
+
+  /** 지금 줌에 맞춘 카메라 경계 (화면이 집보다 넓으면 집이 가운데 오게) */
+  private applyBounds(): void {
+    const cam = this.cameras.main;
     const vw = cam.width / cam.zoom;
     const vh = cam.height / cam.zoom;
     cam.setBounds(vw > this.W ? (this.W - vw) / 2 : 0, vh > this.H ? (this.H - vh) / 2 : 0, Math.max(this.W, vw), Math.max(this.H, vh));
@@ -963,7 +979,7 @@ export class HouseScene extends Phaser.Scene {
       return;
     }
     if (!pres.client.online) return;
-    const friend = [...pres.remotes.values()].find((r) => r.name === f.name);
+    const friend = findFollowed(pres.remotes.values(), f.name);
     if (!friend) return;
     this.follow = null;
     if (this.using) this.exitSpot();
@@ -982,7 +998,7 @@ export class HouseScene extends Phaser.Scene {
     this.player.warp(spot.x, spot.y, time, NO_SEATS);
     this.player.faceTo(friend.x, friend.y, time);
     pres.client.warp(spot.x, spot.y);
-    bridge.emit("friend:notice", { message: `${f.name}님 옆으로 왔어요!` });
+    bridge.emit("friend:notice", { message: FRIEND_ARRIVED });
   }
 
   /** 자리에서 일어나 원래 서 있던 곳으로 */
@@ -1207,6 +1223,12 @@ export class HouseScene extends Phaser.Scene {
       this.player.warp(u.pre.x, u.pre.y, time, NO_SEATS);
     }
     const cam = this.cameras.main;
+    // 휠·핀치 줌 (편집 중에는 경계 없이 그 자리에서)
+    const z = this.zoomer;
+    if (z && (z.step(delta) || cam.zoom !== z.zoom)) {
+      cam.setZoom(z.zoom);
+      if (!this.editing) this.applyBounds();
+    }
     const s = 1 / cam.zoom;
     this.player.view.sync(time, s);
     if (this.follow) this.tryFollow(time);
@@ -1352,6 +1374,7 @@ export class HouseScene extends Phaser.Scene {
       const plotH = (this.tier.h + 2) * T;
       const fit = Math.min(cam.width / this.W, Math.max(1, bottom - top) / plotH);
       cam.setZoom(Math.max(ZOOM_MIN, Math.min(cam.zoom, Math.floor(fit * 2) / 2)));
+      this.zoomer?.reset(cam.zoom);
       const mid = (top + bottom) / 2;
       cam.pan(this.W / 2, this.oy + (this.tier.h * T) / 2 + (cam.height / 2 - mid) / cam.zoom, 300, "Sine.easeInOut");
     } else {
@@ -1518,7 +1541,7 @@ export class HouseScene extends Phaser.Scene {
   };
 
   private onMove = (e: PointerEvent) => {
-    if (!this.editing) return;
+    if (!this.editing || this.zoomer?.pinching) return;
     if (this.drag) {
       const w = this.worldPoint(e);
       const tile = this.toTile(w.x, w.y);
@@ -1538,6 +1561,19 @@ export class HouseScene extends Phaser.Scene {
       cam.setScroll(this.pan.cx - (e.clientX - this.pan.sx) / cam.zoom, this.pan.cy - (e.clientY - this.pan.sy) / cam.zoom);
     }
   };
+
+  /** 두 손가락 줌이 시작됐다: 끌던 물건은 제자리로, 화면 끌기도 그만 */
+  private cancelDrag(): void {
+    this.pan = null;
+    const d = this.drag;
+    if (!d) return;
+    this.drag = null;
+    const p = this.work.items.find((i) => i.u === d.u);
+    const v = p ? this.views.get(p.u) : undefined;
+    if (p && v) this.placeView(p, v);
+    v?.img.setAlpha(1);
+    this.changed();
+  }
 
   private onUp = () => {
     this.pan = null;

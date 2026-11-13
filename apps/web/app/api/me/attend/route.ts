@@ -16,6 +16,8 @@ export const POST = handler(async (req) => {
   const profile = await readBody(req, AttendSchema);
   const accounts = getAccounts();
   const now = Date.now();
-  await accounts.enter(visitorId, profile, now);
+  // 휴면 판정·마지막 입장 시각. 휴면 재설정 중이면 이름은 여기서 정하지 않는다 (POST /api/names)
+  const { renameRequired } = await accounts.visit(visitorId, now, true);
+  await accounts.enter(visitorId, renameRequired ? { ...profile, name: undefined } : profile, now);
   return json<AttendResponse>({ me: await loadMe(accounts, visitorId, now), earned: 0 });
 });

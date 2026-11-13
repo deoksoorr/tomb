@@ -415,6 +415,8 @@ export async function publicDex(accountId: string, now = Date.now()): Promise<Pu
 export async function peerDex(where: { ch: number } | { room: string }, sid: number, now = Date.now()): Promise<PublicDex> {
   const peer = await peerOf(where, sid);
   if (!peer) throw new HttpError(404, "NOT_FOUND", "그 사람을 찾지 못했어요. 이미 나갔을 수 있어요.");
+  // 운영자 캐릭터는 정보를 내보내지 않는다 (화면에서도 운영자를 눌러 열 수 없다)
+  if (await isStaff(peer.visitorId)) throw new HttpError(403, "STAFF_TARGET", "운영자의 정보는 볼 수 없어요.");
   const d = await publicDex(peer.visitorId, now);
   return { ...d, accountId: "", name: d.name ?? peer.name };
 }

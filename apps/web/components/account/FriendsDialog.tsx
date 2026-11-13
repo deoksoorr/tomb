@@ -145,13 +145,9 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
           bridge.emit("portal:open", { kind: "housing", houseId });
         };
         onClose();
-        if (myCh === null || w.ch === myCh) {
-          showFriendNotice(`${now.name}님이 있는 집으로 가는 중…`);
-          enter();
-        } else {
-          showFriendNotice(`${w.ch}채널로 옮긴 뒤 ${now.name}님이 있는 집으로 가요…`);
-          hopTo(w.ch, myCh, enter, () => showFriendNotice(`${w.ch}채널로 옮기지 못했어요. 채널이 가득 찼을 수 있어요.`));
-        }
+        // 가는 중… 안내는 띄우지 않는다: 도착하면 집 장면이 "도착했어요!"를 한 번만 띄운다
+        if (myCh === null || w.ch === myCh) enter();
+        else hopTo(w.ch, myCh, enter, () => showFriendNotice(`${w.ch}채널로 옮기지 못했어요. 채널이 가득 찼을 수 있어요.`));
         return;
       }
       const no = cannotGo(f.name, w);
@@ -161,14 +157,13 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
         return;
       }
       const goto = (x: { sid: number; x: number; y: number }) => bridge.emit("friend:goto", { sid: x.sid, name: now.name, x: x.x, y: x.y });
+      // 가는 중… 안내 없이 옮기고, 도착하면 게임이 "도착했어요!"를 한 번만 띄운다
       if (w.ch === myCh) {
         onClose();
-        showFriendNotice(`${now.name}님 옆으로 가는 중…`);
         goto(w);
         return;
       }
       onClose();
-      showFriendNotice(`${now.name}님이 있는 ${w.ch}채널로 옮기는 중…`);
       hopTo(
         w.ch,
         myCh ?? 0,
@@ -219,6 +214,11 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
           </p>
         )}
         {!data && !error && <p className={ui.hint}>불러오는 중…</p>}
+        {data?.staff && (
+          <p className={ui.hint} role="status">
+            운영자 계정은 친구 기능을 쓸 수 없어요. (운영자와는 친구를 맺을 수 없어요)
+          </p>
+        )}
 
         {data && data.incoming.length > 0 && (
           <section className={styles.section} aria-labelledby="friend-in">

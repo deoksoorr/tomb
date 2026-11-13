@@ -1,4 +1,4 @@
-import { itemById, type CosmeticSlot } from "@tomb/protocol";
+import { itemById, nameKey, type CosmeticSlot } from "@tomb/protocol";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import { staffAccountIdNow } from "../staff";
@@ -9,9 +9,12 @@ import { giftTermUntil } from "./gifts";
 import type { MemoryStore } from "./memory";
 import {
   ACTIVITY_KEEP,
+  DORMANT_MS,
   PRESENCE_MIN_GAP_MS,
   spendCategory,
   type NameChangeResult,
+  type NameClaimResult,
+  type VisitResult,
   type AccountRecord,
   type AccountStore,
   type EarnOptions,
@@ -53,6 +56,11 @@ type Acct = {
   calInit?: boolean;
   /** 처음 입장한 시각 (없으면 모름) */
   createdAt?: number;
+  /** 닉네임 중복 금지: 마지막 입장 시각, 이 계정이 차지한 이름 비교 키, 기존 중복(색인에 못 올림) 표시, 휴면 재설정 중 */
+  seenAt?: number;
+  nameKey?: string;
+  nameDup?: boolean;
+  renameRequired?: boolean;
   /** 사냥 기록: 처치 수 합계(전체·주별), 사냥터별 최단 클리어 ms(전체·`${zone}|${week}`) */
   hunt?: { kills: number; killsWeek: Map<string, number>; best: Map<string, number>; bestWeek: Map<string, number> };
 };
@@ -70,6 +78,8 @@ export class MemoryAccounts implements AccountStore {
   private ipEarned = new Map<string, number>();
   /** 경제 통계: 날짜 → 필드(`earn:{source}`, `spend:{분류}`, `refund`) → 합계 */
   private econ = new Map<string, Map<string, number>>();
+  /** 닉네임 중복 금지: 이름 비교 키(nameKey) → 계정 id (Redis `names` 해시와 같다) */
+  private names = new Map<string, string>();
 
   private stat(a: Acct, day: string, field: string, amount: number): void {
     // 운영자 계정의 적립·사용은 경제 통계에 넣지 않는다 (지갑·기능은 그대로. accounts.ts econKeyFor와 같은 규칙)
@@ -217,6 +227,7 @@ export class MemoryAccounts implements AccountStore {
       nameChangedAt: a.nameChangedAt ?? 0,
       nameChanges: a.nameChanges ?? 0,
       tutorialDone: a.tutorialDone ?? false,
+      renameRequired: a.renameRequired ?? false,
     };
   }
 
@@ -315,8 +326,9 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async enter(id: string, profile: Profile, now: number): Promise<void> {
+    // 이름은 이름 색인과 함께 등록한다 (다른 계정이 쓰는 이름이면 저장하지 않는다). 휴면 재설정은 여기서 하지 않는다
+    if (profile.name) this.claimNow(id, profile.name, now, true);
     const a = this.acct(id);
-    a.name ??= profile.name || null;
     a.color ??= profile.color || null;
     a.body ??= profile.body || null;
     a.createdAt ??= now;
@@ -535,6 +547,8 @@ export class MemoryAccounts implements AccountStore {
   async changeName(id: string, name: string, now: number, price: number, cooldownMs: number): Promise<NameChangeResult> {
     const a = this.acct(id);
     if (a.nameChangedAt && now < a.nameChangedAt + cooldownMs) return { ok: false, reason: "cooldown", nextAllowedAt: a.nameChangedAt + cooldownMs };
+    const key = nameKey(name);
+    if (!this.canTake(key, id, now)) return { ok: false, reason: "taken" };
     const cost = a.nameChanges ? price : 0;
     if (a.points < cost) return { ok: false, reason: "points" };
     a.points -= cost;
@@ -542,10 +556,100 @@ export class MemoryAccounts implements AccountStore {
       a.ledger = [{ at: now, amount: -cost, reason: "name" }, ...(a.ledger ?? [])].slice(0, 100);
       this.stat(a, kstDay(now), "spend:name", cost);
     }
+    this.takeName(a, key, id);
     a.name = name;
     a.nameChangedAt = now;
     a.nameChanges = (a.nameChanges ?? 0) + 1;
     return { ok: true, cost };
+  }
+
+  // ── 닉네임 중복 금지 (이름 색인). accounts-redis.ts의 NAME_FNS·CLAIM_NAME_LUA·VISIT_LUA·INDEX_NAME_LUA와 같은 규칙 ──
+
+  /** 마지막 접속(입장·머무르기·처음 입장 중 가장 늦은 것)이 DORMANT_MS보다 오래면 휴면. 기록이 없으면 휴면이 아니다 */
+  private dormant(a: Acct | undefined, now: number): boolean {
+    const last = a ? Math.max(a.seenAt ?? 0, a.presenceAt ?? 0, a.createdAt ?? 0) : 0;
+    return last > 0 && now - last > DORMANT_MS;
+  }
+
+  /** 비었거나 내 것이거나 점유자가 휴면이면 가질 수 있다 */
+  private canTake(key: string, id: string, now: number): boolean {
+    const owner = this.names.get(key);
+    return !owner || owner === id || this.dormant(this.accts.get(owner), now);
+  }
+
+  /** 그 키를 차지한다: 내 옛 키는 풀고, 휴면 점유자에게서 가져오면 그 계정의 nameKey를 지운다 */
+  private takeName(a: Acct, key: string, id: string): void {
+    if (a.nameKey && a.nameKey !== key && this.names.get(a.nameKey) === id) this.names.delete(a.nameKey);
+    const owner = this.names.get(key);
+    const prev = owner && owner !== id ? this.accts.get(owner) : undefined;
+    if (prev?.nameKey === key) prev.nameKey = undefined;
+    this.names.set(key, id);
+    a.nameKey = key;
+    a.nameDup = false;
+    a.renameRequired = false;
+  }
+
+  private claimNow(id: string, name: string, now: number, onlyEmpty: boolean): NameClaimResult {
+    const key = nameKey(name);
+    const cur = this.accts.get(id);
+    if (cur?.name && (onlyEmpty || !cur.renameRequired)) return cur.nameKey === key ? "ok" : "has";
+    if (!this.canTake(key, id, now)) return "taken";
+    const a = this.acct(id);
+    this.takeName(a, key, id);
+    a.name = name;
+    a.seenAt = now;
+    return "ok";
+  }
+
+  /** 옛 계정 이름을 색인에 채운다 (이미 다른 계정이 차지했으면 이름은 그대로 두고 nameDup 표시만) */
+  private indexName(a: Acct, id: string, now: number): "indexed" | "dup" | "none" {
+    if (!a.name || a.nameKey || a.renameRequired) return "none";
+    const key = nameKey(a.name);
+    if (!this.canTake(key, id, now)) {
+      a.nameDup = true;
+      return "dup";
+    }
+    this.takeName(a, key, id);
+    return "indexed";
+  }
+
+  async nameOwner(key: string, now: number): Promise<string | null> {
+    const owner = this.names.get(key);
+    return owner && !this.dormant(this.accts.get(owner), now) ? owner : null;
+  }
+
+  async claimName(id: string, name: string, now: number): Promise<NameClaimResult> {
+    return this.claimNow(id, name, now, false);
+  }
+
+  async visit(id: string, now: number, touch: boolean): Promise<VisitResult> {
+    const a = touch ? this.acct(id) : this.accts.get(id);
+    if (!a) return { renameRequired: false };
+    if (a.name && !a.renameRequired && this.dormant(a, now)) {
+      if (a.nameKey && this.names.get(a.nameKey) === id) this.names.delete(a.nameKey);
+      a.nameKey = undefined;
+      a.nameDup = false;
+      a.renameRequired = true;
+    }
+    if (!a.renameRequired) {
+      if (touch) a.seenAt = now;
+      this.indexName(a, id, now);
+    }
+    return { renameRequired: a.renameRequired ?? false };
+  }
+
+  async reindexNames(cursor: string, count: number, now: number): Promise<{ next: string; indexed: number; dup: number }> {
+    const all = [...this.accts];
+    const start = Number(cursor) || 0;
+    const end = start + count;
+    let indexed = 0;
+    let dup = 0;
+    for (const [id, a] of all.slice(start, end)) {
+      const r = this.indexName(a, id, now);
+      if (r === "indexed") indexed++;
+      else if (r === "dup") dup++;
+    }
+    return { next: end >= all.length ? "0" : String(end), indexed, dup };
   }
 
   async setTutorialDone(id: string): Promise<void> {

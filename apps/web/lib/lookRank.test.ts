@@ -47,7 +47,7 @@ describe("꾸미기 랭킹", () => {
       [2, "나", 180],
       [3, "다", 176],
     ]);
-    expect(r.rows[0].items).toEqual(["pet_deer", "hat_crown"]);
+    expect(r.rows[0].items).toEqual(["hat_crown", "pet_deer"]); // 지금 착용 파츠 전부, 부위 순
   });
 
   it("읽을 때 만료를 반영해 순위를 바로잡고, 기록 점수도 고친다", async () => {

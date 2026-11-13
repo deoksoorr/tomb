@@ -9,19 +9,21 @@ import {
   checkName,
   isAvatarBody,
   isAvatarColor,
+  NAME_TAKEN_MESSAGE,
   pickChannel,
   type AvatarDye,
 } from "@tomb/protocol";
-import { api, errorMessage } from "@/lib/api";
+import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { useAmbience } from "@/lib/hooks/useAmbience";
 import { prefetchGraves } from "@/lib/hooks/useGraves";
 import { isChannelSelectable, useLobby } from "@/lib/hooks/useLobby";
 import { useMyHouseChannel } from "@/lib/hooks/useMyHouseChannel";
 import { useHydrated } from "@/lib/hooks/useMedia";
 import { meStore } from "@/lib/hooks/useMe";
+import { useNameTaken } from "@/lib/hooks/useNameTaken";
 import { useNotices } from "@/lib/hooks/useNotices";
 import { readItem, writeItem } from "@/lib/storage";
-import { LS, type Me } from "@/lib/types";
+import { DORMANT_RENAME_MESSAGE, LS, type Me } from "@/lib/types";
 import { bgm } from "../bgm/engine";
 import { latestNotice } from "../notice/notices";
 import NoticesDialog from "../notice/NoticesDialog";
@@ -120,8 +122,9 @@ type AccountPath = Exclude<Path, { kind: "new" }>;
 type Step =
   | { kind: "choose" }
   | { kind: "code" }
-  /** 새로 시작 ① 이름 → ② 캐릭터(몸 모양·색) → ③ 채널. 계정에 이름이 없는 이어서·코드도 이 길로 */
-  | { kind: "name"; path: Path; draft: Look }
+  /** 새로 시작 ① 이름 → ② 캐릭터(몸 모양·색) → ③ 채널. 계정에 이름이 없는 이어서·코드도 이 길로.
+   *  takenName = 입장하려다 다른 계정이 먼저 쓴 이름이라 돌아왔다 (그 이름이면 "이미 있는 이름이에요.") */
+  | { kind: "name"; path: Path; draft: Look; takenName?: string }
   | { kind: "look"; path: Path; draft: Look }
   /** 이어서·코드: ① 계정 확인 → ② 채널 */
   | { kind: "account"; path: AccountPath }
@@ -218,6 +221,7 @@ function EntryFlow({ start, focusGraveId, onEnter }: Omit<Props, "entering" | "s
       return (
         <NameStep
           draft={step.draft}
+          takenName={step.takenName}
           onBack={back}
           onNext={(draft) => setStep({ kind: "look", path: step.path, draft })}
         />
@@ -239,6 +243,10 @@ function EntryFlow({ start, focusGraveId, onEnter }: Omit<Props, "entering" | "s
           onBack={back}
           onNext={(look) => setStep({ kind: "channel", path: step.path, look, custom: false })}
           onCustomize={() => setStep({ kind: "name", path: step.path, draft: freshDraft() })}
+          onRenamed={(me) => {
+            // 코드로 시작: 확인된 계정 정보를 새 이름으로 바꿔 둔다 (채널에서 [이전]으로 돌아와도 휴면 안내가 다시 뜨지 않게)
+            if (step.path.kind === "code") setStep({ kind: "account", path: { kind: "code", me } });
+          }}
         />
       );
     case "channel":
@@ -256,6 +264,7 @@ function EntryFlow({ start, focusGraveId, onEnter }: Omit<Props, "entering" | "s
             )
           }
           onEnter={onEnter}
+          onNameTaken={() => setStep({ kind: "name", path: step.path, draft: step.look, takenName: step.look.name })}
         />
       );
   }
@@ -301,18 +310,21 @@ function StepHeader({
 type DraftProps = { draft: Look; onNext: (look: Look) => void };
 
 /** 새로 시작 ① 이름 */
-function NameStep({ draft, onBack, onNext }: DraftProps & { onBack: () => void }) {
+function NameStep({ draft, takenName, onBack, onNext }: DraftProps & { takenName?: string; onBack: () => void }) {
   const [name, setName] = useState(draft.name);
   const [touched, setTouched] = useState(false);
   const nameId = useId();
   const check = checkName(name);
+  // 닉네임 중복: 입력 중 서버에 가볍게 미리 묻는다 (입장하려다 거절된 이름이면 바로 표시)
+  const takenNow = useNameTaken(name);
+  const taken = takenNow ?? (check.ok && check.name === takenName ? NAME_TAKEN_MESSAGE : null);
   // 첫 글자를 치는 중에는 길이 경고를 띄우지 않는다
-  const nameError = !check.ok && (touched || [...name].length >= 2) ? check.reason : null;
+  const nameError = (!check.ok && (touched || [...name].length >= 2) ? check.reason : null) ?? taken;
 
   function next(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setTouched(true);
-    if (check.ok) onNext({ ...draft, name: check.name });
+    if (check.ok && !taken) onNext({ ...draft, name: check.name });
   }
 
   return (
@@ -423,13 +435,17 @@ type AccountProps = {
   onNext: (look: Look) => void;
   /** 계정에 이름이 없다 → 새로 시작처럼 이름·모습을 정한다 */
   onCustomize: () => void;
+  /** 휴면에서 돌아와 닉네임을 다시 정했다 */
+  onRenamed: (me: Me) => void;
 };
 
 /** 이어서·코드 ① 계정에 저장된 이름·모습을 확인만 한다 */
-function AccountStep({ path, fallbackName, onBack, onNext, onCustomize }: AccountProps) {
+function AccountStep({ path, fallbackName, onBack, onNext, onCustomize, onRenamed }: AccountProps) {
   // 이어서 들어가기: 이 기기 계정의 저장된 모습 (없으면 이 기기에 남은 이름·색)
   const [account, setAccount] = useState<Me | null>(null);
   const [accountChecked, setAccountChecked] = useState(path.kind !== "continue");
+  // 휴면 계정이 닉네임을 다시 정한 뒤의 계정
+  const [renamed, setRenamed] = useState<Me | null>(null);
 
   useEffect(() => {
     if (path.kind !== "continue") return;
@@ -442,7 +458,8 @@ function AccountStep({ path, fallbackName, onBack, onNext, onCustomize }: Accoun
       .finally(() => setAccountChecked(true));
   }, [path.kind]);
 
-  const saved = lookOf(path.kind === "code" ? path.me : account, fallbackName);
+  const current = renamed ?? (path.kind === "code" ? path.me : account);
+  const saved = lookOf(current, fallbackName);
 
   function next(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -455,6 +472,20 @@ function AccountStep({ path, fallbackName, onBack, onNext, onCustomize }: Accoun
       <p className={styles.loading} role="status">
         계정을 확인하는 중…
       </p>
+    );
+  }
+
+  // 휴면(90일 넘게 안 들어옴)에서 돌아왔다: 닉네임을 다시 정해야 들어간다 (포인트·아이템·집·친구는 그대로)
+  if (current?.renameRequired) {
+    return (
+      <DormantRename
+        me={current}
+        onBack={onBack}
+        onDone={(me) => {
+          setRenamed(me);
+          onRenamed(me);
+        }}
+      />
     );
   }
 
@@ -481,6 +512,75 @@ function AccountStep({ path, fallbackName, onBack, onNext, onCustomize }: Accoun
   );
 }
 
+/** 휴면 계정 닉네임 다시 정하기. 옛 이름을 기본값으로 채운다 (아직 아무도 안 가져갔으면 그대로 다시 쓸 수 있다) */
+function DormantRename({ me, onBack, onDone }: { me: Me; onBack: () => void; onDone: (me: Me) => void }) {
+  const [name, setName] = useState(me.name ?? "");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const nameId = useId();
+  const check = checkName(name);
+  const taken = useNameTaken(name);
+  const nameError = (!check.ok && [...name].length > 0 ? check.reason : null) ?? taken ?? error;
+  const color = isAvatarColor(me.color) ? me.color : AVATAR_COLORS[0];
+  const body = me.body && isAvatarBody(me.body) ? me.body : undefined;
+
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!check.ok || taken || pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const res = await api.claimName(check.name);
+      meStore.set(res.me);
+      writeItem(LS.name, check.name);
+      onDone(res.me);
+    } catch (err) {
+      setError(errorMessage(err));
+      setPending(false);
+    }
+  }
+
+  return (
+    <form className={styles.form} onSubmit={submit} noValidate>
+      <StepHeader index={1} total={2} label="닉네임 다시 정하기" backLabel="처음으로" onBack={onBack} />
+      <p className={ui.hint} role="status">
+        {DORMANT_RENAME_MESSAGE}
+      </p>
+      <div className={ui.field}>
+        <label htmlFor={nameId} className={ui.label}>
+          이름
+        </label>
+        <div className={styles.nameRow}>
+          <span className={styles.avatar}>
+            <AvatarSprite color={avatarColorSpec(color, me.dye)} body={body} scale={2} />
+          </span>
+          <input
+            id={nameId}
+            className={ui.input}
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setError(null);
+            }}
+            placeholder="묘지에서 불릴 이름"
+            autoComplete="nickname"
+            spellCheck={false}
+            aria-invalid={nameError !== null}
+            aria-describedby={`${nameId}-hint`}
+            autoFocus
+          />
+        </div>
+        <p id={`${nameId}-hint`} className={nameError ? ui.error : ui.hint}>
+          {nameError ?? "포인트·아이템·집·친구는 그대로예요. 2~12자 · 한글, 영문, 숫자, 공백, _"}
+        </p>
+      </div>
+      <button type="submit" className={cx(ui.button, ui.primary, styles.enter)} disabled={pending}>
+        {pending ? "확인하는 중…" : "이 이름으로 정하기"}
+      </button>
+    </form>
+  );
+}
+
 type ChannelProps = {
   path: Path;
   look: Look;
@@ -489,10 +589,12 @@ type ChannelProps = {
   sharedChannel: number | null;
   onBack: () => void;
   onEnter: (choice: EntryChoice) => void;
+  /** 들어가려던 이름을 다른 계정이 먼저 쓰고 있다 → 이름 단계로 돌아간다 */
+  onNameTaken: () => void;
 };
 
 /** ② 채널 목록 → 입장. 세 길이 같은 화면을 쓰고, 버튼 문구만 다르다 */
-function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter }: ChannelProps) {
+function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter, onNameTaken }: ChannelProps) {
   const [channel, setChannel] = useState<ChannelChoice>("auto");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -535,14 +637,24 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter }: Cha
       const fresh = path.kind === "new" && existing !== null;
       await api.startSession(fresh);
       if (fresh) meStore.reset();
+      // 닉네임 중복 금지: 계정에 이름이 없으면 이 이름을 먼저 등록한다 (다른 계정이 쓰면 이름 단계로).
+      // 이미 이름이 있는 계정이면 그대로 둔다 — 마을에서는 계정 이름으로 보인다
+      await api.claimName(look.name).catch((err: unknown) => {
+        if (err instanceof ApiRequestError && err.code === "NAME_ALREADY_SET") return;
+        throw err;
+      });
       const target = sharedChannel ?? channel;
       // 들어갈 채널 묘지를 미리 받아 둔다 (자동 배정은 서버와 같은 규칙으로 짐작)
       prefetchGraves(typeof target === "number" ? target : (lobby.lobby && pickChannel(lobby.lobby)) || 1);
       onEnter({ ...look, channel: target });
     } catch (err) {
       if (!wasPlaying) bgm.pause();
-      setError(errorMessage(err));
       setPending(false);
+      if (err instanceof ApiRequestError && err.code === "NAME_TAKEN") {
+        onNameTaken();
+        return;
+      }
+      setError(errorMessage(err));
     }
   }
 

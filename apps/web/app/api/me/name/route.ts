@@ -1,3 +1,4 @@
+import { NAME_TAKEN_MESSAGE } from "@tomb/protocol";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
@@ -21,6 +22,8 @@ export const POST = handler(async (req) => {
     const retry = String(Math.ceil((r.nextAllowedAt - now) / 1000));
     throw new HttpError(429, "NAME_COOLDOWN", "닉네임은 7일에 한 번만 바꿀 수 있어요.", { "Retry-After": retry, "X-Next-Allowed-At": String(r.nextAllowedAt) });
   }
+  // 닉네임 중복 금지: 다른 계정이 쓰는 이름(비교 키가 같은 이름 포함)이면 포인트·대기 기간을 쓰지 않고 거절
+  if (!r.ok && r.reason === "taken") throw new HttpError(409, "NAME_TAKEN", NAME_TAKEN_MESSAGE);
   if (!r.ok) throw new HttpError(409, "NOT_ENOUGH_POINTS", "포인트가 모자라요.");
   return json<NameChangeResponse>({ me: await loadMe(accounts, visitorId, now), cost: r.cost, nextAllowedAt: now + NAME_CHANGE_COOLDOWN_MS });
 });

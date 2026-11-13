@@ -1,5 +1,5 @@
 import { findBan } from "./ban";
-import { lookScore, topParts, type LookScoreInput } from "./lookScore";
+import { lookScore, wornParts, type LookScoreInput } from "./lookScore";
 import { staffAccountId } from "./staff";
 import { getAccounts, NO_NAME } from "./store";
 import { getLookRankStore, type LookRankStore, type LookState } from "./store/lookRank";
@@ -11,7 +11,7 @@ import type { RankRow } from "./types";
 //    (기록된 점수는 만료로 줄어들 뿐이라 "남은 후보의 기록 점수 ≤ 바로잡은 N위 점수"가 될 때까지만 더 읽는다)
 //  - 운영자(lib/staffRank 규칙: 목록에 없고, 본인이 보면 mine = null · staff)·정지 계정은 목록에서 뺀다
 
-/** 순위 판 한 줄 (대표 파츠 아이콘용 items 포함) */
+/** 순위 판 한 줄 (지금 착용한 파츠 전부 — 아이콘용 items, lookScore.wornParts) */
 export type LookRankRow = RankRow & { accountId: string };
 type Cand = { accountId: string; name: string; score: number; items: string[]; order: number };
 
@@ -73,7 +73,7 @@ async function correctedBoard(store: LookRankStore, size: number, now: number, s
       // 만료·누락으로 달라진 기록은 그 자리에서 바로잡는다 (정지 계정은 기록은 두고 목록에서만 뺀다 — 해제되면 돌아온다)
       if (score !== t.score) fixes.push([t.accountId, score]);
       if (!st || score <= 0 || bannedSet.has(t.accountId)) return;
-      rows.push({ accountId: t.accountId, name: st.name ?? NO_NAME, score, items: topParts(st, now), order: offset + i });
+      rows.push({ accountId: t.accountId, name: st.name ?? NO_NAME, score, items: wornParts(st, now), order: offset + i });
     });
     rows.sort(byScore);
     if (top.length < batch) break;
@@ -121,7 +121,7 @@ export async function lookRank(me: string | null, size: number, opts: LookRankOp
   const banned = myScore > 0 && (await isBanned(me));
   await store.put(me, myScore).catch(() => undefined);
   let list = board.filter((c) => c.accountId !== me);
-  const myCand: Cand | null = st && myScore > 0 && !banned ? { accountId: me, name: st.name ?? NO_NAME, score: myScore, items: topParts(st, now), order: -1 } : null;
+  const myCand: Cand | null = st && myScore > 0 && !banned ? { accountId: me, name: st.name ?? NO_NAME, score: myScore, items: wornParts(st, now), order: -1 } : null;
   if (myCand) {
     const at = list.findIndex((c) => c.score < myScore);
     list = at < 0 ? [...list, myCand] : [...list.slice(0, at), myCand, ...list.slice(at)];

@@ -145,6 +145,8 @@ export type AccountRecord = {
   nameChangedAt: number;
   nameChanges: number;
   tutorialDone: boolean;
+  /** 휴면(DORMANT_DAYS일 넘게 안 들어옴)에서 돌아왔다 → 닉네임을 다시 정해야 마을에 들어갈 수 있다 */
+  renameRequired: boolean;
 };
 
 /** 내 소식 보관 개수 */
@@ -152,7 +154,22 @@ export const ACTIVITY_KEEP = 50;
 /** 경제 통계 보관 기간 */
 export const ECON_TTL_SEC = 90 * 86_400;
 /** 닉네임 변경 결과. cooldown이면 다음 가능 시각, points면 포인트 부족 */
-export type NameChangeResult = { ok: true; cost: number } | { ok: false; reason: "cooldown"; nextAllowedAt: number } | { ok: false; reason: "points" };
+export type NameChangeResult =
+  | { ok: true; cost: number }
+  | { ok: false; reason: "cooldown"; nextAllowedAt: number }
+  | { ok: false; reason: "points" }
+  | { ok: false; reason: "taken" };
+
+/**
+ * 휴면 기준: 마지막 접속(입장 seenAt·머무르기 presenceAt·처음 입장 createdAt 중 가장 늦은 것)에서 이만큼 넘게 지나면
+ * 그 계정이 차지한 이름을 다른 사람이 가져갈 수 있고, 돌아오면 닉네임을 다시 정한다. 접속 기록이 전혀 없는 옛 계정은 휴면으로 보지 않는다
+ */
+export const DORMANT_DAYS = 90;
+export const DORMANT_MS = DORMANT_DAYS * 86_400_000;
+/** 이름 등록 결과: ok = 이 계정 이름이 됐다, taken = 다른 계정이 쓰는 이름, has = 이미 이름이 있다(휴면 재설정 대상도 아님) */
+export type NameClaimResult = "ok" | "taken" | "has";
+/** 입장·확인 때 계정 상태: renameRequired = 휴면에서 돌아와 닉네임을 다시 정해야 한다 */
+export type VisitResult = { renameRequired: boolean };
 
 /** 날짜 인자는 모두 KST 기준 `YYYYMMDD` (lib/store/accounts.ts의 kstDay). 포인트·가방 변화는 모두 원자적이다 */
 export interface AccountStore {
@@ -192,7 +209,8 @@ export interface AccountStore {
   ): Promise<{ rows: RankEntry[]; mine: RankEntry | null }>;
   /**
    * 입장 기록: 이름·색·몸 모양은 계정에 아직 값이 없을 때만 저장한다 (코드로 시작·이어서 들어온 기기의 다른 값이
-   * 덮어쓰지 않게). 처음 입장한 시각도 한 번만 남긴다. 포인트는 주지 않는다 (10번: 출석은 달력에서 받는다)
+   * 덮어쓰지 않게). 이름은 이름 색인과 함께 등록하고, 다른 계정이 쓰는 이름이면 저장하지 않는다.
+   * 처음 입장한 시각도 한 번만 남긴다. 포인트는 주지 않는다 (10번: 출석은 달력에서 받는다)
    */
   enter(id: string, profile: Profile, now: number): Promise<void>;
   /**
@@ -265,6 +283,22 @@ export interface AccountStore {
    * 묘비의 상주 이름은 그대로 두고, 계정 이름(랭킹 표시명)만 바뀐다
    */
   changeName(id: string, name: string, now: number, price: number, cooldownMs: number): Promise<NameChangeResult>;
+
+  // ── 닉네임 중복 금지 (이름 색인: nameKey → 계정 id). 등록·변경·휴면 점유 교체는 모두 원자적이다 ──
+  /** 그 이름(비교 키)을 지금 쓰는 계정. 점유자가 휴면이면 null (가져갈 수 있다) */
+  nameOwner(key: string, now: number): Promise<string | null>;
+  /**
+   * 계정에 이름이 없거나 휴면 재설정 중일 때 그 이름으로 등록한다 (색인 등록·계정 이름 저장이 한 번에, 무료·쿨다운 없음).
+   * 다른 계정이 쓰는 이름이면 taken (점유자가 휴면이면 가져온다). 등록하면 마지막 입장 시각도 now로
+   */
+  claimName(id: string, name: string, now: number): Promise<NameClaimResult>;
+  /**
+   * 입장·계정 확인 때: 휴면이면 재설정 표시를 남기고 그 계정이 차지한 이름 색인을 푼다. touch면(마을에 들어올 때) 마지막 입장 시각을 now로.
+   * 색인에 없는 옛 계정 이름은 여기서 색인에 채운다 (이미 다른 계정이 차지했으면 이름은 그대로 두고 nameDup 표시만)
+   */
+  visit(id: string, now: number, touch: boolean): Promise<VisitResult>;
+  /** 관리자 일괄 색인: cursor부터 계정 몇 개를 훑어 색인에 채운다. next = "0"이면 끝 */
+  reindexNames(cursor: string, count: number, now: number): Promise<{ next: string; indexed: number; dup: number }>;
   setTutorialDone(id: string): Promise<void>;
   /** 날짜(YYYYMMDD)별 경제 통계 필드: `earn:{source}`, `spend:{분류}`, `refund` (운영자 계정 활동은 ECON_STAFF_EXCLUDED_FROM부터 빠져 있다) */
   economy(days: string[]): Promise<{ date: string; fields: Record<string, number> }[]>;

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { ITEMS, PERMANENT_MULTIPLIER, PERMANENT_UNTIL, withDyeSpecial } from "@tomb/protocol";
-import { bodyLookScore, DYE_SPECIAL_BONUS, itemLookScore, itemLookValue, LOOK_SCORE_DIVISOR, lookScore, topParts, valueScore } from "./lookScore";
+import { ITEMS, PERMANENT_MULTIPLIER, PERMANENT_UNTIL, PREMIUM_BODIES, withDyeSpecial } from "@tomb/protocol";
+import { bodyIconGrid } from "@/game/sprites/bodyIcons";
+import { hasItemIcon } from "@/game/sprites/itemIcons";
+import { BODY_PART_PREFIX, bodyLookScore, DYE_SPECIAL_BONUS, itemLookScore, itemLookValue, LOOK_SCORE_DIVISOR, LOOK_SLOT_ORDER, lookPartName, lookScore, valueScore, wornParts } from "./lookScore";
 
 // 꾸미기 점수: 지금 입은(만료 전) 코디 파츠의 가치 비례 점수 합 + 프리미엄 외형 + 특수 염색 보너스
 
@@ -45,7 +47,7 @@ describe("가치 비례 점수 (영구 소장 기준 가치 ÷ 5, 1점 단위)",
     expect(lookScore({ equipped, body: "king" }, NOW)).toBe(308 + 1000);
     expect(lookScore({ equipped, dye: { head: withDyeSpecial("#ff0000", "g"), body: "#00ff00", accent: withDyeSpecial("#0000ff", "r") } }, NOW)).toBe(308 + 2 * DYE_SPECIAL_BONUS);
     expect(DYE_SPECIAL_BONUS).toBe(10);
-    expect(topParts({ equipped }, NOW)).toEqual(["pet_cat", "hat_halo"]);
+    expect(wornParts({ equipped }, NOW)).toEqual(["hat_halo", "pet_cat"]);
   });
 });
 
@@ -58,7 +60,8 @@ describe("기간제가 끝나면 점수도 사라진다", () => {
     expect(lookScore({ equipped }, NOW)).toBe(384 + 48);
     expect(lookScore({ equipped }, NOW + HOUR)).toBe(48);
     expect(lookScore({ equipped }, NOW + 2 * HOUR)).toBe(0);
-    expect(topParts({ equipped }, NOW + 2 * HOUR)).toEqual([]);
+    expect(wornParts({ equipped }, NOW + HOUR)).toEqual(["neck_scarf"]);
+    expect(wornParts({ equipped }, NOW + 2 * HOUR)).toEqual([]);
   });
 
   it("같은 부위는 하나만 센다", () => {
@@ -67,5 +70,53 @@ describe("기간제가 끝나면 점수도 사라진다", () => {
       { itemId: "hat_cat", until: NOW + HOUR },
     ];
     expect(lookScore({ equipped }, NOW)).toBe(384);
+  });
+});
+
+describe("랭킹 한 줄의 착용 파츠 (빠짐없이, 부위 순)", () => {
+  it("모든 부위를 점수와 상관없이 머리 → 목 → 등 → 손 → 오라 → 발 → 펫 → 프리미엄 외형 순으로", () => {
+    const equipped = [
+      { itemId: "neck_tie", until: NOW - 1 }, // 끝난 이용권은 빼고, 그 부위의 다음 착용품을 쓴다
+      { itemId: "pet_cat", until: PERMANENT_UNTIL },
+      { itemId: "feet_flowers", until: NOW + HOUR },
+      { itemId: "aura_fog", until: NOW + HOUR },
+      { itemId: "hand_lantern", until: NOW + HOUR },
+      { itemId: "back_wings", until: NOW + HOUR },
+      { itemId: "neck_scarf", until: NOW + HOUR },
+      { itemId: "hat_halo", until: NOW + HOUR },
+      { itemId: "hat_cat", until: NOW + HOUR }, // 같은 부위 둘째는 뺀다
+    ];
+    expect(wornParts({ equipped, body: "king" }, NOW)).toEqual([
+      "hat_halo",
+      "neck_scarf",
+      "back_wings",
+      "hand_lantern",
+      "aura_fog",
+      "feet_flowers",
+      "pet_cat",
+      `${BODY_PART_PREFIX}king`,
+    ]);
+    // 처음 6종 몸은 외형 아이콘을 붙이지 않는다
+    expect(wornParts({ equipped: [], body: "hood" }, NOW)).toEqual([]);
+    expect(lookPartName("neck_scarf")).toBe("빨간 목도리");
+    expect(lookPartName(`${BODY_PART_PREFIX}king`)).toBe("왕관 유령");
+  });
+
+  it("꾸미기 부위는 전부 순서가 정해져 있고, 모든 꾸미기·프리미엄 외형에 아이콘이 있다", () => {
+    for (const it of ITEMS) {
+      if (it.kind !== "cosmetic") continue;
+      expect(it.slot, it.id).toBeDefined();
+      expect(LOOK_SLOT_ORDER[it.slot!], it.id).toBeTypeOf("number");
+      expect(hasItemIcon(it.id), it.id).toBe(true);
+      expect(lookPartName(it.id), it.id).not.toBe(it.id);
+    }
+    for (const b of PREMIUM_BODIES) {
+      const id = `${BODY_PART_PREFIX}${b.id}`;
+      expect(hasItemIcon(id), id).toBe(true);
+      const g = bodyIconGrid(id)!;
+      expect([g.w, g.h]).toEqual([16, 16]);
+      expect(g.px.filter((p) => (p & 255) > 0).length, id).toBeGreaterThan(60);
+    }
+    expect(bodyIconGrid(`${BODY_PART_PREFIX}hood`)).toBeNull();
   });
 });

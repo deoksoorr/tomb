@@ -167,17 +167,33 @@ li:nth-child(-n + 3) .rank {
   font-size: 10px;
 }
 
-/* 꾸미기 랭킹: 대표 파츠 아이콘 (점수 높은 순 최대 3개) */
+/* 사냥 레벨 랭킹: 장착 무기 아이콘 */
 .parts {
   display: inline-flex;
   flex: none;
   gap: 2px;
 }
 
+/* 꾸미기 랭킹: 이름 아래 줄에 지금 착용한 파츠 전부 (부위 순, 16px 같은 크기 — 넘치면 다음 줄로) */
+.worn {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 3px;
+}
+
+.wornIcon {
+  display: flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
 .pointRow {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0; /* 좁은 화면: 줄이 창보다 넓어지지 않게 (이름은 말줄임, 착용 아이콘은 다음 줄로) */
   min-height: 36px;
   padding: 6px 8px;
   color: var(--text);

@@ -5,6 +5,7 @@ import { ghostCat, miniLantern } from "./extras";
 import { forageIconCanvas, isForageIcon } from "./forageIcons";
 import { GRAVE_STONE_H, graveCanvas } from "./graves";
 import { MEGAPHONE_ICON_IDS, megaphoneIcon } from "./megaphoneIcon";
+import { bodyIconGrid, isBodyIconId } from "./bodyIcons";
 import { DYE_ICON_IDS, dyeIcon } from "./dyeIcons";
 import { Grid, type Color } from "./pixel";
 
@@ -918,7 +919,7 @@ function base(itemId: string): HTMLCanvasElement {
       return fwWaterfall().toCanvas();
     default: {
       // F8 추가 꾸미기 (시트 그림 → 문자 아이콘, 따로 그리는 연출 → 그 그림으로 만든 아이콘)
-      const f8 = gearIcon(itemId) ?? fxIconGrid(itemId) ?? megaphoneIcon(itemId) ?? dyeIcon(itemId);
+      const f8 = gearIcon(itemId) ?? fxIconGrid(itemId) ?? megaphoneIcon(itemId) ?? dyeIcon(itemId) ?? bodyIconGrid(itemId);
       if (f8) return f8.toCanvas();
       // 낚시·채집물 (4·32번: f_/b_/h_/o_/d_)
       return forageIconCanvas(itemId) ?? unknown().toCanvas();
@@ -943,13 +944,13 @@ export const ICON_IDS: readonly string[] = [
   ...DYE_ICON_IDS,
 ];
 
-/** 이 아이템에 전용 아이콘이 있는지 (없으면 물음표 아이콘) */
+/** 이 아이템에 전용 아이콘이 있는지 (없으면 물음표 아이콘). 꾸미기 랭킹의 프리미엄 외형("body:{id}")도 그림이 있다 */
 export function hasItemIcon(itemId: string): boolean {
   if (itemId.startsWith("gs_")) {
     const shape = itemId.slice(3) as GraveShape;
     return shape in GRAVE_STONE_H && isPaidShape(shape);
   }
-  return ICON_IDS.includes(itemId) || isForageIcon(itemId);
+  return ICON_IDS.includes(itemId) || isForageIcon(itemId) || isBodyIconId(itemId);
 }
 
 /** 아이콘 원본 크기: 묘비 디자인권은 32, 나머지는 16 */

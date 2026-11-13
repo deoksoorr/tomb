@@ -44,6 +44,8 @@ type Props = {
   giftCount?: number;
   /** 친구: 받은 친구 신청 수 (빨간 점) */
   friendIncoming?: number;
+  /** 운영자 계정: 친구 기능을 쓸 수 없어 친구 타일을 뺀다 */
+  noFriends?: boolean;
   onPick: (target: MenuTarget) => void;
   onClose: () => void;
 };
@@ -76,6 +78,7 @@ export default function MenuSheet({
   calendarReady = false,
   giftCount = 0,
   friendIncoming = 0,
+  noFriends = false,
   onPick,
   onClose,
 }: Props) {
@@ -103,14 +106,18 @@ export default function MenuSheet({
       badge: giftCount ? String(giftCount) : undefined,
       redDot: giftCount > 0,
     },
-    {
-      target: "friends",
-      icon: "friends",
-      label: "친구",
-      desc: friendIncoming > 0 ? `받은 친구 신청 ${friendIncoming}개` : "친구 위치·가기·집 놀러 가기",
-      badge: friendIncoming ? String(friendIncoming) : undefined,
-      redDot: friendIncoming > 0,
-    },
+    ...(noFriends
+      ? []
+      : [
+          {
+            target: "friends" as const,
+            icon: "friends" as const,
+            label: "친구",
+            desc: friendIncoming > 0 ? `받은 친구 신청 ${friendIncoming}개` : "친구 위치·가기·집 놀러 가기",
+            badge: friendIncoming ? String(friendIncoming) : undefined,
+            redDot: friendIncoming > 0,
+          },
+        ]),
     { target: "activity", icon: "heart", label: "내 소식", desc: "헌화·방명록·좋아요 소식", badge: activityUnread ? String(activityUnread) : undefined },
     { target: "ranking", icon: "list", label: "랭킹", desc: "포인트·사냥·집·헌화 순위" },
     { target: "notices", icon: "bell", label: "공지", desc: unreadNotice ? "새 공지가 있어요" : "업데이트·점검 소식", dot: unreadNotice },

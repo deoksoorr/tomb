@@ -383,11 +383,31 @@
   border-radius: 50%;
 }
 
-/* 궁극기: 모서리를 깎은 큰 칸 */
+/* 궁극기: 큰 칸 + 바깥에 모서리를 깎은 금테.
+   깎은 모양(clip-path)은 테(::before)에만 건다 — 아이콘 칸에 걸면 칸 밖으로 나온 랭크·단축 번호 배지까지 잘려 숫자가 안 보인다 */
 .node[data-ult] .icon {
   width: 64px;
   height: 64px;
-  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
+}
+
+.node[data-ult] .icon::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border: 2px solid color-mix(in srgb, var(--candle) 75%, transparent);
+  clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px);
+  pointer-events: none;
+}
+
+/* 배지는 테 위에 */
+.node[data-ult] .rank,
+.node[data-ult] .key {
+  z-index: 1;
+}
+
+/* 궁극기 이름은 테 아래로 조금 더 내려서 겹치지 않게 */
+.node[data-ult] .nodeName {
+  margin-top: 14px;
 }
 
 .node[data-state="locked"] .icon {

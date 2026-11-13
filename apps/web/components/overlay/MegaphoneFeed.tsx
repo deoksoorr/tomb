@@ -67,16 +67,18 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
               {e.scope === "all" && <span className={styles.all}>전체</span>}
               <b className={cx(styles.name, e.staff && styles.staff)}>{e.name}</b>
               <span className={styles.text}>{e.text}</span>
-              {/* 47번 확성기 신고 */}
-              <button
-                type="button"
-                className={styles.report}
-                aria-label={`${e.name}의 확성기 신고`}
-                title="신고"
-                onClick={() => reportStore.open({ type: "megaphone", id: e.id, name: e.name, text: e.text })}
-              >
-                신고
-              </button>
+              {/* 47번 확성기 신고 (운영자 확성기는 신고 대상이 아니라 버튼이 없다) */}
+              {!e.staff && (
+                <button
+                  type="button"
+                  className={styles.report}
+                  aria-label={`${e.name}의 확성기 신고`}
+                  title="신고"
+                  onClick={() => reportStore.open({ type: "megaphone", id: e.id, name: e.name, text: e.text })}
+                >
+                  신고
+                </button>
+              )}
             </li>
           ))}
         </ol>

@@ -26,6 +26,10 @@ type WorldLike = Phaser.Scene & {
   reduced?: boolean;
   player?: { view: { wearing: readonly string[]; bodyId: string } };
   onAction?: (a: KeyAction) => void;
+  /** 유령 잡화점 안이면 나온다 (상점에서 친구 창의 [집 놀러 가기]를 눌렀을 때) */
+  exitShop?: () => void;
+  /** 그 번지 집 문 앞으로 (WorldScene.standAtHouseDoor) */
+  standAtHouseDoor?: (lot: number) => void;
 };
 
 type Where = { at: "village" } | { at: "house"; from: "world" | "village"; lot: number } | null;
@@ -40,7 +44,10 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
 
   const hideWorld = (): boolean => {
     const w = game.scene.getScene("world") as WorldLike | null;
-    if (!w || !w.scene.isActive() || !w.hub || !w.atlas || ctx.disposed || w.inShop) return false;
+    if (!w || !w.scene.isActive() || !w.hub || !w.atlas || ctx.disposed) return false;
+    // 상점 안에서 집으로 바로 (친구 창 [집 놀러 가기]·[친구한테 가기]): 상점에서 먼저 나온다. 예전엔 여기서 멈춰 집 HUD만 떠 있고 들어가지지 않았다
+    if (w.inShop) w.exitShop?.call(w);
+    if (w.inShop) return false;
     w.inShop = true; // 월드의 입력·탭 처리를 멈추고 캐릭터를 세운다 (상점과 같은 경로)
     if (w.rig) w.rig.enabled = false;
     w.scene.setVisible(false);
@@ -95,6 +102,11 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
     bridge.emit("scene:changed", { scene: "house", place: "village" });
   };
 
+  /** 월드의 내 캐릭터를 그 번지 집 문 앞으로 (월드에서 들어온 집만. 2단지 번지는 메인 맵에 없어 그대로) */
+  const toDoor = (w: WorldLike | null, lot: number) => {
+    if (w?.standAtHouseDoor) w.standAtHouseDoor.call(w, lot);
+  };
+
   const exitHouse = () => {
     if (where?.at !== "house") return;
     const { from, lot } = where;
@@ -103,17 +115,26 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
       runVillage(lastVillage, lot);
       bridge.emit("house:left", { to: "village" });
     } else {
+      // 나오면 언제나 그 집 문 앞 (들어가기 전 자리로 순간이동하지 않게)
+      toDoor(world, lot);
       showWorld();
       bridge.emit("house:left", { to: "world" });
     }
   };
 
   const enterHouse = (house: PublicHouse, mine: boolean, edit: boolean) => {
-    if (!where && !hideWorld()) return;
+    if (!where && !hideWorld()) {
+      // 들어갈 수 없으면 UI(집 HUD)도 닫는다 — 들어가지도 못했는데 위쪽 집 막대만 남아 닫히지 않던 문제
+      bridge.emit("house:left", { to: "world" });
+      bridge.emit("toast", { message: "지금은 집에 들어갈 수 없어요. 잠시 뒤 다시 해 주세요." });
+      return;
+    }
     const from = where?.at === "village" ? "village" : where?.at === "house" ? where.from : "world";
     stopAll();
     const data: HouseSceneData = { ...base(), house, mine, editing: edit, onExit: exitHouse };
     where = { at: "house", from, lot: house.lot };
+    // 월드에서 들어온 집: 숨은 월드 캐릭터를 미리 문 앞에 세워 둔다 (새로고침 복원도 문 앞으로)
+    if (from === "world") toDoor(world, house.lot);
     game.scene.run("house", data);
     bridge.emit("scene:changed", { scene: "house", place: "house", houseId: house.id });
   };
@@ -140,6 +161,8 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
       const s = game.scene.getScene("house") as HouseScene | null;
       if (where?.at === "house" && s?.scene.isActive()) s.leave();
       else if (where?.at === "house") exitHouse();
+      // 게임은 집에 없는데 UI만 집 HUD를 띄우고 있다 → UI도 닫게 알린다
+      else if (!where) bridge.emit("house:left", { to: "world" });
     }),
     bridge.on("house:data", ({ house }) => {
       const s = game.scene.getScene("house") as HouseScene | null;

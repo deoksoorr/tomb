@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { nanoid } from "nanoid";
 import { afterEach, describe, expect, it } from "vitest";
+import { nameKey } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, type EarnSource } from "../economy";
 import { env } from "../env";
 import type { Grave } from "../types";
@@ -10,7 +11,7 @@ import { RedisAccounts } from "./accounts-redis";
 import { K } from "./keys";
 import { MemoryStore } from "./memory";
 import { RedisStore } from "./redis";
-import { PRESENCE_MIN_GAP_MS, type AccountStore, type GraveStore } from "./types";
+import { DORMANT_MS, PRESENCE_MIN_GAP_MS, type AccountStore, type GraveStore } from "./types";
 
 type Kit = {
   graves: GraveStore;
@@ -18,6 +19,9 @@ type Kit = {
   setPoints(id: string, n: number): Promise<void>;
   /** 달력 개편 전 계정처럼 마지막 출석일·연속 일수만 넣는다 */
   setLegacyAttend(id: string, lastAttend: string, streak: number): Promise<void>;
+  /** 이름 색인을 만들기 전 계정처럼 이름만 넣는다 (색인·마지막 입장 기록 없음) */
+  setLegacyName(id: string, name: string): Promise<void>;
+  /** 테스트 계정이 차지한 이름 색인도 함께 지운다 */
   cleanup(ids: string[]): Promise<void>;
 };
 
@@ -538,6 +542,141 @@ function contract(make: () => Kit) {
     expect(a.name).toMatch(/^이름\d$/);
   });
 
+  // ── 닉네임 중복 금지 (이름 색인) ──
+  const T0 = Date.parse("2026-11-08T03:00:00Z");
+  const DAY_MS = 86_400_000;
+  const WEEK_MS = 7 * DAY_MS;
+  /** 실제 Redis에서 다른 실행이 남긴 색인과 겹치지 않게 이름마다 꼬리표 */
+  const tagged = (base: string) => `${base}${nanoid(4).replace(/[^A-Za-z0-9]/g, "z")}`;
+
+  it("이름 중복: 비교 키가 같은 이름(공백·_·대소문자 차이)은 등록·입장·변경 모두 거절, 내 이름은 그대로", async () => {
+    const [a, b] = [newId(), newId()];
+    const name = tagged("홍길동");
+    expect(await accounts.claimName(a, name, T0)).toBe("ok");
+    expect(await accounts.nameOwner(nameKey(name), T0)).toBe(a);
+    const lookalike = `홍 길_동 ${name.slice(3).toUpperCase()}`;
+    expect(nameKey(lookalike)).toBe(nameKey(name));
+    expect(await accounts.claimName(b, lookalike, T0)).toBe("taken");
+    await accounts.enter(b, { name: lookalike, color: "#9fc5a8" }, T0);
+    expect(await accounts.get(b, DAY, T0)).toMatchObject({ name: null, color: "#9fc5a8" });
+    // 변경도 거절: 포인트·쿨다운·횟수를 쓰지 않는다
+    expect(await accounts.changeName(b, lookalike, T0, 100, WEEK_MS)).toEqual({ ok: false, reason: "taken" });
+    expect(await accounts.get(b, DAY, T0)).toMatchObject({ nameChanges: 0, nameChangedAt: 0 });
+    // 이미 내 이름이면 ok, 이름이 있는 계정의 다른 등록은 has
+    expect(await accounts.claimName(a, name, T0)).toBe("ok");
+    expect(await accounts.claimName(a, tagged("딴이름"), T0)).toBe("has");
+  });
+
+  it("이름 중복: 같은 이름 동시 등록·동시 변경은 하나만 성공", async () => {
+    const ids = [newId(), newId(), newId(), newId()];
+    const name = tagged("동시");
+    const claims = await Promise.all(ids.map((id) => accounts.claimName(id, name, T0)));
+    expect(claims.filter((r) => r === "ok")).toHaveLength(1);
+    expect(claims.filter((r) => r === "taken")).toHaveLength(3);
+    const winner = ids[claims.indexOf("ok")];
+    expect(await accounts.nameOwner(nameKey(name), T0)).toBe(winner);
+
+    const others = ids.filter((id) => id !== winner);
+    const target = tagged("바꿀");
+    const changes = await Promise.all(others.map((id) => accounts.changeName(id, target, T0, 0, WEEK_MS)));
+    expect(changes.filter((r) => r.ok)).toHaveLength(1);
+    expect(changes.filter((r) => !r.ok && r.reason === "taken")).toHaveLength(2);
+  });
+
+  it("이름 중복: 이름을 바꾸면 옛 이름은 풀려서 다른 계정이 쓸 수 있다", async () => {
+    const [a, b] = [newId(), newId()];
+    const [x, y] = [tagged("옛이름"), tagged("새이름")];
+    expect(await accounts.claimName(a, x, T0)).toBe("ok");
+    expect(await accounts.changeName(a, y, T0, 100, WEEK_MS)).toEqual({ ok: true, cost: 0 });
+    expect(await accounts.nameOwner(nameKey(x), T0)).toBeNull();
+    expect(await accounts.nameOwner(nameKey(y), T0)).toBe(a);
+    expect(await accounts.claimName(b, x, T0)).toBe("ok");
+    expect((await accounts.get(a, DAY, T0)).name).toBe(y);
+  });
+
+  it("이름 중복: 기존 중복 계정은 이름을 그대로 두고(먼저 확인된 계정이 색인), 새로 그 이름을 쓰는 건 막는다", async () => {
+    const [a, b, c] = [newId(), newId(), newId()];
+    const name = tagged("겹친이름");
+    const same = name.toUpperCase(); // 비교 키가 같은 옛 이름
+    await kit.setLegacyName(a, name);
+    await kit.setLegacyName(b, same);
+    // 다음 입장·계정 확인 때 색인을 채운다: a가 먼저 → a 차지, b는 이름 그대로(표시만)
+    expect(await accounts.visit(a, T0, true)).toEqual({ renameRequired: false });
+    expect(await accounts.visit(b, T0, false)).toEqual({ renameRequired: false });
+    expect(await accounts.nameOwner(nameKey(name), T0)).toBe(a);
+    expect((await accounts.get(b, DAY, T0)).name).toBe(same);
+    expect(await accounts.claimName(c, name, T0)).toBe("taken");
+    // b가 다른 이름으로 바꿔도 a의 색인은 그대로
+    const other = tagged("비켜줌");
+    expect(await accounts.changeName(b, other, T0, 100, WEEK_MS)).toEqual({ ok: true, cost: 0 });
+    expect(await accounts.nameOwner(nameKey(name), T0)).toBe(a);
+    expect(await accounts.nameOwner(nameKey(other), T0)).toBe(b);
+  });
+
+  it("이름 중복: 관리자 일괄 색인은 색인에 없는 옛 계정 이름을 채운다 (겹치면 표시만)", async () => {
+    const [a, b] = [newId(), newId()];
+    const name = tagged("일괄");
+    await kit.setLegacyName(a, name);
+    await kit.setLegacyName(b, name);
+    let cursor = "0";
+    let dup = 0;
+    for (let i = 0; i < 10_000; i++) {
+      const r = await accounts.reindexNames(cursor, 500, T0);
+      dup += r.dup;
+      cursor = r.next;
+      if (cursor === "0") break;
+    }
+    expect([a, b]).toContain(await accounts.nameOwner(nameKey(name), T0));
+    expect(dup).toBeGreaterThanOrEqual(1);
+    expect((await accounts.get(a, DAY, T0)).name).toBe(name);
+    expect((await accounts.get(b, DAY, T0)).name).toBe(name);
+  });
+
+  it("휴면: 89일이면 이름을 지키고, 91일이면 다른 계정이 가져가며, 돌아오면 닉네임을 다시 정해야 한다 (나머지 데이터는 그대로)", async () => {
+    const [a, b] = [newId(), newId()];
+    const [x, z] = [tagged("휴면"), tagged("다시")];
+    expect(DORMANT_MS).toBe(90 * DAY_MS);
+    expect(await accounts.claimName(a, x, T0)).toBe("ok");
+    await kit.setPoints(a, 30);
+    // 89일: 그대로 a의 것
+    const d89 = T0 + 89 * DAY_MS;
+    expect(await accounts.nameOwner(nameKey(x), d89)).toBe(a);
+    expect(await accounts.claimName(b, x, d89)).toBe("taken");
+    expect(await accounts.changeName(b, x, d89, 0, WEEK_MS)).toEqual({ ok: false, reason: "taken" });
+    expect(await accounts.visit(a, d89, false)).toEqual({ renameRequired: false });
+    // 91일: 다른 계정이 가져간다 (원자적으로 점유자 교체)
+    const d91 = T0 + 91 * DAY_MS;
+    expect(await accounts.nameOwner(nameKey(x), d91)).toBeNull();
+    expect(await accounts.claimName(b, x, d91)).toBe("ok");
+    expect(await accounts.nameOwner(nameKey(x), d91)).toBe(b);
+    // a가 돌아오면 재설정 요구 — 입장 기록(enter)으로는 이름을 정하지 못한다
+    expect(await accounts.visit(a, d91 + 1, true)).toEqual({ renameRequired: true });
+    await accounts.enter(a, { name: z }, d91 + 1);
+    expect(await accounts.get(a, DAY, d91 + 1)).toMatchObject({ renameRequired: true, name: x, points: 30 });
+    expect(await accounts.claimName(a, x, d91 + 1)).toBe("taken");
+    expect(await accounts.claimName(a, z, d91 + 1)).toBe("ok");
+    expect(await accounts.get(a, DAY, d91 + 1)).toMatchObject({ renameRequired: false, name: z, points: 30 });
+    expect(await accounts.visit(a, d91 + 2, true)).toEqual({ renameRequired: false });
+  });
+
+  it("휴면: 옛 이름이 아직 비어 있으면 다시 정할 때 그대로 쓸 수 있고, 머무르기 기록도 접속으로 친다", async () => {
+    const [a, c] = [newId(), newId()];
+    const [x, w] = [tagged("돌아옴"), tagged("머묾")];
+    expect(await accounts.claimName(a, x, T0)).toBe("ok");
+    const back = T0 + 120 * DAY_MS;
+    expect(await accounts.visit(a, back, false)).toEqual({ renameRequired: true });
+    // 휴면 판정 때 a의 색인은 풀린다
+    expect(await accounts.nameOwner(nameKey(x), back)).toBeNull();
+    expect(await accounts.claimName(a, x, back)).toBe("ok");
+    expect(await accounts.get(a, DAY, back)).toMatchObject({ renameRequired: false, name: x });
+
+    // 50일째 머무르기 → 91일째(머문 지 41일)는 휴면이 아니다
+    expect(await accounts.claimName(c, w, T0)).toBe("ok");
+    expect(await accounts.presence(c, kstDay(T0 + 50 * DAY_MS), T0 + 50 * DAY_MS)).not.toBeNull();
+    expect(await accounts.visit(c, T0 + 91 * DAY_MS, true)).toEqual({ renameRequired: false });
+    expect(await accounts.nameOwner(nameKey(w), T0 + 91 * DAY_MS)).toBe(c);
+  });
+
   it("v4 튜토리얼 완료", async () => {
     const id = newId();
     expect((await accounts.get(id, DAY, 0)).tutorialDone).toBeFalsy();
@@ -642,7 +781,13 @@ describe("MemoryAccounts", () =>
       async setLegacyAttend(id, lastAttend, streak) {
         Object.assign((accounts as unknown as { acct(id: string): object }).acct(id), { lastAttend, streak });
       },
-      async cleanup() {},
+      async setLegacyName(id, name) {
+        (accounts as unknown as { acct(id: string): { name: string | null } }).acct(id).name = name;
+      },
+      async cleanup(ids) {
+        const names = (accounts as unknown as { names: Map<string, string> }).names;
+        for (const [k, owner] of names) if (ids.includes(owner)) names.delete(k);
+      },
     };
   }));
 
@@ -659,7 +804,15 @@ describe.skipIf(!redisEnv)("RedisAccounts (실제 Redis, 개발용 DB에서만 �
       async setLegacyAttend(id, lastAttend, streak) {
         await raw.hset(K.acct(id), { lastAttend, streak: String(streak) });
       },
+      async setLegacyName(id, name) {
+        await raw.hset(K.acct(id), { name });
+      },
       async cleanup(ids) {
+        // 테스트 계정이 차지한 이름 색인을 먼저 푼다 (계정 해시를 지우면 어느 키였는지 모른다)
+        for (const id of ids.filter((x) => !x.startsWith("code:"))) {
+          const key = (await raw.hget(K.acct(id), "nameKey")) as string | null;
+          if (key && (await raw.hget(K.names, key)) === id) await raw.hdel(K.names, key);
+        }
         const keys = (await Promise.all(ids.map((id) => (id.startsWith("code:") ? [id] : raw.keys(`acct:${id}*`))))).flat();
         if (keys.length) await raw.del(...keys);
         const members = ids.filter((id) => !id.startsWith("code:"));

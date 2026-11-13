@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FriendPresenceResponse } from "../friendTypes";
-import { friendsInChannel, lastSeenText, presenceChanges } from "./useFriends";
+import { friendsInChannel, friendsStore, lastSeenText, presenceChanges } from "./useFriends";
 
 // 친구 접속 알림(누가 새로 들어왔나)과 지금 채널의 친구 (이름표·미니맵 하트)
 
@@ -42,5 +42,33 @@ describe("마지막 접속 표시", () => {
     expect(lastSeenText(at, at + 3 * 3_600_000)).toBe("2026-11-13 21:40 · 3시간 전");
     expect(lastSeenText(at, at + 3 * 86_400_000 + 1)).toBe("2026-11-13 21:40 · 3일 전");
     expect(lastSeenText(null, at)).toBe("기록 없음");
+  });
+});
+
+describe("받은 친구 신청 새로 받기", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("받는 도중에 신청 알림(me:stale)이 오면, 끝난 뒤 한 번 더 받아 새 신청을 놓치지 않는다 (여러 번 와도 한 번)", async () => {
+    let incoming = 0;
+    const resolvers: (() => void)[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+      // 요청이 시작될 때의 값을 응답한다 (서버가 그 순간 본 값)
+      const seen = incoming;
+      return new Promise<Response>((res) => resolvers.push(() => res(Response.json({ friends: [], incoming: seen }))));
+    });
+    const first = friendsStore.refresh();
+    // 주기 조회가 서버에 간 뒤 친구 신청이 저장되고, 알림이 와서 또 부른다 (두 번)
+    incoming = 1;
+    const second = friendsStore.refresh();
+    const third = friendsStore.refresh();
+    expect(resolvers).toHaveLength(1);
+    resolvers[0]();
+    await first;
+    await vi.waitFor(() => expect(resolvers).toHaveLength(2));
+    resolvers[1]();
+    expect((await second)?.incoming).toBe(1);
+    expect((await third)?.incoming).toBe(1);
+    expect(friendsStore.getSnapshot().incoming).toBe(1);
+    expect(resolvers).toHaveLength(2);
   });
 });

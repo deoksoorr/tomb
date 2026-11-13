@@ -18,7 +18,8 @@ import { escape, overlaps, type Box } from "../logic/jump";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { nearestObject, pickInteraction } from "../logic/interact";
 import { anchorAt, nudgeSpot, restoreAfterDenied, spotVerdict, standBesideSpot } from "../logic/restore";
-import { besideFriend } from "../logic/friendSpot";
+import { besideFriend, FRIEND_ARRIVED } from "../logic/friendSpot";
+import { doorFront } from "../logic/doorSpot";
 import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST, spotOf, spotTaken } from "../logic/spots";
 import { neighborSeat, pickSeat, sideIntent, standPoint } from "../logic/sit";
 import { RealtimeClient } from "../net/RealtimeClient";
@@ -1255,7 +1256,34 @@ export class WorldScene extends Phaser.Scene {
     this.net.warp(spot.x, spot.y);
     this.rig.recenter();
     this.recenterAt = 0;
-    notice(`${name}님 옆으로 왔어요!`);
+    // 안내는 이동이 끝난 뒤 한 번만 (가는 중… 안내는 띄우지 않는다)
+    notice(FRIEND_ARRIVED);
+  }
+
+  /**
+   * 집에 들어갈 때·나올 때(game/housing/install.ts): 월드의 내 캐릭터를 그 번지 집 문 앞(걸을 수 있는 칸)으로 옮긴다.
+   * 들어가기 전 자리(친구 따라가기·집 놀러 가기로 들어왔으면 엉뚱한 곳)로 돌아오지 않게, 새로고침 복원도 문 앞을 기억하게.
+   * 서버에도 warp로 알린다 (집 안에 있는 동안은 다른 사람 화면에서 숨겨져 있다). 메인 맵에 없는 번지면 그대로
+   */
+  standAtHouseDoor(lot: number): void {
+    if (this.cleaned) return;
+    const feet = this.graveBoxes();
+    const hitsLow = (x: number, y: number) => feet.some((b) => x - 4 < b.x + b.w && x + 4 > b.x && y - 5 < b.y + b.h && y > b.y);
+    const others = [...this.remotes.values()].filter((o) => !o.away).map((o) => ({ x: o.x, y: o.y }));
+    const spot = doorFront(lot, others, (x, y) => !standable(x, y) || inWater(x, y) || hitsLow(x, y));
+    if (!spot) return;
+    const pl = this.player;
+    if (Math.hypot(pl.x - spot.x, pl.y - spot.y) < 2 && !pl.sitting && !pl.anchored) return;
+    this.walker.cancel();
+    this.leaveCampfire();
+    this.beforeAutoWalk();
+    const now = this.time.now;
+    pl.warp(spot.x, spot.y, now, this.seatReq);
+    pl.dir = DIR.down;
+    pl.view.apply(pl.state, DIR.down, now);
+    this.net.warp(spot.x, spot.y);
+    this.rig.recenter();
+    this.recenterAt = 0;
   }
 
   private resolveGuide(target: GuideTarget, label?: string): { x: number; y: number; text: string } | null {
@@ -1396,6 +1424,8 @@ export class WorldScene extends Phaser.Scene {
       wx,
       wy,
     );
+    // 운영자(서버가 준 staff 표시) 캐릭터는 눌러도 아무 메뉴·정보도 띄우지 않는다 (친구 신청·도감·신고 모두 없음)
+    if (hit && this.remotes.get(hit.sid)?.view.staff) return;
     if (hit && this.net.channel !== null) {
       const chat = this.remotes.get(hit.sid)?.view.chatText(performance.now());
       bridge.emit("peer:menu", { sid: hit.sid, name: hit.name, ch: this.net.channel, ...(chat ? { chat } : {}) });
