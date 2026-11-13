@@ -11,12 +11,45 @@
   min-width: 0;
 }
 
-/* 넓은 화면: 사진 쪽(왼쪽)과 정보 쪽(오른쪽) 두 칸 — 창 안에서 스크롤 없이 */
+/* 넓은 화면: 사진·헌화(왼쪽)와 글·정보(오른쪽) 1:1 두 칸 — 사진이 오른쪽 칸 높이만큼 늘어나 아래가 비지 않는다 */
 @media (min-width: 640px) {
   .grave {
-    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 18px;
-    align-items: start;
+    align-items: stretch;
+  }
+
+  .side {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .side .photo {
+    flex: 1;
+    width: 100%;
+    min-height: 200px;
+    aspect-ratio: auto;
+  }
+
+  /* 칸 높이에 맞춰 늘어난 사진 틀: 사진은 잘리지 않게 전체를, 남는 자리는 같은 사진을 흐리게 */
+  .side .photoImage {
+    object-fit: contain;
+  }
+
+  .side .photoBlur {
+    display: block;
+    object-fit: cover;
+    filter: blur(14px) brightness(0.55);
+    transform: scale(1.15);
+  }
+
+  .main .epitaph,
+  .main .lifespan {
+    text-align: left;
+  }
+
+  .main .lifespan {
+    margin-top: -6px;
   }
 
   .main .facts {
@@ -51,6 +84,10 @@
 
 .photoImage {
   object-fit: cover;
+}
+
+.photoBlur {
+  display: none;
 }
 
 .noPhoto {

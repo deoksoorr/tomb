@@ -19,6 +19,8 @@ type Props = {
    * - "confirm": 예/아니요 확인·짧은 알림만. 작은 표준 크기(너비 360, 높이는 내용만큼).
    */
   kind?: "window" | "confirm";
+  /** 표준 창인데 데스크톱에서 높이를 내용만큼만 (아래 빈 여백 없이, 화면보다 길면 본문 스크롤). 폰은 그대로 화면 전체 */
+  fitHeight?: boolean;
   /** false면 ESC·배경·× 로 닫히지 않는다 (예: 저장 중) */
   closable?: boolean;
   /** false면 배경(창 바깥) 클릭·터치로는 닫히지 않는다 (Esc·×는 그대로). 실수로 닫히면 안 되는 진행 중 창용 */
@@ -36,7 +38,7 @@ type Props = {
  * 열릴 때 포커스를 가졌던 요소로 닫힐 때 돌려준다. 열려 있는 동안 게임 키 입력을 막는다.
  * 마운트 = 열림. 닫으려면 부모가 언마운트한다 (onClose).
  */
-export default function Dialog({ title, onClose, children, kind = "window", closable = true, backdropClose = true, onEscape }: Props) {
+export default function Dialog({ title, onClose, children, kind = "window", fitHeight = false, closable = true, backdropClose = true, onEscape }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const pressedBackdrop = useRef(false);
   const titleId = useId();
@@ -73,6 +75,7 @@ export default function Dialog({ title, onClose, children, kind = "window", clos
       ref={ref}
       className={styles.dialog}
       data-kind={kind}
+      data-fit={fitHeight || undefined}
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault();

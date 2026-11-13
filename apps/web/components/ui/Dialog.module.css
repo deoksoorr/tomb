@@ -99,6 +99,13 @@
   height: fit-content;
 }
 
+/* fitHeight: 표준 창이지만 높이는 내용만큼 (fit-content — auto면 모달 inset 때문에 화면 높이까지 늘어난다) */
+@media (min-width: 561px) {
+  .dialog[data-kind="window"][data-fit] {
+    height: fit-content;
+  }
+}
+
 /* 폰: 표준 창은 화면 전체 (머리말은 위에 고정, 본문만 스크롤) */
 @media (max-width: 560px) {
   .dialog[data-kind="window"] {

@@ -196,20 +196,24 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   const location = graveLocation(graves.graves, graveId);
 
   return (
-    <Dialog title={grave.name} onClose={onClose}>
+    <Dialog title={grave.name} onClose={onClose} fitHeight>
       <article className={styles.grave}>
-        {/* 넓은 화면: 왼쪽 = 사진·묘비명·헌화, 오른쪽 = 정보·버튼 (스크롤 없이 한눈에). 좁은 화면은 위아래 한 줄 */}
+        {/* 넓은 화면: 왼쪽 = 사진·헌화, 오른쪽 = 묘비명·한마디·기간·정보·버튼 (1:1, 창 높이는 내용만큼). 좁은 화면은 위아래 한 줄 */}
         <div className={styles.side}>
           <figure className={styles.photo}>
             {grave.imageUrl ? (
-              <Image
-                src={grave.imageUrl}
-                alt={`${grave.name} 스크린샷`}
-                fill
-                unoptimized
-                sizes="(max-width: 460px) 100vw, 420px"
-                className={styles.photoImage}
-              />
+              <>
+                {/* 칸이 사진보다 길 때: 같은 사진을 흐리게 깔고 그 위에 사진 전체를 잘림 없이 */}
+                <Image src={grave.imageUrl} alt="" aria-hidden fill unoptimized sizes="420px" className={styles.photoBlur} />
+                <Image
+                  src={grave.imageUrl}
+                  alt={`${grave.name} 스크린샷`}
+                  fill
+                  unoptimized
+                  sizes="(max-width: 460px) 100vw, 420px"
+                  className={styles.photoImage}
+                />
+              </>
             ) : (
               <div className={styles.noPhoto}>
                 <StyleArt style={grave.style} ageDays={grave.ageDays} scale={4} />
@@ -217,15 +221,6 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
               </div>
             )}
           </figure>
-
-          <p className={styles.epitaph}>{grave.epitaph}</p>
-          {grave.comment && (
-            <p className={styles.comment}>
-              <span className={styles.commentBy}>상주 {grave.mourner}의 한마디</span>
-              {grave.comment}
-            </p>
-          )}
-          <p className={styles.lifespan}>{lifespanLabel(grave.bornAt, grave.diedAt, grave.ageDays)}</p>
 
           <div className={styles.reactions}>
             <button
@@ -240,6 +235,15 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
         </div>
 
         <div className={styles.main}>
+          <p className={styles.epitaph}>{grave.epitaph}</p>
+          {grave.comment && (
+            <p className={styles.comment}>
+              <span className={styles.commentBy}>상주 {grave.mourner}의 한마디</span>
+              {grave.comment}
+            </p>
+          )}
+          <p className={styles.lifespan}>{lifespanLabel(grave.bornAt, grave.diedAt, grave.ageDays)}</p>
+
           <dl className={styles.facts}>
             {location && (
               <div>
