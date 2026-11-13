@@ -1,5 +1,6 @@
 import { pageMetadata } from "../../seo";
 import GuidePage from "../GuidePage";
+import { DEFAULT_CHANNEL_CAPACITY } from "@tomb/protocol";
 
 const PATH = "/guide/bulmeong";
 const H1 = "모닥불·빗소리 불멍 사이트";
@@ -15,7 +16,7 @@ const FACTS = [
   ["빗소리 음악", "빗소리 목록 20곡 (전체 9가지 장르 180곡)"],
   ["날씨", "맑음·흐림·안개·비·눈, 한국 시간 30분마다 바뀌고 비가 오면 빗소리가 들려요"],
   ["하늘", "한국 시간에 맞춰 새벽·낮·해질녘·밤"],
-  ["함께 쉬는 사람", "채널마다 최대 40명"],
+  ["함께 쉬는 사람", `채널마다 최대 ${DEFAULT_CHANNEL_CAPACITY}명`],
   ["요금", "무료 (설치·회원가입 없음)"],
 ] as const;
 

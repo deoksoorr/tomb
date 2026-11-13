@@ -1,5 +1,6 @@
 import { pageMetadata } from "../../seo";
 import GuidePage from "../GuidePage";
+import { DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS } from "@tomb/protocol";
 
 const PATH = "/guide/browser-game";
 const H1 = "설치 없이 하는 브라우저 도트 멀티 게임";
@@ -14,10 +15,11 @@ const FACTS = [
   ["요금", "무료"],
   ["설치", "필요 없음 (웹 브라우저)"],
   ["회원가입", "필요 없음 (이름과 모습만 정하면 입장)"],
-  ["함께 노는 인원", "채널마다 최대 40명, 최대 10채널"],
+  ["함께 노는 인원", `채널마다 최대 ${DEFAULT_CHANNEL_CAPACITY}명, 최대 ${DEFAULT_MAX_CHANNELS}채널`],
   ["조작", "키보드(WASD·방향키) 또는 터치(왼쪽 아래 조이스틱과 버튼)"],
-  ["할 수 있는 것", "사냥터·미니게임, 낚시, 채집, 동물원 펫, 내 집 꾸미기, 묘비 세우기·헌화, 관람차·열기구, 귀신의집, 폭죽"],
+  ["할 수 있는 것", "채팅·친구, 사냥터(스킬 트리)·미니게임, 낚시(자동 낚시)·채집·도감, 동물원 펫, 캐릭터·집 꾸미기와 랭킹, 묘비 세우기·헌화, 관람차·열기구, 귀신의집, 폭죽"],
   ["다른 기기에서 이어 하기", "개인 코드로 포인트·가방·내 묘비를 그대로"],
+  ["앱처럼 쓰기", "크롬·엣지 앱 설치 또는 휴대폰 홈 화면에 추가로 아이콘 만들기"],
 ] as const;
 
 export default function BrowserGamePage() {
