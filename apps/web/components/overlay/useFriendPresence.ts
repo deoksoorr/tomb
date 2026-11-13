@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
-import { friendJoinToastOn, friendsInChannel, friendsStore, isOnline, presenceChanges, useFriends } from "@/lib/hooks/useFriends";
+import { friendJoinToastOn, friendsInChannel, friendsStore, presenceChanges, useFriends } from "@/lib/hooks/useFriends";
 import { showFriendNotice } from "./FriendNotice";
 
 /**
@@ -27,12 +27,10 @@ const delayFor = () => {
 /** 실시간 서버가 밀어 준 들고 남 (친구 키 → 방향·시각) */
 const pushed = new Map<string, { on: boolean; at: number }>();
 
-/** "가람님, 보리님 외 2명" */
-const namesText = (names: string[]) => (names.length > 2 ? `${names.slice(0, 2).join("님, ")}님 외 ${names.length - 2}명` : `${names.join("님, ")}님`);
 
 /**
  * 친구: 게임 중 접속 상태를 주기적으로 받아
- *  - 친구가 들어오고 나가면 화면 가운데 띠로 알린다 (친구 창에서 끌 수 있다). 처음 받았을 때 이미 와 있는 친구도 한 번 알린다
+ *  - 친구가 들어오고 나가면 화면 가운데 띠로 알린다 (친구 창에서 끌 수 있다). 내가 들어왔을 때 이미 와 있는 친구는 알리지 않는다
  *  - 새 친구 신청이 오면 알리고 빨간 점 (받은 신청 수를 돌려준다)
  *  - 지금 채널에 있는 친구를 게임에 알린다 (이름표·미니맵 하트)
  */
@@ -88,11 +86,10 @@ export function useFriendPresence(ready: boolean): { friendIncoming: number } {
     };
   }, [ready]);
 
-  // 접속·퇴장 알림 (처음 받은 목록이면 이미 와 있는 친구를 한 번에)
+  // 접속·퇴장 알림 (밀어 주기를 못 받았을 때만). 처음 받은 목록은 알리지 않는다 — "들어옴"은 이미 와 있던 쪽 화면에만 뜬다
   const prev = useRef<typeof friends>(null);
   useEffect(() => {
     if (!friends) return;
-    const first = prev.current === null;
     const changes = presenceChanges(prev.current, friends);
     // 실시간 서버가 이미 밀어 준 변화는 다시 알리지 않는다
     const now = Date.now();
@@ -105,11 +102,6 @@ export function useFriendPresence(ready: boolean): { friendIncoming: number } {
     const left = changes.left.filter(fresh(false));
     prev.current = friends;
     if (!friendJoinToastOn()) return;
-    if (first) {
-      const here = friends.filter((f) => isOnline(f.where)).map((f) => f.name);
-      if (here.length) showFriendNotice(`${namesText(here)}이 마을에 있어요`);
-      return;
-    }
     for (const name of came.slice(0, 3)) showFriendNotice(`${name}님이 마을에 왔어요`);
     if (came.length > 3) showFriendNotice(`친구 ${came.length - 3}명이 더 왔어요`);
     for (const name of left.slice(0, 3)) showFriendNotice(`${name}님이 나갔어요`);

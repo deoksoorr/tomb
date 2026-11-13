@@ -37,7 +37,7 @@ describe("친구 들고 남 (밀어 주기)", () => {
     fp.dropped("b", 30_000);
     expect(fp.tick(40_000)).toEqual([]);
     expect(fp.due()).toBeNull();
-    fp.hello("b", "보리", KEY, ["a"]);
+    // 입장 토큰을 재사용한 재접속(웹을 거치지 않아 hello 없음)도 다시 들어옴
     expect(fp.joined("b")).toMatchObject({ on: true });
   });
 });

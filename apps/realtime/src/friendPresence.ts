@@ -66,8 +66,8 @@ export class FriendPresence {
       this.dirty = true;
       const rec = this.store.get(v);
       if (!rec?.on) continue;
-      // 나간 사람의 기록은 지운다 (다음 입장 때 웹이 다시 맡긴다)
-      this.store.put(v, null);
+      // 기록은 남겨 둔다: 다시 들어올 때 입장 토큰을 재사용하면(60초 안 재접속) 웹을 거치지 않아 hello가 오지 않는다
+      this.store.put(v, { ...rec, on: false });
       if (rec.friends.length) out.push({ to: rec.friends, key: rec.key, name: rec.name, on: false });
     }
     return out;
