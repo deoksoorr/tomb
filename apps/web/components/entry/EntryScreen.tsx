@@ -90,7 +90,7 @@ export default function EntryScreen({ start, focusGraveId, entering, stalled, on
           <>
             <EntryFlow start={start} focusGraveId={focusGraveId} onEnter={onEnter} />
             <p className={styles.nonprofit}>
-              게임을 한 번도 만들어 본 적 없는 개인이 만든 비영리 프로젝트입니다.
+              게임을 한 번도 만들어 본 적 없는 개인이 만든 포트폴리오입니다.
               <br />
               후원, 광고, 유료 재화는 없습니다.
             </p>
