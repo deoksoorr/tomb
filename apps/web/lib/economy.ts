@@ -71,6 +71,12 @@ export const BALANCE_CAP = 99_999;
 /** 같은 IP에서 하루에 출석 포인트를 받을 수 있는 계정 수 (계정 여러 개로 출석 농사 방지) */
 export const ATTEND_ACCOUNTS_PER_IP = 3;
 
+/**
+ * 관리자 경제 통계에서 운영자 계정 활동을 빼기 시작한 날 (KST YYYYMMDD). 이전 날짜 통계는 계정별로 나눌 수 없어 그대로라
+ * 운영자 활동이 섞여 있다 (관리자 경제 탭이 안내한다)
+ */
+export const ECON_STAFF_EXCLUDED_FROM = "20261113";
+
 export const earnRule = (s: EarnSource) => EARN_RULES.find((r) => r.source === s)!;
 
 /** 개인 코드: 12자(헷갈리는 글자 0/O/1/I/L 제외), XXXX-XXXX-XXXX 형식. 이 코드를 아는 사람은 계정 주인으로 본다 */

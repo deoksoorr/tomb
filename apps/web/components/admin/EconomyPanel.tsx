@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { EARN_RULES } from "@/lib/economy";
+import { EARN_RULES, ECON_STAFF_EXCLUDED_FROM } from "@/lib/economy";
 import ui from "../ui/ui.module.css";
 import { adminApi } from "./adminApi";
 import styles from "./Admin.module.css";
@@ -30,6 +30,8 @@ const SPEND_LABELS: Record<string, string> = {
 const sum = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0);
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const dateLabel = (d: string) => `${Number(d.slice(4, 6))}.${d.slice(6)}`;
+/** 운영자 제외 적용일 안내 ("11월 13일") */
+const STAFF_FROM_LABEL = `${Number(ECON_STAFF_EXCLUDED_FROM.slice(4, 6))}월 ${Number(ECON_STAFF_EXCLUDED_FROM.slice(6))}일`;
 
 function Bars({ title, totals, labels }: { title: string; totals: Record<string, number>; labels: Record<string, string> }) {
   const rows = Object.entries(totals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
@@ -90,6 +92,10 @@ export default function EconomyPanel({ toast, onAuthLost }: Props) {
               <span className={styles.statLabel}>기간 순증가 (적립 − 사용)</span>
             </div>
           </div>
+          {/* 고른 기간에 적용일 이전 날짜가 있을 때만 안내한다 */}
+          {data.days.some((d) => d.date < ECON_STAFF_EXCLUDED_FROM) && (
+            <p className={ui.hint}>운영자 제외는 {STAFF_FROM_LABEL}부터 적용, 이전 날짜에는 운영자 활동이 섞여 있어요.</p>
+          )}
           <Bars title="적립 (항목별)" totals={earnedTotal} labels={EARN_LABELS} />
           <Bars title="사용 (분류별)" totals={spentTotal} labels={SPEND_LABELS} />
           <table className={styles.table}>

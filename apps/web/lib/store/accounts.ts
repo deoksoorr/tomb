@@ -5,7 +5,8 @@ import { STAY_TICK_MINUTES } from "../calendar";
 import { CODE_ALPHABET, type EarnSource } from "../economy";
 import { parseYmd, todayKst } from "../epitaph";
 import { NAME_CHANGE_COOLDOWN_DAYS, NAME_CHANGE_PRICE, type Me } from "../types";
-import { topUpIfStaff } from "../staff";
+import { staffAccountId, topUpIfStaff } from "../staff";
+import { K } from "./keys";
 import { getStyleStore } from "./style";
 import type { AccountRecord, AccountStore } from "./types";
 
@@ -22,6 +23,15 @@ export function weekOfDay(day: string): string {
   return new Date(t - ((dow + 6) % 7) * 86_400_000).toISOString().slice(0, 10).replaceAll("-", "");
 }
 export const kstWeek = (now = Date.now()) => weekOfDay(kstDay(now));
+
+/**
+ * 경제 통계 키 (Redis Lua에 KEYS로 넘긴다). 운영자 계정이면 관리자 경제 통계(econ:{날짜})가 아니라
+ * 따로 모으는 키(econstaff:{날짜})에 더한다 — 같은 Lua 안에서 바뀌므로 원자성은 그대로, 운영자 지갑·기능도 그대로.
+ * 받는 계정 기준이다 (선물 받기·관리자 지급도 받는 쪽이 운영자면 빠진다). 메모리 저장소는 accounts-memory.ts stat이 같은 규칙
+ */
+export async function econKeyFor(accountId: string, day: string): Promise<string> {
+  return (await staffAccountId()) === accountId ? K.econStaff(day) : K.econ(day);
+}
 /** 주간 랭킹 보관 (지난주까지 보고 나서 저절로 지워지게) */
 export const WEEK_RANK_TTL_SEC = 21 * 86_400;
 

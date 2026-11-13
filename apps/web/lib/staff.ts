@@ -36,6 +36,15 @@ export async function staffAccountId(now = Date.now()): Promise<string | null> {
   return id;
 }
 
+/**
+ * 기다리지 않고 지금 운영자 id. 메모리 저장소(로컬 개발·테스트)는 한 프로세스라 지정·해제가 바로 보인다.
+ * Redis면 이 인스턴스가 마지막으로 확인한 값 (메모리 계정 저장소의 경제 통계 제외용 — Redis 쪽은 staffAccountId를 쓴다)
+ */
+export function staffAccountIdNow(): string | null {
+  const s = getStaffStore();
+  return s instanceof MemoryStaff ? (s.peek()?.accountId ?? null) : (g.__tombStaffCache?.id ?? null);
+}
+
 export async function isStaff(accountId: string): Promise<boolean> {
   return !!accountId && (await staffAccountId()) === accountId;
 }

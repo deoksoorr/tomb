@@ -43,6 +43,7 @@ export const K = {
   ledger: (id: string) => `acct:${id}:ledger`, // LIST 최근 포인트 사용 기록 {at, amount, reason}, 최대 100개
   activity: (id: string) => `acct:${id}:activity`, // LIST 내 소식 JSON, 최신 먼저 최대 50개
   econ: (day: string) => `econ:${day}`, // HASH earn:{source}/spend:{분류}/refund → 그날 합계 (90일)
+  econStaff: (day: string) => `econstaff:${day}`, // HASH econ과 같은 필드, 운영자 계정 활동만 (관리자 경제 통계에서 뺀 것, 90일)
   earnIp: (ipHash: string, day: string) => `earnip:${ipHash}:${day}`, // HASH source → 그 IP 합계. 2일 TTL // ZSET 신고 기록이 있는 묘비 → 지금 세는 신고 수 (관리자 목록용)
   revivers: (id: string) => `grave:${id}:revivers`, // SET visitorId (지금 살려주세요 중)
   reviveEarned: (id: string) => `grave:${id}:reviveEarned`, // SET visitorId (포인트를 한 번 받은 사람, 취소해도 남김)

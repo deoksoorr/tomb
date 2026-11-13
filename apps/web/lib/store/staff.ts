@@ -33,6 +33,10 @@ export class MemoryStaff implements StaffStore {
   async get(): Promise<StaffRecord | null> {
     return this.rec;
   }
+  /** 기다리지 않고 지금 기록 (메모리 계정 저장소가 경제 통계에서 운영자를 뺄 때) */
+  peek(): StaffRecord | null {
+    return this.rec;
+  }
   async set(rec: StaffRecord | null): Promise<void> {
     this.rec = rec;
   }

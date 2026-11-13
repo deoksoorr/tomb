@@ -4,7 +4,7 @@ import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMont
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import { STAY_BONUS_AMOUNTS, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
 import type { ActivityItem, Grave, GraveDecor } from "../types";
-import { kstDay, WEEK_RANK_TTL_SEC, weekOfDay } from "./accounts";
+import { econKeyFor, kstDay, WEEK_RANK_TTL_SEC, weekOfDay } from "./accounts";
 import { chKeys, DECOR, K } from "./keys";
 import { encode } from "./redis";
 import {
@@ -450,7 +450,7 @@ export class RedisAccounts implements AccountStore {
 
   async earn(id: string, source: EarnSource, day: string, opts: EarnOptions = {}): Promise<number> {
     const rule = earnRule(source);
-    const keys = [K.acct(id), K.earn(id, day), K.rankPoints, K.econ(day), K.rankPointsWeek(weekOfDay(day))];
+    const keys = [K.acct(id), K.earn(id, day), K.rankPoints, await econKeyFor(id, day), K.rankPointsWeek(weekOfDay(day))];
     if (opts.ipHash) keys.push(K.earnIp(opts.ipHash, day));
     const r = await this.redis.eval<string[], number>(EARN_LUA, keys, [
       id,
@@ -468,7 +468,7 @@ export class RedisAccounts implements AccountStore {
   async spend(id: string, amount: number, reason: string, now: number): Promise<number | null> {
     const entry = JSON.stringify({ at: now, amount: -amount, reason });
     const r = Number(
-      await this.redis.eval<string[], number>(SPEND_LUA, [K.acct(id), K.ledger(id), K.econ(kstDay(now))], [
+      await this.redis.eval<string[], number>(SPEND_LUA, [K.acct(id), K.ledger(id), await econKeyFor(id, kstDay(now))], [
         String(amount),
         entry,
         `spend:${spendCategory(reason)}`,
@@ -480,7 +480,7 @@ export class RedisAccounts implements AccountStore {
   async refund(id: string, amount: number, reason: string, now: number): Promise<number> {
     const entry = JSON.stringify({ at: now, amount, reason });
     return Number(
-      await this.redis.eval<string[], number>(REFUND_LUA, [K.acct(id), K.ledger(id), K.econ(kstDay(now))], [
+      await this.redis.eval<string[], number>(REFUND_LUA, [K.acct(id), K.ledger(id), await econKeyFor(id, kstDay(now))], [
         String(amount),
         String(BALANCE_CAP),
         entry,
@@ -493,7 +493,7 @@ export class RedisAccounts implements AccountStore {
     const r = Number(
       await this.redis.eval<string[], number>(
         PRESENCE_LUA,
-        [K.acct(id), K.earn(id, day), K.rankPoints, K.econ(day), K.rankPointsWeek(weekOfDay(day))],
+        [K.acct(id), K.earn(id, day), K.rankPoints, await econKeyFor(id, day), K.rankPointsWeek(weekOfDay(day))],
         [
         id,
         String(now),
@@ -511,7 +511,7 @@ export class RedisAccounts implements AccountStore {
   async claimStayBonus(id: string, day: string): Promise<{ earned: number; count: number } | null> {
     const [earned, count] = await this.redis.eval<string[], [number, number]>(
       STAY_BONUS_LUA,
-      [K.acct(id), K.earn(id, day), K.rankPoints, K.econ(day), K.rankPointsWeek(weekOfDay(day))],
+      [K.acct(id), K.earn(id, day), K.rankPoints, await econKeyFor(id, day), K.rankPointsWeek(weekOfDay(day))],
       [
         id,
         String(STAY_BONUS_EVERY_TICKS),
@@ -608,7 +608,7 @@ export class RedisAccounts implements AccountStore {
     const r = (
       await this.redis.eval<string[], number[]>(
         CLAIM_LUA,
-        [K.acct(id), K.earn(id, day), K.attendIp(ipHash, day), K.rankPoints, K.econ(day), K.rankPointsWeek(weekOfDay(day)), K.cal(id, day.slice(0, 6))],
+        [K.acct(id), K.earn(id, day), K.attendIp(ipHash, day), K.rankPoints, await econKeyFor(id, day), K.rankPointsWeek(weekOfDay(day)), K.cal(id, day.slice(0, 6))],
         [
           id,
           day,
@@ -658,7 +658,7 @@ export class RedisAccounts implements AccountStore {
     opts: { unique?: boolean; now?: number } = {},
   ): Promise<"ok" | "insufficient" | "owned"> {
     const r = Number(
-      await this.redis.eval<string[], number>(BUY_LUA, [K.acct(id), K.inv(id), K.look(id), K.econ(kstDay(opts.now ?? Date.now())), K.stash(id)], [
+      await this.redis.eval<string[], number>(BUY_LUA, [K.acct(id), K.inv(id), K.look(id), await econKeyFor(id, kstDay(opts.now ?? Date.now())), K.stash(id)], [
         itemId,
         String(price),
         opts.unique ? "1" : "0",
@@ -723,7 +723,7 @@ export class RedisAccounts implements AccountStore {
 
   async adjustPoints(id: string, delta: number): Promise<number | null> {
     const r = Number(
-      await this.redis.eval<string[], number>(ADJUST_LUA, [K.acct(id), K.rankPoints, K.econ(kstDay())], [
+      await this.redis.eval<string[], number>(ADJUST_LUA, [K.acct(id), K.rankPoints, await econKeyFor(id, kstDay())], [
         String(delta),
         String(BALANCE_CAP),
         id,
@@ -760,7 +760,7 @@ export class RedisAccounts implements AccountStore {
   async changeName(id: string, name: string, now: number, price: number, cooldownMs: number): Promise<NameChangeResult> {
     const entry = JSON.stringify({ at: now, amount: -price, reason: "name" });
     const [code, next] = (
-      await this.redis.eval<string[], [number, number]>(NAME_LUA, [K.acct(id), K.ledger(id), K.econ(kstDay(now))], [
+      await this.redis.eval<string[], [number, number]>(NAME_LUA, [K.acct(id), K.ledger(id), await econKeyFor(id, kstDay(now))], [
         name,
         String(now),
         String(price),
@@ -785,9 +785,9 @@ export class RedisAccounts implements AccountStore {
     return days.map((date, i) => ({ date, fields: Object.fromEntries([...pairs(r[i])].map(([k, v]) => [k, Number(v)])) }));
   }
 
-  /** 랭킹에 오른 계정(포인트를 모은 적 있는 계정)의 잔액 합계. 관리자 화면에서만 부른다 */
-  async walletTotals(): Promise<{ wallets: number; accounts: number }> {
-    const ids = await this.redis.zrange<string[]>(K.rankPoints, 0, -1);
+  /** 랭킹에 오른 계정(포인트를 모은 적 있는 계정)의 잔액 합계 (exclude 계정은 뺀다 — 운영자). 관리자 화면에서만 부른다 */
+  async walletTotals(exclude: string | null = null): Promise<{ wallets: number; accounts: number }> {
+    const ids = (await this.redis.zrange<string[]>(K.rankPoints, 0, -1)).filter((id) => id !== exclude);
     if (!ids.length) return { wallets: 0, accounts: 0 };
     const p = this.redis.pipeline();
     for (const id of ids) p.hget(K.acct(id), "points");

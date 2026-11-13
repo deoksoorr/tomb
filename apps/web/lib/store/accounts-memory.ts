@@ -1,6 +1,7 @@
 import { itemById, type CosmeticSlot } from "@tomb/protocol";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
+import { staffAccountIdNow } from "../staff";
 import { stayBonusSum, stayBonusTiers } from "../stayBonus";
 import type { ActivityItem, GiftItem, Grave, GraveDecor } from "../types";
 import { kstDay, weekOfDay } from "./accounts";
@@ -70,7 +71,10 @@ export class MemoryAccounts implements AccountStore {
   /** 경제 통계: 날짜 → 필드(`earn:{source}`, `spend:{분류}`, `refund`) → 합계 */
   private econ = new Map<string, Map<string, number>>();
 
-  private stat(day: string, field: string, amount: number): void {
+  private stat(a: Acct, day: string, field: string, amount: number): void {
+    // 운영자 계정의 적립·사용은 경제 통계에 넣지 않는다 (지갑·기능은 그대로. accounts.ts econKeyFor와 같은 규칙)
+    const staff = staffAccountIdNow();
+    if (staff && this.accts.get(staff) === a) return;
     let m = this.econ.get(day);
     if (!m) this.econ.set(day, (m = new Map()));
     m.set(field, (m.get(field) ?? 0) + amount);
@@ -138,7 +142,7 @@ export class MemoryAccounts implements AccountStore {
     this.addLifetime(a, amount);
     const weeks = (a.weeks ??= new Map());
     weeks.set(weekOfDay(day), (weeks.get(weekOfDay(day)) ?? 0) + amount);
-    this.stat(day, `earn:${source}`, amount);
+    this.stat(a, day, `earn:${source}`, amount);
     return amount;
   }
 
@@ -220,7 +224,7 @@ export class MemoryAccounts implements AccountStore {
     if (a.points < amount) return null;
     a.points -= amount;
     a.ledger = [{ at: now, amount: -amount, reason }, ...(a.ledger ?? [])].slice(0, 100);
-    this.stat(kstDay(now), `spend:${spendCategory(reason)}`, amount);
+    this.stat(a, kstDay(now), `spend:${spendCategory(reason)}`, amount);
     return a.points;
   }
 
@@ -229,7 +233,7 @@ export class MemoryAccounts implements AccountStore {
     a.lifetime ??= a.points; // 모은 포인트는 그대로 (개편 전 계정은 지금 잔액에서 시작)
     const before = a.points;
     a.points = Math.min(BALANCE_CAP, a.points + amount);
-    this.stat(kstDay(now), "refund", a.points - before);
+    this.stat(a, kstDay(now), "refund", a.points - before);
     a.ledger = [{ at: now, amount, reason }, ...(a.ledger ?? [])].slice(0, 100);
     return a.points;
   }
@@ -386,7 +390,7 @@ export class MemoryAccounts implements AccountStore {
     const got = a.points - before;
     if (got > 0) {
       this.addLifetime(a, got);
-      this.stat(kstDay(now), "earn:gift", got);
+      this.stat(a, kstDay(now), "earn:gift", got);
     }
     this.prune(a, now);
     for (const { itemId, count, term } of items) {
@@ -430,7 +434,7 @@ export class MemoryAccounts implements AccountStore {
     if (opts.unique && ((a.inv.get(itemId) ?? 0) > 0 || wearing || stashed)) return "owned";
     if (a.points < price) return "insufficient";
     a.points -= price;
-    this.stat(kstDay(now), "spend:shop", price);
+    this.stat(a, kstDay(now), "spend:shop", price);
     a.inv.set(itemId, (a.inv.get(itemId) ?? 0) + 1);
     return "ok";
   }
@@ -494,8 +498,8 @@ export class MemoryAccounts implements AccountStore {
     const before = a.points;
     a.points = Math.min(BALANCE_CAP, Math.max(0, a.points + delta));
     if (a.points > before) this.addLifetime(a, a.points - before);
-    if (a.points > before) this.stat(kstDay(), "earn:admin", a.points - before);
-    if (a.points < before) this.stat(kstDay(), "spend:admin", before - a.points);
+    if (a.points > before) this.stat(a, kstDay(), "earn:admin", a.points - before);
+    if (a.points < before) this.stat(a, kstDay(), "spend:admin", before - a.points);
     return a.points;
   }
 
@@ -531,7 +535,7 @@ export class MemoryAccounts implements AccountStore {
     a.points -= cost;
     if (cost) {
       a.ledger = [{ at: now, amount: -cost, reason: "name" }, ...(a.ledger ?? [])].slice(0, 100);
-      this.stat(kstDay(now), "spend:name", cost);
+      this.stat(a, kstDay(now), "spend:name", cost);
     }
     a.name = name;
     a.nameChangedAt = now;
@@ -547,8 +551,8 @@ export class MemoryAccounts implements AccountStore {
     return days.map((date) => ({ date, fields: Object.fromEntries(this.econ.get(date) ?? []) }));
   }
 
-  async walletTotals(): Promise<{ wallets: number; accounts: number }> {
-    const all = [...this.accts.values()].filter((a) => a.points > 0 || (a.lifetime ?? 0) > 0);
+  async walletTotals(exclude: string | null = null): Promise<{ wallets: number; accounts: number }> {
+    const all = [...this.accts].filter(([id, a]) => id !== exclude && (a.points > 0 || (a.lifetime ?? 0) > 0)).map(([, a]) => a);
     return { wallets: all.reduce((n, a) => n + a.points, 0), accounts: all.length };
   }
 
@@ -594,7 +598,7 @@ export class MemoryAccounts implements AccountStore {
     if (a.points < amount) return false;
     a.points -= amount;
     a.ledger = [{ at: now, amount: -amount, reason }, ...(a.ledger ?? [])].slice(0, 100);
-    this.stat(kstDay(now), `spend:${spendCategory(reason)}`, amount);
+    this.stat(a, kstDay(now), `spend:${spendCategory(reason)}`, amount);
     return true;
   }
 

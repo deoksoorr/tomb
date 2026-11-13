@@ -2,7 +2,7 @@ import { Redis } from "@upstash/redis";
 import { DYE_PARTS, premiumBody, PREMIUM_BODIES, type AvatarDye, type CosmeticSlot, type DyePart } from "@tomb/protocol";
 import { env } from "../env";
 import type { DyeTier } from "../dye/palette";
-import { kstDay } from "./accounts";
+import { econKeyFor, kstDay } from "./accounts";
 import type { MemoryAccounts } from "./accounts-memory";
 import { K } from "./keys";
 import { ECON_TTL_SEC, spendCategory, type AccountStore } from "./types";
@@ -383,7 +383,7 @@ export class RedisStyle implements StyleStore {
 
   async reset(id: string, part: DyePart, price: number, reason: string, now: number): Promise<ChargeResult> {
     const r = Number(
-      await this.redis.eval<string[], number>(RESET_LUA, [K.acct(id), K.ledger(id), K.econ(kstDay(now)), styleKey(id)], [
+      await this.redis.eval<string[], number>(RESET_LUA, [K.acct(id), K.ledger(id), await econKeyFor(id, kstDay(now)), styleKey(id)], [
         part,
         String(price),
         this.entry(price, reason, now),
@@ -395,7 +395,7 @@ export class RedisStyle implements StyleStore {
 
   async reshape(id: string, body: string, now: number, unlock?: ReshapeUnlock): Promise<ReshapeResult> {
     const r = Number(
-      await this.redis.eval<string[], number>(RESHAPE_LUA, [K.acct(id), K.ledger(id), K.econ(kstDay(now)), styleKey(id)], [
+      await this.redis.eval<string[], number>(RESHAPE_LUA, [K.acct(id), K.ledger(id), await econKeyFor(id, kstDay(now)), styleKey(id)], [
         body,
         PREMIUM_IDS,
         unlock ? String(unlock.price) : "",
@@ -410,7 +410,7 @@ export class RedisStyle implements StyleStore {
     const r = Number(
       await this.redis.eval<string[], number>(
         PERMANENT_LUA,
-        [K.acct(id), K.inv(id), K.look(id), K.stash(id), K.ledger(id), K.econ(kstDay(now))],
+        [K.acct(id), K.inv(id), K.look(id), K.stash(id), K.ledger(id), await econKeyFor(id, kstDay(now))],
         [itemId, slot, String(price), String(now), String(permUntil), this.entry(price, reason, now), `spend:${spendCategory(reason)}`],
       ),
     );

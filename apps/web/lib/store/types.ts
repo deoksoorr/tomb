@@ -266,10 +266,10 @@ export interface AccountStore {
    */
   changeName(id: string, name: string, now: number, price: number, cooldownMs: number): Promise<NameChangeResult>;
   setTutorialDone(id: string): Promise<void>;
-  /** 날짜(YYYYMMDD)별 경제 통계 필드: `earn:{source}`, `spend:{분류}`, `refund` */
+  /** 날짜(YYYYMMDD)별 경제 통계 필드: `earn:{source}`, `spend:{분류}`, `refund` (운영자 계정 활동은 ECON_STAFF_EXCLUDED_FROM부터 빠져 있다) */
   economy(days: string[]): Promise<{ date: string; fields: Record<string, number> }[]>;
-  /** 포인트를 가진 적 있는 계정 수와 지갑 잔액 합계 */
-  walletTotals(): Promise<{ wallets: number; accounts: number }>;
+  /** 포인트를 가진 적 있는 계정 수와 지갑 잔액 합계. exclude(운영자 계정)는 빼고 센다 */
+  walletTotals(exclude?: string | null): Promise<{ wallets: number; accounts: number }>;
 }
 
 /** 포인트 사용 사유 → 경제 통계 분류 (사유 앞부분으로 나눈다) */

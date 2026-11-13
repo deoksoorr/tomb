@@ -2,7 +2,7 @@ import { Redis } from "@upstash/redis";
 import { itemById, PERMANENT_UNTIL } from "@tomb/protocol";
 import { BALANCE_CAP } from "../economy";
 import { GIFT_TERMS, type GiftEntry, type GiftItem, type GiftTerm } from "../types";
-import { kstDay } from "./accounts";
+import { econKeyFor, kstDay } from "./accounts";
 import type { MemoryAccounts } from "./accounts-memory";
 import { K } from "./keys";
 import { ECON_TTL_SEC } from "./types";
@@ -275,7 +275,7 @@ export class RedisGifts implements GiftStore {
     const r = Number(
       await this.redis.eval<string[], number>(
         GIFT_CLAIM_LUA,
-        [K.giftState(accountId), K.acct(accountId), K.inv(accountId), K.rankPoints, K.econ(kstDay(now)), K.giftClaims, K.look(accountId), K.stash(accountId)],
+        [K.giftState(accountId), K.acct(accountId), K.inv(accountId), K.rankPoints, await econKeyFor(accountId, kstDay(now)), K.giftClaims, K.look(accountId), K.stash(accountId)],
         [
           g.id,
           String(now),
