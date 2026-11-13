@@ -1,5 +1,5 @@
 import type * as Phaser from "phaser";
-import { DIR, isAvatarBody, isEmoId, sanitizeDye, STATE, type ActKind, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
+import { DIR, isAvatarBody, isEmoId, maskChat, normalizeChat, sanitizeDye, STATE, type ActKind, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
 import { avatarColorSpec } from "../sprites/avatar";
 import { bridge } from "../bridge";
 import type { AvatarView } from "../entities/AvatarView";
@@ -145,6 +145,7 @@ export class RoomPresence {
           if (!r || !isEmoId(id)) return;
           r.view.emote(emoIcon(id), performance.now(), EMO_SHOW_MS);
         },
+        onChat: (sid, text) => this.remotes.get(sid)?.view.chat(text, performance.now()),
         onPeers: (peers, seats) => {
           this.reconcile(peers);
           this.setSeats(seats);
@@ -167,6 +168,7 @@ export class RoomPresence {
       this.offs.push(
         bridge.on("input:say", ({ id }) => this.say(id)),
         bridge.on("input:emo", ({ id }) => this.emo(id)),
+        bridge.on("input:chat", ({ text }) => this.chat(text)),
       );
     }
   }
@@ -225,6 +227,14 @@ export class RoomPresence {
     this.emoAt = now;
     this.o.me?.emote(emoIcon(id), now, EMO_SHOW_MS);
     this.client.emo(id);
+  }
+
+  /** 말풍선 자유 채팅: 내 머리 위에 가린 글을 바로 띄우고 방에 보낸다 (도배 제한은 입력칸과 서버) */
+  chat(raw: string): void {
+    const text = normalizeChat(raw);
+    if (!text || this.destroyed) return;
+    this.o.me?.chat(maskChat(text), performance.now());
+    this.client.chat(text);
   }
 
   /** 몸짓 (손 흔들기·환호 등): 내 아바타가 바로 하고 방에 보낸다 */

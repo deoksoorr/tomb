@@ -1,4 +1,5 @@
 import { ACT_KINDS, MAX_MESSAGE_BYTES, isEmoId, isPhraseId, isSeatMood, type ActKind, type EmoId, type PhraseId, type SeatMood } from "./constants";
+import { normalizeChat } from "./chat";
 import { MAX_GRANT_LEN } from "./grants";
 import type { MegaphoneScope } from "./items";
 import { GOBLIN_ID_RE, type GoblinInfo } from "./npc";
@@ -54,7 +55,9 @@ export type C2S =
    * 실내(상점·집·분양 마을·사냥터·미니게임 같은 하위 장면)에 들어가 있다(on)·나왔다. 월드 채널만.
    * 메인 맵에서는 문 앞에 멈춰 있으니 다른 사람 화면에서는 숨긴다. 옛 서버는 모르는 t라 버린다(그러면 예전처럼 문 앞에 보인다)
    */
-  | { t: "away"; on: boolean };
+  | { t: "away"; on: boolean }
+  /** 말풍선 자유 채팅 (CHAT_MAX자). 서버가 토큰 버킷으로 도배를 막고 가려서(maskChat) 같은 채널·방에만 중계한다. 저장하지 않는다 */
+  | { t: "chat"; text: string };
 
 // ── 서버 → 클라이언트 ──
 export type WelcomeMsg = {
@@ -119,7 +122,9 @@ export type S2C =
   /** 실내에 들어갔다·나왔다 (보낸 사람 빼고. 늦게 온 사람은 PeerInfo.away로 받는다. 옛 클라이언트는 모르는 t라 버린다 → 문 앞에 보인다) */
   | { t: "away"; sid: Sid; on: boolean }
   /** 받는 사람에게만: 서버에서 내 계정(포인트·선물함)이 바뀌었다 → /api/me를 다시 받는다 (관리자 지급 등. 옛 클라이언트는 버린다) */
-  | { t: "me" };
+  | { t: "me" }
+  /** 말풍선 자유 채팅 (보낸 사람 빼고, 서버가 가린 글. 옛 클라이언트는 모르는 t라 버린다) */
+  | { t: "chat"; sid: Sid; text: string };
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number };
@@ -191,6 +196,10 @@ export function parseC2S(text: string): C2S | null {
       return typeof m.on === "boolean" ? { t: "rod", on: m.on } : null;
     case "away":
       return typeof m.on === "boolean" ? { t: "away", on: m.on } : null;
+    case "chat": {
+      const text = normalizeChat(m.text);
+      return text ? { t: "chat", text } : null;
+    }
     case "use":
       return typeof m.u === "string" && USE_ID_RE.test(m.u) && typeof m.a === "number" && Number.isInteger(m.a) && m.a >= 0 && m.a <= 255
         ? { t: "use", u: m.u, a: m.a }

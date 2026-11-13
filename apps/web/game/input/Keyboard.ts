@@ -1,6 +1,6 @@
 // 키보드 입력. Phaser 키보드 플러그인 대신 window 이벤트를 직접 받는다:
 //  - 입력창(input/textarea/select/contenteditable)에 포커스가 있으면 무시 → 폼에서 WASD·스페이스가 그대로 입력됨
-//  - Space = 점프, E(또는 Enter) = 상호작용, X/C = 앉기, 1 = 손 흔들기, 2 = 환호 (감정표현), 3~9 = 이모티콘 판 3~9번 칸 (5번), R = 타는 펫 타기·내리기
+//  - Space = 점프, E = 상호작용 (Enter는 말풍선 채팅 입력칸), X/C = 앉기, 1 = 손 흔들기, 2 = 환호 (감정표현), 3~9 = 이모티콘 판 3~9번 칸 (5번), R = 타는 펫 타기·내리기
 //  - 오버레이 버튼에 "지금" 포커스가 남아 있으면 Space/Enter는 버튼 몫으로 둔다.
 //    (UI가 게임 키를 누르면 캡처 단계에서 버튼을 blur 하므로 e.target이 아닌 document.activeElement로 판단한다.
 //     그래야 HUD 버튼을 클릭한 직후의 첫 Space도 게임 상호작용이 된다)
@@ -21,7 +21,8 @@ const LEFT = new Set<string>(LEFT_KEYS);
 const RIGHT = new Set<string>(RIGHT_KEYS);
 const RUN = new Set(["ShiftLeft", "ShiftRight"]);
 const SIT = new Set(["KeyX", "KeyC"]);
-const INTERACT = new Set(["KeyE", "Enter", "NumpadEnter"]);
+// Enter는 말풍선 채팅 입력칸 몫이다 (GameShell이 연다)
+const INTERACT = new Set(["KeyE"]);
 const JUMP = new Set(["Space"]);
 const WAVE = new Set(["Digit1", "Numpad1"]);
 const CHEER = new Set(["Digit2", "Numpad2"]);

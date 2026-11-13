@@ -57,6 +57,32 @@ describe("critters (cats · ghosts)", () => {
     });
     expect(walked).toBeGreaterThan(50); // 실제로 돌아다닌다
   });
+
+  it("cats can reach their perches: seat-front rest spots exist, are walkable and next to the seat", () => {
+    const g = critterGrid();
+    for (const def of CRITTERS.filter((d) => d.kind === "cat")) {
+      const perched = restSpots(def, g).filter((s) => s.perch);
+      expect(perched.length, def.id).toBeGreaterThan(0);
+      for (const s of perched) {
+        expect(restable(g, s.x, s.y), `${def.id} ${s.perch?.id}`).toBe(true);
+        expect(Math.hypot(s.x - s.perch!.x, s.y - s.perch!.y)).toBeLessThanOrEqual(25);
+      }
+    }
+    // 실제로 좌석 쉼 자리에서 쉬는 구간이 나온다 (같은 시드면 두 시뮬레이터가 같은 좌석)
+    const t0 = Date.UTC(2026, 10, 12, 0, 0, 0);
+    let perchRests = 0;
+    CRITTERS.forEach((def, i) => {
+      if (def.kind !== "cat") return;
+      const a = new CritterSim(def, i, 5);
+      const b = new CritterSim(def, i, 5);
+      for (let t = t0; t < t0 + 3 * 3600_000; t += 5_000) {
+        const p = a.at(t);
+        expect(b.at(t).perch?.id ?? null).toBe(p.perch?.id ?? null);
+        if (!p.walking && p.perch) perchRests++;
+      }
+    });
+    expect(perchRests).toBeGreaterThan(20);
+  });
 });
 
 describe("golden goblin routes", () => {

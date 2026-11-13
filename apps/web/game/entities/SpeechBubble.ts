@@ -54,18 +54,19 @@ export class SpeechBubble {
     this.bg = scene.add.image(0, 0, TEX.pixel).setOrigin(0.5, 1).setTint(0x24211d).setDepth(DEPTH.bubble + 3).setVisible(false);
     this.tail = scene.add.image(0, 0, TEX.pixel).setOrigin(0.5, 0).setTint(0xcfc4a4).setDepth(DEPTH.bubble + 2).setVisible(false);
     this.tailIn = scene.add.image(0, 0, TEX.pixel).setOrigin(0.5, 0).setTint(0xcfc4a4).setDepth(DEPTH.bubble + 3).setVisible(false);
-    this.text = scene.add.bitmapText(0, 0, FONT_KEY, "", FONT_PX).setOrigin(0.5, 1).setTint(0xf8f0d8).setDepth(DEPTH.bubble + 4).setVisible(false);
+    this.text = scene.add.bitmapText(0, 0, FONT_KEY, "", FONT_PX).setOrigin(0.5, 1).setCenterAlign().setTint(0xf8f0d8).setDepth(DEPTH.bubble + 4).setVisible(false);
     ensureEmoteTextures(scene);
     this.icon = scene.add.image(0, 0, emoteTexKey("wave")).setOrigin(0.5, 1).setDepth(DEPTH.bubble + 4).setVisible(false);
   }
 
-  show(text: string, now: number): void {
+  /** 글 말풍선 (ms 동안. 정해진 문장은 SAY_MS, 자유 채팅은 CHAT_SHOW_MS). 떠 있던 말풍선·이모티콘은 바로 바뀐다 */
+  show(text: string, now: number, ms = SAY_MS): void {
     this.atlas.ensure(text);
     this.text.setText(text);
     this.icon.setVisible(false);
     this.mode = "text";
     this.born = now;
-    this.until = now + SAY_MS;
+    this.until = now + ms;
     this.scale = 0;
   }
 

@@ -54,7 +54,7 @@ function readOpen(): boolean {
 export default function Minimap() {
   const [open, setOpen] = useState(readOpen);
   const canvas = useRef<HTMLCanvasElement | null>(null);
-  const last = useRef<{ me: { x: number; y: number }; others: number[] } | null>(null);
+  const last = useRef<{ me: { x: number; y: number }; others: number[]; residents?: number[] } | null>(null);
   /** 나에게 피어 있는 채집 지점 (forage:nodes) */
   const nodes = useRef<string[]>(bridge.last("forage:nodes")?.ids ?? []);
 
@@ -125,6 +125,12 @@ export default function Minimap() {
     // 점 크기는 화면 픽셀 기준으로 정한다 (지도 칸 1개가 화면에서 몇 px인지로 나눈다 — 데스크톱·폰 크기가 달라도 같은 크기로 보이게)
     const unit = c.clientWidth / MINIMAP_W || 1;
     const px = (n: number) => n / unit;
+    // 마을 주민: 작은 회색 점 (사람보다 작게, 사람 점 아래에)
+    const rs = d.residents ?? [];
+    for (let i = 0; i + 1 < rs.length; i += 2) {
+      const p = toMinimap(rs[i], rs[i + 1]);
+      dot(ctx, p.x, p.y, px(2), px(1), "#a9aaa4", "rgba(8,10,14,0.8)");
+    }
     // 다른 사람: 하늘색 점 + 검은 테두리 (어두운 바탕에서도 또렷하게)
     for (let i = 0; i + 1 < d.others.length; i += 2) {
       const p = toMinimap(d.others[i], d.others[i + 1]);

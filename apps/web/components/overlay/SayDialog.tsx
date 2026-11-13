@@ -13,6 +13,7 @@ import Dialog from "../ui/Dialog";
 import { InfoCard, TipList } from "../ui/InfoBlocks";
 import ui from "../ui/ui.module.css";
 import FavStar from "./FavStar";
+import ChatInput from "./ChatInput";
 import SayBoard from "./SayBoard";
 import styles from "./SayDialog.module.css";
 import { FAV_MAX, slotKey, useFavs } from "./sayFavorites";
@@ -34,7 +35,8 @@ const rememberTab = (t: Tab) => {
  * 표현 창: 말풍선·이모티콘·벤치 상태 고르기 (데스크톱 T 키 · 바로 가기 [표현] · 메뉴).
  * - 말풍선·이모티콘마다 별(즐겨찾기, 최대 8개) → Y 키(폰은 [표현] 길게 누르기)로 내 캐릭터 둘레에 펼친다
  * - 이모티콘(5번): 손 흔들기·환호 + 이모티콘 14종. 창 안에서도 숫자 1~9로 바로 고른다 (게임 화면에서도 같은 숫자 키)
- * - 말풍선: 정해진 문장만 보낸다
+ * - 맨 위: 말풍선 자유 채팅 입력칸 (40자, 기록 안 남음 — 데스크톱은 게임 화면에서 Enter로도 연다)
+ * - 말풍선: 정해진 문장
  * - 벤치 상태(24번): 의자·벤치에 앉아 있을 때만 — 머리 위 아이콘과 손 소품이 같은 채널 모두에게 보이고, 일어나면 풀린다
  */
 export default function SayDialog({ onClose }: { onClose: () => void }) {
@@ -65,6 +67,8 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
     if (tab !== "emo") return;
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+      // 위쪽 채팅 입력칸에 숫자를 치는 중이면 입력 몫
+      if (e.target instanceof HTMLElement && e.target.matches("input, textarea, [contenteditable]")) return;
       const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
       if (!m) return;
       const slot = EMO_BOARD[Number(m[1]) - 1];
@@ -80,6 +84,8 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog title="표현 (말풍선·이모티콘)" onClose={onClose}>
+      {/* 말풍선 자유 채팅 (폰은 여기서, 데스크톱은 게임 화면에서 Enter) */}
+      <ChatInput onSent={onClose} className={styles.chat} />
       <div className={styles.tabs} role="tablist" aria-label="고르기">
         {TABS.map(([k, label]) => (
           <button

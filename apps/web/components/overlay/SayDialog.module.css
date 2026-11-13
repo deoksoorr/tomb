@@ -1,5 +1,11 @@
 /* 말풍선·이모티콘·벤치 상태 창 (5·24번) */
 
+/* 맨 위 자유 채팅 입력칸 */
+.chat {
+  flex: none;
+  margin-bottom: 12px;
+}
+
 .tabs {
   display: flex;
   flex: none;

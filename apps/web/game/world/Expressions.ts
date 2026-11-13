@@ -1,4 +1,4 @@
-import { isEmoId, isSeatMood, type Sid } from "@tomb/protocol";
+import { isEmoId, isSeatMood, maskChat, normalizeChat, type Sid } from "@tomb/protocol";
 import { bridge } from "../bridge";
 import type { Player } from "../entities/Player";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
@@ -54,6 +54,23 @@ export class Expressions {
     this.h.player().view.emote(emoIcon(id), now, EMO_SHOW_MS);
     this.h.net().emo(id);
     this.h.sfx.play("say", 0.35);
+  }
+
+  /** 말풍선 자유 채팅: 내 머리 위에 가린 글을 바로 띄우고 같은 채널에 보낸다 (도배 제한은 입력칸과 서버) */
+  chat(raw: string, now: number): void {
+    const text = normalizeChat(raw);
+    if (!text) return;
+    this.h.player().view.chat(maskChat(text), now);
+    this.h.net().chat(text);
+    this.h.sfx.play("say", 0.35);
+  }
+
+  /** 다른 사람의 자유 채팅 (서버가 가린 글). 떠 있던 말풍선·이모티콘은 바로 바뀐다 */
+  onRemoteChat(sid: Sid, text: string): void {
+    const r = this.h.remotes().get(sid);
+    if (!r) return;
+    r.view.chat(text, performance.now());
+    if (r.visible) this.h.sfx.play("say", 0.2, 1.1, 6);
   }
 
   /** 다른 사람의 이모티콘 (원격 아바타는 performance.now 시계로 그린다) */

@@ -47,6 +47,7 @@ import MobileControls from "./MobileControls";
 import NetHud from "./NetHud";
 import ExprRadial, { ExprButton } from "./ExprRadial";
 import SayDialog from "./SayDialog";
+import { ChatBar } from "./ChatInput";
 import ReportLayer from "./ReportLayer";
 import Tutorial from "./Tutorial";
 import UpdateNotice from "./UpdateNotice";
@@ -190,6 +191,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   /** 표현 창(T: 말풍선·이모티콘·벤치 상태)과 즐겨찾기 원형 목록(Y). 집·마을 HUD(panel "housing") 위에서도 열리게 panel과 따로 둔다 */
   const [sayOpen, setSayOpen] = useState(false);
   const [radial, setRadial] = useState(false);
+  /** 데스크톱 Enter 말풍선 채팅 막대 */
+  const [chatOpen, setChatOpen] = useState(false);
   /** 주거 구역의 집 문·빈 필지에서 하우징 창을 열었으면 그 집/번지 */
   const [housingIntent, setHousingIntent] = useState<{ houseId?: string; lot?: number } | null>(null);
   const coarse = useMediaQuery("(pointer: coarse)");
@@ -248,12 +251,21 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   useEffect(() => {
     if (!ready || (!quiet && !roomQuiet)) return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.code !== "KeyT" && e.code !== "KeyI" && e.code !== "KeyY") || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      const enter = e.code === "Enter" || e.code === "NumpadEnter";
+      if ((e.code !== "KeyT" && e.code !== "KeyI" && e.code !== "KeyY" && !enter) || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
       if (roomQuiet && e.code === "KeyI") return;
       const el = document.activeElement;
       if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]")) return;
       // 하우징 안의 방명록·분양 사무소 같은 창이 떠 있으면 그 창 몫
       if (document.querySelector("dialog[open]")) return;
+      // Enter: 말풍선 채팅 입력칸 (버튼에 포커스가 있으면 그 버튼 몫, 낚시처럼 게임 키를 막은 창이 있으면 그 창 몫)
+      if (enter) {
+        if (!canRadial || chatOpen || bridge.last("ui:blockKeys")?.blocked || (el instanceof HTMLElement && el.matches("button, a[href], [role=button]"))) return;
+        e.preventDefault();
+        setRadial(false);
+        setChatOpen(true);
+        return;
+      }
       if (e.code === "KeyY") {
         if (!canRadial) return;
         e.preventDefault();
@@ -267,7 +279,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [ready, quiet, roomQuiet, canRadial]);
+  }, [ready, quiet, roomQuiet, canRadial, chatOpen]);
 
   // 게임이 맵에 내 묘비를 표시한다 (sticky)
   const myGraveIds = me?.graves;
@@ -609,6 +621,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         />
       )}
       {sayOpen && <SayDialog onClose={() => setSayOpen(false)} />}
+      {chatOpen && canRadial && !sayOpen && <ChatBar onClose={() => setChatOpen(false)} />}
       {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
       {/* 마을·집 안: 월드 바로 가기 줄이 숨으니 [표현] 버튼만 왼쪽 아래에 따로 */}
       {ready && scene === "house" && (

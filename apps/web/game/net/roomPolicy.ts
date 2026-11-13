@@ -1,4 +1,4 @@
-import { ACT_KINDS, CLIENT_VERSION, CLOSE, isEmoId, isPhraseId, ROOM_ID_RE, USE_ID_RE, sanitizeDye, type ActKind, type AvatarDye, type EmoId, type PeerInfo, type PhraseId, type Sid } from "@tomb/protocol";
+import { ACT_KINDS, CHAT_MAX, CLIENT_VERSION, CLOSE, isEmoId, isPhraseId, ROOM_ID_RE, USE_ID_RE, sanitizeDye, type ActKind, type AvatarDye, type EmoId, type PeerInfo, type PhraseId, type Sid } from "@tomb/protocol";
 
 // 방(room) 연결의 순수 규칙: 접속 URL, 닫힘 코드 → 다음 행동, 받은 JSON 검증. Phaser·WebSocket 없이 테스트한다.
 
@@ -56,6 +56,7 @@ export type RoomEvent =
   | { t: "act"; sid: Sid; kind: ActKind; x: number; y: number }
   | { t: "say"; sid: Sid; id: PhraseId }
   | { t: "emo"; sid: Sid; id: EmoId }
+  | { t: "chat"; sid: Sid; text: string }
   | { t: "peers"; peers: PeerInfo[]; seats: Record<string, Sid> }
   | { t: "seat"; seatId: string; sid: Sid | null }
   | { t: "seatDenied"; seatId: string }
@@ -122,6 +123,8 @@ export function parseRoomMessage(text: string, mySid: Sid | null): RoomEvent | n
       return isSid(m.sid) && m.sid !== mySid && isPhraseId(m.id) ? { t: "say", sid: m.sid, id: m.id } : null;
     case "emo":
       return isSid(m.sid) && m.sid !== mySid && isEmoId(m.id) ? { t: "emo", sid: m.sid, id: m.id } : null;
+    case "chat":
+      return isSid(m.sid) && m.sid !== mySid && typeof m.text === "string" && m.text ? { t: "chat", sid: m.sid, text: m.text.slice(0, CHAT_MAX * 2) } : null;
     case "peers":
       return Array.isArray(m.peers)
         ? { t: "peers", peers: (m.peers as unknown[]).filter(peerOk).filter((p) => p.sid !== mySid).map(cleanPeer), seats: cleanSeats(m.seats) }

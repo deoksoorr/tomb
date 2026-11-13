@@ -2,9 +2,10 @@ import type { Sfx } from "../Sfx";
 
 // 22번 마을 생물 소리 (파일 없이 WebAudio 합성). 볼륨·끄기는 월드 효과음(Sfx = 13번 효과음 갈래 audio:mix sfx)을 따른다.
 //  purr: 고양이 골골 (낮은 웅웅 + 25Hz 떨림) · meow: 야옹 · coo: 유령 "우우~" · sparkle: 고블린 반짝 · fanfare: 고블린 잡음
+//  bark: 강아지 "멍!" (짧게 내려가는 네모파 + 저역 통과, 아주 작게) · yip: 작은 강아지(우유) "왈!" — 같은 소리를 더 높고 짧게
 //  caw: 까마귀 "까악" (거친 톱니파 두 마디, 띠 통과) · flap: 푸드덕 (잡음 펄스 네 번)
 
-export type LifeSound = "purr" | "meow" | "coo" | "sparkle" | "fanfare" | "caw" | "flap";
+export type LifeSound = "purr" | "meow" | "coo" | "sparkle" | "fanfare" | "caw" | "flap" | "bark" | "yip";
 
 export function playLife(sfx: Sfx, kind: LifeSound, gain = 1): void {
   const ac = sfx.audio();
@@ -69,6 +70,32 @@ export function playLife(sfx: Sfx, kind: LifeSound, gain = 1): void {
       vib.connect(vd).connect(o.frequency);
       vib.start(t);
       vib.stop(t + 1);
+      break;
+    }
+    case "bark":
+    case "yip": {
+      const hi = kind === "yip" ? 1.7 : 1;
+      // "멍!": 짧은 두 겹 (낮은 네모파가 뚝 떨어지고, 위에 거친 배음) → 저역 통과로 둥글게
+      const lp = ac.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 1400 * hi;
+      lp.connect(out);
+      for (const [type, f0, f1, peak] of [
+        ["square", 420, 260, 0.18],
+        ["sawtooth", 840, 520, 0.06],
+      ] as const) {
+        const o = ac.createOscillator();
+        const g = ac.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(f0 * hi, t);
+        o.frequency.exponentialRampToValueAtTime(f1 * hi, t + 0.12 / hi);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(peak, t + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+        o.connect(g).connect(lp);
+        o.start(t);
+        o.stop(t + 0.18);
+      }
       break;
     }
     case "sparkle":

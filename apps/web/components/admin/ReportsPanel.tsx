@@ -134,6 +134,7 @@ export default function ReportsPanel({ toast, onAuthLost, onOpenCount, onBan }: 
                       <li key={i}>
                         {KST.format(n.at)} · {USER_REPORT_REASON_LABELS[n.reason] ?? n.reason}
                         {n.memo ? ` — ${n.memo}` : ""}
+                        {n.chat ? ` · 말풍선 「${n.chat}」` : ""}
                       </li>
                     ))}
                   </ol>

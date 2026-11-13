@@ -7,6 +7,7 @@ import { darken, Grid, lighten, makeCanvas, type Color } from "../../sprites/pix
 export const LTEX = {
   cat: (v: number, f: CatFrame) => `life-cat-${v}-${f}`,
   ghost: (v: number, f: number) => `life-ghost-${v}-${f}`,
+  dog: (v: number, f: DogFrame) => `life-dog-${v}-${f}`,
   goblin: (f: number) => `life-goblin-${f}`,
   telescope: "life-telescope",
   sparkle: "life-sparkle",
@@ -29,6 +30,147 @@ const CAT_COLORS: readonly CatColors[] = [
   { base: 0x26262e, mark: 0x26262e, belly: 0xf2f2f2, eye: 0x7ab040 }, // 턱시도
 ];
 const OUT = 0x16121a;
+
+// ── 강아지 (16×12, 오른쪽을 본다, 발은 맨 아래 줄). 0 백구(진돗개) · 1 누렁이 · 2 점박이 ──
+export type DogFrame = "walk0" | "walk1" | "sit0" | "sit1" | "lie" | "sleep" | "sniff0" | "sniff1";
+export const DOG_FRAMES: readonly DogFrame[] = ["walk0", "walk1", "sit0", "sit1", "lie", "sleep", "sniff0", "sniff1"];
+type DogColors = { base: Color; ear: Color; muzzle: Color; spots?: Color; prick: boolean };
+const DOG_COLORS: readonly DogColors[] = [
+  { base: 0xf2ecdc, ear: 0xe2cfae, muzzle: 0xfffaf0, prick: true }, // 백구
+  { base: 0xd09a52, ear: 0xa8743a, muzzle: 0xf0d6a8, prick: false }, // 누렁이
+  { base: 0xf4f0e8, ear: 0x2e2a2a, muzzle: 0xffffff, spots: 0x3a3434, prick: false }, // 점박이
+];
+/** 강아지 그림 수 (DOG_COLORS + 비숑 우유) */
+export const DOG_VARIANTS = DOG_COLORS.length + 1;
+const BICHON = DOG_COLORS.length;
+
+/** 우유 (비숑): 하얀 솜뭉치 몸, 동그란 머리털, 까만 눈·코, 짧은 다리, 등에 말린 꼬리 (16×12, 오른쪽을 본다) */
+function bichon(f: DogFrame): HTMLCanvasElement {
+  const g = new Grid(16, 12);
+  const fur = 0xfbfaf6;
+  const shade = 0xe6e0d6;
+  const black = 0x1e1a1a;
+  const fluff = (cx: number, cy: number, rx: number, ry: number) => {
+    g.ellipse(cx, cy, rx, ry, fur);
+    // 솜털 결: 아래쪽 가장자리에 옅은 그늘 몇 점
+    g.recolor((x, y) => g.filled(x, y) && y > cy + ry * 0.4 && (x + y) % 3 === 0, shade);
+  };
+  // 동그란 머리털 + 얼굴 (cx, cy = 머리 가운데)
+  const head = (cx: number, cy: number, closed = false) => {
+    fluff(cx, cy, 3.1, 2.9);
+    const x = Math.round(cx);
+    const y = Math.round(cy);
+    if (closed) g.hline(x, x + 1, y, 0x8a7f78);
+    else {
+      // 까만 눈 두 개 (살짝 옆모습)
+      g.set(x, y - 1, black);
+      g.set(x + 2, y - 1, black);
+    }
+    g.set(x + 3, y + 1, black); // 코
+    g.set(x - 2, y + 1, shade); // 처진 귀털
+    g.set(x - 2, y + 2, shade);
+  };
+  // 등 위로 말린 꼬리 (wag면 좌우로)
+  const tail = (x: number, y: number, wag: 0 | 1) => {
+    g.set(x, y, fur);
+    g.set(x - 1 + wag, y - 1, fur);
+    g.set(x + wag, y - 2, fur);
+    g.set(x + 1, y - 1, shade);
+  };
+  if (f === "walk0" || f === "walk1" || f === "sniff0" || f === "sniff1") {
+    const sniff = f.startsWith("sniff");
+    const step = f === "walk1" ? 1 : 0;
+    fluff(7, 7.5, 4.4, 2.8);
+    const legs = step ? [5, 9] : [4, 10];
+    for (const x of legs) g.vline(x, 10, 11, fur);
+    g.vline(legs[0] + 1, 10, 11, shade);
+    g.vline(legs[1] + 1, 10, 11, shade);
+    head(sniff ? 11.6 : 11.2, sniff ? 7.6 : 4.6);
+    tail(3, 5, sniff ? (f === "sniff1" ? 1 : 0) : step);
+  } else if (f === "sit0" || f === "sit1") {
+    fluff(7, 8, 3.4, 3.2);
+    g.vline(8, 10, 11, fur);
+    g.vline(10, 10, 11, fur);
+    head(9.2, 4.2);
+    tail(4, 7, f === "sit1" ? 1 : 0);
+  } else {
+    // 엎드리기·낮잠: 납작한 솜뭉치
+    fluff(7, 9, 5, 2.3);
+    head(11.4, f === "sleep" ? 8.6 : 7.6, f === "sleep");
+    g.hline(12, 15, 11, fur);
+    tail(3, 8, 0);
+  }
+  g.outline(0x6a5f58, false, 200);
+  return g.toCanvas();
+}
+
+function dog(v: number, f: DogFrame): HTMLCanvasElement {
+  if (v === BICHON) return bichon(f);
+  const c = DOG_COLORS[v % DOG_COLORS.length];
+  const g = new Grid(16, 12);
+  const nose = 0x2a2020;
+  const eye = 0x2a2018;
+  // 머리: (hx, hy) 가운데, 주둥이는 오른쪽
+  const head = (hx: number, hy: number, closed = false) => {
+    g.ellipse(hx, hy, 2.3, 2.1, c.base);
+    const y = Math.round(hy);
+    g.rect(Math.round(hx) + 2, y, 2, 2, c.muzzle);
+    g.set(Math.round(hx) + 3, y, nose);
+    if (closed) g.hline(Math.round(hx), Math.round(hx) + 1, y, darken(c.base, 0.45));
+    else g.set(Math.round(hx) + 1, y - 1, eye);
+    // 귀: 백구는 쫑긋, 나머지는 축 처진 귀
+    const ex = Math.round(hx) - 1;
+    if (c.prick) {
+      g.set(ex, y - 3, c.ear);
+      g.set(ex, y - 2, c.ear);
+      g.set(ex + 1, y - 2, c.ear);
+    } else {
+      g.set(ex - 1, y - 1, c.ear);
+      g.set(ex - 1, y, c.ear);
+      g.set(ex, y - 2, c.ear);
+      g.set(ex - 1, y + 1, c.ear);
+    }
+  };
+  // 꼬리: up = 말아 올린 꼬리(흔들면 좌우), down = 바닥에 늘어진 꼬리
+  const tail = (x: number, y: number, wag: 0 | 1, up: boolean) => {
+    if (up) {
+      g.set(x, y, c.base);
+      g.set(x - 1 + wag, y - 1, c.base);
+      g.set(x - 1 + wag * 2, y - 2, c.base);
+    } else {
+      g.set(x, y, c.base);
+      g.set(x - 1, y - wag, c.base);
+      g.set(x - 2, y - wag * 2, c.base);
+    }
+  };
+  if (f === "walk0" || f === "walk1" || f === "sniff0" || f === "sniff1") {
+    const sniff = f.startsWith("sniff");
+    const step = f === "walk1" ? 1 : 0;
+    g.ellipse(7, 6.5, 4.6, 2.3, c.base);
+    g.hline(5, 9, 8, c.muzzle);
+    const legs = sniff ? [4, 6, 9, 10] : step ? [4, 7, 8, 11] : [3, 6, 9, 10];
+    for (const x of legs) g.vline(x, 8, 11, c.base);
+    head(sniff ? 12.5 : 12, sniff ? 7.5 : 4.2);
+    tail(2, 5, sniff ? (f === "sniff1" ? 1 : 0) : (step as 0 | 1), true);
+  } else if (f === "sit0" || f === "sit1") {
+    g.ellipse(7, 7.5, 3, 3.2, c.base);
+    g.rect(7, 7, 3, 3, c.muzzle);
+    g.ellipse(5, 9.8, 2.2, 1.6, c.base); // 뒷다리
+    g.vline(8, 9, 11, c.base);
+    g.vline(10, 9, 11, c.base);
+    head(9.5, 3.6);
+    tail(3, 10, f === "sit1" ? 1 : 0, false);
+  } else {
+    // 엎드리기·낮잠: 납작하게, 앞발은 앞으로
+    g.ellipse(7, 9, 5, 2.1, c.base);
+    head(11.5, f === "sleep" ? 8.6 : 7.4, f === "sleep");
+    g.hline(11, 15, 11, c.base);
+    tail(2, 10, 0, false);
+  }
+  if (c.spots) g.recolor((x, y) => g.filled(x, y) && x < 10 && ((x * 7 + y * 5) % 13 === 0 || (x * 3 + y * 11) % 17 === 0), c.spots);
+  g.outline(OUT, false, 200);
+  return g.toCanvas();
+}
 
 /** 고양이 한 장 (16×12, 오른쪽을 본다, 발은 맨 아래 줄) */
 function cat(v: number, f: CatFrame): HTMLCanvasElement {
@@ -258,6 +400,7 @@ export function ensureLifeTextures(scene: Phaser.Scene): void {
   const tx = scene.textures;
   if (tx.exists(LTEX.telescope)) return;
   for (let v = 0; v < CAT_VARIANTS; v++) for (const f of CAT_FRAMES) tx.addCanvas(LTEX.cat(v, f), cat(v, f));
+  for (let v = 0; v < DOG_VARIANTS; v++) for (const f of DOG_FRAMES) tx.addCanvas(LTEX.dog(v, f), dog(v, f));
   for (let v = 0; v < GHOST_VARIANTS; v++) for (let f = 0; f < 2; f++) tx.addCanvas(LTEX.ghost(v, f), ghost(v, f));
   for (let f = 0; f < 3; f++) tx.addCanvas(LTEX.goblin(f), goblin(f));
   tx.addCanvas(LTEX.telescope, telescope());

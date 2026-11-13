@@ -102,7 +102,7 @@ export type GameEvents = {
   /** 47번: 실시간 서버가 이용 제한으로 내보냄(4012) → UI가 새로고침해 제한 화면을 띄운다 */
   "app:banned": undefined;
   /** 47번: 다른 사람 캐릭터(또는 이름표)를 눌렀다 → UI가 작은 메뉴(신고하기)를 띄운다. ch = 월드 채널, room = 방 id */
-  "peer:menu": { sid: number; name: string; ch?: number; room?: string };
+  "peer:menu": { sid: number; name: string; ch?: number; room?: string; /** 그 사람 머리 위에 지금 떠 있는 자유 채팅 (신고에 붙인다) */ chat?: string };
 
   // ── 하우징 ── (game/housing, components/housing)
   /** 집 안 편집 상태 (편집 모드에서 바뀔 때마다). UI가 가방 남은 개수·점수·저장 버튼에 쓴다 */
@@ -133,7 +133,7 @@ export type GameEvents = {
   "haunt:ended": { escaped: boolean; ms: number; scares: number };
 
   /** F17 미니맵: 내 위치와 같은 채널 사람들 위치 [x0, y0, x1, y1, …] (월드에 있는 동안 0.25초마다) */
-  "minimap:dots": { me: { x: number; y: number }; others: number[] };
+  "minimap:dots": { me: { x: number; y: number }; others: number[]; residents?: number[] };
   /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고) */
   "peers:list": { names: string[] };
 
@@ -195,6 +195,8 @@ export type UiEvents = {
   "input:say": { id: string };
   /** 5번 이모티콘 (EMOS id). 내 머리 위에 바로 띄우고 같은 채널에 보낸다 */
   "input:emo": { id: string };
+  /** 말풍선 자유 채팅 (입력칸이 정리·도배 제한을 마친 글). 지금 있는 공간(채널·방)에 보낸다 */
+  "input:chat": { text: string };
   /** 24번 벤치 상태 고르기 (SEAT_MOODS id, "" = 풀기). 앉아 있을 때만 */
   "input:mood": { mood: string };
   /** 첫 방문 안내: 월드의 한 지점을 화살표로 가리킨다 (null이면 지움). target이 있으면 게임이 그 대상의 좌표를 찾는다 */

@@ -6,6 +6,7 @@ import {
   TELESCOPE,
   goblinPos,
   goblinRoute,
+  hashUnit,
   spotSeatId,
   type GoblinInfo,
   type GoblinPose,
@@ -23,8 +24,11 @@ import type { Interactable } from "../layout";
 import type { Lighting } from "../Lighting";
 import type { Sfx } from "../Sfx";
 import { stargazeColliders } from "./stargazeLayout";
-import { CRITTERS, CritterSim, PERCH_FRONT_DY, type CritterPose } from "./critterSim";
+import { CRITTERS, CritterSim, PERCH_HOP_MS, type CritterPose } from "./critterSim";
 import { Crows } from "./Crows";
+import { Dogs } from "./Dogs";
+import type { LineContext } from "./residentData";
+import { Residents } from "./Residents";
 import { playLife } from "./sounds";
 import { ensureLifeTextures, LTEX, type CatFrame } from "./sprites";
 
@@ -67,6 +71,8 @@ type CritterView = {
   hop: number;
   startledUntil: number;
   petUntil: number;
+  /** 좌석 위에 올라가 있다 (사람이 앉으면 폴짝 내려와 비킨다) */
+  onSeat: boolean;
   /** 화면에 그려진 자리 */
   x: number;
   y: number;
@@ -86,6 +92,8 @@ const PET_RADIUS = 18;
 const LABEL_RADIUS = 46;
 const STARTLE_RADIUS = 26;
 const CURIOUS_RADIUS = 36;
+/** 사람이 앉은 좌석 앞에서 고양이가 비켜 서는 거리 (주민과 같은 규칙) */
+const PERCH_SIDESTEP = 13;
 const PET_TEXT_CAT = ["골골골…", "냐옹~", "그르릉…", "야옹!"];
 const PET_TEXT_GHOST = ["우우~", "히히", "부끄…", "둥실~"];
 
@@ -113,6 +121,14 @@ export class VillageLife {
   private destroyed = false;
   /** 까마귀 연못의 까마귀 (crowSim — 고양이처럼 채널 시드 + 서버 시계) */
   private readonly crows: Crows;
+  /** 돌아다니는 마을 주민 (residentSim — 고양이처럼 채널 시드 + 서버 시계, 관리자 설정으로 수 조절) */
+  private readonly residents: Residents;
+  /** 돌아다니는 강아지 (dogSim — 채널 시드 + 서버 시계, 주민 설정과 별개로 늘 켜짐) */
+  private readonly dogs: Dogs;
+  /** 주민이 (보기에만) 앉아 있는 좌석 — 고양이가 그 자리는 비킨다 */
+  private readonly residentSeats = new Set<string>();
+  /** 주민 대사 고르기용 시간대·날씨 (updateAmbience가 30초마다) */
+  private lineCtx: LineContext = { phase: "day", weather: "clear" };
 
   constructor(private readonly d: LifeDeps) {
     const scene = (this.scene = d.scene);
@@ -146,6 +162,8 @@ export class VillageLife {
     });
     this.hearts.setDepth(DEPTH.bubble - 1);
     this.crows = new Crows(scene, d.sfx, d.reduced);
+    this.residents = new Residents(scene, d.atlas, d.reduced);
+    this.dogs = new Dogs(scene, d.atlas, d.sfx, d.reduced);
     this.setSeed(d.channel());
   }
 
@@ -174,6 +192,8 @@ export class VillageLife {
     if (seed === this.seed) return;
     this.seed = seed;
     this.crows.setSeed(seed);
+    this.residents.setSeed(seed);
+    this.dogs.setSeed(seed);
     for (const c of this.critters) {
       c.img.destroy();
       c.label.destroy();
@@ -185,7 +205,7 @@ export class VillageLife {
       if (sim.spots.length === 0) return;
       const img = this.scene.add.image(0, 0, def.kind === "cat" ? LTEX.cat(def.variant, "sit") : LTEX.ghost(def.variant, 0)).setOrigin(0.5, 1);
       const label = this.scene.add.bitmapText(0, 0, FONT_KEY, def.name, FONT_PX).setOrigin(0.5, 1).setDepth(DEPTH.labels - 2).setTint(0xf2e8d0).setVisible(false);
-      this.critters.push({ sim, pose: sim.at(this.serverNow()), img, label, zzz: null, ox: 0, oy: 0, tx: 0, ty: 0, hop: 0, startledUntil: 0, petUntil: 0, x: 0, y: 0, visible: false });
+      this.critters.push({ sim, pose: sim.at(this.serverNow()), img, label, zzz: null, ox: 0, oy: 0, tx: 0, ty: 0, hop: 0, startledUntil: 0, petUntil: 0, onSeat: false, x: 0, y: 0, visible: false });
     });
   }
 
@@ -199,6 +219,9 @@ export class VillageLife {
     this.updateAmbience(t);
     this.updateCritters(t, pnow, dt, view, labelScale);
     const pl = this.d.player();
+    this.residents.update(t, dt, view, labelScale, pl, this.d.seats());
+    this.residents.seated(this.residentSeats);
+    this.dogs.update(t, dt, view, labelScale, pl);
     this.crows.update(t, pnow, view, { x: pl.x, y: pl.y, rushing: pl.state === "run" || pl.state === "jump" });
     this.updateGoblin(t, pnow, labelScale);
     this.updateStars(pnow, view);
@@ -210,6 +233,7 @@ export class VillageLife {
     this.ambAt = t;
     const a = ambienceAt(Date.now(), this.override);
     this.starry = a.phase === "night" && a.weather === "clear";
+    this.lineCtx = { phase: a.phase, weather: a.weather };
     this.ghostAlpha = a.phase === "night" ? 0.85 : a.phase === "day" ? 0.45 : 0.65;
     this.crows.setNight(a.phase === "night" || a.phase === "dusk");
   }
@@ -225,14 +249,24 @@ export class VillageLife {
       let y = p.y;
       let depth = y;
       let hopY = 0;
-      // 벤치·의자 위로 폴짝 (그 좌석이 비어 있을 때만 — 사람이 앉아 있으면 그 앞에서 쉰다)
-      if (cat && p.perch && !p.walking && !seats.has(p.perch.id)) {
-        const f = Math.min(1, p.restMs / 380);
-        x = p.perch.x;
-        y = p.perch.y + PERCH_FRONT_DY * (1 - f) - 2 * f;
-        hopY = Math.sin(f * Math.PI) * 7;
-        depth = p.perch.y + 2;
-      }
+      // 벤치·그루터기 위로 폴짝 (좌석 앞 쉼 자리에서). 사람·주민이 앉아 있으면 주민처럼 그 앞을 옆으로 비켜 쉬고,
+      // 올라가 있다가 누가 앉으면 폴짝 내려온다
+      if (cat && p.perch && !p.walking) {
+        const s = p.perch;
+        const mine = pl.sitting && Math.abs(s.x - pl.x) < 4 && Math.abs(s.y - pl.y) < 4;
+        if (!seats.has(s.id) && !this.residentSeats.has(s.id) && !mine) {
+          const f = Math.min(1, p.restMs / PERCH_HOP_MS);
+          x = p.x + (s.x - p.x) * f;
+          y = p.y + (s.y - 2 - p.y) * f;
+          hopY = Math.sin(f * Math.PI) * 7;
+          depth = s.y + 2;
+          c.onSeat = f >= 1;
+        } else {
+          x = p.x + (hashUnit(c.sim.seed, c.sim.index, p.leg, 31) < 0.5 ? -PERCH_SIDESTEP : PERCH_SIDESTEP);
+          if (c.onSeat) c.hop = 1;
+          c.onSeat = false;
+        }
+      } else c.onSeat = false;
       const inView = x > view.x - 40 && x < view.right + 40 && y > view.y - 40 && y < view.bottom + 60;
       c.visible = inView;
       c.img.setVisible(inView);
@@ -312,7 +346,8 @@ export class VillageLife {
   pet(): boolean {
     const pl = this.d.player();
     const c = this.nearestCritter(pl.x, pl.y, PET_RADIUS);
-    if (!c) return false;
+    // 고양이·유령이 없으면 강아지 쓰다듬기, 그것도 없으면 바로 옆 마을 주민에게 말 걸기
+    if (!c) return this.dogs.pet(pl) || this.residents.talk(pl, this.lineCtx);
     const pnow = performance.now();
     if (pnow - this.petAt < 900) return true;
     this.petAt = pnow;
@@ -337,7 +372,10 @@ export class VillageLife {
   /** 발밑 안내 ("E 쓰다듬기"). 가까운 고양이·유령이 없으면 null */
   hint(prefix: string, px: number, py: number): { x: number; y: number; text: string; dim: boolean; dist: number } | null {
     const c = this.nearestCritter(px, py, PET_RADIUS);
-    if (!c) return null;
+    if (!c) {
+      const r = this.dogs.hint(prefix, px, py) ?? this.residents.hint(prefix, px, py);
+      return r ? { x: px, y: py + 2, text: r.text, dim: false, dist: r.dist } : null;
+    }
     const dist = Math.hypot(c.x - px, c.y - py);
     return { x: px, y: py + 2, text: `${prefix}${c.sim.def.name} ${c.sim.def.kind === "cat" ? "쓰다듬기" : "놀아 주기"}`, dim: false, dist };
   }
@@ -547,6 +585,11 @@ export class VillageLife {
     });
   }
 
+  /** 미니맵용 마을 주민 자리 [x, y, …] (강아지도 같은 작은 점으로 덧붙인다) */
+  residentDots(out?: number[]): number[] {
+    return this.dogs.dots(this.residents.dots(out));
+  }
+
   /** 지금 맑은 밤인지 (QA·HUD) */
   get starryNight(): boolean {
     return this.starry;
@@ -564,6 +607,8 @@ export class VillageLife {
     this.destroyed = true;
     this.clearGoblin(false);
     this.crows.destroy();
+    this.residents.destroy();
+    this.dogs.destroy();
     for (const c of this.critters) {
       c.img.destroy();
       c.label.destroy();

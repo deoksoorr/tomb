@@ -12,7 +12,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import styles from "./ReportLayer.module.css";
 
-type Menu = { sid: number; name: string; ch?: number; room?: string; x: number; y: number };
+type Menu = { sid: number; name: string; ch?: number; room?: string; chat?: string; x: number; y: number };
 const MENU_W = 180;
 const MENU_H = 136;
 
@@ -77,7 +77,8 @@ export default function ReportLayer() {
             role="menuitem"
             className={cx(ui.button, styles.menuItem)}
             onClick={() => {
-              reportStore.open({ type: "user", name: menu.name, sid: menu.sid, ch: menu.ch, room: menu.room });
+              // 그 사람 머리 위에 떠 있던 자유 채팅은 이 신고에만 붙여 보낸다 (채팅은 따로 저장하지 않는다)
+              reportStore.open({ type: "user", name: menu.name, sid: menu.sid, ch: menu.ch, room: menu.room, ...(menu.chat ? { chat: menu.chat } : {}) });
               setMenu(null);
             }}
           >
@@ -123,6 +124,7 @@ function ReportDialog({ target, onDone }: { target: ReportTarget; onDone: (messa
         <p className={styles.who}>
           <strong>{target.name}</strong>
           {target.type === "megaphone" && <span className={styles.quote}>「{target.text}」</span>}
+          {target.type === "user" && target.chat && <span className={styles.quote}>「{target.chat}」 (이 말풍선이 신고와 함께 전달돼요)</span>}
         </p>
         <fieldset className={styles.reasons}>
           <legend className={ui.hint}>신고 사유</legend>

@@ -1,0 +1,52 @@
+/* 말풍선 자유 채팅 입력칸 (표현 창 위쪽 · 데스크톱 Enter 막대) */
+
+.chat {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  gap: 6px;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+}
+
+.send {
+  flex: none;
+}
+
+.meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.slow {
+  color: var(--candle);
+}
+
+.count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 데스크톱 Enter 막대: 화면 아래 가운데 */
+.bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+  width: min(420px, calc(100vw - 32px));
+  padding: 10px 12px 8px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border-strong);
+  transform: translateX(-50%);
+}

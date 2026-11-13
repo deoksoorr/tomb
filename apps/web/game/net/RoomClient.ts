@@ -33,6 +33,8 @@ export type RoomCallbacks = {
   onSay?(sid: Sid, id: string): void;
   /** 5번 이모티콘 (방 안에서도 서버가 중계한다) */
   onEmo?(sid: Sid, id: string): void;
+  /** 말풍선 자유 채팅 (서버가 가린 글) */
+  onChat?(sid: Sid, text: string): void;
   /** sync 응답: 서버가 아는 방 인원 전체 (나 제외)와 좌석 점유표 */
   onPeers?(peers: PeerInfo[], seats: Record<string, Sid>): void;
   /** 3번 집 안 1인 자리: 점유 변경 (sid null = 비었다) / 내 요청 거절 */
@@ -204,6 +206,11 @@ export class RoomClient {
     if (isEmoId(id)) this.send({ t: "emo", id });
   }
 
+  /** 말풍선 자유 채팅 (정리된 글. 도배 제한·가리기는 서버가 한 번 더 한다) */
+  chat(text: string): void {
+    this.send({ t: "chat", text });
+  }
+
   /** 꾸미기 변경 증서 (Vercel 서명). 서버 간격(10초) 안이면 버리지 않고 간격이 지나자마자 최신 것을 보낸다 */
   look(grant: string): void {
     this.lookGrant = grant;
@@ -352,6 +359,9 @@ export class RoomClient {
           break;
         case "emo":
           this.cb.onEmo?.(ev.sid, ev.id);
+          break;
+        case "chat":
+          this.cb.onChat?.(ev.sid, ev.text);
           break;
         case "seat":
           this.cb.onSeat?.(ev.seatId, ev.sid);

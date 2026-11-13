@@ -2,6 +2,7 @@ import {
   ACT_KINDS,
   CLIENT_VERSION,
   isPhraseId,
+  CHAT_MAX,
   isEmoId,
   isSeatMood,
   CLOSE,
@@ -81,6 +82,8 @@ export type NetCallbacks = {
   onSay(sid: Sid, id: PhraseId): void;
   /** 5번 이모티콘 (EMOS id). 내 것은 오지 않는다 */
   onEmo?(sid: Sid, id: EmoId): void;
+  /** 말풍선 자유 채팅 (서버가 가린 글). 내 것은 오지 않는다 */
+  onChat?(sid: Sid, text: string): void;
   /** 24번 벤치 상태 (SEAT_MOODS id, "" = 풀림). 서버가 받아들인 내 것도 온다 */
   onMood?(sid: Sid, mood: SeatMood | ""): void;
   /** 동물원 타는 펫에 올라탐·내림. 서버가 받아들인 내 것도 온다 (자리에 앉거나 물에 들어가면 서버가 내리기도 한다) */
@@ -343,6 +346,11 @@ export class RealtimeClient {
     this.send({ t: "emo", id });
   }
 
+  /** 말풍선 자유 채팅 (정리된 글. 도배 제한·가리기는 서버가 한 번 더 한다) */
+  chat(text: string): void {
+    this.send({ t: "chat", text });
+  }
+
   /** 24번 벤치 상태 ("" = 풀기). 앉아 있을 때만 서버가 받는다 */
   mood(m: SeatMood | ""): void {
     this.send({ t: "mood", m });
@@ -545,6 +553,9 @@ export class RealtimeClient {
           break;
         case "emo":
           if (m.sid !== this.mySid && isEmoId(m.id)) this.cb.onEmo?.(m.sid, m.id);
+          break;
+        case "chat":
+          if (m.sid !== this.mySid && typeof m.text === "string") this.cb.onChat?.(m.sid, m.text.slice(0, CHAT_MAX * 2));
           break;
         case "mood":
           if (m.m === "" || isSeatMood(m.m)) this.cb.onMood?.(m.sid, m.m);

@@ -33,7 +33,8 @@ export type CaseMeta = {
   /** 묘비·방명록처럼 원래 저장소가 따로 세는 경우 그쪽 신고자 수 (신고함의 신고자 집합이 없을 때) */
   reporters?: number;
 };
-export type ReportNote = { at: number; reason: UserReportReason; memo: string; by: string };
+/** chat = 유저 신고 때 그 사람 머리 위에 떠 있던 자유 채팅 (채팅은 이 신고 기록에만 남는다) */
+export type ReportNote = { at: number; reason: UserReportReason; memo: string; by: string; chat?: string };
 export type Resolution = { at: number; by: string; action: string; note?: string };
 export type ReportCase = CaseMeta & {
   key: string;

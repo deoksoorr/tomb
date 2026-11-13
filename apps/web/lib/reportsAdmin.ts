@@ -1,4 +1,4 @@
-import { CLOSE, ROOM_ID_RE } from "@tomb/protocol";
+import { CHAT_MAX, CLOSE, ROOM_ID_RE } from "@tomb/protocol";
 import { z } from "zod";
 import { kickNow, peerOf } from "./ban";
 import { listAdminGraves } from "./admin";
@@ -38,6 +38,8 @@ export const UserReportSchema = z.discriminatedUnion("type", [
     ch: z.number().int().min(1).max(100).optional(),
     room: z.string().max(60).regex(ROOM_ID_RE).optional(),
     sid: z.number().int().min(0).max(1_000_000),
+    /** 신고하는 순간 그 사람 머리 위에 떠 있던 자유 채팅 (클라이언트가 본 글. 이 신고 기록에만 남는다) */
+    chat: z.string().trim().max(CHAT_MAX * 2).optional(),
     reason,
     memo,
   }),
@@ -65,7 +67,8 @@ export async function submitReport(reporterId: string, input: UserReportInput, n
     if (rec.accountId === reporterId) throw new HttpError(400, "INVALID_INPUT", "자기 확성기는 신고할 수 없어요.");
     meta = { type: "megaphone", targetId: rec.id, accountId: rec.accountId, name: rec.name, preview: rec.text };
   }
-  const note: ReportNote = { at: now, reason: input.reason, memo: input.memo, by: reporterId };
+  const chat = input.type === "user" && input.chat ? input.chat : undefined;
+  const note: ReportNote = { at: now, reason: input.reason, memo: input.memo, by: reporterId, ...(chat ? { chat } : {}) };
   if ((await getReportBox().add(meta, note, kstDay(now))) === "duplicate")
     throw new HttpError(409, "ALREADY_REPORTED", "오늘은 이미 이 대상을 신고했어요. 내일 다시 신고할 수 있어요.");
 }

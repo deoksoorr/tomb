@@ -22,6 +22,7 @@ import PassedPanel from "./PassedPanel";
 import ReportsPanel from "./ReportsPanel";
 import type { BanTarget } from "./BanPanel";
 import { moderationApi } from "./moderationApi";
+import ResidentsPanel from "./ResidentsPanel";
 import StaffPanel from "./StaffPanel";
 import { adminApi } from "./adminApi";
 import styles from "./Admin.module.css";
@@ -29,7 +30,7 @@ import styles from "./Admin.module.css";
 type Filter = "all" | "reported" | "hidden";
 type Sort = "reports" | "recent" | "flowers";
 /** 48번 탭 순서: 대시보드 · 회원 · 신고 · 경제 · 하우징 · 공지 · 콘텐츠(묘비·성불) · 오류 */
-type Tab = "dashboard" | "members" | "reports" | "economy" | "housing" | "notices" | "content" | "errors" | "gifts" | "megaphone" | "dye" | "staff";
+type Tab = "dashboard" | "members" | "reports" | "economy" | "housing" | "notices" | "content" | "errors" | "gifts" | "megaphone" | "dye" | "staff" | "residents";
 const TABS: [Tab, string][] = [
   ["dashboard", "대시보드"],
   ["members", "회원"],
@@ -46,6 +47,8 @@ const TABS: [Tab, string][] = [
   // 11·23번
   ["gifts", "선물"],
   ["megaphone", "확성기"],
+  // 돌아다니는 마을 주민 (켜기/끄기·주민 수)
+  ["residents", "마을 주민"],
 ];
 
 const FILTERS: [Filter, string][] = [
@@ -290,6 +293,7 @@ export default function AdminApp() {
         {phase === "ready" && tab === "errors" && <ErrorsPanel toast={toast} onAuthLost={authLost} />}
         {phase === "ready" && tab === "gifts" && <GiftsPanel toast={toast} onAuthLost={authLost} />}
         {phase === "ready" && tab === "megaphone" && <MegaphonePanel toast={toast} onAuthLost={authLost} />}
+        {phase === "ready" && tab === "residents" && <ResidentsPanel toast={toast} onAuthLost={authLost} />}
 
         {phase === "ready" && tab === "content" && content === "graves" && (
           <>

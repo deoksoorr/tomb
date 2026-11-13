@@ -10,6 +10,10 @@ import {
   decodeMove,
   encodeEvent,
   encodeSnapshot,
+  maskChat,
+  newChatBucket,
+  takeChatToken,
+  type ChatBucket,
   inServerBounds,
   parseC2S,
   seatSlot,
@@ -231,6 +235,8 @@ type Peer<C> = PeerRecord & {
   lastRideAt?: number;
   lastRodAt?: number;
   lastAwayAt?: number;
+  /** 말풍선 채팅 도배 제한 (토큰 버킷). 재접속해도 피어에 남겨 다시 채워지지 않게 한다 */
+  chatBucket?: ChatBucket;
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
   lastSeenAt: number;
   /** attachment가 최신인지 */
@@ -718,6 +724,10 @@ export class ChannelCore<C extends object> {
         if (now - p.lastSayAt < SAY_INTERVAL_MS) return;
         p.lastSayAt = now;
         return this.broadcast(encodeEvent({ t: "say", sid: p.sid, id: m.id }));
+      case "chat":
+        // 말풍선 채팅: 넘치면 조용히 버린다. 가린 글만 같은 채널·방에 중계하고 어디에도 저장하지 않는다 (실내에 있으면 안 보이니 버린다)
+        if (p.away || !takeChatToken((p.chatBucket ??= newChatBucket()), now)) return;
+        return this.broadcast(encodeEvent({ t: "chat", sid: p.sid, text: maskChat(m.text) }), p.sid);
       case "goblin":
         return this.onGoblinClaim(p, m.id, now);
       case "megaphone":

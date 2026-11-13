@@ -1,4 +1,4 @@
-import { FURNITURE, MAP_HEIGHT, MAP_WIDTH, SEATS, hashUnit, mulberry32, type Seat } from "@tomb/protocol";
+import { DIR, FURNITURE, MAP_HEIGHT, MAP_WIDTH, SEATS, hashUnit, mulberry32, type Seat } from "@tomb/protocol";
 import { findPath, type Pt, type WalkGrid } from "../../logic/pathfind";
 import { nearWater, WALK, walkableGrid } from "../layout";
 
@@ -33,11 +33,11 @@ export type CritterDef = {
 };
 
 export const CRITTERS: readonly CritterDef[] = [
-  { id: "cheese", kind: "cat", name: "치즈", variant: 0, home: { x: 720, y: 560, r: 150 }, perches: ["bB", "bC", "lA"], grass: 5, legMs: 38_000, speed: 22 },
+  { id: "cheese", kind: "cat", name: "치즈", variant: 0, home: { x: 720, y: 560, r: 150 }, perches: ["bB", "bC", "lA", "kPe2"], grass: 5, legMs: 38_000, speed: 22 },
   { id: "kkam", kind: "cat", name: "까망이", variant: 1, home: { x: 476, y: 470, r: 90 }, perches: ["bA"], grass: 4, legMs: 42_000, speed: 20 },
   { id: "godeung", kind: "cat", name: "고등어", variant: 2, home: { x: 420, y: 620, r: 150 }, perches: ["lC", "bK"], grass: 5, legMs: 40_000, speed: 22 },
   { id: "samsaek", kind: "cat", name: "삼색이", variant: 3, home: { x: 720, y: 128, r: 110 }, perches: ["bG", "bH", "bQ"], grass: 4, legMs: 36_000, speed: 24 },
-  { id: "tux", kind: "cat", name: "턱시도", variant: 4, home: { x: 1000, y: 960, r: 110 }, perches: ["bO", "lE", "cE", "cF"], grass: 4, legMs: 44_000, speed: 20 },
+  { id: "tux", kind: "cat", name: "턱시도", variant: 4, home: { x: 1000, y: 960, r: 110 }, perches: ["bO", "lE", "cE", "cF", "kSe"], grass: 4, legMs: 44_000, speed: 20 },
   { id: "boo", kind: "ghost", name: "꼬마 유령", variant: 0, home: { x: 240, y: 430, r: 160 }, perches: ["bI", "bJ"], grass: 5, legMs: 30_000, speed: 14 },
   { id: "starlet", kind: "ghost", name: "별 유령", variant: 1, home: { x: 200, y: 140, r: 120 }, perches: ["lB", "bL"], grass: 4, legMs: 34_000, speed: 12 },
   { id: "moss", kind: "ghost", name: "이끼 유령", variant: 2, home: { x: 500, y: 960, r: 130 }, perches: ["bS", "bV", "bW", "bX"], grass: 6, legMs: 32_000, speed: 13 },
@@ -63,8 +63,8 @@ export type CritterPose = {
   leg: number;
 };
 
-/** 좌석 앞(내려선 자리)까지의 거리 — 길은 여기까지 걷고, 쉬기 시작하면 좌석 위로 */
-export const PERCH_FRONT_DY = 9;
+/** 좌석 위로 폴짝 오르는 시간 (쉼 자리 = 좌석 앞 seatFront까지 걷고, 쉬기 시작하면 좌석 위로) */
+export const PERCH_HOP_MS = 380;
 
 const CELL = 8;
 let gridCache: WalkGrid | null = null;
@@ -95,6 +95,19 @@ export function restable(g: WalkGrid, x: number, y: number): boolean {
 
 const FURN = new Map(FURNITURE.map((f) => [f.id, f]));
 
+/**
+ * 좌석 앞 "내려선 자리": 좌석이 바라보는 쪽(없으면 아래쪽)으로 10~24px 안에서 처음 쉴 수 있는 점.
+ * 좌석 바로 앞 9px은 벤치 몸체(가구 충돌) 칸이라 막힌 자리로 판정돼 고양이가 벤치에 못 올라갔다 → 주민처럼 조금 더 앞에서 찾는다.
+ * 결정적이라 모든 클라이언트가 같은 점을 얻는다
+ */
+export function seatFront(g: WalkGrid, s: Seat): Pt | null {
+  const fx = s.facing === DIR.left ? -1 : s.facing === DIR.right ? 1 : 0;
+  const fy = s.facing === DIR.up ? -1 : s.facing === DIR.down ? 1 : 0;
+  for (let d = 10; d <= 24; d += 2) if (restable(g, s.x + fx * d, s.y + fy * d)) return { x: s.x + fx * d, y: s.y + fy * d };
+  if (fy !== 1) for (let d = 10; d <= 24; d += 2) if (restable(g, s.x, s.y + d)) return { x: s.x, y: s.y + d };
+  return null;
+}
+
 /** 한 마리의 쉼 자리 목록 (결정적: 같은 맵이면 모든 클라이언트가 같은 목록) */
 export function restSpots(def: CritterDef, g: WalkGrid = critterGrid()): RestSpot[] {
   const out: RestSpot[] = [];
@@ -102,8 +115,8 @@ export function restSpots(def: CritterDef, g: WalkGrid = critterGrid()): RestSpo
     if (!FURN.has(fid)) continue;
     for (const s of SEATS) {
       if (s.furnitureId !== fid) continue;
-      const front = { x: s.x, y: s.y + PERCH_FRONT_DY };
-      if (restable(g, front.x, front.y)) out.push({ x: front.x, y: front.y, perch: s });
+      const front = seatFront(g, s);
+      if (front) out.push({ x: front.x, y: front.y, perch: s });
     }
   }
   const r = mulberry32(Math.floor(hashUnit(def.id.length, def.home.x, def.home.y) * 0x7fffffff));
@@ -137,8 +150,10 @@ export class CritterSim {
     readonly index: number,
     readonly seed: number,
     private readonly grid: WalkGrid = critterGrid(),
+    /** 쉼 자리를 따로 줄 때 (마을 주민: 좌석 앞을 더 넓게 찾는다) */
+    spots?: RestSpot[],
   ) {
-    this.spots = restSpots(def, grid);
+    this.spots = spots ?? restSpots(def, grid);
     this.phase = Math.floor(hashUnit(seed, index, 17) * def.legMs);
   }
 
@@ -180,6 +195,13 @@ export class CritterSim {
     const leg: Leg = { k, start: k * def.legMs - this.phase, from, to: reached ? to : { x: end.x, y: end.y, perch: null }, path, lens, total, walkMs, pose, restFace };
     this.leg = leg;
     return leg;
+  }
+
+  /** 시각 t가 든 구간의 시작 시각과 걷는 시간 (강아지가 걷다 멈춰 냄새 맡는 연출에 쓴다) */
+  legTiming(t: number): { k: number; start: number; walkMs: number } {
+    const k = Math.floor((t + this.phase) / this.def.legMs);
+    const L = this.legAt(k);
+    return { k, start: L.start, walkMs: L.total > 0 ? L.walkMs : 0 };
   }
 
   /** 시각 t(서버 ms)의 모습 */

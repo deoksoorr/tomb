@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { dexBadgeCats, DIR, ridePetOfLook, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
+import { CHAT_SHOW_MS, dexBadgeCats, DIR, ridePetOfLook, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange, isDyedSpec } from "../sprites/avatar";
@@ -10,6 +10,7 @@ import type { EmoteIcon } from "../sprites/emotes";
 import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
 import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_H, POSE_W, type IndoorPose } from "../sprites/indoorPose";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
+import { wrapChat } from "../logic/chatWrap";
 import { SpeechBubble } from "./SpeechBubble";
 import { MoodView } from "./MoodView";
 import { STAFF_COLOR, StaffFxView } from "./StaffFxView";
@@ -59,6 +60,8 @@ export class AvatarView {
   private bubble: Phaser.GameObjects.Image | null = null;
   /** 말풍선(say) — 처음 말할 때 만든다 */
   private speech: SpeechBubble | null = null;
+  /** 말풍선 자리에 지금 떠 있는 자유 채팅 (신고용) */
+  private chatShown: { text: string; until: number } | null = null;
   private texKey: string;
   private look: readonly string[] = [];
   private body: string;
@@ -571,12 +574,26 @@ export class AvatarView {
   say(text: string, now: number): void {
     this.speech ??= new SpeechBubble(this.scene, this.atlas);
     this.speech.show(text, now);
+    this.chatShown = null;
+  }
+
+  /** 말풍선 자유 채팅 (가린 글, CHAT_SHOW_MS). 떠 있던 말풍선·이모티콘은 바로 바뀐다 (한 자리 하나) */
+  chat(text: string, now: number): void {
+    this.speech ??= new SpeechBubble(this.scene, this.atlas);
+    this.speech.show(wrapChat(text), now, CHAT_SHOW_MS);
+    this.chatShown = { text, until: now + CHAT_SHOW_MS };
+  }
+
+  /** 지금 떠 있는 자유 채팅 글 (신고에 붙인다). 없거나 다른 말풍선으로 바뀌었으면 null */
+  chatText(now: number): string | null {
+    return this.chatShown && now < this.chatShown.until ? this.chatShown.text : null;
   }
 
   /** 이모티콘 (손 흔들기·환호·헌화·5번 이모티콘 판): 말풍선 자리에 크게 잠깐 (ms 없으면 기본 길이) */
   emote(kind: EmoteIcon, now: number, ms?: number): void {
     this.speech ??= new SpeechBubble(this.scene, this.atlas);
     this.speech.showIcon(kind, now, ms);
+    this.chatShown = null;
   }
 
   /** 24번 벤치 상태 (SEAT_MOODS id, 없거나 ""면 푼다). 앉아 있는 동안만 보인다 */

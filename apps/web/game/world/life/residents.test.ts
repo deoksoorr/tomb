@@ -1,0 +1,141 @@
+import { MAP_HEIGHT, MAP_WIDTH, SEATS } from "@tomb/protocol";
+import { describe, expect, it } from "vitest";
+import { RESIDENTS_MAX } from "@/lib/residents";
+import { walkableGrid, WALK, inWater } from "../layout";
+import { critterGrid, restable } from "./critterSim";
+import { pickLine, RESIDENTS, type LineContext } from "./residentData";
+import { ResidentSim, residentSpots, restActOf } from "./residentSim";
+
+// 돌아다니는 마을 주민: 결정성(같은 채널·시각 = 같은 자리), 걷기 가능 영역, 보기에만 앉기(사람이 앉으면 비켜 섬), 대사 고르기
+
+const T0 = Date.UTC(2026, 10, 13, 3, 0, 0);
+
+describe("resident roster", () => {
+  it("has 15 residents (= admin max) with unique ids and 5~8 lines each", () => {
+    expect(RESIDENTS.length).toBe(RESIDENTS_MAX);
+    expect(new Set(RESIDENTS.map((r) => r.id)).size).toBe(RESIDENTS.length);
+    for (const r of RESIDENTS) {
+      expect(r.lines.length, r.id).toBeGreaterThanOrEqual(5);
+      expect(r.lines.length, r.id).toBeLessThanOrEqual(8);
+      expect(
+        r.lines.some((l) => !l.when),
+        r.id,
+      ).toBe(true);
+    }
+  });
+
+  it("every resident has several rest spots on open dry ground, including a seat", () => {
+    const g = critterGrid();
+    for (const r of RESIDENTS) {
+      const spots = residentSpots(r, g);
+      expect(spots.length, r.id).toBeGreaterThanOrEqual(3);
+      expect(
+        spots.some((s) => s.perch),
+        r.id,
+      ).toBe(true);
+      for (const s of spots) expect(restable(g, s.x, s.y), `${r.id} ${s.x},${s.y}`).toBe(true);
+    }
+  });
+});
+
+describe("resident simulation", () => {
+  it("is deterministic: two browsers asking in different orders agree", () => {
+    RESIDENTS.forEach((def, i) => {
+      const a = new ResidentSim(def, i, 2);
+      const b = new ResidentSim(def, i, 2);
+      const times = Array.from({ length: 40 }, (_, k) => T0 + k * 6_133);
+      const ra = times.map((t) => ({ ...a.at(t) }));
+      const rb = [...times]
+        .reverse()
+        .map((t) => ({ ...b.at(t) }))
+        .reverse();
+      expect(rb).toEqual(ra);
+    });
+  });
+
+  it("different channels place residents differently", () => {
+    const a = RESIDENTS.map((d, i) => new ResidentSim(d, i, 1).at(T0));
+    const b = RESIDENTS.map((d, i) => new ResidentSim(d, i, 5).at(T0));
+    expect(a.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`)).not.toEqual(b.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`));
+  });
+
+  it("stays in the walkable area (or exactly on a seat) and really walks and sits", () => {
+    const w = walkableGrid(8);
+    const seatAt = new Set(SEATS.map((s) => `${s.x},${s.y}`));
+    let walked = 0;
+    let sat = 0;
+    RESIDENTS.forEach((def, i) => {
+      const sim = new ResidentSim(def, i, 3);
+      for (let t = T0; t < T0 + 30 * 60_000; t += 900) {
+        const p = sim.at(t);
+        expect(p.x).toBeGreaterThan(0);
+        expect(p.x).toBeLessThan(MAP_WIDTH);
+        expect(p.y).toBeLessThan(MAP_HEIGHT);
+        if (p.state === "sitChair") {
+          expect(seatAt.has(`${p.x},${p.y}`)).toBe(true);
+          sat++;
+          continue;
+        }
+        const c = w.cells[Math.floor(p.y / 8) * w.cols + Math.floor(p.x / 8)];
+        // 좌석 앞에서 자리로 옮겨 앉는 몇 걸음은 벤치 칸을 지난다
+        if (c !== WALK.open && p.state === "walk" && SEATS.some((s) => Math.hypot(s.x - p.x, s.y - p.y) <= 26)) continue;
+        expect(c, `${def.id} ${p.state} at ${Math.round(p.x)},${Math.round(p.y)}`).toBe(WALK.open);
+        if (p.state === "walk") walked++;
+      }
+    });
+    expect(walked).toBeGreaterThan(50);
+    expect(sat).toBeGreaterThan(10);
+  });
+
+  it("gets up and steps aside when a person sits in that seat (seat is never claimed on the server)", () => {
+    let checked = 0;
+    RESIDENTS.forEach((def, i) => {
+      const sim = new ResidentSim(def, i, 4);
+      for (let t = T0; t < T0 + 20 * 60_000 && checked < 20; t += 1_000) {
+        const free = { ...sim.at(t, () => false) };
+        if (free.state !== "sitChair" || !free.seat) continue;
+        const id = free.seat.id;
+        const taken = sim.at(t, (s) => s === id);
+        expect(taken.state).toBe("idle");
+        expect(taken.seat).toBeNull();
+        expect(Math.abs(taken.x - free.x)).toBeGreaterThan(8);
+        expect(inWater(taken.x, taken.y)).toBe(false);
+        checked++;
+      }
+    });
+    expect(checked).toBeGreaterThan(5);
+  });
+
+  it("rest gestures are the same for everyone in a leg", () => {
+    for (let leg = 0; leg < 50; leg++) expect(restActOf(1, 3, leg)).toEqual(restActOf(1, 3, leg));
+    const acts = Array.from({ length: 200 }, (_, leg) => restActOf(1, 3, leg));
+    expect(acts.some((a) => a === null)).toBe(true);
+    expect(acts.some((a) => a?.icon === "wave")).toBe(true);
+  });
+});
+
+describe("talking (pickLine)", () => {
+  const kim = RESIDENTS.find((r) => r.id === "kimdr")!;
+  const seq = (...xs: number[]) => {
+    let i = 0;
+    return () => xs[i++ % xs.length];
+  };
+  it("picks a night line at night and a rain line in the rain", () => {
+    const night: LineContext = { phase: "night", weather: "clear" };
+    expect(pickLine(kim, night, seq(0, 0))).toBe("야근 끝나고 불멍 중이에요");
+    const rain: LineContext = { phase: "dusk", weather: "rain" };
+    expect(pickLine(kim, rain, seq(0, 0))).toBe("비 오는 날 야근은 두 배로 길어요");
+  });
+  it("otherwise picks an any-time line, never a line for another time", () => {
+    const day: LineContext = { phase: "day", weather: "clear" };
+    const allowed = new Set(kim.lines.filter((l) => !l.when || l.when === "day").map((l) => l.t));
+    for (let k = 0; k < 200; k++) expect(allowed.has(pickLine(kim, day, Math.random))).toBe(true);
+    const night: LineContext = { phase: "night", weather: "clear" };
+    for (let k = 0; k < 200; k++) expect(pickLine(kim, night, Math.random)).not.toBe("해 떠 있을 때 퇴근해 보고 싶다");
+  });
+  it("avoids repeating the previous line", () => {
+    const day: LineContext = { phase: "dawn", weather: "cloudy" };
+    const first = pickLine(kim, day, seq(0.9, 0));
+    for (let k = 0; k < 50; k++) expect(pickLine(kim, day, Math.random, first)).not.toBe(first);
+  });
+});

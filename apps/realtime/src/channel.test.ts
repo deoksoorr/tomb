@@ -1341,3 +1341,39 @@ describe("5번 이모티콘 / 24번 벤치 상태", () => {
     expect(core.peer(1)?.mood).toBeUndefined();
   });
 });
+
+describe("말풍선 채팅", () => {
+  it("가린 글을 보낸 사람 빼고 같은 채널에만 중계한다 (다른 채널은 받지 않는다)", () => {
+    const { core, join } = setup();
+    const other = setup();
+    const a = join("a");
+    const b = join("b");
+    const c = other.join("c");
+    clear(a, b, c);
+    core.message(a, send({ t: "chat", text: "  안녕 씨발  " }), 0);
+    expect(events(b)).toEqual([{ t: "chat", sid: 1, text: "안녕 ***" }]);
+    expect(events(a)).toEqual([]);
+    expect(events(c)).toEqual([]);
+  });
+
+  it("토큰 버킷: 3번까지 몰아 보내고 그 뒤로는 1초에 1번, 넘치면 조용히 버린다", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const b = join("b");
+    clear(a, b);
+    for (const [i, t] of [0, 100, 200, 300, 999, 1_000, 1_500, 2_000].entries()) core.message(a, send({ t: "chat", text: `ㅋ${i}` }), t);
+    expect(events(b).map((e) => (e as { text: string }).text)).toEqual(["ㅋ0", "ㅋ1", "ㅋ2", "ㅋ5", "ㅋ7"]);
+    expect(a.closed).toBeUndefined();
+  });
+
+  it("40자 넘는 글·공백만은 버린다, 방(마을·집)에서도 중계한다", () => {
+    const { core, join } = setup(3, 20_000, true);
+    const a = join("a");
+    const b = join("b");
+    clear(a, b);
+    core.message(a, JSON.stringify({ t: "chat", text: "가".repeat(41) }), 0);
+    core.message(a, '{"t":"chat","text":"   "}', 0);
+    core.message(a, send({ t: "chat", text: "가".repeat(40) }), 0);
+    expect(events(b)).toEqual([{ t: "chat", sid: 1, text: "가".repeat(40) }]);
+  });
+});

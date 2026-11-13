@@ -483,6 +483,7 @@ export class WorldScene extends Phaser.Scene {
         },
         onAct: (sid, kind, x, y) => this.playAct(sid, kind, x, y),
         onEmo: (sid, id) => this.expr.onRemoteEmo(sid, id),
+        onChat: (sid, text) => this.expr.onRemoteChat(sid, text),
         onMood: (sid, mood) => this.expr.onRemoteMood(sid, mood),
         onRide: (sid, on) => this.riding.onRide(sid, on),
         onRod: (sid, on) => this.forage.onRod(sid, on), // 4번 배 위 낚싯대
@@ -727,6 +728,7 @@ export class WorldScene extends Phaser.Scene {
     // 마을·집 안이면 그 방(RoomPresence)이 받는다
     on.push(bridge.on("input:say", ({ id }) => !this.awayScene && this.doSay(id)));
     on.push(bridge.on("input:emo", ({ id }) => !this.cleaned && !this.inShop && !this.awayScene && this.expr.emo(id, this.time.now)));
+    on.push(bridge.on("input:chat", ({ text }) => !this.cleaned && !this.inShop && !this.awayScene && this.expr.chat(text, this.time.now)));
     on.push(bridge.on("input:mood", ({ mood }) => !this.cleaned && this.expr.setMood(mood)));
     on.push(bridge.on("input:ride", () => !this.cleaned && !this.inShop && this.riding.toggle()));
     on.push(bridge.on("guide:point", ({ target, label }) => this.guide.set(target ? this.resolveGuide(target, label) : null)));
@@ -1195,7 +1197,8 @@ export class WorldScene extends Phaser.Scene {
   private emitMinimap(): void {
     const others: number[] = [];
     for (const r of this.remotes.values()) if (!r.away) others.push(Math.round(r.x), Math.round(r.y));
-    bridge.emit("minimap:dots", { me: { x: Math.round(this.player.x), y: Math.round(this.player.y) }, others });
+    // 마을 주민: 작은 회색 점 (서버에 없는 클라이언트 시뮬레이션)
+    bridge.emit("minimap:dots", { me: { x: Math.round(this.player.x), y: Math.round(this.player.y) }, others, residents: this.life.residentDots() });
   }
 
   private resolveGuide(target: GuideTarget, label?: string): { x: number; y: number; text: string } | null {
@@ -1337,7 +1340,8 @@ export class WorldScene extends Phaser.Scene {
       wy,
     );
     if (hit && this.net.channel !== null) {
-      bridge.emit("peer:menu", { sid: hit.sid, name: hit.name, ch: this.net.channel });
+      const chat = this.remotes.get(hit.sid)?.view.chatText(performance.now());
+      bridge.emit("peer:menu", { sid: hit.sid, name: hit.name, ch: this.net.channel, ...(chat ? { chat } : {}) });
       return;
     }
     const p = graveAt(this.field.layout, wx, wy);
