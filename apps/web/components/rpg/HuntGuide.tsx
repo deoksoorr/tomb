@@ -81,6 +81,13 @@ function HuntDemo({ page, title }: { page: number; title: string }) {
 
 /** 비율 → 퍼센트 (13.5%처럼 소수 한 자리까지) */
 const pct = (n: number) => `${Number((n * 100).toFixed(1))}%`;
+/** 난이도끼리 견준 드롭 빈도 → 말 (확률 숫자는 안내에 안 보인다). 가장 낮은 쪽 "드물게", 가장 높은 쪽 "자주", 사이는 "가끔" */
+function oftenWord(v: number, all: readonly number[]): string {
+  const lo = Math.min(...all);
+  const hi = Math.max(...all);
+  if (hi === lo) return "가끔";
+  return v === lo ? "드물게" : v === hi ? "자주" : "가끔";
+}
 const sec = (ms: number) => `${Number((ms / 1000).toFixed(2))}초`;
 const skillArt = (id: SkillId): IconArt | undefined => skillById(id)?.art;
 const skillName = (id: SkillId) => skillById(id)?.name ?? id;
@@ -225,7 +232,9 @@ function pages(): Page[] {
               레벨이 오를 때마다 1포인트(10의 배수 레벨엔 2). 랭크 하나에 1포인트. 패시브(둥근 칸)는 찍으면 늘 켜져 있어요.
             </Item>
             <Item pic={<Keys k={["↺"]} />} title="초기화">
-              스킬 탭의 [초기화]로 찍은 포인트를 모두 돌려받아요. 첫 1회는 무료, 그 뒤로는 레벨에 따라 {respecCost(10, 1)}~{RESPEC_MAX_COST}P.
+              스킬 탭의 [초기화]로 찍은 포인트를 모두 돌려받아요. 첫 1회는 무료, 그 뒤로는 레벨에 따라 {respecCost(1, 1)}~{RESPEC_MAX_COST}P.
+              <br />
+              <small>스킬 트리가 바뀌는 업데이트가 있으면 모두의 스킬이 초기화되고 포인트를 전부 돌려받아요(무료 초기화도 다시 1회).</small>
             </Item>
             <Item art={skillById("em_meteor")?.art} title="광역기">
               바닥에 마법진이 먼저 깔리고 터져요. 갈래마다 색이 달라요 (모닥불 주황·서리 하늘빛·넋 보라). 화면 흔들림·번쩍임은 기기의 &lsquo;동작 줄이기&rsquo;를 켜면 꺼져요.
@@ -370,8 +379,8 @@ function pages(): Page[] {
             })}
           </ul>
           <p className={s.meta}>
-            몇몇 몬스터의 공격과 우두머리의 큰 기술이 맞으면 확률로 걸려요. 같은 상태는 겹치지 않고 남은 시간만 새로 채워지고, 풀린 직후엔 잠깐 같은 상태에 안 걸려요. 지속
-            피해로는 쓰러지지 않아요(HP 1에서 멈춤). 어려운 사냥터일수록 더 자주·오래·세게 걸려요 (지옥: 확률 ×{STATUS_DIFF.hell.chance}, 세기 ×
+            몇몇 몬스터의 공격과 우두머리의 큰 기술에 맞으면 가끔 걸려요. 같은 상태는 겹치지 않고 남은 시간만 새로 채워지고, 풀린 직후엔 잠깐 같은 상태에 안 걸려요. 지속
+            피해로는 쓰러지지 않아요(HP 1에서 멈춤). 어려운 사냥터일수록 더 자주·오래·세게 걸려요 (지옥: 가장 자주 걸리고 세기 ×
             {STATUS_DIFF.hell.power}, 둔화는 최대 -{pct(MAX_SLOW)}). 무적 중에는 안 걸리고, 부활 쿠키로 일어나면 모두 풀려요.
           </p>
         </>
@@ -411,15 +420,15 @@ function pages(): Page[] {
             </thead>
             <tbody>
               <tr>
-                <th>드롭 기회당 확률</th>
+                <th>장비·물약 드롭</th>
                 {DIFFICULTIES.map((d) => (
-                  <td key={d}>{pct(DIFFS[d].dropChance)}</td>
+                  <td key={d}>{oftenWord(DIFFS[d].dropChance, DIFFICULTIES.map((x) => DIFFS[x].dropChance))}</td>
                 ))}
               </tr>
               <tr>
                 <th>우두머리 장비</th>
                 {DIFFICULTIES.map((d) => (
-                  <td key={d}>{pct(DIFFS[d].bossDropChance)}</td>
+                  <td key={d}>{oftenWord(DIFFS[d].bossDropChance, DIFFICULTIES.map((x) => DIFFS[x].bossDropChance))}</td>
                 ))}
               </tr>
               <tr>
