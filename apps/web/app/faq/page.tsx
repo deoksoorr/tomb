@@ -2,7 +2,8 @@ import GuidePage from "../guide/GuidePage";
 import guide from "../guide/guide.module.css";
 import { pageMetadata } from "../seo";
 import { DAILY_EARN_CAP, earnRule } from "@/lib/economy";
-import { DYE_SPECIAL_BONUS, LOOK_SCORE_TIERS, LOOK_SCORE_TOP } from "@/lib/lookScore";
+import { PERMANENT_MULTIPLIER } from "@tomb/protocol";
+import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
 import { PRESENCE_INTERVAL_MS } from "@/lib/types";
 
@@ -79,7 +80,7 @@ const FAQ = [
   },
   {
     q: "꾸미기 점수는 어떻게 매겨지나요?",
-    a: `지금 입고 있는 코디 파츠마다 가격대에 따라 점수를 더해요. 기본 코디 ${LOOK_SCORE_TIERS[0][1]}점부터 비쌀수록 높아져 펫·프리미엄 외형은 최대 ${LOOK_SCORE_TOP}점이고, 특수 염색은 부위마다 +${DYE_SPECIAL_BONUS}점이에요. 각 코디의 점수는 상점·가방·동물원에 보여요. 기간제 코디가 끝나면 그 점수도 바로 빠져요. 랭킹 창 [꾸미기] 탭에서 1~50위와 내 순위를, 가방 꾸미기 칸과 내 정보에서 내 점수를 볼 수 있어요.`,
+    a: `지금 입고 있는 코디 파츠마다 영구 소장 기준 가치 ${LOOK_SCORE_DIVISOR}P마다 1점씩 더해요(코디는 이용권 값 × ${PERMANENT_MULTIPLIER}, 펫은 분양가, 프리미엄 외형은 선택권 값). 특수 염색은 부위마다 +${DYE_SPECIAL_BONUS}점이에요. 각 코디의 점수는 상점·가방·동물원에 보여요. 기간제 코디가 끝나면 그 점수도 바로 빠져요. 랭킹 창 [꾸미기] 탭에서 1~50위와 내 순위를, 가방 꾸미기 칸과 내 정보에서 내 점수를 볼 수 있어요.`,
   },
 ] as const;
 

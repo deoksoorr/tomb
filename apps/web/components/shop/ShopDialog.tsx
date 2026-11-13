@@ -14,6 +14,7 @@ import { matchesSlot, resolveAvatar, SHOP_COSMETICS, SLOT_NAMES, SLOT_ORDER, slo
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
+import LookScoreBadge from "../ui/LookScoreBadge";
 import ui from "../ui/ui.module.css";
 import { fittingLook } from "./fitting";
 import FireworkPreview from "./FireworkPreview";
@@ -210,6 +211,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                   {shown.name}
                 </p>
                 <p className={styles.desc}>{shown.desc}</p>
+                {shown.kind === "cosmetic" && <LookScoreBadge itemId={shown.id} className={styles.lookScore} />}
                 <p className={styles.meta}>
                   {effectLabel(shown)}
                   {owned(shown) > 0 && ` · 가방에 ${owned(shown)}개`}
@@ -261,6 +263,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                         <ItemIcon itemId={item.id} size={item.id.startsWith("gs_") ? 32 : 48} />
                       </span>
                       <span className={styles.tileName}>{item.name}</span>
+                      {item.kind === "cosmetic" && <LookScoreBadge itemId={item.id} />}
                       <span className={styles.tilePrice}>
                         {item.staff ? "운영자" : `${item.price}P`}
                         {forever(item) ? <span className={styles.badge}>영구</span> : worn(item) ? <span className={styles.badge}>착용</span> : n > 0 || stashed(item) ? <span className={styles.badge}>보유</span> : null}

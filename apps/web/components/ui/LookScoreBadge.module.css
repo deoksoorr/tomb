@@ -1,0 +1,15 @@
+/* 꾸미기 점수 배지: 상점·가방·동물원·외형 선택권 (lib/lookScore 점수) */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border: 1px solid rgba(224, 195, 106, 0.45);
+  background: rgba(224, 195, 106, 0.12);
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

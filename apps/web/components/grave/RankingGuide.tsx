@@ -1,3 +1,4 @@
+import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { InfoCard, InfoGrid, TipList } from "../ui/InfoBlocks";
 
 /** 랭킹 창 아래: 탭마다 순위를 어떻게 매기는지와 올리는 방법 */
@@ -17,7 +18,7 @@ export default function RankingGuide() {
               <b>사냥 레벨</b> — 사냥 캐릭터 레벨이 높은 순, 레벨이 같으면 경험치가 많은 순이에요.
             </>,
             <>
-              <b>꾸미기</b> — 지금 입은 코디 파츠마다 가격대 점수를 더해요 (비쌀수록 높고, 펫·프리미엄 외형·특수 염색도 쳐요). 기간이 끝난 코디는 바로 빠져요.
+              <b>꾸미기</b> — 지금 입은 코디·펫·프리미엄 외형의 영구 소장 가치 {LOOK_SCORE_DIVISOR}P마다 1점, 특수 염색은 부위마다 +{DYE_SPECIAL_BONUS}점. 기간이 끝난 코디는 바로 빠져요.
             </>,
             <>
               <b>집 꾸미기</b> — 꾸밈 점수 = 안팎 물건 점수 + 좋아요 × 3.

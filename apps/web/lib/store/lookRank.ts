@@ -10,9 +10,11 @@ import type { AccountStore, EquippedItem } from "./types";
 // 읽을 때마다 후보의 지금 착용(acct:{id}:look)·몸·염색을 다시 읽어 점수를 다시 매긴다 (lib/lookRank.ts).
 //
 // Redis 키 (이 파일에서만 쓴다)
-//  - rank:look  ZSET 계정 id → 마지막으로 기록한 꾸미기 점수 (0점이면 뺀다). 착용 변경·구매·재접속·읽을 때 바로잡기로 갱신
+//  - rank:look:v2  ZSET 계정 id → 마지막으로 기록한 꾸미기 점수 (0점이면 뺀다). 착용 변경·구매·재접속·읽을 때 바로잡기로 갱신
+//    v2 = 점수 공식 개편(11/13, 가치 비례 1점 단위). 읽기의 "남은 후보 기록 점수 ≤ 바로잡은 N위" 판단이 옛 작은 점수와 섞이면 틀어지므로 키를 새로 쓴다
+//    (옛 rank:look은 더 읽지 않는다. 재접속·착용 변경·랭킹 보기 때 새 키로 다시 쌓인다)
 
-const LOOK_RANK_KEY = "rank:look";
+const LOOK_RANK_KEY = "rank:look:v2";
 
 /** 점수를 다시 매길 때 읽는 계정 상태 (착용품은 만료된 것도 그대로 — 판정은 lookScore가 now로 한다) */
 export type LookState = { name: string | null; body: string | null; dye: AvatarDye; equipped: EquippedItem[] };

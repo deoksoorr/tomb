@@ -15,6 +15,7 @@ import { remainingLabel } from "../account/items";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
+import LookScoreBadge from "../ui/LookScoreBadge";
 import ui from "../ui/ui.module.css";
 import PetArt, { hasPetArt } from "./PetArt";
 import s from "./zoo.module.css";
@@ -119,7 +120,7 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
             </h3>
             <p className={s.desc}>{item.desc}</p>
             <p className={s.price}>
-              영구 분양 <strong>{pick.price.toLocaleString("ko-KR")}P</strong>
+              영구 분양 <strong>{pick.price.toLocaleString("ko-KR")}P</strong> <LookScoreBadge itemId={pick.id} />
             </p>
             <p className={s.state}>
               {forever
@@ -180,6 +181,7 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
                   <button type="button" className={s.card} aria-pressed={p.id === pick.id} onClick={() => select(p.id)} aria-label={`${it.name}, ${p.price}포인트${fam ? ", 가족" : ""}`}>
                     <ItemIcon itemId={p.id} size={32} />
                     <span className={s.cardName}>{it.name}</span>
+                    <LookScoreBadge itemId={p.id} short />
                     <span className={s.cardMeta}>
                       {fam ? (o!.where === "worn" ? "함께 걷는 중" : "가족") : `${p.price.toLocaleString("ko-KR")}P`}
                       {isRideablePet(p.id) ? " · 탈것" : ""}

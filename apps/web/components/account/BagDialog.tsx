@@ -16,6 +16,7 @@ import Dialog from "../ui/Dialog";
 import ForageBag from "../forage/ForageBag";
 import BagDyeSection, { dyeTicketCount } from "../dye/BagDyeSection";
 import ItemIcon from "../ui/ItemIcon";
+import LookScoreBadge from "../ui/LookScoreBadge";
 import { DollNote, DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
 import { openMegaphone } from "@/lib/hooks/useMegaphone";
@@ -415,7 +416,9 @@ function Wardrobe({
                       >
                         <ItemIcon itemId={e.item.id} size={32} />
                         <span className={styles.main}>
-                          <span className={styles.name}>{e.item.name}</span>
+                          <span className={styles.name}>
+                            {e.item.name} <LookScoreBadge itemId={e.item.id} short />
+                          </span>
                           <span className={styles.status} data-state={e.state}>
                             {entryStatus(e, now)}
                           </span>

@@ -18,6 +18,7 @@ import shop from "../shop/ShopDialog.module.css";
 import OutfitPreview from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
 import ItemIcon from "../ui/ItemIcon";
+import LookScoreBadge from "../ui/LookScoreBadge";
 import ui from "../ui/ui.module.css";
 import DyeDialog, { type DyeTicket } from "./DyeDialog";
 import styles from "./StylePanel.module.css";
@@ -214,6 +215,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
           <AvatarSprite color={avatar.color} body={id} scale={2} />
         </span>
         <span className={shop.tileName}>{label}</span>
+        <LookScoreBadge body={id} />
         <span className={shop.tilePrice}>{price}</span>
       </button>
     </li>
@@ -233,6 +235,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
             )}
           </p>
           <p className={cx(shop.desc, styles.fullDesc)}>{desc}</p>
+          {sel.kind === "body" && <LookScoreBadge body={sel.body} className={shop.lookScore} />}
           {action}
         </div>
       </section>

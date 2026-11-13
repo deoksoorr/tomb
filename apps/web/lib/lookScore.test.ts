@@ -1,42 +1,50 @@
 import { describe, expect, it } from "vitest";
-import { ITEMS, PERMANENT_UNTIL, withDyeSpecial } from "@tomb/protocol";
-import { itemLookScore, lookScore, priceScore, topParts } from "./lookScore";
+import { ITEMS, PERMANENT_MULTIPLIER, PERMANENT_UNTIL, withDyeSpecial } from "@tomb/protocol";
+import { bodyLookScore, DYE_SPECIAL_BONUS, itemLookScore, itemLookValue, LOOK_SCORE_DIVISOR, lookScore, topParts, valueScore } from "./lookScore";
 
-// 꾸미기 점수: 지금 입은(만료 전) 코디 파츠의 기본 가격대 점수 합 + 프리미엄 외형 + 특수 염색 보너스
+// 꾸미기 점수: 지금 입은(만료 전) 코디 파츠의 가치 비례 점수 합 + 프리미엄 외형 + 특수 염색 보너스
 
 const NOW = 1_800_000_000_000;
 const HOUR = 3_600_000;
 
-describe("가격대 점수", () => {
-  it("기본(24시간) 가격 구간마다 점수가 오른다", () => {
-    expect([0, 60, 100, 101, 200, 320, 400, 480, 800, 900, 1500, 2000, 3000, 3200, 4500, 5000].map(priceScore)).toEqual([
-      0, 1, 1, 2, 2, 3, 3, 5, 5, 8, 8, 12, 12, 16, 16, 20,
-    ]);
+describe("가치 비례 점수 (영구 소장 기준 가치 ÷ 5, 1점 단위)", () => {
+  it("값이 조금만 달라도 점수가 달라진다", () => {
+    expect(LOOK_SCORE_DIVISOR).toBe(5);
+    expect([0, -10, 480, 482, 483, 500, 5000].map(valueScore)).toEqual([0, 0, 96, 96, 97, 100, 1000]);
   });
 
-  it("파츠 점수: 기본 가격 기준(영구가와 무관), 펫은 동물원 가격, 운영자 전용·모르는 아이템은 0", () => {
-    expect(itemLookScore("neck_scarf")).toBe(1); // 60P
-    expect(itemLookScore("hat_halo")).toBe(2); // 160P (영구 소장 가능 — 점수는 같다)
-    expect(itemLookScore("back_wings_dragon")).toBe(5); // 480P
-    expect(itemLookScore("pet_duck")).toBe(5); // 450P
-    expect(itemLookScore("pet_cat")).toBe(8); // 900P
-    expect(itemLookScore("pet_deer")).toBe(12); // 3,000P
+  it("코디 = 이용권 값 × 영구 배수, 펫 = 동물원 가격, 운영자 전용·모르는 아이템은 0", () => {
+    expect(PERMANENT_MULTIPLIER).toBe(4);
+    expect(itemLookScore("hand_lantern")).toBe(96); // 120P × 4 = 480P
+    expect(itemLookScore("neck_scarf")).toBe(48); // 60P × 4 = 240P
+    expect(itemLookScore("hat_halo")).toBe(128); // 160P × 4 = 640P
+    expect(itemLookScore("back_wings_dragon")).toBe(384); // 480P × 4
+    expect(itemLookScore("pet_duck")).toBe(90); // 동물원 450P
+    expect(itemLookScore("pet_cat")).toBe(180); // 900P
+    expect(itemLookScore("pet_deer")).toBe(600); // 3,000P
     expect(itemLookScore("staff_crown")).toBe(0);
     expect(itemLookScore("fw_small")).toBe(0);
     expect(itemLookScore("nope")).toBe(0);
-    // 운영자 전용이 아닌 모든 코디는 1점 이상
-    for (const it of ITEMS) if (it.kind === "cosmetic" && !it.staff) expect(itemLookScore(it.id)).toBeGreaterThan(0);
+    // 운영자 전용이 아닌 모든 코디는 1점 이상, 공식 그대로
+    for (const it of ITEMS)
+      if (it.kind === "cosmetic" && !it.staff) {
+        expect(itemLookScore(it.id)).toBeGreaterThan(0);
+        expect(itemLookScore(it.id)).toBe(Math.round(itemLookValue(it.id) / LOOK_SCORE_DIVISOR));
+      }
   });
 
-  it("착용 파츠 합 + 프리미엄 외형 + 특수 염색 부위마다 +1", () => {
+  it("착용 파츠 합 + 프리미엄 외형(선택권 값) + 특수 염색 부위마다 +10", () => {
     const equipped = [
       { itemId: "hat_halo", until: NOW + HOUR },
       { itemId: "pet_cat", until: PERMANENT_UNTIL },
     ];
-    expect(lookScore({ equipped }, NOW)).toBe(2 + 8);
-    expect(lookScore({ equipped, body: "king" }, NOW)).toBe(10 + 20); // 전설 외형 5,000P
-    expect(lookScore({ equipped, body: "hood" }, NOW)).toBe(10); // 처음 6종은 0
-    expect(lookScore({ equipped, dye: { head: withDyeSpecial("#ff0000", "g"), body: "#00ff00", accent: withDyeSpecial("#0000ff", "r") } }, NOW)).toBe(12);
+    expect(lookScore({ equipped }, NOW)).toBe(128 + 180);
+    expect(bodyLookScore("king")).toBe(1000); // 전설 외형 5,000P
+    expect(bodyLookScore("suit")).toBe(240); // 일반 외형 1,200P
+    expect(bodyLookScore("hood")).toBe(0); // 처음 6종은 0
+    expect(lookScore({ equipped, body: "king" }, NOW)).toBe(308 + 1000);
+    expect(lookScore({ equipped, dye: { head: withDyeSpecial("#ff0000", "g"), body: "#00ff00", accent: withDyeSpecial("#0000ff", "r") } }, NOW)).toBe(308 + 2 * DYE_SPECIAL_BONUS);
+    expect(DYE_SPECIAL_BONUS).toBe(10);
     expect(topParts({ equipped }, NOW)).toEqual(["pet_cat", "hat_halo"]);
   });
 });
@@ -47,8 +55,8 @@ describe("기간제가 끝나면 점수도 사라진다", () => {
       { itemId: "hat_crown", until: NOW + HOUR },
       { itemId: "neck_scarf", until: NOW + 2 * HOUR },
     ];
-    expect(lookScore({ equipped }, NOW)).toBe(5 + 1);
-    expect(lookScore({ equipped }, NOW + HOUR)).toBe(1);
+    expect(lookScore({ equipped }, NOW)).toBe(384 + 48);
+    expect(lookScore({ equipped }, NOW + HOUR)).toBe(48);
     expect(lookScore({ equipped }, NOW + 2 * HOUR)).toBe(0);
     expect(topParts({ equipped }, NOW + 2 * HOUR)).toEqual([]);
   });
@@ -58,6 +66,6 @@ describe("기간제가 끝나면 점수도 사라진다", () => {
       { itemId: "hat_crown", until: NOW + HOUR },
       { itemId: "hat_cat", until: NOW + HOUR },
     ];
-    expect(lookScore({ equipped }, NOW)).toBe(5);
+    expect(lookScore({ equipped }, NOW)).toBe(384);
   });
 });
