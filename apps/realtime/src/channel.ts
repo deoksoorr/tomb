@@ -27,6 +27,7 @@ import {
   balloonSeatById,
   BALLOON_BOARD_GRACE_MS,
   USE_INTERVAL_MS,
+  HUNT_ACT_INTERVAL_MS,
   hasDye,
   sameDye,
   staffGateBody,
@@ -166,7 +167,13 @@ export interface ChannelHost<C> {
  * - 방 크기를 모르므로 좌표는 u16 범위만 본다(MOVE 형식이 이미 보장)
  * - 로비 보고·대기열·채널 간 중복 정리는 DO(호스트) 쪽에서 하지 않는다
  */
-export type ChannelConfig = { capacity: number; graceMs: number; room?: boolean };
+export type ChannelConfig = {
+  capacity: number;
+  graceMs: number;
+  room?: boolean;
+  /** 11/13 사냥터 방("hunt:…"): 공격·스킬 동작(hunt)과 자리 비움(away)을 같은 방 사람에게 중계한다. 마을·집 방은 받지 않는다 */
+  hunt?: boolean;
+};
 
 /** 클라이언트가 채널 이동·나가기로 직접 닫을 때 쓰는 코드. 유예 없이 바로 퇴장시킨다. 그 밖의 코드는 모두 유예. */
 export const CLOSE_NORMAL = 1000;
@@ -244,6 +251,8 @@ type Peer<C> = PeerRecord & {
   lastRideAt?: number;
   lastRodAt?: number;
   lastAwayAt?: number;
+  /** 11/13 사냥터 공격·스킬 동작 (없으면 아직 안 씀) */
+  lastHuntAt?: number;
   /** 말풍선 채팅 도배 제한 (토큰 버킷). 재접속해도 피어에 남겨 다시 채워지지 않게 한다 */
   chatBucket?: ChatBucket;
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
@@ -747,6 +756,15 @@ export class ChannelCore<C extends object> {
         if (now - (p.lastUseAt ?? -Infinity) < USE_INTERVAL_MS) return;
         p.lastUseAt = now;
         return this.broadcast(encodeEvent({ t: "use", sid: p.sid, u: m.u, a: m.a }), p.sid);
+      case "hunt":
+        // 11/13 함께 사냥: 사냥터 방에서만, 보낸 사람 빼고 같은 방에만 (판정·몬스터는 각자 — 서버는 그림용 신호만 넘긴다)
+        if (!this.cfg.hunt || this.peers.size < 2) return;
+        if (now - (p.lastHuntAt ?? -Infinity) < HUNT_ACT_INTERVAL_MS) return;
+        p.lastHuntAt = now;
+        return this.broadcast(
+          encodeEvent({ t: "hunt", sid: p.sid, k: m.k, a: m.a, ...(m.w ? { w: m.w } : {}), ...(m.s ? { s: m.s } : {}), ...(m.f ? { f: true as const } : {}) }),
+          p.sid,
+        );
       case "emo":
         // 5번 이모티콘: 보낸 사람은 이미 화면에 띄웠다 → 나머지에게만
         if (now - (p.lastEmoAt ?? -Infinity) < EMO_INTERVAL_MS) return;
@@ -1021,7 +1039,14 @@ export class ChannelCore<C extends object> {
    * 옛 클라이언트는 보내지 않으니 언제나 보인다
    */
   private onAway(p: Peer<C>, on: boolean, now = Date.now(), place?: AwayPlace, house?: string): void {
-    if (this.cfg.room) return;
+    if (this.cfg.room) {
+      // 11/13 사냥터 방: 탭을 숨겼거나 판을 멈춘 사람 = 자리 비움 (늦게 온 사람은 PeerInfo.away로 받는다). 마을·집 방은 쓰지 않는다
+      if (!this.cfg.hunt || !!p.away === on) return;
+      p.away = on ? true : undefined;
+      this.save(p);
+      this.broadcast(encodeEvent({ t: "away", sid: p.sid, on }), p.sid);
+      return;
+    }
     const where = on ? place : undefined;
     const inHouse = on && place === "house" ? house : undefined;
     if (!!p.away === on) {

@@ -1,5 +1,5 @@
 import type * as Phaser from "phaser";
-import { DIR, isAvatarBody, isEmoId, maskChat, normalizeChat, sanitizeDye, STATE, type ActKind, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
+import { DIR, isAvatarBody, isEmoId, maskChat, normalizeChat, sanitizeDye, STATE, type ActKind, type DirId, type HuntAct, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
 import { avatarColorSpec } from "../sprites/avatar";
 import { bridge } from "../bridge";
 import type { AvatarView } from "../entities/AvatarView";
@@ -46,6 +46,8 @@ export type RoomPresenceOptions = {
   onSeats?: () => void;
   /** 3번 다른 사람이 가구를 썼다 */
   onUse?: (sid: Sid, u: string, a: number) => void;
+  /** 11/13 사냥터 방: 같은 방 사람의 공격·스킬 동작 (그 사람이 화면에 보일 때만) */
+  onHunt?: (r: RemoteAvatar, h: HuntAct) => void;
   /**
    * 표현 창(T)·즐겨찾기 원형 목록(Y)의 말풍선·이모티콘을 이 방에서 받는다 (bridge input:say·input:emo)
    * + 원형 목록이 열려 있으면 내 화면 위치를 UI에 알린다. 마을·집처럼 월드 HUD 대신 쓰는 방에서 켠다 (몸짓은 씬의 키 처리가 받는다)
@@ -77,6 +79,8 @@ export class RoomPresence {
   readonly seats = new Map<string, Sid>();
   /** 서버가 집 안 자리를 판정한다 (welcome spots). false면 이전 서버 → 혼자 앉는다 */
   spots = false;
+  /** 11/13 사냥터 방: 자리 비움인 사람 (탭을 숨겼거나 판을 멈춤 — 그 사람 화면이 멈춰 있다) */
+  readonly away = new Set<Sid>();
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -115,10 +119,19 @@ export class RoomPresence {
         },
         onSeatDenied: (seatId) => o.onSeatDenied?.(seatId),
         onUse: (sid, u, a) => o.onUse?.(sid, u, a),
+        onHunt: (sid, h) => {
+          const r = this.remotes.get(sid);
+          if (r?.visible) o.onHunt?.(r, h);
+        },
+        onAway: (sid, on) => {
+          if (on) this.away.add(sid);
+          else this.away.delete(sid);
+        },
         onJoin: (p) => this.add(p),
         onLeave: (sid) => {
           this.remotes.get(sid)?.destroy();
           this.remotes.delete(sid);
+          this.away.delete(sid);
         },
         onSnapshot: (entries, t) => {
           const me = this.client.mySid;
@@ -211,6 +224,16 @@ export class RoomPresence {
   }
   use(u: string, a: number): void {
     this.client.use(u, a);
+  }
+
+  /** 11/13 사냥터 방: 내 공격·스킬 동작을 같은 방 사람에게 (혼자면 안 보낸다) */
+  hunt(h: HuntAct): void {
+    if (!this.destroyed) this.client.hunt(h);
+  }
+
+  /** 11/13 사냥터 방: 판을 멈췄다·이어 한다 (탭 숨김은 RoomClient가 더한다) */
+  setAway(on: boolean): void {
+    if (!this.destroyed) this.client.setAway(on);
   }
 
   /** 다른 방으로 (같은 씬에서 사냥터 난이도를 바꾸는 등) */
@@ -325,6 +348,8 @@ export class RoomPresence {
     const r = new RemoteAvatar(this.scene, this.o.atlas, p.sid, p.name, avatarColorSpec(p.color, sanitizeDye(p.dye)), p, performance.now(), p.look ?? [], body);
     r.view.setStaff(p.staff === true); // 31번 운영자 차림
     this.remotes.set(p.sid, r);
+    if (p.away) this.away.add(p.sid);
+    else this.away.delete(p.sid);
     for (const [id, sid] of this.seats) if (sid === p.sid) r.seatId = id;
   }
 
@@ -333,6 +358,8 @@ export class RoomPresence {
     const keep = new Set<Sid>();
     for (const p of peers) {
       keep.add(p.sid);
+      if (p.away) this.away.add(p.sid);
+      else this.away.delete(p.sid);
       const r = this.remotes.get(p.sid);
       const body = isAvatarBody(p.body) ? p.body : "hood";
       if (!r || r.name !== p.name || r.view.colorSpec !== avatarColorSpec(p.color, sanitizeDye(p.dye)) || r.view.bodyId !== body) this.add(p);
@@ -342,12 +369,14 @@ export class RoomPresence {
       if (keep.has(sid)) continue;
       r.destroy();
       this.remotes.delete(sid);
+      this.away.delete(sid);
     }
   }
 
   private clear(): void {
     for (const r of this.remotes.values()) r.destroy();
     this.remotes.clear();
+    this.away.clear();
   }
 
   destroy(): void {

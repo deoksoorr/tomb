@@ -13,55 +13,51 @@ import { art } from "./skillArt";
 
 export type FxKind = "projectile" | "cone" | "ground" | "fall" | "vortex" | "chain" | "dash" | "summon" | "buff" | "ultimate" | "proc" | "passive";
 
-/** 스킬별 합성음 차이 (sfx.burst의 결) */
-export type Tone = { pitch?: number; sweep?: number; noise?: number; len?: number };
-
 export type SkillLook = {
   /** 연출 키 (스킬마다 다르다) */
   key: string;
   kind: FxKind;
   /** 손맛 무게 0~4 (히트스톱·흔들림·숫자 크기) */
   weight: 0 | 1 | 2 | 3 | 4;
-  tone?: Tone;
 };
 
 /** 스킬 → 연출 키 매핑. 33종 모두 (빠지면 타입 검사가 잡는다) */
 export const SKILL_LOOK: Record<SkillId, SkillLook> = {
   // 모닥불지기
-  em_kindle: { key: "ember-flick", kind: "projectile", weight: 1, tone: { pitch: 1.3, len: -0.05 } },
+  em_kindle: { key: "ember-flick", kind: "projectile", weight: 1 },
   em_hearth: { key: "hearth-glow", kind: "passive", weight: 0 },
-  em_fan: { key: "flame-fan", kind: "cone", weight: 2, tone: { pitch: 1.1, noise: 1.3 } },
-  em_stoke: { key: "stoke-pillar", kind: "buff", weight: 1, tone: { pitch: 0.8, sweep: 1.6 } },
+  em_fan: { key: "flame-fan", kind: "cone", weight: 2 },
+  em_stoke: { key: "stoke-pillar", kind: "buff", weight: 1 },
   em_spark: { key: "spark-crit", kind: "passive", weight: 0 },
-  em_ring: { key: "fire-ring", kind: "ground", weight: 2, tone: { pitch: 0.9, len: 0.1 } },
-  em_ignite: { key: "ignite-pop", kind: "proc", weight: 1, tone: { pitch: 1.5, len: -0.1 } },
-  em_meteor: { key: "meteor-log", kind: "fall", weight: 3, tone: { pitch: 0.7, len: 0.25, noise: 1.4 } },
-  em_brazier: { key: "brazier-ground", kind: "ground", weight: 1, tone: { pitch: 1.0, noise: 0.8 } },
-  em_bonfire: { key: "bonfire-ult", kind: "ultimate", weight: 4, tone: { pitch: 0.6, len: 0.35, noise: 1.5 } },
+  em_ring: { key: "fire-ring", kind: "ground", weight: 2 },
+  em_ignite: { key: "ignite-pop", kind: "proc", weight: 1 },
+  em_meteor: { key: "meteor-log", kind: "fall", weight: 3 },
+  em_brazier: { key: "brazier-ground", kind: "ground", weight: 1 },
+  em_bonfire: { key: "bonfire-ult", kind: "ultimate", weight: 4 },
   em_ashheart: { key: "ashheart", kind: "passive", weight: 0 },
   // 서리 묘지기
-  fr_breath: { key: "frost-breath", kind: "cone", weight: 1, tone: { pitch: 0.9, noise: 1.6 } },
+  fr_breath: { key: "frost-breath", kind: "cone", weight: 1 },
   fr_collar: { key: "collar", kind: "passive", weight: 0 },
-  fr_icicle: { key: "icicle-volley", kind: "projectile", weight: 1, tone: { pitch: 1.35, len: -0.05 } },
+  fr_icicle: { key: "icicle-volley", kind: "projectile", weight: 1 },
   fr_brittle: { key: "brittle-crack", kind: "proc", weight: 0 },
-  fr_ward: { key: "ice-hex", kind: "buff", weight: 1, tone: { pitch: 1.2, sweep: 1.2 } },
-  fr_nova: { key: "frost-flower", kind: "ground", weight: 2, tone: { pitch: 1.0, len: 0.1 } },
-  fr_mist: { key: "mist-dash", kind: "dash", weight: 1, tone: { pitch: 0.8, noise: 1.5, sweep: 0.7 } },
-  fr_tomb: { key: "icicle-rain", kind: "fall", weight: 3, tone: { pitch: 0.75, len: 0.25 } },
-  fr_field: { key: "frost-field", kind: "ground", weight: 1, tone: { pitch: 1.1, noise: 0.7 } },
-  fr_blizzard: { key: "blizzard-ult", kind: "ultimate", weight: 4, tone: { pitch: 0.85, len: 0.35, noise: 1.8 } },
+  fr_ward: { key: "ice-hex", kind: "buff", weight: 1 },
+  fr_nova: { key: "frost-flower", kind: "ground", weight: 2 },
+  fr_mist: { key: "mist-dash", kind: "dash", weight: 1 },
+  fr_tomb: { key: "icicle-rain", kind: "fall", weight: 3 },
+  fr_field: { key: "frost-field", kind: "ground", weight: 1 },
+  fr_blizzard: { key: "blizzard-ult", kind: "ultimate", weight: 4 },
   fr_solstice: { key: "solstice", kind: "passive", weight: 0 },
   // 넋 인도자
-  so_wisp: { key: "wisp-homing", kind: "projectile", weight: 1, tone: { pitch: 1.25 } },
-  so_lamp: { key: "lamp-prayer", kind: "buff", weight: 0, tone: { pitch: 1.5, sweep: 1.3 } },
+  so_wisp: { key: "wisp-homing", kind: "projectile", weight: 1 },
+  so_lamp: { key: "lamp-prayer", kind: "buff", weight: 0 },
   so_drain: { key: "drain-wisp", kind: "proc", weight: 0 },
-  so_swift: { key: "wind-ribbon", kind: "buff", weight: 0, tone: { pitch: 1.3, sweep: 1.8, noise: 1.2 } },
-  so_friend: { key: "tomb-rise", kind: "summon", weight: 1, tone: { pitch: 0.8 } },
-  so_chain: { key: "soul-chain", kind: "chain", weight: 2, tone: { pitch: 1.1, len: 0.1 } },
-  so_veil: { key: "veil-portal", kind: "dash", weight: 1, tone: { pitch: 0.7, sweep: 0.6 } },
-  so_harvest: { key: "soul-vortex", kind: "vortex", weight: 2, tone: { pitch: 0.9, len: 0.15 } },
-  so_lantern: { key: "lantern-hands", kind: "summon", weight: 1, tone: { pitch: 1.1 } },
-  so_procession: { key: "procession-ult", kind: "ultimate", weight: 4, tone: { pitch: 0.75, len: 0.35 } },
+  so_swift: { key: "wind-ribbon", kind: "buff", weight: 0 },
+  so_friend: { key: "tomb-rise", kind: "summon", weight: 1 },
+  so_chain: { key: "soul-chain", kind: "chain", weight: 2 },
+  so_veil: { key: "veil-portal", kind: "dash", weight: 1 },
+  so_harvest: { key: "soul-vortex", kind: "vortex", weight: 2 },
+  so_lantern: { key: "lantern-hands", kind: "summon", weight: 1 },
+  so_procession: { key: "procession-ult", kind: "ultimate", weight: 4 },
   so_kinship: { key: "kinship", kind: "passive", weight: 0 },
 };
 

@@ -1,4 +1,4 @@
-import { decodeSnapshot, DIR, encodeEvent, encodeMove, isEmoId, isPhraseId, PING, PONG, STATE, type ActKind, type C2S, type PeerInfo, type PeerState, type Sid } from "@tomb/protocol";
+import { decodeSnapshot, DIR, encodeEvent, encodeMove, HUNT_ACT_INTERVAL_MS, isEmoId, isHuntRoom, isPhraseId, PING, PONG, STATE, type ActKind, type C2S, type HuntAct, type PeerInfo, type PeerState, type Sid } from "@tomb/protocol";
 import type { AppearanceChange } from "../sprites/avatar";
 import type { RoomJoinRequest, RoomJoinResponse } from "@/lib/types";
 import type { IncomingChatLine } from "../logic/chatLog";
@@ -45,6 +45,9 @@ export type RoomCallbacks = {
   onSeatDenied?(seatId: string): void;
   /** 3번 같은 방 사람이 가구를 썼다 */
   onUse?(sid: Sid, u: string, a: number): void;
+  /** 11/13 사냥터 방: 같은 방 사람의 공격·스킬 동작 / 자리 비움(탭을 숨겼거나 판을 멈춤) */
+  onHunt?(sid: Sid, h: HuntAct): void;
+  onAway?(sid: Sid, on: boolean): void;
   /** 끊김·방 이동: 원격 아바타를 비운다 */
   onReset?(): void;
   onStatus?(s: RoomStatus): void;
@@ -83,6 +86,10 @@ const OFFLINE_AFTER = 5;
 const FULL_RETRY_MS = 15_000;
 /** "refetch"(토큰 문제)가 이만큼 연달아면 백오프로 바꾼다 */
 const MAX_QUICK_REFETCH = 2;
+/** 11/13 사냥터 동작: 서버 간격보다 조금 넉넉히 (지터로 서버에서 버려지지 않게) */
+const HUNT_GAP_MS = HUNT_ACT_INTERVAL_MS + 30;
+/** 기본 공격은 이보다 잦으면 보내지 않는다 (MOVE 10Hz와 합쳐도 서버 레이트리밋 20/s 아래) */
+const HUNT_ATK_GAP_MS = 250;
 
 class JoinError extends Error {
   constructor(readonly status: number) {
@@ -122,6 +129,15 @@ export class RoomClient {
   rtt: number | null = null;
   /** 받은 스냅샷 수 (통계용, 호출하는 쪽이 비워도 된다) */
   snapshots = 0;
+  // 11/13 사냥터 방: 공격·스킬 동작 간격과 미뤄 둔 스킬 하나, 자리 비움(판 멈춤 + 탭 숨김)
+  private huntAt = -Infinity;
+  private huntPending: HuntAct | null = null;
+  private huntTimer: ReturnType<typeof setTimeout> | null = null;
+  private awayManual = false;
+  /** 이 연결에서 마지막으로 보낸 자리 비움 (null = 아직 안 보냄 → 다음에 꼭 보낸다) */
+  private awaySent: boolean | null = null;
+  private awaySentAt = -Infinity;
+  private awayTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly cb: RoomCallbacks,
@@ -186,6 +202,57 @@ export class RoomClient {
 
   act(kind: ActKind): void {
     this.send({ t: "act", kind });
+  }
+
+  /**
+   * 11/13 사냥터 방: 내 공격·스킬 동작을 같은 방 사람에게 (보여 주기만 — 판정은 각자).
+   * 사냥터 방이고 다른 사람이 있을 때만 보낸다 (혼자면 서버에 아무것도 안 간다).
+   * 간격 안이면 기본 공격은 버리고, 스킬은 간격이 지나자마자 보낸다 (마지막 하나만)
+   */
+  hunt(h: HuntAct): void {
+    if (!this.online || this.peers.size === 0 || !isHuntRoom(this.target)) return;
+    const now = performance.now();
+    const wait = this.huntAt + (h.k === "atk" ? HUNT_ATK_GAP_MS : HUNT_GAP_MS) - now;
+    if (wait <= 0 && !this.huntTimer) return this.sendHunt(h, now);
+    if (h.k !== "skill") return;
+    this.huntPending = h;
+    if (this.huntTimer) return;
+    this.huntTimer = setTimeout(() => {
+      this.huntTimer = null;
+      const p = this.huntPending;
+      this.huntPending = null;
+      if (p && this.online) this.sendHunt(p, performance.now());
+    }, Math.max(0, this.huntAt + HUNT_GAP_MS - now));
+  }
+
+  private sendHunt(h: HuntAct, now: number): void {
+    this.huntAt = now;
+    this.send({ t: "hunt", ...h });
+  }
+
+  /** 11/13 사냥터 방: 판을 멈췄다(on)·이어 한다. 탭 숨김은 이 클라이언트가 알아서 더해 "자리 비움"으로 알린다 */
+  setAway(on: boolean): void {
+    this.awayManual = on;
+    this.syncAway();
+  }
+
+  /** 자리 비움이 바뀌었으면 알린다 (서버 간격 AWAY_INTERVAL_MS 안이면 조금 뒤에 마지막 상태로) */
+  private syncAway(): void {
+    if (!this.online || !isHuntRoom(this.target)) return;
+    const on = this.hidden || this.awayManual;
+    if (on === this.awaySent) return;
+    const now = performance.now();
+    const wait = this.awaySentAt + 200 - now;
+    if (wait > 0) {
+      this.awayTimer ??= setTimeout(() => {
+        this.awayTimer = null;
+        this.syncAway();
+      }, wait);
+      return;
+    }
+    this.awaySent = on;
+    this.awaySentAt = now;
+    this.send({ t: "away", on });
   }
 
   /** 의도된 순간이동 (친구 옆으로): 서버가 범위·쿨다운만 보고 그 자리로 옮긴다. 다음 MOVE는 새 자리에서 이어진다 */
@@ -385,6 +452,12 @@ export class RoomClient {
         case "use":
           this.cb.onUse?.(ev.sid, ev.u, ev.a);
           break;
+        case "hunt":
+          this.cb.onHunt?.(ev.sid, ev.h);
+          break;
+        case "away":
+          this.cb.onAway?.(ev.sid, ev.on);
+          break;
         case "peers":
           this.syncPolicy.mark(performance.now());
           this.peers.clear();
@@ -433,6 +506,10 @@ export class RoomClient {
     // 방 안에서 꾸미기를 바꿨으면 새 연결에도 알린다 (입장 토큰은 잠깐 재사용돼 옛 착용일 수 있다)
     if (this.lookGrant) this.lookPacer.push(this.lookGrant);
     this.lookPacer.reset();
+    // 11/13 사냥터 방: 새 연결마다 지금 자리 비움 상태를 한 번 (이어받은 자리에 옛 값이 남아 있을 수 있다)
+    this.awaySent = null;
+    this.awaySentAt = -Infinity;
+    this.syncAway();
   }
 
   /** 소켓이 닫혔거나 죽은 것으로 판단됨 */
@@ -528,6 +605,11 @@ export class RoomClient {
     this.syncTimer = null;
     if (this.hiddenIdleTimer) clearTimeout(this.hiddenIdleTimer);
     this.hiddenIdleTimer = null;
+    if (this.huntTimer) clearTimeout(this.huntTimer);
+    this.huntTimer = null;
+    this.huntPending = null;
+    if (this.awayTimer) clearTimeout(this.awayTimer);
+    this.awayTimer = null;
   }
 
   private startPing(): void {
@@ -577,6 +659,7 @@ export class RoomClient {
     const hidden = document.hidden;
     if (this.hidden && !hidden) this.throttle.reset(); // 돌아오면 현재 상태 1회
     this.hidden = hidden;
+    this.syncAway(); // 11/13 사냥터 방: 숨은 탭 = 판이 멈춘다 → 같은 방 사람에게 "자리 비움"
     if (!hidden) {
       this.lastPongAt = performance.now();
       if (this.hiddenIdleTimer) clearTimeout(this.hiddenIdleTimer);

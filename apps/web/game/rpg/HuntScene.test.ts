@@ -37,7 +37,7 @@ vi.mock("phaser", () => {
   };
 });
 vi.mock("./sprites", () => ({ RTEX: stub(), avFrame: () => 0, ensureFloor: () => "floor", ensureRpgTextures: () => {}, makePlayer: () => {} }));
-vi.mock("./sfx", () => ({ RpgSfx: class { play() {} burst() {} destroy() {} } }));
+vi.mock("./sfx", () => ({ RpgSfx: class { play() {} skill() {} destroy() {} } }));
 vi.mock("../entities/AvatarView", () => ({ AvatarView: class {} }));
 vi.mock("../net/RoomPresence", () => ({ RoomPresence: class {} }));
 

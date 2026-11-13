@@ -108,6 +108,18 @@ describe("events", () => {
     expect(parseC2S('{"t":"mood","m":"dance"}')).toBeNull();
     expect(parseC2S('{"t":"mood"}')).toBeNull();
   });
+
+  it("11/13 함께 사냥 hunt: 공격·스킬 동작만, 각도는 0..359로, 모르는 필드는 뺀다", () => {
+    expect(parseC2S('{"t":"hunt","k":"atk","a":90,"w":"swing"}')).toEqual({ t: "hunt", k: "atk", a: 90, w: "swing" });
+    expect(parseC2S('{"t":"hunt","k":"atk","a":-90.4,"f":true,"x":1}')).toEqual({ t: "hunt", k: "atk", a: 270, f: true });
+    expect(parseC2S('{"t":"hunt","k":"skill","a":720,"s":"em_blast"}')).toEqual({ t: "hunt", k: "skill", a: 0, s: "em_blast" });
+    // 스킬은 id가 있어야 하고, id 모양이 틀리면 버린다
+    expect(parseC2S('{"t":"hunt","k":"skill","a":0}')).toBeNull();
+    expect(parseC2S('{"t":"hunt","k":"skill","a":0,"s":"<b>"}')).toBeNull();
+    expect(parseC2S('{"t":"hunt","k":"atk","a":0,"w":"Big Sword"}')).toEqual({ t: "hunt", k: "atk", a: 0 });
+    expect(parseC2S('{"t":"hunt","k":"dance","a":0}')).toBeNull();
+    expect(parseC2S('{"t":"hunt","k":"atk"}')).toBeNull();
+  });
 });
 
 describe("token", () => {

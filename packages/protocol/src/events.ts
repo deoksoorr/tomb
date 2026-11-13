@@ -58,7 +58,12 @@ export type C2S =
    */
   | { t: "away"; on: boolean; /** 친구: 어느 실내인지 (옛 클라이언트는 없다) */ p?: AwayPlace; /** 집 안이면 그 집 id (친구가 따라 들어간다) */ h?: string }
   /** 말풍선 자유 채팅 (CHAT_MAX자). 서버가 토큰 버킷으로 도배를 막고 가려서(maskChat) 같은 채널·방에만 중계한다. 저장하지 않는다 */
-  | { t: "chat"; text: string };
+  | { t: "chat"; text: string }
+  /**
+   * 11/13 함께 사냥: 내 공격·스킬 동작 (사냥터 방 전용, 보여 주기만 — 판정·몬스터는 각자). 서버는 HUNT_ACT_INTERVAL_MS 간격으로
+   * 같은 사냥터 방의 다른 사람에게만 중계하고 저장하지 않는다. 옛 서버는 모르는 t라 버린다
+   */
+  | ({ t: "hunt" } & HuntAct);
 
 // ── 서버 → 클라이언트 ──
 export type WelcomeMsg = {
@@ -129,7 +134,9 @@ export type S2C =
   /** 받는 사람에게만: 방에 들어올 때(입장·재접속·실내에서 복귀) 이 방의 최근 1분 채팅. now = 서버 시각 (옛 클라이언트는 모르는 t라 버린다) */
   | { t: "chatLog"; now: number; lines: ChatLogLine[] }
   /** 받는 사람에게만: 친구가 들어왔다(on)·나갔다 (key = 친구 창의 그 친구 키, 옛 클라이언트는 모르는 t라 버린다) */
-  | { t: "friend"; key: string; name: string; on: boolean };
+  | { t: "friend"; key: string; name: string; on: boolean }
+  /** 11/13 같은 사냥터 사람의 공격·스킬 동작 (보낸 사람 빼고. 옛 클라이언트는 모르는 t라 버린다) */
+  | ({ t: "hunt"; sid: Sid } & HuntAct);
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 /** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */
@@ -146,6 +153,26 @@ export const USE_ID_RE = /^[a-z0-9]{1,8}$/;
 /** 3번 use 이벤트: 연결당 최소 간격 (피아노를 빠르게 쳐도 들리게 짧게) */
 export const USE_INTERVAL_MS = 80;
 const isNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+
+// ── 11/13 함께 사냥: 공격·스킬 동작 ──
+/** atk = 기본 공격 한 번, skill = 스킬 시전 */
+export type HuntActKind = "atk" | "skill";
+/** a = 바라보는 각도(도, 0..359 정수), w = 무기 방식 id(기본 공격), s = 스킬 id(이름은 받는 쪽 카탈로그에서), f = 연타 마무리 */
+export type HuntAct = { k: HuntActKind; a: number; w?: string; s?: string; f?: true };
+/** 무기 방식·스킬 id 모양 (모르는 id는 받는 쪽이 그림만 기본으로 그린다) */
+export const HUNT_ACT_ID_RE = /^[a-z0-9_]{1,24}$/;
+/** 연결당 최소 간격: 서버는 이보다 잦은 hunt를 버린다 (클라이언트는 기본 공격을 더 드물게 보낸다) */
+export const HUNT_ACT_INTERVAL_MS = 150;
+
+/** hunt 이벤트 본문 검증 (서버 parseC2S·클라이언트 수신 공용). 모양이 틀리면 null, 모르는 필드는 버린다 */
+export function parseHuntAct(m: Record<string, unknown>): HuntAct | null {
+  if ((m.k !== "atk" && m.k !== "skill") || !isNum(m.a)) return null;
+  const a = ((Math.round(m.a) % 360) + 360) % 360;
+  const w = typeof m.w === "string" && HUNT_ACT_ID_RE.test(m.w) ? m.w : undefined;
+  const s = m.k === "skill" && typeof m.s === "string" && HUNT_ACT_ID_RE.test(m.s) ? m.s : undefined;
+  if (m.k === "skill" && !s) return null;
+  return { k: m.k, a, ...(w ? { w } : {}), ...(s ? { s } : {}), ...(m.f === true ? { f: true as const } : {}) };
+}
 
 /** 확성기 이벤트만 증서가 길어 이만큼까지 받는다 (나머지는 MAX_MESSAGE_BYTES) */
 export const MAX_MEGAPHONE_MESSAGE_BYTES = MAX_GRANT_LEN + 64;
@@ -212,6 +239,10 @@ export function parseC2S(text: string): C2S | null {
     case "chat": {
       const text = normalizeChat(m.text);
       return text ? { t: "chat", text } : null;
+    }
+    case "hunt": {
+      const h = parseHuntAct(m);
+      return h ? { t: "hunt", ...h } : null;
     }
     case "use":
       return typeof m.u === "string" && USE_ID_RE.test(m.u) && typeof m.a === "number" && Number.isInteger(m.a) && m.a >= 0 && m.a <= 255

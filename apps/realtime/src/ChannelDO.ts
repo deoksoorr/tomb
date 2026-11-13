@@ -100,7 +100,7 @@ export class ChannelDO extends DurableObject<Env> {
     const { capacity, graceMs } = readConfig(env);
     const room = this.room !== null;
     return new ChannelCore<WebSocket>(
-      { capacity: room ? ROOM_CAPACITY : capacity, graceMs, room },
+      { capacity: room ? ROOM_CAPACITY : capacity, graceMs, room, hunt: isHuntRoom(this.room) },
       {
         send: (ws, data) => {
           try {

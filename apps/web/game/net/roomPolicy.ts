@@ -1,4 +1,4 @@
-import { ACT_KINDS, CHAT_MAX, CLIENT_VERSION, CLOSE, isEmoId, isPhraseId, ROOM_ID_RE, USE_ID_RE, sanitizeDye, type ActKind, type AvatarDye, type EmoId, type PeerInfo, type PhraseId, type Sid } from "@tomb/protocol";
+import { ACT_KINDS, CHAT_MAX, CLIENT_VERSION, CLOSE, isEmoId, isPhraseId, parseHuntAct, ROOM_ID_RE, USE_ID_RE, sanitizeDye, type ActKind, type AvatarDye, type EmoId, type HuntAct, type PeerInfo, type PhraseId, type Sid } from "@tomb/protocol";
 import { readChatLog, type IncomingChatLine } from "../logic/chatLog";
 
 // 방(room) 연결의 순수 규칙: 접속 URL, 닫힘 코드 → 다음 행동, 받은 JSON 검증. Phaser·WebSocket 없이 테스트한다.
@@ -63,7 +63,10 @@ export type RoomEvent =
   | { t: "peers"; peers: PeerInfo[]; seats: Record<string, Sid> }
   | { t: "seat"; seatId: string; sid: Sid | null }
   | { t: "seatDenied"; seatId: string }
-  | { t: "use"; sid: Sid; u: string; a: number };
+  | { t: "use"; sid: Sid; u: string; a: number }
+  /** 11/13 사냥터 방: 같은 방 사람의 공격·스킬 동작 / 자리 비움(탭을 숨겼거나 판을 멈춤) */
+  | { t: "hunt"; sid: Sid; h: HuntAct }
+  | { t: "away"; sid: Sid; on: boolean };
 
 const isSid = (v: unknown): v is Sid => typeof v === "number" && Number.isInteger(v) && v >= 0;
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -144,6 +147,13 @@ export function parseRoomMessage(text: string, mySid: Sid | null): RoomEvent | n
       return isSid(m.sid) && m.sid !== mySid && typeof m.u === "string" && USE_ID_RE.test(m.u) && typeof m.a === "number" && Number.isInteger(m.a) && m.a >= 0 && m.a <= 255
         ? { t: "use", sid: m.sid, u: m.u, a: m.a }
         : null;
+    case "hunt": {
+      if (!isSid(m.sid) || m.sid === mySid) return null;
+      const h = parseHuntAct(m);
+      return h ? { t: "hunt", sid: m.sid, h } : null;
+    }
+    case "away":
+      return isSid(m.sid) && m.sid !== mySid && typeof m.on === "boolean" ? { t: "away", sid: m.sid, on: m.on } : null;
     default:
       return null;
   }

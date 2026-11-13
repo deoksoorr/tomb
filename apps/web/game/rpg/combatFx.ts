@@ -276,7 +276,7 @@ export class CombatFx {
   }
 
   /** 무기 동작 궤적. (x,y)는 손 위치, ang은 바라보는 각도, reach는 범위(px) */
-  motion(style: WeaponStyleId, x: number, y: number, ang: number, reach: number, finisher: boolean, arcDeg = 120): void {
+  motion(style: WeaponStyleId, x: number, y: number, ang: number, reach: number, finisher: boolean, arcDeg = 120): Phaser.GameObjects.Sprite | null {
     const sc = this.scene;
     switch (style) {
       case "swing":
@@ -288,31 +288,31 @@ export class CombatFx {
         s.setScale(k, k * Math.min(1.5, Math.max(0.8, arcDeg / 130)));
         if (finisher) s.setTint(heavy ? 0xffb060 : 0xbfe8ff);
         playFrames(sc, s, 4, heavy ? 40 : 30);
-        break;
+        return s;
       }
       case "thrust": {
         const s = sc.add.sprite(x, y, FXT.streak, 0).setOrigin(0, 0.5).setRotation(ang).setDepth(DEPTH_TOP - 20);
         s.setScale(reach / 52, finisher ? 1.6 : 1);
         if (finisher) s.setTint(0xbfe8ff);
         playFrames(sc, s, 3, 40);
-        break;
+        return s;
       }
       case "combo": {
         const s = sc.add.sprite(x + Math.cos(ang) * reach * 0.55, y + Math.sin(ang) * reach * 0.55, FXT.cross, 0).setDepth(DEPTH_TOP - 20);
         s.setScale(reach / 16).setRotation(ang);
         playFrames(sc, s, 2, 45);
-        break;
+        return s;
       }
       case "shot":
       case "card": {
         const s = sc.add.sprite(x + Math.cos(ang) * 6, y + Math.sin(ang) * 6, FXT.puff, 0).setDepth(DEPTH_TOP - 20);
         playFrames(sc, s, 3, 50);
-        break;
+        return s;
       }
       case "magic": {
         const s = sc.add.sprite(x, y - 4, FXT.impact, 0).setDepth(DEPTH_TOP - 20).setTint(0x7aa8ff).setScale(0.6);
         playFrames(sc, s, 4, 40);
-        break;
+        return s;
       }
     }
   }

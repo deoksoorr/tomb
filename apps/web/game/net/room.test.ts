@@ -57,6 +57,16 @@ describe("room policy", () => {
     const w2 = parseRoomMessage(JSON.stringify({ t: "welcome", sid: 5, cap: 30, resumed: false, peers: [], spots: true, seats: { l_1_2: 6, "x y": 7 } }), null);
     expect(w2?.t === "welcome" && [w2.m.spots, w2.m.seats]).toEqual([true, { l_1_2: 6 }]);
   });
+
+  it("11/13 사냥터 방: hunt(공격·스킬 동작)·away(자리 비움)를 받고 내 것은 거른다", () => {
+    expect(parseRoomMessage(JSON.stringify({ t: "hunt", sid: 2, k: "atk", a: 90, w: "swing" }), 1)).toEqual({ t: "hunt", sid: 2, h: { k: "atk", a: 90, w: "swing" } });
+    expect(parseRoomMessage(JSON.stringify({ t: "hunt", sid: 2, k: "skill", a: 400, s: "em_blast", f: true }), 1)).toEqual({ t: "hunt", sid: 2, h: { k: "skill", a: 40, s: "em_blast", f: true } });
+    expect(parseRoomMessage(JSON.stringify({ t: "hunt", sid: 1, k: "atk", a: 90 }), 1)).toBeNull();
+    expect(parseRoomMessage(JSON.stringify({ t: "hunt", sid: 2, k: "skill", a: 0 }), 1)).toBeNull();
+    expect(parseRoomMessage(JSON.stringify({ t: "away", sid: 2, on: true }), 1)).toEqual({ t: "away", sid: 2, on: true });
+    expect(parseRoomMessage(JSON.stringify({ t: "away", sid: 1, on: true }), 1)).toBeNull();
+    expect(parseRoomMessage(JSON.stringify({ t: "away", sid: 2, on: 1 }), 1)).toBeNull();
+  });
 });
 
 // ── 가짜 소켓으로 RoomClient ──
@@ -130,6 +140,8 @@ describe("RoomClient", () => {
         onLeave: (sid) => events.push(`leave:${sid}`),
         onSay: (sid, id) => events.push(`say:${sid}:${id}`),
         onAct: (sid, k) => events.push(`act:${sid}:${k}`),
+        onHunt: (sid, h) => events.push(`hunt:${sid}:${h.k}:${h.s ?? h.w ?? ""}`),
+        onAway: (sid, on) => events.push(`away:${sid}:${on}`),
         onSnapshot: (e) => events.push(`snap:${e.length}`),
         onReset: () => events.push("reset"),
         onStatus: (s) => statuses.push(s),
@@ -212,6 +224,50 @@ describe("RoomClient", () => {
     ws.recv({ t: "say", sid: 2, id: "thanks" });
     ws.recv({ t: "act", sid: 2, kind: "cheer", x: 1, y: 2 });
     expect(events.filter((e) => e.startsWith("say") || e.startsWith("act"))).toEqual(["say:2:thanks", "act:2:cheer"]);
+  });
+
+  it("11/13 사냥터 방: 공격·스킬 동작은 다른 사람이 있을 때만 간격을 지켜, 판 멈춤은 자리 비움", async () => {
+    const c = make();
+    c.joinRoom("hunt:meadow:easy");
+    await flush();
+    const ws = FakeWs.last!;
+    ws.open();
+    ws.recv({ t: "welcome", sid: 1, cap: 30, resumed: false, peers: [] });
+    const sent = (t: string) => ws.texts().map((x) => JSON.parse(x)).filter((m) => m.t === t);
+    // 새 연결마다 지금 자리 비움 상태 1회 (이어받은 자리에 옛 값이 남아 있을 수 있다)
+    expect(sent("away")).toEqual([{ t: "away", on: false }]);
+    c.hunt({ k: "atk", a: 0 }); // 혼자 → 서버에 아무것도 안 간다
+    expect(sent("hunt")).toEqual([]);
+    ws.recv({ t: "join", sid: 2, x: 0, y: 0, name: "b", color: "#fff", state: 0, dir: 0 });
+    c.hunt({ k: "atk", a: 0, w: "swing" });
+    c.hunt({ k: "atk", a: 10 }); // 간격 안 기본 공격 → 버린다
+    c.hunt({ k: "skill", a: 20, s: "em_blast" }); // 간격 안 스킬 → 간격이 지나자마자
+    expect(sent("hunt")).toEqual([{ t: "hunt", k: "atk", a: 0, w: "swing" }]);
+    vi.advanceTimersByTime(200);
+    expect(sent("hunt")).toEqual([{ t: "hunt", k: "atk", a: 0, w: "swing" }, { t: "hunt", k: "skill", a: 20, s: "em_blast" }]);
+    // 판 멈춤 → 자리 비움, 바로 이어 하면 서버 간격이 지난 뒤 마지막 상태로
+    vi.advanceTimersByTime(300);
+    c.setAway(true);
+    c.setAway(false);
+    expect(sent("away")).toEqual([{ t: "away", on: false }, { t: "away", on: true }]);
+    vi.advanceTimersByTime(300);
+    expect(sent("away")).toEqual([{ t: "away", on: false }, { t: "away", on: true }, { t: "away", on: false }]);
+    // 받기: 다른 사람 동작·자리 비움
+    ws.recv({ t: "hunt", sid: 2, k: "skill", a: 0, s: "fr_nova" });
+    ws.recv({ t: "away", sid: 2, on: true });
+    expect(events.filter((e) => e.startsWith("hunt") || e.startsWith("away"))).toEqual(["hunt:2:skill:fr_nova", "away:2:true"]);
+  });
+
+  it("마을·집 방은 공격 동작·자리 비움을 보내지 않는다", async () => {
+    const c = make();
+    c.joinRoom("village");
+    await flush();
+    const ws = FakeWs.last!;
+    ws.open();
+    ws.recv({ t: "welcome", sid: 1, cap: 30, resumed: false, peers: [{ sid: 2, x: 0, y: 0, name: "b", color: "#fff", state: 0, dir: 0 }] });
+    c.hunt({ k: "atk", a: 0 });
+    c.setAway(true);
+    expect(ws.texts()).toEqual([]);
   });
 
   it("MOVE follows the throttle (only on change, ≤10Hz)", async () => {
