@@ -88,13 +88,15 @@ export default function NoticesPanel({ toast, onAuthLost }: Props) {
       <ul className={styles.list}>
         {notices?.map((n) => (
           <li key={n.id} className={styles.notice}>
-            <div className={styles.noticeTitle}>
+            {/* 처음엔 제목만 보이게 접어 두고, 눌러서 본문·버튼을 펼친다 (본문이 길어 목록이 너무 길어지지 않게) */}
+            <details className={styles.noticeFold}>
+            <summary className={styles.noticeTitle}>
               {n.pinned && <span className={cx(styles.badge, styles.badgeOpen)}>고정</span>}
               <strong>{n.title}</strong>
               <time className={styles.meta} dateTime={new Date(n.createdAt).toISOString()}>
                 {formatDateTime(n.createdAt)}
               </time>
-            </div>
+            </summary>
             <p className={styles.noticeBody}>{n.body}</p>
             <div className={styles.actions}>
               <button type="button" className={ui.button} disabled={busy || !!editing} onClick={() => setEditing(n)}>
@@ -114,6 +116,7 @@ export default function NoticesPanel({ toast, onAuthLost }: Props) {
                 삭제
               </button>
             </div>
+            </details>
           </li>
         ))}
       </ul>

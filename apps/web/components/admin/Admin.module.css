@@ -524,3 +524,23 @@
     margin-bottom: 4px;
   }
 }
+
+/* 공지 목록: 제목만 보이게 접힘, 눌러서 펼침 */
+.noticeFold > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.noticeFold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.noticeFold > summary::before {
+  content: "▸";
+  margin-right: 6px;
+  color: var(--muted);
+}
+
+.noticeFold[open] > summary::before {
+  content: "▾";
+}
