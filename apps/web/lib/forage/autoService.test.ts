@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as autoRoute from "@/app/api/forage/auto/route";
 import * as session from "@/app/api/session/route";
-import { kstDay } from "../store/accounts";
+import { kstDay, kstWeek } from "../store/accounts";
 import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, autoCatchTimes, beatAuto, newAutoSession, rollAutoCatch } from "./auto";
 import { beatAutoFish } from "./autoSettle";
 import { rollAutoSunken } from "./sunken";
@@ -121,15 +121,53 @@ describe("자동 낚시 정산", () => {
     expect(got(stops)).toBe(Math.floor((11 * MIN) / AUTO_FISH_EVERY_MS) - got(rs));
   });
 
-  it("최대어 순위·최대 크기 기록은 하지 않는다 (직접 낚은 것만)", async () => {
+  it("크기는 내 도감의 종류별 최대 기록에 반영한다", async () => {
+    const a = acct();
+    await startAutoFish(a, PIER, 1, T0);
+    for (let t = T0 + 10 * MIN; t < T0 + 30 * MIN; t += 10 * MIN) await beatAutoFish(a, t);
+    const r = await stopAutoFish(a, T0 + 30 * MIN);
+    const sized = r.items.filter((x) => x.size > 0);
+    expect(sized.length).toBeGreaterThan(0);
+    // 종류별로 이번에 낚은 것 중 가장 큰 크기 = 도감의 최대 기록 (처음 계정이라 그 전 기록이 없다)
+    const best = new Map<string, number>();
+    for (const x of sized) best.set(x.id, Math.max(best.get(x.id) ?? 0, x.size));
+    for (const [id, size] of best) expect(r.state.dex[id].max).toBe(size);
+    // 처음 기록은 record가 아니고, 그 뒤 더 큰 것이 나오면 record (직접 낚을 때와 같은 규칙)
+    const seen = new Map<string, number>();
+    for (const x of r.items) {
+      const old = seen.get(x.id) ?? 0;
+      expect(x.record).toBe(x.size > old && old > 0);
+      seen.set(x.id, Math.max(old, x.size));
+    }
+  });
+
+  it("직접 낚은 더 큰 기록은 자동으로 낚은 작은 것이 덮어쓰지 않는다", async () => {
+    const a = acct();
+    await startAutoFish(a, PIER, 1, T0);
+    const r1 = await syncAutoFish(a, T0 + 10 * MIN);
+    const first = r1.items.find((x) => x.size > 0)!;
+    // 같은 종류를 아주 크게 직접 넣어 둔다 → 그 뒤 자동으로 낚인 것이 더 작으면 최대 기록은 그대로
+    await getForageStore().grant(a, kstDay(T0), "fish", [{ id: first.id, size: 99_999 }], 99);
+    for (let t = T0 + 20 * MIN; t < T0 + 40 * MIN; t += 10 * MIN) await beatAutoFish(a, t);
+    const r2 = await stopAutoFish(a, T0 + 40 * MIN);
+    expect(r2.items.length).toBeGreaterThan(0);
+    expect(r2.state.dex[first.id].max).toBe(99_999);
+    expect(r2.items.filter((x) => x.id === first.id).every((x) => !x.record)).toBe(true);
+  });
+
+  it("최대어 순위(물고기별·전체, 주간·전체)에는 넣지 않는다 (직접 낚은 것만)", async () => {
     const a = acct();
     const rank = vi.spyOn(getFishRank(), "record");
     await startAutoFish(a, PIER, 1, T0);
-    const r = await stopAutoFish(a, T0 + 10 * MIN);
-    expect(r.items.length).toBeGreaterThan(0);
-    expect(r.items.every((x) => !x.record)).toBe(true);
-    expect(Object.values(r.state.dex).every((d) => d.max === 0)).toBe(true);
+    for (let t = T0 + 10 * MIN; t < T0 + 30 * MIN; t += 10 * MIN) await beatAutoFish(a, t);
+    const r = await stopAutoFish(a, T0 + 30 * MIN);
+    expect(r.items.some((x) => x.size > 0)).toBe(true);
     expect(rank).not.toHaveBeenCalled();
+    const week = kstWeek(T0);
+    for (const w of [week, null]) {
+      expect((await getFishRank().board(null, w, 50, a)).mine).toBeNull();
+      for (const id of new Set(r.items.map((x) => x.id))) expect((await getFishRank().board(id, w, 50, a)).mine).toBeNull();
+    }
   });
 
   it("6시간이 지나면 정산하고 끝난다", async () => {

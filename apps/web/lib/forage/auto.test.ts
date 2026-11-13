@@ -19,7 +19,7 @@ import {
   type AutoSession,
 } from "./auto";
 import { speciesById, type Species } from "./catalog";
-import { candidates, conditionsAt, weightOf, type Cond } from "./rules";
+import { candidates, conditionsAt, hash01, rollSize10, weightOf, type Cond } from "./rules";
 
 // 자동 낚시 순수 규칙: 접속 시간 → 마릿수, 끊긴 구간 제외, 세션 최대 길이, 희귀 확률 절반, 결정성
 
@@ -191,6 +191,27 @@ describe("결정성", () => {
   });
 });
 
+describe("크기", () => {
+  it("직접 낚을 때와 같은 분포(rollSize10)로, 시드 + 번호로 정해진다", () => {
+    const c = conditionsAt(T0);
+    const sizes = new Map<string, Set<number>>();
+    for (let k = 1; k <= 300; k++) {
+      const r = rollAutoCatch(31, k, "river", T0, c)!;
+      const sp = speciesById(r.id)!;
+      expect(r.size).toBe(rollSize10(sp, hash01(`auto|31|${k}|sz`)));
+      expect(rollAutoCatch(31, k, "river", T0, c)!.size).toBe(r.size); // 다시 굴려도 같다
+      if (!sp.size) expect(r.size).toBe(0);
+      else {
+        expect(r.size).toBeGreaterThanOrEqual(sp.size[0] * 10);
+        expect(r.size).toBeLessThanOrEqual(sp.size[1] * 10);
+        sizes.set(r.id, (sizes.get(r.id) ?? new Set()).add(r.size));
+      }
+    }
+    // 같은 종류라도 번호가 다르면 크기가 여러 가지
+    expect(Math.max(...[...sizes.values()].map((x) => x.size))).toBeGreaterThan(1);
+  });
+});
+
 describe("요약", () => {
   it("종류별 마릿수, 새 도감은 앞에 표시, 많으면 외 n종", () => {
     const items = [
@@ -201,5 +222,17 @@ describe("요약", () => {
     ];
     expect(autoSummary(items, (id) => id.toUpperCase())).toBe("B 1(새 도감), A 2, C 1");
     expect(autoSummary(items, (id) => id, 1)).toBe("b 1(새 도감) 외 2종");
+  });
+
+  it("크기가 있으면 종류별 가장 큰 것, 도감 최대 기록을 새로 세웠으면 표시", () => {
+    const items = [
+      { id: "a", isNew: false, size: 300 },
+      { id: "a", isNew: false, size: 423, record: true },
+      { id: "b", isNew: true, size: 610 },
+      { id: "c", isNew: false, size: 0 },
+      { id: "c", isNew: false, size: 0 },
+      { id: "c", isNew: false, size: 0 },
+    ];
+    expect(autoSummary(items, (id) => id.toUpperCase())).toBe("B 1(새 도감·61.0cm), A 2(최대 42.3cm·새 기록), C 3");
   });
 });

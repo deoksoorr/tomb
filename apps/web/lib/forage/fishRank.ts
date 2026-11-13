@@ -4,7 +4,8 @@ import { getAccounts } from "../store";
 import { kstDay, WEEK_RANK_TTL_SEC } from "../store/accounts";
 import { K } from "../store/keys";
 
-// 최대어 랭킹: 물고기별·전체 가장 큰 크기 기록 (이번 주·전체). 낚시 결과 API(reelIn)에서 서버만 기록한다.
+// 최대어 랭킹: 물고기별·전체 가장 큰 크기 기록 (이번 주·전체). 낚시 결과 API(reelIn)에서 서버만 기록한다
+// (직접 낚은 것만 — 자동 낚시로 낚은 물고기는 크기가 있어도 내 도감 최대 기록에만 들어간다).
 // Redis 정렬 집합 (점수 = 크기 cm×10, 멤버 = 계정 id). 한 사람은 판마다 한 줄 — 더 큰 기록일 때만 바꾼다 (Lua 한 번, 원자적).
 // 전체(모든 물고기) 판은 그 기록이 어떤 물고기인지 옆 해시에 함께 둔다.
 

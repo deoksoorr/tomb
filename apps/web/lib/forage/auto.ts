@@ -1,5 +1,5 @@
 import type { Species } from "./catalog";
-import { BITE_MAX_MS, BITE_MIN_MS, candidates, conditionsAt, hash01, reelMinMs, rollSize10, weightOf, type Cond } from "./rules";
+import { BITE_MAX_MS, BITE_MIN_MS, candidates, conditionsAt, hash01, reelMinMs, rollSize10, sizeText, weightOf, type Cond } from "./rules";
 
 // 자동 낚시 규칙 (순수 함수 — 서버가 쓰고 테스트한다).
 // 클라이언트 프레임이 아니라 서버 시각으로 센다: 켤 때 세션(시작 시각·자리·채널·물 종류·시드)을 저장하고,
@@ -129,7 +129,10 @@ export function pickAuto(list: readonly Species[], rand: number): Species | null
   return list[list.length - 1];
 }
 
-/** k번째 물고기: 그 시각의 조건으로, 시드 + 번호로 결정적으로 (같은 입력 → 같은 결과) */
+/**
+ * k번째 물고기: 그 시각의 조건으로, 시드 + 번호로 결정적으로 (같은 입력 → 같은 결과).
+ * 크기는 직접 낚을 때와 같은 분포(rollSize10). 내 도감 최대 기록에는 들어가고, 최대어 순위에는 넣지 않는다
+ */
 export function rollAutoCatch(seed: number, k: number, water: "lake" | "river", at: number, cond: Cond = conditionsAt(at)) {
   const s = pickAuto(candidates("fish", water, cond), hash01(`auto|${seed}|${k}|sp`));
   if (!s) return null;
@@ -142,17 +145,32 @@ export function autoNextLabel(ms: number): string {
   return min >= 1 ? `약 ${min}분` : "곧";
 }
 
-/** 종류별 마릿수 요약: "월요병 붕어 5, 야근 메기 2(새 도감) 외 2종". 많이 낚은 순, 새로 등록한 것은 표시 */
-export function autoSummary(items: readonly { id: string; isNew: boolean }[], nameOf: (id: string) => string, maxKinds = 5): string {
-  const by = new Map<string, { n: number; isNew: boolean }>();
+/** 자동 낚시 안내 (낚시 창·결과 알림이 같이 쓴다) */
+export const AUTO_RANK_NOTE = "자동 낚시로 낚은 물고기는 최대어 순위에 오르지 않아요(크기는 도감에 기록돼요)";
+
+/**
+ * 종류별 마릿수 요약: "월요병 붕어 5(최대 42.3cm), 야근 메기 1(새 도감·61.0cm) 외 2종".
+ * 새로 등록한 것·도감 최대 기록을 새로 세운 것을 앞에, 그다음 많이 낚은 순. 크기가 있으면 그 종류에서 가장 큰 것을 붙인다
+ */
+export function autoSummary(
+  items: readonly { id: string; isNew: boolean; size?: number; record?: boolean }[],
+  nameOf: (id: string) => string,
+  maxKinds = 5,
+): string {
+  const by = new Map<string, { n: number; isNew: boolean; max: number; record: boolean }>();
   for (const it of items) {
-    const e = by.get(it.id) ?? { n: 0, isNew: false };
+    const e = by.get(it.id) ?? { n: 0, isNew: false, max: 0, record: false };
     e.n++;
     e.isNew ||= it.isNew;
+    e.record ||= !!it.record;
+    e.max = Math.max(e.max, it.size ?? 0);
     by.set(it.id, e);
   }
-  const rows = [...by].sort((a, b) => Number(b[1].isNew) - Number(a[1].isNew) || b[1].n - a[1].n);
-  const head = rows.slice(0, maxKinds).map(([id, e]) => `${nameOf(id)} ${e.n}${e.isNew ? "(새 도감)" : ""}`);
+  const rows = [...by].sort((a, b) => Number(b[1].isNew) - Number(a[1].isNew) || Number(b[1].record) - Number(a[1].record) || b[1].n - a[1].n);
+  const head = rows.slice(0, maxKinds).map(([id, e]) => {
+    const tags = [e.isNew && "새 도감", e.max > 0 && `${e.n > 1 ? "최대 " : ""}${sizeText(e.max)}`, e.record && "새 기록"].filter(Boolean);
+    return `${nameOf(id)} ${e.n}${tags.length ? `(${tags.join("·")})` : ""}`;
+  });
   const rest = rows.length - maxKinds;
   return head.join(", ") + (rest > 0 ? ` 외 ${rest}종` : "");
 }

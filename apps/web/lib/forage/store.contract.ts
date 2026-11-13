@@ -123,7 +123,7 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     expect(r.filter(Boolean)).toHaveLength(1);
   });
 
-  it("자동 낚시 넣기: 자동 한도·하루 전체 한도 안에서 앞에서부터, 최대 크기는 기록하지 않는다", async () => {
+  it("자동 낚시 넣기: 자동 한도·하루 전체 한도 안에서 앞에서부터, 도감 최대 크기도 기록한다", async () => {
     const a = acct();
     const fish = (n: number, size = 500) => Array.from({ length: n }, () => ({ id: "f_carp", size }));
     const g1 = await store.grantAuto(a, DAY, fish(3), 99, 5, 150);
@@ -136,14 +136,20 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     expect(await store.grantAuto(a, DAY, fish(1), 99, 5, 150)).toEqual([]);
     let s = await store.snapshot(a, DAY, 1);
     expect(s.day).toMatchObject({ fish: 5, auto: 5 });
-    expect(s.dex.f_carp).toEqual({ n: 5, max: 0, first: DAY });
+    expect(s.dex.f_carp).toEqual({ n: 5, max: 500, first: DAY });
     expect(s.bag.f_carp).toBe(5);
     // 하루 전체 한도: 직접 낚은 것과 합쳐서
     await store.grant(a, "20261113", "fish", fish(8, 300), 99);
     expect(await store.grantAuto(a, "20261113", fish(5), 99, 75, 10)).toHaveLength(2);
     s = await store.snapshot(a, "20261113", 1);
     expect(s.day).toMatchObject({ fish: 10, auto: 2 });
-    expect(s.dex.f_carp.max).toBe(300); // 직접 낚은 크기만 기록
+    expect(s.dex.f_carp.max).toBe(500); // 더 작은 크기는 최대 기록을 바꾸지 않는다
+    // 더 큰 크기면 최대 기록을 바꾸고 record (처음 기록일 땐 record 아님 — 직접 낚을 때와 같다)
+    expect(await store.grantAuto(a, "20261114", [{ id: "f_carp", size: 640 }, { id: "f_koi", size: 300 }], 99, 75, 150)).toEqual([
+      { id: "f_carp", size: 640, kept: true, isNew: false, record: true },
+      { id: "f_koi", size: 300, kept: true, isNew: true, record: false },
+    ]);
+    expect((await store.snapshot(a, "20261114", 1)).dex.f_carp.max).toBe(640);
     // "@"(물에 빠진 꾸미기 자리)는 한도만 세고 가방·도감은 그대로
     const b = acct();
     expect(await store.grantAuto(b, DAY, [{ id: "@hat_cat", size: 0 }, { id: "f_carp", size: 1 }], 99, 75, 150)).toEqual([

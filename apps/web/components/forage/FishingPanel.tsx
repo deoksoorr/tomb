@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { bridge, type ForageRodPhase } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
-import { AUTO_SYNC_MS, autoNextLabel } from "@/lib/forage/auto";
+import { AUTO_RANK_NOTE, AUTO_SYNC_MS, autoNextLabel } from "@/lib/forage/auto";
 import { DAILY_CATCH_MAX, speciesById } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { sunkenText } from "@/lib/forage/sunken";
@@ -430,7 +430,7 @@ export default function FishingPanel({
           onClick={toggleAuto}
           disabled={autoBusy || (!auto && phase !== "ready" && phase !== "done")}
           aria-pressed={auto !== null}
-          title="자리를 비워도 접속해 있는 동안 천천히 낚아요"
+          title={`자리를 비워도 접속해 있는 동안 천천히 낚아요. ${AUTO_RANK_NOTE}`}
         >
           {auto ? "자동 낚시 끄기" : "자동 낚시 켜기"}
         </button>
@@ -438,6 +438,8 @@ export default function FishingPanel({
           일어나기
         </button>
       </div>
+      {/* 자동 낚시 켜기 버튼 바로 아래 안내 (감는 중엔 숨긴다) */}
+      {phase !== "reel" && <p className={s.keys}>{AUTO_RANK_NOTE}</p>}
       <p className={s.keys}>Space·E 던지기/당기기 (감을 땐 누르고 있기) · Esc·방향키 일어나기</p>
     </div>
   );

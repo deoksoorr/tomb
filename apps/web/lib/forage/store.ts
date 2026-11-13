@@ -68,7 +68,7 @@ export interface ForageStore {
   autoSwap(acct: string, expected: string | null, next: string | null): Promise<boolean>;
   /**
    * 자동 낚시로 낚은 것 넣기 (원자적): 오늘 자동 한도(autoCap − 오늘 auto)와 하루 전체 낚시 한도(fishCap − 오늘 fish) 중
-   * 남은 만큼만 앞에서부터 넣고 fish·auto를 그만큼 올린다. 도감은 수·처음 날만 (최대 크기 기록은 직접 낚은 것만).
+   * 남은 만큼만 앞에서부터 넣고 fish·auto를 그만큼 올린다. 도감은 수·처음 날·최대 크기까지 (최대어 순위는 여기서 다루지 않는다 — 직접 낚은 것만 service가 올린다).
    * id가 "@"로 시작하면(물에 빠진 꾸미기 자리) 한도만 세고 가방·도감은 건드리지 않는다
    */
   grantAuto(acct: string, day: string, items: GrantItem[], stackMax: number, autoCap: number, fishCap: number): Promise<Granted[]>;
@@ -265,7 +265,16 @@ export class MemoryForageStore implements ForageStore {
       const n = Number(a.dex.get(`n:${id}`) ?? 0) + 1;
       a.dex.set(`n:${id}`, String(n));
       if (n === 1) a.dex.set(`first:${id}`, day);
-      return { id, size, kept, isNew: n === 1, record: false };
+      // 크기는 내 도감의 최대 기록에만 (최대어 순위는 service가 직접 낚은 것만 올린다)
+      let record = false;
+      if (size > 0) {
+        const old = Number(a.dex.get(`max:${id}`) ?? 0);
+        if (size > old) {
+          a.dex.set(`max:${id}`, String(size));
+          record = old > 0;
+        }
+      }
+      return { id, size, kept, isNew: n === 1, record };
     });
   }
 }
@@ -373,8 +382,8 @@ return 1
 `;
 
 // KEYS: bag, dex, day  ARGV: day, stackMax, autoCap, fishCap, dayTtl, (id, size)...
-// 남은 한도만큼만 앞에서부터. 돌려주는 값: 넣은 아이템마다 "id:{kept}{isNew}0" (최대 크기는 기록하지 않는다).
-// "@"로 시작하는 id(물에 빠진 꾸미기 자리)는 한도만 센다 → "id:000"
+// 남은 한도만큼만 앞에서부터. 돌려주는 값: 넣은 아이템마다 "id:{kept}{isNew}{record}" (도감 최대 크기도 GRANT_LUA처럼 기록한다.
+// 최대어 순위에는 넣지 않는다 — 그건 직접 낚은 것만). "@"로 시작하는 id(물에 빠진 꾸미기 자리)는 한도만 센다 → "id:000"
 export const GRANT_AUTO_LUA = `
 local auto = tonumber(redis.call('HGET', KEYS[3], 'auto') or '0')
 local fish = tonumber(redis.call('HGET', KEYS[3], 'fish') or '0')
@@ -389,6 +398,7 @@ for j = 0, room - 1 do
   local id = ARGV[6 + j * 2]
   local kept = '0'
   local isNew = '0'
+  local rec = '0'
   if string.sub(id, 1, 1) ~= '@' then
     if tonumber(redis.call('HGET', KEYS[1], id) or '0') < stackMax then
       redis.call('HINCRBY', KEYS[1], id, 1)
@@ -398,8 +408,16 @@ for j = 0, room - 1 do
       isNew = '1'
       redis.call('HSET', KEYS[2], 'first:' .. id, ARGV[1])
     end
+    local size = tonumber(ARGV[7 + j * 2])
+    if size > 0 then
+      local old = tonumber(redis.call('HGET', KEYS[2], 'max:' .. id) or '0')
+      if size > old then
+        redis.call('HSET', KEYS[2], 'max:' .. id, ARGV[7 + j * 2])
+        if old > 0 then rec = '1' end
+      end
+    end
   end
-  out[#out + 1] = id .. ':' .. kept .. isNew .. '0'
+  out[#out + 1] = id .. ':' .. kept .. isNew .. rec
 end
 return out
 `;

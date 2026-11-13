@@ -119,6 +119,7 @@ export default function RankingList({ graves, onPick }: Props) {
             ))}
           </div>
           {tab === "house" && <span className={styles.hint}>꾸밈 점수 = 안팎 물건 점수 + 좋아요 × 3</span>}
+          {tab === "fish" && <span className={styles.hint}>직접 낚은 물고기만 올라요 (자동 낚시로 낚은 것은 도감에만 기록돼요)</span>}
           {tab === "fish" && (
             <select className={styles.zone} value={fish} onChange={(e) => setFish(e.target.value)} aria-label="물고기">
               <option value="all">모든 물고기</option>

@@ -56,7 +56,7 @@ export type AutoFishStatus = {
   limited: boolean;
 };
 
-/** 자동 낚시 켜기·정산·끄기 응답. items = 이번에 새로 받은 것 (최대어 기록은 하지 않는다 → record는 늘 false) */
+/** 자동 낚시 켜기·정산·끄기 응답. items = 이번에 새로 받은 것 (크기는 내 도감 최대 기록에 반영해 record가 설 수 있다. 최대어 순위에는 넣지 않는다) */
 export type AutoFishResponse = {
   auto: AutoFishStatus | null;
   items: CatchResult[];
