@@ -83,19 +83,18 @@ describe("캐릭터 조작", () => {
     expect(() => allocStats(n, { str: 1 })).toThrow(RpgError);
   });
 
-  it("스킬은 레벨·선행 스킬·포인트가 있어야 배우고, 처음 배우면 단축키에 놓인다", () => {
+  it("스킬은 단·선행 스킬·포인트가 있어야 배우고, 처음 배운 액티브는 단축키에 놓인다", () => {
     let c = newCharacter();
-    c = learnSkill(c, "refactor");
-    expect(c.skills.refactor).toBe(1);
-    expect(c.hotbar[0]).toBe("refactor");
-    expect(() => learnSkill(c, "refactor")).toThrow(/스킬 포인트/);
+    c = learnSkill(c, "em_kindle");
+    expect(c.skills.em_kindle).toBe(1);
+    expect(c.hotbar[0]).toBe("em_kindle");
+    expect(() => learnSkill(c, "em_kindle")).toThrow(/스킬 포인트/);
     c = gainExp(c, 1e6).state;
-    expect(() => learnSkill(c, "deploy")).toThrow(/결재판 치기 3단계/);
-    expect(() => setHotbar(c, ["hotfix", null, null, null, null, null])).toThrow(/배운 스킬/);
-    // 11/12: 16개 이상, 선행 스킬은 모두 있는 스킬, 이름은 겹치지 않는다
-    expect(SKILLS.length).toBeGreaterThanOrEqual(16);
+    expect(() => learnSkill(c, "em_ring")).toThrow(/3단은/);
+    expect(() => setHotbar(c, ["so_lamp", null, null, null, null, null])).toThrow(/배운 스킬/);
+    // 30개 안팎, 이름은 겹치지 않는다
+    expect(SKILLS.length).toBeGreaterThanOrEqual(28);
     expect(new Set(SKILLS.map((x) => x.name)).size).toBe(SKILLS.length);
-    for (const sk of SKILLS) for (const r of sk.requires ?? []) expect(SKILLS.some((x) => x.id === r.id && x.reqLevel <= sk.reqLevel)).toBe(true);
   });
 
   it("장착: 종류·레벨·보유를 확인하고, 같은 장신구는 가진 수만큼만 낀다", () => {

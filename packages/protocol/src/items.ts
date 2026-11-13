@@ -311,31 +311,21 @@ export function sanitizeLook(raw: unknown): Look {
   return out.slice(0, 7);
 }
 
-// ── 30번 영구 소유 코디: 일부 꾸미기는 영구로도 산다 (기간제 가격의 7배 — 기간제는 I0d에서 4배로 올림). 영구 착용품·벗어 둔 것은 만료 시각이 PERMANENT_UNTIL ──
+// ── 30번 영구 소유 코디: 상점에서 파는 캐릭터 꾸미기는 모두 영구로도 산다 (24시간 이용권 가격의 4배, 10P 단위 반올림). 영구 착용품·벗어 둔 것은 만료 시각이 PERMANENT_UNTIL ──
 
 /** 영구 소유의 "만료 시각" (2286년). 기간제와 같은 자리(착용·벗어 둠)에 저장되고, 이보다 크거나 같으면 영구로 표시한다 */
 export const PERMANENT_UNTIL = 9_999_999_999_999;
 export function isPermanentUntil(until: number): boolean {
   return until >= PERMANENT_UNTIL;
 }
-/** 영구로 살 수 있는 꾸미기 → 영구 가격 */
-const PERMANENT_IDS = [
-  "hat_cat", "hat_halo", "hat_crown", "hat_wizard", "hat_headphones",
-  "neck_scarf", "neck_bowtie",
-  "hand_lantern", "hand_umbrella",
-  "back_wings", "back_cape",
-  "aura_firefly", "aura_petals",
-  "feet_flowers",
-  // 추가분 2
-  "hat_beret", "hat_horns", "neck_pearl", "hand_wand", "back_wings_angel", "aura_hearts",
-  // 펫(pet_ghost·pet_cat)은 동물원으로 옮겼다 — 상점에서 영구로 팔지 않는다 (ZOO_PETS)
-] as const;
-export const PERMANENT_MULTIPLIER = 7;
+/** 24시간 이용권 가격 → 영구 소장 가격 배율 (7배에서 4배로 내렸다. 이미 영구로 산 것은 그대로 — 환불하지 않는다) */
+export const PERMANENT_MULTIPLIER = 4;
+/**
+ * 영구로 살 수 있는 꾸미기 → 영구 가격: 상점 목록에 나오는(isShopListed) 부위 있는 캐릭터 꾸미기 전부.
+ * 펫(동물원 사육사에게서 영구로만 — ZOO_PETS)·운영자 전용(아래에서 값 0)은 빠지고, 묘비 꾸미기(decor)는 꾸미기 종류가 달라 해당 없음
+ */
 const permanentPrices = new Map<string, number>(
-  PERMANENT_IDS.flatMap((id) => {
-    const it = byId.get(id);
-    return it?.kind === "cosmetic" ? [[id, Math.round((it.price * PERMANENT_MULTIPLIER) / 10) * 10] as const] : [];
-  }),
+  ITEMS.filter((it) => it.kind === "cosmetic" && it.slot && isShopListed(it)).map((it) => [it.id, Math.round((it.price * PERMANENT_MULTIPLIER) / 10) * 10] as const),
 );
 // 운영자 전용 꾸미기는 값 0으로 영구로만 받는다 (운영자인지는 web 서버가 확인한다)
 for (const id of STAFF_ITEM_IDS) permanentPrices.set(id, 0);
@@ -347,7 +337,7 @@ export function permanentPrice(id: string): number | null {
 // ── 동물원 펫: 버드나무 묘역 자리의 동물원 사육사에게서 영구로만 산다 (상점의 기간제 펫 판매는 멈췄다 — isShopListed) ──
 // 펫은 착용 부위 "pet" 하나라 한 번에 한 마리만 데리고 다닌다. 산 펫은 영구(PERMANENT_UNTIL)로 착용·벗어 둔 꾸미기에 들어가고,
 // 바꾸기·집에 두기는 다른 꾸미기와 같은 입기(/api/me/wear)·벗기(/api/me/unequip)로 한다.
-// 가격(I0d 경제 재조정): 보통 유저(하루 20~30분, 약 200P)가 입문 펫(450P)은 2~3번 플레이, 타는 펫(1,400~1,800P)은 1주쯤 모으는 값.
+// 가격(I0d 경제 재조정): 보통 유저(하루 20~30분, 약 200P)가 입문 펫(450P)은 2~3번 플레이, 타는 펫(2,000~3,000P)은 열흘~보름쯤 모으는 값.
 
 /** 타는 펫 (ride = 타고 걷는 속도 배율 — 달리기 × 배율이 서버 속도 검증(MAX_VALID_SPEED) 안에 들도록 1.35 이하) */
 export type PetDef = { id: string; price: number; ride?: { speed: number } };

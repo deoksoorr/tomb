@@ -134,3 +134,65 @@
   height: 18px;
   accent-color: #ff8fb8;
 }
+
+/* 친구 한 줄: 왼쪽 캐릭터 미리보기 + 오른쪽 이름·상태·자랑거리 */
+.top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.info {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.heart {
+  color: #ff8fb8;
+  font-size: 12px;
+}
+
+/* 자랑거리 칸: 좁으면 줄바꿈 */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stats li {
+  white-space: nowrap;
+}
+
+.stats li + li::before {
+  content: "·";
+  margin-right: 10px;
+  opacity: 0.6;
+}
+
+/* 창 맨 위 내 요약 한 줄 */
+.mine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 10px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.mineTitle {
+  color: var(--bone);
+  font-size: 13px;
+}
+
+.mine .stats {
+  color: var(--bone);
+}

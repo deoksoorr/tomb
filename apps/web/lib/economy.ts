@@ -36,7 +36,7 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "bury", label: "묘비 세우기", points: 20, dailyMax: 20, note: "하루 1개분만 지급" },
   { source: "gotFlower", label: "내 묘비가 헌화 받음", points: 1, dailyMax: 20, note: "다른 사람이 헌화할 때" },
   { source: "presence", label: "묘지에 머무르기", points: 5, dailyMax: 60, note: "접속해 있는 10분마다 (다른 일을 해도 OK)" },
-  // 출석 도장과 같은 머문 시간(서버의 머무르기 기록)으로 판정. 10→15→20→25P(이후 고정), 하루 7구간 145P. 머무르기처럼 하루 상한(800P)에 포함
+  // 출석 도장과 같은 머문 시간(서버의 머무르기 기록)으로 판정. 10→15→20→25P(이후 고정), 하루 7구간 145P. 하루 상한(800P)과 별개 (lib/stayBonus.ts)
   { source: "stayBonus", label: "접속 시간 보너스", points: 0, dailyMax: STAY_BONUS_DAILY_MAX, note: `${STAY_BONUS_EVERY_MINUTES}분 머물 때마다 10→15→20→25P (구석 창의 [받기], 안 받으면 쌓여요)` },
   { source: "hunt", label: "사냥터·미니게임", points: 0, dailyMax: 600, note: "난이도와 성적에 따라 (한 판 보상은 게임 결과로)" },
   { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때" },
@@ -62,6 +62,7 @@ export const DAILY_EARN_CAP = 800;
  * I0d 경제 기준 (가격을 바꿀 때 이 표를 함께 본다): 보통 유저 = 하루 한 번 20~30분 → 약 200P
  * (머무르기 10~15 · 접속 보너스 10 (30분 머물면 첫 구간) · 헌화 10~20 · 쉬움 사냥 3~4판 60~80 · 낚시 10분 80~120 · 채집 몇 곳 20~40 · 초반 도감 보상).
  *  - 기본 코디(하루권 60~100P): 첫 플레이에 하나
+ *  - 영구 소장 코디(상점 코디 전부, 하루권의 4배 — protocol PERMANENT_MULTIPLIER, 7배에서 내림): 기본 코디 240~400P(1~2일) · 가장 비싼 코디(하루권 480P) 1,920P(약 10일)
  *  - 입문 펫(450P, 동물원 ZOO_PETS): 2~3번째 플레이
  *  - 프리미엄 외형 선택권(영구, protocol BODY_TIER_INFO): 일반 1,200 · 고급 2,000 · 희귀 3,200 · 전설 5,000P (약 6일 ~ 25일)
  *  - 작은 집(2,000P, housing PLOT_TIERS): 약 10일 (하루 상한 800P로 몰아쳐도 3일)

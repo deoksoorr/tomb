@@ -12,6 +12,7 @@ import {
   type Stats,
 } from "./catalog";
 import { applyExp, baseStats, START_SKILL_POINTS, START_STAT_POINTS, STAT_MAX } from "./formulas";
+import { checkAllocation, checkLearn, cleanAlloc, SKILL_TREE_VERSION, skillPointsEarned, spentPoints, type Alloc } from "./skillRules";
 import type { CharacterState } from "./types";
 
 // 캐릭터 상태를 바꾸는 순수 함수들. 저장소(메모리·Redis)는 이 함수를 원자적 갱신(CAS) 안에서 부른다.
@@ -46,7 +47,26 @@ export function newCharacter(): CharacterState {
     equip: { weapon: "w_ruler", armor: "a_hoodie", head: null, acc1: null, acc2: null },
     potions: { p_coffee: 3 },
     runs: 0,
+    treeVer: SKILL_TREE_VERSION,
+    respecs: 0,
   };
+}
+
+/** 남은 스킬 포인트 = 레벨로 받은 포인트 - 쓴 포인트 (저장된 값은 믿지 않고 늘 다시 센다 → 포인트 합이 어긋날 수 없다) */
+const freePoints = (level: number, skills: Alloc) => Math.max(0, skillPointsEarned(level) - spentPoints(skills));
+
+/** 단축키: 배운 액티브만, 겹치지 않게 */
+function cleanHotbar(hotbar: unknown, skills: Alloc): (SkillId | null)[] {
+  const raw = Array.isArray(hotbar) ? hotbar.slice(0, HOTBAR_SIZE) : [];
+  const seen = new Set<string>();
+  const out = raw.map((id) => {
+    const def = typeof id === "string" ? skillById(id) : undefined;
+    if (!def || def.kind !== "active" || !(skills[def.id] ?? 0) || seen.has(def.id)) return null;
+    seen.add(def.id);
+    return def.id;
+  });
+  while (out.length < HOTBAR_SIZE) out.push(null);
+  return out;
 }
 
 /** 저장된 JSON을 지금 형태로 맞춘다 (필드가 늘어도 예전 기록이 깨지지 않게) */
@@ -54,14 +74,29 @@ export function normalize(raw: unknown): CharacterState {
   const base = newCharacter();
   if (!raw || typeof raw !== "object") return base;
   const r = raw as Partial<CharacterState>;
-  const hotbar = Array.isArray(r.hotbar) ? r.hotbar.slice(0, HOTBAR_SIZE) : base.hotbar;
-  while (hotbar.length < HOTBAR_SIZE) hotbar.push(null);
+  const level = Number.isInteger(r.level) && r.level! >= 1 ? r.level! : base.level;
+  // 스킬 저장 형식이 옛것(1: 스킬 18종)이면 모두 비우고 레벨만큼의 포인트를 돌려준다 + 안내 1회.
+  // 지금 형식이라도 모르는 스킬·단·선행이 어긋난 배분이면 같은 방식으로 돌려준다 (포인트 합은 서비스가 예산으로 본다)
+  const old = r.treeVer !== SKILL_TREE_VERSION;
+  let skills: Alloc = old ? {} : cleanAlloc(Object.fromEntries(Object.entries(r.skills ?? {}).filter(([id]) => skillById(id))) as Alloc);
+  let notice = old ? r.level !== undefined : !!r.treeNotice;
+  if (!old && checkAllocation(skills, Infinity)) {
+    skills = {};
+    notice = true;
+  }
+  const { treeNotice: _drop, ...rest } = r;
+  void _drop;
   return {
     ...base,
-    ...r,
+    ...rest,
+    level,
     stats: { ...base.stats, ...r.stats },
-    skills: { ...r.skills },
-    hotbar,
+    skills,
+    skillPoints: freePoints(level, skills),
+    hotbar: old ? base.hotbar : cleanHotbar(r.hotbar, skills),
+    treeVer: SKILL_TREE_VERSION,
+    respecs: Number.isInteger(r.respecs) && r.respecs! > 0 ? r.respecs! : 0,
+    ...(notice ? { treeNotice: true } : {}),
     inv: { ...(r.inv ?? base.inv) },
     bought: { ...r.bought },
     equip: { ...base.equip, ...(r.equip ?? {}) },
@@ -87,23 +122,21 @@ export function allocStats(s: CharacterState, alloc: Partial<Stats>): CharacterS
   return next;
 }
 
-/** 스킬 1단계 배우기 */
-export function learnSkill(s: CharacterState, id: SkillId): CharacterState {
-  const def = skillById(id);
-  if (!def) throw new RpgError(400, "INVALID_INPUT", "없는 스킬이에요.");
+/**
+ * 스킬 1랭크 올리기. 단(아래 단에 쓴 포인트)·선행 스킬·남은 포인트를 서버가 검사한다 (skillRules.checkLearn).
+ * budget: 쓸 수 있는 포인트 합 (없으면 레벨로 받은 만큼. 테스트 서버 슈퍼 계정은 서비스가 크게 넘긴다)
+ */
+export function learnSkill(s: CharacterState, id: SkillId, budget = skillPointsEarned(s.level)): CharacterState {
+  const e = checkLearn(s.skills, id, budget);
+  if (e) throw new RpgError(e.status, e.code, e.message);
+  const def = skillById(id)!;
   const cur = s.skills[id] ?? 0;
-  if (cur >= def.maxLevel) throw new RpgError(409, "SKILL_MAX", "이미 최고 단계예요.");
-  if (s.level < def.reqLevel) throw new RpgError(409, "LEVEL_LOW", `레벨 ${def.reqLevel}부터 배울 수 있어요.`);
-  for (const req of def.requires ?? []) {
-    if ((s.skills[req.id] ?? 0) < req.level)
-      throw new RpgError(409, "SKILL_REQUIRED", `${skillById(req.id)!.name} ${req.level}단계가 먼저 필요해요.`);
-  }
-  if (s.skillPoints < 1) throw new RpgError(409, "NO_SKILL_POINTS", "스킬 포인트가 모자라요.");
   const next = clone(s);
   next.skills[id] = cur + 1;
-  next.skillPoints -= 1;
-  // 처음 배운 스킬은 빈 단축키 칸에 자동으로 놓는다
-  if (cur === 0 && !next.hotbar.includes(id)) {
+  next.skillPoints = freePoints(next.level, next.skills);
+  delete next.treeNotice;
+  // 처음 배운 액티브는 빈 단축키 칸에 자동으로 놓는다
+  if (cur === 0 && def.kind === "active" && !next.hotbar.includes(id)) {
     const empty = next.hotbar.indexOf(null);
     if (empty >= 0) next.hotbar[empty] = id;
   }
@@ -116,10 +149,38 @@ export function setHotbar(s: CharacterState, slots: (SkillId | null)[]): Charact
   for (const id of slots) {
     if (id === null) continue;
     if (!(s.skills[id] ?? 0)) throw new RpgError(409, "SKILL_NOT_LEARNED", "배운 스킬만 단축키에 놓을 수 있어요.");
+    if (skillById(id)?.kind !== "active") throw new RpgError(409, "SKILL_PASSIVE", "패시브는 늘 켜져 있어서 단축키에 놓지 않아요.");
     if (seen.has(id)) throw new RpgError(400, "INVALID_INPUT", "같은 스킬을 두 칸에 놓을 수 없어요.");
     seen.add(id);
   }
   return { ...clone(s), hotbar: [...slots] };
+}
+
+/**
+ * 스킬 초기화(재분배): 배운 스킬을 모두 비우고 레벨만큼의 포인트를 돌려준다. 단축키도 비운다.
+ * count=false면 초기화 횟수를 세지 않는다 (테스트 서버 슈퍼 계정 — 운영 데이터에 흔적을 남기지 않게). 비용은 서비스가 받는다
+ */
+export function resetSkills(s: CharacterState, count = true): CharacterState {
+  const next = clone(s);
+  next.skills = {};
+  next.skillPoints = freePoints(next.level, next.skills);
+  next.hotbar = new Array(HOTBAR_SIZE).fill(null);
+  if (count) next.respecs = (next.respecs ?? 0) + 1;
+  delete next.treeNotice;
+  return next;
+}
+
+/** 스킬 트리 바뀜 안내를 봤다 */
+export function ackTreeNotice(s: CharacterState): CharacterState {
+  const next = clone(s);
+  delete next.treeNotice;
+  return next;
+}
+
+/** 예산(쓸 수 있는 포인트)을 넘는 배분이면 비우고 돌려준다 (슈퍼 계정이 찍은 배분이 다른 환경에서 읽힐 때 등). 그대로면 같은 객체 */
+export function fitSkillBudget(s: CharacterState, budget: number): CharacterState {
+  if (spentPoints(s.skills) <= budget) return s;
+  return { ...resetSkills(s, false), treeNotice: true };
 }
 
 /** 그 장비가 장착된 칸 수 */

@@ -8,6 +8,8 @@ import type { FriendListResponse, FriendPresenceResponse, FriendRequestResponse,
 import { setStaff } from "@/lib/staff";
 import { getAccounts, getFriends } from "@/lib/store";
 import type { ApiError } from "@/lib/types";
+import { kstDay } from "@/lib/store/accounts";
+import { forgetFriendCard } from "@/lib/friendCard";
 import * as friendByKey from "./friends/[key]/route";
 import * as presence from "./friends/presence/route";
 import * as answer from "./friends/requests/[key]/route";
@@ -263,5 +265,28 @@ describe("친구 위치", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("down", { status: 503 }));
     const p = await body<FriendPresenceResponse>(await presence.GET(call("/api/friends/presence", a)));
     expect(p.friends[0].where).toEqual({ at: "unknown" });
+  });
+});
+
+describe("친구 창 한 줄 (마지막 접속·자랑거리·정렬)", () => {
+  it("접속 안 한 친구는 마지막 접속(머무르기 기록), 자랑거리·내 요약이 오고, 접속 중인 친구가 먼저", async () => {
+    const [a, b, c] = [await newVisitor(), await newVisitor("늦게"), await newVisitor("지금")];
+    const t = Date.now() - 3 * 86_400_000;
+    await getAccounts().presence(b.id, kstDay(t), t);
+    fakeRealtime({ 2: b, 3: c }, { [c.id]: { ch: 1, sid: 3, x: 10, y: 10 } });
+    for (const sid of [2, 3]) await ask(a, sid);
+    for (const v of [b, c]) await reply(v, (await list(v)).incoming[0].key, true);
+    forgetFriendCard();
+    const la = await list(a);
+    expect(la.friends.map((f) => f.name)).toEqual(["지금", "늦게"]);
+    expect(la.friends[1].lastSeen).toBe(t);
+    expect(la.friends[0].lastSeen).toBeNull(); // 기록 없음
+    expect(la.friends[1].card).toMatchObject({ house: null, hunt: 1, dex: 0, bigFish: null, fashion: 0 });
+    expect(la.friends[1].card?.look.body).toBe("hood");
+    expect(la.me).toMatchObject({ house: null, hunt: 1 });
+    // 위치 조회·접속 알림용 응답에는 자랑거리·마지막 접속을 싣지 않는다
+    const p = await body<FriendPresenceResponse>(await presence.GET(call("/api/friends/presence", a)));
+    expect(JSON.stringify(p)).not.toContain("lastSeen");
+    expect(JSON.stringify(p)).not.toContain("card");
   });
 });

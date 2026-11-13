@@ -119,12 +119,18 @@ export class CombatFx {
     this.scene.cameras.main.shake(ms, intensity);
   }
 
-  /** 피해 숫자: 튀어 올랐다가(팝) 살짝 옆으로 흐르며 떠오른다. crit이면 크고 주황 + "치명!" */
-  damage(x: number, y: number, n: number, crit: boolean, nth = 0): void {
+  /**
+   * 피해 숫자: 튀어 올랐다가(팝) 살짝 옆으로 흐르며 떠오른다. crit이면 크고 주황 + "치명!".
+   * skillColor가 있으면 스킬 피해: 더 큰 글씨·갈래 색, 치명타는 좌우로 흔들린다
+   */
+  damage(x: number, y: number, n: number, crit: boolean, nth = 0, skillColor?: string): void {
     const base = 1 / this.zoom;
     const drift = ((nth % 3) - 1) * 4 + (Math.random() - 0.5) * 3;
-    const t = this.text(x + ((nth % 3) - 1) * 3, y - (nth % 2) * 4, String(n), crit ? "#ffb02e" : "#fff7e6", crit ? 17 : 12, crit ? "#3a1004" : "#0a0b10");
-    t.setScale(base * (crit ? 2 : 1.5));
+    const big = !!skillColor;
+    const color = crit ? "#ffb02e" : (skillColor ?? "#fff7e6");
+    const t = this.text(x + ((nth % 3) - 1) * 3, y - (nth % 2) * 4, String(n), color, crit ? (big ? 21 : 17) : big ? 15 : 12, crit ? "#3a1004" : "#0a0b10");
+    t.setScale(base * (crit ? 2 : 1.5) * (big ? 1.2 : 1));
+    if (big && crit && !this.reduced) this.scene.tweens.add({ targets: t, x: t.x + 2, duration: 40, yoyo: true, repeat: 3 });
     this.scene.tweens.add({ targets: t, scale: base, duration: crit ? 140 : 90, ease: "Back.easeOut" });
     this.scene.tweens.add({ targets: t, x: t.x + drift, y: t.y - (crit ? 18 : 14), alpha: { from: 1, to: 0 }, delay: crit ? 260 : 160, duration: crit ? 640 : 520, ease: "Quad.easeIn", onComplete: () => t.destroy() });
     if (crit) {

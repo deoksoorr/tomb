@@ -8,20 +8,25 @@ import { HttpError } from "../http";
 import { isStaff } from "../staff";
 import { COSMETIC_DROPS, gearById, potionById, timeLimitSec, zoneFor, type Difficulty, type GameKind, type ZoneId } from "./catalog";
 import {
+  ackTreeNotice,
   addDrops,
   addGear,
   addPotions,
   allocStats,
   consumePotions,
   equip,
+  fitSkillBudget,
   gainExp,
   learnSkill,
+  resetSkills,
   removeForSale,
   returnUnsold,
   RpgError,
   setHotbar,
 } from "./character";
-import { derive, expToNext } from "./formulas";
+import { derive, expToNext, MAX_LEVEL } from "./formulas";
+import { ALL_SKILLS_POINTS, respecCost, skillPointsEarned, spentPoints } from "./skillRules";
+import { isSuperHunter } from "./superHunter";
 import { evaluate, FINISH_GRACE_SEC } from "./rewards";
 import { STARRY_NIGHT_BONUS, starryNight } from "../stargaze";
 import type { z } from "zod";
@@ -46,20 +51,42 @@ async function http<T>(p: Promise<T>): Promise<T> {
   }
 }
 
+/** 스킬 포인트 예산: 보통은 레벨로 받은 만큼, 테스트 서버 슈퍼 계정은 모든 스킬 최대치 */
+const skillBudget = (level: number, sup: boolean) => (sup ? Math.max(ALL_SKILLS_POINTS, skillPointsEarned(level)) : skillPointsEarned(level));
+/** 사냥에 쓰는 레벨 (슈퍼 계정은 최대 레벨 취급, 저장된 레벨은 그대로) */
+const huntLevel = (level: number, sup: boolean) => (sup ? MAX_LEVEL : level);
+
+/**
+ * 캐릭터 읽기 + 예산 검사: 쓴 스킬 포인트가 예산을 넘으면(슈퍼 계정으로 찍은 배분을 운영자 지정이 풀린 뒤·다른 환경에서 읽는 등)
+ * 스킬을 비우고 포인트를 돌려준 상태를 저장한다
+ */
+async function loadChar(acct: string, store: RpgStore, sup: boolean): Promise<CharacterState> {
+  const c = await store.get(acct);
+  if (spentPoints(c.skills) <= skillBudget(c.level, sup)) return c;
+  return (await http(store.update(acct, (s) => ({ state: fitSkillBudget(s, skillBudget(s.level, sup)), result: null })))).state;
+}
+
 export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now = Date.now(), state?: CharacterState): Promise<RpgView> {
   const day = kstDay(now);
-  const [character, daily, me, runs] = await Promise.all([
-    state ?? store.get(acct),
+  const sup = await isSuperHunter(acct);
+  const [stored, daily, me, runs] = await Promise.all([
+    state ?? loadChar(acct, store, sup),
     store.daily(acct, day),
     getAccounts().get(acct, day, now),
     store.runsThisHour(acct, hourBucket(now)),
   ]);
+  // 슈퍼 계정: 화면에는 최대 레벨·넉넉한 스킬 포인트로 보인다 (저장값은 그대로)
+  const character = sup
+    ? { ...stored, level: MAX_LEVEL, skillPoints: Math.max(0, skillBudget(stored.level, true) - spentPoints(stored.skills)) }
+    : stored;
   return {
     character,
     derived: derive(character.level, character.stats, character.equip),
     expToNext: Number.isFinite(expToNext(character.level)) ? expToNext(character.level) : 0,
     points: me.points,
     today: { huntPoints: Math.min(daily.points, HUNT_CAP), cap: HUNT_CAP, runs: daily.runs, runsPerHour: RUNS_PER_HOUR - runs },
+    respecCost: sup ? 0 : respecCost(stored.level, stored.respecs),
+    ...(sup ? { superHunter: true } : {}),
   };
 }
 
@@ -67,13 +94,17 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
 
 export async function characterAction(acct: string, a: z.output<typeof CharacterActionSchema>): Promise<RpgView> {
   const store = getRpgStore();
+  const sup = await isSuperHunter(acct);
+  if (a.type === "respec") return respec(acct, a.cost, sup);
   const { state } = await http(
     store.update(acct, (s) => {
       switch (a.type) {
         case "alloc":
           return { state: allocStats(s, a.stats), result: null };
         case "learn":
-          return { state: learnSkill(s, a.skill), result: null };
+          return { state: learnSkill(s, a.skill, skillBudget(s.level, sup)), result: null };
+        case "ackTree":
+          return { state: ackTreeNotice(s), result: null };
         case "hotbar":
           return { state: setHotbar(s, a.slots), result: null };
         case "equip":
@@ -82,6 +113,30 @@ export async function characterAction(acct: string, a: z.output<typeof Character
     }),
   );
   return rpgView(acct, store, Date.now(), state);
+}
+
+/**
+ * 스킬 초기화(재분배): 첫 1회 무료, 그 뒤로는 지갑 포인트 (skillRules.respecCost). 슈퍼 계정은 늘 무료·횟수 안 셈.
+ * seen: 화면에 보인 비용 — 그 사이 비용이 바뀌었으면(다른 탭에서 먼저 초기화 등) 돈을 받지 않고 다시 보여 준다
+ */
+async function respec(acct: string, seen: number, sup: boolean): Promise<RpgView> {
+  const store = getRpgStore();
+  const c = await store.get(acct);
+  const cost = sup ? 0 : respecCost(c.level, c.respecs);
+  if (cost !== seen) throw new HttpError(409, "COST_CHANGED", `초기화 비용이 ${cost}P로 바뀌었어요. 다시 확인해 주세요.`);
+  if (cost > 0) await spendPoints(acct, cost, "사냥 스킬 초기화");
+  try {
+    const { state } = await http(
+      store.update(acct, (s) => {
+        if (s.respecs !== c.respecs) throw new RpgError(409, "BUSY", "다른 곳에서 먼저 초기화했어요. 다시 시도해 주세요.");
+        return { state: resetSkills(s, !sup), result: null };
+      }),
+    );
+    return rpgView(acct, store, Date.now(), state);
+  } catch (e) {
+    if (cost > 0) await refundPoints(acct, cost, "사냥 스킬 초기화 환불");
+    throw e;
+  }
 }
 
 // ── 상점 (장비·포션 사기, 장비·포션 되팔기 — 여러 개 한 번에) ──
@@ -157,11 +212,13 @@ export const zoneUnlockBypass = () => process.env.NODE_ENV === "development";
 
 export async function startRun(acct: string, game: GameKind, difficulty: Difficulty, now = Date.now(), zoneId?: ZoneId): Promise<RunStartResponse> {
   const store = getRpgStore();
-  const c = await store.get(acct);
-  const d = derive(c.level, c.stats, c.equip);
+  const sup = await isSuperHunter(acct);
+  const c = await loadChar(acct, store, sup);
+  const lv = huntLevel(c.level, sup);
+  const d = derive(lv, c.stats, c.equip);
   const zone = game === "hunt" ? zoneFor(difficulty, zoneId) : null;
   if (zone && zoneId && zone.id !== zoneId) throw new HttpError(400, "INVALID_INPUT", "그 사냥터는 이 난이도에 없어요.");
-  if (zone && c.level < zone.unlockLevel && !zoneUnlockBypass())
+  if (zone && lv < zone.unlockLevel && !zoneUnlockBypass())
     throw new HttpError(403, "ZONE_LOCKED", `${zone.name}은(는) Lv.${zone.unlockLevel}부터 갈 수 있어요.`);
   const limit = timeLimitSec(game, difficulty, zone?.id);
   const nonce = nanoid(16);
@@ -175,11 +232,11 @@ export async function startRun(acct: string, game: GameKind, difficulty: Difficu
     d: difficulty,
     t: now,
     s: seed,
-    lv: c.level,
+    lv,
     st: { agi: d.stats.agi, dex: d.stats.dex, luk: d.stats.luk },
     ...(zone ? { z: zone.id } : {}),
   });
-  return { ticket, game, difficulty, ...(zone ? { zone: zone.id } : {}), seed, timeLimitSec: limit, view: await rpgView(acct, store, now, c) };
+  return { ticket, game, difficulty, ...(zone ? { zone: zone.id } : {}), seed, timeLimitSec: limit, view: await rpgView(acct, store, now) };
 }
 
 /** 코디 드롭 하나에 시도해 볼 후보 수 (이미 가진 것이면 다음 것) */

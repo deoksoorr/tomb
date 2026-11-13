@@ -121,6 +121,62 @@ export class RpgSfx extends AudioHost {
     }
   }
 
+  /**
+   * 스킬 갈래별 합성 효과음 (공용 WebAudio 컨텍스트, 파일 없이): 효과음 파일(slam·ink 등)에 겹쳐 갈래 색을 입힌다.
+   *  - 모닥불: 낮게 쿵 + 불길 쉬익 (저역 잡음)
+   *  - 서리: 높은 유리 종소리 + 바삭한 고역 잡음
+   *  - 넋: 두 음이 엇갈려 떨리며 올라가는 울림
+   * power 1~3: 클수록 길고 크게
+   */
+  burst(branch: "ember" | "frost" | "soul", power = 1): void {
+    const vol = this.busGain();
+    if (vol <= 0 || this.hidden) return;
+    try {
+      const ctx = this.audio();
+      if (!ctx) return;
+      const t0 = ctx.currentTime;
+      const len = 0.25 + power * 0.18;
+      const out = ctx.createGain();
+      out.gain.setValueAtTime(0.0001, t0);
+      out.gain.exponentialRampToValueAtTime(Math.min(0.5, 0.16 + power * 0.08) * vol, t0 + 0.015);
+      out.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
+      out.connect(this.output);
+      // 잡음 (불길·서리 바스락)
+      const n = Math.floor(ctx.sampleRate * len);
+      const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const f = ctx.createBiquadFilter();
+      f.type = branch === "frost" ? "highpass" : branch === "ember" ? "lowpass" : "bandpass";
+      f.frequency.setValueAtTime(branch === "frost" ? 3200 : branch === "ember" ? 900 : 1400, t0);
+      if (branch === "ember") f.frequency.exponentialRampToValueAtTime(220, t0 + len);
+      const ng = ctx.createGain();
+      ng.gain.value = branch === "soul" ? 0.25 : 0.7;
+      src.connect(f).connect(ng).connect(out);
+      src.start(t0);
+      src.stop(t0 + len);
+      // 음 (쿵 · 종 · 울림)
+      const tones: [number, number, OscillatorType][] =
+        branch === "ember" ? [[90, 0.9, "sine"], [60, 0.6, "triangle"]] : branch === "frost" ? [[1568, 0.35, "sine"], [2349, 0.22, "sine"], [3136, 0.12, "sine"]] : [[392, 0.4, "sine"], [397, 0.4, "sine"], [587, 0.25, "triangle"]];
+      for (const [hz, g, type] of tones) {
+        const o = ctx.createOscillator();
+        const og = ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(hz, t0);
+        if (branch === "ember") o.frequency.exponentialRampToValueAtTime(hz * 0.5, t0 + len);
+        if (branch === "soul") o.frequency.exponentialRampToValueAtTime(hz * 1.5, t0 + len);
+        og.gain.value = g;
+        o.connect(og).connect(out);
+        o.start(t0);
+        o.stop(t0 + len);
+      }
+    } catch {
+      /* 오디오를 못 쓰면 조용히 */
+    }
+  }
+
   destroy(): void {
     this.closeAudio();
   }

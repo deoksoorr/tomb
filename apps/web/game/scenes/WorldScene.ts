@@ -1234,10 +1234,11 @@ export class WorldScene extends Phaser.Scene {
    */
   private goToFriend(sid: Sid, name: string, fx: number, fy: number): void {
     if (this.cleaned || !this.net.online) return;
-    if (this.awayScene) return this.toast("마을로 나온 뒤에 친구한테 갈 수 있어요.");
+    const notice = (message: string) => bridge.emit("friend:notice", { message });
+    if (this.awayScene) return notice("마을로 나온 뒤에 친구한테 갈 수 있어요.");
     const r = this.remotes.get(sid);
     const live = r && r.name === name ? r : null;
-    if (live?.away) return this.toast(`${name}님은 지금 실내에 있어요.`);
+    if (live?.away) return notice(`${name}님은 지금 실내에 있어요.`);
     const at = live ? { x: live.x, y: live.y } : { x: fx, y: fy };
     if (this.inShop) this.exitShop();
     this.walker.cancel();
@@ -1253,7 +1254,7 @@ export class WorldScene extends Phaser.Scene {
     this.net.warp(spot.x, spot.y);
     this.rig.recenter();
     this.recenterAt = 0;
-    this.toast(`${name}님 옆으로 왔어요.`);
+    notice(`${name}님 옆으로 왔어요!`);
   }
 
   private resolveGuide(target: GuideTarget, label?: string): { x: number; y: number; text: string } | null {

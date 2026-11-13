@@ -1,0 +1,438 @@
+/* 스킬 트리 창 (SkillTreePanel.tsx). 갈래 색은 --br / --br-light / --br-dark (BRANCH_INFO) */
+
+.wrap {
+  grid-template-rows: auto;
+  align-content: start;
+  gap: 10px;
+}
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  box-shadow:
+    0 0 0 1px var(--candle),
+    var(--px-border);
+  line-height: 1.5;
+}
+
+.notice p {
+  flex: 1 1 260px;
+  margin: 0;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.head h3 {
+  margin: 0;
+}
+
+.headSpacer {
+  flex: 1;
+}
+
+.pointBox {
+  padding: 2px 8px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.pointBox b {
+  color: var(--candle);
+  font-size: 15px;
+}
+
+.super {
+  padding: 2px 6px;
+  background: #3a1d4a;
+  color: #ffd27a;
+  font-family: var(--font-small);
+  font-size: 10px;
+  box-shadow: 0 0 0 1px #ffd27a;
+}
+
+.confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+/* 갈래 탭 */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tab {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 6px;
+  border: 0;
+  background: var(--bg-deep);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  box-shadow: 0 0 0 1px var(--line);
+  cursor: pointer;
+}
+
+.tab[aria-selected="true"] {
+  background: color-mix(in srgb, var(--tab) 22%, var(--bg-deep));
+  box-shadow:
+    0 0 0 2px var(--tab),
+    inset 0 -3px 0 var(--tab);
+}
+
+.tabName {
+  overflow: hidden;
+  color: var(--tab);
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tabRole {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: 10px;
+  align-items: start;
+}
+
+.treeCol {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.branchDesc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 트리: 5단 × 3칸. 노드는 % 좌표로, 연결선은 같은 좌표계의 SVG */
+.tree {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  background: radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--br) 14%, transparent), transparent 70%), var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.band {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-top: 1px dashed var(--line);
+  pointer-events: none;
+}
+
+.band:first-child {
+  border-top: 0;
+}
+
+.band span {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 9px;
+}
+
+.band[data-open] span {
+  color: var(--br-light);
+}
+
+.lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.lines line {
+  stroke: var(--line);
+  stroke-width: 3;
+  stroke-dasharray: 4 3;
+}
+
+.lines g[data-met] line {
+  stroke: color-mix(in srgb, var(--br) 70%, transparent);
+  stroke-dasharray: none;
+}
+
+.lines g[data-met][data-on] line {
+  stroke: var(--br-light);
+  filter: drop-shadow(0 0 3px var(--br));
+}
+
+.node {
+  position: absolute;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  width: 30%;
+  max-width: 100px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--line);
+  transition:
+    box-shadow 0.15s,
+    transform 0.15s;
+}
+
+.node[data-passive] .icon {
+  border-radius: 50%;
+}
+
+.node[data-state="locked"] .icon {
+  background: #15141a;
+}
+
+.node[data-state="locked"] img {
+  filter: grayscale(1) brightness(0.45);
+}
+
+.node[data-state="open"] .icon {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--br) 60%, var(--line));
+}
+
+.node[data-state="learned"] .icon {
+  background: color-mix(in srgb, var(--br) 30%, var(--surface));
+  box-shadow: 0 0 0 2px var(--br);
+}
+
+.node[data-state="max"] .icon {
+  background: color-mix(in srgb, var(--br) 45%, var(--surface));
+  box-shadow:
+    0 0 0 2px var(--br-light),
+    0 0 10px var(--br);
+}
+
+/* 지금 찍을 수 있으면 갈래 색으로 숨쉬듯 빛난다 */
+.node[data-can] .icon {
+  animation: canLearn 1.4s ease-in-out infinite;
+}
+
+@keyframes canLearn {
+  50% {
+    box-shadow:
+      0 0 0 2px var(--br-light),
+      0 0 12px var(--br);
+  }
+}
+
+.node[aria-pressed="true"] .icon {
+  transform: scale(1.08);
+  outline: 2px solid var(--candle);
+  outline-offset: 2px;
+}
+
+.node:hover .icon,
+.node:focus-visible .icon {
+  transform: scale(1.06);
+}
+
+.rank {
+  position: absolute;
+  top: 30px;
+  left: 50%;
+  padding: 0 3px;
+  background: var(--bg-deep);
+  color: var(--bone);
+  font-family: var(--font-small);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.node[data-state="max"] .rank {
+  color: var(--br-light);
+}
+
+.key {
+  position: absolute;
+  top: -4px;
+  left: calc(50% - 26px);
+  padding: 0 3px;
+  background: var(--surface);
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 9px;
+}
+
+.nodeName {
+  max-width: 100%;
+  margin-top: 6px;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 0 #000;
+}
+
+.node[data-state="locked"] .nodeName {
+  color: var(--muted);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-left: 6px;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.legend i[data-k="locked"] {
+  background: #15141a;
+}
+
+.legend i[data-k="open"] {
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--br);
+}
+
+.legend i[data-k="learned"] {
+  background: color-mix(in srgb, var(--br) 30%, var(--surface));
+  box-shadow: 0 0 0 1px var(--br);
+}
+
+.legend i[data-k="max"] {
+  background: color-mix(in srgb, var(--br) 45%, var(--surface));
+  box-shadow: 0 0 0 1px var(--br-light);
+}
+
+.detail {
+  position: sticky;
+  top: 0;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--br) 50%, transparent),
+    var(--px-border);
+}
+
+.rankLine {
+  margin: 0;
+  color: var(--br-light);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.next {
+  margin: 0;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--br) 12%, transparent);
+  font-size: 12px;
+}
+
+.next b {
+  color: var(--br-light);
+  font-weight: 400;
+}
+
+.reqs {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+}
+
+.reqs li {
+  color: #e8806a;
+}
+
+.reqs li::before {
+  content: "✕ ";
+}
+
+.reqs li[data-ok] {
+  color: var(--moss);
+}
+
+.reqs li[data-ok]::before {
+  content: "✓ ";
+}
+
+@media (max-width: 720px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+
+  .detail {
+    position: static;
+  }
+}
+
+@media (max-width: 420px) {
+  .icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .rank {
+    top: 27px;
+  }
+
+  .nodeName {
+    font-size: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node[data-can] .icon {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--br-light);
+  }
+}

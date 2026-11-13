@@ -1,4 +1,5 @@
 import { handler, json } from "@/lib/http";
+import { recordHuntLevel } from "@/lib/huntLevelRank";
 import { RunFinishSchema } from "@/lib/rpg/schemas";
 import { finishRun } from "@/lib/rpg/service";
 import type { RunFinishResponse } from "@/lib/rpg/types";
@@ -12,5 +13,7 @@ import { readBody } from "@/lib/validate";
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   const { ticket, result } = await readBody(req, RunFinishSchema);
-  return json<RunFinishResponse>(await finishRun(visitorId, ticket, result, ipHash(req)));
+  const res = await finishRun(visitorId, ticket, result, ipHash(req));
+  await recordHuntLevel(visitorId, res.view.character); // 사냥 레벨 랭킹
+  return json<RunFinishResponse>(res);
 });

@@ -477,6 +477,252 @@ const P: Record<string, Painter> = {
     g.rect(6, 6, 4, 1, a);
   },
 
+  // ── 스킬 트리 (모닥불 · 서리 · 넋) ──
+  /** 불씨: 작은 불꽃 + 튀는 점 */
+  sk_ember(g, m, a) {
+    g.ellipse(7, 10, 4, 4, m);
+    for (let i = 0; i < 4; i++) g.hline(7 - Math.floor((4 - i) / 2), 7 + Math.floor((4 - i) / 3), 3 + i, m);
+    g.ellipse(7, 11, 2, 2, a);
+    g.set(12, 4, a);
+    g.set(13, 3, m);
+    g.set(11, 7, a);
+  },
+  /** 화로: 둥근 화로 위 불꽃 */
+  sk_hearth(g, m, a) {
+    g.rect(2, 10, 12, 4, a);
+    g.hline(3, 12, 14, darken(a, 0.3));
+    g.ellipse(8, 7, 3.5, 3, m);
+    g.vline(8, 2, 6, m);
+    g.set(7, 4, m);
+    g.set(9, 3, lighten(m, 0.4));
+  },
+  /** 불꽃 부채: 펼친 부채꼴 */
+  sk_fan(g, m, a) {
+    for (let t = -4; t <= 4; t++) {
+      const ang = -Math.PI / 2 + t * 0.22;
+      for (let r = 2; r < 13; r++) g.set(8 + Math.cos(ang) * r, 14 + Math.sin(ang) * r, r > 9 ? a : m);
+    }
+    g.rect(7, 13, 2, 2, darken(m, 0.3));
+  },
+  /** 장작: 엇갈린 통나무 두 개 + 불씨 */
+  sk_logs(g, m, a) {
+    for (let i = 0; i < 10; i++) {
+      g.rect(3 + i, 12 - Math.floor(i / 2), 2, 2, m);
+      g.rect(11 - i, 12 - Math.floor(i / 2), 2, 2, darken(m, 0.2));
+    }
+    g.ellipse(8, 4, 2.5, 2.5, a);
+    g.set(8, 1, lighten(a, 0.3));
+  },
+  /** 튀는 불티: 흩어진 별점 */
+  sk_sparks(g, m, a) {
+    for (const [x, y] of [[4, 4], [11, 3], [8, 8], [3, 11], [12, 12], [7, 13]]) {
+      g.rect(x - 1, y, 3, 1, m);
+      g.rect(x, y - 1, 1, 3, m);
+      g.set(x, y, a);
+    }
+  },
+  /** 불의 고리 */
+  sk_firering(g, m, a) {
+    for (let t = 0; t < 40; t++) {
+      const ang = (t / 40) * Math.PI * 2;
+      g.set(8 + Math.cos(ang) * 6, 9 + Math.sin(ang) * 4.5, m);
+      g.set(8 + Math.cos(ang) * 5, 9 + Math.sin(ang) * 3.6, a);
+      if (t % 5 === 0) g.set(8 + Math.cos(ang) * 6, 8 + Math.sin(ang) * 4.5 - 1, lighten(a, 0.3));
+    }
+  },
+  /** 별똥 장작: 꼬리 달린 불덩이 */
+  sk_meteor(g, m, a) {
+    for (let i = 0; i < 8; i++) g.set(2 + i, 2 + i, i % 2 ? a : m);
+    for (let i = 0; i < 6; i++) g.set(3 + i, 1 + i, lighten(m, 0.2));
+    g.ellipse(11, 11, 3.5, 3.5, m);
+    g.ellipse(11, 11, 1.8, 1.8, a);
+  },
+  /** 화톳불: 다리 셋 달린 쇠 바구니 + 불 */
+  sk_brazier(g, m, a) {
+    g.rect(3, 7, 10, 3, m);
+    g.set(4, 11, m);
+    g.set(3, 12, m);
+    g.set(11, 11, m);
+    g.set(12, 12, m);
+    g.vline(8, 10, 14, m);
+    g.ellipse(8, 5, 3.5, 2.5, a);
+    g.vline(8, 1, 4, a);
+  },
+  /** 큰 모닥불: 쌓은 장작 위 큰 불길 */
+  sk_bonfire(g, m, a) {
+    g.rect(2, 13, 12, 2, 0x6a4a30);
+    for (let i = 0; i < 6; i++) g.hline(8 - (6 - i), 8 + (6 - i) - 1, 7 + i, m);
+    g.vline(8, 2, 7, m);
+    g.vline(5, 5, 7, m);
+    g.vline(11, 4, 7, m);
+    g.ellipse(8, 10, 2.5, 2, a);
+  },
+  /** 재의 심장 */
+  sk_heart(g, m, a) {
+    g.ellipse(5.5, 6, 3, 3, m);
+    g.ellipse(10.5, 6, 3, 3, m);
+    for (let i = 0; i < 6; i++) g.hline(2 + i, 13 - i, 8 + i, m);
+    g.ellipse(8, 8, 2, 2, a);
+  },
+  /** 서리 입김: 바람 세 줄 */
+  sk_breath(g, m, a) {
+    for (let i = 0; i < 3; i++) {
+      g.hline(2, 10 - i * 2, 4 + i * 4, m);
+      g.set(11 - i * 2, 3 + i * 4, a);
+      g.set(12 - i * 2, 4 + i * 4, a);
+    }
+    g.set(13, 13, a);
+  },
+  /** 서리 옷깃: 세운 깃 */
+  sk_collar(g, m, a) {
+    for (let i = 0; i < 6; i++) {
+      g.vline(2 + i, 4 + i, 14, m);
+      g.vline(13 - i, 4 + i, 14, m);
+    }
+    g.hline(2, 13, 4, a);
+    g.set(8, 12, a);
+  },
+  /** 고드름 */
+  sk_icicle(g, m, a) {
+    for (const x of [3, 8, 13]) for (let i = 0; i < (x === 8 ? 12 : 9); i++) g.hline(x - Math.max(0, 1 - Math.floor(i / 4)), x + Math.max(0, 1 - Math.floor(i / 4)), 2 + i, i < 2 ? a : m);
+  },
+  /** 살얼음: 금 간 얼음판 */
+  sk_crack(g, m, a) {
+    g.rect(2, 3, 12, 10, m);
+    for (const [x, y] of [[8, 3], [7, 5], [8, 7], [6, 8], [5, 10], [9, 8], [11, 10], [12, 12]]) g.set(x, y, a);
+  },
+  /** 얼음 방패 */
+  sk_iceshield(g, m, a) {
+    g.rect(3, 2, 10, 7, m);
+    for (let i = 0; i < 6; i++) g.hline(3 + i, 12 - i, 9 + i, m);
+    g.vline(8, 3, 12, a);
+    g.hline(5, 11, 6, a);
+  },
+  /** 서리꽃: 눈 결정 */
+  sk_snow(g, m, a) {
+    P.st_freeze(g, m, a);
+  },
+  /** 안개 걸음: 흐린 발자국 */
+  sk_mist(g, m, a) {
+    for (let i = 0; i < 4; i++) g.hline(1 + i, 9 + i, 4 + i * 3, i % 2 ? a : m);
+    g.ellipse(12, 7, 2.5, 3, m);
+  },
+  /** 얼음 무덤: 솟은 결정 */
+  sk_crystal(g, m, a) {
+    for (let i = 0; i < 12; i++) g.hline(8 - Math.floor(i / 3), 8 + Math.floor(i / 3), 2 + i, m);
+    for (let i = 0; i < 7; i++) g.hline(3 - Math.floor(i / 4), 3 + Math.floor(i / 4), 7 + i, a);
+    for (let i = 0; i < 7; i++) g.hline(13 - Math.floor(i / 4), 13 + Math.floor(i / 4), 7 + i, a);
+    g.vline(8, 3, 10, lighten(m, 0.4));
+  },
+  /** 서리밭: 바닥 타원 + 결정 */
+  sk_frostfield(g, m, a) {
+    g.ellipse(8, 11, 7, 3.5, a);
+    g.ellipse(8, 11, 5, 2.2, m);
+    g.vline(8, 2, 8, m);
+    g.hline(5, 11, 5, m);
+  },
+  /** 눈보라: 휘도는 선 + 눈송이 */
+  sk_blizzard(g, m, a) {
+    for (let t = 0; t < 30; t++) {
+      const ang = t * 0.35;
+      g.set(8 + Math.cos(ang) * t * 0.2, 8 + Math.sin(ang) * t * 0.2, m);
+    }
+    for (const [x, y] of [[2, 3], [13, 4], [3, 13], [12, 12]]) g.set(x, y, a);
+  },
+  /** 동지의 맹세: 서리 낀 초승달 */
+  sk_moonfrost(g, m, a) {
+    g.ellipse(8, 8, 6, 6, m);
+    // 오른쪽 위를 지워 초승달로
+    g.ellipse(10.5, 6, 5, 5, 0x000000, 0);
+    g.set(4, 11, a);
+    g.set(6, 13, a);
+  },
+  /** 도깨비불: 꼬리 달린 넋불 */
+  sk_wisp(g, m, a) {
+    g.ellipse(9, 6, 4, 4, m);
+    g.ellipse(9, 6, 2, 2, a);
+    for (let i = 0; i < 6; i++) g.set(5 - i * 0.6, 9 + i, i % 2 ? m : a);
+  },
+  /** 등불 */
+  sk_lamp(g, m, a) {
+    g.hline(6, 9, 1, a);
+    g.vline(8, 1, 3, a);
+    g.rect(4, 4, 8, 9, a);
+    g.rect(5, 5, 6, 7, m);
+    g.rect(7, 7, 2, 3, 0xffffff);
+    g.hline(4, 11, 13, a);
+  },
+  /** 넋 거두기: 빨려 드는 방울 */
+  sk_drain(g, m, a) {
+    g.ellipse(8, 8, 3, 3, a);
+    for (const [x, y] of [[2, 2], [14, 3], [2, 13], [13, 13]]) {
+      g.set(x, y, m);
+      g.set(x + (x < 8 ? 2 : -2), y + (y < 8 ? 2 : -2), m);
+    }
+  },
+  /** 바람 넋: 감기는 바람 */
+  sk_gust(g, m, a) {
+    for (let t = 0; t < 24; t++) g.set(2 + t * 0.5, 8 + Math.sin(t * 0.5) * 4, t % 3 ? m : a);
+    g.hline(4, 12, 13, a);
+  },
+  /** 길동무 넋: 유령 */
+  sk_ghost(g, m, a) {
+    g.ellipse(8, 6, 5, 4.5, m);
+    g.rect(3, 6, 10, 7, m);
+    for (const x of [3, 7, 11]) g.rect(x, 13, 2, 2, m);
+    g.set(6, 6, a);
+    g.set(10, 6, a);
+  },
+  /** 넋 사슬 */
+  sk_chain(g, m, a) {
+    for (let i = 0; i < 4; i++) {
+      const x = 2 + i * 3;
+      const y = 12 - i * 3;
+      g.rect(x, y, 3, 2, i % 2 ? a : m);
+    }
+    g.ellipse(13, 3, 2, 2, a);
+  },
+  /** 저승 너울: 드리운 천 */
+  sk_veil(g, m, a) {
+    for (let i = 0; i < 12; i++) g.hline(8 - Math.floor(i / 2), 8 + Math.floor(i / 2), 2 + i, m);
+    for (const x of [3, 6, 9, 12]) g.vline(x, 10, 14, a);
+  },
+  /** 넋 소용돌이 */
+  sk_vortex(g, m, a) {
+    for (let t = 0; t < 50; t++) {
+      const ang = t * 0.28;
+      const r = 0.5 + t * 0.12;
+      g.set(8 + Math.cos(ang) * r, 8 + Math.sin(ang) * r * 0.8, t > 35 ? a : m);
+    }
+  },
+  /** 망자의 초롱: 매단 둥근 초롱 */
+  sk_lantern(g, m, a) {
+    g.vline(8, 0, 2, a);
+    g.ellipse(8, 8, 5, 5, m);
+    g.hline(4, 12, 3, a);
+    g.hline(4, 12, 13, a);
+    g.vline(8, 4, 12, a);
+    g.ellipse(8, 8, 1.5, 2, 0xffffff);
+  },
+  /** 별빛 행렬: 큰 별 + 따르는 작은 별 */
+  sk_starlight(g, m, a) {
+    g.vline(10, 1, 9, m);
+    g.hline(6, 14, 5, m);
+    g.rect(9, 4, 3, 3, lighten(m, 0.3));
+    for (const [x, y] of [[3, 10], [5, 13], [1, 13]]) {
+      g.set(x, y, a);
+      g.set(x + 1, y, a);
+    }
+  },
+  /** 넋의 인연: 이어진 두 고리 */
+  sk_bond(g, m, a) {
+    for (let t = 0; t < 30; t++) {
+      const ang = (t / 30) * Math.PI * 2;
+      g.set(5.5 + Math.cos(ang) * 3.5, 8 + Math.sin(ang) * 3.5, m);
+      g.set(10.5 + Math.cos(ang) * 3.5, 8 + Math.sin(ang) * 3.5, a);
+    }
+  },
+
   // ── 몬스터가 거는 상태 이상 (lib/rpg/status) ──
   /** 독: 거품 이는 물방울 */
   st_poison(g, m, a) {

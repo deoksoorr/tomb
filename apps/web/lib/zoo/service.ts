@@ -1,6 +1,7 @@
 import { PERMANENT_UNTIL, petDef } from "@tomb/protocol";
 import { env } from "../env";
 import { HttpError } from "../http";
+import { recordLook } from "../lookRank";
 import { getAccounts } from "../store";
 import { lookGrant, lookOf, loadMe } from "../store/accounts";
 import { getStyleStore } from "../store/style";
@@ -23,5 +24,6 @@ export async function buyPet(accountId: string, petId: string, now = Date.now())
   // 집(벗어 둔 꾸미기)에 들어간 새 펫을 바로 데리고 나온다. 입고 있던 기간제가 영구로 바뀐 경우엔 이미 데리고 있다 (false여도 괜찮다)
   await accounts.wear(accountId, petId, "pet", now);
   const me = await loadMe(accounts, accountId, now);
+  await recordLook(accountId, me, { now }); // 꾸미기 랭킹 점수
   return { me, lookGrant: await lookGrant(env.joinSecret(), accountId, lookOf(me), now, me) };
 }

@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { FRIEND_MAX, staffPublicName, type PeerWhere } from "@tomb/protocol";
 import { findBan, notifyMe, peerOf, whereOf } from "./ban";
 import { env } from "./env";
+import { friendCard } from "./friendCard";
 import type { FriendEntry, FriendListResponse, FriendPresenceResponse, FriendRequestEntry, FriendRequestResponse, FriendWhere, FriendWhereResponse } from "./friendTypes";
 import { HttpError } from "./http";
 import { getHouseStore, houseIdFor } from "./housing/service";
@@ -58,16 +59,25 @@ function pick(list: FriendLink[], key: string): FriendLink | null {
   return list.find((l) => friendKeyFor(l.id) === key) ?? null;
 }
 
-/** 친구 창: 친구(지금 위치·집)·받은 신청·보낸 신청 */
+/** 친구 창 정렬: 접속 중 먼저, 그다음 최근 접속 순, 같으면 이름 순 */
+export function byPresence(a: FriendEntry, b: FriendEntry): number {
+  const on = (f: FriendEntry) => (f.where.at === "world" || f.where.at === "away" ? 1 : 0);
+  return on(b) - on(a) || (b.lastSeen ?? 0) - (a.lastSeen ?? 0) || a.name.localeCompare(b.name, "ko");
+}
+
+/** 친구 창: 친구(지금 위치·마지막 접속·자랑거리·집)·받은 신청·보낸 신청 + 내 요약. 친구에게만 보이는 값이라 목록 API에만 싣는다 */
 export async function friendList(me: string, now = Date.now()): Promise<FriendListResponse> {
   const store = getFriends();
   const lists = await store.lists(me, now);
   const [friends, incoming, outgoing] = await Promise.all([withoutBanned(lists.friends, now), withoutBanned(lists.incoming, now), withoutBanned(lists.outgoing, now)]);
   const all = [...friends, ...incoming, ...outgoing];
-  const [names, where, houses] = await Promise.all([
+  const ids = friends.map((f) => f.id);
+  const [names, where, seen, cards, mine] = await Promise.all([
     namesOf(store, all.map((l) => l.id)),
-    friends.length ? whereOf(friends.map((f) => f.id)) : Promise.resolve<Record<string, PeerWhere>>({}),
-    Promise.all(friends.map((f) => houseOf(f.id).catch(() => null))),
+    friends.length ? whereOf(ids) : Promise.resolve<Record<string, PeerWhere>>({}),
+    store.seenAt(ids),
+    Promise.all(ids.map((id) => friendCard(id, now))),
+    friendCard(me, now),
   ]);
   const nameOf = new Map(all.map((l, i) => [l.id, names[i]]));
   const req = (l: FriendLink): FriendRequestEntry => ({ key: friendKeyFor(l.id), name: nameOf.get(l.id) ?? NO_NAME, at: l.at });
@@ -76,9 +86,17 @@ export async function friendList(me: string, now = Date.now()): Promise<FriendLi
     name: nameOf.get(f.id) ?? NO_NAME,
     since: f.at,
     where: toFriendWhere(where?.[f.id], where !== null),
-    houseId: houses[j],
+    houseId: cards[j]?.house?.id ?? null,
+    lastSeen: seen[j] || null,
+    ...(cards[j] ? { card: cards[j] } : {}),
   }));
-  return { friends: entries, incoming: incoming.map(req), outgoing: outgoing.map(req), max: FRIEND_MAX };
+  return {
+    friends: entries.sort(byPresence),
+    incoming: incoming.map(req),
+    outgoing: outgoing.map(req),
+    max: FRIEND_MAX,
+    ...(mine ? { me: mine } : {}),
+  };
 }
 
 /** 접속 알림·지도 하트·빨간 점 (주기적으로): 친구 이름·위치와 받은 신청 수만 */

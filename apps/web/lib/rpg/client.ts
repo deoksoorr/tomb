@@ -12,7 +12,9 @@ export type CharacterAction =
   | { type: "alloc"; stats: Partial<Stats> }
   | { type: "learn"; skill: SkillId }
   | { type: "hotbar"; slots: (SkillId | null)[] }
-  | { type: "equip"; slot: GearSlot; itemId: string | null };
+  | { type: "equip"; slot: GearSlot; itemId: string | null }
+  | { type: "respec"; cost: number }
+  | { type: "ackTree" };
 
 export type ShopResponse = RpgView & { sold?: SoldInfo };
 

@@ -4,7 +4,7 @@ import { derive } from "@/lib/rpg/formulas";
 import type { Difficulty } from "@/lib/rpg/catalog";
 import type { RpgPlay } from "@/lib/rpg/types";
 
-// 회귀: 어려움을 클리어한 뒤(판 막바지에 커피 브레이크를 씀) 다음 판부터 방향키·공격키가 안 먹혔다.
+// 회귀: 어려움을 클리어한 뒤(판 막바지에 제자리 멈춤 스킬을 씀) 다음 판부터 방향키·공격키가 안 먹혔다.
 // Phaser는 같은 씬 인스턴스를 다시 띄우는데 create()가 rootUntil 같은 "판 시간 기준 시각"을 0으로 되돌리지 않아,
 // 경과 시간이 0부터 다시 세는 다음 판에서 지난 판의 제자리 멈춤이 이어졌다.
 // 씬을 실제로 돌리지 않고 Phaser·그리기는 모두 가짜로 바꾼 뒤, 입력→이동·공격 로직만 본다.
@@ -37,7 +37,7 @@ vi.mock("phaser", () => {
   };
 });
 vi.mock("./sprites", () => ({ RTEX: stub(), avFrame: () => 0, ensureFloor: () => "floor", ensureRpgTextures: () => {}, makePlayer: () => {} }));
-vi.mock("./sfx", () => ({ RpgSfx: class { play() {} destroy() {} } }));
+vi.mock("./sfx", () => ({ RpgSfx: class { play() {} burst() {} destroy() {} } }));
 vi.mock("../entities/AvatarView", () => ({ AvatarView: class {} }));
 vi.mock("../net/RoomPresence", () => ({ RoomPresence: class {} }));
 
@@ -75,8 +75,8 @@ function play(difficulty: Difficulty): RpgPlay {
     timeLimitSec: difficulty === "hard" ? 210 : 150,
     level: 5,
     derived: derive(5, c.stats, c.equip),
-    skills: { coffee_break: 1 },
-    hotbar: ["coffee_break", null, null, null, null, null],
+    skills: { so_lamp: 1 },
+    hotbar: ["so_lamp", null, null, null, null, null],
     potions: {},
     equip: c.equip,
   };
@@ -88,10 +88,10 @@ function launch(scene: Scene, difficulty: Difficulty): void {
 }
 
 describe("사냥터: 판을 다시 띄워도 지난 판의 시간 상태가 남지 않는다", () => {
-  it("지난 판 막바지에 커피 브레이크를 썼어도 다음 판은 바로 움직이고 때릴 수 있다", () => {
+  it("지난 판 막바지에 등불 기도(잠깐 멈춤)를 썼어도 다음 판은 바로 움직이고 때릴 수 있다", () => {
     const scene = new HuntScene();
     launch(scene, "hard");
-    // 어려움 판 200초쯤: 커피 브레이크(1번 칸) → 0.8초 제자리 + 재생·무적 시각도 판 시간 기준으로 앞에 있다
+    // 어려움 판 200초쯤: 등불 기도(1번 칸) → 0.5초 제자리 + 재생·무적 시각도 판 시간 기준으로 앞에 있다
     scene.elapsed = 200_000;
     scene.onKey("Digit1");
     expect(scene.rootUntil).toBeGreaterThan(200_000);

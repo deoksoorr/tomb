@@ -27,6 +27,6 @@ export const AWAY_PLACE_LABEL: Record<AwayPlace, string> = {
 export type PeerWhere = { ch: number; sid: number; x: number; y: number; away?: true; place?: AwayPlace };
 
 /** 실시간 서버가 채널별 접속자 자리를 기억해 두는 시간 (위치 조회를 가볍게) */
-export const WHERE_CACHE_MS = 15_000;
+export const WHERE_CACHE_MS = 10_000;
 /** 위치 조회 한 번에 물을 수 있는 계정 수 (친구 상한 + 여유) */
 export const WHERE_MAX_IDS = 60;

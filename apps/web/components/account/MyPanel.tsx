@@ -7,6 +7,7 @@ import { api, errorMessage } from "@/lib/api";
 import { DAILY_EARN_CAP } from "@/lib/economy";
 import { CAT_LABEL, dexBadgeBits } from "@/lib/forage/catalog";
 import { meStore, useMe } from "@/lib/hooks/useMe";
+import { lookScore } from "@/lib/lookScore";
 import { useForage } from "../forage/forageStore";
 import { forgetMyCode, readMyCode, saveMyCode, writeItem } from "@/lib/storage";
 import { LS, type Me } from "@/lib/types";
@@ -62,6 +63,8 @@ export default function MyPanel({
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const codeButtonId = useId();
+  // 꾸미기 점수의 만료 판정 기준 시각 (렌더 중에 시계를 읽지 않는다)
+  const [openedAt] = useState(() => Date.now());
 
   useEffect(() => {
     void meStore.refresh();
@@ -113,6 +116,7 @@ export default function MyPanel({
             오늘 {me.todayEarned}/{DAILY_EARN_CAP} · 연속 출석 {me.attendance.streak}일
             {me.attendance.today && " · 오늘 출석 완료"}
           </p>
+          <p className={styles.sub}>내 꾸미기 점수 {lookScore(me, openedAt)}점 (지금 입은 코디 기준)</p>
         </section>
 
         <NameSection me={me} />

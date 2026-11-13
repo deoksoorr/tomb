@@ -12,6 +12,8 @@ import {
   ITEMS,
   MAX_DECOR_PER_GRAVE,
   MEGAPHONE_TTL_MS,
+  PERMANENT_MULTIPLIER,
+  permanentPrice,
   ZOO_PETS,
 } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES } from "@/lib/economy";
@@ -182,7 +184,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               ["지갑", `${won(BALANCE_CAP)}P까지 담겨요`],
               ["출석", `같은 IP는 하루 ${ATTEND_ACCOUNTS_PER_IP}계정까지`],
               ["한도에 걸리면", "알림 없이 조용히 안 쌓여요"],
-              ["랭킹", "포인트(이번 주·전체, 써도 안 줄어요)·사냥·집·헌화"],
+              ["랭킹", "포인트(이번 주·전체, 써도 안 줄어요)·사냥·사냥 레벨·꾸미기(지금 입은 코디 점수)·집·헌화"],
             ]}
           />
         </section>
@@ -204,7 +206,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table
             head={["종류", "얻는 곳", "쓰면"]}
             rows={[
-              [KIND_LABELS.cosmetic, "유령 잡화점", `착용하면 ${durationLabel(COSMETIC_DURATION_MS)} (일부는 영구로도)`],
+              [KIND_LABELS.cosmetic, "유령 잡화점", `착용하면 ${durationLabel(COSMETIC_DURATION_MS)} · 영구 소장도 가능 (이용권 값의 ${PERMANENT_MULTIPLIER}배)`],
               ["펫", "동물원 사육사", "영구 · 한 마리씩 데리고 다녀요"],
               [KIND_LABELS.firework, "유령 잡화점", "쏘면 사라지고 채널 모두가 봐요"],
               [KIND_LABELS.megaphone, "유령 잡화점", `외치면 사라져요 · 기록은 ${durationLabel(MEGAPHONE_TTL_MS)} 뒤 사라져요`],
@@ -238,7 +240,11 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
                         </span>
                       </span>
                     </th>
-                    <td data-label="가격">{item.price}</td>
+                    <td data-label="가격">
+                      {won(item.price)}
+                      {/* 꾸미기는 영구 소장 값도 (카탈로그에서 계산 — 배율이 바뀌면 같이 바뀐다) */}
+                      {permanentPrice(item.id) !== null && <span className={styles.note}>영구 {won(permanentPrice(item.id)!)}</span>}
+                    </td>
                     <td data-label="효과">{effectLabel(item)}</td>
                   </tr>
                 ))}

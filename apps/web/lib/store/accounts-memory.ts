@@ -108,6 +108,11 @@ export class MemoryAccounts implements AccountStore {
     };
   }
 
+  /** 친구 창의 마지막 접속: 마지막 머무르기 기록 시각 (없으면 0). 계정을 만들지 않는다 */
+  lastPresence(id: string): number {
+    return this.accts.get(id)?.presenceAt ?? 0;
+  }
+
   /** 쓰기에서만 만든다 (조회만 한 계정은 "없는 계정"으로 남는다 → 관리자 지급에서 오타를 잡는다) */
   private acct(id: string): Acct {
     let a = this.accts.get(id);

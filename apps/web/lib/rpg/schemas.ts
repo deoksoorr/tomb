@@ -39,6 +39,10 @@ export const CharacterActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("learn"), skill: skillId }),
   z.object({ type: z.literal("hotbar"), slots: z.array(skillId.nullable()).length(HOTBAR_SIZE) }),
   z.object({ type: z.literal("equip"), slot: z.enum(GEAR_SLOTS), itemId: itemId.nullable() }),
+  // 스킬 초기화: cost = 화면에 보인 비용 (서버 비용과 다르면 거절, 돈을 받지 않는다)
+  z.object({ type: z.literal("respec"), cost: z.number().int().min(0).max(10_000) }),
+  // 스킬 트리 바뀜 안내를 봤다
+  z.object({ type: z.literal("ackTree") }),
 ]);
 
 export const ShopActionSchema = z.discriminatedUnion("type", [

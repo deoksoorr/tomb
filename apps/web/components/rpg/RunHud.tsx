@@ -17,12 +17,13 @@ import s from "./rpg.module.css";
 // 판 진행 중 오버레이: 캔버스 위 전체를 덮고(탭은 rpg:tap으로 게임에 넘긴다) 상태·버튼을 그린다.
 // 사냥터: 캔버스·공격 버튼을 누르고 있으면 rpg:action hold로 계속 공격 (36번). 말풍선 버튼은 없앴다 (26번).
 
+/** 머리 위 버프 이름 (HuntScene buffs 키). 없는 키(내부용)는 숨긴다 */
 const BUFF_NAMES: Record<string, string> = {
-  rollback: "못 들은 척",
-  cache_hit: "칼퇴 질주",
-  debugging: "매의 눈",
-  pair_prog: "동기",
-  overtime: "야근",
+  invuln: "무적",
+  em_stoke: "장작",
+  so_swift: "바람 넋",
+  so_friend: "길동무",
+  fr_ward: "얼음 방패",
 };
 
 /** 아이콘 위 원형 쿨다운 (남은 비율만큼 시계 방향으로 어둡게) */
@@ -182,13 +183,15 @@ export default function RunHud({ game, hotbar, onPause, title }: { game: GameKin
                   </div>
                 )}
                 <Bar value={hud.sp} max={hud.maxSp} className={s.sp} label="SP" />
-                {hud.buffs.length > 0 && (
+                {hud.buffs.some((b) => BUFF_NAMES[b.id]) && (
                   <div className={s.buffs}>
-                    {hud.buffs.map((b) => (
-                      <span key={b.id}>
-                        {BUFF_NAMES[b.id] ?? b.id} {Math.ceil(b.leftMs / 1000)}초
-                      </span>
-                    ))}
+                    {hud.buffs
+                      .filter((b) => BUFF_NAMES[b.id])
+                      .map((b) => (
+                        <span key={b.id}>
+                          {BUFF_NAMES[b.id]} {Math.ceil(b.leftMs / 1000)}초
+                        </span>
+                      ))}
                   </div>
                 )}
               </>

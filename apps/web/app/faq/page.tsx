@@ -1,6 +1,9 @@
 import GuidePage from "../guide/GuidePage";
 import guide from "../guide/guide.module.css";
 import { pageMetadata } from "../seo";
+import { DAILY_EARN_CAP, earnRule } from "@/lib/economy";
+import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
+import { PRESENCE_INTERVAL_MS } from "@/lib/types";
 
 const PATH = "/faq";
 const TITLE = "한때는... 자주 묻는 질문 — 무료인지, 설치·가입, 모바일, 함께 있는 인원, 노동요 곡 수";
@@ -46,7 +49,8 @@ const FAQ = [
   },
   {
     q: "포인트는 어떻게 모으나요?",
-    a: "접속해 있는 10분마다 5포인트가 쌓이고(다른 창을 봐도 괜찮아요), 출석 도장, 헌화, 사냥터·미니게임, 물고기·채집물 팔기 등으로도 모여요. 하루에 모두 합쳐 800포인트까지 쌓여요.",
+    // 숫자는 lib/economy.ts·stayBonus.ts에서 읽는다 (값을 바꾸면 답도 같이 바뀐다)
+    a: `접속해 있는 ${PRESENCE_INTERVAL_MS / 60_000}분마다 ${earnRule("presence").points}포인트가 쌓이고(다른 창을 봐도 괜찮아요), 출석 도장, 헌화, 사냥터·미니게임, 물고기·채집물 팔기 등으로도 모여요. 하루에 모두 합쳐 ${DAILY_EARN_CAP.toLocaleString("ko-KR")}포인트까지 쌓이고, 오래 머물면 받는 접속 시간 보너스(하루 최대 ${STAY_BONUS_DAILY_MAX}포인트)는 이 한도와 따로예요.`,
   },
   {
     q: "무엇을 할 수 있나요?",
@@ -71,6 +75,10 @@ const FAQ = [
   {
     q: "다른 기기에서 이어서 할 수 있나요?",
     a: "네. 내 정보 → 개인 코드에서 코드를 만들고, 다른 기기의 입장 화면에서 [코드로 시작]에 넣으면 포인트·가방·내 묘비가 그대로 따라와요.",
+  },
+  {
+    q: "꾸미기 점수는 어떻게 매겨지나요?",
+    a: "지금 입고 있는 코디 파츠마다 가격대에 따라 점수를 더해요(비싼 코디·펫·프리미엄 외형일수록 높고, 특수 염색은 조금 더). 기간제 코디가 끝나면 그 점수도 바로 빠져요. 랭킹 창 [꾸미기] 탭에서 1~50위와 내 순위를, 가방 꾸미기 칸과 내 정보에서 내 점수를 볼 수 있어요.",
   },
 ] as const;
 

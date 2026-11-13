@@ -1,4 +1,4 @@
-import type { AwayPlace } from "@tomb/protocol";
+import type { AvatarDye, AwayPlace } from "@tomb/protocol";
 
 // 친구 API 응답 (브라우저와 서버가 함께 쓴다). 계정 id는 내보내지 않고 친구마다 key(계정 id의 HMAC)로 가리킨다.
 
@@ -14,6 +14,24 @@ export type FriendWhere =
   | { at: "world"; ch: number; sid: number; x: number; y: number }
   | { at: "away"; ch: number; sid: number; place: AwayPlace | null };
 
+/**
+ * 친구 창 한 줄의 자랑거리 (친구에게만, 서버가 잠깐 기억해 둔다).
+ * look = 지금 입은 모습(바탕색·몸·꾸미기·염색) — 화면이 avatarColorSpec으로 칠한다
+ */
+export type FriendCard = {
+  look: { color: string; body: string; look: string[]; dye?: AvatarDye };
+  /** 집 꾸밈 점수 (집 랭킹 점수). 집이 없거나 숨겨졌으면 null */
+  house: { id: string; score: number } | null;
+  /** 사냥 레벨 */
+  hunt: number;
+  /** 도감 채운 비율 (0~100, 모든 종류 합쳐) */
+  dex: number;
+  /** 가장 큰 물고기 (이름·크기 mm). 없으면 null */
+  bigFish: { name: string; size: number } | null;
+  /** 꾸미기 점수 (lib/lookScore — 만료 전 착용품·외형·염색) */
+  fashion?: number;
+};
+
 export type FriendEntry = {
   key: string;
   name: string;
@@ -22,6 +40,10 @@ export type FriendEntry = {
   where: FriendWhere;
   /** 친구 집 (분양받았고 숨겨지지 않았으면). 목록(GET /api/friends)에만 있다 */
   houseId?: string | null;
+  /** 마지막 접속 (마지막 머무르기 기록 시각, 없으면 null). 목록에만 있다 */
+  lastSeen?: number | null;
+  /** 자랑거리 한 줄. 목록에만 있다 */
+  card?: FriendCard;
 };
 
 export type FriendRequestEntry = { key: string; name: string; at: number };
@@ -32,6 +54,8 @@ export type FriendListResponse = {
   incoming: FriendRequestEntry[];
   outgoing: FriendRequestEntry[];
   max: number;
+  /** 창 맨 위 내 요약 (내 집 점수·사냥 레벨·도감·최대어) */
+  me?: FriendCard;
 };
 
 /** GET /api/friends/presence (접속 알림·지도 하트·빨간 점, 주기적으로) */
@@ -41,4 +65,4 @@ export type FriendPresenceResponse = { friends: Pick<FriendEntry, "key" | "name"
 export type FriendRequestResponse = { result: "sent" | "accepted"; name: string };
 
 /** GET /api/friends/[key] (친구한테 가기 직전, 지금 위치) */
-export type FriendWhereResponse = Required<FriendEntry>;
+export type FriendWhereResponse = Required<Pick<FriendEntry, "key" | "name" | "since" | "where" | "houseId">>;

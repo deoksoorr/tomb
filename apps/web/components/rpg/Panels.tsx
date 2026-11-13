@@ -9,12 +9,9 @@ import {
   GEAR,
   GEAR_SLOTS,
   gearById,
-  HOTBAR_SIZE,
   KIND_LABELS,
   MONSTERS,
   POTIONS,
-  SKILLS,
-  skillById,
   SLOT_LABELS,
   slotKind,
   STAT_KEYS,
@@ -26,8 +23,6 @@ import {
   type GearDef,
   type GearKind,
   type GearSlot,
-  type SkillDef,
-  type SkillId,
   type Stats,
   type ZoneDef,
   type ZoneId,
@@ -727,186 +722,8 @@ function SellQty({
   );
 }
 
-// ── 스킬 ──
-// 위: 단축키 칸 6개 (고른 스킬을 칸에 놓는다) · 아래 왼쪽: 스킬 아이콘 격자 (배운 것 / 아직 못 배운 것)
-// 오른쪽: 마우스를 올리거나 탭한 스킬 설명 + 배우기·단축키 놓기. 스킬 목록은 catalog(SKILLS)를 그대로 읽는다
-
-type SkillState = {
-  sk: SkillDef;
-  lv: number;
-  locked: boolean;
-  maxed: boolean;
-  why: string;
-  learnable: boolean;
-};
-
-function skillState(c: RpgView["character"], sk: SkillDef): SkillState {
-  const lv = c.skills[sk.id] ?? 0;
-  const reqs = (sk.requires ?? []).filter((r) => (c.skills[r.id] ?? 0) < r.level);
-  const locked = c.level < sk.reqLevel || reqs.length > 0;
-  const maxed = lv >= sk.maxLevel;
-  const why = [c.level < sk.reqLevel ? `Lv.${sk.reqLevel}부터` : "", ...reqs.map((r) => `${skillById(r.id)?.name ?? r.id} ${r.level}단계 필요`)]
-    .filter(Boolean)
-    .join(" · ");
-  return {
-    sk,
-    lv,
-    locked,
-    maxed,
-    why,
-    learnable: !locked && !maxed && c.skillPoints > 0,
-  };
-}
-
-export function SkillPanel({ view, busy, onCharacter }: Common) {
-  const c = view.character;
-  const all = SKILLS.map((sk) => skillState(c, sk));
-  const learned = all.filter((x) => x.lv > 0);
-  const notYet = all.filter((x) => x.lv === 0);
-  const [picked, setPicked] = useState<SkillId>(() => (learned[0] ?? all[0]).sk.id);
-  const [hover, setHover] = useState<SkillId | null>(null);
-  const shown = all.find((x) => x.sk.id === (hover ?? picked)) ?? all[0];
-  const pickedState = all.find((x) => x.sk.id === picked);
-  const setKey = (id: SkillId, slot: number | null) => {
-    const next = c.hotbar.map((h) => (h === id ? null : h));
-    if (slot !== null) next[slot] = id;
-    onCharacter({ type: "hotbar", slots: next }, slot === null ? "단축키에서 뺐어요." : `${slot + 1}번 단축키에 놓았어요.`);
-  };
-  const cell = (x: SkillState) => {
-    const slot = c.hotbar.indexOf(x.sk.id);
-    return (
-      <button
-        key={x.sk.id}
-        type="button"
-        className={s.skCell}
-        aria-pressed={picked === x.sk.id}
-        data-locked={x.locked || undefined}
-        data-learnable={x.learnable || undefined}
-        aria-label={`${x.sk.name} ${x.lv}/${x.sk.maxLevel}단계${x.locked ? ` (${x.why})` : ""}`}
-        onClick={() => setPicked(x.sk.id)}
-        onPointerEnter={(e) => e.pointerType === "mouse" && setHover(x.sk.id)}
-        onPointerLeave={() => setHover(null)}
-        onFocus={() => setHover(x.sk.id)}
-        onBlur={() => setHover(null)}
-      >
-        <RpgIcon art={x.sk.art} size={32} />
-        <span className={s.skPips} aria-hidden="true">
-          {Array.from({ length: x.sk.maxLevel }, (_, i) => (
-            <i key={i} data-on={i < x.lv || undefined} />
-          ))}
-        </span>
-        <span className={s.skCellName}>{x.sk.name}</span>
-        {slot >= 0 && <span className={s.skKey}>{slot + 1}</span>}
-        {x.learnable && <span className={s.skNew}>+</span>}
-      </button>
-    );
-  };
-  const d = shown;
-  const lvShow = Math.max(1, d.lv);
-  const dSlot = c.hotbar.indexOf(d.sk.id);
-  return (
-    <div className={cx(s.lobby, s.skillTab)}>
-      <section className={s.skHotbar} aria-labelledby="rpg-hotbar">
-        <h3 id="rpg-hotbar" className={s.sectionTitle}>
-          단축키{" "}
-          <span className={s.meta}>
-            · 스킬 포인트 <b className={s.points}>{c.skillPoints}</b> ·{" "}
-            {pickedState && pickedState.lv > 0 ? `${pickedState.sk.name}을(를) 놓을 칸을 누르세요` : "배운 스킬을 고르고 칸을 누르면 놓여요"}
-          </span>
-        </h3>
-        <div className={s.hotbar}>
-          {Array.from({ length: HOTBAR_SIZE }, (_, i) => {
-            const sk = skillById(c.hotbar[i] ?? "");
-            const canPut = !!pickedState && pickedState.lv > 0 && c.hotbar[i] !== picked;
-            return (
-              <button
-                key={i}
-                type="button"
-                className={s.hotSlot}
-                data-target={canPut || undefined}
-                disabled={busy || (!canPut && !sk)}
-                aria-label={canPut ? `${i + 1}번 칸에 ${pickedState!.sk.name} 놓기` : sk ? `${i + 1}번 칸 ${sk.name} 보기` : `${i + 1}번 칸 비어 있음`}
-                onClick={() => (canPut ? setKey(picked, i) : sk && setPicked(sk.id))}
-              >
-                <span className={s.skKeyNum}>{i + 1}</span>
-                {sk ? <RpgIcon art={sk.art} size={32} /> : <span className={s.slotEmpty} aria-hidden="true" />}
-                <span>{sk?.name ?? "비어 있음"}</span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <div className={s.skBody}>
-        <div className={s.skGrids}>
-          <section aria-label="배운 스킬">
-            <h4 className={s.skGroup}>
-              배운 스킬 <span>{learned.length}</span>
-            </h4>
-            {learned.length > 0 ? (
-              <div className={s.skGrid}>{learned.map(cell)}</div>
-            ) : (
-              <p className={s.meta}>아직 배운 스킬이 없어요. 아래에서 골라 배워 보세요.</p>
-            )}
-          </section>
-          <section aria-label="아직 못 배운 스킬">
-            <h4 className={s.skGroup}>
-              아직 못 배운 스킬 <span>{notYet.length}</span>
-            </h4>
-            {notYet.length > 0 ? <div className={s.skGrid}>{notYet.map(cell)}</div> : <p className={s.meta}>모든 스킬을 배웠어요!</p>}
-          </section>
-          <p className={s.meta}>직업 없이 모든 스킬을 배울 수 있어요. 레벨이 오를 때마다 스킬 포인트를 받아요.</p>
-        </div>
-
-        <aside className={s.skDetail} aria-live="polite">
-          <div className={s.skDetailHead}>
-            <RpgIcon art={d.sk.art} size={48} />
-            <div>
-              <p className={s.cardName}>{d.sk.name}</p>
-              <p className={s.meta}>
-                {d.sk.tag} · {d.lv}/{d.sk.maxLevel}단계
-              </p>
-            </div>
-          </div>
-          <p>{d.sk.describe(lvShow)}</p>
-          <dl className={s.skFacts}>
-            <div>
-              <dt>SP</dt>
-              <dd>{d.sk.sp(lvShow)}</dd>
-            </div>
-            <div>
-              <dt>쿨타임</dt>
-              <dd>{d.sk.cooldownMs(lvShow) / 1000}초</dd>
-            </div>
-            <div>
-              <dt>단축키</dt>
-              <dd>{dSlot >= 0 ? `${dSlot + 1}번` : "—"}</dd>
-            </div>
-          </dl>
-          {d.lv > 0 && !d.maxed && <p className={s.meta}>다음 단계: {d.sk.describe(d.lv + 1)}</p>}
-          {d.locked && <p className={s.warn}>{d.why}</p>}
-          <div className={s.skActions}>
-            <button
-              type="button"
-              className={cx(ui.button, d.learnable && ui.primary)}
-              disabled={busy || !d.learnable}
-              onClick={() => onCharacter({ type: "learn", skill: d.sk.id }, `${d.sk.name} ${d.lv + 1}단계를 배웠어요.`)}
-            >
-              {d.maxed ? "최고 단계" : d.lv ? "단계 올리기" : "배우기"}
-              {!d.maxed && " (1포인트)"}
-            </button>
-            {dSlot >= 0 && (
-              <button type="button" className={cx(ui.button, ui.quiet)} disabled={busy} onClick={() => setKey(d.sk.id, null)}>
-                단축키에서 빼기
-              </button>
-            )}
-          </div>
-          {hover && hover !== picked && <p className={s.meta}>누르면 이 스킬을 골라요.</p>}
-        </aside>
-      </div>
-    </div>
-  );
-}
+// ── 스킬: 갈래 3개 × 단 5개 트리 창 (SkillTreePanel.tsx) ──
+export { SkillPanel } from "./SkillTreePanel";
 
 // ── 상점 ──
 // 사내 매점(편의점) 느낌: 차양 간판 + 지갑, 구역(무기·방어구·장신구·물약) 통로 표지, 선반 위 상품 카드

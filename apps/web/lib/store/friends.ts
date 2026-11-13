@@ -42,6 +42,8 @@ export interface FriendStore {
   isFriend(a: string, b: string): Promise<boolean>;
   /** 계정 닉네임 여러 개를 한 번에 (없으면 null). 친구 목록 표시용 — 계정 전체를 읽지 않는다 */
   names(ids: string[]): Promise<(string | null)[]>;
+  /** 마지막 접속(= 마지막 머무르기 기록 시각, 게임 중 10분마다 남는다). 없으면 0 */
+  seenAt(ids: string[]): Promise<number[]>;
 }
 
 const newestFirst = (a: FriendLink, b: FriendLink) => b.at - a.at || a.id.localeCompare(b.id);
@@ -150,6 +152,10 @@ export class MemoryFriends implements FriendStore {
   async names(ids: string[]): Promise<(string | null)[]> {
     const now = Date.now();
     return Promise.all(ids.map(async (id) => (await this.accounts().get(id, kstDay(now), now)).name));
+  }
+
+  async seenAt(ids: string[]): Promise<number[]> {
+    return ids.map((id) => this.accounts().lastPresence(id));
   }
 }
 
@@ -278,5 +284,12 @@ export class RedisFriends implements FriendStore {
     const p = this.redis.pipeline();
     for (const id of ids) p.hget(K.acct(id), "name");
     return (await p.exec<(string | null)[]>()).map((v) => (v === null || v === undefined ? null : String(v)));
+  }
+
+  async seenAt(ids: string[]): Promise<number[]> {
+    if (!ids.length) return [];
+    const p = this.redis.pipeline();
+    for (const id of ids) p.hget(K.acct(id), "presenceAt");
+    return (await p.exec<(string | null)[]>()).map((v) => Number(v ?? 0) || 0);
   }
 }

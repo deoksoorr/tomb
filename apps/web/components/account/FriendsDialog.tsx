@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { AWAY_PLACE_LABEL, FRIEND_MAX } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
-import type { FriendEntry, FriendListResponse, FriendWhere } from "@/lib/friendTypes";
+import type { FriendCard, FriendEntry, FriendListResponse, FriendWhere } from "@/lib/friendTypes";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
-import { friendJoinToastOn, friendsApi, friendsStore, setFriendJoinToast } from "@/lib/hooks/useFriends";
-import { showToast } from "@/lib/hooks/useToasts";
+import { friendJoinToastOn, friendsApi, friendsStore, isOnline, lastSeenText, setFriendJoinToast } from "@/lib/hooks/useFriends";
+import { showFriendNotice } from "../overlay/FriendNotice";
+import AvatarThumb from "./AvatarThumb";
 import { hopChannel } from "../housing/channelHop";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -38,6 +39,27 @@ function cannotGo(name: string, w: FriendWhere): string | null {
   return null;
 }
 
+/** 자랑거리 칸들 (꾸미기·집·사냥·도감·최대어). 좁은 화면에서는 줄바꿈된다 */
+export function cardStats(c: FriendCard): string[] {
+  return [
+    ...(c.fashion !== undefined ? [`꾸미기 ${c.fashion}점`] : []),
+    c.house ? `집 ${c.house.score.toLocaleString("ko-KR")}점` : "집 없음",
+    `사냥 Lv ${c.hunt}`,
+    `도감 ${c.dex}%`,
+    c.bigFish ? `최대어 ${c.bigFish.name} ${(c.bigFish.size / 10).toFixed(1)}cm` : "최대어 없음",
+  ];
+}
+
+function Stats({ card }: { card: FriendCard }) {
+  return (
+    <ul className={styles.stats}>
+      {cardStats(card).map((t) => (
+        <li key={t}>{t}</li>
+      ))}
+    </ul>
+  );
+}
+
 type Pending = string | null;
 
 /** 친구한테 가려고 채널을 옮기는 중이면 그 기다림 (창이 닫혀도 이어 간다. 다른 친구한테 가기를 누르면 앞의 것은 그만둔다) */
@@ -58,6 +80,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
   const [confirmDrop, setConfirmDrop] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [joinToast, setJoinToast] = useState(friendJoinToastOn);
+  const [loadedAt, setLoadedAt] = useState(0);
   const status = useBridgeValue("net:status");
   const myCh = status?.mode === "online" ? status.channel : null;
 
@@ -66,6 +89,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
       friendsApi.list().then(
         (r) => {
           setData(r);
+          setLoadedAt(Date.now());
           setError(null);
           friendsStore.fromList(r);
         },
@@ -110,16 +134,18 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
       const no = cannotGo(f.name, w);
       if (no || w.at !== "world") {
         setNotice(no);
+        if (no) showFriendNotice(no);
         return;
       }
       const goto = (x: { sid: number; x: number; y: number }) => bridge.emit("friend:goto", { sid: x.sid, name: now.name, x: x.x, y: x.y });
       if (w.ch === myCh) {
         onClose();
+        showFriendNotice(`${now.name}님 옆으로 가는 중…`);
         goto(w);
         return;
       }
       onClose();
-      showToast(`${w.ch}채널로 옮기는 중…`);
+      showFriendNotice(`${now.name}님이 있는 ${w.ch}채널로 옮기는 중…`);
       hopTo(
         w.ch,
         myCh ?? 0,
@@ -130,10 +156,10 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
             .then((again) => {
               const a = again.where;
               if (a.at === "world" && a.ch === w.ch) bridge.emit("friend:goto", { sid: a.sid, name: again.name, x: a.x, y: a.y });
-              else showToast(cannotGo(again.name, a) ?? `${again.name}님이 다른 곳으로 옮겼어요.`);
+              else showFriendNotice(cannotGo(again.name, a) ?? `${again.name}님이 다른 곳으로 옮겼어요.`);
             })
-            .catch((e) => showToast(errorMessage(e))),
-        () => showToast(`${w.ch}채널로 옮기지 못했어요. 채널이 가득 찼을 수 있어요. 잠시 뒤 다시 해 주세요.`),
+            .catch((e) => showFriendNotice(errorMessage(e))),
+        () => showFriendNotice(`${w.ch}채널로 옮기지 못했어요. 채널이 가득 찼을 수 있어요.`),
       );
     } catch (e) {
       setNotice(errorMessage(e));
@@ -150,11 +176,19 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
   }
 
   const busy = pending !== null;
+  // 마지막 접속 상대 시간의 기준 (목록을 받을 때마다 새로 — 렌더 중에 시계를 읽지 않는다)
+  const nowMs = data ? loadedAt : 0;
   const friends = data?.friends ?? [];
 
   return (
     <Dialog title="친구" onClose={onClose}>
       <div className={styles.wrap}>
+        {data?.me && (
+          <section className={styles.mine} aria-label="내 요약">
+            <span className={styles.mineTitle}>나</span>
+            <Stats card={data.me} />
+          </section>
+        )}
         <p className={ui.hint}>마을에서 다른 사람 캐릭터를 누르고 [친구 신청]을 보내 보세요. 서로 받아 주면 친구가 돼요.</p>
         {error && (
           <p className={ui.error} role="alert">
@@ -219,21 +253,32 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
             ) : (
               <ul className={styles.list}>
                 {friends.map((f) => {
-                  const online = f.where.at === "world" || f.where.at === "away";
+                  const online = isOnline(f.where);
                   const here = f.where.at === "world" && f.where.ch === myCh;
                   return (
                     <li key={f.key} className={cx(styles.card, !online && styles.offline)}>
-                      <div className={styles.head}>
-                        <span className={styles.name}>
-                          <span className={cx(styles.lamp, online && styles.on)} aria-hidden="true" />
-                          {f.name}
-                        </span>
-                        <span className={styles.where}>{whereText(f.where, myCh)}</span>
+                      <div className={styles.top}>
+                        {f.card && <AvatarThumb {...f.card.look} label={`${f.name}의 지금 모습`} />}
+                        <div className={styles.info}>
+                          <div className={styles.head}>
+                            <span className={styles.name}>
+                              <span className={cx(styles.lamp, online && styles.on)} aria-hidden="true" />
+                              {f.name}
+                              <span className={styles.heart} aria-hidden="true">
+                                ♥
+                              </span>
+                            </span>
+                            <span className={styles.where}>
+                              {f.where.at === "offline" ? `마지막 접속 ${lastSeenText(f.lastSeen, nowMs)}` : whereText(f.where, myCh)}
+                            </span>
+                          </div>
+                          {f.card && <Stats card={f.card} />}
+                        </div>
                       </div>
                       <div className={styles.actions}>
                         {f.where.at === "world" && (
                           <button type="button" className={cx(ui.button, ui.primary)} disabled={busy} onClick={() => void go(f)}>
-                            {here ? "옆으로 가기" : `${f.where.ch}채널로 가기`}
+                            {here ? "친구한테 가기" : `친구한테 가기 (${f.where.ch}채널)`}
                           </button>
                         )}
                         {f.houseId && (
@@ -317,7 +362,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
             tips={[
               `친구는 ${FRIEND_MAX}명까지예요. 서로 받아 줘야 친구가 되고, 한쪽이 끊으면 둘 다 목록에서 사라져요.`,
               "같은 채널 마을에 있는 친구는 지도에 분홍 하트로, 이름표 옆에 작은 하트로 보여요.",
-              "[옆으로 가기]는 같은 채널이면 친구 옆으로 바로, 다른 채널이면 그 채널로 옮긴 뒤 친구 옆으로 가요.",
+              "[친구한테 가기]는 같은 채널이면 친구 옆으로 바로, 다른 채널이면 그 채널로 옮긴 뒤 친구 옆으로 가요.",
               "친구가 집 안·사냥터에 있으면 갈 수 없어요. 친구 집이 있으면 [집 놀러 가기]로 구경할 수 있어요.",
               "친구에게는 포인트·아이템 보상이 없어요. 답하지 않은 신청은 14일 뒤 사라져요.",
             ]}

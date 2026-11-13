@@ -113,7 +113,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
     );
   }
 
-  /** 30번 영구로 사기 (기간제의 7배). 입고 있던 기간제는 그대로 영구가 된다 */
+  /** 30번 영구로 사기 (24시간 이용권의 4배 — protocol PERMANENT_MULTIPLIER). 입고 있던 기간제는 그대로 영구가 된다 */
   async function buyForever(item: ItemDef) {
     setPending(`${item.id}:perm`);
     setNotice(null);

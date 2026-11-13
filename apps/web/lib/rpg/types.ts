@@ -12,9 +12,16 @@ export type CharacterState = {
   skillPoints: number;
   /** 직접 올린 기본 능력치 (장비 보너스 제외) */
   stats: Stats;
+  /** 스킬 트리 배분 (스킬 → 랭크). 검증 규칙은 skillRules.ts */
   skills: Partial<Record<SkillId, number>>;
-  /** 단축키 1~6에 놓은 스킬 */
+  /** 단축키 1~6에 놓은 스킬 (액티브만) */
   hotbar: (SkillId | null)[];
+  /** 스킬 저장 형식 버전 (2 = 갈래 3개 트리). 다르면 normalize가 스킬을 비우고 포인트를 돌려준다 */
+  treeVer: number;
+  /** 스킬 초기화한 횟수 (첫 1회 무료) */
+  respecs: number;
+  /** 스킬 트리가 바뀌어 포인트를 돌려줬다는 안내를 아직 안 봤다 (한 번 보면 지운다) */
+  treeNotice?: boolean;
   /** 가진 장비 (장착 중인 것 포함) itemId → 개수 */
   inv: Record<string, number>;
   /** 그중 포인트로 산 개수 (되팔면 50% 환불, 나머지는 드롭이라 사냥 포인트 한도 안에서 지급) */
@@ -38,6 +45,10 @@ export type RpgView = {
   points: number;
   /** 오늘 사냥터·미니게임으로 받은 포인트와 하루 한도 */
   today: { huntPoints: number; cap: number; runs: number; runsPerHour: number };
+  /** 다음 스킬 초기화 비용 (지갑 포인트, 0 = 무료) */
+  respecCost: number;
+  /** 테스트 서버 슈퍼 계정 (운영 서버에서는 늘 없음): 스킬 포인트 넉넉히·레벨 최대 취급·사냥터 모두 열림·초기화 무료 */
+  superHunter?: boolean;
 };
 
 // ── 판 결과 (클라이언트가 보낸다, 서버가 계획·시간으로 검증한다) ──

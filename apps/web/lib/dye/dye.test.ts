@@ -546,7 +546,9 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
     await expect(buyPermanent(id, "hat_halo", now)).rejects.toMatchObject({ code: "HAS_TICKET" });
     const poor = await account(10);
     await expect(buyPermanent(poor, "hat_cat", now)).rejects.toMatchObject({ code: "NOT_ENOUGH_POINTS" });
-    await expect(buyPermanent(poor, "hat_straw", now)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    // 상점 코디는 모두 영구로 살 수 있다 (예전 영구 목록에 없던 밀짚모자도) — 폭죽은 영구가 없다
+    await expect(buyPermanent(poor, "hat_straw", now)).rejects.toMatchObject({ code: "NOT_ENOUGH_POINTS" });
+    await expect(buyPermanent(poor, "fw_small", now)).rejects.toMatchObject({ code: "INVALID_INPUT" });
   });
 
   it("옛 계정(염색 기록 없음)은 dye가 비어 있다", async () => {

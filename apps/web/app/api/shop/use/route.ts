@@ -4,6 +4,7 @@ import { env } from "@/lib/env";
 import { handler, HttpError, json, notFound } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
+import { recordLook } from "@/lib/lookRank";
 import { getAccounts, getStore, toPublicGrave } from "@/lib/store";
 import { lookGrant, lookOf, loadMe } from "@/lib/store/accounts";
 import type { UseItemResponse } from "@/lib/types";
@@ -42,6 +43,7 @@ export const POST = handler(async (req) => {
     if (!(await accounts.equip(visitorId, itemId, item.slot!, now + (item.durationMs ?? COSMETIC_DURATION_MS), now)))
       throw noItem();
     const me = await loadMe(accounts, visitorId, now);
+    await recordLook(visitorId, me, { now }); // 꾸미기 랭킹 점수
     return json<UseItemResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now, me) });
   }
 

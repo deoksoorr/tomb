@@ -26,13 +26,38 @@ export const friendsApi = {
 export const isOnline = (w: FriendWhere) => w.at === "world" || w.at === "away";
 
 /**
- * 접속 알림 대상: 직전에 "접속 안 함"이었다가 지금 접속한 친구 이름.
- * 처음 받은 목록(prev = null)과 실시간 서버에 닿지 못했던 때(unknown)는 알리지 않는다 (들어올 때마다 한꺼번에 뜨지 않게)
+ * 접속·퇴장 알림 대상: 직전에 "접속 안 함"이었다가 지금 접속한 친구(came)와 그 반대(left).
+ * 처음 받은 목록(prev = null)과 실시간 서버에 닿지 못했던 때(unknown)는 바뀐 것으로 보지 않는다 (들어올 때마다 한꺼번에 뜨지 않게)
  */
-export function arrivals(prev: FriendPresenceResponse["friends"] | null, next: FriendPresenceResponse["friends"]): string[] {
-  if (!prev) return [];
+export function presenceChanges(prev: FriendPresenceResponse["friends"] | null, next: FriendPresenceResponse["friends"]): { came: string[]; left: string[] } {
+  if (!prev) return { came: [], left: [] };
   const before = new Map(prev.map((f) => [f.key, f.where]));
-  return next.filter((f) => before.get(f.key)?.at === "offline" && isOnline(f.where)).map((f) => f.name);
+  const came: string[] = [];
+  const left: string[] = [];
+  for (const f of next) {
+    const b = before.get(f.key);
+    if (!b) continue;
+    if (b.at === "offline" && isOnline(f.where)) came.push(f.name);
+    else if (isOnline(b) && f.where.at === "offline") left.push(f.name);
+  }
+  return { came, left };
+}
+
+/** 상대 시간: 방금 전 / n분 전 / n시간 전 / n일 전 */
+export function agoText(at: number, now: number): string {
+  const min = Math.floor(Math.max(0, now - at) / 60_000);
+  if (min < 1) return "방금 전";
+  if (min < 60) return `${min}분 전`;
+  if (min < 24 * 60) return `${Math.floor(min / 60)}시간 전`;
+  return `${Math.floor(min / (24 * 60))}일 전`;
+}
+
+/** 마지막 접속: "2026-11-13 21:40 · 3일 전" (한국 시간). 기록이 없으면 "기록 없음" */
+export function lastSeenText(at: number | null | undefined, now: number): string {
+  if (!at) return "기록 없음";
+  const d = new Date(at + 9 * 3_600_000); // KST
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} · ${agoText(at, now)}`;
 }
 
 /** 지금 채널에 있는 친구 (게임이 이름표·미니맵 하트로 그린다) */

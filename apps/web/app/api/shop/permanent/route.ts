@@ -7,7 +7,7 @@ import type { WearResponse } from "@/lib/types";
 import { readBody } from "@/lib/validate";
 
 /**
- * 30번 영구 꾸미기 사기 `{ itemId }` (기간제 가격의 7배): 입고 있던 기간제는 그대로 영구가 되고, 아니면 벗어 둔 꾸미기에 영구로 들어간다.
+ * 30번 영구 꾸미기 사기 `{ itemId }` (24시간 이용권 가격의 4배 — protocol PERMANENT_MULTIPLIER, 상점 코디 전부): 입고 있던 기간제는 그대로 영구가 되고, 아니면 벗어 둔 꾸미기에 영구로 들어간다.
  * 이미 영구면 409 ALREADY_OWNED, 가방에 같은 새 이용권이 있으면 409 HAS_TICKET
  */
 export const POST = handler(async (req) => {

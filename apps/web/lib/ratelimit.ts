@@ -23,6 +23,8 @@ const LIMITS = {
   report: { visitor: 10, ip: 10, windowSec: DAY, message: "오늘은 더 신고할 수 없어요." },
   detail: { visitor: null, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   shop: { visitor: 20, ip: 60, windowSec: MIN, message: "상점 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  // 사냥 스킬 트리: 한 랭크에 한 번씩 누르므로 (초기화 뒤 다시 찍기 등) 상점보다 넉넉히
+  rpgSkill: { visitor: 90, ip: 240, windowSec: MIN, message: "스킬을 너무 빨리 찍고 있어요. 잠시 뒤에 다시 시도해 주세요." },
   inquiry: { visitor: 3, ip: 3, windowSec: DAY, message: "문의는 하루에 3번까지 보낼 수 있어요." },
   presence: { visitor: 2, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요." },
   // 접속 시간 보너스 받기 (구간은 30분마다라 넉넉해도 된다)

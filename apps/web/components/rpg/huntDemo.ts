@@ -630,10 +630,10 @@ const boss: Scene = {
 
 /** 6쪽: 상태 이상 4가지를 차례로 (머리 위 아이콘 + 남은 시간) */
 const STATES: { id: SkillId; name: string }[] = [
-  { id: "rollback", name: "무적 — 깜빡이며 피해 0" },
-  { id: "cache_hit", name: "빨라짐" },
-  { id: "pair_prog", name: "도우미 — 같이 때려요" },
-  { id: "code_review", name: "약화 — 몬스터가 느려져요" },
+  { id: "so_veil", name: "무적 — 깜빡이며 피해 0" },
+  { id: "so_swift", name: "빨라짐" },
+  { id: "so_friend", name: "도우미 — 같이 때려요" },
+  { id: "fr_field", name: "약화 — 몬스터가 느려져요" },
 ];
 const SSEG = 1700;
 const status: Scene = {
@@ -683,7 +683,7 @@ const status: Scene = {
       const mx = 150 - (slow ? 30 + (u - 500) * 0.012 : u * 0.06);
       monster(ctx, "req_change", slow ? MON_FRAMES.move + (Math.floor(t / 330) % 4) : moveFrame(t), mx, py - 4, true);
       if (slow) {
-        icon(ctx, skillArt("code_review"), mx - 6, py - 38, 12);
+        icon(ctx, skillArt("fr_field"), mx - 6, py - 38, 12);
         text(ctx, "느려짐", mx, py - 44, "#d8b0ff", { size: 10 });
       }
       avatar(ctx, px, py, "right", "idle", t);

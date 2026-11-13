@@ -185,7 +185,13 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
     }
   }
 
-  const onCharacter = (a: CharacterAction, ok?: string) => void act(() => rpgApi.character(a), ok);
+  const onCharacter = (a: CharacterAction, ok?: string) =>
+    void act(async () => {
+      const v = await rpgApi.character(a);
+      // 스킬 초기화는 지갑 포인트를 쓸 수 있다
+      if (a.type === "respec") void meStore.refresh();
+      return v;
+    }, ok);
 
   const onBuy = (id: string, qty: number) =>
     void act(
@@ -386,6 +392,14 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
                 }}
               />
             </div>
+            {c.treeNotice && tab !== "skills" && (
+              <p className={s.meta} role="status">
+                스킬 트리가 새로 바뀌어 스킬 포인트를 모두 돌려드렸어요.{" "}
+                <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setTab("skills")}>
+                  스킬 트리 보기
+                </button>
+              </p>
+            )}
             <div className={s.tabs} role="tablist" aria-label="사냥터 메뉴">
               {TABS.map(([k, label]) => (
                 <button

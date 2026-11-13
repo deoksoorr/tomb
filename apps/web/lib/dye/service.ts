@@ -3,6 +3,7 @@ import { bodyLabel, bodyUnlockPrice, isFixedDyeId, isStaffBody, itemById, PERMAN
 import { env } from "../env";
 import { sendGift } from "../gifts";
 import { HttpError } from "../http";
+import { recordLook } from "../lookRank";
 import { isStaff } from "../staff";
 import { getAccounts } from "../store";
 import { kstDay, lookGrant, lookOf, loadMe } from "../store/accounts";
@@ -20,6 +21,7 @@ const view = (s: DyeSession, now: number): DyeSessionView => ({ ...s, serverNow:
 /** 바뀐 내 정보 + 착용 증서 (염색·몸 모양 포함) */
 async function changed(accountId: string, now: number, extra: Partial<StyleChangeResponse> = {}): Promise<StyleChangeResponse> {
   const me = await loadMe(getAccounts(), accountId, now);
+  await recordLook(accountId, me, { now }); // 꾸미기 랭킹 점수 (외형·염색·영구 구매)
   return { me, lookGrant: await lookGrant(env.joinSecret(), accountId, lookOf(me), now, me), ...extra };
 }
 

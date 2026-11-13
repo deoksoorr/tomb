@@ -3,6 +3,8 @@ import { getFishRank, type FishRankEntry } from "@/lib/forage/fishRank";
 import { DIFFICULTIES } from "@/lib/rpg/catalog";
 import { handler, HttpError, json } from "@/lib/http";
 import { getHouseStore, houseRank } from "@/lib/housing/service";
+import { huntLevelRank } from "@/lib/huntLevelRank";
+import { lookRank } from "@/lib/lookRank";
 import { rateLimit } from "@/lib/ratelimit";
 import { getVisitorId } from "@/lib/session";
 import { staffAccountId } from "@/lib/staff";
@@ -21,6 +23,8 @@ const RANK_SIZE = 50;
  *  - huntBest: 그 사냥터를 쓰러지지 않고 끝까지 깬 가장 짧은 시간 (value = ms)
  *  - house: 하우징 꾸밈 점수 (F11. 전체 = 모든 집, 주간 = 이번 주에 꾸민 집. name = 집 이름, sub = 번지 · 주인)
  *  - fish: 최대어 `&fish=<물고기 id>|all` (value = 크기 cm×10. all이면 sub = 그 물고기 이름)
+ *  - huntLevel: 사냥 캐릭터 레벨 (같으면 경험치. 기간 없음. value = 레벨, sub = 경험치, gear = 장착 무기. 정지 계정 제외)
+ *  - look: 외형 꾸미기 점수 (기간 없음. 읽을 때 상위 후보를 지금 착용으로 다시 계산 — 만료된 코디는 0점. items = 대표 파츠. 정지 계정 제외)
  * 운영자 계정은 어느 판에도 나오지 않는다 (lib/staffRank). 운영자 본인이 보면 mine = null, staff = true
  * 기본은 방문자와 무관한 응답이라 CDN에 30초 캐시하고, `?me=1`이면 내 줄·내 순위를 넣고 캐시하지 않는다
  */
@@ -50,6 +54,16 @@ export const GET = handler(async (req) => {
       ...(e.sp ? { sub: speciesById(e.sp)?.name ?? e.sp } : {}),
     });
     return json<RankResponse>({ board, period, fish, rows: r.rows.map(row), mine: r.mine ? row(r.mine) : null, ...staff }, { headers: cacheHeaders(personal) });
+  }
+  if (board === "look" || board === "huntLevel") {
+    const r = board === "look" ? await lookRank(me, RANK_SIZE, { staffId }) : await huntLevelRank(me, RANK_SIZE, { staffId });
+    // 계정 id는 응답에 싣지 않는다
+    const strip = (x: (typeof r.rows)[number]): RankRow => {
+      const row: RankRow & { accountId?: string } = { ...x };
+      delete row.accountId;
+      return row;
+    };
+    return json<RankResponse>({ board, period: "all", rows: r.rows.map(strip), mine: r.mine ? strip(r.mine) : null, ...staff }, { headers: cacheHeaders(personal) });
   }
   if (board === "house") {
     const r = await houseRank(getHouseStore(), period, me, RANK_SIZE, Date.now(), staffId);

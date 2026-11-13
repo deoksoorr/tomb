@@ -9,15 +9,19 @@ import {
   MONSTERS,
   POTION_COOLDOWN_MS,
   POTIONS,
+  BRANCH_INFO,
+  BRANCHES,
   SKILL_FX,
   SKILLS,
   skillById,
+  TIER_GATES,
   type IconArt,
   type MonsterId,
   type SkillId,
 } from "@/lib/rpg/catalog";
 import { DEFAULT_BOSS_PHASES, MIN_WINDUP_MS, PATTERNS, type TelegraphShape } from "@/lib/rpg/patterns";
 import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL, MIN_RUN_MS } from "@/lib/rpg/rewards";
+import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
@@ -153,10 +157,11 @@ function Item({ art, pic, title, children }: { art?: IconArt; pic?: ReactNode; t
 type Page = { title: string; lead: string; body: ReactNode };
 
 function pages(): Page[] {
-  const rb = SKILL_FX.rollback(1);
-  const ot = SKILL_FX.overtime(1);
-  const cr = SKILL_FX.code_review(1);
-  const cb = SKILL_FX.coffee_break(1);
+  const veil = SKILL_FX.so_veil(1);
+  const stoke = SKILL_FX.em_stoke(1);
+  const chain = SKILL_FX.so_chain(1);
+  const lamp = SKILL_FX.so_lamp(1);
+  const tomb = SKILL_FX.fr_tomb(1);
   const stunStyles = Object.values(WEAPON_STYLES)
     .filter((w) => w.stunMs > 0)
     .map((w) => w.name);
@@ -192,11 +197,11 @@ function pages(): Page[] {
     },
     {
       title: "스킬·포션",
-      lead: `스킬은 스킬 탭에서 배우고 단축키 1~${HOTBAR_SIZE}에 놓아야 써요.`,
+      lead: `스킬은 스킬 탭의 트리에서 찍고, 액티브 스킬은 단축키 1~${HOTBAR_SIZE}에 놓아야 써요.`,
       body: (
         <>
           <div className={s.guideIcons} aria-hidden="true">
-            {SKILLS.slice(0, HOTBAR_SIZE).map((sk, i) => (
+            {BRANCHES.flatMap((b) => SKILLS.filter((sk) => sk.branch === b && (sk.tier === 1 || sk.tier === 5) && sk.kind === "active")).map((sk, i) => (
               <span key={sk.id} className={s.guideHot}>
                 <RpgIcon art={sk.art} size={32} />
                 <span>{i + 1}</span>
@@ -204,12 +209,28 @@ function pages(): Page[] {
             ))}
           </div>
           <ul className={s.guideList}>
+            {BRANCHES.map((b) => (
+              <Item key={b} art={SKILLS.find((sk) => sk.branch === b && sk.tier === 5 && sk.kind === "active")?.art} title={`${BRANCH_INFO[b].name} (${BRANCH_INFO[b].role})`}>
+                {BRANCH_INFO[b].desc} 궁극기: {SKILLS.filter((sk) => sk.branch === b && sk.tier === 5 && sk.kind === "active").map((sk) => sk.name).join("·")}.
+              </Item>
+            ))}
+            <Item pic={<Keys k={["1단", "…", "5단"]} />} title="단·선행 스킬">
+              갈래마다 5단. 위 단은 그 갈래의 아래 단에 포인트를 {TIER_GATES.slice(1).join("·")}만큼 쓰면 열려요. 선 이어진 스킬은 앞 스킬을 정해진 랭크까지 찍어야 배워요.
+            </Item>
+            <Item pic={<span className={s.guideSp}>+1</span>} title="스킬 포인트">
+              레벨이 오를 때마다 1포인트(10의 배수 레벨엔 2). 랭크 하나에 1포인트. 패시브(둥근 칸)는 찍으면 늘 켜져 있어요.
+            </Item>
+            <Item pic={<Keys k={["↺"]} />} title="초기화">
+              스킬 탭의 [초기화]로 찍은 포인트를 모두 돌려받아요. 첫 1회는 무료, 그 뒤로는 레벨에 따라 {respecCost(10, 1)}~{RESPEC_MAX_COST}P.
+            </Item>
+            <Item art={skillById("em_meteor")?.art} title="광역기">
+              바닥에 마법진이 먼저 깔리고 터져요. 갈래마다 색이 달라요 (모닥불 주황·서리 하늘빛·넋 보라). 화면 흔들림·번쩍임은 기기의 &lsquo;동작 줄이기&rsquo;를 켜면 꺼져요.
+            </Item>
             <Item pic={<Keys k={["1", "…", String(HOTBAR_SIZE)]} />} title="스킬 쓰기">
               숫자 키, 또는 화면 아래 스킬 버튼을 눌러요.
             </Item>
             <Item pic={<span className={s.guideSp}>SP</span>} title="SP">
-              스킬마다 SP를 써요. 모자라면 &lsquo;SP가 모자라요&rsquo;가 뜨고 안 나가요. 최대 SP는 INT로 늘고, 에너지드링크·
-              {skillName("coffee_break")}로 채워요.
+              스킬마다 SP를 써요. 모자라면 &lsquo;SP가 모자라요&rsquo;가 뜨고 안 나가요. 최대 SP는 INT로 늘고(스킬 위력도), 에너지드링크로 채워요.
             </Item>
             <Item pic={<span className={s.guideCool} />} title="쿨타임">
               한 번 쓰면 아이콘 위 그림자가 시계 방향으로 걷힐 때까지 다시 못 써요. 스킬마다 다르고 스킬 탭에서 확인해요.
@@ -280,11 +301,11 @@ function pages(): Page[] {
             ))}
           </ol>
           <ul className={s.guideList}>
-            <Item art={skillArt("pair_prog")} title="졸개 부르기">
+            <Item art={skillArt("so_friend")} title="졸개 부르기">
               단계가 오를 때마다 사냥터마다 정해진 졸개 무리를 부르고, 지형 기믹도 더 거칠어져요. 우두머리 둘레엔 붉은 기운이 돌아요.
             </Item>
-            <Item art={skillArt("refactor")} title="잘 안 밀려요">
-              우두머리는 넉백·경직이 거의 없고 지형에 느려지지도 않아요. 경고를 보고 빠지는 게 핵심.
+            <Item art={skillArt("fr_tomb")} title="잘 안 밀려요">
+              우두머리는 넉백·경직이 거의 없고 지형에 느려지지도 않아요. 묶기·끌어당기기도 1/3만 먹혀요. 경고를 보고 빠지는 게 핵심.
             </Item>
           </ul>
         </>
@@ -296,25 +317,25 @@ function pages(): Page[] {
       body: (
         <>
           <ul className={cx(s.guideList, s.guideGrid)}>
-            <Item art={skillArt("rollback")} title="무적">
-              {skillName("rollback")}({sec(rb.durMs)}~), 부활 쿠키(2초): 몸이 깜빡이며 어떤 피해도 안 받아요.
+            <Item art={skillArt("so_veil")} title="무적">
+              {skillName("so_veil")}({sec(veil.safeMs)}~), {skillName("fr_mist")}, 부활 쿠키(2초): 몸이 깜빡이며 어떤 피해도 안 받아요.
             </Item>
-            <Item art={skillArt("cache_hit")} title="빨라짐·치명타↑">
-              {skillName("cache_hit")}는 이동속도, {skillName("debugging")}는 치명타 확률을 잠깐 올려요.
+            <Item art={skillArt("so_swift")} title="빨라짐·공격↑">
+              {skillName("so_swift")}는 이동·공격 속도, {skillName("em_stoke")}는 공격력(+{pct(stoke.atk)}~)을 잠깐 올려요.
             </Item>
-            <Item art={skillArt("pair_prog")} title="도우미">
-              {skillName("pair_prog")}: 동기 유령이 곁에서 같이 때려요.
+            <Item art={skillArt("so_friend")} title="도우미">
+              {skillName("so_friend")}: 길동무 넋이 곁에서 같이 때려요. {skillName("so_lantern")}은 그 자리에서 넋불을 쏴요.
             </Item>
-            <Item art={skillArt("overtime")} title="야근 (공격↑·HP↓)">
-              공격력이 오르는 대신 매초 최대 HP의 {pct(ot.hpDrainPct)}를 잃어요. 이걸로 쓰러지지는 않아요 (HP 1에서 멈춤).
+            <Item art={skillArt("fr_ward")} title="보호막">
+              {skillName("fr_ward")}: 얼음 방패가 피해를 먼저 받아 줘요.
             </Item>
-            <Item art={skillArt("coffee_break")} title="멈춰 섬">
-              {skillName("coffee_break")}를 쓰면 {sec(cb.rootMs)} 동안 움직이지도 공격하지도 못해요.
+            <Item art={skillArt("so_lamp")} title="멈춰 섬">
+              {skillName("so_lamp")}을 쓰면 {sec(lamp.rootMs)} 동안 움직이지도 공격하지도 못해요.
             </Item>
-            <Item art={skillArt("code_review")} title="약화 (몬스터)">
-              {skillName("code_review")}: 주변 적이 {sec(cr.durMs)} 동안 받는 피해↑, 이동속도 -{pct(cr.slow)}.
+            <Item art={skillArt("so_chain")} title="약화·묶기 (몬스터)">
+              {skillName("so_chain")}·{skillName("fr_tomb")}에 걸린 적은 잠깐({sec(chain.stunMs)}~{sec(tomb.stunMs)}) 묶이고 받는 피해가 늘어요. 서리 스킬은 적을 느리게 해요.
             </Item>
-            <Item art={skillArt("refactor")} title="경직·넉백 (몬스터)">
+            <Item art={skillArt("em_kindle")} title="경직·넉백 (몬스터)">
               맞은 몬스터는 잠깐 밀려나고 멈춰요. 치명타는 더 오래.
               {stunStyles.length > 0 && ` ${stunStyles.join("·")}는 경직이 더 길고,`}
               {pushStyles.length > 0 && ` ${pushStyles.join("·")}는 멀리 밀쳐요.`}
@@ -364,10 +385,10 @@ function pages(): Page[] {
             <Item art={POTIONS[0]?.art} title="잘 나오는 것">
               사냥터마다 잘 나오는 장비가 있어요(사냥터 설명). 싼 장비일수록 자주 나와요. 가방이 가득 차면 못 챙겨요.
             </Item>
-            <Item art={skillArt("hotfix")} title="쓰러지면">
+            <Item art={skillArt("so_lamp")} title="쓰러지면">
               포인트는 절반, EXP는 조금 깎여요. 권장 레벨보다 낮으면 조심!
             </Item>
-            <Item art={skillArt("debugging")} title="하루 한도">
+            <Item art={skillArt("em_spark")} title="하루 한도">
               사냥 포인트는 하루 한도가 있어요. 넘으면 EXP와 드롭만 받아요. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
             </Item>
           </ul>

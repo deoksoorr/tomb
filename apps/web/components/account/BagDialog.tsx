@@ -6,6 +6,7 @@ import { errorMessage } from "@/lib/api";
 import type { GraveCache } from "@/lib/hooks/useGraves";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { useMe } from "@/lib/hooks/useMe";
+import { lookScore } from "@/lib/lookScore";
 import { readItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
 import { fittingLook } from "../shop/fitting";
@@ -128,7 +129,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
 
         <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={styles.panel}>
           {tab === "wear" ? (
-            <Wardrobe entries={wardrobe} now={now} pending={pending} act={act} avatar={resolveAvatar(avatar, me, savedColor)} />
+            <Wardrobe entries={wardrobe} now={now} pending={pending} act={act} avatar={resolveAvatar(avatar, me, savedColor)} score={lookScore(me, now)} />
           ) : tab === "dye" ? (
             <BagDyeSection me={me} avatar={resolveAvatar(avatar, me, savedColor)} onNotice={setNotice} />
           ) : tab === "forage" ? (
@@ -245,12 +246,15 @@ function Wardrobe({
   pending,
   act,
   avatar,
+  score,
 }: {
   entries: WardrobeEntry[];
   now: number;
   pending: boolean;
   act: (task: () => Promise<void>, done: string) => Promise<void>;
   avatar: { color: string; body: string };
+  /** 내 꾸미기 점수 (지금 입은 코디 · lib/lookScore.ts) */
+  score: number;
 }) {
   const [filter, setFilter] = useState<SlotFilter>("all");
   /** 목록에서 마우스를 올리거나 초점이 간 것: 장비창에 미리 입혀 보고, 들어갈 칸을 밝힌다 */
@@ -355,6 +359,9 @@ function Wardrobe({
           </DollNote>
         </PaperDoll>
         <ViewControls dir={view.dir} walking={view.walking} onDir={view.setDir} onWalking={view.setWalking} className={styles.viewControls} />
+        <p className={styles.hint}>
+          내 꾸미기 점수 <b>{score}점</b> · 랭킹 [꾸미기]에 올라가요
+        </p>
         <p id={hintId} className={styles.hint}>
           칸을 누르면 그 부위 목록이 나와요{canDrag ? " · 목록에서 칸으로 끌어다 놓아도 입어요" : ""}. 벗어 둔 꾸미기도 남은 시간은 계속 흘러요.
         </p>

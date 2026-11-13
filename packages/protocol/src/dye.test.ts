@@ -9,6 +9,7 @@ import {
   normalizeDyeColor,
   withDyeSpecial,
   isPermanentUntil,
+  isShopListed,
   ITEMS,
   itemById,
   packDye,
@@ -89,22 +90,21 @@ describe("46번 염색권·30번 영구 코디 카탈로그", () => {
     expect(Math.min(...dyes.map((d) => d.price))).toBe(100);
     expect(Math.max(...dyes.map((d) => d.price))).toBeLessThanOrEqual(600);
   });
-  it("영구 가격은 기간제의 7배(10 단위), 꾸미기만", () => {
-    const perm = (id: string) => Math.round((itemById(id)!.price * PERMANENT_MULTIPLIER) / 10) * 10;
-    expect(PERMANENT_MULTIPLIER).toBe(7);
+  it("영구 가격은 24시간 이용권의 4배(10 단위 반올림), 상점에서 파는 코디는 모두 영구로 살 수 있다", () => {
+    const perm = (id: string) => Math.round((itemById(id)!.price * 4) / 10) * 10;
+    expect(PERMANENT_MULTIPLIER).toBe(4);
     expect(permanentPrice("hat_crown")).toBe(perm("hat_crown"));
     expect(permanentPrice("neck_scarf")).toBe(perm("neck_scarf"));
+    expect(permanentPrice("hat_straw")).toBe(perm("hat_straw"));
     expect(permanentPrice("fw_small")).toBeNull();
-    expect(permanentPrice("hat_straw")).toBeNull();
     for (const it of ITEMS) {
       const p = permanentPrice(it.id);
-      if (it.staff) expect(p).toBe(0);
-      else if (p !== null) {
-        expect(itemById(it.id)?.kind).toBe("cosmetic");
-        expect(p / it.price).toBeGreaterThanOrEqual(6);
-        expect(p / it.price).toBeLessThanOrEqual(8);
-      }
+      if (it.staff) expect(p, it.id).toBe(0);
+      else if (it.kind === "cosmetic" && it.slot && isShopListed(it)) expect(p, it.id).toBe(perm(it.id));
+      // 펫(동물원 전용)·폭죽·묘비 꾸미기·디자인권·확성기·염색권은 영구로 팔지 않는다
+      else expect(p, it.id).toBeNull();
     }
+    for (const it of ITEMS) if (it.kind === "decor") expect(permanentPrice(it.id), it.id).toBeNull();
     expect(isPermanentUntil(PERMANENT_UNTIL)).toBe(true);
     expect(isPermanentUntil(Date.now() + 86_400_000)).toBe(false);
   });

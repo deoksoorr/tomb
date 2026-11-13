@@ -72,6 +72,7 @@ import GiftsDialog from "../account/GiftsDialog";
 // 친구 (목록·신청·위치·접속 알림)
 import FriendsDialog from "../account/FriendsDialog";
 import { useFriendPresence } from "./useFriendPresence";
+import FriendNotice from "./FriendNotice";
 import MegaphoneLayer from "./MegaphoneDialog";
 import MegaphoneFeed from "./MegaphoneFeed";
 import { useSocial } from "./useSocial";
@@ -410,6 +411,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <UpdateNotice />}
       {/* 47번 다른 사람 캐릭터 메뉴(신고하기)·신고 창 */}
       {ready && <ReportLayer />}
+      {/* 친구 안내 띠 (접속·퇴장·친구 옆으로): 화면 가운데, 집·사냥터 안에서도 보이게 월드 HUD 밖에 */}
+      {ready && <FriendNotice />}
       {/* 4·32·51번 낚시·채집·판매·도감 (자기 창·HUD를 스스로 연다) */}
       {ready && <ForageLayer />}
       {ready && <ZooLayer />}
@@ -476,14 +479,16 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   <PixelIcon name="gift" />
                   {giftCount > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
                 </button>
+                {/* 친구: 위쪽 버튼 줄에 글자와 함께 바로 (받은 신청이 있으면 빨간 점) */}
                 <button
                   type="button"
-                  className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
+                  className={cx(ui.button, ui.top, styles.topButton)}
                   onClick={() => setPanel("friends")}
                   aria-label={friendIncoming ? `친구 (받은 신청 ${friendIncoming}개)` : "친구"}
                   title="친구"
                 >
-                  <PixelIcon name="friends" />
+                  <PixelIcon name="heart" />
+                  친구
                   {friendIncoming > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
                 </button>
                 <button

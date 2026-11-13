@@ -1,0 +1,19 @@
+/* 무대(72×64)에서 아바타 둘레 32×36만 2배로 (작은 칸에서도 꾸미기가 보이게) */
+.crop {
+  --s: 2;
+  display: block;
+  flex: none;
+  width: calc(32px * var(--s));
+  height: calc(36px * var(--s));
+  overflow: hidden;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.crop canvas {
+  display: block;
+  width: calc(72px * var(--s));
+  height: calc(64px * var(--s));
+  margin: calc(-18px * var(--s)) 0 0 calc(-20px * var(--s));
+  image-rendering: pixelated;
+}

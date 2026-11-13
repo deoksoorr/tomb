@@ -1,5 +1,7 @@
 import { pageMetadata } from "../../seo";
 import GuidePage from "../GuidePage";
+import { earnRule } from "@/lib/economy";
+import { PRESENCE_INTERVAL_MS } from "@/lib/types";
 
 const PATH = "/guide/cowork";
 const H1 = "재택근무할 때 같이 일하는 느낌 나는 사이트";
@@ -16,7 +18,7 @@ const FACTS = [
   ["지금 하는 일 표시 (벤치 상태)", "7가지 — 공부 중, 일하는 중, 밥 먹는 중, 쉬는 중, 음악 듣는 중, 통화 중, 커피 마시는 중"],
   ["누구에게 보이나", "같은 채널 모두에게 (일어나면 풀려요)"],
   ["인사", "정해진 문장 말풍선과 이모티콘"],
-  ["틀어 두는 동안", "접속해 있는 10분마다 5포인트 (다른 창을 봐도 괜찮아요, 하루 최대 60포인트)"],
+  ["틀어 두는 동안", `접속해 있는 ${PRESENCE_INTERVAL_MS / 60_000}분마다 ${earnRule("presence").points}포인트 (다른 창을 봐도 괜찮아요, 하루 최대 ${earnRule("presence").dailyMax}포인트)`],
   ["요금", "무료 (설치·회원가입 없음)"],
 ] as const;
 

@@ -184,10 +184,67 @@ describe("사냥터 API", () => {
     const a = (await (await character.POST(call("/x", v, { type: "alloc", stats: { str: 2, dex: 3 } }))).json()) as RpgView;
     expect(a.character.statPoints).toBe(0);
     expect(a.derived.stats.str).toBe(3);
-    const l = (await (await character.POST(call("/x", v, { type: "learn", skill: "refactor" }))).json()) as RpgView;
-    expect(l.character.skills.refactor).toBe(1);
-    const bad = await character.POST(call("/x", v, { type: "learn", skill: "deploy" }));
+    const l = (await (await character.POST(call("/x", v, { type: "learn", skill: "em_kindle" }))).json()) as RpgView;
+    expect(l.character.skills.em_kindle).toBe(1);
+    expect(l.respecCost).toBe(0);
+    expect(l.superHunter).toBeUndefined();
+    // 서버가 잘못된 배분을 거절한다: 선행 없음·단 잠김·포인트 없음·모르는 스킬
+    const bad = await character.POST(call("/x", v, { type: "learn", skill: "em_fan" }));
     expect(bad.status).toBe(409);
+    const unknown = await character.POST(call("/x", v, { type: "learn", skill: "refactor" }));
+    expect(unknown.status).toBe(400);
+    const passiveKey = await character.POST(call("/x", v, { type: "hotbar", slots: ["em_hearth", null, null, null, null, null] }));
+    expect(passiveKey.status).toBe(409);
+  });
+
+  it("스킬 초기화: 첫 1회 무료, 그 뒤로는 지갑 포인트 (보인 비용과 다르면 거절)", async () => {
+    const v = await newVisitor();
+    await getRpgStore().update(v.id, (s) => ({ state: { ...s, level: 10 }, result: null }));
+    await character.POST(call("/x", v, { type: "learn", skill: "em_kindle" }));
+    const r1 = (await (await character.POST(call("/x", v, { type: "respec", cost: 0 }))).json()) as RpgView;
+    expect(r1.character.skills).toEqual({});
+    expect(r1.character.skillPoints).toBe(11);
+    expect(r1.respecCost).toBe(50);
+    await character.POST(call("/x", v, { type: "learn", skill: "em_kindle" }));
+    const stale = await character.POST(call("/x", v, { type: "respec", cost: 0 }));
+    expect(stale.status).toBe(409);
+    expect(await errCode(stale)).toBe("COST_CHANGED");
+    // 지갑이 모자라면 돈도 상태도 그대로
+    const poor = await character.POST(call("/x", v, { type: "respec", cost: 50 }));
+    if (poor.status === 200) expect(((await poor.json()) as RpgView).character.skills).toEqual({});
+    else expect((await getRpgStore().get(v.id)).skills.em_kindle).toBe(1);
+  });
+
+  it("테스트 서버 슈퍼 계정: 운영자만, 운영 서버(VERCEL_ENV=production)에서는 꺼진다", async () => {
+    const op = await newVisitor();
+    await setStaff(op.id);
+    try {
+      const view = (await (await rpg.GET(call("/api/rpg", op))).json()) as RpgView;
+      expect(view.superHunter).toBe(true);
+      expect(view.character.level).toBe(50);
+      expect(view.respecCost).toBe(0);
+      expect(view.character.skillPoints).toBeGreaterThan(100);
+      // Lv.1인데도 지옥 사냥터가 열린다
+      const hell = await start.POST(call("/api/rpg/run/start", op, { game: "hunt", difficulty: "hell" }));
+      expect(hell.status).toBe(200);
+      // 스킬을 레벨 예산 너머까지 찍을 수 있다
+      for (let i = 0; i < 5; i++) expect((await character.POST(call("/x", op, { type: "learn", skill: "em_kindle" }))).status).toBe(200);
+      expect((await character.POST(call("/x", op, { type: "learn", skill: "em_hearth" }))).status).toBe(200);
+      expect((await getRpgStore().get(op.id)).level).toBe(1);
+
+      // 운영 서버에서는 같은 운영자 계정이라도 보통 계정 — 예산을 넘은 배분은 비우고 포인트를 돌려준다
+      vi.stubEnv("VERCEL_ENV", "production");
+      const prod = (await (await rpg.GET(call("/api/rpg", op))).json()) as RpgView;
+      expect(prod.superHunter).toBeUndefined();
+      expect(prod.character.level).toBe(1);
+      expect(prod.character.skills).toEqual({});
+      expect(prod.character.skillPoints).toBe(1);
+      const locked = await start.POST(call("/api/rpg/run/start", op, { game: "hunt", difficulty: "hell" }));
+      expect(await errCode(locked)).toBe("ZONE_LOCKED");
+    } finally {
+      vi.stubEnv("VERCEL_ENV", "");
+      await setStaff(null);
+    }
   });
 });
 

@@ -395,12 +395,14 @@ export type MyGraveStatusResponse = { active: PublicGrave | null; passDays: numb
 
 /** 랭킹 (49번: 포인트·사냥 중심). huntKills = 사냥터 처치 수 합계, huntBest = 사냥터(zone)별 최단 클리어 시간(ms, 작을수록 위) */
 /** house = 하우징 꾸밈 점수 (F11: 주간 = 이번 주에 꾸민 집, 전체 = 모든 집) */
-export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish"] as const;
+/** look = 외형 꾸미기 점수 (지금 착용 중인 코디 파츠 가격대 점수 합, 기간 구분 없음 — lib/lookScore.ts) */
+/** huntLevel = 사냥터 캐릭터 레벨 (같으면 경험치, 기간 구분 없음 — lib/huntLevelRank.ts) */
+export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish", "look", "huntLevel"] as const;
 export type RankBoard = (typeof RANK_BOARDS)[number];
 /** week = 이번 주(KST 월요일 0시부터), all = 전체 */
 export type RankPeriod = "week" | "all";
-/** sub: 보조 줄 (house 랭킹은 "번지 · 주인 이름") */
-export type RankRow = { rank: number; name: string; value: number; me: boolean; sub?: string };
+/** sub: 보조 줄 (house 랭킹은 "번지 · 주인 이름"). items: look 랭킹의 대표 파츠 아이템 id (점수 높은 순 최대 3개). gear: huntLevel 랭킹의 장착 무기 id */
+export type RankRow = { rank: number; name: string; value: number; me: boolean; sub?: string; items?: string[]; gear?: string };
 /** GET /api/rank?board=&period=&zone=&me=1 */
 export type RankResponse = {
   board: RankBoard;

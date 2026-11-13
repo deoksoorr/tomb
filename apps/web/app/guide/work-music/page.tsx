@@ -1,5 +1,7 @@
 import { pageMetadata } from "../../seo";
 import GuidePage from "../GuidePage";
+import { earnRule } from "@/lib/economy";
+import { PRESENCE_INTERVAL_MS } from "@/lib/types";
 
 const PATH = "/guide/work-music";
 const H1 = "일할 때 틀어 두는 노동요 사이트";
@@ -18,7 +20,7 @@ const FACTS = [
   ["설치·회원가입", "필요 없음 (브라우저에서 바로)"],
   ["다른 탭으로 옮기면", "같은 창의 다른 탭에서 일해도 음악이 계속 나와요"],
   ["소리 조절", "배경음악·환경음·효과음 볼륨을 따로"],
-  ["틀어 두는 동안", "접속해 있는 10분마다 5포인트 (하루 최대 60포인트)"],
+  ["틀어 두는 동안", `접속해 있는 ${PRESENCE_INTERVAL_MS / 60_000}분마다 ${earnRule("presence").points}포인트 (하루 최대 ${earnRule("presence").dailyMax}포인트)`],
 ] as const;
 
 export default function WorkMusicPage() {

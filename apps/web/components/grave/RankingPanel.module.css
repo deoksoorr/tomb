@@ -22,13 +22,16 @@
 .tabs {
   display: flex;
   flex: none;
+  overflow-x: auto;
   border-bottom: 2px solid var(--line);
+  scrollbar-width: none;
 }
 
 .tab {
-  flex: 1;
+  flex: 1 0 auto;
   min-height: 36px;
-  padding: 6px 4px;
+  padding: 6px 5px;
+  white-space: nowrap;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -162,6 +165,13 @@ li:nth-child(-n + 3) .rank {
   color: var(--muted);
   font-family: var(--font-small);
   font-size: 10px;
+}
+
+/* 꾸미기 랭킹: 대표 파츠 아이콘 (점수 높은 순 최대 3개) */
+.parts {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
 }
 
 .pointRow {

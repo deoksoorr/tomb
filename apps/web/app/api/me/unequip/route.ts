@@ -2,6 +2,7 @@ import { env } from "@/lib/env";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
+import { recordLook } from "@/lib/lookRank";
 import { getAccounts } from "@/lib/store";
 import { lookGrant, lookOf, loadMe } from "@/lib/store/accounts";
 import type { WearResponse } from "@/lib/types";
@@ -16,5 +17,6 @@ export const POST = handler(async (req) => {
   const now = Date.now();
   if (!(await accounts.unequip(visitorId, slot, now))) throw new HttpError(409, "NO_ITEM", "그 부위에 입은 게 없어요.");
   const me = await loadMe(accounts, visitorId, now);
+  await recordLook(visitorId, me, { now }); // 꾸미기 랭킹 점수
   return json<WearResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now, me) });
 });
