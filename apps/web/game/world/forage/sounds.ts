@@ -1,3 +1,4 @@
+import { releaseOnEnd } from "@/lib/sharedAudio";
 import { AudioHost } from "../audioHost";
 
 // 4·32번 낚시·채집 효과음 (파일 없이 WebAudio로 합성, 아주 짧게). 13번: 효과음 갈래(sfx 버스, audio:mix)를 따른다.
@@ -35,6 +36,7 @@ export class ForageSfx extends AudioHost {
     src.connect(bp).connect(g).connect(this.output);
     src.start(t);
     src.stop(t + dur + 0.02);
+    releaseOnEnd(src, bp, g);
   }
 
   /** 음 하나 (주파수 미끄러짐 가능) */
@@ -50,6 +52,7 @@ export class ForageSfx extends AudioHost {
     o.connect(g).connect(this.output);
     o.start(t);
     o.stop(t + dur + 0.02);
+    releaseOnEnd(o, g);
   }
 
   play(name: ForageSound, gain = 1): void {

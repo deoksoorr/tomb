@@ -14,6 +14,10 @@ export type LoopOptions = {
   bus?: SoundBus;
 };
 
+/** 크기가 이만큼 넘게 바뀔 때만 램프를 다시 건다 (걸어가며 매 프레임 조금씩 바뀌어도 초당 몇 번만) */
+const LEVEL_STEP = 0.02;
+/** 소리를 새로 시작하는 최소 크기. 멈추는 문턱(0.001)보다 높게 둬서, 들릴 듯 말 듯한 거리 문턱에서 켜졌다 꺼졌다 하지 않게 (히스테리시스) */
+const START_MIN = 0.012;
 /** 먹먹할 때 로우패스 주파수 (Hz) */
 const MUFFLED_HZ = 650;
 const OPEN_HZ = 18000;
@@ -26,6 +30,8 @@ export class AmbientLoop {
   private gain: GainNode | null = null;
   private lp: BiquadFilterNode | null = null;
   private level = 0;
+  /** 마지막으로 건 게인 목표 (같은 목표를 다시 걸지 않는다) */
+  private target = 0;
   /** 소리가 0이 된 시각 (한동안 0이면 재생을 멈춘다) */
   private quietAt = 0;
   private offLife: (() => void) | null = null;
@@ -42,12 +48,13 @@ export class AmbientLoop {
   set(level: number): void {
     if (this.dead) return;
     const lv = Math.max(0, Math.min(1, Number.isFinite(level) ? level : 0));
-    if (Math.abs(lv - this.level) < 0.01 && lv > 0 === this.level > 0) {
+    if (Math.abs(lv - this.level) < LEVEL_STEP && lv > 0 === this.level > 0) {
       this.maybeStop();
       // 들려야 하는데 멈춰 있다(창을 바꿨다 돌아옴 등): 컨텍스트를 깨우고, 숨을 때 멈춘 루프를 다시 튼다
+      // (시작 문턱보다 작으면 건드리지 않는다 — 문턱 근처에 서 있을 때 매 프레임 apply()가 돌지 않게)
       if (lv > 0 && !this.hidden && this.busGain > 0) {
         this.host.kick();
-        if (!this.src && this.buf) this.apply();
+        if (!this.src && this.buf && this.wanted() >= START_MIN) this.apply();
       }
       return;
     }
@@ -83,11 +90,24 @@ export class AmbientLoop {
     return this.src !== null;
   }
 
+  /** 지금 내야 할 크기 (버스 볼륨·옵션 반영) */
+  private wanted(): number {
+    return this.hidden ? 0 : this.level * this.busGain * this.opts.gain;
+  }
+
+  /** 게인 목표가 바뀔 때만 램프를 건다 */
+  private ramp(ac: AudioContext, v: number, tc: number): void {
+    if (!this.gain || Math.abs(v - this.target) < 0.0005) return;
+    this.target = v;
+    this.gain.gain.setTargetAtTime(v, ac.currentTime, tc);
+  }
+
   private apply(): void {
-    const want = this.hidden ? 0 : this.level * this.busGain * this.opts.gain;
-    if (want <= 0.001) {
+    const want = this.wanted();
+    // 멈춰 있으면 START_MIN부터, 울리는 중이면 0.001까지 (히스테리시스)
+    if (want <= 0.001 || (!this.src && want < START_MIN)) {
       const ac = this.host.context;
-      if (this.gain && ac) this.gain.gain.setTargetAtTime(0, ac.currentTime, 0.35);
+      if (ac) this.ramp(ac, 0, 0.35);
       if (!this.quietAt) this.quietAt = performance.now();
       return;
     }
@@ -102,6 +122,7 @@ export class AmbientLoop {
     if (!this.gain) {
       this.gain = ac.createGain();
       this.gain.gain.value = 0;
+      this.target = 0;
       this.gain.connect(this.host.output);
       if (this.opts.filter) {
         this.lp = ac.createBiquadFilter();
@@ -123,7 +144,7 @@ export class AmbientLoop {
       src.start(ac.currentTime + 0.01, 0.02 + Math.random() * Math.max(0, d - 0.1));
       this.src = src;
     }
-    this.gain.gain.setTargetAtTime(want, ac.currentTime, 0.45);
+    this.ramp(ac, want, 0.45);
   }
 
   /** 4초 넘게 조용하면 재생을 멈춘다 (다시 커지면 버퍼에서 새로 시작) */
@@ -182,6 +203,13 @@ export class AmbientLoop {
     this.offLife?.();
     this.offLife = null;
     this.stopSource();
+    // 공용 컨텍스트는 닫히지 않으므로 게인·필터도 그래프에서 뗀다
+    try {
+      this.lp?.disconnect();
+      this.gain?.disconnect();
+    } catch {
+      // 이미 뗐다
+    }
     this.gain = null;
     this.lp = null;
   }

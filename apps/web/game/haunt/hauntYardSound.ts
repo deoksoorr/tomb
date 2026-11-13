@@ -1,3 +1,4 @@
+import { releaseOnEnd } from "@/lib/sharedAudio";
 import { AudioHost } from "../world/audioHost";
 
 // 마을의 귀신의집 근처에서 가끔 들리는 아주 작은 소리 (파일 없이 WebAudio 합성). 효과음 갈래(sfx 버스) 볼륨을 따른다.
@@ -26,15 +27,18 @@ export class HauntYardSound extends AudioHost {
     if (this.master && ac) this.master.gain.setTargetAtTime((this.muted ? 0 : this.volume) * YARD_GAIN, ac.currentTime, 0.05);
   }
 
-  private dest(ac: AudioContext, v: number, pan: number): AudioNode {
+  /** 소리 하나의 출구 (크기·좌우). 돌려준 nodes는 소리가 끝나면 releaseOnEnd로 뗀다 */
+  private dest(ac: AudioContext, v: number, pan: number): { head: AudioNode; nodes: AudioNode[] } {
     const g = ac.createGain();
     g.gain.value = Math.max(0, Math.min(1, v));
     if (typeof ac.createStereoPanner === "function") {
       const p = ac.createStereoPanner();
       p.pan.value = Math.max(-1, Math.min(1, pan));
       g.connect(p).connect(this.out(ac));
-    } else g.connect(this.out(ac));
-    return g;
+      return { head: g, nodes: [g, p] };
+    }
+    g.connect(this.out(ac));
+    return { head: g, nodes: [g] };
   }
 
   /** 킥킥 웃음. v 0..1 (거리), pan -1..1 */
@@ -47,7 +51,7 @@ export class HauntYardSound extends AudioHost {
     bp.type = "bandpass";
     bp.frequency.value = 1500;
     bp.Q.value = 1.2;
-    bp.connect(dst);
+    bp.connect(dst.head);
     const n = 4 + Math.floor(Math.random() * 3);
     const base = 760 + Math.random() * 180;
     for (let i = 0; i < n; i++) {
@@ -64,6 +68,8 @@ export class HauntYardSound extends AudioHost {
       o.connect(g).connect(bp);
       o.start(t);
       o.stop(t + 0.1);
+      // 마지막 음이 끝나면 필터·출구까지 뗀다
+      releaseOnEnd(o, g, ...(i === n - 1 ? [bp, ...dst.nodes] : []));
     }
   }
 
@@ -77,7 +83,7 @@ export class HauntYardSound extends AudioHost {
     const lp = ac.createBiquadFilter();
     lp.type = "lowpass";
     lp.frequency.value = 1700;
-    lp.connect(dst);
+    lp.connect(dst.head);
     const o = ac.createOscillator();
     o.type = "sawtooth";
     const f0 = 620 + Math.random() * 120;
@@ -100,6 +106,8 @@ export class HauntYardSound extends AudioHost {
     lfo.start(t);
     o.stop(t + dur + 0.05);
     lfo.stop(t + dur + 0.05);
+    releaseOnEnd(lfo, lg);
+    releaseOnEnd(o, g, lp, ...dst.nodes);
   }
 
   destroy(): void {

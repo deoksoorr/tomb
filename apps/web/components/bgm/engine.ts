@@ -1,5 +1,6 @@
 import { bridge } from "@/game/bridge";
 import { audioLife, type AudioLifeState } from "@/lib/audioLife";
+import { setAudioSessionType } from "@/lib/audioSession";
 import { sharedAudioContext } from "@/lib/sharedAudio";
 import { readItem, writeItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
@@ -13,6 +14,7 @@ import { silentWav } from "./silence";
 // 탭이 숨으면 게임 소리와 함께 멈추고 돌아오면 함께 이어서 튼다 (lib/audioLife가 컨텍스트를 suspend·resume, 덱은 여기서 pause·play).
 // 컨텍스트는 게임 소리와 같은 공용 하나(lib/sharedAudio), <audio>는 이 두 덱뿐이다 — 효과음은 모두 WebAudio 버퍼.
 // 아이폰 잠금 화면·다이내믹 아일랜드에는 mediaSession으로 지금 곡 하나만 보인다 (곡이 바뀔 때만 메타데이터를 바꾼다).
+// 아이폰 오디오 세션 종류는 BGM을 켜면 playback, 끄면 ambient로 고정한다 (lib/audioSession — auto면 효과음마다 세션이 바뀌며 아일랜드가 깜빡인다).
 
 const MANIFEST_URL = "/bgm/tracks.json";
 const CROSSFADE_SEC = 1.5;
@@ -91,11 +93,15 @@ class BgmEngine {
       });
       this.shareAudioSettings();
     })();
+    // 앱 시작 때 한 번: 아직 BGM 전이므로 ambient (트는 순간 play()가 playback으로 바꾼다)
+    this.syncSession();
     return this.loading;
   }
 
   /** 사용자 제스처(입장 클릭, 재생 버튼) 안에서 불러야 한다. tracks.json이 아직 안 왔어도 덱을 깨워 두고 도착하면 시작한다 */
   play(): void {
+    // 덱을 재생하기 전에 세션 종류부터 (재생 도중 바꾸면 세션이 한 번 더 흔들린다)
+    setAudioSessionType("playback");
     this.ensureGraph();
     if (this.ctx && this.ctx.state !== "running") void this.ctx.resume().catch(() => undefined);
     this.unlockDecks();
@@ -164,7 +170,13 @@ class BgmEngine {
 
   private set(patch: Partial<BgmState>): void {
     this.state = { ...this.state, ...patch };
+    if ("playing" in patch) this.syncSession();
     this.listeners.forEach((fn) => fn());
+  }
+
+  /** BGM 재생 여부에 맞춰 아이폰 오디오 세션 종류를 고정한다 (같으면 아무것도 안 한다) */
+  private syncSession(): void {
+    setAudioSessionType(this.state.playing ? "playback" : "ambient");
   }
 
   private tracks(): Track[] {
@@ -217,12 +229,26 @@ class BgmEngine {
 
   private sessionFile = "";
 
-  /** 지금 곡을 시스템에 알린다 (같은 곡이면 그대로 둔다 — 자꾸 바꾸면 아일랜드가 깜빡인다) */
+  private sessionState: MediaSessionPlaybackState | "" = "";
+
+  /**
+   * 지금 곡을 시스템에 알린다 (같은 곡·같은 상태면 그대로 둔다 — 자꾸 바꾸면 아일랜드가 깜빡인다).
+   * 멈추면(track=null) 곡 정보를 비운다: 세션이 ambient가 되므로 잠금 화면에 멈춘 곡 카드를 남기지 않는다
+   */
   private updateMediaSession(track: Track | null): void {
     const ms = typeof navigator !== "undefined" ? navigator.mediaSession : undefined;
     if (!ms) return;
     try {
-      ms.playbackState = this.state.playing ? "playing" : "paused";
+      const state: MediaSessionPlaybackState = this.state.playing ? "playing" : "paused";
+      if (state !== this.sessionState) {
+        this.sessionState = state;
+        ms.playbackState = state;
+      }
+      if (!track && !this.state.playing && this.sessionFile) {
+        this.sessionFile = "";
+        ms.metadata = null;
+        return;
+      }
       if (!track || track.file === this.sessionFile || typeof MediaMetadata === "undefined") return;
       this.sessionFile = track.file;
       const list = this.state.playlists.find((p) => p.id === this.state.playlistId);
@@ -260,22 +286,19 @@ class BgmEngine {
     }
   };
 
-  /** 두 덱을 무음으로 재생했다가 멈춘다 (gain 0). 그 사이 진짜 곡이 걸리면(token 변경) 멈추지 않는다 */
+  /**
+   * 두 덱을 무음으로 한 번 재생한다 (gain 0). 0.1초 무음은 저절로 끝나므로 pause()를 부르지 않는다
+   * (아이폰은 play·pause마다 '지금 재생 중' 세션을 건드린다). 그 사이 진짜 곡이 걸리면 그 곡이 이어서 난다
+   */
   private unlockDecks(): void {
     if (this.unlocked || this.decks.length === 0) return;
     this.unlocked = true;
     const silence = URL.createObjectURL(new Blob([silentWav()], { type: "audio/wav" }));
     for (const deck of this.decks) {
-      const token = deck.token;
       deck.audio.src = silence;
-      deck.audio
-        .play()
-        .then(() => {
-          if (deck.token === token) deck.audio.pause();
-        })
-        .catch(() => {
-          // 곧바로 진짜 곡으로 바뀌면 이 재생은 중단된다
-        });
+      deck.audio.play().catch(() => {
+        // 곧바로 진짜 곡으로 바뀌면 이 재생은 중단된다
+      });
     }
   }
 
@@ -329,8 +352,10 @@ class BgmEngine {
     deck.gain.gain.cancelScheduledValues(now);
     deck.gain.gain.setValueAtTime(deck.gain.gain.value, now);
     deck.gain.gain.linearRampToValueAtTime(0, now + sec);
+    // 이미 멈춘 덱(쉬고 있는 덱)은 pause()를 다시 부르지 않는다
+    if (deck.audio.paused) return;
     setTimeout(() => {
-      if (deck.token === token) deck.audio.pause();
+      if (deck.token === token && !deck.audio.paused) deck.audio.pause();
     }, sec * 1000 + 50);
   }
 

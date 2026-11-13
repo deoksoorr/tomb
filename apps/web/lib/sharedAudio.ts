@@ -155,3 +155,23 @@ export function playBuffer(ac: AudioContext, out: AudioNode, url: string, opts: 
     return false;
   }
 }
+
+/**
+ * 합성음 정리: 소스(마지막으로 끝나는 것)가 끝나면 함께 만든 게인·필터를 그래프에서 뗀다.
+ * 공용 컨텍스트는 닫지 않으므로, 떼지 않은 노드는 소리가 끝난 뒤에도 출력에 붙은 채 남아 오디오 스레드가 점점 무거워진다
+ */
+export function releaseOnEnd(last: AudioScheduledSourceNode, ...nodes: AudioNode[]): void {
+  last.addEventListener(
+    "ended",
+    () => {
+      for (const n of [last, ...nodes]) {
+        try {
+          n.disconnect();
+        } catch {
+          // 이미 뗐다
+        }
+      }
+    },
+    { once: true },
+  );
+}

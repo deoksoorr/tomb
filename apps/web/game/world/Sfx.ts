@@ -1,4 +1,4 @@
-import { playBuffer, preloadSound, soundMissing } from "@/lib/sharedAudio";
+import { playBuffer, preloadSound, releaseOnEnd, soundMissing } from "@/lib/sharedAudio";
 import { AmbientLoop } from "./ambientLoop";
 import { AudioHost, type SoundBus } from "./audioHost";
 
@@ -84,6 +84,8 @@ export class Sfx extends AudioHost {
       [5.4, 0.18, 0.8],
       [0.5, 0.35, 3.6],
     ];
+    let longest: OscillatorNode | null = null;
+    let longestDur = 0;
     for (const [mul, amp, dur] of partials) {
       const o = ac.createOscillator();
       const g = ac.createGain();
@@ -95,7 +97,14 @@ export class Sfx extends AudioHost {
       o.connect(g).connect(out);
       o.start(t);
       o.stop(t + dur + 0.05);
+      releaseOnEnd(o, g);
+      if (dur > longestDur) {
+        longestDur = dur;
+        longest = o;
+      }
     }
+    // 가장 길게 울리는 배음이 끝나면 묶음 출력도 뗀다
+    if (longest) releaseOnEnd(longest, out);
   }
 
   /** 물 튀기는 소리: 걸러낸 잡음 + 물방울 몇 개 */
@@ -124,6 +133,7 @@ export class Sfx extends AudioHost {
     src.connect(bp).connect(g).connect(this.output);
     src.start(t);
     src.stop(t + 0.45);
+    releaseOnEnd(src, bp, g);
     for (let i = 0; i < 3; i++) {
       const at = t + 0.12 + i * 0.07 + Math.random() * 0.05;
       const o = ac.createOscillator();
@@ -137,6 +147,7 @@ export class Sfx extends AudioHost {
       o.connect(og).connect(this.output);
       o.start(at);
       o.stop(at + 0.1);
+      releaseOnEnd(o, og);
     }
   }
 

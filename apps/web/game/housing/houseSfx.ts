@@ -1,3 +1,4 @@
+import { releaseOnEnd } from "@/lib/sharedAudio";
 import { AudioHost } from "../world/audioHost";
 import { pianoFreq } from "./interact";
 
@@ -65,6 +66,7 @@ export class HouseSfx extends AudioHost {
     src.connect(bp).connect(g).connect(this.output);
     src.start(t, Math.random() * 0.3);
     src.stop(t + dur + 0.02);
+    releaseOnEnd(src, bp, g);
   }
 
   private tone(ac: AudioContext, t: number, dur: number, f0: number, f1: number, gain: number, type: OscillatorType = "sine", attack = 0.006): void {
@@ -79,6 +81,7 @@ export class HouseSfx extends AudioHost {
     o.connect(g).connect(this.output);
     o.start(t);
     o.stop(t + dur + 0.02);
+    releaseOnEnd(o, g);
   }
 
   /** 피아노 음 (i = 0..PIANO_NOTES-1) */

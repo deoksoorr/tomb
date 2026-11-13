@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { bridge } from "../bridge";
 import type { GameContext } from "../scenes/context";
+import { releaseOnEnd } from "@/lib/sharedAudio";
 import { AmbientLoop } from "./ambientLoop";
 import { AudioHost } from "./audioHost";
 
@@ -112,10 +113,7 @@ export class WeatherSound extends AudioHost {
     g.connect(this.output);
     src.connect(head);
     src.start(t);
-    src.onended = () => {
-      src.disconnect();
-      g.disconnect();
-    };
+    releaseOnEnd(src, g, ...(head === g ? [] : [head]));
   }
 
   private loadThunder(): void {

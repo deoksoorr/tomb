@@ -1,3 +1,4 @@
+import { releaseOnEnd } from "@/lib/sharedAudio";
 import { AudioHost } from "./audioHost";
 
 // 놀이기구 2 소리 (WebAudio로 바로 만든다 — 파일 없음, 효과음 갈래 sfx 버스):
@@ -127,6 +128,7 @@ export class SkySound extends AudioHost {
     o.connect(g).connect(this.output);
     o.start(t);
     o.stop(t + 0.3);
+    releaseOnEnd(o, g);
   }
 
   destroy(): void {
