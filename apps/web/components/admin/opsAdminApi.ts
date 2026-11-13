@@ -1,4 +1,5 @@
 import type { AdminNameReindexResponse } from "@/app/api/admin/accounts/names/route";
+import type { AdminRankFillResponse } from "@/app/api/admin/rank/fill/route";
 import type { AdminStaffResponse } from "@/app/api/admin/staff/route";
 import type { AnalyticsRange, AnalyticsReport } from "@/lib/analyticsReport";
 import { request } from "@/lib/api";
@@ -31,5 +32,12 @@ export const opsAdminApi = {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ cursor, count }),
+    }),
+  /** 랭킹 기존 기록 다시 채우기 한 번 (next가 "0"이 될 때까지 이어서 부른다) */
+  fillRank: (board: "huntLevel" | "look", cursor: string, count = 200) =>
+    request<AdminRankFillResponse>("/api/admin/rank/fill", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ board, cursor, count }),
     }),
 };

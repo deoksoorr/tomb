@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { DYE_PARTS, type AvatarDye } from "@tomb/protocol";
 import { env } from "../env";
+import { MemoryFillMark, RedisFillMark, type FillMark } from "../rankFill";
 import { kstDay } from "./accounts";
 import { K } from "./keys";
 import { getStyleStore, styleKey } from "./style";
@@ -12,9 +13,12 @@ import type { AccountStore, EquippedItem } from "./types";
 // Redis 키 (이 파일에서만 쓴다)
 //  - rank:look:v2  ZSET 계정 id → 마지막으로 기록한 꾸미기 점수 (0점이면 뺀다). 착용 변경·구매·재접속·읽을 때 바로잡기로 갱신
 //    v2 = 점수 공식 개편(11/13, 가치 비례 1점 단위). 읽기의 "남은 후보 기록 점수 ≤ 바로잡은 N위" 판단이 옛 작은 점수와 섞이면 틀어지므로 키를 새로 쓴다
-//    (옛 rank:look은 더 읽지 않는다. 재접속·착용 변경·랭킹 보기 때 새 키로 다시 쌓인다)
+//    (옛 rank:look은 더 읽지 않는다. 처음 읽을 때 기존 계정의 착용을 한 번 훑어 새 키를 채운다 — lib/rankFill)
+//  - rank:look:v2:filled       STRING 기존 계정 채우기 표시 ("done" 또는 이어서 훑을 커서)
+//  - rank:look:v2:filled:lock  STRING 채우기 잠금 (30초)
 
 const LOOK_RANK_KEY = "rank:look:v2";
+const FILL_KEY = "rank:look:v2:filled";
 
 /** 점수를 다시 매길 때 읽는 계정 상태 (착용품은 만료된 것도 그대로 — 판정은 lookScore가 now로 한다) */
 export type LookState = { name: string | null; body: string | null; dye: AvatarDye; equipped: EquippedItem[] };
@@ -23,6 +27,12 @@ export type LookRankEntry = { accountId: string; score: number };
 export interface LookRankStore {
   /** 점수 기록 (0 이하면 뺀다) */
   put(accountId: string, score: number): Promise<void>;
+  /** 여러 명을 한 번에 (기존 계정 채우기) */
+  putMany(rows: readonly LookRankEntry[]): Promise<void>;
+  /** 착용 기록이 있을 수 있는 계정 id를 커서로 훑는다 (next "0" = 끝) */
+  scanWorn(cursor: string, count: number): Promise<{ next: string; ids: string[] }>;
+  /** 기존 계정 채우기 표시·잠금 */
+  readonly fill: FillMark;
   /** 기록 점수 높은 순 offset부터 count명 */
   top(offset: number, count: number): Promise<LookRankEntry[]>;
   /** 기록 점수가 score보다 큰 계정 수 (내 순위 어림) */
@@ -35,12 +45,21 @@ export interface LookRankStore {
 
 export class MemoryLookRank implements LookRankStore {
   private scores = new Map<string, number>();
+  readonly fill: FillMark = new MemoryFillMark();
   /** 계정 저장소 (HMR로 바뀌어도 최신 것을 쓰게 매번 받는다) */
   constructor(public accounts: () => AccountStore) {}
 
   async put(accountId: string, score: number): Promise<void> {
     if (score > 0) this.scores.set(accountId, score);
     else this.scores.delete(accountId);
+  }
+  async putMany(rows: readonly LookRankEntry[]): Promise<void> {
+    for (const r of rows) await this.put(r.accountId, r.score);
+  }
+  /** 메모리는 계정 전체를 훑는다 */
+  async scanWorn(cursor: string, count: number): Promise<{ next: string; ids: string[] }> {
+    const { next, accounts } = await this.accounts().scanAccounts(cursor, count);
+    return { next, ids: accounts.map((a) => a.accountId) };
   }
   async top(offset: number, count: number): Promise<LookRankEntry[]> {
     return [...this.scores]
@@ -82,14 +101,32 @@ function entriesOf(raw: unknown): [string, string][] {
 
 export class RedisLookRank implements LookRankStore {
   private redis: Redis;
+  readonly fill: FillMark;
 
   constructor(conn: { url: string; token: string }) {
     this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.fill = new RedisFillMark(this.redis, FILL_KEY);
   }
 
   async put(accountId: string, score: number): Promise<void> {
     if (score > 0) await this.redis.zadd(LOOK_RANK_KEY, { score, member: accountId });
     else await this.redis.zrem(LOOK_RANK_KEY, accountId);
+  }
+
+  async putMany(rows: readonly LookRankEntry[]): Promise<void> {
+    if (!rows.length) return;
+    const p = this.redis.pipeline();
+    for (const { accountId, score } of rows) {
+      if (score > 0) p.zadd(LOOK_RANK_KEY, { score, member: accountId });
+      else p.zrem(LOOK_RANK_KEY, accountId);
+    }
+    await p.exec();
+  }
+
+  /** SCAN acct:*:look (해시만) — 착용한 적 있는 계정만 나온다 */
+  async scanWorn(cursor: string, count: number): Promise<{ next: string; ids: string[] }> {
+    const [next, keys] = await this.redis.scan(cursor, { match: "acct:*:look", count, type: "hash" });
+    return { next: String(next), ids: keys.flatMap((k) => /^acct:([^:]+):look$/.exec(k)?.[1] ?? []) };
   }
 
   async top(offset: number, count: number): Promise<LookRankEntry[]> {

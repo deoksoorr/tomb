@@ -19,8 +19,8 @@ const STEP_LABEL: Record<string, string> = {
 };
 
 /**
- * 운영 점검: ① 저장소 점검(임시 묘비를 실제로 쓰고·읽고·지워 어느 단계에서 막히는지) ② 닉네임 색인 채우기(옛 계정 이름을 색인에 넣기).
- * 둘 다 누를 때만 돈다 (화면을 연다고 저절로 돌지 않는다)
+ * 운영 점검: ① 저장소 점검(임시 묘비를 실제로 쓰고·읽고·지워 어느 단계에서 막히는지) ② 닉네임 색인 채우기(옛 계정 이름을 색인에 넣기)
+ * ③ 사냥 레벨·꾸미기 랭킹 다시 채우기(기존 캐릭터·착용을 랭킹에 다시 적기). 모두 누를 때만 돈다 (화면을 연다고 저절로 돌지 않는다)
  */
 export default function SystemPanel({ toast, onAuthLost }: Props) {
   const [health, setHealth] = useState<AdminHealthReport | null>(null);
@@ -133,6 +133,77 @@ export default function SystemPanel({ toast, onAuthLost }: Props) {
           </p>
         )}
       </div>
+
+      <RankFillCard
+        board="huntLevel"
+        title="사냥 레벨 랭킹 다시 채우기"
+        hint="사냥 캐릭터를 200개씩 훑어 지금 레벨·경험치를 사냥 레벨 랭킹에 다시 적어요. 랭킹을 처음 볼 때 서버가 한 번 저절로 채우니, 레벨을 올린 사람이 랭킹에 안 보일 때만 쓰면 돼요. 운영자는 빼고, 정지 계정은 목록에서 빠져요."
+        toast={toast}
+        fail={fail}
+      />
+      <RankFillCard
+        board="look"
+        title="꾸미기 랭킹 다시 채우기"
+        hint="코디를 입은 계정을 200개씩 훑어 지금 착용으로 꾸미기 점수를 다시 적어요. 랭킹을 처음 볼 때 서버가 한 번 저절로 채우니, 입고 있는 사람이 랭킹에 안 보일 때만 쓰면 돼요. 운영자는 빼고, 정지 계정은 목록에서 빠져요."
+        toast={toast}
+        fail={fail}
+      />
     </section>
+  );
+}
+
+/** 랭킹 다시 채우기 카드 하나 (커서가 "0"으로 돌아올 때까지 200개씩) */
+function RankFillCard({
+  board,
+  title,
+  hint,
+  toast,
+  fail,
+}: {
+  board: "huntLevel" | "look";
+  title: string;
+  hint: string;
+  toast: (message: string) => void;
+  fail: (e: unknown) => void;
+}) {
+  const [state, setState] = useState<{ filled: number; rounds: number; done: boolean } | null>(null);
+  const [running, setRunning] = useState(false);
+
+  const run = async () => {
+    setRunning(true);
+    let cursor = "0";
+    let total = { filled: 0, rounds: 0, done: false };
+    setState(total);
+    try {
+      do {
+        const r = await opsAdminApi.fillRank(board, cursor);
+        cursor = r.next;
+        total = { filled: total.filled + r.filled, rounds: total.rounds + 1, done: r.next === "0" };
+        setState(total);
+      } while (cursor !== "0" && total.rounds < 500);
+      toast(`${title.replace(/ 다시 채우기$/, "")}을 다시 채웠어요. 랭킹에 오른 ${total.filled.toLocaleString("ko-KR")}명.`);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardHead}>
+        <h2 className={styles.cardTitle}>{title}</h2>
+        <button type="button" className={ui.button} onClick={() => void run()} disabled={running}>
+          {running ? "채우는 중…" : "다시 채우기"}
+        </button>
+      </div>
+      <p className={ui.hint}>{hint}</p>
+      {state && (
+        <p className={styles.meta} aria-live="polite">
+          {state.rounds}번 훑음 · 랭킹에 적은 {state.filled.toLocaleString("ko-KR")}명
+          {state.done ? " · 끝까지 훑었어요" : running ? " · 계속 훑는 중" : " · 중간에 멈췄어요"}
+        </p>
+      )}
+    </div>
   );
 }

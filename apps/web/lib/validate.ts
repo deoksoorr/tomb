@@ -241,6 +241,13 @@ export const AdminNameReindexSchema = z.object({
   count: z.number().int().min(1).max(500).default(200),
 });
 
+/** 관리자: 랭킹 기존 기록 다시 채우기 (board = 사냥 레벨·꾸미기, cursor = 이전 응답의 next, 처음은 "0") */
+export const AdminRankFillSchema = z.object({
+  board: z.enum(["huntLevel", "look"]),
+  cursor: z.string().max(40).regex(/^\d+$/, "cursor가 올바르지 않아요.").default("0"),
+  count: z.number().int().min(1).max(500).default(200),
+});
+
 export const AdminPointsSchema = z
   .object({
     code: z.string().max(40).transform(normalizeCode).optional(),

@@ -1,5 +1,6 @@
 import { findBan } from "./ban";
 import { lookScore, wornParts, type LookScoreInput } from "./lookScore";
+import { autoFill, FILL_BATCH, FILL_DONE } from "./rankFill";
 import { staffAccountId } from "./staff";
 import { getAccounts, NO_NAME } from "./store";
 import { getLookRankStore, type LookRankStore, type LookState } from "./store/lookRank";
@@ -10,6 +11,7 @@ import type { RankRow } from "./types";
 //  - 읽기: 정렬 집합의 상위 후보를 지금 착용으로 다시 계산해 바로잡는다 → 기간제가 끝난 코디는 읽는 순간 0점
 //    (기록된 점수는 만료로 줄어들 뿐이라 "남은 후보의 기록 점수 ≤ 바로잡은 N위 점수"가 될 때까지만 더 읽는다)
 //  - 운영자(lib/staffRank 규칙: 목록에 없고, 본인이 보면 mine = null · staff)·정지 계정은 목록에서 뺀다
+//  - 채우기: 랭킹이 생기기 전부터 입고 있던 계정은 처음 읽을 때 계정 착용 목록을 한 번 훑어 채운다 (lib/rankFill, 관리자 「운영 점검」에서 다시 채우기)
 
 /** 순위 판 한 줄 (지금 착용한 파츠 전부 — 아이콘용 items, lookScore.wornParts) */
 export type LookRankRow = RankRow & { accountId: string };
@@ -48,6 +50,25 @@ export async function recordLook(accountId: string, look: LookScoreInput & { sta
   } catch (e) {
     console.warn("[lookRank] 기록 실패", e);
   }
+}
+
+/**
+ * 기존 계정 채우기 한 묶음: 착용 기록이 있는 계정을 커서부터 count개 훑어 지금 착용으로 점수를 적는다 (운영자는 뺀다,
+ * 정지 계정은 기록은 두고 읽을 때 뺀다). next "0" = 끝 → 채움 표시를 "done"으로. 관리자 다시 채우기는 "0"부터 끝까지 부른다
+ */
+export async function fillLookRank(cursor: string, count: number, opts: LookRankOptions = {}): Promise<{ next: string; filled: number }> {
+  const now = opts.now ?? Date.now();
+  const store = rankStore(opts);
+  const staffId = opts.staffId === undefined ? await staffAccountId() : opts.staffId;
+  const { next, ids } = await store.scanWorn(cursor, count);
+  const states = await store.states(ids.filter((id) => id !== staffId), now);
+  const rows = ids.map((accountId) => {
+    const st = states.get(accountId);
+    return { accountId, score: accountId === staffId || !st ? 0 : lookScore(st, now) };
+  });
+  await store.putMany(rows);
+  if (next === "0") await store.fill.set(FILL_DONE);
+  return { next, filled: rows.filter((r) => r.score > 0).length };
 }
 
 const g = globalThis as typeof globalThis & { __tombLookBoard?: { at: number; size: number; staff: string | null; rows: Cand[] } };
@@ -108,6 +129,8 @@ export async function lookRank(me: string | null, size: number, opts: LookRankOp
   let board: Cand[];
   if (!opts.fresh && !opts.store && cached && now - cached.at < BOARD_CACHE_MS && cached.size === size && cached.staff === staffId) board = cached.rows;
   else {
+    // 기존 계정을 아직 안 채웠으면 한 번 훑는다 (끝나면 다시 안 돈다)
+    await autoFill(store.fill, (c) => fillLookRank(c, FILL_BATCH, { store, staffId, now }), "lookRank");
     board = await correctedBoard(store, size, now, staffId, isBanned);
     if (!opts.store) g.__tombLookBoard = { at: now, size, staff: staffId, rows: board };
   }

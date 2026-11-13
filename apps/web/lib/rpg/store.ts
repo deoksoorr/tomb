@@ -31,6 +31,8 @@ export interface RpgStore {
   addDaily(acct: string, day: string, d: Partial<DailyStats>): Promise<DailyStats>;
   daily(acct: string, day: string): Promise<DailyStats>;
   runsThisHour(acct: string, hourBucket: string): Promise<number>;
+  /** 저장된 캐릭터를 커서로 훑는다 (next "0" = 끝). 랭킹 기존 기록 채우기용 (lib/huntLevelRank) */
+  scanChars(cursor: string, count: number): Promise<{ next: string; chars: [string, CharacterState][] }>;
 }
 
 export const rk = {
@@ -95,6 +97,13 @@ export class MemoryRpgStore implements RpgStore {
 
   async runsThisHour(acct: string, hour: string): Promise<number> {
     return Math.min(this.runs.get(rk.runs(acct, hour)) ?? 0, RUNS_PER_HOUR);
+  }
+
+  async scanChars(cursor: string, count: number) {
+    const all = [...this.chars];
+    const start = Number(cursor) || 0;
+    const end = start + Math.max(1, count);
+    return { next: end >= all.length ? "0" : String(end), chars: all.slice(start, end).map(([a, s]) => [a, structuredClone(s)] as [string, CharacterState]) };
   }
 }
 
@@ -182,6 +191,27 @@ export class RedisRpgStore implements RpgStore {
 
   async runsThisHour(acct: string, hour: string): Promise<number> {
     return Math.min(Number((await this.redis.get<string>(rk.runs(acct, hour))) ?? 0), RUNS_PER_HOUR);
+  }
+
+  /** SCAN rpg:*:char (해시만) → 캐릭터 JSON을 파이프라인 한 번으로. 깨진 JSON은 건너뛴다 */
+  async scanChars(cursor: string, count: number) {
+    const [next, keys] = await this.redis.scan(cursor, { match: "rpg:*:char", count, type: "hash" });
+    const ids = keys.flatMap((k) => /^rpg:([^:]+):char$/.exec(k)?.[1] ?? []);
+    const chars: [string, CharacterState][] = [];
+    if (ids.length) {
+      const p = this.redis.pipeline();
+      for (const id of ids) p.hget(rk.char(id), "data");
+      const res = (await p.exec()) as unknown[];
+      ids.forEach((id, i) => {
+        if (res[i] === null || res[i] === undefined) return;
+        try {
+          chars.push([id, normalize(JSON.parse(String(res[i])))]);
+        } catch {
+          /* 깨진 캐릭터는 랭킹에서 뺀다 */
+        }
+      });
+    }
+    return { next: String(next), chars };
   }
 }
 
