@@ -1,5 +1,6 @@
 import { staffPublicName } from "@tomb/protocol";
 import { assertNotBanned, recordSeen } from "@/lib/ban";
+import { announceFriends } from "@/lib/friends";
 import { dexBadgeOf } from "@/lib/forage/service";
 import { handler, json } from "@/lib/http";
 import { issueJoin } from "@/lib/joinToken";
@@ -34,5 +35,7 @@ export const POST = handler(async (req) => {
   // 25번 외형 바꾸기: 계정에 몸 모양이 있으면 그것이 정답 (요청 값은 입장 화면에서 처음 고른 몸)
   // 31번: 운영자 표시는 여기(서버)에서만 넣는다. 운영자는 다른 사람에게 닉네임 대신 공개 이름("대장")로 보인다
   const claims = { visitorId, name: staffPublicName(name, staff), color, body: account.body ?? body ?? "hood", look: lookOf(account), dye: style.dye, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}) };
+  // 친구: 들어오는 순간·나간 뒤 5초에 친구들에게 바로 알리도록 실시간 서버에 맡긴다 (친구가 없으면 아무것도 안 한다, 실패해도 입장은 그대로)
+  await announceFriends(visitorId, now).catch(() => undefined);
   return json<JoinResponse>(await issueJoin(channel, claims));
 });

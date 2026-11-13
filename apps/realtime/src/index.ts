@@ -23,6 +23,7 @@
  *   POST /internal/me        Vercel → 이 서버: 접속 중인 그 방문자들에게 "내 정보 새로 받기"를 보낸다 (관리자 포인트 지급 등). 서명 필수
  *   POST /internal/kick      47번 Vercel → 이 서버: 방문자들을 지금 내보낸다(강퇴 4011·이용 제한 4012). 본문 서명(JOIN_SECRET) 필수
  *   POST /internal/peer      47번 Vercel → 이 서버: 채널·방의 sid가 누구인지 (유저 신고). 본문 서명 필수
+ *   POST /internal/hello     친구 Vercel → 이 서버: 입장 직전 "들고 날 때 알릴 친구들" 등록 (로비가 들어옴·나감을 밀어 준다). 본문 서명 필수
  *   POST /internal/where     친구 Vercel → 이 서버: 그 방문자들이 지금 어느 채널·자리에 있는지 (WHERE_CACHE_MS 기억). 본문 서명 필수
  */
 import { CLOSE, HUNT_ROOMS_CACHE_SEC, INTERNAL_SIG_HEADER, LOBBY_CACHE_SEC, ROOM_ID_RE, WHERE_CACHE_MS, verifyInternal, type PeerWhere } from "@tomb/protocol";
@@ -55,7 +56,7 @@ export default {
     if (ch) return channel(req, env, url, ch[1]);
     const rm = /^\/room\/([^/]*)$/.exec(url.pathname);
     if (rm) return room(req, env, url, rm[1]);
-    if (url.pathname === "/internal/kick" || url.pathname === "/internal/peer" || url.pathname === "/internal/me" || url.pathname === "/internal/where")
+    if (url.pathname === "/internal/kick" || url.pathname === "/internal/peer" || url.pathname === "/internal/me" || url.pathname === "/internal/where" || url.pathname === "/internal/hello")
       return internal(req, env, url.pathname);
     if (url.pathname === "/dev/goblin" && env.DEV_HOOKS === "1" && req.method === "POST") {
       const n = parseChannel(url.searchParams.get("ch") ?? "1", readConfig(env).maxChannels);
@@ -105,6 +106,10 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
       ),
     );
     return Response.json({ sent: counts.reduce((a, b) => a + b, 0) });
+  }
+  if (r.op === "hello") {
+    await lobbyStub(env).friendHello(r.visitorId, r.name, r.key, r.friends);
+    return Response.json({ ok: true });
   }
   if (r.op === "where") {
     const map = await whereMap(env, r.fresh === true);

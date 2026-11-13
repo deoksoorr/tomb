@@ -153,6 +153,12 @@ export class ChannelDO extends DurableObject<Env> {
             .releaseVisitor(visitorId, this.channel)
             .catch((e) => console.error("releaseVisitor failed", e));
         },
+        visitorDropped: (visitorId) => {
+          if (room) return; // 친구 들고 남은 월드 채널 연결로만 본다 (집·사냥터 방은 월드 연결과 함께 붙어 있다)
+          lobbyStub(env)
+            .visitorDropped(visitorId, this.channel)
+            .catch((e) => console.error("visitorDropped failed", e));
+        },
         verifyGrant: (token) => (env.JOIN_SECRET ? verifyGrant(env.JOIN_SECRET, token).catch(() => null) : Promise.resolve(null)),
         claimNonce: (nonce, until) => {
           const kv = ctx.storage.kv;
@@ -265,6 +271,11 @@ export class ChannelDO extends DurableObject<Env> {
   /** 47번: Worker의 /internal/peer → sid의 방문자 (유저 신고 대상 확인, RPC) */
   peerAt(sid: number): { visitorId: string; name: string } | null {
     return this.core.peerAt(sid);
+  }
+
+  /** 친구 들고 남 (Lobby DO가 사람이 있는 채널마다 부른다): 접속 중인 그 친구들에게만 알린다 (RPC) */
+  friendNotice(to: string[], key: string, name: string, on: boolean): number {
+    return this.core.friendNotice(to, key, name, on);
   }
 
   /** 친구 위치 (Worker의 /internal/where가 채널마다 묻는다). 이 채널 접속자 전부 — 웹 서버가 친구만 골라 낸다 */

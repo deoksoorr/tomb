@@ -155,7 +155,9 @@ export class MemoryFriends implements FriendStore {
   }
 
   async seenAt(ids: string[]): Promise<number[]> {
-    return ids.map((id) => this.accounts().lastPresence(id));
+    // 개발 중 HMR로 옛 계정 저장소 인스턴스가 남아 있으면 그 메서드가 없을 수 있다 → 기록 없음
+    const acc = this.accounts() as Partial<Pick<MemoryAccounts, "lastPresence">>;
+    return ids.map((id) => acc.lastPresence?.(id) ?? 0);
   }
 }
 

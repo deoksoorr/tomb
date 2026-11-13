@@ -16,6 +16,7 @@ import * as answer from "./friends/requests/[key]/route";
 import * as requests from "./friends/requests/route";
 import * as friends from "./friends/route";
 import * as session from "./session/route";
+import * as join from "./join/route";
 
 // 친구: 신청·수락·거절·삭제·중복·상한·정지 계정 / 위치는 친구에게만 / 계정 id는 브라우저에 나가지 않는다
 
@@ -55,7 +56,7 @@ const errCode = async (res: Response) => (await body<ApiError>(res)).error.code;
 
 /** 실시간 서버 흉내: 채널 1의 sid → 방문자(/internal/peer), 방문자 → 자리(/internal/where), 알림(/internal/me) */
 function fakeRealtime(peers: Record<number, Visitor>, where: Record<string, PeerWhere> = {}) {
-  const calls: { op: string; fresh?: boolean; ids?: string[] }[] = [];
+  const calls: { op: string; fresh?: boolean; ids?: string[]; name?: string; key?: string; visitorId?: string }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (!url.includes("/internal/")) return new Response("no", { status: 503 });
@@ -69,6 +70,10 @@ function fakeRealtime(peers: Record<number, Visitor>, where: Record<string, Peer
     if (r.op === "where") {
       calls.push({ op: "where", fresh: r.fresh, ids: r.visitorIds });
       return Response.json({ where: Object.fromEntries(r.visitorIds.filter((v) => where[v]).map((v) => [v, where[v]])) });
+    }
+    if (r.op === "hello") {
+      calls.push({ op: "hello", visitorId: r.visitorId, name: r.name, key: r.key, ids: r.friends });
+      return Response.json({ ok: true });
     }
     if (r.op === "me") {
       calls.push({ op: "me", ids: r.visitorIds });
@@ -288,5 +293,23 @@ describe("친구 창 한 줄 (마지막 접속·자랑거리·정렬)", () => {
     const p = await body<FriendPresenceResponse>(await presence.GET(call("/api/friends/presence", a)));
     expect(JSON.stringify(p)).not.toContain("lastSeen");
     expect(JSON.stringify(p)).not.toContain("card");
+  });
+});
+
+describe("친구 들고 남 밀어 주기 등록", () => {
+  it("입장 토큰을 줄 때 친구가 있으면 실시간 서버에 친구들을 맡기고(키·이름), 친구가 없으면 묻지 않는다. 수락하면 바로 두 사람 다 다시 맡긴다", async () => {
+    const [a, b, c] = [await newVisitor("가람"), await newVisitor("보리"), await newVisitor("혼자")];
+    const calls = fakeRealtime({ 2: b });
+    await ask(a, 2);
+    await reply(b, (await list(b)).incoming[0].key, true);
+    const accepted = calls.filter((x) => x.op === "hello");
+    expect(accepted.map((x) => x.visitorId).sort()).toEqual([a.id, b.id].sort());
+    calls.length = 0;
+    const res = await join.POST(call("/api/join", b, { channel: 1, name: "보리", color: "#9fc5a8" }));
+    expect(res.status).toBe(200);
+    expect(calls.filter((x) => x.op === "hello")).toEqual([{ op: "hello", visitorId: b.id, name: "보리", key: friendKeyFor(b.id), ids: [a.id] }]);
+    calls.length = 0;
+    await join.POST(call("/api/join", c, { channel: 1, name: "혼자", color: "#9fc5a8" }));
+    expect(calls.filter((x) => x.op === "hello")).toEqual([]);
   });
 });

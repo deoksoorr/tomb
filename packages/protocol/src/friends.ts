@@ -26,6 +26,13 @@ export const AWAY_PLACE_LABEL: Record<AwayPlace, string> = {
 /** 실시간 서버가 아는 한 사람의 자리 (내부 요청 /internal/where 응답). 좌표는 서버 위치 */
 export type PeerWhere = { ch: number; sid: number; x: number; y: number; away?: true; place?: AwayPlace };
 
+/**
+ * 친구 퇴장 알림 유예: 연결이 끊기거나 채널을 나간 뒤 이 안에 다시 들어오면(새로고침·채널 이동·잠깐 끊김) 알리지 않는다
+ */
+export const FRIEND_LEAVE_GRACE_MS = 5_000;
+/** 친구 키 모양 (웹 서버의 HMAC 16자) */
+export const FRIEND_KEY_RE = /^[A-Za-z0-9_-]{16}$/;
+
 /** 실시간 서버가 채널별 접속자 자리를 기억해 두는 시간 (위치 조회를 가볍게) */
 export const WHERE_CACHE_MS = 10_000;
 /** 위치 조회 한 번에 물을 수 있는 계정 수 (친구 상한 + 여유) */

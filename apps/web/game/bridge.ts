@@ -140,6 +140,8 @@ export type GameEvents = {
   /** F17 미니맵: 내 위치와 같은 채널 사람들 위치 [x0, y0, x1, y1, …] (월드에 있는 동안 0.25초마다) */
   /** 친구 안내 (친구 옆으로 왔어요·실내라 못 가요 …) → UI가 화면 가운데 큼직한 띠로 띄운다 */
   "friend:notice": { message: string };
+  /** 친구가 들어왔다(on)·나갔다 — 실시간 서버가 밀어 준 것 (key = 친구 창의 그 친구 키) */
+  "friend:presence": { key: string; name: string; on: boolean };
   "minimap:dots": { me: { x: number; y: number }; others: number[]; residents?: number[]; /** 친구 (others에서 뺀 같은 채널 친구 위치, 하트로 그린다) */ friends?: number[] };
   /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고) */
   "peers:list": { names: string[] };

@@ -114,4 +114,20 @@ describe("실내 표시 (away)", () => {
     expect(core.roster()[0].place).toBeUndefined();
     expect(core.roster()[0].away).toBeUndefined();
   });
+
+  it("친구 들고 남: 접속 중인 그 친구에게만 보내고, 연결이 끊기면(유예 시작) 로비에 알린다", () => {
+    const dropped: string[] = [];
+    const { core, join } = setup();
+    (core as unknown as { host: { visitorDropped?: (v: string) => void } }).host.visitorDropped = (v) => void dropped.push(v);
+    const a = join("a");
+    const b = join("b");
+    clear(a, b);
+    expect(core.friendNotice(["a", "zz"], "abcdEFGH_-123456", "보리", true)).toBe(1);
+    expect(events(a)).toEqual([{ t: "friend", key: "abcdEFGH_-123456", name: "보리", on: true }]);
+    expect(events(b)).toEqual([]);
+    core.disconnect(b, 1006, 1_000);
+    expect(dropped).toEqual(["b"]);
+    // 끊긴(유예 중) 사람에게는 보내지 않는다
+    expect(core.friendNotice(["b"], "abcdEFGH_-123456", "가람", false)).toBe(0);
+  });
 });

@@ -196,3 +196,12 @@ export async function whereOf(visitorIds: string[], fresh = false): Promise<Reco
   const r = await internal<{ where: Record<string, PeerWhere> }>("/internal/where", { op: "where", visitorIds: ids, ...(fresh ? { fresh: true } : {}) }, 3000);
   return r ? r.where : null;
 }
+
+/**
+ * 친구 들고 남 등록 (입장 토큰을 주기 직전): 이 사람이 채널에 들어오면·나가면 friendIds에게 바로 알리게 실시간 서버에 맡긴다.
+ * 입장을 늦추지 않게 짧게 기다리고, 실패하면(옛 실시간 서버 등) 조용히 넘어간다 — 친구 창의 주기 조회가 남는다
+ */
+export async function friendHello(visitorId: string, name: string, key: string, friendIds: string[]): Promise<boolean> {
+  const r = await internal<{ ok: true }>("/internal/hello", { op: "hello", visitorId, name, key, friends: friendIds.slice(0, 50) }, 1500);
+  return !!r;
+}

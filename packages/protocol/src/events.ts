@@ -127,7 +127,9 @@ export type S2C =
   /** 말풍선 자유 채팅 (보낸 사람 빼고, 서버가 가린 글. 옛 클라이언트는 모르는 t라 버린다). id = 줄 id(chatLog와 중복 제거), at = 서버 시각 */
   | { t: "chat"; sid: Sid; text: string; id?: string; at?: number }
   /** 받는 사람에게만: 방에 들어올 때(입장·재접속·실내에서 복귀) 이 방의 최근 1분 채팅. now = 서버 시각 (옛 클라이언트는 모르는 t라 버린다) */
-  | { t: "chatLog"; now: number; lines: ChatLogLine[] };
+  | { t: "chatLog"; now: number; lines: ChatLogLine[] }
+  /** 받는 사람에게만: 친구가 들어왔다(on)·나갔다 (key = 친구 창의 그 친구 키, 옛 클라이언트는 모르는 t라 버린다) */
+  | { t: "friend"; key: string; name: string; on: boolean };
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 /** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */

@@ -110,6 +110,8 @@ export type NetCallbacks = {
   /** 23번 확성기 한마디 (내 것 포함, 서버가 서명된 문장만 보낸다) */
   /** 서버에서 내 계정(포인트·선물함)이 바뀌었다 → UI가 /api/me를 다시 받는다 */
   onMeStale?(): void;
+  /** 친구가 들어왔다·나갔다 (실시간 서버가 밀어 준다) */
+  onFriend?(m: { key: string; name: string; on: boolean }): void;
   onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true }): void;
 };
 
@@ -609,6 +611,9 @@ export class RealtimeClient {
           break;
         case "me":
           this.cb.onMeStale?.();
+          break;
+        case "friend":
+          if (typeof m.key === "string" && typeof m.name === "string") this.cb.onFriend?.({ key: m.key, name: m.name, on: m.on === true });
           break;
         case "peers": {
           this.peers.clear();

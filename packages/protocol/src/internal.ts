@@ -1,5 +1,5 @@
 import { ROOM_ID_RE } from "./constants";
-import { WHERE_MAX_IDS } from "./friends";
+import { FRIEND_KEY_RE, FRIEND_MAX, WHERE_MAX_IDS } from "./friends";
 import { hmacSign, hmacVerify } from "./token";
 
 // 47번: Vercel(웹 서버) → 실시간 서버 내부 요청 서명. 브라우저를 거치지 않는 서버끼리의 호출이라
@@ -8,6 +8,7 @@ import { hmacSign, hmacVerify } from "./token";
 //  - POST /internal/peer  { ch | room, sid, exp }        → 그 채널·방의 sid가 누구인지 (유저 신고 대상 확인)
 //  - POST /internal/me    { visitorIds, exp }              → 접속 중인 그 방문자들에게 "내 정보 새로 받기"(관리자 포인트 지급 등)
 //  - POST /internal/where { visitorIds, fresh?, exp }      → 친구: 그 방문자들이 지금 어느 채널·자리에 있는지 (접속 안 했으면 빠진다)
+//  - POST /internal/hello { visitorId, name, key, friends, exp } → 친구: 입장 직전 "이 사람이 들어오면·나가면 이 친구들에게 알려 달라"
 
 export const INTERNAL_SIG_HEADER = "X-Tomb-Internal";
 /** 내부 요청 유효 시간 (초). 서버끼리라 짧게 */
@@ -20,7 +21,9 @@ export type InternalPeer = { op: "peer"; ch?: number; room?: string; sid: number
 export type InternalMe = { op: "me"; visitorIds: string[]; exp: number };
 /** fresh = 실시간 서버의 위치 기억(WHERE_CACHE_MS)을 건너뛰고 지금 채널들에 묻는다 (친구한테 가기) */
 export type InternalWhere = { op: "where"; visitorIds: string[]; fresh?: boolean; exp: number };
-export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere;
+/** 친구 들고 남 알림 등록 (웹 /api/join이 입장 토큰을 주기 직전). friends = 알릴 친구 방문자 id, key = 이 사람의 친구 키 */
+export type InternalHello = { op: "hello"; visitorId: string; name: string; key: string; friends: string[]; exp: number };
+export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere | InternalHello;
 
 const sigData = (body: string) => "internal:" + body;
 
@@ -60,6 +63,14 @@ export async function verifyInternal(
     if (!Array.isArray(ids) || ids.length < 1 || ids.length > INTERNAL_KICK_MAX) return null;
     if (!ids.every((v) => typeof v === "string" && VISITOR_RE.test(v))) return null;
     return { op: "me", visitorIds: ids as string[], exp: r.exp };
+  }
+  if (r.op === "hello") {
+    const ids = r.friends;
+    if (typeof r.visitorId !== "string" || !VISITOR_RE.test(r.visitorId)) return null;
+    if (typeof r.name !== "string" || !r.name || r.name.length > 40) return null;
+    if (typeof r.key !== "string" || !FRIEND_KEY_RE.test(r.key)) return null;
+    if (!Array.isArray(ids) || ids.length > FRIEND_MAX || !ids.every((v) => typeof v === "string" && VISITOR_RE.test(v))) return null;
+    return { op: "hello", visitorId: r.visitorId, name: r.name, key: r.key, friends: ids as string[], exp: r.exp };
   }
   if (r.op === "where") {
     const ids = r.visitorIds;

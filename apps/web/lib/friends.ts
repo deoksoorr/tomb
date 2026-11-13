@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { FRIEND_MAX, staffPublicName, type PeerWhere } from "@tomb/protocol";
-import { findBan, notifyMe, peerOf, whereOf } from "./ban";
+import { findBan, friendHello, notifyMe, peerOf, whereOf } from "./ban";
 import { env } from "./env";
 import { friendCard } from "./friendCard";
 import type { FriendEntry, FriendListResponse, FriendPresenceResponse, FriendRequestEntry, FriendRequestResponse, FriendWhere, FriendWhereResponse } from "./friendTypes";
@@ -121,6 +121,23 @@ export async function friendWhere(me: string, key: string, now = Date.now()): Pr
   return { key, name, since: f.at, where: toFriendWhere(where?.[f.id], where !== null), houseId };
 }
 
+/**
+ * 친구 들고 남 등록 (/api/join이 입장 토큰을 주기 직전): 친구가 있으면 실시간 서버에 "이 사람이 들어오면·나가면 이 친구들에게"를 맡긴다.
+ * 이름은 친구 창과 같게 (운영자는 "대장"). 친구가 없으면 아무것도 안 한다
+ */
+export async function announceFriends(me: string, now = Date.now()): Promise<void> {
+  const store = getFriends();
+  const friends = await withoutBanned((await store.lists(me, now)).friends, now);
+  if (!friends.length) return;
+  const [name] = await namesOf(store, [me]);
+  await friendHello(me, name, friendKeyFor(me), friends.map((f) => f.id));
+}
+
+/** 친구가 새로 생기면(수락) 두 사람 모두 다시 등록한다 — 다음 입장을 기다리지 않고 지금부터 들고 남을 알리게 */
+async function reannounce(ids: string[], now: number): Promise<void> {
+  await Promise.all(ids.map((id) => announceFriends(id, now).catch(() => undefined)));
+}
+
 /** 받는 쪽 화면에 알린다 (빨간 점·목록을 바로 새로). 응답 뒤로 미루면 서버리스가 멈출 수 있어 기다린다(최대 2초). 실패해도 다음 주기에 맞는다 */
 const nudge = (id: string) => notifyMe([id]).catch(() => null);
 
@@ -145,6 +162,7 @@ export async function requestFriendById(me: string, target: string, now = Date.n
     case "sent":
     case "accepted":
       await nudge(target);
+      if (r === "accepted") await reannounce([me, target], now);
       return { result: r, name };
     case "already":
       throw new HttpError(409, "ALREADY", `${name}님과는 이미 친구예요.`);
@@ -176,6 +194,7 @@ export async function answerRequest(me: string, key: string, accept: boolean, no
   if (r === "full") throw new HttpError(409, "FULL", `친구는 ${FRIEND_MAX}명까지예요. 목록을 정리한 뒤 받아 주세요.`);
   if (r === "their_full") throw new HttpError(409, "THEIR_FULL", "상대의 친구 목록이 가득 찼어요.");
   await nudge(from.id);
+  await reannounce([me, from.id], now);
   return { ok: true };
 }
 

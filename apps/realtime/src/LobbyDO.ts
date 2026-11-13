@@ -14,6 +14,7 @@ import {
 } from "./lobbyState";
 import { AdmissionQueue, type QueueSnapshot } from "./queue";
 import { applyHuntReport, huntRoomsInfo, pruneHunt, type HuntRoomsState } from "./huntRooms";
+import { FriendPresence, type FriendNotice, type PresenceRec } from "./friendPresence";
 
 // Lobby DO (전체에 하나, idFromName("lobby")).
 // - 각 Channel DO가 인원 변화를 1초 단위로 디바운스해 RPC(report)로 알려 준다(push).
@@ -28,6 +29,9 @@ import { applyHuntReport, huntRoomsInfo, pruneHunt, type HuntRoomsState } from "
 const SNAPSHOT_KEY = "lobby";
 const QUEUE_KEY = "queue";
 const HUNT_KEY = "hunt";
+/** 친구 들고 남: 방문자별 기록 "fp:{visitorId}", 나감 알림 대기 목록 */
+const FP_PREFIX = "fp:";
+const FP_PENDING_KEY = "fpPending";
 
 export class LobbyDO extends DurableObject<Env> {
   private readonly cfg: Config;
@@ -41,6 +45,8 @@ export class LobbyDO extends DurableObject<Env> {
   private refreshDueAt: number;
   private alarmAt: number | null = null;
   private readonly counts = (id: number) => countOf(this.state, id);
+  /** 친구 들고 남 알림 (기록은 storage에 두어 로비가 다시 떠도 중복·누락이 없게) */
+  private readonly friends: FriendPresence;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -50,6 +56,14 @@ export class LobbyDO extends DurableObject<Env> {
     this.hunt = ctx.storage.kv.get<HuntRoomsState>(HUNT_KEY) ?? {};
     this.queue = new AdmissionQueue(this.cfg, ctx.storage.kv.get<QueueSnapshot>(QUEUE_KEY), Date.now());
     this.refreshDueAt = Date.now() + LOBBY_REFRESH_MS;
+    const kv = ctx.storage.kv;
+    this.friends = new FriendPresence(
+      {
+        get: (v) => kv.get<PresenceRec>(FP_PREFIX + v),
+        put: (v, rec) => void (rec ? kv.put(FP_PREFIX + v, rec) : kv.delete(FP_PREFIX + v)),
+      },
+      kv.get<[string, number][]>(FP_PENDING_KEY) ?? [],
+    );
     // 새로 떴다 = 메모리를 잃었다(유휴 DO는 로컬 workerd에서 약 10초, 운영에서 70~140초 뒤 내려간다).
     // 요청을 받기 전에 각 채널의 현재 인원으로 맞춘다.
     const all = Array.from({ length: this.cfg.maxChannels }, (_, i) => i + 1);
@@ -109,6 +123,10 @@ export class LobbyDO extends DurableObject<Env> {
    */
   async claimVisitor(visitorId: string, channel: number, claimedAt: number): Promise<void> {
     if (typeof visitorId !== "string" || !this.validChannel(channel)) return;
+    // 친구 들고 남: 처음 자리를 잡았으면 친구들에게 바로 "들어옴" (나감 대기 중이었으면 취소)
+    const notice = this.friends.joined(visitorId);
+    this.saveFriends();
+    if (notice) this.tellFriends(notice);
     const prev = this.visitors.claim(visitorId, channel);
     if (prev !== null) {
       await channelStub(this.env, prev)
@@ -119,13 +137,52 @@ export class LobbyDO extends DurableObject<Env> {
 
   /** Channel DO → 방문자가 최종 퇴장했다(1000 close, 유예 만료, 추방). 등록된 채널이 같을 때만 지운다. */
   releaseVisitor(visitorId: string, channel: number): void {
-    if (typeof visitorId === "string" && this.validChannel(channel)) this.visitors.release(visitorId, channel);
+    if (typeof visitorId !== "string" || !this.validChannel(channel)) return;
+    this.visitors.release(visitorId, channel);
+    // 다른 채널에 이미 자리를 잡았으면(채널 이동) 나간 게 아니다
+    if (this.visitors.channelOf(visitorId) === undefined) this.dropFriend(visitorId);
+  }
+
+  /** Channel DO → 연결이 끊겼다 (재연결 유예 시작). 유예 안에 돌아오면 claim이 다시 온다 */
+  visitorDropped(visitorId: string, channel: number): void {
+    if (typeof visitorId !== "string" || !this.validChannel(channel)) return;
+    const at = this.visitors.channelOf(visitorId);
+    if (at === undefined || at === channel) this.dropFriend(visitorId);
+  }
+
+  /** Worker /internal/hello → 웹이 입장 토큰을 주기 직전: 이 사람이 들고 날 때 알릴 친구들 */
+  friendHello(visitorId: string, name: string, key: string, friends: string[]): void {
+    this.friends.hello(visitorId, name, key, friends);
+  }
+
+  private dropFriend(visitorId: string): void {
+    this.friends.dropped(visitorId, Date.now());
+    this.saveFriends();
+    this.ensureAlarm();
+  }
+
+  private saveFriends(): void {
+    if (!this.friends.dirty) return;
+    this.ctx.storage.kv.put(FP_PENDING_KEY, [...this.friends.pending]);
+    this.friends.dirty = false;
+  }
+
+  /** 사람이 있는 채널마다 그 친구들에게 전한다 (받을 사람이 없는 채널은 아무것도 안 한다) */
+  private tellFriends(n: FriendNotice): void {
+    for (const c of computeLobby(this.state, this.cfg).channels) {
+      if (c.count <= 0) continue;
+      channelStub(this.env, c.id)
+        .friendNotice(n.to, n.key, n.name, n.on)
+        .catch((e) => console.error("friendNotice failed", c.id, e));
+    }
   }
 
   /** 스냅샷(30초, 바뀐 경우만)과 재확인(5분) */
   async alarm(): Promise<void> {
     this.alarmAt = null;
     const now = Date.now();
+    for (const n of this.friends.tick(now)) this.tellFriends(n);
+    this.saveFriends();
     if (now >= this.refreshDueAt) {
       this.refreshDueAt = now + LOBBY_REFRESH_MS;
       await this.refresh(refreshTargets(this.state, this.cfg, now));
@@ -174,7 +231,7 @@ export class LobbyDO extends DurableObject<Env> {
   /** 알람 하나로 두 주기를 돌린다: min(스냅샷 예정, 재확인 예정). 최근 쓰인 채널이 없고 저장할 것도 없으면 알람 없음 */
   private ensureAlarm(): void {
     const refreshAt = hasRecentChannels(this.state, this.cfg, Date.now()) ? this.refreshDueAt : Infinity;
-    const at = Math.min(this.snapshotDueAt ?? Infinity, refreshAt);
+    const at = Math.min(this.snapshotDueAt ?? Infinity, refreshAt, this.friends.due() ?? Infinity);
     if (at === Infinity || (this.alarmAt !== null && this.alarmAt <= at)) return;
     this.alarmAt = at;
     this.ctx.storage.setAlarm(at).catch((e) => console.error("lobby setAlarm failed", e));

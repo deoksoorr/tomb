@@ -138,6 +138,8 @@ export interface ChannelHost<C> {
   /** 방문자가 이 채널에 자리를 잡았다(신규·복귀·교체) / 최종 퇴장했다 → 로비의 채널 간 중복 방지 레지스트리 */
   visitorJoined(visitorId: string, at: number): void;
   visitorLeft(visitorId: string): void;
+  /** 친구 들고 남: 연결이 끊겨 재연결 유예에 들어갔다 (없으면 알리지 않는다) */
+  visitorDropped?(visitorId: string): void;
   /** Vercel이 서명한 증서(look/firework) 검증. 비동기(HMAC) */
   verifyGrant(token: string): Promise<Grant | null>;
   /** 폭죽 nonce를 until(ms)까지 "사용됨"으로 기록. 이미 쓴 nonce면 false */
@@ -544,6 +546,7 @@ export class ChannelCore<C extends object> {
       this.markDirty(p);
     }
     this.host.saveReservation({ ...this.record(p), until: p.until });
+    this.host.visitorDropped?.(p.visitorId);
   }
 
   /** 만료된 유예 예약을 정리한다 (알람에서 호출) */
@@ -603,6 +606,19 @@ export class ChannelCore<C extends object> {
       ...(p.away ? { away: true as const } : {}),
       ...(p.away && p.place ? { place: p.place } : {}),
     }));
+  }
+
+  /** 친구 들고 남: 이 채널에 접속 중인 to(친구들)에게만 알린다. 보낸 수 */
+  friendNotice(to: readonly string[], key: string, name: string, on: boolean): number {
+    let n = 0;
+    for (const v of to) {
+      const sid = this.byVisitor.get(v);
+      const p = sid === undefined ? undefined : this.peers.get(sid);
+      if (!p?.conn) continue;
+      this.sendTo(p, { t: "friend", key, name, on });
+      n++;
+    }
+    return n;
   }
 
   /** 47번 유저 신고: 이 채널·방의 sid가 누구인지 (지금 접속 중이거나 유예 중인 사람만) */

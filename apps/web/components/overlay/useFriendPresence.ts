@@ -6,16 +6,26 @@ import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { friendJoinToastOn, friendsInChannel, friendsStore, isOnline, presenceChanges, useFriends } from "@/lib/hooks/useFriends";
 import { showFriendNotice } from "./FriendNotice";
 
-/** 친구가 있거나 받은 신청이 있으면 이 간격으로 접속 상태를 묻는다 (실시간 서버도 10초씩 기억해 가볍다) → 들고 나는 것을 30초 안팎에 안다 */
-export const POLL_MS = 20_000;
-/** 친구도 신청도 없으면 드물게 (새 신청·수락은 실시간 서버의 "내 정보 새로 받기" 알림으로 바로 온다) */
-export const IDLE_POLL_MS = 2 * 60_000;
+/**
+ * 들고 남 알림은 실시간 서버가 바로 밀어 준다(friend:presence). 주기 조회는 지도 하트·목록을 맞추는 용도라 느리게,
+ * 밀어 주기를 못 받은 경우(옛 실시간 서버 등)에만 조회 결과로 알린다
+ */
+export const POLL_MS = 60_000;
+/** 친구도 신청도 없으면 더 드물게 (새 신청·수락은 실시간 서버의 "내 정보 새로 받기" 알림으로 바로 온다) */
+export const IDLE_POLL_MS = 3 * 60_000;
+/** 밀어 준 알림 뒤 이 안에 조회로 같은 변화를 보면 다시 알리지 않는다 */
+const PUSH_DEDUPE_MS = 3 * 60_000;
+/** 밀어 준 알림 뒤 목록(지도 하트)을 다시 받기까지 (실시간 서버가 새 자리를 보게 조금 기다린다) */
+const PUSH_REFRESH_MS = 2_500;
 
 /** 다음에 물을 때까지 (친구·받은 신청이 있으면 짧게) */
 const delayFor = () => {
   const s = friendsStore.getSnapshot();
   return (s.friends?.length ?? 0) > 0 || s.incoming > 0 ? POLL_MS : IDLE_POLL_MS;
 };
+
+/** 실시간 서버가 밀어 준 들고 남 (친구 키 → 방향·시각) */
+const pushed = new Map<string, { on: boolean; at: number }>();
 
 /** "가람님, 보리님 외 2명" */
 const namesText = (names: string[]) => (names.length > 2 ? `${names.slice(0, 2).join("님, ")}님 외 ${names.length - 2}명` : `${names.join("님, ")}님`);
@@ -54,6 +64,15 @@ export function useFriendPresence(ready: boolean): { friendIncoming: number } {
     });
     // 친구 신청·수락처럼 서버에서 내 쪽이 바뀌면 실시간 서버가 알려 준다 → 바로 다시 받는다
     const offStale = bridge.on("me:stale", () => void friendsStore.refresh());
+    // 친구 들고 남 (실시간 서버가 밀어 준 것): 바로 알리고, 조금 뒤 목록을 새로 (지도 하트·친구 창)
+    let pushTimer: ReturnType<typeof setTimeout> | null = null;
+    const offPush = bridge.on("friend:presence", ({ key, name, on }) => {
+      pushed.set(key, { on, at: Date.now() });
+      const known = friendsStore.getSnapshot().friends;
+      if (friendJoinToastOn() && (!known || known.some((f) => f.key === key))) showFriendNotice(on ? `${name}님이 마을에 왔어요` : `${name}님이 나갔어요`);
+      if (pushTimer) clearTimeout(pushTimer);
+      pushTimer = setTimeout(() => void friendsStore.refresh(), PUSH_REFRESH_MS);
+    });
     const onVisible = () => {
       if (!document.hidden && alive) schedule(0);
     };
@@ -63,6 +82,8 @@ export function useFriendPresence(ready: boolean): { friendIncoming: number } {
       if (timer) clearTimeout(timer);
       offStore();
       offStale();
+      offPush();
+      if (pushTimer) clearTimeout(pushTimer);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [ready]);
@@ -72,7 +93,16 @@ export function useFriendPresence(ready: boolean): { friendIncoming: number } {
   useEffect(() => {
     if (!friends) return;
     const first = prev.current === null;
-    const { came, left } = presenceChanges(prev.current, friends);
+    const changes = presenceChanges(prev.current, friends);
+    // 실시간 서버가 이미 밀어 준 변화는 다시 알리지 않는다
+    const now = Date.now();
+    const fresh = (on: boolean) => (name: string) => {
+      const f = friends.find((x) => x.name === name);
+      const p = f ? pushed.get(f.key) : undefined;
+      return !(p && p.on === on && now - p.at < PUSH_DEDUPE_MS);
+    };
+    const came = changes.came.filter(fresh(true));
+    const left = changes.left.filter(fresh(false));
     prev.current = friends;
     if (!friendJoinToastOn()) return;
     if (first) {

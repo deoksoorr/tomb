@@ -18,6 +18,8 @@ describe("내부 요청 서명", () => {
     // 친구 위치 조회 (fresh는 true일 때만 남는다)
     const where = await signInternal(S, { op: "where", visitorIds: ["abc_DEF-1", "x"], fresh: true, exp: now + 20 });
     expect(await verifyInternal(S, where.body, where.sig, now)).toEqual({ op: "where", visitorIds: ["abc_DEF-1", "x"], fresh: true, exp: now + 20 });
+    const hello = await signInternal(S, { op: "hello", visitorId: "me_1", name: "가람", key: "abcdEFGH_-123456", friends: ["f1", "f2"], exp: now + 20 });
+    expect(await verifyInternal(S, hello.body, hello.sig, now)).toEqual({ op: "hello", visitorId: "me_1", name: "가람", key: "abcdEFGH_-123456", friends: ["f1", "f2"], exp: now + 20 });
     const plain = await signInternal(S, { op: "where", visitorIds: ["x"], exp: now + 20 });
     expect(await verifyInternal(S, plain.body, plain.sig, now)).toEqual({ op: "where", visitorIds: ["x"], exp: now + 20 });
   });
@@ -45,6 +47,9 @@ describe("내부 요청 서명", () => {
       { op: "me", visitorIds: [], exp: now + 5 },
       { op: "me", visitorIds: ["a b"], exp: now + 5 },
       { op: "where", visitorIds: [], exp: now + 5 },
+      { op: "hello", visitorId: "a", name: "", key: "abcdEFGH_-123456", friends: [], exp: now + 5 },
+      { op: "hello", visitorId: "a", name: "가람", key: "짧음", friends: [], exp: now + 5 },
+      { op: "hello", visitorId: "a", name: "가람", key: "abcdEFGH_-123456", friends: ["a b"], exp: now + 5 },
       { op: "where", visitorIds: Array.from({ length: WHERE_MAX_IDS + 1 }, (_, i) => `v${i}`), exp: now + 5 },
       { op: "where", visitorIds: ["a b"], exp: now + 5 },
       { op: "zap", exp: now + 5 },
