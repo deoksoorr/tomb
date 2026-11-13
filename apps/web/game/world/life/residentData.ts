@@ -20,7 +20,7 @@ export type ResidentDef = {
   color: string;
   /** 꾸미기 (가벼운 머리·목 꾸미기만 — 오라·펫처럼 따로 붙는 연출은 쓰지 않는다) */
   look: readonly string[];
-  /** 사는 동네 (쉼 자리는 이 원 안에서) */
+  /** 집 구역(활동 반경): 대부분의 시간은 이 원 안을 돌아다니고 쉼 자리도 여기서 고른다. 주민마다 맵 곳곳에 고르게 나눠 둔다 */
   home: { x: number; y: number; r: number };
   /** 앉아 쉬는 벤치·그루터기 (FURNITURE id) */
   perches: readonly string[];
@@ -46,8 +46,8 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "suit",
     color: MIST,
     look: [],
-    home: { x: 720, y: 520, r: 130 },
-    perches: ["lA", "bB", "bC"],
+    home: { x: 790, y: 300, r: 90 }, // 귀신의집·소원 분수 옆 (광장 북동쪽 가장자리)
+    perches: ["cA", "cB"],
     grass: 4,
     legMs: 40_000,
     speed: 30,
@@ -68,8 +68,8 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "hood",
     color: BONE,
     look: ["neck_scarf"],
-    home: { x: 470, y: 480, r: 100 },
-    perches: ["bA"],
+    home: { x: 210, y: 880, r: 150 }, // 동물원
+    perches: ["bX"],
     grass: 4,
     legMs: 44_000,
     speed: 28,
@@ -90,7 +90,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "sheet",
     color: CANDLE,
     look: ["hand_lantern"],
-    home: { x: 720, y: 470, r: 80 },
+    home: { x: 720, y: 470, r: 90 }, // 모닥불 광장 (광장 담당은 이 사람 하나)
     perches: ["kP1", "kP2", "kP3", "kPw1", "kPe1"],
     grass: 3,
     legMs: 50_000,
@@ -112,8 +112,8 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "cup",
     color: OCHRE,
     look: [],
-    home: { x: 824, y: 390, r: 90 },
-    perches: ["cA", "cB", "lA"],
+    home: { x: 1160, y: 430, r: 190 }, // 분양 단지 (주거 구역)
+    perches: ["bN"],
     grass: 3,
     legMs: 38_000,
     speed: 32,
@@ -133,7 +133,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "bun",
     color: LAVENDER,
     look: ["hat_flower"],
-    home: { x: 720, y: 130, r: 110 },
+    home: { x: 570, y: 120, r: 140 }, // 정문 앞마당·유령 잡화점·달빛 연못
     perches: ["bG", "bH"],
     grass: 4,
     legMs: 34_000,
@@ -155,7 +155,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "tall",
     color: MIST,
     look: ["hat_halo"],
-    home: { x: 220, y: 190, r: 120 },
+    home: { x: 240, y: 140, r: 150 }, // 별 보기 언덕 (망원경·열기구)
     perches: ["lB", "bL"],
     grass: 4,
     legMs: 46_000,
@@ -176,7 +176,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "umbrella",
     color: CANDLE,
     look: [],
-    home: { x: 420, y: 630, r: 130 },
+    home: { x: 400, y: 640, r: 130 }, // 강가·서쪽 다리
     perches: ["lC", "bK"],
     grass: 5,
     legMs: 36_000,
@@ -197,8 +197,8 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "box",
     color: MOSS,
     look: ["hat_straw"],
-    home: { x: 1090, y: 790, r: 100 },
-    perches: ["bO", "lE"],
+    home: { x: 1200, y: 830, r: 140 }, // 호수·나루터·낚시터
+    perches: ["lE", "bO"],
     grass: 4,
     legMs: 48_000,
     speed: 24,
@@ -218,7 +218,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "round",
     color: OCHRE,
     look: [],
-    home: { x: 150, y: 600, r: 80 },
+    home: { x: 150, y: 600, r: 100 }, // 묘지기 모닥불
     perches: ["kWn", "kWs", "kWw", "kWe"],
     grass: 3,
     legMs: 42_000,
@@ -239,8 +239,8 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "catmask",
     color: BONE,
     look: [],
-    home: { x: 968, y: 900, r: 80 },
-    perches: ["kSn", "kSs", "kSw", "kSe", "cE", "cF"],
+    home: { x: 500, y: 880, r: 130 }, // 안개 숲·안개 연못
+    perches: ["bS"],
     grass: 3,
     legMs: 44_000,
     speed: 26,
@@ -260,7 +260,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "cat",
     color: LAVENDER,
     look: ["hat_cat"],
-    home: { x: 240, y: 470, r: 120 },
+    home: { x: 240, y: 440, r: 160 }, // 옛 묘역
     perches: ["bI", "bJ"],
     grass: 5,
     legMs: 36_000,
@@ -281,7 +281,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "hood",
     color: MOSS,
     look: ["hand_lantern"],
-    home: { x: 900, y: 150, r: 100 },
+    home: { x: 890, y: 120, r: 120 }, // 사냥터 동굴 앞·분양 사무소
     perches: ["bQ"],
     grass: 4,
     legMs: 40_000,
@@ -302,7 +302,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "suit",
     color: OCHRE,
     look: [],
-    home: { x: 950, y: 300, r: 90 },
+    home: { x: 1110, y: 170, r: 140 }, // 까마귀 연못·주거 구역 북쪽
     perches: ["bN"],
     grass: 3,
     legMs: 42_000,
@@ -323,8 +323,8 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "round",
     color: CANDLE,
     look: ["hat_straw"],
-    home: { x: 1030, y: 980, r: 80 },
-    perches: ["cE", "cF"],
+    home: { x: 990, y: 930, r: 100 }, // 호박밭 작은 모닥불
+    perches: ["kSn", "kSs", "kSw", "kSe", "cE", "cF"],
     grass: 4,
     legMs: 46_000,
     speed: 24,
@@ -344,8 +344,8 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "bun",
     color: MOSS,
     look: ["neck_scarf"],
-    home: { x: 720, y: 980, r: 120 },
-    perches: ["bV", "bW", "bS"],
+    home: { x: 720, y: 920, r: 150 }, // 다리 건너 묘역
+    perches: ["bV", "bW"],
     grass: 4,
     legMs: 38_000,
     speed: 32,

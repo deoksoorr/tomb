@@ -2,8 +2,8 @@ import { DIR, hashUnit, MAP_HEIGHT, MAP_WIDTH, RIVER_HALF_W, RIVER_PATH, riverYA
 import { faceToward } from "../../logic/movement";
 import { findPath, type Pt, type WalkGrid } from "../../logic/pathfind";
 import type { EmoteIcon } from "../../sprites/emotes";
-import { ELLIPSES, inWater, inWaterBody, onDeck, onStone } from "../layout";
-import { critterGrid, restSpots, seatFront, type CritterDef, type RestSpot } from "./critterSim";
+import { ELLIPSES, inWater, inWaterBody, onDeck, onStone, PLAZA_FIRE } from "../layout";
+import { critterGrid, restable, restSpots, seatFront, type CritterDef, type RestSpot } from "./critterSim";
 import { RESIDENTS, type ResidentDef, type ResidentTaste } from "./residentData";
 
 // 돌아다니는 마을 주민 — 결정적 시뮬레이션 (순수, Phaser 없음 → residents.test.ts).
@@ -12,7 +12,10 @@ import { RESIDENTS, type ResidentDef, type ResidentTaste } from "./residentData"
 //
 // 사용자 요청 "다 너무 앉아 있다. 돌아다니는 걸 위주로, 앉는 건 살짝만. 수영도 하게":
 // 하루 = 같은 길이(legMs)의 구간이 이어진 것. 구간 k는 자리 S(k)에서 S(k+1)까지 "구간의 대부분을 써서" 걷고(약 80%),
-// 끝에 잠깐 쉰다 — 앉기(6~15초, 전체 15% 안팎) 또는 서서 두리번(1.5~4.5초). 길이 짧으면 마을 다른 곳(다른 주민의 쉼 자리)을 들러 간다.
+// 끝에 잠깐 쉰다 — 앉기(6~15초, 전체 15% 안팎) 또는 서서 두리번(1.5~4.5초).
+// 사용자 요청 "주민들이 광장에만 몰려 있다. 구석구석 흩어 놔야": 주민마다 집 구역(def.home, 맵 곳곳에 나눠 둠)이 있어
+// 대부분의 구간은 그 구역 안에서 이 점 저 점을 들르며 돌아다니고(길이 짧으면 구역 안 다른 점을 더 들른다),
+// 구간의 10~20%만 이웃 구역(다른 주민의 쉼 자리)으로 산책 간다. 마을 전체 쉼 자리를 들르던 옛 방식은 광장 벤치가 많아 광장으로 끌렸다.
 // 가끔 달리고, 가끔 물가(강·호수·연못)로 가 물에 들어가 잠시 헤엄치다 나온다 (모습은 사람 수영 그대로: state "swim").
 // 구간 하나만 계산하면 되므로(과거를 다시 돌리지 않는다) 어느 시각을 물어도 모두 같은 자리다.
 // 걷는 길은 critterGrid(담·절벽·소품·가구·집·물을 피하는 격자). 벤치·그루터기에는 "보기에만" 앉는다 (서버 좌석을 잡지 않는다).
@@ -31,14 +34,20 @@ const PACE_MAX = 2;
 /** 헤엄 빠르기 범위 (px/s) */
 const SWIM_V_MIN = 9;
 const SWIM_V_MAX = 24;
-/** 마을 다른 곳까지 가는 거리 (사는 동네 중심에서) */
-const ROAM_R = 520;
+/** 산책 갈 이웃 구역까지의 거리 (집 구역 중심끼리) — 너무 먼 구역은 맵 한가운데(광장)를 가로지르게 되니 가까운 구역만 */
+const ROAM_R = 560;
+/** 큰 모닥불에서 이 거리 안에 집 구역이 있으면 광장 구역 — 모닥불 좋아하는 주민만 산책 간다 (광장에 몰리지 않게) */
+const PLAZA_R = 150;
+/** 구역 안을 돌아다닐 때 들르는 점 사이 간격 */
+const WANDER_STEP = 24;
+/** 한 구간에 구역 안에서 들르는 점 수 상한 */
+const WANDER_MAX = 6;
 
-/** 성향별 비율 — 모두 걷는 비중이 크고(약 75~85%), 앉기·수영·달리기만 조금씩 다르다 */
+/** 성향별 비율 — 모두 걷는 비중이 크고(약 75~85%), 앉기·수영·달리기만 조금씩 다르다. roam = 이웃 구역으로 산책 가는 구간 비율 (10~20%) */
 const TASTES: Record<ResidentTaste, { sit: number; swim: number; run: number; sitMs: [number, number]; roam: number }> = {
-  walk: { sit: 0.46, swim: 0.06, run: 0.14, sitMs: [7_000, 15_000], roam: 0.6 },
-  swim: { sit: 0.4, swim: 0.3, run: 0.1, sitMs: [6_000, 14_000], roam: 0.45 },
-  fire: { sit: 0.62, swim: 0.04, run: 0.06, sitMs: [9_000, 15_000], roam: 0.4 },
+  walk: { sit: 0.4, swim: 0.06, run: 0.14, sitMs: [7_000, 15_000], roam: 0.2 },
+  swim: { sit: 0.34, swim: 0.3, run: 0.1, sitMs: [6_000, 14_000], roam: 0.15 },
+  fire: { sit: 0.54, swim: 0.04, run: 0.06, sitMs: [9_000, 15_000], roam: 0.1 },
 };
 /** 서서 두리번거리는 시간 */
 const IDLE_MS: [number, number] = [1_500, 4_500];
@@ -89,6 +98,60 @@ export function residentCritterDef(r: ResidentDef): CritterDef {
   };
 }
 
+/** 마을의 가장 큰 이어진 걷기 영역 (격자마다 한 번만) — 동물원 우리 안처럼 갇힌 칸은 빠진다 */
+const mainCache = new WeakMap<WalkGrid, Uint8Array>();
+function mainArea(g: WalkGrid): Uint8Array {
+  const hit = mainCache.get(g);
+  if (hit) return hit;
+  const n = g.cols * g.rows;
+  const label = new Int32Array(n).fill(-1);
+  const q = new Int32Array(n);
+  let best = -1;
+  let bestSize = 0;
+  for (let i = 0, id = 0; i < n; i++) {
+    if (label[i] >= 0 || g.blocked(i % g.cols, Math.floor(i / g.cols))) continue;
+    let head = 0;
+    let tail = 0;
+    q[tail++] = i;
+    label[i] = id;
+    while (head < tail) {
+      const c = q[head++];
+      const cx = c % g.cols;
+      const cy = Math.floor(c / g.cols);
+      for (const [dx, dy] of NEIGH) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        const j = ny * g.cols + nx;
+        if (g.blocked(nx, ny) || label[j] >= 0) continue;
+        label[j] = id;
+        q[tail++] = j;
+      }
+    }
+    if (tail > bestSize) {
+      bestSize = tail;
+      best = id;
+    }
+    id++;
+  }
+  const out = new Uint8Array(n);
+  for (let i = 0; i < n; i++) if (label[i] === best) out[i] = 1;
+  mainCache.set(g, out);
+  return out;
+}
+const NEIGH: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+/** 이 점에서 마을 큰 길로 걸어 나갈 수 있는지 (갇힌 칸이면 그 자리로 가는 길이 없어 순간이동처럼 보인다) */
+export function reachable(g: WalkGrid, x: number, y: number): boolean {
+  const cx = Math.floor(x / g.cell);
+  const cy = Math.floor(y / g.cell);
+  return cx >= 0 && cy >= 0 && cx < g.cols && cy < g.rows && mainArea(g)[cy * g.cols + cx] === 1;
+}
+
 /**
  * 주민의 쉼 자리: 앉는 좌석마다 "그 앞에 서는 자리"를 바라보는 쪽(없으면 아래쪽)으로 10~24px 안에서 찾고,
  * 길가·풀밭 자리는 고양이와 같은 규칙(restSpots). 결정적이라 모든 클라이언트가 같은 목록을 얻는다
@@ -103,18 +166,26 @@ export function residentSpots(def: ResidentDef, g: WalkGrid = critterGrid()): Re
     }
   }
   for (const sp of restSpots(residentCritterDef({ ...def, perches: [] }), g)) if (!out.some((o) => Math.hypot(o.x - sp.x, o.y - sp.y) < 20)) out.push(sp);
-  return out;
+  return out.filter((sp) => reachable(g, sp.x, sp.y));
 }
 
-/** 마을 곳곳의 들를 자리 = 모든 주민의 쉼 자리 (격자마다 한 번만 만든다) */
-const poolCache = new WeakMap<WalkGrid, RestSpot[]>();
-function villagePool(g: WalkGrid): RestSpot[] {
-  let p = poolCache.get(g);
-  if (!p) {
-    p = RESIDENTS.flatMap((r) => residentSpots(r, g));
-    poolCache.set(g, p);
-  }
-  return p;
+/** 주민별 쉼 자리 (격자마다 한 번만 만든다 — 이웃 구역 산책 도착지로도 쓴다) */
+const spotCache = new WeakMap<WalkGrid, Map<string, RestSpot[]>>();
+function spotsOf(def: ResidentDef, g: WalkGrid): RestSpot[] {
+  let m = spotCache.get(g);
+  if (!m) spotCache.set(g, (m = new Map()));
+  let s = m.get(def.id);
+  if (!s) m.set(def.id, (s = residentSpots(def, g)));
+  return s;
+}
+
+/** 집 구역 안을 돌아다닐 때 들르는 점: 구역 원 안의 탁 트인 마른 땅 (WANDER_STEP 간격, 결정적) */
+export function wanderPoints(def: ResidentDef, g: WalkGrid = critterGrid()): Pt[] {
+  const { x: hx, y: hy, r } = def.home;
+  const out: Pt[] = [];
+  for (let y = hy - r; y <= hy + r; y += WANDER_STEP)
+    for (let x = hx - r; x <= hx + r; x += WANDER_STEP) if (Math.hypot(x - hx, y - hy) <= r && restable(g, x, y) && reachable(g, x, y)) out.push({ x, y });
+  return out;
 }
 
 // ── 수영 자리 ──
@@ -232,8 +303,10 @@ const near = (a: Pt, b: Pt, r = 2) => Math.hypot(a.x - b.x, a.y - b.y) < r;
 
 export class ResidentSim {
   readonly spots: RestSpot[];
-  /** 마을 다른 곳의 쉼 자리 (멀리 산책 갈 때의 도착지) */
-  readonly roam: RestSpot[];
+  /** 이웃 구역들의 쉼 자리 (구역마다 한 묶음 — 산책 갈 때 구역을 먼저 고르니 쉼 자리가 많은 광장으로 쏠리지 않는다) */
+  readonly roam: RestSpot[][];
+  /** 집 구역 안에서 들르는 점 */
+  readonly wander: Pt[];
   private readonly phase: number;
   private readonly idx: number;
   private leg: Leg | null = null;
@@ -247,15 +320,19 @@ export class ResidentSim {
     private readonly grid: WalkGrid = critterGrid(),
   ) {
     this.idx = RESIDENT_INDEX_BASE + index;
-    this.spots = residentSpots(def, grid);
-    this.roam = villagePool(grid).filter((p) => !p.perch && Math.hypot(p.x - def.home.x, p.y - def.home.y) <= ROAM_R && !this.spots.some((o) => near(o, p, 20)));
+    this.spots = spotsOf(def, grid);
+    const plaza = (o: ResidentDef) => Math.hypot(o.home.x - PLAZA_FIRE.x, o.home.y - PLAZA_FIRE.y) <= PLAZA_R;
+    this.roam = RESIDENTS.filter((o) => o.id !== def.id && Math.hypot(o.home.x - def.home.x, o.home.y - def.home.y) <= ROAM_R && (def.taste === "fire" || !plaza(o)))
+      .map((o) => spotsOf(o, grid))
+      .filter((l) => l.length > 0);
+    this.wander = wanderPoints(def, grid);
     this.phase = Math.floor(hashUnit(seed, this.idx, 17) * def.legMs);
   }
 
-  /** 구간 k의 출발(= 구간 k-1의 도착) 자리: 사는 동네 또는 (성향만큼) 마을 다른 곳 */
+  /** 구간 k의 출발(= 구간 k-1의 도착) 자리: 집 구역 또는 (성향만큼, 10~20%) 이웃 구역 하나 */
   spotAt(k: number): RestSpot {
     const away = this.roam.length > 0 && hashUnit(this.seed, this.idx, k, 3) < TASTES[this.def.taste].roam;
-    const list = away ? this.roam : this.spots;
+    const list = away ? this.roam[Math.floor(hashUnit(this.seed, this.idx, k, 4) * this.roam.length) % this.roam.length] : this.spots;
     return list[Math.floor(hashUnit(this.seed, this.idx, k) * list.length) % list.length];
   }
 
@@ -307,43 +384,32 @@ export class ResidentSim {
     return v;
   }
 
-  /** 길이 목표 거리 D에 모자라면 들를 자리 하나 (from→w→to 어림 거리가 D에 가까운 곳) */
-  private waypoint(k: number, from: Pt, to: Pt, D: number): Pt | null {
-    const pool = villagePool(this.grid);
-    const est = (w: Pt) => (Math.hypot(w.x - from.x, w.y - from.y) + Math.hypot(to.x - w.x, to.y - w.y)) * 1.15;
-    const ok = pool.filter((w) => !near(w, from, 30) && !near(w, to, 30) && est(w) >= D * 0.7 && est(w) <= D * 1.1);
-    if (ok.length) return ok[Math.floor(this.h(k, 91) * ok.length) % ok.length];
-    let best: Pt | null = null;
-    let bd = Infinity;
-    for (const w of pool) {
-      if (near(w, from, 30) || near(w, to, 30)) continue;
-      const d = Math.abs(est(w) - D);
-      if (d < bd) {
-        bd = d;
-        best = w;
-      }
-    }
-    return best;
-  }
-
-  /** 그냥 걷는 구간: from→(들를 곳)→to를 budget ms에 맞춰 */
+  /**
+   * 그냥 걷는 구간: from→(집 구역 안의 점 몇 개)→to를 budget ms에 맞춰.
+   * 길이 목표 거리 D에 모자라면 구역 안 점을 하나씩 더 들른다 (남은 거리 안에서 고르니 구역 밖으로 끌려 나가지 않는다)
+   */
   private planWalk(k: number, from: Pt, to: Pt, budget: number, pace: number): Seg[] {
     const D = (pace * budget) / 1000;
-    let path = this.route(from, to);
-    if (measure(path).total < D * 0.7) {
-      const w = this.waypoint(k, from, to, D);
-      if (w) {
-        const a = this.route(from, w);
-        const b = this.route(w, to);
-        if (near(a[a.length - 1], w) && near(b[b.length - 1], to)) {
-          const via = [...a, ...b.slice(1)];
-          if (measure(via).total > measure(path).total) path = via;
-        }
-      }
+    const path: Pt[] = [{ x: from.x, y: from.y }];
+    let len = 0;
+    let cur: Pt = from;
+    const est = (a: Pt, b: Pt) => Math.hypot(b.x - a.x, b.y - a.y) * 1.15;
+    for (let i = 0; i < WANDER_MAX; i++) {
+      const left = D - len;
+      if (est(cur, to) >= left * 0.85) break;
+      const ok = this.wander.filter((w) => !near(w, cur, 40) && !near(w, to, 30) && est(cur, w) + est(w, to) <= left * 1.1);
+      if (!ok.length) break;
+      const w = ok[Math.floor(this.h(k, 91 + i) * ok.length) % ok.length];
+      const a = this.route(cur, w);
+      if (!near(a[a.length - 1], w)) break;
+      path.push(...a.slice(1));
+      len += measure(a).total;
+      cur = w;
     }
+    path.push(...this.route(cur, to).slice(1));
     const total = measure(path).total;
     if (total <= 0) return [];
-    // 달리는 구간은 D가 길어 들를 곳도 멀다 → 빠르기가 RUN_AT을 넘어 달린다
+    // 달리는 구간은 D가 길어 들를 곳이 많다 → 빠르기가 RUN_AT을 넘어 달린다
     return [this.walkSeg(path, 0, this.pace(total, budget, this.def.legMs - 500))];
   }
 

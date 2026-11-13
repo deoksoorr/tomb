@@ -1,7 +1,7 @@
-import { MAP_HEIGHT, MAP_WIDTH, SEATS } from "@tomb/protocol";
+import { MAP_HEIGHT, MAP_WIDTH, SEATS, ZONES } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { RESIDENTS_MAX } from "@/lib/residents";
-import { walkableGrid, WALK, inWater, inWaterBody } from "../layout";
+import { walkableGrid, WALK, inWater, inWaterBody, LANDMARKS, PLAZA_FIRE } from "../layout";
 import { critterGrid, restable } from "./critterSim";
 import { pickLine, RESIDENTS, type LineContext } from "./residentData";
 import { ResidentSim, residentSpots, restActOf, swimSites } from "./residentSim";
@@ -189,6 +189,31 @@ describe("resident simulation", () => {
       }
     });
     expect(checked).toBeGreaterThan(5);
+  });
+
+  it("spreads out over the whole map: few in the plaza, many different areas at any time", { timeout: 30_000 }, () => {
+    // 사용자 제보 "주민들이 광장에만 몰려 있다": 어느 시각이든 광장(큰 모닥불 150px 안)엔 3명 이하, 주민들이 8곳 이상의 서로 다른 구역에 있다
+    // 구역 = 가장 가까운 안내 장소(LANDMARKS)나 구역(ZONES, 광장은 큰 모닥불로 대신) 가운데
+    const anchors = [...LANDMARKS.map((l) => ({ id: l.label, x: l.x, y: l.y })), ...ZONES.filter((z) => z.id !== "plaza").map((z) => ({ id: z.name, x: z.x + z.w / 2, y: z.y + z.h / 2 }))];
+    const areaOf = (x: number, y: number) => anchors.reduce((b, a) => (Math.hypot(a.x - x, a.y - y) < Math.hypot(b.x - x, b.y - y) ? a : b)).id;
+    let home = 0;
+    let all = 0;
+    for (const seed of [1, 4, 7]) {
+      const sims = RESIDENTS.map((d, i) => new ResidentSim(d, i, seed));
+      for (let t = T0; t < T0 + 60 * 60_000; t += 20_000) {
+        const ps = sims.map((s) => s.at(t));
+        const inPlaza = ps.filter((p) => Math.hypot(p.x - PLAZA_FIRE.x, p.y - PLAZA_FIRE.y) <= 150).length;
+        expect(inPlaza, `seed ${seed} t+${(t - T0) / 1000}s`).toBeLessThanOrEqual(3);
+        expect(new Set(ps.map((p) => areaOf(p.x, p.y))).size, `seed ${seed} t+${(t - T0) / 1000}s`).toBeGreaterThanOrEqual(8);
+        ps.forEach((p, i) => {
+          const h = RESIDENTS[i].home;
+          if (Math.hypot(p.x - h.x, p.y - h.y) <= h.r + 60) home++;
+          all++;
+        });
+      }
+    }
+    // 대부분의 시간은 자기 집 구역 안 (가끔만 이웃 구역으로 산책)
+    expect(home / all).toBeGreaterThan(0.7);
   });
 
   it("rest gestures are the same for everyone in a leg", () => {
