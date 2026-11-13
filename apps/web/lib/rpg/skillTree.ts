@@ -130,7 +130,8 @@ export const SKILL_FX = {
   em_ignite: (lv: number) => ({ chance: 0.04 * lv, mult: 0.8, radius: 22 }),
   em_meteor: (lv: number) => ({ mult: 2.2 + 0.36 * lv, radius: 50, delayMs: 800, reach: 130 }),
   em_brazier: (lv: number) => ({ durMs: 6000 + 500 * lv, everyMs: 900, radius: 42, mult: 0.35 + 0.07 * lv }),
-  em_bonfire: (lv: number) => ({ pulses: 3, gapMs: 450, radius: [70, 85, 100] as const, mult: 1.3 + 0.25 * lv }),
+  // 궁극기 3종: 지금 화면(카메라에 보이는 곳) 안의 적 모두를 친다. hitAt = 시전부터 ms (연출 박자에 맞춘 다단히트), castMs = 연출 길이
+  em_bonfire: (lv: number) => ({ screen: true, hitAt: [820, 1000, 1180, 1360, 1620] as const, castMs: 2300, mult: 0.55 + 0.09 * lv }),
   em_ashheart: (lv: number) => ({ aoePct: 0.05 * lv }),
   // ── 서리 묘지기 ──
   fr_breath: (lv: number) => ({ mult: 1 + 0.15 * lv, range: 46, arcDeg: 80, slowMs: 3000 }),
@@ -142,7 +143,7 @@ export const SKILL_FX = {
   fr_mist: (lv: number) => ({ dist: 64 + 8 * lv, mult: 0.8 + 0.2 * lv, width: 16, slowMs: 2500 }),
   fr_tomb: (lv: number) => ({ mult: 2.1 + 0.38 * lv, radius: 50, delayMs: 600, stunMs: 1200, vuln: 0.15, vulnMs: 4000, reach: 130 }),
   fr_field: (lv: number) => ({ radius: 80, durMs: 6000, everyMs: 1000, mult: 0.25 + 0.05 * lv, vuln: 0.05 * lv }),
-  fr_blizzard: (lv: number) => ({ durMs: 5000, everyMs: 500, radius: 78, mult: 0.45 + 0.08 * lv }),
+  fr_blizzard: (lv: number) => ({ screen: true, hitAt: [700, 940, 1180, 1420, 1660, 1960] as const, castMs: 2400, mult: 0.34 + 0.04 * lv, slowMs: 3000 }),
   fr_solstice: (lv: number) => ({ cdCut: 0.04 * lv, guard: 0.03 * lv }),
   // ── 넋 인도자 ──
   so_wisp: (lv: number) => ({ n: lv >= 4 ? 3 : 2, mult: 0.8 + 0.12 * lv, range: 130 }),
@@ -154,7 +155,7 @@ export const SKILL_FX = {
   so_veil: (lv: number) => ({ dist: 72, safeMs: 800 + 300 * lv }),
   so_harvest: (lv: number) => ({ radius: 54, ticks: 3, gapMs: 400, mult: 0.85 + 0.15 * lv, healPerHit: 0.015, healCap: 0.08, reach: 130 }),
   so_lantern: (lv: number) => ({ durMs: 8000 + 1500 * lv, atkPct: 0.4 + 0.1 * lv, everyMs: 700, range: 110 }),
-  so_procession: (lv: number) => ({ sweeps: 2, gapMs: 600, radius: 110, mult: 1.6 + 0.35 * lv, healPct: 0.1 + 0.05 * lv }),
+  so_procession: (lv: number) => ({ screen: true, hitAt: [900, 1100, 1300, 1500, 1760] as const, castMs: 2300, mult: 0.45 + 0.085 * lv, healPct: 0.1 + 0.05 * lv }),
   so_kinship: (lv: number) => ({ summonPct: 0.15 * lv, durPct: 0.1 * lv }),
 } as const;
 
@@ -308,14 +309,14 @@ export const SKILLS: readonly SkillDef[] = [
     tier: 5,
     col: 1,
     name: "큰 모닥불",
-    tag: "궁극 · 3연속 화염",
+    tag: "궁극 · 화면 전체 화염",
     kind: "active",
     maxLevel: 3,
     aoe: true,
     requires: [{ id: "em_meteor", level: 3 }],
     sp: (lv) => 36 + 4 * lv,
     cooldownMs: () => 24_000,
-    describe: (lv) => `마을 축제의 큰 모닥불을 피운다. 점점 넓어지는 불길이 세 번 솟아 한 번에 공격력의 ${pct(FX.em_bonfire(lv).mult)} 피해.`,
+    describe: (lv) => `마을 축제의 큰 모닥불을 피운다. 불기둥이 화면 전체를 뒤덮어 보이는 적 모두에게 ${FX.em_bonfire(lv).hitAt.length}번, 한 번에 공격력의 ${pct(FX.em_bonfire(lv).mult)} 피해.`,
     art: { shape: "sk_bonfire", main: E.color, accent: E.light },
   },
   {
@@ -479,7 +480,7 @@ export const SKILLS: readonly SkillDef[] = [
     tier: 5,
     col: 1,
     name: "한겨울 눈보라",
-    tag: "궁극 · 몰아치는 눈보라",
+    tag: "궁극 · 화면 전체 눈보라",
     kind: "active",
     maxLevel: 3,
     aoe: true,
@@ -487,7 +488,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: () => 40,
     cooldownMs: () => 26_000,
     describe: (lv) =>
-      `${sec(FX.fr_blizzard(lv).durMs)} 동안 나를 따라 눈보라가 몰아친다. ${sec(FX.fr_blizzard(lv).everyMs)}마다 둘레 적에게 공격력의 ${pct(FX.fr_blizzard(lv).mult)} 피해 + 둔화.`,
+      `화면 전체에 눈보라가 몰아친다. 보이는 적 모두에게 ${FX.fr_blizzard(lv).hitAt.length}번, 한 번에 공격력의 ${pct(FX.fr_blizzard(lv).mult)} 피해 + 둔화.`,
     art: { shape: "sk_blizzard", main: F.light, accent: F.color },
   },
   {
@@ -658,7 +659,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: () => 40,
     cooldownMs: () => 28_000,
     describe: (lv) =>
-      `별빛을 따라 넋들의 행렬이 지나간다. 둘레(반지름 ${FX.so_procession(lv).radius}) 적에게 두 번 공격력의 ${pct(FX.so_procession(lv).mult)} 피해, 최대 HP의 ${pct(FX.so_procession(lv).healPct)}를 회복.`,
+      `별빛을 따라 넋들의 행렬이 화면을 가로지른다. 보이는 적 모두에게 ${FX.so_procession(lv).hitAt.length}번, 한 번에 공격력의 ${pct(FX.so_procession(lv).mult)} 피해, 최대 HP의 ${pct(FX.so_procession(lv).healPct)}를 회복.`,
     art: { shape: "sk_starlight", main: 0xfff3c8, accent: S.color },
   },
   {

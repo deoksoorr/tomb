@@ -16,7 +16,8 @@ import { RpgScene } from "./base";
 import { CombatFx, COMBO_RESET_MS, FXT } from "./combatFx";
 import { PALETTES, SkillFx, SKT } from "./skillFx";
 // 스킬마다 고유 연출 (skillMoves) · 큰 도트 피해 숫자와 연타 합계 (damageNumbers)
-import { SKILL_LOOK, SkillMoves } from "./skillMoves";
+import { SKILL_LOOK, SkillMoves, skillPower } from "./skillMoves";
+import { art } from "./skillArt";
 import { DamageNumbers, type DmgGroup } from "./damageNumbers";
 import { cancelCast, seedPatternTimers, tryStartPattern, updateCast, type Cast, type PatternHost } from "./monsterPatterns";
 import type { RpgSound } from "./sfx";
@@ -129,7 +130,7 @@ type HitOpts = {
 
 /** 바닥에 남는 스킬 (화톳불·서리밭·눈보라): 일정 간격으로 둘레를 친다. follow면 나를 따라온다 */
 type Field = {
-  kind: "brazier" | "field" | "blizzard";
+  kind: "brazier" | "field";
   branch: BranchId;
   x: number;
   y: number;
@@ -998,9 +999,49 @@ export class HuntScene extends RpgScene {
   private shootSkill(ang: number, speed: number, range: number, pierce: number, mult: number, tex: string, b: BranchId, opts: HitOpts, home?: Mon | null, trail?: PShot["trail"]): void {
     const x = this.px + Math.cos(ang) * 6;
     const y = this.py - 7 + Math.sin(ang) * 4;
-    const sprite = this.add.sprite(x, y, tex).setRotation(ang).setDepth(1e5 + 60).setTint(PALETTES[b].light).setScale(trail === "icicle" ? 0.9 : 1.4);
+    const sprite = this.add.sprite(x, y, tex).setRotation(ang).setDepth(1e5 + 60).setScale(trail === "icicle" ? 0.3 : 1.4);
+    // 고드름은 색을 구운 고유 그림 (틴트 없이), 넋불은 갈래 색 빛
+    if (trail !== "icicle") sprite.setTint(PALETTES[b].light);
     if (b !== "frost") sprite.setBlendMode(Phaser.BlendModes.ADD);
     this.pshots.push({ x, y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, left: range, pierce, mult, hit: new Set(), sprite, spin: false, opts, trail, ...(home !== undefined ? { home } : {}) });
+  }
+
+  /** 지금 화면(카메라에 보이는 영역) 안의 적 (궁극기 판정): 몸이 화면에 조금이라도 걸치면 맞는다. 우두머리 포함 */
+  private screenTargets(): Mon[] {
+    const v = this.cameras.main.worldView;
+    return this.mons.filter((m) => {
+      if (!m.alive || m.hidden) return false;
+      const s = MONSTERS[m.id].size;
+      return inView(v, m.x, m.y - s / 2, s / 2);
+    });
+  }
+
+  /**
+   * 궁극기 공통: 화면 전체 연출(준비 → 기 모으기 → 발사/폭발 → 여파)을 틀고, hitAt 박자마다 지금 화면 안의 적 모두를 친다
+   * (다단히트: 박자마다 숫자가 쏟아지고 끝에 합계). beat(i, last, victims)는 박자마다 스킬 고유 연출 + 추가 효과
+   */
+  private castUltimate(id: SkillId, b: BranchId, f: { hitAt: readonly number[]; castMs: number; mult: number }, opts: HitOpts, beat: (i: number, last: boolean, victims: Mon[]) => void): void {
+    const pow = this.dv.skillPower;
+    this.cutIn(b, true, id);
+    this.skfx.ultimate(b, { x: this.px, y: this.py }, f.castMs, f.hitAt);
+    this.skfx.punch(2, b);
+    this.hitstop = Math.max(this.hitstop, 120);
+    const g = this.hitGroup(id, this.px, this.py - 46, 700, 3);
+    f.hitAt.forEach((t, i) => {
+      this.later(t, () => {
+        const last = i === f.hitAt.length - 1;
+        const victims = this.screenTargets();
+        this.skfx.ultBeat(b, i, last);
+        beat(i, last, victims);
+        this.sfx.burst(b, last ? 3 : 2, { ...SKILL_LOOK[id].tone, pitch: (SKILL_LOOK[id].tone?.pitch ?? 1) * (1 + i * 0.05) });
+        if (last || i === 0) this.sfx.play(last ? "slam" : "thud", 0.75);
+        g.x = this.px;
+        g.y = this.py - 46;
+        victims.forEach((m, k) => this.strike(m, f.mult * pow, true, k, this.sk(id, g, { aoe: true, kb: last ? 1.4 : 0.35, heavy: last, ...opts })));
+        this.skfx.punch(last ? 4 : 2, b);
+        if (last) this.slowMo(200);
+      });
+    });
   }
 
   /** 스킬 효과 (게임 판정 + 연출). 수치는 lib/rpg/skillTree.ts의 SKILL_FX, 연출은 skillMoves.ts (스킬마다 고유) */
@@ -1009,37 +1050,42 @@ export class HuntScene extends RpgScene {
     const now = this.now;
     const ang = () => Math.atan2(this.face.y, this.face.x);
     const mv = this.mv;
+    const fxs = this.skfx;
+    // 단·랭크 강도 (1단은 단정하게, 높은 단·랭크일수록 화려하게)
+    const def = skillById(id);
+    fxs.pw = def ? skillPower(def.tier, lv, def.maxLevel) : 1;
+    const me = { x: this.px, y: this.py };
     switch (id) {
       // ════ 모닥불지기 ════
       case "em_kindle": {
-        // 투사체형: 불씨가 포물선으로 튕겨 날아가 불꽃 꽃으로 터진다
+        // 투사체형: 금빛 다트가 포물선으로 날아가 금빛 불꽃 꽃으로 터진다
         const fx = SKILL_FX.em_kindle(lv);
         const pt = this.targetPoint(fx.reach, 40);
         this.cutIn("ember", false, id);
-        mv.kindleFly({ x: this.px, y: this.py }, pt, 150);
+        fxs.aimAt(me, pt, fx.blast, "ember", 150);
+        mv.kindleFly(me, pt, 150);
         const g = this.hitGroup(id, pt.x, pt.y - 30);
         this.later(150, () => {
           mv.kindleHit(pt.x, pt.y, fx.blast + 6);
           this.sfx.play("ink", 0.5);
           this.sfx.burst("ember", 1, SKILL_LOOK[id].tone);
           this.aoeAt(pt.x, pt.y, fx.blast, fx.mult * pow, this.sk(id, g, { kb: 1.2 }));
-          this.skfx.punch(1, "ember");
+          fxs.punch(1, "ember");
         });
         break;
       }
       case "em_fan": {
-        // 부채형: 부채살 불길이 차례로 펼쳐진다
+        // 부채형: 진홍 주름 부채가 펼쳐진다 (바닥에 판정 부채꼴 표시)
         const fx = SKILL_FX.em_fan(lv);
         this.aimNearest(fx.range);
         this.cutIn("ember", false, id);
-        mv.fan(this.px, this.py - 4, ang(), fx.range, fx.arcDeg);
-        // 범위기 화면 연출: 바라보는 쪽으로 화면 끝까지 불길이 휩쓴다
-        this.skfx.areaCine("ember", { x: this.px, y: this.py }, "sweep", ang());
+        fxs.zone({ kind: "cone", x: this.px, y: this.py, ang: ang(), range: fx.range, arcDeg: fx.arcDeg }, "ember", 90);
+        mv.fan(this.px, this.py, ang(), fx.range, fx.arcDeg);
         this.sfx.play("swish", 0.6);
         const g = this.hitGroup(id, this.px + this.face.x * fx.range * 0.5, this.py - 34);
         this.later(90, () => {
           this.coneAt(fx.range, fx.arcDeg, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 1.4 }));
-          this.skfx.punch(2, "ember");
+          fxs.punch(2, "ember");
         });
         break;
       }
@@ -1052,35 +1098,37 @@ export class HuntScene extends RpgScene {
         break;
       }
       case "em_ring": {
-        // 장판형: 둘레 불씨가 하나씩 켜졌다가 불기둥 고리로 솟는다
+        // 장판형: 불꽃 화환이 판정 원 그대로 타오른다
         const fx = SKILL_FX.em_ring(lv);
         this.cutIn("ember", true, id);
+        fxs.zone({ kind: "circle", x: this.px, y: this.py, r: fx.radius }, "ember", 200);
         mv.ringCharge(this.px, this.py, fx.radius, 200);
         const g = this.hitGroup(id, this.px, this.py - 40);
         this.later(200, () => {
           mv.ringBlast(this.px, this.py, fx.radius);
-          this.skfx.areaCine("ember", { x: this.px, y: this.py });
+          fxs.accent({ x: this.px, y: this.py }, "ember", "ring-wreath", fx.radius * 0.66, { vr: 1.4, ms: 600 });
           this.sfx.play("slam", 0.7);
           this.sfx.burst("ember", 2, SKILL_LOOK[id].tone);
           this.aoeAt(this.px, this.py, fx.radius, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 1.8, heavy: true }));
-          this.skfx.punch(2, "ember");
+          fxs.punch(2, "ember");
         });
         break;
       }
       case "em_meteor": {
-        // 낙하형: 하늘에서 불붙은 장작이 긴 불꼬리를 끌며 떨어진다 → 대폭발 → 불씨 구덩이
+        // 낙하형: 용암이 갈라진 장작 유성이 떨어진다 → 용암 왕관 → 갈라진 구덩이
         const fx = SKILL_FX.em_meteor(lv);
         const pt = this.targetPoint(fx.reach);
         this.cutIn("ember", true, id);
+        fxs.aimAt(me, pt, fx.radius, "ember", fx.delayMs);
         mv.meteorFall(pt.x, pt.y, fx.radius, fx.delayMs);
         const g = this.hitGroup(id, pt.x, pt.y - 34);
         this.later(fx.delayMs, () => {
           mv.meteorImpact(pt.x, pt.y, fx.radius);
-          this.skfx.areaCine("ember", pt);
+          fxs.accent(pt, "ember", "meteor-splash", fx.radius, { vr: 0, oy: 0.95, ms: 760 });
           this.sfx.play("slam", 0.9);
           this.sfx.burst("ember", 3, SKILL_LOOK[id].tone);
           this.aoeAt(pt.x, pt.y, fx.radius, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 2.2, heavy: true, stun: 200 }));
-          this.skfx.punch(3, "ember");
+          fxs.punch(3, "ember");
           this.slowMo(160);
           this.hitstop = Math.max(this.hitstop, 90);
         });
@@ -1091,60 +1139,44 @@ export class HuntScene extends RpgScene {
         this.cutIn("ember", false, id);
         const x = this.px + this.face.x * 14;
         const y = this.py + this.face.y * 10;
+        fxs.zone({ kind: "circle", x, y, r: fx.radius }, "ember", 260);
         mv.brazierPlace(x, y, fx.radius);
-        this.skfx.areaCine("ember", { x, y });
+        fxs.accent({ x, y }, "ember", "brazier-coals", fx.radius, { vr: 0.4, ms: 560 });
         this.addField("brazier", "ember", x, y, fx.radius, fx.durMs, fx.everyMs, fx.mult * pow, 0, false, "em_brazier");
         break;
       }
       case "em_bonfire": {
-        // 큰 모닥불 (궁극): 화면 전체 컷인 → 점점 넓어지는 불길이 세 번 솟는다
+        // 큰 모닥불 (궁극): 화면 전체 — 장작더미에 불이 붙어 불기둥이 터지고, 박자마다 화면 안 적 모두의 발밑에서 불기둥이 솟는다
         const fx = SKILL_FX.em_bonfire(lv);
-        this.cutIn("ember", true, id);
-        this.skfx.ultimate("ember", { x: this.px, y: this.py });
-        this.skfx.punch(2, "ember");
-        this.skfx.circle(this.px, this.py, fx.radius[2], "ember", 260);
-        this.hitstop = Math.max(this.hitstop, 120);
-        const g = this.hitGroup(id, this.px, this.py - 46, 700);
-        for (let i = 0; i < fx.pulses; i++) {
-          this.later(260 + i * fx.gapMs, () => {
-            const r = fx.radius[i];
-            const last = i === fx.pulses - 1;
-            mv.bonfirePulse(this.px, this.py, r, i, last);
-            this.sfx.play(last ? "slam" : "thud", 0.8);
-            this.sfx.burst("ember", last ? 3 : 2, SKILL_LOOK[id].tone);
-            g.x = this.px;
-            g.y = this.py - 46;
-            this.aoeAt(this.px, this.py, r, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 1.6 + i * 0.4, heavy: true }));
-            this.skfx.punch(last ? 4 : 3, "ember");
-            if (last) this.slowMo(200);
-          });
-        }
+        this.castUltimate(id, "ember", fx, {}, (i, last, victims) => mv.bonfireHit(victims.map((m) => ({ x: m.x, y: m.y })), i, last));
         break;
       }
       // ════ 서리 묘지기 ════
       case "fr_breath": {
-        // 부채형: 찬 안개가 밀려가고 바닥에 서리 가시가 돋는다
+        // 부채형: 민트빛 안개가 판정 부채꼴로 밀려간다
         const fx = SKILL_FX.fr_breath(lv);
         this.aimNearest(fx.range);
-        mv.breath(this.px, this.py - 4, ang(), fx.range, fx.arcDeg);
-        this.skfx.areaCine("frost", { x: this.px, y: this.py }, "sweep", ang());
+        fxs.zone({ kind: "cone", x: this.px, y: this.py, ang: ang(), range: fx.range, arcDeg: fx.arcDeg }, "frost", 80);
+        mv.breath(this.px, this.py, ang(), fx.range, fx.arcDeg);
         this.sfx.burst("frost", 1, SKILL_LOOK[id].tone);
         const g = this.hitGroup(id, this.px + this.face.x * fx.range * 0.5, this.py - 34);
         this.later(80, () => {
           this.coneAt(fx.range, fx.arcDeg, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 0.8, slowMs: fx.slowMs }));
-          this.skfx.punch(1, "frost");
+          fxs.punch(1, "frost");
         });
         break;
       }
       case "fr_icicle": {
-        // 투사체형: 고드름이 하얀 꼬리를 끌며 날아가 깨진다
+        // 투사체형: 고드름이 날아갈 궤적을 짧게 보이고, 진행 방향 꼬리를 끌며 날아가 깨진다
         const fx = SKILL_FX.fr_icicle(lv);
         this.aimNearest(fx.range);
-        this.skfx.cutIn(this.px, this.py, "frost", false);
+        fxs.cutIn(this.px, this.py, "frost", false);
         const base = ang();
+        const angs = Array.from({ length: fx.n }, (_, i) => base + (i - (fx.n - 1) / 2) * 0.15);
+        fxs.aim(this.px, this.py - 7, angs, fx.range, "frost");
         mv.icicleLaunch(this.px, this.py, base);
         const g = this.hitGroup(id, this.px + Math.cos(base) * 50, this.py - 30 + Math.sin(base) * 30, 520);
-        for (let i = 0; i < fx.n; i++) this.shootSkill(base + (i - (fx.n - 1) / 2) * 0.15, 280, fx.range, fx.pierce, fx.mult * pow, SKT.icicle, "frost", this.sk(id, g, { kb: 0.9, slowMs: 1200 }), undefined, "icicle");
+        for (const a of angs) this.shootSkill(a, 280, fx.range, fx.pierce, fx.mult * pow, art(this, "icicle-lance"), "frost", this.sk(id, g, { kb: 0.9, slowMs: 1200 }), undefined, "icicle");
         this.sfx.play("twang", 0.6);
         this.sfx.burst("frost", 1, SKILL_LOOK[id].tone);
         break;
@@ -1159,26 +1191,27 @@ export class HuntScene extends RpgScene {
         break;
       }
       case "fr_nova": {
-        // 장판형: 발밑에서 거대한 서리꽃이 피고 얼음 가시가 줄지어 돋는다
+        // 장판형: 판정 원 그대로 거대한 여섯 갈래 눈송이가 핀다
         const fx = SKILL_FX.fr_nova(lv);
         this.cutIn("frost", true, id);
+        fxs.zone({ kind: "circle", x: this.px, y: this.py, r: fx.radius }, "frost", 180);
         mv.novaCharge(this.px, this.py, fx.radius, 180);
         const g = this.hitGroup(id, this.px, this.py - 40);
         this.later(180, () => {
           mv.novaBloom(this.px, this.py, fx.radius);
-          this.skfx.areaCine("frost", { x: this.px, y: this.py });
+          fxs.accent({ x: this.px, y: this.py }, "frost", "nova-flake", fx.radius, { vr: 0.8, ms: 640 });
           this.sfx.play("slam", 0.6);
           this.sfx.burst("frost", 2, SKILL_LOOK[id].tone);
           this.aoeAt(this.px, this.py, fx.radius, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 0.6 }), (m) => {
             this.hold(m, fx.freezeMs);
             mv.freezeOn(m.x, m.y, MONSTERS[m.id].size);
           });
-          this.skfx.punch(2, "frost");
+          fxs.punch(2, "frost");
         });
         break;
       }
       case "fr_mist": {
-        // 돌진형: 잔상을 줄지어 남기며 미끄러지고, 지나친 적에게 X자 얼음 베기 (그동안 무적)
+        // 돌진형: 은빛 안개 띠를 남기며 미끄러지고, 지나친 적에게 X자 베기 (그동안 무적). 바닥에 판정 띠 표시
         const fx = SKILL_FX.fr_mist(lv);
         const from = { x: this.px, y: this.py };
         this.buffs.set("invuln", { until: now + 300, v: 1 });
@@ -1186,9 +1219,11 @@ export class HuntScene extends RpgScene {
         for (let i = 0; i < steps; i++) {
           this.slide((this.face.x * fx.dist) / steps, (this.face.y * fx.dist) / steps);
           this.player.setPosition(Math.round(this.px), Math.round(this.py));
-          this.skfx.ghost(this.player, "frost", 0.6 - i * 0.07, 280 + i * 40, i % 2 ? 0xffffff : undefined);
+          fxs.ghost(this.player, "frost", 0.6 - i * 0.07, 280 + i * 40, i % 2 ? 0xffffff : 0xc8d4e4);
         }
         const to = { x: this.px, y: this.py };
+        fxs.zone({ kind: "band", x0: from.x, y0: from.y, x1: to.x, y1: to.y, w: fx.width }, "frost", 120);
+        fxs.aim(from.x, from.y, [Math.atan2(to.y - from.y, to.x - from.x)], Math.max(12, Math.hypot(to.x - from.x, to.y - from.y)), "frost", 260);
         mv.mistDash(from, to);
         this.sfx.play("swish", 0.6);
         this.sfx.burst("frost", 1, SKILL_LOOK[id].tone);
@@ -1202,63 +1237,63 @@ export class HuntScene extends RpgScene {
             this.strike(m, fx.mult * pow, true, k++, this.sk(id, g, { kb: 1.4, slowMs: fx.slowMs }));
           }
         }
-        if (k) this.skfx.punch(1, "frost");
+        if (k) fxs.punch(1, "frost");
         break;
       }
       case "fr_tomb": {
-        // 낙하형: 고드름 비가 쏟아진 뒤 얼음 무덤이 솟아 깨지고 묶는다
+        // 낙하형: 청록 얼음 덩이가 쏟아진 뒤 얼음 비석 무리가 솟아 깨지고 묶는다
         const fx = SKILL_FX.fr_tomb(lv);
         const pt = this.targetPoint(fx.reach);
         this.cutIn("frost", true, id);
+        fxs.aimAt(me, pt, fx.radius, "frost", fx.delayMs);
         mv.tombRain(pt.x, pt.y, fx.radius, fx.delayMs);
         const g = this.hitGroup(id, pt.x, pt.y - 40);
         this.later(fx.delayMs, () => {
           mv.tombRise(pt.x, pt.y, fx.radius);
-          this.skfx.areaCine("frost", pt);
+          fxs.accent(pt, "frost", "tomb-slab", fx.radius * 0.9, { vr: 0, oy: 0.95, ms: 720 });
           this.sfx.play("slam", 0.9);
           this.sfx.burst("frost", 3, SKILL_LOOK[id].tone);
           this.aoeAt(pt.x, pt.y, fx.radius, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 0.4, heavy: true }), (m) => {
             this.hold(m, fx.stunMs);
             this.weaken(m, fx.vuln, fx.vulnMs);
           });
-          this.skfx.punch(3, "frost");
+          fxs.punch(3, "frost");
           this.slowMo(160);
           this.hitstop = Math.max(this.hitstop, 90);
         });
         break;
       }
       case "fr_field": {
-        // 장판형: 서리 금이 번지며 바닥이 얼어붙는다
+        // 장판형: 판정 원 그대로 서리 고사리 무늬가 번진다
         const fx = SKILL_FX.fr_field(lv);
         this.cutIn("frost", false, id);
+        fxs.zone({ kind: "circle", x: this.px, y: this.py, r: fx.radius }, "frost", 300);
         this.addField("field", "frost", this.px, this.py, fx.radius, fx.durMs, fx.everyMs, fx.mult * pow, fx.vuln, false, undefined, id);
-        this.skfx.areaCine("frost", { x: this.px, y: this.py });
+        fxs.accent({ x: this.px, y: this.py }, "frost", "field-ferns", fx.radius, { vr: 0.3, ms: 620 });
         break;
       }
       case "fr_blizzard": {
-        // 한겨울 눈보라 (궁극): 화면 전체 컷인 → 화면 가득 눈보라 → 나를 따라 몰아친다
+        // 한겨울 눈보라 (궁극): 화면 전체 — 만다라가 모이고, 박자마다 눈보라 돌풍이 가로지르며 화면 안 적 모두의 발밑에서 얼음 첨탑이 솟는다 (둔화)
         const fx = SKILL_FX.fr_blizzard(lv);
-        this.cutIn("frost", true, id);
-        this.skfx.ultimate("frost", { x: this.px, y: this.py });
-        this.skfx.circle(this.px, this.py, fx.radius, "frost", 240);
-        this.skfx.punch(3, "frost");
-        this.hitstop = Math.max(this.hitstop, 120);
-        this.addField("blizzard", "frost", this.px, this.py, fx.radius, fx.durMs, fx.everyMs, fx.mult * pow, 0, true, undefined, id);
+        this.castUltimate(id, "frost", fx, { slowMs: fx.slowMs }, (i, last, victims) => mv.blizzardHit(victims.map((m) => ({ x: m.x, y: m.y })), i, last));
         break;
       }
       // ════ 넋 인도자 ════
       case "so_wisp": {
-        // 투사체형: 너울거리는 넋불이 적을 쫓아간다
+        // 투사체형: 청록 넋불이 적을 쫓아간다 (나가는 방향을 짧게 보인다)
         const fx = SKILL_FX.so_wisp(lv);
         const targets = this.mons.filter((m) => m.alive && !m.hidden && Math.hypot(m.x - this.px, m.y - this.py) < fx.range).sort((p, q) => Math.hypot(p.x - this.px, p.y - this.py) - Math.hypot(q.x - this.px, q.y - this.py));
-        this.skfx.cutIn(this.px, this.py, "soul", false);
+        fxs.cutIn(this.px, this.py, "soul", false);
         mv.wispCast(this.px, this.py);
         const g = this.hitGroup(id, this.px, this.py - 40, 700);
+        const angs: number[] = [];
         for (let i = 0; i < fx.n; i++) {
           const t = targets[i % Math.max(1, targets.length)] ?? null;
           const a = ang() + (i - (fx.n - 1) / 2) * 0.9;
+          angs.push(t ? Math.atan2(t.y - this.py, t.x - this.px) : a);
           this.shootSkill(a, 170, fx.range + 60, 0, fx.mult * pow, SKT.wisp, "soul", this.sk(id, g, { kb: 0.8 }), t, "wisp");
         }
+        fxs.aim(this.px, this.py - 6, angs, Math.min(fx.range, 70), "soul", 280);
         this.sfx.play("ink", 0.5);
         this.sfx.burst("soul", 1, SKILL_LOOK[id].tone);
         break;
@@ -1283,7 +1318,7 @@ export class HuntScene extends RpgScene {
         break;
       }
       case "so_friend": {
-        // 소환형: 묘비가 솟고 넋 기둥 속에서 길동무가 나온다
+        // 소환형: 새김 글자가 빛나는 묘비가 솟고 길동무가 나온다
         const fx = SKILL_FX.so_friend(lv);
         const dur = fx.durMs * (1 + this.mods.summonDurPct);
         this.helper?.sprite.destroy();
@@ -1295,11 +1330,12 @@ export class HuntScene extends RpgScene {
         break;
       }
       case "so_chain": {
-        // 연쇄형: 넋불이 적에서 적으로 튀며 번개 사슬을 잇고, 끌어모은 자리에서 터진다
+        // 연쇄형: 보랏빛 쇠사슬이 적에서 적으로 이어지고, 끌어모은 자리에 봉인 고리가 찍힌다 (판정 원 표시)
         const fx = SKILL_FX.so_chain(lv);
         const cx = this.px + this.face.x * 16;
         const cy = this.py + this.face.y * 16;
         this.cutIn("soul", true, id);
+        fxs.zone({ kind: "circle", x: this.px, y: this.py, r: fx.radius }, "soul", 160);
         const g = this.hitGroup(id, cx, cy - 36);
         const caught = this.mons
           .filter((m) => m.alive && !m.hidden && Math.hypot(m.x - this.px, m.y - this.py) <= fx.radius)
@@ -1309,7 +1345,7 @@ export class HuntScene extends RpgScene {
           caught.map((m) => ({ x: m.x, y: m.y - MONSTERS[m.id].size / 2 })),
           { x: cx, y: cy },
         );
-        this.skfx.areaCine("soul", { x: cx, y: cy });
+        fxs.accent({ x: cx, y: cy }, "soul", "chain-seal", 34, { vr: 1.2, ms: 620 });
         let k = 0;
         for (const m of caught) {
           const boss = m.boss || MONSTERS[m.id].behavior === "boss";
@@ -1319,36 +1355,37 @@ export class HuntScene extends RpgScene {
           this.weaken(m, fx.vuln, fx.stunMs + fx.vulnMs);
           this.strike(m, fx.mult * pow, true, k++, this.sk(id, g, { aoe: true, kb: 0 }));
         }
-        this.skfx.punch(2, "soul");
+        fxs.punch(2, "soul");
         this.sfx.play("slam", 0.5);
         break;
       }
       case "so_veil": {
-        // 돌진형(순간이동): 장막에 싸여 사라지고 저승 문에서 나타난다
+        // 돌진형(순간이동): 검보라 장막에 덮여 사라지고, 장막이 걷히며 나타난다 (가는 방향 표시)
         const fx = SKILL_FX.so_veil(lv);
         const t = this.nearest(400);
         const dx = t ? this.px - t.x : -this.face.x;
         const dy = t ? this.py - t.y : -this.face.y;
         const k = Math.hypot(dx, dy) || 1;
         const from = { x: this.px, y: this.py };
-        this.skfx.ghost(this.player, "soul", 0.7, 420, 0x4a2a8a);
+        fxs.ghost(this.player, "soul", 0.7, 420, 0x4a2a8a);
         mv.veilOut(from.x, from.y);
         this.slide((dx / k) * fx.dist, (dy / k) * fx.dist);
-        this.skfx.beam(from.x, from.y - 8, this.px, this.py - 8, "soul", 300, 2, 3);
+        fxs.aim(from.x, from.y, [Math.atan2(this.py - from.y, this.px - from.x)], Math.max(12, Math.hypot(this.px - from.x, this.py - from.y)), "soul", 300);
         mv.veilIn(this.px, this.py);
         this.buffs.set("invuln", { until: now + fx.safeMs, v: 1 });
-        this.skfx.cutIn(this.px, this.py, "soul", false);
+        fxs.cutIn(this.px, this.py, "soul", false);
         this.sfx.burst("soul", 1, SKILL_LOOK[id].tone);
         this.floatText(this.px, this.py - 22, "저승 너울", "#d8c0ff", 10);
         break;
       }
       case "so_harvest": {
-        // 회오리형: 넋 소용돌이가 세 번 휘감기며 적의 넋을 빨아들인다 (맞힌 적마다 HP 조금)
+        // 회오리형: 자홍·보라 은하 소용돌이가 세 번 휘감기며 적의 넋을 빨아들인다 (맞힌 적마다 HP 조금)
         const fx = SKILL_FX.so_harvest(lv);
         const pt = this.targetPoint(fx.reach);
         this.cutIn("soul", true, id);
+        fxs.aimAt(me, pt, fx.radius, "soul", 220 + (fx.ticks - 1) * fx.gapMs);
         mv.vortexOpen(pt.x, pt.y, fx.radius, 220);
-        this.skfx.areaCine("soul", pt);
+        fxs.accent(pt, "soul", "harvest-vortex", fx.radius, { vr: -3, ms: 760 });
         const g = this.hitGroup(id, pt.x, pt.y - 40, 600);
         let healed = 0;
         for (let i = 0; i < fx.ticks; i++) {
@@ -1365,13 +1402,13 @@ export class HuntScene extends RpgScene {
               mv.absorb(pt, { x: this.px, y: this.py });
               if (last) this.dmg.heal(this.px, this.py - 26, healed);
             }
-            this.skfx.punch(last ? 3 : 1, "soul");
+            fxs.punch(last ? 3 : 1, "soul");
           });
         }
         break;
       }
       case "so_lantern": {
-        // 소환형: 유령 손이 초롱을 받쳐 든다
+        // 소환형: 연보라 유령 손이 금빛 초롱을 받쳐 든다
         const fx = SKILL_FX.so_lantern(lv);
         this.turret?.sprite.destroy();
         const key = "rpg-skill-lantern";
@@ -1383,31 +1420,14 @@ export class HuntScene extends RpgScene {
         const dur = fx.durMs * (1 + this.mods.summonDurPct);
         this.turret = { sprite, until: now + dur, nextAtk: now + 300, atkPct: fx.atkPct, everyMs: fx.everyMs, range: fx.range, group: null };
         this.cutIn("soul", false, id);
+        fxs.zone({ kind: "circle", x: sprite.x, y: sprite.y + 20, r: fx.range }, "soul", 360);
         mv.lantern(sprite.x, sprite.y + 20);
         break;
       }
       case "so_procession": {
-        // 별빛 행렬 (궁극): 화면 전체 컷인 → 넋 행렬이 둘레를 두 번 휩쓸고 지나간다 + 회복
+        // 별빛 행렬 (궁극): 화면 전체 — 별이 돋고 오로라가 드리운 뒤, 박자마다 순례자 행렬이 가로지르며 화면 안 적 모두에게 별빛이 꽂힌다 + 회복
         const fx = SKILL_FX.so_procession(lv);
-        this.cutIn("soul", true, id);
-        this.skfx.ultimate("soul", { x: this.px, y: this.py });
-        this.skfx.circle(this.px, this.py, fx.radius, "soul", 300);
-        this.skfx.punch(2, "soul");
-        this.hitstop = Math.max(this.hitstop, 120);
-        const g = this.hitGroup(id, this.px, this.py - 46, 800);
-        for (let i = 0; i < fx.sweeps; i++) {
-          this.later(300 + i * fx.gapMs, () => {
-            const last = i === fx.sweeps - 1;
-            mv.processionSweep(this.px, this.py, fx.radius, i % 2 ? -1 : 1);
-            this.sfx.play("slam", 0.7);
-            this.sfx.burst("soul", 3, SKILL_LOOK[id].tone);
-            g.x = this.px;
-            g.y = this.py - 46;
-            this.aoeAt(this.px, this.py, fx.radius, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 1.5, heavy: true }));
-            this.skfx.punch(last ? 4 : 3, "soul");
-            if (last) this.slowMo(200);
-          });
-        }
+        this.castUltimate(id, "soul", fx, {}, (i, last, victims) => mv.processionHit(victims.map((m) => ({ x: m.x, y: m.y })), i, last));
         const heal = Math.round(this.dv.maxHp * fx.healPct);
         this.hp = Math.min(this.dv.maxHp, this.hp + heal);
         this.dmg.heal(this.px, this.py - 26, heal, true);
@@ -1448,8 +1468,8 @@ export class HuntScene extends RpgScene {
       if (!this.textures.exists(key)) this.textures.addCanvas(key, iconCanvas(skillById(prop)!.art));
       img = this.add.image(x, y, key).setOrigin(0.5, 1).setDepth(y);
     }
-    // 서리밭: 바닥에 서리 금이 번져 끝날 때까지 남는다
-    const deco = kind === "field" ? this.mv.fieldPlace(x, y, r) : undefined;
+    // 바닥 무늬 (판정 원 크기): 서리밭은 서리 고사리, 화톳불은 숯 바닥이 끝날 때까지 남는다
+    const deco = kind === "field" ? this.mv.fieldPlace(x, y, r) : this.mv.brazierGround(x, y, r);
     this.fields.push({ kind, branch: b, x, y, r, until: this.now + durMs, next: this.now + 150, every, mult, vuln, follow, gfx, prop: img, deco, group: null, skill: skill ?? prop });
   }
 
@@ -1467,13 +1487,12 @@ export class HuntScene extends RpgScene {
       f.gfx
         .clear()
         .fillStyle(p.main, (f.kind === "field" ? 0.2 : 0.12) * fade)
-        .fillEllipse(f.x, f.y, f.r * 2, f.r * 1.24)
+        .fillCircle(f.x, f.y, f.r)
         .lineStyle(1, p.light, (0.4 + 0.3 * pulse) * fade)
-        .strokeEllipse(f.x, f.y, f.r * 2, f.r * 1.24);
-      // 바닥이 살아 있다: 화톳불은 곳곳에서 불꽃 혀가 솟고, 서리밭은 찬 안개가 깔리고, 눈보라는 나를 감아 돈다
+        .strokeCircle(f.x, f.y, f.r);
+      // 바닥이 살아 있다: 화톳불은 곳곳에서 밑동이 푸른 불꽃이 솟고, 서리밭은 찬 안개가 깔린다
       if (f.until > now) {
         if (f.kind === "brazier") this.mv.brazierIdle(f.x, f.y, f.r);
-        else if (f.kind === "blizzard") this.mv.blizzardIdle(f.x, f.y, f.r);
         else this.mv.fieldIdle(f.x, f.y, f.r);
       }
       f.deco?.setAlpha(0.85 * fade).setRotation(Math.sin(now / 900) * 0.04);
@@ -1483,15 +1502,13 @@ export class HuntScene extends RpgScene {
           f.prop?.setScale(1.15);
           this.tweens.add({ targets: f.prop, scale: 1, duration: 160 });
           this.mv.brazierTick(f.x, f.y, f.r);
-        } else if (f.kind === "blizzard") this.mv.blizzardTick(f.x, f.y, f.r);
-        else this.mv.fieldTick(f.x, f.y, f.r);
+        } else this.mv.fieldTick(f.x, f.y, f.r);
         // 연타 묶음: 조용해지면 합계를 띄우고 다음 타격부터 새 묶음
         if (!f.group || f.group.closed) f.group = this.dmg.group(f.x, f.y - 40, f.branch, f.every + 400, 3);
         f.group.x = f.x;
         f.group.y = f.y - 40;
         const look = f.skill ? SKILL_LOOK[f.skill] : null;
-        const n = this.aoeAt(f.x, f.y, f.r, f.mult, { skill: f.branch, aoe: true, kb: f.kind === "blizzard" ? 0.3 : 0.5, slowMs: f.kind === "brazier" ? 0 : 1100, weight: look ? Math.min(1, look.weight) : 1, group: f.group }, (m) => this.weaken(m, f.vuln, f.every + 200));
-        if (f.kind === "blizzard" && n > 0) this.skfx.punch(1, "frost");
+        this.aoeAt(f.x, f.y, f.r, f.mult, { skill: f.branch, aoe: true, kb: 0.5, slowMs: f.kind === "brazier" ? 0 : 1100, weight: look ? Math.min(1, look.weight) : 1, group: f.group }, (m) => this.weaken(m, f.vuln, f.every + 200));
       }
     }
     for (const f of this.fields) {
@@ -2209,6 +2226,11 @@ export class HuntScene extends RpgScene {
 }
 
 /** 점 (px,py)와 선분 (ax,ay)-(bx,by) 사이 거리 */
+/** 점이 화면(월드 좌표 사각형) 안에 있나 (pad만큼 걸쳐도 안) — 궁극기 판정 */
+export function inView(v: { x: number; y: number; width: number; height: number }, x: number, y: number, pad = 0): boolean {
+  return x + pad >= v.x && x - pad <= v.x + v.width && y + pad >= v.y && y - pad <= v.y + v.height;
+}
+
 function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
   const vx = bx - ax;
   const vy = by - ay;

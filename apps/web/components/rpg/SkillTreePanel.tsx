@@ -19,6 +19,7 @@ import type { RpgView } from "@/lib/rpg/types";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import RpgIcon from "./RpgIcon";
+import { initialPick, nextPick } from "./skillPick";
 import s from "./rpg.module.css";
 import t from "./SkillTree.module.css";
 
@@ -62,9 +63,9 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
   const c = view.character;
   const budget = spentPoints(c.skills) + c.skillPoints;
   const firstBranch = (BRANCHES.find((b) => spentIn(c.skills, b) > 0) ?? "ember") as BranchId;
-  const [branch, setBranch] = useState<BranchId>(firstBranch);
-  const [picked, setPicked] = useState<SkillId>(() => SKILLS.find((x) => x.branch === firstBranch)!.id);
-  const [hover, setHover] = useState<SkillId | null>(null);
+  // 보는 갈래 + 눌러서 고른 스킬. 설명은 고른 스킬만 따라간다 (마우스 올림·포커스로는 안 바뀜)
+  const [sel, setSel] = useState(() => initialPick(firstBranch));
+  const { branch, picked } = sel;
   const [confirmReset, setConfirmReset] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
@@ -94,8 +95,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
 
   const nodes = SKILLS.filter((x) => x.branch === branch);
   const info = BRANCH_INFO[branch];
-  const shownId = hover && skillById(hover)?.branch === branch ? hover : picked;
-  const d = skillById(shownId) ?? nodes[0];
+  const d = skillById(picked) ?? nodes[0];
   const dRank = rank(d.id);
   const dSlot = hotbar.indexOf(d.id);
   const why = checkLearn(c.skills, d.id, budget);
@@ -206,16 +206,12 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
     window.addEventListener("pointercancel", cancel);
   }
 
-  const pick = (b: BranchId) => {
-    setBranch(b);
-    setHover(null);
-    setPicked((p) => (skillById(p)?.branch === b ? p : SKILLS.find((x) => x.branch === b)!.id));
-  };
+  const pick = (b: BranchId) => setSel((p) => nextPick(p, { type: "branch", branch: b }));
+  // 클릭·탭·Enter·Space(버튼 기본 동작) 모두 여기로 온다. 끌어다 놓은 뒤 따라온 click은 선택을 바꾸지 않는다
   const select = (id: SkillId) => {
-    if (suppressClick.current) return;
-    const sk = skillById(id)!;
-    if (sk.branch !== branch) pick(sk.branch);
-    setPicked(id);
+    const afterDrag = suppressClick.current;
+    setSel((p) => nextPick(p, { type: "press", id, afterDrag }));
+    if (afterDrag) return;
     setSheet(true);
     setHint(null);
   };
@@ -394,10 +390,6 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
                   style={{ left: `${cxOf(sk) / 3}%`, top: `${(cyOf(sk) / (TIERS * ROW)) * 100}%` }}
                   onClick={() => select(sk.id)}
                   onPointerDown={(e) => startPointer(e, sk.id, null)}
-                  onPointerEnter={(e) => e.pointerType === "mouse" && !drag && setHover(sk.id)}
-                  onPointerLeave={() => setHover(null)}
-                  onFocus={() => setHover(sk.id)}
-                  onBlur={() => setHover(null)}
                 >
                   <span className={t.icon}>
                     <RpgIcon art={sk.art} size={48} />

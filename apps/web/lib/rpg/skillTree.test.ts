@@ -60,6 +60,21 @@ describe("트리 모양", () => {
   });
 });
 
+describe("궁극기: 화면 전체 다단히트", () => {
+  it("연출은 1.5~2.5초, 박자는 연출 안에서 차례로 3번 이상", () => {
+    for (const f of [SKILL_FX.em_bonfire(1), SKILL_FX.fr_blizzard(1), SKILL_FX.so_procession(1)]) {
+      expect(f.screen).toBe(true);
+      expect(f.castMs).toBeGreaterThanOrEqual(1500);
+      expect(f.castMs).toBeLessThanOrEqual(2500);
+      expect(f.hitAt.length).toBeGreaterThanOrEqual(3);
+      f.hitAt.forEach((t, i) => {
+        expect(t).toBeLessThan(f.castMs);
+        if (i) expect(t).toBeGreaterThan(f.hitAt[i - 1]);
+      });
+    }
+  });
+});
+
 describe("규칙: 선행·단·포인트 합", () => {
   it("단은 그 갈래의 아래 단에 쓴 포인트로 열린다", () => {
     expect(TIER_GATES[0]).toBe(0);
@@ -242,6 +257,8 @@ describe("테스트 서버 슈퍼 계정 환경 검사", () => {
 // 대략적인 비교지만 수치를 크게 바꾸면 이 테스트가 먼저 알려 준다.
 const WINDOW = 30;
 const AOE_TARGETS = 4;
+/** 궁극기는 화면 전체를 친다 (광역기보다 많이 맞는다) */
+const ULT_TARGETS = 6;
 
 /** 옛 트리(형식 1) 최상위 화력 빌드: 결재판 치기5·전체 회신5·보고서 폭탄5·스테이플러 난사5·입사 동기5·복합기5·야근5·빨간 펜5·매의 눈5 + 선행 (옛 수치 그대로) */
 function oldTopScore(): number {
@@ -275,7 +292,7 @@ function newScore(a: Alloc): number {
     const f = SKILL_FX.em_brazier(lv("em_brazier"));
     dmg += f.mult * (f.durMs / f.everyMs) * AOE_TARGETS * 0.5 * aoe * casts("em_brazier");
   }
-  if (on("em_bonfire")) dmg += SKILL_FX.em_bonfire(lv("em_bonfire")).mult * 3 * AOE_TARGETS * aoe * casts("em_bonfire");
+  if (on("em_bonfire")) dmg += SKILL_FX.em_bonfire(lv("em_bonfire")).mult * SKILL_FX.em_bonfire(1).hitAt.length * ULT_TARGETS * aoe * casts("em_bonfire");
   if (on("fr_breath")) dmg += SKILL_FX.fr_breath(lv("fr_breath")).mult * 2 * aoe * casts("fr_breath");
   if (on("fr_icicle")) dmg += SKILL_FX.fr_icicle(lv("fr_icicle")).n * SKILL_FX.fr_icicle(lv("fr_icicle")).mult * 0.6 * casts("fr_icicle");
   if (on("fr_nova")) dmg += SKILL_FX.fr_nova(lv("fr_nova")).mult * AOE_TARGETS * aoe * casts("fr_nova");
@@ -287,12 +304,12 @@ function newScore(a: Alloc): number {
   }
   if (on("fr_blizzard")) {
     const f = SKILL_FX.fr_blizzard(lv("fr_blizzard"));
-    dmg += f.mult * (f.durMs / f.everyMs) * AOE_TARGETS * 0.6 * aoe * casts("fr_blizzard");
+    dmg += f.mult * f.hitAt.length * ULT_TARGETS * aoe * casts("fr_blizzard");
   }
   if (on("so_wisp")) dmg += SKILL_FX.so_wisp(lv("so_wisp")).n * SKILL_FX.so_wisp(lv("so_wisp")).mult * casts("so_wisp");
   if (on("so_chain")) dmg += SKILL_FX.so_chain(lv("so_chain")).mult * AOE_TARGETS * aoe * casts("so_chain");
   if (on("so_harvest")) dmg += SKILL_FX.so_harvest(lv("so_harvest")).mult * 3 * AOE_TARGETS * aoe * casts("so_harvest");
-  if (on("so_procession")) dmg += SKILL_FX.so_procession(lv("so_procession")).mult * 2 * AOE_TARGETS * aoe * casts("so_procession");
+  if (on("so_procession")) dmg += SKILL_FX.so_procession(lv("so_procession")).mult * SKILL_FX.so_procession(1).hitAt.length * ULT_TARGETS * aoe * casts("so_procession");
   if (on("so_friend")) {
     const f = SKILL_FX.so_friend(lv("so_friend"));
     dmg += (f.atkPct / (f.everyMs / 1000)) * Math.min(WINDOW, (f.durMs * sdur) / 1000) * summon;

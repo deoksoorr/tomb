@@ -365,7 +365,8 @@
   box-shadow: 0 0 0 2px var(--line);
   transition:
     box-shadow 0.15s,
-    transform 0.15s;
+    transform 0.15s,
+    filter 0.15s;
 }
 
 .icon img {
@@ -452,15 +453,32 @@
   }
 }
 
+/* 마우스를 올리면 살짝 밝아지기만 한다 (설명·선택은 눌러야 바뀜). 터치 기기는 탭 뒤에 남지 않게 뺀다 */
+@media (hover: hover) {
+  .node:hover .icon {
+    filter: brightness(1.18);
+  }
+}
+
+/* 키보드 포커스: 점선 테 (선택 테와 구분) */
+.node:focus-visible {
+  outline: none;
+}
+
+.node:focus-visible .icon {
+  outline: 2px dashed var(--text);
+  outline-offset: 3px;
+}
+
+/* 눌러서 고른 스킬: 금색 테 + 살짝 크게. 다른 스킬을 누르기 전까지 유지 */
 .node[aria-pressed="true"] .icon {
   transform: scale(1.06);
   outline: 2px solid var(--candle);
   outline-offset: 3px;
 }
 
-.node:hover .icon,
-.node:focus-visible .icon {
-  transform: scale(1.06);
+.node[aria-pressed="true"]:focus-visible .icon {
+  outline-style: dashed;
 }
 
 .node[data-lifted] .icon {

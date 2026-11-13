@@ -146,11 +146,11 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     ],
   },
   em_bonfire: {
-    summary: "점점 넓어지는 불길을 세 번 솟구치게 하는 모닥불지기의 궁극기.",
+    summary: "불기둥이 화면 전체를 뒤덮어 보이는 적 모두를 여러 번 태우는 모닥불지기의 궁극기.",
     flavor: "축제의 밤, 마을 한가운데 큰 불이 오른다.",
     types: ["melee", "aoe"],
     synergy: [
-      { with: ["em_stoke"], text: "공격력을 올려 두고 쓰면 세 번 모두 세게 들어가요" },
+      { with: ["em_stoke"], text: "공격력을 올려 두고 쓰면 모든 타격이 세게 들어가요" },
       { with: ["em_ashheart"], text: "광역 스킬이라 피해가 더 올라요" },
     ],
   },
@@ -228,9 +228,9 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     ],
   },
   fr_blizzard: {
-    summary: "나를 따라다니는 눈보라를 일으켜 둘레 적을 계속 때리고 느리게 하는 궁극기.",
+    summary: "화면 전체에 눈보라를 몰아쳐 보이는 적 모두를 여러 번 때리고 느리게 하는 궁극기.",
     flavor: "한겨울 밤, 눈보라 속에 서 있는 것은 묘지기뿐.",
-    types: ["field", "aoe", "control"],
+    types: ["aoe", "control"],
     synergy: [
       { with: ["fr_brittle"], text: "눈보라에 느려진 적이 피해를 더 받아요" },
       { with: ["em_ashheart"], text: "광역 스킬이라 매번 피해가 더 올라요" },
@@ -310,11 +310,11 @@ export const SKILL_TEXT: Record<SkillId, SkillText> = {
     ],
   },
   so_procession: {
-    summary: "넋들의 행렬이 내 둘레를 두 번 휩쓸고 지나가며 HP도 채워 주는 궁극기.",
+    summary: "넋들의 행렬이 화면 전체를 휩쓸어 보이는 적 모두를 여러 번 때리고 HP도 채워 주는 궁극기.",
     flavor: "별빛을 따라 걷는 행렬, 모두가 마침내 집으로 간다.",
     types: ["melee", "aoe", "heal"],
     synergy: [
-      { with: ["so_chain"], text: "끌어모은 뒤 쓰면 두 번 모두 맞아요" },
+      { with: ["so_chain"], text: "약해진 적이 많을 때 쓰면 모든 타격이 더 아파요" },
       { with: ["em_ashheart"], text: "광역 스킬이라 피해가 더 올라요" },
     ],
   },
@@ -379,7 +379,7 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
     }
     case "em_bonfire": {
       const f = SKILL_FX.em_bonfire(lv);
-      return [["한 번 피해", `${dmg(f.mult)} × ${f.pulses}번`], ["범위", `반지름 ${f.radius.join(" → ")}`]];
+      return [["한 번 피해", `${dmg(f.mult)} × ${f.hitAt.length}번`], ["범위", "지금 화면 전체 (우두머리 포함)"]];
     }
     case "em_ashheart":
       return [["광역 스킬 피해", `+${pct(SKILL_FX.em_ashheart(lv).aoePct)}`]];
@@ -425,7 +425,7 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
     }
     case "fr_blizzard": {
       const f = SKILL_FX.fr_blizzard(lv);
-      return [["한 번 피해", `${dmg(f.mult)} · ${sec(f.everyMs)}마다`], ["지속", `${sec(f.durMs)} (약 ${Math.floor(f.durMs / f.everyMs)}번)`], ["범위", `나를 따라 반지름 ${f.radius}`]];
+      return [["한 번 피해", `${dmg(f.mult)} × ${f.hitAt.length}번`], ["둔화", sec(f.slowMs)], ["범위", "지금 화면 전체 (우두머리 포함)"]];
     }
     case "fr_solstice": {
       const f = SKILL_FX.fr_solstice(lv);
@@ -471,7 +471,7 @@ function effectRows(id: SkillId, lv: number): [string, string][] {
     }
     case "so_procession": {
       const f = SKILL_FX.so_procession(lv);
-      return [["한 번 피해", `${dmg(f.mult)} × ${f.sweeps}번`], ["범위", `내 둘레 반지름 ${f.radius}`], ["회복", `최대 HP의 ${pct(f.healPct)}`]];
+      return [["한 번 피해", `${dmg(f.mult)} × ${f.hitAt.length}번`], ["범위", "지금 화면 전체 (우두머리 포함)"], ["회복", `최대 HP의 ${pct(f.healPct)}`]];
     }
     case "so_kinship": {
       const f = SKILL_FX.so_kinship(lv);

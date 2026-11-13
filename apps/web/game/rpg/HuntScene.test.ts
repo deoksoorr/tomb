@@ -117,3 +117,26 @@ describe("사냥터: 판을 다시 띄워도 지난 판의 시간 상태가 남�
     expect(scene.atkReadyAt).toBeGreaterThan(scene.elapsed);
   });
 });
+
+describe("궁극기 판정: 지금 화면(카메라에 보이는 영역) 안", () => {
+  it("화면 안·가장자리에 몸이 걸친 적은 맞고, 화면 밖 적은 안 맞는다", async () => {
+    const { inView } = (await import("./HuntScene")) as unknown as { inView: (v: { x: number; y: number; width: number; height: number }, x: number, y: number, pad?: number) => boolean };
+    const view = { x: 100, y: 50, width: 220, height: 140 };
+    expect(inView(view, 210, 120)).toBe(true);
+    expect(inView(view, 100, 50)).toBe(true);
+    expect(inView(view, 95, 120, 6)).toBe(true);
+    expect(inView(view, 90, 120, 6)).toBe(false);
+    expect(inView(view, 330, 120, 6)).toBe(false);
+    expect(inView(view, 210, 196, 4)).toBe(false);
+  });
+});
+
+describe("단·랭크 강도", () => {
+  it("1단보다 높은 단이, 같은 스킬도 랭크가 높을수록 화려하다", async () => {
+    const { skillPower } = await import("./skillMoves");
+    expect(skillPower(1, 1, 5)).toBeCloseTo(0.75);
+    expect(skillPower(5, 3, 3)).toBeCloseTo(1.5);
+    for (let t = 1; t < 5; t++) expect(skillPower(t + 1, 1, 5)).toBeGreaterThan(skillPower(t, 1, 5));
+    for (let lv = 1; lv < 5; lv++) expect(skillPower(3, lv + 1, 5)).toBeGreaterThan(skillPower(3, lv, 5));
+  });
+});
