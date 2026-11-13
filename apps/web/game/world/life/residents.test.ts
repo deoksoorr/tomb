@@ -232,16 +232,16 @@ describe("talking (pickLine)", () => {
   };
   it("picks a night line at night and a rain line in the rain", () => {
     const night: LineContext = { phase: "night", weather: "clear" };
-    expect(pickLine(kim, night, seq(0, 0))).toBe("밤 귀신의집은 제 퇴근 후에 가 주세요");
+    expect(pickLine(kim, night, seq(0, 0))).toBe("밤 귀신의집은… 나 없이 다녀와 줄래?");
     const rain: LineContext = { phase: "dusk", weather: "rain" };
-    expect(pickLine(kim, rain, seq(0, 0))).toBe("비 오는 날 귀신의집은 반칙이에요");
+    expect(pickLine(kim, rain, seq(0, 0))).toBe("비 오는 날 귀신의집은 반칙이야, 히잉");
   });
   it("otherwise picks an any-time line, never a line for another time", () => {
     const day: LineContext = { phase: "day", weather: "clear" };
     const allowed = new Set(kim.lines.filter((l) => !l.when || l.when === "day").map((l) => l.t));
     for (let k = 0; k < 200; k++) expect(allowed.has(pickLine(kim, day, Math.random))).toBe(true);
     const night: LineContext = { phase: "night", weather: "clear" };
-    for (let k = 0; k < 200; k++) expect(pickLine(kim, night, Math.random)).not.toBe("낮엔 귀신들도 낮잠 자요… 아마도");
+    for (let k = 0; k < 200; k++) expect(pickLine(kim, night, Math.random)).not.toBe("낮엔 귀신들도 낮잠 자… 아마도!");
   });
   it("avoids repeating the previous line", () => {
     const day: LineContext = { phase: "dawn", weather: "cloudy" };
