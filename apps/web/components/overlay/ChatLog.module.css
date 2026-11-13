@@ -28,7 +28,8 @@
 /* ── 데스크톱: 왼쪽 아래 바로 가기 줄(36px) 바로 위, 게임 패널 톤의 반투명 상자 ── */
 .box {
   position: fixed;
-  z-index: 10;
+  /* 게임 화면 안내층(.overlay, z 10 — 토스트·안내 띠가 여기 있음)보다 아래: 겹치면 안내문이 채팅창 위로 온다 */
+  z-index: 9;
   left: var(--safe-left);
   bottom: calc(var(--safe-bottom) + 36px + 8px);
   display: grid;
