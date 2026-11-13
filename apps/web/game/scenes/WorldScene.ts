@@ -648,7 +648,11 @@ export class WorldScene extends Phaser.Scene {
     const keep = new Set<Sid>();
     const now = performance.now();
     for (const p of peers) {
-      if (p.sid === this.net.mySid) continue;
+      if (p.sid === this.net.mySid) {
+        // 내 벤치 상태는 서버 기억을 따른다 (새로고침·재접속 뒤 남들은 상태를 보는데 내 화면만 "…"이던 문제)
+        this.expr.syncMyMood(p.mood ?? null);
+        continue;
+      }
       keep.add(p.sid);
       const r = this.remotes.get(p.sid);
       if (!r || r.name !== p.name || r.view.colorSpec !== avatarColorSpec(p.color, sanitizeDye(p.dye)) || r.view.bodyId !== (isAvatarBody(p.body) ? p.body : "hood") || r.view.staff !== (p.staff === true) || r.view.dexBadgeCount !== dexBadgeCats(p.dex).length) {

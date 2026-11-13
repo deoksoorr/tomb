@@ -97,6 +97,14 @@ export class Expressions {
     this.emit(pl);
   }
 
+  /** 서버가 기억하는 내 벤치 상태를 내 화면에 맞춘다 (앉아 있을 때만, 서버에 없으면 그대로) */
+  syncMyMood(mood: string | null): void {
+    const pl = this.h.player();
+    if (!this.seated(pl) || !mood || !isSeatMood(mood) || pl.view.mood === mood) return;
+    pl.view.setMood(mood);
+    this.emit(pl);
+  }
+
   /** 서버가 내 좌석을 확정했다 (다시 붙음·옮겨 앉기): 고른 상태가 있으면 다시 알린다 (재접속하면 서버가 잊었을 수 있다) */
   onMySeat(): void {
     const m = this.h.player().view.mood;

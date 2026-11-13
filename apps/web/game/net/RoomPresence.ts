@@ -147,7 +147,8 @@ export class RoomPresence {
         },
         onChat: (sid, text) => this.remotes.get(sid)?.view.chat(text, performance.now()),
         onPeers: (peers, seats) => {
-          this.reconcile(peers);
+          // 목록에 내 항목도 오므로(월드가 내 벤치 상태를 맞추는 데 씀) 방에서는 나를 뺀다
+          this.reconcile(peers.filter((p) => p.sid !== this.client.mySid));
           this.setSeats(seats);
         },
         onReset: () => this.clear(),

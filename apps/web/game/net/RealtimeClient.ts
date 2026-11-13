@@ -598,8 +598,9 @@ export class RealtimeClient {
           this.peers.clear();
           this.syncPolicy.mark(performance.now());
           for (const p of m.peers) if (p.sid !== this.mySid) this.peers.add(p.sid);
+          // 내 항목도 넘긴다 (받는 쪽이 내 벤치 상태를 서버 기억에 맞추고, 원격 목록에서는 건너뛴다)
           this.cb.onPeers(
-            m.peers.filter((p) => p.sid !== this.mySid),
+            m.peers,
             m.seats,
           );
           this.emitStatus();
