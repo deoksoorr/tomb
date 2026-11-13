@@ -4,7 +4,7 @@ import { makeCanvas } from "../../sprites/pixel";
 
 // 채집 지점(약초·광석·발굴·곤충 수풀) 연출 (사용자 요청: "필 때·사라질 때 티가 나게, 처음 온 사람도 저기 뭔가 있다를 바로 알게").
 // - 새로 필 때: 땅에서 솟는 빛 기둥 + 위로 오르는 반짝이 + 옆으로 이는 먼지 (+ "뿅" 소리는 Foraging)
-// - 피어 있는 동안: 발밑의 은은한 빛(밤에도 보이게 빛 층 위, 더하기 섞기) + 가끔 반짝이는 별. 가까이 가면 더 밝게
+// - 피어 있는 동안: 발밑의 은은한 빛(땅바닥 층, 더하기 섞기 — 밤엔 어둠에 작은 빛 구멍) + 가끔 반짝이는 별. 가까이 가면 더 밝게
 // - 창이 끝나 갈 때(몇 초 전): 깜빡이다가, 사라질 때 연기처럼 흩어진다
 // - 캐서 없어질 때: 반짝이가 사방으로 터진다
 
@@ -69,7 +69,8 @@ export type NodeAura = { glow: Phaser.GameObjects.Image; star: Phaser.GameObject
 
 export function makeAura(scene: Phaser.Scene, x: number, y: number, kind: string): NodeAura {
   const color = NODE_GLOW[kind] ?? 0xffffff;
-  const glow = scene.add.image(x, y, NTEX.glow).setDepth(DEPTH.lights + 1).setBlendMode(Phaser.BlendModes.ADD).setTint(color).setAlpha(0.3);
+  // 빛은 땅바닥 층(물건·사람 밑)에 깐다. 밤에는 Foraging.addLights가 어둠에 작은 구멍을 내서 보이게 한다
+  const glow = scene.add.image(x, y, NTEX.glow).setDepth(DEPTH.decal + 4).setBlendMode(Phaser.BlendModes.ADD).setTint(color).setAlpha(0.3);
   const star = scene.add.image(x, y - 10, NTEX.star).setDepth(DEPTH.lights + 2).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffffff).setAlpha(0);
   return { glow, star, seed: (x * 31 + y * 17) % 997, color };
 }

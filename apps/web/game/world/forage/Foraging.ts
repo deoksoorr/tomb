@@ -9,6 +9,7 @@ import type { RemoteAvatar } from "../../entities/RemoteAvatar";
 import type { RealtimeClient } from "../../net/RealtimeClient";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../../text/GlyphAtlas";
 import type { Interactable } from "../layout";
+import type { Lighting } from "../Lighting";
 import { ensureForageTextures, ensureIconTexture, FTEX } from "./art";
 import { nodeWindow, windowEndsAt } from "@/lib/forage/rules";
 import { FishZoneView } from "./FishZoneView";
@@ -746,6 +747,11 @@ export class Foraging {
       const a = updateAura(v.aura, now, near, blink, this.d.reduced);
       if (v.img.alpha !== a && !this.scene.tweens.isTweening(v.img)) v.img.setAlpha(a);
     }
+  }
+
+  /** 밤: 피어 있는 지점마다 작은 빛 구멍 (발밑 빛·물건이 어둠에 묻히지 않게) */
+  addLights(lit: Lighting): void {
+    for (const v of this.nodes.values()) lit.add(v.node.x, v.node.y - 4, 22, 0.55 * v.img.alpha);
   }
 
   destroy(): void {

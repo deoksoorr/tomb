@@ -1625,6 +1625,7 @@ export class WorldScene extends Phaser.Scene {
       }
       this.fireworks.addLights(lit);
       this.life.addLights(lit);
+      this.forage.addLights(lit);
       this.sky.addLights(lit);
     }
     lit.end();
