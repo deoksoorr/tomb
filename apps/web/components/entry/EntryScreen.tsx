@@ -90,7 +90,7 @@ export default function EntryScreen({ start, focusGraveId, entering, stalled, on
           <>
             <EntryFlow start={start} focusGraveId={focusGraveId} onEnter={onEnter} />
             <p className={styles.legal}>
-              <Link href="/privacy">개인정보처리방침</Link> · <Link href="/terms">이용약관</Link>
+              <Link href="/privacy">개인정보처리방침</Link> · <Link href="/terms">이용약관</Link> · <Link href="/faq">자주 묻는 질문</Link>
             </p>
           </>
         ) : entering && stalled ? (

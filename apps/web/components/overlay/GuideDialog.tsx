@@ -335,6 +335,10 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
             <Link href="/terms" target="_blank">
               이용약관
             </Link>
+            {" · "}
+            <Link href="/faq" target="_blank">
+              자주 묻는 질문
+            </Link>
           </p>
         </section>
       </div>
