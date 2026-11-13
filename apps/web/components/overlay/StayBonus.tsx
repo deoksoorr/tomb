@@ -82,7 +82,7 @@ export default function StayBonus() {
           <div className={styles.row}>
             <span className={styles.label}>
               접속 보너스 <b className={styles.points}>+{state.points}P</b>
-              {state.count > 1 && <span className={styles.count}> ×{state.count}</span>}
+              {state.count > 1 && <span className={styles.count}> (합계 · {state.count}개 쌓임)</span>}
             </span>
             <button type="button" className={cx(ui.button, ui.primary, styles.claim)} disabled={pending} onClick={claim}>
               받기
