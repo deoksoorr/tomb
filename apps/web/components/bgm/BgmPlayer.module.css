@@ -94,6 +94,14 @@
   font-size: 12px;
 }
 
+/* 채팅 알림음 켜기/끄기 줄: 이름이 길어 갈래 이름 폭 대신 남은 자리를 쓴다 (단추는 오른쪽 끝) */
+.chimeLabel {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .select {
   min-height: 36px;
   padding: 4px 8px;

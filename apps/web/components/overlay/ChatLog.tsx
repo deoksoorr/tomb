@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
+import { chatChime, chimeForChat } from "@/lib/chatChime";
 import { addChatLine, CHAT_LOG_MOBILE_LINES, chatLineOpacity, chatLineTone, liveChatLines, mergeChatLines, visibleChatLines, type ChatLine } from "@/game/logic/chatLog";
 import { cx } from "../ui/cx";
 import ChatInput from "./ChatInput";
@@ -21,13 +22,17 @@ let lines: ChatLine[] = [];
 let seq = 0;
 /** 지금 줄들이 속한 채널 번호 (모르면 null) */
 let channelOf: string | null = null;
+/** 채팅창이 지금 화면에 보이는지 (숨은 장면·화면이 아직 없으면 알림음을 내지 않는다) */
+let shownNow = false;
 const subs = new Set<() => void>();
 const notify = () => subs.forEach((f) => f());
 const store = {
-  push(name: string, text: string, mine: boolean, key?: string, staff?: true) {
-    if (key && lines.some((l) => l.key === key)) return; // chatLog로 이미 받은 줄
+  /** 새 줄이면 true */
+  push(name: string, text: string, mine: boolean, key?: string, staff?: true): boolean {
+    if (key && lines.some((l) => l.key === key)) return false; // chatLog로 이미 받은 줄
     lines = addChatLine(lines, { id: ++seq, name, text, mine, at: Date.now(), ...(key ? { key } : {}), ...(staff ? { staff } : {}) });
     notify();
+    return true;
   },
   /** 서버 최근 5분 합치기 */
   merge(incoming: Parameters<typeof mergeChatLines>[1]) {
@@ -60,7 +65,11 @@ const EMPTY: ChatLine[] = [];
 
 // 화면이 아직 안 떴어도(입장 직후 welcome·chatLog가 먼저 올 수 있다) 받은 줄을 모은다 — 모듈에서 한 번만 구독
 if (typeof window !== "undefined") {
-  bridge.on("chat:line", ({ name, text, mine, key, staff }) => store.push(name, text, mine, key, staff));
+  bridge.on("chat:line", ({ name, text, mine, key, staff }) => {
+    const added = store.push(name, text, mine, key, staff);
+    // 실시간으로 새로 온 다른 사람 채팅에만 작은 알림음 (지난 기록 chat:log에는 울리지 않는다)
+    chimeForChat({ mine, added, shown: shownNow, enabled: chatChime.getSnapshot() }, Date.now());
+  });
   bridge.on("chat:log", ({ lines: incoming, ch }) => {
     // 월드 채널 기록이면 그 채널로 맞춘 뒤 합친다 (화면의 채널 표시가 늦게 바뀌어도 새 채널 기록을 지우지 않게)
     if (ch !== undefined) store.setChannel(String(ch));
@@ -91,6 +100,13 @@ export default function ChatLog({ mobile, room, hidden = false }: Props) {
   // 채널을 옮길 때만 비운다 (같은 채널 안에서 집에 들어갔다 나와도 5분 안의 글은 남는다)
   const channel = room.split(":")[1] ?? room;
   useEffect(() => store.setChannel(channel), [channel]);
+  // 알림음은 채팅창이 보일 때만
+  useEffect(() => {
+    shownNow = !hidden;
+    return () => {
+      shownNow = false;
+    };
+  }, [hidden]);
   // 줄이 있는 동안만 1초마다 흐려짐·만료 갱신
   const any = all.length > 0;
   useEffect(() => {

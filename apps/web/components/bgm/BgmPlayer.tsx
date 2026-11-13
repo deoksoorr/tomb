@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
+import { chatChime } from "@/lib/chatChime";
 import { soundMix, type SoundBus } from "@/lib/soundMix";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -19,6 +20,8 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
   const state = useSyncExternalStore(bgm.subscribe, bgm.getSnapshot, () => INITIAL_BGM_STATE);
   // 13번: 환경음·효과음 따로 (기기에 저장, 게임에는 audio:mix로)
   const mix = useSyncExternalStore(soundMix.subscribe, soundMix.getSnapshot, soundMix.getServerSnapshot);
+  // 다른 사람이 채팅하면 작은 "톡" (효과음 볼륨을 따른다)
+  const chime = useSyncExternalStore(chatChime.subscribe, chatChime.getSnapshot, chatChime.getServerSnapshot);
   useEffect(() => {
     if (!bridge.last("audio:mix")) bridge.emit("audio:mix", soundMix.getSnapshot());
   }, []);
@@ -152,6 +155,19 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
               </div>
             );
           })}
+          <div className={styles.row} title="다른 사람이 채팅하면 작은 소리 (효과음 볼륨을 따라요)">
+            <span className={styles.chimeLabel}>채팅 알림음</span>
+            <button
+              type="button"
+              className={cx(ui.button, ui.quiet, ui.icon)}
+              onClick={() => chatChime.set(!chime)}
+              aria-pressed={chime}
+              aria-label="채팅 알림음 켜기"
+              data-chat-chime
+            >
+              <PixelIcon name={chime ? "sound" : "mute"} />
+            </button>
+          </div>
           <div className={styles.row}>
             <p className={cx(styles.now, styles.grow)}>{track ? `♪ ${track.title}` : "음원 준비 중 · 지금은 조용히 머물러요"}</p>
             <button
