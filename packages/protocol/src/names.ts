@@ -25,5 +25,7 @@ export function checkName(raw: unknown): NameCheck {
   if (!NAME_RE.test(name)) return { ok: false, reason: "한글, 영문, 숫자, 공백, _ 만 쓸 수 있어요." };
   const flat = name.replace(/[\s_]/g, "").toLowerCase();
   if (BANNED.some((w) => flat.includes(w))) return { ok: false, reason: "쓸 수 없는 단어가 들어 있어요." };
+  // 운영자 공개 이름 "대장" 흉내 막기: "대장"이나 "○○대장"은 안 되고, "대장장이"처럼 다른 낱말 안에 든 건 된다
+  if (flat === "대장" || flat.endsWith("대장")) return { ok: false, reason: "쓸 수 없는 단어가 들어 있어요." };
   return { ok: true, name };
 }

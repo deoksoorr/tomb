@@ -205,6 +205,11 @@ describe("names", () => {
     expect(checkName("가".repeat(13)).ok).toBe(false);
     expect(checkName("hi!").ok).toBe(false);
     expect(checkName("관리 자").ok).toBe(false);
+    // 운영자 공개 이름("대장")·옛 이름("운영자")은 일반 닉네임으로 흉내 낼 수 없다
+    expect(checkName("대장").ok).toBe(false);
+    expect(checkName("진짜 대장").ok).toBe(false);
+    expect(checkName("대장장이").ok).toBe(true);
+    expect(checkName("운영자").ok).toBe(false);
     expect(checkName("Fu_ck").ok).toBe(false);
     expect(checkName("dev_kim 2").ok).toBe(true);
   });

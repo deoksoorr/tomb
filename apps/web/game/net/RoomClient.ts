@@ -1,6 +1,7 @@
 import { decodeSnapshot, DIR, encodeEvent, encodeMove, isEmoId, isPhraseId, PING, PONG, STATE, type ActKind, type C2S, type PeerInfo, type PeerState, type Sid } from "@tomb/protocol";
 import type { AppearanceChange } from "../sprites/avatar";
 import type { RoomJoinRequest, RoomJoinResponse } from "@/lib/types";
+import type { IncomingChatLine } from "../logic/chatLog";
 import { bridge } from "../bridge";
 import { backoffDelay } from "./backoff";
 import { JoinLimiter, TOKEN_REUSE_MS } from "./joinPolicy";
@@ -33,8 +34,10 @@ export type RoomCallbacks = {
   onSay?(sid: Sid, id: string): void;
   /** 5번 이모티콘 (방 안에서도 서버가 중계한다) */
   onEmo?(sid: Sid, id: string): void;
-  /** 말풍선 자유 채팅 (서버가 가린 글) */
-  onChat?(sid: Sid, text: string): void;
+  /** 말풍선 자유 채팅 (서버가 가린 글). id = 서버 줄 id (옛 서버는 없음) */
+  onChat?(sid: Sid, text: string, id?: string): void;
+  /** 입장·재접속 때 이 방의 최근 1분 채팅 (이 기기 시계로 옮긴 줄, 내 줄은 mine) */
+  onChatLog?(lines: IncomingChatLine[]): void;
   /** sync 응답: 서버가 아는 방 인원 전체 (나 제외)와 좌석 점유표 */
   onPeers?(peers: PeerInfo[], seats: Record<string, Sid>): void;
   /** 3번 집 안 1인 자리: 점유 변경 (sid null = 비었다) / 내 요청 거절 */
@@ -361,7 +364,10 @@ export class RoomClient {
           this.cb.onEmo?.(ev.sid, ev.id);
           break;
         case "chat":
-          this.cb.onChat?.(ev.sid, ev.text);
+          this.cb.onChat?.(ev.sid, ev.text, ev.id);
+          break;
+        case "chatLog":
+          this.cb.onChatLog?.(ev.lines);
           break;
         case "seat":
           this.cb.onSeat?.(ev.seatId, ev.sid);

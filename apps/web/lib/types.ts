@@ -486,7 +486,8 @@ export type GiftListResponse = { gifts: GiftEntry[]; unclaimed: number };
 export type GiftClaimResponse = { gift: GiftEntry; me: Me; points: number };
 
 /** 확성기 기록 한 줄 */
-export type MegaphoneEntry = { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number };
+/** staff = 운영자 계정이 외친 것 (서버가 계정으로 판별 → 이름 금색) */
+export type MegaphoneEntry = { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true };
 /** GET /api/megaphone?channel=N → 그 채널에서 보이는 최근 확성기 (모든 채널 확성기 포함, 숨긴 것 빼고, 오래된 것 먼저 최대 20개) */
 export type MegaphoneListResponse = { entries: MegaphoneEntry[] };
 /** POST /api/megaphone { itemId, text, channel } → 확성기 1개를 쓰고 증서를 받는다 (게임이 실시간 서버로 보낸다) */

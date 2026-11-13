@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import { addChatLine, CHAT_LOG_MOBILE_LINES, chatLineOpacity, chatLineTone, liveChatLines, visibleChatLines, type ChatLine } from "@/game/logic/chatLog";
-import { useBridgeEvent } from "@/lib/hooks/useBridge";
+import { bridge } from "@/game/bridge";
+import { addChatLine, CHAT_LOG_MOBILE_LINES, chatLineOpacity, chatLineTone, liveChatLines, mergeChatLines, visibleChatLines, type ChatLine } from "@/game/logic/chatLog";
 import { cx } from "../ui/cx";
 import ChatInput from "./ChatInput";
 import styles from "./ChatLog.module.css";
 
-// 채팅 기록창: 같은 채널(방)에서 오간 자유 채팅을 1분 동안 보여 준다 (말풍선과 함께). 화면 메모리에만 두고 저장하지 않는다.
+// 채팅 기록창: 같은 채널(방)에서 오간 자유 채팅을 5분 동안 보여 준다 (말풍선과 함께). 화면 메모리에만 두고 기기에 저장하지 않는다.
+// 방에 들어올 때(입장·새로고침·재접속·실내에서 복귀) 서버가 그 방의 최근 5분(chat:log)을 보내 주면 서버 줄 id로 겹치지 않게 합친다.
 //  - 데스크톱: 왼쪽 아래 바로 가기 줄 바로 위 반투명 상자. 상자 안에서 스크롤(하단 고정), 아래에 입력칸 (Enter 포커스 → Enter 전송 → Esc·빈 Enter 해제)
 //  - 모바일: 상자 없이 글씨만 최근 몇 줄, 터치는 통과. 입력은 기존 [채팅] 버튼
 
@@ -18,17 +19,29 @@ const TICK_MS = 1000;
 
 let lines: ChatLine[] = [];
 let seq = 0;
+/** 지금 줄들이 속한 채널 번호 (모르면 null) */
+let channelOf: string | null = null;
 const subs = new Set<() => void>();
 const notify = () => subs.forEach((f) => f());
 const store = {
-  push(name: string, text: string, mine: boolean) {
-    lines = addChatLine(lines, { id: ++seq, name, text, mine, at: Date.now() });
+  push(name: string, text: string, mine: boolean, key?: string, staff?: true) {
+    if (key && lines.some((l) => l.key === key)) return; // chatLog로 이미 받은 줄
+    lines = addChatLine(lines, { id: ++seq, name, text, mine, at: Date.now(), ...(key ? { key } : {}), ...(staff ? { staff } : {}) });
     notify();
   },
-  clear() {
-    if (!lines.length) return;
-    lines = [];
+  /** 서버 최근 5분 합치기 */
+  merge(incoming: Parameters<typeof mergeChatLines>[1]) {
+    if (!incoming.length) return;
+    lines = mergeChatLines(lines, incoming, Date.now(), () => ++seq);
     notify();
+  },
+  /** 채널이 바뀌면 비운다 (처음 알게 된 채널이면 그대로 둔다) */
+  setChannel(ch: string) {
+    if (channelOf !== null && channelOf !== ch && lines.length) {
+      lines = [];
+      notify();
+    }
+    channelOf = ch;
   },
   /** 지난 줄 정리 (바뀐 게 있을 때만 알린다) */
   prune(now: number) {
@@ -45,6 +58,16 @@ const store = {
 };
 const EMPTY: ChatLine[] = [];
 
+// 화면이 아직 안 떴어도(입장 직후 welcome·chatLog가 먼저 올 수 있다) 받은 줄을 모은다 — 모듈에서 한 번만 구독
+if (typeof window !== "undefined") {
+  bridge.on("chat:line", ({ name, text, mine, key, staff }) => store.push(name, text, mine, key, staff));
+  bridge.on("chat:log", ({ lines: incoming, ch }) => {
+    // 월드 채널 기록이면 그 채널로 맞춘 뒤 합친다 (화면의 채널 표시가 늦게 바뀌어도 새 채널 기록을 지우지 않게)
+    if (ch !== undefined) store.setChannel(String(ch));
+    store.merge(incoming);
+  });
+}
+
 /** 데스크톱 Enter: 채팅창 입력칸에 포커스. 입력칸이 없으면 false */
 export function focusChatLog(): boolean {
   const el = document.getElementById(INPUT_ID);
@@ -55,7 +78,7 @@ export function focusChatLog(): boolean {
 
 type Props = {
   mobile: boolean;
-  /** 채널·방이 바뀌면 비운다 (예: "world:3", "house:3") */
+  /** 지금 공간 (예: "world:3", "house:3"). 채널 번호가 바뀔 때만 비운다 */
   room: string;
   /** 지금 채팅을 쓸 수 없는 장면(상점·사냥 등)이면 숨긴다 (받은 줄은 계속 모은다) */
   hidden?: boolean;
@@ -65,9 +88,9 @@ export default function ChatLog({ mobile, room, hidden = false }: Props) {
   const all = useSyncExternalStore(store.subscribe, store.get, () => EMPTY);
   const [now, setNow] = useState(() => Date.now());
 
-  useBridgeEvent("chat:line", ({ name, text, mine }) => store.push(name, text, mine));
-  // 채널 이동·집 드나들기: 다른 공간의 글은 비운다
-  useEffect(() => store.clear(), [room]);
+  // 채널을 옮길 때만 비운다 (같은 채널 안에서 집에 들어갔다 나와도 5분 안의 글은 남는다)
+  const channel = room.split(":")[1] ?? room;
+  useEffect(() => store.setChannel(channel), [channel]);
   // 줄이 있는 동안만 1초마다 흐려짐·만료 갱신
   const any = all.length > 0;
   useEffect(() => {
@@ -89,7 +112,7 @@ export default function ChatLog({ mobile, room, hidden = false }: Props) {
 function Line({ line, now }: { line: ChatLine; now: number }) {
   return (
     <li className={cx(styles.line, styles[chatLineTone(line)])} style={{ opacity: chatLineOpacity(line, now) }}>
-      <b className={styles.name}>{line.name}</b>
+      <b className={cx(styles.name, line.staff && styles.staff)}>{line.name}</b>
       <span className={styles.sep}>: </span>
       <span className={styles.text}>{line.text}</span>
     </li>

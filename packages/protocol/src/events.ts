@@ -1,5 +1,5 @@
 import { ACT_KINDS, MAX_MESSAGE_BYTES, isEmoId, isPhraseId, isSeatMood, type ActKind, type EmoId, type PhraseId, type SeatMood } from "./constants";
-import { normalizeChat } from "./chat";
+import { normalizeChat, type ChatLogLine } from "./chat";
 import { MAX_GRANT_LEN } from "./grants";
 import type { MegaphoneScope } from "./items";
 import { GOBLIN_ID_RE, type GoblinInfo } from "./npc";
@@ -123,11 +123,14 @@ export type S2C =
   | { t: "away"; sid: Sid; on: boolean }
   /** 받는 사람에게만: 서버에서 내 계정(포인트·선물함)이 바뀌었다 → /api/me를 다시 받는다 (관리자 지급 등. 옛 클라이언트는 버린다) */
   | { t: "me" }
-  /** 말풍선 자유 채팅 (보낸 사람 빼고, 서버가 가린 글. 옛 클라이언트는 모르는 t라 버린다) */
-  | { t: "chat"; sid: Sid; text: string };
+  /** 말풍선 자유 채팅 (보낸 사람 빼고, 서버가 가린 글. 옛 클라이언트는 모르는 t라 버린다). id = 줄 id(chatLog와 중복 제거), at = 서버 시각 */
+  | { t: "chat"; sid: Sid; text: string; id?: string; at?: number }
+  /** 받는 사람에게만: 방에 들어올 때(입장·재접속·실내에서 복귀) 이 방의 최근 1분 채팅. now = 서버 시각 (옛 클라이언트는 모르는 t라 버린다) */
+  | { t: "chatLog"; now: number; lines: ChatLogLine[] };
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
-export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number };
+/** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */
+export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number; staff?: true };
 
 export function encodeEvent(msg: C2S | S2C): string {
   return JSON.stringify(msg);

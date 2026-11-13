@@ -12,7 +12,7 @@ import type { HouseListResponse } from "@/lib/housing/types";
 export const GET = handler(async (req) => {
   const sort = SortSchema.parse(req.nextUrl.searchParams.get("sort") ?? "score");
   const [list, staffId] = await Promise.all([getHouseStore().list(sort, LIST_LIMIT), staffAccountId()]);
-  const houses = list.map((h) => toSummary(h, staffId)); // 운영자 집주인은 "운영자"로
+  const houses = list.map((h) => toSummary(h, staffId)); // 운영자 집주인은 공개 이름("대장")으로
   return json<HouseListResponse>(
     { sort, houses, generatedAt: Date.now() },
     { headers: { "Vercel-CDN-Cache-Control": "max-age=30, stale-while-revalidate=86400", "Cache-Control": "no-store" } },

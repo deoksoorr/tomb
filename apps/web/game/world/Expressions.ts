@@ -64,17 +64,17 @@ export class Expressions {
     const shown = maskChat(text);
     view.chat(shown, now);
     this.h.net().chat(text);
-    // 채팅 기록창: 내 글도 보낼 때 바로 (이름은 이름표 그대로 — 운영자면 "운영자")
-    bridge.emit("chat:line", { name: view.label.text, text: shown, mine: true });
+    // 채팅 기록창: 내 글도 보낼 때 바로 (이름은 이름표 그대로 — 운영자면 공개 이름 "대장" + 금색)
+    bridge.emit("chat:line", { name: view.label.text, text: shown, mine: true, ...(view.staff ? { staff: true as const } : {}) });
     this.h.sfx.play("say", 0.35);
   }
 
   /** 다른 사람의 자유 채팅 (서버가 가린 글). 떠 있던 말풍선·이모티콘은 바로 바뀐다 */
-  onRemoteChat(sid: Sid, text: string): void {
+  onRemoteChat(sid: Sid, text: string, key?: string): void {
     const r = this.h.remotes().get(sid);
     if (!r) return;
     r.view.chat(text, performance.now());
-    bridge.emit("chat:line", { name: r.name, text, mine: false });
+    bridge.emit("chat:line", { name: r.name, text, mine: false, ...(key ? { key } : {}), ...(r.view.staff ? { staff: true as const } : {}) });
     if (r.visible) this.h.sfx.play("say", 0.2, 1.1, 6);
   }
 

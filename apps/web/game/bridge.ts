@@ -5,6 +5,7 @@ import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
 import type { RpgAction, RpgHud, RpgPlay, RunResult } from "@/lib/rpg/types";
 import type { ResumeState } from "@/lib/resume";
 import type { SoundMix } from "@/lib/soundMix";
+import type { IncomingChatLine } from "@/game/logic/chatLog";
 
 // React(UI 오버레이) ↔ Phaser(게임) 사이의 유일한 통로. 양쪽은 서로를 직접 import하지 않는다.
 // "sticky" 이벤트는 마지막 값을 기억해서, 늦게 구독한 쪽도 last()로 현재 값을 읽을 수 있다.
@@ -94,7 +95,7 @@ export type GameEvents = {
   /** 22번 황금 고블린을 내가 가장 먼저 잡았다 → UI가 증서로 /api/goblin에 보상을 받는다 */
   "goblin:grant": { id: string; grant: string; points: number };
   /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
-  "megaphone:heard": { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number };
+  "megaphone:heard": { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; /** 운영자 계정이 외친 것 → 이름 금색 */ staff?: true };
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
   "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house" };
   /** 실시간 서버가 이 화면을 옛 버전이라 거절함(4010, 큰 패치) → UI가 업데이트 창을 띄운다 (sticky) */
@@ -103,8 +104,10 @@ export type GameEvents = {
   "app:banned": undefined;
   /** 47번: 다른 사람 캐릭터(또는 이름표)를 눌렀다 → UI가 작은 메뉴(신고하기)를 띄운다. ch = 월드 채널, room = 방 id */
   "peer:menu": { sid: number; name: string; ch?: number; room?: string; /** 그 사람 머리 위에 지금 떠 있는 자유 채팅 (신고에 붙인다) */ chat?: string };
-  /** 채팅 기록창 한 줄: 같은 채널·방에서 받은 자유 채팅(가린 글) 또는 내가 보낸 글. 화면 메모리에만 1분 */
-  "chat:line": { name: string; text: string; mine: boolean };
+  /** 채팅 기록창 한 줄: 같은 채널·방에서 받은 자유 채팅(가린 글) 또는 내가 보낸 글. 화면 메모리에만 1분. key = 서버 줄 id(중복 제거) */
+  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true };
+  /** 방에 들어올 때 서버가 보낸 이 방의 최근 1분 채팅 (이 기기 시계로 옮긴 줄). ch = 월드 채널이면 그 번호 (방이면 없음) */
+  "chat:log": { lines: IncomingChatLine[]; ch?: number };
 
   // ── 하우징 ── (game/housing, components/housing)
   /** 집 안 편집 상태 (편집 모드에서 바뀔 때마다). UI가 가방 남은 개수·점수·저장 버튼에 쓴다 */

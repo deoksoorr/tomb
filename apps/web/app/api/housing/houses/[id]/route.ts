@@ -8,7 +8,7 @@ import { rateLimit } from "@/lib/ratelimit";
 export const GET = handler<{ id: string }>(async (req, { id }) => {
   await rateLimit("detail", req);
   const [h, staffId] = await Promise.all([findVisibleHouse(getHouseStore(), id), staffAccountId()]);
-  const house = toPublicHouse(h, staffId); // 운영자 집주인은 "운영자"로
+  const house = toPublicHouse(h, staffId); // 운영자 집주인은 공개 이름("대장")으로
   return json<HouseDetailResponse>(
     { house },
     { headers: { "Vercel-CDN-Cache-Control": "max-age=10, stale-while-revalidate=600", "Cache-Control": "no-store" } },

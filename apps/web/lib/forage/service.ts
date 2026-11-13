@@ -327,7 +327,7 @@ export async function claimDexReward(acct: string, cat: LifeCat, tier: DexTier, 
 /** 다른 사람 도감 구경 (프로필·랭킹에서) */
 export async function publicDex(accountId: string, now = Date.now()): Promise<PublicDex> {
   const [d, acc, staff] = await Promise.all([getForageStore().dex(accountId), getAccounts().get(accountId, kstDay(now), now), isStaff(accountId)]);
-  // 운영자는 다른 사람에게 "운영자"로
+  // 운영자는 다른 사람에게 공개 이름("대장")으로
   return { accountId, name: staff ? STAFF_PUBLIC_NAME : acc.name, dex: d.dex, titles: titlesOf(d.claims) };
 }
 

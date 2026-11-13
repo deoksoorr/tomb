@@ -1,5 +1,6 @@
 // 말풍선 자유 채팅 (클라이언트·실시간 서버 공용).
-// - 쓴 글은 내 머리 위 말풍선으로만 잠깐 뜬다. 기록 창도 저장도 없다 (서버는 같은 채널에 중계만 한다)
+// - 쓴 글은 머리 위 말풍선 + 채팅창에 뜬다. 서버는 같은 채널·방에 중계하고, 늦게 온 사람을 위해 방별 최근 1분(최대 50줄)만
+//   메모리에 들고 있다가 버린다 (디스크·스토리지에는 저장하지 않는다)
 // - 서버가 가려서(maskChat) 내보낸다. 클라이언트도 같은 함수로 내 화면 미리보기를 가린다
 // - 도배 제한: 토큰 버킷 (최대 CHAT_BURST개 저장, CHAT_REFILL_MS마다 1개 충전 — 짧은 대답 몇 번은 연달아 쳐도 된다)
 
@@ -11,6 +12,15 @@ export const CHAT_SHOW_MS = 5_000;
 export const CHAT_BURST = 3;
 /** 토큰 버킷: 1개 충전 간격 */
 export const CHAT_REFILL_MS = 1_000;
+/** 서버가 방별로 들고 있는 최근 채팅 시간 (이보다 오래된 줄은 꺼낼 때 버린다) */
+export const CHAT_RECENT_MS = 300_000;
+/** 서버가 방별로 들고 있는 최근 채팅 최대 줄 수 */
+export const CHAT_RECENT_MAX = 150;
+
+/** 방에 들어올 때 받는 최근 채팅 한 줄 (S2C chatLog). at = 서버 시각 ms, mine = 내가 쓴 줄 */
+/** staff = 운영자(대장)가 쓴 줄 → 채팅창 이름 금색 */
+export type ChatLogLine = { id: string; at: number; name: string; text: string; mine?: true; staff?: true };
+
 /** 가린 자리 */
 export const CHAT_MASK = "***";
 

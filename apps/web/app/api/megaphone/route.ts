@@ -26,8 +26,11 @@ export const GET = handler(async (req) => {
     .filter((r) => !r.hidden && (r.scope === "all" || r.ch === channel))
     .slice(0, MEGA_SHOW)
     .reverse()
-    // 운영자로 지정되기 전에 남긴 기록도 "운영자"로
-    .map(({ id, name, text, scope, ch, at, accountId }) => ({ id, name: staffPublicName(name, !!staffId && accountId === staffId), text, scope, ch, at }));
+    // 운영자로 지정되기 전에 남긴 기록도 공개 이름("대장")·금색 표시로
+    .map(({ id, name, text, scope, ch, at, accountId }) => {
+      const staff = !!staffId && accountId === staffId;
+      return { id, name: staffPublicName(name, staff), text, scope, ch, at, ...(staff ? { staff: true as const } : {}) };
+    });
   return json<MegaphoneListResponse>(
     { entries },
     { headers: { "cache-control": "no-store", "vercel-cdn-cache-control": "s-maxage=10, stale-while-revalidate=30" } },
@@ -61,11 +64,12 @@ export const POST = handler(async (req) => {
     await store.releaseCooldown(visitorId);
     throw new HttpError(409, "NO_ITEM", "가방에 확성기가 없어요. 상점에서 살 수 있어요.");
   }
-  // 운영자는 보낸 이가 "운영자"로 보인다
+  // 운영자는 보낸 이가 공개 이름("대장")으로 보인다
   const name = staffPublicName((await accounts.get(visitorId, kstDay(now), now)).name ?? NO_NAME, staff);
   const scope = megaphoneScope(itemId)!;
-  const entry: MegaphoneEntry = { id: nanoid(10), name, text: checked.text, scope, ch: channel, at: now };
-  await store.push({ ...entry, accountId: visitorId });
+  const row = { id: nanoid(10), name, text: checked.text, scope, ch: channel, at: now };
+  await store.push({ ...row, accountId: visitorId }); // 저장 기록엔 staff를 넣지 않는다 (목록에서 계정으로 다시 판별)
+  const entry: MegaphoneEntry = { ...row, ...(staff ? { staff: true as const } : {}) };
   const grant = await signGrant(env.joinSecret(), {
     kind: "megaphone",
     visitorId,
@@ -75,6 +79,7 @@ export const POST = handler(async (req) => {
     scope,
     ch: channel,
     exp: Math.floor(now / 1000) + GRANT_TTL_SEC,
+    ...(staff ? { staff: true as const } : {}),
   });
   return json<MegaphoneUseResponse>({ entry, grant, me: await loadMe(accounts, visitorId, now) });
 });

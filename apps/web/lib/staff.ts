@@ -40,7 +40,7 @@ export async function isStaff(accountId: string): Promise<boolean> {
   return !!accountId && (await staffAccountId()) === accountId;
 }
 
-/** 다른 사람에게 보일 이름: 운영자 계정이면 닉네임 대신 "운영자" (관리자 페이지에서는 쓰지 않는다) */
+/** 다른 사람에게 보일 이름: 운영자 계정이면 닉네임 대신 공개 이름("대장") (관리자 페이지에서는 쓰지 않는다) */
 export async function publicNameOf(accountId: string, name: string): Promise<string> {
   return staffPublicName(name, await isStaff(accountId));
 }

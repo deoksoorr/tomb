@@ -1,16 +1,22 @@
 import * as Phaser from "phaser";
-import { DIR, type DirId } from "@tomb/protocol";
+import { DIR, STAFF_PUBLIC_NAME, type DirId } from "@tomb/protocol";
 import { addCanvasTexture, TEX } from "../assets/manifest";
 import { makeCanvas } from "../sprites/pixel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 
 // 31번 운영자 계정의 저승사자 차림: 검은 망토(AvatarView가 색을 STAFF_COLOR로 바꾼다) + 손에 든 낫 + 발밑에 은은한 안개 +
-// 이름표 왼쪽 "운영자" 배지. 운영자 표시는 실시간 서버가 입장 토큰(Vercel 서명)에서 받은 것만 오므로 흉내 낼 수 없다.
+// 이름표 왼쪽 "운영자" 배지(이름표가 이미 공개 이름 "대장"이면 숨김) + 이름표 금빛 테두리·숨쉬는 빛 무리. 운영자 표시는 실시간 서버가 입장 토큰(Vercel 서명)에서 받은 것만 오므로 흉내 낼 수 없다.
 
 /** 저승사자 망토 색 표기 (기본|머리|몸|포인트): 거의 검은 두건·망토, 보랏빛 회색 목도리 */
 export const STAFF_COLOR = "#3a3446|#2b2734|#24212c|#6f6488";
 export const STAFF_BADGE = "운영자";
 const BADGE_TINT = 0xc8b0ff;
+/** 이름표 금빛 테두리 색 */
+const FRAME_GOLD = 0xffd36a;
+/** 이름표 뒤 빛 무리 색 (가산 섞기) */
+const HALO_GOLD = 0xffb840;
+/** 숨쉬는 빛 주기 (ms 단위 각속도 분모) */
+const HALO_BREATH_MS = 700;
 
 // 낫 그림 (오른쪽을 보고 든 모습). L 외곽선, S 날, H 날 반짝임, W 자루, w 자루 그늘
 const SCYTHE = [
@@ -81,7 +87,13 @@ export class StaffFxView {
   private readonly scythe: Phaser.GameObjects.Image;
   private readonly fog: Phaser.GameObjects.Image[] = [];
   private readonly badge: Phaser.GameObjects.BitmapText;
-  /** 마지막으로 본 이름표 글자 ("운영자"면 배지를 숨긴다) */
+  /** 이름표 금빛 테두리 (이름표 글자 바로 뒤) */
+  private readonly frame: Phaser.GameObjects.Graphics;
+  /** 이름표 뒤 숨쉬는 빛 무리 (가산 섞기) */
+  private readonly halo: Phaser.GameObjects.Image;
+  /** 테두리를 마지막으로 그린 크기 (바뀔 때만 다시 그린다) */
+  private frameKey = "";
+  /** 마지막으로 본 이름표 글자 (공개 이름이면 배지를 숨긴다) */
   private lastLabel = "";
 
   constructor(scene: Phaser.Scene, atlas: GlyphAtlas, labelDepth: number) {
@@ -96,6 +108,21 @@ export class StaffFxView {
       );
     atlas.ensure(STAFF_BADGE);
     this.badge = scene.add.bitmapText(0, 0, FONT_KEY, STAFF_BADGE, FONT_PX).setOrigin(1, 1).setDepth(labelDepth).setTint(BADGE_TINT);
+    this.halo = scene.add.image(0, 0, TEX.glow).setTint(HALO_GOLD).setBlendMode(Phaser.BlendModes.ADD).setDepth(labelDepth - 0.02);
+    this.frame = scene.add.graphics().setDepth(labelDepth - 0.01);
+  }
+
+  /** 테두리를 이름표 크기에 맞춰 다시 그린다 (원점 = 이름표 아래 가운데) */
+  private drawFrame(w: number, h: number, sc: number): void {
+    const key = `${w}|${h}|${sc}`;
+    if (key === this.frameKey) return;
+    this.frameKey = key;
+    const padX = sc;
+    const padY = 0.5 * sc;
+    const g = this.frame.clear();
+    // 바깥 어두운 줄 → 금빛 줄 (어느 바닥에서도 테두리가 보이게)
+    g.lineStyle(sc * 2, 0x14100a, 0.55).strokeRect(-w / 2 - padX, -h - padY, w + padX * 2, h + padY * 2);
+    g.lineStyle(sc, FRAME_GOLD, 1).strokeRect(-w / 2 - padX, -h - padY, w + padX * 2, h + padY * 2);
   }
 
   sync(s: StaffSync, vis: boolean): void {
@@ -124,19 +151,40 @@ export class StaffFxView {
     const l = s.label;
     this.lastLabel = l.text;
     if (this.badge.scaleX !== s.labelScale) this.badge.setScale(s.labelScale);
-    // 이름표가 이미 "운영자"이므로 배지를 함께 띄우면 "운영자 운영자"가 된다 → 이름이 "운영자"면 배지는 숨긴다
-    this.badge.setPosition(Math.round(l.x - l.width / 2 - 3 * s.labelScale), l.y).setVisible(vis && l.visible && l.text !== STAFF_BADGE);
+    // 이름표가 이미 공개 이름("대장")이므로 배지를 함께 띄우면 "운영자 대장"처럼 겹친다 → 공개 이름이면 배지는 숨긴다
+    this.badge.setPosition(Math.round(l.x - l.width / 2 - 3 * s.labelScale), l.y).setVisible(vis && l.visible && !hideBadge(l.text));
+
+    // 이름표 금빛 테두리 + 숨쉬듯 밝아지는 빛 무리 (움직임 줄이기면 고정 빛)
+    const on = vis && l.visible && l.text !== "";
+    const sc = s.labelScale;
+    const breathe = s.reduced ? 0.5 : 0.5 + 0.5 * Math.sin(s.now / HALO_BREATH_MS);
+    if (on) this.drawFrame(l.width, l.height, sc);
+    this.frame.setPosition(l.x, l.y).setAlpha(l.alpha * (s.reduced ? 1 : 0.85 + 0.15 * breathe)).setVisible(on);
+    this.halo
+      .setPosition(l.x, l.y - l.height / 2)
+      .setDisplaySize(l.width + 18 * sc, l.height + 12 * sc)
+      .setAlpha(l.alpha * (0.22 + 0.26 * breathe))
+      .setVisible(on);
   }
 
   setVisible(v: boolean): void {
     this.scythe.setVisible(v);
     for (const f of this.fog) f.setVisible(v);
-    this.badge.setVisible(v && this.lastLabel !== STAFF_BADGE);
+    this.badge.setVisible(v && !hideBadge(this.lastLabel));
+    this.frame.setVisible(v);
+    this.halo.setVisible(v);
   }
 
   destroy(): void {
     this.scythe.destroy();
     for (const f of this.fog) f.destroy();
     this.badge.destroy();
+    this.frame.destroy();
+    this.halo.destroy();
   }
+}
+
+/** 이름표가 이미 운영자 공개 이름(또는 옛 배지 글자)이면 배지를 숨긴다 → "대장 대장"·"운영자 대장" 겹침 없게 */
+function hideBadge(label: string): boolean {
+  return label === STAFF_PUBLIC_NAME || label === STAFF_BADGE;
 }

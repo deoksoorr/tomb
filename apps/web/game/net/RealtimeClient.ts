@@ -33,6 +33,7 @@ import {
   type WelcomeMsg,
 } from "@tomb/protocol";
 import type { AppearanceChange } from "../sprites/avatar";
+import { readChatLog, type IncomingChatLine } from "../logic/chatLog";
 import { fetchLobby } from "@/lib/realtime";
 import type { ApiError, JoinRequest, JoinResponse } from "@/lib/types";
 import { bridge, type NetMode } from "../bridge";
@@ -82,8 +83,10 @@ export type NetCallbacks = {
   onSay(sid: Sid, id: PhraseId): void;
   /** 5번 이모티콘 (EMOS id). 내 것은 오지 않는다 */
   onEmo?(sid: Sid, id: EmoId): void;
-  /** 말풍선 자유 채팅 (서버가 가린 글). 내 것은 오지 않는다 */
-  onChat?(sid: Sid, text: string): void;
+  /** 말풍선 자유 채팅 (서버가 가린 글). 내 것은 오지 않는다. id = 서버 줄 id (옛 서버는 없음) */
+  onChat?(sid: Sid, text: string, id?: string): void;
+  /** 입장·재접속·실내에서 복귀 때 이 채널의 최근 1분 채팅 (이 기기 시계로 옮긴 줄, 내 줄은 mine) */
+  onChatLog?(lines: IncomingChatLine[]): void;
   /** 24번 벤치 상태 (SEAT_MOODS id, "" = 풀림). 서버가 받아들인 내 것도 온다 */
   onMood?(sid: Sid, mood: SeatMood | ""): void;
   /** 동물원 타는 펫에 올라탐·내림. 서버가 받아들인 내 것도 온다 (자리에 앉거나 물에 들어가면 서버가 내리기도 한다) */
@@ -106,7 +109,7 @@ export type NetCallbacks = {
   /** 23번 확성기 한마디 (내 것 포함, 서버가 서명된 문장만 보낸다) */
   /** 서버에서 내 계정(포인트·선물함)이 바뀌었다 → UI가 /api/me를 다시 받는다 */
   onMeStale?(): void;
-  onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number }): void;
+  onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true }): void;
 };
 
 export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean; body?: string };
@@ -555,7 +558,10 @@ export class RealtimeClient {
           if (m.sid !== this.mySid && isEmoId(m.id)) this.cb.onEmo?.(m.sid, m.id);
           break;
         case "chat":
-          if (m.sid !== this.mySid && typeof m.text === "string") this.cb.onChat?.(m.sid, m.text.slice(0, CHAT_MAX * 2));
+          if (m.sid !== this.mySid && typeof m.text === "string") this.cb.onChat?.(m.sid, m.text.slice(0, CHAT_MAX * 2), typeof m.id === "string" ? m.id : undefined);
+          break;
+        case "chatLog":
+          this.cb.onChatLog?.(readChatLog(m.now, m.lines, Date.now()));
           break;
         case "mood":
           if (m.m === "" || isSeatMood(m.m)) this.cb.onMood?.(m.sid, m.m);
@@ -589,7 +595,7 @@ export class RealtimeClient {
         // ── 23번 확성기 ──
         case "megaphone":
           if (typeof m.id === "string" && typeof m.text === "string" && typeof m.name === "string")
-            this.cb.onMegaphone?.({ id: m.id, name: m.name, text: m.text, scope: m.scope === "all" ? "all" : "channel", ch: Number(m.ch) || 0, at: Number(m.at) || Date.now() });
+            this.cb.onMegaphone?.({ id: m.id, name: m.name, text: m.text, scope: m.scope === "all" ? "all" : "channel", ch: Number(m.ch) || 0, at: Number(m.at) || Date.now(), ...(m.staff === true ? { staff: true as const } : {}) });
           break;
         case "me":
           this.cb.onMeStale?.();

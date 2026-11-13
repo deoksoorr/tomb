@@ -179,3 +179,9 @@
     opacity: 0;
   }
 }
+
+/* 운영자(대장) 이름: 금색 글자 + 은은한 빛 (서버가 준 staff 표시만) */
+.name.staff {
+  color: #ffd36a;
+  text-shadow: 0 0 6px rgba(255, 190, 64, 0.55);
+}

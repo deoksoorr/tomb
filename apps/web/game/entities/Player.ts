@@ -105,7 +105,7 @@ export class Player {
       this.view.applyAppearance({ dye: e.dye, body: e.body });
     });
     // 31번 운영자 계정이면 내 캐릭터도 저승사자 차림 (/api/me가 알려 준 값, 바뀌면 바로)
-    // 운영자는 다른 사람에게 "운영자"로 보이므로 내 화면의 이름표도 같게
+    // 운영자는 다른 사람에게 공개 이름("대장")으로 보이므로 내 화면의 이름표도 같게
     const staffOn = (on: boolean) => {
       this.view.setStaff(on);
       this.view.setName(staffPublicName(name, on));

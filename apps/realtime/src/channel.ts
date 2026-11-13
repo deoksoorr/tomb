@@ -43,6 +43,7 @@ import {
   type S2C,
   type StateId,
 } from "@tomb/protocol";
+import { ChatRecent } from "./chatRecent";
 import { MoveBudget, RateLimiter, allocSid, dist, stepToward, type Point } from "./logic";
 import { GoblinCore, type GoblinState } from "./goblin";
 
@@ -258,6 +259,8 @@ export class ChannelCore<C extends object> {
   private tickNo = 0;
   /** 22번 황금 고블린 (등장·주인 판정) */
   private readonly goblin = new GoblinCore(() => (this.host.random ? this.host.random() : Math.random()));
+  /** 이 방(채널·집·사냥터)의 최근 1분 채팅 — 메모리에만 (DO가 잠들면 사라진다) */
+  private readonly chats = new ChatRecent(() => (this.host.random ? this.host.random() : Math.random()));
 
   constructor(
     private readonly cfg: ChannelConfig,
@@ -476,6 +479,13 @@ export class ChannelCore<C extends object> {
     // 고블린을 잡았는데 증서를 받기 전에 끊겼다 → 다시 보낸다 (웹은 같은 고블린을 한 번만 지급한다)
     const owed = this.goblinOn ? this.goblin.grantFor(p.visitorId, now) : null;
     if (owed) this.sendTo(p, { t: "goblinGrant", ...owed });
+    this.sendChatLog(p, now);
+  }
+
+  /** 이 방의 최근 1분 채팅을 p에게 (없으면 보내지 않는다). 입장·재접속·실내에서 복귀할 때 */
+  private sendChatLog(p: Peer<C>, now: number): void {
+    const lines = this.chats.recent(now, p.visitorId);
+    if (lines.length) this.sendTo(p, { t: "chatLog", now, lines });
   }
 
   /** 나를 뺀 현재 접속자 전체 (유예 중인 사람 포함 — 다른 사람에게는 멈춘 아바타로 보인다) */
@@ -715,7 +725,7 @@ export class ChannelCore<C extends object> {
       case "away":
         if (now - (p.lastAwayAt ?? -Infinity) < AWAY_INTERVAL_MS) return;
         p.lastAwayAt = now;
-        return this.onAway(p, m.on);
+        return this.onAway(p, m.on, now);
       case "mood":
         if (now - (p.lastMoodAt ?? -Infinity) < MOOD_INTERVAL_MS) return;
         p.lastMoodAt = now;
@@ -724,10 +734,12 @@ export class ChannelCore<C extends object> {
         if (now - p.lastSayAt < SAY_INTERVAL_MS) return;
         p.lastSayAt = now;
         return this.broadcast(encodeEvent({ t: "say", sid: p.sid, id: m.id }));
-      case "chat":
-        // 말풍선 채팅: 넘치면 조용히 버린다. 가린 글만 같은 채널·방에 중계하고 어디에도 저장하지 않는다 (실내에 있으면 안 보이니 버린다)
+      case "chat": {
+        // 말풍선 채팅: 넘치면 조용히 버린다. 가린 글만 같은 채널·방에 중계하고, 늦게 온 사람용으로 메모리에 1분만 둔다 (실내에 있으면 안 보이니 버린다)
         if (p.away || !takeChatToken((p.chatBucket ??= newChatBucket()), now)) return;
-        return this.broadcast(encodeEvent({ t: "chat", sid: p.sid, text: maskChat(m.text) }), p.sid);
+        const c = this.chats.push({ sid: p.sid, visitorId: p.visitorId, name: p.name, text: maskChat(m.text), ...(p.staff ? { staff: true as const } : {}) }, now);
+        return this.broadcast(encodeEvent({ t: "chat", sid: p.sid, text: c.text, id: c.id, at: c.at }), p.sid);
+      }
       case "goblin":
         return this.onGoblinClaim(p, m.id, now);
       case "megaphone":
@@ -787,7 +799,7 @@ export class ChannelCore<C extends object> {
     const ch = this.host.channelNo?.();
     if (g.scope === "channel" && ch !== undefined && ch !== g.ch) return;
     if (!this.host.claimNonce(`m:${g.nonce}`, g.exp * 1000)) return; // 이미 외친 확성기
-    const data = encodeEvent({ t: "megaphone", id: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, at: Date.now() });
+    const data = encodeEvent({ t: "megaphone", id: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, at: Date.now(), ...(g.staff ? { staff: true as const } : {}) });
     this.broadcast(data);
     if (g.scope === "all") this.host.relayMegaphone?.(g.nonce, g.exp * 1000, data);
   }
@@ -970,12 +982,14 @@ export class ChannelCore<C extends object> {
    * 실내에 들어감(on)·나옴. 월드 채널만 (방은 그 자체가 실내). 같은 채널의 다른 사람에게 알리고, 늦게 온 사람은 PeerInfo.away로 받는다.
    * 옛 클라이언트는 보내지 않으니 언제나 보인다
    */
-  private onAway(p: Peer<C>, on: boolean): void {
+  private onAway(p: Peer<C>, on: boolean, now = Date.now()): void {
     if (this.cfg.room || !!p.away === on) return;
     p.away = on ? true : undefined;
     this.save(p);
     this.host.liveChanged?.(true);
     this.broadcast(encodeEvent({ t: "away", sid: p.sid, on }), p.sid);
+    // 마을로 돌아왔다 → 실내에 있던 동안의 마을 채팅을 다시 맞춘다 (클라이언트가 id로 중복을 거른다)
+    if (!on) this.sendChatLog(p, now);
   }
 
   /** 타는 펫에서 내리고 모두에게 알린다 (타고 있지 않으면 아무것도 안 한다) */

@@ -127,7 +127,7 @@ export async function pushActivity(
     id: nanoid(10),
     kind: item.kind,
     at: now,
-    who: await publicNameOf(item.actorId, await displayName(item.actorId, now)), // 운영자는 "운영자"로
+    who: await publicNameOf(item.actorId, await displayName(item.actorId, now)), // 운영자는 공개 이름("대장")으로
     targetId: item.targetId,
     targetName: item.targetName,
   });
@@ -238,7 +238,7 @@ export async function saveGrave(
   grave: Grave,
   spendStyle: boolean,
 ): Promise<void> {
-  // 운영자가 세운 묘비의 상주는 닉네임 대신 "운영자" (돌려줄 응답에도 보이게 그 자리에서 바꾼다)
+  // 운영자가 세운 묘비의 상주는 닉네임 대신 공개 이름("대장") (돌려줄 응답에도 보이게 그 자리에서 바꾼다)
   if (await isStaff(accountId)) grave.mourner = STAFF_PUBLIC_NAME;
   const itemId = spendStyle && grave.style ? styleItemId(grave.style) : null;
   if (!itemId) return store.put(grave);

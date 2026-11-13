@@ -17,7 +17,7 @@ export type Grant =
   | { kind: "firework"; visitorId: string; item: string; nonce: string; exp: number }
   | { kind: "goblin"; visitorId: string; points: number; nonce: string; exp: number }
   /** ch = 외친 채널 (scope가 channel이면 그 채널 DO만 받아 준다) */
-  | { kind: "megaphone"; visitorId: string; nonce: string; name: string; text: string; scope: MegaphoneScope; ch: number; exp: number };
+  | { kind: "megaphone"; visitorId: string; nonce: string; name: string; text: string; scope: MegaphoneScope; ch: number; exp: number; /** 운영자 계정 (이름 금색 표시용) */ staff?: true };
 
 export const GRANT_TTL_SEC = 60;
 /** 증서 최대 길이. 확성기 증서는 닉네임·문장(한글 60자)을 품어 다른 증서보다 길다 */
@@ -80,6 +80,6 @@ export async function verifyGrant(
     g.ch >= 1 &&
     g.ch <= 100
   )
-    return { kind: "megaphone", visitorId: g.visitorId, nonce: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, exp: g.exp };
+    return { kind: "megaphone", visitorId: g.visitorId, nonce: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, exp: g.exp, ...(g.staff === true ? { staff: true as const } : {}) };
   return null;
 }

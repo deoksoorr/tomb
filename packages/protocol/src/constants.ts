@@ -188,9 +188,10 @@ export function bodyUnlockPrice(b: unknown): number | null {
 export function bodyLabel(b: unknown): string {
   return AVATAR_BODIES.find((x) => x.id === b)?.label ?? String(b ?? "");
 }
-/** 운영자 계정이 다른 사람에게 보이는 이름 (닉네임 대신). 관리자 페이지에서는 원래 닉네임 */
-export const STAFF_PUBLIC_NAME = "운영자";
-/** 운영자면 "운영자", 아니면 원래 이름 */
+/** 운영자 계정이 다른 사람에게 보이는 이름 (닉네임 대신, 재미있게 "대장"). 관리자 페이지에서는 원래 닉네임.
+ *  일반 닉네임으로는 못 쓴다 (names.ts 금칙어). 이미 "운영자"로 저장된 옛 기록은 그대로 둔다 */
+export const STAFF_PUBLIC_NAME = "대장";
+/** 운영자면 공개 이름("대장"), 아니면 원래 이름 */
 export function staffPublicName(name: string, staff: boolean): string {
   return staff ? STAFF_PUBLIC_NAME : name;
 }

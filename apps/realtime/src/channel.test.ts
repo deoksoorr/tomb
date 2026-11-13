@@ -1351,7 +1351,8 @@ describe("말풍선 채팅", () => {
     const c = other.join("c");
     clear(a, b, c);
     core.message(a, send({ t: "chat", text: "  안녕 씨발  " }), 0);
-    expect(events(b)).toEqual([{ t: "chat", sid: 1, text: "안녕 ***" }]);
+    expect(events(b)).toMatchObject([{ t: "chat", sid: 1, text: "안녕 ***", at: 0 }]);
+    expect((events(b)[0] as { id?: unknown }).id).toEqual(expect.any(String));
     expect(events(a)).toEqual([]);
     expect(events(c)).toEqual([]);
   });
@@ -1374,6 +1375,76 @@ describe("말풍선 채팅", () => {
     core.message(a, JSON.stringify({ t: "chat", text: "가".repeat(61) }), 0);
     core.message(a, '{"t":"chat","text":"   "}', 0);
     core.message(a, send({ t: "chat", text: "가".repeat(60) }), 0);
-    expect(events(b)).toEqual([{ t: "chat", sid: 1, text: "가".repeat(60) }]);
+    expect(events(b)).toMatchObject([{ t: "chat", sid: 1, text: "가".repeat(60) }]);
+  });
+
+  const chatLogs = (c: Conn) => events(c).filter((e): e is Extract<S2C, { t: "chatLog" }> => e.t === "chatLog");
+
+  it("늦게 들어온 사람은 welcome 뒤에 이 방의 최근 5분 채팅(chatLog)을 받는다. 5분 지난 줄은 빠지고, 줄이 없으면 보내지 않는다", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    expect(chatLogs(a)).toEqual([]);
+    core.message(a, send({ t: "chat", text: "첫 줄" }), 1_000);
+    core.message(a, send({ t: "chat", text: "둘째 씨발" }), 30_000);
+    const b = join("b", 40_000);
+    const types = events(b).map((e) => e.t);
+    expect(types.indexOf("chatLog")).toBeGreaterThan(types.indexOf("welcome"));
+    expect(chatLogs(b)).toMatchObject([{ now: 40_000, lines: [{ at: 1_000, name: "a", text: "첫 줄" }, { at: 30_000, name: "a", text: "둘째 ***" }] }]);
+    expect(chatLogs(b)[0].lines.every((l) => l.mine === undefined)).toBe(true);
+    // 5분 지난 첫 줄은 빠진다
+    const c = join("c", 301_000);
+    expect(chatLogs(c)[0].lines.map((l) => l.text)).toEqual(["둘째 ***"]);
+    // 모두 지나면 보내지 않는다
+    const d = join("d", 330_001);
+    expect(chatLogs(d)).toEqual([]);
+  });
+
+  it("chatLog 줄 id는 실시간 chat 방송의 id와 같다 (클라이언트 중복 제거)", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const b = join("b");
+    core.message(a, send({ t: "chat", text: "안녕" }), 100);
+    const live = events(b).find((e) => e.t === "chat") as Extract<S2C, { t: "chat" }>;
+    const c = join("c", 200);
+    expect(chatLogs(c)[0].lines).toEqual([{ id: live.id, at: 100, name: "a", text: "안녕" }]);
+  });
+
+  it("재접속하면 내 줄은 mine으로 받는다", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const b = join("b");
+    core.message(a, send({ t: "chat", text: "나야" }), 0);
+    core.message(b, send({ t: "chat", text: "너야" }), 10);
+    core.disconnect(a, 1006, 1_000);
+    const a2 = join("a", 2_000);
+    expect(chatLogs(a2)[0].lines).toMatchObject([{ text: "나야", mine: true }, { text: "너야" }]);
+    expect(chatLogs(a2)[0].lines[1].mine).toBeUndefined();
+  });
+
+  it("실내에서 마을로 돌아오면(away off) 그동안의 마을 채팅을 chatLog로 다시 받는다", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const b = join("b");
+    core.message(a, send({ t: "away", on: true }), 0);
+    core.message(b, send({ t: "chat", text: "집에 간 사이" }), 5_000);
+    clear(a);
+    core.message(a, send({ t: "away", on: false }), 10_000);
+    expect(chatLogs(a)).toMatchObject([{ now: 10_000, lines: [{ name: "b", text: "집에 간 사이" }] }]);
+    // 들어갈 때는 보내지 않는다
+    clear(a);
+    core.message(a, send({ t: "away", on: true }), 20_000);
+    expect(chatLogs(a)).toEqual([]);
+  });
+
+  it("방(집)마다 따로 들고 있다: 다른 방·다른 채널 채팅은 섞이지 않는다", () => {
+    const house1 = setup(3, 20_000, true);
+    const house2 = setup(3, 20_000, true);
+    const village = setup();
+    house1.core.message(house1.join("a"), send({ t: "chat", text: "집1" }), 0);
+    house2.core.message(house2.join("b"), send({ t: "chat", text: "집2" }), 0);
+    village.core.message(village.join("c"), send({ t: "chat", text: "마을" }), 0);
+    expect(chatLogs(house1.join("x", 100))[0].lines.map((l) => l.text)).toEqual(["집1"]);
+    expect(chatLogs(house2.join("x", 100))[0].lines.map((l) => l.text)).toEqual(["집2"]);
+    expect(chatLogs(village.join("x", 100))[0].lines.map((l) => l.text)).toEqual(["마을"]);
   });
 });

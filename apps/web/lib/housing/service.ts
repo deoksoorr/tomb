@@ -56,7 +56,7 @@ export const isHouseId = (id: string) => HOUSE_ID_RE.test(id);
 export const houseNotFound = () => new HttpError(404, "NOT_FOUND", "그 집을 찾을 수 없어요.");
 const noHouse = () => new HttpError(409, "NO_HOUSE", "먼저 분양 사무소에서 내 집을 분양받아 주세요.");
 
-/** 집주인 이름: 운영자 집이면 "운영자" (staffId = 운영자 계정 id. 관리자 화면은 넘기지 않아 원래 닉네임) */
+/** 집주인 이름: 운영자 집이면 공개 이름("대장") (staffId = 운영자 계정 id. 관리자 화면은 넘기지 않아 원래 닉네임) */
 const ownerNameOf = (r: HouseRecord, staffId: string | null): string => staffPublicName(r.ownerName, !!staffId && r.owner === staffId);
 
 export function toPublicHouse(r: HouseRecord, staffId: string | null = null): PublicHouse {
@@ -137,7 +137,7 @@ export async function buyPlot(
     throw new HttpError(400, "INVALID_INPUT", `번지는 1~${VILLAGE_MAX_LOTS} 중에서 골라 주세요.`);
   if (lot !== null && (await store.village(ch)).some((h) => h.lot === lot)) throw lotTaken();
   await spend(accountId, cost, tier.id === PLOT_TIERS[0].id ? "plot" : `plot:${tier.id}`);
-  // 운영자는 집주인 이름도 "운영자"로 남긴다
+  // 운영자는 집주인 이름도 공개 이름("대장")으로 남긴다
   const r = await store.create({ id, owner: accountId, name, intro, ownerName: await publicNameOf(accountId, ownerName), tier: tier.id, ch, lot, now: Date.now() });
   if (r === "exists") await refundAndThrow(accountId, cost, new HttpError(409, "ALREADY_OWNED", "이미 내 집이 있어요."));
   if (r === "lot_taken") await refundAndThrow(accountId, cost, lotTaken());
@@ -315,7 +315,7 @@ export async function postGuest(
 
 export async function guestView(store: HouseStore, houseId: string, visitorId: string | null): Promise<GuestEntryView[]> {
   const [rows, staffId] = await Promise.all([store.guestbook(houseId, false), staffAccountId()]);
-  // 운영자로 지정되기 전에 쓴 글도 "운영자"로
+  // 운영자로 지정되기 전에 쓴 글도 공개 이름("대장")으로
   return rows.map((g) => ({ id: g.id, name: staffPublicName(g.name, !!staffId && g.author === staffId), text: g.text, at: g.at, mine: !!visitorId && g.author === visitorId }));
 }
 

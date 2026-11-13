@@ -65,7 +65,7 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
           {entries.map((e) => (
             <li key={e.id} className={cx(styles.line, flash?.id === e.id && styles.newLine)}>
               {e.scope === "all" && <span className={styles.all}>전체</span>}
-              <b className={styles.name}>{e.name}</b>
+              <b className={cx(styles.name, e.staff && styles.staff)}>{e.name}</b>
               <span className={styles.text}>{e.text}</span>
               {/* 47번 확성기 신고 */}
               <button
