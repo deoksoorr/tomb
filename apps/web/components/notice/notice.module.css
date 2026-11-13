@@ -157,3 +157,11 @@
 .guide {
   margin-top: 16px;
 }
+
+/* 첫 화면(입구)처럼 가운데 정렬인 곳에서 열려도 공지 목록·본문·아래 안내는 늘 왼쪽 정렬 */
+.notices,
+.body,
+.guide,
+.guide * {
+  text-align: left;
+}
