@@ -63,7 +63,7 @@ const FAQ = [
   {
     q: "출석 도장은 어떻게 찍나요?",
     // 숫자는 lib/attendStay.ts·attendTiers.ts·economy.ts에서 읽는다
-    a: `${ATTEND_RULE_TEXT}(다른 창을 봐도 괜찮아요). 출석 달력의 오늘 칸을 누르면 ${earnRule("attend").points}포인트, 7일 연속마다 ${earnRule("streak").points}포인트, 한 달 개근이면 ${earnRule("monthly").points}포인트를 더 받아요. 출석 보상 길: ${ATTEND_TIER_GUIDE}. 받은 코디는 가방의 꾸미기에서 입을 수 있어요.`,
+    a: `${ATTEND_RULE_TEXT}(다른 창을 봐도 괜찮아요). 출석 달력의 오늘 칸을 누르면 ${earnRule("attend").points}포인트, 7일 연속마다 ${earnRule("streak").points}포인트, 한 달 개근이면 ${earnRule("monthly").points}포인트를 더 받아요. 이번 달 출석 보상: ${ATTEND_TIER_GUIDE}. 받은 코디는 가방의 꾸미기에서 입을 수 있어요.`,
   },
   {
     q: "무엇을 할 수 있나요?",

@@ -245,9 +245,9 @@ function TierRoad({ cal, stamped, isCurrent, fresh }: { cal: CalendarResponse; s
         ? "남은 날을 모두 채워도 다음 보상에는 닿지 않아요"
         : `다음 보상까지 출석 ${next.days - stamped}일 남았어요`;
   return (
-    <section className={styles.road} aria-label={isCurrent ? "이번 달 보상 길" : `${monthLabel(cal.month)} 보상 길`}>
+    <section className={styles.road} aria-label={isCurrent ? "이번 달 출석 보상" : `${monthLabel(cal.month)} 출석 보상`}>
       <div className={styles.roadHead}>
-        <h4 className={styles.roadTitle}>{isCurrent ? "이번 달 보상 길" : "그달 보상 길"}</h4>
+        <h4 className={styles.roadTitle}>{isCurrent ? "이번 달 출석 보상" : "그달 출석 보상"}</h4>
         <span className={styles.roadNote}>{note}</span>
       </div>
       <span className={styles.roadBar} role="progressbar" aria-valuemin={0} aria-valuemax={last} aria-valuenow={Math.min(stamped, last)} aria-label="이번 달 출석 수">

@@ -272,7 +272,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               ["머무르기", `${PRESENCE_INTERVAL_MS / 60_000}분마다 (다른 창을 봐도 OK)`],
               ["지갑", `${won(BALANCE_CAP)}P까지 담겨요`],
               ["출석", `마을에 ${ATTEND_STAY_TEXT} 머물면 그날 도장 · 같은 IP는 하루 ${ATTEND_ACCOUNTS_PER_IP}계정까지 포인트`],
-              ["출석 보상 길", ATTEND_TIER_GUIDE],
+              ["이번 달 출석 보상", ATTEND_TIER_GUIDE],
               ["한도에 걸리면", "알림 없이 조용히 안 쌓여요"],
               ["랭킹", "포인트(이번 주·전체, 써도 안 줄어요)·사냥·사냥 레벨·낚시(최대어)·꾸미기(지금 입은 코디 점수)·집 꾸미기·헌화 · 운영자는 순위에 안 들어요"],
             ]}
