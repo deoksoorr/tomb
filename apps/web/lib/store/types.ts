@@ -225,6 +225,13 @@ export interface AccountStore {
    * 같은 IP에서 오늘 이미 ATTEND_ACCOUNTS_PER_IP개 계정이 받았으면 도장만 찍고 포인트는 주지 않는다
    */
   claimAttend(id: string, ipHash: string, day: string, yesterday: string, monthDays: number, needTicks: number): Promise<AttendClaim>;
+  /**
+   * 출석 구간 코디 보상 지급 (원자적, 그달 구간마다 한 번): 그달(month = YYYYMM) 도장 수가 tierDays 이상이고 그 구간을
+   * 아직 받지 않았으면 받은 꾸미기를 달력 기록에 남기고 꾸미기를 준다. 기간제(termMs)는 입고 있으면 그 자리, 아니면 벗어 둔
+   * 꾸미기의 만료 시각을 늘린다(선물 기간과 같은 규칙 — lib/attendTiers.ts tierUntil). termMs = null이면 영구 소장.
+   * 줬으면 true, 이미 받았거나 도장이 모자라면 false
+   */
+  grantAttendTier(id: string, month: string, tierDays: number, itemId: string, slot: CosmeticSlot, termMs: number | null, now: number): Promise<boolean>;
   /** 개인 코드 해시 교체 (이전 코드는 무효) */
   setCode(id: string, codeHash: string): Promise<void>;
   findByCode(codeHash: string): Promise<string | null>;

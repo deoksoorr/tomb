@@ -1,4 +1,5 @@
 import { itemById, nameKey, type CosmeticSlot } from "@tomb/protocol";
+import { tierUntil } from "../attendTiers";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import { staffAccountIdNow } from "../staff";
@@ -55,6 +56,8 @@ type Acct = {
   calendar?: Map<string, Map<string, number>>;
   /** 달력 개편 전 출석을 도장으로 옮겼는지 */
   calInit?: boolean;
+  /** 출석 구간 코디 보상: 달(YYYYMM) → (구간 일수 → 받은 꾸미기 id). 예전 계정에는 없을 수 있다 */
+  attendTiers?: Map<string, Record<string, string>>;
   /** 처음 입장한 시각 (없으면 모름) */
   createdAt?: number;
   /** 닉네임 중복 금지: 마지막 입장 시각, 이 계정이 차지한 이름 비교 키, 기존 중복(색인에 못 올림) 표시, 휴면 재설정 중 */
@@ -355,13 +358,37 @@ export class MemoryAccounts implements AccountStore {
 
   async attendCalendar(id: string, month: string): Promise<CalendarMonthRecord> {
     const a = this.accts.get(id);
-    if (!a) return { days: {}, monthBonus: null };
+    if (!a) return { days: {}, monthBonus: null, tiers: {} };
     this.initCalendar(a);
     const m = a.calendar?.get(month) ?? new Map<string, number>();
     return {
       days: Object.fromEntries([...m].filter(([k]) => !k.startsWith("_"))),
       monthBonus: m.has("_month") ? m.get("_month")! : null,
+      tiers: { ...(a.attendTiers?.get(month) ?? {}) },
     };
+  }
+
+  async grantAttendTier(id: string, month: string, tierDays: number, itemId: string, slot: CosmeticSlot, termMs: number | null, now: number): Promise<boolean> {
+    // await 없이 확인·기록·지급을 한 번에 (accounts-redis.ts TIER_LUA와 같은 규칙)
+    const a = this.accts.get(id);
+    if (!a) return false;
+    this.initCalendar(a);
+    const stamped = [...(a.calendar?.get(month)?.keys() ?? [])].filter((k) => !k.startsWith("_")).length;
+    if (stamped < tierDays) return false;
+    const tiers = (a.attendTiers ??= new Map());
+    const got = tiers.get(month) ?? {};
+    if (got[String(tierDays)]) return false;
+    tiers.set(month, { ...got, [String(tierDays)]: itemId });
+    this.prune(a, now);
+    const cur = a.look.get(slot);
+    const wearing = cur?.itemId === itemId && cur.until > now;
+    const had = wearing ? cur.until : (this.stashOf(a).get(itemId) ?? 0);
+    const until = tierUntil(termMs, had, now);
+    if (until > had) {
+      if (wearing) a.look.set(slot, { itemId, until });
+      else this.stashOf(a).set(itemId, until);
+    }
+    return true;
   }
 
   async claimAttend(id: string, ipHash: string, day: string, yesterday: string, monthDays: number, needTicks: number): Promise<AttendClaim> {

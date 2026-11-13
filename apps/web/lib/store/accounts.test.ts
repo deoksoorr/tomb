@@ -1,7 +1,9 @@
 import { Redis } from "@upstash/redis";
 import { nanoid } from "nanoid";
 import { afterEach, describe, expect, it } from "vitest";
-import { nameKey } from "@tomb/protocol";
+import { nameKey, PERMANENT_UNTIL } from "@tomb/protocol";
+import { attendTierPlan } from "../attendTiers";
+import { calendarOf, grantAttendTiers } from "../calendarView";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, type EarnSource } from "../economy";
 import { env } from "../env";
 import type { Grave } from "../types";
@@ -253,7 +255,7 @@ function contract(make: () => Kit) {
     expect(await claim(id, "ip-a", d[6], d[5])).toEqual({ ok: false, reason: "already" });
     expect(await accounts.get(id, d[6], 0)).toMatchObject({ streak: 7, name: "새벽코더", lastAttend: d[6] });
     const cal = await accounts.attendCalendar(id, "202611");
-    expect(cal).toEqual({ days: { "01": 10, "02": 10, "03": 10, "04": 10, "05": 10, "06": 10, "07": 40 }, monthBonus: null });
+    expect(cal).toEqual({ days: { "01": 10, "02": 10, "03": 10, "04": 10, "05": 10, "06": 10, "07": 40 }, monthBonus: null, tiers: {} });
     // 하루 건너뛰면 다시 1일째
     await stay(id, d[8], 6);
     const again = await claim(id, "ip-b", d[8], d[7]);
@@ -307,6 +309,78 @@ function contract(make: () => Kit) {
     const cal = await accounts.attendCalendar(id, "202611");
     expect(Object.keys(cal.days)).toHaveLength(30);
     expect(cal.monthBonus).toBe(200);
+  });
+
+  // ── 출석 구간 코디 보상 (lib/attendTiers.ts) ──
+  const TT = 1_790_000_000_000;
+  const D = 86_400_000;
+  /** 11월 1일부터 이어서 n일째까지 출석 도장을 찍는다 (이미 찍은 날은 건너뛴다) */
+  const stampedUpTo = new Map<string, number>();
+  async function stampDays(id: string, n: number) {
+    const d = days(n);
+    for (let i = stampedUpTo.get(id) ?? 0; i < n; i++) {
+      await stay(id, d[i], 6);
+      const r = await claim(id, `ip-${nanoid(6)}`, d[i], d[i - 1] ?? "");
+      if (!r.ok) throw new Error(r.reason);
+    }
+    stampedUpTo.set(id, Math.max(n, stampedUpTo.get(id) ?? 0));
+  }
+  const owned = async (id: string, itemId: string, now: number) => {
+    const a = await accounts.get(id, DAY, now);
+    return [...a.equipped, ...a.stash].find((e) => e.itemId === itemId)?.until ?? 0;
+  };
+
+  it("출석 구간 코디: 도장 수가 모자라면 못 받고, 닿으면 그 구간 한 번만 (기록이 달력에 남는다)", async () => {
+    const id = newId();
+    await stampDays(id, 2);
+    expect(await accounts.grantAttendTier(id, "202611", 3, "hat_sprout", "head", 3 * D, TT)).toBe(false);
+    await stampDays(id, 3);
+    expect(await accounts.grantAttendTier(id, "202611", 3, "hat_sprout", "head", 3 * D, TT)).toBe(true);
+    // 같은 구간은 다른 꾸미기로도 다시 받을 수 없다
+    expect(await accounts.grantAttendTier(id, "202611", 3, "hat_sprout", "head", 3 * D, TT)).toBe(false);
+    expect(await accounts.grantAttendTier(id, "202611", 3, "neck_scarf", "neck", 3 * D, TT)).toBe(false);
+    expect(await owned(id, "hat_sprout", TT)).toBe(TT + 3 * D);
+    expect(await owned(id, "neck_scarf", TT)).toBe(0);
+    const cal = await accounts.attendCalendar(id, "202611");
+    expect(cal.tiers).toEqual({ "3": "hat_sprout" });
+    expect(Object.keys(cal.days)).toHaveLength(3); // 보상 기록은 도장 수에 들어가지 않는다
+  });
+
+  it("출석 구간 코디: 기간제는 남은 기간에 더하고(입고 있으면 그 자리), 영구는 영구 소장", async () => {
+    const id = newId();
+    await stampDays(id, 7);
+    // 벗어 둔 꾸미기에 3일 → 같은 꾸미기 7일을 더 받으면 남은 시간 + 7일
+    expect(await accounts.grantAttendTier(id, "202611", 3, "hat_cat", "head", 3 * D, TT)).toBe(true);
+    expect(await accounts.grantAttendTier(id, "202611", 7, "hat_cat", "head", 7 * D, TT + D)).toBe(true);
+    expect(await owned(id, "hat_cat", TT + D)).toBe(TT + 10 * D);
+    // 입고 있으면 착용한 자리에서 늘어난다
+    expect(await accounts.wear(id, "hat_cat", "head", TT + D)).toBe(true);
+    await stampDays(id, 14);
+    expect(await accounts.grantAttendTier(id, "202611", 14, "hat_cat", "head", 14 * D, TT + 2 * D)).toBe(true);
+    const a = await accounts.get(id, DAY, TT + 2 * D);
+    expect(a.equipped).toContainEqual({ itemId: "hat_cat", until: TT + 24 * D });
+    expect(a.stash.find((e) => e.itemId === "hat_cat")).toBeUndefined();
+    // 영구
+    await stampDays(id, 28);
+    expect(await accounts.grantAttendTier(id, "202611", 28, "back_wings_dragon", "back", null, TT)).toBe(true);
+    expect(await owned(id, "back_wings_dragon", TT)).toBe(PERMANENT_UNTIL);
+    expect((await accounts.attendCalendar(id, "202611")).tiers).toEqual({ "3": "hat_cat", "7": "hat_cat", "14": "hat_cat", "28": "back_wings_dragon" });
+  });
+
+  it("출석 구간 코디 지급(grantAttendTiers): 닿은 구간을 모두 이어서 주고, 다시 불러도 두 번 주지 않는다", async () => {
+    const id = newId();
+    await stampDays(id, 8);
+    const now = Date.UTC(2026, 10, 8, 3);
+    const got = await grantAttendTiers(accounts, id, "202611", now);
+    const plan = attendTierPlan("202611", {}, new Set());
+    expect(got).toEqual([
+      { days: 3, itemId: plan[0].itemId, termDays: 3 },
+      { days: 7, itemId: plan[1].itemId, termDays: 7 },
+    ]);
+    expect(await grantAttendTiers(accounts, id, "202611", now)).toEqual([]);
+    expect(await owned(id, plan[1].itemId!, now)).toBe(now + 7 * D);
+    const view = await calendarOf(accounts, id, "202611", now);
+    expect(view.tiers.map((t) => t.received)).toEqual([true, true, false, false, false]);
   });
 
   it("입장 기록: 이름·색·몸 모양·처음 입장 시각은 비어 있을 때만, 포인트는 주지 않는다", async () => {

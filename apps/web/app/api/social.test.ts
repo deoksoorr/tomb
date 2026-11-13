@@ -82,7 +82,7 @@ describe("10번 출석 달력", () => {
     expect(second.me.points).toBe(first.me.points + 6 * 5 + 35); // 그 사이 머무르기 +5 × 6번 + 보너스 2구간
   });
 
-  it("1시간 머물러야 오늘 칸을 받고(+10), 하루 한 번만. 입장만으로는 포인트가 없다", async () => {
+  it("정해진 시간(1시간) 머물러야 오늘 칸을 받고(+10), 하루 한 번만. 입장만으로는 포인트가 없다", async () => {
     vi.spyOn(Date, "now").mockReturnValue(NOON);
     const v = await newVisitor("달력지기");
     const cal = await bodyOf<CalendarResponse>(calendar.GET(call("/api/me/calendar", { visitor: v })));
@@ -110,6 +110,8 @@ describe("10번 출석 달력", () => {
     expect(res.me.attendance).toMatchObject({ today: true, streak: 1 });
     expect(res.calendar.days[11]).toEqual({ day: 12, state: "stamped", points: 10 });
     expect(res.calendar.claimable).toBe(false);
+    expect(res.tierRewards).toEqual([]); // 첫 도장은 아직 구간(3일) 전
+    expect(res.calendar.tiers).toHaveLength(5);
     expect(await errOf(claim.POST(call("/api/me/calendar/claim", { method: "POST", visitor: v })))).toBe("ALREADY");
     // 다시 입장해도(옛 화면의 자동 출석 호출) 포인트는 그대로
     const again = await bodyOf<{ me: Me; earned: number }>(attend.POST(call("/api/me/attend", { visitor: v, body: {} })));

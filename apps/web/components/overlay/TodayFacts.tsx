@@ -1,7 +1,7 @@
 "use client";
 
 import { PHASE_LABELS, WEATHER_LABELS } from "@/lib/ambience";
-import { ATTEND_STAY_MINUTES } from "@/lib/calendar";
+import { ATTEND_STAY_MINUTES, attendLeftText } from "@/lib/attendStay";
 import { DAILY_EARN_CAP } from "@/lib/economy";
 import { useAmbience } from "@/lib/hooks/useAmbience";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
@@ -21,12 +21,12 @@ export default function TodayFacts({ show = ALL }: { show?: readonly TodayFact[]
   const facts = {
     attend: {
       label: "오늘 출석",
-      value: !att ? "…" : att.today ? "도장 받음" : att.stayMinutes >= ATTEND_STAY_MINUTES ? "받을 수 있어요" : "아직",
+      value: !att ? "…" : att.today ? "도장 찍음" : att.stayMinutes >= ATTEND_STAY_MINUTES ? "받을 수 있어요" : "아직",
       note: !att
         ? undefined
         : att.today
           ? `${att.streak}일 연속 출석 중`
-          : `오늘 머문 시간 ${Math.min(att.stayMinutes, ATTEND_STAY_MINUTES)}/${ATTEND_STAY_MINUTES}분`,
+          : attendLeftText(att.stayMinutes),
       tone: att?.today ? ("good" as const) : att && att.stayMinutes >= ATTEND_STAY_MINUTES ? ("warn" as const) : undefined,
     },
     cap: {

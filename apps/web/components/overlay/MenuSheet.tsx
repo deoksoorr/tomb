@@ -1,6 +1,7 @@
 "use client";
 
 import { bridge } from "@/game/bridge";
+import { ATTEND_STAY_TEXT } from "@/lib/attendStay";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import PixelIcon, { type IconName } from "../ui/PixelIcon";
@@ -97,7 +98,7 @@ export default function MenuSheet({
     ...(fireworkCount > 0
       ? [{ target: "fireworks" as const, icon: "spark" as const, label: "폭죽 쏘기", desc: "채널 하늘에 불꽃 한 발", badge: String(fireworkCount) }]
       : []),
-    { target: "calendar", icon: "calendar", label: "출석 달력", desc: calendarReady ? "오늘 도장을 받을 수 있어요!" : "1시간 머물면 오늘 도장", redDot: calendarReady },
+    { target: "calendar", icon: "calendar", label: "출석 달력", desc: calendarReady ? "오늘 출석 도장을 찍을 수 있어요!" : `${ATTEND_STAY_TEXT} 머물면 오늘 출석 도장`, redDot: calendarReady },
     {
       target: "gifts",
       icon: "gift",

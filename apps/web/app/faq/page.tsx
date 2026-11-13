@@ -1,6 +1,8 @@
 import GuidePage from "../guide/GuidePage";
 import guide from "../guide/guide.module.css";
 import { pageMetadata } from "../seo";
+import { ATTEND_RULE_TEXT } from "@/lib/attendStay";
+import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
 import { DAILY_EARN_CAP, earnRule } from "@/lib/economy";
 import { CHAT_MAX, CHAT_RECENT_MS, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS, FRIEND_MAX, NAME_MAX, NAME_MIN, PERMANENT_MULTIPLIER, STAFF_PUBLIC_NAME } from "@tomb/protocol";
 import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, AUTO_FISH_MAX_MS } from "@/lib/forage/auto";
@@ -57,6 +59,11 @@ const FAQ = [
     q: "포인트는 어떻게 모으나요?",
     // 숫자는 lib/economy.ts·stayBonus.ts에서 읽는다 (값을 바꾸면 답도 같이 바뀐다)
     a: `접속해 있는 ${PRESENCE_INTERVAL_MS / 60_000}분마다 ${earnRule("presence").points}포인트가 쌓이고(다른 창을 봐도 괜찮아요), 출석 도장, 헌화, 사냥터·미니게임, 물고기·채집물 팔기 등으로도 모여요(사냥터·미니게임은 주운 장비·물약 되팔기까지 합쳐 하루 ${earnRule("hunt").dailyMax}포인트까지). 하루에 모두 합쳐 ${DAILY_EARN_CAP.toLocaleString("ko-KR")}포인트까지 쌓이고, 오래 머물면 받는 접속 시간 보너스(하루 최대 ${STAY_BONUS_DAILY_MAX}포인트)는 이 한도와 따로예요.`,
+  },
+  {
+    q: "출석 도장은 어떻게 찍나요?",
+    // 숫자는 lib/attendStay.ts·attendTiers.ts·economy.ts에서 읽는다
+    a: `${ATTEND_RULE_TEXT}(다른 창을 봐도 괜찮아요). 출석 달력의 오늘 칸을 누르면 ${earnRule("attend").points}포인트, 7일 연속마다 ${earnRule("streak").points}포인트, 한 달 개근이면 ${earnRule("monthly").points}포인트를 더 받아요. 출석 보상 길: ${ATTEND_TIER_GUIDE}. 받은 코디는 가방의 꾸미기에서 입을 수 있어요.`,
   },
   {
     q: "무엇을 할 수 있나요?",

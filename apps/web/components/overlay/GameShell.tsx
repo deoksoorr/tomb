@@ -476,7 +476,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   type="button"
                   className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
                   onClick={() => setPanel("calendar")}
-                  aria-label={calendarReady ? "출석 달력 (오늘 도장을 받을 수 있어요)" : "출석 달력"}
+                  aria-label={calendarReady ? "출석 달력 (오늘 출석 도장을 찍을 수 있어요)" : "출석 달력"}
                   title="출석 달력"
                 >
                   <PixelIcon name="calendar" />

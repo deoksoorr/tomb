@@ -1,3 +1,5 @@
+import { ATTEND_STAY_MINUTES, STAY_TICK_MINUTES } from "./attendStay";
+import { attendTierPlan, permOwnedOf } from "./attendTiers";
 import { earnRule } from "./economy";
 import type { CalendarResponse } from "./types";
 
@@ -6,11 +8,8 @@ import type { CalendarResponse } from "./types";
 //  - 받은 날은 도장, 못 받고 지난 날은 회색. 7일 연속마다 보너스, 그달 모든 날을 받으면 한 달 개근 보상
 //  - 날짜 문자열: 하루 YYYYMMDD, 달 YYYYMM, 달 안의 날 DD (계정 저장소 키와 같다)
 
-/** 머무르기 기록 1번 = 10분 (클라이언트 PRESENCE_INTERVAL_MS) */
-export const STAY_TICK_MINUTES = 10;
-/** 출석 도장을 받으려면 그날 머물러야 하는 시간 */
-export const ATTEND_STAY_MINUTES = 60;
-export const ATTEND_STAY_TICKS = ATTEND_STAY_MINUTES / STAY_TICK_MINUTES;
+// 머문 시간 조건(기록 수 × 10분)과 안내 문구는 lib/attendStay.ts (포인트 규칙 설명과 함께 쓴다)
+export { ATTEND_STAY_MINUTES, ATTEND_STAY_TICKS, STAY_TICK_MINUTES } from "./attendStay";
 /** 달력 기록 보관 (지난달·지지난달까지 볼 수 있게) */
 export const CALENDAR_TTL_SEC = 100 * 86_400;
 /** 볼 수 있는 지난달 수 (이번 달 포함 3개월) */
@@ -67,6 +66,8 @@ export type CalendarMonthRecord = {
   days: Record<string, number>;
   /** 한 달 개근 보상을 받았으면 그 포인트 */
   monthBonus: number | null;
+  /** 출석 구간 코디 보상(lib/attendTiers.ts): 받은 구간 일수 → 받은 꾸미기 id */
+  tiers: Record<string, string>;
 };
 
 /** 오늘 칸 받기 결과 */
@@ -80,7 +81,14 @@ export function buildCalendar(
   month: string,
   today: string,
   rec: CalendarMonthRecord,
-  acct: { lastAttend: string | null; streak: number; stayTicks: number },
+  acct: {
+    lastAttend: string | null;
+    streak: number;
+    stayTicks: number;
+    /** 착용·벗어 둔 꾸미기 (영구로 가진 것은 구간 보상 후보에서 뺀다) */
+    equipped?: readonly { itemId: string; until: number }[];
+    stash?: readonly { itemId: string; until: number }[];
+  },
 ): CalendarResponse {
   const todayMonth = today.slice(0, 6);
   const todayDd = Number(today.slice(6));
@@ -109,5 +117,6 @@ export function buildCalendar(
     streak: acct.lastAttend && acct.lastAttend >= ymdOf(utcOf(today) - DAY_MS) ? acct.streak : 0,
     monthBonus: rec.monthBonus,
     rewards: calendarRewards(),
+    tiers: attendTierPlan(month, rec.tiers, permOwnedOf([...(acct.equipped ?? []), ...(acct.stash ?? [])])),
   };
 }

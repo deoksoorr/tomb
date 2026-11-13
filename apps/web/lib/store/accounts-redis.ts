@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { MAX_DECOR_PER_GRAVE, nameKey, type CosmeticSlot } from "@tomb/protocol";
+import { MAX_DECOR_PER_GRAVE, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
 import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import { STAY_BONUS_AMOUNTS, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
@@ -201,6 +201,40 @@ if paid and redis.call('HEXISTS', KEYS[7], '_month') == 0 then
 end
 redis.call('EXPIRE', KEYS[7], ARGV[16])
 return {1, a, s, m, streak}
+`;
+
+// 출석 구간 코디 보상 (그달 구간마다 한 번). 달력 해시의 `_r{구간 일수}` = 받은 꾸미기 id (도장 수를 셀 때 `_` 필드는 빠진다).
+// 꾸미기: 입고 있으면 그 자리(look), 아니면 벗어 둔 꾸미기(stash)의 만료 시각을 늘린다 — lib/store/gifts.ts GIFT_CLAIM_LUA,
+// MemoryAccounts.grantAttendTier, lib/attendTiers.ts tierUntil과 같은 규칙. 'perm'이면 영구 소장
+// KEYS: cal, look, stash  ARGV: field, tierDays, itemId, slot, 기간 ms|'perm', now, 영구 만료 ms, calTtl  → 1 줌 | 0 이미 받음·도장 모자람
+const TIER_LUA = `
+if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1 then return 0 end
+local n = 0
+for _, f in ipairs(redis.call('HKEYS', KEYS[1])) do
+  if string.sub(f, 1, 1) ~= '_' then n = n + 1 end
+end
+if n < tonumber(ARGV[2]) then return 0 end
+redis.call('HSET', KEYS[1], ARGV[1], ARGV[3])
+redis.call('EXPIRE', KEYS[1], ARGV[8])
+local id, slot, now, perm = ARGV[3], ARGV[4], tonumber(ARGV[6]), tonumber(ARGV[7])
+local cur = redis.call('HGET', KEYS[2], slot)
+local curItem, curUntil = nil, 0
+if cur then
+  local ci, cu = string.match(cur, '^([^|]+)|(.+)$')
+  curItem, curUntil = ci, tonumber(cu) or 0
+end
+local wearing = curItem == id and curUntil > now
+local had = curUntil
+if not wearing then
+  had = tonumber(redis.call('HGET', KEYS[3], id) or '0')
+  if had <= now then had = 0 end
+end
+local u = perm
+if ARGV[5] ~= 'perm' then u = math.min(perm, math.max(had, now) + tonumber(ARGV[5])) end
+if u > had then
+  if wearing then redis.call('HSET', KEYS[2], slot, id .. '|' .. u) else redis.call('HSET', KEYS[3], id, u) end
+end
+return 1
 `;
 
 // 구매. unique('1')면 가방에 있거나 지금 착용 중이거나 벗어 둔 것(만료 전)이 있을 때 -1. 잔액 부족은 0
@@ -688,7 +722,18 @@ export class RedisAccounts implements AccountStore {
     return {
       days: Object.fromEntries([...m].filter(([k]) => !k.startsWith("_")).map(([k, v]) => [k, Number(v)])),
       monthBonus: m.has("_month") ? Number(m.get("_month")) : null,
+      tiers: Object.fromEntries([...m].filter(([k]) => /^_r\d+$/.test(k)).map(([k, v]) => [k.slice(2), v])),
     };
+  }
+
+  async grantAttendTier(id: string, month: string, tierDays: number, itemId: string, slot: CosmeticSlot, termMs: number | null, now: number): Promise<boolean> {
+    await this.initCalendar(id);
+    const r = await this.redis.eval<string[], number>(
+      TIER_LUA,
+      [K.cal(id, month), K.look(id), K.stash(id)],
+      [`_r${tierDays}`, String(tierDays), itemId, slot, termMs === null ? "perm" : String(termMs), String(now), String(PERMANENT_UNTIL), String(CALENDAR_TTL_SEC)],
+    );
+    return Number(r) === 1;
   }
 
   async claimAttend(id: string, ipHash: string, day: string, yesterday: string, monthDays: number, needTicks: number): Promise<AttendClaim> {

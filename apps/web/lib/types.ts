@@ -445,7 +445,7 @@ export type CalendarResponse = {
   /** 1일의 요일 (0 = 일요일) */
   firstWeekday: number;
   days: { day: number; state: CalendarDayState; points: number }[];
-  /** 오늘 칸을 지금 받을 수 있는지 (1시간 머묾 + 아직 안 받음) */
+  /** 오늘 칸을 지금 받을 수 있는지 (그날 정해진 시간만큼 머묾 + 아직 안 받음) */
   claimable: boolean;
   stayMinutes: number;
   needMinutes: number;
@@ -453,12 +453,20 @@ export type CalendarResponse = {
   /** 한 달 개근 보상을 받았으면 그 포인트 */
   monthBonus: number | null;
   rewards: { daily: number; streak: number; streakEvery: number; monthly: number };
+  /** 이번 달 보상 길: 출석 구간(3·7·14·21·28일)마다 코디 1개 (lib/attendTiers.ts) */
+  tiers: AttendTierView[];
 };
+/** 보상 길 한 칸. itemId = 받은(또는 받을) 꾸미기 (후보가 없으면 null), termDays = 이용 기간 (null = 영구) */
+export type AttendTierView = { days: number; termDays: number | null; itemId: string | null; received: boolean };
+/** 출석 도장을 찍으면서 받은 구간 코디 */
+export type AttendTierGrant = { days: number; itemId: string; termDays: number | null };
 /** POST /api/me/calendar/claim → 오늘 칸 받기. 머문 시간이 모자라면 409 NOT_YET, 이미 받았으면 409 ALREADY */
 export type CalendarClaimResponse = {
   calendar: CalendarResponse;
   me: Me;
   earned: { daily: number; streak: number; monthly: number };
+  /** 이번 도장으로 닿은 구간 코디 보상 (없으면 빈 배열) */
+  tierRewards: AttendTierGrant[];
 };
 
 /**

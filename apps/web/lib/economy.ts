@@ -1,6 +1,7 @@
 // 포인트 정책 (서버가 강제하고, UI의 ⓘ 가이드가 그대로 보여 준다). 바꾸면 가이드도 자동으로 바뀐다.
 // 날짜 기준은 한국 시간(KST) 자정. 모든 아이템은 1회성(items.ts).
 
+import { ATTEND_STAY_TEXT } from "./attendStay";
 import { STAY_BONUS_DAILY_MAX, STAY_BONUS_EVERY_MINUTES } from "./stayBonus";
 
 export type EarnSource =
@@ -28,14 +29,14 @@ export type EarnSource =
 export type EarnRule = { source: EarnSource; label: string; points: number; dailyMax: number; note: string };
 
 export const EARN_RULES: readonly EarnRule[] = [
-  // 10번: 입장 때 자동으로 주지 않고, 그날 1시간 머문 뒤 출석 달력의 오늘 칸을 눌러 받는다 (lib/calendar.ts)
-  { source: "attend", label: "출석 도장", points: 10, dailyMax: 10, note: "그날 1시간 머문 뒤 출석 달력에서 오늘 칸을 눌러 받기" },
+  // 10번: 입장 때 자동으로 주지 않고, 그날 정해진 시간(lib/attendStay.ts) 머문 뒤 출석 달력의 오늘 칸을 눌러 받는다 (lib/calendar.ts)
+  { source: "attend", label: "출석 도장", points: 10, dailyMax: 10, note: `마을에 ${ATTEND_STAY_TEXT} 머문 뒤 출석 달력의 오늘 칸을 눌러 찍기` },
   { source: "streak", label: "7일 연속 출석", points: 30, dailyMax: 30, note: "도장을 연속 7일째 찍을 때마다 보너스" },
   { source: "monthly", label: "한 달 개근", points: 200, dailyMax: 200, note: "그달 1일부터 마지막 날까지 하루도 빠짐없이 도장을 찍으면" },
   { source: "flower", label: "헌화하기", points: 2, dailyMax: 20, note: "묘비마다 하루 1번, 하루 10번까지" },
   { source: "bury", label: "묘비 세우기", points: 20, dailyMax: 20, note: "하루 1개분만 지급" },
   { source: "gotFlower", label: "내 묘비가 헌화 받음", points: 1, dailyMax: 20, note: "다른 사람이 헌화할 때" },
-  { source: "presence", label: "묘지에 머무르기", points: 5, dailyMax: 60, note: "접속해 있는 10분마다 (다른 일을 해도 OK)" },
+  { source: "presence", label: "마을에 머무르기", points: 5, dailyMax: 60, note: "접속해 있는 10분마다 (다른 일을 해도 OK)" },
   // 출석 도장과 같은 머문 시간(서버의 머무르기 기록)으로 판정. 10→15→20→25P(이후 고정), 하루 7구간 145P. 하루 상한(800P)과 별개 (lib/stayBonus.ts)
   { source: "stayBonus", label: "접속 시간 보너스", points: 0, dailyMax: STAY_BONUS_DAILY_MAX, note: `${STAY_BONUS_EVERY_MINUTES}분 머물 때마다 10→15→20→25P (구석 창의 [받기], 안 받으면 쌓여요)` },
   { source: "hunt", label: "사냥터·미니게임", points: 0, dailyMax: 600, note: "난이도와 성적에 따라 (한 판 보상은 게임 결과로)" },
