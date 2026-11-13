@@ -17,13 +17,15 @@ export function ensureNodeFxTextures(scene: Phaser.Scene): void {
   const tx = scene.textures;
   if (tx.exists(NTEX.glow)) return;
   {
-    // 발밑 빛: 납작한 부드러운 원 (흰색 → 색은 tint)
+    // 발밑 빛: 납작한 부드러운 원 (흰색 → 색은 tint). 32×32 원을 세로 절반으로 눌러 캔버스를 꽉 채운다
+    // (예전엔 4px 내려 그려서 윗부분이 일자로 잘려 보였다)
     const { canvas, ctx } = makeCanvas(32, 16);
-    const g = ctx.createRadialGradient(16, 8, 0, 16, 8, 16);
+    const g = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
     g.addColorStop(0, "rgba(255,255,255,0.9)");
     g.addColorStop(0.45, "rgba(255,255,255,0.35)");
+    g.addColorStop(0.8, "rgba(255,255,255,0.06)");
     g.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.setTransform(1, 0, 0, 0.5, 0, 4);
+    ctx.setTransform(1, 0, 0, 0.5, 0, 0);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 32, 32);
     tx.addCanvas(NTEX.glow, canvas);
