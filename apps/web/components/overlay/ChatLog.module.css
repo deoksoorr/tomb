@@ -1,0 +1,124 @@
+/* 채팅 기록창. 글꼴은 채팅용 Pretendard(--font-chat). 내 줄은 촛불색, 다른 사람 이름은 연한 뼈색, 내용은 밝은 글자색 */
+
+.line {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  transition: opacity 1s linear;
+}
+
+.name {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.sep {
+  color: var(--muted);
+}
+
+.text {
+  color: var(--bone);
+}
+
+.mine .name,
+.mine .sep,
+.mine .text {
+  color: var(--candle);
+}
+
+/* ── 데스크톱: 왼쪽 아래 바로 가기 줄(36px) 바로 위, 게임 패널 톤의 반투명 상자 ── */
+.box {
+  position: fixed;
+  z-index: 10;
+  left: var(--safe-left);
+  bottom: calc(var(--safe-bottom) + 36px + 8px);
+  display: grid;
+  gap: 6px;
+  width: min(360px, calc(100vw - var(--safe-left) - var(--safe-right)));
+  padding: 6px 8px 8px;
+  background: rgba(17, 18, 15, 0.62);
+  box-shadow: var(--px-border);
+  font-family: var(--font-chat);
+  font-size: 13px;
+}
+
+.logWrap {
+  position: relative;
+}
+
+/* 높이 고정(약 8줄), 넘치면 상자 안에서 스크롤 */
+.log {
+  display: grid;
+  align-content: start;
+  gap: 1px;
+  height: calc(8 * 1.45em + 7px);
+  margin: 0;
+  padding: 0 2px 0 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+
+/* 위로 올려 읽는 중에 새 글이 오면 */
+.newMsg {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  padding: 2px 10px;
+  border: 0;
+  background: var(--panel-solid);
+  box-shadow: var(--px-border);
+  color: var(--candle);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transform: translateX(-50%);
+}
+
+/* 입력칸 아래 안내 줄은 쓰는 중에만 */
+.input:not(:focus-within) > p {
+  display: none;
+}
+
+/* ── 모바일: 상자 없이 글씨만, 어떤 배경에서도 읽히게 외곽선 그림자. 터치는 통과 ──
+   세로: 조이스틱 위 확성기 줄(펼치면 그 기록) 위 (--hud-bottom, GameShell .shell).
+   같은 높이 가운데의 안내 줄(토스트·연결 끊김) 한 줄을 피해 조금 더 위 */
+.mobile {
+  position: fixed;
+  z-index: 9;
+  left: var(--safe-left);
+  bottom: calc(var(--hud-bottom, calc(var(--safe-bottom) + 168px)) + 72px);
+  display: grid;
+  gap: 1px;
+  width: min(240px, 58vw);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+  user-select: none;
+  font-family: var(--font-chat);
+  font-size: 13px;
+  text-shadow:
+    -1px 0 0 rgba(0, 0, 0, 0.9),
+    1px 0 0 rgba(0, 0, 0, 0.9),
+    0 -1px 0 rgba(0, 0, 0, 0.9),
+    0 1px 0 rgba(0, 0, 0, 0.9),
+    0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.mobile .name {
+  color: #c9c1a6;
+}
+
+.mobile .mine .name {
+  color: var(--candle);
+}
+
+/* 가로 폰: --hud-bottom이 맨 아래라 조이스틱 위 확성기 줄 위로 따로 */
+@media (pointer: coarse) and (max-height: 520px) {
+  .mobile {
+    bottom: calc(var(--safe-bottom) + 168px);
+    font-size: 12px;
+  }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type PointerEvent } from "react";
 import { flushSync } from "react-dom";
 import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
@@ -36,6 +36,7 @@ export default function MobileControls({
   const nearGrave = useBridgeValue("grave:near") != null;
   const nearSeat = useBridgeValue("seat:near");
   const inShop = useBridgeValue("scene:changed")?.scene === "shop";
+  useTouchGuards();
 
   function toggleRun() {
     const on = !running;
@@ -101,6 +102,38 @@ export default function MobileControls({
   );
 }
 
+/**
+ * 터치 화면 기본 동작 막기: 길게 누르기 메뉴(contextmenu)·글자 선택 시작(selectstart)·이미지/캔버스 끌기(dragstart).
+ * 이게 끼어들면 브라우저가 터치를 가져가(pointercancel) 조이스틱·버튼이 멈춘다. 입력칸은 그대로 둔다.
+ */
+function useTouchGuards() {
+  useEffect(() => {
+    // 입력칸·글자 선택을 일부러 허용한 곳(user-select가 none이 아닌 곳 — 계정 코드 등 대화창 글)은 그대로 둔다
+    const allowed = (t: EventTarget | null) => {
+      const el = t instanceof Element ? t : t instanceof Node ? t.parentElement : null;
+      if (!el) return false;
+      if (el.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])")) return true;
+      const cs = getComputedStyle(el);
+      return (cs.userSelect || cs.webkitUserSelect) !== "none";
+    };
+    const block = (e: Event) => {
+      if (!allowed(e.target)) e.preventDefault();
+    };
+    // 일부러 끌게 만든 것(가방 옷 끌어 입히기 등 draggable="true")만 빼고, 이미지·캔버스·글자 끌기는 막는다
+    const onDrag = (e: DragEvent) => {
+      if (!(e.target instanceof Element && e.target.closest('[draggable="true"]'))) e.preventDefault();
+    };
+    document.addEventListener("contextmenu", block);
+    document.addEventListener("selectstart", block);
+    document.addEventListener("dragstart", onDrag);
+    return () => {
+      document.removeEventListener("contextmenu", block);
+      document.removeEventListener("selectstart", block);
+      document.removeEventListener("dragstart", onDrag);
+    };
+  }, []);
+}
+
 function Joystick({ hidden = false }: { hidden?: boolean }) {
   const baseRef = useRef<HTMLDivElement>(null);
   const knobRef = useRef<HTMLDivElement>(null);
@@ -113,8 +146,35 @@ function Joystick({ hidden = false }: { hidden?: boolean }) {
     bridge.emit("input:joystick", { x, y });
   };
 
-  // 화면을 떠날 때 캐릭터가 계속 걸어가지 않게
-  useEffect(() => () => bridge.emit("input:joystick", { x: 0, y: 0 }), []);
+  /** 눌림을 풀고 손잡이를 가운데로 (다음 값이 0과 같아도 다시 보내도록 last도 0으로) */
+  const reset = useEffectEvent(() => {
+    const id = pointerId.current;
+    pointerId.current = null;
+    if (id !== null && baseRef.current?.hasPointerCapture(id)) baseRef.current.releasePointerCapture(id);
+    if (knobRef.current) knobRef.current.style.transform = "";
+    last.current = { x: 0, y: 0 };
+    bridge.emit("input:joystick", { x: 0, y: 0 });
+  });
+
+  // 화면을 떠날 때·앱 전환(창 blur·탭 숨김) 때 캐릭터가 계속 걸어가거나 '눌린 채'로 남지 않게
+  useEffect(() => {
+    const onLeave = () => reset();
+    const onVis = () => {
+      if (document.hidden) reset();
+    };
+    window.addEventListener("blur", onLeave);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("blur", onLeave);
+      document.removeEventListener("visibilitychange", onVis);
+      reset();
+    };
+  }, []);
+
+  // 채팅 중엔 숨긴다: 숨는 사이 손가락을 떼면 pointerup을 못 받아 다음 터치가 막힐 수 있어 미리 푼다
+  useEffect(() => {
+    if (hidden) reset();
+  }, [hidden]);
 
   function move(e: PointerEvent<HTMLDivElement>) {
     const base = baseRef.current;
@@ -149,7 +209,8 @@ function Joystick({ hidden = false }: { hidden?: boolean }) {
       role="application"
       aria-label="이동 조이스틱"
       onPointerDown={(e) => {
-        if (pointerId.current !== null) return;
+        // 이미 잡은 손가락이 있어도 캡처가 풀려 있으면(떼는 이벤트를 놓친 묵은 값) 새 손가락이 이어받는다
+        if (pointerId.current !== null && e.currentTarget.hasPointerCapture(pointerId.current)) return;
         pointerId.current = e.pointerId;
         e.currentTarget.setPointerCapture(e.pointerId);
         move(e);

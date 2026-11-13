@@ -21,6 +21,17 @@
 @media (pointer: coarse) {
   .shell {
     --hud-bottom: calc(var(--safe-bottom) + 168px);
+    /* 길게 누르거나 끌 때 글자 선택·확대경·길게 누르기 메뉴가 터치를 가져가 조이스틱·버튼이 멈추지 않게 */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* 입력칸은 글자 선택·붙여넣기 그대로 */
+  .shell :is(input, textarea, [contenteditable]:not([contenteditable="false"])) {
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-touch-callout: default;
   }
 
   .shell:has([data-megaphone-open]) {

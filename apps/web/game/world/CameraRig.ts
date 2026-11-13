@@ -295,6 +295,19 @@ export class CameraRig {
     this.listen("pointermove", (e) => this.onMove(e));
     this.listen("pointerup", (e) => this.onUp(e, false));
     this.listen("pointercancel", (e) => this.onUp(e, true));
+    // 브라우저가 터치를 가져가 캡처가 풀리면(떼는 이벤트 없이) 취소로 친다 — 묵은 손가락이 남아 다음 탭이 두 손가락으로 잡히지 않게
+    this.listen("lostpointercapture", (e) => this.onUp(e, true));
+    // 앱 전환·탭 숨김: 잡고 있던 손가락·핀치를 모두 놓는다
+    const drop = () => this.dropPointers();
+    const onVis = () => {
+      if (document.hidden) drop();
+    };
+    window.addEventListener("blur", drop);
+    document.addEventListener("visibilitychange", onVis);
+    this.off.push(() => {
+      window.removeEventListener("blur", drop);
+      document.removeEventListener("visibilitychange", onVis);
+    });
     this.listen("wheel", (e) => this.onWheel(e), { passive: false });
   }
 
@@ -373,6 +386,21 @@ export class CameraRig {
     if (tap?.id === e.pointerId) this.tap = null;
     if (this.touches.delete(e.pointerId)) this.release(e.pointerId);
     if (this.pinch && this.touches.size < 2) {
+      this.pinch = null;
+      this.target = snapZoom(this.zoom);
+      this.persist();
+      this.emitState();
+    }
+  }
+
+  /** 잡고 있던 포인터(터치·우클릭 끌기·핀치)를 모두 놓는다 */
+  private dropPointers(): void {
+    for (const id of this.touches.keys()) this.release(id);
+    this.touches.clear();
+    if (this.rightDrag) this.release(this.rightDrag.id);
+    this.rightDrag = null;
+    this.tap = null;
+    if (this.pinch) {
       this.pinch = null;
       this.target = snapZoom(this.zoom);
       this.persist();

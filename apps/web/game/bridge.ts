@@ -103,6 +103,8 @@ export type GameEvents = {
   "app:banned": undefined;
   /** 47번: 다른 사람 캐릭터(또는 이름표)를 눌렀다 → UI가 작은 메뉴(신고하기)를 띄운다. ch = 월드 채널, room = 방 id */
   "peer:menu": { sid: number; name: string; ch?: number; room?: string; /** 그 사람 머리 위에 지금 떠 있는 자유 채팅 (신고에 붙인다) */ chat?: string };
+  /** 채팅 기록창 한 줄: 같은 채널·방에서 받은 자유 채팅(가린 글) 또는 내가 보낸 글. 화면 메모리에만 1분 */
+  "chat:line": { name: string; text: string; mine: boolean };
 
   // ── 하우징 ── (game/housing, components/housing)
   /** 집 안 편집 상태 (편집 모드에서 바뀔 때마다). UI가 가방 남은 개수·점수·저장 버튼에 쓴다 */

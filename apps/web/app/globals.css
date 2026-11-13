@@ -111,6 +111,11 @@ body {
   margin: 0;
 }
 
+/* 당겨서 새로고침·바깥 튕김 스크롤이 게임 터치를 가져가지 않게 (body만으로는 iOS·안드로이드 문서 스크롤이 남는다) */
+html {
+  overscroll-behavior: none;
+}
+
 body {
   background: var(--bg);
   color: var(--text);

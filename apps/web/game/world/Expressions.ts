@@ -60,8 +60,12 @@ export class Expressions {
   chat(raw: string, now: number): void {
     const text = normalizeChat(raw);
     if (!text) return;
-    this.h.player().view.chat(maskChat(text), now);
+    const view = this.h.player().view;
+    const shown = maskChat(text);
+    view.chat(shown, now);
     this.h.net().chat(text);
+    // 채팅 기록창: 내 글도 보낼 때 바로 (이름은 이름표 그대로 — 운영자면 "운영자")
+    bridge.emit("chat:line", { name: view.label.text, text: shown, mine: true });
     this.h.sfx.play("say", 0.35);
   }
 
@@ -70,6 +74,7 @@ export class Expressions {
     const r = this.h.remotes().get(sid);
     if (!r) return;
     r.view.chat(text, performance.now());
+    bridge.emit("chat:line", { name: r.name, text, mine: false });
     if (r.visible) this.h.sfx.play("say", 0.2, 1.1, 6);
   }
 

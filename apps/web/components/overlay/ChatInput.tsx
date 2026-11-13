@@ -7,8 +7,8 @@ import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import styles from "./ChatInput.module.css";
 
-// 말풍선 자유 채팅 입력칸: 데스크톱은 Enter로 여는 아래쪽 막대(ChatBar), 폰은 [채팅] 버튼으로 여는 키보드 위 줄(ChatSheet)과 표현 창 위쪽.
-// 쓴 글은 내 머리 위 말풍선으로만 잠깐 뜬다 (기록 창·저장 없음). 도배 제한은 서버와 같은 토큰 버킷을 화면에서도 미리 지킨다.
+// 말풍선 자유 채팅 입력칸: 데스크톱은 왼쪽 아래 채팅창(ChatLog) 안, 폰은 [채팅] 버튼으로 여는 키보드 위 줄(ChatSheet)과 표현 창 위쪽.
+// 쓴 글은 머리 위 말풍선 + 같은 채널의 채팅창에 1분 동안 뜬다 (서버·기기 어디에도 저장 안 함). 도배 제한은 서버와 같은 토큰 버킷을 화면에서도 미리 지킨다.
 
 /** 화면 쪽 토큰 버킷 (입력칸이 여럿이어도 하나를 같이 쓴다) */
 const bucket = newChatBucket();
@@ -22,9 +22,12 @@ type Props = {
   onCancel?: () => void;
   autoFocus?: boolean;
   className?: string;
+  /** 입력칸 id (데스크톱 채팅창: Enter로 포커스할 때 찾는다) */
+  id?: string;
+  placeholder?: string;
 };
 
-export default function ChatInput({ onSent, onCancel, autoFocus = false, className }: Props) {
+export default function ChatInput({ onSent, onCancel, autoFocus = false, className, id, placeholder = "머리 위 말풍선으로 한마디" }: Props) {
   const [text, setText] = useState("");
   const [slow, setSlow] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
@@ -34,6 +37,14 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
   useLayoutEffect(() => {
     if (autoFocus) ref.current?.focus({ preventScroll: true });
   }, [autoFocus]);
+  // 닫힐 때(보내기·바깥 누르기) 포커스를 먼저 놓는다: iOS(WebKit)는 포커스된 입력칸이 그냥 사라지면 focusout을 안 보내
+  // 게임 입력 잠금(ui:blockKeys)이 안 풀려 조이스틱·버튼이 전부 멈춘 채로 남는다
+  useLayoutEffect(() => {
+    const el = ref.current;
+    return () => {
+      if (el && document.activeElement === el) el.blur();
+    };
+  }, []);
   useEffect(
     () => () => {
       if (slowTimer.current) clearTimeout(slowTimer.current);
@@ -87,14 +98,15 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
       <div className={styles.row}>
         <input
           ref={ref}
+          id={id}
           className={cx(ui.input, styles.input)}
           type="text"
           enterKeyHint="send"
           autoComplete="off"
           maxLength={CHAT_MAX}
           value={text}
-          placeholder="머리 위 말풍선으로 한마디"
-          aria-label={`말풍선 채팅 (${CHAT_MAX}자까지, 기록 안 남음)`}
+          placeholder={placeholder}
+          aria-label={`채팅 (${CHAT_MAX}자까지, 1분 뒤 사라지고 저장 안 됨)`}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
         />
@@ -114,7 +126,7 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
         ) : masked ? (
           <span>일부 낱말·주소는 ***로 가려져요</span>
         ) : (
-          <span>5초쯤 머리 위에 떠요 · 기록은 남지 않아요</span>
+          <span>같은 채널에 1분 동안 보여요 · 저장 안 돼요</span>
         )}
         <span className={styles.count}>
           {[...text].length}/{CHAT_MAX}
@@ -124,26 +136,18 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
   );
 }
 
-/** 데스크톱 Enter 채팅 막대 (화면 아래 가운데). Enter 보내기·Esc 닫기, 보내면 닫힌다 */
-export function ChatBar({ onClose }: { onClose: () => void }) {
-  return (
-    <div
-      className={styles.bar}
-      role="dialog"
-      aria-label="말풍선 채팅"
-      // 게임 화면 등 막대 밖을 누르면 닫는다 (보내기 버튼으로 옮겨 가는 포커스는 그대로)
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onClose();
-      }}
-    >
-      <ChatInput autoFocus onSent={onClose} onCancel={onClose} />
-    </div>
-  );
-}
-
 /** 폰 [채팅] 버튼으로 여는 한 줄 입력칸: 키보드 바로 위에 붙고, 보내거나 바깥을 누르면 닫힌다 */
 export function ChatSheet({ onClose }: { onClose: () => void }) {
   const kb = useKeyboardInset();
+  // 키보드가 내려가며 iOS가 페이지를 밀어 올린 채 남으면 게임 화면·터치 좌표가 어긋난다 → 닫을 때 원위치
+  useEffect(
+    () => () => {
+      requestAnimationFrame(() => {
+        if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+      });
+    },
+    [],
+  );
   return (
     <>
       {/* 바깥(게임 화면·조이스틱·행동 버튼)을 누르면 닫기 — iOS는 빈 곳을 눌러도 입력칸 포커스가 안 풀릴 때가 있어 막을 깐다 */}

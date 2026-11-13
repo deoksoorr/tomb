@@ -145,7 +145,12 @@ export class RoomPresence {
           if (!r || !isEmoId(id)) return;
           r.view.emote(emoIcon(id), performance.now(), EMO_SHOW_MS);
         },
-        onChat: (sid, text) => this.remotes.get(sid)?.view.chat(text, performance.now()),
+        onChat: (sid, text) => {
+          const r = this.remotes.get(sid);
+          if (!r) return;
+          r.view.chat(text, performance.now());
+          bridge.emit("chat:line", { name: r.name, text, mine: false });
+        },
         onPeers: (peers, seats) => {
           // 목록에 내 항목도 오므로(월드가 내 벤치 상태를 맞추는 데 씀) 방에서는 나를 뺀다
           this.reconcile(peers.filter((p) => p.sid !== this.client.mySid));
@@ -234,8 +239,11 @@ export class RoomPresence {
   chat(raw: string): void {
     const text = normalizeChat(raw);
     if (!text || this.destroyed) return;
-    this.o.me?.chat(maskChat(text), performance.now());
+    const shown = maskChat(text);
+    this.o.me?.chat(shown, performance.now());
     this.client.chat(text);
+    // 채팅 기록창: 내 글도 바로 (이름은 내 이름표 그대로)
+    if (this.o.me) bridge.emit("chat:line", { name: this.o.me.label.text, text: shown, mine: true });
   }
 
   /** 몸짓 (손 흔들기·환호 등): 내 아바타가 바로 하고 방에 보낸다 */

@@ -46,7 +46,8 @@ import MobileControls from "./MobileControls";
 import NetHud from "./NetHud";
 import ExprRadial, { ExprButton } from "./ExprRadial";
 import SayDialog from "./SayDialog";
-import { ChatBar, ChatSheet } from "./ChatInput";
+import { ChatSheet } from "./ChatInput";
+import ChatLog, { focusChatLog } from "./ChatLog";
 import ReportLayer from "./ReportLayer";
 import Tutorial from "./Tutorial";
 import UpdateNotice from "./UpdateNotice";
@@ -262,7 +263,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         if (!canRadial || chatOpen || bridge.last("ui:blockKeys")?.blocked || (el instanceof HTMLElement && el.matches("button, a[href], [role=button]"))) return;
         e.preventDefault();
         setRadial(false);
-        setChatOpen(true);
+        // 데스크톱은 왼쪽 아래 채팅창 입력칸으로, 터치(키보드 달린 태블릿 등)는 한 줄 입력칸
+        if (coarse || !focusChatLog()) setChatOpen(true);
         return;
       }
       if (e.code === "KeyY") {
@@ -278,7 +280,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [ready, quiet, roomQuiet, canRadial, chatOpen]);
+  }, [ready, quiet, roomQuiet, canRadial, chatOpen, coarse]);
 
   // 게임이 맵에 내 묘비를 표시한다 (sticky)
   const myGraveIds = me?.graves;
@@ -625,10 +627,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         />
       )}
       {sayOpen && <SayDialog onClose={() => setSayOpen(false)} />}
-      {chatOpen &&
-        canRadial &&
-        !sayOpen &&
-        (coarse ? <ChatSheet onClose={() => setChatOpen(false)} /> : <ChatBar onClose={() => setChatOpen(false)} />)}
+      {chatOpen && canRadial && !sayOpen && <ChatSheet onClose={() => setChatOpen(false)} />}
+      {/* 채팅 기록창: 데스크톱은 바로 가기 줄 위 상자(입력칸 포함), 터치는 확성기 위에 글씨만. 채널·집 드나들면 비운다 */}
+      {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}`} hidden={!canRadial} />}
       {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
       {/* 마을·집 안: 월드 바로 가기 줄이 숨으니 [표현] 버튼만 왼쪽 아래에 따로 */}
       {ready && scene === "house" && (

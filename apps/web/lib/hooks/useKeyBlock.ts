@@ -67,10 +67,13 @@ export function useGameKeyboardGuard(): void {
     };
     document.addEventListener("focusin", sync);
     document.addEventListener("focusout", onFocusOut);
+    // 안전망: iOS(WebKit)는 포커스된 입력칸이 화면에서 지워질 때 focusout을 안 보낸다 → 잠금이 남지 않게 터치할 때마다 다시 본다
+    document.addEventListener("pointerdown", sync, true);
     window.addEventListener("keydown", onKeyDown, true);
     return () => {
       document.removeEventListener("focusin", sync);
       document.removeEventListener("focusout", onFocusOut);
+      document.removeEventListener("pointerdown", sync, true);
       window.removeEventListener("keydown", onKeyDown, true);
     };
   }, []);

@@ -1,4 +1,4 @@
-/* 말풍선 자유 채팅 입력칸 (표현 창 위쪽 · 데스크톱 Enter 막대) */
+/* 말풍선 자유 채팅 입력칸 (표현 창 위쪽 · 데스크톱 채팅창 안 · 폰 [채팅] 줄) */
 
 .chat {
   display: grid;
@@ -38,19 +38,6 @@
 .count {
   flex: none;
   font-variant-numeric: tabular-nums;
-}
-
-/* 데스크톱 Enter 막대: 화면 아래 가운데 */
-.bar {
-  position: fixed;
-  left: 50%;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-  z-index: 30;
-  width: min(420px, calc(100vw - 32px));
-  padding: 10px 12px 8px;
-  background: var(--bg-deep);
-  box-shadow: var(--px-border-strong);
-  transform: translateX(-50%);
 }
 
 /* 폰 [채팅] 한 줄 입력칸: 화면 아래 꽉 차게, 키보드가 뜨면 그 바로 위 (bottom은 visualViewport로 덮어쓴다) */
