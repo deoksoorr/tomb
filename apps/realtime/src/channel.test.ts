@@ -1366,14 +1366,14 @@ describe("말풍선 채팅", () => {
     expect(a.closed).toBeUndefined();
   });
 
-  it("40자 넘는 글·공백만은 버린다, 방(마을·집)에서도 중계한다", () => {
+  it("60자 넘는 글·공백만은 버린다, 방(마을·집)에서도 중계한다", () => {
     const { core, join } = setup(3, 20_000, true);
     const a = join("a");
     const b = join("b");
     clear(a, b);
-    core.message(a, JSON.stringify({ t: "chat", text: "가".repeat(41) }), 0);
+    core.message(a, JSON.stringify({ t: "chat", text: "가".repeat(61) }), 0);
     core.message(a, '{"t":"chat","text":"   "}', 0);
-    core.message(a, send({ t: "chat", text: "가".repeat(40) }), 0);
-    expect(events(b)).toEqual([{ t: "chat", sid: 1, text: "가".repeat(40) }]);
+    core.message(a, send({ t: "chat", text: "가".repeat(60) }), 0);
+    expect(events(b)).toEqual([{ t: "chat", sid: 1, text: "가".repeat(60) }]);
   });
 });

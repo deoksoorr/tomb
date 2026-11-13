@@ -3,7 +3,7 @@ import { CHAT_BURST, CHAT_MAX, CHAT_REFILL_MS, maskChat, newChatBucket, normaliz
 import { encodeEvent, parseC2S } from "./events";
 
 describe("말풍선 채팅: 정리·검증", () => {
-  it("공백 정리, 공백만은 거절, 40자까지", () => {
+  it("공백 정리, 공백만은 거절, 60자까지", () => {
     expect(normalizeChat("  안녕\n  하세요  ")).toBe("안녕 하세요");
     expect(normalizeChat("   ")).toBeNull();
     expect(normalizeChat("​​")).toBeNull();
@@ -12,10 +12,10 @@ describe("말풍선 채팅: 정리·검증", () => {
     expect(normalizeChat(3)).toBeNull();
   });
 
-  it("parseC2S: chat은 정리된 글만, 공백만·41자·문자열 아님은 null", () => {
+  it("parseC2S: chat은 정리된 글만, 공백만·61자·문자열 아님은 null", () => {
     expect(parseC2S(encodeEvent({ t: "chat", text: " 하이 " }))).toEqual({ t: "chat", text: "하이" });
     expect(parseC2S('{"t":"chat","text":"   "}')).toBeNull();
-    expect(parseC2S(JSON.stringify({ t: "chat", text: "a".repeat(41) }))).toBeNull();
+    expect(parseC2S(JSON.stringify({ t: "chat", text: "a".repeat(61) }))).toBeNull();
     expect(parseC2S('{"t":"chat","text":1}')).toBeNull();
     expect(parseC2S('{"t":"chat"}')).toBeNull();
   });

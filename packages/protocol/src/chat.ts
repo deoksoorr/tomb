@@ -4,7 +4,7 @@
 // - 도배 제한: 토큰 버킷 (최대 CHAT_BURST개 저장, CHAT_REFILL_MS마다 1개 충전 — 짧은 대답 몇 번은 연달아 쳐도 된다)
 
 /** 한 번에 보낼 수 있는 글자 수 (코드 포인트 기준) */
-export const CHAT_MAX = 40;
+export const CHAT_MAX = 60;
 /** 말풍선이 떠 있는 시간 */
 export const CHAT_SHOW_MS = 5_000;
 /** 토큰 버킷: 모아 둘 수 있는 최대 개수 */
