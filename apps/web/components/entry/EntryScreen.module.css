@@ -456,3 +456,12 @@
 .legal a {
   color: var(--muted);
 }
+
+/* 비영리 안내: 약관 링크 바로 위, 작고 차분하게 */
+.nonprofit {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+  word-break: keep-all;
+}

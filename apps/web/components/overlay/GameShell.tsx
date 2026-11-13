@@ -38,7 +38,6 @@ import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import CameraControls from "./CameraControls";
 import ChannelMenu from "./ChannelMenu";
-import DonateButton from "./DonateButton";
 import FireworkButton from "./FireworkButton";
 import GuideDialog from "./GuideDialog";
 import Hud, { StatusBanners, ToastList } from "./Hud";
@@ -413,9 +412,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && (
         <div className={cx(styles.overlay, away && styles.away, campfire && styles.campfire)}>
           {coarse ? (
-            // 터치: 위 가장자리 바(메뉴 · 음악 · 후원 · 채널·날씨) + 아래 조이스틱(그 위 확성기)·행동 버튼. 바로 가기 줄은 없고 모두 메뉴 시트에
+            // 터치: 위 가장자리 바(메뉴 · 음악 · 채널·날씨) + 아래 조이스틱(그 위 확성기)·행동 버튼. 바로 가기 줄은 없고 모두 메뉴 시트에
             <div className={styles.touchBar}>
-              {/* 맨 왼쪽 [메뉴], 그 오른쪽에 노래 버튼·후원 버튼 (사용자 요청) */}
+              {/* 맨 왼쪽 [메뉴], 그 오른쪽에 노래 버튼 */}
               <div className={styles.touchLeft}>
                 <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => setPanel("menu")}>
                   <PixelIcon name="menu" />
@@ -434,7 +433,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   )}
                 </button>
                 <BgmPlayer compact />
-                <DonateButton inline />
               </div>
               <Hud compact onOpenChannels={() => setPanel("channels")} />
             </div>
@@ -556,7 +554,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
               chatOpen={chatOpen && canRadial && !sayOpen}
             />
           )}
-          {!coarse && <DonateButton />}
           {/* 접속 시간 보너스: 사냥·귀신의 집·실내에서도 서버 기록은 쌓이고, 창은 마을에서만 띄운다 */}
           {(!scene || scene === "world") && <StayBonus />}
         </div>

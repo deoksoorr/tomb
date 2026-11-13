@@ -5,7 +5,7 @@ import styles from "../legal.module.css";
 
 export const metadata: Metadata = { title: "개인정보처리방침 · 한때는...", alternates: { canonical: "/privacy" } };
 
-const EFFECTIVE = "2026년 11월 12일";
+const EFFECTIVE = "2026년 11월 13일";
 
 export default function PrivacyPage() {
   return (
@@ -22,6 +22,7 @@ export default function PrivacyPage() {
           「한때는...」은 회원가입 없이 쓰는 서비스예요. 이름·이메일 같은 신원 정보를 요구하지 않고, 서비스를 돌리는 데 꼭
           필요한 것만 다뤄요.
         </p>
+        <p>게임을 한 번도 만들어 본 적 없는 개인이 만든 비영리 프로젝트예요. 후원, 광고, 유료 재화는 없어요. 모은 정보를 팔거나 광고·마케팅에 쓰지 않아요.</p>
 
         <h2>2. 처리하는 정보</h2>
         <table className={styles.table}>

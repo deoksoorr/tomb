@@ -73,7 +73,7 @@
   --safe-bottom: max(var(--gutter), env(safe-area-inset-bottom));
   --safe-left: max(var(--gutter), env(safe-area-inset-left));
 
-  /* 화면 위쪽 줄(노래·채널/날씨·오른쪽 버튼·후원·지도 버튼) 공용 크기: 모두 이 값을 쓴다 */
+  /* 화면 위쪽 줄(노래·채널/날씨·오른쪽 버튼·지도 버튼) 공용 크기: 모두 이 값을 쓴다 */
   --top-h: 36px;
   --top-gap: 8px;
   --top-pad: 10px;
