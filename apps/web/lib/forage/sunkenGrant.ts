@@ -1,23 +1,21 @@
-import { addGear, GEAR_INV_MAX, RpgError } from "../rpg/character";
-import { gearById } from "../rpg/catalog";
-import { getRpgStore, type RpgStore } from "../rpg/store";
+import { isPermanentUntil, itemById, PERMANENT_UNTIL } from "@tomb/protocol";
+import { getStaffStore } from "../staff";
+import { getAccounts } from "../store";
+import { kstDay } from "../store/accounts";
 
-// 물에 빠진 장비 지급 (서버 전용 — 사냥 저장소를 쓴다). 규칙은 lib/forage/sunken.ts
+// 물에 빠진 꾸미기 지급 (서버 전용). 규칙은 lib/forage/sunken.ts.
+// 영구 소장은 기존 영구 꾸미기와 같은 저장(입고 있으면 그 자리에서 영구로, 아니면 벗어 둔 꾸미기에 영구로)을
+// 한 번에 바꾸는 grant(Redis는 Lua 한 번)로 넣는다 — 포인트는 오가지 않는다.
 
-/** 사냥 장비 지급 (사냥 드롭과 같은 규칙: 산 것이 아님, 저장소 원자적 갱신). 장비 칸이 가득이면 false */
-export async function grantSunkenGear(acct: string, gearId: string, store: RpgStore = getRpgStore()): Promise<boolean> {
-  if (!gearById(gearId)) return false;
-  try {
-    await store.update(acct, (s) => ({ state: addGear(s, gearId, false), result: null }));
-    return true;
-  } catch (e) {
-    if (e instanceof RpgError && e.code === "INVENTORY_FULL") return false;
-    throw e;
-  }
+/** 이미 영구로 가진 꾸미기 id (입은 것 + 벗어 둔 것) */
+export async function ownedPermanent(acct: string, now = Date.now()): Promise<Set<string>> {
+  const a = await getAccounts().get(acct, kstDay(now), now);
+  return new Set([...a.equipped, ...a.stash].filter((e) => isPermanentUntil(e.until)).map((e) => e.itemId));
 }
 
-/** 장비 칸에 남은 자리 */
-export async function sunkenGearRoom(acct: string, store: RpgStore = getRpgStore()): Promise<number> {
-  const s = await store.get(acct);
-  return Math.max(0, GEAR_INV_MAX - Object.values(s.inv).reduce((a, b) => a + b, 0));
+/** 꾸미기 하나를 영구 소장으로 (원자적). 새로 넣었으면 true, 이미 영구거나 계정이 없으면 false */
+export async function grantSunkenCosmetic(acct: string, itemId: string): Promise<boolean> {
+  const item = itemById(itemId);
+  if (!item?.slot) return false;
+  return (await getStaffStore().grant(getAccounts(), acct, [{ itemId, slot: item.slot }], PERMANENT_UNTIL)) === 1;
 }

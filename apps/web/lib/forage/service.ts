@@ -53,9 +53,8 @@ import {
 import { AUTO_FISH_DAILY_MAX, newAutoSession } from "./auto";
 import { autoStatus, settleAuto, type AutoSettled } from "./autoSettle";
 import { getFishRank } from "./fishRank";
-import { pickSunkenGear, SUNKEN_GEAR_CHANCE, sunkenFallbackFish, sunkenName } from "./sunken";
-import { grantSunkenGear } from "./sunkenGrant";
-import { gearById } from "../rpg/catalog";
+import { pickSunkenCosmetic, SUNKEN_CHANCE, sunkenFallbackFish, sunkenName } from "./sunken";
+import { grantSunkenCosmetic, ownedPermanent } from "./sunkenGrant";
 import { getForageStore, type GrantItem, type ForageStore, type Snapshot } from "./store";
 import { signForageTicket, verifyForageTicket, type ForageTicket } from "./ticket";
 import type {
@@ -142,8 +141,8 @@ async function claimOrThrow(store: ForageStore, acct: string, nonce: string): Pr
 
 // ── 낚시 ──
 
-/** g = 물에 빠진 장비 id (아주 드물게, 던질 때 서버가 정한다), alt = 장비 칸이 가득일 때 대신 줄 물고기 */
-type FishPayload = { k: "fish"; sp: string; sz: number; g?: string; alt?: string };
+/** g = 물에 빠진 꾸미기를 고를 난수 (아주 드물게, 던질 때 서버가 정한다), alt = 꾸미기를 다 가졌을 때 대신 줄 물고기 */
+type FishPayload = { k: "fish"; sp: string; sz: number; g?: number; alt?: string };
 
 export async function castLine(acct: string, spotId: string, now = Date.now()): Promise<CastResponse> {
   const store = getForageStore();
@@ -162,9 +161,9 @@ export async function castLine(acct: string, spotId: string, now = Date.now()): 
   const bite = now + biteDelayMs(rand(), cond);
   const nonce = nanoid(16);
   const payload: FishPayload = { k: "fish", sp: s.id, sz: size };
-  // 아주 드물게 물고기 대신 사냥 장비 (손맛·입질은 물고기 그대로 → 미리 알 수 없다)
-  if (rand() < SUNKEN_GEAR_CHANCE) {
-    payload.g = pickSunkenGear(rand(), rand()).id;
+  // 아주 드물게 물고기 대신 꾸미기 (손맛·입질은 물고기 그대로 → 미리 알 수 없다). 무엇인지는 감을 때 가진 것을 보고 고른다
+  if (rand() < SUNKEN_CHANCE) {
+    payload.g = rand();
     payload.alt = sunkenFallbackFish(water, cond, rand(), s).id;
   }
   const ttl = Math.ceil((bite - now + HOOK_WINDOW_MS + REEL_MAX_MS) / 1000) + 30;
@@ -184,7 +183,7 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
   if (since < reelMinMs(t.p ?? 1) - REEL_SLACK_MS) throw new HttpError(422, "TOO_FAST", "입질도 전에, 또는 너무 빨리 감았어요. 이번 물고기는 놓쳤어요.");
   if (since > HOOK_WINDOW_MS + REEL_MAX_MS) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래 걸려서 물고기가 도망갔어요.");
   const day = kstDay(now);
-  if (payload.g) return reelSunken(store, acct, payload, now);
+  if (payload.g !== undefined) return reelSunken(store, acct, payload, now);
   const got = await store.grant(acct, day, "fish", [{ id: payload.sp, size: payload.sz }], STACK_MAX);
   // 최대어 랭킹: 크기는 시작할 때 서버가 굴린 값 (가방이 가득 차 못 넣었어도 잡은 기록은 남는다). 랭킹 저장 실패가 낚시를 막지는 않는다
   // 운영자 계정은 순위에 남기지 않는다
@@ -241,17 +240,21 @@ export async function stopAutoFish(acct: string, now = Date.now()): Promise<Auto
   return autoResponse(store, acct, await settleAuto(store, acct, now, true), now);
 }
 
-/** 물에 빠진 장비를 건졌다: 사냥 장비로 지급(낚시 1회로 셈, 도감·최대어 기록 없음). 장비 칸이 가득이면 대신 희귀 물고기 */
+/** 물에 빠진 꾸미기를 건졌다: 영구 소장으로 지급(낚시 1회로 셈, 도감·최대어 기록 없음). 다 가졌으면 대신 희귀 물고기 */
 async function reelSunken(store: ForageStore, acct: string, p: FishPayload, now: number): Promise<ReelResponse> {
-  const g = gearById(p.g!)!;
   const day = kstDay(now);
-  if (await grantSunkenGear(acct, g.id)) {
+  const c = pickSunkenCosmetic(p.g!, await ownedPermanent(acct, now));
+  if (c && (await grantSunkenCosmetic(acct, c.id))) {
     await store.addDay(acct, day, "fish", 1);
-    return { result: null, gear: { id: g.id, name: sunkenName(g), kept: true }, state: await forageState(acct, now, store) };
+    return { result: null, gear: { id: c.id, name: sunkenName(c), kept: true }, state: await forageState(acct, now, store) };
   }
   const alt = p.alt ?? p.sp;
   const got = await store.grant(acct, day, "fish", [{ id: alt, size: 0 }], STACK_MAX);
-  return { result: got?.[0] ?? null, gear: { id: g.id, name: sunkenName(g), kept: false, instead: alt }, state: await forageState(acct, now, store) };
+  return {
+    result: got?.[0] ?? null,
+    gear: { id: c?.id ?? "", name: c ? sunkenName(c) : "", kept: false, instead: alt },
+    state: await forageState(acct, now, store),
+  };
 }
 
 // ── 채집 ──

@@ -290,7 +290,7 @@ export type UiEvents = {
   "forage:rod": { phase: ForageRodPhase; tension?: number };
   /** 채집 게이지: start(ms 동안 머리 위 막대) / end(ok면 그 지점을 지운다) */
   "forage:gauge": { phase: "start"; ms: number; kind: string; node: string } | { phase: "end"; ok: boolean; node: string };
-  /** 잡은 것·캔 것을 머리 위로 띄운다. sparkle = 반짝 효과 (물에 빠진 사냥 장비 — itemId가 장비 id) */
+  /** 잡은 것·캔 것을 머리 위로 띄운다. sparkle = 반짝 효과 (물에 빠진 꾸미기 — itemId가 꾸미기 id) */
   "forage:pop": { itemId: string; sparkle?: boolean };
   /** 낚시 그만하기 (일어난다) */
   "forage:leave": undefined;

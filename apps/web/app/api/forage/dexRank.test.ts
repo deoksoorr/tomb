@@ -16,8 +16,8 @@ import * as peerDex from "./dex/peer/route";
 import * as cast from "./fish/cast/route";
 import * as reel from "./fish/reel/route";
 
-// 물에 빠진 장비(아주 드문 확률)는 lib/forage/sunken.test.ts가 따로 본다 → 여기서는 늘 물고기가 걸리게
-vi.mock("@/lib/forage/sunken", async (orig) => ({ ...(await orig<typeof import("@/lib/forage/sunken")>()), SUNKEN_GEAR_CHANCE: 0 }));
+// 물에 빠진 꾸미기(아주 드문 확률)는 lib/forage/sunken.test.ts가 따로 본다 → 여기서는 늘 물고기가 걸리게
+vi.mock("@/lib/forage/sunken", async (orig) => ({ ...(await orig<typeof import("@/lib/forage/sunken")>()), SUNKEN_CHANCE: 0 }));
 
 // 다른 사람 도감 보기(실시간 서버로 sid → 계정) · 도감 100% 배지(입장 토큰) · 최대어 랭킹(낚시 결과에서 기록)
 

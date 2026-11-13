@@ -14,8 +14,8 @@ import { nodeWindow, windowEndsAt } from "@/lib/forage/rules";
 import { FishZoneView } from "./FishZoneView";
 import { destroyAura, ensureNodeFxTextures, gatheredFx, makeAura, spawnFx, updateAura, vanishFx, type NodeAura } from "./nodeFx";
 import { ForageSfx } from "./sounds";
-import { gearById } from "@/lib/rpg/catalog";
-import { iconCanvas } from "../../rpg/icons";
+import { itemById } from "@tomb/protocol";
+import { itemIconCanvas } from "../../sprites/itemIcons";
 
 // 4·32번 낚시·채집 (월드 쪽). WorldScene은 이 클래스 하나만 들고 몇 군데(접속·좌석·E·매 프레임)에서 부른다.
 //
@@ -436,16 +436,15 @@ export class Foraging {
     return { x: f.x + dx * dist, y: f.y + dy * dist - (dy === 0 ? 2 : 0) };
   }
 
-  /** 물에 빠진 사냥 장비 아이콘 (사냥터 장비 그림을 그대로) */
-  private gearIconTexture(id: string): string | null {
-    const g = gearById(id);
-    if (!g) return null;
-    const key = `forage-gear-${id}`;
-    if (!this.scene.textures.exists(key)) this.scene.textures.addCanvas(key, iconCanvas(g.art));
+  /** 물에 빠진 꾸미기 아이콘 (가방·상점과 같은 그림) */
+  private cosmeticIconTexture(id: string): string | null {
+    if (itemById(id)?.kind !== "cosmetic") return null;
+    const key = `forage-cos-${id}`;
+    if (!this.scene.textures.exists(key)) this.scene.textures.addCanvas(key, itemIconCanvas(id));
     return key;
   }
 
-  /** 반짝 (물에 빠진 장비를 건졌을 때) */
+  /** 반짝 (물에 빠진 꾸미기를 건졌을 때) */
   private sparkleAt(x: number, y: number): void {
     this.sfx.play("catch", 0.9);
     if (this.d.reduced) return;
@@ -654,7 +653,7 @@ export class Foraging {
 
   /** 잡은 것을 머리 위로 띄운다 */
   private pop(itemId: string, sparkle = false): void {
-    const key = ensureIconTexture(this.scene, itemId) ?? this.gearIconTexture(itemId);
+    const key = ensureIconTexture(this.scene, itemId) ?? this.cosmeticIconTexture(itemId);
     if (!key) return;
     const pl = this.d.player();
     if (sparkle) this.sparkleAt(pl.x, pl.y - 26);

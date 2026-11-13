@@ -962,6 +962,11 @@ export function itemIconSize(itemId: string, scale = 2): { width: number; height
   return { width: s, height: s };
 }
 
+/** 원본 크기 아이콘 캔버스 (게임 안에서 텍스처로 — 낚시로 건진 꾸미기를 머리 위에 띄울 때) */
+export function itemIconCanvas(itemId: string): HTMLCanvasElement {
+  return base(itemId);
+}
+
 /** 아이템 아이콘 dataURL (정수 배율, 같은 인자면 캐시) */
 export function itemIcon(itemId: string, scale = 2): string {
   const k = Math.max(1, Math.round(scale));

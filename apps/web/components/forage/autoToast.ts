@@ -14,7 +14,7 @@ export function toastAutoCatch(r: AutoFishResponse, away: boolean): void {
   const n = r.items.length;
   const head = n ? `${away ? "자리 비운 동안" : "자동 낚시로"} ${n}마리 낚았어요 · ${autoSummary(r.items, name)}` : away ? "자리 비운 동안" : "자동 낚시 중";
   const cut = r.dropped > 0 ? ` (오늘 한도로 ${r.dropped}마리는 놓아줬어요)` : "";
-  // 물에 빠진 장비는 따로 덧붙인다
+  // 물에 빠진 꾸미기는 따로 덧붙인다
   const extra = gear.map((g) => ` · 반짝! ${sunkenText(g, name)}`).join("");
   showToast(`${head}${cut}${extra}`, gear.length ? 9_000 : 7_000);
 }

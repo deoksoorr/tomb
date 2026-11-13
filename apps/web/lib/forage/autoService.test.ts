@@ -32,7 +32,7 @@ async function syncEvery(a: string, from: number, until: number, every: number) 
   for (let t = from + every; t <= until; t += every) out.push(await syncAutoFish(a, t));
   return out;
 }
-/** 받은 수 (물고기 + 아주 드물게 걸린 물에 빠진 장비 — 둘 다 낚시 1회) */
+/** 받은 수 (물고기 + 아주 드물게 걸린 물에 빠진 꾸미기 — 둘 다 낚시 1회) */
 const caught = (r: AutoFishResponse) => r.items.length + r.gear.length;
 const got = (rs: AutoFishResponse[]) => rs.reduce((n, r) => n + caught(r), 0);
 
@@ -58,8 +58,8 @@ describe("자동 낚시 정산", () => {
     const r = await syncAutoFish(a, T0 + 10 * MIN);
     const s = beatAuto(s0, T0 + 10 * MIN);
     const want = autoCatchTimes(s, 1, caught(r)).map((t, i) => rollAutoCatch(s0.seed, i + 1, "lake", t)!);
-    // 물에 빠진 장비가 걸린 번호는 빼고 비교 (그 번호는 장비로 나간다)
-    const fish = want.filter((_, i) => !rollAutoSunken(s0.seed, i + 1));
+    // 물에 빠진 꾸미기가 걸린 번호는 빼고 비교 (그 번호는 꾸미기로 나간다)
+    const fish = want.filter((_, i) => rollAutoSunken(s0.seed, i + 1) === null);
     expect(r.items.map((x) => [x.id, x.size])).toEqual(fish.map((x) => [x.id, x.size]));
   });
 

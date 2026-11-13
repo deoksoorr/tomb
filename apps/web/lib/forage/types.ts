@@ -34,7 +34,10 @@ export type CatchResult = {
   record: boolean;
 };
 
-/** 물에 빠진 사냥 장비 (아주 드물게 물고기 대신). kept=false면 장비 칸이 가득이라 instead(물고기 id)를 대신 가방에 넣었다 */
+/**
+ * 물에 빠진 꾸미기 (아주 드물게 물고기 대신, 영구 소장). id = 꾸미기 아이템 id.
+ * kept=false면 이미 모두 가지고 있어서 instead(물고기 id)를 대신 가방에 넣었다 (그때 id·name은 빈 문자열일 수 있다)
+ */
 export type SunkenCatch = { id: string; name: string; kept: boolean; instead?: string };
 
 /** 자동 낚시 상태 (켜져 있을 때) */
@@ -59,7 +62,7 @@ export type AutoFishResponse = {
   items: CatchResult[];
   /** 한도에 막혀 못 받은 수 */
   dropped: number;
-  /** 이번에 건진 물에 빠진 장비 (items와 따로, 한도에는 같이 센다) */
+  /** 이번에 건진 물에 빠진 꾸미기 (items와 따로, 한도에는 같이 센다) */
   gear: SunkenCatch[];
   /** 세션이 끝난 까닭 (끄기·시간 다 됨). 켜져 있으면 없음 */
   ended?: "stop" | "time";
@@ -77,7 +80,7 @@ export type CastResponse = {
   hookMs: number;
 };
 
-/** gear가 있으면 물고기 대신 장비를 건졌다 (장비 칸이 가득이면 result에 대신 받은 물고기) */
+/** gear가 있으면 물고기 대신 꾸미기를 건졌다 (다 가졌으면 result에 대신 받은 물고기) */
 export type ReelResponse = { result: CatchResult | null; gear?: SunkenCatch; state: ForageState };
 
 export type GatherStartResponse =

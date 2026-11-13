@@ -28,8 +28,8 @@ import * as gStart from "./gather/start/route";
 import * as forage from "./route";
 import * as sell from "./sell/route";
 
-// 물에 빠진 장비(아주 드문 확률)는 lib/forage/sunken.test.ts가 따로 본다 → 여기서는 늘 물고기가 걸리게
-vi.mock("@/lib/forage/sunken", async (orig) => ({ ...(await orig<typeof import("@/lib/forage/sunken")>()), SUNKEN_GEAR_CHANCE: 0 }));
+// 물에 빠진 꾸미기(아주 드문 확률)는 lib/forage/sunken.test.ts가 따로 본다 → 여기서는 늘 물고기가 걸리게
+vi.mock("@/lib/forage/sunken", async (orig) => ({ ...(await orig<typeof import("@/lib/forage/sunken")>()), SUNKEN_CHANCE: 0 }));
 
 // 로컬 구성(MemoryStore·MemoryForageStore)으로 낚시·채집·판매·도감 라우트를 직접 부른다. 시간은 Date.now를 바꿔 흐르게 한다.
 

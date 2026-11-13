@@ -69,7 +69,7 @@ export interface ForageStore {
   /**
    * 자동 낚시로 낚은 것 넣기 (원자적): 오늘 자동 한도(autoCap − 오늘 auto)와 하루 전체 낚시 한도(fishCap − 오늘 fish) 중
    * 남은 만큼만 앞에서부터 넣고 fish·auto를 그만큼 올린다. 도감은 수·처음 날만 (최대 크기 기록은 직접 낚은 것만).
-   * id가 "@"로 시작하면(물에 빠진 장비 자리) 한도만 세고 가방·도감은 건드리지 않는다
+   * id가 "@"로 시작하면(물에 빠진 꾸미기 자리) 한도만 세고 가방·도감은 건드리지 않는다
    */
   grantAuto(acct: string, day: string, items: GrantItem[], stackMax: number, autoCap: number, fishCap: number): Promise<Granted[]>;
 }
@@ -374,7 +374,7 @@ return 1
 
 // KEYS: bag, dex, day  ARGV: day, stackMax, autoCap, fishCap, dayTtl, (id, size)...
 // 남은 한도만큼만 앞에서부터. 돌려주는 값: 넣은 아이템마다 "id:{kept}{isNew}0" (최대 크기는 기록하지 않는다).
-// "@"로 시작하는 id(물에 빠진 장비 자리)는 한도만 센다 → "id:000"
+// "@"로 시작하는 id(물에 빠진 꾸미기 자리)는 한도만 센다 → "id:000"
 export const GRANT_AUTO_LUA = `
 local auto = tonumber(redis.call('HGET', KEYS[3], 'auto') or '0')
 local fish = tonumber(redis.call('HGET', KEYS[3], 'fish') or '0')

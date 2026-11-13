@@ -6,7 +6,8 @@ import { errorMessage } from "@/lib/api";
 import { gatherNodeById, NODE_LABEL, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
 import { forageApi, type DexPeer } from "@/lib/forage/client";
 import { BUG_DIFFICULTY } from "@/lib/forage/rules";
-import type { CatchResult } from "@/lib/forage/types";
+import type { CatchResult, SunkenCatch } from "@/lib/forage/types";
+import { meStore } from "@/lib/hooks/useMe";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { showToast } from "@/lib/hooks/useToasts";
@@ -33,7 +34,8 @@ import s from "./forage.module.css";
 
 type Gather = { ticket: string; node: string; kind: string; endsAt: number; ms: number };
 type Insect = { ticket: string; node: string; seed: number };
-type Card = { item: CatchResult; more: number };
+/** 잡은 것 카드. cosmetic이면 물에 빠진 꾸미기 (영구 소장) */
+type Card = { item: CatchResult; more: number; cosmetic?: SunkenCatch };
 
 const NEUTRAL = { str: 0, agi: 0, vit: 0, int: 0, dex: 0, luk: 0 };
 const NO_EQUIP = { weapon: null, armor: null, head: null, acc1: null, acc2: null };
@@ -74,8 +76,9 @@ export default function ForageLayer() {
     forageApi
       .autoStop()
       .then((r) => {
-        if (!r.items.length) return;
+        if (!r.items.length && !r.gear.length) return;
         forageStore.set(r.state);
+        if (r.gear.some((g) => g.kept)) void meStore.refresh();
         toastAutoCatch(r, true);
       })
       .catch(() => {
@@ -180,6 +183,13 @@ export default function ForageLayer() {
           spot={fishing.spot}
           water={fishing.water}
           onCatch={(r) => showCard([r])}
+          onSunken={(c) => {
+            // 영구 소장이 늘었다 → 내 정보(벗어 둔 꾸미기)를 새로
+            void meStore.refresh();
+            if (cardTimer.current) clearTimeout(cardTimer.current);
+            setCard({ item: { id: c.id, size: 0, kept: true, isNew: false, record: false }, more: 0, cosmetic: c });
+            cardTimer.current = setTimeout(() => setCard(null), 5_000);
+          }}
           onLeave={() => bridge.emit("forage:leave")}
         />
       )}
@@ -280,7 +290,18 @@ function GatherDock({ gather, onCancel }: { gather: Gather; onCancel: () => void
 }
 
 function CatchCard({ card }: { card: Card }) {
-  const { item, more } = card;
+  const { item, more, cosmetic } = card;
+  if (cosmetic)
+    return (
+      <div className={s.catchCard} role="status" aria-live="polite">
+        <ItemIcon itemId={cosmetic.id} size={48} />
+        <div className={s.catchMeta}>
+          <strong>{cosmetic.name}</strong>
+          <span className={s.badgeNew}>반짝! 영구 소장 꾸미기를 건졌어요</span>
+          <span>가방에서 꾸미기 칸을 눌러 입을 수 있어요</span>
+        </div>
+      </div>
+    );
   const sp = speciesById(item.id);
   if (!sp) return null;
   return (

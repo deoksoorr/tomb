@@ -144,10 +144,10 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     s = await store.snapshot(a, "20261113", 1);
     expect(s.day).toMatchObject({ fish: 10, auto: 2 });
     expect(s.dex.f_carp.max).toBe(300); // 직접 낚은 크기만 기록
-    // "@"(물에 빠진 장비 자리)는 한도만 세고 가방·도감은 그대로
+    // "@"(물에 빠진 꾸미기 자리)는 한도만 세고 가방·도감은 그대로
     const b = acct();
-    expect(await store.grantAuto(b, DAY, [{ id: "@w_ruler", size: 0 }, { id: "f_carp", size: 1 }], 99, 75, 150)).toEqual([
-      { id: "@w_ruler", size: 0, kept: false, isNew: false, record: false },
+    expect(await store.grantAuto(b, DAY, [{ id: "@hat_cat", size: 0 }, { id: "f_carp", size: 1 }], 99, 75, 150)).toEqual([
+      { id: "@hat_cat", size: 0, kept: false, isNew: false, record: false },
       { id: "f_carp", size: 1, kept: true, isNew: true, record: false },
     ]);
     const sb = await store.snapshot(b, DAY, 1);

@@ -7,7 +7,7 @@ import { AUTO_SYNC_MS, autoNextLabel } from "@/lib/forage/auto";
 import { DAILY_CATCH_MAX, speciesById } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { sunkenText } from "@/lib/forage/sunken";
-import type { AutoFishResponse, AutoFishStatus, CastResponse, CatchResult } from "@/lib/forage/types";
+import type { AutoFishResponse, AutoFishStatus, CastResponse, CatchResult, SunkenCatch } from "@/lib/forage/types";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { showToast } from "@/lib/hooks/useToasts";
 import { cx } from "../ui/cx";
@@ -35,11 +35,14 @@ export default function FishingPanel({
   spot,
   water,
   onCatch,
+  onSunken,
   onLeave,
 }: {
   spot: string;
   water: "lake" | "river";
   onCatch: (r: CatchResult) => void;
+  /** 물에 빠진 꾸미기를 건졌을 때 (영구 소장) */
+  onSunken: (c: SunkenCatch) => void;
   onLeave: () => void;
 }) {
   useBlockingLayer(true);
@@ -89,12 +92,17 @@ export default function FishingPanel({
       .then((r) => {
         forageStore.set(r.state);
         if (r.gear) {
-          // 물고기 대신 물에 빠진 사냥 장비 (아주 드물게)
-          bridge.emit("forage:pop", { itemId: r.gear.id, sparkle: true });
+          // 물고기 대신 물에 빠진 꾸미기 (아주 드물게, 영구 소장). 다 가졌으면 대신 받은 희귀 물고기(result)
           const text = sunkenText(r.gear, (id) => speciesById(id)?.name ?? id);
           setMsg({ text, tone: "hot" });
           showToast(text, 6_000);
-          if (r.result) onCatch(r.result);
+          if (r.gear.kept) {
+            bridge.emit("forage:pop", { itemId: r.gear.id, sparkle: true });
+            onSunken(r.gear);
+          } else if (r.result) {
+            bridge.emit("forage:pop", { itemId: r.result.id, sparkle: true });
+            onCatch(r.result);
+          }
           return;
         }
         if (r.result) {
@@ -159,8 +167,11 @@ export default function FishingPanel({
   function applyAuto(r: AutoFishResponse, away: boolean) {
     forageStore.set(r.state);
     toastAutoCatch(r, away);
-    if (r.gear.length) bridge.emit("forage:pop", { itemId: r.gear[0].id, sparkle: true });
-    else for (const it of r.items.slice(0, 3)) bridge.emit("forage:pop", { itemId: it.id });
+    const won = r.gear.find((g) => g.kept);
+    if (won) {
+      bridge.emit("forage:pop", { itemId: won.id, sparkle: true });
+      onSunken(won);
+    } else for (const it of r.items.slice(0, 3)) bridge.emit("forage:pop", { itemId: it.id });
     autoRef.current = r.auto;
     setAuto(r.auto);
     if (r.auto?.nextInMs != null) {
