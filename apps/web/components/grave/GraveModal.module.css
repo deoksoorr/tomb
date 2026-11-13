@@ -3,6 +3,35 @@
   gap: 14px;
 }
 
+.side,
+.main {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* 넓은 화면: 사진 쪽(왼쪽)과 정보 쪽(오른쪽) 두 칸 — 창 안에서 스크롤 없이 */
+@media (min-width: 640px) {
+  .grave {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: 18px;
+    align-items: start;
+  }
+
+  .main .facts {
+    gap: 8px;
+  }
+
+  .main .secondary {
+    justify-content: flex-start;
+  }
+
+  .main .notice:empty {
+    display: none;
+  }
+}
+
 .state {
   padding: 24px 0;
   color: var(--muted);

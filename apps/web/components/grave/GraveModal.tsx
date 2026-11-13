@@ -198,275 +198,280 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
   return (
     <Dialog title={grave.name} onClose={onClose}>
       <article className={styles.grave}>
-        <figure className={styles.photo}>
-          {grave.imageUrl ? (
-            <Image
-              src={grave.imageUrl}
-              alt={`${grave.name} 스크린샷`}
-              fill
-              unoptimized
-              sizes="(max-width: 460px) 100vw, 420px"
-              className={styles.photoImage}
-            />
-          ) : (
-            <div className={styles.noPhoto}>
-              <StyleArt style={grave.style} ageDays={grave.ageDays} scale={4} />
-              <figcaption>사진 없음</figcaption>
-            </div>
-          )}
-        </figure>
-
-        <p className={styles.epitaph}>{grave.epitaph}</p>
-        {grave.comment && (
-          <p className={styles.comment}>
-            <span className={styles.commentBy}>상주 {grave.mourner}의 한마디</span>
-            {grave.comment}
-          </p>
-        )}
-        <p className={styles.lifespan}>{lifespanLabel(grave.bornAt, grave.diedAt, grave.ageDays)}</p>
-
-        <dl className={styles.facts}>
-          {location && (
-            <div>
-              <dt>위치</dt>
-              <dd>{location}</dd>
-            </div>
-          )}
-          <div>
-            <dt>사인</dt>
-            <dd>
-              <ul className={styles.tags}>
-                {grave.causes.map((c) => (
-                  <li key={c} className={ui.tag}>
-                    {CAUSE_LABELS[c] ?? c}
-                  </li>
-                ))}
-              </ul>
-              {grave.causeDetail && <p className={styles.detail}>{grave.causeDetail}</p>}
-            </dd>
-          </div>
-          {grave.lastTask && (
-            <div>
-              <dt>마지막으로 하던 일</dt>
-              <dd>{grave.lastTask}</dd>
-            </div>
-          )}
-          <div>
-            <dt>상주</dt>
-            <dd>{grave.mourner}</dd>
-          </div>
-          {grave.passAt !== undefined && (
-            <div>
-              <dt>성불</dt>
-              <dd>
-                {grave.passAt > openedAt ? `${remainingText(grave.passAt - openedAt)} 뒤 성불해요` : "곧 성불해요"}
-              </dd>
-            </div>
-          )}
-          {decor.length > 0 && (
-            <div>
-              <dt>꾸밈</dt>
-              <dd>
-                <ul className={styles.tags}>
-                  {decor.map((d) => (
-                    <li key={d.itemId} className={ui.tag}>
-                      {itemById(d.itemId)?.name ?? d.itemId} · {remainingLabel(d.until, openedAt)}
-                    </li>
-                  ))}
-                </ul>
-              </dd>
-            </div>
-          )}
-          {links.length > 0 && (
-            <div>
-              <dt>링크</dt>
-              <dd className={styles.links}>
-                {links.map((l) => (
-                  <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer">
-                    {l.label}
-                  </a>
-                ))}
-              </dd>
-            </div>
-          )}
-          {grave.stack && grave.stack.length > 0 && (
-            <div>
-              <dt>함께한 도구</dt>
-              <dd>
-                <ul className={styles.tags}>
-                  {grave.stack.map((s) => (
-                    <li key={s} className={ui.tag}>
-                      {s}
-                    </li>
-                  ))}
-                </ul>
-              </dd>
-            </div>
-          )}
-        </dl>
-
-        <div className={styles.reactions}>
-          <button
-            type="button"
-            className={cx(ui.button, styles.reaction)}
-            onClick={flower}
-            disabled={!mine || mine.floweredToday || pending.flower}
-          >
-            🌼 {mine?.floweredToday ? "오늘 헌화했어요" : "헌화하기"} ({grave.flowers})
-          </button>
-        </div>
-
-        {confirming ? (
-          <div className={styles.confirm} role="group" aria-label="확인">
-            <p>
-              {confirming === "report"
-                ? "이 묘비를 신고할까요?"
-                : confirming === "staffDelete"
-                  ? "운영자 권한으로 이 묘비를 완전히 지울까요? 사진도 함께 지워지고 되돌릴 수 없어요."
-                  : `이 묘비를 이장할까요? 성황당에 ${SHRINE_KEEP_DAYS}일 동안 모셔져요. 그 안에는 다시 모실 수 있어요.`}
-            </p>
-            {confirming === "report" && (
-              <fieldset className={styles.reasons}>
-                <legend className={ui.hint}>신고 사유</legend>
-                {REPORT_REASONS.map((r) => (
-                  <label key={r} className={styles.reason}>
-                    <input
-                      type="radio"
-                      name="report-reason"
-                      value={r}
-                      checked={reportReason === r}
-                      onChange={() => setReportReason(r)}
-                    />
-                    {REPORT_REASON_LABELS[r]}
-                  </label>
-                ))}
-              </fieldset>
+        {/* 넓은 화면: 왼쪽 = 사진·묘비명·헌화, 오른쪽 = 정보·버튼 (스크롤 없이 한눈에). 좁은 화면은 위아래 한 줄 */}
+        <div className={styles.side}>
+          <figure className={styles.photo}>
+            {grave.imageUrl ? (
+              <Image
+                src={grave.imageUrl}
+                alt={`${grave.name} 스크린샷`}
+                fill
+                unoptimized
+                sizes="(max-width: 460px) 100vw, 420px"
+                className={styles.photoImage}
+              />
+            ) : (
+              <div className={styles.noPhoto}>
+                <StyleArt style={grave.style} ageDays={grave.ageDays} scale={4} />
+                <figcaption>사진 없음</figcaption>
+              </div>
             )}
-            <div className={styles.confirmButtons}>
-              <button
-                type="button"
-                className={cx(ui.button, ui.danger)}
-                onClick={confirming === "report" ? report : confirming === "staffDelete" ? staffDelete : remove}
-                autoFocus
-              >
-                {confirming === "report" ? "신고하기" : confirming === "staffDelete" ? "완전히 지우기" : "이장하기"}
-              </button>
-              <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirming(null)}>
-                그만두기
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className={styles.secondary}>
-            <button type="button" className={cx(ui.button, ui.quiet)} onClick={share}>
-              공유
-            </button>
+          </figure>
+
+          <p className={styles.epitaph}>{grave.epitaph}</p>
+          {grave.comment && (
+            <p className={styles.comment}>
+              <span className={styles.commentBy}>상주 {grave.mourner}의 한마디</span>
+              {grave.comment}
+            </p>
+          )}
+          <p className={styles.lifespan}>{lifespanLabel(grave.bornAt, grave.diedAt, grave.ageDays)}</p>
+
+          <div className={styles.reactions}>
             <button
               type="button"
-              className={cx(ui.button, ui.quiet)}
-              onClick={() => setConfirming("report")}
-              disabled={pending.report}
+              className={cx(ui.button, styles.reaction)}
+              onClick={flower}
+              disabled={!mine || mine.floweredToday || pending.flower}
             >
-              신고
+              🌼 {mine?.floweredToday ? "오늘 헌화했어요" : "헌화하기"} ({grave.flowers})
             </button>
-            {canManage && (
-              <>
+          </div>
+        </div>
+
+        <div className={styles.main}>
+          <dl className={styles.facts}>
+            {location && (
+              <div>
+                <dt>위치</dt>
+                <dd>{location}</dd>
+              </div>
+            )}
+            <div>
+              <dt>사인</dt>
+              <dd>
+                <ul className={styles.tags}>
+                  {grave.causes.map((c) => (
+                    <li key={c} className={ui.tag}>
+                      {CAUSE_LABELS[c] ?? c}
+                    </li>
+                  ))}
+                </ul>
+                {grave.causeDetail && <p className={styles.detail}>{grave.causeDetail}</p>}
+              </dd>
+            </div>
+            {grave.lastTask && (
+              <div>
+                <dt>마지막으로 하던 일</dt>
+                <dd>{grave.lastTask}</dd>
+              </div>
+            )}
+            <div>
+              <dt>상주</dt>
+              <dd>{grave.mourner}</dd>
+            </div>
+            {grave.passAt !== undefined && (
+              <div>
+                <dt>성불</dt>
+                <dd>
+                  {grave.passAt > openedAt ? `${remainingText(grave.passAt - openedAt)} 뒤 성불해요` : "곧 성불해요"}
+                </dd>
+              </div>
+            )}
+            {decor.length > 0 && (
+              <div>
+                <dt>꾸밈</dt>
+                <dd>
+                  <ul className={styles.tags}>
+                    {decor.map((d) => (
+                      <li key={d.itemId} className={ui.tag}>
+                        {itemById(d.itemId)?.name ?? d.itemId} · {remainingLabel(d.until, openedAt)}
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+            )}
+            {links.length > 0 && (
+              <div>
+                <dt>링크</dt>
+                <dd className={styles.links}>
+                  {links.map((l) => (
+                    <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer">
+                      {l.label}
+                    </a>
+                  ))}
+                </dd>
+              </div>
+            )}
+            {grave.stack && grave.stack.length > 0 && (
+              <div>
+                <dt>함께한 도구</dt>
+                <dd>
+                  <ul className={styles.tags}>
+                    {grave.stack.map((s) => (
+                      <li key={s} className={ui.tag}>
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+            )}
+          </dl>
+
+          {confirming ? (
+            <div className={styles.confirm} role="group" aria-label="확인">
+              <p>
+                {confirming === "report"
+                  ? "이 묘비를 신고할까요?"
+                  : confirming === "staffDelete"
+                    ? "운영자 권한으로 이 묘비를 완전히 지울까요? 사진도 함께 지워지고 되돌릴 수 없어요."
+                    : `이 묘비를 이장할까요? 성황당에 ${SHRINE_KEEP_DAYS}일 동안 모셔져요. 그 안에는 다시 모실 수 있어요.`}
+              </p>
+              {confirming === "report" && (
+                <fieldset className={styles.reasons}>
+                  <legend className={ui.hint}>신고 사유</legend>
+                  {REPORT_REASONS.map((r) => (
+                    <label key={r} className={styles.reason}>
+                      <input
+                        type="radio"
+                        name="report-reason"
+                        value={r}
+                        checked={reportReason === r}
+                        onChange={() => setReportReason(r)}
+                      />
+                      {REPORT_REASON_LABELS[r]}
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+              <div className={styles.confirmButtons}>
                 <button
                   type="button"
-                  className={cx(ui.button, ui.quiet)}
-                  onClick={() => setTool((t) => (t === "decor" ? null : "decor"))}
-                  aria-expanded={tool === "decor"}
+                  className={cx(ui.button, ui.danger)}
+                  onClick={confirming === "report" ? report : confirming === "staffDelete" ? staffDelete : remove}
+                  autoFocus
                 >
-                  꾸미기
+                  {confirming === "report" ? "신고하기" : confirming === "staffDelete" ? "완전히 지우기" : "이장하기"}
                 </button>
-                <button
-                  type="button"
-                  className={cx(ui.button, ui.quiet)}
-                  onClick={() => setTool((t) => (t === "style" ? null : "style"))}
-                  aria-expanded={tool === "style"}
-                >
-                  디자인 바꾸기
+                <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirming(null)}>
+                  그만두기
                 </button>
-                <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => onEdit(grave, ownerToken)}>
-                  수정
-                </button>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.secondary}>
+              <button type="button" className={cx(ui.button, ui.quiet)} onClick={share}>
+                공유
+              </button>
+              <button
+                type="button"
+                className={cx(ui.button, ui.quiet)}
+                onClick={() => setConfirming("report")}
+                disabled={pending.report}
+              >
+                신고
+              </button>
+              {canManage && (
+                <>
+                  <button
+                    type="button"
+                    className={cx(ui.button, ui.quiet)}
+                    onClick={() => setTool((t) => (t === "decor" ? null : "decor"))}
+                    aria-expanded={tool === "decor"}
+                  >
+                    꾸미기
+                  </button>
+                  <button
+                    type="button"
+                    className={cx(ui.button, ui.quiet)}
+                    onClick={() => setTool((t) => (t === "style" ? null : "style"))}
+                    aria-expanded={tool === "style"}
+                  >
+                    디자인 바꾸기
+                  </button>
+                  <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => onEdit(grave, ownerToken)}>
+                    수정
+                  </button>
+                  <button
+                    type="button"
+                    className={cx(ui.button, ui.quiet, ui.danger)}
+                    onClick={() => setConfirming("remove")}
+                    disabled={pending.remove}
+                  >
+                    이장(삭제)
+                  </button>
+                </>
+              )}
+              {me?.staff && (
                 <button
                   type="button"
                   className={cx(ui.button, ui.quiet, ui.danger)}
-                  onClick={() => setConfirming("remove")}
+                  onClick={() => setConfirming("staffDelete")}
                   disabled={pending.remove}
+                  title="운영자 계정 전용 (관리자 IP에서만)"
                 >
-                  이장(삭제)
+                  삭제 (운영자)
                 </button>
-              </>
-            )}
-            {me?.staff && (
+              )}
+            </div>
+          )}
+
+          {tool === "style" && !confirming && (
+            <div className={styles.toolBox}>
+              <StylePicker
+                value={nextStyle ?? grave.style ?? DEFAULT_STYLE}
+                onChange={setNextStyle}
+                inventory={me?.inventory ?? {}}
+                current={grave.style ?? DEFAULT_STYLE}
+                ageDays={grave.ageDays}
+                verb="바꾸면"
+              />
               <button
                 type="button"
-                className={cx(ui.button, ui.quiet, ui.danger)}
-                onClick={() => setConfirming("staffDelete")}
-                disabled={pending.remove}
-                title="운영자 계정 전용 (관리자 IP에서만)"
+                className={cx(ui.button, ui.primary)}
+                onClick={() => restyle(grave, nextStyle ?? grave.style ?? DEFAULT_STYLE)}
+                disabled={pending.restyle || (nextStyle ?? grave.style ?? DEFAULT_STYLE) === (grave.style ?? DEFAULT_STYLE)}
               >
-                삭제 (운영자)
+                {pending.restyle ? "바꾸는 중…" : "이 디자인으로 바꾸기"}
               </button>
-            )}
-          </div>
-        )}
+            </div>
+          )}
 
-        {tool === "style" && !confirming && (
-          <div className={styles.toolBox}>
-            <StylePicker
-              value={nextStyle ?? grave.style ?? DEFAULT_STYLE}
-              onChange={setNextStyle}
-              inventory={me?.inventory ?? {}}
-              current={grave.style ?? DEFAULT_STYLE}
-              ageDays={grave.ageDays}
-              verb="바꾸면"
-            />
-            <button
-              type="button"
-              className={cx(ui.button, ui.primary)}
-              onClick={() => restyle(grave, nextStyle ?? grave.style ?? DEFAULT_STYLE)}
-              disabled={pending.restyle || (nextStyle ?? grave.style ?? DEFAULT_STYLE) === (grave.style ?? DEFAULT_STYLE)}
-            >
-              {pending.restyle ? "바꾸는 중…" : "이 디자인으로 바꾸기"}
-            </button>
-          </div>
-        )}
+          {tool === "decor" && !confirming && (
+            <div className={styles.decorPicker}>
+              {decor.length >= MAX_DECOR_PER_GRAVE ? (
+                <p>묘비 하나에는 {MAX_DECOR_PER_GRAVE}개까지 놓을 수 있어요. 기간이 끝나면 다시 놓을 수 있어요.</p>
+              ) : decorInBag.length === 0 ? (
+                <p>가방에 묘비 꾸미기가 없어요. (묘비 꾸미기는 지금 상점에서 팔지 않아요.)</p>
+              ) : (
+                <>
+                  <p className={ui.hint}>
+                    놓는 순간 가방에서 사라지고 {durationLabel(DECOR_DURATION_MS)} 동안 이 묘비에 남아요.
+                  </p>
+                  <div className={styles.decorChoices}>
+                    {decorInBag.map(({ item, count }) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={ui.button}
+                        onClick={() => decorate(item.id)}
+                        disabled={pending.decorate}
+                      >
+                        {item.name} 놓기 ({count})
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
-        {tool === "decor" && !confirming && (
-          <div className={styles.decorPicker}>
-            {decor.length >= MAX_DECOR_PER_GRAVE ? (
-              <p>묘비 하나에는 {MAX_DECOR_PER_GRAVE}개까지 놓을 수 있어요. 기간이 끝나면 다시 놓을 수 있어요.</p>
-            ) : decorInBag.length === 0 ? (
-              <p>가방에 묘비 꾸미기가 없어요. (묘비 꾸미기는 지금 상점에서 팔지 않아요.)</p>
-            ) : (
-              <>
-                <p className={ui.hint}>
-                  놓는 순간 가방에서 사라지고 {durationLabel(DECOR_DURATION_MS)} 동안 이 묘비에 남아요.
-                </p>
-                <div className={styles.decorChoices}>
-                  {decorInBag.map(({ item, count }) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={ui.button}
-                      onClick={() => decorate(item.id)}
-                      disabled={pending.decorate}
-                    >
-                      {item.name} 놓기 ({count})
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        <p className={styles.notice} role="status">
-          {notice}
-        </p>
+          <p className={styles.notice} role="status">
+            {notice}
+          </p>
+        </div>
       </article>
     </Dialog>
   );
