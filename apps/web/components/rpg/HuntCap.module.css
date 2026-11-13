@@ -1,0 +1,91 @@
+/* 오늘 사냥 포인트 막대 (HuntCap.tsx) */
+.box {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 8px 10px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+
+.label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.nums {
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.nums b {
+  color: var(--candle);
+  font-size: 18px;
+  font-weight: 400;
+}
+
+.left {
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.bar {
+  position: relative;
+  height: 10px;
+  overflow: hidden;
+  background: #0d0e0b;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: repeating-linear-gradient(90deg, var(--candle) 0 6px, color-mix(in srgb, var(--candle) 80%, #000) 6px 8px);
+  transition: width 0.3s;
+}
+
+.msg {
+  margin: 0;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.msg b {
+  color: var(--bone);
+  font-weight: 400;
+}
+
+.box[data-near] {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--candle) 60%, var(--line));
+}
+
+.box[data-full] {
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-deep));
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+.box[data-full] .bar > span {
+  background: repeating-linear-gradient(90deg, var(--danger) 0 6px, color-mix(in srgb, var(--danger) 75%, #000) 6px 8px);
+}
+
+.box[data-full] .left {
+  color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar > span {
+    transition: none;
+  }
+}

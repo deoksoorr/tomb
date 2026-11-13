@@ -35,6 +35,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import { mmss, pts } from "./format";
 import { gearGrade } from "./gear";
+import HuntCapMeter from "./HuntCap";
 import HuntGuide from "./HuntGuide";
 import { CharacterPanel, GearPanel, LOBBY_HIDDEN, ShopPanel, SkillPanel, StartPanel } from "./Panels";
 import LevelUpSound from "./LevelUpSound";
@@ -622,19 +623,7 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
               }}
             />
           </div>
-          <div className={s.barLabel}>
-            <span>오늘 사냥 포인트</span>
-            <span>
-              {view.today.huntPoints} / {view.today.cap}
-            </span>
-          </div>
-          <div className={cx(s.expBar, s.capBar)}>
-            <span
-              style={{
-                width: `${view.today.cap ? Math.min(100, (view.today.huntPoints / view.today.cap) * 100) : 100}%`,
-              }}
-            />
-          </div>
+          <HuntCapMeter today={view.today} where="result" />
         </div>
       )}
     </div>

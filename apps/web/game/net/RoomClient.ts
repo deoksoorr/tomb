@@ -188,6 +188,13 @@ export class RoomClient {
     this.send({ t: "act", kind });
   }
 
+  /** 의도된 순간이동 (친구 옆으로): 서버가 범위·쿨다운만 보고 그 자리로 옮긴다. 다음 MOVE는 새 자리에서 이어진다 */
+  warp(x: number, y: number): void {
+    if (!this.online) return;
+    this.send({ t: "warp", x: Math.round(x), y: Math.round(y) });
+    this.throttle.reset();
+  }
+
   /** 3번 집 안 1인 자리 점유 요청 / 일어나기 / 가구 쓰기 */
   sit(seatId: string): void {
     this.send({ t: "sit", seatId });

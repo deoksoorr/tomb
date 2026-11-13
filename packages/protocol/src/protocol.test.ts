@@ -87,6 +87,10 @@ describe("events", () => {
     expect(parseC2S('{"t":"away","on":true,"p":"house"}')).toEqual({ t: "away", on: true, p: "house" });
     expect(parseC2S('{"t":"away","on":true,"p":"moon"}')).toEqual({ t: "away", on: true });
     expect(parseC2S('{"t":"away","on":false,"p":"hunt"}')).toEqual({ t: "away", on: false });
+    // 집 안이면 그 집 id (모양이 틀리거나 집이 아닌 곳이면 뺀다)
+    expect(parseC2S('{"t":"away","on":true,"p":"house","h":"abcDEF123_-x"}')).toEqual({ t: "away", on: true, p: "house", h: "abcDEF123_-x" });
+    expect(parseC2S('{"t":"away","on":true,"p":"house","h":"집"}')).toEqual({ t: "away", on: true, p: "house" });
+    expect(parseC2S('{"t":"away","on":true,"p":"hunt","h":"abcDEF123_-x"}')).toEqual({ t: "away", on: true, p: "hunt" });
     expect(parseC2S(JSON.stringify({ t: "sit", seatId: "x".repeat(600) }))).toBeNull();
   });
 

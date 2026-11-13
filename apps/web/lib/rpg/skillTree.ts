@@ -266,7 +266,7 @@ export const SKILLS: readonly SkillDef[] = [
     requires: [{ id: "em_stoke", level: 1 }],
     ...passive,
     describe: (lv) => `기본 공격이 맞으면 ${pct(FX.em_ignite(lv).chance)} 확률로 불씨가 터져 둘레 적에게 공격력의 ${pct(FX.em_ignite(lv).mult)} 피해.`,
-    art: { shape: "sk_ember", main: E.dark, accent: E.light },
+    art: { shape: "sk_bomb", main: E.dark, accent: E.light },
   },
   {
     id: "em_meteor",

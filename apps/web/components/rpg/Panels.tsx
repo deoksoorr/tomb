@@ -38,6 +38,7 @@ import { DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
 import { bonusText, pts } from "./format";
 import { bagGear, deltaText, equipTarget, gearDiff, gearGrade, sellable, sellWarning, slotAccepts } from "./gear";
+import HuntCapMeter from "./HuntCap";
 import RpgIcon from "./RpgIcon";
 import ZonePicker, { ZoneInfo, zoneOpen, zoneUnlockAll } from "./ZonePicker";
 import s from "./rpg.module.css";
@@ -87,14 +88,14 @@ export function StartPanel({
   const D = DIFFS[diff];
   const low = c.level < D.recLevel;
   const zoneLocked = game === "hunt" && !zoneOpen(zone, c.level, zoneUnlockAll());
-  const capLeft = Math.max(0, view.today.cap - view.today.huntPoints);
   const monsters = [...new Set([...zone.pool])].map((id) => MONSTERS[id].name);
   const canStart = !busy && view.today.runsPerHour > 0 && !zoneLocked;
+  // 오늘 사냥 포인트 한도는 늘 막대로 보여 준다 (한도에 닿으면 안내까지)
   const todayLine = (
-    <p className={s.meta}>
-      오늘 사냥 포인트 {view.today.huntPoints} / {view.today.cap}
-      {capLeft === 0 && " · 오늘 한도를 다 채워서 EXP와 드롭만 받아요"} · 이번 시간 남은 판 {view.today.runsPerHour}
-    </p>
+    <>
+      <HuntCapMeter today={view.today} where="start" />
+      <p className={s.meta}>이번 시간 남은 판 {view.today.runsPerHour}</p>
+    </>
   );
   const startButton = (
     <button type="button" className={cx(ui.button, ui.primary, s.start)} onClick={onStart} disabled={!canStart}>
@@ -106,6 +107,7 @@ export function StartPanel({
   if (game === "hunt" && onZone) {
     return (
       <div className={s.lobby}>
+        <HuntCapMeter today={view.today} where="start" />
         <section className={s.section} aria-label="사냥터 고르기">
           <ZonePicker
             level={c.level}
@@ -121,7 +123,9 @@ export function StartPanel({
                 )}
                 {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
                 <div className={s.zoneGo}>
-                  {todayLine}
+                  <p className={s.meta}>
+                    오늘 사냥 포인트 {view.today.huntPoints} / {view.today.cap}P · 이번 시간 남은 판 {view.today.runsPerHour}
+                  </p>
                   {startButton}
                 </div>
               </>
@@ -419,6 +423,7 @@ export function GearPanel({
 
   return (
     <div className={s.lobby}>
+      <HuntCapMeter today={view.today} where="bag" />
       <div className={s.gearTop}>
         <PaperDoll
           areas={GEAR_AREAS}

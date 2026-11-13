@@ -23,8 +23,11 @@ export const AWAY_PLACE_LABEL: Record<AwayPlace, string> = {
   game: "놀이 중",
 };
 
-/** 실시간 서버가 아는 한 사람의 자리 (내부 요청 /internal/where 응답). 좌표는 서버 위치 */
-export type PeerWhere = { ch: number; sid: number; x: number; y: number; away?: true; place?: AwayPlace };
+/** 실내가 집이면 그 집 id (away 이벤트의 h) — 친구가 그 집으로 따라 들어간다 */
+export const AWAY_HOUSE_RE = /^[A-Za-z0-9_-]{4,24}$/;
+
+/** 실시간 서버가 아는 한 사람의 자리 (내부 요청 /internal/where 응답). 좌표는 서버 위치. house = 들어가 있는 집 id */
+export type PeerWhere = { ch: number; sid: number; x: number; y: number; away?: true; place?: AwayPlace; house?: string };
 
 /**
  * 친구 퇴장 알림 유예: 연결이 끊기거나 채널을 나간 뒤 이 안에 다시 들어오면(새로고침·채널 이동·잠깐 끊김) 알리지 않는다

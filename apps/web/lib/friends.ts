@@ -5,7 +5,7 @@ import { env } from "./env";
 import { friendCard } from "./friendCard";
 import type { FriendEntry, FriendListResponse, FriendPresenceResponse, FriendRequestEntry, FriendRequestResponse, FriendWhere, FriendWhereResponse } from "./friendTypes";
 import { HttpError } from "./http";
-import { getHouseStore, houseIdFor } from "./housing/service";
+import { getHouseStore, houseIdFor, isHouseId } from "./housing/service";
 import { staffAccountId } from "./staff";
 import { getFriends, NO_NAME } from "./store";
 import type { FriendLink, FriendStore } from "./store/friends";
@@ -42,7 +42,7 @@ async function namesOf(store: FriendStore, ids: string[]): Promise<string[]> {
 export function toFriendWhere(w: PeerWhere | undefined, reached: boolean): FriendWhere {
   if (!reached) return { at: "unknown" };
   if (!w) return { at: "offline" };
-  if (w.away) return { at: "away", ch: w.ch, sid: w.sid, place: w.place ?? null };
+  if (w.away) return { at: "away", ch: w.ch, sid: w.sid, place: w.place ?? null, ...(w.place === "house" && w.house ? { houseId: w.house } : {}) };
   return { at: "world", ch: w.ch, sid: w.sid, x: w.x, y: w.y };
 }
 
@@ -118,7 +118,15 @@ export async function friendWhere(me: string, key: string, now = Date.now()): Pr
   const f = pick((await store.lists(me, now)).friends, key);
   if (!f || (await findBan(f.id, null, { now }))) throw new HttpError(403, "NOT_FRIEND", "친구만 위치를 볼 수 있어요.");
   const [[name], where, houseId] = await Promise.all([namesOf(store, [f.id]), whereOf([f.id], true), houseOf(f.id).catch(() => null)]);
-  return { key, name, since: f.at, where: toFriendWhere(where?.[f.id], where !== null), houseId };
+  return { key, name, since: f.at, where: await withHouseCheck(toFriendWhere(where?.[f.id], where !== null)), houseId };
+}
+
+/** 친구가 집 안이면 그 집에 따라 들어갈 수 있는지 (집 방문과 같은 규칙: 없거나 운영자가 가린 집은 안 된다) */
+export async function withHouseCheck(w: FriendWhere): Promise<FriendWhere> {
+  if (w.at !== "away" || !w.houseId) return w;
+  const h = isHouseId(w.houseId) ? await getHouseStore().get(w.houseId).catch(() => null) : null;
+  if (h && !h.hidden) return w;
+  return { ...w, houseBlocked: h ? "그 집은 운영자가 가려 두어 지금은 들어갈 수 없어요." : "그 집을 찾을 수 없어요. 집이 정리됐을 수 있어요." };
 }
 
 /**

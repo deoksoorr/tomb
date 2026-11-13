@@ -161,8 +161,9 @@ export class RealtimeClient {
   private redirected = false;
   /** 실내(하위 장면)에 들어가 있다 (setAway) */
   private away = false;
-  /** 친구 위치용: 어느 실내인지 (setAway) */
+  /** 친구 위치용: 어느 실내인지·집 안이면 그 집 id (setAway) */
   private awayPlace: AwayPlace | undefined;
+  private awayHouse: string | undefined;
   private consecutiveInvalid = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private spectatorTimer: ReturnType<typeof setInterval> | null = null;
@@ -378,17 +379,19 @@ export class RealtimeClient {
    * 실내(하위 장면)에 들어감·나옴. 연결이 바뀌어도 이어 가도록 기억해 두고 welcome 때 다시 알린다.
    * 옛 서버는 모르는 메시지라 버린다 (그러면 예전처럼 문 앞에 보인다)
    */
-  setAway(on: boolean, place?: AwayPlace): void {
+  setAway(on: boolean, place?: AwayPlace, house?: string): void {
     const p = on ? place : undefined;
-    if (this.away === on && this.awayPlace === p) return;
+    const h = on && place === "house" ? house : undefined;
+    if (this.away === on && this.awayPlace === p && this.awayHouse === h) return;
     this.away = on;
     this.awayPlace = p;
+    this.awayHouse = h;
     this.send(this.awayMsg());
   }
 
   /** 실내 알림 (친구 위치용 장소 p는 실내일 때만. 옛 서버는 p를 버리고 on만 본다) */
   private awayMsg(): C2S {
-    return { t: "away", on: this.away, ...(this.away && this.awayPlace ? { p: this.awayPlace } : {}) };
+    return { t: "away", on: this.away, ...(this.away && this.awayPlace ? { p: this.awayPlace } : {}), ...(this.away && this.awayHouse ? { h: this.awayHouse } : {}) };
   }
 
   /** 접속자 목록 다시 받기 (자가 복구) */

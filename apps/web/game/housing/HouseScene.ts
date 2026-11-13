@@ -16,6 +16,7 @@ import { INDOOR_FRONT } from "../entities/RemoteAvatar";
 import type { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
 import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST } from "../logic/spots";
+import { besideFriend } from "../logic/friendSpot";
 import { emoSlotOfKey } from "../logic/emoBoard";
 import type { MoveInput } from "../logic/movement";
 import { RoomPresence } from "../net/RoomPresence";
@@ -55,6 +56,9 @@ import {
 //  - 아래 문 밖에서 시작하고, 문 밖으로 걸어 내려가면 월드(분양 사무소 앞)로 돌아간다.
 //  - 주인은 편집 모드에서 물건을 끌어 옮기고(마우스·터치), 방향키로 한 칸씩 옮기고, R 돌리기, Delete 치우기.
 //    편집 결과는 house:state로 UI에 알리고, 저장은 UI가 API로 한다 (저장되면 house:data로 다시 받는다).
+
+/** 따라 들어온 뒤 친구가 방에 보이기를 기다리는 시간 (방 접속·친구 목록 받기 포함) */
+const FOLLOW_WAIT_MS = 12_000;
 
 export type HouseSceneData = {
   house: PublicHouse;
@@ -137,6 +141,8 @@ export class HouseScene extends Phaser.Scene {
   private readonly pose: NetPose = { x: 0, y: 0, state: 0, dir: 0 };
   private presenceAt = 0;
   private presenceKey = "";
+  /** 친구한테 가기로 따라 들어왔다: 이 이름의 친구가 방에 보이면 그 옆으로 옮긴다 (until = 기다리는 끝 시각) */
+  private follow: { name: string; until: number } | null = null;
   private readonly view = new Phaser.Geom.Rectangle();
   private exiting = false;
   private armed = false;
@@ -274,6 +280,10 @@ export class HouseScene extends Phaser.Scene {
       onUse: (sid, u, a) => this.onRemoteUse(sid, u, a),
     });
     this.player.dir = DIR.up;
+    // 친구 창의 [친구한테 가기]로 이 집에 따라 들어왔으면 친구를 찾아 옆으로 (30초 넘게 지난 부탁은 버린다)
+    const f = bridge.last("house:follow");
+    if (f && f.houseId === this.data0.house.id && Date.now() - f.at < 30_000) this.follow = { name: f.name, until: this.time.now + FOLLOW_WAIT_MS };
+    if (f) bridge.emit("house:follow", null);
     this.physics.add.collider(this.player.sprite, this.wallBodies);
     this.physics.add.collider(this.player.sprite, this.itemBodies);
     this.physics.world.setBounds(T, this.oy - 12, this.W - 2 * T, this.H - (this.oy - 12));
@@ -939,6 +949,42 @@ export class HouseScene extends Phaser.Scene {
     } else if (s.use === "piano") this.notice("숫자 1~8로 건반을 누르거나 E로 한 음씩 연주해요. 움직이면 일어나요.");
   }
 
+  /**
+   * 따라 들어온 친구 옆으로: 방에 친구(이름)가 보이면 둘레의 걸을 수 있는 칸(방 안, 벽·가구에 안 닿는 곳, 다른 사람과 안 겹치는 곳)으로
+   * 순간이동하고 서버에도 알린다(warp). FOLLOW_WAIT_MS 안에 못 찾으면 안내만
+   */
+  private tryFollow(time: number): void {
+    const f = this.follow;
+    const pres = this.presence;
+    if (!f || !pres) return;
+    if (time > f.until) {
+      this.follow = null;
+      bridge.emit("friend:notice", { message: `집 안에서 ${f.name}님을 찾지 못했어요. 방금 나갔을 수 있어요.` });
+      return;
+    }
+    if (!pres.client.online) return;
+    const friend = [...pres.remotes.values()].find((r) => r.name === f.name);
+    if (!friend) return;
+    this.follow = null;
+    if (this.using) this.exitSpot();
+    const boxes: { x: number; y: number; w: number; h: number }[] = [];
+    for (const g of [this.wallBodies, this.itemBodies])
+      for (const z of g.getChildren()) {
+        const b = (z as Phaser.GameObjects.Zone).body as Phaser.Physics.Arcade.StaticBody | null;
+        if (b) boxes.push({ x: b.x, y: b.y, w: b.width, h: b.height });
+      }
+    const bounds = this.physics.world.bounds;
+    // 발 상자(8×5)가 방 밖이거나 벽·가구에 닿으면 막힌 칸
+    const blocked = (x: number, y: number) =>
+      x - 4 < bounds.x || x + 4 > bounds.right || y - 5 < bounds.y || y > bounds.bottom || boxes.some((b) => x - 4 < b.x + b.w && x + 4 > b.x && y - 5 < b.y + b.h && y > b.y);
+    const others = [...pres.remotes.values()].map((r) => ({ x: r.x, y: r.y }));
+    const spot = besideFriend({ x: friend.x, y: friend.y }, others, blocked);
+    this.player.warp(spot.x, spot.y, time, NO_SEATS);
+    this.player.faceTo(friend.x, friend.y, time);
+    pres.client.warp(spot.x, spot.y);
+    bridge.emit("friend:notice", { message: `${f.name}님 옆으로 왔어요!` });
+  }
+
   /** 자리에서 일어나 원래 서 있던 곳으로 */
   private exitSpot(): void {
     const u = this.using;
@@ -1163,6 +1209,7 @@ export class HouseScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const s = 1 / cam.zoom;
     this.player.view.sync(time, s);
+    if (this.follow) this.tryFollow(time);
     if (this.presence) {
       const now = performance.now();
       this.presence.update(now, cam.worldView, s);

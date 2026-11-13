@@ -115,7 +115,7 @@ export function installHousing(game: Phaser.Game, ctx: GameContext): void {
     const data: HouseSceneData = { ...base(), house, mine, editing: edit, onExit: exitHouse };
     where = { at: "house", from, lot: house.lot };
     game.scene.run("house", data);
-    bridge.emit("scene:changed", { scene: "house", place: "house" });
+    bridge.emit("scene:changed", { scene: "house", place: "house", houseId: house.id });
   };
 
   const offs = [

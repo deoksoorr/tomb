@@ -24,6 +24,7 @@ import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL, MIN_RUN_MS } from "@/lib/rpg/rewa
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
+import { earnRule } from "@/lib/economy";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -35,6 +36,9 @@ import s from "./rpg.module.css";
 // 사냥 안내서: 사냥 로비·멈춤 창에서 연다. 짧은 페이지를 넘겨 본다 (←/→ 키도 된다).
 // 숫자·이름은 catalog·patterns·weapons·rewards에서 읽는다 → 스킬·무기·패턴이 늘어도 안내가 따라간다.
 // 쪽마다 위에 게임 그림으로 움직이는 짧은 반복 시연이 돈다 (huntDemo). 지금 보는 쪽 것만 돌고, 움직임 줄이기면 정지 그림.
+
+/** 하루 사냥 포인트 한도 (economy.ts) */
+const HUNT_DAILY_MAX = earnRule("hunt").dailyMax;
 
 /** 이 쪽의 반복 시연 캔버스 */
 function HuntDemo({ page, title }: { page: number; title: string }) {
@@ -226,8 +230,11 @@ function pages(): Page[] {
             <Item art={skillById("em_meteor")?.art} title="광역기">
               바닥에 마법진이 먼저 깔리고 터져요. 갈래마다 색이 달라요 (모닥불 주황·서리 하늘빛·넋 보라). 화면 흔들림·번쩍임은 기기의 &lsquo;동작 줄이기&rsquo;를 켜면 꺼져요.
             </Item>
+            <Item pic={<Keys k={["1", "…", String(HOTBAR_SIZE)]} />} title="단축 칸에 놓기">
+              스킬 탭 맨 아래 단축 줄로 배운 액티브 스킬을 끌어다 놓아요(손가락으로도). 또는 스킬을 고르고 칸이나 숫자 키 1~{HOTBAR_SIZE}를 눌러요. 칸끼리 끌면 자리를 바꾸고, 줄 밖으로 끌어내면 빠져요. 처음 배운 액티브는 빈 칸에 저절로 들어가요.
+            </Item>
             <Item pic={<Keys k={["1", "…", String(HOTBAR_SIZE)]} />} title="스킬 쓰기">
-              숫자 키, 또는 화면 아래 스킬 버튼을 눌러요.
+              숫자 키, 또는 화면 아래 스킬 버튼을 눌러요. 패시브(둥근 칸)는 칸이 필요 없이 늘 켜져 있어요.
             </Item>
             <Item pic={<span className={s.guideSp}>SP</span>} title="SP">
               스킬마다 SP를 써요. 모자라면 &lsquo;SP가 모자라요&rsquo;가 뜨고 안 나가요. 최대 SP는 INT로 늘고(스킬 위력도), 에너지드링크로 채워요.
@@ -389,7 +396,8 @@ function pages(): Page[] {
               포인트는 절반, EXP는 조금 깎여요. 권장 레벨보다 낮으면 조심!
             </Item>
             <Item art={skillArt("em_spark")} title="하루 한도">
-              사냥 포인트는 하루 한도가 있어요. 넘으면 EXP와 드롭만 받아요. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
+              사냥 포인트는 하루 {HUNT_DAILY_MAX}P까지예요(출발 창·가방·결과 화면 막대에 오늘 받은 양이 나와요). 넘으면 EXP와 드롭만 받아요. 주운 장비·물약 되팔기도 이 한도
+              안이라 다 차면 내일 팔아요 — 상점에서 산 장비는 언제든 50% 환불. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
             </Item>
           </ul>
           <table className={s.guideTable}>

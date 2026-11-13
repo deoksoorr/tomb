@@ -12,7 +12,16 @@ export type FriendWhere =
   | { at: "offline" }
   | { at: "unknown" }
   | { at: "world"; ch: number; sid: number; x: number; y: number }
-  | { at: "away"; ch: number; sid: number; place: AwayPlace | null };
+  | {
+      at: "away";
+      ch: number;
+      sid: number;
+      place: AwayPlace | null;
+      /** 집 안이면 그 집 id (따라 들어가기). 옛 화면이면 없다 */
+      houseId?: string;
+      /** 그 집에 들어갈 수 없는 이유 (친구한테 가기 직전 조회에만) */
+      houseBlocked?: string;
+    };
 
 /**
  * 친구 창 한 줄의 자랑거리 (친구에게만, 서버가 잠깐 기억해 둔다).

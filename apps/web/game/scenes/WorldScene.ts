@@ -726,11 +726,11 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("channel:switch", ({ channel }) => this.switchChannel(channel)));
     // 실내(상점·집·분양 마을·사냥터·미니게임)에 들어가 있는 동안은 다른 사람 화면에서 숨긴다 (메인 맵의 나는 문 앞에 멈춰 있다)
     on.push(
-      bridge.on("scene:changed", ({ scene, place }) => {
+      bridge.on("scene:changed", ({ scene, place, houseId }) => {
         this.awayScene = scene !== "world" && scene !== "shop";
         // 친구 위치용 장소 (친구 창에 "집 안"·"사냥터"처럼 보인다)
         const where = scene === "shop" ? "shop" : scene === "hunt" ? "hunt" : scene === "minigame" ? "game" : (place ?? "house");
-        this.net.setAway(scene !== "world", where);
+        this.net.setAway(scene !== "world", where, where === "house" ? houseId : undefined);
       }),
     );
     // 친구: 이 채널의 친구 표시 (이름표 하트·미니맵 하트)와 친구한테 가기

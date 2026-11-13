@@ -109,6 +109,12 @@ describe("실내 표시 (away)", () => {
     // 다른 사람 화면(입장 정보)에는 장소를 보내지 않는다
     const c = join("c", 1_100);
     expect(JSON.stringify(welcome(c))).not.toContain("house");
+    // 집 id도 기억한다 (친구가 따라 들어간다), 다른 집으로 옮기면 바뀐다
+    core.message(a, send({ t: "away", on: true, p: "house", h: "houseAAAA1234" }), 1_200);
+    expect(core.roster()[0]).toMatchObject({ place: "house", house: "houseAAAA1234" });
+    expect(a.att?.house).toBe("houseAAAA1234");
+    core.message(a, send({ t: "away", on: true, p: "hunt" }), 1_500);
+    expect(core.roster()[0].house).toBeUndefined();
     // 나오면 장소도 지운다
     core.message(a, send({ t: "away", on: false }), 2_000);
     expect(core.roster()[0].place).toBeUndefined();
@@ -129,5 +135,13 @@ describe("실내 표시 (away)", () => {
     expect(dropped).toEqual(["b"]);
     // 끊긴(유예 중) 사람에게는 보내지 않는다
     expect(core.friendNotice(["b"], "abcdEFGH_-123456", "가람", false)).toBe(0);
+  });
+
+  it("집(방) 안에서도 친구 옆 순간이동(warp)은 받는다 — 따라 들어간 사람이 친구 옆으로", () => {
+    const { core, join } = setup(true);
+    const a = join("a");
+    join("friend");
+    core.message(a, send({ t: "warp", x: 140, y: 96 }), 1_000);
+    expect(core.peer(1)).toMatchObject({ x: 140, y: 96 });
   });
 });

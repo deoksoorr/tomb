@@ -10,6 +10,7 @@ import { getAccounts, getFriends } from "@/lib/store";
 import type { ApiError } from "@/lib/types";
 import { kstDay } from "@/lib/store/accounts";
 import { forgetFriendCard } from "@/lib/friendCard";
+import { getHouseStore, houseIdFor } from "@/lib/housing/service";
 import * as friendByKey from "./friends/[key]/route";
 import * as presence from "./friends/presence/route";
 import * as answer from "./friends/requests/[key]/route";
@@ -311,5 +312,27 @@ describe("친구 들고 남 밀어 주기 등록", () => {
     calls.length = 0;
     await join.POST(call("/api/join", c, { channel: 1, name: "혼자", color: "#9fc5a8" }));
     expect(calls.filter((x) => x.op === "hello")).toEqual([]);
+  });
+});
+
+describe("친구가 집 안에 있으면 따라 들어가기", () => {
+  it("친구가 있는 집 id를 주고, 운영자가 가린·없는 집이면 들어갈 수 없는 이유를 준다", async () => {
+    const [a, b, owner] = [await newVisitor(), await newVisitor("집순"), await newVisitor("집주인")];
+    const houseId = houseIdFor(owner.id);
+    await getHouseStore().create({ id: houseId, owner: owner.id, name: "작은 집", intro: "", ownerName: "집주인", tier: "small", lot: null, now: Date.now() });
+    const where: Record<string, PeerWhere> = { [b.id]: { ch: 3, sid: 4, x: 1, y: 1, away: true, place: "house", house: houseId } };
+    fakeRealtime({ 2: b }, where);
+    await ask(a, 2);
+    await reply(b, (await list(b)).incoming[0].key, true);
+    const key = (await list(a)).friends[0].key;
+    const one = async () => (await body<FriendWhereResponse>(await friendByKey.GET(call(`/api/friends/${key}`, a), params(key)))).where;
+    expect(await one()).toEqual({ at: "away", ch: 3, sid: 4, place: "house", houseId });
+    await getHouseStore().setHidden(houseId, true);
+    expect(await one()).toMatchObject({ houseId, houseBlocked: expect.stringContaining("가려") });
+    where[b.id] = { ...where[b.id], house: "없는집아이디1234" };
+    expect(await one()).toMatchObject({ houseBlocked: expect.stringContaining("찾을 수 없어요") });
+    // 사냥터처럼 따라갈 수 없는 곳은 집 정보가 없다
+    where[b.id] = { ch: 3, sid: 4, x: 1, y: 1, away: true, place: "hunt" };
+    expect(await one()).toEqual({ at: "away", ch: 3, sid: 4, place: "hunt" });
   });
 });

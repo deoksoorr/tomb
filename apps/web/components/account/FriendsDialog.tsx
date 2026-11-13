@@ -35,7 +35,8 @@ export function whereText(w: FriendWhere, myCh: number | null): string {
 function cannotGo(name: string, w: FriendWhere): string | null {
   if (w.at === "offline") return `${name}님은 지금 접속하지 않았어요.`;
   if (w.at === "unknown") return "지금은 위치를 알 수 없어요. 잠시 뒤 다시 해 주세요.";
-  if (w.at === "away") return `${name}님은 지금 ${w.place ? AWAY_PLACE_LABEL[w.place] : "실내"}에 있어요.`;
+  if (w.at === "away" && w.place === "house") return `${name}님은 집 안에 있는데 어느 집인지 알 수 없어 따라갈 수 없어요.`;
+  if (w.at === "away") return `${name}님은 지금 ${w.place ? AWAY_PLACE_LABEL[w.place] : "실내"}에 있어 따라갈 수 없어요.`;
   return null;
 }
 
@@ -131,6 +132,28 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
     try {
       const now = await friendsApi.where(f.key);
       const w = now.where;
+      // 집 안이면 그 집으로 따라 들어간다 (집 방문 흐름 그대로, 들어가면 집 장면이 친구 옆으로 옮긴다)
+      if (w.at === "away" && w.place === "house" && w.houseId) {
+        if (w.houseBlocked) {
+          setNotice(w.houseBlocked);
+          showFriendNotice(w.houseBlocked);
+          return;
+        }
+        const houseId = w.houseId;
+        const enter = () => {
+          bridge.emit("house:follow", { houseId, name: now.name, at: Date.now() });
+          bridge.emit("portal:open", { kind: "housing", houseId });
+        };
+        onClose();
+        if (myCh === null || w.ch === myCh) {
+          showFriendNotice(`${now.name}님이 있는 집으로 가는 중…`);
+          enter();
+        } else {
+          showFriendNotice(`${w.ch}채널로 옮긴 뒤 ${now.name}님이 있는 집으로 가요…`);
+          hopTo(w.ch, myCh, enter, () => showFriendNotice(`${w.ch}채널로 옮기지 못했어요. 채널이 가득 찼을 수 있어요.`));
+        }
+        return;
+      }
       const no = cannotGo(f.name, w);
       if (no || w.at !== "world") {
         setNotice(no);
@@ -276,11 +299,10 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
                         </div>
                       </div>
                       <div className={styles.actions}>
-                        {f.where.at === "world" && (
-                          <button type="button" className={cx(ui.button, ui.primary)} disabled={busy} onClick={() => void go(f)}>
-                            {here ? "친구한테 가기" : `친구한테 가기 (${f.where.ch}채널)`}
-                          </button>
-                        )}
+                        {/* 늘 보인다: 갈 수 없는 곳(사냥터·잡화점·접속 안 함 …)이면 누를 때 이유를 알려 준다 */}
+                        <button type="button" className={cx(ui.button, online && ui.primary)} disabled={busy} onClick={() => void go(f)}>
+                          {f.where.at === "world" && !here ? `친구한테 가기 (${f.where.ch}채널)` : "친구한테 가기"}
+                        </button>
                         {f.houseId && (
                           <button type="button" className={ui.button} disabled={busy} onClick={() => visit(f)}>
                             <PixelIcon name="house" />집 놀러 가기

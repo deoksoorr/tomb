@@ -97,7 +97,7 @@ export type GameEvents = {
   /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
   "megaphone:heard": { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; /** 운영자 계정이 외친 것 → 이름 금색 */ staff?: true };
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
-  "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house"; /** 친구 위치용: "house" 장면 중 분양 마을인지 집 안인지 */ place?: "village" | "house" };
+  "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house"; /** 친구 위치용: "house" 장면 중 분양 마을인지 집 안인지 */ place?: "village" | "house"; /** 집 안이면 그 집 id */ houseId?: string };
   /** 실시간 서버가 이 화면을 옛 버전이라 거절함(4010, 큰 패치) → UI가 업데이트 창을 띄운다 (sticky) */
   "app:outdated": { source: "channel" | "room" };
   /** 47번: 실시간 서버가 이용 제한으로 내보냄(4012) → UI가 새로고침해 제한 화면을 띄운다 */
@@ -310,6 +310,8 @@ export type UiEvents = {
   "friends:here": { ch: number; list: { sid: number; name: string }[] };
   /** 친구한테 가기 (같은 채널 마을): 친구 옆 걸을 수 있는 칸으로 순간이동. x,y = 서버가 알려 준 위치 (화면에 친구가 없을 때 쓴다) */
   "friend:goto": { sid: number; name: string; x: number; y: number };
+  /** 친구가 있는 집으로 따라 들어간다: 그 집 장면이 열리면 친구(이름)를 찾아 옆으로 옮긴다 (at = 누른 시각, 오래되면 무시. sticky) */
+  "house:follow": { houseId: string; name: string; at: number } | null;
 };
 
 export type ForageUse = { kind: "fish"; spot: string; water: "lake" | "river" } | { kind: "npc"; npc: "fishmonger" | "collector" } | { kind: "node"; node: string };
@@ -343,6 +345,7 @@ const STICKY = new Set<keyof AllEvents>([
   "ui:radial",
   "sky:hud",
   "friends:here",
+  "house:follow",
 ]);
 
 class Bridge {
