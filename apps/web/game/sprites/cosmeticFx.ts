@@ -730,6 +730,18 @@ const bodyDepth = (f: Pick<FxInput, "y" | "depth">) => f.depth ?? f.y;
 type Part = { x: number; y: number; born: number; frame: number; flip: boolean; vx: number };
 
 const TRAIL_POOL = 14;
+/** 새 흔적을 발에서 진행 방향 반대쪽으로 이만큼 (지나온 자리) */
+const TRAIL_BEHIND = 2;
+/** 몸 그림 반너비 (빛 흔적이 몸과 겹치는지 볼 때) */
+const BODY_HALF_W = 7;
+
+/** 흔적 그림이 몸 그림(발바닥 줄 위, 머리 꼭대기 아래, 몸 너비 안)과 겹치는지. 발바닥 줄 아래는 바닥이라 겹침이 아니다 */
+function overBody(c: FxCmd, a: { w: number; h: number }, f: Pick<FxInput, "x" | "headY" | "artTop">): boolean {
+  const hw = (a.w * Math.abs(c.sx)) / 2;
+  const top = c.y - a.h * Math.abs(c.sy) * c.oy;
+  const bottom = top + a.h * Math.abs(c.sy);
+  return Math.abs(c.x - f.x) < BODY_HALF_W + hw && top < f.headY - 1 && bottom > f.headY - f.artTop;
+}
 const PET_LAG_MS = 240;
 /** 펫이 물에 들어가거나 나오는 데 걸리는 시간 (뒤따라오느라 주인보다 조금 늦게 잠긴다) */
 const PET_WADE_MS = 260;
@@ -1010,9 +1022,9 @@ export class CosmeticFxSim {
           const side = this.stepAlt ? 1 : -1;
           const prints = s.motion === "prints";
           const p: Part = {
-            // 발자국은 좌우 발을 번갈아, 나머지는 살짝 흩어서
-            x: Math.round(f.x + (prints ? side * 2 * Math.abs(hy) : (Math.random() - 0.5) * 6)),
-            y: Math.round(f.y - 1 + (prints ? side * Math.abs(hx) : (Math.random() - 0.5) * 2)),
+            // 발자국은 좌우 발을 번갈아, 나머지는 살짝 흩어서. 새 흔적은 발 앞이 아닌 지나온 자리(진행 방향 반대쪽)에 찍는다
+            x: Math.round(f.x - hx * TRAIL_BEHIND + (prints ? side * 2 * Math.abs(hy) : (Math.random() - 0.5) * 6)),
+            y: Math.round(f.y - 1 - hy * TRAIL_BEHIND + (prints ? side * Math.abs(hx) : (Math.random() - 0.5) * 2)),
             born: f.now,
             frame: prints ? this.stepAlt : Math.floor(Math.random() * art.frames),
             flip: Math.random() < 0.5,
@@ -1031,6 +1043,7 @@ export class CosmeticFxSim {
       if (u < 0 || u >= 1) continue;
       const fade = u < 0.65 ? 1 : (1 - u) / 0.35;
       const base = { layer: (s.light ? "light" : "ground") as FxCmd["layer"], depth: 0 };
+      const n = out.length;
       switch (s.motion) {
         case "prints":
           out.push(cmd(s.art, p.frame, p.x, p.y, { ...base, alpha: fade }));
@@ -1056,6 +1069,9 @@ export class CosmeticFxSim {
           break;
         }
       }
+      // 빛 흔적(반짝·별·저승길 안개)은 맨 위 빛 층이라 아래로 걸으면 지나온 자리(몸 위쪽)의 입자가 몸을 덮는다 →
+      // 몸 그림과 겹치는 동안만 몸 뒤(body 층, 더해 그리기)로 내려 몸에 가려지게 한다. 발밑·몸 바깥은 그대로 빛 층.
+      if (s.light) for (let j = n; j < out.length; j++) if (overBody(out[j], art, f)) Object.assign(out[j], { layer: "body", add: true, depth: bodyDepth(f) - 0.3 });
     }
   }
 

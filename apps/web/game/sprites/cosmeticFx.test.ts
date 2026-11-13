@@ -161,6 +161,46 @@ describe("F8 effects (CosmeticFxSim)", () => {
     expect(out).toHaveLength(0);
   });
 
+  it("walking down, trails never cover the body (staff_steps 저승길 발자국 · sparkles · prints)", () => {
+    for (const id of ["staff_steps", "feet_sparkle", "feet_stars", "feet_prints", "feet_paws"]) {
+      const sim = new CosmeticFxSim();
+      sim.setLook([id]);
+      let behind = 0;
+      for (let i = 0; i < 60; i++) {
+        const out: FxCmd[] = [];
+        const y = 200 + i * 2;
+        sim.step(input({ now: 1000 + i * 33, y, headY: y, moving: true, dir: DIR.down }), out);
+        for (const c of out) {
+          // 발자국류는 언제나 바닥 층 (몸 밑)
+          if (!COSMETIC_FX[id] || !("light" in COSMETIC_FX[id] && COSMETIC_FX[id].light)) expect(c.layer, id).toBe("ground");
+          const a = FX_ART[c.art];
+          const top = c.y - a.h * c.sy * c.oy;
+          const over = Math.abs(c.x - 100) < 7 + (a.w * c.sx) / 2 && top < y - 1 && top + a.h * c.sy > y - 18;
+          // 몸과 겹치는 빛 입자는 몸 뒤 (몸 depth보다 아래, 더해 그리기)
+          if (over && c.layer !== "ground") {
+            expect(c.layer, id).toBe("body");
+            expect(c.depth, id).toBeLessThan(y);
+            expect(c.add, id).toBe(true);
+            behind++;
+          }
+        }
+      }
+      if (id === "staff_steps" || id === "feet_sparkle") expect(behind, id).toBeGreaterThan(0);
+    }
+  });
+
+  it("new footprints land behind the feet (where the avatar came from)", () => {
+    const sim = new CosmeticFxSim();
+    sim.setLook(["feet_prints"]);
+    const out: FxCmd[] = [];
+    for (let i = 0; i < 30; i++) {
+      out.length = 0;
+      sim.step(input({ now: 1000 + i * 33, y: 200 + i * 2, headY: 200 + i * 2, moving: true, dir: DIR.down }), out);
+    }
+    expect(out.length).toBeGreaterThan(0);
+    for (const c of out) expect(c.y).toBeLessThan(200 + 29 * 2 - 1);
+  });
+
   it("pets trail behind and catch up", () => {
     const sim = new CosmeticFxSim();
     sim.setLook(["pet_cat"]);
