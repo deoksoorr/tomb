@@ -720,7 +720,12 @@ export type FxInput = {
   hop?: number;
   /** 주인이 물에서 수영(swim)·잠수(dive) 중: 걷는 펫도 따라 들어가 헤엄치거나 수면 아래로 (나는 펫은 물 위를 그대로 난다) */
   water?: "swim" | "dive" | null;
+  /** 아바타 그림의 실제 depth (앉기·집 안 자세·놀거리는 발 y와 다르게 덮어쓴다). 없으면 y */
+  depth?: number;
 };
+
+/** 몸에 붙은 연출의 기준 depth: 아바타 그림 depth (덮어쓴 값이 있으면 그것) */
+const bodyDepth = (f: Pick<FxInput, "y" | "depth">) => f.depth ?? f.y;
 
 type Part = { x: number; y: number; born: number; frame: number; flip: boolean; vx: number };
 
@@ -855,7 +860,7 @@ export class CosmeticFxSim {
         sx: flap,
         flip: f.dir === DIR.right,
         layer: "body",
-        depth: f.y + (f.dir === DIR.up ? 0.05 : -0.05),
+        depth: bodyDepth(f) + (f.dir === DIR.up ? 0.05 : -0.05),
       }),
     );
   }
@@ -869,8 +874,8 @@ export class CosmeticFxSim {
     const cx = Math.round(hx - Math.sign(f.hand.dx || 1) * 2.5);
     const front = f.dir === DIR.up ? -0.06 : 0.06;
     const len = Math.max(2, hy - canopyY);
-    out.push(cmd("stick", 0, hx, hy, { oy: 1, sy: len / 8, layer: "body", depth: f.y + front }));
-    out.push(cmd("umbrella", 0, cx, canopyY + 1, { oy: 1, layer: "body", depth: f.y + front + 0.01 }));
+    out.push(cmd("stick", 0, hx, hy, { oy: 1, sy: len / 8, layer: "body", depth: bodyDepth(f) + front }));
+    out.push(cmd("umbrella", 0, cx, canopyY + 1, { oy: 1, layer: "body", depth: bodyDepth(f) + front + 0.01 }));
   }
 
   private balloon(f: FxInput, t: number, out: FxCmd[]): void {
@@ -894,7 +899,7 @@ export class CosmeticFxSim {
     const dx = bx - hx;
     const dy = by - hy;
     const len = Math.max(1, Math.hypot(dx, dy));
-    const depth = f.y + (f.dir === DIR.up ? -0.06 : 0.06);
+    const depth = bodyDepth(f) + (f.dir === DIR.up ? -0.06 : 0.06);
     out.push(cmd("string", 0, Math.round(hx), Math.round(hy), { oy: 1, sy: len / 8, rot: Math.atan2(dx, -dy), layer: "body", depth }));
     out.push(cmd("balloon", 0, bx, by + 1, { oy: 1, layer: "body", depth: depth + 0.01 }));
   }
@@ -1057,7 +1062,7 @@ export class CosmeticFxSim {
   private aura(s: AuraSpec, f: FxInput, t: number, out: FxCmd[]): void {
     const bx = f.x;
     const top = f.headY - f.artTop;
-    const front = f.y + 0.2;
+    const front = bodyDepth(f) + 0.2;
     switch (s.motion) {
       case "orbit":
         // 기울어진 고리를 따라 돈다: 위아래로 출렁이며 뒤쪽 반원은 몸 뒤로
@@ -1087,7 +1092,7 @@ export class CosmeticFxSim {
         const legend = s.motion === "tierLegend";
         // 몸 뒤 은은한 빛 (숨 쉬듯)
         const breathe = f.reduced ? 0.8 : 0.7 + 0.3 * Math.sin(t / 900);
-        out.push(cmd("tierGlow", legend ? 1 : 0, bx, Math.round(f.headY - f.artTop * 0.45), { alpha: breathe, sx: 1 + 0.04 * breathe, sy: 1 + 0.04 * breathe, layer: "body", depth: f.y - 0.3, add: true }));
+        out.push(cmd("tierGlow", legend ? 1 : 0, bx, Math.round(f.headY - f.artTop * 0.45), { alpha: breathe, sx: 1 + 0.04 * breathe, sy: 1 + 0.04 * breathe, layer: "body", depth: bodyDepth(f) - 0.3, add: true }));
         if (legend) {
           // 전설: 무지개 반짝이가 몸 둘레를 나선으로 돌며 피어오른다
           const n = 7;
@@ -1233,7 +1238,7 @@ export class CosmeticFxSim {
  * 앞쪽 반원은 몸 앞(depth 위), 뒤쪽 반원은 몸 뒤(depth 아래)에 그리고, 뒤로 갈수록 조금 작고 어둡게 → 입체감.
  * light = 빛 입자 (더해 그린다: 앞쪽은 light 층, 뒤쪽은 몸에 가려지게 body 층 + add)
  */
-export function around(f: Pick<FxInput, "y">, z: number, o: Partial<FxCmd>, light = false): Partial<FxCmd> {
+export function around(f: Pick<FxInput, "y" | "depth">, z: number, o: Partial<FxCmd>, light = false): Partial<FxCmd> {
   const back = z < 0;
   const k = back ? 1 + 0.22 * z : 1;
   const dim = back ? 1 + 0.4 * z : 1;
@@ -1246,7 +1251,7 @@ export function around(f: Pick<FxInput, "y">, z: number, o: Partial<FxCmd>, ligh
     // 앞쪽 빛은 맨 위 빛 층 (밤 어둠에 묻히지 않게), 뒤쪽 빛은 몸 뒤에서 더해 그린다
     layer: light && !back ? "light" : "body",
     add: (light && back) || undefined,
-    depth: back ? f.y - 0.2 : f.y + 0.2,
+    depth: back ? bodyDepth(f) - 0.2 : bodyDepth(f) + 0.2,
   };
 }
 

@@ -771,6 +771,8 @@ export class AvatarView {
           riding: this.mountedIn(st),
           hop: this.hop,
           water: st === "swim" || st === "dive" ? st : null,
+          // 앉기(피아노·책상·벤치)·집 안 자세는 그림 depth를 덮어쓴다: 날개 앞뒤도 그 값 기준이어야 몸에 안 가린다
+          depth: this.depthOverride ?? s.y,
         },
         vis,
         fa,
@@ -873,7 +875,8 @@ export class AvatarView {
         .setScale(flap, 1)
         // 뒷모습(up)이면 날개가 앞에 보이고, 나머지는 몸 뒤
         .setDepth(this.dir === DIR.up ? depth + 0.05 : depth - 0.05)
-        .setVisible(vis && !wet && st !== "hammock");
+        // 이불 속·욕조 물속에서는 날개를 숨긴다 (꾸미기 연출과 같은 규칙)
+        .setVisible(vis && !wet && st !== "hammock" && st !== "lie" && st !== "bath");
     }
     if (this.pet) {
       // 몸 뒤쪽으로 조금 떨어져 느긋하게 따라온다

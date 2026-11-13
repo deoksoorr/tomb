@@ -229,6 +229,20 @@ describe("F8 effects (CosmeticFxSim)", () => {
     }
   });
 
+  it("wings follow the avatar's overridden depth (sitting at a piano/bench): over the body from behind, under it otherwise", () => {
+    const sim = new CosmeticFxSim();
+    sim.setLook(["back_wings_angel"]);
+    // 앉으면 몸 depth = 자리 y + 1 인데 그림 y는 3px 들어 올린다 → 날개는 덮어쓴 depth 기준이어야 한다
+    const body = 204;
+    for (const dir of [DIR.up, DIR.down, DIR.left, DIR.right]) {
+      const out: FxCmd[] = [];
+      sim.step(input({ y: 200, dir, depth: body }), out);
+      const w = out.find((c) => c.art === "wingsAngel")!;
+      if (dir === DIR.up) expect(w.depth, "뒷모습이면 몸 위").toBeGreaterThan(body);
+      else expect(w.depth, `dir ${dir}이면 몸 뒤`).toBeLessThan(body);
+    }
+  });
+
   it("still preview (reduced motion) is deterministic and pre-seeds trails while walking", () => {
     const a = new CosmeticFxSim();
     const b = new CosmeticFxSim();
