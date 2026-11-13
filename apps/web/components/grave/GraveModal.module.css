@@ -11,10 +11,10 @@
   min-width: 0;
 }
 
-/* 넓은 화면: 사진·헌화(왼쪽)와 글·정보(오른쪽) 1:1 두 칸 — 사진이 오른쪽 칸 높이만큼 늘어나 아래가 비지 않는다 */
+/* 넓은 화면: 사진·헌화(왼쪽)와 글·정보(오른쪽) 1:2 두 칸 — 사진이 오른쪽 칸 높이만큼 늘어나 아래가 비지 않는다 */
 @media (min-width: 640px) {
   .grave {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
     gap: 18px;
     align-items: stretch;
   }
@@ -56,8 +56,14 @@
     gap: 8px;
   }
 
+  /* 공유·신고 (+ 주인·운영자 버튼까지 7개)도 한 줄에 들어가게 좌우 여백만 줄인다 */
   .main .secondary {
     justify-content: flex-start;
+    gap: 0;
+  }
+
+  .main .secondary > button {
+    padding-inline: 9px;
   }
 
   .main .notice:empty {
