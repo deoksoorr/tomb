@@ -30,7 +30,11 @@ export default function DonateButton({ inline = false }: { inline?: boolean }) {
             <figure className={styles.qrBox}>
               <img className={styles.qr} src="/donation.png" width={718} height={718} alt="카카오페이 후원 QR 코드" />
             </figure>
-            <p className={styles.note}>후원금은 서버 운영과 앞으로의 콘텐츠 제작에 쓰여요.</p>
+            <p className={styles.note}>
+              후원금은 서버 운영과 앞으로의 콘텐츠 제작에 쓰여요.
+              <br />
+              후원해도 게임 안 혜택(포인트·아이템)은 없어요.
+            </p>
           </div>
         </Dialog>
       )}
