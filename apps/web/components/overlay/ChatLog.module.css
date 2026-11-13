@@ -45,10 +45,11 @@
   position: relative;
 }
 
-/* 높이 고정(약 8줄), 넘치면 상자 안에서 스크롤 */
+/* 높이 고정(약 8줄), 넘치면 상자 안에서 스크롤. 글이 적을 때도 맨 아래부터 쌓여 위로 올라간다
+   (align-content: end는 넘칠 때 위쪽이 스크롤로 안 닿으므로, 첫 줄 margin-top: auto로 아래에 붙인다) */
 .log {
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: 1px;
   height: calc(8 * 1.45em + 7px);
   margin: 0;
@@ -58,6 +59,10 @@
   list-style: none;
   scrollbar-width: thin;
   scrollbar-color: var(--muted) transparent;
+}
+
+.log > :first-child {
+  margin-top: auto;
 }
 
 /* 위로 올려 읽는 중에 새 글이 오면 */
