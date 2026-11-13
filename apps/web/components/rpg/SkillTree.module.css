@@ -628,6 +628,19 @@
   display: none;
 }
 
+/* 아무것도 고르지 않았을 때 */
+.emptyTitle {
+  margin: 0;
+  color: var(--bone);
+  font-size: 14px;
+}
+
+.emptyText {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .dHead {
   display: flex;
   align-items: center;
@@ -1051,16 +1064,30 @@
   -webkit-user-drag: none;
 }
 
-/* 고른 스킬을 놓을 수 있는 칸 · 끌고 있을 때 모든 칸: 점선 금테 */
-.slot[data-target],
-.wrap[data-dragging] .slot {
-  box-shadow: inset 0 0 0 1px var(--candle);
-  outline: 1px dashed color-mix(in srgb, var(--candle) 70%, transparent);
-  outline-offset: -5px;
+/* 단축 칸 테두리는 두 경우뿐 (규칙: skillPick.ts slotLook)
+   ① 고른 스킬이 들어 있는 칸: 트리 선택과 같은 금색 얇은 테 */
+.slot[data-mine] {
+  box-shadow: inset 0 0 0 2px var(--candle);
 }
 
-.slot[data-target]:hover {
-  background: var(--surface-hover);
+/* ② 놓을 자리 미리보기: 넣을 수 있는 스킬을 고른 채 마우스를 올린(키보드 포커스) 칸 · 끌고 있는 스킬 아래 칸.
+   터치 기기는 :hover가 탭 뒤에 남지 않게 뺀다 */
+@media (hover: hover) {
+  .slot[data-preview]:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--candle) 22%, var(--surface));
+    box-shadow:
+      inset 0 0 0 2px var(--candle),
+      0 0 12px color-mix(in srgb, var(--candle) 55%, transparent);
+    transform: translateY(-2px);
+  }
+}
+
+.slot[data-preview]:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--candle) 22%, var(--surface));
+  box-shadow:
+    inset 0 0 0 2px var(--candle),
+    0 0 12px color-mix(in srgb, var(--candle) 55%, transparent);
+  transform: translateY(-2px);
 }
 
 .slot[data-over] {

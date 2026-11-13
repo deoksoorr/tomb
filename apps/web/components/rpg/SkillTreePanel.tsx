@@ -19,13 +19,14 @@ import type { RpgView } from "@/lib/rpg/types";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import RpgIcon from "./RpgIcon";
-import { initialPick, nextPick } from "./skillPick";
+import { initialPick, keyPress, nextPick, slotLook, slotPress, type SlotAction } from "./skillPick";
 import s from "./rpg.module.css";
 import t from "./SkillTree.module.css";
 
 // 스킬 트리 창: 위에 남은 포인트·초기화 비용, 갈래 탭(쓴 포인트), 가운데 트리 + 오른쪽 상세(휴대폰은 아래 시트), 맨 아래 단축 슬롯 줄.
 // 단축 슬롯 놓기: 배운 액티브 노드를 슬롯으로 끌어다 놓기(마우스·터치) / 노드를 고르고 슬롯 누르기·숫자 키 1~6 /
 // 슬롯끼리 끌어서 바꾸기 / 슬롯에서 밖으로 끌어내면 빼기. 사냥 화면 단축 줄과 같은 데이터(character.hotbar)다.
+// 선택·단축 칸 테두리 규칙은 skillPick.ts 한곳에 있다 (선택은 트리 스킬 하나뿐, 빈 곳·Esc로 해제).
 // 규칙(단·선행·포인트·단축 칸)은 서버가 다시 검사한다 — 화면은 보여 주기만.
 
 type Props = {
@@ -63,7 +64,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
   const c = view.character;
   const budget = spentPoints(c.skills) + c.skillPoints;
   const firstBranch = (BRANCHES.find((b) => spentIn(c.skills, b) > 0) ?? "ember") as BranchId;
-  // 보는 갈래 + 눌러서 고른 스킬. 설명은 고른 스킬만 따라간다 (마우스 올림·포커스로는 안 바뀜)
+  // 보는 갈래 + 눌러서 고른 스킬(없을 수 있음). 설명은 고른 스킬만 따라간다 (마우스 올림·포커스로는 안 바뀜)
   const [sel, setSel] = useState(() => initialPick(firstBranch));
   const { branch, picked } = sel;
   const [confirmReset, setConfirmReset] = useState(false);
@@ -95,13 +96,14 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
 
   const nodes = SKILLS.filter((x) => x.branch === branch);
   const info = BRANCH_INFO[branch];
-  const d = skillById(picked) ?? nodes[0];
-  const dRank = rank(d.id);
-  const dSlot = hotbar.indexOf(d.id);
-  const why = checkLearn(c.skills, d.id, budget);
-  const pickedDef = skillById(picked)!;
-  const placing = slotBlock(pickedDef) ? null : pickedDef;
-  const text = SKILL_TEXT[d.id];
+  const d = picked ? skillById(picked) : undefined;
+  const dRank = d ? rank(d.id) : 0;
+  const dSlot = d ? hotbar.indexOf(d.id) : -1;
+  const why = d ? checkLearn(c.skills, d.id, budget) : null;
+  const pickBlock = d ? slotBlock(d) : null;
+  /** 고른 스킬을 단축 칸에 넣을 수 있다 (배운 액티브) */
+  const placeable = !!d && !pickBlock;
+  const text = d ? SKILL_TEXT[d.id] : null;
 
   function place(id: SkillId, to: number | null) {
     const def = skillById(id)!;
@@ -133,27 +135,69 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
           : `${josa(def.name, "을", "를")} ${to + 1}번 칸에 놓았어요.`,
     );
   }
+  const pick = (b: BranchId) => setSel((p) => nextPick(p, { type: "branch", branch: b }));
+  // 클릭·탭·Enter·Space(버튼 기본 동작) 모두 여기로 온다. 끌어다 놓은 뒤 따라온 click은 선택을 바꾸지 않는다
+  const select = (id: SkillId) => {
+    const afterDrag = suppressClick.current;
+    setSel((p) => nextPick(p, { type: "press", id, afterDrag }));
+    if (afterDrag) return;
+    setSheet(true);
+    setHint(null);
+  };
+
+  /** 단축 칸 누름·숫자 키의 결과(skillPick.ts가 정함)를 실제로 한다 */
+  function runSlot(a: SlotAction, i: number) {
+    switch (a.do) {
+      case "place":
+        return place(a.id, a.to);
+      case "select":
+        return select(a.id);
+      case "hint":
+        return setHint(
+          a.why === "blocked"
+            ? pickBlock
+            : a.why === "already"
+              ? `${josa(d!.name, "은", "는")} 이미 ${i + 1}번 칸에 있어요. 빼려면 칸을 줄 밖으로 끌어내세요.`
+              : a.why === "pickFirst"
+                ? "먼저 스킬 트리에서 배운 액티브 스킬을 고르세요. 그다음 숫자 키를 누르면 그 칸에 놓여요."
+                : "스킬 트리에서 배운 액티브 스킬을 고른 뒤 이 칸을 누르거나, 노드를 끌어다 놓으세요.",
+        );
+    }
+  }
+  const clearPick = () => {
+    setSel((p) => nextPick(p, { type: "clear" }));
+    setSheet(false);
+    setHint(null);
+  };
+
   // 최신 값을 전역 포인터·키 처리기에서 읽는다
-  const live = useRef({ busy, place });
+  const live = useRef({ busy, place, runSlot, clearPick, picked, placeable, hotbar });
   useEffect(() => {
-    live.current = { busy, place };
+    live.current = { busy, place, runSlot, clearPick, picked, placeable, hotbar };
   });
 
-  // 숫자 키 1~6: 고른 스킬을 그 칸에 놓는다
+  // 숫자 키 1~6: 고른 스킬을 그 칸에 놓는다 · Esc: 고른 게 있으면 선택만 해제(창은 안 닫힘), 없으면 창이 닫힌다
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const L = live.current;
+      if (e.key === "Escape") {
+        if (L.picked === null) return;
+        e.preventDefault();
+        L.clearPick();
+        return;
+      }
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       const n = Number(e.key);
       if (!Number.isInteger(n) || n < 1 || n > HOTBAR_SIZE) return;
       e.preventDefault();
-      if (live.current.busy) return;
-      live.current.place(picked, n - 1);
+      if (L.busy) return;
+      L.runSlot(keyPress(L.picked, L.placeable, L.hotbar, n), n - 1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [picked]);
+  }, []);
 
   // ── 끌어다 놓기 (마우스·터치 공통: 포인터 이벤트) ──
   function startPointer(e: ReactPointerEvent, id: SkillId, from: number | null) {
@@ -206,26 +250,16 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
     window.addEventListener("pointercancel", cancel);
   }
 
-  const pick = (b: BranchId) => setSel((p) => nextPick(p, { type: "branch", branch: b }));
-  // 클릭·탭·Enter·Space(버튼 기본 동작) 모두 여기로 온다. 끌어다 놓은 뒤 따라온 click은 선택을 바꾸지 않는다
-  const select = (id: SkillId) => {
-    const afterDrag = suppressClick.current;
-    setSel((p) => nextPick(p, { type: "press", id, afterDrag }));
-    if (afterDrag) return;
-    setSheet(true);
-    setHint(null);
-  };
-
   const dockHint = drag
     ? drag.from !== null
       ? "다른 칸에 놓으면 자리를 바꾸고, 줄 밖에 놓으면 단축 칸에서 빠져요."
       : `${josa(skillById(drag.id)!.name, "을", "를")} 놓을 칸 위에서 손을 떼세요.`
     : (hint ??
-      (placing
-        ? `${placing.name}: 칸을 누르거나 숫자 키 1~${HOTBAR_SIZE}를 누르면 바로 놓여요. 노드를 칸으로 끌어와도 돼요.`
-        : slotBlock(pickedDef) && pickedDef.kind === "passive"
-          ? "패시브는 배우면 늘 켜져 있어서 단축 칸이 필요 없어요."
-          : "배운 액티브 스킬을 칸으로 끌어다 놓거나, 스킬을 고른 뒤 칸·숫자 키를 누르세요."));
+      (!d
+        ? `트리에서 배운 액티브 스킬을 고른 뒤 칸이나 숫자 키 1~${HOTBAR_SIZE}을 누르면 놓여요. 노드를 칸으로 끌어와도 돼요.`
+        : pickBlock
+          ? pickBlock
+          : `${d.name}: ${dSlot >= 0 ? `지금 ${dSlot + 1}번 칸 · ` : ""}넣을 칸을 누르거나 숫자 키 1~${HOTBAR_SIZE}을 누르세요.`));
 
   const resetLabel = view.respecCost > 0 ? `${view.respecCost}P` : c.respecs > 0 ? "무료" : "무료 (첫 1회)";
 
@@ -234,6 +268,12 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
       ref={wrapRef}
       className={cx(s.lobby, t.wrap)}
       data-dragging={drag ? "" : undefined}
+      // 빈 곳(버튼·설명 밖)을 누르면 선택 해제. 끌어다 놓은 뒤 따라온 click은 무시
+      onClick={(e) => {
+        if (suppressClick.current) return;
+        if ((e.target as HTMLElement).closest("button, a, input, select, textarea, label, aside")) return;
+        clearPick();
+      }}
       style={{ "--br": hex(info.color), "--br-light": hex(info.light), "--br-dark": hex(info.dark) } as CSSProperties}
     >
       {c.treeNotice && (
@@ -413,147 +453,157 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
           <p className={t.branchDesc}>{info.desc}</p>
         </section>
 
-        <aside className={t.detail} data-sheet={sheet || undefined} aria-live="polite" aria-label={`${d.name} 설명`}>
-          <button type="button" className={t.sheetClose} onClick={() => setSheet(false)} aria-label="설명 닫기">
-            닫기 ✕
-          </button>
-          <div className={t.dHead}>
-            <span className={t.dIcon} data-state={stateOf(d)} data-passive={d.kind === "passive" || undefined}>
-              <RpgIcon art={d.art} size={48} />
-            </span>
-            <div className={t.dTitle}>
-              <p className={t.dName}>{d.name}</p>
-              <p className={t.dWhere}>
-                {BRANCH_INFO[d.branch].name} · {d.tier}단
-              </p>
-              <p className={t.dRank}>
-                <span className={t.pips} aria-hidden="true">
-                  {Array.from({ length: d.maxLevel }, (_, i) => (
-                    <i key={i} data-on={i < dRank || undefined} />
-                  ))}
-                </span>
-                랭크 {dRank}/{d.maxLevel}
-              </p>
-            </div>
-          </div>
-          <ul className={t.tags} aria-label="스킬 유형">
-            {skillTypes(d).map((tag) => (
-              <li key={tag} data-tag={tag}>
-                <Glyph tag={tag} />
-                {TYPE_TAG_LABEL[tag]}
-              </li>
-            ))}
-          </ul>
-          {why && dRank < d.maxLevel && why.code === "NO_SKILL_POINTS" && <p className={t.warn}>{why.message} 레벨이 오르면 1포인트씩 받아요.</p>}
-          <div className={t.actions}>
-            <button
-              type="button"
-              className={cx(ui.button, !why && ui.primary, t.learnBtn)}
-              disabled={busy || !!why}
-              onClick={() => onCharacter({ type: "learn", skill: d.id }, `${d.name} ${dRank + 1}랭크를 찍었어요.`)}
-            >
-              {dRank >= d.maxLevel ? "최대 랭크예요" : why && why.code !== "NO_SKILL_POINTS" ? `잠김 · ${requirements(d, c.skills).find((r) => !r.ok)?.text ?? why.message}` : dRank ? `${dRank + 1}랭크로 올리기 · 1포인트` : "배우기 · 1포인트"}
+        {!d || !text ? (
+          <aside className={t.detail} data-empty aria-label="스킬 설명">
+            <p className={t.emptyTitle}>
+              {info.name} · {info.role}
+            </p>
+            <p className={t.emptyText}>트리에서 스킬을 누르면 설명과 배우기 버튼이 여기 나와요.</p>
+            <p className={t.emptyText}>스킬을 고른 채로 아래 단축 칸이나 숫자 키 1~{HOTBAR_SIZE}을 누르면 그 칸에 들어가요. 빈 곳을 누르거나 Esc를 누르면 선택이 풀려요.</p>
+          </aside>
+        ) : (
+          <aside className={t.detail} data-sheet={sheet || undefined} aria-live="polite" aria-label={`${d.name} 설명`}>
+            <button type="button" className={t.sheetClose} onClick={() => setSheet(false)} aria-label="설명 닫기">
+              닫기 ✕
             </button>
-            {d.kind === "active" && dRank > 0 && (
-              <div className={t.quickSlots} role="group" aria-label={`${d.name} 단축 칸 고르기`}>
-                <span>단축 칸</span>
-                {Array.from({ length: HOTBAR_SIZE }, (_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    className={t.quickSlot}
-                    aria-pressed={dSlot === i}
-                    disabled={busy}
-                    onClick={() => (dSlot === i ? place(d.id, null) : place(d.id, i))}
-                    title={dSlot === i ? `${i + 1}번에서 빼기` : `${i + 1}번 칸에 놓기${hotbar[i] ? ` (${skillById(hotbar[i]!)!.name}과 자리 바꿈)` : ""}`}
-                  >
-                    {i + 1}
-                  </button>
+            <div className={t.dHead}>
+              <span className={t.dIcon} data-state={stateOf(d)} data-passive={d.kind === "passive" || undefined}>
+                <RpgIcon art={d.art} size={48} />
+              </span>
+              <div className={t.dTitle}>
+                <p className={t.dName}>{d.name}</p>
+                <p className={t.dWhere}>
+                  {BRANCH_INFO[d.branch].name} · {d.tier}단
+                </p>
+                <p className={t.dRank}>
+                  <span className={t.pips} aria-hidden="true">
+                    {Array.from({ length: d.maxLevel }, (_, i) => (
+                      <i key={i} data-on={i < dRank || undefined} />
+                    ))}
+                  </span>
+                  랭크 {dRank}/{d.maxLevel}
+                </p>
+              </div>
+            </div>
+            <ul className={t.tags} aria-label="스킬 유형">
+              {skillTypes(d).map((tag) => (
+                <li key={tag} data-tag={tag}>
+                  <Glyph tag={tag} />
+                  {TYPE_TAG_LABEL[tag]}
+                </li>
+              ))}
+            </ul>
+            {why && dRank < d.maxLevel && why.code === "NO_SKILL_POINTS" && <p className={t.warn}>{why.message} 레벨이 오르면 1포인트씩 받아요.</p>}
+            <div className={t.actions}>
+              <button
+                type="button"
+                className={cx(ui.button, !why && ui.primary, t.learnBtn)}
+                disabled={busy || !!why}
+                onClick={() => onCharacter({ type: "learn", skill: d.id }, `${d.name} ${dRank + 1}랭크를 찍었어요.`)}
+              >
+                {dRank >= d.maxLevel ? "최대 랭크예요" : why && why.code !== "NO_SKILL_POINTS" ? `잠김 · ${requirements(d, c.skills).find((r) => !r.ok)?.text ?? why.message}` : dRank ? `${dRank + 1}랭크로 올리기 · 1포인트` : "배우기 · 1포인트"}
+              </button>
+              {d.kind === "active" && dRank > 0 && (
+                <div className={t.quickSlots} role="group" aria-label={`${d.name} 단축 칸 고르기`}>
+                  <span>단축 칸</span>
+                  {Array.from({ length: HOTBAR_SIZE }, (_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className={t.quickSlot}
+                      aria-pressed={dSlot === i}
+                      disabled={busy}
+                      onClick={() => (dSlot === i ? place(d.id, null) : place(d.id, i))}
+                      title={dSlot === i ? `${i + 1}번에서 빼기` : `${i + 1}번 칸에 놓기${hotbar[i] ? ` (${skillById(hotbar[i]!)!.name}과 자리 바꿈)` : ""}`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                  {dSlot >= 0 && (
+                    <button type="button" className={cx(ui.button, t.unslot)} disabled={busy} onClick={() => place(d.id, null)}>
+                      빼기
+                    </button>
+                  )}
+                </div>
+              )}
+              {d.kind === "passive" && <p className={t.note}>패시브는 배우면 사냥 내내 늘 켜져 있어요. 단축 칸이 필요 없어요.</p>}
+            </div>
+            <p className={t.summary}>{text.summary}</p>
+
+            <table className={t.stats}>
+              <thead>
+                <tr>
+                  <th scope="col">효과</th>
+                  {dRank === 0 ? (
+                    <>
+                      <th scope="col">1랭크</th>
+                      {d.maxLevel > 1 && <th scope="col">최대 {d.maxLevel}랭크</th>}
+                    </>
+                  ) : (
+                    <>
+                      <th scope="col">지금 {dRank}랭크</th>
+                      {dRank < d.maxLevel && <th scope="col">다음 {dRank + 1}랭크</th>}
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {compareStats(d, Math.max(1, dRank), dRank === 0 ? (d.maxLevel > 1 ? d.maxLevel : null) : dRank < d.maxLevel ? dRank + 1 : null).map((row) => (
+                  <tr key={row.label} data-changed={row.changed || undefined}>
+                    <th scope="row">{row.label}</th>
+                    <td>{row.a}</td>
+                    {row.b !== null && <td>{row.b}</td>}
+                  </tr>
                 ))}
-                {dSlot >= 0 && (
-                  <button type="button" className={cx(ui.button, t.unslot)} disabled={busy} onClick={() => place(d.id, null)}>
-                    빼기
-                  </button>
+              </tbody>
+            </table>
+            <p className={t.tableNote}>피해 %는 내 공격력 기준 (INT가 높으면 스킬이 더 세요) · 거리는 화면 점 단위</p>
+
+            {text.synergy.length > 0 && (
+              <div className={t.block}>
+                <p className={t.blockTitle}>함께 쓰면</p>
+                <ul className={t.synergy}>
+                  {text.synergy.map((sy) => (
+                    <li key={sy.text}>
+                      <span className={t.syIcons} aria-hidden="true">
+                        {sy.with.slice(0, 3).map((id) => (
+                          <span key={id} data-have={rank(id) > 0 || undefined}>
+                            <RpgIcon art={skillById(id)!.art} size={16} />
+                          </span>
+                        ))}
+                      </span>
+                      <span>
+                        <b>{josa(names(sy.with), "과", "와")} 함께 쓰면</b> {sy.text}.
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {(d.tier > 1 || (d.requires ?? []).length > 0 || unlocks(d.id).length > 0) && (
+              <div className={t.block}>
+                <p className={t.blockTitle}>배우는 조건</p>
+                <ul className={t.reqs}>
+                  {requirements(d, c.skills).map((r) => (
+                    <li key={r.text} data-ok={r.ok || undefined}>
+                      {r.text} <span>({Math.min(r.have, r.need)}/{r.need})</span>
+                    </li>
+                  ))}
+                  {d.tier === 1 && (d.requires ?? []).length === 0 && <li data-ok>1단 · 바로 배울 수 있어요</li>}
+                </ul>
+                {unlocks(d.id).length > 0 && (
+                  <p className={t.unlocks}>
+                    다음에 열리는 스킬: {unlocks(d.id).map((u) => `${u.def.name}(${u.level}랭크)`).join(", ")}
+                  </p>
                 )}
               </div>
             )}
-            {d.kind === "passive" && <p className={t.note}>패시브는 배우면 사냥 내내 늘 켜져 있어요. 단축 칸이 필요 없어요.</p>}
-          </div>
-          <p className={t.summary}>{text.summary}</p>
 
-          <table className={t.stats}>
-            <thead>
-              <tr>
-                <th scope="col">효과</th>
-                {dRank === 0 ? (
-                  <>
-                    <th scope="col">1랭크</th>
-                    {d.maxLevel > 1 && <th scope="col">최대 {d.maxLevel}랭크</th>}
-                  </>
-                ) : (
-                  <>
-                    <th scope="col">지금 {dRank}랭크</th>
-                    {dRank < d.maxLevel && <th scope="col">다음 {dRank + 1}랭크</th>}
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {compareStats(d, Math.max(1, dRank), dRank === 0 ? (d.maxLevel > 1 ? d.maxLevel : null) : dRank < d.maxLevel ? dRank + 1 : null).map((row) => (
-                <tr key={row.label} data-changed={row.changed || undefined}>
-                  <th scope="row">{row.label}</th>
-                  <td>{row.a}</td>
-                  {row.b !== null && <td>{row.b}</td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className={t.tableNote}>피해 %는 내 공격력 기준 (INT가 높으면 스킬이 더 세요) · 거리는 화면 점 단위</p>
+            <p className={t.flavor}>“{text.flavor}”</p>
 
-          {text.synergy.length > 0 && (
-            <div className={t.block}>
-              <p className={t.blockTitle}>함께 쓰면</p>
-              <ul className={t.synergy}>
-                {text.synergy.map((sy) => (
-                  <li key={sy.text}>
-                    <span className={t.syIcons} aria-hidden="true">
-                      {sy.with.slice(0, 3).map((id) => (
-                        <span key={id} data-have={rank(id) > 0 || undefined}>
-                          <RpgIcon art={skillById(id)!.art} size={16} />
-                        </span>
-                      ))}
-                    </span>
-                    <span>
-                      <b>{josa(names(sy.with), "과", "와")} 함께 쓰면</b> {sy.text}.
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {(d.tier > 1 || (d.requires ?? []).length > 0 || unlocks(d.id).length > 0) && (
-            <div className={t.block}>
-              <p className={t.blockTitle}>배우는 조건</p>
-              <ul className={t.reqs}>
-                {requirements(d, c.skills).map((r) => (
-                  <li key={r.text} data-ok={r.ok || undefined}>
-                    {r.text} <span>({Math.min(r.have, r.need)}/{r.need})</span>
-                  </li>
-                ))}
-                {d.tier === 1 && (d.requires ?? []).length === 0 && <li data-ok>1단 · 바로 배울 수 있어요</li>}
-              </ul>
-              {unlocks(d.id).length > 0 && (
-                <p className={t.unlocks}>
-                  다음에 열리는 스킬: {unlocks(d.id).map((u) => `${u.def.name}(${u.level}랭크)`).join(", ")}
-                </p>
-              )}
-            </div>
-          )}
-
-          <p className={t.flavor}>“{text.flavor}”</p>
-
-        </aside>
+          </aside>
+        )}
       </div>
 
       <section className={t.dock} aria-labelledby="rpg-hotbar" data-over={over !== null || undefined}>
@@ -569,7 +619,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
         <div className={t.slots}>
           {Array.from({ length: HOTBAR_SIZE }, (_, i) => {
             const sk = skillById(hotbar[i] ?? "");
-            const target = !!placing && hotbar[i] !== placing.id;
+            const look = slotLook(i, hotbar, picked, placeable, drag, over);
             return (
               <button
                 key={i}
@@ -577,24 +627,22 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
                 data-slot={i}
                 className={t.slot}
                 data-filled={sk ? "" : undefined}
-                data-target={(target && !drag) || undefined}
-                data-over={over === i || undefined}
+                data-mine={look.mine || undefined}
+                data-preview={look.canPreview || undefined}
+                data-over={look.previewNow || undefined}
                 data-lifted={(drag && drag.from === i) || undefined}
                 disabled={busy}
                 aria-label={
-                  target
-                    ? `${i + 1}번 칸에 ${placing!.name} 놓기${sk ? ` (${sk.name}과 자리 바꿈)` : ""}`
-                    : sk
-                      ? `${i + 1}번 칸 ${sk.name}. 누르면 설명, 끌어서 옮기기`
-                      : `${i + 1}번 칸 비어 있음`
+                  look.mine
+                    ? `${i + 1}번 칸 ${sk!.name} (고른 스킬)`
+                    : look.canPreview
+                      ? `${i + 1}번 칸에 ${d!.name} 놓기${sk ? ` (${josa(sk.name, "과", "와")} ${dSlot >= 0 ? "자리 바꿈" : "바꿔 넣기"})` : ""}`
+                      : sk
+                        ? `${i + 1}번 칸 ${sk.name}${d ? "" : ". 누르면 이 스킬을 고름, 끌어서 옮기기"}`
+                        : `${i + 1}번 칸 비어 있음`
                 }
                 onPointerDown={(e) => sk && startPointer(e, sk.id, i)}
-                onClick={() => {
-                  if (suppressClick.current) return;
-                  if (target) place(placing!.id, i);
-                  else if (sk) select(sk.id);
-                  else setHint("스킬 트리에서 배운 액티브 스킬을 골라 이 칸을 누르거나, 노드를 끌어다 놓으세요.");
-                }}
+                onClick={() => runSlot(slotPress(picked, placeable, hotbar, i, suppressClick.current), i)}
               >
                 <span className={t.slotNum}>{i + 1}</span>
                 {sk ? <RpgIcon art={sk.art} size={32} /> : <span className={t.slotEmpty} aria-hidden="true" />}
