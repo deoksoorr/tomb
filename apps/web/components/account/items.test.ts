@@ -37,8 +37,11 @@ describe("지속·남은 시간", () => {
   it("카탈로그 지속 시간을 사람이 읽는 말로", () => {
     expect(durationLabel(COSMETIC_DURATION_MS)).toBe("24시간");
     expect(durationLabel(DECOR_DURATION_MS)).toBe("7일");
-    expect(effectLabel(itemById("fw_small")!)).toBe("한 번 쏘면 사라져요");
-    expect(effectLabel(itemById("hat_cat")!)).toBe("24시간 유지");
+    expect(effectLabel(itemById("fw_small")!)).toBe("한 번 쏘면 사라져요 (채널 모두가 봐요)");
+    expect(effectLabel(itemById("hat_cat")!)).toBe("착용하면 24시간 유지");
+    expect(effectLabel(itemById("decor_candles")!)).toBe("묘비에 놓으면 7일 유지");
+    expect(effectLabel(itemById("mega_ch")!)).toBe("한 번 외치면 사라져요 (기록은 5분 뒤 사라져요)");
+    expect(effectLabel(itemById("dye_basic")!)).toMatch(/^한 번 염색하면 사라져요/);
     expect(effectLabel(itemById("gs_duck")!)).toMatch("1개 써요");
   });
 

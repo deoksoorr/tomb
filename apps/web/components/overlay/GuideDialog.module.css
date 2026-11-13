@@ -72,3 +72,59 @@
   justify-items: start;
   gap: 8px;
 }
+
+.table + .table {
+  margin-top: 10px;
+}
+
+.table th,
+.table td {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.lead {
+  margin: 10px 0 6px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.more {
+  margin-top: 10px;
+}
+
+.more summary {
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.more .table {
+  margin-top: 6px;
+}
+
+/* 좁은 화면: 표를 줄마다 카드로 쌓는다 (칸 이름은 data-label) */
+@media (max-width: 520px) {
+  .table thead {
+    display: none;
+  }
+
+  .table tr {
+    display: block;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .table th,
+  .table td {
+    display: block;
+    padding: 2px 4px;
+    border-bottom: 0;
+  }
+
+  .table td[data-label]::before {
+    content: attr(data-label) " · ";
+    color: var(--muted);
+    font-size: 11px;
+  }
+}

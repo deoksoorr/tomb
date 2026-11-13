@@ -1,4 +1,4 @@
-import { isPermanentUntil, itemById, plotLabel, sanitizeLook, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { isPermanentUntil, itemById, MEGAPHONE_TTL_MS, plotLabel, sanitizeLook, type ItemDef, type ItemKind } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 
 // 가방·착용·지속시간 표시용 순수 함수
@@ -38,11 +38,17 @@ export function durationLabel(ms: number): string {
   return `${Math.max(1, Math.round(ms / MINUTE))}분`;
 }
 
-/** 아이템 한 줄 설명: 꾸미기는 "24시간 유지", 폭죽은 "한 번 쏘면 사라져요", 디자인권은 "세울 때 1개 써요" */
+/** 아이템 한 줄 설명: 꾸미기는 "착용하면 24시간 유지", 묘비 꾸미기는 "묘비에 놓으면 7일 유지", 폭죽은 "한 번 쏘면 사라져요", 염색권은 "한 번 염색하면 사라져요", 디자인권은 "1개 써요" */
 export function effectLabel(item: ItemDef): string {
-  if (item.durationMs) return `${durationLabel(item.durationMs)} 유지`;
-  if (item.kind === "megaphone") return "한 번 외치면 사라져요";
-  return item.kind === "graveStyle" ? "묘비를 세우거나 디자인을 바꿀 때 1개 써요" : "한 번 쏘면 사라져요";
+  if (item.durationMs) {
+    const d = durationLabel(item.durationMs);
+    if (item.kind === "decor") return `묘비에 놓으면 ${d} 유지`;
+    return item.kind === "cosmetic" ? `착용하면 ${d} 유지` : `${d} 유지`;
+  }
+  if (item.kind === "megaphone") return `한 번 외치면 사라져요 (기록은 ${durationLabel(MEGAPHONE_TTL_MS)} 뒤 사라져요)`;
+  if (item.kind === "dye") return "한 번 염색하면 사라져요 (접속이 끊겨도 남은 시간 안에는 이어서 할 수 있어요)";
+  if (item.kind === "firework") return "한 번 쏘면 사라져요 (채널 모두가 봐요)";
+  return item.kind === "graveStyle" ? "묘비를 세우거나 디자인을 바꿀 때 1개 써요" : "한 번 쓰면 사라져요";
 }
 
 /** 남은 시간: "6일 남음" · "13시간 남음" · "40분 남음" */

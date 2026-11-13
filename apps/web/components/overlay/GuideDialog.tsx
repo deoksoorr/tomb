@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import {
   COSMETIC_DURATION_MS,
   DECOR_DURATION_MS,
@@ -10,9 +11,14 @@ import {
   isShopListed,
   ITEMS,
   MAX_DECOR_PER_GRAVE,
+  MEGAPHONE_TTL_MS,
   ZOO_PETS,
 } from "@tomb/protocol";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES } from "@/lib/economy";
+import { DYE_TIME_MS } from "@/lib/dye/palette";
+import { PLOT_TIERS, plotCost } from "@/lib/housing/catalog";
+import { POTIONS } from "@/lib/rpg/catalog";
+import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
 import { DEFAULT_PASS_DAYS, PRESENCE_INTERVAL_MS, SHRINE_KEEP_DAYS } from "@/lib/types";
 import { durationLabel, effectLabel, KIND_LABELS } from "../account/items";
 import Link from "next/link";
@@ -22,218 +28,289 @@ import ItemIcon from "../ui/ItemIcon";
 import { InquiryButton } from "../notice/InquiryDialog";
 import styles from "./GuideDialog.module.css";
 
-const CONTROLS: [string, string, string][] = [
+const won = (n: number) => n.toLocaleString("ko-KR");
+const petPrices = ZOO_PETS.map((p) => p.price);
+
+/** 표 한 장: 첫 칸은 행 제목. 좁은 화면에서는 줄마다 카드처럼 쌓인다 (data-label이 칸 이름) */
+function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
+  return (
+    <table className={styles.table}>
+      <thead>
+        <tr>
+          {head.map((h) => (
+            <th key={h} scope="col">
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(([first, ...rest], i) => (
+          <tr key={i}>
+            <th scope="row">{first}</th>
+            {rest.map((cell, j) => (
+              <td key={j} data-label={head[j + 1]}>
+                {cell}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+const CONTROLS: ReactNode[][] = [
   ["걷기", "WASD · 방향키", "왼쪽 아래 조이스틱"],
   ["달리기", "Shift 누른 채 걷기", "달리기 버튼"],
-  ["점프 (낮은 것을 넘어가요)", "Space", "점프 버튼"],
-  ["앉기·일어서기", "X 또는 C (벤치·의자 근처면 그 자리에)", "앉기 버튼 (근처에 자리가 있으면 빛나요)"],
-  ["말 걸기·살펴보기 (상점·묘비 등)", "E", "상호작용 버튼"],
-  ["나무에 매달리기·그네·종 치기·잠수", "가까이 가서 E (화면 안내를 따라)", "상호작용 버튼"],
-  ["수영·잠수", "물에 들어가면 헤엄쳐요 (잠수도 돼요)", "조이스틱으로 물에"],
-  ["감정 표현", "1 손 흔들기 · 2 환호 · 3~9 이모티콘", "아래 [표현] 버튼"],
-  ["말풍선·이모티콘 (표현 창)", "T 또는 아래 [표현] → 이모티콘·문장 고르기 (별로 즐겨찾기)", "아래 [표현] 버튼 · 메뉴 → 표현"],
-  ["즐겨찾기 표현 (원형)", "Y → 내 캐릭터 둘레에 펼쳐져요 · 눌러서 또는 1~8로 보내기", "[표현] 길게 누르기 · 메뉴 → 즐겨찾기 표현"],
-  ["벤치 상태", "앉아서 T → 벤치 상태", "앉아서 [표현] → 벤치 상태"],
-  ["타는 펫 타기·내리기", "R (타는 펫을 데리고 있을 때)", "타기 버튼"],
-  ["확대·축소", "마우스 휠 · ＋/－", "＋/－ 버튼"],
-  ["둘러보기", "오른쪽 버튼으로 끌기", "—"],
-  ["시점 되돌리기", "내 캐릭터로 버튼", "내 캐릭터로 버튼"],
+  ["점프", "Space", "점프 버튼"],
+  ["앉기·일어서기", "X 또는 C", "앉기 버튼"],
+  ["말 걸기·타기·살펴보기", "E", "상호작용 버튼"],
+  ["메뉴", "왼쪽 아래 [메뉴]", "왼쪽 위 [메뉴]"],
+  ["가방·사냥·도감·집·소식", "왼쪽 아래 바로 가기 줄", "[메뉴] 안에"],
+  ["표현 창 (말풍선·이모티콘)", "T", "점프 왼쪽 [표현]"],
+  ["즐겨찾기 표현 (원형)", "Y → 누르거나 1~8", "[표현] 길게 누르기"],
+  ["손 흔들기·환호", "1 · 2", "메뉴 → 감정 표현"],
+  ["이모티콘 바로 보내기", "3~9", "[표현] 창에서"],
+  ["벤치 상태", "앉아서 T", "앉아서 [표현]"],
+  ["가방", "I", "메뉴 → 가방"],
+  ["펫 타기·내리기", "R", "타기 버튼"],
+  ["확대·축소", "마우스 휠 · ＋/－", "두 손가락 · ＋/－"],
+  ["둘러보기", "오른쪽 버튼으로 끌기", "두 손가락으로 끌기"],
+  ["시점 되돌리기", "[내 캐릭터로]", "[내 캐릭터로]"],
+  ["확성기 기록", "왼쪽 위 (음악 아래)", "조이스틱 위"],
+];
+
+const PLACES: ReactNode[][] = [
+  ["모닥불", "모닥불 광장", "곁에 앉아 불멍 · 같이 쉬기"],
+  ["소원 분수", "광장 입구", "동전 던지기 (하루 3번)"],
+  ["귀신의집", "광장 입구, 소원 분수 옆", "혼자 공포 미로 · 기록만 남아요"],
+  ["유령 잡화점", "상점 주인장에게 E", "꾸미기·폭죽·확성기·염색권"],
+  ["동물원", "서쪽 다리 건너 바로", `사육사에게 펫 분양 (${won(Math.min(...petPrices))}~${won(Math.max(...petPrices))}P)`],
+  ["낚시터", "호수 북동쪽, 나루터 옆 데크", "낚시 의자 앞에서 E"],
+  ["수집가", "숲 빈터", "약초·광석·발굴품·곤충 팔기"],
+  ["사냥터", "메뉴 → 사냥터", "혼자·함께 사냥 · 미니게임"],
+  ["분양 사무소", "메뉴 → 집·분양 마을", "내 집 분양·꾸미기·좋아요"],
+  ["성황당", "옛 묘역 동문 옆", "묘역을 떠난 묘비 모시기"],
+  ["황금 고블린", "가끔 마을 어딘가", "가장 먼저 잡으면 보너스"],
+];
+
+const RIDES: ReactNode[][] = [
+  ["관람차", "맨 아래 칸에서 E (칸당 2명)", "한 바퀴(약 50초) 뒤 저절로"],
+  ["열기구", "언덕 출발장에서 E (4명)", "마을 위를 돌아 약 2분"],
+  ["도중에 내리기", "X 두 번 (E·Space도)", "앉기 버튼 두 번"],
+  ["시점 바꾸기", "V · [시점 변경하기]", "[시점 변경하기]"],
+  ["조각배", "나루터에서 E (2인승)", "물가 가까이에서 E로 내려요"],
+  ["타는 펫", "R (데리고 있을 때)", "앉기·낚시·물에선 저절로 내려요"],
+];
+
+const HUNT_KEYS: ReactNode[][] = [
+  ["공격", "Space · J", "공격 버튼"],
+  ["스킬", "1~6", "스킬 버튼"],
+  ["물약", "Q · E · R", "물약 버튼"],
+];
+
+const FORAGE: ReactNode[][] = [
+  ["낚시", "의자 앞 E → 입질에 누르고 꾹 감기", "물고기가 당기면 잠깐 놓아요"],
+  ["팔기", "물고기는 어부 영감, 채집물은 수집가", "희귀할수록 비싸요"],
+  ["도감", "왼쪽 아래 [도감] · 메뉴 → 도감", "25·50·75·100% 보상"],
+];
+
+const DYE: ReactNode[][] = [
+  ["판 옮기기", "WASD·방향키 · 끌기 (Shift 빠르게)", "끌기"],
+  ["확대·축소", "휠 · ＋/－", "두 손가락"],
+  ["색 고르기", "가운데 조준점 아래 색", "가운데 조준점 아래 색"],
+  ["확정", "[이 색으로 염색] · 엔터", "[이 색으로 염색]"],
 ];
 
 /** 숫자는 전부 정책·카탈로그에서 읽는다 (정책을 바꾸면 가이드도 바뀐다) */
 type Props = { onClose: () => void; onReplayTutorial: () => void };
 
 export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
+  const freeStyles = GRAVE_STYLES.filter((s) => s.free)
+    .map((s) => s.name)
+    .join(" · ");
   return (
     <Dialog title="한때는... 안내" onClose={onClose}>
       <div className={styles.guide}>
         <section>
           <h3>조작</h3>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th scope="col">하는 일</th>
-                <th scope="col">키보드·마우스</th>
-                <th scope="col">터치</th>
-              </tr>
-            </thead>
-            <tbody>
-              {CONTROLS.map(([what, keys, touch]) => (
-                <tr key={what}>
-                  <th scope="row">{what}</th>
-                  <td>{keys}</td>
-                  <td>{touch}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Table head={["하는 일", "컴퓨터", "휴대폰"]} rows={CONTROLS} />
         </section>
 
         <section>
-          <h3>마을 안의 장소</h3>
+          <h3>마을 둘러보기</h3>
+          <Table head={["곳", "어디", "하는 일"]} rows={PLACES} />
           <ul className={styles.points}>
-            <li>모닥불: 곁에 앉으면 불멍을 할 수 있어요. 다른 사람과 같이 쉬어 가요.</li>
-            <li>사냥터: 혼자 또는 함께 싸우고 미니게임을 하며 포인트를 모아요 (왼쪽 위 [사냥]으로도 열려요).</li>
-            <li>분양 사무소: 나만의 집을 꾸미고 다른 사람의 집에 좋아요를 눌러요 (왼쪽 위 [집]으로도 열려요).</li>
-            <li>유령 잡화점: 포인트로 꾸미기·폭죽·묘비 디자인권을 사요.</li>
-            <li>귀신의집: 마을 왼쪽 위 서리 언덕의 낡은 집이에요. 혼자 들어가는 캄캄한 공포 미로라 깜짝 놀라는 장면·큰 소리가 있어요. 출구를 찾아 빠져나오면 걸린 시간이 내 기록으로 남아요(포인트 보상은 없어요).</li>
-            <li>낚시터: 낚시는 낚시터에서 해요. 호수 북동쪽(나루터 옆) 나무 데크의 낚시 의자 앞에서 E — 잡은 물고기는 어부 영감에게 팔아요. 지도의 물고기 표시가 낚시터예요.</li>
-            <li>
-              동물원: 마을 왼쪽 아래(서쪽 다리를 건너 바로)예요. 우리 안의 동물들을 구경하고, 정문 옆 사육사에게서 펫을 영구로 분양 받아요(
-              {Math.min(...ZOO_PETS.map((p) => p.price)).toLocaleString("ko-KR")}~{Math.max(...ZOO_PETS.map((p) => p.price)).toLocaleString("ko-KR")}P). 펫은 한 번에
-              한 마리만 데리고 다니고, 큰 개·왕거위·달빛 사슴은 R(모바일은 타기 버튼)로 올라타요. 앉기·낚시·놀이기구·배·물에 들어가면 저절로 내려요. 지도의 발바닥 표시가
-              동물원이에요.
-            </li>
-            <li>
-              관람차: 모닥불 광장 남쪽(다리로 가는 길 옆)이에요. 맨 아래로 내려온 칸에 E로 타면(칸마다 두 명) 한 바퀴 도는 동안 높이 올라 마을을
-              내려다봐요. 끌거나 방향키로 둘러보고, 한 바퀴(약 50초)가 끝나면 저절로 내려요. 지도의 분홍 바퀴 표시예요.
-              타는 동안 [시점 변경하기] 버튼(키보드 V)으로 옆에서 보는 장면과 마을 위를 떠다니는 보기를 오갈 수 있어요(마지막 선택을 기억해요).
-            </li>
-            <li>
-              열기구: 별 보기 언덕 위 출발장에서 타요(기구마다 네 명). 기구 두 대가 번갈아 내려오고, 출발장에 있을 때 E로 타면 곧 떠올라 묘역·큰
-              모닥불·강과 호수·동물원 위를 날아 언덕으로 돌아와요(약 2분). 다른 사람에게는 하늘에 뜬 열기구로 보여요. 도중에 내리려면 X를 두 번
-              눌러요. 지도의 주황 열기구 표시예요. 나는 동안 [시점 변경하기] 버튼(키보드 V)으로 옆에서 보는 장면과 마을 위를 떠다니는 보기를
-              오갈 수 있어요.
-            </li>
-            <li>작은 묘역: 끝내지 못한 것들이 잠든 곳이에요. 아래 &quot;묘역과 묘비&quot;를 보세요.</li>
-            <li>자세한 건 각 장소에서 안내해요.</li>
+            <li>귀신의집은 깜짝 놀라는 장면·큰 소리가 있어요. 포인트 보상은 없어요.</li>
+            <li>지도에 장소마다 표시가 있어요. 자세한 건 각 장소에서 안내해요.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>탈것</h3>
+          <Table head={["탈것", "타기", "비고"]} rows={RIDES} />
+          <ul className={styles.points}>
+            <li>시점 변경: 옆에서 보는 장면 ↔ 마을 위를 떠다니는 보기 (마지막 선택을 기억해요).</li>
+            <li>펫은 한 번에 한 마리만 데리고 다녀요. 타는 펫은 동물원에서 분양받아요.</li>
           </ul>
         </section>
 
         <section>
           <h3>포인트</h3>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th scope="col">이렇게 하면</th>
-                <th scope="col">포인트</th>
-                <th scope="col">하루 최대</th>
-              </tr>
-            </thead>
-            <tbody>
-              {EARN_RULES.map((r) => (
-                <tr key={r.source}>
-                  <th scope="row">
-                    {r.label}
-                    <span className={styles.note}>{r.note}</span>
-                  </th>
-                  <td>+{r.points}</td>
-                  <td>{r.dailyMax}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <ul className={styles.points}>
-            <li>하루에 모두 합쳐 {DAILY_EARN_CAP} 포인트까지 쌓여요. 날짜는 한국 시간 자정에 바뀌어요.</li>
-            <li>지갑에는 {BALANCE_CAP.toLocaleString("ko-KR")} 포인트까지 담겨요.</li>
-            <li>한도에 걸리면 알림 없이 조용히 쌓이지 않아요.</li>
-            <li>
-              묘지에 머무르기만 해도 {PRESENCE_INTERVAL_MS / 60_000}분마다 포인트가 쌓여요(다른 창을 보고 있어도 괜찮아요).
-            </li>
-            <li>
-              랭킹의 &quot;포인트&quot; 탭은 이번 주(월요일부터)·전체로 모은 포인트(써도 줄지 않아요) 순이에요. &quot;사냥&quot; 탭은
-              사냥터별 가장 빠른 클리어와 처치 수 순이에요.
-            </li>
-            <li>한 곳(같은 IP)에서는 하루 {ATTEND_ACCOUNTS_PER_IP}개 계정까지만 출석 포인트를 받아요.</li>
-          </ul>
+          <Table
+            head={["이렇게 하면", "포인트", "하루 최대"]}
+            rows={EARN_RULES.map((r) => [
+              <>
+                {r.label}
+                <span className={styles.note}>{r.note}</span>
+              </>,
+              r.points ? `+${r.points}` : "설명대로",
+              r.dailyMax,
+            ])}
+          />
+          <Table
+            head={["규칙", "내용"]}
+            rows={[
+              ["하루 한도", `모두 합쳐 ${won(DAILY_EARN_CAP)}P · 한국 시간 자정에 새로`],
+              ["접속 시간 보너스", `하루 한도와 별개 · 하루 최대 ${STAY_BONUS_DAILY_MAX}P`],
+              ["머무르기", `${PRESENCE_INTERVAL_MS / 60_000}분마다 (다른 창을 봐도 OK)`],
+              ["지갑", `${won(BALANCE_CAP)}P까지 담겨요`],
+              ["출석", `같은 IP는 하루 ${ATTEND_ACCOUNTS_PER_IP}계정까지`],
+              ["한도에 걸리면", "알림 없이 조용히 안 쌓여요"],
+              ["랭킹", "포인트(이번 주·전체, 써도 안 줄어요)·사냥·집·헌화"],
+            ]}
+          />
         </section>
 
         <section>
-          <h3>상점과 물건</h3>
-          <p>묘지 안 상점의 주인장에게 말을 걸면(상호작용) 상점이 열려요.</p>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th scope="col">물건</th>
-                <th scope="col">가격</th>
-                <th scope="col">효과</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ITEMS.filter(isShopListed).map((item) => (
-                <tr key={item.id}>
-                  <th scope="row">
-                    <span className={styles.itemName}>
-                      <ItemIcon itemId={item.id} size={32} />
-                      <span>
-                        {item.name}
-                        <span className={styles.note}>{KIND_LABELS[item.kind]}</span>
+          <h3>사냥</h3>
+          <Table head={["하는 일", "컴퓨터", "휴대폰"]} rows={HUNT_KEYS} />
+          <p className={styles.lead}>몬스터 공격에 상태 이상(독·화상·출혈·둔화·빙결·혼란·침묵)이 걸릴 수 있어요. 물약으로 풀어요.</p>
+          <Table head={["물약", "효과"]} rows={POTIONS.map((p) => [p.key ? `${p.name} (${p.key})` : p.name, p.desc])} />
+        </section>
+
+        <section>
+          <h3>낚시·채집·도감</h3>
+          <Table head={["하는 일", "방법", "비고"]} rows={FORAGE} />
+        </section>
+
+        <section>
+          <h3>꾸미기와 물건</h3>
+          <Table
+            head={["종류", "얻는 곳", "쓰면"]}
+            rows={[
+              [KIND_LABELS.cosmetic, "유령 잡화점", `착용하면 ${durationLabel(COSMETIC_DURATION_MS)} (일부는 영구로도)`],
+              ["펫", "동물원 사육사", "영구 · 한 마리씩 데리고 다녀요"],
+              [KIND_LABELS.firework, "유령 잡화점", "쏘면 사라지고 채널 모두가 봐요"],
+              [KIND_LABELS.megaphone, "유령 잡화점", `외치면 사라져요 · 기록은 ${durationLabel(MEGAPHONE_TTL_MS)} 뒤 사라져요`],
+              [KIND_LABELS.dye, "잡화점 염색·외형 탭", "한 번 염색하면 사라져요"],
+              [KIND_LABELS.graveStyle, "유령 잡화점", "세우거나 바꿀 때 1개"],
+              [KIND_LABELS.decor, "가방 → 내 묘비에", `${durationLabel(DECOR_DURATION_MS)} 유지 · 묘비당 ${MAX_DECOR_PER_GRAVE}개`],
+            ]}
+          />
+          <ul className={styles.points}>
+            <li>캐릭터 꾸미기는 같은 부위면 마지막에 착용한 것으로 바뀌어요.</li>
+          </ul>
+          <details className={styles.more}>
+            <summary>잡화점 물건 전체 보기</summary>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th scope="col">물건</th>
+                  <th scope="col">가격</th>
+                  <th scope="col">효과</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ITEMS.filter(isShopListed).map((item) => (
+                  <tr key={item.id}>
+                    <th scope="row">
+                      <span className={styles.itemName}>
+                        <ItemIcon itemId={item.id} size={32} />
+                        <span>
+                          {item.name}
+                          <span className={styles.note}>{KIND_LABELS[item.kind]}</span>
+                        </span>
                       </span>
-                    </span>
-                  </th>
-                  <td>{item.price}</td>
-                  <td>{effectLabel(item)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <ul className={styles.points}>
-            <li>모든 물건은 한 번 쓰면 사라져요.</li>
-            <li>폭죽은 쏘는 순간 사라지고, 같은 채널 모두가 함께 봐요.</li>
-            <li>
-              캐릭터 꾸미기는 착용하는 순간 사라지고 {durationLabel(COSMETIC_DURATION_MS)} 동안 보여요. 같은 부위는 마지막에
-              착용한 것으로 바뀌어요.
-            </li>
-            <li>
-              묘비 꾸미기는 내 묘비에 놓는 순간 사라지고 {durationLabel(DECOR_DURATION_MS)} 동안 남아요. 묘비 하나에{" "}
-              {MAX_DECOR_PER_GRAVE}개까지 놓을 수 있어요.
-            </li>
-            <li>묘비 디자인권은 그 디자인으로 묘비를 세우거나 바꾸는 순간 사라져요.</li>
-          </ul>
+                    </th>
+                    <td data-label="가격">{item.price}</td>
+                    <td data-label="효과">{effectLabel(item)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
         </section>
 
         <section>
-          <h3>개인 코드</h3>
-          <ul className={styles.points}>
-            <li>내 정보 → 개인 코드에서 만들어요. 만들 때 한 번만 보여 주니 바로 적어 두세요.</li>
-            <li>다른 기기의 입장 화면에서 &quot;개인 코드로 들어가기&quot;에 넣으면 포인트·가방·내 묘비가 그대로 따라와요.</li>
-            <li>이 코드를 아는 사람은 누구나 내 계정에 들어올 수 있어요. 새어 나갔다면 다시 만드세요. 예전 코드는 바로 막혀요.</li>
-          </ul>
+          <h3>염색</h3>
+          <Table head={["하는 일", "컴퓨터", "휴대폰"]} rows={DYE} />
+          <Table
+            head={["알아 둘 것", "내용"]}
+            rows={[
+              ["시작", `부위 고르기 → ${DYE_TIME_MS / 1000}초 안에 색 찾기`],
+              ["판", "끝없이 이어져요 · 특수 색은 드물게 숨어 있어요"],
+              ["창 닫기", "바깥을 눌러도 안 닫혀요 · 직접 닫으면 포기"],
+              ["이어서 하기", "도중에 나가도 시간 안이면 가방·잡화점에서"],
+              ["시간이 끝나면", "지금 색과 새 색 중에서 골라요"],
+            ]}
+          />
         </section>
 
         <section>
-          <h3>채널과 대기열</h3>
-          <ul className={styles.points}>
-            <li>
-              채널마다 정원이 있어요(기본 {DEFAULT_CHANNEL_CAPACITY}명, 최대 {DEFAULT_MAX_CHANNELS}채널). 위쪽 채널 표시를
-              누르면 다른 채널로 옮길 수 있어요.
-            </li>
-            <li>묘지 전체가 꽉 차면 대기열에 줄을 서요. 기다리는 동안에도 혼자 걷고 묘비를 볼 수 있고, 차례가 오면 자동으로 들어가요.</li>
-            <li>다 둘러봤으면 내 정보 → 접속 종료로 자리를 비워 주세요. 기다리던 다음 사람이 바로 들어와요.</li>
-          </ul>
+          <h3>집</h3>
+          <Table
+            head={["터", "처음 분양가", "가구"]}
+            rows={PLOT_TIERS.map((t) => [t.name, `${won(plotCost(t.id))}P`, `${t.maxItems}개까지`])}
+          />
+          <Table
+            head={["하는 일", "방법"]}
+            rows={[
+              ["분양", "분양 사무소에서 터 크기·번지 고르기"],
+              ["넓히기", "작은 터 → 넓은 터 → 대저택 업그레이드"],
+              ["꾸미기", "가구·외관 사서 놓기"],
+              ["놀러 가기", "다른 집 구경 · 좋아요 · 방명록"],
+            ]}
+          />
         </section>
 
         <section>
           <h3>묘역과 묘비</h3>
+          <Table
+            head={["하는 일", "방법"]}
+            rows={[
+              ["묘비 쓰기", "메뉴 → 묘비 쓰기 (한 사람에 하나)"],
+              ["헌화", "묘비마다 하루 한 번 · 둘 다 포인트"],
+              ["내 묘비 가기", "메뉴 → 내 묘비 가기 (움직이면 멈춰요)"],
+              ["성불", `세운 뒤 ${DEFAULT_PASS_DAYS}일 (운영 상황에 따라 바뀔 수 있어요)`],
+              ["성불한 이야기들", "메뉴에서 · 최신 순·검색·헌화 수"],
+              ["디자인", `무료 ${freeStyles} · 나머지는 디자인권`],
+              ["성황당", `이장한 묘비를 ${SHRINE_KEEP_DAYS}일 모셔요 · 그 안에 다시 모시기`],
+            ]}
+          />
           <ul className={styles.points}>
-            <li>묘비 앞에서 할 수 있는 건 헌화(꽃 놓기)예요. 묘비마다 하루 한 번, 놓은 사람과 묘비 주인 모두 포인트를 받아요.</li>
             <li>
-              묘비는 한 사람에 하나만 쓸 수 있어요(메뉴 → 묘비 쓰기). 세운 뒤 {DEFAULT_PASS_DAYS}일(운영 상황에 따라 바뀔 수
-              있어요)이 지나면 성불해 묘역을 떠나요. 성불하면 소식으로 알려 드리고, 그 뒤에 새 묘비를 쓸 수 있어요.
+              묘역은 두 곳(언덕 아래 옛 묘역, 다리 건너 묘역)이고 채널마다 {GRAVEYARD_CAPACITY}개까지예요. 자리가 모자라면 오래된 묘비부터 조금
+              일찍 성불해요.
             </li>
-            <li>
-              묘역은 마을에 두 곳(언덕 아래 옛 묘역, 다리 건너 묘역)이고, 채널마다 묘비 {GRAVEYARD_CAPACITY}개까지
-              세운 순서대로 골고루 놓여요. 자리가 모자라면 가장 오래된 묘비부터 조금 일찍 성불해요.
-            </li>
-            <li>성불한 묘비는 메뉴 → 성불한 이야기들에 남아요(최신 순·검색, 받은 헌화 수).</li>
-            <li>메뉴 → 내 묘비 가기를 누르면 캐릭터가 내 묘비 앞까지 걸어가요. 걷는 중에 움직이거나 점프하면 멈춰요.</li>
-            <li>
-              디자인: 무료{" "}
-              {GRAVE_STYLES.filter((s) => s.free)
-                .map((s) => s.name)
-                .join(" · ")}
-              , 나머지는 상점의 디자인권(
-              {ITEMS.filter((i) => i.kind === "graveStyle")
-                .map((i) => `${i.name} ${i.price}P`)
-                .join(" · ")}
-              )을 세우거나 바꿀 때 1개 써요. 세운 뒤에도 내 묘비 상세의 &quot;디자인 바꾸기&quot;로 바꿀 수 있어요.
-            </li>
-            <li>
-              성황당(옛 묘역 동문 옆): 묘역을 떠난 묘비들이 머무는 곳이에요. 이장한 내 묘비는 {SHRINE_KEEP_DAYS}일 동안 모셔지고 그 안에
-              다시 모실 수 있어요(성황당 앞에서 E, 또는 내 정보에서 열어요). 다시 모시면 성불 기간은 그때부터 다시 세요. 세운 지{" "}
-              {DEFAULT_PASS_DAYS}일이 지난 묘비는 성불해 성불한 이야기들에 남아요.
-            </li>
+            <li>다시 모신 묘비는 성불 기간을 그때부터 다시 세요. 디자인은 내 묘비 상세에서도 바꿀 수 있어요.</li>
           </ul>
+        </section>
+
+        <section>
+          <h3>계정과 채널</h3>
+          <Table
+            head={["항목", "내용"]}
+            rows={[
+              ["개인 코드", "내 정보 → 개인 코드 · 만들 때 한 번만 보여요"],
+              ["다른 기기", "입장 화면 → 개인 코드로 들어가기"],
+              ["코드가 새면", "다시 만들기 (예전 코드는 바로 막혀요)"],
+              ["채널", `정원 ${DEFAULT_CHANNEL_CAPACITY}명 · 최대 ${DEFAULT_MAX_CHANNELS}채널 · 위 채널 표시로 옮기기`],
+              ["대기열", "꽉 차면 줄 서기 · 차례가 오면 자동 입장"],
+              ["다 놀았으면", "내 정보 → 접속 종료로 자리 비우기"],
+            ]}
+          />
         </section>
 
         <section className={styles.inquiry}>
