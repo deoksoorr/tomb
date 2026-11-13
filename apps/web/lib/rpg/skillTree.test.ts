@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BRANCHES, SKILL_FX, SKILLS, skillById, TIER_GATES, type SkillId } from "./catalog";
-import { fitSkillBudget, learnSkill, newCharacter, normalize, resetSkills, RpgError, setHotbar } from "./character";
+import { allocStats, equip, fitSkillBudget, fitToLevel, learnSkill, newCharacter, normalize, resetSkills, resetStats, RpgError, setHotbar, statPointsEarned } from "./character";
 import { MAX_LEVEL } from "./formulas";
 import { ALL_SKILLS_POINTS, checkAllocation, checkLearn, RESPEC_MAX_COST, respecCost, SKILL_TREE_VERSION, skillPointsEarned, spentIn, spentPoints, tierOpen, type Alloc } from "./skillRules";
 import { testServerEnv } from "./superHunter";
@@ -207,6 +207,30 @@ describe("테스트 서버 슈퍼 계정 환경 검사", () => {
     expect(testServerEnv({ NODE_ENV: "development" })).toBe(true);
     expect(testServerEnv({ NODE_ENV: "test" })).toBe(true);
   });
+  it("슈퍼 계정 레벨·능력치: 요구 레벨 검사에 넘긴 레벨을 쓰고, 능력치는 예산 안에서, 실제 레벨로 되돌리면 정리된다", () => {
+    expect(statPointsEarned(1)).toBe(5);
+    expect(statPointsEarned(MAX_LEVEL)).toBe(172);
+    const c = normalize({ level: 1, treeVer: SKILL_TREE_VERSION, inv: { w_ruler: 1, w_stamp: 1 } });
+    expect(() => equip(c, "weapon", "w_stamp")).toThrow(/레벨 45/);
+    const worn = equip(c, "weapon", "w_stamp", MAX_LEVEL);
+    expect(worn.equip.weapon).toBe("w_stamp");
+    expect(() => allocStats(worn, { str: 10 })).toThrow(/포인트/);
+    const strong = allocStats(worn, { str: 98, luk: 70 }, statPointsEarned(MAX_LEVEL));
+    expect(strong.stats.str).toBe(99);
+    expect(strong.statPoints).toBe(0);
+    expect(() => allocStats(strong, { dex: 5 }, statPointsEarned(MAX_LEVEL))).toThrow(/포인트/);
+    expect(resetStats(strong).statPoints).toBe(5);
+    // 보통 계정으로 읽으면: 능력치 되돌림 + 요구 레벨 넘는 장비 빼기 (가방엔 남음)
+    const fit = fitToLevel(strong);
+    expect(fit.stats.str).toBe(1);
+    expect(fit.statPoints).toBe(5);
+    expect(fit.equip.weapon).toBeNull();
+    expect(fit.inv.w_stamp).toBe(1);
+    // 레벨에 맞는 정상 상태는 그대로 (같은 객체)
+    const ok = allocStats(c, { str: 5 });
+    expect(fitToLevel(ok)).toBe(ok);
+  });
+
   it("슈퍼 계정 예산은 모든 스킬 최대 랭크", () => {
     expect(ALL_SKILLS_POINTS).toBe(SKILLS.reduce((a, s) => a + s.maxLevel, 0));
     expect(ALL_SKILLS_POINTS).toBeGreaterThan(skillPointsEarned(MAX_LEVEL));

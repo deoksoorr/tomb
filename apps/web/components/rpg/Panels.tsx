@@ -266,6 +266,23 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
             {used ? `${used}포인트 적용` : "올릴 능력치를 골라 주세요"}
           </button>
         </div>
+        {view.superHunter && (
+          // 테스트 서버 슈퍼 계정만: 능력치를 모두 되돌린다 (무료, 서버도 슈퍼 계정만 받는다)
+          <div className={s.startRow}>
+            <span className={s.meta}>테스트 서버 슈퍼 계정 · 능력치 포인트는 최대 레벨 기준으로 모두 받아요</span>
+            <button
+              type="button"
+              className={cx(ui.button, ui.quiet)}
+              disabled={busy}
+              onClick={() => {
+                setPlan({});
+                onCharacter({ type: "resetStats" }, "능력치를 모두 되돌렸어요.");
+              }}
+            >
+              능력치 초기화 (무료)
+            </button>
+          </div>
+        )}
       </section>
       <section className={s.section} aria-labelledby="rpg-derived">
         <h3 id="rpg-derived" className={s.sectionTitle}>

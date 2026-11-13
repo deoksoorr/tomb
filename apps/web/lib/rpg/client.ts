@@ -14,7 +14,8 @@ export type CharacterAction =
   | { type: "hotbar"; slots: (SkillId | null)[] }
   | { type: "equip"; slot: GearSlot; itemId: string | null }
   | { type: "respec"; cost: number }
-  | { type: "ackTree" };
+  | { type: "ackTree" }
+  | { type: "resetStats" };
 
 export type ShopResponse = RpgView & { sold?: SoldInfo };
 

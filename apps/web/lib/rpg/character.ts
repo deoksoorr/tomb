@@ -11,7 +11,7 @@ import {
   type SkillId,
   type Stats,
 } from "./catalog";
-import { applyExp, baseStats, START_SKILL_POINTS, START_STAT_POINTS, STAT_MAX } from "./formulas";
+import { applyExp, baseStats, MAX_LEVEL, START_SKILL_POINTS, START_STAT_POINTS, STAT_MAX, statPointsAt } from "./formulas";
 import { checkAllocation, checkLearn, cleanAlloc, SKILL_TREE_VERSION, skillPointsEarned, spentPoints, type Alloc } from "./skillRules";
 import type { CharacterState } from "./types";
 
@@ -106,7 +106,21 @@ export function normalize(raw: unknown): CharacterState {
 
 const clone = (s: CharacterState): CharacterState => structuredClone(s);
 
-export function allocStats(s: CharacterState, alloc: Partial<Stats>): CharacterState {
+/** 그 레벨까지 받은 능력치 포인트 합 (시작 5 + 레벨업마다 3, 5의 배수 레벨엔 5) */
+export function statPointsEarned(level: number): number {
+  let n = START_STAT_POINTS;
+  for (let lv = 2; lv <= Math.min(MAX_LEVEL, Math.floor(level)); lv++) n += statPointsAt(lv);
+  return n;
+}
+
+/** 직접 올린 능력치 합 (기본값 1을 뺀 만큼) */
+export const spentStats = (s: CharacterState) => STAT_KEYS.reduce((a, k) => a + Math.max(0, s.stats[k] - baseStats()[k]), 0);
+
+/**
+ * 능력치 올리기. budget을 주면(테스트 서버 슈퍼 계정) 남은 포인트를 "budget - 올린 합"으로 보고, 저장하는 남은 포인트는
+ * 실제 레벨 기준으로 다시 센다 (슈퍼 계정의 넉넉한 포인트가 저장값에 남지 않게)
+ */
+export function allocStats(s: CharacterState, alloc: Partial<Stats>, budget?: number): CharacterState {
   const next = clone(s);
   let total = 0;
   for (const k of STAT_KEYS) {
@@ -117,8 +131,37 @@ export function allocStats(s: CharacterState, alloc: Partial<Stats>): CharacterS
     total += n;
   }
   if (total === 0) throw new RpgError(400, "INVALID_INPUT", "올릴 능력치를 골라 주세요.");
-  if (total > s.statPoints) throw new RpgError(409, "NO_STAT_POINTS", "능력치 포인트가 모자라요.");
-  next.statPoints -= total;
+  const free = budget === undefined ? s.statPoints : budget - spentStats(s);
+  if (total > free) throw new RpgError(409, "NO_STAT_POINTS", "능력치 포인트가 모자라요.");
+  next.statPoints = budget === undefined ? s.statPoints - total : Math.max(0, statPointsEarned(s.level) - spentStats(next));
+  return next;
+}
+
+/** 능력치 초기화: 모두 기본값으로 되돌리고 레벨만큼의 포인트를 돌려준다 (지금은 테스트 서버 슈퍼 계정만 — 서비스가 막는다) */
+export function resetStats(s: CharacterState): CharacterState {
+  const next = clone(s);
+  next.stats = baseStats();
+  next.statPoints = statPointsEarned(next.level);
+  return next;
+}
+
+/**
+ * 실제 레벨 기준으로 맞춘다 (슈퍼 계정으로 바꾼 상태를 운영자 지정이 풀린 뒤·운영 서버에서 읽을 때):
+ * 레벨로 받을 수 있는 것보다 많이 올린 능력치는 되돌리고 포인트를 돌려주며, 요구 레벨이 넘는 장착 장비는 뺀다(가방에는 남는다).
+ * 바꿀 게 없으면 같은 객체
+ */
+export function fitToLevel(s: CharacterState): CharacterState {
+  const overStats = spentStats(s) > statPointsEarned(s.level);
+  const overGear = GEAR_SLOTS.filter((k) => {
+    const id = s.equip[k];
+    return id && (gearById(id)?.reqLevel ?? 0) > s.level;
+  });
+  if (!overStats && overGear.length === 0) return s;
+  let next = overStats ? resetStats(s) : clone(s);
+  if (overGear.length) {
+    next = clone(next);
+    for (const k of overGear) next.equip[k] = null;
+  }
   return next;
 }
 
@@ -187,7 +230,8 @@ export function fitSkillBudget(s: CharacterState, budget: number): CharacterStat
 export const equippedCount = (s: CharacterState, id: string) => GEAR_SLOTS.filter((k) => s.equip[k] === id).length;
 const gearCount = (s: CharacterState) => Object.values(s.inv).reduce((a, b) => a + b, 0);
 
-export function equip(s: CharacterState, slot: GearSlot, id: string | null): CharacterState {
+/** level: 요구 레벨 검사에 쓰는 레벨 (테스트 서버 슈퍼 계정은 서비스가 최대 레벨을 넘긴다) */
+export function equip(s: CharacterState, slot: GearSlot, id: string | null, level = s.level): CharacterState {
   const next = clone(s);
   if (id === null) {
     next.equip[slot] = null;
@@ -196,7 +240,7 @@ export function equip(s: CharacterState, slot: GearSlot, id: string | null): Cha
   const g = gearById(id);
   if (!g) throw new RpgError(400, "INVALID_INPUT", "없는 장비예요.");
   if (g.kind !== slotKind(slot)) throw new RpgError(400, "WRONG_SLOT", "그 칸에는 낄 수 없는 장비예요.");
-  if (s.level < g.reqLevel) throw new RpgError(409, "LEVEL_LOW", `레벨 ${g.reqLevel}부터 낄 수 있어요.`);
+  if (level < g.reqLevel) throw new RpgError(409, "LEVEL_LOW", `레벨 ${g.reqLevel}부터 낄 수 있어요.`);
   const owned = s.inv[id] ?? 0;
   const usedElsewhere = equippedCount(s, id) - (s.equip[slot] === id ? 1 : 0);
   if (owned - usedElsewhere < 1) throw new RpgError(409, "NOT_OWNED", "가방에 그 장비가 없어요.");

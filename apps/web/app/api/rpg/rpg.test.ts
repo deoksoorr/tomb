@@ -231,6 +231,21 @@ describe("사냥터 API", () => {
       for (let i = 0; i < 5; i++) expect((await character.POST(call("/x", op, { type: "learn", skill: "em_kindle" }))).status).toBe(200);
       expect((await character.POST(call("/x", op, { type: "learn", skill: "em_hearth" }))).status).toBe(200);
       expect((await getRpgStore().get(op.id)).level).toBe(1);
+      // 장비: 요구 레벨 45 장비도 낄 수 있다 (레벨 50 취급)
+      await getRpgStore().update(op.id, (st) => ({ state: { ...st, inv: { ...st.inv, w_stamp: 1 } }, result: null }));
+      const worn = await character.POST(call("/x", op, { type: "equip", slot: "weapon", itemId: "w_stamp" }));
+      expect(worn.status).toBe(200);
+      // 능력치: 최대 레벨 기준 포인트를 모두 받은 것으로 (172) — 바로 배분, 무료 초기화
+      const sv = (await worn.json()) as RpgView;
+      expect(sv.character.statPoints).toBe(172);
+      const alloc = await character.POST(call("/x", op, { type: "alloc", stats: { str: 98, agi: 60 } }));
+      expect(alloc.status).toBe(200);
+      expect(((await alloc.json()) as RpgView).character.statPoints).toBe(14);
+      expect((await character.POST(call("/x", op, { type: "alloc", stats: { vit: 15 } }))).status).toBe(409);
+      const reset = (await (await character.POST(call("/x", op, { type: "resetStats" }))).json()) as RpgView;
+      expect(reset.character.stats.str).toBe(1);
+      expect(reset.character.statPoints).toBe(172);
+      expect((await character.POST(call("/x", op, { type: "alloc", stats: { str: 98, agi: 60 } }))).status).toBe(200);
 
       // 운영 서버에서는 같은 운영자 계정이라도 보통 계정 — 예산을 넘은 배분은 비우고 포인트를 돌려준다
       vi.stubEnv("VERCEL_ENV", "production");
@@ -239,6 +254,16 @@ describe("사냥터 API", () => {
       expect(prod.character.level).toBe(1);
       expect(prod.character.skills).toEqual({});
       expect(prod.character.skillPoints).toBe(1);
+      // 운영: 레벨 1 기준으로 되돌린다 — 능력치는 돌려받고(5포인트), 요구 레벨이 넘는 무기는 빠진다(가방에는 남음)
+      expect(prod.character.stats.str).toBe(1);
+      expect(prod.character.statPoints).toBe(5);
+      expect(prod.character.equip.weapon).toBeNull();
+      expect(prod.character.inv.w_stamp).toBe(1);
+      const prodWear = await character.POST(call("/x", op, { type: "equip", slot: "weapon", itemId: "w_stamp" }));
+      expect(prodWear.status).toBe(409);
+      expect(await errCode(prodWear)).toBe("LEVEL_LOW");
+      expect((await character.POST(call("/x", op, { type: "resetStats" }))).status).toBe(403);
+      expect((await character.POST(call("/x", op, { type: "alloc", stats: { str: 6 } }))).status).toBe(409);
       const locked = await start.POST(call("/api/rpg/run/start", op, { game: "hunt", difficulty: "hell" }));
       expect(await errCode(locked)).toBe("ZONE_LOCKED");
     } finally {

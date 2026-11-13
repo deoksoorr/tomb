@@ -16,9 +16,13 @@ import {
   consumePotions,
   equip,
   fitSkillBudget,
+  fitToLevel,
   gainExp,
   learnSkill,
   resetSkills,
+  resetStats,
+  spentStats,
+  statPointsEarned,
   removeForSale,
   returnUnsold,
   RpgError,
@@ -53,31 +57,45 @@ async function http<T>(p: Promise<T>): Promise<T> {
 
 /** 스킬 포인트 예산: 보통은 레벨로 받은 만큼, 테스트 서버 슈퍼 계정은 모든 스킬 최대치 */
 const skillBudget = (level: number, sup: boolean) => (sup ? Math.max(ALL_SKILLS_POINTS, skillPointsEarned(level)) : skillPointsEarned(level));
-/** 사냥에 쓰는 레벨 (슈퍼 계정은 최대 레벨 취급, 저장된 레벨은 그대로) */
-const huntLevel = (level: number, sup: boolean) => (sup ? MAX_LEVEL : level);
+/** 슈퍼 계정의 능력치 포인트: 최대 레벨까지 받는 포인트 전부 */
+const SUPER_STAT_POINTS = statPointsEarned(MAX_LEVEL);
+/**
+ * 레벨을 보는 모든 검사(장비 요구 레벨·사냥터 잠금·판 기록·능력치 계산)에 쓰는 레벨.
+ * 테스트 서버 슈퍼 계정은 최대 레벨 취급, 저장된 레벨은 그대로
+ */
+export const effectiveLevel = (level: number, sup: boolean) => (sup ? MAX_LEVEL : level);
 
 /**
- * 캐릭터 읽기 + 예산 검사: 쓴 스킬 포인트가 예산을 넘으면(슈퍼 계정으로 찍은 배분을 운영자 지정이 풀린 뒤·다른 환경에서 읽는 등)
- * 스킬을 비우고 포인트를 돌려준 상태를 저장한다
+ * 보통 계정이면 실제 레벨 기준으로 맞춘다: 스킬 예산·능력치 포인트를 넘은 배분은 돌려주고, 요구 레벨이 넘는 장착 장비는 뺀다
+ * (슈퍼 계정으로 바꾼 상태를 운영자 지정이 풀린 뒤·운영 서버에서 읽을 때). 슈퍼 계정이면 그대로
  */
+const fitAll = (s: CharacterState, sup: boolean): CharacterState => (sup ? s : fitToLevel(fitSkillBudget(s, skillPointsEarned(s.level))));
+
+/** 캐릭터 읽기 + 맞추기 (바뀌면 저장한다) */
 async function loadChar(acct: string, store: RpgStore, sup: boolean): Promise<CharacterState> {
   const c = await store.get(acct);
-  if (spentPoints(c.skills) <= skillBudget(c.level, sup)) return c;
-  return (await http(store.update(acct, (s) => ({ state: fitSkillBudget(s, skillBudget(s.level, sup)), result: null })))).state;
+  if (fitAll(c, sup) === c) return c;
+  return (await http(store.update(acct, (s) => ({ state: fitAll(s, sup), result: null })))).state;
 }
 
 export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now = Date.now(), state?: CharacterState): Promise<RpgView> {
   const day = kstDay(now);
   const sup = await isSuperHunter(acct);
-  const [stored, daily, me, runs] = await Promise.all([
+  const [loaded, daily, me, runs] = await Promise.all([
     state ?? loadChar(acct, store, sup),
     store.daily(acct, day),
     getAccounts().get(acct, day, now),
     store.runsThisHour(acct, hourBucket(now)),
   ]);
-  // 슈퍼 계정: 화면에는 최대 레벨·넉넉한 스킬 포인트로 보인다 (저장값은 그대로)
+  const stored = fitAll(loaded, sup);
+  // 슈퍼 계정: 화면에는 최대 레벨·넉넉한 스킬·능력치 포인트로 보인다 (저장값은 그대로)
   const character = sup
-    ? { ...stored, level: MAX_LEVEL, skillPoints: Math.max(0, skillBudget(stored.level, true) - spentPoints(stored.skills)) }
+    ? {
+        ...stored,
+        level: effectiveLevel(stored.level, true),
+        skillPoints: Math.max(0, skillBudget(stored.level, true) - spentPoints(stored.skills)),
+        statPoints: Math.max(0, SUPER_STAT_POINTS - spentStats(stored)),
+      }
     : stored;
   return {
     character,
@@ -96,11 +114,15 @@ export async function characterAction(acct: string, a: z.output<typeof Character
   const store = getRpgStore();
   const sup = await isSuperHunter(acct);
   if (a.type === "respec") return respec(acct, a.cost, sup);
+  if (a.type === "resetStats" && !sup) throw new HttpError(403, "NOT_AVAILABLE", "능력치 초기화는 테스트 서버 슈퍼 계정만 쓸 수 있어요.");
   const { state } = await http(
-    store.update(acct, (s) => {
+    store.update(acct, (s0) => {
+      const s = fitAll(s0, sup);
       switch (a.type) {
         case "alloc":
-          return { state: allocStats(s, a.stats), result: null };
+          return { state: allocStats(s, a.stats, sup ? SUPER_STAT_POINTS : undefined), result: null };
+        case "resetStats":
+          return { state: resetStats(s), result: null };
         case "learn":
           return { state: learnSkill(s, a.skill, skillBudget(s.level, sup)), result: null };
         case "ackTree":
@@ -108,7 +130,7 @@ export async function characterAction(acct: string, a: z.output<typeof Character
         case "hotbar":
           return { state: setHotbar(s, a.slots), result: null };
         case "equip":
-          return { state: equip(s, a.slot, a.itemId), result: null };
+          return { state: equip(s, a.slot, a.itemId, effectiveLevel(s.level, sup)), result: null };
       }
     }),
   );
@@ -214,7 +236,7 @@ export async function startRun(acct: string, game: GameKind, difficulty: Difficu
   const store = getRpgStore();
   const sup = await isSuperHunter(acct);
   const c = await loadChar(acct, store, sup);
-  const lv = huntLevel(c.level, sup);
+  const lv = effectiveLevel(c.level, sup);
   const d = derive(lv, c.stats, c.equip);
   const zone = game === "hunt" ? zoneFor(difficulty, zoneId) : null;
   if (zone && zoneId && zone.id !== zoneId) throw new HttpError(400, "INVALID_INPUT", "그 사냥터는 이 난이도에 없어요.");
