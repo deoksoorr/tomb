@@ -247,7 +247,7 @@ export class Residents {
     return true;
   }
 
-  /** 발밑 안내 ("E 야근하는 김대리 말 걸기") */
+  /** 발밑 안내 ("E 사육사 말 걸기") */
   hint(prefix: string, px: number, py: number): { text: string; dist: number } | null {
     const r = this.nearest(px, py);
     if (!r) return null;

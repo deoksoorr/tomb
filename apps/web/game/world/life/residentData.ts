@@ -42,7 +42,7 @@ const [BONE, MOSS, MIST, OCHRE, LAVENDER, CANDLE] = AVATAR_COLORS;
 export const RESIDENTS: readonly ResidentDef[] = [
   {
     id: "kimdr",
-    name: "김대리",
+    name: "소원지기",
     body: "suit",
     color: MIST,
     look: [],
@@ -64,7 +64,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "parkjj",
-    name: "박주임",
+    name: "사육사",
     body: "hood",
     color: BONE,
     look: ["neck_scarf"],
@@ -108,7 +108,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "leegj",
-    name: "이과장",
+    name: "관리인",
     body: "cup",
     color: OCHRE,
     look: [],
@@ -129,7 +129,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "choisw",
-    name: "최사원",
+    name: "문지기",
     body: "bun",
     color: LAVENDER,
     look: ["hat_flower"],
@@ -151,7 +151,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "jungcj",
-    name: "정차장",
+    name: "별지기",
     body: "tall",
     color: MIST,
     look: ["hat_halo"],
@@ -172,7 +172,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "handr",
-    name: "한대리",
+    name: "뱃사공",
     body: "umbrella",
     color: CANDLE,
     look: [],
@@ -193,7 +193,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "ohbj",
-    name: "오부장",
+    name: "낚시꾼",
     body: "box",
     color: MOSS,
     look: ["hat_straw"],
@@ -214,7 +214,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "yoonjj",
-    name: "윤주임",
+    name: "묘지기",
     body: "round",
     color: OCHRE,
     look: [],
@@ -235,7 +235,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "seogj",
-    name: "서과장",
+    name: "숲지기",
     body: "catmask",
     color: BONE,
     look: [],
@@ -256,7 +256,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "jangin",
-    name: "장인턴",
+    name: "성묘객",
     body: "cat",
     color: LAVENDER,
     look: ["hat_cat"],
@@ -277,7 +277,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "kangdr",
-    name: "강대리",
+    name: "사냥꾼",
     body: "hood",
     color: MOSS,
     look: ["hand_lantern"],
@@ -298,7 +298,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "limtj",
-    name: "임팀장",
+    name: "까악이",
     body: "suit",
     color: OCHRE,
     look: [],
@@ -319,7 +319,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "songjj",
-    name: "송주임",
+    name: "호박농부",
     body: "round",
     color: CANDLE,
     look: ["hat_straw"],
@@ -340,7 +340,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
   },
   {
     id: "baeksw",
-    name: "백사원",
+    name: "헌화객",
     body: "bun",
     color: MOSS,
     look: ["neck_scarf"],
