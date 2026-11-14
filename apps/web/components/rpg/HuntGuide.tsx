@@ -396,7 +396,7 @@ function pages(): Page[] {
         <>
           <ul className={s.guideList}>
             <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="드롭">
-              {KILLS_PER_DROP_ROLL}마리 잡을 때마다 한 번(한 판 최대 {HUNT_DROP_ROLLS}번) 장비·물약이 나올 기회. 우두머리를 잡고 모든 웨이브를 깨면 장비가
+              {KILLS_PER_DROP_ROLL}마리 잡을 때마다 한 번(한 판 최대 {HUNT_DROP_ROLLS}번) 장비·물약이 나올 기회. 우두머리를 잡으면 그 자리에서 장비가
               나올 기회가 한 번 더 있어요.
               <br />
               <small>쓰러지지 않고 다 깨면 아주 가끔 기간제 코디(꾸미기 하루권)가 꾸미기 가방에 들어와요.</small>

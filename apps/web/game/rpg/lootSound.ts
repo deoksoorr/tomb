@@ -8,9 +8,10 @@ import type { FilterKind, Layer, Wave } from "./skillSound";
 //      plain(물약·일반) = 작은 "톡" / fine(고급) = 맑은 두 음 / rare(희귀) = 낮은 쿵 + 오르는 세 음 + 반짝 쉬익
 //      legend(전설) = 깊은 울림 + 오르는 다섯 음 + 오래 남는 종 화음 + 긴 반짝임 / gift(꾸미기) = 리본 풀리는 오르내림 + 종
 //  - pick: 캐릭터에게 빨려 들어올 때 오르는 짧은 음 (등급마다 높이·겹)
+//  - beam: 전설·꾸미기 하늘 빔 — 위에서 내리꽂히는 바람 + 깊게 가라앉는 울림, 닿는 순간 쿵, 높은 반짝 꼬리 (그 밖의 등급은 없음)
 // 시각은 초, 음량은 0..1 (볼륨·리미터는 재생 쪽에서).
 
-export type LootSoundEv = "pop" | "land" | "pick";
+export type LootSoundEv = "pop" | "land" | "pick" | "beam";
 
 const osc = (wave: Wave, at: number, dur: number, f0: number, f1: number, gain: number, x: Partial<Layer> = {}): Layer => ({ src: "osc", wave, at, dur, f0, f1, gain, atk: 0.004, env: "perc", ...x });
 const nz = (at: number, dur: number, gain: number, type: FilterKind, f0: number, f1 = f0, q = type === "bandpass" ? 1.2 : 0, x: Partial<Layer> = {}): Layer => ({
@@ -57,19 +58,21 @@ export function lootSound(ev: LootSoundEv, sound: LootLook["sound"]): Layer[] {
     case "land":
       switch (sound) {
         case "plain":
-          // 작은 "톡" (바닥에 닿는 나무·유리 사이 결)
-          return [osc("sine", 0, 0.09, 920, 640, 0.16, { atk: 0.002 }), nz(0, 0.04, 0.08, "highpass", 3000, 3000, 0)];
+          // 작은 "톡" (바닥에 닿는 나무·유리 사이 결) + 가는 반짝 하나
+          return [osc("sine", 0, 0.09, 920, 640, 0.16, { atk: 0.002 }), nz(0, 0.04, 0.08, "highpass", 3000, 3000, 0), ...glints(0.06, 1760, 2, 0.05)];
         case "fine":
-          // 맑은 두 음 (5도) + 작은 톡
-          return [nz(0, 0.05, 0.08, "highpass", 2600, 2600, 0), ...bell(0.02, 1318, 0.5, 0.15, -0.2), ...bell(0.12, semi(1318, 7), 0.6, 0.13, 0.2)];
+          // 맑은 두 음 (5도) + 작은 톡 + 튀는 반짝
+          return [nz(0, 0.05, 0.08, "highpass", 2600, 2600, 0), osc("sine", 0, 0.12, 200, 110, 0.14), ...bell(0.02, 1318, 0.55, 0.15, -0.2), ...bell(0.12, semi(1318, 7), 0.65, 0.13, 0.2), ...glints(0.2, 2093, 3, 0.05)];
         case "rare":
           // 낮은 쿵 + 오르는 세 음 + 반짝 쉬익
           return [
-            osc("sine", 0, 0.22, 150, 70, 0.26, { atk: 0.003 }),
-            nz(0, 0.1, 0.12, "lowpass", 1400, 300, 0),
-            ...[0, 4, 7].flatMap((s, i) => bell(0.05 + i * 0.07, semi(880, s), 0.7 - i * 0.05, 0.14, (i - 1) * 0.3)),
-            nz(0.12, 0.55, 0.06, "highpass", 5000, 9000, 1, { env: "hold", atk: 0.06, verb: 0.3 }),
-            ...glints(0.3, 1760, 3, 0.06),
+            osc("sine", 0, 0.28, 150, 60, 0.28, { atk: 0.003 }),
+            nz(0, 0.12, 0.13, "lowpass", 1600, 260, 0),
+            // 작은 충격 고리: 퍼지는 바람
+            nz(0.02, 0.3, 0.07, "bandpass", 600, 2400, 1.4, { atk: 0.02 }),
+            ...[0, 4, 7, 12].flatMap((s, i) => bell(0.05 + i * 0.065, semi(880, s), 0.75 - i * 0.05, 0.13, (i - 1.5) * 0.25)),
+            nz(0.12, 0.6, 0.06, "highpass", 5000, 9000, 1, { env: "hold", atk: 0.06, verb: 0.3 }),
+            ...glints(0.3, 1760, 4, 0.06),
           ];
         case "gift":
           // 리본이 풀리듯 오르내리는 음 + 종 하나 (꾸미기 선물)
@@ -91,5 +94,19 @@ export function lootSound(ev: LootSoundEv, sound: LootLook["sound"]): Layer[] {
             ...glints(0.6, 2637, 5, 0.06),
           ];
       }
+      break;
+    case "beam":
+      if (sound !== "legend" && sound !== "gift") return [];
+      // 내리꽂힘(0~0.15초): 위에서 아래로 쓸어내리는 바람 + 깊게 가라앉는 울림 → 닿는 순간 쿵 → 높은 반짝 꼬리
+      return [
+        nz(0, 0.16, 0.14, "bandpass", 5200, 500, 2, { atk: 0.01 }),
+        osc("sawtooth", 0, 0.18, 420, 90, 0.07, { atk: 0.01, flt: { type: "lowpass", f0: 1800, f1: 400, q: 2 } }),
+        osc("sine", 0.14, 0.9, 82, 38, 0.32, { atk: 0.004 }),
+        nz(0.14, 0.35, 0.16, "lowpass", 900, 120, 0),
+        osc("triangle", 0.14, 0.5, sound === "gift" ? 330 : 247, sound === "gift" ? 330 : 247, 0.1, { atk: 0.004, verb: 0.4 }),
+        nz(0.2, 1.4, 0.06, "highpass", 7000, 11000, 1, { env: "hold", atk: 0.15, verb: 0.5, lfo: { hz: 9, cents: 400, on: "filter" } }),
+        ...glints(0.24, sound === "gift" ? 2349 : 2637, 6, 0.055),
+      ];
   }
+  return [];
 }

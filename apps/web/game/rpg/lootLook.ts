@@ -4,11 +4,12 @@ import { gearGrade } from "@/components/rpg/gear";
 
 // 사냥터 바닥 드롭 연출의 등급별 모양 (Phaser 없이 — 테스트가 쉽다). 그리기는 loot.ts.
 // 등급과 이름 색은 상점·가방·결과 화면과 같은 장비 등급표(components/rpg/gear.ts gearGrade)를 그대로 쓴다.
-//  - 단계 0 (물약·일반 장비): 작은 반짝임만
-//  - 단계 1 (고급): 바닥 빛 고리 + 가는 빛기둥
-//  - 단계 2 (희귀 · 꾸미기 선물): 더 굵고 높은 기둥, 떠오르는 빛 알갱이, 맥동, 떨어지는 순간 섬광
-//  - 단계 3 (전설): 가장 굵고 높고 짙은 기둥 + 화면 가장자리 빛 + 짧은 알림 글자
-// 색은 단계가 오를수록 짙게(기둥 알파·고리 겹), 기둥은 굵고 높게.
+//  - 단계 0 (물약·일반 장비): 작은 빛기둥 + 바닥 고리 1겹 + 가끔 반짝
+//  - 단계 1 (고급): 더 높은 기둥, 고리 2겹, 빛 알갱이, 착지 때 튀는 섬광
+//  - 단계 2 (희귀): 굵은 기둥, 도는 고리 2겹, 착지 섬광 + 작은 충격 고리 + 보라 불티
+//  - 단계 3 (전설) · 꾸미기 선물: 하늘에서 화면 위 끝까지 이어지는 굵은 빔이 내리꽂혀 크게 번쩍인 뒤 가늘어져 주울 때까지 남는다
+//      (둘레에 소용돌이 빛 고리·불티, 화면 가장자리 빛, 알림 글자). 전설은 금빛, 꾸미기는 분홍·무지개 결
+// 색은 단계가 오를수록 짙게(기둥 알파·고리 겹), 기둥은 굵고 높게 — 전설·꾸미기 빔이 늘 가장 압도적이게 간격을 둔다.
 
 export type LootTier = 0 | 1 | 2 | 3;
 
@@ -45,14 +46,17 @@ export type LootLook = {
   tex: string;
   /** 소리 결 (lootSound) */
   sound: "plain" | "fine" | "rare" | "legend" | "gift";
+  /** 하늘 빔 (전설·꾸미기): 화면 위 끝까지 닿는 빔이 내리꽂혔다가 기둥으로 남는다. rainbow면 무지개 결 */
+  sky?: "gold" | "rainbow";
 };
 
 /** 단계별 기본값 (색만 바꿔 쓴다) */
 const TIER: Record<LootTier, Pick<LootLook, "beamH" | "beamW" | "beamA" | "ringR" | "rings" | "motes" | "pulse">> = {
-  0: { beamH: 0, beamW: 0, beamA: 0, ringR: 0, rings: 0, motes: 0, pulse: 0 },
-  1: { beamH: 38, beamW: 7, beamA: 0.55, ringR: 8, rings: 1, motes: 1.5, pulse: 0.2 },
-  2: { beamH: 66, beamW: 11, beamA: 0.75, ringR: 10, rings: 2, motes: 4, pulse: 0.45 },
-  3: { beamH: 112, beamW: 16, beamA: 0.92, ringR: 13, rings: 3, motes: 8, pulse: 0.7 },
+  0: { beamH: 24, beamW: 5, beamA: 0.42, ringR: 6, rings: 1, motes: 0.8, pulse: 0.15 },
+  1: { beamH: 50, beamW: 8, beamA: 0.62, ringR: 9, rings: 2, motes: 3, pulse: 0.35 },
+  2: { beamH: 78, beamW: 12, beamA: 0.8, ringR: 11, rings: 2, motes: 6, pulse: 0.55 },
+  // 전설: 짧은 기둥 대신 하늘 빔(sky) — 폭은 빔의 남는 기둥 굵기
+  3: { beamH: 120, beamW: 18, beamA: 0.95, ringR: 14, rings: 3, motes: 10, pulse: 0.75 },
 };
 
 /** 등급 → [단계, 기둥 색, 밝은 색] (이름표 색은 등급표 그대로) */
@@ -73,7 +77,7 @@ export function lootLook(d: Pick<Drop, "kind" | "id">): LootLook | null {
     const g = gearById(d.id)!;
     const grade = gearGrade(g);
     const [tier, beam, light] = GRADE_FX[grade.id];
-    return { tier, grade: grade.label, name: g.name, text: grade.color, beam, light, ...TIER[tier], edge: tier === 3, notice: tier === 3 ? "전설 장비!" : undefined, art: g.art, tex: `rpg-loot-${d.kind}-${d.id}`, sound: SOUND[tier] };
+    return { tier, grade: grade.label, name: g.name, text: grade.color, beam, light, ...TIER[tier], edge: tier === 3, notice: tier === 3 ? "전설 장비!" : undefined, art: g.art, tex: `rpg-loot-${d.kind}-${d.id}`, sound: SOUND[tier], ...(tier === 3 ? { sky: "gold" as const } : {}) };
   }
   if (d.kind === "potion") {
     return { tier: 0, grade: "물약", name: info.name, text: "#d9d4c3", beam: 0xd9d4c3, light: 0xfff3c8, ...TIER[0], edge: false, art: info.art, tex: `rpg-loot-${d.kind}-${d.id}`, sound: "plain" };
@@ -86,12 +90,14 @@ export function lootLook(d: Pick<Drop, "kind" | "id">): LootLook | null {
     text: "#ffb0c8",
     beam: 0xf06aa8,
     light: 0xffe2ee,
-    ...TIER[2],
-    edge: false,
+    // 정렬·알림 우선순위는 희귀와 같은 단계지만, 모양은 전설만큼 (하늘 빔 + 가장자리 빛)
+    ...TIER[3],
+    edge: true,
     notice: "꾸미기 선물!",
     art: COSMETIC_DROP_ART,
     tex: "rpg-loot-cosmetic",
     sound: "gift",
+    sky: "rainbow",
   };
 }
 

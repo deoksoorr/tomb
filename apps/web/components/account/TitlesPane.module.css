@@ -120,3 +120,14 @@
 .title:not([data-earned]) .how {
   color: var(--faint);
 }
+
+/* 새로 얻은 칭호 (이번에 처음 봄) */
+.new {
+  margin-left: 6px;
+  padding: 0 4px;
+  background: #e0453a;
+  color: #fff;
+  font-family: var(--font-small);
+  font-size: 10px;
+  vertical-align: middle;
+}

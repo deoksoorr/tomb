@@ -5,6 +5,7 @@ import { titleOfLook } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { TITLE_GROUP_NAMES, TITLE_GROUPS, TITLES, titleDef, type TitleDef } from "@/lib/titles";
 import type { Me } from "@/lib/types";
+import { titleNews } from "@/lib/hooks/useTitleNews";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { wearTitle } from "./actions";
@@ -17,6 +18,8 @@ type Act = (task: () => Promise<void>, done: string) => Promise<void>;
 
 export default function TitlesPane({ me, pending, act }: { me: Me; pending: boolean; act: Act }) {
   const [earned, setEarned] = useState<Set<string> | null>(null);
+  /** 이번에 열었을 때 처음 본 새 칭호 ("새로!" — 닫았다 다시 열면 사라진다) */
+  const [fresh, setFresh] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   // 지금 낀 칭호는 내 정보(착용 목록)에서 — 끼우고 빼면 바로 바뀐다
   const equipped = titleOfLook(me.equipped.map((e) => e.itemId));
@@ -26,7 +29,14 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
     let alive = true;
     api
       .titles()
-      .then((r) => alive && setEarned(new Set(r.earned)))
+      .then((r) => {
+        if (!alive) return;
+        setEarned(new Set(r.earned));
+        setFresh(new Set(r.unseen));
+        // 칸을 열었으니 본 것으로 (가방 단추 점이 꺼진다)
+        if (r.unseen.length) void api.titleMarks({ seen: r.unseen }).catch(() => undefined);
+        titleNews.set([]);
+      })
       .catch((e: unknown) => alive && setError(errorMessage(e)));
     return () => {
       alive = false;
@@ -79,7 +89,9 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
                       aria-label={`${t.name}, ${got ? (on ? "착용 중, 누르면 빼기" : "얻은 칭호, 누르면 달기") : `아직 못 얻음. ${t.how}`}`}
                       onClick={() => toggle(t)}
                     >
-                      <span className={styles.name}>「{t.name}」</span>
+                      <span className={styles.name}>
+                        「{t.name}」{fresh.has(t.id) && <span className={styles.new}>새로!</span>}
+                      </span>
                       <span className={styles.how}>{got ? (on ? "착용 중 · 누르면 빼기" : "누르면 달기") : t.how}</span>
                     </button>
                   </li>

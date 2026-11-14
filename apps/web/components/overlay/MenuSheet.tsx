@@ -46,6 +46,8 @@ type Props = {
   giftCount?: number;
   /** 친구: 받은 친구 신청 수 (빨간 점) */
   friendIncoming?: number;
+  /** 가방 [칭호]에서 아직 안 본 새 칭호가 있다 (가방 타일에 점) */
+  titleNew?: boolean;
   /** 운영자 계정: 친구 기능을 쓸 수 없어 친구 타일을 뺀다 */
   noFriends?: boolean;
   onPick: (target: MenuTarget) => void;
@@ -80,6 +82,7 @@ export default function MenuSheet({
   calendarReady = false,
   giftCount = 0,
   friendIncoming = 0,
+  titleNew = false,
   noFriends = false,
   onPick,
   onClose,
@@ -92,7 +95,7 @@ export default function MenuSheet({
   const entries: Entry[] = [
     { target: "say", icon: "chat", label: "표현 (T)", desc: "말풍선·이모티콘으로 인사하기" },
     { target: "favs", icon: "spark", label: "즐겨찾기 표현 (Y)", desc: "별 표시한 표현을 내 둘레에 펼치기" },
-    { target: "bag", icon: "bag", label: "가방", desc: "꾸미기·폭죽·잡은 것 꺼내기", badge: bagCount ? String(bagCount) : undefined },
+    { target: "bag", icon: "bag", label: "가방", desc: titleNew ? "새 칭호를 얻었어요!" : "꾸미기·폭죽·잡은 것 꺼내기", badge: bagCount ? String(bagCount) : undefined, dot: titleNew },
     { target: "hunt", icon: "sword", label: "사냥터", desc: "몬스터 사냥 · 경험치와 포인트" },
     { target: "dex", icon: "book", label: "도감", desc: "물고기·곤충·약초 모으기" },
     { target: "housing", icon: "house", label: "집·분양 마을", desc: "내 집 분양받고 꾸미기" },
@@ -149,7 +152,7 @@ export default function MenuSheet({
         </span>
         <span className={styles.desc}>{e.desc}</span>
       </span>
-      {e.dot && <span className={cx(styles.dot, styles.corner)} aria-label="새 공지" />}
+      {e.dot && <span className={cx(styles.dot, styles.corner)} aria-label={e.target === "bag" ? "새 칭호" : "새 공지"} />}
       {e.redDot && <span className={cx(styles.dot, styles.redDot, styles.corner)} aria-label="받을 것이 있어요" />}
     </button>
   );

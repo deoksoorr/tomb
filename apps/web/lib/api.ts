@@ -141,6 +141,8 @@ export const api = {
   /** 칭호: 얻은 것·낀 것 / 하나 끼우기(null = 빼기) */
   titles: () => request<TitlesResponse>("/api/me/titles", { cache: "no-store" }),
   setTitle: (id: string | null) => request<WearResponse>("/api/me/titles", jsonInit("POST", { id })),
+  /** 칭호 알림 기록 (알림 창을 띄운 것·가방에서 본 것) */
+  titleMarks: (marks: { announced?: string[]; seen?: string[] }) => request<{ ok: true }>("/api/me/titles/marks", jsonInit("POST", marks)),
   buy: (itemId: string) => request<BuyResponse>("/api/shop/buy", jsonInit("POST", { itemId })),
   /** 아이템 사용 (이름이 use로 시작하면 훅으로 오해받으므로 spend) */
   spendItem: (itemId: string, graveId?: string) =>

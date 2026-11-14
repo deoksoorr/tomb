@@ -9,6 +9,7 @@ import { getChamp } from "@/lib/store/champ";
 import { earnedTitleIds, titleDef, titleLabel, TITLE_GROUPS, TITLES } from "@/lib/titles";
 import type { ApiError, TitlesResponse, WearResponse } from "@/lib/types";
 import { wardrobeEntries } from "@/components/account/wardrobe";
+import * as marks from "./me/titles/marks/route";
 import * as titles from "./me/titles/route";
 import * as session from "./session/route";
 
@@ -66,7 +67,7 @@ describe("칭호 끼우기 (/api/me/titles)", () => {
     const v = await newVisitor();
     const day = kstDay();
     const get = async () => (await (await titles.GET(call("/api/me/titles", v))).json()) as TitlesResponse;
-    expect(await get()).toEqual({ earned: [], equipped: null });
+    expect(await get()).toEqual({ earned: [], equipped: null, fresh: [], unseen: [], first: true });
 
     const locked = await titles.POST(call("/api/me/titles", v, { id: "t_fish50" }));
     expect(locked.status).toBe(403);
@@ -96,3 +97,36 @@ describe("칭호 끼우기 (/api/me/titles)", () => {
     expect((await getAccounts().get(v.visitorId, day, Date.now())).equipped).toEqual([]);
   });
 });
+
+describe("새 칭호 알림 (fresh·unseen·first)", () => {
+  it("기능 전에 얻어 둔 칭호는 처음 한 번 묶어서, 그 뒤엔 새로 얻은 것만 알린다 · 가방에서 보면 새로! 표시가 꺼진다", async () => {
+    const v = await newVisitor();
+    const day = kstDay();
+    const get = async () => (await (await titles.GET(call("/api/me/titles", v))).json()) as TitlesResponse;
+    const mark = (body: object) => marks.POST(call("/api/me/titles/marks", v, body));
+    // 이미 얻어 둔 칭호 둘 → 처음 확인: 둘 다 fresh, first
+    await getForageStore().markDexTitles(v.visitorId, ["bug:50", "ore:100"], day);
+    expect(await get()).toMatchObject({ fresh: ["t_bug50", "t_ore100"], unseen: ["t_bug50", "t_ore100"], first: true });
+    // 알림 창을 띄움 → 다시 확인해도 안 뜬다 (가방 점은 남는다)
+    expect((await mark({ announced: ["t_bug50", "t_ore100"] })).status).toBe(200);
+    expect(await get()).toMatchObject({ fresh: [], unseen: ["t_bug50", "t_ore100"], first: false });
+    // 새로 얻은 칭호 하나 → 그것만
+    await getForageStore().markDexTitles(v.visitorId, ["star:50"], day);
+    expect(await get()).toMatchObject({ fresh: ["t_star50"], first: false });
+    // 가방 [칭호] 칸에서 봄
+    await mark({ announced: ["t_star50"], seen: ["t_bug50", "t_ore100", "t_star50"] });
+    expect(await get()).toMatchObject({ fresh: [], unseen: [], first: false });
+    // 모르는 칭호 id는 400
+    expect((await mark({ seen: ["hat_cat"] })).status).toBe(400);
+  });
+
+  it("얻은 칭호가 없어도 처음 확인 뒤 얻은 칭호는 하나씩 (first 아님)", async () => {
+    const v = await newVisitor();
+    const get = async () => (await (await titles.GET(call("/api/me/titles", v))).json()) as TitlesResponse;
+    expect((await get()).first).toBe(true);
+    await marks.POST(call("/api/me/titles/marks", v, { announced: [] }));
+    await getForageStore().markDexTitles(v.visitorId, ["dig:50"], kstDay());
+    expect(await get()).toMatchObject({ fresh: ["t_dig50"], first: false });
+  });
+});
+

@@ -26,6 +26,11 @@ export class GlyphAtlas {
   private readonly font: string;
   private readonly ascent: number;
   private readonly cellH: number;
+  /**
+   * 글자 칸 위·아래의 빈 줄 수 (px, 배율 1): 한글 글자(외곽선 포함) 위·아래로 칸 안에 남는 여백.
+   * 이름표 위에 칭호·배지를 쌓을 때 "보이는 글자" 사이 간격을 맞추는 데 쓴다
+   */
+  readonly inkPad: { top: number; bottom: number };
   private cx = 0;
   private cy = 0;
   private full = false;
@@ -51,6 +56,14 @@ export class GlyphAtlas {
     this.ascent = Math.round(m.fontBoundingBoxAscent || m.actualBoundingBoxAscent || FONT_PX * 0.85);
     const descent = Math.round(m.fontBoundingBoxDescent || m.actualBoundingBoxDescent || FONT_PX * 0.2);
     this.cellH = this.ascent + descent + PAD * 2;
+    const ink = sctx.measureText("가힣");
+    const inkA = Math.ceil(ink.actualBoundingBoxAscent || this.ascent);
+    const inkD = Math.ceil(ink.actualBoundingBoxDescent || 0);
+    // 글자는 기준선(PAD + ascent)에 그리고 외곽선 1px을 두른다
+    this.inkPad = {
+      top: Math.max(0, PAD + this.ascent - inkA - 1),
+      bottom: Math.max(0, this.cellH - (PAD + this.ascent + inkD + 1)),
+    };
 
     const data: Phaser.Types.GameObjects.BitmapText.BitmapFontData = {
       font: FONT_KEY,

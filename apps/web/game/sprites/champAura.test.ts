@@ -115,3 +115,31 @@ describe("오라는 모든 자세에서 (수영·잠수·매달리기·해먹 �
     expect(up.find((c) => c.art === "champRingFront")!.y).toBe(170);
   });
 });
+
+describe("타는 펫에 올라탄 오라", () => {
+  it("발밑 줄은 펫 발밑(땅), 펫과 사람을 감싸게 넓고, 앞쪽 빛은 펫+사람 상자를 가리지 않는다", () => {
+    const worn = frames(0, ["aura_sparkle"], { aura: { base: 200, top: 165, dim: 1, wide: 1.75 } }, 30).flat().filter((c) => c.art === "sparkStar");
+    const wornPlain = frames(0, ["aura_sparkle"], { aura: { base: 200, top: 165, dim: 1 } }, 30).flat().filter((c) => c.art === "sparkStar");
+    // 착용 오라도 몸 둘레 거리가 넓어진다
+    expect(Math.max(...worn.map((c) => Math.abs(c.x - 100)))).toBeGreaterThan(Math.max(...wornPlain.map((c) => Math.abs(c.x - 100))) * 1.5);
+    const wide = 1.75;
+    const a = { base: 200, top: 165, dim: 1, wide };
+    // 전용 오라만 (착용 오라는 원래 앞쪽 반원이 몸 앞을 지나가는 연출이라 따로 — 거리만 넓힌다)
+    const all = frames(7, [], { headY: 189, aura: a });
+    const plain = frames(7, [], { aura: { base: 200, top: 165, dim: 1 } }, 2)[1];
+    const ring = all[1].find((c) => c.art === "champRingFront")!;
+    expect(ring.y).toBe(200);
+    expect(ring.sx).toBeGreaterThan(plain.find((c) => c.art === "champRingFront")!.sx * 1.5);
+    for (const out of all)
+      for (const c of out) {
+        if (c.layer !== "light" || c.art === "champHalo" || c.art.startsWith("champRing")) continue;
+        const art = FX_ART[c.art];
+        const w = art.w * Math.abs(c.sx);
+        const h = art.h * Math.abs(c.sy);
+        const left = c.x - w * c.ox;
+        const top = c.y - h * c.oy;
+        const overlaps = left < 100 + 7 * wide && left + w > 100 - 7 * wide && top < a.base - 1 && top + h > a.top;
+        expect(overlaps, `${c.art} ${c.x},${c.y}`).toBe(false);
+      }
+  });
+});

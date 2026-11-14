@@ -921,7 +921,7 @@ export type FxInput = {
    * 오라(착용 오라·전용 오라)를 그릴 몸 자리. 주면 hidden 자세(수영·잠수·매달리기·해먹·눕기·욕조)에서도 오라를 그린다:
    * base = 발밑 줄(물이면 수면, 공중이면 몸 아래), top = 보이는 몸 꼭대기, dim = 밝기 배율(잠수 중엔 은은하게)
    */
-  aura?: { base: number; top: number; dim: number };
+  aura?: { base: number; top: number; dim: number; wide?: number };
 };
 
 /** 몸에 붙은 연출의 기준 depth: 아바타 그림 depth (덮어쓴 값이 있으면 그것) */
@@ -936,11 +936,11 @@ const TRAIL_BEHIND = 2;
 const BODY_HALF_W = 7;
 
 /** 흔적 그림이 몸 그림(발바닥 줄 위, 머리 꼭대기 아래, 몸 너비 안)과 겹치는지. 발바닥 줄 아래는 바닥이라 겹침이 아니다 */
-function overBody(c: FxCmd, a: { w: number; h: number }, f: Pick<FxInput, "x" | "headY" | "artTop">): boolean {
+function overBody(c: FxCmd, a: { w: number; h: number }, f: Pick<FxInput, "x" | "headY" | "artTop" | "aura">): boolean {
   const hw = (a.w * Math.abs(c.sx)) / 2;
   const top = c.y - a.h * Math.abs(c.sy) * c.oy;
   const bottom = top + a.h * Math.abs(c.sy);
-  return Math.abs(c.x - f.x) < BODY_HALF_W + hw && top < f.headY - 1 && bottom > f.headY - f.artTop;
+  return Math.abs(c.x - f.x) < BODY_HALF_W * (f.aura?.wide ?? 1) + hw && top < f.headY - 1 && bottom > f.headY - f.artTop;
 }
 const PET_LAG_MS = 240;
 /** 펫이 물에 들어가거나 나오는 데 걸리는 시간 (뒤따라오느라 주인보다 조금 늦게 잠긴다) */
@@ -1060,10 +1060,15 @@ export class CosmeticFxSim {
           break;
         case "aura":
           if (f.aura) {
-            // 모든 자세에서: 보이는 몸 자리에 맞춰 그린다 (물이면 수면 위, 공중이면 몸 아래로 따라간다)
+            // 모든 자세에서: 보이는 몸 자리에 맞춰 그린다 (물이면 수면 위, 공중이면 몸 아래로 따라간다, 타는 펫이면 펫까지 감싸게)
             const n = out.length;
             this.aura(s, { ...f, headY: f.aura.base, artTop: Math.max(6, f.aura.base - f.aura.top) }, t, out);
-            if (f.aura.dim < 1) for (let i = n; i < out.length; i++) out[i].alpha *= f.aura.dim;
+            const wide = f.aura.wide ?? 1;
+            for (let i = n; i < out.length; i++) {
+              if (f.aura.dim < 1) out[i].alpha *= f.aura.dim;
+              // 착용 오라는 몸 둘레 거리를 넓힌다 (전용 오라는 champAura가 크기까지 맞춘다)
+              if (wide !== 1 && s.motion !== "champ") out[i].x = Math.round(f.x + (out[i].x - f.x) * wide);
+            }
           } else if (!f.hidden) this.aura(s, f, t, out);
           break;
       }
@@ -1505,40 +1510,43 @@ function champAura(theme: number, f: FxInput, t: number, out: FxCmd[]): void {
   const rainbow = theme === CHAMP_THEMES - 1;
   const calm = f.reduced || !!f.still;
   const pulse = calm ? 0.85 : 0.75 + 0.25 * Math.sin(t / 260);
+  // 타는 펫이면 펫과 사람 전체를 감싸게 가로로 넓힌다 (W), 세로는 조금만 (고리가 납작한 타원이라)
+  const W = f.aura?.wide ?? 1;
+  const WY = 1 + (W - 1) * 0.5;
   // ① 바닥 빛 · 빛 고리
   // 땅에 서 있으면 바닥 층, 놀이기구·나무·점프로 몸이 떠 있으면 몸 바로 뒤 층 (바닥 층은 관람차·열기구 그림 아래에 깔려 안 보인다)
   const lifted = f.y - f.headY > 3;
   out.push(
-    cmd("champGlow", theme, bx, fy, { alpha: 0.7 + 0.3 * pulse, sx: 1 + 0.08 * pulse, sy: 1 + 0.08 * pulse, layer: lifted ? "body" : "ground", add: true, depth: lifted ? back - 0.04 : 0 }),
+    cmd("champGlow", theme, bx, fy, { alpha: 0.7 + 0.3 * pulse, sx: (1 + 0.08 * pulse) * W, sy: (1 + 0.08 * pulse) * WY, layer: lifted ? "body" : "ground", add: true, depth: lifted ? back - 0.04 : 0 }),
   );
   const phase = calm ? 0 : Math.floor(t / 70) % RING_PHASES;
   const ring = theme * RING_PHASES + phase;
   const rs = 1 + 0.05 * Math.sin(t / 180);
-  out.push(cmd("champRingBack", ring, bx, fy, { oy: 1, sx: rs, sy: rs, alpha: 0.95, layer: "body", add: true, depth: back }));
-  out.push(cmd("champRingFront", ring, bx, fy, { oy: 0, sx: rs, sy: rs, alpha: 0.95, layer: "light", depth: 0 }));
+  out.push(cmd("champRingBack", ring, bx, fy, { oy: 1, sx: rs * W, sy: rs * WY, alpha: 0.95, layer: "body", add: true, depth: back }));
+  out.push(cmd("champRingFront", ring, bx, fy, { oy: 0, sx: rs * W, sy: rs * WY, alpha: 0.95, layer: "light", depth: 0 }));
   // 바깥 고리: 거꾸로 돌며 크게 숨 쉰다
   const ring2 = theme * RING_PHASES + (RING_PHASES - 1 - phase);
   const rs2 = 1.32 + 0.1 * (calm ? 0.5 : (Math.sin(t / 420) + 1) / 2);
-  out.push(cmd("champRingBack", ring2, bx, fy, { oy: 1, sx: rs2, sy: rs2, alpha: 0.5, layer: "body", add: true, depth: back - 0.005 }));
-  out.push(cmd("champRingFront", ring2, bx, fy, { oy: 0, sx: rs2, sy: rs2, alpha: 0.5, layer: "light", depth: 0 }));
+  out.push(cmd("champRingBack", ring2, bx, fy, { oy: 1, sx: rs2 * W, sy: rs2 * WY, alpha: 0.5, layer: "body", add: true, depth: back - 0.005 }));
+  out.push(cmd("champRingFront", ring2, bx, fy, { oy: 0, sx: rs2 * W, sy: rs2 * WY, alpha: 0.5, layer: "light", depth: 0 }));
   // 후광 고리 (구멍이 몸보다 커서 빛 층에 그려도 몸을 덮지 않는다)
   const midY = Math.round(f.headY - f.artTop * 0.5);
   const hk = Math.max(1, (f.artTop / 2 + 2) / HALO_HOLE_RY);
-  out.push(cmd("champHalo", theme, bx, midY, { sx: hk * (1 + 0.04 * pulse), sy: hk * (1 + 0.04 * pulse), alpha: 0.55 + 0.35 * pulse, layer: "light", depth: 0 }));
+  out.push(cmd("champHalo", theme, bx, midY, { sx: hk * W * (1 + 0.04 * pulse), sy: hk * (1 + 0.04 * pulse), alpha: 0.55 + 0.35 * pulse, layer: "light", depth: 0 }));
   // ④ 섬광: 고리가 크게 퍼지고 몸 뒤에서 빛살이 터진다
   const fp = calm ? 1 : ((t + (bx % 97) * 13) % CHAMP_FLASH_MS) / CHAMP_FLASH_MS;
   if (fp < CHAMP_FLASH_LEN) {
     const k = fp / CHAMP_FLASH_LEN;
     const grow = 1 + k * 1.3;
-    out.push(cmd("champRingBack", ring, bx, fy, { oy: 1, sx: grow, sy: grow, alpha: (1 - k) * 0.9, layer: "body", add: true, depth: back - 0.01 }));
-    out.push(cmd("champRingFront", ring, bx, fy, { oy: 0, sx: grow, sy: grow, alpha: (1 - k) * 0.9, layer: "light", depth: 0 }));
-    out.push(cmd("champHalo", theme, bx, midY, { sx: hk * (1 + k * 0.9), sy: hk * (1 + k * 0.9), alpha: (1 - k) * 0.9, layer: "light", depth: 0 }));
-    const bs = 0.6 + k * 1.4;
+    out.push(cmd("champRingBack", ring, bx, fy, { oy: 1, sx: grow * W, sy: grow * WY, alpha: (1 - k) * 0.9, layer: "body", add: true, depth: back - 0.01 }));
+    out.push(cmd("champRingFront", ring, bx, fy, { oy: 0, sx: grow * W, sy: grow * WY, alpha: (1 - k) * 0.9, layer: "light", depth: 0 }));
+    out.push(cmd("champHalo", theme, bx, midY, { sx: hk * W * (1 + k * 0.9), sy: hk * (1 + k * 0.9), alpha: (1 - k) * 0.9, layer: "light", depth: 0 }));
+    const bs = (0.6 + k * 1.4) * WY;
     out.push(cmd("champBurst", theme, bx, Math.round(f.headY - f.artTop * 0.5), { sx: bs, sy: bs, rot: k * 0.6, alpha: 1 - k, layer: "body", add: true, depth: back - 0.02 }));
   }
   // ② 빛기둥: 가운데(몸 뒤) 하나 + 둘레를 도는 넷
   const ph = calm ? 1 : 0.8 + 0.2 * Math.sin(t / 400);
-  out.push(cmd("champPillar", theme, bx, fy + 1, { oy: 1, sx: 2.2, sy: ph * (f.artTop + 12) / 34, alpha: 0.75, layer: "body", add: true, depth: back - 0.03 }));
+  out.push(cmd("champPillar", theme, bx, fy + 1, { oy: 1, sx: 2.2 * W, sy: ph * (f.artTop + 12) / 34, alpha: 0.75, layer: "body", add: true, depth: back - 0.03 }));
   for (let i = 0; i < 4; i++) {
     const a = (calm ? 0 : t / 1700) + (i * Math.PI) / 2 + Math.PI / 4;
     const c = Math.cos(a);
@@ -1549,14 +1557,14 @@ function champAura(theme: number, f: FxInput, t: number, out: FxCmd[]): void {
     const vis = z < 0 ? 0.55 + 0.45 * Math.min(1, Math.abs(c) + 0.3) : side;
     if (vis < 0.05) continue;
     const h = (0.55 + 0.35 * (calm ? 0.5 : (Math.sin(t / 300 + i * 1.9) + 1) / 2)) * (f.artTop + 16);
-    const x = bx + c * 15;
+    const x = bx + c * 15 * W;
     out.push(cmd("champPillar", theme, Math.round(x), fy + Math.round(z * 3), { oy: 1, sy: h / 34, alpha: 0.85 * vis, layer: z < 0 ? "body" : "light", add: z < 0 || undefined, depth: z < 0 ? back - 0.02 : 0 }));
   }
   // 몸 양옆에서 빠르게 솟는 빛줄기
   if (!calm)
     for (let i = 0; i < 4; i++) {
       const u = (t / 700 + i / 4 + h01(i, 41) * 0.3) % 1;
-      const sx = (i % 2 ? 1 : -1) * (10 + h01(i, 42) * 6);
+      const sx = (i % 2 ? 1 : -1) * (10 + h01(i, 42) * 6) * W;
       out.push(cmd("champStreak", theme, Math.round(bx + sx), Math.round(fy - 2 - u * (f.artTop + 20)), { oy: 0, alpha: Math.sin(Math.PI * u), layer: "light", depth: 0 }));
     }
   // ③ 솟구치는 입자
@@ -1567,7 +1575,7 @@ function champAura(theme: number, f: FxInput, t: number, out: FxCmd[]): void {
     const speed = kind === "ember" ? 1300 : kind === "drop" ? 1600 : 2000;
     const u = calm ? (i + 0.5) / n : (t / speed + i / n + h01(i, 31) * 0.4) % 1;
     const ang = h01(i, 32) * Math.PI * 2 + (calm ? 0 : t / 2400);
-    const r = 7 + h01(i, 33) * 9;
+    const r = (7 + h01(i, 33) * 9) * W;
     let x = bx + Math.cos(ang) * r;
     let y = fy + Math.sin(ang) * 2.5;
     const rise = f.artTop + 18;

@@ -68,6 +68,8 @@ import Telescope from "@/components/rpg/Telescope";
 import HauntDialog from "@/components/haunt/HauntDialog";
 import GoblinClaim from "./GoblinClaim";
 import ChampNotice from "./ChampNotice";
+import TitleNotice from "./TitleNotice";
+import { useTitleNews } from "@/lib/hooks/useTitleNews";
 // 10·11·23번: 출석 달력 · 선물함 · 확성기
 import CalendarDialog from "../account/CalendarDialog";
 import GiftsDialog from "../account/GiftsDialog";
@@ -219,6 +221,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   useAccountOnEnter(ready, options.name, options.color, options.body);
   usePresencePoints(ready);
   const { calendarReady, giftCount } = useSocial(ready);
+  /** 가방 [칭호]에서 아직 안 본 새 칭호 (가방 단추·메뉴 점) */
+  const titleNew = useTitleNews().length > 0;
   const { friendIncoming } = useFriendPresence(ready);
   // 운영자 계정은 친구를 맺을 수 없다 → 친구 버튼·메뉴를 숨긴다 (서버도 막는다)
   const iAmStaff = useBridgeValue("me:staff")?.on === true;
@@ -447,7 +451,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                       <span className="visually-hidden"> (받을 출석 도장·선물·친구 신청 있음)</span>
                     </>
                   )}
-                  {(unreadNotice || (me?.activityUnread ?? 0) > 0) && (
+                  {(unreadNotice || (me?.activityUnread ?? 0) > 0 || titleNew) && (
                     <>
                       <span className={styles.dot} aria-hidden="true" />
                       <span className="visually-hidden"> (새 소식 있음)</span>
@@ -550,6 +554,12 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 <PixelIcon name="bag" />
                 가방
                 {bagCount > 0 && <span className={styles.badge}>{bagCount}</span>}
+                {titleNew && (
+                  <>
+                    <span className={styles.dot} aria-hidden="true" />
+                    <span className="visually-hidden"> (새 칭호 있음)</span>
+                  </>
+                )}
               </button>
               <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("hunt")}>
                 <PixelIcon name="sword" />
@@ -696,6 +706,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           calendarReady={calendarReady}
           giftCount={giftCount}
           friendIncoming={friendIncoming}
+          titleNew={titleNew}
           noFriends={iAmStaff}
           points={me ? me.points : null}
           onPick={pickFromMenu}
@@ -734,6 +745,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       <GoblinClaim />
       {/* 주간 랭킹 1위 알림 창 (본인에게 한 번) */}
       {ready && <ChampNotice />}
+      {ready && <TitleNotice />}
       {panel === "calendar" && <CalendarDialog onClose={closePanel} />}
       {panel === "gifts" && <GiftsDialog onClose={closePanel} onOpenCalendar={() => setPanel("calendar")} />}
       {panel === "friends" && <FriendsDialog onClose={closePanel} />}

@@ -1,0 +1,84 @@
+/* 새 칭호 알림 창: 금빛 테두리 짧은 창 */
+.body {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  box-shadow:
+    0 -2px 0 0 #f3d98a,
+    0 2px 0 0 #f3d98a,
+    -2px 0 0 0 #f3d98a,
+    2px 0 0 0 #f3d98a,
+    inset 0 0 18px rgba(243, 217, 138, 0.18);
+}
+
+.lead {
+  margin: 0;
+  color: var(--bone);
+  font-size: 14px;
+  text-align: center;
+}
+
+.spark {
+  display: block;
+  color: #f3d98a;
+  font-size: 24px;
+  line-height: 1.2;
+  animation: twinkle 1.2s ease-in-out infinite;
+}
+
+.list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list li {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+}
+
+.name {
+  color: #f3d98a;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.how {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.actions button {
+  min-height: 44px;
+}
+
+@keyframes twinkle {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark {
+    animation: none;
+  }
+}

@@ -30,7 +30,7 @@ import { avFrame, ensureRpgTextures, makePlayer, RTEX } from "./sprites";
 import { Arena } from "./arena/Arena";
 import { monsterFrame, monsterOrigin, playMonsterDeath } from "./monsterArt";
 // 바닥 드롭 연출: 판이 끝나는 순간 서버와 같은 식으로 굴린 드롭을 몬스터 자리에 떨군다 (보상은 서버가)
-import { huntDropsFor } from "@/lib/rpg/rewards";
+import { huntBossDrop, huntDropsFor, MIN_RUN_MS, type DropTicket } from "@/lib/rpg/rewards";
 import { LootLayer } from "./loot";
 
 // 사냥터: 위에서 내려다보는 실시간 전투. 웨이브는 서버가 준 시드의 계획(huntPlan)대로 나온다.
@@ -278,6 +278,8 @@ export class HuntScene extends RpgScene {
   private lootDeadline = 0;
   /** 마지막으로 잡은 몬스터 자리 (드롭이 여기서 튀어 오른다) */
   private lastKill: { x: number; y: number } | null = null;
+  /** 우두머리 몫(또는 운영자 시험 드롭)을 우두머리를 잡는 순간 이미 떨궜나 → 판 끝에는 나머지만 */
+  private bossDropped = false;
 
   constructor() {
     super("rpg-hunt");
@@ -418,6 +420,7 @@ export class HuntScene extends RpgScene {
     this.endAt = 0;
     this.lootDeadline = 0;
     this.lastKill = null;
+    this.bossDropped = false;
     this.loot = new LootLayer(
       this,
       {
@@ -860,6 +863,8 @@ export class HuntScene extends RpgScene {
   private killMonster(m: Mon): void {
     m.alive = false;
     this.lastKill = { x: m.x, y: m.y };
+    // 우두머리를 잡는 순간 그 자리에 우두머리 몫을 떨군다 (싸움은 계속 — 다가가면 빨려 오고 3초 뒤 날아온다)
+    if (m.id === this.zone.boss && !this.bossDropped && !this.endSnap) this.dropBossLoot(m.x, m.y);
     this.kills[m.id] = (this.kills[m.id] ?? 0) + 1;
     this.killCount++;
     if (!m.minion && !MONSTERS[m.id].minion) this.waveAlive[m.wave]--;
@@ -2166,9 +2171,10 @@ export class HuntScene extends RpgScene {
       this.flash("시간이 다 됐어요", 1500);
       this.endRun(this.result(), true, 0);
     }
+    // 바닥 드롭 (우두머리 몫은 싸우는 중에도 바닥에 있다)
+    this.loot.update(now, Math.min(delta, 100));
     // 판 끝: 드롭을 다 주웠거나(놓쳐도 잠시 뒤 날아온다) 기다림이 끝나면 결과를 보낸다
     if (this.endSnap) {
-      this.loot.update(now, Math.min(delta, 100));
       if (now >= this.endAt) {
         if (now >= this.lootDeadline) this.loot.rush();
         if (this.loot.count === 0 || now >= this.lootDeadline + 900) return this.finish();
@@ -2368,22 +2374,60 @@ export class HuntScene extends RpgScene {
     let drops: ReturnType<typeof huntDropsFor> = [];
     try {
       // 테스트 서버 시험 드롭이 실린 판이면 서버가 그것을 준다 (승리·쓰러짐 관계없이) → 예측 대신 그대로
-      drops = this.play.testDrops?.length ? this.play.testDrops : huntDropsFor({ game: "hunt", difficulty: this.play.difficulty, seed: this.play.seed, zone: this.play.zone }, r);
+      if (this.play.testDrops?.length) drops = this.bossDropped ? [] : this.play.testDrops;
+      else {
+        drops = huntDropsFor(this.dropTicket(), r);
+        // 우두머리 몫은 잡는 순간 이미 떨궜다 → 맨 앞(우두머리 몫)을 뺀 나머지만
+        const b = this.bossDropped ? huntBossDrop(this.dropTicket()) : null;
+        if (b && drops[0]?.kind === b.kind && drops[0].id === b.id) drops = drops.slice(1);
+      }
     } catch {
       // 연출용 계산이 실패해도 판은 그대로 끝난다 (보상은 서버가)
     }
     // 바닥에 닿고 스스로 날아올 때까지 넉넉히 (그 뒤엔 남은 것을 끌어와 끝낸다)
     this.lootDeadline = now + minMs + (freeze ? 2600 : 4200);
     if (!drops.length) return;
-    // 마지막으로 잡은 자리에서 (멀면 내 둘레에서). 화면(세로로 긴 휴대폰은 좁다) 안쪽으로 당겨 떨어지는 걸 놓치지 않게
-    const k = this.lastKill;
+    // 마지막으로 잡은 자리에서 (멀면 내 둘레에서)
+    const src = this.lootSrc(this.lastKill);
+    this.loot.drop(drops, src.x, src.y, freeze || this.died, freeze ? 120 : 380);
+  }
+
+  private dropTicket(): DropTicket {
+    return { game: "hunt", difficulty: this.play.difficulty, seed: this.play.seed, zone: this.play.zone };
+  }
+
+  /** 드롭이 튀어 오를 자리: 멀면 내 둘레, 화면(세로로 긴 휴대폰은 좁다) 안쪽으로 당겨 떨어지는 걸 놓치지 않게 */
+  private lootSrc(k: { x: number; y: number } | null): { x: number; y: number } {
     const src = k && Math.hypot(k.x - this.px, k.y - this.py) < 140 ? { ...k } : { x: this.px + this.face.x * 14, y: this.py + 4 };
     const v = this.cameras.main.worldView;
     if (v.width > 80 && v.height > 80) {
       src.x = Phaser.Math.Clamp(src.x, v.x + 34, v.right - 34);
       src.y = Phaser.Math.Clamp(src.y, v.y + 40, v.bottom - 30);
     }
-    this.loot.drop(drops, src.x, src.y, freeze || this.died, freeze ? 120 : 380);
+    return src;
+  }
+
+  /**
+   * 우두머리를 잡은 순간: 서버가 줄 우두머리 몫(같은 난수 줄의 맨 앞 — huntBossDrop)을 그 자리에 떨군다.
+   * 운영자 시험 드롭이 실린 판이면 그 묶음을 모두 여기서. 너무 짧은 판(서버가 드롭을 주지 않는 8초 미만)이면 판 끝으로 미룬다
+   */
+  private dropBossLoot(x: number, y: number): void {
+    const test = this.play.testDrops;
+    if (!test?.length && this.now < MIN_RUN_MS) return;
+    this.bossDropped = true;
+    let drops: ReturnType<typeof huntDropsFor> = [];
+    try {
+      if (test?.length) drops = test;
+      else {
+        const b = huntBossDrop(this.dropTicket());
+        drops = b ? [b] : [];
+      }
+    } catch {
+      return;
+    }
+    if (!drops.length) return;
+    const src = this.lootSrc({ x, y });
+    this.loot.drop(drops, src.x, src.y, this.died, 320);
   }
 
   /** 드롭만 줍던 중에 나가도 판은 이미 끝났으니 정상 종료로 */

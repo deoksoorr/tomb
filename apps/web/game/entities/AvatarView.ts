@@ -27,6 +27,8 @@ const FRIEND_TINT = 0xff8fb8;
 const DEX_BADGE_TINT = 0xffd45e;
 /** 칭호 글자 (연한 금빛 — 이름표 뼈색·촛불빛·1위 배지 금색과 구분되게 옅게) */
 const TITLE_TINT = 0xf3d98a;
+/** 칭호 위아래로 보이는 간격 (화면 px): 이름표 ↔ 칭호 ↔ 1위 배지·말풍선 */
+const TITLE_GAP = 6;
 
 // 아바타 한 명의 화면 표현 (스프라이트 + 이름 라벨 + "…" 말풍선). 내 캐릭터와 원격 아바타가 같이 쓴다.
 // 상태 값과 방향만 받아서 애니메이션을 고르고, 상태별 연출은 그림에만 얹는다 (논리 위치는 그대로):
@@ -890,17 +892,25 @@ export class AvatarView {
     const speaking = !!this.speech?.active(now);
     // 이름표 높이(height)는 이미 배율이 들어간 월드 높이 (displayHeight는 배율이 한 번 더 곱해져 이름표에 겹쳤다)
     // 주간 1위 배지가 있으면 이름표 위에 얹고, 말풍선은 그 위로
-    // 이름표 위로 쌓기: (바탕판 여백) → 칭호 → 주간 1위 배지 → 말풍선
+    // 이름표 위로 쌓기: (바탕판 여백) → 칭호 → 주간 1위 배지 → 말풍선.
+    // 칭호가 있으면 보이는 간격을 모두 TITLE_GAP으로 맞춘다: 이름표(바탕판이 있으면 판 윗변, 운영자면 금빛 테두리, 그냥 글자면 글자 윗선) ↔ 칭호 글자 ↔ 1위 배지 판·말풍선
     let lift = this.nameFx?.topLift(labelScale) ?? 0;
+    let labelTop: number;
     if (this.titleText) {
       const t = this.titleText;
-      if (t.scaleX !== labelScale) t.setScale(labelScale);
-      t.setPosition(Math.round(this.label.x), Math.round(this.label.y - this.label.height - lift + labelScale))
-        .setAlpha(fa)
-        .setVisible(vis && this.label.visible);
-      lift += t.height - labelScale;
-    }
-    const labelTop = this.champBadge ? this.champBadge.sync(this.label, labelScale, vis, fa, now, this.reduced, lift) : this.label.y - this.label.height - lift;
+      const sc = labelScale;
+      if (t.scaleX !== sc) t.setScale(sc);
+      const pad = this.atlas.inkPad;
+      const gap = TITLE_GAP * sc;
+      const cellTop = this.label.y - this.label.height;
+      const visibleTop = cellTop - (lift > 0 ? lift : this.staffFx ? 1.5 * sc : -pad.top * sc);
+      const titleBottom = visibleTop - gap + pad.bottom * sc;
+      t.setPosition(Math.round(this.label.x), Math.round(titleBottom)).setAlpha(fa).setVisible(vis && this.label.visible);
+      const titleInkTop = titleBottom - t.height + pad.top * sc;
+      // 1위 배지 판 아랫변 = 칭호 글자 윗선 − 간격 (ChampBadgeView: 판 아랫변 = 칸 위 − 1px − lift)
+      lift = cellTop - sc - (titleInkTop - gap);
+      labelTop = this.champBadge ? this.champBadge.sync(this.label, sc, vis, fa, now, this.reduced, lift) : titleInkTop - gap + sc;
+    } else labelTop = this.champBadge ? this.champBadge.sync(this.label, labelScale, vis, fa, now, this.reduced, lift) : this.label.y - this.label.height - lift;
     if (this.speech) this.speech.place(this.label.x, labelTop - labelScale, labelScale, now, vis);
     // 벤치 상태를 고르면 기본 "…"은 띄우지 않는다
     const longSit = !speaking && !this.mood && this.sitSince > 0 && now - this.sitSince > SIT_IDLE_MS;
@@ -924,8 +934,13 @@ export class AvatarView {
    * 수영·잠수는 수면에 고리를 띄우고 잠긴 만큼 몸 꼭대기를 내린다(잠수 중엔 은은하게), 해먹·눕기·욕조는 누운 몸 높이,
    * 매달리기·점프·놀이기구·타는 펫은 들어 올린 몸 아래(headY), 앉기는 낮아진 머리에 맞춘다
    */
-  private auraFrame(st: StateName, y: number, headY: number, labelY: number, waterDrop: number, sitLift: number, armsUp: number): { base: number; top: number; dim: number } {
+  private auraFrame(st: StateName, y: number, headY: number, labelY: number, waterDrop: number, sitLift: number, armsUp: number): { base: number; top: number; dim: number; wide?: number } {
     if (st === "swim" || st === "dive") return { base: y - WATER_LINE, top: headY - this.artTop + waterDrop, dim: st === "dive" ? 0.45 : 1 };
+    // 타는 펫에 올라탔으면 펫 발밑(땅, 점프하면 같이)을 발밑 줄로, 펫과 사람 전체를 감싸게 넓게 (옆모습은 펫이 길다)
+    if (this.mountedIn(st)) {
+      const side = this.dir === DIR.left || this.dir === DIR.right;
+      return { base: y - this.hop, top: headY - this.artTop, dim: 1, wide: side ? 1.75 : 1.3 };
+    }
     if (st === "hammock" || st === "lie" || st === "bath") {
       const top = labelY + 2;
       return { base: top + 12, top, dim: 1 };
@@ -984,7 +999,7 @@ export class AvatarView {
     }
   }
 
-  private syncCosmetics(now: number, dt: number, x: number, headY: number, vis: boolean, af: { base: number; top: number; dim: number }): void {
+  private syncCosmetics(now: number, dt: number, x: number, headY: number, vis: boolean, af: { base: number; top: number; dim: number; wide?: number }): void {
     const s = this.sprite;
     const st = this.state;
     const wet = st === "swim" || st === "dive";

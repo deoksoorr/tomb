@@ -15,10 +15,18 @@ import { RTEX } from "./sprites";
 //  - 층: 바닥 고리·바닥빛은 바닥 효과 바로 위, 아이콘·기둥은 캐릭터와 y 정렬, 이름표는 연출 위·피해 숫자(1e6) 아래
 //  - 성능: 한 화면 LOOT_MAX개, 칸(이미지·글자·그래픽 묶음)은 풀에서 재사용, 입자는 SkillFx 풀(상한 있음)
 //  - 동작 줄이기: 기둥 맥동·빛 알갱이·화면 섬광·흔들림 없이, 가장자리 빛은 옅게 한 번
+//  - 전설·꾸미기 선물(look.sky): 하늘(화면 위 끝)에서 굵은 빔이 내리꽂혀 크게 번쩍인 뒤 가늘어져 주울 때까지 남는다.
+//    둘레로 소용돌이 빛 고리가 오르고 불티가 나선으로 감아 오른다 (전설 금빛, 꾸미기 분홍 빔 + 무지개 고리·불티).
+//    동작 줄이기면 빔은 처음부터 남는 굵기로 멈춰 있고 번쩍임·소용돌이·불티가 없다
 
 const FONT = '"Galmuri11", "Galmuri9", monospace';
 const TEX_BEAM = "rpg-loot-beam";
 const TEX_EDGE = "rpg-loot-edge";
+/** 하늘 빔 (세로로 한결같은 띠 — 화면 위 끝까지 늘인다) */
+const TEX_SKY = "rpg-loot-sky";
+/** 하늘 빔이 내리꽂히는 시간 · 번쩍였다가 가늘어지는 시간 (ms) */
+const SKY_DROP_MS = 150;
+const SKY_FLARE_MS = 420;
 /** 튀어 오르는 시간 · 여러 개일 때 사이 간격 (ms, 게임 시간) */
 const FLY_MS = 560;
 const STAGGER_MS = 260;
@@ -59,6 +67,8 @@ type Slot = {
   /** 기둥 둘레 번짐 (가산) */
   halo: Phaser.GameObjects.Image;
   ring: Phaser.GameObjects.Graphics;
+  /** 하늘 빔 둘레 소용돌이 고리 */
+  swirl: Phaser.GameObjects.Graphics;
   label: Phaser.GameObjects.Text;
 };
 
@@ -83,6 +93,9 @@ type Item = {
   nextMote: number;
   lift: number;
   seed: number;
+  /** 하늘 빔이 땅에 닿아 번쩍였나 */
+  impacted: boolean;
+  nextSpark: number;
 };
 
 /** 빛기둥 그림: 가운데가 밝고 가장자리·위로 갈수록 계단처럼 옅어진다 (도트 느낌을 살리려고 최근접 필터) */
@@ -108,6 +121,27 @@ function beamCanvas(): HTMLCanvasElement | null {
     }
   }
   return cv;
+}
+
+/** 하늘 빔 띠: 가로로만 가운데가 밝고 (세로는 한결같다), 도트 계단 */
+function skyCanvas(): HTMLCanvasElement | null {
+  if (typeof document === "undefined") return null;
+  const col = [0.08, 0.18, 0.32, 0.5, 0.7, 0.88, 1, 1, 1, 1, 0.88, 0.7, 0.5, 0.32, 0.18, 0.08];
+  const cv = document.createElement("canvas");
+  cv.width = col.length;
+  cv.height = 4;
+  const c = cv.getContext("2d");
+  if (!c) return null;
+  col.forEach((a, x) => {
+    c.fillStyle = `rgba(255,255,255,${a})`;
+    c.fillRect(x, 0, 1, 4);
+  });
+  return cv;
+}
+
+/** 무지개 결 (꾸미기 선물): 0..1 색상환 → 밝은 색 */
+function hue(h: number, sat = 0.5): number {
+  return Phaser.Display.Color.HSVToRGB(((h % 1) + 1) % 1, sat, 1).color ?? 0xffffff;
 }
 
 /** 화면 가장자리 빛 (가운데는 비고 테두리로 갈수록 밝다) */
@@ -149,6 +183,10 @@ export class LootLayer {
     if (!tx.exists(TEX_BEAM)) {
       const cv = beamCanvas();
       if (cv) tx.addCanvas(TEX_BEAM, cv);
+    }
+    if (!tx.exists(TEX_SKY)) {
+      const cv = skyCanvas();
+      if (cv) tx.addCanvas(TEX_SKY, cv);
     }
     if (!tx.exists(TEX_EDGE)) {
       const cv = edgeCanvas();
@@ -201,6 +239,8 @@ export class LootLayer {
         nextMote: 0,
         lift: 0,
         seed: Math.random() * 100,
+        impacted: false,
+        nextSpark: 0,
       });
     });
   }
@@ -264,6 +304,7 @@ export class LootLayer {
       s.halo.setAlpha(s.halo.alpha * fade);
       s.glow.setAlpha(s.glow.alpha * fade);
       s.ring.setAlpha(fade);
+      s.swirl.setAlpha(fade);
       s.shadow.setAlpha(0.6 * fade);
       if (d <= Math.max(4, stepLen)) {
         this.collect(it, tgt);
@@ -307,6 +348,7 @@ export class LootLayer {
         core: sc.add.image(0, 0, TEX_BEAM).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD),
         halo: sc.add.image(0, 0, SKT.glow).setBlendMode(Phaser.BlendModes.ADD),
         ring: sc.add.graphics().setDepth(DEPTH_GROUND + 9),
+        swirl: sc.add.graphics().setBlendMode(Phaser.BlendModes.ADD),
         label: sc.add
           .text(0, 0, "", { fontFamily: FONT, fontSize: "11px", color: "#ffffff", stroke: "#0a0b10", strokeThickness: 3, resolution: 1 })
           .setOrigin(0.5, 1)
@@ -314,18 +356,19 @@ export class LootLayer {
       } satisfies Slot);
     s.icon.setTexture(look.tex).setScale(1).setAlpha(1).clearTint();
     s.label.setText(look.name).setColor(look.text).setScale(1 / (sc.cameras.main.zoom || 1));
-    for (const o of [s.shadow, s.icon, s.glow, s.beam, s.core, s.halo, s.ring, s.label]) o.setVisible(false).setActive(true);
+    for (const o of [s.shadow, s.icon, s.glow, s.beam, s.core, s.halo, s.ring, s.swirl, s.label]) o.setVisible(false).setActive(true);
     return s;
   }
 
   private release(s: Slot): void {
     s.ring.clear();
-    for (const o of [s.shadow, s.icon, s.glow, s.beam, s.core, s.halo, s.ring, s.label]) o.setVisible(false).setActive(false);
+    s.swirl.clear();
+    for (const o of [s.shadow, s.icon, s.glow, s.beam, s.core, s.halo, s.ring, s.swirl, s.label]) o.setVisible(false).setActive(false);
     this.pool.push(s);
   }
 
   private kill(s: Slot): void {
-    for (const o of [s.shadow, s.icon, s.glow, s.beam, s.core, s.halo, s.ring, s.label]) if (o.scene) o.destroy();
+    for (const o of [s.shadow, s.icon, s.glow, s.beam, s.core, s.halo, s.ring, s.swirl, s.label]) if (o.scene) o.destroy();
   }
 
   private ensureIcon(look: LootLook): void {
@@ -354,35 +397,60 @@ export class LootLayer {
     it.cx = it.x;
     it.cy = it.y;
     it.nextMote = now + 200;
+    it.nextSpark = now;
     s.icon.setPosition(Math.round(it.x), Math.round(it.y)).setDepth(it.y);
     s.shadow.setPosition(it.x, it.y).setScale(0.75, 0.8).setAlpha(0.6);
     s.label.setVisible(true).setAlpha(0);
     const t = look.tier;
     const lite = this.reduced ? 0.4 : this.mobile ? 0.7 : 1;
-    // 모든 등급: 닿는 순간 반짝 + 먼지
+    const tex = look.sky ? TEX_SKY : TEX_BEAM;
+    // 모든 등급: 닿는 순간 반짝 + 먼지, 바닥 고리가 퍼지며 자리를 잡고, 빛기둥이 솟는다
     this.fx.twinkle(it.x, it.y - 6, Math.max(1, Math.round((2 + t * 2) * lite)), 8 + t * 2, look.light, 480, 0.4 + t * 0.06);
     this.fx.emit({ x: it.x, y: it.y, tex: SKT.glow, tint: 0xfff3dc, life: 260, s0: 0.12, s1: 0.32, sy: 0.4, alpha: 0.5, depth: DEPTH_GROUND + 7 });
+    this.fx.ring(it.x, it.y, look.ringR * 1.8, look.beam, 420, 2, 0, DEPTH_GROUND + 9);
+    s.glow.setVisible(true).setTint(look.beam).setPosition(it.x, it.y).setScale((look.ringR * 1.6) / 32, (look.ringR * 0.7) / 32);
+    s.beam.setTexture(tex).setVisible(true).setTint(look.beam).setPosition(it.x, it.y + 1).setDepth(it.y - 0.3).setScale(0.01, 0.01);
+    s.core.setTexture(tex).setVisible(true).setTint(look.light).setPosition(it.x, it.y + 1).setDepth(it.y - 0.2).setScale(0.01, 0.01);
+    s.halo.setVisible(true).setTint(look.beam).setDepth(it.y - 0.4);
+    s.ring.setVisible(true).setAlpha(1);
+    s.swirl.clear().setVisible(!!look.sky).setAlpha(1).setDepth(it.y + 0.5);
     if (t >= 1) {
-      // 바닥 고리가 퍼지며 자리를 잡고, 빛기둥이 솟는다
-      this.fx.ring(it.x, it.y, look.ringR * 1.8, look.beam, 420, 2, 0, DEPTH_GROUND + 9);
-      s.glow.setVisible(true).setTint(look.beam).setPosition(it.x, it.y).setScale((look.ringR * 1.6) / 32, (look.ringR * 0.7) / 32);
-      s.beam.setVisible(true).setTint(look.beam).setPosition(it.x, it.y + 1).setDepth(it.y - 0.3);
-      s.core.setVisible(true).setTint(look.light).setPosition(it.x, it.y + 1).setDepth(it.y - 0.2);
-      s.halo.setVisible(true).setTint(look.beam).setDepth(it.y - 0.4);
-      s.ring.setVisible(true).setAlpha(1);
+      // 튀는 섬광: 작은 빛 + 위로 튀는 불티 몇 개
+      this.fx.glow(it.x, it.y - 6, 14 + t * 6, look.light, 260, 0.25, 0.8, it.y + 2);
+      this.fx.sparks(it.x, it.y - 4, Math.round((3 + t * 3) * lite), [look.light, look.beam, 0xffffff], 70 + t * 22, { ang: -Math.PI / 2, spread: 1.6, ay: 120, life: 420 });
     }
     if (t >= 2) {
-      // 섬광: 바닥빛이 크게 번지고 불티가 위로
-      this.fx.glow(it.x, it.y - 8, 22 + t * 6, look.light, 300, 0.2, 0.9, it.y + 2);
-      this.fx.sparks(it.x, it.y - 4, Math.round((5 + t * 3) * lite), [look.light, look.beam, 0xffffff], 90 + t * 20, { ang: -Math.PI / 2, spread: 1.6, ay: 120, life: 460 });
+      // 희귀: 착지 섬광 + 작은 충격 고리 + 보라 불티
+      this.fx.glow(it.x, it.y - 8, 30, look.light, 320, 0.2, 0.95, it.y + 2);
+      this.fx.ring(it.x, it.y, 30, look.light, 480, 2, 40, DEPTH_GROUND + 9);
+      this.fx.sparks(it.x, it.y - 6, Math.round(8 * lite), [look.beam, look.light], 120, { spread: 6.3, ay: 60, life: 520, flat: 0.6 });
     }
-    if (t >= 3) {
-      this.fx.ring(it.x, it.y, 46, look.light, 620, 3, 60, DEPTH_GROUND + 9);
-      this.fx.screenFlash(look.light, 0.2, 220);
-      this.host.shake(160, 0.0035);
+    if (look.sky) {
+      // 하늘 빔: 내리꽂는 소리부터 (번쩍임·흔들림·알림은 빔이 땅에 닿는 순간 — skyImpact)
+      this.sound("beam", look);
+      if (this.reduced) this.skyImpact(it, now);
+      return;
     }
     if (look.edge) this.showEdge(now, look.beam);
     if (look.notice) this.showNotice(now, look.notice, look.text, t);
+    this.sound("land", look);
+  }
+
+  /** 하늘 빔이 땅에 닿는 순간: 크게 번쩍 + 충격 고리 두 겹 + 사방 불티 + 화면 섬광·흔들림 + 가장자리 빛·알림 */
+  private skyImpact(it: Item, now: number): void {
+    const { look } = it;
+    it.impacted = true;
+    const lite = this.reduced ? 0.4 : this.mobile ? 0.7 : 1;
+    const tints = look.sky === "rainbow" ? [0, 0.16, 0.33, 0.5, 0.66, 0.83].map((h) => hue(h, 0.45)) : [look.light, look.beam, 0xffffff];
+    this.fx.glow(it.x, it.y - 10, 48, look.light, 420, 0.2, 1, it.y + 2);
+    this.fx.ring(it.x, it.y, 56, look.light, 640, 3, 0, DEPTH_GROUND + 9);
+    this.fx.ring(it.x, it.y, 34, look.beam, 520, 2, 90, DEPTH_GROUND + 9);
+    this.fx.sparks(it.x, it.y - 6, Math.round(18 * lite), tints, 170, { spread: 6.3, ay: 40, life: 620, flat: 0.55 });
+    this.fx.sparks(it.x, it.y - 10, Math.round(10 * lite), tints, 200, { ang: -Math.PI / 2, spread: 0.9, ay: 80, life: 700 });
+    this.fx.screenFlash(look.light, 0.26, 240);
+    this.host.shake(200, 0.0045);
+    if (look.edge) this.showEdge(now, look.beam);
+    if (look.notice) this.showNotice(now, look.notice, look.text, look.tier);
     this.sound("land", look);
   }
 
@@ -399,24 +467,24 @@ export class LootLayer {
       .setPosition(it.x, it.y - 17 - it.lift)
       .setScale(1 / (this.scene.cameras.main.zoom || 1))
       .setAlpha(Math.min(1, age / 220));
-    if (look.tier === 0) {
+    if (look.tier === 0 && now >= it.nextSpark) {
       // 일반·물약: 가끔 작은 별 하나
-      if (now >= it.nextMote) {
-        it.nextMote = now + (this.reduced ? 1800 : 900) + Math.random() * 400;
-        this.fx.twinkle(it.x + (Math.random() - 0.5) * 8, it.y - 8 - Math.random() * 6, 1, 0, look.light, 520, 0.35);
-      }
-      return;
+      it.nextSpark = now + (this.reduced ? 1800 : 900) + Math.random() * 400;
+      this.fx.twinkle(it.x + (Math.random() - 0.5) * 8, it.y - 8 - Math.random() * 6, 1, 0, look.light, 520, 0.35);
     }
-    // 기둥: 닿은 뒤 220ms 동안 아래에서 위로 솟고, 그다음 맥동 (동작 줄이기면 멈춘 채)
-    const grow = Math.min(1, age / 220);
     const wave = this.reduced ? 0.5 : 0.5 + 0.5 * Math.sin(now / 240 + it.seed);
     const p = look.pulse;
-    const h = (look.beamH / 64) * grow * (1 + (this.reduced ? 0 : 0.06 * p * Math.sin(now / 380 + it.seed)));
-    s.beam.setScale(look.beamW / 12, h).setAlpha(look.beamA * (1 - p * 0.25 * wave));
-    s.core.setScale((look.beamW * 0.45) / 12, h * 0.94).setAlpha(look.beamA * (0.75 + 0.25 * wave));
-    // 둘레 번짐: 기둥 아래쪽이 더 넓게 빛난다
-    const hh = look.beamH * grow;
-    s.halo.setPosition(it.x, it.y - hh * 0.38).setDisplaySize(look.beamW * 3.2, Math.max(1, hh * 1.05)).setAlpha(look.beamA * (0.22 + 0.18 * wave));
+    if (look.sky) this.skyBeam(it, now, age, wave);
+    else {
+      // 기둥: 닿은 뒤 220ms 동안 아래에서 위로 솟고, 그다음 맥동 (동작 줄이기면 멈춘 채)
+      const grow = Math.min(1, age / 220);
+      const h = (look.beamH / 64) * grow * (1 + (this.reduced ? 0 : 0.06 * p * Math.sin(now / 380 + it.seed)));
+      s.beam.setScale(look.beamW / 12, h).setAlpha(look.beamA * (1 - p * 0.25 * wave));
+      s.core.setScale((look.beamW * 0.45) / 12, h * 0.94).setAlpha(look.beamA * (0.75 + 0.25 * wave));
+      // 둘레 번짐: 기둥 아래쪽이 더 넓게 빛난다
+      const hh = look.beamH * grow;
+      s.halo.setPosition(it.x, it.y - hh * 0.38).setDisplaySize(look.beamW * 3.2, Math.max(1, hh * 1.05)).setAlpha(look.beamA * (0.22 + 0.18 * wave));
+    }
     s.glow.setAlpha(0.35 + 0.35 * look.beamA * (0.6 + 0.4 * wave));
     this.drawRing(it, now, wave);
     // 빛 알갱이: 기둥 안을 타고 오른다
@@ -438,6 +506,95 @@ export class LootLayer {
         depth: it.y + 0.4,
         fade: 1.6,
       });
+    }
+  }
+
+  /**
+   * 하늘 빔: ① 화면 위 끝에서 아이템까지 굵은 빔이 내리꽂힌다(SKY_DROP_MS) ② 닿는 순간 크게 번쩍 → 가늘어진다(SKY_FLARE_MS)
+   * ③ 가는 기둥으로 주울 때까지 남는다 (맥동). 둘레로 소용돌이 고리가 오르고 불티가 나선으로 감아 오른다
+   */
+  private skyBeam(it: Item, now: number, age: number, wave: number): void {
+    const { look, slot: s } = it;
+    const top = this.scene.cameras.main.worldView.y - 12;
+    const full = Math.max(8, it.y + 1 - top);
+    const W = look.beamW;
+    const rainbow = look.sky === "rainbow";
+    let tip = it.y + 1;
+    let width = W * 0.8;
+    let alpha = look.beamA * (0.85 - 0.15 * wave);
+    if (!this.reduced && age < SKY_DROP_MS) {
+      // 내리꽂힘: 가속하며 아래로 (빔 끝이 아이템에 닿을 때까지)
+      const k = age / SKY_DROP_MS;
+      tip = top + full * k * k;
+      width = W * 1.5;
+      alpha = 1;
+    } else {
+      if (!it.impacted) this.skyImpact(it, now);
+      const u = (age - SKY_DROP_MS) / SKY_FLARE_MS;
+      if (!this.reduced && u < 1) {
+        // 번쩍 → 가늘어짐
+        width = W * (0.8 + 2.4 * (1 - u) * (1 - u));
+        alpha = look.beamA + (1 - look.beamA) * (1 - u);
+      } else if (!this.reduced) width = W * (0.8 + 0.12 * wave);
+    }
+    const h = Math.max(1, tip - top) / 4;
+    s.beam.setPosition(it.x, tip).setScale(width / 16, h).setAlpha(alpha * 0.85);
+    s.core.setPosition(it.x, tip).setScale((width * 0.42) / 16, h).setAlpha(Math.min(1, alpha + 0.1));
+    if (rainbow) s.core.setTint(hue(now / 2400 + it.seed, 0.25));
+    // 둘레 번짐은 바닥 쪽만 (화면 끝까지 퍼지면 화면이 뿌옇다)
+    const hh = Math.min(90, tip - top);
+    s.halo.setPosition(it.x, tip - hh * 0.4).setDisplaySize(W * 4, Math.max(1, hh)).setAlpha(look.beamA * (0.3 + 0.2 * wave));
+    if (this.reduced || age < SKY_DROP_MS) {
+      s.swirl.clear();
+      return;
+    }
+    this.drawSwirl(it, now);
+    // 나선 불티: 빔을 감아 오른다
+    if (now >= it.nextSpark) {
+      it.nextSpark = now + 1000 / (this.mobile ? 8 : 14);
+      const a = Math.random() * Math.PI * 2;
+      this.fx.emit({
+        x: it.x,
+        y: it.y - 3,
+        tex: SKT.ember,
+        tint: rainbow ? hue(now / 1500 + Math.random() * 0.3, 0.5) : Math.random() < 0.5 ? look.light : 0xffffff,
+        life: 1200,
+        s0: 0.75,
+        s1: 0.25,
+        alpha: 1,
+        depth: it.y + 0.6,
+        fade: 1.4,
+        orb: { ox: it.x, oy: it.y - 3, r: W * 0.75, a, v: 5, dr: -3, lift: 46, flat: 0.32 },
+      });
+    }
+  }
+
+  /** 소용돌이 빛 고리 세 개가 빔을 따라 오르며 작아지고 옅어진다 (조각이 돌아 회오리처럼) */
+  private drawSwirl(it: Item, now: number): void {
+    const { look, slot: s } = it;
+    const g = s.swirl;
+    g.clear();
+    const W = look.beamW;
+    for (let i = 0; i < 3; i++) {
+      const f = (now / 1100 + i / 3 + it.seed) % 1;
+      const cy = it.y - 4 - f * 72;
+      const r = W * (1.35 - 0.6 * f);
+      const color = look.sky === "rainbow" ? hue(now / 2000 + i / 3, 0.55) : i === 1 ? look.beam : look.light;
+      const spin = now / 260 + i * 2.1;
+      g.lineStyle(1, color, 0.95 * (1 - f));
+      // 고리를 다섯 조각으로 (빈틈이 돌아 소용돌이처럼 보인다)
+      for (let j = 0; j < 5; j++) {
+        const a0 = spin + (j / 5) * Math.PI * 2;
+        g.beginPath();
+        for (let q = 0; q <= 4; q++) {
+          const aa = a0 + ((Math.PI * 2) / 5) * 0.65 * (q / 4);
+          const x = it.x + Math.cos(aa) * r;
+          const y = cy + Math.sin(aa) * r * 0.3;
+          if (q === 0) g.moveTo(x, y);
+          else g.lineTo(x, y);
+        }
+        g.strokePath();
+      }
     }
   }
 

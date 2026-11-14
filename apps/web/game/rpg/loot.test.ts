@@ -24,11 +24,12 @@ describe("등급별 모양", () => {
     }
   });
 
-  it("단계가 오를수록 기둥이 굵고 높고 짙으며 알갱이·맥동도 는다. 일반·물약은 기둥 없이 반짝임만", () => {
+  it("단계가 오를수록 기둥이 굵고 높고 짙으며 알갱이·맥동도 는다. 일반·물약도 작은 기둥·고리가 있고, 전설만 하늘 빔", () => {
     const pick = (t: LootTier) => lootLook({ kind: "gear", id: GEAR.find((g) => lootLook({ kind: "gear", id: g.id })!.tier === t)!.id })!;
     const ls = ([0, 1, 2, 3] as const).map(pick);
-    expect(ls[0].beamH).toBe(0);
-    expect(ls[0].ringR).toBe(0);
+    expect(ls[0].beamH).toBeGreaterThan(0);
+    expect(ls[0].ringR).toBeGreaterThan(0);
+    expect(ls.map((l) => l.sky)).toEqual([undefined, undefined, undefined, "gold"]);
     for (let i = 1; i < 4; i++) {
       expect(ls[i].beamH).toBeGreaterThan(ls[i - 1].beamH);
       expect(ls[i].beamW).toBeGreaterThan(ls[i - 1].beamW);
@@ -36,8 +37,10 @@ describe("등급별 모양", () => {
       expect(ls[i].motes).toBeGreaterThanOrEqual(ls[i - 1].motes);
       expect(ls[i].pulse).toBeGreaterThanOrEqual(ls[i - 1].pulse);
     }
-    // 전설만 화면 가장자리 빛 + 알림 글자
+    // 장비 중에는 전설만 화면 가장자리 빛 + 알림 글자
     expect(ls.map((l) => l.edge)).toEqual([false, false, false, true]);
+    // 단계 간격: 희귀 기둥도 전설의 3/4보다 낮다 (전설·꾸미기 빔이 늘 가장 압도적)
+    expect(ls[2].beamH).toBeLessThan(ls[3].beamH * 0.75);
     expect(ls[3].notice).toBe("전설 장비!");
     for (const p of POTIONS) expect(lootLook({ kind: "potion", id: p.id })!.tier).toBe(0);
   });
@@ -46,6 +49,10 @@ describe("등급별 모양", () => {
     const l = lootLook({ kind: "cosmetic", id: COSMETIC_DROPS[0] })!;
     expect(l.name).toBe("꾸미기 선물");
     expect(l.tier).toBe(2);
+    // 모양은 전설만큼: 무지개 결 하늘 빔 + 가장자리 빛
+    expect(l.sky).toBe("rainbow");
+    expect(l.edge).toBe(true);
+    expect(l.beamW).toBe(lootLook({ kind: "gear", id: GEAR.find((g) => gearGrade(g).id === "legend")!.id })!.beamW);
     expect(lootLook({ kind: "gear", id: "없는것" })).toBeNull();
   });
 });
@@ -100,6 +107,17 @@ describe("드롭 소리", () => {
       expect(soundEnd(land[i])).toBeGreaterThan(soundEnd(land[i - 1]));
     }
     expect(new Set(SOUNDS.map((s) => soundSignature(lootSound("land", s)))).size).toBe(SOUNDS.length);
+    // 하늘 빔 소리는 전설·꾸미기만 (내리꽂는 낮은 울림 + 높은 반짝 꼬리), 짧고 음량이 넘치지 않는다
+    for (const s of SOUNDS) {
+      const ls = lootSound("beam", s);
+      if (s === "legend" || s === "gift") {
+        expect(ls.length).toBeGreaterThan(5);
+        expect(Math.min(...ls.map((l) => l.f1 ?? Infinity))).toBeLessThan(60);
+        expect(Math.max(...ls.map((l) => l.f0 ?? 0))).toBeGreaterThan(2000);
+        expect(soundEnd(ls)).toBeLessThanOrEqual(2.2);
+        for (const l of ls) expect(l.gain).toBeLessThanOrEqual(0.4);
+      } else expect(ls).toEqual([]);
+    }
     // 전설은 가장 낮은 울림을 깐다
     const low = (s: (typeof SOUNDS)[number]) => Math.min(...lootSound("land", s).map((l) => l.f1 ?? Infinity));
     expect(low("legend")).toBeLessThan(low("rare"));

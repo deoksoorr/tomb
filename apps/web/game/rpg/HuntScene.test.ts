@@ -249,3 +249,90 @@ describe("바닥 드롭: 판이 끝나면 받을 드롭을 바닥에 떨구고, 
     expect(ends[0].result.wavesCleared).toBeGreaterThan(0);
   });
 });
+
+describe("우두머리를 잡는 순간 그 자리에 우두머리 몫이 떨어진다", () => {
+  type Boss = Scene & {
+    plan: { monsters: string[] }[];
+    nextWave: number;
+    waveAlive: number[];
+    kills: Record<string, number>;
+    killCount: number;
+    mons: { id: string; alive: boolean }[];
+    pendingSpawns: number;
+    zone: { boss: string };
+    loot: { count: number };
+    endSnap: unknown;
+    spawn(id: string, x: number, y: number, wave: number): void;
+    killMonster(m: unknown): void;
+    endRun(r: unknown, freeze: boolean, minMs: number): void;
+    result(): import("@/lib/rpg/types").HuntResult;
+  };
+
+  it("남은 몬스터와 싸우는 중에도 바닥에 있고(입력 그대로), 뒤에 쓰러져도 판 끝에는 나머지만 — 서버 지급 맨 앞과 같다", async () => {
+    const { huntBossDrop, huntDropsFor, evaluate } = await import("@/lib/rpg/rewards");
+    const { huntPlan } = await import("@/lib/rpg/plan");
+    const t = (seed: number) => ({ game: "hunt" as const, difficulty: "easy" as const, seed });
+    const seed = Array.from({ length: 500 }, (_, i) => i + 1).find((s) => huntBossDrop(t(s)) !== null)!;
+    const scene = new HuntScene() as Boss;
+    scene.init({ play: { ...play("easy"), seed }, color: "#fff", name: "검수", body: "hood", look: [], atlas: null, reduced: false, onEnd: () => {} });
+    scene.create();
+    const plan = huntPlan(seed, "easy");
+    const last = plan.length - 1;
+    const boss = scene.zone.boss;
+    const other = plan[last].monsters.find((m) => m !== boss)!;
+    const kills: Record<string, number> = {};
+    for (const w of plan) for (const m of w.monsters) kills[m] = (kills[m] ?? 0) + 1;
+    kills[boss]--;
+    kills[other]--;
+    scene.kills = kills;
+    scene.killCount = Object.values(kills).reduce((a, b) => a + b, 0);
+    scene.nextWave = plan.length;
+    scene.waveAlive = plan.map(() => 0);
+    scene.waveAlive[last] = 2;
+    scene.mons = [];
+    scene.pendingSpawns = 0;
+    scene.elapsed = 60_000;
+    scene.spawn(boss, 200, 150, last);
+    scene.spawn(other, 300, 150, last);
+    scene.killMonster(scene.mons.find((m) => m.id === boss));
+    // 그 순간 우두머리 몫 하나가 바닥에, 판은 계속
+    expect(scene.loot.count).toBe(1);
+    expect(scene.endSnap).toBeNull();
+    for (let i = 0; i < 10; i++) scene.step(16);
+    const before = scene.atkReadyAt;
+    scene.onKey("Space");
+    expect(scene.atkReadyAt).toBeGreaterThan(before);
+    // 남은 몬스터를 못 잡고 쓰러져 끝남 → 서버 드롭 맨 앞은 우두머리 몫, 판 끝에는 나머지만 더 떨어진 것
+    const r = { ...scene.result(), died: true };
+    const v = evaluate({ ...t(seed), level: 5, st: { agi: 1, dex: 1, luk: 1 } }, r, r.durationMs + 1000);
+    expect(v.ok).toBe(true);
+    if (!v.ok) return;
+    expect(v.drops[0]).toEqual(huntBossDrop(t(seed)));
+    expect(huntDropsFor(t(seed), r)).toEqual(v.drops);
+    const onFloor = scene.loot.count;
+    scene.endRun(r, true, 0);
+    expect(scene.loot.count).toBe(onFloor + v.drops.length - 1);
+  });
+
+  it("운영자 시험 드롭이 실린 판은 우두머리를 잡는 순간 묶음 전부가 떨어지고, 판 끝에는 더 없다", async () => {
+    const { huntPlan } = await import("@/lib/rpg/plan");
+    const testDrops = [
+      { kind: "cosmetic" as const, id: "hat_party", qty: 1 },
+      { kind: "gear" as const, id: "w_legacy_axe", qty: 1 },
+    ];
+    const scene = new HuntScene() as Boss;
+    scene.init({ play: { ...play("easy"), seed: 3, testDrops }, color: "#fff", name: "검수", body: "hood", look: [], atlas: null, reduced: false, onEnd: () => {} });
+    scene.create();
+    const plan = huntPlan(3, "easy");
+    scene.nextWave = plan.length;
+    scene.waveAlive = plan.map(() => 0);
+    scene.waveAlive[plan.length - 1] = 1;
+    scene.mons = [];
+    scene.elapsed = 20_000;
+    scene.spawn(scene.zone.boss, 200, 150, plan.length - 1);
+    scene.killMonster(scene.mons[0]);
+    expect(scene.loot.count).toBe(2);
+    scene.endRun(scene.result(), false, 1200);
+    expect(scene.loot.count).toBe(2);
+  });
+});

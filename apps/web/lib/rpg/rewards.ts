@@ -125,7 +125,9 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
     points *= 0.5;
     xp *= 0.7;
   }
-  const bossKilled = (r.kills[zone.boss] ?? 0) > 0 && cleared;
+  // 11/14: 우두머리 드롭은 우두머리를 잡는 순간 정해진다 (뒤에 쓰러지거나 남은 몬스터를 못 잡아도 유지 — 확률은 그대로).
+  // 우두머리는 마지막 웨이브에 한 번만 나오고 졸개·분열로는 나오지 않는다 → 처치 기록에 있으면 잡은 것 (위에서 출현 수로 검증됨)
+  const bossKilled = (r.kills[zone.boss] ?? 0) > 0;
   const drops = huntDrops(t, total, bossKilled, cleared && !r.died);
   return {
     ok: true,
@@ -233,7 +235,10 @@ function miniReward(t: TicketInfo, score: number, perf: number): Verdict {
 /** 드롭 굴림에 쓰는 티켓 값 (화면의 바닥 드롭 연출도 같은 값으로 굴린다) */
 export type DropTicket = Pick<TicketInfo, "game" | "difficulty" | "seed" | "zone">;
 
-/** 사냥터 한 판의 드롭: 처치 수만큼 굴림 + 우두머리 + 깔끔한 클리어 코디. 서버 판정(evalHunt)과 화면 연출(huntDropsFor)이 같은 식을 쓴다 */
+/**
+ * 사냥터 한 판의 드롭: 우두머리 몫(맨 앞) + 처치 수만큼 굴림 + 깔끔한 클리어 코디. 서버 판정(evalHunt)과 화면 연출(huntDropsFor)이 같은 식을 쓴다.
+ * 우두머리 몫은 같은 난수 줄의 맨 앞이라 우두머리를 잡는 순간 정해지고(huntBossDrop), 나머지는 판 끝에 정해진다
+ */
 export function huntDrops(t: DropTicket, total: number, bossKilled: boolean, cleanClear: boolean): Drop[] {
   return rollDrops(t, Math.min(HUNT_DROP_ROLLS, Math.floor(total / KILLS_PER_DROP_ROLL)), bossKilled, false, cleanClear);
 }
@@ -248,7 +253,15 @@ export function huntDropsFor(t: DropTicket, r: HuntResult): Drop[] {
   const waves = huntPlan(t.seed, t.difficulty, zone.id).length;
   const total = Object.values(r.kills).reduce((a, n) => a + (n ?? 0), 0);
   const cleared = r.wavesCleared === waves;
-  return huntDrops(t, total, (r.kills[zone.boss] ?? 0) > 0 && cleared, cleared && !r.died);
+  return huntDrops(t, total, (r.kills[zone.boss] ?? 0) > 0, cleared && !r.died);
+}
+
+/**
+ * 우두머리 몫: 우두머리를 잡는 순간 화면이 그 자리에 떨군다. 우두머리를 잡은 판의 huntDropsFor 결과 맨 앞과 늘 같다
+ * (없으면 null — 그 판은 우두머리 장비가 안 나온 것). 판 끝에는 이 몫을 뺀 나머지만 떨군다
+ */
+export function huntBossDrop(t: DropTicket): Drop | null {
+  return rollDrops(t, 0, true)[0] ?? null;
 }
 
 /**
