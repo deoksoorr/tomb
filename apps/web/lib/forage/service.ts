@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { fishingWaterOf, STAFF_PUBLIC_NAME } from "@tomb/protocol";
+import { fishingWaterOf } from "@tomb/protocol";
 import { BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import { env } from "../env";
 import { peerOf } from "../ban";
@@ -412,9 +412,8 @@ export async function claimDexPending(acct: string, cat: DexCat, ipHash: string,
 
 /** 다른 사람 도감 구경 (프로필·랭킹에서) */
 export async function publicDex(accountId: string, now = Date.now()): Promise<PublicDex> {
-  const [d, acc, staff] = await Promise.all([getForageStore().dex(accountId), getAccounts().get(accountId, kstDay(now), now), isStaff(accountId)]);
-  // 운영자는 다른 사람에게 공개 이름("대장")으로
-  return { accountId, name: staff ? STAFF_PUBLIC_NAME : acc.name, dex: d.dex, titles: titlesOf(d.dex, d.claims, d.pay.marks) };
+  const [d, acc] = await Promise.all([getForageStore().dex(accountId), getAccounts().get(accountId, kstDay(now), now)]);
+  return { accountId, name: acc.name, dex: d.dex, titles: titlesOf(d.dex, d.claims, d.pay.marks) };
 }
 
 /**

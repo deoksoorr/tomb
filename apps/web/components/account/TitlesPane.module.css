@@ -294,3 +294,29 @@
     height: 112px;
   }
 }
+
+/* 11/15 운영자 전용 「운영자」(신화): 자줏빛 판 + 금테 + 금속빛 이름 (운영자 계정에만 보인다, 누르는 카드가 아님) */
+.title[data-grade="staff"] {
+  background: linear-gradient(180deg, #37214f, #170c24);
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 1px #ffd36a,
+    inset 0 0 0 2px rgba(122, 85, 36, 0.9),
+    inset 0 0 16px rgba(185, 140, 255, 0.28);
+  cursor: default;
+}
+
+.title[data-grade="staff"] .grade {
+  color: #c9a2ff;
+}
+
+.title[data-grade="staff"] .name {
+  background: linear-gradient(180deg, #ffeaa0 20%, #ffa22e 85%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.title[data-grade="staff"] .how {
+  color: #e6d8ff;
+}

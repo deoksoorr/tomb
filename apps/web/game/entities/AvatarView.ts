@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, isChampValue, isNameSlot, itemById, ridePetOfLook, sanitizeDye, titleOfLook, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { hasNameStyle, nameStyleRef } from "@/lib/nameStyle";
-import { titleDef } from "@/lib/titles";
+import { headTitle } from "@/lib/titles";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange, isDyedSpec } from "../sprites/avatar";
@@ -146,6 +146,8 @@ export class AvatarView {
   private champBadge: ChampBadgeView | null = null;
   /** 칭호 「…」 (이름표 바로 위, 연한 금빛). 칭호를 달았을 때만 만든다 */
   private titleView: TitleView | null = null;
+  /** 착용 목록의 칭호 id (운영자 표시가 꺼지면 이것으로 되돌린다) */
+  private wornTitle: string | null = null;
   /** 닉네임 꾸미기 (이름 글자 색·이름표 바탕판). 착용했을 때만 만든다 */
   private nameFx: NameStyleView | null = null;
   private readonly isMe: boolean;
@@ -256,6 +258,7 @@ export class AvatarView {
       this.color = this.staffBase;
     }
     this.nameFx?.setStaff(on);
+    this.setTitle(this.wornTitle);
     this.retexture();
     this.refreshAura();
   }
@@ -465,9 +468,15 @@ export class AvatarView {
     return this.look;
   }
 
-  /** 칭호 글자 (null = 없앤다). 이름표와 같은 글꼴, 구분되게 연한 금빛 */
+  /** 칭호 글자 (null = 없앤다). 이름표와 같은 글꼴, 구분되게 연한 금빛.
+   *  11/15 운영자 표시면 낀 칭호 대신 운영자 전용 「운영자」 (한 줄만 — 착용 목록이 아니라 서명된 staff 표시로만 뜬다) */
   private setTitle(id: string | null): void {
-    const t = titleDef(id);
+    this.wornTitle = id;
+    const t = headTitle(id, !!this.staffFx);
+    if (t === "staff") {
+      (this.titleView ??= new TitleView(this.scene, this.atlas, this.label.depth, this.reduced)).setStaff();
+      return;
+    }
     if (!t) {
       this.titleView?.destroy();
       this.titleView = null;
@@ -818,7 +827,8 @@ export class AvatarView {
     if (this.label.alpha !== fa) this.label.setAlpha(fa);
     // 닉네임 꾸미기 (바탕판이 있으면 옆 표시·위 배지를 그만큼 비켜 놓는다)
     this.nameFx?.sync(now, labelScale, vis, fa);
-    const side = this.nameFx?.sidePad(labelScale) ?? 0;
+    // 운영자 이름표 판은 이전 프레임 크기 기준 (판은 아래 staffFx.sync에서 맞춘다)
+    const side = this.staffFx ? this.staffFx.sidePad(labelScale) : (this.nameFx?.sidePad(labelScale) ?? 0);
     if (this.dexBadge) {
       const l = this.label;
       if (this.dexBadge.scaleX !== labelScale) this.dexBadge.setScale(labelScale);
@@ -903,8 +913,9 @@ export class AvatarView {
     // 이름표 높이(height)는 이미 배율이 들어간 월드 높이 (displayHeight는 배율이 한 번 더 곱해져 이름표에 겹쳤다)
     // 주간 1위 배지가 있으면 이름표 위에 얹고, 말풍선은 그 위로
     // 이름표 위로 쌓기: (바탕판 여백) → 칭호 → 주간 1위 배지 → 말풍선.
-    // 칭호가 있으면 보이는 간격을 모두 TITLE_GAP으로 맞춘다: 이름표(바탕판이 있으면 판 윗변, 운영자면 금빛 테두리, 그냥 글자면 글자 윗선) ↔ 칭호 글자 ↔ 1위 배지 판·말풍선
-    let lift = this.nameFx?.topLift(labelScale) ?? 0;
+    // 칭호가 있으면 보이는 간격을 모두 TITLE_GAP으로 맞춘다: 이름표(바탕판이 있으면 판 윗변, 운영자면 이름표 판 금관 꼭대기, 그냥 글자면 글자 윗선) ↔ 칭호 글자 ↔ 1위 배지 판·말풍선
+    // (운영자는 닉네임 꾸미기 바탕판을 그리지 않으므로 운영자 판 높이만 본다)
+    let lift = this.staffFx ? this.staffFx.topLift(labelScale) : (this.nameFx?.topLift(labelScale) ?? 0);
     let labelTop: number;
     if (this.titleView) {
       const t = this.titleView;
@@ -913,7 +924,7 @@ export class AvatarView {
       const pad = this.atlas.inkPad;
       const gap = (TITLE_GAP + t.padY) * sc;
       const cellTop = this.label.y - this.label.height;
-      const visibleTop = cellTop - (lift > 0 ? lift : this.staffFx ? 1.5 * sc : -pad.top * sc);
+      const visibleTop = cellTop - (lift > 0 ? lift : -pad.top * sc);
       const titleBottom = visibleTop - gap + pad.bottom * sc;
       t.place(Math.round(this.label.x), Math.round(titleBottom), sc, vis && this.label.visible, fa, now);
       const titleInkTop = titleBottom - t.height + pad.top * sc;

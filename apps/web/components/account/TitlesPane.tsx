@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { TITLE_IDS, titleOfLook } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
-import { perkShort, perkText, pioneerText, progressText, TITLE_GRADE_NAMES, TITLE_GROUP_NAMES, TITLE_GROUPS, TITLES, titleDef, type TitleDef } from "@/lib/titles";
+import { perkShort, perkText, pioneerText, progressText, STAFF_TITLE, TITLE_GRADE_NAMES, TITLE_GROUP_NAMES, TITLE_GROUPS, TITLES, titleDef, type TitleDef } from "@/lib/titles";
 import type { Me } from "@/lib/types";
 import { titleNews } from "@/lib/hooks/useTitleNews";
 import { cx } from "../ui/cx";
@@ -13,6 +13,7 @@ import styles from "./TitlesPane.module.css";
 
 // 가방 [칭호] 칸: 모든 칭호를 갈래별로 늘어놓는다. 얻은 칭호는 흰 글자(누르면 끼우기·다시 누르면 빼기),
 // 못 얻은 칭호는 회색 + 얻는 방법. 한 번에 하나만 낀다. 낀 칭호는 머리 위 이름표 위에 「…」로 보인다.
+// 11/15 운영자 계정만: 맨 위에 운영자 전용 「운영자」(신화) 카드 — 끼우는 칭호가 아니라 운영자 표시로 머리 위에 저절로 뜬다 (낀 칭호 자리를 대신).
 
 type Act = (task: () => Promise<void>, done: string) => Promise<void>;
 
@@ -85,6 +86,25 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
         )}
       </div>
       {error && <p className={ui.error}>{error}</p>}
+      {staff && (
+        <section className={styles.group} aria-label="운영자 전용 칭호">
+          <h3 className={styles.heading}>
+            운영자 전용<span className={styles.count}> 1/1</span>
+          </h3>
+          <ul className={styles.list}>
+            <li>
+              <div className={styles.title} data-grade="staff" data-earned aria-label={`${STAFF_TITLE.name}, 운영자 전용 칭호. ${STAFF_TITLE.how}`}>
+                <span className={styles.top}>
+                  <span className={styles.grade}>{STAFF_TITLE.gradeName}</span>
+                  <span className={styles.name}>「{STAFF_TITLE.name}」</span>
+                </span>
+                <span className={styles.how}>{STAFF_TITLE.how}</span>
+                <span className={styles.progress}>{cur ? "낀 칭호 대신 머리 위에 떠요" : "늘 머리 위에 떠요"}</span>
+              </div>
+            </li>
+          </ul>
+        </section>
+      )}
       {TITLE_GROUPS.map((g) => {
         const list = TITLES.filter((t) => t.group === g);
         return (

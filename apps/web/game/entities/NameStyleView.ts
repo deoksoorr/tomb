@@ -14,7 +14,7 @@ import { LABEL_ME, LABEL_OTHER } from "../config";
 // 움직임 줄이기 설정이면 멈춘 그림(그라데이션·고정 빛·고정 반짝이).
 // 이름표와 장식은 모두 밤 어둠 층 위(DEPTH.labels)라 밤에도 색이 그대로 보인다.
 // 내 이름표: 산 색이 있으면 그 색을 쓰고, 내 것이라는 표시는 이름표 아래 작은 촛불빛 삼각형으로 한다 (색이 없으면 예전처럼 촛불빛 글자).
-// 운영자: 금빛 테두리(StaffFxView)와 겹치지 않게 바탕판은 그리지 않는다 (글자 색은 그대로).
+// 운영자: 운영자 이름표 판(StaffFxView)과 겹치지 않게 바탕판은 그리지 않는다 (글자 색은 그대로).
 
 /** 움직이는 이름 색을 다시 칠하는 간격 (ms) */
 const ANIM_STEP_MS = 80;
@@ -85,7 +85,7 @@ export class NameStyleView {
     return this.colorId === null && this.plateId === null;
   }
 
-  /** 운영자 표시가 켜지면 바탕판을 숨긴다 (금빛 테두리와 겹치지 않게) */
+  /** 운영자 표시가 켜지면 바탕판을 숨긴다 (운영자 이름표 판과 겹치지 않게) */
   setStaff(on: boolean): void {
     this.staff = on;
   }

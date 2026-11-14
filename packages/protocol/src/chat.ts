@@ -18,7 +18,7 @@ export const CHAT_RECENT_MS = 300_000;
 export const CHAT_RECENT_MAX = 150;
 
 /** 방에 들어올 때 받는 최근 채팅 한 줄 (S2C chatLog). at = 서버 시각 ms, mine = 내가 쓴 줄 */
-/** staff = 운영자(대장)가 쓴 줄 → 채팅창 이름 금색 */
+/** staff = 운영자가 쓴 줄 → 채팅창 이름 금색 + "운영자" 딱지 */
 export type ChatLogLine = { id: string; at: number; name: string; text: string; mine?: true; staff?: true };
 
 /** 가린 자리 */

@@ -230,11 +230,14 @@ describe("names", () => {
     expect(checkName("가".repeat(13)).ok).toBe(false);
     expect(checkName("hi!").ok).toBe(false);
     expect(checkName("관리 자").ok).toBe(false);
-    // 운영자 공개 이름("대장")·옛 이름("운영자")은 일반 닉네임으로 흉내 낼 수 없다
+    // 운영자 흉내 막기: "운영자"·"운영진"·"운영팀", 예전 공개 이름 "대장"은 일반 닉네임으로 쓸 수 없다
     expect(checkName("대장").ok).toBe(false);
     expect(checkName("진짜 대장").ok).toBe(false);
     expect(checkName("대장장이").ok).toBe(true);
     expect(checkName("운영자").ok).toBe(false);
+    expect(checkName("진짜 운영자").ok).toBe(false);
+    expect(checkName("운영 진").ok).toBe(false);
+    expect(checkName("운영팀장").ok).toBe(false);
     expect(checkName("Fu_ck").ok).toBe(false);
     expect(checkName("dev_kim 2").ok).toBe(true);
   });

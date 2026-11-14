@@ -183,6 +183,21 @@ export function titleLabel(id: string | null | undefined): string | null {
   return t ? `「${t.name}」` : null;
 }
 
+/**
+ * 11/15 운영자 전용 칭호 「운영자」 (등급 "신화" — 전설 위). 착용 목록(TITLE_IDS)에 없는 표시 전용 칭호:
+ * 실시간 서버·/api/me가 알린 운영자 표시(Vercel 서명)일 때만 머리 위에 저절로 뜨고, 낀 칭호가 있어도 그 자리를 이 칭호가 대신한다.
+ * 일반 계정은 달 수도, 착용 목록으로 흉내 낼 수도 없다 (가방 칭호 칸에도 운영자에게만 보인다). 칭호 능력은 없다 (낀 칭호의 능력은 그대로)
+ */
+export const STAFF_TITLE = { name: "운영자", gradeName: "신화", how: "운영자 계정에만 보여요. 칭호 능력은 없어요." } as const;
+
+/**
+ * 머리 위에 띄울 칭호: 운영자 표시(서명된 staff)면 낀 칭호와 상관없이 운영자 전용 "staff", 아니면 낀 칭호 (없거나 모르는 id면 null).
+ * 운영자 전용 칭호는 착용 목록 id가 아니라서 일반 계정은 어떤 착용 목록으로도 띄울 수 없다
+ */
+export function headTitle(wornId: string | null | undefined, staff: boolean): TitleDef | "staff" | null {
+  return staff ? "staff" : titleDef(wornId);
+}
+
 /** 착용 목록의 칭호 정의 */
 export const titleOfLookDef = (look: readonly string[] | null | undefined): TitleDef | null => titleDef(titleOfLook(look));
 

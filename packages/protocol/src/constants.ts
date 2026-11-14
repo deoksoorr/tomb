@@ -82,7 +82,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 13 = 휴식 중 어두운 막 없앰 — 창을 옆에 띄워 두고 구경하는 플레이가 되게 모두 한 번 새로고침 (11/14)
 // 14 = 지옥 사냥터 2곳·사냥터 기준 EXP·레이스 — 모두 한 번 새로고침 (11/15)
 // 15 = 사냥 끝판 1단계(초월 레벨·번아웃 단계)·끝판 칭호 id — 모두 한 번 새로고침 (11/15)
-export const CLIENT_VERSION = 15;
+// 16 = 운영자 이름표·전용 칭호(운영자도 닉네임 그대로, 머리 위 「운영자」) — 모두 한 번 새로고침 (11/15)
+export const CLIENT_VERSION = 16;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
@@ -191,13 +192,6 @@ export function bodyUnlockPrice(b: unknown): number | null {
 /** 화면에 보일 몸 이름 */
 export function bodyLabel(b: unknown): string {
   return AVATAR_BODIES.find((x) => x.id === b)?.label ?? String(b ?? "");
-}
-/** 운영자 계정이 다른 사람에게 보이는 이름 (닉네임 대신, 재미있게 "대장"). 관리자 페이지에서는 원래 닉네임.
- *  일반 닉네임으로는 못 쓴다 (names.ts 금칙어). 이미 "운영자"로 저장된 옛 기록은 그대로 둔다 */
-export const STAFF_PUBLIC_NAME = "대장";
-/** 운영자면 공개 이름("대장"), 아니면 원래 이름 */
-export function staffPublicName(name: string, staff: boolean): string {
-  return staff ? STAFF_PUBLIC_NAME : name;
 }
 /** 운영자가 아니면 운영자 전용 몸은 후드 유령으로 (입장 토큰·실시간 서버가 쓴다) */
 export function staffGateBody<T extends string>(body: T, staff: boolean): T | "hood" {

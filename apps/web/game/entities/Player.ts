@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { DIR, isAvatarBody, JUMP_MS, STATE, staffPublicName, titleOfLook, type DirId, type Seat, type StateName } from "@tomb/protocol";
+import { DIR, isAvatarBody, JUMP_MS, STATE, titleOfLook, type DirId, type Seat, type StateName } from "@tomb/protocol";
 import { titlePerk } from "@/lib/titles";
 import { canJump, jumpHeight, shadowScale } from "../logic/jump";
 import { emptyMove, faceToward, resolveMove, type MoveInput } from "../logic/movement";
@@ -114,14 +114,9 @@ export class Player {
       if (Array.isArray(e.look)) this.view.setLook(e.look.filter((v): v is string => typeof v === "string"));
       this.view.applyAppearance({ dye: e.dye, body: e.body, champ: e.champ });
     });
-    // 31번 운영자 계정이면 내 캐릭터도 저승사자 차림 (/api/me가 알려 준 값, 바뀌면 바로)
-    // 운영자는 다른 사람에게 공개 이름("대장")으로 보이므로 내 화면의 이름표도 같게
-    const staffOn = (on: boolean) => {
-      this.view.setStaff(on);
-      this.view.setName(staffPublicName(name, on));
-    };
-    staffOn(bridge.last("me:staff")?.on === true);
-    this.offStaff = bridge.on("me:staff", ({ on }) => staffOn(on));
+    // 31번 운영자 계정이면 내 캐릭터도 저승사자 차림·금빛 이름표·「운영자」 칭호 (/api/me가 알려 준 값, 바뀌면 바로). 이름은 닉네임 그대로
+    this.view.setStaff(bridge.last("me:staff")?.on === true);
+    this.offStaff = bridge.on("me:staff", ({ on }) => this.view.setStaff(on));
     // 도감 100% 배지 (내 도감 상태가 바뀌면 바로)
     this.view.setDexBadge(bridge.last("me:dex")?.bits);
     this.offDex = bridge.on("me:dex", ({ bits }) => this.view.setDexBadge(bits));

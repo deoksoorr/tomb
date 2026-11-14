@@ -1,4 +1,4 @@
-import { GRANT_TTL_SEC, megaphoneScope, signGrant, staffPublicName } from "@tomb/protocol";
+import { GRANT_TTL_SEC, megaphoneScope, signGrant } from "@tomb/protocol";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { env } from "@/lib/env";
@@ -27,12 +27,12 @@ export const GET = handler(async (req) => {
     .filter((r) => !r.hidden && (r.scope === "all" || r.ch === channel))
     .slice(0, MEGA_SHOW)
     .reverse()
-    // 운영자로 지정되기 전에 남긴 기록도 공개 이름("대장")·금색 표시로
+    // 운영자로 지정되기 전에 남긴 기록도 금색·"운영자" 딱지로 (이름은 남긴 그대로)
     .map(({ id, name, text, scope, ch, at, accountId }) => {
       const staff = !!staffId && accountId === staffId;
       // 주간 1위 소식 같은 마을 공지(시스템 줄)는 보낸 이 이름("마을 소식") 그대로, 운영자처럼 금색·신고 버튼 없이
       const system = accountId === CHAMP_NOTICE_ACCOUNT;
-      return { id, name: system ? name : staffPublicName(name, staff), text, scope, ch, at, ...(staff || system ? { staff: true as const } : {}) };
+      return { id, name, text, scope, ch, at, ...(staff || system ? { staff: true as const } : {}), ...(system ? { system: true as const } : {}) };
     });
   return json<MegaphoneListResponse>(
     { entries },
@@ -67,8 +67,8 @@ export const POST = handler(async (req) => {
     await store.releaseCooldown(visitorId);
     throw new HttpError(409, "NO_ITEM", "가방에 확성기가 없어요. 상점에서 살 수 있어요.");
   }
-  // 운영자는 보낸 이가 공개 이름("대장")으로 보인다
-  const name = staffPublicName((await accounts.get(visitorId, kstDay(now), now)).name ?? NO_NAME, staff);
+  // 11/15: 운영자도 보낸 이는 닉네임 그대로 (staff 표시로 금색·"운영자" 딱지)
+  const name = (await accounts.get(visitorId, kstDay(now), now)).name ?? NO_NAME;
   const scope = megaphoneScope(itemId)!;
   const row = { id: nanoid(10), name, text: checked.text, scope, ch: channel, at: now };
   await store.push({ ...row, accountId: visitorId }); // 저장 기록엔 staff를 넣지 않는다 (목록에서 계정으로 다시 판별)

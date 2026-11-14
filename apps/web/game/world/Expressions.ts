@@ -65,7 +65,7 @@ export class Expressions {
     const shown = maskChat(text);
     view.chat(shown, now);
     this.h.net().chat(text);
-    // 채팅 기록창: 내 글도 보낼 때 바로 (이름은 이름표 그대로 — 운영자면 공개 이름 "대장" + 금색)
+    // 채팅 기록창: 내 글도 보낼 때 바로 (이름은 이름표 그대로 — 운영자면 금색 + "운영자" 딱지)
     const ns = nameStyleIds(view.wearing);
     bridge.emit("chat:line", { name: view.label.text, text: shown, mine: true, ...(view.staff ? { staff: true as const } : {}), ...(ns ? { ns } : {}) });
     this.h.sfx.play("say", 0.35);
