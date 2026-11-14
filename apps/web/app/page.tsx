@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import App from "@/components/App";
 import BannedScreen from "@/components/BannedScreen";
 import { pageBan } from "@/lib/banPage";
+import { googleEnabled } from "@/lib/googleAuth";
+import { isGoogleResult } from "@/lib/googleResult";
 import HomeJsonLd from "./HomeJsonLd";
 import { graveIdParam, graveOgImage, shareMetadata } from "./seo";
 
@@ -23,7 +25,12 @@ export default async function Home({ searchParams }: Props) {
     <>
       {/* 검색용 구조화 데이터 (화면에는 그리지 않는다) */}
       <HomeJsonLd />
-      <App initialGraveId={graveIdParam(params.grave)} debug={params.debug === "1"} />
+      <App
+        initialGraveId={graveIdParam(params.grave)}
+        debug={params.debug === "1"}
+        // 구글 설정이 없으면 단추를 그리지 않는다. 결과(?google=)는 정해진 값만 받는다
+        google={{ enabled: googleEnabled(), result: isGoogleResult(params.google) ? params.google : null }}
+      />
     </>
   );
 }

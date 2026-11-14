@@ -1,54 +1,29 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type DragEvent } from "react";
-import { isChampItem, type CosmeticSlot, type ItemKind } from "@tomb/protocol";
+import { useEffect, useId, useState } from "react";
+import { isChampItem, type ItemKind } from "@tomb/protocol";
 import { errorMessage } from "@/lib/api";
 import type { GraveCache } from "@/lib/hooks/useGraves";
-import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { useMe } from "@/lib/hooks/useMe";
 import { lookScore } from "@/lib/lookScore";
 import { readItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
-import { fittingLook } from "../shop/fitting";
-import { OutfitCanvas, useOutfitView, ViewControls } from "../shop/OutfitPreview";
-import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ForageBag from "../forage/ForageBag";
 import BagDyeSection, { dyeTicketCount } from "../dye/BagDyeSection";
 import ItemIcon from "../ui/ItemIcon";
-import LookScoreBadge from "../ui/LookScoreBadge";
-import StyledName from "../ui/StyledName";
-import { DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
 import { openMegaphone } from "@/lib/hooks/useMegaphone";
-import { decorateGrave, fireFirework, takeOff, wearCosmetic, wearStashed } from "./actions";
+import { decorateGrave, fireFirework } from "./actions";
 import ChampRewardsTab from "./ChampRewardsTab";
-import { bagEntries, KIND_LABELS, remainingLabel, type MyGraveEntry } from "./items";
-import {
-  canDropOn,
-  displaced,
-  entryStatus,
-  matchesSlot,
-  resolveAvatar,
-  SLOT_NAMES,
-  SLOT_ORDER,
-  SLOT_SILHOUETTE,
-  slotCounts,
-  timeLeftRatio,
-  wardrobeEntries,
-  wearAction,
-  wornBySlot,
-  type SlotFilter,
-  type WardrobeEntry,
-} from "./wardrobe";
+import { bagEntries, KIND_LABELS, type MyGraveEntry } from "./items";
+import { LookPane, PickPane } from "./WardrobePanes";
+import { resolveAvatar, wardrobeEntries, type SlotFilter } from "./wardrobe";
 import styles from "./BagDialog.module.css";
 
 const OTHER_KINDS: ItemKind[] = ["firework", "megaphone", "decor", "graveStyle"];
-type BagTab = "wear" | "other" | "dye" | "forage" | "race";
-
-/** 몸 위치에 맞춘 칸 배치 (낮은 칸 compact): 아바타는 가운데 세 줄을 차지하고 왼쪽에 머리·등·오라, 오른쪽에 목·손·펫,
- * 맨 아래 줄은 이름 글자 · 발(아바타 바로 아래) · 이름표 바탕판. 9칸이 네 줄에 들어가 1280×720에서도 장비창이 한눈에 보인다 */
-const DOLL_AREAS = `"head fig neck" "back fig hand" "aura fig pet" "nameColor feet namePlate"`;
+/** look = [지금 모습](장비창), wear = [꾸미기](부위별 카드 목록 — components/account/WardrobePanes) */
+type BagTab = "look" | "wear" | "other" | "dye" | "forage" | "race";
 
 type Props = {
   cache: GraveCache;
@@ -61,10 +36,12 @@ type Props = {
   onOpenRace?: () => void;
 };
 
-/** 가방: [꾸미기] 장비창(입은 것) + 부위별 목록, [소모품: 폭죽·확성기·묘비 꾸미기] 쓰기·묘비에 놓기 */
+/** 가방: [지금 모습] 장비창(입은 것), [꾸미기] 부위별 목록·입어 보기, [소모품: 폭죽·확성기·묘비 꾸미기] 쓰기·묘비에 놓기 */
 export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace }: Props) {
   const { me, error } = useMe();
-  const [tab, setTab] = useState<BagTab>("wear");
+  const [tab, setTab] = useState<BagTab>("look");
+  /** [꾸미기] 부위 칩 ([지금 모습]의 부위 칸을 누르면 그 부위로) */
+  const [slotFilter, setSlotFilter] = useState<SlotFilter>("all");
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   /** 묘비에 놓으려고 고른 꾸미기 */
@@ -113,7 +90,8 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
           {(
             [
               // 주간 랭킹 1위 전용 모자는 [레이스 보상] 칸에 따로 (일반 꾸미기 수에서 뺀다)
-              ["wear", `캐릭터 꾸미기 ${wardrobe.filter((e) => !isChampItem(e.item.id)).length}`],
+              ["look", "지금 모습"],
+              ["wear", `꾸미기 ${wardrobe.filter((e) => !isChampItem(e.item.id)).length}`],
               ["other", `소모품 ${others.reduce((n, e) => n + e.count, 0)}`],
               ["dye", `염색권 ${dyeTicketCount(me.inventory)}`],
               ["forage", "물고기·채집물"],
@@ -136,8 +114,20 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
         </div>
 
         <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={styles.panel}>
-          {tab === "wear" ? (
-            <Wardrobe entries={wardrobe} now={now} pending={pending} act={act} avatar={resolveAvatar(avatar, me, savedColor)} score={lookScore(me, now)} name={me.name ?? ""} />
+          {tab === "look" ? (
+            <LookPane
+              entries={wardrobe}
+              now={now}
+              avatar={resolveAvatar(avatar, me, savedColor)}
+              score={lookScore(me, now)}
+              name={me.name ?? ""}
+              onPickSlot={(slot) => {
+                setSlotFilter(slot);
+                setTab("wear");
+              }}
+            />
+          ) : tab === "wear" ? (
+            <PickPane entries={wardrobe} now={now} pending={pending} act={act} avatar={resolveAvatar(avatar, me, savedColor)} name={me.name ?? ""} filter={slotFilter} onFilter={setSlotFilter} />
           ) : tab === "dye" ? (
             <BagDyeSection me={me} avatar={resolveAvatar(avatar, me, savedColor)} onNotice={setNotice} />
           ) : tab === "forage" ? (
@@ -245,223 +235,5 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
         </p>
       </div>
     </Dialog>
-  );
-}
-
-// ── 캐릭터 꾸미기: 장비창 + 부위별 목록 ──
-
-function Wardrobe({
-  entries,
-  now,
-  pending,
-  act,
-  avatar,
-  score,
-  name,
-}: {
-  entries: WardrobeEntry[];
-  now: number;
-  pending: boolean;
-  act: (task: () => Promise<void>, done: string) => Promise<void>;
-  avatar: { color: string; body: string };
-  /** 내 꾸미기 점수 (지금 입은 코디 · lib/lookScore.ts) */
-  score: number;
-  /** 내 이름 (닉네임 꾸미기 미리보기) */
-  name: string;
-}) {
-  const [filter, setFilter] = useState<SlotFilter>("all");
-  /** 목록에서 마우스를 올리거나 초점이 간 것: 장비창에 미리 입혀 보고, 들어갈 칸을 밝힌다 */
-  const [peek, setPeek] = useState<WardrobeEntry | null>(null);
-  const [dragging, setDragging] = useState<string | null>(null);
-  const view = useOutfitView(false);
-  const listRef = useRef<HTMLElement>(null);
-  const hintId = useId();
-  const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const canDrag = useMediaQuery("(hover: hover) and (pointer: fine)");
-
-  const worn = wornBySlot(entries);
-  const wornIds = SLOT_ORDER.flatMap((s) => (worn[s] ? [worn[s]!.item.id] : []));
-  const fit = fittingLook(wornIds, peek && peek.state !== "worn" ? peek.item.id : null);
-  // 주간 랭킹 1위 전용 모자는 [레이스 보상] 칸에서 다룬다 (장비창에는 입은 그대로 보이고, 목록·부위 수에서는 뺀다)
-  const listed = entries.filter((e) => !isChampItem(e.item.id));
-  const counts = slotCounts(listed);
-  const shown = listed.filter((e) => matchesSlot(e.slot, filter));
-  const peekSlot = dragging ? (entries.find((e) => e.item.id === dragging)?.slot ?? null) : (peek?.slot ?? null);
-
-  function run(e: WardrobeEntry) {
-    const a = wearAction(e);
-    const name = e.item.name;
-    if (a.kind === "unequip") {
-      void act(() => takeOff(e.slot), `${name}을(를) 벗어 두었어요. 남은 시간은 계속 흘러요.`);
-      return;
-    }
-    const old = displaced(entries, e);
-    const swap = old ? ` ${old.name}은(는) 벗어 두었어요.` : "";
-    if (a.kind === "spend") void act(() => wearCosmetic(e.item.id), `${name}을(를) 입었어요. 지금부터 24시간 유지돼요.${swap}`);
-    else void act(() => wearStashed(e.item.id), `${name}을(를) 다시 입었어요.${swap}`);
-    setPeek(null);
-  }
-
-  /** 칸을 누르면 그 부위만 목록에 (벗기·입을 것), 좁은 화면이면 목록이 보이게 내린다 */
-  function pickSlot(slot: CosmeticSlot) {
-    setFilter((f) => (f === slot ? "all" : slot));
-    listRef.current?.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
-  }
-
-  function onDragStart(e: DragEvent, entry: WardrobeEntry) {
-    e.dataTransfer.setData("text/plain", entry.item.id);
-    e.dataTransfer.effectAllowed = "move";
-    setDragging(entry.item.id);
-  }
-
-  const wornCount = Object.keys(worn).length;
-
-  return (
-    <div className={styles.wardrobe}>
-      <section className={styles.dollPane} aria-label="착용 부위">
-        <PaperDoll
-          className={styles.doll}
-          areas={DOLL_AREAS}
-          label="착용 부위"
-          compact
-          figure={
-            <OutfitCanvas
-              color={avatar.color}
-              body={avatar.body}
-              look={fit.look}
-              label={peek && !fit.wearing ? `${peek.item.name}을(를) 입어 본 내 모습` : "지금 내 모습"}
-              dir={view.dir}
-              walking={view.walking}
-              onRotate={view.rotate}
-              describedBy={hintId}
-            />
-          }
-          caption={
-            <>
-              {/* 닉네임 꾸미기 미리보기: 지금(또는 목록에서 고른 것을 입어 본) 이름 글자·이름표 */}
-              <span className={styles.namePv}>
-                <StyledName name={name || "내 이름"} look={fit.look} />
-              </span>
-              <p className={styles.figNote} aria-live="polite">
-                {peek && peek.state !== "worn" ? `미리 보기: ${peek.item.name}` : "\u00a0"}
-              </p>
-            </>
-          }
-        >
-          {SLOT_ORDER.map((slot) => {
-            const e = worn[slot];
-            const label = SLOT_NAMES[slot];
-            return (
-              <DollSlot
-                key={slot}
-                area={slot}
-                label={label}
-                name={e?.item.name ?? null}
-                icon={e ? <ItemIcon itemId={e.item.id} size={24} /> : null}
-                silhouette={<ItemIcon itemId={SLOT_SILHOUETTE[slot]} size={24} />}
-                meter={e?.until ? { ratio: timeLeftRatio(e.until, now), text: remainingLabel(e.until, now) } : null}
-                tip={e ? { title: e.item.name, body: e.item.desc } : { title: `${label} · 비어 있어요`, body: "눌러서 이 부위에 입을 것을 골라요." }}
-                selected={filter === slot}
-                highlight={peekSlot === slot}
-                ariaLabel={`${label} 칸, ${e ? `${e.item.name} 착용 중, ${remainingLabel(e.until!, now)}` : "비어 있음"}. 누르면 ${label} 꾸미기 목록`}
-                onClick={() => pickSlot(slot)}
-                drop={{
-                  accepts: !!dragging && canDropOn(dragging, slot) && !pending,
-                  onDrop: (id) => {
-                    setDragging(null);
-                    const entry = entries.find((x) => x.item.id === id && x.state !== "worn");
-                    if (entry) run(entry);
-                  },
-                }}
-              />
-            );
-          })}
-        </PaperDoll>
-        <ViewControls dir={view.dir} walking={view.walking} onDir={view.setDir} onWalking={view.setWalking} className={styles.viewControls} />
-        <p className={styles.hint}>
-          착용 {wornCount}/{SLOT_ORDER.length} · 내 꾸미기 점수 <b>{score}점</b> · 랭킹 [꾸미기]에 올라가요
-        </p>
-        <p id={hintId} className={styles.hint}>
-          칸을 누르면 그 부위 목록이 나와요{canDrag ? " · 목록에서 칸으로 끌어다 놓아도 입어요" : ""}. 벗어 둔 꾸미기도 남은 시간은 계속 흘러요.
-        </p>
-      </section>
-
-      <section ref={listRef} className={styles.listPane} aria-label="가진 꾸미기">
-        <div className={styles.filter} role="group" aria-label="착용 부위로 거르기">
-          {(["all", ...SLOT_ORDER] as SlotFilter[]).map((f) => (
-            <button
-              key={f}
-              type="button"
-              className={styles.chip}
-              aria-pressed={filter === f}
-              data-empty={counts[f] === 0 || undefined}
-              onClick={() => setFilter(f)}
-            >
-              {f === "all" ? "전체" : SLOT_NAMES[f]} <span className={styles.chipCount}>{counts[f]}</span>
-            </button>
-          ))}
-        </div>
-
-        {shown.length === 0 ? (
-          <p className={styles.empty}>
-            {filter === "all" ? "가진 꾸미기가 없어요." : `${SLOT_NAMES[filter]}에 입을 꾸미기가 없어요.`} 상점 캐릭터 꾸미기에서 살 수 있어요.
-          </p>
-        ) : (
-          SLOT_ORDER.filter((slot) => shown.some((e) => e.slot === slot)).map((slot) => (
-            <div key={slot} className={styles.group}>
-              <h3 className={styles.heading}>
-                {SLOT_NAMES[slot]}
-                {!worn[slot] && <span className={styles.meta}> · 비어 있어요</span>}
-              </h3>
-              <ul className={styles.list}>
-                {shown
-                  .filter((e) => e.slot === slot)
-                  .map((e) => {
-                    const a = wearAction(e);
-                    const old = displaced(entries, e);
-                    return (
-                      <li
-                        key={`${e.item.id}-${e.state}`}
-                        className={cx(styles.row, styles.wearRow)}
-                        data-state={e.state}
-                        draggable={canDrag && a.kind !== "unequip" && !pending}
-                        onDragStart={(ev) => onDragStart(ev, e)}
-                        onDragEnd={() => setDragging(null)}
-                        onPointerEnter={(ev) => ev.pointerType === "mouse" && setPeek(e)}
-                        onPointerLeave={(ev) => ev.pointerType === "mouse" && setPeek(null)}
-                        onFocus={() => setPeek(e)}
-                        onBlur={() => setPeek(null)}
-                      >
-                        <ItemIcon itemId={e.item.id} size={32} />
-                        <span className={styles.main}>
-                          <span className={styles.name}>
-                            {e.item.name} <LookScoreBadge itemId={e.item.id} short />
-                          </span>
-                          <span className={styles.status} data-state={e.state}>
-                            {entryStatus(e, now)}
-                          </span>
-                          <span className={styles.meta}>
-                            {e.item.desc}
-                            {old && ` · 입으면 ${old.name}은(는) 벗어 둬요`}
-                          </span>
-                        </span>
-                        <button
-                          type="button"
-                          className={cx(ui.button, a.kind !== "unequip" && ui.primary, styles.wearBtn)}
-                          disabled={pending}
-                          aria-label={`${e.item.name} ${a.label}`}
-                          onClick={() => run(e)}
-                        >
-                          {a.label}
-                        </button>
-                      </li>
-                    );
-                  })}
-              </ul>
-            </div>
-          ))
-        )}
-      </section>
-    </div>
   );
 }

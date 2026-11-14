@@ -4,7 +4,7 @@ import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../repor
 import { DEFAULT_PASS_DAYS, type Grave, type GraveDecor, type PassReason } from "../types";
 import { chKeys, DECOR, HIDDEN, K } from "./keys";
 import {
-  FLOWER_TTL_SEC,
+  flowerTtlSec,
   REPORT_HIDE_THRESHOLD,
   type GraveRecord,
   type GraveSettings,
@@ -438,7 +438,7 @@ export class RedisStore implements GraveStore {
     const r = await this.redis.eval<string[], [number, string?] | null>(
       FLOWER_LUA,
       [k.meta, K.flowerMark(id, visitorId), k.flower],
-      [id, String(FLOWER_TTL_SEC)],
+      [id, String(flowerTtlSec(Date.now()))],
     );
     if (!r) return null;
     return Number(r[0]) === 1 ? Number(r[1]) : "already";

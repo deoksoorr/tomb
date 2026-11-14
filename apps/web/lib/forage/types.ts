@@ -10,7 +10,7 @@ import type { DexCat, DexTier, LifeCat, NodeKind, NpcId } from "./catalog";
  */
 export type DexEntry = { n: number; max: number; first: string; pf?: number };
 
-/** 오늘(KST) 기록: 판 포인트(항목별)와 잡은·캔 수. auto = 그중 자동 낚시로 낚은 수 (fish에도 들어 있다) */
+/** 오늘(게임 날짜, 새벽 5시 경계) 기록: 판 포인트(항목별)와 잡은·캔 수. auto = 그중 자동 낚시로 낚은 수 (fish에도 들어 있다) */
 export type LifeDay = { fishP: number; gatherP: number; dexP: number; fish: number; gather: number; auto: number };
 
 export type ForageState = {

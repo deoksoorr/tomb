@@ -246,7 +246,7 @@ function ChampCard({ toast, fail }: { toast: (message: string) => void; fail: (e
         </button>
       </div>
       <p className={ui.hint}>
-        매주 월요일 0시(KST) 마감 뒤 첫 요청(입장·랭킹 창)이 지난주 1위(포인트·사냥 처치·낚시, 운영자 제외)를 정하고 보상(1위 전용 모자 대여 · 1,000P)을 줘요. 실패했을 때만
+        매주 월요일 새벽 5시(한국 시간) 마감 뒤 첫 요청(입장·랭킹 창)이 지난주 1위(포인트·사냥 처치·낚시, 운영자 제외)를 정하고 보상(1위 전용 모자 대여 · 1,000P)을 줘요. 실패했을 때만
         [다시 지급]을 누르세요 — 이미 받은 랭킹은 다시 주지 않아요. 주를 비우면 지난주, 다른 주는 그 주 월요일(YYYYMMDD).
       </p>
       <label className={styles.meta}>

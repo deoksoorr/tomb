@@ -126,7 +126,7 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
     xp *= 0.7;
   }
   const bossKilled = (r.kills[zone.boss] ?? 0) > 0 && cleared;
-  const drops = rollDrops(t, Math.min(HUNT_DROP_ROLLS, Math.floor(total / KILLS_PER_DROP_ROLL)), bossKilled, false, cleared && !r.died);
+  const drops = huntDrops(t, total, bossKilled, cleared && !r.died);
   return {
     ok: true,
     score: Math.round(exp),
@@ -230,12 +230,33 @@ function miniReward(t: TicketInfo, score: number, perf: number): Verdict {
   return { ok: true, score, exp, points, drops };
 }
 
+/** 드롭 굴림에 쓰는 티켓 값 (화면의 바닥 드롭 연출도 같은 값으로 굴린다) */
+export type DropTicket = Pick<TicketInfo, "game" | "difficulty" | "seed" | "zone">;
+
+/** 사냥터 한 판의 드롭: 처치 수만큼 굴림 + 우두머리 + 깔끔한 클리어 코디. 서버 판정(evalHunt)과 화면 연출(huntDropsFor)이 같은 식을 쓴다 */
+export function huntDrops(t: DropTicket, total: number, bossKilled: boolean, cleanClear: boolean): Drop[] {
+  return rollDrops(t, Math.min(HUNT_DROP_ROLLS, Math.floor(total / KILLS_PER_DROP_ROLL)), bossKilled, false, cleanClear);
+}
+
+/**
+ * 이 사냥터 결과가 검증을 통과하면 받을 드롭 (화면에서 바닥에 떨굴 것을 미리 안다 — 보상은 언제나 서버가 정한다).
+ * evaluate의 드롭과 같은 값인지 테스트로 묶어 둔다 (lib/rpg/huntDrops.test.ts)
+ */
+export function huntDropsFor(t: DropTicket, r: HuntResult): Drop[] {
+  if (r.durationMs < MIN_RUN_MS) return [];
+  const zone = zoneFor(t.difficulty, t.zone);
+  const waves = huntPlan(t.seed, t.difficulty, zone.id).length;
+  const total = Object.values(r.kills).reduce((a, n) => a + (n ?? 0), 0);
+  const cleared = r.wavesCleared === waves;
+  return huntDrops(t, total, (r.kills[zone.boss] ?? 0) > 0 && cleared, cleared && !r.died);
+}
+
 /**
  * 드롭은 시드로 정해진다 (같은 판 결과를 다시 보내 다시 굴릴 수 없다).
  * 11/12: 확률을 다시 절반쯤으로, 우두머리 장비도 확률(bossDropChance), 포션은 1개씩.
  * clearedClean(사냥터를 쓰러지지 않고 다 깼다)이면 기간제 코디를 아주 낮은 확률(cosmeticChance)로 굴린다
  */
-export function rollDrops(t: TicketInfo, rolls: number, bossKilled: boolean, potionsOnly = false, clearedClean = false): Drop[] {
+export function rollDrops(t: DropTicket, rolls: number, bossKilled: boolean, potionsOnly = false, clearedClean = false): Drop[] {
   const D = DIFFS[t.difficulty];
   const r = seeded(t.seed ^ 0x44524f50);
   const drops: Drop[] = [];

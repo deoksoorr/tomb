@@ -477,7 +477,7 @@ describe("꾸밈 점수 랭킹 (houseRank)", () => {
     const store = new MemoryHouseStore();
     const now = Date.UTC(2026, 10, 12, 3); // 2026-11-12 (목) 12시 KST
     const weekStart = kstWeekStart(now);
-    expect(new Date(weekStart).toISOString()).toBe("2026-11-08T15:00:00.000Z"); // 11/9(월) 0시 KST
+    expect(new Date(weekStart).toISOString()).toBe("2026-11-08T20:00:00.000Z"); // 11/9(월) 새벽 5시 KST
     await mk(store, "old", "지난주 집", 500, weekStart - 1000);
     await mk(store, "a", "가", 300, now);
     await mk(store, "b", "나", 100, now);

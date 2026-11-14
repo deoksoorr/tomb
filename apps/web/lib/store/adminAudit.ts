@@ -7,7 +7,8 @@ import { env } from "../env";
 export const AUDIT_KEY = "admin:audit";
 export const AUDIT_KEEP = 200;
 
-export type AdminAuditAction = "codeReissue";
+/** codeReissue = 관리자 코드 재발급, googleLink·googleUnlink = 본인의 구글 연결·끊기 (따로 쌓는다 — getGoogleAudit) */
+export type AdminAuditAction = "codeReissue" | "googleLink" | "googleUnlink";
 export type AdminAuditEntry = {
   at: number;
   /** 처리자 (lib/ban.ts adminActor — "관리자" 또는 "관리자(닉네임)") */
@@ -26,8 +27,9 @@ export interface AdminAuditStore {
 
 export class MemoryAdminAudit implements AdminAuditStore {
   private rows: AdminAuditEntry[] = [];
+  constructor(private keep = AUDIT_KEEP) {}
   async push(entry: AdminAuditEntry): Promise<void> {
-    this.rows = [entry, ...this.rows].slice(0, AUDIT_KEEP);
+    this.rows = [entry, ...this.rows].slice(0, this.keep);
   }
   async recent(limit: number): Promise<AdminAuditEntry[]> {
     return this.rows.slice(0, limit);
@@ -36,18 +38,22 @@ export class MemoryAdminAudit implements AdminAuditStore {
 
 export class RedisAdminAudit implements AdminAuditStore {
   private redis: Redis;
-  constructor(conn: { url: string; token: string }) {
+  constructor(
+    conn: { url: string; token: string },
+    private key = AUDIT_KEY,
+    private keep = AUDIT_KEEP,
+  ) {
     this.redis = new Redis({ ...conn, automaticDeserialization: false });
   }
   async push(entry: AdminAuditEntry): Promise<void> {
     await this.redis
       .pipeline()
-      .lpush(AUDIT_KEY, JSON.stringify(entry))
-      .ltrim(AUDIT_KEY, 0, AUDIT_KEEP - 1)
+      .lpush(this.key, JSON.stringify(entry))
+      .ltrim(this.key, 0, this.keep - 1)
       .exec();
   }
   async recent(limit: number): Promise<AdminAuditEntry[]> {
-    const raw = await this.redis.lrange<string>(AUDIT_KEY, 0, limit - 1);
+    const raw = await this.redis.lrange<string>(this.key, 0, limit - 1);
     return raw.flatMap((r) => {
       try {
         return [JSON.parse(r) as AdminAuditEntry];
@@ -60,6 +66,7 @@ export class RedisAdminAudit implements AdminAuditStore {
 
 const g = globalThis as typeof globalThis & {
   __tombAdminAudit?: AdminAuditStore;
+  __tombGoogleAudit?: AdminAuditStore;
 };
 
 /** 계정 저장소와 같은 백엔드 (Redis가 있으면 Redis, 없으면 메모리) */
@@ -69,4 +76,17 @@ export function getAdminAudit(): AdminAuditStore {
   if (conn) return cur instanceof RedisAdminAudit ? cur : (g.__tombAdminAudit = new RedisAdminAudit(conn));
   if (cur instanceof MemoryAdminAudit) return cur;
   return (g.__tombAdminAudit = cur ? Object.assign(new MemoryAdminAudit(), cur) : new MemoryAdminAudit());
+}
+
+// 구글 연결·끊기 기록: 같은 형식이지만 키를 따로 둔다 — 누구나 하는 일이라 한 목록에 섞으면 관리자 재발급 기록을 밀어낸다.
+// Redis 키: google:audit  LIST JSON, 최신 먼저 최대 GOOGLE_AUDIT_KEEP개 (구글 고유 번호·해시는 적지 않는다)
+export const GOOGLE_AUDIT_KEY = "google:audit";
+export const GOOGLE_AUDIT_KEEP = 500;
+
+export function getGoogleAudit(): AdminAuditStore {
+  const cur = g.__tombGoogleAudit;
+  const conn = env.redis();
+  if (conn) return cur instanceof RedisAdminAudit ? cur : (g.__tombGoogleAudit = new RedisAdminAudit(conn, GOOGLE_AUDIT_KEY, GOOGLE_AUDIT_KEEP));
+  if (cur instanceof MemoryAdminAudit) return cur;
+  return (g.__tombGoogleAudit = cur ? Object.assign(new MemoryAdminAudit(GOOGLE_AUDIT_KEEP), cur) : new MemoryAdminAudit(GOOGLE_AUDIT_KEEP));
 }

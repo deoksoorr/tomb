@@ -97,18 +97,19 @@ describe("자동 낚시 정산", () => {
     expect(r.auto?.limited).toBe(true);
   });
 
-  it("한국 시간 자정이 지나면 그날 한도로 새로 센다 (마리마다 낚인 날 기준)", async () => {
+  it("한국 시간 새벽 5시가 지나면 그날 한도로 새로 센다 (마리마다 낚인 날 기준)", async () => {
     const a = acct();
-    const start = Date.UTC(2026, 10, 12, 14, 30); // KST 23:30
-    const midnight = Date.UTC(2026, 10, 12, 15, 0);
+    const start = Date.UTC(2026, 10, 12, 19, 30); // KST 11/13 새벽 4:30 (게임 날짜는 아직 11/12)
+    const midnight = Date.UTC(2026, 10, 12, 20, 0); // KST 새벽 5시 = 하루가 바뀌는 때
     await startAutoFish(a, PIER, 1, start);
     for (let t = start + 5 * MIN; t <= start + 70 * MIN; t += 5 * MIN) await beatAutoFish(a, t);
     const r = await syncAutoFish(a, start + 70 * MIN);
-    const before = Math.ceil((midnight - start) / AUTO_FISH_EVERY_MS) - 1; // 자정 정각에 낚인 것은 다음 날
+    const before = Math.ceil((midnight - start) / AUTO_FISH_EVERY_MS) - 1; // 새벽 5시 정각에 낚인 것은 다음 날
     const store = getForageStore();
     expect((await store.snapshot(a, kstDay(start), 0)).day.auto).toBe(before);
     expect((await store.snapshot(a, kstDay(midnight), 0)).day.auto).toBe(AUTO_FISH_DAILY_MAX);
     expect(caught(r)).toBe(before + AUTO_FISH_DAILY_MAX);
+    expect([kstDay(start), kstDay(midnight)]).toEqual(["20261112", "20261113"]);
   });
 
   it("동시에 여러 번 정산해도 한 번만 지급된다", async () => {

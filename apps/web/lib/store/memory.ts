@@ -2,7 +2,7 @@ import { REPORT_LOG_MAX, type ReportLogEntry, type ReportReason } from "../repor
 import { MAX_DECOR_PER_GRAVE } from "@tomb/protocol";
 import { DEFAULT_PASS_DAYS, type Grave, type GraveDecor, type PassReason } from "../types";
 import {
-  FLOWER_TTL_SEC,
+  flowerTtlSec,
   REPORT_HIDE_THRESHOLD,
   type GraveRecord,
   type GraveSettings,
@@ -189,7 +189,7 @@ export class MemoryStore implements GraveStore {
   async flower(id: string, visitorId: string): Promise<number | "already" | null> {
     if (!this.graves.has(id)) return null;
     if (this.flowered(id, visitorId)) return "already";
-    this.flowerMarks.set(`${id}:${visitorId}`, this.now() + FLOWER_TTL_SEC * 1000);
+    this.flowerMarks.set(`${id}:${visitorId}`, this.now() + flowerTtlSec(this.now()) * 1000);
     const count = (this.flowers.get(id) ?? 0) + 1;
     this.flowers.set(id, count);
     return count;

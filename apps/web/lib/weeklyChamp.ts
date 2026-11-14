@@ -14,7 +14,7 @@ import { getStyleStore } from "./store/style";
 // 주간 랭킹 1위 보상 (설계: docs/superpowers/specs/2026-11-14-weekly-first-reward-design.md).
 // 대상: 포인트(이번 주 모은 포인트) · 사냥 처치(이번 주 처치 수) · 낚시(이번 주 가장 큰 물고기, 전체 물고기 판). 운영자 제외.
 // 동점이면 먼저 달성한 사람 (주간 랭킹 점수에 달성 시각이 소수부로 실려 있다 — lib/store/accounts.ts weekTieFrac).
-// 매주 월요일 0시(KST) 마감. 크론 없이 "지난주 결과를 처음 읽는 요청"(입장·랭킹 창·내 정보)이 정리한다 (lib/rankFill과 같은 게으른 방식):
+// 매주 월요일 새벽 5시(한국 시간, lib/gameDay) 마감. 크론 없이 "지난주 결과를 처음 읽는 요청"(입장·랭킹 창·내 정보)이 정리한다 (lib/rankFill과 같은 게으른 방식):
 //  1) 그 주 1위를 한 번 정해 저장한다 (처음 정한 것만 — 다시 계산해도 바뀌지 않는다)
 //  2) 1위마다 보상: 1위 전용 꾸미기 대여(다음 주 1위가 정해질 때까지 + 여유) + 1,000P — 계정 저장소 grantChamp가 주·랭킹마다 한 번만 준다.
 //     다관왕은 랭킹 모자 대신 다관왕 전용 모자 하나 (protocol champHatOf)
@@ -167,7 +167,7 @@ export async function champMine(accountId: string, now = Date.now()): Promise<{ 
   const week = prevWeek(kstWeek(now));
   const [rec, seen, test] = await Promise.all([champWeekCached(week, now), store.seen(accountId), testServerEnv() ? store.test(accountId, now) : null]);
   const won = CHAMP_BOARDS.filter((b) => rec?.winners.some((w) => w.board === b && w.accountId === accountId));
-  // 자격이 끝나는 시각: 진짜 1위는 이번 주 마감(다음 월요일 0시 — 그때 다음 1위로 넘어간다), 시험 1위는 시험 끝 시각
+  // 자격이 끝나는 시각: 진짜 1위는 이번 주 마감(다음 월요일 새벽 5시 — 그때 다음 1위로 넘어간다), 시험 1위는 시험 끝 시각
   const until = Math.max(won.length ? weekEndMs(kstWeek(now)) : 0, test?.until ?? 0);
   if (won.length && seen !== week) return { bits, until, unseen: { week, boards: won } };
   if (test && seen !== test.id) return { bits, until, unseen: { week: test.id, boards: champBoards(test.bits), test: true } };
@@ -179,7 +179,7 @@ export async function champMine(accountId: string, now = Date.now()): Promise<{ 
 /** 시험 1위 자격(배지·전용 오라)이 저절로 끝나는 시간 */
 export const CHAMP_TEST_MS = 3 * 3_600_000;
 /**
- * 시험 지급 모자 대여 기간: 실제 지급과 같은 길이 — 발표(월요일 0시 정리) 때 받아 다음 발표까지 한 주 + 정리가 늦어질 여유(CHAMP_GRACE_MS).
+ * 시험 지급 모자 대여 기간: 실제 지급과 같은 길이 — 발표(월요일 새벽 5시 정리) 때 받아 다음 발표까지 한 주 + 정리가 늦어질 여유(CHAMP_GRACE_MS).
  * (실제 지급은 champUntil = 그 주 시작 + 14일 + 여유 = 받은 월요일로부터 7일 + 여유)
  */
 export const CHAMP_TEST_HAT_MS = 7 * 86_400_000 + CHAMP_GRACE_MS;

@@ -1,0 +1,355 @@
+/* 가방 캐릭터 꾸미기 두 화면: [지금 모습](장비창) · [꾸미기](부위 칩 + 카드 목록 + 입어 보기) */
+
+/* ── [지금 모습] ── */
+.look {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+/* 장비창: 아바타 ×4 (낮은 창·폰은 ×3), 부위 칸은 낮은 칸 compact (PaperDoll) */
+.doll {
+  --scale: 4;
+  width: min(100%, 560px);
+  gap: 6px;
+  padding: 8px;
+}
+
+.doll button {
+  min-width: 0;
+}
+
+/* 아바타 아래·입어 보기 위: 내 이름표 미리보기 (게임 이름표 글꼴·크기·외곽선, 꾸미기 없으면 내 이름표 촛불빛) */
+.namePv {
+  display: block;
+  justify-self: center;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--candle);
+  font-family: "Galmuri11", var(--font-body);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  white-space: nowrap;
+  filter: drop-shadow(1px 0 0 #0a0b10) drop-shadow(-1px 0 0 #0a0b10) drop-shadow(0 1px 0 #0a0b10) drop-shadow(0 -1px 0 #0a0b10);
+}
+
+/* 방향(앞·옆·뒤)과 자세(서 있기·걷기)를 한 줄에 */
+.viewControls {
+  grid-template-columns: 3fr 2fr;
+  gap: 4px;
+  width: min(100%, 320px);
+}
+
+.viewControls > * {
+  gap: 2px;
+}
+
+.viewControls button {
+  min-width: 0;
+  min-height: 34px;
+  padding: 2px 3px;
+  white-space: nowrap;
+}
+
+.summary {
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
+}
+
+.summary b {
+  color: var(--candle);
+  font-weight: 400;
+}
+
+.hint {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-align: center;
+}
+
+/* 낮은 창(노트북 + 브라우저 막대)·폰: 아바타 ×3 */
+@media (max-height: 660px), (max-width: 560px) {
+  .doll {
+    --scale: 3;
+  }
+}
+
+/* 폰: 칸이 좁아 이름이 잘리지 않게 아바타를 위에 두고 부위 칸 9개를 세 개씩 세 줄로 (몸 위에서 아래 순서) */
+@media (max-width: 560px) {
+  .look .doll {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-areas:
+      "fig fig fig"
+      "head neck back"
+      "hand aura feet"
+      "pet nameColor namePlate";
+  }
+}
+
+/* ── [꾸미기] ── */
+.pick {
+  display: grid;
+  gap: 8px;
+}
+
+/* 부위 칩: 여러 줄로 감싸 늘 다 보이게 (가로로 밀어 보는 줄은 끝 칩이 잘려 보인다) */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 36px;
+  min-height: 32px;
+  padding: 2px 7px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: var(--px-border);
+  touch-action: manipulation;
+}
+
+.chip:hover {
+  background: var(--surface-hover);
+}
+
+.chip[data-empty] {
+  color: var(--faint);
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--moss-deep);
+  color: var(--bone);
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}
+
+.chipCount {
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+@media (pointer: coarse) {
+  .chip {
+    min-height: 38px;
+  }
+}
+
+/* 목록(왼쪽) + 입어 보기(오른쪽, 목록을 내려도 그 자리) */
+.pickBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 176px;
+  grid-template-areas: "list fit";
+  align-items: start;
+  gap: 10px;
+}
+
+.listCol {
+  grid-area: list;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fitting {
+  grid-area: fit;
+  position: sticky;
+  top: 0;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+/* 작은 입어 보기 무대 (×2 = 144×128) */
+.fitStage {
+  --scale: 2;
+}
+
+.fitInfo {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+}
+
+.fitName {
+  max-width: 100%;
+  color: var(--bone);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.fitNote {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.fitBtn {
+  width: 100%;
+  min-height: 40px;
+}
+
+.group {
+  display: grid;
+  gap: 6px;
+}
+
+.heading {
+  color: var(--bone);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.meta {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.empty {
+  padding: 16px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* 카드: 누르면 입어 보기, 오른쪽 [입기]/[벗기] */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px;
+}
+
+.card {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  padding: 3px;
+  background: var(--bg-deep);
+  box-shadow: inset 3px 0 0 transparent;
+}
+
+.card[data-state="worn"] {
+  background: rgba(47, 66, 52, 0.55);
+  box-shadow: inset 3px 0 0 var(--moss);
+}
+
+.card[data-picked] {
+  outline: 2px solid var(--candle);
+  outline-offset: -2px;
+}
+
+.cardPick {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.cardPick:hover {
+  background: var(--surface-hover);
+}
+
+.cardMain {
+  display: grid;
+  justify-items: start;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cardName {
+  max-width: 100%;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.status[data-state="worn"] {
+  color: var(--moss);
+}
+
+.status[data-state="new"] {
+  color: var(--candle);
+}
+
+.wearBtn {
+  flex: none;
+  align-self: center;
+  min-width: 52px;
+  min-height: 40px;
+  padding: 2px 6px;
+}
+
+/* 폰·좁은 창: 입어 보기를 위에 가로로 작게 (목록을 내려도 위에 남는다) */
+@media (max-width: 720px) {
+  .pickBody {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "fit"
+      "list";
+  }
+
+  .fitting {
+    z-index: 1;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "name name"
+      "stage info";
+    align-items: center;
+    padding: 4px 8px 6px;
+  }
+
+  .fitting > .namePv {
+    grid-area: name;
+  }
+
+  .fitStage {
+    grid-area: stage;
+    --scale: 2;
+  }
+
+  .fitInfo {
+    grid-area: info;
+    justify-items: stretch;
+    text-align: left;
+  }
+
+  /* 카드로 스크롤해 올 때 위에 붙은 입어 보기에 가리지 않게 */
+  .card {
+    scroll-margin-top: 180px;
+  }
+}

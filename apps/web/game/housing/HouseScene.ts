@@ -44,6 +44,7 @@ import {
   PIANO_NOTES,
   pickPondSeat,
   pondSeats,
+  type PondSeat,
   RADIO_CHANNELS,
   SNACK_NAMES,
   SNACKS,
@@ -187,6 +188,12 @@ export class HouseScene extends Phaser.Scene {
   private pondSpots: { x: number; y: number; r: number }[] = [];
   /** 잠깐 바뀌는 그림 (끄적인 화이트보드·눌린 오리·흔들리는 덤불…): u → 변형·끝나는 시각 */
   private flash = new Map<string, { v: string; until: number }>();
+  /** 연못가 자리 (연못 u별 네 물가) — 배치가 바뀔 때 다시 계산 */
+  private pondSeatList: (PondSeat & { u: string })[] = [];
+  /** 내가 앉은 연못가 (앉아 있는 동안 연못 몸통과 부딪히지 않는다) */
+  private pondSit: (PondSeat & { u: string }) | null = null;
+  /** 연못가에 앉은 사람(나 "me"·다른 사람 sid) → 물에 잠긴 발끝을 덮는 물빛 조각 */
+  private pondFeet = new Map<string, Phaser.GameObjects.Graphics>();
   /** 디딤돌 칸 (밟으면 발소리) */
   private stoneTiles = new Set<number>();
   private stepAt = 0;
@@ -226,6 +233,9 @@ export class HouseScene extends Phaser.Scene {
     this.pondSpots = [];
     this.flash = new Map();
     this.stoneTiles = new Set();
+    this.pondSeatList = [];
+    this.pondSit = null;
+    this.pondFeet = new Map();
     this.walls = [];
     this.ground = null;
     this.glowSpots = [];
@@ -312,7 +322,8 @@ export class HouseScene extends Phaser.Scene {
     this.follow = f && f.houseId === this.data0.house.id && Date.now() - f.at < 30_000 ? { name: f.name, until: followDeadline(this.game.loop.time, FOLLOW_WAIT_MS) } : null;
     if (f) bridge.emit("house:follow", null);
     this.physics.add.collider(this.player.sprite, this.wallBodies);
-    this.physics.add.collider(this.player.sprite, this.itemBodies);
+    // 연못가에 걸터앉은 동안은 연못 몸통과 부딪히지 않는다 (발이 물 안까지 들어간다)
+    this.physics.add.collider(this.player.sprite, this.itemBodies, undefined, () => !this.pondSit, this);
     this.physics.world.setBounds(T, this.oy - 12, this.W - 2 * T, this.H - (this.oy - 12));
 
     // 집 안: 비·눈·낙엽은 그리지 않고 빗소리·천둥은 벽 너머로 먹먹하게
@@ -809,6 +820,7 @@ export class HouseScene extends Phaser.Scene {
     this.useByU = new Map();
     for (const t of this.targets) if (!this.useByU.has(t.u) || t.spot) this.useByU.set(t.u, t.use);
     this.stoneTiles = new Set(this.work.items.filter((p) => p.i === "stone_path").map((p) => p.y * 1000 + p.x));
+    this.pondSeatList = this.work.items.filter((p) => p.i === "pond").flatMap((p) => pondSeats(p, this.work.items, this.tier, this.frame).map((s) => ({ ...s, u: p.u })));
   }
 
   private isOpen(u: string): boolean {
@@ -963,6 +975,7 @@ export class HouseScene extends Phaser.Scene {
         const others = this.presence ? [...this.presence.remotes.values()] : [];
         const seat = pond && pickPondSeat(pond, this.work.items, this.tier, this.frame, p.x, p.y, (x, y) => others.some((o) => Math.hypot(o.x - x, o.y - y) < 7));
         if (!seat) return this.notice("연못 둘레에 앉을 물가가 없어요. 둘레의 가구를 조금 옮겨 주세요.");
+        this.pondSit = { ...seat, u: t.u };
         this.sitGroundAt(seat.x, seat.y, seat.facing);
         this.fxDip(t.u, 1, seat.side);
         this.emote("drop");
@@ -1058,9 +1071,9 @@ export class HouseScene extends Phaser.Scene {
     const seat = pond && pondSeats(pond, this.work.items, this.tier, this.frame)[side];
     if (!seat) return;
     // 앉은 쪽 발 앞에서 잔물결이 번진다
-    const { x, y } = seat.ripple;
-    // 연못 그림 바로 위 (아래 물가에 앉은 사람보다는 뒤)
-    const depth = (this.views.get(u)?.img.depth ?? y) + 0.5;
+    const { x, y } = seat.foot;
+    // 발끝에서 번진다: 연못 그림과 그 앞에 앉은 사람보다 위
+    const depth = (this.views.get(u)?.img.depth ?? y) + 3;
     const n = this.data0.reduced ? 1 : 3;
     for (let i = 0; i < n; i++)
       this.time.delayedCall(i * 380, () => {
@@ -1220,6 +1233,55 @@ export class HouseScene extends Phaser.Scene {
       const t = r.stateId === STATE.lie ? tiltOf(r.seatId) : 0;
       if (t) r.view.sprite.setAngle(t);
     }
+  }
+
+  /**
+   * 연못가에 걸터앉은 사람(나·같은 방 사람): 연못 그림보다 앞에 그리고, 물에 잠긴 발끝은 물빛 조각으로 덮는다.
+   * 아바타 갱신 뒤에 부른다: 다른 사람 그림은 갱신 때마다 깊이를 되돌리므로 그림 깊이를 바로 맞추고, 내 캐릭터는 일어나면 되돌린다
+   */
+  private updatePondSitters(): void {
+    const seen = new Set<string>();
+    const place = (key: string, view: { depthOverride: number | null; sprite: Phaser.GameObjects.Sprite }, seat: PondSeat & { u: string }) => {
+      const depth = (this.views.get(seat.u)?.img.depth ?? seat.y) + 1;
+      view.depthOverride = depth;
+      view.sprite.setDepth(depth);
+      seen.add(key);
+      if (!seat.cover) return;
+      let g = this.pondFeet.get(key);
+      if (!g) {
+        g = this.add.graphics();
+        this.pondFeet.set(key, g);
+      }
+      // 발끝을 덮는 물 (가로로 납작한 조각 + 밝은 물결 한 줄)
+      const water = this.night ? 0x2b465e : 0x47727a;
+      const wide = seat.side === 1;
+      g.clear();
+      g.fillStyle(water, 0.92);
+      g.fillEllipse(seat.foot.x, seat.foot.y + 1, wide ? 12 : 7, 4);
+      g.fillStyle(this.night ? 0xa8b8d0 : 0xd6eeea, 0.7);
+      g.fillRect(seat.foot.x - (wide ? 4 : 2), seat.foot.y - 1, wide ? 8 : 4, 1);
+      g.setDepth(depth + 1);
+    };
+    const near = (x: number, y: number) => this.pondSeatList.find((s) => Math.abs(s.x - x) <= 2 && Math.abs(s.y - y) <= 2);
+    // 나: 일어나면 끝
+    const me = this.pondSit;
+    if (me) {
+      if (this.player.state === "sitGround" && Math.abs(this.player.x - me.x) <= 2 && Math.abs(this.player.y - me.y) <= 2) place("me", this.player.view, me);
+      else {
+        this.pondSit = null;
+        this.player.view.depthOverride = null;
+      }
+    }
+    if (this.presence)
+      for (const [sid, r] of this.presence.remotes) {
+        const seat = r.stateId === STATE.sitGround ? near(r.x, r.y) : undefined;
+        if (seat) place(String(sid), r.view, seat);
+      }
+    for (const [key, g] of this.pondFeet)
+      if (!seen.has(key)) {
+        g.destroy();
+        this.pondFeet.delete(key);
+      }
   }
 
   /** 1인 자리에 앉기·눕기·읽기·욕조 (서버 점유 요청과 동시에 자리로) */
@@ -1605,6 +1667,7 @@ export class HouseScene extends Phaser.Scene {
       }
     }
     this.tiltLying();
+    this.updatePondSitters();
     // 가구 안내 (가장 가까운 것 하나)
     this.target = this.editing || this.using ? null : pickTarget(this.targets, this.player.x, this.player.y, (id) => this.takenByOther(id));
     const nearSign = !this.editing && this.nearSign();

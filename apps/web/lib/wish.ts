@@ -1,27 +1,22 @@
+import { DAY_RESET_TEXT, msUntilDayReset } from "./gameDay";
 import type { Me } from "./types";
 
 // 50번 소원 분수 (광장 북쪽): 동전(1~5P)을 던지면 오늘의 운세가 나오고, 가끔 몇 포인트가 튀어 돌아온다.
 // 서버가 판정한다(/api/plaza/wish): 포인트 차감 → 운세·보너스 굴리기 → 보너스는 적립(하루 한도 "wish").
-// 계정당 하루(KST 자정 기준) WISH_DAILY번 — 운영자 IP도 예외 없다 (lib/store/wishDay, 서버에서 원자적으로 잡는다).
+// 계정당 하루(한국 시간 새벽 5시 기준, lib/gameDay) WISH_DAILY번 — 운영자 IP도 예외 없다 (lib/store/wishDay, 서버에서 원자적으로 잡는다).
 // IP 한도(lib/ratelimit "wish")는 계정 여러 개로 농사하는 것만 막는다. 순수 규칙은 여기, 라우트는 app/api/plaza/wish.
 
 /** 던질 수 있는 동전 (포인트) */
 export const WISH_COINS = [1, 3, 5] as const;
 export const WISH_MIN = 1;
 export const WISH_MAX = 5;
-/** 하루(KST 날짜)에 던질 수 있는 횟수 */
+/** 하루(게임 날짜, 새벽 5시에 바뀐다)에 던질 수 있는 횟수 */
 export const WISH_DAILY = 1;
 /** 오늘 이미 던졌을 때 */
-export const WISH_USED_MESSAGE = "소원은 하루에 한 번만 빌 수 있어요. 자정이 지나면 다시 와 주세요.";
+export const WISH_USED_MESSAGE = `소원은 하루에 한 번만 빌 수 있어요. ${DAY_RESET_TEXT}가 지나면 다시 와 주세요.`;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const KST_MS = 9 * 60 * 60 * 1000;
-
-/** 다음 KST 자정까지 남은 ms (1..하루) — 소원 횟수가 새로 차는 때 */
-export function msUntilKstMidnight(now: number): number {
-  const into = (((now + KST_MS) % DAY_MS) + DAY_MS) % DAY_MS;
-  return DAY_MS - into;
-}
+/** 다음 새벽 5시(한국 시간)까지 남은 ms (1..하루) — 소원 횟수가 새로 차는 때 */
+export const msUntilWishReset = (now: number) => msUntilDayReset(now);
 
 export type WishLuck = "great" | "good" | "fair" | "small" | "soso";
 export type WishFortune = { luck: WishLuck; title: string; text: string };

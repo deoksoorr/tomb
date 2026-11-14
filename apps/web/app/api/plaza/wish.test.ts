@@ -3,11 +3,11 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { getAccounts } from "@/lib/store";
 import { kstDay } from "@/lib/store/accounts";
 import type { ApiError } from "@/lib/types";
-import { isWishAmount, msUntilKstMidnight, pickFortune, rollBonus, WISH_DAILY, type WishResponse } from "@/lib/wish";
+import { isWishAmount, msUntilWishReset, pickFortune, rollBonus, WISH_DAILY, type WishResponse } from "@/lib/wish";
 import * as session from "../session/route";
 import * as wish from "./wish/route";
 
-// 50번 소원 분수 (메모리 구성): 동전 차감 → 운세 → 가끔 보너스(적립 한도), 계정당 하루(KST) 1번 — 운영자도 (실패한 시도는 세지 않는다)
+// 50번 소원 분수 (메모리 구성): 동전 차감 → 운세 → 가끔 보너스(적립 한도), 계정당 하루(새벽 5시 기준) 1번 — 운영자도 (실패한 시도는 세지 않는다)
 
 beforeAll(() => {
   for (const k of ["KV_REST_API_URL", "UPSTASH_REDIS_REST_URL", "BLOB_READ_WRITE_TOKEN", "BLOB_STORE_ID", "SESSION_SECRET", "JOIN_SECRET", "ADMIN_ALLOWED_IPS"])
@@ -60,11 +60,13 @@ describe("소원 분수 규칙", () => {
     expect([0, 1, 5, 6, 2.5, "3"].map(isWishAmount)).toEqual([false, true, true, false, false, false]);
   });
 
-  it("다음 KST 자정까지 남은 시간", () => {
-    const kstMidnight = Date.UTC(2026, 10, 12, 15, 0, 0); // 11/13 00:00 KST
-    expect(msUntilKstMidnight(kstMidnight)).toBe(24 * 3_600_000);
-    expect(msUntilKstMidnight(kstMidnight - 1)).toBe(1);
-    expect(msUntilKstMidnight(kstMidnight - 3_600_000)).toBe(3_600_000);
+  it("다음 새벽 5시(한국 시간)까지 남은 시간", () => {
+    const reset = Date.UTC(2026, 10, 12, 20, 0, 0); // 11/13 05:00 KST
+    expect(msUntilWishReset(reset)).toBe(24 * 3_600_000);
+    expect(msUntilWishReset(reset - 1)).toBe(1);
+    expect(msUntilWishReset(reset - 3_600_000)).toBe(3_600_000);
+    // 자정에는 아직 오늘이다 (새로 차기까지 5시간)
+    expect(msUntilWishReset(reset - 5 * 3_600_000)).toBe(5 * 3_600_000);
   });
 });
 
@@ -107,14 +109,14 @@ describe("POST /api/plaza/wish", () => {
     for (let i = 0; i < WISH_DAILY; i++) expect((await throwCoin(v, 1)).status).toBe(200);
   });
 
-  it("운영자 IP도 하루 1번, KST 자정이 지나면 다시 던질 수 있다", async () => {
+  it("운영자 IP도 하루 1번, 새벽 5시가 지나면 다시 던질 수 있다", async () => {
     const v = await newVisitor();
     vi.stubEnv("ADMIN_ALLOWED_IPS", v.ip);
     const accounts = getAccounts();
     await accounts.earn(v.visitorId, "hunt", kstDay(), { amount: 50 });
-    // 오늘 KST 23:59:59에 던지고 → 같은 날은 막히고 → 1초 뒤(자정)에는 다시
+    // 새벽 4:59:59에 던지고 → 같은 날은 막히고 → 1초 뒤(새벽 5시)에는 다시
     const real = Date.now();
-    const lastSec = real + msUntilKstMidnight(real) - 1000;
+    const lastSec = real + msUntilWishReset(real) - 1000;
     vi.spyOn(Date, "now").mockReturnValue(lastSec);
     expect((await throwCoin(v, 1)).status).toBe(200);
     const again = await throwCoin(v, 1);

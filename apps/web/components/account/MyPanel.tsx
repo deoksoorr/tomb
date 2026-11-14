@@ -17,6 +17,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import type { MyGraveEntry } from "./items";
 import { InquiryButton } from "../notice/InquiryDialog";
+import GoogleSection from "./GoogleSection";
 import MyGraves from "./MyGraves";
 import styles from "./MyPanel.module.css";
 import MyHouseLine from "../housing/MyHouseLine";
@@ -137,6 +138,8 @@ export default function MyPanel({
         {onOpenFriends && <FriendsLine onOpen={onOpenFriends} />}
 
         <CodeSection me={me} buttonId={codeButtonId} />
+
+        <GoogleSection me={me} />
 
         <div className={styles.endButtons}>
           <button type="button" className={cx(ui.button, styles.leave)} onClick={onOpenShrine}>

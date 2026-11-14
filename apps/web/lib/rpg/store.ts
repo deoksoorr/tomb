@@ -11,7 +11,7 @@ import type { CharacterState, DailyStats } from "./types";
 //  - rpg:{a}:active      STRING 지금 진행 중인 판의 nonce (시간 제한 + 여유 뒤 만료). 새 판을 시작하면 바뀐다
 //  - rpg:{a}:used:{n}    STRING 끝낸 판 표시 (SET NX, 2일) → 같은 티켓을 두 번 낼 수 없다
 //  - rpg:{a}:runs:{시}   STRING 이번 한 시간 동안 시작한 판 수 (INCR, 1시간)
-//  - rpg:{a}:day:{KST}   HASH  points/runs/exp 오늘 사냥 기록 (2일)
+//  - rpg:{a}:day:{게임 날짜}   HASH  points/runs/exp 오늘 사냥 기록 (2일)
 
 export const RUNS_PER_HOUR = 30;
 const USED_TTL_SEC = 2 * 86_400;

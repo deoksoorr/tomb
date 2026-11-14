@@ -97,6 +97,10 @@ export const K = {
   friendsIn: (id: string) => `fr:in:${id}`, // ZSET 나에게 신청한 계정 → 신청 시각. 답하지 않은 신청 보관 기간 + 1일 TTL
   friendsOut: (id: string) => `fr:out:${id}`, // ZSET 내가 신청한 계정 → 신청 시각. 같은 TTL
 
+  // ── 구글 계정 연결 (lib/store/googleLinks.ts). 구글 고유 번호(sub)는 원문 없이 서버 비밀값 HMAC(subHash)로만 ──
+  googleSub: (subHash: string) => `google:sub:${subHash}`, // STRING → 연결된 계정 id
+  googleAcct: (id: string) => `acct:${id}:google`, // HASH h = subHash, at = 연결 시각(ms)
+
   // ── 50번 소원 분수 (lib/store/wishDay.ts) ──
   wishDay: (id: string, day: string) => `wish:day:${day}:${id}`, // STRING NX EX 계정별 그날(KST) 한 번
 };

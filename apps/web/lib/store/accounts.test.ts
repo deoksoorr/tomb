@@ -908,21 +908,25 @@ describe.skipIf(!redisEnv)("RedisAccounts (실제 Redis, 개발용 DB에서만 �
     };
   }));
 
-describe("KST 날짜 키", () => {
-  it("주 키는 그 주 월요일 (KST)", () => {
+describe("게임 날짜 키 (한국 시간 새벽 5시 경계)", () => {
+  it("주 키는 그 주 월요일, 주는 월요일 새벽 5시에 바뀐다", () => {
     expect(weekOfDay("20261112")).toBe("20261109"); // 목 → 월
     expect(weekOfDay("20261109")).toBe("20261109"); // 월
     expect(weekOfDay("20261115")).toBe("20261109"); // 일 → 그 주 월
     expect(weekOfDay("20261116")).toBe("20261116");
     expect(weekOfDay("20260301")).toBe("20260223"); // 달을 넘어간다
-    expect(kstWeek(Date.UTC(2026, 10, 15, 15, 1))).toBe("20261116"); // 11/16(월) 00:01 KST
+    expect(kstWeek(Date.UTC(2026, 10, 15, 15, 1))).toBe("20261109"); // 11/16(월) 00:01 KST — 아직 지난주
+    expect(kstWeek(Date.UTC(2026, 10, 15, 19, 59, 59))).toBe("20261109"); // 11/16(월) 04:59:59 KST
+    expect(kstWeek(Date.UTC(2026, 10, 15, 20, 0))).toBe("20261116"); // 11/16(월) 05:00 KST
   });
 
-  it("한국 자정 기준으로 오늘·어제를 YYYYMMDD로", () => {
-    const justAfterMidnightKst = Date.UTC(2026, 10, 7, 15, 1); // 11/8 00:01 KST
-    expect(kstDay(justAfterMidnightKst)).toBe("20261108");
-    expect(kstYesterday(justAfterMidnightKst)).toBe("20261107");
-    expect(kstDay(Date.UTC(2026, 10, 7, 14, 59))).toBe("20261107");
-    expect(kstYesterday(Date.UTC(2026, 2, 1, 0, 0))).toBe("20260228");
+  it("새벽 5시 기준으로 오늘·어제를 YYYYMMDD로", () => {
+    const justAfterMidnightKst = Date.UTC(2026, 10, 7, 15, 1); // 11/8 00:01 KST → 아직 11/7
+    expect(kstDay(justAfterMidnightKst)).toBe("20261107");
+    expect(kstYesterday(justAfterMidnightKst)).toBe("20261106");
+    expect(kstDay(Date.UTC(2026, 10, 7, 19, 59, 59))).toBe("20261107"); // 11/8 04:59:59 KST
+    expect(kstDay(Date.UTC(2026, 10, 7, 20, 0))).toBe("20261108"); // 11/8 05:00 KST
+    expect(kstYesterday(Date.UTC(2026, 10, 7, 20, 0))).toBe("20261107");
+    expect(kstYesterday(Date.UTC(2026, 2, 1, 0, 0))).toBe("20260228"); // 3/1 09:00 KST → 어제는 2/28
   });
 });

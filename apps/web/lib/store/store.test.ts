@@ -150,7 +150,7 @@ function contract(make: () => GraveStore) {
     expect((await store.remove(g.id))?.id).toBe(g.id);
     expect(await store.get(g.id)).toBeNull();
     expect((await store.listAll()).some((r) => r.id === g.id)).toBe(false);
-    expect((await store.viewer(g.id, "a")).myFlowerToday).toBe(true); // 헌화 표시는 24시간 TTL로 저절로 사라진다
+    expect((await store.viewer(g.id, "a")).myFlowerToday).toBe(true); // 헌화 표시는 다음 새벽 5시까지의 TTL로 저절로 사라진다
     expect((await store.reportSummary()).has(g.id)).toBe(false);
     expect(await store.remove(g.id)).toBeNull();
     // 같은 id로 다시 세워도 예전 카운트·숨김·신고가 남아 있지 않다
@@ -337,15 +337,21 @@ describe.skipIf(!redisEnv)("RedisStore 성불 보관 (실제 Redis)", () => {
 });
 
 describe("MemoryStore 전용", () => {
-  it("헌화 표시는 24시간 뒤에 풀린다", async () => {
-    let now = 1_000_000;
+  it("헌화 표시는 다음 새벽 5시(한국 시간)에 풀린다", async () => {
+    const reset = Date.UTC(2026, 10, 14, 20, 0); // 11/15 05:00 KST
+    let now = reset - 2 * 3_600_000; // 새벽 3시에 헌화 (게임 날짜는 아직 11/14)
     const store = new MemoryStore([], () => now);
     await store.put(grave({ id: "g" }));
     expect(await store.flower("g", "v")).toBe(1);
-    now += 86_400_000 - 1;
+    now = reset - 1;
     expect(await store.flower("g", "v")).toBe("already");
-    now += 1;
+    now = reset;
     expect(await store.flower("g", "v")).toBe(2);
+    // 5시 넘어 놓으면 다음 날 새벽 5시까지 (24시간 꽉 채워 막힌다)
+    now = reset + 86_400_000 - 1;
+    expect(await store.flower("g", "v")).toBe("already");
+    now = reset + 86_400_000;
+    expect(await store.flower("g", "v")).toBe(3);
   });
 });
 

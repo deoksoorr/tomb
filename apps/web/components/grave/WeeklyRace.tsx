@@ -9,7 +9,7 @@ import StyledName from "../ui/StyledName";
 import { ChampReward, ComboAuras } from "./ChampReward";
 import styles from "./WeeklyRace.module.css";
 
-// 이번 주 레이스 (화면 위 [레이스] 버튼 · 메뉴 시트 → 표준 창): 포인트·사냥 처치·낚시마다 1~3등 시상대(캐릭터 모습), 마감(월요일 0시 KST)까지 남은 시간,
+// 이번 주 레이스 (화면 위 [레이스] 버튼 · 메뉴 시트 → 표준 창): 포인트·사냥 처치·낚시마다 1~3등 시상대(캐릭터 모습), 마감(월요일 새벽 5시, 한국 시간)까지 남은 시간,
 // 내 순위·1위와의 차이. 창이 열려 있는 동안 30초마다 다시 받는다. 아래에는 지난주 1위와 명예의 전당.
 
 /** 1위 보상 포인트 (응답이 오기 전 기본값 — lib/weeklyChamp CHAMP_POINTS와 같다) */
@@ -79,7 +79,7 @@ export default function WeeklyRace() {
           ⏳
         </span>
         마감까지 <b>{leftText(race.endsAt - now)}</b>
-        <span className={styles.when}> · 월요일 0시</span>
+        <span className={styles.when}> · 월요일 새벽 5시</span>
       </p>
       <p className={styles.reward}>1위 보상: 전용 모자(한 주) · 전용 오라 · 이름표 배지 · {(champ?.points ?? CHAMP_POINTS_DEFAULT).toLocaleString("ko-KR")}P</p>
       {/* 시상대 3개: 넓은 창은 가로로 나란히, 좁은 창은 세로로 */}

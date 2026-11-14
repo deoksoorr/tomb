@@ -255,7 +255,7 @@
   }
 }
 
-/* ── 낮은 칸 (compact): 그림 왼쪽 · 부위 이름 / 낀 것 이름 / 남은 기간 막대·글자를 오른쪽 세 줄로 ── */
+/* ── 낮은 칸 (compact, 가방 [지금 모습]): 그림 왼쪽 · 부위 이름 / 낀 것 이름 / 남은 기간 막대·글자를 오른쪽 세 줄로 ── */
 .doll[data-compact] .slot {
   /* 아이콘은 16px 원본의 2배(32) — ItemIcon size 24는 2배로 반올림된다 */
   grid-template-columns: 32px minmax(0, 1fr);
@@ -267,15 +267,15 @@
   align-items: center;
   justify-items: stretch;
   column-gap: 4px;
-  row-gap: 1px;
-  min-height: 44px;
-  padding: 3px 4px;
+  row-gap: 2px;
+  min-height: 52px;
+  padding: 4px 5px;
   text-align: left;
 }
 
 .doll[data-compact] .slotLabel {
   grid-area: label;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.1;
 }
 
@@ -288,8 +288,8 @@
 .doll[data-compact] .slotName {
   grid-area: name;
   overflow: hidden;
-  font-size: 10px;
-  line-height: 1.2;
+  font-size: 12px;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow-wrap: normal;
@@ -314,8 +314,8 @@
 
 .doll[data-compact] .meterText {
   overflow: hidden;
-  max-width: 64px;
-  font-size: 9px;
+  max-width: 72px;
+  font-size: 10px;
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -329,6 +329,14 @@
 
   .doll[data-compact] .meterText {
     display: none;
+  }
+
+  .doll[data-compact] .slot {
+    min-height: 46px;
+  }
+
+  .doll[data-compact] .slotName {
+    font-size: 11px;
   }
 }
 

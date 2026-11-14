@@ -32,7 +32,7 @@ export default function TodayFacts({ show = ALL }: { show?: readonly TodayFact[]
     cap: {
       label: "오늘 남은 포인트 한도",
       value: left === null ? "…" : `${left.toLocaleString("ko-KR")}P`,
-      note: me ? `오늘 ${me.todayEarned.toLocaleString("ko-KR")}/${DAILY_EARN_CAP.toLocaleString("ko-KR")}P 모음 · 자정에 다시 차요` : undefined,
+      note: me ? `오늘 ${me.todayEarned.toLocaleString("ko-KR")}/${DAILY_EARN_CAP.toLocaleString("ko-KR")}P 모음 · 새벽 5시에 다시 차요` : undefined,
       tone: left === 0 ? ("warn" as const) : undefined,
     },
     channel: {

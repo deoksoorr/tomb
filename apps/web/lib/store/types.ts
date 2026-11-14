@@ -1,6 +1,7 @@
 import type { CosmeticSlot } from "@tomb/protocol";
 import type { AttendClaim, CalendarMonthRecord } from "../calendar";
 import type { EarnSource } from "../economy";
+import { msUntilDayReset } from "../gameDay";
 import type { ReportLogEntry, ReportReason } from "../reports";
 import { SHRINE_KEEP_DAYS, type ActivityItem, type Grave, type GraveDecor, type PassReason } from "../types";
 
@@ -24,8 +25,8 @@ export type ShrineRecord = { record: GraveRecord; removedAt: number; expiresAt: 
 /** 관리자용 신고 요약: 지금 세고 있는 신고 IP 수 + 최근 기록(최신 먼저) */
 export type ReportSummary = { count: number; log: ReportLogEntry[] };
 
-/** 헌화 하루 1회 판정 기간 (spec: `SET NX EX 86400`) */
-export const FLOWER_TTL_SEC = 86_400;
+/** 헌화 하루 1회 판정 기간: 다음 새벽 5시(한국 시간, lib/gameDay)까지 — 그때 다시 놓을 수 있다 (예전: 놓은 때부터 24시간) */
+export const flowerTtlSec = (now: number) => Math.max(1, Math.ceil(msUntilDayReset(now) / 1000));
 /** 서로 다른 IP의 신고가 이만큼 모이면 숨긴다 */
 export const REPORT_HIDE_THRESHOLD = 5;
 
@@ -122,7 +123,7 @@ export type AccountRecord = {
   color: string | null;
   body: string | null;
   streak: number;
-  /** 마지막 출석일 (KST, YYYYMMDD) = 출석 달력에서 마지막으로 도장을 받은 날 */
+  /** 마지막 출석일 (게임 날짜 YYYYMMDD) = 출석 달력에서 마지막으로 도장을 받은 날 */
   lastAttend: string | null;
   /** 10번: 오늘 머무르기 기록 수 (1번 = 10분, 출석 도장 조건) */
   stayTicks: number;
@@ -171,7 +172,7 @@ export type NameClaimResult = "ok" | "taken" | "has";
 /** 입장·확인 때 계정 상태: renameRequired = 휴면에서 돌아와 닉네임을 다시 정해야 한다 */
 export type VisitResult = { renameRequired: boolean };
 
-/** 날짜 인자는 모두 KST 기준 `YYYYMMDD` (lib/store/accounts.ts의 kstDay). 포인트·가방 변화는 모두 원자적이다 */
+/** 날짜 인자는 모두 게임 날짜 `YYYYMMDD` (한국 시간 새벽 5시에 바뀐다 — lib/store/accounts.ts의 kstDay = lib/gameDay). 포인트·가방 변화는 모두 원자적이다 */
 export interface AccountStore {
   get(id: string, day: string, now: number): Promise<AccountRecord>;
   /** 항목별 하루 한도·하루 전체 한도·지갑 한도 안에서 적립하고 실제 쌓인 점수를 돌려준다 (0 = 한도) */

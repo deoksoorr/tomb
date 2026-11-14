@@ -1,5 +1,5 @@
 // 포인트 정책 (서버가 강제하고, UI의 ⓘ 가이드가 그대로 보여 준다). 바꾸면 가이드도 자동으로 바뀐다.
-// 날짜 기준은 한국 시간(KST) 자정. 모든 아이템은 1회성(items.ts).
+// 날짜 기준은 한국 시간 새벽 5시 (lib/gameDay — 하루 한도가 그때 다시 찬다). 모든 아이템은 1회성(items.ts).
 
 import { ATTEND_STAY_TEXT } from "./attendStay";
 import { STAY_BONUS_DAILY_MAX, STAY_BONUS_EVERY_MINUTES } from "./stayBonus";

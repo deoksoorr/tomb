@@ -22,7 +22,8 @@ import { useHydrated } from "@/lib/hooks/useMedia";
 import { meStore } from "@/lib/hooks/useMe";
 import { useNameTaken } from "@/lib/hooks/useNameTaken";
 import { useNotices } from "@/lib/hooks/useNotices";
-import { readItem, writeItem } from "@/lib/storage";
+import type { GoogleResult } from "@/lib/googleResult";
+import { readItem, saveMyCode, writeItem } from "@/lib/storage";
 import { DORMANT_RENAME_MESSAGE, LS, type Me } from "@/lib/types";
 import { bgm } from "../bgm/engine";
 import { latestNotice } from "../notice/notices";
@@ -34,6 +35,7 @@ import AvatarSprite from "./AvatarSprite";
 import ChannelPicker, { type ChannelChoice } from "./ChannelPicker";
 import CodeStart from "./CodeStart";
 import EntryMusic, { entryMusic } from "./EntryMusic";
+import { GoogleDoneStep, GoogleNewStep, GoogleStartButton, type GoogleDone } from "./GoogleEntry";
 import LiveBackground from "./LiveBackground";
 import NightSky from "./NightSky";
 import styles from "./EntryScreen.module.css";
@@ -48,6 +50,8 @@ const COLOR_NAMES = ["뼛빛", "이끼", "새벽안개", "황토", "라벤더", 
 
 type Props = {
   start: EntryStart;
+  /** 구글로 시작하기 단추를 그릴지, 구글에서 막 돌아온 결과 (login → 계정 확인, new → 새로 만들기 확인) */
+  google: { enabled: boolean; result: GoogleResult | null };
   /** 공유 링크로 온 묘비: 그 묘비가 있는 채널로 들어간다 */
   focusGraveId: string | null;
   /** 입장 버튼을 눌러 게임이 뜨는 중 */
@@ -69,7 +73,7 @@ function OnlineCount() {
   );
 }
 
-export default function EntryScreen({ start, focusGraveId, entering, stalled, onEnter }: Props) {
+export default function EntryScreen({ start, google, focusGraveId, entering, stalled, onEnter }: Props) {
   const hydrated = useHydrated();
   const ambience = useAmbience();
   const [liveShown, setLiveShown] = useState(false);
@@ -90,7 +94,7 @@ export default function EntryScreen({ start, focusGraveId, entering, stalled, on
         {/* 이름·색은 localStorage에 있으므로 하이드레이션 뒤에 그린다 */}
         {hydrated && !entering ? (
           <>
-            <EntryFlow start={start} focusGraveId={focusGraveId} onEnter={onEnter} />
+            <EntryFlow start={start} google={google} focusGraveId={focusGraveId} onEnter={onEnter} />
             <p className={styles.nonprofit}>개인 포트폴리오 · 후원·광고·유료 재화 없음</p>
             <p className={styles.legal}>
               <Link href="/privacy">개인정보처리방침</Link> · <Link href="/terms">이용약관</Link> · <Link href="/faq">자주 묻는 질문</Link>
@@ -113,8 +117,8 @@ export default function EntryScreen({ start, focusGraveId, entering, stalled, on
   );
 }
 
-/** 어떤 길로 들어왔나: 새로 시작 / 이어서 들어가기 / 코드로 시작(확인된 계정) */
-type Path = { kind: "new" } | { kind: "continue" } | { kind: "code"; me: Me };
+/** 어떤 길로 들어왔나: 새로 시작(google = 구글로 새로 만들기, 끝에 구글 연결) / 이어서 들어가기 / 코드로 시작(확인된 계정) */
+type Path = { kind: "new"; google?: boolean } | { kind: "continue" } | { kind: "code"; me: Me };
 /** 들어갈 때의 모습 */
 /** dye = 46번 계정에 남은 염색 (미리보기 그림에만 쓴다 — color는 입장 요청에 그대로 가는 프리셋 색) */
 type Look = { name: string; color: string; body: string | undefined; dye?: AvatarDye };
@@ -122,6 +126,8 @@ type AccountPath = Exclude<Path, { kind: "new" }>;
 type Step =
   | { kind: "choose" }
   | { kind: "code" }
+  /** 구글은 확인됐는데 연결된 계정이 없다 → 새로 만들기 전 경고 */
+  | { kind: "googleNew" }
   /** 새로 시작 ① 이름 → ② 캐릭터(몸 모양·색) → ③ 채널. 계정에 이름이 없는 이어서·코드도 이 길로.
    *  takenName = 입장하려다 다른 계정이 먼저 쓴 이름이라 돌아왔다 (그 이름이면 "이미 있는 이름이에요.") */
   | { kind: "name"; path: Path; draft: Look; takenName?: string }
@@ -157,11 +163,18 @@ function freshDraft(): Look {
  *  새로 시작: ① 이름 → ② 캐릭터 → ③ 채널 (휴대폰 한 화면에 한 단계씩)
  *  이어서·코드: ① 계정 확인 → ② 채널 (세 길 모두 같은 채널 화면)
  */
-function EntryFlow({ start, focusGraveId, onEnter }: Omit<Props, "entering" | "stalled">) {
+function EntryFlow({ start, google, focusGraveId, onEnter }: Omit<Props, "entering" | "stalled">) {
   const [savedName] = useState(() => readItem(LS.name) ?? "");
   const previous = checkName(savedName).ok ? savedName : null;
   const [step, setStep] = useState<Step>(() =>
-    start === "continue" && previous ? { kind: "account", path: { kind: "continue" } } : { kind: "choose" },
+    // 구글로 들어옴: 세션 쿠키가 그 계정으로 바뀌었으니 이어서 들어가기처럼 계정을 확인한다 (휴면이면 닉네임 재설정)
+    google.result === "login"
+      ? { kind: "account", path: { kind: "continue" } }
+      : google.result === "new"
+        ? { kind: "googleNew" }
+        : start === "continue" && previous
+          ? { kind: "account", path: { kind: "continue" } }
+          : { kind: "choose" },
   );
   // 공유 링크의 묘비가 있는 채널 (그 채널로 들어간다)
   const [sharedChannel, setSharedChannel] = useState<number | null>(null);
@@ -204,6 +217,7 @@ function EntryFlow({ start, focusGraveId, onEnter }: Omit<Props, "entering" | "s
             코드로 시작
             <span className={styles.bigSub}>다른 기기에서 쓰던 계정으로</span>
           </button>
+          {google.enabled && <GoogleStartButton />}
           {previous && (
             <button
               type="button"
@@ -217,6 +231,14 @@ function EntryFlow({ start, focusGraveId, onEnter }: Omit<Props, "entering" | "s
       );
     case "code":
       return <CodeStart onLogin={(me) => setStep({ kind: "account", path: { kind: "code", me } })} onBack={back} />;
+    case "googleNew":
+      return (
+        <GoogleNewStep
+          onCode={() => setStep({ kind: "code" })}
+          onCreate={() => setStep({ kind: "name", path: { kind: "new", google: true }, draft: freshDraft() })}
+          onBack={back}
+        />
+      );
     case "name":
       return (
         <NameStep
@@ -601,6 +623,8 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter, onNam
   // 새로 시작인데 이 기기에 이미 계정이 있으면 새 계정으로 바꾼다. 코드가 없던 계정이면 한 번 묻는다
   const [existing, setExisting] = useState<Me | null>(null);
   const [confirmFresh, setConfirmFresh] = useState(false);
+  // 구글로 새로 만들기: 연결 결과와 새 개인 코드를 보여 준 뒤 들어간다
+  const [googleDone, setGoogleDone] = useState<GoogleDone | null>(null);
   const lobby = useLobby();
   // 내 집 채널: 평소 닫혀 있는 채널에 집이 있어도 목록에 보여 준다 (새로 시작이면 집이 없다)
   const houseCh = useMyHouseChannel(path.kind !== "new");
@@ -643,10 +667,22 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter, onNam
         if (err instanceof ApiRequestError && err.code === "NAME_ALREADY_SET") return;
         throw err;
       });
-      const target = sharedChannel ?? channel;
-      // 들어갈 채널 묘지를 미리 받아 둔다 (자동 배정은 서버와 같은 규칙으로 짐작)
-      prefetchGraves(typeof target === "number" ? target : (lobby.lobby && pickChannel(lobby.lobby)) || 1);
-      onEnter({ ...look, channel: target });
+      if (path.kind === "new" && path.google) {
+        // 새 계정에 방금 확인한 구글을 연결한다 (개인 코드가 없으면 서버가 만들어 한 번만 준다). 실패해도 계정은 그대로 쓴다
+        let done: GoogleDone;
+        try {
+          const r = await api.googleClaim();
+          meStore.set(r.me);
+          if (r.code) saveMyCode(r.me.accountId, r.code);
+          done = { code: r.code, error: null };
+        } catch (err) {
+          done = { code: null, error: errorMessage(err) };
+        }
+        setGoogleDone(done);
+        setPending(false);
+        return;
+      }
+      go();
     } catch (err) {
       if (!wasPlaying) bgm.pause();
       setPending(false);
@@ -657,6 +693,15 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter, onNam
       setError(errorMessage(err));
     }
   }
+
+  function go() {
+    const target = sharedChannel ?? channel;
+    // 들어갈 채널 묘지를 미리 받아 둔다 (자동 배정은 서버와 같은 규칙으로 짐작)
+    prefetchGraves(typeof target === "number" ? target : (lobby.lobby && pickChannel(lobby.lobby)) || 1);
+    onEnter({ ...look, channel: target });
+  }
+
+  if (googleDone) return <GoogleDoneStep done={googleDone} onEnter={go} />;
 
   return (
     <form className={styles.form} onSubmit={submit} noValidate>

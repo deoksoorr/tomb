@@ -13,7 +13,7 @@ import { BITE_MAX_MS, BITE_MIN_MS, candidates, conditionsAt, hash01, reelMinMs, 
 export const DIRECT_FISH_AVG_MS = (BITE_MIN_MS + BITE_MAX_MS) / 2 + reelMinMs(2);
 /** 자동 낚시는 직접 낚을 때 평균의 2.5배마다 한 마리 */
 export const AUTO_FISH_EVERY_MS = Math.round(DIRECT_FISH_AVG_MS * 2.5);
-/** 자동 낚시 하루 한도 (한국 시간 자정 초기화, 하루 전체 낚시 한도 DAILY_CATCH_MAX.fish 안에서) */
+/** 자동 낚시 하루 한도 (한국 시간 새벽 5시 초기화, 하루 전체 낚시 한도 DAILY_CATCH_MAX.fish 안에서) */
 export const AUTO_FISH_DAILY_MAX = 75;
 /** 한 세션 최대 길이 (켠 시각부터) */
 export const AUTO_FISH_MAX_MS = 6 * 3_600_000;

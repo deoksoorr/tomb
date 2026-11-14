@@ -21,7 +21,7 @@ type DollProps = {
   label: string;
   children: ReactNode;
   className?: string;
-  /** 낮은 칸: 그림은 왼쪽, 부위·이름·남은 기간 막대는 오른쪽에 한 덩어리로 (칸 높이 약 44px — 가방 꾸미기처럼 칸이 많을 때) */
+  /** 낮은 칸: 그림은 왼쪽, 부위·이름·남은 기간 막대는 오른쪽에 한 덩어리로 (칸 높이 약 52px — 가방 [지금 모습]처럼 칸이 많을 때) */
   compact?: boolean;
 };
 

@@ -361,13 +361,30 @@ export const BOOK_LINES = [
 // ── 연못가 앉기 (네 방향) ──
 // 연못 둘레 네 물가(아래·위·왼쪽·오른쪽) 중 서 있는 곳에서 가장 가까운 빈 물가에 연못을 보고 앉아 발을 담근다.
 // 자리 없이 바닥에 앉는 것이라(여럿이 앉을 수 있다) 서버 좌석은 쓰지 않는다. use 이벤트 a = 물가 번호(side).
-//  - 아래 물가: 연못 아래에 연못을 보고(위를 보고) 앉는다 → 연못 그림보다 앞 (등이 보인다)
-//  - 위 물가: 연못 윗가에 아래를 보고 앉는다 → 연못 그림이 발끝만 덮는다 (얼굴이 보인다)
-//  - 왼쪽·오른쪽 물가: 옆을 보고 앉고, 발 쪽은 연못 그림에 살짝 덮인다
+// 자리는 연못 그림의 물 영역 기준: 물은 그림 네 변에서 POND_WATER_INSET px 안쪽부터 (돌 테두리 두께, 가로·세로 그림 모두).
+// 앉은 사람은 돌 테두리 위에 걸터앉고 발끝이 물에 닿는다 → 연못 그림보다 앞에 그리고(front),
+// 물에 잠긴 발끝은 장면이 물빛 조각으로 덮는다(foot). 잔물결도 발끝에서 번진다.
+//  - 아래 물가: 아랫돌 위에 연못을 보고(위를 보고) 앉는다 (등이 보이고 발은 몸에 가려 물속)
+//  - 위 물가: 윗돌 위에 아래를 보고 앉아 발을 물로 내린다 (얼굴이 보인다)
+//  - 왼쪽·오른쪽 물가: 옆돌 위에 연못 쪽을 보고 앉아 발을 물로 뻗는다
+
+/** 연못 그림 가장자리에서 물이 시작하는 거리 (px): 돌 테두리 두께 (art.ts pondArt — 가로 48×32·세로 32×48 모두 6) */
+export const POND_WATER_INSET = 6;
 
 /** 물가 번호: 0 아래 · 1 위 · 2 왼쪽 · 3 오른쪽 */
 export type PondSide = 0 | 1 | 2 | 3;
-export type PondSeat = { side: PondSide; x: number; y: number; facing: DirId; ripple: { x: number; y: number }; open: boolean };
+export type PondSeat = {
+  side: PondSide;
+  /** 앉는 발 위치 (앵커) */
+  x: number;
+  y: number;
+  facing: DirId;
+  /** 물에 닿은 발끝 (잔물결이 번지는 곳) */
+  foot: { x: number; y: number };
+  /** 발끝을 물빛으로 덮는다 (아래 물가는 발이 몸에 가려 보이지 않아 덮지 않는다) */
+  cover: boolean;
+  open: boolean;
+};
 
 /** 연못 하나의 네 물가 자리 (open = 그쪽 칸이 집 안이고 가구·칸막이·방 사이 문 앞이 아니다) */
 export function pondSeats(p: Placed, items: readonly Placed[], tier: TierShape, f: Frame): PondSeat[] {
@@ -393,11 +410,19 @@ export function pondSeats(p: Placed, items: readonly Placed[], tier: TierShape, 
   };
   const rowOf = (wy: number) => Math.floor((wy - f.oy) / T);
   const cy = b.cy + 3;
+  // 물 영역 (연못 그림 = 차지 칸 그대로, 위로 솟는 높이 없음)
+  const wTop = b.Tp + POND_WATER_INSET;
+  const wBot = b.B - POND_WATER_INSET;
+  const wL = b.L + POND_WATER_INSET;
+  const wR = b.R - POND_WATER_INSET;
   return [
-    { side: 0, x: b.cx, y: b.B + 1, facing: DIR.up, ripple: { x: b.cx, y: b.B - 9 }, open: free(b.cx - 4, b.cx + 4, p.y + b.fh) },
-    { side: 1, x: b.cx, y: b.Tp - 1, facing: DIR.down, ripple: { x: b.cx, y: b.Tp + 9 }, open: free(b.cx - 4, b.cx + 4, p.y - 1) },
-    { side: 2, x: b.L - 2, y: cy, facing: DIR.right, ripple: { x: b.L + 9, y: cy }, open: free(b.L - 6, b.L, rowOf(cy - 1)) },
-    { side: 3, x: b.R + 2, y: cy, facing: DIR.left, ripple: { x: b.R - 9, y: cy }, open: free(b.R, b.R + 6, rowOf(cy - 1)) },
+    // 아랫돌에 걸터앉아 위를 본다: 몸 윗부분이 물 위에 겹친다
+    { side: 0, x: b.cx, y: wBot + 4, facing: DIR.up, foot: { x: b.cx, y: wBot - 2 }, cover: false, open: free(b.cx - 4, b.cx + 4, p.y + b.fh) },
+    // 윗돌에 걸터앉아 아래를 본다: 발끝이 물 안 2px
+    { side: 1, x: b.cx, y: wTop + 2, facing: DIR.down, foot: { x: b.cx, y: wTop + 1 }, cover: true, open: free(b.cx - 4, b.cx + 4, p.y - 1) },
+    // 옆돌에 걸터앉아 연못 쪽을 본다: 뻗은 발이 물 안
+    { side: 2, x: wL - 4, y: cy, facing: DIR.right, foot: { x: wL + 2, y: cy - 1 }, cover: true, open: free(b.L - 6, b.L, rowOf(cy - 1)) },
+    { side: 3, x: wR + 4, y: cy, facing: DIR.left, foot: { x: wR - 2, y: cy - 1 }, cover: true, open: free(b.R, b.R + 6, rowOf(cy - 1)) },
   ];
 }
 

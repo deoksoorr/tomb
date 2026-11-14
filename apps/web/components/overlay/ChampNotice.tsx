@@ -16,7 +16,7 @@ import styles from "./ChampNotice.module.css";
 
 /**
  * 주간 랭킹 1위 알림 창 (본인에게 한 번) + 접속 중 1위 상태 지키기.
- *  - 확인 시점: 처음 마을에 들어올 때 · 월요일 0시(KST) 마감 직후 0~20초 흩뜨려 · 서버의 "내 정보 새로 받기" 신호(me:stale — 지급 직후 서버가 보낸다)
+ *  - 확인 시점: 처음 마을에 들어올 때 · 월요일 새벽 5시(한국 시간) 마감 직후 0~20초 흩뜨려 · 서버의 "내 정보 새로 받기" 신호(me:stale — 지급 직후 서버가 보낸다)
  *    · 화면이 보이는 동안 몇 분마다 · 다시 화면으로 돌아올 때 (모두 가벼운 /api/champ/me)
  *  - 1위 값이 바뀌면(새로 1위·자격 끝·관리자 다시 지급·시험 지급) 내 정보와 착용 증서를 새로 받아 실시간 서버로 다시 보낸다 →
  *    새로고침 없이 내 화면·다른 사람 화면에 모자(가방)·배지·전용 오라가 붙거나 떨어진다
@@ -69,7 +69,7 @@ export default function ChampNotice() {
       }
     };
     void check();
-    // 월요일 0시 마감 직후 (흩뜨려서), 그다음 주도 이어서
+    // 월요일 새벽 5시 마감 직후 (흩뜨려서), 그다음 주도 이어서
     let weekly: ReturnType<typeof setTimeout>;
     const arm = () => {
       weekly = setTimeout(() => {
@@ -131,7 +131,7 @@ export default function ChampNotice() {
             <ItemIcon itemId={hat} size={32} />
             <span>
               <b>{itemName(hat)}</b>
-              <span className={styles.note}>다음 발표(월요일 0시)까지 · 가방 [레이스 보상]에 들어 있어요</span>
+              <span className={styles.note}>다음 발표(월요일 새벽 5시)까지 · 가방 [레이스 보상]에 들어 있어요</span>
             </span>
           </li>
           <li>

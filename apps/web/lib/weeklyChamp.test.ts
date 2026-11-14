@@ -3,12 +3,12 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getFishRank } from "./forage/fishRank";
 import { setStaff } from "./staff";
 import { getAccounts, getMegaphone } from "./store";
-import { kstWeek, loadMe, lookGrant, rankValue, weekOfDay, weekTieFrac } from "./store/accounts";
+import { kstDay, kstWeek, loadMe, lookGrant, rankValue, weekOfDay, weekTieFrac } from "./store/accounts";
 import { champBitsFor, champUntil, getChamp, kstWeekOf, prevWeek, weekEndMs, weekStartMs } from "./store/champ";
-import { CHAMP_POINTS, ensureChampSettled, noteLeaders, resetChampMemo, resetLeaderMemo, settleChamps } from "./weeklyChamp";
+import { CHAMP_FIRST_WEEK, CHAMP_POINTS, ensureChampSettled, noteLeaders, resetChampMemo, resetLeaderMemo, settleChamps } from "./weeklyChamp";
 import { verifyGrant } from "@tomb/protocol";
 
-// 주간 랭킹 1위 보상: 한 번만 지급 · 동점은 먼저 달성 · 운영자 제외 · 주 경계(월요일 0시 KST) · 연속 1위면 대여가 이어짐 · 다관왕
+// 주간 랭킹 1위 보상: 한 번만 지급 · 동점은 먼저 달성 · 운영자 제외 · 주 경계(월요일 새벽 5시, 한국 시간) · 연속 1위면 대여가 이어짐 · 다관왕
 
 beforeAll(() => {
   for (const k of ["KV_REST_API_URL", "UPSTASH_REDIS_REST_URL"]) vi.stubEnv(k, "");
@@ -35,8 +35,8 @@ async function user(name: string): Promise<string> {
 }
 const earn = (id: string, week: string, days: number, amount: number) => getAccounts().earn(id, "hunt", dayOf(week, days), { amount });
 
-describe("주 경계 (월요일 0시 KST)", () => {
-  it("일요일 23:59 KST는 그 주, 월요일 0시는 다음 주", () => {
+describe("주 경계 (월요일 새벽 5시, 한국 시간)", () => {
+  it("월요일 새벽 4:59는 그 주, 새벽 5시는 다음 주", () => {
     const mon = weekStartMs(NEXT);
     expect(kstWeekOf(mon - 1)).toBe(WEEK);
     expect(kstWeekOf(mon)).toBe(NEXT);
@@ -45,7 +45,7 @@ describe("주 경계 (월요일 0시 KST)", () => {
     expect(prevWeek(NEXT)).toBe(WEEK);
     expect(weekEndMs(WEEK)).toBe(mon);
     expect(weekOfDay(dayOf(WEEK, 6))).toBe(WEEK);
-    // 대여: 다음 주 마감(다다음 월요일 0시) + 여유
+    // 대여: 다음 주 마감(다다음 월요일 새벽 5시) + 여유
     expect(champUntil(WEEK)).toBeGreaterThan(weekEndMs(NEXT));
     expect(champUntil(WEEK) - weekEndMs(NEXT)).toBeLessThanOrEqual(12 * 3_600_000);
   });
@@ -56,6 +56,70 @@ describe("주 경계 (월요일 0시 KST)", () => {
     expect((await settleChamps(WEEK, weekEndMs(WEEK) - 1)).rec).toBeNull();
     expect((await settleChamps("20261026", at(WEEK, 1))).rec).toBeNull();
     expect((await settleChamps(WEEK, weekEndMs(WEEK))).rec?.winners).toHaveLength(1);
+  });
+});
+
+describe("새벽 5시 경계로 옮긴 뒤 (첫 주 20261109 · 정리 시각 · 한 번만)", () => {
+  /** 한국 시각 → ms */
+  const kst = (m: number, d: number, h: number, min = 0, sec = 0) => Date.UTC(2026, m - 1, d, h, min, sec) - 9 * 3_600_000;
+
+  it("첫 주(CHAMP_FIRST_WEEK)는 그대로 20261109, 마감은 11/16(월) 새벽 5시", () => {
+    expect(CHAMP_FIRST_WEEK).toBe("20261109");
+    expect(weekStartMs(CHAMP_FIRST_WEEK)).toBe(kst(11, 9, 5));
+    expect(weekEndMs(CHAMP_FIRST_WEEK)).toBe(kst(11, 16, 5));
+    // 오늘(11/14 토) 어느 시각이든 이번 주 키는 바뀌지 않는다 → 이미 쌓인 주간 기록이 이어진다
+    for (const h of [0, 4, 5, 12, 23]) expect(kstWeek(kst(11, 14, h))).toBe("20261109");
+    // 월요일 0~5시는 아직 지난주
+    expect(kstWeek(kst(11, 16, 0))).toBe("20261109");
+    expect(kstWeek(kst(11, 16, 4, 59, 59))).toBe("20261109");
+    expect(kstWeek(kst(11, 16, 5))).toBe("20261116");
+    expect(prevWeek(kstWeek(kst(11, 16, 5)))).toBe("20261109");
+    // 대여 끝: 다다음 월요일 새벽 5시 + 여유 6시간 = 11/23(월) 11시
+    expect(champUntil(CHAMP_FIRST_WEEK)).toBe(kst(11, 23, 11));
+  });
+
+  it("월요일 새벽 4:59까지 번 포인트는 지난주 몫, 5시부터는 새 주 몫", async () => {
+    const a = await user("alpha");
+    const b = await user("bravo");
+    await getAccounts().earn(a, "hunt", kstDay(kst(11, 15, 23)), { amount: 100 }); // 일요일 밤
+    await getAccounts().earn(b, "hunt", kstDay(kst(11, 16, 4, 59, 59)), { amount: 150 }); // 월요일 새벽 4:59:59 (밤샘)
+    await getAccounts().earn(a, "hunt", kstDay(kst(11, 16, 5)), { amount: 500 }); // 월요일 5시 = 새 주
+    expect((await getAccounts().pointRank(10, null, "20261109")).rows.map((r) => [r.accountId, r.points])).toEqual([
+      [b, 150],
+      [a, 100],
+    ]);
+    expect((await getAccounts().pointRank(10, null, "20261116")).rows.map((r) => [r.accountId, r.points])).toEqual([[a, 500]]);
+  });
+
+  it("정리는 월요일 새벽 5시 정각부터 딱 한 번 (4:59에는 하지 않고, 5시 뒤 여러 요청에도 한 번), 그 전 주는 건너뛴다", async () => {
+    const a = await user("zulu"); // 1위 기록 캐시(프로세스 안 30초)가 다른 시험의 alpha와 섞이지 않게
+    await getAccounts().earn(a, "hunt", "20261110", { amount: 300 });
+    await getAccounts().earn(a, "hunt", "20261103", { amount: 300 }); // 기능을 열기 전 주 (정리 안 함)
+    const before = (await getAccounts().get(a, "20261116", kst(11, 16, 5))).points;
+    // 4:59:59: 지난주(= 20261102, 첫 주 전)만 보고 아무것도 안 한다
+    await ensureChampSettled(kst(11, 16, 4, 59, 59));
+    expect(await getChamp().get("20261109")).toBeNull();
+    expect(await getChamp().get("20261102")).toBeNull();
+    expect(await champBitsFor(a, kst(11, 16, 4, 59, 59))).toBe(0);
+    expect((await settleChamps("20261109", kst(11, 16, 4, 59, 59))).rec).toBeNull();
+    // 5:00: 이번에 처음 정리·지급
+    await ensureChampSettled(kst(11, 16, 5));
+    expect((await getChamp().get("20261109"))?.winners).toEqual([expect.objectContaining({ board: "points", accountId: a, value: 300 })]);
+    expect(await champBitsFor(a, kst(11, 16, 5))).toBe(1);
+    // 같은 프로세스 기억을 지우고 다시 불러도(다른 서버·재시작) 두 번 주지 않는다
+    resetChampMemo();
+    await ensureChampSettled(kst(11, 16, 5, 0, 10));
+    const again = await settleChamps("20261109", kst(11, 16, 6));
+    expect(again.paidNow).toEqual([]);
+    expect(again.paid).toEqual(["points"]);
+    const acc = await getAccounts().get(a, "20261116", kst(11, 16, 6));
+    expect(acc.points - before).toBe(CHAMP_POINTS);
+    expect(acc.stash).toEqual([{ itemId: CHAMP_HAT.points, until: kst(11, 23, 11) }]);
+    // 자격은 다음 월요일 새벽 5시까지 (4:59:59까지는 그대로, 5시에 다음 주 1위로 넘어간다)
+    expect(await champBitsFor(a, kst(11, 23, 4, 59, 59))).toBe(1);
+    expect(await champBitsFor(a, kst(11, 23, 5))).toBe(0);
+    // 첫 주 전 주는 끝까지 정리하지 않는다
+    expect((await settleChamps("20261102", kst(11, 16, 6))).rec).toBeNull();
   });
 });
 

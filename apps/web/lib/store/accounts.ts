@@ -3,7 +3,7 @@ import { customAlphabet } from "nanoid";
 import { GRANT_TTL_SEC, isAvatarBody, signGrant, type AvatarDye, type Look } from "@tomb/protocol";
 import { STAY_TICK_MINUTES } from "../calendar";
 import { CODE_ALPHABET, type EarnSource } from "../economy";
-import { parseYmd, todayKst } from "../epitaph";
+import { gameDay, gameWeek, gameYesterday, weekOfDay } from "../gameDay";
 import { NAME_CHANGE_COOLDOWN_DAYS, NAME_CHANGE_PRICE, type Me } from "../types";
 import { staffAccountId, topUpIfStaff } from "../staff";
 import { champBitsFor } from "./champ";
@@ -11,19 +11,15 @@ import { K } from "./keys";
 import { getStyleStore } from "./style";
 import type { AccountRecord, AccountStore } from "./types";
 
-// 계정·포인트 공용 도우미 (라우트가 쓴다). 날짜 키는 KST 기준 YYYYMMDD.
+// 계정·포인트 공용 도우미 (라우트가 쓴다). 날짜 키는 게임 날짜 YYYYMMDD — 한국 시간 새벽 5시에 바뀐다 (lib/gameDay).
 
-export const kstDay = (now = Date.now()) => todayKst(now).replaceAll("-", "");
-export const kstYesterday = (now = Date.now()) =>
-  new Date(parseYmd(todayKst(now)) - 86_400_000).toISOString().slice(0, 10).replaceAll("-", "");
-
-/** KST 날짜(YYYYMMDD)가 속한 주의 월요일 (YYYYMMDD). 주간 랭킹 키 */
-export function weekOfDay(day: string): string {
-  const t = Date.UTC(Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)));
-  const dow = new Date(t).getUTCDay(); // 0 = 일요일
-  return new Date(t - ((dow + 6) % 7) * 86_400_000).toISOString().slice(0, 10).replaceAll("-", "");
-}
-export const kstWeek = (now = Date.now()) => weekOfDay(kstDay(now));
+/** 오늘 (게임 날짜 YYYYMMDD, 새벽 5시에 바뀐다). 이름은 예전 그대로 — 하루 경계는 lib/gameDay 한 곳 */
+export const kstDay = gameDay;
+/** 어제 (게임 날짜) */
+export const kstYesterday = gameYesterday;
+/** 게임 날짜(YYYYMMDD)가 속한 주의 월요일 (YYYYMMDD). 주간 랭킹 키 — 주는 월요일 새벽 5시에 바뀐다 */
+export { weekOfDay };
+export const kstWeek = gameWeek;
 
 /**
  * 경제 통계 키 (Redis Lua에 KEYS로 넘긴다). 운영자 계정이면 관리자 경제 통계(econ:{날짜})가 아니라

@@ -32,7 +32,7 @@ const LIMITS = {
   room: { visitor: 20, ip: 120, windowSec: MIN, message: "방 입장 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   errors: { visitor: null, ip: 10, windowSec: MIN, message: "오류 보고가 너무 많아요." },
   rank: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
-  // 50번 소원 분수: 계정당 하루 1번은 KST 날짜로 lib/store/wishDay가 막는다 (운영자도 예외 없이).
+  // 50번 소원 분수: 계정당 하루 1번은 게임 날짜(새벽 5시 경계)로 lib/store/wishDay가 막는다 (운영자도 예외 없이).
   // 여기는 같은 IP에서 계정 여러 개로 던지는 것만 막는다 — 같은 와이파이 여러 명을 생각해 넉넉히
   wish: { visitor: null, ip: 10, windowSec: DAY, message: "이 네트워크에서는 오늘 소원을 더 빌 수 없어요. 내일 다시 와 주세요." },
   // 10번 출석 달력 받기 · 11번 선물함 받기·지우기

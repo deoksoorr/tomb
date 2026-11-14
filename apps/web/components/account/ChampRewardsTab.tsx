@@ -14,7 +14,7 @@ import { remainingLabel } from "./items";
 import { wardrobeEntries } from "./wardrobe";
 import styles from "./BagDialog.module.css";
 
-/** "11월 16일(월) 0시" */
+/** "11월 23일(월) 11시" */
 function whenText(ms: number): string {
   const d = new Date(ms + 9 * 3_600_000);
   const day = ["일", "월", "화", "수", "목", "금", "토"][d.getUTCDay()];

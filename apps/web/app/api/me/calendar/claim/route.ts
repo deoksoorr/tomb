@@ -10,7 +10,7 @@ import { kstDay, kstYesterday, loadMe } from "@/lib/store/accounts";
 import type { CalendarClaimResponse } from "@/lib/types";
 
 /**
- * 10번 출석 달력: 오늘 칸 받기 (KST 하루 1번, 원자적).
+ * 10번 출석 달력: 오늘 칸 받기 (하루 1번 — 새벽 5시에 바뀌는 게임 날짜, 원자적).
  * 조건: 오늘 머무르기 기록이 ATTEND_STAY_TICKS번(× 10분) 이상 — 서버가 받아 준 /api/me/presence 기록으로만 판정한다.
  * 보상: 출석 10P, 연속 7일째마다 +30P, 그달 모든 날을 찍으면 한 달 개근 +200P (lib/economy.ts EARN_RULES).
  * 같은 IP에서 하루에 포인트를 받는 계정 수는 ATTEND_ACCOUNTS_PER_IP개까지 (넘으면 도장만).

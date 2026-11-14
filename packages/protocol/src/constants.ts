@@ -296,7 +296,7 @@ export function dexBadgeCats(v: number | undefined): DexBadgeCat[] {
 }
 
 /**
- * 주간 랭킹 1위(챔피언) 표시: 랭킹별 비트 (입장 토큰·PeerInfo의 champ). 지난주(월요일 0시 KST 마감) 1위만 Vercel이 넣는다.
+ * 주간 랭킹 1위(챔피언) 표시: 랭킹별 비트 (입장 토큰·PeerInfo의 champ). 지난주(월요일 새벽 5시 한국 시간 마감) 1위만 Vercel이 넣는다.
  * 이름표 위 작은 배지("이번 주 포인트왕")와 몸 둘레 1위 오라로 그린다. 옛 클라이언트는 모르는 필드라 무시한다
  */
 export const CHAMP_BOARDS = ["points", "huntKills", "fish"] as const;

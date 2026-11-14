@@ -8,6 +8,8 @@ import type {
   AttendResponse,
   BuyResponse,
   CodeLoginResponse,
+  GoogleClaimResponse,
+  GoogleStatusResponse,
   CodeResponse,
   CreateGraveResponse,
   FlowerResponse,
@@ -127,6 +129,10 @@ export const api = {
     request<AttendResponse>("/api/me/attend", jsonInit("POST", body ? { name, color, body } : { name, color })),
   issueCode: () => request<CodeResponse>("/api/me/code", { method: "POST" }),
   loginWithCode: (code: string) => request<CodeLoginResponse>("/api/me/login", jsonInit("POST", { code })),
+  /** 구글 연결 상태 (구글 설정이 없으면 404) · 연결 끊기 · 구글로 새로 만든 계정에 연결 */
+  googleStatus: () => request<GoogleStatusResponse>("/api/me/google", { cache: "no-store" }),
+  googleUnlink: () => request<GoogleStatusResponse>("/api/me/google", { method: "DELETE" }),
+  googleClaim: () => request<GoogleClaimResponse>("/api/auth/google/claim", { method: "POST" }),
   myLook: () => request<LookGrantResponse>("/api/me/look", { cache: "no-store" }),
   /** 벗어 둔 꾸미기 다시 입기 / 부위 벗기 */
   wear: (itemId: string) => request<WearResponse>("/api/me/wear", jsonInit("POST", { itemId })),

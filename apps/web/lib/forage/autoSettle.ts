@@ -31,7 +31,7 @@ export type AutoSettled = {
   ended?: "stop" | "time";
 };
 
-/** 정산: 지금까지 낚은 번호 중 아직 안 받은 것을 그 시각 조건으로 굴려 그날(KST) 한도 안에서 넣는다. stop이면 세션을 끝낸다 */
+/** 정산: 지금까지 낚은 번호 중 아직 안 받은 것을 그 시각 조건으로 굴려 그날(게임 날짜, 새벽 5시 경계) 한도 안에서 넣는다. stop이면 세션을 끝낸다 */
 export async function settleAuto(store: ForageStore, acct: string, now: number, stop: boolean): Promise<AutoSettled> {
   for (let i = 0; i < SWAP_TRIES; i++) {
     const raw = await store.autoGet(acct);
@@ -57,7 +57,7 @@ export async function settleAuto(store: ForageStore, acct: string, now: number, 
 type Rolled = { day: string; id: string; size: number; gear?: { pick: number; alt: string } };
 
 /**
- * from..to번을 굴려(그 시각 조건, 시드 + 번호) 낚인 날(KST)마다 한도 안에서 넣는다.
+ * from..to번을 굴려(그 시각 조건, 시드 + 번호) 낚인 날(게임 날짜)마다 한도 안에서 넣는다.
  * 물에 빠진 꾸미기는 한도 자리("@" + 꾸미기 id)만 차지하고 영구 소장으로 지급한다.
  * 이미 가진 것은 빼고 고르고(한 정산 안에서 겹치지 않게), 다 가졌으면 희귀 물고기(alt)로 대신
  */

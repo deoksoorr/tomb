@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { staffPublicName } from "@tomb/protocol";
 import { nanoid } from "nanoid";
 import { env } from "../env";
+import { weekStartMs } from "../gameDay";
 import { HttpError } from "../http";
 import { publicNameOf, staffAccountId } from "../staff";
 import { kstDay, kstWeek } from "../store/accounts";
@@ -334,10 +335,9 @@ export async function deleteGuest(store: HouseStore, houseId: string, entryId: s
 /** 랭킹을 고르는 후보 수 (꾸밈 점수 상위). 주간은 이 안에서 이번 주에 꾸민 집만 남긴다 */
 export const HOUSE_RANK_POOL = 300;
 
-/** 이번 주(KST 월요일 0시) 시작 시각 (epoch ms) */
+/** 이번 주(월요일 새벽 5시, lib/gameDay) 시작 시각 (epoch ms) */
 export function kstWeekStart(now = Date.now()): number {
-  const w = kstWeek(now);
-  return Date.UTC(Number(w.slice(0, 4)), Number(w.slice(4, 6)) - 1, Number(w.slice(6, 8))) - 9 * 3_600_000;
+  return weekStartMs(kstWeek(now));
 }
 
 export type HouseRankRow = { rank: number; name: string; sub: string; value: number; me: boolean };

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { errorMessage, request } from "@/lib/api";
+import { DAY_RESET_TEXT, gameYmd } from "@/lib/gameDay";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { readItem, writeItem } from "@/lib/storage";
 import { WISH_BONUS_JACKPOT, WISH_BONUS_SPARKLE, WISH_COINS, WISH_DAILY, WISH_LUCK_TABLE, type WishFortune, type WishResponse } from "@/lib/wish";
@@ -12,12 +13,12 @@ import PixelArt, { type PixelRect } from "../ui/PixelArt";
 import ui from "../ui/ui.module.css";
 import styles from "./WishDialog.module.css";
 
-/** 오늘(한국 시간) 이 기기에서 던진 기록 */
+/** 오늘(새벽 5시에 바뀌는 게임 날짜) 이 기기에서 던진 기록 */
 const LOG_KEY = "tomb.ui.wishLog";
 type Toss = { day: string; at: number; spent: number; bonus: number; title: string; text: string };
 
-/** 한국 시간 날짜 (YYYY-MM-DD) */
-const kstDay = (t: number) => new Date(t + 9 * 3_600_000).toISOString().slice(0, 10);
+/** 게임 날짜 (YYYY-MM-DD, 한국 시간 새벽 5시에 바뀐다 — 서버 횟수와 같은 경계) */
+const kstDay = (t: number) => gameYmd(t);
 
 function readTodayLog(now: number): Toss[] {
   try {
@@ -192,7 +193,7 @@ export default function WishDialog({ onClose }: { onClose: () => void }) {
               `${pct(WISH_BONUS_SPARKLE + WISH_BONUS_JACKPOT)} 확률로 동전이 튀어 돌아와요. 그중 ${pct(WISH_BONUS_JACKPOT)}는 대박 — 던진 것의 두 배 + 5P예요.`,
               "운세는 동전 크기와 상관없이 같은 확률로 나와요. 1P로도 충분해요.",
               "돌아온 포인트는 하루 포인트 한도에 들어가요. 한도가 차면 줄거나 0이 될 수 있어요.",
-              "던진 횟수는 자정(한국 시간)에 다시 채워져요.",
+              `던진 횟수는 한국 시간 ${DAY_RESET_TEXT}에 다시 채워져요.`,
             ]}
           />
         </InfoCard>

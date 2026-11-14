@@ -1,6 +1,7 @@
 import { DIR } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { BUSH_FINDS, FRAME_LINES, houseTargets, pickPondSeat, pickTarget, pondSeats, PRAY_LINES, USE_LABEL } from "@/game/housing/interact";
+import { furnitureGrid } from "@/game/housing/art";
+import { BUSH_FINDS, FRAME_LINES, houseTargets, pickPondSeat, pickTarget, POND_WATER_INSET, pondSeats, PRAY_LINES, USE_LABEL } from "@/game/housing/interact";
 import { EMOTE_ICONS } from "@/game/sprites/emotes";
 import { FURNITURE, tierById } from "./catalog";
 import { roomPlan } from "./rooms";
@@ -119,15 +120,48 @@ describe("연못가 앉기: 네 방향 물가", () => {
     }
   });
 
-  it("위 물가는 연못 윗가(그림보다 뒤라 발끝이 덮인다), 아래 물가는 연못 밖(그림보다 앞)", () => {
-    const pond: Placed = { u: "po", i: "pond", x: 3, y: 3, r: 0 };
-    const [down, up] = pondSeats(pond, [pond], wide, F);
-    const B = F.oy + 5 * T;
+  it.each([
+    ["가로", 0, 3, 2],
+    ["세로", 1, 2, 3],
+    ["가로 뒤집힘", 2, 3, 2],
+    ["세로 뒤집힘", 3, 2, 3],
+  ] as const)("%s 연못: 네 물가 모두 발끝이 물 영역 안 (돌 테두리 안쪽), 앉는 자리는 돌 테두리 위", (_n, r, fw, fh) => {
+    const pond: Placed = { u: "po", i: "pond", x: 3, y: 3, r };
+    const L = F.ox + 3 * T;
     const Tp = F.oy + 3 * T;
-    // 연못 그림 깊이 = 밑변 − 1: 아래에 앉으면 앞, 위에 앉으면 뒤
-    expect(down.y).toBeGreaterThan(B - 1);
-    expect(up.y).toBeLessThan(B - 1);
-    // 위 물가 발 위치는 연못 윗변 바로 근처 (몸이 연못에 묻히지 않게)
-    expect(Math.abs(up.y - Tp)).toBeLessThanOrEqual(2);
+    const R = L + fw * T;
+    const B = Tp + fh * T;
+    const inset = POND_WATER_INSET;
+    for (const s of pondSeats(pond, [pond], wide, F)) {
+      // 발끝(잔물결 자리)은 물 안
+      expect(s.foot.x, `물가 ${s.side}`).toBeGreaterThanOrEqual(L + inset);
+      expect(s.foot.x).toBeLessThanOrEqual(R - inset);
+      expect(s.foot.y).toBeGreaterThanOrEqual(Tp + inset);
+      expect(s.foot.y).toBeLessThanOrEqual(B - inset);
+      // 앉는 자리는 물가 돌 테두리 근처 (물에서 6px 안쪽 이내 — 허공에 뜨지 않게)
+      const dx = Math.max(L - s.x, s.x - R, 0);
+      const dy = Math.max(Tp - s.y, s.y - B, 0);
+      expect(Math.hypot(dx, dy), `물가 ${s.side}`).toBeLessThanOrEqual(2);
+      // 발끝과 앉는 자리 사이가 붙어 있다 (몸 길이 안)
+      expect(Math.hypot(s.foot.x - s.x, s.foot.y - s.y)).toBeLessThanOrEqual(8);
+    }
+  });
+  it("연못 그림의 물은 가로·세로 모두 네 변에서 POND_WATER_INSET px 안쪽부터 (자리 계산과 그림이 맞는지)", () => {
+    for (const v of ["", "v", "n", "v-n"]) {
+      const g = furnitureGrid("pond", v)!;
+      const water = (x: number, y: number) => {
+        const p = g.get(x, y);
+        const c = p >>> 8;
+        return (p & 255) > 0 && (c & 255) >= ((c >> 16) & 255) + 15; // 푸른 물빛
+      };
+      const cx = Math.floor(g.w / 2);
+      const cy = Math.floor(g.h / 2);
+      let top = -1;
+      for (let y = 0; y < g.h && top < 0; y++) if (water(cx, y)) top = y;
+      let left = -1;
+      for (let x = 0; x < g.w && left < 0; x++) if (water(x, cy)) left = x;
+      expect(top, v).toBe(POND_WATER_INSET);
+      expect(left, v).toBe(POND_WATER_INSET);
+    }
   });
 });

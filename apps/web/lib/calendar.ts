@@ -3,7 +3,7 @@ import { attendTierPlan, permOwnedOf } from "./attendTiers";
 import { earnRule } from "./economy";
 import type { CalendarResponse } from "./types";
 
-// 10번 출석 달력 (KST 기준). 입장 때 자동으로 주던 출석을 "그날 1시간 머문 뒤 달력의 오늘 칸을 눌러 받기"로 바꿨다.
+// 10번 출석 달력 (게임 날짜 = 한국 시간 새벽 5시에 바뀐다, lib/gameDay — 1일 새벽 0~5시는 지난달 마지막 날). 입장 때 자동으로 주던 출석을 "그날 1시간 머문 뒤 달력의 오늘 칸을 눌러 받기"로 바꿨다.
 //  - 머문 시간 = 그날 서버가 받아 준 머무르기 기록 수 × 10분 (/api/me/presence, PRESENCE_MIN_GAP_MS 간격)
 //  - 받은 날은 도장, 못 받고 지난 날은 회색. 7일 연속마다 보너스, 그달 모든 날을 받으면 한 달 개근 보상
 //  - 날짜 문자열: 하루 YYYYMMDD, 달 YYYYMM, 달 안의 날 DD (계정 저장소 키와 같다)

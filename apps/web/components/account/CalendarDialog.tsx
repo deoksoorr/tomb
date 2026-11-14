@@ -215,7 +215,7 @@ export default function CalendarDialog({ onClose }: { onClose: () => void }) {
 
             <TierRoad cal={cal} stamped={stamped} isCurrent={isCurrent} fresh={freshTiers} />
 
-            <p className={ui.hint}>날짜는 한국 시간 자정에 바뀌어요. 머문 시간은 {STAY_TICK_MINUTES}분마다 쌓여요.</p>
+            <p className={ui.hint}>날짜는 한국 시간 새벽 5시에 바뀌어요 (새벽 5시 전까지는 전날 칸). 머문 시간은 {STAY_TICK_MINUTES}분마다 쌓여요.</p>
           </>
         )}
         <p className={styles.notice} role="status">

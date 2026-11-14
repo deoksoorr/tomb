@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { champBitsOf, champBoards, type ChampBoard } from "@tomb/protocol";
 import { env } from "../env";
+import { gameWeek, prevWeek, weekEndMs, weekStartMs } from "../gameDay";
 import { testServerEnv } from "../rpg/superHunter";
 import { K } from "./keys";
 
@@ -197,33 +198,17 @@ export function getChamp(): ChampStore {
   return (g.__tombChamp = cur ? Object.assign(new MemoryChamp(), cur) : new MemoryChamp());
 }
 
-// ── 주 계산 (KST 월요일 0시 마감) ──
+// ── 주 계산 (월요일 새벽 5시 마감 — 하루·주 경계는 lib/gameDay 한 곳) ──
 
 const DAY_MS = 86_400_000;
-const KST_MS = 9 * 3_600_000;
-/** 1위 꾸미기 대여 여유: 다음 주 1위가 정해지는 정리(월요일 0시 뒤 첫 요청)가 늦어져도 끊기지 않게 */
+/** 1위 꾸미기 대여 여유: 다음 주 1위가 정해지는 정리(월요일 새벽 5시 뒤 첫 요청)가 늦어져도 끊기지 않게 */
 export const CHAMP_GRACE_MS = 6 * 3_600_000;
 
-/**
- * now가 속한 주의 월요일 (YYYYMMDD, KST). store/accounts.ts kstWeek와 같은 값 — 그 파일이 이 파일을 가져오므로
- * 순환 import를 피하려고 여기서 따로 계산한다
- */
-export function kstWeekOf(now = Date.now()): string {
-  const day = new Date(now + KST_MS);
-  const dow = day.getUTCDay(); // 0 = 일요일
-  const monday = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()) - ((dow + 6) % 7) * DAY_MS;
-  return new Date(monday).toISOString().slice(0, 10).replaceAll("-", "");
-}
-
-/** 그 주(월요일 YYYYMMDD)가 시작하는 시각 = 그 월요일 0시 KST (ms) */
-export function weekStartMs(week: string): number {
-  return Date.UTC(Number(week.slice(0, 4)), Number(week.slice(4, 6)) - 1, Number(week.slice(6, 8))) - KST_MS;
-}
-/** 그 주 마감 = 다음 월요일 0시 KST */
-export const weekEndMs = (week: string) => weekStartMs(week) + 7 * DAY_MS;
-/** 지난주 (월요일 YYYYMMDD) */
-export const prevWeek = (week: string) => kstWeekOf(weekStartMs(week) - 1);
-/** 그 주 1위 꾸미기·자격이 끝나는 시각: 다음 주 마감(다다음 월요일 0시) + 여유 */
+/** now가 속한 주의 월요일 (YYYYMMDD). store/accounts.ts kstWeek와 같은 값 (둘 다 lib/gameDay gameWeek) */
+export const kstWeekOf = gameWeek;
+/** 그 주(월요일 YYYYMMDD)가 시작하는 시각 = 그 월요일 새벽 5시 (ms) · 마감 = 다음 월요일 새벽 5시 · 지난주 */
+export { prevWeek, weekEndMs, weekStartMs };
+/** 그 주 1위 꾸미기·자격이 끝나는 시각: 다음 주 마감(다다음 월요일 새벽 5시) + 여유 */
 export const champUntil = (week: string) => weekStartMs(week) + 14 * DAY_MS + CHAMP_GRACE_MS;
 
 // ── 계정의 지금 1위 값 (입장 토큰·내 정보·착용 증서가 함께 쓴다) ──
@@ -247,7 +232,7 @@ export function primeChampCache(rec: ChampWeek, now = Date.now()): void {
 
 /**
  * 지금 그 계정의 1위 값 (CHAMP_BOARDS 비트 + 본인이 오라를 껐으면 CHAMP_AURA_OFF, 1위가 아니면 0).
- * 자격 = 지난주(이번 주 월요일 0시에 마감한 주) 1위. 이번 주가 끝나면 저절로 다음 주 1위로 넘어간다
+ * 자격 = 지난주(이번 주 월요일 새벽 5시에 마감한 주) 1위. 이번 주가 끝나면 저절로 다음 주 1위로 넘어간다
  */
 export async function champBitsFor(accountId: string, now = Date.now()): Promise<number> {
   const rec = await champWeekCached(prevWeek(kstWeekOf(now)), now);

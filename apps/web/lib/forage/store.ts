@@ -17,7 +17,7 @@ import type { DexEntry, LifeDay } from "./types";
 //  - forage:{a}:active      STRING `${nonce}|${JSON}` 진행 중인 낚시·채집 (새로 시작하면 바뀐다, TTL)
 //  - forage:{a}:used:{n}    STRING 끝낸 티켓 표시 (SET NX, 1일) → 같은 티켓을 두 번 낼 수 없다
 //  - forage:{a}:hour:{h}    STRING 이번 한 시간 동안 시작한 수 (INCR, 1시간)
-//  - forage:{a}:day:{KST}   HASH  fishP/gatherP/dexP(판 포인트) · fish/gather(잡은 수) (2일)
+//  - forage:{a}:day:{게임 날짜}   HASH  fishP/gatherP/dexP(판 포인트) · fish/gather(잡은 수) (2일)
 //  - forage:{a}:took:{w}    SET   이 창(15분)에 캔 채집 지점 id (2시간)
 //  - forage:{a}:auto        STRING 자동 낚시 세션 JSON (lib/forage/auto.ts, 바꿀 때는 이전 값과 같을 때만 = 비교 후 교체)
 

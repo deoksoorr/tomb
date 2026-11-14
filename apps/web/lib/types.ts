@@ -256,6 +256,10 @@ export type AttendResponse = { me: Me; earned: number };
 export type CodeResponse = { code: string };
 /** POST /api/me/login { code } → 이 기기를 그 계정으로 전환 (세션 쿠키 교체) */
 export type CodeLoginResponse = { me: Me };
+/** GET·DELETE /api/me/google → 이 계정의 구글 연결 (구글 설정이 없으면 404) */
+export type GoogleStatusResponse = { linked: boolean; linkedAt: number | null };
+/** POST /api/auth/google/claim → 구글로 새로 만든 계정에 연결. code = 새로 만든 개인 코드 (이미 있던 계정이면 null, 원문은 이때 한 번만) */
+export type GoogleClaimResponse = { me: Me; code: string | null };
 /** POST /api/shop/buy { itemId } */
 export type BuyResponse = { me: Me };
 /**
@@ -417,7 +421,7 @@ export type MyGraveStatusResponse = { active: PublicGrave | null; passDays: numb
 /** huntLevel = 사냥터 캐릭터 레벨 (같으면 경험치, 기간 구분 없음 — lib/huntLevelRank.ts) */
 export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish", "look", "huntLevel"] as const;
 export type RankBoard = (typeof RANK_BOARDS)[number];
-/** week = 이번 주(KST 월요일 0시부터), all = 전체 */
+/** week = 이번 주(월요일 새벽 5시부터, lib/gameDay), all = 전체 */
 export type RankPeriod = "week" | "all";
 /**
  * sub: 보조 줄 (house 랭킹은 "번지 · 주인 이름"). items: look 랭킹의 지금 착용 파츠 전부 (부위 순, 프리미엄 외형은 "body:{id}" — lib/lookScore.wornParts). gear: huntLevel 랭킹의 장착 무기 id.
@@ -469,7 +473,7 @@ export type RaceRow = { rank: number; name: string; value: number; sub?: string;
 /** GET /api/champ/race: 이번 주 랭킹 3개의 1~3등 · 마감 시각 · 내 순위와 1위와의 차이 */
 export type RaceResponse = {
   week: string;
-  /** 마감 (다음 월요일 0시 KST, ms) */
+  /** 마감 (다음 월요일 새벽 5시 한국 시간, ms) */
   endsAt: number;
   boards: { board: ChampBoard; top: RaceRow[]; mine: { rank: number; value: number; gap: number } | null }[];
   /** 보는 사람이 운영자 (순위에 들지 않는다) */
@@ -486,7 +490,7 @@ export type CalendarDayState = "stamped" | "missed" | "today" | "future";
  */
 export type CalendarResponse = {
   month: string;
-  /** 오늘 (KST YYYYMMDD) */
+  /** 오늘 (게임 날짜 YYYYMMDD, 한국 시간 새벽 5시에 바뀐다) */
   today: string;
   /** 1일의 요일 (0 = 일요일) */
   firstWeekday: number;

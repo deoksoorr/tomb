@@ -63,6 +63,18 @@ export const env = {
     return token && repo && /^[\w.-]+\/[\w.-]+$/.test(repo) ? { token, repo } : null;
   },
 
+  /**
+   * 구글 계정 연결·로그인 (lib/googleAuth.ts). 둘 다 있어야 켜진다 — 없으면 구글 단추·경로를 모두 숨긴다(지금처럼 코드만).
+   * 운영·테스트 서버(Vercel Production / Preview staging)에 각각 넣는다
+   */
+  google(): { clientId: string; clientSecret: string } | null {
+    const clientId = read("GOOGLE_CLIENT_ID");
+    const clientSecret = read("GOOGLE_CLIENT_SECRET");
+    return clientId && clientSecret ? { clientId, clientSecret } : null;
+  },
+  /** 로컬 개발 전용 모의 구글 (GOOGLE_MOCK=1). 운영 빌드(NODE_ENV=production — Vercel 미리보기 포함)에서는 절대 켜지지 않는다 */
+  googleMock: (): boolean => !isProd() && read("GOOGLE_MOCK") === "1",
+
   /** MemoryStore가 처음 뜰 때 심는 목업 묘비 수 */
   mockGraves(): number {
     const n = Number(read("MOCK_GRAVES") ?? 30);

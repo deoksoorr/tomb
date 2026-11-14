@@ -19,7 +19,7 @@ const RANK_SIZE = 50;
 
 /**
  * 랭킹 (49번: 포인트·사냥 중심). `?board=points|huntKills|huntBest|house&period=week|all&zone=easy|normal|hard|hell`
- *  - points: 모은 포인트 (전체 = 쓰더라도 줄지 않는 합계, 주간 = 이번 주 KST 월요일부터 모은 포인트)
+ *  - points: 모은 포인트 (전체 = 쓰더라도 줄지 않는 합계, 주간 = 이번 주 월요일 새벽 5시부터 모은 포인트)
  *  - huntKills: 사냥터 처치 수 합계
  *  - huntBest: 그 사냥터를 쓰러지지 않고 끝까지 깬 가장 짧은 시간 (value = ms)
  *  - house: 하우징 꾸밈 점수 (F11. 전체 = 모든 집, 주간 = 이번 주에 꾸민 집. name = 집 이름, sub = 번지 · 주인)

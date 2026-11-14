@@ -12,6 +12,8 @@ import { removeItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
 import { bgm } from "./bgm/engine";
 import EntryScreen, { type EntryChoice, type EntryStart } from "./entry/EntryScreen";
+import GoogleNotice from "./entry/GoogleNotice";
+import type { GoogleResult } from "@/lib/googleResult";
 
 // 게임과 오버레이는 입장한 뒤에만 필요하다. 첫 화면(입장)은 가볍게 띄운다.
 const GameShell = dynamic(() => import("./overlay/GameShell"), { ssr: false });
@@ -26,9 +28,11 @@ type Props = {
   initialGraveId: string | null;
   /** ?debug=1 → 네트워크 HUD */
   debug: boolean;
+  /** 구글로 시작하기를 켤지 (서버 설정), 구글에서 돌아온 결과 /?google= */
+  google: { enabled: boolean; result: GoogleResult | null };
 };
 
-export default function App({ initialGraveId, debug }: Props) {
+export default function App({ initialGraveId, debug, google }: Props) {
   const [options, setOptions] = useState<GameStartOptions | null>(null);
   const [ready, setReady] = useState(false);
   const [bootStalled, setBootStalled] = useState(false);
@@ -62,6 +66,8 @@ export default function App({ initialGraveId, debug }: Props) {
 
   // 공유 링크의 묘비는 처음 들어갈 때만 찾아간다 (접속 종료 후 다시 들어오면 평소처럼)
   const [focusGraveId, setFocusGraveId] = useState(initialGraveId);
+  // 구글에서 돌아온 결과도 처음 들어갈 때만 입구 단계를 정한다 (접속 종료 뒤에는 평소처럼)
+  const [entryGoogleResult, setEntryGoogleResult] = useState(google.result);
 
   // 새로고침(업데이트·F5) 직전 자리 기록이 있으면 입장 화면을 건너뛰고 그 채널·자리로 바로 들어간다 (lib/resume.ts).
   // 기록은 처음 읽을 때 지운다 — 탭을 복제하면 sessionStorage가 복사돼 두 탭이 같은 자리로 돌아오기 때문.
@@ -115,6 +121,7 @@ export default function App({ initialGraveId, debug }: Props) {
     (choice: EntryChoice) => {
       setOptions({ ...choice, focusGraveId, debug });
       setFocusGraveId(null);
+      setEntryGoogleResult(null);
     },
     [focusGraveId, debug],
   );
@@ -140,10 +147,13 @@ export default function App({ initialGraveId, debug }: Props) {
 
   return (
     <>
+      {/* 구글 연결 결과·실패 안내 (게임 위에도 뜬다 — 연결하고 바로 이어서 들어온 경우) */}
+      {google.result && <GoogleNotice result={google.result} />}
       {current && <GameShell options={current} ready={ready} onLeave={leave} onLoggedOut={loggedOut} />}
       {!ready && (
         <EntryScreen
           start={entryStart}
+          google={{ enabled: google.enabled, result: entryGoogleResult }}
           focusGraveId={focusGraveId}
           entering={current !== null}
           stalled={bootStalled}

@@ -44,7 +44,7 @@ export default function HuntCapMeter({ today, where }: { today: RpgView["today"]
       </div>
       {full ? (
         <p className={c.msg} role="status">
-          <b>오늘 사냥으로 받을 수 있는 포인트를 다 받았어요</b> — 주운 물건은 내일 팔 수 있어요 (상점에서 산 장비는 지금도 {refund} 환불). {FULL_TEXT[where]} 한도는 내일 0시(한국 시간)에
+          <b>오늘 사냥으로 받을 수 있는 포인트를 다 받았어요</b> — 주운 물건은 내일 팔 수 있어요 (상점에서 산 장비는 지금도 {refund} 환불). {FULL_TEXT[where]} 한도는 한국 시간 새벽 5시에
           다시 차요.
         </p>
       ) : near ? (

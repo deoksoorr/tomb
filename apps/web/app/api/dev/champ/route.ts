@@ -6,7 +6,7 @@ import { getFishRank } from "@/lib/forage/fishRank";
 import { handler, HttpError, json } from "@/lib/http";
 import { requireVisitor } from "@/lib/session";
 import { getAccounts } from "@/lib/store";
-import { kstWeek, weekOfDay } from "@/lib/store/accounts";
+import { kstDay, kstWeek, weekOfDay } from "@/lib/store/accounts";
 import { weekStartMs } from "@/lib/store/champ";
 import { readBody } from "@/lib/validate";
 import { prevWeek, settleChamps } from "@/lib/weeklyChamp";
@@ -64,7 +64,7 @@ export const POST = handler(async (req) => {
     if (b === "points") {
       let left = body.value;
       for (let d = 0; left > 0 && d < 7; d++) {
-        const day = new Date(start + d * 86_400_000 + 9 * 3_600_000).toISOString().slice(0, 10).replaceAll("-", "");
+        const day = kstDay(start + d * 86_400_000);
         if (weekOfDay(day) !== week) break;
         left -= await accounts.earn(who, "hunt", day, { amount: Math.min(600, left) });
       }

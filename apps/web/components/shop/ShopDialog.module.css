@@ -229,33 +229,38 @@
 }
 
 /* 착용 부위 필터: 한 줄 (넘치면 옆으로 밀어 본다) */
+/* 부위 칩 줄: 가로로 밀어 보는 줄은 끝 칩이 잘려 보여서(이름표 등) 여러 줄로 감싼다 → 칩이 늘 다 보인다.
+   칩을 작게 해 데스크톱은 한두 줄, 폰은 두세 줄 */
 .slotFilter {
   display: flex;
   flex: none;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
   padding: 2px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.slotFilter::-webkit-scrollbar {
-  display: none;
 }
 
 .slotChip {
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 4px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 4px 9px;
+  gap: 3px;
+  min-width: 36px;
+  min-height: 32px;
+  padding: 2px 7px;
   border: 0;
   background: var(--surface);
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
+  white-space: nowrap;
   box-shadow: var(--px-border);
   touch-action: manipulation;
+}
+
+/* 손가락으로 누르는 화면은 조금 크게 */
+@media (pointer: coarse) {
+  .slotChip {
+    min-height: 38px;
+  }
 }
 
 .slotChip:hover {
