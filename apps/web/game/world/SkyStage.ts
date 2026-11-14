@@ -373,7 +373,7 @@ export class SkyStage {
     this.riders = [];
     for (let i = 0; i < 4; i++) this.riders.push(this.add(sc.add.image(0, 0, P + "px").setOrigin(0.5, 1).setVisible(false)));
     // 오라 층: 탄 사람 그림 depth 바로 앞뒤에만 (장면 물체는 차례대로 정수 depth라 테두리·날씨 아래에 머문다)
-    sc.data.set("cfxDepth", { ground: "body", lightOnBody: true } satisfies CfxDepth);
+    sc.data.set("cfxDepth", { ground: "body", lightOnBody: true, noCull: true } satisfies CfxDepth);
     // 테두리
     if (this.kind === "ferris") {
       const w = art.ferrisWindow(VW, VH, CAR_COLORS[this.unit % CAR_COLORS.length]);

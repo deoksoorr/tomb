@@ -141,8 +141,9 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
     const full = owned >= MAX_OWN_PER_ITEM;
     const once = (!!f.skin || !!f.ext) && owned > 0;
     const r = turn.id === f.id ? turn.r : 0;
-    // 돌리면 가로·세로가 바뀌는 물건은 4방향, 아니면 좌우 뒤집기 2방향
-    const ways = f.turn ? 4 : 2;
+    // 돌리는 물건(turn)·4방향 가구(spin)는 4방향, 아니면 좌우 뒤집기 2방향
+    const four = !!(f.turn || f.spin);
+    const ways = four ? 4 : 2;
     const sw = phone ? 140 : 216;
     const sh = phone ? 140 : stageFit;
     return (
@@ -157,9 +158,9 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
                 type="button"
                 className={cx(ui.button, styles.fsStageBtn)}
                 onClick={() => setTurn({ id: f.id, r: (r + 1) % ways })}
-                aria-label={`${f.name} ${f.turn ? "돌려" : "뒤집어"} 보기 (${r + 1}/${ways})`}
+                aria-label={`${f.name} ${four ? "돌려" : "뒤집어"} 보기 (${r + 1}/${ways})`}
               >
-                {f.turn ? "↻ 돌려 보기" : "⇆ 뒤집어 보기"}
+                {four ? "↻ 돌려 보기" : "⇆ 뒤집어 보기"}
               </button>
             )}
             <div className={styles.fsDayNight} role="group" aria-label="미리보기 조명">

@@ -46,7 +46,8 @@ const placed = z.object({
   i: z.string().max(40),
   x: z.number().int().min(0).max(63),
   y: z.number().int().min(0).max(63),
-  r: z.number().int().min(0).max(3),
+  // 0~3 돌리기·뒤집기, 4~7 4방향 가구의 방향 (layout.ts SPIN_R0)
+  r: z.number().int().min(0).max(7),
 });
 
 export const LayoutSchema = z.object({

@@ -1,4 +1,5 @@
 import { DEFAULT_FLOOR, DEFAULT_WALL, defaultExterior, furnitureById, type HouseExteriorMap } from "@/lib/housing/catalog";
+import { footprint, SPIN_R0, spinDir } from "@/lib/housing/layout";
 import { darken, Grid, hash2, lighten, type Color } from "../sprites/pixel";
 import { facadeGrid } from "./exterior";
 
@@ -756,6 +757,247 @@ const DRAW: Record<string, Draw> = {
   },
 };
 
+// ── 4방향 가구 (catalog spin): 옆모습(왼쪽을 봄)·뒷모습. 오른쪽을 보는 모습은 옆모습을 좌우로 뒤집는다 ──
+// 빛은 늘 위에서 (윗면 밝게 · 밑변 어둡게) 내려와 좌우로 뒤집어도 어색하지 않게 그린다.
+// 옆모습 크기 = 앞모습의 가로·세로 칸을 바꾼 것 (2×1 가구는 16 × 32+솟는 높이).
+
+type SpinArt = { side: Draw; back: Draw };
+
+const SPIN_ART: Record<string, SpinArt> = {
+  chair: {
+    // 왼쪽을 봄: 앉는 판이 왼쪽, 등받이가 오른쪽에 선다
+    side: (g, _W, H) => {
+      g.rect(10, 0, 3, 14, WOOD);
+      g.vline(10, 1, 12, WOOD_L);
+      box(g, 2, 8, 11, 6, WOOD_L);
+      g.hline(2, 12, 8, lighten(WOOD_L, 0.15));
+      g.vline(3, 14, H - 1, WOOD_D);
+      g.vline(11, 14, H - 1, WOOD_D);
+    },
+    // 뒤: 앉는 판이 뒤로 보이고 등받이 뒷면이 앞에 선다
+    back: (g, _W, H) => {
+      box(g, 2, 3, 12, 5, WOOD_L);
+      g.rect(3, 4, 10, 12, WOOD);
+      g.rect(3, 4, 10, 1, WOOD_L);
+      g.vline(5, 6, 14, WOOD_D);
+      g.vline(10, 6, 14, WOOD_D);
+      g.hline(3, 12, 15, WOOD_D);
+      g.vline(3, 16, H - 1, WOOD_D);
+      g.vline(12, 16, H - 1, WOOD_D);
+    },
+  },
+  bed: {
+    // 머리가 오른쪽: 오른쪽에 높은 머리판, 왼쪽에 낮은 발판, 베개 둘이 세로로
+    side: (g, W, H) => {
+      g.rect(0, 6, 3, H - 8, WOOD_D);
+      g.rect(1, 7, 1, H - 10, WOOD);
+      g.rect(3, 9, W - 7, H - 12, 0xe8e2d4);
+      g.hline(3, W - 5, 9, 0xf4f0e6);
+      for (const y of [11, 23]) {
+        g.rect(W - 13, y, 8, 10, 0xf8f4ea);
+        g.vline(W - 13, y, y + 9, 0xd8d0c0);
+      }
+      g.rect(3, 9, W - 18, H - 12, 0x6a4a7a);
+      g.vline(W - 15, 9, H - 4, 0x8a6a9a);
+      g.vline(W - 16, 9, H - 4, 0xf0ead8);
+      for (let x = 5; x < W - 17; x += 5) for (let y = 12; y < H - 4; y += 6) g.set(x + ((x / 5) % 2) * 2, y, 0x553a63);
+      g.rect(W - 4, 0, 4, H - 1, WOOD_D);
+      g.vline(W - 3, 2, H - 4, WOOD);
+      g.hline(W - 4, W - 1, 0, WOOD_L);
+      box(g, 0, H - 3, W, 3, WOOD_D);
+    },
+    // 머리가 아래: 위쪽은 낮은 발판, 아래쪽 머리판이 베개 앞을 가린다
+    back: (g, W, H) => {
+      box(g, 0, 2, W, 5, WOOD_D);
+      g.hline(0, W - 1, 2, WOOD);
+      g.rect(1, 7, W - 2, H - 15, 0xe8e2d4);
+      g.vline(1, 7, H - 9, 0xc8c0b0);
+      g.vline(W - 2, 7, H - 9, 0xc8c0b0);
+      g.rect(1, 7, W - 2, H - 25, 0x6a4a7a);
+      for (let y = 9; y < H - 19; y += 5) for (let x = 3; x < W - 2; x += 6) g.set(x + ((y / 5) % 2) * 3, y, 0x553a63);
+      g.hline(1, W - 2, H - 18, 0x8a6a9a);
+      g.hline(1, W - 2, H - 17, 0xf0ead8);
+      g.rect(4, H - 16, 11, 6, 0xf8f4ea);
+      g.rect(W - 15, H - 16, 11, 6, 0xf8f4ea);
+      g.hline(4, 14, H - 16, 0xffffff);
+      g.hline(W - 15, W - 5, H - 16, 0xffffff);
+      box(g, 0, H - 10, W, 10, WOOD_D);
+      g.rect(2, H - 8, W - 4, 5, WOOD);
+      g.hline(2, W - 3, H - 8, WOOD_L);
+      g.rect(0, H - 12, 3, 12, WOOD_D);
+      g.rect(W - 3, H - 12, 3, 12, WOOD_D);
+    },
+  },
+  piano: {
+    // 건반이 왼쪽: 몸통은 오른쪽에 높이 서고, 건반 판이 왼쪽으로 튀어나온다
+    side: (g, W, H) => {
+      box(g, 6, 0, W - 7, H - 4, 0x2e2220);
+      g.rect(7, 1, W - 9, 2, 0x4a3632);
+      g.vline(7, 3, H - 6, 0x3a2a26);
+      g.rect(1, 15, 6, H - 24, 0x4a3632);
+      g.rect(2, 16, 3, H - 26, 0xf6f2e8);
+      for (let y = 18; y < H - 10; y += 3) g.hline(2, 4, y, 0xc8c0b0);
+      for (let y = 17; y < H - 10; y += 4) g.rect(4, y, 1, 2, 0x1a1412);
+      g.rect(2, H - 9, 4, 5, 0x2e2220);
+      g.rect(8, H - 4, 2, 3, 0x1a1412);
+      g.rect(8, 13, 2, 3, 0x1a1412);
+      g.rect(3, H - 6, 2, 2, 0xc8a050);
+    },
+    // 뒤: 판자를 댄 뒷판만 보인다
+    back: (g, W, H) => {
+      box(g, 1, 0, W - 2, H - 4, 0x2e2220);
+      g.rect(2, 1, W - 4, 2, 0x4a3632);
+      g.rect(3, 4, W - 6, H - 10, 0x3a2a26);
+      for (let x = 7; x < W - 4; x += 6) g.vline(x, 4, H - 7, 0x2a1c18);
+      g.hline(3, W - 4, Math.floor(H / 2), 0x4a3632);
+      g.rect(3, H - 4, 2, 3, 0x1a1412);
+      g.rect(W - 5, H - 4, 2, 3, 0x1a1412);
+    },
+  },
+  monitor_desk: {
+    // 화면이 왼쪽을 봄: 길쭉한 책상 윗면(밝게) + 앞면, 오른쪽 끝에 모니터 옆면 둘이 서고 왼쪽에 자판
+    side: (g, W, H) => {
+      g.rect(1, 10, W - 2, H - 16, WOOD);
+      g.hline(1, W - 2, 10, WOOD_L);
+      box(g, 1, H - 6, W - 2, 5, WOOD_D);
+      for (const y of [4, 20]) {
+        g.rect(10, y, 3, 10, 0x22262e);
+        g.vline(10, y + 1, y + 8, 0x3a6ab0);
+        g.rect(11, y + 10, 2, 2, 0x22262e);
+      }
+      g.rect(3, 14, 4, 14, 0x30343c);
+      for (let y = 15; y < 27; y += 2) g.hline(4, 5, y, 0x50565e);
+    },
+    // 뒤: 모니터 뒷면 둘과 받침
+    back: (g, W, H) => {
+      box(g, 1, H - 12, W - 2, 10, WOOD_D);
+      g.hline(1, W - 2, H - 12, lighten(WOOD_D, 0.2));
+      for (const x of [4, 17]) {
+        g.rect(x, 1, 11, 9, 0x2a2e36);
+        g.rect(x + 2, 3, 7, 5, 0x343842);
+        g.rect(x + 4, 10, 3, 4, 0x22262e);
+      }
+      g.vline(16, 8, H - 12, 0x1a1c20); // 전선
+    },
+  },
+  radio: {
+    side: (g, _W, H, v) => {
+      g.vline(9, 0, 6, 0x9a9a9a);
+      g.set(9, 0, 0xd0d0d0);
+      box(g, 5, 5, 7, H - 6, 0x8a5a36);
+      g.rect(6, 6, 5, 1, 0xa87448);
+      g.rect(4, H - 9, 1, 3, v.split("-").includes("on") ? 0x9ff0a0 : 0x5a6a50); // 다이얼이 옆으로 살짝
+      g.rect(5, H - 4, 2, 2, 0xc8a050);
+    },
+    back: (g, _W, H) => {
+      g.vline(12, 0, 6, 0x9a9a9a);
+      g.set(12, 0, 0xd0d0d0);
+      box(g, 2, 5, 12, H - 6, 0x7a4e2e);
+      g.rect(3, 6, 10, 1, 0x9a6a40);
+      for (let y = H - 11; y < H - 3; y += 2) g.hline(4, 11, y, 0x5a3a22);
+    },
+  },
+  coffee_machine: {
+    side: (g, _W, H) => {
+      box(g, 6, 1, 7, H - 2, 0x30343a);
+      g.rect(7, 3, 5, 4, 0x50565e);
+      g.rect(3, H - 11, 3, 2, 0x30343a); // 꼭지
+      g.rect(3, H - 8, 4, 4, 0xe8e0c8);
+      g.rect(3, H - 7, 4, 1, 0x5a3a26);
+    },
+    back: (g, W, H) => {
+      box(g, 3, 1, W - 6, H - 2, 0x2a2e34);
+      g.rect(5, 3, W - 10, 4, 0x3a4048);
+      g.vline(W / 2, 8, H - 3, 0x1a1c20); // 전선
+    },
+  },
+  fridge: {
+    side: (g, _W, H) => {
+      const body = 0xd8ece4;
+      box(g, 4, 0, 9, H, body);
+      g.hline(4, 12, 0, 0xeef8f4);
+      g.vline(4, 0, H - 1, 0xb8ccc4); // 문 옆선
+      g.rect(3, 4, 1, 5, 0x8a9a92); // 손잡이
+      g.rect(3, 14, 1, 9, 0x8a9a92);
+      g.rect(5, H - 2, 2, 2, 0x5a5a5a);
+      g.rect(10, H - 2, 2, 2, 0x5a5a5a);
+    },
+    back: (g, W, H) => {
+      box(g, 1, 0, W - 2, H, 0xc4d8d0);
+      g.hline(1, W - 2, 0, 0xe0f0ea);
+      // 뒷면 방열판 격자
+      for (let y = 4; y < H - 4; y += 3) g.hline(4, W - 5, y, 0x6a7470);
+      for (const x of [4, W - 5]) g.vline(x, 4, H - 5, 0x6a7470);
+      g.rect(2, H - 2, 2, 2, 0x5a5a5a);
+      g.rect(W - 4, H - 2, 2, 2, 0x5a5a5a);
+    },
+  },
+  server_rack: {
+    side: (g, _W, H) => {
+      box(g, 4, 0, 9, H, 0x2a2e36);
+      g.hline(4, 12, 0, 0x3c424c);
+      for (let y = 2; y < H - 3; y += 4) g.set(4, y + 1, (y / 4) % 2 ? 0x7fe0a0 : 0xe0c050);
+      g.rect(3, H - 10, 1, 5, 0x3c424c); // 꺼내는 칸
+    },
+    back: (g, W, H) => {
+      box(g, 2, 0, W - 4, H, 0x24282e);
+      g.hline(2, W - 3, 0, 0x343a42);
+      for (let y = 4; y < H - 4; y += 3) g.hline(4, W - 5, y, 0x1a1c20);
+    },
+  },
+  grand_clock: {
+    side: (g, _W, H) => {
+      box(g, 5, 2, 7, H - 3, WOOD_D);
+      g.rect(5, 0, 7, 3, WOOD);
+      g.set(8, 0, WOOD_L);
+      g.vline(4, 4, 12, 0xc8a050); // 시계판 테두리
+      g.vline(4, 15, H - 8, 0x3a281c);
+      g.rect(5, H - 3, 7, 2, WOOD);
+    },
+    back: (g, W, H) => {
+      box(g, 2, 2, W - 4, H - 3, WOOD_D);
+      g.rect(3, 0, W - 6, 3, WOOD);
+      g.set(8, 0, WOOD_L);
+      g.rect(4, 5, W - 8, H - 10, darken(WOOD_D, 0.15));
+      g.hline(4, W - 5, Math.floor(H / 2), WOOD);
+      g.rect(3, H - 3, W - 6, 2, WOOD);
+    },
+  },
+  cat_cushion: {
+    // 고양이가 위쪽(뒤)을 보고 몸을 만다 (등이 보인다)
+    side: (g, _W, H) => {
+      g.ellipse(8, H - 5, 7, 4.5, 0xc04a4a);
+      g.ellipse(8, H - 6, 6, 3, 0xd86060);
+      g.ellipse(8, H - 7, 4, 3.5, 0xe8a050);
+      g.ellipse(8, H - 11, 2.5, 2.2, 0xe8a050);
+      g.set(6, H - 13, 0xe8a050);
+      g.set(10, H - 13, 0xe8a050);
+      g.set(7, H - 7, 0xc8803a);
+      g.set(9, H - 8, 0xc8803a);
+      g.hline(3, 6, H - 4, 0xe8a050); // 꼬리
+    },
+    // 머리가 오른쪽 (앞모습의 거울) + 등 줄무늬
+    back: (g, _W, H) => {
+      g.ellipse(8, H - 5, 7, 4.5, 0xc04a4a);
+      g.ellipse(8, H - 6, 6, 3, 0xd86060);
+      g.ellipse(8, H - 8, 5, 3.5, 0xe8a050);
+      g.ellipse(11, H - 10, 2.5, 2.2, 0xe8a050);
+      g.set(13, H - 13, 0xe8a050);
+      g.set(10, H - 13, 0xe8a050);
+      g.hline(11, 12, H - 10, 0x5a3a20);
+      g.set(7, H - 9, 0xc8803a);
+      g.set(5, H - 8, 0xc8803a);
+      g.hline(3, 6, H - 6, 0xe8a050);
+    },
+  },
+};
+
+/** 4방향 가구 그림의 방향 (변형 이름의 d1~d3. 없으면 0 = 앞) */
+const dirOfVariant = (v: string): number => {
+  const t = v.split("-").find((x) => /^d[0-3]$/.test(x));
+  return t ? Number(t[1]) : 0;
+};
+
 /** 돌린 모습을 그림째 돌리지 않고 따로 그리는 물건 (연못: 빛 방향·물가 돌이 돌려도 자연스럽게). 나머지 turn 물건은 그림을 90°씩 돌린다 */
 export const drawsTurned = (id: string) => id === "pond";
 /** 은은하게 움직이는 물건의 장면 수 (연못 잔물결·반짝임). 1이면 멈춘 그림 */
@@ -772,6 +1014,9 @@ export const hasNightArt = (id: string) => id === "pond";
 export function itemVariant(id: string, base: string, opts: { r?: number; night?: boolean; frame?: number } = {}): string {
   const parts = [base];
   if (drawsTurned(id) && (opts.r ?? 0) % 2 === 1) parts.push("v");
+  // 4방향 가구: 앞(0)이 아니면 방향 d1~d3 (오른쪽을 보는 d3은 옆모습 d1을 뒤집어 쓴다)
+  const sd = furnitureById(id)?.spin ? spinDir(opts.r ?? 0) : 0;
+  if (sd) parts.push(`d${sd === 3 ? 1 : sd}`);
   if (hasNightArt(id) && opts.night) parts.push("n");
   const n = animFrames(id);
   if (n > 1 && opts.frame && opts.frame % n) parts.push(`f${opts.frame % n}`);
@@ -784,11 +1029,14 @@ export function furnitureGrid(id: string, variant = ""): Grid | null {
   const draw = DRAW[id];
   if (!def || !draw) return null;
   // 세로로 돌린 모습을 따로 그리는 물건 (drawsTurned)은 변형에 "v"가 붙으면 가로·세로를 바꿔 그린다
-  const vert = def.turn && drawsTurned(id) && variant.split("-").includes("v");
+  // 4방향 가구는 "d1"(옆)·"d2"(뒤)가 붙으면 그 모습을 그린다 (옆모습은 가로·세로 칸이 바뀐다)
+  const sd = def.spin ? dirOfVariant(variant) : 0;
+  const vert = (def.turn && drawsTurned(id) && variant.split("-").includes("v")) || sd % 2 === 1;
   const W = (vert ? def.h : def.w) * 16;
   const H = (vert ? def.w : def.h) * 16 + artUp(id);
   const g = new Grid(W, H);
-  draw(g, W, H, variant);
+  const spin = sd ? SPIN_ART[id] : undefined;
+  (spin ? (sd === 2 ? spin.back : spin.side) : draw)(g, W, H, variant);
   if (id !== "rug" && id !== "flowerbed" && id !== "stone_path") g.outline(OUT, false, 170);
   return g;
 }
@@ -1086,6 +1334,8 @@ export function shownItemGrid(id: string, r: number, variant = ""): Grid | null 
   const def = furnitureById(id);
   const g = furnitureGrid(id, variant);
   if (!def || !g) return g;
+  // 4방향 가구: 예전 값(0~3)은 앞모습(홀수면 뒤집기), 4~7은 방향 그림 (오른쪽을 보면 옆모습을 뒤집는다)
+  if (def.spin) return r >= SPIN_R0 ? (spinDir(r) === 3 ? g.mirrored() : g) : r % 2 ? g.mirrored() : g;
   const q = ((r % 4) + 4) % 4;
   if (def.turn && drawsTurned(id)) return q >= 2 ? g.mirrored() : g;
   if (def.turn) {
@@ -1143,9 +1393,11 @@ export function furniturePreview(id: string, scale: number, opts: PreviewOpts = 
   const hit = icons.get(key);
   if (hit) return hit;
   const flat = def && !def.skin;
-  const turned = !!(flat && def.turn && r % 2 === 1);
-  const fw = flat ? (turned ? def.h : def.w) : 2;
-  const fh = flat ? (turned ? def.w : def.h) : 1;
+  // 보기 방향 r(0~3) → 배치 r (4방향 가구는 방향 값 4~7)
+  const pr = def?.spin ? SPIN_R0 + r : r;
+  const fp = flat ? footprint(def, pr) : { w: 2, h: 1 };
+  const fw = fp.w;
+  const fh = fp.h;
   const floorId = def?.skin === "floor" ? id : DEFAULT_FLOOR;
   const wallId = def?.skin === "wall" ? id : DEFAULT_WALL;
   let W: number;
@@ -1154,7 +1406,7 @@ export function furniturePreview(id: string, scale: number, opts: PreviewOpts = 
   let left: number;
   if (stage) {
     // 큰 미리보기: 둘레를 반 칸씩만 두른 좁은 방 (물건이 크게 보이게). 돌리는 물건은 긴 쪽에 맞춰 돌려도 방 크기가 그대로
-    const span = flat && def.turn ? Math.max(def.w, def.h) : 0;
+    const span = flat && (def.turn || def.spin) ? Math.max(def.w, def.h) : 0;
     W = (span || fw) * 16 + 16;
     floorH = (span || fh) * 16 + 8;
     wallShow = def?.skin === "wall" ? WALL_H - 4 : Math.max(12, artUp(id) + 4);
@@ -1185,7 +1437,7 @@ export function furniturePreview(id: string, scale: number, opts: PreviewOpts = 
   if (def && !def.skin && !def.ext) {
     // 밤에는 켜고 끄는 빛(벽난로·스탠드)을 켠 모습으로 보여 준다
     const lit = night && (id === "fireplace" || id === "floor_lamp");
-    const art = shownItemGrid(id, r, itemVariant(id, lit ? "on" : "", { r, night, frame }));
+    const art = shownItemGrid(id, pr, itemVariant(id, lit ? "on" : "", { r: pr, night, frame }));
     if (art) {
       const bottom = wallShow + Math.round((floorH - fh * 16) / 2) + fh * 16;
       if (!def.floor && !noFootShadow(id)) {

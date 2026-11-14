@@ -60,6 +60,11 @@ export type FurnitureDef = {
   floor?: boolean;
   /** 돌리면 가로·세로가 바뀐다. 아니면 돌리기 = 좌우 뒤집기 (서 있는 물건이 눕지 않게) */
   turn?: boolean;
+  /**
+   * 4방향 가구: 앞·옆·뒤 모습을 따로 그려 네 방향으로 돌린다 (옆을 보면 가로·세로 칸 수가 바뀐다).
+   * 배치 r 4~7 = 방향(0 앞 · 1 왼쪽을 봄 · 2 뒤 · 3 오른쪽을 봄). 예전에 놓은 r 0~3은 그대로 앞모습(홀수 = 좌우 뒤집기)
+   */
+  spin?: boolean;
   /** 밤에 빛을 내는 물건 (색, 반지름 px) */
   light?: { color: number; r: number };
   /** 바닥·담장 스킨: 칸에 놓지 않고 집 전체에 입힌다 */
@@ -73,28 +78,28 @@ export type FurnitureDef = {
 export const FURNITURE: readonly FurnitureDef[] = [
   // ── 가구 ──
   { id: "desk", name: "책상", desc: "끝내지 못한 기획서가 올려져 있다. 앉으면 타닥타닥 자판 소리.", category: "furniture", price: 120, score: 6, w: 2, h: 1, turn: true, use: "앉아서 일하기" },
-  { id: "chair", name: "의자", desc: "삐걱거리지만 아직 앉을 만하다.", category: "furniture", price: 60, score: 3, w: 1, h: 1, use: "앉기" },
+  { id: "chair", name: "의자", desc: "삐걱거리지만 아직 앉을 만하다.", category: "furniture", price: 60, score: 3, w: 1, h: 1, use: "앉기", spin: true },
   { id: "sofa", name: "소파", desc: "누우면 일어나기 싫어지는 소파. 둘이 나란히 앉을 수 있다.", category: "furniture", price: 220, score: 12, w: 2, h: 1, turn: true, use: "앉기 (2자리)" },
-  { id: "bed", name: "침대", desc: "푹 자고 나면 다시 시작할 수 있을지도.", category: "furniture", price: 280, score: 15, w: 2, h: 2, use: "눕기" },
+  { id: "bed", name: "침대", desc: "푹 자고 나면 다시 시작할 수 있을지도.", category: "furniture", price: 280, score: 15, w: 2, h: 2, use: "눕기", spin: true },
   { id: "bookshelf", name: "책장", desc: "읽다 만 자기계발서가 빼곡하다.", category: "furniture", price: 200, score: 10, w: 2, h: 1, use: "책 읽기" },
   { id: "table", name: "둥근 탁자", desc: "찻잔 하나 놓기 좋은 크기.", category: "furniture", price: 80, score: 4, w: 1, h: 1 },
   { id: "rug", name: "러그", desc: "발이 따뜻해지는 낡은 러그. 위에 물건을 올릴 수 있다.", category: "furniture", price: 160, score: 8, w: 3, h: 2, floor: true, turn: true },
   // ── 생활 (3번 집 안 개편: 써 보는 가구) ──
-  { id: "piano", name: "피아노", desc: "건반을 누르면 방 안 모두에게 들린다. 숫자 1~8로 음을 고른다.", category: "living", price: 520, score: 26, w: 2, h: 1, use: "앉아서 연주" },
-  { id: "radio", name: "라디오", desc: "다이얼을 돌리면 지직, 노래가 바뀐다.", category: "living", price: 160, score: 8, w: 1, h: 1, use: "채널 돌리기" },
+  { id: "piano", name: "피아노", desc: "건반을 누르면 방 안 모두에게 들린다. 숫자 1~8로 음을 고른다.", category: "living", price: 520, score: 26, w: 2, h: 1, use: "앉아서 연주", spin: true },
+  { id: "radio", name: "라디오", desc: "다이얼을 돌리면 지직, 노래가 바뀐다.", category: "living", price: 160, score: 8, w: 1, h: 1, use: "채널 돌리기", spin: true },
   { id: "fireplace", name: "벽난로", desc: "불을 지피면 방이 주황빛으로 따뜻해진다. 타닥타닥.", category: "living", price: 480, score: 24, w: 2, h: 1, use: "불 켜기·끄기" },
   { id: "floor_lamp", name: "스탠드 조명", desc: "딸깍 켜면 노란 빛이 동그랗게 번진다.", category: "living", price: 140, score: 7, w: 1, h: 1, use: "켜기·끄기" },
-  { id: "fridge", name: "냉장고", desc: "열 때마다 뭔가 하나씩 나온다. 누가 채워 두는 걸까.", category: "living", price: 260, score: 12, w: 1, h: 1, use: "간식 꺼내기" },
+  { id: "fridge", name: "냉장고", desc: "열 때마다 뭔가 하나씩 나온다. 누가 채워 두는 걸까.", category: "living", price: 260, score: 12, w: 1, h: 1, use: "간식 꺼내기", spin: true },
   { id: "bathtub", name: "욕조", desc: "거품이 뽀글뽀글. 들어가면 나오기 싫다.", category: "living", price: 380, score: 18, w: 2, h: 1, use: "들어가기" },
-  { id: "cat_cushion", name: "고양이 쿠션", desc: "쿠션 위의 고양이. 쓰다듬으면 골골 소리를 낸다.", category: "living", price: 180, score: 10, w: 1, h: 1, use: "쓰다듬기" },
-  { id: "grand_clock", name: "괘종시계", desc: "지금 몇 시인지 댕— 하고 알려 준다.", category: "living", price: 240, score: 11, w: 1, h: 1, use: "시간 보기" },
+  { id: "cat_cushion", name: "고양이 쿠션", desc: "쿠션 위의 고양이. 쓰다듬으면 골골 소리를 낸다.", category: "living", price: 180, score: 10, w: 1, h: 1, use: "쓰다듬기", spin: true },
+  { id: "grand_clock", name: "괘종시계", desc: "지금 몇 시인지 댕— 하고 알려 준다.", category: "living", price: 240, score: 11, w: 1, h: 1, use: "시간 보기", spin: true },
   // ── 사무실 ──
-  { id: "monitor_desk", name: "모니터 책상", desc: "듀얼 모니터. 한쪽엔 아직 엑셀이 열려 있다.", category: "dev", price: 340, score: 18, w: 2, h: 1, light: { color: 0x8ac8ff, r: 26 }, use: "앉아서 일하기" },
-  { id: "server_rack", name: "사무실 자판기", desc: "초록 불이 깜빡인다. 동전을 넣으면 가끔 뭔가 나온다.", category: "dev", price: 420, score: 22, w: 1, h: 1, light: { color: 0x7fe0a0, r: 20 }, use: "음료 뽑기" },
+  { id: "monitor_desk", name: "모니터 책상", desc: "듀얼 모니터. 한쪽엔 아직 엑셀이 열려 있다.", category: "dev", price: 340, score: 18, w: 2, h: 1, light: { color: 0x8ac8ff, r: 26 }, spin: true, use: "앉아서 일하기" },
+  { id: "server_rack", name: "사무실 자판기", desc: "초록 불이 깜빡인다. 동전을 넣으면 가끔 뭔가 나온다.", category: "dev", price: 420, score: 22, w: 1, h: 1, light: { color: 0x7fe0a0, r: 20 }, spin: true, use: "음료 뽑기" },
   { id: "whiteboard", name: "화이트보드", desc: "지난 분기 회의 내용이 아직 안 지워졌다.", category: "dev", price: 260, score: 12, w: 2, h: 1 },
   { id: "postit_wall", name: "메모지 벽", desc: "할 일, 할 일, 진짜 할 일.", category: "dev", price: 140, score: 8, w: 2, h: 1 },
   { id: "duck_shelf", name: "오리 인형 선반", desc: "하소연을 들어 준 오리들이 줄지어 있다.", category: "dev", price: 160, score: 10, w: 1, h: 1 },
-  { id: "coffee_machine", name: "커피 머신", desc: "야근의 동반자. 아직 따뜻하다.", category: "dev", price: 200, score: 9, w: 1, h: 1, use: "커피 내리기" },
+  { id: "coffee_machine", name: "커피 머신", desc: "야근의 동반자. 아직 따뜻하다.", category: "dev", price: 200, score: 9, w: 1, h: 1, use: "커피 내리기", spin: true },
   { id: "frame_404", name: "사훈 액자", desc: "사훈은 \"404\". 무슨 뜻인지 아무도 모른다.", category: "dev", price: 120, score: 6, w: 1, h: 1 },
   // ── 자연 ──
   { id: "pot", name: "화분", desc: "물만 주면 잘 자란다. 내 다짐과 달리. 물을 주면 며칠에 걸쳐 꽃이 핀다.", category: "nature", price: 40, score: 2, w: 1, h: 1, use: "물 주기" },

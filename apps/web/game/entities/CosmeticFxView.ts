@@ -21,8 +21,11 @@ function ensureTex(scene: Phaser.Scene, art: FxArtId): string {
  * 장면별 층 바꾸기 (scene.data "cfxDepth"): 사냥터처럼 밤 어둠 층이 없고 전투 효과·피해 숫자가 위에 와야 하는 장면은
  * 바닥 층을 그 장면 바닥 효과 바로 아래로, 빛 층을 몸 바로 앞(y 정렬 — 몬스터와 앞뒤로 섞이고 전투 효과·숫자보다 아래)으로 내린다
  */
-/** ground = 바닥 층 depth (또는 "body" = 몸 depth 바로 아래 — 탑승 장면처럼 그림이 순서대로 쌓이는 곳) */
-export type CfxDepth = { ground: number | "body"; lightOnBody: boolean };
+/**
+ * ground = 바닥 층 depth (또는 "body" = 몸 depth 바로 아래 — 탑승 장면처럼 그림이 순서대로 쌓이는 곳).
+ * noCull = 화면 밖 생략을 하지 않는다 (탑승 장면은 카메라 worldView가 그림 좌표와 맞지 않는다)
+ */
+export type CfxDepth = { ground: number | "body"; lightOnBody: boolean; noCull?: true };
 
 export class CosmeticFxView {
   private readonly sim = new CosmeticFxSim();
@@ -51,7 +54,7 @@ export class CosmeticFxView {
     this.cmds.length = 0;
     // 화면 밖이면 무거운 연출(주간 1위 오라)은 그리지 않는다 (펫·발자국은 따라오던 자리를 이어 가야 해서 그대로 계산)
     const view = this.scene.cameras.main?.worldView;
-    if (view && view.width > 0) {
+    if (view && view.width > 0 && !this.depthCfg?.noCull) {
       const m = 48;
       // 보이는 몸 자리로 본다 (관람차·열기구처럼 앵커는 땅에 두고 그림만 띄우는 탑승 중에도)
       const by = input.aura?.base ?? input.headY;

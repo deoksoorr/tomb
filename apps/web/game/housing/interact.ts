@@ -1,6 +1,6 @@
 import { DIR, spotSeatId, type DirId, type SpotKind } from "@tomb/protocol";
 import { furnitureById, type FurnitureDef } from "@/lib/housing/catalog";
-import { buildOccupancy, footprint, type TierShape } from "@/lib/housing/layout";
+import { buildOccupancy, footprint, SPIN_R0, spinDir, type TierShape } from "@/lib/housing/layout";
 import type { RoomPlan } from "@/lib/housing/rooms";
 import type { Placed } from "@/lib/housing/types";
 
@@ -47,6 +47,10 @@ export type HouseSpot = {
   facing: DirId;
   /** 앵커가 가구 차지 칸 안이면 true (소파·침대·욕조). 밖이면 가구 앞 (책상·피아노·책장) */
   inside: boolean;
+  /** 누운 자세 그림을 이만큼(도) 기울인다: 돌린 침대에서 머리가 베개 쪽으로 (발 = 앵커 기준) */
+  tilt?: number;
+  /** 가구 그림이 사람 앞에 그려진다 (뒤돌아 앉은 의자: 등받이가 앞) */
+  behind?: boolean;
 };
 
 export type HouseTarget = {
@@ -106,11 +110,19 @@ export const NEAR = 14;
 /** turn 가구의 r → 앉은 사람이 보는 방향 (그림의 등받이가 위 → 오른쪽 → 아래 → 왼쪽으로 돈다) */
 const FACE_BY_R: readonly DirId[] = [DIR.down, DIR.left, DIR.up, DIR.right];
 
-const spot = (kind: SpotKind, use: UseKind, u: string, x: number, y: number, facing: DirId, inside: boolean): HouseSpot => {
+const spot = (kind: SpotKind, use: UseKind, u: string, x: number, y: number, facing: DirId, inside: boolean, extra: Pick<HouseSpot, "tilt" | "behind"> = {}): HouseSpot => {
   const ax = Math.round(x);
   const ay = Math.round(y);
-  return { id: spotSeatId(kind, ax, ay), kind, use, u, x: ax, y: ay, facing, inside };
+  return { id: spotSeatId(kind, ax, ay), kind, use, u, x: ax, y: ay, facing, inside, ...extra };
 };
+
+/** 방향 d로 한 칸 앞 (0 아래 · 1 왼쪽 · 2 위 · 3 오른쪽) */
+const AHEAD: readonly [number, number][] = [
+  [0, 1],
+  [-1, 0],
+  [0, -1],
+  [1, 0],
+];
 
 type Box = { L: number; Tp: number; R: number; B: number; cx: number; cy: number; fw: number; fh: number };
 
@@ -136,13 +148,23 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
     const def = furnitureById(p.i);
     if (!def || def.floor || def.skin || def.ext) continue;
     const b = boxOf(p, def, f);
-    const r = def.turn ? p.r % 4 : 0;
+    // 4방향 가구(spin)는 방향 값(4~7)이 있을 때만 돌린 자리. 예전 값(0~3)은 앞모습 그대로
+    const sd = def.spin && p.r >= SPIN_R0 ? spinDir(p.r) : -1;
+    const r = def.turn ? p.r % 4 : Math.max(0, sd);
     switch (p.i) {
       case "chair": {
-        // 바로 위 칸이 책상·피아노면 그쪽을 보고 앉아 그 일을 한다
-        const above = standAt(p.x, p.y - 1);
-        const at = above ? SIT_AT[above.i] : undefined;
-        out.push(spot("chair", at ?? "sit", p.u, b.cx, b.B - 5, at ? DIR.up : DIR.down, true));
+        if (sd <= 0) {
+          // 앞을 보는 의자: 바로 위 칸이 책상·피아노면 그쪽을 보고 앉아 그 일을 한다 (예전 규칙)
+          const above = standAt(p.x, p.y - 1);
+          const at = above ? SIT_AT[above.i] : undefined;
+          out.push(spot("chair", at ?? "sit", p.u, b.cx, b.B - 5, at ? DIR.up : DIR.down, true));
+        } else {
+          // 돌린 의자: 보는 쪽 바로 앞 칸이 책상·피아노면 그 일을 한다. 뒤돌아 앉으면 등받이가 사람 앞에 온다
+          const [dx, dy] = AHEAD[sd];
+          const front = standAt(p.x + dx, p.y + dy);
+          const at = front ? SIT_AT[front.i] : undefined;
+          out.push(spot("chair", at ?? "sit", p.u, b.cx, b.B - 5, FACE_BY_R[sd], true, { behind: sd === 2 }));
+        }
         break;
       }
       case "sofa": {
@@ -171,8 +193,11 @@ export function houseSpots(items: readonly Placed[], tier: TierShape, f: Frame):
         break;
       }
       case "bed":
-        // 머리가 베개 위에 오도록 (침대 그림의 베개 = 칸 위쪽 3~8px)
-        out.push(spot("bed", "lie", p.u, b.cx, b.Tp + 20, DIR.down, true));
+        // 머리가 베개 위에 오도록 (침대 그림의 베개 = 칸 위쪽 3~8px). 돌린 침대는 발을 발판 쪽에 두고 자세를 기울인다
+        if (sd === 1) out.push(spot("bed", "lie", p.u, b.L + 8, b.Tp + 17, DIR.down, true, { tilt: 90 }));
+        else if (sd === 2) out.push(spot("bed", "lie", p.u, b.cx, b.Tp + 2, DIR.down, true, { tilt: 180 }));
+        else if (sd === 3) out.push(spot("bed", "lie", p.u, b.R - 8, b.Tp + 17, DIR.down, true, { tilt: -90 }));
+        else out.push(spot("bed", "lie", p.u, b.cx, b.Tp + 20, DIR.down, true));
         break;
       case "bookshelf":
         if ([...Array(b.fw).keys()].every((i) => free(p.x + i, p.y + b.fh))) out.push(spot("book", "read", p.u, b.cx, b.B + 5, DIR.down, false));
@@ -246,7 +271,7 @@ export function itemDepthY(p: Placed, def: FurnitureDef, spots: readonly HouseSp
   const b = boxOf(p, def, f);
   let d = b.B - 1;
   // 위를 보고 앉는 소파 자리(돌린 소파)는 등받이가 앞에 와야 하므로 그대로 둔다. 의자는 위를 봐도(책상 앞) 사람이 앞에
-  for (const s of spots) if (s.u === p.u && s.inside && !(s.facing === DIR.up && p.i === "sofa")) d = Math.min(d, s.y - 1);
+  for (const s of spots) if (s.u === p.u && s.inside && !s.behind && !(s.facing === DIR.up && p.i === "sofa")) d = Math.min(d, s.y - 1);
   return d;
 }
 

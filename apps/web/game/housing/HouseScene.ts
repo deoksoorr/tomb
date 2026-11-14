@@ -1,9 +1,9 @@
 import * as Phaser from "phaser";
-import { DIR, type Sid } from "@tomb/protocol";
+import { DIR, STATE, type Sid } from "@tomb/protocol";
 import { bgm } from "@/components/bgm/engine";
 import { furnitureById, tierById, type PlotTier } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
-import { buildOccupancy, findFreeSpot, footprint, gateTiles, newUid } from "@/lib/housing/layout";
+import { buildOccupancy, findFreeSpot, footprint, gateTiles, newUid, nextRotation, SPIN_R0, spinDir } from "@/lib/housing/layout";
 import { GROW_MS, plantStage, type PlantState } from "@/lib/housing/plants";
 import { roomPlan, type RoomPlan } from "@/lib/housing/rooms";
 import { placedSig } from "@/lib/housing/states";
@@ -594,8 +594,13 @@ export class HouseScene extends Phaser.Scene {
     return key;
   }
 
-  /** 지금 상태에 맞는 그림 변형 (불 켜짐·문 열림·화분 단계) */
+  /** 지금 상태에 맞는 그림 변형 (불 켜짐·문 열림·화분 단계 + 4방향 가구의 방향) */
   private variantOf(p: Placed): string {
+    const base = this.baseVariantOf(p);
+    return furnitureById(p.i)?.spin ? itemVariant(p.i, base, { r: p.r }) : base;
+  }
+
+  private baseVariantOf(p: Placed): string {
     switch (p.i) {
       case "pot":
         return `s${plantStage(this.plants[p.u], Date.now())}`;
@@ -638,7 +643,9 @@ export class HouseScene extends Phaser.Scene {
     } else if (def.turn) {
       img.setOrigin(0.5, 0.5).setPosition(left + (fp.w * T) / 2, bottom - (fp.h * T) / 2).setAngle((p.r % 4) * 90).setFlipX(false);
     } else {
-      img.setOrigin(0, 1).setPosition(left, bottom).setAngle(0).setFlipX(p.r % 2 === 1);
+      // 4방향 가구는 오른쪽을 볼 때 옆모습을 뒤집고, 예전 값(0~3)·다른 물건은 홀수면 좌우 뒤집기
+      const flip = def.spin && p.r >= SPIN_R0 ? spinDir(p.r) === 3 : p.r % 2 === 1;
+      img.setOrigin(0, 1).setPosition(left, bottom).setAngle(0).setFlipX(flip);
     }
     img.setDepth(def.floor ? DEPTH.decal + bottom : itemDepthY(p, def, this.spots, this.frame));
     return { p, img, variant };
@@ -968,6 +975,20 @@ export class HouseScene extends Phaser.Scene {
     for (const p of this.work.items) if (p.i === "pot") this.refreshVariant(p.u);
   }
 
+  /**
+   * 돌린 침대에 누운 사람: 누운 자세 그림을 침대 방향대로 눕힌다 (머리가 베개 쪽). 아바타 그림은 매 프레임 각도를 0으로 되돌리므로
+   * 아바타 갱신 뒤 여기서 다시 기울인다 (나와 같은 방 사람 모두)
+   */
+  private tiltLying(): void {
+    const tiltOf = (id: string | null | undefined) => (id ? (this.spots.find((s) => s.id === id)?.tilt ?? 0) : 0);
+    const mine = this.using && this.player.anchored ? this.using.spot.tilt ?? 0 : 0;
+    if (mine) this.player.sprite.setAngle(mine);
+    if (this.presence) for (const r of this.presence.remotes.values()) {
+      const t = r.stateId === STATE.lie ? tiltOf(r.seatId) : 0;
+      if (t) r.view.sprite.setAngle(t);
+    }
+  }
+
   /** 1인 자리에 앉기·눕기·읽기·욕조 (서버 점유 요청과 동시에 자리로) */
   private enterSpot(s: HouseSpot): void {
     const now = this.time.now;
@@ -1278,6 +1299,7 @@ export class HouseScene extends Phaser.Scene {
         }
       }
     }
+    this.tiltLying();
     // 가구 안내 (가장 가까운 것 하나)
     this.target = this.editing || this.using ? null : pickTarget(this.targets, this.player.x, this.player.y, (id) => this.takenByOther(id));
     const nearSign = !this.editing && this.nearSign();
@@ -1572,7 +1594,7 @@ export class HouseScene extends Phaser.Scene {
       }
       case "rotate": {
         if (!p) return;
-        const r = (p.r + 1) % 4;
+        const r = nextRotation(furnitureById(p.i)!, p.r);
         if (!this.tryMove(p.u, p.x, p.y, r)) {
           const def = furnitureById(p.i)!;
           const spot = findFreeSpot(

@@ -31,10 +31,29 @@ export const emptyLayout = (): HouseLayout => ({ items: [], floor: DEFAULT_FLOOR
 
 const UID_RE = /^[a-z0-9]{1,8}$/;
 
-/** 돌린 상태의 차지 칸 */
-export function footprint(def: Pick<FurnitureDef, "w" | "h" | "turn">, r: number): { w: number; h: number } {
-  return def.turn && r % 2 === 1 ? { w: def.h, h: def.w } : { w: def.w, h: def.h };
+/** 4방향 가구(spin)의 방향 값 시작: 배치 r 4~7 = 방향 0~3. 그보다 작은 r은 예전 값(앞모습, 홀수면 좌우 뒤집기) */
+export const SPIN_R0 = 4;
+/** 배치 r의 가장 큰 값 */
+export const MAX_R = SPIN_R0 + 3;
+
+/** 4방향 가구의 방향: 0 앞(아래를 봄) · 1 왼쪽을 봄 · 2 뒤(위를 봄) · 3 오른쪽을 봄. 예전 값(r 0~3)은 0 */
+export const spinDir = (r: number): number => (r >= SPIN_R0 ? (r - SPIN_R0) % 4 : 0);
+
+/** 돌린 상태의 차지 칸 (turn은 r 홀수, spin은 옆을 볼 때 가로·세로가 바뀐다) */
+export function footprint(def: Pick<FurnitureDef, "w" | "h" | "turn" | "spin">, r: number): { w: number; h: number } {
+  const swap = def.turn ? r % 2 === 1 : def.spin ? spinDir(r) % 2 === 1 : false;
+  return swap ? { w: def.h, h: def.w } : { w: def.w, h: def.h };
 }
+
+/** 한 번 돌린 다음 r: turn은 90°씩, spin은 다음 방향(예전 값이면 앞에서 시작), 나머지는 좌우 뒤집기 */
+export function nextRotation(def: Pick<FurnitureDef, "turn" | "spin">, r: number): number {
+  if (def.spin) return SPIN_R0 + ((spinDir(r) + 1) % 4);
+  return (r + 1) % 4;
+}
+
+/** 이 물건에 쓸 수 있는 r인지 (4~7은 4방향 가구만) */
+export const validRotation = (def: Pick<FurnitureDef, "spin">, r: number): boolean =>
+  Number.isInteger(r) && r >= 0 && r <= (def.spin ? MAX_R : 3);
 
 /** 문 칸 (아래 줄 가운데 2칸) */
 export function gateTiles(tier: Pick<PlotTier, "w" | "h">): { x: number; y: number }[] {
@@ -138,7 +157,7 @@ export function validateLayout(layout: HouseLayout, tierId: PlotTierId, owned: R
     seen.add(p.u);
     const def = furnitureById(p.i);
     if (!def || def.skin || def.ext) return fail("BAD_ITEM", "알 수 없는 물건이 있어요.");
-    if (![p.x, p.y, p.r].every(Number.isInteger) || p.r < 0 || p.r > 3) return fail("BAD_LAYOUT", "배치 정보가 올바르지 않아요.");
+    if (![p.x, p.y].every(Number.isInteger) || !validRotation(def, p.r)) return fail("BAD_LAYOUT", "배치 정보가 올바르지 않아요.");
     const why = occ.check(def, p.x, p.y, p.r);
     if (why) return fail("BAD_PLACE", `${def.name}: ${why}`);
     occ.add(p, def);
