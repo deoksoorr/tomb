@@ -190,7 +190,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
           ) : (
           <>
           {shown && (
-            <section className={styles.detail} aria-label="자세히 보기" aria-live="polite">
+            <section className={cx(styles.detail, shown.kind === "cosmetic" && isNameSlot(shown.slot) && styles.detailName)} aria-label="자세히 보기" aria-live="polite">
               {shown.kind === "cosmetic" && isNameSlot(shown.slot) ? (
                 // 닉네임 꾸미기: 낮·밤 머리 위 이름표 미리보기 (지금 입은 이름 글자·이름표에 고른 것을 바꿔 끼운 모습)
                 <NameStylePreview

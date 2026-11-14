@@ -68,19 +68,29 @@
   filter: drop-shadow(0 1px 0 #0a0b10);
 }
 
-/* 무대(72×64)에서 아바타 둘레 32×36만 3배로 (게임에서 보는 크기와 비슷하게) */
+/* 무대(72×64)에서 아바타 둘레 32×36만 --s배로 (기본 3배 — 게임에서 보는 크기와 비슷하게).
+   칸이 좁으면(스크롤 막대가 생긴 자세히 보기 등) 칸 폭에 맞춰 양옆을 더 자른다 → 칸 밖으로 밀어내지 않는다 */
+.preview {
+  --s: 3;
+}
+
 .crop {
-  display: block;
-  width: 96px;
-  height: 108px;
+  display: grid;
+  justify-items: center;
+  width: calc(32px * var(--s));
+  max-width: 100%;
+  height: calc(36px * var(--s));
   overflow: hidden;
 }
 
 .crop canvas {
   display: block;
-  width: 216px;
-  height: 192px;
-  margin: -54px 0 0 -60px;
+  width: calc(72px * var(--s));
+  height: calc(64px * var(--s));
+  margin-top: calc(-18px * var(--s));
+  /* 가운데 맞춤: 무대 72 중 아바타 둘레 32 (왼쪽 20 + 32 + 오른쪽 20) */
+  margin-left: calc(-20px * var(--s));
+  margin-right: calc(-20px * var(--s));
   image-rendering: pixelated;
 }
 
@@ -95,18 +105,22 @@
 
 /* 상점 자세히 보기 칸이 낮으면(그 칸이 크기 기준 컨테이너) 아바타를 2배로 줄여 사기 버튼까지 들어가게 */
 @container (max-height: 460px) {
+  .preview {
+    --s: 2;
+  }
+
   .scene {
     padding-top: 16px;
   }
+}
 
-  .crop {
-    width: 64px;
-    height: 72px;
+/* 폰: 자세히 보기가 목록 위에 있어 낮게 (아바타 2배) — 아래 목록이 더 보이게 */
+@media (max-width: 560px) {
+  .preview {
+    --s: 2;
   }
 
-  .crop canvas {
-    width: 144px;
-    height: 128px;
-    margin: -36px 0 0 -40px;
+  .scene {
+    padding-top: 16px;
   }
 }

@@ -124,9 +124,10 @@
   max-width: 320px;
 }
 
-/* 폰: 이름표 미리보기는 낮·밤 두 칸이라 옆에 글을 두면 좁다 → 미리보기 위, 글·사기 버튼 아래로 */
+/* 폰: 이름표 미리보기는 낮·밤 두 칸이라 옆에 글을 두면 좁아 사기 버튼이 칸 밖으로 밀린다 → 미리보기 위, 글·사기 버튼 아래로
+   (닉네임 꾸미기를 고르면 ShopDialog가 detailName을 붙인다 — :has를 못 쓰는 브라우저도 같게) */
 @media (max-width: 560px) {
-  .detail:has(.namePreview) {
+  .detail.detailName {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -302,6 +303,16 @@
   color: var(--text);
   box-shadow: var(--px-border);
   touch-action: manipulation;
+}
+
+/* 좁은 폰(카드 80px 안팎)에서도 이름·점수 배지·값이 카드 밖으로 나가지 않게 */
+.tile {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tile > * {
+  max-width: 100%;
 }
 
 .tile:hover {

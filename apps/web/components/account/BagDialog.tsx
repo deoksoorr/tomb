@@ -18,7 +18,7 @@ import BagDyeSection, { dyeTicketCount } from "../dye/BagDyeSection";
 import ItemIcon from "../ui/ItemIcon";
 import LookScoreBadge from "../ui/LookScoreBadge";
 import StyledName from "../ui/StyledName";
-import { DollNote, DollSlot, PaperDoll } from "../ui/PaperDoll";
+import { DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
 import { openMegaphone } from "@/lib/hooks/useMegaphone";
 import { decorateGrave, fireFirework, takeOff, wearCosmetic, wearStashed } from "./actions";
@@ -46,9 +46,9 @@ import styles from "./BagDialog.module.css";
 const OTHER_KINDS: ItemKind[] = ["firework", "megaphone", "decor", "graveStyle"];
 type BagTab = "wear" | "other" | "dye" | "forage" | "race";
 
-/** 몸 위치에 맞춘 칸 배치: 등은 어깨 뒤, 목·손은 오른쪽, 오라는 몸 옆, 발은 아래, 펫은 발 옆.
- * 맨 아래 줄은 닉네임 꾸미기: 이름 글자 · (지금 이름표 미리보기) · 이름표 바탕판 */
-const DOLL_AREAS = `"back head neck" "aura fig hand" "pet feet info" "nameColor namePv namePlate"`;
+/** 몸 위치에 맞춘 칸 배치 (낮은 칸 compact): 아바타는 가운데 세 줄을 차지하고 왼쪽에 머리·등·오라, 오른쪽에 목·손·펫,
+ * 맨 아래 줄은 이름 글자 · 발(아바타 바로 아래) · 이름표 바탕판. 9칸이 네 줄에 들어가 1280×720에서도 장비창이 한눈에 보인다 */
+const DOLL_AREAS = `"head fig neck" "back fig hand" "aura fig pet" "nameColor feet namePlate"`;
 
 type Props = {
   cache: GraveCache;
@@ -323,6 +323,7 @@ function Wardrobe({
           className={styles.doll}
           areas={DOLL_AREAS}
           label="착용 부위"
+          compact
           figure={
             <OutfitCanvas
               color={avatar.color}
@@ -336,9 +337,15 @@ function Wardrobe({
             />
           }
           caption={
-            <p className={styles.figNote} aria-live="polite">
-              {peek && peek.state !== "worn" ? `미리 보기: ${peek.item.name}` : "\u00a0"}
-            </p>
+            <>
+              {/* 닉네임 꾸미기 미리보기: 지금(또는 목록에서 고른 것을 입어 본) 이름 글자·이름표 */}
+              <span className={styles.namePv}>
+                <StyledName name={name || "내 이름"} look={fit.look} />
+              </span>
+              <p className={styles.figNote} aria-live="polite">
+                {peek && peek.state !== "worn" ? `미리 보기: ${peek.item.name}` : "\u00a0"}
+              </p>
+            </>
           }
         >
           {SLOT_ORDER.map((slot) => {
@@ -369,19 +376,10 @@ function Wardrobe({
               />
             );
           })}
-          <DollNote area="info">
-            착용 {wornCount}/{SLOT_ORDER.length}
-          </DollNote>
-          {/* 닉네임 꾸미기 미리보기: 지금(또는 목록에서 고른 것을 입어 본) 이름 글자·이름표 */}
-          <DollNote area="namePv">
-            <span className={styles.namePv}>
-              <StyledName name={name || "내 이름"} look={fit.look} />
-            </span>
-          </DollNote>
         </PaperDoll>
         <ViewControls dir={view.dir} walking={view.walking} onDir={view.setDir} onWalking={view.setWalking} className={styles.viewControls} />
         <p className={styles.hint}>
-          내 꾸미기 점수 <b>{score}점</b> · 랭킹 [꾸미기]에 올라가요
+          착용 {wornCount}/{SLOT_ORDER.length} · 내 꾸미기 점수 <b>{score}점</b> · 랭킹 [꾸미기]에 올라가요
         </p>
         <p id={hintId} className={styles.hint}>
           칸을 누르면 그 부위 목록이 나와요{canDrag ? " · 목록에서 칸으로 끌어다 놓아도 입어요" : ""}. 벗어 둔 꾸미기도 남은 시간은 계속 흘러요.

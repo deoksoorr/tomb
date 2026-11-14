@@ -154,23 +154,31 @@
   gap: 6px;
 }
 
-/* 가방 장비창은 조금 작게 (아바타 ×3, 부위 칸 낮게) → 1280×720에서도 아래 방향·자세 버튼까지 스크롤 없이 보인다 */
+/* 가방 장비창은 작게 (아바타 ×3, 부위 칸은 낮은 칸 compact 약 44px — PaperDoll) → 9칸 네 줄이어도 1280×720에서
+   방향·자세 버튼·점수 줄까지 스크롤 없이 보인다 */
 .dollPane .doll {
   --scale: 3;
-  gap: 6px;
-  padding: 8px;
+  gap: 5px;
+  padding: 6px;
 }
 
-/* 부위 칸(PaperDoll .slot 버튼) 높이 96 → 64: 닉네임 꾸미기 두 칸이 늘어 네 줄이 되어도 아래 버튼까지 들어가게 */
-.dollPane .doll button {
-  min-height: 64px;
-  gap: 2px;
-  padding: 4px 3px 5px;
+/* 창이 아주 낮으면(브라우저 창을 줄였거나 노트북 + 큰 글꼴) 아바타 ×2.5, 그래도 넘치면 장비창도 목록과 같이 스크롤 */
+@media (max-height: 680px) {
+  .dollPane .doll {
+    --scale: 2.5;
+  }
 }
 
-/* 장비창 맨 아래 줄 가운데: 내 이름표 미리보기 (게임 이름표 글꼴·크기·외곽선) */
+@media (max-height: 600px) {
+  .dollPane {
+    position: static;
+  }
+}
+
+/* 아바타 아래: 내 이름표 미리보기 (게임 이름표 글꼴·크기·외곽선) */
 .namePv {
   display: block;
+  justify-self: center;
   max-width: 100%;
   overflow: hidden;
   color: var(--candle);
@@ -182,7 +190,7 @@
 }
 
 .figNote {
-  min-height: 1.4em;
+  min-height: 1.2em;
   color: var(--candle);
   font-family: var(--font-small);
   font-size: 10px;
