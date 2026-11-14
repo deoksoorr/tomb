@@ -18,6 +18,7 @@ import {
   type MeadowLayout,
 } from "./meadowLayout";
 import type { RpgSfx } from "./sfx";
+import { shakeEnabled } from "@/lib/shakePref";
 
 // 32번 곤충 채집 들판 (BugsScene meadow 테마의 그림·연출·소리). 규칙(출현·점수·콤보)은 BugsScene이 그대로 갖고,
 // 여기는 "보이는 것"만 맡는다: 들판 한 장 + 덤불 9개 + 키 팻말, 날아 들어와 앉는 곤충, 잠자리채 잡기·헛치기, 꽃잎·빛 가루, 콤보 외침.
@@ -307,7 +308,7 @@ export class MeadowStage {
     });
     if (bug) bug.state = "leave";
     this.hooks.float(p.x, p.y - 12, `${bee ? MEADOW_TEXT.feature : MEADOW_TEXT.decoy} ${penalty}`, "#ff8a7a", 13);
-    if (!this.reduced) this.scene.cameras.main.shake(110, 0.004);
+    if (!this.reduced && shakeEnabled()) this.scene.cameras.main.shake(110, 0.004);
     this.sound(bee ? "bee" : "leaf");
   }
 

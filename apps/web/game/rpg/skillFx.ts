@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { BRANCH_INFO, type BranchId } from "@/lib/rpg/skillTree";
 import { art } from "./skillArt";
+import { shakeEnabled } from "@/lib/shakePref";
 
 // 스킬 연출 엔진 (모닥불 · 서리 · 넋). 특정 게임 그림을 쓰지 않고 코드로 그린 빛·불꽃·얼음·넋 텍스처를 겹겹이 쌓는다.
 //  - 입자는 풀(재사용 이미지)에서 꺼내 한 번의 update 루프로 움직인다 (트윈을 입자마다 만들지 않는다 → 휴대폰도 60fps 목표)
@@ -1159,7 +1160,7 @@ export class SkillFx {
     const ph = v.h * 0.42;
     this.big({ tex: pyre, x: at.x, y: at.y + 4, oy: 1, depth: DEPTH_FX + 3, life: castMs - 250, delay: 250, s0: (ph * 0.3) / 200, s1: ph / 200, grow: "out", alpha: a, fadeIn: 0.1, fadeOut: 0.3, flick: 0.05, sway: 0.03, swayHz: 3 });
     this.later(260, () => {
-      if (!this.reduced) this.scene.cameras.main.shake(t0 - 260, 0.0016);
+      if (!this.reduced && shakeEnabled()) this.scene.cameras.main.shake(t0 - 260, 0.0016);
     });
     for (let k = 0; k < 4; k++) this.ring(at.x, at.y, Math.min(v.w, v.h) * (0.5 - k * 0.08), E.light, 260, 2, 250 + k * 130, DEPTH_GROUND + 6, 1.4);
     this.screenTint(0xff5a1a, 0.1, t0, tEnd - t0, castMs - tEnd, true);
