@@ -55,7 +55,7 @@ export type Species = {
 const W = { L: ["lake"], R: ["river"], LR: ["lake", "river"] } as const;
 const ALL_GROUND: readonly Where[] = ["forest", "meadow", "hill", "cave", "lakeside"];
 
-// ── 물고기 (24) ──
+// ── 물고기 (40) ── 앞의 24종은 그대로 두고 뒤에 이어 붙인다 (id·값을 바꾸면 이미 잡은 도감·가방·순위가 어긋난다)
 const FISH: Species[] = [
   { id: "f_crucian", cat: "fish", name: "월요병 붕어", rarity: 1, price: 3, where: W.LR, size: [10, 32], desc: "월요일 아침마다 유난히 잘 잡힌다. 표정이 어딘가 지쳐 있다." },
   { id: "f_bluegill", cat: "fish", name: "블루길", rarity: 1, price: 3, where: W.L, time: ["day", "dusk"], size: [8, 22], desc: "어디서 왔는지 모르지만 이미 이 호수의 터줏대감." },
@@ -81,9 +81,26 @@ const FISH: Species[] = [
   { id: "f_moon", cat: "fish", name: "새벽 달빛 송어", rarity: 5, price: 80, where: W.R, time: ["dawn"], weather: ["fog"], size: [40, 70], desc: "안개 낀 새벽에만 비치는 달빛 비늘. 본 사람이 거의 없다." },
   { id: "f_shoe", cat: "fish", name: "출근 구두 한 짝", rarity: 1, price: 1, where: W.LR, junk: true, weight: 12, desc: "누가 강으로 출근했나 보다." },
   { id: "f_badge", cat: "fish", name: "잃어버린 사원증", rarity: 2, price: 2, where: W.LR, weather: ["rain", "fog", "cloudy"], junk: true, weight: 5, desc: "사진 속 얼굴이 묘하게 낯익다." },
+  // 2차 (16) — 계절·날씨·새벽에 고루 흩어 둔다
+  { id: "f_bitterling", cat: "fish", name: "납자루", rarity: 1, price: 3, where: W.R, time: ["day"], season: ["spring", "summer"], size: [4, 9], desc: "조개 속에 알을 맡긴다. 전세 계약서도 없이." },
+  { id: "f_willow", cat: "fish", name: "버들치", rarity: 1, price: 3, where: W.R, time: ["dawn", "day"], size: [6, 13], desc: "계곡 찬물에서 누구보다 먼저 출근한다." },
+  { id: "f_goby", cat: "fish", name: "밀어", rarity: 1, price: 2, where: W.L, time: ["dusk", "night"], size: [3, 7], desc: "바닥에 붙어 소곤소곤. 이름처럼 비밀 이야기를 좋아한다." },
+  { id: "f_skygazer", cat: "fish", name: "강준치", rarity: 2, price: 6, where: W.L, time: ["dusk"], season: ["summer"], size: [30, 80], desc: "입이 하늘을 향해 있다. 늘 위만 본다." },
+  { id: "f_nuchi", cat: "fish", name: "누치", rarity: 2, price: 6, where: W.R, time: ["day"], season: ["spring", "summer"], size: [20, 50], desc: "큰 몸집에 순한 얼굴. 여울을 천천히 거슬러 오른다." },
+  { id: "f_lunchcarp", cat: "fish", name: "점심시간 떡붕어", rarity: 2, price: 7, where: W.L, time: ["day"], weather: ["clear", "cloudy"], size: [20, 45], desc: "열두 시 정각이면 물 위로 입을 뻐끔댄다." },
+  { id: "f_grasscarp", cat: "fish", name: "초어", rarity: 2, price: 6, where: W.L, time: ["day", "dusk"], season: ["spring", "summer"], size: [40, 100], desc: "풀만 먹고도 1미터. 꾸준함의 힘." },
+  { id: "f_report", cat: "fish", name: "물 먹은 보고서", rarity: 2, price: 2, where: W.R, weather: ["rain"], junk: true, weight: 4, desc: "결재란이 빗물에 번져 아무도 읽을 수 없다." },
+  { id: "f_lenok", cat: "fish", name: "열목어", rarity: 3, price: 15, where: W.R, time: ["dawn", "day"], season: ["summer"], size: [30, 70], desc: "눈이 빨갛다. 밤새 보고서를 쓴 사람처럼." },
+  { id: "f_miyugi", cat: "fish", name: "미유기", rarity: 3, price: 14, where: W.R, time: ["night"], season: ["autumn", "winter"], size: [15, 30], desc: "산골 계곡의 작은 메기. 찬 바람이 불면 수염을 세운다." },
+  { id: "f_ungeo", cat: "fish", name: "웅어", rarity: 3, price: 14, where: W.R, time: ["dawn"], season: ["spring"], size: [20, 30], desc: "봄 새벽, 은빛 칼처럼 번쩍이며 강을 거슬러 온다." },
+  { id: "f_whitefish", cat: "fish", name: "백조어", rarity: 3, price: 14, where: W.L, time: ["dawn", "dusk"], weather: ["fog", "cloudy"], size: [15, 35], desc: "백조처럼 흰 몸. 흐리거나 안개 낀 호수를 미끄러지듯 지난다." },
+  { id: "f_goldmandarin", cat: "fish", name: "황쏘가리", rarity: 4, price: 34, where: W.R, time: ["dusk"], weather: ["clear", "cloudy"], season: ["summer"], size: [25, 50], desc: "천연기념물. 여름 해질녘 금빛 줄무늬가 번뜩인다." },
+  { id: "f_huchen", cat: "fish", name: "자치", rarity: 4, price: 36, where: W.R, time: ["dawn", "day"], weather: ["snow"], season: ["winter"], size: [60, 120], desc: "눈 내리는 겨울 강의 은둔자. 사라졌다고들 했다." },
+  { id: "f_ghostcarp", cat: "fish", name: "묘역 유령 잉어", rarity: 4, price: 34, where: W.L, time: ["dusk", "night"], weather: ["cloudy", "rain"], season: ["autumn"], size: [40, 90], desc: "비늘 너머가 비쳐 보인다. 끝내지 못한 낚시가 있었나 보다." },
+  { id: "f_dragon", cat: "fish", name: "승진 용잉어", rarity: 5, price: 80, where: W.L, time: ["dawn"], weather: ["snow"], season: ["winter"], size: [80, 140], desc: "전설. 등용문을 넘은 잉어. 눈 오는 겨울 새벽에만 비늘을 보인다." },
 ];
 
-// ── 곤충 (16) ── 수풀에서 벌레 잡기 미니게임으로 (낮: 나비·잠자리 / 밤: 반딧불이)
+// ── 곤충 (30) ── 수풀에서 벌레 잡기 미니게임으로 (낮: 나비·잠자리 / 밤: 반딧불이)
 const BUGS: Species[] = [
   { id: "b_cabbage", cat: "bug", name: "배추흰나비", rarity: 1, price: 3, where: ALL_GROUND, time: ["dawn", "day"], season: ["spring", "summer", "autumn"], size: [4, 6], desc: "하얀 날개로 팔랑팔랑. 가장 먼저 만나는 나비." },
   { id: "b_redfly", cat: "bug", name: "고추잠자리", rarity: 1, price: 3, where: ALL_GROUND, time: ["day", "dusk"], season: ["autumn"], size: [4, 5], desc: "가을 하늘을 빨갛게 칠하고 다닌다." },
@@ -101,9 +118,24 @@ const BUGS: Species[] = [
   { id: "b_stag", cat: "bug", name: "사슴벌레", rarity: 3, price: 14, where: ALL_GROUND, time: ["night"], season: ["summer"], size: [3, 8], desc: "여름밤 참나무의 주인. 집게가 멋지다." },
   { id: "b_rhino", cat: "bug", name: "장수풍뎅이", rarity: 4, price: 32, where: ALL_GROUND, time: ["night"], season: ["summer"], size: [4, 8.5], desc: "힘이 세다. 여름밤의 챔피언." },
   { id: "b_wisp", cat: "bug", name: "도깨비불 반딧불이", rarity: 4, price: 34, where: ALL_GROUND, time: ["night"], weather: ["fog"], size: [1.5, 2.5], desc: "안개 낀 밤, 묘역 쪽에서 푸르게 날아온다." },
+  // 2차 (14) — 물가(호숫가)·숲에만 사는 것도 섞었다
+  { id: "b_cicada", cat: "bug", name: "매미", rarity: 1, price: 3, where: ALL_GROUND, time: ["day"], season: ["summer"], size: [3, 5], desc: "맴맴. 여름 내내 같은 말만 한다. 주간 회의처럼." },
+  { id: "b_bee", cat: "bug", name: "꿀벌", rarity: 1, price: 3, where: ["forest", "meadow"], time: ["dawn", "day"], weather: ["clear", "cloudy"], season: ["spring", "summer"], size: [1, 1.5], desc: "꽃에서 꽃으로, 하루 종일 외근 중." },
+  { id: "b_ant", cat: "bug", name: "일개미", rarity: 1, price: 2, where: ALL_GROUND, time: ["day"], season: ["spring", "summer", "autumn"], size: [0.4, 1.2], desc: "주말에도 줄 맞춰 출근한다." },
+  { id: "b_skimmer", cat: "bug", name: "밀잠자리", rarity: 2, price: 6, where: ["lakeside", "meadow"], time: ["day"], weather: ["clear"], season: ["summer"], size: [4, 5.5], desc: "파란 꼬리로 물가를 순찰한다." },
+  { id: "b_strider", cat: "bug", name: "소금쟁이", rarity: 2, price: 6, where: ["lakeside"], time: ["dawn", "day", "dusk"], season: ["spring", "summer"], size: [1, 2.5], desc: "물 위를 걷는다. 출근길이 막힐 일이 없다." },
+  { id: "b_katydid", cat: "bug", name: "여치", rarity: 2, price: 6, where: ["meadow", "forest"], time: ["dusk", "night"], season: ["summer", "autumn"], size: [3, 5], desc: "풀숲에서 찌르르. 베짱이와 헷갈리지만 더 부지런하다." },
+  { id: "b_stink", cat: "bug", name: "노린재", rarity: 2, price: 6, where: ALL_GROUND, time: ["day"], weather: ["cloudy", "fog"], season: ["autumn"], size: [1, 1.6], desc: "건드리면 고약한 냄새. 퇴근 직전에 떨어진 급한 일 같다." },
+  { id: "b_jewel", cat: "bug", name: "비단벌레", rarity: 3, price: 15, where: ["forest"], time: ["day"], weather: ["clear"], season: ["summer"], size: [2.5, 4], desc: "초록·보랏빛 비단 날개. 옛 왕관 장식에도 쓰였다." },
+  { id: "b_mayfly", cat: "bug", name: "하루살이", rarity: 3, price: 14, where: ["lakeside", "meadow"], time: ["dusk"], weather: ["cloudy", "fog"], season: ["spring"], size: [1, 2], desc: "딱 하루만 산다. 내일 출근 걱정이 없다." },
+  { id: "b_anglewing", cat: "bug", name: "네발나비", rarity: 3, price: 14, where: ALL_GROUND, time: ["day"], weather: ["clear"], season: ["winter", "spring"], size: [4, 6], desc: "볕 좋은 겨울 낮이면 깨어나 날개를 말린다." },
+  { id: "b_hawkmoth", cat: "bug", name: "박각시", rarity: 3, price: 15, where: ALL_GROUND, time: ["dusk"], weather: ["rain", "cloudy"], season: ["summer", "autumn"], size: [5, 9], desc: "벌새처럼 제자리에서 날며 꿀을 빤다. 궂은 날 해질녘에." },
+  { id: "b_emperor", cat: "bug", name: "왕오색나비", rarity: 4, price: 34, where: ["forest"], time: ["day"], season: ["summer"], size: [7, 10], desc: "보랏빛 날개를 펼치면 숲이 잠깐 조용해진다." },
+  { id: "b_wintermoth", cat: "bug", name: "겨울자나방", rarity: 4, price: 32, where: ALL_GROUND, time: ["night"], weather: ["snow", "fog"], season: ["winter"], size: [2, 4], desc: "모두 잠든 겨울밤에만 난다. 진정한 야근의 달인." },
+  { id: "b_longhorn", cat: "bug", name: "장수하늘소", rarity: 5, price: 80, where: ["forest"], time: ["dawn"], weather: ["fog", "rain"], season: ["summer"], size: [6, 11], desc: "전설. 천연기념물. 안개나 비 내린 여름 새벽 고목에서만 봤다는 이야기." },
 ];
 
-// ── 약초·버섯 (15) ──
+// ── 약초·버섯 (28) ──
 const HERBS: Species[] = [
   { id: "h_mugwort", cat: "herb", name: "쑥", rarity: 1, price: 2, where: ["forest", "meadow", "lakeside"], desc: "어디서나 쑥쑥. 떡을 하면 맛있다." },
   { id: "h_dandelion", cat: "herb", name: "민들레", rarity: 1, price: 2, where: ["meadow", "lakeside", "hill"], season: ["spring", "summer"], desc: "후 불면 홀씨가 출장을 떠난다." },
@@ -120,9 +152,23 @@ const HERBS: Species[] = [
   { id: "h_reishi", cat: "herb", name: "영지버섯", rarity: 3, price: 14, where: ["forest", "hill"], weather: ["rain", "fog"], desc: "비 오는 숲에서 윤기가 흐른다." },
   { id: "h_ginseng", cat: "herb", name: "야근 산삼", rarity: 4, price: 34, where: ["forest", "hill"], time: ["night"], desc: "밤샘의 기운이 깃든 뿌리. 한 뿌리면 내일도 버틴다." },
   { id: "h_cordyceps", cat: "herb", name: "동충하초", rarity: 4, price: 32, where: ["hill"], season: ["winter"], desc: "겨울엔 벌레, 여름엔 풀. 언덕 눈밭에서." },
+  // 2차 (13)
+  { id: "h_dropwort", cat: "herb", name: "미나리", rarity: 1, price: 2, where: ["lakeside", "meadow"], season: ["spring"], desc: "물가에서 쑥쑥 자란다. 봄의 아삭함." },
+  { id: "h_plantain", cat: "herb", name: "질경이", rarity: 1, price: 2, where: ["meadow", "hill", "lakeside"], desc: "밟혀도 다시 일어난다. 월요일 아침의 우리처럼." },
+  { id: "h_oyster", cat: "herb", name: "느타리버섯", rarity: 1, price: 3, where: ["forest"], weather: ["cloudy", "rain", "fog"], season: ["spring", "autumn"], desc: "비 온 뒤 쓰러진 나무에 층층이 돋는다." },
+  { id: "h_gomchwi", cat: "herb", name: "곰취", rarity: 2, price: 6, where: ["forest", "hill"], season: ["spring"], desc: "산그늘의 넓은 잎. 쌈 싸 먹으면 봄이 입에 들어온다." },
+  { id: "h_omija", cat: "herb", name: "오미자", rarity: 2, price: 6, where: ["forest", "hill"], season: ["autumn"], desc: "다섯 가지 맛. 월요일 맛부터 금요일 맛까지." },
+  { id: "h_lotus", cat: "herb", name: "연꽃", rarity: 2, price: 7, where: ["lakeside"], time: ["dawn", "day"], season: ["summer"], desc: "진흙 속에서도 깨끗하게 핀다." },
+  { id: "h_hovenia", cat: "herb", name: "회식 헛개 열매", rarity: 2, price: 6, where: ["forest", "hill"], time: ["dusk", "night"], season: ["autumn", "winter"], desc: "회식 다음 날 아침에 유난히 생각난다." },
+  { id: "h_adonis", cat: "herb", name: "복수초", rarity: 3, price: 14, where: ["hill", "forest"], time: ["day"], weather: ["snow", "clear"], season: ["winter", "spring"], desc: "눈을 뚫고 피는 노란 꽃. 새해 첫 출근의 각오." },
+  { id: "h_edelweiss", cat: "herb", name: "솜다리", rarity: 3, price: 15, where: ["hill"], weather: ["fog", "cloudy"], season: ["summer"], desc: "한국의 에델바이스. 언덕 바위틈에서만 핀다." },
+  { id: "h_morel", cat: "herb", name: "곰보버섯", rarity: 3, price: 14, where: ["forest"], weather: ["rain", "cloudy"], season: ["spring"], desc: "봄비 온 뒤 숲 바닥에 불쑥. 생김새와 달리 귀하다." },
+  { id: "h_chaga", cat: "herb", name: "차가버섯", rarity: 4, price: 32, where: ["forest", "hill"], time: ["dawn", "day"], season: ["winter"], desc: "자작나무에 붙은 검은 덩어리. 겨울에만 눈에 띈다." },
+  { id: "h_ghostpipe", cat: "herb", name: "나도수정초", rarity: 4, price: 34, where: ["forest"], weather: ["rain", "fog"], season: ["summer"], desc: "잎도 초록도 없는 하얀 풀. 비 오는 여름 숲 그늘에 유령처럼 선다." },
+  { id: "h_elixir", cat: "herb", name: "불로초", rarity: 5, price: 80, where: ["hill"], time: ["dawn"], weather: ["fog"], desc: "전설. 진시황도 못 찾은 풀. 안개 낀 새벽 언덕에 잠깐 보인다." },
 ];
 
-// ── 광석 (10) ──
+// ── 광석 (20) ──
 const ORES: Species[] = [
   { id: "o_pebble", cat: "ore", name: "매끈한 조약돌", rarity: 1, price: 1, where: ["hill", "cave", "lakeside"], desc: "책상 위 문진으로 딱 좋다." },
   { id: "o_coal", cat: "ore", name: "석탄", rarity: 1, price: 3, where: ["hill", "cave"], desc: "모닥불에 넣으면 오래 탄다." },
@@ -134,9 +180,20 @@ const ORES: Species[] = [
   { id: "o_gold", cat: "ore", name: "금광석", rarity: 4, price: 32, where: ["cave"], desc: "번쩍. 동굴 깊은 곳의 반짝임." },
   { id: "o_meteor", cat: "ore", name: "별똥별 조각", rarity: 4, price: 36, where: ["hill"], time: ["night"], weather: ["clear"], desc: "맑은 밤, 별 보기 언덕에 떨어진다." },
   { id: "o_diamond", cat: "ore", name: "사직서 다이아몬드", rarity: 5, price: 80, where: ["cave", "hill"], weather: ["fog", "snow"], desc: "무엇보다 단단하다. 내밀 용기만큼." },
+  // 2차 (10)
+  { id: "o_flint", cat: "ore", name: "부싯돌", rarity: 1, price: 2, where: ["hill", "cave"], desc: "탁 치면 불꽃이 튄다. 모닥불 피울 때 요긴하다." },
+  { id: "o_lead", cat: "ore", name: "월요일 납 광석", rarity: 1, price: 3, where: ["cave"], desc: "들어 보면 묵직하다. 월요일 아침 발걸음처럼." },
+  { id: "o_mica", cat: "ore", name: "운모", rarity: 2, price: 6, where: ["hill", "cave"], time: ["day"], desc: "얇게 벗겨지는 반짝이 판. 햇빛에 은빛으로 빛난다." },
+  { id: "o_jade", cat: "ore", name: "옥", rarity: 2, price: 7, where: ["cave", "hill"], season: ["spring", "summer"], desc: "은은한 초록. 할머니 반지 속 그 돌." },
+  { id: "o_garnet", cat: "ore", name: "석류석", rarity: 2, price: 6, where: ["cave"], season: ["autumn", "winter"], desc: "석류알처럼 붉게 박혀 있다." },
+  { id: "o_obsidian", cat: "ore", name: "흑요석", rarity: 3, price: 14, where: ["cave", "hill"], time: ["dusk", "night"], weather: ["rain", "cloudy"], desc: "검은 유리 같은 돌. 궂은 밤엔 더 까맣다." },
+  { id: "o_aquamarine", cat: "ore", name: "남옥", rarity: 3, price: 15, where: ["hill"], time: ["dawn", "day"], weather: ["clear"], season: ["summer"], desc: "바다를 닮은 푸른 결정. 여름 아침 햇살에 빛난다." },
+  { id: "o_ruby", cat: "ore", name: "루비", rarity: 4, price: 34, where: ["cave"], time: ["night"], season: ["winter"], desc: "깜깜한 겨울밤에도 불씨처럼 붉다." },
+  { id: "o_sapphire", cat: "ore", name: "사파이어", rarity: 4, price: 34, where: ["hill", "cave"], weather: ["rain"], season: ["spring"], desc: "봄비가 씻어 낸 언덕에서 파랗게 드러났다." },
+  { id: "o_opal", cat: "ore", name: "성과급 오팔", rarity: 5, price: 80, where: ["cave"], time: ["dawn"], weather: ["rain"], desc: "전설. 보는 각도마다 색이 바뀐다. 성과급 기준처럼." },
 ];
 
-// ── 발굴품 (13) ── 끝내지 못한 것들이 잠든 마을답게, 땅을 파면 누군가 묻어 둔 것들이 나온다
+// ── 발굴품 (24) ── 끝내지 못한 것들이 잠든 마을답게, 땅을 파면 누군가 묻어 둔 것들이 나온다
 const DIGS: Species[] = [
   { id: "d_coin", cat: "dig", name: "옛날 동전", rarity: 1, price: 3, where: ["meadow", "forest", "hill", "lakeside"], desc: "십 원짜리. 요즘은 잘 안 보인다." },
   { id: "d_mug", cat: "dig", name: "이 빠진 회사 머그컵", rarity: 1, price: 2, where: ["meadow", "forest", "lakeside"], desc: "'창립 10주년 기념'이라고 적혀 있다." },
@@ -151,6 +208,18 @@ const DIGS: Species[] = [
   { id: "d_capsule", cat: "dig", name: "타임캡슐", rarity: 4, price: 32, where: ["meadow", "forest"], season: ["winter", "spring"], desc: "'10년 뒤의 나에게 — 열어 보지 말 것.'" },
   { id: "d_ring", cat: "dig", name: "금반지", rarity: 4, price: 34, where: ["lakeside", "meadow"], time: ["day"], weather: ["clear"], desc: "햇빛에 반짝여서 찾았다." },
   { id: "d_crown", cat: "dig", name: "황금 왕관", rarity: 5, price: 80, where: ["hill", "forest"], time: ["dusk", "night"], desc: "이 마을이 생기기 전, 누군가의 꿈." },
+  // 2차 (11)
+  { id: "d_clip", cat: "dig", name: "녹슨 클립", rarity: 1, price: 1, where: ["meadow", "forest", "hill", "lakeside"], desc: "서류를 묶던 시절이 있었다." },
+  { id: "d_marble", cat: "dig", name: "유리구슬", rarity: 1, price: 2, where: ["meadow", "lakeside"], desc: "구슬치기 왕이 묻어 둔 보물." },
+  { id: "d_pager", cat: "dig", name: "삐삐", rarity: 2, price: 6, where: ["meadow", "forest"], desc: "'8282'가 찍혀 있다. 지금이라도 가 봐야 하나." },
+  { id: "d_cards", cat: "dig", name: "명함 한 묶음", rarity: 2, price: 6, where: ["forest", "hill", "meadow"], time: ["dusk", "night"], desc: "같은 이름에 직함만 세 번 바뀌었다." },
+  { id: "d_cassette", cat: "dig", name: "카세트테이프", rarity: 2, price: 6, where: ["meadow", "lakeside", "forest"], season: ["summer"], desc: "'여름휴가 노래 모음' — A면만 늘어났다." },
+  { id: "d_arrowhead", cat: "dig", name: "돌화살촉", rarity: 3, price: 14, where: ["hill", "meadow"], weather: ["rain", "cloudy"], desc: "비에 씻겨 드러난 뾰족한 돌." },
+  { id: "d_celadon", cat: "dig", name: "청자 조각", rarity: 3, price: 15, where: ["forest", "hill"], season: ["spring"], desc: "비췻빛이 아직 살아 있다." },
+  { id: "d_letter", cat: "dig", name: "부치지 못한 편지", rarity: 3, price: 14, where: ["lakeside", "meadow"], time: ["dusk"], season: ["autumn"], desc: "'잘 지내?' 한 줄에서 멈췄다." },
+  { id: "d_mirror", cat: "dig", name: "청동 거울", rarity: 4, price: 34, where: ["hill", "forest"], time: ["night"], weather: ["clear"], desc: "달빛을 비추면 뒷면 무늬가 떠오른다." },
+  { id: "d_shoes", cat: "dig", name: "금동 신발", rarity: 4, price: 32, where: ["hill", "forest"], weather: ["fog"], season: ["summer"], desc: "누군가 먼 길 떠날 때 신겨 준 신발." },
+  { id: "d_goldkey", cat: "dig", name: "정년퇴임 황금 열쇠", rarity: 5, price: 80, where: ["meadow", "lakeside"], time: ["dawn"], weather: ["snow"], desc: "전설. 30년 근속의 증표. 눈 오는 새벽에만 반짝 보인다." },
 ];
 
 export const SPECIES: readonly Species[] = [...FISH, ...BUGS, ...HERBS, ...ORES, ...DIGS];

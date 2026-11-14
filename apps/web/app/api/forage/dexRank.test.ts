@@ -151,6 +151,15 @@ describe("최대어 랭킹", () => {
     expect((await rank.GET(call(`/api/rank?board=fish&fish=b_nope`))).status).toBe(400);
   });
 
+  it("모든 물고기(2차로 늘린 것 포함)에 물고기별 판이 있다", async () => {
+    const r = new MemoryFishRank();
+    for (const sp of speciesOf("fish").filter((x) => x.size)) {
+      await r.record("a", sp.id, sp.size![0] * 10, "w1");
+      expect((await r.board(sp.id, "w1", 10, "a")).mine, sp.id).toMatchObject({ rank: 1, size: sp.size![0] * 10 });
+      expect((await rank.GET(call(`/api/rank?board=fish&period=week&fish=${sp.id}`))).status, sp.id).toBe(200);
+    }
+  });
+
   it("운영자 계정은 최대어를 잡아도 기록되지 않고, 내 순위 대신 staff 표시", async () => {
     const v = await newVisitor();
     await setStaff(v.id);

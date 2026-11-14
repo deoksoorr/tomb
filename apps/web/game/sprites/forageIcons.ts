@@ -7,15 +7,21 @@ const OUT = 0x1e1c1a;
 const g16 = () => new Grid(16, 16);
 
 // ── 물고기 ──
-type FishShape = "round" | "slim" | "long" | "big" | "sturgeon";
+type FishShape = "round" | "slim" | "long" | "big" | "sturgeon" | "deep" | "torpedo";
 type FishSpec = {
   shape: FishShape;
   body: Color;
   belly?: Color;
   fin?: Color;
-  pattern?: "stripes" | "spots" | "band" | "shine" | "plates";
+  pattern?: "stripes" | "spots" | "band" | "shine" | "plates" | "scales";
   mark?: Color;
   whiskers?: boolean;
+  /** 위로 들린 입 (강준치) */
+  jaw?: boolean;
+  /** 눈동자 색 (열목어는 빨갛다) */
+  eye?: Color;
+  /** 비쳐 보이는 몸 (유령 잉어) */
+  ghost?: boolean;
 };
 
 function fish(f: FishSpec): Grid {
@@ -28,6 +34,8 @@ function fish(f: FishSpec): Grid {
     long: { cx: 8, cy: 8.5, rx: 6.6, ry: 1.7, tail: 2 },
     big: { cx: 8.5, cy: 8, rx: 6, ry: 3.4, tail: 3 },
     sturgeon: { cx: 8.5, cy: 8.5, rx: 6.4, ry: 2.4, tail: 3 },
+    deep: { cx: 8.5, cy: 8, rx: 4.8, ry: 4.4, tail: 3 },
+    torpedo: { cx: 8.5, cy: 8, rx: 6.4, ry: 2.9, tail: 3 },
   };
   const d = dims[f.shape];
   const left = Math.round(d.cx - d.rx);
@@ -66,12 +74,22 @@ function fish(f: FishSpec): Grid {
       g.set(Math.round(d.cx), Math.round(d.cy - 2), 0xffffff);
       g.set(Math.round(d.cx + 2), Math.round(d.cy - 1), 0xfff6c0);
       break;
+    case "scales":
+      // 비늘: 몸통에 어긋난 점
+      for (let y = Math.round(d.cy - d.ry) + 1; y < d.cy + d.ry - 0.5; y += 2)
+        for (let x = left + 2 + (y % 2); x < d.cx + d.rx - 2; x += 2) if (g.filled(x, y)) g.set(x, y, m);
+      break;
   }
   // 눈
   const ex = Math.round(d.cx + d.rx - 2);
   const ey = Math.round(d.cy - 1);
   g.set(ex, ey, 0xffffff);
-  g.set(ex + 1, ey, 0x101014);
+  g.set(ex + 1, ey, f.eye ?? 0x101014);
+  if (f.jaw) {
+    // 위로 들린 아래턱
+    g.set(Math.round(d.cx + d.rx), ey - 1, f.body);
+    g.set(Math.round(d.cx + d.rx) + 1, ey - 2, f.body);
+  }
   if (f.whiskers) {
     const mx = Math.round(d.cx + d.rx);
     g.set(mx + 1, ey + 2, 0x3a3028);
@@ -79,6 +97,14 @@ function fish(f: FishSpec): Grid {
     g.set(mx + 1, ey + 3, 0x3a3028);
   }
   g.outline(OUT);
+  if (f.ghost) {
+    // 테두리와 눈동자만 진하게, 나머지는 반쯤 비친다
+    for (let i = 0; i < g.px.length; i++) {
+      const v = g.px[i];
+      const rgb = v >>> 8;
+      if ((v & 255) && rgb !== OUT && rgb !== 0x101014) g.px[i] = Grid.rgba(rgb, 150);
+    }
+  }
   return g;
 }
 
@@ -119,7 +145,10 @@ function dragonfly(body: Color): Grid {
   return g;
 }
 
-function beetle(shell: Color, opts: { dots?: Color; horn?: boolean; jaws?: boolean; ball?: boolean; shine?: boolean } = {}): Grid {
+function beetle(
+  shell: Color,
+  opts: { dots?: Color; horn?: boolean; jaws?: boolean; ball?: boolean; shine?: boolean; tri?: Color; stripe?: Color; antennae?: Color } = {},
+): Grid {
   const g = g16();
   const leg = 0x2a2420;
   for (const y of [7, 9, 11]) {
@@ -147,12 +176,26 @@ function beetle(shell: Color, opts: { dots?: Color; horn?: boolean; jaws?: boole
     g.set(7, 6, 0xfff2b0);
   }
   if (opts.ball) g.ellipse(13, 13.5, 2.4, 2.2, 0x7a5a3a);
+  if (opts.tri) {
+    // 노린재 등의 방패 무늬
+    g.hline(6, 10, 7, opts.tri);
+    g.hline(7, 9, 8, opts.tri);
+    g.set(8, 9, opts.tri);
+  }
+  if (opts.stripe) {
+    g.vline(6, 8, 12, opts.stripe);
+    g.vline(10, 8, 12, opts.stripe);
+  }
+  if (opts.antennae) {
+    // 하늘소: 몸보다 긴 더듬이
+    for (const [x, y] of [[5, 2], [4, 1], [3, 1], [2, 2], [1, 3], [10, 2], [11, 1], [12, 1], [13, 2], [14, 3]]) g.set(x, y, opts.antennae);
+  }
   g.set(6, 7, lighten(shell, 0.5));
   g.outline(OUT, false, 200);
   return g;
 }
 
-function hopper(body: Color, mantis = false): Grid {
+function hopper(body: Color, mantis = false, antennae = false): Grid {
   const g = g16();
   const dark = darken(body, 0.3);
   g.ellipse(7.5, 9, 5.5, 2, body);
@@ -171,11 +214,83 @@ function hopper(body: Color, mantis = false): Grid {
     g.set(13, 12, dark);
     g.set(11, 4, dark);
     g.set(12, 5, dark);
+  } else if (antennae) {
+    // 여치: 등 뒤로 넘어가는 긴 더듬이
+    for (const [x, y] of [[13, 5], [12, 4], [11, 3], [10, 2], [9, 2], [8, 1], [14, 5], [15, 4]]) g.set(x, y, dark);
   } else {
     g.set(14, 5, dark);
     g.set(15, 4, dark);
   }
   g.outline(OUT, false, 200);
+  return g;
+}
+
+function cicada(body: Color): Grid {
+  const g = g16();
+  const wing = 0xd8eef0;
+  g.ellipse(4.8, 9.5, 2.6, 5.4, wing, 190);
+  g.ellipse(11.2, 9.5, 2.6, 5.4, wing, 190);
+  g.vline(4, 6, 13, darken(wing, 0.35));
+  g.vline(11, 6, 13, darken(wing, 0.35));
+  g.ellipse(8, 9, 2.4, 4.6, body);
+  g.rect(5, 3, 6, 2, darken(body, 0.2));
+  g.set(5, 3, 0xd84a3a);
+  g.set(10, 3, 0xd84a3a);
+  g.hline(7, 9, 9, lighten(body, 0.3));
+  g.outline(OUT, false, 180);
+  return g;
+}
+
+function bee(): Grid {
+  const g = g16();
+  g.ellipse(4.5, 5.5, 2.8, 2.2, 0xf4f8ff, 200);
+  g.ellipse(11.5, 5.5, 2.8, 2.2, 0xf4f8ff, 200);
+  g.ellipse(8, 9.5, 3.4, 4.4, 0xf0c030);
+  for (const y of [8, 11]) g.hline(5, 11, y, 0x2a2420);
+  g.ellipse(8, 4, 2, 1.6, 0x3a3028);
+  g.set(6, 1, 0x3a3028);
+  g.set(10, 1, 0x3a3028);
+  g.set(8, 14, 0x2a2420);
+  g.outline(OUT, false, 200);
+  return g;
+}
+
+function ant(c: Color): Grid {
+  const g = g16();
+  const leg = darken(c, 0.2);
+  for (const [x, y] of [[5, 6], [4, 5], [11, 6], [12, 5], [5, 8], [4, 9], [11, 8], [12, 9], [6, 10], [10, 10]]) g.set(x, y, leg);
+  g.ellipse(8, 3.5, 1.8, 1.6, c);
+  g.ellipse(8, 7.5, 1.4, 1.8, c);
+  g.ellipse(8, 12, 2.6, 3, c);
+  g.set(6, 1, leg);
+  g.set(10, 1, leg);
+  g.set(7, 11, lighten(c, 0.35));
+  g.outline(OUT, false, 200);
+  return g;
+}
+
+function strider(c: Color): Grid {
+  const g = g16();
+  // 물결 위에 선 긴 다리
+  g.ellipse(8, 13.5, 6.5, 1.3, 0x8ac8e8, 140);
+  for (const [x, y] of [[6, 6], [5, 5], [4, 4], [3, 3], [10, 6], [11, 5], [12, 4], [13, 3], [6, 9], [5, 10], [4, 11], [3, 12], [10, 9], [11, 10], [12, 11], [13, 12]]) g.set(x, y, c);
+  g.vline(7, 3, 11, c);
+  g.vline(8, 3, 11, darken(c, 0.25));
+  g.set(7, 2, darken(c, 0.4));
+  g.outline(OUT, false, 160);
+  return g;
+}
+
+function mayfly(c: Color): Grid {
+  const g = g16();
+  const wing = 0xf0f4f8;
+  g.ellipse(5, 5.5, 3, 3.6, wing, 200);
+  g.ellipse(11, 5.5, 3, 3.6, wing, 200);
+  g.vline(8, 3, 11, c);
+  g.vline(7, 4, 10, darken(c, 0.2));
+  // 꼬리 실 세 가닥
+  for (const [x, y] of [[6, 12], [5, 13], [4, 14], [8, 12], [8, 13], [8, 14], [9, 12], [10, 13], [11, 14]]) g.set(x, y, darken(c, 0.15));
+  g.outline(OUT, false, 170);
   return g;
 }
 
@@ -262,8 +377,81 @@ function root(c: Color, berry?: Color): Grid {
   return g;
 }
 
+/** 열매 송이 (오미자·헛개) */
+function berries(c: Color, leaf = 0x4a9a3a): Grid {
+  const g = g16();
+  g.ellipse(11, 3.5, 3, 1.6, leaf);
+  g.vline(8, 2, 6, 0x6a4a30);
+  for (const [x, y] of [[8, 7], [6, 8], [10, 8], [7, 10], [9, 10], [5, 11], [11, 11], [8, 12], [6, 13], [10, 13], [8, 14]]) g.ellipse(x + 0.5, y + 0.5, 1.3, 1.3, c);
+  for (const [x, y] of [[8, 7], [6, 10], [10, 11], [8, 13]]) g.set(x, y, lighten(c, 0.45));
+  g.outline(OUT, false, 200);
+  return g;
+}
+
+/** 넓은 꽃잎 한 송이 (연꽃·복수초). base = 아래 받침(잎·눈밭) */
+function cupFlower(petal: Color, base: Color, heart: Color): Grid {
+  const g = g16();
+  g.ellipse(8, 12.5, 7, 2.6, base);
+  g.ellipse(4.5, 7.5, 2, 3.4, petal);
+  g.ellipse(11.5, 7.5, 2, 3.4, petal);
+  g.ellipse(8, 6, 2.4, 4.2, lighten(petal, 0.15));
+  g.ellipse(6, 9, 2.2, 2, darken(petal, 0.1));
+  g.ellipse(10, 9, 2.2, 2, darken(petal, 0.1));
+  g.rect(7, 8, 2, 2, heart);
+  g.outline(OUT, false, 200);
+  return g;
+}
+
+/** 바닥에 붙은 넓은 잎 (질경이·곰취). spike = 가운데 꽃대 */
+function rosette(leaf: Color, opts: { spike?: Color; round?: boolean } = {}): Grid {
+  const g = g16();
+  const r = opts.round ? 3.2 : 2.6;
+  for (const [x, y] of [[4, 10], [12, 10], [5.5, 6.5], [10.5, 6.5]] as const) g.ellipse(x, y, r, r * 0.75, leaf);
+  g.ellipse(8, 11.5, 3, 2.4, lighten(leaf, 0.12));
+  for (const [x, y] of [[4, 10], [12, 10], [6, 7], [10, 7]]) g.set(x, y, darken(leaf, 0.3));
+  if (opts.spike) {
+    g.vline(8, 1, 9, darken(leaf, 0.3));
+    for (let y = 1; y <= 5; y++) g.set(y % 2 ? 7 : 9, y, opts.spike);
+  }
+  g.outline(OUT, false, 200);
+  return g;
+}
+
+/** 물가 풀 (미나리): 가는 줄기 끝에 잎 뭉치 */
+function stems(leaf: Color): Grid {
+  const g = g16();
+  g.ellipse(8, 14, 6, 1.4, 0x6aa8d0, 150);
+  for (const [x, top] of [[5, 6], [8, 3], [11, 5]] as const) {
+    g.vline(x, top + 2, 13, darken(leaf, 0.35));
+    g.ellipse(x, top, 1.8, 1.6, leaf);
+    g.ellipse(x - 1, top + 2, 1.2, 1, leaf);
+    g.ellipse(x + 1, top + 2, 1.2, 1, leaf);
+  }
+  g.outline(OUT, false, 200);
+  return g;
+}
+
+/** 둥글게 간 보석 (옥·오팔). spark = 속에서 반짝이는 색들 */
+function cabochon(c: Color, spark: readonly Color[] = []): Grid {
+  const g = g16();
+  g.ellipse(8, 9, 5.5, 4.6, c);
+  g.recolor((x, y) => y > 10, darken(c, 0.2));
+  g.ellipse(6.5, 7, 2, 1.4, lighten(c, 0.35));
+  g.set(6, 6, 0xffffff);
+  spark.forEach((s, i) => {
+    const [x, y] = [[9, 8], [10, 10], [7, 10], [11, 8], [8, 11], [5, 9]][i % 6];
+    g.set(x, y, s);
+  });
+  g.outline(OUT, false, 200);
+  return g;
+}
+
 // ── 광석 ──
-function rock(base: Color, vein?: Color, opts: { crystal?: Color; nugget?: Color; glow?: Color; smooth?: boolean } = {}): Grid {
+function rock(
+  base: Color,
+  vein?: Color,
+  opts: { crystal?: Color; nugget?: Color; glow?: Color; smooth?: boolean; spark?: Color; flakes?: Color; glass?: boolean } = {},
+): Grid {
   const g = g16();
   if (opts.glow) g.ellipse(8, 9, 7.5, 6.5, opts.glow, 70);
   if (opts.smooth) g.ellipse(8, 10, 5.5, 3.5, base);
@@ -286,6 +474,22 @@ function rock(base: Color, vein?: Color, opts: { crystal?: Color; nugget?: Color
     g.ellipse(7, 9, 1.6, 1.3, opts.nugget);
     g.ellipse(10.5, 11, 1.4, 1.1, opts.nugget);
     g.set(7, 8, 0xffffff);
+  }
+  if (opts.flakes) {
+    // 운모: 얇게 겹친 반짝이 판
+    for (const y of [7, 9, 11]) g.recolor((x, py) => py === y && x > 3 && x < 12, opts.flakes);
+  }
+  if (opts.glass) {
+    // 흑요석: 매끈한 유리 광택
+    g.set(5, 8, 0xffffff);
+    g.set(6, 7, 0xd8d8f0);
+    g.set(10, 10, 0x9a98c8);
+    g.set(11, 9, 0x9a98c8);
+  }
+  if (opts.spark) {
+    // 부싯돌 불꽃
+    for (const [x, y] of [[12, 3], [13, 2], [11, 2], [14, 4], [12, 5]]) g.set(x, y, opts.spark);
+    g.set(13, 4, 0xffffff);
   }
   g.outline(OUT, false, 200);
   return g;
@@ -331,11 +535,41 @@ const DIG_ART: Record<string, () => Grid> = {
   d_capsule: () => art(["..####..", ".#rrrr#.", "#rrrrrr#", "#yyyyyy#", "#ssssss#", "#ssssss#", ".#ssss#.", "..####.."], { "#": 0x5a5a64, r: 0xd84a3a, y: 0xe8c24a, s: 0xb8c0c8 }),
   d_ring: () => art(["...gg...", "..gwwg..", "...gg...", ".######.", "#y....y#", "#y....y#", ".######."], { "#": 0xc8902a, y: 0xffd060, g: 0x4ad0c0, w: 0xffffff }),
   d_crown: () => art(["y...y...y", "yy.yyy.yy", "yyyyyyyyy", "yrybyryby", "yyyyyyyyy", "#########"], { y: 0xffd060, r: 0xd84a3a, b: 0x4a8ad8, "#": 0xc8902a }),
+  // 2차
+  d_clip: () => art([".sssss.", "s.....s", "s.sss.s", "s.s.s.s", "s.s.r.s", "s.s.s.s", "s.s.s.s", "s.r...s", "s.sssss", "s......", ".sssss."], { s: 0xb8bec8, r: 0xb0703a }),
+  d_marble: () => art(["..####..", ".#bbww#.", "#bbbbwb#", "#byybbb#", "#bbyybb#", "#bbbyyb#", ".#bbbb#.", "..####.."], { "#": 0x3a8ac8, b: 0x8ad0f4, w: 0xffffff, y: 0xf0c040 }),
+  d_pager: () => art(["##########", "#gggggggg#", "#gdgdgdgg#", "#gggggggg#", "##########", "#kk#kk#kk#", "##########"], { "#": 0x2a2a30, g: 0x9ac87a, d: 0x2a4a2a, k: 0x6a6a74 }),
+  d_cards: () => art(["...#########", "...#ccccccc#", "#########cc#", "#wwwwwww#cc#", "#wnnnwww#cc#", "#wwwwwww#cc#", "#wllllww####", "#wwwwwww#...", "#########..."], { "#": 0x6a6a74, c: 0xe8e0c8, w: 0xffffff, n: 0x2a2a38, l: 0x8a9aaa }),
+  d_cassette: () => art(["############", "#llllllllll#", "#lwwwwwwwwl#", "#lw##ww##wl#", "#lw##ww##wl#", "#lwwwwwwwwl#", "#lll####lll#", "############"], { "#": 0x2a2a30, l: 0xe0783a, w: 0xf2f2ee }),
+  d_arrowhead: () => art(["...s...", "..sss..", "..sls..", ".sssss.", ".slsss.", "sssssls", "sslssss", "sssssss", ".s...s.", "ss...ss"], { s: 0x8a8478, l: 0xc0baae }),
+  d_celadon: () => art(["....###...", "..##ccc#..", ".#cccwcc#.", "#ccwwwccc#", "#cccwcccc#", ".#ccccc##.", "..#cc##...", "...##....."], { "#": 0x4a8070, c: 0x9ad0b8, w: 0xf2f2ee }),
+  d_letter: () => art(["############", "#w#wwwwww#w#", "#ww#wwww#ww#", "#www#ww#www#", "#wwww##wwww#", "#wwwwwwwwrr#", "#wwwwwwwwrr#", "############"], { "#": 0x9a8a70, w: 0xf6f0e0, r: 0xd84a3a }),
+  d_mirror: () => art(["...####...", ".##bbbb##.", ".#bggbbb#.", "#bbg##gbb#", "#bb#kk#bb#", "#bb#kk#bb#", "#bbg##gbb#", ".#bbbggb#.", ".##bbbb##.", "...####..."], { "#": 0x6a4a2a, b: 0xb8864a, g: 0x5aa08a, k: 0xf0c060 }),
+  d_shoes: () => art(["......####..", ".....#yyyy#.", "....#yydyy#.", "#####yyyyyy#", "#yydyyydyyy#", "#yyyyyyyyyy#", "############", ".#.#.#.#.#.."], { "#": 0x8a6020, y: 0xe8b040, d: 0xa87020 }),
+  d_goldkey: () => art([".yyyy........", "yhhhhy.......", "yh..hyyyyyyyy", "yh..hyhhhhhhy", "yhhhhy...y.y.", ".yyyy....y.y.", "rr.rr........", ".rrr........."], { y: 0xffd060, h: 0xc8902a, r: 0xd83a3a }),
 };
 
 const JUNK_ART: Record<string, () => Grid> = {
   f_shoe: () => art(["....####...", "....#bb#...", "....#bb#...", "#####bb####", "#bbbbbbbbb#", "###########"], { "#": 0x1a1a20, b: 0x4a4a56 }),
   f_badge: () => art(["...##...", "...##...", "########", "#wwwwww#", "#wffwww#", "#wffwll#", "#wwwwww#", "#bbbbbb#", "########"], { "#": 0x3a6ad0, w: 0xf2f2ee, f: 0xe0b896, l: 0x8a9aaa, b: 0x3a6ad0 }),
+  f_report: () => art(["#########", "#wwwwwww#", "#wllbbll#", "#wwbbbww#", "#wlbbllw#", "#wwwwwww#", "#wrrwrrw#", "#wrrwrrw#", "#########"], { "#": 0x8a8070, w: 0xe0dccc, l: 0x8a9aaa, b: 0x6a8ac8, r: 0xd88a8a }),
+};
+
+/** 그림으로 그리는 약초 (틀로 안 되는 모양) */
+const HERB_ART: Record<string, () => Grid> = {
+  h_edelweiss: () => art(["....w....", "..w.w.w..", "...wyw...", ".wwyyyww.", "...wyw...", "..w.w.w..", "....g....", "...ggg...", "..g.g.g..", "....g....", "..ggggg.."], { w: 0xf4f4ee, y: 0xd8c860, g: 0x8aa890 }),
+  h_morel: () => art(["...##...", "..#bd#..", ".#bdbd#.", ".#dbdb#.", ".#bdbd#.", ".#dbdb#.", "..#bd#..", "..#ss#..", "..#ss#..", ".#ssss#."], { "#": 0x5a3a20, b: 0xb08a5a, d: 0x6a4a2a, s: 0xf0e8d4 }),
+  h_chaga: () => art(["wwww.....", "wkww.....", "wwwwddd..", "wwwdkkkd.", "wkwdkbkkd", "wwwdkkkkd", "wwwwdkkd.", "wwkw.dd..", "wwww.....", "wkww....."], { w: 0xf0ece0, k: 0x2a2420, d: 0x4a3a2a, b: 0xb06a2a }),
+  h_elixir: () =>
+    art(["y.........y.", "...######...", "..#rrrrrr#..", ".#rrhhhhrr#.", "#rrrrrrrrrr#", "#gggggggggg#", ".####ss####.", ".....ss.....", ".....ss...y.", "....ssss.yyy"], {
+      "#": 0x6a2018,
+      r: 0xb03a2a,
+      h: 0xd86a4a,
+      g: 0xf0c040,
+      s: 0x8a5a2a,
+      y: 0xfff0a0,
+    }),
+  h_ghostpipe: () => art(["..ww......", ".wwww..ww.", ".w.ww.wwww", "...w..ww.w", "...w...w..", "...w...w..", "..w....w..", "..w...w...", ".gggggggg."], { w: 0xf4f6f8, g: 0x5a4a3a }),
 };
 
 const FISH_SPECS: Record<string, FishSpec> = {
@@ -361,12 +595,29 @@ const FISH_SPECS: Record<string, FishSpec> = {
   f_sturgeon: { shape: "sturgeon", body: 0x6a7480, pattern: "plates", mark: 0xc8d0d8 },
   f_king: { shape: "big", body: 0xffc830, belly: 0xfff0a0, fin: 0xd84a3a, pattern: "shine" },
   f_moon: { shape: "slim", body: 0xb8c8f0, belly: 0xf0f4ff, pattern: "shine", fin: 0x8aa0e0 },
+  // 2차
+  f_bitterling: { shape: "round", body: 0x9a9ab8, pattern: "band", mark: 0xe87aa0, fin: 0xd86a5a },
+  f_willow: { shape: "slim", body: 0x8a8a6a, pattern: "spots", mark: 0x4a4a32, fin: 0x6a6a4a },
+  f_goby: { shape: "long", body: 0x9a8a6a, belly: 0xd8ccb0, pattern: "stripes", mark: 0x5a4a32 },
+  f_skygazer: { shape: "slim", body: 0xb8c4cc, belly: 0xf0f4f6, fin: 0xd0a0a0, jaw: true },
+  f_nuchi: { shape: "big", body: 0xa8a088, belly: 0xece4cc, pattern: "spots", mark: 0x7a7058 },
+  f_lunchcarp: { shape: "deep", body: 0xb0b4a0, belly: 0xe8ead8, pattern: "scales", mark: 0x8a8e7a },
+  f_grasscarp: { shape: "torpedo", body: 0x7a7a4a, belly: 0xd8d0a0, pattern: "scales", mark: 0x5a5a32 },
+  f_lenok: { shape: "torpedo", body: 0x8a7a5a, pattern: "spots", mark: 0x3a2a1a, eye: 0xe02a2a, fin: 0x6a5a3a },
+  f_miyugi: { shape: "slim", body: 0x5a4a3a, belly: 0xa89878, whiskers: true },
+  f_ungeo: { shape: "long", body: 0xd8dce4, belly: 0xf8f8fc, pattern: "shine" },
+  f_whitefish: { shape: "deep", body: 0xe8ecf0, belly: 0xffffff, fin: 0xb8c0c8 },
+  f_goldmandarin: { shape: "big", body: 0xf0c040, pattern: "spots", mark: 0x8a5a10 },
+  f_huchen: { shape: "torpedo", body: 0x8a5a4a, belly: 0xd8c0b0, pattern: "spots", mark: 0x3a2020, fin: 0xa04a3a },
+  f_ghostcarp: { shape: "big", body: 0xb8dce8, belly: 0xe8f6fa, fin: 0x8ab8c8, ghost: true },
+  f_dragon: { shape: "big", body: 0xd83a2a, belly: 0xffd060, fin: 0xffd060, pattern: "shine", whiskers: true },
 };
 
 function draw(id: string): Grid | null {
   if (FISH_SPECS[id]) return fish(FISH_SPECS[id]);
   if (JUNK_ART[id]) return JUNK_ART[id]();
   if (DIG_ART[id]) return DIG_ART[id]();
+  if (HERB_ART[id]) return HERB_ART[id]();
   switch (id) {
     // 곤충
     case "b_cabbage":
@@ -401,6 +652,34 @@ function draw(id: string): Grid | null {
       return firefly(0xffe060);
     case "b_wisp":
       return firefly(0x6ad0ff);
+    case "b_cicada":
+      return cicada(0x5a4a32);
+    case "b_bee":
+      return bee();
+    case "b_ant":
+      return ant(0x3a2420);
+    case "b_skimmer":
+      return dragonfly(0x5a8ad8);
+    case "b_strider":
+      return strider(0x4a4038);
+    case "b_katydid":
+      return hopper(0x5ac060, false, true);
+    case "b_stink":
+      return beetle(0x6a7a3a, { tri: 0xd8c050 });
+    case "b_jewel":
+      return beetle(0x2a9a6a, { shine: true, stripe: 0xb05ae0 });
+    case "b_mayfly":
+      return mayfly(0xd8c890);
+    case "b_anglewing":
+      return butterfly(0xe0782a, 0xb05a20, 0x3a2a1a, false, 0x2a1a10);
+    case "b_hawkmoth":
+      return butterfly(0x8a7a6a, 0xe88a9a, 0x5a4a3a, false, 0x3a2a2a);
+    case "b_emperor":
+      return butterfly(0x6a4ab0, 0x4a3a8a, 0x2a2420, false, 0xf4f4ee);
+    case "b_wintermoth":
+      return butterfly(0xd8d4c8, 0xb8b4a8, 0x6a6458, false, 0x8a8478);
+    case "b_longhorn":
+      return beetle(0x3a3028, { dots: 0xc8a04a, antennae: 0x3a3028 });
     // 약초·버섯
     case "h_mugwort":
       return plant(0x8aa88a);
@@ -432,6 +711,22 @@ function draw(id: string): Grid | null {
       return mushroom(0x9a3a2a, 0xc89a5a, { fan: true });
     case "h_glowcap":
       return mushroom(0x5ad0d0, 0xc8f0f0, { glow: 0x6af0f0, spots: 0xe0ffff });
+    case "h_dropwort":
+      return stems(0x5ac070);
+    case "h_plantain":
+      return rosette(0x4a9a3a, { spike: 0xc8c08a });
+    case "h_oyster":
+      return mushroom(0xb8b0a8, 0xe0dcd4, { fan: true });
+    case "h_gomchwi":
+      return rosette(0x3a8a3a, { round: true });
+    case "h_omija":
+      return berries(0xd8303a);
+    case "h_lotus":
+      return cupFlower(0xf0a0c0, 0x4a9a4a, 0xf8d040);
+    case "h_hovenia":
+      return berries(0x8a5a2a, 0x6a8a3a);
+    case "h_adonis":
+      return cupFlower(0xf8d020, 0xf4f8ff, 0x9a7a20);
     // 광석
     case "o_pebble":
       return rock(0x9aa0a6, undefined, { smooth: true });
@@ -453,9 +748,34 @@ function draw(id: string): Grid | null {
       return rock(0x3a3448, 0x8ad0ff, { glow: 0x6ab0ff });
     case "o_diamond":
       return gem(0xc8f0ff);
+    case "o_flint":
+      return rock(0x5a5a62, 0x8a8a92, { spark: 0xffd040 });
+    case "o_lead":
+      return rock(0x4a5260, 0x7a8698, { smooth: true });
+    case "o_mica":
+      return rock(0x7a7068, undefined, { flakes: 0xe8e0c8 });
+    case "o_jade":
+      return cabochon(0x4ab07a);
+    case "o_garnet":
+      return rock(0x6a5a5a, undefined, { nugget: 0xc8283a });
+    case "o_obsidian":
+      return rock(0x24222c, undefined, { glass: true });
+    case "o_aquamarine":
+      return rock(0x8a8e94, undefined, { crystal: 0x6ad8e8 });
+    case "o_ruby":
+      return gem(0xe02a4a);
+    case "o_sapphire":
+      return gem(0x2a5ad8);
+    case "o_opal":
+      return cabochon(0xe8f0f8, [0xf06a8a, 0x6ad0a0, 0x6a9af0, 0xf0c040, 0xb07ae0]);
     default:
       return null;
   }
+}
+
+/** forage 아이템 그림 그리드 (캔버스 없이 — 시험에서 그림끼리 비교할 때). 모르는 id면 null */
+export function forageIconGrid(id: string): Grid | null {
+  return draw(id);
 }
 
 const cache = new Map<string, HTMLCanvasElement | null>();
