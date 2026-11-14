@@ -1,5 +1,7 @@
+/* 펼친 음악 목록이 바로 아래 확성기 창보다 위에 오게 (같은 왼쪽 위 묶음 안에서 뒤에 그려지는 확성기가 덮던 것) */
 .player {
   position: relative;
+  z-index: 3;
 }
 
 /* 위쪽 줄 한 칸: 높이·패널·글자 크기를 다른 위쪽 버튼(ui.top)과 같은 --top-* 값으로 */
@@ -43,6 +45,7 @@
 
 .panel {
   position: absolute;
+  z-index: 3;
   top: calc(100% + 10px);
   left: 0;
   width: min(290px, calc(100vw - var(--safe-left) - var(--safe-right)));
