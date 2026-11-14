@@ -30,7 +30,22 @@ export type UseKind =
   | "chime"
   | "clock"
   | "water"
-  | "window";
+  | "window"
+  // ── 모든 가구 상호작용 (자리 없이 서서 E: 바닥 앉기·연출만. 포인트·아이템은 주지 않는다) ──
+  | "dip"
+  | "lean"
+  | "rug"
+  | "smell"
+  | "tea"
+  | "scribble"
+  | "memo"
+  | "squeak"
+  | "straighten"
+  | "rummage"
+  | "spore"
+  | "light"
+  | "firefly"
+  | "pray";
 
 /** 집 씬에서 칸 (0,0)의 왼쪽 위 월드 좌표 */
 export type Frame = { ox: number; oy: number };
@@ -63,6 +78,8 @@ export type HouseTarget = {
   /** 다가가야 하는 범위 (발 위치가 이 사각형에서 NEAR 안이면 쓸 수 있다) */
   rect: Rect;
   spot?: HouseSpot;
+  /** 바닥 물건: 같은 거리면 다른 가구를 먼저 */
+  low?: boolean;
 };
 
 /** 서서 E로 쓰는 가구 */
@@ -78,7 +95,25 @@ const USE_OF: Readonly<Record<string, UseKind>> = {
   wind_chime: "chime",
   grand_clock: "clock",
   pot: "water",
+  pond: "dip",
+  tree: "lean",
+  rug: "rug",
+  flowerbed: "smell",
+  table: "tea",
+  whiteboard: "scribble",
+  postit_wall: "memo",
+  duck_shelf: "squeak",
+  frame_404: "straighten",
+  bush: "rummage",
+  mushrooms: "spore",
+  stone_lantern: "light",
+  candles: "light",
+  firefly_jar: "firefly",
+  memorial: "pray",
 };
+
+/** 바닥에 깔린 물건(러그·꽃밭)은 위에 다른 가구가 있으면 그 가구를 먼저 고르게 조금 멀게 친다 */
+const LOW_PRIORITY: ReadonlySet<UseKind> = new Set(["rug", "smell"]);
 
 /** 앞에 앉아서 쓰는 가구 (의자가 바로 앞에 있으면 그 의자가 이 일을 한다) */
 const SIT_AT: Readonly<Record<string, UseKind>> = { desk: "type", monitor_desk: "type", piano: "piano" };
@@ -102,6 +137,20 @@ export const USE_LABEL: Readonly<Record<UseKind, string>> = {
   clock: "시간 보기",
   water: "물 주기",
   window: "창문 열기",
+  dip: "연못가에 앉아 발 담그기",
+  lean: "나무에 기대어 앉기",
+  rug: "러그에 앉기",
+  smell: "꽃밭에 앉아 향기 맡기",
+  tea: "차 한 잔 마시기",
+  scribble: "화이트보드에 끄적이기",
+  memo: "메모 붙이기",
+  squeak: "오리 꾹 누르기",
+  straighten: "액자 바로잡기",
+  rummage: "덤불 뒤지기",
+  spore: "버섯 톡 건드리기",
+  light: "불 끄기",
+  firefly: "병뚜껑 열기",
+  pray: "꽃 놓고 묵념하기",
 };
 
 /** 가까이 있다고 보는 거리 (발 위치 ↔ 대상 사각형, px) */
@@ -228,7 +277,7 @@ export function houseTargets(items: readonly Placed[], tier: TierShape, plan: Ro
     const def = furnitureById(p.i);
     if (!use || !def) continue;
     const b = boxOf(p, def, f);
-    out.push({ key: `u:${p.u}`, use, u: p.u, item: p.i, rect: { x0: b.L, y0: b.Tp, x1: b.R, y1: b.B } });
+    out.push({ key: `u:${p.u}`, use, u: p.u, item: p.i, rect: { x0: b.L, y0: b.Tp, x1: b.R, y1: b.B }, ...(LOW_PRIORITY.has(use) ? { low: true } : {}) });
   }
   plan.windows.forEach((w, i) => {
     const x0 = f.ox + w.x * T;
@@ -254,7 +303,7 @@ export function pickTarget(targets: readonly HouseTarget[], x: number, y: number
     const d = rectDist(t.rect, x, y);
     if (d > NEAR) continue;
     // 빈자리를 먼저 고른다: 차 있으면 조금 멀게 친다. 같은 거리(소파 둘레)면 앵커가 가까운 자리
-    const score = d + (t.spot && taken(t.spot.id) ? NEAR : 0) + (t.spot ? Math.hypot(t.spot.x - x, t.spot.y - y) * 0.01 : 0);
+    const score = d + (t.spot && taken(t.spot.id) ? NEAR : 0) + (t.spot ? Math.hypot(t.spot.x - x, t.spot.y - y) * 0.01 : 0) + (t.low ? 6 : 0);
     if (score < bestD) {
       bestD = score;
       best = t;
@@ -308,6 +357,27 @@ export const BOOK_LINES = [
   "‘영어 회화 30일 완성’ 첫 장에 내 이름만 적혀 있다.",
   "추리 소설의 마지막 장을 먼저 읽어 버렸다.",
 ];
+
+/** 덤불을 뒤지면 튀어나오는 것 (a = 번호. 연출만 — 포인트·아이템은 주지 않는다) */
+export const BUSH_FINDS = [
+  { emote: "wow", line: "도토리 하나가 데굴데굴 굴러 나왔다." },
+  { emote: "what", line: "작은 고양이가 휙 달아났다!" },
+  { emote: "laugh", line: "잃어버린 양말 한 짝이 여기 있었네." },
+  { emote: "sweat", line: "아무것도 없다… 손만 긁혔다." },
+  { emote: "flower", line: "덤불 속에 작은 꽃이 숨어 있었다." },
+  { emote: "bang", line: "참새가 푸드득 날아올랐다!" },
+] as const;
+
+/** 사훈 액자를 바로잡을 때 한 줄 (a = 번호) */
+export const FRAME_LINES = [
+  "사훈 \"404\"… 오늘도 뜻을 찾지 못했다.",
+  "액자를 바로 세웠다. 3초 뒤 다시 기울었다.",
+  "액자 뒤에 \"뜻은 나중에 정함\"이라고 적혀 있다.",
+  "바르게 걸린 404. 마음이 조금 편해졌다.",
+] as const;
+
+/** 추억 비석 앞 한 줄 */
+export const PRAY_LINES = ["잠시 고개를 숙였다.", "작은 꽃을 놓았다. 바람이 살랑.", "고마웠다고, 조용히 말했다."] as const;
 
 /** 라디오 채널 (0 = 꺼짐). 켜면 BGM 플레이리스트를 차례로 돌린다. 서버 저장 범위와 같은 값 (lib/housing/states.ts) */
 export { RADIO_CHANNELS } from "@/lib/housing/states";

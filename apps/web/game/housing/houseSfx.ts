@@ -27,7 +27,13 @@ export type HouseSound =
   | "cricket"
   | "wind"
   | "sheet"
-  | "snore";
+  | "snore"
+  // ── 모든 가구 상호작용 ──
+  | "step"
+  | "squeak"
+  | "rustle"
+  | "marker"
+  | "sparkle";
 
 /** 거리 → 크기 (0..1): 가까우면 그대로, HEAR_FAR px 밖이면 안 들린다 */
 export const HEAR_FAR = 260;
@@ -183,6 +189,23 @@ export class HouseSfx extends AudioHost {
         break;
       case "snore":
         this.hiss(ac, t, 0.9, 200, 160, v * 0.08, "lowpass");
+        break;
+      case "step": // 디딤돌 또각
+        this.tone(ac, t, 0.05, 900 + r * 200, 500, v * 0.08, "triangle", 0.002);
+        this.hiss(ac, t, 0.04, 2400, 1200, v * 0.05, "bandpass", 2);
+        break;
+      case "squeak": // 고무 오리 삑
+        this.tone(ac, t, 0.16, 1200, 1700, v * 0.12, "square", 0.01);
+        this.tone(ac, t + 0.14, 0.12, 1600, 1100, v * 0.07, "square", 0.01);
+        break;
+      case "rustle": // 덤불 부스럭
+        for (let i = 0; i < 5; i++) this.hiss(ac, t + i * 0.08 + Math.random() * 0.04, 0.12, 2200 + Math.random() * 1500, 1500, v * 0.14, "bandpass", 1.2);
+        break;
+      case "marker": // 마커 끄적끄적
+        for (let i = 0; i < 4; i++) this.hiss(ac, t + i * 0.13, 0.1, 3800, 5200, v * 0.1, "bandpass", 4);
+        break;
+      case "sparkle": // 포자·반딧불 반짝
+        [2637, 3136, 3520].forEach((f, i) => this.tone(ac, t + i * 0.07, 0.4, f, f, v * 0.04));
         break;
     }
   }

@@ -42,6 +42,7 @@ function abilities(f: FurnitureDef): string[] {
   else if (f.skin) out.push(f.skin === "floor" ? "방 바닥 전체를 바꿔요" : "방 벽 전체를 바꿔요");
   // 칸에 놓는 물건의 크기는 점수 줄의 "3×2칸" 표시로 보여 준다
   if (f.use) out.push(`E 키: ${f.use}`);
+  if (f.id === "stone_path") out.push("밟으면 또각또각 발소리가 나요");
   if (f.floor) out.push("밟고 지나갈 수 있고 위에 물건을 올려요");
   if (f.light) out.push("밤에 빛나요");
   return out;

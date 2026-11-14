@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { DIR, STATE, type Sid } from "@tomb/protocol";
+import { DIR, STATE, type DirId, type Sid } from "@tomb/protocol";
 import { bgm } from "@/components/bgm/engine";
 import { furnitureById, tierById, type PlotTier } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
@@ -32,8 +32,11 @@ import { HouseSfx, hearGain, type HouseSound } from "./houseSfx";
 import { HouseZoom } from "./houseZoom";
 import {
   BOOK_LINES,
+  BUSH_FINDS,
   clockText,
   DRINKS,
+  FRAME_LINES,
+  PRAY_LINES,
   houseSpots,
   houseTargets,
   itemDepthY,
@@ -179,6 +182,11 @@ export class HouseScene extends Phaser.Scene {
   private pondFrame = 0;
   /** 밤에 달빛이 비치는 연못 자리 */
   private pondSpots: { x: number; y: number; r: number }[] = [];
+  /** 잠깐 바뀌는 그림 (끄적인 화이트보드·눌린 오리·흔들리는 덤불…): u → 변형·끝나는 시각 */
+  private flash = new Map<string, { v: string; until: number }>();
+  /** 디딤돌 칸 (밟으면 발소리) */
+  private stoneTiles = new Set<number>();
+  private stepAt = 0;
   /** 다른 사람 자판·거품 소리 타이머 (sid → 다음 시각) */
   private remoteTick = new Map<Sid, number>();
   private varTick = 0;
@@ -213,6 +221,8 @@ export class HouseScene extends Phaser.Scene {
     this.pan = null;
     this.views = new Map();
     this.pondSpots = [];
+    this.flash = new Map();
+    this.stoneTiles = new Set();
     this.walls = [];
     this.ground = null;
     this.glowSpots = [];
@@ -615,9 +625,33 @@ export class HouseScene extends Phaser.Scene {
       case "pond":
         // 돌린 방향(세로 그림)·밤(달)·잔물결 장면
         return itemVariant(p.i, "", { r: p.r, night: this.night, frame: this.data0.reduced ? 0 : this.pondFrame });
-      default:
-        return "";
+      case "stone_lantern":
+      case "candles":
+        // 값 1 = 꺼짐 (처음부터 켜져 있던 가구)
+        return this.toggles.get(p.u) ? "off" : "";
+      default: {
+        const f = this.flash.get(p.u);
+        return f && f.until > this.time.now ? f.v : "";
+      }
     }
+  }
+
+  /** 잠깐 다른 그림으로 바꿨다가 되돌린다 (ms 뒤) */
+  private flashVariant(u: string, v: string, ms: number): void {
+    this.flash.set(u, { v, until: this.time.now + ms });
+    this.refreshVariant(u);
+    this.time.delayedCall(ms + 30, () => {
+      const f = this.flash.get(u);
+      if (f && f.until <= this.time.now) {
+        this.flash.delete(u);
+        this.refreshVariant(u);
+      }
+    });
+  }
+
+  /** 꺼 둔 석등·촛대 */
+  private isDark(p: Placed): boolean {
+    return (p.i === "stone_lantern" || p.i === "candles") && !!this.toggles.get(p.u);
   }
 
   /** 물건 그림의 불투명도: 놓아 보는 물건은 반투명, 끌어서 못 놓는 자리면 더 흐리게 */
@@ -634,9 +668,10 @@ export class HouseScene extends Phaser.Scene {
     if (!def || !key) return null;
     const fp = footprint(def, p.r);
     const img = v?.img ?? this.add.image(0, 0, key).setAlpha(this.alphaOf(p.u));
+    // 그림이 바뀌면 보기 기록(variant)도 같이 고친다: tryMove·끌기처럼 돌려받은 보기를 다시 넣지 않는 길에서도
+    // 다음 비교가 맞아야 한 바퀴 돌린 뒤 처음 그림(앞모습)으로 돌아온다
     if (v && v.variant !== variant) {
       img.setTexture(key);
-      // 보기 기록도 함께 고친다 (돌리기·옮기기가 새 기록을 다시 넣지 않아 한 바퀴 돌아도 앞모습으로 안 바뀌던 것)
       v.variant = variant;
     }
     const left = this.tileX(p.x);
@@ -722,7 +757,7 @@ export class HouseScene extends Phaser.Scene {
       const x = this.tileX(p.x) + (fp.w * T) / 2;
       const yb = this.tileY(p.y + fp.h);
       if (hasNightArt(p.i)) this.pondSpots.push({ x, y: yb - (fp.h * T) / 2, r: Math.max(fp.w, fp.h) * T * 0.9 });
-      if (def.light) {
+      if (def.light && !this.isDark(p)) {
         const y = yb - Math.min(14, artUp(p.i) + 6);
         this.glowSpots.push({ x, y, r: def.light.r, color: def.light.color });
         spots.push({ x, y, scale: def.light.r / 40, tint: def.light.color, base: 0.5 });
@@ -770,6 +805,7 @@ export class HouseScene extends Phaser.Scene {
     this.targets = houseTargets(this.work.items, this.tier, this.plan, this.frame);
     this.useByU = new Map();
     for (const t of this.targets) if (!this.useByU.has(t.u) || t.spot) this.useByU.set(t.u, t.use);
+    this.stoneTiles = new Set(this.work.items.filter((p) => p.i === "stone_path").map((p) => p.y * 1000 + p.x));
   }
 
   private isOpen(u: string): boolean {
@@ -803,6 +839,8 @@ export class HouseScene extends Phaser.Scene {
         return on ? "스탠드 끄기" : USE_LABEL.lamp;
       case "window":
         return on ? "창문 닫기" : USE_LABEL.window;
+      case "light":
+        return on ? "불 켜기" : USE_LABEL.light;
       default:
         return USE_LABEL[t.use];
     }
@@ -848,7 +886,8 @@ export class HouseScene extends Phaser.Scene {
       }
       case "fire":
       case "lamp":
-      case "window": {
+      case "window":
+      case "light": {
         const on = this.toggles.get(t.u) ? 0 : 1;
         this.applyToggle(t.u, t.use, on, 1);
         this.emitUse(t.u, on);
@@ -892,6 +931,176 @@ export class HouseScene extends Phaser.Scene {
         return;
       case "water":
         return this.water(t.u);
+      default:
+        return this.useMore(t);
+    }
+  }
+
+  // ── 모든 가구 상호작용 (연출만: 포인트·아이템은 주지 않는다. 같은 방 사람에게는 use 이벤트로 같은 연출) ──
+
+  /** 바닥에 앉는다 (러그·꽃밭·연못가·나무 밑). 자리 없이 여럿이 앉을 수 있고, 움직이면 일어난다 */
+  private sitGroundAt(x: number, y: number, dir: DirId): void {
+    const now = this.time.now;
+    if (this.using) this.exitSpot();
+    this.player.warp(x, y, now, NO_SEATS);
+    this.presence?.client.warp(x, y);
+    this.player.dir = dir;
+    this.player.sit(null, now, null);
+  }
+
+  private useMore(t: HouseTarget): void {
+    const r = t.rect;
+    const cx = (r.x0 + r.x1) / 2;
+    const p = this.player;
+    const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+    switch (t.use) {
+      case "dip":
+        // 연못 앞 물가에 연못을 보고 앉아 발을 담근다: 첨벙 + 잔물결
+        this.sitGroundAt(cx, r.y1 + 1, DIR.up);
+        this.fxDip(t.u, 1);
+        this.emote("drop");
+        this.emitUse(t.u, 0);
+        return;
+      case "lean":
+        this.sitGroundAt(cx, r.y1 + 1, DIR.down);
+        this.sfx.play("rustle", 0.4);
+        this.time.delayedCall(1200, () => this.emote("zzz"));
+        this.emitUse(t.u, 0);
+        return;
+      case "rug":
+      case "smell":
+        // 지금 선 자리에서 가장 가까운 러그·꽃밭 위
+        this.sitGroundAt(clamp(p.x, r.x0 + 4, r.x1 - 4), clamp(p.y, r.y0 + 8, r.y1 - 2), DIR.down);
+        this.sfx.play("sheet", 0.6);
+        if (t.use === "smell") {
+          this.emote("flower");
+          this.fxPuffs(cx, r.y0 + 6, [0xf0a0c0, 0xf0e080, 0xf6f2e8], 5, false);
+        }
+        this.emitUse(t.u, 0);
+        return;
+      case "tea":
+        this.sfx.play("pour");
+        this.fxPuffs(cx, r.y0 - 2, [0xf4f4f4], 4, false);
+        this.time.delayedCall(900, () => this.emote("coffee"));
+        this.notice("따뜻한 차 한 잔. 김이 모락모락.");
+        this.emitUse(t.u, 0);
+        return;
+      case "scribble":
+        this.sfx.play("marker");
+        this.flashVariant(t.u, "draw", 6000);
+        this.emote("idea");
+        this.emitUse(t.u, 0);
+        return;
+      case "memo":
+        this.sfx.play("page");
+        this.flashVariant(t.u, "memo", 6000);
+        this.emote("idea");
+        this.emitUse(t.u, 0);
+        return;
+      case "squeak":
+        this.sfx.play("squeak");
+        this.flashVariant(t.u, "squish", 350);
+        this.emote("laugh");
+        this.emitUse(t.u, 0);
+        return;
+      case "straighten": {
+        const i = Math.floor(Math.random() * FRAME_LINES.length);
+        this.sfx.play("creak", 0.6);
+        this.flashVariant(t.u, "tilt", 700);
+        p.view.say(FRAME_LINES[i], performance.now());
+        this.emitUse(t.u, i);
+        return;
+      }
+      case "rummage": {
+        const i = Math.floor(Math.random() * BUSH_FINDS.length);
+        this.fxRummage(t.u, 1);
+        this.time.delayedCall(700, () => {
+          this.emote(BUSH_FINDS[i].emote);
+          p.view.say(BUSH_FINDS[i].line, performance.now());
+        });
+        this.emitUse(t.u, i);
+        return;
+      }
+      case "spore":
+        this.sfx.play("sparkle");
+        this.fxPuffs(cx, r.y1 - 6, [0x9fe8d0, 0xc8fff0, 0xe8fff8], 9, true);
+        this.emitUse(t.u, 0);
+        return;
+      case "firefly":
+        this.fxFireflies(t.u, cx, r.y1 - 8, 1);
+        this.time.delayedCall(600, () => this.emote("wow"));
+        this.emitUse(t.u, 0);
+        return;
+      case "pray": {
+        const i = Math.floor(Math.random() * PRAY_LINES.length);
+        this.flashVariant(t.u, "flower", 20_000);
+        this.emote("flower");
+        p.view.say(PRAY_LINES[i], performance.now());
+        this.sfx.play("chime", 0.4);
+        this.emitUse(t.u, i);
+        return;
+      }
+    }
+  }
+
+  /** 연못 첨벙: 물가 앞쪽에서 잔물결 고리가 번진다 */
+  private fxDip(u: string, gain: number): void {
+    this.sfx.play("splash", gain);
+    const t = this.targets.find((x) => x.u === u);
+    if (!t) return;
+    const x = (t.rect.x0 + t.rect.x1) / 2;
+    const y = t.rect.y1 - 9;
+    const n = this.data0.reduced ? 1 : 3;
+    for (let i = 0; i < n; i++)
+      this.time.delayedCall(i * 380, () => {
+        const ring = this.add.ellipse(x + (i - 1) * 3, y, 6, 3).setStrokeStyle(1, 0xd6eeea, 0.9).setDepth(y + 2);
+        ring.isFilled = false;
+        this.tweens.add({ targets: ring, scale: 3.2, alpha: 0, duration: 900, ease: "Sine.easeOut", onComplete: () => ring.destroy() });
+        if (i > 0) this.sfx.play("bubble", gain * 0.6);
+      });
+  }
+
+  /** 덤불 흔들기 (두 번) + 부스럭 */
+  private fxRummage(u: string, gain: number): void {
+    this.sfx.play("rustle", gain);
+    this.flashVariant(u, "shake", 220);
+    if (!this.data0.reduced) this.time.delayedCall(330, () => this.flashVariant(u, "shake", 220));
+  }
+
+  /** 작은 점들이 피어오른다 (김·꽃가루·포자). glow면 밤에도 빛난다 */
+  private fxPuffs(x: number, y: number, colors: number[], n: number, glow: boolean): void {
+    if (this.data0.reduced) n = Math.min(n, 2);
+    for (let i = 0; i < n; i++) {
+      const c = colors[i % colors.length];
+      const dot = this.add
+        .rectangle(x + (Math.random() - 0.5) * 12, y + (Math.random() - 0.5) * 4, 1.5, 1.5, c)
+        .setDepth(glow ? DEPTH.lights + 1 : y + 30)
+        .setAlpha(0.95);
+      if (glow) dot.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: dot,
+        y: dot.y - 10 - Math.random() * 10,
+        x: dot.x + (Math.random() - 0.5) * 8,
+        alpha: 0,
+        delay: i * 90,
+        duration: this.data0.reduced ? 500 : 1300 + Math.random() * 600,
+        ease: "Sine.easeOut",
+        onComplete: () => dot.destroy(),
+      });
+    }
+  }
+
+  /** 반딧불 병을 열면 반딧불이 잠깐 날아다니다 사라진다 */
+  private fxFireflies(u: string, x: number, y: number, gain: number): void {
+    this.sfx.play("sparkle", gain);
+    this.flashVariant(u, "open", 4200);
+    const n = this.data0.reduced ? 2 : 6;
+    for (let i = 0; i < n; i++) {
+      const f = this.add.circle(x, y, 1.2, 0xe8ff9a).setDepth(DEPTH.lights + 1).setBlendMode(Phaser.BlendModes.ADD);
+      const hops = this.data0.reduced ? 1 : 4;
+      const path: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
+      for (let k = 0; k < hops; k++) path.push({ targets: f, x: x + (Math.random() - 0.5) * 60, y: y - 6 - Math.random() * 30, duration: 700 + Math.random() * 300, ease: "Sine.easeInOut" });
+      this.tweens.chain({ targets: f, tweens: [...path, { targets: f, x, y, alpha: 0, duration: 600 }], onComplete: () => f.destroy() });
     }
   }
 
@@ -905,6 +1114,12 @@ export class HouseScene extends Phaser.Scene {
       return;
     }
     this.refreshVariant(u);
+    if (use === "light") {
+      // 석등·촛대: 값 1 = 꺼짐. 밤 조명(빛 번짐)도 다시 계산
+      this.applyLights();
+      this.sfx.play(on ? "page" : "fireOn", gain * 0.6);
+      return;
+    }
     if (use === "fire") this.sfx.play(on ? "fireOn" : "pop", gain);
     else this.sfx.play("click", gain);
   }
@@ -938,14 +1153,17 @@ export class HouseScene extends Phaser.Scene {
       .then((r) => {
         if (!this.scene.isActive()) return;
         let win = false;
+        let lit = false;
         for (const [u, a] of Object.entries(r.states)) {
           const use = this.useByU.get(u);
-          if (this.stateTouched.has(u) || (use !== "radio" && use !== "fire" && use !== "lamp" && use !== "window")) continue;
+          if (this.stateTouched.has(u) || (use !== "radio" && use !== "fire" && use !== "lamp" && use !== "window" && use !== "light")) continue;
           this.toggles.set(u, a);
           if (use === "window") win = true;
           else this.refreshVariant(u);
+          if (use === "light") lit = true;
         }
         if (win) this.updateWindows();
+        if (lit) this.applyLights();
       })
       .catch(() => undefined);
   }
@@ -1108,6 +1326,7 @@ export class HouseScene extends Phaser.Scene {
       case "fire":
       case "lamp":
       case "window":
+      case "light":
         this.stateTouched.add(u);
         this.applyToggle(u, use, a ? 1 : 0, gain);
         return;
@@ -1139,6 +1358,69 @@ export class HouseScene extends Phaser.Scene {
         this.sfx.play("pour", gain);
         r?.view.emote("drop", now);
         this.loadPlants();
+        return;
+      case "dip":
+        this.fxDip(u, gain);
+        r?.view.emote("drop", now);
+        return;
+      case "lean":
+        this.sfx.play("rustle", gain * 0.4);
+        return;
+      case "rug":
+        this.sfx.play("sheet", gain * 0.6);
+        return;
+      case "smell":
+        this.sfx.play("sheet", gain * 0.6);
+        r?.view.emote("flower", now);
+        if (at) this.fxPuffs(at.x, at.y - 4, [0xf0a0c0, 0xf0e080, 0xf6f2e8], 5, false);
+        return;
+      case "tea":
+        this.sfx.play("pour", gain);
+        if (at) this.fxPuffs(at.x, at.y - 10, [0xf4f4f4], 4, false);
+        r?.view.emote("coffee", now);
+        return;
+      case "scribble":
+        this.sfx.play("marker", gain);
+        this.flashVariant(u, "draw", 6000);
+        r?.view.emote("idea", now);
+        return;
+      case "memo":
+        this.sfx.play("page", gain);
+        this.flashVariant(u, "memo", 6000);
+        r?.view.emote("idea", now);
+        return;
+      case "squeak":
+        this.sfx.play("squeak", gain);
+        this.flashVariant(u, "squish", 350);
+        r?.view.emote("laugh", now);
+        return;
+      case "straighten":
+        this.sfx.play("creak", gain * 0.6);
+        this.flashVariant(u, "tilt", 700);
+        r?.view.say(FRAME_LINES[a % FRAME_LINES.length], now);
+        return;
+      case "rummage": {
+        const find = BUSH_FINDS[a % BUSH_FINDS.length];
+        this.fxRummage(u, gain);
+        this.time.delayedCall(700, () => {
+          r?.view.emote(find.emote, performance.now());
+          r?.view.say(find.line, performance.now());
+        });
+        return;
+      }
+      case "spore":
+        this.sfx.play("sparkle", gain);
+        if (at) this.fxPuffs(at.x, at.y + 2, [0x9fe8d0, 0xc8fff0, 0xe8fff8], 9, true);
+        return;
+      case "firefly":
+        if (at) this.fxFireflies(u, at.x, at.y, gain);
+        r?.view.emote("wow", now);
+        return;
+      case "pray":
+        this.flashVariant(u, "flower", 20_000);
+        this.sfx.play("chime", gain * 0.4);
+        r?.view.emote("flower", now);
+        r?.view.say(PRAY_LINES[a % PRAY_LINES.length], now);
         return;
     }
   }
@@ -1192,6 +1474,14 @@ export class HouseScene extends Phaser.Scene {
         this.refreshVariant(it.u);
         const at = this.whereU(it.u);
         if (at && Math.random() < 0.45) this.sfx.play("pop", 0.7 * hearGain(Math.hypot(at.x - p.x, at.y - p.y)));
+      }
+    }
+    // 디딤돌: 걸어서 밟으면 또각 발소리
+    if (this.stoneTiles.size && time >= this.stepAt && (p.state === "walk" || p.state === "run")) {
+      const tile = this.toTile(p.x, p.y - 2);
+      if (this.stoneTiles.has(tile.y * 1000 + tile.x)) {
+        this.stepAt = time + (p.state === "run" ? 200 : 300);
+        this.sfx.play("step", 0.8);
       }
     }
     // 연못: 잔물결·반짝임 장면을 천천히 넘긴다 (동작 줄이기면 멈춤). 끌고 있는 연못은 건너뛴다 (제자리로 튀지 않게)

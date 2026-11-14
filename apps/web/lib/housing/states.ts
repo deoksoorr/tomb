@@ -2,7 +2,7 @@ import { tierById, type PlotTierId } from "./catalog";
 import { roomPlan } from "./rooms";
 import type { HouseLayout, Placed } from "./types";
 
-// 3번 집 안 가구의 "남는 상태" (벽난로 불·스탠드·라디오 채널·창문 열림).
+// 3번 집 안 가구의 "남는 상태" (벽난로 불·스탠드·라디오 채널·창문 열림·석등·촛대 꺼짐).
 // 집마다 배치 id(창문은 "w0"…) → { a: 값, s: 서명 }으로 저장한다. 서명은 그 가구가 지금 그 자리에 그대로 있는지
 // 확인하는 값이라, 가구를 치우거나 옮기면(또는 다른 가구로 바꾸면) 서명이 달라져 상태가 사라진다.
 // 화분 자람은 따로 저장한다 (plants.ts).
@@ -10,8 +10,11 @@ import type { HouseLayout, Placed } from "./types";
 /** 라디오 채널 수 (0 = 꺼짐) */
 export const RADIO_CHANNELS = 4;
 
-/** 상태가 남는 가구 → 값의 최댓값 (0..max) */
-export const STATE_MAX: Readonly<Record<string, number>> = { fireplace: 1, floor_lamp: 1, radio: RADIO_CHANNELS };
+/**
+ * 상태가 남는 가구 → 값의 최댓값 (0..max).
+ * 석등·촛대는 처음부터 켜져 있던 가구라 값 1 = 꺼짐 (저장 안 된 0이 예전처럼 켜진 모습)
+ */
+export const STATE_MAX: Readonly<Record<string, number>> = { fireplace: 1, floor_lamp: 1, radio: RADIO_CHANNELS, stone_lantern: 1, candles: 1 };
 /** 창문 열림 (0/1) */
 export const WINDOW_MAX = 1;
 /** 창문 상태의 서명 (창문은 터 크기로 정해지고 배치로는 바뀌지 않는다) */

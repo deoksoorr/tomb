@@ -433,7 +433,7 @@ const DRAW: Record<string, Draw> = {
       g.set(7, y + 1, 0x7fe0a0);
     }
   },
-  whiteboard: (g, W, H) => {
+  whiteboard: (g, W, H, v) => {
     g.vline(3, 10, H - 1, STONE_D);
     g.vline(W - 4, 10, H - 1, STONE_D);
     g.rect(1, 1, W - 2, 16, 0xb0b4b8);
@@ -444,8 +444,19 @@ const DRAW: Record<string, Draw> = {
     g.hline(19, 25, 5, 0x3a6ab0);
     g.hline(19, 25, 9, 0x3a6ab0);
     g.hline(6, 22, 12, 0x404040);
+    if (v === "draw") {
+      // 방금 끄적인 웃는 얼굴 + 화살표
+      g.ellipse(25, 11, 3, 3, 0xc04a3a);
+      g.ellipse(25, 11, 2, 2, 0xf0f2f0);
+      g.set(24, 10, 0xc04a3a);
+      g.set(26, 10, 0xc04a3a);
+      g.hline(24, 26, 12, 0xc04a3a);
+      g.hline(15, 20, 14, 0x2a8a5a);
+      g.set(20, 13, 0x2a8a5a);
+      g.set(20, 15, 0x2a8a5a);
+    }
   },
-  postit_wall: (g, W, H) => {
+  postit_wall: (g, W, H, v) => {
     box(g, 1, 1, W - 2, H - 4, 0x6a5440);
     const c = [0xf0e070, 0xf0a0b0, 0x90d0f0, 0xa0e090];
     for (let i = 0; i < 12; i++) {
@@ -454,12 +465,27 @@ const DRAW: Record<string, Draw> = {
       g.rect(x, y, 4, 4, c[i % 4]);
       g.set(x + 1, y + 1, darken(c[i % 4], 0.4));
     }
+    if (v === "memo") {
+      // 새로 붙인 큰 메모 (한쪽 귀가 들렸다)
+      g.rect(12, 5, 7, 7, 0xfff4a0);
+      g.hline(13, 17, 7, 0x8a8060);
+      g.hline(13, 16, 9, 0x8a8060);
+      g.set(18, 11, 0xe0d070);
+      g.set(18, 5, 0xc04a3a);
+    }
   },
-  duck_shelf: (g, W, H) => {
+  duck_shelf: (g, W, H, v) => {
     box(g, 1, 0, W - 2, H, WOOD);
     for (const y of [9, 18]) {
       g.hline(1, W - 2, y, WOOD_D);
       for (const x of [3, 9]) {
+        // "squish" = 꾹 누른 아래 오른쪽 오리 (납작)
+        if (v === "squish" && y === 18 && x === 9) {
+          g.rect(x - 1, y - 2, 6, 2, 0xf0d040);
+          g.set(x + 4, y - 2, 0xe08030);
+          g.set(x + 3, y - 2, 0x202020);
+          continue;
+        }
         g.rect(x, y - 4, 4, 3, 0xf0d040);
         g.set(x + 3, y - 5, 0xf0d040);
         g.set(x + 4, y - 4, 0xe08030);
@@ -474,7 +500,17 @@ const DRAW: Record<string, Draw> = {
     g.rect(6, H - 9, 4, 4, 0xe8e0c8);
     g.rect(6, H - 8, 4, 1, 0x5a3a26);
   },
-  frame_404: (g, W, H) => {
+  frame_404: (g, W, H, v) => {
+    if (v === "tilt") {
+      // 바로잡는 중: 살짝 기운 액자 (윗줄은 오른쪽, 아랫줄은 왼쪽으로 한 칸)
+      const t = new Grid(W, H);
+      DRAW.frame_404(t, W, H, "");
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const sx = x - (y < 5 ? 1 : y > 11 ? -1 : 0);
+        if (sx >= 0 && sx < W) g.px[y * W + x] = t.px[y * W + sx];
+      }
+      return;
+    }
     g.vline(4, 12, H - 1, WOOD_D);
     g.vline(11, 12, H - 1, WOOD_D);
     g.rect(1, 1, W - 2, 14, WOOD_L);
@@ -555,11 +591,18 @@ const DRAW: Record<string, Draw> = {
     g.set(10, 10, lighten(STONE, 0.3));
     g.outline(STONE_D, false, 200);
   },
-  bush: (g, W, H) => {
-    g.ellipse(W / 2, H - 7, 7, 6, LEAF_D);
-    g.ellipse(W / 2 - 2, H - 9, 4, 3.5, LEAF);
-    g.set(5, H - 10, LEAF_L);
-    g.set(10, H - 8, LEAF_L);
+  bush: (g, W, H, v) => {
+    // "shake" = 뒤지는 중: 한쪽으로 기울고 잎이 튄다
+    const s = v === "shake" ? 1 : 0;
+    g.ellipse(W / 2 + s, H - 7, 7, 6, LEAF_D);
+    g.ellipse(W / 2 - 2 + s * 2, H - 9, 4, 3.5, LEAF);
+    g.set(5 + s, H - 10, LEAF_L);
+    g.set(10 + s, H - 8, LEAF_L);
+    if (s) {
+      g.set(1, H - 14, LEAF_L);
+      g.set(14, H - 15, LEAF);
+      g.set(13, H - 13, LEAF_L);
+    }
   },
   mushrooms: (g) => {
     for (const [x, y, r] of [[5, 9, 3], [11, 7, 2.5], [9, 12, 2]] as const) {
@@ -568,29 +611,37 @@ const DRAW: Record<string, Draw> = {
       g.set(x - 1, y - 1, 0xc8fff0);
     }
   },
-  stone_lantern: (g, _W, H) => {
+  stone_lantern: (g, _W, H, v) => {
     g.rect(4, H - 4, 8, 3, STONE_D);
     g.rect(6, H - 12, 4, 8, STONE);
     g.rect(3, H - 18, 10, 6, STONE);
-    g.rect(5, H - 17, 6, 4, 0xffd080);
+    // "off" = 불을 끈 석등 (창이 어둡다)
+    g.rect(5, H - 17, 6, 4, v === "off" ? 0x2a2622 : 0xffd080);
     g.rect(2, H - 21, 12, 3, STONE_D);
     g.rect(6, H - 24, 4, 3, STONE);
   },
-  candles: (g, _W, H) => {
+  candles: (g, _W, H, v) => {
     g.rect(4, H - 3, 8, 2, 0x8a7040);
     g.vline(8, H - 9, H - 3, 0x8a7040);
     g.hline(4, 12, H - 9, 0x8a7040);
     for (const x of [4, 8, 12]) {
       g.rect(x - 1, H - 14, 2, 5, 0xf0e8d8);
+      if (v === "off") {
+        g.set(x, H - 15, 0x3a3028); // 꺼진 심지
+        continue;
+      }
       g.set(x, H - 16, 0xffd070);
       g.set(x, H - 15, 0xffa040);
     }
   },
-  firefly_jar: (g, _W, H) => {
+  firefly_jar: (g, _W, H, v) => {
+    const open = v === "open";
     g.rect(4, H - 13, 8, 11, 0x6a8a9a, 140);
-    g.rect(5, H - 15, 6, 2, 0x8a6a40);
+    // 열면 뚜껑이 옆에 놓이고 반딧불은 날아가 하나만 남는다
+    if (open) g.rect(10, H - 3, 5, 2, 0x8a6a40);
+    else g.rect(5, H - 15, 6, 2, 0x8a6a40);
     g.hline(4, 11, H - 2, 0x4a6a7a);
-    for (const [x, y] of [[6, 6], [9, 9], [7, 11]]) g.set(x, H - 16 + y, 0xe8ff9a);
+    for (const [x, y] of open ? [[7, 11]] : [[6, 6], [9, 9], [7, 11]]) g.set(x, H - 16 + y, 0xe8ff9a);
   },
   wind_chime: (g, _W, H) => {
     g.vline(3, 0, H - 2, WOOD_D);
@@ -601,7 +652,7 @@ const DRAW: Record<string, Draw> = {
     g.rect(8, 14, 3, 4, 0xf0e8d0);
     g.rect(2, H - 2, 3, 2, STONE_D);
   },
-  memorial: (g, _W, H) => {
+  memorial: (g, _W, H, v) => {
     g.rect(2, H - 4, 12, 3, STONE_D);
     g.rect(4, H - 18, 8, 14, 0x9a988e);
     g.rect(5, H - 20, 6, 2, 0x9a988e);
@@ -609,6 +660,12 @@ const DRAW: Record<string, Draw> = {
     g.hline(6, 9, H - 11, 0x5a5850);
     g.set(3, H - 5, 0xf0a0c0);
     g.set(12, H - 5, 0xf0e080);
+    if (v === "flower") {
+      // 비석 앞에 놓은 작은 꽃다발
+      g.vline(7, H - 7, H - 4, LEAF);
+      g.vline(9, H - 7, H - 4, LEAF);
+      for (const [x, y, c] of [[6, H - 8, 0xf0a0c0], [8, H - 9, 0xf6f2e8], [10, H - 8, 0xf0e080], [7, H - 9, 0xf4c8d8]] as const) g.set(x, y, c);
+    }
   },
   // ── 3번 생활 가구 ──
   piano: (g, W, H) => {

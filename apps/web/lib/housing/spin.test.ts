@@ -1,5 +1,6 @@
 import { DIR } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
+import { itemVariant, shownItemGrid } from "@/game/housing/art";
 import { houseSpots, itemDepthY } from "@/game/housing/interact";
 import { FURNITURE, furnitureById, tierById } from "./catalog";
 import { footprint, nextRotation, SPIN_R0, spinDir, validateLayout } from "./layout";
@@ -62,6 +63,31 @@ describe("4방향 가구: 방향 값과 칸", () => {
       { u: "c1", i: "chair", x: 0, y: 1, r: 0 },
     ]);
     expect(validateLayout(clash, "small", null).ok).toBe(false);
+  });
+});
+
+describe("한 바퀴 돌리면 처음 모습으로", () => {
+  // 제보: 4방향 가구를 네 번 돌려도 앞모습으로 돌아오지 않았다 (집 장면이 바뀐 그림 기록을 갱신하지 않던 문제).
+  // 순수 함수 쪽은 모든 가구가 놓기(r 0) → 네 번 돌리기 뒤 칸·그림 이름·픽셀이 처음과 같아야 한다
+  const placeable = FURNITURE.filter((f) => !f.skin && !f.ext);
+  it.each(placeable.map((f) => [f.id]))("%s: 놓기 → 4번 돌리기 → 처음과 같은 칸·그림", (id) => {
+    const def = furnitureById(id)!;
+    const look = (r: number) => {
+      const v = itemVariant(id, "", { r });
+      const g = shownItemGrid(id, r, v)!;
+      // turn 가구는 집 안에서 그림째 90°씩 돌리므로 각도까지 같아야 한다
+      return { fp: footprint(def, r), v, w: g.w, h: g.h, px: Array.from(g.px).join(","), angle: def.turn ? (r % 4) * 90 : 0 };
+    };
+    const first = look(0);
+    let r = 0;
+    const seen = new Set<string>();
+    for (let i = 0; i < 4; i++) {
+      r = nextRotation(def, r);
+      seen.add(look(r).px + look(r).angle);
+    }
+    expect(look(r)).toEqual(first);
+    // 4방향·turn 가구는 도는 동안 서로 다른 모습 4가지 (연못·러그처럼 위에서 본 대칭 그림은 각도로 구분)
+    if (def.spin || def.turn) expect(seen.size).toBe(4);
   });
 });
 
