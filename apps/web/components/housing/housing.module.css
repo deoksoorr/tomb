@@ -355,6 +355,14 @@
   gap: 6px;
 }
 
+/* 상점에서 "놓아 보기"로 얹은 물건: 촛불색 테두리 (산 물건과 구분) */
+.trialBar {
+  padding: 6px;
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 2px var(--candle);
+}
+
 
 /* ── 방명록 ── */
 
@@ -644,12 +652,59 @@
   box-shadow: var(--px-border);
 }
 
-.fsDetailArt {
+/* 큰 미리보기: 집 안에 놓인 모습 + 돌려 보기·낮밤 단추 */
+.fsStageWrap {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.fsStage {
   display: grid;
   place-items: center;
   width: 100%;
   padding: 4px 0;
   background: radial-gradient(ellipse at 50% 90%, rgba(85, 112, 79, 0.25), transparent 70%);
+  transition: background-color 0.2s;
+}
+
+.fsStage[data-night] {
+  background: radial-gradient(ellipse at 50% 80%, rgba(110, 130, 190, 0.18), transparent 70%), #0d1018;
+}
+
+.fsStageBar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+.fsDayNight {
+  display: flex;
+  gap: 2px;
+}
+
+.fsStageBtn {
+  min-height: 32px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.fsStageBtn[aria-pressed="true"] {
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 2px var(--candle);
+  color: var(--bone);
+}
+
+.fsSize {
+  margin-right: 6px;
+  padding: 0 4px;
+  background: var(--surface);
+  color: var(--bone);
+  font-family: var(--font-small);
+  font-size: 10px;
 }
 
 .fsInfo {
@@ -706,6 +761,13 @@
   flex: 1 1 100%;
   min-width: 0;
   min-height: 44px;
+}
+
+/* 사기 단추 아래 되팔기·놓아 보기는 반씩 나란히 (자세히 보기가 스크롤 없이 들어오게) */
+.fsActions > button:not(:first-child) {
+  flex: 1 1 40%;
+  min-height: 40px;
+  font-size: 12px;
 }
 
 .fsGrid {
@@ -793,17 +855,29 @@
     padding: 8px;
   }
 
-  .fsDetailArt {
+  .fsStageWrap {
+    width: auto;
+    gap: 4px;
+  }
+
+  .fsStage {
     width: auto;
     padding: 0;
+  }
+
+  .fsStageBtn {
+    min-height: 30px;
+    padding: 2px 6px;
+    font-size: 10px;
   }
 
   .fsText {
     font-size: 12px;
   }
 
-  .fsActions > button {
-    flex: 1 1 0;
+  .fsActions > button:not(:first-child) {
+    min-height: 36px;
+    font-size: 11px;
   }
 
   .fsGrid {

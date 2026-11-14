@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트라 next/image 최적화가 필요 없다 */
 import { useSyncExternalStore } from "react";
 import { facadePreview, furnitureIcon, furniturePreview } from "@/game/housing/art";
-import { defaultExterior, HOUSE_TITLES, houseTitle, nextTitle, PLOT_TIERS, plotCost, type HouseExteriorMap, type PlotTierId } from "@/lib/housing/catalog";
+import { defaultExterior, furnitureById, HOUSE_TITLES, houseTitle, nextTitle, PLOT_TIERS, plotCost, type HouseExteriorMap, type PlotTierId } from "@/lib/housing/catalog";
 import styles from "./housing.module.css";
 
 const noop = () => () => undefined;
@@ -52,6 +52,32 @@ export function FurnitureThumb({ itemId, ext, w = 120, h = 96 }: { itemId: strin
   return (
     <span style={box} aria-hidden="true">
       <img src={img.url} width={iw} height={ih} alt="" style={{ width: iw, height: ih, maxWidth: "none", imageRendering: "pixelated", borderRadius: ext ? 0 : 4 }} />
+    </span>
+  );
+}
+
+/**
+ * 가구 상점 큰 미리보기: 집 안에 놓였을 때와 같은 그림을 고정 칸(w×h)에 정수 배율로 크게 보여 준다.
+ * r = 돌린 방향, night = 집 안 밤 조명, frame = 잔물결 장면(연못). 외관은 마을에서 보이는 집 모습(밤이면 밤 그림).
+ */
+export function FurnitureStage({ itemId, w, h, r = 0, night = false, frame = 0 }: { itemId: string; w: number; h: number; r?: number; night?: boolean; frame?: number }) {
+  const client = useSyncExternalStore(noop, () => true, () => false);
+  const box = { width: w, height: h, flex: "none", display: "grid", placeItems: "center", overflow: "hidden" } as const;
+  if (!client) return <span style={box} aria-hidden="true" />;
+  const def = furnitureById(itemId);
+  const draw = (s: number) =>
+    def?.ext ? facadePreview({ ...defaultExterior(), [def.ext]: itemId }, "small", s, night) : furniturePreview(itemId, s, { r, night, frame, stage: true });
+  const base = draw(1);
+  const fit = Math.min(w / base.w, h / base.h);
+  const n = Math.max(1, Math.floor(fit));
+  const img = n > 1 ? draw(n) : base;
+  // 칸보다 크면(정수 배율 1도 안 들어가면) 비율대로 줄인다
+  const k = fit < 1 ? fit : 1;
+  const iw = Math.max(1, Math.round(img.w * k));
+  const ih = Math.max(1, Math.round(img.h * k));
+  return (
+    <span style={box} aria-hidden="true">
+      <img src={img.url} width={iw} height={ih} alt="" style={{ width: iw, height: ih, maxWidth: "none", imageRendering: "pixelated", borderRadius: def?.ext ? 0 : 4 }} />
     </span>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { bridge } from "@/game/bridge";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import { errorMessage } from "@/lib/api";
+import { meStore } from "@/lib/hooks/useMe";
 import { DEFAULT_FLOOR, DEFAULT_FLOOR_NAME, DEFAULT_WALL, DEFAULT_WALL_NAME, FURNITURE, furnitureById, LIKE_WEIGHT, tierById } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { layoutCounts, placedScore, styleTag, totalScore } from "@/lib/housing/layout";
@@ -39,6 +40,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
   const [modal, setModal] = useState<Modal>(null);
   const [saving, setSaving] = useState(false);
   const [leaveTo, setLeaveTo] = useState(false);
+  const [buying, setBuying] = useState(false);
   const [here, setHere] = useState<{ count: number; online: boolean; ownerHere: boolean } | null>(null);
 
   useEffect(() => {
@@ -106,6 +108,23 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
     }
   }
 
+  /** 놓아 보던 물건을 사서 그 자리에 그대로 놓는다 */
+  async function buyTrial(itemId: string) {
+    const def = furnitureById(itemId);
+    if (!def) return;
+    setBuying(true);
+    try {
+      onMy(await housingApi.buyItem(itemId));
+      void meStore.refresh();
+      bridge.emit("house:tool", { action: "tryEnd", keep: true });
+      setNotice(`${def.name}을(를) 사서 놓았어요. 저장하면 꾸밈 점수에 들어가요.`);
+    } catch (e) {
+      setNotice(errorMessage(e));
+    } finally {
+      setBuying(false);
+    }
+  }
+
   function leave(toOffice: boolean) {
     if (editing && edit?.dirty) {
       setLeaveTo(toOffice);
@@ -160,12 +179,26 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
       </div>
 
       {mine && editing && edit && my && (
-        <EditToolbar edit={edit} my={my} saving={saving} maxItems={tier.maxItems} onSave={save} onShop={() => setModal("shop")} />
+        <EditToolbar edit={edit} my={my} saving={saving} buying={buying} maxItems={tier.maxItems} onSave={save} onShop={() => setModal("shop")} onBuyTrial={buyTrial} />
       )}
 
       {modal === "guestbook" && <GuestbookDialog houseId={house.id} houseName={house.name} mine={mine} onClose={() => setModal(null)} />}
       {modal === "shop" && my && (
-        <FurnitureShop my={my} placed={edit ? layoutCounts({ items: edit.items, floor: edit.floor, wall: edit.wall }) : layoutCounts(house.layout)} onMy={onMy} onClose={() => setModal(null)} />
+        <FurnitureShop
+          my={my}
+          placed={edit ? layoutCounts({ items: edit.items, floor: edit.floor, wall: edit.wall }) : layoutCounts(house.layout)}
+          onMy={onMy}
+          onClose={() => setModal(null)}
+          onTry={
+            editing
+              ? (itemId) => {
+                  // 상점을 닫고 집 바닥에 반투명으로 얹는다 (사지 않음·저장 안 됨)
+                  setModal(null);
+                  bridge.emit("house:tool", { action: "try", itemId });
+                }
+              : undefined
+          }
+        />
       )}
       {modal === "leave" && (
         <Dialog kind="confirm" title="저장하지 않은 변경" onClose={() => setModal(null)}>
@@ -206,16 +239,20 @@ function EditToolbar({
   edit,
   my,
   saving,
+  buying,
   maxItems,
   onSave,
   onShop,
+  onBuyTrial,
 }: {
   edit: HouseEditState;
   my: MyHouseResponse;
   saving: boolean;
+  buying: boolean;
   maxItems: number;
   onSave: (close: boolean) => void;
   onShop: () => void;
+  onBuyTrial: (itemId: string) => void;
 }) {
   const counts = layoutCounts({ items: edit.items, floor: edit.floor, wall: edit.wall });
   const sel = edit.selected ? edit.items.find((p) => p.u === edit.selected) : undefined;
@@ -224,6 +261,10 @@ function EditToolbar({
   const floors = [DEFAULT_FLOOR, ...FURNITURE.filter((f) => f.skin === "floor" && (my.inventory[f.id] ?? 0) > 0).map((f) => f.id)];
   const walls = [DEFAULT_WALL, ...FURNITURE.filter((f) => f.skin === "wall" && (my.inventory[f.id] ?? 0) > 0).map((f) => f.id)];
   const tool = (t: HouseTool) => bridge.emit("house:tool", t);
+  const trial = edit.trial;
+  const trialDef = trial ? furnitureById(trial.itemId) : undefined;
+  // 가방에 남은 게 있으면 사지 않고 바로 놓을 수 있다
+  const trialLeft = trial ? (my.inventory[trial.itemId] ?? 0) - (counts[trial.itemId] ?? 0) : 0;
   const skinName = (id: string) => (id === DEFAULT_FLOOR ? DEFAULT_FLOOR_NAME : id === DEFAULT_WALL ? DEFAULT_WALL_NAME : (furnitureById(id)?.name ?? id));
 
   return (
@@ -244,6 +285,36 @@ function EditToolbar({
           </button>
         </div>
       </div>
+
+      {trial && trialDef && (
+        <div className={cx(styles.selBar, styles.trialBar)} aria-live="polite" role="group" aria-label="놓아 보는 중">
+          <FurnitureIcon itemId={trial.itemId} size={32} />
+          <span className={ui.label}>
+            {trialDef.name} 놓아 보는 중 <span className={styles.small}>· 끌어서 옮기고 R로 돌려 보세요 · 저장되지 않아요</span>
+          </span>
+          <button type="button" className={ui.button} onClick={() => tool({ action: "rotate" })}>
+            돌리기
+          </button>
+          {trialLeft > 0 ? (
+            <button type="button" className={cx(ui.button, ui.primary)} onClick={() => tool({ action: "tryEnd", keep: true })}>
+              가방에서 놓기
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={cx(ui.button, ui.primary)}
+              disabled={buying || saving || my.points < trialDef.price}
+              onClick={() => onBuyTrial(trialDef.id)}
+              aria-label={`${trialDef.name}, ${trialDef.price}포인트에 사서 이 자리에 놓기`}
+            >
+              {buying ? "…" : `${fmt(trialDef.price)}P${my.points < trialDef.price ? " · 모자라요" : " · 사서 놓기"}`}
+            </button>
+          )}
+          <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => tool({ action: "tryEnd", keep: false })}>
+            그만 보기
+          </button>
+        </div>
+      )}
 
       {sel && selDef && (
         <div className={styles.selBar} aria-live="polite">

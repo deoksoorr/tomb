@@ -26,7 +26,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import type { LightSpot } from "../world/WorldMap";
-import { artUp, floorGrid, furnitureGrid, sconceGrid, wallCapColor, wallFaceColor, WALL_H, wallGrid, windowGrid, WINDOW_W, yardGrid } from "./art";
+import { animFrames, artUp, drawsTurned, floorGrid, furnitureGrid, hasNightArt, itemVariant, noFootShadow, sconceGrid, wallCapColor, wallFaceColor, WALL_H, wallGrid, windowGrid, WINDOW_W, yardGrid } from "./art";
 import type { HouseEditState, HouseTool } from "./events";
 import { HouseSfx, hearGain, type HouseSound } from "./houseSfx";
 import { HouseZoom } from "./houseZoom";
@@ -174,6 +174,11 @@ export class HouseScene extends Phaser.Scene {
   private nextAmbient = 0;
   private flameAt = 0;
   private flameFrame = 0;
+  /** 연못 잔물결 장면 (동작 줄이기면 0에 멈춘다) */
+  private pondAt = 0;
+  private pondFrame = 0;
+  /** 밤에 달빛이 비치는 연못 자리 */
+  private pondSpots: { x: number; y: number; r: number }[] = [];
   /** 다른 사람 자판·거품 소리 타이머 (sid → 다음 시각) */
   private remoteTick = new Map<Sid, number>();
   private varTick = 0;
@@ -183,6 +188,8 @@ export class HouseScene extends Phaser.Scene {
   private work: HouseLayout = { items: [], floor: "", wall: "" };
   private baseline = "";
   private selected: string | null = null;
+  /** 상점에서 "놓아 보기"로 얹은 물건의 배치 id (가방에 없는 물건: 반투명, 저장·점수에서 빠진다) */
+  private trialU: string | null = null;
   private drag: { u: string; offX: number; offY: number; from: { x: number; y: number }; to: { x: number; y: number } } | null = null;
   private pan: { sx: number; sy: number; cx: number; cy: number } | null = null;
   /** 마우스 휠·두 손가락 확대·축소 (마을과 같은 규칙·한계) */
@@ -201,9 +208,11 @@ export class HouseScene extends Phaser.Scene {
     this.armed = false;
     this.editing = false;
     this.selected = null;
+    this.trialU = null;
     this.drag = null;
     this.pan = null;
     this.views = new Map();
+    this.pondSpots = [];
     this.walls = [];
     this.ground = null;
     this.glowSpots = [];
@@ -598,9 +607,18 @@ export class HouseScene extends Phaser.Scene {
         return this.toggles.get(p.u) ? "on" : "";
       case "fridge":
         return (this.openUntil.get(p.u) ?? 0) > this.time.now ? "open" : "";
+      case "pond":
+        // 돌린 방향(세로 그림)·밤(달)·잔물결 장면
+        return itemVariant(p.i, "", { r: p.r, night: this.night, frame: this.data0.reduced ? 0 : this.pondFrame });
       default:
         return "";
     }
+  }
+
+  /** 물건 그림의 불투명도: 놓아 보는 물건은 반투명, 끌어서 못 놓는 자리면 더 흐리게 */
+  private alphaOf(u: string, ok = true): number {
+    const a = u === this.trialU ? 0.62 : 1;
+    return ok ? a : a * 0.55;
   }
 
   /** 물건 하나 놓기 (r: turn 물건은 90°씩 돌리고, 아니면 홀수일 때 좌우 뒤집기) */
@@ -610,11 +628,14 @@ export class HouseScene extends Phaser.Scene {
     const key = def && this.itemTex(p.i, variant);
     if (!def || !key) return null;
     const fp = footprint(def, p.r);
-    const img = v?.img ?? this.add.image(0, 0, key);
+    const img = v?.img ?? this.add.image(0, 0, key).setAlpha(this.alphaOf(p.u));
     if (v && v.variant !== variant) img.setTexture(key);
     const left = this.tileX(p.x);
     const bottom = this.tileY(p.y + fp.h);
-    if (def.turn) {
+    if (def.turn && drawsTurned(p.i)) {
+      // 돌린 모습을 따로 그린 물건(연못): 그림은 돌리지 않고 r≥2면 좌우만 뒤집는다 (빛이 늘 왼쪽 위에서)
+      img.setOrigin(0.5, 0.5).setPosition(left + (fp.w * T) / 2, bottom - (fp.h * T) / 2).setAngle(0).setFlipX(p.r % 4 >= 2);
+    } else if (def.turn) {
       img.setOrigin(0.5, 0.5).setPosition(left + (fp.w * T) / 2, bottom - (fp.h * T) / 2).setAngle((p.r % 4) * 90).setFlipX(false);
     } else {
       img.setOrigin(0, 1).setPosition(left, bottom).setAngle(0).setFlipX(p.r % 2 === 1);
@@ -663,9 +684,11 @@ export class HouseScene extends Phaser.Scene {
         rg.fillRect(x + 1, y + 2, fp.w * T - 1, fp.h * T - 1);
         continue;
       }
-      // 서 있는 물건: 발밑 그림자 (오른쪽 아래로 조금)
-      g.fillStyle(0x140c06, 0.28);
-      g.fillRoundedRect(x + 2, y + fp.h * T - 6, fp.w * T - 2, 6, 3);
+      // 서 있는 물건: 발밑 그림자 (오른쪽 아래로 조금). 바닥에 낮게 깔린 연못은 빼고
+      if (!noFootShadow(p.i)) {
+        g.fillStyle(0x140c06, 0.28);
+        g.fillRoundedRect(x + 2, y + fp.h * T - 6, fp.w * T - 2, 6, 3);
+      }
       // 발밑 기준이라 위쪽 절반은 뒤로 지나갈 수 있게 조금 줄인다
       const bx = x + 2;
       const by = y + 6;
@@ -677,6 +700,7 @@ export class HouseScene extends Phaser.Scene {
 
   private applyLights(): void {
     this.glowSpots = [];
+    this.pondSpots = [];
     const spots: LightSpot[] = [];
     for (const g of this.glows.filter((x) => x.r !== 0)) g.img.destroy();
     this.glows = this.glows.filter((x) => x.r === 0);
@@ -686,6 +710,7 @@ export class HouseScene extends Phaser.Scene {
       const fp = footprint(def, p.r);
       const x = this.tileX(p.x) + (fp.w * T) / 2;
       const yb = this.tileY(p.y + fp.h);
+      if (hasNightArt(p.i)) this.pondSpots.push({ x, y: yb - (fp.h * T) / 2, r: Math.max(fp.w, fp.h) * T * 0.9 });
       if (def.light) {
         const y = yb - Math.min(14, artUp(p.i) + 6);
         this.glowSpots.push({ x, y, r: def.light.r, color: def.light.color });
@@ -1144,6 +1169,12 @@ export class HouseScene extends Phaser.Scene {
         if (at && Math.random() < 0.45) this.sfx.play("pop", 0.7 * hearGain(Math.hypot(at.x - p.x, at.y - p.y)));
       }
     }
+    // 연못: 잔물결·반짝임 장면을 천천히 넘긴다 (동작 줄이기면 멈춤). 끌고 있는 연못은 건너뛴다 (제자리로 튀지 않게)
+    if (!this.data0.reduced && time >= this.pondAt) {
+      this.pondAt = time + 420;
+      this.pondFrame = (this.pondFrame + 1) % animFrames("pond");
+      for (const it of this.work.items) if (it.i === "pond" && this.drag?.u !== it.u) this.refreshVariant(it.u);
+    }
     // 열린 창: 바깥 소리 (낮 새소리·밤 귀뚜라미·가끔 바람)
     if (time >= this.nextAmbient) {
       this.nextAmbient = time + 1200 + Math.random() * 2500;
@@ -1263,6 +1294,8 @@ export class HouseScene extends Phaser.Scene {
     if (night !== this.night) {
       this.night = night;
       this.updateWindows();
+      // 밤 그림이 따로 있는 물건 (연못에 달이 비친다)
+      for (const it of this.work.items) if (hasNightArt(it.i)) this.refreshVariant(it.u);
     }
     const lantern = this.player.view.lantern;
     const r = playerLightRadius(L.glow, lantern);
@@ -1291,6 +1324,8 @@ export class HouseScene extends Phaser.Scene {
           this.lighting.add(cx, cy, Math.max(room.x1 - room.x0, this.tier.h) * T * 0.75, 0.7);
         }
       this.lighting.add(this.sign.x, this.sign.y - 10, 26, 0.5);
+      // 연못에 비친 달빛 (은은하게)
+      if (night) for (const ps of this.pondSpots) this.lighting.add(ps.x, ps.y, ps.r, 0.4);
     }
     this.lighting.end();
 
@@ -1339,14 +1374,22 @@ export class HouseScene extends Phaser.Scene {
 
   // ── 편집 모드 ──
 
+  /** 저장·점수에 들어가는 배치 (놓아 보는 물건은 뺀다) */
+  private savedWork(): HouseLayout {
+    return this.trialU ? { ...this.work, items: this.work.items.filter((i) => i.u !== this.trialU) } : this.work;
+  }
+
   private emitState(): void {
+    const w = this.savedWork();
+    const trial = this.trialU ? this.work.items.find((i) => i.u === this.trialU) : undefined;
     const st: HouseEditState = {
       editing: this.editing,
-      items: structuredClone(this.work.items),
-      floor: this.work.floor,
-      wall: this.work.wall,
+      items: structuredClone(w.items),
+      floor: w.floor,
+      wall: w.wall,
       selected: this.selected,
-      dirty: JSON.stringify(this.work) !== this.baseline,
+      dirty: JSON.stringify(w) !== this.baseline,
+      trial: trial ? { u: trial.u, itemId: trial.i } : null,
     };
     bridge.emit("house:state", st);
   }
@@ -1354,6 +1397,8 @@ export class HouseScene extends Phaser.Scene {
   private setEditing(on: boolean, revert: boolean): void {
     if (!this.data0.mine || this.exiting) return;
     if (on && this.using) this.exitSpot();
+    // 편집을 마치거나 되돌리면 놓아 보던 물건은 치운다
+    if (!on || revert) this.dropTrial();
     if (revert) {
       this.work = JSON.parse(this.baseline) as HouseLayout;
       this.refreshAll();
@@ -1423,8 +1468,10 @@ export class HouseScene extends Phaser.Scene {
     if (!p || !def) return;
     const pos = this.drag?.u === p.u ? this.drag.to : p;
     const fp = footprint(def, p.r);
-    g.lineStyle(1, valid ? 0x9fc5a8 : 0xd08a76, 1);
-    g.fillStyle(valid ? 0x9fc5a8 : 0xd08a76, 0.18);
+    // 놓아 보는 물건은 촛불색 테두리
+    const ok = p.u === this.trialU ? 0xe8c070 : 0x9fc5a8;
+    g.lineStyle(1, valid ? ok : 0xd08a76, 1);
+    g.fillStyle(valid ? ok : 0xd08a76, 0.18);
     g.fillRect(this.tileX(pos.x), this.tileY(pos.y), fp.w * T, fp.h * T);
     g.strokeRect(this.tileX(pos.x) + 0.5, this.tileY(pos.y) + 0.5, fp.w * T - 1, fp.h * T - 1);
   }
@@ -1452,14 +1499,65 @@ export class HouseScene extends Phaser.Scene {
     this.emitState();
   }
 
+  /** 놓아 보던 물건을 치운다 (없으면 그대로) */
+  private dropTrial(): void {
+    const u = this.trialU;
+    if (!u) return;
+    this.trialU = null;
+    this.work.items = this.work.items.filter((i) => i.u !== u);
+    this.views.get(u)?.img.destroy();
+    this.views.delete(u);
+    if (this.selected === u) this.selected = null;
+    if (this.drag?.u === u) this.drag = null;
+    this.rebuildBodies();
+    this.applyLights();
+  }
+
   private tool(t: HouseTool): void {
     if (!this.editing) return;
-    const p = this.selected ? this.work.items.find((i) => i.u === this.selected) : undefined;
+    // 놓아 보는 중에 고른 게 없으면 돌리기는 놓아 보는 물건에
+    const pick = this.selected ?? (t.action === "rotate" ? this.trialU : null);
+    const p = pick ? this.work.items.find((i) => i.u === pick) : undefined;
     switch (t.action) {
+      case "try": {
+        // 상점 "놓아 보기": 사지 않고 반투명으로 얹어 본다 (저장·점수에서 빠진다)
+        const def = furnitureById(t.itemId);
+        if (!def || def.skin || def.ext) return;
+        this.dropTrial();
+        const c = this.toTile(this.cameras.main.midPoint.x, this.cameras.main.midPoint.y);
+        const spot = findFreeSpot(this.work.items, this.tier, def, 0, c.x, c.y);
+        if (!spot) {
+          this.changed();
+          return this.notice("놓아 볼 빈자리가 없어요. 다른 물건을 옮기거나 치워 주세요.");
+        }
+        const np: Placed = { u: newUid(this.work.items), i: def.id, x: spot.x, y: spot.y, r: 0 };
+        this.trialU = np.u;
+        this.work.items.push(np);
+        const v = this.placeView(np);
+        if (v) this.views.set(np.u, v);
+        this.rebuildBodies();
+        this.applyLights();
+        this.selected = np.u;
+        return this.changed();
+      }
+      case "tryEnd": {
+        const u = this.trialU;
+        if (!u) return;
+        if (!t.keep) {
+          this.dropTrial();
+          return this.changed();
+        }
+        // 샀거나 가방에 남은 게 있다: 진짜 물건으로 (그 자리 그대로)
+        if (this.work.items.length - 1 >= this.tier.maxItems) return this.notice(`${this.tier.name}에는 ${this.tier.maxItems}개까지 놓을 수 있어요.`);
+        this.trialU = null;
+        this.views.get(u)?.img.setAlpha(1);
+        this.selected = u;
+        return this.changed();
+      }
       case "place": {
         const def = furnitureById(t.itemId);
         if (!def || def.skin) return;
-        if (this.work.items.length >= this.tier.maxItems) return this.notice(`${this.tier.name}에는 ${this.tier.maxItems}개까지 놓을 수 있어요.`);
+        if (this.savedWork().items.length >= this.tier.maxItems) return this.notice(`${this.tier.name}에는 ${this.tier.maxItems}개까지 놓을 수 있어요.`);
         const c = this.toTile(this.cameras.main.midPoint.x, this.cameras.main.midPoint.y);
         const spot = findFreeSpot(this.work.items, this.tier, def, 0, c.x, c.y);
         if (!spot) return this.notice("빈자리가 없어요. 다른 물건을 옮기거나 치워 주세요.");
@@ -1491,6 +1589,10 @@ export class HouseScene extends Phaser.Scene {
       }
       case "remove": {
         if (!p) return;
+        if (p.u === this.trialU) {
+          this.dropTrial();
+          return this.changed();
+        }
         this.work.items = this.work.items.filter((i) => i.u !== p.u);
         this.views.get(p.u)?.img.destroy();
         this.views.delete(p.u);
@@ -1554,7 +1656,7 @@ export class HouseScene extends Phaser.Scene {
       // 끄는 동안 그림을 따라 움직이고, 놓을 수 없는 자리면 빨갛게 보인다
       const v = this.views.get(p.u);
       if (v) this.placeView({ ...p, x: to.x, y: to.y }, v);
-      v?.img.setAlpha(ok ? 1 : 0.55);
+      v?.img.setAlpha(this.alphaOf(p.u, ok));
       this.drawSelection(ok);
     } else if (this.pan) {
       const cam = this.cameras.main;
@@ -1571,7 +1673,7 @@ export class HouseScene extends Phaser.Scene {
     const p = this.work.items.find((i) => i.u === d.u);
     const v = p ? this.views.get(p.u) : undefined;
     if (p && v) this.placeView(p, v);
-    v?.img.setAlpha(1);
+    if (p) v?.img.setAlpha(this.alphaOf(p.u));
     this.changed();
   }
 
@@ -1585,7 +1687,7 @@ export class HouseScene extends Phaser.Scene {
     const moved = (d.to.x !== p.x || d.to.y !== p.y) && this.tryMove(p.u, d.to.x, d.to.y);
     const v = this.views.get(p.u);
     if (!moved && v) this.placeView(p, v);
-    v?.img.setAlpha(1);
+    v?.img.setAlpha(this.alphaOf(p.u));
     this.changed();
   };
 
@@ -1642,6 +1744,7 @@ export class HouseScene extends Phaser.Scene {
     const before = new Map((JSON.parse(this.baseline) as HouseLayout).items.map((p) => [p.u, placedSig(p)]));
     const after = new Map(house.layout.items.map((p) => [p.u, placedSig(p)]));
     for (const u of [...this.toggles.keys()]) if ((before.has(u) || after.has(u)) && before.get(u) !== after.get(u)) this.toggles.delete(u);
+    this.trialU = null;
     this.work = structuredClone(house.layout);
     this.baseline = JSON.stringify(this.work);
     this.refreshAll();
@@ -1654,6 +1757,7 @@ export class HouseScene extends Phaser.Scene {
       editing: this.editing,
       items: this.work.items.length,
       selected: this.selected,
+      trial: this.trialU,
       player: { x: this.player.x, y: this.player.y, state: this.player.state },
       H: this.H,
       // 3번 QA: 쓸 대상·자리·켜짐 상태

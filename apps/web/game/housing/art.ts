@@ -59,6 +59,287 @@ const box = (g: Grid, x: number, y: number, w: number, h: number, c: Color, edge
   g.hline(x, x + w - 1, y + h - 1, edge);
 };
 
+// ── 연못 (3×2) ──
+// 마을 호수와 같은 청록 물빛(game/sprites/ground.ts)을 조금 맑게: 가장자리 얕은 물 → 가운데 깊은 물,
+// 둥근 물가 돌, 연잎·연꽃, 물풀, 잉어 한 마리, 잔물결·반짝임. 밤 그림(n)에는 달이 비친다.
+// 변형 이름은 "-"로 잇는다: v = 세로로 돌린 모습(그림을 돌리지 않고 다시 그려 빛이 늘 왼쪽 위에서 온다),
+// n = 밤, f1~f3 = 잔물결 장면 (f0은 생략: 상점 아이콘·동작 줄이기와 같은 그림).
+
+/** 연못 잔물결 장면 수 */
+export const POND_FRAMES = 4;
+
+const POND_STONES = [0x8f8a7e, 0x7d796f, 0x9b958a, 0x868b7b] as const;
+const POND_RIM = 0x4a463d;
+const POND_MOSS = 0x5f8048;
+/** 얕은 물(모래 비침)·그늘진 가장자리·중간·깊은 물·가장 깊은 물 */
+const POND_WATER = {
+  day: [0x7aa898, 0x557f80, 0x47727a, 0x355a66, 0x284856],
+  night: [0x45667a, 0x2f4a62, 0x2b465e, 0x203650, 0x182a42],
+} as const;
+const PAD = 0x4f8a48;
+const PAD_L = 0x78b464;
+const PAD_D = 0x34663a;
+const LOTUS = 0xf0a6c2;
+const LOTUS_L = 0xffe2ec;
+const LOTUS_C = 0xf2d060;
+
+function pondArt(g: Grid, W: number, H: number, v: string): void {
+  const tok = v.split("-");
+  const night = tok.includes("n");
+  const f = Number(tok.find((t) => /^f\d$/.test(t))?.slice(1) ?? 0) % POND_FRAMES;
+  const vert = H > W;
+  const water = night ? POND_WATER.night : POND_WATER.day;
+  const cx = W / 2;
+  const cy = H / 2;
+  const rx = W / 2 - 1.8;
+  const ry = H / 2 - 1.8;
+  // 긴 축 좌표(a)·짧은 축 좌표(b) (-1..1) → 픽셀. 세로 그림은 두 축을 맞바꿔 같은 짜임으로 그린다
+  const at = (a: number, b: number) => (vert ? { x: Math.round(cx + b * rx - 0.5), y: Math.round(cy + a * ry - 0.5) } : { x: Math.round(cx + a * rx - 0.5), y: Math.round(cy + b * ry - 0.5) });
+  // 긴 축 방향 한 칸 (잉어 몸 방향)
+  const step = (da: number, db: number) => (vert ? { x: db, y: da } : { x: da, y: db });
+  // 물가 굴곡: 타원 반지름을 각도마다 조금씩 줄인다 (긴 축 기준 각도라 세로 그림도 같은 모양)
+  const wob = (t: number) => 1 - 0.045 * (1 + Math.sin(3 * t + 0.6)) - 0.03 * (1 + Math.sin(5 * t + 2.2));
+  const shape = (x: number, y: number) => {
+    const nx = (x + 0.5 - cx) / rx;
+    const ny = (y + 0.5 - cy) / ry;
+    const t = vert ? Math.atan2(nx, ny) : Math.atan2(ny, nx);
+    const d = Math.hypot(nx, ny) / wob(t);
+    // 물가까지 남은 픽셀 거리 (중심에서 이 점을 지나 물가까지)
+    const dist = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+    return { d, e: d > 0 ? dist * (1 / d - 1) : 99, nx, ny };
+  };
+  // 픽셀 종류: 0 빈칸, 1 물가 흙, 2 물, 3 물 위 물건(연잎·꽃)
+  const kind = new Uint8Array(W * H);
+  const RIM = 2.4;
+
+  // 1) 물: 깊이에 따라 색을 나누고 경계는 살짝 흩뿌려 부드럽게
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const { d, e, nx, ny } = shape(x, y);
+      if (d > 1) continue;
+      if (e < RIM) {
+        g.set(x, y, POND_RIM);
+        kind[y * W + x] = 1;
+        continue;
+      }
+      const j = (hash2(x, y, 61) - 0.5) * 0.1;
+      const dd = d + j;
+      let c: Color;
+      if (e < RIM + 1.6) c = ny < -0.15 || nx < -0.75 ? water[1] : water[0]; // 위쪽은 돌 그늘, 아래쪽은 모래가 비친다
+      else if (dd > 0.66) c = water[2];
+      else if (dd > 0.4) c = water[3];
+      else c = water[4];
+      // 하늘이 비친 결 (왼쪽 위에서 오른쪽 아래로 비스듬히)
+      const band = nx * 0.45 + ny;
+      if (!night && band > -0.62 && band < -0.42 && e >= RIM + 1.6) c = lighten(c, 0.1);
+      g.set(x, y, c);
+      kind[y * W + x] = 2;
+    }
+  const isWater = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && kind[y * W + x] === 2;
+  const waterAt = (x: number, y: number) => ((g.get(x, y) >>> 8) & 0xffffff) as Color;
+  const tint = (x: number, y: number, c: Color, t: number) => {
+    if (isWater(x, y)) g.set(x, y, mixColor(waterAt(x, y), c, t));
+  };
+
+  // 2) 물속: 물풀 몇 가닥 + 잉어 한 마리 (물빛에 묻혀 흐릿하게)
+  const weed = night ? 0x2c5040 : 0x3d6e48;
+  for (const [a, b, n] of [[-0.62, -0.22, 4], [0.66, 0.3, 3], [0.1, 0.62, 3]] as const) {
+    const o = at(a, b);
+    for (let i = 0; i < n; i++) tint(o.x + (i % 2), o.y - i, weed, 0.6);
+    tint(o.x + 2, o.y - 1, weed, 0.45);
+  }
+  {
+    // 잉어: 긴 축으로 헤엄치는 주황 몸 + 흰 무늬, 꼬리는 장면마다 살랑
+    const o = at(0.0, -0.1);
+    const koi = night ? 0xb06a4a : 0xf08a3c;
+    const white = night ? 0xc0bab0 : 0xf8f2e6;
+    const body: [number, number, Color][] = [
+      [2, 0, koi],
+      [1, 0, white],
+      [1, 1, koi],
+      [0, 0, koi],
+      [0, 1, white],
+      [-1, 0, koi],
+      [-1, 1, koi],
+      [-2, 0, koi],
+    ];
+    for (const [da, db, c] of body) {
+      const p = step(da, db);
+      tint(o.x + p.x, o.y + p.y, c, 0.8);
+    }
+    const wag = [0, 1, 0, -1][f];
+    const t1 = step(-3, wag);
+    const t2 = step(-3, wag + 1);
+    tint(o.x + t1.x, o.y + t1.y, koi, 0.6);
+    tint(o.x + t2.x, o.y + t2.y, koi, 0.6);
+  }
+
+  // 3) 밤: 물에 비친 달 + 물결에 부서지는 달빛
+  if (night) {
+    const m = at(0.22, -0.4);
+    for (let y = m.y - 3; y <= m.y + 3; y++)
+      for (let x = m.x - 4; x <= m.x + 4; x++) {
+        const q = ((x - m.x) / 3.1) ** 2 + ((y - m.y) / 2.3) ** 2;
+        if (q <= 1) g.set(x, y, q < 0.3 && x <= m.x && y <= m.y ? 0xfffbe6 : 0xece6c4);
+        else if (q <= 1.9) tint(x, y, 0x9eb2c8, 0.45);
+      }
+    for (let k = 0; k < 2; k++) {
+      const y = m.y + 4 + k;
+      for (let x = m.x - 3 + ((f + k) % 2); x <= m.x + 3; x += 3) {
+        tint(x, y, 0xe8e2c0, 0.6 - k * 0.2);
+        tint(x + 1, y, 0xe8e2c0, 0.4 - k * 0.15);
+      }
+    }
+  }
+
+  // 4) 잔물결: 물방울이 떨어진 자리에서 둥글게 번진다 (장면마다 한 칸씩)
+  const ripple = (a: number, b: number, phase: number) => {
+    const o = at(a, b);
+    const ph = (f + phase) % POND_FRAMES;
+    const r = [0, 1.4, 2.3, 3.1][ph];
+    const k = [0.6, 0.5, 0.36, 0.22][ph];
+    const light = night ? 0xa8b8d0 : 0xd6eeea;
+    for (let y = o.y - r - 1; y <= o.y + r + 1; y++)
+      for (let x = o.x - 2 * r - 1; x <= o.x + 2 * r + 1; x++) {
+        // 납작한 고리 (위쪽 호는 밝게, 아래쪽 호는 옅게)
+        const q = Math.hypot((x - o.x) / 1.8, y - o.y);
+        if (r > 0 && Math.abs(q - r) < 0.5) tint(x, y, light, y > o.y ? k * 0.55 : k);
+      }
+    if (ph === 0) tint(o.x, o.y, light, 0.75); // 막 떨어진 물방울
+
+  };
+  ripple(0.3, 0.36, 0);
+  ripple(-0.2, -0.34, 2);
+
+  // 5) 연잎 (물에 그림자를 드리운다) + 연꽃·봉오리
+  const pad = (a: number, b: number, r: number, notch: number) => {
+    const o = at(a, b);
+    const ry2 = r * 0.8;
+    const cells: [number, number, Color][] = [];
+    for (let y = Math.floor(o.y - ry2 - 1); y <= o.y + ry2 + 1; y++)
+      for (let x = Math.floor(o.x - r - 1); x <= o.x + r + 1; x++) {
+        const dx = (x + 0.5 - (o.x + 0.5)) / r;
+        const dy = (y + 0.5 - (o.y + 0.5)) / ry2;
+        const q = dx * dx + dy * dy;
+        if (q > 1) continue;
+        let da = Math.atan2(dy, dx) - notch;
+        da = Math.atan2(Math.sin(da), Math.cos(da));
+        if (Math.abs(da) < 0.42 && q > 0.06) continue; // 갈라진 틈
+        const lit = dx + dy;
+        cells.push([x, y, q > 0.55 && lit < -0.35 ? PAD_L : q > 0.5 && lit > 0.55 ? PAD_D : PAD]);
+      }
+    for (const [x, y] of cells) tint(x + 1, y + 1, 0x10202a, 0.35);
+    for (const [x, y, c] of cells) {
+      if (kind[y * W + x] === 0 || kind[y * W + x] === 1) continue;
+      g.set(x, y, c);
+      kind[y * W + x] = 3;
+    }
+    // 잎맥 한 줄
+    g.set(Math.round(o.x - Math.cos(notch) * r * 0.45), Math.round(o.y - Math.sin(notch) * ry2 * 0.45), PAD_D);
+    return o;
+  };
+  const big = pad(-0.44, 0.22, 4.6, vert ? -0.6 : 0.5);
+  pad(-0.1, 0.56, 2.7, vert ? 2.4 : 3.6);
+  const third = pad(0.56, -0.18, 3.4, vert ? 1.9 : 2.6);
+  // 활짝 핀 연꽃
+  {
+    const x = big.x - 1;
+    const y = big.y - 1;
+    const px: [number, number, Color][] = [
+      [0, -2, LOTUS_L],
+      [-1, -1, LOTUS_L],
+      [0, -1, LOTUS],
+      [1, -1, LOTUS_L],
+      [-2, 0, LOTUS],
+      [-1, 0, LOTUS],
+      [0, 0, LOTUS_C],
+      [1, 0, LOTUS],
+      [2, 0, LOTUS],
+      [-1, 1, darken(LOTUS, 0.15)],
+      [0, 1, LOTUS],
+      [1, 1, darken(LOTUS, 0.15)],
+    ];
+    for (const [dx, dy, c] of px) g.set(x + dx, y + dy, c);
+  }
+  // 봉오리
+  g.set(third.x, third.y - 1, LOTUS);
+  g.set(third.x, third.y - 2, LOTUS_L);
+  g.set(third.x + 1, third.y - 1, darken(LOTUS, 0.15));
+
+  // 6) 반짝임: 장면마다 다른 자리가 반짝 (낮은 하얗게, 밤은 푸르게)
+  const spark = night ? 0xc8d6f0 : 0xf2fbf8;
+  const spots: [number, number][] = [[-0.2, -0.38], [0.15, 0.1], [0.62, 0.22], [-0.55, -0.05], [0.4, -0.55], [-0.3, 0.5]];
+  spots.forEach(([a, b], i) => {
+    if ((i + f) % 3 !== 0) return;
+    const o = at(a, b);
+    if (!isWater(o.x, o.y)) return;
+    g.set(o.x, o.y, spark);
+    tint(o.x + 1, o.y, spark, 0.45);
+  });
+
+  // 7) 물가 돌: 둥근 돌을 둘레에 둘러 쌓는다 (위쪽 돌부터 그려 아래 돌이 앞에 오게)
+  const perim = Math.PI * (3 * (rx + ry) - Math.sqrt((3 * rx + ry) * (rx + 3 * ry)));
+  const n = Math.round(perim / 5.2);
+  const stones: { x: number; y: number; sx: number; sy: number; c: Color; moss: boolean }[] = [];
+  for (let k = 0; k < n; k++) {
+    const t = ((k + (hash2(k, 7, 71) - 0.5) * 0.3) / n) * Math.PI * 2;
+    const w = wob(t);
+    const la = Math.cos(t) * w;
+    const sb = Math.sin(t) * w;
+    const ex = cx + (vert ? sb : la) * rx;
+    const ey = cy + (vert ? la : sb) * ry;
+    const len = Math.hypot(cx - ex, cy - ey) || 1;
+    const size = 2.1 + hash2(k, 3, 73) * 0.9;
+    stones.push({
+      x: ex + ((cx - ex) / len) * 1.1,
+      y: ey + ((cy - ey) / len) * 1.1,
+      sx: size,
+      sy: size * 0.78,
+      c: POND_STONES[Math.floor(hash2(k, 5, 75) * POND_STONES.length)],
+      moss: hash2(k, 9, 77) < 0.3,
+    });
+  }
+  stones.sort((a, b) => a.y - b.y);
+  for (const s of stones)
+    for (let y = Math.floor(s.y - s.sy - 1); y <= Math.ceil(s.y + s.sy + 1); y++)
+      for (let x = Math.floor(s.x - s.sx - 1); x <= Math.ceil(s.x + s.sx + 1); x++) {
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        const dx = (x + 0.5 - s.x) / s.sx;
+        const dy = (y + 0.5 - s.y) / s.sy;
+        const q = dx * dx + dy * dy;
+        if (q > 1) continue;
+        const lit = -(dx * 0.6 + dy * 0.8);
+        let c = lit > 0.5 ? lighten(s.c, 0.2) : lit < -0.4 ? darken(s.c, 0.28) : s.c;
+        if (q > 0.72 && lit < -0.1) c = darken(s.c, 0.4); // 돌 사이 틈
+        if (s.moss && dy < -0.2 && hash2(x, y, 79) < 0.55) c = POND_MOSS;
+        if (lit > 0.75 && q < 0.4) c = lighten(s.c, 0.38);
+        g.set(x, y, c);
+        kind[y * W + x] = 1;
+      }
+
+  // 8) 물가 풀: 한쪽 끝에 부들 몇 줄기, 반대쪽 돌 틈에 풀 한 포기
+  {
+    const o = at(0.78, -0.48);
+    const blades: [number, number, Color, boolean][] = [
+      [-2, 5, 0x6f8c46, false],
+      [0, 6, 0x5a7a3c, true],
+      [1, 5, 0x7c9a4e, false],
+      [3, 6, 0x5a7a3c, true],
+    ];
+    for (const [dx, h, c, tail] of blades) {
+      const x = o.x + dx;
+      const base = o.y + 1;
+      for (let i = 0; i < h; i++) g.set(x + (i > h - 3 && dx < 0 ? -1 : 0), Math.max(0, base - i), c);
+      if (tail) {
+        g.set(x, Math.max(0, base - h), 0x7a5232);
+        g.set(x, Math.max(0, base - h + 1), 0x6a4428);
+      }
+    }
+    const t = at(-0.74, 0.62);
+    for (const [dx, dy] of [[0, 0], [-1, -1], [1, -1], [0, -2], [2, -2]] as const) g.set(t.x + dx, t.y + dy, dy === -2 ? LEAF_L : LEAF);
+  }
+}
+
 const DRAW: Record<string, Draw> = {
   desk: (g, W) => {
     box(g, 1, 2, W - 2, 12, WOOD);
@@ -255,14 +536,7 @@ const DRAW: Record<string, Draw> = {
     g.ellipse(W / 2 + 6, 18, 7, 6, LEAF);
     for (let i = 0; i < 14; i++) g.set(6 + ((i * 7) % 20), 6 + ((i * 5) % 20), LEAF_L);
   },
-  pond: (g, W, H) => {
-    g.ellipse(W / 2, H / 2, W / 2 - 1, H / 2 - 1, STONE_D);
-    g.ellipse(W / 2, H / 2, W / 2 - 3, H / 2 - 3, 0x24405e);
-    g.ellipse(W / 2 + 4, H / 2 - 3, 6, 3, 0x34587a);
-    g.ellipse(W / 2 - 8, H / 2 + 2, 3, 2, 0xe8e4c8); // 달
-    g.ellipse(10, H - 9, 3, 2, LEAF); // 연잎
-    g.set(10, H - 10, 0xf0a0c0);
-  },
+  pond: (g, W, H, v) => pondArt(g, W, H, v),
   flowerbed: (g, W, H) => {
     g.rect(1, 2, W - 2, H - 4, 0x3a2c22);
     const c = [0xf0a0c0, 0xf0e080, 0xb0a0f0, 0xf0f0f0];
@@ -482,13 +756,37 @@ const DRAW: Record<string, Draw> = {
   },
 };
 
+/** 돌린 모습을 그림째 돌리지 않고 따로 그리는 물건 (연못: 빛 방향·물가 돌이 돌려도 자연스럽게). 나머지 turn 물건은 그림을 90°씩 돌린다 */
+export const drawsTurned = (id: string) => id === "pond";
+/** 은은하게 움직이는 물건의 장면 수 (연못 잔물결·반짝임). 1이면 멈춘 그림 */
+export const animFrames = (id: string) => (id === "pond" ? POND_FRAMES : 1);
+/** 발밑 그림자를 깔지 않는 물건 (연못: 바닥에 낮게 깔린 물이라 돌 테두리만으로 충분) */
+export const noFootShadow = (id: string) => id === "pond";
+/** 밤에 다른 그림을 쓰는 물건 (연못: 달이 비친다) */
+export const hasNightArt = (id: string) => id === "pond";
+
+/**
+ * 그림 변형 이름 잇기: 기본 변형(불 켜짐 등) + 세로(v)·밤(n)·장면(f1…). 빈 조각은 뺀다.
+ * 연못처럼 따로 그리는 물건만 v·n·f를 쓰고, 나머지는 기본 변형 그대로다.
+ */
+export function itemVariant(id: string, base: string, opts: { r?: number; night?: boolean; frame?: number } = {}): string {
+  const parts = [base];
+  if (drawsTurned(id) && (opts.r ?? 0) % 2 === 1) parts.push("v");
+  if (hasNightArt(id) && opts.night) parts.push("n");
+  const n = animFrames(id);
+  if (n > 1 && opts.frame && opts.frame % n) parts.push(`f${opts.frame % n}`);
+  return parts.filter(Boolean).join("-");
+}
+
 /** 물건 그림 (차지 칸 + 위로 솟는 부분). 없는 id면 null. variant = 불 켜짐·문 열림·화분 단계 (Draw 참고) */
 export function furnitureGrid(id: string, variant = ""): Grid | null {
   const def = furnitureById(id);
   const draw = DRAW[id];
   if (!def || !draw) return null;
-  const W = def.w * 16;
-  const H = def.h * 16 + artUp(id);
+  // 세로로 돌린 모습을 따로 그리는 물건 (drawsTurned)은 변형에 "v"가 붙으면 가로·세로를 바꿔 그린다
+  const vert = def.turn && drawsTurned(id) && variant.split("-").includes("v");
+  const W = (vert ? def.h : def.w) * 16;
+  const H = (vert ? def.w : def.h) * 16 + artUp(id);
   const g = new Grid(W, H);
   draw(g, W, H, variant);
   if (id !== "rug" && id !== "flowerbed" && id !== "stone_path") g.outline(OUT, false, 170);
@@ -773,40 +1071,124 @@ export function furnitureIcon(id: string, scale: number): { url: string; w: numb
   return out;
 }
 
+/** 시계 방향 90° 돌린 복사본 (Phaser setAngle(90)과 같은 방향) */
+function rotateCW(src: Grid): Grid {
+  const g = new Grid(src.h, src.w);
+  for (let y = 0; y < src.h; y++) for (let x = 0; x < src.w; x++) g.px[x * src.h + (src.h - 1 - y)] = src.px[y * src.w + x];
+  return g;
+}
+
+/**
+ * 집 안에 r 방향으로 놓였을 때 보이는 그림 (HouseScene.placeView와 같은 규칙):
+ * 따로 그리는 물건(연못)은 세로 그림 + r≥2면 좌우 뒤집기, 다른 turn 물건은 90°씩 돌리기, 나머지는 r 홀수면 좌우 뒤집기.
+ */
+export function shownItemGrid(id: string, r: number, variant = ""): Grid | null {
+  const def = furnitureById(id);
+  const g = furnitureGrid(id, variant);
+  if (!def || !g) return g;
+  const q = ((r % 4) + 4) % 4;
+  if (def.turn && drawsTurned(id)) return q >= 2 ? g.mirrored() : g;
+  if (def.turn) {
+    let out = g;
+    for (let i = 0; i < q; i++) out = rotateCW(out);
+    return out;
+  }
+  return q % 2 ? g.mirrored() : g;
+}
+
+/** 상점 미리보기 보기 방식: 방향(r)·밤·잔물결 장면 */
+export type PreviewOpts = { r?: number; night?: boolean; frame?: number; stage?: boolean };
+
+/** 밤 미리보기에서 빛나는 자리 */
+type PreviewLight = { x: number; y: number; r: number; color: Color; k: number };
+
+/** 밤 방 안: 푸르스름하게 어둡히고, 빛나는 물건 둘레만 따뜻하게 남긴다 (게임의 밤 조명을 흉내) */
+function nightShade(g: Grid, lights: PreviewLight[]): void {
+  for (let y = 0; y < g.h; y++)
+    for (let x = 0; x < g.w; x++) {
+      const v = g.px[y * g.w + x];
+      if ((v & 255) === 0) continue;
+      const c = (v >>> 8) & 0xffffff;
+      let glow = 0;
+      let lc: Color = 0xffe0a0;
+      for (const l of lights) {
+        const t = Math.max(0, 1 - Math.hypot(x - l.x, y - l.y) / l.r) ** 1.4 * l.k;
+        if (t > glow) {
+          glow = t;
+          lc = l.color;
+        }
+      }
+      const r = (c >> 16) & 255;
+      const gg = (c >> 8) & 255;
+      const b = c & 255;
+      const dim = ((Math.round(r * 0.28) << 16) | (Math.round(gg * 0.34) << 8) | Math.round(b * 0.58 + 14)) as Color;
+      let out = mixColor(c, dim, 0.92 * (1 - glow));
+      if (glow > 0) out = mixColor(out, lc, glow * 0.2);
+      g.px[y * g.w + x] = Grid.rgba(out, v & 255);
+    }
+}
+
 /**
  * 3번 상점 "놓아 본 모습": 기본 벽·바닥 위에 그 물건을 놓고 그림자까지 그린 미리보기 (dataURL, 캐시).
  * 스킨이면 그 벽지·바닥을 입힌 작은 방 귀퉁이를 보여 준다.
+ * opts: 돌린 방향(r)·밤(집 안 밤 조명)·잔물결 장면. 돌리는 물건은 어느 방향이든 같은 크기의 방에 담아 그림이 들썩이지 않게 한다.
  */
-export function furniturePreview(id: string, scale: number): { url: string; w: number; h: number } {
-  const key = `preview:${id}@${scale}`;
+export function furniturePreview(id: string, scale: number, opts: PreviewOpts = {}): { url: string; w: number; h: number } {
+  const def = furnitureById(id);
+  const r = def?.skin || def?.ext ? 0 : (((opts.r ?? 0) % 4) + 4) % 4;
+  const night = !!opts.night;
+  const frame = animFrames(id) > 1 ? (opts.frame ?? 0) % animFrames(id) : 0;
+  const stage = !!opts.stage;
+  const key = `preview:${id}@${scale}:${r}${night ? "n" : ""}${frame}${stage ? "s" : ""}`;
   const hit = icons.get(key);
   if (hit) return hit;
-  const def = furnitureById(id);
-  const fw = def && !def.skin ? def.w : 2;
-  const fh = def && !def.skin ? def.h : 1;
-  const cols = Math.max(3, fw + 2);
-  const rows = fh + 1;
-  // 벽지 스킨은 벽을 거의 다 보여 준다 (아래 판·무늬가 같이 보이게)
-  const wallShow = def?.skin === "wall" ? WALL_H - 4 : 18;
-  const W = cols * 16;
-  const H = wallShow + rows * 16;
+  const flat = def && !def.skin;
+  const turned = !!(flat && def.turn && r % 2 === 1);
+  const fw = flat ? (turned ? def.h : def.w) : 2;
+  const fh = flat ? (turned ? def.w : def.h) : 1;
   const floorId = def?.skin === "floor" ? id : DEFAULT_FLOOR;
   const wallId = def?.skin === "wall" ? id : DEFAULT_WALL;
+  let W: number;
+  let floorH: number;
+  let wallShow: number;
+  let left: number;
+  if (stage) {
+    // 큰 미리보기: 둘레를 반 칸씩만 두른 좁은 방 (물건이 크게 보이게). 돌리는 물건은 긴 쪽에 맞춰 돌려도 방 크기가 그대로
+    const span = flat && def.turn ? Math.max(def.w, def.h) : 0;
+    W = (span || fw) * 16 + 16;
+    floorH = (span || fh) * 16 + 8;
+    wallShow = def?.skin === "wall" ? WALL_H - 4 : Math.max(12, artUp(id) + 4);
+    left = Math.round((W - fw * 16) / 2);
+  } else {
+    const cols = Math.max(3, fw + 2);
+    W = cols * 16;
+    floorH = (fh + 1) * 16;
+    // 벽지 스킨은 벽을 거의 다 보여 준다 (아래 판·무늬가 같이 보이게)
+    wallShow = def?.skin === "wall" ? WALL_H - 4 : 18;
+    left = Math.floor((cols - fw) / 2) * 16;
+  }
+  const H = wallShow + floorH;
   const g = new Grid(W, H);
-  for (let x = 0; x < cols; x++) {
+  // 바닥 타일·벽 판자는 물건 왼쪽 끝에 칸을 맞춘다 (집 안처럼 물건이 칸 위에 놓이게)
+  const off = (left % 16) - 16;
+  for (let x = 0; off + x * 16 < W; x++) {
+    const x0 = off + x * 16;
     const wall = wallGrid(wallId, x);
     // 벽 아래쪽(벽지 + 걸레받이)만 보인다
-    for (let y = 0; y < wallShow; y++) for (let i = 0; i < 16; i++) g.px[y * W + x * 16 + i] = wall.px[(WALL_H - wallShow + y) * 16 + i];
-    for (let y = 0; y < rows; y++) g.draw(floorGrid(floorId, x * 5 + y * 3), x * 16, wallShow + y * 16);
+    for (let y = 0; y < wallShow; y++)
+      for (let i = 0; i < 16; i++) if (x0 + i >= 0 && x0 + i < W) g.px[y * W + x0 + i] = wall.px[(WALL_H - wallShow + y) * 16 + i];
+    for (let y = 0; y * 16 < floorH; y++) g.draw(floorGrid(floorId, x * 5 + y * 3), x0, wallShow + y * 16);
   }
   // 벽 밑 그늘
   for (let x = 0; x < W; x++) g.set(x, wallShow, darken(((g.get(x, wallShow) >>> 8) & 0xffffff) as Color, 0.35));
+  const lights: PreviewLight[] = [];
   if (def && !def.skin && !def.ext) {
-    const art = furnitureGrid(id);
+    // 밤에는 켜고 끄는 빛(벽난로·스탠드)을 켠 모습으로 보여 준다
+    const lit = night && (id === "fireplace" || id === "floor_lamp");
+    const art = shownItemGrid(id, r, itemVariant(id, lit ? "on" : "", { r, night, frame }));
     if (art) {
-      const left = Math.floor((cols - fw) / 2) * 16;
-      const bottom = wallShow + fh * 16 + 8;
-      if (!def.floor) {
+      const bottom = wallShow + Math.round((floorH - fh * 16) / 2) + fh * 16;
+      if (!def.floor && !noFootShadow(id)) {
         // 바닥 그림자
         for (let x = left + 2; x < left + fw * 16 - 1; x++)
           for (let y = bottom - 4; y < bottom; y++) {
@@ -815,7 +1197,17 @@ export function furniturePreview(id: string, scale: number): { url: string; w: n
           }
       }
       g.draw(art, left, bottom - art.h);
+      const mx = left + (fw * 16) / 2;
+      if (def.light) lights.push({ x: mx, y: bottom - Math.min(14, artUp(id) + 6), r: def.light.r * 1.9, color: def.light.color, k: 0.95 });
+      if (lit) lights.push({ x: mx, y: bottom - (id === "fireplace" ? 8 : 26), r: id === "fireplace" ? 64 : 52, color: id === "fireplace" ? 0xff9a50 : 0xffe0a0, k: 1 });
+      // 연못: 물에 비친 달이 은은하게 밝다
+      if (hasNightArt(id)) lights.push({ x: mx, y: bottom - (fh * 16) / 2, r: Math.max(fw, fh) * 11, color: 0xc8d8f0, k: 0.4 });
     }
+  }
+  if (night) {
+    // 방 천장 조명 (게임에서도 밤이면 방마다 켜진다)
+    lights.push({ x: W / 2, y: wallShow, r: Math.max(W, H) * 0.75, color: 0xffe8c0, k: 0.32 });
+    nightShade(g, lights);
   }
   const c = document.createElement("canvas");
   c.width = W * scale;
