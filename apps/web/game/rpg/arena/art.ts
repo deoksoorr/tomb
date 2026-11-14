@@ -398,6 +398,97 @@ const THEMES: Record<ZoneId, Theme> = {
       R(c, 0, TOP - 2, AW, 2, 0x2a2a40);
     },
   },
+  "quarter-close": {
+    side: 0x161a24,
+    floor(c) {
+      // 밤 사무실 카펫 타일 (불 꺼진 남색)
+      for (let y = 0; y < AH; y += 32)
+        for (let x = 0; x < AW; x += 32) {
+          const alt = ((x + y) / 32) % 2;
+          R(c, x, y, 32, 32, alt ? 0x262c3c : 0x232938);
+          for (let k = 2; k < 32; k += 4) R(c, x + (alt ? k : 0), y + (alt ? 0 : k), alt ? 1 : 32, alt ? 32 : 1, alt ? 0x232838 : 0x202534);
+        }
+      speckle(c, 0, 0, AW, AH, 0x1a1e2a, 0.04, 111);
+      // 바닥을 기어가는 멀티탭 전선
+      for (let x = 30; x < AW - 30; x++) {
+        const y = 150 + Math.round(Math.sin(x / 23) * 5 + Math.sin(x / 7) * 1.5);
+        if (hash2(x, 0, 112) < 0.9) R(c, x, y, 1, 1, 0x101218);
+      }
+    },
+    wall(c) {
+      R(c, 0, 0, AW, TOP, 0x1a2030);
+      // 통유리 창 너머 새벽 2시 도시 (불 켜진 창이 몇 개 없다)
+      R(c, 24, 2, 300, TOP - 6, 0x0a0e1a);
+      skyline(c, 6, TOP - 10, 0x141c2c, 0x8a7a40, 113);
+      for (let x = 24; x < 324; x += 50) R(c, x, 2, 2, TOP - 6, 0x2a3244);
+      // 벽시계 (새벽 2시)
+      E(c, 348, 11, 6, 6, 0x3a3a44);
+      E(c, 348, 11, 5, 5, 0xd8d8d0);
+      R(c, 348, 6, 1, 5, OUT);
+      R(c, 345, 9, 3, 1, OUT);
+      // 비상구 표시 (초록 바탕에 달리는 사람) + 문
+      R(c, AW - 76, 4, 24, 10, 0x1a8a4a);
+      R(c, AW - 75, 5, 22, 8, 0x3ad07a);
+      R(c, AW - 70, 6, 2, 2, 0xf2f2ee);
+      R(c, AW - 71, 8, 3, 3, 0xf2f2ee);
+      R(c, AW - 68, 10, 2, 2, 0xf2f2ee);
+      R(c, AW - 73, 10, 2, 2, 0xf2f2ee);
+      R(c, AW - 64, 7, 8, 4, 0xf2f2ee);
+      R(c, AW - 60, 6, 2, 6, 0x3ad07a);
+      R(c, AW - 50, 3, 22, TOP - 3, 0x3a4250);
+      R(c, AW - 48, 5, 18, TOP - 5, 0x4a5262);
+      R(c, AW - 33, 15, 2, 2, 0xc8ccd2);
+      // "D-1 분기 마감" 벽 달력 (빨간 동그라미)
+      R(c, 372, 4, 14, 16, 0xe8e8e0);
+      R(c, 372, 4, 14, 3, 0xc83c3c);
+      for (let y = 9; y < 19; y += 3) for (let x = 374; x < 385; x += 3) R(c, x, y, 2, 1, 0x6a6e78);
+      E(c, 380, 15, 3, 2, 0xd03030);
+      E(c, 380, 15, 2, 1, 0xe8e8e0);
+      R(c, 0, TOP - 4, AW, 4, 0x2a3244);
+      R(c, 0, TOP - 1, AW, 1, 0x101420);
+    },
+  },
+  "layoff-day": {
+    side: 0x5a5e6a,
+    floor(c) {
+      // 회색 사무실 카펫 + 박스를 끌고 간 자국
+      tiles(c, 24, 0x4a4e5a, 0x464a56, null, 0x40444e, 0.08, 121);
+      for (let k = 0; k < 6; k++) {
+        const y = TOP + 20 + hash2(k, 1, 122) * (AH - TOP - 50);
+        const x0 = hash2(k, 2, 122) * AW * 0.5;
+        R(c, x0, y, 60 + hash2(k, 3, 122) * 120, 1, 0x3c404a, 0.8);
+        R(c, x0, y + 5, 60 + hash2(k, 4, 122) * 100, 1, 0x3c404a, 0.6);
+      }
+    },
+    wall(c) {
+      R(c, 0, 0, AW, TOP, 0xc8c4b8);
+      speckle(c, 0, 0, AW, TOP, 0xbcb8ac, 0.12, 123);
+      // 회의실 반투명 유리문 (블라인드가 내려와 있다)
+      for (const x of [40, 152, 296]) {
+        R(c, x, 2, 56, TOP - 4, 0x6a6e78);
+        R(c, x + 2, 4, 52, TOP - 6, 0xb8c8d0);
+        for (let y = 5; y < TOP - 3; y += 2) R(c, x + 2, y, 52, 1, 0xd8e0e4);
+        R(c, x + 26, 4, 2, TOP - 6, 0x6a6e78);
+        R(c, x + 18, 7, 18, 5, 0xf2f2ee);
+        R(c, x + 20, 9, 14, 1, 0x3a3f4a);
+      }
+      // 게시판: "조직 개편 안내" (빨간 압정)
+      R(c, 104, 3, 40, 20, 0x8a6a4a);
+      R(c, 106, 5, 36, 16, 0xa8845a);
+      R(c, 109, 6, 13, 14, 0xf2f2ee);
+      R(c, 125, 7, 14, 12, 0xf2ead3);
+      for (let y = 9; y < 19; y += 2) R(c, 110, y, 10 - (y % 3), 1, 0x6a6e78);
+      R(c, 127, 9, 10, 2, 0xc83c3c);
+      R(c, 115, 5, 2, 2, 0xd03030);
+      R(c, 131, 6, 2, 2, 0xd03030);
+      // 인사팀 표지
+      R(c, 360, 6, 46, 12, 0x2a2e3a);
+      R(c, 362, 8, 42, 8, 0x3a3f4a);
+      for (let x = 366; x < 400; x += 6) R(c, x, 10, 4, 4, 0xe8e0c8);
+      R(c, 0, TOP - 3, AW, 3, 0x8a867a);
+      R(c, 0, TOP - 1, AW, 1, 0x5a5850);
+    },
+  },
 };
 
 // ── 바닥 무늬 ──
@@ -464,6 +555,24 @@ function decal(c: Ctx, d: Decal): void {
       R(c, x, y + h - 2, w, 2, 0x2a1a14);
       for (let i = x + 4; i < x + w; i += 10) R(c, i, y + h - 4, 2, 2, [0xff6ac8, 0x6ad0ff, 0xffd04a][(i / 10) % 3 | 0]);
       break;
+    case "paper_scatter": {
+      // 흩어진 서류 (반려 도장·빨간 줄)
+      const v = d.v ?? 0;
+      for (let k = 0; k < Math.max(3, Math.floor(w / 12)); k++) {
+        const px = x + hash2(k, 1, 131 + v) * (w - 8);
+        const py = y + hash2(k, 2, 131 + v) * (h - 5);
+        R(c, px, py, 7, 5, 0xe8e4d8, 0.9);
+        R(c, px + 1, py + 1, 5, 1, 0x9aa3ad, 0.8);
+        if (hash2(k, 3, 131 + v) < 0.4) R(c, px + 1, py + 3, 5, 1, 0xc83c3c, 0.9);
+      }
+      break;
+    }
+    case "hall_runner":
+      R(c, x, y, w, h, 0x3a3e4c);
+      R(c, x, y + 2, w, 1, 0x5a5e6c);
+      R(c, x, y + h - 3, w, 1, 0x5a5e6c);
+      for (let i = x + 6; i < x + w; i += 24) R(c, i, y + h / 2 - 1, 10, 2, 0x4a4e5c);
+      break;
     case "plaza":
       E(c, x + w / 2, y + h / 2, w / 2, h / 2, 0x56567a);
       E(c, x + w / 2, y + h / 2, w / 2 - 6, h / 2 - 5, 0x4e4e6e);
@@ -509,6 +618,22 @@ function regionBase(c: Ctx, r: Region): void {
       R(c, r.x, r.y, r.w, r.h, 0x3a4252);
       frame(c, r.x, r.y, r.w, r.h, 0xffd04a);
       for (let i = 2; i < r.w - 2; i += 4) R(c, r.x + i, r.y + r.h - 3, 2, 1, 0xffd04a);
+      break;
+    case "shredder":
+      // 벽에 붙은 문서 파쇄기 줄: 철판 + 칼날 틈 + 노랑·검정 경고 띠 (안쪽 가장자리)
+      R(c, r.x, r.y, r.w, r.h, 0x2a2e36);
+      R(c, r.x, r.y, r.w, 1, 0x6a727c);
+      R(c, r.x, r.y + r.h - 1, r.w, 1, 0x14161a);
+      for (let yy = r.y + 3; yy < r.y + r.h - 2; yy += 4) {
+        R(c, r.x + 3, yy, r.w - 8, 2, 0x0e1014);
+        for (let xx = r.x + 4; xx < r.x + r.w - 5; xx += 3) R(c, xx, yy, 1, 1, 0x9aa3ad);
+      }
+      {
+        const edge = r.x < AW / 2 ? r.x + r.w - 3 : r.x;
+        for (let yy = r.y; yy < r.y + r.h; yy++) R(c, edge, yy, 3, 1, Math.floor((yy - r.y) / 3) % 2 ? 0x1a1a1a : 0xf0c040);
+      }
+      // 종이 부스러기
+      for (let k = 0; k < r.h / 6; k++) R(c, r.x + 2 + hash2(k, 1, 141 + (r.id ?? 0)) * (r.w - 6), r.y + hash2(k, 2, 141 + (r.id ?? 0)) * r.h, 2, 1, 0xe8e4d8);
       break;
     case "door":
     case "vine":
@@ -870,6 +995,84 @@ const PROPS: Record<string, PropPaint> = {
     R(c, 3, 9, 2, 5, 0x2a2a3a);
     R(c, w - 5, 9, 2, 5, 0x2a2a3a);
   },
+  night_desk(c, w, h, v) {
+    // 마주 보는 책상 섬: 가운데 낮은 칸막이, 모니터 넷 (꺼져 있다 — v=1이면 하나가 켜져 있다)
+    R(c, 4, 26, 2, h - 26, 0x22262e);
+    R(c, w - 6, 26, 2, h - 26, 0x22262e);
+    R(c, 1, 12, w - 2, 16, 0x5a5448);
+    R(c, 1, 12, w - 2, 1, 0x7a7262);
+    R(c, 1, 28, w - 2, 3, 0x3a362e);
+    R(c, 2, 8, w - 4, 5, 0x3a4252);
+    R(c, 2, 8, w - 4, 1, 0x4a5262);
+    for (const mx of [6, 22, w - 38, w - 22]) {
+      const on = v === 1 && mx === 22;
+      R(c, mx, 2, 15, 11, 0x111318);
+      R(c, mx + 1, 3, 13, 8, on ? 0x3a7ab8 : 0x1a1e26);
+      if (on) {
+        R(c, mx + 2, 4, 9, 1, 0xa8d8ff);
+        R(c, mx + 2, 6, 6, 1, 0x6aa8e0);
+        R(c, mx + 2, 8, 10, 1, 0x6aa8e0);
+      } else R(c, mx + 2, 4, 3, 1, 0x2a3040);
+      R(c, mx + 6, 13, 3, 2, 0x111318);
+    }
+    // 키보드·식은 커피·포스트잇
+    R(c, 8, 18, 14, 3, 0x2a2e36);
+    R(c, w - 24, 18, 14, 3, 0x2a2e36);
+    R(c, 28, 17, 5, 5, 0xe8d9b0);
+    R(c, 29, 17, 3, 2, 0x4a3420);
+    R(c, w - 32, 16, 9, 7, 0xf2f2ee);
+    R(c, w - 31, 18, 6, 1, 0xc83c3c);
+    R(c, 40, 14, 4, 4, 0xf0e060);
+  },
+  file_cabinet(c, w, h) {
+    R(c, 1, 0, 16, h - 2, 0x6a727c);
+    R(c, 1, 0, 16, 1, 0x9aa3ad);
+    for (let y = 2; y < h - 4; y += 9) {
+      R(c, 2, y, 14, 8, 0x5a626c);
+      R(c, 6, y + 3, 6, 1, 0xc8ccd2);
+      R(c, 3, y + 1, 3, 2, 0xf2f2ee);
+    }
+    // 반쯤 열린 서랍에서 서류가 삐져나왔다
+    R(c, 0, 11, 18, 2, 0xe8e4d8);
+    R(c, 1, h - 2, 16, 2, 0x000000, 0.35);
+  },
+  empty_desk(c, w, h, v) {
+    // 짐을 다 뺀 책상: 떼어 낸 이름표 자국, 상자 하나
+    R(c, 4, 16, 2, h - 16, 0x3a3226);
+    R(c, w - 6, 16, 2, h - 16, 0x3a3226);
+    wood(c, 1, 6, w - 2, 12, 0x9a8668);
+    R(c, 1, 18, w - 2, 3, 0x5a4a38);
+    R(c, 14, 8, 10, 2, 0x8a7658);
+    R(c, 15, 8, 8, 1, 0xb8a888);
+    if (v % 2 === 0) {
+      R(c, w - 18, 0, 14, 10, 0xc89a5a);
+      R(c, w - 18, 0, 14, 2, 0xd8b070);
+      R(c, w - 12, 0, 2, 10, 0xa87a3a);
+      R(c, w - 16, 4, 4, 2, 0x2a2e36);
+    } else {
+      R(c, 4, 2, 6, 6, 0xe8f0f0);
+      R(c, 5, 3, 4, 2, 0x6a4a30);
+    }
+  },
+  box_stack(c, w, h, v) {
+    // 짐 박스 두세 개 ("개인 물품" 매직 글씨)
+    const n = v % 2 ? 3 : 2;
+    for (let k = 0; k < n; k++) {
+      const bw = k === 2 ? 14 : 18 - k * 2;
+      const x = (w - bw) / 2 + (k === 1 ? 1 : 0);
+      const y = h - 9 - k * 8;
+      R(c, x, y, bw, 8, k % 2 ? 0xb88a4a : 0xc89a5a);
+      R(c, x, y, bw, 1, 0xd8b070);
+      R(c, x + bw / 2 - 1, y, 2, 8, 0xa87a3a);
+      R(c, x + 2, y + 4, 5, 1, 0x2a2a30);
+    }
+    if (v % 3 === 0) {
+      // 맨 위 박스에서 삐져나온 화분 잎
+      R(c, w / 2 - 2, 0, 1, 4, 0x3e8a3a);
+      R(c, w / 2 + 1, 1, 1, 3, 0x5aaa4a);
+    }
+    R(c, 2, h - 1, w - 4, 1, 0x000000, 0.35);
+  },
 };
 
 /** 소품 하나의 그림 (Arena가 kind·v·flip마다 텍스처로 한 번 등록) */
@@ -981,6 +1184,8 @@ export const PARTICLE_COLORS: Record<ZoneId, Color[]> = {
   "homework-desert": [0xf0dca0, 0xe0c080],
   "burnout-abyss": [0xff6ac8, 0x6ad0ff, 0xffd04a],
   "new-year-eve": [0xff6a6a, 0xffd04a, 0x6ad0ff, 0x8aff8a, 0xffffff],
+  "quarter-close": [0xa8c0e8],
+  "layoff-day": [0xf2ead3, 0xffffff, 0xe8e4d8],
 };
 
 /** 로비 카드 미리보기: 지도 + 소품 + 우두머리와 몬스터 몇 마리 (반 크기) */
@@ -1048,4 +1253,6 @@ export const AMBIENT: Record<ZoneId, { color: Color; alpha: number }> = {
   "homework-desert": { color: 0xfff0d0, alpha: 0.15 },
   "burnout-abyss": { color: 0x8a6ab0, alpha: 0.7 },
   "new-year-eve": { color: 0x6a6ab0, alpha: 0.65 },
+  "quarter-close": { color: 0x4a5a90, alpha: 0.72 },
+  "layoff-day": { color: 0xdcdce8, alpha: 0.25 },
 };

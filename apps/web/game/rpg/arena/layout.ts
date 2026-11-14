@@ -23,7 +23,7 @@ export type Prop = { kind: string; x: number; y: number; flip?: boolean; v?: num
 /** 바닥에 납작하게 그리는 무늬 (깔개·줄·얼룩) */
 export type Decal = { kind: string; x: number; y: number; w: number; h: number; v?: number };
 
-export type RegionKind = "conveyor" | "mud" | "vine" | "puddle" | "door" | "pad" | "stage";
+export type RegionKind = "conveyor" | "mud" | "vine" | "puddle" | "door" | "pad" | "stage" | "shredder";
 export type Region = {
   kind: RegionKind;
   /** 사각형 (x,y,w,h) 또는 타원 (ellipse: 가운데 x+w/2, y+h/2) */
@@ -38,7 +38,8 @@ export type Region = {
   id?: number;
 };
 
-export type Light = { x: number; y: number; r: number; color: number; flicker?: boolean };
+/** emergency: 소등(정전) 중에도 켜져 있는 비상등 (어둠 위에 그린다) */
+export type Light = { x: number; y: number; r: number; color: number; flicker?: boolean; emergency?: boolean };
 
 export type ArenaLayout = {
   zone: ZoneId;
@@ -91,6 +92,11 @@ export const PROP_META: Record<string, PropMeta> = {
   lantern_post: { w: 10, h: 46, solid: C(0, -2, 4) },
   light_tree: { w: 28, h: 42, solid: C(0, -5, 8) },
   park_bench: { w: 30, h: 14 },
+  // 11/15 분기 마감 전날 밤·구조조정 발표 날
+  night_desk: { w: 72, h: 40, solid: R(-34, -22, 68, 20) },
+  file_cabinet: { w: 18, h: 30, solid: R(-8, -12, 16, 12) },
+  empty_desk: { w: 44, h: 30, solid: R(-20, -14, 40, 12) },
+  box_stack: { w: 22, h: 26, solid: R(-10, -10, 20, 10) },
 };
 
 // ── 만들기 도구 ──
@@ -128,6 +134,11 @@ class Builder {
   }
   light(x: number, y: number, r: number, color: number, flicker = false): this {
     this.lights.push({ x, y, r, color, ...(flicker ? { flicker } : {}) });
+    return this;
+  }
+  /** 소등 중에도 켜져 있는 비상등 */
+  emergency(x: number, y: number, r: number, color: number): this {
+    this.lights.push({ x, y, r, color, emergency: true });
     return this;
   }
   spawn(...pts: [number, number][]): this {
@@ -353,6 +364,60 @@ const MAKE: Record<ZoneId, { variants: number; make: Make }> = {
       b.prop("park_bench", 224, 266).prop("park_bench", 224, 52);
       for (const [x, y] of stalls) b.light(x, y - 24, 40, 0xff9a50);
       b.spawn([26, 160], [AW - 26, 160], [224, 40], [100, 40], [348, 40], [110, AH - 24], [338, AH - 24]);
+    },
+  },
+
+  // 분기 마감 전날 밤: 꺼진 모니터가 놓인 책상 섬, 서류 캐비닛·복사기, 깜빡이는 형광등, 비상구 초록 불. 기믹은 자동 소등 (아주 좁은 시야)
+  "quarter-close": {
+    variants: 2,
+    make(b, v) {
+      const desks: [number, number][] = v === 0 ? [[92, 100], [224, 100], [356, 100], [92, 214], [356, 214]] : [[140, 92], [308, 92], [80, 204], [224, 214], [368, 204]];
+      b.decal("carpet_path", SIDE, v === 0 ? 144 : 128, AW - SIDE * 2, 28);
+      desks.forEach(([x, y], i) => {
+        // 한 자리만 모니터가 켜져 있다 (v=1 그림) — 누군가 아직 안 갔다
+        b.prop("night_desk", x, y, { v: i === 2 ? 1 : 0 });
+        b.prop("chair", x - 18, y + 8).prop("chair", x + 18, y + 8, { flip: true });
+        b.decal("paper_scatter", x - 30, y + 4, 60, 14, i);
+        if (i === 2) b.light(x - 12, y - 20, 18, 0x7ab8f0, true);
+      });
+      if (v === 0) {
+        b.prop("file_cabinet", 150, TOP_SOLID + 14).prop("file_cabinet", 298, TOP_SOLID + 14);
+        b.prop("copier", 224, 214);
+      } else {
+        b.prop("file_cabinet", 40, 120).prop("file_cabinet", AW - 40, 120);
+        b.prop("copier", 300, 152);
+      }
+      b.prop("plant", 18, AH - 10).prop("plant", AW - 18, AH - 10).prop("cooler", v === 0 ? 30 : AW - 30, 170);
+      // 천장 형광등 (몇 개는 수명이 다해 깜빡인다)
+      for (const [x, y, fl] of [[92, 60, 0], [224, 60, 1], [356, 60, 0], [92, 176, 1], [224, 176, 0], [356, 176, 0]] as const) b.light(x, y, 38, 0xd8ecff, fl === 1);
+      // 비상구 (위 벽 오른쪽) — 소등돼도 켜져 있다
+      b.emergency(AW - 64, 12, 30, 0x3aff8a);
+      b.spawn(...EDGE_SPAWNS, [26, 140], [AW - 26, 140], [224, 40]);
+    },
+  },
+
+  // 구조조정 발표 날: 짐을 뺀 빈 책상·박스 더미가 늘어선 인사팀 복도, 양쪽 벽에 문서 파쇄기. 기믹은 서류 폭풍 (가로로 밀림 + 파쇄기)
+  "layoff-day": {
+    variants: 2,
+    make(b, v) {
+      b.decal("hall_runner", SIDE, 132, AW - SIDE * 2, 36);
+      // 양쪽 벽 파쇄기 (구간마다 끊겨 있다 — 밀려도 틈으로 피할 수 있다)
+      const shred: [number, number, number][] =
+        v === 0
+          ? [[SIDE, TOP + 8, 92], [SIDE, 182, AH - SIDE - 182 - 4], [AW - SIDE - 18, TOP + 30, 100], [AW - SIDE - 18, 196, AH - SIDE - 196 - 4]]
+          : [[SIDE, TOP + 36, 96], [SIDE, 204, AH - SIDE - 204 - 4], [AW - SIDE - 18, TOP + 8, 84], [AW - SIDE - 18, 170, AH - SIDE - 170 - 4]];
+      shred.forEach(([x, y, h], i) => b.region({ kind: "shredder", x, y, w: 18, h, id: i }));
+      const desks: [number, number][] = v === 0 ? [[110, 96], [224, 96], [338, 96], [110, 214], [338, 214]] : [[96, 110], [224, 80], [352, 110], [150, 232], [298, 232]];
+      desks.forEach(([x, y], i) => {
+        b.prop("empty_desk", x, y, { v: i });
+        b.prop("chair", x + (i % 2 ? -14 : 14), y + 10, { flip: i % 2 === 1 });
+      });
+      const boxes: [number, number][] = v === 0 ? [[168, 160], [280, 160], [224, 236], [60, 150], [388, 150]] : [[160, 166], [288, 166], [224, 196], [70, 196], [378, 196]];
+      boxes.forEach(([x, y], i) => b.prop("box_stack", x, y, { v: i }));
+      b.decal("paper_scatter", 120, 150, 70, 16, 1).decal("paper_scatter", 260, 178, 80, 16, 2).decal("paper_scatter", 180, 60, 90, 14, 3);
+      b.prop("plant", 150, TOP_SOLID + 10).prop("cooler", 360, TOP_SOLID + 12);
+      for (const x of [92, 224, 356]) b.light(x, 50, 40, 0xf0f4ff).light(x, 190, 40, 0xf0f4ff);
+      b.spawn([40, 62], [AW - 40, 62], [40, AH - 30], [AW - 40, AH - 30], [AW / 2, AH - 22], [AW / 2, 40], [150, AH - 22], [298, 44]);
     },
   },
 };

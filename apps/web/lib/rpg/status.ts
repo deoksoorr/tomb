@@ -193,6 +193,24 @@ export const MONSTER_STATUS: Partial<Record<MonsterId, readonly StatusRule[]>> =
     { status: "poison", chance: 0.4, on: ["fan_volley", "rain", "slam"] },
     { status: "confuse", chance: 0.35, on: ["nova", "cross"] },
   ],
+  // 분기 마감 전날 밤 (11/15)
+  afterglow_monitor: [{ status: "silence", chance: 0.3, on: ["ambush"] }],
+  night_rider: [{ status: "bleed", chance: 0.35, on: ["charge"] }],
+  pending_binder: [{ status: "slow", chance: 0.25 }],
+  pending_sheet: [{ status: "bleed", chance: 0.2 }],
+  drowsiness: [{ status: "slow", chance: 0.45 }],
+  quarterly_report: [
+    { status: "confuse", chance: 0.35, on: ["cross", "rain"] },
+    { status: "slow", chance: 0.4, on: ["slam", "nova", "breath"] },
+  ],
+  // 구조조정 발표 날 (11/15)
+  one_on_one: [{ status: "silence", chance: 0.3, on: ["aimed_shot", "fan_volley"] }],
+  desk_box: [{ status: "bleed", chance: 0.6, on: ["self_destruct"] }],
+  standby_shadow: [{ status: "freeze", chance: 0.25, on: ["ambush"] }],
+  hr_chair: [
+    { status: "silence", chance: 0.4, on: ["fan_volley", "aimed_shot", "rain"] },
+    { status: "freeze", chance: 0.35, on: ["slam", "cross"] },
+  ],
 };
 
 /** 한 번 걸리는 상태 (지속·세기는 난이도가 반영된 값) */

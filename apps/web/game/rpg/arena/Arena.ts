@@ -3,8 +3,9 @@ import { HUNT_ZONES, MONSTERS, type MonsterId, type ZoneDef, type ZoneId } from 
 import { BOSS_RAGES } from "@/lib/rpg/plan";
 import { radial } from "../../sprites/pixel";
 import { RTEX } from "../sprites";
+import type { Color } from "../../sprites/pixel";
 import { AMBIENT, arrowCanvas, beltCanvas, doorLeafCanvas, elevatorLeafCanvas, floorCanvas, PARTICLE_COLORS, propCanvas, tunnelCanvas, vineCanvas } from "./art";
-import { AH, allSolids, AW, buildLayout, collide, COLS, CELL, FlowField, freeGrid, inRegion, nearestFree, PROP_META, standable, TOP, type ArenaLayout, type Pt, type Region, type Solid } from "./layout";
+import { AH, allSolids, AW, buildLayout, collide, COLS, CELL, FlowField, freeGrid, inRegion, nearestFree, PROP_META, SIDE, standable, TOP, type ArenaLayout, type Pt, type Region, type Solid } from "./layout";
 
 // 40번 사냥터 실행부: 지도 그리기(바닥·소품·조명·입자) + 지형 기믹 + 몬스터 길찾기·충돌 + 우두머리가 화날 때 졸개 부르기.
 // HuntScene은 몇 군데에서만 부른다 — 만들 때(new Arena), 이동·충돌(collide·steer·playerVelocity·speedMul), 매 프레임(update).
@@ -38,7 +39,97 @@ export type ArenaHooks = {
   sfx(name: "tick" | "warn" | "slam" | "roar" | "potion", gain?: number): void;
   shake(ms: number, intensity: number): void;
   maxHp(): number;
+  /** 움직임 줄이기 설정 (깜빡이는 경고를 고정 밝기로 — 어둠·바람 같은 난이도 기믹 자체는 그대로) */
+  readonly reduced: boolean;
 };
+
+// ── 11/15 기믹 설정: 예전 사냥터(도서관·사막)의 숫자는 그대로, 새 지옥 사냥터는 훨씬 세게 ──
+
+/** 정전: 처음·주기·지속(ms), 어둠 짙기, 시야 그림 (wide = 도서관, narrow = 분기 마감 — 발밑만 보인다) */
+type DarkCfg = {
+  first: number;
+  period: [number, number];
+  dur: [number, number];
+  depth: number;
+  vision: "wide" | "narrow";
+  warnMsg: string;
+  onMsg: string;
+  /** 어두운 동안 우두머리가 내 자리에 하락 그래프를 내리꽂는다 */
+  bossFall: boolean;
+};
+const DARK: Partial<Record<ZoneId, DarkCfg>> = {
+  library: { first: 16_000, period: [21_000, 15_000], dur: [6000, 7000], depth: 0.95, vision: "wide", warnMsg: "불이 깜빡여요… 곧 정전!", onMsg: "정전! 내 주변만 보여요", bossFall: false },
+  "quarter-close": {
+    first: 12_000,
+    period: [18_000, 14_000],
+    dur: [7000, 8500],
+    depth: 0.985,
+    vision: "narrow",
+    warnMsg: "형광등이 깜빡여요… 곧 자동 소등!",
+    onMsg: "자동 소등! 발밑만 보여요 — 경고도 원 안에서만 보여요",
+    bossFall: true,
+  },
+};
+
+/**
+ * 바람: [보통, 우두머리가 화난 뒤] 주기·세기(px/s). shots = 탄도 휩쓸린다, shelter = 소품 바로 뒤면 덜 밀린다,
+ * gust = 세기가 출렁인다, hazeColor·haze = 화면을 덮는 색과 짙기
+ */
+type StormCfg = {
+  first: number;
+  period: [number, number];
+  dur: number;
+  force: [number, number];
+  warnMs: number;
+  hazeColor: number;
+  haze: number;
+  warnHaze: number;
+  shots: boolean;
+  shelter: boolean;
+  gust: boolean;
+  warnMsg: (arrow: string) => string;
+};
+const STORM: Partial<Record<ZoneId, StormCfg>> = {
+  "homework-desert": {
+    first: 18_000,
+    period: [23_000, 17_000],
+    dur: 6000,
+    force: [55, 70],
+    warnMs: 2000,
+    hazeColor: 0xd8a860,
+    haze: 0.52,
+    warnHaze: 0.14,
+    shots: false,
+    shelter: false,
+    gust: false,
+    warnMsg: (a) => `모래 폭풍이 와요! ${a} 쪽으로 밀려요`,
+  },
+  "layoff-day": {
+    first: 12_000,
+    period: [16_000, 12_500],
+    dur: 6500,
+    force: [100, 122],
+    warnMs: 2200,
+    hazeColor: 0xf2ead3,
+    haze: 0.16,
+    warnHaze: 0.06,
+    shots: true,
+    shelter: true,
+    gust: true,
+    warnMsg: (a) => `서류 폭풍이 와요! ${a} 쪽으로 밀려요 — 책상·박스 바로 뒤로!`,
+  },
+};
+/** 소품 바로 뒤(바람이 오는 쪽에 막힌 것)에 서면 이만큼만 밀린다 */
+const SHELTER_MUL = 0.2;
+/** 파쇄기: 이 간격마다 최대 HP의 비율만큼 (플레이어 무적 시간 450ms보다 길게) */
+const SHRED_TICK_MS = 500;
+const SHRED_PCT = 0.1;
+const SHRED_MON_PCT = 0.08;
+/** 어둠 속에서도 빛나는 몬스터 (소등되면 어둠 위에 그린다) */
+const GLOW_IN_DARK = new Set<MonsterId>(["afterglow_monitor"]);
+
+/** 바닥에 떨어지는 것 (축제장 폭죽·하락 그래프·인사 명단): 경고 타원 → 펑 */
+type Shell = { x: number; y: number; at: number; fuse: number; rx: number; ry: number; pct: number; monPct: number; color: number; ring: Phaser.GameObjects.Graphics; cols: Color[] };
 
 type Particle = { img: Phaser.GameObjects.Image; vx: number; vy: number; life: number; max: number; tw: number };
 
@@ -61,6 +152,7 @@ const TEX = {
   vine: (z: string, i: number) => `arena-vine-${z}-${i}`,
   px: "arena-px",
   vision: "arena-vision",
+  visionNarrow: "arena-vision-narrow",
   soft: "arena-soft",
 } as const;
 
@@ -83,7 +175,7 @@ export class Arena {
   private prev = new WeakMap<ArenaMon, Pt>();
   private rages = new WeakMap<ArenaMon, number>();
   private auras = new Map<ArenaMon, Phaser.GameObjects.Image>();
-  private lights: { img: Phaser.GameObjects.Image; base: number; flicker: boolean }[] = [];
+  private lights: { img: Phaser.GameObjects.Image; base: number; flicker: boolean; emergency: boolean }[] = [];
   /** 우두머리가 화난 만큼 기믹이 세진다 (1~3) */
   private intensity = 1;
   private playerV = { x: 0, y: 0 };
@@ -98,13 +190,28 @@ export class Arena {
   private padCool = 0;
   private padInside = -1;
   private spot: { img: Phaser.GameObjects.Image; x: number; y: number; r: number; tickAt: number } | null = null;
-  private dark: { hole: Phaser.GameObjects.Image; rects: Phaser.GameObjects.Rectangle[]; next: number; until: number; warned: boolean; level: number } | null = null;
+  private dark: { cfg: DarkCfg; hole: Phaser.GameObjects.Image; rects: Phaser.GameObjects.Rectangle[]; next: number; until: number; warned: boolean; level: number; fallAt: number } | null = null;
   private vines: { r: Region; img: Phaser.GameObjects.Image; grow: number }[] = [];
   private muds: { r: Region; glow: Phaser.GameObjects.Image; next: number; warned: boolean }[] = [];
-  private storm: { tint: Phaser.GameObjects.Rectangle; next: number; until: number; wind: number; warned: boolean; level: number } | null = null;
+  private storm: {
+    cfg: StormCfg;
+    tint: Phaser.GameObjects.Rectangle;
+    next: number;
+    until: number;
+    wind: number;
+    warned: boolean;
+    level: number;
+    /** 우두머리가 화난 뒤: 폭풍 도중 방향이 바뀌는 시각들 (경고했는지) */
+    flips: { at: number; warned: boolean }[];
+    rainAt: number;
+  } | null = null;
+  private shredders: { r: Region; glow: Phaser.GameObjects.Image }[] = [];
+  private shredAt = 0;
+  private glows = new Map<ArenaMon, Phaser.GameObjects.Image>();
+  private player: Pt = { x: AW / 2, y: 150 };
   private puddles: Region[] = [];
   private disco: Phaser.GameObjects.Image[] = [];
-  private shells: { x: number; y: number; at: number; ring: Phaser.GameObjects.Graphics }[] = [];
+  private shells: Shell[] = [];
   private nextShell = 4000;
   private skyBurstAt = 1500;
   private rnd: () => number;
@@ -180,8 +287,17 @@ export class Arena {
     }
     for (const li of this.layout.lights) {
       const base = tone.alpha > 0 ? 0.55 : 0.28;
-      const img = this.keep(sc.add.image(li.x, li.y, RTEX.glow).setTint(li.color).setScale(li.r / 32).setAlpha(base).setBlendMode(Phaser.BlendModes.ADD).setDepth(D_LIGHT));
-      this.lights.push({ img, base, flicker: !!li.flicker });
+      // 비상등은 소등(정전) 어둠 위에 그린다 — 깜깜해도 비상구 초록 불은 보인다
+      const img = this.keep(
+        sc.add
+          .image(li.x, li.y, RTEX.glow)
+          .setTint(li.color)
+          .setScale(li.r / 32)
+          .setAlpha(base)
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setDepth(li.emergency ? D_DARK + 2 : D_LIGHT),
+      );
+      this.lights.push({ img, base, flicker: !!li.flicker, emergency: !!li.emergency });
     }
   }
 
@@ -215,6 +331,11 @@ export class Arena {
         const glow = this.keep(sc.add.image(r.x + r.w / 2, r.y + r.h / 2, TEX.soft).setDisplaySize(r.w, r.h).setTint(0xff7a2a).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD).setDepth(D_FLAT + 2));
         this.muds.push({ r, glow, next: 7000 + (r.id ?? 0) * 2300, warned: false });
       } else if (r.kind === "puddle") this.puddles.push(r);
+      else if (r.kind === "shredder") {
+        // 바람이 그쪽으로 불면 붉게 달아오른다
+        const glow = this.keep(sc.add.image(r.x + r.w / 2, r.y + r.h / 2, TEX.soft).setDisplaySize(r.w * 2.2, r.h * 1.1).setTint(0xff3a2a).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD).setDepth(D_FLAT + 2));
+        this.shredders.push({ r, glow });
+      }
     }
     if (z === "subway") {
       // 창밖 터널 불빛
@@ -227,23 +348,37 @@ export class Arena {
       this.spot = { img: this.keep(sc.add.image(224, 150, TEX.soft).setTint(0xfff0b0).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5).setDepth(D_FLAT + 2)), x: 224, y: 150, r: 26, tickAt: 0 };
       this.spot.img.setDisplaySize(64, 40);
     }
-    if (z === "library") {
-      const key = addCanvas(sc, TEX.vision, () =>
-        radial(160, [
-          [0, "rgba(0,0,0,0)"],
-          [0.3, "rgba(0,0,0,0)"],
-          [0.62, "rgba(0,0,0,0.85)"],
-          [0.71, "rgba(0,0,0,1)"],
-          [1, "rgba(0,0,0,1)"],
-        ]),
-      );
+    const dc = DARK[z];
+    if (dc) {
+      // 시야 구멍 그림 (160px): wide = 도서관 그대로, narrow = 발밑 한 뼘만 (분기 마감 전날 밤)
+      const key =
+        dc.vision === "wide"
+          ? addCanvas(sc, TEX.vision, () =>
+              radial(160, [
+                [0, "rgba(0,0,0,0)"],
+                [0.3, "rgba(0,0,0,0)"],
+                [0.62, "rgba(0,0,0,0.85)"],
+                [0.71, "rgba(0,0,0,1)"],
+                [1, "rgba(0,0,0,1)"],
+              ]),
+            )
+          : addCanvas(sc, TEX.visionNarrow, () =>
+              radial(160, [
+                [0, "rgba(0,0,0,0)"],
+                [0.22, "rgba(0,0,0,0)"],
+                [0.42, "rgba(0,0,0,0.88)"],
+                [0.52, "rgba(0,0,0,1)"],
+                [1, "rgba(0,0,0,1)"],
+              ]),
+            );
       const hole = this.keep(sc.add.image(0, 0, key).setDepth(D_DARK).setAlpha(0));
       const rects = [0, 1, 2, 3].map(() => this.keep(sc.add.rectangle(0, 0, 10, 10, 0x000000).setOrigin(0, 0).setDepth(D_DARK).setAlpha(0)));
-      this.dark = { hole, rects, next: 16_000, until: 0, warned: false, level: 0 };
+      this.dark = { cfg: dc, hole, rects, next: dc.first, until: 0, warned: false, level: 0, fallAt: 0 };
     }
-    if (z === "homework-desert") {
-      const tint = this.keep(sc.add.rectangle(-200, -200, AW + 400, AH + 400, 0xd8a860).setOrigin(0, 0).setDepth(D_WEATHER).setAlpha(0));
-      this.storm = { tint, next: 18_000, until: 0, wind: 1, warned: false, level: 0 };
+    const sc0 = STORM[z];
+    if (sc0) {
+      const tint = this.keep(sc.add.rectangle(-200, -200, AW + 400, AH + 400, sc0.hazeColor).setOrigin(0, 0).setDepth(D_WEATHER).setAlpha(0));
+      this.storm = { cfg: sc0, tint, next: sc0.first, until: 0, wind: 1, warned: false, level: 0, flips: [], rainAt: 0 };
     }
     if (z === "burnout-abyss") {
       for (const c of [0xff6ac8, 0x6ad0ff, 0xffd04a]) this.disco.push(this.keep(sc.add.image(224, 150, TEX.soft).setTint(c).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.35).setDisplaySize(70, 46).setDepth(D_FLAT + 3)));
@@ -251,7 +386,8 @@ export class Arena {
   }
 
   private buildParticles(): void {
-    const n = this.layout.zone === "homework-desert" ? 60 : this.layout.zone === "new-year-eve" ? 30 : 22;
+    const z = this.layout.zone;
+    const n = z === "homework-desert" ? 60 : z === "layoff-day" ? 46 : z === "new-year-eve" ? 30 : 22;
     for (let i = 0; i < n; i++) this.particles.push(this.newParticle(true));
   }
 
@@ -290,6 +426,13 @@ export class Arena {
         p.vx = (30 + r() * 30) * (this.storm && this.storm.wind < 0 ? -1 : 1);
         p.vy = (r() - 0.5) * 4;
         p.img.setScale(1.6, 0.4).setAlpha(0.5);
+        break;
+      case "layoff-day":
+        // 서류 조각: 평소엔 천천히 내려앉고, 폭풍이면 바람 쪽으로 날린다 (tickParticles가 속도를 키운다)
+        x = initial ? x : this.storm && this.storm.wind < 0 ? AW + 4 : -4;
+        p.vx = (14 + r() * 16) * (this.storm && this.storm.wind < 0 ? -1 : 1);
+        p.vy = (r() - 0.3) * 6;
+        p.img.setScale(1.5, 1).setAlpha(0.8);
         break;
       case "burnout-abyss":
         y = initial ? y : AH - 12;
@@ -364,8 +507,46 @@ export class Arena {
       for (const d of this.doors) {
         if ((this.doorCycle.which === -1 || d.r.id === this.doorCycle.which) && inRegion(d.r, x, y)) vy += 130;
       }
-    if (this.storm && now < this.storm.until) vx += this.storm.wind * (this.intensity > 1 ? 70 : 55);
+    if (this.storm && now < this.storm.until) {
+      const w = this.windForce(now);
+      vx += this.storm.cfg.shelter && this.sheltered(x, y, this.storm.wind) ? w * SHELTER_MUL : w;
+    }
     return { x: vx, y: vy };
+  }
+
+  /** 지금 바람 (부호 = 방향, px/s). 가림막은 빼고 */
+  private windForce(now: number): number {
+    const s = this.storm;
+    if (!s || now >= s.until) return 0;
+    const base = s.cfg.force[this.intensity > 1 ? 1 : 0];
+    // 돌풍: 0.85~1.15배로 출렁인다
+    const gust = s.cfg.gust ? 0.85 + 0.3 * (0.5 + 0.5 * Math.sin(now / 420)) : 1;
+    return s.wind * base * gust;
+  }
+
+  /** 바람이 오는 쪽 바로 앞(10~42px)에 소품이 막고 있나 (벽은 가림막이 아니다) */
+  private sheltered(x: number, y: number, dir: number): boolean {
+    for (let k = 10; k <= 42; k += 8) {
+      const sx = x - dir * k;
+      if (sx < SIDE || sx > AW - SIDE) return false;
+      for (const o of this.layout.solids) {
+        if (o.t === "c" ? Math.hypot(sx - o.x, y - 3 - o.y) <= o.r : sx >= o.x && sx <= o.x + o.w && y - 3 >= o.y - 4 && y - 3 <= o.y + o.h + 4) return true;
+      }
+    }
+    return false;
+  }
+
+  /** 탄을 휩쓰는 바람 (px/s, 가로). 서류 폭풍만 — 사막 모래 폭풍은 예전처럼 탄을 밀지 않는다 */
+  shotWind(now: number): number {
+    return this.storm?.cfg.shots ? this.windForce(now) : 0;
+  }
+
+  /** 소등 중이라 이 몬스터가 안 보이나 (체력 막대도 숨긴다). 어둠 속에서 빛나는 몬스터는 늘 보인다 */
+  inDark(m: Pick<ArenaMon, "id" | "x" | "y">): boolean {
+    const d = this.dark;
+    if (!d || d.level < 0.5 || GLOW_IN_DARK.has(m.id)) return false;
+    const r = d.cfg.vision === "narrow" ? 30 : 46;
+    return Math.hypot(m.x - this.player.x, m.y - this.player.y) > r;
   }
 
   /** 플레이어 속도: 바라는 속도 + 미끄러짐 + 지형이 미는 힘 */
@@ -386,11 +567,41 @@ export class Arena {
   // ── 매 프레임 ──
 
   update(now: number, dt: number, player: Pt, mons: readonly ArenaMon[]): void {
+    this.player = { x: player.x, y: player.y };
     this.flow.update(player.x, player.y);
     this.tickMonsters(now, dt, mons);
     this.tickGimmicks(now, dt, player, mons);
     this.tickParticles(now, dt);
-    for (const l of this.lights) if (l.flicker) l.img.setAlpha(l.base * (0.85 + 0.15 * Math.sin(now / 90 + l.img.x)));
+    if (!this.hooks.reduced) for (const l of this.lights) if (l.flicker) l.img.setAlpha(l.base * (0.85 + 0.15 * Math.sin(now / 90 + l.img.x)));
+    this.tickGlows(now, mons);
+  }
+
+  /** 꺼지지 않는 모니터: 불이 켜져 있으면 흐릿하고, 소등되면 어둠 위로 또렷하게 빛난다 */
+  private tickGlows(now: number, mons: readonly ArenaMon[]): void {
+    const lv = this.dark?.level ?? 0;
+    for (const m of mons) {
+      if (!m.alive || !GLOW_IN_DARK.has(m.id)) continue;
+      let img = this.glows.get(m);
+      if (!img) {
+        img = this.scene.add.image(m.x, m.y, TEX.soft).setTint(MONSTERS[m.id].accent).setBlendMode(Phaser.BlendModes.ADD).setDepth(D_DARK + 1);
+        this.glows.set(m, img);
+        this.objs.push(img);
+      }
+      const s = MONSTERS[m.id].size;
+      const lit = Math.min(1, lv / 0.8);
+      img
+        .setPosition(m.x, m.y - s * 0.55)
+        .setDisplaySize(s * 2.6, s * 2)
+        .setAlpha(m.hidden ? 0 : (0.12 + 0.5 * lit) * (this.hooks.reduced ? 1 : 0.85 + 0.15 * Math.sin(now / 140 + m.x)));
+      if (m.hidden) continue;
+      m.sprite.setAlpha(0.3 + 0.7 * lit);
+      if (lit > 0.3) m.sprite.setDepth(D_DARK + 1 + m.y / 1000);
+    }
+    for (const [m, img] of this.glows) {
+      if (m.alive) continue;
+      img.destroy();
+      this.glows.delete(m);
+    }
   }
 
   private tickMonsters(now: number, dt: number, mons: readonly ArenaMon[]): void {
@@ -561,24 +772,27 @@ export class Arena {
       }
     }
 
-    // 도서관: 정전 (깜빡임 1.5초 → 6초 어둠)
+    // 도서관: 정전 (깜빡임 1.5초 → 6초 어둠) · 분기 마감 전날 밤: 자동 소등 (18초마다 7초, 발밑만 보인다)
     if (this.dark) {
       const d = this.dark;
-      const period = fast ? 15_000 : 21_000;
+      const cfg = d.cfg;
+      const period = cfg.period[fast ? 1 : 0];
       if (!d.warned && now >= d.next - 1500) {
         d.warned = true;
-        H.flash("불이 깜빡여요… 곧 정전!", 1300);
+        H.flash(cfg.warnMsg, 1300);
         H.sfx("tick", 0.4);
       }
       if (now >= d.next) {
-        d.until = now + (fast ? 7000 : 6000);
+        d.until = now + cfg.dur[fast ? 1 : 0];
         d.next = now + period;
         d.warned = false;
-        H.flash("정전! 내 주변만 보여요", 1400);
+        d.fallAt = now + 900;
+        H.flash(cfg.onMsg, 1400);
       }
       let target = 0;
-      if (now < d.until) target = 0.95;
-      else if (d.warned) target = Math.floor(now / 110) % 3 === 0 ? 0.6 : 0;
+      if (now < d.until) target = cfg.depth;
+      // 곧 꺼진다는 깜빡임 (움직임 줄이기면 깜빡이지 않고 반쯤 어두워진다)
+      else if (d.warned) target = H.reduced ? 0.35 : Math.floor(now / 110) % 3 === 0 ? 0.6 : 0;
       d.level += (target - d.level) * Math.min(1, dt * (target > d.level ? 10 : 3));
       const hw = 80;
       const px = Math.round(player.x);
@@ -593,7 +807,15 @@ export class Arena {
       b.setPosition(-200, y0 + hw2).setSize(AW + 400, AH + 200 - (y0 + hw2)).setAlpha(d.level);
       c2.setPosition(-200, y0 - 1).setSize(x0 + 200, hw2 + 2).setAlpha(d.level);
       e.setPosition(x0 + hw2, y0 - 1).setSize(AW + 200 - (x0 + hw2), hw2 + 2).setAlpha(d.level);
-      for (const l of this.lights) l.img.setVisible(d.level < 0.5);
+      for (const l of this.lights) if (!l.emergency) l.img.setVisible(d.level < 0.5);
+      // 어둠 속 우두머리: 내 자리에 하락 그래프를 내리꽂는다 (경고 타원도 어둠에 가려 발밑 원 안에서만 보인다)
+      if (cfg.bossFall && now < d.until && now >= d.fallAt && mons.some((m) => m.alive && m.boss)) {
+        d.fallAt = now + (this.intensity >= 3 ? 600 : fast ? 720 : 900);
+        const near = this.rnd() < 0.6;
+        const a = this.rnd() * Math.PI * 2;
+        const r = near ? this.rnd() * 14 : 18 + this.rnd() * 36;
+        this.dropShell(player.x + Math.cos(a) * r, player.y + Math.sin(a) * r * 0.7, now, { fuse: 1000, rx: 24, ry: 15, pct: 0.12, monPct: 0, color: 0xff4a3a, cols: [0xd03030, 0xff6a4a, 0xf2f2ee] });
+      }
     }
 
     // 장바구니 정글: 덩굴이 숨 쉬듯 커졌다 작아진다
@@ -618,24 +840,68 @@ export class Arena {
       }
     }
 
-    // 방학 숙제 사막: 모래 폭풍
+    // 방학 숙제 사막: 모래 폭풍 · 구조조정 발표 날: 서류 폭풍 (더 세고, 탄도 휩쓸리고, 화나면 도중에 방향이 바뀐다)
     if (this.storm) {
       const s = this.storm;
-      const period = fast ? 17_000 : 23_000;
-      if (!s.warned && now >= s.next - 2000) {
+      const cfg = s.cfg;
+      const period = cfg.period[fast ? 1 : 0];
+      if (!s.warned && now >= s.next - cfg.warnMs) {
         s.warned = true;
         s.wind = this.rnd() < 0.5 ? -1 : 1;
-        H.flash(`모래 폭풍이 와요! ${s.wind > 0 ? "→" : "←"} 쪽으로 밀려요`, 1800);
+        H.flash(cfg.warnMsg(s.wind > 0 ? "→" : "←"), 1800);
         H.sfx("warn", 0.4);
       }
       if (now >= s.next) {
-        s.until = now + 6000;
+        s.until = now + cfg.dur;
         s.next = now + period;
         s.warned = false;
+        s.rainAt = now + 700;
+        // 서류 폭풍만: 우두머리가 한 번 화나면 한 번, 두 번 화나면 두 번 방향이 뒤집힌다 (뒤집히기 0.9초 전에 알린다)
+        s.flips = cfg.shots && this.intensity >= 2 ? (this.intensity >= 3 ? [2200, 4400] : [3300]).map((t) => ({ at: now + t, warned: false })) : [];
       }
-      const target = now < s.until ? 0.52 + 0.06 * Math.sin(now / 130) : s.warned ? 0.14 + 0.08 * Math.sin(now / 80) : 0;
+      for (const fl of s.flips) {
+        if (!fl.warned && now >= fl.at - 900) {
+          fl.warned = true;
+          H.flash(`바람이 뒤집혀요! ${s.wind > 0 ? "←" : "→"}`, 900);
+          H.sfx("tick", 0.5);
+        }
+        if (fl.at <= now) s.wind = -s.wind;
+      }
+      s.flips = s.flips.filter((fl) => fl.at > now);
+      const blowing = now < s.until;
+      const wob = H.reduced && cfg.shots ? 0 : 1;
+      const target = blowing ? cfg.haze + 0.06 * wob * Math.sin(now / 130) * (cfg.haze / 0.52) : s.warned ? cfg.warnHaze + 0.08 * wob * Math.sin(now / 80) * (cfg.warnHaze / 0.14) : 0;
       s.level += (target - s.level) * Math.min(1, dt * 3);
       s.tint.setAlpha(s.level);
+      // 우두머리: 바람 아래쪽(밀려 갈 자리)에 해고 명단을 내리꽂는다 → 바람을 거슬러 버텨야 한다
+      if (cfg.shots && blowing && now >= s.rainAt && mons.some((m) => m.alive && m.boss)) {
+        s.rainAt = now + (this.intensity >= 3 ? 480 : fast ? 560 : 700);
+        const ahead = 34 + this.rnd() * 54;
+        this.dropShell(player.x + s.wind * ahead, player.y + (this.rnd() - 0.5) * 70, now, { fuse: 900, rx: 22, ry: 14, pct: 0.11, monPct: 0, color: 0xff4a3a, cols: [0xf2ead3, 0xc83c3c, 0xffffff] });
+      }
+    }
+
+    // 구조조정 발표 날: 벽의 문서 파쇄기 (밀려 들어가면 크게 다친다 — 몬스터도 갈린다)
+    if (this.shredders.length) {
+      const st = this.storm;
+      const blowing = !!st && now < st.until;
+      for (const sh of this.shredders) {
+        const left = sh.r.x < AW / 2;
+        const downwind = blowing && (left ? st!.wind < 0 : st!.wind > 0);
+        const warnSide = !!st && st.warned && (left ? st.wind < 0 : st.wind > 0);
+        const want = downwind ? 0.55 : warnSide ? (H.reduced ? 0.3 : 0.25 + 0.2 * Math.sin(now / 90)) : 0.08;
+        sh.glow.setAlpha(sh.glow.alpha + (want - sh.glow.alpha) * Math.min(1, dt * 6));
+      }
+      if (now >= this.shredAt) {
+        this.shredAt = now + SHRED_TICK_MS;
+        const inShred = (x: number, y: number) => this.shredders.some((sh) => inRegion(sh.r, x, y));
+        if (inShred(player.x, player.y)) {
+          H.hurtPlayer(Math.max(1, Math.round(H.maxHp() * SHRED_PCT)));
+          H.sfx("tick", 0.5);
+          for (let i = 0; i < 3; i++) this.paperBit(player.x, player.y - 6);
+        }
+        for (const mon of mons) if (mon.alive && !mon.boss && !mon.hidden && inShred(mon.x, mon.y)) H.hurtMonster(mon, Math.max(1, Math.round(mon.st.maxHp * SHRED_MON_PCT)));
+      }
     }
 
     // 회식 3차: 빙글빙글 사이키 조명
@@ -652,31 +918,49 @@ export class Arena {
         const near = this.rnd() < 0.55;
         const tx = near ? player.x + (this.rnd() - 0.5) * 70 : 30 + this.rnd() * (AW - 60);
         const ty = near ? player.y + (this.rnd() - 0.5) * 50 : TOP + 20 + this.rnd() * (AH - TOP - 40);
-        const ring = this.keep(this.scene.add.graphics().setDepth(-440));
-        this.shells.push({ x: Phaser.Math.Clamp(tx, 20, AW - 20), y: Phaser.Math.Clamp(ty, TOP + 10, AH - 16), at: now + 1300, ring });
+        this.dropShell(tx, ty, now, { fuse: 1300, rx: 24, ry: 15, pct: 0.1, monPct: 0.25, color: 0xff4a3a, cols: PARTICLE_COLORS["new-year-eve"] });
       }
-      for (const s of this.shells) {
-        const left = s.at - now;
-        const p = 1 - Math.max(0, left) / 1300;
-        s.ring.clear();
-        s.ring.lineStyle(1, 0xff4a3a, 0.9).strokeEllipse(s.x, s.y, 48, 30);
-        s.ring.fillStyle(0xff4a3a, 0.12 + 0.25 * smooth(p)).fillEllipse(s.x, s.y, 48 * p, 30 * p);
-        if (left <= 0) {
-          this.burst(s.x, s.y - 4, 18);
-          H.sfx("slam", 0.4);
-          H.shake(70, 0.002);
-          if (Math.hypot((player.x - s.x) / 24, (player.y - s.y) / 15) <= 1) H.hurtPlayer(Math.max(1, Math.round(H.maxHp() * 0.1)));
-          for (const mon of mons)
-            if (mon.alive && Math.hypot((mon.x - s.x) / 24, (mon.y - s.y) / 15) <= 1) H.hurtMonster(mon, Math.max(1, Math.round(mon.st.maxHp * (mon.boss ? 0.03 : 0.25))));
-          s.ring.destroy();
-        }
-      }
-      this.shells = this.shells.filter((s) => s.at > now);
       if (now >= this.skyBurstAt) {
         this.skyBurstAt = now + 700 + this.rnd() * 1200;
         this.burst(20 + this.rnd() * (AW - 40), 4 + this.rnd() * 14, 10, true);
       }
     }
+    this.tickShells(now, player, mons);
+  }
+
+  /** 바닥에 떨어질 것 하나 (경고 타원이 fuse ms 동안 차오른다). 지도 밖이면 안쪽으로 */
+  private dropShell(x: number, y: number, now: number, o: Omit<Shell, "x" | "y" | "at" | "ring">): void {
+    const ring = this.keep(this.scene.add.graphics().setDepth(-440));
+    this.shells.push({ ...o, x: Phaser.Math.Clamp(x, 20, AW - 20), y: Phaser.Math.Clamp(y, TOP + 10, AH - 16), at: now + o.fuse, ring });
+  }
+
+  private tickShells(now: number, player: Pt, mons: readonly ArenaMon[]): void {
+    const H = this.hooks;
+    for (const s of this.shells) {
+      const left = s.at - now;
+      const p = 1 - Math.max(0, left) / s.fuse;
+      s.ring.clear();
+      s.ring.lineStyle(1, s.color, 0.9).strokeEllipse(s.x, s.y, s.rx * 2, s.ry * 2);
+      s.ring.fillStyle(s.color, 0.12 + 0.25 * smooth(p)).fillEllipse(s.x, s.y, s.rx * 2 * p, s.ry * 2 * p);
+      if (left <= 0) {
+        this.burst(s.x, s.y - 4, 18, false, s.cols);
+        H.sfx("slam", 0.4);
+        H.shake(70, 0.002);
+        if (Math.hypot((player.x - s.x) / s.rx, (player.y - s.y) / s.ry) <= 1) H.hurtPlayer(Math.max(1, Math.round(H.maxHp() * s.pct)));
+        if (s.monPct > 0)
+          for (const mon of mons)
+            if (mon.alive && Math.hypot((mon.x - s.x) / s.rx, (mon.y - s.y) / s.ry) <= 1) H.hurtMonster(mon, Math.max(1, Math.round(mon.st.maxHp * (mon.boss ? 0.03 : s.monPct))));
+        s.ring.destroy();
+      }
+    }
+    this.shells = this.shells.filter((s) => s.at > now);
+  }
+
+  /** 파쇄기에서 튀는 종이 조각 */
+  private paperBit(x: number, y: number): void {
+    const img = this.scene.add.image(x, y, TEX.px).setTint(0xf2ead3).setDepth(D_PARTICLE).setScale(1.5, 1);
+    const a = this.rnd() * Math.PI * 2;
+    this.scene.tweens.add({ targets: img, x: x + Math.cos(a) * 14, y: y + Math.sin(a) * 8 - 6, alpha: 0, angle: 180, duration: 420, onComplete: () => img.destroy() });
   }
 
   private bubble(r: Region, big = false): void {
@@ -688,8 +972,7 @@ export class Arena {
     this.scene.tweens.add({ targets: img, y: y - (big ? 10 : 4), scale: big ? 2.5 : 1.6, alpha: 0, duration: big ? 500 : 700, onComplete: () => img.destroy() });
   }
 
-  private burst(x: number, y: number, n: number, sky = false): void {
-    const cols = PARTICLE_COLORS["new-year-eve"];
+  private burst(x: number, y: number, n: number, sky = false, cols: readonly Color[] = PARTICLE_COLORS["new-year-eve"]): void {
     const col = cols[Math.floor(this.rnd() * cols.length)];
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
@@ -706,6 +989,7 @@ export class Arena {
   private tickParticles(now: number, dt: number): void {
     const z = this.layout.zone;
     const storming = !!this.storm && now < this.storm.until;
+    const wdir = this.storm && this.storm.wind < 0 ? -1 : 1;
     for (const p of this.particles) {
       p.life += dt * 1000;
       const sp = storming ? 4 : 1;
@@ -713,6 +997,13 @@ export class Arena {
       p.img.y += p.vy * dt;
       if (z === "deadline-swamp") p.img.setAlpha(0.3 + 0.7 * Math.max(0, Math.sin(now / 400 + p.tw)));
       else if (z === "cart-jungle" || z === "new-year-eve") p.img.x += Math.sin(now / 500 + p.tw) * dt * 6;
+      // 서류 폭풍: 조각이 바람 방향으로 세차게 (도중에 방향이 바뀌면 같이 돈다)
+      if (z === "layoff-day") {
+        if (storming && Math.sign(p.vx) !== wdir) p.vx = -p.vx;
+        p.img.x += (storming ? 150 : 0) * wdir * dt;
+        p.img.y += Math.sin(now / 300 + p.tw) * dt * (storming ? 30 : 8);
+        p.img.setAngle((now / 4 + p.tw * 60) % 360);
+      }
       if (p.life > p.max || p.img.x < -10 || p.img.x > AW + 10 || p.img.y < TOP - 8 || p.img.y > AH) this.resetParticle(p, false);
       // 모래 폭풍: 줄기가 바람 방향으로 길고 진해진다
       if (z === "homework-desert") p.img.setScale(storming ? 4 : 1.6, storming ? 0.5 : 0.4).setAlpha(storming ? 0.8 : 0.5).setFlipX(false);
@@ -725,5 +1016,6 @@ export class Arena {
     for (const o of this.objs) o.destroy();
     this.objs.length = 0;
     this.auras.clear();
+    this.glows.clear();
   }
 }

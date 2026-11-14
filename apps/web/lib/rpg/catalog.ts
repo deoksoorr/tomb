@@ -283,7 +283,18 @@ export type MonsterId =
   | "countdown_clock"
   | "party_popper"
   | "midnight_bell"
-  | "endless_toast";
+  | "endless_toast"
+  // 11/15 지옥 40~50대 사냥터 (분기 마감 전날 밤·구조조정 발표 날)
+  | "afterglow_monitor"
+  | "night_rider"
+  | "pending_binder"
+  | "pending_sheet"
+  | "drowsiness"
+  | "quarterly_report"
+  | "one_on_one"
+  | "desk_box"
+  | "standby_shadow"
+  | "hr_chair";
 
 export type MonsterDef = {
   id: MonsterId;
@@ -369,6 +380,58 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
 
   // ── 회식 3차 우두머리 ──
   endless_toast: { id: "endless_toast", name: "끝나지 않는 건배사", desc: "\"마지막으로 한마디만\"이 한 시간째. 잔을 들 때마다 졸개가 늘어난다.", hp: 1500, atk: 20, def: 6, speed: 22, exp: 230, behavior: "boss", size: 36, color: 0x3a8a4a, accent: 0xf2ead3 },
+
+  // ── 분기 마감 전날 밤 (11/15) ──
+  afterglow_monitor: { id: "afterglow_monitor", name: "꺼지지 않는 모니터", desc: "화면 보호기는 퇴근하지 않는다. 불이 켜져 있을 땐 흐릿하지만, 소등되면 이것만 또렷하게 빛난다.", hp: 130, atk: 15, def: 2, speed: 40, exp: 24, behavior: "blink", size: 16, color: 0x2a2e38, accent: 0x7af0ff },
+  night_rider: { id: "night_rider", name: "야식 배달 오토바이", desc: "\"문 앞에 두고 갈게요!\" 잠깐 멈칫하더니 헤드라이트를 켜고 달려든다.", hp: 170, atk: 18, def: 5, speed: 30, exp: 26, behavior: "dash", size: 18, color: 0xd8402a, accent: 0xf0d050 },
+  pending_binder: { id: "pending_binder", name: "결재 대기 서류철", desc: "부장님 책상 위에서 석 달째 기다린 서류철. 쓰러뜨리면 반려된 서류 세 장이 흩어진다.", hp: 150, atk: 14, def: 4, speed: 26, exp: 22, behavior: "split", size: 17, color: 0x3a5a9a, accent: 0xf2ead3, split: { id: "pending_sheet", n: 3 } },
+  pending_sheet: { id: "pending_sheet", name: "반려된 서류", desc: "빨간 줄이 그어진 서류 한 장. 얇지만 베이면 아프다.", hp: 30, atk: 9, def: 0, speed: 52, exp: 4, behavior: "chase", size: 10, color: 0xf2ead3, accent: 0xc83c3c, minion: true },
+  drowsiness: { id: "drowsiness", name: "새벽 2시의 졸음", desc: "소리 없이 다가와 어깨에 기댄다. 닿으면 눈꺼풀이 무거워져 발이 느려진다.", hp: 120, atk: 13, def: 2, speed: 36, exp: 20, behavior: "chase", size: 15, color: 0x6a5a9a, accent: 0xc8c0f0 },
+  quarterly_report: {
+    id: "quarterly_report",
+    name: "분기 실적 보고서",
+    desc: "숫자가 맞을 때까지 잠들지 않는 보고서. 맞을 때마다 그래프가 꺾이고, 불이 꺼지면 어둠 속에서 하락 그래프를 내리꽂는다.",
+    hp: 1800,
+    atk: 22,
+    def: 8,
+    speed: 22,
+    exp: 280,
+    behavior: "boss",
+    size: 38,
+    color: 0xf2f2ee,
+    accent: 0x3a7ad0,
+    patterns: ["bite", "fan_volley", "slam", "cross"],
+    phases: [
+      { below: 0.75, add: ["charge", "rain"], haste: 0.85, label: "하향 조정에 들어간다!" },
+      { below: 0.5, add: ["nova", "ambush"], haste: 0.72, label: "숫자를 다시 맞춘다!" },
+      { below: 0.25, add: ["breath"], haste: 0.58, label: "최종_진짜최종_v3!" },
+    ],
+  },
+
+  // ── 구조조정 발표 날 (11/15) ──
+  one_on_one: { id: "one_on_one", name: "개인 면담 호출", desc: "\"잠깐 회의실로 올래요?\" 멀리서 호출 쪽지를 날린다. 쪽지는 서류 폭풍을 타고 휘어 온다.", hp: 140, atk: 16, def: 3, speed: 30, exp: 26, behavior: "ranged", size: 15, color: 0xe8e0c8, accent: 0x3a6ac8 },
+  desk_box: { id: "desk_box", name: "빈 책상 박스", desc: "짐을 다 싸고 남은 박스. 굴러와서 터지며 스테이플러·머그컵을 흩뿌린다. 폭풍에 실려 오면 더 빠르다.", hp: 60, atk: 26, def: 0, speed: 46, exp: 14, behavior: "explode", size: 14, color: 0xc89a5a, accent: 0x5a3e22 },
+  standby_shadow: { id: "standby_shadow", name: "대기발령 그림자", desc: "자리는 있는데 일이 없다. 보였다 사라졌다 하다가 등 뒤에서 나타난다.", hp: 150, atk: 17, def: 2, speed: 42, exp: 26, behavior: "blink", size: 16, color: 0x2a2a34, accent: 0x9a9ab0 },
+  hr_chair: {
+    id: "hr_chair",
+    name: "인사위원장",
+    desc: "\"회사의 결정을 존중해 주세요.\" 서류 폭풍이 불면 바람 아래쪽에 명단을 내리꽂는다. 화날수록 폭풍이 도중에 방향을 바꾼다.",
+    hp: 2100,
+    atk: 24,
+    def: 9,
+    speed: 22,
+    exp: 320,
+    behavior: "boss",
+    size: 40,
+    color: 0x2a2e3a,
+    accent: 0xc83c3c,
+    patterns: ["bite", "fan_volley", "slam", "aimed_shot"],
+    phases: [
+      { below: 0.75, add: ["cross", "charge"], haste: 0.85, label: "인사 평가를 시작한다!" },
+      { below: 0.5, add: ["rain", "nova"], haste: 0.72, label: "명단을 펼친다!" },
+      { below: 0.25, add: ["breath", "ambush"], haste: 0.56, label: "최종 통보!" },
+    ],
+  },
 };
 
 export const MONSTER_IDS = Object.keys(MONSTERS) as MonsterId[];
@@ -386,6 +449,8 @@ export const ZONE_IDS = [
   "homework-desert",
   "burnout-abyss",
   "new-year-eve",
+  "quarter-close",
+  "layoff-day",
 ] as const;
 export type ZoneId = (typeof ZONE_IDS)[number];
 
@@ -576,6 +641,43 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     favor: ["a_server_rack", "w_compiler"],
     floor: [0x2a2a44, 0x24243c],
     deco: 0xf0d050,
+  }),
+  // 11/15: 지옥 41~50 구간 (사냥 최고 레벨 50). 기믹은 확실히 어렵게 — 숫자는 game/rpg/arena/Arena.ts
+  "quarter-close": zone({
+    id: "quarter-close",
+    difficulty: "hell",
+    name: "분기 마감 전날 밤",
+    desc: "새벽 2시, 텅 빈 사무실 층. 모두 퇴근했는데 실적 보고서만 깨어 있다.",
+    unlockLevel: 42,
+    power: 1.3,
+    gimmick: {
+      name: "자동 소등",
+      desc: "18초마다 층 전체 불이 7초 동안 꺼진다. 내 발밑 작은 원 밖은 바닥 경고까지 보이지 않는다. 형광등이 깜빡이면 곧 꺼진다 — 우두머리는 어둠 속에서 하락 그래프를 내리꽂는다.",
+    },
+    pool: ["afterglow_monitor", "night_rider", "pending_binder", "drowsiness", "burnout_wraith", "server_bill"],
+    boss: "quarterly_report",
+    summon: { id: "drowsiness", n: 3 },
+    favor: ["w_tumbler", "a_hazmat"],
+    floor: [0x1e2432, 0x1a202c],
+    deco: 0x3ad07a,
+  }),
+  "layoff-day": zone({
+    id: "layoff-day",
+    difficulty: "hell",
+    name: "구조조정 발표 날",
+    desc: "인사팀 복도에 빈 박스가 쌓여 간다. 오늘만은 이름이 불리지 않기를.",
+    unlockLevel: 48,
+    power: 1.45,
+    gimmick: {
+      name: "서류 폭풍",
+      desc: "회의실 문이 열릴 때마다 한쪽으로 서류 폭풍이 몰아쳐 나와 나와 몬스터, 날아오는 탄까지 휩쓴다. 양쪽 벽의 파쇄기에 밀려 들어가면 크게 다친다. 책상·박스 바로 뒤에 붙으면 덜 밀린다. 우두머리가 화날수록 폭풍이 도중에 방향을 바꾼다.",
+    },
+    pool: ["one_on_one", "desk_box", "standby_shadow", "opposing_lead", "legacy_golem", "burnout_wraith"],
+    boss: "hr_chair",
+    summon: { id: "desk_box", n: 3 },
+    favor: ["w_stamp", "c_bonus"],
+    floor: [0x3a3e4a, 0x343844],
+    deco: 0xe8e0c8,
   }),
 };
 

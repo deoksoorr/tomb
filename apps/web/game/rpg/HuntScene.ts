@@ -361,6 +361,7 @@ export class HuntScene extends RpgScene {
       sfx: (name, gain) => this.sfx.play(name, gain),
       shake: (ms, k) => this.fx.shake(ms, k),
       maxHp: () => this.dv.maxHp,
+      reduced: this.data0.reduced,
     });
     this.px = this.arena.start.x;
     this.py = this.arena.start.y;
@@ -719,7 +720,8 @@ export class HuntScene extends RpgScene {
       if (s.trail === "wisp") this.mv.wispTrail(s.x, s.y, s.vx, s.vy);
       else if (s.trail === "icicle") this.mv.icicleTrail(s.x, s.y, s.vx, s.vy);
       const step = Math.hypot(s.vx, s.vy) * dt;
-      s.x += s.vx * dt;
+      // 11/15 서류 폭풍: 내 탄도 바람에 휩쓸린다
+      s.x += (s.vx + this.arena.shotWind(this.now)) * dt;
       s.y += s.vy * dt;
       s.left -= step;
       s.sprite.setPosition(s.x, s.y);
@@ -2292,7 +2294,8 @@ export class HuntScene extends RpgScene {
       m.sprite.setPosition(Math.round(m.x), Math.round(m.y)).setDepth(m.y).setFrame(monsterFrame(m, now)).setFlipX(this.px < m.x);
       m.shadow.setPosition(m.x, m.y);
       const top = m.y - size - 3;
-      const showBar = (m.elite || m.hp < m.st.maxHp) && !m.hidden;
+      // 11/15 자동 소등: 어둠에 가린 몬스터는 체력 막대도 숨긴다 (막대는 어둠 위 깊이라 위치가 드러난다)
+      const showBar = (m.elite || m.hp < m.st.maxHp) && !m.hidden && !this.arena.inDark(m);
       const eTop = m.elite ? m.y - size * ELITE.scale - 3 : top;
       m.barBg.setPosition(m.x, eTop).setVisible(showBar);
       m.bar.setPosition(m.x - size / 2, eTop).setSize(Math.max(0, (size * m.hp) / m.st.maxHp), 2).setVisible(showBar);
@@ -2307,9 +2310,10 @@ export class HuntScene extends RpgScene {
     if (this.combo && now - this.comboAt > COMBO_RESET_MS) this.combo = 0;
     this.fx.combo(this.died ? 0 : this.combo, this.px, this.py - 33);
 
-    // 투사체
+    // 투사체 (11/15 서류 폭풍이면 바람에 휘어 날아온다)
+    const wind = this.arena.shotWind(now);
     for (const s of this.shots) {
-      s.x += s.vx * dt;
+      s.x += (s.vx + wind) * dt;
       s.y += s.vy * dt;
       s.sprite.setPosition(s.x, s.y);
       if (Math.hypot(s.x - this.px, s.y - (this.py - 8)) < 8) {

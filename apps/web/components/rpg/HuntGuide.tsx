@@ -90,6 +90,8 @@ function oftenWord(v: number, all: readonly number[]): string {
 }
 const sec = (ms: number) => `${Number((ms / 1000).toFixed(2))}초`;
 const skillArt = (id: SkillId): IconArt | undefined => skillById(id)?.art;
+/** 기본보다 단계가 많은 우두머리 (11/15 지옥 40~50대: 분기 실적 보고서·인사위원장) */
+const deepBosses = Object.values(MONSTERS).filter((m) => (m.phases?.length ?? 0) > DEFAULT_BOSS_PHASES.length);
 const skillName = (id: SkillId) => skillById(id)?.name ?? id;
 
 /** 바닥 빨간 경고 모양 그림 (원·줄·부채꼴·고리). 64×44 상자 안 가운데 기준 */
@@ -326,6 +328,15 @@ function pages(): Page[] {
             <Item art={skillArt("fr_tomb")} title="잘 안 밀려요">
               우두머리는 넉백·경직이 거의 없고 지형에 느려지지도 않아요. 묶기·끌어당기기도 1/3만 먹혀요. 경고를 보고 빠지는 게 핵심.
             </Item>
+            {deepBosses.length > 0 && (
+              <Item art={skillArt("em_spark")} title="한 번 더 폭주하는 우두머리">
+                {deepBosses.map((b) => {
+                  const ph = b.phases!.at(-1)!;
+                  return `${b.name}(HP ${pct(ph.below)} 아래 · ${ph.add.map((id) => PATTERNS[id].name).join("·")})`;
+                }).join(", ")}
+                는 마지막에 한 번 더 단계가 올라 패턴 간격이 더 짧아져요. 졸개는 두 번까지만 불러요.
+              </Item>
+            )}
           </ul>
         </>
       ),

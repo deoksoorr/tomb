@@ -89,9 +89,9 @@ export function StartPanel({
   const zone = zoneFor(diff, zoneId);
   const D = DIFFS[diff];
   const low = c.level < D.recLevel;
-  // 권장 레벨보다 10 넘게 높음: EXP가 깎이고(지옥 빼고 10%·2%), 지옥이 아니면 주간 레이스(사냥 처치·주간 최단)에 안 들어간다 (lib/rpg/service)
-  const expCut = levelPenalty(c.level, diff);
-  const noRace = game === "hunt" && !countsForRace(c.level, diff);
+  // 11/15: 사냥은 그 사냥터가 열리는 레벨, 미니게임은 난이도 권장 레벨보다 10 넘게 높으면 EXP가 깎이고(10%·20 넘으면 2%), 사냥은 주간 레이스(사냥 처치·주간 최단)에도 안 들어간다 (lib/rpg/service)
+  const expCut = levelPenalty(c.level, diff, game === "hunt" ? zone : null);
+  const noRace = game === "hunt" && !countsForRace(c.level, diff, zone);
   const zoneLocked = game === "hunt" && !zoneOpen(zone, c.level, zoneUnlockAll());
   const monsters = [...new Set([...zone.pool])].map((id) => MONSTERS[id].name);
   const canStart = !busy && view.today.runsPerHour > 0 && !zoneLocked;
@@ -128,9 +128,10 @@ export function StartPanel({
                 )}
                 {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
                 {!zoneLocked && noRace && (
-                  <p className={s.warn}>내 레벨보다 한참 쉬운 사냥터예요. EXP는 {Math.round(expCut * 100)}%만 받고, 주간 레이스(사냥 처치)에는 들어가지 않아요.</p>
+                  <p className={s.warn}>
+                    이 사냥터가 열리는 레벨(Lv.{zone.unlockLevel})보다 10 넘게 높아요. EXP는 {Math.round(expCut * 100)}%만 받고, 주간 레이스(사냥 처치)에는 들어가지 않아요.
+                  </p>
                 )}
-                {!zoneLocked && !noRace && expCut < 1 && <p className={s.warn}>권장 레벨보다 한참 높아서 EXP는 {Math.round(expCut * 100)}%만 받아요.</p>}
                 <div className={s.zoneGo}>
                   <p className={s.meta}>
                     오늘 사냥 포인트 {view.today.huntPoints} / {view.today.cap}P · 이번 시간 남은 판 {view.today.runsPerHour}

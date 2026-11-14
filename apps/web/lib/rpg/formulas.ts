@@ -163,19 +163,25 @@ export function monsterStats(id: MonsterId, d: Difficulty, power = 1): MonsterSt
 }
 
 /**
- * 권장보다 너무 높은 레벨로 쉬운 곳을 돌면 EXP가 준다.
- * 11/15: 낮은 난이도는 거의 못 먹게 — +10 넘으면 10%, +20 넘으면 2% (예전 절반·1/4).
- * 지옥은 맨 위 난이도라 41~50이 갈 곳이 여기뿐 → 예전처럼 +10 넘으면 절반까지만
+ * EXP·주간 레이스 기준 레벨: 사냥터면 그 사냥터가 열리는 레벨(ZoneDef.unlockLevel), 미니게임(사냥터 없음)이면 난이도 권장 레벨.
+ * 11/15: 지옥에도 40~50대 사냥터가 생겨서 난이도가 아니라 사냥터를 기준으로 본다
  */
-export function levelPenalty(level: number, d: Difficulty): number {
-  const over = level - DIFFS[d].recLevel;
-  if (d === "hell") return over > 10 ? 0.5 : 1;
+export function refLevel(d: Difficulty, zone?: { unlockLevel: number } | null): number {
+  return zone ? zone.unlockLevel : DIFFS[d].recLevel;
+}
+
+/**
+ * 기준 레벨(refLevel)보다 너무 높은 레벨로 쉬운 곳을 돌면 EXP가 준다: +10 넘으면 10%, +20 넘으면 2%.
+ * 11/15: 지옥 예외(+10 넘어도 절반)는 없앴다 — 41~50은 새 지옥 사냥터(Lv.42·48)로 간다
+ */
+export function levelPenalty(level: number, d: Difficulty, zone?: { unlockLevel: number } | null): number {
+  const over = level - refLevel(d, zone);
   return over > 20 ? 0.02 : over > 10 ? 0.1 : 1;
 }
 
-/** 이 판이 주간 레이스(그 주 처치·최단)에 들어가는지: 권장 +10 이하이거나 맨 위 난이도(지옥) */
-export function countsForRace(level: number, d: Difficulty): boolean {
-  return d === "hell" || level - DIFFS[d].recLevel <= 10;
+/** 이 판이 주간 레이스(그 주 처치·최단)에 들어가는지: 기준 레벨(사냥터가 열리는 레벨) +10 이하 */
+export function countsForRace(level: number, d: Difficulty, zone?: { unlockLevel: number } | null): boolean {
+  return level - refLevel(d, zone) <= 10;
 }
 
 // ── 공용 ──

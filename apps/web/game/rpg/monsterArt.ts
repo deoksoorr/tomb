@@ -816,6 +816,256 @@ const P: Record<MonsterId, Paint> = {
     g.rect(x0 + 3 + leg(p), s - 4, 3, 4, darken(m, 0.4));
     g.rect(x0 + 10 - leg(p), s - 4, 3, 4, darken(m, 0.4));
   },
+
+  // ── 분기 마감 전날 밤 (11/15) ──
+  afterglow_monitor(g, s, m, a, p) {
+    const f = p.f;
+    // 공격하면 파란 화면 + ":(" (멈춰 버린 화면)
+    const scr = p.atk ? 0x2a5ad0 : a;
+    g.rect(1, 1 - f, s - 2, 11, m);
+    g.rect(2, 2 - f, s - 4, 9, scr);
+    g.hline(3, s - 5, 3 - f, lighten(scr, 0.45));
+    if (p.atk) {
+      g.set(4, 5 - f, WHITE);
+      g.set(4, 7 - f, WHITE);
+      g.set(8, 4 - f, WHITE);
+      g.vline(7, 5 - f, 7 - f, WHITE);
+      g.set(8, 8 - f, WHITE);
+    } else {
+      eyes(g, 5, 6 - f, 5, p, darken(a, 0.75));
+      g.hline(6, 9, 8 - f, darken(a, 0.45));
+    }
+    // 받침대 (둥둥 떠 있다)
+    g.vline(s / 2, 12 - f, 13 - f, m);
+    g.hline(s / 2 - 3, s / 2 + 2, 14 - f, m);
+  },
+  night_rider(g, s, m, a, p) {
+    const f = p.f * 0.5;
+    const lean = p.atk === 2 ? 1 : 0;
+    // 뒤에 실은 배달통
+    g.rect(1, 4 - f, 7, 6, a);
+    g.hline(1, 7, 4 - f, lighten(a, 0.3));
+    g.rect(3, 6 - f, 3, 2, m);
+    // 차체·앞 덮개
+    g.rect(4, 10 - f, 11, 3, m);
+    g.rect(12 + lean, 7 - f, 3, 4, m);
+    shade(g, m, 10, 12);
+    g.rect(6, 9 - f, 5, 1, 0x2a2a30);
+    // 탄 사람 (헬멧·어두운 바이저)
+    g.rect(8 + lean, 4 - f, 3, 5, 0x3a3f4a);
+    g.ellipse(10 + lean, 3 - f, 2.5, 2.5, m);
+    g.rect(11 + lean, 2 - f, 2, 2, p.hurt ? 0x6a7a8a : 0x1a2a34);
+    g.set(13 + lean, 6 - f, OUT);
+    // 전조등: 돌진 직전에 하얗게
+    g.rect(15 + lean, 9 - f, 2, 2, p.atk ? 0xffffff : 0xfff3c8);
+    // 바퀴
+    for (const wx of [4, s - 4]) {
+      g.ellipse(wx, s - 3, 2.6, 2.6, 0x2a2a30);
+      g.set(wx + leg(p), s - 3, 0x9aa3ad);
+    }
+  },
+  pending_binder(g, s, m, a, p) {
+    const f = p.f + lift(p);
+    g.rect(3, 2 - f, s - 6, s - 5, m);
+    shade(g, m, 4 - f, s - 5);
+    g.vline(3, 2 - f, s - 4 - f, darken(m, 0.35));
+    for (const y of [4, 8, 12]) g.rect(2, y - f, 2, 1, 0xc8ccd2);
+    // 삐져나온 서류 (공격하면 들썩)
+    g.rect(s - 3, 3 - f - (p.atk ? 1 : 0), 2, s - 8, a);
+    // "결재" 이름표
+    g.rect(6, 4 - f, 7, 3, a);
+    g.hline(7, 11, 5 - f, 0x6a6e78);
+    eyes(g, 7, 9 - f, 4, p, WHITE);
+    // 빨간 "대기" 도장
+    g.ellipse(9, 12 - f, 1.5, 1.2, 0xc83c3c);
+    feet(g, s / 2, s - 2, 3, p, darken(m, 0.4));
+  },
+  pending_sheet(g, s, m, a, p) {
+    const f = p.f + lift(p);
+    const t = p.atk === 2 ? 1 : 0;
+    g.rect(1 + t, 1 - f, s - 3, s - 3, m);
+    g.set(s - 3 + t, 1 - f, darken(m, 0.25));
+    g.hline(2 + t, s - 4 + t, 3 - f, 0x9aa3ad);
+    // 반려 빨간 줄
+    g.hline(2 + t, s - 3 + t, 5 - f, a);
+    if (!p.hurt) {
+      g.set(3 + t, 6 - f, OUT);
+      g.set(5 + t, 6 - f, OUT);
+    }
+  },
+  drowsiness(g, s, m, a, p) {
+    const f = p.f;
+    const y0 = Math.round(s / 2 + 2 - f * 0.5);
+    // 몽실몽실한 졸음 구름
+    g.ellipse(s / 2, y0, 6, 4.5, m);
+    g.ellipse(s / 2 - 4, y0 + 1, 3, 3, m);
+    g.ellipse(s / 2 + 4, y0 + 1, 3, 3, m);
+    shade(g, m, y0 - 3, y0 + 3);
+    // 수면 모자 + 방울
+    for (let i = 0; i < 4; i++) g.hline(Math.round(s / 2 - 4 + i), Math.round(s / 2 + 1), y0 - 4 - i, a);
+    g.ellipse(s / 2 + 2, y0 - 8, 1.2, 1.2, WHITE);
+    // 눈: 늘 감겨 있다가 덮칠 때만 번쩍 뜬다
+    if (p.atk) eyes(g, Math.round(s / 2 - 2), y0, 4, p, EYE);
+    else {
+      g.hline(Math.round(s / 2 - 3), Math.round(s / 2 - 1), y0, OUT);
+      g.hline(Math.round(s / 2 + 1), Math.round(s / 2 + 3), y0, OUT);
+    }
+    g.set(Math.round(s / 2), y0 + 2, p.atk ? OUT : lighten(a, 0.2));
+    // Z
+    if (!p.atk) {
+      const zy = 1 + f;
+      g.hline(s - 4, s - 2, zy, a);
+      g.set(s - 3, zy + 1, a);
+      g.hline(s - 4, s - 2, zy + 2, a);
+    }
+  },
+  quarterly_report(g, s, m, a, p) {
+    const f = p.f + lift(p);
+    const x0 = 7;
+    const w = s - 14;
+    const y0 = 3 - f;
+    const h = s - 10;
+    // 뒤에 겹친 장들
+    g.rect(x0 + 3, y0 + 2, w, h, darken(m, 0.14));
+    g.rect(x0 + 1, y0 + 1, w, h, darken(m, 0.07));
+    // 표지 + 제목 띠
+    g.rect(x0, y0, w, h, m);
+    shade(g, m, y0 + 3, y0 + h - 3);
+    g.rect(x0, y0, w, 5, a);
+    g.hline(x0 + 3, x0 + 10, y0 + 2, WHITE);
+    g.hline(x0 + 13, x0 + 16, y0 + 2, 0xffe39a);
+    // 막대그래프: 화날수록 꺾인다 (마지막 막대는 빨강)
+    const bars = p.atk === 2 ? [8, 6, 3, 1] : p.atk ? [8, 7, 5, 3] : [6, 8, 7, 5];
+    bars.forEach((bh, i) => g.rect(x0 + 4 + i * 5, y0 + 18 - bh, 3, bh, i === 3 ? 0xd03030 : lighten(a, 0.15)));
+    g.hline(x0 + 3, x0 + w - 4, y0 + 18, darken(m, 0.5));
+    // 하락 화살표
+    if (p.atk) {
+      for (let i = 0; i <= 14; i++) g.set(x0 + 4 + i, y0 + 8 + Math.round(i / 2), 0xd03030);
+      g.hline(x0 + 15, x0 + 18, y0 + 15, 0xd03030);
+      g.vline(x0 + 18, y0 + 12, y0 + 15, 0xd03030);
+    }
+    // 얼굴
+    eyes(g, x0 + 7, y0 + 23, 9, p, EYE, true);
+    if (p.atk) g.rect(x0 + 9, y0 + 26, 6, 2, OUT);
+    else g.hline(x0 + 9, x0 + 14, y0 + 26, darken(m, 0.5));
+    // 빨간 펜 든 팔 (공격하면 치켜든다) + 왼팔
+    const ay = p.atk === 2 ? y0 + 8 : p.atk ? y0 + 12 : y0 + 18;
+    g.rect(x0 + w, ay, 4, 2, m);
+    g.rect(x0 + w + 3, ay - 5, 2, 7, 0xd03030);
+    g.set(x0 + w + 3, ay - 6, OUT);
+    g.rect(x0 - 3, y0 + 20, 3, 2, m);
+    // 다리 (바인더 집게)
+    g.rect(x0 + 4 + leg(p), s - 6, 3, 5, darken(a, 0.2));
+    g.rect(x0 + w - 7 - leg(p), s - 6, 3, 5, darken(a, 0.2));
+  },
+
+  // ── 구조조정 발표 날 (11/15) ──
+  one_on_one(g, s, m, a, p) {
+    const f = lift(p) + p.f * 0.5;
+    const ring = p.atk ? 2 : 0;
+    // 사내 전화기: 울리면 수화기가 들썩인다
+    const rc = darken(m, 0.15);
+    g.rect(2, 2 - f - ring, s - 4, 2, rc);
+    g.rect(1, 3 - f - ring, 3, 3, rc);
+    g.rect(s - 4, 3 - f - ring, 3, 3, rc);
+    g.rect(2, 6 - f, s - 4, s - 9, m);
+    shade(g, m, 7 - f, s - 5);
+    // 액정 = 눈
+    g.rect(4, 7 - f, s - 8, 3, a);
+    eyes(g, 5, 8 - f, 4, p, WHITE);
+    for (let i = 0; i < 4; i++) g.set(4 + i * 2, 10 - f, darken(m, 0.35));
+    // 빨간 호출등
+    g.set(s - 4, 10 - f, p.f || p.atk ? 0xff3a3a : 0x6a2a2a);
+    if (p.atk) {
+      g.set(0, 1 - f, a);
+      g.set(s - 1, 1 - f, a);
+    }
+    g.rect(3 + leg(p), s - 3, 2, 2, OUT);
+    g.rect(s - 5 - leg(p), s - 3, 2, 2, OUT);
+  },
+  desk_box(g, s, m, a, p) {
+    const f = lift(p);
+    const puff = p.atk ? 1 : 0;
+    g.rect(1 - puff, 5 - f, s - 2 + puff * 2, s - 7, m);
+    shade(g, m, 6 - f, s - 4);
+    g.vline(s / 2, 5 - f, s - 3 - f, darken(m, 0.2));
+    // 열린 뚜껑 (터지기 직전엔 활짝)
+    const fl = p.atk ? -2 : 0;
+    g.rect(0, 3 - f + fl, 5, 2, lighten(m, 0.15));
+    g.rect(s - 5, 3 - f + fl, 5, 2, lighten(m, 0.15));
+    // 삐져나온 짐: 머그컵·화분 잎
+    g.rect(3, 2 - f, 3, 3, 0xe8f0f0);
+    g.vline(9, 1 - f, 4 - f, 0x3e8a3a);
+    g.set(10, 2 - f, 0x5aaa4a);
+    // 매직으로 그린 눈·"개인물품"
+    eyes(g, 4, 8 - f, 5, p, a);
+    g.hline(3, 6, s - 4 - f, 0xc83c3c);
+  },
+  standby_shadow(g, s, m, a, p) {
+    const f = p.f;
+    g.ellipse(s / 2, 4 - f, 3.2, 3.2, m);
+    g.rect(s / 2 - 5, 7 - f, 10, 6, m);
+    for (let x = 0; x < 10; x++) if ((x + f + Math.max(0, p.step)) % 3) g.vline(s / 2 - 5 + x, 13 - f, 14 - f + (x % 2), m);
+    // 사원증 (사진 칸이 비었다)
+    g.vline(s / 2 - 2, 7 - f, 9 - f, a);
+    g.vline(s / 2 + 1, 7 - f, 9 - f, a);
+    g.rect(s / 2 - 2, 10 - f, 4, 3, WHITE);
+    g.rect(s / 2 - 1, 10 - f, 2, 1, darken(a, 0.3));
+    const ec = p.atk ? 0xff5a5a : a;
+    if (p.hurt) {
+      g.hline(s / 2 - 3, s / 2 - 1, 4 - f, ec);
+      g.hline(s / 2 + 1, s / 2 + 3, 4 - f, ec);
+    } else {
+      g.hline(s / 2 - 2, s / 2 - 1, 4 - f, ec);
+      g.hline(s / 2 + 1, s / 2 + 2, 4 - f, ec);
+    }
+    // 어깨를 짚는 손
+    if (p.atk) g.rect(s / 2 + 5, 8 - f - p.atk, 3, 2, m);
+  },
+  hr_chair(g, s, m, a, p) {
+    const f = p.f + lift(p) * 0.5;
+    const cx = s / 2;
+    const skin = 0xe8c8a0;
+    // 높은 등받이 가죽 의자 (단추 박힌)
+    g.rect(cx - 13, 2, 26, 26, 0x5a2a2a);
+    shade(g, 0x5a2a2a, 4, 24);
+    for (let y = 5; y < 26; y += 5) for (let x = cx - 10; x <= cx + 10; x += 5) g.set(x, y, 0x3a1a1a);
+    // 양복 몸통 + 셔츠·넥타이
+    g.rect(cx - 9, 16 - f, 18, 13, m);
+    shade(g, m, 17 - f, 27);
+    g.rect(cx - 2, 16 - f, 4, 7, WHITE);
+    g.vline(cx, 17 - f, 23 - f, a);
+    g.vline(cx - 1, 17 - f, 22 - f, a);
+    // 머리 (옆머리만 남았다) + 안경
+    g.ellipse(cx, 10 - f, 6, 6, skin);
+    g.vline(cx - 6, 8 - f, 11 - f, 0x6a6a6a);
+    g.vline(cx + 5, 8 - f, 11 - f, 0x6a6a6a);
+    g.rect(cx - 5, 9 - f, 4, 3, OUT);
+    g.rect(cx + 1, 9 - f, 4, 3, OUT);
+    g.hline(cx - 1, cx, 10 - f, OUT);
+    if (!p.hurt) {
+      const lens = p.atk ? 0xff5a3a : 0xc8e8ff;
+      g.rect(cx - 4, 10 - f, 2, 1, lens);
+      g.rect(cx + 2, 10 - f, 2, 1, lens);
+    }
+    if (p.atk) g.rect(cx - 2, 13 - f, 4, 2, OUT);
+    else g.hline(cx - 2, cx + 1, 14 - f, darken(skin, 0.4));
+    // 팔걸이·바퀴 의자 다리
+    g.rect(cx - 15, 22, 4, 8, 0x4a2020);
+    g.rect(cx + 11, 22, 4, 8, 0x4a2020);
+    g.rect(cx - 1, 29, 2, 6, 0x3a3f4a);
+    g.hline(cx - 9, cx + 8, s - 5, 0x3a3f4a);
+    for (const wx of [cx - 9, cx + 8]) g.rect(wx - 1 + leg(p), s - 4, 2, 2, OUT);
+    // 왼손 명단 클립보드 (빨간 줄이 그어진 이름들)
+    g.rect(cx - 16, 17 - f, 7, 9, 0x8a6a4a);
+    g.rect(cx - 15, 18 - f, 5, 7, WHITE);
+    for (let y = 19; y < 25; y += 2) g.hline(cx - 14, cx - 12, y - f, 0x3a3f4a);
+    g.hline(cx - 14, cx - 11, 21 - f, a);
+    // 오른손 도장: 공격하면 치켜든다
+    const sy = p.atk === 2 ? 3 : p.atk ? 8 : 19 - f;
+    g.rect(cx + 10, sy, 4, 4, 0x6a4a30);
+    g.rect(cx + 9, sy + 4, 6, 3, a);
+  },
 };
 
 // ── 공통 변형 ──

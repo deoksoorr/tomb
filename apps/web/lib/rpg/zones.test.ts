@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DIFFICULTIES, DIFFS, GEAR, HUNT_ZONES, MONSTER_IDS, MONSTERS, timeLimitSec, ZONE_IDS, ZONES, zoneFor, zonesOf } from "./catalog";
 import { monsterStats } from "./formulas";
 import { BOSS_RAGES, huntPlan, huntSpawnable, huntTotal } from "./plan";
-import { evaluate, killRateCeiling, type TicketInfo } from "./rewards";
+import { evaluate, huntBossDrop, killRateCeiling, type TicketInfo } from "./rewards";
 import { signTicket, verifyTicket } from "./ticket";
 
 // 40번 테마 사냥터: 카탈로그·출현 계획·서버 검증이 모든 사냥터·시드에서 맞물리는지
@@ -150,6 +150,36 @@ describe("40번 출현 계획·서버 검증 (사냥터마다)", () => {
     expect(await verifyTicket("k", await signTicket("k", claims))).toEqual(claims);
     expect(await verifyTicket("k", await signTicket("k", { ...claims, z: "library" as never }))).toBeNull();
     expect(await verifyTicket("k", await signTicket("k", { ...claims, z: "../x" as never }))).toBeNull();
+  });
+
+  it("11/15 지옥 40~50대 사냥터: Lv.42·48, 분열 조각·졸개까지 상한에 들고, 50레벨 EXP는 그 사냥터 기준", () => {
+    const hell = zonesOf("hell").map((z) => z.id);
+    expect(hell).toEqual(["burnout-abyss", "new-year-eve", "quarter-close", "layoff-day"]);
+    expect(HUNT_ZONES["quarter-close"]).toMatchObject({ unlockLevel: 42, power: 1.3, waves: 7, timeLimitSec: 240 });
+    expect(HUNT_ZONES["layoff-day"]).toMatchObject({ unlockLevel: 48, power: 1.45, waves: 7, timeLimitSec: 240 });
+    // 결재 대기 서류철은 쓰러지면 반려된 서류 3장 → 출현 상한도 3배로 센다
+    for (let seed = 1; seed <= 20; seed++) {
+      const p = huntPlan(seed, "hell", "quarter-close");
+      const planned = p.flatMap((w) => w.monsters);
+      const can = huntSpawnable(p, Infinity);
+      expect(can.pending_sheet ?? 0).toBe(planned.filter((m) => m === "pending_binder").length * 3);
+      expect(can.drowsiness ?? 0).toBe(planned.filter((m) => m === "drowsiness").length + 3 * BOSS_RAGES);
+      expect(planned).not.toContain("pending_sheet");
+    }
+    // 같은 판을 50레벨로: 새 사냥터는 EXP 그대로, 회식 3차는 10% (예전 지옥 예외 50%는 없앴다)
+    const run = (id: (typeof ZONE_IDS)[number], level: number) => {
+      const z = HUNT_ZONES[id];
+      const p = huntPlan(5, z.difficulty, id);
+      const kills = huntSpawnable(p, Infinity) as Record<string, number>;
+      const ms = (z.timeLimitSec * 1000) / 2;
+      const v = evaluate({ ...T, difficulty: z.difficulty, seed: 5, level, zone: id }, hunt({ kills, wavesCleared: p.length, durationMs: ms }), ms + 1000);
+      if (!v.ok) throw new Error(`${id} ${level}`);
+      return v;
+    };
+    for (const id of ["quarter-close", "layoff-day"] as const) expect(run(id, 50).exp).toBe(run(id, HUNT_ZONES[id].unlockLevel).exp);
+    expect(run("burnout-abyss", 50).exp).toBe(Math.round(run("burnout-abyss", 30).exp * 0.1));
+    // 우두머리를 잡으면 우두머리 드롭 몫을 굴린다 (시드 몇 개 중엔 장비가 나온다)
+    expect(Array.from({ length: 60 }, (_, i) => huntBossDrop({ game: "hunt", difficulty: "hell", seed: i + 1, zone: "layoff-day" })).some((d) => d?.kind === "gear")).toBe(true);
   });
 
   it("계획 크기: 최대 동시 출현 20마리 이하 (화면 성능)", () => {
