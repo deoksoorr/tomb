@@ -1,0 +1,8 @@
+# 배경음악 파일 배달 (R2 버킷 tomb-bgm → workers.dev 주소). 도메인 없이 운영 주소로 쓰려고 만든 작은 워커.
+name = "tomb-bgm"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[[r2_buckets]]
+binding = "BGM"
+bucket_name = "tomb-bgm"
