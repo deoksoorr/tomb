@@ -519,10 +519,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 </button>
                 <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => setPanel("me")}>
                   <PixelIcon name="user" />
-                  <span className={styles.meLabel}>
-                    {me ? `${me.points.toLocaleString("ko-KR")}P` : "내 정보"}
-                    <span className="visually-hidden"> 내 정보</span>
-                  </span>
+                  {/* 포인트는 내 정보 창 안에서 보여 준다 (위쪽 단추는 이름만) */}
+                  <span className={styles.meLabel}>내 정보</span>
                 </button>
                 {/* 주간 랭킹 1위 레이스 (시상대·마감·내 순위·명예의 전당): 랭킹 옆 따로.
                     위쪽 줄이 가운데 채널 칸과 겹칠 만큼 좁은 화면에선 숨기고 [메뉴] 시트의 「이번 주 레이스」로 연다 */}
