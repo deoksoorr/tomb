@@ -42,6 +42,8 @@ import {
   itemDepthY,
   pickTarget,
   PIANO_NOTES,
+  pickPondSeat,
+  pondSeats,
   RADIO_CHANNELS,
   SNACK_NAMES,
   SNACKS,
@@ -49,6 +51,7 @@ import {
   USE_LABEL,
   type HouseSpot,
   type HouseTarget,
+  type PondSide,
   type UseKind,
 } from "./interact";
 
@@ -954,13 +957,18 @@ export class HouseScene extends Phaser.Scene {
     const p = this.player;
     const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
     switch (t.use) {
-      case "dip":
-        // 연못 앞 물가에 연못을 보고 앉아 발을 담근다: 첨벙 + 잔물결
-        this.sitGroundAt(cx, r.y1 + 1, DIR.up);
-        this.fxDip(t.u, 1);
+      case "dip": {
+        // 연못 둘레 네 물가 중 내가 선 쪽에서 가장 가까운 빈 물가에 연못을 보고 앉아 발을 담근다: 첨벙 + 잔물결
+        const pond = this.work.items.find((x) => x.u === t.u);
+        const others = this.presence ? [...this.presence.remotes.values()] : [];
+        const seat = pond && pickPondSeat(pond, this.work.items, this.tier, this.frame, p.x, p.y, (x, y) => others.some((o) => Math.hypot(o.x - x, o.y - y) < 7));
+        if (!seat) return this.notice("연못 둘레에 앉을 물가가 없어요. 둘레의 가구를 조금 옮겨 주세요.");
+        this.sitGroundAt(seat.x, seat.y, seat.facing);
+        this.fxDip(t.u, 1, seat.side);
         this.emote("drop");
-        this.emitUse(t.u, 0);
+        this.emitUse(t.u, seat.side);
         return;
+      }
       case "lean":
         this.sitGroundAt(cx, r.y1 + 1, DIR.down);
         this.sfx.play("rustle", 0.4);
@@ -1044,16 +1052,19 @@ export class HouseScene extends Phaser.Scene {
   }
 
   /** 연못 첨벙: 물가 앞쪽에서 잔물결 고리가 번진다 */
-  private fxDip(u: string, gain: number): void {
+  private fxDip(u: string, gain: number, side: PondSide): void {
     this.sfx.play("splash", gain);
-    const t = this.targets.find((x) => x.u === u);
-    if (!t) return;
-    const x = (t.rect.x0 + t.rect.x1) / 2;
-    const y = t.rect.y1 - 9;
+    const pond = this.work.items.find((x) => x.u === u);
+    const seat = pond && pondSeats(pond, this.work.items, this.tier, this.frame)[side];
+    if (!seat) return;
+    // 앉은 쪽 발 앞에서 잔물결이 번진다
+    const { x, y } = seat.ripple;
+    // 연못 그림 바로 위 (아래 물가에 앉은 사람보다는 뒤)
+    const depth = (this.views.get(u)?.img.depth ?? y) + 0.5;
     const n = this.data0.reduced ? 1 : 3;
     for (let i = 0; i < n; i++)
       this.time.delayedCall(i * 380, () => {
-        const ring = this.add.ellipse(x + (i - 1) * 3, y, 6, 3).setStrokeStyle(1, 0xd6eeea, 0.9).setDepth(y + 2);
+        const ring = this.add.ellipse(x + (i - 1) * 3, y, 6, 3).setStrokeStyle(1, 0xd6eeea, 0.9).setDepth(depth);
         ring.isFilled = false;
         this.tweens.add({ targets: ring, scale: 3.2, alpha: 0, duration: 900, ease: "Sine.easeOut", onComplete: () => ring.destroy() });
         if (i > 0) this.sfx.play("bubble", gain * 0.6);
@@ -1360,7 +1371,7 @@ export class HouseScene extends Phaser.Scene {
         this.loadPlants();
         return;
       case "dip":
-        this.fxDip(u, gain);
+        this.fxDip(u, gain, (a % 4) as PondSide);
         r?.view.emote("drop", now);
         return;
       case "lean":

@@ -1,7 +1,7 @@
 import { DIR, spotSeatId, type DirId, type SpotKind } from "@tomb/protocol";
 import { furnitureById, type FurnitureDef } from "@/lib/housing/catalog";
 import { buildOccupancy, footprint, SPIN_R0, spinDir, type TierShape } from "@/lib/housing/layout";
-import type { RoomPlan } from "@/lib/housing/rooms";
+import { partitionViolation, roomPlan, type RoomPlan } from "@/lib/housing/rooms";
 import type { Placed } from "@/lib/housing/types";
 
 // 3번 집 안 가구 상호작용 규칙 (Phaser 없이 테스트한다).
@@ -357,6 +357,68 @@ export const BOOK_LINES = [
   "‘영어 회화 30일 완성’ 첫 장에 내 이름만 적혀 있다.",
   "추리 소설의 마지막 장을 먼저 읽어 버렸다.",
 ];
+
+// ── 연못가 앉기 (네 방향) ──
+// 연못 둘레 네 물가(아래·위·왼쪽·오른쪽) 중 서 있는 곳에서 가장 가까운 빈 물가에 연못을 보고 앉아 발을 담근다.
+// 자리 없이 바닥에 앉는 것이라(여럿이 앉을 수 있다) 서버 좌석은 쓰지 않는다. use 이벤트 a = 물가 번호(side).
+//  - 아래 물가: 연못 아래에 연못을 보고(위를 보고) 앉는다 → 연못 그림보다 앞 (등이 보인다)
+//  - 위 물가: 연못 윗가에 아래를 보고 앉는다 → 연못 그림이 발끝만 덮는다 (얼굴이 보인다)
+//  - 왼쪽·오른쪽 물가: 옆을 보고 앉고, 발 쪽은 연못 그림에 살짝 덮인다
+
+/** 물가 번호: 0 아래 · 1 위 · 2 왼쪽 · 3 오른쪽 */
+export type PondSide = 0 | 1 | 2 | 3;
+export type PondSeat = { side: PondSide; x: number; y: number; facing: DirId; ripple: { x: number; y: number }; open: boolean };
+
+/** 연못 하나의 네 물가 자리 (open = 그쪽 칸이 집 안이고 가구·칸막이·방 사이 문 앞이 아니다) */
+export function pondSeats(p: Placed, items: readonly Placed[], tier: TierShape, f: Frame): PondSeat[] {
+  const def = furnitureById(p.i);
+  if (!def) return [];
+  const b = boxOf(p, def, f);
+  const occ = buildOccupancy(items, tier);
+  const plan = tier.id ? roomPlan({ id: tier.id, w: tier.w, h: tier.h }) : null;
+  /** 앉는 사람(가로 8px)이 차지하는 칸들이 비었는지. 연못과 같은 방이어야 한다 */
+  const free = (wx0: number, wx1: number, ty: number) => {
+    const tx0 = Math.floor((wx0 - f.ox) / T);
+    const tx1 = Math.floor((wx1 - 1 - f.ox) / T);
+    for (let tx = tx0; tx <= tx1; tx++) {
+      if (tx < 0 || ty < 0 || tx >= tier.w || ty >= tier.h || occ.stand.has(ty * 1000 + tx)) return false;
+      if (plan) {
+        if (partitionViolation(plan, tx, ty, 1, 1, true)) return false;
+        const x0 = Math.min(tx, p.x);
+        const x1 = Math.max(tx + 1, p.x + b.fw);
+        if (partitionViolation(plan, x0, ty, x1 - x0, 1, false)) return false;
+      }
+    }
+    return true;
+  };
+  const rowOf = (wy: number) => Math.floor((wy - f.oy) / T);
+  const cy = b.cy + 3;
+  return [
+    { side: 0, x: b.cx, y: b.B + 1, facing: DIR.up, ripple: { x: b.cx, y: b.B - 9 }, open: free(b.cx - 4, b.cx + 4, p.y + b.fh) },
+    { side: 1, x: b.cx, y: b.Tp - 1, facing: DIR.down, ripple: { x: b.cx, y: b.Tp + 9 }, open: free(b.cx - 4, b.cx + 4, p.y - 1) },
+    { side: 2, x: b.L - 2, y: cy, facing: DIR.right, ripple: { x: b.L + 9, y: cy }, open: free(b.L - 6, b.L, rowOf(cy - 1)) },
+    { side: 3, x: b.R + 2, y: cy, facing: DIR.left, ripple: { x: b.R - 9, y: cy }, open: free(b.R, b.R + 6, rowOf(cy - 1)) },
+  ];
+}
+
+/**
+ * (px,py)에 선 사람이 앉을 물가: 열린 물가 중 가장 가까운 곳. taken(x,y) = 이미 다른 사람이 앉은 자리면 다음으로.
+ * 열린 물가가 모두 차 있으면 그중 가장 가까운 곳 (같이 앉기), 모두 막혔으면 null
+ */
+export function pickPondSeat(
+  p: Placed,
+  items: readonly Placed[],
+  tier: TierShape,
+  f: Frame,
+  px: number,
+  py: number,
+  taken: (x: number, y: number) => boolean = () => false,
+): PondSeat | null {
+  const open = pondSeats(p, items, tier, f)
+    .filter((s) => s.open)
+    .sort((a, b) => Math.hypot(a.x - px, a.y - py) - Math.hypot(b.x - px, b.y - py));
+  return open.find((s) => !taken(s.x, s.y)) ?? open[0] ?? null;
+}
 
 /** 덤불을 뒤지면 튀어나오는 것 (a = 번호. 연출만 — 포인트·아이템은 주지 않는다) */
 export const BUSH_FINDS = [
