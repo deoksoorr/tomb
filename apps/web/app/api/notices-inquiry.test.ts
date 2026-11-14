@@ -136,7 +136,8 @@ describe("문의 → GitHub 이슈", () => {
     expect(JSON.parse(text)).toEqual({ ok: true });
     expect(text).not.toMatch(/ghp_|issues\/7/);
 
-    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    // 저장소 공개 여부 확인(GET)이 먼저 올 수 있어 이슈 만들기(POST) 호출을 고른다
+    const [url, init] = fetchSpy.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === "POST") as [string, RequestInit];
     expect(url).toBe("https://api.github.com/repos/owner/inquiries/issues");
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer ghp_secret_token");
@@ -146,8 +147,9 @@ describe("문의 → GitHub 이슈", () => {
     expect(issue.title).not.toMatch(/[@#]/);
     expect(issue.body).toContain(fenced(message));
     expect(issue.body).toContain("````text"); // 본문 안 ``` 보다 긴 펜스
-    expect(issue.body).toContain(`계정: ${v.visitorId.slice(0, 6)}…`);
-    expect(issue.body).not.toContain(v.visitorId);
+    // 이 시험의 저장소 확인 응답에 따라 비공개면 계정 id 전체, 공개면 앞부분만
+    expect(issue.body).toMatch(new RegExp(`계정: ${v.visitorId.slice(0, 6)}`));
+    expect(issue.body).toContain("닉네임: ");
     expect(issue.body).toContain("채널: 3");
     expect(issue.body).toContain("User-Agent: TestBrowser/1.0");
     expect(issue.body).toContain(fenced("me@example.com"));

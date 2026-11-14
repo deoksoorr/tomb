@@ -2,6 +2,7 @@ import { handler, json } from "@/lib/http";
 import { createInquiryIssue, inquiryConfig, inquiryInfo } from "@/lib/inquiry";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
+import { getAccounts } from "@/lib/store";
 import type { InquiryInfoResponse, InquiryResponse } from "@/lib/types";
 import { InquirySchema, readBody } from "@/lib/validate";
 
@@ -17,6 +18,7 @@ export const POST = handler(async (req) => {
   inquiryConfig(); // 설정이 없으면 한도를 쓰기 전에 503
   const input = await readBody(req, InquirySchema);
   await rateLimit("inquiry", req, visitorId);
-  await createInquiryIssue({ ...input, accountId: visitorId, userAgent: req.headers.get("user-agent") });
+  const [[me], info] = await Promise.all([getAccounts().summaries([visitorId]).catch(() => [null]), inquiryInfo()]);
+  await createInquiryIssue({ ...input, accountId: visitorId, name: me?.name ?? null, fullId: !info.public, userAgent: req.headers.get("user-agent") });
   return json<InquiryResponse>({ ok: true });
 });

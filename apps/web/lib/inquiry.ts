@@ -61,6 +61,10 @@ export type InquiryIssue = {
   message: string;
   contact?: string;
   accountId: string;
+  /** 보낸 사람의 지금 닉네임 (없으면 이름 없는 계정) */
+  name?: string | null;
+  /** 문의 저장소가 비공개일 때만 계정 id를 전부 적는다 (공개 저장소면 앞 6자만) */
+  fullId?: boolean;
   channel?: number;
   userAgent: string | null;
 };
@@ -70,7 +74,9 @@ export function buildIssue(i: InquiryIssue): { title: string; body: string; labe
   const head = [...i.message.replace(/\s+/g, " ")].slice(0, 40).join("");
   const meta = [
     `카테고리: ${label}`,
-    `계정: ${i.accountId.slice(0, 6)}…`,
+    // 관리자 회원 탭에서 바로 찾아 코드 재발급할 수 있게 계정 id 전체 (비공개 저장소일 때만. id는 로그인 열쇠가 아니고, 로그인 코드는 해시로만 저장돼 넣을 수 없다)
+    `계정: ${i.fullId ? i.accountId : `${i.accountId.slice(0, 6)}… (문의 저장소가 공개라 앞부분만)`}`,
+    `닉네임: ${i.name ?? "(이름 없음)"}`,
     `채널: ${i.channel ?? "알 수 없음"}`,
     `User-Agent: ${(i.userAgent ?? "알 수 없음").slice(0, 300)}`,
   ].join("\n");
