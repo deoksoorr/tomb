@@ -1581,6 +1581,18 @@ export class WorldScene extends Phaser.Scene {
       riders[rn++] = r.y;
     }
     this.map.updateSwings(riders, rn);
+    // 해먹에 누운 사람이 있으면 기둥만 남긴다 (줄·천은 누운 사람 그림이 흔들리며 그린다)
+    rn = 0;
+    if (pl.state === "hammock") {
+      riders[rn++] = pl.x;
+      riders[rn++] = pl.y;
+    }
+    for (const r of this.remotes.values()) {
+      if (r.stateId !== STATE.hammock) continue;
+      riders[rn++] = r.x;
+      riders[rn++] = r.y;
+    }
+    this.map.updateHammocks(riders, rn);
     this.map.scaleLabels(s);
     const L = this.atmos.levels;
     this.field.update(now, view, L.glow);

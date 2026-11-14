@@ -9,7 +9,7 @@ import { CosmeticFxView } from "./CosmeticFxView";
 import { DyeFxView } from "./DyeFxView";
 import { bodyFx, riderLift } from "../sprites/cosmeticFx";
 import type { EmoteIcon } from "../sprites/emotes";
-import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
+import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, lieFrameOf, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
 import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_H, POSE_W, type IndoorPose } from "../sprites/indoorPose";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { wrapChat } from "../logic/chatWrap";
@@ -33,7 +33,7 @@ const TITLE_GAP = 6;
 // 상태 값과 방향만 받아서 애니메이션을 고르고, 상태별 연출은 그림에만 얹는다 (논리 위치는 그대로):
 //  - hang: HANG_LIFT만큼 들어 올리고 살짝 흔들린다     - swing: 그네처럼 좌우로 왕복 (진자)
 //  - swim: 수면 물결 고리                              - dive: 물결 + 물방울이 올라온다
-//  - hammock: 해먹 천 안에 누운 그림(sprites/hammockArt — 천 곡선을 따라 휜 몸 + 앞 천)으로 바꿔 천천히 흔들린다 (F5)
+//  - hammock: 해먹 천 안에 누운 그림(sprites/hammockArt — 줄 + 천 곡선을 따라 휜 몸 + 앞 천)으로 바꿔 좌우로 흔들린다 (F5, 11/15)
 // 꾸미기: 모자·후광 고리·목도리·손등불은 시트에 함께 그려지고, 날개·후광 빛·그림자 유령 친구·발자국 꽃·
 // 안개 망토·반딧불 오라는 따로 붙는 오브젝트다. 몸 모양(AVATAR_BODIES)은 시트를 바꾼다.
 // 머리 위는 아래에서부터 머리 꾸미기(귀·모자·후광·날개 끝) → 이름표 → 말풍선/이모티콘 순으로 쌓는다:
@@ -48,6 +48,8 @@ const SWING_AMP = 3;
 const SWING_PERIOD = 1600;
 /** 해먹 흔들림 주기 (몸이 천 안으로 1px 가라앉았다 올라온다) */
 const LIE_PERIOD = 2400;
+/** 해먹 좌우 흔들림 주기 (11/15) */
+const HAMMOCK_SWAY_PERIOD = 2800;
 /** 해먹 누운 그림: 텍스처마다 몸 맨 윗줄 (이름표 자리) */
 const lieTops = new Map<string, number>();
 /** 수면 줄: 발바닥에서 위로 */
@@ -743,9 +745,11 @@ export class AvatarView {
         s.setFrame(avatarFrame("swing", this.dir, f));
       }
     } else if (st === "hammock") {
-      // 천 안에서 몸이 천천히 1px 가라앉았다 올라온다 (천은 그대로라 밑의 해먹 소품과 어긋나지 않는다)
+      // 11/15: 해먹이 좌우로 흔들린다 (천·줄·몸이 함께 −2..2px, 기둥은 WorldMap이 남긴 소품 그대로) + 몸이 천천히 1px 가라앉았다 올라온다
       this.setPose(0, 0);
-      const f = this.reduced ? 0 : Math.sin(((now % LIE_PERIOD) / LIE_PERIOD) * Math.PI * 2) > 0.2 ? 1 : 0;
+      const sway = this.reduced ? 0 : Math.round(Math.sin(((now % HAMMOCK_SWAY_PERIOD) / HAMMOCK_SWAY_PERIOD) * Math.PI * 2) * 2);
+      const breath = this.reduced ? 0 : Math.sin(((now % LIE_PERIOD) / LIE_PERIOD) * Math.PI * 2) > 0.2 ? 1 : 0;
+      const f = lieFrameOf(sway, breath);
       if (this.lying && f !== this.lieFrame) {
         this.lieFrame = f;
         s.setFrame(f);

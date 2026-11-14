@@ -6,8 +6,9 @@ import { darken, Grid, lighten, type Color } from "./pixel";
 //  - 누운 사람 텍스처(해먹 텍스처와 같은 48×30 칸, 픽셀 1:1로 겹친다) = 뒤 천 → 천 곡선을 따라 휜 몸 → 앞 천.
 //    몸 아래쪽은 앞 천에 가려 "천 안에 누운" 모습이 된다. 몸은 서 있는 프레임(AV_ANIM.hammock)을 90° 눕혀(머리 왼쪽)
 //    천 곡선만큼 세로줄마다 내려 휘게 만든다 → 몸 6종·시트 꾸미기(모자·목도리·손등불)가 그대로 따라온다.
-//  - 프레임 2장: 0 = 쉬는 자세, 1 = 몸이 1px 더 가라앉음 (AvatarView가 천천히 번갈아 → 흔들흔들). 천은 두 프레임이 같아
-//    밑에 깔린 해먹 소품과 어긋나지 않는다.
+//  - 11/15 흔들림: 누가 누우면 해먹 소품은 기둥만 남기고(hammockPosts) 줄·천·몸은 누운 텍스처가 그린다. 프레임 = 흔들림 칸
+//    (천이 좌우 −2..2px, 양 끝에서 1px 들림 — 진자) × 숨쉬기 2장 (1 = 몸이 1px 더 가라앉음). 줄은 늘 기둥 매듭에서 천 끝까지
+//    이어져 기둥과 어긋나지 않는다. 가운데 칸(dx 0)의 천·줄은 해먹 소품과 픽셀 1:1로 같다.
 // 좌표: 해먹 텍스처 왼쪽 위 기준 (tx, ty). 해먹 소품은 원점 (0.5, 1)로 받침(p.x, p.y + 1)에 놓인다.
 
 export const HAMMOCK_W = 48;
@@ -16,7 +17,13 @@ export const HAMMOCK_H = 30;
 export const HAMMOCK_ANCHOR_UP = 5;
 export const LIE_ORIGIN_X = HAMMOCK_W / 2;
 export const LIE_ORIGIN_Y = HAMMOCK_H - 1 - HAMMOCK_ANCHOR_UP;
-export const LIE_FRAMES = 2;
+/** 흔들림 칸 (천 가로 이동 px): 프레임 = (칸 번호) × 2 + 숨쉬기 */
+export const SWAY_DX = [-2, -1, 0, 1, 2] as const;
+export const LIE_FRAMES = SWAY_DX.length * 2;
+/** 흔들림 dx(−2..2)와 숨쉬기(0|1) → 누운 텍스처 프레임 번호 */
+export const lieFrameOf = (dx: number, breath: number) => (dx + 2) * 2 + breath;
+/** 진자: 양 끝에서는 천이 1px 들린다 */
+const swayLift = (dx: number) => (Math.abs(dx) >= 2 ? -1 : 0);
 
 /** 천 가로 범위 (양 끝 = 줄이 묶이는 곳) */
 export const FABRIC_X0 = 10;
@@ -40,6 +47,26 @@ const OUT = 0x1f1d1a;
 const STRIPE_A = 0xc85a46;
 const STRIPE_B = 0xe8d6b0;
 const stripe = (tx: number): Color => (Math.floor((tx - FABRIC_X0) / 3) % 2 ? STRIPE_A : STRIPE_B);
+
+const ROPE = 0xc8b894;
+/** 기둥 매듭 (해먹 소품의 기둥 x=3..5, 42..44 바로 안쪽) */
+const KNOT_L = { x: 6, y: 8 };
+const KNOT_R = { x: 41, y: 8 };
+
+/** 줄: 기둥 매듭 → 천 끝 (천이 dx, dy만큼 움직인 자리). 테두리는 기둥 위로 번지지 않게 기둥 칸에서 지운다 */
+export function hammockRopes(dx = 0, dy = 0): Grid {
+  const g = new Grid(HAMMOCK_W, HAMMOCK_H);
+  const rope = (x0: number, y0: number, x1: number, y1: number) => {
+    const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+    for (let i = 0; i <= steps; i++) g.set(Math.round(x0 + ((x1 - x0) * i) / steps), Math.round(y0 + ((y1 - y0) * i) / steps), ROPE);
+  };
+  rope(KNOT_L.x, KNOT_L.y, FABRIC_X0 + dx, fabricBackTop(FABRIC_X0) + dy);
+  rope(KNOT_R.x, KNOT_R.y, FABRIC_X1 + dx, fabricBackTop(FABRIC_X1) + dy);
+  g.outline(OUT);
+  for (let y = 0; y < HAMMOCK_H; y++)
+    for (let x = 0; x < HAMMOCK_W; x++) if ((x < KNOT_L.x || x > KNOT_R.x) && g.get(x, y) !== 0) g.px[y * HAMMOCK_W + x] = 0;
+  return g;
+}
 
 /** 뒤 천: 먼 쪽 테 + 주머니 안쪽 그늘 (테두리 포함) */
 export function fabricBack(): Grid {
@@ -100,25 +127,32 @@ export function hammockLieSheet(body: string, color: string, look: readonly stri
   const ox = Math.round(FABRIC_CX - (y0 + y1) / 2);
   const midTop = fabricBackTop(Math.round(FABRIC_CX)) - BODY_ABOVE_RIM - BODY_SAG;
   let top = HAMMOCK_H;
-  for (let f = 0; f < LIE_FRAMES; f++) {
-    const g = new Grid(HAMMOCK_W, HAMMOCK_H);
-    g.draw(back, 0, 0);
-    // 90° 눕히기 (반시계: 머리 → 왼쪽, 그림 오른쪽 → 위) + 천 곡선만큼 세로줄마다 내리기. 주머니 바닥 아래는 천에 가려 안 보인다
-    for (let y = y0; y <= y1; y++) {
-      const tx = y + ox;
-      const drop = Math.round(BODY_SAG * sag(tx)) + f;
-      for (let x = x0; x <= x1; x++) {
-        const v = src.get(x, y);
-        if ((v & 255) === 0) continue;
-        const ty = midTop + (x1 - x) + drop;
-        if (ty > fabricBottom(tx) && tx >= FABRIC_X0 && tx <= FABRIC_X1) continue;
-        if (ty < 0 || ty >= HAMMOCK_H) continue;
-        g.px[ty * HAMMOCK_W + tx] = v;
-        if (f === 0) top = Math.min(top, ty);
+  for (const dx of SWAY_DX) {
+    const dy = swayLift(dx);
+    const ropes = hammockRopes(dx, dy);
+    for (let b = 0; b < 2; b++) {
+      const g = new Grid(HAMMOCK_W, HAMMOCK_H);
+      g.draw(ropes, 0, 0);
+      g.draw(back, dx, dy);
+      // 90° 눕히기 (반시계: 머리 → 왼쪽, 그림 오른쪽 → 위) + 천 곡선만큼 세로줄마다 내리기. 주머니 바닥 아래는 천에 가려 안 보인다
+      for (let y = y0; y <= y1; y++) {
+        const tx = y + ox;
+        const drop = Math.round(BODY_SAG * sag(tx)) + b;
+        for (let x = x0; x <= x1; x++) {
+          const v = src.get(x, y);
+          if ((v & 255) === 0) continue;
+          const ty = midTop + (x1 - x) + drop;
+          if (ty > fabricBottom(tx) && tx >= FABRIC_X0 && tx <= FABRIC_X1) continue;
+          const px = tx + dx;
+          const py = ty + dy;
+          if (py < 0 || py >= HAMMOCK_H || px < 0 || px >= HAMMOCK_W) continue;
+          g.px[py * HAMMOCK_W + px] = v;
+          if (dx === 0 && b === 0) top = Math.min(top, ty);
+        }
       }
+      g.draw(front, dx, dy);
+      sheet.draw(g, lieFrameOf(dx, b) * HAMMOCK_W, 0);
     }
-    g.draw(front, 0, 0);
-    sheet.draw(g, f * HAMMOCK_W, 0);
   }
   return { grid: sheet, top };
 }

@@ -48,6 +48,7 @@ import {
   campfireCollider,
   cliffColliders,
   furnitureCollider,
+  HAMMOCK_LIFT,
   hammockPosts,
   houseCollider,
   interactables,
@@ -112,6 +113,8 @@ export class WorldMap {
   private houseKey = "";
   /** 그네 줄·판 (받침 좌표 x*65536+y → 이미지) */
   private readonly swingSeats = new Map<number, Phaser.GameObjects.Image>();
+  /** 해먹 소품 (받침 x·y 키). 누가 누우면 기둥만 남긴다 (11/15) */
+  private readonly hammocks = new Map<number, Phaser.GameObjects.Image>();
   /** 모닥불 id → 불티·연기 이미터 */
   private readonly fires = new Map<string, { embers: Phaser.GameObjects.Particles.ParticleEmitter; smoke: Phaser.GameObjects.Particles.ParticleEmitter; big?: boolean }>();
   private readonly reduced: boolean;
@@ -345,7 +348,9 @@ export class WorldMap {
     }
     // 해먹: 누운 사람(받침 + 1)보다 뒤에
     const depth = FLAT.has(p.kind) ? DEPTH.decal + 3 : p.kind === "hammock" ? p.y - 2 : p.y;
-    return this.scene.add.image(p.x, p.y + 1, this.propTexture(p)).setOrigin(0.5, 1).setDepth(depth);
+    const img = this.scene.add.image(p.x, p.y + 1, this.propTexture(p)).setOrigin(0.5, 1).setDepth(depth);
+    if (p.kind === "hammock") this.hammocks.set(p.x * 65536 + p.y, img);
+    return img;
   }
 
   /**
@@ -366,6 +371,26 @@ export class WorldMap {
       // 컬링으로 숨긴 칸이면 그대로 둔다 (칸이 보이면 다음 프레임에 맞춘다)
       const want = !busy && this.shownCells.has(Math.floor(py / CELL) * CELL_COLS + Math.floor(px / CELL));
       if (seat.visible !== want) seat.setVisible(want);
+    }
+  }
+
+  /**
+   * 해먹에 누운 사람 자리(앵커 = 받침 y − HAMMOCK_LIFT)들을 받아, 사람이 있는 해먹은 기둥만 남긴다
+   * (줄·천은 누운 사람 텍스처가 흔들리며 그린다). riders: [x0, y0, x1, y1, …]
+   */
+  updateHammocks(riders: readonly number[], n: number): void {
+    for (const [key, img] of this.hammocks) {
+      const px = Math.floor(key / 65536);
+      const py = key % 65536;
+      let busy = false;
+      for (let i = 0; i < n; i += 2) {
+        if (Math.abs(riders[i] - px) <= 6 && Math.abs(riders[i + 1] - (py - HAMMOCK_LIFT)) <= 6) {
+          busy = true;
+          break;
+        }
+      }
+      const tex = busy ? WP.hammockPosts : WP.hammock;
+      if (img.texture.key !== tex) img.setTexture(tex);
     }
   }
 
