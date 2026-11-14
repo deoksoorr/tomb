@@ -1,10 +1,10 @@
 // "뒤로 간 상태" 판정: 탭이 숨겨졌거나(document.hidden), 창이 포커스를 잃은 채(다른 창을 보는 중) BACKGROUND_DELAY_MS가 지났다.
 // 탭은 보이지만 다른 창을 띄워 보는 경우에는 document.hidden이 false라 이 판정으로 잡는다.
-// 뒤로 간 동안: Redis를 쓰는 주기 호출은 숨긴 탭처럼 멈추고, 게임은 렌더·갱신을 크게 줄인다 (소리·실시간 연결·게임 시계는 그대로).
+// 뒤로 간 동안: Redis를 쓰는 주기 호출은 숨긴 탭처럼 멈추고, 게임은 "휴식 중"으로 루프를 재운다 (음악·실시간 연결은 그대로, game/backgroundLoop).
 // 창이 포커스를 다시 얻거나 포인터·키 입력이 오면 바로 앞으로 돌아온다 (포커스 없이 입력만 오면 그때부터 다시 BACKGROUND_DELAY_MS를 센다).
 
-/** 포커스를 잃은 뒤 뒤로 간 것으로 보기까지 */
-export const BACKGROUND_DELAY_MS = 20_000;
+/** 포커스를 잃은 뒤 뒤로 간 것으로 보기까지 (잠깐 다른 창을 눌렀다 오는 정도는 깜빡이지 않게) */
+export const BACKGROUND_DELAY_MS = 5_000;
 
 type Listener = (background: boolean) => void;
 

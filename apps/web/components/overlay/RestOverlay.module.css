@@ -1,0 +1,61 @@
+/* 휴식 중 막: 다른 탭·다른 창을 보는 동안 게임 위를 어둡게 덮는다. 게임 오버레이(10)·연결 끊김(5) 위, 업데이트 창(40) 아래.
+   쉬는 동안 자원을 쓰지 않게 계속 도는 애니메이션은 두지 않는다 (나타날 때 한 번만 흐려짐) */
+
+.cover {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: grid;
+  place-items: center;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+  background: rgba(6, 7, 6, 0.86);
+  cursor: pointer;
+  animation: fade 0.4s ease both;
+}
+
+.card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: min(340px, calc(100% - 32px));
+  padding: 22px 18px 18px;
+  color: var(--text);
+  text-align: center;
+}
+
+.title {
+  margin: 0;
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 22px;
+  line-height: 1.4;
+}
+
+.sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.track {
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--bone);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cover {
+    animation: none;
+  }
+}

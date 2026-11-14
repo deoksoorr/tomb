@@ -172,6 +172,8 @@ export class RealtimeClient {
   private statsTimer: ReturnType<typeof setInterval> | null = null;
   private readonly throttle = new MoveThrottle();
   private hidden = false;
+  /** 휴식 중 (다른 창을 보는 중이라 게임 루프를 재움 — game/backgroundLoop). 탭 숨김과 똑같이 다룬다 */
+  private resting = false;
   private pendingWarp: { x: number; y: number } | null = null;
   private readonly joinLimiter = new JoinLimiter();
   private token: CachedToken<Extract<JoinResponse, { mode: "channel" }>> | null = null;
@@ -373,6 +375,16 @@ export class RealtimeClient {
   /** 4번 배 위 낚싯대 드리우기·거두기 (조각배 자리에 앉아 있을 때만 서버가 받는다) */
   rod(on: boolean): void {
     this.send({ t: "rod", on });
+  }
+
+  /**
+   * 휴식 중(다른 창을 보는 중이라 게임 루프를 재움)을 알린다. 탭 숨김과 똑같이 다룬다:
+   * 걷던 중이면 다른 사람 화면에서 멈춰 서게 1회 알리고, 돌아오면 놓친 입장·퇴장을 다시 맞춘다
+   */
+  setResting(on: boolean): void {
+    if (this.resting === on) return;
+    this.resting = on;
+    this.onVisibility();
   }
 
   /**
@@ -990,7 +1002,7 @@ export class RealtimeClient {
   }
 
   private readonly onVisibility = (): void => {
-    const hidden = document.hidden;
+    const hidden = document.hidden || this.resting;
     if (this.hidden && !hidden) this.throttle.reset(); // 돌아오면 현재 상태 1회
     this.hidden = hidden;
     if (!hidden) {

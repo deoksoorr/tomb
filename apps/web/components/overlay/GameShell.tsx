@@ -29,6 +29,7 @@ import BuryForm, { type BuryMode } from "../grave/BuryForm";
 import GraveModal from "../grave/GraveModal";
 import PassedDialog from "../grave/PassedDialog";
 import Minimap from "./Minimap";
+import RestOverlay from "./RestOverlay";
 import StayBonus from "./StayBonus";
 import NoticesDialog from "../notice/NoticesDialog";
 import RankingList from "../grave/RankingList";
@@ -140,7 +141,7 @@ const PRESENCE_SID = Math.random().toString(36).slice(2, 12) + Date.now().toStri
 
 /**
  * 머무르기 포인트: 게임 중에는(탭이 숨겨지거나 다른 창을 보는 중에도) 서버에 알린다.
- *  - 앞에 있는 동안 10분마다. 뒤로 간 동안(lib/background: 숨긴 탭·포커스 잃고 20초)은 30분마다 한 번만 보내고
+ *  - 앞에 있는 동안 10분마다. 뒤로 간 동안(lib/background: 숨긴 탭·포커스 잃고 5초)은 30분마다 한 번만 보내고
  *    서버가 같은 화면(sid)이면 흐른 시간만큼 몰아서 센다
  *  - 돌아오면 마지막으로 보낸 지 10분이 지났을 때 (흩어서) 바로 한 번 → 뒤로 간 동안의 몫을 한 번에 받는다
  */
@@ -727,6 +728,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {chatOpen && canRadial && !sayOpen && <ChatSheet onClose={() => setChatOpen(false)} />}
       {/* 채팅 기록창: 데스크톱은 바로 가기 줄 위 상자(입력칸 포함), 터치는 확성기 위에 글씨만. 채널·집 드나들면 비운다 */}
       {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}`} hidden={!canRadial} />}
+      {/* 다른 탭·다른 창을 보는 동안: 게임을 재우고 어두운 "휴식 중" 막 (음악은 계속) */}
+      <RestOverlay />
       {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
       {/* 마을·집 안: 월드 바로 가기 줄이 숨으니 [표현] 버튼만 왼쪽 아래에 따로 */}
       {ready && scene === "house" && !coarse && (

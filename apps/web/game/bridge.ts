@@ -55,6 +55,8 @@ export type GameStartOptions = {
 export type GameEvents = {
   /** Phaser 부팅이 끝나고 월드가 보이기 시작함 */
   ready: undefined;
+  /** 휴식 중: 뒤로 가서(다른 탭·다른 창) 게임 루프를 재웠다 → UI가 "휴식 중" 막을 띄운다 (game/backgroundLoop, sticky) */
+  "game:rest": { on: boolean };
   /** 근접 툴팁 대상 묘비 (없으면 null). 모바일 상호작용 버튼 표시용 */
   "grave:near": { graveId: string } | null;
   /** 앉을 수 있는 빈 좌석 근처(없으면 null). 게임은 좌석 옆에 "X 앉기" 안내를, UI는 모바일 앉기 버튼을 강조한다 (sticky) */
@@ -326,6 +328,7 @@ const STICKY = new Set<keyof AllEvents>([
   "graves:set",
   "ui:blockKeys",
   "ready",
+  "game:rest",
   "camera:state",
   "grave:near",
   "look:set",

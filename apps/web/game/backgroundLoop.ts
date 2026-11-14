@@ -1,14 +1,15 @@
 import * as Phaser from "phaser";
 import { isBackground, onBackgroundChange } from "@/lib/background";
-import { BackgroundStepper, LIVE_SCENE_KEYS } from "./backgroundStepper";
+import { bridge } from "./bridge";
+import { BackgroundStepper, LIVE_SCENE_KEYS, LoopController } from "./backgroundStepper";
 
-// 뒤로 간 상태(다른 창을 보는 중 — lib/background)에서 게임이 자원을 거의 먹지 않게 루프를 줄인다.
-//  - 마을·집 등: 갱신·그리기를 초당 BACKGROUND_FPS번으로 (그사이 흐른 시간은 모아서 넘긴다 → 게임 시계는 그대로)
-//  - 판 시계가 프레임마다 돌아야 하는 씬(사냥·벌레·별·귀신의집)이 진행 중이면 갱신은 그대로, 그리기만 줄인다
-//    (판 규칙·멈춤 제한과 부딪히지 않게 — 탭을 숨겼을 때는 지금처럼 Phaser가 루프를 멈춘다)
-//  - 실시간 연결·소리(음악·효과음)는 게임 루프와 따로 돌아 그대로 나온다
-//  - 앞으로 돌아오면 바로 원래 루프로
-// Phaser 루프(TimeStep)가 부르는 콜백만 바꿔 끼운다 (Phaser 내부 다른 것은 건드리지 않는다).
+// 뒤로 간 상태(다른 탭·다른 창을 보는 중 — lib/background)에서 게임이 자원을 거의 먹지 않게 한다.
+//  - 휴식(rest): Phaser 루프를 재운다(갱신·그리기 0). UI는 game:rest로 어두운 "휴식 중" 막을 띄운다.
+//    실시간 연결·서버 정산·음악·효과음 장치는 게임 루프와 따로 돌아 그대로 (게임 안 연출 소리는 멈춰도 된다)
+//  - 판 진행 중(live: 사냥·곤충·별자리·귀신의집): 판 규칙과 부딪히지 않게 재우지 않고 갱신은 매 프레임, 그리기만 초당 BACKGROUND_FPS번.
+//    막도 띄우지 않는다. 판이 끝났는데 여전히 뒤에 있으면 그때 휴식
+//  - 앞으로 돌아오면(포커스·클릭·키·탭 보임) 바로 깨운다. 쉬던 시간은 넘기지 않는다(탭 숨김 복귀와 같다 → 순간이동·시계 튐 없음)
+// Phaser 루프(TimeStep)의 sleep/wake와 콜백만 쓴다 (Phaser 내부 다른 것은 건드리지 않는다).
 
 type StepFn = (time: number, delta: number) => void;
 
@@ -29,24 +30,7 @@ export function installBackgroundLoop(game: Phaser.Game): () => void {
 
   const live = () => LIVE_SCENE_KEYS.some((k) => game.scene.getScene(k) !== null && game.scene.isActive(k));
 
-  const enter = () => {
-    if (wrapped) return;
-    const loop = game.loop;
-    const orig = loop.callback as StepFn;
-    const stepper = new BackgroundStepper();
-    const w: StepFn = (time, delta) => {
-      // 정리 중이면 원래 콜백이 마무리한다
-      if ((game as unknown as { pendingDestroy?: boolean }).pendingDestroy) return orig(time, delta);
-      const p = stepper.plan(time, delta, live());
-      if (p.kind === "full") orig(time, p.delta);
-      else if (p.kind === "update") updateOnly(game, time, p.delta);
-    };
-    saved = orig;
-    wrapped = w;
-    loop.callback = w;
-  };
-
-  const leave = () => {
+  const unwrap = () => {
     if (!wrapped) return;
     // 그사이 Phaser가 콜백을 새로 넣었으면(루프 다시 시작) 그대로 둔다
     if (game.loop.callback === wrapped && saved) game.loop.callback = saved;
@@ -54,21 +38,58 @@ export function installBackgroundLoop(game: Phaser.Game): () => void {
     saved = null;
   };
 
-  // 루프가 시작되기 전이면(부팅 중) 시작한 뒤에 건다 — 시작이 콜백을 덮어쓰므로
-  const sync = (bg: boolean) => {
-    if (!bg) return leave();
-    if (!game.loop.started) return;
-    enter();
+  /** 판 진행 중: 갱신은 매 프레임, 그리기만 줄인다. 판이 끝나면 휴식으로 */
+  const wrapLive = () => {
+    if (wrapped) return;
+    const loop = game.loop;
+    const orig = loop.callback as StepFn;
+    const stepper = new BackgroundStepper();
+    const w: StepFn = (time, delta) => {
+      // 정리 중이면 원래 콜백이 마무리한다
+      if ((game as unknown as { pendingDestroy?: boolean }).pendingDestroy) return orig(time, delta);
+      if (!live()) {
+        orig(time, delta);
+        // 판이 끝났다 → 뒤에 있으면 휴식 (다음 프레임 전에)
+        queueMicrotask(apply);
+        return;
+      }
+      const p = stepper.plan(time, delta, true);
+      if (p.kind === "full") orig(time, p.delta);
+      else updateOnly(game, time, p.delta);
+    };
+    saved = orig;
+    wrapped = w;
+    loop.callback = w;
   };
-  const offBg = onBackgroundChange(sync);
-  // READY는 루프 시작 전에 오므로 첫 프레임이 끝난 뒤에 본다
-  const onFirstStep = () => sync(isBackground());
-  if (game.loop.started) onFirstStep();
+
+  const ctl = new LoopController({
+    started: () => game.loop.started,
+    background: isBackground,
+    live,
+    sleep: () => game.loop.sleep(),
+    wake: () => {
+      // 쉬던 시간은 넘기지 않는다 (탭 숨김 복귀처럼) → 첫 프레임 delta가 튀지 않게
+      game.loop.resetDelta();
+      game.loop.wake();
+    },
+    enterLive: wrapLive,
+    leaveLive: unwrap,
+    rest: (on) => {
+      if ((bridge.last("game:rest")?.on ?? false) !== on) bridge.emit("game:rest", { on });
+    },
+  });
+  /** 지금 상태(뒤에 있는지·판 진행 중인지)에 맞춰 루프를 바꾼다 */
+  const apply = () => ctl.apply();
+
+  const offBg = onBackgroundChange(apply);
+  // 루프가 시작되기 전이면(부팅 중) 첫 프레임 뒤에 본다 (READY는 루프 시작 전에 온다)
+  const onFirstStep = () => apply();
+  if (game.loop.started) apply();
   else game.events.once(Phaser.Core.Events.POST_STEP, onFirstStep);
 
   return () => {
     offBg();
     game.events.off(Phaser.Core.Events.POST_STEP, onFirstStep);
-    leave();
+    ctl.dispose();
   };
 }
