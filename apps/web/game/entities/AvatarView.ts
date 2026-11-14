@@ -250,14 +250,13 @@ export class AvatarView {
     if (on === !!this.staffFx) return;
     if (on) {
       this.staffBase = this.color;
-      this.staffFx = new StaffFxView(this.scene, this.atlas, this.label.depth);
+      this.staffFx = new StaffFxView(this.scene);
       this.color = staffColorOf(this.color);
     } else {
       this.staffFx?.destroy();
       this.staffFx = null;
       this.color = this.staffBase;
     }
-    this.nameFx?.setStaff(on);
     this.setTitle(this.wornTitle);
     this.retexture();
     this.refreshAura();
@@ -494,10 +493,7 @@ export class AvatarView {
       this.nameFx = null;
       return;
     }
-    if (!this.nameFx) {
-      this.nameFx = new NameStyleView(this.scene, this.label, this.isMe, this.reduced);
-      this.nameFx.setStaff(this.staff);
-    }
+    this.nameFx ??= new NameStyleView(this.scene, this.label, this.isMe, this.reduced);
     this.nameFx.set(ref.color, ref.plate);
   }
 
@@ -827,8 +823,7 @@ export class AvatarView {
     if (this.label.alpha !== fa) this.label.setAlpha(fa);
     // 닉네임 꾸미기 (바탕판이 있으면 옆 표시·위 배지를 그만큼 비켜 놓는다)
     this.nameFx?.sync(now, labelScale, vis, fa);
-    // 운영자 이름표 판은 이전 프레임 크기 기준 (판은 아래 staffFx.sync에서 맞춘다)
-    const side = this.staffFx ? this.staffFx.sidePad(labelScale) : (this.nameFx?.sidePad(labelScale) ?? 0);
+    const side = this.nameFx?.sidePad(labelScale) ?? 0;
     if (this.dexBadge) {
       const l = this.label;
       if (this.dexBadge.scaleX !== labelScale) this.dexBadge.setScale(labelScale);
@@ -872,8 +867,6 @@ export class AvatarView {
           moving: st === "walk" || st === "run",
           hidden: st === "dive" || st === "swim" || st === "hammock" || st === "hang" || st === "lie" || st === "bath" || st === "swing",
           reduced: this.reduced,
-          label: this.label,
-          labelScale,
         },
         vis,
       );
@@ -913,9 +906,8 @@ export class AvatarView {
     // 이름표 높이(height)는 이미 배율이 들어간 월드 높이 (displayHeight는 배율이 한 번 더 곱해져 이름표에 겹쳤다)
     // 주간 1위 배지가 있으면 이름표 위에 얹고, 말풍선은 그 위로
     // 이름표 위로 쌓기: (바탕판 여백) → 칭호 → 주간 1위 배지 → 말풍선.
-    // 칭호가 있으면 보이는 간격을 모두 TITLE_GAP으로 맞춘다: 이름표(바탕판이 있으면 판 윗변, 운영자면 이름표 판 금관 꼭대기, 그냥 글자면 글자 윗선) ↔ 칭호 글자 ↔ 1위 배지 판·말풍선
-    // (운영자는 닉네임 꾸미기 바탕판을 그리지 않으므로 운영자 판 높이만 본다)
-    let lift = this.staffFx ? this.staffFx.topLift(labelScale) : (this.nameFx?.topLift(labelScale) ?? 0);
+    // 칭호가 있으면 보이는 간격을 모두 TITLE_GAP으로 맞춘다: 이름표(바탕판이 있으면 판 윗변, 그냥 글자면 글자 윗선) ↔ 칭호 글자 ↔ 1위 배지 판·말풍선
+    let lift = this.nameFx?.topLift(labelScale) ?? 0;
     let labelTop: number;
     if (this.titleView) {
       const t = this.titleView;
