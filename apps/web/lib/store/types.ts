@@ -282,14 +282,27 @@ export interface AccountStore {
    * 주간 랭킹 1위 보상 지급 (원자적, mark마다 한 번 — mark = `${주}:${랭킹}`, 지급 표시는 계정 밖 공용 해시 champ:paid에 남는다).
    * 꾸미기(itemId)는 until까지 빌려 준다: 입고 있으면 그 자리, 아니면 벗어 둔 꾸미기의 만료 시각을 until로 늘린다 (이미 더 길면 그대로 →
    * 같은 사람이 또 1위면 이어진다). 전용 모자는 늘 하나만: 다른 전용 꾸미기(CHAMP_ITEM_IDS)는 가방·벗어 둔 꾸미기·착용 칸에서 거두고,
-   * 그걸 입고 있었으면 새 모자를 그 칸에 입힌다. 포인트는 잔액·모은 포인트(전체 랭킹)에 더하고 주간 랭킹에는 넣지 않는다 (경제 통계 earn:champ).
-   * 줬으면 true, 이미 줬으면 false
+   * 그걸 입고 있었으면 새 모자를 그 칸에 입힌다. 포인트는 지갑에만 넣고 모은 포인트·전체/주간 포인트 랭킹에는 넣지 않는다 (경제 통계 earn:champ).
+   * 실제로 지갑에 들어간 포인트는 champ:wallet(mark → 포인트)에 남긴다 (랭킹 정리 때 이전 지급과 구분). 줬으면 true, 이미 줬으면 false
    */
   grantChamp(id: string, mark: string, itemId: string, slot: CosmeticSlot, until: number, points: number, now: number): Promise<boolean>;
   /** 전용 꾸미기 거두기 (시험 해제): 가방·벗어 둔 꾸미기에서 지우고, 착용 중이면 벗긴다 (원자적) */
   revokeChamp(id: string, itemIds: readonly string[]): Promise<void>;
   /** 주간 1위 보상 지급 표시 (mark → 받은 계정, 없으면 null) */
   champPaid(marks: readonly string[]): Promise<(string | null)[]>;
+  /** 랭킹 정리용: 보상 포인트가 모은 포인트·전체 랭킹에도 들어가던 때(지갑 전용 표시 champ:wallet가 없는) 지급 표시 전부 */
+  legacyChampMarks(): Promise<{ mark: string; accountId: string }[]>;
+  /**
+   * 한 번짜리 정리(tag)로 모은 포인트(lifetime)·전체 포인트 랭킹에서 amount를 뺀다 (0 아래로는 안 내려간다, 0이 되면 랭킹에서 빠진다).
+   * 계정마다 한 번만 (원자적 — 이미 한 계정이면 null). before/after = 뺀 앞뒤 모은 포인트
+   */
+  unrankOnce(tag: string, id: string, amount: number): Promise<{ before: number; after: number } | null>;
+  /** 한 번짜리 작업 표시: 지금 값 (없으면 null). "running" = 진행 중, 그 밖 = 끝난 결과 JSON */
+  onceGet(tag: string): Promise<string | null>;
+  /** 한 번짜리 작업 시작: 아무도 안 했으면 "running"(ttlSec 뒤 저절로 풀림)으로 잡고 null, 이미 있으면 그 값 */
+  onceBegin(tag: string, ttlSec: number): Promise<string | null>;
+  /** 한 번짜리 작업 끝: 결과를 영구로 남긴다 (null이면 표시를 지워 다시 할 수 있게) */
+  onceEnd(tag: string, value: string | null): Promise<void>;
   /** 개인 코드 해시 교체 (이전 코드는 무효) */
   setCode(id: string, codeHash: string): Promise<void>;
   findByCode(codeHash: string): Promise<string | null>;
@@ -336,7 +349,7 @@ export interface AccountStore {
    * 디자인권 1개로 묘비 2개를 동시에 세울 수 없다. 가방에 없으면 저장하지 않고 false
    */
   putGraveUsing(id: string, itemId: string, grave: Grave): Promise<boolean>;
-  /** 관리자 포인트 조정. 0~BALANCE_CAP으로 자르고 하루 적립 한도와는 무관. 없는 계정이면 null */
+  /** 관리자 포인트 조정. 0~BALANCE_CAP으로 자르고 하루 적립 한도와는 무관. 지갑만 바뀐다 (모은 포인트·포인트 랭킹엔 넣지 않는다). 없는 계정이면 null */
   adjustPoints(id: string, delta: number): Promise<number | null>;
   addGrave(id: string, graveId: string): Promise<void>;
   removeGrave(id: string, graveId: string): Promise<void>;

@@ -438,6 +438,12 @@ export class MemoryAccounts implements AccountStore {
 
   /** 주간 1위 보상 지급 표시 (mark → 계정). accounts-redis.ts CHAMP_LUA의 champ:paid와 같다 */
   private champMarks = new Map<string, string>();
+  /** 지갑 전용으로 준 1위 보상: mark → 지갑에 들어간 포인트 (Redis champ:wallet) */
+  private champWallet = new Map<string, number>();
+  /** 한 번짜리 정리 표시 (Redis fix:{tag}) — until = "running" 저절로 풀리는 시각 (null = 영구) */
+  private onceFlags = new Map<string, { value: string; until: number | null }>();
+  /** 한 번짜리 정리로 처리한 계정 (Redis fix:{tag}:acct) */
+  private onceAccts = new Map<string, Map<string, number>>();
 
   async grantChamp(id: string, mark: string, itemId: string, slot: CosmeticSlot, until: number, points: number, now: number): Promise<boolean> {
     // await 없이 확인·표시·지급을 한 번에 (accounts-redis.ts CHAMP_LUA와 같은 규칙)
@@ -462,14 +468,18 @@ export class MemoryAccounts implements AccountStore {
       if (wearing) a.look.set(slot, { itemId, until });
       else this.stashOf(a).set(itemId, until);
     }
+    // 포인트는 지갑에만 (모은 포인트·포인트 랭킹엔 넣지 않는다). 들어간 양은 지갑 전용 표시로 남긴다 (accounts-redis.ts CHAMP_LUA와 같은 규칙)
+    let got = 0;
     if (points > 0) {
       const before = a.points;
       a.points = Math.min(BALANCE_CAP, before + points);
-      if (a.points > before) {
-        this.addLifetime(a, a.points - before);
-        this.stat(a, kstDay(now), "earn:champ", a.points - before);
+      got = a.points - before;
+      if (got > 0) {
+        a.lifetime ??= before;
+        this.stat(a, kstDay(now), "earn:champ", got);
       }
     }
+    this.champWallet.set(mark, got);
     return true;
   }
 
@@ -485,6 +495,50 @@ export class MemoryAccounts implements AccountStore {
 
   async champPaid(marks: readonly string[]): Promise<(string | null)[]> {
     return marks.map((m) => this.champMarks.get(m) ?? null);
+  }
+
+  async legacyChampMarks(): Promise<{ mark: string; accountId: string }[]> {
+    return [...this.champMarks].filter(([mark]) => !this.champWallet.has(mark)).map(([mark, accountId]) => ({ mark, accountId }));
+  }
+
+  async unrankOnce(tag: string, id: string, amount: number): Promise<{ before: number; after: number } | null> {
+    // await 없이 확인·차감·표시를 한 번에 (accounts-redis.ts UNRANK_LUA와 같은 규칙)
+    let done = this.onceAccts.get(tag);
+    if (!done) this.onceAccts.set(tag, (done = new Map()));
+    if (done.has(id)) return null;
+    const a = this.accts.get(id);
+    if (!a) {
+      done.set(id, 0);
+      return { before: 0, after: 0 };
+    }
+    const before = a.lifetime ?? a.points;
+    const after = Math.max(0, before - Math.max(0, Math.floor(amount)));
+    a.lifetime = after;
+    done.set(id, before - after);
+    return { before, after };
+  }
+
+  private onceNow(tag: string): string | null {
+    const v = this.onceFlags.get(tag);
+    if (v && v.until !== null && v.until <= Date.now()) this.onceFlags.delete(tag);
+    return this.onceFlags.get(tag)?.value ?? null;
+  }
+
+  async onceGet(tag: string): Promise<string | null> {
+    return this.onceNow(tag);
+  }
+
+  async onceBegin(tag: string, ttlSec: number): Promise<string | null> {
+    // await 없이 확인·표시를 한 번에 (Redis SET NX와 같은 규칙)
+    const cur = this.onceNow(tag);
+    if (cur !== null) return cur;
+    this.onceFlags.set(tag, { value: "running", until: Date.now() + ttlSec * 1000 });
+    return null;
+  }
+
+  async onceEnd(tag: string, value: string | null): Promise<void> {
+    if (value === null) this.onceFlags.delete(tag);
+    else this.onceFlags.set(tag, { value, until: null });
   }
 
   async claimAttend(id: string, ipHash: string, day: string, yesterday: string, monthDays: number, needTicks: number): Promise<AttendClaim> {
@@ -521,7 +575,7 @@ export class MemoryAccounts implements AccountStore {
   }
 
   /**
-   * 11번 선물 받기 (MemoryGifts가 부른다): 포인트(지갑 상한에서 잘림, 모은 포인트·랭킹에도 더한다)와 아이템을 가방에 넣는다.
+   * 11번 선물 받기 (MemoryGifts가 부른다): 포인트(지갑 상한에서 잘림, 지갑에만 — 모은 포인트·포인트 랭킹엔 넣지 않는다)와 아이템을 가방에 넣는다.
    * accounts-redis.ts가 아니라 gifts.ts의 Lua(GIFT_CLAIM_LUA)와 같은 규칙. 실제로 들어간 포인트를 돌려준다
    */
   deposit(id: string, points: number, items: readonly GiftItem[], now: number): number {
@@ -530,7 +584,7 @@ export class MemoryAccounts implements AccountStore {
     a.points = Math.min(BALANCE_CAP, a.points + Math.max(0, points));
     const got = a.points - before;
     if (got > 0) {
-      this.addLifetime(a, got);
+      a.lifetime ??= before; // 개편 전 계정은 받기 전 잔액에서 시작 (선물 몫은 빼고)
       this.stat(a, kstDay(now), "earn:gift", got);
     }
     this.prune(a, now);
@@ -645,7 +699,8 @@ export class MemoryAccounts implements AccountStore {
     if (!a) return null;
     const before = a.points;
     a.points = Math.min(BALANCE_CAP, Math.max(0, a.points + delta));
-    if (a.points > before) this.addLifetime(a, a.points - before);
+    // 지갑만 (모은 포인트·포인트 랭킹엔 넣지 않는다, accounts-redis.ts ADJUST_LUA와 같은 규칙)
+    if (a.points > before) a.lifetime ??= before;
     if (a.points > before) this.stat(a, kstDay(), "earn:admin", a.points - before);
     if (a.points < before) this.stat(a, kstDay(), "spend:admin", before - a.points);
     return a.points;

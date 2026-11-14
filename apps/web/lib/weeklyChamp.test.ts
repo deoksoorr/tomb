@@ -140,6 +140,9 @@ describe("1위 정리·지급", () => {
     expect(after.stash).toContainEqual({ itemId: CHAMP_HAT.points, until: champUntil(WEEK) });
     // 보상 포인트는 다음 주 주간 랭킹에 넣지 않는다 (1위가 굴러가며 쌓이지 않게)
     expect((await getAccounts().pointRank(10, null, NEXT)).rows).toEqual([]);
+    // 지갑에만: 모은 포인트·전체 포인트 랭킹에도 넣지 않는다 (순수하게 모은 포인트로만)
+    expect(after.lifetimePoints).toBe(before.lifetimePoints);
+    expect((await getAccounts().pointRank(10, a)).mine?.points).toBe(300);
     // 본인 소식 한 줄 + 마을 확성기 줄 한 줄
     const act = await getAccounts().activity(a);
     expect(act.items.filter((i) => i.kind === "champ")).toHaveLength(1);

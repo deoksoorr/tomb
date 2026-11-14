@@ -46,7 +46,9 @@ function giftContract(make: () => { gifts: GiftStore; accounts: AccountStore; cl
       expect(results.find((r) => !r.ok)).toEqual({ ok: false, reason: "done" });
       const a = await accounts.get(old, "20261112", T0);
       expect(a.points).toBe(70);
-      expect(a.lifetimePoints).toBe(70);
+      // 선물 포인트는 지갑에만: 모은 포인트·전체 포인트 랭킹엔 안 들어간다
+      expect(a.lifetimePoints).toBe(0);
+      expect((await accounts.pointRank(10_000, old)).mine).toBeNull();
       expect(a.inventory.fw_small).toBe(2);
       expect((await gifts.inbox(old, T0 - 1, T0 + 6)).find((x) => x.id === g.id)?.claimedAt).toBe(T0 + 5);
       expect((await gifts.log(50)).find((x) => x.id === g.id)?.claims).toBe(1);
@@ -80,7 +82,22 @@ function giftContract(make: () => { gifts: GiftStore; accounts: AccountStore; cl
     const r = await gifts.claim(me, g.id, T0 + 100, T0 + 1); // 특정 계정 선물은 처음 들어온 시각과 상관없다
     expect(r).toMatchObject({ ok: true, points: BALANCE_CAP - 2 });
     expect((await accounts.get(me, "20261112", T0)).points).toBe(BALANCE_CAP);
+    // 모은 포인트·랭킹은 꽃 적립 2만 (선물 몫은 빠진다)
+    expect((await accounts.get(me, "20261112", T0)).lifetimePoints).toBe(2);
+    expect((await accounts.pointRank(10_000, me)).mine?.points).toBe(2);
     await cleanup([me, other], [g.id]);
+  });
+
+  it("지갑 전용으로 받은 선물은 랭킹 정리(legacyClaims) 대상이 아니다 (받고 지워도)", async () => {
+    const { gifts, cleanup } = make();
+    const me = `t-${nanoid(10)}`;
+    const g = gift({ target: me, points: 40 });
+    await gifts.send(g);
+    expect(await gifts.claim(me, g.id, 0, T0 + 1)).toMatchObject({ ok: true, points: 40 });
+    expect((await gifts.legacyClaims()).perAccount.has(me)).toBe(false);
+    expect(await gifts.remove(me, g.id, 0, T0 + 2)).toBe(true);
+    expect((await gifts.legacyClaims()).perAccount.has(me)).toBe(false);
+    await cleanup([me], [g.id]);
   });
 
   it("기간 선물(꾸미기): 3일·7일은 옷장에 기간을 더하고, 입고 있으면 그 자리에서, 영구는 영구, 기간 없는 옛 선물은 가방 이용권", async () => {

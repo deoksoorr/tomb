@@ -60,6 +60,68 @@ export interface GiftStore {
   remove(accountId: string, giftId: string, acctCreatedAt: number, now: number): Promise<boolean>;
   /** 관리자 발송 기록 (최신 먼저) */
   log(limit: number): Promise<GiftLogEntry[]>;
+  /** 랭킹 정리용: 선물 포인트가 모은 포인트·랭킹에도 들어가던 때(지갑 전용 표시 `w:` 없이) 받은 선물을 계정별로 (legacyGiftPoints) */
+  legacyClaims(): Promise<LegacyGiftPoints>;
+}
+
+/** 지갑 전용으로 받은 표시 (상태 해시의 `w:{선물 id}` → 지갑에 들어간 포인트) */
+export const walletField = (giftId: string) => `w:${giftId}`;
+
+/** legacyGiftPoints 결과: 계정별 뺄 포인트 + 계산 내역 */
+export type LegacyGiftPoints = {
+  /** 계정 → 이전 방식으로 받은 선물 포인트 합 (선물에 적힌 포인트 기준 — 지갑 상한에서 잘렸는지는 기록이 없다) */
+  perAccount: Map<string, number>;
+  /** 받음 상태(c:)로 남은 이전 방식 받기 수 */
+  claims: number;
+  /** 받은 뒤 지운("d") 것으로 받은 수(gifts:claims)와 맞춰 확정한 받기 수 */
+  deleted: number;
+  /** 받은 뒤 지웠는지 확정하지 못한 받기 수 (전체 선물에서 지운 계정 중 일부만 받았던 경우 — 빼지 않는다) */
+  ambiguous: number;
+  /** 선물 내용(포인트)을 찾지 못한 받기 수 (빼지 않는다) */
+  missing: number;
+};
+
+/**
+ * 이전 방식(받을 때 모은 포인트·랭킹에도 더하던 때) 받은 선물 포인트를 계정별로 모은다. 메모리·Redis가 같은 계산을 쓴다.
+ *  - 상태 "c:…"이고 지갑 전용 표시(w:)가 없으면 이전 방식 받기
+ *  - 받은 뒤 지우면 상태가 "d"로 덮여 받았는지가 사라진다 → 선물마다 받은 수(claims)에서 c:·w: 로 확인된 수를 빼고 남은 수 k로 맞춘다:
+ *    k = 0이면 지운 계정은 모두 안 받고 지운 것, k = (지갑 전용 표시 없이 지운 계정 수)면 모두 받고 지운 것, 그 밖이면 확정 못 함(ambiguous)
+ * states = 계정 → 상태 해시, gifts = 선물 id → 내용, claimCounts = 선물 id → 받은 계정 수
+ */
+export function legacyGiftPoints(
+  states: Map<string, Map<string, string>>,
+  gifts: Map<string, GiftRecord>,
+  claimCounts: Map<string, number>,
+): LegacyGiftPoints {
+  const out: LegacyGiftPoints = { perAccount: new Map(), claims: 0, deleted: 0, ambiguous: 0, missing: 0 };
+  const add = (id: string, giftId: string) => {
+    const g = gifts.get(giftId);
+    if (!g) return void out.missing++;
+    if (g.points > 0) out.perAccount.set(id, (out.perAccount.get(id) ?? 0) + g.points);
+  };
+  // 선물마다: 확인된 받기 수(c: 전부 + 지갑 전용 표시가 있는 d:), 지갑 전용 표시 없이 지운 계정
+  const known = new Map<string, number>();
+  const dropped = new Map<string, string[]>();
+  for (const [id, st] of states) {
+    for (const [field, v] of st) {
+      if (field.startsWith("w:")) continue;
+      const wallet = st.has(walletField(field));
+      if (v.startsWith("c:") || (v === "d" && wallet)) known.set(field, (known.get(field) ?? 0) + 1);
+      if (v.startsWith("c:") && !wallet) {
+        out.claims++;
+        add(id, field);
+      } else if (v === "d" && !wallet) dropped.set(field, [...(dropped.get(field) ?? []), id]);
+    }
+  }
+  for (const [giftId, ids] of dropped) {
+    const k = Math.max(0, (claimCounts.get(giftId) ?? 0) - (known.get(giftId) ?? 0));
+    if (k === 0) continue;
+    if (k === ids.length) {
+      out.deleted += ids.length;
+      for (const id of ids) add(id, giftId);
+    } else out.ambiguous += k;
+  }
+  return out;
 }
 
 /** 이 계정이 받을 수 있는 선물인지 (보관 기간 안 + 대상) */
@@ -124,7 +186,9 @@ export class MemoryGifts implements GiftStore {
     if (st.has(giftId)) return { ok: false, reason: "done" };
     st.set(giftId, `c:${now}`);
     this.claims.set(giftId, (this.claims.get(giftId) ?? 0) + 1);
-    return { ok: true, gift: g, points: this.accounts().deposit(accountId, g.points, g.items, now) };
+    const points = this.accounts().deposit(accountId, g.points, g.items, now);
+    st.set(walletField(giftId), String(points));
+    return { ok: true, gift: g, points };
   }
 
   async remove(accountId: string, giftId: string, created: number, now: number): Promise<boolean> {
@@ -139,15 +203,22 @@ export class MemoryGifts implements GiftStore {
   async log(limit: number): Promise<GiftLogEntry[]> {
     return this.sent.slice(0, limit).map((g) => ({ ...g, claims: this.claims.get(g.id) ?? 0 }));
   }
+
+  async legacyClaims(): Promise<LegacyGiftPoints> {
+    const gifts = new Map<string, GiftRecord>();
+    for (const g of [...this.sent, ...this.all.values(), ...[...this.to.values()].flatMap((m) => [...m.values()])]) gifts.set(g.id, g);
+    return legacyGiftPoints(this.state, gifts, this.claims);
+  }
 }
 
 // ── Redis (운영) ──
 
-// 받기: 상태 필드가 없을 때만 "받음"으로 바꾸고 포인트(지갑 상한, 모은 포인트·랭킹·경제 통계 earn:gift)와 아이템을 넣는다.
+// 받기: 상태 필드가 없을 때만 "받음"으로 바꾸고 포인트(지갑 상한, 지갑에만 — 모은 포인트·포인트 랭킹엔 넣지 않는다, 경제 통계 earn:gift)와 아이템을 넣는다.
+// 지갑에 들어간 양은 상태 해시 w:{선물 id}에 남긴다 (지갑 전용으로 받은 표시 — 랭킹 정리 때 이전 받기와 구분).
 // MemoryGifts.claim + MemoryAccounts.deposit과 같은 규칙. 이미 받았거나 지웠으면 -1, 아니면 실제로 들어간 포인트
 // 아이템: 기간 없음(옛 선물·기본) → 가방에 이용권 count개. 기간 있음(꾸미기) → 입고 있으면 그 자리(look), 아니면 벗어 둔 꾸미기(stash)의
 // 만료 시각을 giftTermUntil 규칙으로 늘린다 (MemoryAccounts.deposit과 같은 규칙)
-// KEYS: state, acct, inv, rank, econ, claims, look, stash
+// KEYS: state, acct, inv, econ, claims, look, stash
 // ARGV: giftId, now, points, balanceCap, accountId, stateTtl, 아이템 수 n, 영구 만료 ms, (itemId, count, 기간 ms|'0' 기본|'perm', 부위) × n
 const GIFT_CLAIM_LUA = `
 if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1 then return -1 end
@@ -161,12 +232,13 @@ if pts > 0 then
   if bal > before then
     got = bal - before
     redis.call('HSET', KEYS[2], 'points', bal)
+    -- 지갑에만: 모은 포인트는 그대로 (개편 전 계정은 받기 전 잔액에서 시작하도록 먼저 고정)
     redis.call('HSETNX', KEYS[2], 'lifetime', before)
-    redis.call('ZADD', KEYS[4], redis.call('HINCRBY', KEYS[2], 'lifetime', got), ARGV[5])
-    redis.call('HINCRBY', KEYS[5], 'earn:gift', got)
-    redis.call('EXPIRE', KEYS[5], ${ECON_TTL_SEC})
+    redis.call('HINCRBY', KEYS[4], 'earn:gift', got)
+    redis.call('EXPIRE', KEYS[4], ${ECON_TTL_SEC})
   end
 end
+redis.call('HSET', KEYS[1], 'w:' .. ARGV[1], got)
 local n = tonumber(ARGV[7])
 local now, perm = tonumber(ARGV[2]), tonumber(ARGV[8])
 for i = 0, n - 1 do
@@ -174,7 +246,7 @@ for i = 0, n - 1 do
   if t == '0' then
     if c and c > 0 then redis.call('HINCRBY', KEYS[3], id, c) end
   else
-    local cur = redis.call('HGET', KEYS[7], slot)
+    local cur = redis.call('HGET', KEYS[6], slot)
     local curItem, curUntil = nil, 0
     if cur then
       local ci, cu = string.match(cur, '^([^|]+)|(.+)$')
@@ -182,15 +254,15 @@ for i = 0, n - 1 do
     end
     local wearing = curItem == id and curUntil > now
     local had = curUntil
-    if not wearing then had = tonumber(redis.call('HGET', KEYS[8], id) or '0') end
+    if not wearing then had = tonumber(redis.call('HGET', KEYS[7], id) or '0') end
     local u = perm
     if t ~= 'perm' then u = math.min(perm, math.max(had, now) + tonumber(t)) end
     if u > had then
-      if wearing then redis.call('HSET', KEYS[7], slot, id .. '|' .. u) else redis.call('HSET', KEYS[8], id, u) end
+      if wearing then redis.call('HSET', KEYS[6], slot, id .. '|' .. u) else redis.call('HSET', KEYS[7], id, u) end
     end
   end
 end
-redis.call('HINCRBY', KEYS[6], ARGV[1], 1)
+redis.call('HINCRBY', KEYS[5], ARGV[1], 1)
 return got
 `;
 
@@ -275,7 +347,7 @@ export class RedisGifts implements GiftStore {
     const r = Number(
       await this.redis.eval<string[], number>(
         GIFT_CLAIM_LUA,
-        [K.giftState(accountId), K.acct(accountId), K.inv(accountId), K.rankPoints, await econKeyFor(accountId, kstDay(now)), K.giftClaims, K.look(accountId), K.stash(accountId)],
+        [K.giftState(accountId), K.acct(accountId), K.inv(accountId), await econKeyFor(accountId, kstDay(now)), K.giftClaims, K.look(accountId), K.stash(accountId)],
         [
           g.id,
           String(now),
@@ -308,5 +380,35 @@ export class RedisGifts implements GiftStore {
     if (!rows.length) return [];
     const counts = (await this.redis.hmget(K.giftClaims, ...rows.map((g) => g.id))) as unknown as (string | null)[] | null;
     return rows.map((g, i) => ({ ...g, claims: Number(counts?.[i] ?? 0) }));
+  }
+
+  async legacyClaims(): Promise<LegacyGiftPoints> {
+    // 계정별 상태 해시(gifts:st:*)를 모두 훑는다 (31일 TTL이라 그 안에 받은 것만 남는다). 선물 내용은 발송 기록·전체 선물·계정 앞 선물에서
+    const states = new Map<string, Map<string, string>>();
+    const prefix = K.giftState("");
+    let cursor = "0";
+    do {
+      const [next, keys] = await this.redis.scan(cursor, { match: `${prefix}*`, count: 200, type: "hash" });
+      cursor = String(next);
+      if (!keys.length) continue;
+      const p = this.redis.pipeline();
+      for (const k of keys) p.hgetall(k);
+      const rows = await p.exec<(string[] | null)[]>();
+      keys.forEach((k, i) => states.set(k.slice(prefix.length), new Map(pairs(rows[i]))));
+    } while (cursor !== "0");
+    const [log, all, counts] = await this.redis
+      .pipeline()
+      .lrange(K.giftLog, 0, -1)
+      .hgetall(K.giftsAll)
+      .hgetall(K.giftClaims)
+      .exec<[string[], string[] | null, string[] | null]>();
+    const ids = [...states.keys()];
+    const to = ids.length ? await ids.reduce((p, id) => p.hgetall(K.giftsTo(id)), this.redis.pipeline()).exec<(string[] | null)[]>() : [];
+    const gifts = new Map<string, GiftRecord>();
+    for (const raw of [...(log ?? []), ...pairs(all).map(([, v]) => v), ...to.flatMap((r) => pairs(r).map(([, v]) => v))]) {
+      const g = JSON.parse(raw) as GiftRecord;
+      gifts.set(g.id, g);
+    }
+    return legacyGiftPoints(states, gifts, new Map(pairs(counts).map(([k, v]) => [k, Number(v)])));
   }
 }

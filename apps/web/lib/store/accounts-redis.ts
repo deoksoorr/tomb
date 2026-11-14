@@ -275,10 +275,10 @@ return 1
 
 // 주간 랭킹 1위 보상 (mark = `${주}:${랭킹}`마다 한 번). 지급 표시 HSETNX가 먼저라 동시에 불려도 한 번만 준다.
 // 꾸미기: 입고 있으면 그 자리, 아니면 벗어 둔 꾸미기의 만료 시각을 until로 늘린다 (이미 더 길면 그대로 — 연속 1위면 이어진다).
-// 포인트: 잔액(지갑 상한)·모은 포인트·전체 포인트 랭킹 (주간 랭킹엔 넣지 않는다), 경제 통계 earn:champ. MemoryAccounts.grantChamp와 같은 규칙
+// 포인트: 지갑에만 (지갑 상한, 모은 포인트·전체/주간 포인트 랭킹엔 넣지 않는다), 경제 통계 earn:champ, 들어간 양은 champ:wallet에. MemoryAccounts.grantChamp와 같은 규칙
 // 전용 모자는 늘 지금 자격에 맞는 것 하나만: 다른 전용 꾸미기(ARGV[9..])는 가방·벗어 둔 꾸미기·착용 칸에서 거두고,
 // 그걸 입고 있었으면 새 모자를 그 칸에 입힌다
-// KEYS: paid(champ:paid), acct, look, stash, rank, econ, inv  ARGV: mark, 계정, itemId, slot, until, points, balanceCap, now, 다른 전용 꾸미기 id...  → 1 줌 | 0 이미 줌
+// KEYS: paid(champ:paid), acct, look, stash, wallet(champ:wallet), econ, inv  ARGV: mark, 계정, itemId, slot, until, points, balanceCap, now, 다른 전용 꾸미기 id...  → 1 줌 | 0 이미 줌
 const CHAMP_LUA = `
 if redis.call('HSETNX', KEYS[1], ARGV[1], ARGV[2]) == 0 then return 0 end
 local id, slot, target, now = ARGV[3], ARGV[4], tonumber(ARGV[5]), tonumber(ARGV[8])
@@ -310,17 +310,20 @@ elseif target > had then
   if wearing then redis.call('HSET', KEYS[3], slot, id .. '|' .. target) else redis.call('HSET', KEYS[4], id, target) end
 end
 local pts = tonumber(ARGV[6])
+local got = 0
 if pts > 0 then
   local before = tonumber(redis.call('HGET', KEYS[2], 'points') or '0')
   local bal = math.min(tonumber(ARGV[7]), before + pts)
   if bal > before then
+    got = bal - before
     redis.call('HSET', KEYS[2], 'points', bal)
+    -- 지갑에만: 모은 포인트는 그대로 (개편 전 계정은 지금 잔액에서 시작하도록 먼저 고정)
     redis.call('HSETNX', KEYS[2], 'lifetime', before)
-    redis.call('ZADD', KEYS[5], redis.call('HINCRBY', KEYS[2], 'lifetime', bal - before), ARGV[2])
-    redis.call('HINCRBY', KEYS[6], 'earn:champ', bal - before)
+    redis.call('HINCRBY', KEYS[6], 'earn:champ', got)
     redis.call('EXPIRE', KEYS[6], ${ECON_TTL_SEC})
   end
 end
+redis.call('HSET', KEYS[5], ARGV[1], got)
 return 1
 `;
 
@@ -454,8 +457,8 @@ redis.call('HSET', KEYS[4], ARGV[2], ARGV[5])
 return 1
 `;
 
-// 관리자 조정. 늘어난 만큼은 모은 포인트·랭킹에도 더한다. 계정 해시가 없으면 -1
-// KEYS: acct, rank, econ  ARGV: delta, balanceCap, id
+// 관리자 조정. 지갑만 바꾼다 (모은 포인트·포인트 랭킹엔 넣지 않는다 — 개편 전 계정은 지금 잔액에서 시작하도록 먼저 고정). 계정 해시가 없으면 -1
+// KEYS: acct, econ  ARGV: delta, balanceCap
 const ADJUST_LUA = `
 if redis.call('EXISTS', KEYS[1]) == 0 then return -1 end
 local before = tonumber(redis.call('HGET', KEYS[1], 'points') or '0')
@@ -463,13 +466,32 @@ local bal = math.max(0, math.min(tonumber(ARGV[2]), before + tonumber(ARGV[1])))
 redis.call('HSET', KEYS[1], 'points', bal)
 if bal > before then
   redis.call('HSETNX', KEYS[1], 'lifetime', before)
-  redis.call('ZADD', KEYS[2], redis.call('HINCRBY', KEYS[1], 'lifetime', bal - before), ARGV[3])
-  redis.call('HINCRBY', KEYS[3], 'earn:admin', bal - before)
+  redis.call('HINCRBY', KEYS[2], 'earn:admin', bal - before)
 elseif bal < before then
-  redis.call('HINCRBY', KEYS[3], 'spend:admin', before - bal)
+  redis.call('HINCRBY', KEYS[2], 'spend:admin', before - bal)
 end
-redis.call('EXPIRE', KEYS[3], ${ECON_TTL_SEC})
+redis.call('EXPIRE', KEYS[2], ${ECON_TTL_SEC})
 return bal
+`;
+
+// 한 번짜리 랭킹 정리 (계정마다 한 번): 모은 포인트에서 amount를 빼고(0 아래로는 안 내려감) 전체 포인트 랭킹을 맞춘다 (0이면 랭킹에서 뺀다).
+// 이미 한 계정이면 {-1, 0}. 계정 해시가 없으면 표시만 남기고 {0, 0}. 아니면 {뺀 앞, 뺀 뒤}
+// KEYS: acct, rank, done(fix:{tag}:acct)  ARGV: id, amount
+const UNRANK_LUA = `
+if redis.call('HEXISTS', KEYS[3], ARGV[1]) == 1 then return {-1, 0} end
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  redis.call('HSET', KEYS[3], ARGV[1], 0)
+  return {0, 0}
+end
+local life = tonumber(redis.call('HGET', KEYS[1], 'lifetime') or '')
+if not life then life = tonumber(redis.call('HGET', KEYS[1], 'points') or '0') or 0 end
+local after = math.max(0, life - math.max(0, tonumber(ARGV[2])))
+redis.call('HSET', KEYS[1], 'lifetime', after)
+if redis.call('ZSCORE', KEYS[2], ARGV[1]) then
+  if after > 0 then redis.call('ZADD', KEYS[2], after, ARGV[1]) else redis.call('ZREM', KEYS[2], ARGV[1]) end
+end
+redis.call('HSET', KEYS[3], ARGV[1], life - after)
+return {life, after}
 `;
 
 // ── 닉네임 중복 금지: 이름 색인(names: 비교 키 → 계정 id) Lua 공용 함수 ──
@@ -870,7 +892,7 @@ export class RedisAccounts implements AccountStore {
   async grantChamp(id: string, mark: string, itemId: string, slot: CosmeticSlot, until: number, points: number, now: number): Promise<boolean> {
     const r = await this.redis.eval<string[], number>(
       CHAMP_LUA,
-      [K.champPaid, K.acct(id), K.look(id), K.stash(id), K.rankPoints, await econKeyFor(id, kstDay(now)), K.inv(id)],
+      [K.champPaid, K.acct(id), K.look(id), K.stash(id), K.champWallet, await econKeyFor(id, kstDay(now)), K.inv(id)],
       [mark, id, itemId, slot, String(until), String(points), String(BALANCE_CAP), String(now), ...CHAMP_ITEM_IDS],
     );
     return Number(r) === 1;
@@ -885,6 +907,31 @@ export class RedisAccounts implements AccountStore {
     if (!marks.length) return [];
     const r = (await this.redis.hmget(K.champPaid, ...marks)) as unknown as (string | null)[] | null;
     return marks.map((_, i) => r?.[i] ?? null);
+  }
+
+  async legacyChampMarks(): Promise<{ mark: string; accountId: string }[]> {
+    const [paid, wallet] = await this.redis.pipeline().hgetall(K.champPaid).hgetall(K.champWallet).exec<[string[] | null, string[] | null]>();
+    const walletOnly = new Set(pairs(wallet).keys());
+    return [...pairs(paid)].filter(([mark]) => !walletOnly.has(mark)).map(([mark, accountId]) => ({ mark, accountId }));
+  }
+
+  async unrankOnce(tag: string, id: string, amount: number): Promise<{ before: number; after: number } | null> {
+    const [before, after] = await this.redis.eval<string[], [number, number]>(UNRANK_LUA, [K.acct(id), K.rankPoints, K.onceAcct(tag)], [id, String(Math.max(0, Math.floor(amount)))]);
+    return Number(before) < 0 ? null : { before: Number(before), after: Number(after) };
+  }
+
+  async onceGet(tag: string): Promise<string | null> {
+    return (await this.redis.get<string>(K.once(tag))) ?? null;
+  }
+
+  async onceBegin(tag: string, ttlSec: number): Promise<string | null> {
+    if ((await this.redis.set(K.once(tag), "running", { nx: true, ex: ttlSec })) === "OK") return null;
+    return (await this.onceGet(tag)) ?? "running";
+  }
+
+  async onceEnd(tag: string, value: string | null): Promise<void> {
+    if (value === null) await this.redis.del(K.once(tag));
+    else await this.redis.set(K.once(tag), value);
   }
 
   async claimAttend(id: string, ipHash: string, day: string, yesterday: string, monthDays: number, needTicks: number): Promise<AttendClaim> {
@@ -1015,11 +1062,7 @@ export class RedisAccounts implements AccountStore {
 
   async adjustPoints(id: string, delta: number): Promise<number | null> {
     const r = Number(
-      await this.redis.eval<string[], number>(ADJUST_LUA, [K.acct(id), K.rankPoints, await econKeyFor(id, kstDay())], [
-        String(delta),
-        String(BALANCE_CAP),
-        id,
-      ]),
+      await this.redis.eval<string[], number>(ADJUST_LUA, [K.acct(id), await econKeyFor(id, kstDay())], [String(delta), String(BALANCE_CAP)]),
     );
     return r < 0 ? null : r;
   }

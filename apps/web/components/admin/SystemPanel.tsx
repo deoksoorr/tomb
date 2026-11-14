@@ -9,6 +9,7 @@ import { opsAdminApi, type AdminHealthReport } from "./opsAdminApi";
 import type { AdminChampResponse } from "@/app/api/admin/champ/route";
 import type { AdminChampTestResponse } from "@/app/api/admin/champ/test/route";
 import type { AdminTestDropsResponse } from "@/app/api/admin/rpg/test-drops/route";
+import type { RankGiftFixResponse } from "@/lib/rankGiftFix";
 
 type Props = { toast: (message: string) => void; onAuthLost: () => void };
 
@@ -23,7 +24,7 @@ const STEP_LABEL: Record<string, string> = {
 
 /**
  * 운영 점검: ① 저장소 점검(임시 묘비를 실제로 쓰고·읽고·지워 어느 단계에서 막히는지) ② 닉네임 색인 채우기(옛 계정 이름을 색인에 넣기)
- * ③ 사냥 레벨·꾸미기 랭킹 다시 채우기(기존 캐릭터·착용을 랭킹에 다시 적기). 모두 누를 때만 돈다 (화면을 연다고 저절로 돌지 않는다)
+ * ③ 선물·1위 보상 포인트 랭킹에서 빼기(한 번) ④ 사냥 레벨·꾸미기 랭킹 다시 채우기(기존 캐릭터·착용을 랭킹에 다시 적기). 모두 누를 때만 돈다 (화면을 연다고 저절로 돌지 않는다)
  */
 export default function SystemPanel({ toast, onAuthLost }: Props) {
   const [health, setHealth] = useState<AdminHealthReport | null>(null);
@@ -137,6 +138,8 @@ export default function SystemPanel({ toast, onAuthLost }: Props) {
         )}
       </div>
 
+      <RankGiftFixCard toast={toast} fail={fail} />
+
       <ChampCard toast={toast} fail={fail} />
 
       <TestDropsCard toast={toast} fail={fail} />
@@ -209,6 +212,77 @@ function RankFillCard({
         <p className={styles.meta} aria-live="polite">
           {state.rounds}번 훑음 · 랭킹에 적은 {state.filled.toLocaleString("ko-KR")}명
           {state.done ? " · 끝까지 훑었어요" : running ? " · 계속 훑는 중" : " · 중간에 멈췄어요"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const fmtP = (n: number) => `${n.toLocaleString("ko-KR")}P`;
+
+/**
+ * 한 번짜리 정리: 관리자 선물·주간 1위 보상 포인트가 모은 포인트·전체 포인트 랭킹에 들어가던 때의 몫을 뺀다.
+ * 서버가 두 번 하지 않는다 (끝난 뒤 다시 누르면 그때 결과만 보여 준다). 화면을 열면 상태만 읽는다
+ */
+function RankGiftFixCard({ toast, fail }: { toast: (message: string) => void; fail: (e: unknown) => void }) {
+  const [state, setState] = useState<RankGiftFixResponse | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    opsAdminApi
+      .rankGiftFix()
+      .then((r) => alive && setState(r))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const run = async () => {
+    if (!confirm) {
+      setConfirm(true);
+      return;
+    }
+    setConfirm(false);
+    setBusy(true);
+    try {
+      const r = await opsAdminApi.runRankGiftFix();
+      setState(r);
+      toast(r.status === "done" ? "선물·1위 보상 포인트를 랭킹에서 뺐어요." : r.status === "busy" ? "다른 요청이 정리 중이에요. 잠시 뒤 다시 보세요." : "이미 한 정리예요. 그때 결과를 보여 드려요.");
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const s = state?.summary;
+  const finished = state?.status === "done" || state?.status === "already";
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardHead}>
+        <h2 className={styles.cardTitle}>선물 포인트 랭킹에서 빼기 (한 번)</h2>
+        <button type="button" className={cx(ui.button, confirm ? ui.danger : ui.primary)} onClick={() => void run()} disabled={busy || finished}>
+          {busy ? "정리 중…" : finished ? "정리 끝남" : confirm ? "정말 뺄까요? 한 번 더 누르세요" : "랭킹에서 빼기"}
+        </button>
+      </div>
+      <p className={ui.hint}>
+        지금은 관리자 선물·주간 1위 보상(1,000P)·관리자 지급 포인트가 지갑에만 들어가고 모은 포인트·포인트 랭킹에는 안 들어가요. 이 단추는 그 전에 받은 선물·1위 보상 몫을 계정마다
+        모은 포인트와 전체 포인트 랭킹에서 한 번만 빼요 (0 아래로는 안 내려가요). 선물은 선물에 적힌 포인트, 1위 보상은 지급마다 1,000P 기준이에요. 받은 뒤 지운 선물은 받은 수와 맞춰
+        확정되는 것만 빼고, 관리자 지급(회원 탭)은 계정별 기록이 없어 빼지 못해요. 끝나면 다시 눌러도 그때 결과만 보여요.
+      </p>
+      {state?.status === "busy" && <p className={styles.meta}>다른 요청이 정리 중이에요.</p>}
+      {state?.status === "none" && <p className={styles.meta}>아직 안 했어요.</p>}
+      {s && (
+        <p className={styles.meta} aria-live="polite">
+          {new Date(s.at).toLocaleString("ko-KR")} 정리 · 계정 {s.accounts.toLocaleString("ko-KR")}개 · 뺀 합계 {fmtP(s.deducted)} (빼야 할 합계 {fmtP(s.requested)}
+          {s.clamped ? `, 0에서 멈춘 계정 ${s.clamped}개` : ""}) · 선물 받기 {s.gift.claims + s.gift.deleted}건 {fmtP(s.gift.points)}
+          {s.gift.deleted ? ` (받고 지운 것 ${s.gift.deleted}건 포함)` : ""}
+          {s.gift.ambiguous ? ` · 받고 지웠는지 확정 못 해 안 뺀 받기 ${s.gift.ambiguous}건` : ""}
+          {s.gift.missing ? ` · 선물 내용을 못 찾아 안 뺀 받기 ${s.gift.missing}건` : ""} · 1위 보상 {s.champ.marks}건 {fmtP(s.champ.points)}
+          {s.skipped ? ` · 이미 정리돼 건너뛴 계정 ${s.skipped}개` : ""}
         </p>
       )}
     </div>

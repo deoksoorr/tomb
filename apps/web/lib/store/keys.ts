@@ -73,13 +73,16 @@ export const K = {
   // ── 11번 선물함 (lib/store/gifts.ts) ──
   giftsAll: "gifts:all", // HASH 선물 id → JSON (전체 발송, 받을 때 계정별 상태만 만든다)
   giftsTo: (id: string) => `gifts:to:${id}`, // HASH 선물 id → JSON (그 계정 앞으로 보낸 것)
-  giftState: (id: string) => `gifts:st:${id}`, // HASH 선물 id → "c:{받은 시각}"(받음) | "d"(지움). 31일 TTL
+  giftState: (id: string) => `gifts:st:${id}`, // HASH 선물 id → "c:{받은 시각}"(받음) | "d"(지움), `w:{선물 id}` → 지갑에 들어간 포인트(지갑 전용으로 받은 표시). 31일 TTL
   giftLog: "gifts:log", // LIST 관리자 발송 기록 JSON, 최신 먼저 최대 200개
   giftClaims: "gifts:claims", // HASH 선물 id → 받은 계정 수
 
   // ── 23번 확성기 (lib/store/megaphone.ts) ──
   // ── 주간 랭킹 1위 보상 (lib/weeklyChamp) ──
   champPaid: "champ:paid", // HASH `${주}:${랭킹}` → 받은 계정 (지급 표시, 한 번만)
+  champWallet: "champ:wallet", // HASH 지급 표시(mark) → 지갑에 들어간 포인트 (지갑 전용 지급 — 이 표시가 없는 champ:paid는 랭킹에도 들어갔던 이전 지급)
+  once: (tag: string) => `fix:${tag}`, // STRING 한 번짜리 정리 표시: "running"(진행 중, TTL) | 결과 JSON(끝남, 영구)
+  onceAcct: (tag: string) => `fix:${tag}:acct`, // HASH 계정 → 그 정리로 뺀 양 (계정마다 한 번만)
   champWeek: (week: string) => `champ:w:${week}`, // STRING 그 주 1위 기록 JSON (처음 정한 것만 — SET NX)
   champWeeks: "champ:weeks", // ZSET 주 → 그 주 월요일 0시(ms) (명예의 전당 목록)
   champLock: (week: string) => `champ:lock:${week}`, // STRING NX EX 지급 잠금

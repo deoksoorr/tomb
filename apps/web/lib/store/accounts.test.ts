@@ -476,19 +476,21 @@ function contract(make: () => Kit) {
     expect((await accounts.get(id, DAY, 0)).todayEarned).toBe(2);
   });
 
-  it("모은 포인트·랭킹: 적립과 관리자 지급은 올리고, 쓰면 잔액만 준다", async () => {
+  it("모은 포인트·랭킹: 적립은 올리고, 관리자 지급은 지갑만, 쓰면 잔액만 준다", async () => {
     const [a, b] = [newId(), newId()];
     await accounts.earn(a, "hunt", DAY, { amount: 50 });
     await accounts.earn(b, "hunt", DAY, { amount: 80 });
     expect(await accounts.spend(b, 70, "rpg:무기", 1)).toBe(10);
     expect(await accounts.get(b, DAY, 0)).toMatchObject({ points: 10, lifetimePoints: 80 });
     await accounts.adjustPoints(a, 100);
+    expect(await accounts.get(a, DAY, 0)).toMatchObject({ points: 150, lifetimePoints: 50 });
+    expect((await accounts.pointRank(500, a)).mine?.points).toBe(50);
     await accounts.adjustPoints(a, -100);
-    expect(await accounts.get(a, DAY, 0)).toMatchObject({ points: 50, lifetimePoints: 150 });
+    expect(await accounts.get(a, DAY, 0)).toMatchObject({ points: 50, lifetimePoints: 50 });
 
     const { rows, mine } = await accounts.pointRank(500, b);
     const order = rows.filter((r) => r.accountId === a || r.accountId === b).map((r) => r.accountId);
-    expect(order).toEqual([a, b]);
+    expect(order).toEqual([b, a]);
     expect(mine).toMatchObject({ accountId: b, points: 80 });
     expect(rows.find((r) => r.accountId === b)?.rank).toBe(mine!.rank);
     expect((await accounts.pointRank(500, `t-${nanoid(10)}`)).mine).toBeNull();

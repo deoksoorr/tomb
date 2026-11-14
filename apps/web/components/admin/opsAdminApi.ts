@@ -2,6 +2,7 @@ import type { AdminNameReindexResponse } from "@/app/api/admin/accounts/names/ro
 import type { AdminChampResponse } from "@/app/api/admin/champ/route";
 import type { AdminChampTestResponse } from "@/app/api/admin/champ/test/route";
 import type { AdminRankFillResponse } from "@/app/api/admin/rank/fill/route";
+import type { RankGiftFixResponse } from "@/lib/rankGiftFix";
 import type { AdminTestDropsResponse } from "@/app/api/admin/rpg/test-drops/route";
 import type { AdminStaffResponse } from "@/app/api/admin/staff/route";
 import type { AnalyticsRange, AnalyticsReport } from "@/lib/analyticsReport";
@@ -51,6 +52,10 @@ export const opsAdminApi = {
   /** 테스트 서버 전용: 시험 드롭 예약 — preset = [고급+희귀] → [꾸미기 선물+전설] 두 판, clear = 비우기 */
   setTestDrops: (action: "preset" | "clear") =>
     request<AdminTestDropsResponse>("/api/admin/rpg/test-drops", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) }),
+  /** 선물·1위 보상 포인트를 랭킹에서 빼는 한 번짜리 정리: 상태 */
+  rankGiftFix: () => request<RankGiftFixResponse>("/api/admin/rank/gift-fix", { cache: "no-store" }),
+  /** 정리 실행 (이미 했으면 그때 결과가 온다 — 두 번 눌러도 한 번만) */
+  runRankGiftFix: () => request<RankGiftFixResponse>("/api/admin/rank/gift-fix", { method: "POST" }),
   /** 랭킹 기존 기록 다시 채우기 한 번 (next가 "0"이 될 때까지 이어서 부른다) */
   fillRank: (board: "huntLevel" | "look", cursor: string, count = 200) =>
     request<AdminRankFillResponse>("/api/admin/rank/fill", {
