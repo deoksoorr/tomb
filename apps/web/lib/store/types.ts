@@ -270,6 +270,11 @@ export interface AccountStore {
   /** 그 부위에 입은 것을 벗어 stash로 옮긴다 (남은 시간 그대로). 입은 게 없으면 false */
   unequip(id: string, slot: CosmeticSlot, now: number): Promise<boolean>;
   /**
+   * 칭호 끼우기·빼기 (titleId = null이면 뺀다). 착용 해시의 "title" 칸에 영구로 둔다 → 착용 목록(lookOf)에 같이 실려
+   * 입장 토큰·착용 증서로 다른 사람 머리 위에도 보인다. 얻었는지는 호출자(lib/titlesServer)가 확인한다
+   */
+  setTitle(id: string, titleId: string | null): Promise<void>;
+  /**
    * 가방에서 1개 쓰고 묘비에 꾸미기를 놓는다 (만료된 것 정리, 최대 개수를 넘으면 가장 오래된 것 교체).
    * 묘비가 없으면 null, 가방에 없으면 "no_item". 주인 확인은 호출자가 한다
    */

@@ -359,13 +359,20 @@ export function sanitizeLook(raw: unknown): Look {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<CosmeticSlot>();
   const out: string[] = [];
+  // 칭호(TITLE_IDS)는 꾸미기가 아니지만 같은 착용 목록에 하나만 실려 다른 사람 화면 머리 위에 보인다 (맨 뒤에 둔다)
+  let title: string | null = null;
   for (const id of raw) {
+    if (isTitleId(id)) {
+      title ??= id;
+      continue;
+    }
     const it = typeof id === "string" ? byId.get(id) : undefined;
     if (!it || it.kind !== "cosmetic" || !it.slot || seen.has(it.slot)) continue;
     seen.add(it.slot);
     out.push(it.id);
   }
-  return out.slice(0, LOOK_MAX_PARTS);
+  const parts = out.slice(0, LOOK_MAX_PARTS);
+  return title ? [...parts, title] : parts;
 }
 
 // ── 30번 영구 소유 코디: 상점에서 파는 캐릭터 꾸미기는 모두 영구로도 산다 (24시간 이용권 가격의 4배, 10P 단위 반올림). 영구 착용품·벗어 둔 것은 만료 시각이 PERMANENT_UNTIL ──
@@ -457,4 +464,44 @@ export function nameStyleOfLook(look: readonly string[] | null | undefined): { c
     else if (slot === "namePlate") plate ??= id;
   }
   return { color, plate };
+}
+
+// ── 칭호: 도감 절반·전부, 주간 1위, 집 꾸밈 점수로 얻는다 (이름·얻는 방법·얻었는지는 web lib/titles.ts). ──
+// 착용한 칭호 하나는 착용 목록(look)에 꾸미기와 같이 실려(입장 토큰·착용 증서 → 실시간 서버 → 다른 사람) 머리 위 이름표 위에 보인다.
+// 옛 실시간 서버·옛 화면은 이 id를 몰라 버리거나 무시한다 (깨지지 않는다). id는 증서 길이 때문에 짧게.
+
+export const TITLE_IDS = [
+  // 도감 칸 절반(50)·전부(100): 물고기·곤충·약초버섯·광석·발굴품·별자리
+  "t_fish50",
+  "t_fish100",
+  "t_bug50",
+  "t_bug100",
+  "t_herb50",
+  "t_herb100",
+  "t_ore50",
+  "t_ore100",
+  "t_dig50",
+  "t_dig100",
+  "t_star50",
+  "t_star100",
+  // 주간 랭킹 1위 (한 번이라도)
+  "t_champ_points",
+  "t_champ_hunt",
+  "t_champ_fish",
+  // 집 꾸밈 점수 (HOUSE_TITLES 구간)
+  "t_house50",
+  "t_house150",
+  "t_house400",
+  "t_house900",
+] as const;
+export type TitleId = (typeof TITLE_IDS)[number];
+const titleSet = new Set<string>(TITLE_IDS);
+/** 칭호 id인지 */
+export function isTitleId(id: unknown): id is TitleId {
+  return typeof id === "string" && titleSet.has(id);
+}
+/** 착용 목록의 칭호 (없으면 null) */
+export function titleOfLook(look: readonly string[] | null | undefined): TitleId | null {
+  for (const id of look ?? []) if (isTitleId(id)) return id;
+  return null;
 }

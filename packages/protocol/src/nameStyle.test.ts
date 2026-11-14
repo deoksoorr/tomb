@@ -16,6 +16,9 @@ import {
   permanentPrice,
   sanitizeLook,
   signGrant,
+  isTitleId,
+  TITLE_IDS,
+  titleOfLook,
   signJoinToken,
   staffGateLook,
   verifyGrant,
@@ -109,8 +112,9 @@ describe("착용 목록 (look)", () => {
     // 부위마다 가장 긴 id + 가장 긴 몸 + 특수 색 세 부위 + 1위 값 전부 = 가장 긴 증서
     const longest = new Map<string, string>();
     for (const i of ITEMS) if (i.kind === "cosmetic" && i.slot && (longest.get(i.slot)?.length ?? 0) < i.id.length) longest.set(i.slot, i.id);
-    const look = [...longest.values()];
-    expect(look.length).toBe(LOOK_MAX_PARTS);
+    // + 가장 긴 칭호 (칭호도 같은 착용 목록에 하나 실린다)
+    const look = [...longest.values(), [...TITLE_IDS].sort((a, b) => b.length - a.length)[0]];
+    expect(look.length).toBe(LOOK_MAX_PARTS + 1);
     const bodyId = [...AVATAR_BODIES].map((b) => b.id).sort((a, b) => b.length - a.length)[0];
     const dye = { head: "#aabbcc~g", body: "#aabbcc~s", accent: "#aabbcc~r" };
     const exp = 1_999_999_999;
@@ -124,7 +128,7 @@ describe("착용 목록 (look)", () => {
     expect(await verifyGrant(s, withNames, exp - 10)).toMatchObject({ look });
 
     // 닉네임 꾸미기가 없는 사람(옛 화면 포함)은 지금처럼 옛 실시간 서버 한도 안 → 웹을 먼저 올려도 그대로 보인다
-    const without = await sign(look.filter((id) => !isNameSlot(ITEMS.find((i) => i.id === id)?.slot)));
+    const without = await sign(look.filter((id) => !isTitleId(id) && !isNameSlot(ITEMS.find((i) => i.id === id)?.slot)));
     expect(without.length).toBeLessThanOrEqual(400);
   });
 
@@ -132,7 +136,7 @@ describe("착용 목록 (look)", () => {
     const s = "secret";
     const longest = new Map<string, string>();
     for (const i of ITEMS) if (i.kind === "cosmetic" && i.slot && (longest.get(i.slot)?.length ?? 0) < i.id.length) longest.set(i.slot, i.id);
-    const look = [...longest.values()];
+    const look = [...longest.values(), "t_champ_points"];
     const bodyId = [...AVATAR_BODIES].map((b) => b.id).sort((a, b) => b.length - a.length)[0];
     const token = await signJoinToken(s, {
       visitorId: "V1StGXR8_Z5jdHi6B-myT",
@@ -150,5 +154,29 @@ describe("착용 목록 (look)", () => {
     const claims = await verifyJoinToken(s, token);
     expect(nameStyleOfLook(claims?.look)).toEqual(nameStyleOfLook(look));
     expect(nameStyleOfLook(look).color).not.toBeNull();
+    expect(titleOfLook(claims?.look)).toBe("t_champ_points");
+  });
+});
+
+describe("칭호 (착용 목록에 하나)", () => {
+  it("칭호는 하나만 맨 뒤에, 꾸미기 9칸과 따로 센다 · 운영자 거르기와 상관없다", () => {
+    const body = ["hat_cat", "neck_scarf", "back_wings", "hand_lantern", "aura_firefly", "feet_flowers", "pet_ghost", "nc_sky", "np_wood"];
+    expect(sanitizeLook(["t_star50", ...body, "t_fish100"])).toEqual([...body, "t_star50"]);
+    expect(titleOfLook(sanitizeLook(["t_star50", "hat_cat"]))).toBe("t_star50");
+    expect(titleOfLook(["hat_cat"])).toBeNull();
+    expect(sanitizeLook(["t_nope", "hat_cat"])).toEqual(["hat_cat"]);
+    expect(staffGateLook(["hat_cat", "t_champ_fish"], false)).toEqual(["hat_cat", "t_champ_fish"]);
+    expect(new Set(TITLE_IDS).size).toBe(TITLE_IDS.length);
+    expect(TITLE_IDS.every((id) => id.length <= 15)).toBe(true);
+  });
+
+  it("옛 실시간 서버(칭호를 모르는 빌드)는 칭호만 버리고 꾸미기는 그대로 받는다", async () => {
+    const s = "secret";
+    const exp = Math.floor(Date.now() / 1000) + 60;
+    const g = await verifyGrant(s, await signGrant(s, { kind: "look", visitorId: "v", look: ["hat_cat", "t_future_title"], exp }));
+    expect(g).toMatchObject({ look: ["hat_cat"] });
+    const known = new Set(ITEMS.map((i) => i.id));
+    const oldSanitize = (raw: string[]) => sanitizeLook(raw.filter((id) => known.has(id))).slice(0, 7);
+    expect(oldSanitize(["hat_cat", "t_star100"])).toEqual(["hat_cat"]);
   });
 });

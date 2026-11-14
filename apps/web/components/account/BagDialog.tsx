@@ -18,12 +18,13 @@ import { decorateGrave, fireFirework } from "./actions";
 import ChampRewardsTab from "./ChampRewardsTab";
 import { bagEntries, KIND_LABELS, type MyGraveEntry } from "./items";
 import { LookPane, PickPane } from "./WardrobePanes";
+import TitlesPane from "./TitlesPane";
 import { resolveAvatar, wardrobeEntries, type SlotFilter } from "./wardrobe";
 import styles from "./BagDialog.module.css";
 
 const OTHER_KINDS: ItemKind[] = ["firework", "megaphone", "decor", "graveStyle"];
 /** look = [지금 모습](장비창), wear = [꾸미기](부위별 카드 목록 — components/account/WardrobePanes) */
-type BagTab = "look" | "wear" | "other" | "dye" | "forage" | "race";
+type BagTab = "look" | "wear" | "title" | "other" | "dye" | "forage" | "race";
 
 type Props = {
   cache: GraveCache;
@@ -92,6 +93,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
               // 주간 랭킹 1위 전용 모자는 [레이스 보상] 칸에 따로 (일반 꾸미기 수에서 뺀다)
               ["look", "지금 모습"],
               ["wear", `꾸미기 ${wardrobe.filter((e) => !isChampItem(e.item.id)).length}`],
+              ["title", "칭호"],
               ["other", `소모품 ${others.reduce((n, e) => n + e.count, 0)}`],
               ["dye", `염색권 ${dyeTicketCount(me.inventory)}`],
               ["forage", "물고기·채집물"],
@@ -128,6 +130,8 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
             />
           ) : tab === "wear" ? (
             <PickPane entries={wardrobe} now={now} pending={pending} act={act} avatar={resolveAvatar(avatar, me, savedColor)} name={me.name ?? ""} filter={slotFilter} onFilter={setSlotFilter} />
+          ) : tab === "title" ? (
+            <TitlesPane me={me} pending={pending} act={act} />
           ) : tab === "dye" ? (
             <BagDyeSection me={me} avatar={resolveAvatar(avatar, me, savedColor)} onNotice={setNotice} />
           ) : tab === "forage" ? (

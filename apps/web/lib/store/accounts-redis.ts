@@ -925,6 +925,12 @@ export class RedisAccounts implements AccountStore {
     return Number(r) === 1;
   }
 
+  async setTitle(id: string, titleId: string | null): Promise<void> {
+    // 착용 해시의 "title" 필드 (만료 없음 = PERMANENT_UNTIL). 읽기·만료 정리는 다른 착용품과 같다
+    if (titleId) await this.redis.hset(K.look(id), { title: `${titleId}|${PERMANENT_UNTIL}` });
+    else await this.redis.hdel(K.look(id), "title");
+  }
+
   async unequip(id: string, slot: CosmeticSlot, now: number): Promise<boolean> {
     const r = await this.redis.eval<string[], number>(UNEQUIP_LUA, [K.look(id), K.stash(id)], [slot, String(now)]);
     return Number(r) === 1;

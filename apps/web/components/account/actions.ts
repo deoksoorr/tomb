@@ -49,6 +49,11 @@ export async function takeOff(slot: string): Promise<void> {
   applyLook(await api.unequip(slot));
 }
 
+/** 칭호 하나 끼우기 (null = 빼기) → 내 머리 위·같은 방 사람들 화면에 바로 */
+export async function wearTitle(id: string | null): Promise<void> {
+  applyLook(await api.setTitle(id));
+}
+
 /** 내 묘비에 꾸미기를 놓는다 → 목록 반영 + 같은 채널에 알림 */
 export async function decorateGrave(itemId: string, graveId: string, cache: GraveCache): Promise<void> {
   const res = await api.spendItem(itemId, graveId);

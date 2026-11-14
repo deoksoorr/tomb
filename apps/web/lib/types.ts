@@ -249,6 +249,8 @@ export type NameClaimResponse = { me: Me };
  * 둘 다 바뀐 착용 상태의 증서를 같이 준다 (게임이 실시간 서버로 보낸다). 없으면 409 NO_ITEM
  */
 export type WearResponse = { me: Me; lookGrant: string };
+/** GET /api/me/titles: 얻은 칭호 id(@tomb/protocol TITLE_IDS)와 지금 낀 칭호 (없으면 null). 이름·얻는 방법은 lib/titles */
+export type TitlesResponse = { earned: string[]; equipped: string | null };
 
 /** POST /api/me/attend → 출석 처리 (입장할 때 호출, 하루 1번만 지급) */
 export type AttendResponse = { me: Me; earned: number };

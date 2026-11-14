@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
-import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, isNameSlot, itemById, ridePetOfLook, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
+import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, isNameSlot, itemById, ridePetOfLook, sanitizeDye, titleOfLook, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { hasNameStyle, nameStyleRef } from "@/lib/nameStyle";
+import { titleLabel } from "@/lib/titles";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange, isDyedSpec } from "../sprites/avatar";
@@ -24,6 +25,8 @@ const DEX_BADGE_STAR = "★";
 const FRIEND_HEART = "♥";
 const FRIEND_TINT = 0xff8fb8;
 const DEX_BADGE_TINT = 0xffd45e;
+/** 칭호 글자 (연한 금빛 — 이름표 뼈색·촛불빛·1위 배지 금색과 구분되게 옅게) */
+const TITLE_TINT = 0xf3d98a;
 
 // 아바타 한 명의 화면 표현 (스프라이트 + 이름 라벨 + "…" 말풍선). 내 캐릭터와 원격 아바타가 같이 쓴다.
 // 상태 값과 방향만 받아서 애니메이션을 고르고, 상태별 연출은 그림에만 얹는다 (논리 위치는 그대로):
@@ -138,6 +141,8 @@ export class AvatarView {
   /** 주간 랭킹 1위 값 (비트 묶음 + 오라 끔 표시, 0 = 아님)과 이름표 위 배지 */
   private champ = 0;
   private champBadge: ChampBadgeView | null = null;
+  /** 칭호 「…」 (이름표 바로 위, 연한 금빛). 칭호를 달았을 때만 만든다 */
+  private titleText: Phaser.GameObjects.BitmapText | null = null;
   /** 닉네임 꾸미기 (이름 글자 색·이름표 바탕판). 착용했을 때만 만든다 */
   private nameFx: NameStyleView | null = null;
   private readonly isMe: boolean;
@@ -377,6 +382,7 @@ export class AvatarView {
     this.relayout();
     this.retexture();
     this.setNameStyle(look);
+    this.setTitle(titleLabel(titleOfLook(look)));
     const vis = this.sprite.visible;
     const wantAura = look.includes("aura_firefly");
     if (wantAura && !this.aura.length) {
@@ -433,7 +439,7 @@ export class AvatarView {
       this.flowerBorn = [];
     }
     // 착용하면 가끔 머리 위에서 작게 반짝 (움직임 줄이기 설정이면 없음). 닉네임 꾸미기만 했으면 몸에는 반짝이지 않는다
-    if (look.some((id) => !isNameSlot(itemById(id)?.slot)) && !this.reduced) {
+    if (look.some((id) => itemById(id)?.kind === "cosmetic" && !isNameSlot(itemById(id)?.slot)) && !this.reduced) {
       if (!this.sparkle) {
         this.sparkle = this.scene.add.image(0, 0, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 3).setVisible(false);
         this.sparkleAt = 0;
@@ -446,6 +452,19 @@ export class AvatarView {
 
   get wearing(): readonly string[] {
     return this.look;
+  }
+
+  /** 칭호 글자 (null = 없앤다). 이름표와 같은 글꼴, 구분되게 연한 금빛 */
+  private setTitle(text: string | null): void {
+    if (!text) {
+      this.titleText?.destroy();
+      this.titleText = null;
+      return;
+    }
+    if (this.titleText?.text === text) return;
+    this.atlas.ensure(text);
+    if (this.titleText) this.titleText.setText(text);
+    else this.titleText = this.scene.add.bitmapText(0, 0, FONT_KEY, text, FONT_PX).setOrigin(0.5, 1).setDepth(this.label.depth).setTint(TITLE_TINT).setVisible(this.sprite.visible);
   }
 
   /** 닉네임 꾸미기 (착용 목록에서 이름 글자·이름표 바탕판). 없으면 원래 이름표 색으로 */
@@ -871,7 +890,16 @@ export class AvatarView {
     const speaking = !!this.speech?.active(now);
     // 이름표 높이(height)는 이미 배율이 들어간 월드 높이 (displayHeight는 배율이 한 번 더 곱해져 이름표에 겹쳤다)
     // 주간 1위 배지가 있으면 이름표 위에 얹고, 말풍선은 그 위로
-    const lift = this.nameFx?.topLift(labelScale) ?? 0;
+    // 이름표 위로 쌓기: (바탕판 여백) → 칭호 → 주간 1위 배지 → 말풍선
+    let lift = this.nameFx?.topLift(labelScale) ?? 0;
+    if (this.titleText) {
+      const t = this.titleText;
+      if (t.scaleX !== labelScale) t.setScale(labelScale);
+      t.setPosition(Math.round(this.label.x), Math.round(this.label.y - this.label.height - lift + labelScale))
+        .setAlpha(fa)
+        .setVisible(vis && this.label.visible);
+      lift += t.height - labelScale;
+    }
     const labelTop = this.champBadge ? this.champBadge.sync(this.label, labelScale, vis, fa, now, this.reduced, lift) : this.label.y - this.label.height - lift;
     if (this.speech) this.speech.place(this.label.x, labelTop - labelScale, labelScale, now, vis);
     // 벤치 상태를 고르면 기본 "…"은 띄우지 않는다
@@ -1071,6 +1099,7 @@ export class AvatarView {
     this.dexBadge?.setVisible(v);
     this.champBadge?.setVisible(v);
     this.nameFx?.setVisible(v);
+    this.titleText?.setVisible(v);
     this.friendMark?.setVisible(v);
     for (const f of this.fog) f.setVisible(v);
     this.ripple?.setVisible(v);
@@ -1089,6 +1118,8 @@ export class AvatarView {
     this.champBadge = null;
     this.nameFx?.destroy();
     this.nameFx = null;
+    this.titleText?.destroy();
+    this.titleText = null;
     this.friendMark?.destroy();
     this.bubble?.destroy();
     this.bubble = null;

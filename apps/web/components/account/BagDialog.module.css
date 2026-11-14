@@ -136,14 +136,14 @@
   outline-offset: -2px;
 }
 
-/* 폰: 칸이 여섯 개라 한 줄에 넣으면 글자가 세 줄로 접힌다 → 세 개씩 두 줄 */
+/* 폰: 칸이 일곱 개라 한 줄에 넣으면 글자가 세 줄로 접힌다 → 네 개·세 개 두 줄 */
 @media (max-width: 560px) {
   .tabs {
     flex-wrap: wrap;
   }
 
   .tab {
-    flex: 1 0 33%;
+    flex: 1 0 25%;
     min-height: 40px;
   }
 }

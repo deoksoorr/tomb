@@ -1,4 +1,4 @@
-import { CHAMP_ITEM_IDS, itemById, nameKey, type CosmeticSlot } from "@tomb/protocol";
+import { CHAMP_ITEM_IDS, itemById, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
 import { tierUntil } from "../attendTiers";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
@@ -9,6 +9,7 @@ import { kstDay, weekOfDay } from "./accounts";
 import { giftTermUntil } from "./gifts";
 import type { MemoryStore } from "./memory";
 import {
+
   ACTIVITY_KEEP,
   DORMANT_MS,
   PRESENCE_MIN_GAP_MS,
@@ -24,6 +25,9 @@ import {
   type Profile,
   type RankEntry,
 } from "./types";
+
+/** 칭호를 두는 착용 칸 (꾸미기 부위가 아니다 — 착용 목록에 실려 머리 위에 보일 뿐) */
+const TITLE_FIELD = "title" as CosmeticSlot;
 
 type Acct = {
   points: number;
@@ -573,6 +577,13 @@ export class MemoryAccounts implements AccountStore {
     if (until === undefined) return false;
     this.putOn(a, slot, { itemId, until });
     return true;
+  }
+
+  async setTitle(id: string, titleId: string | null): Promise<void> {
+    const a = this.acct(id);
+    // 칭호는 꾸미기 부위가 아니지만 같은 착용 칸 지도에 "title"로 둔다 (Redis의 착용 해시 필드와 같다)
+    if (titleId) a.look.set(TITLE_FIELD, { itemId: titleId, until: PERMANENT_UNTIL });
+    else a.look.delete(TITLE_FIELD);
   }
 
   async unequip(id: string, slot: CosmeticSlot, now: number): Promise<boolean> {

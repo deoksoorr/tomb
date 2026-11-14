@@ -2,6 +2,7 @@ import type {
   ChampMeResponse,
   ChampResponse,
   RaceResponse,
+  TitlesResponse,
   WearResponse,
   ActivityResponse,
   ApiError,
@@ -137,6 +138,9 @@ export const api = {
   /** 벗어 둔 꾸미기 다시 입기 / 부위 벗기 */
   wear: (itemId: string) => request<WearResponse>("/api/me/wear", jsonInit("POST", { itemId })),
   unequip: (slot: string) => request<WearResponse>("/api/me/unequip", jsonInit("POST", { slot })),
+  /** 칭호: 얻은 것·낀 것 / 하나 끼우기(null = 빼기) */
+  titles: () => request<TitlesResponse>("/api/me/titles", { cache: "no-store" }),
+  setTitle: (id: string | null) => request<WearResponse>("/api/me/titles", jsonInit("POST", { id })),
   buy: (itemId: string) => request<BuyResponse>("/api/shop/buy", jsonInit("POST", { itemId })),
   /** 아이템 사용 (이름이 use로 시작하면 훅으로 오해받으므로 spend) */
   spendItem: (itemId: string, graveId?: string) =>
