@@ -102,6 +102,18 @@ export function BurnoutBox({ view, busy, onStart }: { view: RpgView; busy: boole
           {view.superHunter ? " · 슈퍼 계정: 모든 단계 열림" : ""}
         </span>
       </h3>
+      {/* 왜 하는지: 50 이후 성장은 여기가 가장 빠르고, 자랑거리는 여기서만 나온다 */}
+      <ul className={s.burnWhy}>
+        <li>
+          <b>가장 빠른 초월:</b> 레벨 50부터 EXP는 ★51~★100 초월 EXP로만 쌓여요. 번아웃은 지옥 EXP에 단계마다 10%씩 더 얹어 줘요 (5단계 ×1.5, 10단계 ×2).
+        </li>
+        <li>
+          <b>여기서만 받는 칭호:</b> 5단계 「번아웃 생존자」, 10단계 「야근이 일상」, 그리고 출시 2주 안에 1단계를 깨면 「개척자 #번호」.
+        </li>
+        <li>
+          <b>실력 증명:</b> 단계마다 몬스터가 1.35배씩 세지고 저주가 붙어요. 내가 막히는 단계가 곧 내 실력이에요.
+        </li>
+      </ul>
       <div className={s.burnTiers} role="radiogroup" aria-label="번아웃 단계">
         {Array.from({ length: b.max }, (_, i) => i + 1).map((n) => (
           <button

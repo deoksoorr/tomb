@@ -2347,3 +2347,18 @@ button.hotSlot:disabled {
     -2px 0 0 0 var(--candle),
     2px 0 0 0 var(--candle);
 }
+
+/* 11/15 번아웃을 하는 이유 (상자 맨 위 세 줄) */
+.burnWhy {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 16px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.burnWhy b {
+  color: var(--candle);
+}

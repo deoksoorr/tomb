@@ -119,6 +119,13 @@ export function StartPanel({
       <div className={s.lobby}>
         <HuntCapMeter today={view.today} where="start" />
         {view.endgame && <TranscendDay eg={view.endgame} />}
+        {/* 11/15 번아웃 단계: 레벨 50이면 사냥터 고르기보다 위에 (50 이후 성장의 중심) */}
+        {view.endgame && onBurnout && (
+          <>
+            <BurnoutBox view={view} busy={busy} onStart={onBurnout} />
+            <PioneerLine eg={view.endgame} />
+          </>
+        )}
         <section className={s.section} aria-label="사냥터 고르기">
           <ZonePicker
             level={c.level}
@@ -150,13 +157,6 @@ export function StartPanel({
             }
           />
         </section>
-        {/* 11/15 번아웃 단계: 지옥 사냥터 아래 (레벨 50) */}
-        {view.endgame && onBurnout && (
-          <>
-            <BurnoutBox view={view} busy={busy} onStart={onBurnout} />
-            <PioneerLine eg={view.endgame} />
-          </>
-        )}
         {onGuide && (
           <p className={s.meta}>
             조작·몬스터 패턴·보상이 궁금하면{" "}
