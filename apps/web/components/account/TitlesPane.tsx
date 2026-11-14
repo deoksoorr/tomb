@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { titleOfLook } from "@tomb/protocol";
+import { TITLE_IDS, titleOfLook } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { perkShort, perkText, progressText, TITLE_GRADE_NAMES, TITLE_GROUP_NAMES, TITLE_GROUPS, TITLES, titleDef, type TitleDef } from "@/lib/titles";
 import type { Me } from "@/lib/types";
@@ -16,13 +16,19 @@ import styles from "./TitlesPane.module.css";
 
 type Act = (task: () => Promise<void>, done: string) => Promise<void>;
 
+/** 마지막으로 받은 칭호 상태 (계정마다, 이 화면 메모리) — 다시 열 때 먼저 보여 줘 회색 → 흰색 깜빡임이 없게 */
+const lastSeen = new Map<string, { earned: string[]; progress: Record<string, number> }>();
+
 export default function TitlesPane({ me, pending, act }: { me: Me; pending: boolean; act: Act }) {
-  const [earned, setEarned] = useState<Set<string> | null>(null);
+  // 처음 그림: 운영자는 내 정보의 staff로 처음부터 모두 얻은 것으로, 아니면 마지막으로 받은 값, 그것도 없으면 "불러오는 중"(null)
+  const [earned, setEarned] = useState<Set<string> | null>(() =>
+    me.staff ? new Set(TITLE_IDS) : lastSeen.has(me.accountId) ? new Set(lastSeen.get(me.accountId)!.earned) : null,
+  );
   /** 이번에 열었을 때 처음 본 새 칭호 ("NEW" — 닫았다 다시 열면 사라진다) */
   const [fresh, setFresh] = useState<Set<string>>(() => new Set());
   /** 진행 수치 (처치 1,234/5,000 등)와 운영자 계정 표시 */
-  const [progress, setProgress] = useState<Record<string, number>>({});
-  const [staff, setStaff] = useState(false);
+  const [progress, setProgress] = useState<Record<string, number>>(() => lastSeen.get(me.accountId)?.progress ?? {});
+  const [staff, setStaff] = useState(me.staff === true);
   const [error, setError] = useState<string | null>(null);
   // 지금 낀 칭호는 내 정보(착용 목록)에서 — 끼우고 빼면 바로 바뀐다
   const equipped = titleOfLook(me.equipped.map((e) => e.itemId));
@@ -38,6 +44,7 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
         setFresh(new Set(r.unseen));
         setProgress(r.progress ?? {});
         setStaff(r.staff === true);
+        lastSeen.set(me.accountId, { earned: r.earned, progress: r.progress ?? {} });
         // 칸을 열었으니 본 것으로 (가방 단추 점이 꺼진다)
         if (r.unseen.length) void api.titleMarks({ seen: r.unseen }).catch(() => undefined);
         titleNews.set([]);
@@ -46,6 +53,8 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
     return () => {
       alive = false;
     };
+    // 계정은 열려 있는 동안 바뀌지 않는다 (처음 한 번만)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function toggle(t: TitleDef) {
@@ -86,6 +95,7 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
             </h3>
             <ul className={styles.list}>
               {list.map((t) => {
+                const loading = earned === null;
                 const got = !!earned?.has(t.id);
                 const on = equipped === t.id;
                 return (
@@ -95,9 +105,11 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
                       className={styles.title}
                       data-grade={t.grade}
                       data-earned={got || undefined}
+                      data-loading={loading || undefined}
+                      aria-busy={loading || undefined}
                       aria-pressed={on}
                       disabled={!got || pending}
-                      aria-label={`${t.name}, ${got ? (on ? "착용 중, 누르면 빼기" : "얻은 칭호, 누르면 달기") : `아직 못 얻음. ${t.how}`}`}
+                      aria-label={`${t.name}, ${loading ? "불러오는 중" : got ? (on ? "착용 중, 누르면 빼기" : "얻은 칭호, 누르면 달기") : `아직 못 얻음. ${t.how}`}`}
                       onClick={() => toggle(t)}
                     >
                       <span className={styles.top}>
@@ -105,7 +117,7 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
                         <span className={styles.name}>「{t.name}」</span>
                         {fresh.has(t.id) && <span className={styles.new}>NEW</span>}
                       </span>
-                      <span className={styles.how}>{got ? (on ? "착용 중 · 누르면 빼기" : "누르면 달기") : t.how}</span>
+                      <span className={styles.how}>{loading ? "불러오는 중…" : got ? (on ? "착용 중 · 누르면 빼기" : "누르면 달기") : t.how}</span>
                       {!got && !staff && t.metric && progress[t.metric] !== undefined && (
                         <span className={styles.progress}>
                           <span className={styles.bar} aria-hidden="true">
