@@ -267,7 +267,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table
             head={["규칙", "내용"]}
             rows={[
-              ["하루 한도", `모두 합쳐 ${won(DAILY_EARN_CAP)}P · 한국 시간 자정에 새로`],
+              ["하루 한도", `항목마다 따로 (위 표의 하루 최대) · 모두 합치면 ${won(DAILY_EARN_CAP)}P · 한국 시간 자정에 새로`],
               ["접속 시간 보너스", `하루 한도와 별개 · 하루 최대 ${STAY_BONUS_DAILY_MAX}P`],
               ["머무르기", `${PRESENCE_INTERVAL_MS / 60_000}분마다 (다른 창을 봐도 OK)`],
               ["지갑", `${won(BALANCE_CAP)}P까지 담겨요`],

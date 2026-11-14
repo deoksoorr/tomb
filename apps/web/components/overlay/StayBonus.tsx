@@ -53,7 +53,7 @@ export default function StayBonus() {
         setPop(`+${res.earned}P`);
         setTimeout(() => setPop(null), 1_400);
       }
-      // 보너스는 하루 전체 한도(800P)와 별개라 0P는 지갑이 가득 찼을 때뿐 (운영자 계정은 지갑이 늘 가득 차 있다)
+      // 보너스는 하루 전체 한도와 별개라 0P는 지갑이 가득 찼을 때뿐 (운영자 계정은 지갑이 늘 가득 차 있다)
       const text =
         res.earned > 0
           ? `+${res.earned}P 받았어요 (보너스 ${res.count}개)`

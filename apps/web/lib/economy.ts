@@ -37,7 +37,7 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "bury", label: "묘비 세우기", points: 20, dailyMax: 20, note: "하루 1개분만 지급" },
   { source: "gotFlower", label: "내 묘비가 헌화 받음", points: 1, dailyMax: 20, note: "다른 사람이 헌화할 때" },
   { source: "presence", label: "마을에 머무르기", points: 5, dailyMax: 60, note: "접속해 있는 10분마다 (다른 일을 해도 OK)" },
-  // 출석 도장과 같은 머문 시간(서버의 머무르기 기록)으로 판정. 10→15→20→25P(이후 고정), 하루 7구간 145P. 하루 상한(800P)과 별개 (lib/stayBonus.ts)
+  // 출석 도장과 같은 머문 시간(서버의 머무르기 기록)으로 판정. 10→15→20→25P(이후 고정), 하루 7구간 145P. 하루 전체 한도와 별개 (lib/stayBonus.ts)
   { source: "stayBonus", label: "접속 시간 보너스", points: 0, dailyMax: STAY_BONUS_DAILY_MAX, note: `${STAY_BONUS_EVERY_MINUTES}분 머물 때마다 10→15→20→25P (구석 창의 [받기], 안 받으면 쌓여요)` },
   { source: "hunt", label: "사냥터·미니게임", points: 0, dailyMax: 600, note: "난이도와 성적에 따라 (한 판 보상은 게임 결과로)" },
   { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때" },
@@ -52,12 +52,15 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "wish", label: "소원 분수", points: 0, dailyMax: 30, note: "광장 분수에 동전을 던지면 가끔 몇 포인트가 튀어 돌아와요 (하루 3번)" },
 ];
 
+/** 하루 전체 합계에 들어가지 않는 항목 (출석 달력 보상·접속 시간 보너스 — 각자 따로 정산) */
+const OUTSIDE_TOTAL: ReadonlySet<EarnSource> = new Set<EarnSource>(["attend", "streak", "monthly", "stayBonus"]);
+
 /**
- * 하루에 쌓을 수 있는 전체 포인트. 위 항목 한도의 합(접속 보너스 145 빼고 1,430)보다 작게 잡아 하루 상한을 둔다 — 사냥만 해도(600) 닿기 쉽고,
- * 출석·머무르기(70) + 낚시(200) + 채집(150)처럼 골고루 하면 420쯤. 낚시·채집을 더해도 하루 최대는 그대로 800
- * 접속 보너스(stayBonus)는 이 한도와 별개: 800에 닿아도 받고 오늘 합계(_total)에도 더하지 않는다 (자기 하루 145P·지갑 상한만). 출석 달력 보상도 이 한도에 막히지 않는다
+ * 하루에 쌓을 수 있는 전체 포인트 = 위 항목 한도의 합 (출석 달력·접속 시간 보너스 빼고).
+ * 11/14: 예전엔 800으로 따로 묶어서, 낚시·채집을 판 사람은 사냥 한도(600)가 남아도 사냥 포인트가 380쯤에서 멈췄다.
+ * 이제 항목마다 자기 한도만 보면 되도록 합계 한도는 항목 한도의 합으로 둔다 (먼저 닿는 일이 없다). 지갑 상한은 그대로
  */
-export const DAILY_EARN_CAP = 800;
+export const DAILY_EARN_CAP = EARN_RULES.filter((r) => !OUTSIDE_TOTAL.has(r.source)).reduce((n, r) => n + r.dailyMax, 0);
 /**
  * 지갑 상한 (I0b: 9,999 → 99,999). 관리자 지급·선물·운영자 채우기·검증 스키마·Redis Lua 인자가 모두 이 값을 쓴다.
  *
@@ -67,7 +70,7 @@ export const DAILY_EARN_CAP = 800;
  *  - 영구 소장 코디(상점 코디 전부, 하루권의 4배 — protocol PERMANENT_MULTIPLIER, 7배에서 내림): 기본 코디 240~400P(1~2일) · 가장 비싼 코디(하루권 480P) 1,920P(약 10일)
  *  - 입문 펫(450P, 동물원 ZOO_PETS): 2~3번째 플레이
  *  - 프리미엄 외형 선택권(영구, protocol BODY_TIER_INFO): 일반 1,200 · 고급 2,000 · 희귀 3,200 · 전설 5,000P (약 6일 ~ 25일)
- *  - 작은 집(2,000P, housing PLOT_TIERS): 약 10일 (하루 상한 800P로 몰아쳐도 3일)
+ *  - 작은 집(2,000P, housing PLOT_TIERS): 약 10일
  *  - 대저택(누적 2,000 + 3,000 + 5,000 = 10,000P): 약 50일 — 가구·외관(4배)까지 더하면 그 이상
  */
 export const BALANCE_CAP = 99_999;
