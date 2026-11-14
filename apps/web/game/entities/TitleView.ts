@@ -53,7 +53,7 @@ export class TitleView {
     this.apply(`「${t.name}」`, t.grade);
   }
 
-  /** 운영자 전용 칭호 「운영자」 (운영자 표시일 때만 AvatarView가 부른다) */
+  /** 운영자 전용 칭호 STAFF_TITLE (운영자 표시일 때만 AvatarView가 부른다) */
   setStaff(): void {
     this.apply(`「${STAFF_TITLE.name}」`, "staff");
   }
