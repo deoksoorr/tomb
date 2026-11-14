@@ -209,7 +209,9 @@ export type ActKind = (typeof ACT_KINDS)[number];
 
 /**
  * 5번 이모티콘: 머리 위에 3~4초 뜨는 그림 (말풍선과 같은 자리·쌓기 규칙). id만 주고받고 그림은 클라이언트가 그린다.
- * 옛 클라이언트는 모르는 이벤트(emo)라 그냥 버린다. 순서 = 이모티콘 판 순서 (손 흔들기·환호 다음 3번부터 단축키)
+ * 옛 클라이언트는 모르는 이벤트(emo)라 그냥 버린다. 새 id도 마찬가지 — 받는 쪽이 isEmoId로 걸러 모르는 그림은 조용히 버린다.
+ * 서버가 isEmoId로 받을 id를 정하므로 id를 늘리면 realtime도 다시 배포해야 한다.
+ * 순서 = 이모티콘 판 순서 (손 흔들기·환호 다음 3번부터 단축키 — 앞 14개 순서는 바꾸지 않는다)
  */
 export const EMOS = [
   { id: "heart", label: "하트" },
@@ -226,6 +228,56 @@ export const EMOS = [
   { id: "note", label: "음표" },
   { id: "sweat", label: "진땀" },
   { id: "idea", label: "번뜩" },
+  // 얼굴 (여기부터는 단축키 없이 창에서 고른다 — 앞 14개 순서는 그대로 둔다: 단축키 1~9)
+  { id: "grin", label: "씨익" },
+  { id: "wink", label: "윙크" },
+  { id: "blank", label: "멍" },
+  { id: "panic", label: "당황" },
+  { id: "shy", label: "부끄" },
+  { id: "moved", label: "감동" },
+  { id: "tongue", label: "메롱" },
+  { id: "annoyed", label: "짜증" },
+  { id: "doubt", label: "의심" },
+  { id: "zen", label: "해탈" },
+  { id: "faint", label: "기절" },
+  { id: "yawn", label: "하품" },
+  { id: "proud", label: "뿌듯" },
+  { id: "gloom", label: "현타" },
+  // 회사
+  { id: "leave", label: "퇴근" },
+  { id: "overtime", label: "야근" },
+  { id: "payday", label: "월급날" },
+  { id: "meeting", label: "회의" },
+  { id: "approve", label: "결재" },
+  { id: "laptop", label: "노트북" },
+  { id: "excel", label: "엑셀" },
+  { id: "subway", label: "지옥철" },
+  { id: "vacation", label: "연차" },
+  { id: "clockout", label: "칼퇴" },
+  { id: "beer", label: "회식" },
+  { id: "soju", label: "소주" },
+  // 반응
+  { id: "thumbs", label: "엄지척" },
+  { id: "ok", label: "OK" },
+  { id: "thanks", label: "감사" },
+  { id: "vein", label: "빠직" },
+  { id: "lol", label: "ㅋㅋ" },
+  { id: "sob", label: "ㅠㅠ" },
+  { id: "gg", label: "GG" },
+  { id: "party", label: "축하" },
+  { id: "gift", label: "선물" },
+  { id: "check", label: "확인" },
+  // 자연·묘역
+  { id: "sun", label: "맑음" },
+  { id: "rain", label: "비" },
+  { id: "moon", label: "달" },
+  { id: "rainbow", label: "무지개" },
+  { id: "flower", label: "꽃" },
+  { id: "cat", label: "고양이" },
+  { id: "dog", label: "강아지" },
+  { id: "ghost", label: "유령" },
+  { id: "tomb", label: "묘비" },
+  { id: "candle", label: "촛불" },
 ] as const;
 export type EmoId = (typeof EMOS)[number]["id"];
 export function isEmoId(id: unknown): id is EmoId {

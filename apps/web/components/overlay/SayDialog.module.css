@@ -32,11 +32,76 @@
   outline-offset: -2px;
 }
 
-/* 이모티콘 판 */
+/* 이모티콘 묶음 작은 탭: 판이 길어 본문이 스크롤돼도 위에 붙어 있다 (가로로 넘치면 옆으로 민다) */
+.cats {
+  position: sticky;
+  top: calc(-1 * var(--dialog-pad-y, 12px));
+  z-index: 1;
+  display: flex;
+  gap: 6px;
+  margin: 0 calc(-1 * var(--dialog-pad-x, 14px)) 4px;
+  padding: 6px var(--dialog-pad-x, 14px) 8px;
+  overflow-x: auto;
+  background: var(--panel-solid);
+  scrollbar-width: none;
+}
+
+.cats::-webkit-scrollbar {
+  display: none;
+}
+
+.cat {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  background: var(--bg-deep);
+  color: var(--muted);
+  box-shadow: var(--px-border);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.cat:hover,
+.cat:focus-visible {
+  background: var(--surface);
+}
+
+.cat[aria-pressed="true"] {
+  background: var(--surface);
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 2px var(--candle);
+  color: var(--bone);
+}
+
+@media (pointer: coarse) {
+  .cat {
+    min-height: 44px;
+  }
+}
+
+/* 묶음 (전체 보기에서는 묶음마다 제목) */
+.group + .group {
+  margin-top: 4px;
+}
+
+.groupTitle {
+  margin: 10px 0 6px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* 이모티콘 판 (폰 375px 너비에서 4칸, 칸은 44px 이상) */
 .board {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
 }
 
 .emo {
@@ -46,7 +111,7 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  min-height: 84px;
+  min-height: 76px;
   padding: 8px 4px 6px;
   border: 0;
   background: var(--bg-deep);

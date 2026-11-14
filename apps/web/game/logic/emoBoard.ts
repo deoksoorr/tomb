@@ -17,6 +17,24 @@ export const EMO_BOARD: readonly EmoSlot[] = [
   ...EMOS.map((e): EmoSlot => ({ kind: "emo", id: e.id, label: e.label, icon: emoIcon(e.id) })),
 ];
 
+/** 판의 묶음 (표현 창 이모티콘 탭의 작은 탭·제목). 판의 모든 칸이 꼭 한 묶음에 들어간다 (polish.test.ts) */
+export type EmoGroupId = "basic" | "face" | "work" | "react" | "nature";
+export type EmoGroup = { id: EmoGroupId; label: string; slots: readonly EmoSlot[] };
+
+const GROUP_IDS: readonly [EmoGroupId, string, readonly EmoSlot["id"][]][] = [
+  ["basic", "기본", ["wave", "cheer", "heart", "laugh", "cry", "wow", "what", "bang", "clap", "angry", "zzz", "coffee", "fire", "note", "sweat", "idea"]],
+  ["face", "얼굴", ["grin", "wink", "blank", "panic", "shy", "moved", "tongue", "annoyed", "doubt", "zen", "faint", "yawn", "proud", "gloom"]],
+  ["work", "회사", ["leave", "overtime", "payday", "meeting", "approve", "laptop", "excel", "subway", "vacation", "clockout", "beer", "soju"]],
+  ["react", "반응", ["thumbs", "ok", "thanks", "vein", "lol", "sob", "gg", "party", "gift", "check"]],
+  ["nature", "자연·묘역", ["sun", "rain", "moon", "rainbow", "flower", "cat", "dog", "ghost", "tomb", "candle"]],
+];
+
+export const EMO_GROUPS: readonly EmoGroup[] = GROUP_IDS.map(([id, label, ids]) => ({
+  id,
+  label,
+  slots: ids.map((sid) => EMO_BOARD.find((s) => s.id === sid)).filter((s): s is EmoSlot => !!s),
+}));
+
 /** 단축키가 붙는 칸 수 (1~9) */
 export const EMO_HOTKEYS = 9;
 
