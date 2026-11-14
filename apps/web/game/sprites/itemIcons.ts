@@ -634,6 +634,14 @@ function fwLetter(): Grid {
 
 type Ascii = { rows: readonly string[]; pal: Record<string, Color> };
 
+/** 다관왕 쌍둥이 왕관 아이콘: 왼쪽 반 a색, 오른쪽 반 b색 (같은 그림, 색만 조합마다) */
+function duoCrownIcon(a: Color, aLo: Color, b: Color, bLo: Color): Ascii {
+  return {
+    rows: ["", "..w...w..W...W", "..a..aa..bb..b", "..aa.aa..bb.bb", "..aaaaaaabbbbb", "..aaxaaaabbybb", "..aaaaaaabbbbb", "..AAAAAAABBBBB"],
+    pal: { a, A: aLo, b, B: bLo, w: 0xfffaf0, W: 0xe8faff, x: 0xffffff, y: 0xffffff },
+  };
+}
+
 const GEAR_ICONS: Record<string, Ascii> = {
   hat_beanie: {
     rows: ["", ".......ww", "......wwww", ".......ww", ".....oooooo", "...oooooooooo", "..oooooooooooo", "..oooooooooool", "..ooooooooooll", "..rrrrrrrrrrrr", "..rorororororo", "..rrrrrrrrrrrr"],
@@ -744,6 +752,14 @@ const GEAR_ICONS: Record<string, Ascii> = {
   champ_plume: {
     rows: [".r.....r", "..rR.Rr", "..rrRrr", "...rrr", "....r", "....kkkk", "..kssssssk", ".kssshssssk", ".kssssssssk", ".ksssssssdk", ".yyyyyryyyy", ".kdddddddk"],
     pal: { r: 0xe0283a, R: 0xff7a6a, s: 0xb8c0cc, h: 0xeef2f8, d: 0x7a8496, k: 0x4a5262, y: 0xd8a838 },
+  },
+  // 다관왕: 쌍둥이 왕관 (왼쪽 a색 · 오른쪽 b색) 셋은 같은 그림에 색만 다르게, 삼관왕 대관은 무지개 보석
+  champ_duo_ph: duoCrownIcon(0xf6c83a, 0xb8841a, 0xe0384a, 0x98202e),
+  champ_duo_pf: duoCrownIcon(0xf6c83a, 0xb8841a, 0x3aa8f0, 0x1a5aa8),
+  champ_duo_hf: duoCrownIcon(0xe0384a, 0x98202e, 0x3aa8f0, 0x1a5aa8),
+  champ_triple: {
+    rows: ["........w", ".r..o..y..g..b", ".g..g.ggg.g..g", ".gg.ggggggg.gg", ".ggggggggggggg", "gggggggggggggggg", "grgogygggbgvgggg", "gggggggggggggggg", "llllllllllllllll"],
+    pal: { g: 0xf6c83a, l: 0xb8841a, w: 0xffffff, r: 0xff4a5a, o: 0xffa030, y: 0xfff06a, b: 0x4ab0ff, v: 0xb87aff },
   },
   champ_fishhat: {
     rows: ["", "", "", "......ff", ".....ffff", "..ggggggggg..f", ".gehgggggghgff", ".ggggghgggggff", "..lllllllll..f", "......f"],

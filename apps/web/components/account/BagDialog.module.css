@@ -328,3 +328,48 @@
     min-height: 44px;
   }
 }
+
+/* ── 레이스 보상 칸 ── */
+.champTab {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.champNow {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.champNowBody {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.champNowText {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.champBadge {
+  padding: 1px 6px;
+  border: 1px solid #ffd36a;
+  color: #ffe27a;
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.champEmpty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 32px 12px;
+  color: var(--text);
+  text-align: center;
+}

@@ -127,7 +127,7 @@ describe("1위 정리·지급", () => {
     expect(r.rec!.winners[0].accountId).toBe(a);
   });
 
-  it("다관왕: 랭킹 수만큼 보상, 배지·오라 값은 비트 묶음 하나", async () => {
+  it("다관왕: 포인트는 랭킹 수만큼, 모자는 다관왕 전용 하나, 배지·오라 값은 비트 묶음 하나", async () => {
     const a = await user("alpha");
     await earn(a, WEEK, 0, 300);
     await getAccounts().recordHunt(a, "easy", { kills: 9, clearMs: null }, WEEK);
@@ -138,7 +138,8 @@ describe("1위 정리·지급", () => {
     expect(r.paidNow).toEqual(["points", "huntKills", "fish"]);
     const acc = await getAccounts().get(a, dayOf(NEXT, 0), now);
     expect(acc.points - before).toBe(CHAMP_POINTS * 3);
-    expect(acc.stash.map((s) => s.itemId).sort()).toEqual(Object.values(CHAMP_HAT).sort());
+    // 랭킹 모자 셋이 아니라 삼관왕 대관 하나
+    expect(acc.stash.map((s) => s.itemId)).toEqual(["champ_triple"]);
     expect(await champBitsFor(a, now)).toBe(7);
     // 알림은 사람마다 한 줄로 합친다
     expect((await getAccounts().activity(a)).items.filter((i) => i.kind === "champ")).toEqual([expect.objectContaining({ targetName: "3관왕(포인트왕·사냥왕·낚시왕)" })]);
@@ -158,6 +159,25 @@ describe("1위 정리·지급", () => {
     const acc = await getAccounts().get(a, dayOf(AFTER, 0), now2);
     expect(acc.equipped).toContainEqual({ itemId: CHAMP_HAT.points, until: champUntil(NEXT) });
     expect(acc.stash.find((s) => s.itemId === CHAMP_HAT.points)).toBeUndefined();
+  });
+
+  it("이번 주 단일 1위 → 다음 주 2관왕: 이전 모자는 기간까지 남고 쌍둥이 왕관을 새로 받는다", async () => {
+    const a = await user("alpha");
+    await earn(a, WEEK, 0, 300);
+    await settleChamps(WEEK, at(NEXT, 0));
+    await earn(a, NEXT, 1, 300);
+    await getFishRank().record(a, "f_carp", 610, NEXT);
+    const AFTER = "20261130";
+    const now = at(AFTER, 0, 1);
+    const r = await settleChamps(NEXT, now);
+    expect(r.paidNow).toEqual(["points", "fish"]);
+    const acc = await getAccounts().get(a, dayOf(AFTER, 0), now);
+    expect(acc.stash).toContainEqual({ itemId: CHAMP_HAT.points, until: champUntil(WEEK) });
+    expect(acc.stash).toContainEqual({ itemId: "champ_duo_pf", until: champUntil(NEXT) });
+    expect(acc.stash).toHaveLength(2);
+    // 이전 금화 왕관은 기간(다음 발표 + 여유)이 지나면 사라진다
+    const later = champUntil(WEEK) + 1;
+    expect((await getAccounts().get(a, dayOf(AFTER, 1), later)).stash.map((x) => x.itemId)).toEqual(["champ_duo_pf"]);
   });
 
   it("자격은 지난주 1위에만: 다음 주가 되면 저절로 끝난다. 오라 끔 표시는 1위일 때만 붙는다", async () => {
@@ -217,7 +237,7 @@ describe("레이스 1위 바뀜 공지", () => {
 
 describe("테스트 서버 운영자 시험 1위", () => {
   it("실제 지급과 같은 경로로 주되, 주간 1위 기록·랭킹·명예의 전당은 건드리지 않고 몇 시간 뒤 저절로 끝난다", async () => {
-    const { grantChampTest, champMine, CHAMP_TEST_MS } = await import("./weeklyChamp");
+    const { grantChampTest, champMine, CHAMP_TEST_MS, CHAMP_TEST_HAT_MS } = await import("./weeklyChamp");
     const op = await user("staffer");
     await setStaff(op);
     const now = at(NEXT, 1);
@@ -228,9 +248,10 @@ describe("테스트 서버 운영자 시험 1위", () => {
     const mine = await champMine(op, now + 1000);
     expect(mine.unseen).toMatchObject({ boards: ["points", "fish"], test: true });
     expect(mine.unseen?.week).toMatch(/^test:\d+$/);
-    // 모자 둘이 하루 대여로
+    // 여러 개면 다관왕 모자 하나, 실제 지급과 같은 한 주(+ 여유) 대여로
     const acc = await getAccounts().get(op, dayOf(NEXT, 1), now);
-    expect(acc.stash.length - before).toBe(2);
+    expect(acc.stash.length - before).toBe(1);
+    expect(acc.stash).toContainEqual({ itemId: "champ_duo_pf", until: now + CHAMP_TEST_HAT_MS });
     // 진짜 주간 기록·명예의 전당은 그대로 (11/16 실제 정리를 막지 않는다)
     expect(await getChamp().get(WEEK)).toBeNull();
     expect(await getChamp().get(NEXT)).toBeNull();

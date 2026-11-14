@@ -305,6 +305,17 @@ export type ChampBoard = (typeof CHAMP_BOARDS)[number];
 export const CHAMP_TITLE: Record<ChampBoard, string> = { points: "포인트왕", huntKills: "사냥왕", fish: "낚시왕" };
 /** 랭킹별 1위 전용 꾸미기 (상점에 없다. 1위가 되면 다음 1위가 정해질 때까지 빌려 입는다) */
 export const CHAMP_HAT: Record<ChampBoard, string> = { points: "champ_crown", huntKills: "champ_plume", fish: "champ_fishhat" };
+/**
+ * 다관왕 전용 꾸미기 (2개 이상 1위면 랭킹 모자 여러 개 대신 이것 하나): 2관왕은 차지한 두 랭킹 조합마다 색이 다른 쌍둥이 왕관, 3관왕은 무지개 대관.
+ * 키 = 1위 비트 묶음 (3 포인트+사냥 · 5 포인트+낚시 · 6 사냥+낚시 · 7 셋 다)
+ */
+export const CHAMP_MULTI_HAT: Readonly<Record<number, string>> = { 3: "champ_duo_ph", 5: "champ_duo_pf", 6: "champ_duo_hf", 7: "champ_triple" };
+/** 1위 랭킹 → 받을 전용 모자 하나 (하나면 그 랭킹 모자, 둘·셋이면 다관왕 모자) */
+export function champHatOf(boards: readonly ChampBoard[]): string {
+  const set = CHAMP_BOARDS.filter((b) => boards.includes(b));
+  if (set.length === 1) return CHAMP_HAT[set[0]];
+  return CHAMP_MULTI_HAT[set.reduce((n, b) => n | (1 << CHAMP_BOARDS.indexOf(b)), 0)] ?? CHAMP_HAT[CHAMP_BOARDS[0]];
+}
 export const CHAMP_ALL = (1 << CHAMP_BOARDS.length) - 1;
 /** 본인이 "1위 오라 보이기"를 끈 표시 (배지는 그대로, 오라만 숨긴다). 1위 비트와 같은 값에 함께 싣는다 */
 export const CHAMP_AURA_OFF = 1 << CHAMP_BOARDS.length;

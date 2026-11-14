@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { CHAMP_POLL_MS, champRecheckDelay } from "@/lib/champClock";
-import { CHAMP_HAT, CHAMP_TITLE, itemName, type ChampBoard } from "@tomb/protocol";
+import { CHAMP_TITLE, champHatOf, itemName, type ChampBoard } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
@@ -30,6 +30,8 @@ export default function ChampNotice() {
   const [pending, setPending] = useState(false);
   /** 마지막으로 화면에 반영한 1위 값 (처음엔 내 정보의 값) */
   const known = useRef<number | null>(null);
+  /** 이 화면에서 이미 닫은 알림 (봤음 저장이 서버에 닿기 전에 다시 확인해도 또 띄우지 않게) */
+  const dismissed = useRef(new Set<string>());
   const firstBits = me?.champ ?? 0;
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export default function ChampNotice() {
           // 가방(빌려 받은 모자)·포인트, 그리고 배지·전용 오라를 실은 착용 증서 → 내 아바타·같은 채널 사람들
           await Promise.all([meStore.refresh(), restoreLook()]);
         }
-        if (r.unseen) {
+        if (r.unseen && !dismissed.current.has(r.unseen.week)) {
           const u = r.unseen;
           setNotice((cur) => cur ?? { ...u, points: r.points });
         }
@@ -95,12 +97,14 @@ export default function ChampNotice() {
 
   if (!notice) return null;
   const close = () => {
+    dismissed.current.add(notice.week);
     void api.champSeen(notice.week).catch(() => undefined);
     setNotice(null);
   };
   const n = notice.boards.length;
   const title = `${notice.test ? "[시험] " : ""}${n > 1 ? `지난주 ${n}관왕!` : `지난주 ${CHAMP_TITLE[notice.boards[0]]}!`}`;
-  const hat = CHAMP_HAT[notice.boards[0]];
+  // 다관왕은 다관왕 전용 모자 하나
+  const hat = champHatOf(notice.boards);
   const tryOn = async () => {
     setPending(true);
     try {
@@ -123,22 +127,20 @@ export default function ChampNotice() {
           {n > 1 ? `${notice.boards.map((b) => CHAMP_TITLE[b]).join("·")} — 축하해요!` : "축하해요! 이번 주 동안 1위 보상을 누려요."}
         </p>
         <ul className={styles.list}>
-          {notice.boards.map((b) => (
-            <li key={b}>
-              <ItemIcon itemId={CHAMP_HAT[b]} size={32} />
-              <span>
-                <b>{itemName(CHAMP_HAT[b])}</b>
-                <span className={styles.note}>다음 1위가 정해질 때까지 · 가방 코디에 들어 있어요</span>
-              </span>
-            </li>
-          ))}
+          <li>
+            <ItemIcon itemId={hat} size={32} />
+            <span>
+              <b>{itemName(hat)}</b>
+              <span className={styles.note}>다음 발표(월요일 0시)까지 · 가방 [레이스 보상]에 들어 있어요</span>
+            </span>
+          </li>
           <li>
             <span className={styles.sparkle} aria-hidden="true">
               ✦
             </span>
             <span>
               <b>전용 오라 · 이름표 배지</b>
-              <span className={styles.note}>{n > 1 ? `이번 주 ${n}관왕 전용 오라 하나로` : "이번 주 동안 자동으로"} · 코디 창에서 오라를 끌 수 있어요</span>
+              <span className={styles.note}>{n > 1 ? `이번 주 ${n}관왕 전용 오라 하나로` : "이번 주 동안 자동으로"} · 가방 [레이스 보상]에서 오라를 끌 수 있어요</span>
             </span>
           </li>
           <li>
@@ -153,7 +155,7 @@ export default function ChampNotice() {
         </ul>
         <div className={styles.buttons}>
           <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void tryOn()} disabled={pending}>
-            {n > 1 ? `${itemName(hat)} 써 보기` : "써 보기"}
+            써 보기
           </button>
           <button type="button" className={ui.button} onClick={close}>
             확인

@@ -181,6 +181,11 @@ export const ITEMS: readonly ItemDef[] = [
     ["champ_crown", "head", "금화 왕관", "이번 주 포인트를 가장 많이 모은 사람의 금화 왕관. 주간 포인트 1위 전용.", 0],
     ["champ_plume", "head", "붉은 깃털 투구", "붉은 깃털을 꽂은 사냥꾼의 투구 장식. 주간 사냥 처치 1위 전용.", 0],
     ["champ_fishhat", "head", "황금 물고기 모자", "가장 큰 물고기를 낚은 사람의 황금 물고기 모자. 주간 낚시 1위 전용.", 0],
+    // 다관왕 전용 (2개 이상 1위면 랭킹 모자 대신 이것 하나 — constants CHAMP_MULTI_HAT)
+    ["champ_duo_ph", "head", "금홍 쌍둥이 왕관", "금빛·붉은빛 두 왕관이 겹친 쌍둥이 왕관. 주간 포인트·사냥 2관왕 전용.", 0],
+    ["champ_duo_pf", "head", "금청 쌍둥이 왕관", "금빛·푸른빛 두 왕관이 겹친 쌍둥이 왕관. 주간 포인트·낚시 2관왕 전용.", 0],
+    ["champ_duo_hf", "head", "홍청 쌍둥이 왕관", "붉은빛·푸른빛 두 왕관이 겹친 쌍둥이 왕관. 주간 사냥·낚시 2관왕 전용.", 0],
+    ["champ_triple", "head", "삼관왕 대관", "무지개 보석이 박힌 커다란 대관. 주간 포인트·사냥·낚시 3관왕 전용.", 0],
   ]).map((it) => ({ ...it, champ: true as const })),
   // ── 동물원 펫 (사육사에게서 영구로만 산다 — 가격은 아래 ZOO_PETS. price는 같은 값을 적어 둔다) ──
   { id: "pet_fox", kind: "cosmetic", slot: "pet", name: "달빛 여우", desc: "야근하는 밤에만 슬그머니 따라오는 여우. 꼬리가 은은하게 빛나요.", price: 1200, durationMs: COSMETIC_DURATION_MS },

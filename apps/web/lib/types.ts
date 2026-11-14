@@ -459,7 +459,8 @@ export type ChampResponse = {
 /** 아직 안 본 1위 알림 (week = 그 주 월요일 또는 시험 지급 id "test:…", test = 테스트 서버 운영자 시험 지급) */
 export type ChampUnseenView = { week: string; boards: ChampBoard[]; test?: true };
 /** GET /api/champ/me: 접속 중인 화면이 가볍게 확인하는 내 1위 상태 (bits 0 = 아님) */
-export type ChampMeResponse = { bits: number; unseen: ChampUnseenView | null; points: number };
+/** until = 지금 자격(배지·전용 오라)이 끝나는 시각 (ms, 1위가 아니면 0) */
+export type ChampMeResponse = { bits: number; unseen: ChampUnseenView | null; points: number; until: number };
 /** 이번 주 레이스 시상대 한 칸 */
 export type RaceRow = { rank: number; name: string; value: number; sub?: string; me: boolean; avatar: ChampAvatar };
 /** GET /api/champ/race: 이번 주 랭킹 3개의 1~3등 · 마감 시각 · 내 순위와 1위와의 차이 */

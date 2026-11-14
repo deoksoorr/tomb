@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { CHAMP_BOARDS, CHAMP_HAT, CHAMP_TITLE, champBitsOf, champBoards, itemById, type AvatarDye, type ChampBoard } from "@tomb/protocol";
+import { CHAMP_BOARDS, CHAMP_TITLE, champBitsOf, champBoards, champHatOf, itemById, type AvatarDye, type ChampBoard } from "@tomb/protocol";
 import { notifyMe } from "./ban";
 import { speciesById } from "./forage/catalog";
 import { getFishRank } from "./forage/fishRank";
@@ -7,7 +7,7 @@ import { staffAccountId } from "./staff";
 import { rankWithoutStaff } from "./staffRank";
 import { getAccounts, getMegaphone, NO_NAME } from "./store";
 import { kstDay, kstWeek, lookOf } from "./store/accounts";
-import { champBitsFor, champUntil, champWeekCached, getChamp, prevWeek, primeChampCache, weekEndMs, weekStartMs, type ChampWeek, type ChampWinner } from "./store/champ";
+import { CHAMP_GRACE_MS, champBitsFor, champUntil, champWeekCached, getChamp, prevWeek, primeChampCache, weekEndMs, weekStartMs, type ChampWeek, type ChampWinner } from "./store/champ";
 import { testServerEnv } from "./rpg/superHunter";
 import { getStyleStore } from "./store/style";
 
@@ -16,7 +16,8 @@ import { getStyleStore } from "./store/style";
 // 동점이면 먼저 달성한 사람 (주간 랭킹 점수에 달성 시각이 소수부로 실려 있다 — lib/store/accounts.ts weekTieFrac).
 // 매주 월요일 0시(KST) 마감. 크론 없이 "지난주 결과를 처음 읽는 요청"(입장·랭킹 창·내 정보)이 정리한다 (lib/rankFill과 같은 게으른 방식):
 //  1) 그 주 1위를 한 번 정해 저장한다 (처음 정한 것만 — 다시 계산해도 바뀌지 않는다)
-//  2) 1위마다 보상: 1위 전용 꾸미기 대여(다음 주 1위가 정해질 때까지 + 여유) + 1,000P — 계정 저장소 grantChamp가 주·랭킹마다 한 번만 준다
+//  2) 1위마다 보상: 1위 전용 꾸미기 대여(다음 주 1위가 정해질 때까지 + 여유) + 1,000P — 계정 저장소 grantChamp가 주·랭킹마다 한 번만 준다.
+//     다관왕은 랭킹 모자 대신 다관왕 전용 모자 하나 (protocol champHatOf)
 //  3) 처음 준 보상만 본인 소식(알림)·마을 확성기 줄(전체)에 한 번 알린다
 // 1위 오라·배지는 아이템이 아니라 "지난주 1위 자격"에 붙는다 (lib/store/champ.ts champBitsFor → 입장 토큰·착용 증서·내 정보).
 // 한 사람이 2~3개를 차지하면 보상은 개수만큼, 배지는 "이번 주 2관왕/3관왕", 오라는 하나로 섞어 그린다.
@@ -115,7 +116,8 @@ export async function settleChamps(week: string, now = Date.now(), opts: { minWe
     primeChampCache(rec, now);
     const paidNow: ChampBoard[] = [];
     for (const w of rec.winners) {
-      const hat = CHAMP_HAT[w.board];
+      // 다관왕이면 랭킹 모자 여러 개 대신 다관왕 전용 모자 하나 (랭킹마다 같은 모자·같은 기간이라 겹쳐 줘도 한 벌). 포인트는 랭킹마다
+      const hat = champHatOf(rec.winners.filter((x) => x.accountId === w.accountId).map((x) => x.board));
       const slot = itemById(hat)?.slot ?? "head";
       if (await accounts.grantChamp(w.accountId, `${week}:${w.board}`, hat, slot, champUntil(week), CHAMP_POINTS, now)) paidNow.push(w.board);
     }
@@ -158,28 +160,33 @@ export type ChampUnseen = { week: string; boards: ChampBoard[]; test?: true };
  * 지금 내 1위 값(비트, 0 = 아님)과 아직 안 본 1위 알림. 1위가 아니면 저장소를 거의 읽지 않는다
  * (지난주 기록은 프로세스 캐시, 오라 끔·봤음 표시는 1위일 때만 읽는다)
  */
-export async function champMine(accountId: string, now = Date.now()): Promise<{ bits: number; unseen: ChampUnseen | null }> {
+export async function champMine(accountId: string, now = Date.now()): Promise<{ bits: number; unseen: ChampUnseen | null; until: number }> {
   const bits = await champBitsFor(accountId, now);
-  if (!bits) return { bits: 0, unseen: null };
+  if (!bits) return { bits: 0, unseen: null, until: 0 };
   const store = getChamp();
   const week = prevWeek(kstWeek(now));
   const [rec, seen, test] = await Promise.all([champWeekCached(week, now), store.seen(accountId), testServerEnv() ? store.test(accountId, now) : null]);
   const won = CHAMP_BOARDS.filter((b) => rec?.winners.some((w) => w.board === b && w.accountId === accountId));
-  if (won.length && seen !== week) return { bits, unseen: { week, boards: won } };
-  if (test && seen !== test.id) return { bits, unseen: { week: test.id, boards: champBoards(test.bits), test: true } };
-  return { bits, unseen: null };
+  // 자격이 끝나는 시각: 진짜 1위는 이번 주 마감(다음 월요일 0시 — 그때 다음 1위로 넘어간다), 시험 1위는 시험 끝 시각
+  const until = Math.max(won.length ? weekEndMs(kstWeek(now)) : 0, test?.until ?? 0);
+  if (won.length && seen !== week) return { bits, until, unseen: { week, boards: won } };
+  if (test && seen !== test.id) return { bits, until, unseen: { week: test.id, boards: champBoards(test.bits), test: true } };
+  return { bits, until, unseen: null };
 }
 
 // ── 테스트 서버 운영자 시험 1위 (운영에서는 쓸 수 없다) ──
 
 /** 시험 1위 자격(배지·전용 오라)이 저절로 끝나는 시간 */
 export const CHAMP_TEST_MS = 3 * 3_600_000;
-/** 시험 지급 모자 대여 기간 */
-export const CHAMP_TEST_HAT_MS = 86_400_000;
+/**
+ * 시험 지급 모자 대여 기간: 실제 지급과 같은 길이 — 발표(월요일 0시 정리) 때 받아 다음 발표까지 한 주 + 정리가 늦어질 여유(CHAMP_GRACE_MS).
+ * (실제 지급은 champUntil = 그 주 시작 + 14일 + 여유 = 받은 월요일로부터 7일 + 여유)
+ */
+export const CHAMP_TEST_HAT_MS = 7 * 86_400_000 + CHAMP_GRACE_MS;
 
 /**
- * 운영자 계정에 시험 1위 주기 (실제 지급과 같은 계정 저장소 grantChamp: 전용 모자 하루 대여 + 1,000P씩) + 시험 자격(CHAMP_TEST_MS 뒤 저절로 끝).
- * 주간 1위 기록·랭킹·명예의 전당은 건드리지 않는다. boards가 비면 시험 자격만 끝낸다 (빌려 준 모자는 하루 뒤 저절로 끝난다).
+ * 운영자 계정에 시험 1위 주기 (실제 지급과 같은 계정 저장소 grantChamp: 전용 모자 한 주 대여(실제와 같은 길이) + 1,000P씩) + 시험 자격(CHAMP_TEST_MS 뒤 저절로 끝).
+ * 주간 1위 기록·랭킹·명예의 전당은 건드리지 않는다. boards가 비면 시험 자격만 끝낸다 (빌려 준 모자는 대여 기간까지 남는다).
  * 접속 중인 운영자 화면에 바로 알린다 (알림 창·모자·배지·전용 오라)
  */
 export async function grantChampTest(accountId: string, boards: readonly ChampBoard[], now = Date.now()): Promise<{ bits: number; until: number }> {
@@ -192,10 +199,9 @@ export async function grantChampTest(accountId: string, boards: readonly ChampBo
   }
   const id = `test:${now}`;
   const accounts = getAccounts();
-  for (const b of boards) {
-    const hat = CHAMP_HAT[b];
-    await accounts.grantChamp(accountId, `${id}:${b}`, hat, itemById(hat)?.slot ?? "head", now + CHAMP_TEST_HAT_MS, CHAMP_POINTS, now);
-  }
+  // 여러 개면 다관왕 전용 모자 하나 (실제 지급과 같은 규칙)
+  const hat = champHatOf(boards);
+  for (const b of boards) await accounts.grantChamp(accountId, `${id}:${b}`, hat, itemById(hat)?.slot ?? "head", now + CHAMP_TEST_HAT_MS, CHAMP_POINTS, now);
   const t = { id, bits: champBitsOf([...boards]), until: now + CHAMP_TEST_MS };
   await store.setTest(accountId, t);
   const title = boards.length > 1 ? `${boards.length}관왕(${champTitles(boards)})` : champTitles(boards);

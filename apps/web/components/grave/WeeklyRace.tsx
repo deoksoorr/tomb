@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CHAMP_TITLE, type ChampBoard } from "@tomb/protocol";
+import { CHAMP_BOARDS, CHAMP_TITLE, type ChampBoard } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import type { ChampAvatar, ChampResponse, RaceResponse, RaceRow } from "@/lib/types";
 import AvatarThumb from "../account/AvatarThumb";
@@ -111,63 +111,64 @@ export default function WeeklyRace() {
           </section>
         ))}
       </div>
-      {/* 지난주 1위 · 명예의 전당: 넓은 창은 두 칸, 좁은 창은 세로로 */}
-      <div className={styles.bottom}>
-        {champ && champ.last.length > 0 && (
-          <section className={styles.board} aria-label="지난주 1위">
-            <h3 className={styles.title}>지난주 1위 · {weekLabel(champ.week)}</h3>
-            <ul className={styles.last}>
-              {champ.last.map((w) => (
-                <li key={w.board} className={styles.lastRow} data-me={w.me === true}>
-                  <Avatar a={w.avatar} label={w.name} scale={1} />
-                  <span className={styles.lastText}>
-                    <span className={styles.badge} data-board={w.board}>
-                      {CHAMP_TITLE[w.board]}
-                    </span>
-                    <b>{w.name}</b>
-                    <span className={styles.value}>
-                      {w.sub ? `${w.sub} ` : ""}
-                      {valueText(w.board, w.value)}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-        {champ && (
-          <section className={styles.board} aria-label="명예의 전당">
-            <h3 className={styles.title}>명예의 전당</h3>
-            {champ.hall.length === 0 ? (
-              <p className={styles.none}>첫 주간 1위는 월요일 0시에 정해져요.</p>
-            ) : (
-              <ol className={styles.hall}>
-                {champ.hall.map((h) => (
-                  <li key={h.week} className={styles.hallRow}>
-                    <span className={styles.hallWeek}>{weekLabel(h.week)}</span>
-                    <span className={styles.hallWinners}>
-                      {h.winners.length === 0
-                        ? "1위 없음"
-                        : h.winners.map((w) => (
-                            <span key={w.board} className={styles.hallOne}>
-                              <span className={styles.badge} data-board={w.board}>
-                                {CHAMP_TITLE[w.board]}
-                              </span>
-                              {w.name}
-                            </span>
-                          ))}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </section>
-        )}
-        <section className={styles.board} aria-label="여러 랭킹 1위면 합쳐진 오라">
-          <h3 className={styles.title}>여러 개 1위면 합쳐진 오라</h3>
-          <ComboAuras />
+      {/* 명예의 전당: 랭킹마다 한 칸 (맨 앞 = 지난주 1위를 크게, 그 뒤로 지난 주들 1위를 작게). 넓은 창은 세 칸, 좁은 창은 세로로 */}
+      {champ && (
+        <section className={styles.hallBox} aria-label="명예의 전당">
+          <h3 className={styles.title}>명예의 전당</h3>
+          <div className={styles.boards}>
+            {CHAMP_BOARDS.map((board) => (
+              <HallColumn key={board} board={board} champ={champ} />
+            ))}
+          </div>
         </section>
-      </div>
+      )}
+      <section className={styles.hallBox} aria-label="여러 랭킹 1위면 합쳐진 오라">
+        <h3 className={styles.title}>여러 개 1위면 · 다관왕 모자 하나 + 합쳐진 오라 하나</h3>
+        <ComboAuras />
+      </section>
+    </div>
+  );
+}
+
+/** 지난 주들 1위 (작게) 몇 개까지 */
+const HALL_SHOW = 4;
+
+/** 명예의 전당 한 칸: 지난주 1위(캐릭터·이름·기록) + 그 전 주들 1위 */
+function HallColumn({ board, champ }: { board: ChampBoard; champ: ChampResponse }) {
+  const last = champ.last.find((w) => w.board === board);
+  const past = champ.hall
+    .filter((h) => h.week !== champ.week)
+    .flatMap((h) => h.winners.filter((w) => w.board === board).map((w) => ({ week: h.week, w })))
+    .slice(0, HALL_SHOW);
+  return (
+    <div className={styles.hallCol}>
+      <span className={styles.badge} data-board={board}>
+        {CHAMP_TITLE[board]}
+      </span>
+      {last ? (
+        <div className={styles.hallTop} data-me={last.me === true}>
+          <Avatar a={last.avatar} label={`지난주 ${CHAMP_TITLE[board]} ${last.name}`} scale={1.25} />
+          <span className={styles.lastText}>
+            <span className={styles.hallWeek}>지난주 · {weekLabel(champ.week)}</span>
+            <b>{last.name}</b>
+            <span className={styles.value}>
+              {last.sub ? `${last.sub} ` : ""}
+              {valueText(board, last.value)}
+            </span>
+          </span>
+        </div>
+      ) : (
+        <p className={styles.none}>지난주 1위 없음</p>
+      )}
+      {past.length > 0 && (
+        <ol className={styles.hallPast}>
+          {past.map(({ week, w }) => (
+            <li key={week}>
+              <span className={styles.hallWeek}>{weekLabel(week)}</span> {w.name}
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

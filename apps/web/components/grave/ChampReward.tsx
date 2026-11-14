@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { CHAMP_HAT, CHAMP_TITLE, champBitsOf, DIR, itemName, type ChampBoard } from "@tomb/protocol";
+import { CHAMP_HAT, CHAMP_TITLE, champBitsOf, champHatOf, DIR, itemName, type ChampBoard } from "@tomb/protocol";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { OutfitStage, STAGE_H, STAGE_W } from "../shop/outfitStage";
 import ItemIcon from "../ui/ItemIcon";
@@ -68,18 +68,25 @@ export function ChampReward({ board, points }: { board: ChampBoard; points: numb
   );
 }
 
-/** 여러 랭킹 1위면 합쳐진 오라 (2관왕 = 두 색 섞임 예시, 3관왕 = 무지개) */
+/** 여러 랭킹 1위면 합쳐진 오라 하나 + 다관왕 전용 모자: 2관왕 세 조합(두 색 섞임 · 쌍둥이 왕관) + 3관왕(무지개 · 삼관왕 대관) */
+const COMBOS: readonly { boards: ChampBoard[]; name: string }[] = [
+  { boards: ["points", "huntKills"], name: "포인트왕+사냥왕" },
+  { boards: ["points", "fish"], name: "포인트왕+낚시왕" },
+  { boards: ["huntKills", "fish"], name: "사냥왕+낚시왕" },
+  { boards: ["points", "huntKills", "fish"], name: "3관왕 무지개" },
+];
+
 export function ComboAuras() {
   return (
     <ul className={styles.combo}>
-      <li>
-        <AuraPreview bits={champBitsOf(["points", "huntKills"])} look={["champ_crown"]} label="2관왕 오라 미리보기 (포인트·사냥)" />
-        <span className={styles.rewardCaption}>2관왕 · 두 색이 섞인 오라</span>
-      </li>
-      <li>
-        <AuraPreview bits={champBitsOf(["points", "huntKills", "fish"])} look={["champ_crown"]} label="3관왕 무지개 오라 미리보기" />
-        <span className={styles.rewardCaption}>3관왕 · 무지개 오라</span>
-      </li>
+      {COMBOS.map((c) => (
+        <li key={c.name}>
+          <AuraPreview bits={champBitsOf(c.boards)} look={[champHatOf(c.boards)]} label={`${c.name} 오라 미리보기`} />
+          <span className={styles.rewardCaption}>
+            {c.name} · {itemName(champHatOf(c.boards))}
+          </span>
+        </li>
+      ))}
     </ul>
   );
 }

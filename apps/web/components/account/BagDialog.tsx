@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type DragEvent } from "react";
-import { type CosmeticSlot, type ItemKind } from "@tomb/protocol";
+import { isChampItem, type CosmeticSlot, type ItemKind } from "@tomb/protocol";
 import { errorMessage } from "@/lib/api";
 import type { GraveCache } from "@/lib/hooks/useGraves";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
@@ -21,7 +21,7 @@ import { DollNote, DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
 import { openMegaphone } from "@/lib/hooks/useMegaphone";
 import { decorateGrave, fireFirework, takeOff, wearCosmetic, wearStashed } from "./actions";
-import ChampAuraToggle from "./ChampAuraToggle";
+import ChampRewardsTab from "./ChampRewardsTab";
 import { bagEntries, KIND_LABELS, remainingLabel, type MyGraveEntry } from "./items";
 import {
   canDropOn,
@@ -43,7 +43,7 @@ import {
 import styles from "./BagDialog.module.css";
 
 const OTHER_KINDS: ItemKind[] = ["firework", "megaphone", "decor", "graveStyle"];
-type BagTab = "wear" | "other" | "dye" | "forage";
+type BagTab = "wear" | "other" | "dye" | "forage" | "race";
 
 /** 몸 위치에 맞춘 칸 배치: 등은 어깨 뒤, 목·손은 오른쪽, 오라는 몸 옆, 발은 아래, 펫은 발 옆 */
 const DOLL_AREAS = `"back head neck" "aura fig hand" "pet feet info"`;
@@ -55,10 +55,12 @@ type Props = {
   onClose: () => void;
   /** 게임 속 내 아바타 (입장할 때 정한 색·몸) */
   avatar?: { color: string; body?: string };
+  /** [레이스 보상] 칸이 비었을 때 [레이스 보기] (이번 주 레이스 창) */
+  onOpenRace?: () => void;
 };
 
 /** 가방: [꾸미기] 장비창(입은 것) + 부위별 목록, [소모품: 폭죽·확성기·묘비 꾸미기] 쓰기·묘비에 놓기 */
-export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
+export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace }: Props) {
   const { me, error } = useMe();
   const [tab, setTab] = useState<BagTab>("wear");
   const [pending, setPending] = useState(false);
@@ -108,10 +110,12 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
         <div className={styles.tabs} role="tablist" aria-label="가방 칸">
           {(
             [
-              ["wear", `캐릭터 꾸미기 ${wardrobe.length}`],
+              // 주간 랭킹 1위 전용 모자는 [레이스 보상] 칸에 따로 (일반 꾸미기 수에서 뺀다)
+              ["wear", `캐릭터 꾸미기 ${wardrobe.filter((e) => !isChampItem(e.item.id)).length}`],
               ["other", `소모품 ${others.reduce((n, e) => n + e.count, 0)}`],
               ["dye", `염색권 ${dyeTicketCount(me.inventory)}`],
               ["forage", "물고기·채집물"],
+              ["race", "레이스 보상"],
             ] as const
           ).map(([k, label]) => (
             <button
@@ -136,6 +140,8 @@ export default function BagDialog({ cache, myGraves, onClose, avatar }: Props) {
             <BagDyeSection me={me} avatar={resolveAvatar(avatar, me, savedColor)} onNotice={setNotice} />
           ) : tab === "forage" ? (
             <ForageBag />
+          ) : tab === "race" ? (
+            <ChampRewardsTab me={me} now={now} pending={pending} act={act} onOpenRace={onOpenRace} />
           ) : (
             <div className={styles.others}>
               {others.length === 0 && <p className={styles.empty}>폭죽·확성기·묘비 꾸미기 같은 소모품이 없어요. 상점에서 포인트로 살 수 있어요.</p>}
@@ -271,8 +277,10 @@ function Wardrobe({
   const worn = wornBySlot(entries);
   const wornIds = SLOT_ORDER.flatMap((s) => (worn[s] ? [worn[s]!.item.id] : []));
   const fit = fittingLook(wornIds, peek && peek.state !== "worn" ? peek.item.id : null);
-  const counts = slotCounts(entries);
-  const shown = entries.filter((e) => matchesSlot(e.slot, filter));
+  // 주간 랭킹 1위 전용 모자는 [레이스 보상] 칸에서 다룬다 (장비창에는 입은 그대로 보이고, 목록·부위 수에서는 뺀다)
+  const listed = entries.filter((e) => !isChampItem(e.item.id));
+  const counts = slotCounts(listed);
+  const shown = listed.filter((e) => matchesSlot(e.slot, filter));
   const peekSlot = dragging ? (entries.find((e) => e.item.id === dragging)?.slot ?? null) : (peek?.slot ?? null);
 
   function run(e: WardrobeEntry) {
@@ -364,7 +372,6 @@ function Wardrobe({
         <p className={styles.hint}>
           내 꾸미기 점수 <b>{score}점</b> · 랭킹 [꾸미기]에 올라가요
         </p>
-        <ChampAuraToggle />
         <p id={hintId} className={styles.hint}>
           칸을 누르면 그 부위 목록이 나와요{canDrag ? " · 목록에서 칸으로 끌어다 놓아도 입어요" : ""}. 벗어 둔 꾸미기도 남은 시간은 계속 흘러요.
         </p>

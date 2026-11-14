@@ -151,3 +151,22 @@ describe("주간 랭킹 1위", () => {
     expect(await verifyGrant(s, await signGrant(s, { kind: "look", visitorId: "v1", look: [], exp, champ: 8 }))).not.toHaveProperty("champ");
   });
 });
+
+describe("다관왕 전용 모자", () => {
+  it("하나면 랭킹 모자, 둘이면 조합마다 쌍둥이 왕관, 셋이면 삼관왕 대관 — 모두 1위 전용(상점·영구 없음)", async () => {
+    const c = await import("./constants");
+    const it2 = await import("./items");
+    expect(c.champHatOf(["fish"])).toBe("champ_fishhat");
+    expect(c.champHatOf(["huntKills", "points"])).toBe("champ_duo_ph");
+    expect(c.champHatOf(["points", "fish"])).toBe("champ_duo_pf");
+    expect(c.champHatOf(["fish", "huntKills"])).toBe("champ_duo_hf");
+    expect(c.champHatOf(["points", "huntKills", "fish"])).toBe("champ_triple");
+    for (const id of Object.values(c.CHAMP_MULTI_HAT)) {
+      const item = it2.itemById(id)!;
+      expect(item.slot).toBe("head");
+      expect(it2.isChampItem(id)).toBe(true);
+      expect(it2.isShopListed(item)).toBe(false);
+      expect(it2.permanentPrice(id)).toBeNull();
+    }
+  });
+});

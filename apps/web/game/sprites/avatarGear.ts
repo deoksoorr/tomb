@@ -27,7 +27,7 @@ export type GearM = {
 
 // 추가분 2(11/12): 머리 5·목 5·손 5·등 3 + 31번 운영자 전용(왕관·완장·명부·등불·도포)
 // 주간 랭킹 1위 전용 머리 3종 (금화 왕관·붉은 깃털 투구·황금 물고기 모자 — protocol CHAMP_HAT)
-export const GEAR_HEAD = ["hat_beanie", "hat_headphones", "hat_crown", "hat_ribbon", "hat_party", "hat_glasses", "hat_wizard", "hat_cap", "hat_sprout", "hat_beret", "hat_hardhat", "hat_chef", "hat_horns", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat"] as const;
+export const GEAR_HEAD = ["hat_beanie", "hat_headphones", "hat_crown", "hat_ribbon", "hat_party", "hat_glasses", "hat_wizard", "hat_cap", "hat_sprout", "hat_beret", "hat_hardhat", "hat_chef", "hat_horns", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple"] as const;
 export const GEAR_NECK = ["neck_tie", "neck_badge", "neck_bowtie", "neck_bell", "neck_lei", "neck_collar", "neck_whistle", "neck_camera", "neck_pearl", "neck_medal", "staff_armband"] as const;
 export const GEAR_HAND = ["hand_coffee", "hand_briefcase", "hand_phone", "hand_lantern_blue", "hand_donut", "hand_clipboard", "hand_mic", "hand_bouquet", "hand_wand", "staff_ledger", "staff_lamp"] as const;
 export const GEAR_BACK = ["back_backpack", "back_cape", "back_shell", "back_guitar", "back_jetpack", "staff_robe"] as const;
@@ -35,7 +35,7 @@ export const GEAR_BACK = ["back_backpack", "back_cape", "back_shell", "back_guit
 export const GEAR_SHEET_IDS: readonly string[] = [...GEAR_HEAD, ...GEAR_NECK, ...GEAR_HAND, ...GEAR_BACK];
 
 /** 두건·키다리 끝·동글이 새싹을 덮는 모자 (그 위에 꼭지를 그리지 않는다) */
-export const COVERING_HATS: ReadonlySet<string> = new Set(["hat_straw", "hat_cat", "hat_beanie", "hat_crown", "hat_party", "hat_wizard", "hat_cap", "hat_beret", "hat_hardhat", "hat_chef", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat"]);
+export const COVERING_HATS: ReadonlySet<string> = new Set(["hat_straw", "hat_cat", "hat_beanie", "hat_crown", "hat_party", "hat_wizard", "hat_cap", "hat_beret", "hat_hardhat", "hat_chef", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple"]);
 
 export type ExtraGear = { head: string | null; neck: string | null; hand: string | null; back: string | null };
 
@@ -399,6 +399,65 @@ export function drawHeadGear(g: Grid, view: GearView, id: string, m: GearM, body
       }
       break;
     }
+    case "champ_duo_ph":
+    case "champ_duo_pf":
+    case "champ_duo_hf": {
+      // 다관왕(2관왕) 쌍둥이 왕관: 왼쪽 반은 첫 랭킹 색, 오른쪽 반은 둘째 랭킹 색. 끝마다 그 색 보석, 가운데 두 끝은 맞닿아 높다
+      const [a, b] = DUO_COLORS[id];
+      const w = side ? 7 : 9;
+      const x0 = cx - 4;
+      const mid = x0 + Math.floor(w / 2);
+      for (let x = x0; x < x0 + w; x++) {
+        const c = x < mid || (x === mid && w % 2 === 0) ? a : b;
+        g.set(x, top - 1, c.c);
+        g.set(x, top, c.lo);
+      }
+      const tips = side ? [x0, x0 + 3, x0 + 6] : [x0, x0 + 3, x0 + 5, x0 + 8];
+      tips.forEach((x, i) => {
+        const c = x < mid ? a : b;
+        const tall = !side && (i === 1 || i === 2);
+        const tip = Math.max(2, top - (tall ? 5 : 4));
+        g.vline(x, tip + 1, top - 2, c.c);
+        g.set(x, tip, c.gem);
+      });
+      if (!side) {
+        g.set(x0 + 1, top - 2, a.c);
+        g.set(x0 + 7, top - 2, b.c);
+      }
+      // 띠의 두 보석 (앞모습) — 두 랭킹 색
+      if (view === "down") {
+        g.set(x0 + 2, top - 1, a.gem);
+        g.set(x0 + 6, top - 1, b.gem);
+      }
+      g.set(x0, top - 1, a.hi);
+      g.set(x0 + w - 1, top - 1, b.hi);
+      break;
+    }
+    case "champ_triple": {
+      // 3관왕 대관: 가장 크고 화려하게 — 넓은 금 띠 위로 다섯 끝이 솟고(가운데가 가장 높다), 끝마다 무지개 보석, 띠에도 무지개 보석이 줄지어 박힌다
+      const gold = 0xf6c83a;
+      const lo = 0xb8841a;
+      const hi = 0xfff4b0;
+      const w = side ? 9 : 11;
+      const x0 = cx - 5;
+      g.rect(x0, top - 2, w, 3, gold);
+      g.hline(x0, x0 + w - 1, top, lo);
+      g.hline(x0, x0 + w - 1, top - 2, hi);
+      const tips = side ? [x0, x0 + 4, x0 + 8] : [x0, x0 + 3, x0 + 5, x0 + 7, x0 + 10];
+      tips.forEach((x, i) => {
+        const center = side ? i === 1 : i === 2;
+        const tip = Math.max(2, top - (center ? 6 : i === 1 || i === 3 ? 5 : 4));
+        g.vline(x, tip + 1, top - 3, gold);
+        g.set(x, tip, RAINBOW_GEMS[i % RAINBOW_GEMS.length]);
+      });
+      if (!side) for (const x of [x0 + 2, x0 + 4, x0 + 6, x0 + 8]) g.set(x, top - 3, gold);
+      if (view !== "up") {
+        // 띠의 무지개 보석
+        const gems = side ? [x0 + 2, x0 + 4, x0 + 6] : [x0 + 1, x0 + 3, x0 + 5, x0 + 7, x0 + 9];
+        gems.forEach((x, i) => g.set(x, top - 1, RAINBOW_GEMS[(i + 2) % RAINBOW_GEMS.length]));
+      }
+      break;
+    }
     case "champ_fishhat": {
       // 주간 낚시 1위: 머리 위에 통통한 황금 물고기 (머리 쪽에 큰 눈, 반대쪽에 위로 갈라진 꼬리, 등에 지느러미)
       // 옆모습은 앞(+x)을 보고, 앞·뒷모습은 머리가 왼쪽
@@ -437,6 +496,19 @@ export function drawHeadGear(g: Grid, view: GearView, id: string, m: GearM, body
     }
   }
 }
+
+/** 다관왕 쌍둥이 왕관 색 (랭킹 색: 포인트 금 · 사냥 빨강 · 낚시 파랑) */
+type CrownColor = { c: number; lo: number; hi: number; gem: number };
+const CROWN_GOLD: CrownColor = { c: 0xf6c83a, lo: 0xb8841a, hi: 0xfff4b0, gem: 0xfffaf0 };
+const CROWN_RED: CrownColor = { c: 0xe0384a, lo: 0x98202e, hi: 0xff9a8a, gem: 0xffd0c8 };
+const CROWN_BLUE: CrownColor = { c: 0x3aa8f0, lo: 0x1a5aa8, hi: 0xbfeaff, gem: 0xe8faff };
+const DUO_COLORS: Record<string, [CrownColor, CrownColor]> = {
+  champ_duo_ph: [CROWN_GOLD, CROWN_RED],
+  champ_duo_pf: [CROWN_GOLD, CROWN_BLUE],
+  champ_duo_hf: [CROWN_RED, CROWN_BLUE],
+};
+/** 3관왕 대관 무지개 보석 */
+const RAINBOW_GEMS = [0xff4a5a, 0xffa030, 0xfff06a, 0x5ae08a, 0x4ab0ff, 0xb87aff];
 
 // ── 목 ──
 

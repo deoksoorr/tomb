@@ -168,25 +168,6 @@
   text-align: center;
 }
 
-.last {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.lastRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.lastRow[data-me="true"] b {
-  color: var(--candle);
-}
-
 .lastText {
   display: flex;
   flex-wrap: wrap;
@@ -199,57 +180,16 @@
   font-weight: normal;
 }
 
-.hall {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.hallRow {
-  display: grid;
-  gap: 2px;
-  padding: 4px 0;
-  border-top: 1px solid var(--line);
-}
-
-.hallRow:first-child {
-  border-top: 0;
-}
-
 .hallWeek {
   color: var(--muted);
   font-family: var(--font-small);
   font-size: 10px;
 }
 
-.hallWinners {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  font-size: 11px;
-}
-
-.hallOne {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
 /* 시상대 3개: 넓은 창(데스크톱 표준 창)은 가로로 나란히, 좁은 창은 한 줄에 하나 */
 .boards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 8px;
-  align-items: start;
-}
-
-/* 지난주 1위 · 명예의 전당 */
-.bottom {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 8px;
   align-items: start;
 }
@@ -310,13 +250,63 @@
   font-size: 10px;
 }
 
-/* 여러 개 1위면 합쳐진 오라 (2관왕 예시 · 3관왕 무지개) */
+/* 여러 개 1위면 합쳐진 오라 (2관왕 세 조합 · 3관왕 무지개): 넓은 창은 네 칸 한 줄, 좁은 창은 두 칸씩 */
 .combo {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
   margin: 0;
   padding: 0;
+  list-style: none;
+}
+
+@media (max-width: 560px) {
+  .combo {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 명예의 전당 · 합쳐진 오라 상자 */
+.hallBox {
+  display: grid;
+  gap: 6px;
+  padding: 8px 6px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+/* 명예의 전당 한 칸 (랭킹마다) */
+.hallCol {
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px;
+  background: var(--bg-deep);
+}
+
+.hallTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hallTop[data-me="true"] b {
+  color: var(--candle);
+}
+
+.hallTop b {
+  font-weight: normal;
+}
+
+.hallPast {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
   list-style: none;
 }
 

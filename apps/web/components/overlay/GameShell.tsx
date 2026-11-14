@@ -660,7 +660,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           <GraveGuide onBury={myGraves.entries.length > 0 ? startBury : undefined} onShrine={() => setPanel("shrine")} onPassed={() => setPanel("passed")} />
         </Dialog>
       )}
-      {panel === "bag" && <BagDialog cache={graves.cache} myGraves={myGraves.entries} onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
+      {panel === "bag" && (
+        <BagDialog cache={graves.cache} myGraves={myGraves.entries} onClose={closePanel} avatar={{ color: options.color, body: options.body }} onOpenRace={() => setPanel("race")} />
+      )}
       {panel === "notices" && <NoticesDialog onClose={closePanel} />}
       {panel === "activity" && (
         <ActivityDialog
