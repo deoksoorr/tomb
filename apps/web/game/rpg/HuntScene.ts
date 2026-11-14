@@ -445,7 +445,7 @@ export class HuntScene extends RpgScene {
     cam.setRoundPixels(true);
     this.applyZoom();
     cam.startFollow(this.player, true, 0.15, 0.15);
-    this.flash(`${zone.name} · ${zone.desc}`, 2600);
+    this.flash(`${zone.name} · ${zone.desc}${play.testDrops?.length ? " · 시험 드롭 예약됨" : ""}`, 2600);
   }
 
   // ── 카메라 ──
@@ -2367,7 +2367,8 @@ export class HuntScene extends RpgScene {
     this.endAt = now + minMs;
     let drops: ReturnType<typeof huntDropsFor> = [];
     try {
-      drops = huntDropsFor({ game: "hunt", difficulty: this.play.difficulty, seed: this.play.seed, zone: this.play.zone }, r);
+      // 테스트 서버 시험 드롭이 실린 판이면 서버가 그것을 준다 (승리·쓰러짐 관계없이) → 예측 대신 그대로
+      drops = this.play.testDrops?.length ? this.play.testDrops : huntDropsFor({ game: "hunt", difficulty: this.play.difficulty, seed: this.play.seed, zone: this.play.zone }, r);
     } catch {
       // 연출용 계산이 실패해도 판은 그대로 끝난다 (보상은 서버가)
     }

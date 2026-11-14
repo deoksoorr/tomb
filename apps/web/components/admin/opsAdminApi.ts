@@ -2,6 +2,7 @@ import type { AdminNameReindexResponse } from "@/app/api/admin/accounts/names/ro
 import type { AdminChampResponse } from "@/app/api/admin/champ/route";
 import type { AdminChampTestResponse } from "@/app/api/admin/champ/test/route";
 import type { AdminRankFillResponse } from "@/app/api/admin/rank/fill/route";
+import type { AdminTestDropsResponse } from "@/app/api/admin/rpg/test-drops/route";
 import type { AdminStaffResponse } from "@/app/api/admin/staff/route";
 import type { AnalyticsRange, AnalyticsReport } from "@/lib/analyticsReport";
 import { request } from "@/lib/api";
@@ -45,6 +46,11 @@ export const opsAdminApi = {
   /** 테스트 서버 전용: 운영자 계정에 시험 1위 주기 (빈 목록 = 시험 해제) */
   setChampTest: (boards: string[]) =>
     request<AdminChampTestResponse>("/api/admin/champ/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ boards }) }),
+  /** 테스트 서버 전용: 운영자 계정의 남은 시험 드롭 예약 (운영은 404) */
+  testDrops: () => request<AdminTestDropsResponse>("/api/admin/rpg/test-drops", { cache: "no-store" }),
+  /** 테스트 서버 전용: 시험 드롭 예약 — preset = [고급+희귀] → [꾸미기 선물+전설] 두 판, clear = 비우기 */
+  setTestDrops: (action: "preset" | "clear") =>
+    request<AdminTestDropsResponse>("/api/admin/rpg/test-drops", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) }),
   /** 랭킹 기존 기록 다시 채우기 한 번 (next가 "0"이 될 때까지 이어서 부른다) */
   fillRank: (board: "huntLevel" | "look", cursor: string, count = 200) =>
     request<AdminRankFillResponse>("/api/admin/rank/fill", {

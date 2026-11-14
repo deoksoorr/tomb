@@ -22,6 +22,8 @@ export type CharacterState = {
   treeVer: number;
   /** 스킬 초기화한 횟수 (첫 1회 무료) */
   respecs: number;
+  /** 능력치 초기화한 횟수 (스킬과 따로 센다, 첫 1회 무료). 옛 저장값에 없으면 0 */
+  statResets: number;
   /** 스킬 트리가 바뀌어 포인트를 돌려줬다는 안내를 아직 안 봤다 (한 번 보면 지운다) */
   treeNotice?: boolean;
   /** 가진 장비 (장착 중인 것 포함) itemId → 개수 */
@@ -49,6 +51,8 @@ export type RpgView = {
   today: { huntPoints: number; cap: number; runs: number; runsPerHour: number };
   /** 다음 스킬 초기화 비용 (지갑 포인트, 0 = 무료) */
   respecCost: number;
+  /** 다음 능력치 초기화 비용 (지갑 포인트, 0 = 무료). 공식은 스킬 초기화와 같고 횟수만 따로 */
+  statResetCost: number;
   /** 테스트 서버 슈퍼 계정 (운영 서버에서는 늘 없음): 스킬 포인트 넉넉히·레벨 최대 취급·사냥터 모두 열림·초기화 무료 */
   superHunter?: boolean;
 };
@@ -95,6 +99,8 @@ export type RunStartResponse = {
   /** 별자리 잇기: 판 시작 시각의 하늘 (맑은 밤·계절·새벽)과 서버가 받아들인 계획 판 번호 */
   sky?: StarSky;
   planVer?: number;
+  /** 테스트 서버 운영자 시험 드롭 (lib/rpg/testDrops): 이 판 끝에 화면이 떨구고 서버가 굴림 대신 준다 */
+  testDrops?: Drop[];
   view: RpgView;
 };
 
@@ -154,6 +160,8 @@ export type RpgPlay = {
   sky?: StarSky;
   /** 별자리 잇기: 이미 도감에 있는 별자리 id (처음 완성하면 "도감 등록!"을 띄운다. 등록 자체는 서버가 한다) */
   starsKnown?: string[];
+  /** 테스트 서버 운영자 시험 드롭 (판 시작 응답 그대로). 있으면 화면은 드롭 예측 대신 이것을 판 끝에 떨군다 */
+  testDrops?: Drop[];
 };
 
 /** 곤충 채집 들판 시간대: 낮(나비) · 노을(잠자리) · 밤(반딧불이) */

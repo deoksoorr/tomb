@@ -77,6 +77,7 @@ export function cleanAlloc(a: Alloc): Alloc {
 
 /**
  * 스킬 초기화(재분배) 비용 (지갑 포인트). 첫 1회는 무료, 그 뒤로는 레벨에 따라 조금씩 (최대 120P).
+ * 능력치 초기화도 같은 공식을 쓴다 (횟수만 statResets로 따로 센다).
  * I0d 경제 기준(보통 유저 하루 약 200P, economy.ts)에서 반나절 벌이를 넘지 않게.
  */
 export const RESPEC_MAX_COST = 120;

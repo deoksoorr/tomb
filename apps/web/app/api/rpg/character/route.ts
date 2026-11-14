@@ -6,7 +6,7 @@ import type { RpgView } from "@/lib/rpg/types";
 import { requireVisitor } from "@/lib/session";
 import { readBody } from "@/lib/validate";
 
-/** 캐릭터 바꾸기: 능력치 올리기(alloc) · 스킬 찍기(learn) · 단축키(hotbar) · 장착/해제(equip) · 스킬 초기화(respec) · 트리 안내 확인(ackTree) */
+/** 캐릭터 바꾸기: 능력치 올리기(alloc) · 스킬 찍기(learn) · 단축키(hotbar) · 장착/해제(equip) · 스킬 초기화(respec) · 능력치 초기화(resetStats) · 트리 안내 확인(ackTree) */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   const action = await readBody(req, CharacterActionSchema);

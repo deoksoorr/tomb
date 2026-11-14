@@ -1,5 +1,6 @@
 import { b64urlDecode, b64urlEncode, hmacSign, hmacVerify } from "@tomb/protocol";
 import { DIFFICULTIES, GAME_KINDS, HUNT_ZONES, isZoneId, type Difficulty, type GameKind, type ZoneId } from "./catalog";
+import type { Drop } from "./types";
 
 // 런 티켓: 서버가 판을 시작할 때 서명해 주고, 끝낼 때 그대로 돌려받는다.
 // `${base64url(JSON)}.${HMAC(SESSION_SECRET, "rpg:" + payload)}` — 서명이 맞아도 한 번만 쓸 수 있다 (저장소의 claimRun).
@@ -21,7 +22,15 @@ export type TicketClaims = {
   z?: ZoneId;
   /** 별자리 잇기 계획 판 번호 (판 시작 때 화면이 알려 준 판). 없으면 판 번호가 생기기 전 티켓 */
   sv?: number;
+  /** 테스트 서버 운영자 시험 드롭 (lib/rpg/testDrops). 있으면 판 끝에 굴림 대신 이것을 준다 — 운영 서버는 싣지도 읽지도 않는다 */
+  td?: Drop[];
 };
+
+/** 시험 드롭 형식 (한 판 최대 6개, 하나씩) */
+const okDrops = (v: unknown): v is Drop[] =>
+  Array.isArray(v) &&
+  v.length <= 6 &&
+  v.every((d: Partial<Drop> | null) => !!d && (d.kind === "gear" || d.kind === "potion" || d.kind === "cosmetic") && typeof d.id === "string" && d.id.length <= 64 && d.qty === 1);
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -53,7 +62,8 @@ export async function verifyTicket(secret: string, token: string): Promise<Ticke
       typeof c.st === "object" &&
       c.st !== null &&
       (c.z === undefined || (isZoneId(c.z) && HUNT_ZONES[c.z].difficulty === c.d)) &&
-      (c.sv === undefined || Number.isInteger(c.sv));
+      (c.sv === undefined || Number.isInteger(c.sv)) &&
+      (c.td === undefined || okDrops(c.td));
     return ok ? c : null;
   } catch {
     return null;

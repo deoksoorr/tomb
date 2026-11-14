@@ -8,6 +8,7 @@ import styles from "./Admin.module.css";
 import { opsAdminApi, type AdminHealthReport } from "./opsAdminApi";
 import type { AdminChampResponse } from "@/app/api/admin/champ/route";
 import type { AdminChampTestResponse } from "@/app/api/admin/champ/test/route";
+import type { AdminTestDropsResponse } from "@/app/api/admin/rpg/test-drops/route";
 
 type Props = { toast: (message: string) => void; onAuthLost: () => void };
 
@@ -137,6 +138,8 @@ export default function SystemPanel({ toast, onAuthLost }: Props) {
       </div>
 
       <ChampCard toast={toast} fail={fail} />
+
+      <TestDropsCard toast={toast} fail={fail} />
 
       <RankFillCard
         board="huntLevel"
@@ -352,6 +355,62 @@ function ChampTestBox({ toast, fail }: { toast: (message: string) => void; fail:
         시험 해제
       </button>
       <p className={styles.meta}>{info.test ? `지금 시험 1위: ${["points", "huntKills", "fish"].filter((_, i) => info.test!.bits & (1 << i)).map((b) => CHAMP_BOARD_LABEL[b]).join("·")} · ${new Date(info.test.until).toLocaleTimeString("ko-KR")}까지` : "지금 시험 1위 없음"}</p>
+    </div>
+  );
+}
+
+/**
+ * 테스트 서버 전용 (운영에서는 서버가 404라 카드가 아예 안 보인다): 운영자 계정의 "다음 판 시험 드롭" 예약.
+ * 운영자 계정이 사냥 판을 시작할 때마다 맨 앞 한 판을 꺼내, 판이 끝나면(승리·쓰러짐 관계없이) 우두머리 자리에 떨어지고 실제로 지급된다
+ */
+function TestDropsCard({ toast, fail }: { toast: (message: string) => void; fail: (e: unknown) => void }) {
+  const [info, setInfo] = useState<AdminTestDropsResponse | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    // 운영(404)이면 조용히 숨긴다
+    opsAdminApi
+      .testDrops()
+      .then((r) => alive && setInfo(r))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (!info) return null;
+
+  const run = async (action: "preset" | "clear") => {
+    setBusy(true);
+    try {
+      setInfo(await opsAdminApi.setTestDrops(action));
+      toast(action === "preset" ? "운영자 계정에 두 판 시험 드롭을 예약했어요. 사냥 판을 시작할 때마다 한 판씩 쓰여요." : "시험 드롭 예약을 비웠어요.");
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardHead}>
+        <h2 className={styles.cardTitle}>시험 드롭 예약 (운영자 계정)</h2>
+      </div>
+      <p className={ui.hint}>
+        <b>테스트 서버 전용</b> · 운영자 계정이 사냥 판을 시작할 때마다 맨 앞 예약 한 판을 꺼내요. 그 판이 끝나면(이기든 쓰러지든) 우두머리 자리에 예약한 드롭이 떨어지고, 확률 굴림 대신 그대로
+        지급돼요 (장비는 그 사냥터에 어울리는 해당 등급에서 무작위, 꾸미기 선물은 이미 가진 것을 피해서). 일반 계정과 운영 서버에는 아무 영향이 없어요.
+        {!info.staffId && " 먼저 운영자 계정을 지정해 주세요."}
+      </p>
+      <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void run("preset")} disabled={busy || !info.staffId}>
+        고급+희귀 → 꾸미기+전설 두 판 예약
+      </button>{" "}
+      <button type="button" className={ui.button} onClick={() => void run("clear")} disabled={busy || !info.left.length}>
+        예약 비우기
+      </button>
+      <p className={styles.meta} aria-live="polite">
+        {info.left.length ? `남은 예약: ${info.left.map((l, i) => `${i + 1}판 ${l}`).join(" → ")}` : "남은 예약 없음"}
+      </p>
     </div>
   );
 }

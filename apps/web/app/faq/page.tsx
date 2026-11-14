@@ -13,6 +13,7 @@ import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
 import { DEFAULT_PASS_DAYS, PRESENCE_INTERVAL_MS } from "@/lib/types";
 import { env } from "@/lib/env";
+import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 
 const PATH = "/faq";
 const TITLE = "한때는... 자주 묻는 질문 — 무료인지, 설치·가입, 모바일, 함께 있는 인원, 노동요 곡 수";
@@ -98,6 +99,11 @@ const FAQ = [
   {
     q: "랭킹은 어떤 게 있나요?",
     a: "포인트, 사냥, 사냥 레벨, 낚시(최대어), 꾸미기, 집 꾸미기, 헌화 랭킹이 있어요. 운영자는 순위에 들지 않아요.",
+  },
+  {
+    q: "사냥터 능력치나 스킬을 다시 찍을 수 있나요?",
+    // 비용은 lib/rpg/skillRules.ts respecCost에서 읽는다
+    a: `네. 사냥터 [캐릭터] 탭의 [능력치 초기화], [스킬] 탭의 [초기화]로 배분한 포인트를 모두 돌려받아요. 둘은 따로 세어 각각 첫 1회는 무료, 그 뒤로는 레벨에 따라 ${respecCost(1, 1)}~${RESPEC_MAX_COST}포인트가 들어요. 장비·레벨·경험치는 그대로예요.`,
   },
   {
     q: "닉네임이 다른 사람과 같아도 되나요?",

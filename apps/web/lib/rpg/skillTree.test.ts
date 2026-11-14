@@ -241,9 +241,31 @@ describe("테스트 서버 슈퍼 계정 환경 검사", () => {
     expect(fit.statPoints).toBe(5);
     expect(fit.equip.weapon).toBeNull();
     expect(fit.inv.w_stamp).toBe(1);
+    expect(fit.statResets).toBe(0); // 레벨에 맞춰 되돌린 건 초기화 횟수로 세지 않는다
     // 레벨에 맞는 정상 상태는 그대로 (같은 객체)
     const ok = allocStats(c, { str: 5 });
     expect(fitToLevel(ok)).toBe(ok);
+  });
+
+  it("능력치 초기화: 기본 능력치만 되돌리고 횟수를 스킬과 따로 센다 (옛 저장값은 0회)", () => {
+    // 옛 저장값(statResets 없음) → 0회: 첫 1회 무료가 남는다
+    const old = normalize({ level: 10, treeVer: SKILL_TREE_VERSION, respecs: 2, stats: { str: 5 }, statPoints: 20 });
+    expect(old.statResets).toBe(0);
+    expect(respecCost(old.level, old.statResets)).toBe(0);
+    expect(normalize({ ...old, statResets: 3 }).statResets).toBe(3);
+    expect(normalize({ ...old, statResets: -1 }).statResets).toBe(0);
+    expect(newCharacter().statResets).toBe(0);
+    const learned = learnSkill(old, "em_kindle");
+    const r = resetStats({ ...learned, exp: 9, equip: { ...learned.equip, weapon: "w_ruler" } });
+    expect(r.stats.str).toBe(1);
+    expect(r.statPoints).toBe(statPointsEarned(10));
+    expect(r.statResets).toBe(1);
+    expect(r.respecs).toBe(2);
+    expect(r.skills).toEqual({ em_kindle: 1 });
+    expect([r.level, r.exp, r.equip.weapon]).toEqual([10, 9, "w_ruler"]);
+    expect(respecCost(r.level, r.statResets)).toBe(50);
+    // 슈퍼 계정·레벨 맞춤은 세지 않는다
+    expect(resetStats(r, false).statResets).toBe(1);
   });
 
   it("슈퍼 계정 예산은 모든 스킬 최대 랭크", () => {

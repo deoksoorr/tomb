@@ -189,8 +189,8 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
   const onCharacter = (a: CharacterAction, ok?: string) =>
     void act(async () => {
       const v = await rpgApi.character(a);
-      // 스킬 초기화는 지갑 포인트를 쓸 수 있다
-      if (a.type === "respec") void meStore.refresh();
+      // 스킬·능력치 초기화는 지갑 포인트를 쓸 수 있다
+      if (a.type === "respec" || a.type === "resetStats") void meStore.refresh();
       return v;
     }, ok);
 
@@ -258,6 +258,8 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
         hotbar: c.hotbar,
         potions: c.potions,
         equip: c.equip,
+        // 테스트 서버 운영자 시험 드롭 (판 끝에 우두머리 자리에서 떨어진다)
+        ...(res.testDrops?.length ? { testDrops: res.testDrops } : {}),
       });
     } catch (e) {
       setNotice(errorMessage(e));

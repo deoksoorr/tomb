@@ -49,6 +49,7 @@ export function newCharacter(): CharacterState {
     runs: 0,
     treeVer: SKILL_TREE_VERSION,
     respecs: 0,
+    statResets: 0,
   };
 }
 
@@ -96,6 +97,8 @@ export function normalize(raw: unknown): CharacterState {
     hotbar: old ? base.hotbar : cleanHotbar(r.hotbar, skills),
     treeVer: SKILL_TREE_VERSION,
     respecs: Number.isInteger(r.respecs) && r.respecs! > 0 ? r.respecs! : 0,
+    // 능력치 초기화 횟수: 옛 저장값에는 없다 → 0 (첫 1회 무료가 그대로 남는다)
+    statResets: Number.isInteger(r.statResets) && r.statResets! > 0 ? r.statResets! : 0,
     ...(notice ? { treeNotice: true } : {}),
     inv: { ...(r.inv ?? base.inv) },
     bought: { ...r.bought },
@@ -137,11 +140,16 @@ export function allocStats(s: CharacterState, alloc: Partial<Stats>, budget?: nu
   return next;
 }
 
-/** 능력치 초기화: 모두 기본값으로 되돌리고 레벨만큼의 포인트를 돌려준다 (지금은 테스트 서버 슈퍼 계정만 — 서비스가 막는다) */
-export function resetStats(s: CharacterState): CharacterState {
+/**
+ * 능력치 초기화: 직접 올린 기본 능력치만 기본값으로 되돌리고 레벨만큼의 포인트를 돌려준다.
+ * 장비로 붙는 능력치는 stats에 없어서(derive가 장착 장비에서 더한다) 그대로이고, 장비·레벨·경험치·스킬도 건드리지 않는다.
+ * count=false면 초기화 횟수를 세지 않는다 (테스트 서버 슈퍼 계정·레벨에 맞춰 되돌릴 때). 비용은 서비스가 받는다
+ */
+export function resetStats(s: CharacterState, count = true): CharacterState {
   const next = clone(s);
   next.stats = baseStats();
   next.statPoints = statPointsEarned(next.level);
+  if (count) next.statResets = (next.statResets ?? 0) + 1;
   return next;
 }
 
@@ -157,7 +165,7 @@ export function fitToLevel(s: CharacterState): CharacterState {
     return id && (gearById(id)?.reqLevel ?? 0) > s.level;
   });
   if (!overStats && overGear.length === 0) return s;
-  let next = overStats ? resetStats(s) : clone(s);
+  let next = overStats ? resetStats(s, false) : clone(s);
   if (overGear.length) {
     next = clone(next);
     for (const k of overGear) next.equip[k] = null;

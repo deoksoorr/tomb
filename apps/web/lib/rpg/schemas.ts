@@ -57,8 +57,8 @@ export const CharacterActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("respec"), cost: z.number().int().min(0).max(10_000) }),
   // 스킬 트리 바뀜 안내를 봤다
   z.object({ type: z.literal("ackTree") }),
-  // 능력치 초기화 (테스트 서버 슈퍼 계정만, 무료)
-  z.object({ type: z.literal("resetStats") }),
+  // 능력치 초기화: cost = 화면에 보인 비용 (스킬 초기화와 같은 방식. 예전 화면은 cost 없이 보냈다 → 0으로 읽는다)
+  z.object({ type: z.literal("resetStats"), cost: z.number().int().min(0).max(10_000).default(0) }),
 ]);
 
 export const ShopActionSchema = z.discriminatedUnion("type", [

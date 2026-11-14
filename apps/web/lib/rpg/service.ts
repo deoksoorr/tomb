@@ -30,7 +30,8 @@ import {
 } from "./character";
 import { derive, expToNext, MAX_LEVEL } from "./formulas";
 import { ALL_SKILLS_POINTS, respecCost, skillPointsEarned, spentPoints } from "./skillRules";
-import { isSuperHunter } from "./superHunter";
+import { isSuperHunter, testServerEnv } from "./superHunter";
+import { takeTestDrops } from "./testDrops";
 import { evaluate, FINISH_GRACE_SEC, type StarsDone } from "./rewards";
 import { payNewDex } from "../forage/dexReward";
 import { getForageStore } from "../forage/store";
@@ -108,6 +109,7 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
     points: me.points,
     today: { huntPoints: Math.min(daily.points, HUNT_CAP), cap: HUNT_CAP, runs: daily.runs, runsPerHour: RUNS_PER_HOUR - runs },
     respecCost: sup ? 0 : respecCost(stored.level, stored.respecs),
+    statResetCost: sup ? 0 : respecCost(stored.level, stored.statResets),
     ...(sup ? { superHunter: true } : {}),
   };
 }
@@ -117,16 +119,14 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
 export async function characterAction(acct: string, a: z.output<typeof CharacterActionSchema>): Promise<RpgView> {
   const store = getRpgStore();
   const sup = await isSuperHunter(acct);
-  if (a.type === "respec") return respec(acct, a.cost, sup);
-  if (a.type === "resetStats" && !sup) throw new HttpError(403, "NOT_AVAILABLE", "능력치 초기화는 테스트 서버 슈퍼 계정만 쓸 수 있어요.");
+  if (a.type === "respec") return paidReset(acct, "skills", a.cost, sup);
+  if (a.type === "resetStats") return paidReset(acct, "stats", a.cost, sup);
   const { state } = await http(
     store.update(acct, (s0) => {
       const s = fitAll(s0, sup);
       switch (a.type) {
         case "alloc":
           return { state: allocStats(s, a.stats, sup ? SUPER_STAT_POINTS : undefined), result: null };
-        case "resetStats":
-          return { state: resetStats(s), result: null };
         case "learn":
           return { state: learnSkill(s, a.skill, skillBudget(s.level, sup)), result: null };
         case "ackTree":
@@ -141,26 +141,35 @@ export async function characterAction(acct: string, a: z.output<typeof Character
   return rpgView(acct, store, Date.now(), state);
 }
 
+/** 초기화 두 가지: 스킬(횟수 respecs)·능력치(횟수 statResets). 비용 공식(skillRules.respecCost)은 같고 횟수만 따로 센다 */
+const RESETS = {
+  skills: { name: "스킬", count: (s: CharacterState) => s.respecs, apply: (s: CharacterState, sup: boolean) => resetSkills(s, !sup) },
+  // 능력치는 직접 올린 기본 능력치만 되돌린다 (장비·레벨·경험치·스킬은 그대로). 레벨에 맞춰 정리한 뒤 되돌린다
+  stats: { name: "능력치", count: (s: CharacterState) => s.statResets, apply: (s: CharacterState, sup: boolean) => resetStats(fitAll(s, sup), !sup) },
+} as const;
+
 /**
- * 스킬 초기화(재분배): 첫 1회 무료, 그 뒤로는 지갑 포인트 (skillRules.respecCost). 슈퍼 계정은 늘 무료·횟수 안 셈.
- * seen: 화면에 보인 비용 — 그 사이 비용이 바뀌었으면(다른 탭에서 먼저 초기화 등) 돈을 받지 않고 다시 보여 준다
+ * 스킬·능력치 초기화: 첫 1회 무료, 그 뒤로는 지갑 포인트 (skillRules.respecCost). 슈퍼 계정은 늘 무료·횟수 안 셈.
+ * seen: 화면에 보인 비용 — 그 사이 비용이 바뀌었으면(다른 탭에서 먼저 초기화 등) 돈을 받지 않고 다시 보여 준다.
+ * 포인트를 먼저 빼고, 저장이 실패하면 돌려준다
  */
-async function respec(acct: string, seen: number, sup: boolean): Promise<RpgView> {
+async function paidReset(acct: string, kind: keyof typeof RESETS, seen: number, sup: boolean): Promise<RpgView> {
+  const r = RESETS[kind];
   const store = getRpgStore();
   const c = await store.get(acct);
-  const cost = sup ? 0 : respecCost(c.level, c.respecs);
+  const cost = sup ? 0 : respecCost(c.level, r.count(c));
   if (cost !== seen) throw new HttpError(409, "COST_CHANGED", `초기화 비용이 ${cost}P로 바뀌었어요. 다시 확인해 주세요.`);
-  if (cost > 0) await spendPoints(acct, cost, "사냥 스킬 초기화");
+  if (cost > 0) await spendPoints(acct, cost, `사냥 ${r.name} 초기화`);
   try {
     const { state } = await http(
       store.update(acct, (s) => {
-        if (s.respecs !== c.respecs) throw new RpgError(409, "BUSY", "다른 곳에서 먼저 초기화했어요. 다시 시도해 주세요.");
-        return { state: resetSkills(s, !sup), result: null };
+        if (r.count(s) !== r.count(c)) throw new RpgError(409, "BUSY", "다른 곳에서 먼저 초기화했어요. 다시 시도해 주세요.");
+        return { state: r.apply(s, sup), result: null };
       }),
     );
     return rpgView(acct, store, Date.now(), state);
   } catch (e) {
-    if (cost > 0) await refundPoints(acct, cost, "사냥 스킬 초기화 환불");
+    if (cost > 0) await refundPoints(acct, cost, `사냥 ${r.name} 초기화 환불`);
     throw e;
   }
 }
@@ -263,6 +272,8 @@ export async function startRun(
     throw new HttpError(429, "RATE_LIMITED", `한 시간에 ${RUNS_PER_HOUR}판까지 할 수 있어요. 잠시 쉬었다 와요.`);
   const seed = newSeed();
   const sv = game === "stars" ? (planVer === STARS_PLAN_VER ? STARS_PLAN_VER : 1) : undefined;
+  // 테스트 서버 운영자(슈퍼) 계정의 시험 드롭 예약: 맨 앞 묶음을 꺼내 티켓에 싣는다 (운영 서버·일반 계정은 꺼내지도 않는다)
+  const td = game === "hunt" && sup ? await takeTestDrops(acct, difficulty, zone?.id) : null;
   const ticket = await signTicket(env.sessionSecret(), {
     n: nonce,
     a: acct,
@@ -274,11 +285,12 @@ export async function startRun(
     st: { agi: d.stats.agi, dex: d.stats.dex, luk: d.stats.luk },
     ...(zone ? { z: zone.id } : {}),
     ...(sv ? { sv } : {}),
+    ...(td ? { td } : {}),
   });
   // 별자리 잇기: 판 시작 시각의 하늘(맑은 밤 = 전설, 계절, 새벽)에 따라 계획에 들어가는 별자리가 달라진다 (끝낼 때 티켓 시각으로 다시 계산)
   const sky = starSkyAt(now);
   const stars = game === "stars" ? { starry: sky.starry, sky, planVer: sv } : {};
-  return { ticket, game, difficulty, ...(zone ? { zone: zone.id } : {}), seed, timeLimitSec: limit, ...stars, view: await rpgView(acct, store, now) };
+  return { ticket, game, difficulty, ...(zone ? { zone: zone.id } : {}), seed, timeLimitSec: limit, ...stars, ...(td ? { testDrops: td } : {}), view: await rpgView(acct, store, now) };
 }
 
 /** 코디 드롭 하나에 시도해 볼 후보 수 (이미 가진 것이면 다음 것) */
@@ -383,17 +395,19 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
     elapsed,
   );
   if (!v.ok) throw new HttpError(422, v.code, v.message);
+  // 시험 드롭이 실린 판(테스트 서버 운영자): 굴림 대신 예약 드롭을 준다 (운영 서버에서는 실려 있어도 무시)
+  const vDrops = t.td && testServerEnv() ? t.td : v.drops;
 
   const { state, result: applied } = await http(
     store.update(acct, (s) => {
       let cur = s;
       if (result.game === "hunt") cur = consumePotions(cur, result.potionsUsed).state;
       const g = gainExp(cur, v.exp);
-      const dr = addDrops(g.state, v.drops);
+      const dr = addDrops(g.state, vDrops);
       return { state: { ...dr.state, runs: dr.state.runs + 1 }, result: { levelsGained: g.levelsGained, lost: dr.lost } };
     }),
   );
-  const drops = await grantCosmetics(acct, v.drops, now);
+  const drops = await grantCosmetics(acct, vDrops, now);
   const stars = v.stars ? await registerStars(acct, v.stars, now, ipHash) : undefined;
   const constellations = stars?.list;
   const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
