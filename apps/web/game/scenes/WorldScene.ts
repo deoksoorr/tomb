@@ -759,8 +759,12 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("world:lot", ({ lot, label }) => this.showLot(lot, label)));
     on.push(
       bridge.on("input:act", ({ kind }) => {
-        // 표현 창이 열려 키가 막혀 있어도 단추로 고른 몸짓은 보낸다 (이모티콘 input:emo와 같은 조건)
-        if ((kind === "wave" || kind === "cheer") && !this.cleaned && !this.inShop && !this.awayScene) this.hub.trigger(kind);
+        // 표현 창 단추로 고른 몸짓: 창이 열려 키 입력이 막혀 있는 순간에 오므로 onAction(막혀 있으면 버린다)을 거치지 않고 바로 한다
+        // (이모티콘 input:emo와 같은 조건 — 예전엔 폰에서 표현 창의 1·2번이 사라졌다)
+        if ((kind === "wave" || kind === "cheer") && !this.cleaned && !this.inShop && !this.awayScene) {
+          this.walker.cancel();
+          this.doAct(kind);
+        }
       }),
     );
     on.push(bridge.on("ui:blockKeys", ({ blocked }) => this.hub.setBlocked(blocked)));

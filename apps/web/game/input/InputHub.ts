@@ -32,14 +32,6 @@ export class InputHub {
     if (!this.blocked) this.handler?.(a);
   }
 
-  /**
-   * 화면 단추로 고른 동작(표현 창의 손 흔들기·환호): 창이 열려 키 입력이 막혀 있어도 보낸다.
-   * (dispatch는 막힌 동안 버려서, 폰에서 표현 창을 띄운 채 누른 몸짓이 사라졌다)
-   */
-  trigger(a: KeyAction): void {
-    this.handler?.(a);
-  }
-
   setJoystick(x: number, y: number): void {
     this.joyX = Number.isFinite(x) ? Math.max(-1, Math.min(1, x)) : 0;
     this.joyY = Number.isFinite(y) ? Math.max(-1, Math.min(1, y)) : 0;
