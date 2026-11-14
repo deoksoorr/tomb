@@ -1423,8 +1423,11 @@ export class WorldScene extends Phaser.Scene {
       else this.fx.splash(x, y);
       if (d < 360 || mine) this.sfx.splash(gain);
     } else if (d < 400 || mine) {
-      // 손 흔들기·환호 이모티콘은 아바타가 이름표 위에 띄운다 (AvatarView.playAct). 여기는 환호 반짝임만
+      // 손 흔들기·환호 이모티콘은 아바타가 이름표 위에 띄운다 (AvatarView.playAct). 여기는 환호 반짝임과 소리 (이모티콘과 같은 톡 — 환호는 높게)
       this.fx.actSparks(x, y, kind);
+      const rate = kind === "cheer" ? 1.3 : 1;
+      if (mine) this.sfx.play("say", 0.45, rate);
+      else this.sfx.play("say", 0.2 * gain, rate * 1.05, 6);
     }
   }
 
