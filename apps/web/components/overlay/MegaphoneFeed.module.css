@@ -166,3 +166,8 @@
   color: #ffd36a;
   text-shadow: 0 0 6px rgba(255, 190, 64, 0.55);
 }
+
+/* 휴식 중(휴식 막 z 35): 떠 있는 확성기 창을 막 위로 */
+.resting {
+  z-index: 36;
+}

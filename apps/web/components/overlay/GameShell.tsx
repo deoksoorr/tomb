@@ -248,6 +248,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   // 데스크톱인데 창이 좁으면 윗줄에 채널 표시 자리가 없다 → 아래 안내 줄로
   const narrow = useMediaQuery("(max-width: 700px)");
   const scene = useBridgeValue("scene:changed")?.scene;
+  // 휴식 중 막(RestOverlay) 위로 왼쪽 위 묶음(음악·확성기)을 올린다 — 쉬는 동안 올라온 외침도 보이게
+  const resting = useBridgeValue("game:rest")?.on ?? false;
   const inShop = scene === "shop";
   // 집·사냥터·미니게임 안에서는 그 화면이 자기 HUD를 그린다. 월드 HUD는 숨기기만 한다(BGM 플레이어는 계속 살아 있게)
   const away = scene === "house" || scene === "hunt" || scene === "minigame";
@@ -509,7 +511,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
             </div>
           ) : (
             <>
-              <div className={styles.topLeft}>
+              <div className={cx(styles.topLeft, resting && styles.restLift)}>
                 <BgmPlayer />
                 {options.debug && <NetHud />}
                 <MegaphoneFeed channel={channel} />
