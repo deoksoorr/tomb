@@ -1,14 +1,15 @@
 import * as Phaser from "phaser";
-import { isBackground, onBackgroundChange } from "@/lib/background";
+import { isTabHidden, onTabHiddenChange } from "@/lib/background";
 import { bridge } from "./bridge";
 import { BackgroundStepper, LIVE_SCENE_KEYS, LoopController } from "./backgroundStepper";
 
-// 뒤로 간 상태(다른 탭·다른 창을 보는 중 — lib/background)에서 게임이 자원을 거의 먹지 않게 한다.
+// 탭이 숨겨진 동안(다른 탭·창 최소화 — lib/background isTabHidden) 게임이 자원을 거의 먹지 않게 한다.
+// 다른 창을 눌러 포커스만 잃은 경우(창을 옆에 띄워 두고 구경)는 그대로 움직인다 — Redis 주기 호출만 lib/background가 따로 줄인다.
 //  - 휴식(rest): Phaser 루프를 재운다(갱신·그리기 0). UI는 game:rest로 어두운 "휴식 중" 막을 띄운다.
 //    실시간 연결·서버 정산·음악·효과음 장치는 게임 루프와 따로 돌아 그대로 (게임 안 연출 소리는 멈춰도 된다)
 //  - 판 진행 중(live: 사냥·곤충·별자리·귀신의집): 판 규칙과 부딪히지 않게 재우지 않고 갱신은 매 프레임, 그리기만 초당 BACKGROUND_FPS번.
 //    막도 띄우지 않는다. 판이 끝났는데 여전히 뒤에 있으면 그때 휴식
-//  - 앞으로 돌아오면(포커스·클릭·키·탭 보임) 바로 깨운다. 쉬던 시간은 넘기지 않는다(탭 숨김 복귀와 같다 → 순간이동·시계 튐 없음)
+//  - 탭이 다시 보이면 바로 깨운다. 쉬던 시간은 넘기지 않는다(탭 숨김 복귀와 같다 → 순간이동·시계 튐 없음)
 // Phaser 루프(TimeStep)의 sleep/wake와 콜백만 쓴다 (Phaser 내부 다른 것은 건드리지 않는다).
 
 type StepFn = (time: number, delta: number) => void;
@@ -64,7 +65,7 @@ export function installBackgroundLoop(game: Phaser.Game): () => void {
 
   const ctl = new LoopController({
     started: () => game.loop.started,
-    background: isBackground,
+    background: isTabHidden,
     live,
     sleep: () => game.loop.sleep(),
     wake: () => {
@@ -81,7 +82,7 @@ export function installBackgroundLoop(game: Phaser.Game): () => void {
   /** 지금 상태(뒤에 있는지·판 진행 중인지)에 맞춰 루프를 바꾼다 */
   const apply = () => ctl.apply();
 
-  const offBg = onBackgroundChange(apply);
+  const offBg = onTabHiddenChange(apply);
   // 루프가 시작되기 전이면(부팅 중) 첫 프레임 뒤에 본다 (READY는 루프 시작 전에 온다)
   const onFirstStep = () => apply();
   if (game.loop.started) apply();

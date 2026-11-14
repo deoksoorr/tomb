@@ -728,7 +728,7 @@ export class WorldScene extends Phaser.Scene {
       }),
     );
     on.push(bridge.on("net:status", (st) => this.onNetStatus(st)));
-    // 휴식 중(다른 창을 보는 중이라 게임 루프를 재움)은 실시간 연결에서 탭 숨김과 같게
+    // 휴식 중(탭이 숨겨져 게임 루프를 재움)은 실시간 연결에서 탭 숨김과 같게
     on.push(bridge.on("game:rest", ({ on: resting }) => this.net.setResting(resting)));
     on.push(bridge.on("grave:focus", ({ graveId, walk }) => this.focusGrave(graveId, walk)));
     on.push(

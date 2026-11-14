@@ -2,6 +2,7 @@
 // 탭은 보이지만 다른 창을 띄워 보는 경우에는 document.hidden이 false라 이 판정으로 잡는다.
 // 뒤로 간 동안: Redis를 쓰는 주기 호출은 숨긴 탭처럼 멈추고, 게임은 "휴식 중"으로 루프를 재운다 (음악·실시간 연결은 그대로, game/backgroundLoop).
 // 창이 포커스를 다시 얻거나 포인터·키 입력이 오면 바로 앞으로 돌아온다 (포커스 없이 입력만 오면 그때부터 다시 BACKGROUND_DELAY_MS를 센다).
+// 휴식 중 막·게임 루프 재우기는 이것 말고 탭이 정말 숨겨졌을 때만 (isTabHidden) — 창을 옆에 띄워 두고 다른 일을 하며 구경하는 플레이가 되게.
 
 /** 포커스를 잃은 뒤 뒤로 간 것으로 보기까지 (잠깐 다른 창을 눌렀다 오는 정도는 깜빡이지 않게) */
 export const BACKGROUND_DELAY_MS = 5_000;
@@ -138,4 +139,24 @@ export function isBackground(): boolean {
 export function onBackgroundChange(fn: Listener): () => void {
   if (typeof document === "undefined" || typeof window === "undefined") return () => undefined;
   return watch().subscribe(fn);
+}
+
+/** 탭이 정말 숨겨졌는지 (다른 탭·창 최소화·다른 창에 완전히 가려짐). 다른 창을 눌러 포커스만 잃은 것은 아니다 */
+export function isTabHidden(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.visibilityState === "hidden";
+}
+
+/** 탭 숨김·보임을 듣는다. 해제 함수를 돌려준다 */
+export function onTabHiddenChange(fn: Listener): () => void {
+  if (typeof document === "undefined") return () => undefined;
+  let last = isTabHidden();
+  const h = () => {
+    const now = isTabHidden();
+    if (now === last) return;
+    last = now;
+    fn(now);
+  };
+  document.addEventListener("visibilitychange", h);
+  return () => document.removeEventListener("visibilitychange", h);
 }

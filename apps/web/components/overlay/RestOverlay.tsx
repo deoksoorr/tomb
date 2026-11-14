@@ -6,7 +6,7 @@ import { bgm, currentTrack, INITIAL_BGM_STATE } from "../bgm/engine";
 import styles from "./RestOverlay.module.css";
 
 /**
- * 휴식 중 막: 다른 탭·다른 창으로 넘어가 게임 루프를 재운 동안(game/backgroundLoop → game:rest) 화면을 어둡게 덮고 "휴식 중"을 띄운다.
+ * 휴식 중 막: 다른 탭으로 넘어가거나 창을 내려 게임 루프를 재운 동안(game/backgroundLoop → game:rest) 화면을 어둡게 덮고 "휴식 중"을 띄운다.
  * 음악은 계속 흐른다. 돌아오면(포커스·클릭·키·탭 보임 — lib/background) 게임이 바로 깨고 막도 걷힌다.
  * 막을 누르면 그 입력으로 바로 돌아온다 (lib/background가 창의 pointerdown을 듣는다)
  */
