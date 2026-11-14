@@ -346,6 +346,28 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     return () => window.removeEventListener("keydown", onKey);
   }, [ready, quiet, roomQuiet, canRadial, chatOpen, coarse]);
 
+  // 11/15: 단축키로 연 창은 같은 단축키로 닫는다 (I = 가방, T = 표현 창. Y 원형 목록은 ExprRadial이 직접 닫는다)
+  const bagOpen = panel === "bag";
+  useEffect(() => {
+    if (!bagOpen && !sayOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.code !== "KeyI" && e.code !== "KeyT") || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+      const el = document.activeElement;
+      if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]")) return;
+      // 가방 위에 다른 창(염색·확인 등)이 겹쳐 있으면 그 창 몫
+      if (document.querySelectorAll("dialog[open]").length > 1) return;
+      if (e.code === "KeyI" && bagOpen) {
+        e.preventDefault();
+        setPanel(null);
+      } else if (e.code === "KeyT" && sayOpen) {
+        e.preventDefault();
+        setSayOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [bagOpen, sayOpen]);
+
   // 게임이 맵에 내 묘비를 표시한다 (sticky)
   const myGraveIds = me?.graves;
   useEffect(() => {
