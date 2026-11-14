@@ -42,7 +42,6 @@ import LevelUpSound from "./LevelUpSound";
 import RpgIcon from "./RpgIcon";
 import ItemIcon from "../ui/ItemIcon";
 import RunHud from "./RunHud";
-import ShakeToggle from "./ShakeToggle";
 import s from "./rpg.module.css";
 
 // 사냥터 입구 창 (월드의 사냥터 입구에서 portal:open {kind:"hunt"} → UI가 이 컴포넌트를 띄운다).
@@ -313,7 +312,6 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
           <Dialog kind="confirm" title="잠깐 멈춤" onClose={resume}>
             <div className={s.result}>
               <p>멈춘 동안 게임 시간은 흐르지 않아요. 너무 오래(2분 넘게) 멈추면 결과를 받을 수 없어요.</p>
-              <ShakeToggle />
               <div className={s.buttons}>
                 <button type="button" className={cx(ui.button, ui.primary)} onClick={resume}>
                   계속하기

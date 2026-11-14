@@ -2267,7 +2267,7 @@ button.hotSlot:disabled {
   font-size: 12px;
 }
 
-/* 멈춤 창: 화면 흔들림 켜기·끄기 */
+/* 사냥터 고르는 화면: 화면 흔들림 켜기·끄기 */
 .shakeToggle {
   display: inline-flex;
   align-items: center;

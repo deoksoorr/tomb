@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { readItem, writeItem } from "./storage";
 
-// 사냥터·미니게임 화면 흔들림 끄기 (기기의 '동작 줄이기'와 따로, 게임 안에서 고른다). 이 기기에만 기억한다.
+// 사냥터·미니게임 화면 흔들림 끄기 (기기의 '동작 줄이기'와 따로, 사냥터 고르는 화면에서 고른다). 이 기기에만 기억한다.
 
 const KEY = "tomb.ui.shakeOff";
 const subs = new Set<() => void>();

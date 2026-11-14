@@ -3,7 +3,7 @@
 import { useShakeEnabled } from "@/lib/shakePref";
 import s from "./rpg.module.css";
 
-/** 사냥터·미니게임 화면 흔들림 켜기·끄기 (멈춤 창). 이 기기에만 기억한다 */
+/** 사냥터·미니게임 화면 흔들림 켜기·끄기 (사냥터 고르는 화면). 이 기기에만 기억한다 */
 export default function ShakeToggle() {
   const [on, set] = useShakeEnabled();
   return (

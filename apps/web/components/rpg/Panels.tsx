@@ -42,6 +42,7 @@ import HuntCapMeter from "./HuntCap";
 import RpgIcon from "./RpgIcon";
 import ZonePicker, { ZoneInfo, zoneOpen, zoneUnlockAll } from "./ZonePicker";
 import s from "./rpg.module.css";
+import ShakeToggle from "./ShakeToggle";
 
 // 사냥터 로비의 탭들: 출발 · 캐릭터 · 장비 · 스킬 · 상점
 
@@ -126,6 +127,8 @@ export function StartPanel({
                   <p className={s.meta}>
                     오늘 사냥 포인트 {view.today.huntPoints} / {view.today.cap}P · 이번 시간 남은 판 {view.today.runsPerHour}
                   </p>
+                  {/* 화면 흔들림 효과 켜기·끄기: 출발 전에 고른다 (이 기기에 기억) */}
+                  <ShakeToggle />
                   {startButton}
                 </div>
               </>
