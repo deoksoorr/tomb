@@ -21,13 +21,16 @@ type DollProps = {
   label: string;
   children: ReactNode;
   className?: string;
-  /** 낮은 칸: 그림은 왼쪽, 부위·이름·남은 기간 막대는 오른쪽에 한 덩어리로 (칸 높이 약 52px — 가방 [지금 모습]처럼 칸이 많을 때) */
-  compact?: boolean;
+  /**
+   * 낮은 칸: 그림은 왼쪽, 부위·이름·남은 기간 막대는 오른쪽에 한 덩어리로 (칸 높이 약 52px — 칸이 많을 때).
+   * "large" = 같은 모양을 크게 (그림 48px·글자 크게) + 칸이 줄 높이를 꽉 채운다 (가방 [지금 모습]이 창 높이를 다 쓸 때)
+   */
+  compact?: boolean | "large";
 };
 
 export function PaperDoll({ areas, figure, caption, label, children, className, compact }: DollProps) {
   return (
-    <div role="group" aria-label={label} className={cx(styles.doll, className)} data-compact={compact || undefined} style={{ "--areas": areas } as CSSProperties}>
+    <div role="group" aria-label={label} className={cx(styles.doll, className)} data-compact={compact === true ? "" : compact || undefined} style={{ "--areas": areas } as CSSProperties}>
       <div className={styles.figure} style={{ gridArea: "fig" }}>
         <div className={styles.crop}>{figure}</div>
         {caption}

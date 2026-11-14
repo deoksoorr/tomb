@@ -1,22 +1,67 @@
 /* 가방 캐릭터 꾸미기 두 화면: [지금 모습](장비창) · [꾸미기](부위 칩 + 카드 목록 + 입어 보기) */
 
-/* ── [지금 모습] ── */
+/* ── [지금 모습]: 가방 칸 높이를 다 쓴다 (장비창이 남은 높이를 채우고, 방향·자세·점수 줄은 아래에 붙는다) ── */
 .look {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto auto;
   justify-items: center;
-  gap: 8px;
+  gap: 6px;
+  /* 가방 칸(bagpanel 컨테이너) 높이만큼 (반올림으로 1px 스크롤이 생기지 않게 1px 덜) */
+  min-height: calc(100cqh - 1px);
 }
 
-/* 장비창: 아바타 ×4 (낮은 창·폰은 ×3), 부위 칸은 낮은 칸 compact (PaperDoll) */
-.doll {
-  --scale: 4;
-  width: min(100%, 560px);
+/* 장비창: 네 줄이 남은 높이를 나눠 갖고(칸이 줄 높이를 채운다 — PaperDoll compact="large"), 아바타는 가운데 세 줄 가운데.
+   아바타 배율은 칸 높이로 고른다: 아래 @container */
+.look .doll {
+  --scale: 3;
+  width: min(100%, 640px);
+  height: 100%;
+  grid-template-rows: repeat(4, minmax(min-content, 1fr));
   gap: 6px;
   padding: 8px;
 }
 
-.doll button {
+.look .doll button {
   min-width: 0;
+}
+
+/* 넓은 칸(데스크톱): 칸 높이 440px부터 ×4, 470px부터 ×5 (1280×620처럼 낮으면 ×3에 칸을 늘린다) */
+@container bagpanel (min-width: 561px) and (min-height: 440px) {
+  .look .doll {
+    --scale: 4;
+  }
+}
+
+@container bagpanel (min-width: 561px) and (min-height: 470px) {
+  .look .doll {
+    --scale: 5;
+  }
+}
+
+/* 폰: 칸이 좁아 이름이 잘리지 않게 아바타를 위에 두고 부위 칸 9개를 세 개씩 세 줄로 (몸 위에서 아래 순서) */
+@container bagpanel (max-width: 560px) {
+  .look .doll {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto repeat(3, minmax(min-content, 1fr));
+    grid-template-areas:
+      "fig fig fig"
+      "head neck back"
+      "hand aura feet"
+      "pet nameColor namePlate";
+  }
+}
+
+/* 폰 높이에 맞춰: 540px부터 ×4, 630px부터 ×5 */
+@container bagpanel (max-width: 560px) and (min-height: 540px) {
+  .look .doll {
+    --scale: 4;
+  }
+}
+
+@container bagpanel (max-width: 560px) and (min-height: 630px) {
+  .look .doll {
+    --scale: 5;
+  }
 }
 
 /* 아바타 아래·입어 보기 위: 내 이름표 미리보기 (게임 이름표 글꼴·크기·외곽선, 꾸미기 없으면 내 이름표 촛불빛) */
@@ -68,25 +113,6 @@
   font-family: var(--font-small);
   font-size: 10px;
   text-align: center;
-}
-
-/* 낮은 창(노트북 + 브라우저 막대)·폰: 아바타 ×3 */
-@media (max-height: 660px), (max-width: 560px) {
-  .doll {
-    --scale: 3;
-  }
-}
-
-/* 폰: 칸이 좁아 이름이 잘리지 않게 아바타를 위에 두고 부위 칸 9개를 세 개씩 세 줄로 (몸 위에서 아래 순서) */
-@media (max-width: 560px) {
-  .look .doll {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-areas:
-      "fig fig fig"
-      "head neck back"
-      "hand aura feet"
-      "pet nameColor namePlate";
-  }
 }
 
 /* ── [꾸미기] ── */

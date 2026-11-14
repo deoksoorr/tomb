@@ -8,6 +8,8 @@
 }
 
 .panel {
+  /* 칸 크기 기준 컨테이너: [지금 모습]이 이 칸 높이를 다 쓰고, 높이에 맞춰 아바타 배율을 고른다 (WardrobePanes.module.css) */
+  container: bagpanel / size;
   flex: 1;
   min-height: 0;
   padding: 2px;

@@ -88,7 +88,7 @@ export function LookPane({
         className={styles.doll}
         areas={DOLL_AREAS}
         label="착용 부위"
-        compact
+        compact="large"
         figure={<OutfitCanvas color={avatar.color} body={avatar.body} look={look} label="지금 내 모습" dir={view.dir} walking={view.walking} onRotate={view.rotate} />}
         caption={
           <span className={styles.namePv}>
@@ -105,8 +105,8 @@ export function LookPane({
               area={slot}
               label={label}
               name={e?.item.name ?? null}
-              icon={e ? <ItemIcon itemId={e.item.id} size={32} /> : null}
-              silhouette={<ItemIcon itemId={SLOT_SILHOUETTE[slot]} size={32} />}
+              icon={e ? <ItemIcon itemId={e.item.id} size={48} /> : null}
+              silhouette={<ItemIcon itemId={SLOT_SILHOUETTE[slot]} size={48} />}
               meter={e?.until ? { ratio: timeLeftRatio(e.until, now), text: remainingLabel(e.until, now) } : null}
               tip={e ? { title: e.item.name, body: e.item.desc } : { title: `${label} · 비어 있어요`, body: "눌러서 이 부위에 입을 것을 골라요." }}
               ariaLabel={`${label} 칸, ${e ? `${e.item.name} 착용 중, ${remainingLabel(e.until!, now)}` : "비어 있음"}. 누르면 [꾸미기]에서 ${label} 목록`}
