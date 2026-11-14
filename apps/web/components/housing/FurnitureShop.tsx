@@ -7,6 +7,7 @@ import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore } from "@/lib/hooks/useMe";
 import { CATEGORY_LABELS, FURNITURE, MAX_OWN_PER_ITEM, sellPrice, type FurnitureCategory, type FurnitureDef } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
+import { rotateMode } from "@/lib/housing/layout";
 import type { MyHouseResponse } from "@/lib/housing/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -143,7 +144,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
     const once = (!!f.skin || !!f.ext) && owned > 0;
     const r = turn.id === f.id ? turn.r : 0;
     // 돌리는 물건(turn)·4방향 가구(spin)는 4방향, 아니면 좌우 뒤집기 2방향
-    const four = !!(f.turn || f.spin);
+    const four = rotateMode(f) === "turn";
     const ways = four ? 4 : 2;
     const sw = phone ? 140 : 216;
     const sh = phone ? 140 : stageFit;

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { itemVariant, shownItemGrid } from "@/game/housing/art";
 import { houseSpots, itemDepthY } from "@/game/housing/interact";
 import { FURNITURE, furnitureById, tierById } from "./catalog";
-import { footprint, nextRotation, SPIN_R0, spinDir, validateLayout } from "./layout";
+import { footprint, nextRotation, rotateMode, SPIN_R0, spinDir, validateLayout } from "./layout";
 import { LayoutSchema } from "./schemas";
 import type { HouseLayout, Placed } from "./types";
 
@@ -63,6 +63,20 @@ describe("4방향 가구: 방향 값과 칸", () => {
       { u: "c1", i: "chair", x: 0, y: 1, r: 0 },
     ]);
     expect(validateLayout(clash, "small", null).ok).toBe(false);
+  });
+});
+
+describe("돌리기·뒤집기 구분 (상점·꾸미기 단추가 같이 쓴다)", () => {
+  it("4방향·turn 가구는 돌리기, 나머지는 좌우 뒤집기", () => {
+    expect(rotateMode(furnitureById("bed")!)).toBe("turn");
+    expect(rotateMode(furnitureById("desk")!)).toBe("turn");
+    expect(rotateMode(furnitureById("pond")!)).toBe("turn");
+    expect(rotateMode(furnitureById("bookshelf")!)).toBe("flip");
+    expect(rotateMode(furnitureById("bathtub")!)).toBe("flip");
+    // 뒤집기 가구는 R 두 번이면 처음으로 (좌우만 바뀐다), 칸은 그대로
+    const shelf = furnitureById("bookshelf")!;
+    expect(footprint(shelf, nextRotation(shelf, 0))).toEqual(footprint(shelf, 0));
+    expect(nextRotation(shelf, nextRotation(shelf, 0)) % 2).toBe(0);
   });
 });
 

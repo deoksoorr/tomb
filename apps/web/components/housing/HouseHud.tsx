@@ -7,7 +7,7 @@ import { errorMessage } from "@/lib/api";
 import { meStore } from "@/lib/hooks/useMe";
 import { DEFAULT_FLOOR, DEFAULT_FLOOR_NAME, DEFAULT_WALL, DEFAULT_WALL_NAME, FURNITURE, furnitureById, LIKE_WEIGHT, tierById } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
-import { layoutCounts, placedScore, styleTag, totalScore } from "@/lib/housing/layout";
+import { layoutCounts, placedScore, ROTATE_LABEL, rotateMode, styleTag, totalScore } from "@/lib/housing/layout";
 import type { MyHouseResponse, PublicHouse } from "@/lib/housing/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -265,13 +265,17 @@ function EditToolbar({
   const trialDef = trial ? furnitureById(trial.itemId) : undefined;
   // 가방에 남은 게 있으면 사지 않고 바로 놓을 수 있다
   const trialLeft = trial ? (my.inventory[trial.itemId] ?? 0) - (counts[trial.itemId] ?? 0) : 0;
+  // R·단추가 하는 일은 고른 가구에 따라: 네 방향으로 돌리기 / 좌우 뒤집기 (상점 미리보기와 같은 구분)
+  const focus = selDef ?? trialDef;
+  const mode = focus ? rotateMode(focus) : null;
+  const rKey = mode === "turn" ? "R 돌리기" : mode === "flip" ? "R 뒤집기" : "R 돌리기·뒤집기";
   const skinName = (id: string) => (id === DEFAULT_FLOOR ? DEFAULT_FLOOR_NAME : id === DEFAULT_WALL ? DEFAULT_WALL_NAME : (furnitureById(id)?.name ?? id));
 
   return (
     <section className={cx(ui.panel, styles.toolbar)} aria-label="꾸미기 도구">
       <div className={styles.spread}>
         <p className={styles.small}>
-          끌어서 옮기기 · 방향키 한 칸 · R 돌리기 · Del 치우기 · Q/E 차례로 고르기 · 빈 곳을 끌면 화면 이동 (물건 {edit.items.length}/{maxItems})
+          끌어서 옮기기 · 방향키 한 칸 · {rKey} · Del 치우기 · Q/E 차례로 고르기 · 빈 곳을 끌면 화면 이동 (물건 {edit.items.length}/{maxItems})
         </p>
         <div className={styles.row}>
           <button type="button" className={ui.button} onClick={onShop}>
@@ -290,10 +294,11 @@ function EditToolbar({
         <div className={cx(styles.selBar, styles.trialBar)} aria-live="polite" role="group" aria-label="놓아 보는 중">
           <FurnitureIcon itemId={trial.itemId} size={32} />
           <span className={ui.label}>
-            {trialDef.name} 놓아 보는 중 <span className={styles.small}>· 끌어서 옮기고 R로 돌려 보세요 · 저장되지 않아요</span>
+            {trialDef.name} 놓아 보는 중{" "}
+            <span className={styles.small}>· 끌어서 옮기고 R로 {rotateMode(trialDef) === "turn" ? "돌려" : "뒤집어"} 보세요 · 저장되지 않아요</span>
           </span>
-          <button type="button" className={ui.button} onClick={() => tool({ action: "rotate" })}>
-            돌리기
+          <button type="button" className={ui.button} onClick={() => tool({ action: "rotate" })} aria-label={`${trialDef.name} ${rotateMode(trialDef) === "turn" ? "돌리기" : "좌우 뒤집기"}`}>
+            {ROTATE_LABEL[rotateMode(trialDef)]}
           </button>
           {trialLeft > 0 ? (
             <button type="button" className={cx(ui.button, ui.primary)} onClick={() => tool({ action: "tryEnd", keep: true })}>
@@ -320,8 +325,8 @@ function EditToolbar({
         <div className={styles.selBar} aria-live="polite">
           <FurnitureIcon itemId={sel.i} size={32} />
           <span className={ui.label}>{selDef.name}</span>
-          <button type="button" className={ui.button} onClick={() => tool({ action: "rotate" })}>
-            돌리기
+          <button type="button" className={ui.button} onClick={() => tool({ action: "rotate" })} aria-label={`${selDef.name} ${rotateMode(selDef) === "turn" ? "돌리기" : "좌우 뒤집기"}`}>
+            {ROTATE_LABEL[rotateMode(selDef)]}
           </button>
           <button type="button" className={cx(ui.button, ui.danger)} onClick={() => tool({ action: "remove" })}>
             치우기

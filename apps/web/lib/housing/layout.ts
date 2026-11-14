@@ -51,6 +51,11 @@ export function nextRotation(def: Pick<FurnitureDef, "turn" | "spin">, r: number
   return (r + 1) % 4;
 }
 
+/** R(돌리기 단추)이 하는 일: 네 방향으로 돌리기(turn·spin 가구) 또는 좌우 뒤집기(나머지). 화면 단추·안내 글이 같이 쓴다 */
+export const rotateMode = (def: Pick<FurnitureDef, "turn" | "spin">): "turn" | "flip" => (def.turn || def.spin ? "turn" : "flip");
+/** 단추·안내 이름 */
+export const ROTATE_LABEL = { turn: "↻ 돌리기", flip: "⇆ 뒤집기" } as const;
+
 /** 이 물건에 쓸 수 있는 r인지 (4~7은 4방향 가구만) */
 export const validRotation = (def: Pick<FurnitureDef, "spin">, r: number): boolean =>
   Number.isInteger(r) && r >= 0 && r <= (def.spin ? MAX_R : 3);
