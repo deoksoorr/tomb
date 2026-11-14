@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { titleOfLook } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
-import { perkText, progressText, TITLE_GRADE_NAMES, TITLE_GROUP_NAMES, TITLE_GROUPS, TITLES, titleDef, type TitleDef } from "@/lib/titles";
+import { perkShort, perkText, progressText, TITLE_GRADE_NAMES, TITLE_GROUP_NAMES, TITLE_GROUPS, TITLES, titleDef, type TitleDef } from "@/lib/titles";
 import type { Me } from "@/lib/types";
 import { titleNews } from "@/lib/hooks/useTitleNews";
 import { cx } from "../ui/cx";
@@ -115,7 +115,7 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
                         </span>
                       )}
                       {staff && <span className={styles.progress}>운영자</span>}
-                      {perkText(t.grade) && <span className={styles.perk}>{perkText(t.grade)}</span>}
+                      {perkShort(t.grade) && <span className={styles.perk}>{perkShort(t.grade)}</span>}
                     </button>
                   </li>
                 );

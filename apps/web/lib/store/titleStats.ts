@@ -14,8 +14,11 @@ export type TitleStats = { stay: number };
 
 export interface TitleStatStore {
   get(accountId: string): Promise<TitleStats>;
-  /** 머문 기록 +1. 처음이면 seed(그날 이미 머문 기록 수)부터 시작한다. 새 누적 값을 돌려준다 */
-  addStay(accountId: string, seed: number): Promise<number>;
+  /**
+   * 머문 기록 +by (숨긴 탭은 몰아서 세므로 한 번에 여러 개). 처음이면 그날 머문 기록 수(todayTotal — 이번 것 포함)에서 시작한다.
+   * Redis 2명령 (HSETNX + HINCRBY). 새 누적 값을 돌려준다
+   */
+  addStay(accountId: string, by: number, todayTotal: number): Promise<number>;
 }
 
 export class MemoryTitleStats implements TitleStatStore {
@@ -23,9 +26,9 @@ export class MemoryTitleStats implements TitleStatStore {
   async get(accountId: string): Promise<TitleStats> {
     return { stay: this.rows.get(accountId)?.stay ?? 0 };
   }
-  async addStay(accountId: string, seed: number): Promise<number> {
-    const r = this.rows.get(accountId) ?? { stay: Math.max(0, seed - 1) };
-    r.stay += 1;
+  async addStay(accountId: string, by: number, todayTotal: number): Promise<number> {
+    const r = this.rows.get(accountId) ?? { stay: Math.max(0, todayTotal - by) };
+    r.stay += by;
     this.rows.set(accountId, r);
     return r.stay;
   }
@@ -39,8 +42,12 @@ export class RedisTitleStats implements TitleStatStore {
   async get(accountId: string): Promise<TitleStats> {
     return { stay: Number(await this.redis.hget(key(accountId), "stay")) || 0 };
   }
-  async addStay(accountId: string, seed: number): Promise<number> {
-    const [, n] = (await this.redis.pipeline().hsetnx(key(accountId), "stay", String(Math.max(0, seed - 1))).hincrby(key(accountId), "stay", 1).exec()) as [unknown, unknown];
+  async addStay(accountId: string, by: number, todayTotal: number): Promise<number> {
+    const [, n] = (await this.redis
+      .pipeline()
+      .hsetnx(key(accountId), "stay", String(Math.max(0, todayTotal - by)))
+      .hincrby(key(accountId), "stay", by)
+      .exec()) as [unknown, unknown];
     return Number(n) || 0;
   }
 }
@@ -52,5 +59,7 @@ export function getTitleStats(): TitleStatStore {
   const conn = env.redis();
   if (conn) return cur instanceof RedisTitleStats ? cur : (g.__tombTitleStats = new RedisTitleStats(conn));
   if (env.isProd()) throw new Error("[titleStats] Redis 환경변수가 없습니다.");
-  return cur instanceof MemoryTitleStats ? cur : (g.__tombTitleStats = new MemoryTitleStats());
+  // 모듈이 다시 로드되거나 경로마다 따로 묶여도(개발 서버) 기록이 남게 이전 객체의 값을 옮긴다 (lib/store/champ와 같은 방식)
+  if (cur instanceof MemoryTitleStats) return cur;
+  return (g.__tombTitleStats = cur ? Object.assign(new MemoryTitleStats(), cur) : new MemoryTitleStats());
 }

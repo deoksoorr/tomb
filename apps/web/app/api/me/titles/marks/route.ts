@@ -4,6 +4,7 @@ import { handler, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
 import { getTitleMarks } from "@/lib/store/titleMarks";
+import { forgetTitles } from "@/lib/titlesServer";
 import { readBody } from "@/lib/validate";
 
 const ids = z
@@ -20,5 +21,6 @@ export const POST = handler(async (req) => {
   const store = getTitleMarks();
   if (body.announced) await store.add(visitorId, "announced", body.announced);
   if (body.seen) await store.add(visitorId, "seen", body.seen);
+  forgetTitles(visitorId);
   return json<{ ok: true }>({ ok: true });
 });

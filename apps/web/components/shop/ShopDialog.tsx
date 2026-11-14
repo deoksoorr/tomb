@@ -119,11 +119,13 @@ export default function ShopDialog({ onClose, avatar }: Props) {
         ) : blocked ? (
           blocked
         ) : (
-          <>
-            {item.kind === "cosmetic" ? "⏱ 24시간 이용권 · " : ""}
+          // 단추가 flex라 조각마다 따로 줄바꿈되지 않게 한 덩어리로
+          <span>
+            {/* 칭호 할인가가 붙으면 줄이 넘치지 않게 "이용권"을 뺀다 */}
+            {item.kind === "cosmetic" ? (cost < item.price ? "⏱ 24시간 · " : "⏱ 24시간 이용권 · ") : ""}
             <Price price={item.price} cost={cost} />
             {short ? " · 모자라요" : " · 사기"}
-          </>
+          </span>
         )}
       </button>
     );
@@ -167,10 +169,10 @@ export default function ShopDialog({ onClose, avatar }: Props) {
         ) : item.staff ? (
           "운영자 전용 · 받기"
         ) : (
-          <>
+          <span>
             ♾ 영구 소장 · <Price price={base} cost={price} />
             {short ? " · 모자라요" : " · 사기"}
-          </>
+          </span>
         )}
       </button>
     );

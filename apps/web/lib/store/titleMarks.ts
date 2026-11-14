@@ -67,5 +67,7 @@ export function getTitleMarks(): TitleMarkStore {
   const conn = env.redis();
   if (conn) return cur instanceof RedisTitleMarks ? cur : (g.__tombTitleMarks = new RedisTitleMarks(conn));
   if (env.isProd()) throw new Error("[titleMarks] Redis 환경변수가 없습니다.");
-  return cur instanceof MemoryTitleMarks ? cur : (g.__tombTitleMarks = new MemoryTitleMarks());
+  // 모듈이 다시 로드되거나 경로마다 따로 묶여도(개발 서버) 기록이 남게 이전 객체의 값을 옮긴다 (lib/store/champ와 같은 방식)
+  if (cur instanceof MemoryTitleMarks) return cur;
+  return (g.__tombTitleMarks = cur ? Object.assign(new MemoryTitleMarks(), cur) : new MemoryTitleMarks());
 }

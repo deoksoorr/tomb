@@ -5,6 +5,7 @@ import { bridge } from "@/game/bridge";
 import { api, errorMessage } from "@/lib/api";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { titleNews } from "@/lib/hooks/useTitleNews";
+import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
 import { showToast } from "@/lib/hooks/useToasts";
 import { playTitleChime } from "@/lib/titleChime";
 import { perkText, TITLE_GRADE_NAMES, titleDef, type TitleDef } from "@/lib/titles";
@@ -14,19 +15,21 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import styles from "./TitleNotice.module.css";
 
-/** 내 정보가 바뀐 뒤 확인까지 기다리는 시간 (도감 등록·1위 지급 결과가 한꺼번에 들어오게) */
+/** 신호(me:stale·집 저장) 뒤 확인까지 기다리는 시간 (결과가 한꺼번에 들어오게) */
 const SETTLE_MS = 2500;
-/** 연달아 확인하지 않는 최소 간격 */
-const MIN_GAP_MS = 10_000;
-/** 화면이 보이는 동안 이만큼마다 한 번 (집 점수처럼 내 정보가 안 바뀌는 칭호도 잡게) */
-const POLL_MS = 4 * 60_000;
+/** 포인트가 바뀌어도(도감 등록 보상 등) 이 간격 안에는 다시 확인하지 않는다 (Redis 명령 절약 — 서버도 칭호 사실을 몇 분 기억한다) */
+const POINTS_GAP_MS = 10 * 60_000;
+/** 신호로 확인할 때도 이 간격은 둔다 */
+const MIN_GAP_MS = 20_000;
+/** 안전망: 화면이 보이는 동안 이만큼마다 한 번 (집 점수처럼 신호가 없는 칭호도 잡게). 숨긴 탭은 멈춘다 */
+const SAFETY_MS = 30 * 60_000;
 
 /**
  * 새 칭호 알림: 칭호를 새로 얻으면 금빛 테두리 짧은 창 "새 칭호 「…」를 얻었어요!" + [지금 달기] [나중에] + 반짝 소리.
  * 판정은 서버(GET /api/me/titles의 fresh = 얻었는데 아직 알리지 않은 칭호). 여러 개면 한 번에 묶는다.
  * 기능 전부터 얻어 둔 칭호(처음 확인, first)는 "칭호가 n개 생겼어요"로 한 번만 묶어 알린다.
- * 확인 시점: 처음 마을에 들어올 때 · 내 정보가 바뀐 뒤(도감 등록 포인트·1위 지급 등) · 서버 신호(me:stale) · 집 꾸미기 저장 뒤 ·
- * 화면으로 돌아올 때 · 몇 분마다. 알림 창을 띄운 칭호는 서버에 "알림" 기록을 남겨 다른 탭·기기에서 다시 뜨지 않는다.
+ * 확인 시점 (Redis 명령 아끼기 — 숨긴 탭은 하지 않는다): 처음 마을에 들어올 때 · 서버 신호(me:stale — 1위 지급 등) · 집 꾸미기 저장 뒤 ·
+ * 1위 값이 바뀐 뒤 · 포인트가 바뀐 뒤(도감 등록 보상 등, 마지막 확인에서 10분 지났을 때만) · 숨겼다 돌아올 때(10분 지났으면) · 30분 안전망. 알림 창을 띄운 칭호는 서버에 "알림" 기록을 남겨 다른 탭·기기에서 다시 뜨지 않는다.
  * 가방 [칭호] 칸에서 아직 안 본 칭호(unseen)는 titleNews로 넘겨 가방 단추 점·"NEW" 표시에 쓴다
  */
 export default function TitleNotice() {
@@ -66,32 +69,34 @@ export default function TitleNotice() {
         busy = false;
       }
     };
-    /** 잠시 뒤에 한 번 (몰아서 바뀌면 마지막 것 기준, 최소 간격 지키기) */
-    const soon = (ms = SETTLE_MS) => {
+    /** 잠시 뒤에 한 번 (몰아서 바뀌면 마지막 것 기준, 최소 간격 지키기). 숨긴 탭이면 하지 않는다 */
+    const soon = (ms = SETTLE_MS, gap = MIN_GAP_MS) => {
+      if (tabHidden()) return;
       clearTimeout(timer);
-      timer = setTimeout(() => void check(), Math.max(ms, lastAt + MIN_GAP_MS - Date.now()));
+      timer = setTimeout(() => !tabHidden() && void check(), Math.max(ms, lastAt + gap - Date.now()));
     };
-    void check();
-    // 포인트·착용·1위 값이 바뀌면 (도감 등록 보상·1위 지급·자동 낚시 정산 뒤) 잠시 뒤 확인
+    if (!tabHidden()) void check();
+    // 포인트·1위 값이 바뀌면 (도감 등록 보상·1위 지급 뒤) — 단, 마지막 확인에서 POINTS_GAP_MS가 지났을 때만
     let prev = meStore.getSnapshot().me;
     const offMe = meStore.subscribe(() => {
       const cur = meStore.getSnapshot().me;
-      if (cur && prev && (cur.lifetimePoints !== prev.lifetimePoints || cur.champ !== prev.champ)) soon();
+      if (cur && prev && cur.champ !== prev.champ) soon();
+      else if (cur && prev && cur.lifetimePoints !== prev.lifetimePoints && Date.now() - lastAt >= POINTS_GAP_MS) soon(SETTLE_MS, POINTS_GAP_MS);
       prev = cur;
     });
-    const offStale = bridge.on("me:stale", () => soon(SETTLE_MS));
-    const offHouse = bridge.on("house:data", () => soon(SETTLE_MS));
-    const poll = setInterval(() => document.visibilityState === "visible" && void check(), POLL_MS);
-    const onVisible = () => document.visibilityState === "visible" && soon(500);
-    document.addEventListener("visibilitychange", onVisible);
+    const offStale = bridge.on("me:stale", () => soon());
+    const offHouse = bridge.on("house:data", () => soon());
+    const safety = setInterval(() => !tabHidden() && Date.now() - lastAt >= SAFETY_MS && void check(), 60_000);
+    // 숨겼다 돌아오면 (흩어서) 오래됐을 때만
+    const offVisible = onVisibleAgain(() => Date.now() - lastAt >= POINTS_GAP_MS && void check());
     return () => {
       alive = false;
       clearTimeout(timer);
-      clearInterval(poll);
+      clearInterval(safety);
       offMe();
       offStale();
       offHouse();
-      document.removeEventListener("visibilitychange", onVisible);
+      offVisible();
     };
   }, [ready]);
 

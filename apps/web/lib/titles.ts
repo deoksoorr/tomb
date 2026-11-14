@@ -186,6 +186,12 @@ export function perkText(grade: TitleGrade): string {
   return parts.join(" · ");
 }
 
+/** 칭호 능력 짧게 ("이동 +4% · 할인 4%", 없으면 "") — 가방 칭호 카드 */
+export function perkShort(grade: TitleGrade): string {
+  const p = TITLE_PERKS[grade];
+  return p.speed > 1 ? `이동 +${Math.round((p.speed - 1) * 100)}% · 할인 ${Math.round(p.discount * 100)}%` : "";
+}
+
 /** 할인가: 원가 × (1 − 할인율)을 1P 단위로 내림, 할인이 있으면 최소 1P는 깎는다 (값이 0이면 그대로) */
 export function discountedPrice(price: number, discount: number): number {
   if (price <= 0 || discount <= 0) return price;

@@ -34,11 +34,8 @@ export const POST = handler(async (req) => {
   // 47번: 누군가 머무는 동안 동시 접속을 1분에 한 번씩 찍어 둔다 (cron 없이)
   runAfter(() => sampleConcurrency());
   // 칭호용 누적 접속 시간 (받아 준 기록만, 처음이면 오늘 머문 기록부터. 몰아서 센 만큼). 실패해도 머무르기는 그대로
-  if (tick) {
-    const stats = getTitleStats();
-    for (let i = tick.ticks - 1; i >= 0; i--)
-      await stats.addStay(visitorId, tick.stayTicks - i).catch((e) => console.error("[titles] 접속 시간 기록 실패", e));
-  }
+  // 몰아서 센 기록도 한 번에 (Redis 2명령)
+  if (tick && tick.ticks > 0) await getTitleStats().addStay(visitorId, tick.ticks, tick.stayTicks).catch((e) => console.error("[titles] 접속 시간 기록 실패", e));
   const lite = req.nextUrl.searchParams.get("lite") === "1" && (await staffAccountId()) !== visitorId;
   if (lite) {
     return json<PresenceResponse>(

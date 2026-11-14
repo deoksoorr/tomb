@@ -18,6 +18,7 @@ import * as permanent from "./shop/permanent/route";
 import * as staffRoute from "./admin/staff/route";
 import { getTitleStats } from "@/lib/store/titleStats";
 import { getTitleMarks } from "@/lib/store/titleMarks";
+import { FACTS_TTL_MS, forgetTitles, titleStatus } from "@/lib/titlesServer";
 
 // 칭호: 얻은 칭호만 끼운다(서버 확인), 하나만, 착용 목록(look)에 실려 착용 증서로 다른 사람에게 간다. 꾸미기 점수·코디 목록과는 따로
 const SECRET = "dev-join-secret-change-me";
@@ -124,7 +125,11 @@ describe("칭호 끼우기 (/api/me/titles)", () => {
 
     // 도감 절반 칭호 붙음 + 지난 주간 낚시 1위 기록
     await getForageStore().markDexTitles(v.visitorId, ["fish:50"], day);
+    forgetTitles();
     await getChamp().create({ week: "20260105", winners: [{ board: "fish", accountId: v.visitorId, name: "낚시꾼", value: 300 }], settledAt: 1 }, 0);
+    // 명예의 전당·칭호 사실은 서버가 몇 분 기억한다 (도감 등록·1위 지급은 그만큼 늦게 보인다) — 시험에서는 바로 잊힌다
+    forgetTitles();
+    (globalThis as { __tombTitleHall?: unknown }).__tombTitleHall = undefined;
     expect((await get()).earned).toEqual(["t_fish50", "t_champ_fish"]);
 
     const r1 = (await (await titles.POST(call("/api/me/titles", v, { id: "t_fish50" }))).json()) as WearResponse;
@@ -154,12 +159,14 @@ describe("새 칭호 알림 (fresh·unseen·first)", () => {
     const mark = (body: object) => marks.POST(call("/api/me/titles/marks", v, body));
     // 이미 얻어 둔 칭호 둘 → 처음 확인: 둘 다 fresh, first
     await getForageStore().markDexTitles(v.visitorId, ["bug:50", "ore:100"], day);
+    forgetTitles();
     expect(await get()).toMatchObject({ fresh: ["t_bug50", "t_ore100"], unseen: ["t_bug50", "t_ore100"], first: true });
     // 알림 창을 띄움 → 다시 확인해도 안 뜬다 (가방 점은 남는다)
     expect((await mark({ announced: ["t_bug50", "t_ore100"] })).status).toBe(200);
     expect(await get()).toMatchObject({ fresh: [], unseen: ["t_bug50", "t_ore100"], first: false });
     // 새로 얻은 칭호 하나 → 그것만
     await getForageStore().markDexTitles(v.visitorId, ["star:50"], day);
+    forgetTitles();
     expect(await get()).toMatchObject({ fresh: ["t_star50"], first: false });
     // 가방 [칭호] 칸에서 봄
     await mark({ announced: ["t_star50"], seen: ["t_bug50", "t_ore100", "t_star50"] });
@@ -174,6 +181,7 @@ describe("새 칭호 알림 (fresh·unseen·first)", () => {
     expect((await get()).first).toBe(true);
     await marks.POST(call("/api/me/titles/marks", v, { announced: [] }));
     await getForageStore().markDexTitles(v.visitorId, ["dig:50"], kstDay());
+    forgetTitles();
     expect(await get()).toMatchObject({ fresh: ["t_dig50"], first: false });
   });
 });
@@ -213,6 +221,7 @@ describe("운영자 · 칭호 능력 · 누적 접속 시간", () => {
     setPoints(v, 10_000);
     // 금 등급 칭호 (도감 전부)
     await getForageStore().markDexTitles(v.visitorId, ["fish:100"], kstDay());
+    forgetTitles();
     expect((await titles.POST(call("/api/me/titles", v, { id: "t_fish100" }))).status).toBe(200);
     const before = (await getAccounts().get(v.visitorId, kstDay(), Date.now())).points;
     const res = await buy.POST(call("/api/shop/buy", v, { itemId: "hat_cat" }));
@@ -230,6 +239,9 @@ describe("운영자 · 칭호 능력 · 누적 접속 시간", () => {
     expect((await getTitleStats().get(v.visitorId)).stay).toBe(0);
     await presence.POST(call("/api/me/presence", v, {}));
     expect((await getTitleStats().get(v.visitorId)).stay).toBe(1);
+    // 몰아서 센 만큼 한 번에 (처음이면 그날 머문 기록부터)
+    expect(await getTitleStats().addStay("fresh-" + v.visitorId, 3, 5)).toBe(5);
+    expect(await getTitleStats().addStay("fresh-" + v.visitorId, 2, 7)).toBe(7);
     // 너무 이르면 안 센다
     await presence.POST(call("/api/me/presence", v, {}));
     expect((await getTitleStats().get(v.visitorId)).stay).toBe(1);
@@ -238,9 +250,26 @@ describe("운영자 · 칭호 능력 · 누적 접속 시간", () => {
   it("한 번 알린 칭호는 기록이 내려가도 남는다", async () => {
     const v = await newVisitor();
     await getTitleMarks().add(v.visitorId, "announced", ["t_att30"]);
+    forgetTitles();
     const r = (await (await titles.GET(call("/api/me/titles", v))).json()) as TitlesResponse;
     expect(r.earned).toContain("t_att30");
     expect(r.progress.streak ?? 0).toBe(0);
+  });
+});
+
+describe("칭호 사실 기억 (Redis 명령 절약)", () => {
+  it("한 번 읽은 칭호 사실은 몇 분 기억하고, 칭호를 달거나 알림 기록을 남기면 그 계정 기억을 지운다", async () => {
+    const v = await newVisitor();
+    const t0 = 1_900_000_000_000;
+    expect((await titleStatus(v.visitorId, t0)).earned).toEqual([]);
+    await getForageStore().markDexTitles(v.visitorId, ["herb:50"], kstDay());
+    // 기억하는 동안은 그대로
+    expect((await titleStatus(v.visitorId, t0 + 60_000)).earned).toEqual([]);
+    // 시간이 지나면 새로 읽는다
+    expect((await titleStatus(v.visitorId, t0 + FACTS_TTL_MS + 1)).earned).toEqual(["t_herb50"]);
+    // 알림 기록을 남기면 바로 (marks 경로가 기억을 지운다)
+    await marks.POST(call("/api/me/titles/marks", v, { announced: ["t_herb50"] }));
+    expect((await titleStatus(v.visitorId, t0 + FACTS_TTL_MS + 2)).fresh).toEqual([]);
   });
 });
 

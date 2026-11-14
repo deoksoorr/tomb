@@ -1,4 +1,4 @@
-import { isTitleId, titleOfLook } from "@tomb/protocol";
+import { isTitleId } from "@tomb/protocol";
 import { z } from "zod";
 import { env } from "@/lib/env";
 import { handler, HttpError, json } from "@/lib/http";
@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
 import { getAccounts } from "@/lib/store";
 import { lookGrant, lookOf, loadMe } from "@/lib/store/accounts";
-import { earnedTitles, titleStatus } from "@/lib/titlesServer";
+import { earnedTitles, forgetTitles, titleStatus } from "@/lib/titlesServer";
 import type { TitlesResponse, WearResponse } from "@/lib/types";
 import { readBody } from "@/lib/validate";
 
@@ -24,9 +24,9 @@ const TitleSetSchema = z.object({
  */
 export const GET = handler(async (req) => {
   const visitorId = await requireVisitor(req);
-  const now = Date.now();
-  const [st, me] = await Promise.all([titleStatus(visitorId, now), loadMe(getAccounts(), visitorId, now)]);
-  return json<TitlesResponse>({ ...st, equipped: titleOfLook(lookOf(me)) }, { headers: { "Cache-Control": "private, no-store" } });
+  // 계정 전체(loadMe)는 읽지 않는다: 단 칭호도 칭호 기억(lib/titlesServer — 계정마다 몇 분)에서 (Redis 명령 절약)
+  const st = await titleStatus(visitorId, Date.now());
+  return json<TitlesResponse>(st, { headers: { "Cache-Control": "private, no-store" } });
 });
 
 /**
@@ -41,6 +41,7 @@ export const POST = handler(async (req) => {
   if (id && !(await earnedTitles(visitorId, now)).includes(id)) throw new HttpError(403, "TITLE_LOCKED", "아직 얻지 못한 칭호예요.");
   const accounts = getAccounts();
   await accounts.setTitle(visitorId, id);
+  forgetTitles(visitorId);
   const me = await loadMe(accounts, visitorId, now);
   return json<WearResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now, me) });
 });
