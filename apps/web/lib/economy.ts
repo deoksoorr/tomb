@@ -44,7 +44,8 @@ export const EARN_RULES: readonly EarnRule[] = [
   // 낚시·채집은 잡을 때가 아니라 NPC에게 팔 때 들어온다 (값은 lib/forage/catalog.ts). 한도를 넘는 만큼은 가방에 남아 내일 팔 수 있다
   { source: "fish", label: "물고기 팔기", points: 0, dailyMax: 200, note: "낚시터 어부에게 (희귀할수록 비싸요)" },
   { source: "gather", label: "채집물 팔기", points: 0, dailyMax: 150, note: "숲 빈터의 수집가에게 (약초·광석·발굴품·곤충)" },
-  { source: "dex", label: "도감 달성 보상", points: 0, dailyMax: 300, note: "종류별 도감을 25·50·75·100% 채울 때 한 번씩" },
+  // 11/14: 단계(25·50·75·100%) 보상 → 종마다 처음 등록 보상 (lib/forage/dexReward, 값은 catalog DEX_NEW_REWARD). 한도를 넘는 만큼은 도감 창에 쌓여 나중에 받는다
+  { source: "dex", label: "도감 등록 보상", points: 0, dailyMax: 300, note: "새 종을 도감에 처음 등록할 때마다 3~50P (희귀할수록 많이)" },
   // 실시간 서버가 "가장 먼저 잡은 한 명"에게 서명한 증서로만 받는다 (고블린 한 마리당 한 번, lib/goblin.ts)
   { source: "goblin", label: "황금 고블린 잡기", points: 0, dailyMax: 150, note: "가끔 마을에 나타나는 황금 고블린(보너스 요정)을 가장 먼저 잡으면 20~100P" },
   // 광장 소원 분수에 동전(1~5P)을 던지면 가끔 튀어 돌아온다 (하루 3번)

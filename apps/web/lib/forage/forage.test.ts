@@ -5,9 +5,18 @@ import { spotOf } from "@/game/logic/spots";
 import { allProps, inWater, nearWater, standable } from "@/game/world/layout";
 import { SEASONS, TIME_PHASES, WEATHERS } from "../ambience";
 import { bugsCount, bugsPlan } from "../rpg/plan";
+import { CONSTELLATIONS } from "../rpg/constellations";
 import {
+  DEX_CATS,
+  DEX_NEW_REWARD,
   DEX_REWARD,
+  DEX_REWARD_TABLE,
   DEX_TITLES,
+  dexCatOf,
+  dexIdsOf,
+  dexRewardLabel,
+  dexRewardOf,
+  dexTitleNeed,
   GATHER_NODES,
   LIFE_CATS,
   NODE_CAT,
@@ -180,12 +189,32 @@ describe("카탈로그", () => {
     }
   });
 
-  it("도감 보상: 단계마다 포인트, 칭호는 종류마다 50·100%", () => {
-    expect(Object.values(DEX_REWARD).every((p) => p > 0)).toBe(true);
-    for (const c of LIFE_CATS) {
+  it("도감 보상: 종마다 처음 등록 희귀도별 3·6·12·25·50P (잡동사니는 ★1), 별자리도 같은 표, 칭호는 칸마다 절반·전부", () => {
+    expect(DEX_NEW_REWARD).toEqual({ 1: 3, 2: 6, 3: 12, 4: 25, 5: 50 });
+    for (const s of SPECIES) expect(dexRewardOf(s.id), s.id).toBe(DEX_NEW_REWARD[s.junk ? 1 : s.rarity]);
+    expect(SPECIES.some((s) => s.junk && s.rarity > 1)).toBe(true);
+    for (const c of CONSTELLATIONS) {
+      expect(dexRewardOf(c.id), c.id).toBe(DEX_NEW_REWARD[c.rarity]);
+      expect(dexCatOf(c.id)).toBe("star");
+    }
+    expect(dexRewardOf("없는_종")).toBe(0);
+    expect(dexCatOf("없는_종")).toBeNull();
+    expect(dexRewardLabel(CONSTELLATIONS.find((c) => c.rarity === 5)!.id)).toBe("★5 · 50P");
+    // 표에 모든 칸이 한 번씩
+    expect(DEX_REWARD_TABLE).toHaveLength(DEX_CATS.reduce((n, c) => n + dexIdsOf(c).length, 0));
+    expect(new Set(DEX_REWARD_TABLE.map((r) => r.id)).size).toBe(DEX_REWARD_TABLE.length);
+    // 칸별 총합은 예전 단계 보상 합(290P)과 비슷한 크기 (전체 합은 예전의 1.5배를 넘지 않게)
+    const legacy = Object.values(DEX_REWARD).reduce((a, b) => a + b, 0);
+    expect(legacy).toBe(290);
+    const total = DEX_REWARD_TABLE.reduce((n, r) => n + r.pts, 0);
+    expect(total).toBeLessThanOrEqual(legacy * DEX_CATS.length * 1.5);
+    for (const c of DEX_CATS) {
       expect(DEX_TITLES[c][50]).toBeTruthy();
       expect(DEX_TITLES[c][100]).toBeTruthy();
+      expect(dexTitleNeed(c, 100)).toBe(dexIdsOf(c).length);
+      expect(dexTitleNeed(c, 50)).toBe(Math.ceil(dexIdsOf(c).length / 2));
     }
+    expect(LIFE_CATS.every((c) => DEX_CATS.includes(c))).toBe(true);
   });
 });
 

@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { DEX_REWARD } from "@/lib/forage/catalog";
+import { dexRewardOf, dexTitleNeed } from "@/lib/forage/catalog";
 import { getForageStore } from "@/lib/forage/store";
-import type { DexClaimResponse, PublicDex } from "@/lib/forage/types";
+import type { ForageState, PublicDex } from "@/lib/forage/types";
 import { CONSTELLATIONS } from "@/lib/rpg/constellations";
 import { env } from "@/lib/env";
 import { starGroups, starsPlan, STARS_PLAN_VER } from "@/lib/rpg/plan";
@@ -12,6 +12,7 @@ import type { RunFinishResponse, RunStartResponse, StarsResult } from "@/lib/rpg
 import { kstDay } from "@/lib/store/accounts";
 import * as dexClaim from "../forage/dex/claim/route";
 import * as dexOf from "../forage/dex/[id]/route";
+import * as forage from "../forage/route";
 import * as session from "../session/route";
 import * as finish from "./run/finish/route";
 import * as start from "./run/start/route";
@@ -178,33 +179,50 @@ describe("별자리 잇기 → 별자리 도감", () => {
     expect(((await res.json()) as RunFinishResponse).reward.points).toBeGreaterThan(0);
   });
 
-  it("별자리 도감 25% 보상은 한 번만, 이웃 도감 구경에도 별자리·칭호가 보인다", async () => {
+  it("별자리를 처음 등록하면 판 결과에 도감 보상(희귀도별), 절반을 모으면 칭호 「별지기」가 저절로. 옛 단계 받기는 거절, 이웃 구경에도 보인다", async () => {
     const v = await newVisitor();
+    const s = await startStars(v);
+    const gs = groupsOf(s);
+    later(76_000);
+    const r = (await (await finish.POST(call("/x", v, { ticket: s.ticket, result: perfectRun(s, [gs[0].group, gs[1].group]) }))).json()) as RunFinishResponse;
+    const pts = dexRewardOf(gs[0].con) + dexRewardOf(gs[1].con);
+    expect(r.reward.dexReward).toMatchObject({ points: pts, earned: pts, pending: 0, titles: [] });
+    expect(r.reward.dexReward!.me!.points).toBeGreaterThanOrEqual(pts);
+    vi.restoreAllMocks();
+    // 같은 별자리를 다시 이어도 보상은 없다
+    const s2 = await startStars(v);
+    const again = groupsOf(s2).find((g) => g.con === gs[0].con);
+    if (again) {
+      later(76_000);
+      const r2 = (await (await finish.POST(call("/x", v, { ticket: s2.ticket, result: perfectRun(s2, [again.group]) }))).json()) as RunFinishResponse;
+      expect(r2.reward.constellations).toEqual([{ id: gs[0].con, isNew: false, perfect: true }]);
+      expect(r2.reward.dexReward).toBeUndefined();
+      vi.restoreAllMocks();
+    }
+    // 옛 화면의 단계 보상 받기는 포인트 없이 거절
+    expect(await errCode(await dexClaim.POST(call("/x", v, { cat: "star", tier: 25 })))).toBe("DEX_CHANGED");
+
+    // 절반까지 채우면 칭호가 저절로 (받기 버튼 없음)
     const day = kstDay(Date.now());
-    const need = (pct: number) => Math.ceil((CONSTELLATIONS.length * pct) / 100);
+    const have = new Set([gs[0].con, gs[1].con]);
+    const rest = CONSTELLATIONS.filter((c) => !have.has(c.id)).slice(0, dexTitleNeed("star", 50) - have.size);
     await getForageStore().addStars(
       v.id,
       day,
-      CONSTELLATIONS.slice(0, need(25)).map((c) => ({ id: c.id, perfect: false })),
+      rest.map((c) => ({ id: c.id, perfect: true })),
     );
-    expect(await errCode(await dexClaim.POST(call("/x", v, { cat: "star", tier: 50 })))).toBe("NOT_YET");
-    const c = (await (await dexClaim.POST(call("/x", v, { cat: "star", tier: 25 }))).json()) as DexClaimResponse;
-    expect(c.earned).toBe(DEX_REWARD[25]);
-    expect(c.state.claims["star:25"]).toBe(day);
-    expect(await errCode(await dexClaim.POST(call("/x", v, { cat: "star", tier: 25 })))).toBe("ALREADY");
-    await getForageStore().addStars(
-      v.id,
-      day,
-      CONSTELLATIONS.slice(need(25), need(50)).map((c) => ({ id: c.id, perfect: true })),
-    );
-    const c50 = (await (await dexClaim.POST(call("/x", v, { cat: "star", tier: 50 }))).json()) as DexClaimResponse;
-    expect(c50.title).toBe("별지기");
+    const st = (await (await forage.GET(call("/api/forage", v))).json()) as ForageState;
+    expect(st.titles).toContain("별지기");
+    expect(st.titles).not.toContain("밤하늘 지도 제작자");
+    // 정산을 마친 계정이라 직접 등록한 별자리 보상은 받을 보상에 쌓여 있다
+    expect(st.reward.pending.star).toBe(rest.reduce((n, c) => n + dexRewardOf(c.id), 0));
+    expect(st.reward.got.star).toBe(pts);
     // 별자리는 가방에 들어가지 않는다 (팔 수 없다)
-    expect(c50.state.bag).toEqual({});
+    expect(st.bag).toEqual({});
 
     const w = await newVisitor();
     const pub = (await (await dexOf.GET(call(`/api/forage/dex/${v.id}`, w), { params: Promise.resolve({ id: v.id }) })).json()) as PublicDex;
-    expect(Object.keys(pub.dex).filter((id) => id.startsWith("c_"))).toHaveLength(need(50));
+    expect(Object.keys(pub.dex).filter((id) => id.startsWith("c_"))).toHaveLength(dexTitleNeed("star", 50));
     expect(pub.titles).toContain("별지기");
   });
 });

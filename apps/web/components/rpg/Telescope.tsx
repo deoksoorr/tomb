@@ -12,6 +12,7 @@ import { constellationById } from "@/lib/rpg/constellations";
 import { STARS_NEW_PER_RUN, STARS_PLAN_VER } from "@/lib/rpg/plan";
 import type { RunReward, RunResult } from "@/lib/rpg/types";
 import { STARRY_NIGHT_BONUS, starryNight } from "@/lib/stargaze";
+import { dexGainText } from "../forage/autoToast";
 import ConstellationIcon from "../forage/ConstellationIcon";
 import { forageStore, useForage } from "../forage/forageStore";
 import { cx } from "../ui/cx";
@@ -349,6 +350,11 @@ function ResultConstellations({ reward }: { reward: RunReward }) {
         완성한 별자리 <b>{list.length}</b>
         {fresh > 0 && <span className={x.fresh}> · 새로 등록 {fresh}</span>}
       </p>
+      {reward.dexReward && (
+        <p className={x.fresh} style={{ margin: 0, whiteSpace: "normal" }}>
+          {dexGainText(reward.dexReward)}
+        </p>
+      )}
       {later > 0 && (
         <p className={ui.hint}>
           한 판에 새로 등록되는 별자리는 {STARS_NEW_PER_RUN}개까지예요. 넘친 {later}개는 다음 판에 다시 이으면 등록돼요.

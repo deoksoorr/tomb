@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RARITY_LABEL } from "@/lib/forage/catalog";
+import { dexRewardLabel, RARITY_LABEL } from "@/lib/forage/catalog";
 import type { DexEntry } from "@/lib/forage/types";
 import { constellationWhen, CONSTELLATIONS, type Constellation } from "@/lib/rpg/constellations";
 import { cx } from "../ui/cx";
@@ -60,6 +60,8 @@ export default function ConstellationDex({ dex }: { dex: Record<string, DexEntry
               <dd>{constellationWhen(pick)}</dd>
               <dt>별</dt>
               <dd>{pick.stars.length}개</dd>
+              <dt>처음 등록 보상</dt>
+              <dd>{dexRewardLabel(pick.id)}</dd>
               {entry ? (
                 <>
                   <dt>그림</dt>

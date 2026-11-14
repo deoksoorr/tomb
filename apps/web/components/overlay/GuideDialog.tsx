@@ -36,7 +36,7 @@ import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, earnRule } from "@/lib/economy";
 import { DYE_TIME_MS } from "@/lib/dye/palette";
 import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, AUTO_FISH_MAX_MS, AUTO_RANK_NOTE } from "@/lib/forage/auto";
-import { DAILY_CATCH_MAX } from "@/lib/forage/catalog";
+import { DAILY_CATCH_MAX, DEX_NEW_REWARD } from "@/lib/forage/catalog";
 import { PHASE_LABELS, TIME_PHASES, WEATHER_BLOCK_MS, WEATHER_LABELS, WEATHERS } from "@/lib/ambience";
 import { PLOT_TIERS, plotCost } from "@/lib/housing/catalog";
 import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
@@ -184,7 +184,7 @@ const FORAGE: ReactNode[][] = [
     `다른 탭에 있어도 접속해 있는 동안 ${sec(AUTO_FISH_EVERY_MS)}초에 1마리 · 하루 ${AUTO_FISH_DAILY_MAX}마리(직접 낚은 것까지 하루 ${DAILY_CATCH_MAX.fish}마리) · 한 번에 최대 ${AUTO_FISH_MAX_MS / 3_600_000}시간 · 움직이거나 일어나면 꺼져요 · ${AUTO_RANK_NOTE}`,
   ],
   ["팔기", "물고기는 어부 영감, 채집물은 수집가", "희귀할수록 비싸요"],
-  ["도감", "왼쪽 아래 [도감] · 메뉴 → 도감", "25·50·75·100% 보상"],
+  ["도감", "왼쪽 아래 [도감] · 메뉴 → 도감", `새 종을 처음 등록할 때마다 ${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[5]}P (희귀할수록 많이, 오늘 한도를 넘은 건 도감 창에서 받기) · 절반·전부 등록하면 칭호`],
 ];
 
 const DYE: ReactNode[][] = [

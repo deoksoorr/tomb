@@ -1,4 +1,5 @@
 import type { Difficulty, DropKind, GameKind, GearSlot, MonsterId, SkillId, Stats, ZoneId } from "./catalog";
+import type { DexGain } from "../forage/types";
 import type { Derived } from "./formulas";
 import type { StarSky } from "./plan";
 import type { StatusId } from "./status";
@@ -120,6 +121,8 @@ export type RunReward = {
    * later = 처음 완성했지만 한 판 새 등록 한도(STARS_NEW_PER_RUN)를 넘어 이번엔 등록하지 않음 — 다음 판에)
    */
   constellations?: { id: string; isNew: boolean; perfect: boolean; later?: boolean }[];
+  /** 별자리를 도감에 처음 등록해서 받은 도감 보상 (lib/forage/dexReward) */
+  dexReward?: DexGain;
 };
 
 export type RunFinishResponse = { reward: RunReward; view: RpgView };

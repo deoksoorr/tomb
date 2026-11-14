@@ -1,6 +1,6 @@
 import type { TimePhase } from "../ambience";
 import type { Me } from "../types";
-import type { DexTier, LifeCat, NodeKind, NpcId } from "./catalog";
+import type { DexCat, DexTier, LifeCat, NodeKind, NpcId } from "./catalog";
 
 // 낚시·채집·도감 API 계약 (서버 ↔ UI)
 
@@ -17,14 +17,25 @@ export type ForageState = {
   /** 가방의 물고기·채집물 (id → 개수) */
   bag: Record<string, number>;
   dex: Record<string, DexEntry>;
-  /** 받은 도감 보상 (`${cat}:${tier}` → 받은 날) */
+  /** 예전 단계 보상으로 받은 기록 (`${cat}:${tier}` → 받은 날). 11/14부터 새로 생기지 않는다 (옛 화면 호환·정산 근거) */
   claims: Record<string, string>;
   /** 받은 칭호 */
   titles: string[];
+  /** 종마다 처음 등록 보상: 칸별 받을 보상(한도에 걸려 쌓인 것)과 받은 보상 */
+  reward: DexRewardState;
   today: LifeDay & { fishCap: number; gatherCap: number; dexCap: number; autoCap: number };
   /** 지금 나에게 피어 있는 채집 지점 id와 다음에 다시 피는 시각 */
   nodes: { ids: string[]; refreshAt: number };
 };
+
+/** 도감 보상 (칸별). got = 이 칸에서 지금까지 받은 포인트 (예전 단계 보상 포함), pending = 아직 못 받은 것 */
+export type DexRewardState = { pending: Partial<Record<DexCat, number>>; got: Partial<Record<DexCat, number>> };
+
+/**
+ * 이번에 도감에 처음 등록해서 받은 보상 (등록 응답에 실린다). points = 이번 등록 보상 합, earned = 그중 바로 지갑에 들어간 것,
+ * pending = 한도에 걸려 받을 도감 보상으로 쌓인 것, titles = 새로 붙은 칭호. me = 지갑이 바뀌었을 때 내 정보
+ */
+export type DexGain = { points: number; earned: number; pending: number; titles: string[]; me?: Me };
 
 export type CatchResult = {
   id: string;
@@ -70,6 +81,8 @@ export type AutoFishResponse = {
   gear: SunkenCatch[];
   /** 세션이 끝난 까닭 (끄기·시간 다 됨). 켜져 있으면 없음 */
   ended?: "stop" | "time";
+  /** 이번 정산으로 도감에 처음 등록한 보상 */
+  dex?: DexGain;
   state: ForageState;
 };
 
@@ -85,13 +98,13 @@ export type CastResponse = {
 };
 
 /** gear가 있으면 물고기 대신 꾸미기를 건졌다 (다 가졌으면 result에 대신 받은 물고기) */
-export type ReelResponse = { result: CatchResult | null; gear?: SunkenCatch; state: ForageState };
+export type ReelResponse = { result: CatchResult | null; gear?: SunkenCatch; dex?: DexGain; state: ForageState };
 
 export type GatherStartResponse =
   | { ticket: string; mode: "gauge"; kind: Exclude<NodeKind, "bug">; durationMs: number }
   | { ticket: string; mode: "bugs"; kind: "bug"; seed: number; timeLimitSec: number; night: boolean; phase?: TimePhase };
 
-export type GatherFinishResponse = { items: CatchResult[]; state: ForageState; message?: string };
+export type GatherFinishResponse = { items: CatchResult[]; state: ForageState; message?: string; dex?: DexGain };
 
 export type SellResponse = {
   /** 실제로 판 것 (id → 개수) */
@@ -103,7 +116,11 @@ export type SellResponse = {
   me: Me;
 };
 
+/** 예전 단계 보상 받기 응답 (지금은 409로 거절해 쓰이지 않는다) */
 export type DexClaimResponse = { earned: number; title: string | null; state: ForageState; me: Me };
+
+/** [도감 보상 받기]: earned = 이번에 받은 것, left = 한도에 걸려 그 칸에 남은 받을 보상 */
+export type DexPayResponse = { earned: number; left: number; state: ForageState; me: Me };
 
 export type PublicDex = {
   accountId: string;
@@ -112,4 +129,4 @@ export type PublicDex = {
   titles: string[];
 };
 
-export type { DexTier, LifeCat, NpcId };
+export type { DexCat, DexTier, LifeCat, NpcId };

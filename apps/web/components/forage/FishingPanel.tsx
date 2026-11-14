@@ -12,7 +12,7 @@ import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { showToast } from "@/lib/hooks/useToasts";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
-import { toastAutoCatch } from "./autoToast";
+import { noteDexGain, toastAutoCatch } from "./autoToast";
 import { forageStore, useForage } from "./forageStore";
 import s from "./forage.module.css";
 
@@ -91,6 +91,7 @@ export default function FishingPanel({
       .reel(c.ticket, ok)
       .then((r) => {
         forageStore.set(r.state);
+        noteDexGain(r.dex);
         if (r.gear) {
           // 물고기 대신 물에 빠진 꾸미기 (아주 드물게, 영구 소장). 다 가졌으면 대신 받은 희귀 물고기(result)
           const text = sunkenText(r.gear, (id) => speciesById(id)?.name ?? id);

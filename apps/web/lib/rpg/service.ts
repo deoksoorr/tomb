@@ -32,7 +32,9 @@ import { derive, expToNext, MAX_LEVEL } from "./formulas";
 import { ALL_SKILLS_POINTS, respecCost, skillPointsEarned, spentPoints } from "./skillRules";
 import { isSuperHunter } from "./superHunter";
 import { evaluate, FINISH_GRACE_SEC, type StarsDone } from "./rewards";
+import { payNewDex } from "../forage/dexReward";
 import { getForageStore } from "../forage/store";
+import type { DexGain } from "../forage/types";
 import { STARRY_NIGHT_BONUS, starSkyAt } from "../stargaze";
 import { STARS_NEW_PER_RUN, STARS_PLAN_VER } from "./plan";
 import type { z } from "zod";
@@ -311,9 +313,14 @@ export async function grantCosmetics(acct: string, drops: Drop[], now: number): 
  * 별자리 잇기에서 검증을 통과한 완성 별자리를 도감(낚시·채집 도감 저장소의 별자리 칸)에 등록한다.
  * 한 판에 새로 등록하는 별자리는 STARS_NEW_PER_RUN개까지 — 넘친 처음 별자리는 등록하지 않고 later로 알린다 (다음 판에).
  * 이미 있는 별자리는 몇 번이든 완성 횟수가 오른다. 판 기록은 이미 claim했고 계정당 진행 중인 판은 하나라 같은 판으로 두 번 등록할 수 없다.
- * 저장이 실패해도 판 보상은 그대로 (도감만 빠진다)
+ * 저장이 실패해도 판 보상은 그대로 (도감만 빠진다). 처음 등록한 별자리는 도감 보상(lib/forage/dexReward)을 그 자리에서 받는다
  */
-async function registerStars(acct: string, done: StarsDone[], now: number): Promise<RunReward["constellations"]> {
+async function registerStars(
+  acct: string,
+  done: StarsDone[],
+  now: number,
+  ip: string,
+): Promise<{ list: NonNullable<RunReward["constellations"]>; dex?: DexGain }> {
   try {
     const store = getForageStore();
     const have = (await store.dex(acct)).dex;
@@ -331,10 +338,18 @@ async function registerStars(acct: string, done: StarsDone[], now: number): Prom
     );
     // 한 판에 같은 별자리가 두 번 나오면 둘째부터는 처음이 아니다 (저장소가 차례로 센다)
     let k = 0;
-    return done.map((d) => (keep.includes(d) ? { id: d.id, isNew: isNew[k++] ?? false, perfect: d.perfect } : { id: d.id, isNew: false, perfect: d.perfect, later: true }));
+    const list = done.map((d) => (keep.includes(d) ? { id: d.id, isNew: isNew[k++] ?? false, perfect: d.perfect } : { id: d.id, isNew: false, perfect: d.perfect, later: true }));
+    let dex: DexGain | undefined;
+    try {
+      dex = await payNewDex(store, acct, list, ip, now);
+    } catch (e) {
+      // 못 준 보상은 받을 도감 보상에 남아 도감 창에서 받는다
+      console.error("[rpg] 별자리 도감 보상 지급 실패", e);
+    }
+    return { list, ...(dex ? { dex } : {}) };
   } catch (e) {
     console.error("[rpg] 별자리 도감 등록 실패", e);
-    return [];
+    return { list: [] };
   }
 }
 
@@ -379,7 +394,8 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
     }),
   );
   const drops = await grantCosmetics(acct, v.drops, now);
-  const constellations = v.stars ? await registerStars(acct, v.stars, now) : undefined;
+  const stars = v.stars ? await registerStars(acct, v.stars, now, ipHash) : undefined;
+  const constellations = stars?.list;
   const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
   const earned = pointsRaw > 0 ? (await earnPoints(acct, "hunt", pointsRaw, ipHash)).earned : 0;
   await store.addDaily(acct, kstDay(now), { points: earned, runs: 1, exp: v.exp });
@@ -396,6 +412,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       capped: earned < pointsRaw,
       ...(nightBonus ? { nightBonus: true } : {}),
       ...(constellations?.length ? { constellations } : {}),
+      ...(stars?.dex ? { dexReward: stars.dex } : {}),
       drops,
       levelsGained: applied.levelsGained,
       newLevel: state.level,

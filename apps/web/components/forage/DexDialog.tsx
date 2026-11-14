@@ -5,11 +5,12 @@ import { errorMessage } from "@/lib/api";
 import {
   DEX_CAT_LABEL,
   DEX_CATS,
-  DEX_REWARD,
-  DEX_TIERS,
+  DEX_NEW_REWARD,
+  DEX_TITLE_TIERS,
   DEX_TITLES,
-  dexClaimKey,
   dexIdsOf,
+  dexRewardLabel,
+  dexTitleNeed,
   PHASE_LABEL,
   RARITY_LABEL,
   SEASON_LABEL,
@@ -18,7 +19,6 @@ import {
   WHERE_LABEL,
   buyerOf,
   type DexCat,
-  type DexTier,
   type Species,
   type Where,
 } from "@/lib/forage/catalog";
@@ -37,10 +37,12 @@ import { forageStore, useForage } from "./forageStore";
 import s from "./forage.module.css";
 
 // 도감 (51번): 물고기·곤충·약초/버섯·광석·발굴품 + 별자리(망원경 별자리 잇기, ConstellationDex). 처음 잡으면 등록 (실루엣 → 그림, 가장 큰 크기·처음 잡은 날).
-// 모르는 칸도 희귀도·잡히는 곳·시간대·날씨·계절 힌트는 보인다. 종류별 25·50·75·100% 보상(포인트, 50·100%는 칭호).
+// 모르는 칸도 희귀도·잡히는 곳·시간대·날씨·계절 힌트는 보인다. 보상은 종(칸) 하나를 처음 등록할 때마다 희귀도별 포인트 (등록하는 순간 서버가 지급,
+// 오늘 한도에 걸려 못 받은 것은 칸마다 [도감 보상 받기]로). 칭호는 그 칸의 절반·전부를 등록하면 자동으로 (lib/forage/dexReward).
 // accountId를 주면 그 사람의 도감 구경 (보상 버튼 없이).
 
 const stars = (n: number) => "★".repeat(n) + "☆".repeat(5 - n);
+const REWARD_RANGE = `${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[5]}P`;
 const ymd = (d: string) => (d.length === 8 ? `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6)}` : d);
 
 function hints(sp: Species): string[] {
@@ -80,7 +82,7 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
 
   const dex: Record<string, DexEntry> = (mine ? state?.dex : other?.dex) ?? {};
   const titles = (mine ? state?.titles : other?.titles) ?? [];
-  const claims = mine ? (state?.claims ?? {}) : {};
+  const reward = mine ? state?.reward : undefined;
   // 별자리 칸은 종 목록이 없다 (ConstellationDex가 따로 그린다)
   const list = cat === "star" ? [] : speciesOf(cat);
   const ids = dexIdsOf(cat);
@@ -91,15 +93,20 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
   const entry = pick ? dex[pick.id] : undefined;
   const loaded = mine ? !!state : !!other;
 
-  async function claim(tier: DexTier) {
+  const pending = reward?.pending[cat] ?? 0;
+  // 다음 칭호 (절반 → 전부 중 아직 없는 것)
+  const nextTitle = DEX_TITLE_TIERS.map((t) => ({ name: DEX_TITLES[cat][t], need: dexTitleNeed(cat, t) })).find((t) => t.name && !titles.includes(t.name));
+
+  async function payDex() {
     setBusy(true);
     try {
-      const r = await forageApi.claimDex(cat, tier);
+      const r = await forageApi.payDex(cat);
       forageStore.set(r.state);
       meStore.set(r.me);
-      showToast(`${DEX_CAT_LABEL[cat]} 도감 ${tier}% 달성! +${r.earned}P${r.title ? ` · 칭호 「${r.title}」` : ""}`, 5_000);
+      showToast(`${DEX_CAT_LABEL[cat]} 도감 보상 +${r.earned}P${r.left > 0 ? ` (오늘 한도로 ${r.left}P는 남겨 뒀어요 — 내일 또 받기)` : ""}`, 5_000);
     } catch (e) {
       showToast(errorMessage(e));
+      void forageStore.refresh();
     } finally {
       setBusy(false);
     }
@@ -140,6 +147,11 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
                   }}
                 >
                   {DEX_CAT_LABEL[c]} {n}/{all.length}
+                  {(reward?.pending[c] ?? 0) > 0 && (
+                    <span className={s.dexDot} aria-label="받을 도감 보상 있음">
+                      {" "}●
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -156,25 +168,19 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
                 <span style={{ width: `${pct}%` }} />
               </div>
               {mine && (
-                <div className={s.tiers}>
-                  {DEX_TIERS.map((t) => {
-                    const done = !!claims[dexClaimKey(cat, t)];
-                    const ok = pct >= t;
-                    const tt = DEX_TITLES[cat][t];
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        className={cx(ui.button, s.tier, ok && !done && ui.primary)}
-                        data-done={done}
-                        disabled={busy || done || !ok}
-                        onClick={() => void claim(t)}
-                        title={tt ? `칭호 「${tt}」` : undefined}
-                      >
-                        {t}% {done ? "받음" : `+${DEX_REWARD[t]}P${tt ? " · 칭호" : ""}`}
-                      </button>
-                    );
-                  })}
+                <div className={s.dexReward}>
+                  <p>
+                    등록 {got}/총 {ids.length} · 이 분류에서 받은 도감 보상 <b>{reward?.got[cat] ?? 0}P</b>
+                  </p>
+                  {pending > 0 && (
+                    <button type="button" className={cx(ui.button, ui.primary, s.tier)} disabled={busy} onClick={() => void payDex()}>
+                      도감 보상 받기 ({pending}P)
+                    </button>
+                  )}
+                  <p className={ui.hint}>
+                    {nextTitle ? `다음 칭호 「${nextTitle.name}」까지 ${Math.max(0, nextTitle.need - got)}종` : "이 분류 칭호를 모두 받았어요"} · 새 종을 처음 등록할 때마다{" "}
+                    {REWARD_RANGE} (희귀할수록 많이)
+                  </p>
                 </div>
               )}
             </div>
@@ -215,6 +221,8 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
                   <dl>
                     <dt>힌트</dt>
                     <dd>{hints(pick).join(" · ")}</dd>
+                    <dt>처음 등록 보상</dt>
+                    <dd>{dexRewardLabel(pick.id)}</dd>
                     {entry ? (
                       <>
                         <dt>잡은 수</dt>

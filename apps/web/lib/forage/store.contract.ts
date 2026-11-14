@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import { afterAll, expect, it } from "vitest";
+import { DEX_REWARD, dexIdsOf, dexRewardOf, speciesOf } from "./catalog";
 import type { ForageStore } from "./store";
 
 // 저장소 계약: MemoryForageStore·RedisForageStore가 똑같이 지켜야 하는 동작 (store.test.ts가 두 구현에 돌린다).
@@ -19,8 +20,9 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
   it("빈 계정은 빈 가방·빈 도감·0인 오늘 기록", async () => {
     const a = acct();
     const s = await store.snapshot(a, DAY, 1);
-    expect(s).toEqual({ bag: {}, dex: {}, claims: {}, day: { fishP: 0, gatherP: 0, dexP: 0, fish: 0, gather: 0, auto: 0 }, taken: [] });
-    expect(await store.dex(a)).toEqual({ dex: {}, claims: {} });
+    const pay = { settled: null, pending: {}, paid: {}, marks: [] };
+    expect(s).toEqual({ bag: {}, dex: {}, claims: {}, pay, day: { fishP: 0, gatherP: 0, dexP: 0, fish: 0, gather: 0, auto: 0 }, taken: [] });
+    expect(await store.dex(a)).toEqual({ dex: {}, claims: {}, pay });
   });
 
   it("시작 → 끝내기: 같은 티켓은 한 번만, 새로 시작하면 이전 것은 stale, 시간당 한도", async () => {
@@ -160,6 +162,90 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     expect(sb.day).toMatchObject({ fish: 2, auto: 2 });
     expect(sb.bag).toEqual({ f_carp: 1 });
     expect(Object.keys(sb.dex)).toEqual(["f_carp"]);
+  });
+
+  it("도감 보상 전환 정산: 정산 전 등록은 쌓지 않고, 정산이 (등록 보상 합 − 받은 단계 보상)을 칸마다 한 번만 (음수는 0)", async () => {
+    const a = acct();
+    const fish = speciesOf("fish").filter((s) => !s.junk);
+    const ten = fish.slice(0, 10);
+    const sum = ten.reduce((n, s) => n + dexRewardOf(s.id), 0);
+    await store.grant(a, DAY, "fish", ten.map((s) => ({ id: s.id, size: 0 })), 99);
+    await store.addStars(a, DAY, [{ id: "c_gym", perfect: false }]);
+    // 정산 전: 등록해도 받을 보상은 그대로
+    expect((await store.dexPay(a)).pending).toEqual({});
+    // 예전 단계 보상: 물고기 25% (20P), 곤충 25·50% (60P, 곤충은 하나도 등록 안 함 → 음수 → 0)
+    await store.claimDex(a, "fish:25", "20261101");
+    await store.claimDex(a, "bug:25", "20261101");
+    await store.claimDex(a, "bug:50", "20261101");
+    const owed = await store.settleDex(a, DAY);
+    expect(owed).toMatchObject({ fish: sum - DEX_REWARD[25], bug: 0, star: dexRewardOf("c_gym"), herb: 0 });
+    const pay = await store.dexPay(a);
+    expect(pay.settled).toBe(DAY);
+    expect(pay.pending).toEqual({ fish: sum - DEX_REWARD[25], star: dexRewardOf("c_gym") });
+    // 두 번째는 아무것도 하지 않는다 (동시에 불러도 하나만)
+    expect(await store.settleDex(a, DAY)).toBeNull();
+    const again = await Promise.all([store.settleDex(a, DAY), store.settleDex(a, DAY)]);
+    expect(again).toEqual([null, null]);
+    expect((await store.dexPay(a)).pending).toEqual(pay.pending);
+    // 예전 기록은 그대로 남는다
+    expect((await store.dex(a)).claims).toEqual({ "fish:25": "20261101", "bug:25": "20261101", "bug:50": "20261101" });
+
+    const b = acct();
+    const races = await Promise.all(Array.from({ length: 4 }, () => store.settleDex(b, DAY)));
+    expect(races.filter((r) => r !== null)).toHaveLength(1);
+  });
+
+  it("정산한 계정은 등록하는 순간 그 종의 보상이 받을 보상에 쌓인다 (낚시·채집·자동·별자리, 두 번째부터는 없음)", async () => {
+    const a = acct();
+    await store.settleDex(a, DAY);
+    const [f1, f2] = speciesOf("fish").filter((s) => !s.junk);
+    const herb = speciesOf("herb")[0];
+    await store.grant(a, DAY, "fish", [{ id: f1.id, size: 10 }, { id: f1.id, size: 20 }], 99);
+    await store.grant(a, DAY, "gather", [{ id: herb.id, size: 0 }], 99, { window: 3, node: "n1" });
+    await store.grantAuto(a, DAY, [{ id: "@hat_x", size: 0 }, { id: f2.id, size: 5 }, { id: f1.id, size: 5 }], 99, 10, 100);
+    await store.addStars(a, DAY, [{ id: "c_gym", perfect: false }, { id: "c_gym", perfect: true }]);
+    expect((await store.dexPay(a)).pending).toEqual({
+      fish: dexRewardOf(f1.id) + dexRewardOf(f2.id),
+      herb: dexRewardOf(herb.id),
+      star: dexRewardOf("c_gym"),
+    });
+    // 이미 캔 자리(taken)면 등록도 보상도 없다
+    expect(await store.grant(a, DAY, "gather", [{ id: speciesOf("herb")[1].id, size: 0 }], 99, { window: 3, node: "n1" })).toBeNull();
+    expect((await store.dexPay(a)).pending.herb).toBe(dexRewardOf(herb.id));
+    expect(dexIdsOf("star")).toContain("c_gym");
+  });
+
+  it("받을 보상 꺼내기: 동시에 꺼내도 합이 쌓인 값을 넘지 않고, 못 들어간 만큼은 되돌리며 받은 기록이 쌓인다", async () => {
+    const a = acct();
+    await store.settleDex(a, DAY);
+    const ones = speciesOf("ore").slice(0, 6);
+    await store.grant(a, DAY, "gather", ones.map((s) => ({ id: s.id, size: 0 })), 99);
+    const total = ones.reduce((n, s) => n + dexRewardOf(s.id), 0);
+    expect((await store.dexPay(a)).pending.ore).toBe(total);
+    expect(await store.takeDexPending(a, "ore", 0)).toBe(0);
+    expect(await store.takeDexPending(a, "fish", 100)).toBe(0);
+    const takes = await Promise.all(Array.from({ length: 6 }, () => store.takeDexPending(a, "ore", Number.MAX_SAFE_INTEGER)));
+    expect(takes.reduce((x, y) => x + y, 0)).toBe(total);
+    expect(takes.filter((t) => t > 0)).toHaveLength(1);
+    expect((await store.dexPay(a)).pending.ore).toBeUndefined();
+    // 꺼낸 total 중 5만 지갑에 → 나머지는 되돌린다
+    await store.dexPaid(a, "ore", total, 5);
+    let pay = await store.dexPay(a);
+    expect(pay.pending.ore).toBe(total - 5);
+    expect(pay.paid.ore).toBe(5);
+    expect(await store.takeDexPending(a, "ore", 3)).toBe(3);
+    await store.dexPaid(a, "ore", 3, 3);
+    pay = await store.dexPay(a);
+    expect(pay).toMatchObject({ pending: { ore: total - 8 }, paid: { ore: 8 } });
+  });
+
+  it("칭호 붙음 표시는 한 번 남으면 그대로", async () => {
+    const a = acct();
+    await store.markDexTitles(a, ["fish:50", "star:100"], DAY);
+    await store.markDexTitles(a, ["fish:50"], "20261120");
+    await store.markDexTitles(a, [], DAY);
+    expect((await store.dexPay(a)).marks).toEqual(["fish:50", "star:100"]);
+    expect((await store.snapshot(a, DAY, 1)).pay.marks).toEqual(["fish:50", "star:100"]);
   });
 
   it("동시에 같은 티켓을 내도 하나만 ok", async () => {

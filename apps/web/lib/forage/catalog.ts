@@ -327,10 +327,14 @@ export const DEX_CAT_LABEL: Record<DexCat, string> = { ...CAT_LABEL, star: "별�
 /** 그 도감 칸의 항목 id (채우는 비율·보상 계산) */
 export const dexIdsOf = (cat: DexCat): string[] => (cat === "star" ? CONSTELLATIONS.map((c) => c.id) : speciesOf(cat).map((s) => s.id));
 
-/** 도감 달성 보상: 종류마다 25·50·75·100% (포인트는 EarnSource "dex", 칭호는 50·100%) */
+/**
+ * 예전 도감 달성 보상 (종류마다 25·50·75·100%, 11/14 종 하나마다 보상으로 바뀌며 새로 주지 않는다).
+ * 이미 받은 기록(claims `${cat}:${tier}`)은 지우지 않고 남겨 둔다 — 전환 정산(lib/forage/dexReward)이 이 값을 빼고, 받은 50·100% 칭호는 그대로 유지된다
+ */
 export const DEX_TIERS = [25, 50, 75, 100] as const;
 export type DexTier = (typeof DEX_TIERS)[number];
 export const DEX_REWARD: Record<DexTier, number> = { 25: 20, 50: 40, 75: 80, 100: 150 };
+/** 칭호: 50 = 그 칸의 절반을 등록, 100 = 전부 등록 (지금 종 수 기준, 자동으로 붙는다. 예전 단계 보상으로 받은 칭호도 유지) */
 export const DEX_TITLES: Record<DexCat, Partial<Record<DexTier, string>>> = {
   fish: { 50: "주말 낚시꾼", 100: "호수의 전설" },
   bug: { 50: "곤충 채집단", 100: "곤충 박사" },
@@ -340,6 +344,46 @@ export const DEX_TITLES: Record<DexCat, Partial<Record<DexTier, string>>> = {
   star: { 50: "별지기", 100: "밤하늘 지도 제작자" },
 };
 export const dexClaimKey = (cat: DexCat, tier: DexTier) => `${cat}:${tier}`;
+
+/** 칭호가 붙는 단계 (절반·전부) */
+export const DEX_TITLE_TIERS = [50, 100] as const satisfies readonly DexTier[];
+export type DexTitleTier = (typeof DEX_TITLE_TIERS)[number];
+/** 그 칭호에 필요한 등록 수 (절반은 올림) */
+export const dexTitleNeed = (cat: DexCat, tier: DexTitleTier): number => {
+  const all = dexIdsOf(cat).length;
+  return tier === 100 ? all : Math.ceil(all / 2);
+};
+
+/**
+ * 도감 처음 등록 보상 (종 하나마다 한 번, 포인트는 EarnSource "dex"). 희귀도별 — 잡동사니는 ★1로 친다.
+ * 별자리도 같은 표 (흔함·보통·희귀·전설 = ★1·★2·★3·★5)
+ */
+export const DEX_NEW_REWARD: Record<Rarity, number> = { 1: 3, 2: 6, 3: 12, 4: 25, 5: 50 };
+const STAR_BY_ID = new Map(CONSTELLATIONS.map((c) => [c.id, c]));
+/** 도감 칸 id → 어느 칸 (모르는 id면 null) */
+export function dexCatOf(id: string): DexCat | null {
+  if (STAR_BY_ID.has(id)) return "star";
+  return BY_ID.get(id)?.cat ?? null;
+}
+/** 보상 계산용 희귀도 (잡동사니 ★1, 모르는 id면 null) */
+export function dexRarityOf(id: string): Rarity | null {
+  const c = STAR_BY_ID.get(id);
+  if (c) return c.rarity;
+  const s = BY_ID.get(id);
+  if (!s) return null;
+  return s.junk ? 1 : s.rarity;
+}
+/** 그 칸을 처음 등록할 때 받는 포인트 (모르는 id면 0) */
+export function dexRewardOf(id: string): number {
+  const r = dexRarityOf(id);
+  return r ? DEX_NEW_REWARD[r] : 0;
+}
+/** 칸 설명의 "★3 · 12P" (처음 등록 보상) */
+export const dexRewardLabel = (id: string) => `★${dexRarityOf(id) ?? 1} · ${dexRewardOf(id)}P`;
+/** 도감 칸 전체 (id·칸·보상) — 저장소의 전환 정산이 쓴다 */
+export const DEX_REWARD_TABLE: readonly { id: string; cat: DexCat; pts: number }[] = DEX_CATS.flatMap((cat) =>
+  dexIdsOf(cat).map((id) => ({ id, cat, pts: dexRewardOf(id) })),
+);
 
 /** 도감 100% 배지 비트 묶음 (protocol DEX_BADGE_CATS 순서 = LIFE_CATS 순서). 하나도 없으면 0 */
 export function dexBadgeBits(dex: Record<string, { n: number }>): number {

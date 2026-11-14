@@ -21,7 +21,7 @@ import Dialog from "../ui/Dialog";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
 import DexDialog from "./DexDialog";
-import { toastAutoCatch } from "./autoToast";
+import { noteDexGain, toastAutoCatch } from "./autoToast";
 import FishingPanel from "./FishingPanel";
 import { forageStore } from "./forageStore";
 import NpcShop from "./NpcShop";
@@ -145,6 +145,7 @@ export default function ForageLayer() {
         .gatherFinish(gather.ticket)
         .then((r) => {
           forageStore.set(r.state);
+          noteDexGain(r.dex);
           bridge.emit("forage:gauge", { phase: "end", ok: true, node: gather.node });
           for (const it of r.items.slice(0, 3)) bridge.emit("forage:pop", { itemId: it.id });
           showCard(r.items);
@@ -175,6 +176,7 @@ export default function ForageLayer() {
       .gatherFinish(run.ticket, result)
       .then((r) => {
         forageStore.set(r.state);
+        noteDexGain(r.dex);
         for (const it of r.items.slice(0, 3)) bridge.emit("forage:pop", { itemId: it.id });
         setInsectDone((d) => (d ? { ...d, items: r.items, message: r.items.length ? undefined : (r.message ?? "곤충이 모두 날아갔어요.") } : d));
       })

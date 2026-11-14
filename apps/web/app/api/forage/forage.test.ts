@@ -1,13 +1,14 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { earnRule } from "@/lib/economy";
-import { GATHER_NODES, gatherNodeById, speciesById, speciesOf } from "@/lib/forage/catalog";
+import { DEX_REWARD, dexRewardOf, dexTitleNeed, GATHER_NODES, gatherNodeById, speciesById, speciesOf } from "@/lib/forage/catalog";
 import { BUG_DIFFICULTY, BUG_ROUND_SEC, BUG_STATS, reelMinMs } from "@/lib/forage/rules";
+import { payNewDex } from "@/lib/forage/dexReward";
 import { getForageStore } from "@/lib/forage/store";
 import { signForageTicket } from "@/lib/forage/ticket";
 import type {
   CastResponse,
-  DexClaimResponse,
+  DexPayResponse,
   GatherFinishResponse,
   GatherStartResponse,
   ForageState,
@@ -21,6 +22,7 @@ import { kstDay } from "@/lib/store/accounts";
 import * as session from "../session/route";
 import * as dexClaim from "./dex/claim/route";
 import * as dexOf from "./dex/[id]/route";
+import * as dexPay from "./dex/reward/route";
 import * as cast from "./fish/cast/route";
 import * as reel from "./fish/reel/route";
 import * as gFinish from "./gather/finish/route";
@@ -247,28 +249,165 @@ describe("NPC 판매", () => {
 });
 
 describe("도감", () => {
-  it("25%를 채우면 보상 한 번, 50%는 칭호도. 다른 사람 도감을 볼 수 있다", async () => {
+  const pointsOf = async (id: string) => (await getAccounts().get(id, kstDay(Date.now()), Date.now())).points;
+
+  /** 던지고 감기까지 한 번 (시계는 그대로 둔다 — 부른 쪽이 되돌린다) */
+  async function catchOne(v: Visitor) {
+    const c = await body<CastResponse>(await cast.POST(call("/x", v, { spot: PIER })));
+    later(c.biteInMs + reelMinMs(c.power) + 50);
+    const r = await body<ReelResponse>(await reel.POST(call("/x", v, { ticket: c.ticket, ok: true })));
+    vi.restoreAllMocks();
+    return r;
+  }
+
+  it("새 종을 처음 낚는 순간 희귀도별 보상이 지갑에 (결과에 도감 +N P), 같은 종 두 번째는 없다", async () => {
     const v = await newVisitor();
+    await state(v);
+    const r = await catchOne(v);
+    const id = r.result!.id;
+    const pts = dexRewardOf(id);
+    expect(pts).toBeGreaterThan(0);
+    expect(r.dex).toMatchObject({ points: pts, earned: pts, pending: 0, titles: [] });
+    expect(r.dex!.me!.points).toBe(pts);
+    expect(await pointsOf(v.id)).toBe(pts);
+    expect(r.state.reward).toEqual({ pending: {}, got: { fish: pts } });
+    expect(r.state.today.dexP).toBe(pts);
+    // 같은 종을 또 잡으면 보상 없음 (같은 종이 나올 때까지 몇 번)
+    for (let i = 0; i < 40; i++) {
+      const again = await catchOne(v);
+      if (again.result?.id !== id) continue;
+      expect(again.result.isNew).toBe(false);
+      expect(again.dex).toBeUndefined();
+      break;
+    }
+  });
+
+  it("오늘 도감 한도에 걸린 만큼은 받을 보상으로 쌓이고, 다음 날 [도감 보상 받기]로 한도 안에서 — 동시에 눌러도 한 번만", async () => {
+    const v = await newVisitor();
+    const cap = earnRule("dex").dailyMax;
+    await state(v);
+    await getAccounts().earn(v.id, "dex", kstDay(realNow()), { amount: cap });
+    const before = await pointsOf(v.id);
+    const r = await catchOne(v);
+    const pts = dexRewardOf(r.result!.id);
+    expect(r.dex).toMatchObject({ points: pts, earned: 0, pending: pts });
+    expect(r.dex!.me).toBeUndefined();
+    expect(await pointsOf(v.id)).toBe(before);
+    expect(r.state.reward.pending).toEqual({ fish: pts });
+    // 오늘은 받아도 한도라 그대로 남는다
+    expect(await errCode(await dexPay.POST(call("/x", v, { cat: "fish" })))).toBe("DAILY_CAP");
+    expect((await state(v)).reward.pending).toEqual({ fish: pts });
+    expect(await errCode(await dexPay.POST(call("/x", v, { cat: "bug" })))).toBe("NOTHING_TO_CLAIM");
+    expect((await dexPay.POST(call("/x", v, { cat: "nope" }))).status).toBe(400);
+
+    // 다음 날: 1P만 남은 상태에서 동시에 다섯 번 → 한 번만 1P, 나머지는 남는다
+    later(86_400_000);
+    const day2 = kstDay(Date.now());
+    await getAccounts().earn(v.id, "dex", day2, { amount: cap - 1 });
+    const mid = await pointsOf(v.id);
+    const res = await Promise.all(Array.from({ length: 5 }, () => dexPay.POST(call("/x", v, { cat: "fish" }))));
+    const ok = res.filter((x) => x.status === 200);
+    expect(ok).toHaveLength(1);
+    const paid = await body<DexPayResponse>(ok[0]);
+    expect(paid).toMatchObject({ earned: 1, left: pts - 1 });
+    expect(await pointsOf(v.id)).toBe(mid + 1);
+    expect((await state(v)).reward).toEqual({ pending: { fish: pts - 1 }, got: { fish: 1 } });
+    vi.restoreAllMocks();
+
+    // 그다음 날: 남은 것을 모두 (동시에 눌러도 합은 한 번)
+    later(2 * 86_400_000);
+    const end = await pointsOf(v.id);
+    const res3 = await Promise.all(Array.from({ length: 4 }, () => dexPay.POST(call("/x", v, { cat: "fish" }))));
+    const ok3 = res3.filter((x) => x.status === 200);
+    expect(ok3).toHaveLength(1);
+    expect(await body<DexPayResponse>(ok3[0])).toMatchObject({ earned: pts - 1, left: 0 });
+    expect(await pointsOf(v.id)).toBe(end + pts - 1);
+    expect((await state(v)).reward).toEqual({ pending: {}, got: { fish: pts } });
+  });
+
+  it("전환 정산: 예전에 단계 보상을 받은 계정은 (등록한 종 보상 합 − 받은 단계 보상)만큼 받을 보상에, 음수는 0, 한 번만. 받은 칭호는 유지", async () => {
+    const v = await newVisitor();
+    const store = getForageStore();
     const day = kstDay(realNow());
-    const fish = speciesOf("fish");
-    const need = (pct: number) => Math.ceil((fish.length * pct) / 100);
-    await getForageStore().grant(v.id, day, "fish", fish.slice(0, need(25)).map((s) => ({ id: s.id, size: 100 })), 99);
-    expect(await errCode(await dexClaim.POST(call("/x", v, { cat: "fish", tier: 50 })))).toBe("NOT_YET");
-    const c = await body<DexClaimResponse>(await dexClaim.POST(call("/x", v, { cat: "fish", tier: 25 })));
-    expect(c).toMatchObject({ earned: 20, title: null });
-    expect(c.me.points).toBe(20);
-    expect(c.state.claims["fish:25"]).toBe(day);
-    expect(await errCode(await dexClaim.POST(call("/x", v, { cat: "fish", tier: 25 })))).toBe("ALREADY");
-    await getForageStore().grant(v.id, day, "fish", fish.slice(need(25), need(50)).map((s) => ({ id: s.id, size: 100 })), 99);
-    const c50 = await body<DexClaimResponse>(await dexClaim.POST(call("/x", v, { cat: "fish", tier: 50 })));
-    expect(c50.title).toBe("주말 낚시꾼");
-    expect(c50.state.titles).toContain("주말 낚시꾼");
-    expect((await dexClaim.POST(call("/x", v, { cat: "fish", tier: 33 }))).status).toBe(400);
+    const fish = speciesOf("fish").slice(0, 20);
+    const sum = fish.reduce((n, s) => n + dexRewardOf(s.id), 0);
+    // 개편 전 기록: 물고기 20종 등록 + 25·50% 받음, 곤충은 하나도 없는데 25·50% 받음(종이 늘기 전 기록), 별자리 25%
+    await store.grant(v.id, day, "fish", fish.map((s) => ({ id: s.id, size: 100 })), 99);
+    for (const k of ["fish:25", "fish:50", "bug:25", "bug:50", "star:25"]) await store.claimDex(v.id, k, "20261101");
+    const before = await pointsOf(v.id);
+
+    const s1 = await state(v);
+    const owed = sum - DEX_REWARD[25] - DEX_REWARD[50];
+    expect(owed).toBeGreaterThan(0);
+    expect(s1.reward.pending).toEqual({ fish: owed });
+    expect(s1.reward.got).toEqual({ fish: 60, bug: 60, star: 20 });
+    // 받은 50% 칭호는 그대로 (곤충은 지금 등록 0이어도), 물고기는 20/40 = 절반 등록이라 어차피 붙는다
+    expect(s1.titles).toEqual(["주말 낚시꾼", "곤충 채집단"]);
+    // 예전 기록은 지우지 않는다
+    expect(s1.claims).toMatchObject({ "fish:25": "20261101", "bug:50": "20261101" });
+    // 정산은 한 번만 (다시 읽어도, 동시에 읽어도 그대로)
+    await Promise.all([state(v), state(v), state(v)]);
+    expect((await state(v)).reward.pending).toEqual({ fish: owed });
+    expect(await pointsOf(v.id)).toBe(before);
+
+    // 정산 뒤 새로 등록하면 그 종만 더 쌓이거나 바로 받는다 (두 번 세지 않는다)
+    const extra = speciesOf("fish")[25];
+    const g = await store.grant(v.id, day, "fish", [{ id: extra.id, size: 100 }], 99);
+    expect(g![0].isNew).toBe(true);
+    expect((await state(v)).reward.pending).toEqual({ fish: owed + dexRewardOf(extra.id) });
+
+    // 받기: 오늘 한도(300) 안에서
+    const cap = earnRule("dex").dailyMax;
+    const p = await body<DexPayResponse>(await dexPay.POST(call("/x", v, { cat: "fish" })));
+    const all = owed + dexRewardOf(extra.id);
+    expect(p.earned).toBe(Math.min(all, cap));
+    expect(p.left).toBe(all - Math.min(all, cap));
+    expect(p.me.points).toBe(before + p.earned);
+    expect(p.state.reward.got.fish).toBe(60 + p.earned);
+
+    // 정산할 게 없는 계정(받은 단계 보상이 등록 보상보다 큼)은 0 — 빼앗지 않는다
+    const w = await newVisitor();
+    await store.grant(w.id, day, "gather", [{ id: speciesOf("ore")[0].id, size: 0 }], 99);
+    for (const k of ["ore:25", "ore:50", "ore:75"]) await store.claimDex(w.id, k, "20261101");
+    const sw = await state(w);
+    expect(sw.reward.pending).toEqual({});
+    expect(sw.reward.got).toEqual({ ore: 140 });
+    expect(sw.titles).toEqual(["초보 광부"]);
+  });
+
+  it("칭호는 그 칸의 절반·전부를 등록하면 저절로 (등록 결과에 새 칭호), 한 번 붙으면 남는다. 옛 단계 받기는 409, 다른 사람 도감에도 보인다", async () => {
+    const v = await newVisitor();
+    const store = getForageStore();
+    const day = kstDay(realNow());
+    await state(v);
+    const herbs = speciesOf("herb");
+    const half = dexTitleNeed("herb", 50);
+    await store.grant(v.id, day, "gather", herbs.slice(0, half - 1).map((s) => ({ id: s.id, size: 0 })), 99);
+    expect((await state(v)).titles).toEqual([]);
+    // 마지막 한 종은 채집 경로로 (지급·칭호가 결과에 실린다)
+    const g = await store.grant(v.id, day, "gather", [{ id: herbs[half - 1].id, size: 0 }], 99);
+    const gain = await payNewDex(store, v.id, g!, "ip", Date.now());
+    expect(gain).toMatchObject({ points: dexRewardOf(herbs[half - 1].id), titles: ["약초꾼"] });
+    const s1 = await state(v);
+    expect(s1.titles).toEqual(["약초꾼"]);
+    expect((await store.dexPay(v.id)).marks).toContain("herb:50");
+    // 이미 등록된 종을 또 넣으면 아무것도 없다
+    expect(await payNewDex(store, v.id, (await store.grant(v.id, day, "gather", [{ id: herbs[0].id, size: 0 }], 99))!, "ip", Date.now())).toBeUndefined();
+
+    // 옛 화면이 단계 보상을 부르면 포인트 없이 409
+    const before = await pointsOf(v.id);
+    const old = await dexClaim.POST(call("/x", v, { cat: "herb", tier: 50 }));
+    expect(old.status).toBe(409);
+    expect(await errCode(old)).toBe("DEX_CHANGED");
+    expect(await errCode(await dexClaim.POST(call("/x", v, { cat: "fish", tier: 33 })))).toBe("DEX_CHANGED");
+    expect((await dexClaim.POST(call("/x", undefined, { cat: "fish", tier: 25 }))).status).toBe(401);
+    expect(await pointsOf(v.id)).toBe(before);
 
     const w = await newVisitor();
     const pub = await body<PublicDex>(await dexOf.GET(call(`/api/forage/dex/${v.id}`, w), { params: Promise.resolve({ id: v.id }) }));
-    expect(Object.keys(pub.dex)).toHaveLength(need(50));
-    expect(pub.titles).toEqual(["주말 낚시꾼"]);
+    expect(Object.keys(pub.dex)).toHaveLength(half);
+    expect(pub.titles).toEqual(["약초꾼"]);
     expect(pub).not.toHaveProperty("bag");
+    expect(pub).not.toHaveProperty("reward");
   });
 });

@@ -1,13 +1,12 @@
-import { handler, json } from "@/lib/http";
-import { DexClaimSchema } from "@/lib/forage/schemas";
-import { claimDexReward } from "@/lib/forage/service";
-import type { DexClaimResponse } from "@/lib/forage/types";
-import { ipHash, requireVisitor } from "@/lib/session";
-import { readBody } from "@/lib/validate";
+import { handler } from "@/lib/http";
+import { legacyDexClaim } from "@/lib/forage/service";
+import { requireVisitor } from "@/lib/session";
 
-/** 도감 달성 보상 `{ cat, tier }` (한 번만, 포인트 + 50·100%는 칭호) */
+/**
+ * 예전 도감 달성 보상 `{ cat, tier }` — 11/14 종마다 처음 등록 보상으로 바뀌어 늘 409 DEX_CHANGED로 거절한다
+ * (배포 중 옛 화면이 불러도 포인트가 나가지 않게. 새 화면은 /api/forage/dex/reward)
+ */
 export const POST = handler(async (req) => {
-  const visitorId = await requireVisitor(req);
-  const { cat, tier } = await readBody(req, DexClaimSchema);
-  return json<DexClaimResponse>(await claimDexReward(visitorId, cat, tier, ipHash(req)));
+  await requireVisitor(req);
+  return legacyDexClaim();
 });

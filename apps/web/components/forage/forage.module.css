@@ -461,12 +461,6 @@
   font-size: 13px;
 }
 
-.tiers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
 .tier {
   font-size: 11px;
   padding: 4px 8px;
@@ -478,10 +472,6 @@
   .tier {
     min-height: 44px;
   }
-}
-
-.tier[data-done="true"] {
-  opacity: 0.55;
 }
 
 .grid {
@@ -605,4 +595,20 @@
   top: 2px;
   color: var(--bone);
   font-size: 11px;
+}
+
+/* ── 도감 보상 (종마다 처음 등록) ── */
+.dexReward {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  font-size: 12px;
+}
+
+.dexReward p {
+  margin: 0;
+}
+
+.dexDot {
+  color: var(--candle);
 }
