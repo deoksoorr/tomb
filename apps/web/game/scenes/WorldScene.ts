@@ -759,7 +759,8 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("world:lot", ({ lot, label }) => this.showLot(lot, label)));
     on.push(
       bridge.on("input:act", ({ kind }) => {
-        if (kind === "wave" || kind === "cheer") this.hub.dispatch(kind);
+        // 표현 창이 열려 키가 막혀 있어도 단추로 고른 몸짓은 보낸다 (이모티콘 input:emo와 같은 조건)
+        if ((kind === "wave" || kind === "cheer") && !this.cleaned && !this.inShop && !this.awayScene) this.hub.trigger(kind);
       }),
     );
     on.push(bridge.on("ui:blockKeys", ({ blocked }) => this.hub.setBlocked(blocked)));
