@@ -109,6 +109,7 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
                   data-playlist={p.id}
                 >
                   {p.title}
+                  {p.isNew && <span className={styles.newTag}>NEW</span>}
                 </button>
               ))}
             </div>

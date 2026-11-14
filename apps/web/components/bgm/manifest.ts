@@ -9,7 +9,8 @@ export type Track = {
   durationSec: number;
 };
 
-export type Playlist = { id: string; title: string; tracks: Track[] };
+/** isNew: 새로 들어온 목록 (플레이어 단추에 NEW 딱지) */
+export type Playlist = { id: string; title: string; isNew?: boolean; tracks: Track[] };
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
@@ -35,7 +36,7 @@ export function parseManifest(data: unknown): Playlist[] {
         },
       ];
     });
-    return [{ id, title, tracks }];
+    return [{ id, title, ...(p.isNew === true ? { isNew: true } : {}), tracks }];
   });
 }
 

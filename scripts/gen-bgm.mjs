@@ -2374,16 +2374,16 @@ function importExternal(s) {
 }
 
 // ───────────────────────── 트랙 목록 ─────────────────────────
-// tracks.json 목록 순서 (로파이가 맨 앞 — 처음 들어오면 로파이로 시작한다)
+// tracks.json 목록 순서 (로파이가 맨 앞 — 처음 들어오면 로파이로 시작한다). 새로 바꾼 세 목록을 위에 두고 NEW 딱지(isNew)
 const PLAYLISTS = [
-  { id: "lofi", title: "로파이" },
+  { id: "lofi", title: "로파이", isNew: true },
+  { id: "acoustic", title: "어쿠스틱 기타", isNew: true },
+  { id: "jazz", title: "재즈", isNew: true },
   { id: "orgel", title: "오르골" },
   { id: "rain", title: "빗소리" },
   { id: "piano", title: "피아노" },
   { id: "chiptune", title: "8비트" },
-  { id: "jazz", title: "재즈" },
   { id: "ambient", title: "앰비언트" },
-  { id: "acoustic", title: "어쿠스틱 기타" },
   { id: "retro", title: "레트로 RPG" },
 ];
 /** 픽사베이 곡으로 바꾼 목록: 여기서 굽거나 지우지 않고, tracks.json의 지금 내용을 그대로 쓴다 */
@@ -2636,7 +2636,7 @@ function writeManifest() {
     const tracks = kept ? kept.tracks.map(row) : ordered(p.id).map((s) =>
       row({ file: `/bgm/${s.pl}/${s.file}.mp3`, title: s.title, artist: s.artist ?? ARTIST, sourceUrl: s.sourceUrl ?? "", license: s.license ?? "CC0", durationSec: s.ext ? probeDur(outFile(s)) : planOf(s).dur }),
     );
-    return `    {\n      "id": ${JSON.stringify(p.id)},\n      "title": ${JSON.stringify(p.title)},\n      "tracks": [\n${tracks.map((t) => `        ${t}`).join(",\n")}\n      ]\n    }`;
+    return `    {\n      "id": ${JSON.stringify(p.id)},\n      "title": ${JSON.stringify(p.title)},\n${p.isNew ? '      "isNew": true,\n' : ""}      "tracks": [\n${tracks.map((t) => `        ${t}`).join(",\n")}\n      ]\n    }`;
   });
   writeFileSync(join(OUT, "tracks.json"), `{\n  "playlists": [\n${lists.join(",\n")}\n  ]\n}\n`);
 }

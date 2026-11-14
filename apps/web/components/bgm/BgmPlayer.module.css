@@ -115,6 +115,7 @@
 }
 
 .listButton {
+  position: relative;
   min-width: 0;
   min-height: 32px;
   padding: 4px 2px;
@@ -198,4 +199,18 @@
   .title {
     display: none;
   }
+}
+
+/* 새로 들어온 목록 딱지: 단추 오른쪽 위 모서리에 스티커처럼 (글자 폭을 차지하지 않아 좁은 폰에서도 넘치지 않게) */
+.newTag {
+  position: absolute;
+  top: -6px;
+  right: -2px;
+  padding: 0 3px;
+  background: var(--candle);
+  color: var(--bg-deep);
+  font-family: var(--font-small);
+  font-size: 8px;
+  line-height: 11px;
+  pointer-events: none;
 }
