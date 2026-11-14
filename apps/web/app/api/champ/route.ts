@@ -4,9 +4,9 @@ import { handler, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { getVisitorId } from "@/lib/session";
 import { kstWeek } from "@/lib/store/accounts";
-import { champBitsFor, getChamp, type ChampWeek, type ChampWinner } from "@/lib/store/champ";
+import { getChamp, type ChampWeek, type ChampWinner } from "@/lib/store/champ";
 import type { ChampResponse, ChampWinnerView } from "@/lib/types";
-import { CHAMP_POINTS, champLookOf, champWeekCached, ensureChampSettled, prevWeek } from "@/lib/weeklyChamp";
+import { CHAMP_POINTS, champLookOf, champMine, champWeekCached, ensureChampSettled, prevWeek } from "@/lib/weeklyChamp";
 
 /** 명예의 전당에 보여 주는 주 수 */
 const HALL_WEEKS = 12;
@@ -34,9 +34,8 @@ export const GET = handler(async (req) => {
   const last = await Promise.all(order(rec).map(async (w) => ({ ...view(w), avatar: await champLookOf(w.accountId, now) })));
   let mine: ChampResponse["mine"];
   if (me) {
-    const [bits, auraOff, seen] = await Promise.all([champBitsFor(me, now), store.auraOff(me), store.seen(me)]);
-    const won = order(rec).filter((w) => w.accountId === me).map((w) => w.board);
-    mine = { bits, auraOff, unseen: won.length && seen !== week ? { week, boards: won } : null };
+    const [m, auraOff] = await Promise.all([champMine(me, now), store.auraOff(me)]);
+    mine = { bits: m.bits, auraOff, unseen: m.unseen };
   }
   return json<ChampResponse>(
     { week, last, hall: hall.map((r) => ({ week: r.week, winners: order(r).map(view) })), points: CHAMP_POINTS, ...(mine ? { mine } : {}) },

@@ -24,7 +24,8 @@ const FLOWER_MS = 3000;
 const PET_LAG_MS = 240;
 
 export type StagePose = { dir: DirId; walking: boolean };
-export type StageLook = { color: string; body: string; look: readonly string[] };
+/** champ = 주간 랭킹 1위 값 (전용 오라 미리보기 — 레이스 창 보상 칸) */
+export type StageLook = { color: string; body: string; look: readonly string[]; champ?: number };
 
 type Flower = { x: number; y: number; frame: number; born: number };
 
@@ -309,10 +310,10 @@ export class OutfitStage {
 
     // ── F8 연출 (우산·풍선·날개·발자국·오라·펫): 게임과 같은 CosmeticFxSim ──
     // 몸도 함께: 프리미엄 외형 등급 연출 (빛·반짝이)
-    const fxKey = `${body}|${l.look.join(",")}`;
+    const fxKey = `${body}|${l.look.join(",")}|${l.champ ?? 0}`;
     if (fxKey !== this.fxKey) {
       this.fxKey = fxKey;
-      this.fx.setLook(l.look, body);
+      this.fx.setLook(l.look, body, l.champ);
     }
     const fxCmds: FxCmd[] = [];
     if (!this.fx.empty) {

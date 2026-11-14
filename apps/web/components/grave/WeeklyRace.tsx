@@ -5,10 +5,14 @@ import { CHAMP_TITLE, type ChampBoard } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import type { ChampAvatar, ChampResponse, RaceResponse, RaceRow } from "@/lib/types";
 import AvatarThumb from "../account/AvatarThumb";
+import { ChampReward, ComboAuras } from "./ChampReward";
 import styles from "./WeeklyRace.module.css";
 
 // 이번 주 레이스 (화면 위 [레이스] 버튼 · 메뉴 시트 → 표준 창): 포인트·사냥 처치·낚시마다 1~3등 시상대(캐릭터 모습), 마감(월요일 0시 KST)까지 남은 시간,
 // 내 순위·1위와의 차이. 창이 열려 있는 동안 30초마다 다시 받는다. 아래에는 지난주 1위와 명예의 전당.
+
+/** 1위 보상 포인트 (응답이 오기 전 기본값 — lib/weeklyChamp CHAMP_POINTS와 같다) */
+const CHAMP_POINTS_DEFAULT = 1000;
 
 /** 다시 받는 간격 */
 export const RACE_REFRESH_MS = 30_000;
@@ -76,7 +80,7 @@ export default function WeeklyRace() {
         마감까지 <b>{leftText(race.endsAt - now)}</b>
         <span className={styles.when}> · 월요일 0시</span>
       </p>
-      <p className={styles.reward}>1위 보상: 전용 모자(한 주) · 1위 오라 · 이름표 배지 · {(champ?.points ?? 1000).toLocaleString("ko-KR")}P</p>
+      <p className={styles.reward}>1위 보상: 전용 모자(한 주) · 전용 오라 · 이름표 배지 · {(champ?.points ?? CHAMP_POINTS_DEFAULT).toLocaleString("ko-KR")}P</p>
       {/* 시상대 3개: 넓은 창은 가로로 나란히, 좁은 창은 세로로 */}
       <div className={styles.boards}>
         {race.boards.map((b) => (
@@ -87,6 +91,7 @@ export default function WeeklyRace() {
               </span>
               {BOARD_NAME[b.board]}
             </h3>
+            <ChampReward board={b.board} points={champ?.points ?? CHAMP_POINTS_DEFAULT} />
             {b.top.length === 0 ? (
               <p className={styles.none}>아직 기록이 없어요. 지금 1위가 될 기회!</p>
             ) : (
@@ -158,6 +163,10 @@ export default function WeeklyRace() {
             )}
           </section>
         )}
+        <section className={styles.board} aria-label="여러 랭킹 1위면 합쳐진 오라">
+          <h3 className={styles.title}>여러 개 1위면 합쳐진 오라</h3>
+          <ComboAuras />
+        </section>
       </div>
     </div>
   );

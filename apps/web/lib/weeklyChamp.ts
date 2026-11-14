@@ -1,12 +1,14 @@
 import { nanoid } from "nanoid";
-import { CHAMP_BOARDS, CHAMP_HAT, CHAMP_TITLE, itemById, type AvatarDye, type ChampBoard } from "@tomb/protocol";
+import { CHAMP_BOARDS, CHAMP_HAT, CHAMP_TITLE, champBitsOf, champBoards, itemById, type AvatarDye, type ChampBoard } from "@tomb/protocol";
+import { notifyMe } from "./ban";
 import { speciesById } from "./forage/catalog";
 import { getFishRank } from "./forage/fishRank";
 import { staffAccountId } from "./staff";
 import { rankWithoutStaff } from "./staffRank";
 import { getAccounts, getMegaphone, NO_NAME } from "./store";
 import { kstDay, kstWeek, lookOf } from "./store/accounts";
-import { champUntil, champWeekCached, getChamp, prevWeek, primeChampCache, weekEndMs, weekStartMs, type ChampWeek, type ChampWinner } from "./store/champ";
+import { champBitsFor, champUntil, champWeekCached, getChamp, prevWeek, primeChampCache, weekEndMs, weekStartMs, type ChampWeek, type ChampWinner } from "./store/champ";
+import { testServerEnv } from "./rpg/superHunter";
 import { getStyleStore } from "./store/style";
 
 // 주간 랭킹 1위 보상 (설계: docs/superpowers/specs/2026-11-14-weekly-first-reward-design.md).
@@ -143,6 +145,63 @@ async function announce(rec: ChampWeek, paidNow: readonly ChampBoard[], now: num
     const what = ws.map((w) => `${CHAMP_BOARD_LABEL[w.board]} ${champValueText(w)}`).join(" · ");
     await pushVillageNotice(`👑 지난주 ${title}은 ${ws[0].name}님! (${what})`, now);
   }
+  // 접속 중인 1위 화면에 "내 정보 새로 받기" 신호 → 그 자리에서 알림 창·모자·배지·전용 오라 (실시간 서버 /internal/me, 실패해도 화면이 몇 분 안에 스스로 확인한다)
+  await notifyMe([...byAccount.keys()]).catch(() => null);
+}
+
+// ── 내 1위 상태 (화면이 접속 중에 가볍게 확인한다 — /api/champ/me) ──
+
+/** 아직 안 본 1위 알림: week = 그 주 월요일 또는 시험 지급 id("test:…"), test = 운영자 시험 지급 */
+export type ChampUnseen = { week: string; boards: ChampBoard[]; test?: true };
+
+/**
+ * 지금 내 1위 값(비트, 0 = 아님)과 아직 안 본 1위 알림. 1위가 아니면 저장소를 거의 읽지 않는다
+ * (지난주 기록은 프로세스 캐시, 오라 끔·봤음 표시는 1위일 때만 읽는다)
+ */
+export async function champMine(accountId: string, now = Date.now()): Promise<{ bits: number; unseen: ChampUnseen | null }> {
+  const bits = await champBitsFor(accountId, now);
+  if (!bits) return { bits: 0, unseen: null };
+  const store = getChamp();
+  const week = prevWeek(kstWeek(now));
+  const [rec, seen, test] = await Promise.all([champWeekCached(week, now), store.seen(accountId), testServerEnv() ? store.test(accountId, now) : null]);
+  const won = CHAMP_BOARDS.filter((b) => rec?.winners.some((w) => w.board === b && w.accountId === accountId));
+  if (won.length && seen !== week) return { bits, unseen: { week, boards: won } };
+  if (test && seen !== test.id) return { bits, unseen: { week: test.id, boards: champBoards(test.bits), test: true } };
+  return { bits, unseen: null };
+}
+
+// ── 테스트 서버 운영자 시험 1위 (운영에서는 쓸 수 없다) ──
+
+/** 시험 1위 자격(배지·전용 오라)이 저절로 끝나는 시간 */
+export const CHAMP_TEST_MS = 3 * 3_600_000;
+/** 시험 지급 모자 대여 기간 */
+export const CHAMP_TEST_HAT_MS = 86_400_000;
+
+/**
+ * 운영자 계정에 시험 1위 주기 (실제 지급과 같은 계정 저장소 grantChamp: 전용 모자 하루 대여 + 1,000P씩) + 시험 자격(CHAMP_TEST_MS 뒤 저절로 끝).
+ * 주간 1위 기록·랭킹·명예의 전당은 건드리지 않는다. boards가 비면 시험 자격만 끝낸다 (빌려 준 모자는 하루 뒤 저절로 끝난다).
+ * 접속 중인 운영자 화면에 바로 알린다 (알림 창·모자·배지·전용 오라)
+ */
+export async function grantChampTest(accountId: string, boards: readonly ChampBoard[], now = Date.now()): Promise<{ bits: number; until: number }> {
+  if (!testServerEnv()) throw new Error("[champ] 시험 지급은 테스트 서버에서만");
+  const store = getChamp();
+  if (!boards.length) {
+    await store.setTest(accountId, null);
+    await notifyMe([accountId]).catch(() => null);
+    return { bits: 0, until: 0 };
+  }
+  const id = `test:${now}`;
+  const accounts = getAccounts();
+  for (const b of boards) {
+    const hat = CHAMP_HAT[b];
+    await accounts.grantChamp(accountId, `${id}:${b}`, hat, itemById(hat)?.slot ?? "head", now + CHAMP_TEST_HAT_MS, CHAMP_POINTS, now);
+  }
+  const t = { id, bits: champBitsOf([...boards]), until: now + CHAMP_TEST_MS };
+  await store.setTest(accountId, t);
+  const title = boards.length > 1 ? `${boards.length}관왕(${champTitles(boards)})` : champTitles(boards);
+  await accounts.pushActivity(accountId, { id: nanoid(10), kind: "champ", at: now, who: "", targetId: id, targetName: `[시험] ${title}` });
+  await notifyMe([accountId]).catch(() => null);
+  return { bits: t.bits, until: t.until };
 }
 
 /** 이 프로세스에서 정리가 끝난 주 (다음 주가 될 때까지 다시 확인하지 않는다) */

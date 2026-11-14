@@ -1,4 +1,5 @@
 import type {
+  ChampMeResponse,
   ChampResponse,
   RaceResponse,
   WearResponse,
@@ -156,9 +157,11 @@ export const api = {
     request<RankResponse>(`/api/rank?${new URLSearchParams({ board, period, me: "1", ...(zone ? { zone } : {}), ...(fish ? { fish } : {}) })}`, { cache: "no-store" }),
   /** 주간 랭킹 1위: 지난주 1위·명예의 전당 + 내 1위 값·아직 안 본 1위 알림 */
   champ: () => request<ChampResponse>("/api/champ?me=1", { cache: "no-store" }),
+  /** 내 1위 상태 (가볍게 — 접속 중 확인용) */
+  champMe: () => request<ChampMeResponse>("/api/champ/me", { cache: "no-store" }),
   /** 1위 알림 창을 봤다 */
   champSeen: (week: string) => request<unknown>("/api/champ/seen", jsonInit("POST", { week })),
-  /** "1위 오라 보이기" 켜기·끄기 (지금 1위인 사람만) */
+  /** "전용 오라 보이기"(1위 오라) 켜기·끄기 (지금 1위인 사람만) */
   champAura: (on: boolean) => request<WearResponse>("/api/champ/aura", jsonInit("POST", { on })),
   /** 이번 주 레이스 (랭킹 3개 1~3등·마감·내 순위) */
   race: () => request<RaceResponse>("/api/champ/race", { cache: "no-store" }),

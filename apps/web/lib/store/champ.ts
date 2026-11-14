@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
-import { champBitsOf, type ChampBoard } from "@tomb/protocol";
+import { champBitsOf, champBoards, type ChampBoard } from "@tomb/protocol";
 import { env } from "../env";
+import { testServerEnv } from "../rpg/superHunter";
 import { K } from "./keys";
 
 // 주간 랭킹 1위 기록 (lib/weeklyChamp). 한 주의 1위는 처음 정한 기록만 남는다 (SET NX → 다시 계산해도 바뀌지 않는다).
@@ -10,6 +11,9 @@ import { K } from "./keys";
 export type ChampWinner = { board: ChampBoard; accountId: string; name: string; value: number; sp?: string };
 /** 한 주의 1위 기록. winners = 1위가 있는 랭킹만 (아무도 기록이 없으면 빠진다) */
 export type ChampWeek = { week: string; winners: ChampWinner[]; settledAt: number };
+
+/** 테스트 서버 운영자 시험 1위 (주간 기록과 따로 — 랭킹·명예의 전당에 나오지 않는다). id = 알림 창 "봤음" 표시용, until = 저절로 끝나는 시각 */
+export type ChampTest = { id: string; bits: number; until: number };
 
 /** 잠금 유지 시간 (정리하던 서버가 죽어도 이만큼 지나면 다른 요청이 잇는다) */
 const LOCK_SEC = 60;
@@ -34,6 +38,9 @@ export interface ChampStore {
   swapLeader(week: string, board: ChampBoard, next: string): Promise<string | null>;
   /** 1위 바뀜 공지 간격: ms 안에 처음이면 true (잡는다) */
   leadCooldown(board: ChampBoard, ms: number): Promise<boolean>;
+  /** 시험 1위 (테스트 서버 운영자 전용, 끝났으면 null) */
+  test(accountId: string, now: number): Promise<ChampTest | null>;
+  setTest(accountId: string, t: ChampTest | null): Promise<void>;
 }
 
 export class MemoryChamp implements ChampStore {
@@ -43,6 +50,7 @@ export class MemoryChamp implements ChampStore {
   private off = new Set<string>();
   private leads = new Map<string, string>();
   private cools = new Map<string, number>();
+  private tests = new Map<string, ChampTest>();
 
   async get(week: string): Promise<ChampWeek | null> {
     const r = this.weeks.get(week);
@@ -89,6 +97,15 @@ export class MemoryChamp implements ChampStore {
     if ((this.cools.get(board) ?? 0) > now) return false;
     this.cools.set(board, now + ms);
     return true;
+  }
+  async test(accountId: string, now: number): Promise<ChampTest | null> {
+    const t = this.tests?.get(accountId);
+    return t && t.until > now ? { ...t } : null;
+  }
+  async setTest(accountId: string, t: ChampTest | null): Promise<void> {
+    this.tests ??= new Map();
+    if (t) this.tests.set(accountId, { ...t });
+    else this.tests.delete(accountId);
   }
 }
 
@@ -155,6 +172,16 @@ export class RedisChamp implements ChampStore {
   }
   async leadCooldown(board: ChampBoard, ms: number): Promise<boolean> {
     return (await this.redis.set(K.champLeadCool(board), "1", { nx: true, px: ms })) !== null;
+  }
+  async test(accountId: string, now: number): Promise<ChampTest | null> {
+    const raw = await this.redis.hget<string>(K.champTest, accountId);
+    if (raw === null || raw === undefined) return null;
+    const t = JSON.parse(String(raw)) as ChampTest;
+    return t.until > now ? t : null;
+  }
+  async setTest(accountId: string, t: ChampTest | null): Promise<void> {
+    if (t) await this.redis.hset(K.champTest, { [accountId]: JSON.stringify(t) });
+    else await this.redis.hdel(K.champTest, accountId);
   }
 }
 
@@ -225,6 +252,11 @@ export function primeChampCache(rec: ChampWeek, now = Date.now()): void {
 export async function champBitsFor(accountId: string, now = Date.now()): Promise<number> {
   const rec = await champWeekCached(prevWeek(kstWeekOf(now)), now);
   const boards = rec?.winners.filter((w) => w.accountId === accountId).map((w) => w.board) ?? [];
+  // 테스트 서버에서만: 운영자 시험 1위를 더한다 (운영에서는 읽지도 않는다)
+  if (testServerEnv()) {
+    const t = await getChamp().test(accountId, now);
+    for (const b of champBoards(t?.bits)) if (!boards.includes(b)) boards.push(b);
+  }
   if (!boards.length) return 0;
   return champBitsOf(boards, await getChamp().auraOff(accountId));
 }

@@ -27,7 +27,7 @@ export function activityText(item: ActivityItem): string {
     case "restore":
       return `${target}이(가) 성황당에서 다시 모셔졌어요`;
     case "champ":
-      return `지난주 ${item.targetName}에 올랐어요! 1위 전용 꾸미기·오라·배지와 포인트를 받았어요`;
+      return `지난주 ${item.targetName}에 올랐어요! 전용 꾸미기·전용 오라·배지와 포인트를 받았어요`;
   }
 }
 

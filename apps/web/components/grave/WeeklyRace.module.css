@@ -249,7 +249,79 @@
 /* 지난주 1위 · 명예의 전당 */
 .bottom {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 8px;
   align-items: start;
+}
+
+/* 1위 보상 줄: 전용 오라 미리보기 · 전용 모자 · 배지 · 포인트 */
+.rewardRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  background: var(--bg-deep);
+}
+
+.auraCanvas {
+  display: block;
+  flex: none;
+  width: 72px;
+  height: 64px;
+  image-rendering: pixelated;
+  box-shadow: var(--px-border);
+}
+
+/* 폰: 창이 한 줄이라 오라 미리보기를 크게 */
+@media (max-width: 560px) {
+  .auraCanvas {
+    width: 108px;
+    height: 96px;
+  }
+}
+
+.rewardItems {
+  display: grid;
+  justify-items: start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rewardHat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rewardName {
+  color: var(--bone);
+  font-size: 11px;
+}
+
+.rewardPoints {
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.rewardCaption {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 여러 개 1위면 합쳐진 오라 (2관왕 예시 · 3관왕 무지개) */
+.combo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.combo li {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
 }

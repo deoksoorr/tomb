@@ -87,6 +87,7 @@ export const K = {
   champAuraOff: "champ:auraoff", // HASH 계정 → "1" (1위 오라 끔)
   champLead: (week: string) => `champ:lead:${week}`, // HASH 랭킹 → 지금 1위 계정 (레이스 1위 바뀜 공지용, 3주 TTL)
   champLeadCool: (board: string) => `champ:lead:cool:${board}`, // STRING NX PX 같은 랭킹 1위 바뀜 공지 간격
+  champTest: "champ:test", // HASH 계정 → 시험 1위 JSON {id, bits, until} (테스트 서버 운영자 시험 지급 전용, 주간 기록과 따로)
   megaLog: "mega:log", // LIST 확성기 기록 JSON, 최신 먼저 최대 MEGA_KEEP개
   megaHidden: "mega:hidden", // SET 관리자가 숨긴 기록 id
   megaCool: (id: string) => `mega:cool:${id}`, // STRING NX PX 계정별 도배 제한

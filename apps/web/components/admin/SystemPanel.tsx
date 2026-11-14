@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { cx } from "../ui/cx";
 import ui from "./AdminUi.module.css";
 import styles from "./Admin.module.css";
 import { opsAdminApi, type AdminHealthReport } from "./opsAdminApi";
 import type { AdminChampResponse } from "@/app/api/admin/champ/route";
+import type { AdminChampTestResponse } from "@/app/api/admin/champ/test/route";
 
 type Props = { toast: (message: string) => void; onAuthLost: () => void };
 
@@ -252,6 +253,7 @@ function ChampCard({ toast, fail }: { toast: (message: string) => void; fail: (e
         주(월요일){" "}
         <input value={week} onChange={(e) => setWeek(e.target.value)} placeholder="비우면 지난주" inputMode="numeric" maxLength={8} />
       </label>
+      <ChampTestBox toast={toast} fail={fail} />
       {state && (
         <div className={styles.tableWrap}>
           <p className={styles.meta}>
@@ -295,3 +297,61 @@ function ChampCard({ toast, fail }: { toast: (message: string) => void; fail: (e
   );
 }
 
+/**
+ * 테스트 서버 전용 (운영에서는 서버가 404라 이 칸이 아예 안 보인다): 운영자 계정에 시험 1위 주기·해제.
+ * 실제 지급과 같은 경로(전용 모자 하루 대여 · 1,000P씩 · 배지·전용 오라)로 주고, 자격은 몇 시간 뒤 저절로 끝난다.
+ * 주간 1위 기록·랭킹·명예의 전당은 건드리지 않는다. 운영자가 게임 화면을 열어 두면 그 자리에서 알림 창이 뜨고 오라가 붙는다
+ */
+function ChampTestBox({ toast, fail }: { toast: (message: string) => void; fail: (e: unknown) => void }) {
+  const [info, setInfo] = useState<AdminChampTestResponse | null>(null);
+  const [boards, setBoards] = useState<string[]>(["points"]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    // 운영(404)이면 조용히 숨긴다
+    opsAdminApi
+      .champTest()
+      .then((r) => alive && setInfo(r))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (!info) return null;
+
+  const run = async (list: string[]) => {
+    setBusy(true);
+    try {
+      const r = await opsAdminApi.setChampTest(list);
+      setInfo(r);
+      toast(list.length ? "운영자 계정에 시험 1위를 줬어요. 게임 화면에 알림 창이 뜨고 전용 오라가 붙어요." : "시험 1위를 끝냈어요.");
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggle = (b: string) => setBoards((cur) => (cur.includes(b) ? cur.filter((x) => x !== b) : [...cur, b]));
+
+  return (
+    <div className={styles.meta}>
+      <p className={ui.hint}>
+        <b>테스트 서버 전용</b> · 운영자 계정에 시험 1위 주기 (전용 모자 하루 대여 · 1,000P씩 · 배지·전용 오라 3시간). 랭킹·명예의 전당에는 나오지 않아요.
+        {!info.staffId && " 먼저 운영자 계정을 지정해 주세요."}
+      </p>
+      {(["points", "huntKills", "fish"] as const).map((b) => (
+        <label key={b} style={{ marginRight: 10 }}>
+          <input type="checkbox" checked={boards.includes(b)} onChange={() => toggle(b)} /> {CHAMP_BOARD_LABEL[b]}
+        </label>
+      ))}
+      <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void run(boards)} disabled={busy || !boards.length || !info.staffId}>
+        운영자 계정에 시험 1위 주기
+      </button>{" "}
+      <button type="button" className={ui.button} onClick={() => void run([])} disabled={busy || !info.test}>
+        시험 해제
+      </button>
+      <p className={styles.meta}>{info.test ? `지금 시험 1위: ${["points", "huntKills", "fish"].filter((_, i) => info.test!.bits & (1 << i)).map((b) => CHAMP_BOARD_LABEL[b]).join("·")} · ${new Date(info.test.until).toLocaleTimeString("ko-KR")}까지` : "지금 시험 1위 없음"}</p>
+    </div>
+  );
+}

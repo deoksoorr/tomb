@@ -214,3 +214,51 @@ describe("레이스 1위 바뀜 공지", () => {
     expect(await notices()).toHaveLength(2);
   });
 });
+
+describe("테스트 서버 운영자 시험 1위", () => {
+  it("실제 지급과 같은 경로로 주되, 주간 1위 기록·랭킹·명예의 전당은 건드리지 않고 몇 시간 뒤 저절로 끝난다", async () => {
+    const { grantChampTest, champMine, CHAMP_TEST_MS } = await import("./weeklyChamp");
+    const op = await user("staffer");
+    await setStaff(op);
+    const now = at(NEXT, 1);
+    const before = (await getAccounts().get(op, dayOf(NEXT, 1), now)).stash.length;
+    await grantChampTest(op, ["points", "fish"], now);
+    // 자격·배지·전용 오라 (2관왕) + 알림
+    expect(await champBitsFor(op, now + 1000)).toBe(5);
+    const mine = await champMine(op, now + 1000);
+    expect(mine.unseen).toMatchObject({ boards: ["points", "fish"], test: true });
+    expect(mine.unseen?.week).toMatch(/^test:\d+$/);
+    // 모자 둘이 하루 대여로
+    const acc = await getAccounts().get(op, dayOf(NEXT, 1), now);
+    expect(acc.stash.length - before).toBe(2);
+    // 진짜 주간 기록·명예의 전당은 그대로 (11/16 실제 정리를 막지 않는다)
+    expect(await getChamp().get(WEEK)).toBeNull();
+    expect(await getChamp().get(NEXT)).toBeNull();
+    expect(await getChamp().hall(10)).toEqual([]);
+    // 봤으면 다시 안 뜬다
+    await getChamp().setSeen(op, mine.unseen!.week);
+    expect((await champMine(op, now + 2000)).unseen).toBeNull();
+    // 몇 시간 뒤 저절로 끝
+    expect(await champBitsFor(op, now + CHAMP_TEST_MS + 1)).toBe(0);
+    // 해제
+    await grantChampTest(op, ["huntKills"], now + 5000);
+    expect(await champBitsFor(op, now + 6000)).toBe(2);
+    await grantChampTest(op, [], now + 7000);
+    expect(await champBitsFor(op, now + 8000)).toBe(0);
+  });
+
+  it("운영 서버(VERCEL_ENV=production)에서는 시험 지급도, 시험 자격 읽기도 막힌다", async () => {
+    const { grantChampTest } = await import("./weeklyChamp");
+    const op = await user("staffer");
+    await setStaff(op);
+    const now = at(NEXT, 1);
+    await grantChampTest(op, ["points"], now);
+    vi.stubEnv("VERCEL_ENV", "production");
+    try {
+      await expect(grantChampTest(op, ["fish"], now)).rejects.toThrow();
+      expect(await champBitsFor(op, now + 1000)).toBe(0);
+    } finally {
+      vi.stubEnv("VERCEL_ENV", "");
+    }
+  });
+});

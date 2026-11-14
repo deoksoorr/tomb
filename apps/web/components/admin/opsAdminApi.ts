@@ -1,5 +1,6 @@
 import type { AdminNameReindexResponse } from "@/app/api/admin/accounts/names/route";
 import type { AdminChampResponse } from "@/app/api/admin/champ/route";
+import type { AdminChampTestResponse } from "@/app/api/admin/champ/test/route";
 import type { AdminRankFillResponse } from "@/app/api/admin/rank/fill/route";
 import type { AdminStaffResponse } from "@/app/api/admin/staff/route";
 import type { AnalyticsRange, AnalyticsReport } from "@/lib/analyticsReport";
@@ -39,6 +40,11 @@ export const opsAdminApi = {
   /** 주간 랭킹 1위 정리·지급 다시 시도 (이미 준 랭킹은 다시 주지 않는다) */
   champSettle: (week?: string) =>
     request<AdminChampResponse>("/api/admin/champ", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(week ? { week } : {}) }),
+  /** 테스트 서버 전용: 운영자 시험 1위 상태 (운영은 404) */
+  champTest: () => request<AdminChampTestResponse>("/api/admin/champ/test", { cache: "no-store" }),
+  /** 테스트 서버 전용: 운영자 계정에 시험 1위 주기 (빈 목록 = 시험 해제) */
+  setChampTest: (boards: string[]) =>
+    request<AdminChampTestResponse>("/api/admin/champ/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ boards }) }),
   /** 랭킹 기존 기록 다시 채우기 한 번 (next가 "0"이 될 때까지 이어서 부른다) */
   fillRank: (board: "huntLevel" | "look", cursor: string, count = 200) =>
     request<AdminRankFillResponse>("/api/admin/rank/fill", {
