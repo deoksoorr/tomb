@@ -7,7 +7,7 @@ import { meStore, useMe } from "@/lib/hooks/useMe";
 import { titleNews } from "@/lib/hooks/useTitleNews";
 import { showToast } from "@/lib/hooks/useToasts";
 import { playTitleChime } from "@/lib/titleChime";
-import { perkText, TITLE_GRADE_NAMES, titleDef, type TitleDef } from "@/lib/titles";
+import { titleDef, type TitleDef } from "@/lib/titles";
 import { wearTitle } from "../account/actions";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -130,11 +130,8 @@ export default function TitleNotice() {
         <ul className={styles.list}>
           {notice.titles.map((t) => (
             <li key={t.id}>
-              <b className={styles.name} data-grade={t.grade}>
-                <span className={styles.grade}>{TITLE_GRADE_NAMES[t.grade]}</span> 「{t.name}」
-              </b>
+              <b className={styles.name}>「{t.name}」</b>
               <span className={styles.how}>{t.how.replace(/(하)?면$/, "")}</span>
-              {perkText(t.grade) && <span className={styles.perk}>칭호 능력: {perkText(t.grade)}</span>}
             </li>
           ))}
         </ul>

@@ -251,19 +251,9 @@ export type NameClaimResponse = { me: Me };
 export type WearResponse = { me: Me; lookGrant: string };
 /**
  * GET /api/me/titles: 얻은 칭호 id(@tomb/protocol TITLE_IDS)와 지금 낀 칭호 (없으면 null). 이름·얻는 방법은 lib/titles.
- * fresh = 새로 알릴 칭호 (알림 창), unseen = 가방 [칭호] 칸에서 아직 안 본 칭호 ("NEW"·가방 점), first = 처음 확인 (이미 얻어 둔 칭호를 묶어 알린다)
+ * fresh = 새로 알릴 칭호 (알림 창), unseen = 가방 [칭호] 칸에서 아직 안 본 칭호 ("새로!"·가방 점), first = 처음 확인 (이미 얻어 둔 칭호를 묶어 알린다)
  */
-export type TitlesResponse = {
-  earned: string[];
-  equipped: string | null;
-  fresh: string[];
-  unseen: string[];
-  first: boolean;
-  /** 진행 수치 (lib/titles TitleMetric → 값, 가방 칭호 칸 진행도) */
-  progress: Record<string, number>;
-  /** 운영자 계정: 모든 칭호를 쓸 수 있다 (진행도 대신 "운영자") */
-  staff?: true;
-};
+export type TitlesResponse = { earned: string[]; equipped: string | null; fresh: string[]; unseen: string[]; first: boolean };
 
 /** POST /api/me/attend → 출석 처리 (입장할 때 호출, 하루 1번만 지급) */
 export type AttendResponse = { me: Me; earned: number };
