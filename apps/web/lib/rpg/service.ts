@@ -411,8 +411,9 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   const stars = v.stars ? await registerStars(acct, v.stars, now, ipHash) : undefined;
   const constellations = stars?.list;
   const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
-  const earned = pointsRaw > 0 ? (await earnPoints(acct, "hunt", pointsRaw, ipHash)).earned : 0;
-  await store.addDaily(acct, kstDay(now), { points: earned, runs: 1, exp: v.exp });
+  // 사냥은 사냥 한도, 곤충·별자리는 미니게임 한도 (사냥 화면의 오늘 사냥 포인트(daily.points)에는 사냥 몫만)
+  const earned = pointsRaw > 0 ? (await earnPoints(acct, t.g === "hunt" ? "hunt" : "mini", pointsRaw, ipHash)).earned : 0;
+  await store.addDaily(acct, kstDay(now), { points: t.g === "hunt" ? earned : 0, runs: 1, exp: v.exp });
   if (t.g === "hunt") await recordEvent("hunt", now); // 47번 방문 분석: 사냥 판 수
   // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터). 운영자 계정은 순위에 남기지 않는다
   if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null) && !(await isStaff(acct)))

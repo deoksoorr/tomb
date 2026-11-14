@@ -284,7 +284,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table head={["하는 일", "컴퓨터", "휴대폰"]} rows={HUNT_KEYS} />
           <ul className={styles.points}>
             <li>
-              {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비·물약을 되파는 값도 이 한도 안이고, 넘으면 EXP와 드롭만 받아요. 상점에서 산 장비 되팔기는 한도와 상관없어요.`}
+              {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비·물약을 되파는 값도 이 한도 안이고, 넘으면 EXP와 드롭만 받아요. 상점에서 산 장비 되팔기는 한도와 상관없어요. 곤충 잡기·별자리 잇기는 사냥과 따로 하루 ${won(earnRule("mini").dailyMax)}P까지예요.`}
             </li>
             <li>자세한 공격·스킬·패턴은 사냥터의 [사냥 안내서]에서 봐요.</li>
           </ul>

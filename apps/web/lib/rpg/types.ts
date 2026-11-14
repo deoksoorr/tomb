@@ -47,7 +47,7 @@ export type RpgView = {
   expToNext: number;
   /** 지갑 포인트 */
   points: number;
-  /** 오늘 사냥터·미니게임으로 받은 포인트와 하루 한도 */
+  /** 오늘 사냥터로 받은 포인트와 하루 한도 (곤충·별자리는 미니게임 한도로 따로) */
   today: { huntPoints: number; cap: number; runs: number; runsPerHour: number };
   /** 다음 스킬 초기화 비용 (지갑 포인트, 레벨에 따라 32~120) */
   respecCost: number;

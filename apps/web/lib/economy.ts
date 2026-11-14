@@ -12,6 +12,8 @@ export type EarnSource =
   | "gotFlower"
   | "presence"
   | "hunt"
+  // 11/15: 미니게임(곤충 잡기·별자리 잇기)은 사냥 한도와 따로 — 사냥으로 600을 채우면 별자리가 늘 0P였다
+  | "mini"
   | "houseLike"
   // ── 4·32·51번 낚시·채집·도감 (lib/forage) ──
   | "fish"
@@ -39,7 +41,8 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "presence", label: "마을에 머무르기", points: 5, dailyMax: 60, note: "접속해 있는 10분마다 (다른 일을 해도 OK)" },
   // 출석 도장과 같은 머문 시간(서버의 머무르기 기록)으로 판정. 10→15→20→25P(이후 고정), 하루 7구간 145P. 하루 전체 한도와 별개 (lib/stayBonus.ts)
   { source: "stayBonus", label: "접속 시간 보너스", points: 0, dailyMax: STAY_BONUS_DAILY_MAX, note: `${STAY_BONUS_EVERY_MINUTES}분 머물 때마다 10→15→20→25P (구석 창의 [받기], 안 받으면 쌓여요)` },
-  { source: "hunt", label: "사냥터·미니게임", points: 0, dailyMax: 600, note: "난이도와 성적에 따라 (한 판 보상은 게임 결과로)" },
+  { source: "hunt", label: "사냥터", points: 0, dailyMax: 600, note: "난이도와 성적에 따라, 주운 장비·물약 되팔기 포함 (한 판 보상은 게임 결과로)" },
+  { source: "mini", label: "곤충 잡기·별자리 잇기", points: 0, dailyMax: 150, note: "미니게임 성적에 따라 (사냥 한도와 따로)" },
   { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때" },
   // 낚시·채집은 잡을 때가 아니라 NPC에게 팔 때 들어온다 (값은 lib/forage/catalog.ts). 한도를 넘는 만큼은 가방에 남아 내일 팔 수 있다
   { source: "fish", label: "물고기 팔기", points: 0, dailyMax: 200, note: "낚시터 어부에게 (희귀할수록 비싸요)" },

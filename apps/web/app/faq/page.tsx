@@ -63,7 +63,7 @@ const FAQ = [
   {
     q: "포인트는 어떻게 모으나요?",
     // 숫자는 lib/economy.ts·stayBonus.ts에서 읽는다 (값을 바꾸면 답도 같이 바뀐다)
-    a: `접속해 있는 ${PRESENCE_INTERVAL_MS / 60_000}분마다 ${earnRule("presence").points}포인트가 쌓이고(다른 창을 봐도 괜찮아요), 출석 도장, 헌화, 사냥터·미니게임, 물고기·채집물 팔기 등으로도 모여요(사냥터·미니게임은 주운 장비·물약 되팔기까지 합쳐 하루 ${earnRule("hunt").dailyMax}포인트까지). 하루 한도는 항목마다 따로라 한 가지를 다 채워도 다른 활동 포인트는 그대로 쌓이고(모두 합치면 하루 ${DAILY_EARN_CAP.toLocaleString("ko-KR")}포인트까지), 오래 머물면 받는 접속 시간 보너스(하루 최대 ${STAY_BONUS_DAILY_MAX}포인트)는 이 한도와 따로예요. 하루 한도와 출석 도장의 하루는 한국 시간 새벽 5시에 새로 시작해요.`,
+    a: `접속해 있는 ${PRESENCE_INTERVAL_MS / 60_000}분마다 ${earnRule("presence").points}포인트가 쌓이고(다른 창을 봐도 괜찮아요), 출석 도장, 헌화, 사냥터·미니게임, 물고기·채집물 팔기 등으로도 모여요(사냥터는 주운 장비·물약 되팔기까지 합쳐 하루 ${earnRule("hunt").dailyMax}포인트, 곤충 잡기·별자리 잇기는 따로 하루 ${earnRule("mini").dailyMax}포인트까지). 하루 한도는 항목마다 따로라 한 가지를 다 채워도 다른 활동 포인트는 그대로 쌓이고(모두 합치면 하루 ${DAILY_EARN_CAP.toLocaleString("ko-KR")}포인트까지), 오래 머물면 받는 접속 시간 보너스(하루 최대 ${STAY_BONUS_DAILY_MAX}포인트)는 이 한도와 따로예요. 하루 한도와 출석 도장의 하루는 한국 시간 새벽 5시에 새로 시작해요.`,
   },
   {
     q: "출석 도장은 어떻게 찍나요?",
