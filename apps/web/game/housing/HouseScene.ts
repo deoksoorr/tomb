@@ -634,7 +634,11 @@ export class HouseScene extends Phaser.Scene {
     if (!def || !key) return null;
     const fp = footprint(def, p.r);
     const img = v?.img ?? this.add.image(0, 0, key).setAlpha(this.alphaOf(p.u));
-    if (v && v.variant !== variant) img.setTexture(key);
+    if (v && v.variant !== variant) {
+      img.setTexture(key);
+      // 보기 기록도 함께 고친다 (돌리기·옮기기가 새 기록을 다시 넣지 않아 한 바퀴 돌아도 앞모습으로 안 바뀌던 것)
+      v.variant = variant;
+    }
     const left = this.tileX(p.x);
     const bottom = this.tileY(p.y + fp.h);
     if (def.turn && drawsTurned(p.i)) {
