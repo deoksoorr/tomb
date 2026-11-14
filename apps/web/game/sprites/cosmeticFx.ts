@@ -1,4 +1,4 @@
-import { DIR, premiumBody, type DirId } from "@tomb/protocol";
+import { champAuraOn, champBoards, CHAMP_BOARDS, DIR, premiumBody, type DirId } from "@tomb/protocol";
 import { foxSheet, MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountLift, mountSheet, type MountKind } from "./mountArt";
 import { Grid, type Color } from "./pixel";
 
@@ -45,6 +45,74 @@ function wings(fill: Color, lo: Color, edge: Color, line: Color, shape: (i: numb
     g.outline(line, false, 220);
     return g;
   };
+}
+
+// ── 주간 랭킹 1위 오라 그림 도우미 ──
+
+/** 테마 수 (금·빨강·파랑, 둘씩 섞은 셋, 무지개) */
+const CHAMP_THEMES = 7;
+const RING_W = 36;
+const RING_H = 12;
+const RING_PHASES = 8;
+/** 후광 고리 구멍 반지름 (몸 반너비 7·머리 위까지 반높이보다 크게) */
+export const HALO_HOLE_RX = 11;
+export const HALO_HOLE_RY = 16;
+type ChampCol = { c: Color; hi: Color };
+/** 랭킹 색: 포인트 = 금, 사냥 처치 = 빨강, 낚시 = 파랑 */
+const CHAMP_BASE: readonly ChampCol[] = [
+  { c: 0xffc83a, hi: 0xfff4b0 },
+  { c: 0xff4a2a, hi: 0xffc070 },
+  { c: 0x3ab8ff, hi: 0xc8f4ff },
+];
+/** 테마 → 섞을 랭킹 색 (마지막은 무지개) */
+const THEME_MIX: readonly (readonly number[])[] = [[0], [1], [2], [0, 1], [0, 2], [1, 2], [0, 1, 2]];
+
+function hsv(h: number, s: number, v: number): Color {
+  const i = Math.floor(h * 6);
+  const f = h * 6 - i;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+  const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][((i % 6) + 6) % 6];
+  return (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255);
+}
+
+/** 테마의 u(0..1) 자리 색: 한 랭킹이면 그 색, 둘이면 반씩 번갈아, 무지개면 색상환 */
+function champColor(theme: number, u: number): ChampCol {
+  if (theme === CHAMP_THEMES - 1) {
+    const h = ((u % 1) + 1) % 1;
+    return { c: hsv(h, 0.85, 1), hi: hsv(h, 0.35, 1) };
+  }
+  const mix = THEME_MIX[theme] ?? [0];
+  return CHAMP_BASE[mix[Math.floor((((u % 1) + 1) % 1) * mix.length * 2) % mix.length]];
+}
+
+/** 발밑 빛 고리 반쪽 (back = 위쪽 반원 → 몸 뒤, front = 아래쪽 반원 → 발 앞). 프레임 = 테마 × 회전 단계: 밝은 마디 6개가 돈다 */
+function champRing(half: "back" | "front"): Grid {
+  const hh = RING_H / 2;
+  const out = new Grid(RING_W * CHAMP_THEMES * RING_PHASES, hh);
+  const cx = RING_W / 2;
+  const cy = RING_H / 2;
+  for (let th = 0; th < CHAMP_THEMES; th++)
+    for (let ph = 0; ph < RING_PHASES; ph++) {
+      const ox = (th * RING_PHASES + ph) * RING_W;
+      for (let y = 0; y < RING_H; y++) {
+        if ((half === "back") !== y < hh) continue;
+        for (let x = 0; x < RING_W; x++) {
+          const dx = (x + 0.5 - cx) / (cx - 0.5);
+          const dy = (y + 0.5 - cy) / (cy - 0.5);
+          const d = Math.hypot(dx, dy);
+          if (d > 1.02) continue;
+          const ang = Math.atan2(dy, dx) / (Math.PI * 2) + 0.5;
+          const col = champColor(th, ang + ph / RING_PHASES / 2);
+          const dash = (ang * 6 + ph / RING_PHASES) % 1 < 0.42;
+          const oy = half === "back" ? y : y - hh;
+          if (d > 0.76) out.set(ox + x, oy, dash ? col.hi : col.c, dash ? 250 : 165);
+          else if (d > 0.55) out.set(ox + x, oy, col.c, dash ? 110 : 60);
+        }
+      }
+    }
+  return out;
 }
 
 export const FX_ART = {
@@ -560,6 +628,117 @@ export const FX_ART = {
       for (const [x, y] of [[1, 0], [0, 1], [2, 1], [1, 2]]) g.set(x, y, c, 200);
     }),
   },
+  // ── 주간 랭킹 1위 오라 (테마 7가지: 0 금 · 1 빨강 · 2 파랑 · 3 금+빨강 · 4 금+파랑 · 5 빨강+파랑 · 6 무지개 — champTheme) ──
+  /** 발밑 빛 고리 뒤쪽 반(몸 뒤)·앞쪽 반(발 앞). 테마 × 회전 8단계 */
+  champRingBack: { w: RING_W, h: RING_H / 2, frames: CHAMP_THEMES * RING_PHASES, build: () => champRing("back") },
+  champRingFront: { w: RING_W, h: RING_H / 2, frames: CHAMP_THEMES * RING_PHASES, build: () => champRing("front") },
+  /** 발밑 바닥 빛 */
+  champGlow: {
+    w: 40,
+    h: 14,
+    frames: CHAMP_THEMES,
+    build: frames(40, 14, CHAMP_THEMES, (g, f) => {
+      const [a, b] = [champColor(f, 0), champColor(f, 0.5)];
+      g.ellipse(20, 7, 20, 7, a.c, 40);
+      g.ellipse(20, 7, 14, 5, b.c, 60);
+      g.ellipse(20, 7, 8, 3, a.hi, 80);
+    }),
+  },
+  /**
+   * 후광 고리 (가운데가 뚫린 타원 빛): 구멍(가로 반지름 HALO_HOLE_RX · 세로 HALO_HOLE_RY)이 몸 그림보다 커서
+   * 맨 위 빛 층에 그려도 몸을 덮지 않는다 → 밤에도 1위 둘레가 환하다
+   */
+  champHalo: {
+    w: 36,
+    h: 46,
+    frames: CHAMP_THEMES,
+    build: frames(36, 46, CHAMP_THEMES, (g, f) => {
+      for (let y = 0; y < 46; y++)
+        for (let x = 0; x < 36; x++) {
+          const dx = x + 0.5 - 18;
+          const dy = y + 0.5 - 23;
+          const out = Math.hypot(dx / 18, dy / 23);
+          const hole = Math.hypot(dx / HALO_HOLE_RX, dy / HALO_HOLE_RY);
+          if (out > 1 || hole < 1) continue;
+          const k = Math.min(1, (hole - 1) * 2.2) * Math.min(1, (1 - out) * 3.5);
+          const col = champColor(f, Math.atan2(dy, dx) / (Math.PI * 2) + 0.5);
+          g.set(x, y, k > 0.6 ? col.hi : col.c, Math.round(150 * k));
+        }
+    }),
+  },
+  /** 위로 솟는 빛줄기 (가는 세로 빛) */
+  champStreak: {
+    w: 1,
+    h: 7,
+    frames: CHAMP_THEMES,
+    build: frames(1, 7, CHAMP_THEMES, (g, f) => {
+      for (let y = 0; y < 7; y++) g.set(0, y, y < 2 ? 0xffffff : champColor(f, y / 7).hi, Math.round(240 * (1 - y / 7)));
+    }),
+  },
+  /** 빛기둥 (아래·위로 갈수록 흐려지는 세로 빛) */
+  champPillar: {
+    w: 5,
+    h: 34,
+    frames: CHAMP_THEMES,
+    build: frames(5, 34, CHAMP_THEMES, (g, f) => {
+      for (let y = 0; y < 34; y++) {
+        const k = Math.pow(Math.sin((Math.PI * (y + 0.5)) / 34), 0.8) * (0.35 + 0.65 * (y / 33));
+        const col = champColor(f, y / 34);
+        g.set(2, y, col.hi, Math.round(235 * k));
+        g.set(1, y, col.c, Math.round(150 * k));
+        g.set(3, y, col.c, Math.round(150 * k));
+        g.set(0, y, col.c, Math.round(55 * k));
+        g.set(4, y, col.c, Math.round(55 * k));
+      }
+    }),
+  },
+  /** 섬광 (여덟 갈래 빛살) */
+  champBurst: {
+    w: 21,
+    h: 21,
+    frames: CHAMP_THEMES,
+    build: frames(21, 21, CHAMP_THEMES, (g, f) => {
+      for (let r = 0; r < 8; r++) {
+        const a = (r * Math.PI) / 4;
+        const len = r % 2 ? 7 : 10;
+        const col = champColor(f, r / 8);
+        for (let d = 1; d <= len; d++) g.set(Math.round(10 + Math.cos(a) * d), Math.round(10 + Math.sin(a) * d), d < 3 ? 0xffffff : col.hi, Math.round(250 * (1 - d / (len + 1))));
+      }
+      g.ellipse(10.5, 10.5, 3, 3, champColor(f, 0).c, 120);
+      g.set(10, 10, 0xffffff);
+    }),
+  },
+  /** 불티 (흰·노랑·주황·빨강) */
+  champEmber: {
+    w: 3,
+    h: 3,
+    frames: 3,
+    build: frames(3, 3, 3, (g, f) => {
+      const c = [0xfff2a0, 0xffa030, 0xff4a2a][f];
+      g.set(1, 1, f === 0 ? 0xffffff : c);
+      for (const [x, y] of [[1, 0], [0, 1], [2, 1], [1, 2]]) g.set(x, y, c, f === 0 ? 200 : 150);
+    }),
+  },
+  /** 불꽃 혀 (발밑 고리 둘레에서 날름) */
+  champFlame: {
+    w: 5,
+    h: 8,
+    frames: 2,
+    build: frames(5, 8, 2, (g, f) => {
+      rows(g, f ? ["..y..", ".yy..", ".yoy.", "yoooy", "yorry", "orrro", ".rrr.", "..r.."] : ["...y.", "..yy.", ".yoy.", "yooy.", "yorry", "orrro", ".rrr.", "..r.."], { y: 0xfff0a0, o: 0xffa030, r: 0xe8381e });
+    }),
+  },
+  /** 물방울 */
+  champDrop: {
+    w: 3,
+    h: 4,
+    frames: 1,
+    build: () => {
+      const g = new Grid(3, 4);
+      rows(g, [".w.", "wbw", "bbb", ".b."], { w: 0xe8fbff, b: 0x4ac0ff });
+      return g;
+    },
+  },
 } satisfies Record<string, ArtDef>;
 
 export type FxArtId = keyof typeof FX_ART;
@@ -579,9 +758,11 @@ type TrailSpec = { kind: "trail"; art: FxArtId; step: number; life: number; moti
 type AuraSpec = {
   kind: "aura";
   /** tier* = 25번 프리미엄 외형 등급 연출 (꾸미기가 아니라 몸에 딸린다) */
-  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend";
+  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ";
   art?: FxArtId;
   light?: boolean;
+  /** champ = 주간 랭킹 1위 오라 테마 (champTheme) */
+  theme?: number;
 };
 type WingSpec = { kind: "wings"; art: FxArtId; flapMs: number; amp: number };
 type HeldSpec = { kind: "held"; item: "umbrella" | "balloon" };
@@ -663,6 +844,18 @@ export function bodyFx(body: string | null | undefined): FxSpec | null {
   return (tier && TIER_FX[tier]) || null;
 }
 
+/**
+ * 주간 랭킹 1위 값 → 오라 테마 (오라를 그리지 않으면 -1): 한 랭킹이면 그 색(0 금 포인트 · 1 빨강 사냥 · 2 파랑 낚시),
+ * 2관왕은 두 색을 섞은 테마(3 금+빨강 · 4 금+파랑 · 5 빨강+파랑), 3관왕은 무지개(6). 본인이 끈 오라(CHAMP_AURA_OFF)는 -1
+ */
+export function champTheme(bits: number | undefined): number {
+  if (!champAuraOn(bits)) return -1;
+  const b = champBoards(bits).map((x) => CHAMP_BOARDS.indexOf(x));
+  if (b.length === 3) return 6;
+  if (b.length === 2) return b[0] === 0 ? (b[1] === 1 ? 3 : 4) : 5;
+  return b[0] ?? -1;
+}
+
 // ── 그리기 명령 ──
 
 /**
@@ -722,6 +915,8 @@ export type FxInput = {
   water?: "swim" | "dive" | null;
   /** 아바타 그림의 실제 depth (앉기·집 안 자세·놀거리는 발 y와 다르게 덮어쓴다). 없으면 y */
   depth?: number;
+  /** 화면 밖 (주간 1위 오라처럼 무거운 연출은 그리지 않는다) */
+  offscreen?: boolean;
 };
 
 /** 몸에 붙은 연출의 기준 depth: 아바타 그림 depth (덮어쓴 값이 있으면 그것) */
@@ -792,11 +987,13 @@ export class CosmeticFxSim {
   private balY = 0;
   private balOn = false;
 
-  /** body = 몸 id (프리미엄 외형 등급 연출을 함께 건다) */
-  setLook(look: readonly string[], body?: string | null): void {
+  /** body = 몸 id (프리미엄 외형 등급 연출을 함께 건다), champ = 주간 랭킹 1위 값 (1위 오라를 함께 건다 — 착용 오라와 자리를 나눠 둘 다 보인다) */
+  setLook(look: readonly string[], body?: string | null, champ?: number): void {
     const next = look.filter((id) => id in COSMETIC_FX).map((id) => [id, COSMETIC_FX[id]] as [string, FxSpec]);
     const tier = bodyFx(body);
     if (tier) next.push(["@body", tier]);
+    const theme = champTheme(champ);
+    if (theme >= 0) next.push(["@champ", { kind: "aura", motion: "champ", theme, light: true }]);
     const had = new Set(this.specs.map(([id]) => id));
     if (!next.some(([, s]) => s.kind === "pet")) {
       this.petOn = false;
@@ -1080,6 +1277,9 @@ export class CosmeticFxSim {
     const top = f.headY - f.artTop;
     const front = bodyDepth(f) + 0.2;
     switch (s.motion) {
+      case "champ":
+        if (!f.offscreen) champAura(s.theme ?? 0, f, t, out);
+        break;
       case "orbit":
         // 기울어진 고리를 따라 돈다: 위아래로 출렁이며 뒤쪽 반원은 몸 뒤로
         for (let i = 0; i < 4; i++) {
@@ -1269,6 +1469,122 @@ export function around(f: Pick<FxInput, "y" | "depth">, z: number, o: Partial<Fx
     add: (light && back) || undefined,
     depth: back ? bodyDepth(f) - 0.2 : bodyDepth(f) + 0.2,
   };
+}
+
+/** 주간 1위 오라 한 장면에 쓰는 입자 수 상한 (사람마다) */
+export const CHAMP_FX_MAX = 36;
+/** 섬광 주기 */
+const CHAMP_FLASH_MS = 2_600;
+const CHAMP_FLASH_LEN = 0.2;
+
+/**
+ * 주간 랭킹 1위 오라 (착용 오라와 자리를 나눈다: 착용 오라는 머리 위·몸 둘레, 1위 오라는 발밑과 몸 뒤).
+ * 몸을 덮지 않는다 — 몸과 겹치는 것은 모두 몸 뒤(body 층 depth 아래, 더해 그리기)로, 몸 바깥의 빛만 맨 위 빛 층(밤에도 보이게):
+ *  ① 바닥 빛 + 회전·맥동하는 빛 고리 두 겹 (뒤쪽 반원은 몸 뒤, 앞쪽 반원은 발 앞 빛 층) + 가운데가 뚫린 후광 고리(구멍이 몸보다 크다)
+ *  ② 빛기둥: 몸 뒤 가운데 큰 기둥 + 몸 둘레를 도는 기둥 넷 (앞을 지날 때는 사라진다)
+ *  ③ 솟구치는 입자: 포인트 = 금화·반짝이, 사냥 = 불티·불꽃 혀, 낚시 = 물방울 분수·거품, 섞인 테마는 번갈아, 무지개는 셋 다 + 무지개 알갱이
+ *  ④ 섬광: 2.6초마다 몸 뒤 빛살이 터지고 고리가 퍼진다
+ * 움직임 줄이기면 시각 0의 모습 그대로(고리·기둥·바닥 빛만 은은하게)
+ */
+function champAura(theme: number, f: FxInput, t: number, out: FxCmd[]): void {
+  const start = out.length;
+  const bx = Math.round(f.x);
+  const fy = Math.round(f.y);
+  const back = bodyDepth(f) - 0.4;
+  const rainbow = theme === CHAMP_THEMES - 1;
+  const calm = f.reduced || !!f.still;
+  const pulse = calm ? 0.85 : 0.75 + 0.25 * Math.sin(t / 260);
+  // ① 바닥 빛 · 빛 고리
+  out.push(cmd("champGlow", theme, bx, fy, { alpha: 0.7 + 0.3 * pulse, sx: 1 + 0.08 * pulse, sy: 1 + 0.08 * pulse, layer: "ground", add: true, depth: 0 }));
+  const phase = calm ? 0 : Math.floor(t / 70) % RING_PHASES;
+  const ring = theme * RING_PHASES + phase;
+  const rs = 1 + 0.05 * Math.sin(t / 180);
+  out.push(cmd("champRingBack", ring, bx, fy, { oy: 1, sx: rs, sy: rs, alpha: 0.95, layer: "body", add: true, depth: back }));
+  out.push(cmd("champRingFront", ring, bx, fy, { oy: 0, sx: rs, sy: rs, alpha: 0.95, layer: "light", depth: 0 }));
+  // 바깥 고리: 거꾸로 돌며 크게 숨 쉰다
+  const ring2 = theme * RING_PHASES + (RING_PHASES - 1 - phase);
+  const rs2 = 1.32 + 0.1 * (calm ? 0.5 : (Math.sin(t / 420) + 1) / 2);
+  out.push(cmd("champRingBack", ring2, bx, fy, { oy: 1, sx: rs2, sy: rs2, alpha: 0.5, layer: "body", add: true, depth: back - 0.005 }));
+  out.push(cmd("champRingFront", ring2, bx, fy, { oy: 0, sx: rs2, sy: rs2, alpha: 0.5, layer: "light", depth: 0 }));
+  // 후광 고리 (구멍이 몸보다 커서 빛 층에 그려도 몸을 덮지 않는다)
+  const midY = Math.round(f.headY - f.artTop * 0.5);
+  const hk = Math.max(1, (f.artTop / 2 + 2) / HALO_HOLE_RY);
+  out.push(cmd("champHalo", theme, bx, midY, { sx: hk * (1 + 0.04 * pulse), sy: hk * (1 + 0.04 * pulse), alpha: 0.55 + 0.35 * pulse, layer: "light", depth: 0 }));
+  // ④ 섬광: 고리가 크게 퍼지고 몸 뒤에서 빛살이 터진다
+  const fp = calm ? 1 : ((t + (bx % 97) * 13) % CHAMP_FLASH_MS) / CHAMP_FLASH_MS;
+  if (fp < CHAMP_FLASH_LEN) {
+    const k = fp / CHAMP_FLASH_LEN;
+    const grow = 1 + k * 1.3;
+    out.push(cmd("champRingBack", ring, bx, fy, { oy: 1, sx: grow, sy: grow, alpha: (1 - k) * 0.9, layer: "body", add: true, depth: back - 0.01 }));
+    out.push(cmd("champRingFront", ring, bx, fy, { oy: 0, sx: grow, sy: grow, alpha: (1 - k) * 0.9, layer: "light", depth: 0 }));
+    out.push(cmd("champHalo", theme, bx, midY, { sx: hk * (1 + k * 0.9), sy: hk * (1 + k * 0.9), alpha: (1 - k) * 0.9, layer: "light", depth: 0 }));
+    const bs = 0.6 + k * 1.4;
+    out.push(cmd("champBurst", theme, bx, Math.round(f.headY - f.artTop * 0.5), { sx: bs, sy: bs, rot: k * 0.6, alpha: 1 - k, layer: "body", add: true, depth: back - 0.02 }));
+  }
+  // ② 빛기둥: 가운데(몸 뒤) 하나 + 둘레를 도는 넷
+  const ph = calm ? 1 : 0.8 + 0.2 * Math.sin(t / 400);
+  out.push(cmd("champPillar", theme, bx, fy + 1, { oy: 1, sx: 2.2, sy: ph * (f.artTop + 12) / 34, alpha: 0.75, layer: "body", add: true, depth: back - 0.03 }));
+  for (let i = 0; i < 4; i++) {
+    const a = (calm ? 0 : t / 1700) + (i * Math.PI) / 2 + Math.PI / 4;
+    const c = Math.cos(a);
+    const z = Math.sin(a);
+    // 앞쪽 반원에서는 몸 옆으로 비켜 있을 때만 (몸 반너비 + 기둥 반너비 밖, |cos| ≥ 0.68) 보이고 가운데로 올수록 사라진다.
+    // 뒤쪽 반원은 몸 뒤라 그대로 보인다
+    const side = Math.min(1, Math.max(0, (Math.abs(c) - 0.68) / 0.22));
+    const vis = z < 0 ? 0.55 + 0.45 * Math.min(1, Math.abs(c) + 0.3) : side;
+    if (vis < 0.05) continue;
+    const h = (0.55 + 0.35 * (calm ? 0.5 : (Math.sin(t / 300 + i * 1.9) + 1) / 2)) * (f.artTop + 16);
+    const x = bx + c * 15;
+    out.push(cmd("champPillar", theme, Math.round(x), fy + Math.round(z * 3), { oy: 1, sy: h / 34, alpha: 0.85 * vis, layer: z < 0 ? "body" : "light", add: z < 0 || undefined, depth: z < 0 ? back - 0.02 : 0 }));
+  }
+  // 몸 양옆에서 빠르게 솟는 빛줄기
+  if (!calm)
+    for (let i = 0; i < 4; i++) {
+      const u = (t / 700 + i / 4 + h01(i, 41) * 0.3) % 1;
+      const sx = (i % 2 ? 1 : -1) * (10 + h01(i, 42) * 6);
+      out.push(cmd("champStreak", theme, Math.round(bx + sx), Math.round(fy - 2 - u * (f.artTop + 20)), { oy: 0, alpha: Math.sin(Math.PI * u), layer: "light", depth: 0 }));
+    }
+  // ③ 솟구치는 입자
+  const kinds = rainbow ? ["coin", "ember", "drop", "mote"] : THEME_MIX[theme].map((m) => (["coin", "ember", "drop"] as const)[m]);
+  const n = calm ? 4 : rainbow ? 16 : 13;
+  for (let i = 0; i < n && out.length - start < CHAMP_FX_MAX - 2; i++) {
+    const kind = kinds[i % kinds.length];
+    const speed = kind === "ember" ? 1300 : kind === "drop" ? 1600 : 2000;
+    const u = calm ? (i + 0.5) / n : (t / speed + i / n + h01(i, 31) * 0.4) % 1;
+    const ang = h01(i, 32) * Math.PI * 2 + (calm ? 0 : t / 2400);
+    const r = 7 + h01(i, 33) * 9;
+    let x = bx + Math.cos(ang) * r;
+    let y = fy + Math.sin(ang) * 2.5;
+    const rise = f.artTop + 18;
+    let art: FxArtId;
+    let frame = 0;
+    if (kind === "drop") {
+      // 분수처럼 솟았다가 바깥으로 떨어진다
+      x += Math.cos(ang) * u * 6;
+      y -= 4 * (rise * 0.75) * u * (1 - u);
+      art = i % 3 === 0 ? "bubble" : "champDrop";
+      frame = art === "bubble" ? i % 2 : 0;
+    } else {
+      y -= u * rise;
+      if (kind === "ember") {
+        x += Math.sin(t / 90 + i * 2.3) * 1.5;
+        art = i % 4 === 0 && u < 0.3 ? "champFlame" : "champEmber";
+        frame = art === "champFlame" ? Math.floor(t / 110 + i) % 2 : Math.min(2, Math.floor(u * 3));
+      } else if (kind === "coin") {
+        art = i % 3 === 2 ? "sparkStar" : "coin";
+        frame = art === "coin" ? Math.floor(t / 120 + i) % 2 : 0;
+      } else {
+        art = "tierMote";
+        frame = i % 4;
+      }
+    }
+    const alpha = Math.sin(Math.PI * Math.min(1, Math.max(0, u)));
+    const big = art === "champEmber" || art === "sparkStar" || art === "tierMote" ? 1.3 : 1;
+    const c = cmd(art, frame, Math.round(x), Math.round(y), { alpha, sx: big, sy: big, layer: "light", depth: 0 });
+    // 몸 그림과 겹치면 몸 뒤로 (몸을 덮지 않는다)
+    if (overBody(c, FX_ART[art], f)) Object.assign(c, { layer: "body", add: true, depth: back - 0.01 });
+    out.push(c);
+  }
 }
 
 function cmd(art: FxArtId, frame: number, x: number, y: number, o: Partial<FxCmd> = {}): FxCmd {

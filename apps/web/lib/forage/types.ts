@@ -1,10 +1,14 @@
+import type { TimePhase } from "../ambience";
 import type { Me } from "../types";
 import type { DexTier, LifeCat, NodeKind, NpcId } from "./catalog";
 
 // 낚시·채집·도감 API 계약 (서버 ↔ UI)
 
-/** 도감 한 칸: 잡은 수, 가장 큰 크기(cm×10, 크기 없는 것은 0), 처음 잡은 날(KST YYYYMMDD) */
-export type DexEntry = { n: number; max: number; first: string };
+/**
+ * 도감 한 칸: 잡은 수, 가장 큰 크기(cm×10, 크기 없는 것은 0), 처음 잡은 날(KST YYYYMMDD).
+ * 별자리 칸은 n = 완성한 횟수, pf = 그중 완벽으로만 이은 횟수 (한 번이라도 있을 때만)
+ */
+export type DexEntry = { n: number; max: number; first: string; pf?: number };
 
 /** 오늘(KST) 기록: 판 포인트(항목별)와 잡은·캔 수. auto = 그중 자동 낚시로 낚은 수 (fish에도 들어 있다) */
 export type LifeDay = { fishP: number; gatherP: number; dexP: number; fish: number; gather: number; auto: number };
@@ -85,7 +89,7 @@ export type ReelResponse = { result: CatchResult | null; gear?: SunkenCatch; sta
 
 export type GatherStartResponse =
   | { ticket: string; mode: "gauge"; kind: Exclude<NodeKind, "bug">; durationMs: number }
-  | { ticket: string; mode: "bugs"; kind: "bug"; seed: number; timeLimitSec: number; night: boolean };
+  | { ticket: string; mode: "bugs"; kind: "bug"; seed: number; timeLimitSec: number; night: boolean; phase?: TimePhase };
 
 export type GatherFinishResponse = { items: CatchResult[]; state: ForageState; message?: string };
 

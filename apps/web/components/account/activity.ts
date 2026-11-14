@@ -26,6 +26,8 @@ export function activityText(item: ActivityItem): string {
       return `${item.who}님이 ${target} 방명록에 글을 남겼어요`;
     case "restore":
       return `${target}이(가) 성황당에서 다시 모셔졌어요`;
+    case "champ":
+      return `지난주 ${item.targetName}에 올랐어요! 1위 전용 꾸미기·오라·배지와 포인트를 받았어요`;
   }
 }
 

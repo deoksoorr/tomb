@@ -284,6 +284,25 @@ export class RpgSfx extends AudioHost {
     }
   }
 
+  /**
+   * 미리 짠 합성음 한 묶음 (32번 곤충 채집 bugSound.ts 등). 스킬 소리와 같은 버스·보이스 상한을 쓴다.
+   * 같은 key를 gapMs 안에 또 부르면 건너뛴다
+   */
+  synth(key: string, layers: Layer[], gapMs = 30): void {
+    const vol = this.busGain();
+    if (vol <= 0 || this.hidden || !layers.length) return;
+    const now = performance.now();
+    if (now - (this.lastSkill.get(key) ?? -Infinity) < gapMs) return;
+    try {
+      const ac = this.audio();
+      if (!ac || ac.state !== "running") return;
+      this.lastSkill.set(key, now);
+      this.voice(ac, layers, vol);
+    } catch {
+      /* 오디오를 못 쓰면 조용히 */
+    }
+  }
+
   /** 스킬 소리 버스: 들어온 소리 → 컴프레서(뭉개지 않게 살짝) → 부드러운 리미터(최대 ±0.89) → 호스트 출력. 잔향은 컨볼버 하나를 같이 쓴다 */
   private skillBus(ac: AudioContext): SkillBus {
     if (this.bus2) return this.bus2;

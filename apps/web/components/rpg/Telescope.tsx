@@ -8,24 +8,29 @@ import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { meStore } from "@/lib/hooks/useMe";
 import { DIFFICULTIES, DIFFS, GAMES, potionById, type Difficulty } from "@/lib/rpg/catalog";
 import { rpgApi } from "@/lib/rpg/client";
+import { constellationById } from "@/lib/rpg/constellations";
 import type { RunReward, RunResult } from "@/lib/rpg/types";
 import { STARRY_NIGHT_BONUS, starryNight } from "@/lib/stargaze";
+import ConstellationIcon from "../forage/ConstellationIcon";
+import { forageStore, useForage } from "../forage/forageStore";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import LevelUpSound from "./LevelUpSound";
 import RpgIcon from "./RpgIcon";
-import RunHud from "./RunHud";
+import StarsHud from "./StarsHud";
 import s from "./rpg.module.css";
-import { readStarsRecords, saveStarsRecord, StarsInfo, StarsPreview } from "./TelescopeExtras";
+import { readStarsRecords, saveStarsRecord, StarsDexCard, StarsInfo, StarsPreview } from "./TelescopeExtras";
+import x from "./TelescopeExtras.module.css";
 
 // 22번 별 보기 언덕의 망원경 (월드에서 망원경 앞 E → portal:open {kind:"telescope"}).
 // 사냥터 로비에 있던 "별자리 잇기"를 여기서 한다. 판 시작·결과 검증은 사냥터와 같은 /api/rpg/run (game "stars") —
 // 시드로 다시 만든 별 계획으로 결과 상한을 검사하고, 판 시작 시각이 진짜 맑은 밤(KST)이면 포인트 ×1.5 (lib/stargaze).
 // 망원경 속은 언제나 밤하늘이라 낮에도 할 수 있다.
+// 한 별자리를 하나도 놓치지 않고 이으면 결과의 완성 목록을 서버가 검사해 도감 "별자리" 칸에 등록한다 (희귀 = 어려움 이상, 전설 = 맑은 밤 판).
 
 type Phase = "intro" | "starting" | "playing" | "paused" | "submitting" | "result";
-type Run = { ticket: string; difficulty: Difficulty };
+type Run = { ticket: string; difficulty: Difficulty; starry: boolean; totalMs: number };
 type Outcome = {
   result: RunResult;
   aborted: boolean;
@@ -53,8 +58,16 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
   const [starry, setStarry] = useState(() => starryNight(Date.now()));
   const [records, setRecords] = useState(readStarsRecords);
   const run = useRef<Run | null>(null);
+  const [hudInfo, setHudInfo] = useState({ starry: false, totalMs: 0 });
   const phaseRef = useRef<Phase>("intro");
   phaseRef.current = phase;
+  // 별자리 도감 (이미 있는 별자리는 판 중 "도감 등록!"을 띄우지 않는다)
+  const { state: forage } = useForage();
+  const dex = forage?.dex;
+
+  useEffect(() => {
+    void forageStore.refresh();
+  }, []);
 
   useBlockingLayer(phase === "playing" || phase === "submitting");
 
@@ -107,7 +120,10 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
     try {
       const res = await rpgApi.start("stars", diff);
       const c = res.view.character;
-      run.current = { ticket: res.ticket, difficulty: diff };
+      // 맑은 밤은 서버가 판 시작 시각으로 정한다 (옛 서버면 없으므로 시계로)
+      const runStarry = res.starry ?? starryNight(Date.now());
+      run.current = { ticket: res.ticket, difficulty: diff, starry: runStarry, totalMs: res.timeLimitSec * 1000 };
+      setHudInfo({ starry: runStarry, totalMs: res.timeLimitSec * 1000 });
       setOutcome(null);
       setStarry(starryNight(Date.now()));
       setPhase("playing");
@@ -122,6 +138,8 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
         hotbar: c.hotbar,
         potions: c.potions,
         equip: c.equip,
+        starry: runStarry,
+        starsKnown: Object.keys(dex ?? {}).filter((id) => id.startsWith("c_")),
       });
     } catch (e) {
       setNotice(errorMessage(e));
@@ -139,6 +157,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
       .then((res) => {
         setOutcome({ result, aborted, reward: res.reward });
         void meStore.refresh();
+        if (res.reward.constellations?.length) void forageStore.refresh();
         // 이 기기의 최근 기록 (끝까지 본 판만)
         if (!aborted && result.game === "stars") {
           saveStarsRecord({
@@ -149,6 +168,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
             miss: result.miss,
             points: res.reward.points,
             night: !!res.reward.nightBonus,
+            cons: res.reward.constellations?.length ?? 0,
           });
           setRecords(readStarsRecords());
         }
@@ -160,7 +180,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
   if (phase === "playing" || phase === "paused" || phase === "submitting") {
     return (
       <>
-        <RunHud game="stars" hotbar={[]} onPause={pause} />
+        <StarsHud onPause={pause} totalMs={hudInfo.totalMs} starry={hudInfo.starry} />
         {phase === "submitting" && (
           <div className={s.submitting} role="status">
             별자리를 정리하는 중…
@@ -219,6 +239,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
                   </div>
                 </div>
                 {r.nightBonus && <p className={s.levelUp}>맑은 밤 보너스 ×{STARRY_NIGHT_BONUS} — 진짜 별이 잘 보이는 밤이었어요</p>}
+                <ResultConstellations reward={r} />
                 {r.capped && (
                   <p className={ui.hint}>
                     오늘 사냥·미니게임 포인트 한도(또는 하루 전체 한도)에 닿아서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
@@ -307,8 +328,43 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
           {notice}
         </p>
         <StarsPreview starry={starry} />
+        <StarsDexCard dex={dex} starry={starry} />
         <StarsInfo records={records} />
       </div>
     </Dialog>
+  );
+}
+
+/** 결과: 이번 판에 완성한 별자리 (처음이면 "도감 등록!", 완벽으로만 이었으면 표시) */
+function ResultConstellations({ reward }: { reward: RunReward }) {
+  const list = reward.constellations ?? [];
+  if (!list.length) return <p className={ui.hint}>이번 판에는 끝까지 이은 별자리가 없어요. 한 별자리의 별을 하나도 놓치지 않으면 도감에 등록돼요.</p>;
+  const fresh = list.filter((c) => c.isNew).length;
+  return (
+    <div className={x.cons}>
+      <p className={x.consHead}>
+        완성한 별자리 <b>{list.length}</b>
+        {fresh > 0 && <span className={x.fresh}> · 새로 등록 {fresh}</span>}
+      </p>
+      <ul className={x.consList}>
+        {list.map((c, i) => {
+          const def = constellationById(c.id);
+          if (!def) return null;
+          return (
+            <li key={`${c.id}${i}`} data-rarity={def.rarity}>
+              <ConstellationIcon con={def} known size={36} />
+              <span>
+                <b>{def.name}</b>
+                <small>
+                  {def.shape}
+                  {c.perfect ? " · 완벽" : ""}
+                </small>
+              </span>
+              {c.isNew && <em className={x.fresh}>도감 등록!</em>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

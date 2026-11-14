@@ -125,3 +125,41 @@ describe("도감 100% 배지 (입장 토큰의 dex)", () => {
     expect((events(u).find((e) => e.t === "join") as (PeerInfo & { t: "join" }) | undefined)?.dex).toBe(7);
   });
 });
+
+describe("주간 랭킹 1위 (입장 토큰·착용 증서의 champ)", () => {
+  it("서명 안의 champ만 입장 정보가 되고 다른 사람 화면(join·welcome)에 실린다. 착용 증서로 켜고 끄면 look 방송에 함께", async () => {
+    const t1 = await signJoinToken(SECRET, { visitorId: "king", name: "왕", color: AVATAR_COLORS[0], channel: 1, look: ["champ_crown"], champ: 1 });
+    const a1 = await admit(SECRET, t1, 1, undefined);
+    expect(a1?.champ).toBe(1);
+    // 1위 전용 꾸미기는 운영자 전용이 아니라 그대로 입는다
+    expect(a1?.look).toEqual(["champ_crown"]);
+    const t2 = await signJoinToken(SECRET, { visitorId: "odd", name: "이상", color: AVATAR_COLORS[0], channel: 1, look: [], champ: 64 });
+    expect((await admit(SECRET, t2, 1, undefined))?.champ).toBeUndefined();
+    const core = setup();
+    const u = conn("u");
+    core.join(u, ticket("u"), 0);
+    const king = conn("king");
+    core.join(king, { ...ticket("king"), champ: 5 }, 0);
+    expect((events(u).find((e) => e.t === "join") as (PeerInfo & { t: "join" }) | undefined)?.champ).toBe(5);
+    const late = conn("late");
+    core.join(late, ticket("late"), 0);
+    const welcome = events(late).find((e) => e.t === "welcome") as { peers: PeerInfo[] } | undefined;
+    expect(welcome?.peers.find((p) => p.name === "king")?.champ).toBe(5);
+    // 오라 끄기 (1위 비트 + 오라 끔 표시)
+    u.out.length = 0;
+    core.applyGrant(king, { kind: "look", visitorId: "king", look: [], exp: 9e9, champ: 5 | 8 });
+    expect(events(u).find((e) => e.t === "look")).toMatchObject({ t: "look", champ: 13 });
+    expect(king.att?.champ).toBe(13);
+    // 1위가 끝남 (0) → 지운다
+    u.out.length = 0;
+    core.applyGrant(king, { kind: "look", visitorId: "king", look: [], exp: 9e9, champ: 0 });
+    expect(events(u).find((e) => e.t === "look")).toMatchObject({ t: "look", champ: 0 });
+    expect(king.att?.champ).toBeUndefined();
+    // 옛 웹 증서(champ 없음)는 그대로 둔다
+    core.applyGrant(king, { kind: "look", visitorId: "king", look: [], exp: 9e9, champ: 2 });
+    u.out.length = 0;
+    core.applyGrant(king, { kind: "look", visitorId: "king", look: [], exp: 9e9 });
+    expect(events(u).find((e) => e.t === "look")).not.toHaveProperty("champ");
+    expect(king.att?.champ).toBe(2);
+  });
+});

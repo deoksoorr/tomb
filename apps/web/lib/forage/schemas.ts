@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BOAT_FISHING_SPOTS, FISHING_SPOTS } from "@tomb/protocol";
-import { DEX_TIERS, GATHER_NODES, LIFE_CATS, NPCS, SPECIES, type DexTier } from "./catalog";
+import { DEX_CATS, DEX_TIERS, GATHER_NODES, NPCS, SPECIES, type DexCat, type DexTier } from "./catalog";
 
 // 낚시·채집·판매·도감 API 입력 검증 (zod)
 
@@ -37,6 +37,6 @@ export const SellSchema = z.object({
   items: z.partialRecord(speciesId, z.number().int().min(1).max(999)).refine((o) => Object.keys(o).length > 0 && Object.keys(o).length <= 80, "팔 것을 골라 주세요."),
 });
 export const DexClaimSchema = z.object({
-  cat: z.enum(LIFE_CATS),
+  cat: z.enum(DEX_CATS as [DexCat, ...DexCat[]]),
   tier: z.union(DEX_TIERS.map((t) => z.literal(t)) as unknown as [z.ZodLiteral<DexTier>, z.ZodLiteral<DexTier>, ...z.ZodLiteral<DexTier>[]]),
 });

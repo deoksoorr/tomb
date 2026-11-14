@@ -8,6 +8,7 @@ import { requireVisitor } from "@/lib/session";
 import { isStaff } from "@/lib/staff";
 import { getAccounts, NO_NAME } from "@/lib/store";
 import { getStyleStore } from "@/lib/store/style";
+import { champBitsFor } from "@/lib/store/champ";
 import { kstDay, lookOf } from "@/lib/store/accounts";
 import type { RoomJoinResponse } from "@/lib/types";
 import { readBody, RoomJoinSchema } from "@/lib/validate";
@@ -28,11 +29,11 @@ export const POST = handler(async (req) => {
   }
   const now = Date.now();
   const accounts = getAccounts();
-  const [a, style, staff, dex] = await Promise.all([accounts.get(visitorId, kstDay(now), now), getStyleStore(accounts).get(visitorId), isStaff(visitorId), dexBadgeOf(visitorId)]);
+  const [a, style, staff, dex, champ] = await Promise.all([accounts.get(visitorId, kstDay(now), now), getStyleStore(accounts).get(visitorId), isStaff(visitorId), dexBadgeOf(visitorId), champBitsFor(visitorId, now).catch(() => 0)]);
   const token = await signJoinToken(
     env.joinSecret(),
     // 31번: 운영자 표시는 서버가 확인한 뒤에만. 운영자 이름은 공개 이름("대장")으로
-    { visitorId, name: staffPublicName(a.name ?? NO_NAME, staff), color: a.color ?? AVATAR_COLORS[0], body: a.body ?? "hood", look: lookOf(a), dye: style.dye, channel: 0, room, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}) },
+    { visitorId, name: staffPublicName(a.name ?? NO_NAME, staff), color: a.color ?? AVATAR_COLORS[0], body: a.body ?? "hood", look: lookOf(a), dye: style.dye, channel: 0, room, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}) },
     ROOM_TOKEN_TTL_SEC,
   );
   return json<RoomJoinResponse>({ room, token, wsUrl: `${env.realtimeWsUrl()}/room/${encodeURIComponent(room)}?t=${encodeURIComponent(token)}` });

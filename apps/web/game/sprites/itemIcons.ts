@@ -736,6 +736,19 @@ const GEAR_ICONS: Record<string, Ascii> = {
     rows: ["", "", "..s....bb....s", "..k...kkkk...k", "..kk.kkkkkk.kk", "..kkkkkkkkkkkk", "..kkkkkbkkkkkk", "..kkkkkkkkkkkk", "..llllllllllll"],
     pal: { k: 0x2a2838, l: 0x4a4660, s: 0xc8d0e0, b: 0x6ae0ff },
   },
+  // 주간 랭킹 1위 전용 (금화 왕관·붉은 깃털 투구·황금 물고기 모자)
+  champ_crown: {
+    rows: ["", ".......w", "..w....g....w", "..g...ggg...g", "..gg.gggggggg", "..ggggggrgggg", ".ggggggrrrggggg", ".gcchggggggcchg", ".gccggggggggccg", ".llllllllllllll", "..lllllllllll"],
+    pal: { g: 0xf6c83a, l: 0xb8841a, w: 0xfffaf0, r: 0xe0304a, c: 0xe0a828, h: 0xfff4b0 },
+  },
+  champ_plume: {
+    rows: [".r.....r", "..rR.Rr", "..rrRrr", "...rrr", "....r", "....kkkk", "..kssssssk", ".kssshssssk", ".kssssssssk", ".ksssssssdk", ".yyyyyryyyy", ".kdddddddk"],
+    pal: { r: 0xe0283a, R: 0xff7a6a, s: 0xb8c0cc, h: 0xeef2f8, d: 0x7a8496, k: 0x4a5262, y: 0xd8a838 },
+  },
+  champ_fishhat: {
+    rows: ["", "", "", "......ff", ".....ffff", "..ggggggggg..f", ".gehgggggghgff", ".ggggghgggggff", "..lllllllll..f", "......f"],
+    pal: { g: 0xf4c030, l: 0xb07a14, h: 0xfff0a0, f: 0xff9a3a, e: 0x1a1a24 },
+  },
   neck_collar: {
     rows: ["", "", "..wwww....wwww", "...wwww..wwww", "....wwwwwwww", ".....llllll", "......l..l"],
     pal: { w: 0xf8f8f4, l: 0xc8c8c0 },

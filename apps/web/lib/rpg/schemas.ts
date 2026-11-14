@@ -15,6 +15,7 @@ export const RunStartSchema = z.object({
 });
 
 const duration = z.number().int().min(0).max(30 * 60_000);
+const starGroupList = z.array(z.number().int().min(0).max(200)).max(60).optional();
 
 export const RunResultSchema = z.discriminatedUnion("game", [
   z.object({
@@ -26,7 +27,18 @@ export const RunResultSchema = z.discriminatedUnion("game", [
     potionsUsed: z.record(itemId, count).default({}),
   }),
   z.object({ game: z.literal("bugs"), durationMs: duration, caught: count, golden: count, wrong: count, decoy: count, maxCombo: count, score: z.number().int().min(0).max(1_000_000) }),
-  z.object({ game: z.literal("stars"), durationMs: duration, perfect: count, good: count, miss: count, maxCombo: count, score: z.number().int().min(0).max(1_000_000) }),
+  z.object({
+    game: z.literal("stars"),
+    durationMs: duration,
+    perfect: count,
+    good: count,
+    miss: count,
+    maxCombo: count,
+    score: z.number().int().min(0).max(1_000_000),
+    // 완성한 별 무리 번호 (없으면 옛 화면 — 도감 등록 없이). 한 판 무리 수는 30개를 넘지 않는다
+    groups: starGroupList,
+    perfectGroups: starGroupList,
+  }),
 ]);
 
 export const RunFinishSchema = z.object({

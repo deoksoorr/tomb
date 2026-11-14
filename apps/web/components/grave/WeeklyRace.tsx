@@ -1,0 +1,180 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { CHAMP_TITLE, type ChampBoard } from "@tomb/protocol";
+import { api, errorMessage } from "@/lib/api";
+import type { ChampAvatar, ChampResponse, RaceResponse, RaceRow } from "@/lib/types";
+import AvatarThumb from "../account/AvatarThumb";
+import styles from "./WeeklyRace.module.css";
+
+// 이번 주 레이스 (랭킹 창 맨 앞 칸): 포인트·사냥 처치·낚시마다 1~3등 시상대(캐릭터 모습), 마감(월요일 0시 KST)까지 남은 시간,
+// 내 순위·1위와의 차이. 창이 열려 있는 동안 30초마다 다시 받는다. 아래에는 지난주 1위와 명예의 전당.
+
+/** 다시 받는 간격 */
+export const RACE_REFRESH_MS = 30_000;
+
+const BOARD_NAME: Record<ChampBoard, string> = { points: "포인트", huntKills: "사냥 처치", fish: "낚시 · 가장 큰 물고기" };
+
+/** "2일 5시간" · "3시간 12분" · "8분" */
+export function leftText(ms: number): string {
+  const m = Math.max(0, Math.floor(ms / 60_000));
+  const d = Math.floor(m / 1440);
+  const h = Math.floor((m % 1440) / 60);
+  if (d > 0) return `${d}일 ${h}시간`;
+  if (h > 0) return `${h}시간 ${m % 60}분`;
+  return `${Math.max(1, m)}분`;
+}
+
+/** 11월 9일 주 */
+function weekLabel(week: string): string {
+  return `${Number(week.slice(4, 6))}월 ${Number(week.slice(6, 8))}일 주`;
+}
+
+/** 1,234P · 56마리 · 61.0cm (랭킹 창 rankValue와 같은 모양) */
+function valueText(board: ChampBoard, value: number): string {
+  if (board === "fish") return `${(value / 10).toFixed(1)}cm`;
+  return `${value.toLocaleString("ko-KR")}${board === "points" ? "P" : "마리"}`;
+}
+
+export default function WeeklyRace() {
+  const [race, setRace] = useState<RaceResponse | null>(null);
+  const [champ, setChamp] = useState<ChampResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      api
+        .race()
+        .then((r) => {
+          if (!alive) return;
+          setRace(r);
+          setError(null);
+          setNow(Date.now());
+        })
+        .catch((e: unknown) => alive && setError(errorMessage(e)));
+    void load();
+    api
+      .champ()
+      .then((r) => alive && setChamp(r))
+      .catch(() => undefined);
+    const t = setInterval(() => void load(), RACE_REFRESH_MS);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  if (!race) return <p className={styles.empty}>{error ?? "불러오는 중…"}</p>;
+  return (
+    <div className={styles.race}>
+      <p className={styles.deadline}>
+        <span className={styles.clock} aria-hidden="true">
+          ⏳
+        </span>
+        마감까지 <b>{leftText(race.endsAt - now)}</b>
+        <span className={styles.when}> · 월요일 0시</span>
+      </p>
+      <p className={styles.reward}>1위 보상: 전용 모자(한 주) · 1위 오라 · 이름표 배지 · {(champ?.points ?? 1000).toLocaleString("ko-KR")}P</p>
+      {race.boards.map((b) => (
+        <section key={b.board} className={styles.board} aria-label={`이번 주 ${BOARD_NAME[b.board]} 레이스`}>
+          <h3 className={styles.title}>
+            <span className={styles.badge} data-board={b.board}>
+              {CHAMP_TITLE[b.board]}
+            </span>
+            {BOARD_NAME[b.board]}
+          </h3>
+          {b.top.length === 0 ? (
+            <p className={styles.none}>아직 기록이 없어요. 지금 1위가 될 기회!</p>
+          ) : (
+            <ol className={styles.podium}>
+              {[b.top[1], b.top[0], b.top[2]].map((r, i) => (r ? <Step key={r.rank} row={r} board={b.board} place={[2, 1, 3][i]} /> : <li key={`e${i}`} className={styles.blank} aria-hidden="true" />))}
+            </ol>
+          )}
+          <p className={styles.mine}>
+            {race.staff
+              ? "운영자는 순위에 들지 않아요."
+              : !b.mine
+                ? "내 기록이 아직 없어요."
+                : b.mine.rank === 1
+                  ? `지금 내가 1위! (${valueText(b.board, b.mine.value)}) 월요일까지 지키면 보상`
+                  : `내 순위 ${b.mine.rank}위 · ${valueText(b.board, b.mine.value)} · 1위까지 ${valueText(b.board, b.mine.gap)}`}
+          </p>
+        </section>
+      ))}
+      {champ && champ.last.length > 0 && (
+        <section className={styles.board} aria-label="지난주 1위">
+          <h3 className={styles.title}>지난주 1위 · {weekLabel(champ.week)}</h3>
+          <ul className={styles.last}>
+            {champ.last.map((w) => (
+              <li key={w.board} className={styles.lastRow} data-me={w.me === true}>
+                <Avatar a={w.avatar} label={w.name} scale={1} />
+                <span className={styles.lastText}>
+                  <span className={styles.badge} data-board={w.board}>
+                    {CHAMP_TITLE[w.board]}
+                  </span>
+                  <b>{w.name}</b>
+                  <span className={styles.value}>
+                    {w.sub ? `${w.sub} ` : ""}
+                    {valueText(w.board, w.value)}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {champ && (
+        <section className={styles.board} aria-label="명예의 전당">
+          <h3 className={styles.title}>명예의 전당</h3>
+          {champ.hall.length === 0 ? (
+            <p className={styles.none}>첫 주간 1위는 월요일 0시에 정해져요.</p>
+          ) : (
+            <ol className={styles.hall}>
+              {champ.hall.map((h) => (
+                <li key={h.week} className={styles.hallRow}>
+                  <span className={styles.hallWeek}>{weekLabel(h.week)}</span>
+                  <span className={styles.hallWinners}>
+                    {h.winners.length === 0
+                      ? "1위 없음"
+                      : h.winners.map((w) => (
+                          <span key={w.board} className={styles.hallOne}>
+                            <span className={styles.badge} data-board={w.board}>
+                              {CHAMP_TITLE[w.board]}
+                            </span>
+                            {w.name}
+                          </span>
+                        ))}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function Avatar({ a, label, scale }: { a: ChampAvatar; label: string; scale: number }) {
+  return <AvatarThumb color={a.color} body={a.body} look={a.look} dye={a.dye} label={label} scale={scale} />;
+}
+
+/** 시상대 한 칸: 캐릭터 + 받침(등수) + 이름·값 */
+function Step({ row, board, place }: { row: RaceRow; board: ChampBoard; place: number }) {
+  return (
+    <li className={styles.step} data-place={place} data-me={row.me}>
+      <Avatar a={row.avatar} label={`${place}등 ${row.name}`} scale={place === 1 ? 2 : 1.6} />
+      <span className={styles.block}>{place}</span>
+      <span className={styles.who}>
+        {row.name}
+        {row.me && " (나)"}
+      </span>
+      <span className={styles.value}>
+        {row.sub ? `${row.sub} ` : ""}
+        {valueText(board, row.value)}
+      </span>
+    </li>
+  );
+}

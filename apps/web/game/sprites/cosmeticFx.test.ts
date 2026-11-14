@@ -24,7 +24,7 @@ describe("F8 catalog", () => {
       expect(SPRITE_COSMETICS as readonly string[]).toContain(it.id);
       expect(hasItemIcon(it.id), it.id).toBe(true);
       if (it.slot === "pet") continue; // 펫은 동물원 사육사가 영구로만 판다 (값은 ZOO_PETS, zoo.test.ts)
-      if (it.staff) continue; // 31번 운영자 전용은 값 0 (운영자만 영구로 받는다)
+      if (it.staff || it.champ) continue; // 31번 운영자 전용·주간 1위 전용은 값 0 (운영자만 영구로 받는다 / 1위만 빌려 입는다)
       expect(it.price).toBeGreaterThanOrEqual(60);
       expect(it.price).toBeLessThanOrEqual(480);
     }

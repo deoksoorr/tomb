@@ -66,6 +66,7 @@ import SkyHud from "@/components/sky/SkyHud";
 import Telescope from "@/components/rpg/Telescope";
 import HauntDialog from "@/components/haunt/HauntDialog";
 import GoblinClaim from "./GoblinClaim";
+import ChampNotice from "./ChampNotice";
 // 10·11·23번: 출석 달력 · 선물함 · 확성기
 import CalendarDialog from "../account/CalendarDialog";
 import GiftsDialog from "../account/GiftsDialog";
@@ -718,6 +719,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "telescope" && <Telescope onClose={closePanel} />}
       {panel === "haunt" && <HauntDialog onClose={closePanel} />}
       <GoblinClaim />
+      {/* 주간 랭킹 1위 알림 창 (본인에게 한 번) */}
+      {ready && <ChampNotice />}
       {panel === "calendar" && <CalendarDialog onClose={closePanel} />}
       {panel === "gifts" && <GiftsDialog onClose={closePanel} onOpenCalendar={() => setPanel("calendar")} />}
       {panel === "friends" && <FriendsDialog onClose={closePanel} />}

@@ -1,12 +1,17 @@
 import * as Phaser from "phaser";
-import { CONSTELLATIONS, comboMult, STAR_APPROACH, STAR_SCORE, starWindows, starsPlan, type StarNote } from "@/lib/rpg/plan";
+import { constellationById, type Constellation } from "@/lib/rpg/constellations";
+import { comboMult, STAR_APPROACH, STAR_SCORE, starGroups, starWindows, starsPlan, type StarGroup, type StarNote } from "@/lib/rpg/plan";
 import type { RpgAction, RpgHud, StarsResult } from "@/lib/rpg/types";
+import { hash2 } from "../sprites/pixel";
 import { RpgScene } from "./base";
+import { artColor, artSegments, ensureStarTextures, STEX, type Seg } from "./starArt";
+import { StarSfx } from "./starSound";
 import { ensureRpgTextures, RTEX } from "./sprites";
 
-// 별자리 잇기: 끝내지 못한 아이디어들이 밤하늘에 별로 떠오른다. 빛의 고리가 별에 닿는 순간 누르면 별이 켜지고,
-// 앞 별과 금빛 선으로 이어진다. 한 무리를 다 이으면 별자리 이름이 잠깐 떠올랐다가 사라진다.
-// 박자는 시드 계획(starsPlan)대로 — 서버는 같은 계획으로 판정 수의 상한을 검사한다.
+// 별자리 잇기: 끝내지 못한 다짐들이 망원경 속 밤하늘에 별로 떠오른다. 빛의 고리가 별에 닿는 순간 누르면 별이 번쩍 켜지고,
+// 앞 별과 빛이 흐르는 선으로 이어진다. 한 무리(별자리)를 하나도 놓치지 않고 다 이으면 그 별자리 그림이 떠올랐다 사라지며
+// 이름과 (처음이면) "도감 등록!" — 등록은 서버가 결과의 완성 목록을 계획·시간·판정 수로 검사한 뒤에 한다.
+// 박자는 시드 계획(starsPlan)대로 — 서버는 같은 계획으로 판정 수의 상한을 검사한다. 별자리 모양은 화면 비율을 지키며 펼친다.
 // 어디를 눌러도 "다음 별"을 판정한다 (모바일에서 작은 별을 정확히 누를 필요가 없게). 너무 일찍 누르면 놓침.
 
 const KEYS = new Set(["Space", "KeyJ", "KeyK", "KeyF", "Enter", "NumpadEnter"]);
@@ -14,7 +19,13 @@ const KEYS = new Set(["Space", "KeyJ", "KeyK", "KeyF", "Enter", "NumpadEnter"]);
 const EARLY_MISS_MS = 260;
 const RING_START = 26;
 const RING_END = 5;
+/** 무리가 끝난 뒤 별·선·그림이 남아 있는 시간 (완성했으면 조금 더) */
+const LINGER_MS = 1500;
+const LINGER_DONE_MS = 2300;
+/** 완성 그림을 그어 나가는 시간 */
+const ART_DRAW_MS = 700;
 
+type Judge = "perfect" | "good" | "miss";
 type Live = {
   n: StarNote;
   x: number;
@@ -22,14 +33,27 @@ type Live = {
   star: Phaser.GameObjects.Image;
   ring: Phaser.GameObjects.Image;
   glow: Phaser.GameObjects.Image;
-  judged: "perfect" | "good" | "miss" | null;
+  judged: Judge | null;
+};
+/** 무리마다: 화면 자리(가운데·한 변), 놓친 별이 있는지, 완벽으로만 이었는지, 함께 사라질 것들 */
+type GroupView = {
+  info: StarGroup;
+  con: Constellation;
+  cx: number;
+  cy: number;
+  size: number;
+  hits: number;
+  broken: boolean;
+  flawless: boolean;
+  objs: Phaser.GameObjects.GameObject[];
 };
 
 export class StarsScene extends RpgScene {
   private plan: StarNote[] = [];
+  private groups: StarGroup[] = [];
+  private views = new Map<number, GroupView>();
   private nextSpawn = 0;
   private live: Live[] = [];
-  private groupObjs = new Map<number, Phaser.GameObjects.GameObject[]>();
   private lastHit = new Map<number, { x: number; y: number }>();
   private aw = 320;
   private ah = 200;
@@ -41,9 +65,17 @@ export class StarsScene extends RpgScene {
   private combo = 0;
   private maxCombo = 0;
   private points = 0;
-  private judge: "perfect" | "good" | "miss" | undefined;
+  private judge: Judge | undefined;
   private judgeUntil = 0;
+  /** 이번 판에 완성한 무리 · 그중 완벽으로만 이은 무리 */
+  private doneGroups: number[] = [];
+  private perfectGroups: number[] = [];
+  /** 도감에 이미 있는 별자리 + 이번 판에 처음 완성한 것 ("도감 등록!"은 한 번만) */
+  private known = new Set<string>();
+  private lastName: string | null = null;
+  private reduced = false;
   private burst!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private snd!: StarSfx;
 
   constructor() {
     super("rpg-stars");
@@ -51,6 +83,8 @@ export class StarsScene extends RpgScene {
 
   create(): void {
     this.setupCommon();
+    this.snd = new StarSfx();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.snd.destroy());
     ensureRpgTextures(this);
     this.textures.get(RTEX.glow).setFilter(Phaser.Textures.FilterMode.LINEAR);
     const cam = this.cameras.main;
@@ -58,16 +92,23 @@ export class StarsScene extends RpgScene {
     const portrait = cam.height > cam.width * 1.1;
     this.aw = portrait ? 210 : 320;
     this.ah = portrait ? 300 : 200;
-    this.plan = starsPlan(this.play.seed, this.play.difficulty, this.play.timeLimitSec);
+    ensureStarTextures(this, this.aw, this.ah);
+    this.reduced = this.data0.reduced;
+    this.plan = starsPlan(this.play.seed, this.play.difficulty, this.play.timeLimitSec, !!this.play.starry);
+    this.groups = starGroups(this.plan);
     this.approach = STAR_APPROACH[this.play.difficulty];
     this.win = starWindows(this.play.difficulty, this.play.derived.stats.dex);
     this.nextSpawn = 0;
     this.live = [];
-    this.groupObjs.clear();
+    this.views.clear();
     this.lastHit.clear();
     this.perfect = this.good = this.miss = this.combo = this.maxCombo = this.points = 0;
     this.judge = undefined;
-    cam.setBackgroundColor("#070812");
+    this.doneGroups = [];
+    this.perfectGroups = [];
+    this.known = new Set(this.play.starsKnown ?? []);
+    this.lastName = null;
+    cam.setBackgroundColor("#04050c");
     this.fit();
     this.drawSky();
     this.burst = this.add.particles(0, 0, RTEX.dust, {
@@ -79,6 +120,8 @@ export class StarsScene extends RpgScene {
       emitting: false,
     });
     this.burst.setDepth(50);
+    // 가끔 별똥별 (동작 줄이기면 없음)
+    if (!this.reduced) this.time.addEvent({ delay: 4200, loop: true, callback: () => Math.random() < 0.55 && this.shootingStar() });
   }
 
   private fit(): void {
@@ -93,63 +136,97 @@ export class StarsScene extends RpgScene {
     for (const o of this.children.list) if (o instanceof Phaser.GameObjects.Text) o.setScale(1 / this.cameras.main.zoom);
   }
 
-  /** 밤하늘: 위가 깊고 아래가 옅은 그라데이션, 은하수 띠, 반짝이는 먼 별, 아래 언덕과 묘비 실루엣 */
+  /** 망원경 속 밤하늘: 구워 둔 하늘(은하수·별밭) + 깜빡이는 별 몇 개 + 달 + 언덕·묘비 실루엣 + 망원경 테 */
   private drawSky(): void {
     const { aw, ah } = this;
-    const key = `rpg-sky-${aw}x${ah}`;
-    if (!this.textures.exists(key)) {
-      const c = document.createElement("canvas");
-      c.width = aw;
-      c.height = ah;
-      const ctx = c.getContext("2d")!;
-      const gr = ctx.createLinearGradient(0, 0, 0, ah);
-      gr.addColorStop(0, "#080a1c");
-      gr.addColorStop(0.6, "#121634");
-      gr.addColorStop(1, "#262046");
-      ctx.fillStyle = gr;
-      ctx.fillRect(0, 0, aw, ah);
-      this.textures.addCanvas(key, c);
-    }
-    this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-100);
-    // 은하수
+    this.add.image(0, 0, STEX.sky(aw, ah)).setOrigin(0, 0).setDepth(-100);
     const rnd = new Phaser.Math.RandomDataGenerator([String(this.play.seed)]);
-    for (let i = 0; i < 9; i++) {
-      const t = i / 8;
-      this.add
-        .image(aw * (0.1 + 0.8 * t), ah * (0.85 - 0.7 * t) + rnd.between(-10, 10), RTEX.glow)
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setTint(0x6a7ad0)
-        .setAlpha(0.08 + rnd.frac() * 0.06)
-        .setScale(1.6 + rnd.frac())
-        .setDepth(-90);
-    }
-    // 먼 별 (천천히 깜빡인다)
-    for (let i = 0; i < 70; i++) {
+    // 깜빡이는 가까운 별 (구워 둔 별밭 위에 몇 개만 — 트윈 수를 적게)
+    for (let i = 0; i < (this.reduced ? 8 : 18); i++) {
       const d = this.add
-        .image(rnd.between(2, aw - 2), rnd.between(2, Math.floor(ah * 0.85)), RTEX.dust)
-        .setAlpha(0.15 + rnd.frac() * 0.5)
-        .setScale(rnd.frac() < 0.15 ? 1 : 0.5)
+        .image(rnd.between(6, aw - 6), rnd.between(6, Math.floor(ah * 0.8)), STEX.spark)
+        .setAlpha(0.25 + rnd.frac() * 0.4)
+        .setScale(rnd.frac() < 0.3 ? 0.7 : 0.45)
+        .setTint(rnd.pick([0xffffff, 0xc8d8ff, 0xffe2b0]))
         .setDepth(-80);
-      if (!this.data0.reduced)
-        this.tweens.add({ targets: d, alpha: 0.05, duration: 900 + rnd.between(0, 2400), yoyo: true, repeat: -1, delay: rnd.between(0, 2000) });
+      if (!this.reduced)
+        this.tweens.add({ targets: d, alpha: 0.05, duration: 1100 + rnd.between(0, 2400), yoyo: true, repeat: -1, delay: rnd.between(0, 2000) });
     }
     // 달
-    this.add.image(aw * 0.84, ah * 0.16, RTEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xfff0c8).setAlpha(0.35).setScale(0.9).setDepth(-70);
-    this.add.circle(aw * 0.84, ah * 0.16, 6, 0xf2ead3).setDepth(-69);
-    this.add.circle(aw * 0.84 + 2.5, ah * 0.16 - 1.5, 5.4, 0x10132c).setDepth(-68);
+    const mx = aw * 0.86;
+    const my = ah * 0.13;
+    this.add.image(mx, my, RTEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xfff0c8).setAlpha(0.3).setScale(0.8).setDepth(-70);
+    this.add.circle(mx, my, 6, 0xf2ead3).setDepth(-69);
+    this.add.circle(mx + 2.5, my - 1.5, 5.4, 0x0b0e26).setDepth(-68);
     // 언덕과 묘비 실루엣
     const g = this.add.graphics().setDepth(-60);
-    g.fillStyle(0x0a0b16, 1);
+    g.fillStyle(0x07080f, 1);
     const pts: Phaser.Math.Vector2[] = [new Phaser.Math.Vector2(0, ah)];
-    for (let x = 0; x <= aw; x += 8) pts.push(new Phaser.Math.Vector2(x, ah - 14 - Math.sin(x / 37) * 5 - Math.sin(x / 13) * 1.5));
+    for (let x = 0; x <= aw; x += 8) pts.push(new Phaser.Math.Vector2(x, ah - 12 - Math.sin(x / 37) * 4 - Math.sin(x / 13) * 1.5));
     pts.push(new Phaser.Math.Vector2(aw, ah));
     g.fillPoints(pts, true);
-    for (let i = 0; i < 6; i++) {
-      const x = rnd.between(10, aw - 10);
-      const y = ah - 16 - Math.sin(x / 37) * 5;
-      g.fillRect(x - 3, y - 7, 6, 8);
-      g.fillCircle(x, y - 7, 3);
+    for (let i = 0; i < 5; i++) {
+      const x = rnd.between(14, aw - 14);
+      const y = ah - 13 - Math.sin(x / 37) * 4;
+      g.fillRect(x - 3, y - 6, 6, 7);
+      g.fillCircle(x, y - 6, 3);
     }
+    // 망원경 테 (맨 위 — 별자리는 테 안쪽에만 펼친다)
+    this.add.image(0, 0, STEX.rim(aw, ah)).setOrigin(0, 0).setDepth(95);
+  }
+
+  private shootingStar(): void {
+    if (this.paused || this.ended) return;
+    const { aw, ah } = this;
+    const x0 = aw * (0.15 + Math.random() * 0.7);
+    const y0 = ah * (0.05 + Math.random() * 0.25);
+    const ang = Phaser.Math.DegToRad(150 + Math.random() * 30);
+    const dist = 60 + Math.random() * 50;
+    const c = this.add.image(x0, y0, STEX.comet).setOrigin(1, 0.5).setRotation(ang).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setDepth(-50);
+    this.tweens.add({
+      targets: c,
+      x: x0 + Math.cos(ang) * dist,
+      y: y0 + Math.sin(ang) * dist,
+      alpha: { from: 0.9, to: 0 },
+      duration: 650,
+      ease: "Quad.easeIn",
+      onComplete: () => c.destroy(),
+    });
+    this.snd.shoot();
+  }
+
+  // ── 무리 자리 ──
+
+  /**
+   * 무리가 펼쳐질 자리: 겹치지 않게 번갈아 (가로 화면 = 왼쪽·오른쪽, 세로 화면 = 위·아래) + 시드로 조금 흔든다.
+   * 별자리 모양은 정사각형(size) 안에 화면 비율을 지키며 그린다
+   */
+  private view(g: number): GroupView {
+    const known = this.views.get(g);
+    if (known) return known;
+    const info = this.groups[g];
+    const con = constellationById(info.con)!;
+    const { aw, ah } = this;
+    const portrait = ah > aw;
+    const jx = (hash2(g, 1, this.play.seed) - 0.5) * 12;
+    const jy = (hash2(g, 2, this.play.seed) - 0.5) * 10;
+    const size = portrait ? 140 : 150;
+    const cx = portrait ? aw / 2 + jx : (g % 2 ? aw * 0.72 : aw * 0.28) + jx;
+    const cy = portrait ? (g % 2 ? ah * 0.7 : ah * 0.27) + jy : ah * 0.46 + jy;
+    const v: GroupView = { info, con, cx, cy, size, hits: 0, broken: false, flawless: true, objs: [] };
+    this.views.set(g, v);
+    // 무리가 처음 보일 때: 앞으로 이을 별 자리를 아주 옅은 점으로 (모양을 미리 짐작할 수 있게)
+    for (const n of this.plan)
+      if (n.group === g) {
+        const p = this.place(v, n.x, n.y);
+        v.objs.push(this.add.image(p.x, p.y, RTEX.dust).setAlpha(0).setTint(0xaab8ff).setDepth(6));
+      }
+    this.tweens.add({ targets: v.objs, alpha: 0.35, duration: 500 });
+    return v;
+  }
+
+  private place(v: GroupView, x: number, y: number): { x: number; y: number } {
+    return { x: v.cx + (x - 0.5) * v.size, y: v.cy + (y - 0.5) * v.size };
   }
 
   // ── 입력 ──
@@ -186,21 +263,42 @@ export class StarsScene extends RpgScene {
     const mult = comboMult(this.combo);
     this.points += Math.round(STAR_SCORE[j] * mult);
     this.setJudge(j);
-    this.sfx.chime(l.n.idx + (l.n.group % 3), j === "perfect");
+    const v = this.view(l.n.group);
+    v.hits++;
+    if (j !== "perfect") v.flawless = false;
+    this.snd.link(l.n.idx, j === "perfect");
     l.ring.destroy();
     l.star.setAlpha(1).setTint(j === "perfect" ? 0xfff3c8 : 0xc8dcff);
-    this.tweens.add({ targets: l.star, scale: { from: 1.8, to: 1.1 }, duration: 260, ease: "Quad.easeOut" });
+    this.tweens.add({ targets: l.star, scale: { from: 2.2, to: 1.2 }, duration: 260, ease: "Quad.easeOut" });
     l.glow.setAlpha(j === "perfect" ? 0.55 : 0.35);
     this.tweens.add({ targets: l.glow, scale: { from: 0.9, to: 0.45 }, duration: 500 });
-    this.burst.explode(j === "perfect" ? 14 : 7, l.x, l.y);
+    // 켜질 때 번쩍임
+    const fl = this.add
+      .image(l.x, l.y, STEX.flash)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(30)
+      .setTint(j === "perfect" ? 0xfff3c8 : 0xc8dcff);
+    this.tweens.add({
+      targets: fl,
+      scale: { from: 0.4, to: this.reduced ? 0.9 : 1.3 },
+      alpha: { from: 1, to: 0 },
+      duration: 260,
+      onComplete: () => fl.destroy(),
+    });
+    this.burst.explode(this.reduced ? 4 : j === "perfect" ? 12 : 6, l.x, l.y);
     this.floatText(l.x, l.y - 8, j === "perfect" ? (mult > 1 ? `완벽 ×${mult}` : "완벽") : "좋아", j === "perfect" ? "#ffe39a" : "#bcd0f0", 11);
-    // 같은 별자리의 앞 별과 금빛 선으로 잇는다
+    // 같은 별자리의 앞 별과 선으로 잇는다: 선이 켜지며 빛 한 점이 앞 별에서 이 별로 흐른다
     const prev = this.lastHit.get(l.n.group);
     if (prev) {
       const line = this.add.graphics().setDepth(5).setAlpha(0);
-      line.lineStyle(1, 0xffe39a, 0.7).lineBetween(prev.x, prev.y, l.x, l.y);
-      this.tweens.add({ targets: line, alpha: 1, duration: 220 });
-      this.track(l.n.group, line);
+      line.lineStyle(3, 0xffd890, 0.16).lineBetween(prev.x, prev.y, l.x, l.y);
+      line.lineStyle(1, 0xffe39a, 0.85).lineBetween(prev.x, prev.y, l.x, l.y);
+      this.tweens.add({ targets: line, alpha: 1, duration: 200 });
+      v.objs.push(line);
+      if (!this.reduced) {
+        const dot = this.add.image(prev.x, prev.y, RTEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xfff3c8).setScale(0.18).setDepth(7);
+        this.tweens.add({ targets: dot, x: l.x, y: l.y, duration: 200, ease: "Sine.easeIn", onComplete: () => dot.destroy() });
+      }
     }
     this.lastHit.set(l.n.group, { x: l.x, y: l.y });
     this.afterJudge(l);
@@ -211,52 +309,107 @@ export class StarsScene extends RpgScene {
     this.miss++;
     this.combo = 0;
     this.setJudge("miss");
-    this.sfx.play("miss", 0.3);
+    const v = this.view(l.n.group);
+    v.broken = true;
+    v.flawless = false;
+    this.snd.miss();
     l.ring.destroy();
     l.star.setTint(0x50546a).setAlpha(0.45);
     l.glow.setAlpha(0);
     this.floatText(l.x, l.y - 8, why, "#7a7f90", 10);
-    // 끊긴 자리부터 다시 잇는다
+    // 끊긴 자리부터 다시 잇는다 (도감 등록은 놓친 별이 없을 때만)
     this.lastHit.delete(l.n.group);
     this.afterJudge(l);
   }
 
-  private setJudge(j: "perfect" | "good" | "miss"): void {
+  private setJudge(j: Judge): void {
     this.judge = j;
     this.judgeUntil = this.elapsed + 500;
   }
 
-  private track(group: number, o: Phaser.GameObjects.GameObject): void {
-    const arr = this.groupObjs.get(group) ?? [];
-    arr.push(o);
-    this.groupObjs.set(group, arr);
-  }
-
-  /** 무리의 마지막 별이 판정되면 별자리 이름을 띄우고 천천히 지운다 */
+  /** 무리의 마지막 별이 판정되면: 다 이었으면 별자리 그림·이름, 아니면 (꽤 이었으면) 이름만 흐리게. 그리고 천천히 지운다 */
   private afterJudge(l: Live): void {
     const g = l.n.group;
-    const members = this.plan.filter((n) => n.group === g);
-    if (l.n.idx !== members.length - 1) return;
+    const v = this.view(g);
+    if (l.n.idx !== v.info.size - 1) return;
     const lives = this.live.filter((x) => x.n.group === g);
-    const hits = lives.filter((x) => x.judged === "perfect" || x.judged === "good").length;
-    const objs = this.groupObjs.get(g) ?? [];
-    if (hits >= Math.ceil(members.length * 0.6)) {
-      const cx = lives.reduce((a, x) => a + x.x, 0) / lives.length;
-      const cy = Math.min(...lives.map((x) => x.y)) - 10;
-      const name = this.label(Phaser.Math.Clamp(cx, 40, this.aw - 40), Math.max(14, cy), CONSTELLATIONS[(g + this.play.seed) % CONSTELLATIONS.length], "#ffe39a", 11)
-        .setAlpha(0)
-        .setDepth(60);
-      this.tweens.add({ targets: name, alpha: 1, duration: 400 });
-      objs.push(name);
-      this.sfx.play("coin-drop", 0.35);
-      for (const x of lives) if (x.judged !== "miss") this.tweens.add({ targets: x.glow, alpha: 0.7, scale: 0.7, duration: 300, yoyo: true });
+    const complete = v.info.full && !v.broken && v.hits === v.info.size;
+    if (complete) this.complete(v);
+    else if (v.hits >= Math.ceil(v.info.size * 0.6)) {
+      const top = this.place(v, 0.5, Math.min(...v.con.stars.map((s) => s[1])));
+      const name = this.nameLabel(top.x, top.y - 6, `${v.con.name} · 끊김`, "#8a90a8", 11);
+      v.objs.push(name);
     }
-    const all = [...objs, ...lives.flatMap((x) => [x.star, x.glow])];
-    this.time.delayedCall(1500, () => {
+    const all = [...v.objs, ...lives.flatMap((x) => [x.star, x.glow])];
+    this.time.delayedCall(complete ? LINGER_DONE_MS : LINGER_MS, () => {
       this.tweens.add({ targets: all, alpha: 0, duration: 900, onComplete: () => all.forEach((o) => o.destroy()) });
       this.live = this.live.filter((x) => x.n.group !== g);
-      this.groupObjs.delete(g);
     });
+  }
+
+  private nameLabel(x: number, y: number, text: string, color: string, px: number): Phaser.GameObjects.Text {
+    const t = this.label(Phaser.Math.Clamp(x, 44, this.aw - 44), Math.max(16, y), text, color, px)
+      .setAlpha(0)
+      .setDepth(60);
+    this.tweens.add({ targets: t, alpha: 1, duration: 350 });
+    return t;
+  }
+
+  /** 별자리 완성: 이은 선 위로 그 별자리 그림(가는 빛 선)을 그어 나가고, 이름 + 희귀도 + (처음이면) "도감 등록!" */
+  private complete(v: GroupView): void {
+    const { con } = v;
+    this.doneGroups.push(v.info.group);
+    if (v.flawless) this.perfectGroups.push(v.info.group);
+    const fresh = !this.known.has(con.id);
+    this.known.add(con.id);
+    this.lastName = con.name;
+    const color = artColor(con.rarity);
+    const art = this.add.graphics().setDepth(40).setBlendMode(Phaser.BlendModes.ADD);
+    const segs = artSegments(con);
+    const total = segs.reduce((a, s) => a + s.len, 0);
+    const draw = (p: number) => this.drawArt(art, v, segs, total * p, color);
+    if (this.reduced) {
+      draw(1);
+      art.setAlpha(0);
+      this.tweens.add({ targets: art, alpha: 1, duration: 300 });
+    } else {
+      const st = { p: 0 };
+      this.tweens.add({ targets: st, p: 1, duration: ART_DRAW_MS, ease: "Sine.easeInOut", onUpdate: () => draw(st.p) });
+    }
+    v.objs.push(art);
+    // 이름 (모양 위쪽), 희귀도, 처음이면 도감 등록
+    const top = this.place(v, 0.5, Math.min(...con.stars.map((s) => s[1]), ...con.art.flat().map((p) => p[1])));
+    const hex = `#${color.toString(16).padStart(6, "0")}`;
+    const tag = con.rarity >= 5 ? " ★전설" : con.rarity >= 3 ? " ★희귀" : "";
+    v.objs.push(this.nameLabel(top.x, top.y - 4, `${con.name}${tag}`, con.rarity >= 3 ? hex : "#ffe39a", 14));
+    if (fresh) {
+      const bottom = this.place(v, 0.5, Math.max(...con.stars.map((s) => s[1])));
+      const t = this.nameLabel(bottom.x, Math.min(this.ah - 22, bottom.y + 16), "도감 등록!", "#9ef0c0", 12);
+      if (!this.reduced) this.tweens.add({ targets: t, y: t.y - 3, duration: 260, yoyo: true, repeat: 2, ease: "Sine.easeOut" });
+      v.objs.push(t);
+    }
+    for (const x of this.live)
+      if (x.n.group === v.info.group) {
+        this.tweens.add({ targets: x.glow, alpha: 0.75, scale: 0.75, duration: 320, yoyo: true });
+        if (!this.reduced) this.burst.explode(5, x.x, x.y);
+      }
+    if (con.rarity >= 5 && !this.reduced) this.cameras.main.flash(260, 255, 232, 170);
+    this.snd.complete(con.rarity, fresh);
+  }
+
+  /** 그림 선을 len만큼(앞에서부터) 그린다: 넓고 옅은 빛 + 가는 선 */
+  private drawArt(g: Phaser.GameObjects.Graphics, v: GroupView, segs: Seg[], len: number, color: number): void {
+    g.clear();
+    let left = len;
+    for (const s of segs) {
+      if (left <= 0) break;
+      const k = Math.min(1, left / Math.max(1e-6, s.len));
+      left -= s.len;
+      const a = this.place(v, s.x0, s.y0);
+      const b = this.place(v, s.x0 + (s.x1 - s.x0) * k, s.y0 + (s.y1 - s.y0) * k);
+      g.lineStyle(3, color, 0.14).lineBetween(a.x, a.y, b.x, b.y);
+      g.lineStyle(1, color, 0.7).lineBetween(a.x, a.y, b.x, b.y);
+    }
   }
 
   // ── 매 프레임 ──
@@ -266,11 +419,15 @@ export class StarsScene extends RpgScene {
     const now = this.elapsed;
     while (this.nextSpawn < this.plan.length && this.plan[this.nextSpawn].t - this.approach <= now) {
       const n = this.plan[this.nextSpawn++];
-      const x = 12 + n.x * (this.aw - 24);
-      const y = 12 + n.y * (this.ah - 40);
+      const { x, y } = this.place(this.view(n.group), n.x, n.y);
       const glow = this.add.image(x, y, RTEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffd890).setAlpha(0.12).setScale(0.35).setDepth(8);
-      const star = this.add.image(x, y, RTEX.star).setAlpha(0).setDepth(10);
-      const ring = this.add.image(x, y, RTEX.ring).setTint(0xbcd0f0).setAlpha(0).setScale(RING_START / 32).setDepth(12);
+      const star = this.add.image(x, y, STEX.spark).setAlpha(0).setDepth(10);
+      const ring = this.add
+        .image(x, y, RTEX.ring)
+        .setTint(0xbcd0f0)
+        .setAlpha(0)
+        .setScale(RING_START / 32)
+        .setDepth(12);
       this.tweens.add({ targets: star, alpha: 0.6, duration: 300 });
       this.live.push({ n, x, y, star, ring, glow, judged: null });
     }
@@ -289,6 +446,9 @@ export class StarsScene extends RpgScene {
   }
 
   protected hud(): RpgHud {
+    // 지금 잇는 무리: 아직 판정 안 된 첫 별의 무리, 없으면 마지막으로 본 무리
+    const cur = this.live.find((l) => !l.judged) ?? this.live[this.live.length - 1];
+    const v = cur ? this.views.get(cur.n.group) : undefined;
     return {
       game: "stars",
       hp: 0,
@@ -300,6 +460,13 @@ export class StarsScene extends RpgScene {
       combo: this.combo,
       kills: this.perfect + this.good,
       judge: this.elapsed < this.judgeUntil ? this.judge : undefined,
+      stars: {
+        hit: v?.hits ?? 0,
+        size: v?.info.size ?? 0,
+        broken: v?.broken ?? false,
+        done: this.doneGroups.length,
+        last: this.lastName,
+      },
       cooldowns: [],
       potionCooldown: 0,
       potions: {},
@@ -317,6 +484,8 @@ export class StarsScene extends RpgScene {
       miss: this.miss,
       maxCombo: this.maxCombo,
       score: this.points,
+      groups: [...this.doneGroups],
+      perfectGroups: [...this.perfectGroups],
     };
   }
 }

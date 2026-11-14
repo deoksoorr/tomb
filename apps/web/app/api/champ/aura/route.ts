@@ -1,0 +1,27 @@
+import { z } from "zod";
+import { env } from "@/lib/env";
+import { handler, HttpError, json } from "@/lib/http";
+import { rateLimit } from "@/lib/ratelimit";
+import { requireVisitor } from "@/lib/session";
+import { getAccounts } from "@/lib/store";
+import { loadMe, lookGrant, lookOf } from "@/lib/store/accounts";
+import { champBitsFor, getChamp } from "@/lib/store/champ";
+import type { WearResponse } from "@/lib/types";
+import { readBody } from "@/lib/validate";
+
+const AuraSchema = z.object({ on: z.boolean() });
+
+/**
+ * "1위 오라 보이기" 켜기·끄기 `{ on }` (기본 켜짐). 지금 1위(지난주 1위 자격)인 사람만 바꿀 수 있다 (아니면 409 NOT_CHAMP).
+ * 설정은 남아서 다음에 1위가 되면 그대로 쓴다. 응답의 착용 증서를 게임이 실시간 서버로 보내 다른 사람 화면의 오라도 바로 바뀐다
+ */
+export const POST = handler(async (req) => {
+  const visitorId = await requireVisitor(req);
+  const { on } = await readBody(req, AuraSchema);
+  await rateLimit("shop", req, visitorId);
+  const now = Date.now();
+  if (!(await champBitsFor(visitorId, now))) throw new HttpError(409, "NOT_CHAMP", "지금은 1위 오라가 없어요.");
+  await getChamp().setAuraOff(visitorId, !on);
+  const me = await loadMe(getAccounts(), visitorId, now);
+  return json<WearResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now, me) });
+});

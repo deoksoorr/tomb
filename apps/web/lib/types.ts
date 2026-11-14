@@ -1,6 +1,6 @@
 // web 안에서 공유하는 데이터 타입과 API 응답 형태 (계약). 바꿀 때는 모든 사용처를 같이 고친다.
 
-import { itemById, type AvatarDye } from "@tomb/protocol";
+import { itemById, type AvatarDye, type ChampBoard } from "@tomb/protocol";
 
 export const CAUSE_TAGS = [
   "time",
@@ -228,6 +228,8 @@ export type Me = {
   bodies?: string[];
   /** 휴면(90일 넘게 안 들어옴)에서 돌아왔다 → 닉네임을 다시 정해야(POST /api/names) 마을에 들어갈 수 있다 */
   renameRequired?: true;
+  /** 주간 랭킹 1위 (지난주 1위인 랭킹 비트 + 본인이 오라를 껐으면 CHAMP_AURA_OFF — @tomb/protocol). 1위가 아니면 없음 */
+  champ?: number;
 };
 
 /** 휴면 계정이 돌아왔을 때 (입장 화면 안내·입장 거절 문구) */
@@ -265,7 +267,7 @@ export type BuyResponse = { me: Me };
 export type UseItemResponse = { me: Me; grant?: string; lookGrant?: string; grave?: PublicGrave };
 /** GET /api/me/look → 지금 착용 상태의 증서 (재접속 때) */
 /** dye·body = 46·25번 지금 염색·몸 모양 (게임이 내 아바타에 입힌다) */
-export type LookGrantResponse = { look: string[]; lookGrant: string; dye?: AvatarDye; body?: string | null };
+export type LookGrantResponse = { look: string[]; lookGrant: string; dye?: AvatarDye; body?: string | null; /** 주간 1위 값 (0 = 아님) */ champ?: number };
 /** GET /api/version → 배포 식별자. 다르면 새 버전 안내 */
 /** version = 배포 id (다르면 평소 패치 배너), minClient = 이 배포가 요구하는 최소 클라이언트 버전 (내 CLIENT_VERSION보다 크면 강제 업데이트 창) */
 export type VersionResponse = { version: string; minClient: number };
@@ -352,8 +354,11 @@ export type RoomJoinResponse = { room: string; token: string; wsUrl: string };
  * 내 소식 (자리를 비운 사이 내 묘비·집에 생긴 일). GET /api/me/activity?since=epochMs → 최신 순 50개.
  * POST /api/me/activity/seen { at } → 여기까지 읽음. me.activityUnread로 안 읽은 수를 HUD에 띄운다.
  */
-/** revive는 49번 이전에 쌓인 소식 (API가 걸러 내고 보여 주지 않는다). passed = 내 묘비가 성불함 (who는 빈 문자열) */
-export type ActivityKind = "flower" | "revive" | "houseLike" | "guestbook" | "restore" | "passed";
+/**
+ * revive는 49번 이전에 쌓인 소식 (API가 걸러 내고 보여 주지 않는다). passed = 내 묘비가 성불함 (who는 빈 문자열).
+ * champ = 지난주 랭킹 1위 보상을 받음 (targetId = 그 주 월요일 YYYYMMDD, targetName = "포인트왕" · "2관왕(포인트왕·낚시왕)", who는 빈 문자열)
+ */
+export type ActivityKind = "flower" | "revive" | "houseLike" | "guestbook" | "restore" | "passed" | "champ";
 export type ActivityItem = { id: string; kind: ActivityKind; at: number; who: string; targetId: string; targetName: string };
 export type ActivityResponse = { items: ActivityItem[]; unread: number; lastSeenAt: number };
 
@@ -427,6 +432,39 @@ export type RankResponse = {
   rows: RankRow[];
   mine: RankRow | null;
   /** 보는 사람이 운영자 (운영자는 순위에 들지 않는다 — 내 순위 대신 안내) */
+  staff?: true;
+};
+
+// ── 주간 랭킹 1위 보상 · 이번 주 레이스 (lib/weeklyChamp) ──
+
+/** 시상대·지난주 1위에 그리는 캐릭터 모습 */
+export type ChampAvatar = { color: string; body: string; look: string[]; dye?: AvatarDye };
+/** 한 주 1위 한 줄 (value = 포인트 P · 처치 수 · 크기 cm×10, sub = 낚시면 물고기 이름) */
+export type ChampWinnerView = { board: ChampBoard; name: string; value: number; sub?: string; me?: true };
+/** 명예의 전당 한 주 */
+export type ChampWeekView = { week: string; winners: ChampWinnerView[] };
+/**
+ * GET /api/champ (?me=1): 지난주 1위(모습 포함)·명예의 전당(최근 주부터).
+ * me=1이면 mine: 지금 1위 값(bits, 0 = 아님)·오라 끔·아직 안 본 1위 알림(unseen)
+ */
+export type ChampResponse = {
+  /** 지난주 (월요일 YYYYMMDD) */
+  week: string;
+  last: (ChampWinnerView & { avatar: ChampAvatar })[];
+  hall: ChampWeekView[];
+  /** 1위 보상 포인트 (랭킹 하나당) */
+  points: number;
+  mine?: { bits: number; auraOff: boolean; unseen: { week: string; boards: ChampBoard[] } | null };
+};
+/** 이번 주 레이스 시상대 한 칸 */
+export type RaceRow = { rank: number; name: string; value: number; sub?: string; me: boolean; avatar: ChampAvatar };
+/** GET /api/champ/race: 이번 주 랭킹 3개의 1~3등 · 마감 시각 · 내 순위와 1위와의 차이 */
+export type RaceResponse = {
+  week: string;
+  /** 마감 (다음 월요일 0시 KST, ms) */
+  endsAt: number;
+  boards: { board: ChampBoard; top: RaceRow[]; mine: { rank: number; value: number; gap: number } | null }[];
+  /** 보는 사람이 운영자 (순위에 들지 않는다) */
   staff?: true;
 };
 

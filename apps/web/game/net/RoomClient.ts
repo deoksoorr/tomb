@@ -426,7 +426,7 @@ export class RoomClient {
           this.emitStatus();
           break;
         case "look":
-          this.cb.onLook?.(ev.sid, ev.look, { dye: ev.dye, body: ev.body });
+          this.cb.onLook?.(ev.sid, ev.look, { dye: ev.dye, body: ev.body, ...(ev.champ !== undefined ? { champ: ev.champ } : {}) });
           break;
         case "act":
           this.cb.onAct?.(ev.sid, ev.kind, ev.x, ev.y);

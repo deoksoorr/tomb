@@ -24,6 +24,8 @@ function applyLook(res: { me: Me; lookGrant?: string }): void {
       // 46·25번: 지금 염색·몸 모양도 같이 (게임이 내 아바타에 입힌다)
       dye: res.me.dye ?? {},
       ...(res.me.body ? { body: res.me.body } : {}),
+      // 주간 1위 배지·오라 (1위가 아니면 0 → 내 아바타에서도 지운다)
+      champ: res.me.champ ?? 0,
     });
 }
 
@@ -59,6 +61,6 @@ export async function decorateGrave(itemId: string, graveId: string, cache: Grav
 
 /** 입장할 때 지금 착용 상태를 게임에 알린다 */
 export async function restoreLook(): Promise<void> {
-  const { look, lookGrant, dye, body } = await api.myLook();
-  if (lookGrant) bridge.emit("look:set", { look, lookGrant, dye: dye ?? {}, ...(body ? { body } : {}) });
+  const { look, lookGrant, dye, body, champ } = await api.myLook();
+  if (lookGrant) bridge.emit("look:set", { look, lookGrant, dye: dye ?? {}, ...(body ? { body } : {}), champ: champ ?? 0 });
 }

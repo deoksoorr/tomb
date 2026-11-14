@@ -71,7 +71,8 @@ export default function ActivityDialog({ onGoToGrave, onOpenHousing, onBury, foo
                 <button
                   type="button"
                   className={styles.placeChoice}
-                  onClick={() => (isHouseActivity(item) ? onOpenHousing() : onGoToGrave(item.targetId))}
+                  // 주간 1위 소식은 갈 곳이 없다 (보상은 이미 가방·코디에 들어가 있다)
+                  onClick={() => (item.kind === "champ" ? undefined : isHouseActivity(item) ? onOpenHousing() : onGoToGrave(item.targetId))}
                 >
                   {activityText(item)}
                   <span className={styles.meta}>{relativeTime(item.at, openedAt)}</span>
@@ -87,6 +88,7 @@ export default function ActivityDialog({ onGoToGrave, onOpenHousing, onBury, foo
               "누군가 내 묘비에 헌화하면 — 누르면 그 묘비 앞으로 가요.",
               "내 집에 좋아요를 누르거나 방명록을 남기면 — 누르면 분양 사무소가 열려요.",
               "내 묘비가 성불하거나 성황당에서 다시 모셔지면.",
+              "주간 랭킹(포인트·사냥 처치·낚시) 1위 보상을 받으면.",
               "새 소식이 오면 [소식] 버튼에 숫자가 붙고, 이 창을 열면 모두 읽음이 돼요.",
             ]}
           />

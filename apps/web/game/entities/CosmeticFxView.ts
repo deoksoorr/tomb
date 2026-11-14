@@ -24,9 +24,9 @@ export class CosmeticFxView {
 
   constructor(private readonly scene: Phaser.Scene) {}
 
-  /** body = 몸 id (프리미엄 외형 등급 연출) */
-  setLook(look: readonly string[], body?: string): void {
-    this.sim.setLook(look, body);
+  /** body = 몸 id (프리미엄 외형 등급 연출), champ = 주간 랭킹 1위 값 (1위 오라) */
+  setLook(look: readonly string[], body?: string, champ?: number): void {
+    this.sim.setLook(look, body, champ);
     if (this.sim.empty) this.clear();
   }
 
@@ -39,6 +39,12 @@ export class CosmeticFxView {
   sync(input: FxInput, visible: boolean, fade = 1): void {
     if (this.sim.empty) return;
     this.cmds.length = 0;
+    // 화면 밖이면 무거운 연출(주간 1위 오라)은 그리지 않는다 (펫·발자국은 따라오던 자리를 이어 가야 해서 그대로 계산)
+    const view = this.scene.cameras.main?.worldView;
+    if (view && view.width > 0) {
+      const m = 48;
+      input.offscreen = input.x < view.x - m || input.x > view.right + m || input.y < view.y - m || input.y > view.bottom + m + 40;
+    }
     this.sim.step(input, this.cmds);
     let i = 0;
     for (; i < this.cmds.length; i++) {

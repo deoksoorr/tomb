@@ -1,4 +1,5 @@
 import type { AdminNameReindexResponse } from "@/app/api/admin/accounts/names/route";
+import type { AdminChampResponse } from "@/app/api/admin/champ/route";
 import type { AdminRankFillResponse } from "@/app/api/admin/rank/fill/route";
 import type { AdminStaffResponse } from "@/app/api/admin/staff/route";
 import type { AnalyticsRange, AnalyticsReport } from "@/lib/analyticsReport";
@@ -33,6 +34,11 @@ export const opsAdminApi = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ cursor, count }),
     }),
+  /** 주간 랭킹 1위 지급 상태 (week 없으면 지난주) */
+  champ: (week?: string) => request<AdminChampResponse>(`/api/admin/champ${week ? `?week=${week}` : ""}`, { cache: "no-store" }),
+  /** 주간 랭킹 1위 정리·지급 다시 시도 (이미 준 랭킹은 다시 주지 않는다) */
+  champSettle: (week?: string) =>
+    request<AdminChampResponse>("/api/admin/champ", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(week ? { week } : {}) }),
   /** 랭킹 기존 기록 다시 채우기 한 번 (next가 "0"이 될 때까지 이어서 부른다) */
   fillRank: (board: "huntLevel" | "look", cursor: string, count = 200) =>
     request<AdminRankFillResponse>("/api/admin/rank/fill", {

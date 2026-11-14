@@ -4,8 +4,8 @@ import { ITEMS, sanitizeLook, signGrant, signJoinToken, verifyGrant, verifyJoinT
 describe("items", () => {
   it("ids are unique and prices positive", () => {
     expect(new Set(ITEMS.map((i) => i.id)).size).toBe(ITEMS.length);
-    // 31번 운영자 전용 꾸미기만 값 0 (운영자만 영구로 받는다)
-    expect(ITEMS.every((i) => i.price > 0 || i.staff)).toBe(true);
+    // 31번 운영자 전용·주간 1위 전용 꾸미기만 값 0 (운영자만 영구로 받는다 / 1위만 빌려 입는다)
+    expect(ITEMS.every((i) => i.price > 0 || i.staff || i.champ)).toBe(true);
   });
   it("sanitizeLook keeps one cosmetic per slot and drops unknown/non-cosmetic ids", () => {
     expect(sanitizeLook(["hat_cat", "hat_straw", "fw_small", "nope", "aura_firefly"])).toEqual(["hat_cat", "aura_firefly"]);
@@ -101,5 +101,53 @@ describe("25번 프리미엄 외형 · 31번 운영자 외형", () => {
     for (const id of it2.STAFF_ITEM_IDS) expect(it2.isShopListed(it2.itemById(id)!)).toBe(false);
     expect(it2.staffGateLook(["staff_crown", "neck_tie"], false)).toEqual(["neck_tie"]);
     expect(it2.staffGateLook(["staff_crown", "neck_tie"], true)).toEqual(["staff_crown", "neck_tie"]);
+  });
+});
+
+describe("주간 랭킹 1위", () => {
+  it("1위 전용 꾸미기는 랭킹마다 하나, 머리 부위이고 상점·영구 소장에 없다", async () => {
+    const c = await import("./constants");
+    const it2 = await import("./items");
+    for (const b of c.CHAMP_BOARDS) {
+      const item = it2.itemById(c.CHAMP_HAT[b])!;
+      expect(item.slot).toBe("head");
+      expect(item.champ).toBe(true);
+      expect(it2.isChampItem(item.id)).toBe(true);
+      expect(it2.isShopListed(item)).toBe(false);
+      expect(it2.permanentPrice(item.id)).toBeNull();
+      // 운영자 전용이 아니라 누구나 입을 수 있다
+      expect(it2.staffGateLook([item.id], false)).toEqual([item.id]);
+    }
+  });
+  it("비트 묶음·오라 끔 표시·배지 글자", async () => {
+    const c = await import("./constants");
+    expect(c.champBitsOf([])).toBe(0);
+    expect(c.champBitsOf(["fish"])).toBe(4);
+    expect(c.champBitsOf(["points", "fish"], true)).toBe(5 | c.CHAMP_AURA_OFF);
+    expect(c.champBitsOf([], true)).toBe(0);
+    expect(c.champBoards(5)).toEqual(["points", "fish"]);
+    expect(c.champBoards(c.CHAMP_AURA_OFF)).toEqual([]);
+    expect(c.isChampBits(c.CHAMP_AURA_OFF)).toBe(false);
+    expect(c.isChampBits(16)).toBe(false);
+    expect(c.champAuraOn(1)).toBe(true);
+    expect(c.champAuraOn(1 | c.CHAMP_AURA_OFF)).toBe(false);
+    expect(c.champBadgeText(2)).toBe("이번 주 사냥왕");
+    expect(c.champBadgeText(3)).toBe("이번 주 2관왕");
+    expect(c.champBadgeText(7 | c.CHAMP_AURA_OFF)).toBe("이번 주 3관왕");
+    expect(c.champBadgeText(0)).toBe("");
+  });
+  it("입장 토큰·착용 증서에 1위 값이 실리고, 틀린 값은 버린다", async () => {
+    const s = "secret";
+    const base = { visitorId: "v1", name: "n", color: "#9fc5a8", channel: 1 };
+    expect((await verifyJoinToken(s, await signJoinToken(s, { ...base, champ: 3 })))?.champ).toBe(3);
+    expect((await verifyJoinToken(s, await signJoinToken(s, { ...base, champ: 99 })))?.champ).toBeUndefined();
+    expect((await verifyJoinToken(s, await signJoinToken(s, base)))?.champ).toBeUndefined();
+    const exp = Math.floor(Date.now() / 1000) + 60;
+    const g = await verifyGrant(s, await signGrant(s, { kind: "look", visitorId: "v1", look: ["champ_crown"], exp, champ: 9 }));
+    expect(g).toMatchObject({ kind: "look", look: ["champ_crown"], champ: 9 });
+    // 0 = 1위가 끝남 (실시간 서버가 배지·오라를 끈다), 없으면 옛 웹 증서 (그대로 둔다)
+    expect(await verifyGrant(s, await signGrant(s, { kind: "look", visitorId: "v1", look: [], exp, champ: 0 }))).toMatchObject({ champ: 0 });
+    expect(await verifyGrant(s, await signGrant(s, { kind: "look", visitorId: "v1", look: [], exp }))).not.toHaveProperty("champ");
+    expect(await verifyGrant(s, await signGrant(s, { kind: "look", visitorId: "v1", look: [], exp, champ: 8 }))).not.toHaveProperty("champ");
   });
 });

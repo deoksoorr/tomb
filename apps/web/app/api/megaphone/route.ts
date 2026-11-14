@@ -13,6 +13,7 @@ import { MEGA_KEEP, MEGA_SHOW, MEGAPHONE_COOLDOWN_MS } from "@/lib/store/megapho
 import type { MegaphoneEntry, MegaphoneListResponse, MegaphoneUseResponse } from "@/lib/types";
 import { isStaff, staffAccountId } from "@/lib/staff";
 import { readBody } from "@/lib/validate";
+import { CHAMP_NOTICE_ACCOUNT } from "@/lib/weeklyChamp";
 
 /**
  * 23번 확성기 최근 기록 `?channel=N`: 그 채널에서 외친 것 + 모든 채널 확성기 (관리자가 숨긴 것 빼고, 오래된 것 먼저 최대 20개).
@@ -29,7 +30,9 @@ export const GET = handler(async (req) => {
     // 운영자로 지정되기 전에 남긴 기록도 공개 이름("대장")·금색 표시로
     .map(({ id, name, text, scope, ch, at, accountId }) => {
       const staff = !!staffId && accountId === staffId;
-      return { id, name: staffPublicName(name, staff), text, scope, ch, at, ...(staff ? { staff: true as const } : {}) };
+      // 주간 1위 소식 같은 마을 공지(시스템 줄)는 보낸 이 이름("마을 소식") 그대로, 운영자처럼 금색·신고 버튼 없이
+      const system = accountId === CHAMP_NOTICE_ACCOUNT;
+      return { id, name: system ? name : staffPublicName(name, staff), text, scope, ch, at, ...(staff || system ? { staff: true as const } : {}) };
     });
   return json<MegaphoneListResponse>(
     { entries },

@@ -227,7 +227,8 @@ export type UiEvents = {
   "net:reconnect": undefined;
   /** 꾸미기 착용 변경: 내 아바타에 바로 반영하고 grant를 실시간 서버로 보낸다 (sticky) */
   /** 내 착용 상태 (+ 46·25번: 염색·몸 모양 — 있으면 내 아바타에도 바로 입힌다) */
-  "look:set": { look: string[]; lookGrant: string; dye?: AvatarDye; body?: string };
+  /** champ = 주간 랭킹 1위 값 (0 = 아님, 옛 응답엔 없음) — 내 아바타 배지·오라 */
+  "look:set": { look: string[]; lookGrant: string; dye?: AvatarDye; body?: string; champ?: number };
   /** 폭죽 발사: 내 위치에서 바로 터뜨리고 grant를 실시간 서버로 보낸다 */
   "firework:fire": { item: string; grant: string };
   /** 23번 확성기: Vercel이 서명한 증서를 지금 채널의 실시간 서버로 보낸다 (서버가 채널·모든 채널에 방송) */

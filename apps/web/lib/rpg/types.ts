@@ -63,7 +63,21 @@ export type HuntResult = {
 };
 /** wrong: '기능'을 누른 수, decoy: 주석 처리된 가짜 버그를 누른 수, score: 콤보 배수까지 넣은 점수(서버가 상한으로 자른다) */
 export type BugsResult = { game: "bugs"; durationMs: number; caught: number; golden: number; wrong: number; decoy: number; maxCombo: number; score: number };
-export type StarsResult = { game: "stars"; durationMs: number; perfect: number; good: number; miss: number; maxCombo: number; score: number };
+/**
+ * groups: 별을 하나도 놓치지 않고(좋아 이상) 끝까지 이은 별 무리 번호, perfectGroups: 그중 완벽으로만 이은 무리.
+ * 서버가 계획·시간·판정 수로 검사한 뒤 별자리 도감에 등록한다. 옛 화면은 보내지 않는다 (없으면 도감 등록 없이)
+ */
+export type StarsResult = {
+  game: "stars";
+  durationMs: number;
+  perfect: number;
+  good: number;
+  miss: number;
+  maxCombo: number;
+  score: number;
+  groups?: number[];
+  perfectGroups?: number[];
+};
 export type RunResult = HuntResult | BugsResult | StarsResult;
 
 export type RunStartResponse = {
@@ -74,6 +88,8 @@ export type RunStartResponse = {
   zone?: ZoneId;
   seed: number;
   timeLimitSec: number;
+  /** 별자리 잇기: 판 시작 시각이 맑은 밤 (전설 별자리가 나올 수 있다, 포인트 보너스) */
+  starry?: boolean;
   view: RpgView;
 };
 
@@ -95,6 +111,8 @@ export type RunReward = {
   lostDrops: number;
   /** 22번: 별자리 잇기를 맑은 밤에 해서 포인트 보너스를 받았다 */
   nightBonus?: boolean;
+  /** 별자리 잇기: 이번 판에 완성한 별자리 (isNew = 도감에 처음 등록, perfect = 완벽으로만 이음) */
+  constellations?: { id: string; isNew: boolean; perfect: boolean }[];
 };
 
 export type RunFinishResponse = { reward: RunReward; view: RpgView };
@@ -118,7 +136,16 @@ export type RpgPlay = {
   /** 32번 곤충 채집: 벌레 잡기를 마을 수풀 그림(나비·반딧불이)으로. night면 반딧불이 */
   theme?: "meadow";
   night?: boolean;
+  /** 곤충 채집 들판의 시간대 (한국 시각 낮·노을·밤). 없으면 night로 낮/밤만 */
+  tone?: MeadowTone;
+  /** 별자리 잇기: 맑은 밤 판 (서버 판 시작 응답의 starry — 전설 별자리가 계획에 들어간다) */
+  starry?: boolean;
+  /** 별자리 잇기: 이미 도감에 있는 별자리 id (처음 완성하면 "도감 등록!"을 띄운다. 등록 자체는 서버가 한다) */
+  starsKnown?: string[];
 };
+
+/** 곤충 채집 들판 시간대: 낮(나비) · 노을(잠자리) · 밤(반딧불이) */
+export type MeadowTone = "day" | "dusk" | "night";
 
 /** 게임 → UI 상태 (초당 약 8번) */
 export type RpgHud = {
@@ -138,6 +165,8 @@ export type RpgHud = {
   peers?: number;
   /** 별자리 잇기: 마지막 판정 */
   judge?: "perfect" | "good" | "miss";
+  /** 별자리 잇기: 지금 잇는 무리(이은 수·별 수, 끊겼으면 broken), 이번 판에 완성한 수, 마지막으로 완성한 별자리 이름 */
+  stars?: { hit: number; size: number; broken: boolean; done: number; last: string | null };
   /** 단축키 칸별 남은 쿨타임 비율 0..1 */
   cooldowns: number[];
   potionCooldown: number;

@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { CHAT_SHOW_MS, dexBadgeCats, DIR, ridePetOfLook, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
+import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, ridePetOfLook, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange, isDyedSpec } from "../sprites/avatar";
@@ -14,6 +14,7 @@ import { wrapChat } from "../logic/chatWrap";
 import { SpeechBubble } from "./SpeechBubble";
 import { MoodView } from "./MoodView";
 import { STAFF_COLOR, StaffFxView } from "./StaffFxView";
+import { ChampBadgeView } from "./ChampBadgeView";
 
 /** 도감 100% 배지: 종류마다 별 하나 (금빛) */
 const DEX_BADGE_STAR = "★";
@@ -132,6 +133,9 @@ export class AvatarView {
   /** 도감 100% 배지 (이름표 오른쪽 별) */
   private dexBadge: Phaser.GameObjects.BitmapText | null = null;
   private dexBadgeN = 0;
+  /** 주간 랭킹 1위 값 (비트 묶음 + 오라 끔 표시, 0 = 아님)과 이름표 위 배지 */
+  private champ = 0;
+  private champBadge: ChampBadgeView | null = null;
   /** 친구 하트 (이름표 왼쪽). 친구일 때만 만든다 */
   private friendMark: Phaser.GameObjects.BitmapText | null = null;
   private wings: Phaser.GameObjects.Image | null = null;
@@ -264,6 +268,25 @@ export class AvatarView {
     return this.dexBadgeN;
   }
 
+  /**
+   * 주간 랭킹 1위 (실시간 서버가 알린 champ, 내 캐릭터는 착용 증서와 같이 온 값): 이름표 위 "이번 주 ○○왕" 배지 +
+   * 발밑·몸 뒤 1위 오라 (본인이 끄면 배지만). 0이나 모르는 값이면 둘 다 없앤다
+   */
+  setChamp(bits: number | undefined): void {
+    const next = isChampBits(bits) ? bits : 0;
+    if (next === this.champ) return;
+    this.champ = next;
+    if (!next) {
+      this.champBadge?.destroy();
+      this.champBadge = null;
+    } else (this.champBadge ??= new ChampBadgeView(this.scene, this.atlas, this.label.depth)).set(next);
+    if (this.cfx || champAuraOn(next)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, this.body, next);
+  }
+
+  get champBits(): number {
+    return this.champ;
+  }
+
   /** 친구면 이름표 왼쪽에 작은 하트 (UI가 알려 준 같은 채널 친구) */
   setFriend(on: boolean): void {
     if (on === !!this.friendMark) return;
@@ -285,6 +308,7 @@ export class AvatarView {
     if (!extra) return;
     if (typeof extra.body === "string") this.setBody(extra.body);
     if (extra.dye !== undefined) this.setColor(avatarColorSpec(this.colorSpec, sanitizeDye(extra.dye)));
+    if (typeof extra.champ === "number") this.setChamp(extra.champ);
   }
 
   /** 몸 모양 변경 (AVATAR_BODIES id, 모르는 값은 hood) */
@@ -294,7 +318,7 @@ export class AvatarView {
     this.body = b;
     this.shoulder = BODY_METRICS[b].shoulder;
     // 25번 프리미엄 외형 등급 연출은 몸에 딸린다 (다른 사람 화면에서도 몸 id로 똑같이)
-    if (this.cfx || bodyFx(b)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, b);
+    if (this.cfx || bodyFx(b)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, b, this.champ);
     this.relayout();
     this.retexture();
   }
@@ -337,7 +361,7 @@ export class AvatarView {
       this.mountPet = mount;
       this.anim = "";
     }
-    if (this.cfx || look.length || bodyFx(this.body)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(look, this.body);
+    if (this.cfx || look.length || bodyFx(this.body) || champAuraOn(this.champ)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(look, this.body, this.champ);
     this.relayout();
     this.retexture();
     const vis = this.sprite.visible;
@@ -809,7 +833,8 @@ export class AvatarView {
 
     const speaking = !!this.speech?.active(now);
     // 이름표 높이(height)는 이미 배율이 들어간 월드 높이 (displayHeight는 배율이 한 번 더 곱해져 이름표에 겹쳤다)
-    const labelTop = this.label.y - this.label.height;
+    // 주간 1위 배지가 있으면 이름표 위에 얹고, 말풍선은 그 위로
+    const labelTop = this.champBadge ? this.champBadge.sync(this.label, labelScale, vis, fa, now, this.reduced) : this.label.y - this.label.height;
     if (this.speech) this.speech.place(this.label.x, labelTop - labelScale, labelScale, now, vis);
     // 벤치 상태를 고르면 기본 "…"은 띄우지 않는다
     const longSit = !speaking && !this.mood && this.sitSince > 0 && now - this.sitSince > SIT_IDLE_MS;
@@ -991,6 +1016,7 @@ export class AvatarView {
     this.moodFx?.setVisible(v);
     this.staffFx?.setVisible(v);
     this.dexBadge?.setVisible(v);
+    this.champBadge?.setVisible(v);
     this.friendMark?.setVisible(v);
     for (const f of this.fog) f.setVisible(v);
     this.ripple?.setVisible(v);
@@ -1005,6 +1031,8 @@ export class AvatarView {
     this.sprite.destroy();
     this.label.destroy();
     this.dexBadge?.destroy();
+    this.champBadge?.destroy();
+    this.champBadge = null;
     this.friendMark?.destroy();
     this.bubble?.destroy();
     this.bubble = null;

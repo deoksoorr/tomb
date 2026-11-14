@@ -78,6 +78,15 @@ export const K = {
   giftClaims: "gifts:claims", // HASH 선물 id → 받은 계정 수
 
   // ── 23번 확성기 (lib/store/megaphone.ts) ──
+  // ── 주간 랭킹 1위 보상 (lib/weeklyChamp) ──
+  champPaid: "champ:paid", // HASH `${주}:${랭킹}` → 받은 계정 (지급 표시, 한 번만)
+  champWeek: (week: string) => `champ:w:${week}`, // STRING 그 주 1위 기록 JSON (처음 정한 것만 — SET NX)
+  champWeeks: "champ:weeks", // ZSET 주 → 그 주 월요일 0시(ms) (명예의 전당 목록)
+  champLock: (week: string) => `champ:lock:${week}`, // STRING NX EX 지급 잠금
+  champSeen: "champ:seen", // HASH 계정 → 1위 알림 창을 본 주
+  champAuraOff: "champ:auraoff", // HASH 계정 → "1" (1위 오라 끔)
+  champLead: (week: string) => `champ:lead:${week}`, // HASH 랭킹 → 지금 1위 계정 (레이스 1위 바뀜 공지용, 3주 TTL)
+  champLeadCool: (board: string) => `champ:lead:cool:${board}`, // STRING NX PX 같은 랭킹 1위 바뀜 공지 간격
   megaLog: "mega:log", // LIST 확성기 기록 JSON, 최신 먼저 최대 MEGA_KEEP개
   megaHidden: "mega:hidden", // SET 관리자가 숨긴 기록 id
   megaCool: (id: string) => `mega:cool:${id}`, // STRING NX PX 계정별 도배 제한

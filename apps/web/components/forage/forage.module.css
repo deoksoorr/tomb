@@ -183,6 +183,113 @@
   letter-spacing: 1px;
 }
 
+/* ── 곤충 채집 결과 카드 (나무 팻말) ── */
+.insectResult {
+  position: fixed;
+  left: 50%;
+  top: calc(var(--safe-top) + 56px);
+  transform: translateX(-50%);
+  z-index: 31;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: min(300px, calc(100vw - 32px));
+  padding: 12px 16px 14px;
+  color: #fff4dc;
+  font-variant-numeric: tabular-nums;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 11px, rgba(60, 34, 14, 0.16) 11px 12px),
+    linear-gradient(180deg, #a2703e, #8a5c30);
+  box-shadow:
+    inset 0 2px 0 0 #c08a52,
+    inset 0 -3px 0 0 #6a4424,
+    0 -2px 0 0 #2a1a0e,
+    0 2px 0 0 #2a1a0e,
+    -2px 0 0 0 #2a1a0e,
+    2px 0 0 0 #2a1a0e,
+    0 6px 0 0 rgba(0, 0, 0, 0.3);
+}
+
+.insectResultHead {
+  margin: 0;
+  font-size: 14px;
+  color: #fff4dc;
+  text-shadow: 0 1px 0 #4a2c14;
+}
+
+.insectScore {
+  font-size: 30px;
+  line-height: 1;
+  color: #fff8e4;
+  text-shadow:
+    0 2px 0 #4a2c14,
+    2px 0 0 #4a2c14,
+    -2px 0 0 #4a2c14,
+    0 -2px 0 #4a2c14;
+}
+
+.insectScore small {
+  margin-left: 2px;
+  font-size: 13px;
+}
+
+.insectStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+}
+
+.insectStats > div {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 5px 2px;
+  background: rgba(42, 26, 14, 0.55);
+}
+
+.insectStats dt {
+  font-family: var(--font-small);
+  font-size: 10px;
+  color: #e8d4ac;
+}
+
+.insectStats dd {
+  margin: 0;
+  font-size: 16px;
+  color: #ffe9a0;
+}
+
+.insectItems {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.insectItems li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px;
+  background: rgba(42, 26, 14, 0.4);
+}
+
+.insectItems em {
+  font-style: normal;
+}
+
+.insectNote {
+  margin: 0;
+  font-size: 12px;
+  color: #f4e2bc;
+  text-align: center;
+}
+
 /* ── 판매 창 ── */
 .npcHello {
   display: flex;

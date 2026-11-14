@@ -1,0 +1,60 @@
+/* 주간 랭킹 1위 알림 창 */
+.body {
+  display: grid;
+  gap: 12px;
+}
+
+.lead {
+  margin: 0;
+  color: var(--bone);
+  text-align: center;
+}
+
+.crown {
+  display: block;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.list b {
+  display: block;
+  color: var(--candle);
+  font-weight: normal;
+}
+
+.note {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.sparkle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--candle);
+  font-size: 18px;
+}
+
+.buttons {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}

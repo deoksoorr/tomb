@@ -1,4 +1,4 @@
-import { JOIN_TOKEN_TTL_SEC, ROOM_ID_RE, isAvatarBody, isDexBadge, staffGateBody } from "./constants";
+import { JOIN_TOKEN_TTL_SEC, ROOM_ID_RE, isAvatarBody, isChampBits, isDexBadge, staffGateBody } from "./constants";
 import { sanitizeLook, staffGateLook } from "./items";
 import { hasDye, packDye, unpackDye, type AvatarDye } from "./dye";
 
@@ -24,6 +24,8 @@ export type JoinClaims = {
   staff?: true;
   /** 도감 100% 달성 종류 (DEX_BADGE_BITS 비트 묶음, 1~31). Vercel이 도감 기록을 확인한 뒤에만 넣는다. 없으면 0 */
   dex?: number;
+  /** 지난주 랭킹 1위 (CHAMP_BOARDS 비트 묶음, 1~7). Vercel이 주간 1위 기록을 확인한 뒤에만 넣는다. 없으면 0 */
+  champ?: number;
   /** 만료 시각 (unix seconds) */
   exp: number;
 };
@@ -108,7 +110,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff, dex } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff, dex, champ } = c as Record<string, unknown>;
   if (
     typeof visitorId !== "string" ||
     typeof name !== "string" ||
@@ -121,5 +123,5 @@ export async function verifyJoinToken(
   if (exp < nowSec) return null;
   // 운영자 전용 몸·꾸미기는 토큰에 운영자 표시(staff)가 있을 때만 (없으면 후드 유령·빼고)
   const isStaff = staff === true;
-  return { visitorId, name, color, channel, exp, look: staffGateLook(sanitizeLook(look), isStaff), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}) };
+  return { visitorId, name, color, channel, exp, look: staffGateLook(sanitizeLook(look), isStaff), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampBits(champ) ? { champ } : {}) };
 }

@@ -10,9 +10,11 @@ import {
   huntSpawnable,
   huntTotal,
   STAR_SCORE,
+  starGroups,
   starsCount,
   starsPlan,
   WAVE_MIN_GAP_SEC,
+  type StarNote,
 } from "./plan";
 import type { BugsResult, Drop, HuntResult, RunResult, StarsResult } from "./types";
 
@@ -48,11 +50,16 @@ export type TicketInfo = {
   st: { agi: number; dex: number; luk: number };
   /** 사냥터 id (40번). 없으면 그 난이도의 기본 사냥터 */
   zone?: string;
+  /** 별자리 잇기: 판 시작 시각이 맑은 밤이었는지 (전설 별자리가 계획에 들어간다) */
+  starry?: boolean;
 };
+
+/** 별자리 잇기에서 검증을 통과한 완성 별자리 (무리 번호·별자리 id·완벽으로만 이었는지) */
+export type StarsDone = { group: number; id: string; perfect: boolean };
 
 export type Verdict =
   /** hunt = 사냥터 랭킹 기록 (검증을 통과한 처치 수, 쓰러지지 않고 모든 웨이브를 깼으면 걸린 시간 ms) */
-  | { ok: true; score: number; exp: number; points: number; drops: Drop[]; hunt?: { kills: number; clearMs: number | null } }
+  | { ok: true; score: number; exp: number; points: number; drops: Drop[]; hunt?: { kills: number; clearMs: number | null }; stars?: StarsDone[] }
   | { ok: false; code: string; message: string };
 
 const reject = (code: string, message: string): Verdict => ({ ok: false, code, message });
@@ -144,14 +151,47 @@ function evalBugs(t: TicketInfo, r: BugsResult, eff: number): Verdict {
 }
 
 function evalStars(t: TicketInfo, r: StarsResult, eff: number): Verdict {
-  const plan = starsPlan(t.seed, t.difficulty, timeLimitSec("stars", t.difficulty));
+  const plan = starsPlan(t.seed, t.difficulty, timeLimitSec("stars", t.difficulty), !!t.starry);
   // 마지막 별은 판정 범위만큼 늦게 눌릴 수 있다
   if (r.perfect + r.good + r.miss > starsCount(plan, eff + 300)) return tooHigh("별");
   if (r.maxCombo > r.perfect + r.good) return tooHigh("콤보");
+  const done = checkStarGroups(plan, r, eff);
+  if (done === null) return tooHigh("별자리");
   const upper = Math.round((r.perfect * STAR_SCORE.perfect + r.good * STAR_SCORE.good) * comboMult(r.maxCombo));
   const score = Math.max(0, Math.min(r.score, upper));
   const target = Math.max(1, plan.length * STAR_SCORE.perfect);
-  return miniReward(t, score, clamp(score / target, 0, 1));
+  const v = miniReward(t, score, clamp(score / target, 0, 1));
+  return v.ok && done.length ? { ...v, stars: done } : v;
+}
+
+/**
+ * 완성했다는 별자리 목록 검사 (결과 상한 방식): 계획에 있는 온전한 무리이고, 마지막 별이 그 시간 안에 나왔고,
+ * 완성 무리 별 수의 합 ≤ 이은 별(완벽+좋아), 완벽으로만 이은 무리의 합 ≤ 완벽. 하나라도 어긋나면 null (판 전체 거절).
+ * 목록이 없으면(옛 화면이 보낸 결과) 빈 목록 — 도감 등록 없이 예전처럼 끝난다
+ */
+export function checkStarGroups(plan: StarNote[], r: StarsResult, eff: number): StarsDone[] | null {
+  const groups = r.groups ?? [];
+  const perfect = r.perfectGroups ?? [];
+  if (!groups.length && !perfect.length) return [];
+  const all = starGroups(plan);
+  const seen = new Set<number>();
+  let linked = 0;
+  for (const g of groups) {
+    const info = all[g];
+    if (!Number.isInteger(g) || !info || seen.has(g) || !info.full || info.lastT > eff + 300) return null;
+    seen.add(g);
+    linked += info.size;
+  }
+  if (linked > r.perfect + r.good) return null;
+  const pset = new Set<number>();
+  let flawless = 0;
+  for (const g of perfect) {
+    if (!seen.has(g) || pset.has(g)) return null;
+    pset.add(g);
+    flawless += all[g].size;
+  }
+  if (flawless > r.perfect) return null;
+  return groups.map((g) => ({ group: g, id: all[g].con, perfect: pset.has(g) }));
 }
 
 function miniReward(t: TicketInfo, score: number, perf: number): Verdict {

@@ -232,6 +232,15 @@ export interface AccountStore {
    * 줬으면 true, 이미 받았거나 도장이 모자라면 false
    */
   grantAttendTier(id: string, month: string, tierDays: number, itemId: string, slot: CosmeticSlot, termMs: number | null, now: number): Promise<boolean>;
+  /**
+   * 주간 랭킹 1위 보상 지급 (원자적, mark마다 한 번 — mark = `${주}:${랭킹}`, 지급 표시는 계정 밖 공용 해시 champ:paid에 남는다).
+   * 꾸미기(itemId)는 until까지 빌려 준다: 입고 있으면 그 자리, 아니면 벗어 둔 꾸미기의 만료 시각을 until로 늘린다 (이미 더 길면 그대로 →
+   * 같은 사람이 또 1위면 이어진다). 포인트는 잔액·모은 포인트(전체 랭킹)에 더하고 주간 랭킹에는 넣지 않는다 (경제 통계 earn:champ).
+   * 줬으면 true, 이미 줬으면 false
+   */
+  grantChamp(id: string, mark: string, itemId: string, slot: CosmeticSlot, until: number, points: number, now: number): Promise<boolean>;
+  /** 주간 1위 보상 지급 표시 (mark → 받은 계정, 없으면 null) */
+  champPaid(marks: readonly string[]): Promise<(string | null)[]>;
   /** 개인 코드 해시 교체 (이전 코드는 무효) */
   setCode(id: string, codeHash: string): Promise<void>;
   findByCode(codeHash: string): Promise<string | null>;

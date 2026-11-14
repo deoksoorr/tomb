@@ -1,6 +1,6 @@
 import { request } from "../api";
 import type { BugsResult } from "../rpg/types";
-import type { DexTier, LifeCat, NpcId } from "./catalog";
+import type { DexCat, DexTier, NpcId } from "./catalog";
 import type {
   AutoFishResponse,
   CastResponse,
@@ -37,7 +37,7 @@ export const forageApi = {
   gatherStart: (node: string) => request<GatherStartResponse>("/api/forage/gather/start", post({ node })),
   gatherFinish: (ticket: string, result?: BugsResult) => request<GatherFinishResponse>("/api/forage/gather/finish", post({ ticket, result })),
   sell: (npc: NpcId, items: Record<string, number>) => request<SellResponse>("/api/forage/sell", post({ npc, items })),
-  claimDex: (cat: LifeCat, tier: DexTier) => request<DexClaimResponse>("/api/forage/dex/claim", post({ cat, tier })),
+  claimDex: (cat: DexCat, tier: DexTier) => request<DexClaimResponse>("/api/forage/dex/claim", post({ cat, tier })),
   /** 게임 안에서 누른 사람 (채널·방 + sid). 계정은 서버가 푼다 */
   dexOfPeer: (peer: DexPeer) => request<PublicDex>("/api/forage/dex/peer", post(peer)),
   dexOf: (accountId: string) => request<PublicDex>(`/api/forage/dex/${encodeURIComponent(accountId)}`, { cache: "no-store" }),

@@ -1,7 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { env } from "../env";
 import { getAccounts } from "../store";
-import { kstDay, WEEK_RANK_TTL_SEC } from "../store/accounts";
+import { kstDay, rankValue, WEEK_RANK_TTL_SEC, WEEK_TIE_SCALE } from "../store/accounts";
 import { K } from "../store/keys";
 
 // 최대어 랭킹: 물고기별·전체 가장 큰 크기 기록 (이번 주·전체). 낚시 결과 API(reelIn)에서 서버만 기록한다
@@ -31,14 +31,16 @@ const FK = {
 
 /**
  * KEYS: 물고기별 전체, 물고기별 주간, 전체, 주간, 전체 물고기 해시, 주간 물고기 해시
- * ARGV: 계정, 크기, 물고기 id, 주간 TTL
+ * ARGV: 계정, 크기, 물고기 id, 주간 TTL, now
+ * 주간 판(2·4)은 동점이면 먼저 낚은 사람이 위: 점수에 달성 시각 소수부를 싣는다 (lib/store/accounts.ts weekTieFrac, 읽을 때 버린다)
  */
 const RECORD_LUA = `
 local size = tonumber(ARGV[2])
+local frac = (${WEEK_TIE_SCALE} - tonumber(ARGV[5])) / ${WEEK_TIE_SCALE}
 for i = 1, 4 do
   local cur = redis.call('ZSCORE', KEYS[i], ARGV[1])
-  if not cur or size > tonumber(cur) then
-    redis.call('ZADD', KEYS[i], size, ARGV[1])
+  if not cur or size > math.floor(tonumber(cur)) then
+    if i == 2 or i == 4 then redis.call('ZADD', KEYS[i], string.format('%.17g', size + frac), ARGV[1]) else redis.call('ZADD', KEYS[i], size, ARGV[1]) end
     if i >= 3 then redis.call('HSET', KEYS[i + 2], ARGV[1], ARGV[3]) end
   end
 end
@@ -65,7 +67,7 @@ export class RedisFishRank implements FishRankStore {
     await this.redis.eval<string[], number>(
       RECORD_LUA,
       [FK.sp(sp), FK.spWeek(sp, week), FK.all, FK.allWeek(week), FK.allSp, FK.allWeekSp(week)],
-      [acct, String(Math.round(size)), sp, String(WEEK_RANK_TTL_SEC)],
+      [acct, String(Math.round(size)), sp, String(WEEK_RANK_TTL_SEC), String(Date.now())],
     );
   }
 
@@ -73,7 +75,7 @@ export class RedisFishRank implements FishRankStore {
     const { z, h } = boardKeys(sp, week);
     const flat = (await this.redis.zrange<string[]>(z, 0, limit - 1, { rev: true, withScores: true })) ?? [];
     const top: [string, number][] = [];
-    for (let i = 0; i + 1 < flat.length; i += 2) top.push([String(flat[i]), Number(flat[i + 1])]);
+    for (let i = 0; i + 1 < flat.length; i += 2) top.push([String(flat[i]), rankValue(flat[i + 1])]);
     const p = this.redis.pipeline();
     // 이름은 계정에서 지금 이름을 읽는다 (닉네임을 바꾸거나 운영자가 바꿔도 바로 맞게)
     for (const [id] of top) {
@@ -96,7 +98,7 @@ export class RedisFishRank implements FishRankStore {
     const [myRank, mySize, myName, mySp] = r.slice(top.length * per);
     const mine =
       me && myRank !== null && myRank !== undefined
-        ? { accountId: me, name: (myName as string | null) ?? null, size: Number(mySize), rank: Number(myRank) + 1, ...(h && mySp ? { sp: String(mySp) } : {}) }
+        ? { accountId: me, name: (myName as string | null) ?? null, size: rankValue(mySize), rank: Number(myRank) + 1, ...(h && mySp ? { sp: String(mySp) } : {}) }
         : null;
     return { rows, mine };
   }

@@ -294,3 +294,40 @@ export function isDexBadge(v: unknown): v is number {
 export function dexBadgeCats(v: number | undefined): DexBadgeCat[] {
   return isDexBadge(v) ? DEX_BADGE_CATS.filter((_, i) => v & (1 << i)) : [];
 }
+
+/**
+ * 주간 랭킹 1위(챔피언) 표시: 랭킹별 비트 (입장 토큰·PeerInfo의 champ). 지난주(월요일 0시 KST 마감) 1위만 Vercel이 넣는다.
+ * 이름표 위 작은 배지("이번 주 포인트왕")와 몸 둘레 1위 오라로 그린다. 옛 클라이언트는 모르는 필드라 무시한다
+ */
+export const CHAMP_BOARDS = ["points", "huntKills", "fish"] as const;
+export type ChampBoard = (typeof CHAMP_BOARDS)[number];
+/** 배지 글자 ("이번 주 " 뒤에 붙는다) */
+export const CHAMP_TITLE: Record<ChampBoard, string> = { points: "포인트왕", huntKills: "사냥왕", fish: "낚시왕" };
+/** 랭킹별 1위 전용 꾸미기 (상점에 없다. 1위가 되면 다음 1위가 정해질 때까지 빌려 입는다) */
+export const CHAMP_HAT: Record<ChampBoard, string> = { points: "champ_crown", huntKills: "champ_plume", fish: "champ_fishhat" };
+export const CHAMP_ALL = (1 << CHAMP_BOARDS.length) - 1;
+/** 본인이 "1위 오라 보이기"를 끈 표시 (배지는 그대로, 오라만 숨긴다). 1위 비트와 같은 값에 함께 싣는다 */
+export const CHAMP_AURA_OFF = 1 << CHAMP_BOARDS.length;
+/** 1위 비트가 하나 이상 있는 값 (오라 끔 표시 포함 1~15) */
+export function isChampBits(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v > 0 && v <= (CHAMP_ALL | CHAMP_AURA_OFF) && (v & CHAMP_ALL) > 0;
+}
+/** 비트 묶음 → 1위 랭킹 (CHAMP_BOARDS 순서) */
+export function champBoards(v: number | undefined): ChampBoard[] {
+  return isChampBits(v) ? CHAMP_BOARDS.filter((_, i) => v & (1 << i)) : [];
+}
+/** 1위 오라를 그릴지 (1위이고 본인이 끄지 않았을 때) */
+export function champAuraOn(v: number | undefined): boolean {
+  return isChampBits(v) && (v & CHAMP_AURA_OFF) === 0;
+}
+/** 1위 랭킹 목록 → 비트 묶음 (없으면 0). auraOff면 오라 끔 표시도 */
+export function champBitsOf(boards: readonly ChampBoard[], auraOff = false): number {
+  const n = boards.reduce((v, b) => v | (1 << CHAMP_BOARDS.indexOf(b)), 0);
+  return n && auraOff ? n | CHAMP_AURA_OFF : n;
+}
+/** 배지 글자: 하나면 "이번 주 포인트왕", 둘·셋이면 "이번 주 2관왕"·"이번 주 3관왕" (없으면 "") */
+export function champBadgeText(v: number | undefined): string {
+  const b = champBoards(v);
+  if (!b.length) return "";
+  return b.length === 1 ? `이번 주 ${CHAMP_TITLE[b[0]]}` : `이번 주 ${b.length}관왕`;
+}

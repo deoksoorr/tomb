@@ -298,3 +298,33 @@
     position: static;
   }
 }
+
+/* 주간 랭킹 1위 오라 켜기·끄기 (1위일 때만) */
+.champAura {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  color: var(--candle);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.champAura input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--candle);
+}
+
+.champAuraNote {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+@media (pointer: coarse) {
+  .champAura {
+    min-height: 44px;
+  }
+}

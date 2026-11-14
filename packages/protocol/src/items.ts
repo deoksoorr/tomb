@@ -31,6 +31,8 @@ export type ItemDef = {
   dye?: DyeTicketSpec;
   /** 운영자(31번) 전용 꾸미기: 상점 목록에 없고, 운영자만 영구로 받아 입는다 (서버·실시간 서버가 운영자가 아니면 뺀다) */
   staff?: true;
+  /** 주간 랭킹 1위 전용 꾸미기: 상점 목록에 없고 사거나 영구로 살 수 없다. 1위가 되면 다음 1위가 정해질 때까지 빌려 입는다 (값 0 → 꾸미기 점수 0) */
+  champ?: true;
 };
 
 export const COSMETIC_DURATION_MS = DAY;
@@ -174,6 +176,12 @@ export const ITEMS: readonly ItemDef[] = [
     ["staff_steps", "feet", "저승길 발자국", "지나간 자리에 푸른 안개 발자국. 운영자 전용.", 0],
     ["staff_souls", "aura", "혼불", "푸른 혼불이 둘레를 맴돌아요. 운영자 전용.", 0],
   ]).map((it) => ({ ...it, staff: true as const })),
+  // ── 주간 랭킹 1위 전용 꾸미기 (값 0: 상점에 없고, 1위가 되면 한 주 동안 빌려 입는다 — constants CHAMP_HAT) ──
+  ...cosmetics([
+    ["champ_crown", "head", "금화 왕관", "이번 주 포인트를 가장 많이 모은 사람의 금화 왕관. 주간 포인트 1위 전용.", 0],
+    ["champ_plume", "head", "붉은 깃털 투구", "붉은 깃털을 꽂은 사냥꾼의 투구 장식. 주간 사냥 처치 1위 전용.", 0],
+    ["champ_fishhat", "head", "황금 물고기 모자", "가장 큰 물고기를 낚은 사람의 황금 물고기 모자. 주간 낚시 1위 전용.", 0],
+  ]).map((it) => ({ ...it, champ: true as const })),
   // ── 동물원 펫 (사육사에게서 영구로만 산다 — 가격은 아래 ZOO_PETS. price는 같은 값을 적어 둔다) ──
   { id: "pet_fox", kind: "cosmetic", slot: "pet", name: "달빛 여우", desc: "야근하는 밤에만 슬그머니 따라오는 여우. 꼬리가 은은하게 빛나요.", price: 1200, durationMs: COSMETIC_DURATION_MS },
   { id: "pet_hound", kind: "cosmetic", slot: "pet", name: "듬직한 큰 개", desc: "등에 태워 주는 커다란 개. 출근길이 두 배로 즐거워요. (타고 다닐 수 있어요)", price: 2000, durationMs: COSMETIC_DURATION_MS },
@@ -261,8 +269,8 @@ export function styleItemId(id: string): string | null {
  */
 export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "megaphone", "dye"];
 /** 상점 목록에 나오는지. 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — ZOO_PETS) */
-export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true }): boolean {
-  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff;
+export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true }): boolean {
+  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ;
 }
 
 const byId = new Map(ITEMS.map((i) => [i.id, i]));
@@ -286,6 +294,10 @@ export function itemName(id: string): string {
 /** 운영자 전용 꾸미기인지 */
 export function isStaffItem(id: unknown): boolean {
   return typeof id === "string" && byId.get(id)?.staff === true;
+}
+/** 주간 랭킹 1위 전용 꾸미기인지 (사거나 영구로 살 수 없다) */
+export function isChampItem(id: unknown): boolean {
+  return typeof id === "string" && byId.get(id)?.champ === true;
 }
 /** 운영자 전용 꾸미기 id (상점의 운영자 칸·검증용) */
 export const STAFF_ITEM_IDS: readonly string[] = ITEMS.filter((i) => i.staff).map((i) => i.id);

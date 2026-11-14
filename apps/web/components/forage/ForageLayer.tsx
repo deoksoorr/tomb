@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { bridge, type ForageUse } from "@/game/bridge";
+import { meadowTone } from "@/game/rpg/meadowLayout";
+import type { TimePhase } from "@/lib/ambience";
 import { errorMessage } from "@/lib/api";
 import { gatherNodeById, NODE_LABEL, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
 import { forageApi, type DexPeer } from "@/lib/forage/client";
@@ -12,7 +14,7 @@ import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { showToast } from "@/lib/hooks/useToasts";
 import { derive } from "@/lib/rpg/formulas";
-import type { RpgPlay, RunResult } from "@/lib/rpg/types";
+import type { BugsResult, RpgPlay, RunResult } from "@/lib/rpg/types";
 import RunHud from "../rpg/RunHud";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -29,19 +31,22 @@ import s from "./forage.module.css";
 // 게임(game/world/forage)이 forage:use로 "낚시 자리에 앉음 / NPC 앞 / 채집 지점"을 알려 주면 해당 창을 연다.
 //  - 낚시: FishingPanel (서버 티켓으로 던지고 감는다)
 //  - 채집: 게이지 (머리 위 막대는 게임이 그린다) → 서버가 시간을 확인하고 가방·도감에 넣는다
-//  - 곤충 수풀: 옛 사냥터 "벌레 잡기"를 마을 수풀 그림으로 (rpg:play theme meadow) → 결과를 서버가 시드로 검사
+//  - 곤충 수풀: 옛 사냥터 "벌레 잡기"를 마을 들판 그림으로 (rpg:play theme meadow, 한국 시각 낮·노을·밤) → 결과를 서버가 시드로 검사,
+//    끝나면 결과 카드(잡은 수·황금·최고 콤보·점수 + 챙긴 곤충)
 //  - NPC: 판매 창 / 도감: forage:dex (HUD 버튼·메뉴·가방)
 
 type Gather = { ticket: string; node: string; kind: string; endsAt: number; ms: number };
-type Insect = { ticket: string; node: string; seed: number };
+type Insect = { ticket: string; node: string; seed: number; timeLimitSec: number };
+/** 곤충 채집 결과 카드. items가 null이면 아직 서버 답을 기다리는 중 */
+type InsectDone = { result: BugsResult; aborted: boolean; items: CatchResult[] | null; message?: string };
 /** 잡은 것 카드. cosmetic이면 물에 빠진 꾸미기 (영구 소장) */
 type Card = { item: CatchResult; more: number; cosmetic?: SunkenCatch };
 
 const NEUTRAL = { str: 0, agi: 0, vit: 0, int: 0, dex: 0, luk: 0 };
 const NO_EQUIP = { weapon: null, armor: null, head: null, acc1: null, acc2: null };
 
-/** 곤충 미니게임 판 (능력치 영향 없음 — 서버 BUG_STATS와 같다) */
-function insectPlay(seed: number, timeLimitSec: number, night: boolean): RpgPlay {
+/** 곤충 미니게임 판 (능력치 영향 없음 — 서버 BUG_STATS와 같다). phase: 서버가 잰 한국 시각 시간대 (옛 서버면 없음) */
+function insectPlay(seed: number, timeLimitSec: number, night: boolean, phase?: TimePhase): RpgPlay {
   return {
     game: "bugs",
     difficulty: BUG_DIFFICULTY,
@@ -55,6 +60,7 @@ function insectPlay(seed: number, timeLimitSec: number, night: boolean): RpgPlay
     equip: NO_EQUIP,
     theme: "meadow",
     night,
+    tone: meadowTone(phase, night),
   };
 }
 
@@ -66,6 +72,8 @@ export default function ForageLayer() {
   const [insect, setInsect] = useState<Insect | null>(null);
   const [paused, setPaused] = useState(false);
   const [card, setCard] = useState<Card | null>(null);
+  const [insectDone, setInsectDone] = useState<InsectDone | null>(null);
+  const closeInsectDone = useCallback(() => setInsectDone(null), []);
   const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const busy = useRef(false);
 
@@ -105,9 +113,10 @@ export default function ForageLayer() {
         setGather({ ticket: r.ticket, node, kind: r.kind, ms: r.durationMs, endsAt: performance.now() + r.durationMs + 80 });
         bridge.emit("forage:gauge", { phase: "start", ms: r.durationMs, kind: r.kind, node });
       } else {
-        setInsect({ ticket: r.ticket, node, seed: r.seed });
+        setInsect({ ticket: r.ticket, node, seed: r.seed, timeLimitSec: r.timeLimitSec });
+        setInsectDone(null);
         setPaused(false);
-        bridge.emit("rpg:play", insectPlay(r.seed, r.timeLimitSec, r.night));
+        bridge.emit("rpg:play", insectPlay(r.seed, r.timeLimitSec, r.night, r.phase));
       }
     } catch (e) {
       showToast(errorMessage(e));
@@ -156,20 +165,21 @@ export default function ForageLayer() {
   }
 
   // 곤충 미니게임이 끝나면 결과를 낸다
-  useBridgeEvent("rpg:ended", ({ result }: { result: RunResult; aborted: boolean }) => {
+  useBridgeEvent("rpg:ended", ({ result, aborted }: { result: RunResult; aborted: boolean }) => {
     const run = insect;
     if (!run || result.game !== "bugs") return;
     setInsect(null);
     setPaused(false);
+    setInsectDone({ result, aborted, items: null });
     forageApi
       .gatherFinish(run.ticket, result)
       .then((r) => {
         forageStore.set(r.state);
         for (const it of r.items.slice(0, 3)) bridge.emit("forage:pop", { itemId: it.id });
-        if (r.items.length) showCard(r.items);
-        else showToast(r.message ?? "곤충이 모두 날아갔어요.");
+        setInsectDone((d) => (d ? { ...d, items: r.items, message: r.items.length ? undefined : (r.message ?? "곤충이 모두 날아갔어요.") } : d));
       })
       .catch((e) => {
+        setInsectDone(null);
         showToast(errorMessage(e));
         void forageStore.refresh();
       });
@@ -200,6 +210,8 @@ export default function ForageLayer() {
             game="bugs"
             hotbar={[]}
             title="곤충 채집"
+            look="meadow"
+            totalMs={insect.timeLimitSec * 1000}
             onPause={() => {
               bridge.emit("rpg:pause", { paused: true });
               setPaused(true);
@@ -242,6 +254,7 @@ export default function ForageLayer() {
         </>
       )}
       {card && <CatchCard card={card} />}
+      {insectDone && <InsectResultCard done={insectDone} onClose={closeInsectDone} />}
       {npc && <NpcShop npcId={npc} onClose={() => setNpc(null)} />}
       {dex && <DexDialog accountId={dex.accountId} peer={dex.peer} name={dex.name} onClose={() => setDex(null)} />}
     </>
@@ -285,6 +298,62 @@ function GatherDock({ gather, onCancel }: { gather: Gather; onCancel: () => void
           그만두기 (Esc)
         </button>
       </div>
+    </div>
+  );
+}
+
+/** 곤충 채집 결과 카드: 잡은 수·황금·최고 콤보·점수, 서버가 답하면 챙긴 곤충. 다 받으면 잠시 뒤 저절로 닫힌다 */
+function InsectResultCard({ done, onClose }: { done: InsectDone; onClose: () => void }) {
+  const { result, aborted, items, message } = done;
+  useEffect(() => {
+    if (!items) return;
+    const t = setTimeout(onClose, 7_000);
+    return () => clearTimeout(t);
+  }, [items, onClose]);
+  const stats: [string, number][] = [
+    ["잡은 수", result.caught + result.golden],
+    ["황금", result.golden],
+    ["최고 콤보", result.maxCombo],
+  ];
+  return (
+    <div className={s.insectResult} role="status" aria-live="polite">
+      <p className={s.insectResultHead}>{aborted ? "채집을 멈췄어요" : "채집 끝!"}</p>
+      <div className={s.insectScore}>
+        {result.score}
+        <small>점</small>
+      </div>
+      <dl className={s.insectStats}>
+        {stats.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+      {items === null ? (
+        <p className={s.insectNote}>가방에 챙기는 중…</p>
+      ) : items.length ? (
+        <ul className={s.insectItems} aria-label="챙긴 곤충">
+          {items.map((it, i) => {
+            const sp = speciesById(it.id);
+            return (
+              <li key={`${it.id}-${i}`}>
+                <ItemIcon itemId={it.id} size={32} />
+                <span>
+                  {sp?.name ?? it.id}
+                  {it.isNew && <em className={s.badgeNew}> 새로!</em>}
+                  {!it.kept && <em> (가방이 가득 차 놓아줌)</em>}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className={s.insectNote}>{message}</p>
+      )}
+      <button type="button" className={cx(ui.button, ui.primary)} onClick={onClose}>
+        확인
+      </button>
     </div>
   );
 }

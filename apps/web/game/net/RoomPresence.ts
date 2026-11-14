@@ -178,10 +178,10 @@ export class RoomPresence {
     );
     this.client.joinRoom(o.room);
     // 방 안에서 꾸미기를 바꾸면 내 아바타에 바로 입히고 방 사람들에게도 알린다
-    this.offLook = bridge.on("look:set", ({ look, lookGrant, dye, body }) => {
+    this.offLook = bridge.on("look:set", ({ look, lookGrant, dye, body, champ }) => {
       const clean = Array.isArray(look) ? look.filter((x): x is string => typeof x === "string") : [];
       o.me?.setLook(clean);
-      o.me?.applyAppearance({ dye, body });
+      o.me?.applyAppearance({ dye, body, champ });
       if (lookGrant) this.client.look(lookGrant);
     });
     if (o.expressions) {
@@ -347,6 +347,7 @@ export class RoomPresence {
     const body = isAvatarBody(p.body) ? p.body : "hood";
     const r = new RemoteAvatar(this.scene, this.o.atlas, p.sid, p.name, avatarColorSpec(p.color, sanitizeDye(p.dye)), p, performance.now(), p.look ?? [], body);
     r.view.setStaff(p.staff === true); // 31번 운영자 차림
+    r.view.setChamp(p.champ); // 주간 랭킹 1위 배지·오라
     this.remotes.set(p.sid, r);
     if (p.away) this.away.add(p.sid);
     else this.away.delete(p.sid);
@@ -363,7 +364,10 @@ export class RoomPresence {
       const r = this.remotes.get(p.sid);
       const body = isAvatarBody(p.body) ? p.body : "hood";
       if (!r || r.name !== p.name || r.view.colorSpec !== avatarColorSpec(p.color, sanitizeDye(p.dye)) || r.view.bodyId !== body) this.add(p);
-      else r.view.setLook(p.look ?? []);
+      else {
+        r.view.setLook(p.look ?? []);
+        r.view.setChamp(p.champ);
+      }
     }
     for (const [sid, r] of this.remotes) {
       if (keep.has(sid)) continue;

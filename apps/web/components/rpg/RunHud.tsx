@@ -93,8 +93,64 @@ function Joystick() {
   );
 }
 
-/** title: 게임 이름 대신 (32번 곤충 채집은 "곤충 채집") */
-export default function RunHud({ game, hotbar, onPause, title }: { game: GameKind; hotbar: (SkillId | null)[]; onPause: () => void; title?: string }) {
+/** 콤보 단계 0..4 (점수 배수가 오르는 5콤보마다) — game/rpg/meadowLayout comboTier와 같다 */
+const tierOf = (combo: number) => Math.max(0, Math.min(4, Math.floor(combo / 5)));
+
+/** 32번 곤충 채집 점수판: 나무 팻말에 남은 시간 막대·점수·콤보 */
+function MeadowBoard({ hud, title, totalMs }: { hud: RpgHud | null; title: string; totalMs: number }) {
+  const left = hud?.leftMs ?? totalMs;
+  const pct = totalMs > 0 ? Math.max(0, Math.min(100, (left / totalMs) * 100)) : 0;
+  const combo = hud?.combo ?? 0;
+  return (
+    <div className={s.meadowBoard}>
+      <div className={s.boardHead}>
+        <strong>{title}</strong>
+        <span className={s.boardTime}>{mmss(left)}</span>
+      </div>
+      <div
+        className={cx(s.boardBar, left <= 5000 && s.boardBarLow)}
+        role="meter"
+        aria-label="남은 시간"
+        aria-valuenow={Math.ceil(left / 1000)}
+        aria-valuemin={0}
+        aria-valuemax={Math.round(totalMs / 1000)}
+      >
+        <span style={{ width: `${pct}%` }} />
+      </div>
+      <div className={s.boardRow}>
+        <span className={s.boardScore} aria-label={`점수 ${hud?.score ?? 0}`}>
+          {hud?.score ?? 0}
+          <small>점</small>
+        </span>
+        {combo >= 2 && (
+          <span className={s.boardCombo} data-tier={tierOf(combo)}>
+            {combo}콤보 ×{comboMult(combo)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * title: 게임 이름 대신 (32번 곤충 채집은 "곤충 채집").
+ * look="meadow": 곤충 채집 들판 — 나무 팻말 점수판(totalMs: 판 전체 시간), 콤보 단계만큼 화면 가장자리가 은은히 밝아진다
+ */
+export default function RunHud({
+  game,
+  hotbar,
+  onPause,
+  title,
+  look,
+  totalMs = 0,
+}: {
+  game: GameKind;
+  hotbar: (SkillId | null)[];
+  onPause: () => void;
+  title?: string;
+  look?: "meadow";
+  totalMs?: number;
+}) {
   const [hud, setHud] = useState<RpgHud | null>(null);
   useBridgeEvent("rpg:hud", setHud);
   const holding = useRef<number | null>(null);
@@ -131,72 +187,77 @@ export default function RunHud({ game, hotbar, onPause, title }: { game: GameKin
       onLostPointerCapture={release}
       onContextMenu={(e) => e.preventDefault()}
     >
+      {look === "meadow" && <div className={s.meadowGlow} data-tier={tierOf(hud?.combo ?? 0)} aria-hidden="true" />}
       <div className={s.hudTop}>
         <div className={s.hudLine}>
-          <div className={s.hudPanel}>
-            <div className={s.hudStats}>
-              <strong>{title ?? GAMES[game].name}</strong>
-              <span>
-                남은 시간 <strong className={s.timer}>{hud ? mmss(hud.leftMs) : "–"}</strong>
-              </span>
-              {hud?.wave && (
+          {look === "meadow" ? (
+            <MeadowBoard hud={hud} title={title ?? GAMES[game].name} totalMs={totalMs} />
+          ) : (
+            <div className={s.hudPanel}>
+              <div className={s.hudStats}>
+                <strong>{title ?? GAMES[game].name}</strong>
                 <span>
-                  웨이브 <strong>{hud.wave[0]}</strong>/{hud.wave[1]}
+                  남은 시간 <strong className={s.timer}>{hud ? mmss(hud.leftMs) : "–"}</strong>
                 </span>
-              )}
-              {game === "hunt" && (
-                <span>
-                  처치 <strong>{hud?.kills ?? 0}</strong>
-                </span>
-              )}
-              {game === "hunt" && (hud?.peers ?? 0) > 1 && <span className={s.together}>함께 {hud!.peers}명</span>}
-              {game !== "hunt" && (
-                <span>
-                  점수 <strong>{hud?.score ?? 0}</strong>
-                </span>
-              )}
-              {game !== "hunt" && (hud?.combo ?? 0) >= 2 && (
-                <span className={s.timer}>
-                  {hud!.combo}콤보 ×{comboMult(hud!.combo!)}
-                </span>
+                {hud?.wave && (
+                  <span>
+                    웨이브 <strong>{hud.wave[0]}</strong>/{hud.wave[1]}
+                  </span>
+                )}
+                {game === "hunt" && (
+                  <span>
+                    처치 <strong>{hud?.kills ?? 0}</strong>
+                  </span>
+                )}
+                {game === "hunt" && (hud?.peers ?? 0) > 1 && <span className={s.together}>함께 {hud!.peers}명</span>}
+                {game !== "hunt" && (
+                  <span>
+                    점수 <strong>{hud?.score ?? 0}</strong>
+                  </span>
+                )}
+                {game !== "hunt" && (hud?.combo ?? 0) >= 2 && (
+                  <span className={s.timer}>
+                    {hud!.combo}콤보 ×{comboMult(hud!.combo!)}
+                  </span>
+                )}
+              </div>
+              {game === "hunt" && hud && (
+                <>
+                  <Bar value={hud.hp} max={hud.maxHp} className={s.hp} label="HP" />
+                  {(hud.statuses?.length ?? 0) > 0 && (
+                    <div className={s.statuses} role="status" aria-label="걸린 상태 이상">
+                      {hud.statuses!.map((x) => {
+                        const def = STATUSES[x.id];
+                        return (
+                          <span
+                            key={x.id}
+                            className={cx(s.statusChip, x.leftMs < 1000 && s.statusEnding)}
+                            style={{ color: `#${def.color.toString(16).padStart(6, "0")}` }}
+                            title={def.desc}
+                          >
+                            <RpgIcon art={def.art} size={16} />
+                            {def.name} {(x.leftMs / 1000).toFixed(1)}초
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <Bar value={hud.sp} max={hud.maxSp} className={s.sp} label="SP" />
+                  {hud.buffs.some((b) => BUFF_NAMES[b.id]) && (
+                    <div className={s.buffs}>
+                      {hud.buffs
+                        .filter((b) => BUFF_NAMES[b.id])
+                        .map((b) => (
+                          <span key={b.id}>
+                            {BUFF_NAMES[b.id]} {Math.ceil(b.leftMs / 1000)}초
+                          </span>
+                        ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
-            {game === "hunt" && hud && (
-              <>
-                <Bar value={hud.hp} max={hud.maxHp} className={s.hp} label="HP" />
-                {(hud.statuses?.length ?? 0) > 0 && (
-                  <div className={s.statuses} role="status" aria-label="걸린 상태 이상">
-                    {hud.statuses!.map((x) => {
-                      const def = STATUSES[x.id];
-                      return (
-                        <span
-                          key={x.id}
-                          className={cx(s.statusChip, x.leftMs < 1000 && s.statusEnding)}
-                          style={{ color: `#${def.color.toString(16).padStart(6, "0")}` }}
-                          title={def.desc}
-                        >
-                          <RpgIcon art={def.art} size={16} />
-                          {def.name} {(x.leftMs / 1000).toFixed(1)}초
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-                <Bar value={hud.sp} max={hud.maxSp} className={s.sp} label="SP" />
-                {hud.buffs.some((b) => BUFF_NAMES[b.id]) && (
-                  <div className={s.buffs}>
-                    {hud.buffs
-                      .filter((b) => BUFF_NAMES[b.id])
-                      .map((b) => (
-                        <span key={b.id}>
-                          {BUFF_NAMES[b.id]} {Math.ceil(b.leftMs / 1000)}초
-                        </span>
-                      ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+          )}
           <div className={s.topButtons}>
             <button type="button" className={cx(ui.button, ui.icon)} onPointerDown={stop} onClick={onPause} aria-label="멈춤">
               <PixelIcon name="pause" />
@@ -280,7 +341,9 @@ export default function RunHud({ game, hotbar, onPause, title }: { game: GameKin
             </button>
           </>
         )}
-        {game !== "hunt" && <p className={s.keysHint}>{GAMES[game].how} · Esc 멈춤</p>}
+        {game !== "hunt" && (
+          <p className={s.keysHint}>{look === "meadow" ? "덤불 누르기 · Q W E / A S D / Z X C · 벌·낙엽은 그대로 두기 · Esc 멈춤" : `${GAMES[game].how} · Esc 멈춤`}</p>
+        )}
       </div>
     </div>
   );

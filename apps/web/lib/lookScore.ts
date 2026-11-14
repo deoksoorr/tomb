@@ -9,6 +9,8 @@ import { bodyLabel, bodyUnlockPrice, DYE_PARTS, dyeSpecialOf, itemById, PERMANEN
 //  - 프리미엄 외형(선택권으로 해금한 몸): 선택권 값. 처음 6종·운영자 몸은 0
 //  - 염색 특수 색(금빛·반짝이·무지개·야광): 부위마다 +DYE_SPECIAL_BONUS
 //  - 운영자 전용 꾸미기는 0
+//  - 주간 랭킹 1위 전용 꾸미기(금화 왕관 등)도 0: 상점 값이 없는 상징이라 1위 보상이 꾸미기 점수를 부풀리지 않게.
+//    1위 오라는 아이템이 아니라 1위 자격에 붙은 연출이라 점수에 들어가지 않는다
 
 /** 가치 몇 P당 1점인지 */
 export const LOOK_SCORE_DIVISOR = 5;
@@ -20,10 +22,10 @@ export function valueScore(value: number): number {
   return value > 0 ? Math.round(value / LOOK_SCORE_DIVISOR) : 0;
 }
 
-/** 꾸미기 한 점의 영구 소장 기준 가치 (꾸미기가 아니거나 운영자 전용이면 0) */
+/** 꾸미기 한 점의 영구 소장 기준 가치 (꾸미기가 아니거나 운영자 전용·주간 1위 전용이면 0) */
 export function itemLookValue(itemId: string): number {
   const it = itemById(itemId);
-  if (!it || it.kind !== "cosmetic" || it.staff) return 0;
+  if (!it || it.kind !== "cosmetic" || it.staff || it.champ) return 0;
   return petPrice(itemId) ?? it.price * PERMANENT_MULTIPLIER;
 }
 

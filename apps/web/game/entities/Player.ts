@@ -97,12 +97,14 @@ export class Player {
     // 46·25번: 내 염색·몸 모양의 출처는 마지막 착용 증서(look:set) 하나 → 어느 장면(월드·상점·집·마을)에서 만들어도 같은 모습
     const last = bridge.last("look:set");
     this.view = new AvatarView(scene, atlas, x, y, avatarColorSpec(color, last?.dye), name, true, [], isAvatarBody(last?.body) ? last.body : body);
+    // 주간 1위 배지·오라도 마지막 착용 증서 값으로 (어느 장면에서 만들어도 같게)
+    this.view.setChamp(last?.champ);
     // 그 장면 안에 있는 동안 염색·외형 바꾸기·꾸미기를 바꿔도 바로 (예전엔 상점 안에서는 나가야 바뀌었다)
     this.offLook = bridge.on("look:set", (e) => {
       // 장면이 정리돼 그림이 사라졌으면 (게임 종료 등) 더 듣지 않는다
       if (!this.view.sprite.scene) return this.offLook();
       if (Array.isArray(e.look)) this.view.setLook(e.look.filter((v): v is string => typeof v === "string"));
-      this.view.applyAppearance({ dye: e.dye, body: e.body });
+      this.view.applyAppearance({ dye: e.dye, body: e.body, champ: e.champ });
     });
     // 31번 운영자 계정이면 내 캐릭터도 저승사자 차림 (/api/me가 알려 준 값, 바뀌면 바로)
     // 운영자는 다른 사람에게 공개 이름("대장")으로 보이므로 내 화면의 이름표도 같게

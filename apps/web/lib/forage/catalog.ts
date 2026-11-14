@@ -1,4 +1,5 @@
 import type { Season, TimePhase, Weather } from "../ambience";
+import { CONSTELLATIONS } from "../rpg/constellations";
 
 // 낚시·채집·도감 (NEXT.md 4·32·51) 카탈로그 — 서버(lib/forage/service)와 UI·게임이 같은 표를 쓴다 (순수 데이터).
 // 값(가격·확률)은 서버만 믿는다. 잡는 순간 무엇이 걸렸는지는 서버가 굴려 저장해 두고, 끝낼 때 확인한다.
@@ -249,18 +250,27 @@ export const STACK_MAX = 99;
 /** 하루에 잡을·캘 수 있는 수 (자동화 방지. 포인트는 따로 EARN_RULES 한도) */
 export const DAILY_CATCH_MAX = { fish: 150, gather: 200 } as const;
 
+// ── 도감 칸 ── 잡는 것(LifeCat) + 별자리. 별자리는 망원경 별자리 잇기로 모으는 도감 표시용 칸이라
+// 가방·NPC 판매·상점 값과는 상관없다 (LifeCat을 넓히지 않는다 — 판매·가방 코드는 LifeCat·SPECIES만 본다).
+export type DexCat = LifeCat | "star";
+export const DEX_CATS: readonly DexCat[] = [...LIFE_CATS, "star"];
+export const DEX_CAT_LABEL: Record<DexCat, string> = { ...CAT_LABEL, star: "별자리" };
+/** 그 도감 칸의 항목 id (채우는 비율·보상 계산) */
+export const dexIdsOf = (cat: DexCat): string[] => (cat === "star" ? CONSTELLATIONS.map((c) => c.id) : speciesOf(cat).map((s) => s.id));
+
 /** 도감 달성 보상: 종류마다 25·50·75·100% (포인트는 EarnSource "dex", 칭호는 50·100%) */
 export const DEX_TIERS = [25, 50, 75, 100] as const;
 export type DexTier = (typeof DEX_TIERS)[number];
 export const DEX_REWARD: Record<DexTier, number> = { 25: 20, 50: 40, 75: 80, 100: 150 };
-export const DEX_TITLES: Record<LifeCat, Partial<Record<DexTier, string>>> = {
+export const DEX_TITLES: Record<DexCat, Partial<Record<DexTier, string>>> = {
   fish: { 50: "주말 낚시꾼", 100: "호수의 전설" },
   bug: { 50: "곤충 채집단", 100: "곤충 박사" },
   herb: { 50: "약초꾼", 100: "산신령의 제자" },
   ore: { 50: "초보 광부", 100: "보석 감정사" },
   dig: { 50: "보물 사냥꾼", 100: "고고학자" },
+  star: { 50: "별지기", 100: "밤하늘 지도 제작자" },
 };
-export const dexClaimKey = (cat: LifeCat, tier: DexTier) => `${cat}:${tier}`;
+export const dexClaimKey = (cat: DexCat, tier: DexTier) => `${cat}:${tier}`;
 
 /** 도감 100% 배지 비트 묶음 (protocol DEX_BADGE_CATS 순서 = LIFE_CATS 순서). 하나도 없으면 0 */
 export function dexBadgeBits(dex: Record<string, { n: number }>): number {

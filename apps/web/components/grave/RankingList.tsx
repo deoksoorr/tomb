@@ -8,14 +8,17 @@ import { DIFFICULTIES, gearById, ZONES, type Difficulty } from "@/lib/rpg/catalo
 import type { PublicGrave, RankBoard, RankPeriod, RankResponse } from "@/lib/types";
 import RpgIcon from "../rpg/RpgIcon";
 import ItemIcon from "../ui/ItemIcon";
+import WeeklyRace from "./WeeklyRace";
 import styles from "./RankingPanel.module.css";
 
 // 49번: 랭킹은 포인트·사냥 중심. 묘비(헌화 순)는 작은 탭 하나로만 남긴다 (살려주세요 순위는 없어졌다).
 
-type Tab = "points" | "hunt" | "level" | "fish" | "look" | "house" | "flower";
+type Tab = "race" | "points" | "hunt" | "level" | "fish" | "look" | "house" | "flower";
 type HuntMode = "huntKills" | "huntBest";
 
 const TABS: { id: Tab; label: string }[] = [
+  // 주간 랭킹 1위 보상: 이번 주 레이스(시상대·마감·내 순위) + 지난주 1위·명예의 전당
+  { id: "race", label: "이번 주 레이스" },
   { id: "points", label: "포인트" },
   { id: "hunt", label: "사냥" },
   { id: "level", label: "사냥 레벨" },
@@ -68,9 +71,9 @@ type Props = {
   onPick: (graveId: string) => void;
 };
 
-/** 탭 7개: 포인트(이번 주·전체) · 사냥(처치 수·사냥터별 최단 클리어) · 사냥 레벨(같으면 경험치) · 낚시(물고기별·전체 최대어) · 꾸미기(지금 입은 코디 점수) · 집 꾸미기(F11 꾸밈 점수) · 헌화(지금 채널 묘비) */
+/** 탭 8개: 이번 주 레이스(주간 1위 보상 · 명예의 전당) · 포인트(이번 주·전체) · 사냥(처치 수·사냥터별 최단 클리어) · 사냥 레벨(같으면 경험치) · 낚시(물고기별·전체 최대어) · 꾸미기(지금 입은 코디 점수) · 집 꾸미기(F11 꾸밈 점수) · 헌화(지금 채널 묘비) */
 export default function RankingList({ graves, onPick }: Props) {
-  const [tab, setTab] = useState<Tab>("points");
+  const [tab, setTab] = useState<Tab>("race");
   const [period, setPeriod] = useState<RankPeriod>("week");
   const [hunt, setHunt] = useState<HuntMode>("huntBest");
   const [zone, setZone] = useState<Difficulty>(DIFFICULTIES[0]);
@@ -110,7 +113,7 @@ export default function RankingList({ graves, onPick }: Props) {
           <span className={styles.hint}>사냥 캐릭터 레벨 순 · 레벨이 같으면 경험치가 많은 순</span>
         </div>
       )}
-      {tab !== "flower" && tab !== "look" && tab !== "level" && (
+      {tab !== "flower" && tab !== "look" && tab !== "level" && tab !== "race" && (
         <div className={styles.filters}>
           <div className={styles.chips} role="group" aria-label="기간">
             {PERIODS.map((p) => (
@@ -155,7 +158,9 @@ export default function RankingList({ graves, onPick }: Props) {
         </div>
       )}
       <div id={`${baseId}-list`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={styles.listWrap}>
-        {tab === "flower" ? (
+        {tab === "race" ? (
+          <WeeklyRace />
+        ) : tab === "flower" ? (
           flowered.length === 0 ? (
             <p className={styles.empty}>이 채널 묘비에 아직 놓인 꽃이 없어요.</p>
           ) : (

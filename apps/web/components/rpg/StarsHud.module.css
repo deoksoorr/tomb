@@ -1,0 +1,164 @@
+/* 별자리 잇기 점수판: 밤하늘 남색 판 + 금빛 글자 */
+
+.board {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: 340px;
+  padding: 8px 10px;
+  background: linear-gradient(rgba(10, 12, 34, 0.92), rgba(24, 22, 52, 0.92));
+  box-shadow:
+    0 0 0 2px #2c2a52,
+    0 0 0 3px #0a0b16;
+  color: #dfe3f4;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.head strong {
+  color: #ffe39a;
+}
+
+.starry {
+  padding: 0 5px;
+  font-size: 10px;
+  color: #1a1530;
+  background: #e0c36a;
+}
+
+.time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: #bcd0f0;
+}
+
+.bar {
+  height: 4px;
+  background: #1b1d3c;
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #7d8fe0, #ffe39a);
+  transition: width 0.2s linear;
+}
+
+.barLow > span {
+  background: #e08a6a;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 18px;
+}
+
+.score {
+  font-size: 18px;
+  font-weight: bold;
+  color: #fff3c8;
+  font-variant-numeric: tabular-nums;
+}
+
+.score small {
+  margin-left: 2px;
+  font-size: 10px;
+  color: #9aa3c8;
+}
+
+.combo {
+  padding: 1px 5px;
+  font-size: 11px;
+  color: #ffe39a;
+  box-shadow: 0 0 0 1px #6a5a2a;
+}
+
+.combo[data-hot] {
+  color: #1a1530;
+  background: #ffe39a;
+}
+
+.judge {
+  margin-left: auto;
+  font-size: 12px;
+  animation: pop 0.45s ease-out both;
+}
+
+.judge[data-judge="perfect"] {
+  color: #ffe39a;
+}
+
+.judge[data-judge="good"] {
+  color: #bcd0f0;
+}
+
+.judge[data-judge="miss"] {
+  color: #7a7f90;
+}
+
+.dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.dots > i {
+  width: 6px;
+  height: 6px;
+  background: #2c2f58;
+  box-shadow: 0 0 0 1px #464a80;
+}
+
+.dots > i[data-on] {
+  background: #ffe39a;
+  box-shadow: 0 0 4px rgba(255, 227, 154, 0.8);
+}
+
+.dots[data-broken] > i[data-on] {
+  background: #7a7f90;
+  box-shadow: none;
+}
+
+.done {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #9aa3c8;
+}
+
+.done b {
+  color: #fff3c8;
+}
+
+.last {
+  color: #ffe39a;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .judge {
+    animation: none;
+  }
+  .bar > span {
+    transition: none;
+  }
+}

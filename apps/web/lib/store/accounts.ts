@@ -6,6 +6,7 @@ import { CODE_ALPHABET, type EarnSource } from "../economy";
 import { parseYmd, todayKst } from "../epitaph";
 import { NAME_CHANGE_COOLDOWN_DAYS, NAME_CHANGE_PRICE, type Me } from "../types";
 import { staffAccountId, topUpIfStaff } from "../staff";
+import { champBitsFor } from "./champ";
 import { K } from "./keys";
 import { getStyleStore } from "./style";
 import type { AccountRecord, AccountStore } from "./types";
@@ -34,6 +35,16 @@ export async function econKeyFor(accountId: string, day: string): Promise<string
 }
 /** 주간 랭킹 보관 (지난주까지 보고 나서 저절로 지워지게) */
 export const WEEK_RANK_TTL_SEC = 21 * 86_400;
+
+/**
+ * 주간 랭킹 동점 정리 (주간 1위 보상: "동점이면 먼저 달성한 사람"). Redis 정렬 집합 점수에 달성 시각을 소수부로 싣는다:
+ * 점수 = 정수 값 + weekTieFrac(달성 시각). 이른 시각일수록 소수부가 커서 같은 값 안에서 위에 온다 (늘 0과 1 사이, 1ms 단위까지 구분).
+ * 화면·지급에 쓰는 값은 rankValue로 소수부를 버린 정수
+ */
+export const WEEK_TIE_SCALE = 1e13;
+export const weekTieFrac = (now: number) => (WEEK_TIE_SCALE - now) / WEEK_TIE_SCALE;
+/** 저장된 랭킹 점수 → 화면 값 (동점 정리용 소수부를 버린다) */
+export const rankValue = (score: unknown) => Math.floor(Number(score));
 
 export const NAME_CHANGE_COOLDOWN_MS = NAME_CHANGE_COOLDOWN_DAYS * 86_400_000;
 
@@ -66,8 +77,15 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
   // 31번 운영자 계정은 잔액을 지갑 상한까지 채운 뒤 읽는다 (포인트가 줄지 않는다)
   const staff = await topUpIfStaff(accounts, accountId);
   // 46번 염색은 따로 저장한다 (lib/store/style.ts)
-  const [a, style] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId)]);
-  return { ...toMe(accountId, a, day, now), dye: style.dye, ...(staff ? { staff: true } : {}), ...(style.bodies?.length ? { bodies: style.bodies } : {}) };
+  // 주간 1위 값 (지난주 1위면 비트, 오라를 껐으면 끔 표시까지) → 착용 증서에 실려 다른 사람 화면의 배지·오라도 맞춘다
+  const [a, style, champ] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId), champBitsFor(accountId, now).catch(() => 0)]);
+  return {
+    ...toMe(accountId, a, day, now),
+    dye: style.dye,
+    ...(staff ? { staff: true } : {}),
+    ...(style.bodies?.length ? { bodies: style.bodies } : {}),
+    ...(champ ? { champ } : {}),
+  };
 }
 
 /**
@@ -106,17 +124,18 @@ export const lookOf = (a: Pick<AccountRecord, "equipped">): Look => a.equipped.m
 
 /**
  * 착용 증서. 46·25번: appearance(지금 염색·몸 모양)를 주면 같이 싣는다 → 실시간 서버가 다른 사람 화면에도 바꾼다
- * (빈 염색 = 기본색으로 되돌림). 주지 않으면 예전처럼 꾸미기만
+ * (빈 염색 = 기본색으로 되돌림). 주지 않으면 예전처럼 꾸미기만.
+ * 주간 1위: appearance가 있으면 1위 값(champ, 없으면 0 = 1위 아님)도 싣는다 → 1위가 끝났거나 오라를 끄고 켠 것이 바로 반영된다
  */
 export function lookGrant(
   secret: string,
   visitorId: string,
   look: Look,
   now = Date.now(),
-  appearance?: { dye?: AvatarDye; body?: string | null },
+  appearance?: { dye?: AvatarDye; body?: string | null; champ?: number },
 ): Promise<string> {
   const extra = appearance
-    ? { dye: appearance.dye ?? {}, ...(isAvatarBody(appearance.body) ? { body: appearance.body } : {}) }
+    ? { dye: appearance.dye ?? {}, ...(isAvatarBody(appearance.body) ? { body: appearance.body } : {}), champ: appearance.champ ?? 0 }
     : {};
   return signGrant(secret, { kind: "look", visitorId, look, exp: Math.floor(now / 1000) + GRANT_TTL_SEC, ...extra });
 }

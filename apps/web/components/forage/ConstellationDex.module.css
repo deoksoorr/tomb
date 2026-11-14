@@ -1,0 +1,35 @@
+/* 도감 별자리 칸: 밤하늘 바탕 칸 + 픽셀 별자리 아이콘 */
+
+.icon {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.cell {
+  background: linear-gradient(#0a0d22, #1a1c3a);
+}
+
+.cell[data-known="true"][data-rarity="3"] {
+  box-shadow: 0 0 0 1px #6a5490;
+}
+
+.cell[data-known="true"][data-rarity="5"] {
+  box-shadow:
+    0 0 0 1px var(--candle),
+    0 0 8px rgba(224, 195, 106, 0.35);
+}
+
+.cell[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--candle);
+}
+
+.detail > canvas {
+  background: linear-gradient(#0a0d22, #1a1c3a);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}

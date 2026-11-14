@@ -1,0 +1,239 @@
+/* 이번 주 레이스 (랭킹 창 맨 앞 칸): 시상대 3개 + 지난주 1위 + 명예의 전당 */
+.race {
+  display: grid;
+  gap: 10px;
+}
+
+.empty {
+  padding: 16px 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.deadline {
+  margin: 0;
+  color: var(--text);
+  text-align: center;
+}
+
+.deadline b {
+  color: var(--candle);
+}
+
+.clock {
+  margin-right: 4px;
+}
+
+.when,
+.reward {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.reward {
+  margin: -6px 0 0;
+  text-align: center;
+}
+
+.board {
+  display: grid;
+  gap: 6px;
+  padding: 8px 6px;
+  background: var(--surface);
+  box-shadow: var(--px-border);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--bone);
+  font-size: 12px;
+  font-weight: normal;
+}
+
+/* 랭킹 색 작은 배지 (포인트 금 · 사냥 빨강 · 낚시 파랑) */
+.badge {
+  flex: none;
+  padding: 1px 4px;
+  border: 1px solid #ffd36a;
+  color: #ffe27a;
+  font-family: var(--font-small);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.badge[data-board="huntKills"] {
+  border-color: #ff7a5a;
+  color: #ffb0a0;
+}
+
+.badge[data-board="fish"] {
+  border-color: #7ad8ff;
+  color: #b8ecff;
+}
+
+.none {
+  margin: 0;
+  padding: 6px 0;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-align: center;
+}
+
+/* 시상대: 2등 · 1등 · 3등 (가운데가 가장 높다) */
+.podium {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.step > span:first-child {
+  background: transparent;
+  box-shadow: none;
+}
+
+.block {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 14px;
+  background: #6b5a3a;
+  color: #f2ead3;
+  font-family: var(--font-small);
+  font-size: 10px;
+  box-shadow: var(--px-border);
+}
+
+.step[data-place="1"] .block {
+  height: 22px;
+  background: #b8862a;
+  color: #fff4c8;
+}
+
+.step[data-place="2"] .block {
+  height: 18px;
+  background: #8a92a2;
+}
+
+.step[data-place="3"] .block {
+  background: #8a5a3a;
+}
+
+.who {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step[data-me="true"] .who {
+  color: var(--candle);
+}
+
+.value {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.blank {
+  min-height: 1px;
+}
+
+.mine {
+  margin: 0;
+  padding: 4px 6px;
+  background: var(--bg-deep);
+  color: var(--text);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-align: center;
+}
+
+.last {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lastRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lastRow[data-me="true"] b {
+  color: var(--candle);
+}
+
+.lastText {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
+.lastText b {
+  font-weight: normal;
+}
+
+.hall {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hallRow {
+  display: grid;
+  gap: 2px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+
+.hallRow:first-child {
+  border-top: 0;
+}
+
+.hallWeek {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.hallWinners {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 11px;
+}
+
+.hallOne {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}

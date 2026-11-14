@@ -6,6 +6,7 @@ import { cx } from "../ui/cx";
 import ui from "./AdminUi.module.css";
 import styles from "./Admin.module.css";
 import { opsAdminApi, type AdminHealthReport } from "./opsAdminApi";
+import type { AdminChampResponse } from "@/app/api/admin/champ/route";
 
 type Props = { toast: (message: string) => void; onAuthLost: () => void };
 
@@ -134,6 +135,8 @@ export default function SystemPanel({ toast, onAuthLost }: Props) {
         )}
       </div>
 
+      <ChampCard toast={toast} fail={fail} />
+
       <RankFillCard
         board="huntLevel"
         title="사냥 레벨 랭킹 다시 채우기"
@@ -207,3 +210,88 @@ function RankFillCard({
     </div>
   );
 }
+
+const CHAMP_BOARD_LABEL: Record<string, string> = { points: "포인트", huntKills: "사냥 처치", fish: "낚시" };
+
+/** 주간 랭킹 1위 보상: 그 주 1위·지급 상태 보기 + 다시 지급 (이미 준 랭킹은 다시 주지 않는다 — 계정 저장소가 주·랭킹마다 한 번만) */
+function ChampCard({ toast, fail }: { toast: (message: string) => void; fail: (e: unknown) => void }) {
+  const [week, setWeek] = useState("");
+  const [state, setState] = useState<AdminChampResponse | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const run = async (settle: boolean) => {
+    setBusy(true);
+    try {
+      const w = week.trim() || undefined;
+      const r = settle ? await opsAdminApi.champSettle(w) : await opsAdminApi.champ(w);
+      setState(r);
+      if (settle) toast(r.busy ? "다른 요청이 정리 중이에요. 잠시 뒤 다시 보세요." : r.paidNow?.length ? `새로 지급: ${r.paidNow.map((b) => CHAMP_BOARD_LABEL[b]).join("·")}` : "새로 줄 보상이 없어요 (이미 모두 지급).");
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardHead}>
+        <h2 className={styles.cardTitle}>주간 1위 보상</h2>
+        <button type="button" className={ui.button} onClick={() => void run(false)} disabled={busy}>
+          상태 보기
+        </button>
+        <button type="button" className={cx(ui.button, ui.primary)} onClick={() => void run(true)} disabled={busy}>
+          {busy ? "처리 중…" : "다시 지급"}
+        </button>
+      </div>
+      <p className={ui.hint}>
+        매주 월요일 0시(KST) 마감 뒤 첫 요청(입장·랭킹 창)이 지난주 1위(포인트·사냥 처치·낚시, 운영자 제외)를 정하고 보상(1위 전용 모자 대여 · 1,000P)을 줘요. 실패했을 때만
+        [다시 지급]을 누르세요 — 이미 받은 랭킹은 다시 주지 않아요. 주를 비우면 지난주, 다른 주는 그 주 월요일(YYYYMMDD).
+      </p>
+      <label className={styles.meta}>
+        주(월요일){" "}
+        <input value={week} onChange={(e) => setWeek(e.target.value)} placeholder="비우면 지난주" inputMode="numeric" maxLength={8} />
+      </label>
+      {state && (
+        <div className={styles.tableWrap}>
+          <p className={styles.meta}>
+            {state.week} 주 · {state.over ? "마감됨" : "아직 마감 전"} · 기능 시작 주 {state.firstWeek}
+            {!state.rec && " · 아직 정리 전 (1위 기록 없음)"}
+          </p>
+          {state.rec && (
+            <table className={styles.table} aria-label="주간 1위 지급 상태">
+              <thead>
+                <tr>
+                  <th scope="col">랭킹</th>
+                  <th scope="col">1위</th>
+                  <th scope="col" className={styles.num}>
+                    값
+                  </th>
+                  <th scope="col">지급</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.rec.winners.length === 0 && (
+                  <tr>
+                    <td colSpan={4}>그 주 기록이 없어 1위가 없어요.</td>
+                  </tr>
+                )}
+                {state.rec.winners.map((w) => (
+                  <tr key={w.board}>
+                    <td>{CHAMP_BOARD_LABEL[w.board]}</td>
+                    <td>
+                      {w.name} <span className={styles.meta}>{w.accountId}</span>
+                    </td>
+                    <td className={styles.num}>{w.value.toLocaleString("ko-KR")}</td>
+                    <td className={state.paid[w.board] === w.accountId ? styles.checkOk : styles.checkFail}>{state.paid[w.board] === w.accountId ? "지급됨" : "아직"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+

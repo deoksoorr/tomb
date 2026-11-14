@@ -1,6 +1,6 @@
 import { b64urlDecode, b64urlEncode, hmacSign, hmacVerify } from "./token";
 import { sanitizeLook, isFireworkId, MEGAPHONE_MAX, type Look, type MegaphoneScope } from "./items";
-import { isAvatarBody } from "./constants";
+import { CHAMP_ALL, CHAMP_AURA_OFF, isAvatarBody } from "./constants";
 import { packDye, unpackDye, type AvatarDye } from "./dye";
 
 // Vercel(포인트·가방의 원천)이 서명하고 실시간 서버가 검증하는 짧은 증서. 비밀키는 JOIN_SECRET.
@@ -13,7 +13,8 @@ import { packDye, unpackDye, type AvatarDye } from "./dye";
 
 export type Grant =
   /** 46·25번: dye·body가 있으면 염색·몸 모양도 같이 바꾼다 (옛 웹이 낸 증서엔 없다 → 실시간 서버는 그대로 둔다) */
-  | { kind: "look"; visitorId: string; look: Look; exp: number; dye?: AvatarDye; body?: string }
+  /** 주간 1위: champ = 지금 1위 비트(+ 오라 끔 표시, 0 = 1위 아님)가 있으면 실시간 서버가 다른 사람 화면의 배지·오라도 바꾼다 */
+  | { kind: "look"; visitorId: string; look: Look; exp: number; dye?: AvatarDye; body?: string; champ?: number }
   | { kind: "firework"; visitorId: string; item: string; nonce: string; exp: number }
   | { kind: "goblin"; visitorId: string; points: number; nonce: string; exp: number }
   /** ch = 외친 채널 (scope가 channel이면 그 채널 DO만 받아 준다) */
@@ -60,6 +61,7 @@ export async function verifyGrant(
       exp: g.exp,
       ...(typeof g.dye === "string" ? { dye: unpackDye(g.dye) } : {}),
       ...(isAvatarBody(g.body) ? { body: g.body } : {}),
+      ...(isChampField(g.champ) ? { champ: g.champ } : {}),
     };
   if (g.kind === "firework" && isFireworkId(g.item) && typeof g.nonce === "string" && g.nonce.length <= 32)
     return { kind: "firework", visitorId: g.visitorId, item: g.item, nonce: g.nonce, exp: g.exp };
@@ -82,4 +84,9 @@ export async function verifyGrant(
   )
     return { kind: "megaphone", visitorId: g.visitorId, nonce: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, exp: g.exp, ...(g.staff === true ? { staff: true as const } : {}) };
   return null;
+}
+
+/** 착용 증서의 주간 1위 값: 0(1위 아님) 또는 1위 비트(+ 오라 끔 표시) */
+function isChampField(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= (CHAMP_ALL | CHAMP_AURA_OFF) && (v === 0 || (v & CHAMP_ALL) > 0);
 }

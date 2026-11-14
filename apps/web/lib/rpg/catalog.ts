@@ -618,7 +618,7 @@ export const GAMES: Record<GameKind, { name: string; desc: string; how: string; 
   },
   stars: {
     name: "별자리 잇기",
-    desc: "끝내지 못한 다짐들이 밤하늘의 별로 떠오른다. 빛의 고리가 별에 닿는 순간 눌러 하나의 별자리로 잇는다.",
+    desc: "끝내지 못한 다짐들이 밤하늘의 별로 떠오른다. 빛의 고리가 별에 닿는 순간 눌러 하나의 별자리로 잇는다. 하나도 놓치지 않고 이으면 그 별자리가 도감에 오른다.",
     how: "고리가 별에 겹치는 순간 Space·J·클릭·탭 (어디를 눌러도 다음 별) · 너무 일찍 누르면 놓침",
     statNote: "DEX: 판정이 조금 너그러워짐",
   },

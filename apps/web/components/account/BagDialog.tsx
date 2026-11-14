@@ -21,6 +21,7 @@ import { DollNote, DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
 import { openMegaphone } from "@/lib/hooks/useMegaphone";
 import { decorateGrave, fireFirework, takeOff, wearCosmetic, wearStashed } from "./actions";
+import ChampAuraToggle from "./ChampAuraToggle";
 import { bagEntries, KIND_LABELS, remainingLabel, type MyGraveEntry } from "./items";
 import {
   canDropOn,
@@ -363,6 +364,7 @@ function Wardrobe({
         <p className={styles.hint}>
           내 꾸미기 점수 <b>{score}점</b> · 랭킹 [꾸미기]에 올라가요
         </p>
+        <ChampAuraToggle />
         <p id={hintId} className={styles.hint}>
           칸을 누르면 그 부위 목록이 나와요{canDrag ? " · 목록에서 칸으로 끌어다 놓아도 입어요" : ""}. 벗어 둔 꾸미기도 남은 시간은 계속 흘러요.
         </p>

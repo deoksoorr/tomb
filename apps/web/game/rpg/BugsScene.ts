@@ -1,13 +1,16 @@
 import * as Phaser from "phaser";
 import { BUG_SCORE, BUG_SLOTS, bugsPlan, comboMult, type BugSpawn } from "@/lib/rpg/plan";
 import type { BugsResult, RpgAction, RpgHud } from "@/lib/rpg/types";
+import { bridge } from "../bridge";
 import { RpgScene } from "./base";
-import { ensureMeadowTextures, MEADOW_TEXT, MTEX } from "./meadowArt";
+import { MeadowStage } from "./meadowStage";
 import { ensureRpgTextures, RTEX } from "./sprites";
 
 // 벌레 잡기: 3×3 창에서 튀어나오는 벌레를 누른다. 초록 체크는 누르면 감점.
 // 출현은 서버가 준 시드의 계획(bugsPlan)대로이고, DEX는 버그가 보이는 시간을, LUK는 황금 버그 확률을 조금 늘린다.
-// play.theme === "meadow"(32번 곤충 채집, 마을 수풀에서): 같은 규칙에 그림만 풀숲·나비/반딧불이·꿀벌·낙엽으로 (meadowArt.ts)
+// play.theme === "meadow"(32번 곤충 채집, 마을 수풀에서): 같은 규칙에 들판 한 장·덤불 9개·날아와 앉는 곤충으로 (meadowStage.ts).
+//  그림·연출·소리는 MeadowStage가, 출현·판정·점수는 여기가 그대로 맡는다. 시작 전 "준비 → 시작!"(게임 시간은 흐르지 않음),
+//  끝나면 "끝!"을 잠깐 보이고 낸다.
 
 const COLS = 3;
 const WIN_W = 76;
@@ -19,7 +22,12 @@ const SLOT_KEYS = ["KeyQ", "KeyW", "KeyE", "KeyA", "KeyS", "KeyD", "KeyZ", "KeyX
 const KEY_LABELS = ["Q", "W", "E", "A", "S", "D", "Z", "X", "C"];
 const LINE_COLORS = [0x6ad0c8, 0xc8a0e8, 0xffe39a, 0x9aa3ad, 0xe07a2a];
 
-type Active = { s: BugSpawn; sprite: Phaser.GameObjects.Sprite; until: number; done: boolean };
+/** sprite: 옛 사냥터 그림일 때만 (들판은 MeadowStage가 곤충을 그린다) */
+type Active = { s: BugSpawn; sprite: Phaser.GameObjects.Sprite | null; until: number; done: boolean };
+/** 들판: 시작 글자 시간 (준비 → 시작!) · 끝 글자를 보이는 시간 (ms) */
+const INTRO_MS = 1300;
+const GO_AT_MS = 650;
+const OUTRO_MS = 750;
 
 const slotPos = (slot: number) => {
   const c = slot % COLS;
@@ -41,6 +49,10 @@ export class BugsScene extends RpgScene {
   private maxCombo = 0;
   private lastTick = 0;
   private meadow = false;
+  private stage: MeadowStage | null = null;
+  /** 들판: 남은 시작 시간 / 끝 글자 남은 시간 (-1 = 아직 아님) */
+  private intro = 0;
+  private outro = -1;
 
   constructor() {
     super("rpg-bugs");
@@ -56,6 +68,9 @@ export class BugsScene extends RpgScene {
     this.caught = this.golden = this.wrong = this.decoy = this.combo = this.maxCombo = this.points = 0;
     this.lastTick = 0;
     this.meadow = this.play.theme === "meadow";
+    this.stage = null;
+    this.intro = 0;
+    this.outro = -1;
     if (this.meadow) {
       this.createMeadow();
       this.fit();
@@ -85,19 +100,24 @@ export class BugsScene extends RpgScene {
     this.fit();
   }
 
-  /** 곤충 채집: 9칸을 풀숲으로 */
+  /** 곤충 채집: 들판 한 장 (시간대는 서버가 준 한국 시각 시간대, 없으면 밤 여부로) */
   private createMeadow(): void {
-    ensureMeadowTextures(this);
-    this.cameras.main.setBackgroundColor(this.play.night ? "#0c1410" : "#1c2a1a");
-    for (let slot = 0; slot < BUG_SLOTS; slot++) {
-      const { x, y } = slotPos(slot);
-      this.add.image(x, y, `${MTEX.tuft}-${slot}`).setOrigin(0, 0);
-      this.label(x + WIN_W - 7, y + WIN_H - 1, KEY_LABELS[slot], "#a8c890", 10).setAlpha(0.7);
-    }
+    const tone = this.play.tone ?? (this.play.night ? "night" : "day");
+    this.stage = new MeadowStage(this, this.sfx, tone, this.data0.reduced, {
+      label: (x, y, text, color, px) => this.label(x, y, text, color, px),
+      float: (x, y, text, color, px) => this.floatText(x, y, text, color, px),
+    });
+    this.stage.build();
+    this.intro = INTRO_MS;
   }
 
   private fit(): void {
     const cam = this.cameras.main;
+    if (this.stage) {
+      const z = this.stage.fit();
+      for (const o of this.children.list) if (o instanceof Phaser.GameObjects.Text) o.setScale(1 / z);
+      return;
+    }
     // 작은 화면에선 0.25 단위까지 키운다 (칸이 손가락보다 작아지지 않게)
     const z = Math.max(1, Math.floor(Math.min(cam.width / (AREA_W + 8), (cam.height - 150) / (AREA_H + 8)) * 4) / 4);
     cam.setZoom(z);
@@ -119,6 +139,11 @@ export class BugsScene extends RpgScene {
   }
 
   protected onTap(x: number, y: number): void {
+    if (this.stage) {
+      const slot = this.stage.slotAt(x, y);
+      if (slot >= 0) this.press(slot);
+      return;
+    }
     for (let slot = 0; slot < BUG_SLOTS; slot++) {
       const p = slotPos(slot);
       if (x >= p.x - 2 && x <= p.x + WIN_W + 2 && y >= p.y - 2 && y <= p.y + WIN_H + 2) return this.press(slot);
@@ -126,13 +151,16 @@ export class BugsScene extends RpgScene {
   }
 
   private press(slot: number): void {
+    // 들판: 시작 글자·끝 글자 동안은 누르지 않는다
+    if (this.stage && (this.intro > 0 || this.outro >= 0)) return;
     const a = this.active.find((b) => !b.done && b.s.slot === slot);
     const { x, y } = slotPos(slot);
     const cx = x + WIN_W / 2;
     const cy = y + WIN_H / 2 + 6;
     if (!a) {
       this.combo = 0;
-      this.sfx.play("miss", 0.4);
+      if (this.stage) this.stage.whiff(slot);
+      else this.sfx.play("miss", 0.4);
       return;
     }
     a.done = true;
@@ -141,11 +169,16 @@ export class BugsScene extends RpgScene {
       else this.decoy++;
       this.points += BUG_SCORE[a.s.kind];
       this.combo = 0;
-      const warn = this.meadow ? (a.s.kind === "feature" ? MEADOW_TEXT.feature : MEADOW_TEXT.decoy) : a.s.kind === "feature" ? "체크는 잡지 마세요" : "이미 잡은 벌레";
+      if (this.stage) {
+        this.stage.wrong(a.s, BUG_SCORE[a.s.kind]);
+        return;
+      }
+      const sprite = a.sprite!;
+      const warn = a.s.kind === "feature" ? "체크는 잡지 마세요" : "이미 잡은 벌레";
       this.floatText(cx, cy - 8, `${warn} ${a.s.kind === "feature" ? BUG_SCORE.feature : BUG_SCORE.decoy}`, "#ff6a6a", 11);
       this.cameras.main.shake(100, 0.004);
       this.sfx.play("miss");
-      this.tweens.add({ targets: a.sprite, alpha: 0, duration: 200, onComplete: () => a.sprite.destroy() });
+      this.tweens.add({ targets: sprite, alpha: 0, duration: 200, onComplete: () => sprite.destroy() });
       return;
     }
     if (a.s.kind === "golden") this.golden++;
@@ -155,58 +188,99 @@ export class BugsScene extends RpgScene {
     const mult = comboMult(this.combo);
     const pts = Math.round(BUG_SCORE[a.s.kind] * mult);
     this.points += pts;
+    if (this.stage) {
+      this.stage.caught(a.s, pts, mult, this.combo);
+      return;
+    }
+    const sprite = a.sprite!;
     this.floatText(cx, cy - 8, mult > 1 ? `+${pts} ×${mult}` : `+${pts}`, a.s.kind === "golden" ? "#ffd04a" : "#f2ead3", a.s.kind === "golden" ? 14 : 12);
     this.sfx.play(a.s.kind === "golden" ? "coin-drop" : "hit", 0.7);
-    const splat = this.add.image(a.sprite.x, a.sprite.y, this.meadow ? MTEX.splat : RTEX.splat).setAlpha(0.8);
+    const splat = this.add.image(sprite.x, sprite.y, RTEX.splat).setAlpha(0.8);
     this.tweens.add({ targets: splat, alpha: 0, duration: 600, onComplete: () => splat.destroy() });
-    a.sprite.destroy();
+    sprite.destroy();
+  }
+
+  /** 들판: 시작 글자 → 판 → 끝 글자. false면 이번 프레임은 판을 돌리지 않는다 */
+  private meadowGate(stage: MeadowStage, delta: number): boolean {
+    if (this.ended || this.paused) return false;
+    const dt = Math.min(delta, 100);
+    if (this.intro > 0) {
+      // 게임 시계는 멈춘 채 (출현 계획 0초 = "시작!" 뒤)
+      if (this.intro === INTRO_MS) {
+        bridge.emit("rpg:hud", this.hud());
+        stage.banner("ready");
+      }
+      const before = this.intro;
+      this.intro = Math.max(0, this.intro - dt);
+      if (before > INTRO_MS - GO_AT_MS && this.intro <= INTRO_MS - GO_AT_MS) stage.banner("go");
+      stage.update(this.elapsed, dt);
+      return false;
+    }
+    if (this.outro >= 0) {
+      this.outro -= dt;
+      stage.update(this.elapsed, dt);
+      if (this.outro < 0) this.finish();
+      return false;
+    }
+    return true;
   }
 
   update(_t: number, delta: number): void {
+    const stage = this.stage;
+    if (stage && !this.meadowGate(stage, delta)) return;
     if (!this.tickCommon(delta)) return;
     const now = this.elapsed;
     while (this.nextIdx < this.plan.length && this.plan[this.nextIdx].t <= now) {
       const s = this.plan[this.nextIdx++];
+      if (stage) {
+        stage.spawn(s, now);
+        this.active.push({ s, sprite: null, until: s.t + s.lifeMs, done: false });
+        continue;
+      }
       const { x, y } = slotPos(s.slot);
-      const tex = this.meadow
-        ? s.kind === "golden"
-          ? MTEX.golden
-          : s.kind === "feature"
-            ? MTEX.feature
-            : s.kind === "decoy"
-              ? MTEX.decoy
-              : MTEX.bug(!!this.play.night)
-        : s.kind === "golden"
-          ? RTEX.golden
-          : s.kind === "feature"
-            ? RTEX.feature
-            : s.kind === "decoy"
-              ? RTEX.decoy
-              : RTEX.bug;
+      const tex = s.kind === "golden" ? RTEX.golden : s.kind === "feature" ? RTEX.feature : s.kind === "decoy" ? RTEX.decoy : RTEX.bug;
       const sprite = this.add.sprite(x + WIN_W / 2 + (Math.random() - 0.5) * 30, y + WIN_H / 2 + 8, tex, 0).setScale(0.3);
       this.tweens.add({ targets: sprite, scale: 1.4, y: sprite.y - 6, duration: 140, ease: "Back.easeOut" });
       this.active.push({ s, sprite, until: s.t + s.lifeMs, done: false });
     }
     for (const a of this.active) {
       if (a.done) continue;
-      a.sprite.setFrame(Math.floor(now / 140) % 2);
+      const missed = a.s.kind === "bug" || a.s.kind === "golden";
+      if (stage) {
+        if (now >= a.until) {
+          a.done = true;
+          if (missed) this.combo = 0;
+          stage.escape(a.s, missed);
+        }
+        continue;
+      }
+      const sp = a.sprite!;
+      sp.setFrame(Math.floor(now / 140) % 2);
       if (now >= a.until) {
         a.done = true;
-        if (a.s.kind === "bug" || a.s.kind === "golden") {
+        if (missed) {
           this.combo = 0;
-          this.floatText(a.sprite.x, a.sprite.y - 8, this.meadow ? MEADOW_TEXT.miss : "놓침", "#9aa3ad", 10);
+          this.floatText(sp.x, sp.y - 8, "놓침", "#9aa3ad", 10);
         }
-        const sp = a.sprite;
         this.tweens.add({ targets: sp, alpha: 0, scale: 0.4, duration: 160, onComplete: () => sp.destroy() });
       }
     }
     this.active = this.active.filter((a) => !a.done);
+    stage?.update(now, Math.min(delta, 100));
     const left = this.limitMs - now;
     if (left <= 5000 && Math.ceil(left / 1000) !== this.lastTick) {
       this.lastTick = Math.ceil(left / 1000);
       this.sfx.play("tick", 0.5);
     }
     if (now >= this.limitMs) {
+      if (stage) {
+        // 끝 글자를 잠깐 보이고 낸다 (게임 시계는 여기서 멈춘다)
+        bridge.emit("rpg:hud", this.hud());
+        stage.finish();
+        stage.banner("end");
+        this.outro = OUTRO_MS;
+        return;
+      }
       this.sfx.play("victory");
       this.finish();
     }

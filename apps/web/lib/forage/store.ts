@@ -8,6 +8,7 @@ import type { DexEntry, LifeDay } from "./types";
 // Redis 키 (모두 forage:{accountId}:*)
 //  - forage:{a}:bag         HASH  종류 id → 개수 (0이 되면 지운다)
 //  - forage:{a}:dex         HASH  n:{id} 잡은 수 · max:{id} 가장 큰 크기(cm×10) · first:{id} 처음 잡은 날(YYYYMMDD)
+//                                별자리(c_*)는 n = 완성 횟수 · pf:{id} 완벽으로만 이은 횟수 (가방에는 들어가지 않는다)
 //  - forage:{a}:claims      HASH  `${cat}:${tier}` → 받은 날 (도감 보상은 한 번만)
 //  - forage:{a}:active      STRING `${nonce}|${JSON}` 진행 중인 낚시·채집 (새로 시작하면 바뀐다, TTL)
 //  - forage:{a}:used:{n}    STRING 끝낸 티켓 표시 (SET NX, 1일) → 같은 티켓을 두 번 낼 수 없다
@@ -18,6 +19,8 @@ import type { DexEntry, LifeDay } from "./types";
 
 export type ClaimResult = { status: "ok"; payload: string } | { status: "reused" | "stale" };
 export type GrantItem = { id: string; size: number };
+/** 별자리 도감 등록 한 건 */
+export type StarDexItem = { id: string; perfect: boolean };
 export type Granted = { id: string; size: number; kept: boolean; isNew: boolean; record: boolean };
 export type Snapshot = {
   bag: Record<string, number>;
@@ -62,6 +65,11 @@ export interface ForageStore {
   addDay(acct: string, day: string, field: DayField, n: number): Promise<void>;
   /** 도감 보상 받음 표시 (한 번만 true) */
   claimDex(acct: string, key: string, day: string): Promise<boolean>;
+  /**
+   * 별자리 도감 등록 (원자적, 가방·오늘 잡은 수와 무관): 항목마다 완성 횟수 +1, 처음이면 그날을 남기고, perfect면 완벽 횟수 +1.
+   * 돌려주는 값은 항목마다 처음 등록인지
+   */
+  addStars(acct: string, day: string, items: StarDexItem[]): Promise<boolean[]>;
   /** 자동 낚시 세션 (없으면 null) */
   autoGet(acct: string): Promise<string | null>;
   /** 비교 후 교체 (원자적): 지금 값이 expected(null = 없음)와 같을 때만 next(null = 지움)로 바꾸고 true */
@@ -100,6 +108,7 @@ export function dexFromHash(h: Record<string, string>): Record<string, DexEntry>
     if (f === "n") e.n = Number(v) || 0;
     else if (f === "max") e.max = Number(v) || 0;
     else if (f === "first") e.first = v;
+    else if (f === "pf") e.pf = Number(v) || 0;
   }
   for (const [id, e] of Object.entries(out)) if (e.n <= 0) delete out[id];
   return out;
@@ -235,6 +244,17 @@ export class MemoryForageStore implements ForageStore {
     if (a.claims.has(key)) return false;
     a.claims.set(key, day);
     return true;
+  }
+
+  async addStars(acct: string, day: string, items: StarDexItem[]) {
+    const a = this.acct(acct);
+    return items.map(({ id, perfect }) => {
+      const n = Number(a.dex.get(`n:${id}`) ?? 0) + 1;
+      a.dex.set(`n:${id}`, String(n));
+      if (n === 1) a.dex.set(`first:${id}`, day);
+      if (perfect) a.dex.set(`pf:${id}`, String(Number(a.dex.get(`pf:${id}`) ?? 0) + 1));
+      return n === 1;
+    });
   }
 
   async autoGet(acct: string) {
@@ -422,6 +442,19 @@ end
 return out
 `;
 
+// KEYS: dex  ARGV: day, (id, perfect '1'/'0')...  돌려주는 값: 항목마다 처음 등록이면 1, 아니면 0
+export const STARS_LUA = `
+local out = {}
+for i = 2, #ARGV, 2 do
+  local id = ARGV[i]
+  local n = redis.call('HINCRBY', KEYS[1], 'n:' .. id, 1)
+  if n == 1 then redis.call('HSET', KEYS[1], 'first:' .. id, ARGV[1]) end
+  if ARGV[i + 1] == '1' then redis.call('HINCRBY', KEYS[1], 'pf:' .. id, 1) end
+  out[#out + 1] = (n == 1) and 1 or 0
+end
+return out
+`;
+
 /** GRANT_LUA 결과 한 줄 → 기록 (크기는 넘긴 값) */
 export function parseGranted(lines: unknown, items: GrantItem[]): Granted[] | null {
   if (lines === "taken" || !Array.isArray(lines)) return null;
@@ -507,6 +540,13 @@ export class RedisForageStore implements ForageStore {
 
   async claimDex(acct: string, key: string, day: string) {
     return Number(await this.redis.hsetnx(lk.claims(acct), key, day)) === 1;
+  }
+
+  async addStars(acct: string, day: string, items: StarDexItem[]) {
+    if (!items.length) return [];
+    const argv = [day, ...items.flatMap((it) => [it.id, it.perfect ? "1" : "0"])];
+    const r = await this.redis.eval<string[], unknown>(STARS_LUA, [lk.dex(acct)], argv);
+    return items.map((_, i) => Array.isArray(r) && Number(r[i]) === 1);
   }
 
   async autoGet(acct: string) {

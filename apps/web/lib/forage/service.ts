@@ -10,20 +10,20 @@ import { kstDay, kstWeek, loadMe } from "../store/accounts";
 import type { BugsResult } from "../rpg/types";
 import {
   DAILY_CATCH_MAX,
+  DEX_CATS,
   dexBadgeBits,
   DEX_REWARD,
   DEX_TIERS,
   DEX_TITLES,
   dexClaimKey,
+  dexIdsOf,
   gatherNodeById,
-  LIFE_CATS,
   NODE_CAT,
   npcById,
   speciesById,
-  speciesOf,
   STACK_MAX,
+  type DexCat,
   type DexTier,
-  type LifeCat,
   type NpcId,
 } from "./catalog";
 import {
@@ -94,7 +94,7 @@ const DAY_FIELD = { fish: "fishP", gather: "gatherP", dex: "dexP" } as const;
 /** 받은 보상 → 칭호 */
 function titlesOf(claims: Record<string, string>): string[] {
   const out: string[] = [];
-  for (const cat of LIFE_CATS)
+  for (const cat of DEX_CATS)
     for (const tier of DEX_TIERS) {
       const t = DEX_TITLES[cat][tier];
       if (t && claims[dexClaimKey(cat, tier)]) out.push(t);
@@ -118,10 +118,10 @@ export async function forageState(acct: string, now = Date.now(), store: ForageS
   return toState(acct, await store.snapshot(acct, kstDay(now), nodeWindow(now)), now);
 }
 
-/** 도감 칸 채운 비율 (%, 내림) */
-export function dexPercent(dex: Record<string, { n: number }>, cat: LifeCat): number {
-  const all = speciesOf(cat);
-  const got = all.filter((s) => (dex[s.id]?.n ?? 0) > 0).length;
+/** 도감 칸 채운 비율 (%, 내림). 별자리 칸도 같은 방식 (완성한 별자리 수) */
+export function dexPercent(dex: Record<string, { n: number }>, cat: DexCat): number {
+  const all = dexIdsOf(cat);
+  const got = all.filter((id) => (dex[id]?.n ?? 0) > 0).length;
   return Math.floor((got * 100) / all.length);
 }
 
@@ -280,7 +280,7 @@ export async function startGather(acct: string, nodeId: string, now = Date.now()
     await begin({ k: "gather" }, BUG_TTL_SEC);
     const phase = conditionsAt(now).phase;
     const ticket = await signForageTicket(secret, { n: nonce, a: acct, k: "gather", x: n.id, t: now, w, m: 0, s: seed });
-    return { ticket, mode: "bugs", kind: "bug", seed, timeLimitSec: BUG_ROUND_SEC, night: phase === "night" || phase === "dusk" };
+    return { ticket, mode: "bugs", kind: "bug", seed, timeLimitSec: BUG_ROUND_SEC, night: phase === "night" || phase === "dusk", phase };
   }
   const s = pickWeighted(candidates(NODE_CAT[n.kind], n.where, conditionsAt(now)), rand());
   if (!s) throw new HttpError(409, "NODE_EMPTY", "지금은 비어 있어요. 조금 뒤에 다시 피어나요.");
@@ -385,7 +385,7 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
 
 // ── 도감 ──
 
-export async function claimDexReward(acct: string, cat: LifeCat, tier: DexTier, ipHash: string, now = Date.now()): Promise<DexClaimResponse> {
+export async function claimDexReward(acct: string, cat: DexCat, tier: DexTier, ipHash: string, now = Date.now()): Promise<DexClaimResponse> {
   const store = getForageStore();
   const day = kstDay(now);
   const [snap, acc] = await Promise.all([store.snapshot(acct, day, nodeWindow(now)), getAccounts().get(acct, day, now)]);

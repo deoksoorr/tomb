@@ -3,12 +3,13 @@
 import { useEffect, useId, useState } from "react";
 import { errorMessage } from "@/lib/api";
 import {
-  CAT_LABEL,
+  DEX_CAT_LABEL,
+  DEX_CATS,
   DEX_REWARD,
   DEX_TIERS,
   DEX_TITLES,
   dexClaimKey,
-  LIFE_CATS,
+  dexIdsOf,
   PHASE_LABEL,
   RARITY_LABEL,
   SEASON_LABEL,
@@ -16,8 +17,8 @@ import {
   WEATHER_LABEL,
   WHERE_LABEL,
   buyerOf,
+  type DexCat,
   type DexTier,
-  type LifeCat,
   type Species,
   type Where,
 } from "@/lib/forage/catalog";
@@ -31,10 +32,11 @@ import Dialog from "../ui/Dialog";
 import { FactGrid, InfoCard } from "../ui/InfoBlocks";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
+import ConstellationDex from "./ConstellationDex";
 import { forageStore, useForage } from "./forageStore";
 import s from "./forage.module.css";
 
-// 도감 (51번): 물고기·곤충·약초/버섯·광석·발굴품. 처음 잡으면 등록 (실루엣 → 그림, 가장 큰 크기·처음 잡은 날).
+// 도감 (51번): 물고기·곤충·약초/버섯·광석·발굴품 + 별자리(망원경 별자리 잇기, ConstellationDex). 처음 잡으면 등록 (실루엣 → 그림, 가장 큰 크기·처음 잡은 날).
 // 모르는 칸도 희귀도·잡히는 곳·시간대·날씨·계절 힌트는 보인다. 종류별 25·50·75·100% 보상(포인트, 50·100%는 칭호).
 // accountId를 주면 그 사람의 도감 구경 (보상 버튼 없이).
 
@@ -55,7 +57,7 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
   const { state } = useForage();
   const [other, setOther] = useState<PublicDex | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cat, setCat] = useState<LifeCat>("fish");
+  const [cat, setCat] = useState<DexCat>("fish");
   const [sel, setSel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const baseId = useId();
@@ -79,9 +81,11 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
   const dex: Record<string, DexEntry> = (mine ? state?.dex : other?.dex) ?? {};
   const titles = (mine ? state?.titles : other?.titles) ?? [];
   const claims = mine ? (state?.claims ?? {}) : {};
-  const list = speciesOf(cat);
-  const got = list.filter((sp) => (dex[sp.id]?.n ?? 0) > 0).length;
-  const pct = Math.floor((got * 100) / list.length);
+  // 별자리 칸은 종 목록이 없다 (ConstellationDex가 따로 그린다)
+  const list = cat === "star" ? [] : speciesOf(cat);
+  const ids = dexIdsOf(cat);
+  const got = ids.filter((id) => (dex[id]?.n ?? 0) > 0).length;
+  const pct = Math.floor((got * 100) / ids.length);
   const pick = list.find((sp) => sp.id === sel) ?? null;
   const ambience = useAmbience();
   const entry = pick ? dex[pick.id] : undefined;
@@ -93,7 +97,7 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
       const r = await forageApi.claimDex(cat, tier);
       forageStore.set(r.state);
       meStore.set(r.me);
-      showToast(`${CAT_LABEL[cat]} 도감 ${tier}% 달성! +${r.earned}P${r.title ? ` · 칭호 「${r.title}」` : ""}`, 5_000);
+      showToast(`${DEX_CAT_LABEL[cat]} 도감 ${tier}% 달성! +${r.earned}P${r.title ? ` · 칭호 「${r.title}」` : ""}`, 5_000);
     } catch (e) {
       showToast(errorMessage(e));
     } finally {
@@ -118,9 +122,9 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
             </div>
           )}
           <div className={s.dexTabs} role="tablist" aria-label="도감 종류">
-            {LIFE_CATS.map((c) => {
-              const all = speciesOf(c);
-              const n = all.filter((sp) => (dex[sp.id]?.n ?? 0) > 0).length;
+            {DEX_CATS.map((c) => {
+              const all = dexIdsOf(c);
+              const n = all.filter((id) => (dex[id]?.n ?? 0) > 0).length;
               return (
                 <button
                   key={c}
@@ -135,7 +139,7 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
                     setSel(null);
                   }}
                 >
-                  {CAT_LABEL[c]} {n}/{all.length}
+                  {DEX_CAT_LABEL[c]} {n}/{all.length}
                 </button>
               );
             })}
@@ -144,11 +148,11 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
             <div className={s.dexHead}>
               <div>
                 <span>
-                  {CAT_LABEL[cat]} {got}/{list.length}
+                  {DEX_CAT_LABEL[cat]} {got}/{ids.length}
                 </span>
                 <strong>{pct}%</strong>
               </div>
-              <div className={s.track} role="meter" aria-label={`${CAT_LABEL[cat]} 도감 채움`} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+              <div className={s.track} role="meter" aria-label={`${DEX_CAT_LABEL[cat]} 도감 채움`} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
                 <span style={{ width: `${pct}%` }} />
               </div>
               {mine && (
@@ -174,6 +178,8 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
                 </div>
               )}
             </div>
+            {cat === "star" && <ConstellationDex key={peerKey || accountId || "me"} dex={dex} />}
+            {/* 별자리 칸이면 list가 비어 있어 아무것도 그리지 않는다 */}
             <div className={s.grid}>
               {list.map((sp, i) => {
                 const known = (dex[sp.id]?.n ?? 0) > 0;
@@ -196,7 +202,7 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
                 );
               })}
             </div>
-            {!pick && <DexGuide list={list} dex={dex} ambience={ambience} />}
+            {!pick && cat !== "star" && <DexGuide list={list} dex={dex} ambience={ambience} />}
             {pick && (
               <div className={cx(s.detail, !entry && s.unknown)} role="status">
                 <ItemIcon itemId={pick.id} size={48} />

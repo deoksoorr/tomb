@@ -1,5 +1,6 @@
 import { DIFFS, MONSTERS, zoneFor, type Difficulty, type MonsterId } from "./catalog";
 import { clamp, monsterStats, seeded } from "./formulas";
+import { constellationById, CONSTELLATIONS, type Constellation, type ConstellationRarity } from "./constellations";
 
 // 한 판의 출현 계획. 시드(서버가 런 티켓에 넣어 준다)로 정해져서, 게임은 이대로 내보내고
 // 서버는 같은 계획으로 "그 시간 안에 나올 수 있었던 것보다 많이 잡았는지"를 검사한다.
@@ -198,8 +199,11 @@ export function bugsCount(plan: BugSpawn[], effMs: number): Record<BugKind, numb
 
 // ── 별자리 잇기 ──
 
-/** 빛의 고리가 별에 닿는 시각(t)에 누른다. x·y는 0..1 (화면 비율에 맞춰 씬이 펼친다) */
-export type StarNote = { t: number; x: number; y: number; group: number; idx: number };
+/**
+ * 빛의 고리가 별에 닿는 시각(t)에 누른다. con = 이 별 무리(group)가 그리는 별자리 (lib/rpg/constellations),
+ * x·y는 그 별자리 모양 안의 자리 0..1 (화면 어디에 얼마나 크게 펼칠지는 씬이 화면 비율에 맞춰 정한다)
+ */
+export type StarNote = { t: number; x: number; y: number; group: number; idx: number; con: string };
 export const STAR_SCORE = { perfect: 300, good: 100 } as const;
 
 /** 고리가 줄어드는 시간 (ms) */
@@ -214,23 +218,49 @@ export function starWindows(d: Difficulty, dex: number): [number, number] {
   return [Math.round(STAR_WIN[d][0] * k), Math.round(STAR_WIN[d][1] * k)];
 }
 
-export function starsPlan(seed: number, d: Difficulty, durationSec: number): StarNote[] {
+/** 별자리 고르는 무게: 흔함 > 보통 > 희귀(어려움 이상) > 전설(맑은 밤) */
+const CON_WEIGHT: Record<ConstellationRarity, number> = { 1: 10, 2: 6, 3: 3.5, 5: 2.5 };
+
+/** 이 판에 나올 수 있는 별자리인지: 희귀는 어려움·지옥, 전설은 맑은 밤 보너스 판에서만 */
+export function constellationAllowed(c: Constellation, d: Difficulty, starry: boolean): boolean {
+  if (c.rarity === 5) return starry;
+  if (c.rarity === 3) return d === "hard" || d === "hell";
+  return true;
+}
+
+/**
+ * 박자(t)·무리 크기·무리 번호는 예전 계획과 한 치도 다르지 않다 (같은 난수 r을 같은 순서로 쓴다 → 판 진행 중 배포가 겹쳐도
+ * 옛 화면과 새 서버의 별 수 상한이 같다). 별자리 고르기는 따로 굴리는 난수(rc)로만 — 무리 크기와 같은 별 수의 별자리 중에서,
+ * 이 판에서 아직 안 나온 것을 먼저. starry = 판 시작 시각이 맑은 밤인지 (서버는 티켓 시각으로 다시 계산한다)
+ */
+export function starsPlan(seed: number, d: Difficulty, durationSec: number, starry = false): StarNote[] {
   const r = seeded(seed ^ 0x53544152);
+  const rc = seeded(seed ^ 0x434f4e53);
+  const used = new Set<string>();
+  const pickCon = (len: number): Constellation => {
+    const fits = CONSTELLATIONS.filter((c) => c.stars.length === len && constellationAllowed(c, d, starry));
+    const fresh = fits.filter((c) => !used.has(c.id));
+    const pool = fresh.length ? fresh : fits;
+    let x = rc() * pool.reduce((a, c) => a + CON_WEIGHT[c.rarity], 0);
+    const c = pool.find((c) => (x -= CON_WEIGHT[c.rarity]) < 0) ?? pool[pool.length - 1];
+    used.add(c.id);
+    return c;
+  };
   const out: StarNote[] = [];
   const end = durationSec * 1000 - 400;
   let t = STAR_APPROACH[d] + 600;
   let group = 0;
   while (t < end) {
     const len = 5 + Math.floor(r() * 3);
-    let x = 0.2 + r() * 0.6;
-    let y = 0.25 + r() * 0.5;
+    const con = pickCon(len);
+    // 예전 계획의 시작 자리·걸음 난수 — 자리는 이제 별자리 모양이 정하지만, 박자 난수 순서를 지키려고 그대로 뽑는다
+    r();
+    r();
     for (let i = 0; i < len && t < end; i++) {
-      out.push({ t: Math.round(t), x, y, group, idx: i });
-      // 다음 별은 가까이 (별자리처럼 이어지게), 화면 안쪽으로
-      const a = r() * Math.PI * 2;
-      const step = 0.14 + r() * 0.12;
-      x = clamp(x + Math.cos(a) * step, 0.08, 0.92);
-      y = clamp(y + Math.sin(a) * step * 0.9, 0.12, 0.88);
+      const [x, y] = con.stars[i];
+      out.push({ t: Math.round(t), x, y, group, idx: i, con: con.id });
+      r();
+      r();
       t += STAR_BEAT[d] * (r() < STAR_HALF_P[d] ? 0.5 : 1);
     }
     group++;
@@ -243,20 +273,18 @@ export function starsCount(plan: StarNote[], effMs: number): number {
   return plan.filter((n) => n.t <= effMs).length;
 }
 
-export const CONSTELLATIONS = [
-  "새해 다짐자리",
-  "헬스장 회원권자리",
-  "영어 단어장자리",
-  "다이어리자리",
-  "가계부자리",
-  "홈트자리",
-  "자격증 문제집자리",
-  "독서 기록자리",
-  "다이어트자리",
-  "기타 독학자리",
-  "아침형 인간자리",
-  "퇴사 다짐자리",
-] as const;
+/** 무리 하나의 정보: 별자리·별 수·마지막 별 시각. 판 끝에 잘려 별자리 별 수보다 적게 나온 무리는 full=false (완성할 수 없다) */
+export type StarGroup = { group: number; con: string; size: number; lastT: number; full: boolean };
+export function starGroups(plan: StarNote[]): StarGroup[] {
+  const out: StarGroup[] = [];
+  for (const n of plan) {
+    const g = out[n.group] ?? (out[n.group] = { group: n.group, con: n.con, size: 0, lastT: n.t, full: false });
+    g.size++;
+    g.lastT = n.t;
+  }
+  for (const g of out) g.full = g.size === (constellationById(g.con)?.stars.length ?? -1);
+  return out;
+}
 
 /** 난이도 이름 (로그·메시지용) */
 export const diffName = (d: Difficulty) => DIFFS[d].name;

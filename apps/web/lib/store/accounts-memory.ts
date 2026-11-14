@@ -52,6 +52,8 @@ type Acct = {
   earned: Map<string, number>;
   /** 주(월요일 YYYYMMDD) → 그 주에 모은 포인트. 예전(HMR 전) 계정에는 없을 수 있다 */
   weeks?: Map<string, number>;
+  /** 주간 랭킹 동점 정리: 주 → 마지막으로 값이 오른 순번 (먼저 달성한 사람이 위 — accounts-redis.ts WEEK_FN과 같은 규칙) */
+  weeksAt?: Map<string, number>;
   /** 10번 출석 달력: 달(YYYYMM) → (DD → 그날 받은 포인트, `_month` → 한 달 개근 보상). 예전 계정에는 없을 수 있다 */
   calendar?: Map<string, Map<string, number>>;
   /** 달력 개편 전 출석을 도장으로 옮겼는지 */
@@ -66,7 +68,7 @@ type Acct = {
   nameDup?: boolean;
   renameRequired?: boolean;
   /** 사냥 기록: 처치 수 합계(전체·주별), 사냥터별 최단 클리어 ms(전체·`${zone}|${week}`) */
-  hunt?: { kills: number; killsWeek: Map<string, number>; best: Map<string, number>; bestWeek: Map<string, number> };
+  hunt?: { kills: number; killsWeek: Map<string, number>; best: Map<string, number>; bestWeek: Map<string, number>; killsWeekAt?: Map<string, number> };
 };
 
 /**
@@ -80,6 +82,8 @@ export class MemoryAccounts implements AccountStore {
   private attendIps = new Map<string, Set<string>>();
   /** `${ipHash}:${day}:${source}` → 그 IP가 그날 그 항목으로 받은 합계 */
   private ipEarned = new Map<string, number>();
+  /** 주간 랭킹 동점 정리용 순번 (값이 오를 때마다 1씩) */
+  private tieSeq = 0;
   /** 경제 통계: 날짜 → 필드(`earn:{source}`, `spend:{분류}`, `refund`) → 합계 */
   private econ = new Map<string, Map<string, number>>();
   /** 닉네임 중복 금지: 이름 비교 키(nameKey) → 계정 id (Redis `names` 해시와 같다) */
@@ -161,6 +165,7 @@ export class MemoryAccounts implements AccountStore {
     this.addLifetime(a, amount);
     const weeks = (a.weeks ??= new Map());
     weeks.set(weekOfDay(day), (weeks.get(weekOfDay(day)) ?? 0) + amount);
+    (a.weeksAt ??= new Map()).set(weekOfDay(day), ++this.tieSeq);
     this.stat(a, day, `earn:${source}`, amount);
     return amount;
   }
@@ -279,32 +284,39 @@ export class MemoryAccounts implements AccountStore {
     return { earned: this.credit(a, "stayBonus", day, { amount: stayBonusSum(claimed, tiers) }, true, true), count: tiers - claimed };
   }
 
-  /** value가 null인 계정은 순위에서 뺀다. asc면 작을수록 위 */
-  private board(limit: number, me: string | null, value: (a: Acct) => number | null, asc = false) {
+  /** value가 null인 계정은 순위에서 뺀다. asc면 작을수록 위. tie = 같은 값일 때 먼저 달성한 순번 (작을수록 위, 주간 랭킹) */
+  private board(limit: number, me: string | null, value: (a: Acct) => number | null, asc = false, tie?: (a: Acct) => number) {
     const all = [...this.accts]
       .flatMap(([accountId, a]) => {
         const points = value(a);
-        return points === null ? [] : [{ accountId, name: a.name, points }];
+        return points === null ? [] : [{ accountId, name: a.name, points, at: tie?.(a) ?? 0 }];
       })
-      .sort((x, y) => (asc ? x.points - y.points : y.points - x.points) || x.accountId.localeCompare(y.accountId))
-      .map((r, i) => ({ ...r, rank: i + 1 }));
+      .sort((x, y) => (asc ? x.points - y.points : y.points - x.points) || x.at - y.at || x.accountId.localeCompare(y.accountId))
+      .map((r, i) => ({ accountId: r.accountId, name: r.name, points: r.points, rank: i + 1 }));
     return { rows: all.slice(0, limit), mine: all.find((r) => r.accountId === me) ?? null };
   }
 
   async pointRank(limit: number, me: string | null, week?: string): Promise<{ rows: RankEntry[]; mine: RankEntry | null }> {
-    return this.board(limit, me, (a) => {
-      const v = week ? (a.weeks?.get(week) ?? 0) : (a.lifetime ?? a.points);
-      return v > 0 ? v : null;
-    });
+    return this.board(
+      limit,
+      me,
+      (a) => {
+        const v = week ? (a.weeks?.get(week) ?? 0) : (a.lifetime ?? a.points);
+        return v > 0 ? v : null;
+      },
+      false,
+      week ? (a) => a.weeksAt?.get(week) ?? 0 : undefined,
+    );
   }
 
   async recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string): Promise<void> {
     const a = this.acct(id);
-    const h = (a.hunt ??= { kills: 0, killsWeek: new Map(), best: new Map(), bestWeek: new Map() });
+    const h: NonNullable<Acct["hunt"]> = (a.hunt ??= { kills: 0, killsWeek: new Map(), best: new Map(), bestWeek: new Map() });
     const kills = Math.max(0, Math.floor(run.kills));
     if (kills > 0) {
       h.kills += kills;
       h.killsWeek.set(week, (h.killsWeek.get(week) ?? 0) + kills);
+      (h.killsWeekAt ??= new Map()).set(week, ++this.tieSeq);
     }
     if (run.clearMs === null) return;
     const ms = Math.round(run.clearMs);
@@ -321,10 +333,16 @@ export class MemoryAccounts implements AccountStore {
   ): Promise<{ rows: RankEntry[]; mine: RankEntry | null }> {
     const { week } = opts;
     if (board === "kills")
-      return this.board(limit, me, (a) => {
-        const v = week ? (a.hunt?.killsWeek.get(week) ?? 0) : (a.hunt?.kills ?? 0);
-        return v > 0 ? v : null;
-      });
+      return this.board(
+        limit,
+        me,
+        (a) => {
+          const v = week ? (a.hunt?.killsWeek.get(week) ?? 0) : (a.hunt?.kills ?? 0);
+          return v > 0 ? v : null;
+        },
+        false,
+        week ? (a) => a.hunt?.killsWeekAt?.get(week) ?? 0 : undefined,
+      );
     const zone = opts.zone ?? "easy";
     return this.board(limit, me, (a) => (week ? a.hunt?.bestWeek.get(`${zone}|${week}`) : a.hunt?.best.get(zone)) ?? null, true);
   }
@@ -389,6 +407,37 @@ export class MemoryAccounts implements AccountStore {
       else this.stashOf(a).set(itemId, until);
     }
     return true;
+  }
+
+  /** 주간 1위 보상 지급 표시 (mark → 계정). accounts-redis.ts CHAMP_LUA의 champ:paid와 같다 */
+  private champMarks = new Map<string, string>();
+
+  async grantChamp(id: string, mark: string, itemId: string, slot: CosmeticSlot, until: number, points: number, now: number): Promise<boolean> {
+    // await 없이 확인·표시·지급을 한 번에 (accounts-redis.ts CHAMP_LUA와 같은 규칙)
+    if (this.champMarks.has(mark)) return false;
+    this.champMarks.set(mark, id);
+    const a = this.acct(id);
+    this.prune(a, now);
+    const cur = a.look.get(slot);
+    const wearing = cur?.itemId === itemId && cur.until > now;
+    const had = wearing ? cur.until : (this.stashOf(a).get(itemId) ?? 0);
+    if (until > had) {
+      if (wearing) a.look.set(slot, { itemId, until });
+      else this.stashOf(a).set(itemId, until);
+    }
+    if (points > 0) {
+      const before = a.points;
+      a.points = Math.min(BALANCE_CAP, before + points);
+      if (a.points > before) {
+        this.addLifetime(a, a.points - before);
+        this.stat(a, kstDay(now), "earn:champ", a.points - before);
+      }
+    }
+    return true;
+  }
+
+  async champPaid(marks: readonly string[]): Promise<(string | null)[]> {
+    return marks.map((m) => this.champMarks.get(m) ?? null);
   }
 
   async claimAttend(id: string, ipHash: string, day: string, yesterday: string, monthDays: number, needTicks: number): Promise<AttendClaim> {

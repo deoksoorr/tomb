@@ -639,6 +639,7 @@ export class WorldScene extends Phaser.Scene {
     prev?.destroy();
     const r = new RemoteAvatar(this, this.atlas, p.sid, p.name, avatarColorSpec(p.color, sanitizeDye(p.dye)), p, performance.now(), p.look ?? [], isAvatarBody(p.body) ? p.body : "hood");
     r.view.setDexBadge(p.dex); // 도감 100% 배지 (입장 토큰에 서버가 넣은 것만 온다)
+    r.view.setChamp(p.champ); // 주간 랭킹 1위 배지·오라 (입장 토큰·착용 증서에 서버가 넣은 것만 온다)
     r.view.setStaff(p.staff === true); // 31번 운영자: 저승사자 차림·"운영자" 배지 (서버가 넣은 표시만 온다)
     // 같은 sid가 다시 들어오면(이름·색 변경) 앉아 있던 좌석을 이어받는다
     r.seatId = prev?.seatId ?? null;
@@ -668,6 +669,7 @@ export class WorldScene extends Phaser.Scene {
         continue;
       }
       r.view.setLook(p.look ?? []);
+      r.view.setChamp(p.champ);
       r.view.setMood(p.mood ?? null);
       this.riding.applyPeer(r, p);
       this.forage.applyPeer(p);

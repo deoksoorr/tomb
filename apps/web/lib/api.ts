@@ -1,4 +1,6 @@
 import type {
+  ChampResponse,
+  RaceResponse,
   WearResponse,
   ActivityResponse,
   ApiError,
@@ -152,6 +154,14 @@ export const api = {
   /** 49번 랭킹 (포인트·사냥). zone은 huntBest의 사냥터(난이도 id) */
   rank: (board: RankBoard, period: RankPeriod, zone?: string, fish?: string) =>
     request<RankResponse>(`/api/rank?${new URLSearchParams({ board, period, me: "1", ...(zone ? { zone } : {}), ...(fish ? { fish } : {}) })}`, { cache: "no-store" }),
+  /** 주간 랭킹 1위: 지난주 1위·명예의 전당 + 내 1위 값·아직 안 본 1위 알림 */
+  champ: () => request<ChampResponse>("/api/champ?me=1", { cache: "no-store" }),
+  /** 1위 알림 창을 봤다 */
+  champSeen: (week: string) => request<unknown>("/api/champ/seen", jsonInit("POST", { week })),
+  /** "1위 오라 보이기" 켜기·끄기 (지금 1위인 사람만) */
+  champAura: (on: boolean) => request<WearResponse>("/api/champ/aura", jsonInit("POST", { on })),
+  /** 이번 주 레이스 (랭킹 3개 1~3등·마감·내 순위) */
+  race: () => request<RaceResponse>("/api/champ/race", { cache: "no-store" }),
   /** 성불한 이야기들 (최신 성불 순, 검색) */
   passed: (q: string, offset = 0) =>
     request<PassedListResponse>(`/api/graves/passed?${new URLSearchParams({ ...(q ? { q } : {}), ...(offset ? { offset: String(offset) } : {}) })}`),

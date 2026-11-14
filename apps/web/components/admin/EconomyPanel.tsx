@@ -14,6 +14,7 @@ const EARN_LABELS: Record<string, string> = {
   ...Object.fromEntries(EARN_RULES.map((r) => [r.source, r.label])),
   admin: "관리자 지급",
   gift: "관리자 선물",
+  champ: "주간 1위 보상",
   refund: "환불·되팔기",
   // 49번에서 없어진 항목 (지난 기록에만 남아 있다)
   revive: "살려주세요 (종료)",

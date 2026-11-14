@@ -31,13 +31,14 @@ import {
 import { derive, expToNext, MAX_LEVEL } from "./formulas";
 import { ALL_SKILLS_POINTS, respecCost, skillPointsEarned, spentPoints } from "./skillRules";
 import { isSuperHunter } from "./superHunter";
-import { evaluate, FINISH_GRACE_SEC } from "./rewards";
+import { evaluate, FINISH_GRACE_SEC, type StarsDone } from "./rewards";
+import { getForageStore } from "../forage/store";
 import { STARRY_NIGHT_BONUS, starryNight } from "../stargaze";
 import type { z } from "zod";
 import type { CharacterActionSchema, ShopActionSchema } from "./schemas";
 import { getRpgStore, RUNS_PER_HOUR, type RpgStore } from "./store";
 import { signTicket, verifyTicket } from "./ticket";
-import type { CharacterState, Drop, RpgView, SoldInfo, RunFinishResponse, RunResult, RunStartResponse } from "./types";
+import type { CharacterState, Drop, RpgView, SoldInfo, RunFinishResponse, RunResult, RunReward, RunStartResponse } from "./types";
 
 // 사냥터 서버 로직 (라우트는 세션 확인·입력 검증·레이트리밋만 하고 여기로 넘긴다).
 // 포인트는 백엔드 공용 함수(earnPoints/spendPoints)로만 움직인다. 사냥터 자체에는 포인트 장부가 없다.
@@ -258,7 +259,9 @@ export async function startRun(acct: string, game: GameKind, difficulty: Difficu
     st: { agi: d.stats.agi, dex: d.stats.dex, luk: d.stats.luk },
     ...(zone ? { z: zone.id } : {}),
   });
-  return { ticket, game, difficulty, ...(zone ? { zone: zone.id } : {}), seed, timeLimitSec: limit, view: await rpgView(acct, store, now) };
+  // 별자리 잇기: 맑은 밤 판이면 계획에 전설 별자리가 들어간다 (끝낼 때 서버는 티켓 시각으로 다시 계산한다)
+  const starry = game === "stars" ? { starry: starryNight(now) } : {};
+  return { ticket, game, difficulty, ...(zone ? { zone: zone.id } : {}), seed, timeLimitSec: limit, ...starry, view: await rpgView(acct, store, now) };
 }
 
 /** 코디 드롭 하나에 시도해 볼 후보 수 (이미 가진 것이면 다음 것) */
@@ -289,6 +292,25 @@ export async function grantCosmetics(acct: string, drops: Drop[], now: number): 
   return out;
 }
 
+/**
+ * 별자리 잇기에서 검증을 통과한 완성 별자리를 도감(낚시·채집 도감 저장소의 별자리 칸)에 등록한다.
+ * 판 기록은 이미 claim했으므로 같은 판으로 두 번 등록할 수 없다. 저장이 실패해도 판 보상은 그대로 (도감만 빠진다)
+ */
+async function registerStars(acct: string, done: StarsDone[], now: number): Promise<RunReward["constellations"]> {
+  try {
+    const fresh = await getForageStore().addStars(
+      acct,
+      kstDay(now),
+      done.map((d) => ({ id: d.id, perfect: d.perfect })),
+    );
+    // 한 판에 같은 별자리가 두 번 나오면 둘째부터는 처음이 아니다 (저장소가 차례로 센다)
+    return done.map((d, i) => ({ id: d.id, isNew: fresh[i] ?? false, perfect: d.perfect }));
+  } catch (e) {
+    console.error("[rpg] 별자리 도감 등록 실패", e);
+    return [];
+  }
+}
+
 export async function finishRun(acct: string, token: string, result: RunResult, ipHash: string, now = Date.now()): Promise<RunFinishResponse> {
   const store = getRpgStore();
   const t = await verifyTicket(env.sessionSecret(), token);
@@ -301,7 +323,13 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   if (expired) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래된 판이라 결과를 받을 수 없어요.");
   if (claim === "stale") throw new HttpError(409, "TICKET_STALE", "그 뒤에 새 판을 시작해서 이 판은 끝났어요.");
 
-  const v = evaluate({ game: t.g, difficulty: t.d, seed: t.s, level: t.lv, st: t.st, ...(t.z ? { zone: t.z } : {}) }, result, elapsed);
+  // 22번: 별자리 잇기를 진짜 맑은 밤(판 시작 시각, KST)에 했으면 포인트 보너스 + 전설 별자리
+  const nightBonus = t.g === "stars" && starryNight(t.t);
+  const v = evaluate(
+    { game: t.g, difficulty: t.d, seed: t.s, level: t.lv, st: t.st, ...(t.z ? { zone: t.z } : {}), ...(nightBonus ? { starry: true } : {}) },
+    result,
+    elapsed,
+  );
   if (!v.ok) throw new HttpError(422, v.code, v.message);
 
   const { state, result: applied } = await http(
@@ -314,8 +342,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
     }),
   );
   const drops = await grantCosmetics(acct, v.drops, now);
-  // 22번: 별자리 잇기를 진짜 맑은 밤(판 시작 시각, KST)에 했으면 포인트 보너스
-  const nightBonus = t.g === "stars" && starryNight(t.t);
+  const constellations = v.stars ? await registerStars(acct, v.stars, now) : undefined;
   const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
   const earned = pointsRaw > 0 ? (await earnPoints(acct, "hunt", pointsRaw, ipHash)).earned : 0;
   await store.addDaily(acct, kstDay(now), { points: earned, runs: 1, exp: v.exp });
@@ -331,6 +358,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       points: earned,
       capped: earned < pointsRaw,
       ...(nightBonus ? { nightBonus: true } : {}),
+      ...(constellations?.length ? { constellations } : {}),
       drops,
       levelsGained: applied.levelsGained,
       newLevel: state.level,

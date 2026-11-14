@@ -168,4 +168,15 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     const r = await Promise.all(Array.from({ length: 5 }, () => store.claim(a, "race")));
     expect(r.filter((x) => x.status === "ok")).toHaveLength(1);
   });
+
+  it("별자리 등록: 처음만 새로, 완성 횟수·완벽 횟수·처음 날, 가방·오늘 잡은 수는 그대로", async () => {
+    const a = acct();
+    expect(await store.addStars(a, DAY, [])).toEqual([]);
+    expect(await store.addStars(a, DAY, [{ id: "c_gym", perfect: false }, { id: "c_gym", perfect: true }])).toEqual([true, false]);
+    expect(await store.addStars(a, "20261113", [{ id: "c_gym", perfect: true }, { id: "c_diet", perfect: false }])).toEqual([false, true]);
+    const s = await store.snapshot(a, DAY, 1);
+    expect(s.dex).toEqual({ c_gym: { n: 3, max: 0, first: DAY, pf: 2 }, c_diet: { n: 1, max: 0, first: "20261113" } });
+    expect(s.bag).toEqual({});
+    expect(s.day).toMatchObject({ fish: 0, gather: 0 });
+  });
 }

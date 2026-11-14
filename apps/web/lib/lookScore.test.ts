@@ -25,11 +25,14 @@ describe("가치 비례 점수 (영구 소장 기준 가치 ÷ 5, 1점 단위)",
     expect(itemLookScore("pet_cat")).toBe(180); // 900P
     expect(itemLookScore("pet_deer")).toBe(600); // 3,000P
     expect(itemLookScore("staff_crown")).toBe(0);
+    // 주간 1위 전용 꾸미기는 상점 값이 없는 상징이라 0 (1위 보상이 꾸미기 점수를 부풀리지 않게, 1위 오라는 아이템이 아니라 점수에 없다)
+    expect(itemLookScore("champ_crown")).toBe(0);
+    expect(itemLookScore("champ_fishhat")).toBe(0);
     expect(itemLookScore("fw_small")).toBe(0);
     expect(itemLookScore("nope")).toBe(0);
     // 운영자 전용이 아닌 모든 코디는 1점 이상, 공식 그대로
     for (const it of ITEMS)
-      if (it.kind === "cosmetic" && !it.staff) {
+      if (it.kind === "cosmetic" && !it.staff && !it.champ) {
         expect(itemLookScore(it.id)).toBeGreaterThan(0);
         expect(itemLookScore(it.id)).toBe(Math.round(itemLookValue(it.id) / LOOK_SCORE_DIVISOR));
       }

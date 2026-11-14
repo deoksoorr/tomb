@@ -26,7 +26,8 @@ export type GearM = {
 };
 
 // 추가분 2(11/12): 머리 5·목 5·손 5·등 3 + 31번 운영자 전용(왕관·완장·명부·등불·도포)
-export const GEAR_HEAD = ["hat_beanie", "hat_headphones", "hat_crown", "hat_ribbon", "hat_party", "hat_glasses", "hat_wizard", "hat_cap", "hat_sprout", "hat_beret", "hat_hardhat", "hat_chef", "hat_horns", "hat_santa", "staff_crown"] as const;
+// 주간 랭킹 1위 전용 머리 3종 (금화 왕관·붉은 깃털 투구·황금 물고기 모자 — protocol CHAMP_HAT)
+export const GEAR_HEAD = ["hat_beanie", "hat_headphones", "hat_crown", "hat_ribbon", "hat_party", "hat_glasses", "hat_wizard", "hat_cap", "hat_sprout", "hat_beret", "hat_hardhat", "hat_chef", "hat_horns", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat"] as const;
 export const GEAR_NECK = ["neck_tie", "neck_badge", "neck_bowtie", "neck_bell", "neck_lei", "neck_collar", "neck_whistle", "neck_camera", "neck_pearl", "neck_medal", "staff_armband"] as const;
 export const GEAR_HAND = ["hand_coffee", "hand_briefcase", "hand_phone", "hand_lantern_blue", "hand_donut", "hand_clipboard", "hand_mic", "hand_bouquet", "hand_wand", "staff_ledger", "staff_lamp"] as const;
 export const GEAR_BACK = ["back_backpack", "back_cape", "back_shell", "back_guitar", "back_jetpack", "staff_robe"] as const;
@@ -34,7 +35,7 @@ export const GEAR_BACK = ["back_backpack", "back_cape", "back_shell", "back_guit
 export const GEAR_SHEET_IDS: readonly string[] = [...GEAR_HEAD, ...GEAR_NECK, ...GEAR_HAND, ...GEAR_BACK];
 
 /** 두건·키다리 끝·동글이 새싹을 덮는 모자 (그 위에 꼭지를 그리지 않는다) */
-export const COVERING_HATS: ReadonlySet<string> = new Set(["hat_straw", "hat_cat", "hat_beanie", "hat_crown", "hat_party", "hat_wizard", "hat_cap", "hat_beret", "hat_hardhat", "hat_chef", "hat_santa", "staff_crown"]);
+export const COVERING_HATS: ReadonlySet<string> = new Set(["hat_straw", "hat_cat", "hat_beanie", "hat_crown", "hat_party", "hat_wizard", "hat_cap", "hat_beret", "hat_hardhat", "hat_chef", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat"]);
 
 export type ExtraGear = { head: string | null; neck: string | null; hand: string | null; back: string | null };
 
@@ -322,6 +323,116 @@ export function drawHeadGear(g: Grid, view: GearView, id: string, m: GearM, body
       g.set(side ? x0 + 2 : x0 + 2, top - 3, 0x6ae0ff);
       if (!side) g.set(x0 + 3, top - 3, 0x6ae0ff);
       if (view !== "up") g.set(side ? x0 + 3 : x0 + 2, top - 1, 0x6ae0ff);
+      break;
+    }
+    case "champ_crown": {
+      // 주간 포인트 1위: 보통 왕관보다 한 뼘 크고, 띠에 금화가 박힌 금관 + 큰 루비 + 끝마다 진주
+      const gold = 0xf6c83a;
+      const lo = 0xb8841a;
+      const hi = 0xfff4b0;
+      const w = side ? 7 : 9;
+      const x0 = cx - (side ? 4 : 4) - (side ? 0 : 0);
+      g.rect(x0, top - 1, w, 2, gold);
+      g.hline(x0, x0 + w - 1, top, lo);
+      // 뾰족 끝 (가운데가 가장 높다)
+      const tips = side ? [x0, x0 + 3, x0 + 6] : [x0, x0 + 2, x0 + 4, x0 + 6, x0 + 8];
+      for (const x of tips) {
+        const mid = x === x0 + (side ? 3 : 4);
+        // 프레임 위쪽에 붙은 몸(키다리)은 진주가 잘리지 않게 낮춘다 (외곽선 자리까지 맨 위 두 줄은 비워 둔다)
+        const tip = Math.max(2, top - (mid ? 5 : 4));
+        g.vline(x, tip + 1, top - 2, gold);
+        g.set(x, tip, 0xfffaf0); // 진주
+      }
+      if (!side) for (const x of [x0 + 1, x0 + 3, x0 + 5, x0 + 7]) g.set(x, top - 2, gold);
+      // 띠의 금화 (밝은 테 + 가운데 점)
+      if (view !== "up")
+        for (const x of side ? [x0 + 1, x0 + 4] : [x0 + 1, x0 + 6]) {
+          g.set(x, top - 1, hi);
+          g.set(x + 1, top - 1, hi);
+          g.set(x, top, 0xe0a828);
+        }
+      // 가운데 큰 루비 (앞모습), 옆모습은 사파이어
+      if (view === "down") {
+        g.set(x0 + 4, top - 1, 0xe0304a);
+        g.set(x0 + 4, top, 0xa01830);
+        g.set(x0 + 4, top - 2, 0xff8098);
+      } else if (side) g.set(x0 + 3, top - 1, 0x3a7ae8);
+      g.set(x0, top - 1, hi);
+      break;
+    }
+    case "champ_plume": {
+      // 주간 사냥 처치 1위: 은빛 투구(머리 윗부분) + 꼭대기에서 뒤로 휘날리는 붉은 깃털
+      const steel = 0xb8c0cc;
+      const shade = 0x7a8496;
+      const shine = 0xeef2f8;
+      const red = 0xe0283a;
+      const redLo = 0x9a1424;
+      const redHi = 0xff7a6a;
+      for (const [y, h] of [
+        [top - 1, Math.max(2, rx - 2)],
+        [top, rx - 1],
+        [top + 1, rx],
+      ] as [number, number][])
+        for (let x = cx - h; x < cx + h; x++) g.set(x, y, x < cx - h + 2 ? shine : x >= cx + h - 2 ? shade : steel);
+      // 이마 띠 (금 테)
+      g.hline(cx - rx, cx + rx - 1, top + 2, 0xd8a838);
+      if (view === "down") g.set(cx - 1, top + 2, 0xff5060);
+      // 깃털: 앞·뒷모습은 위로 솟아 양쪽으로 갈라지고, 옆모습은 뒤(-x)로 휘날린다
+      const h = Math.max(1, Math.min(6, top - 3));
+      if (side) {
+        for (let i = 0; i < h; i++) {
+          const y = top - 2 - i;
+          const x = cx - Math.floor((i * i) / 3);
+          g.set(x, y, i % 2 ? redLo : red);
+          g.set(x - 1, y, red);
+          if (i > 1) g.set(x - 2, y + 1, redLo);
+        }
+        g.set(cx, top - 2, redHi);
+      } else {
+        for (let i = 0; i < h; i++) {
+          const y = top - 2 - i;
+          const spread = Math.floor(i / 2);
+          g.set(cx - 1 - spread, y, red);
+          g.set(cx + spread, y, i % 2 ? redLo : red);
+          if (i < h - 1) g.set(cx - 1 + (i % 2), y, view === "up" ? redLo : redHi);
+        }
+      }
+      break;
+    }
+    case "champ_fishhat": {
+      // 주간 낚시 1위: 머리 위에 통통한 황금 물고기 (머리 쪽에 큰 눈, 반대쪽에 위로 갈라진 꼬리, 등에 지느러미)
+      // 옆모습은 앞(+x)을 보고, 앞·뒷모습은 머리가 왼쪽
+      const gold = 0xf4c030;
+      const lo = 0xb07a14;
+      const hi = 0xfff0a0;
+      const fin = 0xff8a2a;
+      const d = side ? 1 : -1; // 머리 쪽 방향
+      const len = 9;
+      const head = side ? cx + 4 : cx - 5; // 머리 끝 x
+      const xAt = (i: number) => head - d * i; // i = 머리에서 꼬리 쪽으로
+      // 몸통 3줄 (가운데 줄이 가장 길다), 아랫줄은 그늘
+      for (let i = 0; i < len; i++) {
+        const x = xAt(i);
+        if (i > 0 && i < len - 1) g.set(x, top - 2, i === 3 || i === 5 ? hi : gold);
+        g.set(x, top - 1, gold);
+        if (i > 0 && i < len - 1) g.set(x, top, i > 2 && i < 6 ? hi : lo);
+      }
+      // 꼬리: 위아래로 갈라져 솟는다
+      const tx = xAt(len);
+      g.set(tx, top - 1, fin);
+      g.set(tx - d, top - 2, fin);
+      g.set(tx - d, top - 3, fin);
+      g.set(tx - d, top, fin);
+      g.set(tx - d * 2, top - 4 < 2 ? 2 : top - 4, fin);
+      // 등지느러미
+      g.set(xAt(4), top - 3, fin);
+      g.set(xAt(5), top - 3, fin);
+      // 눈 (흰자 + 검은 눈동자) — 뒷모습은 없음
+      if (view !== "up") {
+        g.set(xAt(1), top - 2, 0xffffff);
+        g.set(xAt(1), top - 1, 0x1a1a24);
+        g.set(head + d, top - 1, lo); // 입
+      }
       break;
     }
   }

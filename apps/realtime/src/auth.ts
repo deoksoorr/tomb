@@ -57,7 +57,7 @@ function ticketOf(claims: JoinClaims, channel: number, spawn: Point | undefined)
   // 운영자는 다른 사람에게 닉네임 대신 공개 이름("대장")로 보인다 (웹 서버도 바꿔 넣지만 여기서 한 번 더)
   const name = claims.staff ? STAFF_PUBLIC_NAME : [...normalizeName(claims.name)].slice(0, NAME_MAX).join("") || FALLBACK_NAME;
   const color = isAvatarColor(claims.color) ? claims.color : AVATAR_COLORS[0];
-  return { visitorId: claims.visitorId, name, color, channel, spawn, look: claims.look ?? [], body: claims.body ?? "hood", ...(claims.dye ? { dye: claims.dye } : {}), ...(claims.staff ? { staff: true as const } : {}), ...(claims.dex ? { dex: claims.dex } : {}) };
+  return { visitorId: claims.visitorId, name, color, channel, spawn, look: claims.look ?? [], body: claims.body ?? "hood", ...(claims.dye ? { dye: claims.dye } : {}), ...(claims.staff ? { staff: true as const } : {}), ...(claims.dex ? { dex: claims.dex } : {}), ...(claims.champ ? { champ: claims.champ } : {}) };
 }
 
 /** 대기열 토큰(channel = 0, Vercel이 TTL 600초로 발급)이면 visitorId. 채널 입장 토큰은 대기열에 쓸 수 없고 그 반대도 마찬가지다 */
