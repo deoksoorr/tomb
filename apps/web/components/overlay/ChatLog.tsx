@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 import { bridge } from "@/game/bridge";
 import { chatChime, chimeForChat } from "@/lib/chatChime";
 import { useBackground } from "@/lib/hooks/useBackground";
+import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { addChatLine, CHAT_LOG_MOBILE_LINES, chatLineOpacity, chatLineTone, liveChatLines, mergeChatLines, visibleChatLines, type ChatLine } from "@/game/logic/chatLog";
 import { cx } from "../ui/cx";
 import StyledName from "../ui/StyledName";
@@ -114,6 +115,8 @@ export default function ChatLog({ mobile, room, hidden = false }: Props) {
   // 줄이 있는 동안만 1초마다 흐려짐·만료 갱신
   const any = all.length > 0;
   const background = useBackground();
+  // 휴식 중 막(RestOverlay) 위로 채팅만 보이게 — 쉬는 동안에도 올라오는 채팅을 보고 돌아올 수 있다
+  const resting = useBridgeValue("game:rest")?.on ?? false;
   useEffect(() => {
     if (!any) return;
     const t = setInterval(
@@ -130,7 +133,11 @@ export default function ChatLog({ mobile, room, hidden = false }: Props) {
   if (hidden) return null;
   // 막 추가된 줄은 렌더 시각이 받은 시각보다 앞설 수 있다 → 둘 중 늦은 쪽으로 (1초 안 흐려짐 없음)
   const at = Math.max(now, all.at(-1)?.at ?? 0);
-  return mobile ? <MobileLines lines={visibleChatLines(all, at, CHAT_LOG_MOBILE_LINES)} now={at} /> : <DesktopBox lines={visibleChatLines(all, at)} now={at} />;
+  return mobile ? (
+    <MobileLines lines={visibleChatLines(all, at, CHAT_LOG_MOBILE_LINES)} now={at} resting={resting} />
+  ) : (
+    <DesktopBox lines={visibleChatLines(all, at)} now={at} resting={resting} />
+  );
 }
 
 function Line({ line, now }: { line: ChatLine; now: number }) {
@@ -147,10 +154,10 @@ function Line({ line, now }: { line: ChatLine; now: number }) {
 }
 
 /** 모바일: 게임 화면 위에 글씨만 (그림자 외곽선), 터치 통과 */
-function MobileLines({ lines: shown, now }: { lines: ChatLine[]; now: number }) {
+function MobileLines({ lines: shown, now, resting }: { lines: ChatLine[]; now: number; resting: boolean }) {
   if (!shown.length) return null;
   return (
-    <ol className={styles.mobile} aria-label="채팅" aria-live="polite">
+    <ol className={cx(styles.mobile, resting && styles.resting)} aria-label="채팅" aria-live="polite">
       {shown.map((l) => (
         <Line key={l.id} line={l} now={now} />
       ))}
@@ -159,7 +166,7 @@ function MobileLines({ lines: shown, now }: { lines: ChatLine[]; now: number }) 
 }
 
 /** 데스크톱: 반투명 상자 + 스크롤 기록(하단 고정) + 입력칸 */
-function DesktopBox({ lines: shown, now }: { lines: ChatLine[]; now: number }) {
+function DesktopBox({ lines: shown, now, resting }: { lines: ChatLine[]; now: number; resting: boolean }) {
   const logRef = useRef<HTMLOListElement>(null);
   /** 사용자가 맨 아래를 보고 있는지 (위로 올려 읽는 중이면 끌어내리지 않는다) */
   const stick = useRef(true);
@@ -190,7 +197,7 @@ function DesktopBox({ lines: shown, now }: { lines: ChatLine[]; now: number }) {
   };
 
   return (
-    <section className={styles.box} aria-label="채팅">
+    <section className={cx(styles.box, resting && styles.resting)} aria-label="채팅">
       {shown.length > 0 && (
         <div className={styles.logWrap}>
           <ol
