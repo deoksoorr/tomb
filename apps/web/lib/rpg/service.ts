@@ -33,7 +33,8 @@ import { ALL_SKILLS_POINTS, respecCost, skillPointsEarned, spentPoints } from ".
 import { isSuperHunter } from "./superHunter";
 import { evaluate, FINISH_GRACE_SEC, type StarsDone } from "./rewards";
 import { getForageStore } from "../forage/store";
-import { STARRY_NIGHT_BONUS, starryNight } from "../stargaze";
+import { STARRY_NIGHT_BONUS, starSkyAt } from "../stargaze";
+import { STARS_NEW_PER_RUN, STARS_PLAN_VER } from "./plan";
 import type { z } from "zod";
 import type { CharacterActionSchema, ShopActionSchema } from "./schemas";
 import { getRpgStore, RUNS_PER_HOUR, type RpgStore } from "./store";
@@ -233,7 +234,18 @@ function newSeed(): number {
  */
 export const zoneUnlockBypass = () => process.env.NODE_ENV === "development";
 
-export async function startRun(acct: string, game: GameKind, difficulty: Difficulty, now = Date.now(), zoneId?: ZoneId): Promise<RunStartResponse> {
+/**
+ * planVer: 별자리 잇기 화면이 쓰는 계획 판 번호 (없으면 1판 화면). 서버가 아는 판이면 그대로 티켓(sv)에 실어,
+ * 끝낼 때 그 판의 계획으로 검사한다 → 배포가 겹쳐 옛 화면이 새 서버에서 판을 시작해도 화면과 서버의 계획이 같다
+ */
+export async function startRun(
+  acct: string,
+  game: GameKind,
+  difficulty: Difficulty,
+  now = Date.now(),
+  zoneId?: ZoneId,
+  planVer?: number,
+): Promise<RunStartResponse> {
   const store = getRpgStore();
   const sup = await isSuperHunter(acct);
   const c = await loadChar(acct, store, sup);
@@ -248,6 +260,7 @@ export async function startRun(acct: string, game: GameKind, difficulty: Difficu
   if (!(await store.startRun(acct, nonce, limit + FINISH_GRACE_SEC, hourBucket(now))))
     throw new HttpError(429, "RATE_LIMITED", `한 시간에 ${RUNS_PER_HOUR}판까지 할 수 있어요. 잠시 쉬었다 와요.`);
   const seed = newSeed();
+  const sv = game === "stars" ? (planVer === STARS_PLAN_VER ? STARS_PLAN_VER : 1) : undefined;
   const ticket = await signTicket(env.sessionSecret(), {
     n: nonce,
     a: acct,
@@ -258,10 +271,12 @@ export async function startRun(acct: string, game: GameKind, difficulty: Difficu
     lv,
     st: { agi: d.stats.agi, dex: d.stats.dex, luk: d.stats.luk },
     ...(zone ? { z: zone.id } : {}),
+    ...(sv ? { sv } : {}),
   });
-  // 별자리 잇기: 맑은 밤 판이면 계획에 전설 별자리가 들어간다 (끝낼 때 서버는 티켓 시각으로 다시 계산한다)
-  const starry = game === "stars" ? { starry: starryNight(now) } : {};
-  return { ticket, game, difficulty, ...(zone ? { zone: zone.id } : {}), seed, timeLimitSec: limit, ...starry, view: await rpgView(acct, store, now) };
+  // 별자리 잇기: 판 시작 시각의 하늘(맑은 밤 = 전설, 계절, 새벽)에 따라 계획에 들어가는 별자리가 달라진다 (끝낼 때 티켓 시각으로 다시 계산)
+  const sky = starSkyAt(now);
+  const stars = game === "stars" ? { starry: sky.starry, sky, planVer: sv } : {};
+  return { ticket, game, difficulty, ...(zone ? { zone: zone.id } : {}), seed, timeLimitSec: limit, ...stars, view: await rpgView(acct, store, now) };
 }
 
 /** 코디 드롭 하나에 시도해 볼 후보 수 (이미 가진 것이면 다음 것) */
@@ -294,17 +309,29 @@ export async function grantCosmetics(acct: string, drops: Drop[], now: number): 
 
 /**
  * 별자리 잇기에서 검증을 통과한 완성 별자리를 도감(낚시·채집 도감 저장소의 별자리 칸)에 등록한다.
- * 판 기록은 이미 claim했으므로 같은 판으로 두 번 등록할 수 없다. 저장이 실패해도 판 보상은 그대로 (도감만 빠진다)
+ * 한 판에 새로 등록하는 별자리는 STARS_NEW_PER_RUN개까지 — 넘친 처음 별자리는 등록하지 않고 later로 알린다 (다음 판에).
+ * 이미 있는 별자리는 몇 번이든 완성 횟수가 오른다. 판 기록은 이미 claim했고 계정당 진행 중인 판은 하나라 같은 판으로 두 번 등록할 수 없다.
+ * 저장이 실패해도 판 보상은 그대로 (도감만 빠진다)
  */
 async function registerStars(acct: string, done: StarsDone[], now: number): Promise<RunReward["constellations"]> {
   try {
-    const fresh = await getForageStore().addStars(
+    const store = getForageStore();
+    const have = (await store.dex(acct)).dex;
+    const fresh = new Set<string>();
+    const keep = done.filter((d) => {
+      if ((have[d.id]?.n ?? 0) > 0 || fresh.has(d.id)) return true;
+      if (fresh.size >= STARS_NEW_PER_RUN) return false;
+      fresh.add(d.id);
+      return true;
+    });
+    const isNew = await store.addStars(
       acct,
       kstDay(now),
-      done.map((d) => ({ id: d.id, perfect: d.perfect })),
+      keep.map((d) => ({ id: d.id, perfect: d.perfect })),
     );
     // 한 판에 같은 별자리가 두 번 나오면 둘째부터는 처음이 아니다 (저장소가 차례로 센다)
-    return done.map((d, i) => ({ id: d.id, isNew: fresh[i] ?? false, perfect: d.perfect }));
+    let k = 0;
+    return done.map((d) => (keep.includes(d) ? { id: d.id, isNew: isNew[k++] ?? false, perfect: d.perfect } : { id: d.id, isNew: false, perfect: d.perfect, later: true }));
   } catch (e) {
     console.error("[rpg] 별자리 도감 등록 실패", e);
     return [];
@@ -323,10 +350,20 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   if (expired) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래된 판이라 결과를 받을 수 없어요.");
   if (claim === "stale") throw new HttpError(409, "TICKET_STALE", "그 뒤에 새 판을 시작해서 이 판은 끝났어요.");
 
-  // 22번: 별자리 잇기를 진짜 맑은 밤(판 시작 시각, KST)에 했으면 포인트 보너스 + 전설 별자리
-  const nightBonus = t.g === "stars" && starryNight(t.t);
+  // 22번: 별자리 잇기를 진짜 맑은 밤(판 시작 시각, KST)에 했으면 포인트 보너스 + 전설 별자리. 계절·새벽 별자리도 판 시작 시각으로
+  const sky = t.g === "stars" ? starSkyAt(t.t) : null;
+  const nightBonus = !!sky?.starry;
   const v = evaluate(
-    { game: t.g, difficulty: t.d, seed: t.s, level: t.lv, st: t.st, ...(t.z ? { zone: t.z } : {}), ...(nightBonus ? { starry: true } : {}) },
+    {
+      game: t.g,
+      difficulty: t.d,
+      seed: t.s,
+      level: t.lv,
+      st: t.st,
+      ...(t.z ? { zone: t.z } : {}),
+      ...(sky ? { sky } : {}),
+      ...(t.sv !== undefined ? { planVer: t.sv } : {}),
+    },
     result,
     elapsed,
   );

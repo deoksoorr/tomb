@@ -1,5 +1,6 @@
 import { DIFFS, MONSTERS, zoneFor, type Difficulty, type MonsterId } from "./catalog";
 import { clamp, monsterStats, seeded } from "./formulas";
+import type { Season } from "../ambience";
 import { constellationById, CONSTELLATIONS, type Constellation, type ConstellationRarity } from "./constellations";
 
 // 한 판의 출현 계획. 시드(서버가 런 티켓에 넣어 준다)로 정해져서, 게임은 이대로 내보내고
@@ -200,7 +201,7 @@ export function bugsCount(plan: BugSpawn[], effMs: number): Record<BugKind, numb
 // ── 별자리 잇기 ──
 
 /**
- * 빛의 고리가 별에 닿는 시각(t)에 누른다. con = 이 별 무리(group)가 그리는 별자리 (lib/rpg/constellations),
+ * 빛의 고리가 별에 닿는 시각(t)에 누른다. con = 이 별 무리(group)가 그리는 별자리 (lib/rpg/constellations, 2판은 무리 = 별자리 별 전부),
  * x·y는 그 별자리 모양 안의 자리 0..1 (화면 어디에 얼마나 크게 펼칠지는 씬이 화면 비율에 맞춰 정한다)
  */
 export type StarNote = { t: number; x: number; y: number; group: number; idx: number; con: string };
@@ -218,53 +219,54 @@ export function starWindows(d: Difficulty, dex: number): [number, number] {
   return [Math.round(STAR_WIN[d][0] * k), Math.round(STAR_WIN[d][1] * k)];
 }
 
-/** 별자리 고르는 무게: 흔함 > 보통 > 희귀(어려움 이상) > 전설(맑은 밤) */
-const CON_WEIGHT: Record<ConstellationRarity, number> = { 1: 10, 2: 6, 3: 3.5, 5: 2.5 };
+/** 별자리 계획 판 번호. 판 시작 때 티켓에 실려 서버가 그 판의 계획으로 검사한다 (1판 = lib/rpg/starsPlanV1, 별 5~7개) */
+export const STARS_PLAN_VER = 2;
+/** 한 판에 도감에 새로 등록할 수 있는 별자리 수 (넘친 것은 완성 연출만, 다음 판에) */
+export const STARS_NEW_PER_RUN = 3;
 
-/** 이 판에 나올 수 있는 별자리인지: 희귀는 어려움·지옥, 전설은 맑은 밤 보너스 판에서만 */
-export function constellationAllowed(c: Constellation, d: Difficulty, starry: boolean): boolean {
-  if (c.rarity === 5) return starry;
+/** 판 시작 시각의 하늘 (서버가 티켓 시각으로 다시 계산한다 — lib/stargaze starSkyAt) */
+export type StarSky = { starry?: boolean; season?: Season; dawn?: boolean };
+
+/** 별자리 고르는 무게: 흔함 > 보통 > 희귀(어려움 이상) > 전설(맑은 밤). 계절·새벽 별자리는 그때만 나오므로 조금 더 자주 */
+const CON_WEIGHT: Record<ConstellationRarity, number> = { 1: 10, 2: 6, 3: 3.5, 5: 2.5 };
+const conWeight = (c: Constellation) => (c.season ? 8 : c.dawn ? 6 : CON_WEIGHT[c.rarity]);
+
+/** 이 판에 나올 수 있는 별자리인지: 계절·새벽 별자리는 그때만(난이도 무관), 전설은 맑은 밤, 희귀는 어려움·지옥 */
+export function constellationAllowed(c: Constellation, d: Difficulty, sky: StarSky): boolean {
+  if (c.season) return sky.season === c.season;
+  if (c.dawn) return !!sky.dawn;
+  if (c.rarity === 5) return !!sky.starry;
   if (c.rarity === 3) return d === "hard" || d === "hell";
   return true;
 }
 
 /**
- * 박자(t)·무리 크기·무리 번호는 예전 계획과 한 치도 다르지 않다 (같은 난수 r을 같은 순서로 쓴다 → 판 진행 중 배포가 겹쳐도
- * 옛 화면과 새 서버의 별 수 상한이 같다). 별자리 고르기는 따로 굴리는 난수(rc)로만 — 무리 크기와 같은 별 수의 별자리 중에서,
- * 이 판에서 아직 안 나온 것을 먼저. starry = 판 시작 시각이 맑은 밤인지 (서버는 티켓 시각으로 다시 계산한다)
+ * 2판 계획: 무리마다 별자리를 먼저 고르고(rc), 그 별자리의 별 수만큼 박자대로 (박자 간격·반 박자 확률·무리 사이 쉼은 1판과 같다).
+ * 남은 시간에 끝까지 다 나올 수 있는 별자리만 고른다 → 판 끝에 잘린 무리가 없다. 한 판 안에서는 아직 안 나온 별자리를 먼저
  */
-export function starsPlan(seed: number, d: Difficulty, durationSec: number, starry = false): StarNote[] {
+export function starsPlan(seed: number, d: Difficulty, durationSec: number, sky: StarSky = {}): StarNote[] {
   const r = seeded(seed ^ 0x53544152);
   const rc = seeded(seed ^ 0x434f4e53);
   const used = new Set<string>();
-  const pickCon = (len: number): Constellation => {
-    const fits = CONSTELLATIONS.filter((c) => c.stars.length === len && constellationAllowed(c, d, starry));
-    const fresh = fits.filter((c) => !used.has(c.id));
-    const pool = fresh.length ? fresh : fits;
-    let x = rc() * pool.reduce((a, c) => a + CON_WEIGHT[c.rarity], 0);
-    const c = pool.find((c) => (x -= CON_WEIGHT[c.rarity]) < 0) ?? pool[pool.length - 1];
-    used.add(c.id);
-    return c;
-  };
+  const beat = STAR_BEAT[d];
   const out: StarNote[] = [];
   const end = durationSec * 1000 - 400;
   let t = STAR_APPROACH[d] + 600;
   let group = 0;
-  while (t < end) {
-    const len = 5 + Math.floor(r() * 3);
-    const con = pickCon(len);
-    // 예전 계획의 시작 자리·걸음 난수 — 자리는 이제 별자리 모양이 정하지만, 박자 난수 순서를 지키려고 그대로 뽑는다
-    r();
-    r();
-    for (let i = 0; i < len && t < end; i++) {
-      const [x, y] = con.stars[i];
-      out.push({ t: Math.round(t), x, y, group, idx: i, con: con.id });
-      r();
-      r();
-      t += STAR_BEAT[d] * (r() < STAR_HALF_P[d] ? 0.5 : 1);
-    }
+  for (;;) {
+    const fits = CONSTELLATIONS.filter((c) => constellationAllowed(c, d, sky) && t + (c.stars.length - 1) * beat < end);
+    if (!fits.length) break;
+    const fresh = fits.filter((c) => !used.has(c.id));
+    const pool = fresh.length ? fresh : fits;
+    let x = rc() * pool.reduce((a, c) => a + conWeight(c), 0);
+    const con = pool.find((c) => (x -= conWeight(c)) < 0) ?? pool[pool.length - 1];
+    used.add(con.id);
+    con.stars.forEach(([sx, sy], i) => {
+      out.push({ t: Math.round(t), x: sx, y: sy, group, idx: i, con: con.id });
+      if (i < con.stars.length - 1) t += beat * (r() < STAR_HALF_P[d] ? 0.5 : 1);
+    });
     group++;
-    t += STAR_BEAT[d] * 1.8;
+    t += beat * 2.8;
   }
   return out;
 }
@@ -273,16 +275,19 @@ export function starsCount(plan: StarNote[], effMs: number): number {
   return plan.filter((n) => n.t <= effMs).length;
 }
 
-/** 무리 하나의 정보: 별자리·별 수·마지막 별 시각. 판 끝에 잘려 별자리 별 수보다 적게 나온 무리는 full=false (완성할 수 없다) */
+/**
+ * 무리 하나의 정보: 별자리·별 수·마지막 별 시각. 판 끝에 잘려 별자리 별 수보다 적게 나온 무리는 full=false (완성할 수 없다).
+ * sizeOf: 그 계획 판의 별자리 별 수 (1판 검사는 1판 표)
+ */
 export type StarGroup = { group: number; con: string; size: number; lastT: number; full: boolean };
-export function starGroups(plan: StarNote[]): StarGroup[] {
+export function starGroups(plan: StarNote[], sizeOf: (id: string) => number | undefined = (id) => constellationById(id)?.stars.length): StarGroup[] {
   const out: StarGroup[] = [];
   for (const n of plan) {
     const g = out[n.group] ?? (out[n.group] = { group: n.group, con: n.con, size: 0, lastT: n.t, full: false });
     g.size++;
     g.lastT = n.t;
   }
-  for (const g of out) g.full = g.size === (constellationById(g.con)?.stars.length ?? -1);
+  for (const g of out) g.full = g.size === (sizeOf(g.con) ?? -1);
   return out;
 }
 

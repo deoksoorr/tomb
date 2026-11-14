@@ -2,16 +2,18 @@ import { describe, expect, it } from "vitest";
 import { dexIdsOf, DEX_CATS, DEX_TITLES } from "../forage/catalog";
 import { dexPercent } from "../forage/service";
 import { dexFromHash, MemoryForageStore } from "../forage/store";
+import { SEASONS } from "../ambience";
 import { DIFFICULTIES, type Difficulty } from "./catalog";
-import { CONSTELLATIONS, constellationById } from "./constellations";
+import { CONSTELLATIONS, constellationById, STAR_COUNT } from "./constellations";
 import { clamp, seeded } from "./formulas";
-import { STAR_APPROACH, starGroups, starsCount, starsPlan } from "./plan";
+import { STAR_APPROACH, starGroups, starsCount, starsPlan, STARS_PLAN_VER, type StarSky } from "./plan";
 import { checkStarGroups, evaluate, type TicketInfo } from "./rewards";
+import { starsPlanV1, V1_SIZE, V1_TABLE } from "./starsPlanV1";
 import type { StarsResult } from "./types";
 
-// 별자리 잇기 개편: 별자리 모양 데이터, 계획(박자 불변·희귀 조건), 완성 목록 서버 검증, 도감 등록.
+// 별자리 잇기: 별자리 모양 데이터, 계획(2판: 별 많은 별자리·계절·새벽, 1판 얼림), 완성 목록 서버 검증(판 번호), 도감 등록.
 
-/** 개편 전 starsPlan 박자 그대로 (판 진행 중 배포가 겹쳐도 옛 화면과 새 서버의 별 수 상한이 같아야 한다) */
+/** 개편 전(0판) starsPlan 박자 — 1판은 이 박자와 같았다 */
 function legacyTimes(seed: number, d: Difficulty, durationSec: number): { t: number; group: number; idx: number }[] {
   const BEAT: Record<Difficulty, number> = { easy: 820, normal: 640, hard: 500, hell: 400 };
   const HALF: Record<Difficulty, number> = { easy: 0, normal: 0.12, hard: 0.25, hell: 0.35 };
@@ -54,24 +56,33 @@ const OLD_NAMES = [
 ];
 
 describe("별자리 모양 데이터", () => {
-  it("24개 안팎, id·이름 겹침 없음, 예전 12개 이름 유지", () => {
-    expect(CONSTELLATIONS.length).toBeGreaterThanOrEqual(20);
-    expect(CONSTELLATIONS.length).toBeLessThanOrEqual(28);
+  it("1차 24개 id 그대로 + 계절·새벽, id·이름 겹침 없음, 예전 12개 이름 유지", () => {
+    expect(CONSTELLATIONS.length).toBeGreaterThanOrEqual(28);
+    expect(CONSTELLATIONS.length).toBeLessThanOrEqual(34);
+    for (const [id] of V1_TABLE) expect(constellationById(id), id).toBeTruthy();
     expect(new Set(CONSTELLATIONS.map((c) => c.id)).size).toBe(CONSTELLATIONS.length);
     expect(new Set(CONSTELLATIONS.map((c) => c.name)).size).toBe(CONSTELLATIONS.length);
     for (const n of OLD_NAMES) expect(CONSTELLATIONS.map((c) => c.name)).toContain(n);
+    for (const s of SEASONS)
+      expect(
+        CONSTELLATIONS.some((c) => c.season === s),
+        s,
+      ).toBe(true);
+    expect(CONSTELLATIONS.filter((c) => c.dawn).length).toBeGreaterThanOrEqual(2);
     for (const c of CONSTELLATIONS) {
       expect(c.id).toMatch(/^c_[a-z]+$/);
       expect(c.name.endsWith("자리")).toBe(true);
       expect(c.shape.length).toBeGreaterThan(0);
       expect(c.desc.length).toBeGreaterThan(0);
+      expect(!!c.season && !!c.dawn).toBe(false);
     }
   });
 
-  it("별 수 5~7, 좌표는 화면(망원경 테) 안, 잇는 순서는 서로 다른 별을 알맞은 거리로", () => {
+  it("별 수는 희귀도별 범위(흔함 8~10·보통 10~12·희귀 12~15·전설 16~20), 좌표는 화면(망원경 테) 안, 잇는 순서는 알맞은 거리로", () => {
     for (const c of CONSTELLATIONS) {
-      expect(c.stars.length, c.id).toBeGreaterThanOrEqual(5);
-      expect(c.stars.length, c.id).toBeLessThanOrEqual(7);
+      const [lo, hi] = STAR_COUNT[c.rarity];
+      expect(c.stars.length, c.id).toBeGreaterThanOrEqual(lo);
+      expect(c.stars.length, c.id).toBeLessThanOrEqual(hi);
       for (const [x, y] of c.stars) {
         expect(x, c.id).toBeGreaterThanOrEqual(0.06);
         expect(x, c.id).toBeLessThanOrEqual(0.94);
@@ -88,8 +99,8 @@ describe("별자리 모양 데이터", () => {
       for (let i = 0; i < c.stars.length; i++)
         for (let j = i + 1; j < c.stars.length; j++)
           expect(Math.hypot(c.stars[i][0] - c.stars[j][0], c.stars[i][1] - c.stars[j][1]), `${c.id} ${i}-${j}`).toBeGreaterThanOrEqual(0.1);
-      // 그림 선도 0..1 안, 선마다 점 둘 이상
-      expect(c.art.length).toBeGreaterThan(0);
+      // 그림 선도 0..1 안, 선마다 점 둘 이상, 첫 줄은 별을 이은 테두리
+      expect(c.art.length).toBeGreaterThan(1);
       for (const line of c.art) {
         expect(line.length).toBeGreaterThanOrEqual(2);
         for (const [x, y] of line) {
@@ -99,92 +110,124 @@ describe("별자리 모양 데이터", () => {
           expect(y, c.id).toBeLessThanOrEqual(1);
         }
       }
-    }
-  });
-
-  it("별 수(5·6·7)마다 어느 난이도에서나 나오는 별자리가 셋 이상, 희귀·전설도 있다", () => {
-    for (const len of [5, 6, 7]) {
-      const same = CONSTELLATIONS.filter((c) => c.stars.length === len);
-      expect(same.filter((c) => c.rarity <= 2).length).toBeGreaterThanOrEqual(3);
-      expect(same.some((c) => c.rarity === 3)).toBe(true);
-      expect(same.some((c) => c.rarity === 5)).toBe(true);
+      expect(c.art[0][0], c.id).toEqual(c.stars[0]);
     }
   });
 });
 
-describe("별자리 잇기 계획", () => {
-  it("박자·무리 크기·무리 번호는 개편 전과 똑같다 (맑은 밤이어도)", () => {
-    for (const seed of [1, 7, 12345, 99_999_999])
-      for (const d of DIFFICULTIES)
-        for (const starry of [false, true]) {
-          const plan = starsPlan(seed, d, 75, starry);
-          expect(plan.map(({ t, group, idx }) => ({ t, group, idx }))).toEqual(legacyTimes(seed, d, 75));
+const SKIES: StarSky[] = [{}, { starry: true }, { season: "spring" }, { season: "winter", dawn: true }];
+
+describe("별자리 잇기 계획 (2판)", () => {
+  it("같은 시드·하늘이면 같은 계획, 무리 = 별자리 별 전부(잘린 무리 없음), 별 자리는 모양 그대로", () => {
+    expect(starsPlan(42, "hard", 75, { starry: true })).toEqual(starsPlan(42, "hard", 75, { starry: true }));
+    for (const seed of [3, 4, 5, 6])
+      for (const d of DIFFICULTIES) {
+        const plan = starsPlan(seed, d, 75, SKIES[seed % SKIES.length]);
+        const gs = starGroups(plan);
+        expect(gs.length).toBeGreaterThan(3);
+        for (const g of gs) {
+          const con = constellationById(g.con)!;
+          expect(g.full, g.con).toBe(true);
+          for (const n of plan.filter((n) => n.group === g.group)) expect([n.x, n.y]).toEqual(con.stars[n.idx]);
         }
+        expect(plan.every((n, i) => i === 0 || n.t > plan[i - 1].t)).toBe(true);
+        expect(plan[plan.length - 1].t).toBeLessThan(75_000 - 400);
+        // 한 판 안에서 같은 별자리가 두 번 나오지 않는다 (후보가 무리 수보다 많다)
+        expect(new Set(gs.map((g) => g.con)).size).toBe(gs.length);
+      }
   });
 
-  it("같은 시드면 같은 계획, 무리마다 한 별자리 · 그 별자리의 별 수만큼 (판 끝에 잘린 마지막 무리만 예외)", () => {
-    expect(starsPlan(42, "hard", 75, true)).toEqual(starsPlan(42, "hard", 75, true));
-    for (const seed of [3, 4, 5, 6]) {
-      const plan = starsPlan(seed, "normal", 75);
-      const gs = starGroups(plan);
-      gs.forEach((g, i) => {
-        const con = constellationById(g.con)!;
-        expect(plan.filter((n) => n.group === g.group).every((n) => n.con === g.con)).toBe(true);
-        if (i < gs.length - 1) expect(g.full).toBe(true);
-        expect(g.size).toBeLessThanOrEqual(con.stars.length);
-        // 별 자리는 별자리 모양 그대로
-        for (const n of plan.filter((n) => n.group === g.group)) expect([n.x, n.y]).toEqual(con.stars[n.idx]);
-      });
-      // 한 판 안에서는 같은 별 수의 후보를 다 쓰기 전에는 같은 별자리가 다시 나오지 않는다
-      for (const len of [5, 6, 7]) {
-        const same = gs.filter((g) => constellationById(g.con)!.stars.length === len).map((g) => g.con);
-        const pool = CONSTELLATIONS.filter((c) => c.stars.length === len && c.rarity <= 2).length;
-        expect(new Set(same).size).toBe(Math.min(same.length, pool));
+  it("박자 간격·반 박자 확률은 그대로: 무리 안 간격은 한 박자 또는 반 박자, 무리 사이는 2.8박자", () => {
+    const BEAT: Record<Difficulty, number> = { easy: 820, normal: 640, hard: 500, hell: 400 };
+    for (const d of DIFFICULTIES) {
+      const plan = starsPlan(11, d, 75);
+      for (let i = 1; i < plan.length; i++) {
+        const gap = plan[i].t - plan[i - 1].t;
+        const same = plan[i].group === plan[i - 1].group;
+        const ok = same ? [BEAT[d], BEAT[d] / 2] : [BEAT[d] * 2.8];
+        expect(
+          ok.some((w) => Math.abs(gap - w) <= 1),
+          `${d} ${i} ${gap}`,
+        ).toBe(true);
       }
     }
   });
 
-  it("희귀는 어려움·지옥에서만, 전설은 맑은 밤 판에서만", () => {
-    const seen = (d: Difficulty, starry: boolean) => {
-      const out = new Set<number>();
-      for (let seed = 1; seed <= 300; seed++) for (const g of starGroups(starsPlan(seed, d, 75, starry))) out.add(constellationById(g.con)!.rarity);
-      return out;
+  it("희귀는 어려움·지옥, 전설은 맑은 밤, 계절 별자리는 그 계절, 새벽 별자리는 새벽에만", () => {
+    const seen = (d: Difficulty, sky: StarSky) => {
+      const out = new Set<string>();
+      for (let seed = 1; seed <= 250; seed++) for (const g of starGroups(starsPlan(seed, d, 75, sky))) out.add(g.con);
+      return [...out].map((id) => constellationById(id)!);
     };
     for (const d of ["easy", "normal"] as const) {
-      expect(seen(d, false).has(3)).toBe(false);
-      expect(seen(d, false).has(5)).toBe(false);
-      expect(seen(d, true).has(3)).toBe(false);
-      expect(seen(d, true).has(5)).toBe(true);
+      const plain = seen(d, {});
+      expect(plain.some((c) => c.rarity === 3 || c.rarity === 5 || c.season || c.dawn)).toBe(false);
+      expect(seen(d, { starry: true }).some((c) => c.rarity === 5)).toBe(true);
+      const dawn = seen(d, { dawn: true });
+      expect(dawn.some((c) => c.dawn)).toBe(true);
+      expect(dawn.some((c) => c.rarity === 3 && !c.dawn)).toBe(false);
     }
     for (const d of ["hard", "hell"] as const) {
-      expect(seen(d, false).has(3)).toBe(true);
-      expect(seen(d, false).has(5)).toBe(false);
-      expect(seen(d, true).has(5)).toBe(true);
+      const plain = seen(d, {});
+      expect(plain.some((c) => c.rarity === 3 && !c.dawn)).toBe(true);
+      expect(plain.some((c) => c.rarity === 5 || c.season || c.dawn)).toBe(false);
+    }
+    for (const s of SEASONS) {
+      const got = seen("normal", { season: s });
+      expect(
+        got.some((c) => c.season === s),
+        s,
+      ).toBe(true);
+      expect(
+        got.some((c) => c.season && c.season !== s),
+        s,
+      ).toBe(false);
     }
   });
 
-  it("별 개수 상한은 그대로 (같은 시간에 나올 수 있는 별 수가 예전과 같다)", () => {
-    for (const d of DIFFICULTIES) {
-      const plan = starsPlan(77, d, 75, true);
-      const old = legacyTimes(77, d, 75);
-      for (const ms of [10_000, 30_000, 75_000]) expect(starsCount(plan, ms)).toBe(old.filter((n) => n.t <= ms).length);
-    }
+  it("1판 계획은 얼려 둔 그대로 (박자는 0판과 같고, 별자리는 1판 표대로)", () => {
+    for (const seed of [1, 7, 12345])
+      for (const d of DIFFICULTIES)
+        expect(starsPlanV1(seed, d, 75, seed % 2 === 0).map(({ t, group, idx }) => ({ t, group, idx }))).toEqual(legacyTimes(seed, d, 75));
+    // 1판 서버가 냈던 별자리 (커밋 b19d557의 starsPlan과 비교해 뽑은 기준값)
+    const a = starsPlanV1(7, "normal", 75, false);
+    expect([a.length, a.reduce((s, x) => s + x.t, 0)]).toEqual([91, 3378264]);
+    expect(starGroups(a, (id) => V1_SIZE.get(id)).map((g) => g.con)).toEqual([
+      "c_cooking",
+      "c_license",
+      "c_reading",
+      "c_morning",
+      "c_blog",
+      "c_coding",
+      "c_diet",
+      "c_diary",
+      "c_guitar",
+      "c_ledger",
+      "c_newyear",
+      "c_hometrain",
+      "c_resign",
+      "c_ledger",
+      "c_license",
+      "c_diet",
+    ]);
+    const b = starsPlanV1(2024, "hard", 75, true);
+    expect([b.length, b.reduce((s, x) => s + x.t, 0)]).toEqual([126, 4771900]);
+    expect(starGroups(b, (id) => V1_SIZE.get(id))[19].con).toBe("c_bucket");
   });
 });
 
 describe("완성 목록 서버 검증", () => {
-  const T: TicketInfo = { game: "stars", difficulty: "normal", seed: 2024, level: 10, st: { agi: 1, dex: 1, luk: 1 } };
+  const T: TicketInfo = { game: "stars", difficulty: "normal", seed: 2024, level: 10, st: { agi: 1, dex: 1, luk: 1 }, planVer: STARS_PLAN_VER };
   const plan = starsPlan(T.seed, T.difficulty, 75);
   const gs = starGroups(plan);
-  const full = gs.filter((g) => g.full);
-  const base = (over: Partial<StarsResult>): StarsResult => ({
+  const base = (over: Partial<StarsResult>, p = plan): StarsResult => ({
     game: "stars",
     durationMs: 75_000,
-    perfect: plan.length,
+    perfect: p.length,
     good: 0,
     miss: 0,
-    maxCombo: plan.length,
-    score: plan.length * 300,
+    maxCombo: p.length,
+    score: p.length * 300,
     ...over,
   });
 
@@ -195,69 +238,79 @@ describe("완성 목록 서버 검증", () => {
   });
 
   it("계획에 있고 시간 안이고 이은 별 수가 맞으면 통과 → 무리마다 별자리 id", () => {
-    const groups = [full[0].group, full[1].group];
-    const v = evaluate(T, base({ groups, perfectGroups: [full[0].group] }), 76_000);
+    const v = evaluate(T, base({ groups: [gs[0].group, gs[1].group], perfectGroups: [gs[0].group] }), 76_000);
     expect(v).toMatchObject({
       ok: true,
       stars: [
-        { group: full[0].group, id: full[0].con, perfect: true },
-        { group: full[1].group, id: full[1].con, perfect: false },
+        { group: gs[0].group, id: gs[0].con, perfect: true },
+        { group: gs[1].group, id: gs[1].con, perfect: false },
       ],
     });
   });
 
-  it("가짜 목록은 판 전체를 거절한다", () => {
-    const g0 = full[0].group;
+  it("판 번호가 있는 티켓: 가짜 목록은 판 전체를 거절한다", () => {
+    const g0 = gs[0].group;
     const bad: Partial<StarsResult>[] = [
-      // 없는 무리
       { groups: [gs.length + 3] },
-      // 같은 무리 두 번
       { groups: [g0, g0] },
-      // 완벽 목록이 완성 목록 밖
-      { groups: [g0], perfectGroups: [full[1].group] },
-      // 이은 별 수보다 완성 별 수가 많다
-      { groups: full.map((g) => g.group), perfect: 3, good: 0, miss: 0, maxCombo: 3, score: 900 },
-      // 완벽으로만 이었다는 별 수가 완벽 판정보다 많다
-      { groups: [g0], perfectGroups: [g0], perfect: 0, good: full[0].size, maxCombo: full[0].size, score: full[0].size * 100 },
+      { groups: [g0], perfectGroups: [gs[1].group] },
+      { groups: gs.map((g) => g.group), perfect: 3, good: 0, miss: 0, maxCombo: 3, score: 900 },
+      { groups: [g0], perfectGroups: [g0], perfect: 0, good: gs[0].size, maxCombo: gs[0].size, score: gs[0].size * 100 },
     ];
     for (const o of bad) expect(evaluate(T, base(o), 76_000), JSON.stringify(o)).toMatchObject({ ok: false, code: "RESULT_REJECTED" });
-    // 아직 나오지도 않은 무리 (시간 밖): 10초 판에 마지막 무리를 완성했다고
-    const lastFull = full[full.length - 1];
+    // 아직 나오지도 않은 무리 (시간 밖)
+    const last = gs[gs.length - 1];
     const early = starsCount(plan, 10_000);
-    expect(evaluate(T, base({ durationMs: 10_000, perfect: early, maxCombo: early, score: early * 300, groups: [lastFull.group] }), 10_500)).toMatchObject({
+    expect(evaluate(T, base({ durationMs: 10_000, perfect: early, maxCombo: early, score: early * 300, groups: [last.group] }), 10_500)).toMatchObject({
       ok: false,
     });
   });
 
-  it("판 끝에 잘린 무리는 완성할 수 없다", () => {
-    // 잘린 무리가 생기는 계획을 찾는다
+  it("1판 티켓(sv=1)은 1판 계획으로 검사한다", () => {
+    const T1: TicketInfo = { ...T, planVer: 1 };
+    const p1 = starsPlanV1(T.seed, "normal", 75);
+    const g1 = starGroups(p1, (id) => V1_SIZE.get(id)).filter((g) => g.full);
+    const v = evaluate(T1, base({ groups: [g1[0].group] }, p1), 76_000);
+    expect(v).toMatchObject({ ok: true, stars: [{ id: g1[0].con }] });
+  });
+
+  it("판 번호 없는 옛 티켓: 1판으로 맞으면 1판, 2판 화면이 보낸 결과도 거절하지 않는다 (안 맞는 목록은 버리고 보상은 그대로)", () => {
+    const T0: TicketInfo = { ...T, planVer: undefined };
+    const p1 = starsPlanV1(T.seed, "normal", 75);
+    const g1 = starGroups(p1, (id) => V1_SIZE.get(id)).filter((g) => g.full);
+    expect(evaluate(T0, base({ groups: [g1[0].group] }, p1), 76_000)).toMatchObject({ ok: true, stars: [{ id: g1[0].con }] });
+    // 2판 화면의 정상 판 (별 수·목록 모두 2판 기준): 거절되지 않는다
+    for (let seed = 1; seed < 60; seed++) {
+      const p2 = starsPlan(seed, "hell", 75);
+      const r = base({ groups: starGroups(p2).map((g) => g.group), perfectGroups: [] }, p2);
+      const v = evaluate({ ...T0, seed, difficulty: "hell" }, r, 76_000);
+      expect(v.ok, String(seed)).toBe(true);
+    }
+  });
+
+  it("판 끝에 잘린 무리는 완성할 수 없다 (1판 계획)", () => {
     for (let seed = 1; seed < 200; seed++) {
-      const p = starsPlan(seed, "easy", 75);
-      const g = starGroups(p);
+      const p = starsPlanV1(seed, "easy", 75);
+      const g = starGroups(p, (id) => V1_SIZE.get(id));
       const cut = g.find((x) => !x.full);
       if (!cut) continue;
-      const r = base({ perfect: p.length, maxCombo: p.length, groups: [cut.group] });
-      expect(checkStarGroups(p, r, 76_000)).toBeNull();
+      expect(checkStarGroups(p, base({ groups: [cut.group] }, p), 76_000, (id) => V1_SIZE.get(id))).toBeNull();
       return;
     }
     throw new Error("잘린 무리가 있는 계획을 못 찾음");
   });
 
-  it("맑은 밤 판이면 서버도 맑은 밤 계획으로 별자리를 정한다", () => {
-    const S: TicketInfo = { ...T, difficulty: "hard", starry: true };
+  it("하늘(맑은 밤·계절·새벽)이 같아야 같은 별자리 — 서버는 티켓 시각의 하늘로 다시 만든다", () => {
     for (let seed = 1; seed < 400; seed++) {
-      const p = starsPlan(seed, "hard", 75, true);
-      const legend = starGroups(p).find((g) => g.full && constellationById(g.con)!.rarity === 5);
-      if (!legend) continue;
-      const v = evaluate(
-        { ...S, seed },
-        { game: "stars", durationMs: 75_000, perfect: p.length, good: 0, miss: 0, maxCombo: p.length, score: 0, groups: [legend.group] },
-        76_000,
-      );
-      expect(v.ok && v.stars?.[0].id).toBe(legend.con);
+      const sky: StarSky = { season: "autumn" };
+      const p = starsPlan(seed, "normal", 75, sky);
+      const g = starGroups(p).find((x) => constellationById(x.con)!.season === "autumn");
+      if (!g) continue;
+      const r = base({ groups: [g.group] }, p);
+      expect(evaluate({ ...T, seed, sky }, r, 76_000)).toMatchObject({ ok: true, stars: [{ id: g.con }] });
       return;
     }
-    throw new Error("전설 별자리가 있는 계획을 못 찾음");
+    throw new Error("가을 별자리가 있는 계획을 못 찾음");
   });
 });
 

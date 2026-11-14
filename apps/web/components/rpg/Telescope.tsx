@@ -9,6 +9,7 @@ import { meStore } from "@/lib/hooks/useMe";
 import { DIFFICULTIES, DIFFS, GAMES, potionById, type Difficulty } from "@/lib/rpg/catalog";
 import { rpgApi } from "@/lib/rpg/client";
 import { constellationById } from "@/lib/rpg/constellations";
+import { STARS_NEW_PER_RUN, STARS_PLAN_VER } from "@/lib/rpg/plan";
 import type { RunReward, RunResult } from "@/lib/rpg/types";
 import { STARRY_NIGHT_BONUS, starryNight } from "@/lib/stargaze";
 import ConstellationIcon from "../forage/ConstellationIcon";
@@ -118,7 +119,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
     setPhase("starting");
     setNotice(null);
     try {
-      const res = await rpgApi.start("stars", diff);
+      const res = await rpgApi.start("stars", diff, undefined, STARS_PLAN_VER);
       const c = res.view.character;
       // 맑은 밤은 서버가 판 시작 시각으로 정한다 (옛 서버면 없으므로 시계로)
       const runStarry = res.starry ?? starryNight(Date.now());
@@ -139,6 +140,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
         potions: c.potions,
         equip: c.equip,
         starry: runStarry,
+        sky: res.sky ?? { starry: runStarry },
         starsKnown: Object.keys(dex ?? {}).filter((id) => id.startsWith("c_")),
       });
     } catch (e) {
@@ -340,12 +342,18 @@ function ResultConstellations({ reward }: { reward: RunReward }) {
   const list = reward.constellations ?? [];
   if (!list.length) return <p className={ui.hint}>이번 판에는 끝까지 이은 별자리가 없어요. 한 별자리의 별을 하나도 놓치지 않으면 도감에 등록돼요.</p>;
   const fresh = list.filter((c) => c.isNew).length;
+  const later = list.filter((c) => c.later).length;
   return (
     <div className={x.cons}>
       <p className={x.consHead}>
         완성한 별자리 <b>{list.length}</b>
         {fresh > 0 && <span className={x.fresh}> · 새로 등록 {fresh}</span>}
       </p>
+      {later > 0 && (
+        <p className={ui.hint}>
+          한 판에 새로 등록되는 별자리는 {STARS_NEW_PER_RUN}개까지예요. 넘친 {later}개는 다음 판에 다시 이으면 등록돼요.
+        </p>
+      )}
       <ul className={x.consList}>
         {list.map((c, i) => {
           const def = constellationById(c.id);
@@ -361,6 +369,7 @@ function ResultConstellations({ reward }: { reward: RunReward }) {
                 </small>
               </span>
               {c.isNew && <em className={x.fresh}>도감 등록!</em>}
+              {c.later && <em className={x.later}>다음 판에</em>}
             </li>
           );
         })}

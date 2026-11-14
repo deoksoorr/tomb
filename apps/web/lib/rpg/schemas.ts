@@ -12,6 +12,8 @@ export const RunStartSchema = z.object({
   difficulty: z.enum(DIFFICULTIES),
   /** 40번 테마 사냥터 (사냥만, 없으면 그 난이도의 기본 사냥터) */
   zone: z.enum(ZONE_IDS).optional(),
+  /** 별자리 잇기: 화면이 쓰는 계획 판 번호 (없으면 1판 화면) */
+  planVer: z.number().int().min(1).max(99).optional(),
 });
 
 const duration = z.number().int().min(0).max(30 * 60_000);

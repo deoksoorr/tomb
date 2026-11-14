@@ -24,7 +24,9 @@ export const rpgApi = {
   character: (a: CharacterAction) => request<RpgView>("/api/rpg/character", post(a)),
   buy: (itemId: string, qty = 1) => request<ShopResponse>("/api/rpg/shop", post({ type: "buy", itemId, qty })),
   sell: (itemId: string, count = 1) => request<ShopResponse>("/api/rpg/shop", post({ type: "sell", itemId, count })),
-  start: (game: GameKind, difficulty: Difficulty, zone?: ZoneId) => request<RunStartResponse>("/api/rpg/run/start", post({ game, difficulty, ...(game === "hunt" && zone ? { zone } : {}) })),
+  // planVer: 별자리 잇기 화면이 쓰는 계획 판 번호 (서버가 티켓에 실어 그 판으로 검사한다)
+  start: (game: GameKind, difficulty: Difficulty, zone?: ZoneId, planVer?: number) =>
+    request<RunStartResponse>("/api/rpg/run/start", post({ game, difficulty, ...(game === "hunt" && zone ? { zone } : {}), ...(planVer ? { planVer } : {}) })),
   finish: (ticket: string, result: RunResult) => request<RunFinishResponse>("/api/rpg/run/finish", post({ ticket, result })),
 };
 

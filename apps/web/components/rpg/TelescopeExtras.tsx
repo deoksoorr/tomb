@@ -115,7 +115,8 @@ export function StarsDexCard({ dex, starry }: { dex: Record<string, DexEntry> | 
   return (
     <InfoCard title="별자리 도감" icon="book" aside={dex ? `${got.length}/${CONSTELLATIONS.length}` : "…"}>
       <p className={styles.muted}>
-        흔한 별자리는 어느 난이도에서나, <b>희귀</b>는 어려움·지옥에서만, <b>전설</b>({legend.length}개)은 맑은 밤 판에서만 떠요.
+        흔한 별자리는 어느 난이도에서나, <b>희귀</b>는 어려움·지옥에서만, <b>전설</b>({legend.length}개)은 맑은 밤 판에서만 떠요. 계절 별자리는 그
+        계절에만, 새벽 별자리는 새벽(5~7시)에만. 한 판에 새로 등록되는 건 3개까지예요.
         {starry ? " 지금은 맑은 밤 — 전설 별자리가 뜰 수 있어요!" : ""}
       </p>
       {got.length > 0 && <p className={styles.consNames}>{got.map((c) => c.name).join(" · ")}</p>}

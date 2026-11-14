@@ -4,7 +4,10 @@ import { DEX_REWARD } from "@/lib/forage/catalog";
 import { getForageStore } from "@/lib/forage/store";
 import type { DexClaimResponse, PublicDex } from "@/lib/forage/types";
 import { CONSTELLATIONS } from "@/lib/rpg/constellations";
-import { starGroups, starsPlan } from "@/lib/rpg/plan";
+import { env } from "@/lib/env";
+import { starGroups, starsPlan, STARS_PLAN_VER } from "@/lib/rpg/plan";
+import { starsPlanV1, V1_SIZE } from "@/lib/rpg/starsPlanV1";
+import { signTicket, verifyTicket } from "@/lib/rpg/ticket";
 import type { RunFinishResponse, RunStartResponse, StarsResult } from "@/lib/rpg/types";
 import { kstDay } from "@/lib/store/accounts";
 import * as dexClaim from "../forage/dex/claim/route";
@@ -46,17 +49,24 @@ const later = (ms: number) => {
   vi.spyOn(Date, "now").mockReturnValue(real + ms);
 };
 
-async function startStars(v: Visitor) {
-  const res = await start.POST(call("/api/rpg/run/start", v, { game: "stars", difficulty: "easy" }));
+/** 판 시작: planVer를 주면 그 판 화면 (2 = 지금 화면), 없으면 1판 화면 */
+async function startStars(v: Visitor, planVer: number | undefined = STARS_PLAN_VER) {
+  const res = await start.POST(call("/api/rpg/run/start", v, { game: "stars", difficulty: "easy", ...(planVer ? { planVer } : {}) }));
   expect(res.status).toBe(200);
   const s = (await res.json()) as RunStartResponse;
   expect(typeof s.starry).toBe("boolean");
+  expect(s.planVer).toBe(planVer ?? 1);
   return s;
 }
 
+/** 그 판 화면이 만든 계획 */
+const planOf = (s: RunStartResponse) =>
+  s.planVer === 1 ? starsPlanV1(s.seed, "easy", s.timeLimitSec, !!s.starry) : starsPlan(s.seed, "easy", s.timeLimitSec, s.sky);
+const groupsOf = (s: RunStartResponse) => starGroups(planOf(s), s.planVer === 1 ? (id) => V1_SIZE.get(id) : undefined).filter((g) => g.full);
+
 /** 다 완벽으로 이은 판 (groups를 주면 완성 목록도) */
 function perfectRun(s: RunStartResponse, groups?: number[]): StarsResult {
-  const plan = starsPlan(s.seed, "easy", s.timeLimitSec, !!s.starry);
+  const plan = planOf(s);
   return {
     game: "stars",
     durationMs: 75_000,
@@ -70,9 +80,9 @@ function perfectRun(s: RunStartResponse, groups?: number[]): StarsResult {
 }
 
 describe("별자리 잇기 → 별자리 도감", () => {
-  it("완성 목록을 검사해 도감에 등록 (처음만 새로), 옛 화면 결과는 등록 없이, 가짜 목록은 거절", async () => {
+  it("완성 목록을 검사해 도감에 등록 (처음만 새로), 완성 목록 없는 결과는 등록 없이, 가짜 목록은 거절", async () => {
     const v = await newVisitor();
-    // 1) 옛 화면 (완성 목록 없음): 보상은 그대로, 도감 등록 없음
+    // 1) 완성 목록 없음: 보상은 그대로, 도감 등록 없음
     const s0 = await startStars(v);
     later(76_000);
     const r0 = (await (await finish.POST(call("/x", v, { ticket: s0.ticket, result: perfectRun(s0) }))).json()) as RunFinishResponse;
@@ -81,9 +91,9 @@ describe("별자리 잇기 → 별자리 도감", () => {
     expect((await getForageStore().dex(v.id)).dex).toEqual({});
     vi.restoreAllMocks();
 
-    // 2) 완성 목록: 온전한 무리 둘
+    // 2) 완성 목록: 무리 둘
     const s1 = await startStars(v);
-    const g1 = starGroups(starsPlan(s1.seed, "easy", s1.timeLimitSec, !!s1.starry)).filter((g) => g.full);
+    const g1 = groupsOf(s1);
     later(76_000);
     const res1 = await finish.POST(call("/x", v, { ticket: s1.ticket, result: perfectRun(s1, [g1[0].group, g1[1].group]) }));
     expect(res1.status).toBe(200);
@@ -106,17 +116,66 @@ describe("별자리 잇기 → 별자리 도감", () => {
     expect(fake.status).toBe(422);
     expect(Object.keys((await getForageStore().dex(v.id)).dex)).toHaveLength(2);
     vi.restoreAllMocks();
+  });
 
-    // 4) 이미 있는 별자리를 다시 완성하면 횟수만 오르고 isNew는 아니다 (그 판에 같은 별자리가 나왔을 때 — 저장소 단위 시험은 lib/rpg/constellations.test.ts)
-    const s3 = await startStars(v);
-    const g3 = starGroups(starsPlan(s3.seed, "easy", s3.timeLimitSec, !!s3.starry)).filter((g) => g.full);
-    const again = g3.find((g) => g.con === g1[0].con || g.con === g1[1].con);
-    if (again) {
-      later(76_000);
-      const r3 = (await (await finish.POST(call("/x", v, { ticket: s3.ticket, result: perfectRun(s3, [again.group]) }))).json()) as RunFinishResponse;
-      expect(r3.reward.constellations).toEqual([{ id: again.con, isNew: false, perfect: true }]);
-      expect((await getForageStore().dex(v.id)).dex[again.con]).toMatchObject({ n: 2, pf: 2 });
-    }
+  it("한 판 새 등록은 3개까지 — 넘친 처음 별자리는 later, 이미 있는 별자리는 한도와 상관없이 횟수가 오른다", async () => {
+    const v = await newVisitor();
+    const s = await startStars(v);
+    const gs = groupsOf(s);
+    expect(gs.length).toBeGreaterThanOrEqual(5);
+    // 하나는 미리 도감에 있다
+    await getForageStore().addStars(v.id, kstDay(Date.now()), [{ id: gs[4].con, perfect: false }]);
+    later(76_000);
+    const r = (await (
+      await finish.POST(
+        call("/x", v, {
+          ticket: s.ticket,
+          result: perfectRun(
+            s,
+            gs.slice(0, 5).map((g) => g.group),
+          ),
+        }),
+      )
+    ).json()) as RunFinishResponse;
+    expect(r.reward.constellations).toEqual([
+      { id: gs[0].con, isNew: true, perfect: true },
+      { id: gs[1].con, isNew: true, perfect: true },
+      { id: gs[2].con, isNew: true, perfect: true },
+      { id: gs[3].con, isNew: false, perfect: true, later: true },
+      { id: gs[4].con, isNew: false, perfect: true },
+    ]);
+    const dex = (await getForageStore().dex(v.id)).dex;
+    expect(dex[gs[3].con]).toBeUndefined();
+    expect(dex[gs[4].con]).toMatchObject({ n: 2, pf: 1 });
+    expect(Object.keys(dex)).toHaveLength(4);
+  });
+
+  it("배포 호환: 1판 화면(판 번호 없이 시작)은 1판 계획으로 검사, 판 번호 없는 옛 티켓도 정상 판은 거절하지 않는다", async () => {
+    const v = await newVisitor();
+    // 1판 화면이 새 서버에서 시작 → 티켓 sv=1 → 1판 계획으로 목록 검사·등록
+    const s1 = await startStars(v, undefined);
+    const g1 = groupsOf(s1);
+    later(76_000);
+    const r1 = (await (await finish.POST(call("/x", v, { ticket: s1.ticket, result: perfectRun(s1, [g1[0].group]) }))).json()) as RunFinishResponse;
+    expect(r1.reward.constellations).toEqual([{ id: g1[0].con, isNew: true, perfect: true }]);
+    vi.restoreAllMocks();
+
+    // 2판 배포 전 서버가 낸 티켓(sv 없음)으로 2판 화면이 한 정상 판: 보상은 그대로 (목록은 1판과 안 맞으면 버린다)
+    const s2 = await startStars(v);
+    const old = await signTicket(env.sessionSecret(), { ...(await verifyTicket(env.sessionSecret(), s2.ticket))!, sv: undefined });
+    const g2 = groupsOf(s2);
+    later(76_000);
+    const res = await finish.POST(
+      call("/x", v, {
+        ticket: old,
+        result: perfectRun(
+          s2,
+          g2.map((g) => g.group),
+        ),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as RunFinishResponse).reward.points).toBeGreaterThan(0);
   });
 
   it("별자리 도감 25% 보상은 한 번만, 이웃 도감 구경에도 별자리·칭호가 보인다", async () => {

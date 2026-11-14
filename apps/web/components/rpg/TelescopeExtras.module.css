@@ -198,3 +198,11 @@
 .consHead .fresh {
   margin-left: 0;
 }
+
+.later {
+  margin-left: auto;
+  color: #9aa3c8;
+  font-style: normal;
+  font-size: 11px;
+  white-space: nowrap;
+}

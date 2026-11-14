@@ -19,6 +19,8 @@ export type TicketClaims = {
   st: { agi: number; dex: number; luk: number };
   /** 사냥터 id (40번, 사냥만). 없으면 그 난이도의 기본 사냥터 */
   z?: ZoneId;
+  /** 별자리 잇기 계획 판 번호 (판 시작 때 화면이 알려 준 판). 없으면 판 번호가 생기기 전 티켓 */
+  sv?: number;
 };
 
 const enc = new TextEncoder();
@@ -50,7 +52,8 @@ export async function verifyTicket(secret: string, token: string): Promise<Ticke
       Number.isInteger(c.lv) &&
       typeof c.st === "object" &&
       c.st !== null &&
-      (c.z === undefined || (isZoneId(c.z) && HUNT_ZONES[c.z].difficulty === c.d));
+      (c.z === undefined || (isZoneId(c.z) && HUNT_ZONES[c.z].difficulty === c.d)) &&
+      (c.sv === undefined || Number.isInteger(c.sv));
     return ok ? c : null;
   } catch {
     return null;

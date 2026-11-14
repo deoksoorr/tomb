@@ -1,5 +1,6 @@
 import type { Difficulty, DropKind, GameKind, GearSlot, MonsterId, SkillId, Stats, ZoneId } from "./catalog";
 import type { Derived } from "./formulas";
+import type { StarSky } from "./plan";
 import type { StatusId } from "./status";
 
 // 사냥터(RPG) 데이터 형태: 저장 원본, API 응답, 게임 ↔ UI 브리지 페이로드.
@@ -88,8 +89,11 @@ export type RunStartResponse = {
   zone?: ZoneId;
   seed: number;
   timeLimitSec: number;
-  /** 별자리 잇기: 판 시작 시각이 맑은 밤 (전설 별자리가 나올 수 있다, 포인트 보너스) */
+  /** 별자리 잇기: 판 시작 시각이 맑은 밤 (전설 별자리가 나올 수 있다, 포인트 보너스). 1판 화면도 읽는다 */
   starry?: boolean;
+  /** 별자리 잇기: 판 시작 시각의 하늘 (맑은 밤·계절·새벽)과 서버가 받아들인 계획 판 번호 */
+  sky?: StarSky;
+  planVer?: number;
   view: RpgView;
 };
 
@@ -111,8 +115,11 @@ export type RunReward = {
   lostDrops: number;
   /** 22번: 별자리 잇기를 맑은 밤에 해서 포인트 보너스를 받았다 */
   nightBonus?: boolean;
-  /** 별자리 잇기: 이번 판에 완성한 별자리 (isNew = 도감에 처음 등록, perfect = 완벽으로만 이음) */
-  constellations?: { id: string; isNew: boolean; perfect: boolean }[];
+  /**
+   * 별자리 잇기: 이번 판에 완성한 별자리 (isNew = 도감에 처음 등록, perfect = 완벽으로만 이음,
+   * later = 처음 완성했지만 한 판 새 등록 한도(STARS_NEW_PER_RUN)를 넘어 이번엔 등록하지 않음 — 다음 판에)
+   */
+  constellations?: { id: string; isNew: boolean; perfect: boolean; later?: boolean }[];
 };
 
 export type RunFinishResponse = { reward: RunReward; view: RpgView };
@@ -140,6 +147,8 @@ export type RpgPlay = {
   tone?: MeadowTone;
   /** 별자리 잇기: 맑은 밤 판 (서버 판 시작 응답의 starry — 전설 별자리가 계획에 들어간다) */
   starry?: boolean;
+  /** 별자리 잇기: 판 시작 시각의 하늘 (서버 판 시작 응답 — 계절·새벽 별자리). 있으면 starry 대신 이것으로 계획을 만든다 */
+  sky?: StarSky;
   /** 별자리 잇기: 이미 도감에 있는 별자리 id (처음 완성하면 "도감 등록!"을 띄운다. 등록 자체는 서버가 한다) */
   starsKnown?: string[];
 };

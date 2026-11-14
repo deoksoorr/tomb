@@ -1,6 +1,16 @@
 import * as Phaser from "phaser";
 import { constellationById, type Constellation } from "@/lib/rpg/constellations";
-import { comboMult, STAR_APPROACH, STAR_SCORE, starGroups, starWindows, starsPlan, type StarGroup, type StarNote } from "@/lib/rpg/plan";
+import {
+  comboMult,
+  STAR_APPROACH,
+  STAR_SCORE,
+  starGroups,
+  STARS_NEW_PER_RUN,
+  starWindows,
+  starsPlan,
+  type StarGroup,
+  type StarNote,
+} from "@/lib/rpg/plan";
 import type { RpgAction, RpgHud, StarsResult } from "@/lib/rpg/types";
 import { hash2 } from "../sprites/pixel";
 import { RpgScene } from "./base";
@@ -72,6 +82,8 @@ export class StarsScene extends RpgScene {
   private perfectGroups: number[] = [];
   /** 도감에 이미 있는 별자리 + 이번 판에 처음 완성한 것 ("도감 등록!"은 한 번만) */
   private known = new Set<string>();
+  /** 이번 판에 처음 완성한 별자리 수 (STARS_NEW_PER_RUN개까지만 도감에 오른다 — 넘친 것은 "다음 판에") */
+  private newCount = 0;
   private lastName: string | null = null;
   private reduced = false;
   private burst!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -94,7 +106,7 @@ export class StarsScene extends RpgScene {
     this.ah = portrait ? 300 : 200;
     ensureStarTextures(this, this.aw, this.ah);
     this.reduced = this.data0.reduced;
-    this.plan = starsPlan(this.play.seed, this.play.difficulty, this.play.timeLimitSec, !!this.play.starry);
+    this.plan = starsPlan(this.play.seed, this.play.difficulty, this.play.timeLimitSec, this.play.sky ?? { starry: !!this.play.starry });
     this.groups = starGroups(this.plan);
     this.approach = STAR_APPROACH[this.play.difficulty];
     this.win = starWindows(this.play.difficulty, this.play.derived.stats.dex);
@@ -107,6 +119,7 @@ export class StarsScene extends RpgScene {
     this.doneGroups = [];
     this.perfectGroups = [];
     this.known = new Set(this.play.starsKnown ?? []);
+    this.newCount = 0;
     this.lastName = null;
     cam.setBackgroundColor("#04050c");
     this.fit();
@@ -266,7 +279,7 @@ export class StarsScene extends RpgScene {
     const v = this.view(l.n.group);
     v.hits++;
     if (j !== "perfect") v.flawless = false;
-    this.snd.link(l.n.idx, j === "perfect");
+    this.snd.link(l.n.con, l.n.idx, v.con.stars.length, j === "perfect");
     l.ring.destroy();
     l.star.setAlpha(1).setTint(j === "perfect" ? 0xfff3c8 : 0xc8dcff);
     this.tweens.add({ targets: l.star, scale: { from: 2.2, to: 1.2 }, duration: 260, ease: "Quad.easeOut" });
@@ -312,7 +325,9 @@ export class StarsScene extends RpgScene {
     const v = this.view(l.n.group);
     v.broken = true;
     v.flawless = false;
-    this.snd.miss();
+    // 너무 일찍 = 짧고 탁한 틱, 놓침(별자리가 끊김) = 낮게 떨어지며 흐려지는 종
+    if (why === "너무 일찍") this.snd.early();
+    else this.snd.miss();
     l.ring.destroy();
     l.star.setTint(0x50546a).setAlpha(0.45);
     l.glow.setAlpha(0);
@@ -360,8 +375,13 @@ export class StarsScene extends RpgScene {
     const { con } = v;
     this.doneGroups.push(v.info.group);
     if (v.flawless) this.perfectGroups.push(v.info.group);
-    const fresh = !this.known.has(con.id);
-    this.known.add(con.id);
+    const first = !this.known.has(con.id);
+    // 한 판 새 등록 한도 안이면 도감 등록, 넘쳤으면 다음 판에 (등록은 서버가 같은 규칙으로 한다)
+    const fresh = first && this.newCount < STARS_NEW_PER_RUN;
+    if (fresh) {
+      this.newCount++;
+      this.known.add(con.id);
+    }
     this.lastName = con.name;
     const color = artColor(con.rarity);
     const art = this.add.graphics().setDepth(40).setBlendMode(Phaser.BlendModes.ADD);
@@ -382,9 +402,11 @@ export class StarsScene extends RpgScene {
     const hex = `#${color.toString(16).padStart(6, "0")}`;
     const tag = con.rarity >= 5 ? " ★전설" : con.rarity >= 3 ? " ★희귀" : "";
     v.objs.push(this.nameLabel(top.x, top.y - 4, `${con.name}${tag}`, con.rarity >= 3 ? hex : "#ffe39a", 14));
-    if (fresh) {
+    if (first) {
       const bottom = this.place(v, 0.5, Math.max(...con.stars.map((s) => s[1])));
-      const t = this.nameLabel(bottom.x, Math.min(this.ah - 22, bottom.y + 16), "도감 등록!", "#9ef0c0", 12);
+      const t = fresh
+        ? this.nameLabel(bottom.x, Math.min(this.ah - 22, bottom.y + 16), "도감 등록!", "#9ef0c0", 12)
+        : this.nameLabel(bottom.x, Math.min(this.ah - 22, bottom.y + 16), "도감 칸이 가득 — 다음 판에", "#9aa3c8", 11);
       if (!this.reduced) this.tweens.add({ targets: t, y: t.y - 3, duration: 260, yoyo: true, repeat: 2, ease: "Sine.easeOut" });
       v.objs.push(t);
     }

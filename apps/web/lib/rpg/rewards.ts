@@ -11,11 +11,15 @@ import {
   huntTotal,
   STAR_SCORE,
   starGroups,
+  STARS_PLAN_VER,
   starsCount,
   starsPlan,
   WAVE_MIN_GAP_SEC,
   type StarNote,
+  type StarSky,
 } from "./plan";
+import { constellationById } from "./constellations";
+import { starsPlanV1, V1_SIZE } from "./starsPlanV1";
 import type { BugsResult, Drop, HuntResult, RunResult, StarsResult } from "./types";
 
 // 판 결과 검증과 보상 계산 (서버 전용으로 쓰지만 순수 함수라 테스트가 쉽다).
@@ -50,8 +54,10 @@ export type TicketInfo = {
   st: { agi: number; dex: number; luk: number };
   /** 사냥터 id (40번). 없으면 그 난이도의 기본 사냥터 */
   zone?: string;
-  /** 별자리 잇기: 판 시작 시각이 맑은 밤이었는지 (전설 별자리가 계획에 들어간다) */
-  starry?: boolean;
+  /** 별자리 잇기: 판 시작 시각의 하늘 (맑은 밤·계절·새벽 — 그때만 나오는 별자리가 계획에 들어간다) */
+  sky?: StarSky;
+  /** 별자리 잇기: 판을 시작할 때의 계획 판 번호 (티켓의 sv). 없으면 판 번호가 생기기 전 티켓 */
+  planVer?: number;
 };
 
 /** 별자리 잇기에서 검증을 통과한 완성 별자리 (무리 번호·별자리 id·완벽으로만 이었는지) */
@@ -150,13 +156,34 @@ function evalBugs(t: TicketInfo, r: BugsResult, eff: number): Verdict {
   return miniReward(t, score, clamp(score / target, 0, 1));
 }
 
+/** 그 판 번호의 계획과 별자리 별 수 (1판은 얼려 둔 lib/rpg/starsPlanV1) */
+function starsPlanOf(t: TicketInfo, ver: number): { plan: StarNote[]; sizeOf: (id: string) => number | undefined } {
+  const limit = timeLimitSec("stars", t.difficulty);
+  if (ver === 1) return { plan: starsPlanV1(t.seed, t.difficulty, limit, !!t.sky?.starry), sizeOf: (id) => V1_SIZE.get(id) };
+  return { plan: starsPlan(t.seed, t.difficulty, limit, t.sky ?? {}), sizeOf: (id) => constellationById(id)?.stars.length };
+}
+
+/**
+ * 판 번호가 있으면 그 판의 계획으로 검사한다 (가짜 완성 목록은 판 전체 거절).
+ * 판 번호가 없는 티켓(2판 배포 전에 시작한 판): 1판 계획으로 검사하고, 안 맞으면 2판으로 한 번 더 —
+ * 이때는 완성 목록이 어느 계획과도 안 맞아도 목록만 버리고 보상은 그대로 (배포가 판 중간에 겹친 정상 판이 거절되지 않게)
+ */
 function evalStars(t: TicketInfo, r: StarsResult, eff: number): Verdict {
-  const plan = starsPlan(t.seed, t.difficulty, timeLimitSec("stars", t.difficulty), !!t.starry);
+  if (t.planVer === 1 || t.planVer === STARS_PLAN_VER) return evalStarsAt(t, r, eff, t.planVer, false);
+  const v1 = evalStarsAt(t, r, eff, 1, true);
+  return v1.ok ? v1 : evalStarsAt(t, r, eff, STARS_PLAN_VER, true);
+}
+
+function evalStarsAt(t: TicketInfo, r: StarsResult, eff: number, ver: number, lenient: boolean): Verdict {
+  const { plan, sizeOf } = starsPlanOf(t, ver);
   // 마지막 별은 판정 범위만큼 늦게 눌릴 수 있다
   if (r.perfect + r.good + r.miss > starsCount(plan, eff + 300)) return tooHigh("별");
   if (r.maxCombo > r.perfect + r.good) return tooHigh("콤보");
-  const done = checkStarGroups(plan, r, eff);
-  if (done === null) return tooHigh("별자리");
+  let done = checkStarGroups(plan, r, eff, sizeOf);
+  if (done === null) {
+    if (!lenient) return tooHigh("별자리");
+    done = [];
+  }
   const upper = Math.round((r.perfect * STAR_SCORE.perfect + r.good * STAR_SCORE.good) * comboMult(r.maxCombo));
   const score = Math.max(0, Math.min(r.score, upper));
   const target = Math.max(1, plan.length * STAR_SCORE.perfect);
@@ -169,11 +196,11 @@ function evalStars(t: TicketInfo, r: StarsResult, eff: number): Verdict {
  * 완성 무리 별 수의 합 ≤ 이은 별(완벽+좋아), 완벽으로만 이은 무리의 합 ≤ 완벽. 하나라도 어긋나면 null (판 전체 거절).
  * 목록이 없으면(옛 화면이 보낸 결과) 빈 목록 — 도감 등록 없이 예전처럼 끝난다
  */
-export function checkStarGroups(plan: StarNote[], r: StarsResult, eff: number): StarsDone[] | null {
+export function checkStarGroups(plan: StarNote[], r: StarsResult, eff: number, sizeOf?: (id: string) => number | undefined): StarsDone[] | null {
   const groups = r.groups ?? [];
   const perfect = r.perfectGroups ?? [];
   if (!groups.length && !perfect.length) return [];
-  const all = starGroups(plan);
+  const all = starGroups(plan, sizeOf);
   const seen = new Set<number>();
   let linked = 0;
   for (const g of groups) {
