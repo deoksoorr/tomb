@@ -86,8 +86,10 @@
   gap: 6px;
   min-height: 0;
   padding: 10px;
-  /* 자세히 보기는 스크롤 없이 다 보이게 (무대는 크게, 글·조작은 작게 → 사기 버튼까지 들어간다) */
-  overflow: hidden;
+  /* 자세히 보기는 스크롤 없이 다 보이게 (무대는 크게, 글·조작은 작게 → 사기 버튼까지 들어간다).
+     그래도 넘치면(낮은 화면·이름표 미리보기처럼 긴 칸) 사기 버튼이 잘리지 않게 이 칸 안에서만 스크롤 */
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--bg-deep);
   box-shadow: var(--px-border);
 }
@@ -120,6 +122,13 @@
 /* 닉네임 꾸미기 미리보기 (낮·밤 두 칸): 칸 폭을 꽉 채운다 */
 .namePreview {
   max-width: 320px;
+}
+
+/* 폰: 이름표 미리보기는 낮·밤 두 칸이라 옆에 글을 두면 좁다 → 미리보기 위, 글·사기 버튼 아래로 */
+@media (max-width: 560px) {
+  .detail:has(.namePreview) {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* 폭죽 미리보기: 자세히 보기 칸 폭을 꽉 채운다 */

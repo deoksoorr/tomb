@@ -92,3 +92,21 @@
   font-size: 10px;
   text-shadow: 0 1px 0 #0a0b10;
 }
+
+/* 상점 자세히 보기 칸이 낮으면(그 칸이 크기 기준 컨테이너) 아바타를 2배로 줄여 사기 버튼까지 들어가게 */
+@container (max-height: 460px) {
+  .scene {
+    padding-top: 16px;
+  }
+
+  .crop {
+    width: 64px;
+    height: 72px;
+  }
+
+  .crop canvas {
+    width: 144px;
+    height: 128px;
+    margin: -36px 0 0 -40px;
+  }
+}

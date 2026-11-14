@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { CHAMP_BOARDS, CHAMP_TITLE, champBitsOf, champBoards, champHatOf, itemById, type AvatarDye, type ChampBoard } from "@tomb/protocol";
+import { CHAMP_BOARDS, CHAMP_ITEM_IDS, CHAMP_TITLE, champBitsOf, champBoards, champHatOf, itemById, type AvatarDye, type ChampBoard } from "@tomb/protocol";
 import { notifyMe } from "./ban";
 import { speciesById } from "./forage/catalog";
 import { getFishRank } from "./forage/fishRank";
@@ -193,9 +193,9 @@ export async function grantChampTest(accountId: string, boards: readonly ChampBo
   if (!testServerEnv()) throw new Error("[champ] 시험 지급은 테스트 서버에서만");
   const store = getChamp();
   if (!boards.length) {
-    // 시험 해제: 시험으로 준 전용 모자도 거둔다 (운영자는 랭킹에서 빠지니 진짜 1위 모자와 겹치지 않는다)
-    const t = await store.test(accountId, now);
-    if (t) await getAccounts().revokeChamp(accountId, [champHatOf(champBoards(t.bits))]);
+    // 시험 해제: 전용 꾸미기를 모두 거둔다 — 예전 시험에서 남은 모자(하나만 규칙 전 것)·시험 자격이 이미 끝난 뒤 남은 모자까지.
+    // 운영자는 랭킹에서 빠지니 진짜 1위 모자와 겹치지 않는다
+    await getAccounts().revokeChamp(accountId, CHAMP_ITEM_IDS);
     await store.setTest(accountId, null);
     await notifyMe([accountId]).catch(() => null);
     return { bits: 0, until: 0 };

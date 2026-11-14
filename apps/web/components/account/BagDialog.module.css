@@ -161,9 +161,11 @@
   padding: 8px;
 }
 
-/* 부위 칸(PaperDoll .slot 버튼) 높이 96 → 80 */
+/* 부위 칸(PaperDoll .slot 버튼) 높이 96 → 64: 닉네임 꾸미기 두 칸이 늘어 네 줄이 되어도 아래 버튼까지 들어가게 */
 .dollPane .doll button {
-  min-height: 80px;
+  min-height: 64px;
+  gap: 2px;
+  padding: 4px 3px 5px;
 }
 
 /* 장비창 맨 아래 줄 가운데: 내 이름표 미리보기 (게임 이름표 글꼴·크기·외곽선) */

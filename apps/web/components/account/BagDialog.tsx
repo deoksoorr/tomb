@@ -350,8 +350,8 @@ function Wardrobe({
                 area={slot}
                 label={label}
                 name={e?.item.name ?? null}
-                icon={e ? <ItemIcon itemId={e.item.id} size={32} /> : null}
-                silhouette={<ItemIcon itemId={SLOT_SILHOUETTE[slot]} size={32} />}
+                icon={e ? <ItemIcon itemId={e.item.id} size={24} /> : null}
+                silhouette={<ItemIcon itemId={SLOT_SILHOUETTE[slot]} size={24} />}
                 meter={e?.until ? { ratio: timeLeftRatio(e.until, now), text: remainingLabel(e.until, now) } : null}
                 tip={e ? { title: e.item.name, body: e.item.desc } : { title: `${label} · 비어 있어요`, body: "눌러서 이 부위에 입을 것을 골라요." }}
                 selected={filter === slot}
