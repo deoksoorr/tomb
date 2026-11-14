@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
+import { tabHidden } from "@/lib/hooks/visibleAgain";
 import { megaphoneStore, openMegaphone, useMegaphone } from "@/lib/hooks/useMegaphone";
 import { reportStore } from "@/lib/reportClient";
 import { cx } from "../ui/cx";
@@ -26,7 +27,7 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
   useEffect(() => {
     void megaphoneStore.load(channel);
     const t = setInterval(() => {
-      if (document.visibilityState === "visible") void megaphoneStore.load(channel);
+      if (!tabHidden()) void megaphoneStore.load(channel);
     }, RELOAD_MS);
     return () => clearInterval(t);
   }, [channel]);

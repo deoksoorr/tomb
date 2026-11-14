@@ -181,7 +181,7 @@ export function useGraves(channel: number): GravesState {
       writeItem(gravesCacheKey(channel), JSON.stringify(list));
     };
     const load = async () => {
-      if (document.hidden) return;
+      if (tabHidden()) return;
       ctrl?.abort();
       const mine = (ctrl = new AbortController());
       try {

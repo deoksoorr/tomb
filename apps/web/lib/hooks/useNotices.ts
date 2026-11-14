@@ -5,7 +5,7 @@ import { hasUnread, latestNotice, sortNotices } from "@/components/notice/notice
 import { api } from "@/lib/api";
 import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
 import type { Notice } from "@/lib/types";
-import { onVisibleAgain } from "./visibleAgain";
+import { onVisibleAgain, tabHidden } from "./visibleAgain";
 
 // 공지 목록은 처음 한 번 받고, 켜 둔 탭에서도 새 공지가 보이게 주기적으로(화면이 보일 때만)·탭으로 돌아올 때(오래됐으면)·공지 창을 열 때 다시 받는다.
 // 마지막으로 본 공지 id를 기억해 새 공지 점을 띄운다.
@@ -58,7 +58,7 @@ function load() {
   watching = true;
   // 모듈 수명 동안 하나만 둔다 (구독자가 바뀌어도 그대로)
   setInterval(() => {
-    if (document.visibilityState === "visible") fetchNotices(POLL_MS - 1000);
+    if (!tabHidden()) fetchNotices(POLL_MS - 1000);
   }, POLL_MS);
   // 탭으로 돌아오면: 마지막으로 받은 지 주기만큼 지났을 때만 (흩어서) 한 번. 숨긴 동안은 받지 않는다
   onVisibleAgain(() => fetchNotices(POLL_MS - 1000));

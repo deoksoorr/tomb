@@ -1,6 +1,7 @@
 import type * as Phaser from "phaser";
 import { SEATS, WALK_SPEED, type Seat, type Sid } from "@tomb/protocol";
 import { activeResidentCount, normalizeResidentSettings, RESIDENTS_DEFAULT, type ResidentSettings } from "@/lib/residents";
+import { isBackground } from "@/lib/background";
 import { AvatarView } from "../../entities/AvatarView";
 import type { Player } from "../../entities/Player";
 import { SAY_MS } from "../../entities/SpeechBubble";
@@ -69,10 +70,10 @@ export class Residents {
     if (typeof window !== "undefined") this.timer = setInterval(() => this.poll(), POLL_MS);
   }
 
-  /** 관리자 설정 확인 (화면이 보일 때만). 처음 받기 전·실패하면 기본값(켜기·12명) */
+  /** 관리자 설정 확인 (앞에 있을 때만 — 숨긴 탭·다른 창을 보는 중이면 건너뛴다). 처음 받기 전·실패하면 기본값(켜기·12명) */
   private poll(): void {
     if (this.destroyed || typeof fetch !== "function") return;
-    if (this.settings && typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    if (this.settings && isBackground()) return;
     fetch("/api/residents", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j: unknown) => this.setSettings(normalizeResidentSettings(j)))

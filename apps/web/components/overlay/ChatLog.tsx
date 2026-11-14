@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
 import { chatChime, chimeForChat } from "@/lib/chatChime";
+import { useBackground } from "@/lib/hooks/useBackground";
 import { addChatLine, CHAT_LOG_MOBILE_LINES, chatLineOpacity, chatLineTone, liveChatLines, mergeChatLines, visibleChatLines, type ChatLine } from "@/game/logic/chatLog";
 import { cx } from "../ui/cx";
 import StyledName from "../ui/StyledName";
@@ -18,6 +19,8 @@ import styles from "./ChatLog.module.css";
 const INPUT_ID = "chat-log-input";
 /** 흐려짐·만료를 다시 그리는 간격 */
 const TICK_MS = 1000;
+/** 뒤로 간 동안(다른 창을 보는 중)은 흐려짐 갱신을 늦춘다 */
+const TICK_BG_MS = 5000;
 
 let lines: ChatLine[] = [];
 let seq = 0;
@@ -110,15 +113,19 @@ export default function ChatLog({ mobile, room, hidden = false }: Props) {
   }, [hidden]);
   // 줄이 있는 동안만 1초마다 흐려짐·만료 갱신
   const any = all.length > 0;
+  const background = useBackground();
   useEffect(() => {
     if (!any) return;
-    const t = setInterval(() => {
-      const n = Date.now();
-      store.prune(n);
-      setNow(n);
-    }, TICK_MS);
+    const t = setInterval(
+      () => {
+        const n = Date.now();
+        store.prune(n);
+        setNow(n);
+      },
+      background ? TICK_BG_MS : TICK_MS,
+    );
     return () => clearInterval(t);
-  }, [any]);
+  }, [any, background]);
 
   if (hidden) return null;
   // 막 추가된 줄은 렌더 시각이 받은 시각보다 앞설 수 있다 → 둘 중 늦은 쪽으로 (1초 안 흐려짐 없음)

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { bridge, type ForageRodPhase } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
+import { onBackgroundChange } from "@/lib/background";
 import { AUTO_RANK_NOTE, AUTO_SYNC_MS, autoNextLabel } from "@/lib/forage/auto";
 import { DAILY_CATCH_MAX, speciesById } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
@@ -10,6 +11,7 @@ import { sunkenText } from "@/lib/forage/sunken";
 import type { AutoFishResponse, AutoFishStatus, CastResponse, CatchResult, SunkenCatch } from "@/lib/forage/types";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { showToast } from "@/lib/hooks/useToasts";
+import { tabHidden } from "@/lib/hooks/visibleAgain";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { noteDexGain, toastAutoCatch } from "./autoToast";
@@ -219,11 +221,12 @@ export default function FishingPanel({
       .finally(() => setAutoBusy(false));
   }
 
-  // 자동 낚시 정산: 보이는 동안 AUTO_SYNC_MS마다, 숨었다가 돌아오면 바로. 숨은 동안은 부르지 않는다 (서버가 접속 시간으로 센다)
+  // 자동 낚시 정산: 앞에 있는 동안 AUTO_SYNC_MS마다, 뒤로 갔다가(숨긴 탭·다른 창을 보는 중) 돌아오면 바로.
+  // 뒤로 간 동안은 부르지 않는다 (서버가 접속 시간으로 센다 — 그동안은 머무르기 기록이 접속 신호)
   const autoOn = auto !== null;
   useEffect(() => {
     if (!autoOn) return;
-    let hiddenSince = document.hidden ? Date.now() : 0;
+    let hiddenSince = tabHidden() ? Date.now() : 0;
     const sync = (away: boolean) =>
       forageApi
         .autoSync()
@@ -232,26 +235,25 @@ export default function FishingPanel({
           // 다음 주기에 다시
         });
     const timer = setInterval(() => {
-      if (!document.hidden) void sync(false);
+      if (!tabHidden()) void sync(false);
     }, AUTO_SYNC_MS);
     const tick = setInterval(() => setClock(performance.now()), 5_000);
-    const onVis = () => {
-      if (document.hidden) hiddenSince = Date.now();
+    const offBg = onBackgroundChange((bg) => {
+      if (bg) hiddenSince = Date.now();
       else if (hiddenSince) {
         hiddenSince = 0;
         void sync(true);
       }
-    };
+    });
     // 탭·창을 닫으면 끈다 (응답은 못 받는다 — 다음에 들어오면 ForageLayer가 남은 세션을 정산한다)
     const onHide = (e: PageTransitionEvent) => {
       if (!e.persisted && autoRef.current) forageApi.autoStopBeacon();
     };
-    document.addEventListener("visibilitychange", onVis);
     window.addEventListener("pagehide", onHide);
     return () => {
       clearInterval(timer);
       clearInterval(tick);
-      document.removeEventListener("visibilitychange", onVis);
+      offBg();
       window.removeEventListener("pagehide", onHide);
     };
     // applyAuto는 ref·setter만 쓴다

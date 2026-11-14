@@ -13,6 +13,7 @@ import { useMyGraves } from "@/lib/hooks/useMyGraves";
 import { useNotices } from "@/lib/hooks/useNotices";
 import { showToast, useToasts } from "@/lib/hooks/useToasts";
 import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
+import { onBackgroundChange } from "@/lib/background";
 import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
 import { PRESENCE_HIDDEN_INTERVAL_MS, PRESENCE_INTERVAL_MS, type PublicGrave } from "@/lib/types";
 import { emitLook, restoreLook } from "../account/actions";
@@ -138,9 +139,10 @@ function useAccountOnEnter(ready: boolean, name: string, color: string, body: st
 const PRESENCE_SID = Math.random().toString(36).slice(2, 12) + Date.now().toString(36).slice(-6);
 
 /**
- * 머무르기 포인트: 게임 중에는(탭이 숨겨져도) 서버에 알린다.
- *  - 보이는 동안 10분마다. 숨긴 동안은 30분마다 한 번만 보내고 서버가 같은 화면(sid)이면 흐른 시간만큼 몰아서 센다
- *  - 돌아오면 마지막으로 보낸 지 10분이 지났을 때 (흩어서) 바로 한 번 → 숨긴 동안의 몫을 한 번에 받는다
+ * 머무르기 포인트: 게임 중에는(탭이 숨겨지거나 다른 창을 보는 중에도) 서버에 알린다.
+ *  - 앞에 있는 동안 10분마다. 뒤로 간 동안(lib/background: 숨긴 탭·포커스 잃고 20초)은 30분마다 한 번만 보내고
+ *    서버가 같은 화면(sid)이면 흐른 시간만큼 몰아서 센다
+ *  - 돌아오면 마지막으로 보낸 지 10분이 지났을 때 (흩어서) 바로 한 번 → 뒤로 간 동안의 몫을 한 번에 받는다
  */
 function usePresencePoints(active: boolean) {
   useEffect(() => {
@@ -167,18 +169,17 @@ function usePresencePoints(active: boolean) {
         });
     }
     schedule();
-    // 숨으면 다음 보내기를 30분 뒤로 미루고, 돌아오면 10분이 지났을 때 바로 (아니면 남은 시간 뒤에)
-    const onHide = () => {
-      if (tabHidden()) schedule();
-    };
-    document.addEventListener("visibilitychange", onHide);
+    // 뒤로 가면 다음 보내기를 30분 뒤로 미루고, 돌아오면 10분이 지났을 때 바로 (아니면 남은 시간 뒤에)
+    const offBg = onBackgroundChange((bg) => {
+      if (bg) schedule();
+    });
     const offVisible = onVisibleAgain(() => {
       if (Date.now() - sentAt >= PRESENCE_INTERVAL_MS) send();
       else schedule();
     });
     return () => {
       if (timer) clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onHide);
+      offBg();
       offVisible();
     };
   }, [active]);

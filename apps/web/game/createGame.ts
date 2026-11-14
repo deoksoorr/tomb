@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { installBackgroundLoop } from "./backgroundLoop";
 import type { GameStartOptions } from "./bridge";
 import { installHousing } from "./housing/install";
 import { HauntHostScene } from "./haunt/HauntHostScene";
@@ -42,6 +43,8 @@ export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHan
   });
   game.registry.set("ctx", ctx);
   installHousing(game, ctx); // 하우징: 집 씬 등록 + 월드 ↔ 집 전환 (game/housing)
+  // 다른 창을 보는 중(뒤로 간 상태)에는 갱신·그리기를 줄인다 (소리·실시간 연결은 그대로, game/backgroundLoop)
+  ctx.disposers.push(installBackgroundLoop(game));
   // ?debug=1: 콘솔에서 상태를 들여다볼 수 있게 (게임 화면에는 아무것도 그리지 않는다. 수치는 UI의 NetHud가 net:stats로 표시)
   if (opts.debug) (window as unknown as { __tombGame?: Phaser.Game }).__tombGame = game;
 

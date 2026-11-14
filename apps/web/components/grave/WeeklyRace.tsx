@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CHAMP_BOARDS, CHAMP_TITLE, type ChampBoard } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
+import { tabHidden } from "@/lib/hooks/visibleAgain";
 import type { ChampAvatar, ChampResponse, RaceResponse, RaceRow } from "@/lib/types";
 import AvatarThumb from "../account/AvatarThumb";
 import StyledName from "../ui/StyledName";
@@ -65,7 +66,7 @@ export default function WeeklyRace() {
       .then((r) => alive && setChamp(r))
       .catch(() => undefined);
     // 숨긴 탭은 다시 받지 않는다
-    const t = setInterval(() => document.visibilityState === "visible" && void load(), RACE_REFRESH_MS);
+    const t = setInterval(() => !tabHidden() && void load(), RACE_REFRESH_MS);
     return () => {
       alive = false;
       clearInterval(t);
