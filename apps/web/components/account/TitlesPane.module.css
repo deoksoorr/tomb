@@ -57,8 +57,9 @@
   align-content: start;
   gap: 2px;
   width: 100%;
-  /* 카드 높이 통일 (가장 긴 경우 기준): 이름(2줄까지) · 얻는 방법(2줄) · 진행도 · 칭호 능력 */
-  height: 116px;
+  /* 카드 높이 통일: 이름 한 줄 · 얻는 방법 두 줄 · 진행도 · 칭호 능력이 딱 들어가는 높이 (아래가 비지 않게).
+     폰처럼 좁아 이름이 두 줄이 될 수 있는 화면만 한 줄만큼 더 */
+  height: 94px;
   overflow: hidden;
   align-content: start;
   padding: 6px 8px;
@@ -285,5 +286,11 @@
 @media (prefers-reduced-motion: reduce) {
   .title[data-loading] {
     animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .title {
+    height: 112px;
   }
 }
