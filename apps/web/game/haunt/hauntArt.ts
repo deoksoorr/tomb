@@ -1,10 +1,13 @@
 import type * as Phaser from "phaser";
 import { makeCanvas } from "../sprites/pixel";
-import { HAUNT_TILE, isWall, mulberry as mulberryCanvasSeed, type GhostLook, type Maze } from "./maze";
+import { ensureGhostTextures } from "./ghostArt";
+import { GHOST_LOOKS } from "./ghostKinds";
+import { HAUNT_TILE, isWall, mulberry as mulberryCanvasSeed, type Maze } from "./maze";
 
 // 귀신의집 그림 (코드로 그리는 픽셀아트). 브라우저에서만 부른다.
 //  - 마을의 귀신의집 건물·간판·벽등·문틈 안개·창 얼굴 (HauntHouseView)
-//  - 미로 바닥·벽·장식 한 장, 귀신 3종(2프레임), 놀래키는 얼굴, 어둠 가리개, 촛불·달빛 번짐, 스치는 그림자
+//  - 미로 바닥·벽·장식 한 장, 어둠 가리개, 촛불·달빛 번짐, 스치는 그림자
+//  - 귀신 10종과 놀래키는 얼굴은 ghostArt.ts
 
 export const HTEX = {
   house: "haunt-house",
@@ -16,8 +19,6 @@ export const HTEX = {
   windowFace: "haunt-window-face",
   sign: "haunt-sign",
   signGlow: "haunt-sign-glow",
-  ghost: (look: GhostLook) => `haunt-ghost-${look}`,
-  face: "haunt-face",
   dark: "haunt-dark",
   glow: "haunt-glow",
   moon: "haunt-moon",
@@ -26,8 +27,6 @@ export const HTEX = {
   maze: "haunt-maze",
 } as const;
 
-export const GHOST_W = 16;
-export const GHOST_H = 24;
 /** 어둠 가리개 텍스처 크기와, 빛 반지름(반쯤 어두워지는 곳)이 텍스처에서 차지하는 픽셀 */
 export const DARK_SIZE = 256;
 export const DARK_LIGHT_PX = 40;
@@ -297,85 +296,6 @@ export function whenSignFont(cb: () => void): void {
 
 // ── 미로 안 ──
 
-function ghostSheet(look: GhostLook): HTMLCanvasElement {
-  const { canvas, ctx } = makeCanvas(GHOST_W * 2, GHOST_H);
-  for (let f = 0; f < 2; f++) {
-    const o = f * GHOST_W;
-    if (look === "sobok") {
-      // 소복 입은 처녀귀신: 긴 검은 머리가 얼굴을 덮고, 흰 옷자락 아래는 발이 없다
-      px(ctx, o + 4, 9, 8, 13, 0xe8e6e0);
-      px(ctx, o + 3, 13, 10, 8, 0xe8e6e0);
-      px(ctx, o + 2, 18, 12, 4 - f, 0xd8d6d0);
-      for (let x = 2; x < 14; x += 2) px(ctx, o + x + f, 21 - f, 1, 2, 0xd8d6d0);
-      px(ctx, o + 3, 11, 1, 7, 0xd0cec8);
-      px(ctx, o + 12, 11, 1, 7, 0xd0cec8);
-      // 머리카락 (어깨 아래까지)
-      px(ctx, o + 4, 1, 8, 3, 0x0a080c);
-      px(ctx, o + 3, 3, 10, 12 + f, 0x0a080c);
-      px(ctx, o + 2, 6, 1, 8, 0x0a080c);
-      px(ctx, o + 13, 6, 1, 9 - f, 0x0a080c);
-      // 머리카락 사이로 보이는 창백한 얼굴 한 줄기와 눈 하나
-      px(ctx, o + 7, 5, 2, 6, 0xc8d0d8);
-      px(ctx, o + 7, 7, 1, 1, 0x000000);
-      px(ctx, o + 8, 9, 1, 1, 0x5a1010);
-    } else if (look === "sheet") {
-      // 보자기 유령: 둥근 머리, 뻥 뚫린 눈과 입
-      oval(ctx, o + 8, 8, 6, 6, 0xf0f0f4);
-      px(ctx, o + 2, 8, 13, 12, 0xf0f0f4);
-      for (let x = 2; x < 15; x += 3) px(ctx, o + x + (f ? 1 : 0), 20, 2, 2, 0xe0e0e8);
-      px(ctx, o + 2, 10, 1, 9, 0xd8d8e2);
-      oval(ctx, o + 6, 8, 1, 2, 0x0a0a10);
-      oval(ctx, o + 10, 8, 1, 2, 0x0a0a10);
-      oval(ctx, o + 8, 13, 1, 1 + f, 0x0a0a10);
-    } else {
-      // 그림자 사람: 새까만 몸, 붉은 눈 두 점
-      oval(ctx, o + 8, 5, 3, 4, 0x050407);
-      px(ctx, o + 5, 8, 6, 12, 0x050407);
-      px(ctx, o + 4, 10, 1, 8 + f, 0x050407);
-      px(ctx, o + 11, 10, 1, 8 - f, 0x050407);
-      px(ctx, o + 5, 20, 2, 4 - f, 0x050407);
-      px(ctx, o + 9, 20, 2, 3 + f, 0x050407);
-      px(ctx, o + 6, 4, 1, 1, 0xff3030);
-      px(ctx, o + 9, 4, 1, 1, 0xff3030);
-    }
-  }
-  return canvas;
-}
-
-/** 놀래키는 얼굴 (64×64, 크게 늘려 화면을 채운다) */
-function faceCanvas(): HTMLCanvasElement {
-  const { canvas, ctx } = makeCanvas(64, 64);
-  const r = mulberryCanvasSeed(13);
-  // 머리카락 (위·양옆으로 길게 늘어진다)
-  oval(ctx, 32, 28, 26, 26, 0x070509);
-  px(ctx, 6, 28, 52, 36, 0x070509);
-  // 창백한 얼굴
-  oval(ctx, 32, 34, 16, 22, 0xb8c4c8);
-  oval(ctx, 32, 36, 14, 19, 0xc8d2d4);
-  // 가르마로 갈라진 앞머리가 이마를 덮는다
-  for (let i = 0; i < 9; i++) {
-    px(ctx, 32 - i * 2 - 2, 12 + i, 2, 6 + i, 0x070509);
-    px(ctx, 32 + i * 2, 12 + i, 2, 6 + i, 0x070509);
-  }
-  // 퀭한 눈: 검은 구멍 + 작은 흰 눈동자
-  for (const ex of [24, 40]) {
-    oval(ctx, ex, 31, 6, 5, 0x6a7078);
-    oval(ctx, ex, 31, 5, 4, 0x000000);
-    px(ctx, ex - (ex < 32 ? -1 : 1), 31, 2, 2, 0xffffff);
-    // 흘러내린 자국
-    px(ctx, ex - 1, 36, 1, 8 + Math.floor(r() * 4), 0x2a2228);
-  }
-  // 크게 벌어진 입
-  oval(ctx, 32, 47, 6, 7, 0x1a0608);
-  oval(ctx, 32, 48, 5, 5, 0x000000);
-  px(ctx, 28, 41, 8, 1, 0x7a8288);
-  // 뺨 그늘·핏줄
-  for (let i = 0; i < 26; i++) px(ctx, 18 + Math.floor(r() * 28), 18 + Math.floor(r() * 34), 1, 1, r() < 0.5 ? 0x8a9298 : 0x9aa2a8);
-  px(ctx, 19, 38, 3, 6, 0x98a2a8);
-  px(ctx, 42, 38, 3, 6, 0x98a2a8);
-  return canvas;
-}
-
 /** 어둠 가리개: 가운데만 투명하고 바깥은 새까맣다 (빛 반지름 = DARK_LIGHT_PX 텍스처 px) */
 function darkCanvas(): HTMLCanvasElement {
   const S = DARK_SIZE;
@@ -424,8 +344,7 @@ function flameCanvas(): HTMLCanvasElement {
 }
 
 export function ensureHauntTextures(scene: Phaser.Scene): void {
-  for (const look of ["sobok", "sheet", "shadow"] as const) add(scene, HTEX.ghost(look), ghostSheet(look), { w: GHOST_W, h: GHOST_H });
-  add(scene, HTEX.face, faceCanvas());
+  ensureGhostTextures(scene, GHOST_LOOKS);
   add(scene, HTEX.dark, darkCanvas());
   add(scene, HTEX.glow, glowCanvas(64, "rgba(255,170,90,1)"));
   add(scene, HTEX.moon, glowCanvas(64, "rgba(170,200,230,1)"));

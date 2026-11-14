@@ -7,6 +7,7 @@ import { formatHauntTime } from "@/game/haunt/maze";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import s from "../rpg/rpg.module.css";
+import ShakeToggle from "../rpg/ShakeToggle";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
@@ -211,13 +212,14 @@ export default function HauntDialog({ onClose }: { onClose: () => void }) {
       <div className={s.result}>
         <p>
           낡은 집 안은 촛불 하나로는 앞이 잘 보이지 않는 미로예요. 들어갈 때마다 길이 조금씩 바뀌고,
-          어둠 속 어딘가에 귀신들이 숨어 있어요. 혼자 출구를 찾아 빠져나와 보세요.
+          어둠 속 어딘가에 저마다 다른 귀신들이 숨어 있어요 — 안으로 들어갈수록 더 무서운 것이 나와요. 혼자 출구를 찾아 빠져나와 보세요.
         </p>
         <div className={h.warn} role="note">
           <strong>주의</strong> 깜짝 놀라는 장면·큰 소리·번쩍임이 있어요.
           <br />
           기기의 &lsquo;동작 줄이기(움직임 줄이기)&rsquo;를 켜 두면 화면이 흔들리거나 번쩍이지 않고 귀신이 나타나기만 해요. 소리 크기는 설정의 효과음 음량을 따라요.
         </div>
+        <ShakeToggle />
         <p className={ui.hint}>
           포인트 보상은 없어요. {best ? `내 최고 기록: ${formatHauntTime(best.ms)} (놀람 ${best.scares}번)` : "아직 빠져나온 기록이 없어요."}
         </p>

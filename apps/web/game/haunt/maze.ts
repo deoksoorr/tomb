@@ -3,10 +3,13 @@
 //    → 귀신을 피해 돌아갈 길이 생긴다. 어떤 시드든 출구까지 늘 이어진다(maze.test.ts).
 //  - 타일 격자는 (2W+1)×(2H+1): 짝수 줄·칸은 벽, 홀수는 바닥. 입구는 왼쪽 아래 칸, 출구는 바깥 벽에 낸 문(입구에서 가장 먼 가장자리 칸).
 //  - 귀신: 정해진 길을 오가는 "순찰"과 막다른 곳·모퉁이에 숨은 "숨음". 출구로 가는 길 위에도 꼭 몇 마리를 둔다.
+//    종류(10가지)는 ghostKinds.ts가 판마다 섞어 붙인다 — 안쪽일수록 무서운 것, 한 판에 같은 종류는 한 번만.
+
+import { assignLooks, type GhostLook } from "./ghostKinds";
+
+export type { GhostLook };
 
 export const HAUNT_TILE = 16;
-
-export type GhostLook = "sobok" | "sheet" | "shadow";
 export type GhostPlan = {
   id: number;
   kind: "patrol" | "lurk";
@@ -107,6 +110,22 @@ export function pathBetween(m: Pick<Maze, "cols" | "rows" | "tiles">, a: { tx: n
   return out;
 }
 
+/**
+ * 거리표(distances(m, 목표))를 따라 목표 쪽으로 한 칸 (이미 목표거나 못 가면 null).
+ * 귀신이 벽을 뚫지 않고 미로 길을 따라 다가오게 한다
+ */
+export function stepToward(m: Pick<Maze, "cols" | "rows" | "tiles">, field: Int32Array, from: { tx: number; ty: number }): { tx: number; ty: number } | null {
+  if (isWall(m, from.tx, from.ty)) return null;
+  const here = field[from.ty * m.cols + from.tx];
+  if (here <= 0) return null;
+  for (const [dx, dy] of DIRS) {
+    const nx = from.tx + dx;
+    const ny = from.ty + dy;
+    if (!isWall(m, nx, ny) && field[ny * m.cols + nx] === here - 1) return { tx: nx, ty: ny };
+  }
+  return null;
+}
+
 const cellTile = (c: number) => c * 2 + 1;
 
 /** 바닥 타일의 열린 이웃 수 (1이면 막다른 곳) */
@@ -205,10 +224,10 @@ export function makeMaze(seed: number): Maze {
   const farFromOthers = (tx: number, ty: number) => anchors.every((a) => Math.abs(a.tx - tx) + Math.abs(a.ty - ty) >= 8);
   const safe = (tx: number, ty: number) => dStart[ty * cols + tx] >= 10 && dExit[ty * cols + tx] >= 3;
   const ghosts: GhostPlan[] = [];
-  const looks: GhostLook[] = ["sobok", "sheet", "shadow"];
+  // 종류는 다 놓은 뒤에 한꺼번에 붙인다 (4-4)
   const addGhost = (kind: GhostPlan["kind"], path: { tx: number; ty: number }[]) => {
     anchors.push(path[0]);
-    ghosts.push({ id: ghosts.length, kind, look: looks[ghosts.length % looks.length], path });
+    ghosts.push({ id: ghosts.length, kind, look: "sobok", path });
   };
 
   // 4-1) 출구로 가는 길 위 모퉁이에 숨은 귀신 2~3 (꼭 한 번은 마주치게)
@@ -250,6 +269,14 @@ export function makeMaze(seed: number): Maze {
     addGhost("patrol", path);
     patrols++;
   }
+
+  // 4-4) 종류: 입구에서 멀수록 무서운 것, 판마다 무작위
+  const looks = assignLooks(
+    ghosts.map((g) => g.kind),
+    ghosts.map((g) => dStart[g.path[0].ty * cols + g.path[0].tx]),
+    r,
+  );
+  ghosts.forEach((g, i) => (g.look = looks[i]));
 
   // 5) 장식: 촛대·초상화·거미줄·쓰러진 의자·인형·깨진 거울 (바닥 타일 / 벽 아래쪽 면)
   const decor: Decor[] = [];
@@ -303,31 +330,42 @@ export function clearLine(m: Pick<Maze, "cols" | "rows" | "tiles">, a: { tx: num
 
 // ── 깜짝 놀래키기 연출 일정 (광과민성 안전: 번쩍임·얼굴 깜빡임은 1초에 3번 이하) ──
 
-export type ScareStep = { at: number; kind: "faceIn" | "faceOut" | "red" | "shake" | "scream" | "thud" | "release" };
+export type ScareStep = { at: number; kind: "dark" | "faceIn" | "faceOut" | "red" | "shake" | "scream" | "thud" | "release" };
 
-/** 놀래키기 한 번의 일정 (ms). reduced = 움직임 줄이기: 커지기·흔들림·번쩍임 없이 천천히 나타났다 사라지기만 */
-export function scareSchedule(reduced: boolean): ScareStep[] {
+/** 먼저 화면이 새까매졌다가(숨 멎는 틈) 튀어나오는 귀신과 그 틈 (ms) — 빛 밖의 그림자·눈 깜빡임 마네킹 */
+const PRE_DARK_MS: Partial<Record<GhostLook, number>> = { shadow: 280, mannequin: 320 };
+
+/**
+ * 놀래키기 한 번의 일정 (ms). look = 귀신 종류, level 0..1 = 이번 판에서 얼마나 놀랐는지(많이 놀랄수록 세진다).
+ * reduced = 움직임 줄이기: 커지기·흔들림·번쩍임 없이 천천히 나타났다 사라지기만
+ */
+export function scareSchedule(reduced: boolean, look: GhostLook = "sobok", level = 0): ScareStep[] {
+  const pre = PRE_DARK_MS[look] ?? 0;
   if (reduced) {
-    return [
-      { at: 0, kind: "scream" },
-      { at: 0, kind: "faceIn" },
-      { at: 1000, kind: "faceOut" },
-      { at: 1100, kind: "release" },
+    const out: ScareStep[] = [
+      { at: pre, kind: "scream" },
+      { at: pre, kind: "faceIn" },
+      { at: pre + 1000, kind: "faceOut" },
+      { at: pre + 1100, kind: "release" },
     ];
+    if (pre) out.unshift({ at: 0, kind: "dark" });
+    return out;
   }
-  // 얼굴 3번 (380ms 간격 ≈ 2.6번/초), 붉은 번쩍임 2번 (760ms 간격)
+  // 얼굴 2~3번 (380ms 간격 ≈ 2.6번/초), 붉은 번쩍임 2번 (760ms 간격)
+  const pulses = level >= 0.25 ? 3 : 2;
   const out: ScareStep[] = [
-    { at: 0, kind: "scream" },
-    { at: 0, kind: "thud" },
-    { at: 0, kind: "shake" },
-    { at: 0, kind: "red" },
-    { at: 760, kind: "red" },
+    { at: pre, kind: "scream" },
+    { at: pre, kind: "thud" },
+    { at: pre, kind: "shake" },
+    { at: pre, kind: "red" },
+    { at: pre + 760, kind: "red" },
   ];
-  for (let i = 0; i < 3; i++) {
-    out.push({ at: i * 380, kind: "faceIn" });
-    out.push({ at: i * 380 + 230, kind: "faceOut" });
+  if (pre) out.push({ at: 0, kind: "dark" });
+  for (let i = 0; i < pulses; i++) {
+    out.push({ at: pre + i * 380, kind: "faceIn" });
+    out.push({ at: pre + i * 380 + 230, kind: "faceOut" });
   }
-  out.push({ at: 1000, kind: "release" });
+  out.push({ at: pre + 1000 + Math.round(clamp01(level) * 200), kind: "release" });
   return out.sort((a, b) => a.at - b.at);
 }
 
