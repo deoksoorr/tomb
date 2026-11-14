@@ -29,6 +29,9 @@ import { avFrame, ensureRpgTextures, makePlayer, RTEX } from "./sprites";
 // 40번 테마 사냥터: 지도·기믹·길찾기 (arena/), 몬스터 동작별 프레임 (monsterArt)
 import { Arena } from "./arena/Arena";
 import { monsterFrame, monsterOrigin, playMonsterDeath } from "./monsterArt";
+// 바닥 드롭 연출: 판이 끝나는 순간 서버와 같은 식으로 굴린 드롭을 몬스터 자리에 떨군다 (보상은 서버가)
+import { huntDropsFor } from "@/lib/rpg/rewards";
+import { LootLayer } from "./loot";
 
 // 사냥터: 위에서 내려다보는 실시간 전투. 웨이브는 서버가 준 시드의 계획(huntPlan)대로 나온다.
 //  - 웨이브 i는 앞 웨이브를 다 잡았고 i×8초가 지났을 때, 또는 앞 웨이브 뒤 35초가 지나면 나온다
@@ -264,6 +267,17 @@ export class HuntScene extends RpgScene {
   private pshots: PShot[] = [];
   /** 게임 시간으로 미루는 일 (휘두르는 동작 뒤 판정 등 — 멈춤·히트스톱 동안은 멈춘다) */
   private laters: { at: number; fn: () => void }[] = [];
+  // ── 바닥 드롭 (loot.ts) ──
+  private loot!: LootLayer;
+  /** 끝난 판의 결과: 드롭을 줍는 동안 더 바뀌지 않게 잡아 둔다 (있으면 판은 끝났고 드롭만 줍는 중) */
+  private endSnap: HuntResult | null = null;
+  /** 시간 끝·쓰러짐: 몬스터·입력을 멈춘 채 드롭만 날아온다 */
+  private over = false;
+  /** 이 시각(게임 ms) 전에는 끝내지 않는다 (승리 뒤 1.2초) · 이 시각이 지나면 남은 드롭을 모두 끌어와 끝낸다 */
+  private endAt = 0;
+  private lootDeadline = 0;
+  /** 마지막으로 잡은 몬스터 자리 (드롭이 여기서 튀어 오른다) */
+  private lastKill: { x: number; y: number } | null = null;
 
   constructor() {
     super("rpg-hunt");
@@ -399,7 +413,29 @@ export class HuntScene extends RpgScene {
     this.combo = this.maxCombo = this.comboAt = 0;
     this.pshots = [];
     this.laters = [];
+    this.endSnap = null;
+    this.over = false;
+    this.endAt = 0;
+    this.lootDeadline = 0;
+    this.lastKill = null;
+    this.loot = new LootLayer(
+      this,
+      {
+        now: () => this.now,
+        target: () => ({ x: this.px, y: this.py - 8 }),
+        place: (x, y) => {
+          const p = this.arena.place(x, y, 4);
+          return { x: Phaser.Math.Clamp(p.x, WALL + 8, W - WALL - 8), y: Phaser.Math.Clamp(p.y, WALL + 16, H - WALL - 4) };
+        },
+        synth: (key, layers) => this.sfx.synth(key, layers),
+        shake: (ms, k) => this.fx.shake(ms, k),
+        float: (x, y, text, color) => this.floatText(x, y, text, color, 10),
+      },
+      this.skfx,
+      this.data0.reduced,
+    );
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.loot.destroy();
       this.fx.destroy();
       this.skfx.clear();
       this.tele.destroy();
@@ -437,6 +473,8 @@ export class HuntScene extends RpgScene {
   // 그래서 Space를 한 번 톡 눌러도 쿨다운이 끝나는 순간 한 번 더 나갔다.
 
   protected onKey(code: string): void {
+    // 판이 끝나 드롭만 줍는 중: 걷기만 (결과가 잡혀 있으니 포션·스킬은 막는다)
+    if (this.endSnap) return;
     if (code === "Space" || code === "KeyJ") this.attack(true);
     else if (/^Digit[1-6]$/.test(code)) this.useSkill(Number(code.slice(5)) - 1);
     else if (code === "KeyQ") this.usePotion("p_coffee");
@@ -445,6 +483,7 @@ export class HuntScene extends RpgScene {
   }
 
   protected onAction(a: RpgAction): void {
+    if (this.endSnap) return;
     if (a.kind === "attack") this.attack(true);
     else if (a.kind === "hold") {
       this.holdOn = a.on;
@@ -455,6 +494,7 @@ export class HuntScene extends RpgScene {
 
   /** 탭: 그쪽을 바라보고 공격 */
   protected onTap(x: number, y: number): void {
+    if (this.endSnap) return;
     const dx = x - this.px;
     const dy = y - this.py;
     if (Math.hypot(dx, dy) > 2) this.setFace(dx, dy);
@@ -819,6 +859,7 @@ export class HuntScene extends RpgScene {
 
   private killMonster(m: Mon): void {
     m.alive = false;
+    this.lastKill = { x: m.x, y: m.y };
     this.kills[m.id] = (this.kills[m.id] ?? 0) + 1;
     this.killCount++;
     if (!m.minion && !MONSTERS[m.id].minion) this.waveAlive[m.wave]--;
@@ -1636,7 +1677,8 @@ export class HuntScene extends RpgScene {
 
   /** 맞으면 true (무적·회피 시간·보호막이 다 막으면 false). src가 있으면 상태 이상을 굴린다 */
   private hurtPlayer(dmg: number, src?: HitSrc): boolean {
-    if (this.died || this.now < this.hurtUntil || this.buff("invuln")) return false;
+    // 판이 끝나 드롭만 줍는 중에는 다치지 않는다 (지형 함정이 결과를 바꾸지 않게)
+    if (this.died || this.endSnap || this.now < this.hurtUntil || this.buff("invuln")) return false;
     this.hurtUntil = this.now + HURT_IFRAME_MS;
     // 11/12 부재중 자동응답: 보호막이 먼저 받는다
     // 동지의 맹세: 받는 피해 감소
@@ -1686,7 +1728,8 @@ export class HuntScene extends RpgScene {
     this.sfx.play("defeat");
     this.flash("쓰러졌어요…", 1500);
     this.player.setAlpha(0.5);
-    this.time.delayedCall(900, () => this.finish());
+    // 쓰러진 뒤 잠깐: 그때까지의 결과로 끝내고, 받을 드롭이 있으면 바닥에 떨궈 날아오게 한 뒤 끝낸다
+    this.time.delayedCall(900, () => !this.ended && !this.endSnap && this.endRun(this.result(), true, 0));
     return true;
   }
 
@@ -2112,15 +2155,26 @@ export class HuntScene extends RpgScene {
       const w = this.plan[this.nextWave];
       const prevDone = !aliveAll;
       if ((prevDone && now >= w.earliestSec * 1000) || now - this.lastWaveAt >= WAVE_MAX_GAP_SEC * 1000) this.spawnWave();
-    } else if (!aliveAll && !this.victoryAt && !this.died) {
+    } else if (!aliveAll && !this.victoryAt && !this.died && !this.endSnap) {
       this.victoryAt = now + 1200;
       this.flash("모든 웨이브를 막아 냈어요!", 2000);
       this.sfx.play("victory");
+      // 결과는 지금 잡는다 (걸린 시간은 예전처럼 1.2초 뒤 끝난 것으로 → 랭킹 기록이 드롭 줍는 시간만큼 늘지 않는다)
+      this.endRun({ ...this.result(), durationMs: Math.round(Math.min(this.victoryAt, this.limitMs)) }, false, 1200);
     }
-    if (this.victoryAt && now >= this.victoryAt) return this.finish();
-    if (now >= this.limitMs && !this.died) {
+    if (!this.endSnap && now >= this.limitMs && !this.died) {
       this.flash("시간이 다 됐어요", 1500);
-      return this.finish();
+      this.endRun(this.result(), true, 0);
+    }
+    // 판 끝: 드롭을 다 주웠거나(놓쳐도 잠시 뒤 날아온다) 기다림이 끝나면 결과를 보낸다
+    if (this.endSnap) {
+      this.loot.update(now, Math.min(delta, 100));
+      if (now >= this.endAt) {
+        if (now >= this.lootDeadline) this.loot.rush();
+        if (this.loot.count === 0 || now >= this.lootDeadline + 900) return this.finish();
+      }
+      // 시간 끝·쓰러짐: 몬스터·이동은 멈춘 채 드롭만 날아온다
+      if (this.over) return;
     }
 
     // 재생·버프
@@ -2302,7 +2356,42 @@ export class HuntScene extends RpgScene {
     };
   }
 
+  /**
+   * 판 끝 (승리·시간 끝·쓰러짐): 결과를 잡아 두고, 그 결과로 서버가 줄 드롭을 마지막으로 잡은 몬스터 자리에서 떨군다.
+   * freeze: 몬스터·입력을 멈춘다 (시간 끝·쓰러짐). minMs: 이만큼은 기다렸다 끝낸다 (승리 연출)
+   */
+  private endRun(r: HuntResult, freeze: boolean, minMs: number): void {
+    this.endSnap = r;
+    this.over = freeze;
+    const now = this.now;
+    this.endAt = now + minMs;
+    let drops: ReturnType<typeof huntDropsFor> = [];
+    try {
+      drops = huntDropsFor({ game: "hunt", difficulty: this.play.difficulty, seed: this.play.seed, zone: this.play.zone }, r);
+    } catch {
+      // 연출용 계산이 실패해도 판은 그대로 끝난다 (보상은 서버가)
+    }
+    // 바닥에 닿고 스스로 날아올 때까지 넉넉히 (그 뒤엔 남은 것을 끌어와 끝낸다)
+    this.lootDeadline = now + minMs + (freeze ? 2600 : 4200);
+    if (!drops.length) return;
+    // 마지막으로 잡은 자리에서 (멀면 내 둘레에서). 화면(세로로 긴 휴대폰은 좁다) 안쪽으로 당겨 떨어지는 걸 놓치지 않게
+    const k = this.lastKill;
+    const src = k && Math.hypot(k.x - this.px, k.y - this.py) < 140 ? { ...k } : { x: this.px + this.face.x * 14, y: this.py + 4 };
+    const v = this.cameras.main.worldView;
+    if (v.width > 80 && v.height > 80) {
+      src.x = Phaser.Math.Clamp(src.x, v.x + 34, v.right - 34);
+      src.y = Phaser.Math.Clamp(src.y, v.y + 40, v.bottom - 30);
+    }
+    this.loot.drop(drops, src.x, src.y, freeze || this.died, freeze ? 120 : 380);
+  }
+
+  /** 드롭만 줍던 중에 나가도 판은 이미 끝났으니 정상 종료로 */
+  protected finish(aborted = false): void {
+    super.finish(aborted && !this.endSnap);
+  }
+
   protected result(): HuntResult {
+    if (this.endSnap) return this.endSnap;
     return {
       game: "hunt",
       durationMs: Math.round(this.elapsed),

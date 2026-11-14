@@ -37,7 +37,7 @@ vi.mock("phaser", () => {
   };
 });
 vi.mock("./sprites", () => ({ RTEX: stub(), avFrame: () => 0, ensureFloor: () => "floor", ensureRpgTextures: () => {}, makePlayer: () => {} }));
-vi.mock("./sfx", () => ({ RpgSfx: class { play() {} skill() {} destroy() {} } }));
+vi.mock("./sfx", () => ({ RpgSfx: class { play() {} skill() {} synth() {} destroy() {} } }));
 vi.mock("../entities/AvatarView", () => ({ AvatarView: class {} }));
 vi.mock("../net/RoomPresence", () => ({ RoomPresence: class {} }));
 
@@ -138,5 +138,101 @@ describe("단·랭크 강도", () => {
     expect(skillPower(5, 3, 3)).toBeCloseTo(1.5);
     for (let t = 1; t < 5; t++) expect(skillPower(t + 1, 1, 5)).toBeGreaterThan(skillPower(t, 1, 5));
     for (let lv = 1; lv < 5; lv++) expect(skillPower(3, lv + 1, 5)).toBeGreaterThan(skillPower(3, lv, 5));
+  });
+});
+
+describe("바닥 드롭: 판이 끝나면 받을 드롭을 바닥에 떨구고, 다 주운 뒤 끝낸다 (결과는 끝난 순간 그대로)", () => {
+  type Ended = { result: { durationMs: number; died: boolean; wavesCleared: number }; aborted: boolean };
+  type Inner = Scene & {
+    plan: unknown[];
+    nextWave: number;
+    waveAlive: number[];
+    kills: Record<string, number>;
+    killCount: number;
+    mons: unknown[];
+    pendingSpawns: number;
+    loot: { count: number };
+    endSnap: unknown;
+    finish(aborted?: boolean): void;
+  };
+
+  async function clearAll(seed: number, reduced = false): Promise<{ scene: Inner; ends: Ended[]; detectAt: number }> {
+    const { huntPlan } = await import("@/lib/rpg/plan");
+    const scene = new HuntScene() as Inner;
+    const ends: Ended[] = [];
+    scene.init({ play: { ...play("easy"), seed }, color: "#fff", name: "검수", body: "hood", look: [], atlas: null, reduced, onEnd: (result: Ended["result"], aborted: boolean) => ends.push({ result, aborted }) });
+    scene.create();
+    // 모든 웨이브를 다 잡은 상태로 만든다 (60초쯤)
+    const plan = huntPlan(seed, "easy");
+    const kills: Record<string, number> = {};
+    for (const w of plan) for (const m of w.monsters) kills[m] = (kills[m] ?? 0) + 1;
+    scene.kills = kills;
+    scene.killCount = Object.values(kills).reduce((a, b) => a + b, 0);
+    scene.nextWave = plan.length;
+    scene.waveAlive = plan.map(() => 0);
+    scene.mons = [];
+    scene.pendingSpawns = 0;
+    scene.elapsed = 60_000;
+    scene.step(16);
+    return { scene, ends, detectAt: 60_016 };
+  }
+
+  it("드롭이 있으면 바닥에서 다 들어온 뒤 끝나고, 걸린 시간은 예전처럼 승리 1.2초 뒤로 잡힌다", async () => {
+    const { huntDropsFor } = await import("@/lib/rpg/rewards");
+    const { huntPlan } = await import("@/lib/rpg/plan");
+    // 깔끔하게 다 깨면 드롭이 나오는 시드
+    const seed = Array.from({ length: 400 }, (_, i) => i + 1).find((s) => {
+      const p = huntPlan(s, "easy");
+      const kills: Record<string, number> = {};
+      for (const w of p) for (const m of w.monsters) kills[m] = (kills[m] ?? 0) + 1;
+      return huntDropsFor({ game: "hunt", difficulty: "easy", seed: s }, { game: "hunt", durationMs: 61_216, kills, wavesCleared: p.length, died: false, potionsUsed: {} }).length > 0;
+    })!;
+    expect(seed).toBeDefined();
+    const { scene, ends, detectAt } = await clearAll(seed);
+    expect(scene.endSnap).toBeTruthy();
+    expect(scene.loot.count).toBeGreaterThan(0);
+    // 1.2초가 지나도 바닥에 남아 있으면 기다린다
+    for (let t = 0; t < 1300; t += 16) scene.step(16);
+    expect(ends).toHaveLength(scene.loot.count > 0 ? 0 : 1);
+    // 놓쳐도 스스로 날아와 들어오고 끝난다 (6초 안)
+    for (let t = 0; t < 6000 && !ends.length; t += 16) scene.step(16);
+    expect(ends).toHaveLength(1);
+    expect(scene.loot.count).toBe(0);
+    expect(ends[0].aborted).toBe(false);
+    expect(ends[0].result.durationMs).toBe(detectAt + 1200);
+    expect(ends[0].result.died).toBe(false);
+  });
+
+  it("드롭이 없으면 예전처럼 승리 1.2초 뒤 바로 끝난다", async () => {
+    const { huntDropsFor } = await import("@/lib/rpg/rewards");
+    const { huntPlan } = await import("@/lib/rpg/plan");
+    const seed = Array.from({ length: 400 }, (_, i) => i + 1).find((s) => {
+      const p = huntPlan(s, "easy");
+      const kills: Record<string, number> = {};
+      for (const w of p) for (const m of w.monsters) kills[m] = (kills[m] ?? 0) + 1;
+      return huntDropsFor({ game: "hunt", difficulty: "easy", seed: s }, { game: "hunt", durationMs: 61_216, kills, wavesCleared: p.length, died: false, potionsUsed: {} }).length === 0;
+    })!;
+    const { scene, ends, detectAt } = await clearAll(seed);
+    expect(scene.loot.count).toBe(0);
+    for (let t = 0; t < 1150; t += 16) scene.step(16);
+    expect(ends).toHaveLength(0);
+    for (let t = 0; t < 100; t += 16) scene.step(16);
+    expect(ends).toHaveLength(1);
+    expect(ends[0].result.durationMs).toBe(detectAt + 1200);
+  });
+
+  it("동작 줄이기에서도 같은 흐름으로 끝난다", async () => {
+    const { scene, ends } = await clearAll(160, true);
+    for (let t = 0; t < 8000 && !ends.length; t += 16) scene.step(16);
+    expect(ends).toHaveLength(1);
+    expect(scene.loot.count).toBe(0);
+  });
+
+  it("드롭을 줍는 중에 나가도 '중간에 나옴'이 아니라 끝난 판 그대로", async () => {
+    const { scene, ends } = await clearAll(7);
+    scene.finish(true);
+    expect(ends).toHaveLength(1);
+    expect(ends[0].aborted).toBe(false);
+    expect(ends[0].result.wavesCleared).toBeGreaterThan(0);
   });
 });

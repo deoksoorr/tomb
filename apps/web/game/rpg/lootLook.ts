@@ -50,9 +50,9 @@ export type LootLook = {
 /** 단계별 기본값 (색만 바꿔 쓴다) */
 const TIER: Record<LootTier, Pick<LootLook, "beamH" | "beamW" | "beamA" | "ringR" | "rings" | "motes" | "pulse">> = {
   0: { beamH: 0, beamW: 0, beamA: 0, ringR: 0, rings: 0, motes: 0, pulse: 0 },
-  1: { beamH: 34, beamW: 5, beamA: 0.5, ringR: 8, rings: 1, motes: 1.5, pulse: 0.2 },
-  2: { beamH: 60, beamW: 8, beamA: 0.7, ringR: 10, rings: 2, motes: 4, pulse: 0.45 },
-  3: { beamH: 104, beamW: 12, beamA: 0.9, ringR: 13, rings: 3, motes: 8, pulse: 0.7 },
+  1: { beamH: 38, beamW: 7, beamA: 0.55, ringR: 8, rings: 1, motes: 1.5, pulse: 0.2 },
+  2: { beamH: 66, beamW: 11, beamA: 0.75, ringR: 10, rings: 2, motes: 4, pulse: 0.45 },
+  3: { beamH: 112, beamW: 16, beamA: 0.92, ringR: 13, rings: 3, motes: 8, pulse: 0.7 },
 };
 
 /** 등급 → [단계, 기둥 색, 밝은 색] (이름표 색은 등급표 그대로) */
@@ -99,16 +99,20 @@ export function lootLook(d: Pick<Drop, "kind" | "id">): LootLook | null {
 export const LOOT_MAX = 6;
 
 /**
- * 떨어질 자리: 출처(sx,sy) 둘레에 고르게 흩뿌리되 서로 minGap 이상 떨어지게 (바닥은 납작하게 0.7).
+ * 떨어질 자리: 출처(sx,sy) 둘레에 흩뿌리되 서로 minGap 이상 떨어지게 (바닥은 납작하게 0.7).
+ * away(라디안)가 있으면 그쪽(캐릭터 반대편)으로 부채꼴로 → 몬스터를 바로 옆에서 잡아도 떨어지자마자 빨려 들지 않는다.
  * rnd는 0..1 난수 (테스트는 고정 난수)
  */
-export function scatter(n: number, sx: number, sy: number, rnd: () => number, minGap = 16): { x: number; y: number }[] {
+export function scatter(n: number, sx: number, sy: number, rnd: () => number, minGap = 16, away?: number): { x: number; y: number }[] {
   const out: { x: number; y: number }[] = [];
-  const base = rnd() * Math.PI * 2;
+  const base = away ?? rnd() * Math.PI * 2;
+  // 부채꼴 사이 각 (여럿이면 반원 안에서 고르게, 방향이 없으면 한 바퀴)
+  const step = away === undefined ? (Math.PI * 2) / Math.max(1, n) : Math.min(0.9, (Math.PI * 0.8) / Math.max(1, n - 1));
   for (let i = 0; i < n; i++) {
     let best = { x: sx, y: sy };
     for (let tryN = 0; tryN < 8; tryN++) {
-      const a = base + (i / Math.max(1, n)) * Math.PI * 2 + (rnd() - 0.5) * 0.6 + tryN * 0.7;
+      // 겹치면 다시: 방향이 없으면 돌려 보고, 있으면 (반원을 벗어나지 않게) 더 멀리만
+      const a = away === undefined ? base + i * step + (rnd() - 0.5) * 0.6 + tryN * 0.7 : base + (i - (n - 1) / 2) * step + (rnd() - 0.5) * 0.4;
       const r = (n === 1 ? 12 : 16) + rnd() * 6 + tryN * 4;
       const p = { x: sx + Math.cos(a) * r, y: sy + Math.sin(a) * r * 0.7 };
       best = p;

@@ -105,3 +105,14 @@ describe("드롭 소리", () => {
     expect(low("legend")).toBeLessThan(low("rare"));
   });
 });
+
+describe("캐릭터 반대편으로 흩뿌림", () => {
+  it("방향을 주면 모두 그쪽 반원 안에 떨어진다", () => {
+    for (let seed = 1; seed < 30; seed++)
+      for (const n of [1, 2, 4]) {
+        const ps = scatter(n, 100, 100, fixed(seed), 16, 0);
+        // 오른쪽(0 라디안)으로: 출처보다 오른쪽
+        for (const p of ps) expect(p.x).toBeGreaterThan(100);
+      }
+  });
+});
