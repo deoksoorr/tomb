@@ -95,6 +95,7 @@ export default function WeeklyRace() {
               {BOARD_NAME[b.board]}
             </h3>
             <ChampReward board={b.board} points={champ?.points ?? CHAMP_POINTS_DEFAULT} />
+            {b.board === "huntKills" && <p className={styles.rewardCaption}>내 레벨이 권장보다 10 넘게 높은 사냥터의 처치는 세지 않아요</p>}
             {b.top.length === 0 ? (
               <p className={styles.none}>아직 기록이 없어요. 지금 1위가 될 기회!</p>
             ) : (

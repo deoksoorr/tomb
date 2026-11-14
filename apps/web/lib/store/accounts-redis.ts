@@ -617,17 +617,20 @@ return 1
 // 사냥 기록 (49번 랭킹). 처치 수는 전체·그 주에 더하고, 클리어 시간은 더 짧을 때만 바꾼다 (ZADD LT와 같은 뜻을 Lua로)
 // KEYS: killsAll, killsWeek, bestAll, bestWeek  ARGV: id, kills, clearMs(''=클리어 못 함), weekTtl, now (주간 처치 수 동점은 먼저 달성한 사람이 위)
 const HUNT_LUA = `${WEEK_FN}
+local weekly = ARGV[6] ~= '0'
 if tonumber(ARGV[2]) > 0 then
   redis.call('ZINCRBY', KEYS[1], ARGV[2], ARGV[1])
-  weekAdd(KEYS[2], ARGV[1], tonumber(ARGV[2]), tonumber(ARGV[5]))
-  redis.call('EXPIRE', KEYS[2], ARGV[4])
+  if weekly then
+    weekAdd(KEYS[2], ARGV[1], tonumber(ARGV[2]), tonumber(ARGV[5]))
+    redis.call('EXPIRE', KEYS[2], ARGV[4])
+  end
 end
 if ARGV[3] ~= '' then
-  for i = 3, 4 do
+  for i = 3, weekly and 4 or 3 do
     local cur = redis.call('ZSCORE', KEYS[i], ARGV[1])
     if not cur or tonumber(ARGV[3]) < tonumber(cur) then redis.call('ZADD', KEYS[i], ARGV[3], ARGV[1]) end
   end
-  redis.call('EXPIRE', KEYS[4], ARGV[4])
+  if weekly then redis.call('EXPIRE', KEYS[4], ARGV[4]) end
 end
 return 1
 `;
@@ -825,11 +828,11 @@ export class RedisAccounts implements AccountStore {
     return this.board(week ? K.rankPointsWeek(week) : K.rankPoints, limit, me);
   }
 
-  async recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string): Promise<void> {
+  async recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string, weekly = true): Promise<void> {
     await this.redis.eval<string[], number>(
       HUNT_LUA,
       [K.rankHuntKills, K.rankHuntKillsWeek(week), K.rankHuntBest(zone), K.rankHuntBestWeek(zone, week)],
-      [id, String(Math.max(0, Math.floor(run.kills))), run.clearMs === null ? "" : String(Math.round(run.clearMs)), String(WEEK_RANK_TTL_SEC), String(Date.now())],
+      [id, String(Math.max(0, Math.floor(run.kills))), run.clearMs === null ? "" : String(Math.round(run.clearMs)), String(WEEK_RANK_TTL_SEC), String(Date.now()), weekly ? "1" : "0"],
     );
   }
 

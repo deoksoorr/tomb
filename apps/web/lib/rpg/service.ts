@@ -28,7 +28,7 @@ import {
   RpgError,
   setHotbar,
 } from "./character";
-import { derive, expToNext, MAX_LEVEL } from "./formulas";
+import { derive, expToNext, levelPenalty, MAX_LEVEL } from "./formulas";
 import { ALL_SKILLS_POINTS, respecCost, skillPointsEarned, spentPoints } from "./skillRules";
 import { isSuperHunter, testServerEnv } from "./superHunter";
 import { takeTestDrops } from "./testDrops";
@@ -415,9 +415,10 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   const earned = pointsRaw > 0 ? (await earnPoints(acct, t.g === "hunt" ? "hunt" : "mini", pointsRaw, ipHash)).earned : 0;
   await store.addDaily(acct, kstDay(now), { points: t.g === "hunt" ? earned : 0, runs: 1, exp: v.exp });
   if (t.g === "hunt") await recordEvent("hunt", now); // 47번 방문 분석: 사냥 판 수
-  // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터). 운영자 계정은 순위에 남기지 않는다
+  // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터). 운영자 계정은 순위에 남기지 않는다.
+  // 11/15: 자기 레벨이 그 난이도 추천 레벨보다 10 넘게 높으면(EXP가 깎이는 판) 주간 레이스(그 주 처치·최단)에는 넣지 않는다 — 전체 기록·칭호는 그대로
   if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null) && !(await isStaff(acct)))
-    await getAccounts().recordHunt(acct, t.d, v.hunt, kstWeek(now));
+    await getAccounts().recordHunt(acct, t.d, v.hunt, kstWeek(now), levelPenalty(t.lv, t.d) === 1);
   return {
     reward: {
       score: v.score,

@@ -243,9 +243,10 @@ export interface AccountStore {
   pointRank(limit: number, me: string | null, week?: string): Promise<{ rows: RankEntry[]; mine: RankEntry | null }>;
   /**
    * 사냥터 한 판 기록 (49번 랭킹): 처치 수 합계(전체·그 주)를 올리고, 클리어했으면(clearMs) 그 사냥터의
-   * 최단 기록(전체·그 주)을 더 짧을 때만 바꾼다. 원자적
+   * 최단 기록(전체·그 주)을 더 짧을 때만 바꾼다. 원자적.
+   * weekly = false: 그 주 기록(주간 레이스 사냥 처치·주간 최단)은 건너뛰고 전체 기록만 (자기 레벨보다 한참 쉬운 사냥터)
    */
-  recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string): Promise<void>;
+  recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string, weekly?: boolean): Promise<void>;
   /** 사냥 랭킹: kills = 처치 수 많은 순, best = 그 사냥터 최단 클리어 순(ms, 작을수록 위). week가 없으면 전체 */
   huntRank(
     board: "kills" | "best",

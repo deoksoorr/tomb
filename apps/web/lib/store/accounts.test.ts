@@ -890,6 +890,17 @@ function contract(make: () => Kit) {
     expect(rb.rank).toBeLessThan(ra.rank);
     expect(rb.points).toBe(80_000);
   });
+
+  it("사냥 기록 weekly=false (자기 레벨보다 한참 쉬운 사냥터): 전체 기록만 오르고 주간 레이스 기록은 그대로", async () => {
+    const a = newId();
+    const week = weekOfDay(DAY);
+    await accounts.recordHunt(a, "easy", { kills: 10, clearMs: 100_000 }, week);
+    await accounts.recordHunt(a, "easy", { kills: 50, clearMs: 30_000 }, week, false);
+    expect((await accounts.huntRank("kills", 10_000, a, {})).mine?.points).toBe(60);
+    expect((await accounts.huntRank("kills", 10_000, a, { week })).mine?.points).toBe(10);
+    expect((await accounts.huntRank("best", 10_000, a, { zone: "easy" })).mine?.points).toBe(30_000);
+    expect((await accounts.huntRank("best", 10_000, a, { zone: "easy", week })).mine?.points).toBe(100_000);
+  });
 }
 
 describe("MemoryAccounts", () =>

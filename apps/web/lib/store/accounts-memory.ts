@@ -336,20 +336,22 @@ export class MemoryAccounts implements AccountStore {
     );
   }
 
-  async recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string): Promise<void> {
+  async recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string, weekly = true): Promise<void> {
     const a = this.acct(id);
     const h: NonNullable<Acct["hunt"]> = (a.hunt ??= { kills: 0, killsWeek: new Map(), best: new Map(), bestWeek: new Map() });
     const kills = Math.max(0, Math.floor(run.kills));
     if (kills > 0) {
       h.kills += kills;
-      h.killsWeek.set(week, (h.killsWeek.get(week) ?? 0) + kills);
-      (h.killsWeekAt ??= new Map()).set(week, ++this.tieSeq);
+      if (weekly) {
+        h.killsWeek.set(week, (h.killsWeek.get(week) ?? 0) + kills);
+        (h.killsWeekAt ??= new Map()).set(week, ++this.tieSeq);
+      }
     }
     if (run.clearMs === null) return;
     const ms = Math.round(run.clearMs);
     const wk = `${zone}|${week}`;
     if (ms < (h.best.get(zone) ?? Infinity)) h.best.set(zone, ms);
-    if (ms < (h.bestWeek.get(wk) ?? Infinity)) h.bestWeek.set(wk, ms);
+    if (weekly && ms < (h.bestWeek.get(wk) ?? Infinity)) h.bestWeek.set(wk, ms);
   }
 
   async huntRank(
