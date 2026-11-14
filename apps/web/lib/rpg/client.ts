@@ -25,8 +25,12 @@ export const rpgApi = {
   buy: (itemId: string, qty = 1) => request<ShopResponse>("/api/rpg/shop", post({ type: "buy", itemId, qty })),
   sell: (itemId: string, count = 1) => request<ShopResponse>("/api/rpg/shop", post({ type: "sell", itemId, count })),
   // planVer: 별자리 잇기 화면이 쓰는 계획 판 번호 (서버가 티켓에 실어 그 판으로 검사한다)
-  start: (game: GameKind, difficulty: Difficulty, zone?: ZoneId, planVer?: number) =>
-    request<RunStartResponse>("/api/rpg/run/start", post({ game, difficulty, ...(game === "hunt" && zone ? { zone } : {}), ...(planVer ? { planVer } : {}) })),
+  // burnout: 11/15 번아웃 단계 (지옥 사냥만 — 사냥터는 서버가 단계로 정한다)
+  start: (game: GameKind, difficulty: Difficulty, zone?: ZoneId, planVer?: number, burnout?: number) =>
+    request<RunStartResponse>(
+      "/api/rpg/run/start",
+      post({ game, difficulty, ...(game === "hunt" && zone ? { zone } : {}), ...(planVer ? { planVer } : {}), ...(burnout ? { burnout } : {}) }),
+    ),
   finish: (ticket: string, result: RunResult) => request<RunFinishResponse>("/api/rpg/run/finish", post({ ticket, result })),
 };
 

@@ -12,6 +12,7 @@ import {
   type Stats,
 } from "./catalog";
 import { applyExp, baseStats, MAX_LEVEL, START_SKILL_POINTS, START_STAT_POINTS, STAT_MAX, statPointsAt } from "./formulas";
+import { applyTranscend, TBANK_MAX, TRANSCEND_MAX, transcendStatPoints } from "./endgame";
 import { checkAllocation, checkLearn, cleanAlloc, SKILL_TREE_VERSION, skillPointsEarned, spentPoints, type Alloc } from "./skillRules";
 import type { CharacterState } from "./types";
 
@@ -50,8 +51,17 @@ export function newCharacter(): CharacterState {
     treeVer: SKILL_TREE_VERSION,
     respecs: 0,
     statResets: 0,
+    tLevel: 0,
+    tExp: 0,
+    tRuns: 0,
+    tBank: 0,
+    bTries: 0,
+    bBest: 0,
   };
 }
+
+/** 0 이상 정수 (상한까지). 아니면 0 — 11/15 끝판 칸을 옛 저장값·깨진 값에서 읽을 때 */
+const nat = (v: unknown, max = Number.MAX_SAFE_INTEGER) => (typeof v === "number" && Number.isInteger(v) && v > 0 ? Math.min(v, max) : 0);
 
 /** 남은 스킬 포인트 = 레벨로 받은 포인트 - 쓴 포인트 (저장된 값은 믿지 않고 늘 다시 센다 → 포인트 합이 어긋날 수 없다) */
 const freePoints = (level: number, skills: Alloc) => Math.max(0, skillPointsEarned(level) - spentPoints(skills));
@@ -104,16 +114,25 @@ export function normalize(raw: unknown): CharacterState {
     bought: { ...r.bought },
     equip: { ...base.equip, ...(r.equip ?? {}) },
     potions: { ...(r.potions ?? base.potions) },
+    // 11/15 끝판: 옛 저장값에는 없다 → 0 (초월 능력치 포인트는 초월 레벨이 오를 때 한 번만 더한다 — gainTranscend)
+    tLevel: nat(r.tLevel, TRANSCEND_MAX),
+    tExp: nat(r.tExp),
+    tRuns: nat(r.tRuns),
+    tBank: nat(r.tBank, TBANK_MAX),
+    bTries: nat(r.bTries),
+    bBest: nat(r.bBest),
+    ...(typeof r.tDay === "string" && /^\d{8}$/.test(r.tDay) ? { tDay: r.tDay } : { tDay: undefined }),
+    ...(r.pioneer && nat(r.pioneer.n) > 0 && Number.isFinite(r.pioneer.at) ? { pioneer: { n: r.pioneer.n, at: r.pioneer.at } } : { pioneer: undefined }),
   };
 }
 
 const clone = (s: CharacterState): CharacterState => structuredClone(s);
 
-/** 그 레벨까지 받은 능력치 포인트 합 (시작 5 + 레벨업마다 3, 5의 배수 레벨엔 5) */
-export function statPointsEarned(level: number): number {
+/** 그 레벨까지 받은 능력치 포인트 합 (시작 5 + 레벨업마다 3, 5의 배수 레벨엔 5) + 11/15 초월 5레벨마다 1 */
+export function statPointsEarned(level: number, tLevel = 0): number {
   let n = START_STAT_POINTS;
   for (let lv = 2; lv <= Math.min(MAX_LEVEL, Math.floor(level)); lv++) n += statPointsAt(lv);
-  return n;
+  return n + transcendStatPoints(tLevel);
 }
 
 /** 직접 올린 능력치 합 (기본값 1을 뺀 만큼) */
@@ -136,7 +155,7 @@ export function allocStats(s: CharacterState, alloc: Partial<Stats>, budget?: nu
   if (total === 0) throw new RpgError(400, "INVALID_INPUT", "올릴 능력치를 골라 주세요.");
   const free = budget === undefined ? s.statPoints : budget - spentStats(s);
   if (total > free) throw new RpgError(409, "NO_STAT_POINTS", "능력치 포인트가 모자라요.");
-  next.statPoints = budget === undefined ? s.statPoints - total : Math.max(0, statPointsEarned(s.level) - spentStats(next));
+  next.statPoints = budget === undefined ? s.statPoints - total : Math.max(0, statPointsEarned(s.level, s.tLevel) - spentStats(next));
   return next;
 }
 
@@ -148,7 +167,7 @@ export function allocStats(s: CharacterState, alloc: Partial<Stats>, budget?: nu
 export function resetStats(s: CharacterState, count = true): CharacterState {
   const next = clone(s);
   next.stats = baseStats();
-  next.statPoints = statPointsEarned(next.level);
+  next.statPoints = statPointsEarned(next.level, next.tLevel);
   if (count) next.statResets = (next.statResets ?? 0) + 1;
   return next;
 }
@@ -159,7 +178,7 @@ export function resetStats(s: CharacterState, count = true): CharacterState {
  * 바꿀 게 없으면 같은 객체
  */
 export function fitToLevel(s: CharacterState): CharacterState {
-  const overStats = spentStats(s) > statPointsEarned(s.level);
+  const overStats = spentStats(s) > statPointsEarned(s.level, s.tLevel);
   const overGear = GEAR_SLOTS.filter((k) => {
     const id = s.equip[k];
     return id && (gearById(id)?.reqLevel ?? 0) > s.level;
@@ -357,6 +376,19 @@ export function gainExp(s: CharacterState, exp: number): { state: CharacterState
   next.exp = r.exp;
   next.statPoints += r.statPoints;
   next.skillPoints += r.skillPoints;
+  return { state: next, levelsGained: r.levelsGained };
+}
+
+/**
+ * 11/15 초월 EXP를 더한다 (레벨 50 지옥·번아웃 판). 초월 5레벨마다 능력치 포인트 1 — 레벨이 오른 이 갱신 안에서만 더하므로
+ * 같은 판으로 두 번 받을 수 없다 (판 기록은 claim으로 한 번만, 저장은 CAS)
+ */
+export function gainTranscend(s: CharacterState, exp: number): { state: CharacterState; levelsGained: number } {
+  const r = applyTranscend(s.tLevel, s.tExp, exp);
+  const next = clone(s);
+  next.tLevel = r.tLevel;
+  next.tExp = r.tExp;
+  next.statPoints += r.statPoints;
   return { state: next, levelsGained: r.levelsGained };
 }
 

@@ -2,6 +2,7 @@ import type { Difficulty, DropKind, GameKind, GearSlot, MonsterId, SkillId, Stat
 import type { DexGain } from "../forage/types";
 import type { Derived } from "./formulas";
 import type { StarSky } from "./plan";
+import type { RunTier } from "./endgame";
 import type { StatusId } from "./status";
 
 // 사냥터(RPG) 데이터 형태: 저장 원본, API 응답, 게임 ↔ UI 브리지 페이로드.
@@ -34,12 +35,37 @@ export type CharacterState = {
   potions: Record<string, number>;
   /** 끝낸 판 수 */
   runs: number;
+  // ── 11/15 사냥 끝판 (lib/rpg/endgame). 옛 저장값에 없으면 normalize가 0으로 ──
+  /** 초월 레벨 0..50 (표시 ★51..★100, 0 = 아직). 레벨 50에서 지옥·번아웃 판 EXP만 여기로 */
+  tLevel: number;
+  tExp: number;
+  /** 하루 초월 판 기록: 게임 날짜(새벽 5시 기준)·그날 시작한 초월 판 수·그날 적립된 100% 판 수·그날 번아웃 도전 수 */
+  tDay?: string;
+  tRuns: number;
+  tBank: number;
+  bTries: number;
+  /** 번아웃 단계: 한 번도 쓰러지지 않고 깬 가장 높은 단계 (0 = 없음) */
+  bBest: number;
+  /** 개척자 번호와 받은 시각 (끝판이 열린 뒤 14일 안에 ★51 또는 번아웃 1단계) */
+  pioneer?: { n: number; at: number };
 };
 
 export type DailyStats = { points: number; runs: number; exp: number };
 
 /** 되팔기 결과: 받은 포인트(환불+사냥 수입), 한도에 닿았는지, 실제로 판 개수 (한도에 막혀 못 판 것은 가방에 그대로) */
 export type SoldInfo = { value: number; capped: boolean; count: number };
+
+/** 11/15 끝판 화면 정보 (레벨 50 — 슈퍼 계정 포함 — 일 때만) */
+export type EndgameView = {
+  /** 다음 초월 레벨까지 (최대면 0) */
+  tExpToNext: number;
+  /** 오늘 초월 판: 시작한 판 수 · 100% 판 수(20 + 적립) · 적립 · 다음 판의 구간 */
+  day: { runs: number; full: number; bank: number; tier: RunTier };
+  /** 번아웃 단계: 깬 최고 단계 · 고를 수 있는 최고 단계 · 상한 · 오늘 남은 도전 / 하루 도전 수 */
+  burnout: { best: number; open: number; max: number; triesLeft: number; tries: number };
+  /** 개척자: 모집 마감 시각(없으면 아직 끝판이 안 열림) · 받은 번호 */
+  pioneer: { until: number | null; n?: number; at?: number };
+};
 
 export type RpgView = {
   character: CharacterState;
@@ -55,6 +81,8 @@ export type RpgView = {
   statResetCost: number;
   /** 테스트 서버 슈퍼 계정 (운영 서버에서는 늘 없음): 스킬 포인트 넉넉히·레벨 최대 취급·사냥터 모두 열림 (초기화는 비용을 내되 횟수는 안 센다) */
   superHunter?: boolean;
+  /** 11/15 끝판 (레벨 50일 때만) */
+  endgame?: EndgameView;
 };
 
 // ── 판 결과 (클라이언트가 보낸다, 서버가 계획·시간으로 검증한다) ──
@@ -93,7 +121,12 @@ export type RunStartResponse = {
   /** 사냥터 id (40번, 사냥만) */
   zone?: ZoneId;
   seed: number;
+  /** 판 제한 시간 (번아웃 저주 '마감 당김'이 반영된 값) */
   timeLimitSec: number;
+  /** 11/15 번아웃 단계 (없으면 보통 판) */
+  burnout?: number;
+  /** 11/15 초월 판 구간 (레벨 50 지옥 판만). practice면 초월 EXP·드롭 없음 */
+  tier?: RunTier;
   /** 별자리 잇기: 판 시작 시각이 맑은 밤 (전설 별자리가 나올 수 있다, 포인트 보너스). 1판 화면도 읽는다 */
   starry?: boolean;
   /** 별자리 잇기: 판 시작 시각의 하늘 (맑은 밤·계절·새벽)과 서버가 받아들인 계획 판 번호 */
@@ -129,6 +162,12 @@ export type RunReward = {
   constellations?: { id: string; isNew: boolean; perfect: boolean; later?: boolean }[];
   /** 별자리를 도감에 처음 등록해서 받은 도감 보상 (lib/forage/dexReward) */
   dexReward?: DexGain;
+  /** 11/15 초월 판: 받은 초월 EXP·그 판의 구간·오른 초월 레벨·지금 초월 레벨 */
+  transcend?: { exp: number; tier: RunTier; levelsGained: number; tLevel: number };
+  /** 11/15 번아웃: 단계·깔끔하게 깼는지·새로 열린 단계(있으면) */
+  burnout?: { tier: number; clean: boolean; unlocked?: number };
+  /** 11/15 이번 판으로 개척자 번호를 받았다 */
+  pioneer?: number;
 };
 
 export type RunFinishResponse = { reward: RunReward; view: RpgView };
@@ -162,6 +201,10 @@ export type RpgPlay = {
   starsKnown?: string[];
   /** 테스트 서버 운영자 시험 드롭 (판 시작 응답 그대로). 있으면 화면은 드롭 예측 대신 이것을 판 끝에 떨군다 */
   testDrops?: Drop[];
+  /** 11/15 번아웃 단계 (몬스터 배율·저주) */
+  burnout?: number;
+  /** 11/15 연습 판 (초월 구간을 다 써서 드롭이 없다) — 바닥 드롭 연출을 하지 않는다 */
+  noDrops?: boolean;
 };
 
 /** 곤충 채집 들판 시간대: 낮(나비) · 노을(잠자리) · 밤(반딧불이) */

@@ -6,6 +6,7 @@ import { attackCooldownMs, CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weapon
 import { gearById } from "@/lib/rpg/catalog";
 import { ELITE, huntPlan, STREAM_GAP_MS, WAVE_FORMATION_LABEL, WAVE_MAX_GAP_SEC, type HuntWave } from "@/lib/rpg/plan";
 import { POTION_CURES, rollStatus, STATUS_IDS, StatusBook, STATUSES, type StatusId } from "@/lib/rpg/status";
+import { burnoutScale, curseFx, type CurseFx } from "@/lib/rpg/endgame";
 import type { HuntResult, RpgAction, RpgHud } from "@/lib/rpg/types";
 import { DIR, STATE, type DirId, type HuntAct } from "@tomb/protocol";
 import { FONT_KEY, FONT_PX } from "../text/GlyphAtlas";
@@ -36,6 +37,7 @@ import { LootLayer } from "./loot";
 // 사냥터: 위에서 내려다보는 실시간 전투. 웨이브는 서버가 준 시드의 계획(huntPlan)대로 나온다.
 //  - 웨이브 i는 앞 웨이브를 다 잡았고 i×8초가 지났을 때, 또는 앞 웨이브 뒤 35초가 지나면 나온다
 //  - 끝: 시간 끝 / 모든 웨이브 클리어 / 쓰러짐(부활 쿠키가 있으면 한 번 일어난다)
+//  - 11/15 번아웃 단계: 몬스터 배율(lib/rpg/endgame burnoutScale) + 저주(물약 절반·금지, 받는 회복 절반, 부활 없음 — 제한 시간은 서버가 준 timeLimitSec)
 //  - 공격: 바라보는 쪽 부채꼴(무기마다 다를 수 있음) 안의 몬스터를 모두 때린다.
 //    누를 때마다 한 번(쿨다운 중이면 버퍼에 한 번), 누르고 있으면(키·마우스·손가락) 공격 속도대로 계속.
 
@@ -182,6 +184,8 @@ export class HuntScene extends RpgScene {
   private buffs = new Map<string, { until: number; v: number }>();
   private died = false;
   private cookieUsed = false;
+  /** 11/15 번아웃 저주 (번아웃이 아니면 모두 그대로) */
+  private curse: CurseFx = curseFx(0);
   private victoryAt = 0;
   private message: string | undefined;
   private messageUntil = 0;
@@ -306,6 +310,7 @@ export class HuntScene extends RpgScene {
     this.buffs.clear();
     this.died = false;
     this.cookieUsed = false;
+    this.curse = curseFx(play.burnout ?? 0);
     this.victoryAt = 0;
     this.helper = null;
     this.turret = null;
@@ -342,8 +347,9 @@ export class HuntScene extends RpgScene {
     this.obstacles = [];
     this.arena = new Arena(this, zone.id, play.seed, {
       hurtPlayer: (dmg) => this.hurtPlayer(dmg),
-      healPlayer: (n) => {
+      healPlayer: (n0) => {
         if (this.died || this.hp >= this.dv.maxHp) return;
+        const n = Math.max(1, Math.round(n0 * this.curse.healMul));
         this.hp = Math.min(this.dv.maxHp, this.hp + n);
         this.dmg.heal(this.px, this.py - 20, n);
       },
@@ -449,7 +455,12 @@ export class HuntScene extends RpgScene {
     cam.setRoundPixels(true);
     this.applyZoom();
     cam.startFollow(this.player, true, 0.15, 0.15);
-    this.flash(`${zone.name} · ${zone.desc}${play.testDrops?.length ? " · 시험 드롭 예약됨" : ""}`, 2600);
+    this.flash(
+      play.burnout
+        ? `번아웃 ${play.burnout}단계 · ${zone.name}${play.testDrops?.length ? " · 시험 드롭 예약됨" : ""}`
+        : `${zone.name} · ${zone.desc}${play.testDrops?.length ? " · 시험 드롭 예약됨" : ""}`,
+      2600,
+    );
   }
 
   // ── 카메라 ──
@@ -768,7 +779,7 @@ export class HuntScene extends RpgScene {
     this.hurtMonster(m, dmg, crit, nth, opts);
     // 넋 거두기 패시브: 준 피해의 일부를 HP로 (한 번에 최대 HP의 3%까지)
     if (this.mods.steal > 0 && !this.died && this.hp < d.maxHp) {
-      this.hp = Math.min(d.maxHp, this.hp + Math.min(d.maxHp * 0.03, dmg * this.mods.steal));
+      this.hp = Math.min(d.maxHp, this.hp + Math.min(d.maxHp * 0.03, dmg * this.mods.steal) * this.curse.healMul);
       this.mv.drainWisp({ x: m.x, y: m.y - MONSTERS[m.id].size / 2 }, { x: this.px, y: this.py });
       this.passiveSnd("so_drain", 260);
     }
@@ -1393,7 +1404,7 @@ export class HuntScene extends RpgScene {
       }
       case "so_lamp": {
         const fx = SKILL_FX.so_lamp(lv);
-        const heal = Math.round(this.dv.maxHp * fx.healPct * pow + this.dv.stats.int * 3);
+        const heal = Math.round((this.dv.maxHp * fx.healPct * pow + this.dv.stats.int * 3) * this.curse.healMul);
         this.hp = Math.min(this.dv.maxHp, this.hp + heal);
         this.rootUntil = now + fx.rootMs;
         this.cutIn("soul", false);
@@ -1492,7 +1503,7 @@ export class HuntScene extends RpgScene {
             snd("tick", { i, last });
             const n = this.aoeAt(pt.x, pt.y, fx.radius, fx.mult * pow, this.sk(id, g, { aoe: true, kb: -0.8 }), (m) => victims.push({ x: m.x, y: m.y - MONSTERS[m.id].size / 2 }));
             mv.vortexTick(pt.x, pt.y, fx.radius, i, last, victims);
-            const want = Math.min(fx.healCap * this.dv.maxHp - healed, n * fx.healPerHit * this.dv.maxHp);
+            const want = Math.min(fx.healCap * this.dv.maxHp - healed, n * fx.healPerHit * this.dv.maxHp) * this.curse.healMul;
             if (want > 0 && !this.died) {
               healed += want;
               this.hp = Math.min(this.dv.maxHp, this.hp + want);
@@ -1526,7 +1537,7 @@ export class HuntScene extends RpgScene {
         // 별빛 행렬 (궁극): 화면 전체 — 별이 돋고 오로라가 드리운 뒤, 박자마다 순례자 행렬이 가로지르며 화면 안 적 모두에게 별빛이 꽂힌다 + 회복
         const fx = SKILL_FX.so_procession(lv);
         this.castUltimate(id, "soul", fx, {}, (i, last, victims) => mv.processionHit(victims.map((m) => ({ x: m.x, y: m.y })), i, last));
-        const heal = Math.round(this.dv.maxHp * fx.healPct);
+        const heal = Math.round(this.dv.maxHp * fx.healPct * this.curse.healMul);
         this.hp = Math.min(this.dv.maxHp, this.hp + heal);
         this.dmg.heal(this.px, this.py - 26, heal, true);
         break;
@@ -1663,6 +1674,11 @@ export class HuntScene extends RpgScene {
   private usePotion(id: string): void {
     const p = potionById(id);
     if (!p || p.revive || this.now < this.potionReadyAt) return;
+    // 11/15 번아웃 저주 '탕비실 폐쇄' (부활 쿠키는 그대로)
+    if (!this.curse.potions) {
+      this.flash("탕비실 폐쇄: 이 단계에선 물약을 못 마셔요", 900);
+      return;
+    }
     if (this.potionLeft(id) <= 0) {
       this.flash(`${p.name}이(가) 없어요`, 900);
       return;
@@ -1670,8 +1686,9 @@ export class HuntScene extends RpgScene {
     this.potionsUsed[id] = (this.potionsUsed[id] ?? 0) + 1;
     this.potionReadyAt = this.now + POTION_COOLDOWN_MS;
     const d = this.dv;
-    if (p.hp) this.hp = Math.min(d.maxHp, this.hp + p.hp);
-    if (p.sp) this.sp = Math.min(d.maxSp, this.sp + p.sp);
+    // 11/15 번아웃 저주: 물약 회복 절반(2단계~), 받는 회복 절반(6단계~ — SP는 회복이 아니라 그대로)
+    if (p.hp) this.hp = Math.min(d.maxHp, this.hp + p.hp * this.curse.potionMul * this.curse.healMul);
+    if (p.sp) this.sp = Math.min(d.maxSp, this.sp + p.sp * this.curse.potionMul);
     this.floatText(this.px, this.py - 20, p.name, "#ffe39a", 11);
     // 상태 이상 풀기 (커피: 독·화상·출혈, 에너지드링크: 둔화·빙결·혼란·침묵, 도시락: 전부)
     const cured = this.status.cure(POTION_CURES[id] ?? [], this.now);
@@ -1716,7 +1733,8 @@ export class HuntScene extends RpgScene {
       if (src) this.inflict(src);
       return true;
     }
-    if (!this.cookieUsed && (this.play.potions.p_cookie ?? 0) > 0) {
+    // 11/15 번아웃 저주 '사직서 즉시 수리'(10단계~): 부활 쿠키 없이 그 자리에서 끝
+    if (!this.cookieUsed && this.curse.revive && (this.play.potions.p_cookie ?? 0) > 0) {
       // 부활 쿠키: 자동으로 먹고 반쯤 회복, 잠깐 무적
       this.cookieUsed = true;
       this.potionsUsed.p_cookie = 1;
@@ -1835,7 +1853,8 @@ export class HuntScene extends RpgScene {
   // ── 몬스터 ──
 
   private spawn(id: MonsterId, x: number, y: number, wave: number, elite = false): void {
-    const base = monsterStats(id, this.play.difficulty, this.zone.power);
+    // 11/15 번아웃 단계: 체력·공격력 × 1.35^단계, 방어 × 1.12^단계 (서버 검증과 같은 식 — lib/rpg/endgame)
+    const base = monsterStats(id, this.play.difficulty, this.zone.power, burnoutScale(this.play.burnout));
     // 11/12 정예: 더 크고 질기다. EXP는 서버가 그 웨이브를 깼을 때 보너스로 더한다 (plan.eliteBonusExp)
     const st = elite
       ? { ...base, maxHp: Math.round(base.maxHp * ELITE.hp), atk: Math.round(base.atk * ELITE.atk), def: Math.round(base.def * ELITE.def), exp: Math.round(base.exp * ELITE.exp) }
@@ -2189,7 +2208,7 @@ export class HuntScene extends RpgScene {
     if (now >= this.regenAt) {
       this.regenAt = now + 1000;
       this.sp = Math.min(d.maxSp, this.sp + 1 + d.maxSp * 0.01);
-      this.hp = Math.min(d.maxHp, this.hp + d.maxHp * 0.004);
+      this.hp = Math.min(d.maxHp, this.hp + d.maxHp * 0.004 * this.curse.healMul);
     }
     // 상태 이상: 끝난 것 정리 + 지속 피해 (무적이면 안 받고, 이걸로는 쓰러지지 않는다 — HP 1에서 멈춤)
     const sd = this.status.update(now, d.maxHp, this.movingNow);
@@ -2379,7 +2398,8 @@ export class HuntScene extends RpgScene {
     try {
       // 테스트 서버 시험 드롭이 실린 판이면 서버가 그것을 준다 (승리·쓰러짐 관계없이) → 예측 대신 그대로
       if (this.play.testDrops?.length) drops = this.bossDropped ? [] : this.play.testDrops;
-      else {
+      // 11/15 연습 판(그날 초월 구간을 다 썼다): 서버가 드롭을 주지 않는다 → 떨구지 않는다
+      else if (!this.play.noDrops) {
         drops = huntDropsFor(this.dropTicket(), r);
         // 우두머리 몫은 잡는 순간 이미 떨궜다 → 맨 앞(우두머리 몫)을 뺀 나머지만
         const b = this.bossDropped ? huntBossDrop(this.dropTicket()) : null;
@@ -2417,7 +2437,7 @@ export class HuntScene extends RpgScene {
    */
   private dropBossLoot(x: number, y: number): void {
     const test = this.play.testDrops;
-    if (!test?.length && this.now < MIN_RUN_MS) return;
+    if (!test?.length && (this.now < MIN_RUN_MS || this.play.noDrops)) return;
     this.bossDropped = true;
     let drops: ReturnType<typeof huntDropsFor> = [];
     try {

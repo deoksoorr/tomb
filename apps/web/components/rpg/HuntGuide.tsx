@@ -21,6 +21,20 @@ import {
 } from "@/lib/rpg/catalog";
 import { DEFAULT_BOSS_PHASES, MIN_WINDUP_MS, PATTERNS, type TelegraphShape } from "@/lib/rpg/patterns";
 import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL, MIN_RUN_MS } from "@/lib/rpg/rewards";
+import {
+  BURNOUT_DEF,
+  BURNOUT_HP_ATK,
+  BURNOUT_MAX_TIER,
+  BURNOUT_TRIES_PER_DAY,
+  BURNOUT_ZONES,
+  CURSES,
+  PIONEER_DAYS,
+  TBANK_MAX,
+  TDAY_FULL,
+  TDAY_STEP,
+  tExpToNext,
+  TRANSCEND_MAX,
+} from "@/lib/rpg/endgame";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
@@ -29,7 +43,7 @@ import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
-import { DEMO_H, DEMO_SCALE, DEMO_W, drawDemo } from "./huntDemo";
+import { DEMO_H, DEMO_SCALE, DEMO_SCENES, DEMO_W, drawDemo } from "./huntDemo";
 import RpgIcon from "./RpgIcon";
 import s from "./rpg.module.css";
 
@@ -456,6 +470,52 @@ function pages(): Page[] {
         </>
       ),
     },
+    {
+      // 11/15 사냥 끝판 1단계 (lib/rpg/endgame)
+      title: "레벨 50 이후",
+      lead: "레벨 50부터는 초월 레벨(★51~★100)과 번아웃 단계로 더 올라가요. 보상은 포인트가 아니라 자랑거리예요.",
+      body: (
+        <>
+          <ul className={s.guideList}>
+            <Item art={skillArt("em_spark")} title="초월 레벨 ★51~★100">
+              레벨 50에서 지옥 사냥터·번아웃 판의 EXP는 초월 EXP로 쌓여요 (다른 난이도·미니게임 EXP는 버려져요). ★51까지 {tExpToNext(0).toLocaleString("ko-KR")}, ★100 직전은 약{" "}
+              {Math.round(tExpToNext(TRANSCEND_MAX - 1) / 10_000)}만. 초월 5레벨마다 능력치 포인트 1개. 회식 3차·축제장은 레벨 50에선 EXP가 10%라 분기 마감·구조조정이
+              제값이에요. 레벨 랭킹은 레벨 → 초월 레벨 → 초월 EXP 순.
+            </Item>
+            <Item art={POTIONS[0]?.art} title="하루 초월 판">
+              레벨 50 지옥 판(번아웃 포함)은 시작하면 초월 판 1판으로 세요 (새벽 5시에 새로). 앞 {TDAY_FULL}판(+적립)은 100%, 다음 {TDAY_STEP}판 30%, 다음 {TDAY_STEP}판 10%, 그
+              뒤는 연습 판 (초월 EXP·드롭 없음, 포인트는 평소대로). 못 쓴 100% 판은 다음 날로 적립돼요 (쉰 날은 {TDAY_FULL}판씩, 최대 {TBANK_MAX}판).
+            </Item>
+            <Item art={skillArt("so_lamp")} title={`번아웃 단계 1~${BURNOUT_MAX_TIER}`}>
+              지옥 사냥터 아래 [번아웃 단계]. {BURNOUT_ZONES.length}곳 지옥 사냥터를 차례로 돌며 몬스터 체력·공격력 ×{BURNOUT_HP_ATK}, 방어 ×{BURNOUT_DEF}씩 단계마다 곱해져요. EXP는
+              ×(1 + 0.1 × 단계)이고 레벨 50 감소가 없어요. 하루 {BURNOUT_TRIES_PER_DAY}번 도전 (시작하면 1번). 바로 아래 단계를 한 번도 쓰러지지 않고 부활 쿠키도 없이 끝까지 깨야
+              다음 단계가 열려요. 번아웃 판은 늘 주간 레이스에 들어가요.
+            </Item>
+            <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="개척자">
+              끝판이 열린 뒤 {PIONEER_DAYS}일 안에 ★51에 닿거나 번아웃 1단계를 처음 깨면 닿은 차례대로 칭호 「개척자 #번호」(운영자 제외). 그 뒤로는 얻을 수 없어요.
+            </Item>
+          </ul>
+          <table className={s.guideTable}>
+            <thead>
+              <tr>
+                <th>단계</th>
+                <th>저주 (누적)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {CURSES.filter((c) => c.from <= BURNOUT_MAX_TIER).map((c) => (
+                <tr key={c.id}>
+                  <th>{c.from}~</th>
+                  <td>
+                    {c.name} — {c.desc}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ),
+    },
   ];
 }
 
@@ -488,7 +548,7 @@ export default function HuntGuide({ onClose }: { onClose: () => void }) {
           <h3 className={s.sectionTitle}>
             {i + 1}. {p.title}
           </h3>
-          <HuntDemo page={i} title={p.title} />
+          {i < DEMO_SCENES.length && <HuntDemo page={i} title={p.title} />}
           <p className={s.guideLead}>{p.lead}</p>
           {p.body}
         </section>

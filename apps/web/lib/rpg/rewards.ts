@@ -19,6 +19,7 @@ import {
   type StarSky,
 } from "./plan";
 import { constellationById } from "./constellations";
+import { burnoutExpMul, runTimeLimitSec } from "./endgame";
 import { starsPlanV1, V1_SIZE } from "./starsPlanV1";
 import type { BugsResult, Drop, HuntResult, RunResult, StarsResult } from "./types";
 
@@ -58,6 +59,8 @@ export type TicketInfo = {
   sky?: StarSky;
   /** 별자리 잇기: 판을 시작할 때의 계획 판 번호 (티켓의 sv). 없으면 판 번호가 생기기 전 티켓 */
   planVer?: number;
+  /** 11/15 번아웃 단계 (티켓의 bt): 제한 시간 저주·EXP 보너스 */
+  burnout?: number;
 };
 
 /** 별자리 잇기에서 검증을 통과한 완성 별자리 (무리 번호·별자리 id·완벽으로만 이었는지) */
@@ -78,7 +81,8 @@ const tooHigh = (what: string) => reject("RESULT_REJECTED", `${what} 기록이 �
 export function evaluate(t: TicketInfo, result: RunResult, serverElapsedMs: number): Verdict {
   if (result.game !== t.game) return reject("INVALID_RESULT", "결과가 시작한 게임과 달라요.");
   if (result.durationMs > serverElapsedMs + CLOCK_SLACK_MS) return reject("TOO_FAST", "기록된 시간이 실제로 흐른 시간보다 길어요.");
-  const limitMs = timeLimitSec(t.game, t.difficulty, t.zone) * 1000;
+  // 11/15 번아웃 '마감 당김' 저주는 제한 시간을 줄인다 → 그 뒤의 처치·웨이브는 셈하지 않는다
+  const limitMs = runTimeLimitSec(t.game, t.difficulty, t.zone, t.burnout) * 1000;
   const eff = Math.min(result.durationMs, serverElapsedMs, limitMs + CLOCK_SLACK_MS);
   if (eff < MIN_RUN_MS) return { ok: true, score: 0, exp: 0, points: 0, drops: [] };
   switch (result.game) {
@@ -120,8 +124,9 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
   const progress = clamp((k + (total / Math.max(1, huntTotal(plan))) * 0.999) / (plan.length + 1), 0, 1);
   // 같은 난이도에서 뒤에 열리는 사냥터는 포인트도 조금 더 (power 1.3 → ×1.15)
   let points = total > 0 ? D.huntPoints * (1 + (zone.power - 1) / 2) * (0.15 + 0.85 * (cleared ? 1 : progress)) : 0;
-  // 11/15: EXP 감소 기준은 그 사냥터가 열리는 레벨
-  let xp = exp * levelPenalty(t.level, t.difficulty, zone);
+  // 11/15: EXP 감소 기준은 그 사냥터가 열리는 레벨. 번아웃 단계는 레벨 50 콘텐츠라 감소 없이 단계 보너스(1 + 0.1 × 단계)
+  // (몬스터가 단계만큼 세져도 마리당 EXP는 그대로 — 처치 수·웨이브 상한도 그대로 쓴다: 더 세진 몬스터는 늦게 잡힐 뿐 더 빨리 잡히지 않는다)
+  let xp = t.burnout ? exp * burnoutExpMul(t.burnout) : exp * levelPenalty(t.level, t.difficulty, zone);
   if (r.died) {
     points *= 0.5;
     xp *= 0.7;

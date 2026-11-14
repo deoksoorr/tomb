@@ -29,6 +29,7 @@ import {
 } from "@/lib/rpg/catalog";
 import { GEAR_INV_MAX, sellValue, spentStats } from "@/lib/rpg/character";
 import type { CharacterAction } from "@/lib/rpg/client";
+import { starLabel, transcendStatPoints } from "@/lib/rpg/endgame";
 import { countsForRace, derive, levelPenalty, STAT_MAX, type Derived } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST } from "@/lib/rpg/skillRules";
 import type { RpgView } from "@/lib/rpg/types";
@@ -39,6 +40,7 @@ import { DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
 import { bonusText, pts } from "./format";
 import { bagGear, deltaText, equipTarget, gearDiff, gearGrade, sellable, sellWarning, slotAccepts } from "./gear";
+import { BurnoutBox, PioneerLine, TranscendDay } from "./Endgame";
 import HuntCapMeter from "./HuntCap";
 import RpgIcon from "./RpgIcon";
 import ZonePicker, { ZoneInfo, zoneOpen, zoneUnlockAll } from "./ZonePicker";
@@ -72,6 +74,7 @@ export function StartPanel({
   onStart,
   busy,
   onGuide,
+  onBurnout,
 }: {
   view: RpgView;
   game: GameKind;
@@ -84,6 +87,8 @@ export function StartPanel({
   busy: boolean;
   /** 사냥 안내서 열기 */
   onGuide?: () => void;
+  /** 11/15 번아웃 단계 도전 (레벨 50) */
+  onBurnout?: (tier: number) => void;
 }) {
   const c = view.character;
   const zone = zoneFor(diff, zoneId);
@@ -113,6 +118,7 @@ export function StartPanel({
     return (
       <div className={s.lobby}>
         <HuntCapMeter today={view.today} where="start" />
+        {view.endgame && <TranscendDay eg={view.endgame} />}
         <section className={s.section} aria-label="사냥터 고르기">
           <ZonePicker
             level={c.level}
@@ -144,6 +150,13 @@ export function StartPanel({
             }
           />
         </section>
+        {/* 11/15 번아웃 단계: 지옥 사냥터 아래 (레벨 50) */}
+        {view.endgame && onBurnout && (
+          <>
+            <BurnoutBox view={view} busy={busy} onStart={onBurnout} />
+            <PioneerLine eg={view.endgame} />
+          </>
+        )}
         {onGuide && (
           <p className={s.meta}>
             조작·몬스터 패턴·보상이 궁금하면{" "}
@@ -228,7 +241,9 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
     <div className={s.lobby}>
       <section className={s.section} aria-labelledby="rpg-stats">
         <h3 id="rpg-stats" className={s.sectionTitle}>
-          능력치 <span className={s.meta}>· 남은 포인트 {left}</span>
+          {/* 11/15 레벨 50: 초월 레벨 ★ */}
+          Lv.{c.level}
+          {c.tLevel > 0 && view.endgame ? ` ${starLabel(c.tLevel)}` : ""} 능력치 <span className={s.meta}>· 남은 포인트 {left}</span>
         </h3>
         <div className={s.statGrid}>
           {STAT_KEYS.map((k) => {
@@ -274,7 +289,10 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
         </div>
         <p className={s.meta}>{STAT_KEYS.map((k) => `${STAT_LABELS[k].name}: ${STAT_LABELS[k].desc}`).join(" · ")}</p>
         <div className={s.startRow}>
-          <span className={s.meta}>레벨이 오를 때마다 능력치 포인트 3개 (5의 배수 레벨엔 5개)</span>
+          <span className={s.meta}>
+            레벨이 오를 때마다 능력치 포인트 3개 (5의 배수 레벨엔 5개)
+            {view.endgame ? ` · 초월 5레벨마다 1개 (지금 ${c.tLevel > 0 ? starLabel(c.tLevel) : "초월 전"}, 받은 ${transcendStatPoints(c.tLevel)}개)` : ""}
+          </span>
           <button
             type="button"
             className={cx(ui.button, ui.primary)}

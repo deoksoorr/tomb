@@ -230,7 +230,11 @@ function BoardRanking({ board, period, zone, fish }: { board: RankBoard; period:
                 <RpgIcon art={gearById(r.gear)!.art} size={16} />
               </span>
             )}
-            <span className={styles.metric}>{rankValue(board, r.value)}</span>
+            <span className={styles.metric}>
+              {rankValue(board, r.value)}
+              {/* 11/15 초월 레벨 (레벨 50) */}
+              {r.star ? ` ★${r.star}` : ""}
+            </span>
           </li>
         ))}
       </ol>

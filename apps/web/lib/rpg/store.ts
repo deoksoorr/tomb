@@ -12,6 +12,9 @@ import type { CharacterState, DailyStats } from "./types";
 //  - rpg:{a}:used:{n}    STRING 끝낸 판 표시 (SET NX, 2일) → 같은 티켓을 두 번 낼 수 없다
 //  - rpg:{a}:runs:{시}   STRING 이번 한 시간 동안 시작한 판 수 (INCR, 1시간)
 //  - rpg:{a}:day:{게임 날짜}   HASH  points/runs/exp 오늘 사냥 기록 (2일)
+//  - rpg:endgame:launch  STRING 11/15 끝판이 이 서버(운영·테스트 따로)에서 처음 열린 시각 ms (SET NX, 한 번만). 개척자 모집 14일의 시작
+//  - rpg:pioneer         HASH  계정 id → "번호|받은 시각 ms" (개척자, 한 번 받으면 그대로)
+//  - rpg:pioneer:n       STRING 개척자 번호 (INCR)
 
 export const RUNS_PER_HOUR = 30;
 const USED_TTL_SEC = 2 * 86_400;
@@ -33,6 +36,10 @@ export interface RpgStore {
   runsThisHour(acct: string, hourBucket: string): Promise<number>;
   /** 저장된 캐릭터를 커서로 훑는다 (next "0" = 끝). 랭킹 기존 기록 채우기용 (lib/huntLevelRank) */
   scanChars(cursor: string, count: number): Promise<{ next: string; chars: [string, CharacterState][] }>;
+  /** 11/15 끝판이 처음 열린 시각: 없으면 now로 적고(SET NX) 저장된 값을 돌려준다 */
+  endgameLaunch(now: number): Promise<number>;
+  /** 11/15 개척자 번호 받기: 이미 받았으면 그 번호·시각, 아니면 다음 번호를 붙인다 (한 계정에 한 번 — 원자적) */
+  claimPioneer(acct: string, now: number): Promise<{ n: number; at: number }>;
 }
 
 export const rk = {
@@ -41,6 +48,9 @@ export const rk = {
   used: (a: string, n: string) => `rpg:${a}:used:${n}`,
   runs: (a: string, hour: string) => `rpg:${a}:runs:${hour}`,
   day: (a: string, day: string) => `rpg:${a}:day:${day}`,
+  launch: "rpg:endgame:launch",
+  pioneer: "rpg:pioneer",
+  pioneerN: "rpg:pioneer:n",
 };
 
 const conflict = () => new RpgError(409, "BUSY", "다른 곳에서 같은 캐릭터를 바꾸는 중이에요. 다시 시도해 주세요.");
@@ -53,6 +63,8 @@ export class MemoryRpgStore implements RpgStore {
   private used = new Set<string>();
   private runs = new Map<string, number>();
   private days = new Map<string, DailyStats>();
+  private launch: number | null = null;
+  private pioneers = new Map<string, { n: number; at: number }>();
 
   async get(acct: string): Promise<CharacterState> {
     return structuredClone(this.chars.get(acct) ?? normalize(null));
@@ -105,6 +117,19 @@ export class MemoryRpgStore implements RpgStore {
     const end = start + Math.max(1, count);
     return { next: end >= all.length ? "0" : String(end), chars: all.slice(start, end).map(([a, s]) => [a, structuredClone(s)] as [string, CharacterState]) };
   }
+
+  async endgameLaunch(now: number): Promise<number> {
+    this.launch ??= now;
+    return this.launch;
+  }
+
+  async claimPioneer(acct: string, now: number) {
+    const had = this.pioneers.get(acct);
+    if (had) return { ...had };
+    const p = { n: this.pioneers.size + 1, at: now };
+    this.pioneers.set(acct, p);
+    return { ...p };
+  }
 }
 
 // ── Redis (운영) ──
@@ -138,6 +163,22 @@ if not redis.call('SET', KEYS[1], '1', 'NX', 'EX', ARGV[2]) then return 'reused'
 if redis.call('GET', KEYS[2]) ~= ARGV[1] then return 'stale' end
 redis.call('DEL', KEYS[2])
 return 'ok'
+`;
+
+// KEYS: launch  ARGV: now — 처음이면 적고, 저장된 값
+const LAUNCH_LUA = `
+redis.call('SET', KEYS[1], ARGV[1], 'NX')
+return redis.call('GET', KEYS[1])
+`;
+
+// KEYS: pioneer(HASH), pioneer:n  ARGV: acct, now — 이미 받았으면 그 값, 아니면 INCR로 번호를 붙여 적는다 ("번호|시각")
+const PIONEER_LUA = `
+local had = redis.call('HGET', KEYS[1], ARGV[1])
+if had then return had end
+local n = redis.call('INCR', KEYS[2])
+local v = n .. '|' .. ARGV[2]
+redis.call('HSET', KEYS[1], ARGV[1], v)
+return v
 `;
 
 export class RedisRpgStore implements RpgStore {
@@ -212,6 +253,17 @@ export class RedisRpgStore implements RpgStore {
       });
     }
     return { next: String(next), chars };
+  }
+
+  async endgameLaunch(now: number): Promise<number> {
+    const v = Number(await this.redis.eval<string[], string>(LAUNCH_LUA, [rk.launch], [String(now)]));
+    return Number.isFinite(v) && v > 0 ? v : now;
+  }
+
+  async claimPioneer(acct: string, now: number) {
+    const v = String(await this.redis.eval<string[], string>(PIONEER_LUA, [rk.pioneer, rk.pioneerN], [acct, String(now)]));
+    const [n, at] = v.split("|").map(Number);
+    return { n: n || 0, at: at || now };
   }
 }
 

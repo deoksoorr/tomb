@@ -143,6 +143,11 @@ async function readFacts(accountId: string, now: number): Promise<{ facts: Title
   const has = (id: string) => (dex[id]?.n ?? 0) > 0;
   const metrics: Partial<Record<TitleMetric, number>> = {
     lv: sup ? MAX_LEVEL : (rpg?.level ?? 1),
+    // 11/15 사냥 끝판: 초월 레벨·번아웃 깬 최고 단계·개척자 번호(와 받은 시각 — 칭호 카드 표시용). 사냥 캐릭터에서 같이 읽는다 (명령 추가 없음)
+    tlv: rpg?.tLevel ?? 0,
+    burn: rpg?.bBest ?? 0,
+    pioneer: rpg?.pioneer?.n ?? 0,
+    ...(rpg?.pioneer ? { pioneerAt: rpg.pioneer.at } : {}),
     kills: l?.kills ?? 0,
     hard: l?.hard ?? 0,
     hell: l?.hell ?? 0,

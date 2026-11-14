@@ -2282,3 +2282,68 @@ button.hotSlot:disabled {
   height: 18px;
   accent-color: var(--candle);
 }
+
+/* 11/15 사냥 끝판: 초월 막대 · 오늘 초월 판 · 구간 칩 · 번아웃 단계 */
+.tBar > span {
+  background: var(--candle);
+}
+
+.tDay {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.tDay b {
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+
+.tierChip {
+  display: inline-block;
+  padding: 0 6px;
+  color: #141414;
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 16px;
+  vertical-align: 1px;
+}
+
+.burnBox {
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.burnTiers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 6px;
+}
+
+.burnTier {
+  min-height: 36px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--px-border);
+}
+
+.burnTier[aria-disabled="true"] {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.burnDone {
+  color: var(--moss);
+}
+
+.burnTier[aria-checked="true"] {
+  color: var(--bone);
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}

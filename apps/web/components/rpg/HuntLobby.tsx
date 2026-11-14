@@ -25,6 +25,7 @@ import {
   type ZoneId,
 } from "@/lib/rpg/catalog";
 import { rpgApi, type CharacterAction } from "@/lib/rpg/client";
+import { BURNOUT_MAX_TIER, starLabel } from "@/lib/rpg/endgame";
 import type { RpgView, RunReward, RunResult } from "@/lib/rpg/types";
 import { readItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
@@ -37,6 +38,7 @@ import { mmss, pts } from "./format";
 import { gearGrade } from "./gear";
 import HuntCapMeter from "./HuntCap";
 import HuntGuide from "./HuntGuide";
+import { EndgameResult, TranscendBar, TranscendDay } from "./Endgame";
 import { CharacterPanel, GearPanel, LOBBY_HIDDEN, ShopPanel, SkillPanel, StartPanel } from "./Panels";
 import LevelUpSound from "./LevelUpSound";
 import RpgIcon from "./RpgIcon";
@@ -65,6 +67,8 @@ type Run = {
   zone?: ZoneId;
   hotbar: (SkillId | null)[];
   seed: number;
+  /** 11/15 번아웃 단계 */
+  burnout?: number;
 };
 type Outcome = {
   result: RunResult;
@@ -73,6 +77,8 @@ type Outcome = {
   zone?: ZoneId;
   reward?: RunReward;
   error?: string;
+  /** 11/15 번아웃 단계 ("한 판 더"는 같은 단계로) */
+  burnout?: number;
 };
 
 const LS_PICK = "tomb.rpg.pick";
@@ -229,11 +235,11 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
       .finally(() => setBusy(false));
   };
 
-  async function start(game = cur.game, difficulty = cur.diff) {
+  async function start(game = cur.game, difficulty = cur.diff, burnout?: number) {
     setPhase("starting");
     setNotice(null);
     try {
-      const res = await rpgApi.start(game, difficulty, cur.zone);
+      const res = await rpgApi.start(game, difficulty, cur.zone, undefined, burnout);
       const c = res.view.character;
       setView(res.view);
       run.current = {
@@ -243,6 +249,7 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
         ...(res.zone ? { zone: res.zone } : {}),
         hotbar: c.hotbar,
         seed: res.seed,
+        ...(res.burnout ? { burnout: res.burnout } : {}),
       };
       setOutcome(null);
       setPhase("playing");
@@ -260,6 +267,9 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
         equip: c.equip,
         // 테스트 서버 운영자 시험 드롭 (판 끝에 우두머리 자리에서 떨어진다)
         ...(res.testDrops?.length ? { testDrops: res.testDrops } : {}),
+        // 11/15 번아웃 단계 (몬스터 배율·저주), 연습 판(드롭 없음)
+        ...(res.burnout ? { burnout: res.burnout } : {}),
+        ...(res.tier === "practice" ? { noDrops: true } : {}),
       });
     } catch (e) {
       setNotice(errorMessage(e));
@@ -282,6 +292,7 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
           difficulty: r.difficulty,
           zone: r.zone,
           reward: res.reward,
+          burnout: r.burnout,
         });
         void meStore.refresh();
       })
@@ -292,6 +303,7 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
           difficulty: r.difficulty,
           zone: r.zone,
           error: errorMessage(e),
+          burnout: r.burnout,
         }),
       )
       .finally(() => setPhase("result"));
@@ -347,8 +359,12 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
           <ResultView outcome={outcome} view={view} />
           {notice && <p className={s.notice}>{notice}</p>}
           <div className={cx(s.buttons, s.resultDock)}>
-            <button type="button" className={cx(ui.button, ui.primary, s.start)} onClick={() => void start(outcome.result.game, cur.diff)}>
-              한 판 더
+            <button
+              type="button"
+              className={cx(ui.button, ui.primary, s.start)}
+              onClick={() => void (outcome.burnout ? start("hunt", "hell", outcome.burnout) : start(outcome.result.game, cur.diff))}
+            >
+              {outcome.burnout ? `번아웃 ${outcome.burnout}단계 한 번 더` : "한 판 더"}
             </button>
             <button type="button" className={ui.button} onClick={() => setPhase("lobby")}>
               로비로
@@ -373,11 +389,19 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
             <div className={s.summary}>
               <span>
                 Lv.<strong>{c.level}</strong>
+                {view.endgame && c.tLevel > 0 && <strong className={s.points}> {starLabel(c.tLevel)}</strong>}
               </span>
-              <span>
-                EXP <strong>{c.exp.toLocaleString("ko-KR")}</strong>
-                {view.expToNext > 0 && ` / ${view.expToNext.toLocaleString("ko-KR")}`}
-              </span>
+              {view.endgame ? (
+                <span>
+                  초월 EXP <strong>{c.tExp.toLocaleString("ko-KR")}</strong>
+                  {view.endgame.tExpToNext > 0 && ` / ${view.endgame.tExpToNext.toLocaleString("ko-KR")}`}
+                </span>
+              ) : (
+                <span>
+                  EXP <strong>{c.exp.toLocaleString("ko-KR")}</strong>
+                  {view.expToNext > 0 && ` / ${view.expToNext.toLocaleString("ko-KR")}`}
+                </span>
+              )}
               <span>
                 포인트 <strong className={s.points}>{pts(view.points)}</strong>
               </span>
@@ -388,13 +412,19 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
                 사냥 안내서
               </button>
             </div>
-            <div className={s.expBar} role="meter" aria-label="경험치" aria-valuenow={c.exp} aria-valuemin={0} aria-valuemax={view.expToNext || 1}>
-              <span
-                style={{
-                  width: `${view.expToNext ? Math.min(100, (c.exp / view.expToNext) * 100) : 100}%`,
-                }}
-              />
-            </div>
+            {view.endgame ? (
+              <div className={cx(s.expBar, s.tBar)} role="meter" aria-label="초월 경험치" aria-valuenow={c.tExp} aria-valuemin={0} aria-valuemax={view.endgame.tExpToNext || 1}>
+                <span style={{ width: `${view.endgame.tExpToNext ? Math.min(100, (c.tExp / view.endgame.tExpToNext) * 100) : 100}%` }} />
+              </div>
+            ) : (
+              <div className={s.expBar} role="meter" aria-label="경험치" aria-valuenow={c.exp} aria-valuemin={0} aria-valuemax={view.expToNext || 1}>
+                <span
+                  style={{
+                    width: `${view.expToNext ? Math.min(100, (c.exp / view.expToNext) * 100) : 100}%`,
+                  }}
+                />
+              </div>
+            )}
             {c.treeNotice && tab !== "skills" && (
               <p className={s.meta} role="status">
                 스킬 트리가 새로 바뀌어 스킬 포인트를 모두 돌려드렸어요.{" "}
@@ -436,6 +466,7 @@ export default function HuntLobby({ onClose, avatar }: { onClose: () => void; av
                   onStart={() => void start()}
                   busy={phase === "starting"}
                   onGuide={() => setGuide(true)}
+                  onBurnout={(tier) => void start("hunt", "hell", tier)}
                 />
               )}
               {tab === "character" && <CharacterPanel view={view} busy={busy} onCharacter={onCharacter} />}
@@ -511,6 +542,7 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
       <header className={s.resultHead} data-tone={tone}>
         <p className={s.resultBig}>{headline(outcome)}</p>
         <p className={s.meta}>
+          {outcome.burnout ? `번아웃 ${outcome.burnout}단계 · ` : ""}
           {zone ? `${zone.name} · ` : ""}
           {DIFFS[outcome.difficulty].name}
         </p>
@@ -520,8 +552,10 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
       ) : r ? (
         <>
           <div className={s.rewards}>
+            {/* 11/15 레벨 50 지옥·번아웃: 판 EXP 대신 받은 초월 EXP */}
             <div>
-              <strong>+{r.exp.toLocaleString("ko-KR")}</strong>EXP
+              <strong>+{(r.transcend ? r.transcend.exp : r.exp).toLocaleString("ko-KR")}</strong>
+              {r.transcend ? "초월 EXP" : "EXP"}
             </div>
             <div>
               <strong>+{r.points}</strong>포인트
@@ -536,6 +570,7 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
               오늘 사냥 포인트 한도(또는 하루 전체 한도)에 닿아서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
             </p>
           )}
+          <EndgameResult reward={r} max={BURNOUT_MAX_TIER} />
           {r.levelsGained > 0 && (
             <p className={s.levelUp} role="status">
               레벨 업! Lv.{r.newLevel} · 능력치·스킬 포인트를 받았어요
@@ -610,7 +645,14 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
         )}
       </div>
 
-      {view && c && (
+      {view && c && view.endgame && (
+        <div className={s.resultProgress}>
+          <TranscendBar tLevel={c.tLevel} tExp={c.tExp} eg={view.endgame} />
+          <TranscendDay eg={view.endgame} />
+          <HuntCapMeter today={view.today} where="result" />
+        </div>
+      )}
+      {view && c && !view.endgame && (
         <div className={s.resultProgress}>
           <div className={s.barLabel}>
             <span>Lv.{c.level} 경험치</span>

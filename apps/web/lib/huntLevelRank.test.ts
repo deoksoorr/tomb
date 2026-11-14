@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { fillHuntLevel, huntLevelRank, levelScore, MemoryHuntLevel, recordHuntLevel, type HuntLevelInput } from "./huntLevelRank";
+import { fillHuntLevel, huntLevelRank, levelOf, levelScore, MemoryHuntLevel, recordHuntLevel, transcendOf, type HuntLevelInput } from "./huntLevelRank";
 import { FILL_DONE } from "./rankFill";
 import { getRpgStore, MemoryRpgStore } from "./rpg/store";
 import { MemoryAccounts } from "./store/accounts-memory";
@@ -37,6 +37,35 @@ describe("사냥 레벨 랭킹", () => {
     ]);
     expect(r.rows[2]).toMatchObject({ gear: "w_keyboard", sub: "경험치 5" });
     expect(levelScore(11, 0)).toBeGreaterThan(levelScore(10, 999_999));
+  });
+
+  it("11/15 레벨 50은 초월 레벨 → 초월 EXP 순 (옛 기록 50·0과 그대로 맞물린다)", async () => {
+    const store = await setup();
+    const rec = (id: string, tLevel: number, tExp: number) => recordHuntLevel(id, { ...ch(50, 0), tLevel, tExp }, { store, staffId: "op" });
+    await rec("old50", 0, 0);
+    await rec("t0", 0, 9_000);
+    await rec("t3", 3, 10);
+    await rec("t3b", 3, 12_000);
+    await rec("t50", 50, 0);
+    const r = await huntLevelRank(null, 50, opts(store));
+    expect(brief(r.rows).slice(0, 6)).toEqual([
+      [1, "t50", 50],
+      [2, "t3b", 50],
+      [3, "t3", 50],
+      [4, "t0", 50],
+      [5, "old50", 50],
+      [6, "b", 12],
+    ]);
+    expect(r.rows[1]).toMatchObject({ star: 53, sub: "초월 경험치 12,000" });
+    expect(r.rows[0]).toMatchObject({ star: 100 });
+    expect(r.rows[3].star).toBeUndefined();
+    expect(levelScore(50, 0)).toBe(levelScore(50, 0, 0, 0));
+    expect(levelScore(50, 0, 1, 0)).toBeGreaterThan(levelScore(50, 0, 0, 999_999));
+    expect(levelScore(50, 0, 50, 0)).toBeLessThan(levelScore(51, 0));
+    expect(levelOf(levelScore(50, 0, 7, 345))).toBe(50);
+    expect(transcendOf(levelScore(50, 0, 7, 345))).toEqual({ tLevel: 7, tExp: 345 });
+    // 49 이하에서는 초월 값이 섞이지 않는다
+    expect(levelScore(49, 100, 5, 5)).toBe(levelScore(49, 100));
   });
 
   it("정지 계정은 빠지고 순번은 이어진다", async () => {

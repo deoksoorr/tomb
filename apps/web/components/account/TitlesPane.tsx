@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { TITLE_IDS, titleOfLook } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
-import { perkShort, perkText, progressText, TITLE_GRADE_NAMES, TITLE_GROUP_NAMES, TITLE_GROUPS, TITLES, titleDef, type TitleDef } from "@/lib/titles";
+import { perkShort, perkText, pioneerText, progressText, TITLE_GRADE_NAMES, TITLE_GROUP_NAMES, TITLE_GROUPS, TITLES, titleDef, type TitleDef } from "@/lib/titles";
 import type { Me } from "@/lib/types";
 import { titleNews } from "@/lib/hooks/useTitleNews";
 import { cx } from "../ui/cx";
@@ -126,6 +126,8 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
                           {progressText(t, progress[t.metric] ?? 0)}
                         </span>
                       )}
+                      {/* 11/15 개척자: 번호·달성 날짜 */}
+                      {got && t.metric === "pioneer" && progress.pioneer ? <span className={styles.progress}>{pioneerText(progress.pioneer, progress.pioneerAt)}</span> : null}
                       {staff && <span className={styles.progress}>운영자</span>}
                       {perkShort(t.grade) && <span className={styles.perk}>{perkShort(t.grade)}</span>}
                     </button>

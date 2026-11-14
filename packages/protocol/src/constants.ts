@@ -81,7 +81,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 12 = 저장소(Redis) 사용량 절감 — 예전 화면의 잦은 확인 호출을 끊으려고 모두 한 번 새로고침시킨다 (11/14)
 // 13 = 휴식 중 어두운 막 없앰 — 창을 옆에 띄워 두고 구경하는 플레이가 되게 모두 한 번 새로고침 (11/14)
 // 14 = 지옥 사냥터 2곳·사냥터 기준 EXP·레이스 — 모두 한 번 새로고침 (11/15)
-export const CLIENT_VERSION = 14;
+// 15 = 사냥 끝판 1단계(초월 레벨·번아웃 단계)·끝판 칭호 id — 모두 한 번 새로고침 (11/15)
+export const CLIENT_VERSION = 15;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */

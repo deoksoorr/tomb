@@ -13,6 +13,8 @@ import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
 import { DEFAULT_PASS_DAYS, PRESENCE_INTERVAL_MS } from "@/lib/types";
 import { env } from "@/lib/env";
+import { BURNOUT_MAX_TIER, BURNOUT_TRIES_PER_DAY, PIONEER_DAYS, TBANK_MAX, TDAY_FULL, TDAY_STEP } from "@/lib/rpg/endgame";
+import { MAX_LEVEL } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 
 const PATH = "/faq";
@@ -104,6 +106,11 @@ const FAQ = [
     q: "사냥터 능력치나 스킬을 다시 찍을 수 있나요?",
     // 비용은 lib/rpg/skillRules.ts respecCost에서 읽는다
     a: `네. 사냥터 [캐릭터] 탭의 [능력치 초기화], [스킬] 탭의 [초기화]로 배분한 포인트를 모두 돌려받아요. 둘 다 레벨에 따라 ${respecCost(1)}~${RESPEC_MAX_COST}포인트가 들어요. 장비·레벨·경험치는 그대로예요.`,
+  },
+  {
+    q: "사냥 레벨 50 다음엔 뭐가 있나요?",
+    // 11/15 사냥 끝판 1단계 — 숫자는 lib/rpg/endgame.ts
+    a: `레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 번아웃 단계에서 얻는 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요. 초월 5레벨마다 능력치 포인트 1개를 받고, 사냥 레벨 랭킹은 레벨 → 초월 레벨 → 초월 EXP 순이에요. 레벨 ${MAX_LEVEL} 지옥 판은 하루(한국 시간 새벽 5시 기준) 앞 ${TDAY_FULL}판은 초월 EXP 100%, 다음 ${TDAY_STEP}판 30%, 다음 ${TDAY_STEP}판 10%, 그 뒤는 연습 판(초월 EXP·드롭 없음)이에요. 못 쓴 100% 판은 다음 날로 적립돼요(최대 ${TBANK_MAX}판). 번아웃 단계(1~${BURNOUT_MAX_TIER}단계)는 하루 ${BURNOUT_TRIES_PER_DAY}번 도전할 수 있고, 단계가 오를수록 몬스터가 세지고 저주(물약 절반·물약 금지·회복 절반·제한 시간 −20%·부활 없음)가 쌓여요. 바로 아래 단계를 한 번도 쓰러지지 않고(부활 쿠키도 없이) 깨야 다음 단계가 열려요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51에 닿거나 번아웃 1단계를 처음 깨면 닿은 차례대로 칭호 「개척자 #번호」를 받아요.`,
   },
   {
     q: "닉네임이 다른 사람과 같아도 되나요?",

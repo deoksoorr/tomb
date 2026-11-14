@@ -41,6 +41,8 @@ import { PHASE_LABELS, TIME_PHASES, WEATHER_BLOCK_MS, WEATHER_LABELS, WEATHERS }
 import { PLOT_TIERS, plotCost } from "@/lib/housing/catalog";
 import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { BRANCH_INFO, BRANCHES, HOTBAR_SIZE, POTIONS, TIER_GATES } from "@/lib/rpg/catalog";
+import { BURNOUT_MAX_TIER, BURNOUT_TRIES_PER_DAY, PIONEER_DAYS, TBANK_MAX, TDAY_FULL, TDAY_STEP } from "@/lib/rpg/endgame";
+import { MAX_LEVEL } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
 import { DORMANT_DAYS } from "@/lib/store/types";
@@ -286,7 +288,13 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
             <li>
               {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비·물약을 되파는 값도 이 한도 안이고, 넘으면 EXP와 드롭만 받아요. 상점에서 산 장비 되팔기는 한도와 상관없어요. 곤충 잡기·별자리 잇기는 사냥과 따로 하루 ${won(earnRule("mini").dailyMax)}P까지예요.`}
             </li>
-            <li>자세한 공격·스킬·패턴은 사냥터의 [사냥 안내서]에서 봐요.</li>
+            <li>
+              {`레벨 ${MAX_LEVEL}부터는 지옥 사냥터·번아웃 단계 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요(초월 5레벨마다 능력치 1포인트). 레벨 ${MAX_LEVEL} 지옥 판은 하루(새벽 5시 기준) 앞 ${TDAY_FULL}판(+못 쓴 날의 적립, 최대 ${TBANK_MAX}판)은 100%, 다음 ${TDAY_STEP}판 30%, 다음 ${TDAY_STEP}판 10%, 그 뒤는 연습 판(초월 EXP·드롭 없음)이에요.`}
+            </li>
+            <li>
+              {`번아웃 단계(1~${BURNOUT_MAX_TIER}단계, 하루 ${BURNOUT_TRIES_PER_DAY}번)는 지옥 사냥터를 단계마다 세게 돌려요. 단계가 오를수록 저주(물약 절반·물약 금지·회복 절반·제한 시간 −20%·부활 없음)가 쌓이고, 바로 아래 단계를 한 번도 쓰러지지 않고 깨야 다음 단계가 열려요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51 또는 번아웃 1단계를 처음 깨면 칭호 「개척자 #번호」.`}
+            </li>
+            <li>자세한 공격·스킬·패턴·끝판은 사냥터의 [사냥 안내서]에서 봐요.</li>
           </ul>
           <Table head={["스킬 트리", "내용"]} rows={SKILL_TREE} />
           <ul className={styles.points}>

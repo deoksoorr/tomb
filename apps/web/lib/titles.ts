@@ -4,7 +4,7 @@ import { HOUSE_TITLES } from "./housing/catalog";
 
 // 칭호 목록 (화면·게임·서버 공용 순수 정의). id는 @tomb/protocol TITLE_IDS (착용 목록에 실려 다른 사람에게도 보인다).
 //  - 등급 4단계 (동 · 은 · 금 · 전설): 머리 위 칭호 모양(game/entities/TitleView)·가방 카드 색·칭호 능력이 등급을 따른다
-//  - 얻는 방법: 도감 절반·전부 / 주간 1위 (랭킹별 · 누적 횟수) / 집 꾸밈 점수 / 사냥 레벨·누적 처치·어려운 사냥터 완주 /
+//  - 얻는 방법: 도감 절반·전부 / 주간 1위 (랭킹별 · 누적 횟수) / 집 꾸밈 점수 / 사냥 레벨·누적 처치·어려운 사냥터 완주·초월 레벨·번아웃 단계·개척자 /
 //    낚시 누적·가장 큰 물고기 / 채집 누적 / 연속 출석 / 누적 접속 시간 / 꾸미기 점수
 //  - 한 번 얻은 칭호는 기록이 내려가도(연속 출석이 끊기거나 집 점수·꾸미기 점수가 내려가도) 남는다 — 서버가 알린 칭호 기록을 함께 본다 (lib/titlesServer)
 //  - 칭호 능력: 단 칭호 하나의 등급만큼 마을 이동 속도 + · 상점 구입 할인 (TITLE_PERKS)
@@ -40,7 +40,8 @@ export const TITLE_GROUPS: readonly TitleGroup[] = ["dex", "hunt", "fish", "life
 
 /**
  * 진행 수치 (서버 lib/titlesServer가 센다). 단위: 레벨·마리·종·일·점, stay = 머문 기록 수(10분씩), big = 가장 큰 물고기 mm,
- * dex_{칸} = 그 도감 칸 등록 종 수, champ = 주간 1위 누적 횟수, hard·hell = 끝까지 깬 적 있음(1/0)
+ * dex_{칸} = 그 도감 칸 등록 종 수, champ = 주간 1위 누적 횟수, hard·hell = 끝까지 깬 적 있음(1/0).
+ * 11/15 tlv = 초월 레벨(1 = ★51), burn = 번아웃 단계 깬 최고 단계, pioneer = 개척자 번호(0 = 없음), pioneerAt = 개척자 받은 시각 ms (진행 표시용, 칭호 조건 아님)
  */
 export type TitleMetric =
   | "lv"
@@ -55,6 +56,10 @@ export type TitleMetric =
   | "look"
   | "champ"
   | "house"
+  | "tlv"
+  | "burn"
+  | "pioneer"
+  | "pioneerAt"
   | `dex_${DexCat}`;
 
 export type TitleDef = {
@@ -108,6 +113,16 @@ const STEP_ROWS: readonly StepRow[] = [
     ["t_kill20k", "몬스터 감원 위원장", "legend", "누적 처치 20,000마리", "kills", 20000, "hunt"],
     ["t_hard", "고난도 출장 완료", "silver", "어려움 사냥터를 쓰러지지 않고 끝까지 깨면", "hard", 1, "hunt"],
     ["t_hell", "지옥 출장 생환자", "gold", "지옥 사냥터를 쓰러지지 않고 끝까지 깨면", "hell", 1, "hunt"],
+    // 11/15 사냥 끝판 (lib/rpg/endgame). 번아웃 20·30단계는 단계 상한(지금 10)을 올리면 열린다
+    ["t_tlv60", "연봉 협상 대상자", "silver", "초월 레벨 ★60 (레벨 50에서 지옥 사냥으로)", "tlv", 10, "hunt"],
+    ["t_tlv75", "임원 후보", "gold", "초월 레벨 ★75", "tlv", 25, "hunt"],
+    ["t_tlv90", "상무님", "gold", "초월 레벨 ★90", "tlv", 40, "hunt"],
+    ["t_tlv100", "퇴사가 불가능한 자", "legend", "초월 레벨 ★100 (최고)", "tlv", 50, "hunt"],
+    ["t_burn5", "번아웃 생존자", "silver", "번아웃 5단계를 처음 깨면", "burn", 5, "hunt"],
+    ["t_burn10", "야근이 일상", "gold", "번아웃 10단계를 처음 깨면", "burn", 10, "hunt"],
+    ["t_burn20", "퇴근을 잊은 자", "gold", "번아웃 20단계를 처음 깨면 (아직 열리지 않은 단계)", "burn", 20, "hunt"],
+    ["t_burn30", "사무실이 집", "legend", "번아웃 30단계를 처음 깨면 (아직 열리지 않은 단계)", "burn", 30, "hunt"],
+    ["t_pioneer", "개척자", "gold", "끝판이 열린 뒤 14일 안에 ★51에 닿거나 번아웃 1단계를 처음 깨면 (닿은 차례대로 번호, 그 뒤로는 못 얻음)", "pioneer", 1, "hunt"],
     ["t_fishn50", "점심시간 낚시꾼", "bronze", "물고기를 모두 합쳐 50마리 낚으면 (자동 낚시 포함)", "fishn", 50, "fish"],
     ["t_fishn300", "주말 강태공", "silver", "물고기 누적 300마리", "fishn", 300, "fish"],
     ["t_fishn1k", "어부 출신 대리", "gold", "물고기 누적 1,000마리", "fishn", 1000, "fish"],
@@ -198,6 +213,14 @@ export function discountedPrice(price: number, discount: number): number {
   return Math.max(0, Math.min(price - 1, Math.floor(price * (1 - discount))));
 }
 
+/** 개척자 칭호 카드 한 줄 ("#3 · 2026.11.20 달성"). 번호가 없으면 "" */
+export function pioneerText(n: number | undefined, at: number | undefined): string {
+  if (!n) return "";
+  if (!at) return `#${n}`;
+  const d = new Date(at + 9 * 3_600_000);
+  return `#${n} · ${d.getUTCFullYear()}.${d.getUTCMonth() + 1}.${d.getUTCDate()} 달성`;
+}
+
 /** 진행 표시 ("1,234 / 5,000", 접속 시간은 "12시간 / 50시간", 큰 물고기는 cm) */
 export function progressText(t: TitleDef, value: number): string {
   if (!t.metric || t.need === undefined) return "";
@@ -205,6 +228,9 @@ export function progressText(t: TitleDef, value: number): string {
   if (t.metric === "stay") return `${Math.floor(hours(value))}시간 / ${hours(t.need)}시간`;
   if (t.metric === "big") return `${(value / 10).toFixed(1)}cm / ${t.need / 10}cm`;
   if (t.metric === "hard" || t.metric === "hell") return value > 0 ? "완주" : "아직";
+  if (t.metric === "tlv") return `${value > 0 ? `★${50 + Math.min(value, t.need)}` : "초월 전"} / ★${50 + t.need}`;
+  if (t.metric === "burn") return `${Math.min(value, t.need)}단계 / ${t.need}단계`;
+  if (t.metric === "pioneer") return value > 0 ? `#${value}` : "아직";
   return `${v.toLocaleString("ko-KR")} / ${t.need.toLocaleString("ko-KR")}`;
 }
 
