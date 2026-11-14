@@ -147,12 +147,14 @@ describe("규칙: 선행·단·포인트 합", () => {
 });
 
 describe("초기화 비용", () => {
-  it("첫 1회 무료, 그 뒤로는 레벨에 따라 크지 않게 (최대 120P)", () => {
-    expect(respecCost(30, 0)).toBe(0);
-    expect(respecCost(1, 1)).toBe(32);
-    expect(respecCost(10, 1)).toBe(50);
-    expect(respecCost(30, 3)).toBe(90);
-    expect(respecCost(50, 9)).toBe(RESPEC_MAX_COST);
+  it("처음부터 레벨에 따라 (30 + 2×레벨, 최대 120P) — 무료 1회는 없다", () => {
+    expect(respecCost(1)).toBe(32);
+    expect(respecCost(10)).toBe(50);
+    expect(respecCost(30)).toBe(90);
+    expect(respecCost(45)).toBe(RESPEC_MAX_COST);
+    expect(respecCost(50)).toBe(RESPEC_MAX_COST);
+    // 레벨이 낮아도 0P는 없다
+    expect(respecCost(0)).toBeGreaterThan(0);
     expect(RESPEC_MAX_COST).toBeLessThanOrEqual(150);
   });
 
@@ -169,7 +171,7 @@ describe("초기화 비용", () => {
 });
 
 describe("옛 데이터 이전 (저장 형식 1 → 2)", () => {
-  it("옛 스킬은 모두 지우고 레벨만큼의 포인트를 돌려준다 + 안내 1회 (무료 초기화 1회는 그대로)", () => {
+  it("옛 스킬은 모두 지우고 레벨만큼의 포인트를 돌려준다 + 안내 1회 (초기화는 처음부터 비용)", () => {
     const old = {
       level: 23,
       exp: 10,
@@ -191,7 +193,7 @@ describe("옛 데이터 이전 (저장 형식 1 → 2)", () => {
     expect(c.hotbar).toEqual([null, null, null, null, null, null]);
     expect(c.treeNotice).toBe(true);
     expect(c.respecs).toBe(0);
-    expect(respecCost(c.level, c.respecs)).toBe(0);
+    expect(respecCost(c.level)).toBe(30 + 2 * 23); // 첫 초기화도 비용
     // 다른 기록은 그대로
     expect(c.stats.str).toBe(30);
     expect(c.potions.p_coffee).toBe(5);
@@ -248,10 +250,10 @@ describe("테스트 서버 슈퍼 계정 환경 검사", () => {
   });
 
   it("능력치 초기화: 기본 능력치만 되돌리고 횟수를 스킬과 따로 센다 (옛 저장값은 0회)", () => {
-    // 옛 저장값(statResets 없음) → 0회: 첫 1회 무료가 남는다
+    // 옛 저장값(statResets 없음) → 0회 (횟수가 0이어도 첫 초기화부터 비용)
     const old = normalize({ level: 10, treeVer: SKILL_TREE_VERSION, respecs: 2, stats: { str: 5 }, statPoints: 20 });
     expect(old.statResets).toBe(0);
-    expect(respecCost(old.level, old.statResets)).toBe(0);
+    expect(respecCost(old.level)).toBe(50);
     expect(normalize({ ...old, statResets: 3 }).statResets).toBe(3);
     expect(normalize({ ...old, statResets: -1 }).statResets).toBe(0);
     expect(newCharacter().statResets).toBe(0);
@@ -263,7 +265,7 @@ describe("테스트 서버 슈퍼 계정 환경 검사", () => {
     expect(r.respecs).toBe(2);
     expect(r.skills).toEqual({ em_kindle: 1 });
     expect([r.level, r.exp, r.equip.weapon]).toEqual([10, 9, "w_ruler"]);
-    expect(respecCost(r.level, r.statResets)).toBe(50);
+    expect(respecCost(r.level)).toBe(50); // 횟수가 늘어도 비용은 그대로
     // 슈퍼 계정·레벨 맞춤은 세지 않는다
     expect(resetStats(r, false).statResets).toBe(1);
   });

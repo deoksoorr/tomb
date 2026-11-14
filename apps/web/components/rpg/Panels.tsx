@@ -30,7 +30,7 @@ import {
 import { GEAR_INV_MAX, sellValue, spentStats } from "@/lib/rpg/character";
 import type { CharacterAction } from "@/lib/rpg/client";
 import { derive, STAT_MAX, type Derived } from "@/lib/rpg/formulas";
-import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
+import { RESPEC_MAX_COST } from "@/lib/rpg/skillRules";
 import type { RpgView } from "@/lib/rpg/types";
 import { weaponStyleOf, weaponStyleText } from "@/lib/rpg/weapons";
 import { OutfitCanvas } from "../shop/OutfitPreview";
@@ -211,12 +211,10 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
   const left = c.statPoints - used;
   const preview = used ? derive(c.level, Object.fromEntries(STAT_KEYS.map((k) => [k, c.stats[k] + (plan[k] ?? 0)])) as Stats, c.equip) : view.derived;
   const bump = (k: keyof Stats, d: number) => setPlan((p) => ({ ...p, [k]: Math.max(0, (p[k] ?? 0) + d) }));
-  // 능력치 초기화: 스킬 초기화와 같은 규칙 (첫 1회 무료, 그 뒤로는 레벨에 따라 지갑 포인트). 서버가 비용을 다시 확인한다
+  // 능력치 초기화: 스킬 초기화와 같은 규칙 (레벨에 따라 지갑 포인트). 서버가 비용을 다시 확인한다
   const [confirmReset, setConfirmReset] = useState(false);
   const spent = spentStats(c);
   const resetCost = view.statResetCost;
-  const resetLabel = resetCost > 0 ? `${resetCost}P` : "무료";
-  const nextCost = respecCost(c.level, c.statResets + 1);
   const short = view.points < resetCost;
   return (
     <div className={s.lobby}>
@@ -283,25 +281,18 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
         </div>
         <div className={s.startRow}>
           <span className={s.meta}>
-            {view.superHunter
-              ? "테스트 서버 슈퍼 계정 · 능력치 포인트는 최대 레벨 기준으로 모두 받아요 · 초기화는 늘 무료"
-              : resetCost > 0
-                ? `배분을 되돌리면 지갑 ${view.points.toLocaleString("ko-KR")}P에서 ${resetCost}P가 빠져요`
-                : `배분을 처음 되돌리는 1회는 무료 · 그 뒤로는 레벨에 따라 최대 ${RESPEC_MAX_COST}P`}
+            {view.superHunter ? "테스트 서버 슈퍼 계정 · 능력치 포인트는 최대 레벨 기준으로 모두 받아요 · " : ""}
+            {`배분을 되돌리면 지갑 ${view.points.toLocaleString("ko-KR")}P에서 ${resetCost}P가 빠져요 (레벨에 따라 최대 ${RESPEC_MAX_COST}P)`}
           </span>
           <button type="button" className={ui.button} disabled={busy || spent === 0 || confirmReset} onClick={() => setConfirmReset(true)}>
-            능력치 초기화 ({resetLabel})
+            능력치 초기화 ({resetCost}P)
           </button>
         </div>
         {confirmReset && (
           <div className={s.confirm} role="alert">
             <p>
               배분한 능력치를 모두 되돌리고 포인트 {spent}개를 돌려받아요. 장비로 붙은 능력치와 레벨·스킬은 그대로예요.{" "}
-              {view.superHunter
-                ? "테스트 서버 슈퍼 계정은 늘 무료예요."
-                : resetCost > 0
-                  ? `지갑에서 ${resetCost}P가 빠지고, 다음에도 ${nextCost}P가 들어요.`
-                  : `이번은 무료, 다음부터는 ${nextCost}P가 들어요.`}
+              지갑에서 {resetCost}P가 빠져요.
             </p>
             <div className={s.cellActions}>
               <button
@@ -314,7 +305,7 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
                   onCharacter({ type: "resetStats", cost: resetCost }, `능력치를 모두 되돌렸어요. 포인트 ${spent}개를 돌려받았어요.`);
                 }}
               >
-                {short ? "포인트가 모자라요" : resetCost > 0 ? `${resetCost}P 내고 초기화` : "무료로 초기화"}
+                {short ? "포인트가 모자라요" : `${resetCost}P 내고 초기화`}
               </button>
               <button type="button" className={cx(ui.button, ui.quiet)} onClick={() => setConfirmReset(false)}>
                 그만두기

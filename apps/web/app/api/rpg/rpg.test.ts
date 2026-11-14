@@ -187,7 +187,7 @@ describe("사냥터 API", () => {
     expect(a.derived.stats.str).toBe(3);
     const l = (await (await character.POST(call("/x", v, { type: "learn", skill: "em_kindle" }))).json()) as RpgView;
     expect(l.character.skills.em_kindle).toBe(1);
-    expect(l.respecCost).toBe(0);
+    expect(l.respecCost).toBe(32); // 첫 초기화도 레벨 1 기준 32P
     expect(l.superHunter).toBeUndefined();
     // 서버가 잘못된 배분을 거절한다: 선행 없음·단 잠김·포인트 없음·모르는 스킬
     const bad = await character.POST(call("/x", v, { type: "learn", skill: "em_fan" }));
@@ -198,39 +198,60 @@ describe("사냥터 API", () => {
     expect(passiveKey.status).toBe(409);
   });
 
-  it("스킬 초기화: 첫 1회 무료, 그 뒤로는 지갑 포인트 (보인 비용과 다르면 거절)", async () => {
+  it("스킬 초기화: 첫 1회부터 지갑 포인트 (보인 비용과 다르면 거절, 횟수는 센다)", async () => {
     const v = await newVisitor();
+    const accounts = getAccounts();
+    await accounts.enter(v.id, { name: "스킬초기" }, Date.now());
+    await accounts.adjustPoints(v.id, 500);
+    const wallet = async () => ((await (await rpg.GET(call("/api/rpg", v))).json()) as RpgView).points;
     await getRpgStore().update(v.id, (s) => ({ state: { ...s, level: 10 }, result: null }));
-    await character.POST(call("/x", v, { type: "learn", skill: "em_kindle" }));
-    const r1 = (await (await character.POST(call("/x", v, { type: "respec", cost: 0 }))).json()) as RpgView;
+    const learned = (await (await character.POST(call("/x", v, { type: "learn", skill: "em_kindle" }))).json()) as RpgView;
+    expect(learned.respecCost).toBe(50); // 첫 초기화도 비용
+    const points0 = await wallet();
+    // 첫 1회라도 무료(cost 0)로 보내면 거절 — 돈도 상태도 그대로
+    const free = await character.POST(call("/x", v, { type: "respec", cost: 0 }));
+    expect(free.status).toBe(409);
+    expect(await errCode(free)).toBe("COST_CHANGED");
+    expect((await getRpgStore().get(v.id)).skills.em_kindle).toBe(1);
+    expect(await wallet()).toBe(points0);
+    // 보인 비용(50P)대로 하면 첫 1회부터 돈이 빠지고 횟수가 센다
+    const r1 = (await (await character.POST(call("/x", v, { type: "respec", cost: 50 }))).json()) as RpgView;
     expect(r1.character.skills).toEqual({});
     expect(r1.character.skillPoints).toBe(11);
-    expect(r1.respecCost).toBe(50);
-    await character.POST(call("/x", v, { type: "learn", skill: "em_kindle" }));
-    const stale = await character.POST(call("/x", v, { type: "respec", cost: 0 }));
-    expect(stale.status).toBe(409);
-    expect(await errCode(stale)).toBe("COST_CHANGED");
+    expect(r1.character.respecs).toBe(1);
+    expect(r1.respecCost).toBe(50); // 횟수가 늘어도 비용은 레벨로만
+    expect(r1.points).toBe(points0 - 50);
     // 지갑이 모자라면 돈도 상태도 그대로
+    await character.POST(call("/x", v, { type: "learn", skill: "em_kindle" }));
+    await accounts.adjustPoints(v.id, -10_000_000);
     const poor = await character.POST(call("/x", v, { type: "respec", cost: 50 }));
-    if (poor.status === 200) expect(((await poor.json()) as RpgView).character.skills).toEqual({});
-    else expect((await getRpgStore().get(v.id)).skills.em_kindle).toBe(1);
+    expect(poor.status).toBe(409);
+    expect(await errCode(poor)).toBe("NOT_ENOUGH_POINTS");
+    expect((await getRpgStore().get(v.id)).skills.em_kindle).toBe(1);
+    expect((await getRpgStore().get(v.id)).respecs).toBe(1);
   });
 
-  it("능력치 초기화: 모두 쓸 수 있다 — 첫 1회 무료, 그 뒤로는 지갑 포인트 (스킬 초기화와 따로 센다)", async () => {
+  it("능력치 초기화: 모두 쓸 수 있다 — 첫 1회부터 지갑 포인트 (스킬 초기화와 따로 센다)", async () => {
     const v = await newVisitor();
     const accounts = getAccounts();
     await accounts.adjustPoints(v.id, 0); // 계정이 없으면 adjust가 무시되므로 먼저 만든다
     await accounts.enter(v.id, { name: "능력치" }, Date.now());
+    await accounts.adjustPoints(v.id, 500);
     const wallet = async () => ((await (await rpg.GET(call("/api/rpg", v))).json()) as RpgView).points;
     await getRpgStore().update(v.id, (s) => ({ state: { ...s, level: 10, exp: 7, statPoints: statPointsEarned(10) }, result: null }));
     await character.POST(call("/x", v, { type: "learn", skill: "em_kindle" }));
     const before = (await (await character.POST(call("/x", v, { type: "alloc", stats: { str: 3, dex: 2 } }))).json()) as RpgView;
-    expect(before.statResetCost).toBe(0);
+    expect(before.statResetCost).toBe(50); // 첫 초기화도 비용
     const gearStr = before.derived.stats.str - before.character.stats.str;
     const points0 = await wallet();
 
-    // 1) 첫 1회 무료: 기본 능력치만 되돌리고 장비·레벨·경험치·스킬은 그대로
-    const r1 = (await (await character.POST(call("/x", v, { type: "resetStats", cost: 0 }))).json()) as RpgView;
+    // 1) 첫 1회부터 50P: 기본 능력치만 되돌리고 장비·레벨·경험치·스킬은 그대로
+    const free = await character.POST(call("/x", v, { type: "resetStats", cost: 0 }));
+    expect(free.status).toBe(409);
+    expect(await errCode(free)).toBe("COST_CHANGED");
+    expect((await getRpgStore().get(v.id)).stats.str).toBe(4);
+    expect(await wallet()).toBe(points0);
+    const r1 = (await (await character.POST(call("/x", v, { type: "resetStats", cost: 50 }))).json()) as RpgView;
     expect(r1.character.stats).toEqual({ str: 1, agi: 1, vit: 1, int: 1, dex: 1, luk: 1 });
     expect(r1.character.statPoints).toBe(statPointsEarned(10));
     expect(r1.derived.stats.str - r1.character.stats.str).toBe(gearStr);
@@ -240,12 +261,13 @@ describe("사냥터 API", () => {
     expect(r1.character.skills).toEqual({ em_kindle: 1 });
     expect(r1.character.statResets).toBe(1);
     expect(r1.statResetCost).toBe(50);
-    expect(r1.respecCost).toBe(0); // 스킬 초기화 무료 1회는 그대로
-    expect(r1.points).toBe(points0);
+    expect(r1.respecCost).toBe(50);
+    expect(r1.character.respecs).toBe(0); // 능력치 초기화는 스킬 초기화 횟수를 세지 않는다
+    expect(r1.points).toBe(points0 - 50);
 
     // 2) 화면에 보인 비용이 다르면(예전 화면처럼 cost 없이 보내도) 돈을 받지 않고 거절
     await character.POST(call("/x", v, { type: "alloc", stats: { str: 1 } }));
-    const stale = await character.POST(call("/x", v, { type: "resetStats", cost: 0 }));
+    const stale = await character.POST(call("/x", v, { type: "resetStats", cost: 32 }));
     expect(stale.status).toBe(409);
     expect(await errCode(stale)).toBe("COST_CHANGED");
     expect(await errCode(await character.POST(call("/x", v, { type: "resetStats" })))).toBe("COST_CHANGED");
@@ -272,7 +294,7 @@ describe("사냥터 API", () => {
     expect(await wallet()).toBe(300);
     expect((await getRpgStore().get(v.id)).stats.str).toBe(2);
 
-    // 5) 두 번째부터는 비용을 내고 초기화
+    // 5) 두 번째도 같은 비용
     const r2 = (await (await character.POST(call("/x", v, { type: "resetStats", cost: 50 }))).json()) as RpgView;
     expect(r2.character.stats.str).toBe(1);
     expect(r2.character.statResets).toBe(2);
@@ -282,13 +304,17 @@ describe("사냥터 API", () => {
 
   it("테스트 서버 슈퍼 계정: 운영자만, 운영 서버(VERCEL_ENV=production)에서는 꺼진다", async () => {
     const op = await newVisitor();
+    // 슈퍼 계정도 초기화 비용을 낸다 — 시험에서는 지갑을 채워 둔다 (운영 서버의 운영자 지갑은 늘 채워져 있다)
+    await getAccounts().enter(op.id, { name: "운영자" }, Date.now());
+    await getAccounts().adjustPoints(op.id, 1000);
     await setStaff(op.id);
     try {
       const view = (await (await rpg.GET(call("/api/rpg", op))).json()) as RpgView;
       expect(view.superHunter).toBe(true);
       expect(view.character.level).toBe(50);
-      expect(view.respecCost).toBe(0);
-      expect(view.statResetCost).toBe(0);
+      // 슈퍼 계정도 무료가 아니다 (저장된 레벨 1 기준 32P — 지갑이 늘 채워질 뿐)
+      expect(view.respecCost).toBe(32);
+      expect(view.statResetCost).toBe(32);
       expect(view.character.skillPoints).toBeGreaterThan(100);
       // Lv.1인데도 지옥 사냥터가 열린다
       const hell = await start.POST(call("/api/rpg/run/start", op, { game: "hunt", difficulty: "hell" }));
@@ -301,19 +327,23 @@ describe("사냥터 API", () => {
       await getRpgStore().update(op.id, (st) => ({ state: { ...st, inv: { ...st.inv, w_stamp: 1 } }, result: null }));
       const worn = await character.POST(call("/x", op, { type: "equip", slot: "weapon", itemId: "w_stamp" }));
       expect(worn.status).toBe(200);
-      // 능력치: 최대 레벨 기준 포인트를 모두 받은 것으로 (172) — 바로 배분, 무료 초기화
+      // 능력치: 최대 레벨 기준 포인트를 모두 받은 것으로 (172) — 바로 배분, 초기화는 32P
       const sv = (await worn.json()) as RpgView;
       expect(sv.character.statPoints).toBe(172);
       const alloc = await character.POST(call("/x", op, { type: "alloc", stats: { str: 98, agi: 60 } }));
       expect(alloc.status).toBe(200);
       expect(((await alloc.json()) as RpgView).character.statPoints).toBe(14);
       expect((await character.POST(call("/x", op, { type: "alloc", stats: { vit: 15 } }))).status).toBe(409);
-      const reset = (await (await character.POST(call("/x", op, { type: "resetStats", cost: 0 }))).json()) as RpgView;
+      const freeReset = await character.POST(call("/x", op, { type: "resetStats", cost: 0 }));
+      expect(freeReset.status).toBe(409);
+      expect(await errCode(freeReset)).toBe("COST_CHANGED");
+      const resetRes = await character.POST(call("/x", op, { type: "resetStats", cost: 32 }));
+      const reset = (await resetRes.json()) as RpgView;
       expect(reset.character.stats.str).toBe(1);
       expect(reset.character.statPoints).toBe(172);
-      // 슈퍼 계정은 늘 무료·횟수 안 셈 (몇 번을 해도 0P)
-      expect(reset.statResetCost).toBe(0);
-      expect((await character.POST(call("/x", op, { type: "resetStats", cost: 0 }))).status).toBe(200);
+      // 슈퍼 계정도 비용은 늘 내되(32P) 횟수는 안 센다 (몇 번을 해도 비용이 그대로)
+      expect(reset.statResetCost).toBe(32);
+      expect((await character.POST(call("/x", op, { type: "resetStats", cost: 32 }))).status).toBe(200);
       expect((await getRpgStore().get(op.id)).statResets).toBe(0);
       expect((await character.POST(call("/x", op, { type: "alloc", stats: { str: 98, agi: 60 } }))).status).toBe(200);
 
@@ -332,10 +362,11 @@ describe("사냥터 API", () => {
       const prodWear = await character.POST(call("/x", op, { type: "equip", slot: "weapon", itemId: "w_stamp" }));
       expect(prodWear.status).toBe(409);
       expect(await errCode(prodWear)).toBe("LEVEL_LOW");
-      // 운영에서는 보통 계정 규칙: 첫 1회 무료, 그 뒤로는 레벨 1 기준 32P
-      const prodReset = await character.POST(call("/x", op, { type: "resetStats", cost: 0 }));
+      // 운영에서는 보통 계정 규칙: 첫 1회부터 레벨 1 기준 32P, 횟수도 센다
+      const prodReset = await character.POST(call("/x", op, { type: "resetStats", cost: 32 }));
       expect(prodReset.status).toBe(200);
       expect(((await prodReset.json()) as RpgView).statResetCost).toBe(32);
+      expect((await getRpgStore().get(op.id)).statResets).toBe(1);
       expect((await character.POST(call("/x", op, { type: "alloc", stats: { str: 6 } }))).status).toBe(409);
       const locked = await start.POST(call("/api/rpg/run/start", op, { game: "hunt", difficulty: "hell" }));
       expect(await errCode(locked)).toBe("ZONE_LOCKED");

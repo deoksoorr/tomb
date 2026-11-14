@@ -173,7 +173,7 @@ const SKILL_TREE: ReactNode[][] = [
   ["단", `갈래마다 ${TIER_GATES.length}단 · 위 단은 그 갈래 아래 단에 ${TIER_GATES.slice(1).join("·")}포인트를 쓰면 열려요`],
   ["선행", "선으로 이어진 스킬은 앞 스킬을 정해진 랭크까지 찍어야 배워요"],
   ["단축 칸", `배운 액티브 스킬을 사냥 → 스킬 탭 아래 ${HOTBAR_SIZE}칸에 끌어다 놓기(손가락도) · 패시브는 칸 없이 늘 켜져요`],
-  ["초기화", `첫 1회 무료 · 그 뒤로는 레벨에 따라 ${respecCost(1, 1)}~${RESPEC_MAX_COST}P`],
+  ["초기화", `레벨에 따라 ${respecCost(1)}~${RESPEC_MAX_COST}P`],
 ];
 
 const FORAGE: ReactNode[][] = [
@@ -290,7 +290,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           </ul>
           <Table head={["스킬 트리", "내용"]} rows={SKILL_TREE} />
           <ul className={styles.points}>
-            <li>스킬 트리가 크게 바뀌면 모두의 스킬이 초기화되고 스킬 포인트를 전부 돌려받아요(스킬 탭에 한 번 안내). 무료 초기화 1회는 그대로 남아요.</li>
+            <li>스킬 트리가 크게 바뀌면 모두의 스킬이 초기화되고 스킬 포인트를 전부 돌려받아요(스킬 탭에 한 번 안내).</li>
           </ul>
           <details className={styles.more}>
             <summary>상태 이상과 물약</summary>

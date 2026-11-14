@@ -97,7 +97,7 @@ export function normalize(raw: unknown): CharacterState {
     hotbar: old ? base.hotbar : cleanHotbar(r.hotbar, skills),
     treeVer: SKILL_TREE_VERSION,
     respecs: Number.isInteger(r.respecs) && r.respecs! > 0 ? r.respecs! : 0,
-    // 능력치 초기화 횟수: 옛 저장값에는 없다 → 0 (첫 1회 무료가 그대로 남는다)
+    // 능력치 초기화 횟수: 옛 저장값에는 없다 → 0
     statResets: Number.isInteger(r.statResets) && r.statResets! > 0 ? r.statResets! : 0,
     ...(notice ? { treeNotice: true } : {}),
     inv: { ...(r.inv ?? base.inv) },

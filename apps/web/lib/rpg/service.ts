@@ -108,8 +108,8 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
     expToNext: Number.isFinite(expToNext(character.level)) ? expToNext(character.level) : 0,
     points: me.points,
     today: { huntPoints: Math.min(daily.points, HUNT_CAP), cap: HUNT_CAP, runs: daily.runs, runsPerHour: RUNS_PER_HOUR - runs },
-    respecCost: sup ? 0 : respecCost(stored.level, stored.respecs),
-    statResetCost: sup ? 0 : respecCost(stored.level, stored.statResets),
+    respecCost: respecCost(stored.level),
+    statResetCost: respecCost(stored.level),
     ...(sup ? { superHunter: true } : {}),
   };
 }
@@ -149,7 +149,7 @@ const RESETS = {
 } as const;
 
 /**
- * 스킬·능력치 초기화: 첫 1회 무료, 그 뒤로는 지갑 포인트 (skillRules.respecCost). 슈퍼 계정은 늘 무료·횟수 안 셈.
+ * 스킬·능력치 초기화: 늘 레벨에 따른 지갑 포인트 (skillRules.respecCost, 슈퍼 계정도 — 슈퍼 계정 지갑은 늘 채워진다). 슈퍼 계정은 횟수만 안 셈.
  * seen: 화면에 보인 비용 — 그 사이 비용이 바뀌었으면(다른 탭에서 먼저 초기화 등) 돈을 받지 않고 다시 보여 준다.
  * 포인트를 먼저 빼고, 저장이 실패하면 돌려준다
  */
@@ -157,7 +157,7 @@ async function paidReset(acct: string, kind: keyof typeof RESETS, seen: number, 
   const r = RESETS[kind];
   const store = getRpgStore();
   const c = await store.get(acct);
-  const cost = sup ? 0 : respecCost(c.level, r.count(c));
+  const cost = respecCost(c.level);
   if (cost !== seen) throw new HttpError(409, "COST_CHANGED", `초기화 비용이 ${cost}P로 바뀌었어요. 다시 확인해 주세요.`);
   if (cost > 0) await spendPoints(acct, cost, `사냥 ${r.name} 초기화`);
   try {

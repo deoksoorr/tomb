@@ -261,7 +261,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
           ? pickBlock
           : `${d.name}: ${dSlot >= 0 ? `지금 ${dSlot + 1}번 칸 · ` : ""}넣을 칸을 누르거나 숫자 키 1~${HOTBAR_SIZE}을 누르세요.`));
 
-  const resetLabel = view.respecCost > 0 ? `${view.respecCost}P` : c.respecs > 0 ? "무료" : "무료 (첫 1회)";
+  const resetLabel = `${view.respecCost}P`;
 
   return (
     <div
@@ -279,7 +279,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
       {c.treeNotice && (
         <div className={t.notice} role="status">
           <p>
-            <b>스킬 트리가 새로 바뀌었어요.</b> 예전에 배운 스킬은 없어지고 스킬 포인트 <b>{c.skillPoints}</b>를 모두 돌려드렸어요. 세 갈래 중에서 마음에 드는 길로 다시 찍어 보세요. (첫 초기화 1회 무료는 그대로 남아 있어요)
+            <b>스킬 트리가 새로 바뀌었어요.</b> 예전에 배운 스킬은 없어지고 스킬 포인트 <b>{c.skillPoints}</b>를 모두 돌려드렸어요. 세 갈래 중에서 마음에 드는 길로 다시 찍어 보세요.
           </p>
           <button type="button" className={cx(ui.button, ui.quiet)} disabled={busy} onClick={() => onCharacter({ type: "ackTree" })}>
             알겠어요
@@ -296,7 +296,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
           </span>
         </div>
         {view.superHunter && (
-          <span className={t.super} title="운영이 아닌 서버의 운영자 계정: 포인트 넉넉히 · 레벨 최대 취급 · 사냥터 모두 열림 · 초기화 무료">
+          <span className={t.super} title="운영이 아닌 서버의 운영자 계정: 포인트 넉넉히 · 레벨 최대 취급 · 사냥터 모두 열림 · 초기화 횟수 안 셈">
             테스트 서버 슈퍼 계정
           </span>
         )}
@@ -305,7 +305,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
             <>
               <span className={t.resetCost}>
                 초기화 비용 <b>{resetLabel}</b>
-                <small>{view.respecCost > 0 ? `지갑 ${view.points.toLocaleString("ko-KR")}P에서 빠져요` : "찍은 포인트를 모두 돌려받아요"}</small>
+                <small>지갑 {view.points.toLocaleString("ko-KR")}P에서 빠져요</small>
               </span>
               <button type="button" className={ui.button} disabled={busy || spentPoints(c.skills) === 0} onClick={() => setConfirmReset(true)}>
                 초기화
@@ -313,7 +313,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
             </>
           ) : (
             <span className={t.confirm} role="alert">
-              {view.respecCost > 0 ? `${view.respecCost}P를 내고` : "무료로"} 포인트 {spentPoints(c.skills)}를 모두 되돌릴까요? 단축 칸도 비워져요.
+              {view.respecCost}P를 내고 포인트 {spentPoints(c.skills)}를 모두 되돌릴까요? 단축 칸도 비워져요.
               <span className={t.confirmBtns}>
                 <button
                   type="button"
