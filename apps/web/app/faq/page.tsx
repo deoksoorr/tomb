@@ -4,7 +4,7 @@ import { pageMetadata } from "../seo";
 import { ATTEND_RULE_TEXT } from "@/lib/attendStay";
 import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
 import { DAILY_EARN_CAP, earnRule } from "@/lib/economy";
-import { CHAT_MAX, CHAT_RECENT_MS, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS, FRIEND_MAX, NAME_MAX, NAME_MIN, PERMANENT_MULTIPLIER } from "@tomb/protocol";
+import { CHAT_MAX, CHAT_RECENT_MS, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS, FRIEND_MAX, NAME_MAX, NAME_MIN, PERMANENT_MULTIPLIER, STAFF_PUBLIC_NAME } from "@tomb/protocol";
 import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, AUTO_FISH_MAX_MS } from "@/lib/forage/auto";
 import { DAILY_CATCH_MAX } from "@/lib/forage/catalog";
 import { DORMANT_DAYS } from "@/lib/store/types";
@@ -114,7 +114,7 @@ const FAQ = [
   },
   {
     q: "닉네임이 다른 사람과 같아도 되나요?",
-    a: `아니요. 닉네임은 ${NAME_MIN}~${NAME_MAX}자이고 다른 사람이 쓰는 이름은 쓸 수 없어요. ${DORMANT_DAYS}일 넘게 들어오지 않은 계정은 휴면이 되어 그 이름을 다른 사람이 쓸 수 있고, 돌아오면 닉네임을 다시 정해요. 운영자도 닉네임 그대로 보이고, 머리 위 「운영자」 칭호와 금빛 장식 이름표로 알아볼 수 있어요. 일반 계정은 이 칭호를 달 수 없고 '운영자' 같은 이름도 쓸 수 없어요.`,
+    a: `아니요. 닉네임은 ${NAME_MIN}~${NAME_MAX}자이고 다른 사람이 쓰는 이름은 쓸 수 없어요. ${DORMANT_DAYS}일 넘게 들어오지 않은 계정은 휴면이 되어 그 이름을 다른 사람이 쓸 수 있고, 돌아오면 닉네임을 다시 정해요. 금빛 '${STAFF_PUBLIC_NAME}' 이름표는 운영자예요.`,
   },
   {
     q: "닉네임을 꾸밀 수 있나요?",

@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, signJoinToken } from "@tomb/protocol";
+import { AVATAR_COLORS, signJoinToken, staffPublicName } from "@tomb/protocol";
 import { env } from "@/lib/env";
 import { dexBadgeOf } from "@/lib/forage/service";
 import { getHouseStore } from "@/lib/housing/service";
@@ -33,8 +33,8 @@ export const POST = handler(async (req) => {
   const [a, style, staff, dex, champ] = await Promise.all([accounts.appearance(visitorId, now), getStyleStore(accounts).get(visitorId), isStaff(visitorId), dexBadgeOf(visitorId), isStaff(visitorId).then((s) => champWireFor(visitorId, s, now)).catch(() => 0)]);
   const token = await signJoinToken(
     env.joinSecret(),
-    // 31번: 운영자 표시는 서버가 확인한 뒤에만. 11/15: 이름은 운영자도 닉네임 그대로
-    { visitorId, name: a.name ?? NO_NAME, color: a.color ?? AVATAR_COLORS[0], body: a.body ?? "hood", look: lookOf(a), dye: style.dye, channel: 0, room, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}) },
+    // 31번: 운영자 표시는 서버가 확인한 뒤에만. 운영자 이름은 공개 이름("대장")으로
+    { visitorId, name: staffPublicName(a.name ?? NO_NAME, staff), color: a.color ?? AVATAR_COLORS[0], body: a.body ?? "hood", look: lookOf(a), dye: style.dye, channel: 0, room, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}) },
     ROOM_TOKEN_TTL_SEC,
   );
   return json<RoomJoinResponse>({ room, token, wsUrl: `${env.realtimeWsUrl()}/room/${encodeURIComponent(room)}?t=${encodeURIComponent(token)}` });
