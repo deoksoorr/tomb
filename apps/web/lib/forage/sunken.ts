@@ -14,7 +14,10 @@ export const SUNKEN_CHANCE = 0.003;
 export const SUNKEN_CHANCE_AUTO = SUNKEN_CHANCE / 2;
 
 /** 낚일 수 있는 꾸미기: 상점에서 파는 부위 있는 꾸미기 (펫·운영자 전용은 빠진다 — isShopListed) */
-export const SUNKEN_POOL: readonly ItemDef[] = ITEMS.filter((i) => i.kind === "cosmetic" && !!i.slot && i.slot !== "pet" && !i.staff && isShopListed(i));
+// 닉네임 꾸미기(이름 글자·이름표 바탕판)는 물에서 건져 올릴 물건이 아니라 뺀다
+export const SUNKEN_POOL: readonly ItemDef[] = ITEMS.filter(
+  (i) => i.kind === "cosmetic" && !!i.slot && i.slot !== "pet" && i.slot !== "nameColor" && i.slot !== "namePlate" && !i.staff && isShopListed(i),
+);
 
 /**
  * 꾸미기 고르기: 싼 것이 조금 더 잘 나온다 (1/√가격). 이미 영구로 가진 것(owned)이 뽑히면 아직 없는 것 중에서 같은 난수로 다시 고른다.

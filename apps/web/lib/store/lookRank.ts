@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { DYE_PARTS, type AvatarDye } from "@tomb/protocol";
+import { DYE_PARTS, itemById, type AvatarDye } from "@tomb/protocol";
 import { env } from "../env";
 import { MemoryFillMark, RedisFillMark, type FillMark } from "../rankFill";
 import { kstDay } from "./accounts";
@@ -39,7 +39,12 @@ export interface LookRankStore {
   countAbove(score: number): Promise<number>;
   /** 계정들의 지금 외형 (없는 계정은 빠진다) */
   states(ids: readonly string[], now: number): Promise<Map<string, LookState>>;
+  /** 계정들이 지금(만료 전) 착용한 닉네임 꾸미기 id (이름 글자 → 이름표 순, 없는 계정·꾸미기 없음은 빠진다). 랭킹 줄 이름 색 */
+  nameStyles(ids: readonly string[], now: number): Promise<Map<string, string[]>>;
 }
+
+/** 닉네임 꾸미기 부위 (착용 해시의 필드 이름 = 부위) */
+const NAME_FIELDS = ["nameColor", "namePlate"] as const;
 
 // ── 메모리 (로컬·테스트) ──
 
@@ -84,7 +89,21 @@ export class MemoryLookRank implements LookRankStore {
     );
     return out;
   }
+  async nameStyles(ids: readonly string[], now: number): Promise<Map<string, string[]>> {
+    const accounts = this.accounts();
+    const out = new Map<string, string[]>();
+    await Promise.all(
+      ids.map(async (id) => {
+        const a = await accounts.get(id, kstDay(now), now);
+        const worn = NAME_FIELDS.flatMap((slot) => a.equipped.filter((e) => e.until > now && itemSlot(e.itemId) === slot).slice(0, 1).map((e) => e.itemId));
+        if (worn.length) out.set(id, worn);
+      }),
+    );
+    return out;
+  }
 }
+
+const itemSlot = (id: string) => itemById(id)?.slot;
 
 // ── Redis ──
 
@@ -159,6 +178,25 @@ export class RedisLookRank implements LookRankStore {
       const dye: AvatarDye = {};
       for (const part of DYE_PARTS) if (st[part]) dye[part] = st[part];
       out.set(id, { name: name === null ? null : String(name), body: body === null ? null : String(body), dye, equipped });
+    });
+    return out;
+  }
+
+  async nameStyles(ids: readonly string[], now: number): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>();
+    if (!ids.length) return out;
+    // 한 사람당 2개 (이름 글자·이름표 필드) 파이프라인 한 번으로
+    const p = this.redis.pipeline();
+    for (const id of ids) for (const f of NAME_FIELDS) p.hget(K.look(id), f);
+    const res = (await p.exec()) as unknown[];
+    ids.forEach((id, i) => {
+      const worn = NAME_FIELDS.flatMap((slot, j) => {
+        const v = res[i * NAME_FIELDS.length + j];
+        if (typeof v !== "string") return [];
+        const [itemId, until] = v.split("|");
+        return itemId && Number(until) > now && itemSlot(itemId) === slot ? [itemId] : [];
+      });
+      if (worn.length) out.set(id, worn);
     });
     return out;
   }

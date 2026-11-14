@@ -4,7 +4,8 @@ import { bodyLabel, bodyUnlockPrice, DYE_PARTS, dyeSpecialOf, itemById, PERMANEN
 // 지금 "착용 중이고 만료 전"인 꾸미기만 센다 → 기간제가 끝나면 그 파츠 점수도 바로 사라진다.
 // 점수 = 영구 소장 기준 가치 ÷ LOOK_SCORE_DIVISOR (반올림, 1점 단위 — 값이 조금만 달라도 점수가 달라진다).
 // 입은 게 이용권이든 영구든 같은 점수다 (영구/이용권 차이는 두지 않는다).
-//  - 캐릭터 꾸미기: 이용권 값 × PERMANENT_MULTIPLIER (영구 소장가와 같은 기준 — 배수가 바뀌면 점수도 따라간다)
+//  - 캐릭터 꾸미기: 이용권 값 × PERMANENT_MULTIPLIER (영구 소장가와 같은 기준 — 배수가 바뀌면 점수도 따라간다).
+//    닉네임 꾸미기(이름 글자·이름표 바탕판)도 같은 공식이다 (부위가 따로라 몸 꾸미기와 함께 더해진다)
 //  - 펫: 동물원 가격
 //  - 프리미엄 외형(선택권으로 해금한 몸): 선택권 값. 처음 6종·운영자 몸은 0
 //  - 염색 특수 색(금빛·반짝이·무지개·야광): 부위마다 +DYE_SPECIAL_BONUS
@@ -67,8 +68,8 @@ export function lookScore(input: LookScoreInput, now: number): number {
   return parts + body + dye;
 }
 
-/** 랭킹 줄에 착용 파츠를 늘어놓는 부위 순서 (머리 → 목 → 등 → 손 → 오라 → 발 → 펫, 그 뒤에 프리미엄 외형) */
-export const LOOK_SLOT_ORDER: Readonly<Record<CosmeticSlot, number>> = { head: 0, neck: 1, back: 2, hand: 3, aura: 4, feet: 5, pet: 6 };
+/** 랭킹 줄에 착용 파츠를 늘어놓는 부위 순서 (머리 → 목 → 등 → 손 → 오라 → 발 → 펫 → 이름 글자 → 이름표, 그 뒤에 프리미엄 외형) */
+export const LOOK_SLOT_ORDER: Readonly<Record<CosmeticSlot, number>> = { head: 0, neck: 1, back: 2, hand: 3, aura: 4, feet: 5, pet: 6, nameColor: 7, namePlate: 8 };
 /** 파츠 목록에서 프리미엄 외형을 나타내는 id 접두사 ("body:king") — 아이콘은 game/sprites/itemIcons가 몸 그림으로 그린다 */
 export const BODY_PART_PREFIX = "body:";
 

@@ -15,8 +15,8 @@ import { remainingLabel } from "./items";
 
 // 캐릭터 꾸미기 "착용 부위" 순수 함수 (상점 부위 필터, 가방 장비창)
 
-/** 몸 위에서 아래로 (가방 목록·상점 필터 순서) */
-export const SLOT_ORDER: readonly CosmeticSlot[] = ["head", "neck", "back", "hand", "aura", "feet", "pet"];
+/** 몸 위에서 아래로 (가방 목록·상점 필터 순서). 닉네임 꾸미기(이름 글자·이름표)는 몸 다음 */
+export const SLOT_ORDER: readonly CosmeticSlot[] = ["head", "neck", "back", "hand", "aura", "feet", "pet", "nameColor", "namePlate"];
 
 export const SLOT_NAMES: Record<CosmeticSlot, string> = {
   head: "머리",
@@ -26,6 +26,8 @@ export const SLOT_NAMES: Record<CosmeticSlot, string> = {
   aura: "오라",
   feet: "발",
   pet: "펫",
+  nameColor: "이름 글자",
+  namePlate: "이름표",
 };
 
 /** 빈 칸에 흐리게 깔아 두는 그림 (그 부위 대표 아이템) */
@@ -37,6 +39,8 @@ export const SLOT_SILHOUETTE: Record<CosmeticSlot, string> = {
   aura: "aura_firefly",
   feet: "feet_flowers",
   pet: "pet_ghost",
+  nameColor: "nc_sky",
+  namePlate: "np_wood",
 };
 
 export type SlotFilter = CosmeticSlot | "all";

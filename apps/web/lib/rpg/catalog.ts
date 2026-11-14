@@ -1,5 +1,5 @@
 // 사냥터(RPG) 카탈로그: 장비·포션·스킬·몬스터·사냥터·난이도. 서버(검증·보상)와 클라이언트(UI·게임)가 같이 쓴다.
-import { isShopListed, itemById, ITEMS } from "@tomb/protocol";
+import { isNameSlot, isShopListed, itemById, ITEMS } from "@tomb/protocol";
 import type { BossPhase, PatternId } from "./patterns";
 import type { WeaponStyleId } from "./weapons";
 // 이름은 회사 생활(월요병·야근·결재·회식)과 누구나 한 번쯤 그만둔 다짐에서 따왔다.
@@ -635,7 +635,8 @@ export const timeLimitSec = (game: GameKind, d: Difficulty, zone?: string | null
  * 사냥터를 다 깼을 때 아주 가끔 나오는 기간제 코디 = 상점에서 파는 캐릭터 꾸미기(펫 제외) 중 200P 이하.
  * 서버가 계정 가방에 넣는다 (이미 가방·착용·벗어 둔 꾸미기에 있으면 다음 후보, 상점 중복 구매 금지 규칙과 같다)
  */
-export const COSMETIC_DROPS: readonly string[] = ITEMS.filter((i) => i.kind === "cosmetic" && isShopListed(i) && i.price <= 200).map((i) => i.id);
+// 닉네임 꾸미기(이름 글자·이름표)는 드롭에서 뺀다 (기존 드롭 후보·확률 그대로 — 상점에서만 산다)
+export const COSMETIC_DROPS: readonly string[] = ITEMS.filter((i) => i.kind === "cosmetic" && isShopListed(i) && !isNameSlot(i.slot) && i.price <= 200).map((i) => i.id);
 
 /** 코디 드롭 아이콘 (선물 상자) */
 export const COSMETIC_DROP_ART: IconArt = { shape: "gift", main: 0xffb0c8, accent: 0xe8b830 };

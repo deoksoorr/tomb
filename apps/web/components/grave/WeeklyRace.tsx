@@ -5,6 +5,7 @@ import { CHAMP_BOARDS, CHAMP_TITLE, type ChampBoard } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import type { ChampAvatar, ChampResponse, RaceResponse, RaceRow } from "@/lib/types";
 import AvatarThumb from "../account/AvatarThumb";
+import StyledName from "../ui/StyledName";
 import { ChampReward, ComboAuras } from "./ChampReward";
 import styles from "./WeeklyRace.module.css";
 
@@ -150,7 +151,9 @@ function HallColumn({ board, champ }: { board: ChampBoard; champ: ChampResponse 
           <Avatar a={last.avatar} label={`지난주 ${CHAMP_TITLE[board]} ${last.name}`} scale={1.25} />
           <span className={styles.lastText}>
             <span className={styles.hallWeek}>지난주 · {weekLabel(champ.week)}</span>
-            <b>{last.name}</b>
+            <b>
+              <StyledName name={last.name} look={last.avatar.look} />
+            </b>
             <span className={styles.value}>
               {last.sub ? `${last.sub} ` : ""}
               {valueText(board, last.value)}
@@ -184,7 +187,7 @@ function Step({ row, board, place }: { row: RaceRow; board: ChampBoard; place: n
       <Avatar a={row.avatar} label={`${place}등 ${row.name}`} scale={place === 1 ? 2 : 1.6} />
       <span className={styles.block}>{place}</span>
       <span className={styles.who}>
-        {row.name}
+        <StyledName name={row.name} look={row.avatar.look} />
         {row.me && " (나)"}
       </span>
       <span className={styles.value}>

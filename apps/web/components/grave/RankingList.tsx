@@ -8,6 +8,7 @@ import { DIFFICULTIES, gearById, ZONES, type Difficulty } from "@/lib/rpg/catalo
 import type { PublicGrave, RankBoard, RankPeriod, RankResponse } from "@/lib/types";
 import RpgIcon from "../rpg/RpgIcon";
 import ItemIcon from "../ui/ItemIcon";
+import StyledName from "../ui/StyledName";
 import styles from "./RankingPanel.module.css";
 
 // 49번: 랭킹은 포인트·사냥 중심. 묘비(헌화 순)는 작은 탭 하나로만 남긴다 (살려주세요 순위는 없어졌다).
@@ -219,7 +220,7 @@ function BoardRanking({ board, period, zone, fish }: { board: RankBoard; period:
           <li key={`${r.rank}-${r.name}`} className={styles.pointRow} data-me={r.me}>
             <span className={styles.rank}>{r.rank}</span>
             <span className={styles.name}>
-              {r.name}
+              <StyledName name={r.name} look={r.ns} />
               {r.me && (board === "house" ? " (내 집)" : " (나)")}
               {r.sub && <span className={styles.sub}>{r.sub}</span>}
               {r.items && r.items.length > 0 && <WornParts items={r.items} />}

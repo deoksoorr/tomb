@@ -10,12 +10,13 @@ import type { HuntResult, RpgAction, RpgHud } from "@/lib/rpg/types";
 import { DIR, STATE, type DirId, type HuntAct } from "@tomb/protocol";
 import { FONT_KEY, FONT_PX } from "../text/GlyphAtlas";
 import { AvatarView } from "../entities/AvatarView";
+import type { CfxDepth } from "../entities/CosmeticFxView";
 import { RoomPresence } from "../net/RoomPresence";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
 import { iconCanvas } from "./icons";
 import { RpgScene } from "./base";
 import { CombatFx, COMBO_RESET_MS, FXT } from "./combatFx";
-import { PALETTES, SkillFx, SKT } from "./skillFx";
+import { DEPTH_GROUND, PALETTES, SkillFx, SKT } from "./skillFx";
 // 스킬마다 고유 연출 (skillMoves) · 큰 도트 피해 숫자와 연타 합계 (damageNumbers)
 import { SKILL_LOOK, SkillMoves, skillPower } from "./skillMoves";
 import { art } from "./skillArt";
@@ -350,6 +351,8 @@ export class HuntScene extends RpgScene {
 
     this.pShadow = this.add.image(this.px, this.py, RTEX.shadow).setDepth(-500);
     const atlas = this.data0.atlas;
+    // 착용 오라·전용 오라: 바닥 층은 바닥 효과 바로 아래, 빛 층은 몸 바로 앞 (전투 효과·몬스터 앞쪽·피해 숫자보다 아래)
+    this.data.set("cfxDepth", { ground: DEPTH_GROUND - 5, lightOnBody: true } satisfies CfxDepth);
     if (atlas) {
       this.me = new AvatarView(this, atlas, this.px, this.py, this.data0.color, this.data0.name, true, this.data0.look, this.data0.body);
       this.player = this.me.sprite;

@@ -96,3 +96,22 @@ describe("주간 1위 오라", () => {
     expect(count(both)).toBeGreaterThanOrEqual(count(auraOnly));
   });
 });
+
+describe("오라는 모든 자세에서 (수영·잠수·매달리기·해먹 …)", () => {
+  it("숨김 자세여도 오라 자리(aura)를 주면 착용 오라·전용 오라를 그린다 — 발밑 고리는 그 자리(수면)에, 잠수는 은은하게", () => {
+    const hiddenOnly = frames(1, ["aura_sparkle"], { hidden: true }, 3)[2];
+    expect(hiddenOnly.some((c) => c.art === "champRingFront" || c.art === "sparkStar")).toBe(false);
+    const swim = frames(1, ["aura_sparkle"], { hidden: true, aura: { base: 195, top: 180, dim: 1 } }, 3)[2];
+    const ring = swim.find((c) => c.art === "champRingFront")!;
+    expect(ring.y).toBe(195);
+    expect(swim.some((c) => c.art === "sparkStar")).toBe(true);
+    const dive = frames(1, ["aura_sparkle"], { hidden: true, aura: { base: 195, top: 186, dim: 0.45 } }, 3)[2];
+    const dring = dive.find((c) => c.art === "champRingFront")!;
+    expect(dring.alpha).toBeLessThan(ring.alpha);
+  });
+
+  it("공중(매달리기·놀이기구)이면 발밑 고리가 몸 아래(headY)로 따라간다", () => {
+    const up = frames(2, [], { headY: 170, aura: { base: 170, top: 152, dim: 1 } }, 2)[1];
+    expect(up.find((c) => c.art === "champRingFront")!.y).toBe(170);
+  });
+});

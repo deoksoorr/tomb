@@ -419,8 +419,11 @@ export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish", 
 export type RankBoard = (typeof RANK_BOARDS)[number];
 /** week = 이번 주(KST 월요일 0시부터), all = 전체 */
 export type RankPeriod = "week" | "all";
-/** sub: 보조 줄 (house 랭킹은 "번지 · 주인 이름"). items: look 랭킹의 지금 착용 파츠 전부 (부위 순, 프리미엄 외형은 "body:{id}" — lib/lookScore.wornParts). gear: huntLevel 랭킹의 장착 무기 id */
-export type RankRow = { rank: number; name: string; value: number; me: boolean; sub?: string; items?: string[]; gear?: string };
+/**
+ * sub: 보조 줄 (house 랭킹은 "번지 · 주인 이름"). items: look 랭킹의 지금 착용 파츠 전부 (부위 순, 프리미엄 외형은 "body:{id}" — lib/lookScore.wornParts). gear: huntLevel 랭킹의 장착 무기 id.
+ * ns: 그 사람의 닉네임 꾸미기 id (이름 글자·이름표, 만료 전 착용만 — lib/nameStyleRank). 없거나 집 랭킹이면 없다 (옛 화면은 무시한다)
+ */
+export type RankRow = { rank: number; name: string; value: number; me: boolean; sub?: string; items?: string[]; gear?: string; ns?: string[] };
 /** GET /api/rank?board=&period=&zone=&me=1 */
 export type RankResponse = {
   board: RankBoard;

@@ -1,4 +1,4 @@
-import { isPermanentUntil, isShopListed, ITEMS, PERMANENT_UNTIL, type ItemDef } from "@tomb/protocol";
+import { isNameSlot, isPermanentUntil, isShopListed, ITEMS, PERMANENT_UNTIL, type ItemDef } from "@tomb/protocol";
 import type { AttendTierView } from "./types";
 
 // 출석 구간 코디 보상 ("이번 달 보상 길"). 그달 출석 도장 수가 구간(3·7·14·21·28일)에 닿으면 꾸미기 1개씩.
@@ -53,8 +53,11 @@ export function tierUntil(termMs: number | null, had: number, now: number): numb
   return Math.min(PERMANENT_UNTIL, Math.max(had, now) + termMs);
 }
 
-/** 보상 후보가 될 수 있는 꾸미기 (상점 목록의 부위 있는 캐릭터 꾸미기, 펫·운영자 전용 제외) */
-const ELIGIBLE: readonly ItemDef[] = ITEMS.filter((it) => it.kind === "cosmetic" && !!it.slot && isShopListed(it));
+/**
+ * 보상 후보가 될 수 있는 꾸미기 (상점 목록의 부위 있는 캐릭터 꾸미기, 펫·운영자 전용 제외).
+ * 닉네임 꾸미기(이름 글자·이름표)는 뺀다: 구간마다 섞은 순서(ORDERS)가 후보 목록으로 정해져서, 넣으면 이미 보이던 이달 보상이 바뀐다
+ */
+const ELIGIBLE: readonly ItemDef[] = ITEMS.filter((it) => it.kind === "cosmetic" && !!it.slot && !isNameSlot(it.slot) && isShopListed(it));
 
 /** 문자열 → 32비트 시드 (FNV-1a) */
 function hash(s: string): number {

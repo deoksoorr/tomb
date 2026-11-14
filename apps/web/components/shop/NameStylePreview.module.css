@@ -1,0 +1,94 @@
+/* 닉네임 꾸미기 미리보기: 낮·밤 두 칸 (게임 이름표 크기 12px, 아바타 ×3) */
+
+.preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.scene {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: end;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 18px 4px 6px;
+  overflow: hidden;
+  box-shadow: var(--px-border);
+}
+
+/* 낮: 잔디 + 흙길 */
+.scene[data-time="day"] {
+  background:
+    linear-gradient(180deg, transparent 72%, #9c8460 72%, #8d7653 100%),
+    linear-gradient(180deg, #7fa85a 0%, #6a9448 100%);
+}
+
+/* 밤: 어둠 층 (몸은 어둡게, 이름표는 그대로 밝게) */
+.scene[data-time="night"] {
+  background:
+    radial-gradient(ellipse at 50% 35%, rgba(120, 140, 200, 0.18), transparent 60%),
+    linear-gradient(180deg, transparent 72%, #2a2633 72%, #221f2b 100%),
+    linear-gradient(180deg, #1a2236 0%, #141a2b 100%);
+}
+
+.scene[data-time="night"] .crop canvas {
+  filter: brightness(0.5) saturate(0.75);
+}
+
+/* 머리 위 이름표: 게임과 같은 글꼴·크기·외곽선, 내 이름표 기본은 촛불빛 */
+.tag {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  max-width: 100%;
+  min-width: 0;
+  font-family: "Galmuri11", var(--font-body);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.name {
+  max-width: 100%;
+  color: #ffe39a;
+  filter: drop-shadow(1px 0 0 #0a0b10) drop-shadow(-1px 0 0 #0a0b10) drop-shadow(0 1px 0 #0a0b10) drop-shadow(0 -1px 0 #0a0b10);
+}
+
+/* 내 이름표 표시 (산 색이 있을 때): 아래를 가리키는 작은 촛불빛 삼각형 */
+.me {
+  width: 0;
+  height: 0;
+  margin-top: 1px;
+  border: 3px solid transparent;
+  border-top: 3px solid #ffe39a;
+  border-bottom: 0;
+  filter: drop-shadow(0 1px 0 #0a0b10);
+}
+
+/* 무대(72×64)에서 아바타 둘레 32×36만 3배로 (게임에서 보는 크기와 비슷하게) */
+.crop {
+  display: block;
+  width: 96px;
+  height: 108px;
+  overflow: hidden;
+}
+
+.crop canvas {
+  display: block;
+  width: 216px;
+  height: 192px;
+  margin: -54px 0 0 -60px;
+  image-rendering: pixelated;
+}
+
+.caption {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 10px;
+  text-shadow: 0 1px 0 #0a0b10;
+}

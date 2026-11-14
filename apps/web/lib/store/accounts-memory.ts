@@ -1,4 +1,4 @@
-import { itemById, nameKey, type CosmeticSlot } from "@tomb/protocol";
+import { CHAMP_ITEM_IDS, itemById, nameKey, type CosmeticSlot } from "@tomb/protocol";
 import { tierUntil } from "../attendTiers";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
@@ -418,10 +418,20 @@ export class MemoryAccounts implements AccountStore {
     this.champMarks.set(mark, id);
     const a = this.acct(id);
     this.prune(a, now);
+    // 전용 모자는 늘 하나만: 다른 전용 꾸미기는 가방·벗어 둔 꾸미기에서 거두고, 입고 있었으면 새 모자로 갈아입힌다
+    const others = CHAMP_ITEM_IDS.filter((x) => x !== itemId);
+    for (const o of others) {
+      a.inv.delete(o);
+      this.stashOf(a).delete(o);
+    }
     const cur = a.look.get(slot);
+    const swapIn = !!cur && others.includes(cur.itemId);
     const wearing = cur?.itemId === itemId && cur.until > now;
     const had = wearing ? cur.until : (this.stashOf(a).get(itemId) ?? 0);
-    if (until > had) {
+    if (swapIn) {
+      a.look.set(slot, { itemId, until: Math.max(until, had) });
+      this.stashOf(a).delete(itemId);
+    } else if (until > had) {
       if (wearing) a.look.set(slot, { itemId, until });
       else this.stashOf(a).set(itemId, until);
     }
@@ -434,6 +444,16 @@ export class MemoryAccounts implements AccountStore {
       }
     }
     return true;
+  }
+
+  async revokeChamp(id: string, itemIds: readonly string[]): Promise<void> {
+    const a = this.accts.get(id);
+    if (!a) return;
+    for (const x of itemIds) {
+      a.inv.delete(x);
+      this.stashOf(a).delete(x);
+    }
+    for (const [slot, e] of a.look) if (itemIds.includes(e.itemId)) a.look.delete(slot);
   }
 
   async champPaid(marks: readonly string[]): Promise<(string | null)[]> {

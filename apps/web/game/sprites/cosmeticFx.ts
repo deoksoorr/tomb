@@ -917,6 +917,11 @@ export type FxInput = {
   depth?: number;
   /** 화면 밖 (주간 1위 오라처럼 무거운 연출은 그리지 않는다) */
   offscreen?: boolean;
+  /**
+   * 오라(착용 오라·전용 오라)를 그릴 몸 자리. 주면 hidden 자세(수영·잠수·매달리기·해먹·눕기·욕조)에서도 오라를 그린다:
+   * base = 발밑 줄(물이면 수면, 공중이면 몸 아래), top = 보이는 몸 꼭대기, dim = 밝기 배율(잠수 중엔 은은하게)
+   */
+  aura?: { base: number; top: number; dim: number };
 };
 
 /** 몸에 붙은 연출의 기준 depth: 아바타 그림 depth (덮어쓴 값이 있으면 그것) */
@@ -1054,7 +1059,12 @@ export class CosmeticFxSim {
           this.trail(s, f, out);
           break;
         case "aura":
-          if (!f.hidden) this.aura(s, f, t, out);
+          if (f.aura) {
+            // 모든 자세에서: 보이는 몸 자리에 맞춰 그린다 (물이면 수면 위, 공중이면 몸 아래로 따라간다)
+            const n = out.length;
+            this.aura(s, { ...f, headY: f.aura.base, artTop: Math.max(6, f.aura.base - f.aura.top) }, t, out);
+            if (f.aura.dim < 1) for (let i = n; i < out.length; i++) out[i].alpha *= f.aura.dim;
+          } else if (!f.hidden) this.aura(s, f, t, out);
           break;
       }
     }
@@ -1489,13 +1499,18 @@ const CHAMP_FLASH_LEN = 0.2;
 function champAura(theme: number, f: FxInput, t: number, out: FxCmd[]): void {
   const start = out.length;
   const bx = Math.round(f.x);
-  const fy = Math.round(f.y);
+  // 발밑 줄 = 보이는 몸의 발 (점프·매달리기·놀이기구로 뜨면 몸 아래로 따라가고, 물이면 수면)
+  const fy = Math.round(f.headY);
   const back = bodyDepth(f) - 0.4;
   const rainbow = theme === CHAMP_THEMES - 1;
   const calm = f.reduced || !!f.still;
   const pulse = calm ? 0.85 : 0.75 + 0.25 * Math.sin(t / 260);
   // ① 바닥 빛 · 빛 고리
-  out.push(cmd("champGlow", theme, bx, fy, { alpha: 0.7 + 0.3 * pulse, sx: 1 + 0.08 * pulse, sy: 1 + 0.08 * pulse, layer: "ground", add: true, depth: 0 }));
+  // 땅에 서 있으면 바닥 층, 놀이기구·나무·점프로 몸이 떠 있으면 몸 바로 뒤 층 (바닥 층은 관람차·열기구 그림 아래에 깔려 안 보인다)
+  const lifted = f.y - f.headY > 3;
+  out.push(
+    cmd("champGlow", theme, bx, fy, { alpha: 0.7 + 0.3 * pulse, sx: 1 + 0.08 * pulse, sy: 1 + 0.08 * pulse, layer: lifted ? "body" : "ground", add: true, depth: lifted ? back - 0.04 : 0 }),
+  );
   const phase = calm ? 0 : Math.floor(t / 70) % RING_PHASES;
   const ring = theme * RING_PHASES + phase;
   const rs = 1 + 0.05 * Math.sin(t / 180);

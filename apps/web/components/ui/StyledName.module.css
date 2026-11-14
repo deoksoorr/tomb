@@ -1,0 +1,180 @@
+/* 닉네임 꾸미기 (HTML). 색은 lib/nameStyle.ts → 인라인 CSS 변수 (--ns-*: 글자, --np-*: 바탕판) */
+
+.wrap {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: bottom;
+  line-height: inherit;
+}
+
+/* 긴 이름도 줄을 넘지 않게 (넘치면 …) */
+.text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* ── 글자 ── */
+
+.text[data-kind="solid"] {
+  color: var(--ns-color);
+}
+
+.text[data-kind="grad"],
+.text[data-kind="rainbow"],
+.text[data-kind="stars"],
+.text[data-kind="flame"] {
+  background: var(--ns-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* 은은한 빛 테두리: 달빛 글자 + 숨 쉬는 빛 그림자 */
+.text[data-kind="glow"] {
+  color: var(--ns-color);
+  text-shadow:
+    0 0 2px var(--ns-halo),
+    0 0 6px var(--ns-halo);
+  animation: nsGlow 2.6s ease-in-out infinite;
+}
+
+/* 흐르는 무지개: 고리 띠를 두 배 폭으로 깔고 한 칸씩 민다 (끊김 없음) */
+.text[data-kind="rainbow"] {
+  background-size: 200% 100%;
+  background-repeat: repeat-x;
+  animation: nsFlow 3.2s linear infinite;
+}
+
+/* 별가루: 옅은 금빛 → 푸른 은빛 위로 반짝이는 빛줄기가 지나간다 + 작은 별 */
+.text[data-kind="stars"] {
+  background:
+    linear-gradient(100deg, transparent 38%, rgba(255, 255, 255, 0.95) 50%, transparent 62%) 0 0 / 300% 100% no-repeat,
+    var(--ns-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: nsShine 2.8s ease-in-out infinite;
+}
+
+.wrap[data-fx="stars"]::after {
+  content: "✦";
+  display: inline-block;
+  margin-left: 2px;
+  color: #fff4c2;
+  font-size: 0.7em;
+  vertical-align: top;
+  animation: nsTwinkle 1.4s ease-in-out infinite;
+}
+
+/* 일렁이는 불꽃: 아래 주황 → 위 노랑 띠가 위아래로 일렁인다 */
+.text[data-kind="flame"] {
+  background: linear-gradient(0deg, #ff7a3a 0%, #ffa040 30%, #ffd25a 60%, #fff2b0 100%) 0 0 / 100% 160%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 0 2px rgba(255, 138, 58, 0.55));
+  animation: nsFlame 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes nsGlow {
+  50% {
+    text-shadow:
+      0 0 3px var(--ns-halo),
+      0 0 10px var(--ns-halo);
+  }
+}
+
+@keyframes nsFlow {
+  to {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes nsShine {
+  0% {
+    background-position: 150% 0, 0 0;
+  }
+  60%,
+  100% {
+    background-position: -50% 0, 0 0;
+  }
+}
+
+@keyframes nsTwinkle {
+  50% {
+    opacity: 0.25;
+    transform: scale(0.7);
+  }
+}
+
+@keyframes nsFlame {
+  to {
+    background-position: 0 100%;
+  }
+}
+
+/* ── 바탕판 (작은 배경 판) ── */
+
+.wrap[data-plate] {
+  padding: 0 5px;
+  background: var(--np-fill);
+  box-shadow:
+    inset 0 1px 0 var(--np-light),
+    0 0 0 1px var(--np-edge);
+}
+
+/* 판 위 글자는 게임 이름표처럼 어두운 1px 외곽선 (그라데이션 글자에도 되게 filter로) */
+.wrap[data-plate] > .text {
+  color: var(--ns-color, var(--bone, #f2ead3));
+  filter: drop-shadow(1px 0 0 #0a0b10) drop-shadow(-1px 0 0 #0a0b10) drop-shadow(0 1px 0 #0a0b10) drop-shadow(0 -1px 0 #0a0b10);
+}
+
+.wrap[data-plate] > .text[data-kind="grad"],
+.wrap[data-plate] > .text[data-kind="rainbow"],
+.wrap[data-plate] > .text[data-kind="stars"],
+.wrap[data-plate] > .text[data-kind="flame"] {
+  color: transparent;
+}
+
+.wrap[data-plate="cloud"] {
+  border-radius: 999px;
+}
+
+.wrap[data-plate="tomb"] {
+  border-radius: 7px 7px 1px 1px;
+}
+
+.wrap[data-plate="wreath"] {
+  border-radius: 4px;
+  outline: 1px dotted var(--np-dot);
+  outline-offset: 1px;
+}
+
+.wrap[data-plate="ribbon"] {
+  clip-path: polygon(0 0, 100% 0, calc(100% - 4px) 50%, 100% 100%, 0 100%, 4px 50%);
+  padding: 0 8px;
+  box-shadow: inset 0 1px 0 var(--np-light), inset 0 -1px 0 var(--np-edge);
+}
+
+.wrap[data-plate="star"] {
+  background:
+    radial-gradient(circle at 4px 3px, var(--np-dot) 0 1px, transparent 1.5px),
+    radial-gradient(circle at calc(100% - 4px) calc(100% - 3px), var(--np-dot) 0 1px, transparent 1.5px),
+    var(--np-fill);
+}
+
+.wrap[data-plate="wood"] {
+  background:
+    radial-gradient(circle at 3px 3px, var(--np-dot) 0 1px, transparent 1.5px),
+    radial-gradient(circle at calc(100% - 3px) 3px, var(--np-dot) 0 1px, transparent 1.5px),
+    var(--np-fill);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .text,
+  .wrap::after {
+    animation: none !important;
+  }
+}

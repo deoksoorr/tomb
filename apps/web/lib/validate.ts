@@ -226,7 +226,7 @@ export const ShopUseSchema = z.object({
 });
 
 /** 캐릭터 꾸미기 부위 (빠진 부위가 있으면 타입 오류가 난다) */
-const COSMETIC_SLOTS: Record<CosmeticSlot, true> = { head: true, hand: true, aura: true, neck: true, back: true, pet: true, feet: true };
+const COSMETIC_SLOTS: Record<CosmeticSlot, true> = { head: true, hand: true, aura: true, neck: true, back: true, pet: true, feet: true, nameColor: true, namePlate: true };
 const cosmeticItem = z.string().refine((id) => itemById(id)?.kind === "cosmetic", "캐릭터 꾸미기 아이템이 아니에요.");
 /** POST /api/me/wear: 벗어 둔 꾸미기 다시 입기 */
 export const WearSchema = z.object({ itemId: cosmeticItem });

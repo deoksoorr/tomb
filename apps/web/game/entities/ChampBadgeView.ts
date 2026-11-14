@@ -57,8 +57,8 @@ export class ChampBadgeView {
     this.frameKey = "";
   }
 
-  /** 이름표 위에 놓는다. 판 맨 위 y를 돌려준다 */
-  sync(label: Phaser.GameObjects.BitmapText, sc: number, vis: boolean, alpha: number, now: number, reduced: boolean): number {
+  /** 이름표 위에 놓는다. 판 맨 위 y를 돌려준다. lift = 이름표 바탕판(닉네임 꾸미기)이 있으면 그 위로 더 올릴 높이 */
+  sync(label: Phaser.GameObjects.BitmapText, sc: number, vis: boolean, alpha: number, now: number, reduced: boolean, lift = 0): number {
     const on = vis && label.visible && this.text.text !== "";
     const rainbow = this.colors.length === 3;
     const t = reduced ? 0 : now;
@@ -72,7 +72,7 @@ export class ChampBadgeView {
     const w = cw + gap + tw + padX * 2;
     const h = th + sc;
     const cx = label.x;
-    const bottom = label.y - label.height - sc;
+    const bottom = label.y - label.height - sc - lift;
     this.top = bottom - h;
     if (this.text.scaleX !== sc) {
       this.text.setScale(sc);
@@ -103,7 +103,7 @@ export class ChampBadgeView {
       .setDisplaySize(w + 16 * sc, h + 10 * sc)
       .setAlpha(alpha * (0.18 + 0.22 * breathe))
       .setVisible(on);
-    return on ? this.top : label.y - label.height;
+    return on ? this.top : label.y - label.height - lift;
   }
 
   setVisible(v: boolean): void {

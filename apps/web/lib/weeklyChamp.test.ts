@@ -161,10 +161,13 @@ describe("1위 정리·지급", () => {
     expect(acc.stash.find((s) => s.itemId === CHAMP_HAT.points)).toBeUndefined();
   });
 
-  it("이번 주 단일 1위 → 다음 주 2관왕: 이전 모자는 기간까지 남고 쌍둥이 왕관을 새로 받는다", async () => {
+  it("이번 주 단일 1위 → 다음 주 2관왕: 전용 모자는 하나만 — 이전 모자는 거두고 쌍둥이 왕관을 준다 (입고 있었으면 그 자리에 갈아입힌다)", async () => {
     const a = await user("alpha");
     await earn(a, WEEK, 0, 300);
-    await settleChamps(WEEK, at(NEXT, 0));
+    const now1 = at(NEXT, 0);
+    await settleChamps(WEEK, now1);
+    // 받은 금화 왕관을 입고 있다
+    expect(await getAccounts().wear(a, CHAMP_HAT.points, "head", now1)).toBe(true);
     await earn(a, NEXT, 1, 300);
     await getFishRank().record(a, "f_carp", 610, NEXT);
     const AFTER = "20261130";
@@ -172,12 +175,21 @@ describe("1위 정리·지급", () => {
     const r = await settleChamps(NEXT, now);
     expect(r.paidNow).toEqual(["points", "fish"]);
     const acc = await getAccounts().get(a, dayOf(AFTER, 0), now);
-    expect(acc.stash).toContainEqual({ itemId: CHAMP_HAT.points, until: champUntil(WEEK) });
-    expect(acc.stash).toContainEqual({ itemId: "champ_duo_pf", until: champUntil(NEXT) });
-    expect(acc.stash).toHaveLength(2);
-    // 이전 금화 왕관은 기간(다음 발표 + 여유)이 지나면 사라진다
-    const later = champUntil(WEEK) + 1;
-    expect((await getAccounts().get(a, dayOf(AFTER, 1), later)).stash.map((x) => x.itemId)).toEqual(["champ_duo_pf"]);
+    expect(acc.equipped).toContainEqual({ itemId: "champ_duo_pf", until: champUntil(NEXT) });
+    const all = [...acc.equipped, ...acc.stash].map((x) => x.itemId).filter((x) => x.startsWith("champ_"));
+    expect(all).toEqual(["champ_duo_pf"]);
+  });
+
+  it("입지 않은 이전 전용 모자도 가방·벗어 둔 꾸미기에서 거둔다", async () => {
+    const a = await user("alpha");
+    await earn(a, WEEK, 0, 300);
+    await settleChamps(WEEK, at(NEXT, 0));
+    await getAccounts().recordHunt(a, "easy", { kills: 5, clearMs: null }, NEXT);
+    const now = at("20261130", 0, 1);
+    await settleChamps(NEXT, now);
+    const acc = await getAccounts().get(a, dayOf("20261130", 0), now);
+    expect(acc.stash.map((x) => x.itemId)).toEqual([CHAMP_HAT.huntKills]);
+    expect(acc.equipped).toEqual([]);
   });
 
   it("자격은 지난주 1위에만: 다음 주가 되면 저절로 끝난다. 오라 끔 표시는 1위일 때만 붙는다", async () => {
@@ -264,8 +276,18 @@ describe("테스트 서버 운영자 시험 1위", () => {
     // 해제
     await grantChampTest(op, ["huntKills"], now + 5000);
     expect(await champBitsFor(op, now + 6000)).toBe(2);
+    // 단일 → 다관왕을 다시 주면 이전 시험 모자는 거두고 하나만 남는다
+    const hats = async (t: number) => {
+      const x = await getAccounts().get(op, dayOf(NEXT, 1), t);
+      return [...x.equipped, ...x.stash].map((e) => e.itemId).filter((e) => e.startsWith("champ_"));
+    };
+    expect(await hats(now + 5500)).toEqual([CHAMP_HAT.huntKills]);
+    await grantChampTest(op, ["points", "huntKills", "fish"], now + 6000);
+    expect(await hats(now + 6500)).toEqual(["champ_triple"]);
+    // 해제하면 시험 모자도 거둔다
     await grantChampTest(op, [], now + 7000);
     expect(await champBitsFor(op, now + 8000)).toBe(0);
+    expect(await hats(now + 8000)).toEqual([]);
   });
 
   it("운영 서버(VERCEL_ENV=production)에서는 시험 지급도, 시험 자격 읽기도 막힌다", async () => {

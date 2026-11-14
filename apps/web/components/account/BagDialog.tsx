@@ -17,6 +17,7 @@ import ForageBag from "../forage/ForageBag";
 import BagDyeSection, { dyeTicketCount } from "../dye/BagDyeSection";
 import ItemIcon from "../ui/ItemIcon";
 import LookScoreBadge from "../ui/LookScoreBadge";
+import StyledName from "../ui/StyledName";
 import { DollNote, DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
 import { openMegaphone } from "@/lib/hooks/useMegaphone";
@@ -45,8 +46,9 @@ import styles from "./BagDialog.module.css";
 const OTHER_KINDS: ItemKind[] = ["firework", "megaphone", "decor", "graveStyle"];
 type BagTab = "wear" | "other" | "dye" | "forage" | "race";
 
-/** 몸 위치에 맞춘 칸 배치: 등은 어깨 뒤, 목·손은 오른쪽, 오라는 몸 옆, 발은 아래, 펫은 발 옆 */
-const DOLL_AREAS = `"back head neck" "aura fig hand" "pet feet info"`;
+/** 몸 위치에 맞춘 칸 배치: 등은 어깨 뒤, 목·손은 오른쪽, 오라는 몸 옆, 발은 아래, 펫은 발 옆.
+ * 맨 아래 줄은 닉네임 꾸미기: 이름 글자 · (지금 이름표 미리보기) · 이름표 바탕판 */
+const DOLL_AREAS = `"back head neck" "aura fig hand" "pet feet info" "nameColor namePv namePlate"`;
 
 type Props = {
   cache: GraveCache;
@@ -135,7 +137,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
 
         <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={styles.panel}>
           {tab === "wear" ? (
-            <Wardrobe entries={wardrobe} now={now} pending={pending} act={act} avatar={resolveAvatar(avatar, me, savedColor)} score={lookScore(me, now)} />
+            <Wardrobe entries={wardrobe} now={now} pending={pending} act={act} avatar={resolveAvatar(avatar, me, savedColor)} score={lookScore(me, now)} name={me.name ?? ""} />
           ) : tab === "dye" ? (
             <BagDyeSection me={me} avatar={resolveAvatar(avatar, me, savedColor)} onNotice={setNotice} />
           ) : tab === "forage" ? (
@@ -255,6 +257,7 @@ function Wardrobe({
   act,
   avatar,
   score,
+  name,
 }: {
   entries: WardrobeEntry[];
   now: number;
@@ -263,6 +266,8 @@ function Wardrobe({
   avatar: { color: string; body: string };
   /** 내 꾸미기 점수 (지금 입은 코디 · lib/lookScore.ts) */
   score: number;
+  /** 내 이름 (닉네임 꾸미기 미리보기) */
+  name: string;
 }) {
   const [filter, setFilter] = useState<SlotFilter>("all");
   /** 목록에서 마우스를 올리거나 초점이 간 것: 장비창에 미리 입혀 보고, 들어갈 칸을 밝힌다 */
@@ -366,6 +371,12 @@ function Wardrobe({
           })}
           <DollNote area="info">
             착용 {wornCount}/{SLOT_ORDER.length}
+          </DollNote>
+          {/* 닉네임 꾸미기 미리보기: 지금(또는 목록에서 고른 것을 입어 본) 이름 글자·이름표 */}
+          <DollNote area="namePv">
+            <span className={styles.namePv}>
+              <StyledName name={name || "내 이름"} look={fit.look} />
+            </span>
           </DollNote>
         </PaperDoll>
         <ViewControls dir={view.dir} walking={view.walking} onDir={view.setDir} onWalking={view.setWalking} className={styles.viewControls} />

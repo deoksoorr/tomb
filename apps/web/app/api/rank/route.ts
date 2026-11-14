@@ -5,6 +5,7 @@ import { handler, HttpError, json } from "@/lib/http";
 import { getHouseStore, houseRank } from "@/lib/housing/service";
 import { huntLevelRank } from "@/lib/huntLevelRank";
 import { lookRank } from "@/lib/lookRank";
+import { boardWithNameStyles } from "@/lib/nameStyleRank";
 import { rateLimit } from "@/lib/ratelimit";
 import { getVisitorId } from "@/lib/session";
 import { staffAccountId } from "@/lib/staff";
@@ -26,6 +27,7 @@ const RANK_SIZE = 50;
  *  - huntLevel: 사냥 캐릭터 레벨 (같으면 경험치. 기간 없음. value = 레벨, sub = 경험치, gear = 장착 무기. 정지 계정 제외)
  *  - look: 외형 꾸미기 점수 (기간 없음. 읽을 때 상위 후보를 지금 착용으로 다시 계산 — 만료된 코디는 0점. items = 지금 착용 파츠 전부(부위 순). 정지 계정 제외)
  * 운영자 계정은 어느 판에도 나오지 않는다 (lib/staffRank). 운영자 본인이 보면 mine = null, staff = true
+ * 사람 줄(집 랭킹 빼고)에는 ns = 그 사람이 지금 입은 닉네임 꾸미기 id (lib/nameStyleRank — 화면이 이름 색·이름표로 그린다)
  * 기본은 방문자와 무관한 응답이라 CDN에 30초 캐시하고, `?me=1`이면 내 줄·내 순위를 넣고 캐시하지 않는다
  */
 export const GET = handler(async (req) => {
@@ -46,24 +48,27 @@ export const GET = handler(async (req) => {
     const fish = params.get("fish") ?? "all";
     if (fish !== "all" && speciesById(fish)?.cat !== "fish") throw new HttpError(400, "INVALID_INPUT", "모르는 물고기예요.");
     const r = await rankWithoutStaff((n, who) => getFishRank().board(fish === "all" ? null : fish, week ?? null, n, who), RANK_SIZE, me, staffId);
-    const row = (e: FishRankEntry): RankRow => ({
+    const row = (e: FishRankEntry & { ns?: string[] }): RankRow => ({
       rank: e.rank,
       name: e.name ?? NO_NAME,
       value: e.size,
       me: e.accountId === me,
       ...(e.sp ? { sub: speciesById(e.sp)?.name ?? e.sp } : {}),
+      ...(e.ns ? { ns: e.ns } : {}),
     });
-    return json<RankResponse>({ board, period, fish, rows: r.rows.map(row), mine: r.mine ? row(r.mine) : null, ...staff }, { headers: cacheHeaders(personal) });
+    const { rows, mine } = await boardWithNameStyles(r.rows, r.mine);
+    return json<RankResponse>({ board, period, fish, rows: rows.map(row), mine: mine ? row(mine) : null, ...staff }, { headers: cacheHeaders(personal) });
   }
   if (board === "look" || board === "huntLevel") {
     const r = board === "look" ? await lookRank(me, RANK_SIZE, { staffId }) : await huntLevelRank(me, RANK_SIZE, { staffId });
     // 계정 id는 응답에 싣지 않는다
-    const strip = (x: (typeof r.rows)[number]): RankRow => {
+    const strip = (x: (typeof r.rows)[number] & { ns?: string[] }): RankRow => {
       const row: RankRow & { accountId?: string } = { ...x };
       delete row.accountId;
       return row;
     };
-    return json<RankResponse>({ board, period: "all", rows: r.rows.map(strip), mine: r.mine ? strip(r.mine) : null, ...staff }, { headers: cacheHeaders(personal) });
+    const { rows, mine } = await boardWithNameStyles(r.rows, r.mine);
+    return json<RankResponse>({ board, period: "all", rows: rows.map(strip), mine: mine ? strip(mine) : null, ...staff }, { headers: cacheHeaders(personal) });
   }
   if (board === "house") {
     const r = await houseRank(getHouseStore(), period, me, RANK_SIZE, Date.now(), staffId);
@@ -79,9 +84,10 @@ export const GET = handler(async (req) => {
     me,
     staffId,
   );
-  const row = (r: RankEntry): RankRow => ({ rank: r.rank, name: r.name ?? NO_NAME, value: r.points, me: r.accountId === me });
+  const row = (r: RankEntry & { ns?: string[] }): RankRow => ({ rank: r.rank, name: r.name ?? NO_NAME, value: r.points, me: r.accountId === me, ...(r.ns ? { ns: r.ns } : {}) });
+  const { rows: styledRows, mine: styledMine } = await boardWithNameStyles(rows, mine);
   return json<RankResponse>(
-    { board, period, ...(board === "huntBest" ? { zone } : {}), rows: rows.map(row), mine: mine ? row(mine) : null, ...staff },
+    { board, period, ...(board === "huntBest" ? { zone } : {}), rows: styledRows.map(row), mine: styledMine ? row(styledMine) : null, ...staff },
     { headers: cacheHeaders(personal) },
   );
 });

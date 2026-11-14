@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isFireworkId, itemById, ITEMS } from "@tomb/protocol";
+import { isFireworkId, isNameSlot, itemById, ITEMS } from "@tomb/protocol";
 import { InputHub } from "../input/InputHub";
 import { gearOf, lookKey, SPRITE_COSMETICS } from "../sprites/avatar";
 import { defaultZoom } from "./cameraMath";
@@ -51,7 +51,8 @@ describe("grave decor", () => {
 describe("cosmetics", () => {
   it("every sprite cosmetic in the catalog is drawn (aura is a separate effect)", () => {
     for (const it of ITEMS.filter((i) => i.kind === "cosmetic")) {
-      if (it.id === "aura_firefly") continue;
+      // 닉네임 꾸미기(이름 글자·이름표)는 몸이 아니라 이름표에 그린다 (game/entities/NameStyleView)
+      if (it.id === "aura_firefly" || isNameSlot(it.slot)) continue;
       expect(SPRITE_COSMETICS as readonly string[]).toContain(it.id);
     }
   });

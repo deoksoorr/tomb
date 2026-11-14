@@ -1,5 +1,8 @@
 import * as Phaser from "phaser";
+import { DIR } from "@tomb/protocol";
 import { addCanvasTexture } from "../assets/manifest";
+import { CosmeticFxView, type CfxDepth } from "../entities/CosmeticFxView";
+import { avatarArtTop, BODY_METRICS, bodyOf, handAnchor } from "../sprites/avatar";
 import { radial } from "../sprites/pixel";
 import * as art from "../sprites/skyScenery";
 import { BALLOON_COLORS, CAR_COLORS, SKY_TEX } from "../sprites/skyProps";
@@ -15,7 +18,8 @@ import { balloonRouteS, carAngle, ferrisLift, flightLift, routeLength, routeSegm
 //  - 시간대·날씨: 층마다 월드 색(Atmosphere levels)을 곱하고, 하늘 그라데이션·별·달·구름·비·눈·안개, 밤 불빛 층, 폭죽
 //  - 시작·끝은 검은 화면으로 덮었다 걷는다 (fade). 끝난 뒤에는 cover로 월드 화면 위 검은 막만 걷는다
 
-export type StageRider = { key: string; frame: number; index: number };
+/** look·body·champ = 착용 오라·전용 오라를 장면 안에서도 그리려고 (없으면 그림만) */
+export type StageRider = { key: string; frame: number; index: number; look?: readonly string[]; body?: string; champ?: number };
 export type StageFrame = {
   /** 씬 시간 ms (애니메이션) */
   now: number;
@@ -105,6 +109,9 @@ export class SkyStage {
   private snow: Phaser.GameObjects.TileSprite | null = null;
   private fog: Phaser.GameObjects.Image | null = null;
   private riders: Phaser.GameObjects.Image[] = [];
+  /** 탄 사람마다 착용 오라·전용 오라 (그 사람 그림 depth 바로 앞뒤 — 칸·바구니 테두리 아래) */
+  private riderFx: (CosmeticFxView | null)[] = [];
+  private riderFxKey: string[] = [];
   private frameImg: Phaser.GameObjects.Image | null = null;
   private sill = 0;
   private wheel: Phaser.GameObjects.Graphics | null = null;
@@ -365,6 +372,8 @@ export class SkyStage {
     // 탄 사람
     this.riders = [];
     for (let i = 0; i < 4; i++) this.riders.push(this.add(sc.add.image(0, 0, P + "px").setOrigin(0.5, 1).setVisible(false)));
+    // 오라 층: 탄 사람 그림 depth 바로 앞뒤에만 (장면 물체는 차례대로 정수 depth라 테두리·날씨 아래에 머문다)
+    sc.data.set("cfxDepth", { ground: "body", lightOnBody: true } satisfies CfxDepth);
     // 테두리
     if (this.kind === "ferris") {
       const w = art.ferrisWindow(VW, VH, CAR_COLORS[this.unit % CAR_COLORS.length]);
@@ -399,6 +408,9 @@ export class SkyStage {
     this.moonImg = this.sunImg = this.fog = this.frameImg = this.jetGlow = null;
     this.wheel = null;
     this.jet = null;
+    for (const fx of this.riderFx) fx?.destroy();
+    this.riderFx = [];
+    this.riderFxKey = [];
     this.bands = {};
     this.clouds = [];
     this.front = [];
@@ -463,7 +475,7 @@ export class SkyStage {
     }
     this.fog?.setTint(pal.low).setAlpha(clamp01(L.fog * 0.3 + L.haze * 0.12));
     this.fireworks(f.now, f.dt);
-    this.ridersUpdate(f.riders, night);
+    this.ridersUpdate(f.riders, night, f.now, f.dt);
     // 테두리(칸·바구니)는 가까이 있어 덜 어둡게 (밤에는 칸 안 불빛)
     this.frameImg?.setTint(mixRgb(shade, 0xffffff, 0.45));
     this.black?.setAlpha(1 - clamp01(f.fade)).setVisible(f.fade < 0.999);
@@ -715,7 +727,7 @@ export class SkyStage {
     });
   }
 
-  private ridersUpdate(list: readonly StageRider[], night: number): void {
+  private ridersUpdate(list: readonly StageRider[], night: number, now: number, dt: number): void {
     const { VW } = this;
     const xs = this.kind === "ferris" ? [0.26, 0.74] : [0.13, 0.3, 0.7, 0.87];
     const tint = mixRgb(0xffffff, 0x8a90b0, night * 0.6);
@@ -723,6 +735,7 @@ export class SkyStage {
       const r = list[i];
       if (!r || !this.scene.textures.exists(r.key)) {
         img.setVisible(false);
+        this.riderFx[i]?.setVisible(false);
         return;
       }
       if (img.texture.key !== r.key || img.frame.name !== String(r.frame)) img.setTexture(r.key, r.frame);
@@ -731,7 +744,42 @@ export class SkyStage {
         .setVisible(true)
         .setPosition(Math.round(x), this.sill + (this.kind === "ferris" ? 3 : 7))
         .setTint(tint);
+      this.riderAura(i, r, img, now, dt);
     });
+  }
+
+  /** 탄 사람의 착용 오라·전용 오라 (뒷모습, 칸·바구니 바닥에 발밑 고리) */
+  private riderAura(i: number, r: StageRider, img: Phaser.GameObjects.Image, now: number, dt: number): void {
+    const look = r.look ?? [];
+    const body = bodyOf(r.body ?? "hood");
+    const key = `${body}|${look.join(",")}|${r.champ ?? 0}`;
+    if (this.riderFxKey[i] !== key) {
+      this.riderFxKey[i] = key;
+      if (!this.riderFx[i] && (look.length || r.champ)) this.riderFx[i] = new CosmeticFxView(this.scene);
+      this.riderFx[i]?.setLook(look, body, r.champ);
+    }
+    const fx = this.riderFx[i];
+    if (!fx) return;
+    const artTop = avatarArtTop(body, look);
+    fx.sync(
+      {
+        now,
+        dt,
+        x: img.x,
+        y: img.y,
+        headY: img.y,
+        dir: DIR.up,
+        moving: false,
+        hidden: true,
+        artTop,
+        shoulder: BODY_METRICS[body].shoulder,
+        hand: handAnchor(body, "up"),
+        reduced: this.reduced,
+        depth: img.depth,
+        aura: { base: img.y, top: img.y - artTop, dim: 1 },
+      },
+      true,
+    );
   }
 
   destroy(): void {

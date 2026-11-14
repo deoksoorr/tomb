@@ -1,4 +1,5 @@
 import { isEmoId, isSeatMood, maskChat, normalizeChat, type Sid } from "@tomb/protocol";
+import { nameStyleIds } from "@/lib/nameStyle";
 import { bridge } from "../bridge";
 import type { Player } from "../entities/Player";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
@@ -65,7 +66,8 @@ export class Expressions {
     view.chat(shown, now);
     this.h.net().chat(text);
     // 채팅 기록창: 내 글도 보낼 때 바로 (이름은 이름표 그대로 — 운영자면 공개 이름 "대장" + 금색)
-    bridge.emit("chat:line", { name: view.label.text, text: shown, mine: true, ...(view.staff ? { staff: true as const } : {}) });
+    const ns = nameStyleIds(view.wearing);
+    bridge.emit("chat:line", { name: view.label.text, text: shown, mine: true, ...(view.staff ? { staff: true as const } : {}), ...(ns ? { ns } : {}) });
     this.h.sfx.play("say", 0.35);
   }
 
@@ -74,7 +76,8 @@ export class Expressions {
     const r = this.h.remotes().get(sid);
     if (!r) return;
     r.view.chat(text, performance.now());
-    bridge.emit("chat:line", { name: r.name, text, mine: false, ...(key ? { key } : {}), ...(r.view.staff ? { staff: true as const } : {}) });
+    const ns = nameStyleIds(r.view.wearing);
+    bridge.emit("chat:line", { name: r.name, text, mine: false, ...(key ? { key } : {}), ...(r.view.staff ? { staff: true as const } : {}), ...(ns ? { ns } : {}) });
     if (r.visible) this.h.sfx.play("say", 0.2, 1.1, 6);
   }
 

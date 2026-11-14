@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { isPermanentUntil, isShopListed, ITEMS, permanentPrice, SHOP_KINDS, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { isNameSlot, isPermanentUntil, isShopListed, ITEMS, permanentPrice, SHOP_KINDS, type ItemDef, type ItemKind } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
 import { meStore, useMe } from "@/lib/hooks/useMe";
@@ -18,6 +18,7 @@ import LookScoreBadge from "../ui/LookScoreBadge";
 import ui from "../ui/ui.module.css";
 import { fittingLook } from "./fitting";
 import FireworkPreview from "./FireworkPreview";
+import NameStylePreview from "./NameStylePreview";
 import OutfitPreview from "./OutfitPreview";
 import { takeShopTab } from "./shopTab";
 import styles from "./ShopDialog.module.css";
@@ -190,7 +191,17 @@ export default function ShopDialog({ onClose, avatar }: Props) {
           <>
           {shown && (
             <section className={styles.detail} aria-label="자세히 보기" aria-live="polite">
-              {shown.kind === "cosmetic" ? (
+              {shown.kind === "cosmetic" && isNameSlot(shown.slot) ? (
+                // 닉네임 꾸미기: 낮·밤 머리 위 이름표 미리보기 (지금 입은 이름 글자·이름표에 고른 것을 바꿔 끼운 모습)
+                <NameStylePreview
+                  className={styles.namePreview}
+                  color={color}
+                  body={body}
+                  look={fitting.look}
+                  name={me?.name ?? "내 이름"}
+                  label={`내 이름표에 ${shown.name}을(를) 달아 본 모습 (낮·밤)`}
+                />
+              ) : shown.kind === "cosmetic" ? (
                 <OutfitPreview
                   className={styles.fitPreview}
                   color={color}

@@ -5,6 +5,7 @@ import { bridge } from "@/game/bridge";
 import { chatChime, chimeForChat } from "@/lib/chatChime";
 import { addChatLine, CHAT_LOG_MOBILE_LINES, chatLineOpacity, chatLineTone, liveChatLines, mergeChatLines, visibleChatLines, type ChatLine } from "@/game/logic/chatLog";
 import { cx } from "../ui/cx";
+import StyledName from "../ui/StyledName";
 import ChatInput from "./ChatInput";
 import styles from "./ChatLog.module.css";
 
@@ -28,9 +29,9 @@ const subs = new Set<() => void>();
 const notify = () => subs.forEach((f) => f());
 const store = {
   /** 새 줄이면 true */
-  push(name: string, text: string, mine: boolean, key?: string, staff?: true): boolean {
+  push(name: string, text: string, mine: boolean, key?: string, staff?: true, ns?: string[]): boolean {
     if (key && lines.some((l) => l.key === key)) return false; // chatLog로 이미 받은 줄
-    lines = addChatLine(lines, { id: ++seq, name, text, mine, at: Date.now(), ...(key ? { key } : {}), ...(staff ? { staff } : {}) });
+    lines = addChatLine(lines, { id: ++seq, name, text, mine, at: Date.now(), ...(key ? { key } : {}), ...(staff ? { staff } : {}), ...(ns ? { ns } : {}) });
     notify();
     return true;
   },
@@ -65,8 +66,8 @@ const EMPTY: ChatLine[] = [];
 
 // 화면이 아직 안 떴어도(입장 직후 welcome·chatLog가 먼저 올 수 있다) 받은 줄을 모은다 — 모듈에서 한 번만 구독
 if (typeof window !== "undefined") {
-  bridge.on("chat:line", ({ name, text, mine, key, staff }) => {
-    const added = store.push(name, text, mine, key, staff);
+  bridge.on("chat:line", ({ name, text, mine, key, staff, ns }) => {
+    const added = store.push(name, text, mine, key, staff, ns);
     // 실시간으로 새로 온 다른 사람 채팅에만 작은 알림음 (지난 기록 chat:log에는 울리지 않는다)
     chimeForChat({ mine, added, shown: shownNow, enabled: chatChime.getSnapshot() }, Date.now());
   });
@@ -128,7 +129,10 @@ export default function ChatLog({ mobile, room, hidden = false }: Props) {
 function Line({ line, now }: { line: ChatLine; now: number }) {
   return (
     <li className={cx(styles.line, styles[chatLineTone(line)])} style={{ opacity: chatLineOpacity(line, now) }}>
-      <b className={cx(styles.name, line.staff && styles.staff)}>{line.name}</b>
+      <b className={cx(styles.name, line.staff && styles.staff)}>
+        {/* 운영자 이름은 금색 그대로 (닉네임 꾸미기를 입혀 헷갈리지 않게) */}
+        {line.staff ? line.name : <StyledName name={line.name} look={line.ns} />}
+      </b>
       <span className={styles.sep}>: </span>
       <span className={styles.text}>{line.text}</span>
     </li>

@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
-import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, ridePetOfLook, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
+import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, isNameSlot, itemById, ridePetOfLook, sanitizeDye, type ActKind, type DirId, type StateName } from "@tomb/protocol";
+import { hasNameStyle, nameStyleRef } from "@/lib/nameStyle";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange, isDyedSpec } from "../sprites/avatar";
@@ -15,6 +16,7 @@ import { SpeechBubble } from "./SpeechBubble";
 import { MoodView } from "./MoodView";
 import { STAFF_COLOR, StaffFxView } from "./StaffFxView";
 import { ChampBadgeView } from "./ChampBadgeView";
+import { NameStyleView } from "./NameStyleView";
 
 /** 도감 100% 배지: 종류마다 별 하나 (금빛) */
 const DEX_BADGE_STAR = "★";
@@ -136,6 +138,9 @@ export class AvatarView {
   /** 주간 랭킹 1위 값 (비트 묶음 + 오라 끔 표시, 0 = 아님)과 이름표 위 배지 */
   private champ = 0;
   private champBadge: ChampBadgeView | null = null;
+  /** 닉네임 꾸미기 (이름 글자 색·이름표 바탕판). 착용했을 때만 만든다 */
+  private nameFx: NameStyleView | null = null;
+  private readonly isMe: boolean;
   /** 친구 하트 (이름표 왼쪽). 친구일 때만 만든다 */
   private friendMark: Phaser.GameObjects.BitmapText | null = null;
   private wings: Phaser.GameObjects.Image | null = null;
@@ -168,6 +173,7 @@ export class AvatarView {
     look: readonly string[] = [],
     body: string = "hood",
   ) {
+    this.isMe = isMe;
     this.body = bodyOf(body);
     const m = BODY_METRICS[bodyOf(body)];
     this.artTop = m.top;
@@ -241,6 +247,7 @@ export class AvatarView {
       this.staffFx = null;
       this.color = this.staffBase;
     }
+    this.nameFx?.setStaff(on);
     this.retexture();
   }
 
@@ -285,6 +292,11 @@ export class AvatarView {
 
   get champBits(): number {
     return this.champ;
+  }
+
+  /** 지금 입은 꾸미기 (관람차·열기구 탑승 장면이 탄 사람 오라를 그릴 때) */
+  get lookIds(): readonly string[] {
+    return this.look;
   }
 
   /** 친구면 이름표 왼쪽에 작은 하트 (UI가 알려 준 같은 채널 친구) */
@@ -364,6 +376,7 @@ export class AvatarView {
     if (this.cfx || look.length || bodyFx(this.body) || champAuraOn(this.champ)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(look, this.body, this.champ);
     this.relayout();
     this.retexture();
+    this.setNameStyle(look);
     const vis = this.sprite.visible;
     const wantAura = look.includes("aura_firefly");
     if (wantAura && !this.aura.length) {
@@ -419,8 +432,8 @@ export class AvatarView {
       this.flowers = [];
       this.flowerBorn = [];
     }
-    // 착용하면 가끔 머리 위에서 작게 반짝 (움직임 줄이기 설정이면 없음)
-    if (look.length && !this.reduced) {
+    // 착용하면 가끔 머리 위에서 작게 반짝 (움직임 줄이기 설정이면 없음). 닉네임 꾸미기만 했으면 몸에는 반짝이지 않는다
+    if (look.some((id) => !isNameSlot(itemById(id)?.slot)) && !this.reduced) {
       if (!this.sparkle) {
         this.sparkle = this.scene.add.image(0, 0, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 3).setVisible(false);
         this.sparkleAt = 0;
@@ -435,9 +448,25 @@ export class AvatarView {
     return this.look;
   }
 
+  /** 닉네임 꾸미기 (착용 목록에서 이름 글자·이름표 바탕판). 없으면 원래 이름표 색으로 */
+  private setNameStyle(look: readonly string[]): void {
+    const ref = nameStyleRef(look);
+    if (!hasNameStyle(ref)) {
+      this.nameFx?.destroy();
+      this.nameFx = null;
+      return;
+    }
+    if (!this.nameFx) {
+      this.nameFx = new NameStyleView(this.scene, this.label, this.isMe, this.reduced);
+      this.nameFx.setStaff(this.staff);
+    }
+    this.nameFx.set(ref.color, ref.plate);
+  }
+
   setName(name: string): void {
     this.atlas.ensure(name);
     this.label.setText(name);
+    this.nameFx?.textChanged();
   }
 
   /** 상태·방향 반영. 바뀔 때만 애니메이션을 바꾼다 */
@@ -745,6 +774,8 @@ export class AvatarView {
     const armsUp = st === "hang" ? 3 : 0;
     // 24번 벤치 상태 아이콘이 있으면 머리와 이름표 사이에 끼운다 (그만큼 이름표를 올린다)
     const labelY = headY - this.labelGap + sitLift + waterDrop - armsUp;
+    // 오라(착용·전용)를 그릴 몸 자리 — 모든 자세에서 보이게 (auraFrame)
+    const af = this.auraFrame(st, s.y, headY, labelY, waterDrop, sitLift, armsUp);
     const moodLift = this.moodFx?.lift(st) ?? 0;
     this.label.setPosition(Math.round(st === "hammock" ? s.x : s.x - this.poseDx), labelY - moodLift);
     if (this.shadow) this.shadow.setPosition(s.x, s.y - 1).setDepth((this.depthOverride ?? s.y) - 0.5);
@@ -754,15 +785,18 @@ export class AvatarView {
     const fa = this.fade;
     if (s.alpha !== fa) s.setAlpha(fa);
     if (this.label.alpha !== fa) this.label.setAlpha(fa);
+    // 닉네임 꾸미기 (바탕판이 있으면 옆 표시·위 배지를 그만큼 비켜 놓는다)
+    this.nameFx?.sync(now, labelScale, vis, fa);
+    const side = this.nameFx?.sidePad(labelScale) ?? 0;
     if (this.dexBadge) {
       const l = this.label;
       if (this.dexBadge.scaleX !== labelScale) this.dexBadge.setScale(labelScale);
-      this.dexBadge.setPosition(Math.round(l.x + l.width / 2 + 2 * labelScale), l.y).setAlpha(fa).setVisible(vis && l.visible);
+      this.dexBadge.setPosition(Math.round(l.x + l.width / 2 + 2 * labelScale + side), l.y).setAlpha(fa).setVisible(vis && l.visible);
     }
     if (this.friendMark) {
       const l = this.label;
       if (this.friendMark.scaleX !== labelScale) this.friendMark.setScale(labelScale);
-      this.friendMark.setPosition(Math.round(l.x - l.width / 2 - 2 * labelScale), l.y).setAlpha(fa).setVisible(vis && l.visible);
+      this.friendMark.setPosition(Math.round(l.x - l.width / 2 - 2 * labelScale - side), l.y).setAlpha(fa).setVisible(vis && l.visible);
     }
     if (this.shadow && this.shadow.alpha !== fa) this.shadow.setAlpha(fa);
 
@@ -773,15 +807,16 @@ export class AvatarView {
       const blink = 0.45 + 0.55 * Math.max(0, Math.sin(now / 350 + i * 2.1));
       const d = this.depthOverride ?? s.y;
       // 앞쪽은 예전처럼 밤 어둠 위(반딧불 층), 뒤쪽은 몸 뒤
+      // 모든 자세에서: 보이는 몸 가운데 높이 (물에 잠기거나 누우면 그 높이로, 잠수 중엔 은은하게)
       this.aura[i]
-        .setPosition(bx + Math.cos(a) * 10, headY - 9 + z * 3 + Math.sin(a * 2 + i) * 2)
-        .setAlpha(blink * (z < 0 ? 0.55 + 0.45 * (1 + z) : 1))
+        .setPosition(bx + Math.cos(a) * 10, af.base - Math.min(9, (af.base - af.top) * 0.5) + z * 3 + Math.sin(a * 2 + i) * 2)
+        .setAlpha(blink * af.dim * (z < 0 ? 0.55 + 0.45 * (1 + z) : 1))
         .setScale(z < 0 ? 1 + 0.22 * z : 1)
         .setDepth(z < 0 ? d - 0.2 : DEPTH.fireflies + 1);
     }
 
     this.syncWater(now, bx, s.y, vis);
-    this.syncCosmetics(now, dt, bx, headY, vis);
+    this.syncCosmetics(now, dt, bx, headY, vis, af);
     this.dyeFx?.sync(now, s);
     if (this.staffFx) {
       const d = this.dir;
@@ -823,6 +858,8 @@ export class AvatarView {
           water: st === "swim" || st === "dive" ? st : null,
           // 앉기(피아노·책상·벤치)·집 안 자세는 그림 depth를 덮어쓴다: 날개 앞뒤도 그 값 기준이어야 몸에 안 가린다
           depth: this.depthOverride ?? s.y,
+          // 오라(착용·전용)는 모든 자세에서 보이게: 보이는 몸 자리 (물 = 수면, 누운 자세 = 누운 몸, 그 밖 = 그림 발밑)
+          aura: af,
         },
         vis,
         fa,
@@ -834,7 +871,8 @@ export class AvatarView {
     const speaking = !!this.speech?.active(now);
     // 이름표 높이(height)는 이미 배율이 들어간 월드 높이 (displayHeight는 배율이 한 번 더 곱해져 이름표에 겹쳤다)
     // 주간 1위 배지가 있으면 이름표 위에 얹고, 말풍선은 그 위로
-    const labelTop = this.champBadge ? this.champBadge.sync(this.label, labelScale, vis, fa, now, this.reduced) : this.label.y - this.label.height;
+    const lift = this.nameFx?.topLift(labelScale) ?? 0;
+    const labelTop = this.champBadge ? this.champBadge.sync(this.label, labelScale, vis, fa, now, this.reduced, lift) : this.label.y - this.label.height - lift;
     if (this.speech) this.speech.place(this.label.x, labelTop - labelScale, labelScale, now, vis);
     // 벤치 상태를 고르면 기본 "…"은 띄우지 않는다
     const longSit = !speaking && !this.mood && this.sitSince > 0 && now - this.sitSince > SIT_IDLE_MS;
@@ -851,6 +889,20 @@ export class AvatarView {
       this.bubble.destroy();
       this.bubble = null;
     }
+  }
+
+  /**
+   * 오라를 그릴 몸 자리 (CosmeticFxSim FxInput.aura): base = 발밑 줄, top = 보이는 몸 꼭대기, dim = 밝기.
+   * 수영·잠수는 수면에 고리를 띄우고 잠긴 만큼 몸 꼭대기를 내린다(잠수 중엔 은은하게), 해먹·눕기·욕조는 누운 몸 높이,
+   * 매달리기·점프·놀이기구·타는 펫은 들어 올린 몸 아래(headY), 앉기는 낮아진 머리에 맞춘다
+   */
+  private auraFrame(st: StateName, y: number, headY: number, labelY: number, waterDrop: number, sitLift: number, armsUp: number): { base: number; top: number; dim: number } {
+    if (st === "swim" || st === "dive") return { base: y - WATER_LINE, top: headY - this.artTop + waterDrop, dim: st === "dive" ? 0.45 : 1 };
+    if (st === "hammock" || st === "lie" || st === "bath") {
+      const top = labelY + 2;
+      return { base: top + 12, top, dim: 1 };
+    }
+    return { base: headY, top: headY - this.artTop + sitLift - armsUp, dim: 1 };
   }
 
   /** 수영·잠수: 수면 물결 고리, 잠수면 물방울 */
@@ -904,7 +956,7 @@ export class AvatarView {
     }
   }
 
-  private syncCosmetics(now: number, dt: number, x: number, headY: number, vis: boolean): void {
+  private syncCosmetics(now: number, dt: number, x: number, headY: number, vis: boolean, af: { base: number; top: number; dim: number }): void {
     const s = this.sprite;
     const st = this.state;
     const wet = st === "swim" || st === "dive";
@@ -966,10 +1018,11 @@ export class AvatarView {
     for (let i = 0; i < this.fog.length; i++) {
       const a = now / 1800 + i * 2.1;
       this.fog[i]
-        .setPosition(x + Math.cos(a) * 6, s.y - 1 + Math.sin(a * 1.4) * 1.5)
-        .setAlpha(0.18 + 0.06 * Math.sin(now / 700 + i))
+        // 모든 자세에서: 발밑 줄(물이면 수면, 매달리면 몸 아래)에 깔린다
+        .setPosition(x + Math.cos(a) * 6, af.base - 1 + Math.sin(a * 1.4) * 1.5)
+        .setAlpha((0.18 + 0.06 * Math.sin(now / 700 + i)) * af.dim)
         .setDepth(depth + 0.03)
-        .setVisible(vis && !wet && st !== "hang");
+        .setVisible(vis);
     }
     if (this.flowers.length) {
       if (st === "walk" || st === "run") {
@@ -1017,6 +1070,7 @@ export class AvatarView {
     this.staffFx?.setVisible(v);
     this.dexBadge?.setVisible(v);
     this.champBadge?.setVisible(v);
+    this.nameFx?.setVisible(v);
     this.friendMark?.setVisible(v);
     for (const f of this.fog) f.setVisible(v);
     this.ripple?.setVisible(v);
@@ -1033,6 +1087,8 @@ export class AvatarView {
     this.dexBadge?.destroy();
     this.champBadge?.destroy();
     this.champBadge = null;
+    this.nameFx?.destroy();
+    this.nameFx = null;
     this.friendMark?.destroy();
     this.bubble?.destroy();
     this.bubble = null;

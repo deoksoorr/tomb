@@ -186,13 +186,16 @@ export const CHAMP_TEST_HAT_MS = 7 * 86_400_000 + CHAMP_GRACE_MS;
 
 /**
  * 운영자 계정에 시험 1위 주기 (실제 지급과 같은 계정 저장소 grantChamp: 전용 모자 한 주 대여(실제와 같은 길이) + 1,000P씩) + 시험 자격(CHAMP_TEST_MS 뒤 저절로 끝).
- * 주간 1위 기록·랭킹·명예의 전당은 건드리지 않는다. boards가 비면 시험 자격만 끝낸다 (빌려 준 모자는 대여 기간까지 남는다).
+ * 주간 1위 기록·랭킹·명예의 전당은 건드리지 않는다. boards가 비면 시험 자격을 끝내고 시험으로 준 전용 모자도 거둔다.
  * 접속 중인 운영자 화면에 바로 알린다 (알림 창·모자·배지·전용 오라)
  */
 export async function grantChampTest(accountId: string, boards: readonly ChampBoard[], now = Date.now()): Promise<{ bits: number; until: number }> {
   if (!testServerEnv()) throw new Error("[champ] 시험 지급은 테스트 서버에서만");
   const store = getChamp();
   if (!boards.length) {
+    // 시험 해제: 시험으로 준 전용 모자도 거둔다 (운영자는 랭킹에서 빠지니 진짜 1위 모자와 겹치지 않는다)
+    const t = await store.test(accountId, now);
+    if (t) await getAccounts().revokeChamp(accountId, [champHatOf(champBoards(t.bits))]);
     await store.setTest(accountId, null);
     await notifyMe([accountId]).catch(() => null);
     return { bits: 0, until: 0 };

@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { MAX_DECOR_PER_GRAVE, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
+import { CHAMP_ITEM_IDS, MAX_DECOR_PER_GRAVE, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
 import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import { STAY_BONUS_AMOUNTS, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
@@ -253,23 +253,37 @@ return 1
 // 주간 랭킹 1위 보상 (mark = `${주}:${랭킹}`마다 한 번). 지급 표시 HSETNX가 먼저라 동시에 불려도 한 번만 준다.
 // 꾸미기: 입고 있으면 그 자리, 아니면 벗어 둔 꾸미기의 만료 시각을 until로 늘린다 (이미 더 길면 그대로 — 연속 1위면 이어진다).
 // 포인트: 잔액(지갑 상한)·모은 포인트·전체 포인트 랭킹 (주간 랭킹엔 넣지 않는다), 경제 통계 earn:champ. MemoryAccounts.grantChamp와 같은 규칙
-// KEYS: paid(champ:paid), acct, look, stash, rank, econ  ARGV: mark, 계정, itemId, slot, until, points, balanceCap, now  → 1 줌 | 0 이미 줌
+// 전용 모자는 늘 지금 자격에 맞는 것 하나만: 다른 전용 꾸미기(ARGV[9..])는 가방·벗어 둔 꾸미기·착용 칸에서 거두고,
+// 그걸 입고 있었으면 새 모자를 그 칸에 입힌다
+// KEYS: paid(champ:paid), acct, look, stash, rank, econ, inv  ARGV: mark, 계정, itemId, slot, until, points, balanceCap, now, 다른 전용 꾸미기 id...  → 1 줌 | 0 이미 줌
 const CHAMP_LUA = `
 if redis.call('HSETNX', KEYS[1], ARGV[1], ARGV[2]) == 0 then return 0 end
 local id, slot, target, now = ARGV[3], ARGV[4], tonumber(ARGV[5]), tonumber(ARGV[8])
+local others = {}
+for i = 9, #ARGV do
+  if ARGV[i] ~= id then
+    others[ARGV[i]] = true
+    redis.call('HDEL', KEYS[7], ARGV[i])
+    redis.call('HDEL', KEYS[4], ARGV[i])
+  end
+end
 local cur = redis.call('HGET', KEYS[3], slot)
 local curItem, curUntil = nil, 0
 if cur then
   local ci, cu = string.match(cur, '^([^|]+)|(.+)$')
   curItem, curUntil = ci, tonumber(cu) or 0
 end
+local swapIn = curItem ~= nil and others[curItem] == true
 local wearing = curItem == id and curUntil > now
 local had = curUntil
 if not wearing then
   had = tonumber(redis.call('HGET', KEYS[4], id) or '0')
   if had <= now then had = 0 end
 end
-if target > had then
+if swapIn then
+  redis.call('HSET', KEYS[3], slot, id .. '|' .. math.max(target, had))
+  redis.call('HDEL', KEYS[4], id)
+elseif target > had then
   if wearing then redis.call('HSET', KEYS[3], slot, id .. '|' .. target) else redis.call('HSET', KEYS[4], id, target) end
 end
 local pts = tonumber(ARGV[6])
@@ -283,6 +297,23 @@ if pts > 0 then
     redis.call('HINCRBY', KEYS[6], 'earn:champ', bal - before)
     redis.call('EXPIRE', KEYS[6], ${ECON_TTL_SEC})
   end
+end
+return 1
+`;
+
+// 전용 꾸미기 거두기 (시험 해제): 가방·벗어 둔 꾸미기에서 지우고, 착용 칸에 있으면 벗긴다
+// KEYS: inv, stash, look  ARGV: itemId...
+const REVOKE_CHAMP_LUA = `
+local drop = {}
+for i = 1, #ARGV do
+  drop[ARGV[i]] = true
+  redis.call('HDEL', KEYS[1], ARGV[i])
+  redis.call('HDEL', KEYS[2], ARGV[i])
+end
+local l = redis.call('HGETALL', KEYS[3])
+for i = 1, #l, 2 do
+  local item = string.match(l[i + 1], '^([^|]+)|')
+  if item and drop[item] then redis.call('HDEL', KEYS[3], l[i]) end
 end
 return 1
 `;
@@ -791,10 +822,15 @@ export class RedisAccounts implements AccountStore {
   async grantChamp(id: string, mark: string, itemId: string, slot: CosmeticSlot, until: number, points: number, now: number): Promise<boolean> {
     const r = await this.redis.eval<string[], number>(
       CHAMP_LUA,
-      [K.champPaid, K.acct(id), K.look(id), K.stash(id), K.rankPoints, await econKeyFor(id, kstDay(now))],
-      [mark, id, itemId, slot, String(until), String(points), String(BALANCE_CAP), String(now)],
+      [K.champPaid, K.acct(id), K.look(id), K.stash(id), K.rankPoints, await econKeyFor(id, kstDay(now)), K.inv(id)],
+      [mark, id, itemId, slot, String(until), String(points), String(BALANCE_CAP), String(now), ...CHAMP_ITEM_IDS],
     );
     return Number(r) === 1;
+  }
+
+  async revokeChamp(id: string, itemIds: readonly string[]): Promise<void> {
+    if (!itemIds.length) return;
+    await this.redis.eval<string[], number>(REVOKE_CHAMP_LUA, [K.inv(id), K.stash(id), K.look(id)], [...itemIds]);
   }
 
   async champPaid(marks: readonly string[]): Promise<(string | null)[]> {

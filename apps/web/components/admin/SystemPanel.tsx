@@ -299,7 +299,7 @@ function ChampCard({ toast, fail }: { toast: (message: string) => void; fail: (e
 
 /**
  * 테스트 서버 전용 (운영에서는 서버가 404라 이 칸이 아예 안 보인다): 운영자 계정에 시험 1위 주기·해제.
- * 실제 지급과 같은 경로(전용 모자 한 주 대여 · 1,000P씩 · 배지·전용 오라)로 주고, 자격은 몇 시간 뒤 저절로 끝난다 (해제해도 모자는 기간까지 남는다).
+ * 실제 지급과 같은 경로(전용 모자 한 주 대여 · 1,000P씩 · 배지·전용 오라)로 주고, 자격은 몇 시간 뒤 저절로 끝난다 (해제하면 시험으로 준 모자도 거둔다). 전용 모자는 늘 지금 자격에 맞는 것 하나만 남는다.
  * 주간 1위 기록·랭킹·명예의 전당은 건드리지 않는다. 운영자가 게임 화면을 열어 두면 그 자리에서 알림 창이 뜨고 오라가 붙는다
  */
 function ChampTestBox({ toast, fail }: { toast: (message: string) => void; fail: (e: unknown) => void }) {
@@ -325,7 +325,7 @@ function ChampTestBox({ toast, fail }: { toast: (message: string) => void; fail:
     try {
       const r = await opsAdminApi.setChampTest(list);
       setInfo(r);
-      toast(list.length ? "운영자 계정에 시험 1위를 줬어요. 게임 화면에 알림 창이 뜨고 전용 오라가 붙어요." : "시험 1위를 끝냈어요. 모자는 대여 기간까지 남아요.");
+      toast(list.length ? "운영자 계정에 시험 1위를 줬어요. 게임 화면에 알림 창이 뜨고 전용 오라가 붙어요." : "시험 1위를 끝냈어요. 시험으로 준 전용 모자도 거뒀어요.");
     } catch (e) {
       fail(e);
     } finally {
@@ -337,7 +337,7 @@ function ChampTestBox({ toast, fail }: { toast: (message: string) => void; fail:
   return (
     <div className={styles.meta}>
       <p className={ui.hint}>
-        <b>테스트 서버 전용</b> · 운영자 계정에 시험 1위 주기 (전용 모자 한 주 대여 — 실제 지급과 같은 길이 · 1,000P씩 · 배지·전용 오라 3시간). 랭킹·명예의 전당에는 나오지 않아요. [시험 해제]는 배지·전용 오라만 끝내요 — 모자는 대여 기간까지 남아요.
+        <b>테스트 서버 전용</b> · 운영자 계정에 시험 1위 주기 (전용 모자 한 주 대여 — 실제 지급과 같은 길이 · 1,000P씩 · 배지·전용 오라 3시간). 랭킹·명예의 전당에는 나오지 않아요. 전용 모자는 늘 지금 자격에 맞는 것 하나만 남아요 (다관왕을 주면 이전 모자는 거둬요). [시험 해제]는 시험 모자도 거둬요.
         {!info.staffId && " 먼저 운영자 계정을 지정해 주세요."}
       </p>
       {(["points", "huntKills", "fish"] as const).map((b) => (

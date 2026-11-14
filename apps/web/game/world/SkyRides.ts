@@ -472,15 +472,16 @@ export class SkyRides {
     const h = this.host;
     const state = r.kind === "ferris" ? "ferris" : "balloon";
     const out: StageRider[] = [];
-    const push = (seatId: string | null, key: string) => {
+    // 착용 오라·전용 오라도 장면 안에 같이 그리게 꾸미기·몸·1위 값을 싣는다
+    const push = (seatId: string | null, v: Player["view"]) => {
       const fs = r.kind === "ferris" ? ferrisSeat(seatId) : undefined;
       const bs = r.kind === "balloon" ? balloonSeat(seatId) : undefined;
       const seat = fs && fs.car === r.unit ? fs.index : bs && bs.balloon === r.unit ? bs.index : -1;
-      if (seat >= 0) out.push({ key, frame: avatarFrame(state, DIR.up), index: seat });
+      if (seat >= 0) out.push({ key: v.sprite.texture.key, frame: avatarFrame(state, DIR.up), index: seat, look: v.lookIds, body: v.bodyId, champ: v.champBits });
     };
-    push(r.seatId, h.player().view.sprite.texture.key);
+    push(r.seatId, h.player().view);
     const want = r.kind === "ferris" ? STATE.ferris : STATE.balloon;
-    for (const a of h.remotes().values()) if (a.stateId === want && a.seatId) push(a.seatId, a.view.sprite.texture.key);
+    for (const a of h.remotes().values()) if (a.stateId === want && a.seatId) push(a.seatId, a.view);
     return out.sort((x, y) => x.index - y.index);
   }
 

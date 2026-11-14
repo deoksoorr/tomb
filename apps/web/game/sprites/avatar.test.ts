@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AVATAR_BODIES, ITEMS, STATE_NAMES } from "@tomb/protocol";
+import { AVATAR_BODIES, isNameSlot, ITEMS, STATE_NAMES } from "@tomb/protocol";
 import { avatarColorSpec, isDyedSpec, AV_ACT_ANIM, AV_ALIASES, AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, avatarFrameGrid, BODY_BASE, BODY_METRICS, bodyOf, gearOf, lookKey, SPRITE_COSMETICS, waterSink } from "./avatar";
 import { EMOTE_ICONS, emoteGrid } from "./emotes";
 import { lighten, mix, parseHex } from "./pixel";
@@ -32,7 +32,8 @@ describe("avatar sheet layout", () => {
   });
 
   it("renders every cosmetic; only sheet-drawn ones change the texture key", () => {
-    for (const it of ITEMS.filter((i) => i.kind === "cosmetic" && i.id !== "aura_firefly")) {
+    // 닉네임 꾸미기(이름 글자·이름표)는 몸이 아니라 이름표에 그린다 (game/entities/NameStyleView)
+    for (const it of ITEMS.filter((i) => i.kind === "cosmetic" && i.id !== "aura_firefly" && !isNameSlot(i.slot))) {
       expect(SPRITE_COSMETICS as readonly string[]).toContain(it.id);
     }
     expect(lookKey(["pet_ghost", "back_wings", "feet_flowers", "aura_fog"])).toBe("");

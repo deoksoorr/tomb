@@ -2,6 +2,8 @@ import * as Phaser from "phaser";
 import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, FISH_ARCH, FURNITURE, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
 import { avatarColorSpec, type AppearanceChange } from "../sprites/avatar";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
+import { nameStyleIds } from "@/lib/nameStyle";
+import type { IncomingChatLine } from "../logic/chatLog";
 import type { PublicGrave } from "@/lib/types";
 import { TEX } from "../assets/manifest";
 import { bridge, type NetStatus, type UiEvents } from "../bridge";
@@ -489,7 +491,7 @@ export class WorldScene extends Phaser.Scene {
         onEmo: (sid, id) => this.expr.onRemoteEmo(sid, id),
         onChat: (sid, text, id) => this.expr.onRemoteChat(sid, text, id),
         // 이 채널의 최근 1분 채팅 → 채팅창에 합친다 (채널 번호로 다른 채널 줄과 섞이지 않게)
-        onChatLog: (lines) => bridge.emit("chat:log", { lines, ...(this.net.channel !== null ? { ch: this.net.channel } : {}) }),
+        onChatLog: (lines) => bridge.emit("chat:log", { lines: this.withNameStyles(lines), ...(this.net.channel !== null ? { ch: this.net.channel } : {}) }),
         onMood: (sid, mood) => this.expr.onRemoteMood(sid, mood),
         onRide: (sid, on) => this.riding.onRide(sid, on),
         onRod: (sid, on) => this.forage.onRod(sid, on), // 4번 배 위 낚싯대
@@ -517,6 +519,20 @@ export class WorldScene extends Phaser.Scene {
         },
       },
     );
+  }
+
+  /**
+   * 서버가 보낸 지난 채팅(이름만 있다)에 닉네임 꾸미기를 붙인다: 지금 이 채널에 있는 사람(나 포함)이면 그 사람 착용 목록에서.
+   * 이미 나간 사람 줄은 그냥 이름 (실시간 서버의 채팅 기록은 그대로)
+   */
+  private withNameStyles(lines: IncomingChatLine[]): IncomingChatLine[] {
+    const byName = new Map<string, readonly string[]>();
+    for (const r of this.remotes.values()) byName.set(r.name, r.view.wearing);
+    if (this.player) byName.set(this.player.view.label.text, this.player.view.wearing);
+    return lines.map((l) => {
+      const ns = l.staff ? undefined : nameStyleIds(byName.get(l.name));
+      return ns ? { ...l, ns } : l;
+    });
   }
 
   // ── 새로고침 뒤 자리 복원 (lib/resume.ts) ──

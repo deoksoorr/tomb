@@ -14,6 +14,7 @@ import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import { EmptyHero, InfoCard, TipList } from "../ui/InfoBlocks";
 import PixelIcon from "../ui/PixelIcon";
+import StyledName from "../ui/StyledName";
 import ui from "../ui/ui.module.css";
 import styles from "./FriendsDialog.module.css";
 
@@ -286,7 +287,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
                           <div className={styles.head}>
                             <span className={styles.name}>
                               <span className={cx(styles.lamp, online && styles.on)} aria-hidden="true" />
-                              {f.name}
+                              <StyledName name={f.name} look={f.card?.look.look} />
                               <span className={styles.heart} aria-hidden="true">
                                 ♥
                               </span>

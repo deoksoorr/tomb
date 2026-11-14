@@ -13,7 +13,8 @@ const DAY = 24 * HOUR;
 // megaphone(23번): 확성기. 쓰는 순간 소모되고, 채널(또는 모든 채널) 사람들의 왼쪽 위 확성기 창에 한마디가 뜬다
 // dye(46번): 염색권. 쓰면 부위 하나의 색이 바뀐다 (random = 무작위 팔레트에서 찾기, fixed = 정해진 색)
 export type ItemKind = "firework" | "cosmetic" | "decor" | "graveStyle" | "megaphone" | "dye";
-export type CosmeticSlot = "head" | "hand" | "aura" | "neck" | "back" | "pet" | "feet";
+// nameColor·namePlate(닉네임 꾸미기): 머리 위 이름표 글자 색 · 이름표 바탕판. 몸 그림에는 그려지지 않고 이름표·화면의 이름에만 보인다
+export type CosmeticSlot = "head" | "hand" | "aura" | "neck" | "back" | "pet" | "feet" | "nameColor" | "namePlate";
 
 export type ItemDef = {
   id: string;
@@ -166,6 +167,40 @@ export const ITEMS: readonly ItemDef[] = [
     ["aura_ghosts", "aura", "꼬마 유령 친구들", "꼬마 유령들이 머리 둘레를 빙글빙글.", 300],
     ["aura_money", "aura", "보너스 비", "성과급이 들어왔어요! (꿈)", 480],
   ]),
+  // ── 닉네임 꾸미기 (11/14): 이름 글자(nameColor)와 이름표 바탕판(namePlate)은 다른 부위라 함께 낄 수 있다.
+  //    값은 같은 등급 꾸미기와 비슷하게: 단색(80~100) < 그라데이션(140~200) < 빛나고 움직이는 이름(300~420), 바탕판은 종류별(100~240).
+  //    다른 꾸미기처럼 24시간 이용권·영구 소장(×PERMANENT_MULTIPLIER) 둘 다 상점에서 판다. 색·그림은 web lib/nameStyle.ts.
+  //    id가 짧은 까닭: 착용 증서(look)에 실린다 — 옛 실시간 서버의 착용 증서 상한(400자)·소켓 메시지 상한(512바이트) 참고
+  ...cosmetics([
+    // 단색 (밤·낮 모두 잘 읽히는 밝기)
+    ["nc_sakura", "nameColor", "벚꽃 분홍 이름", "이름이 벚꽃잎처럼 분홍빛으로 물들어요.", 80],
+    ["nc_sky", "nameColor", "하늘색 이름", "맑은 날 점심시간 하늘색.", 80],
+    ["nc_mint", "nameColor", "민트 이름", "민트초코처럼 호불호 없는 산뜻한 민트.", 80],
+    ["nc_lemon", "nameColor", "레몬 이름", "졸린 오후를 깨우는 레몬빛.", 80],
+    ["nc_lilac", "nameColor", "라벤더 이름", "은은한 라벤더 향이 날 것 같은 보랏빛.", 80],
+    ["nc_orange", "nameColor", "귤빛 이름", "탕비실 귤 바구니에서 막 꺼낸 색.", 80],
+    ["nc_silver", "nameColor", "은빛 이름", "달빛 아래 반짝이는 은빛.", 100],
+    ["nc_dawn", "nameColor", "새벽 남색 이름", "해 뜨기 직전 새벽하늘의 푸른 남빛. 밤에도 또렷해요.", 100],
+    // 그라데이션 (글자마다 색이 이어진다)
+    ["ng_sunset", "nameColor", "노을 이름", "퇴근길 노을처럼 귤빛에서 분홍·보랏빛으로 물들어요.", 160],
+    ["ng_sea", "nameColor", "바다 이름", "얕은 물빛에서 깊은 바다색으로 이어져요.", 160],
+    ["ng_aurora", "nameColor", "오로라 이름", "초록·청록·보랏빛이 이어지는 밤하늘 오로라.", 200],
+    ["ng_peach", "nameColor", "복숭아 이름", "말랑한 복숭아빛에서 분홍으로.", 140],
+    ["ng_forest", "nameColor", "숲 이름", "새순 연두에서 짙은 숲 초록으로.", 140],
+    ["ng_grape", "nameColor", "포도 이름", "청포도에서 거봉까지, 보랏빛으로 익어 가요.", 160],
+    // 빛나고 움직이는 이름 (움직임 줄이기 설정이면 멈춘 그림)
+    ["nf_glow", "nameColor", "은은한 빛 이름", "이름 둘레가 달빛처럼 은은하게 숨 쉬듯 빛나요.", 300],
+    ["nf_rainbow", "nameColor", "흐르는 무지개 이름", "무지개 색이 글자를 따라 천천히 흘러가요.", 420],
+    ["nf_stars", "nameColor", "별가루 이름", "이름 둘레에 별가루가 반짝반짝 내려앉아요.", 360],
+    ["nf_flame", "nameColor", "불꽃 이름", "글자 끝이 모닥불처럼 일렁여요. 열정 과다 주의.", 400],
+    // 이름표 바탕판
+    ["np_wood", "namePlate", "나무 팻말", "이름을 나무 팻말에 새겨 걸어요.", 100],
+    ["np_ribbon", "namePlate", "리본 이름표", "끝이 갈라진 붉은 리본 위에 이름을.", 120],
+    ["np_cloud", "namePlate", "구름 이름표", "몽실몽실 구름 위에 이름이 둥실.", 120],
+    ["np_wreath", "namePlate", "꽃 화환 이름표", "작은 꽃들이 이름 둘레를 감싸요.", 160],
+    ["np_tomb", "namePlate", "묘비석 이름표", "이 마을다운 작은 묘비석에 이름을 새겨요.", 180],
+    ["np_star", "namePlate", "별 이름표", "밤하늘 조각에 별이 콕콕 박힌 이름표.", 240],
+  ]),
   // ── 31번 운영자 전용 꾸미기 (값 0: 운영자만 상점에서 영구로 받는다. 일반 계정은 사거나 입을 수 없다) ──
   ...cosmetics([
     ["staff_crown", "head", "운영자 왕관", "마을을 지키는 운영자의 검은 왕관. 운영자 전용.", 0],
@@ -304,6 +339,8 @@ export function isStaffItem(id: unknown): boolean {
 export function isChampItem(id: unknown): boolean {
   return typeof id === "string" && byId.get(id)?.champ === true;
 }
+/** 주간 랭킹 1위 전용 꾸미기 id 전부 (랭킹 모자 3종 · 쌍둥이 왕관 3종 · 삼관왕 대관) — 새 전용 모자를 줄 때 나머지를 거둔다 */
+export const CHAMP_ITEM_IDS: readonly string[] = ITEMS.filter((i) => i.champ).map((i) => i.id);
 /** 운영자 전용 꾸미기 id (상점의 운영자 칸·검증용) */
 export const STAFF_ITEM_IDS: readonly string[] = ITEMS.filter((i) => i.staff).map((i) => i.id);
 /** 운영자가 아니면 착용 목록에서 운영자 전용 꾸미기를 뺀다 (입장 토큰·실시간 서버) */
@@ -313,7 +350,10 @@ export function staffGateLook(look: Look, staff: boolean): Look {
 export function isFireworkId(id: unknown): id is string {
   return typeof id === "string" && byId.get(id)?.kind === "firework";
 }
-/** 착용 중인 꾸미기 (부위별 최대 1개, 최대 7개). 서버 브로드캐스트·렌더링용 */
+/** 착용 부위 수 = 착용 목록 최대 길이 (몸 7 + 닉네임 꾸미기 2) */
+export const LOOK_MAX_PARTS = 9;
+/** 착용 중인 꾸미기 (부위별 최대 1개, 최대 LOOK_MAX_PARTS개). 서버 브로드캐스트·렌더링용.
+ * 이 빌드가 모르는 id는 버린 뒤에 센다 → 옛 실시간 서버(최대 7개)도 새 닉네임 꾸미기만 버리고 나머지는 그대로 받는다 */
 export type Look = string[];
 export function sanitizeLook(raw: unknown): Look {
   if (!Array.isArray(raw)) return [];
@@ -325,7 +365,7 @@ export function sanitizeLook(raw: unknown): Look {
     seen.add(it.slot);
     out.push(it.id);
   }
-  return out.slice(0, 7);
+  return out.slice(0, LOOK_MAX_PARTS);
 }
 
 // ── 30번 영구 소유 코디: 상점에서 파는 캐릭터 꾸미기는 모두 영구로도 산다 (24시간 이용권 가격의 4배, 10P 단위 반올림). 영구 착용품·벗어 둔 것은 만료 시각이 PERMANENT_UNTIL ──
@@ -398,4 +438,23 @@ export function ridePetOfLook(look: readonly string[] | null | undefined): strin
 /** 타고 걷는 속도 배율 (타는 펫이 아니면 1) */
 export function rideSpeed(id: string | null | undefined): number {
   return (id && petMap.get(id)?.ride?.speed) || 1;
+}
+
+// ── 닉네임 꾸미기: 착용 목록에서 이름 글자·이름표 바탕판 (그리기는 web lib/nameStyle.ts) ──
+
+/** 닉네임 꾸미기 부위 (몸 그림이 아니라 이름표에 보인다) */
+export const NAME_SLOTS: readonly CosmeticSlot[] = ["nameColor", "namePlate"];
+export function isNameSlot(slot: CosmeticSlot | undefined): boolean {
+  return slot === "nameColor" || slot === "namePlate";
+}
+/** 착용 목록의 닉네임 꾸미기 (없는 부위는 null, 이 빌드가 모르는 id는 무시) */
+export function nameStyleOfLook(look: readonly string[] | null | undefined): { color: string | null; plate: string | null } {
+  let color: string | null = null;
+  let plate: string | null = null;
+  for (const id of look ?? []) {
+    const slot = byId.get(id)?.slot;
+    if (slot === "nameColor") color ??= id;
+    else if (slot === "namePlate") plate ??= id;
+  }
+  return { color, plate };
 }

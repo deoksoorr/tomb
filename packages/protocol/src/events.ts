@@ -206,7 +206,8 @@ export function parseC2S(text: string): C2S | null {
         : null;
     case "warp":
       return isNum(m.x) && isNum(m.y) ? { t: "warp", x: Math.round(m.x), y: Math.round(m.y) } : null;
-    // 착용 증서는 염색·몸 모양·주간 1위 값까지 실어 폭죽 증서보다 길 수 있다 (꾸미기 7개·염색 전부여도 400자 안팎)
+    // 착용 증서는 염색·몸 모양·주간 1위 값까지 실어 폭죽 증서보다 길 수 있다 (몸 꾸미기 7개·염색 전부여도 400자 안팎,
+    // 닉네임 꾸미기 2개까지 더하면 430자 안팎 — 메시지 전체 512바이트 안. nameStyle.test.ts가 가장 긴 경우를 잰다)
     case "look":
       return typeof m.grant === "string" && m.grant.length <= 600 ? { t: m.t, grant: m.grant } : null;
     case "firework":
