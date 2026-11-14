@@ -91,7 +91,7 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
         >
           {compact && <div className={styles.row}>{transport}</div>}
           {/* 목록은 단추로: 누를 때마다(같은 목록을 다시 눌러도) 그 목록의 아무 곡부터 튼다 */}
-          <div className={styles.row} role="group" aria-label="음악 목록">
+          <div className={styles.listBlock} role="group" aria-label="음악 목록">
             <span className={styles.rowLabel}>목록</span>
             <div className={styles.lists}>
               {state.playlists.map((p) => (

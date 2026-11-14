@@ -102,18 +102,23 @@
   font-size: 12px;
 }
 
-/* 목록 단추 줄 (로파이·재즈·어쿠스틱 기타): 남은 폭을 똑같이 나눈다 */
+/* 목록: 이름 아래에 단추 격자 (9개면 3줄). 패널 폭을 3칸으로 나눈다 */
+.listBlock {
+  display: grid;
+  gap: 6px;
+}
+
 .lists {
-  flex: 1;
-  min-width: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
 .listButton {
-  flex: 1 1 auto;
   min-width: 0;
-  padding: 4px 6px;
+  min-height: 32px;
+  padding: 4px 2px;
+  font-size: 11px;
   white-space: nowrap;
 }
 

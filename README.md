@@ -145,12 +145,12 @@ npm run loadtest -w realtime -- --scenario hold --duration 300   # 봇 39명 상
 
 ## 5. BGM 넣는 법
 
-- 지금은 픽사베이 곡 55곡, 플레이리스트 3개(`lofi` 로파이 · `jazz` 재즈 · `acoustic` 어쿠스틱 기타)다. 목록·작가·원본 파일 이름은 `CREDITS.md`에 있다.
-- `apps/web/public/bgm/{lofi,jazz,acoustic}/*.mp3`에 영문 소문자·하이픈 이름(작가-곡이름)으로 파일을 넣고, `apps/web/public/bgm/tracks.json`에 등록한다. 외부 핫링크는 쓰지 않는다.
+- 지금은 플레이리스트 9개, 175곡이다. `lofi` 로파이 · `jazz` 재즈 · `acoustic` 어쿠스틱 기타 55곡은 픽사베이 곡이고, `orgel`·`rain`·`piano`·`chiptune`·`ambient`·`retro` 120곡은 자체 제작(CC0)·외부 무료 음원이다. 목록·작가·원본 파일 이름은 `CREDITS.md`에 있다.
+- `apps/web/public/bgm/{playlist}/*.mp3`에 영문 소문자·하이픈 이름(작가-곡이름)으로 파일을 넣고, `apps/web/public/bgm/tracks.json`에 등록한다. 외부 핫링크는 쓰지 않는다.
 - 넣기 전에 ffmpeg로 손질한다: 스테레오 128kbps MP3, 앞뒤 긴 무음 다듬기, loudnorm 2패스로 약 -19 LUFS(효과음·환경음과 맞춘 크기), 메타데이터 태그 제거.
 - 음원은 **Pixabay Content License** 트랙을 1순위로 쓴다. 저작자 표시는 CC-BY 계열만 플레이어 ⓘ에 나온다. `CREDITS.md`에도 기록한다.
 - 재생 규칙(`apps/web/components/bgm/manifest.ts`): 처음 들어오면(입장 화면·마을) 저장값과 상관없이 로파이의 아무 곡부터, 목록을 누를 때마다 그 목록의 아무 곡부터(같은 목록을 다시 누르면 지금 곡 말고), 다음 곡은 섞은 순서로(같은 곡이 연달아 나오지 않게).
-- `scripts/gen-bgm.mjs`는 이제 효과음(`public/sfx`)만 굽는다. BGM 폴더·`tracks.json`은 건드리지 않는다.
+- `scripts/gen-bgm.mjs`는 자체 제작곡(오르골·빗소리·피아노·8비트·앰비언트·레트로 RPG)과 효과음을 굽는다. 픽사베이 목록(로파이·재즈·어쿠스틱 기타)은 굽거나 지우지 않고, `tracks.json`을 다시 쓸 때도 그 세 목록은 지금 내용을 그대로 옮긴다.
 
 ```json
 {

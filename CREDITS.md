@@ -10,11 +10,16 @@
 - 외부 에셋으로 교체할 때는 **CC0만** 사용하고(예: Kenney), 이 표에 출처를 추가합니다. 교체 지점은 `apps/web/game/assets/manifest.ts`입니다.
 
 ## 음원 (BGM)
-플레이리스트 3개(로파이·재즈·어쿠스틱 기타), 55곡, 길이 합 약 2시간 56분입니다. 모두 픽사베이(Pixabay) 음악이며 **Pixabay Content License**(저작자 표시 의무 없음, 상업적 이용 가능)를 따릅니다. 곡 목록·길이·작가는 `apps/web/public/bgm/tracks.json`에 있고(플레이어 ⓘ에 표시됨), 파일은 모두 `apps/web/public/bgm/{lofi,jazz,acoustic}/*.mp3`에 직접 넣었습니다(외부 핫링크 없음).
+플레이리스트 9개, 175곡, 길이 합 약 6시간입니다. 순서는 로파이·오르골·빗소리·피아노·8비트·재즈·앰비언트·어쿠스틱 기타·레트로 RPG이고, 처음 들어오면 로파이로 시작합니다. 곡 목록·순서·길이·저작자는 `apps/web/public/bgm/tracks.json`에 있고(플레이어 ⓘ에 표시됨), 파일은 모두 `apps/web/public/bgm/{playlist}/*.mp3`에 직접 넣었습니다(외부 핫링크 없음). 형식은 MP3 44.1kHz 스테레오, 통합 라우드니스 약 -19 LUFS로 통일했습니다.
+
+- 로파이·재즈·어쿠스틱 기타(55곡): 2026-11에 픽사베이 곡으로 바꿨습니다. 예전 로파이·재즈 카페·어쿠스틱 기타 60곡은 뺐고, 재즈가 재즈 카페 자리를 대신합니다.
+- 오르골·빗소리·피아노·8비트·앰비언트·레트로 RPG(120곡): 예전 그대로입니다(자체 제작 103곡 + 외부 무료 음원 17곡).
+
+### 픽사베이 (Pixabay Content License) — 55곡 (로파이 16·재즈 19·어쿠스틱 기타 20)
+모두 **Pixabay Content License**(저작자 표시 의무 없음, 상업적 이용 가능)를 따릅니다. `scripts/gen-bgm.mjs`는 이 세 목록을 굽거나 지우지 않고, tracks.json을 다시 쓸 때도 지금 내용을 그대로 옮깁니다.
 
 - 손질(2026-11): 받은 원본(256kbps)을 MP3 44.1kHz 스테레오 128kbps로 다시 인코딩했습니다. 앞뒤 무음은 0.5초만 남기고 다듬었고(-55dB 기준), 소리 크기는 loudnorm 2패스로 곡끼리 같은 약 -19 LUFS(true peak ≤ -1.5 dBTP, 효과음·환경음과 맞춰 온 예전 곡들과 같은 크기)로 맞췄으며, 메타데이터 태그는 지웠습니다.
 - 화면 제목은 분위기에 맞춰 새로 붙인 한국어 이름입니다. 아래 표의 원본 파일 이름 끝 숫자가 픽사베이 곡 번호입니다.
-- 예전 자체 제작곡(CC0)·OpenGameArt·incompetech 곡 181곡(9개 목록)은 이때 모두 뺐습니다.
 
 | 플레이리스트 | 파일 (`apps/web/public/bgm/…`) | 화면 제목 | 작가 | 원본 파일 이름 | 길이(초) |
 |---|---|---|---|---|---|
@@ -74,7 +79,67 @@
 | 어쿠스틱 기타 | `acoustic/tunetank-instrumental-acoustic-guitar-music.mp3` | 반차 쓰고 걷는 한낮 | Tunetank | `tunetank-instrumental-acoustic-guitar-music-349949.mp3` | 153 |
 | 어쿠스틱 기타 | `acoustic/universfield-warm-acoustic-guitar.mp3` | 따뜻한 보리차 한 잔 | Universfield | `universfield-warm-acoustic-guitar-232912.mp3` | 94 |
 
-- 음원을 더 넣을 때도 원본 페이지에서 라이선스를 확인할 수 있는 곡(Pixabay Content License, CC0, CC BY)만 씁니다. CC BY 곡은 플레이어 ⓘ에 저작자·출처가 함께 나옵니다. 출처가 불분명하거나 유튜브에서 뽑은 음원은 쓰지 않습니다.
+### 자체 제작 (CC0) — 103곡 (오르골·빗소리·피아노·8비트·앰비언트·레트로 RPG)
+외부 음원·샘플 없이 `scripts/gen-bgm.mjs`가 코드로 작곡·합성했습니다. 트랙마다 고정 시드를 써서 `node scripts/gen-bgm.mjs`를 다시 돌리면 같은 파일이 나옵니다(ffmpeg 필요).
+
+| 플레이리스트 | 곡 수 | 파일 (`apps/web/public/bgm/…`) |
+|---|---|---|
+| 오르골 | 11 | `orgel/`: moonlit-orgel, unfinished-lullaby, first-commit-waltz, archived-dreams, hello-world, forgotten-readme, localhost-lullaby, sleeping-prototype, deprecated-star, version-zero-one, last-star-on-the-graph |
+| 빗소리 | 8 | `rain/`: rain-on-stones, distant-thunder, rainy-night-etude, night-crickets, wind-in-the-trees, tin-roof, drizzle-far-bell, foggy-dawn |
+| 피아노 | 5 | `piano/`: after-the-last-commit, closed-issues, commented-out-feelings, deprecated-docs, snow-on-the-server |
+| 8비트 | 4 | `chiptune/`: pixel-graveyard-walk, save-point, no-extra-life, stuck-on-title-screen |
+| 앰비언트 | 3 | `ambient/`: dreaming-in-the-cloud, garbage-collected-memories, sleep-mode |
+| 레트로 RPG | 3 | `retro/`: item-shop-of-unfinished-swords, inn-at-version-zero, village-of-abandoned-quests |
+
+**3차 보강** (플레이리스트마다 20곡을 채우려고 추가, 지금 남은 6개 목록에서 69곡). 용량을 아끼려고 기존 곡(128kbps)과 달리 64kbps(잡음이 많은 빗소리·몽환 앰비언트는 80kbps)로, 길이는 66~84초로 구웠습니다. 기존 파일은 그대로 두고 `node scripts/gen-bgm.mjs --missing`으로 없는 파일만 굽습니다.
+
+| 플레이리스트 | 곡 수 | 비트레이트 | 파일 (`apps/web/public/bgm/…`) |
+|---|---|---|---|
+| 오르골 | 5 | 64kbps | `orgel/`: sunday-eleven-pm, payday-night-music-box, first-snow-commute, after-the-dishes, saturday-no-alarm |
+| 빗소리 | 12 | 80kbps | `rain/`: umbrella-crosswalk, bus-stop-downpour, cafe-window-seat, meeting-room-monsoon, rainy-monday-morning, wet-sneakers, waiting-under-the-eaves, no-umbrella-going-home, convenience-store-awning, thunder-overtime, foggy-bus-window, monsoon-office-afternoon |
+| 피아노 | 12 | 64kbps | `piano/`: back-seat-of-the-bus, convenience-store-light, empty-elevator, ten-pm-laundry, payday-sunset, letter-back-in-the-drawer, holiday-train-home, ten-minutes-on-the-roof, month-end-closing, after-the-farewell-party, sunday-shirt-ironing, first-workday-of-the-year |
+| 8비트 | 13 | 64kbps | `chiptune/`: lunch-menu-dilemma, last-meal-ticket, elevator-mind-game, coffee-ladder-game, afternoon-meeting-boss, pantry-snack-raid, clock-out-speedrun, punch-in-combo, weekly-report-quest, employee-badge-level-up, post-lunch-walk-stage, vending-machine-jackpot, parcel-arrived-alert |
+| 앰비언트 | 14 | 80kbps | `ambient/`: first-morning-of-leave, rainy-day-off, four-pm-wake-up, waiting-for-the-parcel, saturday-sleep-in, sunny-window-sofa, after-work-bath, folding-laundry-sunday, payday-night-walk, no-meeting-friday, airplane-mode-day, dangerous-outside-the-blanket, last-night-of-leave, half-day-off-nap |
+| 레트로 RPG | 13 | 64kbps | `retro/`: first-login-after-work, guild-meetup-friday, pajama-dungeon, late-night-snack-buff, daily-login-reward, quest-do-the-dishes, weekend-raid-lobby, blacksmith-overtime, nap-at-the-inn, convenience-store-checkpoint, max-level-monday, alarm-before-the-boss, credits-and-cup-noodles |
+
+**중복 정리 (2026-11) — 42곡 다시 만듦(그중 로파이·재즈 카페·어쿠스틱 기타 곡은 뒤에 픽사베이 곡으로 바뀌어 빠졌습니다).** "이름만 다르고 같은 곡 같다"는 피드백에 따라 전체 180곡을 검사했습니다. tracks.json 파일 경로 중복 0건, mp3 해시 중복 0건, 시드 중복 0건이었고, 디코딩한 PCM 지문(앞 70초 크로마·대역 에너지, 마디 단위 크로마)과 생성 설정(진행의 근음열·조·템포·반주·드럼·빗소리 구성) 비교에서 '들으면 사실상 같은 곡'으로 판정된 곡만 새 설정(시드 1001 이상, 다른 진행·조·템포·패턴)으로 다시 구웠습니다. 파일 경로와 비트레이트(기존 128kbps, 3차 64/80kbps)는 그대로 두고 덮어썼고, 외부 곡은 건드리지 않았습니다.
+
+| 플레이리스트 | 다시 만든 곡 (`apps/web/public/bgm/…`) |
+|---|---|
+| 오르골 | `orgel/`: last-star-on-the-graph, sunday-eleven-pm |
+| 빗소리 | `rain/`: bus-stop-downpour, cafe-window-seat, wet-sneakers, convenience-store-awning, thunder-overtime, foggy-bus-window |
+| 8비트 | `chiptune/`: save-point, weekly-report-quest, vending-machine-jackpot |
+| 앰비언트 | `ambient/`: sunny-window-sofa, payday-night-walk, no-meeting-friday, airplane-mode-day, half-day-off-nap |
+| 레트로 RPG | `retro/`: first-login-after-work, guild-meetup-friday, pajama-dungeon, late-night-snack-buff, nap-at-the-inn, convenience-store-checkpoint, credits-and-cup-noodles |
+
+같은 정리 때 플레이리스트 이름을 장르명(오르골·로파이·빗소리·피아노·8비트·재즈 카페·앰비언트·어쿠스틱 기타·레트로 RPG)으로 되돌리고, 자체 제작곡 제목을 목록 분위기에 맞는 회사원 일상 이름으로 바꿨습니다(외부 곡은 원제 유지).
+
+### 외부 무료 음원 — 17곡
+원본 페이지에서 라이선스를 직접 확인한 곡만 넣었습니다(2026-11 확인, 여러 라이선스가 걸린 곡은 CC0로 사용). 받은 원본을 44.1kHz 스테레오 128kbps로 다시 인코딩하고 음량을 다른 곡과 같은 -19 LUFS로 맞췄습니다(변경 사항). happy lofi day, Dimly lit, Apple Cider는 고역을 살짝 깎았습니다. 다시 받으려면 `node scripts/gen-bgm.mjs --fetch`(출처 목록은 스크립트의 `EXTERNAL`).
+
+| 플레이리스트 | 파일 | 곡 | 작가 | 출처 | 라이선스 |
+|---|---|---|---|---|---|
+| 오르골 | `orgel/moonlit-lullaby-for-the-lost.mp3` | Moonlit Lullaby for the Lost | Tsorthan Grove | https://opengameart.org/content/moonlit-lullaby-for-the-lost | CC0 |
+| 오르골 | `orgel/music-box-sad-tune.mp3` | Sad Tune (4 Music Box Tracks 중 musicbox3_sad_tune) | Aureolus_Omicron | https://opengameart.org/content/4-music-box-tracks | CC0 |
+| 오르골 | `orgel/music-box-cute-tune.mp3` | Cute Tune (4 Music Box Tracks 중 musicbox2_cute_tune) | Aureolus_Omicron | https://opengameart.org/content/4-music-box-tracks | CC0 |
+| 오르골 | `orgel/frost-waltz.mp3` | Frost Waltz | Kevin MacLeod (incompetech.com) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100516 | CC BY 4.0 |
+| 피아노 | `piano/calm-piano-vaporware.mp3` | Calm Piano 1 (Vaporware) | The Cynic Project (cynicmusic.com / pixelsphere.org) | https://opengameart.org/content/calm-piano-1-vaporware | CC0 |
+| 피아노 | `piano/calmant.mp3` | Calmant | Kevin MacLeod (incompetech.com) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100859 | CC BY 4.0 |
+| 피아노 | `piano/dreamer.mp3` | Dreamer | Kevin MacLeod (incompetech.com) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600043 | CC BY 4.0 |
+| 8비트 | `chiptune/apple-cider.mp3` | Apple Cider | Zane Little Music | https://opengameart.org/content/apple-cider | CC0 |
+| 8비트 | `chiptune/napping-on-a-cloud.mp3` | Napping on a Cloud | congusbongus | https://opengameart.org/content/napping-on-a-cloud | CC0 |
+| 8비트 | `chiptune/8bit-bossa.mp3` | 8bit Bossa | Joth | https://opengameart.org/content/bossa-nova | CC0 |
+| 앰비언트 | `ambient/waking-states.mp3` | Waking States | Tsorthan Grove | https://opengameart.org/content/waking-states | CC0 |
+| 앰비언트 | `ambient/dream-ambience.mp3` | Dream (Ambience) | TokyoGeisha | https://opengameart.org/content/dream-ambience | CC0 |
+| 앰비언트 | `ambient/contemplation.mp3` | Contemplation | Joth | https://opengameart.org/content/contemplation-0 | CC0 |
+| 레트로 RPG | `retro/welcome-to-the-item-shop.mp3` | Welcome to the Item Shop | congusbongus | https://opengameart.org/content/welcome-to-the-item-shop | CC0 |
+| 레트로 RPG | `retro/quaint-town.mp3` | Quaint Town | neonarkade | https://opengameart.org/content/quaint-town | CC0 |
+| 레트로 RPG | `retro/a-new-town.mp3` | A New Town | The Cynic Project (cynicmusic.com / pixelsphere.org) | https://opengameart.org/content/a-new-town-rpg-theme | CC0 |
+| 레트로 RPG | `retro/magic-town.mp3` | Magic Town | controllerhead | https://opengameart.org/content/magic-town | CC0 |
+
+- Kevin MacLeod 곡 저작자 표시: "<곡명>" Kevin MacLeod (incompetech.com), Licensed under Creative Commons: By Attribution 4.0 License — http://creativecommons.org/licenses/by/4.0/
+- CC0 곡이라도 작가가 표기를 부탁한 경우(The Cynic Project, Alex McCulloch 등)를 포함해 모든 외부 곡의 작가를 이 표와 tracks.json에 적어 둡니다.
+- 외부 음원을 더 넣을 때도 원본 페이지에서 라이선스를 확인할 수 있는 CC0·CC BY 곡만 씁니다(Pixabay Content License도 가능). 출처가 불분명하거나 유튜브에서 뽑은 음원은 쓰지 않습니다.
 
 ## 효과음 (SFX)
 - `apps/web/public/sfx/` 26개: campfire(모닥불 16초 루프, 약 -20 LUFS), say(말풍선 '뿅', 0.2초), firework-launch, firework-burst, coin, flower, bell(산사 종), splash, swim(물장구 루프), bubble(잠수), swing(삐걱), wave(휘파람), cheer, hit, crit, monster-die, levelup, potion, skill, coin-drop, defeat, victory, tick, miss, rain-loop(날씨 비 12초 루프, 약 -21 LUFS, 56kbps), thunder(천둥 한 번 8초, 56kbps)

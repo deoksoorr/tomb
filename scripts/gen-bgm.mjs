@@ -7,11 +7,11 @@
 // 평소에는 이미 구워 둔 파일을 그대로 두고 tracks.json에만 넣는다.
 // 환경변수 BGM_DEBUG=1 이면 스템별 RMS를 출력한다.
 //
-// ※ 2026-11: 배경음악은 픽사베이 곡(로파이·재즈·어쿠스틱 기타, public/bgm/tracks.json 직접 관리)으로 바꿨다.
-//   이 스크립트는 이제 효과음(public/sfx)만 굽는다. BGM 곡을 굽거나 tracks.json을 다시 쓰거나 bgm 폴더 파일을 지우지 않는다
-//   (예전처럼 돌리면 새 곡 목록을 덮어쓰고 픽사베이 곡을 지웠다). 아래 BGM 작곡 코드는 효과음과 같은 합성기를 쓰므로 남겨 둔다.
+// ※ 2026-11: 로파이·재즈·어쿠스틱 기타 목록은 픽사베이 곡으로 바꿨다(PIXABAY_LISTS — tracks.json에서 직접 관리).
+//   이 스크립트는 그 세 목록의 곡을 굽지도, 지우지도 않고, tracks.json을 쓸 때도 그 세 목록은 지금 파일의 내용을 그대로 옮긴다.
+//   나머지 6개 목록(오르골·빗소리·피아노·8비트·앰비언트·레트로 RPG)과 효과음은 예전처럼 굽는다.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
@@ -2374,17 +2374,20 @@ function importExternal(s) {
 }
 
 // ───────────────────────── 트랙 목록 ─────────────────────────
+// tracks.json 목록 순서 (로파이가 맨 앞 — 처음 들어오면 로파이로 시작한다)
 const PLAYLISTS = [
-  { id: "orgel", title: "오르골" },
   { id: "lofi", title: "로파이" },
+  { id: "orgel", title: "오르골" },
   { id: "rain", title: "빗소리" },
   { id: "piano", title: "피아노" },
   { id: "chiptune", title: "8비트" },
-  { id: "jazz", title: "재즈 카페" },
+  { id: "jazz", title: "재즈" },
   { id: "ambient", title: "앰비언트" },
   { id: "acoustic", title: "어쿠스틱 기타" },
   { id: "retro", title: "레트로 RPG" },
 ];
+/** 픽사베이 곡으로 바꾼 목록: 여기서 굽거나 지우지 않고, tracks.json의 지금 내용을 그대로 쓴다 */
+const PIXABAY_LISTS = new Set(["lofi", "jazz", "acoustic"]);
 const M = (r, q) => [r, q];
 // 시드 1001 이상은 '들으면 사실상 같은 곡'을 정리하며 다시 만든 곡이다. 다른 곡과 진행(근음열)·조·템포·반주·빗소리 구성이 겹치지 않게 골랐다.
 const SPECS = [
@@ -2626,8 +2629,11 @@ function ordered(id) {
 }
 function writeManifest() {
   const row = (o) => `{ ${Object.entries(o).map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`).join(", ")} }`;
+  const current = JSON.parse(readFileSync(join(OUT, "tracks.json"), "utf8")).playlists;
   const lists = PLAYLISTS.map((p) => {
-    const tracks = ordered(p.id).map((s) =>
+    const kept = PIXABAY_LISTS.has(p.id) ? current.find((c) => c.id === p.id) : null;
+    if (PIXABAY_LISTS.has(p.id) && !kept) throw new Error(`tracks.json에 ${p.id} 목록이 없다 (픽사베이 곡은 직접 넣는다)`);
+    const tracks = kept ? kept.tracks.map(row) : ordered(p.id).map((s) =>
       row({ file: `/bgm/${s.pl}/${s.file}.mp3`, title: s.title, artist: s.artist ?? ARTIST, sourceUrl: s.sourceUrl ?? "", license: s.license ?? "CC0", durationSec: s.ext ? probeDur(outFile(s)) : planOf(s).dur }),
     );
     return `    {\n      "id": ${JSON.stringify(p.id)},\n      "title": ${JSON.stringify(p.title)},\n      "tracks": [\n${tracks.map((t) => `        ${t}`).join(",\n")}\n      ]\n    }`;
@@ -2638,7 +2644,7 @@ function writeManifest() {
 if (isMainThread) {
   const args = process.argv.slice(2), fetchExt = args.includes("--fetch"), missing = args.includes("--missing"), filter = args.find((a) => !a.startsWith("--"));
   const ids = SPECS.map((_, i) => i).filter(
-    (i) => SPECS[i].pl === "sfx" && (fetchExt || !SPECS[i].ext) && (!filter || `${SPECS[i].pl}/${SPECS[i].file}`.includes(filter)) && !(missing && existsSync(outFile(SPECS[i]))),
+    (i) => !PIXABAY_LISTS.has(SPECS[i].pl) && (fetchExt || !SPECS[i].ext) && (!filter || `${SPECS[i].pl}/${SPECS[i].file}`.includes(filter)) && !(missing && existsSync(outFile(SPECS[i]))),
   );
   if (!ids.length && !missing) throw new Error(`no track matches "${filter}"`);
   const W = Math.min(Math.max(1, ids.length), Math.max(1, Math.min(8, availableParallelism() - 2)));
@@ -2663,7 +2669,18 @@ if (isMainThread) {
     )
   ).flat();
   console.log(`rendered ${results.length} tracks in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-  // 배경음악 곡 목록(tracks.json)·bgm 폴더는 더 이상 여기서 쓰거나 지우지 않는다 (맨 위 ※ 참고)
+  if (!filter) {
+    const extMissing = SPECS.filter((s) => s.ext && !PIXABAY_LISTS.has(s.pl) && !existsSync(outFile(s)));
+    if (extMissing.length) console.warn(`외부 곡 ${extMissing.length}개가 아직 없다 → node scripts/gen-bgm.mjs --fetch`);
+    writeManifest();
+    // 목록에 없는 예전 파일은 지운다(BGM 폴더만)
+    for (const p of PLAYLISTS.filter((pl) => !PIXABAY_LISTS.has(pl.id))) {
+      const keep = new Set(SPECS.filter((s) => s.pl === p.id).map((s) => `${s.file}.mp3`));
+      mkdirSync(join(OUT, p.id), { recursive: true });
+      for (const f of readdirSync(join(OUT, p.id))) if (f.endsWith(".mp3") && !keep.has(f)) rmSync(join(OUT, p.id, f));
+    }
+    console.log("wrote tracks.json");
+  }
 } else {
   for (const i of workerData) parentPort.postMessage(render(i));
 }

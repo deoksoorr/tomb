@@ -23,6 +23,110 @@
       ]
     },
     {
+      "id": "orgel",
+      "title": "오르골",
+      "tracks": [
+        { "file": "/bgm/orgel/moonlit-orgel.mp3", "title": "불 끄고 누운 밤", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 107 },
+        { "file": "/bgm/orgel/unfinished-lullaby.mp3", "title": "내일 걱정은 내일 하기", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 124 },
+        { "file": "/bgm/orgel/first-commit-waltz.mp3", "title": "주말 아침 커튼 사이 햇살", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 105 },
+        { "file": "/bgm/orgel/archived-dreams.mp3", "title": "꿈에서도 출근하는 밤", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 117 },
+        { "file": "/bgm/orgel/moonlit-lullaby-for-the-lost.mp3", "title": "Moonlit Lullaby for the Lost", "artist": "Tsorthan Grove", "sourceUrl": "https://opengameart.org/content/moonlit-lullaby-for-the-lost", "license": "CC0", "durationSec": 119 },
+        { "file": "/bgm/orgel/hello-world.mp3", "title": "토요일 아침 이불 속", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 105 },
+        { "file": "/bgm/orgel/forgotten-readme.mp3", "title": "읽다 만 책을 덮으며", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 113 },
+        { "file": "/bgm/orgel/localhost-lullaby.mp3", "title": "알람 맞추고 눈 감기", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 121 },
+        { "file": "/bgm/orgel/sleeping-prototype.mp3", "title": "베개 옆 휴대폰 무음", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 110 },
+        { "file": "/bgm/orgel/music-box-sad-tune.mp3", "title": "Sad Tune (Music Box)", "artist": "Aureolus_Omicron", "sourceUrl": "https://opengameart.org/content/4-music-box-tracks", "license": "CC0", "durationSec": 156 },
+        { "file": "/bgm/orgel/deprecated-star.mp3", "title": "창밖 가로등 하나", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 108 },
+        { "file": "/bgm/orgel/version-zero-one.mp3", "title": "주말 늦잠 뒤 기지개", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 102 },
+        { "file": "/bgm/orgel/last-star-on-the-graph.mp3", "title": "포근한 이불 냄새", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 104 },
+        { "file": "/bgm/orgel/sunday-eleven-pm.mp3", "title": "월요일 전날 잠 못 드는 밤", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
+        { "file": "/bgm/orgel/music-box-cute-tune.mp3", "title": "Cute Tune (Music Box)", "artist": "Aureolus_Omicron", "sourceUrl": "https://opengameart.org/content/4-music-box-tracks", "license": "CC0", "durationSec": 137 },
+        { "file": "/bgm/orgel/payday-night-music-box.mp3", "title": "월급 들어온 밤의 단잠", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/orgel/first-snow-commute.mp3", "title": "첫눈 예보 듣고 잠들기", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 76 },
+        { "file": "/bgm/orgel/after-the-dishes.mp3", "title": "설거지 끝내고 불 끄기", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 75 },
+        { "file": "/bgm/orgel/saturday-no-alarm.mp3", "title": "알람 없는 토요일 아침", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 84 },
+        { "file": "/bgm/orgel/frost-waltz.mp3", "title": "Frost Waltz", "artist": "Kevin MacLeod (incompetech.com)", "sourceUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100516", "license": "CC BY 4.0", "durationSec": 135 }
+      ]
+    },
+    {
+      "id": "rain",
+      "title": "빗소리",
+      "tracks": [
+        { "file": "/bgm/rain/rain-on-stones.mp3", "title": "보도블록에 떨어지는 비", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 126 },
+        { "file": "/bgm/rain/distant-thunder.mp3", "title": "먼 천둥 치는 출근길", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 134 },
+        { "file": "/bgm/rain/rainy-night-etude.mp3", "title": "비 오는 밤 창가 피아노", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 130 },
+        { "file": "/bgm/rain/night-crickets.mp3", "title": "비 그친 밤 풀벌레", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 120 },
+        { "file": "/bgm/rain/wind-in-the-trees.mp3", "title": "비 갠 뒤 회사 앞 가로수", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 124 },
+        { "file": "/bgm/rain/tin-roof.mp3", "title": "옥상 창고 양철 지붕의 비", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 116 },
+        { "file": "/bgm/rain/drizzle-far-bell.mp3", "title": "이슬비 속 먼 종소리", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 128 },
+        { "file": "/bgm/rain/foggy-dawn.mp3", "title": "비 그친 새벽 안개", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 132 },
+        { "file": "/bgm/rain/umbrella-crosswalk.mp3", "title": "우산 쓰고 건너는 횡단보도", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/rain/bus-stop-downpour.mp3", "title": "장대비 내리는 버스 정류장", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
+        { "file": "/bgm/rain/cafe-window-seat.mp3", "title": "출근 전 카페 창가", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/rain/meeting-room-monsoon.mp3", "title": "회의실 창밖 장맛비", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 74 },
+        { "file": "/bgm/rain/rainy-monday-morning.mp3", "title": "비 오는 월요일 아침", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/rain/wet-sneakers.mp3", "title": "젖은 우산 접고 자리에 앉기", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 74 },
+        { "file": "/bgm/rain/waiting-under-the-eaves.mp3", "title": "처마 밑에서 비 피하기", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/rain/no-umbrella-going-home.mp3", "title": "우산 없이 나온 퇴근길", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
+        { "file": "/bgm/rain/convenience-store-awning.mp3", "title": "편의점 차양 아래 비 구경", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
+        { "file": "/bgm/rain/thunder-overtime.mp3", "title": "천둥 치는 야근 밤", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 74 },
+        { "file": "/bgm/rain/foggy-bus-window.mp3", "title": "김 서린 버스 창문", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/rain/monsoon-office-afternoon.mp3", "title": "장마철 사무실 오후", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 }
+      ]
+    },
+    {
+      "id": "piano",
+      "title": "피아노",
+      "tracks": [
+        { "file": "/bgm/piano/after-the-last-commit.mp3", "title": "노을 지는 퇴근길 다리", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 90 },
+        { "file": "/bgm/piano/closed-issues.mp3", "title": "오늘도 수고한 나에게", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 92 },
+        { "file": "/bgm/piano/commented-out-feelings.mp3", "title": "보내지 못한 메시지", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 87 },
+        { "file": "/bgm/piano/deprecated-docs.mp3", "title": "퇴근 후 혼자 먹는 저녁", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 98 },
+        { "file": "/bgm/piano/snow-on-the-server.mp3", "title": "퇴근길에 내린 눈", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 96 },
+        { "file": "/bgm/piano/back-seat-of-the-bus.mp3", "title": "퇴근 버스 맨 뒷자리", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 75 },
+        { "file": "/bgm/piano/calm-piano-vaporware.mp3", "title": "Calm Piano 1 (Vaporware)", "artist": "The Cynic Project (cynicmusic.com)", "sourceUrl": "https://opengameart.org/content/calm-piano-1-vaporware", "license": "CC0", "durationSec": 165 },
+        { "file": "/bgm/piano/convenience-store-light.mp3", "title": "골목 끝 편의점 불빛", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 76 },
+        { "file": "/bgm/piano/empty-elevator.mp3", "title": "혼자 탄 엘리베이터", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 77 },
+        { "file": "/bgm/piano/ten-pm-laundry.mp3", "title": "밤 열 시의 세탁기", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 73 },
+        { "file": "/bgm/piano/payday-sunset.mp3", "title": "월급날 퇴근길 노을", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 66 },
+        { "file": "/bgm/piano/letter-back-in-the-drawer.mp3", "title": "다시 서랍에 넣은 사직서", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 79 },
+        { "file": "/bgm/piano/holiday-train-home.mp3", "title": "명절 귀성 열차", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 77 },
+        { "file": "/bgm/piano/calmant.mp3", "title": "Calmant", "artist": "Kevin MacLeod (incompetech.com)", "sourceUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100859", "license": "CC BY 4.0", "durationSec": 204 },
+        { "file": "/bgm/piano/ten-minutes-on-the-roof.mp3", "title": "옥상에서 쉬는 10분", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
+        { "file": "/bgm/piano/month-end-closing.mp3", "title": "월말 마감 끝낸 저녁", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 78 },
+        { "file": "/bgm/piano/after-the-farewell-party.mp3", "title": "송별회 끝난 밤길", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 76 },
+        { "file": "/bgm/piano/sunday-shirt-ironing.mp3", "title": "일요일 밤 셔츠 다림질", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 75 },
+        { "file": "/bgm/piano/first-workday-of-the-year.mp3", "title": "새해 첫 출근", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 68 },
+        { "file": "/bgm/piano/dreamer.mp3", "title": "Dreamer", "artist": "Kevin MacLeod (incompetech.com)", "sourceUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600043", "license": "CC BY 4.0", "durationSec": 204 }
+      ]
+    },
+    {
+      "id": "chiptune",
+      "title": "8비트",
+      "tracks": [
+        { "file": "/bgm/chiptune/pixel-graveyard-walk.mp3", "title": "점심시간 동전 오락실", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 88 },
+        { "file": "/bgm/chiptune/save-point.mp3", "title": "오전 업무 저장 완료", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 91 },
+        { "file": "/bgm/chiptune/no-extra-life.mp3", "title": "남은 연차 0개", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 81 },
+        { "file": "/bgm/chiptune/stuck-on-title-screen.mp3", "title": "월요일 아침 로딩 중", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 89 },
+        { "file": "/bgm/chiptune/lunch-menu-dilemma.mp3", "title": "점심 메뉴 룰렛", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/chiptune/last-meal-ticket.mp3", "title": "식권 한 장 남았다", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 74 },
+        { "file": "/bgm/chiptune/apple-cider.mp3", "title": "Apple Cider", "artist": "Zane Little Music", "sourceUrl": "https://opengameart.org/content/apple-cider", "license": "CC0", "durationSec": 200 },
+        { "file": "/bgm/chiptune/elevator-mind-game.mp3", "title": "엘리베이터 눈치 게임", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 73 },
+        { "file": "/bgm/chiptune/coffee-ladder-game.mp3", "title": "커피 내기 사다리 타기", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 67 },
+        { "file": "/bgm/chiptune/afternoon-meeting-boss.mp3", "title": "오후 회의 보스전", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 68 },
+        { "file": "/bgm/chiptune/pantry-snack-raid.mp3", "title": "탕비실 과자 쟁탈전", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/chiptune/clock-out-speedrun.mp3", "title": "칼퇴 스피드런", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 73 },
+        { "file": "/bgm/chiptune/punch-in-combo.mp3", "title": "출근 도장 콤보", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
+        { "file": "/bgm/chiptune/napping-on-a-cloud.mp3", "title": "Napping on a Cloud", "artist": "congusbongus", "sourceUrl": "https://opengameart.org/content/napping-on-a-cloud", "license": "CC0", "durationSec": 248 },
+        { "file": "/bgm/chiptune/weekly-report-quest.mp3", "title": "주간 보고 마감 퀘스트", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 74 },
+        { "file": "/bgm/chiptune/employee-badge-level-up.mp3", "title": "사원증 레벨 업", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
+        { "file": "/bgm/chiptune/post-lunch-walk-stage.mp3", "title": "점심 산책 스테이지", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 75 },
+        { "file": "/bgm/chiptune/vending-machine-jackpot.mp3", "title": "자판기 잭팟", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 71 },
+        { "file": "/bgm/chiptune/parcel-arrived-alert.mp3", "title": "회사로 온 택배 알림", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 71 },
+        { "file": "/bgm/chiptune/8bit-bossa.mp3", "title": "8bit Bossa", "artist": "Joth", "sourceUrl": "https://opengameart.org/content/bossa-nova", "license": "CC0", "durationSec": 60 }
+      ]
+    },
+    {
       "id": "jazz",
       "title": "재즈",
       "tracks": [
@@ -45,6 +149,32 @@
         { "file": "/bgm/jazz/studiokolomna-jazz-groove.mp3", "title": "월급날 저녁 가벼운 발걸음", "artist": "StudioKolomna", "sourceUrl": "https://pixabay.com/music/", "license": "Pixabay Content License", "durationSec": 115 },
         { "file": "/bgm/jazz/the-mountain-lofi-jazz.mp3", "title": "노트북 덮고 기지개", "artist": "The Mountain", "sourceUrl": "https://pixabay.com/music/", "license": "Pixabay Content License", "durationSec": 170 },
         { "file": "/bgm/jazz/velariomusic-smooth-jazz.mp3", "title": "야경 보이는 회의실 야근", "artist": "VelarioMusic", "sourceUrl": "https://pixabay.com/music/", "license": "Pixabay Content License", "durationSec": 213 }
+      ]
+    },
+    {
+      "id": "ambient",
+      "title": "앰비언트",
+      "tracks": [
+        { "file": "/bgm/ambient/dreaming-in-the-cloud.mp3", "title": "구름 보며 멍때리기", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 108 },
+        { "file": "/bgm/ambient/garbage-collected-memories.mp3", "title": "아무 생각 없는 오후", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 112 },
+        { "file": "/bgm/ambient/sleep-mode.mp3", "title": "휴대폰 끄고 누운 오후", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 104 },
+        { "file": "/bgm/ambient/first-morning-of-leave.mp3", "title": "연차 첫날 아침", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/rainy-day-off.mp3", "title": "비 오는 휴일 오후", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/four-pm-wake-up.mp3", "title": "낮잠 자다 깬 오후 네 시", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/waking-states.mp3", "title": "Waking States", "artist": "Tsorthan Grove", "sourceUrl": "https://opengameart.org/content/waking-states", "license": "CC0", "durationSec": 184 },
+        { "file": "/bgm/ambient/waiting-for-the-parcel.mp3", "title": "택배 기다리는 오후", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/saturday-sleep-in.mp3", "title": "늦잠 자도 되는 토요일", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/sunny-window-sofa.mp3", "title": "햇살 드는 창가 소파", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/after-work-bath.mp3", "title": "퇴근 후 반신욕", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/folding-laundry-sunday.mp3", "title": "일요일 저녁 빨래 개기", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/payday-night-walk.mp3", "title": "연차 날 동네 한 바퀴", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/dream-ambience.mp3", "title": "Dream (Ambience)", "artist": "TokyoGeisha", "sourceUrl": "https://opengameart.org/content/dream-ambience", "license": "CC0", "durationSec": 124 },
+        { "file": "/bgm/ambient/no-meeting-friday.mp3", "title": "회의 없는 금요일 오후", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/airplane-mode-day.mp3", "title": "비행기 모드로 쉬는 날", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/dangerous-outside-the-blanket.mp3", "title": "이불 밖은 위험해", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 74 },
+        { "file": "/bgm/ambient/last-night-of-leave.mp3", "title": "연차 마지막 날 밤", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/half-day-off-nap.mp3", "title": "오후 반차 후 낮잠", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/ambient/contemplation.mp3", "title": "Contemplation", "artist": "Joth", "sourceUrl": "https://opengameart.org/content/contemplation-0", "license": "CC0", "durationSec": 120 }
       ]
     },
     {
@@ -71,6 +201,32 @@
         { "file": "/bgm/acoustic/surprising-media-romantic-acoustic-guitar-3.mp3", "title": "첫 월급으로 산 꽃다발", "artist": "Surprising Media", "sourceUrl": "https://pixabay.com/music/", "license": "Pixabay Content License", "durationSec": 152 },
         { "file": "/bgm/acoustic/tunetank-instrumental-acoustic-guitar-music.mp3", "title": "반차 쓰고 걷는 한낮", "artist": "Tunetank", "sourceUrl": "https://pixabay.com/music/", "license": "Pixabay Content License", "durationSec": 153 },
         { "file": "/bgm/acoustic/universfield-warm-acoustic-guitar.mp3", "title": "따뜻한 보리차 한 잔", "artist": "Universfield", "sourceUrl": "https://pixabay.com/music/", "license": "Pixabay Content License", "durationSec": 94 }
+      ]
+    },
+    {
+      "id": "retro",
+      "title": "레트로 RPG",
+      "tracks": [
+        { "file": "/bgm/retro/item-shop-of-unfinished-swords.mp3", "title": "사내 매점은 아이템 상점", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 91 },
+        { "file": "/bgm/retro/inn-at-version-zero.mp3", "title": "신입 사원 마을의 여관", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 91 },
+        { "file": "/bgm/retro/village-of-abandoned-quests.mp3", "title": "미뤄 둔 업무의 마을", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 90 },
+        { "file": "/bgm/retro/first-login-after-work.mp3", "title": "퇴근 후 첫 접속", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 67 },
+        { "file": "/bgm/retro/welcome-to-the-item-shop.mp3", "title": "Welcome to the Item Shop", "artist": "congusbongus", "sourceUrl": "https://opengameart.org/content/welcome-to-the-item-shop", "license": "CC0", "durationSec": 127 },
+        { "file": "/bgm/retro/guild-meetup-friday.mp3", "title": "길드 정모는 금요일", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/retro/pajama-dungeon.mp3", "title": "잠옷 입고 던전", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 74 },
+        { "file": "/bgm/retro/late-night-snack-buff.mp3", "title": "야식 버프", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
+        { "file": "/bgm/retro/daily-login-reward.mp3", "title": "출석 보상 받는 밤", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 71 },
+        { "file": "/bgm/retro/quaint-town.mp3", "title": "Quaint Town", "artist": "neonarkade", "sourceUrl": "https://opengameart.org/content/quaint-town", "license": "CC0", "durationSec": 130 },
+        { "file": "/bgm/retro/quest-do-the-dishes.mp3", "title": "퀘스트: 설거지하기", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
+        { "file": "/bgm/retro/weekend-raid-lobby.mp3", "title": "주말 레이드 대기실", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
+        { "file": "/bgm/retro/blacksmith-overtime.mp3", "title": "마을 대장간의 야근", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 67 },
+        { "file": "/bgm/retro/nap-at-the-inn.mp3", "title": "여관에서 한숨 자기", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 77 },
+        { "file": "/bgm/retro/a-new-town.mp3", "title": "A New Town", "artist": "The Cynic Project (cynicmusic.com)", "sourceUrl": "https://opengameart.org/content/a-new-town-rpg-theme", "license": "CC0", "durationSec": 62 },
+        { "file": "/bgm/retro/convenience-store-checkpoint.mp3", "title": "편의점 앞 중간 저장", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
+        { "file": "/bgm/retro/max-level-monday.mp3", "title": "만렙 찍은 월요일", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
+        { "file": "/bgm/retro/alarm-before-the-boss.mp3", "title": "보스 앞에서 울린 알람", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 68 },
+        { "file": "/bgm/retro/credits-and-cup-noodles.mp3", "title": "엔딩 크레딧과 컵라면", "artist": "한때는... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 74 },
+        { "file": "/bgm/retro/magic-town.mp3", "title": "Magic Town", "artist": "controllerhead", "sourceUrl": "https://opengameart.org/content/magic-town", "license": "CC0", "durationSec": 56 }
       ]
     }
   ]

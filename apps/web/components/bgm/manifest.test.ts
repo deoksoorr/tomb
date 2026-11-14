@@ -7,10 +7,17 @@ import { FIRST_PLAYLIST_ID, needsAttribution, nextShuffled, parseManifest, pickT
 describe("parseManifest", () => {
   it("저장소의 tracks.json은 모든 플레이리스트에 곡이 있다", () => {
     const lists = parseManifest(tracksJson);
+    // 로파이·재즈·어쿠스틱 기타는 픽사베이 곡으로 바꾸고, 나머지 6개는 예전 그대로
     expect(lists.map((p) => [p.id, p.title])).toEqual([
       ["lofi", "로파이"],
+      ["orgel", "오르골"],
+      ["rain", "빗소리"],
+      ["piano", "피아노"],
+      ["chiptune", "8비트"],
       ["jazz", "재즈"],
+      ["ambient", "앰비언트"],
       ["acoustic", "어쿠스틱 기타"],
+      ["retro", "레트로 RPG"],
     ]);
     expect(lists.some((p) => p.id === FIRST_PLAYLIST_ID)).toBe(true);
     expect(lists.every((p) => p.tracks.length > 0)).toBe(true);
