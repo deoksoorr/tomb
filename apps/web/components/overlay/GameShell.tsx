@@ -29,7 +29,6 @@ import BuryForm, { type BuryMode } from "../grave/BuryForm";
 import GraveModal from "../grave/GraveModal";
 import PassedDialog from "../grave/PassedDialog";
 import Minimap from "./Minimap";
-import RestOverlay from "./RestOverlay";
 import StayBonus from "./StayBonus";
 import NoticesDialog from "../notice/NoticesDialog";
 import RankingList from "../grave/RankingList";
@@ -248,8 +247,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   // 데스크톱인데 창이 좁으면 윗줄에 채널 표시 자리가 없다 → 아래 안내 줄로
   const narrow = useMediaQuery("(max-width: 700px)");
   const scene = useBridgeValue("scene:changed")?.scene;
-  // 휴식 중 막(RestOverlay) 위로 왼쪽 위 묶음(음악·확성기)을 올린다 — 쉬는 동안 올라온 외침도 보이게
-  const resting = useBridgeValue("game:rest")?.on ?? false;
   const inShop = scene === "shop";
   // 집·사냥터·미니게임 안에서는 그 화면이 자기 HUD를 그린다. 월드 HUD는 숨기기만 한다(BGM 플레이어는 계속 살아 있게)
   const away = scene === "house" || scene === "hunt" || scene === "minigame";
@@ -511,7 +508,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
             </div>
           ) : (
             <>
-              <div className={cx(styles.topLeft, resting && styles.restLift)}>
+              <div className={styles.topLeft}>
                 <BgmPlayer />
                 {options.debug && <NetHud />}
                 <MegaphoneFeed channel={channel} />
@@ -730,8 +727,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {chatOpen && canRadial && !sayOpen && <ChatSheet onClose={() => setChatOpen(false)} />}
       {/* 채팅 기록창: 데스크톱은 바로 가기 줄 위 상자(입력칸 포함), 터치는 확성기 위에 글씨만. 채널·집 드나들면 비운다 */}
       {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}`} hidden={!canRadial} />}
-      {/* 다른 탭·다른 창을 보는 동안: 게임을 재우고 어두운 "휴식 중" 막 (음악은 계속) */}
-      <RestOverlay />
       {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
       {/* 마을·집 안: 월드 바로 가기 줄이 숨으니 [표현] 버튼만 왼쪽 아래에 따로 */}
       {ready && scene === "house" && !coarse && (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
+import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { tabHidden } from "@/lib/hooks/visibleAgain";
 import { megaphoneStore, openMegaphone, useMegaphone } from "@/lib/hooks/useMegaphone";
 import { reportStore } from "@/lib/reportClient";
@@ -20,8 +20,6 @@ const RELOAD_MS = 10 * 60_000;
  * floating = 터치 화면: 왼쪽 아래 조이스틱 위에 따로 띄운다 (펼친 기록은 위로)
  */
 export default function MegaphoneFeed({ channel, floating = false }: { channel: number; floating?: boolean }) {
-  // 터치 화면의 떠 있는 확성기 창은 휴식 막 위로 (데스크톱은 GameShell 왼쪽 위 묶음째 올린다)
-  const resting = useBridgeValue("game:rest")?.on ?? false;
   const { entries, flash, flashUntil, collapsed } = useMegaphone();
   const logRef = useRef<HTMLOListElement>(null);
 
@@ -46,7 +44,7 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
 
   return (
     <section
-      className={cx(styles.feed, floating && styles.floating, floating && resting && styles.resting)}
+      className={cx(styles.feed, floating && styles.floating)}
       aria-label="확성기"
       // 터치: 기록을 펼치면 아래 가운데 안내 줄·낚시 창 등이 그 위로 올라간다 (GameShell .shell --hud-bottom)
       data-megaphone-open={floating && !collapsed ? "" : undefined}

@@ -289,8 +289,3 @@
 .roomExpr .dockButton {
   background: var(--panel-solid);
 }
-
-/* 휴식 중: 왼쪽 위 묶음(음악·확성기)을 휴식 막(z 35) 위로 */
-.restLift {
-  z-index: 36;
-}
