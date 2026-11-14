@@ -78,7 +78,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 7 = 동물원(버드나무 묘역 자리 — 울타리·우리 충돌, 묘비 자리 재배치, 벤치 bX 이동)·타는 펫(ride 이벤트) — 옛 화면은 우리 안을 걷고 묘비를 옛 자리에 그린다
 // 8 = 관람차·열기구(STATE.ferris·balloon=18·19 — 옛 클라이언트는 모르는 상태 값이 든 SNAPSHOT을 통째로 버린다, 광장 남쪽 관람차 받침 충돌)
 // 11 = 말풍선 자유 채팅(chat 이벤트, Enter 키가 상호작용 대신 채팅 입력칸 — 옛 화면은 남의 채팅을 못 본다)
-export const CLIENT_VERSION = 11;
+// 12 = 저장소(Redis) 사용량 절감 — 예전 화면의 잦은 확인 호출을 끊으려고 모두 한 번 새로고침시킨다 (11/14)
+export const CLIENT_VERSION = 12;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
