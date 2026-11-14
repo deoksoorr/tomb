@@ -69,10 +69,11 @@ export function FurnitureStage({ itemId, w, h, r = 0, night = false, frame = 0 }
     def?.ext ? facadePreview({ ...defaultExterior(), [def.ext]: itemId }, "small", s, night) : furniturePreview(itemId, s, { r, night, frame, stage: true });
   const base = draw(1);
   const fit = Math.min(w / base.w, h / base.h);
-  const n = Math.max(1, Math.floor(fit));
+  // 칸이 2배에 조금 못 미치면(낮은 화면) 1배로 작게 두지 않고 2배 그림을 칸에 맞게 살짝 줄인다
+  const n = fit >= 1.6 && fit < 2 ? 2 : Math.max(1, Math.floor(fit));
   const img = n > 1 ? draw(n) : base;
-  // 칸보다 크면(정수 배율 1도 안 들어가면) 비율대로 줄인다
-  const k = fit < 1 ? fit : 1;
+  // 칸보다 크면 비율대로 줄인다
+  const k = Math.min(1, fit / n);
   const iw = Math.max(1, Math.round(img.w * k));
   const ih = Math.max(1, Math.round(img.h * k));
   return (

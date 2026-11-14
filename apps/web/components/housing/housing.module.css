@@ -721,9 +721,15 @@
 }
 
 .fsText {
+  display: -webkit-box;
+  overflow: hidden;
   color: var(--text);
   font-size: 13px;
   line-height: 1.5;
+  /* 긴 설명은 세 줄까지 (전체는 마우스를 올리면 보인다): 왼쪽 칸에 스크롤이 생기지 않게 */
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 
 .fsScore {

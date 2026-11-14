@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { animFrames } from "@/game/housing/art";
 import { errorMessage } from "@/lib/api";
 import { useMediaQuery } from "@/lib/hooks/useMedia";
@@ -27,6 +27,10 @@ type Props = {
   /** 주면 "내 집에 놓아 보기" 단추가 생긴다: 사지 않고 내 집 바닥에 반투명으로 얹어 본다 (꾸미기 중일 때) */
   onTry?: (itemId: string) => void;
 };
+
+/** 데스크톱 큰 미리보기 칸 높이 (남은 높이에 맞춰 이 사이에서 고른다) */
+const STAGE_MAX_H = 204;
+const STAGE_MIN_H = 72;
 
 /** 칸에 놓는 물건인지 (바닥·벽지·외관은 돌리거나 놓아 볼 수 없다) */
 const placeable = (f: FurnitureDef) => !f.skin && !f.ext;
@@ -68,6 +72,37 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   const frames = shown ? animFrames(shown.id) : 1;
 
   // 움직이는 그림(연못 잔물결)만 천천히 장면을 넘긴다. 동작 줄이기면 멈춘 그림
+  // 데스크톱: 왼쪽 자세히 보기가 스크롤 없이 들어가게 미리보기 칸 높이를 남은 높이에 맞춘다
+  // (창이 낮은 화면·브라우저 확대에서는 미리보기 배율이 저절로 한 단계씩 줄어든다)
+  const detailRef = useRef<HTMLElement>(null);
+  const [stageFit, setStageFit] = useState(STAGE_MAX_H);
+  const shownId = shown?.id;
+  useLayoutEffect(() => {
+    const el = detailRef.current;
+    if (!el || phone || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const wrap = el.querySelector<HTMLElement>("[data-stage-wrap]");
+      const stage = el.querySelector<HTMLElement>("[data-stage]");
+      const info = el.querySelector<HTMLElement>("[data-info]");
+      if (!wrap || !stage || !info) return;
+      const cs = getComputedStyle(el);
+      const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      const gap = parseFloat(cs.rowGap) || 0;
+      const stagePad = stage.offsetHeight - stage.clientHeight + parseFloat(getComputedStyle(stage).paddingTop) + parseFloat(getComputedStyle(stage).paddingBottom);
+      const inner = stage.offsetHeight - stagePad;
+      // 미리보기 그림 칸을 뺀 나머지 (단추 줄·설명·사기 단추)
+      const rest = wrap.offsetHeight - inner + gap + info.offsetHeight;
+      const avail = Math.floor(el.clientHeight - pad - rest);
+      setStageFit(Math.max(STAGE_MIN_H, Math.min(STAGE_MAX_H, avail)));
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    const info = el.querySelector("[data-info]");
+    if (info) ro.observe(info);
+    measure();
+    return () => ro.disconnect();
+  }, [phone, shownId]);
+
   useEffect(() => {
     if (frames < 2 || reduced) return;
     const t = setInterval(() => setFrame((n) => (n + 1) % frames), 420);
@@ -109,11 +144,11 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
     // 돌리면 가로·세로가 바뀌는 물건은 4방향, 아니면 좌우 뒤집기 2방향
     const ways = f.turn ? 4 : 2;
     const sw = phone ? 140 : 216;
-    const sh = phone ? 140 : 204;
+    const sh = phone ? 140 : stageFit;
     return (
-      <section className={styles.fsDetail} aria-label="자세히 보기">
-        <div className={styles.fsStageWrap}>
-          <div className={styles.fsStage} data-night={night || undefined}>
+      <section ref={detailRef} className={styles.fsDetail} aria-label="자세히 보기">
+        <div className={styles.fsStageWrap} data-stage-wrap="">
+          <div className={styles.fsStage} data-stage="" data-night={night || undefined}>
             <FurnitureStage itemId={f.id} w={sw} h={sh} r={r} night={night} frame={reduced ? 0 : frame} />
           </div>
           <div className={styles.fsStageBar}>
@@ -137,9 +172,11 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
             </div>
           </div>
         </div>
-        <div className={styles.fsInfo} aria-live="polite">
+        <div className={styles.fsInfo} data-info="" aria-live="polite">
           <p className={styles.fsName}>{f.name}</p>
-          <p className={styles.fsText}>{f.desc}</p>
+          <p className={styles.fsText} title={f.desc}>
+            {f.desc}
+          </p>
           <p className={styles.fsScore}>
             {placeable(f) && <span className={styles.fsSize}>{f.w}×{f.h}칸</span>}
             꾸밈 점수 <strong>+{f.score}</strong>
