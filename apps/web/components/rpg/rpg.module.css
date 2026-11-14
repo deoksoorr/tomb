@@ -2266,3 +2266,19 @@ button.hotSlot:disabled {
   padding: 2px 6px;
   font-size: 12px;
 }
+
+/* 멈춤 창: 화면 흔들림 켜기·끄기 */
+.shakeToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.shakeToggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--candle);
+}

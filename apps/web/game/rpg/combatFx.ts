@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import type { WeaponStyleId } from "@/lib/rpg/weapons";
+import { shakeEnabled } from "@/lib/shakePref";
 import { Grid, type Color } from "../sprites/pixel";
 import { bandTex, cardSheet, coinSheet, crackSheet, crossSheet, heavyArcSheet, impactSheet, inkBoltTex, inkSheet, orbTex, puffSheet, shardTex, streakSheet, swingArcSheet } from "./fxArt";
 
@@ -113,9 +114,9 @@ export class CombatFx {
       .setDepth(DEPTH_TOP);
   }
 
-  /** 작은 흔들림 (움직임 줄이기면 안 흔든다) */
+  /** 작은 흔들림 (움직임 줄이기거나 게임 안 설정에서 흔들림을 껐으면 안 흔든다) */
   shake(ms: number, intensity: number): void {
-    if (this.reduced) return;
+    if (this.reduced || !shakeEnabled()) return;
     this.scene.cameras.main.shake(ms, intensity);
   }
 

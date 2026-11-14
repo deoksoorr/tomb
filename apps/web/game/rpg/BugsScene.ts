@@ -5,6 +5,7 @@ import { bridge } from "../bridge";
 import { RpgScene } from "./base";
 import { MeadowStage } from "./meadowStage";
 import { ensureRpgTextures, RTEX } from "./sprites";
+import { shakeEnabled } from "@/lib/shakePref";
 
 // 벌레 잡기: 3×3 창에서 튀어나오는 벌레를 누른다. 초록 체크는 누르면 감점.
 // 출현은 서버가 준 시드의 계획(bugsPlan)대로이고, DEX는 버그가 보이는 시간을, LUK는 황금 버그 확률을 조금 늘린다.
@@ -176,7 +177,7 @@ export class BugsScene extends RpgScene {
       const sprite = a.sprite!;
       const warn = a.s.kind === "feature" ? "체크는 잡지 마세요" : "이미 잡은 벌레";
       this.floatText(cx, cy - 8, `${warn} ${a.s.kind === "feature" ? BUG_SCORE.feature : BUG_SCORE.decoy}`, "#ff6a6a", 11);
-      this.cameras.main.shake(100, 0.004);
+      if (shakeEnabled()) this.cameras.main.shake(100, 0.004);
       this.sfx.play("miss");
       this.tweens.add({ targets: sprite, alpha: 0, duration: 200, onComplete: () => sprite.destroy() });
       return;
