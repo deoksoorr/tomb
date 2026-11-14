@@ -7,7 +7,7 @@ import type { ChampAvatar, ChampResponse, RaceResponse, RaceRow } from "@/lib/ty
 import AvatarThumb from "../account/AvatarThumb";
 import styles from "./WeeklyRace.module.css";
 
-// 이번 주 레이스 (랭킹 창 맨 앞 칸): 포인트·사냥 처치·낚시마다 1~3등 시상대(캐릭터 모습), 마감(월요일 0시 KST)까지 남은 시간,
+// 이번 주 레이스 (화면 위 [레이스] 버튼 · 메뉴 시트 → 표준 창): 포인트·사냥 처치·낚시마다 1~3등 시상대(캐릭터 모습), 마감(월요일 0시 KST)까지 남은 시간,
 // 내 순위·1위와의 차이. 창이 열려 있는 동안 30초마다 다시 받는다. 아래에는 지난주 1위와 명예의 전당.
 
 /** 다시 받는 간격 */
@@ -77,82 +77,88 @@ export default function WeeklyRace() {
         <span className={styles.when}> · 월요일 0시</span>
       </p>
       <p className={styles.reward}>1위 보상: 전용 모자(한 주) · 1위 오라 · 이름표 배지 · {(champ?.points ?? 1000).toLocaleString("ko-KR")}P</p>
-      {race.boards.map((b) => (
-        <section key={b.board} className={styles.board} aria-label={`이번 주 ${BOARD_NAME[b.board]} 레이스`}>
-          <h3 className={styles.title}>
-            <span className={styles.badge} data-board={b.board}>
-              {CHAMP_TITLE[b.board]}
-            </span>
-            {BOARD_NAME[b.board]}
-          </h3>
-          {b.top.length === 0 ? (
-            <p className={styles.none}>아직 기록이 없어요. 지금 1위가 될 기회!</p>
-          ) : (
-            <ol className={styles.podium}>
-              {[b.top[1], b.top[0], b.top[2]].map((r, i) => (r ? <Step key={r.rank} row={r} board={b.board} place={[2, 1, 3][i]} /> : <li key={`e${i}`} className={styles.blank} aria-hidden="true" />))}
-            </ol>
-          )}
-          <p className={styles.mine}>
-            {race.staff
-              ? "운영자는 순위에 들지 않아요."
-              : !b.mine
-                ? "내 기록이 아직 없어요."
-                : b.mine.rank === 1
-                  ? `지금 내가 1위! (${valueText(b.board, b.mine.value)}) 월요일까지 지키면 보상`
-                  : `내 순위 ${b.mine.rank}위 · ${valueText(b.board, b.mine.value)} · 1위까지 ${valueText(b.board, b.mine.gap)}`}
-          </p>
-        </section>
-      ))}
-      {champ && champ.last.length > 0 && (
-        <section className={styles.board} aria-label="지난주 1위">
-          <h3 className={styles.title}>지난주 1위 · {weekLabel(champ.week)}</h3>
-          <ul className={styles.last}>
-            {champ.last.map((w) => (
-              <li key={w.board} className={styles.lastRow} data-me={w.me === true}>
-                <Avatar a={w.avatar} label={w.name} scale={1} />
-                <span className={styles.lastText}>
-                  <span className={styles.badge} data-board={w.board}>
-                    {CHAMP_TITLE[w.board]}
-                  </span>
-                  <b>{w.name}</b>
-                  <span className={styles.value}>
-                    {w.sub ? `${w.sub} ` : ""}
-                    {valueText(w.board, w.value)}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {champ && (
-        <section className={styles.board} aria-label="명예의 전당">
-          <h3 className={styles.title}>명예의 전당</h3>
-          {champ.hall.length === 0 ? (
-            <p className={styles.none}>첫 주간 1위는 월요일 0시에 정해져요.</p>
-          ) : (
-            <ol className={styles.hall}>
-              {champ.hall.map((h) => (
-                <li key={h.week} className={styles.hallRow}>
-                  <span className={styles.hallWeek}>{weekLabel(h.week)}</span>
-                  <span className={styles.hallWinners}>
-                    {h.winners.length === 0
-                      ? "1위 없음"
-                      : h.winners.map((w) => (
-                          <span key={w.board} className={styles.hallOne}>
-                            <span className={styles.badge} data-board={w.board}>
-                              {CHAMP_TITLE[w.board]}
-                            </span>
-                            {w.name}
-                          </span>
-                        ))}
+      {/* 시상대 3개: 넓은 창은 가로로 나란히, 좁은 창은 세로로 */}
+      <div className={styles.boards}>
+        {race.boards.map((b) => (
+          <section key={b.board} className={styles.board} aria-label={`이번 주 ${BOARD_NAME[b.board]} 레이스`}>
+            <h3 className={styles.title}>
+              <span className={styles.badge} data-board={b.board}>
+                {CHAMP_TITLE[b.board]}
+              </span>
+              {BOARD_NAME[b.board]}
+            </h3>
+            {b.top.length === 0 ? (
+              <p className={styles.none}>아직 기록이 없어요. 지금 1위가 될 기회!</p>
+            ) : (
+              <ol className={styles.podium}>
+                {[b.top[1], b.top[0], b.top[2]].map((r, i) => (r ? <Step key={r.rank} row={r} board={b.board} place={[2, 1, 3][i]} /> : <li key={`e${i}`} className={styles.blank} aria-hidden="true" />))}
+              </ol>
+            )}
+            <p className={styles.mine}>
+              {race.staff
+                ? "운영자는 순위에 들지 않아요."
+                : !b.mine
+                  ? "내 기록이 아직 없어요."
+                  : b.mine.rank === 1
+                    ? `지금 내가 1위! (${valueText(b.board, b.mine.value)}) 월요일까지 지키면 보상`
+                    : `내 순위 ${b.mine.rank}위 · ${valueText(b.board, b.mine.value)} · 1위까지 ${valueText(b.board, b.mine.gap)}`}
+            </p>
+          </section>
+        ))}
+      </div>
+      {/* 지난주 1위 · 명예의 전당: 넓은 창은 두 칸, 좁은 창은 세로로 */}
+      <div className={styles.bottom}>
+        {champ && champ.last.length > 0 && (
+          <section className={styles.board} aria-label="지난주 1위">
+            <h3 className={styles.title}>지난주 1위 · {weekLabel(champ.week)}</h3>
+            <ul className={styles.last}>
+              {champ.last.map((w) => (
+                <li key={w.board} className={styles.lastRow} data-me={w.me === true}>
+                  <Avatar a={w.avatar} label={w.name} scale={1} />
+                  <span className={styles.lastText}>
+                    <span className={styles.badge} data-board={w.board}>
+                      {CHAMP_TITLE[w.board]}
+                    </span>
+                    <b>{w.name}</b>
+                    <span className={styles.value}>
+                      {w.sub ? `${w.sub} ` : ""}
+                      {valueText(w.board, w.value)}
+                    </span>
                   </span>
                 </li>
               ))}
-            </ol>
-          )}
-        </section>
-      )}
+            </ul>
+          </section>
+        )}
+        {champ && (
+          <section className={styles.board} aria-label="명예의 전당">
+            <h3 className={styles.title}>명예의 전당</h3>
+            {champ.hall.length === 0 ? (
+              <p className={styles.none}>첫 주간 1위는 월요일 0시에 정해져요.</p>
+            ) : (
+              <ol className={styles.hall}>
+                {champ.hall.map((h) => (
+                  <li key={h.week} className={styles.hallRow}>
+                    <span className={styles.hallWeek}>{weekLabel(h.week)}</span>
+                    <span className={styles.hallWinners}>
+                      {h.winners.length === 0
+                        ? "1위 없음"
+                        : h.winners.map((w) => (
+                            <span key={w.board} className={styles.hallOne}>
+                              <span className={styles.badge} data-board={w.board}>
+                                {CHAMP_TITLE[w.board]}
+                              </span>
+                              {w.name}
+                            </span>
+                          ))}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        )}
+      </div>
     </div>
   );
 }

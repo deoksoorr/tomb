@@ -148,6 +148,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 위쪽 줄 [레이스]: 가운데 채널 칸과 겹치지 않을 만큼 넓은 화면에서만 (좁으면 [메뉴] 시트에 있다) */
+.topButton.raceTop {
+  display: none;
+}
+
+@media (min-width: 1140px) {
+  .topButton.raceTop {
+    display: inline-flex;
+  }
+}
+
 /* 아래쪽 안내 줄: [묘비 세우기]·[내 캐릭터로] 위, 화면 가운데(내 캐릭터)보다는 아래 */
 .bottomCenter {
   position: absolute;

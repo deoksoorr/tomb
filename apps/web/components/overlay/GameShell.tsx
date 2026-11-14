@@ -31,6 +31,7 @@ import StayBonus from "./StayBonus";
 import NoticesDialog from "../notice/NoticesDialog";
 import RankingList from "../grave/RankingList";
 import RankingPanel from "../grave/RankingPanel";
+import WeeklyRace from "../grave/WeeklyRace";
 import ShopDialog from "../shop/ShopDialog";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -154,6 +155,7 @@ type Panel =
   | "notices"
   | "menu"
   | "ranking"
+  | "race"
   | "fireworks"
   | "shrine"
   | "hunt"
@@ -522,6 +524,12 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                     <span className="visually-hidden"> 내 정보</span>
                   </span>
                 </button>
+                {/* 주간 랭킹 1위 레이스 (시상대·마감·내 순위·명예의 전당): 랭킹 옆 따로.
+                    위쪽 줄이 가운데 채널 칸과 겹칠 만큼 좁은 화면에선 숨기고 [메뉴] 시트의 「이번 주 레이스」로 연다 */}
+                <button type="button" className={cx(ui.button, ui.top, styles.topButton, styles.raceTop)} onClick={() => setPanel("race")} title="이번 주 레이스">
+                  <PixelIcon name="trophy" />
+                  레이스
+                </button>
                 <RankingPanel graves={graves.graves} onPick={lookAtGrave} />
               </div>
             </>
@@ -698,6 +706,11 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         <Dialog title="랭킹" onClose={closePanel}>
           <RankingList graves={graves.graves} onPick={lookAtGrave} />
           <RankingGuide />
+        </Dialog>
+      )}
+      {panel === "race" && (
+        <Dialog title="이번 주 레이스" onClose={closePanel} fitHeight>
+          <WeeklyRace />
         </Dialog>
       )}
       {panel === "fireworks" && <FireworkDialog onClose={closePanel} onOpenShop={() => setPanel("shop")} />}

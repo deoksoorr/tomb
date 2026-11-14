@@ -237,3 +237,19 @@
   gap: 4px;
   min-width: 0;
 }
+
+/* 시상대 3개: 넓은 창(데스크톱 표준 창)은 가로로 나란히, 좁은 창은 한 줄에 하나 */
+.boards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+
+/* 지난주 1위 · 명예의 전당 */
+.bottom {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+  align-items: start;
+}

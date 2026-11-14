@@ -19,6 +19,7 @@ export type MenuTarget =
   | "housing"
   | "fireworks"
   | "ranking"
+  | "race"
   | "notices"
   | "activity"
   | "say"
@@ -120,6 +121,7 @@ export default function MenuSheet({
           },
         ]),
     { target: "activity", icon: "heart", label: "내 소식", desc: "헌화·방명록·좋아요 소식", badge: activityUnread ? String(activityUnread) : undefined },
+    { target: "race", icon: "trophy", label: "이번 주 레이스", desc: "주간 1위 다툼 · 마감까지 남은 시간" },
     { target: "ranking", icon: "list", label: "랭킹", desc: "포인트·사냥·집·헌화 순위" },
     { target: "notices", icon: "bell", label: "공지", desc: unreadNotice ? "새 공지가 있어요" : "업데이트·점검 소식", dot: unreadNotice },
     { target: "me", icon: "user", label: "내 정보", desc: "닉네임·개인 코드·내 집", badge: points !== null ? `${points.toLocaleString("ko-KR")}P` : undefined },
