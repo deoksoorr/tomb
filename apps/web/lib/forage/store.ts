@@ -54,6 +54,8 @@ export interface ForageStore {
   snapshot(acct: string, day: string, window: number): Promise<Snapshot>;
   /** 남의 도감 구경용 (가방·오늘 기록 없이) */
   dex(acct: string): Promise<{ dex: Record<string, DexEntry>; claims: Record<string, string>; pay: DexPay }>;
+  /** 도감 기록만 (입장 배지용 — 보상·지급 기록은 읽지 않는다, 명령 1개) */
+  dexEntries(acct: string): Promise<Record<string, DexEntry>>;
   /** 시간당 시작 수를 세고(한도면 false) 진행 기록을 남긴다 (이전 진행은 버려진다) */
   begin(acct: string, nonce: string, payload: string, ttlSec: number, hour: string, perHour: number): Promise<boolean>;
   /** 끝내기: 처음 내는 티켓이고 지금 진행 중인 기록이어야 ok (기록을 지우고 돌려준다) */
@@ -224,6 +226,10 @@ export class MemoryForageStore implements ForageStore {
   async dex(acct: string) {
     const a = this.acct(acct);
     return { dex: dexFromHash(Object.fromEntries(a.dex)), claims: Object.fromEntries(a.claims), pay: payFromHash(Object.fromEntries(a.pay)) };
+  }
+
+  async dexEntries(acct: string) {
+    return dexFromHash(Object.fromEntries(this.acct(acct).dex));
   }
 
   async begin(acct: string, nonce: string, payload: string, ttlSec: number, hour: string, perHour: number) {
@@ -682,6 +688,10 @@ export class RedisForageStore implements ForageStore {
   async dex(acct: string) {
     const [dex, claims, pay] = await Promise.all([this.redis.hgetall(lk.dex(acct)), this.redis.hgetall(lk.claims(acct)), this.redis.hgetall(lk.pay(acct))]);
     return { dex: dexFromHash(hashOf(dex)), claims: hashOf(claims), pay: payFromHash(hashOf(pay)) };
+  }
+
+  async dexEntries(acct: string) {
+    return dexFromHash(hashOf(await this.redis.hgetall(lk.dex(acct))));
   }
 
   async begin(acct: string, nonce: string, payload: string, ttlSec: number, hour: string, perHour: number) {

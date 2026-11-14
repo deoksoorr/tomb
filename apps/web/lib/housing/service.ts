@@ -25,7 +25,7 @@ import {
 import { designCounts, designScore, validateExterior, validateLayout } from "./layout";
 import { waterWait, watered, type PlantsResponse } from "./plants";
 import { liveStates, stateTarget, type HouseStatesResponse } from "./states";
-import { myPoints, refundAndThrow, rewardLike, spend, refund } from "./points";
+import { myBrief, refundAndThrow, rewardLike, spend, refund } from "./points";
 import { MemoryHouseStore, type HouseRecord, type HouseStore } from "./store";
 import { RedisHouseStore } from "./store-redis";
 import type { GuestEntryView, HouseExterior, HouseLayout, HouseSummary, MyHouseResponse, PublicHouse, VillageResponse } from "./types";
@@ -90,7 +90,8 @@ export async function findVisibleHouse(store: HouseStore, id: string): Promise<H
 
 export async function myHouse(store: HouseStore, accountId: string, me?: Me): Promise<MyHouseResponse> {
   const id = houseIdFor(accountId);
-  const [h0, inventory, m, staffId] = await Promise.all([store.get(id), store.inventory(id), me ?? myPoints(accountId), staffAccountId()]);
+  // 잔액만 쓰므로 계정 전체를 읽지 않는다 (myBrief = HMGET 1개)
+  const [h0, inventory, m, staffId] = await Promise.all([store.get(id), store.inventory(id), me ?? myBrief(accountId), staffAccountId()]);
   // 마을이 생기기 전에 분양받은 집은 처음 열 때 번지를 받는다
   const h = h0 && !h0.lot && (await store.assignLot(id)) ? await store.get(id) : h0;
   return { house: h ? toPublicHouse(h, staffId) : null, inventory, points: m.points };
@@ -146,12 +147,22 @@ export async function buyPlot(
   return myHouse(store, accountId);
 }
 
+// 옛 집 번지 보충(전체 목록 읽기 = 집 수만큼 명령)을 이미 해 본 저장소. 인스턴스마다 처음 한 번만 한다
+//  (지금 분양은 늘 번지를 받고, 번지 없는 옛 집도 주인이 내 집을 열면 myHouse가 번지를 준다 → 매 요청 훑을 필요가 없다)
+const legacyFilled = new WeakSet<HouseStore>();
+
+/** 시험용: 옛 집 번지 보충을 다시 하게 한다 */
+export function resetLegacyLotFill(store: HouseStore) {
+  legacyFilled.delete(store);
+}
+
 /** 한 채널의 분양 마을: 그 채널에 번지가 있는 집들의 외관·문패 (숨긴 집은 자리만) */
 export async function village(store: HouseStore, ch: number = LEGACY_HOUSING_CHANNEL, now = Date.now()): Promise<VillageResponse> {
   if (!isHousingChannel(ch)) throw badChannel();
   let all = await store.village(ch);
-  // 마을이 생기기 전에 분양받은 집(번지·채널 없음 → 1채널)은 1채널 마을을 열 때 빈 번지를 받는다 (한 번만 일어난다)
-  if (ch === LEGACY_HOUSING_CHANNEL) {
+  // 마을이 생기기 전에 분양받은 집(번지·채널 없음 → 1채널)은 1채널 마을을 열 때 빈 번지를 받는다 (인스턴스마다 처음 한 번만 훑는다)
+  if (ch === LEGACY_HOUSING_CHANNEL && !legacyFilled.has(store)) {
+    legacyFilled.add(store);
     const missing = (await store.listAll()).filter((h) => !h.lot);
     if (missing.length) {
       for (const h of missing) await store.assignLot(h.id);

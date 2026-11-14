@@ -76,8 +76,9 @@ export async function sendGift(input: GiftSendInput, now = Date.now()): Promise<
 /** 계정이 처음 들어온 시각 (없으면 지금으로 남긴다 → 새 계정은 이미 보낸 전체 선물을 받지 못한다) */
 export async function giftAccountCreatedAt(visitorId: string, now: number): Promise<number> {
   const accounts = getAccounts();
-  const a = await accounts.get(visitorId, kstDay(now), now);
-  if (a.createdAt > 0) return a.createdAt;
+  // 가입 시각 한 필드만 (HMGET 1개). 계정 전체(get = 명령 9개)를 읽지 않는다
+  const [a] = await accounts.summaries([visitorId]);
+  if (a && a.createdAt > 0) return a.createdAt;
   await accounts.enter(visitorId, {}, now);
   return (await accounts.get(visitorId, kstDay(now), now)).createdAt;
 }

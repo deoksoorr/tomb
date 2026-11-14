@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
-import { DIR, isAvatarBody, JUMP_MS, STATE, staffPublicName, type DirId, type Seat, type StateName } from "@tomb/protocol";
+import { DIR, isAvatarBody, JUMP_MS, STATE, staffPublicName, titleOfLook, type DirId, type Seat, type StateName } from "@tomb/protocol";
+import { titlePerk } from "@/lib/titles";
 import { canJump, jumpHeight, shadowScale } from "../logic/jump";
 import { emptyMove, faceToward, resolveMove, type MoveInput } from "../logic/movement";
 import { standPoint } from "../logic/sit";
@@ -74,6 +75,13 @@ export class Player {
   boatSeatId: string | null = null;
   /** 동물원 타는 펫에 올라타 걸을 때의 속도 배율 (타지 않으면 1 — 씬의 zoo/Riding이 정한다, 물속에서는 쓰지 않는다) */
   rideMul = 1;
+  /**
+   * 단 칭호의 마을 이동 속도 (lib/titles TITLE_PERKS). 마을(WorldScene)만 켠다 — 상점·집·분양 마을 안은 그대로,
+   * 물속·놀이기구·배는 원래 속도 (서버 속도 검증 안: 전설 1.07 × 타는 펫 1.35 < 1.5)
+   */
+  titleSpeed = false;
+  private titleLook: readonly string[] | null = null;
+  private titleMul = 1;
   /** 트램펄린에서 내리려는 방향(입력 벡터)과 누른 시각. 씬이 매트에 닿는 순간 hopOff를 부른다 (F14) */
   offWish: { ax: number; ay: number; at: number } | null = null;
   /** 놀이기구 2: 관람차가 돌거나 열기구가 떠 있는 동안 — 이동·점프로 내려오지 않는다 (내리기는 SkyRides가 정한다) */
@@ -260,7 +268,11 @@ export class Player {
     }
     const wet = this.water?.(this.x, this.y) ?? false;
     if (!wet) this.diving = false;
-    const mul = wet ? (this.diving ? DIVE_SPEED : SWIM_SPEED) : this.rideMul;
+    if (this.titleSpeed && this.view.wearing !== this.titleLook) {
+      this.titleLook = this.view.wearing;
+      this.titleMul = titlePerk(titleOfLook(this.titleLook)).speed;
+    }
+    const mul = wet ? (this.diving ? DIVE_SPEED : SWIM_SPEED) : this.rideMul * (this.titleSpeed ? this.titleMul : 1);
     // 강물에 떠내려가는 만큼 (가만히 있어도 흘러간다)
     const cur = wet && this.current ? this.current(this.x, this.y) : null;
     const cvx = cur ? cur.vx : 0;

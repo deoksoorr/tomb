@@ -6,9 +6,10 @@ import { ATTEND_STAY_MINUTES, ATTEND_STAY_TEXT } from "@/lib/attendStay";
 import { giftsStore, useGifts } from "@/lib/hooks/useGifts";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
+import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
 
-/** 선물함을 다시 확인하는 간격 */
-const GIFT_POLL_MS = 5 * 60_000;
+/** 선물함을 다시 확인하는 간격 (새 선물은 실시간 서버의 me:stale로 바로 온다 → 맞추기용이라 30분, 숨긴 탭은 묻지 않는다) */
+const GIFT_POLL_MS = 30 * 60_000;
 
 /**
  * 10·11번 알림: 출석 도장을 받을 수 있게 됐는지(그날 정해진 시간 머묾, 머무르기 응답의 me로 갱신)와 안 받은 선물 수.
@@ -21,20 +22,46 @@ export function useSocial(ready: boolean): { calendarReady: boolean; giftCount: 
 
   useEffect(() => {
     if (!ready) return;
-    void giftsStore.refresh();
-    const t = setInterval(() => void giftsStore.refresh(), GIFT_POLL_MS);
-    return () => clearInterval(t);
+    let giftsAt = 0;
+    const refreshGifts = () => {
+      giftsAt = Date.now();
+      void giftsStore.refresh();
+    };
+    refreshGifts();
+    const t = setInterval(() => {
+      if (!tabHidden()) refreshGifts();
+    }, GIFT_POLL_MS);
+    // 돌아오면 마지막으로 본 지 주기만큼 지났을 때만 (흩어서)
+    const off = onVisibleAgain(() => {
+      if (Date.now() - giftsAt >= GIFT_POLL_MS) refreshGifts();
+    });
+    return () => {
+      clearInterval(t);
+      off();
+    };
   }, [ready]);
 
-  // 관리자 포인트 지급·선물 등 서버에서 내 계정이 바뀌면 실시간 서버가 알려 준다 → 바로 다시 받는다
-  useEffect(
-    () =>
-      bridge.on("me:stale", () => {
-        void meStore.refresh();
-        void giftsStore.refresh();
-      }),
-    [],
-  );
+  // 관리자 포인트 지급·선물 등 서버에서 내 계정이 바뀌면 실시간 서버가 알려 준다 → 바로 다시 받는다.
+  // 숨긴 탭이면 돌아올 때 한 번만 (숨긴 동안 여러 번 와도)
+  useEffect(() => {
+    let dirty = false;
+    const pull = () => {
+      dirty = false;
+      void meStore.refresh();
+      void giftsStore.refresh();
+    };
+    const offStale = bridge.on("me:stale", () => {
+      if (tabHidden()) dirty = true;
+      else pull();
+    });
+    const offVisible = onVisibleAgain(() => {
+      if (dirty) pull();
+    });
+    return () => {
+      offStale();
+      offVisible();
+    };
+  }, []);
 
   const wasReady = useRef(false);
   useEffect(() => {

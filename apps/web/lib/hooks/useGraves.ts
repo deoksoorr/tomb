@@ -6,9 +6,11 @@ import { api, ApiRequestError } from "@/lib/api";
 import { gravesCacheKey, readItem, writeItem } from "@/lib/storage";
 import type { GraveDetailResponse, GraveListResponse, PublicGrave } from "@/lib/types";
 import { GraveEventGate, isActionableGraveEvent } from "./graveEventGate";
+import { onVisibleAgain, tabHidden } from "./visibleAgain";
 import { mergeGraves, pruneOverrides, type Overrides } from "./graveMerge";
 
-const LIST_POLL_MS = 30_000;
+// 묘비 변경은 실시간 신호(net:graveEvent)로 바로 온다 → 목록 주기 조회는 맞추기용이라 2분 (Redis 명령 절약)
+const LIST_POLL_MS = 2 * 60_000;
 
 export type GravesSnapshot = {
   /** 이 목록의 채널 (채널마다 묘지가 따로다) */
@@ -158,7 +160,8 @@ export function parseCachedList(raw: string | null): GraveListResponse | null {
 }
 
 /**
- * 지금 채널의 목록: 저장해 둔 목록을 바로 깔고 → 미리 받아 둔(또는 새로 받은) 최신 목록으로 바꾸고 → 30초마다 갱신.
+ * 지금 채널의 목록: 저장해 둔 목록을 바로 깔고 → 미리 받아 둔(또는 새로 받은) 최신 목록으로 바꾸고 → 2분마다 갱신.
+ * 숨긴 탭은 받지 않고, 돌아오면 마지막으로 받은 지 2분이 넘었을 때만 (흩어서) 한 번 받는다.
  * 채널이 바뀌면 즉시 그 채널 목록으로 다시 시작한다. 같은 채널의 묘비 변경(net:graveEvent)은 상세를 받아 바로 반영한다.
  */
 export function useGraves(channel: number): GravesState {
@@ -171,7 +174,9 @@ export function useGraves(channel: number): GravesState {
     if (cached) cache.setList(cached);
 
     let ctrl: AbortController | null = null;
+    let loadedAt = 0;
     const apply = (list: GraveListResponse) => {
+      loadedAt = Date.now();
       cache.setList(list);
       writeItem(gravesCacheKey(channel), JSON.stringify(list));
     };
@@ -186,18 +191,17 @@ export function useGraves(channel: number): GravesState {
         // 다음 주기에 다시 받는다
       }
     };
-    const onVisibility = () => {
-      if (!document.hidden) void load();
-    };
     const early = takePrefetched(channel);
     if (early) void early.then(apply, load);
     else void load();
     const timer = setInterval(load, LIST_POLL_MS);
-    document.addEventListener("visibilitychange", onVisibility);
+    const offVisible = onVisibleAgain(() => {
+      if (Date.now() - loadedAt >= LIST_POLL_MS) void load();
+    });
     return () => {
       ctrl?.abort();
       clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisibility);
+      offVisible();
     };
   }, [cache, channel]);
 
@@ -224,14 +228,31 @@ export function useGraves(channel: number): GravesState {
         Math.max(0, at - Date.now()),
       );
     };
+    // 숨긴 탭은 상세를 받지 않고 모아 뒀다가 돌아오면 한 번에 (많으면 앞의 몇 개만 — 나머지는 다음 목록 갱신이 맞춘다)
+    const hiddenIds = new Set<string>();
+    const HIDDEN_KEEP = 12;
     const off = bridge.on("net:graveEvent", ({ kind, graveId }) => {
       if (!isActionableGraveEvent(kind, graveId, cache.getSnapshot().byId.has(graveId))) return;
+      if (tabHidden()) {
+        if (hiddenIds.size < HIDDEN_KEEP) hiddenIds.add(graveId);
+        return;
+      }
       const decision = gate.offer(graveId, Date.now());
       if (decision === "now") refresh(graveId);
       else if (decision === "later") schedule();
     });
+    const offVisible = onVisibleAgain(() => {
+      const ids = [...hiddenIds];
+      hiddenIds.clear();
+      for (const id of ids) {
+        const decision = gate.offer(id, Date.now());
+        if (decision === "now") refresh(id);
+        else if (decision === "later") schedule();
+      }
+    });
     return () => {
       off();
+      offVisible();
       if (timer) clearTimeout(timer);
     };
   }, [cache]);

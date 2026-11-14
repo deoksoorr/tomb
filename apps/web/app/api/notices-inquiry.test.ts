@@ -55,7 +55,7 @@ describe("공지사항", () => {
     const pinned = await bodyOf<{ notice: Notice }>(create({ title: "고정", body: "c", pinned: true }));
 
     const res = await notices.GET(call("/api/notices"));
-    expect(res.headers.get("vercel-cdn-cache-control")).toBe("max-age=5, stale-while-revalidate=25");
+    expect(res.headers.get("vercel-cdn-cache-control")).toBe("max-age=60, stale-while-revalidate=300");
     expect(res.headers.get("cache-control")).toBe("no-store");
     const ids = ((await res.json()) as NoticeListResponse).notices.map((n) => n.id);
     expect(ids.slice(0, 3)).toEqual([pinned.notice.id, second.notice.id, first.notice.id]);

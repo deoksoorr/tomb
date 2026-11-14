@@ -17,7 +17,7 @@ import { CHAMP_NOTICE_ACCOUNT } from "@/lib/weeklyChamp";
 
 /**
  * 23번 확성기 최근 기록 `?channel=N`: 그 채널에서 외친 것 + 모든 채널 확성기 (관리자가 숨긴 것 빼고, 오래된 것 먼저 최대 20개).
- * 누구나 같은 내용을 보므로 CDN에 10초 캐시한다 (숨김 처리도 그 안에 반영된다)
+ * 누구나 같은 내용을 보므로 CDN에 30초 캐시한다 (숨김 처리도 그 안에 반영된다. 새 방송은 실시간으로 온다)
  */
 export const GET = handler(async (req) => {
   const ch = Number(req.nextUrl.searchParams.get("channel") ?? 1);
@@ -36,7 +36,7 @@ export const GET = handler(async (req) => {
     });
   return json<MegaphoneListResponse>(
     { entries },
-    { headers: { "cache-control": "no-store", "vercel-cdn-cache-control": "s-maxage=10, stale-while-revalidate=30" } },
+    { headers: { "cache-control": "no-store", "vercel-cdn-cache-control": "s-maxage=30, stale-while-revalidate=120" } },
   );
 });
 

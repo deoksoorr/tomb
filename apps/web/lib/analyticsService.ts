@@ -65,6 +65,8 @@ export async function recordHit(req: NextRequest, body: HitBody, cookie: string,
 
 /** 동시 접속 표본 간격 (cron 없이: 머무르기·방문 요청이 올 때 이 간격에 한 번만 로비를 본다) */
 export const SAMPLE_GAP_MS = 60_000;
+/** 이 인스턴스가 다음에 표본 잠금을 시도해 볼 시각 */
+let nextSampleTry = 0;
 
 /**
  * 지금 동시 접속(실시간 서버 로비 total)을 그 시간대 최고값으로 남긴다. force가 아니면 SAMPLE_GAP_MS에 한 번만.
@@ -72,6 +74,11 @@ export const SAMPLE_GAP_MS = 60_000;
  */
 export async function sampleConcurrency(force = false, now = Date.now(), total?: number, timeoutMs = 2500): Promise<number | null> {
   const store = getAnalytics();
+  if (!force) {
+    // 이 인스턴스가 간격 안에 이미 시도했으면 Redis 잠금(SET NX)도 묻지 않는다 (요청마다 명령 1개씩 아끼기)
+    if (now < nextSampleTry) return null;
+    nextSampleTry = now + SAMPLE_GAP_MS;
+  }
   if (!force && !(await store.lockSample(SAMPLE_GAP_MS, now))) return null;
   const n = total ?? (await fetchLobbyServer(timeoutMs))?.total;
   if (typeof n !== "number") return null;

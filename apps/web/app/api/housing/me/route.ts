@@ -4,7 +4,7 @@ import { buyPlot, editProfile, getHouseStore, myHouse } from "@/lib/housing/serv
 import type { MyHouseResponse } from "@/lib/housing/types";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
-import { myPoints } from "@/lib/housing/points";
+import { myBrief } from "@/lib/housing/points";
 import { readBody } from "@/lib/validate";
 
 /** 내 집 + 가진 물건 + 포인트 (방문자별이라 캐시하지 않는다) */
@@ -21,7 +21,7 @@ export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   const body = await readBody(req, CreateHouseSchema);
   await rateLimit("shop", req, visitorId);
-  const me = await myPoints(visitorId);
+  const me = await myBrief(visitorId);
   const house = await buyPlot(getHouseStore(), visitorId, body.name, body.intro, me.name ?? "이름 없는 유령", body.lot ?? null, body.ch, body.tier);
   return json<MyHouseResponse>(house, { status: 201 });
 });

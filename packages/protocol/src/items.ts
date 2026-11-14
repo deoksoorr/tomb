@@ -493,6 +493,54 @@ export const TITLE_IDS = [
   "t_house150",
   "t_house400",
   "t_house900",
+  // ── 11/14 단계별 칭호 ──
+  // 주간 1위 누적 횟수
+  "t_champ3",
+  "t_champ10",
+  // 사냥 레벨
+  "t_lv10",
+  "t_lv20",
+  "t_lv30",
+  "t_lv40",
+  "t_lv50",
+  // 사냥 누적 처치 수
+  "t_kill100",
+  "t_kill1k",
+  "t_kill5k",
+  "t_kill20k",
+  // 사냥터 끝까지 깨기 (어려움·지옥)
+  "t_hard",
+  "t_hell",
+  // 낚시 누적 마리 수
+  "t_fishn50",
+  "t_fishn300",
+  "t_fishn1k",
+  "t_fishn3k",
+  // 가장 큰 물고기
+  "t_big50",
+  "t_big100",
+  "t_big150",
+  // 채집 누적 (곤충·약초버섯·광석·발굴품)
+  "t_gath100",
+  "t_gath500",
+  "t_gath2k",
+  "t_gath5k",
+  // 연속 출석
+  "t_att7",
+  "t_att30",
+  "t_att100",
+  "t_att365",
+  // 누적 접속 시간
+  "t_stay1",
+  "t_stay10",
+  "t_stay50",
+  "t_stay100",
+  "t_stay300",
+  // 꾸미기 점수
+  "t_look200",
+  "t_look600",
+  "t_look1500",
+  "t_look3000",
 ] as const;
 export type TitleId = (typeof TITLE_IDS)[number];
 const titleSet = new Set<string>(TITLE_IDS);

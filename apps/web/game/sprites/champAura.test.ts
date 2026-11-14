@@ -143,3 +143,29 @@ describe("타는 펫에 올라탄 오라", () => {
       }
   });
 });
+
+describe("31번 운영자 오라", () => {
+  const run = (champ: number, staff: boolean, n = 60) => {
+    const sim = new CosmeticFxSim();
+    sim.setLook([], "hood", champ, staff);
+    const all: FxCmd[] = [];
+    for (let i = 0; i < n; i++) sim.step(input({ now: 1000 + i * 53 }), all);
+    return all;
+  };
+  it("운영자면 운영자 오라(넋 불빛·검은 연기 띠) — 1위 오라보다 우선, 본인이 끄면(오라 끔만) 없음", () => {
+    const st = run(0, true);
+    expect(st.some((c) => c.art === "soulFlame")).toBe(true);
+    expect(st.some((c) => c.art === "staffSmoke")).toBe(true);
+    // 검은 연기는 늘 몸 뒤 (보통 섞기, 몸을 덮지 않는다)
+    for (const c of st.filter((x) => x.art === "staffSmoke")) {
+      expect(c.layer).toBe("body");
+      expect(c.depth).toBeLessThan(200);
+    }
+    // 3관왕 시험 지급을 받아도 운영자 오라 (무지개 알갱이 없음)
+    const both = run(7, true);
+    expect(both.some((c) => c.art === "tierMote")).toBe(false);
+    expect(both.some((c) => c.art === "staffSmoke")).toBe(true);
+    expect(run(CHAMP_AURA_OFF, true, 10)).toEqual([]);
+    expect(run(0, false, 10)).toEqual([]);
+  });
+});

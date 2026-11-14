@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Grave } from "../types";
 import { MemoryAccounts } from "./accounts-memory";
 import { MemoryStore } from "./memory";
-import { activeGraveOf, DAY_MS, pagePassed, passAtOf, pickPassing, sweepPassing } from "./passing";
+import { activeGraveOf, DAY_MS, pagePassed, PASS_SWEEP_LOCK_MS, passAtOf, pickPassing, resetSweepGate, sweepPassing, sweepPassingIfDue } from "./passing";
 import type { GraveRecord, GraveSettings } from "./types";
 
 const settings: GraveSettings = { passDays: 14, passEpoch: 0 };
@@ -111,16 +111,37 @@ describe("sweepPassing (묘역 정리, 몇 번을 돌려도 같은 결과)", () 
     expect((await store.passedAll()).length).toBe(2);
   });
 
-  it("잠금: force가 아니면 1분에 한 번만 돈다", async () => {
+  it("잠금: force가 아니면 30분에 한 번만 돈다", async () => {
     const { store, accounts } = kit(0);
     await store.put(grave("g", { createdAt: 0 }));
     await store.setPassDays(1);
     expect(await sweepPassing(store, accounts, 0)).toEqual([]); // 아직 기간 전, 잠금을 잡는다
-    expect(await sweepPassing(store, accounts, 30_000)).toEqual([]); // 잠금 중 (1분)
+    expect(await sweepPassing(store, accounts, 30_000)).toEqual([]); // 잠금 중 (30분)
     expect((await sweepPassing(store, accounts, 2 * DAY_MS)).map((p) => p.record.id)).toEqual(["g"]); // 잠금이 풀림
     await store.put(grave("h", { createdAt: 0 }));
     expect(await sweepPassing(store, accounts, 2 * DAY_MS + 1000)).toEqual([]); // 다시 잠금 중
     expect((await sweepPassing(store, accounts, 2 * DAY_MS + 1000, { force: true })).map((p) => p.record.id)).toEqual(["h"]);
+  });
+
+  it("목록 요청용 sweepPassingIfDue: 인스턴스 메모리로 30분 안에는 잠금(Redis)도 묻지 않는다", async () => {
+    resetSweepGate();
+    const { store, accounts } = kit(0);
+    await store.settings(0); // 규칙을 켠 시각 = 0
+    await store.put(grave("g", { createdAt: 0 }));
+    await store.setPassDays(1);
+    let locks = 0;
+    const lockSweep = store.lockSweep.bind(store);
+    store.lockSweep = (ttl, now) => {
+      locks++;
+      return lockSweep(ttl, now);
+    };
+    expect(await sweepPassingIfDue(store, accounts, 2 * DAY_MS)).toHaveLength(1);
+    await store.put(grave("h", { createdAt: 0 }));
+    expect(await sweepPassingIfDue(store, accounts, 2 * DAY_MS + PASS_SWEEP_LOCK_MS - 1)).toEqual([]);
+    expect(locks).toBe(1);
+    expect((await sweepPassingIfDue(store, accounts, 2 * DAY_MS + PASS_SWEEP_LOCK_MS)).map((p) => p.record.id)).toEqual(["h"]);
+    expect(locks).toBe(2);
+    resetSweepGate();
   });
 });
 

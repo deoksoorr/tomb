@@ -26,12 +26,14 @@ const LIMITS = {
   // 사냥 스킬 트리: 한 랭크에 한 번씩 누르므로 (초기화 뒤 다시 찍기 등) 상점보다 넉넉히
   rpgSkill: { visitor: 90, ip: 240, windowSec: MIN, message: "스킬을 너무 빨리 찍고 있어요. 잠시 뒤에 다시 시도해 주세요." },
   inquiry: { visitor: 3, ip: 3, windowSec: DAY, message: "문의는 하루에 3번까지 보낼 수 있어요." },
-  presence: { visitor: 2, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요." },
+  // 주기 호출(머무르기·친구 목록/접속·1위 확인·랭킹·체류 신호)은 메모리 한도(memory: true) — 화면마다 몇 분에 한 번씩
+  // 부르는 읽기·기록이라 Redis 명령을 쓰지 않는다. 함수 인스턴스마다 따로 세지만 도배는 그대로 막는다 (창이 1분 이하인 한도도 모두 메모리, memoryOnly)
+  presence: { visitor: 2, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요.", memory: true },
   // 접속 시간 보너스 받기 (구간은 30분마다라 넉넉해도 된다)
   stayBonus: { visitor: 10, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   room: { visitor: 20, ip: 120, windowSec: MIN, message: "방 입장 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   errors: { visitor: null, ip: 10, windowSec: MIN, message: "오류 보고가 너무 많아요." },
-  rank: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  rank: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
   // 50번 소원 분수: 계정당 하루 1번은 게임 날짜(새벽 5시 경계)로 lib/store/wishDay가 막는다 (운영자도 예외 없이).
   // 여기는 같은 IP에서 계정 여러 개로 던지는 것만 막는다 — 같은 와이파이 여러 명을 생각해 넉넉히
   wish: { visitor: null, ip: 10, windowSec: DAY, message: "이 네트워크에서는 오늘 소원을 더 빌 수 없어요. 내일 다시 와 주세요." },
@@ -40,12 +42,12 @@ const LIMITS = {
   gift: { visitor: 30, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   // 친구: 신청·수락·삭제 / 목록·위치 (접속 알림은 30초 남짓마다 묻는다)
   friend: { visitor: 30, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
-  friendRead: { visitor: 30, ip: 240, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  friendRead: { visitor: 30, ip: 240, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
   // 23번 확성기: 계정마다 간격(MEGAPHONE_COOLDOWN_MS)과 별개로 하루 상한 (도배 방지)
   megaphone: { visitor: 20, ip: 60, windowSec: DAY, message: "확성기는 하루에 20번까지 쓸 수 있어요." },
   // 47번 방문 분석 기록 (방문·체류 신호). 넘치면 조용히 버린다
-  visit: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요." },
-} as const;
+  visit: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요.", memory: true },
+} as const satisfies Record<string, { visitor: number | null; ip: number; windowSec: number; message: string; memory?: true }>;
 
 /** 관리자 키 대입 방지: IP당 분당 실패 10회 */
 const ADMIN_FAILURES = { tokens: 10, windowSec: MIN };
@@ -80,8 +82,15 @@ function upstashLimiter(name: string, { tokens, windowSec }: Rule, conn: { url: 
   };
 }
 
-// ── 메모리 슬라이딩 윈도 (로컬) ──
+// ── 메모리 슬라이딩 윈도 (로컬 · 운영의 주기 호출) ──
 const hits = new Map<string, number[]>();
+/** 운영 인스턴스가 오래 살아도 키가 끝없이 쌓이지 않게: 이만큼 넘으면 1분 넘게 안 쓴 키를 비운다 (하루 창 한도는 메모리로 두지 않는다) */
+const HITS_PRUNE_AT = 20_000;
+
+function pruneHits(now: number) {
+  if (hits.size < HITS_PRUNE_AT) return;
+  for (const [k, ts] of hits) if (!ts.length || ts[ts.length - 1] <= now - 60_000) hits.delete(k);
+}
 
 function memoryLimiter(name: string, { tokens, windowSec }: Rule): Limiter {
   const windowMs = windowSec * 1000;
@@ -92,6 +101,7 @@ function memoryLimiter(name: string, { tokens, windowSec }: Rule): Limiter {
       const r = recent(key, now);
       const success = r.length < tokens;
       if (success) r.push(now);
+      pruneHits(now);
       hits.set(`${name}:${key}`, r);
       return { success, reset: r[0] + windowMs };
     },
@@ -103,10 +113,17 @@ function memoryLimiter(name: string, { tokens, windowSec }: Rule): Limiter {
   };
 }
 
-function limiter(name: string, rule: Rule): Limiter {
-  const conn = env.redis();
+/** memory면 운영에서도 메모리 한도 (주기 호출용, Redis 명령 0) */
+function limiter(name: string, rule: Rule, memory = false): Limiter {
+  const conn = memory ? null : env.redis();
   return conn ? upstashLimiter(name, rule, conn) : memoryLimiter(name, rule);
 }
+
+/**
+ * 운영에서도 메모리 한도로 보는 항목: 표시한 주기 호출 + 창이 1분 이하인 모든 한도 (짧은 창은 인스턴스마다 세도 도배를 막는다).
+ * 하루 창 한도(묘비·사진·신고·문의·확성기·소원)와 관리자 키·개인 코드 실패 한도는 그대로 Redis
+ */
+const memoryOnly = (action: LimitAction) => ("memory" in LIMITS[action] && LIMITS[action].memory === true) || LIMITS[action].windowSec <= MIN;
 
 function tooMany(message: string, reset: number): HttpError {
   const retryAfter = Math.max(1, Math.ceil((reset - Date.now()) / 1000));
@@ -123,8 +140,9 @@ function isOperator(req: NextRequest): boolean {
 export async function rateLimit(action: LimitAction, req: NextRequest, visitorId?: string): Promise<void> {
   if (isOperator(req)) return;
   const { visitor, ip, windowSec, message } = LIMITS[action];
-  const checks = [limiter(`${action}:ip`, { tokens: ip, windowSec }).take(ipHash(req))];
-  if (visitor !== null && visitorId) checks.push(limiter(`${action}:v`, { tokens: visitor, windowSec }).take(visitorId));
+  const mem = memoryOnly(action);
+  const checks = [limiter(`${action}:ip`, { tokens: ip, windowSec }, mem).take(ipHash(req))];
+  if (visitor !== null && visitorId) checks.push(limiter(`${action}:v`, { tokens: visitor, windowSec }, mem).take(visitorId));
   const verdicts = await Promise.all(checks);
   const blocked = verdicts.filter((v) => !v.success);
   if (blocked.length) throw tooMany(message, Math.max(...blocked.map((v) => v.reset)));
@@ -134,8 +152,9 @@ export async function rateLimit(action: LimitAction, req: NextRequest, visitorId
 export async function assertRateLimitOpen(action: LimitAction, req: NextRequest, visitorId: string): Promise<void> {
   if (isOperator(req)) return;
   const { visitor, ip, windowSec, message } = LIMITS[action];
-  const checks = [limiter(`${action}:ip`, { tokens: ip, windowSec }).peek(ipHash(req))];
-  if (visitor !== null) checks.push(limiter(`${action}:v`, { tokens: visitor, windowSec }).peek(visitorId));
+  const mem = memoryOnly(action);
+  const checks = [limiter(`${action}:ip`, { tokens: ip, windowSec }, mem).peek(ipHash(req))];
+  if (visitor !== null) checks.push(limiter(`${action}:v`, { tokens: visitor, windowSec }, mem).peek(visitorId));
   const blocked = (await Promise.all(checks)).filter((v) => !v.success);
   if (blocked.length) throw tooMany(message, Math.max(...blocked.map((v) => v.reset)));
 }

@@ -1,4 +1,4 @@
-import { champAuraOn, champBoards, CHAMP_BOARDS, DIR, premiumBody, type DirId } from "@tomb/protocol";
+import { champAuraOn, CHAMP_AURA_OFF, champBoards, CHAMP_BOARDS, DIR, premiumBody, type DirId } from "@tomb/protocol";
 import { foxSheet, MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountLift, mountSheet, type MountKind } from "./mountArt";
 import { Grid, type Color } from "./pixel";
 
@@ -49,8 +49,12 @@ function wings(fill: Color, lo: Color, edge: Color, line: Color, shape: (i: numb
 
 // ── 주간 랭킹 1위 오라 그림 도우미 ──
 
-/** 테마 수 (금·빨강·파랑, 둘씩 섞은 셋, 무지개) */
-const CHAMP_THEMES = 7;
+/** 테마 수 (금·빨강·파랑, 둘씩 섞은 셋, 무지개, 운영자) */
+const CHAMP_THEMES = 8;
+/** 3관왕 무지개 테마 */
+const RAINBOW_THEME = 6;
+/** 31번 운영자 오라 테마: 푸른 저승 등불빛 + 금빛 테두리 문양 (도깨비불·검은 연기 띠는 입자로) */
+export const STAFF_THEME = 7;
 const RING_W = 36;
 const RING_H = 12;
 const RING_PHASES = 8;
@@ -77,9 +81,14 @@ function hsv(h: number, s: number, v: number): Color {
   return (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255);
 }
 
-/** 테마의 u(0..1) 자리 색: 한 랭킹이면 그 색, 둘이면 반씩 번갈아, 무지개면 색상환 */
+/** 테마의 u(0..1) 자리 색: 한 랭킹이면 그 색, 둘이면 반씩 번갈아, 무지개면 색상환, 운영자면 저승 등불빛에 금빛 문양 마디 */
 function champColor(theme: number, u: number): ChampCol {
-  if (theme === CHAMP_THEMES - 1) {
+  if (theme === STAFF_THEME) {
+    const k = (((u * 8) % 1) + 1) % 1;
+    // 금빛 문양 마디 · 저승 보랏빛 · 등불 푸른빛 (낚시왕의 맑은 파랑과 결이 다르게 보랏빛·금빛을 넉넉히)
+    return k < 0.28 ? { c: 0xffc23a, hi: 0xfff0b0 } : k < 0.68 ? { c: 0x7a4aff, hi: 0xd2b8ff } : { c: 0x48c8ff, hi: 0xd8faff };
+  }
+  if (theme === RAINBOW_THEME) {
     const h = ((u % 1) + 1) % 1;
     return { c: hsv(h, 0.85, 1), hi: hsv(h, 0.35, 1) };
   }
@@ -728,6 +737,16 @@ export const FX_ART = {
       rows(g, f ? ["..y..", ".yy..", ".yoy.", "yoooy", "yorry", "orrro", ".rrr.", "..r.."] : ["...y.", "..yy.", ".yoy.", "yooy.", "yorry", "orrro", ".rrr.", "..r.."], { y: 0xfff0a0, o: 0xffa030, r: 0xe8381e });
     }),
   },
+  /** 운영자 오라 검은 비단 연기 (보랏빛 도는 검정, 반투명) */
+  staffSmoke: {
+    w: 7,
+    h: 4,
+    frames: 2,
+    build: frames(7, 4, 2, (g, f) => {
+      rows(g, f ? ["..dd...", ".dDDdd.", "dDDDDdd", ".ddDd.."] : ["...dd..", ".ddDDd.", "ddDDDDd", "..dDdd."], { d: 0x1a1426, D: 0x3a2a52 });
+      for (let i = 0; i < g.px.length; i++) if (g.px[i] & 255) g.px[i] = (g.px[i] & ~255) | 190;
+    }),
+  },
   /** 물방울 */
   champDrop: {
     w: 3,
@@ -993,11 +1012,12 @@ export class CosmeticFxSim {
   private balOn = false;
 
   /** body = 몸 id (프리미엄 외형 등급 연출을 함께 건다), champ = 주간 랭킹 1위 값 (1위 오라를 함께 건다 — 착용 오라와 자리를 나눠 둘 다 보인다) */
-  setLook(look: readonly string[], body?: string | null, champ?: number): void {
+  setLook(look: readonly string[], body?: string | null, champ?: number, staff?: boolean): void {
     const next = look.filter((id) => id in COSMETIC_FX).map((id) => [id, COSMETIC_FX[id]] as [string, FxSpec]);
     const tier = bodyFx(body);
     if (tier) next.push(["@body", tier]);
-    const theme = champTheme(champ);
+    // 31번 운영자 오라가 우선 (본인이 끄면 champ에 CHAMP_AURA_OFF) — 아니면 주간 1위 오라
+    const theme = staff && !((champ ?? 0) & CHAMP_AURA_OFF) ? STAFF_THEME : champTheme(champ);
     if (theme >= 0) next.push(["@champ", { kind: "aura", motion: "champ", theme, light: true }]);
     const had = new Set(this.specs.map(([id]) => id));
     if (!next.some(([, s]) => s.kind === "pet")) {
@@ -1507,7 +1527,8 @@ function champAura(theme: number, f: FxInput, t: number, out: FxCmd[]): void {
   // 발밑 줄 = 보이는 몸의 발 (점프·매달리기·놀이기구로 뜨면 몸 아래로 따라가고, 물이면 수면)
   const fy = Math.round(f.headY);
   const back = bodyDepth(f) - 0.4;
-  const rainbow = theme === CHAMP_THEMES - 1;
+  const rainbow = theme === RAINBOW_THEME;
+  const staff = theme === STAFF_THEME;
   const calm = f.reduced || !!f.still;
   const pulse = calm ? 0.85 : 0.75 + 0.25 * Math.sin(t / 260);
   // 타는 펫이면 펫과 사람 전체를 감싸게 가로로 넓힌다 (W), 세로는 조금만 (고리가 납작한 타원이라)
@@ -1568,7 +1589,8 @@ function champAura(theme: number, f: FxInput, t: number, out: FxCmd[]): void {
       out.push(cmd("champStreak", theme, Math.round(bx + sx), Math.round(fy - 2 - u * (f.artTop + 20)), { oy: 0, alpha: Math.sin(Math.PI * u), layer: "light", depth: 0 }));
     }
   // ③ 솟구치는 입자
-  const kinds = rainbow ? ["coin", "ember", "drop", "mote"] : THEME_MIX[theme].map((m) => (["coin", "ember", "drop"] as const)[m]);
+  // 운영자: 떠도는 넋 불빛(도깨비불)과 몸 뒤 검은 비단 연기 띠
+  const kinds = staff ? ["soul", "smoke", "soul", "smoke"] : rainbow ? ["coin", "ember", "drop", "mote"] : THEME_MIX[theme].map((m) => (["coin", "ember", "drop"] as const)[m]);
   const n = calm ? 4 : rainbow ? 16 : 13;
   for (let i = 0; i < n && out.length - start < CHAMP_FX_MAX - 2; i++) {
     const kind = kinds[i % kinds.length];
@@ -1581,7 +1603,21 @@ function champAura(theme: number, f: FxInput, t: number, out: FxCmd[]): void {
     const rise = f.artTop + 18;
     let art: FxArtId;
     let frame = 0;
-    if (kind === "drop") {
+    if (kind === "smoke") {
+      // 검은 비단 같은 연기 띠: 몸 뒤에서 천천히 돌며 피어오른다 (보통 섞기, 늘 몸 뒤)
+      const sa = ang + u * 1.8;
+      const sx = bx + Math.cos(sa) * r * 1.1;
+      const sy = fy - 3 - u * rise * 0.7 + Math.sin(sa) * 2;
+      out.push(cmd("staffSmoke", i % 2, Math.round(sx), Math.round(sy), { alpha: 0.9 * Math.sin(Math.PI * u), sx: 1.4 + u * 1.2, sy: 1.2 + u * 0.5, flip: i % 2 === 0, layer: "body", depth: back - 0.015 }));
+      continue;
+    }
+    if (kind === "soul") {
+      // 떠도는 넋 불빛: 천천히 흔들리며 몸 둘레를 돌아 오른다
+      x = bx + Math.cos(ang + u * 2.4) * r + Math.sin(t / 260 + i) * 1.2;
+      y = fy - 2 - u * rise * 0.85 + Math.sin(ang + u * 2.4) * 2;
+      art = "soulFlame";
+      frame = Math.floor(t / 180 + i) % 2;
+    } else if (kind === "drop") {
       // 분수처럼 솟았다가 바깥으로 떨어진다
       x += Math.cos(ang) * u * 6;
       y -= 4 * (rise * 0.75) * u * (1 - u);

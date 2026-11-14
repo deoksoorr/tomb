@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { isNameSlot, isPermanentUntil, isShopListed, ITEMS, permanentPrice, SHOP_KINDS, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { isNameSlot, isPermanentUntil, isShopListed, ITEMS, permanentPrice, SHOP_KINDS, titleOfLook, type ItemDef, type ItemKind } from "@tomb/protocol";
+import { discountedPrice, titlePerk } from "@/lib/titles";
 import { api, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
 import { meStore, useMe } from "@/lib/hooks/useMe";
@@ -67,6 +68,8 @@ export default function ShopDialog({ onClose, avatar }: Props) {
 
   const { color, body } = resolveAvatar(avatar, me, savedColor);
   const staffView = me?.staff === true;
+  /** 단 칭호의 상점 할인 (lib/titles TITLE_PERKS — 서버가 같은 규칙으로 깎는다) */
+  const discount = me ? titlePerk(titleOfLook(me.equipped.map((e) => e.itemId))).discount : 0;
   const all = listed(tab, staffView);
   const items = all.filter((item) => tab !== "cosmetic" || matchesSlot(item.slot, slotFilter));
   const shown = all.find((i) => i.id === (hoverId ?? picked[tab])) ?? all[0];
@@ -100,7 +103,8 @@ export default function ShopDialog({ onClose, avatar }: Props) {
 
 
   function buyButton(item: ItemDef) {
-    const short = me !== null && me.points < item.price;
+    const cost = discountedPrice(item.price, discount);
+    const short = me !== null && me.points < cost;
     const blocked = me ? cosmeticBlock(item, me.inventory, me.equipped, openedAt, me.stash) : null;
     return (
       <button
@@ -108,9 +112,19 @@ export default function ShopDialog({ onClose, avatar }: Props) {
         className={cx(ui.button, ui.primary, styles.buy)}
         onClick={() => buy(item)}
         disabled={!me || short || blocked !== null || pending !== null}
-        aria-label={`${item.name}, ${item.price}포인트에 사기`}
+        aria-label={`${item.name}, ${cost}포인트에 사기${cost < item.price ? ` (칭호 할인, 원래 ${item.price}포인트)` : ""}`}
       >
-        {pending === item.id ? "사는 중…" : blocked ? blocked : `${item.kind === "cosmetic" ? "⏱ 24시간 이용권 · " : ""}${item.price}P${short ? " · 모자라요" : " · 사기"}`}
+        {pending === item.id ? (
+          "사는 중…"
+        ) : blocked ? (
+          blocked
+        ) : (
+          <>
+            {item.kind === "cosmetic" ? "⏱ 24시간 이용권 · " : ""}
+            <Price price={item.price} cost={cost} />
+            {short ? " · 모자라요" : " · 사기"}
+          </>
+        )}
       </button>
     );
   }
@@ -133,8 +147,9 @@ export default function ShopDialog({ onClose, avatar }: Props) {
     item.kind === "cosmetic" && !!me && [...me.equipped, ...(me.stash ?? [])].some((e) => e.itemId === item.id && isPermanentUntil(e.until));
 
   function foreverButton(item: ItemDef) {
-    const price = permanentPrice(item.id);
-    if (price === null) return null;
+    const base = permanentPrice(item.id);
+    if (base === null) return null;
+    const price = discountedPrice(base, discount);
     const short = me !== null && me.points < price;
     const has = forever(item);
     return (
@@ -145,7 +160,18 @@ export default function ShopDialog({ onClose, avatar }: Props) {
         disabled={!me || short || has || pending !== null}
         aria-label={`${item.name}, ${price}포인트에 영구로 사기`}
       >
-        {pending === `${item.id}:perm` ? "사는 중…" : has ? "영구 소유 중" : item.staff ? "운영자 전용 · 받기" : `♾ 영구 소장 · ${price}P${short ? " · 모자라요" : " · 사기"}`}
+        {pending === `${item.id}:perm` ? (
+          "사는 중…"
+        ) : has ? (
+          "영구 소유 중"
+        ) : item.staff ? (
+          "운영자 전용 · 받기"
+        ) : (
+          <>
+            ♾ 영구 소장 · <Price price={base} cost={price} />
+            {short ? " · 모자라요" : " · 사기"}
+          </>
+        )}
       </button>
     );
   }
@@ -276,7 +302,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
                       <span className={styles.tileName}>{item.name}</span>
                       {item.kind === "cosmetic" && <LookScoreBadge itemId={item.id} />}
                       <span className={styles.tilePrice}>
-                        {item.staff ? "운영자" : `${item.price}P`}
+                        {item.staff ? "운영자" : <Price price={item.price} cost={discountedPrice(item.price, discount)} />}
                         {forever(item) ? <span className={styles.badge}>영구</span> : worn(item) ? <span className={styles.badge}>착용</span> : n > 0 || stashed(item) ? <span className={styles.badge}>보유</span> : null}
                       </span>
                     </button>
@@ -294,5 +320,15 @@ export default function ShopDialog({ onClose, avatar }: Props) {
         </p>
       </div>
     </Dialog>
+  );
+}
+
+/** 값 표시: 칭호 할인이 있으면 원가에 줄을 긋고 할인가 */
+function Price({ price, cost }: { price: number; cost: number }) {
+  if (cost >= price) return <>{price}P</>;
+  return (
+    <>
+      <s className={styles.oldPrice}>{price}P</s> {cost}P
+    </>
   );
 }

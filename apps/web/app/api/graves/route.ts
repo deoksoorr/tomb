@@ -5,7 +5,7 @@ import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { newOwnerToken, requireVisitor } from "@/lib/session";
 import { getAccounts, getStore, listPublic, saveGrave, toPublicGrave } from "@/lib/store";
-import { activeGraveOf, sweepPassing } from "@/lib/store/passing";
+import { activeGraveOf, sweepPassingIfDue } from "@/lib/store/passing";
 import { oneGraveMessage } from "@/lib/passText";
 import { kstDay } from "@/lib/store/accounts";
 import { GRAVE_CHANNELS, isGraveChannel } from "@/lib/store/channels";
@@ -15,20 +15,20 @@ import { createGraveSchema, parseWith, readJson } from "@/lib/validate";
 /**
  * `?channel=N`(없으면 1) 그 채널 묘지의 목록 + 카운트 + 그 채널 랭킹. 채널마다 묘지가 따로다.
  * 방문자와 무관한 응답이라 CDN에 캐시한다 (쿠키를 읽지 않는다, 캐시 키는 URL이라 채널별로 따로 쌓인다).
- * 30초 동안은 신선하고, 그 뒤로 하루까지는 CDN이 마지막 목록을 바로 주면서 뒤에서 새로 받아 둔다.
+ * 2분 동안은 신선하고(변경은 실시간 신호로 바로 가므로 길게 둔다), 그 뒤로 하루까지는 CDN이 마지막 목록을 바로 주면서 뒤에서 새로 받아 둔다.
  * → 한동안 아무도 없다가 들어와도 함수 콜드 스타트·Redis 왕복을 기다리지 않는다
- *   (카운트가 잠깐 옛날 값일 수 있지만 클라이언트가 30초마다 다시 받아 맞춘다).
+ *   (카운트가 잠깐 옛날 값일 수 있지만 클라이언트가 2분마다 다시 받아 맞춘다).
  */
 export const GET = handler(async (req) => {
   const raw = req.nextUrl.searchParams.get("channel");
   const channel = raw === null ? 1 : Number(raw);
   if (!isGraveChannel(channel)) throw new HttpError(400, "INVALID_INPUT", `채널은 1~${GRAVE_CHANNELS} 중 하나예요.`);
   const store = getStore();
-  // 성불 정리(기간·묘역 정원·1인 1묘비)는 잠금으로 1분에 한 번만. 실패해도 목록은 준다
-  await sweepPassing(store, getAccounts()).catch((e: unknown) => console.error("[graves] 성불 정리 실패", e));
+  // 성불 정리(기간·묘역 정원·1인 1묘비)는 인스턴스 메모리 + 잠금으로 30분에 한 번만. 실패해도 목록은 준다
+  await sweepPassingIfDue(store, getAccounts()).catch((e: unknown) => console.error("[graves] 성불 정리 실패", e));
   return json<GraveListResponse>(await listPublic(store, channel), {
-    // 엣지만 30초 캐시(뒤에서 갱신). 브라우저는 캐시하지 않는다 — 브라우저도 stale-while-revalidate를 따라 옛 목록을 먼저 보여 줬다
-    headers: { "Vercel-CDN-Cache-Control": "max-age=30, stale-while-revalidate=86400", "Cache-Control": "no-store" },
+    // 엣지만 2분 캐시(뒤에서 갱신). 브라우저는 캐시하지 않는다 — 브라우저도 stale-while-revalidate를 따라 옛 목록을 먼저 보여 줬다
+    headers: { "Vercel-CDN-Cache-Control": "max-age=120, stale-while-revalidate=86400", "Cache-Control": "no-store" },
   });
 });
 

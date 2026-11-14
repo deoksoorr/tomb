@@ -17,7 +17,7 @@ const GHOST = "#e8d9b0";
 const FRAME_MS = 50;
 
 /** 전용 오라 미리보기 (작은 캔버스). bits = 1위 비트 묶음, look = 함께 입힐 꾸미기 */
-export function AuraPreview({ bits, look, label, scale = 1 }: { bits: number; look: readonly string[]; label: string; scale?: number }) {
+export function AuraPreview({ bits, look, label, scale = 1, staff = false }: { bits: number; look: readonly string[]; label: string; scale?: number; /** 31번 운영자 오라 */ staff?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
   const key = look.join(",");
@@ -25,7 +25,7 @@ export function AuraPreview({ bits, look, label, scale = 1 }: { bits: number; lo
     const ctx = ref.current?.getContext("2d");
     if (!ctx) return;
     const stage = new OutfitStage();
-    const l = { color: GHOST, body: "hood", look: key ? key.split(",") : [], champ: bits };
+    const l = { color: GHOST, body: "hood", look: key ? key.split(",") : [], champ: bits, staff };
     const pose = { dir: DIR.down, walking: false };
     if (reduced) {
       stage.draw(ctx, 0, pose, l, true);
@@ -41,7 +41,7 @@ export function AuraPreview({ bits, look, label, scale = 1 }: { bits: number; lo
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [bits, key, reduced]);
+  }, [bits, key, reduced, staff]);
   return <canvas ref={ref} className={styles.auraCanvas} width={STAGE_W} height={STAGE_H} style={scale === 1 ? undefined : { width: STAGE_W * scale, height: STAGE_H * scale }} role="img" aria-label={label} />;
 }
 

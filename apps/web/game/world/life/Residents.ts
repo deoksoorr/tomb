@@ -13,7 +13,7 @@ import { blankResidentPose, restActOf, ResidentSim, seatMoodOf, type RestAct, ty
 // - 위치: residentSim (채널 시드 + 서버 시계) → 같은 채널 모두가 같은 자리. 네트워크·서버 비용 0.
 // - 모습: 사람 아바타 그림(AvatarView)을 그대로 쓰고, 이름표만 연한 초록으로 구분한다. 처음 화면에 들어올 때 만든다.
 // - 말 걸기(E·모바일 상호작용): 머리 위 말풍선은 내 화면에만. 말하는 동안 멈춰 나를 보고, 끝나면 공유 자리로 슬며시 돌아간다.
-// - 관리자 설정(켜기/끄기·주민 수)은 /api/residents를 1~2분마다 확인하고, 바뀌면 흐려지며 나타나거나 사라진다.
+// - 관리자 설정(켜기/끄기·주민 수)은 /api/residents를 10분마다 확인하고, 바뀌면 흐려지며 나타나거나 사라진다.
 
 /** 주민 이름표 색 (사람 이름표보다 연한 초록) */
 export const RESIDENT_LABEL = 0xa8e6a0;
@@ -22,8 +22,8 @@ const TALK_RADIUS = 18;
 const TALK_RADIUS_SEATED = 11;
 const CULL = 40;
 const FADE_MS = 900;
-/** 설정 확인 간격 */
-const POLL_MS = 90_000;
+/** 설정 확인 간격 (Redis 명령을 아끼려고 10분) */
+const POLL_MS = 10 * 60_000;
 
 type ResidentView = {
   sim: ResidentSim;

@@ -31,3 +31,9 @@ export async function rewardLike(ownerId: string, ip: string): Promise<number> {
 export async function myPoints(accountId: string): Promise<Me> {
   return loadMe(getAccounts(), accountId);
 }
+
+/** 잔액·이름만 (계정 전체(loadMe = 명령 10개 남짓)를 읽지 않고 HMGET 1개) */
+export async function myBrief(accountId: string): Promise<{ points: number; name: string | null }> {
+  const [s] = await getAccounts().summaries([accountId]);
+  return { points: s?.points ?? 0, name: s?.name ?? null };
+}

@@ -2,7 +2,7 @@ import { bridge } from "@/game/bridge";
 import { api } from "@/lib/api";
 import type { GraveCache } from "@/lib/hooks/useGraves";
 import { meStore } from "@/lib/hooks/useMe";
-import type { Me } from "@/lib/types";
+import type { LookGrantResponse, Me } from "@/lib/types";
 import { currentLook } from "./items";
 
 // 아이템 사용 → 서버가 소모하고 증서(grant)를 주면 게임에 넘긴다. 실패하면 ApiRequestError를 그대로 던진다.
@@ -64,8 +64,12 @@ export async function decorateGrave(itemId: string, graveId: string, cache: Grav
   }
 }
 
-/** 입장할 때 지금 착용 상태를 게임에 알린다 */
-export async function restoreLook(): Promise<void> {
-  const { look, lookGrant, dye, body, champ } = await api.myLook();
+/** 지금 착용 상태(증서)를 게임에 알린다 */
+export function emitLook({ look, lookGrant, dye, body, champ }: LookGrantResponse): void {
   if (lookGrant) bridge.emit("look:set", { look, lookGrant, dye: dye ?? {}, ...(body ? { body } : {}), champ: champ ?? 0 });
+}
+
+/** 지금 착용 상태를 받아 게임에 알린다 (재접속·1위 값 변경) */
+export async function restoreLook(): Promise<void> {
+  emitLook(await api.myLook());
 }

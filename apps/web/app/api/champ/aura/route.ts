@@ -8,6 +8,7 @@ import { loadMe, lookGrant, lookOf } from "@/lib/store/accounts";
 import { champBitsFor, getChamp } from "@/lib/store/champ";
 import type { WearResponse } from "@/lib/types";
 import { readBody } from "@/lib/validate";
+import { isStaff } from "@/lib/staff";
 
 const AuraSchema = z.object({ on: z.boolean() });
 
@@ -20,7 +21,8 @@ export const POST = handler(async (req) => {
   const { on } = await readBody(req, AuraSchema);
   await rateLimit("shop", req, visitorId);
   const now = Date.now();
-  if (!(await champBitsFor(visitorId, now))) throw new HttpError(409, "NOT_CHAMP", "지금은 전용 오라가 없어요.");
+  // 1위(전용 오라)이거나 31번 운영자(운영자 오라)만 — 같은 끔 설정을 쓴다
+  if (!(await champBitsFor(visitorId, now)) && !(await isStaff(visitorId))) throw new HttpError(409, "NOT_CHAMP", "지금은 전용 오라가 없어요.");
   await getChamp().setAuraOff(visitorId, !on);
   const me = await loadMe(getAccounts(), visitorId, now);
   return json<WearResponse>({ me, lookGrant: await lookGrant(env.joinSecret(), visitorId, lookOf(me), now, me) });

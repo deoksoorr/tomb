@@ -10,11 +10,12 @@ import type { AccountStore, GraveRecord, GraveSettings, GraveStore, PassedRecord
 //  - 묘역(한 채널)에 보이는 묘비가 GRAVEYARD_CAPACITY를 넘으면 가장 오래된 것부터 앞당겨 성불
 //  - 1인 1묘비: 한 계정이 묘역에 여러 개를 갖고 있으면(옛 데이터·동시 세우기) 가장 최근 것만 남기고 성불
 // 정리는 몇 번을 다시 돌려도 결과가 같다 (passOn이 원자적으로 "아직 묘역에 있을 때만" 옮긴다) → 배포 때 한 번 도는
-// 이관 작업 대신 목록 요청에서 조금씩(잠금으로 1분에 한 번) 돈다.
+// 이관 작업 대신 목록 요청에서 조금씩(잠금으로 30분에 한 번, 인스턴스 메모리로도 걸러 Redis 명령을 아낀다) 돈다.
+//  성불이 몇십 분 늦는 건 괜찮다 (Redis 무료 한도를 아끼려고 1분 → 30분)
 
 export const DAY_MS = 86_400_000;
 /** 정리 잠금 (함수 여러 개가 같은 정리를 겹쳐 하지 않게) */
-export const PASS_SWEEP_LOCK_MS = 60_000;
+export const PASS_SWEEP_LOCK_MS = 30 * 60_000;
 
 export const passAtOf = (g: Pick<Grave, "createdAt">, s: GraveSettings) => Math.max(g.createdAt, s.passEpoch) + s.passDays * DAY_MS;
 
@@ -97,6 +98,24 @@ export async function sweepPassing(
   if (!opts.force && !(await store.lockSweep(PASS_SWEEP_LOCK_MS, now))) return [];
   const [settings, all] = await Promise.all([store.settings(now), store.listAll()]);
   return passGraves(store, accounts, pickPassing(all, settings, now), now);
+}
+
+// 이 인스턴스가 다음에 정리(잠금 시도)를 해 볼 시각. 그 전에는 Redis에 묻지도 않는다
+let nextSweepTry = 0;
+
+/**
+ * 목록 요청용: 이 인스턴스에서 PASS_SWEEP_LOCK_MS에 한 번만 잠금을 시도한다 (잠금 실패 SET도 명령 1개라 매 요청마다 묻지 않게).
+ * 다른 인스턴스가 잠금을 쥐고 있으면 그냥 넘어간다
+ */
+export async function sweepPassingIfDue(store: GraveStore, accounts: AccountStore, now = Date.now()): Promise<PassedRecord[]> {
+  if (now < nextSweepTry) return [];
+  nextSweepTry = now + PASS_SWEEP_LOCK_MS;
+  return sweepPassing(store, accounts, now);
+}
+
+/** 시험용: 인스턴스 메모리 간격 초기화 */
+export function resetSweepGate() {
+  nextSweepTry = 0;
 }
 
 /**

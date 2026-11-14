@@ -4,11 +4,11 @@ import { useEffect } from "react";
 
 // 47번 방문 분석 (가벼운 신호 두 가지, 화면에는 아무것도 그리지 않는다):
 //  - 방문: 브라우저 세션(탭)마다 한 번, 처음 연 주소의 경로 모양·리퍼러·utm을 /api/analytics/hit로
-//  - 체류: 화면이 보이던 시간만 모아 숨겨질 때·나갈 때·5분마다 /api/analytics/stay로 (sendBeacon)
+//  - 체류: 화면이 보이던 시간만 모아 숨겨질 때·나갈 때 한 번씩 /api/analytics/stay로 (sendBeacon).
+//    주기 전송은 없다 (Redis 명령 절약 — 숨길 때·나갈 때 모아서 한 번)
 // 관리자 화면은 세지 않는다. 저장소가 막힌 브라우저(사생활 보호 모드)는 페이지마다 한 번 보낸다.
 
 const HIT_KEY = "tomb.visit";
-const FLUSH_EVERY_MS = 5 * 60_000;
 const MIN_STAY_SEC = 3;
 
 function sendHit(): void {
@@ -71,11 +71,9 @@ export default function VisitTracker() {
     };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", flush);
-    const timer = setInterval(flush, FLUSH_EVERY_MS);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", flush);
-      clearInterval(timer);
       flush();
     };
   }, []);

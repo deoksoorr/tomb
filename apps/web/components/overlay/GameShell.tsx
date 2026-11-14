@@ -13,8 +13,9 @@ import { useMyGraves } from "@/lib/hooks/useMyGraves";
 import { useNotices } from "@/lib/hooks/useNotices";
 import { showToast, useToasts } from "@/lib/hooks/useToasts";
 import { readItem, UI_KEYS, writeItem } from "@/lib/storage";
-import { PRESENCE_INTERVAL_MS, type PublicGrave } from "@/lib/types";
-import { restoreLook } from "../account/actions";
+import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
+import { PRESENCE_HIDDEN_INTERVAL_MS, PRESENCE_INTERVAL_MS, type PublicGrave } from "@/lib/types";
+import { emitLook, restoreLook } from "../account/actions";
 import ActivityDialog from "../account/ActivityDialog";
 import BagDialog from "../account/BagDialog";
 import FireworkDialog from "../account/FireworkDialog";
@@ -103,20 +104,25 @@ function useKeyHints(active: boolean) {
   }, [active]);
 }
 
-/** 입장: 내 계정·착용 상태를 불러오고, 월드가 보이면 입장 기록 (10번: 출석 포인트는 출석 달력에서 받는다 → earned는 0) */
+/**
+ * 입장: 내 계정을 불러오고(입장 화면에서 이미 받았으면 그대로), 월드가 보이면 입장 기록 (10번: 출석 포인트는 출석 달력에서 받는다 → earned는 0).
+ * 착용 증서는 입장 기록 응답에 같이 온다 (옛 서버면 GET /api/me/look으로)
+ */
 function useAccountOnEnter(ready: boolean, name: string, color: string, body: string | undefined) {
   useEffect(() => {
-    void meStore.refresh();
-    restoreLook().catch(() => {
-      // 착용 정보가 없으면 기본 모습
-    });
+    if (!meStore.getSnapshot().me) void meStore.refresh();
   }, []);
   useEffect(() => {
     if (!ready) return;
     api
       .attend(name, color, body)
-      .then(({ me, earned }) => {
+      .then(({ me, earned, look }) => {
         meStore.set(me);
+        if (look) emitLook(look);
+        else
+          restoreLook().catch(() => {
+            // 착용 정보가 없으면 기본 모습
+          });
         const points = pointsText(earned);
         if (!points) return;
         const streak = me.attendance.streak > 1 ? ` · ${me.attendance.streak}일 연속` : "";
@@ -128,22 +134,53 @@ function useAccountOnEnter(ready: boolean, name: string, color: string, body: st
   }, [ready, name, color, body]);
 }
 
-/** 머무르기 포인트: 게임 중에는(탭이 숨겨져도) 정해진 간격마다 서버에 알린다 */
+/** 이 화면(페이지)의 머무르기 sid: 같은 화면에서 연달아 온 기록만 서버가 몰아서 센다 (새로고침·다시 열면 바뀐다) */
+const PRESENCE_SID = Math.random().toString(36).slice(2, 12) + Date.now().toString(36).slice(-6);
+
+/**
+ * 머무르기 포인트: 게임 중에는(탭이 숨겨져도) 서버에 알린다.
+ *  - 보이는 동안 10분마다. 숨긴 동안은 30분마다 한 번만 보내고 서버가 같은 화면(sid)이면 흐른 시간만큼 몰아서 센다
+ *  - 돌아오면 마지막으로 보낸 지 10분이 지났을 때 (흩어서) 바로 한 번 → 숨긴 동안의 몫을 한 번에 받는다
+ */
 function usePresencePoints(active: boolean) {
   useEffect(() => {
     if (!active) return;
-    const timer = setInterval(() => {
+    let sentAt = Date.now();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      const every = tabHidden() ? PRESENCE_HIDDEN_INTERVAL_MS : PRESENCE_INTERVAL_MS;
+      timer = setTimeout(send, Math.max(0, sentAt + every - Date.now()));
+    };
+    function send() {
+      sentAt = Date.now();
+      schedule();
       api
-        .presence()
-        .then(({ earned, me }) => {
-          meStore.set(me);
+        .presence(PRESENCE_SID)
+        .then(({ earned, me, tick }) => {
+          if (me) meStore.set(me);
+          else if (tick) meStore.applyPresence(tick);
           if (earned > 0) showToast(`머무른 덕분에 +${earned} 포인트`);
         })
         .catch(() => {
           // 다음 간격에 다시
         });
-    }, PRESENCE_INTERVAL_MS);
-    return () => clearInterval(timer);
+    }
+    schedule();
+    // 숨으면 다음 보내기를 30분 뒤로 미루고, 돌아오면 10분이 지났을 때 바로 (아니면 남은 시간 뒤에)
+    const onHide = () => {
+      if (tabHidden()) schedule();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    const offVisible = onVisibleAgain(() => {
+      if (Date.now() - sentAt >= PRESENCE_INTERVAL_MS) send();
+      else schedule();
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onHide);
+      offVisible();
+    };
   }, [active]);
 }
 
@@ -212,6 +249,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const inShop = scene === "shop";
   // 집·사냥터·미니게임 안에서는 그 화면이 자기 HUD를 그린다. 월드 HUD는 숨기기만 한다(BGM 플레이어는 계속 살아 있게)
   const away = scene === "house" || scene === "hunt" || scene === "minigame";
+  /** 내 집 꾸미기 중 (터치 조작 줄 대신 꾸미기 도구 줄). house:state는 마지막 값을 기억하지 않아 받을 때마다 적어 둔다 */
+  const [editingHouse, setEditingHouse] = useState(false);
+  useBridgeEvent("house:state", (st) => setEditingHouse(st.editing));
+  const houseEditing = editingHouse && scene === "house";
   // 게임이 준비되기 전(접속 중)에 온 토스트도 놓치지 않게 오버레이보다 먼저 구독한다
   const toasts = useToasts();
 
@@ -687,12 +728,23 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}`} hidden={!canRadial} />}
       {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
       {/* 마을·집 안: 월드 바로 가기 줄이 숨으니 [표현] 버튼만 왼쪽 아래에 따로 */}
-      {ready && scene === "house" && (
+      {ready && scene === "house" && !coarse && (
         <div className={styles.roomExpr}>
           <ExprButton className={cx(ui.button, styles.dockButton)} onOpen={() => setSayOpen(true)} onRadial={openRadial}>
             <PixelIcon name="chat" />
             표현
           </ExprButton>
+        </div>
+      )}
+      {/* 집 안(내 집·남의 집) 터치: 월드 HUD는 숨지만 조이스틱·상호작용·점프·앉기·달리기·[표현]·[채팅]은 그대로 (꾸미기 중에는 도구 줄 자리라 숨긴다) */}
+      {ready && scene === "house" && coarse && !houseEditing && (
+        <div className={styles.roomTouch}>
+          <MobileControls
+            onSay={() => setSayOpen(true)}
+            onRadial={openRadial}
+            onChat={() => setChatOpen(true)}
+            chatOpen={chatOpen && !sayOpen}
+          />
         </div>
       )}
       {panel === "menu" && (

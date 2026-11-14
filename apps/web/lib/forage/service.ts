@@ -433,7 +433,7 @@ export async function peerDex(where: { ch: number } | { room: string }, sid: num
 /** 입장 토큰에 넣을 도감 100% 배지 (종류별 비트). 읽지 못하면 0 — 입장 자체를 막지 않는다 */
 export async function dexBadgeOf(acct: string): Promise<number> {
   try {
-    return dexBadgeBits((await getForageStore().dex(acct)).dex);
+    return dexBadgeBits(await getForageStore().dexEntries(acct));
   } catch {
     return 0;
   }

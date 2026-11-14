@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { champBitsOf, champBoards, type ChampBoard } from "@tomb/protocol";
+import { CHAMP_AURA_OFF, champBitsOf, champBoards, type ChampBoard } from "@tomb/protocol";
 import { env } from "../env";
 import { gameWeek, prevWeek, weekEndMs, weekStartMs } from "../gameDay";
 import { testServerEnv } from "../rpg/superHunter";
@@ -213,14 +213,18 @@ export const champUntil = (week: string) => weekStartMs(week) + 14 * DAY_MS + CH
 
 // ── 계정의 지금 1위 값 (입장 토큰·내 정보·착용 증서가 함께 쓴다) ──
 
-/** 지난주 기록을 프로세스 안에 잠깐 들고 있는다 (입장·내 정보마다 저장소를 읽지 않게) */
-const CACHE_MS = 30_000;
+/**
+ * 지난주 기록을 프로세스 안에 들고 있는다 (입장·내 정보마다 저장소를 읽지 않게). 주에 한 번 정해지므로 10분.
+ * 아직 정리 전(기록 없음)은 곧 생기므로 30초만 (월요일 새벽 정리 직후 1위가 늦게 보이지 않게. 정리한 인스턴스는 primeChampCache로 바로)
+ */
+const CACHE_MS = 10 * 60_000;
+const EMPTY_CACHE_MS = 30_000;
 const cache = new Map<string, { at: number; rec: ChampWeek | null }>();
 
 /** 그 주 1위 기록 (잠깐 캐시) */
 export async function champWeekCached(week: string, now = Date.now()): Promise<ChampWeek | null> {
   const hit = cache.get(week);
-  if (hit && now - hit.at < CACHE_MS) return hit.rec;
+  if (hit && now - hit.at < (hit.rec ? CACHE_MS : EMPTY_CACHE_MS)) return hit.rec;
   const rec = await getChamp().get(week);
   cache.set(week, { at: now, rec });
   return rec;
@@ -244,4 +248,14 @@ export async function champBitsFor(accountId: string, now = Date.now()): Promise
   }
   if (!boards.length) return 0;
   return champBitsOf(boards, await getChamp().auraOff(accountId));
+}
+
+/**
+ * 입장 토큰·착용 증서·내 정보에 싣는 champ 값: 1위면 champBitsFor 그대로, 1위가 아닌 31번 운영자가 "운영자 오라 보이기"를 껐으면
+ * CHAMP_AURA_OFF 하나만 (운영자 오라는 운영자 표시(staff)로 다른 사람 화면에서도 그려지고, 끔만 이 값으로 전한다). 그 밖에는 0
+ */
+export async function champWireFor(accountId: string, staff: boolean, now = Date.now()): Promise<number> {
+  const bits = await champBitsFor(accountId, now);
+  if (bits) return bits;
+  return staff && (await getChamp().auraOff(accountId)) ? CHAMP_AURA_OFF : 0;
 }

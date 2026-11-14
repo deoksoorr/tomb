@@ -37,9 +37,9 @@ export class CosmeticFxView {
     this.depthCfg = scene.data?.get("cfxDepth") as CfxDepth | undefined;
   }
 
-  /** body = 몸 id (프리미엄 외형 등급 연출), champ = 주간 랭킹 1위 값 (1위 오라) */
-  setLook(look: readonly string[], body?: string, champ?: number): void {
-    this.sim.setLook(look, body, champ);
+  /** body = 몸 id (프리미엄 외형 등급 연출), champ = 주간 랭킹 1위 값 (1위 오라), staff = 31번 운영자 (운영자 오라가 우선) */
+  setLook(look: readonly string[], body?: string, champ?: number, staff?: boolean): void {
+    this.sim.setLook(look, body, champ, staff);
     if (this.sim.empty) this.clear();
   }
 

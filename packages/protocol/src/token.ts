@@ -1,4 +1,4 @@
-import { JOIN_TOKEN_TTL_SEC, ROOM_ID_RE, isAvatarBody, isChampBits, isDexBadge, staffGateBody } from "./constants";
+import { JOIN_TOKEN_TTL_SEC, ROOM_ID_RE, isAvatarBody, isChampValue, isDexBadge, staffGateBody } from "./constants";
 import { sanitizeLook, staffGateLook } from "./items";
 import { hasDye, packDye, unpackDye, type AvatarDye } from "./dye";
 
@@ -123,5 +123,5 @@ export async function verifyJoinToken(
   if (exp < nowSec) return null;
   // 운영자 전용 몸·꾸미기는 토큰에 운영자 표시(staff)가 있을 때만 (없으면 후드 유령·빼고)
   const isStaff = staff === true;
-  return { visitorId, name, color, channel, exp, look: staffGateLook(sanitizeLook(look), isStaff), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampBits(champ) ? { champ } : {}) };
+  return { visitorId, name, color, channel, exp, look: staffGateLook(sanitizeLook(look), isStaff), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}) };
 }

@@ -11,7 +11,11 @@ import {
   ACTIVITY_KEEP,
   DORMANT_MS,
   ECON_TTL_SEC,
+  PRESENCE_CATCHUP_MAX_TICKS,
+  PRESENCE_CATCHUP_WINDOW_MS,
   PRESENCE_MIN_GAP_MS,
+  PRESENCE_TICK_MS,
+  PRESENCE_TICK_SLACK_MS,
   spendCategory,
   type NameChangeResult,
   type NameClaimResult,
@@ -21,6 +25,7 @@ import {
   type AccountSummary,
   type EarnOptions,
   type EquippedItem,
+  type PresenceTick,
   type Profile,
   type RankEntry,
 } from "./types";
@@ -123,16 +128,34 @@ local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week
 return credit(c, ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4]), KEYS[6], tonumber(ARGV[8]))
 `;
 
-// 머무르기: 직전 지급 후 gap이 지났을 때만 (아니면 -1)
-// KEYS: acct, earn, rank, econ, week  ARGV: id, now, gap, points, dailyMax, dailyCap, balanceCap, ttl
+// 머무르기: 직전 지급 후 gap이 지났을 때만 (아니면 -1). 같은 화면(sid)의 연달은 기록이면 흐른 시간만큼 몰아서
+// (lib/store/types.ts presenceCatchup과 같은 규칙: 창 window 안·10분(tick) 단위·slack 여유·최대 maxTicks, 다음 기준 = 센 만큼만 앞으로)
+// KEYS: acct, earn, rank, econ, week  ARGV: id, now, gap, points, dailyMax, dailyCap, balanceCap, ttl, sid, tick, slack, maxTicks, window
 const PRESENCE_LUA = `${CREDIT_FN}
-if tonumber(ARGV[2]) - tonumber(redis.call('HGET', KEYS[1], 'presenceAt') or '0') < tonumber(ARGV[3]) then return -1 end
-redis.call('HSET', KEYS[1], 'presenceAt', ARGV[2])
+local now = tonumber(ARGV[2])
+local pv = redis.call('HMGET', KEYS[1], 'presenceAt', 'presenceSid')
+local last = tonumber(pv[1] or '0') or 0
+local elapsed = now - last
+if elapsed < tonumber(ARGV[3]) then return -1 end
+local sid = ARGV[9]
+local ticks = 1
+local nextAt = now
+if sid ~= '' and pv[2] == sid and last > 0 and elapsed <= tonumber(ARGV[13]) then
+  local tick = tonumber(ARGV[10])
+  ticks = math.max(1, math.min(tonumber(ARGV[12]), math.floor((elapsed + tonumber(ARGV[11])) / tick)))
+  nextAt = math.min(now, last + ticks * tick)
+end
+redis.call('HSET', KEYS[1], 'presenceAt', tostring(nextAt))
+if sid ~= '' then redis.call('HSET', KEYS[1], 'presenceSid', sid) else redis.call('HDEL', KEYS[1], 'presenceSid') end
 -- 10번: 머문 기록은 포인트 한도와 상관없이 센다 (출석 도장 조건)
-redis.call('HINCRBY', KEYS[2], '_stay', 1)
+redis.call('HINCRBY', KEYS[2], '_stay', ticks)
 redis.call('EXPIRE', KEYS[2], ARGV[8])
-local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[6]), balanceCap = tonumber(ARGV[7]), ttl = ARGV[8], now = tonumber(ARGV[2]) }
-return credit(c, 'presence', tonumber(ARGV[4]), tonumber(ARGV[5]))
+local c = { acct = KEYS[1], earn = KEYS[2], rank = KEYS[3], econ = KEYS[4], week = KEYS[5], id = ARGV[1], dailyCap = tonumber(ARGV[6]), balanceCap = tonumber(ARGV[7]), ttl = ARGV[8], now = now }
+local amount = credit(c, 'presence', tonumber(ARGV[4]) * ticks, tonumber(ARGV[5]))
+-- 화면이 바로 쓸 값도 같이 (머무르기 응답이 계정 전체를 다시 읽지 않게): 적립, 센 기록 수, 잔액, 모은 포인트, 오늘 쌓은 포인트, 오늘 머문 기록 수
+local bal = redis.call('HMGET', KEYS[1], 'points', 'lifetime')
+local points = tonumber(bal[1] or '0') or 0
+return { amount, ticks, points, tonumber(bal[2] or '') or points, tonumber(redis.call('HGET', KEYS[2], '_total') or '0'), tonumber(redis.call('HGET', KEYS[2], '_stay') or '0') }
 `;
 
 // 접속 시간 보너스: 오늘 머문 기록(_stay)으로 열린 구간 중 안 받은 구간(_bonus 다음부터)을 한 번에. 없으면 -1.
@@ -601,18 +624,18 @@ export class RedisAccounts implements AccountStore {
   }
 
   async get(id: string, day: string, now: number): Promise<AccountRecord> {
-    const [acct, inv, look, graves, today, activity, stashRaw, stay, bonus] = await this.redis
+    // 오늘 적립 기록 세 필드는 HMGET 하나로 (명령 9개 → 7개)
+    const [acct, inv, look, graves, earnToday, activity, stashRaw] = await this.redis
       .pipeline()
       .hgetall(K.acct(id))
       .hgetall(K.inv(id))
       .hgetall(K.look(id))
       .smembers(K.acctGraves(id))
-      .hget(K.earn(id, day), "_total")
+      .hmget(K.earn(id, day), "_total", "_stay", "_bonus")
       .lrange(K.activity(id), 0, -1)
       .hgetall(K.stash(id))
-      .hget(K.earn(id, day), "_stay")
-      .hget(K.earn(id, day), "_bonus")
-      .exec<[string[] | null, string[] | null, string[] | null, string[], string | null, string[], string[] | null, string | null, string | null]>();
+      .exec<[string[] | null, string[] | null, string[] | null, string[], unknown, string[], string[] | null]>();
+    const [today, stay, bonus] = hmgetList(earnToday, ["_total", "_stay", "_bonus"]);
     const a = pairs(acct);
     const equipped: EquippedItem[] = [...pairs(look).values()].flatMap((v) => {
       const [itemId, until] = v.split("|");
@@ -691,13 +714,30 @@ export class RedisAccounts implements AccountStore {
     );
   }
 
+  async appearance(id: string, now: number): Promise<Pick<AccountRecord, "name" | "color" | "body" | "equipped">> {
+    const [nb, look] = await this.redis
+      .pipeline()
+      .hmget(K.acct(id), "name", "color", "body")
+      .hgetall(K.look(id))
+      .exec<[unknown, string[] | null]>();
+    const [name, color, body] = hmgetList(nb, ["name", "color", "body"]);
+    const equipped: EquippedItem[] = [...pairs(look).values()].flatMap((v) => {
+      const [itemId, until] = v.split("|");
+      return Number(until) > now ? [{ itemId, until: Number(until) }] : [];
+    });
+    return { name: name ?? null, color: color ?? null, body: body ?? null, equipped };
+  }
+
   async presence(id: string, day: string, now: number): Promise<number | null> {
+    return (await this.presenceTick(id, day, now))?.earned ?? null;
+  }
+
+  async presenceTick(id: string, day: string, now: number, sid = ""): Promise<PresenceTick | null> {
     const rule = earnRule("presence");
-    const r = Number(
-      await this.redis.eval<string[], number>(
-        PRESENCE_LUA,
-        [K.acct(id), K.earn(id, day), K.rankPoints, await econKeyFor(id, day), K.rankPointsWeek(weekOfDay(day))],
-        [
+    const r = await this.redis.eval<string[], number | number[]>(
+      PRESENCE_LUA,
+      [K.acct(id), K.earn(id, day), K.rankPoints, await econKeyFor(id, day), K.rankPointsWeek(weekOfDay(day))],
+      [
         id,
         String(now),
         String(PRESENCE_MIN_GAP_MS),
@@ -706,9 +746,17 @@ export class RedisAccounts implements AccountStore {
         String(DAILY_EARN_CAP),
         String(BALANCE_CAP),
         String(EARN_TTL_SEC),
-      ]),
+        sid,
+        String(PRESENCE_TICK_MS),
+        String(PRESENCE_TICK_SLACK_MS),
+        String(PRESENCE_CATCHUP_MAX_TICKS),
+        String(PRESENCE_CATCHUP_WINDOW_MS),
+      ],
     );
-    return r < 0 ? null : r;
+    // 너무 이르면 -1 (배열이 아니다)
+    if (!Array.isArray(r)) return null;
+    const [earned, ticks, points, lifetimePoints, todayEarned, stayTicks] = r.map((x) => Number(x) || 0);
+    return { earned, ticks, points, lifetimePoints, todayEarned, stayTicks };
   }
 
   async claimStayBonus(id: string, day: string): Promise<{ earned: number; count: number } | null> {
@@ -1155,6 +1203,13 @@ export class RedisAccounts implements AccountStore {
     const rows = await this.summaries(ids);
     return { next: String(next), accounts: rows.filter((r): r is AccountSummary => r !== null) };
   }
+}
+
+/** HMGET 결과 → 필드 순서 값 (automaticDeserialization: false면 배열, 혹시 객체로 와도) */
+function hmgetList(got: unknown, fields: readonly string[]): (string | null)[] {
+  if (Array.isArray(got)) return fields.map((_, i) => (got[i] as string | null) ?? null);
+  const o = (got ?? {}) as Record<string, string | null>;
+  return fields.map((f) => o[f] ?? null);
 }
 
 const SUMMARY_FIELDS = ["name", "createdAt", "seenAt", "presenceAt", "points", "renameRequired", "codeHash"] as const;

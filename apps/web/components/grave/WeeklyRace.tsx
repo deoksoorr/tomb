@@ -64,7 +64,8 @@ export default function WeeklyRace() {
       .champ()
       .then((r) => alive && setChamp(r))
       .catch(() => undefined);
-    const t = setInterval(() => void load(), RACE_REFRESH_MS);
+    // 숨긴 탭은 다시 받지 않는다
+    const t = setInterval(() => document.visibilityState === "visible" && void load(), RACE_REFRESH_MS);
     return () => {
       alive = false;
       clearInterval(t);

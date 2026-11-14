@@ -19,7 +19,7 @@ import { balloonRouteS, carAngle, ferrisLift, flightLift, routeLength, routeSegm
 //  - 시작·끝은 검은 화면으로 덮었다 걷는다 (fade). 끝난 뒤에는 cover로 월드 화면 위 검은 막만 걷는다
 
 /** look·body·champ = 착용 오라·전용 오라를 장면 안에서도 그리려고 (없으면 그림만) */
-export type StageRider = { key: string; frame: number; index: number; look?: readonly string[]; body?: string; champ?: number };
+export type StageRider = { key: string; frame: number; index: number; look?: readonly string[]; body?: string; champ?: number; staff?: boolean };
 export type StageFrame = {
   /** 씬 시간 ms (애니메이션) */
   now: number;
@@ -752,11 +752,11 @@ export class SkyStage {
   private riderAura(i: number, r: StageRider, img: Phaser.GameObjects.Image, now: number, dt: number): void {
     const look = r.look ?? [];
     const body = bodyOf(r.body ?? "hood");
-    const key = `${body}|${look.join(",")}|${r.champ ?? 0}`;
+    const key = `${body}|${look.join(",")}|${r.champ ?? 0}|${r.staff ? 1 : 0}`;
     if (this.riderFxKey[i] !== key) {
       this.riderFxKey[i] = key;
-      if (!this.riderFx[i] && (look.length || r.champ)) this.riderFx[i] = new CosmeticFxView(this.scene);
-      this.riderFx[i]?.setLook(look, body, r.champ);
+      if (!this.riderFx[i] && (look.length || r.champ || r.staff)) this.riderFx[i] = new CosmeticFxView(this.scene);
+      this.riderFx[i]?.setLook(look, body, r.champ, r.staff);
     }
     const fx = this.riderFx[i];
     if (!fx) return;

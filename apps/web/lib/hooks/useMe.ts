@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
 import { BALANCE_CAP } from "@/lib/economy";
 import { api, errorMessage } from "@/lib/api";
-import type { Me } from "@/lib/types";
+import type { Me, PresenceTickInfo } from "@/lib/types";
 
 // 내 계정(포인트·가방·착용·내 묘비) 클라이언트 사본. 서버 응답의 me로 통째로 바꾸는 것이 기본이고,
 // 반응 응답처럼 earned만 오는 경우에는 숫자만 더해 둔다(다음 /api/me 때 서버 값으로 맞춰진다).
@@ -53,6 +53,19 @@ class MeStore {
     const me = this.state.me;
     if (!me || !earned || earned <= 0) return;
     this.set({ ...me, points: Math.min(BALANCE_CAP, me.points + earned), todayEarned: me.todayEarned + earned });
+  }
+
+  /** 머무르기 응답의 바뀐 값(잔액·모은 포인트·오늘 쌓은 포인트·오늘 머문 시간)만 바꾼다 */
+  applyPresence(tick: PresenceTickInfo): void {
+    const me = this.state.me;
+    if (!me) return;
+    this.set({
+      ...me,
+      points: tick.points,
+      lifetimePoints: tick.lifetimePoints,
+      todayEarned: tick.todayEarned,
+      attendance: { ...me.attendance, stayMinutes: tick.stayMinutes },
+    });
   }
 
   /** 내 계정이 세운 묘비 목록에 더한다 (세운 직후) */

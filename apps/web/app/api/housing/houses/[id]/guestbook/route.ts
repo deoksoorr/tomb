@@ -2,7 +2,7 @@ import { handler, json } from "@/lib/http";
 import { GuestSchema } from "@/lib/housing/schemas";
 import { findVisibleHouse, getHouseStore, guestView, postGuest } from "@/lib/housing/service";
 import type { GuestbookResponse } from "@/lib/housing/types";
-import { myPoints } from "@/lib/housing/points";
+import { myBrief } from "@/lib/housing/points";
 import { rateLimit } from "@/lib/ratelimit";
 import { getVisitorId, requireVisitor } from "@/lib/session";
 import { pushActivity } from "@/lib/store";
@@ -22,7 +22,7 @@ export const POST = handler<{ id: string }>(async (req, { id }) => {
   const { text } = await readBody(req, GuestSchema);
   await rateLimit("reaction", req, visitorId);
   const store = getHouseStore();
-  const me = await myPoints(visitorId);
+  const me = await myBrief(visitorId);
   await postGuest(store, id, visitorId, me.name ?? "지나가던 유령", text);
   const h = await store.get(id);
   if (h) await pushActivity(h.owner, { kind: "guestbook", actorId: visitorId, targetId: id, targetName: h.name });

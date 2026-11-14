@@ -3,7 +3,7 @@ import type { AttendClaim, CalendarMonthRecord } from "../calendar";
 import type { EarnSource } from "../economy";
 import { msUntilDayReset } from "../gameDay";
 import type { ReportLogEntry, ReportReason } from "../reports";
-import { SHRINE_KEEP_DAYS, type ActivityItem, type Grave, type GraveDecor, type PassReason } from "../types";
+import { PRESENCE_HIDDEN_INTERVAL_MS, SHRINE_KEEP_DAYS, type ActivityItem, type Grave, type GraveDecor, type PassReason } from "../types";
 
 /**
  * 저장소 원본 + 카운트 + 채널(읽을 때 항상 채운다, 예전 묘비는 1).
@@ -109,6 +109,33 @@ export type EquippedItem = { itemId: string; until: number };
 
 /** 머무르기 포인트 최소 간격 (클라이언트 주기 10분보다 조금 짧게 → 타이머 오차로 빠지지 않게) */
 export const PRESENCE_MIN_GAP_MS = 9.5 * 60_000;
+/** 머무르기 기록 1번의 길이 (10분) */
+export const PRESENCE_TICK_MS = 10 * 60_000;
+/**
+ * 몰아서 정산 (숨긴 탭은 Redis를 아끼려고 PRESENCE_HIDDEN_INTERVAL_MS마다 한 번만 보낸다):
+ * 같은 화면(sid)에서 온 연달은 기록이고 직전 기록 뒤 PRESENCE_CATCHUP_WINDOW_MS 안이면, 흐른 시간만큼(10분 단위, 30초 여유)
+ * 최대 PRESENCE_CATCHUP_MAX_TICKS번을 한 번에 센다. 그 밖(새 화면·오래 끊김·sid 없는 옛 화면)은 지금처럼 1번만.
+ *  - 시각은 서버 시각만 쓴다. 다음 기준 시각은 센 만큼만 앞으로 (남은 몇 분은 다음 기록으로 넘어간다, 지금보다 앞서지 않는다)
+ *  - 하루 포인트 한도·지갑 상한은 그대로 (몰아서 받아도 한도 안에서만). 머문 기록(출석 도장·접속 보너스)도 같은 수만큼
+ *  - 창을 닫았다 다시 열면 sid가 바뀌어 그 사이는 세지 않는다. sid를 꾸며 보내도 10분마다 부르는 것과 같은 몫 이상은 못 받는다
+ */
+export const PRESENCE_CATCHUP_MAX_TICKS = 3;
+/** 몰아서 정산을 인정하는 직전 기록과의 최대 간격 (숨은 탭 30분 주기 + 타이머 지연 여유) */
+export const PRESENCE_CATCHUP_WINDOW_MS = PRESENCE_HIDDEN_INTERVAL_MS + 10 * 60_000;
+/** 기록 수 셈의 여유 (10분에서 이만큼 모자라도 1번으로 센다 = PRESENCE_TICK_MS - PRESENCE_MIN_GAP_MS) */
+export const PRESENCE_TICK_SLACK_MS = PRESENCE_TICK_MS - PRESENCE_MIN_GAP_MS;
+
+/**
+ * 몰아서 정산할 기록 수와 다음 기준 시각 (Redis Lua·메모리 저장소와 같은 규칙). 너무 이르면 null.
+ * sameSid = 직전 기록과 같은 화면에서 왔는지
+ */
+export function presenceCatchup(last: number, now: number, sameSid: boolean): { ticks: number; nextAt: number } | null {
+  const elapsed = now - last;
+  if (elapsed < PRESENCE_MIN_GAP_MS) return null;
+  if (!sameSid || last <= 0 || elapsed > PRESENCE_CATCHUP_WINDOW_MS) return { ticks: 1, nextAt: now };
+  const ticks = Math.max(1, Math.min(PRESENCE_CATCHUP_MAX_TICKS, Math.floor((elapsed + PRESENCE_TICK_SLACK_MS) / PRESENCE_TICK_MS)));
+  return { ticks, nextAt: Math.min(now, last + ticks * PRESENCE_TICK_MS) };
+}
 
 /** 적립 선택값: amount(없으면 항목 기본 점수), ipHash(주면 같은 IP 합계도 항목 한도 × ATTEND_ACCOUNTS_PER_IP로 막는다) */
 export type EarnOptions = { amount?: number; ipHash?: string };
@@ -173,6 +200,17 @@ export type NameClaimResult = "ok" | "taken" | "has";
 export type VisitResult = { renameRequired: boolean };
 
 /** 날짜 인자는 모두 게임 날짜 `YYYYMMDD` (한국 시간 새벽 5시에 바뀐다 — lib/store/accounts.ts의 kstDay = lib/gameDay). 포인트·가방 변화는 모두 원자적이다 */
+/** 머무르기 한 번의 결과 (AccountStore.presenceTick) */
+export type PresenceTick = {
+  earned: number;
+  /** 이번에 센 머문 기록 수 (몰아서 정산하면 2~3) */
+  ticks: number;
+  points: number;
+  lifetimePoints: number;
+  todayEarned: number;
+  stayTicks: number;
+};
+
 export interface AccountStore {
   get(id: string, day: string, now: number): Promise<AccountRecord>;
   /** 항목별 하루 한도·하루 전체 한도·지갑 한도 안에서 적립하고 실제 쌓인 점수를 돌려준다 (0 = 한도) */
@@ -186,6 +224,13 @@ export interface AccountStore {
   refund(id: string, amount: number, reason: string, now: number): Promise<number>;
   /** 머무르기: 직전 지급 후 PRESENCE_MIN_GAP_MS가 지났으면 적립(한도 안에서). 너무 이르면 null */
   presence(id: string, day: string, now: number): Promise<number | null>;
+  /**
+   * presence와 같은 적립 + 화면이 바로 쓸 값(적립 뒤 잔액·오늘 쌓은 포인트·오늘 머문 기록 수)을 같은 명령 하나로.
+   * 머무르기 응답이 계정 전체(loadMe)를 다시 읽지 않게. sid(화면마다 하나)를 주면 presenceCatchup 규칙으로 몰아서 정산. 너무 이르면 null
+   */
+  presenceTick(id: string, day: string, now: number, sid?: string): Promise<PresenceTick | null>;
+  /** 입장 토큰용: 이름·색·몸 모양·지금 입은 꾸미기만 (계정 전체 get = 명령 9개 대신 2개) */
+  appearance(id: string, now: number): Promise<Pick<AccountRecord, "name" | "color" | "body" | "equipped">>;
   /**
    * 접속 시간 보너스 받기 (원자적): 오늘 머문 기록으로 열린 구간 중 아직 안 받은 구간을 한꺼번에 받는다.
    * 받을 구간이 없으면 null. 받은 구간은 하루 상한(DAILY_EARN_CAP)에 막혀 덜 들어와도 받은 것으로 친다

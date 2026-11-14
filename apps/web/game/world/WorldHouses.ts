@@ -1,18 +1,21 @@
 import { housingApi } from "@/lib/housing/client";
+import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
 import type { VillageResponse } from "@/lib/housing/types";
 import { bridge } from "../bridge";
 import { graveChannelFor } from "./graveChannel";
 import type { WorldMap } from "./WorldMap";
 
 // 주거 구역 (분양 마을을 메인 맵에 합친 것): 마을 정보를 받아 WorldMap.setHouses로 집을 세운다.
-//  - 처음 한 번 + REFRESH_MS마다(탭이 보일 때만) /api/housing/village (CDN 15초 캐시)
+//  - 처음 한 번 + REFRESH_MS마다(탭이 보일 때만) /api/housing/village (CDN 15초·서버 메모리 1분 캐시).
+//    숨긴 탭은 받지 않고, 돌아왔을 때 마지막으로 받은 지 REFRESH_MS가 넘었으면 (흩어서) 한 번
 //  - 분양 사무소가 분양·외관 저장 뒤 village:data를 보내면 바로 다시 세운다 (내 집 id도 거기서 온다)
 //  - 내 집 표시("(내 집)")를 위해 처음 한 번 /api/housing/me를 물어본다 (로그인 전이면 조용히 건너뛴다)
 //  - 채널마다 주거 구역이 따로다: 묘지와 같은 규칙(graveChannelFor)으로 지금 채널을 정하고 그 채널 마을만 받는다.
 //    채널이 바뀌면 곧바로 빈 필지로 비우고 새 채널 마을을 받는다. 다른 채널 마을 정보(늦게 온 응답 등)는 버린다
 //  - 지금 가진 것보다 먼저 만든 마을 정보(generatedAt)는 버린다 → 저장 직후 받은 새 정보를 주기 갱신의 CDN 캐시가 덮지 못한다
 
-const REFRESH_MS = 60_000;
+// Redis 명령을 아끼려고 1분 → 5분 (저장 직후에는 분양 사무소가 village:data로 바로 알려 준다)
+const REFRESH_MS = 5 * 60_000;
 
 export class WorldHouses {
   private village: VillageResponse | null = null;
@@ -22,6 +25,8 @@ export class WorldHouses {
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly offs: (() => void)[] = [];
   private alive = true;
+  /** 마지막으로 마을 정보를 받은 시각 */
+  private loadedAt = 0;
 
   constructor(
     private readonly map: WorldMap,
@@ -55,11 +60,17 @@ export class WorldHouses {
       })
       .catch(() => undefined);
     this.timer = setInterval(() => {
-      if (typeof document === "undefined" || document.visibilityState === "visible") void this.load();
+      if (!tabHidden()) void this.load();
     }, REFRESH_MS);
+    this.offs.push(
+      onVisibleAgain(() => {
+        if (Date.now() - this.loadedAt >= REFRESH_MS) void this.load();
+      }),
+    );
   }
 
   private async load(): Promise<void> {
+    this.loadedAt = Date.now();
     try {
       const v = await housingApi.village(this.ch);
       if (this.alive) this.use(v, this.myHouseId);

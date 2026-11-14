@@ -13,7 +13,7 @@ import { RedisAccounts } from "./accounts-redis";
 import { K } from "./keys";
 import { MemoryStore } from "./memory";
 import { RedisStore } from "./redis";
-import { DORMANT_MS, PRESENCE_MIN_GAP_MS, type AccountStore, type GraveStore } from "./types";
+import { DORMANT_MS, PRESENCE_CATCHUP_WINDOW_MS, PRESENCE_MIN_GAP_MS, PRESENCE_TICK_MS, presenceCatchup, type AccountStore, type GraveStore } from "./types";
 
 type Kit = {
   graves: GraveStore;
@@ -529,6 +529,44 @@ function contract(make: () => Kit) {
     let total = 5;
     for (let i = 1; i <= 13; i++) total += (await accounts.presence(id, DAY, t0 + i * PRESENCE_MIN_GAP_MS)) ?? 0;
     expect(total).toBe(60);
+  });
+
+  it("머무르기 몰아서 정산: 같은 화면(sid)이면 흐른 시간만큼(최대 3번), 새 화면·sid 없음·오래 끊김은 1번", async () => {
+    const MIN = 60_000;
+    const id = newId();
+    const t0 = 1_000_000_000;
+    expect(await accounts.presenceTick(id, DAY, t0, "sidAAAAA1")).toMatchObject({ earned: 5, ticks: 1, stayTicks: 1 });
+    // 숨긴 탭: 30분 뒤 한 번 → 3번 몫
+    expect(await accounts.presenceTick(id, DAY, t0 + 30 * MIN, "sidAAAAA1")).toMatchObject({ earned: 15, ticks: 3, stayTicks: 4, points: 20 });
+    // 너무 이르면 null, 기준 시각은 센 만큼만 앞으로 (31분 뒤 = 직전 기준 30분 + 10분 → 10분 몫)
+    expect(await accounts.presenceTick(id, DAY, t0 + 31 * MIN, "sidAAAAA1")).toBeNull();
+    expect(await accounts.presenceTick(id, DAY, t0 + 40 * MIN, "sidAAAAA1")).toMatchObject({ ticks: 1, stayTicks: 5 });
+    // 2시간 뒤(끊김)에는 같은 sid여도 1번만
+    expect(await accounts.presenceTick(id, DAY, t0 + 160 * MIN, "sidAAAAA1")).toMatchObject({ ticks: 1, stayTicks: 6 });
+    // 다른 화면(새로 연 탭)은 30분이 지났어도 1번만
+    expect(await accounts.presenceTick(id, DAY, t0 + 190 * MIN, "sidBBBBB2")).toMatchObject({ ticks: 1, stayTicks: 7 });
+    // sid 없음(옛 화면)도 1번
+    expect(await accounts.presenceTick(id, DAY, t0 + 220 * MIN)).toMatchObject({ ticks: 1, stayTicks: 8 });
+    // 하루 한도(60점)는 몰아서 받아도 넘지 않는다
+    const id2 = newId();
+    let t = t0;
+    expect(await accounts.presenceTick(id2, DAY, t, "sidCCCCC3")).not.toBeNull();
+    let points = 5;
+    for (let i = 0; i < 6; i++) points += (await accounts.presenceTick(id2, DAY, (t += 30 * MIN), "sidCCCCC3"))?.earned ?? 0;
+    expect(points).toBe(60);
+    expect((await accounts.presenceTick(id2, DAY, (t += 30 * MIN), "sidCCCCC3"))?.stayTicks).toBe(22); // 머문 기록은 한도와 별개로 센다
+  });
+
+  it("presenceCatchup 규칙 (Lua와 같은 계산)", () => {
+    const t = 1_000_000_000;
+    expect(presenceCatchup(t, t + PRESENCE_MIN_GAP_MS - 1, true)).toBeNull();
+    expect(presenceCatchup(t, t + PRESENCE_MIN_GAP_MS, true)).toEqual({ ticks: 1, nextAt: t + PRESENCE_MIN_GAP_MS });
+    expect(presenceCatchup(t, t + 2 * PRESENCE_TICK_MS - 20_000, true)).toEqual({ ticks: 2, nextAt: t + 2 * PRESENCE_TICK_MS - 20_000 });
+    expect(presenceCatchup(t, t + 25 * 60_000, true)).toEqual({ ticks: 2, nextAt: t + 2 * PRESENCE_TICK_MS });
+    expect(presenceCatchup(t, t + PRESENCE_CATCHUP_WINDOW_MS, true)).toEqual({ ticks: 3, nextAt: t + 3 * PRESENCE_TICK_MS });
+    expect(presenceCatchup(t, t + PRESENCE_CATCHUP_WINDOW_MS + 1, true)).toEqual({ ticks: 1, nextAt: t + PRESENCE_CATCHUP_WINDOW_MS + 1 });
+    expect(presenceCatchup(t, t + 30 * 60_000, false)).toEqual({ ticks: 1, nextAt: t + 30 * 60_000 });
+    expect(presenceCatchup(0, 30 * 60_000, true)).toEqual({ ticks: 1, nextAt: 30 * 60_000 });
   });
 
   // 접속 시간 보너스 (lib/stayBonus.ts): 머무르기 기록 3번(30분)마다 한 구간, 10→15→20→25P 고정, 하루 7구간 145P

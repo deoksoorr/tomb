@@ -86,7 +86,7 @@ export async function verifyGrant(
   return null;
 }
 
-/** 착용 증서의 주간 1위 값: 0(1위 아님) 또는 1위 비트(+ 오라 끔 표시) */
+/** 착용 증서의 주간 1위 값: 0(1위 아님), 1위 비트(+ 오라 끔 표시), 또는 오라 끔 표시만(운영자 오라를 끈 운영자) */
 function isChampField(v: unknown): v is number {
-  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= (CHAMP_ALL | CHAMP_AURA_OFF) && (v === 0 || (v & CHAMP_ALL) > 0);
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= (CHAMP_ALL | CHAMP_AURA_OFF);
 }

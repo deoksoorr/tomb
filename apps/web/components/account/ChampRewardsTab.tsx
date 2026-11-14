@@ -56,7 +56,8 @@ export default function ChampRewardsTab({
   }, [bits]);
   const hats = wardrobeEntries(me, now).filter((e) => isChampItem(e.item.id));
 
-  if (!bits && hats.length === 0)
+  const staff = me.staff === true;
+  if (!bits && hats.length === 0 && !staff)
     return (
       <div className={styles.champEmpty}>
         <p>이번 주 레이스에서 1위를 하면 여기에 보상이 들어와요.</p>
@@ -72,7 +73,20 @@ export default function ChampRewardsTab({
   const boards = champBoards(bits);
   return (
     <div className={styles.champTab}>
-      {bits > 0 && (
+      {staff && (
+        <section className={styles.champNow} aria-label="운영자 오라">
+          <ChampAuraToggle />
+          <div className={styles.champNowBody}>
+            <AuraPreview bits={0} staff look={["staff_crown"]} label="운영자 오라 미리보기" />
+            <div className={styles.champNowText}>
+              <span className={styles.champBadge}>운영자 오라</span>
+              <span className={styles.name}>푸른 저승 등불빛 고리 · 떠도는 넋 불빛 · 검은 연기 띠</span>
+              <span className={styles.meta}>운영자 계정에 늘 붙어요 (전용 오라보다 우선) · 다른 사람 화면에도 보여요</span>
+            </div>
+          </div>
+        </section>
+      )}
+      {bits > 0 && !staff && (
         <section className={styles.champNow} aria-label="지금 전용 오라">
           <ChampAuraToggle />
           <div className={styles.champNowBody}>

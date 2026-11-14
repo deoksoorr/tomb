@@ -4,15 +4,16 @@ import { useEffect, useRef } from "react";
 import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { friendJoinToastOn, friendsInChannel, friendsStore, presenceChanges, useFriends } from "@/lib/hooks/useFriends";
+import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
 import { showFriendNotice } from "./FriendNotice";
 
 /**
  * 들고 남 알림은 실시간 서버가 바로 밀어 준다(friend:presence). 주기 조회는 지도 하트·목록을 맞추는 용도라 느리게,
  * 밀어 주기를 못 받은 경우(옛 실시간 서버 등)에만 조회 결과로 알린다
  */
-export const POLL_MS = 60_000;
-/** 친구도 신청도 없으면 더 드물게 (새 신청·수락은 실시간 서버의 "내 정보 새로 받기" 알림으로 바로 온다) */
-export const IDLE_POLL_MS = 3 * 60_000;
+export const POLL_MS = 3 * 60_000;
+/** 친구도 신청도 없으면 아주 드물게 (새 신청·수락은 실시간 서버의 "내 정보 새로 받기" 알림으로 바로 온다 → 맞추기용 30분) */
+export const IDLE_POLL_MS = 30 * 60_000;
 /** 밀어 준 알림 뒤 이 안에 조회로 같은 변화를 보면 다시 알리지 않는다 */
 const PUSH_DEDUPE_MS = 3 * 60_000;
 /** 밀어 준 알림 뒤 목록(지도 하트)을 다시 받기까지 (실시간 서버가 새 자리를 보게 조금 기다린다) */
@@ -44,6 +45,20 @@ export function useFriendPresence(ready: boolean): { friendIncoming: number } {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let waitMs = 0;
     let alive = true;
+    /** 마지막으로 물어본 시각 */
+    let askedAt = 0;
+    /** 숨긴 동안 바뀌었다는 신호(밀어 주기·내 정보 새로 받기)를 받았다 → 돌아오면 바로 묻는다 */
+    let dirty = false;
+    const refresh = () => {
+      askedAt = Date.now();
+      dirty = false;
+      return friendsStore.refresh();
+    };
+    /** 숨긴 탭은 묻지 않고 돌아올 때로 미룬다 */
+    const refreshSoon = () => {
+      if (tabHidden()) dirty = true;
+      else void refresh();
+    };
     const schedule = (ms: number) => {
       if (timer) clearTimeout(timer);
       waitMs = ms;
@@ -51,8 +66,8 @@ export function useFriendPresence(ready: boolean): { friendIncoming: number } {
     };
     const loop = async () => {
       timer = null;
-      // 숨긴 탭은 묻지 않는다 (돌아오면 바로 다시)
-      if (typeof document === "undefined" || !document.hidden) await friendsStore.refresh();
+      // 숨긴 탭은 묻지 않는다 (돌아오면 오래됐을 때만 다시)
+      if (!tabHidden()) await refresh();
       if (alive) schedule(delayFor());
     };
     void loop();
@@ -61,7 +76,7 @@ export function useFriendPresence(ready: boolean): { friendIncoming: number } {
       if (alive && timer && waitMs > POLL_MS && delayFor() === POLL_MS) schedule(POLL_MS);
     });
     // 친구 신청·수락처럼 서버에서 내 쪽이 바뀌면 실시간 서버가 알려 준다 → 바로 다시 받는다
-    const offStale = bridge.on("me:stale", () => void friendsStore.refresh());
+    const offStale = bridge.on("me:stale", refreshSoon);
     // 친구 들고 남 (실시간 서버가 밀어 준 것): 바로 알리고, 조금 뒤 목록을 새로 (지도 하트·친구 창)
     let pushTimer: ReturnType<typeof setTimeout> | null = null;
     const offPush = bridge.on("friend:presence", ({ key, name, on }) => {
@@ -69,12 +84,12 @@ export function useFriendPresence(ready: boolean): { friendIncoming: number } {
       const known = friendsStore.getSnapshot().friends;
       if (friendJoinToastOn() && (!known || known.some((f) => f.key === key))) showFriendNotice(on ? `${name}님이 마을에 왔어요` : `${name}님이 나갔어요`);
       if (pushTimer) clearTimeout(pushTimer);
-      pushTimer = setTimeout(() => void friendsStore.refresh(), PUSH_REFRESH_MS);
+      pushTimer = setTimeout(refreshSoon, PUSH_REFRESH_MS);
     });
-    const onVisible = () => {
-      if (!document.hidden && alive) schedule(0);
-    };
-    document.addEventListener("visibilitychange", onVisible);
+    // 돌아오면: 숨긴 동안 신호가 왔거나 주기만큼 지났을 때만 (흩어서) 한 번 묻는다
+    const offVisible = onVisibleAgain(() => {
+      if (alive && (dirty || Date.now() - askedAt >= delayFor())) schedule(0);
+    });
     return () => {
       alive = false;
       if (timer) clearTimeout(timer);
@@ -82,7 +97,7 @@ export function useFriendPresence(ready: boolean): { friendIncoming: number } {
       offStale();
       offPush();
       if (pushTimer) clearTimeout(pushTimer);
-      document.removeEventListener("visibilitychange", onVisible);
+      offVisible();
     };
   }, [ready]);
 

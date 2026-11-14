@@ -17,8 +17,8 @@ import type { AccountStore } from "./store/types";
 
 const g = globalThis as typeof globalThis & { __tombStaff?: StaffStore; __tombStaffCache?: { id: string | null; at: number } };
 
-/** 같은 서버 인스턴스 안에서 운영자 id를 이만큼 기억한다 (요청마다 Redis를 한 번 더 읽지 않게) */
-const CACHE_MS = 10_000;
+/** 같은 서버 인스턴스 안에서 운영자 id를 이만큼 기억한다 (요청마다 Redis를 한 번 더 읽지 않게. 거의 바뀌지 않아 5분, 지정한 인스턴스는 바로 바뀐다) */
+const CACHE_MS = 5 * 60_000;
 
 export function getStaffStore(): StaffStore {
   const cur = g.__tombStaff;

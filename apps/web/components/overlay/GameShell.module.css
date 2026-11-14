@@ -265,6 +265,19 @@
 }
 
 /* 마을·집 안: 월드 바로 가기 줄 대신 [표현] 버튼 하나 (왼쪽 아래) */
+/* 집 안 터치 조작 (월드 HUD .overlay는 집 안에서 숨으므로 따로): 화면 전체 위에 손이 닿는 곳만 받는다 */
+.roomTouch {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.roomTouch :where(button, a) {
+  pointer-events: auto;
+}
+
 .roomExpr {
   position: fixed;
   z-index: 5;

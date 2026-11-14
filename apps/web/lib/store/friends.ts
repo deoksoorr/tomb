@@ -232,15 +232,14 @@ export class RedisFriends implements FriendStore {
   }
 
   async lists(id: string, now: number): Promise<FriendLists> {
+    // 오래된 신청은 지우지 않고 읽을 때 거른다 (읽기마다 쓰기 2개를 아낀다. 지우기는 신청·수락 Lua와 키 만료가 한다)
     const cutoff = `(${now - FRIEND_REQUEST_KEEP_MS}` as const;
-    const [, , f, i, o] = await this.redis
+    const [f, i, o] = await this.redis
       .pipeline()
-      .zremrangebyscore(K.friendsIn(id), "-inf", cutoff)
-      .zremrangebyscore(K.friendsOut(id), "-inf", cutoff)
       .zrange(K.friends(id), 0, -1, { withScores: true })
-      .zrange(K.friendsIn(id), 0, -1, { withScores: true })
-      .zrange(K.friendsOut(id), 0, -1, { withScores: true })
-      .exec<[number, number, string[] | null, string[] | null, string[] | null]>();
+      .zrange(K.friendsIn(id), cutoff, "+inf", { byScore: true, withScores: true })
+      .zrange(K.friendsOut(id), cutoff, "+inf", { byScore: true, withScores: true })
+      .exec<[string[] | null, string[] | null, string[] | null]>();
     return { friends: links(f), incoming: links(i), outgoing: links(o) };
   }
 

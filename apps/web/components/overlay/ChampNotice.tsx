@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { bridge } from "@/game/bridge";
-import { CHAMP_POLL_MS, champRecheckDelay } from "@/lib/champClock";
+import { champRecheckDelay } from "@/lib/champClock";
 import { CHAMP_TITLE, champHatOf, itemName, type ChampBoard } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
+import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
 import { restoreLook, wearStashed } from "../account/actions";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -14,10 +15,14 @@ import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
 import styles from "./ChampNotice.module.css";
 
+/** 탭으로 돌아왔을 때 이만큼 확인하지 않았으면 한 번 확인한다 */
+const RETURN_CHECK_MS = 30 * 60_000;
+
 /**
  * 주간 랭킹 1위 알림 창 (본인에게 한 번) + 접속 중 1위 상태 지키기.
  *  - 확인 시점: 처음 마을에 들어올 때 · 월요일 새벽 5시(한국 시간) 마감 직후 0~20초 흩뜨려 · 서버의 "내 정보 새로 받기" 신호(me:stale — 지급 직후 서버가 보낸다)
- *    · 화면이 보이는 동안 몇 분마다 · 다시 화면으로 돌아올 때 (모두 가벼운 /api/champ/me)
+ *    · 다시 화면으로 돌아올 때 (숨긴 동안 확인할 일이 생겼거나 30분 넘게 확인하지 않았을 때만. 모두 가벼운 /api/champ/me.
+ *    주기 확인은 Redis 명령을 아끼려고 없앴다. 숨긴 탭은 확인하지 않고 돌아올 때로 미룬다)
  *  - 1위 값이 바뀌면(새로 1위·자격 끝·관리자 다시 지급·시험 지급) 내 정보와 착용 증서를 새로 받아 실시간 서버로 다시 보낸다 →
  *    새로고침 없이 내 화면·다른 사람 화면에 모자(가방)·배지·전용 오라가 붙거나 떨어진다
  *  - 아직 안 본 1위 알림이 있으면 그 자리에서 띄운다. 받은 것(전용 모자 대여·전용 오라·배지·포인트)을 보여 주고 [써 보기]로 모자를 바로 입는다.
@@ -39,8 +44,17 @@ export default function ChampNotice() {
     let alive = true;
     let busy = false;
     let again = false;
+    /** 숨긴 동안 확인할 일이 생겼다 (돌아오면 확인) */
+    let pending = false;
+    let checkedAt = 0;
     if (known.current === null) known.current = firstBits;
     const check = async (): Promise<void> => {
+      if (tabHidden()) {
+        pending = true;
+        return;
+      }
+      pending = false;
+      checkedAt = Date.now();
       if (busy) {
         again = true;
         return;
@@ -78,17 +92,14 @@ export default function ChampNotice() {
       }, champRecheckDelay(Date.now(), Math.random()));
     };
     arm();
-    const poll = setInterval(() => {
-      if (document.visibilityState === "visible") void check();
-    }, CHAMP_POLL_MS);
-    const onVisible = () => document.visibilityState === "visible" && void check();
-    document.addEventListener("visibilitychange", onVisible);
+    const offVisible = onVisibleAgain(() => {
+      if (pending || Date.now() - checkedAt >= RETURN_CHECK_MS) void check();
+    });
     const offStale = bridge.on("me:stale", () => void check());
     return () => {
       alive = false;
       clearTimeout(weekly);
-      clearInterval(poll);
-      document.removeEventListener("visibilitychange", onVisible);
+      offVisible();
       offStale();
     };
     // 처음 값(firstBits)은 시작할 때만 쓴다

@@ -10,8 +10,8 @@ import ui from "../ui/ui.module.css";
 import styles from "./MegaphoneFeed.module.css";
 import MegaphoneSpotlight from "./MegaphoneSpotlight";
 
-/** 기록을 다시 받는 간격 (관리자 숨김 반영·놓친 방송 보충) */
-const RELOAD_MS = 2 * 60_000;
+/** 기록을 다시 받는 간격 (관리자 숨김 반영·놓친 방송 보충. 새 방송은 실시간으로 오므로 10분, 숨긴 탭은 받지 않는다) */
+const RELOAD_MS = 10 * 60_000;
 
 /**
  * 23번 확성기 창 (데스크톱은 화면 왼쪽 위). 최근 20개는 펼쳐 볼 수 있다(접기 가능).
@@ -25,7 +25,9 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
   useBridgeEvent("megaphone:heard", (m) => megaphoneStore.push(m));
   useEffect(() => {
     void megaphoneStore.load(channel);
-    const t = setInterval(() => void megaphoneStore.load(channel), RELOAD_MS);
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") void megaphoneStore.load(channel);
+    }, RELOAD_MS);
     return () => clearInterval(t);
   }, [channel]);
   // 펼쳐 둔 기록은 새 줄이 오면 맨 아래로

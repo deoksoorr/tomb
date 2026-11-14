@@ -251,12 +251,23 @@ export type NameClaimResponse = { me: Me };
 export type WearResponse = { me: Me; lookGrant: string };
 /**
  * GET /api/me/titles: 얻은 칭호 id(@tomb/protocol TITLE_IDS)와 지금 낀 칭호 (없으면 null). 이름·얻는 방법은 lib/titles.
- * fresh = 새로 알릴 칭호 (알림 창), unseen = 가방 [칭호] 칸에서 아직 안 본 칭호 ("새로!"·가방 점), first = 처음 확인 (이미 얻어 둔 칭호를 묶어 알린다)
+ * fresh = 새로 알릴 칭호 (알림 창), unseen = 가방 [칭호] 칸에서 아직 안 본 칭호 ("NEW"·가방 점), first = 처음 확인 (이미 얻어 둔 칭호를 묶어 알린다)
  */
-export type TitlesResponse = { earned: string[]; equipped: string | null; fresh: string[]; unseen: string[]; first: boolean };
+export type TitlesResponse = {
+  earned: string[];
+  equipped: string | null;
+  fresh: string[];
+  unseen: string[];
+  first: boolean;
+  /** 진행 수치 (lib/titles TitleMetric → 값, 가방 칭호 칸 진행도) */
+  progress: Record<string, number>;
+  /** 운영자 계정: 모든 칭호를 쓸 수 있다 (진행도 대신 "운영자") */
+  staff?: true;
+};
 
 /** POST /api/me/attend → 출석 처리 (입장할 때 호출, 하루 1번만 지급) */
-export type AttendResponse = { me: Me; earned: number };
+/** look = 지금 착용 증서 (GET /api/me/look과 같은 값. 입장 때 따로 부르지 않게 같이 준다 — 옛 서버면 없다) */
+export type AttendResponse = { me: Me; earned: number; look?: LookGrantResponse };
 /** POST /api/me/code → 개인 코드 발급(재발급하면 이전 코드는 무효) */
 export type CodeResponse = { code: string };
 /** POST /api/me/login { code } → 이 기기를 그 계정으로 전환 (세션 쿠키 교체) */
@@ -349,7 +360,15 @@ export type PointRankResponse = { rows: PointRankRow[]; mine: PointRankRow | nul
 
 /** POST /api/me/presence (화면이 켜져 있는 동안 10분마다) → 머무르기 포인트 */
 export const PRESENCE_INTERVAL_MS = 10 * 60_000;
-export type PresenceResponse = { earned: number; me: Me };
+/** 숨긴 탭은 이만큼마다 한 번만 보내고 서버가 몰아서 센다 (lib/store/types.ts presenceCatchup). 돌아오면 바로 한 번 */
+export const PRESENCE_HIDDEN_INTERVAL_MS = 30 * 60_000;
+/** 머무르기로 바뀐 내 정보 (POST /api/me/presence?lite=1): 잔액·모은 포인트·오늘 쌓은 포인트·오늘 머문 시간(분) */
+export type PresenceTickInfo = { points: number; lifetimePoints: number; todayEarned: number; stayMinutes: number };
+/**
+ * lite=1(지금 화면): 계정 전체(me) 대신 바뀐 값만 tick으로 (너무 일러 적립하지 않았으면 tick 없음. 운영자는 지갑 채우기 때문에 me).
+ * lite가 없는 옛 화면은 예전처럼 me 전체
+ */
+export type PresenceResponse = { earned: number; me?: Me; tick?: PresenceTickInfo };
 /** POST /api/me/stay-bonus → 접속 시간 보너스 받기 (earned = 실제 들어온 포인트, count = 받은 구간 수) */
 export type StayBonusResponse = { earned: number; count: number; me: Me };
 

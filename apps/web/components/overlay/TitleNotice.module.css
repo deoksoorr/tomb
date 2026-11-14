@@ -82,3 +82,26 @@
     animation: none;
   }
 }
+
+.grade {
+  padding: 0 4px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  vertical-align: middle;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.name[data-grade="silver"] {
+  color: #eef3fb;
+}
+
+.name[data-grade="legend"] {
+  color: #ffb0e0;
+}
+
+.perk {
+  color: var(--moss);
+  font-family: var(--font-small);
+  font-size: 10px;
+}

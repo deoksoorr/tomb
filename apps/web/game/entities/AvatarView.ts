@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
-import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, isNameSlot, itemById, ridePetOfLook, sanitizeDye, titleOfLook, type ActKind, type DirId, type StateName } from "@tomb/protocol";
+import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, isChampValue, isNameSlot, itemById, ridePetOfLook, sanitizeDye, titleOfLook, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { hasNameStyle, nameStyleRef } from "@/lib/nameStyle";
-import { titleLabel } from "@/lib/titles";
+import { titleDef } from "@/lib/titles";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange, isDyedSpec } from "../sprites/avatar";
@@ -18,6 +18,7 @@ import { MoodView } from "./MoodView";
 import { STAFF_COLOR, StaffFxView } from "./StaffFxView";
 import { ChampBadgeView } from "./ChampBadgeView";
 import { NameStyleView } from "./NameStyleView";
+import { TitleView } from "./TitleView";
 
 /** 도감 100% 배지: 종류마다 별 하나 (금빛) */
 const DEX_BADGE_STAR = "★";
@@ -25,8 +26,6 @@ const DEX_BADGE_STAR = "★";
 const FRIEND_HEART = "♥";
 const FRIEND_TINT = 0xff8fb8;
 const DEX_BADGE_TINT = 0xffd45e;
-/** 칭호 글자 (연한 금빛 — 이름표 뼈색·촛불빛·1위 배지 금색과 구분되게 옅게) */
-const TITLE_TINT = 0xf3d98a;
 /** 칭호 위아래로 보이는 간격 (화면 px): 이름표 ↔ 칭호 ↔ 1위 배지·말풍선 */
 const TITLE_GAP = 6;
 
@@ -144,7 +143,7 @@ export class AvatarView {
   private champ = 0;
   private champBadge: ChampBadgeView | null = null;
   /** 칭호 「…」 (이름표 바로 위, 연한 금빛). 칭호를 달았을 때만 만든다 */
-  private titleText: Phaser.GameObjects.BitmapText | null = null;
+  private titleView: TitleView | null = null;
   /** 닉네임 꾸미기 (이름 글자 색·이름표 바탕판). 착용했을 때만 만든다 */
   private nameFx: NameStyleView | null = null;
   private readonly isMe: boolean;
@@ -256,6 +255,7 @@ export class AvatarView {
     }
     this.nameFx?.setStaff(on);
     this.retexture();
+    this.refreshAura();
   }
 
   get staff(): boolean {
@@ -287,14 +287,21 @@ export class AvatarView {
    * 발밑·몸 뒤 1위 오라 (본인이 끄면 배지만). 0이나 모르는 값이면 둘 다 없앤다
    */
   setChamp(bits: number | undefined): void {
-    const next = isChampBits(bits) ? bits : 0;
+    // 1위 비트(+ 오라 끔) 또는 오라 끔만(운영자 오라를 끈 운영자)
+    const next = isChampValue(bits) ? bits : 0;
     if (next === this.champ) return;
     this.champ = next;
-    if (!next) {
+    if (!isChampBits(next)) {
       this.champBadge?.destroy();
       this.champBadge = null;
     } else (this.champBadge ??= new ChampBadgeView(this.scene, this.atlas, this.label.depth)).set(next);
-    if (this.cfx || champAuraOn(next)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, this.body, next);
+    this.refreshAura();
+  }
+
+  /** 1위 오라·운영자 오라 다시 걸기 (운영자 오라가 우선, 본인이 끄면 CHAMP_AURA_OFF) */
+  private refreshAura(): void {
+    const staff = !!this.staffFx;
+    if (this.cfx || champAuraOn(this.champ) || staff) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, this.body, this.champ, staff);
   }
 
   get champBits(): number {
@@ -337,7 +344,7 @@ export class AvatarView {
     this.body = b;
     this.shoulder = BODY_METRICS[b].shoulder;
     // 25번 프리미엄 외형 등급 연출은 몸에 딸린다 (다른 사람 화면에서도 몸 id로 똑같이)
-    if (this.cfx || bodyFx(b)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, b, this.champ);
+    if (this.cfx || bodyFx(b)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, b, this.champ, !!this.staffFx);
     this.relayout();
     this.retexture();
   }
@@ -380,11 +387,11 @@ export class AvatarView {
       this.mountPet = mount;
       this.anim = "";
     }
-    if (this.cfx || look.length || bodyFx(this.body) || champAuraOn(this.champ)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(look, this.body, this.champ);
+    if (this.cfx || look.length || bodyFx(this.body) || champAuraOn(this.champ) || !!this.staffFx) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(look, this.body, this.champ, !!this.staffFx);
     this.relayout();
     this.retexture();
     this.setNameStyle(look);
-    this.setTitle(titleLabel(titleOfLook(look)));
+    this.setTitle(titleOfLook(look));
     const vis = this.sprite.visible;
     const wantAura = look.includes("aura_firefly");
     if (wantAura && !this.aura.length) {
@@ -457,17 +464,16 @@ export class AvatarView {
   }
 
   /** 칭호 글자 (null = 없앤다). 이름표와 같은 글꼴, 구분되게 연한 금빛 */
-  private setTitle(text: string | null): void {
-    if (!text) {
-      this.titleText?.destroy();
-      this.titleText = null;
+  private setTitle(id: string | null): void {
+    const t = titleDef(id);
+    if (!t) {
+      this.titleView?.destroy();
+      this.titleView = null;
       return;
     }
-    if (this.titleText?.text === text) return;
-    this.atlas.ensure(text);
-    if (this.titleText) this.titleText.setText(text);
-    else this.titleText = this.scene.add.bitmapText(0, 0, FONT_KEY, text, FONT_PX).setOrigin(0.5, 1).setDepth(this.label.depth).setTint(TITLE_TINT).setVisible(this.sprite.visible);
+    (this.titleView ??= new TitleView(this.scene, this.atlas, this.label.depth, this.reduced)).set(t);
   }
+
 
   /** 닉네임 꾸미기 (착용 목록에서 이름 글자·이름표 바탕판). 없으면 원래 이름표 색으로 */
   private setNameStyle(look: readonly string[]): void {
@@ -896,16 +902,16 @@ export class AvatarView {
     // 칭호가 있으면 보이는 간격을 모두 TITLE_GAP으로 맞춘다: 이름표(바탕판이 있으면 판 윗변, 운영자면 금빛 테두리, 그냥 글자면 글자 윗선) ↔ 칭호 글자 ↔ 1위 배지 판·말풍선
     let lift = this.nameFx?.topLift(labelScale) ?? 0;
     let labelTop: number;
-    if (this.titleText) {
-      const t = this.titleText;
+    if (this.titleView) {
+      const t = this.titleView;
       const sc = labelScale;
-      if (t.scaleX !== sc) t.setScale(sc);
+      if (t.text.scaleX !== sc) t.text.setScale(sc);
       const pad = this.atlas.inkPad;
-      const gap = TITLE_GAP * sc;
+      const gap = (TITLE_GAP + t.padY) * sc;
       const cellTop = this.label.y - this.label.height;
       const visibleTop = cellTop - (lift > 0 ? lift : this.staffFx ? 1.5 * sc : -pad.top * sc);
       const titleBottom = visibleTop - gap + pad.bottom * sc;
-      t.setPosition(Math.round(this.label.x), Math.round(titleBottom)).setAlpha(fa).setVisible(vis && this.label.visible);
+      t.place(Math.round(this.label.x), Math.round(titleBottom), sc, vis && this.label.visible, fa, now);
       const titleInkTop = titleBottom - t.height + pad.top * sc;
       // 1위 배지 판 아랫변 = 칭호 글자 윗선 − 간격 (ChampBadgeView: 판 아랫변 = 칸 위 − 1px − lift)
       lift = cellTop - sc - (titleInkTop - gap);
@@ -1114,7 +1120,7 @@ export class AvatarView {
     this.dexBadge?.setVisible(v);
     this.champBadge?.setVisible(v);
     this.nameFx?.setVisible(v);
-    this.titleText?.setVisible(v);
+    this.titleView?.setVisible(v);
     this.friendMark?.setVisible(v);
     for (const f of this.fog) f.setVisible(v);
     this.ripple?.setVisible(v);
@@ -1133,8 +1139,8 @@ export class AvatarView {
     this.champBadge = null;
     this.nameFx?.destroy();
     this.nameFx = null;
-    this.titleText?.destroy();
-    this.titleText = null;
+    this.titleView?.destroy();
+    this.titleView = null;
     this.friendMark?.destroy();
     this.bubble?.destroy();
     this.bubble = null;

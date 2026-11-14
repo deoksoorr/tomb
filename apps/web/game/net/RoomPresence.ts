@@ -193,6 +193,8 @@ export class RoomPresence {
     // 방 안에서 꾸미기를 바꾸면 내 아바타에 바로 입히고 방 사람들에게도 알린다
     // 주간 1위 배지·전용 오라: 내 아바타를 Player가 아닌 AvatarView로 만든 장면(사냥터)도 마지막 착용 증서 값으로 시작
     o.me?.setChamp(bridge.last("look:set")?.champ);
+    // 31번 운영자 표시(저승사자 차림·운영자 오라)도 — 사냥터처럼 Player 없이 내 아바타를 만든 장면에서
+    if (o.me && !o.me.staff && bridge.last("me:staff")?.on === true) o.me.setStaff(true);
     this.offLook = bridge.on("look:set", ({ look, lookGrant, dye, body, champ }) => {
       const clean = Array.isArray(look) ? look.filter((x): x is string => typeof x === "string") : [];
       o.me?.setLook(clean);

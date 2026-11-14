@@ -102,8 +102,8 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     void load();
-    // 창이 열려 있는 동안 위치를 30초마다 새로
-    const t = setInterval(() => void load(), 30_000);
+    // 창이 열려 있는 동안 위치를 30초마다 새로 (숨긴 탭은 받지 않는다)
+    const t = setInterval(() => document.visibilityState === "visible" && void load(), 30_000);
     const off = bridge.on("me:stale", () => void load());
     return () => {
       clearInterval(t);

@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AdminGraveSettings, AdminPassedResponse } from "@/lib/admin";
 import { getAccounts, getStore } from "@/lib/store";
+import { PASS_SWEEP_LOCK_MS } from "@/lib/store/passing";
 import type {
   ActivityResponse,
   ApiError,
@@ -110,12 +111,12 @@ describe("1인 1묘비", () => {
     await store.put(old(ids[2], base - 2000, 3));
     for (const id of ids) await accounts.addGrave(v.visitorId, id);
 
-    at(2 * 60_000); // 정리 잠금(1분)이 풀린 뒤
+    at(PASS_SWEEP_LOCK_MS + 60_000); // 정리 잠금(30분)이 풀린 뒤
     await listOf(1);
     expect((await myGraveOf(v)).active?.id).toBe(ids[1]);
     const passed = await bodyOf<PassedListResponse>(passedList.GET(call("/api/graves/passed?q=옛 묘비")));
     expect(passed.entries.map((e) => e.id).sort()).toEqual([ids[0], ids[2]].sort());
-    at(4 * 60_000);
+    at(2 * PASS_SWEEP_LOCK_MS + 2 * 60_000);
     await listOf(1);
     expect((await bodyOf<PassedListResponse>(passedList.GET(call("/api/graves/passed?q=옛 묘비")))).total).toBe(2);
     expect((await myGraveOf(v)).active?.id).toBe(ids[1]);
@@ -130,7 +131,7 @@ describe("성불", () => {
 
     at(14 * DAY - 60_000);
     expect((await listOf(6)).graves.map((g) => g.id)).toContain(grave.id);
-    at(14 * DAY + 60_000);
+    at(14 * DAY + PASS_SWEEP_LOCK_MS); // 정리는 30분에 한 번
     const list = await listOf(6);
     expect(list.graves.map((g) => g.id)).not.toContain(grave.id);
     expect(list.passed).toContain(grave.id);

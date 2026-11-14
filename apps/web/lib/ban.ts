@@ -17,8 +17,11 @@ import { getBanStore, isBanActive, type BanPointer, type BanRecord, type BanStor
 //     정지가 없으면 Redis를 거의 읽지 않는다 (색인은 정지 수만큼만 크다)
 // 운영자 IP(ADMIN_ALLOWED_IPS, 로컬은 루프백)에는 IP 차단을 적용하지 않는다 (계정 정지는 적용).
 
-/** requireVisitor용 색인 캐시 유지 시간. 다른 인스턴스는 이만큼 늦게 알 수 있다 (같은 인스턴스는 바로 비운다) */
-export const BAN_CACHE_MS = 20_000;
+/**
+ * requireVisitor용 색인 캐시 유지 시간. 다른 인스턴스는 이만큼 늦게 알 수 있다 (같은 인스턴스는 바로 비운다).
+ * 입장(/api/join)은 캐시 없이 바로 판정하므로 Redis 명령을 아끼려고 20초 → 2분
+ */
+export const BAN_CACHE_MS = 2 * 60_000;
 
 // ── IP 해시 ──
 

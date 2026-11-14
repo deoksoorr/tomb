@@ -323,6 +323,13 @@ export const CHAMP_AURA_OFF = 1 << CHAMP_BOARDS.length;
 export function isChampBits(v: unknown): v is number {
   return typeof v === "number" && Number.isInteger(v) && v > 0 && v <= (CHAMP_ALL | CHAMP_AURA_OFF) && (v & CHAMP_ALL) > 0;
 }
+/**
+ * 입장 토큰·착용 증서·접속자 정보에 실리는 champ 값 전체 (1~15): 1위 비트(+ 오라 끔) 또는 CHAMP_AURA_OFF 하나만
+ * (31번 운영자가 "운영자 오라 보이기"를 껐을 때 — 1위가 아니어도 오라 끔을 전한다)
+ */
+export function isChampValue(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v > 0 && v <= (CHAMP_ALL | CHAMP_AURA_OFF);
+}
 /** 비트 묶음 → 1위 랭킹 (CHAMP_BOARDS 순서) */
 export function champBoards(v: number | undefined): ChampBoard[] {
   return isChampBits(v) ? CHAMP_BOARDS.filter((_, i) => v & (1 << i)) : [];

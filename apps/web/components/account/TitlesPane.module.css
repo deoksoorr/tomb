@@ -131,3 +131,115 @@
   font-size: 10px;
   vertical-align: middle;
 }
+
+/* ── 등급 (동 · 은 · 금 · 전설): 얻은 카드 테두리·이름 색, 등급 딱지 ── */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.grade {
+  padding: 0 4px;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.title[data-grade="bronze"] .grade {
+  color: #d9a777;
+}
+
+.title[data-grade="silver"] .grade {
+  color: #cfd8e6;
+}
+
+.title[data-grade="gold"] .grade {
+  color: #ffd76a;
+}
+
+.title[data-grade="legend"] .grade {
+  color: #ffb0e0;
+}
+
+.title[data-earned][data-grade="bronze"] .name {
+  color: #f0c493;
+}
+
+.title[data-earned][data-grade="silver"] .name {
+  color: #f1f5fb;
+}
+
+.title[data-earned][data-grade="gold"] .name {
+  color: #ffd76a;
+}
+
+.title[data-earned][data-grade="legend"] .name {
+  background: linear-gradient(90deg, #ff9a9a, #ffd27a, #b8f58a, #8ad8ff, #c2a2ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.title[data-earned][data-grade="gold"] {
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 1px rgba(255, 215, 106, 0.45);
+}
+
+.title[data-earned][data-grade="legend"] {
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 1px rgba(255, 176, 224, 0.5),
+    inset 0 0 14px rgba(194, 162, 255, 0.25);
+}
+
+.nowName[data-grade="legend"] {
+  background: linear-gradient(90deg, #ff9a9a, #ffd27a, #b8f58a, #8ad8ff, #c2a2ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.perkNow {
+  display: block;
+  color: var(--moss);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 칭호 능력 한 줄 (은 이상) */
+.perk {
+  color: var(--moss);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 진행도 (막대 + 숫자) */
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar {
+  position: relative;
+  flex: 1;
+  max-width: 80px;
+  height: 4px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--moss);
+}

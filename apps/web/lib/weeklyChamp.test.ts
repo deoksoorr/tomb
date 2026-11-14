@@ -369,3 +369,20 @@ describe("테스트 서버 운영자 시험 1위", () => {
     }
   });
 });
+
+describe("31번 운영자 오라 끔 값", () => {
+  it("1위가 아닌 운영자가 운영자 오라를 끄면 CHAMP_AURA_OFF만, 일반 계정은 0", async () => {
+    const { champWireFor } = await import("./store/champ");
+    const op = await user("staffer");
+    const a = await user("alpha");
+    await setStaff(op);
+    const now = at(NEXT, 1);
+    expect(await champWireFor(op, true, now)).toBe(0);
+    await getChamp().setAuraOff(op, true);
+    expect(await champWireFor(op, true, now)).toBe(CHAMP_AURA_OFF);
+    await getChamp().setAuraOff(a, true);
+    expect(await champWireFor(a, false, now)).toBe(0);
+    // 내 정보에도 같은 값
+    expect((await loadMe(getAccounts(), op, now)).champ).toBe(CHAMP_AURA_OFF);
+  });
+});

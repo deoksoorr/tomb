@@ -6,7 +6,7 @@ import { CODE_ALPHABET, type EarnSource } from "../economy";
 import { gameDay, gameWeek, gameYesterday, weekOfDay } from "../gameDay";
 import { NAME_CHANGE_COOLDOWN_DAYS, NAME_CHANGE_PRICE, type Me } from "../types";
 import { staffAccountId, topUpIfStaff } from "../staff";
-import { champBitsFor } from "./champ";
+import { champWireFor } from "./champ";
 import { K } from "./keys";
 import { getStyleStore } from "./style";
 import type { AccountRecord, AccountStore } from "./types";
@@ -74,7 +74,8 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
   const staff = await topUpIfStaff(accounts, accountId);
   // 46번 염색은 따로 저장한다 (lib/store/style.ts)
   // 주간 1위 값 (지난주 1위면 비트, 오라를 껐으면 끔 표시까지) → 착용 증서에 실려 다른 사람 화면의 배지·오라도 맞춘다
-  const [a, style, champ] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId), champBitsFor(accountId, now).catch(() => 0)]);
+  // 31번 운영자는 운영자 오라를 끈 것도 같은 값으로 (CHAMP_AURA_OFF)
+  const [a, style, champ] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId), champWireFor(accountId, staff, now).catch(() => 0)]);
   return {
     ...toMe(accountId, a, day, now),
     dye: style.dye,

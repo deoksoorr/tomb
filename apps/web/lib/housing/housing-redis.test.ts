@@ -9,7 +9,7 @@ import { env } from "../env";
 import { getAccounts } from "../store";
 import { kstDay } from "../store/accounts";
 import { defaultExterior, furnitureById, PLOT_TIERS } from "./catalog";
-import { buyFurniture, buyPlot, getHouseStore, houseIdFor, houseStates, saveExterior, sellFurniture, setHouseState, village } from "./service";
+import { buyFurniture, buyPlot, getHouseStore, houseIdFor, houseStates, resetLegacyLotFill, saveExterior, sellFurniture, setHouseState, village } from "./service";
 import { placedSig, WINDOW_SIG } from "./states";
 import { HK, RedisHouseStore } from "./store-redis";
 import type { MyHouseResponse, VillageResponse } from "./types";
@@ -132,6 +132,7 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
     expect((await store.get(ids[0]))!.exterior).toEqual(defaultExterior());
     const taken = new Set((await lotsHash()).keys());
 
+    resetLegacyLotFill(store); // 앞 시험이 이미 훑었다 (인스턴스마다 처음 한 번만 훑는다)
     const [v1, v2] = await Promise.all([village(store), village(store)]); // 동시에 열어도 한 번만 배정
     const lots = ids.map((id) => v1.houses.find((h) => h.id === id)?.lot);
     expect(lots.every((l) => typeof l === "number" && l > 0 && !taken.has(l))).toBe(true);
@@ -143,6 +144,7 @@ describe.skipIf(!conn)("하우징 v4 (실제 Redis)", () => {
       expect([...hash.values()].filter((x) => x === id)).toHaveLength(1);
       expect((await store.get(id))!.lot).toBe(lots[i]);
     }
+    resetLegacyLotFill(store);
     const again = await village(store);
     expect(ids.map((id) => again.houses.find((h) => h.id === id)?.lot)).toEqual(lots);
   });

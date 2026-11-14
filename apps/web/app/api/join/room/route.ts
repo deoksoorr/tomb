@@ -8,8 +8,8 @@ import { requireVisitor } from "@/lib/session";
 import { isStaff } from "@/lib/staff";
 import { getAccounts, NO_NAME } from "@/lib/store";
 import { getStyleStore } from "@/lib/store/style";
-import { champBitsFor } from "@/lib/store/champ";
-import { kstDay, lookOf } from "@/lib/store/accounts";
+import { champWireFor } from "@/lib/store/champ";
+import { lookOf } from "@/lib/store/accounts";
 import type { RoomJoinResponse } from "@/lib/types";
 import { readBody, RoomJoinSchema } from "@/lib/validate";
 
@@ -29,7 +29,8 @@ export const POST = handler(async (req) => {
   }
   const now = Date.now();
   const accounts = getAccounts();
-  const [a, style, staff, dex, champ] = await Promise.all([accounts.get(visitorId, kstDay(now), now), getStyleStore(accounts).get(visitorId), isStaff(visitorId), dexBadgeOf(visitorId), champBitsFor(visitorId, now).catch(() => 0)]);
+  // 계정 전체 대신 이름·색·몸·착용만 (명령 9개 → 2개)
+  const [a, style, staff, dex, champ] = await Promise.all([accounts.appearance(visitorId, now), getStyleStore(accounts).get(visitorId), isStaff(visitorId), dexBadgeOf(visitorId), isStaff(visitorId).then((s) => champWireFor(visitorId, s, now)).catch(() => 0)]);
   const token = await signJoinToken(
     env.joinSecret(),
     // 31번: 운영자 표시는 서버가 확인한 뒤에만. 운영자 이름은 공개 이름("대장")으로

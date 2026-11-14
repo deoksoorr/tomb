@@ -4,7 +4,7 @@ import { BITE_MAX_MS, BITE_MIN_MS, candidates, conditionsAt, hash01, reelMinMs, 
 // 자동 낚시 규칙 (순수 함수 — 서버가 쓰고 테스트한다).
 // 클라이언트 프레임이 아니라 서버 시각으로 센다: 켤 때 세션(시작 시각·자리·채널·물 종류·시드)을 저장하고,
 // "살아 있다"는 신호(정산 요청·머무르기 기록 /api/me/presence)가 올 때마다 직전 신호와의 간격을 접속 구간으로 쌓는다.
-//  - 간격이 AUTO_BEAT_GAP_MS 이하면 그동안 접속해 있던 것으로 본다 (숨은 탭은 머무르기 기록이 10분마다 온다)
+//  - 간격이 AUTO_BEAT_GAP_MS 이하면 그동안 접속해 있던 것으로 본다 (숨은 탭은 머무르기 기록이 30분마다 온다)
 //  - 그보다 길면 끊겼던 것으로 보고 그 구간은 세지 않는다
 // 접속 구간을 이어 붙인 시간 AUTO_FISH_EVERY_MS마다 한 마리. k번째 물고기는 그 시간이 채워진 "그 시각"의 시간대·날씨·계절로
 // 세션 시드 + 번호로 결정적으로 굴린다 → 같은 정산을 다시 계산해도 결과가 같다.
@@ -17,12 +17,15 @@ export const AUTO_FISH_EVERY_MS = Math.round(DIRECT_FISH_AVG_MS * 2.5);
 export const AUTO_FISH_DAILY_MAX = 75;
 /** 한 세션 최대 길이 (켠 시각부터) */
 export const AUTO_FISH_MAX_MS = 6 * 3_600_000;
-/** 신호 사이가 이보다 길면 끊긴 것으로 본다 (머무르기 기록 10분 간격 + 숨은 탭 타이머 지연 여유) */
-export const AUTO_BEAT_GAP_MS = 13 * 60_000;
+/**
+ * 신호 사이가 이보다 길면 끊긴 것으로 본다 (숨은 탭의 머무르기 기록 30분 간격 + 타이머 지연 여유.
+ * 머무르기 몰아서 정산 창 PRESENCE_CATCHUP_WINDOW_MS와 같다. 탭을 닫으면 자동 낚시는 꺼진다)
+ */
+export const AUTO_BEAT_GAP_MS = 40 * 60_000;
 /** 접속 구간 기록 개수 상한 (끊겼다 붙었다를 아주 많이 해도 세션 값이 커지지 않게) */
 export const AUTO_SEGS_MAX = 64;
-/** 보이는 동안 정산 주기 (클라이언트) */
-export const AUTO_SYNC_MS = 90_000;
+/** 보이는 동안 정산 주기 (클라이언트. 서버가 접속 시간으로 세므로 늦게 물어도 몫은 같다 — Redis 명령을 아끼려고 90초 → 3분) */
+export const AUTO_SYNC_MS = 3 * 60_000;
 
 export type AutoSession = {
   v: 1;

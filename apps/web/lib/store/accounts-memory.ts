@@ -12,7 +12,7 @@ import {
 
   ACTIVITY_KEEP,
   DORMANT_MS,
-  PRESENCE_MIN_GAP_MS,
+  presenceCatchup,
   spendCategory,
   type NameChangeResult,
   type NameClaimResult,
@@ -22,6 +22,7 @@ import {
   type AccountSummary,
   type EarnOptions,
   type EquippedItem,
+  type PresenceTick,
   type Profile,
   type RankEntry,
 } from "./types";
@@ -37,6 +38,8 @@ type Acct = {
   color: string | null;
   body: string | null;
   presenceAt: number;
+  /** 직전 머무르기 기록을 보낸 화면 (몰아서 정산 판정) */
+  presenceSid?: string;
   ledger: { at: number; amount: number; reason: string }[];
   activity: ActivityItem[];
   activitySeen: number;
@@ -244,6 +247,11 @@ export class MemoryAccounts implements AccountStore {
     };
   }
 
+  async appearance(id: string, now: number): Promise<Pick<AccountRecord, "name" | "color" | "body" | "equipped">> {
+    const a = this.accts.get(id) ?? this.blank();
+    return { name: a.name, color: a.color ?? null, body: a.body ?? null, equipped: [...a.look.values()].filter((e) => e.until > now) };
+  }
+
   async earn(id: string, source: EarnSource, day: string, opts?: EarnOptions): Promise<number> {
     return this.credit(this.acct(id), source, day, opts);
   }
@@ -268,13 +276,28 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async presence(id: string, day: string, now: number): Promise<number | null> {
+    return (await this.presenceTick(id, day, now))?.earned ?? null;
+  }
+
+  async presenceTick(id: string, day: string, now: number, sid = ""): Promise<PresenceTick | null> {
     const a = this.acct(id);
-    if (now - (a.presenceAt ?? 0) < PRESENCE_MIN_GAP_MS) return null;
-    a.presenceAt = now;
+    // 몰아서 정산 규칙은 accounts-redis.ts PRESENCE_LUA와 같다 (presenceCatchup)
+    const c = presenceCatchup(a.presenceAt ?? 0, now, !!sid && a.presenceSid === sid);
+    if (!c) return null;
+    a.presenceAt = c.nextAt;
+    a.presenceSid = sid || undefined;
     // 10번: 머문 기록은 포인트 한도와 상관없이 센다 (출석 도장 조건)
     this.today(a, day);
-    a.earned.set("_stay", (a.earned.get("_stay") ?? 0) + 1);
-    return this.credit(a, "presence", day);
+    a.earned.set("_stay", (a.earned.get("_stay") ?? 0) + c.ticks);
+    const earned = this.credit(a, "presence", day, { amount: earnRule("presence").points * c.ticks });
+    return {
+      earned,
+      ticks: c.ticks,
+      points: a.points,
+      lifetimePoints: a.lifetime ?? a.points,
+      todayEarned: a.earned.get("_total") ?? 0,
+      stayTicks: a.earned.get("_stay") ?? 0,
+    };
   }
 
   async claimStayBonus(id: string, day: string): Promise<{ earned: number; count: number } | null> {

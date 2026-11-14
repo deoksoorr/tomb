@@ -477,7 +477,7 @@ export class SkyRides {
       const fs = r.kind === "ferris" ? ferrisSeat(seatId) : undefined;
       const bs = r.kind === "balloon" ? balloonSeat(seatId) : undefined;
       const seat = fs && fs.car === r.unit ? fs.index : bs && bs.balloon === r.unit ? bs.index : -1;
-      if (seat >= 0) out.push({ key: v.sprite.texture.key, frame: avatarFrame(state, DIR.up), index: seat, look: v.lookIds, body: v.bodyId, champ: v.champBits });
+      if (seat >= 0) out.push({ key: v.sprite.texture.key, frame: avatarFrame(state, DIR.up), index: seat, look: v.lookIds, body: v.bodyId, champ: v.champBits, staff: v.staff });
     };
     push(r.seatId, h.player().view);
     const want = r.kind === "ferris" ? STATE.ferris : STATE.balloon;

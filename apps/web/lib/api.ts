@@ -151,7 +151,8 @@ export const api = {
   notices: () => request<NoticeListResponse>("/api/notices"),
   inquiryInfo: () => request<InquiryInfoResponse>("/api/inquiry", { cache: "no-store" }),
   inquire: (input: InquiryInput) => request<InquiryResponse>("/api/inquiry", jsonInit("POST", input)),
-  presence: () => request<PresenceResponse>("/api/me/presence", { method: "POST" }),
+  // lite=1: 계정 전체 대신 바뀐 값(tick)만 받는다 (서버 Redis 명령 절약). sid = 이 화면 (숨긴 동안 몰아서 정산)
+  presence: (sid: string) => request<PresenceResponse>(`/api/me/presence?lite=1&sid=${encodeURIComponent(sid)}`, { method: "POST" }),
   stayBonus: () => request<StayBonusResponse>("/api/me/stay-bonus", { method: "POST" }),
   activity: () => request<ActivityResponse>("/api/me/activity", { cache: "no-store" }),
   activitySeen: (at: number) => request<unknown>("/api/me/activity/seen", jsonInit("POST", { at })),

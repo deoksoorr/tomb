@@ -262,6 +262,8 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.player = new Player(this, this.atlas, spawn.x, spawn.y, opts.color, opts.name, this.myBody());
+    // 단 칭호의 마을 이동 속도 (마을에서만)
+    this.player.titleSpeed = true;
     this.player.water = inWater;
     this.player.current = waterCurrent;
     this.physics.add.collider(this.player.sprite, this.map.colliders);

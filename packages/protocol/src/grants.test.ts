@@ -148,7 +148,10 @@ describe("주간 랭킹 1위", () => {
     // 0 = 1위가 끝남 (실시간 서버가 배지·오라를 끈다), 없으면 옛 웹 증서 (그대로 둔다)
     expect(await verifyGrant(s, await signGrant(s, { kind: "look", visitorId: "v1", look: [], exp, champ: 0 }))).toMatchObject({ champ: 0 });
     expect(await verifyGrant(s, await signGrant(s, { kind: "look", visitorId: "v1", look: [], exp }))).not.toHaveProperty("champ");
-    expect(await verifyGrant(s, await signGrant(s, { kind: "look", visitorId: "v1", look: [], exp, champ: 8 }))).not.toHaveProperty("champ");
+    // 오라 끔 표시만 (운영자 오라를 끈 운영자) — 1위 비트 없이도 전한다
+    expect(await verifyGrant(s, await signGrant(s, { kind: "look", visitorId: "v1", look: [], exp, champ: 8 }))).toMatchObject({ champ: 8 });
+    expect(await verifyGrant(s, await signGrant(s, { kind: "look", visitorId: "v1", look: [], exp, champ: 16 }))).not.toHaveProperty("champ");
+    expect((await verifyJoinToken(s, await signJoinToken(s, { ...base, champ: 8 })))?.champ).toBe(8);
   });
 });
 

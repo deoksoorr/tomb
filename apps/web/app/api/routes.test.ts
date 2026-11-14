@@ -201,7 +201,7 @@ describe("묘비 CRUD", () => {
     const v = await newVisitor();
     const { grave } = await createGrave(v);
     const res = await graves.GET(call("/api/graves"));
-    expect(res.headers.get("vercel-cdn-cache-control")).toBe("max-age=30, stale-while-revalidate=86400");
+    expect(res.headers.get("vercel-cdn-cache-control")).toBe("max-age=120, stale-while-revalidate=86400");
     expect(res.headers.get("cache-control")).toBe("no-store");
     const list = (await res.json()) as GraveListResponse;
     expect(list.graves.at(-1)?.id).toBe(grave.id);

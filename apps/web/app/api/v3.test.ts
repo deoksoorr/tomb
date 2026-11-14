@@ -88,9 +88,16 @@ describe("머무르기", () => {
     const v = await newVisitor();
     const first = await bodyOf<PresenceResponse>(presence.POST(call("/api/me/presence", { method: "POST", visitor: v })));
     expect(first.earned).toBe(5);
-    expect(first.me.points).toBe(5);
+    expect(first.me!.points).toBe(5);
     expect((await bodyOf<PresenceResponse>(presence.POST(call("/api/me/presence", { method: "POST", visitor: v })))).earned).toBe(0);
     expect((await presence.POST(call("/api/me/presence", { method: "POST", visitor: v }))).status).toBe(429);
+  });
+
+  it("lite=1: 계정 전체 대신 바뀐 값(tick)만, 너무 이르면 tick 없음", async () => {
+    const v = await newVisitor();
+    const first = await bodyOf<PresenceResponse>(presence.POST(call("/api/me/presence?lite=1", { method: "POST", visitor: v })));
+    expect(first).toEqual({ earned: 5, tick: { points: 5, lifetimePoints: 5, todayEarned: 5, stayMinutes: 10 } });
+    expect(await bodyOf<PresenceResponse>(presence.POST(call("/api/me/presence?lite=1", { method: "POST", visitor: v })))).toEqual({ earned: 0 });
   });
 });
 

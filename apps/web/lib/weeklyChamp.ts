@@ -241,7 +241,8 @@ export function resetChampMemo(): void {
 /** 시상대·명예의 전당에 그릴 캐릭터 모습 */
 export type ChampLook = { color: string; body: string; look: string[]; dye?: AvatarDye };
 
-const LOOK_CACHE_MS = 20_000;
+/** 시상대 모습 캐시 (Redis 명령을 아끼려고 5분. 옷을 바꾼 모습은 그만큼 늦게 보일 수 있다) */
+const LOOK_CACHE_MS = 5 * 60_000;
 const lookCache = new Map<string, { at: number; v: ChampLook }>();
 
 /** 계정의 지금 모습 (꾸미기·몸·염색, 잠깐 캐시) */
