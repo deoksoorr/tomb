@@ -29,7 +29,7 @@ import {
 } from "@/lib/rpg/catalog";
 import { GEAR_INV_MAX, sellValue, spentStats } from "@/lib/rpg/character";
 import type { CharacterAction } from "@/lib/rpg/client";
-import { derive, levelPenalty, STAT_MAX, type Derived } from "@/lib/rpg/formulas";
+import { countsForRace, derive, levelPenalty, STAT_MAX, type Derived } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST } from "@/lib/rpg/skillRules";
 import type { RpgView } from "@/lib/rpg/types";
 import { weaponStyleOf, weaponStyleText } from "@/lib/rpg/weapons";
@@ -89,8 +89,9 @@ export function StartPanel({
   const zone = zoneFor(diff, zoneId);
   const D = DIFFS[diff];
   const low = c.level < D.recLevel;
-  // 권장 레벨보다 10 넘게 높음: EXP가 깎이고 주간 레이스(사냥 처치·주간 최단)에 안 들어간다 (lib/rpg/service)
-  const far = game === "hunt" && levelPenalty(c.level, diff) < 1;
+  // 권장 레벨보다 10 넘게 높음: EXP가 깎이고(지옥 빼고 10%·2%), 지옥이 아니면 주간 레이스(사냥 처치·주간 최단)에 안 들어간다 (lib/rpg/service)
+  const expCut = levelPenalty(c.level, diff);
+  const noRace = game === "hunt" && !countsForRace(c.level, diff);
   const zoneLocked = game === "hunt" && !zoneOpen(zone, c.level, zoneUnlockAll());
   const monsters = [...new Set([...zone.pool])].map((id) => MONSTERS[id].name);
   const canStart = !busy && view.today.runsPerHour > 0 && !zoneLocked;
@@ -126,7 +127,10 @@ export function StartPanel({
                   </p>
                 )}
                 {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
-                {!zoneLocked && far && <p className={s.warn}>내 레벨보다 한참 쉬운 사냥터예요. EXP가 줄고 주간 레이스(사냥 처치)에는 들어가지 않아요.</p>}
+                {!zoneLocked && noRace && (
+                  <p className={s.warn}>내 레벨보다 한참 쉬운 사냥터예요. EXP는 {Math.round(expCut * 100)}%만 받고, 주간 레이스(사냥 처치)에는 들어가지 않아요.</p>
+                )}
+                {!zoneLocked && !noRace && expCut < 1 && <p className={s.warn}>권장 레벨보다 한참 높아서 EXP는 {Math.round(expCut * 100)}%만 받아요.</p>}
                 <div className={s.zoneGo}>
                   <p className={s.meta}>
                     오늘 사냥 포인트 {view.today.huntPoints} / {view.today.cap}P · 이번 시간 남은 판 {view.today.runsPerHour}

@@ -162,10 +162,20 @@ export function monsterStats(id: MonsterId, d: Difficulty, power = 1): MonsterSt
   };
 }
 
-/** 권장보다 너무 높은 레벨로 쉬운 곳을 돌면 EXP가 준다 (+10 넘으면 절반, +20 넘으면 1/4) */
+/**
+ * 권장보다 너무 높은 레벨로 쉬운 곳을 돌면 EXP가 준다.
+ * 11/15: 낮은 난이도는 거의 못 먹게 — +10 넘으면 10%, +20 넘으면 2% (예전 절반·1/4).
+ * 지옥은 맨 위 난이도라 41~50이 갈 곳이 여기뿐 → 예전처럼 +10 넘으면 절반까지만
+ */
 export function levelPenalty(level: number, d: Difficulty): number {
   const over = level - DIFFS[d].recLevel;
-  return over > 20 ? 0.25 : over > 10 ? 0.5 : 1;
+  if (d === "hell") return over > 10 ? 0.5 : 1;
+  return over > 20 ? 0.02 : over > 10 ? 0.1 : 1;
+}
+
+/** 이 판이 주간 레이스(그 주 처치·최단)에 들어가는지: 권장 +10 이하이거나 맨 위 난이도(지옥) */
+export function countsForRace(level: number, d: Difficulty): boolean {
+  return d === "hell" || level - DIFFS[d].recLevel <= 10;
 }
 
 // ── 공용 ──
