@@ -28,7 +28,6 @@ import {
   NAME_MIN,
   PERMANENT_MULTIPLIER,
   permanentPrice,
-  STAFF_PUBLIC_NAME,
   ZOO_PETS,
 } from "@tomb/protocol";
 import { ATTEND_STAY_TEXT } from "@/lib/attendStay";
@@ -204,7 +203,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
     .map((s) => s.name)
     .join(" · ");
   return (
-    <Dialog title="한때는... 안내" onClose={onClose}>
+    <Dialog title="At one time... 안내" onClose={onClose}>
       <div className={styles.guide}>
         <section>
           <h3>조작</h3>
@@ -434,7 +433,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               ["코드가 새면", "내 정보 → [새 코드 발급] (예전 코드는 바로 막혀요)"],
               ["닉네임", `${NAME_MIN}~${NAME_MAX}자 · 다른 사람과 같은 이름은 못 써요 · 첫 변경 무료, 그 뒤 ${won(NAME_CHANGE_PRICE)}P · ${NAME_CHANGE_COOLDOWN_DAYS}일에 한 번`],
               ["오래 쉬면", `${DORMANT_DAYS}일 넘게 안 들어오면 휴면 · 그 이름을 다른 사람이 쓸 수 있고, 돌아오면 닉네임을 다시 정해요`],
-              ["운영자", `금빛 '${STAFF_PUBLIC_NAME}' 이름표 · 채팅·확성기 이름도 금색이에요`],
+              ["운영자", "머리 위 무지갯빛 「운영자」 칭호 + 금빛 장식 이름표 · 채팅·확성기 이름도 금색에 '운영자' 딱지"],
               ["채널", `정원 ${DEFAULT_CHANNEL_CAPACITY}명 · 최대 ${DEFAULT_MAX_CHANNELS}채널 · 위 채널 표시로 옮기기`],
               ["대기열", "꽉 차면 줄 서기 · 차례가 오면 자동 입장"],
               ["다 놀았으면", "내 정보 → 접속 종료로 자리 비우기"],

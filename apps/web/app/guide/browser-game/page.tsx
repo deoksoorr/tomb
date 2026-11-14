@@ -4,9 +4,9 @@ import { DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS } from "@tomb/protocol";
 
 const PATH = "/guide/browser-game";
 const H1 = "설치 없이 하는 브라우저 도트 멀티 게임";
-const TITLE = "설치 없이 하는 브라우저 도트 멀티 게임 — 가입 없는 무료 실시간 마을 | 한때는...";
+const TITLE = "설치 없이 하는 브라우저 도트 멀티 게임 — 가입 없는 무료 실시간 마을 | At one time...";
 const DESCRIPTION =
-  "설치도 회원가입도 없이 브라우저에서 바로 하는 무료 실시간 멀티 도트 게임, 한때는...입니다. 채널마다 최대 40명과 함께 사냥터·미니게임, 낚시, 집 꾸미기, 묘비 세우기를 즐겨요. 키보드와 휴대폰 터치 모두 돼요.";
+  "설치도 회원가입도 없이 브라우저에서 바로 하는 무료 실시간 멀티 도트 게임, At one time...입니다. 채널마다 최대 40명과 함께 사냥터·미니게임, 낚시, 집 꾸미기, 묘비 세우기를 즐겨요. 키보드와 휴대폰 터치 모두 돼요.";
 
 export const metadata = pageMetadata(PATH, TITLE, DESCRIPTION);
 
@@ -28,7 +28,7 @@ export default function BrowserGamePage() {
       path={PATH}
       h1={H1}
       description={DESCRIPTION}
-      lead="「한때는...」은 설치·회원가입 없이 브라우저에서 바로 하는 무료 실시간 멀티 도트 마을이에요."
+      lead="「At one time...」은 설치·회원가입 없이 브라우저에서 바로 하는 무료 실시간 멀티 도트 마을이에요."
       facts={FACTS}
       steps={[
         "아래 [마을 들어가기]를 누르고 [새로 시작]에서 이름과 모습을 정해요.",

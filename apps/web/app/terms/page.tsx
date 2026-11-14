@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import styles from "../legal.module.css";
 
-export const metadata: Metadata = { title: "이용약관 · 한때는...", alternates: { canonical: "/terms" } };
+export const metadata: Metadata = { title: "이용약관 · At one time...", alternates: { canonical: "/terms" } };
 
 const EFFECTIVE = "2026년 11월 13일";
 
@@ -18,7 +18,7 @@ export default function TermsPage() {
 
         <h2>1. 서비스</h2>
         <p>
-          「한때는...」은 누구나 한때 시작했다 그만둔 것들이 잠든 공동묘지 컨셉의 도트 마을이에요. 다른 방문자와 함께 쉬고, 사냥하고,
+          「At one time...」은 누구나 한때 시작했다 그만둔 것들이 잠든 공동묘지 컨셉의 도트 마을이에요. 다른 방문자와 함께 쉬고, 사냥하고,
           집을 꾸미고, 한 사람에 하나씩 묘비를 세울 수 있는 무료 웹 서비스예요. 들어오는 것만으로 이 약관에 동의한 것으로 봐요.
         </p>
         <p>

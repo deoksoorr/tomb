@@ -4,9 +4,9 @@ import { DEFAULT_CHANNEL_CAPACITY } from "@tomb/protocol";
 
 const PATH = "/guide/bulmeong";
 const H1 = "모닥불·빗소리 불멍 사이트";
-const TITLE = "모닥불·빗소리 불멍 사이트 — 도트 마을 모닥불 곁에서 쉬기, 빗소리 20곡 | 한때는...";
+const TITLE = "모닥불·빗소리 불멍 사이트 — 도트 마을 모닥불 곁에서 쉬기, 빗소리 20곡 | At one time...";
 const DESCRIPTION =
-  "모닥불 앞에 앉아 멍하니 쉬고 싶다면 한때는...의 모닥불 광장으로 오세요. 곁에 앉으면 타닥이는 모닥불 소리와 함께 불멍을 할 수 있고, 빗소리 음악 20곡도 틀어 둘 수 있어요. 비 오는 날엔 빗소리도 들려요. 무료, 설치 없이.";
+  "모닥불 앞에 앉아 멍하니 쉬고 싶다면 At one time...의 모닥불 광장으로 오세요. 곁에 앉으면 타닥이는 모닥불 소리와 함께 불멍을 할 수 있고, 빗소리 음악 20곡도 틀어 둘 수 있어요. 비 오는 날엔 빗소리도 들려요. 무료, 설치 없이.";
 
 export const metadata = pageMetadata(PATH, TITLE, DESCRIPTION);
 
@@ -26,7 +26,7 @@ export default function BulmeongPage() {
       path={PATH}
       h1={H1}
       description={DESCRIPTION}
-      lead="「한때는...」 마을의 모닥불 곁에 앉으면 타닥이는 소리와 함께 불멍을 할 수 있어요. 빗소리 음악 20곡도 있어요."
+      lead="「At one time...」 마을의 모닥불 곁에 앉으면 타닥이는 소리와 함께 불멍을 할 수 있어요. 빗소리 음악 20곡도 있어요."
       facts={FACTS}
       steps={[
         "아래 [마을 들어가기]를 눌러 이름과 모습을 정하고 채널을 골라 들어가요.",

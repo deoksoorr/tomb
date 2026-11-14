@@ -5,8 +5,8 @@ import { SITE_DESCRIPTION } from "./seo";
 // 아이콘 그림은 scripts/gen-icons.mjs로 만든다 (후보 번호를 인자로 바꿔 다시 생성)
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "한때는...",
-    short_name: "한때는",
+    name: "At one time...",
+    short_name: "At one time",
     description: SITE_DESCRIPTION,
     start_url: "/",
     scope: "/",

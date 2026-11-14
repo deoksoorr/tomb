@@ -21,7 +21,9 @@
 
 .title {
   color: var(--bone);
-  font-size: 48px;
+  /* 11/15 영문 이름(At one time...)은 폰에서도 한 줄로: 폭에 맞춰 줄인다 */
+  font-size: min(48px, 10.5vw);
+  white-space: nowrap;
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: 0.02em;

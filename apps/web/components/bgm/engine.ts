@@ -264,7 +264,7 @@ class BgmEngine {
       if (!track || track.file === this.sessionFile || typeof MediaMetadata === "undefined") return;
       this.sessionFile = track.file;
       const list = this.state.playlists.find((p) => p.id === this.state.playlistId);
-      ms.metadata = new MediaMetadata({ title: track.title, artist: track.artist || "한때는", album: list?.title ?? "한때는" });
+      ms.metadata = new MediaMetadata({ title: track.title, artist: track.artist || "At one time...", album: list?.title ?? "At one time..." });
     } catch {
       // mediaSession을 못 쓰면 조용히
     }

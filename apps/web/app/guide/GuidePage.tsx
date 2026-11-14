@@ -59,7 +59,7 @@ export default function GuidePage({ path, h1, lead, description, facts, steps, c
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(data) }} />
       <div className={legal.inner}>
         <Link href="/" className={legal.home}>
-          ← 한때는... 마을로
+          ← At one time... 마을로
         </Link>
         <h1 className={legal.title}>{h1}</h1>
         <p className={styles.lead}>{lead}</p>
