@@ -1327,8 +1327,10 @@ export class SkillFx {
     const pw = Phaser.Math.Clamp(this.pw, 0.7, 1.6);
     const ms = [0, 100, 170, 260, 380][level] * (0.8 + 0.2 * pw);
     const k = [0, 0.003, 0.0055, 0.009, 0.013][level] * pw;
-    cam.shake(ms, k);
-    if (level >= 2) {
+    // 사냥터 고르는 화면의 '화면 흔들림 효과'를 껐으면 흔들림·줌 펀치(덜컹 당기기)를 둘 다 뺀다 (번쩍임만 남는다)
+    const jolt = shakeEnabled();
+    if (jolt) cam.shake(ms, k);
+    if (jolt && level >= 2) {
       // 줌 펀치: 살짝 당겼다가 되돌린다 (겹쳐도 원래 배율로 돌아오게 기준을 기억해 둔다)
       if (!this.scene.tweens.isTweening(cam)) this.baseZoom = cam.zoom;
       const z = this.baseZoom || cam.zoom;
