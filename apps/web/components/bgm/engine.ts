@@ -4,7 +4,7 @@ import { setAudioSessionType } from "@/lib/audioSession";
 import { sharedAudioContext } from "@/lib/sharedAudio";
 import { readItem, writeItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
-import { FIRST_PLAYLIST_ID, nextShuffled, parseManifest, pickTrack, randomStart, shuffledOrder, type Playlist, type Track } from "./manifest";
+import { FIRST_PLAYLIST_ID, nextShuffled, parseManifest, pickTrack, randomStart, shuffledOrder, trackSrc, type Playlist, type Track } from "./manifest";
 import { silentWav } from "./silence";
 
 // BGM 엔진 (싱글턴). iOS는 audio.volume을 무시하므로 볼륨·크로스페이드는 모두 Web Audio GainNode로 한다.
@@ -201,6 +201,8 @@ class BgmEngine {
     master.connect(ctx.destination);
     this.decks = [0, 1].map(() => {
       const audio = new Audio();
+      // 곡은 다른 주소(R2, NEXT_PUBLIC_BGM_BASE)에서 오기도 한다. WebAudio로 잇는 다른 출처 소리는 CORS로 받아야 들린다 (아니면 무음)
+      audio.crossOrigin = "anonymous";
       audio.preload = "auto";
       const gain = ctx.createGain();
       gain.gain.value = 0;
@@ -332,7 +334,7 @@ class BgmEngine {
     const to = this.decks[this.active];
     to.token++;
     to.file = track.file;
-    to.audio.src = track.file;
+    to.audio.src = trackSrc(track.file);
     const now = ctx.currentTime;
     to.gain.gain.cancelScheduledValues(now);
     to.gain.gain.setValueAtTime(0, now);

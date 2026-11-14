@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import tracksJson from "../../public/bgm/tracks.json";
-import { FIRST_PLAYLIST_ID, needsAttribution, nextShuffled, parseManifest, pickTrack, randomStart, shuffledOrder, type Playlist } from "./manifest";
+import { FIRST_PLAYLIST_ID, needsAttribution, nextShuffled, parseManifest, pickTrack, randomStart, shuffledOrder, trackSrc, type Playlist } from "./manifest";
 
 describe("parseManifest", () => {
   it("저장소의 tracks.json은 모든 플레이리스트에 곡이 있다", () => {
@@ -174,5 +174,21 @@ describe("randomStart", () => {
   it("곡이 없으면 0번, 목록이 없으면 null", () => {
     expect(randomStart([{ id: "rain", title: "비", tracks: [] }], null, () => 0.5)).toEqual({ playlistId: "rain", index: 0 });
     expect(randomStart([], null)).toEqual({ playlistId: null, index: 0 });
+  });
+});
+
+describe("trackSrc", () => {
+  it("base가 없거나 틀리면 /bgm/ 경로 그대로", () => {
+    expect(trackSrc("/bgm/lofi/a.mp3", undefined)).toBe("/bgm/lofi/a.mp3");
+    expect(trackSrc("/bgm/lofi/a.mp3", "")).toBe("/bgm/lofi/a.mp3");
+    expect(trackSrc("/bgm/lofi/a.mp3", "  ")).toBe("/bgm/lofi/a.mp3");
+    expect(trackSrc("/bgm/lofi/a.mp3", "bgm.myproject.rip")).toBe("/bgm/lofi/a.mp3");
+  });
+  it("base가 있으면 /bgm 대신 그 주소 아래 같은 경로 (끝 / 는 무시)", () => {
+    expect(trackSrc("/bgm/lofi/a.mp3", "https://bgm.myproject.rip")).toBe("https://bgm.myproject.rip/lofi/a.mp3");
+    expect(trackSrc("/bgm/jazz/b.mp3", "https://bgm.myproject.rip/")).toBe("https://bgm.myproject.rip/jazz/b.mp3");
+  });
+  it("/bgm/ 밖의 파일은 바꾸지 않는다", () => {
+    expect(trackSrc("/sfx/rain.mp3", "https://bgm.myproject.rip")).toBe("/sfx/rain.mp3");
   });
 });

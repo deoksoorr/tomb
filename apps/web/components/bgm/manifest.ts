@@ -40,6 +40,17 @@ export function parseManifest(data: unknown): Playlist[] {
   });
 }
 
+/**
+ * 곡 파일(/bgm/...)을 실제로 받을 주소. NEXT_PUBLIC_BGM_BASE(예: https://bgm.myproject.rip)가 있으면
+ * 그 아래 같은 경로(/lofi/xxx.mp3)에서 받고(Cloudflare R2 — Vercel 전송량 절약), 없거나 틀리면 지금처럼 /bgm/... 그대로.
+ * tracks.json은 /bgm/... 그대로 두므로 곡 구분(덱·잠금 화면)은 file로 한다
+ */
+export function trackSrc(file: string, base: string | undefined = process.env.NEXT_PUBLIC_BGM_BASE): string {
+  const b = base?.trim().replace(/\/+$/, "");
+  if (!b || !/^https?:\/\/[^/]+/.test(b) || !file.startsWith("/bgm/")) return file;
+  return b + file.slice("/bgm".length);
+}
+
 /** 처음 들어오면(입장 화면·마을 모두) 저장해 둔 목록과 상관없이 이 플레이리스트로 시작한다 */
 export const FIRST_PLAYLIST_ID = "lofi";
 
