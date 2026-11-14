@@ -2,7 +2,7 @@ import { Redis } from "@upstash/redis";
 import { env } from "../env";
 
 // 칭호 알림 기록 (계정마다): 새 칭호 알림 창을 띄운 칭호(announced)와 가방 [칭호] 칸에서 본 칭호(seen).
-// 얻은 칭호 − announced = 새로 띄울 알림, 얻은 칭호 − seen = 가방의 "새로!" 표시·가방 단추 점.
+// 얻은 칭호 − announced = 새로 띄울 알림, 얻은 칭호 − seen = 가방의 "NEW" 표시·가방 단추 점.
 // 처음 확인하는 계정(기록이 아직 없음)은 이미 얻어 둔 칭호를 한 번에 묶어 알린다 (lib/titlesServer).
 //
 // Redis 키 (이 파일에서만 쓴다)

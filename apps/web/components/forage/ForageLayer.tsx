@@ -343,7 +343,7 @@ function InsectResultCard({ done, onClose }: { done: InsectDone; onClose: () => 
                 <ItemIcon itemId={it.id} size={32} />
                 <span>
                   {sp?.name ?? it.id}
-                  {it.isNew && <em className={s.badgeNew}> 새로!</em>}
+                  {it.isNew && <em className={s.badgeNew}> NEW</em>}
                   {!it.kept && <em> (가방이 가득 차 놓아줌)</em>}
                 </span>
               </li>

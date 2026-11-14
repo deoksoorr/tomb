@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 
 // 가방 [칭호] 칸에서 아직 안 본 칭호 (서버 GET /api/me/titles의 unseen). 칭호 알림(TitleNotice)이 채우고,
-// 가방 단추·메뉴의 점과 [칭호] 칸의 "새로!" 표시가 읽는다. 칸을 열면 본 것으로 비운다.
+// 가방 단추·메뉴의 점과 [칭호] 칸의 "NEW" 표시가 읽는다. 칸을 열면 본 것으로 비운다.
 
 let unseen: readonly string[] = [];
 const subs = new Set<() => void>();

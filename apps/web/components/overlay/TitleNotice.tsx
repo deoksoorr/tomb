@@ -7,7 +7,7 @@ import { meStore, useMe } from "@/lib/hooks/useMe";
 import { titleNews } from "@/lib/hooks/useTitleNews";
 import { showToast } from "@/lib/hooks/useToasts";
 import { playTitleChime } from "@/lib/titleChime";
-import { titleDef, type TitleDef } from "@/lib/titles";
+import { perkText, TITLE_GRADE_NAMES, titleDef, type TitleDef } from "@/lib/titles";
 import { wearTitle } from "../account/actions";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -27,7 +27,7 @@ const POLL_MS = 4 * 60_000;
  * 기능 전부터 얻어 둔 칭호(처음 확인, first)는 "칭호가 n개 생겼어요"로 한 번만 묶어 알린다.
  * 확인 시점: 처음 마을에 들어올 때 · 내 정보가 바뀐 뒤(도감 등록 포인트·1위 지급 등) · 서버 신호(me:stale) · 집 꾸미기 저장 뒤 ·
  * 화면으로 돌아올 때 · 몇 분마다. 알림 창을 띄운 칭호는 서버에 "알림" 기록을 남겨 다른 탭·기기에서 다시 뜨지 않는다.
- * 가방 [칭호] 칸에서 아직 안 본 칭호(unseen)는 titleNews로 넘겨 가방 단추 점·"새로!" 표시에 쓴다
+ * 가방 [칭호] 칸에서 아직 안 본 칭호(unseen)는 titleNews로 넘겨 가방 단추 점·"NEW" 표시에 쓴다
  */
 export default function TitleNotice() {
   const { me } = useMe();
@@ -130,8 +130,11 @@ export default function TitleNotice() {
         <ul className={styles.list}>
           {notice.titles.map((t) => (
             <li key={t.id}>
-              <b className={styles.name}>「{t.name}」</b>
+              <b className={styles.name} data-grade={t.grade}>
+                <span className={styles.grade}>{TITLE_GRADE_NAMES[t.grade]}</span> 「{t.name}」
+              </b>
               <span className={styles.how}>{t.how.replace(/(하)?면$/, "")}</span>
+              {perkText(t.grade) && <span className={styles.perk}>칭호 능력: {perkText(t.grade)}</span>}
             </li>
           ))}
         </ul>

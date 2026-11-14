@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { titleOfLook } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
-import { TITLE_GROUP_NAMES, TITLE_GROUPS, TITLES, titleDef, type TitleDef } from "@/lib/titles";
+import { perkText, progressText, TITLE_GRADE_NAMES, TITLE_GROUP_NAMES, TITLE_GROUPS, TITLES, titleDef, type TitleDef } from "@/lib/titles";
 import type { Me } from "@/lib/types";
 import { titleNews } from "@/lib/hooks/useTitleNews";
 import { cx } from "../ui/cx";
@@ -18,8 +18,11 @@ type Act = (task: () => Promise<void>, done: string) => Promise<void>;
 
 export default function TitlesPane({ me, pending, act }: { me: Me; pending: boolean; act: Act }) {
   const [earned, setEarned] = useState<Set<string> | null>(null);
-  /** 이번에 열었을 때 처음 본 새 칭호 ("새로!" — 닫았다 다시 열면 사라진다) */
+  /** 이번에 열었을 때 처음 본 새 칭호 ("NEW" — 닫았다 다시 열면 사라진다) */
   const [fresh, setFresh] = useState<Set<string>>(() => new Set());
+  /** 진행 수치 (처치 1,234/5,000 등)와 운영자 계정 표시 */
+  const [progress, setProgress] = useState<Record<string, number>>({});
+  const [staff, setStaff] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 지금 낀 칭호는 내 정보(착용 목록)에서 — 끼우고 빼면 바로 바뀐다
   const equipped = titleOfLook(me.equipped.map((e) => e.itemId));
@@ -33,6 +36,8 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
         if (!alive) return;
         setEarned(new Set(r.earned));
         setFresh(new Set(r.unseen));
+        setProgress(r.progress ?? {});
+        setStaff(r.staff === true);
         // 칸을 열었으니 본 것으로 (가방 단추 점이 꺼진다)
         if (r.unseen.length) void api.titleMarks({ seen: r.unseen }).catch(() => undefined);
         titleNews.set([]);
@@ -53,11 +58,16 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
     <div className={styles.pane}>
       <div className={styles.now}>
         <p>
-          지금 칭호 <b className={styles.nowName}>{cur ? `「${cur.name}」` : "없음"}</b>
+          지금 칭호{" "}
+          <b className={styles.nowName} data-grade={cur?.grade}>
+            {cur ? `「${cur.name}」` : "없음"}
+          </b>
           <span className={styles.count}>
             {" "}
             · 얻은 칭호 {earned ? total : "–"}/{TITLES.length}
+            {staff && " · 운영자: 모든 칭호를 쓸 수 있어요"}
           </span>
+          {cur && perkText(cur.grade) && <span className={styles.perkNow}>칭호 능력: {perkText(cur.grade)}</span>}
         </p>
         {cur && (
           <button type="button" className={cx(ui.button, styles.off)} disabled={pending} onClick={() => toggle(cur)}>
@@ -83,16 +93,29 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
                     <button
                       type="button"
                       className={styles.title}
+                      data-grade={t.grade}
                       data-earned={got || undefined}
                       aria-pressed={on}
                       disabled={!got || pending}
                       aria-label={`${t.name}, ${got ? (on ? "착용 중, 누르면 빼기" : "얻은 칭호, 누르면 달기") : `아직 못 얻음. ${t.how}`}`}
                       onClick={() => toggle(t)}
                     >
-                      <span className={styles.name}>
-                        「{t.name}」{fresh.has(t.id) && <span className={styles.new}>새로!</span>}
+                      <span className={styles.top}>
+                        <span className={styles.grade}>{TITLE_GRADE_NAMES[t.grade]}</span>
+                        <span className={styles.name}>「{t.name}」</span>
+                        {fresh.has(t.id) && <span className={styles.new}>NEW</span>}
                       </span>
                       <span className={styles.how}>{got ? (on ? "착용 중 · 누르면 빼기" : "누르면 달기") : t.how}</span>
+                      {!got && !staff && t.metric && progress[t.metric] !== undefined && (
+                        <span className={styles.progress}>
+                          <span className={styles.bar} aria-hidden="true">
+                            <span style={{ width: `${Math.round(Math.min(1, (progress[t.metric] ?? 0) / (t.need ?? 1)) * 100)}%` }} />
+                          </span>
+                          {progressText(t, progress[t.metric] ?? 0)}
+                        </span>
+                      )}
+                      {staff && <span className={styles.progress}>운영자</span>}
+                      {perkText(t.grade) && <span className={styles.perk}>{perkText(t.grade)}</span>}
                     </button>
                   </li>
                 );
