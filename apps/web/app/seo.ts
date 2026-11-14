@@ -53,10 +53,10 @@ export const FACTS_DATE = "2026-11-13";
 
 /** 공개 안내 페이지 목록 (sitemap·llms.txt·페이지끼리 링크가 함께 쓴다). h1과 같은 문구 */
 export const GUIDE_PAGES = [
-  { path: "/guide/work-music", h1: "일할 때 틀어 두는 노동요 사이트", summary: "9가지 장르 180곡 배경음악을 무료로 틀어 두는 법" },
+  { path: "/guide/work-music", h1: "일할 때 틀어 두는 노동요 사이트", summary: "로파이·재즈·어쿠스틱 기타 55곡 배경음악을 무료로 틀어 두는 법" },
   { path: "/guide/cowork", h1: "재택근무할 때 같이 일하는 느낌 나는 사이트", summary: "다른 사람들과 한 마을에 앉아 '일하는 중'을 띄워 두는 법" },
   { path: "/guide/browser-game", h1: "설치 없이 하는 브라우저 도트 멀티 게임", summary: "설치·가입 없이 브라우저에서 바로 하는 실시간 멀티 도트 마을" },
-  { path: "/guide/bulmeong", h1: "모닥불·빗소리 불멍 사이트", summary: "모닥불 곁에 앉아 불멍하고 빗소리를 틀어 두는 법" },
+  { path: "/guide/bulmeong", h1: "모닥불·빗소리 불멍 사이트", summary: "모닥불 곁에 앉아 불멍하고 잔잔한 음악을 틀어 두는 법" },
   { path: "/faq", h1: "자주 묻는 질문", summary: "무료인지, 설치·가입, 모바일, 인원, 음악, 포인트에 대한 답" },
 ] as const;
 

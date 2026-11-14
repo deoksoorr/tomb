@@ -90,21 +90,29 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
           }}
         >
           {compact && <div className={styles.row}>{transport}</div>}
-          <label className={styles.row}>
+          {/* 목록은 단추로: 누를 때마다(같은 목록을 다시 눌러도) 그 목록의 아무 곡부터 튼다 */}
+          <div className={styles.row} role="group" aria-label="음악 목록">
             <span className={styles.rowLabel}>목록</span>
-            <select
-              className={cx(ui.input, styles.select)}
-              value={state.playlistId}
-              onChange={(e) => bgm.setPlaylist(e.target.value)}
-            >
+            <div className={styles.lists}>
               {state.playlists.map((p) => (
-                <option key={p.id} value={p.id}>
+                <button
+                  key={p.id}
+                  type="button"
+                  className={cx(ui.button, p.id === state.playlistId && ui.primary, styles.listButton)}
+                  onClick={() => {
+                    bgm.setPlaylist(p.id);
+                    if (!bgm.getSnapshot().playing) bgm.play();
+                  }}
+                  disabled={p.tracks.length === 0}
+                  aria-pressed={p.id === state.playlistId}
+                  title={`${p.title} · ${p.tracks.length}곡 (누를 때마다 다른 곡부터)`}
+                  data-playlist={p.id}
+                >
                   {p.title}
-                  {p.tracks.length === 0 ? " (준비 중)" : ""}
-                </option>
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          </div>
           <div className={styles.row}>
             <span className={styles.busLabel}>배경음악</span>
             <button

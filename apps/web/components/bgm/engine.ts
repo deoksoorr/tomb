@@ -4,7 +4,7 @@ import { setAudioSessionType } from "@/lib/audioSession";
 import { sharedAudioContext } from "@/lib/sharedAudio";
 import { readItem, writeItem } from "@/lib/storage";
 import { LS } from "@/lib/types";
-import { nextIndex, parseManifest, randomStart, type Playlist, type Track } from "./manifest";
+import { FIRST_PLAYLIST_ID, nextShuffled, parseManifest, pickTrack, randomStart, shuffledOrder, type Playlist, type Track } from "./manifest";
 import { silentWav } from "./silence";
 
 // BGM 엔진 (싱글턴). iOS는 audio.volume을 무시하므로 볼륨·크로스페이드는 모두 Web Audio GainNode로 한다.
@@ -16,7 +16,8 @@ import { silentWav } from "./silence";
 // 아이폰 잠금 화면·다이내믹 아일랜드에는 mediaSession으로 지금 곡 하나만 보인다 (곡이 바뀔 때만 메타데이터를 바꾼다).
 // 아이폰 오디오 세션 종류는 BGM을 켜면 playback, 끄면 ambient로 고정한다 (lib/audioSession — auto면 효과음마다 세션이 바뀌며 아일랜드가 깜빡인다).
 
-const MANIFEST_URL = "/bgm/tracks.json";
+// 배포마다 주소가 달라지게 판 번호를 붙인다 — 브라우저·중간 캐시에 남은 옛 곡 목록을 쓰지 않도록 (곡 파일은 이름이 모두 새것)
+const MANIFEST_URL = `/bgm/tracks.json?v=${encodeURIComponent(process.env.NEXT_PUBLIC_APP_VERSION ?? "dev")}`;
 const CROSSFADE_SEC = 1.5;
 const PAUSE_FADE_SEC = 0.25;
 /** 곡이 끝나기 이만큼 전에 다음 곡으로 크로스페이드를 시작한다 (끝난 뒤 넘기면 사이가 뚝 끊긴다) */
@@ -36,7 +37,7 @@ export type BgmState = {
 export const INITIAL_BGM_STATE: BgmState = {
   loaded: false,
   playlists: [],
-  playlistId: "orgel",
+  playlistId: FIRST_PLAYLIST_ID,
   index: 0,
   playing: false,
   volume: DEFAULT_VOLUME,
@@ -60,6 +61,8 @@ class BgmEngine {
   private decks: Deck[] = [];
   private active = 0;
   private loading: Promise<void> | null = null;
+  /** 지금 플레이리스트를 섞은 재생 순서 (곡 번호들). 다음 곡은 이 순서를 따라가고 한 바퀴 돌면 다시 섞는다 */
+  private order: number[] = [];
   private failures = 0;
   private unlocked = false;
   /** 탭이 숨을 때 멈춘 덱 (돌아오면 이어서 튼다) */
@@ -81,7 +84,10 @@ class BgmEngine {
         .then((r) => (r.ok ? r.json() : null))
         .then(parseManifest)
         .catch(() => []);
-      const start = randomStart(playlists, readItem(LS.playlist));
+      // 처음 들어오면 저장해 둔 목록과 상관없이 로파이의 아무 곡부터 (그 뒤 고른 목록은 이 탭에서 그대로 따른다)
+      const start = randomStart(playlists, FIRST_PLAYLIST_ID);
+      const startTracks = playlists.find((p) => p.id === start.playlistId)?.tracks.length ?? 0;
+      this.order = shuffledOrder(startTracks, start.index);
       const savedVolume = readItem(LS.volume);
       this.set({
         loaded: true,
@@ -132,17 +138,21 @@ class BgmEngine {
   }
 
   next(): void {
-    this.set({ index: nextIndex(this.state.index, this.tracks().length) });
+    const step = nextShuffled(this.order, this.state.index, this.tracks().length);
+    this.order = step.order;
+    this.set({ index: step.index });
     if (this.state.playing) {
       if (this.ctx && this.ctx.state !== "running") void this.ctx.resume().catch(() => undefined);
       this.startTrack();
     }
   }
 
+  /** 목록을 누를 때마다 그 목록의 아무 곡부터 (같은 목록을 다시 누르면 지금 곡 말고 다른 곡). 다음부터는 섞은 순서로 */
   setPlaylist(id: string): void {
-    if (id === this.state.playlistId) return;
-    writeItem(LS.playlist, id);
-    this.set({ playlistId: id, index: 0 });
+    const length = this.state.playlists.find((p) => p.id === id)?.tracks.length ?? 0;
+    const index = pickTrack(length, id === this.state.playlistId ? this.state.index : null);
+    this.order = shuffledOrder(length, index);
+    this.set({ playlistId: id, index });
     if (this.state.playing) this.startTrack();
   }
 

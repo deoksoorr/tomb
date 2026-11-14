@@ -6,6 +6,10 @@
 // 외부 무료 음원(EXTERNAL, 라이선스 확인 완료)은 --fetch 때만 원본을 내려받아 128kbps·같은 음량으로 다시 굽는다.
 // 평소에는 이미 구워 둔 파일을 그대로 두고 tracks.json에만 넣는다.
 // 환경변수 BGM_DEBUG=1 이면 스템별 RMS를 출력한다.
+//
+// ※ 2026-11: 배경음악은 픽사베이 곡(로파이·재즈·어쿠스틱 기타, public/bgm/tracks.json 직접 관리)으로 바꿨다.
+//   이 스크립트는 이제 효과음(public/sfx)만 굽는다. BGM 곡을 굽거나 tracks.json을 다시 쓰거나 bgm 폴더 파일을 지우지 않는다
+//   (예전처럼 돌리면 새 곡 목록을 덮어쓰고 픽사베이 곡을 지웠다). 아래 BGM 작곡 코드는 효과음과 같은 합성기를 쓰므로 남겨 둔다.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, tmpdir } from "node:os";
@@ -2634,7 +2638,7 @@ function writeManifest() {
 if (isMainThread) {
   const args = process.argv.slice(2), fetchExt = args.includes("--fetch"), missing = args.includes("--missing"), filter = args.find((a) => !a.startsWith("--"));
   const ids = SPECS.map((_, i) => i).filter(
-    (i) => (fetchExt || !SPECS[i].ext) && (!filter || `${SPECS[i].pl}/${SPECS[i].file}`.includes(filter)) && !(missing && existsSync(outFile(SPECS[i]))),
+    (i) => SPECS[i].pl === "sfx" && (fetchExt || !SPECS[i].ext) && (!filter || `${SPECS[i].pl}/${SPECS[i].file}`.includes(filter)) && !(missing && existsSync(outFile(SPECS[i]))),
   );
   if (!ids.length && !missing) throw new Error(`no track matches "${filter}"`);
   const W = Math.min(Math.max(1, ids.length), Math.max(1, Math.min(8, availableParallelism() - 2)));
@@ -2659,18 +2663,7 @@ if (isMainThread) {
     )
   ).flat();
   console.log(`rendered ${results.length} tracks in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-  if (!filter) {
-    const extMissing = SPECS.filter((s) => s.ext && !existsSync(outFile(s)));
-    if (extMissing.length) console.warn(`외부 곡 ${extMissing.length}개가 아직 없다 → node scripts/gen-bgm.mjs --fetch`);
-    writeManifest();
-    // 목록에 없는 예전 파일은 지운다(BGM 폴더만)
-    for (const p of PLAYLISTS) {
-      const keep = new Set(SPECS.filter((s) => s.pl === p.id).map((s) => `${s.file}.mp3`));
-      mkdirSync(join(OUT, p.id), { recursive: true });
-      for (const f of readdirSync(join(OUT, p.id))) if (f.endsWith(".mp3") && !keep.has(f)) rmSync(join(OUT, p.id, f));
-    }
-    console.log("wrote tracks.json");
-  }
+  // 배경음악 곡 목록(tracks.json)·bgm 폴더는 더 이상 여기서 쓰거나 지우지 않는다 (맨 위 ※ 참고)
 } else {
   for (const i of workerData) parentPort.postMessage(render(i));
 }
