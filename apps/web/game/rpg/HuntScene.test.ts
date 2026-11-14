@@ -221,6 +221,19 @@ describe("바닥 드롭: 판이 끝나면 받을 드롭을 바닥에 떨구고, 
     expect(ends[0].result.durationMs).toBe(detectAt + 1200);
   });
 
+  it("시험 드롭이 실린 판은 예측 대신 그 드롭을 떨군다 (처치가 없거나 일찍 쓰러져도)", () => {
+    const scene = new HuntScene() as Inner & { endRun(r: unknown, freeze: boolean, minMs: number): void; result(): unknown };
+    const testDrops = [
+      { kind: "gear" as const, id: "w_tie", qty: 1 },
+      { kind: "gear" as const, id: "w_legacy_axe", qty: 1 },
+    ];
+    scene.init({ play: { ...play("easy"), testDrops }, color: "#fff", name: "검수", body: "hood", look: [], atlas: null, reduced: false, onEnd: () => {} });
+    scene.create();
+    scene.elapsed = 3000;
+    scene.endRun(scene.result(), true, 0);
+    expect(scene.loot.count).toBe(2);
+  });
+
   it("동작 줄이기에서도 같은 흐름으로 끝난다", async () => {
     const { scene, ends } = await clearAll(160, true);
     for (let t = 0; t < 8000 && !ends.length; t += 16) scene.step(16);
