@@ -12,13 +12,11 @@ import styles from "./MyPanel.module.css";
  * 내 정보의 구글 계정 칸: 연결하면 다음부터 입구 [구글로 시작하기]로 바로 들어온다. 구글 하나 ↔ 계정 하나.
  * 구글 설정이 없는 서버(상태 404)면 칸을 그리지 않는다. 연결은 구글 동의 화면에 다녀오는 페이지 이동이다
  */
-export default function GoogleSection({ me }: { me: Me }) {
-  // undefined = 불러오는 중, null = 그리지 않음 (꺼짐·실패)
-  const [status, setStatus] = useState<GoogleStatusResponse | null | undefined>(undefined);
-  const [confirming, setConfirming] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+/** 구글 연결 상태: undefined = 불러오는 중, null = 그리지 않음 (꺼짐·실패). 내 정보를 열 때마다 새로 읽는다 */
+export type GoogleStatusState = GoogleStatusResponse | null | undefined;
 
+export function useGoogleStatus(): [GoogleStatusState, (s: GoogleStatusState) => void] {
+  const [status, setStatus] = useState<GoogleStatusState>(undefined);
   useEffect(() => {
     api
       .googleStatus()
@@ -28,12 +26,31 @@ export default function GoogleSection({ me }: { me: Me }) {
         setStatus(null);
       });
   }, []);
+  return [status, setStatus];
+}
+
+/** 닉네임 옆 작은 표시 */
+export function GoogleBadge() {
+  return (
+    <span className={google.badge} title="구글 계정이 연결돼 있어요">
+      <span className={google.mark} aria-hidden="true">
+        G
+      </span>
+      구글 연결됨
+    </span>
+  );
+}
+
+export default function GoogleSection({ me, status, onStatus }: { me: Me; status: GoogleStatusState; onStatus: (s: GoogleStatusState) => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   async function unlink() {
     setPending(true);
     setMessage(null);
     try {
-      setStatus(await api.googleUnlink());
+      onStatus(await api.googleUnlink());
       setConfirming(false);
       setMessage("구글 연결을 끊었어요.");
     } catch (e) {

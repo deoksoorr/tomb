@@ -2,10 +2,55 @@ import { Redis } from "@upstash/redis";
 import { nanoid } from "nanoid";
 import { describe, expect, it } from "vitest";
 import { env } from "../env";
-import { MemoryGoogleLinks, RedisGoogleLinks, type GoogleLinkStore } from "./googleLinks";
+import { LINK_LUA, MemoryGoogleLinks, RedisGoogleLinks, UNLINK_LUA, type GoogleLinkRedis, type GoogleLinkStore } from "./googleLinks";
 import { K } from "./keys";
 
-// 구글 연결 저장소 계약: 메모리는 늘, Redis는 개발용 DB가 있을 때만 (운영·테스트 서버 Redis에서는 돌리지 않는다)
+// 구글 연결 저장소 계약: 메모리는 늘, Redis 구현은 ① Upstash 원본 응답을 흉내 낸 가짜 클라이언트로 늘 ② 개발용 DB가 있을 때만 실제로
+// (운영·테스트 서버 Redis에서는 돌리지 않는다)
+
+/**
+ * Upstash(automaticDeserialization: false) 응답 모양 그대로 돌려주는 가짜: HMGET은 필드 순서 배열, 값은 문자열, Lua 결과는 그대로.
+ * Lua는 두 스크립트를 같은 뜻의 JS로 한 번에(중간에 끼어들 수 없게) 돌린다
+ */
+function fakeUpstash(): GoogleLinkRedis {
+  const str = new Map<string, string>();
+  const hash = new Map<string, Map<string, string>>();
+  const hget = (k: string, f: string) => hash.get(k)?.get(f) ?? null;
+  const client = {
+    async get(k: string) {
+      return str.get(k) ?? null;
+    },
+    async hget(k: string, f: string) {
+      return hget(k, f);
+    },
+    async hmget(k: string, ...fields: string[]) {
+      const vals = fields.map((f) => hget(k, f));
+      return vals.every((v) => v === null) ? null : vals;
+    },
+    async eval(script: string, keys: string[], args: string[]) {
+      if (script === LINK_LUA) {
+        const owner = str.get(keys[0]);
+        if (owner && owner !== args[0]) return "taken";
+        const cur = hget(keys[1], "h");
+        if (cur && cur !== args[1]) return "other";
+        if (owner && cur) return "same";
+        str.set(keys[0], args[0]);
+        hash.set(keys[1], new Map([["h", args[1]], ["at", String(args[2])]]));
+        return "ok";
+      }
+      if (script === UNLINK_LUA) {
+        const cur = hget(keys[0], "h");
+        if (!cur) return 0;
+        if (cur !== args[0]) return -1;
+        if (str.get(keys[1]) === args[1]) str.delete(keys[1]);
+        hash.delete(keys[0]);
+        return 1;
+      }
+      throw new Error("모르는 스크립트");
+    },
+  };
+  return client as unknown as GoogleLinkRedis;
+}
 
 function contract(make: () => { store: GoogleLinkStore; cleanup(ids: string[], hashes: string[]): Promise<void> }) {
   const id = () => `t-${nanoid(10)}`;
@@ -77,6 +122,18 @@ describe("MemoryGoogleLinks", () =>
     store: new MemoryGoogleLinks(),
     async cleanup() {},
   })));
+
+describe("RedisGoogleLinks (Upstash 응답 흉내)", () => {
+  contract(() => ({ store: new RedisGoogleLinks({ client: fakeUpstash() }), async cleanup() {} }));
+
+  it("HMGET이 배열로 와도 연결 상태를 읽는다 (테스트 서버에서 '연결됨'이 안 보이던 원인)", async () => {
+    const store = new RedisGoogleLinks({ client: fakeUpstash() });
+    const g = "a".repeat(64);
+    expect(await store.link("acct-1", g, 1234)).toBe("ok");
+    expect(await store.linkOf("acct-1")).toEqual({ subHash: g, at: 1234 });
+    expect(await store.linkOf("acct-2")).toBeNull();
+  });
+});
 
 const redisEnv = env.redis();
 describe.skipIf(!redisEnv)("RedisGoogleLinks (실제 Redis, 개발용 DB에서만)", () =>

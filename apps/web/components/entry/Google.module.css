@@ -19,6 +19,27 @@
   vertical-align: -2px;
 }
 
+/* 내 정보 닉네임 옆 "구글 연결됨" */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 6px;
+  background: var(--moss-deep);
+  color: var(--moss);
+  font-family: var(--font-small);
+  font-size: 10px;
+  vertical-align: 2px;
+}
+
+.badge .mark {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  font-size: 9px;
+  vertical-align: 0;
+}
+
 .title {
   margin: 0;
   color: var(--bone);

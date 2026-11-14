@@ -55,7 +55,7 @@ export class MemoryGoogleLinks implements GoogleLinkStore {
 
 // 연결: 색인과 계정 쪽을 한 번에 확인하고 함께 쓴다 (동시에 두 계정이 같은 구글을 잡아도 하나만 통과)
 // KEYS: googleSub(subHash), googleAcct(id)  ARGV: id, subHash, now
-const LINK_LUA = `
+export const LINK_LUA = `
 local owner = redis.call('GET', KEYS[1])
 if owner and owner ~= ARGV[1] then return 'taken' end
 local cur = redis.call('HGET', KEYS[2], 'h')
@@ -68,7 +68,7 @@ return 'ok'
 
 // 끊기: 읽어 둔 subHash가 그대로일 때만 두 키를 함께 지운다 (그새 바뀌었으면 -1 → 다시 읽고 재시도)
 // KEYS: googleAcct(id), googleSub(읽어 둔 subHash)  ARGV: 읽어 둔 subHash, id
-const UNLINK_LUA = `
+export const UNLINK_LUA = `
 local cur = redis.call('HGET', KEYS[1], 'h')
 if not cur then return 0 end
 if cur ~= ARGV[1] then return -1 end
@@ -77,10 +77,23 @@ redis.call('DEL', KEYS[1])
 return 1
 `;
 
+/** 이 저장소가 쓰는 Redis 명령만 (시험에서는 Upstash 원본 응답 모양을 흉내 낸 가짜를 넣는다) */
+export type GoogleLinkRedis = Pick<Redis, "eval" | "get" | "hget" | "hmget">;
+
+/**
+ * automaticDeserialization: false면 HMGET은 객체가 아니라 필드 순서 배열을 준다 (lib/store/bans.ts와 같은 처리).
+ * 처음에는 객체로 읽어 Redis에서는 늘 "연결 안 됨"으로 보였다 — 메모리 구현만 시험해서 놓쳤다
+ */
+function hmgetValues(got: unknown, fields: string[]): (string | null)[] {
+  if (Array.isArray(got)) return fields.map((_, i) => (got[i] as string | null) ?? null);
+  const o = (got ?? {}) as Record<string, string | null>;
+  return fields.map((f) => o[f] ?? null);
+}
+
 export class RedisGoogleLinks implements GoogleLinkStore {
-  private redis: Redis;
-  constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+  private redis: GoogleLinkRedis;
+  constructor(conn: { url: string; token: string } | { client: GoogleLinkRedis }) {
+    this.redis = "client" in conn ? conn.client : new Redis({ ...conn, automaticDeserialization: false });
   }
 
   async link(accountId: string, subHash: string, now: number): Promise<GoogleLinkResult> {
@@ -101,9 +114,8 @@ export class RedisGoogleLinks implements GoogleLinkStore {
     return (await this.redis.get<string>(K.googleSub(subHash))) ?? null;
   }
   async linkOf(accountId: string): Promise<{ subHash: string; at: number } | null> {
-    const r = await this.redis.hmget<Record<string, string | null>>(K.googleAcct(accountId), "h", "at");
-    const h = r?.h;
-    return h ? { subHash: h, at: Number(r?.at) || 0 } : null;
+    const [h, at] = hmgetValues(await this.redis.hmget(K.googleAcct(accountId), "h", "at"), ["h", "at"]);
+    return h ? { subHash: String(h), at: Number(at) || 0 } : null;
   }
 }
 

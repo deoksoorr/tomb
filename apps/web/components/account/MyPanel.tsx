@@ -17,7 +17,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import type { MyGraveEntry } from "./items";
 import { InquiryButton } from "../notice/InquiryDialog";
-import GoogleSection from "./GoogleSection";
+import GoogleSection, { GoogleBadge, useGoogleStatus } from "./GoogleSection";
 import MyGraves from "./MyGraves";
 import styles from "./MyPanel.module.css";
 import MyHouseLine from "../housing/MyHouseLine";
@@ -67,6 +67,8 @@ export default function MyPanel({
   const codeButtonId = useId();
   // 꾸미기 점수의 만료 판정 기준 시각 (렌더 중에 시계를 읽지 않는다)
   const [openedAt] = useState(() => Date.now());
+  // 구글 연결 상태 (닉네임 옆 표시와 아래 구글 계정 칸이 같이 쓴다. 구글 설정이 없으면 null)
+  const [googleStatus, setGoogleStatus] = useGoogleStatus();
 
   useEffect(() => {
     void meStore.refresh();
@@ -121,7 +123,7 @@ export default function MyPanel({
           <p className={styles.sub}>내 꾸미기 점수 {lookScore(me, openedAt)}점 (지금 입은 코디 기준)</p>
         </section>
 
-        <NameSection me={me} />
+        <NameSection me={me} googleLinked={!!googleStatus?.linked} />
 
         <DexBadgeLine />
 
@@ -139,7 +141,7 @@ export default function MyPanel({
 
         <CodeSection me={me} buttonId={codeButtonId} />
 
-        <GoogleSection me={me} />
+        <GoogleSection me={me} status={googleStatus} onStatus={setGoogleStatus} />
 
         <div className={styles.endButtons}>
           <button type="button" className={cx(ui.button, styles.leave)} onClick={onOpenShrine}>
@@ -335,7 +337,7 @@ function CodeSection({ me, buttonId }: { me: Me; buttonId: string }) {
 }
 
 /** 닉네임 바꾸기: 첫 변경은 무료, 이후 포인트와 대기 기간 (서버가 정한 값을 그대로 보여 준다) */
-function NameSection({ me }: { me: Me }) {
+function NameSection({ me, googleLinked }: { me: Me; googleLinked: boolean }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(me.name ?? "");
   const [pending, setPending] = useState(false);
@@ -397,7 +399,10 @@ function NameSection({ me }: { me: Me }) {
         </form>
       ) : (
         <div className={styles.nameRow}>
-          <span className={styles.nameNow}>{me.name ?? "이름 없음"}</span>
+          <span className={styles.nameNow}>
+            {me.name ?? "이름 없음"}
+            {googleLinked && <GoogleBadge />}
+          </span>
           <button type="button" className={ui.button} onClick={() => setOpen(true)} disabled={waiting}>
             닉네임 바꾸기
           </button>
