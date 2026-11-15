@@ -104,7 +104,8 @@ export type GatherStartResponse =
   | { ticket: string; mode: "gauge"; kind: Exclude<NodeKind, "bug">; durationMs: number }
   | { ticket: string; mode: "bugs"; kind: "bug"; seed: number; timeLimitSec: number; night: boolean; phase?: TimePhase };
 
-export type GatherFinishResponse = { items: CatchResult[]; state: ForageState; message?: string; dex?: DexGain };
+/** points = 곤충 채집으로 받은 포인트 (곤충 채집 판만, 한도에 닿으면 0) */
+export type GatherFinishResponse = { items: CatchResult[]; state: ForageState; message?: string; dex?: DexGain; points?: number };
 
 export type SellResponse = {
   /** 실제로 판 것 (id → 개수) */

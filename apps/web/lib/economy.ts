@@ -45,8 +45,8 @@ export const EARN_RULES: readonly EarnRule[] = [
   // 11/15: 사냥 한도 600 → 1200 (사람이 적을 때 레이스가 붙게 — 야근 빌딩 층 포인트도 이 한도 안)
   { source: "hunt", label: "사냥터", points: 0, dailyMax: 1200, note: "난이도와 성적에 따라 달라요. 주운 장비나 물약을 판 값도 여기에 들어가요." },
   // 11/15: 미니게임 한도를 게임마다 따로 300 (합쳐서 150이던 것)
-  { source: "bugs", label: "벌레 잡기", points: 0, dailyMax: 300, note: "성적에 따라 달라요. 사냥·별자리 잇기 한도와 따로 세요." },
-  { source: "stars", label: "별자리 잇기", points: 0, dailyMax: 300, note: "성적에 따라 달라요. 사냥·벌레 잡기 한도와 따로 세요." },
+  { source: "bugs", label: "곤충 채집", points: 0, dailyMax: 300, note: "마을 곤충 자리에서 잡은 만큼 받아요. 잡은 곤충은 따로 팔 수도 있어요." },
+  { source: "stars", label: "별자리 잇기", points: 0, dailyMax: 300, note: "성적에 따라 달라요. 사냥·곤충 채집 한도와 따로 세요." },
   { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때" },
   // 11/15: 파는 한도 올림 (물고기 200 → 300, 채집 150 → 300)
   // 낚시·채집은 잡을 때가 아니라 NPC에게 팔 때 들어온다 (값은 lib/forage/catalog.ts). 한도를 넘는 만큼은 가방에 남아 내일 팔 수 있다

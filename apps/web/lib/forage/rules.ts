@@ -148,6 +148,16 @@ export function insectRolls(caught: number, golden: number, mistakes: number): {
   return { common: Math.min(3, Math.floor(Math.max(0, caught - mistakes) / 5)), rare: Math.min(2, golden) };
 }
 
+/** 11/15 곤충 채집 한 판 포인트 최대 (곤충은 따로 가방에 — 포인트는 「곤충 채집」 하루 한도 안) */
+export const INSECT_POINTS_MAX = 15;
+/** 곤충 채집 한 판 포인트: 그 판에 나온 곤충을 모두 잡으면 최대 (금빛은 셋 몫, 실수는 하나씩 뺀다) */
+export function insectPoints(seed: number, caught: number, golden: number, mistakes: number): number {
+  const all = bugsCount(bugsPlan(seed, BUG_DIFFICULTY, BUG_ROUND_SEC, BUG_STATS), Infinity);
+  const target = Math.max(1, all.bug + 3 * all.golden);
+  const perf = Math.max(0, Math.min(1, (caught + 3 * golden - mistakes) / target));
+  return Math.round(INSECT_POINTS_MAX * perf);
+}
+
 export type BugVerdict = { ok: true; caught: number; golden: number; mistakes: number } | { ok: false; message: string };
 
 /** 시드로 다시 만든 출현 계획과 서버가 잰 시간으로 결과의 상한을 검사 (사냥터 evalBugs와 같은 규칙) */
