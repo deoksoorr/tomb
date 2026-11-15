@@ -36,6 +36,8 @@ export const adminApi = {
   deleteNotice: (id: string) => request<{ ok: true }>(noticePath(id), { method: "DELETE" }),
   houses: () => request<{ houses: AdminHouse[] }>("/api/admin/housing", { cache: "no-store" }),
   houseAction: (id: string, action: ModAction) => request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}`, post({ action })),
+  /** 11/15 같은 채널 안에서 번지 옮기기 (빈 번지만) */
+  moveHouse: (id: string, lot: number) => request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}`, post({ action: "move", lot })),
   guestAction: (id: string, entryId: string, action: ModAction) =>
     request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}/guestbook/${encodeURIComponent(entryId)}`, post({ action })),
   errors: (days: number) => request<AdminErrorsResponse>(`/api/admin/errors?days=${days}`, { cache: "no-store" }),
