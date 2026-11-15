@@ -1047,7 +1047,8 @@ export class WorldScene extends Phaser.Scene {
     if (a === "interact" && pl.inBoat && !this.boats.nearShore()) {
       const at = this.boats.fishingSpot();
       if (at) this.forage.fishFromBoat(at);
-      else this.boats.quack(); // 11/15 오리배: 오리 연못은 낚시 대신 꽥
+      // 11/15 오리배: E는 내리기 전용 (꽥은 Space만). 물가가 멀면 안내만
+      else this.toast("물가 가까이 가면 E로 내릴 수 있어요");
       return;
     }
     // 조각배 위: E = 물가에서 내리기, 앉기·점프 없음

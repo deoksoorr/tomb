@@ -41,7 +41,7 @@ import { bystanderGain } from "./rides";
 //  - 배 위 낚시(4번): 물가가 아닌 물 위에서 E → fishingSpot()이 알려 준 물(강·호수)로 낚시 (world/forage Foraging.fishFromBoat)
 //  - 11/15 오리배 (kind "duck"): 오리 연못 선착장(DUCK_DOCK)에서 같은 규칙으로 탄다. 두 자리가 나란히(왼쪽 = 먼저 탄 사람이 페달·조종),
 //    연못 밖으로 못 나가고 물살이 없다. 움직이면 물레바퀴가 돌며 물이 튀고, 탄 사람들이 번갈아 페달을 밟는다(들썩).
-//    Space·E(물 위) = 꽥! (act "quack": 같은 채널에 소리·"꽥!" 말풍선). 오리배끼리 닿으면 살짝 튕겨 나간다 (logic/boat duckBump).
+//    Space = 꽥! (act "quack": 같은 채널에 소리·"꽥!" 말풍선), E는 물가에서 내리기만 (11/15). 오리배끼리 닿으면 살짝 튕겨 나간다 (logic/boat duckBump).
 //    오리 연못은 낚시터가 아니라 배 위 낚시도 없다
 
 /** 오리배 꽥 간격 (서버 act 간격과 같게 — 내 화면과 남의 화면이 같은 횟수) */
@@ -587,9 +587,9 @@ export class BoatRide {
     const ref = boatOf(pl.boatSeatId!);
     const shore = shorePoint(pl.x, pl.y, standable) !== null;
     if (ref && boatKind(ref.boat) === "duck") {
-      // 오리배: 물 위 E·Space = 꽥 (낚시 없음)
-      if (ref.seat.index === 1) return shore ? `${prefix}내리기 · 같이 타는 중 · Space 꽥` : `${prefix}꽥! · 옆자리에 같이 타는 중`;
-      return shore ? `${prefix}내리기 · Space 꽥 · 방향키로 페달` : `${prefix}꽥! · 방향키로 페달 밟기`;
+      // 오리배: Space = 꽥, E = 물가에서 내리기 (11/15 — E로도 꽥이 나가 헷갈렸다). 낚시 없음
+      if (ref.seat.index === 1) return shore ? `${prefix}내리기 · Space 꽥 · 같이 타는 중` : "Space 꽥 · 물가에서 E로 내리기 · 같이 타는 중";
+      return shore ? `${prefix}내리기 · Space 꽥 · 방향키로 페달` : "Space 꽥 · 방향키로 페달 · 물가에서 E로 내리기";
     }
     if (ref?.seat.index === 1) return shore ? `${prefix}내리기 · 같이 타는 중` : `${prefix}낚시하기 · 같이 타는 중`;
     return shore ? `${prefix}내리기 · 방향키로 노 젓기` : `${prefix}낚시하기 · 방향키로 노 젓기`;
