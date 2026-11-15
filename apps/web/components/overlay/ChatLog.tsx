@@ -32,9 +32,9 @@ const subs = new Set<() => void>();
 const notify = () => subs.forEach((f) => f());
 const store = {
   /** 새 줄이면 true */
-  push(name: string, text: string, mine: boolean, key?: string, staff?: true, ns?: string[]): boolean {
+  push(name: string, text: string, mine: boolean, key?: string, staff?: true, ns?: string[], mgr?: true): boolean {
     if (key && lines.some((l) => l.key === key)) return false; // chatLog로 이미 받은 줄
-    lines = addChatLine(lines, { id: ++seq, name, text, mine, at: Date.now(), ...(key ? { key } : {}), ...(staff ? { staff } : {}), ...(ns ? { ns } : {}) });
+    lines = addChatLine(lines, { id: ++seq, name, text, mine, at: Date.now(), ...(key ? { key } : {}), ...(staff ? { staff } : {}), ...(mgr ? { mgr } : {}), ...(ns ? { ns } : {}) });
     notify();
     return true;
   },
@@ -69,8 +69,8 @@ const EMPTY: ChatLine[] = [];
 
 // 화면이 아직 안 떴어도(입장 직후 welcome·chatLog가 먼저 올 수 있다) 받은 줄을 모은다 — 모듈에서 한 번만 구독
 if (typeof window !== "undefined") {
-  bridge.on("chat:line", ({ name, text, mine, key, staff, ns }) => {
-    const added = store.push(name, text, mine, key, staff, ns);
+  bridge.on("chat:line", ({ name, text, mine, key, staff, ns, mgr }) => {
+    const added = store.push(name, text, mine, key, staff, ns, mgr);
     // 실시간으로 새로 온 다른 사람 채팅에만 작은 알림음 (지난 기록 chat:log에는 울리지 않는다)
     chimeForChat({ mine, added, shown: shownNow, enabled: chatChime.getSnapshot() }, Date.now());
   });
@@ -143,6 +143,8 @@ function Line({ line, now }: { line: ChatLine; now: number }) {
       <b className={cx(styles.name, line.staff && styles.staff)}>
         {/* 운영자 이름은 금색 그대로 (닉네임 꾸미기를 입혀 헷갈리지 않게) + 11/15 "운영자" 딱지 (이름은 닉네임 그대로라) */}
         {line.staff && <span className={styles.staffTag}>운영자</span>}
+        {/* 11/16 매니저 딱지 (운영자가 아닐 때만 — 실시간 서버가 붙인 mgr 표시) */}
+        {line.mgr && !line.staff && <span className={styles.mgrTag}>매니저</span>}
         {line.staff ? line.name : <StyledName name={line.name} look={line.ns} />}
       </b>
       <span className={styles.sep}>: </span>

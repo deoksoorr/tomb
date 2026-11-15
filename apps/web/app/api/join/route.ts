@@ -41,7 +41,7 @@ export const POST = handler(async (req) => {
     isStaff(visitorId),
     dexBadgeOf(visitorId),
     isStaff(visitorId).then((s) => champWireFor(visitorId, s, now)).catch(() => 0),
-    // 11/16 매니저 (전용 오라·칭호 — 서버가 확인한 것만 토큰에)
+    // 11/16 매니저 (전용 칭호·채팅 딱지 — 서버가 확인한 것만 토큰에)
     isManager(visitorId, now),
   ]);
   // 머리 위 이름은 계정 이름이 정답. 계정에 아직 이름이 없으면 요청 이름을 이름 색인과 함께 등록한다 (다른 계정이 쓰면 거절)

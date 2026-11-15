@@ -71,6 +71,7 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
               <b className={cx(styles.name, e.staff && styles.staff)}>
                 {/* 11/15 운영자는 닉네임 그대로라 "운영자" 딱지로 알린다 (마을 공지 줄은 빼고) */}
                 {e.staff && !e.system && <span className={styles.staffTag}>운영자</span>}
+                {e.mgr && !e.staff && <span className={styles.mgrTag}>매니저</span>}
                 {e.name}
               </b>
               <span className={styles.text}>{e.text}</span>

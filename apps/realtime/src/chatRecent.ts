@@ -17,6 +17,8 @@ export type RecentChat = {
   text: string;
   /** 운영자가 쓴 줄 */
   staff?: true;
+  /** 11/16 매니저가 쓴 줄 */
+  mgr?: true;
 };
 
 export class ChatRecent {
@@ -57,6 +59,7 @@ export class ChatRecent {
       name: l.name,
       text: l.text,
       ...(l.staff ? { staff: true as const } : {}),
+      ...(l.mgr ? { mgr: true as const } : {}),
       ...(visitorId !== undefined && l.visitorId === visitorId
         ? { mine: true as const }
         : {}),

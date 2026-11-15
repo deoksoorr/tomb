@@ -14,12 +14,12 @@ import { packDye, unpackDye, type AvatarDye } from "./dye";
 export type Grant =
   /** 46·25번: dye·body가 있으면 염색·몸 모양도 같이 바꾼다 (옛 웹이 낸 증서엔 없다 → 실시간 서버는 그대로 둔다) */
   /** 주간 1위: champ = 지금 1위 비트(+ 오라 끔 표시, 0 = 1위 아님)가 있으면 실시간 서버가 다른 사람 화면의 배지·오라도 바꾼다 */
-  /** 11/16 mgr = 매니저 표시 (1 = 매니저, 0 = 아님 — 해제되면 실시간 서버가 오라·칭호를 바로 뗀다). 옛 웹이 낸 증서엔 없다 → 그대로 */
+  /** 11/16 mgr = 매니저 표시 (1 = 매니저, 0 = 아님 — 해제되면 실시간 서버가 칭호를 바로 뗀다). 옛 웹이 낸 증서엔 없다 → 그대로 */
   | { kind: "look"; visitorId: string; look: Look; exp: number; dye?: AvatarDye; body?: string; champ?: number; mgr?: 0 | 1 }
   | { kind: "firework"; visitorId: string; item: string; nonce: string; exp: number }
   | { kind: "goblin"; visitorId: string; points: number; nonce: string; exp: number }
   /** ch = 외친 채널 (scope가 channel이면 그 채널 DO만 받아 준다) */
-  | { kind: "megaphone"; visitorId: string; nonce: string; name: string; text: string; scope: MegaphoneScope; ch: number; exp: number; /** 운영자 계정 (이름 금색 표시용) */ staff?: true };
+  | { kind: "megaphone"; visitorId: string; nonce: string; name: string; text: string; scope: MegaphoneScope; ch: number; exp: number; /** 운영자 계정 (이름 금색 표시용) */ staff?: true; /** 11/16 매니저 계정 ("매니저" 딱지) */ mgr?: true };
 
 export const GRANT_TTL_SEC = 60;
 /** 증서 최대 길이. 확성기 증서는 닉네임·문장(한글 60자)을 품어 다른 증서보다 길다 */
@@ -84,7 +84,7 @@ export async function verifyGrant(
     g.ch >= 1 &&
     g.ch <= 100
   )
-    return { kind: "megaphone", visitorId: g.visitorId, nonce: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, exp: g.exp, ...(g.staff === true ? { staff: true as const } : {}) };
+    return { kind: "megaphone", visitorId: g.visitorId, nonce: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, exp: g.exp, ...(g.staff === true ? { staff: true as const } : {}), ...(g.mgr === true ? { mgr: true as const } : {}) };
   return null;
 }
 

@@ -25,6 +25,6 @@ export const GET = handler(async (req) => {
   // 재접속할 때마다 꾸미기 랭킹 점수도 지금 착용으로 맞춘다 (자리를 비운 사이 끝난 기간제 반영)
   await recordLook(visitorId, { equipped: a.equipped, ...appearance }, { now });
   // 주간 1위 값도 같이 (재접속 때 배지·오라를 내 화면과 다른 사람 화면에 맞춘다)
-  // 11/16 매니저 표시도 같이 (임명·해제 뒤 내 화면과 다른 사람 화면의 오라를 맞춘다)
+  // 11/16 매니저 표시도 같이 (임명·해제 뒤 내 화면과 다른 사람 화면의 매니저 칭호를 맞춘다)
   return json<LookGrantResponse>({ look, ...appearance, champ, mgr: manager ? 1 : 0, lookGrant: await lookGrant(env.joinSecret(), visitorId, look, now, { ...appearance, champ, manager }) });
 });

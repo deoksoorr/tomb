@@ -41,7 +41,7 @@ export const POST = handler(async (req) => {
     isStaff(visitorId).then((s) => champWireFor(visitorId, s, now)).catch(() => 0),
     // 11/15 사냥터 방: 낀 사냥 장비 표시 (캐릭터 저장값으로 — 화면이 주장할 수 없다). 사냥터 방만 명령 1개 더
     room.startsWith("hunt:") ? getRpgStore().get(visitorId).then((c) => huntGearIds(c.equip)).catch(() => []) : Promise.resolve([] as string[]),
-    // 11/16 매니저 (전용 오라·칭호 — 사냥터에서도)
+    // 11/16 매니저 (전용 칭호·채팅 딱지 — 사냥터에서도)
     isManager(visitorId, now),
   ]);
   const token = await signJoinToken(

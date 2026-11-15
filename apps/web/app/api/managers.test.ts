@@ -7,12 +7,14 @@ import { getAccounts } from "@/lib/store";
 import { lookOf } from "@/lib/store/accounts";
 import { headTitle, MANAGER_TITLE, titleDef, titlePerk, TITLES } from "@/lib/titles";
 import { forgetTitles, titleStatus } from "@/lib/titlesServer";
-import type { JoinResponse, LookGrantResponse, Me, TitlesResponse, WearResponse } from "@/lib/types";
+import { readChatLog } from "@/game/logic/chatLog";
+import type { JoinResponse, LookGrantResponse, Me, MegaphoneEntry, TitlesResponse, WearResponse } from "@/lib/types";
 import type { AdminManagersResponse } from "./admin/managers/route";
 import * as adminManagers from "./admin/managers/route";
 import * as join from "./join/route";
 import * as myLook from "./me/look/route";
 import * as me from "./me/route";
+import * as megaphone from "./megaphone/route";
 import * as titles from "./me/titles/route";
 import * as session from "./session/route";
 
@@ -182,3 +184,41 @@ describe("11/16 매니저 전용 칭호", () => {
     expect((await titlesOf(op)).earned).toContain(MANAGER_TITLE_ID);
   });
 });
+
+describe("11/16 매니저 확성기 딱지", () => {
+  const inv = (v: Visitor) => (getAccounts() as unknown as { acct(id: string): { inv: Map<string, number> } }).acct(v.visitorId).inv;
+  const shout = (v: Visitor, text: string) => megaphone.POST(call("/api/megaphone", { visitor: v, body: { itemId: "mega_ch", text, channel: 1 } }));
+
+  it("매니저가 외친 확성기는 기록·증서·목록에 매니저 표시. 확성기는 가방에서 꺼낸다 (운영자처럼 무료가 아니다)", async () => {
+    const mgr = await newVisitor();
+    const user = await newVisitor();
+    await setMgr(mgr.visitorId, true);
+    expect((await shout(mgr, "반장이 왔어요")).status).toBe(409);
+    inv(mgr).set("mega_ch", 1);
+    inv(user).set("mega_ch", 1);
+    const r = await bodyOf<{ entry: MegaphoneEntry; grant: string }>(shout(mgr, "반장이 왔어요"));
+    expect(r.entry).toMatchObject({ mgr: true });
+    expect(r.entry.staff).toBeUndefined();
+    expect(await verifyGrant(SECRET, r.grant)).toMatchObject({ kind: "megaphone", mgr: true });
+    expect(inv(mgr).get("mega_ch") ?? 0).toBe(0);
+    const u = await bodyOf<{ entry: MegaphoneEntry; grant: string }>(shout(user, "저는 그냥 주민"));
+    expect(u.entry.mgr).toBeUndefined();
+    expect(await verifyGrant(SECRET, u.grant)).not.toHaveProperty("mgr");
+
+    const list = async () => (await bodyOf<{ entries: MegaphoneEntry[] }>(megaphone.GET(call("/api/megaphone?channel=1")))).entries;
+    expect((await list()).find((e) => e.text === "반장이 왔어요")?.mgr).toBe(true);
+    expect((await list()).find((e) => e.text === "저는 그냥 주민")?.mgr).toBeUndefined();
+    // 해제하면 지난 기록도 딱지 없이 (운영자처럼 지금 계정으로 다시 판별)
+    await setMgr(mgr.visitorId, false);
+    expect((await list()).find((e) => e.text === "반장이 왔어요")?.mgr).toBeUndefined();
+  });
+});
+
+describe("11/16 매니저 딱지 (지난 채팅 기록)", () => {
+  it("서버가 붙인 mgr 표시만 남기고 이상한 값은 버린다", () => {
+    const got = readChatLog(10_000, [{ id: "a.1", at: 9_000, name: "반장", text: "안녕", mgr: true }, { id: "a.2", at: 9_500, name: "주민", text: "네", mgr: "yes" }], 50_000);
+    expect(got.map((l) => l.mgr === true)).toEqual([true, false]);
+    expect(got[1]).not.toHaveProperty("mgr");
+  });
+});
+

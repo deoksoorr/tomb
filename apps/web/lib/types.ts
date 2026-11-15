@@ -233,7 +233,7 @@ export type Me = {
   renameRequired?: true;
   /** 주간 랭킹 1위 (지난주 1위인 랭킹 비트 + 본인이 오라를 껐으면 CHAMP_AURA_OFF — @tomb/protocol). 1위가 아니면 없음 */
   champ?: number;
-  /** 11/16 매니저 (관리자가 임명 — 전용 칭호·오라뿐). 아니면 없음 */
+  /** 11/16 매니저 (관리자가 임명 — 전용 칭호·채팅 딱지뿐). 아니면 없음 */
   manager?: true;
 };
 
@@ -591,7 +591,7 @@ export type GiftClaimResponse = { gift: GiftEntry; me: Me; points: number };
 
 /** 확성기 기록 한 줄 */
 /** staff = 운영자 계정이 외친 것 (서버가 계정으로 판별 → 이름 금색) */
-export type MegaphoneEntry = { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; /** 마을 공지(주간 1위 소식 등) 줄 — 금색이지만 "운영자" 딱지는 없다 */ system?: true; /** 11/15 이 줄로 바꿔 끼운 앞 공지 id (긴급 의뢰 끝 공지 → 시작 공지를 뺀다) */ replaces?: string };
+export type MegaphoneEntry = { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; /** 마을 공지(주간 1위 소식 등) 줄 — 금색이지만 "운영자" 딱지는 없다 */ system?: true; /** 11/15 이 줄로 바꿔 끼운 앞 공지 id (긴급 의뢰 끝 공지 → 시작 공지를 뺀다) */ replaces?: string; /** 11/16 매니저 계정이 외친 것 → "매니저" 딱지 */ mgr?: true };
 /** GET /api/megaphone?channel=N → 그 채널에서 보이는 최근 확성기 (모든 채널 확성기 포함, 숨긴 것 빼고, 오래된 것 먼저 최대 20개) */
 export type MegaphoneListResponse = { entries: MegaphoneEntry[] };
 /** POST /api/megaphone { itemId, text, channel } → 확성기 1개를 쓰고 증서를 받는다 (게임이 실시간 서버로 보낸다) */

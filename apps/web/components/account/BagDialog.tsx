@@ -18,7 +18,7 @@ import ui from "../ui/ui.module.css";
 import { openMegaphone } from "@/lib/hooks/useMegaphone";
 import { decorateGrave, fireFirework } from "./actions";
 import ChampRewardsTab from "./ChampRewardsTab";
-import { bagEntries, KIND_LABELS, type MyGraveEntry } from "./items";
+import { bagEntries, countLabel, fireworkEntries, KIND_LABELS, type MyGraveEntry } from "./items";
 import { LookPane, PickPane } from "./WardrobePanes";
 import TitlesPane from "./TitlesPane";
 import { resolveAvatar, wardrobeEntries, type SlotFilter } from "./wardrobe";
@@ -87,7 +87,11 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
 
   // 염색권은 따로 "염색권" 칸에 (11/12)
   // 11/15 이모티콘 묶음(unlock)은 쓰는 물건이 아니다 — 말풍선 창 [의뢰] 묶음이 열리는 것으로 보인다
-  const others = bagEntries(me.inventory).filter((e) => e.item.kind !== "cosmetic" && e.item.kind !== "dye" && e.item.kind !== "unlock");
+  // 폭죽은 fireworkEntries (운영자 계정은 모든 폭죽이 「∞」 — 쏘아도 줄지 않는다)
+  const others = [
+    ...bagEntries(me.inventory).filter((e) => e.item.kind !== "cosmetic" && e.item.kind !== "dye" && e.item.kind !== "unlock" && e.item.kind !== "firework"),
+    ...fireworkEntries(me),
+  ];
   const wardrobe = wardrobeEntries(me, now);
 
   return (
@@ -100,7 +104,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
               ["look", "지금 모습"],
               ["wear", `꾸미기 ${wardrobe.filter((e) => !isChampItem(e.item.id)).length}`],
               ["title", "칭호"],
-              ["other", `소모품 ${others.reduce((n, e) => n + e.count, 0)}`],
+              ["other", `소모품 ${countLabel(others.reduce((n, e) => n + e.count, 0))}`],
               ["dye", `염색권 ${dyeTicketCount(me.inventory)}`],
               ["forage", "물고기·채집물"],
               ["race", "레이스 보상"],
@@ -159,7 +163,7 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
                           <ItemIcon itemId={item.id} size={32} />
                           <span className={styles.main}>
                             <span className={styles.name}>
-                              {item.name} <span className={styles.count}>×{count}</span>
+                              {item.name} <span className={styles.count}>×{countLabel(count)}</span>
                             </span>
                             <span className={styles.meta}>{item.desc}</span>
                           </span>

@@ -12,7 +12,7 @@ import ItemIcon from "../ui/ItemIcon";
 import FireworkPreview from "../shop/FireworkPreview";
 import ui from "../ui/ui.module.css";
 import { fireFirework } from "./actions";
-import { bagEntries } from "./items";
+import { countLabel, fireworkEntries } from "./items";
 import styles from "./BagDialog.module.css";
 import fw from "./FireworkDialog.module.css";
 
@@ -43,19 +43,21 @@ const whenText = (at: number) =>
 
 /**
  * 쏠 폭죽 고르기. 하나만 남아도 이름을 보고 고르게 한다 (바로 쏘지 않는다).
- * 아래에 폭죽 종류(값·가진 개수)·최근 쏜 폭죽·팁을 함께 보여 준다
+ * 아래에 폭죽 종류(값·가진 개수)·최근 쏜 폭죽·팁을 함께 보여 준다.
+ * 운영자 계정은 가진 것과 상관없이 모든 폭죽을 「∞」로 보여 준다 (쏘아도 줄지 않는다 — 서버가 가방에서 빼지 않는다)
  */
 export default function FireworkDialog({ onClose, onOpenShop }: { onClose: () => void; onOpenShop?: () => void }) {
   const { me } = useMe();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [history] = useState(readHistory);
-  const stock = me ? bagEntries(me.inventory, "firework") : [];
-  const owned = (id: string) => me?.inventory[id] ?? 0;
+  const staff = !!me?.staff;
+  const stock = me ? fireworkEntries(me) : [];
+  const owned = (id: string) => (staff ? Infinity : (me?.inventory[id] ?? 0));
   // 미리보기할 폭죽: 고른 것 → 가방의 첫 폭죽 → 첫 종류
   const [picked, setPicked] = useState<string | null>(null);
   const shown = FIREWORKS.find((f) => f.id === picked) ?? stock[0]?.item ?? FIREWORKS[0];
-  const shop = onOpenShop ? [{ label: "상점에서 폭죽 사기", icon: "bag" as const, onClick: onOpenShop, primary: stock.length === 0 }] : [];
+  const shop = onOpenShop && !staff ? [{ label: "상점에서 폭죽 사기", icon: "bag" as const, onClick: onOpenShop, primary: stock.length === 0 }] : [];
 
   async function fire(itemId: string) {
     setPending(true);
@@ -92,7 +94,7 @@ export default function FireworkDialog({ onClose, onOpenShop }: { onClose: () =>
                 <ItemIcon itemId={item.id} size={32} />
                 <span className={styles.main}>
                   <span className={styles.name}>
-                    {item.name} <span className={styles.count}>×{count}</span>
+                    {item.name} <span className={styles.count}>×{countLabel(count)}</span>
                   </span>
                   <span className={styles.meta}>{item.desc}</span>
                 </span>
@@ -125,7 +127,7 @@ export default function FireworkDialog({ onClose, onOpenShop }: { onClose: () =>
                     <span className={fw.kindName}>{item.name}</span>
                     <span className={fw.kindDesc}>{item.desc}</span>
                     <span className={fw.kindMeta}>
-                      {item.price}P{owned(item.id) > 0 ? ` · 가방에 ${owned(item.id)}개` : ""}
+                      {item.price}P{staff ? " · 운영자 무제한" : owned(item.id) > 0 ? ` · 가방에 ${owned(item.id)}개` : ""}
                     </span>
                   </span>
                 </button>

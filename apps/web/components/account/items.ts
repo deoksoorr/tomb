@@ -1,5 +1,5 @@
-import { isPermanentUntil, itemById, MEGAPHONE_TTL_MS, plotLabel, sanitizeLook, type ItemDef, type ItemKind } from "@tomb/protocol";
-import type { PublicGrave } from "@/lib/types";
+import { isPermanentUntil, itemById, ITEMS, MEGAPHONE_TTL_MS, plotLabel, sanitizeLook, type ItemDef, type ItemKind } from "@tomb/protocol";
+import type { Me, PublicGrave } from "@/lib/types";
 
 // 가방·착용·지속시간 표시용 순수 함수
 
@@ -27,6 +27,15 @@ export function bagEntries(inventory: Record<string, number>, kind?: ItemKind): 
     return item && count > 0 && (!kind || item.kind === kind) ? [{ item, count }] : [];
   });
 }
+
+/** 쏠 수 있는 폭죽. 운영자 계정은 가진 것과 상관없이 모든 종류 (개수 Infinity → countLabel로 「∞」. 서버도 가방에서 빼지 않는다) */
+export function fireworkEntries(me: Pick<Me, "inventory" | "staff">): BagEntry[] {
+  if (!me.staff) return bagEntries(me.inventory, "firework");
+  return ITEMS.filter((i) => i.kind === "firework").map((item) => ({ item, count: Infinity }));
+}
+
+/** 개수 표시: 무제한(운영자 폭죽)이면 「∞」 */
+export const countLabel = (n: number): string => (Number.isFinite(n) ? String(n) : "∞");
 
 /** 지금 착용 중인 꾸미기 (만료 제외, 부위별 1개) */
 export function currentLook(equipped: readonly { itemId: string; until: number }[], now: number): string[] {

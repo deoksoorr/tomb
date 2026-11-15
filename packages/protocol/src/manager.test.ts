@@ -119,3 +119,14 @@ describe("11/16 매니저 착용 증서", () => {
     expect(mgrGateLook(plain, false)).toBe(plain);
   });
 });
+
+describe("11/16 매니저 확성기 증서", () => {
+  it("확성기 증서의 mgr는 true만 싣는다", async () => {
+    const exp = 1_999_999_999;
+    const g = { kind: "megaphone" as const, visitorId: "v", nonce: "n1", name: "반장", text: "안녕", scope: "channel" as const, ch: 1, exp };
+    expect(await verifyGrant(S, await signGrant(S, { ...g, mgr: true }), exp - 10)).toMatchObject({ kind: "megaphone", mgr: true });
+    const plain = await verifyGrant(S, await signGrant(S, g), exp - 10);
+    expect(plain && "mgr" in plain).toBe(false);
+  });
+});
+

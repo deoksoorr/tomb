@@ -27,7 +27,7 @@ export const TITLE_PERKS: Readonly<Record<TitleGrade, { speed: number; discount:
   legend: { speed: 1.07, discount: 0.07 },
   // 11/15 신화: 능력은 전설과 같다 (실시간 서버 속도 검증 안 — 위 speed 설명)
   mythic: { speed: 1.07, discount: 0.07 },
-  // 11/16 매니저 칭호: 혜택은 칭호와 오라뿐 (능력 없음)
+  // 11/16 매니저 칭호: 혜택은 칭호와 채팅 딱지뿐 (능력 없음)
   manager: { speed: 1, discount: 0 },
 };
 

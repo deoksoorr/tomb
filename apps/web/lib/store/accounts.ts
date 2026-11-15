@@ -84,7 +84,7 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
   // 46번 염색은 따로 저장한다 (lib/store/style.ts)
   // 주간 1위 값 (지난주 1위면 비트, 오라를 껐으면 끔 표시까지) → 착용 증서에 실려 다른 사람 화면의 배지·오라도 맞춘다
   // 31번 운영자는 운영자 오라를 끈 것도 같은 값으로 (CHAMP_AURA_OFF)
-  // 11/16 매니저 (관리자가 임명 — 전용 칭호·오라. 착용 증서에 실려 다른 사람 화면에도)
+  // 11/16 매니저 (관리자가 임명 — 전용 칭호. 착용 증서에 실려 다른 사람 화면에도)
   const [a, style, champ, manager] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId), champWireFor(accountId, staff, now).catch(() => 0), isManager(accountId, now)]);
   return {
     ...toMe(accountId, a, day, now),
@@ -143,7 +143,7 @@ export function lookGrant(
   now = Date.now(),
   appearance?: { dye?: AvatarDye; body?: string | null; champ?: number; manager?: boolean },
 ): Promise<string> {
-  // 11/16 매니저 표시도 같이 (1 = 매니저, 0 = 아님 → 해제되면 실시간 서버가 오라·칭호를 바로 뗀다)
+  // 11/16 매니저 표시도 같이 (1 = 매니저, 0 = 아님 → 해제되면 실시간 서버가 칭호를 바로 뗀다)
   const extra = appearance
     ? { dye: appearance.dye ?? {}, ...(isAvatarBody(appearance.body) ? { body: appearance.body } : {}), champ: appearance.champ ?? 0, mgr: appearance.manager ? (1 as const) : (0 as const) }
     : {};

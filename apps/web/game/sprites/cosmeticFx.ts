@@ -51,14 +51,12 @@ function wings(fill: Color, lo: Color, edge: Color, line: Color, shape: (i: numb
 
 // ── 주간 랭킹 1위 오라 그림 도우미 ──
 
-/** 테마 수 (금·빨강·파랑, 둘씩 섞은 셋, 무지개, 운영자, 11/16 매니저) */
-const CHAMP_THEMES = 9;
+/** 테마 수 (금·빨강·파랑, 둘씩 섞은 셋, 무지개, 운영자) */
+const CHAMP_THEMES = 8;
 /** 3관왕 무지개 테마 */
 const RAINBOW_THEME = 6;
 /** 31번 운영자 오라 테마: 푸른 저승 등불빛 + 금빛 테두리 문양 (도깨비불·검은 연기 띠는 입자로) */
 export const STAFF_THEME = 7;
-/** 11/16 매니저 오라 테마: 민트·청록 빛 + 크림빛 서류 마디 (빙글 도는 서류 종이·민트 반짝이는 입자로) — 운영자의 보라·금, 1위의 금·빨강·파랑과 겹치지 않게 */
-export const MANAGER_THEME = 8;
 const RING_W = 36;
 const RING_H = 12;
 const RING_PHASES = 8;
@@ -87,11 +85,6 @@ function hsv(h: number, s: number, v: number): Color {
 
 /** 테마의 u(0..1) 자리 색: 한 랭킹이면 그 색, 둘이면 반씩 번갈아, 무지개면 색상환, 운영자면 저승 등불빛에 금빛 문양 마디 */
 function champColor(theme: number, u: number): ChampCol {
-  if (theme === MANAGER_THEME) {
-    const k = (((u * 6) % 1) + 1) % 1;
-    // 크림빛 서류 마디 · 민트 · 청록
-    return k < 0.22 ? { c: 0xfff3d2, hi: 0xffffff } : k < 0.66 ? { c: 0x3fe6b4, hi: 0xd4fff0 } : { c: 0x18aebe, hi: 0xa8f4f4 };
-  }
   if (theme === STAFF_THEME) {
     const k = (((u * 8) % 1) + 1) % 1;
     // 금빛 문양 마디 · 저승 보랏빛 · 등불 푸른빛 (낚시왕의 맑은 파랑과 결이 다르게 보랏빛·금빛을 넉넉히)
@@ -756,39 +749,6 @@ export const FX_ART = {
       for (let i = 0; i < g.px.length; i++) if (g.px[i] & 255) g.px[i] = (g.px[i] & ~255) | 190;
     }),
   },
-  /** 11/16 매니저 오라 서류 한 장 (도는 동안 앞면 → 비스듬히 → 옆선으로 뒤집힌다): 크림빛 종이 + 민트 글줄 + 접힌 귀퉁이 + 청록 클립 */
-  mgrPaper: {
-    w: 7,
-    h: 8,
-    frames: 3,
-    build: frames(7, 8, 3, (g, f) => {
-      const pal = { L: 0x1d5e5a, p: 0xfffaf0, s: 0xe2f2ea, l: 0x6fd8bc, c: 0x22b8b0, f: 0xc8e6dc };
-      rows(
-        g,
-        f === 0
-          ? [".LLLLc.", ".LpppcL", ".LllpfL", ".LpppsL", ".LlllsL", ".LpppsL", ".LllssL", ".LLLLLL"]
-          : f === 1
-            ? ["..LLLc.", "..LppcL", "..LlpsL", "..LppsL", "..LllsL", "..LppsL", "..LlssL", "..LLLLL"]
-            : ["...Lc..", "...LL..", "...Ls..", "...Ls..", "...Ls..", "...Ls..", "...Ls..", "...LL.."],
-        pal,
-      );
-    }),
-  },
-  /** 11/16 매니저 오라 반짝이 (민트 네 갈래 별, 0 = 크게 · 1 = 작게) */
-  mgrStar: {
-    w: 5,
-    h: 5,
-    frames: 2,
-    build: frames(5, 5, 2, (g, f) => {
-      if (f === 0) {
-        for (const [x, y] of [[2, 0], [2, 1], [0, 2], [1, 2], [3, 2], [4, 2], [2, 3], [2, 4]]) g.set(x, y, 0x5ff0c4, 220);
-        g.set(2, 2, 0xffffff);
-      } else {
-        for (const [x, y] of [[2, 1], [1, 2], [3, 2], [2, 3]]) g.set(x, y, 0x8ff8d8, 200);
-        g.set(2, 2, 0xf4fffa);
-      }
-    }),
-  },
   /** 물방울 */
   champDrop: {
     w: 3,
@@ -1401,17 +1361,13 @@ export class CosmeticFxSim {
   private kiteY = 0;
   private kiteOn = false;
 
-  /**
-   * body = 몸 id (프리미엄 외형 등급 연출을 함께 건다), champ = 주간 랭킹 1위 값 (1위 오라를 함께 건다 — 착용 오라와 자리를 나눠 둘 다 보인다).
-   * 11/16 mgr = 매니저: 매니저 오라도 같은 전용 오라 자리 (착용 오라와 함께 보인다). 운영자 오라 → 1위 오라 → 매니저 오라 순서로 하나만
-   */
-  setLook(look: readonly string[], body?: string | null, champ?: number, staff?: boolean, mgr?: boolean): void {
+  /** body = 몸 id (프리미엄 외형 등급 연출을 함께 건다), champ = 주간 랭킹 1위 값 (1위 오라를 함께 건다 — 착용 오라와 자리를 나눠 둘 다 보인다) */
+  setLook(look: readonly string[], body?: string | null, champ?: number, staff?: boolean): void {
     const next = look.filter((id) => id in COSMETIC_FX || id in GEAR_EXTRA_FX).map((id) => [id, COSMETIC_FX[id] ?? GEAR_EXTRA_FX[id]] as [string, FxSpec]);
     const tier = bodyFx(body);
     if (tier) next.push(["@body", tier]);
     // 31번 운영자 오라가 우선 (본인이 끄면 champ에 CHAMP_AURA_OFF) — 아니면 주간 1위 오라
-    const won = staff && !((champ ?? 0) & CHAMP_AURA_OFF) ? STAFF_THEME : champTheme(champ);
-    const theme = won < 0 && mgr ? MANAGER_THEME : won;
+    const theme = staff && !((champ ?? 0) & CHAMP_AURA_OFF) ? STAFF_THEME : champTheme(champ);
     if (theme >= 0) next.push(["@champ", { kind: "aura", motion: "champ", theme, light: true }]);
     const had = new Set(this.specs.map(([id]) => id));
     if (!next.some(([, s]) => s.kind === "pet")) {
@@ -1752,7 +1708,7 @@ export class CosmeticFxSim {
         if (!f.offscreen) {
           const n = out.length;
           champAura(s.theme ?? 0, f, t, out);
-          if ((s.theme === STAFF_THEME || s.theme === MANAGER_THEME) && f.staffSoft !== undefined) softenBehind(out, n, bodyDepth(f), f.staffSoft);
+          if (s.theme === STAFF_THEME && f.staffSoft !== undefined) softenBehind(out, n, bodyDepth(f), f.staffSoft);
         }
         break;
       case "orbit":
@@ -2054,7 +2010,6 @@ function champAura(theme: number, f: FxInput, t: number, out: FxCmd[]): void {
       out.push(cmd("champStreak", theme, Math.round(bx + sx), Math.round(fy - 2 - u * (f.artTop + 20)), { oy: 0, alpha: Math.sin(Math.PI * u), layer: "light", depth: 0 }));
     }
   // ③ 솟구치는 입자
-  if (theme === MANAGER_THEME) return mgrPapers(f, t, bx, fy, back, calm, W, out, start);
   // 운영자: 떠도는 넋 불빛(도깨비불)과 몸 뒤 검은 비단 연기 띠
   const kinds = staff ? ["soul", "smoke", "soul", "smoke"] : rainbow ? ["coin", "ember", "drop", "mote"] : THEME_MIX[theme].map((m) => (["coin", "ember", "drop"] as const)[m]);
   const n = calm ? 4 : rainbow ? 16 : 13;
@@ -2108,44 +2063,6 @@ function champAura(theme: number, f: FxInput, t: number, out: FxCmd[]): void {
     const c = cmd(art, frame, Math.round(x), Math.round(y), { alpha, sx: big, sy: big, layer: "light", depth: 0 });
     // 몸 그림과 겹치면 몸 뒤로 (몸을 덮지 않는다)
     if (overBody(c, FX_ART[art], f)) Object.assign(c, { layer: "body", add: true, depth: back - 0.01 });
-    out.push(c);
-  }
-}
-
-/**
- * 11/16 매니저 오라 입자: 서류 종이 다섯 장이 몸 허리 둘레를 기울어진 고리로 빙글 돌며(한 장씩 뒤집히고 둥실), 민트 반짝이가 천천히 솟는다.
- * 뒤쪽 반원 서류는 몸 뒤, 앞쪽은 몸 옆으로 비켜 있을 때만 (몸을 덮지 않는다 — 1위 오라 빛기둥과 같은 규칙)
- */
-function mgrPapers(f: FxInput, t: number, bx: number, fy: number, back: number, calm: boolean, W: number, out: FxCmd[], start: number): void {
-  const midY = fy - f.artTop * 0.45;
-  const n = 5;
-  for (let i = 0; i < n; i++) {
-    const a = (calm ? 0 : t / 1500) + (i * Math.PI * 2) / n;
-    const c = Math.cos(a);
-    const z = Math.sin(a);
-    const side = Math.min(1, Math.max(0, (Math.abs(c) - 0.62) / 0.25));
-    const vis = z < 0 ? 0.75 : side;
-    if (vis < 0.05) continue;
-    const bob = calm ? 0 : Math.sin(t / 420 + i * 1.3) * 2;
-    const x = bx + c * 16 * W;
-    const y = midY + z * 4 + bob;
-    // 도는 동안 한 장씩 뒤집힌다 (앞면 → 비스듬히 → 옆선 → 비스듬히)
-    const spin = calm ? 0 : Math.floor(t / 140 + i * 3) % 4;
-    const frame = spin === 3 ? 1 : spin;
-    const p = cmd("mgrPaper", frame, Math.round(x), Math.round(y), { alpha: 0.95 * vis, flip: c < 0, rot: (calm ? 0 : Math.sin(t / 600 + i) * 0.25) + c * 0.15, layer: z < 0 ? "body" : "light", depth: z < 0 ? back - 0.012 : 0, dim: z < 0 ? 0.8 : 1 });
-    // 앞쪽에서도 몸 그림과 겹치면 몸 뒤로
-    if (z >= 0 && overBody(p, FX_ART.mgrPaper, f)) Object.assign(p, { layer: "body", depth: back - 0.012 });
-    out.push(p);
-  }
-  const m = calm ? 3 : 8;
-  for (let i = 0; i < m && out.length - start < CHAMP_FX_MAX - 1; i++) {
-    const u = calm ? (i + 0.5) / m : (t / 2300 + i / m + h01(i, 51) * 0.4) % 1;
-    const ang = h01(i, 52) * Math.PI * 2 + (calm ? 0 : t / 2600);
-    const r = (8 + h01(i, 53) * 8) * W;
-    const x = bx + Math.cos(ang) * r + (calm ? 0 : Math.sin(t / 300 + i) * 1.2);
-    const y = fy - 2 - u * (f.artTop + 16) + Math.sin(ang) * 2;
-    const c = cmd("mgrStar", u < 0.5 ? 0 : 1, Math.round(x), Math.round(y), { alpha: Math.sin(Math.PI * u), layer: "light", depth: 0 });
-    if (overBody(c, FX_ART.mgrStar, f)) Object.assign(c, { layer: "body", add: true, depth: back - 0.01 });
     out.push(c);
   }
 }

@@ -18,7 +18,10 @@ export default function EarnGauge({ me }: { me: Me }) {
     return () => clearInterval(t);
   }, []);
 
-  const { total, main, rest, separate } = earnGaugeRows(me.todayEarned, me.earnedBy);
+  const view = earnGaugeRows(me.todayEarned, me.earnedBy);
+  const { total, main, rest } = view;
+  // 운영자 계정은 출석 도장·접속 시간 보너스(7일 연속·한 달 개근 포함)를 받지 않는다 → 따로 세는 줄을 뺀다
+  const separate = me.staff ? [] : view.separate;
   const hidden = rest.length + separate.length;
 
   return (

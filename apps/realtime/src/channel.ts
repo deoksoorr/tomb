@@ -807,7 +807,7 @@ export class ChannelCore<C extends object> {
       case "chat": {
         // 말풍선 채팅: 넘치면 조용히 버린다. 가린 글만 같은 채널·방에 중계하고, 늦게 온 사람용으로 메모리에 1분만 둔다 (실내에 있으면 안 보이니 버린다)
         if (p.away || !takeChatToken((p.chatBucket ??= newChatBucket()), now)) return;
-        const c = this.chats.push({ sid: p.sid, visitorId: p.visitorId, name: p.name, text: maskChat(m.text), ...(p.staff ? { staff: true as const } : {}) }, now);
+        const c = this.chats.push({ sid: p.sid, visitorId: p.visitorId, name: p.name, text: maskChat(m.text), ...(p.staff ? { staff: true as const } : {}), ...(p.mgr ? { mgr: true as const } : {}) }, now);
         return this.broadcast(encodeEvent({ t: "chat", sid: p.sid, text: c.text, id: c.id, at: c.at }), p.sid);
       }
       case "goblin":
@@ -873,7 +873,7 @@ export class ChannelCore<C extends object> {
     const ch = this.host.channelNo?.();
     if (g.scope === "channel" && ch !== undefined && ch !== g.ch) return;
     if (!this.host.claimNonce(`m:${g.nonce}`, g.exp * 1000)) return; // 이미 외친 확성기
-    const data = encodeEvent({ t: "megaphone", id: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, at: Date.now(), ...(g.staff ? { staff: true as const } : {}) });
+    const data = encodeEvent({ t: "megaphone", id: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, at: Date.now(), ...(g.staff ? { staff: true as const } : {}), ...(g.mgr ? { mgr: true as const } : {}) });
     this.broadcast(data);
     if (g.scope === "all") this.host.relayMegaphone?.(g.nonce, g.exp * 1000, data);
   }

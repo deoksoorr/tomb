@@ -26,7 +26,7 @@ export type JoinClaims = {
   dex?: number;
   /** 지난주 랭킹 1위 (CHAMP_BOARDS 비트 묶음, 1~7). Vercel이 주간 1위 기록을 확인한 뒤에만 넣는다. 없으면 0 */
   champ?: number;
-  /** 11/16 매니저 (관리자가 임명, Vercel이 확인한 뒤에만 넣는다 → 매니저 전용 오라·칭호). 일반 계정엔 없다 */
+  /** 11/16 매니저 (관리자가 임명, Vercel이 확인한 뒤에만 넣는다 → 매니저 전용 칭호·채팅 딱지). 일반 계정엔 없다 */
   mgr?: true;
   /** 만료 시각 (unix seconds) */
   exp: number;

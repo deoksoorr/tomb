@@ -112,7 +112,7 @@ export type NetCallbacks = {
   onMeStale?(): void;
   /** 친구가 들어왔다·나갔다 (실시간 서버가 밀어 준다) */
   onFriend?(m: { key: string; name: string; on: boolean }): void;
-  onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; system?: true; replaces?: string }): void;
+  onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; system?: true; replaces?: string; mgr?: true }): void;
 };
 
 export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean; body?: string };
@@ -630,6 +630,8 @@ export class RealtimeClient {
               ch: Number(m.ch) || 0,
               at: Number(m.at) || Date.now(),
               ...(m.staff === true ? { staff: true as const } : {}),
+              // 11/16 매니저 계정이 외친 것
+              ...(m.mgr === true ? { mgr: true as const } : {}),
               // 11/15 마을 공지 줄 (실시간 서버가 /internal/say로 띄운 것)
               ...(m.system === true ? { system: true as const } : {}),
               ...(typeof m.replaces === "string" ? { replaces: m.replaces } : {}),

@@ -673,7 +673,7 @@ export class WorldScene extends Phaser.Scene {
     r.view.setDexBadge(p.dex); // 도감 100% 배지 (입장 토큰에 서버가 넣은 것만 온다)
     r.view.setChamp(p.champ); // 주간 랭킹 1위 배지·오라 (입장 토큰·착용 증서에 서버가 넣은 것만 온다)
     r.view.setStaff(p.staff === true); // 31번 운영자: 저승사자 차림·"운영자" 배지 (서버가 넣은 표시만 온다)
-    r.view.setMgr(p.mgr === true); // 11/16 매니저 오라·칭호 (서버가 넣은 표시만 온다)
+    r.view.setMgr(p.mgr === true); // 11/16 매니저 칭호 (서버가 넣은 표시만 온다)
     // 같은 sid가 다시 들어오면(이름·색 변경) 앉아 있던 좌석을 이어받는다
     r.seatId = prev?.seatId ?? null;
     r.view.setMood(p.mood); // 24번: 늦게 온 사람도 앉아 있는 사람의 상태를 본다

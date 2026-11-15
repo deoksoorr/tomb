@@ -1,9 +1,9 @@
 import { env } from "./env";
 import { MemoryManagers, RedisManagers, type ManagerRecord, type ManagerStore } from "./store/managers";
 
-// 11/16 매니저: 관리자가 여러 명을 임명한다. 혜택은 매니저 전용 칭호(「무급 마을 반장」)와 매니저 전용 오라뿐.
+// 11/16 매니저: 관리자가 여러 명을 임명한다. 혜택은 매니저 전용 칭호(「무급 마을 반장」)와 채팅 「매니저」 딱지뿐.
 // 운영자(lib/staff) 권한(관리자 기능·확성기 무료·포인트 채우기·금빛 이름 등)은 하나도 없다. 판정은 언제나 서버가 한다:
-//  - 입장 토큰·착용 증서에 매니저 표시(mgr)를 이 모듈이 확인한 뒤에만 넣는다 (실시간 서버가 다른 사람 화면에 오라를 그리고 칭호를 받아 준다)
+//  - 입장 토큰·착용 증서에 매니저 표시(mgr)를 이 모듈이 확인한 뒤에만 넣는다 (실시간 서버가 매니저 칭호를 받아 주고 채팅 줄에 「매니저」 딱지를 붙인다)
 //  - 칭호는 매니저일 때만 얻은 것으로 본다 (lib/titlesServer). 해제하면 끼고 있던 칭호도 뺀다 (관리자 API)
 
 /** 몇 명까지 임명할 수 있는지 (관리자 화면 실수 방지 — 매니저 목록은 인스턴스가 통째로 기억한다) */
@@ -31,7 +31,7 @@ export async function managerIds(now = Date.now()): Promise<ReadonlySet<string>>
   return ids;
 }
 
-/** 매니저인지 (읽기에 실패하면 아님 — 오라·칭호가 잠깐 안 보일 뿐) */
+/** 매니저인지 (읽기에 실패하면 아님 — 칭호가 잠깐 안 보일 뿐) */
 export async function isManager(accountId: string, now = Date.now()): Promise<boolean> {
   if (!accountId) return false;
   return (await managerIds(now).catch(() => new Set<string>())).has(accountId);

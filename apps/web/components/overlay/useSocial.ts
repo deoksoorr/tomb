@@ -19,7 +19,8 @@ const GIFT_POLL_MS = 30 * 60_000;
 export function useSocial(ready: boolean): { calendarReady: boolean; giftCount: number } {
   const { me } = useMe();
   const { unclaimed, gifts } = useGifts();
-  const calendarReady = !!me && !me.attendance.today && me.attendance.stayMinutes >= ATTEND_STAY_MINUTES;
+  // 운영자 계정은 출석 도장을 받지 않는다 → 빨간 점·「출석 도장을 찍어 주세요」 안내도 없다
+  const calendarReady = !!me && !me.staff && !me.attendance.today && me.attendance.stayMinutes >= ATTEND_STAY_MINUTES;
 
   useEffect(() => {
     if (!ready) return;
@@ -48,7 +49,7 @@ export function useSocial(ready: boolean): { calendarReady: boolean; giftCount: 
     let dirty = false;
     const pull = () => {
       dirty = false;
-      // 11/16 매니저 임명·해제: 바뀌었으면 착용 증서를 새로 받아 보낸다 → 내 아바타와 같은 방 사람들 화면의 매니저 오라·칭호가 그 자리에서 붙거나 떨어진다
+      // 11/16 매니저 임명·해제: 바뀌었으면 착용 증서를 새로 받아 보낸다 → 내 아바타와 같은 방 사람들 화면의 매니저 칭호가 그 자리에서 맞춰진다
       const wasMgr = meStore.getSnapshot().me?.manager === true;
       void meStore.refresh().then((me) => {
         if (me && (me.manager === true) !== wasMgr) void restoreLook().catch(() => undefined);

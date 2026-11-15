@@ -19,7 +19,8 @@ export const CHAT_RECENT_MAX = 150;
 
 /** 방에 들어올 때 받는 최근 채팅 한 줄 (S2C chatLog). at = 서버 시각 ms, mine = 내가 쓴 줄 */
 /** staff = 운영자가 쓴 줄 → 채팅창 이름 금색 + "운영자" 딱지 */
-export type ChatLogLine = { id: string; at: number; name: string; text: string; mine?: true; staff?: true };
+/** mgr = 11/16 매니저가 쓴 줄 (실시간 서버가 서명된 연결 정보로 붙인다) → "매니저" 딱지. 옛 클라이언트는 무시한다 */
+export type ChatLogLine = { id: string; at: number; name: string; text: string; mine?: true; staff?: true; mgr?: true };
 
 /** 가린 자리 */
 export const CHAT_MASK = "***";

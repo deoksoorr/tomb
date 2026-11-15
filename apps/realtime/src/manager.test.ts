@@ -1,9 +1,9 @@
-import { AVATAR_COLORS, MANAGER_TITLE_ID, signJoinToken, type Grant, type PeerInfo, type S2C } from "@tomb/protocol";
+import { AVATAR_COLORS, encodeEvent, MANAGER_TITLE_ID, signJoinToken, type Grant, type PeerInfo, type S2C } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { admit, admitRoom } from "./auth";
 import { ChannelCore, type ChannelHost, type PeerRecord } from "./channel";
 
-// 11/16 매니저: 입장 토큰·착용 증서의 mgr (Vercel 서명) → 접속자 정보·look 방송에 실려 다른 사람 화면에 매니저 오라.
+// 11/16 매니저: 입장 토큰·착용 증서의 mgr (Vercel 서명) → 접속자 정보·look 방송에 실려 다른 사람 화면에서 매니저 칭호를 띄운다.
 // 매니저 전용 칭호는 매니저 연결만 (해제되면 칭호도 바로 빠진다)
 
 type Conn = { id: string; out: (string | ArrayBuffer)[]; att?: PeerRecord | null };
@@ -69,7 +69,7 @@ describe("11/16 매니저 표시", () => {
     expect(u.att?.mgr).toBeUndefined();
   });
 
-  it("착용 증서의 mgr 0으로 해제되면 오라 표시와 매니저 칭호가 바로 빠지고 look 방송에 mgr 0이 실린다. 옛 증서(mgr 없음)는 그대로 둔다", () => {
+  it("착용 증서의 mgr 0으로 해제되면 매니저 표시와 매니저 칭호가 바로 빠지고 look 방송에 mgr 0이 실린다. 옛 증서(mgr 없음)는 그대로 둔다", () => {
     const core = setup(true);
     const u = conn("u");
     const m = conn("m");
@@ -109,5 +109,42 @@ describe("11/16 매니저 표시", () => {
     const again = events(u).find((e) => e.t === "join") as (PeerInfo & { t: "join" }) | undefined;
     expect(again).toBeTruthy();
     expect(again?.mgr).toBeUndefined();
+  });
+});
+
+describe("11/16 매니저 채팅·확성기 딱지", () => {
+  const chatLog = (c: Conn) => events(c).find((e): e is Extract<S2C, { t: "chatLog" }> => e.t === "chatLog");
+  it("채팅 기록 줄에 매니저 표시(mgr)를 실시간 서버가 연결 정보로 붙인다 (일반 줄엔 없다)", () => {
+    const core = setup();
+    const m = conn("m");
+    const u = conn("u");
+    core.join(m, ticket("m", true), 0);
+    core.join(u, ticket("u"), 0);
+    core.message(m, encodeEvent({ t: "chat", text: "반장이에요" }), 1_000);
+    core.message(u, encodeEvent({ t: "chat", text: "안녕하세요" }), 2_000);
+    const late = conn("late");
+    core.join(late, ticket("late"), 3_000);
+    const lines = chatLog(late)?.lines ?? [];
+    expect(lines.map((l) => [l.text, l.mgr === true])).toEqual([
+      ["반장이에요", true],
+      ["안녕하세요", false],
+    ]);
+    // 해제(mgr 0 증서) 뒤에 쓴 줄은 딱지 없음
+    core.applyGrant(m, { kind: "look", visitorId: "m", look: [], exp: 9e9, mgr: 0 });
+    core.message(m, encodeEvent({ t: "chat", text: "이제 평범해요" }), 4_000);
+    const late2 = conn("late2");
+    core.join(late2, ticket("late2"), 5_000);
+    expect(chatLog(late2)?.lines.find((l) => l.text === "이제 평범해요")?.mgr).toBeUndefined();
+  });
+
+  it("확성기 증서의 mgr를 방송에 그대로 싣는다 (증서는 웹이 서명)", () => {
+    const core = setup();
+    const u = conn("u");
+    core.join(u, ticket("u"), 0);
+    const m = conn("m");
+    core.join(m, ticket("m", true), 0);
+    u.out.length = 0;
+    core.applyGrant(m, { kind: "megaphone", visitorId: "m", nonce: "n1", name: "반장", text: "다들 안녕", scope: "channel", ch: 1, exp: 9e9, mgr: true });
+    expect(events(u).find((e) => e.t === "megaphone")).toMatchObject({ t: "megaphone", name: "반장", mgr: true });
   });
 });

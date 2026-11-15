@@ -1,6 +1,6 @@
 import { Redis } from "@upstash/redis";
 
-// 11/16 매니저 저장소. 관리자 화면(관리자 키 + 관리자 IP)에서만 임명·해제한다. 혜택은 매니저 전용 칭호·오라뿐 (운영자 권한은 없다).
+// 11/16 매니저 저장소. 관리자 화면(관리자 키 + 관리자 IP)에서만 임명·해제한다. 혜택은 매니저 전용 칭호·채팅 딱지뿐 (운영자 권한은 없다).
 // Redis 키: admin:managers  HASH 계정 id → JSON {setAt, name}  (임명한 사람 수만큼, 상한 MANAGER_MAX)
 
 export const MANAGERS_KEY = "admin:managers";

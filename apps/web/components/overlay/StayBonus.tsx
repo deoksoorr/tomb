@@ -39,7 +39,8 @@ export default function StayBonus() {
     };
   }, [ticks]);
 
-  if (!me || (state.count === 0 && !notice && !pop)) return null;
+  // 운영자 계정은 접속 시간 보너스를 받지 않는다 (서버도 403) → 창을 띄우지 않는다
+  if (!me || me.staff || (state.count === 0 && !notice && !pop)) return null;
 
   const elapsed = clock && clock.ticks === ticks ? clock.now - clock.at : 0;
   const nextMin = state.ticksToNext === null ? null : Math.max(1, Math.ceil((state.ticksToNext * TICK_MS - elapsed) / 60_000));

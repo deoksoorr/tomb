@@ -108,6 +108,8 @@ export type GameEvents = {
     at: number;
     /** 운영자 계정이 외친 것 → 이름 금색 */
     staff?: true;
+    /** 11/16 매니저 계정이 외친 것 → "매니저" 딱지 */
+    mgr?: true;
     /** 11/15 마을 공지 줄 (실시간 서버 /internal/say) — 금색, "운영자" 딱지·신고 없음 */
     system?: true;
     /** 이 줄로 바꿔 끼울 앞 공지 id (긴급 의뢰 끝 → 시작 공지를 뺀다) */
@@ -128,7 +130,7 @@ export type GameEvents = {
   /** 47번: 다른 사람 캐릭터(또는 이름표)를 눌렀다 → UI가 작은 메뉴(신고하기)를 띄운다. ch = 월드 채널, room = 방 id */
   "peer:menu": { sid: number; name: string; ch?: number; room?: string; /** 그 사람 머리 위에 지금 떠 있는 자유 채팅 (신고에 붙인다) */ chat?: string };
   /** 채팅 기록창 한 줄: 같은 채널·방에서 받은 자유 채팅(가린 글) 또는 내가 보낸 글. 화면 메모리에만 1분. key = 서버 줄 id(중복 제거) */
-  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true; /** 닉네임 꾸미기 id (lib/nameStyle nameStyleIds) */ ns?: string[] };
+  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true; /** 11/16 매니저(실시간 서버가 알린 mgr) → "매니저" 딱지 */ mgr?: true; /** 닉네임 꾸미기 id (lib/nameStyle nameStyleIds) */ ns?: string[] };
   /** 방에 들어올 때 서버가 보낸 이 방의 최근 1분 채팅 (이 기기 시계로 옮긴 줄). ch = 월드 채널이면 그 번호 (방이면 없음) */
   "chat:log": { lines: IncomingChatLine[]; ch?: number };
 
@@ -257,7 +259,7 @@ export type UiEvents = {
   /** 꾸미기 착용 변경: 내 아바타에 바로 반영하고 grant를 실시간 서버로 보낸다 (sticky) */
   /** 내 착용 상태 (+ 46·25번: 염색·몸 모양 — 있으면 내 아바타에도 바로 입힌다) */
   /** champ = 주간 랭킹 1위 값 (0 = 아님, 옛 응답엔 없음) — 내 아바타 배지·오라 */
-  /** mgr = 11/16 매니저 (1 = 매니저 → 내 아바타 매니저 오라, 0 = 아님, 옛 응답엔 없음) */
+  /** mgr = 11/16 매니저 (1 = 매니저 → 내 머리 위 매니저 칭호, 0 = 아님, 옛 응답엔 없음) */
   "look:set": { look: string[]; lookGrant: string; dye?: AvatarDye; body?: string; champ?: number; mgr?: 0 | 1 };
   /** 폭죽 발사: 내 위치에서 바로 터뜨리고 grant를 실시간 서버로 보낸다 */
   "firework:fire": { item: string; grant: string };

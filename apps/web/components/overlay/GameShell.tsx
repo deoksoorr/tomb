@@ -20,7 +20,7 @@ import { emitLook, restoreLook } from "../account/actions";
 import ActivityDialog from "../account/ActivityDialog";
 import BagDialog from "../account/BagDialog";
 import FireworkDialog from "../account/FireworkDialog";
-import { bagEntries, pointsText, type MyGraveEntry } from "../account/items";
+import { fireworkEntries, pointsText, type MyGraveEntry } from "../account/items";
 import MyGraves from "../account/MyGraves";
 import MyPanel from "../account/MyPanel";
 import ShrineDialog from "../account/ShrineDialog";
@@ -485,7 +485,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
 
   const disconnected = status?.mode === "replaced" || status?.mode === "offline";
   const bagCount = me ? Object.values(me.inventory).reduce((n, c) => n + Math.max(0, c), 0) : 0;
-  const fireworkCount = me ? bagEntries(me.inventory, "firework").reduce((n, e) => n + e.count, 0) : 0;
+  const fireworkCount = me ? fireworkEntries(me).reduce((n, e) => n + e.count, 0) : 0;
 
   return (
     <div className={styles.shell}>
@@ -548,16 +548,19 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
               <div className={styles.topRight}>
                 {/* 불멍·놀이기구 중엔 아래 바로 가기 줄(폭죽 포함)이 숨으니 폭죽만 위쪽 줄 맨 앞에 */}
                 {campfire && <FireworkButton variant="top" onOpen={() => setPanel("fireworks")} />}
-                <button
-                  type="button"
-                  className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
-                  onClick={() => setPanel("calendar")}
-                  aria-label={calendarReady ? "출석 달력 (오늘 출석 도장을 찍을 수 있어요)" : "출석 달력"}
-                  title="출석 달력"
-                >
-                  <PixelIcon name="calendar" />
-                  {calendarReady && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
-                </button>
+                {/* 운영자 계정은 출석 도장을 받지 않는다 → 출석 달력 버튼을 뺀다 */}
+                {!me?.staff && (
+                  <button
+                    type="button"
+                    className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
+                    onClick={() => setPanel("calendar")}
+                    aria-label={calendarReady ? "출석 달력 (오늘 출석 도장을 찍을 수 있어요)" : "출석 달력"}
+                    title="출석 달력"
+                  >
+                    <PixelIcon name="calendar" />
+                    {calendarReady && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
+                  </button>
+                )}
                 <button
                   type="button"
                   className={cx(ui.button, ui.icon, ui.top, styles.topButton)}

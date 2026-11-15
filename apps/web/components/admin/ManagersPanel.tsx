@@ -19,7 +19,7 @@ const dateText = (ms: number) => new Date(ms).toLocaleDateString("ko-KR", { year
 
 /**
  * 11/16 매니저 임명 탭: 닉네임으로 찾아 임명하고, 지금 매니저 목록에서 해제한다 (관리자 키 + 관리자 IP에서만 열린다).
- * 매니저 혜택은 전용 칭호와 전용 오라뿐 (운영자 권한은 없다)
+ * 매니저 혜택은 전용 칭호와 채팅 「매니저」 딱지뿐 (운영자 권한은 없다)
  */
 export default function ManagersPanel({ toast, onAuthLost }: Props) {
   const [version, setVersion] = useState(0);
@@ -36,7 +36,7 @@ export default function ManagersPanel({ toast, onAuthLost }: Props) {
   };
 
   const set = async (accountId: string, on: boolean, who: string) => {
-    if (!on && !window.confirm(`${who}님을 매니저에서 해제할까요? 칭호와 오라가 바로 사라져요.`)) return;
+    if (!on && !window.confirm(`${who}님을 매니저에서 해제할까요? 칭호와 채팅 딱지가 바로 사라져요.`)) return;
     setPending(true);
     try {
       const r = await opsAdminApi.setManager(accountId, on);
@@ -100,7 +100,7 @@ export default function ManagersPanel({ toast, onAuthLost }: Props) {
           </ul>
         )}
         <p className={ui.hint}>
-          매니저는 「{MANAGER_TITLE.name}」 칭호를 달 수 있고, 몸 둘레에 민트빛 서류가 도는 매니저 오라가 생겨요. 다른 혜택이나 관리자 권한은 없어요.
+          매니저는 「{MANAGER_TITLE.name}」 칭호를 달 수 있고, 채팅 이름 옆에 「매니저」 딱지가 붙어요. 다른 혜택이나 관리자 권한은 없어요.
           접속 중이면 임명·해제가 그 자리에서 바로 반영돼요. 해제하면 달고 있던 칭호도 같이 빠져요.
         </p>
       </div>

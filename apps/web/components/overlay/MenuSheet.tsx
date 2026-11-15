@@ -2,6 +2,8 @@
 
 import { bridge } from "@/game/bridge";
 import { ATTEND_STAY_TEXT } from "@/lib/attendStay";
+import { useMe } from "@/lib/hooks/useMe";
+import { countLabel } from "../account/items";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import PixelIcon, { type IconName } from "../ui/PixelIcon";
@@ -87,6 +89,8 @@ export default function MenuSheet({
   onPick,
   onClose,
 }: Props) {
+  // 운영자 계정은 출석 도장을 받지 않는다 → 출석 달력 칸을 뺀다
+  const staff = !!useMe().me?.staff;
   /** 감정 표현은 시트를 닫고 바로 보여 준다 */
   const act = (kind: "wave" | "cheer") => {
     onClose();
@@ -100,9 +104,11 @@ export default function MenuSheet({
     { target: "dex", icon: "book", label: "도감", desc: "물고기·곤충·약초 모으기" },
     { target: "housing", icon: "house", label: "집·분양 마을", desc: "내 집 분양받고 꾸미기" },
     ...(fireworkCount > 0
-      ? [{ target: "fireworks" as const, icon: "spark" as const, label: "폭죽 쏘기", desc: "채널 하늘에 불꽃 한 발", badge: String(fireworkCount) }]
+      ? [{ target: "fireworks" as const, icon: "spark" as const, label: "폭죽 쏘기", desc: "채널 하늘에 불꽃 한 발", badge: countLabel(fireworkCount) }]
       : []),
-    { target: "calendar", icon: "calendar", label: "출석 달력", desc: calendarReady ? "오늘 출석 도장을 찍을 수 있어요!" : `${ATTEND_STAY_TEXT} 머물면 오늘 출석 도장`, redDot: calendarReady },
+    ...(staff
+      ? []
+      : [{ target: "calendar" as const, icon: "calendar" as const, label: "출석 달력", desc: calendarReady ? "오늘 출석 도장을 찍을 수 있어요!" : `${ATTEND_STAY_TEXT} 머물면 오늘 출석 도장`, redDot: calendarReady }]),
     {
       target: "gifts",
       icon: "gift",

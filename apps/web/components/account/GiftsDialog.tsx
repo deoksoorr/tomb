@@ -5,7 +5,7 @@ import { itemName } from "@tomb/protocol";
 import { GIFT_TERMS, type GiftItem } from "@/lib/types";
 import { errorMessage } from "@/lib/api";
 import { giftsStore, useGifts } from "@/lib/hooks/useGifts";
-import { meStore } from "@/lib/hooks/useMe";
+import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
 import { socialApi } from "@/lib/socialApi";
 import type { GiftEntry } from "@/lib/types";
@@ -28,6 +28,8 @@ const dateText = (t: number) => {
 /** 11번 선물함: 운영자가 보낸 쪽지·포인트·아이템. 받기(한 번만)·지우기. 받지 않은 선물은 30일 보관 */
 export default function GiftsDialog({ onClose, onOpenCalendar }: { onClose: () => void; onOpenCalendar?: () => void }) {
   const { gifts } = useGifts();
+  // 운영자 계정은 출석 도장을 받지 않는다 → 출석 달력 바로 가기를 뺀다
+  const staff = !!useMe().me?.staff;
   const [pending, setPending] = useState<string | null>(null);
   const [confirmDrop, setConfirmDrop] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -136,7 +138,7 @@ export default function GiftsDialog({ onClose, onOpenCalendar }: { onClose: () =
         </p>
         <InfoCard title="다른 보상도 챙겨요" icon="calendar">
           <TodayFacts show={["attend", "cap"]} />
-          {onOpenCalendar && <Shortcuts items={[{ label: "출석 달력 열기", icon: "calendar", onClick: onOpenCalendar }]} />}
+          {onOpenCalendar && !staff && <Shortcuts items={[{ label: "출석 달력 열기", icon: "calendar", onClick: onOpenCalendar }]} />}
         </InfoCard>
         <InfoCard title="선물은 이럴 때 와요" icon="info">
           <TipList

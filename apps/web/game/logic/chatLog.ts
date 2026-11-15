@@ -28,6 +28,8 @@ export type ChatLine = {
   at: number;
   /** 운영자 계정 (실시간 서버가 알린 staff 표시만, 이름이 같아도 흉내 불가) → 이름 금색 */
   staff?: true;
+  /** 11/16 매니저 계정 (실시간 서버가 알린 mgr 표시만) → "매니저" 딱지 */
+  mgr?: true;
   /** 보낸 사람의 닉네임 꾸미기 id (이름 글자·이름표 — 게임이 아는 그 사람 착용 목록에서). 없으면 그냥 이름 */
   ns?: string[];
 };
@@ -97,7 +99,7 @@ export function readChatLog(serverNow: unknown, raw: unknown, localNow: number):
     if (typeof l.id !== "string" || !l.id || l.id.length > 64 || typeof l.at !== "number" || !Number.isFinite(l.at)) continue;
     if (typeof l.name !== "string" || typeof l.text !== "string" || !l.text) continue;
     const age = Math.max(0, serverNow - l.at);
-    out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), at: localNow - age });
+    out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), ...(l.mgr === true ? { mgr: true } : {}), at: localNow - age });
   }
   return out;
 }
