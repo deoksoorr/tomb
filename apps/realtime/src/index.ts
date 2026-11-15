@@ -16,7 +16,7 @@
  *   GET /lobby               채널 목록과 인원(LobbyInfo). CORS는 ALLOWED_ORIGINS만, 엣지 캐시 2초
  *   GET /hunt-rooms          11/12 사냥터 방별 지금 인원(HuntRoomsInfo). CORS는 ALLOWED_ORIGINS만, 메모리·엣지 캐시 10초
  *   GET /queue?t=            대기열 자리 확인(QueueStatus). 대기열 토큰(channel 0)만 받는다. 캐시 없음
- *   GET /ch/:n?t=&x=&y=&v=   채널 WebSocket. Origin·클라이언트 버전·토큰(그 채널용)을 검증한 뒤 Channel DO로 넘긴다
+ *   GET /ch/:n?t=&x=&y=&v=&m=   채널 WebSocket. Origin·클라이언트 버전·토큰(그 채널용)을 검증한 뒤 Channel DO로 넘긴다 (m=camp: 11/15 캠핑장으로, 토큰에 camp 허락이 있을 때만)
  *   GET /room/:id?t=&x=&y=&v= 방(마을·집·사냥터) WebSocket. 토큰의 room이 id와 같아야 한다. 상한 ROOM_CAPACITY
  *   (v < MIN_CLIENT_VERSION이면 DO까지 가지 않고 4010으로 거절 → 클라이언트가 새로고침 창을 띄운다)
  *   POST /dev/goblin?ch=N    (개발용, DEV_HOOKS=1일 때만) 그 채널에 황금 고블린을 지금 나오게 한다. 운영에서는 404
@@ -40,7 +40,7 @@ import {
   rejectSocket,
 } from "./auth";
 import { type Env, channelStub, lobbyStub, readConfig, roomStub } from "./config";
-import { isOutdatedClient, parseChannel, parseSpawn } from "./logic";
+import { isOutdatedClient, parseChannel, parseMap, parseSpawn } from "./logic";
 
 export { ChannelDO } from "./ChannelDO";
 export { LobbyDO } from "./LobbyDO";
@@ -182,8 +182,10 @@ async function channel(req: Request, env: Env, url: URL, rawN: string): Promise<
   if (n === null) return rejectSocket(CLOSE.BAD_REQUEST, "bad channel");
 
   if (!env.JOIN_SECRET) console.error("JOIN_SECRET is not set — every join is rejected");
-  const spawn = parseSpawn(url.searchParams.get("x"), url.searchParams.get("y"));
-  const ticket = await admit(env.JOIN_SECRET, url.searchParams.get("t"), n, spawn);
+  // 11/15 ?m=camp: 처음부터 캠핑장으로 (새로고침 복원·캠핑장에서 채널 이동·재접속). 허락 없는 토큰이면 admit이 마을로 돌린다
+  const map = parseMap(url.searchParams.get("m"));
+  const spawn = parseSpawn(url.searchParams.get("x"), url.searchParams.get("y"), false, map);
+  const ticket = await admit(env.JOIN_SECRET, url.searchParams.get("t"), n, spawn, map);
   if (!ticket) return rejectSocket(CLOSE.INVALID_TOKEN, "invalid token");
   return forward(req, channelStub(env, n), ticket);
 }

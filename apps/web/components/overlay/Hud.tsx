@@ -33,11 +33,15 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
   const ambience = useAmbience();
   const mode = status?.mode ?? "connecting";
   const channel = status?.channel ?? null;
+  // 11/15 캠핑장: 같은 채널을 마을과 나눠 쓴다 → "3채널 캠핑장 · 4명" (인원은 캠핑장에 있는 사람)
+  const camp = status?.map === "camp";
 
   if (compact) {
     const where =
       mode === "online" && channel !== null
-        ? `${channel}채널 ${status?.count}/${status?.cap}`
+        ? camp
+          ? `${channel}채널 캠핑장 ${status?.count}명`
+          : `${channel}채널 ${status?.count}/${status?.cap}`
         : MODE_TEXT[mode === "online" ? "connecting" : mode];
     const sky = ambience ? ` · ${PHASE_LABELS[ambience.phase]}·${WEATHER_LABELS[ambience.weather]}` : "";
     return mode === "online" && channel !== null ? (
@@ -65,7 +69,8 @@ export default function Hud({ onOpenChannels, compact = false }: { onOpenChannel
         {mode === "online" && channel !== null ? (
           <button type="button" className={cx(ui.button, ui.top, styles.pill)} onClick={onOpenChannels} aria-haspopup="dialog">
             <span className={styles.live} aria-hidden="true" />
-            {channel}채널 · {status?.count}/{status?.cap}명<span className="visually-hidden">, 채널 이동</span>
+            {camp ? `${channel}채널 캠핑장 · ${status?.count}명` : `${channel}채널 · ${status?.count}/${status?.cap}명`}
+            <span className="visually-hidden">, 채널 이동</span>
           </button>
         ) : (
           <span className={cx(ui.top, styles.pill)} data-mode={mode} role="status">

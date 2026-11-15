@@ -14,9 +14,11 @@ import {
   newChatBucket,
   takeChatToken,
   type ChatBucket,
-  inServerBounds,
+  inMapBounds,
+  mapHasSpotState,
+  mapSpawn,
   parseC2S,
-  seatSlot,
+  seatSlotIn,
   spotKindOfState,
   spotSeatId,
   isIndoorSpot,
@@ -38,6 +40,7 @@ import {
   type AvatarDye,
   type AwayPlace,
   type C2S,
+  type MapId,
   type DirId,
   type Grant,
   type MoveMsg,
@@ -94,6 +97,13 @@ export type PeerRecord = {
   champ?: number;
   /** 이 연결로 자리를 잡은 시각. 로비의 채널 간 중복 정리(kick)가 더 새 연결을 내보내지 않게 비교한다 */
   joinedAt: number;
+  /**
+   * 11/15 지금 있는 맵 (캠핑장이면 "camp", 없으면 마을 — 옛 attachment·예약·스냅샷도 마을).
+   * 같은 채널 안에서도 위치·말풍선·채팅·몸짓은 같은 맵 사람끼리만 주고받는다
+   */
+  map?: "camp";
+  /** 11/15 입장 토큰에 캠핑장 허락(camp)이 있었다 → map 요청을 받아 준다 (재접속 때 새 토큰 값으로 바뀐다) */
+  camp?: true;
 };
 
 /** 재연결 유예 예약. until(ms)까지 sid·좌석·위치를 지킨다 */
@@ -122,6 +132,10 @@ export type JoinTicket = {
   dex?: number;
   /** 지난주 랭킹 1위 비트 (JoinClaims.champ, 착용 증서로 바뀔 수 있다) */
   champ?: number;
+  /** 11/15 캠핑장 허락 (JoinClaims.camp) */
+  camp?: true;
+  /** 11/15 처음 들어갈 맵 (URL ?m=camp, 허락이 있을 때만 Worker가 넣는다). 없으면 마을 */
+  map?: "camp";
 };
 
 /** ChannelCore가 바깥(DO)에 맡기는 부수 효과 */
@@ -220,6 +234,15 @@ export const ROD_INTERVAL_MS = 300;
 export const AWAY_INTERVAL_MS = 150;
 /** 24번 벤치 상태(mood) 연결당 최소 간격 */
 export const MOOD_INTERVAL_MS = 800;
+/** 11/15 맵 옮기기(버스) 연결당 최소 간격 */
+export const MAP_INTERVAL_MS = 1_000;
+/** 캠핑장 좌석의 내부 키 접두어 (좌석표는 채널 하나라 좌표로 만든 소품 자리 id가 두 맵에서 겹칠 수 있다). 밖으로는 원래 id */
+const CAMP_SEAT_KEY = "@c:";
+/** 이 사람이 있는 맵 */
+const mapOfPeer = (p: { map?: "camp" }): MapId => (p.map === "camp" ? "camp" : "village");
+/** 맵 + 와이어 좌석 id → 좌석표 키 */
+const seatKey = (map: MapId, id: string): string => (map === "camp" ? CAMP_SEAT_KEY + id : id);
+
 /** warp 서버 쿨다운. 클라이언트(WARP_COOLDOWN_MS 1초)보다 짧게 둬서 네트워크 지터로 정상 요청이 버려지지 않게 한다 */
 export const SERVER_WARP_COOLDOWN_MS = 800;
 /** 입장·복귀 좌표가 다른 사람이 앉은 좌석 앵커에서 이 거리 안이면 그 좌석 앞(내려설 자리)으로 옮긴다 — 한 자리에 한 명 */
@@ -258,6 +281,8 @@ type Peer<C> = PeerRecord & {
   lastAwayAt?: number;
   /** 11/13 사냥터 공격·스킬 동작 (없으면 아직 안 씀) */
   lastHuntAt?: number;
+  /** 11/15 맵 옮기기 (없으면 아직 안 씀) */
+  lastMapAt?: number;
   /** 말풍선 채팅 도배 제한 (토큰 버킷). 재접속해도 피어에 남겨 다시 채워지지 않게 한다 */
   chatBucket?: ChatBucket;
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
@@ -270,7 +295,7 @@ export class ChannelCore<C extends object> {
   private readonly peers = new Map<number, Peer<C>>();
   private readonly bySocket = new Map<C, number>();
   private readonly byVisitor = new Map<string, number>();
-  /** seatId → sid */
+  /** 좌석표 키(seatKey: 마을은 seatId 그대로, 캠핑장은 접두어) → sid */
   private readonly seats = new Map<string, number>();
   /** 다음 틱 SNAPSHOT에 실을 sid ("바뀐 사람" 집합) */
   private readonly dirty = new Set<number>();
@@ -283,6 +308,24 @@ export class ChannelCore<C extends object> {
   private readonly goblin = new GoblinCore(() => (this.host.random ? this.host.random() : Math.random()));
   /** 이 방(채널·집·사냥터)의 최근 1분 채팅 — 메모리에만 (DO가 잠들면 사라진다) */
   private readonly chats = new ChatRecent(() => (this.host.random ? this.host.random() : Math.random()));
+  /** 11/15 캠핑장 사람들의 최근 채팅 (채팅은 같은 맵끼리만). 처음 쓸 때 만든다 */
+  private campChats: ChatRecent | null = null;
+
+  private chatsOf(map: MapId): ChatRecent {
+    if (map === "village") return this.chats;
+    return (this.campChats ??= new ChatRecent(() => (this.host.random ? this.host.random() : Math.random())));
+  }
+
+  /** 그 맵 좌석 (와이어 id → sid) */
+  private seatsOf(map: MapId): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const [key, sid] of this.seats) {
+      const camp = key.startsWith(CAMP_SEAT_KEY);
+      if (camp !== (map === "camp")) continue;
+      out[camp ? key.slice(CAMP_SEAT_KEY.length) : key] = sid;
+    }
+    return out;
+  }
 
   constructor(
     private readonly cfg: ChannelConfig,
@@ -377,7 +420,10 @@ export class ChannelCore<C extends object> {
     const newSid = this.admits(t.visitorId) ? allocSid(this.peers) : null;
     if (newSid === null) return this.host.close(conn, CLOSE.CHANNEL_FULL, "channel full");
 
-    const pos = this.clearOfSeats(t.spawn ?? SPAWN);
+    const map: MapId = t.map === "camp" && t.camp ? "camp" : "village";
+    // 방은 크기를 모른다 (Worker가 u16 범위만 본다). 월드 채널은 그 맵 범위 안일 때만
+    const spawn = t.spawn && (this.cfg.room || inMapBounds(map, t.spawn.x, t.spawn.y)) ? t.spawn : mapSpawn(map, SPAWN);
+    const pos = this.clearOfSeats(spawn, undefined, map);
     const rec: PeerRecord = {
       sid: newSid,
       visitorId: t.visitorId,
@@ -395,11 +441,13 @@ export class ChannelCore<C extends object> {
       ...(t.dex ? { dex: t.dex } : {}),
       ...(t.champ ? { champ: t.champ } : {}),
       joinedAt: now,
+      ...(map === "camp" ? { map: "camp" as const } : {}),
+      ...(t.camp ? { camp: true as const } : {}),
     };
     const p = this.adoptNew(rec, conn, now);
     this.save(p);
     this.welcome(p, t.channel, false, now);
-    this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
+    this.broadcastMap(map, encodeEvent({ t: "join", ...this.info(p) }), p.sid);
     this.host.countChanged(this.peers.size);
     this.host.visitorJoined(p.visitorId, p.joinedAt);
     this.host.liveChanged?.(true);
@@ -429,9 +477,15 @@ export class ChannelCore<C extends object> {
     p.staff = t.staff ? true : undefined;
     p.dex = t.dex || undefined;
     p.champ = t.champ || undefined;
+    p.camp = t.camp ? true : undefined;
     p.joinedAt = now;
     // 새 소켓을 붙이기 전에 옮긴다: 좌석 해제 알림은 다른 사람에게만 가고, 본인은 결과가 반영된 welcome을 처음으로 받는다
-    if (t.spawn) this.relocate(p, t.spawn);
+    // 11/15 다른 맵으로 다시 붙었다 (캠핑장에서 새로고침·허락이 없어진 토큰): 맵을 옮긴 뒤 welcome (옛 맵 leave · 새 맵 join)
+    const want: MapId = t.map === "camp" && t.camp ? "camp" : "village";
+    if (want !== mapOfPeer(p)) {
+      const to = t.spawn && inMapBounds(want, t.spawn.x, t.spawn.y) ? t.spawn : mapSpawn(want, SPAWN);
+      this.switchMap(p, want, this.clearOfSeats(to, p.sid, want), now);
+    } else if (t.spawn) this.relocate(p, t.spawn);
 
     p.conn = conn;
     p.until = 0;
@@ -440,20 +494,20 @@ export class ChannelCore<C extends object> {
     this.save(p);
     this.welcome(p, t.channel, true, now);
     // 이름·색·몸·꾸미기는 입장 때 한 번만 보낸다. 바뀌었을 때만 join을 다시 보낸다(클라이언트는 같은 sid의 join을 덮어쓰기로 처리).
-    if (renamed) this.broadcast(encodeEvent({ t: "join", ...this.info(p) }), p.sid);
+    if (renamed) this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "join", ...this.info(p) }), p.sid);
     this.host.visitorJoined(p.visitorId, p.joinedAt);
     this.host.liveChanged?.(true);
   }
 
   /** 복귀한 클라이언트가 알려 준 위치로 옮긴다(위치의 원천은 클라이언트). 앉아 있던 좌석 근처면 좌석을 유지한다. */
   private relocate(p: Peer<C>, want: Point): void {
-    const seat = p.seatId ? seatSlot(p.seatId) : undefined;
+    const seat = p.seatId ? seatSlotIn(mapOfPeer(p), p.seatId) : undefined;
     // 움직이는 자리(조각배, 50번): 자리는 그대로 두고 위치만 클라이언트가 알려 준 물 위로 (앵커와 멀어도 된다)
     if (seat?.mobile) return this.moveSeated(p, want);
     if (seat && dist(seat, want) <= SEAT_SERVER_RADIUS) return;
     if (p.seatId) this.releaseSeat(p);
     // 그 사이 다른 사람이 앉은 좌석 위로 돌아오지 않는다 (클라이언트는 seatDenied를 받고 가까운 빈자리로 옮긴다)
-    const to = this.clearOfSeats(want, p.sid);
+    const to = this.clearOfSeats(want, p.sid, mapOfPeer(p));
     if (p.x === to.x && p.y === to.y) return;
     p.x = p.tx = to.x;
     p.y = p.ty = to.y;
@@ -472,11 +526,11 @@ export class ChannelCore<C extends object> {
   }
 
   /** 다른 사람이 앉아 있는 좌석 앵커 바로 위면 그 좌석 앞(내려설 자리)으로. 아니면 그대로 */
-  private clearOfSeats(pos: Point, self?: number): Point {
+  private clearOfSeats(pos: Point, self?: number, map: MapId = "village"): Point {
     if (this.cfg.room) return pos;
-    for (const [seatId, sid] of this.seats) {
+    for (const [seatId, sid] of Object.entries(this.seatsOf(map))) {
       if (sid === self) continue;
-      const s = seatSlot(seatId);
+      const s = seatSlotIn(map, seatId);
       // 움직이는 자리(조각배)는 앵커에 사람이 있지 않다 (배가 물 위에 나가 있다)
       if (s && !s.mobile && dist(s, pos) < SEAT_CLEAR_RADIUS) return { x: s.x, y: s.y + SEAT_STAND_DY };
     }
@@ -484,14 +538,16 @@ export class ChannelCore<C extends object> {
   }
 
   private welcome(p: Peer<C>, channel: number, resumed: boolean, now = Date.now()): void {
-    const goblin = this.goblinOn ? this.goblin.visible(now) : undefined;
+    const map = mapOfPeer(p);
+    // 22번 고블린은 마을에만 나온다
+    const goblin = this.goblinOn && map === "village" ? this.goblin.visible(now) : undefined;
     this.sendTo(p, {
       t: "welcome",
       sid: p.sid,
       channel,
       cap: this.cfg.capacity,
       peers: this.othersOf(p),
-      seats: Object.fromEntries(this.seats),
+      seats: this.seatsOf(map),
       resumed,
       // 나무·그네도 좌석처럼 판정한다 (이 값이 없는 이전 서버에는 클라이언트가 소품 자리를 요청하지 않는다)
       // 방(집)도 3번 집 안 가구 자리를 같은 체계로 판정한다
@@ -499,6 +555,8 @@ export class ChannelCore<C extends object> {
       // 22번: 서버 시계(고양이·유령·고블린을 모두가 같은 시각으로) + 지금 나와 있는 고블린
       ...(this.cfg.room ? {} : { now }),
       ...(goblin ? { goblin } : {}),
+      // 11/15 캠핑장에 있으면 알린다 (마을이면 없다 — 옛 서버와 같은 모양)
+      ...(map === "camp" ? { m: "camp" as const } : {}),
     });
     // 고블린을 잡았는데 증서를 받기 전에 끊겼다 → 다시 보낸다 (웹은 같은 고블린을 한 번만 지급한다)
     const owed = this.goblinOn ? this.goblin.grantFor(p.visitorId, now) : null;
@@ -508,14 +566,15 @@ export class ChannelCore<C extends object> {
 
   /** 이 방의 최근 1분 채팅을 p에게 (없으면 보내지 않는다). 입장·재접속·실내에서 복귀할 때 */
   private sendChatLog(p: Peer<C>, now: number): void {
-    const lines = this.chats.recent(now, p.visitorId);
+    const lines = this.chatsOf(mapOfPeer(p)).recent(now, p.visitorId);
     if (lines.length) this.sendTo(p, { t: "chatLog", now, lines });
   }
 
-  /** 나를 뺀 현재 접속자 전체 (유예 중인 사람 포함 — 다른 사람에게는 멈춘 아바타로 보인다) */
+  /** 나를 뺀 같은 맵 접속자 전체 (유예 중인 사람 포함 — 다른 사람에게는 멈춘 아바타로 보인다) */
   private othersOf(p: Peer<C>): PeerInfo[] {
     const out: PeerInfo[] = [];
-    for (const o of this.peers.values()) if (o !== p) out.push(this.info(o));
+    const map = mapOfPeer(p);
+    for (const o of this.peers.values()) if (o !== p && mapOfPeer(o) === map) out.push(this.info(o));
     return out;
   }
 
@@ -615,7 +674,7 @@ export class ChannelCore<C extends object> {
    * 친구 위치: 이 채널에 자리를 가진 모든 사람(접속 중 + 재연결 유예 중)의 방문자 id·sid·서버 위치·실내 여부.
    * 실시간 서버 안(Worker)에서만 쓰고, 웹 서버는 친구 사이인 계정만 골라 브라우저에 넘긴다
    */
-  roster(): { visitorId: string; sid: number; x: number; y: number; away?: true; place?: AwayPlace; house?: string }[] {
+  roster(): { visitorId: string; sid: number; x: number; y: number; away?: true; place?: AwayPlace; house?: string; map?: "camp" }[] {
     return [...this.peers.values()].map((p) => ({
       visitorId: p.visitorId,
       sid: p.sid,
@@ -624,6 +683,7 @@ export class ChannelCore<C extends object> {
       ...(p.away ? { away: true as const } : {}),
       ...(p.away && p.place ? { place: p.place } : {}),
       ...(p.away && p.house ? { house: p.house } : {}),
+      ...(p.map === "camp" ? { map: "camp" as const } : {}),
     }));
   }
 
@@ -661,9 +721,10 @@ export class ChannelCore<C extends object> {
   }
 
   private onMove(p: Peer<C>, m: MoveMsg, now: number): void {
-    if (!this.inBounds(m.x, m.y)) return;
+    const map = mapOfPeer(p);
+    if (!this.inBounds(m.x, m.y, map)) return;
     // 좌석 판정은 서버가 한다. 자리를 차지한 상태(의자 sitChair, 나무 hang, 그네 swing)가 아닌 MOVE가 오면 자리를 놓는다.
-    let held = p.seatId ? seatSlot(p.seatId) : undefined;
+    let held = p.seatId ? seatSlotIn(map, p.seatId) : undefined;
     if (p.seatId && (!held || m.state !== held.state)) {
       this.releaseSeat(p);
       held = undefined;
@@ -680,6 +741,8 @@ export class ChannelCore<C extends object> {
         const kind = spotKindOfState(state);
         const indoor = !!kind && isIndoorSpot(kind);
         if (indoor && !this.cfg.room) state = STATE.idle;
+        // 11/15 그 맵에 없는 놀이기구·배 자세 (캠핑장엔 배·관람차·열기구가 없다)
+        else if (kind && !mapHasSpotState(map, state)) state = STATE.idle;
         else if (kind && indoor === !!this.cfg.room && !this.claimSpot(p, spotSeatId(kind, m.x, m.y), now)) state = STATE.idle;
       }
     }
@@ -735,12 +798,12 @@ export class ChannelCore<C extends object> {
         if (now - p.lastEmoteAt < EMOTE_INTERVAL_MS) return;
         if (!this.once(`e:${p.sid}:${m.graveId}`, EMOTE_DEDUPE_MS, now)) return;
         p.lastEmoteAt = now;
-        return this.broadcast(encodeEvent({ t: "emote", sid: p.sid, kind: m.kind, graveId: m.graveId }), p.sid);
+        return this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "emote", sid: p.sid, kind: m.kind, graveId: m.graveId }), p.sid);
       case "graveEvent":
         if (now - p.lastGraveEventAt < GRAVE_EVENT_INTERVAL_MS) return;
         if (!this.once(`g:${m.graveId}`, GRAVE_EVENT_INTERVAL_MS, now)) return;
         p.lastGraveEventAt = now;
-        return this.broadcast(encodeEvent({ t: "graveEvent", sid: p.sid, kind: m.kind, graveId: m.graveId }), p.sid);
+        return this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "graveEvent", sid: p.sid, kind: m.kind, graveId: m.graveId }), p.sid);
       case "look":
         if (now - p.lastLookAt < LOOK_INTERVAL_MS) return;
         p.lastLookAt = now;
@@ -753,11 +816,11 @@ export class ChannelCore<C extends object> {
         // 자가 복구: 클라이언트가 놓친 join/leave가 있어도 이걸로 맞춘다
         if (now - p.lastSyncAt < SYNC_INTERVAL_MS) return;
         p.lastSyncAt = now;
-        return this.sendTo(p, { t: "peers", peers: this.othersOf(p), seats: Object.fromEntries(this.seats) });
+        return this.sendTo(p, { t: "peers", peers: this.othersOf(p), seats: this.seatsOf(mapOfPeer(p)) });
       case "act":
         if (now - p.lastActAt < ACT_INTERVAL_MS) return;
         p.lastActAt = now;
-        return this.broadcast(encodeEvent({ t: "act", sid: p.sid, kind: m.kind, x: p.x, y: p.y }));
+        return this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "act", sid: p.sid, kind: m.kind, x: p.x, y: p.y }));
       case "use":
         // 3번 집 안 가구 쓰기: 뜻은 클라이언트가 정한다 (피아노 음·불 켜기 …). 보낸 사람은 이미 화면에 반영했다
         if (now - (p.lastUseAt ?? -Infinity) < USE_INTERVAL_MS) return;
@@ -776,7 +839,7 @@ export class ChannelCore<C extends object> {
         // 5번 이모티콘: 보낸 사람은 이미 화면에 띄웠다 → 나머지에게만
         if (now - (p.lastEmoAt ?? -Infinity) < EMO_INTERVAL_MS) return;
         p.lastEmoAt = now;
-        return this.broadcast(encodeEvent({ t: "emo", sid: p.sid, id: m.id }), p.sid);
+        return this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "emo", sid: p.sid, id: m.id }), p.sid);
       case "ride":
         if (now - (p.lastRideAt ?? -Infinity) < RIDE_INTERVAL_MS) return;
         p.lastRideAt = now;
@@ -796,12 +859,13 @@ export class ChannelCore<C extends object> {
       case "say":
         if (now - p.lastSayAt < SAY_INTERVAL_MS) return;
         p.lastSayAt = now;
-        return this.broadcast(encodeEvent({ t: "say", sid: p.sid, id: m.id }));
+        return this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "say", sid: p.sid, id: m.id }));
       case "chat": {
         // 말풍선 채팅: 넘치면 조용히 버린다. 가린 글만 같은 채널·방에 중계하고, 늦게 온 사람용으로 메모리에 1분만 둔다 (실내에 있으면 안 보이니 버린다)
         if (p.away || !takeChatToken((p.chatBucket ??= newChatBucket()), now)) return;
-        const c = this.chats.push({ sid: p.sid, visitorId: p.visitorId, name: p.name, text: maskChat(m.text), ...(p.staff ? { staff: true as const } : {}) }, now);
-        return this.broadcast(encodeEvent({ t: "chat", sid: p.sid, text: c.text, id: c.id, at: c.at }), p.sid);
+        // 11/15 채팅은 같은 맵 사람끼리만 (최근 기록도 맵마다 따로)
+        const c = this.chatsOf(mapOfPeer(p)).push({ sid: p.sid, visitorId: p.visitorId, name: p.name, text: maskChat(m.text), ...(p.staff ? { staff: true as const } : {}) }, now);
+        return this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "chat", sid: p.sid, text: c.text, id: c.id, at: c.at }), p.sid);
       }
       case "goblin":
         return this.onGoblinClaim(p, m.id, now);
@@ -809,12 +873,65 @@ export class ChannelCore<C extends object> {
         if (now - (p.lastMegaphoneAt ?? -Infinity) < MEGAPHONE_INTERVAL_MS) return;
         p.lastMegaphoneAt = now;
         return this.verifyThenApply(p, "megaphone", m.grant);
+      case "map":
+        if (this.cfg.room) return;
+        if (now - (p.lastMapAt ?? -Infinity) < MAP_INTERVAL_MS) return;
+        p.lastMapAt = now;
+        return this.onMap(p, m.m, { x: m.x, y: m.y }, now);
     }
   }
 
-  /** 월드 채널은 묘지 맵 범위, 방은 크기를 모르므로 u16 범위만 */
-  private inBounds(x: number, y: number): boolean {
-    return this.cfg.room ? x >= 0 && x <= 0xffff && y >= 0 && y <= 0xffff : inServerBounds(x, y);
+  /**
+   * 11/15 맵 옮기기 (버스): 연결은 그대로, 같은 채널 안에서 마을 ↔ 캠핑장.
+   * 허락(토큰 camp)이 없거나 그 맵 범위 밖이면 지금 맵 그대로 mapped (클라이언트가 되돌린다).
+   * 같은 맵이면 순간이동처럼 자리만 옮기고 mapped. 다른 맵이면 switchMap + mapped + 그 맵 채팅 기록
+   */
+  private onMap(p: Peer<C>, target: MapId, at: Point, now: number): void {
+    const cur = mapOfPeer(p);
+    const ok = (target === "village" || !!p.camp) && inMapBounds(target, at.x, at.y);
+    if (ok && target === cur) {
+      if (p.seatId) this.releaseSeat(p);
+      if (p.state === STATE.sitChair || p.state === STATE.sitGround || spotKindOfState(p.state)) p.state = STATE.idle;
+      p.x = p.tx = at.x;
+      p.y = p.ty = at.y;
+      this.chasing.delete(p.sid);
+      p.budget = new MoveBudget(now);
+      this.markDirty(p);
+    } else if (ok) {
+      this.switchMap(p, target, this.clearOfSeats(at, p.sid, target), now);
+    }
+    const map = mapOfPeer(p);
+    this.sendTo(p, { t: "mapped", m: map, peers: this.othersOf(p), seats: this.seatsOf(map) });
+    if (ok && target !== cur) this.sendChatLog(p, now);
+  }
+
+  /**
+   * 맵을 옮긴다 (본인에게는 보내지 않는다 — 부른 쪽이 mapped·welcome으로 알린다).
+   * 좌석(배 낚싯대·벤치 상태 포함)을 놓고 실내 표시를 끄고, 옛 맵 사람들에게 leave, 새 맵 사람들에게 join.
+   * 위치는 속도 검증 없이 바로 (순간이동과 같다). 타는 펫은 그대로 탄다
+   */
+  private switchMap(p: Peer<C>, target: MapId, to: Point, now: number): void {
+    const from = mapOfPeer(p);
+    if (p.seatId) this.releaseSeat(p);
+    if (p.state === STATE.sitChair || p.state === STATE.sitGround || spotKindOfState(p.state)) p.state = STATE.idle;
+    p.away = undefined;
+    p.place = undefined;
+    p.house = undefined;
+    p.x = p.tx = to.x;
+    p.y = p.ty = to.y;
+    this.chasing.delete(p.sid);
+    this.dirty.delete(p.sid); // 새 맵 사람들은 join으로 지금 자리를 받는다
+    p.budget = new MoveBudget(now);
+    this.broadcastMap(from, encodeEvent({ t: "leave", sid: p.sid }), p.sid);
+    p.map = target === "camp" ? "camp" : undefined;
+    this.broadcastMap(target, encodeEvent({ t: "join", ...this.info(p) }), p.sid);
+    this.save(p);
+    this.host.liveChanged?.(true);
+  }
+
+  /** 월드 채널은 그 사람이 있는 맵 범위, 방은 크기를 모르므로 u16 범위만 */
+  private inBounds(x: number, y: number, map: MapId): boolean {
+    return this.cfg.room ? x >= 0 && x <= 0xffff && y >= 0 && y <= 0xffff : inMapBounds(map, x, y);
   }
 
   /** 증서 검증(HMAC, 비동기)은 연결당 간격을 통과한 뒤에만 한다 — 검증 CPU를 아끼려고. */
@@ -845,7 +962,7 @@ export class ChannelCore<C extends object> {
       this.save(p);
       this.host.liveChanged?.(true);
       const extra = { ...(g.dye !== undefined ? { dye: p.dye ?? {} } : {}), ...(g.body !== undefined ? { body: p.body } : {}), ...(g.champ !== undefined ? { champ: p.champ ?? 0 } : {}) };
-      this.broadcast(encodeEvent({ t: "look", sid: p.sid, look: p.look, ...extra }));
+      this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "look", sid: p.sid, look: p.look, ...extra }));
       // 타던 펫을 집에 두거나 타지 못하는 펫으로 바꿨으면 내린다
       if (p.ride && !ridePetOfLook(p.look)) this.clearRide(p);
       return;
@@ -853,7 +970,7 @@ export class ChannelCore<C extends object> {
     if (g.kind === "megaphone") return this.applyMegaphone(g);
     if (g.kind !== "firework") return; // 고블린 증서는 실시간 서버가 내주기만 한다 (받지 않는다)
     if (!this.host.claimNonce(g.nonce, g.exp * 1000)) return; // 이미 쏜 폭죽
-    this.broadcast(encodeEvent({ t: "firework", sid: p.sid, item: g.item, x: p.x, y: p.y }));
+    this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "firework", sid: p.sid, item: g.item, x: p.x, y: p.y }));
   }
 
   /**
@@ -895,23 +1012,24 @@ export class ChannelCore<C extends object> {
    * 한 자리에는 한 명: 이미 누가 있거나 멀면 seatDenied.
    */
   private onSit(p: Peer<C>, seatId: string, now = Date.now()): void {
-    const found = seatSlot(seatId);
+    const map = mapOfPeer(p);
+    const found = seatSlotIn(map, seatId);
     // 열기구: 출발장에 있을 때(태우는 동안)만 탄다 — 날아가 있는 기구의 자리는 거절 (운항 시간표 = 서버 시계)
     const air = found?.kind === "balloon" ? balloonSeatById(seatId) : undefined;
-    if (air && this.seats.get(seatId) !== p.sid && !balloonBoarding(air.balloon, now, BALLOON_BOARD_GRACE_MS)) {
+    if (air && this.seats.get(seatKey(map, seatId)) !== p.sid && !balloonBoarding(air.balloon, now, BALLOON_BOARD_GRACE_MS)) {
       return this.sendTo(p, { t: "seatDenied", seatId });
     }
     // 3번: 집 안 가구 자리는 방(집)에서만, 월드 자리(의자·나무 …)는 월드 채널에서만
     const seat = found && isIndoorSpot(found.kind) === !!this.cfg.room ? found : undefined;
-    const holder = this.seats.get(seatId);
+    const holder = this.seats.get(seatKey(map, seatId));
     if (seat && holder === p.sid) return this.sendTo(p, { t: "seat", seatId, sid: p.sid }); // 재요청: 이미 내 자리
     // 긴 벤치에서 앉은 채 옆자리로: 같은 가구의 다른 좌석이면 거리와 상관없이 옮겨 앉는다
-    const old = p.seatId ? seatSlot(p.seatId) : undefined;
+    const old = p.seatId ? seatSlotIn(map, p.seatId) : undefined;
     const slide = !!seat && !!old && old.furnitureId !== null && old.furnitureId === seat.furnitureId;
     // 위치는 클라이언트가 마지막으로 보고한 지점으로 잰다 (서버 위치가 속도 예산 때문에 잠깐 뒤처져 있어도 거절하지 않게)
     const at = { x: p.tx, y: p.ty };
     // 2인승 조각배(F13): 같은 배의 다른 자리에 앉은 사람 곁이면 나루터(앵커)에서 멀어도 같이 탄다 — 배가 물가에 와 있다
-    const beside = !!seat && !slide && holder === undefined && this.besideCompanion(seat, at, p.sid);
+    const beside = !!seat && !slide && holder === undefined && this.besideCompanion(seat, at, p.sid, map);
     if (!seat || holder !== undefined || (!slide && !beside && dist(seat, at) > (seat.radius ?? SEAT_SERVER_RADIUS))) {
       return this.sendTo(p, { t: "seatDenied", seatId });
     }
@@ -919,12 +1037,12 @@ export class ChannelCore<C extends object> {
   }
 
   /** 움직이는 자리(조각배)에서: 같은 배(furnitureId)의 다른 자리에 앉은 사람이 at 가까이 있는지 */
-  private besideCompanion(seat: SeatSlot, at: Point, self: number): boolean {
+  private besideCompanion(seat: SeatSlot, at: Point, self: number, map: MapId): boolean {
     if (!seat.mobile || seat.furnitureId === null) return false;
     const r = seat.radius ?? SEAT_SERVER_RADIUS;
-    for (const [id, sid] of this.seats) {
+    for (const [id, sid] of Object.entries(this.seatsOf(map))) {
       if (sid === self || id === seat.id) continue;
-      if (seatSlot(id)?.furnitureId !== seat.furnitureId) continue;
+      if (seatSlotIn(map, id)?.furnitureId !== seat.furnitureId) continue;
       const q = this.peers.get(sid);
       if (q && dist(q, at) <= r) return true;
     }
@@ -933,9 +1051,10 @@ export class ChannelCore<C extends object> {
 
   /** MOVE로 들어온 나무·그네 상태의 자리 잡기 (이전 클라이언트용). 잡았으면(이미 내 자리 포함) true. 거절 알림은 보내지 않는다 */
   private claimSpot(p: Peer<C>, seatId: string, now = Date.now()): boolean {
-    const seat = seatSlot(seatId);
+    const map = mapOfPeer(p);
+    const seat = seatSlotIn(map, seatId);
     if (!seat) return false;
-    const holder = this.seats.get(seatId);
+    const holder = this.seats.get(seatKey(map, seatId));
     if (holder === p.sid) return true;
     // 열기구: 날아가 있는 기구의 자리는 MOVE로도 잡지 않는다 (onSit과 같은 운항 시간표)
     const air = seat.kind === "balloon" ? balloonSeatById(seatId) : undefined;
@@ -954,12 +1073,13 @@ export class ChannelCore<C extends object> {
     // 한 사람당 한 자리. DO는 한 번에 한 이벤트만 처리하므로 점유와 해제 사이에 다른 요청이 끼어들 수 없다
     // (같은 빈 자리로 두 명이 동시에 옮기면 먼저 처리된 한 명만 앉고, 다른 한 명은 seatDenied).
     // 새 자리 점유를 먼저 알리고 옛 자리 해제를 바로 이어 보낸다 — 클라이언트에는 같은 틱에 함께 도착한다.
+    const map = mapOfPeer(p);
     const prevSeat = p.seatId;
     if (prevSeat) {
-      this.seats.delete(prevSeat);
+      this.seats.delete(seatKey(map, prevSeat));
       p.seatId = null;
     }
-    this.seats.set(seatId, p.sid);
+    this.seats.set(seatKey(map, seatId), p.sid);
     p.seatId = seatId;
     if (!(seat.mobile && slide)) {
       p.x = p.tx = seat.x;
@@ -974,14 +1094,14 @@ export class ChannelCore<C extends object> {
     if (!boatSeatById(seatId)) this.clearRod(p);
     this.chasing.delete(p.sid);
     this.markDirty(p);
-    this.broadcast(encodeEvent({ t: "seat", seatId, sid: p.sid }));
-    if (prevSeat) this.broadcast(encodeEvent({ t: "seat", seatId: prevSeat, sid: null }));
+    this.broadcastMap(map, encodeEvent({ t: "seat", seatId, sid: p.sid }));
+    if (prevSeat) this.broadcastMap(map, encodeEvent({ t: "seat", seatId: prevSeat, sid: null }));
     this.host.liveChanged?.(true);
   }
 
   private onStand(p: Peer<C>): void {
     if (!p.seatId) return;
-    const held = seatSlot(p.seatId);
+    const held = seatSlotIn(mapOfPeer(p), p.seatId);
     this.releaseSeat(p);
     if (p.state === STATE.sitChair || (held && p.state === held.state)) p.state = STATE.idle;
     this.markDirty(p);
@@ -993,14 +1113,14 @@ export class ChannelCore<C extends object> {
    */
   private onMood(p: Peer<C>, m: string): void {
     if (m === "") return this.clearMood(p);
-    const seat = p.seatId ? seatSlot(p.seatId) : undefined;
+    const seat = p.seatId ? seatSlotIn(mapOfPeer(p), p.seatId) : undefined;
     // 상호작용 중이면 받는다: 어떤 자리든 차지했거나 수영·잠수 중
     const engaged = !!seat || p.state === STATE.swim || p.state === STATE.dive;
     if (!isSeatMood(m) || !engaged || p.mood === m) return;
     p.mood = m;
     this.save(p);
     this.host.liveChanged?.(true);
-    this.broadcast(encodeEvent({ t: "mood", sid: p.sid, m }));
+    this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "mood", sid: p.sid, m }));
   }
 
   /**
@@ -1016,7 +1136,7 @@ export class ChannelCore<C extends object> {
     p.ride = true;
     this.save(p);
     this.host.liveChanged?.(true);
-    this.broadcast(encodeEvent({ t: "ride", sid: p.sid, on: true }));
+    this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "ride", sid: p.sid, on: true }));
   }
 
   /**
@@ -1031,7 +1151,7 @@ export class ChannelCore<C extends object> {
     p.rod = true;
     this.save(p);
     this.host.liveChanged?.(true);
-    this.broadcast(encodeEvent({ t: "rod", sid: p.sid, on: true }));
+    this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "rod", sid: p.sid, on: true }));
   }
 
   /** 배 위 낚싯대를 거두고 모두에게 알린다 (드리우고 있지 않으면 아무것도 안 한다) */
@@ -1040,7 +1160,7 @@ export class ChannelCore<C extends object> {
     p.rod = undefined;
     p.saved = false;
     this.host.liveChanged?.(true);
-    this.broadcast(encodeEvent({ t: "rod", sid: p.sid, on: false }));
+    this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "rod", sid: p.sid, on: false }));
   }
 
   /**
@@ -1053,7 +1173,7 @@ export class ChannelCore<C extends object> {
       if (!this.cfg.hunt || !!p.away === on) return;
       p.away = on ? true : undefined;
       this.save(p);
-      this.broadcast(encodeEvent({ t: "away", sid: p.sid, on }), p.sid);
+      this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "away", sid: p.sid, on }), p.sid);
       return;
     }
     const where = on ? place : undefined;
@@ -1072,7 +1192,7 @@ export class ChannelCore<C extends object> {
     p.house = inHouse;
     this.save(p);
     this.host.liveChanged?.(true);
-    this.broadcast(encodeEvent({ t: "away", sid: p.sid, on }), p.sid);
+    this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "away", sid: p.sid, on }), p.sid);
     // 마을로 돌아왔다 → 실내에 있던 동안의 마을 채팅을 다시 맞춘다 (클라이언트가 id로 중복을 거른다)
     if (!on) this.sendChatLog(p, now);
   }
@@ -1083,7 +1203,7 @@ export class ChannelCore<C extends object> {
     p.ride = undefined;
     p.saved = false;
     this.host.liveChanged?.(true);
-    this.broadcast(encodeEvent({ t: "ride", sid: p.sid, on: false }));
+    this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "ride", sid: p.sid, on: false }));
   }
 
   /** 벤치 상태를 풀고 모두에게 알린다 (없으면 아무것도 안 한다) */
@@ -1092,25 +1212,25 @@ export class ChannelCore<C extends object> {
     p.mood = undefined;
     p.saved = false;
     this.host.liveChanged?.(true);
-    this.broadcast(encodeEvent({ t: "mood", sid: p.sid, m: "" }));
+    this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "mood", sid: p.sid, m: "" }));
   }
 
   /** 좌석을 비우고 모두에게 알린다. 상태(state)는 호출한 쪽이 정한다. 벤치 상태도 함께 풀린다 */
   private releaseSeat(p: Peer<C>): void {
     const seatId = p.seatId;
     if (!seatId) return;
-    this.seats.delete(seatId);
+    this.seats.delete(seatKey(mapOfPeer(p), seatId));
     p.seatId = null;
     p.saved = false;
     this.clearMood(p);
     this.clearRod(p);
-    this.broadcast(encodeEvent({ t: "seat", seatId, sid: null }));
+    this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "seat", seatId, sid: null }));
     this.host.liveChanged?.(true);
   }
 
   /** 랭킹 클릭 등 의도된 순간이동: 속도 검증 없이 범위만 본다. 쿨다운 안의 요청은 무시. */
   private onWarp(p: Peer<C>, to: Point, now: number): void {
-    if (!this.inBounds(to.x, to.y) || now - p.lastWarpAt < SERVER_WARP_COOLDOWN_MS) return;
+    if (!this.inBounds(to.x, to.y, mapOfPeer(p)) || now - p.lastWarpAt < SERVER_WARP_COOLDOWN_MS) return;
     p.lastWarpAt = now;
     if (p.seatId) this.releaseSeat(p);
     if (p.state === STATE.sitChair || p.state === STATE.sitGround || spotKindOfState(p.state)) p.state = STATE.idle;
@@ -1141,8 +1261,9 @@ export class ChannelCore<C extends object> {
   goblinCheck(now: number): void {
     if (!this.goblinOn) return;
     const r = this.goblin.check(now, this.online);
-    if (r.gone) this.broadcast(encodeEvent({ t: "goblinGone", id: r.gone }));
-    if (r.spawned) this.broadcast(encodeEvent({ t: "goblin", g: r.spawned }));
+    // 11/15 고블린은 마을에만 (캠핑장 사람에게는 알리지 않는다)
+    if (r.gone) this.broadcastMap("village", encodeEvent({ t: "goblinGone", id: r.gone }));
+    if (r.spawned) this.broadcastMap("village", encodeEvent({ t: "goblin", g: r.spawned }));
     if (r.changed) this.host.goblinChanged?.(this.goblin.state);
   }
 
@@ -1151,7 +1272,7 @@ export class ChannelCore<C extends object> {
     if (!this.goblinOn || this.online === 0) return null;
     this.goblinCheck(now);
     if (!this.goblin.visible(now)) {
-      this.broadcast(encodeEvent({ t: "goblin", g: this.goblin.spawn(now) }));
+      this.broadcastMap("village", encodeEvent({ t: "goblin", g: this.goblin.spawn(now) }));
       this.host.goblinChanged?.(this.goblin.state);
     }
     return this.goblin.state.cur;
@@ -1159,12 +1280,12 @@ export class ChannelCore<C extends object> {
 
   /** 잡기 요청: 가장 먼저 닿은 한 명만. 위치는 서버가 아는 값(마지막 보고·서버 추적 위치 중 가까운 쪽)으로 잰다 */
   private onGoblinClaim(p: Peer<C>, id: string, now: number): void {
-    if (!this.goblinOn || !p.conn) return;
+    if (!this.goblinOn || !p.conn || mapOfPeer(p) !== "village") return;
     this.goblinCheck(now);
     const points = this.goblin.claim(id, p.visitorId, [{ x: p.tx, y: p.ty }, { x: p.x, y: p.y }], now);
     if (points === null) return;
     this.host.goblinChanged?.(this.goblin.state);
-    this.broadcast(encodeEvent({ t: "goblinCaught", id, sid: p.sid, name: p.name, points }));
+    this.broadcastMap("village", encodeEvent({ t: "goblinCaught", id, sid: p.sid, name: p.name, points }));
     const conn = p.conn;
     const exp = Math.floor(now / 1000) + GOBLIN_GRANT_TTL_SEC;
     this.host.signGrant!({ kind: "goblin", visitorId: p.visitorId, points, nonce: id, exp }).then(
@@ -1193,15 +1314,21 @@ export class ChannelCore<C extends object> {
       if (p && this.chase(p, now)) this.markDirty(p);
     }
     if (this.dirty.size > 0) {
-      const entries: PeerState[] = [];
+      // 11/15 맵마다 따로 묶어 그 맵 사람에게만 (마을 사람만 있으면 예전과 똑같이 한 번)
+      const village: PeerState[] = [];
+      let camp: PeerState[] | null = null;
       for (const sid of this.dirty) {
         const p = this.peers.get(sid);
-        if (p) entries.push(this.state(p));
+        if (!p) continue;
+        if (p.map === "camp") (camp ??= []).push(this.state(p));
+        else village.push(this.state(p));
       }
       this.dirty.clear();
       // 엔트리 63개(512바이트)를 넘으면 나눠 보낸다. 같은 tick 번호를 쓴다.
-      for (let i = 0; i < entries.length; i += SNAPSHOT_MAX_ENTRIES) {
-        this.broadcast(encodeSnapshot(this.tickNo, entries.slice(i, i + SNAPSHOT_MAX_ENTRIES)));
+      for (const [map, entries] of [["village", village], ["camp", camp ?? []]] as const) {
+        for (let i = 0; i < entries.length; i += SNAPSHOT_MAX_ENTRIES) {
+          this.broadcastMap(map, encodeSnapshot(this.tickNo, entries.slice(i, i + SNAPSHOT_MAX_ENTRIES)));
+        }
       }
       this.tickNo = (this.tickNo + 1) & 0xffff;
       return true;
@@ -1233,7 +1360,7 @@ export class ChannelCore<C extends object> {
     this.byVisitor.delete(p.visitorId);
     this.dirty.delete(p.sid);
     this.chasing.delete(p.sid);
-    this.broadcast(encodeEvent({ t: "leave", sid: p.sid }));
+    this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "leave", sid: p.sid }));
     this.host.countChanged(this.peers.size);
     this.host.visitorLeft(p.visitorId);
     this.host.liveChanged?.(true);
@@ -1256,8 +1383,9 @@ export class ChannelCore<C extends object> {
     const p = this.adoptNew(rec, conn, now);
     p.until = until;
     if (p.seatId) {
-      if (!seatSlot(p.seatId) || this.seats.has(p.seatId)) p.seatId = null;
-      else this.seats.set(p.seatId, p.sid);
+      const map = mapOfPeer(p);
+      if (!seatSlotIn(map, p.seatId) || this.seats.has(seatKey(map, p.seatId))) p.seatId = null;
+      else this.seats.set(seatKey(map, p.seatId), p.sid);
     }
     if (!p.seatId) {
       p.mood = undefined;
@@ -1315,6 +1443,12 @@ export class ChannelCore<C extends object> {
     for (const p of this.peers.values()) if (p.conn && p.sid !== except) this.host.send(p.conn, data);
   }
 
+  /** 11/15 그 맵에 있는 접속자에게만 (except 제외). 옛 클라이언트는 언제나 마을에 있다 */
+  private broadcastMap(map: MapId, data: string | ArrayBuffer, except?: number): void {
+    const camp = map === "camp";
+    for (const p of this.peers.values()) if (p.conn && p.sid !== except && (p.map === "camp") === camp) this.host.send(p.conn, data);
+  }
+
   private state(p: Peer<C>): PeerState {
     return { sid: p.sid, x: p.x, y: p.y, state: p.state, dir: p.dir };
   }
@@ -1347,6 +1481,6 @@ export class ChannelCore<C extends object> {
     const ride = r.ride === true && !seatId && ridePetOfLook(look) ? { ride: true as const } : {};
     // 배 위 낚싯대는 조각배 자리에 앉아 있을 때만 이어 간다
     const rod = r.rod === true && seatId && boatSeatById(seatId) ? { rod: true as const } : {};
-    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.away === true && r.place === "house" && typeof r.house === "string" ? { house: r.house } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), ...(isChampValue(r.champ) ? { champ: r.champ } : {}), joinedAt: r.joinedAt ?? 0 };
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.away === true && r.place === "house" && typeof r.house === "string" ? { house: r.house } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), ...(isChampValue(r.champ) ? { champ: r.champ } : {}), joinedAt: r.joinedAt ?? 0, ...(r.map === "camp" ? { map: "camp" as const } : {}), ...(r.camp === true ? { camp: true as const } : {}) };
   }
 }

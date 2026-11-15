@@ -27,6 +27,7 @@ import {
   type EmoteKind,
   type GraveEventKind,
   type GoblinInfo,
+  type MapId,
   type PeerInfo,
   type PeerState,
   type QueueStatus,
@@ -113,7 +114,19 @@ export type NetCallbacks = {
   /** 친구가 들어왔다·나갔다 (실시간 서버가 밀어 준다) */
   onFriend?(m: { key: string; name: string; on: boolean }): void;
   onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true }): void;
+  /**
+   * 11/15 맵을 옮겼다 (switchMap의 답). map = 서버가 정한 지금 맵 (허락이 없으면 옮기기 전 맵 그대로),
+   * peers·seats = 그 맵 사람(나 빼고)과 그 사람들이 앉은 자리
+   */
+  onMapped?(map: MapId, peers: PeerInfo[], seats: Record<string, Sid>): void;
 };
+
+/** 맵이 바뀌어도 늘 처음 콜백(월드)이 받는 것: 계정·친구·확성기·내 몸 모양·고블린 보상 */
+const GLOBAL_CALLBACKS = ["onMegaphone", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant"] as const;
+/** 맵 옮기기 답을 기다리는 시간 */
+const MAP_REPLY_MS = 4000;
+/** 맵을 옮기는 중에 버리는 옛 맵 소식 (사람·자리·몸짓·말풍선) */
+const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "goblinCaught", "chatLog"]);
 
 export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean; body?: string };
 
@@ -145,6 +158,15 @@ const RECONNECTING_ATTEMPTS = 5;
 export class RealtimeClient {
   mode: NetMode = "connecting";
   channel: number | null = null;
+  /** 11/15 지금 맵 (서버 기준 — welcome·mapped로 맞춘다). 다시 접속할 때 이 맵으로 들어간다 */
+  map: MapId = "village";
+  /** 11/15 이 서버는 캠핑장 버스가 다닌다 (입장 응답 campOpen) */
+  campOpen = false;
+  /** 11/15 맵을 옮기는 중 (mapped를 기다린다 — 그 전에 온 옛 맵 소식은 버린다) */
+  private mapPending: MapId | null = null;
+  private mapTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 11/15 다른 맵 장면(캠핑장)이 받는 콜백. 없으면 처음 콜백(월드) */
+  private alt: NetCallbacks | null = null;
   cap = 0;
   mySid: Sid | null = null;
   private readonly peers = new Set<Sid>();
@@ -213,6 +235,56 @@ export class RealtimeClient {
     return this.mode === "online" && !!this.ws && this.ws.readyState === WebSocket.OPEN;
   }
 
+  /** 지금 소식을 받는 콜백 (캠핑장 장면이 가져갔으면 그쪽) */
+  private get h(): NetCallbacks {
+    return this.alt ?? this.cb;
+  }
+
+  /** 처음 콜백 (월드 장면) — 캠핑장 장면이 계정·친구 같은 공통 처리를 빌려 쓴다 */
+  get base(): NetCallbacks {
+    return this.cb;
+  }
+
+  /**
+   * 11/15 다른 맵 장면이 소식을 받아 간다 (null이면 월드로 돌려준다). 계정·친구·확성기 같은 공통 소식은 늘 월드가 받는다.
+   * 내 위치(getPose)도 이 콜백에서 읽는다
+   */
+  divert(cb: NetCallbacks | null): void {
+    if (!cb) {
+      this.alt = null;
+      return;
+    }
+    const merged = { ...cb } as NetCallbacks;
+    for (const k of GLOBAL_CALLBACKS) (merged as Record<string, unknown>)[k] = this.cb[k];
+    this.alt = merged;
+  }
+
+  /**
+   * 11/15 맵 옮기기 (버스). 접속 중이면 연결 그대로 서버에 알리고 mapped를 기다린다. 아니면 다음 접속을 그 맵으로.
+   * 돌려주는 값: 서버에 보냈는지 (false면 접속이 없어 다음 접속 때 반영)
+   */
+  switchMap(map: MapId, x: number, y: number): boolean {
+    const from = this.map;
+    this.map = map;
+    this.pendingWarp = null;
+    if (this.mapTimer) clearTimeout(this.mapTimer);
+    this.mapTimer = null;
+    if (!this.online) return false;
+    this.mapPending = map;
+    this.peers.clear();
+    this.throttle.reset();
+    this.send({ t: "map", m: map, x: Math.round(x), y: Math.round(y) });
+    // 답이 없으면 (맵을 모르는 옛 서버) 옮기지 못한 것으로 — 처음 맵 그대로, 목록은 다시 받는다
+    this.mapTimer = setTimeout(() => {
+      this.mapTimer = null;
+      if (this.mapPending === null) return;
+      this.onMapped(from, [], {});
+      this.requestSync();
+    }, MAP_REPLY_MS);
+    this.emitStatus();
+    return true;
+  }
+
   get peerCount(): number {
     return this.peers.size;
   }
@@ -245,7 +317,7 @@ export class RealtimeClient {
     if (channel === this.channel && this.online) return;
     this.pendingWarp = null; // 옛 채널에 보내려던 순간이동은 새 채널에 의미가 없다 (접속 좌표가 곧 위치)
     this.closeSocket(1000, "switch");
-    this.cb.onReset();
+    this.h.onReset();
     this.peers.clear();
     this.clearTimers();
     this.triedFull.clear();
@@ -262,7 +334,7 @@ export class RealtimeClient {
   reconnect(): void {
     if (this.stopped) return;
     this.closeSocket(4000, "reconnect");
-    this.cb.onReset();
+    this.h.onReset();
     this.peers.clear();
     this.clearTimers();
     this.triedFull.clear();
@@ -287,7 +359,7 @@ export class RealtimeClient {
       this.pendingWarp = null;
       this.throttle.reset();
     }
-    const pose = this.cb.getPose(this.pose);
+    const pose = this.h.getPose(this.pose);
     if (!this.throttle.shouldSend(now, pose, this.hidden)) return;
     const seq = this.throttle.markSent(now, pose);
     this.ws!.send(encodeMove({ x: pose.x, y: pose.y, state: pose.state, dir: pose.dir, seq }));
@@ -508,9 +580,12 @@ export class RealtimeClient {
     this.welcomeTimer = null;
     const mine = bodyFromWsUrl(res.wsUrl);
     if (mine) this.cb.onSelfBody?.(mine);
-    const p = this.cb.getPose(this.pose);
+    const p = this.h.getPose(this.pose);
     const sep = res.wsUrl.includes("?") ? "&" : "?";
-    const url = `${res.wsUrl}${sep}x=${Math.round(p.x)}&y=${Math.round(p.y)}&v=${CLIENT_VERSION}`;
+    this.campOpen = res.campOpen === true;
+    // 11/15 캠핑장에 있으면 처음부터 캠핑장으로 (새로고침·채널 이동·재접속). 허락이 없는 토큰이면 서버가 마을로 받는다
+    const mapQ = this.map === "camp" ? "&m=camp" : "";
+    const url = `${res.wsUrl}${sep}x=${Math.round(p.x)}&y=${Math.round(p.y)}${mapQ}&v=${CLIENT_VERSION}`;
     let ws: WebSocket;
     try {
       ws = new WebSocket(url);
@@ -544,77 +619,82 @@ export class RealtimeClient {
       }
       const m = parseS2C(data);
       if (!m) return;
+      // 11/15 맵을 옮기는 중: 서버가 옮기기 전에 보낸 옛 맵 소식은 버린다 (mapped 다음부터가 새 맵 소식)
+      if (this.mapPending !== null && OLD_MAP_EVENTS.has(m.t)) return;
       switch (m.t) {
+        case "mapped":
+          this.onMapped(m.m, m.peers ?? [], m.seats ?? {});
+          break;
         case "welcome":
           this.onWelcome(m);
           break;
         case "join":
           if (m.sid === this.mySid) break;
           this.peers.add(m.sid);
-          this.cb.onJoin(m);
+          this.h.onJoin(m);
           this.emitStatus();
           break;
         case "leave":
           this.peers.delete(m.sid);
-          this.cb.onLeave(m.sid);
+          this.h.onLeave(m.sid);
           this.emitStatus();
           break;
         case "seat":
-          this.cb.onSeat(m.seatId, m.sid);
+          this.h.onSeat(m.seatId, m.sid);
           break;
         case "seatDenied":
-          this.cb.onSeatDenied(m.seatId);
+          this.h.onSeatDenied(m.seatId);
           break;
         case "emote":
-          if (m.sid !== this.mySid) this.cb.onEmote(m.sid, m.kind, m.graveId);
+          if (m.sid !== this.mySid) this.h.onEmote(m.sid, m.kind, m.graveId);
           break;
         case "graveEvent":
-          if (m.sid !== this.mySid) this.cb.onGraveEvent(m.sid, m.kind, m.graveId);
+          if (m.sid !== this.mySid) this.h.onGraveEvent(m.sid, m.kind, m.graveId);
           break;
         case "look":
-          if (m.sid !== this.mySid) this.cb.onLook(m.sid, m.look, { dye: m.dye, body: m.body, ...(typeof m.champ === "number" ? { champ: m.champ } : {}) });
+          if (m.sid !== this.mySid) this.h.onLook(m.sid, m.look, { dye: m.dye, body: m.body, ...(typeof m.champ === "number" ? { champ: m.champ } : {}) });
           break;
         case "act":
           if (m.sid !== this.mySid && (ACT_KINDS as readonly string[]).includes(m.kind) && Number.isFinite(m.x) && Number.isFinite(m.y))
-            this.cb.onAct(m.sid, m.kind, m.x, m.y);
+            this.h.onAct(m.sid, m.kind, m.x, m.y);
           break;
         case "say":
-          if (m.sid !== this.mySid && isPhraseId(m.id)) this.cb.onSay(m.sid, m.id);
+          if (m.sid !== this.mySid && isPhraseId(m.id)) this.h.onSay(m.sid, m.id);
           break;
         case "emo":
-          if (m.sid !== this.mySid && isEmoId(m.id)) this.cb.onEmo?.(m.sid, m.id);
+          if (m.sid !== this.mySid && isEmoId(m.id)) this.h.onEmo?.(m.sid, m.id);
           break;
         case "chat":
-          if (m.sid !== this.mySid && typeof m.text === "string") this.cb.onChat?.(m.sid, m.text.slice(0, CHAT_MAX * 2), typeof m.id === "string" ? m.id : undefined);
+          if (m.sid !== this.mySid && typeof m.text === "string") this.h.onChat?.(m.sid, m.text.slice(0, CHAT_MAX * 2), typeof m.id === "string" ? m.id : undefined);
           break;
         case "chatLog":
-          this.cb.onChatLog?.(readChatLog(m.now, m.lines, Date.now()));
+          this.h.onChatLog?.(readChatLog(m.now, m.lines, Date.now()));
           break;
         case "mood":
-          if (m.m === "" || isSeatMood(m.m)) this.cb.onMood?.(m.sid, m.m);
+          if (m.m === "" || isSeatMood(m.m)) this.h.onMood?.(m.sid, m.m);
           break;
         case "ride":
-          if (typeof m.on === "boolean") this.cb.onRide?.(m.sid, m.on);
+          if (typeof m.on === "boolean") this.h.onRide?.(m.sid, m.on);
           break;
         case "rod":
-          if (typeof m.on === "boolean") this.cb.onRod?.(m.sid, m.on);
+          if (typeof m.on === "boolean") this.h.onRod?.(m.sid, m.on);
           break;
         case "away":
-          if (m.sid !== this.mySid && typeof m.on === "boolean") this.cb.onAway?.(m.sid, m.on);
+          if (m.sid !== this.mySid && typeof m.on === "boolean") this.h.onAway?.(m.sid, m.on);
           break;
         case "firework":
           // 내 폭죽은 누른 순간 이미 터뜨렸다 → 중복 재생하지 않는다
-          if (m.sid !== this.mySid) this.cb.onFirework(m.sid, m.item, m.x, m.y);
+          if (m.sid !== this.mySid) this.h.onFirework(m.sid, m.item, m.x, m.y);
           break;
         // ── 22번 황금 고블린 (판정은 서버, 여기서는 전달만) ──
         case "goblin":
-          if (m.g && typeof m.g.id === "string") this.cb.onGoblin?.(m.g);
+          if (m.g && typeof m.g.id === "string") this.h.onGoblin?.(m.g);
           break;
         case "goblinGone":
-          this.cb.onGoblinGone?.(m.id);
+          this.h.onGoblinGone?.(m.id);
           break;
         case "goblinCaught":
-          this.cb.onGoblinCaught?.(m.id, m.sid, String(m.name ?? ""), Number(m.points) || 0);
+          this.h.onGoblinCaught?.(m.id, m.sid, String(m.name ?? ""), Number(m.points) || 0);
           break;
         case "goblinGrant":
           if (typeof m.grant === "string") this.cb.onGoblinGrant?.(m.id, m.grant, Number(m.points) || 0);
@@ -635,7 +715,7 @@ export class RealtimeClient {
           this.syncPolicy.mark(performance.now());
           for (const p of m.peers) if (p.sid !== this.mySid) this.peers.add(p.sid);
           // 내 항목도 넘긴다 (받는 쪽이 내 벤치 상태를 서버 기억에 맞추고, 원격 목록에서는 건너뛴다)
-          this.cb.onPeers(
+          this.h.onPeers(
             m.peers,
             m.seats,
           );
@@ -648,7 +728,7 @@ export class RealtimeClient {
     if (data instanceof ArrayBuffer) {
       this.bytesIn += data.byteLength;
       const snap = decodeSnapshot(data);
-      if (!snap) return;
+      if (!snap || this.mapPending !== null) return;
       this.snapshots++;
       // 모르는 사람의 스냅샷 = 입장 소식을 놓쳤다 → 목록을 다시 받는다 (최소 간격 유지)
       for (let i = 0; i < snap.entries.length; i++) {
@@ -658,8 +738,21 @@ export class RealtimeClient {
           break;
         }
       }
-      this.cb.onSnapshot(snap.entries, performance.now());
+      this.h.onSnapshot(snap.entries, performance.now());
     }
+  }
+
+  /** 11/15 맵 옮기기 답: 그 맵 접속자로 목록을 새로 */
+  private onMapped(map: MapId, peers: PeerInfo[], seats: Record<string, Sid>): void {
+    this.mapPending = null;
+    if (this.mapTimer) clearTimeout(this.mapTimer);
+    this.mapTimer = null;
+    this.map = map === "camp" ? "camp" : "village";
+    this.peers.clear();
+    for (const p of peers) if (p.sid !== this.mySid) this.peers.add(p.sid);
+    this.syncPolicy.mark(performance.now());
+    this.h.onMapped?.(this.map, peers.filter((p) => p.sid !== this.mySid), seats);
+    this.emitStatus();
   }
 
   private onWelcome(m: WelcomeMsg): void {
@@ -667,6 +760,9 @@ export class RealtimeClient {
     this.welcomeTimer = null;
     this.mySid = m.sid;
     this.channel = m.channel;
+    // 11/15 서버가 아는 내 맵 (없으면 마을 — 허락이 없거나 옛 서버)
+    this.map = m.m === "camp" ? "camp" : "village";
+    this.mapPending = null;
     // 22번: 서버 시계 맞추기 (왕복 절반만큼 늦게 도착했다고 본다)
     if (typeof m.now === "number" && Number.isFinite(m.now)) this.clockOffset = m.now + (this.rtt ?? 60) / 2 - Date.now();
     this.target = m.channel;
@@ -690,7 +786,7 @@ export class RealtimeClient {
     this.syncPolicy.mark(performance.now());
     this.startSync();
     this.setMode("online");
-    this.cb.onWelcome({ ...m, peers: m.peers.filter((p) => p.sid !== m.sid) });
+    this.h.onWelcome({ ...m, peers: m.peers.filter((p) => p.sid !== m.sid) });
     // 실내 표시: 들어가 있으면 새 연결에 다시 알린다. 유예 안에 자리를 되찾았으면 서버가 옛 값을 들고 있을 수 있어 나와 있어도 알린다
     if (this.away || m.resumed) this.send(this.awayMsg());
     // 새 연결: 서버 간격이 처음부터라 지금 착용 증서를 바로 보낸다 (기다리던 것도 함께 정리)
@@ -702,7 +798,7 @@ export class RealtimeClient {
 
   private enterQueue(queueUrl: string): void {
     this.channel = null;
-    this.cb.onReset();
+    this.h.onReset();
     this.peers.clear();
     this.queueUrl = queueUrl;
     this.setMode("queue");
@@ -776,8 +872,11 @@ export class RealtimeClient {
     this.stopSync();
     if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
     this.welcomeTimer = null;
+    if (this.mapTimer) clearTimeout(this.mapTimer);
+    this.mapTimer = null;
+    this.mapPending = null;
     this.peers.clear();
-    this.cb.onReset();
+    this.h.onReset();
     if (this.stopped) return;
 
     switch (code) {
@@ -863,7 +962,7 @@ export class RealtimeClient {
 
   private enterSpectator(): void {
     this.channel = null;
-    this.cb.onReset();
+    this.h.onReset();
     this.peers.clear();
     this.setMode("spectator");
     if (this.spectatorTimer) return;
@@ -919,6 +1018,10 @@ export class RealtimeClient {
     this.stopPing();
     if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
     this.welcomeTimer = null;
+    // 맵 옮기기 답을 기다리던 중이면 그만 (다시 접속하면 this.map으로 들어간다)
+    if (this.mapTimer) clearTimeout(this.mapTimer);
+    this.mapTimer = null;
+    this.mapPending = null;
   }
 
   private closeSocket(code: number, reason: string): void {
@@ -966,7 +1069,7 @@ export class RealtimeClient {
       rttMs: this.online && this.rtt !== null ? Math.round(this.rtt) : null,
       snapshotHz: this.snapshots,
       peers: this.peers.size,
-      fps: Math.round(this.cb.getFps()),
+      fps: Math.round(this.h.getFps()),
       inKBps: Math.round((this.bytesIn / 1024) * 100) / 100,
     });
     this.snapshots = 0;
@@ -984,10 +1087,10 @@ export class RealtimeClient {
     const pending = this.mode === "reconnecting" || this.mode === "connecting";
     const channel = online || pending ? (this.channel ?? (typeof this.target === "number" ? this.target : null)) : null;
     // 나를 포함한 인원. 혼자 걷는 동안(관람·오프라인)은 나 하나
-    const status = { mode: this.mode, channel, count: online ? this.peers.size + 1 : 1, cap: this.cap };
+    const status = { mode: this.mode, channel, count: online ? this.peers.size + 1 : 1, cap: this.cap, ...(this.map === "camp" ? { map: "camp" as const } : {}) };
     const prev = bridge.last("net:status");
     // 재시도마다 같은 상태를 다시 보내지 않는다
-    if (prev && prev.mode === status.mode && prev.channel === status.channel && prev.count === status.count && prev.cap === status.cap) return;
+    if (prev && prev.mode === status.mode && prev.channel === status.channel && prev.count === status.count && prev.cap === status.cap && prev.map === status.map) return;
     bridge.emit("net:status", status);
   }
 
@@ -1019,7 +1122,7 @@ export class RealtimeClient {
       this.hiddenIdleTimer = setTimeout(() => {
         this.hiddenIdleTimer = null;
         if (!this.hidden || !this.online) return;
-        const pose = this.cb.getPose(this.pose);
+        const pose = this.h.getPose(this.pose);
         pose.state = STATE.idle;
         const now = performance.now();
         if (this.throttle.waitMs(now) > 0) return;

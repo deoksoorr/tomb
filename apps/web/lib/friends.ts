@@ -86,7 +86,7 @@ export function toFriendWhere(w: PeerWhere | undefined, reached: boolean): Frien
   if (!reached) return { at: "unknown" };
   if (!w) return { at: "offline" };
   if (w.away) return { at: "away", ch: w.ch, sid: w.sid, place: w.place ?? null, ...(w.place === "house" && w.house ? { houseId: w.house } : {}) };
-  return { at: "world", ch: w.ch, sid: w.sid, x: w.x, y: w.y };
+  return { at: "world", ch: w.ch, sid: w.sid, x: w.x, y: w.y, ...(w.map === "camp" ? { map: "camp" as const } : {}) };
 }
 
 /** 친구 집 id (분양받았고 숨겨지지 않았으면) */

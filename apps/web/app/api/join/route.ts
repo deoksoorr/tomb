@@ -1,5 +1,6 @@
 import { NAME_TAKEN_MESSAGE } from "@tomb/protocol";
 import { assertNotBanned, recordSeen } from "@/lib/ban";
+import { campOpen } from "@/lib/camp";
 import { announceFriends } from "@/lib/friends";
 import { dexBadgeOf } from "@/lib/forage/service";
 import { handler, HttpError, json } from "@/lib/http";
@@ -50,7 +51,7 @@ export const POST = handler(async (req) => {
   }
   // 25번 외형 바꾸기: 계정에 몸 모양이 있으면 그것이 정답 (요청 값은 입장 화면에서 처음 고른 몸)
   // 31번: 운영자 표시는 여기(서버)에서만 넣는다. 11/15: 운영자도 닉네임 그대로 (머리 위 「운영자」 칭호·이름표 장식은 이 staff 표시로만)
-  const claims = { visitorId, name: shown, color, body: account.body ?? body ?? "hood", look: lookOf(account), dye: style.dye, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}) };
+  const claims = { visitorId, name: shown, color, body: account.body ?? body ?? "hood", look: lookOf(account), dye: style.dye, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}), ...(campOpen() ? { camp: true as const } : {}) };
   // 친구: 들어오는 순간·나간 뒤 5초에 친구들에게 바로 알리도록 실시간 서버에 맡긴다 (친구가 없으면 아무것도 안 한다, 실패해도 입장은 그대로)
   await announceFriends(visitorId, now).catch(() => undefined);
   return json<JoinResponse>(await issueJoin(channel, claims));

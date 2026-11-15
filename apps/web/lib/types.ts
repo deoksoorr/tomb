@@ -178,7 +178,8 @@ export type JoinRequest = {
  * spectator 모드: 전체 상한 도달 → 관람 모드.
  */
 export type JoinResponse =
-  | { mode: "channel"; channel: number; token: string; wsUrl: string }
+  /** campOpen = 11/15 이 서버는 캠핑장 버스가 다닌다 (토큰에도 허락이 들어 있다). 없으면 정류장은 "준비 중" */
+  | { mode: "channel"; channel: number; token: string; wsUrl: string; campOpen?: true }
   /** 전체 400명이 차서 대기열. queueUrl을 QUEUE_POLL_MS마다 GET하면 QueueStatus가 온다(토큰 10분 유효) */
   | { mode: "queue"; queueUrl: string }
   | { mode: "spectator" };

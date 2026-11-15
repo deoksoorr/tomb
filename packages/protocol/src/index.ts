@@ -4,6 +4,7 @@ export * from "./binary";
 export * from "./events";
 export * from "./token";
 export * from "./world";
+export * from "./camp";
 export * from "./lobby";
 export * from "./names";
 export * from "./items";

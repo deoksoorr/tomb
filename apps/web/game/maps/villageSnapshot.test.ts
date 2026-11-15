@@ -1,0 +1,54 @@
+import { describe, expect, it } from "vitest";
+import { BOATS, CAMPFIRES, FISHING_SPOTS, FURNITURE, GRAVE_AREAS, HOUSE_LOTS, MAP_HEIGHT, MAP_VERSION, MAP_WIDTH, PONDS, SEATS, SPAWN, ZONES } from "@tomb/protocol";
+import { allProps, interactables, staticColliders, walkableGrid } from "../world/layout";
+import { minimapPixels } from "../world/minimapArt";
+import { BUS_STOP, FISH_DECOR } from "../world/fishZone";
+
+// 11/15 두 번째 맵(캠핑장)을 더하면서 마을 데이터가 한 칸도 바뀌지 않았는지 지문으로 확인한다.
+// 마을을 일부러 고친 패치라면 아래 값을 새로 찍어 바꾼다 (MAP_VERSION도 함께 올릴 일인지 먼저 본다).
+
+function fnv(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+const layoutPrint = () =>
+  fnv(
+    JSON.stringify({
+      MAP_VERSION,
+      MAP_WIDTH,
+      MAP_HEIGHT,
+      SPAWN,
+      ZONES,
+      FURNITURE,
+      SEATS,
+      CAMPFIRES,
+      GRAVE_AREAS,
+      HOUSE_LOTS,
+      PONDS,
+      BOATS,
+      FISHING_SPOTS,
+      BUS_STOP,
+      FISH_DECOR,
+      interactables: interactables(),
+      colliders: staticColliders(),
+      props: allProps(),
+    }),
+  );
+
+describe("마을 지문 (캠핑장이 생겨도 그대로)", () => {
+  it("배치·좌석·상호작용·충돌·소품", () => {
+    expect(layoutPrint()).toBe("df7457a5");
+  });
+  it("걷기 격자", () => {
+    const g = walkableGrid(8);
+    expect(fnv(Array.from(g.cells as ArrayLike<number>).join(""))).toBe("6b5a3a75");
+  });
+  it("미니맵 바탕", () => {
+    expect(fnv(Array.from(minimapPixels()).join(","))).toBe("dbe6a07a");
+  });
+});

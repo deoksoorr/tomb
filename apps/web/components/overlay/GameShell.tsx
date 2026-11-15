@@ -81,6 +81,8 @@ import GiftsDialog from "../account/GiftsDialog";
 import FriendsDialog from "../account/FriendsDialog";
 import { useFriendPresence } from "./useFriendPresence";
 import FriendNotice from "./FriendNotice";
+import CampTalk from "../camp/CampTalk";
+import CampBgm from "../camp/CampBgm";
 import MegaphoneLayer from "./MegaphoneDialog";
 import MegaphoneFeed from "./MegaphoneFeed";
 import { useSocial } from "./useSocial";
@@ -226,6 +228,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const status = useBridgeValue("net:status");
   // 채널마다 묘지가 따로다. 채널을 아직 모르면 고른 채널, 자동 배정이면 1채널
   const channel = status?.channel ?? (typeof options.channel === "number" ? options.channel : 1);
+  /** 11/15 지금 맵 (캠핑장이면 채팅 기록을 마을과 따로) */
+  const netMap = status?.map === "camp" ? "camp" : "village";
   // 채널마다 주거 구역도 따로다. 게임이 지금 보여 주는 채널과 같게 (관람·오프라인이면 1채널)
   const houseChannel = graveChannelFor(status, options.channel);
   const graves = useGraves(channel);
@@ -253,6 +257,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const inShop = scene === "shop";
   // 집·사냥터·미니게임 안에서는 그 화면이 자기 HUD를 그린다. 월드 HUD는 숨기기만 한다(BGM 플레이어는 계속 살아 있게)
   const away = scene === "house" || scene === "hunt" || scene === "minigame";
+  // 11/15 마을 ↔ 캠핑장 버스 창밖 연출 동안은 HUD를 숨긴다 (몇 초)
+  const riding = useBridgeValue("bus:state")?.riding === true;
   /** 내 집 꾸미기 중 (터치 조작 줄 대신 꾸미기 도구 줄). house:state는 마지막 값을 기억하지 않아 받을 때마다 적어 둔다 */
   const [editingHouse, setEditingHouse] = useState(false);
   useBridgeEvent("house:state", (st) => setEditingHouse(st.editing));
@@ -496,6 +502,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <ReportLayer />}
       {/* 친구 안내 띠 (접속·퇴장·친구 옆으로): 화면 가운데, 집·사냥터 안에서도 보이게 월드 HUD 밖에 */}
       {ready && <FriendNotice />}
+      {/* 11/15 캠핑장: NPC 대화 창·배경음 (캠핑장에 있을 때만 일한다) */}
+      {ready && <CampTalk />}
+      {ready && <CampBgm />}
       {/* 4·32·51번 낚시·채집·판매·도감 (자기 창·HUD를 스스로 연다) */}
       {ready && <ForageLayer />}
       {ready && <ZooLayer />}
@@ -505,7 +514,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <UrgentHud />}
 
       {ready && (
-        <div className={cx(styles.overlay, away && styles.away, campfire && styles.campfire)}>
+        <div className={cx(styles.overlay, (away || riding) && styles.away, campfire && styles.campfire)}>
           {coarse ? (
             // 터치: 위 가장자리 바(메뉴 · 음악 · 채널·날씨) + 아래 조이스틱(그 위 확성기)·행동 버튼. 바로 가기 줄은 없고 모두 메뉴 시트에
             <div className={styles.touchBar}>
@@ -753,7 +762,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {sayOpen && <SayDialog onClose={() => setSayOpen(false)} />}
       {chatOpen && canRadial && !sayOpen && <ChatSheet onClose={() => setChatOpen(false)} />}
       {/* 채팅 기록창: 데스크톱은 바로 가기 줄 위 상자(입력칸 포함), 터치는 확성기 위에 글씨만. 채널·집 드나들면 비운다 */}
-      {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}`} hidden={!canRadial} />}
+      {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}${scene !== "house" && netMap === "camp" ? "c" : ""}`} hidden={!canRadial || riding} />}
       {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
       {/* 마을·집 안: 월드 바로 가기 줄이 숨으니 [표현] 버튼만 왼쪽 아래에 따로 */}
       {ready && scene === "house" && !coarse && (

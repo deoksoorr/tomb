@@ -1,0 +1,66 @@
+/* 11/15 캠핑장 NPC 대화 창 (아래 가운데, 바로 가기 줄 위) */
+.wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--safe-bottom) + 132px);
+  z-index: 40;
+  display: grid;
+  justify-items: center;
+  padding: 0 16px;
+  pointer-events: none;
+}
+
+.box {
+  width: min(520px, 100%);
+  padding: 12px 16px 10px;
+  background: rgba(30, 24, 18, 0.94);
+  box-shadow:
+    0 0 0 2px #c98b4a,
+    0 0 0 4px rgba(30, 24, 18, 0.94),
+    0 6px 18px rgba(0, 0, 0, 0.5);
+  color: #fff1d8;
+  pointer-events: auto;
+}
+
+.name {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  background: #c98b4a;
+  color: #24180e;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.line {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.hint {
+  color: rgba(255, 241, 216, 0.6);
+  font-size: 13px;
+}
+
+.next {
+  min-width: 72px;
+}
+
+@media (max-width: 600px) {
+  .wrap {
+    bottom: calc(var(--safe-bottom) + 168px);
+  }
+  .line {
+    font-size: 16px;
+  }
+}

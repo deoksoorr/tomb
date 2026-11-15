@@ -62,6 +62,8 @@ import { MeScreen } from "../world/MeScreen";
 import type { GameContext } from "./context";
 import { FEST_FIREWORK_MS, FEST_MS } from "@/lib/forage/quests/urgent";
 import type { ShopContext } from "./ShopScene";
+import { CampTrip, VILLAGE_BUS_LAND } from "../camp/CampTrip";
+import type { CampFriend } from "../camp/campHost";
 
 // 월드 씬: 맵·묘비·내 캐릭터·원격 아바타·분위기·조명·카메라·네트워크를 묶고 bridge 이벤트를 처리한다.
 // 유령 잡화점에 들어가면 이 씬은 숨기만 하고(업데이트·연결은 유지) 상점 씬이 그 위에 그려진다.
@@ -204,6 +206,10 @@ export class WorldScene extends Phaser.Scene {
   private boats!: BoatRide;
   /** 놀이기구 2: 관람차·열기구 (하늘 시점 포함) */
   private sky!: SkyRides;
+  /** 11/15 마을 ↔ 캠핑장 버스 여행 (game/camp/CampTrip). 캠핑장에 있는 동안 이 장면은 잔다 */
+  private trip!: CampTrip;
+  /** 버스를 기다리거나 타고 내리는 동안: 입력만 막고 장면은 그대로 움직인다 */
+  private tripLock = false;
 
   constructor() {
     super("world");
@@ -254,8 +260,11 @@ export class WorldScene extends Phaser.Scene {
         openOnStart = p.id;
       } else if (!initial) this.pendingFocus = opts.focusGraveId;
     }
+    // 11/15 캠핑장에서 새로고침: 마을의 나는 버스 정류장에 세워 두고 캠핑장 장면이 그 자리를 잇는다 (create 끝에서)
+    const campResume = opts.resume?.where === "camp" ? opts.resume : null;
+    if (campResume) spawn = VILLAGE_BUS_LAND;
     // 새로고침 직전 자리로 시작한다 (의자는 그 앞에 서서 앉는 동작으로 — 거절되면 바닥이 아니라 그 앞으로 돌아오게)
-    this.resume = opts.resume ?? null;
+    this.resume = campResume ? null : (opts.resume ?? null);
     this.restoreSeat = null;
     this.selfBody = isAvatarBody(opts.body) ? opts.body : undefined;
     if (this.resume) {
@@ -323,6 +332,28 @@ export class WorldScene extends Phaser.Scene {
 
     this.net = this.createNet();
     this.seatReq = { sit: (id) => this.net.sit(id), stand: () => this.net.stand() };
+    this.trip = new CampTrip({
+      scene: this,
+      net: this.net,
+      atlas: this.atlas,
+      hub: this.hub,
+      sfx: this.sfx,
+      reduced: this.reduced,
+      name: opts.name,
+      color: opts.color,
+      player: () => this.player,
+      myBody: () => this.player.view.bodyId,
+      myLook: () => this.player.view.wearing,
+      lock: (on) => this.lockForTrip(on),
+      clearRemotes: () => {
+        this.clearRemotes();
+        this.seats.clear();
+      },
+      arrived: (friend) => this.arrivedByBus(friend),
+      isFriend: (sid, name) => this.net.channel === this.friends.ch && this.friends.bySid.get(sid) === name,
+      toast: (m) => this.toast(m),
+    });
+    if (campResume) this.net.map = "camp";
     new HauntHouseView(this, this.map.colliders, this.reduced, () => this.player); // 귀신의집 건물·간판·등불·안개·근처 소리 (game/haunt)
     new TowerView(this, this.map.colliders, this.reduced, () => this.atmos?.levels.darkness ?? 0); // 11/15 야근 빌딩 (game/tower)
     this.life = new VillageLife({
@@ -375,6 +406,7 @@ export class WorldScene extends Phaser.Scene {
 
     bridge.emit("scene:changed", { scene: "world" });
     bridge.emit("ready");
+    if (campResume) this.trip.resumeInCamp(campResume);
     if (openOnStart) {
       const id = openOnStart;
       this.time.delayedCall(250, () => bridge.emit("grave:open", { graveId: id }));
@@ -533,6 +565,8 @@ export class WorldScene extends Phaser.Scene {
           this.selfBody = body;
           this.player.view.setBody(body);
         },
+        // 11/15 캠핑장에서 돌아왔다 (또는 캠핑장 요청이 거절됐다): 마을 사람 목록으로 맞춘다
+        onMapped: (_map, peers, seats) => this.reconcilePeers(peers, seats),
       },
     );
   }
@@ -636,6 +670,12 @@ export class WorldScene extends Phaser.Scene {
     if (this.cleaned) return;
     const ch = this.net.channel;
     if (typeof ch !== "number" || this.net.mode === "replaced") return;
+    // 11/15 캠핑장에 있으면 캠핑장 자리를 남긴다 (다시 열리면 캠핑장으로 바로)
+    const camp = this.trip?.campResume();
+    if (camp) {
+      saveResume({ channel: ch, ...camp, savedAt: Date.now(), name: this.ctx.opts.name, color: this.ctx.opts.color, body: this.selfBody });
+      return;
+    }
     const pl = this.player;
     const p = pl.netPose(this.poseBuf);
     const st = pl.state;
@@ -744,7 +784,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("net:status", (st) => this.onNetStatus(st)));
     // 휴식 중(탭이 숨겨져 게임 루프를 재움)은 실시간 연결에서 탭 숨김과 같게
     on.push(bridge.on("game:rest", ({ on: resting }) => this.net.setResting(resting)));
-    on.push(bridge.on("grave:focus", ({ graveId, walk }) => this.focusGrave(graveId, walk)));
+    on.push(bridge.on("grave:focus", ({ graveId, walk }) => (this.trip.away ? this.toast("묘비는 마을에 있어요. 버스를 타고 마을로 돌아가요.") : this.focusGrave(graveId, walk))));
     on.push(
       bridge.on("grave:buried", ({ graveId }) => {
         this.net.graveEvent("buried", graveId);
@@ -777,33 +817,41 @@ export class WorldScene extends Phaser.Scene {
         for (const r of this.remotes.values()) r.view.setFriend(this.isFriend(r));
       }),
     );
-    on.push(bridge.on("friend:goto", ({ sid, name, x, y }) => this.goToFriend(sid, name, x, y)));
+    // 11/15 친구가 캠핑장에 있으면 버스를 거쳐 그 옆으로 (캠핑장에 있는 동안은 캠핑장 장면이 받는다)
+    on.push(
+      bridge.on("friend:goto", ({ sid, name, x, y, map }) => {
+        if (this.trip.away) return;
+        if (map === "camp") this.goToCampFriend({ sid, name, x, y });
+        else this.goToFriend(sid, name, x, y);
+      }),
+    );
     on.push(bridge.on("input:joystick", ({ x, y }) => this.hub.setJoystick(x, y)));
     on.push(bridge.on("input:runToggle", ({ on: v }) => this.hub.setRunToggle(v)));
     on.push(bridge.on("input:sit", () => this.hub.dispatch("sit")));
     on.push(bridge.on("input:interact", () => this.hub.dispatch("interact")));
     on.push(bridge.on("input:jump", () => this.hub.dispatch("jump")));
     // 마을·집 안이면 그 방(RoomPresence)이 받는다
-    on.push(bridge.on("input:say", ({ id }) => !this.awayScene && this.doSay(id)));
-    on.push(bridge.on("input:emo", ({ id }) => !this.cleaned && !this.inShop && !this.awayScene && this.expr.emo(id, this.time.now)));
-    on.push(bridge.on("input:chat", ({ text }) => !this.cleaned && !this.inShop && !this.awayScene && this.expr.chat(text, this.time.now)));
-    on.push(bridge.on("input:mood", ({ mood }) => !this.cleaned && this.expr.setMood(mood)));
-    on.push(bridge.on("input:ride", () => !this.cleaned && !this.inShop && this.riding.toggle()));
-    on.push(bridge.on("guide:point", ({ target, label }) => this.guide.set(target ? this.resolveGuide(target, label) : null)));
-    on.push(bridge.on("world:lot", ({ lot, label }) => this.showLot(lot, label)));
+    // 11/15 캠핑장에 있거나 버스를 타는 동안(trip.away)은 캠핑장 장면이 받는다
+    on.push(bridge.on("input:say", ({ id }) => !this.awayScene && !this.trip.away && this.doSay(id)));
+    on.push(bridge.on("input:emo", ({ id }) => !this.cleaned && !this.inShop && !this.awayScene && !this.trip.away && this.expr.emo(id, this.time.now)));
+    on.push(bridge.on("input:chat", ({ text }) => !this.cleaned && !this.inShop && !this.awayScene && !this.trip.away && this.expr.chat(text, this.time.now)));
+    on.push(bridge.on("input:mood", ({ mood }) => !this.cleaned && !this.trip.away && this.expr.setMood(mood)));
+    on.push(bridge.on("input:ride", () => !this.cleaned && !this.inShop && !this.trip.away && !this.tripLock && this.riding.toggle()));
+    on.push(bridge.on("guide:point", ({ target, label }) => !this.trip.away && this.guide.set(target ? this.resolveGuide(target, label) : null)));
+    on.push(bridge.on("world:lot", ({ lot, label }) => (this.trip.away ? this.toast("마을로 돌아간 뒤에 볼 수 있어요.") : this.showLot(lot, label))));
     on.push(
       bridge.on("input:act", ({ kind }) => {
         // 표현 창 단추로 고른 몸짓: 창이 열려 키 입력이 막혀 있는 순간에 오므로 onAction(막혀 있으면 버린다)을 거치지 않고 바로 한다
         // (이모티콘 input:emo와 같은 조건 — 예전엔 폰에서 표현 창의 1·2번이 사라졌다)
-        if ((kind === "wave" || kind === "cheer") && !this.cleaned && !this.inShop && !this.awayScene) {
+        if ((kind === "wave" || kind === "cheer") && !this.cleaned && !this.inShop && !this.awayScene && !this.trip.away && !this.tripLock) {
           this.walker.cancel();
           this.doAct(kind);
         }
       }),
     );
     on.push(bridge.on("ui:blockKeys", ({ blocked }) => this.hub.setBlocked(blocked)));
-    on.push(bridge.on("camera:recenter", () => this.rig.recenter()));
-    on.push(bridge.on("camera:zoom", ({ delta }) => this.rig.zoomBy(delta)));
+    on.push(bridge.on("camera:recenter", () => !this.trip.away && this.rig.recenter()));
+    on.push(bridge.on("camera:zoom", ({ delta }) => !this.trip.away && this.rig.zoomBy(delta)));
     on.push(bridge.on("net:reconnect", () => this.net.reconnect()));
     on.push(bridge.on("look:set", (e) => this.applyLook(e.look, e.lookGrant, e)));
     this.festUntil = bridge.last("urgent:fest")?.until ?? 0;
@@ -811,7 +859,7 @@ export class WorldScene extends Phaser.Scene {
     // 11/15 긴급 의뢰 100% 달성: 축하 폭죽 한 발
     on.push(
       bridge.on("urgent:goal", () => {
-        if (this.awayScene || this.inShop) return;
+        if (this.awayScene || this.inShop || this.trip.away) return;
         // 가운데 한 발 + 양옆 한 발씩 (게시판 창이 가운데를 가려도 옆에서 보이게)
         const v = this.fireworkView();
         this.fireworks.launch("fw_triple", v.x + v.width / 2, v.y + v.height * 0.9, v, false);
@@ -830,6 +878,11 @@ export class WorldScene extends Phaser.Scene {
     on.push(
       bridge.on("firework:fire", ({ item, grant }) => {
         // 누른 순간 내 자리에서 바로 터뜨리고, 서버에는 증서를 보낸다 (서버가 같은 채널에 알린다)
+        // 11/15 캠핑장에 있으면 터뜨리는 그림은 캠핑장 장면이 (증서는 여기서 한 번만 보낸다)
+        if (this.trip.away) {
+          this.net.firework(grant);
+          return;
+        }
         this.fireworks.launch(item, this.player.x, this.player.y, this.fireworkView(), true, this.ctx.opts.name);
         this.sky?.firework();
         this.net.firework(grant);
@@ -845,7 +898,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("shop:closed", () => this.hub.setBlocked(bridge.last("ui:blockKeys")?.blocked ?? false)));
     on.push(bridge.on("wish:thrown", () => this.onWishThrown()));
     // 채널 이동 창의 "지금 이 채널에 있는 사람" 미리보기
-    on.push(bridge.on("peers:ask", () => bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name) })));
+    on.push(bridge.on("peers:ask", () => !this.trip.away && bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name) })));
   }
 
   private applyLook(look: string[], grant: string, extra?: AppearanceChange): void {
@@ -1051,7 +1104,7 @@ export class WorldScene extends Phaser.Scene {
   // ── 입력 ──
 
   private onAction(a: KeyAction): void {
-    if (this.hub.isBlocked || this.cleaned || this.inShop) return;
+    if (this.hub.isBlocked || this.cleaned || this.inShop || this.tripLock) return;
     this.walker.cancel();
     const pl = this.player;
     const now = this.time.now;
@@ -1195,9 +1248,10 @@ export class WorldScene extends Phaser.Scene {
         this.life.useStarSpot(o);
         break;
       case "bus":
-        // 11/15 주말 버스 정류장 (납품 부두): 캠핑장 버스는 아직 — 안내만
+        // 11/15 주말 버스 정류장 (납품 부두): 캠핑장이 열린 서버면 버스가 온다 (CampTrip). 운영에서 닫혀 있으면 지금처럼 안내만
         pl.faceTo(o.x, o.y - 20, now);
-        this.toast("캠핑장 가는 버스는 준비 중이에요.");
+        if (this.net.campOpen) this.trip.board();
+        else this.toast("캠핑장 가는 버스는 준비 중이에요.");
         break;
       case "dock":
         // 조각배(50번): 빈 배 앞자리에 타거나 2인승 뒷자리에 같이 탄다 (BoatRide)
@@ -1331,6 +1385,42 @@ export class WorldScene extends Phaser.Scene {
     this.recenterAt = 0;
     // 안내는 이동이 끝난 뒤 한 번만 (가는 중… 안내는 띄우지 않는다)
     notice(FRIEND_ARRIVED);
+  }
+
+  /** 11/15 버스를 기다리거나 타는 동안 입력을 막는다 (장면은 그대로). 풀면 키 처리를 월드로 돌려받는다 */
+  private lockForTrip(on: boolean): void {
+    this.tripLock = on;
+    this.walker.cancel();
+    if (on) {
+      this.leaveCampfire();
+      this.sfx.campfire(0);
+      this.tooltip.hide();
+      if (this.nearId) bridge.emit("grave:near", null);
+      if (this.nearSeatId) bridge.emit("seat:near", null);
+      this.nearT.clear();
+      this.nearSeatId = null;
+      this.seatHint.update(null, this.player, -1, true, 1);
+      return;
+    }
+    this.rig.enabled = true;
+    this.hub.setHandler((a) => this.onAction(a));
+    this.rig.recenter();
+  }
+
+  /** 11/15 마을 정류장에 내렸다 (친구한테 가는 중이면 그 옆으로) */
+  private arrivedByBus(friend: CampFriend | null): void {
+    if (friend) this.goToFriend(friend.sid, friend.name, friend.x, friend.y);
+  }
+
+  /** 11/15 캠핑장에 있는 친구한테 가기: 같은 채널이면 버스 창밖 연출만 보고 친구 옆에 내린다 */
+  private goToCampFriend(f: CampFriend): void {
+    const notice = (message: string) => bridge.emit("friend:notice", { message });
+    if (this.cleaned || !this.net.online) return;
+    if (!this.net.campOpen) return notice("지금은 캠핑장에 갈 수 없어요.");
+    if (this.awayScene) return notice("마을로 나온 뒤에 친구한테 갈 수 있어요.");
+    if (this.inShop) this.exitShop();
+    this.leaveCampfire();
+    this.trip.board(f);
   }
 
   /**
@@ -1496,7 +1586,7 @@ export class WorldScene extends Phaser.Scene {
 
   private onTap(wx: number, wy: number): void {
     this.walker.cancel();
-    if (this.hub.isBlocked || this.cleaned || this.inShop) return;
+    if (this.hub.isBlocked || this.cleaned || this.inShop || this.tripLock) return;
     // 47번: 다른 사람 캐릭터(몸·이름표)를 누르면 작은 메뉴(신고하기)
     const hit = peerAt(
       [...this.remotes.values()].map((r) => ({ sid: r.sid, name: r.name, x: r.x, y: r.y, visible: r.visible, label: r.view.label.getBounds() })),
@@ -1584,7 +1674,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.hub.read(this.move);
-    if (this.hub.isBlocked) this.move.ax = this.move.ay = 0;
+    if (this.hub.isBlocked || this.tripLock) this.move.ax = this.move.ay = 0;
     this.walker.steer(this.move, Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER, now);
     const started = pl.update(this.benchInput(now), now, this.seatReq);
     this.boats.steer(this.move, dt);
@@ -2073,6 +2163,7 @@ export class WorldScene extends Phaser.Scene {
     this.forage?.destroy();
     this.riding?.destroy();
     this.zoo?.destroy();
+    this.trip?.destroy();
     for (const u of this.unsubs) u();
     this.unsubs.length = 0;
     this.net?.stop();

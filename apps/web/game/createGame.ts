@@ -10,6 +10,8 @@ import type { GameContext } from "./scenes/context";
 import { ShopScene } from "./scenes/ShopScene";
 import { installRenderGuard } from "./renderGuard";
 import { WorldScene } from "./scenes/WorldScene";
+import { BusRideScene } from "./bus/BusRideScene";
+import { CampScene } from "./camp/CampScene";
 import { installWorldTint } from "./world/worldTint";
 
 // Phaser 게임 생성. GameCanvas가 브라우저에서만 동적 import 한다 (Phaser는 이 경로로만 로드된다).
@@ -46,7 +48,8 @@ export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHan
     // 입력은 직접 받는다 (키보드: window, 포인터: 캔버스 DOM). Phaser 입력을 켜면 오버레이 터치까지 포인터로 잡는다
     input: { keyboard: false, mouse: false, touch: false, gamepad: false, windowEvents: false },
     audio: { noAudio: true },
-    scene: [BootScene, WorldScene, ShopScene, ...RPG_SCENES, HauntHostScene, HauntScene],
+    // 11/15 캠핑장(CampScene)·버스 창밖 연출(BusRideScene)은 버스를 탈 때만 켜진다 (그림도 그때 굽는다)
+    scene: [BootScene, WorldScene, ShopScene, ...RPG_SCENES, HauntHostScene, HauntScene, CampScene, BusRideScene],
   });
   game.registry.set("ctx", ctx);
   installHousing(game, ctx); // 하우징: 집 씬 등록 + 월드 ↔ 집 전환 (game/housing)

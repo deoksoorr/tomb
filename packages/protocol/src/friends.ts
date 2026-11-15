@@ -12,7 +12,7 @@ export const FRIEND_REQUEST_KEEP_DAYS = 14;
  * 월드 채널에서 실내(하위 장면)에 들어가 있을 때 어디인지 (away 이벤트의 p). 친구 창에 "집 안"·"사냥터"처럼 보여 준다.
  * 옛 클라이언트는 보내지 않는다 → 그냥 "실내"
  */
-export const AWAY_PLACES = ["shop", "house", "village", "hunt", "game"] as const;
+export const AWAY_PLACES = ["shop", "house", "village", "hunt", "game", "bus"] as const;
 export type AwayPlace = (typeof AWAY_PLACES)[number];
 export const isAwayPlace = (v: unknown): v is AwayPlace => typeof v === "string" && (AWAY_PLACES as readonly string[]).includes(v);
 export const AWAY_PLACE_LABEL: Record<AwayPlace, string> = {
@@ -21,13 +21,15 @@ export const AWAY_PLACE_LABEL: Record<AwayPlace, string> = {
   village: "분양 마을",
   hunt: "사냥터",
   game: "놀이 중",
+  // 11/15 마을 ↔ 캠핑장 버스를 타고 가는 중 (몇 초)
+  bus: "버스 안",
 };
 
 /** 실내가 집이면 그 집 id (away 이벤트의 h) — 친구가 그 집으로 따라 들어간다 */
 export const AWAY_HOUSE_RE = /^[A-Za-z0-9_-]{4,24}$/;
 
 /** 실시간 서버가 아는 한 사람의 자리 (내부 요청 /internal/where 응답). 좌표는 서버 위치. house = 들어가 있는 집 id */
-export type PeerWhere = { ch: number; sid: number; x: number; y: number; away?: true; place?: AwayPlace; house?: string };
+export type PeerWhere = { ch: number; sid: number; x: number; y: number; away?: true; place?: AwayPlace; house?: string; /** 11/15 캠핑장에 있으면 "camp" (없으면 마을) */ map?: "camp" };
 
 /**
  * 친구 퇴장 알림 유예: 연결이 끊기거나 채널을 나간 뒤 이 안에 다시 들어오면(새로고침·채널 이동·잠깐 끊김) 알리지 않는다
