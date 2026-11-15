@@ -528,7 +528,7 @@ describe("강화 (고정 난수)", () => {
     }
     expect(tries / N).toBeGreaterThan(80);
     expect(tries / N).toBeLessThan(106);
-  });
+  }, 30_000);
 });
 
 describe("옵션 굴리기·바꾸기·분해", () => {

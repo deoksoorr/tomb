@@ -136,6 +136,21 @@ function bodyArea(g: Grid, fb: Base, m: WearM, bodyCols: readonly Color[], lo: r
       const r = rowX[y] ?? [99, -1];
       rowX[y] = [Math.min(r[0], x), Math.max(r[1], x)];
     }
+  // 몸통을 가리는 몸(상자·머그잔·튜브 등)이라 몸 색 칸이 거의 없으면: 몸통 자리에 조끼 모양으로 직접 입힌다 (사냥 장비가 먼저 보이게)
+  let count = 0;
+  for (const v of mask) if (v) count++;
+  if (count < 24) {
+    const top = fb === "tall" ? m.hy + 4 : m.neck;
+    for (let y = top; y <= 24; y++)
+      for (let x = m.cx - 4; x < m.cx + 4; x++) {
+        if (x < 0 || x >= g.w) continue;
+        mask[y * g.w + x] = true;
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+        const r = rowX[y] ?? [99, -1];
+        rowX[y] = [Math.min(r[0], x), Math.max(r[1], x)];
+      }
+  }
   if (y1 < 0) return null;
   const vis = Math.max(y0, fb === "tall" ? m.hy + 4 : fb === "round" ? Math.round(m.hy) + 1 : m.neck);
   const shade = (x: number, y: number) => lo.includes(g.get(x, y) >>> 8) || x >= (rowX[y]?.[1] ?? 99) - 1;
@@ -462,8 +477,18 @@ function drawShopArmor(g: Grid, view: View, fb: Base, m: WearM, bodyCols: readon
       }
     }
   }
+  // 어두운 장비(캐비닛·롱패딩·정장)도 어두운 몸·테마에서 묻히지 않게 왼쪽 가장자리에 밝은 테, 어깨 줄에 장비 포인트 색
+  const rim = lighten(main, luminance(main) < 0.3 ? 0.45 : 0.25);
+  for (let y = vis; y <= hem; y++) {
+    const r = rowX[y];
+    if (r && has(r[0], y)) g.set(r[0], y, rim);
+  }
+  if (luminance(main) < 0.3 && rowX[vis]) for (let x = rowX[vis][0] + 1; x < rowX[vis][1]; x++) if (has(x, vis)) g.set(x, vis, accent);
   if (p.hi && rowX[hem]) for (let x = rowX[hem][0]; x <= rowX[hem][1]; x++) if (has(x, hem)) g.set(x, hem, GOLD_TRIM);
 }
+
+/** 밝기 0..1 */
+const luminance = (c: Color) => (((c >> 16) & 255) * 0.3 + ((c >> 8) & 255) * 0.59 + (c & 255) * 0.11) / 255;
 
 /** 상점 머리 장비 (모자·헤드셋·고글·왕관·안경·헬멧·후광) — 머리 위·옆으로 보이게 */
 function drawShopHead(g: Grid, view: View, fb: Base, m: WearM, p: Shop): [number, number] {

@@ -624,6 +624,9 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   drawBodyExtra(g, body, "front", view, pose, m, pal, headWorn);
   // 앞을 가리는 몸(상자·머그잔·튜브)이면 뒷모습 등 꾸미기를 그 위에 다시 (배낭이 상자에 묻히지 않게)
   if (gear.extra.back && view !== "side" && (body === "box" || body === "cup" || body === "tube")) drawBackGear(g, view, gear.extra.back, m, fb, "front", pose.hem, pose.sit);
+  // 11/15 사냥 중 갑옷: 몸통을 가리는 몸(상자·머그잔·튜브)은 그 위에 한 번 더 입힌다 (사냥 장비가 먼저 보이게)
+  if (gear.sg.a && (body === "box" || body === "cup" || body === "tube"))
+    drawWearArmor(g, view, fb, m, [pal.cloak, pal.cloakLo, pal.bodyMid, pal.bodyLo, pal.bodyHi], [pal.cloakLo, pal.bodyLo], gear.sg.a);
 
   drawGear(g, view, gear, m, pal, fb);
   // F8 머리·목·손 꾸미기 (avatarGear.ts)
