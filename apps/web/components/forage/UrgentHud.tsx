@@ -136,7 +136,7 @@ export default function UrgentHud() {
               {ev.n} / {ev.goal}
               {d.unit}
             </span>
-            {live ? <span className={u.pct}>{pct}%</span> : <span className={u.result}>{urgentFilled(ev.kind, ev.n, ev.goal)}</span>}
+            {live ? <span className={u.pct}>{pct}%</span> : <span className={u.result}>{urgentFilled(ev.kind, ev.n, ev.goal, !!ev.early)}</span>}
             {live && <span className={u.hudHint}>납품 부두 게시판</span>}
           </div>
           {!live && (rewardLine || canClaim) && (

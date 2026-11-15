@@ -263,6 +263,8 @@ function LiveCard({ ev, now, mine, bag }: { ev: UrgentLive; now: number; mine: n
     } catch (e) {
       setMsg(errorMessage(e));
       void forageStore.refresh();
+      // 그 사이 다른 사람이 150%를 채워 끝났을 수 있다 → 끝난 화면으로
+      void urgentStore.refresh();
     } finally {
       setBusy(false);
     }
@@ -367,7 +369,7 @@ function EndedSummary({ ev, now }: { ev: UrgentLive; now: number }) {
       <span className={u.cardTitle}>{d.label} 긴급 의뢰가 끝났어요</span>
       <Bar ev={ev} now={now} />
       <p className={u.subhead}>
-        {urgentFilled(ev.kind, ev.n, ev.goal)}. {urgentRewardLine({ n: ev.n, goal: ev.goal, mine: false })}
+        {urgentFilled(ev.kind, ev.n, ev.goal, !!ev.early)}. {urgentRewardLine({ n: ev.n, goal: ev.goal, mine: false })}
       </p>
       <Stages n={ev.n} goal={ev.goal} />
       <Top3 ev={ev} ended />
@@ -413,7 +415,9 @@ function ResultCard({ row, pub, now, fresh, busy, onClaim }: { row: UrgentMineRo
   return (
     <section className={u.card} data-done data-fest={ev.festUntil > now || undefined} aria-label="끝난 긴급 의뢰 결과">
       <div className={u.cardHead}>
-        <span className={u.cardTitle}>{d.label} 긴급 의뢰가 끝났어요</span>
+        <span className={u.cardTitle}>
+          {d.label} 긴급 의뢰가 {pub?.early ? "일찍 " : ""}끝났어요
+        </span>
         <span className={u.bigClock}>{pct}%</span>
       </div>
       <Bar ev={ev} now={now} />
@@ -425,7 +429,11 @@ function ResultCard({ row, pub, now, fresh, busy, onClaim }: { row: UrgentMineRo
               내가 낸 수 <strong>{row.mine}</strong>
               {d.unit}
             </span>
-            {pub?.lastName && <span className={ui.hint}>마지막 1분에 채운 사람은 {pub.lastName}님</span>}
+            {pub?.lastName && (
+              <span className={ui.hint}>
+                {pub.lastFest ? "150%를 채워 끝낸" : "마지막 1분에 채운"} 사람은 {pub.lastName}님
+              </span>
+            )}
           </div>
           {pub && <Top3 ev={pub} ended />}
         </div>

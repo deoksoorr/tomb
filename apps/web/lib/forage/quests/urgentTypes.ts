@@ -18,8 +18,12 @@ export type UrgentLive = {
   goalAt: number;
   /** 많이 낸 순 3명 */
   top: { name: string; n: number }[];
-  /** 마지막 1분에 100%를 채운 사람 이름 */
+  /** 마지막 1분에 100%를 채운 사람 이름 (일찍 끝났으면 150%를 채워 끝낸 사람) */
   lastName: string | null;
+  /** 11/15 150%를 채워 일찍 끝났다 (end가 그 시각) */
+  early?: boolean;
+  /** 11/15 lastName이 마지막 1분 100%가 아니라 150%를 채워 끝낸 사람이다 */
+  lastFest?: boolean;
 };
 export type UrgentPublic = {
   /** 응답을 만든 서버 시각 (ms) */

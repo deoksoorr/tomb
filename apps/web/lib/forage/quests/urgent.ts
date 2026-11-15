@@ -7,8 +7,10 @@ import { hash01 } from "../rules";
 //    저장할 것이 없고, 비밀값을 모르는 화면은 미리 알 수 없다 (상태는 서버 /api/forage/urgent로만 본다)
 //  - 방식: 서버 전체가 같이 채우는 목표. 납품 부두 게시판에 낸 만큼 막대가 찬다. 50%·100%·150% 단계
 //  - 제한 시간 안의 납품만 인정 (시각은 서버 기준). 끝나면 막대가 멈추고 그때 단계로 보상을 정한다
+//    (11/15 150%(최고 단계)에 닿으면 그 순간 일찍 끝난다 — 더 낼 수 없고 바로 보상을 받는다. urgentEndAt)
 //  - 보상 (1개 이상 낸 사람): 50% 도장 2 · 100% 도장 3 더 + 「수집가의 뒷주머니」 · 150% 마을 축제 1시간 (모두에게)
 //    가장 많이 낸 사람: 칭호 「긴급 배달왕」 하루 + 사이렌 모자 24시간 · 마지막 1분에 100%를 채운 사람: 칭호 「아슬아슬 마감」 하루
+//    (마지막 1분에 100%를 넘긴 사람이 없고 150%로 일찍 끝났으면 「아슬아슬 마감」은 150%를 채워 끝낸 사람 — urgentLastAcct)
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -156,10 +158,20 @@ export const URGENT_NEXT_HINT = "다음 긴급 의뢰 때 1개라도 내면 보�
 export const URGENT_NOBODY_LINE = "긴급 의뢰가 끝났어요. 이번엔 아무도 오지 않았어요.";
 
 /** 모은 양: "목표의 45%를 채웠어요" (1%가 안 되면 "3개를 모았어요" — 0%라고 쓰지 않는다). n > 0일 때만 쓴다 */
-export function urgentFilled(kind: UrgentKind, n: number, goal: number): string {
+export function urgentFilled(kind: UrgentKind, n: number, goal: number, early = false): string {
   const p = urgentPct(n, goal);
+  if (early) return `목표의 ${p}%를 채워서 일찍 끝났어요`;
   return p > 0 ? `목표의 ${p}%를 채웠어요` : `${n}${URGENT_DEF[kind].unit}를 모았어요`;
 }
+
+/** 실제로 끝나는 시각: 150%에 닿았으면(fest > 0) 그 시각, 아니면 정해진 끝 (11/15 일찍 끝내기) */
+export const urgentEndAt = (end: number, fest: number) => (fest > 0 ? Math.min(end, fest) : end);
+
+/**
+ * 「아슬아슬 마감」을 받을 계정: 마지막 1분에 100%를 넘긴 사람(last)이 있으면 그 사람 (원래 규칙 그대로),
+ * 없고 150%를 채워 일찍 끝났으면 그 마지막 한 방을 낸 사람(festBy — 의뢰를 끝낸 사람). festBy가 없는 예전 기록이면 없음
+ */
+export const urgentLastAcct = (st: { fest: number; festBy: string | null; last: string | null }) => st.last ?? (st.fest > 0 ? st.festBy : null);
 
 /** 단계 보상 이름: "도장 2개" · "도장 5개와 수집가의 뒷주머니" */
 export function urgentPrize(stage: UrgentStage): string {
@@ -185,10 +197,11 @@ export function urgentRewardLine(o: { n: number; goal: number; mine: boolean | n
   return o.claimed ? `${reach} ${prize}를 받았어요.` : `${reach} ${prize}를 받아요.`;
 }
 
-/** 끝 확성기 한 줄 (150% 축제 공지는 따로) */
-export function urgentEndNotice(kind: UrgentKind, goal: number, n: number): string {
+/** 끝 확성기 한 줄 (150% 축제 공지는 따로). early = 150%를 채워 일찍 끝났다 */
+export function urgentEndNotice(kind: UrgentKind, goal: number, n: number, early = false): string {
   const name = `긴급 의뢰(${urgentWhat(kind, goal)})`;
   if (n <= 0) return `${name}는 아무도 오지 않은 채 끝났어요.`;
+  if (early) return `${name}가 ${urgentFilled(kind, n, goal, true)}! 낸 사람은 게시판에서 보상을 받아요.`;
   const filled = urgentFilled(kind, n, goal);
   return urgentStage(n, goal) >= 50 ? `${name}가 끝났어요. ${filled}! 낸 사람은 게시판에서 보상을 받아요.` : `${name}가 끝났어요. ${filled}.`;
 }
