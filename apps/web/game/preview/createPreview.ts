@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { installRenderGuard } from "../renderGuard";
 import { PreviewScene, type PreviewSceneData } from "./PreviewScene";
 
 // 입장 화면 배경용 가벼운 Phaser 게임 (월드 씬·네트워크·입력·소리 없음).
@@ -23,6 +24,7 @@ export function createPreview(parent: HTMLElement, opts: PreviewOptions): Previe
   let paused = false;
   let frozen = false;
   const fps = opts.mobile ? 20 : 30;
+  installRenderGuard();
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent,
@@ -37,6 +39,8 @@ export function createPreview(parent: HTMLElement, opts: PreviewOptions): Previe
       mode: Phaser.Scale.RESIZE,
       width: parent.clientWidth || window.innerWidth,
       height: parent.clientHeight || window.innerHeight,
+      // 부모 크기가 0이면 0×0 화면 버퍼를 만들다 예외가 난다 → 최소 1×1
+      min: { width: 1, height: 1 },
       autoRound: true,
     },
     render: { powerPreference: "low-power", antialiasGL: false },
@@ -78,9 +82,15 @@ export function createPreview(parent: HTMLElement, opts: PreviewOptions): Previe
     destroy() {
       if (destroyed) return;
       destroyed = true;
-      // 잠든 루프는 다음 프레임 정리(pendingDestroy)를 돌리지 못한다 → 깨워서 정리하게
-      if (game.isRunning) game.loop.wake();
+      // 잠든 루프는 다음 프레임 정리(pendingDestroy)를 돌리지 못한다 → 깨워서 정리하게.
+      // 먼저 destroy로 정리 표시를 한 뒤 깨운다: 깨우면 그 자리에서 한 프레임이 도는데, 표시가 없으면 이미 떼어진(크기 0) 캔버스로
+      // 화면 크기를 다시 맞추다 예외가 나 React 정리 중에 오류 화면으로 튕긴다 (운영 오류 기록, 아이폰)
       game.destroy(true);
+      try {
+        if (game.isRunning) game.loop.wake();
+      } catch (e) {
+        console.error(e);
+      }
     },
   };
 }
