@@ -34,7 +34,16 @@ export function OutfitCanvas({
   onRotate,
   describedBy,
   className,
-}: Props & { dir: DirId; walking: boolean; onRotate?: (step: number) => void; describedBy?: string; className?: string }) {
+  liveGlow,
+}: Props & {
+  dir: DirId;
+  walking: boolean;
+  onRotate?: (step: number) => void;
+  describedBy?: string;
+  className?: string;
+  /** 야광을 게임처럼 지금 시각에만 (가방 [지금 모습] — 마을의 내 캐릭터와 같은 모습) */
+  liveGlow?: boolean;
+}) {
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<OutfitStage | null>(null);
@@ -47,7 +56,7 @@ export function OutfitCanvas({
     const stage = (stageRef.current ??= new OutfitStage());
     const wear = lookKey ? lookKey.split(",") : [];
     const pose = { dir, walking };
-    const l = { color, body, look: wear };
+    const l = { color, body, look: wear, liveGlow };
     if (reduced) {
       stage.draw(ctx, performance.now(), pose, l, true);
       return;
@@ -59,7 +68,7 @@ export function OutfitCanvas({
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [color, body, lookKey, dir, walking, reduced]);
+  }, [color, body, lookKey, dir, walking, reduced, liveGlow]);
 
   function onKeyDown(e: KeyboardEvent<HTMLCanvasElement>) {
     if (!onRotate || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
