@@ -8,7 +8,7 @@ import type { InputHub } from "../input/InputHub";
 import type { RealtimeClient } from "../net/RealtimeClient";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
 import type { Sfx } from "../world/Sfx";
-import { BUS_BAY, BUS_FROM_LEFT, BUS_LANE_Y, BUS_STOP } from "../world/fishZone";
+import { BUS_BAY, BUS_DOOR_X, BUS_FROM_LEFT, BUS_LANE_Y, BUS_STOP } from "../world/fishZone";
 import { createBusArrival } from "../bus/BusArrival";
 import { BUS_RIDE_SCENE, type BusArrivalApi, type BusLeg, type BusRideControl, type BusRideData } from "../bus/busTypes";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
@@ -49,7 +49,9 @@ export type WorldSide = {
 };
 
 /** 마을 정류장: 버스 문 앞 (지붕 아래 벤치 앞 골목) */
-export const VILLAGE_BUS_DOOR = { x: BUS_STOP.x, y: BUS_BAY.y - 2 } as const;
+export const VILLAGE_BUS_DOOR = { x: BUS_DOOR_X, y: BUS_BAY.y - 2 } as const;
+/** 마을에 내려 준 버스가 서 있다가 흐려지기까지 (ms) — 캠핑장과 같다 */
+const VILLAGE_BUS_WAIT_MS = 3000;
 /** 마을 버스에서 내려 서는 자리 */
 export const VILLAGE_BUS_LAND = { x: BUS_STOP.x, y: BUS_STOP.y + 16 } as const;
 
@@ -123,6 +125,8 @@ export class CampTrip {
       return;
     }
     pl.faceTo(VILLAGE_BUS_DOOR.x, VILLAGE_BUS_DOOR.y + 10, now);
+    // 내려 준 버스가 아직 흐려지는 중이면 치운다 (곧바로 다시 타면 버스가 둘이 되지 않게)
+    this.dropBus();
     this.bus = createBusArrival(w.scene, { doorX: VILLAGE_BUS_DOOR.x, laneY: BUS_LANE_Y, fromLeft: BUS_FROM_LEFT, reduced: w.reduced });
     this.bus.arrive(() => {
       if (this.phase !== "toCamp") return;
@@ -241,7 +245,8 @@ export class CampTrip {
       this.finishVillage(friend);
       return;
     }
-    this.bus = createBusArrival(w.scene, { doorX: VILLAGE_BUS_DOOR.x, laneY: BUS_LANE_Y, fromLeft: BUS_FROM_LEFT, reduced: w.reduced });
+    // 손님을 내린 뒤 앞으로 지나가지 않고, 캠핑장처럼 잠깐 섰다가 부드럽게 흐려지며 사라진다 (11/15 사용자)
+    this.bus = createBusArrival(w.scene, { doorX: VILLAGE_BUS_DOOR.x, laneY: BUS_LANE_Y, fromLeft: BUS_FROM_LEFT, reduced: w.reduced, leave: "fade", waitMs: VILLAGE_BUS_WAIT_MS });
     this.bus.arrive(() => {
       if (this.phase !== "toVillage") return;
       this.stepOut(VILLAGE_BUS_LAND, () => {

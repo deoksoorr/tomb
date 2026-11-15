@@ -39,8 +39,13 @@ export const BUS_E_RADIUS = 60;
  * 돌지 않고 그대로 앞(서쪽)으로 떠난다 (11/15 사용자 — game/bus BusArrival fromLeft)
  */
 export const BUS_FROM_LEFT = false;
-/** 골목 바닥의 버스 정차 칸 (노란 칠 — 바닥 장식, 막지 않는다). 버스 몸(문 기준 서쪽 19 · 동쪽 89px — 왼쪽을 본다)이 꼭 들어가는 길이 */
-export const BUS_BAY = { x: BUS_STOP.x - 26, y: 756, w: 120, h: 24 } as const;
+/**
+ * 버스 문이 서는 x (지붕 가운데보다 조금 서쪽 — 왼쪽을 보는 버스 몸이 동쪽 담(MAP_WIDTH - WALL_THICKNESS = 1408) 안에 들어오게).
+ * 문은 여전히 지붕 아래 앞이다 (지붕 1298~1362)
+ */
+export const BUS_DOOR_X = BUS_STOP.x - 14;
+/** 골목 바닥의 버스 정차 칸 (노란 칠 — 바닥 장식, 막지 않는다). 버스 몸(문 기준 서쪽 19 · 동쪽 89px — 왼쪽을 본다)이 들어가고 담 안에서 끝난다 */
+export const BUS_BAY = { x: BUS_DOOR_X - 22, y: 756, w: 112, h: 24 } as const;
 /** 버스 바퀴가 닿는 줄 (BusArrival laneY) */
 export const BUS_LANE_Y = BUS_BAY.y + BUS_BAY.h - 2;
 /** 위 마당 테두리 연석 (자갈 마당이 골목·광장과 갈리는 곳 — 바닥 장식) */
