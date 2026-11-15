@@ -237,7 +237,7 @@ describe("서버 최초 · 꼭대기 층 주인 · 개척자 (운영자 제외)"
     expect((await getTowerStore().firsts()).t_first30).toBe(a.id);
     const notices = (await getMegaphone().recent(20)).map((m) => m.text);
     expect(notices.some((t) => t.includes("서버 최초로 30층"))).toBe(true);
-    expect(notices.some((t) => t.includes("꼭대기 층을 차지했어요 (30층)"))).toBe(true);
+    expect(notices.some((t) => t.includes("야근 빌딩 최고층 기록을 세웠어요 (30층)"))).toBe(true);
 
     // 둘째로 30층: 서버 최초는 없고, 같은 층이라 꼭대기도 그대로 (먼저 오른 사람)
     const b = await newVisitor({ level: 50, fBest: 25 });
