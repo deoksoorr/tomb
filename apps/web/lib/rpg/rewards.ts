@@ -194,7 +194,9 @@ function evalStarsAt(t: TicketInfo, r: StarsResult, eff: number, ver: number, le
   const upper = Math.round((r.perfect * STAR_SCORE.perfect + r.good * STAR_SCORE.good) * comboMult(r.maxCombo));
   const score = Math.max(0, Math.min(r.score, upper));
   const target = Math.max(1, plan.length * STAR_SCORE.perfect);
-  const v = miniReward(t, score, clamp(score / target, 0, 1));
+  // 11/15 별자리 잇기는 포인트와 별자리 도감만 (EXP 없음 — 곤충 채집처럼 쉬는 게임)
+  const m = miniReward(t, score, clamp(score / target, 0, 1));
+  const v = m.ok ? { ...m, exp: 0 } : m;
   return v.ok && done.length ? { ...v, stars: done } : v;
 }
 

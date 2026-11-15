@@ -9,7 +9,6 @@ import { meStore } from "@/lib/hooks/useMe";
 import { DIFFICULTIES, DIFFS, GAMES, potionById, type Difficulty } from "@/lib/rpg/catalog";
 import { rpgApi } from "@/lib/rpg/client";
 import { constellationById } from "@/lib/rpg/constellations";
-import { levelPenalty } from "@/lib/rpg/formulas";
 import { STAR_DEX_MAX, STAR_REC_DEX, STARS_NEW_PER_RUN, STARS_PLAN_VER, starWindows } from "@/lib/rpg/plan";
 import type { RunReward, RunResult } from "@/lib/rpg/types";
 import { STARRY_NIGHT_BONUS, starryNight } from "@/lib/stargaze";
@@ -241,9 +240,11 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
             ) : r ? (
               <>
                 <div className={s.rewards}>
-                  <div>
-                    <strong>+{r.exp.toLocaleString("ko-KR")}</strong>EXP
-                  </div>
+                  {r.exp > 0 && (
+                    <div>
+                      <strong>+{r.exp.toLocaleString("ko-KR")}</strong>EXP
+                    </div>
+                  )}
                   <div>
                     <strong>+{r.points}</strong>포인트
                   </div>
@@ -301,7 +302,6 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
 
   const G = GAMES.stars;
   const win = starWindows(diff, stat?.dex ?? 0);
-  const expCut = stat ? levelPenalty(stat.level, diff, null) : 1;
   return (
     <Dialog title="망원경" onClose={onClose}>
       <div className={s.lobby}>
@@ -336,11 +336,6 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
             {stat ? `내 DEX ${stat.dex} 기준으로 ` : ""}고리와 별의 차이가 ±{win[0]}ms 안이면 &apos;완벽&apos;, ±{win[1]}ms 안이면 &apos;좋아&apos;예요. DEX가 높을수록 이 범위가
             넓어져요. DEX {STAR_DEX_MAX}이면 가장 넓어요. 레벨은 판정과 상관없어요.
           </p>
-          {expCut < 1 && (
-            <p className={s.warn}>
-              내 레벨이 Lv.{DIFFS[diff].recLevel}보다 10 넘게 높아요. 이 난이도에서는 EXP를 {Math.round(expCut * 100)}%만 받아요. 포인트와 도감 등록은 그대로예요.
-            </p>
-          )}
         </section>
         <div className={s.buttons}>
           <button type="button" className={cx(ui.button, ui.primary)} disabled={phase === "starting"} onClick={() => void start()}>
