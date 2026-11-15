@@ -159,7 +159,9 @@
 
 .face {
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  /* 그림 · 등급 · 이름 · (가진 카드면 단계) · 설명 — 단계가 없으면 설명이 넷째 줄, 남는 칸은 맨 아래 */
+  grid-template-rows: auto auto auto auto 1fr;
+  align-content: start;
   justify-items: center;
   gap: 4px;
   padding: 10px 10px 12px;
@@ -264,13 +266,27 @@
   word-break: keep-all;
 }
 
-.stack {
-  position: absolute;
-  bottom: 7px;
-  right: 9px;
-  font-family: var(--font-small);
-  font-size: 10px;
+/* 11/15 이미 가진 카드: 지금 단계 → 다음 단계 */
+.level {
+  align-self: center;
+  margin-top: 2px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
   color: var(--tag);
+  font-family: var(--font-small);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.level b {
+  color: #ffe08a;
+  font-weight: 700;
+}
+
+.level em {
+  margin-left: 2px;
+  color: #ffb36b;
+  font-style: normal;
 }
 
 .key {

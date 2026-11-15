@@ -101,19 +101,21 @@ function PickView({ view }: { view: CardOfferView }) {
                 style={{ "--i": i } as React.CSSProperties}
                 disabled={deal || chosen !== null}
                 onClick={() => !deal && pick(i)}
-                aria-label={`${def.name}, ${RARITY_NAME[def.rarity]}. ${cardText(id, view.style)}`}
+                aria-label={`${def.name}, ${RARITY_NAME[def.rarity]}${have > 0 && Number.isFinite(def.max) ? `, 지금 ${have}단계에서 ${have + 1}단계로` : ""}. ${cardText(id, view.style)}`}
               >
                 <span className={c.back} aria-hidden="true" />
                 <span className={c.face}>
                   {!deal && <span className={c.key}>{i + 1}</span>}
-                  {have > 0 && Number.isFinite(def.max) && (
-                    <span className={c.stack}>
-                      {have}/{def.max}
-                    </span>
-                  )}
                   <img className={c.art} src={cardWindowUrl(id, 3)} alt="" />
                   <span className={c.tag}>{RARITY_NAME[def.rarity]}</span>
                   <span className={c.name}>{def.name}</span>
+                  {/* 11/15 이미 가진 카드면 지금 몇 단계인지 크게 (겹칠 수 있는 카드만) */}
+                  {have > 0 && Number.isFinite(def.max) && (
+                    <span className={c.level}>
+                      지금 {have}단계 → <b>{have + 1}단계</b>
+                      {have + 1 >= def.max && <em> 마지막</em>}
+                    </span>
+                  )}
                   <span className={c.desc}>{cardText(id, view.style)}</span>
                 </span>
               </button>
