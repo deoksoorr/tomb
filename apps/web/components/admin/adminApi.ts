@@ -8,6 +8,7 @@ import type {
 } from "@/lib/admin";
 import type { AdminMembersResponse, CodeReissueLogResponse, CodeReissueResponse } from "@/lib/adminMembers";
 import { request } from "@/lib/api";
+import type { RunReward } from "@/lib/rpg/types";
 import type { AdminHouse } from "@/lib/housing/types";
 import type { AdminAccountRow } from "@/app/api/admin/accounts/search/route";
 import type { EconomyResponse, Notice, NoticeInput, NoticeListResponse } from "@/lib/types";
@@ -43,6 +44,9 @@ export const adminApi = {
   errors: (days: number) => request<AdminErrorsResponse>(`/api/admin/errors?days=${days}`, { cache: "no-store" }),
   economy: (days: number) => request<EconomyResponse>(`/api/admin/economy?days=${days}`, { cache: "no-store" }),
   /** 닉네임으로 계정 찾기 (포인트를 모은 적 있는 계정) */
+  /** 11/15 야근 빌딩 대신 정산 (서버가 잘못 거절한 판) */
+  towerGrant: (b: { accountId: string; start: number; floors: number; floorMs: number }) =>
+    request<{ ok: true; reward: RunReward }>("/api/admin/rpg/tower-grant", post(b)),
   searchAccounts: (name: string) =>
     request<{ accounts: AdminAccountRow[] }>(`/api/admin/accounts/search?${new URLSearchParams({ name })}`, { cache: "no-store" }),
   /** 회원 전체 목록 (최근 접속 순 50명씩, next를 cursor로) */
