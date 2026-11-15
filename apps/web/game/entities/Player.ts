@@ -107,12 +107,13 @@ export class Player {
     this.view = new AvatarView(scene, atlas, x, y, avatarColorSpec(color, last?.dye), name, true, [], isAvatarBody(last?.body) ? last.body : body);
     // 주간 1위 배지·오라도 마지막 착용 증서 값으로 (어느 장면에서 만들어도 같게)
     this.view.setChamp(last?.champ);
+    this.view.setMgr(last?.mgr === 1); // 11/16 매니저 오라·칭호
     // 그 장면 안에 있는 동안 염색·외형 바꾸기·꾸미기를 바꿔도 바로 (예전엔 상점 안에서는 나가야 바뀌었다)
     this.offLook = bridge.on("look:set", (e) => {
       // 장면이 정리돼 그림이 사라졌으면 (게임 종료 등) 더 듣지 않는다
       if (!this.view.sprite.scene) return this.offLook();
       if (Array.isArray(e.look)) this.view.setLook(e.look.filter((v): v is string => typeof v === "string"));
-      this.view.applyAppearance({ dye: e.dye, body: e.body, champ: e.champ });
+      this.view.applyAppearance({ dye: e.dye, body: e.body, champ: e.champ, mgr: e.mgr });
     });
     // 31번 운영자 계정이면 내 캐릭터도 저승사자 차림·금빛 이름표·「운영자」 칭호 (/api/me가 알려 준 값, 바뀌면 바로). 이름은 닉네임 그대로
     this.view.setStaff(bridge.last("me:staff")?.on === true);

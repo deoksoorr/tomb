@@ -7,6 +7,7 @@ import { giftsStore, useGifts } from "@/lib/hooks/useGifts";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
 import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
+import { restoreLook } from "../account/actions";
 
 /** 선물함을 다시 확인하는 간격 (새 선물은 실시간 서버의 me:stale로 바로 온다 → 맞추기용이라 30분, 숨긴 탭은 묻지 않는다) */
 const GIFT_POLL_MS = 30 * 60_000;
@@ -47,7 +48,11 @@ export function useSocial(ready: boolean): { calendarReady: boolean; giftCount: 
     let dirty = false;
     const pull = () => {
       dirty = false;
-      void meStore.refresh();
+      // 11/16 매니저 임명·해제: 바뀌었으면 착용 증서를 새로 받아 보낸다 → 내 아바타와 같은 방 사람들 화면의 매니저 오라·칭호가 그 자리에서 붙거나 떨어진다
+      const wasMgr = meStore.getSnapshot().me?.manager === true;
+      void meStore.refresh().then((me) => {
+        if (me && (me.manager === true) !== wasMgr) void restoreLook().catch(() => undefined);
+      });
       void giftsStore.refresh();
     };
     const offStale = bridge.on("me:stale", () => {

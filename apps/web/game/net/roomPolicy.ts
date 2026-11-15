@@ -53,7 +53,7 @@ export type RoomEvent =
   | { t: "welcome"; m: RoomWelcome }
   | { t: "join"; p: PeerInfo }
   | { t: "leave"; sid: Sid }
-  | { t: "look"; sid: Sid; look: string[]; dye?: AvatarDye; body?: string; champ?: number }
+  | { t: "look"; sid: Sid; look: string[]; dye?: AvatarDye; body?: string; champ?: number; mgr?: 0 | 1 }
   | { t: "act"; sid: Sid; kind: ActKind; x: number; y: number }
   | { t: "say"; sid: Sid; id: PhraseId }
   | { t: "emo"; sid: Sid; id: EmoId }
@@ -120,6 +120,7 @@ export function parseRoomMessage(text: string, mySid: Sid | null): RoomEvent | n
             ...(m.dye !== undefined ? { dye: sanitizeDye(m.dye) } : {}),
             ...(typeof m.body === "string" ? { body: m.body } : {}),
             ...(typeof m.champ === "number" ? { champ: m.champ } : {}),
+            ...(m.mgr === 0 || m.mgr === 1 ? { mgr: m.mgr } : {}),
           }
         : null;
     case "act":

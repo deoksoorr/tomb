@@ -1,5 +1,5 @@
 import { JOIN_TOKEN_TTL_SEC, ROOM_ID_RE, isAvatarBody, isChampValue, isDexBadge, staffGateBody } from "./constants";
-import { sanitizeLook, staffGateLook } from "./items";
+import { mgrGateLook, sanitizeLook, staffGateLook } from "./items";
 import { hasDye, packDye, unpackDye, type AvatarDye } from "./dye";
 
 // 입장 토큰: base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload, JOIN_SECRET))
@@ -26,6 +26,8 @@ export type JoinClaims = {
   dex?: number;
   /** 지난주 랭킹 1위 (CHAMP_BOARDS 비트 묶음, 1~7). Vercel이 주간 1위 기록을 확인한 뒤에만 넣는다. 없으면 0 */
   champ?: number;
+  /** 11/16 매니저 (관리자가 임명, Vercel이 확인한 뒤에만 넣는다 → 매니저 전용 오라·칭호). 일반 계정엔 없다 */
+  mgr?: true;
   /** 만료 시각 (unix seconds) */
   exp: number;
 };
@@ -89,13 +91,16 @@ export async function signJoinToken(
   return `${body}.${await hmacSign(secret, body)}`;
 }
 
+/** 입장 토큰 최대 길이 (서명 검증 전에 거른다). 11/16 매니저 표시(mgr)·사냥 장비가 실린 사냥터 방 토큰도 넉넉하게 (예전 600) */
+export const JOIN_TOKEN_MAX_LEN = 900;
+
 /** 서명이 틀리거나 만료됐거나 형식이 맞지 않으면 null */
 export async function verifyJoinToken(
   secret: string,
   token: string,
   nowSec = Math.floor(Date.now() / 1000),
 ): Promise<JoinClaims | null> {
-  if (typeof token !== "string" || token.length > 600) return null;
+  if (typeof token !== "string" || token.length > JOIN_TOKEN_MAX_LEN) return null;
   const dot = token.indexOf(".");
   if (dot <= 0) return null;
   const body = token.slice(0, dot);
@@ -110,7 +115,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff, dex, champ } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff, dex, champ, mgr } = c as Record<string, unknown>;
   if (
     typeof visitorId !== "string" ||
     typeof name !== "string" ||
@@ -123,5 +128,6 @@ export async function verifyJoinToken(
   if (exp < nowSec) return null;
   // 운영자 전용 몸·꾸미기는 토큰에 운영자 표시(staff)가 있을 때만 (없으면 후드 유령·빼고)
   const isStaff = staff === true;
-  return { visitorId, name, color, channel, exp, look: staffGateLook(sanitizeLook(look), isStaff), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}) };
+  // 11/16 매니저 전용 칭호는 매니저 표시(mgr)가 있을 때만
+  return { visitorId, name, color, channel, exp, look: mgrGateLook(staffGateLook(sanitizeLook(look), isStaff), mgr === true), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}), ...(mgr === true ? { mgr: true as const } : {}) };
 }

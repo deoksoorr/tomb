@@ -204,7 +204,8 @@ export type AvatarColors = { base: Color; head: Color; body: Color; accent: Colo
 
 /** 46·25번: 실시간 서버가 알리는 염색·몸 모양 변경 (look 이벤트에 실린다, 없는 값은 그대로) */
 /** champ = 주간 랭킹 1위 값 (새 웹이 낸 착용 증서에만, 0 = 1위 아님) */
-export type AppearanceChange = { dye?: AvatarDye; body?: string; champ?: number };
+/** mgr = 11/16 매니저 표시 (1·0, 없으면 그대로) */
+export type AppearanceChange = { dye?: AvatarDye; body?: string; champ?: number; mgr?: number };
 
 /** 기본색 + 염색 → 색 표기. 염색이 없으면 기본색 그대로 (옛 텍스처 키와 같다) */
 export function avatarColorSpec(base: string, dye?: AvatarDye | null): string {

@@ -233,6 +233,8 @@ export type Me = {
   renameRequired?: true;
   /** 주간 랭킹 1위 (지난주 1위인 랭킹 비트 + 본인이 오라를 껐으면 CHAMP_AURA_OFF — @tomb/protocol). 1위가 아니면 없음 */
   champ?: number;
+  /** 11/16 매니저 (관리자가 임명 — 전용 칭호·오라뿐). 아니면 없음 */
+  manager?: true;
 };
 
 /** 휴면 계정이 돌아왔을 때 (입장 화면 안내·입장 거절 문구) */
@@ -290,7 +292,7 @@ export type BuyResponse = { me: Me };
 export type UseItemResponse = { me: Me; grant?: string; lookGrant?: string; grave?: PublicGrave };
 /** GET /api/me/look → 지금 착용 상태의 증서 (재접속 때) */
 /** dye·body = 46·25번 지금 염색·몸 모양 (게임이 내 아바타에 입힌다) */
-export type LookGrantResponse = { look: string[]; lookGrant: string; dye?: AvatarDye; body?: string | null; /** 주간 1위 값 (0 = 아님) */ champ?: number };
+export type LookGrantResponse = { look: string[]; lookGrant: string; dye?: AvatarDye; body?: string | null; /** 주간 1위 값 (0 = 아님) */ champ?: number; /** 11/16 매니저 (1 = 매니저, 0 = 아님, 옛 응답엔 없음) */ mgr?: 0 | 1 };
 /** GET /api/version → 배포 식별자. 다르면 새 버전 안내 */
 /** version = 배포 id (다르면 평소 패치 배너), minClient = 이 배포가 요구하는 최소 클라이언트 버전 (내 CLIENT_VERSION보다 크면 강제 업데이트 창) */
 export type VersionResponse = { version: string; minClient: number };

@@ -572,7 +572,7 @@ export class RealtimeClient {
           if (m.sid !== this.mySid) this.cb.onGraveEvent(m.sid, m.kind, m.graveId);
           break;
         case "look":
-          if (m.sid !== this.mySid) this.cb.onLook(m.sid, m.look, { dye: m.dye, body: m.body, ...(typeof m.champ === "number" ? { champ: m.champ } : {}) });
+          if (m.sid !== this.mySid) this.cb.onLook(m.sid, m.look, { dye: m.dye, body: m.body, ...(typeof m.champ === "number" ? { champ: m.champ } : {}), ...(m.mgr === 0 || m.mgr === 1 ? { mgr: m.mgr } : {}) });
           break;
         case "act":
           if (m.sid !== this.mySid && (ACT_KINDS as readonly string[]).includes(m.kind) && Number.isFinite(m.x) && Number.isFinite(m.y))

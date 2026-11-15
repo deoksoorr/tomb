@@ -149,6 +149,8 @@ export class AvatarView {
   private dexBadgeN = 0;
   /** 주간 랭킹 1위 값 (비트 묶음 + 오라 끔 표시, 0 = 아님)과 이름표 위 배지 */
   private champ = 0;
+  /** 11/16 매니저 (실시간 서버가 알린 mgr, 내 캐릭터는 착용 증서와 같이 온 값) → 매니저 오라·매니저 칭호 */
+  private mgr = false;
   private champBadge: ChampBadgeView | null = null;
   /** 칭호 「…」 (이름표 바로 위, 연한 금빛). 칭호를 달았을 때만 만든다 */
   private titleView: TitleView | null = null;
@@ -318,7 +320,19 @@ export class AvatarView {
   /** 1위 오라·운영자 오라 다시 걸기 (운영자 오라가 우선, 본인이 끄면 CHAMP_AURA_OFF) */
   private refreshAura(): void {
     const staff = !!this.staffFx;
-    if (this.cfx || champAuraOn(this.champ) || staff) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, this.body, this.champ, staff);
+    if (this.cfx || champAuraOn(this.champ) || staff || this.mgr) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, this.body, this.champ, staff, this.mgr);
+  }
+
+  /** 11/16 매니저 표시 켜기·끄기: 매니저 오라(전용 오라 자리 — 운영자 오라·1위 오라가 있으면 그쪽이 먼저)와 매니저 전용 칭호 */
+  setMgr(on: boolean): void {
+    if (on === this.mgr) return;
+    this.mgr = on;
+    this.setTitle(this.wornTitle);
+    this.refreshAura();
+  }
+
+  get manager(): boolean {
+    return this.mgr;
   }
 
   get champBits(): number {
@@ -352,6 +366,7 @@ export class AvatarView {
     if (typeof extra.body === "string") this.setBody(extra.body);
     if (extra.dye !== undefined) this.setColor(avatarColorSpec(this.colorSpec, sanitizeDye(extra.dye)));
     if (typeof extra.champ === "number") this.setChamp(extra.champ);
+    if (typeof extra.mgr === "number") this.setMgr(extra.mgr === 1);
   }
 
   /** 몸 모양 변경 (AVATAR_BODIES id, 모르는 값은 hood) */
@@ -363,7 +378,7 @@ export class AvatarView {
     // 11/15 수집가 유령은 채집 등불을 들고 있다 (밤 빛)
     this.lantern = this.look.includes("hand_lantern") || this.look.includes("hand_lantern_blue") || this.look.includes("q_hat_miner") || this.look.includes("q_hand_wishlamp") || b === "collector";
     // 25번 프리미엄 외형 등급 연출은 몸에 딸린다 (다른 사람 화면에서도 몸 id로 똑같이)
-    if (this.cfx || bodyFx(b)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, b, this.champ, !!this.staffFx);
+    if (this.cfx || bodyFx(b)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, b, this.champ, !!this.staffFx, this.mgr);
     this.relayout();
     this.retexture();
   }
@@ -407,7 +422,7 @@ export class AvatarView {
       this.mountPet = mount;
       this.anim = "";
     }
-    if (this.cfx || look.length || bodyFx(this.body) || champAuraOn(this.champ) || !!this.staffFx) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(look, this.body, this.champ, !!this.staffFx);
+    if (this.cfx || look.length || bodyFx(this.body) || champAuraOn(this.champ) || !!this.staffFx || this.mgr) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(look, this.body, this.champ, !!this.staffFx, this.mgr);
     this.relayout();
     this.retexture();
     this.setNameStyle(look);
@@ -487,7 +502,7 @@ export class AvatarView {
    *  11/15 운영자 표시면 낀 칭호 대신 운영자 전용 「운영자」 (한 줄만 — 착용 목록이 아니라 서명된 staff 표시로만 뜬다) */
   private setTitle(id: string | null): void {
     this.wornTitle = id;
-    const t = headTitle(id, !!this.staffFx);
+    const t = headTitle(id, !!this.staffFx, this.mgr);
     if (t === "staff") {
       (this.titleView ??= new TitleView(this.scene, this.atlas, this.label.depth, this.reduced)).setStaff();
       return;

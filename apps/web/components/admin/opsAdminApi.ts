@@ -4,6 +4,7 @@ import type { AdminChampTestResponse } from "@/app/api/admin/champ/test/route";
 import type { AdminRankFillResponse } from "@/app/api/admin/rank/fill/route";
 import type { RankGiftFixResponse } from "@/lib/rankGiftFix";
 import type { AdminTestDropsResponse } from "@/app/api/admin/rpg/test-drops/route";
+import type { AdminManagersResponse } from "@/app/api/admin/managers/route";
 import type { AdminStaffResponse } from "@/app/api/admin/staff/route";
 import type { AnalyticsRange, AnalyticsReport } from "@/lib/analyticsReport";
 import { request } from "@/lib/api";
@@ -24,6 +25,10 @@ export const opsAdminApi = {
   staff: () => request<AdminStaffResponse>("/api/admin/staff", { cache: "no-store" }),
   setStaff: (accountId: string | null) =>
     request<AdminStaffResponse>("/api/admin/staff", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accountId }) }),
+  /** 11/16 매니저 목록 · 임명(on = true)·해제 */
+  managers: () => request<AdminManagersResponse>("/api/admin/managers", { cache: "no-store" }),
+  setManager: (accountId: string, on: boolean) =>
+    request<AdminManagersResponse>("/api/admin/managers", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accountId, on }) }),
   /** 돌아다니는 마을 주민 (켜기/끄기·주민 수) */
   residents: () => request<ResidentSettings>("/api/admin/residents", { cache: "no-store" }),
   setResidents: (s: ResidentSettings) =>

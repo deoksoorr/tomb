@@ -23,6 +23,7 @@ import TowerGrantPanel from "./TowerGrantPanel";
 import GravesPanel from "./GravesPanel";
 import HousingPanel from "./HousingPanel";
 import MegaphonePanel from "./MegaphonePanel";
+import ManagersPanel from "./ManagersPanel";
 import MembersPanel from "./MembersPanel";
 import { moderationApi } from "./moderationApi";
 import NoticesPanel from "./NoticesPanel";
@@ -285,6 +286,7 @@ export default function AdminApp() {
           {panel === "members" && <MembersPanel key={version} {...p} banPreset={banPreset} onBanPresetUsed={clearBanPreset} />}
           {panel === "codes" && <CodeLogPanel {...p} version={version} />}
           {panel === "staff" && <StaffPanel key={version} {...p} />}
+          {panel === "managers" && <ManagersPanel key={version} {...p} />}
 
           {panel === "reports" && (
             <ReportsPanel

@@ -6,6 +6,7 @@ import { handler, HttpError, json } from "@/lib/http";
 import { issueJoin } from "@/lib/joinToken";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
+import { isManager } from "@/lib/managers";
 import { isStaff } from "@/lib/staff";
 import { getAccounts } from "@/lib/store";
 import { getStyleStore } from "@/lib/store/style";
@@ -34,12 +35,14 @@ export const POST = handler(async (req) => {
   // 주간 1위: 월요일 0시가 지나 처음 들어오는 요청이 지난주 1위를 정리·지급한다 (한 번만, 끝난 주는 기억해 건너뛴다)
   await ensureChampSettled(now);
   // 계정 전체(get = 명령 9개) 대신 이름·몸·착용만 (2개)
-  const [account, style, staff, dex, champ] = await Promise.all([
+  const [account, style, staff, dex, champ, mgr] = await Promise.all([
     accounts.appearance(visitorId, now),
     getStyleStore(accounts).get(visitorId),
     isStaff(visitorId),
     dexBadgeOf(visitorId),
     isStaff(visitorId).then((s) => champWireFor(visitorId, s, now)).catch(() => 0),
+    // 11/16 매니저 (전용 오라·칭호 — 서버가 확인한 것만 토큰에)
+    isManager(visitorId, now),
   ]);
   // 머리 위 이름은 계정 이름이 정답. 계정에 아직 이름이 없으면 요청 이름을 이름 색인과 함께 등록한다 (다른 계정이 쓰면 거절)
   let shown = account.name;
@@ -50,7 +53,7 @@ export const POST = handler(async (req) => {
   }
   // 25번 외형 바꾸기: 계정에 몸 모양이 있으면 그것이 정답 (요청 값은 입장 화면에서 처음 고른 몸)
   // 31번: 운영자 표시는 여기(서버)에서만 넣는다. 11/15: 운영자도 닉네임 그대로 (머리 위 「운영자」 칭호·이름표 장식은 이 staff 표시로만)
-  const claims = { visitorId, name: shown, color, body: account.body ?? body ?? "hood", look: lookOf(account), dye: style.dye, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}) };
+  const claims = { visitorId, name: shown, color, body: account.body ?? body ?? "hood", look: lookOf(account), dye: style.dye, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}), ...(mgr ? { mgr: true as const } : {}) };
   // 친구: 들어오는 순간·나간 뒤 5초에 친구들에게 바로 알리도록 실시간 서버에 맡긴다 (친구가 없으면 아무것도 안 한다, 실패해도 입장은 그대로)
   await announceFriends(visitorId, now).catch(() => undefined);
   return json<JoinResponse>(await issueJoin(channel, claims));

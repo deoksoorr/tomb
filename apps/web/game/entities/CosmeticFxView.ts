@@ -25,7 +25,7 @@ function ensureTex(scene: Phaser.Scene, art: FxArtId): string {
 /**
  * ground = 바닥 층 depth (또는 "body" = 몸 depth 바로 아래 — 탑승 장면처럼 그림이 순서대로 쌓이는 곳).
  * noCull = 화면 밖 생략을 하지 않는다 (탑승 장면은 카메라 worldView가 그림 좌표와 맞지 않는다).
- * staffSoft = 운영자 오라·발밑 안개를 몸 뒤로 보내고 투명도에 곱할 값 (사냥 화면: 사냥 장비를 가리지 않게. 없으면 그대로 화려하게)
+ * staffSoft = 운영자 오라(11/16 매니저 오라도)·발밑 안개를 몸 뒤로 보내고 투명도에 곱할 값 (사냥 화면: 사냥 장비를 가리지 않게. 없으면 그대로 화려하게)
  */
 export type CfxDepth = { ground: number | "body"; lightOnBody: boolean; noCull?: true; staffSoft?: number };
 
@@ -39,9 +39,9 @@ export class CosmeticFxView {
     this.depthCfg = scene.data?.get("cfxDepth") as CfxDepth | undefined;
   }
 
-  /** body = 몸 id (프리미엄 외형 등급 연출), champ = 주간 랭킹 1위 값 (1위 오라), staff = 31번 운영자 (운영자 오라가 우선) */
-  setLook(look: readonly string[], body?: string, champ?: number, staff?: boolean): void {
-    this.sim.setLook(look, body, champ, staff);
+  /** body = 몸 id (프리미엄 외형 등급 연출), champ = 주간 랭킹 1위 값 (1위 오라), staff = 31번 운영자 (운영자 오라가 우선), mgr = 11/16 매니저 (매니저 오라) */
+  setLook(look: readonly string[], body?: string, champ?: number, staff?: boolean, mgr?: boolean): void {
+    this.sim.setLook(look, body, champ, staff, mgr);
     if (this.sim.empty) this.clear();
   }
 

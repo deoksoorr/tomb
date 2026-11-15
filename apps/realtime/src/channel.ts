@@ -32,6 +32,7 @@ import {
   sameDye,
   staffGateBody,
   staffGateLook,
+  mgrGateLook,
   isChampValue,
   isDexBadge,
   isAwayPlace,
@@ -92,6 +93,8 @@ export type PeerRecord = {
   dex?: number;
   /** 지난주 랭킹 1위 비트 (JoinClaims.champ, 착용 증서로 바뀔 수 있다) */
   champ?: number;
+  /** 11/16 매니저 (JoinClaims.mgr, 착용 증서로 바뀔 수 있다) */
+  mgr?: true;
   /** 이 연결로 자리를 잡은 시각. 로비의 채널 간 중복 정리(kick)가 더 새 연결을 내보내지 않게 비교한다 */
   joinedAt: number;
 };
@@ -122,6 +125,8 @@ export type JoinTicket = {
   dex?: number;
   /** 지난주 랭킹 1위 비트 (JoinClaims.champ, 착용 증서로 바뀔 수 있다) */
   champ?: number;
+  /** 11/16 매니저 (JoinClaims.mgr, 착용 증서로 바뀔 수 있다) */
+  mgr?: true;
 };
 
 /** ChannelCore가 바깥(DO)에 맡기는 부수 효과 */
@@ -394,6 +399,7 @@ export class ChannelCore<C extends object> {
       ...(t.staff ? { staff: true as const } : {}),
       ...(t.dex ? { dex: t.dex } : {}),
       ...(t.champ ? { champ: t.champ } : {}),
+      ...(t.mgr ? { mgr: true as const } : {}),
       joinedAt: now,
     };
     const p = this.adoptNew(rec, conn, now);
@@ -420,7 +426,7 @@ export class ChannelCore<C extends object> {
       this.host.dropReservation(p.sid);
     }
     const renamed =
-      p.name !== t.name || p.color !== t.color || p.body !== t.body || p.look.join() !== t.look.join() || !sameDye(p.dye, t.dye) || !!p.staff !== !!t.staff || (p.dex ?? 0) !== (t.dex ?? 0) || (p.champ ?? 0) !== (t.champ ?? 0);
+      p.name !== t.name || p.color !== t.color || p.body !== t.body || p.look.join() !== t.look.join() || !sameDye(p.dye, t.dye) || !!p.staff !== !!t.staff || (p.dex ?? 0) !== (t.dex ?? 0) || (p.champ ?? 0) !== (t.champ ?? 0) || !!p.mgr !== !!t.mgr;
     p.name = t.name;
     p.color = t.color;
     p.look = t.look;
@@ -429,6 +435,7 @@ export class ChannelCore<C extends object> {
     p.staff = t.staff ? true : undefined;
     p.dex = t.dex || undefined;
     p.champ = t.champ || undefined;
+    p.mgr = t.mgr ? true : undefined;
     p.joinedAt = now;
     // 새 소켓을 붙이기 전에 옮긴다: 좌석 해제 알림은 다른 사람에게만 가고, 본인은 결과가 반영된 welcome을 처음으로 받는다
     if (t.spawn) this.relocate(p, t.spawn);
@@ -836,7 +843,9 @@ export class ChannelCore<C extends object> {
     if (!p || g.visitorId !== p.visitorId) return;
     if (g.kind === "look") {
       // 31번: 운영자 전용 꾸미기·몸은 입장 토큰이 운영자(staff)인 연결만 (아니면 빼고 후드 유령)
-      p.look = staffGateLook(g.look, !!p.staff);
+      // 11/16 매니저: 새 웹이 낸 증서는 지금 매니저인지(1·0)도 싣는다 (옛 증서엔 없으니 그대로). 매니저 전용 칭호는 매니저일 때만
+      if (g.mgr !== undefined) p.mgr = g.mgr ? true : undefined;
+      p.look = mgrGateLook(staffGateLook(g.look, !!p.staff), !!p.mgr);
       // 46·25번: 새 웹이 낸 증서는 염색·몸 모양도 싣는다 (옛 증서엔 없으니 그대로 둔다)
       if (g.dye !== undefined) p.dye = hasDye(g.dye) ? g.dye : undefined;
       if (g.body !== undefined) p.body = staffGateBody(g.body, !!p.staff);
@@ -844,7 +853,7 @@ export class ChannelCore<C extends object> {
       if (g.champ !== undefined) p.champ = g.champ || undefined;
       this.save(p);
       this.host.liveChanged?.(true);
-      const extra = { ...(g.dye !== undefined ? { dye: p.dye ?? {} } : {}), ...(g.body !== undefined ? { body: p.body } : {}), ...(g.champ !== undefined ? { champ: p.champ ?? 0 } : {}) };
+      const extra = { ...(g.dye !== undefined ? { dye: p.dye ?? {} } : {}), ...(g.body !== undefined ? { body: p.body } : {}), ...(g.champ !== undefined ? { champ: p.champ ?? 0 } : {}), ...(g.mgr !== undefined ? { mgr: p.mgr ? (1 as const) : (0 as const) } : {}) };
       this.broadcast(encodeEvent({ t: "look", sid: p.sid, look: p.look, ...extra }));
       // 타던 펫을 집에 두거나 타지 못하는 펫으로 바꿨으면 내린다
       if (p.ride && !ridePetOfLook(p.look)) this.clearRide(p);
@@ -1331,6 +1340,7 @@ export class ChannelCore<C extends object> {
       ...(p.staff ? { staff: true as const } : {}),
       ...(p.dex ? { dex: p.dex } : {}),
       ...(p.champ ? { champ: p.champ } : {}),
+      ...(p.mgr ? { mgr: true as const } : {}),
       ...(p.ride ? { ride: true as const } : {}),
       ...(p.rod ? { rod: true as const } : {}),
       ...(p.away ? { away: true as const } : {}),
@@ -1347,6 +1357,6 @@ export class ChannelCore<C extends object> {
     const ride = r.ride === true && !seatId && ridePetOfLook(look) ? { ride: true as const } : {};
     // 배 위 낚싯대는 조각배 자리에 앉아 있을 때만 이어 간다
     const rod = r.rod === true && seatId && boatSeatById(seatId) ? { rod: true as const } : {};
-    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.away === true && r.place === "house" && typeof r.house === "string" ? { house: r.house } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), ...(isChampValue(r.champ) ? { champ: r.champ } : {}), joinedAt: r.joinedAt ?? 0 };
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.away === true && r.place === "house" && typeof r.house === "string" ? { house: r.house } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), ...(isChampValue(r.champ) ? { champ: r.champ } : {}), ...(r.mgr === true ? { mgr: true as const } : {}), joinedAt: r.joinedAt ?? 0 };
   }
 }

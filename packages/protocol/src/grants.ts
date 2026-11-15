@@ -14,7 +14,8 @@ import { packDye, unpackDye, type AvatarDye } from "./dye";
 export type Grant =
   /** 46·25번: dye·body가 있으면 염색·몸 모양도 같이 바꾼다 (옛 웹이 낸 증서엔 없다 → 실시간 서버는 그대로 둔다) */
   /** 주간 1위: champ = 지금 1위 비트(+ 오라 끔 표시, 0 = 1위 아님)가 있으면 실시간 서버가 다른 사람 화면의 배지·오라도 바꾼다 */
-  | { kind: "look"; visitorId: string; look: Look; exp: number; dye?: AvatarDye; body?: string; champ?: number }
+  /** 11/16 mgr = 매니저 표시 (1 = 매니저, 0 = 아님 — 해제되면 실시간 서버가 오라·칭호를 바로 뗀다). 옛 웹이 낸 증서엔 없다 → 그대로 */
+  | { kind: "look"; visitorId: string; look: Look; exp: number; dye?: AvatarDye; body?: string; champ?: number; mgr?: 0 | 1 }
   | { kind: "firework"; visitorId: string; item: string; nonce: string; exp: number }
   | { kind: "goblin"; visitorId: string; points: number; nonce: string; exp: number }
   /** ch = 외친 채널 (scope가 channel이면 그 채널 DO만 받아 준다) */
@@ -62,6 +63,7 @@ export async function verifyGrant(
       ...(typeof g.dye === "string" ? { dye: unpackDye(g.dye) } : {}),
       ...(isAvatarBody(g.body) ? { body: g.body } : {}),
       ...(isChampField(g.champ) ? { champ: g.champ } : {}),
+      ...(g.mgr === 0 || g.mgr === 1 ? { mgr: g.mgr } : {}),
     };
   if (g.kind === "firework" && isFireworkId(g.item) && typeof g.nonce === "string" && g.nonce.length <= 32)
     return { kind: "firework", visitorId: g.visitorId, item: g.item, nonce: g.nonce, exp: g.exp };

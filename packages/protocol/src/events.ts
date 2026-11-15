@@ -97,7 +97,7 @@ export type S2C =
   | { t: "emote"; sid: Sid; kind: EmoteKind; graveId: string }
   | { t: "graveEvent"; sid: Sid; kind: GraveEventKind; graveId: string }
   /** 꾸미기 변경. 46·25번: dye·body가 있으면 염색·몸 모양도 바뀐 것 (옛 클라이언트는 look만 본다) */
-  | { t: "look"; sid: Sid; look: string[]; dye?: AvatarDye; body?: string; /** 주간 1위 비트 (0 = 아님, 새 웹이 낸 증서일 때만). 옛 클라이언트는 무시한다 */ champ?: number }
+  | { t: "look"; sid: Sid; look: string[]; dye?: AvatarDye; body?: string; /** 주간 1위 비트 (0 = 아님, 새 웹이 낸 증서일 때만). 옛 클라이언트는 무시한다 */ champ?: number; /** 11/16 매니저 표시 (1 = 매니저, 0 = 해제, 새 웹이 낸 증서일 때만). 옛 클라이언트는 무시한다 */ mgr?: 0 | 1 }
   | { t: "firework"; sid: Sid; item: string; x: number; y: number }
   /** sync 응답: 나를 제외한 현재 접속자 전체와 좌석. 클라이언트는 이걸로 원격 아바타를 맞춘다 */
   | { t: "peers"; peers: PeerInfo[]; seats: Record<string, Sid> }
