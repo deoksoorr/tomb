@@ -46,6 +46,8 @@ export type GiftRecord = {
   targetName: string | null;
   /** 여러 계정에 한 번에 보냈으면 받는 계정 id 전부 (발송 기록에만 남는다. 계정 선물함의 사본엔 없다) */
   targets?: string[];
+  /** targets와 같은 순서의 그때 닉네임 (발송 기록에 받은 사람을 모두 보여 준다. 모르면 null) */
+  targetNames?: (string | null)[];
 };
 /** 관리자 발송 기록 한 줄: 받은 계정 수 포함 */
 export type GiftLogEntry = GiftRecord & { claims: number };
@@ -131,6 +133,7 @@ export function legacyGiftPoints(
 export function giftCopies(g: GiftRecord): [string, GiftRecord][] {
   if (!g.targets?.length) return [[g.target, g]];
   const { targets, ...one } = g;
+  delete one.targetNames;
   return [...new Set(targets)].map((id) => [id, { ...one, target: id, targetName: null }]);
 }
 

@@ -614,10 +614,14 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
                     <td>
                       {r.target === "all"
                         ? "전체"
-                        : manyText(
-                            r.targetName ?? r.target.slice(0, 8),
-                            r.targets?.length ?? 1,
-                          )}
+                        : r.targets && r.targets.length > 1
+                          ? (
+                            <>
+                              <span className={styles.nowrap}>{r.targets.length}명</span>{" "}
+                              {r.targets.map((id, i) => r.targetNames?.[i] ?? id.slice(0, 8)).join(", ")}
+                            </>
+                          )
+                          : (r.targetName ?? r.target.slice(0, 8))}
                     </td>
                     <td className={social.noteCell} title={r.note}>
                       <b>{r.from}</b> {r.note}

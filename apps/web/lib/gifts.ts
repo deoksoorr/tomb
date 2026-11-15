@@ -109,7 +109,7 @@ export async function sendGift(input: GiftSendInput, now = Date.now()): Promise<
     expiresAt: now + GIFT_KEEP_MS,
     target: many ? many[0].id : input.target,
     targetName: many ? many[0].name : input.target === "all" ? null : (input.targetName ?? null),
-    ...(many ? { targets: many.map((t) => t.id) } : {}),
+    ...(many ? { targets: many.map((t) => t.id), targetNames: many.map((t) => t.name ?? null) } : {}),
   };
   await getGifts().send(gift);
   return gift;

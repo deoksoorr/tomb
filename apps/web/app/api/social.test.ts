@@ -207,13 +207,16 @@ describe("11번 선물함", () => {
     expect(sent.gift).toMatchObject({ target: a.id, targetName: "진순", targets: [a.id, b.id, c.id] });
     const notes = async (v: Visitor) => (await bodyOf<GiftListResponse>(gifts.GET(call("/api/gifts", { visitor: v })))).gifts.map((g) => g.note);
     for (const v of [a, b, c]) expect(await notes(v)).toContain("골라 보낸 선물");
+    // 받은 사람 이름 목록은 발송 기록에만 (계정 선물함의 사본엔 없다)
+    const box = (await bodyOf<GiftListResponse>(gifts.GET(call("/api/gifts", { visitor: b })))).gifts.find((g) => g.id === sent.gift.id);
+    expect(box).not.toHaveProperty("targetNames");
     expect(await notes(other)).not.toContain("골라 보낸 선물");
     expect((await giftById.POST(call(`/api/gifts/${sent.gift.id}`, { method: "POST", visitor: b }), ctx(sent.gift.id))).status).toBe(200);
     expect((await giftById.POST(call(`/api/gifts/${sent.gift.id}`, { method: "POST", visitor: other }), ctx(sent.gift.id))).status).toBe(404);
     const log = await bodyOf<{ gifts: GiftLogEntry[] }>(adminGifts.GET(call("/api/admin/gifts", { admin: true })));
     const rows = log.gifts.filter((x) => x.id === sent.gift.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ targets: [a.id, b.id, c.id], claims: 1 });
+    expect(rows[0]).toMatchObject({ targets: [a.id, b.id, c.id], targetNames: ["진순", "말순", "삼순"], claims: 1 });
 
     const fake = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `acct${String(i).padStart(17, "0")}` }));
     const tooMany = await adminGifts.POST(call("/api/admin/gifts", { admin: true, body: { targets: fake(51), note: "x", points: 1 } }));
