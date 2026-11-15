@@ -421,11 +421,12 @@ describe("밸런스", () => {
   };
 
   for (const [name, a] of Object.entries(builds)) {
-    it(`${name} 만렙 빌드 화력이 옛 최상위 빌드의 0.75~1.3배`, () => {
+    // 11/15 스킬 손질(평타보다 확실히 세게 — 스킬 피해 ↑·SP 회복 ↑)로 옛 최상위보다 조금 세다
+    it(`${name} 만렙 빌드 화력이 옛 최상위 빌드의 0.9~1.7배`, () => {
       expect(spentPoints(a)).toBeLessThanOrEqual(skillPointsEarned(MAX_LEVEL));
       const ratio = newScore(a) / old;
-      expect(ratio, `${name}: ${ratio.toFixed(2)}`).toBeGreaterThan(0.75);
-      expect(ratio, `${name}: ${ratio.toFixed(2)}`).toBeLessThan(1.3);
+      expect(ratio, `${name}: ${ratio.toFixed(2)}`).toBeGreaterThan(0.9);
+      expect(ratio, `${name}: ${ratio.toFixed(2)}`).toBeLessThan(1.7);
     });
   }
 });

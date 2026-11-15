@@ -337,3 +337,17 @@ describe("11/15 등급 개편: 레벨 업 층·팀장 승진·능력치 판", ()
     expect(plain.rows.every((x) => !x.plus)).toBe(true);
   });
 });
+
+describe("11/15 스킬 손질: 카드가 스킬에도 붙는다", () => {
+  it("가진 카드 등급만큼 스킬 피해 + (커피 수혈 빼고), 처치 속도 상한에도 들어간다, 능력치 판에 스킬 위력", () => {
+    expect(cardStats({}).skillDmg).toBe(0);
+    expect(cardStats({ raise: 2, cc: 1, promote: 1, coffee: 5 }).skillDmg).toBeCloseTo(0.03 * 2 + 0.06 + 0.12);
+    expect(cardPower({ promote: 1, oneshot: 1 })).toBeGreaterThan(cardPower({}) * 1.1);
+    const s = cardStats({ cc: 1, raise: 1 });
+    const base = { atk: 100, aspd: 3, crit: 5, maxHp: 500, move: 90, skillPower: 1.4 };
+    const p = statPanel(base, base, 1, s);
+    const row = p.rows.find((r) => r.label === "스킬 위력")!;
+    expect(row.v).toBe(`×${(1.4 * 1.09).toFixed(2)}`);
+    expect(row.plus).toBe("+13%");
+  });
+});

@@ -215,3 +215,10 @@ export function seeded(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/**
+ * 11/15 사냥 중 초당 SP 회복 (예전 1 + 최대 SP 1%). 스킬 한 줄을 다 돌리려면 초당 SP가 10 넘게 들어 SP에 자주 막혔다 —
+ * 조금만 올린다 (몬스터가 몰려 있으면 광역 스킬이 여러 마리를 쳐서, 판 안 측정으로는 예전에도 스킬 몫이 40~65%였다)
+ */
+export const HUNT_SP_REGEN = { base: 1.5, pct: 0.015 } as const;
+export const huntSpRegen = (maxSp: number) => HUNT_SP_REGEN.base + maxSp * HUNT_SP_REGEN.pct;

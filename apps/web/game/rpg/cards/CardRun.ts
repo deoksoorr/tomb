@@ -189,6 +189,7 @@ export class CardRun<M extends CardMon> {
   private seenCleared = 0;
   private spAt = 0;
   private tempOn = false;
+  private skillChainAt = 0;
   /** 이번 공격에서 연쇄 번개·토스를 아직 안 썼다 */
   private chainReady = false;
   private tossReady = false;
@@ -401,6 +402,41 @@ export class CardRun<M extends CardMon> {
     }
     const k = (1 - s.taken) * (moving ? 1 : 1 - s.stillTaken);
     return k < 1 ? Math.max(1, Math.round(dmg * k)) : dmg;
+  }
+
+  /** 11/15 스킬 피해 배율 (가진 카드 등급만큼) */
+  get skillMul(): number {
+    return 1 + this.s.skillDmg;
+  }
+
+  /** 11/15 스킬이 맞았다: 불·얼음·독·사내 정치도 붙고, 번개는 0.5초에 한 번 */
+  onSkillHit(m: M): void {
+    const s = this.s;
+    const now = this.h.now();
+    if (s.burn || s.chill || s.poison) {
+      const x = this.mst(m);
+      if (s.burn) {
+        if (x.burnUntil < now) x.burnNext = now + 450;
+        x.burnUntil = now + 2600;
+      }
+      if (s.poison) {
+        if (x.psnUntil < now) {
+          x.psn = 0;
+          x.psnNext = now + 500;
+        }
+        x.psn = Math.min(5, x.psn + 1);
+        x.psnUntil = now + 4000;
+      }
+      if (s.chill && m.alive) {
+        m.slowUntil = Math.max(m.slowUntil, now + 1500);
+        if (Math.random() < 0.12 && x.frzUntil < now) this.freeze(m, x, m.boss ? 400 : 1100);
+      }
+    }
+    if (s.chain && now >= this.skillChainAt) {
+      this.skillChainAt = now + 500;
+      this.chain(m);
+    }
+    if (s.politics > 0 && m.alive && Math.random() < s.politics) this.quarrel(m);
   }
 
   /** 참조 추가만큼 한 번 피해 */

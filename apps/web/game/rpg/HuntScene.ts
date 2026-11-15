@@ -1,6 +1,6 @@
 import * as Phaser from "phaser";
 import { MONSTERS, potionById, POTION_COOLDOWN_MS, SKILL_FX, skillById, skillMods, zoneFor, type BranchId, type MonsterId, type SkillId, type SkillMods, type ZoneDef } from "@/lib/rpg/catalog";
-import { attackArea, damage, hitChance, inAttackArea, monsterStats, type AttackArea, type Derived, type MonsterStats } from "@/lib/rpg/formulas";
+import { attackArea, damage, hitChance, huntSpRegen, inAttackArea, monsterStats, type AttackArea, type Derived, type MonsterStats } from "@/lib/rpg/formulas";
 import { bossPhaseIndex, bossPhaseList, monsterPatterns, type PatternId } from "@/lib/rpg/patterns";
 import { attackCooldownMs, CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf, type WeaponStyle, type WeaponStyleId } from "@/lib/rpg/weapons";
 import { gearById } from "@/lib/rpg/catalog";
@@ -1060,7 +1060,8 @@ export class HuntScene extends RpgScene {
     const held = m.slowUntil > this.now || m.stunUntil > this.now;
     const vuln = (m.vulnUntil > this.now ? m.vuln : 0) + (held ? this.mods.vsSlowed : 0);
     // 11/15 능력 카드: 참조 추가만큼 한 번 피해 ↓ · 치명타 피해 ↑ · 원샷 결재
-    const cm = this.cards && opts.basic ? this.cards.hitMul : 1;
+    // 11/15 스킬은 가진 카드 등급만큼 더 세다 (야근 빌딩)
+    const cm = this.cards ? (opts.basic ? this.cards.hitMul : opts.skill ? this.cards.skillMul : 1) : 1;
     let dmg = damage(this.atk(), mult * cm * (opts.aoe ? 1 + this.mods.aoePct : 1), m.st.def, Math.random(), crit, vuln);
     if (crit && this.cards) dmg = Math.round(dmg * this.cards.critMul);
     // 11/15 퇴사 각·성과급
@@ -1068,6 +1069,7 @@ export class HuntScene extends RpgScene {
     if (this.cards?.oneshot(m)) dmg = Math.max(dmg, Math.ceil(m.hp));
     this.hurtMonster(m, dmg, crit, nth, opts);
     if (this.cards && opts.basic) this.cards.onBasicHit(m);
+    else if (this.cards && opts.skill) this.cards.onSkillHit(m);
     // 넋 거두기 패시브: 준 피해의 일부를 HP로 (한 번에 최대 HP의 3%까지)
     if (this.mods.steal > 0 && !this.died && this.hp < d.maxHp) {
       this.hp = Math.min(d.maxHp, this.hp + Math.min(d.maxHp * 0.03, dmg * this.mods.steal) * this.curse.healMul);
@@ -2617,7 +2619,7 @@ export class HuntScene extends RpgScene {
     // 재생·버프
     if (now >= this.regenAt) {
       this.regenAt = now + 1000;
-      this.sp = Math.min(d.maxSp, this.sp + 1 + d.maxSp * 0.01);
+      this.sp = Math.min(d.maxSp, this.sp + huntSpRegen(d.maxSp));
       this.hp = Math.min(d.maxHp, this.hp + d.maxHp * 0.004 * this.curse.healMul);
     }
     // 상태 이상: 끝난 것 정리 + 지속 피해 (무적이면 안 받고, 이걸로는 쓰러지지 않는다 — HP 1에서 멈춤)

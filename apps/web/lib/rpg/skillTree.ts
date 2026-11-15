@@ -119,43 +119,45 @@ const pct = (n: number) => `${Math.round(n * 100)}%`;
 const sec = (ms: number) => `${Math.round(ms / 100) / 10}초`;
 
 /** 스킬 수치 (랭크 lv). 게임(효과)과 UI(설명)·테스트(밸런스)가 같이 쓴다 */
+// 11/15 스킬 피해 손질: 한 번이 평타 한 방보다 확실히 세게 (단일기·한 점 폭발은 평타의 3~5배, 넓은 광역은 그대로 마리당 3~4배).
+// 단일기·약하던 것(불씨·입김·고드름·안개·서리밭·도깨비불·사슬·별똥·무덤·궁극기)만 올리고 SP 회복도 조금 (lib/rpg/formulas huntSpRegen)
 export const SKILL_FX = {
   // ── 모닥불지기 ──
-  em_kindle: (lv: number) => ({ mult: 1.4 + 0.22 * lv, blast: 18, reach: 110 }),
+  em_kindle: (lv: number) => ({ mult: 1.8 + 0.3 * lv, blast: 18, reach: 110 }),
   em_hearth: (lv: number) => ({ atkPct: 0.02 * lv }),
   em_fan: (lv: number) => ({ mult: 1.2 + 0.2 * lv, range: 58, arcDeg: 100 }),
   em_stoke: (lv: number) => ({ atk: 0.06 + 0.05 * lv, durMs: 8000 }),
   em_spark: (lv: number) => ({ crit: 3 * lv }),
   em_ring: (lv: number) => ({ mult: 1.4 + 0.22 * lv, radius: 60 }),
   em_ignite: (lv: number) => ({ chance: 0.04 * lv, mult: 0.8, radius: 22 }),
-  em_meteor: (lv: number) => ({ mult: 2.2 + 0.36 * lv, radius: 50, delayMs: 800, reach: 130 }),
-  em_brazier: (lv: number) => ({ durMs: 6000 + 500 * lv, everyMs: 900, radius: 42, mult: 0.35 + 0.07 * lv }),
+  em_meteor: (lv: number) => ({ mult: 2.5 + 0.4 * lv, radius: 50, delayMs: 800, reach: 130 }),
+  em_brazier: (lv: number) => ({ durMs: 6000 + 500 * lv, everyMs: 900, radius: 42, mult: 0.42 + 0.08 * lv }),
   // 궁극기 3종: 지금 화면(카메라에 보이는 곳) 안의 적 모두를 친다. hitAt = 시전부터 ms (연출 박자에 맞춘 다단히트), castMs = 연출 길이
-  em_bonfire: (lv: number) => ({ screen: true, hitAt: [820, 1000, 1180, 1360, 1620] as const, castMs: 2300, mult: 0.55 + 0.09 * lv }),
+  em_bonfire: (lv: number) => ({ screen: true, hitAt: [820, 1000, 1180, 1360, 1620] as const, castMs: 2300, mult: 0.7 + 0.12 * lv }),
   em_ashheart: (lv: number) => ({ aoePct: 0.05 * lv }),
   // ── 서리 묘지기 ──
-  fr_breath: (lv: number) => ({ mult: 1 + 0.15 * lv, range: 46, arcDeg: 80, slowMs: 3000 }),
+  fr_breath: (lv: number) => ({ mult: 1.3 + 0.2 * lv, range: 46, arcDeg: 80, slowMs: 3000 }),
   fr_collar: (lv: number) => ({ def: 2 * lv, hpPct: 0.03 * lv }),
-  fr_icicle: (lv: number) => ({ n: Math.min(8, 3 + lv), mult: 0.6 + 0.1 * lv, range: 120, pierce: 1 }),
+  fr_icicle: (lv: number) => ({ n: Math.min(8, 3 + lv), mult: 0.8 + 0.14 * lv, range: 120, pierce: 1 }),
   fr_brittle: (lv: number) => ({ vsSlowed: 0.05 * lv }),
   fr_ward: (lv: number) => ({ shieldPct: 0.12 + 0.05 * lv, durMs: 8000 }),
   fr_nova: (lv: number) => ({ mult: 1.3 + 0.22 * lv, radius: 62, freezeMs: 500 + 120 * lv }),
-  fr_mist: (lv: number) => ({ dist: 64 + 8 * lv, mult: 0.8 + 0.2 * lv, width: 16, slowMs: 2500 }),
-  fr_tomb: (lv: number) => ({ mult: 2.1 + 0.38 * lv, radius: 50, delayMs: 600, stunMs: 1200, vuln: 0.15, vulnMs: 4000, reach: 130 }),
-  fr_field: (lv: number) => ({ radius: 80, durMs: 6000, everyMs: 1000, mult: 0.25 + 0.05 * lv, vuln: 0.05 * lv }),
-  fr_blizzard: (lv: number) => ({ screen: true, hitAt: [700, 940, 1180, 1420, 1660, 1960] as const, castMs: 2400, mult: 0.34 + 0.04 * lv, slowMs: 3000 }),
+  fr_mist: (lv: number) => ({ dist: 64 + 8 * lv, mult: 1.1 + 0.24 * lv, width: 16, slowMs: 2500 }),
+  fr_tomb: (lv: number) => ({ mult: 2.5 + 0.4 * lv, radius: 50, delayMs: 600, stunMs: 1200, vuln: 0.15, vulnMs: 4000, reach: 130 }),
+  fr_field: (lv: number) => ({ radius: 80, durMs: 6000, everyMs: 1000, mult: 0.35 + 0.07 * lv, vuln: 0.05 * lv }),
+  fr_blizzard: (lv: number) => ({ screen: true, hitAt: [700, 940, 1180, 1420, 1660, 1960] as const, castMs: 2400, mult: 0.44 + 0.06 * lv, slowMs: 3000 }),
   fr_solstice: (lv: number) => ({ cdCut: 0.04 * lv, guard: 0.03 * lv }),
   // ── 넋 인도자 ──
-  so_wisp: (lv: number) => ({ n: lv >= 4 ? 3 : 2, mult: 0.8 + 0.12 * lv, range: 130 }),
+  so_wisp: (lv: number) => ({ n: lv >= 4 ? 3 : 2, mult: 0.9 + 0.14 * lv, range: 130 }),
   so_lamp: (lv: number) => ({ healPct: 0.1 + 0.04 * lv, rootMs: 500 }),
   so_drain: (lv: number) => ({ steal: 0.01 * lv }),
   so_swift: (lv: number) => ({ move: 0.15 + 0.05 * lv, aspd: 0.08 + 0.04 * lv, durMs: 8000 }),
   so_friend: (lv: number) => ({ durMs: 10_000 + 2000 * lv, atkPct: 0.35 + 0.1 * lv, everyMs: 800 }),
-  so_chain: (lv: number) => ({ radius: 96, stunMs: 500 + 120 * lv, vuln: 0.05 * lv, vulnMs: 3000, mult: 0.6 + 0.1 * lv }),
+  so_chain: (lv: number) => ({ radius: 96, stunMs: 500 + 120 * lv, vuln: 0.05 * lv, vulnMs: 3000, mult: 0.9 + 0.16 * lv }),
   so_veil: (lv: number) => ({ dist: 72, safeMs: 800 + 300 * lv }),
   so_harvest: (lv: number) => ({ radius: 54, ticks: 3, gapMs: 400, mult: 0.85 + 0.15 * lv, healPerHit: 0.015, healCap: 0.08, reach: 130 }),
   so_lantern: (lv: number) => ({ durMs: 8000 + 1500 * lv, atkPct: 0.4 + 0.1 * lv, everyMs: 700, range: 110 }),
-  so_procession: (lv: number) => ({ screen: true, hitAt: [900, 1100, 1300, 1500, 1760] as const, castMs: 2300, mult: 0.45 + 0.085 * lv, healPct: 0.1 + 0.05 * lv }),
+  so_procession: (lv: number) => ({ screen: true, hitAt: [900, 1100, 1300, 1500, 1760] as const, castMs: 2300, mult: 0.55 + 0.1 * lv, healPct: 0.1 + 0.05 * lv }),
   so_kinship: (lv: number) => ({ summonPct: 0.15 * lv, durPct: 0.1 * lv }),
 } as const;
 
