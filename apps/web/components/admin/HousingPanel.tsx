@@ -127,6 +127,19 @@ export default function HousingPanel({ toast, onAuthLost }: Props) {
               </button>
               <button
                 type="button"
+                className={ui.button}
+                disabled={busy}
+                onClick={() => {
+                  const v = window.prompt(`「${h.name}」을 몇 번지로 옮길까요? 지금은 ${h.ch}채널 ${h.lot}번지예요. 같은 채널의 빈 번지로만 옮길 수 있어요.`, "");
+                  const lot = Number(v);
+                  if (!v || !Number.isInteger(lot) || lot < 1) return;
+                  void act(() => adminApi.moveHouse(h.id, lot), `${lot}번지로 옮겼어요.`);
+                }}
+              >
+                번지 옮기기
+              </button>
+              <button
+                type="button"
                 className={cx(ui.button, ui.danger)}
                 disabled={busy}
                 onClick={() => request(`집 「${h.name}」(배치·가방·방명록 포함, 포인트는 돌려주지 않아요)`, "delete", () => adminApi.houseAction(h.id, "delete"))}
