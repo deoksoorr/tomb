@@ -4,6 +4,7 @@ import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
 import type { RpgAction, RpgHud, RpgPlay, RunResult } from "@/lib/rpg/types";
 import type { HotAuto } from "@/lib/rpg/hotbar";
+import type { CardChoice, CardOfferView } from "@/lib/rpg/cards";
 import type { ResumeState } from "@/lib/resume";
 import type { SoundMix } from "@/lib/soundMix";
 import type { IncomingChatLine } from "@/game/logic/chatLog";
@@ -137,6 +138,8 @@ export type GameEvents = {
   "rpg:ended": { result: RunResult; aborted: boolean };
   /** 11/15 사냥 중 자동 스킬 설정이 바뀜 (Shift+숫자·칸 우클릭·X) → UI가 캐릭터에 저장한다 */
   "rpg:auto": HotAuto;
+  /** 11/15 야근 빌딩 능력 카드 고르기 (sticky, null = 닫힘). 게임은 멈춘 채 rpg:cardPick을 기다린다 */
+  "rpg:cards": CardOfferView | null;
   /** 귀신의집 미로 진행 (초당 4번): 걸린 시간·놀란 횟수 (game/haunt → components/haunt) */
   "haunt:hud": { ms: number; scares: number };
   /** 귀신의집이 끝남 (출구로 빠져나옴 = escaped, 아니면 중간에 나감). 월드는 이미 다시 보인다 */
@@ -284,6 +287,8 @@ export type UiEvents = {
   "rpg:pause": { paused: boolean };
   /** 포기하고 나가기 → 지금까지의 결과로 rpg:ended(aborted=true) */
   "rpg:quit": undefined;
+  /** 11/15 능력 카드: 고름·다시 뽑기·상사의 제안 받기/거절 */
+  "rpg:cardPick": CardChoice;
   /** 함께 사냥: 정해진 문장 말풍선 (PHRASES id) — 내 머리 위에 띄우고 같은 방에 보낸다 */
   "rpg:say": { id: string };
 
@@ -322,7 +327,12 @@ export type UiEvents = {
   "house:follow": { houseId: string; name: string; at: number } | null;
 };
 
-export type ForageUse = { kind: "fish"; spot: string; water: "lake" | "river" } | { kind: "npc"; npc: "fishmonger" | "collector" } | { kind: "node"; node: string };
+export type ForageUse =
+  | { kind: "fish"; spot: string; water: "lake" | "river" }
+  | { kind: "npc"; npc: "fishmonger" | "collector" }
+  | { kind: "node"; node: string }
+  /** 11/15 납품 부두 의뢰 게시판 → 수집 의뢰판 */
+  | { kind: "board" };
 export type ForageRodPhase = "idle" | "cast" | "wait" | "nibble" | "bite" | "reel" | "catch" | "escape" | "snap";
 
 type AllEvents = GameEvents & UiEvents;
@@ -356,6 +366,7 @@ const STICKY = new Set<keyof AllEvents>([
   "sky:hud",
   "friends:here",
   "house:follow",
+  "rpg:cards",
 ]);
 
 class Bridge {

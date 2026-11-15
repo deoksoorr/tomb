@@ -4,9 +4,7 @@ import { useState } from "react";
 import {
   CURSES,
   cursesAt,
-  floorTExp,
   TOWER_CHECKPOINT_EVERY,
-  TOWER_FLOORS_PER_RUN,
   towerFloorSec,
   towerHpMul,
   towerZone,
@@ -15,7 +13,7 @@ import type { RpgView } from "@/lib/rpg/types";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { mmss } from "./format";
-import { PioneerLine, TranscendDay } from "./Endgame";
+import { PioneerLine } from "./Endgame";
 import s from "./rpg.module.css";
 
 // 11/15 야근 빌딩 입구 (마을의 야근 빌딩 → portal:open {kind:"tower"} → HuntLobby mode="tower"의 첫 탭).
@@ -104,19 +102,18 @@ export default function TowerEntrance({
           <b className={s.zoneGimmick}>
             {start}층 · {zone.name}
           </b>{" "}
-          몬스터 체력·공격력 ×{towerHpMul(start).toFixed(2)} (층마다 ×1.06) ·
-          층마다 {towerFloorSec(start)}초 · 5층마다 우두머리 (깨면 체력 30%
-          회복·상자)
+          몬스터는 한 층 오를 때마다 조금씩 세져요 (이 층은 처음보다 ×{towerHpMul(start).toFixed(2)}). 한 층에 {towerFloorSec(start)}초,
+          5층마다 우두머리가 기다리고 잡으면 체력이 30% 차고 상자가 나와요.
         </p>
         <p className={s.meta}>
           저주:{" "}
           {curses.length
             ? curses.map((c) => `${c.name}(${c.desc})`).join(" · ")
-            : "아직 없음 (10층부터 붙어요)"}
+            : "아직 없어요. 10층부터 하나씩 붙어요"}
         </p>
         <div className={s.zoneGo}>
           <span className={s.meta}>
-            도전 무제한 · 상자는 하루 {t.chestsMax}개 (새벽 5시)
+            몇 번이든 다시 오를 수 있어요. 우두머리 상자는 하루 {t.chestsMax}개까지 (새벽 5시에 다시 차요)
           </span>
           <button
             type="button"
@@ -129,22 +126,21 @@ export default function TowerEntrance({
         </div>
         <ul className={s.towerWhy}>
           <li>
-            <b>가장 빠른 초월:</b> 깬 층마다 초월 EXP (지금 층{" "}
-            {floorTExp(start).toLocaleString("ko-KR")}, 높을수록 더). 쓰러져도
-            깬 층만큼 받아요. {TOWER_FLOORS_PER_RUN}층 = 초월 판 1판.
+            올라간 층만큼 초월 경험치가 쌓여요. 높이 갈수록 한 층에 주는 양도 늘고, 쓰러져도 그때까지 오른 만큼은 챙겨 가요.
           </li>
           <li>
-            <b>칭호:</b> 10층 「야근 입문」 · 20층 「번아웃 생존자」 · 30층
-            「야근이 일상」 · 50층 「퇴근을 잊은 자」 · 100층 「사무실이 집」,
-            서버 최초·꼭대기 층 주인은 신화 칭호.
+            10층, 20층, 30층, 50층, 100층마다 칭호가 기다려요. 서버에서 제일 먼저 오른 사람만 받는 칭호와, 지금 가장 높이 오른 사람이
+            달고 있는 칭호도 있어요.
           </li>
+          <li>이번 주에 가장 높이 오른 사람은 다음 한 주 동안 「이번 주 최고층」을 달아요.</li>
+          {/* 11/15 능력 카드 */}
           <li>
-            <b>랭킹:</b> 이번 주 최고 층 1위는 다음 주 내내 「이번 주 최고층」.
-            쓰러지면 끝(부활 쿠키 없음), Esc로 그만두면 그 층까지 기록돼요.
+            몬스터를 잡으면 판 레벨이 오르고, 오를 때마다 능력 카드를 한 장 골라요. 카드는 그 판에서만 쌓여요. 11층처럼 위에서 시작하면
+            건너뛴 10층마다 카드 세 장을 먼저 챙겨 가요.
           </li>
+          <li>쓰러지면 그 자리에서 끝이에요. 부활 쿠키는 안 통하고, 전설 카드 「무한 야근」만 한 번 일으켜 줘요. Esc로 나가면 그 층까지는 기록돼요.</li>
         </ul>
       </section>
-      <TranscendDay eg={eg} />
       <PioneerLine eg={eg} />
     </div>
   );

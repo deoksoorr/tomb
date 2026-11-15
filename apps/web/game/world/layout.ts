@@ -16,6 +16,11 @@ import {
   HOUSE_LOT_H,
   HOUSE_LOT_W,
   HOUSE_LOTS,
+  HOUSE_GRID,
+  HOUSE_ROWS,
+  houseLot,
+  BUS_PLAZA,
+  WHARF_YARD,
   HOUSING_DOOR,
   HOUSING_OFFICE,
   HUNT_GATE,
@@ -473,6 +478,12 @@ const HAND_PROPS: readonly PropDef[] = [
   P("leaves", 780, 560, 1),
   P("flowers", 690, 612, 2),
   P("flowers", 752, 612, 0),
+  // ── 11/15 주말 버스 정류장 광장 (예전 1번지) · 납품 부두 위 마당 가로등 ──
+  P("lamp", BUS_PLAZA.x + 10, BUS_PLAZA.y + 16),
+  P("lamp", BUS_PLAZA.x + BUS_PLAZA.w - 10, BUS_PLAZA.y + 16),
+  P("lamp", WHARF_YARD.x + 8, WHARF_YARD.y + 14),
+  P("lamp", WHARF_YARD.x + 124, WHARF_YARD.y + 14),
+  P("lamp", WHARF_YARD.x + WHARF_YARD.w - 8, WHARF_YARD.y + 14),
   // ── 광장 ↔ 주거 구역 사이 가로등 ──
   P("lamp", 968, 300),
   P("lamp", 968, 440),
@@ -512,11 +523,12 @@ const HAND_PROPS: readonly PropDef[] = [
   P("mist", 820, 880, 0),
   // ── 안개 숲 · 오리 연못 (11/15: 안개 연못을 넓혔다 — 물 위 안개는 걷고 선착장 석등. 팻말·배는 BoatRide) ──
   P("hammock", HAMMOCKS[3].x, HAMMOCKS[3].y),
-  P("mist", 452, 812, 0),
-  P("reeds", 434, 900, 0),
-  P("reeds", 578, 914, 1),
+  P("mist", 516, 998, 0),
+  P("reeds", 338, 934, 0),
+  P("reeds", 590, 914, 1),
+  P("reeds", 366, 852, 1),
   P("lantern", DUCK_DOCK_DECK.x + DUCK_DOCK_DECK.w + 10, DUCK_DOCK_DECK.y + 4),
-  P("mushroom", 420, 940, 0),
+  P("mushroom", 326, 980, 0),
   P("mushroom", 584, 830, 1),
   // ── 호박밭 (남동쪽 풀밭) ──
   P("scarecrow", 900, 950),
@@ -578,6 +590,7 @@ function freeForProp(placed: readonly PropDef[], x: number, y: number, gap: numb
   for (const s of SEATS) if (Math.hypot(s.x - x, s.y - y) < (gap > 12 ? 30 : 22)) return false;
   for (const c of CAMPFIRES) if (Math.hypot(c.x - x, c.y - y) < (c.big ? 96 : 44)) return false;
   for (const l of HOUSE_LOTS) if (inRect({ x: l.x, y: l.y, w: HOUSE_LOT_W, h: HOUSE_LOT_H }, x, y, 6)) return false;
+  if (inRect(BUS_PLAZA, x, y, 10) || inRect(WHARF_YARD, x, y, 10)) return false; // 11/15 버스 정류장 광장·납품 부두 위 마당
   for (const p of placed) if (Math.hypot(p.x - x, p.y - y) < (isTree(p.kind) ? gap : 12)) return false;
   for (const p of HAND_PROPS) if (Math.hypot(p.x - x, p.y - y) < (isTree(p.kind) || p.kind === "hammock" || p.kind === "swing" || p.kind === "crypt" || p.kind === "mat" || p.kind === "oldGrave" ? gap : 14)) return false;
   for (const k of RIDE_KEEPOUT) if (Math.hypot(k.x - x, k.y - y) < k.r) return false; // 50번 광장 놀거리 (rides.ts)
@@ -600,7 +613,7 @@ function treeKind(u: number): PropKind {
 function buildProps(): PropDef[] {
   const out: PropDef[] = [];
   // 안개 숲 (오리 연못 둘레): 빽빽하고 으스스하게
-  scatter(out, { x: 404, y: 790, w: 192, h: 214 }, 16, 21, forestKind, 22);
+  scatter(out, { x: 308, y: 790, w: 288, h: 214 }, 18, 21, forestKind, 22);
   // 언덕 위 (서리 내린 대지)
   scatter(out, { x: 48, y: 48, w: 300, h: 176 }, 6, 41, (u) => (u < 0.45 ? "pine" : u < 0.75 ? "deadTree" : "bush"), 30);
   // 까마귀 연못 둘레 ~ 동쪽 담
@@ -832,7 +845,7 @@ export function walkableGrid(cell = 8, extra: readonly Rect[] = [], houses?: rea
       if (px < WALL_THICKNESS || px > MAP_WIDTH - WALL_THICKNESS || py < WALL_THICKNESS + 8 || py > MAP_HEIGHT - TILE) cells[y * cols + x] = WALK.blocked;
       else if (inWater(px, py)) cells[y * cols + x] = WALK.water;
     }
-  const lots = houses ? houses.map((h) => ({ lot: HOUSE_LOTS[h.lot - 1], tier: h.tier })).filter((h) => h.lot) : HOUSE_LOTS.map((lot) => ({ lot, tier: "manor" }));
+  const lots = houses ? houses.flatMap((h) => { const lot = houseLot(h.lot); return lot ? [{ lot, tier: h.tier }] : []; }) : HOUSE_LOTS.map((lot) => ({ lot, tier: "manor" }));
   for (const r of [...staticColliders(), ...allFurnitureColliders(), ...extra, ...lots.map((h) => houseCollider(h.lot, h.tier))]) block(r);
   return { cell, cols, rows, cells };
 }
@@ -879,10 +892,10 @@ const NORTH_ROAD_TY = [11, 12];
 const PROMENADE_TY = 41;
 /** 강 건너 오솔길 (동물원 정문 → 다리 건너 묘역) */
 const SOUTH_PATH_TY = 48;
-const HOUSE_TX0 = T(HOUSE_LOTS[0].x) - 2;
+const HOUSE_TX0 = T(HOUSE_GRID.x) - 2;
 const HOUSE_TX1 = MAP_COLS - 3;
-/** 집 앞 골목 (필지 줄마다 아래로 두 줄) */
-const STREET_TYS: readonly number[] = [...new Set(HOUSE_LOTS.map((l) => T(l.y + HOUSE_LOT_H)))].flatMap((ty) => [ty, ty + 1]);
+/** 집 앞 골목 (필지 줄마다 아래로 두 줄 — 11/15 없앤 번지가 있어도 격자 줄은 그대로) */
+const STREET_TYS: readonly number[] = Array.from({ length: HOUSE_ROWS }, (_, r) => T(HOUSE_GRID.y + r * HOUSE_GRID.pitchY + HOUSE_LOT_H)).flatMap((ty) => [ty, ty + 1]);
 const LAST_STREET_TY = STREET_TYS[STREET_TYS.length - 1];
 
 type AreaTiles = { a: GraveArea; tx0: number; tx1: number; ty0: number; ty1: number; aisle0: number; aisle1: number; rowTys: number[] };
@@ -954,6 +967,9 @@ export function groundKind(tx: number, ty: number): GroundKind {
   // ── 주거 구역: 서쪽 골목(세로)과 집 앞 골목(가로) ──
   if (between(tx, HOUSE_TX0, HOUSE_TX0 + 1) && between(ty, NORTH_ROAD_TY[1] + 1, LAST_STREET_TY)) return "cobble";
   if (between(tx, HOUSE_TX0, HOUSE_TX1) && STREET_TYS.includes(ty)) return "cobble";
+  // 11/15 주말 버스 정류장 광장 (예전 1번지, 북쪽 길까지 포석) · 납품 부두 위 마당 (예전 11·12번지, 자갈)
+  if (between(tx, T(BUS_PLAZA.x), T(BUS_PLAZA.x + BUS_PLAZA.w) - 1) && between(ty, NORTH_ROAD_TY[1] + 1, T(BUS_PLAZA.y + BUS_PLAZA.h) - 1)) return "stone";
+  if (between(tx, T(WHARF_YARD.x), T(WHARF_YARD.x + WHARF_YARD.w) - 1) && between(ty, T(WHARF_YARD.y), T(WHARF_YARD.y + WHARF_YARD.h) - 1)) return "gravel";
   // 광장 ↔ 주거 구역 골목 (첫째·셋째 골목 줄)
   if (between(tx, PZ_TX1 + 1, HOUSE_TX0 - 1) && (STREET_TYS.slice(0, 2).includes(ty) || STREET_TYS.slice(4, 6).includes(ty))) return "dirt";
   // 옛 묘역 동문 ↔ 성황당 ↔ 광장
@@ -1061,7 +1077,7 @@ export function interactables(): Interactable[] {
 
 /** 주거 구역 필지의 상호작용: 집이 있으면 문, 비었으면 "분양 문의" 팻말 */
 export function lotInteractable(lot: number, house: { id: string; name: string } | null): Interactable | null {
-  const l = HOUSE_LOTS[lot - 1];
+  const l = houseLot(lot);
   if (!l) return null;
   if (house) return { id: `door:${lot}`, kind: "door", x: l.door.x, y: l.door.y + 4, r: 16, ax: l.door.x, ay: l.door.y, houseId: house.id, lot, label: `${house.name} 들어가기` };
   const sx = l.x + HOUSE_LOT_W / 2;
@@ -1089,7 +1105,7 @@ export const LANDMARKS: readonly Landmark[] = [
   { id: "housing", label: "분양 사무소", x: HOUSING_OFFICE.x, y: HOUSING_OFFICE.y, kind: "housing" },
   { id: "shrine", label: "성황당", x: SHRINE.x, y: SHRINE.y, kind: "shrine" },
   { id: "dock", label: "나루터", x: FERRY_DOCK.x, y: FERRY_DOCK.y, kind: "dock" },
-  { id: "fish", label: "낚시터", x: FISH_PIER.x + FISH_PIER.w / 2, y: FISH_PIER.y + 50, kind: "fish" },
+  { id: "fish", label: "납품 부두", x: WHARF_YARD.x + WHARF_YARD.w / 2, y: WHARF_YARD.y + 60, kind: "fish" },
   { id: "zoo", label: "동물원", x: ZOOKEEPER.x - 16, y: ZOOKEEPER.y + 40, kind: "zoo" },
   { id: "telescope", label: "망원경", x: TELESCOPE.x, y: TELESCOPE.y, kind: "telescope" },
   { id: "wish", label: "소원 분수", x: WISH_FOUNTAIN.x, y: WISH_FOUNTAIN.y, kind: "wish" },

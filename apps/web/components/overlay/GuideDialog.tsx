@@ -41,8 +41,8 @@ import { PLOT_TIERS, plotCost } from "@/lib/housing/catalog";
 import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { BRANCH_INFO, BRANCHES, POTIONS, TIER_GATES } from "@/lib/rpg/catalog";
 import { SKILL_SLOTS } from "@/lib/rpg/hotbar";
-import { PIONEER_DAYS, PIONEER_FLOOR, TBANK_MAX, TDAY_FULL, TDAY_STEP } from "@/lib/rpg/endgame";
-import { TOWER_CHESTS_PER_DAY, TOWER_FLOORS_PER_RUN } from "@/lib/rpg/tower";
+import { PIONEER_DAYS, PIONEER_FLOOR } from "@/lib/rpg/endgame";
+import { TOWER_CHESTS_PER_DAY } from "@/lib/rpg/tower";
 import { MAX_LEVEL } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
@@ -139,8 +139,9 @@ const PLACES: ReactNode[][] = [
   ["귀신의집", "광장 입구, 소원 분수 옆", "혼자 공포 미로 · 기록만 남아요"],
   ["유령 잡화점", "상점 주인장에게 E", "꾸미기·폭죽·확성기·염색권"],
   ["동물원", "서쪽 다리 건너 바로", `사육사에게 펫 분양 (${won(Math.min(...petPrices))}~${won(Math.max(...petPrices))}P)`],
-  ["낚시터", "호수 북동쪽, 나루터 옆 데크", "낚시 의자 앞에서 E"],
-  ["수집가", "숲 빈터", "약초·광석·발굴품·곤충 팔기"],
+  ["납품 부두", "호수 북동쪽, 주거 구역 오른쪽 아래", "의뢰 게시판 E · 기록 수족관(이번 주 최대어) · 어부 영감 · 작은 낚시 잔교"],
+  ["낚시", "부두 잔교·강둑·연못·호수 서쪽 잔교·조각배 위", "낚시 의자 앞에서 E (자동 낚시도)"],
+  ["수집가", "오리 연못 북서쪽 둑", "약초·광석·발굴품·곤충 팔기"],
   ["사냥터", "메뉴 → 사냥터", "혼자·함께 사냥 · 미니게임"],
   ["분양 사무소", "메뉴 → 집·분양 마을", "내 집 분양·꾸미기·좋아요"],
   ["성황당", "옛 묘역 동문 옆", "묘역을 떠난 묘비 모시기"],
@@ -301,10 +302,10 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비·물약을 되파는 값도 이 한도 안이고, 넘으면 EXP와 드롭만 받아요. 상점에서 산 장비 되팔기는 한도와 상관없어요. 곤충 잡기·별자리 잇기는 사냥과 따로 하루 ${won(earnRule("mini").dailyMax)}P까지예요.`}
             </li>
             <li>
-              {`레벨 ${MAX_LEVEL}부터는 지옥 사냥터·야근 빌딩 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요(초월 5레벨마다 능력치 1포인트). 레벨 ${MAX_LEVEL} 지옥 판은 하루(새벽 5시 기준) 앞 ${TDAY_FULL}판(+못 쓴 날의 적립, 최대 ${TBANK_MAX}판)은 100%, 다음 ${TDAY_STEP}판 30%, 다음 ${TDAY_STEP}판 10%, 그 뒤는 연습 판(초월 EXP·드롭 없음)이에요.`}
+              {`레벨 ${MAX_LEVEL}부터는 지옥 사냥터·야근 빌딩 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요(초월 5레벨마다 능력치 1포인트). 하루에 할 수 있는 판 수 제한은 없어요.`}
             </li>
             <li>
-              {`야근 빌딩(마을 북쪽 분양 사무소 옆, 사냥 레벨 ${MAX_LEVEL}부터)은 1층부터 쓰러질 때까지 이어서 오르는 곳이에요. 층이 오를수록 몬스터가 세지고 10층부터 저주(물약 절반·물약 금지·회복 절반·몬스터 빨라짐·제한 시간 −20%·정예 섞임)가 쌓여요. 깬 층마다 초월 EXP(쓰러져도 깬 만큼), ${TOWER_FLOORS_PER_RUN}층 = 초월 판 1판, 5층마다 우두머리 상자(하루 ${TOWER_CHESTS_PER_DAY}개). 도전은 무제한이고, 최고 기록 아래 1·11·21…층에서 시작할 수 있어요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51 또는 ${PIONEER_FLOOR}층을 처음 넘으면 칭호 「개척자 #번호」, 서버에서 처음 30·50·100층을 깬 사람과 지금 최고 층 주인은 신화 칭호.`}
+              {`야근 빌딩(마을 북쪽 분양 사무소 옆, 사냥 레벨 ${MAX_LEVEL}부터)은 1층부터 쓰러질 때까지 이어서 오르는 곳이에요. 층이 오를수록 몬스터가 세지고 10층부터 저주(물약 절반·물약 금지·회복 절반·몬스터 빨라짐·제한 시간 −20%·정예 섞임)가 쌓여요. 깬 층마다 초월 EXP(쓰러져도 깬 만큼), 5층마다 우두머리 상자(하루 ${TOWER_CHESTS_PER_DAY}개). 도전은 무제한이고, 최고 기록 아래 1·11·21…층에서 시작할 수 있어요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51 또는 ${PIONEER_FLOOR}층을 처음 넘으면 칭호 「개척자 #번호」, 서버에서 처음 30·50·100층을 깬 사람과 지금 최고 층 주인은 신화 칭호.`}
             </li>
             <li>자세한 공격·스킬·패턴·끝판은 사냥터의 [사냥 안내서]에서 봐요.</li>
           </ul>

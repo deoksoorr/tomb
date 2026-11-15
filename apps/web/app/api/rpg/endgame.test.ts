@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { TRANSCEND_EXP_MUL } from "@/lib/rpg/endgame";
+import { tExpToNext, TRANSCEND_EXP_MUL } from "@/lib/rpg/endgame";
 import { floorTExp, TOWER_FLOOR_POINTS, towerPlan } from "@/lib/rpg/tower";
 import { getTowerStore } from "@/lib/rpg/towerStore";
 import { getMegaphone } from "@/lib/store";
@@ -113,23 +113,17 @@ describe("초월 판 보상", () => {
     expect(r.view.character.level).toBe(50);
   });
 
-  it("구간 비율은 서버가 판 시작 때 센 순번으로: 61번째 판은 연습 (초월 EXP·드롭 없음, 포인트는 그대로)", async () => {
+  it("11/15 하루 판 수 제한 없음: 61번째 판도 초월 EXP 100%·드롭 그대로", async () => {
     const v = await newVisitor({ level: 50, tDay: kstDay(), tRuns: 60, tBank: 0 });
     const s = await begin(v, undefined, "layoff-day");
-    expect(s.tier).toBe("practice");
+    expect(s.tier).toBe("full");
     const r = await end(v, s);
-    expect(r.reward.transcend).toMatchObject({ exp: 0, tier: "practice" });
-    expect(r.reward.drops).toEqual([]);
+    expect(r.reward.transcend!.exp).toBe(Math.round(r.reward.exp * TRANSCEND_EXP_MUL));
     expect(r.reward.points).toBeGreaterThan(0);
-    const mid = await newVisitor({ level: 50, tDay: kstDay(), tRuns: 20, tBank: 0 });
-    const ms = await begin(mid, undefined, "layoff-day");
-    expect(ms.tier).toBe("mid");
-    const mr = await end(mid, ms);
-    expect(mr.reward.transcend!.exp).toBe(Math.round(mr.reward.exp * TRANSCEND_EXP_MUL * 0.3));
   });
 
   it("초월 레벨이 오르면 5레벨마다 능력치 포인트", async () => {
-    const v = await newVisitor({ level: 50, tLevel: 4, tExp: 21_000, statPoints: 0 });
+    const v = await newVisitor({ level: 50, tLevel: 4, tExp: tExpToNext(4) - 500, statPoints: 0 });
     const r = await end(v, await begin(v, undefined, "layoff-day"));
     expect(r.reward.transcend!.levelsGained).toBe(1);
     expect(r.view.character.tLevel).toBe(5);
@@ -158,10 +152,10 @@ describe("야근 빌딩 시작 검사 (서버)", () => {
     expect(r2.status).toBe(403);
     expect(await errCode(r2)).toBe("TOWER_LOCKED");
     expect((await start.POST(call("/api/rpg/run/start", v, startBody(5)))).status).toBe(400);
-    // 11층은 열렸다 — 사냥터는 화면이 보낸 것과 상관없이 층으로 정한다 (11층 = 분기 마감)
+    // 11층은 열렸다 — 사냥터는 화면이 보낸 것과 상관없이 층으로 정한다 (11/15: 11층 = 지하 서버실)
     const ok = await begin(v, 11, "burnout-abyss");
     expect(ok.tower).toBe(11);
-    expect(ok.zone).toBe("quarter-close");
+    expect(ok.zone).toBe("server-room");
     expect(ok.tier).toBeUndefined();
     // 시작할 때는 초월 판을 세지 않는다 (캐릭터 저장 없음)
     expect((await getRpgStore().get(v.id)).tRuns).toBe(0);

@@ -1,5 +1,5 @@
 import { b64urlDecode, b64urlEncode, hmacSign, hmacVerify } from "@tomb/protocol";
-import { DIFFICULTIES, GAME_KINDS, HUNT_ZONES, isZoneId, type Difficulty, type GameKind, type ZoneId } from "./catalog";
+import { DIFFICULTIES, GAME_KINDS, HUNT_ZONES, isTowerZoneId, isZoneId, type Difficulty, type GameKind, type ZoneId } from "./catalog";
 import { RUN_TIERS, type RunTier } from "./endgame";
 import { isCheckpoint } from "./tower";
 import type { Drop } from "./types";
@@ -67,7 +67,8 @@ export async function verifyTicket(secret: string, token: string): Promise<Ticke
       Number.isInteger(c.lv) &&
       typeof c.st === "object" &&
       c.st !== null &&
-      (c.z === undefined || (isZoneId(c.z) && HUNT_ZONES[c.z].difficulty === c.d)) &&
+      // 11/15 야근 빌딩 판은 시작 층의 전용 테마(지하 서버실 …)가 실린다
+      (c.z === undefined || ((isZoneId(c.z) || (isTowerZoneId(c.z) && c.tw !== undefined)) && HUNT_ZONES[c.z].difficulty === c.d)) &&
       (c.sv === undefined || Number.isInteger(c.sv)) &&
       (c.td === undefined || okDrops(c.td)) &&
       (c.tw === undefined || (isCheckpoint(c.tw) && c.tw <= 10_000 && c.g === "hunt" && c.d === "hell" && c.tt === undefined)) &&

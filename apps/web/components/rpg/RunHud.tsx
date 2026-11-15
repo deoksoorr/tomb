@@ -14,6 +14,10 @@ import { cx } from "../ui/cx";
 import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import { mmss } from "./format";
+import { HUNT_KEYS } from "./huntKeys";
+// 11/15 야근 빌딩 능력 카드: 고르기 창 · 판 레벨·가진 카드
+import CardPick from "./CardPick";
+import RunCards from "./RunCards";
 import RpgIcon from "./RpgIcon";
 import s from "./rpg.module.css";
 
@@ -51,23 +55,17 @@ function Bar({ value, max, className, label }: { value: number; max: number; cla
 
 /** 11/15 첫 사냥 안내 (한 번만) */
 const LS_AUTO_HINT = "tomb.rpg.autoHint";
+/** H를 한 번이라도 눌렀다 (판 시작 키 안내를 더 띄우지 않는다) */
+const LS_KEYS_KNOWN = "tomb.rpg.keysKnown";
+/** 판 시작 키 안내가 떠 있는 시간 */
+const KEYS_SHOW_MS = 6000;
 const AUTO_HINT_MS = 8000;
 /** [자동] 설정: 이만큼 아무것도 안 누르면 저절로 끝난다 */
 const AUTO_EDIT_IDLE_MS = 6000;
 
-/** 11/15 H: 사냥 키 안내 */
+/** 11/15 H: 사냥 키 안내 (키 목록은 huntKeys — 사냥터 고르기 화면과 같다) */
 function KeyHelp() {
-  const rows: [string, string][] = [
-    ["WASD · 방향키", "걷기"],
-    ["Space · J · 마우스 왼쪽", "기본 공격 (누르고 있으면 계속)"],
-    ["1 ~ 5", "스킬"],
-    ["F", "궁극기 (늘 직접)"],
-    ["Shift+1~5 · 칸 우클릭", "그 칸 자동 켜기·끄기"],
-    ["X", "스킬 자동 한꺼번에 켜기·끄기"],
-    ...POTIONS.filter((p) => p.key).map((p): [string, string] => [p.key!, p.name]),
-    ["Esc", "멈춤"],
-    ["H", "이 안내 띄우기·숨기기"],
-  ];
+  const rows = HUNT_KEYS;
   return (
     <div className={s.keyHelp} role="note" aria-label="사냥 키 안내">
       <strong>사냥 키</strong>
@@ -187,23 +185,34 @@ export default function RunHud({
       const t = e.target;
       if (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
       if (document.querySelector("dialog[open]")) return;
+      // H를 한 번이라도 눌렀으면 키를 아는 사람: 판 시작마다 저절로 띄우지 않는다
+      writeItem(LS_KEYS_KNOWN, "1");
       setHelp((h) => !h);
     };
     window.addEventListener("keydown", onKey);
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let helpTimer: ReturnType<typeof setTimeout> | undefined;
+    // 11/15 PC: 판이 시작되면 키 안내를 잠깐 띄운다 (H를 한 번 누르기 전까지는 판마다)
+    if (!window.matchMedia?.("(pointer: coarse)").matches && !readItem(LS_KEYS_KNOWN)) {
+      helpTimer = setTimeout(() => {
+        setHelp(true);
+        helpTimer = setTimeout(() => setHelp(false), KEYS_SHOW_MS);
+      }, 0);
+    }
     if (!readItem(LS_AUTO_HINT)) {
       writeItem(LS_AUTO_HINT, "1");
       const touch = window.matchMedia?.("(pointer: coarse)").matches;
       setHint(
         touch
           ? "[자동]을 누르고 스킬 칸을 고르면 자동 · 왼쪽 위 '스킬 자동'으로 한꺼번에 · 왼쪽 아무 데나 끌면 걷기"
-          : "Shift+숫자로 스킬 자동 · X로 한꺼번에 · F 궁극기 · H 키 안내",
+          : "H를 누르면 키 안내가 다시 떠요",
       );
       timer = setTimeout(() => setHint(null), AUTO_HINT_MS);
     }
     return () => {
       window.removeEventListener("keydown", onKey);
       if (timer) clearTimeout(timer);
+      if (helpTimer) clearTimeout(helpTimer);
       if (editTimer.current) clearTimeout(editTimer.current);
     };
   }, [hunt]);
@@ -303,6 +312,7 @@ export default function RunHud({
                     </div>
                   )}
                   <Bar value={hud.sp} max={hud.maxSp} className={s.sp} label="SP" />
+                  {hud.run && <RunCards run={hud.run} />}
                   {hud.buffs.some((b) => BUFF_NAMES[b.id]) && (
                     <div className={s.buffs}>
                       {hud.buffs
@@ -349,6 +359,7 @@ export default function RunHud({
         )}
         {help && <KeyHelp />}
       </div>
+      {hunt && <CardPick />}
 
       <div className={s.hudBottom}>
         {game === "hunt" && (

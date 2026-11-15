@@ -1,5 +1,6 @@
 import {
   HUNT_ZONES,
+  isTowerZoneId,
   MONSTER_IDS,
   MONSTERS,
   type MonsterId,
@@ -31,6 +32,10 @@ import {
   rollDrops,
 } from "./rewards";
 import type { Drop, EndgameView, HuntResult } from "./types";
+// 11/15 능력 카드: 고른 카드 검사·처치 속도 상한 배율
+import { cardPower, isBossDealFloor, replayPicks, rerollsAllowed, runLevel, runXp, startPicks } from "./cards";
+// 11/15 끝없는 회의실 층 계획 손질 (참조 메일 상한·무리·중간 우두머리·안건 추가가 불러들이는 몫)
+import { meetingPlan } from "./towerThemes/meetingRoomPlan";
 
 // 11/15 야근 빌딩 (레벨 50 끝판): 1층부터 쓰러질 때까지 이어서 오른다. 한 층 = 방 하나(약 40~60초).
 // 순수 함수만 — 서버(판 시작 검사·결과 검증·보상·기록)와 게임(층 계획·배율·저주)·화면(엘리베이터·안내서)이 같은 표를 쓴다.
@@ -46,14 +51,13 @@ export const TOWER_MAX_RUN_SEC = 2 * 3600;
 // ── 층 테마 (맵·몬스터) ──
 
 /**
- * 테마 표: 다섯 층마다 다음 테마. 1단계는 지옥 사냥터 넷을 돌려 쓴다 (1~5층 회식 3차, 6~10층 축제장, 11~15층 분기 마감, 16~20층 구조조정, 21층부터 다시).
- * 새 테마(지하 서버실·끝없는 회의실 …)가 생기면 이 표만 바꾼다
+ * 테마 표: 다섯 층마다 다음 테마, 표를 다 돌면 처음부터 (한 바퀴 = 테마 수 × 5층).
+ * 11/15: 1칸 지하 서버실 (1~5·11~15·21~25 …층), 2칸 끝없는 회의실 (6~10·16~20·26~30 …층).
+ * 새 테마가 생기면 이 표만 바꾼다
  */
 export const TOWER_THEMES: readonly ZoneId[] = [
-  "burnout-abyss",
-  "new-year-eve",
-  "quarter-close",
-  "layoff-day",
+  "server-room",
+  "mt_meeting",
 ];
 export const FLOORS_PER_THEME = 5;
 const fl = (f: number) => Math.max(1, Math.floor(f));
@@ -64,6 +68,10 @@ export const towerZone = (f: number): ZoneDef =>
       Math.floor((fl(f) - 1) / FLOORS_PER_THEME) % TOWER_THEMES.length
     ]
   ];
+
+/** f층이 테마 표를 몇 바퀴째 도는 중인가 (0부터). 같은 테마도 바퀴마다 조명·몬스터 성질이 달라진다 */
+export const towerLoop = (f: number) =>
+  Math.floor((fl(f) - 1) / (FLOORS_PER_THEME * TOWER_THEMES.length));
 
 // ── 층 배율·저주 ──
 
@@ -217,13 +225,26 @@ const FORMATIONS: readonly WaveFormation[] = [
 ];
 const ELITE_CHANCE = 0.35;
 
+/** 11/15 전용 테마 층은 테마 몬스터 중 이만큼만 골라 섞는다 (층마다 구성이 다르게) */
+const ROSTER = 4;
+/** 바퀴마다 정예 확률 + (최대 3바퀴) */
+const ELITE_LOOP = 0.12;
+
 export function towerPlan(seed: number, f: number): HuntWave[] {
-  const zone = towerZone(f);
+  const zone0 = towerZone(f);
   const r = seeded(floorSeed(seed, f) ^ 0x544f5752);
   const boss = isBossFloor(f);
   const mix = towerCurseFx(f).eliteMix;
+  // 11/15 전용 테마: 층 시드로 몬스터 넷을 골라 그 층의 구성으로 (두 층이 같은 구성일 일이 드물다)
+  const own = isTowerZoneId(zone0.id) && zone0.pool.length > ROSTER;
+  const rr = seeded(floorSeed(seed, f) ^ 0x524f5354);
+  const pool = own ? pickRoster(zone0.pool, ROSTER, rr) : zone0.pool;
+  const zone = { ...zone0, pool };
+  const eliteChance = own
+    ? ELITE_CHANCE + ELITE_LOOP * Math.min(3, towerLoop(f))
+    : ELITE_CHANCE;
   const sizes = boss ? BOSS_WAVES : FLOOR_WAVES;
-  return sizes.map((n, i): HuntWave => {
+  const waves = sizes.map((n, i): HuntWave => {
     const last = boss && i === sizes.length - 1;
     const monsters: MonsterId[] = [];
     if (last) monsters.push(zone.boss);
@@ -242,9 +263,11 @@ export function towerPlan(seed: number, f: number): HuntWave[] {
     let elite: number | undefined;
     const solo = monsters.length - pack;
     const roll = r();
-    if (!last && solo > 0 && (mix || (i > 0 && roll < ELITE_CHANCE))) {
+    if (!last && solo > 0 && (mix || (i > 0 && roll < eliteChance))) {
       const k = Math.floor(r() * solo);
       if (!MONSTERS[monsters[k]].minion) elite = k;
+      // 11/15 테마 정예(백업 테이프 …)가 있으면 그 자리가 정예로 바뀐다
+      if (elite !== undefined && zone.elite) monsters[elite] = zone.elite;
     }
     return {
       index: i,
@@ -257,6 +280,24 @@ export function towerPlan(seed: number, f: number): HuntWave[] {
       ...(last ? { summon: { ...zone.summon } } : {}),
     };
   });
+  // 11/15 테마가 층 계획을 손본다 (없으면 그대로)
+  const hook = PLAN_HOOKS[zone0.id];
+  return hook ? hook(waves, { seed: floorSeed(seed, f), f, loop: towerLoop(f) }) : waves;
+}
+
+/** 11/15 테마별 층 계획 손질 (서버·게임이 같은 계획을 쓴다) */
+const PLAN_HOOKS: Partial<Record<ZoneId, (plan: HuntWave[], o: { seed: number; f: number; loop: number }) => HuntWave[]>> = {
+  mt_meeting: meetingPlan,
+};
+
+/** 시드로 pool에서 n종을 고른다 (순서 섞기 앞부분) */
+function pickRoster<T>(pool: readonly T[], n: number, r: () => number): T[] {
+  const a = [...pool];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(r() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a.slice(0, n);
 }
 
 /** 층을 깨는 데 걸리는 가장 짧은 시간 (마지막 웨이브가 나오는 시각 + 엘리베이터) */
@@ -447,7 +488,21 @@ export function evalTower(
     if (n > (can[id] ?? 0)) return tooHigh(MONSTERS[id].name);
     total += n;
   }
-  if (total > 3 + effSec * killRateCeiling("hell", t.level))
+  // 11/15 능력 카드: 고른 카드가 그때 제안된 카드인지 시드로 다시 굴려 보고, 처치 속도 상한에 카드 배율(멈추면 집중 포함)을 곱한다
+  const bossFloors: number[] = [];
+  for (let i = 0; i < k; i++) if (isBossDealFloor(t.start + i)) bossFloors.push(t.start + i);
+  const cv = replayPicks(t.seed, r.cards ?? [], {
+    levels: runLevel(runXp(r.kills)).level,
+    starts: startPicks(t.start),
+    bossFloors,
+    rerolls: rerollsAllowed(k),
+  });
+  if (!cv.ok)
+    return tReject(
+      "RESULT_REJECTED",
+      "능력 카드 기록이 맞지 않아요. 이번 판은 보상 없이 끝나요.",
+    );
+  if (total > 3 + effSec * killRateCeiling("hell", t.level) * cardPower(cv.owned))
     return tooHigh("처치 수");
   if (k > 0 && minSec > effSec + 1) return tooHigh("층");
   for (const [id, n] of Object.entries(need) as [MonsterId, number][])

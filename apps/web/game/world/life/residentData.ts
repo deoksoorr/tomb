@@ -262,7 +262,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "catmask",
     color: BONE,
     look: [],
-    home: { x: 500, y: 880, r: 130 }, // 안개 숲·오리 연못
+    home: { x: 420, y: 900, r: 130 }, // 안개 숲·오리 연못 둑 (물 위 자리는 쉬는 자리에서 빠진다)
     perches: ["bS"],
     grass: 3,
     legMs: 44_000,

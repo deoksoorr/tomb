@@ -1,3 +1,4 @@
+import type { CardId, CardKindStyle, CardPick } from "./cards";
 import type { Difficulty, DropKind, GameKind, GearSlot, MonsterId, SkillId, Stats, ZoneId } from "./catalog";
 import type { DexGain } from "../forage/types";
 import type { Derived } from "./formulas";
@@ -110,6 +111,8 @@ export type HuntResult = {
   floors?: number;
   floorMs?: number;
   quit?: boolean;
+  /** 11/15 야근 빌딩 능력 카드: 고른 순서대로 (서버가 시드로 제안을 다시 굴려 확인한다 — lib/rpg/cards) */
+  cards?: CardPick[];
 };
 /** wrong: '기능'을 누른 수, decoy: 주석 처리된 가짜 버그를 누른 수, score: 콤보 배수까지 넣은 점수(서버가 상한으로 자른다) */
 export type BugsResult = { game: "bugs"; durationMs: number; caught: number; golden: number; wrong: number; decoy: number; maxCombo: number; score: number };
@@ -270,6 +273,8 @@ export type RpgHud = {
   /** 11/15 칸별 SP 비용 (모자람 표시) · 자동 스킬 상태 (칸에 있는 스킬 중 자동으로 정한 것, 전체 스위치) */
   skillSp?: number[];
   auto?: { slots: boolean[]; on: boolean; keepUlt: boolean };
+  /** 11/15 야근 빌딩 능력 카드: 판 레벨·이번 레벨 경험치, 가진 카드(겹친 수), 남은 다시 뽑기, 멈추면 집중 중, 내 무기 갈래 */
+  run?: { lv: number; xp: number; need: number; cards: { id: CardId; n: number }[]; rerolls: number; focus: boolean; kind: CardKindStyle };
 };
 
 export type RpgAction =

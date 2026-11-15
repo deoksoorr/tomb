@@ -33,6 +33,10 @@ import {
   TELESCOPE_SPOT,
   WORLD_LOTS,
   ZONES,
+  BUS_PLAZA,
+  CLOSED_LOTS,
+  isOpenLot,
+  WHARF_YARD,
   campfireOfSeat,
   graveSlot,
   inZoo,
@@ -303,8 +307,9 @@ describe("강·호수 (50번)", () => {
 });
 
 describe("주거 구역 (분양 마을을 메인 맵에)", () => {
-  it("필지 12곳: 겹치지 않고 주거 구역 안, 문 앞은 골목", () => {
-    expect(HOUSE_LOTS.length).toBe(WORLD_LOTS);
+  it("필지 9곳 (11/15: 1·11·12번지를 없앰): 겹치지 않고 주거 구역 안, 문 앞은 골목", () => {
+    expect(HOUSE_LOTS.length).toBe(WORLD_LOTS - CLOSED_LOTS.length);
+    expect(HOUSE_LOTS.map((l) => l.lot)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
     const zone = ZONES.find((z) => z.id === "housing")!;
     for (const l of HOUSE_LOTS) {
       expect(inside(zone, l.x, l.y, 32) && inside(zone, l.x + HOUSE_LOT_W, l.y + HOUSE_LOT_H, 32), `lot${l.lot}`).toBe(true);
@@ -313,7 +318,32 @@ describe("주거 구역 (분양 마을을 메인 맵에)", () => {
     }
     expect(houseLot(0)).toBeNull();
     expect(houseLot(WORLD_LOTS + 1)).toBeNull();
-    expect(houseLot(1)?.door).toEqual(HOUSE_LOTS[0].door);
+    expect(houseLot(2)?.door).toEqual(HOUSE_LOTS[0].door);
+    for (const c of CLOSED_LOTS) {
+      expect(houseLot(c)).toBeNull();
+      expect(isOpenLot(c)).toBe(false);
+      expect(lotInteractable(c, null)).toBeNull();
+    }
+    expect(isOpenLot(13)).toBe(true); // 2단지 번지는 그대로
+  });
+
+  it("집이 있는 2·3·4번지는 번호도 자리도 그대로 (11/15 필지 정리 전과 같은 좌표)", () => {
+    expect(houseLot(2)).toMatchObject({ x: 1140, y: 216, door: { x: 1204, y: 308 } });
+    expect(houseLot(3)).toMatchObject({ x: 1272, y: 216, door: { x: 1336, y: 308 } });
+    expect(houseLot(4)).toMatchObject({ x: 1008, y: 360, door: { x: 1072, y: 452 } });
+  });
+
+  it("없앤 1번지 자리는 버스 정류장 광장(포석·벤치·가로등), 11·12번지 자리는 납품 부두 위 마당(자갈)", () => {
+    const t = (x: number, y: number) => groundKind(Math.floor(x / 16), Math.floor(y / 16));
+    expect(t(BUS_PLAZA.x + 40, BUS_PLAZA.y + 40)).toBe("stone");
+    expect(t(BUS_PLAZA.x + 40, BUS_PLAZA.y - 4)).toBe("stone"); // 북쪽 길까지 이어진다
+    expect(t(WHARF_YARD.x + 60, WHARF_YARD.y + 40)).toBe("gravel");
+    const benches = FURNITURE.filter((f) => inside(BUS_PLAZA, f.x, f.y));
+    expect(benches.length).toBeGreaterThanOrEqual(2);
+    expect(allProps().filter((p) => p.kind === "lamp" && inside(BUS_PLAZA, p.x, p.y)).length).toBeGreaterThanOrEqual(2);
+    const ok = reachable();
+    expect(ok(BUS_PLAZA.x + 64, BUS_PLAZA.y + 50)).toBe(true);
+    expect(ok(WHARF_YARD.x + 128, WHARF_YARD.y + 100)).toBe(true);
   });
 
   it("문·빈 필지 상호작용", () => {
@@ -608,15 +638,15 @@ describe("미니맵 (F17)", () => {
   });
 });
 
-describe("낚시터 (호수 북동쪽 물가)", () => {
-  it("낚시 자리 20곳 이상, 그중 10곳 이상이 낚시터에 모여 있고 모두 걸어서 닿는다 (데크·마당)", async () => {
+describe("납품 부두 (11/15, 예전 낚시터 — 호수 북동쪽 물가)", () => {
+  it("낚시 자리 20곳 이상, 그중 몇 곳은 납품 부두 잔교에 있고 모두 걸어서 닿는다 (잔교·마당)", async () => {
     const { FISHING_SPOTS, FISHING_ZONE, FISHING_ZONE_SPOTS, FISH_ARCH, FISH_PIER, FISH_PIER_HEAD, inFishingZone } = await import("@tomb/protocol");
     const { NPCS } = await import("@/lib/forage/catalog");
     expect(FISHING_SPOTS.length).toBeGreaterThanOrEqual(20);
     const zone = FISHING_SPOTS.filter((s) => inFishingZone(s.x, s.y));
-    expect(zone.length).toBeGreaterThanOrEqual(10);
+    expect(zone.length).toBeGreaterThanOrEqual(5);
     expect(FISHING_SPOTS.slice(0, FISHING_ZONE_SPOTS).every((s) => inFishingZone(s.x, s.y))).toBe(true);
-    expect(ZONES.some((z) => z.id === "fishing" && z.name === "낚시터" && z.x === FISHING_ZONE.x && z.w === FISHING_ZONE.w)).toBe(true);
+    expect(ZONES.some((z) => z.id === "fishing" && z.name === "납품 부두" && z.x === FISHING_ZONE.x && z.w === FISHING_ZONE.w)).toBe(true);
     // 어부 영감은 낚시터 마당에
     const monger = NPCS.find((n) => n.id === "fishmonger")!;
     expect(inFishingZone(monger.x, monger.y)).toBe(true);
@@ -637,8 +667,8 @@ describe("낚시터 (호수 북동쪽 물가)", () => {
     const hit = (x: number, y: number) => rails.some((r) => inside(r, x, y));
     // 이음매 (데크 가운데 아래 끝 = 가로 데크 윗변)
     expect(hit(FISH_PIER.x + FISH_PIER.w / 2, FISH_PIER_HEAD.y)).toBe(false);
-    expect(hit(FISH_PIER.x + 1, FISH_PIER.y + 60)).toBe(true); // 데크 서쪽 가장자리 (물)
-    expect(hit(FISH_PIER_HEAD.x + 1, FISH_PIER_HEAD.y + 12)).toBe(true); // 가로 데크 서쪽 끝
+    expect(hit(FISH_PIER.x + 1, FISH_PIER.y + FISH_PIER.h - 12)).toBe(true); // 잔교 서쪽 가장자리 (물)
+    expect(hit(FISH_PIER_HEAD.x + 1, FISH_PIER_HEAD.y + 10)).toBe(true); // 가로 데크 서쪽 끝
     expect(hit(FISH_PIER_HEAD.x + 20, FISH_PIER_HEAD.y + FISH_PIER_HEAD.h - 1)).toBe(true); // 가로 데크 남쪽 가장자리
   });
 

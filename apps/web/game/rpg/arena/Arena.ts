@@ -5,7 +5,9 @@ import { radial } from "../../sprites/pixel";
 import { RTEX } from "../sprites";
 import type { Color } from "../../sprites/pixel";
 import { AMBIENT, arrowCanvas, beltCanvas, doorLeafCanvas, elevatorLeafCanvas, floorCanvas, PARTICLE_COLORS, propCanvas, tunnelCanvas, vineCanvas } from "./art";
-import { AH, allSolids, AW, buildLayout, collide, COLS, CELL, FlowField, freeGrid, inRegion, nearestFree, PROP_META, SIDE, standable, TOP, type ArenaLayout, type Pt, type Region, type Solid } from "./layout";
+import { AH, allSolids, AW, buildLayout, collide, COLS, CELL, FlowField, freeGrid, inRegion, nearestFree, PROP_META, SIDE, standable, TOP, type ArenaLayout, type LayoutCtx, type Pt, type Region, type Solid } from "./layout";
+// 11/15 야근 빌딩 끝없는 회의실: 층마다 다른 방 그림·회의 연장(방이 좁아짐)·마커 벽·커피 웅덩이
+import { MeetingArena } from "../../tower/themes/meetingRoomArena";
 
 // 40번 사냥터 실행부: 지도 그리기(바닥·소품·조명·입자) + 지형 기믹 + 몬스터 길찾기·충돌 + 우두머리가 화날 때 졸개 부르기.
 // HuntScene은 몇 군데에서만 부른다 — 만들 때(new Arena), 이동·충돌(collide·steer·playerVelocity·speedMul), 매 프레임(update).
@@ -221,9 +223,11 @@ export class Arena {
     zoneId: ZoneId,
     seed: number,
     private readonly hooks: ArenaHooks,
+    /** 11/15 야근 빌딩: 층·판 시드 (층마다 배치를 고르는 테마용) */
+    ctx?: LayoutCtx,
   ) {
     this.zone = HUNT_ZONES[zoneId];
-    this.layout = buildLayout(zoneId, seed);
+    this.layout = buildLayout(zoneId, seed, ctx);
     this.solids = allSolids(this.layout);
     this.flow = new FlowField(this.solids, 8);
     this.free10 = freeGrid(this.solids, 10);
@@ -236,7 +240,11 @@ export class Arena {
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
     this.build();
+    if (zoneId === "mt_meeting") this.mt = new MeetingArena(scene, this.layout, seed, ctx?.floor ?? 6, ctx?.runSeed ?? seed, hooks);
   }
+
+  /** 11/15 끝없는 회의실 지도 (다른 사냥터는 null) */
+  mt: MeetingArena | null = null;
 
   get start(): Pt {
     return this.layout.start;
@@ -460,10 +468,12 @@ export class Arena {
   /** 장애물 밖으로 (p를 바꾼다) */
   collide(p: Pt, r: number): void {
     collide(this.solids, p, r);
+    this.mt?.collide(p, r);
   }
 
   /** 반지름 r로 설 수 있는 가까운 자리 (출현·순간 이동 뒤) */
   place(x: number, y: number, r: number): Pt {
+    if (this.mt) ({ x, y } = this.mt.clampPt(x, y, r));
     if (standable(this.solids, x, y, r)) return { x, y };
     const g = r > 10 ? this.free20 : this.free10;
     const c = nearestFree(g, x, y);
@@ -493,6 +503,7 @@ export class Arena {
   /** 지형 감속 (늪·덩굴). 우두머리는 안 느려진다 */
   speedMul(x: number, y: number, boss = false): number {
     if (boss) return 1;
+    if (this.mt && this.mt.speedMul(x, y) < 1) return this.mt.speedMul(x, y);
     for (const m of this.muds) if (inRegion(m.r, x, y)) return 0.6;
     for (const v of this.vines) if (inRegion(v.r, x, y, v.grow)) return 0.5;
     return 1;
@@ -544,6 +555,8 @@ export class Arena {
   /** 소등 중이라 이 몬스터가 안 보이나 (체력 막대도 숨긴다). 어둠 속에서 빛나는 몬스터는 늘 보인다 */
   inDark(m: Pick<ArenaMon, "id" | "x" | "y">): boolean {
     const d = this.dark;
+    // 11/15 의견 없음: 가만히 있으면 안 보인다 (체력 막대도)
+    if (this.mt?.hides(m)) return true;
     if (!d || d.level < 0.5 || GLOW_IN_DARK.has(m.id)) return false;
     const r = d.cfg.vision === "narrow" ? 30 : 46;
     return Math.hypot(m.x - this.player.x, m.y - this.player.y) > r;
@@ -561,7 +574,9 @@ export class Arena {
       this.playerV.y = wy;
     }
     const f = this.push(x, y, now);
-    return { x: this.playerV.x + f.x, y: this.playerV.y + f.y };
+    // 11/15 마이크 하울링 밀침
+    const k = this.mt ? this.mt.kickVel(dt) : { x: 0, y: 0 };
+    return { x: this.playerV.x + f.x + k.x, y: this.playerV.y + f.y + k.y };
   }
 
   // ── 매 프레임 ──
@@ -574,6 +589,7 @@ export class Arena {
     this.tickParticles(now, dt);
     if (!this.hooks.reduced) for (const l of this.lights) if (l.flicker) l.img.setAlpha(l.base * (0.85 + 0.15 * Math.sin(now / 90 + l.img.x)));
     this.tickGlows(now, mons);
+    this.mt?.update(now, dt, player, mons);
   }
 
   /** 꺼지지 않는 모니터: 불이 켜져 있으면 흐릿하고, 소등되면 어둠 위로 또렷하게 빛난다 */
@@ -1017,5 +1033,7 @@ export class Arena {
     this.objs.length = 0;
     this.auras.clear();
     this.glows.clear();
+    this.mt?.destroy();
+    this.mt = null;
   }
 }

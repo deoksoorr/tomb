@@ -33,6 +33,7 @@ import { starLabel, transcendStatPoints } from "@/lib/rpg/endgame";
 import { countsForRace, derive, levelPenalty, STAT_MAX, type Derived } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST } from "@/lib/rpg/skillRules";
 import type { RpgView } from "@/lib/rpg/types";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { weaponStyleOf, weaponStyleText } from "@/lib/rpg/weapons";
 import { OutfitCanvas } from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
@@ -40,7 +41,7 @@ import { DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
 import { bonusText, pts } from "./format";
 import { bagGear, deltaText, equipTarget, gearDiff, gearGrade, sellable, sellWarning, slotAccepts } from "./gear";
-import { TranscendDay } from "./Endgame";
+import { HUNT_KEYS, HUNT_TOUCH } from "./huntKeys";
 import HuntCapMeter from "./HuntCap";
 import RpgIcon from "./RpgIcon";
 import ZonePicker, { ZoneInfo, zoneOpen, zoneUnlockAll } from "./ZonePicker";
@@ -115,7 +116,6 @@ export function StartPanel({
     return (
       <div className={s.lobby}>
         <HuntCapMeter today={view.today} where="start" />
-        {view.endgame && <TranscendDay eg={view.endgame} />}
         {/* 11/15 레벨 50 이후의 중심은 마을의 야근 빌딩 (사냥터 창에서는 안내 한 줄만) */}
         {view.endgame && (
           <p className={s.towerHint}>
@@ -146,6 +146,7 @@ export function StartPanel({
                     오늘 사냥 포인트 {view.today.huntPoints} / {view.today.cap}P · 이번 시간 남은 판 {view.today.runsPerHour}
                   </p>
                   {/* 화면 흔들림 효과 켜기·끄기: 출발 전에 고른다 (이 기기에 기억) */}
+                  <HuntKeysStrip />
                   <ShakeToggle />
                   {startButton}
                 </div>
@@ -949,5 +950,24 @@ export function ShopPanel({ view, busy, onBuy }: { view: RpgView; busy: boolean;
         )}
       </div>
     </div>
+  );
+}
+
+/** 11/15 출발 전 조작 키 한눈에 (PC는 키, 손가락 기기는 터치 조작). 판 안에서는 H로 다시 본다 */
+function HuntKeysStrip() {
+  const coarse = useMediaQuery("(pointer: coarse)");
+  const rows = coarse ? HUNT_TOUCH : HUNT_KEYS;
+  return (
+    <details className={s.keysStrip} open={!coarse}>
+      <summary>조작 키</summary>
+      <dl>
+        {rows.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
   );
 }

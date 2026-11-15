@@ -17,7 +17,7 @@ import {
 } from "@/lib/housing/catalog";
 import { housingApi } from "@/lib/housing/client";
 import { styleTag } from "@/lib/housing/layout";
-import { WORLD_LOTS } from "@tomb/protocol";
+import { isOpenLot, WORLD_LOTS } from "@tomb/protocol";
 import type { HouseSummary, MyHouseResponse } from "@/lib/housing/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -154,7 +154,7 @@ function MyPlot({
         if (!alive) return;
         const used = new Set([...v.houses.map((h) => h.lot), ...v.taken]);
         // 메인 맵 주거 구역(1..WORLD_LOTS)의 빈 필지 먼저. 다 찼으면 예전처럼 분양 마을(2단지) 번지
-        const all = Array.from({ length: Math.max(v.lots + 4, WORLD_LOTS) }, (_, i) => i + 1).filter((l) => !used.has(l));
+        const all = Array.from({ length: Math.max(v.lots + 4, WORLD_LOTS) }, (_, i) => i + 1).filter((l) => isOpenLot(l) && !used.has(l)); // 11/15 없앤 번지 빼고
         const near = all.filter((l) => l <= WORLD_LOTS);
         setFree(near.length ? near : all);
       })

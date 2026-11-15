@@ -2668,3 +2668,42 @@ button.hotSlot:disabled {
   color: #ffd36a;
   text-shadow: 0 0 8px rgba(255, 190, 70, 0.6);
 }
+
+/* 11/15 출발 전 조작 키 (Panels HuntKeysStrip) */
+.keysStrip {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  font-size: 11px;
+}
+
+.keysStrip summary {
+  color: var(--bone);
+  cursor: pointer;
+}
+
+.keysStrip dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 2px 12px;
+  margin: 6px 0 0;
+}
+
+.keysStrip dl > div {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.keysStrip dt {
+  flex: none;
+  color: var(--candle);
+  font-family: var(--font-small);
+}
+
+.keysStrip dd {
+  margin: 0;
+  color: var(--text);
+  min-width: 0;
+}

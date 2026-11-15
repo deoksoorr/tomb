@@ -39,7 +39,7 @@ import { mmss, pts } from "./format";
 import { gearGrade } from "./gear";
 import HuntCapMeter from "./HuntCap";
 import HuntGuide from "./HuntGuide";
-import { EndgameResult, TranscendBar, TranscendDay } from "./Endgame";
+import { EndgameResult, TranscendBar } from "./Endgame";
 import { CharacterPanel, GearPanel, LOBBY_HIDDEN, ShopPanel, SkillPanel, StartPanel } from "./Panels";
 import LevelUpSound from "./LevelUpSound";
 import RpgIcon from "./RpgIcon";
@@ -713,7 +713,6 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
       {view && c && view.endgame && (
         <div className={s.resultProgress}>
           <TranscendBar tLevel={c.tLevel} tExp={c.tExp} eg={view.endgame} />
-          <TranscendDay eg={view.endgame} />
           <HuntCapMeter today={view.today} where="result" />
         </div>
       )}

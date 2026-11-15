@@ -121,7 +121,7 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
             <span>사는 것: {npc.buys.map((c) => CAT_LABEL[c]).join("·")}</span>
           </div>
           {rows.length === 0 ? (
-            <p className={s.empty}>{npc.id === "fishmonger" ? "팔 물고기가 없어요. 나루터 옆 낚시터(나무 데크)에서 낚아 와요." : "팔 게 없어요. 숲·풀밭·언덕에서 캐거나 수풀에서 곤충을 잡아 와요."}</p>
+            <p className={s.empty}>{npc.id === "fishmonger" ? "팔 물고기가 없어요. 부두 잔교나 강둑·연못가 낚시 의자에서 낚아 와요." : "팔 게 없어요. 숲·풀밭·언덕에서 캐거나 수풀에서 곤충을 잡아 와요."}</p>
           ) : (
             <div className={s.sellList} role="list">
               {rows.map(({ sp, n }) => {

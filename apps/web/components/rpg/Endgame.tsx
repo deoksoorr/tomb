@@ -36,26 +36,6 @@ export function TranscendBar({ tLevel, tExp, eg }: { tLevel: number; tExp: numbe
   );
 }
 
-/** "오늘 초월 판 12/35 [100%] · 적립 15판" */
-export function TranscendDay({ eg }: { eg: EndgameView }) {
-  const d = eg.day;
-  return (
-    <p className={s.tDay}>
-      {d.tier === "full" ? (
-        <>
-          오늘 초월 판 <b>{d.runs}</b>/{d.full}
-        </>
-      ) : (
-        <>
-          오늘 초월 판 <b>{d.runs}</b>판 (100% {d.full}판 다 씀)
-        </>
-      )}{" "}
-      <TierChip tier={d.tier} /> · 적립 {d.bank}판{d.floors > 0 ? ` · 야근 빌딩 ${d.floors}/4층` : ""}
-      <span className={s.meta}> · 레벨 50에선 지옥 사냥·야근 빌딩만 초월 EXP{d.tier === "practice" ? " · 지금은 연습 판 (초월 EXP·드롭 없음)" : ""}</span>
-    </p>
-  );
-}
-
 /** 개척자 모집 한 줄 (모집 중이거나 받은 번호가 있을 때만) */
 export function PioneerLine({ eg }: { eg: EndgameView }) {
   const [now] = useState(() => Date.now());
@@ -79,10 +59,7 @@ export function EndgameResult({ reward }: { reward: RunReward }) {
     <>
       {t && (
         <p className={s.tDay} role="status">
-          초월 EXP <b>+{t.exp.toLocaleString("ko-KR")}</b> <TierChip tier={t.tier} />
-          {w && w.runs > 0 && <span className={s.meta}> 깬 층으로 초월 판 {w.runs}판을 셌어요 (4층 = 1판)</span>}
-          {t.tier === "practice" && <span className={s.meta}> 오늘 초월 구간을 다 써서 연습 판이에요 (초월 EXP 없음)</span>}
-          {t.tier !== "full" && t.tier !== "practice" && <span className={s.meta}> 오늘 100% 판을 다 써서 {RUN_TIERS[t.tier].label}만 받았어요</span>}
+          초월 EXP <b>+{t.exp.toLocaleString("ko-KR")}</b>
         </p>
       )}
       {t && t.levelsGained > 0 && (

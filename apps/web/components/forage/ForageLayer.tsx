@@ -25,6 +25,7 @@ import { noteDexGain, toastAutoCatch } from "./autoToast";
 import FishingPanel from "./FishingPanel";
 import { forageStore } from "./forageStore";
 import NpcShop from "./NpcShop";
+import QuestBoard from "./QuestBoard";
 import s from "./forage.module.css";
 
 // 4·32·51번 낚시·채집·판매·도감 UI의 뿌리 (GameShell이 게임이 뜨면 붙인다).
@@ -67,6 +68,8 @@ function insectPlay(seed: number, timeLimitSec: number, night: boolean, phase?: 
 export default function ForageLayer() {
   const [fishing, setFishing] = useState<{ spot: string; water: "lake" | "river" } | null>(null);
   const [npc, setNpc] = useState<NpcId | null>(null);
+  /** 11/15 납품 부두 의뢰 게시판 (수집 의뢰판만 — NPC 창의 [의뢰] 칸과 같은 QuestBoard) */
+  const [board, setBoard] = useState(false);
   const [dex, setDex] = useState<{ accountId?: string; peer?: DexPeer; name?: string | null } | null>(null);
   const [gather, setGather] = useState<Gather | null>(null);
   const [insect, setInsect] = useState<Insect | null>(null);
@@ -132,7 +135,10 @@ export default function ForageLayer() {
       setNpc(null);
       setFishing({ spot: u.spot, water: u.water });
     } else if (u.kind === "npc") setNpc(u.npc);
-    else void startGather(u.node);
+    else if (u.kind === "board") {
+      setNpc(null);
+      setBoard(true);
+    } else void startGather(u.node);
   });
   useBridgeEvent("forage:left", () => setFishing(null));
   useBridgeEvent("forage:dex", (d) => setDex(d));
@@ -258,6 +264,11 @@ export default function ForageLayer() {
       {card && <CatchCard card={card} />}
       {insectDone && <InsectResultCard done={insectDone} onClose={closeInsectDone} />}
       {npc && <NpcShop npcId={npc} onClose={() => setNpc(null)} />}
+      {board && (
+        <Dialog title="의뢰 게시판 · 납품 부두" onClose={() => setBoard(false)}>
+          <QuestBoard />
+        </Dialog>
+      )}
       {dex && <DexDialog accountId={dex.accountId} peer={dex.peer} name={dex.name} onClose={() => setDex(null)} />}
     </>
   );

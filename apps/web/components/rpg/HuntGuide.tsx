@@ -21,10 +21,7 @@ import {
 import { SKILL_SLOTS } from "@/lib/rpg/hotbar";
 import { DEFAULT_BOSS_PHASES, MIN_WINDUP_MS, PATTERNS, type TelegraphShape } from "@/lib/rpg/patterns";
 import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL, MIN_RUN_MS } from "@/lib/rpg/rewards";
-import { PIONEER_DAYS, PIONEER_FLOOR, TBANK_MAX,
-  TDAY_FULL,
-  TDAY_STEP,
-  tExpToNext,
+import { PIONEER_DAYS, PIONEER_FLOOR, tExpToNext,
   TRANSCEND_MAX,
 } from "@/lib/rpg/endgame";
 import {
@@ -42,6 +39,9 @@ import {
   FLOORS_PER_THEME,
 } from "@/lib/rpg/tower";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
+import { MT_BOSS, MT_ELITE, MT_LOOPS, MT_MID, MT_POOL, MT_ZONE_DEF } from "@/lib/rpg/towerThemes/meetingRoom";
+import { SV_LOOPS, SV_POOL, SV_ROOMS, SV_ZONE } from "@/lib/rpg/serverRoom";
+import { SV_ROOM_NAMES } from "@/game/tower/themes/serverRoomMap";
 import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
 import { earnRule } from "@/lib/economy";
@@ -51,7 +51,13 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import { DEMO_H, DEMO_SCALE, DEMO_SCENES, DEMO_W, drawDemo } from "./huntDemo";
 import RpgIcon from "./RpgIcon";
+// 11/15 야근 빌딩 능력 카드
+import { cardIconUrl } from "@/game/rpg/cards/cardArt";
+import { BOSS_DEAL_HP_COST, CARD_IDS, FOCUS_ASPD, START_PICKS_PER_10 } from "@/lib/rpg/cards";
 import s from "./rpg.module.css";
+
+/** 11/15 끝없는 회의실 층 (테마 표 두 번째 칸 — 10층마다) */
+const MT_FLOORS = "6~10·16~20·26~30 …층";
 
 // 사냥 안내서: 사냥 로비·멈춤 창에서 연다. 짧은 페이지를 넘겨 본다 (←/→ 키도 된다).
 // 숫자·이름은 catalog·patterns·weapons·rewards에서 읽는다 → 스킬·무기·패턴이 늘어도 안내가 따라간다.
@@ -175,6 +181,12 @@ function Keys({ k }: { k: string[] }) {
 }
 
 /** 그림 + 제목 + 설명 한 줄 */
+/** 능력 카드 그림 (안내서 그림 칸) */
+function CardPic({ id }: { id: (typeof CARD_IDS)[number] }) {
+  // eslint-disable-next-line @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트
+  return <img src={cardIconUrl(id, 2)} width={32} height={32} alt="" aria-hidden="true" style={{ imageRendering: "pixelated" }} />;
+}
+
 function Item({ art, pic, title, children }: { art?: IconArt; pic?: ReactNode; title: ReactNode; children: ReactNode }) {
   return (
     <li className={s.guideItem}>
@@ -494,14 +506,40 @@ function pages(): Page[] {
               {Math.round(tExpToNext(TRANSCEND_MAX - 1) / 10_000)}만. 초월 5레벨마다 능력치 포인트 1개. 회식 3차·축제장은 레벨 50에선 EXP가 10%라 분기 마감·구조조정이
               제값이에요. 레벨 랭킹은 레벨 → 초월 레벨 → 초월 EXP 순.
             </Item>
-            <Item art={POTIONS[0]?.art} title="하루 초월 판">
-              레벨 50 지옥 판은 시작하면, 야근 빌딩은 깬 {TOWER_FLOORS_PER_RUN}층마다 초월 판 1판으로 세요 (새벽 5시에 새로). 앞 {TDAY_FULL}판(+적립)은 100%, 다음 {TDAY_STEP}판 30%, 다음 {TDAY_STEP}판 10%, 그
-              뒤는 연습 판 (초월 EXP·드롭 없음, 포인트는 평소대로). 못 쓴 100% 판은 다음 날로 적립돼요 (쉰 날은 {TDAY_FULL}판씩, 최대 {TBANK_MAX}판).
-            </Item>
             <Item art={skillArt("so_lamp")} title="야근 빌딩">
               마을 북쪽 분양 사무소 옆 높은 건물 (사냥 레벨 50부터). 1층부터 쓰러질 때까지 이어서 올라가요 — 한 층은 방 하나({TOWER_FLOOR_SEC}초 안), {TOWER_BOSS_EVERY}층마다 우두머리
-              층({TOWER_BOSS_FLOOR_SEC}초, 깨면 체력 30% 회복). 체력·SP·버프는 다음 층으로 이어져요. 층마다 몬스터 체력·공격력 ×{TOWER_HP_ATK}, 방어 ×{TOWER_DEF}. 지금은 지옥 사냥터{" "}
-              {TOWER_THEMES.length}곳이 {FLOORS_PER_THEME}층씩 번갈아 나와요. 쓰러지면 끝 (부활 쿠키 없음), Esc → 그만두기는 그 층까지 기록. 도전 횟수 제한은 없어요.
+              층({TOWER_BOSS_FLOOR_SEC}초, 깨면 체력 30% 회복). 체력·SP·버프는 다음 층으로 이어져요. 층마다 몬스터 체력·공격력 ×{TOWER_HP_ATK}, 방어 ×{TOWER_DEF}. 테마{" "}
+              {TOWER_THEMES.length}곳이 {FLOORS_PER_THEME}층씩 번갈아 나오고, 층을 깨면 엘리베이터를 타고 다음 층으로 (층 표시가 붉게 깜빡이면 우두머리 층). 쓰러지면 끝 (부활 쿠키 없음), Esc →
+              그만두기는 그 층까지 기록. 도전 횟수 제한은 없어요.
+            </Item>
+            {/* 11/15 지하 서버실 테마 (lib/rpg/serverRoom) */}
+            <Item art={skillArt("em_spark")} title="지하 서버실 (1~5·11~15·21~25 …층)">
+              파란 네온과 끝없는 랙. 층마다 방이 달라요 ({SV_ROOM_NAMES.slice(0, SV_ROOMS).join("·")}, 우두머리 층은 {SV_ROOM_NAMES[SV_ROOMS]}). 기믹 「{SV_ZONE.gimmick.name}」: 한 칸에 가만히
+              서 있으면 바닥이 주황으로 달아오르다 불길이 솟아요 — 「냉각 실패」 경보(붉은 화면 테두리)면 두 배로 빨리. 10층마다 돌아올 때 판이 바뀌어요 ({SV_LOOPS.slice(1)
+                .map((l) => l.name)
+                .join(" → ")}). 몬스터: {SV_POOL.map((id) => MONSTERS[id].name).join("·")} · 정예 「{MONSTERS.sv_backup_tape.name}」(쓰러지면 최근에 쓰러진 셋을 복원) · 우두머리 「
+              {MONSTERS.sv_legacy_system.name}」 (코드 조각 탄막 → 바닥 회로 전류 → 전체 재부팅, 초록 안전 구역으로). 랜선은 감아 끌어당기고, 블루스크린에 맞으면 1초 방향이 뒤집히고, 무한
+              재부팅은 재부팅 중에 밟거나 쳐야 꺼지고, 자물쇠 사슬에 묶인 몬스터는 자물쇠부터 깨야 해요.
+            </Item>
+            {/* 11/15 끝없는 회의실 테마 (lib/rpg/towerThemes/meetingRoom) */}
+            <Item art={skillArt("so_lamp")} title={`끝없는 회의실 (${MT_FLOORS})`}>
+              유리벽 너머로 회의실이 끝없이 비치는 층. 층마다 방이 달라요 (작은 회의실·대회의실·오픈 오피스·교육장·임원 회의실·카페테리아·폰부스 복도) — 벽시계는 층마다 25분씩
+              흘러 노을 → 야근 → 새벽 → 아침으로, 10층마다 돌아올 때 몬스터 특성이 붙어요 ({MT_LOOPS.slice(1, 4)
+                .map((l) => l.trait)
+                .join("·")}). 기믹 「{MT_ZONE_DEF.gimmick.name}」: 바닥에 노란 줄이 그어지면 그 자리로 테이블이 밀려와 방이 좁아져요 (우두머리가 오래 버틸수록 더 좁게).
+              몬스터: {MT_POOL.map((id) => MONSTERS[id].name).join("·")} · 정예 「{MONSTERS[MT_ELITE].name}」(살아 있으면 계속 들어온다) · 중간 우두머리 「{MONSTERS[MT_MID].name}」
+              (내 지난 길을 되밟는 그림자) · 우두머리 「{MONSTERS[MT_BOSS].name}」 (「한 가지만 더」 → 방이 좁아지고, 끝에 의자를 돌리며 사방 사격).
+            </Item>
+            {/* 11/15 능력 카드 · 상사의 제안 · 멈추면 집중 (lib/rpg/cards) */}
+            <Item pic={<CardPic id="boards" />} title="능력 카드">
+              몬스터를 잡으면 판 레벨 막대가 차요. 오를 때마다 게임이 잠깐 멈추고 카드 세 장 중 하나를 골라요. 카드는 {CARD_IDS.length}장이고, 그 판에서만 쌓였다가 판이
+              끝나면 사라져요. 같은 카드를 여러 번 고르면 더 세져요. 무기에 따라 붙는 모양이 달라서, 쏘는 무기는 한 발 더 날아가고 휘두르는 무기는 다른 방향으로도 같이
+              휘둘러요. 마음에 드는 게 없으면 다시 뽑기를 써요. 판마다 한 번, 10층을 깰 때마다 한 번씩 더 생겨요. 전설 카드 「원샷 결재」와 「무한 야근」은 다시 뽑을 때나
+              상사의 제안에서만 가끔 나와요. {1 + TOWER_CHECKPOINT_EVERY}층처럼 위에서 시작하면 건너뛴 10층마다 카드 {START_PICKS_PER_10}장을 먼저 고르고 올라가요.
+            </Item>
+            <Item pic={<CardPic id="oneshot" />} title="상사의 제안과 멈추면 집중">
+              10층마다 우두머리를 잡으면 상사가 슬쩍 제안을 해요. 최대 체력 {Math.round(BOSS_DEAL_HP_COST * 100)}%를 내주면 희귀 이상 카드 한 장을 주고, 거절하면 체력을 가득
+              채워 줘요. 기본 공격은 저절로 나가고, 가만히 서 있으면 공격 속도가 {Math.round(FOCUS_ASPD * 100)}% 빨라져요. 피할 땐 움직이고 칠 땐 멈추는 게 요령이에요.
             </Item>
             <Item art={POTIONS[0]?.art} title="야근 빌딩 보상">
               깬 층마다 초월 EXP 약 320 × (1 + 0.02 × 층) (1층 {floorTExp(1)} · 30층 {floorTExp(30)} · 100층 {floorTExp(100)}) — 쓰러져도 깬 층만큼. {TOWER_FLOORS_PER_RUN}층 = 초월 판

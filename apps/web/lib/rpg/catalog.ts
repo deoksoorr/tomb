@@ -2,6 +2,10 @@
 import { isNameSlot, isShopListed, itemById, ITEMS } from "@tomb/protocol";
 import type { BossPhase, PatternId } from "./patterns";
 import type { WeaponStyleId } from "./weapons";
+// 11/15 야근 빌딩 지하 서버실 (sv_ 몬스터·사냥터) — 타입만 거꾸로 쓰므로 순환 없음
+import { SV_MONSTERS, SV_ZONE, type SvMonsterId } from "./serverRoom";
+// 11/15 야근 빌딩 끝없는 회의실 (mt_ 몬스터·사냥터) — 이쪽도 타입만 거꾸로
+import { MT_MONSTERS, MT_ZONE_DEF, type MtMonsterId } from "./towerThemes/meetingRoom";
 // 이름은 회사 생활(월요병·야근·결재·회식)과 누구나 한 번쯤 그만둔 다짐에서 따왔다.
 
 export const STAT_KEYS = ["str", "agi", "vit", "int", "dex", "luk"] as const;
@@ -294,7 +298,11 @@ export type MonsterId =
   | "one_on_one"
   | "desk_box"
   | "standby_shadow"
-  | "hr_chair";
+  | "hr_chair"
+  // 11/15 야근 빌딩 지하 서버실 (lib/rpg/serverRoom.ts)
+  | SvMonsterId
+  // 11/15 야근 빌딩 끝없는 회의실 (lib/rpg/towerThemes/meetingRoom.ts)
+  | MtMonsterId;
 
 export type MonsterDef = {
   id: MonsterId;
@@ -316,6 +324,10 @@ export type MonsterDef = {
   split?: { id: MonsterId; n: number };
   /** 갈라진 조각처럼 웨이브 마릿수에 들지 않는 졸개 */
   minion?: boolean;
+  /** 11/15 살아 있는 동안 자기를 이만큼까지 복사한다 (서버 출현 상한에 더한다 — 엑셀 매크로) */
+  clones?: number;
+  /** 11/15 쓰러지면 최근에 쓰러진 몬스터를 이만큼까지 되살린다 (서버 출현 상한에 더한다 — 백업 테이프) */
+  revive?: number;
   // ── 2번 공격 패턴 (combat feel 담당 구역 — lib/rpg/patterns.ts) ──
   /**
    * 공격 패턴 이름 (PATTERNS: bite·slam·charge·aimed_shot·fan_volley·self_destruct·ambush·nova·rain·cross·breath).
@@ -432,6 +444,10 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
       { below: 0.25, add: ["breath", "ambush"], haste: 0.56, label: "최종 통보!" },
     ],
   },
+  // ── 11/15 야근 빌딩 지하 서버실 (lib/rpg/serverRoom.ts) ──
+  ...SV_MONSTERS,
+  // ── 11/15 야근 빌딩 끝없는 회의실 (lib/rpg/towerThemes/meetingRoom.ts) ──
+  ...MT_MONSTERS,
 };
 
 export const MONSTER_IDS = Object.keys(MONSTERS) as MonsterId[];
@@ -452,7 +468,12 @@ export const ZONE_IDS = [
   "quarter-close",
   "layoff-day",
 ] as const;
-export type ZoneId = (typeof ZONE_IDS)[number];
+/** 11/15 야근 빌딩 전용 테마 (사냥터 고르기·함께 사냥 방·판 시작 입력에는 없다 — lib/rpg/tower TOWER_THEMES가 층마다 고른다) */
+export const TOWER_ZONE_IDS = ["server-room", "mt_meeting"] as const;
+export type TowerZoneId = (typeof TOWER_ZONE_IDS)[number];
+export const isTowerZoneId = (v: unknown): v is TowerZoneId => typeof v === "string" && (TOWER_ZONE_IDS as readonly string[]).includes(v);
+/** 사냥터 id (보통 사냥터 + 야근 빌딩 전용 테마). isZoneId는 보통 사냥터만 */
+export type ZoneId = (typeof ZONE_IDS)[number] | TowerZoneId;
 
 export type ZoneDef = {
   /** 사냥터 id = 함께 사냥 방 id에 쓰는 영문 이름 (`hunt:{slug}:{difficulty}`). 처음 네 곳은 예전 이름 그대로 */
@@ -471,6 +492,10 @@ export type ZoneDef = {
   pool: MonsterId[];
   /** 마지막 웨이브 우두머리 */
   boss: MonsterId;
+  /** 11/15 야근 빌딩 테마의 정예 (정예가 굴려지면 웨이브 한 자리가 이것으로 바뀐다) */
+  elite?: MonsterId;
+  /** 11/15 야근 빌딩 테마의 중간 우두머리 (끝없는 회의실: 블록 3층째 둘째 웨이브 정예 자리 — lib/rpg/towerThemes) */
+  mid?: MonsterId;
   /** 우두머리가 화날 때(체력 60%·30%)마다 불러내는 졸개. 서버 출현 상한에 2번 몫이 더해진다 */
   summon: { id: MonsterId; n: number };
   /** 이 사냥터에서 더 잘 나오는 장비 (드롭 장비 굴림에서 가중치 ×3) */
@@ -679,6 +704,9 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     floor: [0x3a3e4a, 0x343844],
     deco: 0xe8e0c8,
   }),
+  // ── 11/15 야근 빌딩 전용 테마 ──
+  "server-room": SV_ZONE,
+  mt_meeting: MT_ZONE_DEF,
 };
 
 /** 난이도마다 처음 열리는 사냥터 (예전 API·저장된 선택이 사냥터 없이 난이도만 보낼 때) */

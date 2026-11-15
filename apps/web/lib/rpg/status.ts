@@ -211,6 +211,28 @@ export const MONSTER_STATUS: Partial<Record<MonsterId, readonly StatusRule[]>> =
     { status: "silence", chance: 0.4, on: ["fan_volley", "aimed_shot", "rain"] },
     { status: "freeze", chance: 0.35, on: ["slam", "cross"] },
   ],
+  // 11/15 야근 빌딩 지하 서버실 (블루스크린의 1초 혼란은 게임이 직접 건다 — game/tower/themes/serverRoomStage)
+  sv_tangled_lan: [{ status: "slow", chance: 0.3 }],
+  sv_hot_fan: [{ status: "burn", chance: 0.7, on: ["breath"] }],
+  sv_ransom_lock: [{ status: "silence", chance: 0.3, on: ["aimed_shot"] }],
+  sv_printer_jam: [{ status: "bleed", chance: 0.12 }],
+  sv_security_cam: [{ status: "slow", chance: 0.25, on: ["aimed_shot"] }],
+  sv_coolant_leak: [{ status: "freeze", chance: 0.15 }],
+  sv_backup_tape: [{ status: "bleed", chance: 0.4, on: ["charge"] }],
+  sv_legacy_system: [
+    { status: "burn", chance: 0.35, on: ["slam", "nova"] },
+    { status: "silence", chance: 0.3, on: ["fan_volley", "cross"] },
+  ],
+  // 11/15 야근 빌딩 끝없는 회의실 (시계 보는 사람의 공격 느려짐·커피 웅덩이는 게임이 직접 — game/tower/themes/meetingRoomRuntime)
+  mt_cc_fwd: [{ status: "bleed", chance: 0.15 }],
+  mt_no_opinion: [{ status: "silence", chance: 0.3 }],
+  mt_chat_ping: [{ status: "confuse", chance: 0.08 }],
+  mt_agenda: [{ status: "slow", chance: 0.35, on: ["slam"] }],
+  mt_minutes: [{ status: "silence", chance: 0.35, on: ["aimed_shot", "slam"] }],
+  mt_chair: [
+    { status: "slow", chance: 0.35, on: ["slam", "nova", "breath"] },
+    { status: "confuse", chance: 0.3, on: ["cross", "rain"] },
+  ],
 };
 
 /** 한 번 걸리는 상태 (지속·세기는 난이도가 반영된 값) */

@@ -54,20 +54,31 @@ describe("HouseStore (memory): 채널마다 필지가 따로", () => {
     expect(await mk(s, "a", 1, 3)).toEqual({ lot: 3 });
     expect(await mk(s, "b", 2, 3)).toEqual({ lot: 3 });
     expect(await mk(s, "c", 1, 3)).toBe("lot_taken");
-    expect(await mk(s, "d", undefined, null)).toEqual({ lot: 1 });
+    // 자동 배정: 11/15 없앤 1번지는 건너뛰고 2번지부터
+    expect(await mk(s, "d", undefined, null)).toEqual({ lot: 2 });
     expect((await s.get("d"))!.ch).toBe(1);
     expect((await s.village(1)).map((h) => [h.id, h.lot])).toEqual([
-      ["d", 1],
+      ["d", 2],
       ["a", 3],
     ]);
     expect((await s.village(2)).map((h) => [h.id, h.ch, h.lot])).toEqual([["b", 2, 3]]);
     expect(await s.village(5)).toEqual([]);
     // 자동 배정은 그 채널의 가장 앞 빈 번지
-    expect(await mk(s, "e", 2, null)).toEqual({ lot: 1 });
+    expect(await mk(s, "e", 2, null)).toEqual({ lot: 2 });
     // 지우면 그 채널의 그 번지만 빈다
     await s.remove("a");
     expect(await mk(s, "f", 1, 3)).toEqual({ lot: 3 });
     expect((await s.village(2)).map((h) => h.id)).toEqual(["e", "b"]);
+  });
+
+  it("11/15 없앤 번지(1·11·12)는 자동 배정에서 빠지고, 2단지 번지는 그대로 쓴다", async () => {
+    const s = new MemoryHouseStore();
+    const got: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      const r = await mk(s, `x${i}`, 3, null);
+      if (typeof r === "object") got.push(r.lot);
+    }
+    expect(got).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15]);
   });
 
   it("채널 필드가 없는 예전 기록(HMR로 옮겨 온 메모리 등)도 1채널로 읽는다", async () => {

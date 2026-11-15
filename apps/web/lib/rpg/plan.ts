@@ -28,6 +28,8 @@ export type HuntWave = {
   formation: WaveFormation;
   /** 정예: monsters[elite]가 더 크고 질기다 (ELITE). 그 웨이브를 깨면 서버가 EXP 보너스를 더한다 */
   elite?: number;
+  /** 11/15 판 중에 더 들어올 수 있는 몬스터 상한 (끝없는 회의실 정예 「안건 추가」가 살아 있는 동안 불러들인다 — 웨이브 마릿수에는 들지 않는다) */
+  adds?: { id: MonsterId; n: number }[];
 };
 
 /**
@@ -119,12 +121,34 @@ export function huntSpawnable(plan: HuntWave[], effSec: number): Partial<Record<
     const sp = MONSTERS[id].split;
     if (sp && depth < 3) add(sp.id, n * sp.n, depth + 1);
   };
+  // 11/15 되살리기(백업 테이프): 되살릴 수 있는 종류마다 그 몫만큼 더 (어느 것을 되살릴지는 판마다 다르다)
+  let revive = 0;
+  const seen = new Set<MonsterId>();
   for (const w of plan) {
     if (w.earliestSec > effSec) continue;
-    for (const m of w.monsters) add(m, 1);
-    if (w.summon) add(w.summon.id, w.summon.n * BOSS_RAGES);
+    for (const m of w.monsters) {
+      add(m, 1);
+      // 11/15 스스로 복사(엑셀 매크로): 복사본은 다시 복사하지 않는다
+      const cl = MONSTERS[m].clones;
+      if (cl) add(m, cl);
+      revive += MONSTERS[m].revive ?? 0;
+      seen.add(m);
+    }
+    // 11/15 판 중에 불려 오는 몬스터 (갈라지는 것이면 조각까지)
+    if (w.adds) for (const a of w.adds) add(a.id, a.n);
+    if (w.summon) {
+      add(w.summon.id, w.summon.n * BOSS_RAGES);
+      seen.add(w.summon.id);
+    }
   }
+  if (revive) for (const id of seen) if (revivable(id)) out[id] = (out[id] ?? 0) + revive;
   return out;
+}
+
+/** 11/15 백업 테이프가 되살릴 수 있는 몬스터: 우두머리·갈라지는 것·복사하는 것·되살리는 것·졸개 조각은 빼고 */
+export function revivable(id: MonsterId): boolean {
+  const d = MONSTERS[id];
+  return d.behavior !== "boss" && !d.split && !d.clones && !d.revive && !d.minion;
 }
 
 export const huntTotal = (plan: HuntWave[]) => plan.reduce((n, w) => n + w.monsters.length, 0);

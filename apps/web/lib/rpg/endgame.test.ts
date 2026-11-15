@@ -22,18 +22,18 @@ import type { HuntResult } from "./types";
 const DAY = 86_400_000;
 
 describe("초월 레벨 곡선 (★51~★100)", () => {
-  it("★51은 15,000, ★100은 약 41만, 합계 약 610만", () => {
-    expect(tExpToNext(0)).toBe(15_000);
-    expect(tExpToNext(1)).toBe(16_050);
-    expect(tExpToNext(49)).toBe(412_949);
+  it("★51은 10,000, ★100은 약 258만, 합계 약 2,400만 (11/15 가파르게)", () => {
+    expect(tExpToNext(0)).toBe(10000);
+    expect(tExpToNext(1)).toBe(11200);
+    expect(tExpToNext(49)).toBe(2580377);
     expect(tExpToNext(50)).toBe(Infinity);
     let sum = 0;
     for (let t = 0; t < 50; t++) sum += tExpToNext(t);
-    expect(sum).toBe(6_097_935);
+    expect(sum).toBe(24000181);
   });
 
   it("초월 EXP를 더하면 여러 레벨이 한 번에 오르고, 5레벨마다 능력치 1포인트 (최대면 EXP 0)", () => {
-    expect(applyTranscend(0, 0, 14_999)).toEqual({ tLevel: 0, tExp: 14_999, levelsGained: 0, statPoints: 0 });
+    expect(applyTranscend(0, 0, 9_999)).toEqual({ tLevel: 0, tExp: 9_999, levelsGained: 0, statPoints: 0 });
     const r = applyTranscend(4, 0, tExpToNext(4) + tExpToNext(5) + 10);
     expect(r).toEqual({ tLevel: 6, tExp: 10, levelsGained: 2, statPoints: 1 });
     expect(applyTranscend(49, 0, 10_000_000)).toEqual({ tLevel: 50, tExp: 0, levelsGained: 1, statPoints: 1 });
@@ -97,18 +97,9 @@ describe("초월 레벨 곡선 (★51~★100)", () => {
 });
 
 describe("하루 초월 판 구간 (새벽 5시 기준)", () => {
-  it("앞 (20 + 적립) 판 100%, 다음 20판 30%, 다음 20판 10%, 그 뒤 연습", () => {
-    expect(runTier(0, 0)).toBe("full");
-    expect(runTier(19, 0)).toBe("full");
-    expect(runTier(20, 0)).toBe("mid");
-    expect(runTier(39, 0)).toBe("mid");
-    expect(runTier(40, 0)).toBe("low");
-    expect(runTier(59, 0)).toBe("low");
-    expect(runTier(60, 0)).toBe("practice");
-    // 적립 15판: 100%가 35판까지
-    expect(runTier(34, 15)).toBe("full");
-    expect(runTier(35, 15)).toBe("mid");
-    expect(runTier(75, 15)).toBe("practice");
+  it("11/15 하루 판 수 제한 없음: 몇 번째 판이든 늘 100%", () => {
+    for (const i of [0, 19, 20, 59, 60, 500]) expect(runTier(i, 0)).toBe("full");
+    expect(runTier(75, 15)).toBe("full");
   });
 
   it("적립: 처음엔 0, 5판 한 날 → 15, 통째로 쉰 날은 20씩, 최대 40", () => {
@@ -141,7 +132,7 @@ describe("하루 초월 판 구간 (새벽 5시 기준)", () => {
   it("화면 정보: 날짜가 바뀌었으면 넘긴 값으로 보여 준다 (야근 빌딩 기록·상자·체크포인트)", () => {
     const c = { ...newCharacter(), level: 50, tDay: "20261116", tRuns: 25, tBank: 0, tFl: 2, tChest: 4, fBest: 23, fBestMs: 600_000, fWk: "20261116", fWkBest: 12, fWkMs: 300_000 };
     const v = endgameView(c, "20261116", "20261116", 1_000, false);
-    expect(v.day).toEqual({ runs: 25, full: 20, bank: 0, tier: "mid", floors: 2 });
+    expect(v.day).toEqual({ runs: 25, full: 20, bank: 0, tier: "full", floors: 2 });
     expect(v.tower).toEqual({ best: 23, week: { floor: 12, ms: 300_000 }, checkpoints: [1, 11, 21], chests: 4, chestsMax: 15 });
     expect(v.pioneer.until).toBe(pioneerUntil(1_000));
     // 다음 날·다음 주: 하루 칸은 넘기고, 지난주 기록은 보이지 않는다. 슈퍼 계정은 101층까지

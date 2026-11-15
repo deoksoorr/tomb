@@ -13,8 +13,8 @@ import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
 import { DEFAULT_PASS_DAYS, PRESENCE_INTERVAL_MS } from "@/lib/types";
 import { env } from "@/lib/env";
-import { PIONEER_DAYS, PIONEER_FLOOR, TBANK_MAX, TDAY_FULL, TDAY_STEP } from "@/lib/rpg/endgame";
-import { TOWER_CHESTS_PER_DAY, TOWER_FLOORS_PER_RUN } from "@/lib/rpg/tower";
+import { PIONEER_DAYS, PIONEER_FLOOR } from "@/lib/rpg/endgame";
+import { TOWER_CHESTS_PER_DAY } from "@/lib/rpg/tower";
 import { MAX_LEVEL } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { QUEST_DAILY, QUEST_STAMPS } from "@/lib/forage/quests/catalog";
@@ -85,7 +85,7 @@ const FAQ = [
   {
     // 11/15 수집 의뢰 (숫자는 lib/forage/quests/catalog.ts)
     q: "수집 의뢰와 의뢰 도장은 무엇인가요?",
-    a: `숲 빈터의 수집가 유령에게 [의뢰]가 있어요(물고기 의뢰는 낚시터 어부 영감에게도 낼 수 있어요). 오늘의 의뢰는 하루 ${QUEST_DAILY}개로 한국 시간 새벽 5시에 새로 나오고, 하루 한 번 의뢰 하나를 무료로 바꿀 수 있어요. 월요일마다 이번 주 큰 의뢰도 1개 나와요. 모은 물고기·채집물을 납품하면(가방에서 사라져요) 의뢰 도장을 ${QUEST_STAMPS.easy}~${QUEST_STAMPS.hard}개, 큰 의뢰는 ${QUEST_STAMPS.weekly}개 받아요. 도장은 포인트로 바꾸거나 남에게 줄 수 없고, 수집가 유령의 도장 교환소에서 상점에 없는 전용 꾸미기·염색권·이모티콘·펫·외형으로만 바꿔요. 끝낸 의뢰 수로 칭호도 받아요.`,
+    a: `수집가 유령(오리 연못 둑)과 납품 부두의 의뢰 게시판에 [의뢰]가 있어요(물고기 의뢰는 부두 어부 영감에게도 낼 수 있어요). 오늘의 의뢰는 하루 ${QUEST_DAILY}개로 한국 시간 새벽 5시에 새로 나오고, 하루 한 번 의뢰 하나를 무료로 바꿀 수 있어요. 월요일마다 이번 주 큰 의뢰도 1개 나와요. 모은 물고기·채집물을 납품하면(가방에서 사라져요) 의뢰 도장을 ${QUEST_STAMPS.easy}~${QUEST_STAMPS.hard}개, 큰 의뢰는 ${QUEST_STAMPS.weekly}개 받아요. 도장은 포인트로 바꾸거나 남에게 줄 수 없고, 수집가 유령의 도장 교환소에서 상점에 없는 전용 꾸미기·염색권·이모티콘·펫·외형으로만 바꿔요. 끝낸 의뢰 수로 칭호도 받아요.`,
   },
   {
     q: "묘비는 무엇인가요?",
@@ -99,7 +99,7 @@ const FAQ = [
     q: "돌아다니는 주민은 누구예요?",
     a: `연한 초록 이름표를 단 마을 주민(${RESIDENTS.slice(0, 3)
       .map((r) => r.name)
-      .join(", ")} 등)이에요. 동물원·낚시터·광장처럼 저마다 맡은 구역을 주로 걷고, 가끔 헤엄치거나 벤치·모닥불 곁에서 쉬어요. 가까이 가서 E(휴대폰은 상호작용 버튼)를 누르면 멈춰서 말을 걸어 주고, 가끔 게임 팁도 알려 줘요. 실제 사람이 아니라서 접속자 수에는 들어가지 않고, 운영 상황에 따라 나오는 수가 달라져요. 마을엔 강아지(비숑 우유 등)와 고양이도 있어 E로 쓰다듬을 수 있어요.`,
+      .join(", ")} 등)이에요. 동물원·납품 부두·광장처럼 저마다 맡은 구역을 주로 걷고, 가끔 헤엄치거나 벤치·모닥불 곁에서 쉬어요. 가까이 가서 E(휴대폰은 상호작용 버튼)를 누르면 멈춰서 말을 걸어 주고, 가끔 게임 팁도 알려 줘요. 실제 사람이 아니라서 접속자 수에는 들어가지 않고, 운영 상황에 따라 나오는 수가 달라져요. 마을엔 강아지(비숑 우유 등)와 고양이도 있어 E로 쓰다듬을 수 있어요.`,
   },
   {
     q: "친구는 어떻게 맺나요?",
@@ -117,7 +117,7 @@ const FAQ = [
   {
     q: "사냥 레벨 50 다음엔 뭐가 있나요?",
     // 11/15 사냥 끝판 1단계 — 숫자는 lib/rpg/endgame.ts
-    a: `레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 얻는 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요. 초월 5레벨마다 능력치 포인트 1개를 받고, 사냥 레벨 랭킹은 레벨 → 초월 레벨 → 초월 EXP 순이에요. 레벨 ${MAX_LEVEL} 지옥 판은 하루(한국 시간 새벽 5시 기준) 앞 ${TDAY_FULL}판은 초월 EXP 100%, 다음 ${TDAY_STEP}판 30%, 다음 ${TDAY_STEP}판 10%, 그 뒤는 연습 판(초월 EXP·드롭 없음)이에요. 못 쓴 100% 판은 다음 날로 적립돼요(최대 ${TBANK_MAX}판). 마을 북쪽 분양 사무소 옆 야근 빌딩은 1층부터 쓰러질 때까지 이어서 오르는 곳으로, 도전 횟수 제한이 없어요. 층이 오를수록 몬스터가 세지고 10층부터 저주가 쌓이며, 깬 층마다 초월 EXP를 받고 ${TOWER_FLOORS_PER_RUN}층이 초월 판 1판으로 세져요. 5층마다 우두머리 상자(하루 ${TOWER_CHESTS_PER_DAY}개)가 열려요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51에 닿거나 야근 빌딩 ${PIONEER_FLOOR}층을 처음 넘으면 닿은 차례대로 칭호 「개척자 #번호」를 받아요.`,
+    a: `레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 얻는 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요. 초월 5레벨마다 능력치 포인트 1개를 받고, 사냥 레벨 랭킹은 레벨 → 초월 레벨 → 초월 EXP 순이에요. 하루에 할 수 있는 판 수 제한은 없어요. 마을 북쪽 분양 사무소 옆 야근 빌딩은 1층부터 쓰러질 때까지 이어서 오르는 곳으로, 도전 횟수 제한이 없어요. 층이 오를수록 몬스터가 세지고 10층부터 저주가 쌓이며, 깬 층마다 초월 EXP를 받아요. 5층마다 우두머리 상자(하루 ${TOWER_CHESTS_PER_DAY}개)가 열려요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51에 닿거나 야근 빌딩 ${PIONEER_FLOOR}층을 처음 넘으면 닿은 차례대로 칭호 「개척자 #번호」를 받아요.`,
   },
   {
     q: "닉네임이 다른 사람과 같아도 되나요?",

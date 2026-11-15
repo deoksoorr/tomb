@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { CLOSED_LOTS } from "@tomb/protocol";
 import {
   defaultExterior,
   GUEST_KEEP,
@@ -74,10 +75,12 @@ const isLegacyCh = (ch: number) => (ch === LEGACY_HOUSING_CHANNEL ? "1" : "0");
 const SORT_KEY: Record<HouseSort, string> = { score: HK.score, likes: HK.likes, new: HK.new };
 
 // 가장 앞의 빈 번지 (없으면 nil)
+// 11/15 없앤 번지(CLOSED_LOTS)는 자동 배정에서 건너뛴다 (스크립트에 상수로 박는다 — 키·인자는 그대로)
 const FREE_LOT_FN = `
+local closed = {${CLOSED_LOTS.map((l) => `[${l}]=true`).join(",")}}
 local function freeLot(lots, max)
   for l = 1, max do
-    if redis.call('HEXISTS', lots, tostring(l)) == 0 then return l end
+    if not closed[l] and redis.call('HEXISTS', lots, tostring(l)) == 0 then return l end
   end
   return nil
 end

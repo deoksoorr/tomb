@@ -1,6 +1,10 @@
 import type * as Phaser from "phaser";
 import { MONSTERS, type MonsterId } from "@/lib/rpg/catalog";
 import { darken, Grid, lighten, mix, type Color } from "../sprites/pixel";
+// 11/15 야근 빌딩 지하 서버실 몬스터 그림 (sv_)
+import { SV_PAINT } from "../tower/themes/serverRoomMonsters";
+// 11/15 야근 빌딩 끝없는 회의실 몬스터 그림 (mt_)
+import { MT_PAINTS } from "../tower/themes/meetingRoomArt";
 
 // 40번 몬스터 디자인: 종류마다 코드로 그린 픽셀아트 + 동작별 프레임.
 // 한 장의 시트에 12프레임 — 0·1 가만히, 2~5 걷기, 6·7 공격(준비·내지름), 8 맞음, 9~11 쓰러짐.
@@ -1066,6 +1070,10 @@ const P: Record<MonsterId, Paint> = {
     g.rect(cx + 10, sy, 4, 4, 0x6a4a30);
     g.rect(cx + 9, sy + 4, 6, 3, a);
   },
+  // ── 11/15 야근 빌딩 지하 서버실 (game/tower/themes/serverRoomMonsters.ts) ──
+  ...SV_PAINT,
+  // ── 11/15 야근 빌딩 끝없는 회의실 (game/tower/themes/meetingRoomArt.ts) ──
+  ...MT_PAINTS,
 };
 
 // ── 공통 변형 ──

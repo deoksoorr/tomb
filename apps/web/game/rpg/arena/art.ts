@@ -2,6 +2,10 @@ import type { MonsterId, ZoneId } from "@/lib/rpg/catalog";
 import { css, darken, hash2, lighten, makeCanvas, mix, type Color } from "../../sprites/pixel";
 import { monsterIdleCanvas } from "../monsterArt";
 import { AH, AW, PROP_META, SIDE, TOP, type ArenaLayout, type Decal, type Region } from "./layout";
+// 11/15 야근 빌딩 지하 서버실 바닥·벽·소품
+import { serverRoomFloor, serverRoomWall, SV_PROPS, SV_SIDE } from "../../tower/themes/serverRoomMap";
+// 11/15 야근 빌딩 끝없는 회의실 (층마다 다른 배경은 MeetingRoom이 이 위에 한 장 더 깐다)
+import { MT_THEME } from "../../tower/themes/meetingRoomArt";
 
 // 40번 사냥터 그림 (캔버스 2D, Phaser 없이 — 로비 미리보기도 같은 함수로 그린다).
 // 바닥(벽·무늬·납작한 구역 포함)은 한 장, 키 있는 소품은 따로 (깊이 정렬), 움직이는 것(벨트·창밖·문)은 Arena가 따로 띄운다.
@@ -489,6 +493,9 @@ const THEMES: Record<ZoneId, Theme> = {
       R(c, 0, TOP - 1, AW, 1, 0x5a5850);
     },
   },
+  // 11/15 야근 빌딩 지하 서버실 (game/tower/themes/serverRoomMap.ts)
+  "server-room": { side: SV_SIDE, floor: (c, l) => serverRoomFloor(c, l.decals, l.variant), wall: (c, l) => serverRoomWall(c, l.variant) },
+  mt_meeting: MT_THEME,
 };
 
 // ── 바닥 무늬 ──
@@ -1073,6 +1080,8 @@ const PROPS: Record<string, PropPaint> = {
     }
     R(c, 2, h - 1, w - 4, 1, 0x000000, 0.35);
   },
+  // 11/15 지하 서버실 랙·냉각기·UPS
+  ...SV_PROPS,
 };
 
 /** 소품 하나의 그림 (Arena가 kind·v·flip마다 텍스처로 한 번 등록) */
@@ -1186,6 +1195,8 @@ export const PARTICLE_COLORS: Record<ZoneId, Color[]> = {
   "new-year-eve": [0xff6a6a, 0xffd04a, 0x6ad0ff, 0x8aff8a, 0xffffff],
   "quarter-close": [0xa8c0e8],
   "layoff-day": [0xf2ead3, 0xffffff, 0xe8e4d8],
+  "server-room": [0x6ad0ff, 0x3a8aff],
+  mt_meeting: [0xffe0b0, 0xfff4e0],
 };
 
 /** 로비 카드 미리보기: 지도 + 소품 + 우두머리와 몬스터 몇 마리 (반 크기) */
@@ -1255,4 +1266,7 @@ export const AMBIENT: Record<ZoneId, { color: Color; alpha: number }> = {
   "new-year-eve": { color: 0x6a6ab0, alpha: 0.65 },
   "quarter-close": { color: 0x4a5a90, alpha: 0.72 },
   "layoff-day": { color: 0xdcdce8, alpha: 0.25 },
+  "server-room": { color: 0x5a6ab8, alpha: 0.4 },
+  // 끝없는 회의실은 시계(층)마다 빛이 달라서 MeetingRoom이 따로 덮는다
+  mt_meeting: { color: 0xffffff, alpha: 0 },
 };

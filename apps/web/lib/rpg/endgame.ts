@@ -12,10 +12,12 @@ const DAY_MS = 86_400_000;
 
 /** 초월 레벨 상한 (t = 0..50, 표시 ★51..★100. 0 = 아직 초월 전) */
 export const TRANSCEND_MAX = 50;
-const T_BASE = 15_000;
-const T_GROWTH = 1.07;
+// 11/15: 하루 판 수 제한을 없애면서 곡선을 리니지처럼 가파르게 (사용자 요청 "레벨업을 리니지급으로").
+// 처음 잡은 2만 시작은 너무 길어 절반으로: 하루 4시간쯤(초월 EXP 약 5만) 하는 사람 기준 ★60 약 3일 · ★75 약 4주 · ★90 약 5달 · ★100 약 1년 3달
+const T_BASE = 10_000;
+const T_GROWTH = 1.12;
 
-/** 초월 t → t+1에 필요한 초월 EXP. ★51(0→1): 15,000 · ★100(49→50): 약 41만 · 합계 약 610만 (최대면 Infinity) */
+/** 초월 t → t+1에 필요한 초월 EXP. ★51(0→1): 10,000 · ★100(49→50): 약 258만 · 합계 약 2,400만 (최대면 Infinity) */
 export function tExpToNext(t: number): number {
   if (t >= TRANSCEND_MAX) return Infinity;
   return Math.round(T_BASE * T_GROWTH ** Math.max(0, Math.floor(t)));
@@ -64,13 +66,12 @@ export const RUN_TIERS: Record<RunTier, { rate: number; label: string; color: st
   practice: { rate: 0, label: "연습", color: "#8a8a8a" },
 };
 
-/** 그날 index번째(0부터) 초월 판의 구간: 앞 (20 + 적립) 판 100%, 다음 20판 30%, 다음 20판 10%, 그 뒤는 연습 판 (초월 EXP·드롭 없음) */
-export function runTier(index: number, bank: number): RunTier {
-  const full = TDAY_FULL + Math.max(0, bank);
-  if (index < full) return "full";
-  if (index < full + TDAY_STEP) return "mid";
-  if (index < full + TDAY_STEP * 2) return "low";
-  return "practice";
+/**
+ * 그날 index번째(0부터) 초월 판의 구간. 11/15: 하루 판 수 제한을 없앴다 — 늘 100% (사용자 요청 "초월 판수 제한도 없애").
+ * 구간 표·저장 칸(tRuns·tBank)은 옛 저장값·결과 모양 때문에 남겨 둔다
+ */
+export function runTier(_index: number, _bank: number): RunTier {
+  return "full";
 }
 
 /**

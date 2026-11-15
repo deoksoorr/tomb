@@ -31,7 +31,7 @@ export default function ForageBag() {
       {!state ? (
         <p className={error ? ui.error : ui.hint}>{error ?? "불러오는 중…"}</p>
       ) : items.length === 0 ? (
-        <p className={ui.hint}>아직 없어요. 나루터 옆 낚시터에서 낚시하고, 숲·풀밭·언덕에서 캐 보세요.</p>
+        <p className={ui.hint}>아직 없어요. 납품 부두·강둑·연못가에서 낚시하고, 숲·풀밭·언덕에서 캐 보세요.</p>
       ) : (
         <div className={s.bagGrid}>
           {items.map(({ sp, n }) => (
@@ -48,7 +48,7 @@ export default function ForageBag() {
         </div>
       )}
       <p className={ui.hint}>
-        물고기는 낚시터의 <b>어부 영감</b>, 나머지는 숲 빈터의 <b>수집가 유령</b>에게 팔 수 있어요. 수집가 유령의 의뢰에 납품하면 의뢰 도장
+        물고기는 납품 부두의 <b>어부 영감</b>, 나머지는 오리 연못 둑의 <b>수집가 유령</b>에게 팔 수 있어요. 수집가 유령의 의뢰에 납품하면 의뢰 도장
         {board ? (
           <>
             {" "}

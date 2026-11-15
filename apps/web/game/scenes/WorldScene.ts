@@ -1355,8 +1355,8 @@ export class WorldScene extends Phaser.Scene {
         return c ? { x: c.x, y: c.y - 22, text: label ?? "모닥불" } : null;
       }
       case "fishing":
-        // 낚시터 입구 아치 (현판 위)
-        return { x: FISH_ARCH.x, y: FISH_ARCH.y - 46, text: label ?? "낚시터" };
+        // 납품 부두 입구 아치 (현판 위)
+        return { x: FISH_ARCH.x, y: FISH_ARCH.y - 46, text: label ?? "납품 부두" };
       case "zoo":
         // 동물원 정문 아치 (현판 위)
         return { x: ZOO_ARCH_AT.x, y: ZOO_ARCH_AT.y - 46, text: label ?? "동물원" };

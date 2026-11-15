@@ -22,8 +22,10 @@ export const WALL_THICKNESS = 2 * TILE;
  * 1 = 세로로 길던 공동묘지 맵, 2 = 가을·겨울 마을(가로로 넓은 맵), 3 = 컴팩트한 묘지 마을(F1: 큰 모닥불 광장·묘역 세 곳·연못 여럿)
  * 4 = 낚시터(호수 북동쪽 데크·아치·노점 마당, 까마귀 연못 마른 나무·비석) — 데크·장식 자리에 옛 기록이 끼지 않게
  * 5 = 동물원(버드나무 묘역 자리 — 울타리·우리·사육사 노점, 묘비 자리는 옛 묘역·다리 건너 묘역으로 옮김) — 우리 안에 옛 기록이 끼지 않게
+ * 6 = 11/15 오리 연못(동물원을 줄이고 연못을 넓힘)·납품 부두(낚시 데크를 줄이고 의뢰 게시판·수족관 마당)·필지 1·11·12번 없앰(버스 정류장 광장)
+ *     — 넓어진 물·우리 울타리·새 장식 자리에 옛 기록이 끼지 않게
  */
-export const MAP_VERSION = 5;
+export const MAP_VERSION = 6;
 
 const CX = MAP_WIDTH / 2; // 720
 
@@ -54,15 +56,15 @@ export const ZONES: readonly Zone[] = [
   { id: "lake", name: "호수", x: 1120, y: 820, w: 272, h: 168 },
   { id: "pond", name: "달빛 연못", x: 398, y: 74, w: 116, h: 76 },
   { id: "pond", name: "까마귀 연못", x: 1108, y: 62, w: 232, h: 92 },
-  { id: "forest", name: "안개 숲", x: 400, y: 784, w: 200, h: 224 },
+  { id: "forest", name: "안개 숲", x: 304, y: 784, w: 296, h: 224 },
   // 11/15 오리 연못 (안개 숲 가운데, 오리배 선착장). DUCK_POND와 같은 타원을 두르는 사각형
-  { id: "pond", name: "오리 연못", x: 432, y: 836, w: 148, h: 120 },
+  { id: "pond", name: "오리 연못", x: 338, y: 828, w: 248, h: 144 },
   { id: "graveyard", name: "다리 건너 묘역", x: 600, y: 784, w: 256, h: 224 },
   // 동물원 (예전 버드나무 묘역 자리, 사용자 요청: 펫은 사육사에게서). ZOO와 같은 사각형
-  { id: "zoo", name: "동물원", x: 48, y: 784, w: 352, h: 224 },
+  { id: "zoo", name: "동물원", x: 48, y: 784, w: 256, h: 224 },
   { id: "meadow", name: "호박밭", x: 864, y: 864, w: 240, h: 144 },
-  // 낚시터 (호수 북동쪽 물가, 나루터 동쪽: 어부 노점 마당 + 호수로 뻗은 ㅜ자 낚시 데크). FISHING_ZONE과 같은 사각형
-  { id: "fishing", name: "낚시터", x: 1272, y: 784, w: 128, h: 192 },
+  // 11/15 납품 부두 (예전 낚시터: 호수 북동쪽 물가 + 없앤 11·12번지 자리의 위 마당 — 의뢰 게시판·기록 수족관·어부 노점·작은 낚시 잔교). FISHING_ZONE과 같은 사각형
+  { id: "fishing", name: "납품 부두", x: 1144, y: 652, w: 256, h: 260 },
 ];
 
 export const SPAWN = { x: CX, y: 60 } as const;
@@ -226,8 +228,23 @@ export const HOUSE_LOT_W = 128;
 export const HOUSE_LOT_H = 104;
 export const HOUSE_COLS = 3;
 export const HOUSE_ROWS = 4;
-/** 메인 맵에 서는 번지 수 (1..WORLD_LOTS) */
+/** 메인 맵 번지의 끝 번호 (1..WORLD_LOTS 중 CLOSED_LOTS를 뺀 번지만 메인 맵에 선다. 그보다 크면 2단지) */
 export const WORLD_LOTS = HOUSE_COLS * HOUSE_ROWS;
+/**
+ * 11/15 없앤 번지 (어느 채널에도 집이 없던 1·11·12번지). 번지를 다시 매기지 않는다: 남은 집의 번지·자리는 그대로,
+ * 없앤 번지는 분양·자동 배정·필지 그림·충돌에서 모두 빠진다.
+ *  - 1번지 자리(야근 빌딩·분양 사무소 바로 아래) → 주말 버스 정류장 광장 자리 (BUS_PLAZA, 지금은 포장된 빈 광장·벤치·가로등)
+ *  - 11·12번지 자리(주거 구역 오른쪽 아래, 호수 낚시터 바로 위) → 납품 부두 위 마당 (WHARF_YARD: 의뢰 게시판·기록 수족관)
+ */
+export const CLOSED_LOTS: readonly number[] = [1, 11, 12];
+/** 분양할 수 있는 번지인지 (1 이상 정수, 없앤 번지가 아님. WORLD_LOTS보다 크면 2단지) */
+export function isOpenLot(lot: number): boolean {
+  return Number.isInteger(lot) && lot >= 1 && !CLOSED_LOTS.includes(lot);
+}
+/** 메인 맵에 서는 번지인지 (없앤 번지는 아니다) */
+export function isWorldLot(lot: number): boolean {
+  return isOpenLot(lot) && lot <= WORLD_LOTS;
+}
 const HOUSE_X0 = 1008;
 const HOUSE_Y0 = 216;
 const HOUSE_PITCH_X = HOUSE_LOT_W + 4;
@@ -235,13 +252,18 @@ const HOUSE_PITCH_Y = HOUSE_LOT_H + 40;
 export type HouseLot = { lot: number; x: number; y: number; door: { x: number; y: number } };
 /** 번지 → 필지 (좌상단 x,y와 문 앞). 메인 맵에 없는 번지면 null */
 export function houseLot(lot: number): HouseLot | null {
-  if (!Number.isInteger(lot) || lot < 1 || lot > WORLD_LOTS) return null;
+  if (!isWorldLot(lot)) return null;
   const i = lot - 1;
   const x = HOUSE_X0 + (i % HOUSE_COLS) * HOUSE_PITCH_X;
   const y = HOUSE_Y0 + Math.floor(i / HOUSE_COLS) * HOUSE_PITCH_Y;
   return { lot, x, y, door: { x: x + HOUSE_LOT_W / 2, y: y + 92 } };
 }
-export const HOUSE_LOTS: readonly HouseLot[] = Array.from({ length: WORLD_LOTS }, (_, i) => houseLot(i + 1)!);
+/** 메인 맵 필지 (없앤 번지는 빠진다 — 순서는 번지 순. 번지 → 필지는 houseLot, 배열 위치로 찾지 않는다) */
+export const HOUSE_LOTS: readonly HouseLot[] = Array.from({ length: WORLD_LOTS }, (_, i) => houseLot(i + 1)).filter((l): l is HouseLot => l !== null);
+/** 주거 구역 필지 격자 왼쪽 위 (없앤 번지와 상관없이 격자는 그대로 — 골목·길 계산용) */
+export const HOUSE_GRID = { x: HOUSE_X0, y: HOUSE_Y0, pitchX: HOUSE_PITCH_X, pitchY: HOUSE_PITCH_Y } as const;
+/** 11/15 주말 버스 정류장 광장 자리 (예전 1번지 필지, 야근 빌딩 바로 아래). 지금은 포장된 빈 광장 + 벤치·가로등 (버스는 아직) */
+export const BUS_PLAZA = { x: HOUSE_X0, y: HOUSE_Y0, w: HOUSE_LOT_W, h: HOUSE_LOT_H } as const;
 
 // ── 강·연못·호수 ── (물 판정·그림은 클라이언트 layout.ts, 좌표 원본은 여기)
 /** 강 가운데 줄 (서쪽 담 밑에서 흘러나와 광장 남쪽을 지나 남동쪽 호수로). 물살은 이 순서 방향. x는 늘어나는 순서 */
@@ -272,8 +294,9 @@ export const LAKE = { x: 1256, y: 904, rx: 136, ry: 84 } as const;
 export const PONDS: readonly Pond[] = [
   { id: "pondN", name: "달빛 연못", x: 456, y: 112, rx: 58, ry: 38 },
   { id: "pondNE", name: "까마귀 연못", x: 1224, y: 108, rx: 116, ry: 46 },
-  // 11/15: 안개 연못을 넓혀 오리 연못으로 (오리배 선착장, 낚시는 하지 않는다 — 둑 낚시 자리를 뺐다)
-  { id: "pondS", name: "오리 연못", x: 506, y: 896, rx: 74, ry: 60 },
+  // 11/15: 안개 연못을 넓혀 오리 연못으로 (오리배 선착장, 낚시는 하지 않는다 — 둑 낚시 자리를 뺐다).
+  // 동물원을 줄인 자리(x 304~400)까지 서쪽으로 넓혔다 — 오리배 세 척이 돌아다닐 만큼 (예전 안개 연못의 약 4배, 처음 오리 연못의 약 2배)
+  { id: "pondS", name: "오리 연못", x: 462, y: 900, rx: 124, ry: 72 },
 ];
 /** 오리 연못 (PONDS "pondS"). 오리배는 이 연못 안에서만 다닌다 */
 export const DUCK_POND: Pond = PONDS.find((p) => p.id === "pondS")!;
@@ -300,29 +323,33 @@ export const DOCK_DECK = { x: 1232, y: 800, w: 24, h: 56 } as const;
 export const BOAT_MOORING = { x: 1206, y: 862 } as const;
 /** 호수 낚시 잔교 (서쪽 둑에서 호수로 뻗은 판자) */
 export const LAKE_PIER = { x: 1108, y: 924, w: 72, h: 16 } as const;
-// ── 낚시터 (사용자 요청: "낚시할 곳이 한눈에") ── 호수 북동쪽 물가(나루터 동쪽)를 낚시 전용 구역으로 꾸민다.
-// 북쪽 골목 바로 아래 어부 노점 마당(FISH_YARD) → 입구 아치(FISH_ARCH) → 호수로 곧게 뻗은 낚시 데크(FISH_PIER) → 끝의 가로 데크(FISH_PIER_HEAD).
-// 강 어귀(호수 북서쪽)는 비워 둬서 조각배가 그대로 강으로 드나든다. 데크 양옆·끝과 둑에 낚시 자리가 모여 있다 (FISHING_SPOTS 앞쪽 FISHING_ZONE_SPOTS곳).
+// ── 납품 부두 (11/15, 예전 낚시터) ── 호수 북동쪽 물가 + 없앤 11·12번지 자리.
+// 위 마당(WHARF_YARD, 마지막 골목 바로 위): 의뢰 게시판(E → 수집 의뢰판)·긴급 의뢰 자리(빈 현판)·기록 수족관(이번 주 최대어 3마리)·벤치·가로등.
+// 아래 마당(FISH_YARD, 골목 바로 아래): 어부 노점 → 입구 아치(FISH_ARCH) → 짧은 낚시 잔교(FISH_PIER + 끝의 작은 가로 데크 FISH_PIER_HEAD).
+// 낚시는 잔교 양옆·끝과 둑의 몇 자리만 (FISHING_SPOTS 앞쪽 FISHING_ZONE_SPOTS곳) — 사람들이 잘 안 오던 큰 데크를 줄였다.
 // 그림·장식·충돌은 클라이언트(game/world/fishZone.ts, game/world/forage/FishZoneView.ts)
-/** 낚시터 구역 (이름표·미니맵·안내). ZONES의 "낚시터"와 같다 */
-export const FISHING_ZONE = { x: 1272, y: 784, w: 128, h: 192 } as const;
-/** 어부 노점 마당 (자갈 바닥, 북쪽 골목 바로 아래) */
+/** 납품 부두 구역 (이름표·미니맵·안내·흩뿌리는 나무 비키기). ZONES의 "납품 부두"와 같다 */
+export const FISHING_ZONE = { x: 1144, y: 652, w: 256, h: 260 } as const;
+/** 납품 부두 위 마당 (자갈 바닥, 없앤 11·12번지 자리 — 마지막 골목 바로 위) */
+export const WHARF_YARD = { x: 1144, y: 640, w: 256, h: 112 } as const;
+/** 어부 노점 마당 (자갈 바닥, 마지막 골목 바로 아래) */
 export const FISH_YARD = { x: 1280, y: 784, w: 112, h: 32 } as const;
-/** 낚시 데크: 마당에서 호수 안쪽(남쪽)으로 곧게 뻗은 넓은 판자 */
-export const FISH_PIER = { x: 1312, y: 816, w: 24, h: 110 } as const;
-/** 낚시 데크 끝의 가로 데크 (ㅜ자 머리) */
-export const FISH_PIER_HEAD = { x: 1288, y: 926, w: 72, h: 24 } as const;
-/** 낚시터 입구 아치 (데크 북쪽 끝, 발 위치 = 아치 가운데 아래) */
+/** 낚시 잔교: 마당에서 호수 안쪽(남쪽)으로 짧게 뻗은 판자 */
+export const FISH_PIER = { x: 1312, y: 816, w: 24, h: 56 } as const;
+/** 잔교 끝의 작은 가로 데크 (ㅜ자 머리) */
+export const FISH_PIER_HEAD = { x: 1296, y: 872, w: 56, h: 20 } as const;
+/** 잔교 입구 아치 (잔교 북쪽 끝, 발 위치 = 아치 가운데 아래) */
 export const FISH_ARCH = { x: 1324, y: 826 } as const;
 // ── 동물원 (사용자 요청: "버드나무 묘역을 동물원으로, 펫은 사육사한테 산다") ── 예전 버드나무 묘역 자리.
 // 나무 울타리로 두르고(위쪽 정문은 서쪽 다리와 줄을 맞추고, 동쪽 문은 안개 숲으로), 안에 우리 다섯 곳과 사육사 노점이 있다.
 // 우리·장식·동물 움직임(결정적 시뮬레이션)은 클라이언트(game/world/zoo), 펫 가격은 items.ts ZOO_PETS.
+// 11/15: 너무 넓다는 요청으로 동쪽을 96px 줄였다 (쉼터를 빼고 우리를 촘촘히) — 빈 자리는 오리 연못이 됐다
 /** 동물원 구역 (울타리 안쪽 땅). ZONES의 "동물원"과 같다 */
-export const ZOO = { x: 48, y: 784, w: 352, h: 224 } as const;
+export const ZOO = { x: 48, y: 784, w: 256, h: 224 } as const;
 /** 위쪽 정문 (울타리를 비우는 x 구간) — 서쪽 다리(x 176)에서 곧장 내려온다 */
 export const ZOO_GATE = { x0: 160, x1: 192, y: 784 } as const;
 /** 동쪽 문 (울타리를 비우는 y 구간) — 안개 숲으로 */
-export const ZOO_EAST_GATE = { x: 400, y0: 872, y1: 904 } as const;
+export const ZOO_EAST_GATE = { x: 304, y0: 872, y1: 904 } as const;
 /** 사육사 (정문 안쪽 오른편 노점 앞, 발 위치). E → 펫 분양 창 */
 export const ZOOKEEPER = { x: 210, y: 826 } as const;
 /** 이 점이 동물원 사각형 안인지 (pad만큼 넓혀 본다) */
@@ -341,18 +368,13 @@ const fishSpot = (water: FishingSpot["water"], x: number, y: number, facing: Dir
 /** 강 북쪽 둑(아래를 본다)·남쪽 둑(위를 본다) 낚시 자리 — 가운데 줄에서 27px */
 const riverSpot = (x: number, north: boolean) => fishSpot("river", x, Math.round(riverYAt(x) + (north ? -27 : 27)), north ? DIR.down : DIR.up);
 export const FISHING_SPOTS: readonly FishingSpot[] = [
-  // ── 낚시터 (12) ── 낚시 데크 양옆·가로 데크 위아래와 끝, 둘레 둑
+  // ── 납품 부두 (7) ── 짧은 잔교 양옆·끝 가로 데크, 둘레 둑 (11/15: 큰 데크를 줄여 12 → 7)
   fishSpot("lake", 1318, 850, DIR.left),
   fishSpot("lake", 1330, 866, DIR.right),
-  fishSpot("lake", 1318, 882, DIR.left),
-  fishSpot("lake", 1330, 898, DIR.right),
-  fishSpot("lake", 1318, 914, DIR.left),
-  fishSpot("lake", 1294, 938, DIR.left),
-  fishSpot("lake", 1310, 943, DIR.down),
-  fishSpot("lake", 1330, 943, DIR.down),
-  fishSpot("lake", 1352, 934, DIR.up),
+  fishSpot("lake", 1303, 882, DIR.left),
+  fishSpot("lake", 1324, 885, DIR.down),
+  fishSpot("lake", 1345, 882, DIR.right),
   fishSpot("lake", 1366, 856, DIR.down),
-  fishSpot("lake", 1384, 872, DIR.down),
   fishSpot("lake", 1398, 904, DIR.left),
   // ── 다른 물가 (14) ── 연못·강·호수 서쪽에도 몇 자리씩 (낚시터가 붐빌 때)
   // 달빛 연못 (언덕 옆)
@@ -374,9 +396,9 @@ export const FISHING_SPOTS: readonly FishingSpot[] = [
   fishSpot("lake", 1180, 828, DIR.down),
   fishSpot("lake", 1180, 982, DIR.up),
 ];
-/** 낚시터 안의 낚시 자리 수 (FISHING_SPOTS 앞쪽) */
-export const FISHING_ZONE_SPOTS = 12;
-/** 이 낚시 자리가 낚시터 안에 있는지 */
+/** 납품 부두(예전 낚시터) 안의 낚시 자리 수 (FISHING_SPOTS 앞쪽) */
+export const FISHING_ZONE_SPOTS = 7;
+/** 이 낚시 자리가 납품 부두(낚시 구역) 안에 있는지 */
 export function inFishingZone(x: number, y: number): boolean {
   const z = FISHING_ZONE;
   return x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
@@ -414,17 +436,17 @@ export const BOATS: readonly Boat[] = [
   { id: "boatA", x: 1206, y: 850, seats: 1, facing: DIR.left },
   { id: "boatB", x: 1282, y: 850, seats: 1, facing: DIR.right },
   { id: "boatC", x: 1250, y: 884, seats: 2, facing: DIR.right },
-  { id: "duckA", x: 466, y: 866, seats: 2, facing: DIR.left, kind: "duck" },
-  { id: "duckB", x: 534, y: 866, seats: 2, facing: DIR.right, kind: "duck" },
-  { id: "duckC", x: 500, y: 900, seats: 2, facing: DIR.right, kind: "duck" },
+  { id: "duckA", x: 422, y: 852, seats: 2, facing: DIR.left, kind: "duck" },
+  { id: "duckB", x: 488, y: 852, seats: 2, facing: DIR.right, kind: "duck" },
+  { id: "duckC", x: 456, y: 884, seats: 2, facing: DIR.right, kind: "duck" },
 ];
 /** 배 종류 (없으면 조각배) */
 export function boatKind(b: Boat): BoatKind {
   return b.kind ?? "row";
 }
 /** 오리배 선착장 판자 (오리 연못 북쪽 둑에서 물로) · 타는 자리(판자 끝) */
-export const DUCK_DOCK_DECK = { x: 496, y: 820, w: 20, h: 40 } as const;
-export const DUCK_DOCK = { x: 506, y: 852 } as const;
+export const DUCK_DOCK_DECK = { x: 452, y: 812, w: 20, h: 40 } as const;
+export const DUCK_DOCK = { x: 462, y: 846 } as const;
 /** 2인승 뒷자리: 앞자리(노 젓는 자리)에서 뱃머리 반대쪽으로 이만큼 */
 export const BOAT_BACK_SEAT = 11;
 /** 오리배 옆자리: 왼쪽 자리(조종)에서 화면 오른쪽으로 이만큼 */
@@ -632,6 +654,11 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "bN", kind: "bench", x: 952, y: 262, facing: DIR.down, seatOffsets: two },
   { id: "bO", kind: "bench", x: 1060, y: 800, facing: DIR.down, seatOffsets: two },
   { id: "lE", kind: "bench", x: 1144, y: 800, facing: DIR.down, seatOffsets: four }, // 낚시터가 생기며 나루터 서쪽 호숫가로 옮김
+  // ── 11/15 주말 버스 정류장 광장 (예전 1번지, 북쪽 길을 바라본다) · 납품 부두 위 마당 (게시판·수족관 앞) ──
+  { id: "bY", kind: "bench", x: 1044, y: 300, facing: DIR.up, seatOffsets: two },
+  { id: "bZ", kind: "bench", x: 1100, y: 300, facing: DIR.up, seatOffsets: two },
+  { id: "bD", kind: "bench", x: 1192, y: 744, facing: DIR.up, seatOffsets: two },
+  { id: "bE", kind: "bench", x: 1336, y: 744, facing: DIR.up, seatOffsets: two },
   // ── 사냥터 동굴 앞 ──
   { id: "bQ", kind: "bench", x: 912, y: 112, facing: DIR.down, seatOffsets: two },
   // ── 다리 건너 묘역 ── 묘비를 바라보는 벤치
@@ -640,7 +667,7 @@ export const FURNITURE: readonly Furniture[] = [
   // ── 동물원 ── 큰 개 놀이터 옆 쉼터 벤치 (예전 버드나무 묘역 벤치를 옮겼다, id 그대로)
   { id: "bX", kind: "bench", x: 354, y: 990, facing: DIR.up, seatOffsets: two },
   // ── 오리 연못(옛 안개 연못) · 호박밭 ──
-  { id: "bS", kind: "bench", x: 440, y: 972, facing: DIR.up, seatOffsets: two },
+  { id: "bS", kind: "bench", x: 540, y: 808, facing: DIR.down, seatOffsets: two }, // 11/15 오리 연못 북쪽 둑 (연못을 바라본다)
   { id: "cE", kind: "chair", x: 1010, y: 960, facing: DIR.right, seatOffsets: [0] },
   { id: "cF", kind: "chair", x: 1050, y: 960, facing: DIR.left, seatOffsets: [0] },
   // 모닥불 둘레 (통나무 2인 + 그루터기)

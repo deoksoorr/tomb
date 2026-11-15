@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CARD_IDS, MAX_PICKS } from "./cards";
 import { DIFFICULTIES, GAME_KINDS, GEAR_SLOTS, HOTBAR_SIZE, MONSTER_IDS, POTION_MAX_STACK, SKILLS, STAT_KEYS, ZONE_IDS, type SkillId } from "./catalog";
 
 // 사냥터 API 입력 검증 (zod). 메시지는 lib/validate.ts가 켜 둔 한국어 로케일을 따른다.
@@ -34,6 +35,11 @@ export const RunResultSchema = z.discriminatedUnion("game", [
     floors: z.number().int().min(0).max(1_000).optional(),
     floorMs: duration.optional(),
     quit: z.boolean().optional(),
+    // 11/15 능력 카드 고른 기록 (lib/rpg/cards replayPicks가 내용을 본다)
+    cards: z
+      .array(z.object({ k: z.enum(["l", "s", "b"]), i: z.number().int().min(0).max(100_000), r: z.number().int().min(0).max(1_000), c: z.enum(CARD_IDS) }))
+      .max(MAX_PICKS)
+      .optional(),
   }),
   z.object({ game: z.literal("bugs"), durationMs: duration, caught: count, golden: count, wrong: count, decoy: count, maxCombo: count, score: z.number().int().min(0).max(1_000_000) }),
   z.object({

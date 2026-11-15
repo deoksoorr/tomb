@@ -190,7 +190,7 @@ export function questText(q: QuestSpec): string {
 }
 
 const HOW: Record<LifeCat, string> = {
-  fish: "낚시터·배 위에서 낚시",
+  fish: "부두 잔교·강둑·연못·배 위에서 낚시",
   bug: "수풀에서 곤충 잡기",
   herb: "숲·풀밭·언덕·호숫가의 약초",
   ore: "언덕·동굴 앞 광석",

@@ -25,6 +25,7 @@ import {
   towerScore,
   towerSettle,
   towerTaunt,
+  TOWER_THEMES,
   towerZone,
   type TowerState,
 } from "./tower";
@@ -83,19 +84,19 @@ describe("층 배율·테마·저주", () => {
     ).toBe(monsterStats("hr_chair", "hell", TOWER_POWER).exp);
   });
 
-  it("테마: 다섯 층마다 지옥 사냥터 넷을 돌아가며", () => {
+  it("테마: 다섯 층마다 번갈아 (11/15 지하 서버실 1~5·11~15 …, 끝없는 회의실 6~10·16~20 …)", () => {
     expect(
       [1, 5, 6, 10, 11, 16, 20, 21, 41].map((f) => towerZone(f).id),
     ).toEqual([
-      "burnout-abyss",
-      "burnout-abyss",
-      "new-year-eve",
-      "new-year-eve",
-      "quarter-close",
-      "layoff-day",
-      "layoff-day",
-      "burnout-abyss",
-      "burnout-abyss",
+      "server-room",
+      "server-room",
+      TOWER_THEMES[1],
+      TOWER_THEMES[1],
+      "server-room",
+      TOWER_THEMES[1],
+      TOWER_THEMES[1],
+      "server-room",
+      "server-room",
     ]);
   });
 
@@ -307,28 +308,12 @@ describe("보상 정산 (층 EXP · 4층 = 1판 · 상자 하루 15개 · 기록
     expect(b.patch).toMatchObject({ tRuns: 2, tFl: 0 });
   });
 
-  it("하루 구간: 100% 판을 다 쓴 뒤 층은 30%·10%·연습(0)", () => {
-    const s = { ...base, tDay: DAY, tRuns: 19, tFl: 3 };
-    const r = towerSettle(s, {
-      day: DAY,
-      week: WEEK,
-      start: 1,
-      floors: 2,
-      floorMs: 60_000,
-    });
-    expect(r.tiers).toEqual(["full", "mid"]);
-    expect(r.tExp).toBe(floorTExp(1) + Math.round(floorTExp(2) * 0.3));
-    const late = towerSettle(
-      { ...base, tDay: DAY, tRuns: 60 },
-      { day: DAY, week: WEEK, start: 1, floors: 4, floorMs: 60_000 },
-    );
-    expect(late.tExp).toBe(0);
-    expect(late.tiers).toEqual([
-      "practice",
-      "practice",
-      "practice",
-      "practice",
-    ]);
+  it("11/15 하루 판 수 제한 없음: 많이 오른 날에도 층마다 100%", () => {
+    const r = towerSettle({ ...base, tDay: DAY, tRuns: 19, tFl: 3 }, { day: DAY, week: WEEK, start: 1, floors: 2, floorMs: 60_000 });
+    expect(r.tiers).toEqual(["full", "full"]);
+    expect(r.tExp).toBe(floorTExp(1) + floorTExp(2));
+    const late = towerSettle({ ...base, tDay: DAY, tRuns: 60 }, { day: DAY, week: WEEK, start: 1, floors: 4, floorMs: 60_000 });
+    expect(late.tExp).toBe(floorTExp(1) + floorTExp(2) + floorTExp(3) + floorTExp(4));
   });
 
   it("우두머리 상자는 하루 15개까지 — 그 뒤 우두머리 층은 빈 상자 (날이 바뀌면 다시)", () => {

@@ -59,7 +59,7 @@ import HousingOffice from "@/components/housing/HousingOffice";
 import { hopChannel } from "@/components/housing/channelHop";
 import { graveChannelFor } from "@/game/world/graveChannel";
 import type { PublicHouse } from "@/lib/housing/types";
-import { isRideablePet, WORLD_LOTS } from "@tomb/protocol";
+import { isRideablePet, isWorldLot } from "@tomb/protocol";
 import HuntLobby from "@/components/rpg/HuntLobby";
 import { towerTaunt } from "@/lib/rpg/tower";
 import ForageLayer from "@/components/forage/ForageLayer";
@@ -423,7 +423,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       house.ch,
       houseChannel,
       () => {
-        if (house.lot >= 1 && house.lot <= WORLD_LOTS) bridge.emit("world:lot", { lot: house.lot, label: "내 집" });
+        if (isWorldLot(house.lot)) bridge.emit("world:lot", { lot: house.lot, label: "내 집" });
         else {
           setHousingIntent(null);
           setPanel("housing");
