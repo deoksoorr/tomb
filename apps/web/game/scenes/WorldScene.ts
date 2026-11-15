@@ -60,6 +60,7 @@ import { ZOO_ARCH_AT, ZooView } from "../world/zoo/ZooView";
 import { Expressions } from "../world/Expressions";
 import { MeScreen } from "../world/MeScreen";
 import type { GameContext } from "./context";
+import { FEST_MS } from "@/lib/forage/quests/urgent";
 import type { ShopContext } from "./ShopScene";
 
 // 월드 씬: 맵·묘비·내 캐릭터·원격 아바타·분위기·조명·카메라·네트워크를 묶고 bridge 이벤트를 처리한다.
@@ -1502,7 +1503,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
-   * 11/15 긴급 의뢰 마을 축제 (150%): 모닥불이 금빛, 하늘에 폭죽이 저절로 오른다 (보는 화면 아래쪽에서 쏘아 화면 안에서 터지게).
+   * 11/15 긴급 의뢰 마을 축제 (150%): 모닥불이 금빛, 하늘에 폭죽이 저절로 오른다 (처음 90초만 자주, 그 뒤엔 드물게) (보는 화면 아래쪽에서 쏘아 화면 안에서 터지게).
    * 폭죽 아이템 없이 그림만 — 서버·다른 사람에게 보내지 않는다 (모두가 같은 축제 상태를 보고 저마다 쏜다). 움직임 줄이기면 드물게
    */
   private updateFestival(now: number): void {
@@ -1513,7 +1514,9 @@ export class WorldScene extends Phaser.Scene {
       this.festNext = now + 800;
     }
     if (!on || this.awayScene || this.inShop || now < this.festNext) return;
-    this.festNext = now + (this.reduced ? 7_000 : 1_600 + Math.random() * 2_600);
+    // 11/15 폭죽은 축제가 열린 처음 90초만 자주 (1.6~4.2초마다), 그 뒤엔 1~2분에 한 발 — 1시간 내내 터지면 시끄럽고 산 폭죽이 묻힌다
+    const burst = Date.now() < this.festUntil - FEST_MS + 90_000;
+    this.festNext = now + (this.reduced ? (burst ? 7_000 : 120_000) : burst ? 1_600 + Math.random() * 2_600 : 60_000 + Math.random() * 60_000);
     const v = this.fireworkView();
     const x = v.x + v.width * (0.12 + Math.random() * 0.76);
     const y = v.y + v.height * (0.82 + Math.random() * 0.15);
