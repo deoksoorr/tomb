@@ -29,6 +29,7 @@ import { DEPTH } from "../config";
 import { drawEmptyLot, drawHouseLot, type LotGfx } from "../housing/worldLots";
 import { CHUNK, CHUNK_COLS, CHUNK_ROWS, drawGroundChunk } from "../sprites/ground";
 import { SHOP_HUT_H } from "../sprites/extras";
+import { BENCH_UP_BACK_ROW } from "../sprites/props";
 import { CAVE_TORCHES, FIRE_FRAMES, OFFICE_H, TORCH_TINT, WP } from "../sprites/worldProps";
 import { BIG_FIRE_FRAMES, FENCE_H_W, GRAVE_GATE_H, GY } from "../sprites/graveyardProps";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
@@ -438,7 +439,14 @@ export class WorldMap {
     if (f.campfire) key = f.kind === "bench" ? WP.logSeat : WP.stumpSeat;
     else if (f.kind === "bench") {
       const w = benchWidth(f);
-      key = w >= 72 ? TEX.bench4 : w >= 56 ? TEX.bench3 : TEX.bench2;
+      const up = f.facing === 3; // 위를 보는 벤치: 뒤에서 본 그림 (등받이가 화면 쪽)
+      key = w >= 72 ? (up ? TEX.bench4Up : TEX.bench4) : w >= 56 ? (up ? TEX.bench3Up : TEX.bench3) : up ? TEX.bench2Up : TEX.bench2;
+      // 등받이·다리만 한 번 더, 앉은 사람(depth 좌석 y + 1) 앞에 그려 허리 아래를 가린다
+      if (up) {
+        const back = this.scene.add.image(f.x, f.y + 2, key).setOrigin(0.5, 1).setDepth(f.y + 1.2);
+        back.setCrop(0, BENCH_UP_BACK_ROW, back.width, back.height - BENCH_UP_BACK_ROW);
+        this.cull(f.x, f.y, back);
+      }
     } else key = f.facing === 1 ? TEX.chairLeft : f.facing === 2 ? TEX.chairRight : TEX.chairDown;
     this.cull(f.x, f.y, this.scene.add.image(f.x, f.y + 2, key).setOrigin(0.5, 1).setDepth(f.y));
     this.addCollider(this.furnitureColliders, furnitureCollider(f));
