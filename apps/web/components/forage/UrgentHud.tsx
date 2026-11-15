@@ -76,7 +76,7 @@ export default function UrgentHud() {
           </span>
           <b>불꽃축제</b>
           <span className={u.fwClock}>{mmss(fwLeft)}</span>
-          <small>목표의 150%를 채웠어요! 모닥불은 1시간 동안 금빛</small>
+          <small>목표의 150%를 채웠어요! 모닥불이 1시간 동안 금빛으로 타요.</small>
         </div>
       )}
       {hidden !== ev.id && !fireworks && (
