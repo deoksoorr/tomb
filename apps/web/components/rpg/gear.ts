@@ -178,7 +178,12 @@ const n2 = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(2));
 
 /** "공격력 136 (+136) · 방어 40 (+16)" — 강화가 없으면 괄호 없이 */
 export function statLine(id: string): string {
-  return enhSplit(id, gearById)
-    .map(([k, base, plus]) => `${STAT_KO[k] ?? k} ${n2(base)}${plus ? ` (+${n2(plus)})` : ""}`)
+  return statParts(id)
+    .map((p) => `${p.label} ${p.base}${p.plus ? ` (+${p.plus})` : ""}`)
     .join(" · ");
+}
+
+/** 능력치 한 줄을 조각으로 (화면이 강화 몫만 다른 색으로 그린다): 이름·강화 전 값·강화 몫(없으면 "") */
+export function statParts(id: string): { k: string; label: string; base: string; plus: string }[] {
+  return enhSplit(id, gearById).map(([k, base, plus]) => ({ k, label: STAT_KO[k] ?? k, base: n2(base), plus: plus ? n2(plus) : "" }));
 }

@@ -441,10 +441,19 @@ export const LOOK_MAX_PARTS = 9;
 /** 착용 중인 꾸미기 (부위별 최대 1개, 최대 LOOK_MAX_PARTS개). 서버 브로드캐스트·렌더링용.
  * 이 빌드가 모르는 id는 버린 뒤에 센다 → 옛 실시간 서버(최대 7개)도 새 닉네임 꾸미기만 버리고 나머지는 그대로 받는다 */
 export type Look = string[];
+/**
+ * 11/15 사냥 장비 표시 (사냥터 방에서만 그린다 — web game/sprites/setGearWear): "sgw.{a|h|c}.{세트}{직급}" 또는 "sgw.{a|h|c}.{상점 장비 id}[+]".
+ * 서버(web)가 캐릭터 저장값에서 꺼내 증서에 서명해 넣는다. 꾸미기 칸 수(LOOK_MAX_PARTS)에는 세지 않고 최대 HUNT_GEAR_MAX개
+ */
+export const HUNT_GEAR_RE = /^sgw\.[ahc]\.(?:[0-3]{2}|[a-z]_[a-z_]{1,30}\+?)$/;
+export const HUNT_GEAR_MAX = 4;
+export const isHuntGearId = (id: unknown): id is string => typeof id === "string" && HUNT_GEAR_RE.test(id);
+
 export function sanitizeLook(raw: unknown): Look {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<CosmeticSlot>();
   const out: string[] = [];
+  const gear: string[] = [];
   // 칭호(TITLE_IDS)는 꾸미기가 아니지만 같은 착용 목록에 하나만 실려 다른 사람 화면 머리 위에 보인다 (맨 뒤에 둔다)
   let title: string | null = null;
   for (const id of raw) {
@@ -452,12 +461,16 @@ export function sanitizeLook(raw: unknown): Look {
       title ??= id;
       continue;
     }
+    if (isHuntGearId(id)) {
+      if (gear.length < HUNT_GEAR_MAX && !gear.includes(id)) gear.push(id);
+      continue;
+    }
     const it = typeof id === "string" ? byId.get(id) : undefined;
     if (!it || it.kind !== "cosmetic" || !it.slot || seen.has(it.slot)) continue;
     seen.add(it.slot);
     out.push(it.id);
   }
-  const parts = out.slice(0, LOOK_MAX_PARTS);
+  const parts = [...out.slice(0, LOOK_MAX_PARTS), ...gear];
   return title ? [...parts, title] : parts;
 }
 

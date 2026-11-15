@@ -549,10 +549,25 @@
 
 /* 강화로 더해진 몫 "(+136)" */
 .enhPart {
-  color: #8cc8ff;
+  color: var(--enh);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 전투 능력 요약 안에서는 작게 */
+dd .enhPart {
   font-family: var(--font-small);
   font-size: 10px;
-  font-variant-numeric: tabular-nums;
+}
+
+/* 강화 미리보기: 다음 단계 몫은 조금 더 밝게 */
+.enhNext {
+  filter: brightness(1.15);
+  font-weight: 700;
+}
+
+.tick {
+  display: inline-block;
+  animation: tick 0.6s ease-out;
 }
 
 .statRows {
@@ -581,16 +596,6 @@
   color: var(--bone);
   font-weight: 400;
   font-variant-numeric: tabular-nums;
-}
-
-.tickUp {
-  color: #ffd76a;
-  animation: tick 0.6s ease-out;
-}
-
-.tickDown {
-  color: #e0806a;
-  animation: tick 0.6s ease-out;
 }
 
 @keyframes tick {

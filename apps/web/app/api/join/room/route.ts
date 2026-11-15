@@ -10,6 +10,8 @@ import { getAccounts, NO_NAME } from "@/lib/store";
 import { getStyleStore } from "@/lib/store/style";
 import { champWireFor } from "@/lib/store/champ";
 import { lookOf } from "@/lib/store/accounts";
+import { huntGearIds } from "@/lib/rpg/huntGear";
+import { getRpgStore } from "@/lib/rpg/store";
 import type { RoomJoinResponse } from "@/lib/types";
 import { readBody, RoomJoinSchema } from "@/lib/validate";
 
@@ -30,11 +32,19 @@ export const POST = handler(async (req) => {
   const now = Date.now();
   const accounts = getAccounts();
   // 계정 전체 대신 이름·색·몸·착용만 (명령 9개 → 2개)
-  const [a, style, staff, dex, champ] = await Promise.all([accounts.appearance(visitorId, now), getStyleStore(accounts).get(visitorId), isStaff(visitorId), dexBadgeOf(visitorId), isStaff(visitorId).then((s) => champWireFor(visitorId, s, now)).catch(() => 0)]);
+  const [a, style, staff, dex, champ, gear] = await Promise.all([
+    accounts.appearance(visitorId, now),
+    getStyleStore(accounts).get(visitorId),
+    isStaff(visitorId),
+    dexBadgeOf(visitorId),
+    isStaff(visitorId).then((s) => champWireFor(visitorId, s, now)).catch(() => 0),
+    // 11/15 사냥터 방: 낀 사냥 장비 표시 (캐릭터 저장값으로 — 화면이 주장할 수 없다). 사냥터 방만 명령 1개 더
+    room.startsWith("hunt:") ? getRpgStore().get(visitorId).then((c) => huntGearIds(c.equip)).catch(() => []) : Promise.resolve([] as string[]),
+  ]);
   const token = await signJoinToken(
     env.joinSecret(),
     // 31번: 운영자 표시는 서버가 확인한 뒤에만. 11/15: 이름은 운영자도 닉네임 그대로
-    { visitorId, name: a.name ?? NO_NAME, color: a.color ?? AVATAR_COLORS[0], body: a.body ?? "hood", look: lookOf(a), dye: style.dye, channel: 0, room, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}) },
+    { visitorId, name: a.name ?? NO_NAME, color: a.color ?? AVATAR_COLORS[0], body: a.body ?? "hood", look: [...lookOf(a), ...gear], dye: style.dye, channel: 0, room, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}) },
     ROOM_TOKEN_TTL_SEC,
   );
   return json<RoomJoinResponse>({ room, token, wsUrl: `${env.realtimeWsUrl()}/room/${encodeURIComponent(room)}?t=${encodeURIComponent(token)}` });

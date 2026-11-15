@@ -3,7 +3,7 @@ import { darken, Grid, lighten, mix, parseHex, type Color } from "./pixel";
 import { COVERING_HATS, drawBackGear, drawHandGear, drawHandGlow, drawHeadGear, drawHeadGlow, drawNeckGear, extraGearOf, GEAR_SHEET_IDS, type ExtraGear } from "./avatarGear";
 import { COSMETIC_FX_IDS } from "./cosmeticFx";
 // 11/15 사냥 중 입은 세트 장비 (착용 목록의 "sgw.…" — game/sprites/setGearWear)
-import { drawSetAcc, drawSetArmor, drawSetHead, drawSetSpark, sgHeadCovers, sgWearOf, sparkFrame, SGW_PREFIX, type SgWear } from "./setGearWear";
+import { drawSetSpark, drawWearAcc, drawWearArmor, drawWearHead, isTopWear, sgHeadCovers, sgWearOf, sparkFrame, SGW_PREFIX, type SgWear } from "./setGearWear";
 
 // 방문자 아바타 6종 (모두 오리지널 디자인, 같은 색 팔레트 규칙):
 //  hood  두건 쓴 작은 순례자 (두건 끝이 새싹처럼 접힘, 어두운 얼굴 구멍에 눈 두 점)
@@ -552,8 +552,10 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   drawArms(g, view, pose, m, pal, false);
   // 11/15 사냥 중 세트 갑옷: 몸통·팔을 세트 색으로 (머리는 그 위에 그린다)
   const sgSpots: [number, number][] = [];
-  if (gear.sg.a)
-    sgSpots.push(drawSetArmor(g, view, fb, m, [pal.cloak, pal.cloakLo, pal.bodyMid, pal.bodyLo, pal.bodyHi, pal.hood, pal.hoodLo, pal.hoodHi], [pal.cloakLo, pal.bodyLo, pal.hoodLo], gear.sg.a));
+  if (gear.sg.a) {
+    const spot = drawWearArmor(g, view, fb, m, [pal.cloak, pal.cloakLo, pal.bodyMid, pal.bodyLo, pal.bodyHi, pal.hood, pal.hoodLo, pal.hoodHi], [pal.cloakLo, pal.bodyLo, pal.hoodLo], gear.sg.a);
+    if (spot && isTopWear(gear.sg.a)) sgSpots.push(spot);
+  }
   // F8 등 꾸미기: 뒷모습에서 등을 덮는 부분·앞모습 어깨끈 (머리보다 먼저)
   if (gear.extra.back) drawBackGear(g, view, gear.extra.back, m, fb, "front", pose.hem, pose.sit);
 
@@ -629,9 +631,12 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   if (gear.extra.head) drawHeadGear(g, view, gear.extra.head, m, fb, fb === "round" ? m.top - 1 : m.top);
   if (gear.extra.hand) drawHandGear(g, view, gear.extra.hand, m);
   // 11/15 사냥 중 세트 장신구·머리 + 임원급 반짝임 (시트 프레임 홀짝으로 두 장)
-  for (const c of gear.sg.c) drawSetAcc(g, view, fb, m, c);
-  if (gear.sg.h) sgSpots.push(drawSetHead(g, view, fb, m, gear.sg.h));
-  const sgTop = [gear.sg.a, gear.sg.h, ...gear.sg.c].some((w) => w?.[1] === 3);
+  for (const c of gear.sg.c) drawWearAcc(g, view, fb, m, c);
+  if (gear.sg.h) {
+    const spot = drawWearHead(g, view, fb, m, gear.sg.h);
+    if (isTopWear(gear.sg.h)) sgSpots.unshift(spot);
+  }
+  const sgTop = [gear.sg.a, gear.sg.h, ...gear.sg.c].some(isTopWear);
   if (sgTop) drawSetSpark(g, sgSpots.length ? sgSpots : [[cx, m.shY]], sparkFrame(pose));
 
   // 귀는 모자 위로 튀어나오게 모자 다음에 (고양이 탈의 귀 안쪽은 늘 분홍 — 포인트 색은 사원증 줄)

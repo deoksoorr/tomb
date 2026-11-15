@@ -51,7 +51,7 @@ import {
   type BagEntry,
   type BagTab,
   type StatDiff,
-  statLine,
+  statParts,
 } from "./gear";
 import EnhanceDialog, { type EnhanceTab } from "./EnhanceDialog";
 import HuntCapMeter from "./HuntCap";
@@ -136,7 +136,11 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
   const targetOf = (gear: GearDef): GearSlot => (slotSel && slotAccepts(slotSel, gear.kind) ? slotSel : equipTarget(c, gear.kind));
   const idOf = (x: BagEntry) => (x.type === "sg" ? x.code : (x.piece?.code ?? x.gear.id));
   const wornSlot = (x: BagEntry): GearSlot | null =>
-    x.type === "sg" ? x.slot : x.piece ? x.piece.slot : (GEAR_SLOTS.find((k) => c.equip[k] && !shopPieceOf(c.equip[k]) && baseGearId(c.equip[k]!) === x.gear.id) ?? null);
+    x.type === "sg"
+      ? x.slot
+      : x.piece
+        ? x.piece.slot
+        : (GEAR_SLOTS.find((k) => c.equip[k] && !shopPieceOf(c.equip[k]) && baseGearId(c.equip[k]!) === x.gear.id) ?? null);
   const diffOf = (x: BagEntry): StatDiff[] => (wornSlot(x) && (x.type === "sg" || x.count - x.equipped < 1) ? [] : gearDiff(c, targetOf(x.gear), idOf(x)));
   const openDiff = openEntry ? diffOf(openEntry) : [];
   const deltaOf = new Map(openDiff.map((d) => [d.key, d.delta]));
@@ -169,7 +173,8 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
 
   function equipEntry(x: BagEntry) {
     const slot = targetOf(x.gear);
-    if (x.type === "sg" || x.piece) void gear({ type: "equip", slot, uid: x.type === "sg" ? x.it.u : x.piece!.u }, `${josa(x.gear.name, "을", "를")} ${SLOT_LABELS[slot]}에 꼈어요.`);
+    if (x.type === "sg" || x.piece)
+      void gear({ type: "equip", slot, uid: x.type === "sg" ? x.it.u : x.piece!.u }, `${josa(x.gear.name, "을", "를")} ${SLOT_LABELS[slot]}에 꼈어요.`);
     else onCharacter({ type: "equip", slot, itemId: x.gear.id }, `${josa(x.gear.name, "을", "를")} ${SLOT_LABELS[slot]}에 꼈어요.`);
   }
 
@@ -458,7 +463,9 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                                 type="button"
                                 className={ui.button}
                                 disabled={working || x.enh >= SHOP_ENH_MAX}
-                                onClick={() => setDlg(x.piece ? { kind: "enhance", piece: x.piece.u, tab: "enhance" } : { kind: "enhance", shop: x.gear.id, tab: "enhance" })}
+                                onClick={() =>
+                                  setDlg(x.piece ? { kind: "enhance", piece: x.piece.u, tab: "enhance" } : { kind: "enhance", shop: x.gear.id, tab: "enhance" })
+                                }
                               >
                                 {x.enh >= SHOP_ENH_MAX ? "강화 끝 +5" : "강화"}
                               </button>
@@ -507,6 +514,21 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
       )}
       {dlg?.kind === "exchange" && onView && <ExchangeDialog view={view} onClose={() => setDlg(null)} onView={onView} />}
     </div>
+  );
+}
+
+/** 능력치 한 줄: 강화로 붙은 몫 (+N)만 강화 색(--enh) */
+function EnhStats({ id }: { id: string }) {
+  return (
+    <>
+      {statParts(id).map((p, i) => (
+        <span key={p.k}>
+          {i > 0 && " · "}
+          {p.label} {p.base}
+          {p.plus && <span className={g.enhPart}> (+{p.plus})</span>}
+        </span>
+      ))}
+    </>
   );
 }
 
@@ -564,7 +586,11 @@ function Row({ x, open, onToggle, children }: { x: BagEntry; open: boolean; onTo
           <span className={g.name}>{plusName(x.gear.name, e)}</span>
           <span className={g.sub}>{sub}</span>
           <span className={g.opts}>
-            {isSg ? x.it.o.map(([k, v]) => optText(k, v)).join(" · ") + (x.it.L ? ` · ${SG_LEGENDS[x.it.L].name}` : "") : statLine(x.piece?.code ?? x.gear.id)}
+            {isSg ? (
+              x.it.o.map(([k, v]) => optText(k, v)).join(" · ") + (x.it.L ? ` · ${SG_LEGENDS[x.it.L].name}` : "")
+            ) : (
+              <EnhStats id={x.piece?.code ?? x.gear.id} />
+            )}
           </span>
         </span>
         {worn ? (
@@ -641,7 +667,9 @@ function SgDetail({
     <div className={g.detail}>
       <Compare diff={diff} target={target} cur={cur} worn={!!x.slot} />
       <ul className={g.optList}>
-        <li>기본 {statLine(x.code)}</li>
+        <li>
+          기본 <EnhStats id={x.code} />
+        </li>
         {x.it.o.map(([k, v]) => (
           <li key={k}>{optText(k, v)}</li>
         ))}

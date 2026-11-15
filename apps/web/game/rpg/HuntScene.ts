@@ -458,6 +458,8 @@ export class HuntScene extends RpgScene {
         atlas,
         room,
         me: this.me,
+        // 11/15 다른 사람의 사냥 장비(서버 서명)도 입혀 보이고, 꾸미기를 바꿔도 내 사냥 장비는 그대로
+        huntGear: { me: (l) => huntLook(l, play.equip) },
         getPose: () => ({ x: Math.round(this.px), y: Math.round(this.py), state: this.movingNow ? STATE.walk : STATE.idle, dir: this.dirRow as DirId }),
         onStatus: (st) => (this.peers = st.mode === "online" ? st.count : 0),
         // 11/13 같은 사냥터 사람의 공격·스킬 동작 (보여 주기만)

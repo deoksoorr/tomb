@@ -15,7 +15,20 @@ import {
   type EnhanceResult,
   type EnhTarget,
 } from "@/lib/rpg/enhance";
-import { decodeSg, encodeSg, encodeShopPiece, enhSplit, optText, SG_LEGENDS, sgDef, sgUid, SHOP_ENH_MAX, shopPieceOf, type SgItem, type SgOpt } from "@/lib/rpg/setGear";
+import {
+  decodeSg,
+  encodeSg,
+  encodeShopPiece,
+  enhSplit,
+  optText,
+  SG_LEGENDS,
+  sgDef,
+  sgUid,
+  SHOP_ENH_MAX,
+  shopPieceOf,
+  type SgItem,
+  type SgOpt,
+} from "@/lib/rpg/setGear";
 import type { RpgView } from "@/lib/rpg/types";
 import { errorMessage } from "@/lib/api";
 import { josa } from "@/lib/rpg/skillText";
@@ -59,7 +72,9 @@ function targetInfo(
   if ("sg" in t) {
     const code = (c.sg ?? []).find((x) => sgUid(x) === t.sg);
     const it = code ? decodeSg(code) : null;
-    return it ? { def: sgDef(it, code), code: code!, next: it.e < 15 ? encodeSg({ ...it, e: it.e + 1 }) : null, e: it.e, f: it.f, it, color: sgGrade(it).color } : null;
+    return it
+      ? { def: sgDef(it, code), code: code!, next: it.e < 15 ? encodeSg({ ...it, e: it.e + 1 }) : null, e: it.e, f: it.f, it, color: sgGrade(it).color }
+      : null;
   }
   if ("piece" in t) {
     const code = (c.si ?? []).find((x) => shopPieceOf(x)?.u === t.piece);
@@ -75,9 +90,28 @@ function targetInfo(
 
 /** 능력치 한 줄씩: 강화 전 값 (+강화 몫) */
 function statRows(code: string): { k: string; label: string; base: number; plus: number }[] {
-  return enhSplit(code, gearById).map(([k, base, plus]) => ({ k, label: STAT_NAMES[k] ?? k, base, plus }));
+  // 깎는 능력치(공속 −0.08 등)는 강화로 안 바뀌어서 뺀다
+  return enhSplit(code, gearById)
+    .filter(([, base]) => base > 0)
+    .map(([k, base, plus]) => ({ k, label: STAT_NAMES[k] ?? k, base, plus }));
 }
-const STAT_NAMES: Record<string, string> = { atk: "공격력", def: "방어", hp: "체력", sp: "SP", str: "STR", agi: "AGI", vit: "VIT", int: "INT", dex: "DEX", luk: "LUK", aspd: "공속", crit: "치명", hit: "명중", flee: "회피", move: "이속" };
+const STAT_NAMES: Record<string, string> = {
+  atk: "공격력",
+  def: "방어",
+  hp: "체력",
+  sp: "SP",
+  str: "STR",
+  agi: "AGI",
+  vit: "VIT",
+  int: "INT",
+  dex: "DEX",
+  luk: "LUK",
+  aspd: "공속",
+  crit: "치명",
+  hit: "명중",
+  flee: "회피",
+  move: "이속",
+};
 const num = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(2));
 
 const CONFETTI = Array.from({ length: 18 }, (_, i) => {
@@ -311,8 +345,8 @@ export default function EnhanceDialog({
                     <li key={r1.k}>
                       <span>{r1.label}</span>
                       <b>
-                        {num(r1.base)} <span className={d > 0 ? g.tickUp : d < 0 ? g.tickDown : undefined}>(+{num(r1.plus)})</span>
-                        <small className={g.note}> {d > 0 ? `▲ ${num(d)}` : d < 0 ? `▼ ${num(-d)}` : "그대로"}</small>
+                        {num(r1.base)} <span className={cx(g.enhPart, d !== 0 && g.tick)}>(+{num(r1.plus)})</span>
+                        <small className={d > 0 ? g.up : d < 0 ? g.down : g.note}> {d > 0 ? `▲ ${num(d)}` : d < 0 ? `▼ ${num(-d)}` : "그대로"}</small>
                       </b>
                     </li>
                   );
@@ -359,7 +393,8 @@ export default function EnhanceDialog({
                         <li key={r0.k}>
                           <span>{r0.label}</span>
                           <b>
-                            {num(r0.base)} (+{num(r0.plus)}) → <span className={g.up}>{num(r1?.base ?? r0.base)} (+{num(r1?.plus ?? r0.plus)})</span>
+                            {num(r0.base)} <span className={g.enhPart}>(+{num(r0.plus)})</span> → {num(r1?.base ?? r0.base)}{" "}
+                            <span className={cx(g.enhPart, g.enhNext)}>(+{num(r1?.plus ?? r0.plus)})</span>
                           </b>
                         </li>
                       );

@@ -325,3 +325,18 @@ describe("슈퍼 계정 여러 층 (31층부터 10층)", () => {
     }
   });
 });
+
+describe("사냥터 방 입장 토큰에 사냥 장비 표시 (서버가 캐릭터 저장값으로)", () => {
+  it("사냥터 방만 낀 갑옷·머리·장신구를 싣고, 마을 방에는 싣지 않는다", async () => {
+    const { verifyJoinToken } = await import("@tomb/protocol");
+    const roomJoin = await import("../join/room/route");
+    const set = encodeSg(mk({ u: 1, p: 1, s: 2, o: [["h", 9]] }));
+    const v = await newVisitor({ level: 50, sg: [set], sgN: 2, inv: { h_cap: 1, w_ruler: 1 }, equip: { weapon: "w_ruler", armor: set, head: "h_cap", acc1: null, acc2: null } });
+    const join = async (room: string) => (await (await roomJoin.POST(call("/api/join/room", v, { room }))).json()) as { token: string };
+    const hunt = await verifyJoinToken("dev-join-secret-change-me", (await join("hunt:slime:a")).token);
+    expect(hunt?.look).toEqual(expect.arrayContaining(["sgw.a.23", "sgw.h.h_cap"]));
+    expect(hunt?.look?.some((x) => x.includes("w_ruler"))).toBe(false);
+    const village = await verifyJoinToken("dev-join-secret-change-me", (await join("village")).token);
+    expect(village?.look?.some((x) => x.startsWith("sgw."))).toBe(false);
+  });
+});
