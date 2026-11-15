@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { HUNT_ZONES, MONSTERS, type MonsterId } from "../catalog";
 import { huntSpawnable } from "../plan";
 import { killRateCeiling } from "../rewards";
-import { evalTower, floorMinSec, isBossFloor, TOWER_THEMES, towerBlock, towerPlan, towerZone } from "../tower";
+import { evalTower, towerClean, floorMinSec, isBossFloor, TOWER_THEMES, towerBlock, towerPlan, towerZone } from "../tower";
 import type { HuntResult } from "../types";
 import { PK_ALARM, PK_BOSS, PK_ELITE, PK_LOOPS, PK_POOL, PK_ROOMS, PK_BOSS_ROOM, PK_RUSH, PK_TICKET, PK_ZONE, pkLoop, pkPillarCode, pkRoom, pkTicketSlow } from "./parking";
 import { PK_BARRIER_CAP, pkTowAdds } from "./parkingPlan";
@@ -118,7 +118,7 @@ describe("지하 주차장: 서버 검증", () => {
     const r = climbAll(seed, 1, 20);
     const can = huntSpawnable(towerPlan(seed, 21, 1), Infinity).pk_alarm_car ?? 0;
     const cheat = { ...r, kills: { ...r.kills, pk_alarm_car: (r.kills.pk_alarm_car ?? 0) + can + 1 } };
-    expect(evalTower({ seed, level: 50, start: 1 }, cheat, r.durationMs + 500).ok).toBe(false);
+    expect(towerClean(evalTower({ seed, level: 50, start: 1 }, cheat, r.durationMs + 500))).toBe(false);
   });
 });
 

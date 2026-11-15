@@ -5,7 +5,7 @@ import { cardPower, isBossDealFloor } from "@/lib/rpg/cards";
 import { seeded } from "@/lib/rpg/formulas";
 import { huntSpawnable } from "@/lib/rpg/plan";
 import { RunFinishSchema } from "@/lib/rpg/schemas";
-import { evalTower, floorMinSec, towerPlan } from "@/lib/rpg/tower";
+import { evalTower, floorMinSec, towerClean, towerPlan } from "@/lib/rpg/tower";
 import type { HuntResult } from "@/lib/rpg/types";
 import { bridge } from "../../bridge";
 import { CardRun, type CardHost, type CardMon } from "./CardRun";
@@ -169,8 +169,8 @@ describe("야근 빌딩 긴 판 (실제 CardRun → 판 끝 요청 형식 → ev
         const { result } = runTower(seed, o);
         const v = serverCheck(seed, start, result, s % 4 === 0 ? 3.5 : 1);
         n++;
-        if (!v.ok) bad.push(`seed ${seed} start ${start} die ${dieAt} floors ${result.floors}: ${v.code} ${v.message}`);
-        else expect(v.best).toBe(start + (result.floors ?? 0) - 1);
+        if (!towerClean(v)) bad.push(`seed ${seed} start ${start} die ${dieAt} floors ${result.floors}: ${v.ok ? v.suspect?.join(" | ") : `${v.code} ${v.message}`}`);
+        else expect(v.ok && v.best).toBe(start + (result.floors ?? 0) - 1);
       }
     expect(bad, bad.slice(0, 5).join("\n")).toEqual([]);
     expect(n).toBe(360);
@@ -189,7 +189,7 @@ describe("야근 빌딩 긴 판 (실제 CardRun → 판 끝 요청 형식 → ev
       const seed = 90_000 + s;
       const { result, cards } = runTower(seed, { start: 21, dieAt: 45, fast: true, rerollP: 0.3 });
       const v = serverCheck(seed, 21, result);
-      expect(v.ok, `seed ${seed}: ${!v.ok ? v.message : ""} power ${cardPower(cards.counts)}`).toBe(true);
+      expect(towerClean(v), `seed ${seed}: ${!v.ok ? v.message : v.suspect?.join(" | ")} power ${cardPower(cards.counts)}`).toBe(true);
     }
   });
 });

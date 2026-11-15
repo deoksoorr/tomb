@@ -59,6 +59,8 @@ export type CharacterState = {
   fWk?: string;
   fWkBest: number;
   fWkMs: number;
+  /** 11/15 의심 판(부드러운 거절)으로 오른 가장 높은 층 — 체크포인트만 연다 (없으면 0) */
+  fSus?: number;
   /** 개척자 번호와 받은 시각 (끝판이 열린 뒤 14일 안에 ★51 또는 야근 빌딩 5층) */
   pioneer?: { n: number; at: number };
   // ── 11/15 세트 장비·강화 (lib/rpg/setGear · lib/rpg/enhance). 옛 저장값에 없으면 normalize가 채운다 ──
@@ -218,7 +220,19 @@ export type RunReward = {
    * 11/15 야근 빌딩: 시작 층·깬 층 수·이번 최고 층 · 새 최고 기록·이번 주 기록 · 초월 판으로 센 판 수 ·
    * 상자를 연 우두머리 층·오늘 한도로 비어 있던 상자 수 · 서버 최초·꼭대기 층 주인으로 받은 칭호 id
    */
-  tower?: { start: number; floors: number; best: number; newBest: boolean; newWeek: boolean; runs: number; chests: number[]; emptyChests: number; titles: string[] };
+  tower?: {
+    start: number;
+    floors: number;
+    best: number;
+    newBest: boolean;
+    newWeek: boolean;
+    runs: number;
+    chests: number[];
+    emptyChests: number;
+    titles: string[];
+    /** 11/15 확인이 필요한 판 (부드러운 거절): 층·초월 EXP·상자는 받았고 랭킹·주간 기록·서버 최초·최고층 기록에서만 빠진다 */
+    suspect?: boolean;
+  };
   /** 11/15 이번 판으로 개척자 번호를 받았다 */
   pioneer?: number;
 };

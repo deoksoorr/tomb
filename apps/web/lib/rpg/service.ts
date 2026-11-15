@@ -7,6 +7,7 @@ import { forgetTitles, forgetTowerTitles } from "../titlesServer";
 import { earnRule } from "../economy";
 import { env } from "../env";
 import { HttpError } from "../http";
+import { recordError } from "../errors";
 import { isStaff } from "../staff";
 import { COSMETIC_DROPS, gearById, potionById, timeLimitSec, zoneFor, type Difficulty, type GameKind, type ZoneId } from "./catalog";
 import {
@@ -40,7 +41,9 @@ import {
   FIRST_STAR_ID,
   TOWER_FIRSTS,
   TOWER_MAX_RUN_SEC,
+  TOWER_TICKET_SEC,
   towerChestDrops,
+  towerReach,
   towerScore,
   towerSettle,
   towerZone,
@@ -306,7 +309,7 @@ export async function startRun(
   // 11/15 야근 빌딩: 지옥 사냥만, 시작 층은 최고 기록으로 연 체크포인트 (층마다 사냥터는 정해져 있다 — 화면이 보낸 사냥터는 보지 않는다)
   if (tower !== undefined) {
     if (game !== "hunt" || difficulty !== "hell") throw new HttpError(400, "INVALID_INPUT", "야근 빌딩은 지옥 사냥에서만 갈 수 있어요.");
-    const bad = checkTowerStart({ level: lv, start: tower, best: c.fBest, sup });
+    const bad = checkTowerStart({ level: lv, start: tower, best: towerReach(c), sup });
     if (bad) throw new HttpError(bad.code === "INVALID_INPUT" ? 400 : 403, bad.code, bad.message);
   }
   // 11/15 야근 빌딩: 층마다 테마는 판 시드로 정해진다 (시작 층의 테마를 티켓에 싣는다)
@@ -318,7 +321,8 @@ export async function startRun(
   // 야근 빌딩은 층마다 제한 시간이 따로 있고, 티켓은 긴 등반을 받도록 두 시간
   const limit = tower ? TOWER_MAX_RUN_SEC : timeLimitSec(game, difficulty, zone?.id);
   const nonce = nanoid(16);
-  if (!(await store.startRun(acct, nonce, limit + FINISH_GRACE_SEC, hourBucket(now))))
+  // 11/15 야근 빌딩은 멈춤·카드 고르기·탭 숨김으로 벽시계가 판 시간보다 길어진다 → 진행 중 표시를 티켓 수명(TOWER_TICKET_SEC)만큼
+  if (!(await store.startRun(acct, nonce, (tower ? TOWER_TICKET_SEC : limit) + FINISH_GRACE_SEC, hourBucket(now))))
     throw new HttpError(429, "RATE_LIMITED", `한 시간에 ${RUNS_PER_HOUR}판까지 할 수 있어요. 잠시 쉬었다 와요.`);
   // 11/15 초월 판(레벨 50 지옥): 그날 몇 번째 판인지를 서버가 센다 (시작하면 한 판 — 끝내지 않아도).
   // 구간(100%·30%·10%·연습)은 여기서 정해 티켓에 싣는다 → 결과를 낼 때 화면 말을 믿지 않는다.
@@ -466,7 +470,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   if (!t) throw new HttpError(400, "BAD_TICKET", "판 기록이 올바르지 않아요. 다시 시작해 주세요.");
   if (t.a !== acct) throw new HttpError(403, "BAD_TICKET", "다른 계정으로 시작한 판이에요.");
   const elapsed = now - t.t;
-  const expired = elapsed > ((t.tw ? TOWER_MAX_RUN_SEC : timeLimitSec(t.g, t.d, t.z)) + FINISH_GRACE_SEC) * 1000 || elapsed < 0;
+  const expired = elapsed > ((t.tw ? TOWER_TICKET_SEC : timeLimitSec(t.g, t.d, t.z)) + FINISH_GRACE_SEC) * 1000 || elapsed < 0;
   const claim = await store.claimRun(acct, t.n);
   if (claim === "reused") throw new HttpError(409, "TICKET_USED", "이미 결과를 받은 판이에요.");
   if (expired) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래된 판이라 결과를 받을 수 없어요.");
@@ -606,13 +610,45 @@ async function finishTower(acct: string, start: number, seed: number, level: num
   // 11/15 테스트 서버 슈퍼 계정만 처치 속도 상한을 빼고 (테스트용 무적·공격력 ×20) — 운영 서버에서는 isSuperHunter가 늘 false
   const sup = await isSuperHunter(acct);
   const v = evalTower({ seed, level, start, ...(gp ? { gp } : {}) }, result, elapsed, { lax: sup });
+  // 11/15 거절·의심 판은 운영 로그와 관리자 오류 모음(/admin 오류)에 남긴다 (정직한 판이 걸리면 원인을 바로 찾게 — 계정은 앞 6자리만)
+  const info = {
+    acct: acct.slice(0, 6),
+    start,
+    floors: result.floors ?? 0,
+    level,
+    gp: gp ?? 1,
+    elapsed,
+    durationMs: result.durationMs,
+    floorMs: result.floorMs ?? 0,
+    kills: Object.values(result.kills).reduce((a, n) => a + (n ?? 0), 0),
+    cards: result.cards?.length ?? 0,
+    died: result.died,
+    quit: !!result.quit,
+  };
   if (!v.ok) {
-    // 11/15 야근 빌딩 결과 거절은 운영 로그에 남긴다 (31층 판이 보상 없이 끝난 문의 — 어느 검사에 걸렸는지 알 수 있게)
-    const kills = Object.values(result.kills ?? {}).reduce((a, n) => a + (n ?? 0), 0);
-    console.warn("[tower] 결과 거절", JSON.stringify({ code: v.code, message: v.message, why: v.why, acct: acct.slice(0, 6), start, floors: result.floors, level, gp, elapsed, durationMs: result.durationMs, kills, cards: result.cards?.length ?? 0 }));
+    console.warn("[tower] 결과 거절", JSON.stringify({ code: v.code, message: v.message, ...(v.why ? { why: v.why } : {}), ...info }));
+    await towerOpsLog("[tower] 결과 거절", { code: v.code, why: v.why ?? v.message, ...info, killsBy: result.kills }, now);
     throw new HttpError(422, v.code, v.message);
   }
+  if (v.suspect) {
+    console.warn("[tower] 의심 판", JSON.stringify({ why: v.suspect, ...info }));
+    await towerOpsLog("[tower] 의심 판 (보상 지급·랭킹 제외)", { why: v.suspect.join(" | "), ...info, killsBy: result.kills, picks: result.cards ?? [] }, now);
+  }
   return settleTowerRun(acct, start, seed, v, result.potionsUsed, ipHash, now, sup);
+}
+
+/** 11/15 야근 빌딩 거절·의심 판 기록 (관리자 오류 모음 — 판마다 따로 묶이게 첫 줄에 계정·시각). 기록 실패는 조용히 */
+async function towerOpsLog(title: string, d: Record<string, unknown> & { acct: string; why: string }, now: number): Promise<void> {
+  await recordError(
+    {
+      kind: "tower",
+      source: "server",
+      message: `${title}: ${d.why}`.slice(0, 500),
+      stack: `${d.acct} @${now}\n${JSON.stringify(d)}`.slice(0, 4000),
+      url: "/api/rpg/run/finish",
+    },
+    now,
+  ).catch(() => {});
 }
 
 /**
@@ -635,7 +671,8 @@ async function settleTowerRun(
   const done = await http(
     store.update(acct, (s) => {
       const cur = consumePotions(s, potionsUsed).state;
-      const st: TowerSettle = towerSettle(cur, { day, week, start, floors: v.floors, floorMs: v.floorMs });
+      // 11/15 의심 판(부드러운 거절): 층·초월 EXP·상자·포인트는 그대로, 최고·주간 기록은 그대로 두고 체크포인트만 연다 (fSus)
+      const st: TowerSettle = towerSettle(cur, { day, week, start, floors: v.floors, floorMs: v.floorMs, suspect: !!v.suspect });
       const settled = { ...cur, ...st.patch };
       const g = gainTranscend(settled, st.tExp);
       // 11/15 상자마다 세트 장비 천장을 이어서 센다 (게임이 판 안에서 같은 순서로 센다) · 슈퍼 계정 시험 드롭(sup)
@@ -664,6 +701,8 @@ async function settleTowerRun(
   const staff = await isStaff(acct);
   const titles: string[] = [];
   let pioneer: number | undefined;
+  // 11/15 의심 판은 랭킹·주간 기록·서버 최초·최고층 기록 보유자·주간 사냥 레이스에서 뺀다 (st.newBest·newWeek도 false)
+  const suspect = !!v.suspect;
   if (!staff) {
     // 랭킹: 기록이 오른 판만 (주간·전체 — 파이프라인 한 번)
     if (st.newWeek || st.newBest) {
@@ -697,14 +736,14 @@ async function settleTowerRun(
         }
       }
     }
-    if (done.result.star100) titles.push(...(await claimFirstTitles(acct, [FIRST_STAR_ID], now, () => "서버 최초로 ★100에 올랐어요!")));
+    if (done.result.star100 && !suspect) titles.push(...(await claimFirstTitles(acct, [FIRST_STAR_ID], now, () => "서버 최초로 ★100에 올랐어요!")));
   }
   const drops = await grantCosmetics(acct, done.result.drops, now);
   const earned = v.points > 0 ? (await earnPoints(acct, "hunt", v.points, ipHash)).earned : 0;
   await store.addDaily(acct, day, { points: earned, runs: 1 });
   await recordEvent("hunt", now);
   // 처치 수는 주간 사냥 레이스에 그대로 (지옥, 레벨 50 콘텐츠라 늘 레이스에 든다)
-  if (v.kills > 0 && !staff) await getAccounts().recordHunt(acct, "hell", { kills: v.kills, clearMs: null }, week, true);
+  if (v.kills > 0 && !staff && !suspect) await getAccounts().recordHunt(acct, "hell", { kills: v.kills, clearMs: null }, week, true);
   const lastTier = st.tiers[st.tiers.length - 1] ?? runTier(rollDay(state, day).tRuns, rollDay(state, day).tBank);
   return {
     reward: {
@@ -718,7 +757,7 @@ async function settleTowerRun(
       newLevel: state.level,
       lostDrops: done.result.lost,
       transcend: { exp: st.tExp, tier: lastTier, levelsGained: done.result.levels, tLevel: state.tLevel },
-      tower: { start, floors: v.floors, best: st.best, newBest: st.newBest, newWeek: st.newWeek, runs: st.runs, chests: st.chests, emptyChests: st.emptyChests, titles },
+      tower: { start, floors: v.floors, best: st.best, newBest: st.newBest, newWeek: st.newWeek, runs: st.runs, chests: st.chests, emptyChests: st.emptyChests, titles, ...(suspect ? { suspect: true } : {}) },
       ...(pioneer ? { pioneer } : {}),
     },
     view: await rpgView(acct, store, now, state),

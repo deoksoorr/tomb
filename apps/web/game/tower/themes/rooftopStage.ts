@@ -2,7 +2,7 @@ import * as Phaser from "phaser";
 import { MONSTERS, type MonsterId } from "@/lib/rpg/catalog";
 import { inTelegraph } from "@/lib/rpg/patterns";
 import { RF_VANE_GUST, RF_VISITS, rfWeather, type RfWeather } from "@/lib/rpg/towerThemes/rooftop";
-import { rfVaneAdds } from "@/lib/rpg/towerThemes/rooftopPlan";
+import { RF_SPARK_CAP, rfVaneAdds } from "@/lib/rpg/towerThemes/rooftopPlan";
 import { css, makeCanvas, mix, radial } from "../../sprites/pixel";
 import type { Layer } from "../../rpg/skillSound";
 import type { Telegraph } from "../../rpg/telegraph";
@@ -17,7 +17,7 @@ import { digits } from "./serverRoomMap";
 // 기믹 「돌풍」(바람 화살표 → 나·몬스터·탄이 옆으로 밀린다, 소품 뒤면 덜) · 「낙뢰」(노란 원 → 벼락, 웅덩이에 떨어지면 웅덩이 전체가 찌릿),
 // 번개가 치면 화면 전체가 환해진다 — 화면을 덮는 층을 새로 두지 않고 지도의 곱하기 분위기 층 색을 잠깐 밝힌다 (overlay.ts 방식).
 // 몬스터 열네 종 행동·정예 풍향계 수탉·우두머리 피뢰침 세 단계. 다시 올 때마다 날씨가 거칠어진다 (rfWeather).
-// 서버 상한과 상관있는 것: 수탉이 불러오는 서류 뭉치는 rfVaneAdds(층 계획 adds와 같다), 우두머리 불꽃은 summon 두 번 몫(여덟)까지.
+// 서버 상한과 상관있는 것: 수탉이 불러오는 서류 뭉치는 rfVaneAdds(층 계획 adds와 같다), 우두머리가 따로 흩뿌리는 불꽃은 RF_SPARK_CAP(층 계획 adds와 같다 — Arena가 체력 단계마다 부르는 summon 두 번 몫과 따로).
 
 const AW = 448;
 const AH = 288;
@@ -48,8 +48,8 @@ const NEON = [0xff4ab0, 0x4ad8ff, 0xffd04a, 0x8a5aff] as const;
 const BOLT = 0xfff6c0;
 const STRIKE_PCT = 0.08;
 const ZAP_PCT = 0.06;
-/** 우두머리 불꽃 상한 (summon.n × 두 번) */
-const SPARK_CAP = 8;
+/** 우두머리 불꽃 상한 (한 층 합계 — 서버 층 계획 adds와 같은 값, lib/rpg/towerThemes/rooftopPlan). 체력 단계마다 Arena가 부르는 summon 몫과 따로 */
+const SPARK_CAP = RF_SPARK_CAP;
 
 const o = (wave: Layer["wave"], at: number, dur: number, f0: number, f1: number, gain: number, x: Partial<Layer> = {}): Layer => ({ src: "osc", wave, at, dur, f0, f1, gain, atk: 0.004, env: "perc", ...x });
 const n = (at: number, dur: number, gain: number, type: "lowpass" | "highpass" | "bandpass", f0: number, f1 = f0, q = 0.8, x: Partial<Layer> = {}): Layer => ({ src: "noise", at, dur, gain, atk: 0.004, env: "perc", flt: { type, f0, f1, q }, ...x });

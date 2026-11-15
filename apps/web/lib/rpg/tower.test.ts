@@ -7,7 +7,7 @@ import {
   betterRecord,
   checkTowerStart,
   cursesAt,
-  evalTower,
+  evalTower, towerClean,
   floorMinSec,
   floorTExp,
   isBossFloor,
@@ -134,7 +134,7 @@ describe("층 배율·테마·저주", () => {
         expect(v.ok, `${seed}/${start}`).toBe(true);
         // 다른 판 시드의 티켓으로는 (테마 순서가 달라서) 대개 맞지 않는다
         const k = Object.keys(kills)[0] as MonsterId;
-        expect(evalTower({ seed, level: 50, start }, { ...r, kills: { ...kills, [k]: kills[k]! - 1 } }, r.durationMs + 1000, { lax: true }).ok).toBe(false);
+        expect(towerClean(evalTower({ seed, level: 50, start }, { ...r, kills: { ...kills, [k]: kills[k]! - 1 } }, r.durationMs + 1000, { lax: true }))).toBe(false);
       }
   });
 
@@ -242,34 +242,34 @@ describe("결과 검증 (층마다)", () => {
       ...r,
       kills: { ...r.kills, [cur]: (r.kills[cur] ?? 0) + 1 },
     };
-    expect(evalTower(t, more, r.durationMs + 1_000).ok).toBe(true);
+    expect(towerClean(evalTower(t, more, r.durationMs + 1_000))).toBe(true);
   });
 
   it("층을 부풀리거나, 몬스터를 덜 잡았거나, 너무 빨리 올랐으면 거절", () => {
     const r = climb(1234, 1, 6);
-    expect(evalTower(t, { ...r, floors: 7 }, r.durationMs + 1_000).ok).toBe(
+    expect(towerClean(evalTower(t, { ...r, floors: 7 }, r.durationMs + 1_000))).toBe(
       false,
     );
     const k = Object.keys(r.kills)[0] as MonsterId;
     expect(
-      evalTower(
+      towerClean(evalTower(
         t,
         { ...r, kills: { ...r.kills, [k]: r.kills[k]! - 1 } },
         r.durationMs + 1_000,
-      ).ok,
+      )),
     ).toBe(false);
     // 6층을 30초에 (층마다 최소 10초)
     const fast = { ...r, durationMs: 30_000, floorMs: 30_000 };
-    expect(evalTower(t, fast, 31_000).ok).toBe(false);
+    expect(towerClean(evalTower(t, fast, 31_000))).toBe(false);
     // 기록 시간이 서버가 잰 시간보다 길다
-    expect(evalTower(t, r, r.durationMs - 10_000).ok).toBe(false);
+    expect(towerClean(evalTower(t, r, r.durationMs - 10_000))).toBe(false);
     // 있을 수 없는 몬스터
     expect(
-      evalTower(
+      towerClean(evalTower(
         t,
         { ...r, kills: { ...r.kills, exam_paper: 1 } },
         r.durationMs + 1_000,
-      ).ok,
+      )),
     ).toBe(false);
   });
 
@@ -282,11 +282,11 @@ describe("결과 검증 (층마다)", () => {
     const id = Object.keys(can)[0] as MonsterId;
     expect(MONSTERS[id]).toBeDefined();
     expect(
-      evalTower(
+      towerClean(evalTower(
         t,
         { ...r, kills: { ...r.kills, [id]: can[id]! + 1 } },
         r.durationMs + 1_000,
-      ).ok,
+      )),
     ).toBe(false);
   });
 
@@ -299,7 +299,7 @@ describe("결과 검증 (층마다)", () => {
       ),
     ).toMatchObject({ ok: true, floors: 0, points: 0 });
     expect(
-      evalTower(t, { ...climb(1234, 1, 1), durationMs: 5_000 }, 6_000).ok,
+      towerClean(evalTower(t, { ...climb(1234, 1, 1), durationMs: 5_000 }, 6_000)),
     ).toBe(false);
   });
 
@@ -310,7 +310,7 @@ describe("결과 검증 (층마다)", () => {
     ).toMatchObject({ ok: true, floors: 3, best: 23 });
     // 다른 시작 층의 계획으로는 맞지 않는다
     expect(
-      evalTower({ seed: 55, level: 50, start: 1 }, r, r.durationMs + 1_000).ok,
+      towerClean(evalTower({ seed: 55, level: 50, start: 1 }, r, r.durationMs + 1_000)),
     ).toBe(false);
   });
 });
@@ -525,5 +525,26 @@ describe("입구 경비원", () => {
     expect(TOWER_TAUNTS.length).toBeGreaterThanOrEqual(8);
     expect(TOWER_TAUNTS.every((t) => t.includes("50"))).toBe(true);
     expect(TOWER_TAUNTS).toContain(towerTaunt(0.99));
+  });
+});
+
+describe("11/15 테마 졸개 (옥상 정전기 불꽃)", () => {
+  it("층마다 계획 밖 졸개를 MINION_FLOOR_ALLOW만큼 더 잡아도 깨끗이 통과 (그 판에 온 테마 졸개만)", async () => {
+    const { evalTower, MINION_FLOOR_ALLOW, towerClean, towerPlan, towerZone } = await import("./tower");
+    const { huntSpawnable } = await import("./plan");
+    const start = 21;
+    const floors = 3;
+    // 21층 블록이 옥상인 판
+    let seed = 77;
+    while (towerZone(seed, start, start).id !== "rf_rooftop") seed++;
+    const kills: Record<string, number> = {};
+    for (let i = 0; i <= floors; i++)
+      for (const [id, n] of Object.entries(huntSpawnable(towerPlan(seed, start + i, start), Infinity))) kills[id] = (kills[id] ?? 0) + (n ?? 0);
+    // 이 판에 온 테마의 졸개 하나
+    const zones = new Set(Array.from({ length: floors + 1 }, (_, i) => towerZone(seed, start, start + i)));
+    const minion = (Object.keys(MONSTERS) as MonsterId[]).find((id) => MONSTERS[id].minion && [...zones].some((z) => id.startsWith(z.boss.split("_")[0] + "_")))!;
+    kills[minion] = (kills[minion] ?? 0) + (floors + 1) * MINION_FLOOR_ALLOW;
+    const v = evalTower({ seed, level: 50, start, gp: 3 }, { game: "hunt", durationMs: 3_000_000, kills, floors, floorMs: 2_900_000, wavesCleared: 0, died: true, potionsUsed: {} } as never, 3_100_000, { lax: true });
+    expect(towerClean(v), JSON.stringify(v)).toBe(true);
   });
 });

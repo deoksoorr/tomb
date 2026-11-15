@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { HUNT_ZONES, MONSTERS, type MonsterId } from "../catalog";
 import { huntSpawnable } from "../plan";
 import { killRateCeiling } from "../rewards";
-import { evalTower, floorMinSec, isBossFloor, towerBlock, towerPlan } from "../tower";
+import { evalTower, MINION_FLOOR_ALLOW, towerClean, floorMinSec, isBossFloor, towerBlock, towerPlan } from "../tower";
 import type { HuntResult } from "../types";
 import { CF_BOSS, CF_BOSS_ROOM, CF_ELITE, CF_LOOPS, CF_PACKABLE, CF_POOL, CF_ROOMS, CF_ZONE, cfDish, cfRoom } from "./cafeteria";
 import { CF_BIN_CAP, CF_JELLY_CAP, CF_SPECIAL_SERVERS, cfRiceAdds } from "./cafeteriaPlan";
@@ -121,7 +121,7 @@ describe("구내식당 서버 검증", () => {
     expect(runs.length).toBeGreaterThan(5);
     for (const seed of runs) {
       const r = climbAll(seed, 1, 10);
-      expect(evalTower({ seed, level: 50, start: 1 }, r, r.durationMs + 500).ok, `seed ${seed}`).toBe(true);
+      expect(towerClean(evalTower({ seed, level: 50, start: 1 }, r, r.durationMs + 500)), `seed ${seed}`).toBe(true);
     }
   });
 
@@ -130,8 +130,8 @@ describe("구내식당 서버 검증", () => {
       const r = climbAll(seed, 1, 10);
       const next = huntSpawnable(towerPlan(seed, 11, 1), Infinity);
       for (const id of ["cf_riceball", "cf_jelly_bit", "cf_server"] as MonsterId[]) {
-        const cheat = { ...r, kills: { ...r.kills, [id]: (r.kills[id] ?? 0) + (next[id] ?? 0) + 1 } };
-        expect(evalTower({ seed, level: 50, start: 1 }, cheat, r.durationMs + 500).ok, `${seed} ${id}`).toBe(false);
+        const cheat = { ...r, kills: { ...r.kills, [id]: (r.kills[id] ?? 0) + (next[id] ?? 0) + 11 * MINION_FLOOR_ALLOW + 1 } };
+        expect(towerClean(evalTower({ seed, level: 50, start: 1 }, cheat, r.durationMs + 500)), `${seed} ${id}`).toBe(false);
       }
     }
   });

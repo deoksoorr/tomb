@@ -5,6 +5,8 @@ import { DIFFICULTIES, GAME_KINDS, GEAR_SLOTS, HOTBAR_SIZE, MONSTER_IDS, POTION_
 // 사냥터 API 입력 검증 (zod). 메시지는 lib/validate.ts가 켜 둔 한국어 로케일을 따른다.
 
 const count = z.number().int().min(0).max(10_000);
+/** 11/15 사냥 처치 수 (몬스터 하나당): 야근 빌딩 긴 등반은 한 종류가 만 마리를 넘을 수 있다 — 형식에서 거절하면 판이 통째로 날아가므로 넉넉히 (상한은 서버 검증이 본다) */
+const killCount = z.number().int().min(0).max(100_000);
 const skillId = z.enum(SKILLS.map((s) => s.id) as [SkillId, ...SkillId[]]);
 const itemId = z.string().regex(/^[a-z]_[a-z_]{1,30}$/, "아이템 id 형식이 맞지 않아요.");
 
@@ -19,15 +21,15 @@ export const RunStartSchema = z.object({
   tower: z.number().int().min(1).max(10_000).optional(),
 });
 
-// 11/15 야근 빌딩 한 판은 두 시간까지 (lib/rpg/tower TOWER_MAX_RUN_SEC) — 실제 시간은 서버가 잰 경과로 자른다
-const duration = z.number().int().min(0).max(3 * 3_600_000);
+// 11/15 야근 빌딩 한 판은 티켓 수명(lib/rpg/tower TOWER_TICKET_SEC, 12시간)까지 받는다 — 실제 시간은 서버가 잰 경과로 자른다 (형식에서 거절하면 판이 통째로 날아간다)
+const duration = z.number().int().min(0).max(12 * 3_600_000);
 const starGroupList = z.array(z.number().int().min(0).max(200)).max(60).optional();
 
 export const RunResultSchema = z.discriminatedUnion("game", [
   z.object({
     game: z.literal("hunt"),
     durationMs: duration,
-    kills: z.partialRecord(z.enum(MONSTER_IDS as [string, ...string[]]), count),
+    kills: z.partialRecord(z.enum(MONSTER_IDS as [string, ...string[]]), killCount),
     wavesCleared: z.number().int().min(0).max(20),
     died: z.boolean(),
     potionsUsed: z.record(itemId, count).default({}),
