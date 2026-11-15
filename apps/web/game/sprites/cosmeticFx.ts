@@ -1288,7 +1288,23 @@ export type FxInput = {
    * 없으면 그대로 (마을·집은 화려하게)
    */
   staffSoft?: number;
+  /**
+   * 11/16 바베큐로 커진 배율 (없으면 1). artTop·shoulder는 이미 이 배율이 들어간 값이고,
+   * 몸에 붙은 그림(날개·우산·풍선·연)은 원래 크기로 계산한 뒤 발밑(x, headY) 기준으로 이만큼 키운다 (몸 그림이 발밑 기준으로 커지는 것과 같게)
+   */
+  scale?: number;
 };
+
+/** 11/16 out[from..]을 (ax, ay) 기준으로 k배 (위치·크기) */
+export function scaleCmds(out: FxCmd[], from: number, ax: number, ay: number, k: number): void {
+  for (let i = from; i < out.length; i++) {
+    const c = out[i];
+    c.x = ax + (c.x - ax) * k;
+    c.y = ay + (c.y - ay) * k;
+    c.sx *= k;
+    c.sy *= k;
+  }
+}
 
 /** 몸에 붙은 연출의 기준 depth: 아바타 그림 depth (덮어쓴 값이 있으면 그것) */
 const bodyDepth = (f: Pick<FxInput, "y" | "depth">) => f.depth ?? f.y;
@@ -1415,15 +1431,21 @@ export class CosmeticFxSim {
 
   step(f: FxInput, out: FxCmd[]): void {
     const t = f.still || f.reduced ? 0 : f.now;
+    // 11/16 커진 몸: 몸에 붙은 그림은 원래 크기 입력(g)으로 계산해 발밑 기준으로 키운다
+    const k = f.scale ?? 1;
+    const g = k === 1 ? f : { ...f, artTop: f.artTop / k, shoulder: f.shoulder / k };
     for (const [, s] of this.specs) {
+      const n0 = out.length;
       switch (s.kind) {
         case "wings":
-          this.wings(s, f, t, out);
+          this.wings(s, g, t, out);
+          if (k !== 1) scaleCmds(out, n0, f.x, f.headY, k);
           break;
         case "held":
-          if (s.item === "umbrella") this.umbrella(f, out);
-          else if (s.item === "kite") this.kite(f, t, out);
-          else this.balloon(f, t, out);
+          if (s.item === "umbrella") this.umbrella(g, out);
+          else if (s.item === "kite") this.kite(g, t, out);
+          else this.balloon(g, t, out);
+          if (k !== 1) scaleCmds(out, n0, f.x, f.headY, k);
           break;
         case "pet":
           this.pet(s, f, t, out);

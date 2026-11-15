@@ -407,6 +407,11 @@ export class AvatarView {
     return this.bigGoal;
   }
 
+  /** 11/16 지금 그리는 배율 (커지고 줄어드는 중간값 — 몸에 붙여 따로 그리는 낚싯대 등) */
+  get scaleNow(): number {
+    return this.big;
+  }
+
   /** 11/15 잔상 메뉴 색 (null이면 끈다) */
   setTrail(tint: number | null): void {
     if (tint === null) {
@@ -739,7 +744,8 @@ export class AvatarView {
     if (h !== prev) this.applyOrigin();
     if (h > 0.01) {
       if (!this.shadow) this.shadow = this.scene.add.image(0, 0, TEX.shadow).setOrigin(0.5, 0.5);
-      this.shadow.setPosition(s.x, s.y - 1).setScale(shadowScale).setDepth(s.depth - 0.5).setVisible(s.visible);
+      // 11/16 바베큐로 커졌으면 그림자도 커진 몸만큼
+      this.shadow.setPosition(s.x, s.y - 1).setScale(shadowScale * this.big).setDepth(s.depth - 0.5).setVisible(s.visible);
     } else if (this.shadow) {
       this.shadow.destroy();
       this.shadow = null;
@@ -923,9 +929,11 @@ export class AvatarView {
     const armsUp = st === "hang" ? 3 : 0;
     // 24번 벤치 상태 아이콘이 있으면 머리와 이름표 사이에 끼운다 (그만큼 이름표를 올린다)
     // 11/15 바베큐로 커지면 (몸·날개·우산 중 가장 높은 꼭대기)가 커진 만큼 더 올린다 → 칭호·1위 배지·말풍선도 이름표를 따라 올라간다
-    const labelY = headY - this.labelGap + sitLift + waterDrop - armsUp - Math.round((this.big - 1) * (this.labelGap - 2));
+    // 11/16 앉아서 낮아진 머리도 커진 만큼 (원래 크기에선 그대로)
+    const sitLiftB = this.big === 1 ? sitLift : Math.round(sitLift * this.big);
+    const labelY = headY - this.labelGap + sitLiftB + waterDrop - armsUp - Math.round((this.big - 1) * (this.labelGap - 2));
     // 오라(착용·전용)를 그릴 몸 자리 — 모든 자세에서 보이게 (auraFrame)
-    const af = this.auraFrame(st, s.y, headY, labelY, waterDrop, sitLift, armsUp);
+    const af = this.auraFrame(st, s.y, headY, labelY, waterDrop, sitLiftB, armsUp);
     const moodLift = this.moodFx?.lift(st) ?? 0;
     this.label.setPosition(Math.round(st === "hammock" ? s.x : s.x - this.poseDx), labelY - moodLift);
     if (this.shadow) this.shadow.setPosition(s.x, s.y - 1).setDepth((this.depthOverride ?? s.y) - 0.5);
@@ -1019,6 +1027,8 @@ export class AvatarView {
           moving: st === "walk" || st === "run",
           hidden: st === "dive" || st === "swim" || st === "hammock" || st === "hang" || st === "lie" || st === "bath" || st === "swing",
           reduced: this.reduced,
+          // 11/16 바베큐로 커지면 낫·발밑 안개도 몸과 같이 (손 자리도 커진 몸 기준)
+          scale: this.big,
         },
         vis,
       );
@@ -1038,6 +1048,8 @@ export class AvatarView {
           // 11/15 바베큐로 커지면 날개·꾸미기 연출 자리도 커진 몸에 맞춘다
           artTop: Math.round(this.artTop * this.big),
           shoulder: Math.round(this.shoulder * this.big),
+          // 11/16 몸에 붙은 그림(날개·우산·풍선·연)도 그만큼 키운다 (artTop·shoulder는 이미 배율이 들어간 값)
+          scale: this.big,
           hand: handAnchor(this.body, d === DIR.left ? "left" : d === DIR.right ? "right" : d === DIR.up ? "up" : "down"),
           reduced: this.reduced,
           riding: this.mountedIn(st),
@@ -1053,7 +1065,7 @@ export class AvatarView {
       );
     }
 
-    this.moodFx?.sync(now, bx, s.y, labelY, this.dir, this.body, this.depthOverride ?? s.y, st, vis);
+    this.moodFx?.sync(now, bx, s.y, labelY, this.dir, this.body, this.depthOverride ?? s.y, st, vis, this.big);
 
     const speaking = !!this.speech?.active(now);
     // 이름표 높이(height)는 이미 배율이 들어간 월드 높이 (displayHeight는 배율이 한 번 더 곱해져 이름표에 겹쳤다)
@@ -1131,7 +1143,7 @@ export class AvatarView {
       const k = this.reduced ? 0 : (Math.sin(now / 420) + 1) / 2;
       this.ripple
         .setPosition(x, y - WATER_LINE)
-        .setScale(1 + 0.18 * k, 1 + 0.1 * k)
+        .setScale((1 + 0.18 * k) * this.big, (1 + 0.1 * k) * this.big)
         .setAlpha(0.85 - 0.35 * k)
         .setDepth(this.sprite.depth + 0.1)
         .setVisible(vis);
@@ -1182,8 +1194,9 @@ export class AvatarView {
       const pulse = this.reduced ? 0.45 : 0.38 + 0.14 * Math.sin(now / 500);
       // 후광 고리는 그림 맨 위 (물에 들어가면 가라앉은 만큼 내려간다)
       const sink = wet ? waterSink(this.body, st) : 0;
-      const sitDrop = st === "sitGround" ? 3 : st === "sitChair" ? 1 : 0;
+      const sitDrop = Math.round((st === "sitGround" ? 3 : st === "sitChair" ? 1 : 0) * this.big);
       this.haloGlow.setPosition(x, headY - Math.round(this.artTop * this.big) + 1 + sink + sitDrop).setAlpha(pulse).setVisible(vis && st !== "dive" && st !== "hammock");
+      if (this.haloGlow.scaleX !== 0.28 * this.big) this.haloGlow.setScale(0.28 * this.big); // 11/16 커지면 후광 빛도 같이
     }
     if (this.wings) {
       const side = this.dir === DIR.left || this.dir === DIR.right;
@@ -1226,8 +1239,8 @@ export class AvatarView {
         const k = Math.sin(u * Math.PI);
         const sink = wet ? waterSink(this.body, st) : 0;
         this.sparkle
-          .setPosition(x + (this.sparkle.getData("dx") as number), headY - (this.sparkle.getData("dy") as number) + sink)
-          .setScale(0.6 + 0.5 * k)
+          .setPosition(x + (this.sparkle.getData("dx") as number) * this.big, headY - (this.sparkle.getData("dy") as number) + sink)
+          .setScale((0.6 + 0.5 * k) * this.big)
           .setAlpha(0.9 * k)
           .setVisible(true);
       } else if (this.sparkle.visible) this.sparkle.setVisible(false);
@@ -1236,7 +1249,8 @@ export class AvatarView {
       const a = now / 1800 + i * 2.1;
       this.fog[i]
         // 모든 자세에서: 발밑 줄(물이면 수면, 매달리면 몸 아래)에 깔린다
-        .setPosition(x + Math.cos(a) * 6, af.base - 1 + Math.sin(a * 1.4) * 1.5)
+        .setPosition(x + Math.cos(a) * 6 * this.big, af.base - 1 + Math.sin(a * 1.4) * 1.5 * this.big)
+        .setScale(0.42 * this.big, 0.14 * this.big)
         .setAlpha((0.18 + 0.06 * Math.sin(now / 700 + i)) * af.dim)
         .setDepth(depth + 0.03)
         .setVisible(vis);

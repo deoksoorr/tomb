@@ -978,6 +978,15 @@ export function shelterArt(): Grid {
   shadow(g, W / 2, base + 1, W / 2 - 3, 2, 58);
   return g;
 }
+/**
+ * 11/16 벤치에 앉은 사람 앞에 한 번 더 그리는 정류장 조각 [x, y, w, h]: 지붕(+등 윗부분)과 앞 기둥 둘 (그림자 줄은 뺀다).
+ * 나머지(뒷벽·포스터)는 벤치 뒤 depth에 그린다 — 통째로 정류장 depth면 앉은 사람 머리가 뒷벽에 가렸다
+ */
+export const SHELTER_FRONT: readonly (readonly [number, number, number, number])[] = [
+  [0, 0, SHELTER_ART_W, 16],
+  [3, 16, 5, 38],
+  [SHELTER_ART_W - 8, 16, 5, 38],
+];
 export function busSignArt(): Grid {
   const g = new Grid(30, 52);
   const base = 49;

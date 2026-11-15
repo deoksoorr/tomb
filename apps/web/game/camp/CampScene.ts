@@ -517,6 +517,7 @@ export class CampScene extends Phaser.Scene {
     const prev = this.remotes.get(p.sid);
     prev?.destroy();
     const r = new RemoteAvatar(this, this.host.atlas, p.sid, p.name, avatarColorSpec(p.color, sanitizeDye(p.dye)), p, performance.now(), p.look ?? [], isAvatarBody(p.body) ? p.body : "hood");
+    r.map = "camp"; // 11/16 좌석 id를 캠핑장 자리로 푼다 (앉은 사람을 의자 앞에 고정)
     r.view.setDexBadge(p.dex);
     r.view.setChamp(p.champ);
     r.view.setStaff(p.staff === true);

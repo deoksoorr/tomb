@@ -562,6 +562,14 @@ export class Foraging {
     return { x: at.x, y: at.y, facing: sideOf(r.view.dir) };
   }
 
+  /** 11/16 낚는 사람이 바베큐로 커진 배율 (배 위 낚시는 커진 채로 못 타니 1) */
+  private rodScale(r: Rod): number {
+    if (r.follow) return 1;
+    if (r.mine) return this.d.player().view.scaleNow;
+    const sid = this.d.seats().get(r.spot.id);
+    return (sid !== undefined && this.d.remotes().get(sid)?.view.scaleNow) || 1;
+  }
+
   private drawRod(r: Rod, now: number): void {
     const { spot, g, bob } = r;
     if (r.follow) {
@@ -577,18 +585,20 @@ export class Foraging {
       g.setDepth(spot.y + 2); // 배 앞 그림(y + 1.5) 위
     }
     const [dx, dy] = STEP[spot.facing];
-    // 손 → 낚싯대 끝
-    const hx = spot.x + dx * 3 + (dy !== 0 ? 4 : 0);
-    const hy = spot.y - 7;
-    const tipX = hx + dx * 9 + (dy !== 0 ? 2 : 0);
-    const tipY = hy - 9 + dy * 4;
+    // 손 → 낚싯대 끝 (11/16 바베큐로 커진 사람이면 손 자리·낚싯대도 그만큼 — 줄·찌는 물 위 그대로)
+    const sc = this.rodScale(r);
+    const hx = spot.x + (dx * 3 + (dy !== 0 ? 4 : 0)) * sc;
+    const hy = spot.y - 7 * sc;
+    const tipX = hx + (dx * 9 + (dy !== 0 ? 2 : 0)) * sc;
+    const tipY = hy + (-9 + dy * 4) * sc;
     const phase = r.mine ? this.rodPhase : "wait";
     const t = (now - (r.mine ? this.phaseAt : 0)) / 1000;
+    const lw = Math.max(1, Math.round(sc));
     g.clear();
-    g.lineStyle(1, 0x6a4a2a, 1);
+    g.lineStyle(lw, 0x6a4a2a, 1);
     g.lineBetween(hx, hy, tipX, tipY);
-    g.lineStyle(1, 0x3a2a1a, 1);
-    g.lineBetween(hx, hy, hx + dx * 2, hy - 2);
+    g.lineStyle(lw, 0x3a2a1a, 1);
+    g.lineBetween(hx, hy, hx + dx * 2 * sc, hy - 2 * sc);
     if (phase === "idle" || phase === "snap") {
       bob.setVisible(false);
       if (phase === "idle") {
