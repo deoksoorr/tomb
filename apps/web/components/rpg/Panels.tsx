@@ -95,8 +95,8 @@ export function StartPanel({
   const todayLine = (
     <>
       <HuntCapMeter today={view.today} where="start" />
-      {/* 11/15 시간당 판 수 한도(자동 반복 막기)는 거의 닿지 않아서 5판 이하로 남았을 때만 알린다 */}
-      {view.today.runsPerHour <= 5 && <p className={s.meta}>이번 한 시간 동안은 {view.today.runsPerHour}판만 더 할 수 있어요.</p>}
+      {/* 11/15 한 시간 판 수 한도(매크로 막기): 남은 판 / 할 수 있는 판 */}
+      <RunsHourLine today={view.today} />
     </>
   );
   const startButton = (
@@ -136,7 +136,7 @@ export function StartPanel({
                   </p>
                 )}
                 <div className={s.zoneGo}>
-                  {view.today.runsPerHour <= 5 && <p className={s.meta}>이번 한 시간 동안은 {view.today.runsPerHour}판만 더 할 수 있어요.</p>}
+                  <RunsHourLine today={view.today} />
                   {/* 화면 흔들림 효과 켜기·끄기: 출발 전에 고른다 (이 기기에 기억) */}
                   <HuntKeysStrip />
                   <ShakeToggle />
@@ -534,5 +534,17 @@ function HuntKeysStrip() {
         ))}
       </dl>
     </details>
+  );
+}
+
+/** 11/15 한 시간 사냥 판 수 (매크로 막기): 「한 시간 사냥 한도 24 / 30판 남음」 */
+function RunsHourLine({ today }: { today: RpgView["today"] }) {
+  const max = today.runsHourMax ?? 30;
+  const left = Math.max(0, today.runsPerHour);
+  return (
+    <p className={s.meta}>
+      한 시간 사냥 한도 <strong>{left}</strong> / {max}판 남음
+      {left === 0 && <> 다음 정각에 다시 채워져요.</>}
+    </p>
   );
 }

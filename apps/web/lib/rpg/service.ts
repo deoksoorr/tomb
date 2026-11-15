@@ -141,7 +141,7 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
     derived: derive(character.level, character.stats, character.equip),
     expToNext: Number.isFinite(expToNext(character.level)) ? expToNext(character.level) : 0,
     points: me.points,
-    today: { huntPoints: Math.min(daily.points, HUNT_CAP), cap: HUNT_CAP, runs: daily.runs, runsPerHour: RUNS_PER_HOUR - runs },
+    today: { huntPoints: Math.min(daily.points, HUNT_CAP), cap: HUNT_CAP, runs: daily.runs, runsPerHour: RUNS_PER_HOUR - runs, runsHourMax: RUNS_PER_HOUR },
     respecCost: respecCost(stored.level),
     statResetCost: respecCost(stored.level),
     ...(sup ? { superHunter: true } : {}),
