@@ -1,6 +1,6 @@
 import type * as Phaser from "phaser";
 import { darken, Grid, lighten } from "../../sprites/pixel";
-import { FISH_ARCH_H, FISH_ARCH_W, TANK_H, TANK_W, TANK_WATER, WHARF_BOARD_H, WHARF_BOARD_W, type FishDecorKind } from "../fishZone";
+import { BUS_BAY, BUS_SHELTER_H, BUS_SHELTER_W, BUS_SIGN_H, BUS_TIMETABLE_H, FISH_ARCH_H, FISH_ARCH_W, WHARF_BOARD_H, WHARF_BOARD_W, type FishDecorKind } from "../fishZone";
 
 // 낚시터 그림 (코드로 그리는 픽셀아트): 입구 아치, 그물 말리는 대, 통발 더미, 물고기 상자, 물통, 등불 기둥,
 // 낚시 자리 표시(나무 낚시 의자 + 물결 고리 + 손짓 표시). 발 위치 = 그림 맨 아래 줄 가운데.
@@ -10,7 +10,7 @@ export const ZTEX = {
   stool: "fishzone-stool",
   ripple: (f: number) => `fishzone-ripple-${f}`,
   hook: "fishzone-hook",
-  bubble: "fishzone-bubble",
+  busBay: "fishzone-bus-bay",
 } as const;
 
 const OUT = 0x16121a;
@@ -275,56 +275,146 @@ function placard(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-/** 기록 수족관 수조: 나무 받침 + 유리 상자(푸른 물·모래·수초·공기 방울). 물고기는 FishZoneView가 따로 그린다. 32×30 */
-function tank(): HTMLCanvasElement {
-  const W = TANK_W;
-  const H = TANK_H;
+// ── 11/15 주말 버스 정류장 (예전 기록 수족관 자리) ──
+const ROOF = { hi: 0x7fb08a, mid: 0x5a8a66, lo: 0x3e6a4c };
+const STEEL = { hi: 0xb8bcc0, mid: 0x8a9096, lo: 0x5e646a };
+
+/** 정류장 지붕: 둥근 초록 지붕(흰 테) + 기둥 넷 + 뒷벽 유리(캠핑장 포스터 한 장) + 지붕 아래 작은 등. 벤치는 가구(bE)가 따로. 64×50 */
+function busShelter(): HTMLCanvasElement {
+  const W = BUS_SHELTER_W;
+  const H = BUS_SHELTER_H;
   const g = new Grid(W, H);
-  const wx0 = TANK_WATER.x;
-  const wy0 = TANK_WATER.y;
-  const wx1 = wx0 + TANK_WATER.w - 1;
-  const wy1 = wy0 + TANK_WATER.h - 1;
-  // 받침 (나무 서랍장)
-  g.rect(1, wy1 + 3, W - 2, H - wy1 - 4, WOOD);
-  g.hline(1, W - 2, wy1 + 3, lighten(WOOD, 0.2));
-  g.hline(4, W - 5, wy1 + 6, WOOD_DARK);
-  g.set(W >> 1, wy1 + 5, 0xd8c08a);
-  // 유리 테 (윗뚜껑·모서리 기둥)
-  g.rect(wx0 - 2, wy0 - 3, TANK_WATER.w + 4, 2, 0x3a4a52);
-  g.vline(wx0 - 2, wy0 - 1, wy1 + 2, 0x5a6a72);
-  g.vline(wx1 + 2, wy0 - 1, wy1 + 2, 0x5a6a72);
-  g.hline(wx0 - 2, wx1 + 2, wy1 + 2, 0x3a4a52);
-  // 물 (위가 밝고 아래가 짙은 푸른빛, 반투명)
-  for (let y = wy0 - 1; y <= wy1 + 1; y++) {
-    const t = (y - wy0) / TANK_WATER.h;
-    g.hline(wx0 - 1, wx1 + 1, y, t < 0.15 ? 0x9fd8f0 : t < 0.6 ? 0x5fa8d0 : 0x3f80b0);
-  }
-  for (let x = wx0 - 1; x <= wx1 + 1; x++) g.set(x, wy0 - 1, 0xd8f4ff);
-  // 모래·조약돌·수초
-  for (let x = wx0 - 1; x <= wx1 + 1; x++) g.set(x, wy1 + 1, (x * 7) % 5 === 0 ? 0xc8b078 : 0xe0cc94);
-  g.set(wx0 + 4, wy1, 0x9a9a92);
-  g.set(wx1 - 6, wy1, 0xb8a888);
-  for (const [x, h] of [[wx0 + 2, 7], [wx0 + 3, 5], [wx1 - 2, 8], [wx1 - 3, 5]] as const)
-    for (let k = 0; k < h; k++) g.set(x + (k % 3 === 1 ? 1 : 0), wy1 - k, k % 2 ? 0x3a9a5a : 0x5aba6a);
+  // 뒷벽 유리 (지붕 아래 안쪽, 반투명 하늘빛 + 테)
+  const gy0 = 14;
+  const gy1 = 30;
+  g.rect(5, gy0, W - 10, gy1 - gy0 + 1, 0x9fc8d8, 150);
+  g.hline(5, W - 6, gy0, STEEL.mid);
+  g.hline(5, W - 6, gy1, STEEL.lo);
+  for (const x of [5, W >> 1, W - 6]) g.vline(x, gy0, gy1, STEEL.mid);
   // 유리 반사
-  g.vline(wx0 + 1, wy0 + 1, wy0 + 5, 0xe8f8ff);
-  g.vline(wx0 + 2, wy0 + 1, wy0 + 2, 0xe8f8ff);
+  for (let k = 0; k < 6; k++) g.set(9 + k, gy0 + 9 - k, 0xe8f6ff, 200);
+  for (let k = 0; k < 4; k++) g.set(W - 14 + k, gy0 + 7 - k, 0xe8f6ff, 200);
+  // 포스터 (캠핑장: 밤하늘·산·텐트·모닥불)
+  const px = (W >> 1) + 4;
+  const py = gy0 + 2;
+  g.rect(px, py, 14, 12, 0x2a3a5a);
+  g.set(px + 3, py + 2, 0xfff2c0);
+  g.set(px + 10, py + 1, 0xfff2c0);
+  for (let k = 0; k < 6; k++) g.hline(px + k, px + 13 - k, py + 6 + k > py + 11 ? py + 11 : py + 6 + k, 0x3a5a4a);
+  g.rect(px, py + 9, 14, 3, 0x4a7a4a);
+  g.set(px + 4, py + 7, 0xe8a040);
+  g.hline(px + 3, px + 5, py + 8, 0xe8a040);
+  g.hline(px + 2, px + 6, py + 9, 0xd8803a);
+  g.set(px + 10, py + 9, 0xffb040);
+  g.set(px + 10, py + 8, 0xffd060);
+  // 기둥 (앞 둘은 몸 앞에서도 보인다 — 가늘게)
+  for (const x of [3, W - 5]) {
+    g.rect(x, 10, 2, H - 12, STEEL.mid);
+    g.vline(x, 10, H - 3, STEEL.hi);
+  }
+  for (const x of [6, W - 8]) g.vline(x, 10, gy1, STEEL.lo);
+  // 지붕 (둥글게 휜 판 + 흰 테 + 처마 그림자)
+  for (let x = 0; x < W; x++) {
+    const t = (x - (W - 1) / 2) / ((W - 1) / 2);
+    const top = 2 + Math.round(t * t * 4);
+    for (let y = top; y <= 10; y++) g.set(x, y, y === top ? ROOF.hi : y >= 9 ? ROOF.lo : ROOF.mid);
+    g.set(x, 11, 0xf0ece0);
+  }
+  for (let x = 4; x < W - 4; x += 6) g.vline(x, 4, 9, ROOF.lo);
+  // 지붕 아래 등 (밤 빛 = FISH_ZONE_LIGHTS)
+  const lx = W >> 1;
+  g.rect(lx - 3, 12, 6, 2, 0x4a4a52);
+  g.hline(lx - 2, lx + 1, 14, 0xfff0c8);
+  // 바닥 판 (포장 위 한 단 높은 승강장)
+  g.rect(1, H - 3, W - 2, 2, 0xb0aa9a);
+  g.hline(1, W - 2, H - 3, 0xd0cab8);
+  g.outline(OUT);
+  for (let x = 2; x < W - 2; x++) g.set(x, H - 1, 0x000000, 60);
+  return g.toCanvas();
+}
+
+/** 노선 팻말: 줄무늬 기둥 + 둥근 버스 표지(파란 판·흰 버스) + 아래 작은 판(텐트 그림). 18×44 */
+function busSign(): HTMLCanvasElement {
+  const W = 18;
+  const H = BUS_SIGN_H;
+  const g = new Grid(W, H);
+  const cx = W >> 1;
+  // 기둥 (흰·빨강 줄무늬)
+  for (let y = 14; y < H - 1; y++) {
+    const c = Math.floor(y / 4) % 2 ? 0xe8e4dc : 0xc8483a;
+    g.set(cx - 1, y, c);
+    g.set(cx, y, darken(c, 0.15));
+  }
+  // 둥근 표지판
+  g.ellipse(cx, 7.5, 7.5, 7.5, 0x3a6ac8);
+  g.ellipse(cx, 7.5, 6, 6, 0x4a86e0);
+  // 흰 버스 (옆모습)
+  g.rect(cx - 4, 4, 8, 5, 0xffffff);
+  g.hline(cx - 3, cx + 2, 5, 0x4a86e0);
+  g.set(cx - 3, 10, 0x1f1d1a);
+  g.set(cx + 2, 10, 0x1f1d1a);
+  g.hline(cx - 4, cx + 3, 9, 0xffffff);
+  // 아래 작은 판: 텐트 (캠핑장행)
+  g.rect(cx - 6, 18, 12, 8, 0xf4ead2);
+  g.hline(cx - 6, cx + 5, 18, 0xd8ccb0);
+  for (let k = 0; k < 4; k++) g.hline(cx - k - 1, cx + k, 20 + k, 0x4a7a4a);
+  g.set(cx, 23, 0x2a3a2a);
+  g.outline(OUT);
+  for (let x = cx - 3; x <= cx + 3; x++) g.set(x, H - 1, 0x000000, 60);
+  return g.toCanvas();
+}
+
+/** 시간표 판: 다리 둘 + 흰 종이(줄 몇 개, 맨 위 시계). 16×28 */
+function timetable(): HTMLCanvasElement {
+  const W = 16;
+  const H = BUS_TIMETABLE_H;
+  const g = new Grid(W, H);
+  for (const x of [3, W - 4]) g.vline(x, 14, H - 2, STEEL.lo);
+  g.rect(1, 1, W - 2, 15, STEEL.mid);
+  g.rect(2, 2, W - 4, 13, 0xf6f2e8);
+  // 시계
+  g.ellipse(5, 5, 2.2, 2.2, 0x2a2a30);
+  g.set(5, 4, 0xf6f2e8);
+  g.set(6, 5, 0xf6f2e8);
+  // 줄 (시간 칸 — 모두 "언젠가")
+  for (const y of [5, 8, 10, 12]) g.hline(y === 5 ? 9 : 4, W - 4, y, y === 5 ? 0xc8483a : 0x9a948a);
   g.outline(OUT);
   for (let x = 3; x < W - 3; x++) g.set(x, H - 1, 0x000000, 60);
   return g.toCanvas();
 }
 
-/** 수조 공기 방울 (작은 흰 동그라미). 3×3 */
-function bubble(): HTMLCanvasElement {
-  const g = new Grid(3, 3);
-  g.set(1, 0, 0xe8f8ff);
-  g.set(0, 1, 0xe8f8ff);
-  g.set(2, 1, 0xe8f8ff);
-  g.set(1, 2, 0xe8f8ff);
+/** 골목 바닥 버스 정차 칸: 노란 테두리 + 앞쪽 지그재그 + 가운데 "BUS" 글자 (바닥 칠, 반투명) */
+function busBay(): HTMLCanvasElement {
+  const W = BUS_BAY.w;
+  const H = BUS_BAY.h;
+  const g = new Grid(W, H);
+  const Y = 0xe8c040;
+  const a = 200;
+  for (let x = 0; x < W; x++) {
+    if (x % 6 < 4) g.set(x, 0, Y, a);
+  }
+  g.vline(0, 0, H - 1, Y);
+  g.vline(W - 1, 0, H - 1, Y);
+  // 앞쪽(골목 가운데 쪽) 지그재그
+  for (let x = 0; x < W; x++) {
+    const p = x % 8;
+    const y = H - 2 - (p < 4 ? p : 8 - p);
+    g.set(x, y, Y, a);
+  }
+  // BUS (3×5 글자)
+  const F: Record<string, string[]> = {
+    B: ["110", "101", "111", "101", "110"],
+    U: ["101", "101", "101", "101", "111"],
+    S: ["111", "100", "111", "001", "111"],
+  };
+  const tx = (W >> 1) - 11;
+  [..."BUS"].forEach((ch, k) =>
+    F[ch].forEach((row, y) => [...row].forEach((v, x) => v === "1" && g.rect(tx + k * 8 + x * 2, 6 + y * 2, 2, 2, 0xf0e8d0, 190))),
+  );
   return g.toCanvas();
 }
 
-const DECOR_ART: Record<FishDecorKind, () => HTMLCanvasElement> = { arch, netRack, traps, crates, barrel, lanternPost, questBoard, placard, tank };
+const DECOR_ART: Record<FishDecorKind, () => HTMLCanvasElement> = { arch, netRack, traps, crates, barrel, lanternPost, questBoard, placard, busShelter, busSign, timetable };
 
 export function ensureZoneTextures(scene: Phaser.Scene): void {
   const tx = scene.textures;
@@ -334,5 +424,5 @@ export function ensureZoneTextures(scene: Phaser.Scene): void {
   tx.addCanvas(ZTEX.ripple(0), ripple(0));
   tx.addCanvas(ZTEX.ripple(1), ripple(1));
   tx.addCanvas(ZTEX.hook, hook());
-  tx.addCanvas(ZTEX.bubble, bubble());
+  tx.addCanvas(ZTEX.busBay, busBay());
 }

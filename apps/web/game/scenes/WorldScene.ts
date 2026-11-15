@@ -1160,6 +1160,11 @@ export class WorldScene extends Phaser.Scene {
         // 22번 별 보기 언덕: 망원경(별자리 잇기)·돗자리 — 1인 자리
         this.life.useStarSpot(o);
         break;
+      case "bus":
+        // 11/15 주말 버스 정류장 (납품 부두): 캠핑장 버스는 아직 — 안내만
+        pl.faceTo(o.x, o.y - 20, now);
+        this.toast("캠핑장 가는 버스는 준비 중이에요.");
+        break;
       case "dock":
         // 조각배(50번): 빈 배 앞자리에 타거나 2인승 뒷자리에 같이 탄다 (BoatRide)
         pl.faceTo(o.x, o.y + 10, now);

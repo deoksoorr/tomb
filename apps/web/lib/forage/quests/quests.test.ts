@@ -387,7 +387,7 @@ describe("이달의 교환소", () => {
   });
 
   it("달마다 칸 (기획 표, 싼 것부터)과 늘 있는 염색권 2종", () => {
-    expect(ids("202611")).toEqual(["qe_pack", "q_hat_angler", "q_hand_net", "q_name_wave", "q_aura_firefly"]);
+    expect(ids("202611")).toEqual(["qe_pack", "q_hat_angler", "q_hand_net", "q_name_wave", "q_aura_firefly", "q_back_cape"]);
     expect(ids("202612")).toEqual(["q_hat_snow", "q_hat_miner", "q_hand_brush", "q_name_leaf", "q_aura_snowglobe", "q_pet_goldfish"]);
     expect(ids("202701")).toEqual(["q_hand_wishlamp", "q_name_newyear", "q_body_collector"]);
     expect(ids("202702")).toEqual(["qe_pack", "q_back_cape", "q_ride_carp"]);
@@ -413,12 +413,13 @@ describe("이달의 교환소", () => {
     for (let n = 0; n < 60; n++, m = nextMonth(m)) expect(monthRewards(m).length, m).toBeGreaterThan(0);
   });
 
-  it("다음 달 미리 보기: 다음 달 칸에서 가장 비싼 것 하나", async () => {
-    expect(monthPreview("202611")?.id).toBe("q_pet_goldfish");
-    expect(monthPreview("202612")?.id).toBe("q_body_collector");
-    expect(monthPreview("202704")?.id).toBe("q_pet_goldfish");
+  it("다음 달 미리 보기: 다음 달 칸에서 비싼 것부터 셋", async () => {
+    const ids = (m: string) => monthPreview(m).map((r) => r.id);
+    expect(ids("202611")).toEqual(["q_pet_goldfish", "q_aura_snowglobe", "q_name_leaf"]);
+    expect(ids("202612")).toEqual(["q_body_collector", "q_name_newyear", "q_hand_wishlamp"]);
+    expect(ids("202704")).toEqual(ids("202611"));
     const b = await questBoard(acct(), T0);
-    expect(b.shop.preview).toEqual({ month: "202612", id: "q_pet_goldfish" });
+    expect(b.shop.preview).toEqual({ month: "202612", ids: ["q_pet_goldfish", "q_aura_snowglobe", "q_name_leaf"] });
     expect(b.shop.always).toEqual([...QUEST_ALWAYS]);
   });
 

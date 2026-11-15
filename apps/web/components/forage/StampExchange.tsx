@@ -66,7 +66,7 @@ export default function StampExchange() {
   if (!board?.shop) return <p className={error ? ui.error : ui.hint}>{error ?? "교환소를 여는 중…"}</p>;
   const { shop } = board;
   const list = (ids: readonly string[]) => ids.map((id) => questRewardById(id)).filter((r): r is QuestReward => !!r);
-  const preview = shop.preview ? questRewardById(shop.preview.id) : undefined;
+  const preview = shop.preview ? list(shop.preview.ids) : [];
   // 교환소 밖에서 받은 영구 꾸미기(운영 지급 등)·이모티콘 묶음도 가진 것으로 본다
   const permOwned = new Set([...(me?.equipped ?? []), ...(me?.stash ?? [])].filter((e) => isPermanentUntil(e.until)).map((e) => e.itemId));
   const has = (r: QuestReward) => isOneTime(r) && (board.owned.includes(r.id) || permOwned.has(r.id) || (r.kind === "flag" && (me?.inventory[r.id] ?? 0) > 0));
@@ -133,13 +133,13 @@ export default function StampExchange() {
         <ul className={q.shopList} aria-label="언제나 있는 것">
           {list(shop.always).map((r) => card(r))}
         </ul>
-        {preview && shop.preview && (
+        {preview.length > 0 && shop.preview && (
           <>
             <h4 className={q.secHead}>
               <span>다음 달 미리 보기 · {monthLabel(shop.preview.month)}</span>
             </h4>
             <ul className={q.shopList} aria-label="다음 달 미리 보기">
-              {card(preview, "preview")}
+              {preview.map((r) => card(r, "preview"))}
             </ul>
           </>
         )}

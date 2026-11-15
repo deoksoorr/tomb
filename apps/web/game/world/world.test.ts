@@ -33,7 +33,7 @@ import {
   TELESCOPE_SPOT,
   WORLD_LOTS,
   ZONES,
-  BUS_PLAZA,
+  REST_PLAZA,
   CLOSED_LOTS,
   isOpenLot,
   WHARF_YARD,
@@ -335,18 +335,27 @@ describe("주거 구역 (분양 마을을 메인 맵에)", () => {
     expect(houseLot(4)).toMatchObject({ x: 1008, y: 360, door: { x: 1072, y: 452 } });
   });
 
-  it("없앤 10번지 자리는 버스 정류장 광장(포석·벤치·가로등), 11·12번지 자리는 납품 부두 위 마당(자갈)", () => {
-    expect(BUS_PLAZA).toMatchObject({ x: 1008, y: 648 });
+  it("없앤 10번지 자리는 쉼터 광장(포석·벤치·가로등), 11·12번지 자리는 납품 부두 위 마당(자갈 — 주말 버스 정류장)", () => {
+    expect(REST_PLAZA).toMatchObject({ x: 1008, y: 648 });
     const t = (x: number, y: number) => groundKind(Math.floor(x / 16), Math.floor(y / 16));
-    expect(t(BUS_PLAZA.x + 40, BUS_PLAZA.y + 40)).toBe("stone");
-    expect(t(BUS_PLAZA.x + BUS_PLAZA.w + 20, BUS_PLAZA.y + 40)).toBe("gravel"); // 바로 오른쪽이 납품 부두 위 마당
+    expect(t(REST_PLAZA.x + 40, REST_PLAZA.y + 40)).toBe("stone");
+    expect(t(REST_PLAZA.x + REST_PLAZA.w + 20, REST_PLAZA.y + 40)).toBe("gravel"); // 바로 오른쪽이 납품 부두 위 마당
     expect(t(WHARF_YARD.x + 60, WHARF_YARD.y + 40)).toBe("gravel");
-    const benches = FURNITURE.filter((f) => inside(BUS_PLAZA, f.x, f.y));
+    const benches = FURNITURE.filter((f) => inside(REST_PLAZA, f.x, f.y));
     expect(benches.length).toBeGreaterThanOrEqual(2);
-    expect(allProps().filter((p) => p.kind === "lamp" && inside(BUS_PLAZA, p.x, p.y)).length).toBeGreaterThanOrEqual(2);
+    expect(allProps().filter((p) => p.kind === "lamp" && inside(REST_PLAZA, p.x, p.y)).length).toBeGreaterThanOrEqual(2);
     const ok = reachable();
-    expect(ok(BUS_PLAZA.x + 64, BUS_PLAZA.y + 84)).toBe(true);
+    expect(ok(REST_PLAZA.x + 64, REST_PLAZA.y + 84)).toBe(true);
     expect(ok(WHARF_YARD.x + 128, WHARF_YARD.y + 100)).toBe(true);
+  });
+
+  it("납품 부두 위 마당의 주말 버스 정류장: 상호작용 \"bus\" 하나, 지붕 아래 벤치 bE, 앞에서 걸어서 닿는다", () => {
+    const bus = interactables().filter((i) => i.kind === "bus");
+    expect(bus.map((i) => i.id)).toEqual(["bus:camp"]);
+    expect(inside(WHARF_YARD, bus[0].x, bus[0].y)).toBe(true);
+    const be = FURNITURE.find((f) => f.id === "bE")!;
+    expect(Math.abs(be.x - bus[0].x)).toBeLessThan(8);
+    expect(reachable()(bus[0].x, bus[0].y + 4)).toBe(true);
   });
 
   it("문·빈 필지 상호작용", () => {

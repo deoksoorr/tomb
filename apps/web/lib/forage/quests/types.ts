@@ -24,8 +24,8 @@ export type QuestBoard = {
   /** 오늘의 의뢰·이번 주 큰 의뢰가 새로 나오는 시각 (ms) */
   dayResetAt: number;
   weekResetAt: number;
-  /** 이달의 교환소 (서버 시각 기준): month = YYYYMM, items = 이달의 칸 id(싼 것부터), always = 늘 있는 것, endsAt = 다음 달 1일 새벽 5시, preview = 다음 달 미리 보기 하나 */
-  shop: { month: string; items: string[]; always: string[]; endsAt: number; preview: { month: string; id: string } | null };
+  /** 이달의 교환소 (서버 시각 기준): month = YYYYMM, items = 이달의 칸 id(싼 것부터), always = 늘 있는 것, endsAt = 다음 달 1일 새벽 5시, preview = 다음 달 미리 보기 (비싼 것부터 셋) */
+  shop: { month: string; items: string[]; always: string[]; endsAt: number; preview: { month: string; ids: string[] } | null };
 };
 
 /** 납품: used = 가방에서 빠진 것 (화면이 가방 사본에서 뺀다 — 낚시 상태를 다시 읽지 않게), earned = 받은 도장, title = 새로 닿은 칭호 단계 */

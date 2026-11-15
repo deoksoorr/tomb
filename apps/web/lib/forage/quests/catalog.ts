@@ -90,7 +90,8 @@ export const QUEST_ALWAYS: readonly string[] = ["q_dye_pick", "q_dye_special"];
  * 표의 마지막 달 뒤로는 QUEST_CYCLE_FROM부터 마지막 달까지를 차례로 돌려 쓴다 (달마다 늘 목록이 있다)
  */
 export const QUEST_MONTHS: Readonly<Record<string, readonly string[]>> = {
-  "202611": ["qe_pack", "q_hat_angler", "q_hand_net", "q_name_wave", "q_aura_firefly"],
+  // 11월은 보름뿐이지만 열심히 하는 사람의 큰 목표로 채집왕 망토(120)를 하나 둔다 (11/15 사용자 요청)
+  "202611": ["qe_pack", "q_hat_angler", "q_hand_net", "q_name_wave", "q_aura_firefly", "q_back_cape"],
   "202612": ["q_hat_snow", "q_hat_miner", "q_hand_brush", "q_name_leaf", "q_aura_snowglobe", "q_pet_goldfish"],
   "202701": [QUEST_BODY_REWARD, "q_hand_wishlamp", "q_name_newyear"],
   "202702": ["q_ride_carp", "q_back_cape", "qe_pack"],
@@ -126,4 +127,5 @@ export function monthRewards(month: string): QuestReward[] {
 export const inMonthShop = (month: string, id: string) => QUEST_ALWAYS.includes(id) || monthRewards(month).some((r) => r.id === id);
 
 /** 다음 달 미리 보기: 다음 달 칸에서 가장 비싼 것 하나 */
-export const monthPreview = (month: string): QuestReward | null => monthRewards(nextMonth(month)).at(-1) ?? null;
+/** 다음 달 미리 보기: 다음 달 칸에서 비싼 것부터 셋 (11/15: 하나 → 셋, 더 잘 보이게) */
+export const monthPreview = (month: string): QuestReward[] => monthRewards(nextMonth(month)).slice(-3).reverse();

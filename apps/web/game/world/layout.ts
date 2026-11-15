@@ -19,7 +19,7 @@ import {
   HOUSE_GRID,
   HOUSE_ROWS,
   houseLot,
-  BUS_PLAZA,
+  REST_PLAZA,
   WHARF_YARD,
   HOUSING_DOOR,
   HOUSING_OFFICE,
@@ -57,7 +57,7 @@ import {
   type GraveArea,
 } from "@tomb/protocol";
 import { facadeInfo } from "../housing/art";
-import { fishZoneColliders, inFishZone } from "./fishZone";
+import { BUS_STOP, fishZoneColliders, inFishZone } from "./fishZone";
 import { stargazeColliders, stargazeInteractables } from "./life/stargazeLayout";
 import { RIDE_KEEPOUT, rideColliders, rideInteractables, WISH_FOUNTAIN } from "./rides";
 import { SKY_KEEPOUT, skyColliders, skyInteractables } from "./skyMath";
@@ -478,9 +478,12 @@ const HAND_PROPS: readonly PropDef[] = [
   P("leaves", 780, 560, 1),
   P("flowers", 690, 612, 2),
   P("flowers", 752, 612, 0),
-  // ── 11/15 주말 버스 정류장 광장 (예전 1번지) · 납품 부두 위 마당 가로등 ──
-  P("lamp", BUS_PLAZA.x + 10, BUS_PLAZA.y + 16),
-  P("lamp", BUS_PLAZA.x + BUS_PLAZA.w - 10, BUS_PLAZA.y + 16),
+  // ── 11/15 쉼터 광장 (예전 10번지: 가로등·꽃밭, 벤치 bY·bZ) · 납품 부두 위 마당 가로등 ──
+  P("lamp", REST_PLAZA.x + 10, REST_PLAZA.y + 16),
+  P("lamp", REST_PLAZA.x + REST_PLAZA.w - 10, REST_PLAZA.y + 16),
+  P("flowers", REST_PLAZA.x + 14, REST_PLAZA.y + 88, 1),
+  P("flowers", REST_PLAZA.x + REST_PLAZA.w - 14, REST_PLAZA.y + 88, 2),
+  P("flowers", REST_PLAZA.x + REST_PLAZA.w / 2, REST_PLAZA.y + 30, 0),
   P("lamp", WHARF_YARD.x + 8, WHARF_YARD.y + 14),
   P("lamp", WHARF_YARD.x + 124, WHARF_YARD.y + 14),
   P("lamp", WHARF_YARD.x + WHARF_YARD.w - 8, WHARF_YARD.y + 14),
@@ -590,7 +593,7 @@ function freeForProp(placed: readonly PropDef[], x: number, y: number, gap: numb
   for (const s of SEATS) if (Math.hypot(s.x - x, s.y - y) < (gap > 12 ? 30 : 22)) return false;
   for (const c of CAMPFIRES) if (Math.hypot(c.x - x, c.y - y) < (c.big ? 96 : 44)) return false;
   for (const l of HOUSE_LOTS) if (inRect({ x: l.x, y: l.y, w: HOUSE_LOT_W, h: HOUSE_LOT_H }, x, y, 6)) return false;
-  if (inRect(BUS_PLAZA, x, y, 10) || inRect(WHARF_YARD, x, y, 10)) return false; // 11/15 버스 정류장 광장·납품 부두 위 마당
+  if (inRect(REST_PLAZA, x, y, 10) || inRect(WHARF_YARD, x, y, 10)) return false; // 11/15 쉼터 광장·납품 부두 위 마당
   for (const p of placed) if (Math.hypot(p.x - x, p.y - y) < (isTree(p.kind) ? gap : 12)) return false;
   for (const p of HAND_PROPS) if (Math.hypot(p.x - x, p.y - y) < (isTree(p.kind) || p.kind === "hammock" || p.kind === "swing" || p.kind === "crypt" || p.kind === "mat" || p.kind === "oldGrave" ? gap : 14)) return false;
   for (const k of RIDE_KEEPOUT) if (Math.hypot(k.x - x, k.y - y) < k.r) return false; // 50번 광장 놀거리 (rides.ts)
@@ -967,8 +970,8 @@ export function groundKind(tx: number, ty: number): GroundKind {
   // ── 주거 구역: 서쪽 골목(세로)과 집 앞 골목(가로) ──
   if (between(tx, HOUSE_TX0, HOUSE_TX0 + 1) && between(ty, NORTH_ROAD_TY[1] + 1, LAST_STREET_TY)) return "cobble";
   if (between(tx, HOUSE_TX0, HOUSE_TX1) && STREET_TYS.includes(ty)) return "cobble";
-  // 11/15 주말 버스 정류장 광장 (예전 10번지, 포석) · 납품 부두 위 마당 (예전 11·12번지, 자갈)
-  if (between(tx, T(BUS_PLAZA.x), T(BUS_PLAZA.x + BUS_PLAZA.w) - 1) && between(ty, T(BUS_PLAZA.y), T(BUS_PLAZA.y + BUS_PLAZA.h) - 1)) return "stone";
+  // 11/15 쉼터 광장 (예전 10번지, 포석) · 납품 부두 위 마당 (예전 11·12번지, 자갈 — 주말 버스 정류장)
+  if (between(tx, T(REST_PLAZA.x), T(REST_PLAZA.x + REST_PLAZA.w) - 1) && between(ty, T(REST_PLAZA.y), T(REST_PLAZA.y + REST_PLAZA.h) - 1)) return "stone";
   if (between(tx, T(WHARF_YARD.x), T(WHARF_YARD.x + WHARF_YARD.w) - 1) && between(ty, T(WHARF_YARD.y), T(WHARF_YARD.y + WHARF_YARD.h) - 1)) return "gravel";
   // 광장 ↔ 주거 구역 골목 (첫째·셋째 골목 줄)
   if (between(tx, PZ_TX1 + 1, HOUSE_TX0 - 1) && (STREET_TYS.slice(0, 2).includes(ty) || STREET_TYS.slice(4, 6).includes(ty))) return "dirt";
@@ -999,7 +1002,7 @@ export function groundKind(tx: number, ty: number): GroundKind {
 }
 
 // ── 상호작용 오브젝트 (E/탭) ── WorldScene이 가장 가까운 것을 골라 안내 문구를 띄우고 상호작용한다.
-export type InteractKind = "tree" | "swing" | "hammock" | "bell" | "well" | "water" | "portal" | "door" | "lot" | "dock" | "wish" | "seesaw" | "trampoline" | "carousel" | "telescope" | "mat" | "forage" | "zoo" | "ferris" | "balloon";
+export type InteractKind = "tree" | "swing" | "hammock" | "bell" | "well" | "water" | "portal" | "door" | "lot" | "dock" | "wish" | "seesaw" | "trampoline" | "carousel" | "telescope" | "mat" | "forage" | "zoo" | "ferris" | "balloon" | "bus";
 export type PortalKind = "hunt" | "housing" | "shrine" | "haunt" | "tower";
 export type Interactable = {
   id: string;
@@ -1028,6 +1031,8 @@ const PORTALS: readonly Interactable[] = [
   { id: "portal:shrine", kind: "portal", portal: "shrine", x: SHRINE.x, y: SHRINE.y, r: PORTAL_RADIUS, ax: SHRINE.x, ay: SHRINE.y, label: "성황당 · 이장한 묘비 보기" },
   { id: "dock:ferry", kind: "dock", x: FERRY_DOCK.x, y: FERRY_DOCK.y, r: 14, ax: FERRY_DOCK.x, ay: FERRY_DOCK.y, label: "나루터 · 조각배 타기" },
   { id: "dock:duck", kind: "dock", x: DUCK_DOCK.x, y: DUCK_DOCK.y, r: 14, ax: DUCK_DOCK.x, ay: DUCK_DOCK.y, label: "오리배 타기" },
+  // 11/15 주말 버스 정류장 (납품 부두 위 마당). 지금은 안내만 — 캠핑장 버스가 생기면 kind "bus"에 붙인다
+  { id: "bus:camp", kind: "bus", x: BUS_STOP.x, y: BUS_STOP.y + 14, r: 20, ax: BUS_STOP.x, ay: BUS_STOP.y + 14, label: "주말 버스 정류장" },
   // 동물원 사육사 (노점 앞) → 펫 분양 창
   { id: "zoo:keeper", kind: "zoo", x: ZOOKEEPER_SPOT.x, y: ZOOKEEPER_SPOT.y, r: 20, ax: ZOOKEEPER_SPOT.x, ay: ZOOKEEPER_SPOT.y, label: "사육사에게 펫 분양 받기" },
 ];

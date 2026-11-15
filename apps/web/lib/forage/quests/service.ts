@@ -70,7 +70,7 @@ function shopOf(day: string): QuestBoard["shop"] {
     items: monthRewards(month).map((r) => r.id),
     always: [...QUEST_ALWAYS],
     endsAt: dayStartMs(`${next}01`),
-    preview: p ? { month: next, id: p.id } : null,
+    preview: p.length ? { month: next, ids: p.map((r) => r.id) } : null,
   };
 }
 

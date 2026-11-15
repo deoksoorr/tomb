@@ -22,11 +22,12 @@ export const WALL_THICKNESS = 2 * TILE;
  * 1 = 세로로 길던 공동묘지 맵, 2 = 가을·겨울 마을(가로로 넓은 맵), 3 = 컴팩트한 묘지 마을(F1: 큰 모닥불 광장·묘역 세 곳·연못 여럿)
  * 4 = 낚시터(호수 북동쪽 데크·아치·노점 마당, 까마귀 연못 마른 나무·비석) — 데크·장식 자리에 옛 기록이 끼지 않게
  * 5 = 동물원(버드나무 묘역 자리 — 울타리·우리·사육사 노점, 묘비 자리는 옛 묘역·다리 건너 묘역으로 옮김) — 우리 안에 옛 기록이 끼지 않게
- * 6 = 11/15 오리 연못(동물원을 줄이고 연못을 넓힘)·납품 부두(낚시 데크를 줄이고 의뢰 게시판·수족관 마당)·필지 1·11·12번 없앰(버스 정류장 광장)
+ * 6 = 11/15 오리 연못(동물원을 줄이고 연못을 넓힘)·납품 부두(낚시 데크를 줄이고 의뢰 게시판 마당)·필지 1·11·12번 없앰(버스 정류장 광장)
  *     — 넓어진 물·우리 울타리·새 장식 자리에 옛 기록이 끼지 않게
  * 7 = 필지를 1~9번지로 (1번지 되살림, 10·11·12번지 없앰 → 버스 정류장 광장을 10번지 자리로) — 광장·필지 자리가 바뀌어서
+ * 8 = 납품 부두 기록 수족관 자리에 주말 버스 정류장(지붕·벤치·팻말 충돌), 10번지 자리는 쉼터 광장 — 새 충돌 자리에 옛 기록이 끼지 않게
  */
-export const MAP_VERSION = 7;
+export const MAP_VERSION = 8;
 
 const CX = MAP_WIDTH / 2; // 720
 
@@ -64,7 +65,7 @@ export const ZONES: readonly Zone[] = [
   // 동물원 (예전 버드나무 묘역 자리, 사용자 요청: 펫은 사육사에게서). ZOO와 같은 사각형
   { id: "zoo", name: "동물원", x: 48, y: 784, w: 256, h: 224 },
   { id: "meadow", name: "호박밭", x: 864, y: 864, w: 240, h: 144 },
-  // 11/15 납품 부두 (예전 낚시터: 호수 북동쪽 물가 + 없앤 11·12번지 자리의 위 마당 — 의뢰 게시판·기록 수족관·어부 노점·작은 낚시 잔교). FISHING_ZONE과 같은 사각형
+  // 11/15 납품 부두 (예전 낚시터: 호수 북동쪽 물가 + 없앤 11·12번지 자리의 위 마당 — 의뢰 게시판·주말 버스 정류장·어부 노점·작은 낚시 잔교). FISHING_ZONE과 같은 사각형
   { id: "fishing", name: "납품 부두", x: 1144, y: 652, w: 256, h: 260 },
 ];
 
@@ -232,7 +233,7 @@ export const HOUSE_COLS = 3;
 export const HOUSE_ROWS = 4;
 /**
  * 메인 맵 번지 1..WORLD_LOTS (11/15: 1~9번지만 — 넷째 줄 10·11·12번지 자리는 없앴다. 어느 채널에도 집이 없던 줄).
- * 10번지 자리 → 주말 버스 정류장 광장 (BUS_PLAZA), 11·12번지 자리 → 납품 부두 위 마당 (WHARF_YARD).
+ * 10번지 자리 → 쉼터 광장 (REST_PLAZA), 11·12번지 자리 → 납품 부두 위 마당 (WHARF_YARD — 버스 정류장도 여기).
  * 그보다 큰 번지는 예전처럼 분양 마을(2단지) 번지다. 남은 집의 번지·자리는 그대로
  */
 export const WORLD_LOTS = HOUSE_COLS * 3;
@@ -263,8 +264,8 @@ export function houseLot(lot: number): HouseLot | null {
 export const HOUSE_LOTS: readonly HouseLot[] = Array.from({ length: WORLD_LOTS }, (_, i) => houseLot(i + 1)).filter((l): l is HouseLot => l !== null);
 /** 주거 구역 필지 격자 왼쪽 위 (없앤 번지와 상관없이 격자는 그대로 — 골목·길 계산용) */
 export const HOUSE_GRID = { x: HOUSE_X0, y: HOUSE_Y0, pitchX: HOUSE_PITCH_X, pitchY: HOUSE_PITCH_Y } as const;
-/** 11/15 주말 버스 정류장 광장 자리 (예전 10번지 필지, 마을 동쪽 끝 — 납품 부두 위 마당 바로 왼쪽). 지금은 포장된 빈 광장 + 벤치·가로등 (버스는 아직) */
-export const BUS_PLAZA = { x: HOUSE_X0, y: HOUSE_Y0 + 3 * HOUSE_PITCH_Y, w: HOUSE_LOT_W, h: HOUSE_LOT_H } as const;
+/** 11/15 쉼터 광장 (예전 10번지 필지, 마을 동쪽 끝 — 납품 부두 위 마당 바로 왼쪽): 포석·벤치·가로등·꽃밭. 버스 정류장은 부두 마당에 */
+export const REST_PLAZA = { x: HOUSE_X0, y: HOUSE_Y0 + 3 * HOUSE_PITCH_Y, w: HOUSE_LOT_W, h: HOUSE_LOT_H } as const;
 
 // ── 강·연못·호수 ── (물 판정·그림은 클라이언트 layout.ts, 좌표 원본은 여기)
 /** 강 가운데 줄 (서쪽 담 밑에서 흘러나와 광장 남쪽을 지나 남동쪽 호수로). 물살은 이 순서 방향. x는 늘어나는 순서 */
@@ -325,7 +326,7 @@ export const BOAT_MOORING = { x: 1206, y: 862 } as const;
 /** 호수 낚시 잔교 (서쪽 둑에서 호수로 뻗은 판자) */
 export const LAKE_PIER = { x: 1108, y: 924, w: 72, h: 16 } as const;
 // ── 납품 부두 (11/15, 예전 낚시터) ── 호수 북동쪽 물가 + 없앤 11·12번지 자리.
-// 위 마당(WHARF_YARD, 마지막 골목 바로 위): 의뢰 게시판(E → 수집 의뢰판)·긴급 의뢰 자리(빈 현판)·기록 수족관(이번 주 최대어 3마리)·벤치·가로등.
+// 위 마당(WHARF_YARD, 마지막 골목 바로 위): 의뢰 게시판(E → 수집 의뢰판)·긴급 의뢰 자리(빈 현판)·주말 버스 정류장(캠핑장행 — 아직 준비 중)·벤치·가로등.
 // 아래 마당(FISH_YARD, 골목 바로 아래): 어부 노점 → 입구 아치(FISH_ARCH) → 짧은 낚시 잔교(FISH_PIER + 끝의 작은 가로 데크 FISH_PIER_HEAD).
 // 낚시는 잔교 양옆·끝과 둑의 몇 자리만 (FISHING_SPOTS 앞쪽 FISHING_ZONE_SPOTS곳) — 사람들이 잘 안 오던 큰 데크를 줄였다.
 // 그림·장식·충돌은 클라이언트(game/world/fishZone.ts, game/world/forage/FishZoneView.ts)
@@ -655,11 +656,11 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "bN", kind: "bench", x: 952, y: 262, facing: DIR.down, seatOffsets: two },
   { id: "bO", kind: "bench", x: 1060, y: 800, facing: DIR.down, seatOffsets: two },
   { id: "lE", kind: "bench", x: 1144, y: 800, facing: DIR.down, seatOffsets: four }, // 낚시터가 생기며 나루터 서쪽 호숫가로 옮김
-  // ── 11/15 주말 버스 정류장 광장 (예전 10번지, 아래 골목을 바라본다) · 납품 부두 위 마당 (게시판·수족관 앞) ──
+  // ── 11/15 쉼터 광장 (예전 10번지, 아래 골목을 바라본다) · 납품 부두 위 마당 (게시판 앞 · 버스 정류장 지붕 아래) ──
   { id: "bY", kind: "bench", x: 1044, y: 704, facing: DIR.down, seatOffsets: two },
   { id: "bZ", kind: "bench", x: 1100, y: 704, facing: DIR.down, seatOffsets: two },
   { id: "bD", kind: "bench", x: 1192, y: 744, facing: DIR.up, seatOffsets: two },
-  { id: "bE", kind: "bench", x: 1336, y: 744, facing: DIR.up, seatOffsets: two },
+  { id: "bE", kind: "bench", x: 1330, y: 716, facing: DIR.down, seatOffsets: two }, // 주말 버스 정류장 지붕 아래 (game/world/fishZone.ts BUS_STOP)
   // ── 사냥터 동굴 앞 ──
   { id: "bQ", kind: "bench", x: 912, y: 112, facing: DIR.down, seatOffsets: two },
   // ── 다리 건너 묘역 ── 묘비를 바라보는 벤치
