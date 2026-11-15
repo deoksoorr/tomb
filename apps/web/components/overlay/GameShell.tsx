@@ -261,6 +261,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const away = scene === "house" || scene === "hunt" || scene === "minigame";
   // 11/15 마을 ↔ 캠핑장 버스 창밖 연출 동안은 HUD를 숨긴다 (몇 초)
   const riding = useBridgeValue("bus:state")?.riding === true;
+  // 11/16 버스에 오르면 열려 있던 한 줄 채팅 입력칸도 닫는다 (내린 뒤 저절로 다시 뜨지 않게)
+  useBridgeEvent("bus:state", (st) => {
+    if (st.riding) setChatOpen(false);
+  });
   /** 내 집 꾸미기 중 (터치 조작 줄 대신 꾸미기 도구 줄). house:state는 마지막 값을 기억하지 않아 받을 때마다 적어 둔다 */
   const [editingHouse, setEditingHouse] = useState(false);
   useBridgeEvent("house:state", (st) => setEditingHouse(st.editing));
@@ -335,7 +339,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       if (document.querySelector("dialog[open]")) return;
       // Enter: 말풍선 채팅 입력칸 (버튼에 포커스가 있으면 그 버튼 몫, 낚시처럼 게임 키를 막은 창이 있으면 그 창 몫)
       if (enter) {
-        if (!canRadial || chatOpen || bridge.last("ui:blockKeys")?.blocked || (el instanceof HTMLElement && el.matches("button, a[href], [role=button]"))) return;
+        // 11/16 버스 안(창밖 연출)에서는 채팅창을 숨긴다 — 이때 Enter가 터치용 한 줄 입력칸(화면 폭 전체)을 열었다
+        if (!canRadial || chatOpen || bridge.last("bus:state")?.riding || bridge.last("ui:blockKeys")?.blocked || (el instanceof HTMLElement && el.matches("button, a[href], [role=button]"))) return;
         e.preventDefault();
         setRadial(false);
         // 데스크톱은 왼쪽 아래 채팅창 입력칸으로, 터치(키보드 달린 태블릿 등)는 한 줄 입력칸
@@ -770,7 +775,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         />
       )}
       {sayOpen && <SayDialog onClose={() => setSayOpen(false)} />}
-      {chatOpen && canRadial && !sayOpen && <ChatSheet onClose={() => setChatOpen(false)} />}
+      {chatOpen && canRadial && !sayOpen && !riding && <ChatSheet onClose={() => setChatOpen(false)} />}
       {/* 채팅 기록창: 데스크톱은 바로 가기 줄 위 상자(입력칸 포함), 터치는 확성기 위에 글씨만 + [기록] 창([말하기] → 채팅 입력 줄). 채널을 옮기면 비운다 */}
       {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}${scene !== "house" && netMap === "camp" ? "c" : ""}`} hidden={!canRadial || riding} onChat={() => setChatOpen(true)} />}
       {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
