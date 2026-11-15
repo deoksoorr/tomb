@@ -525,6 +525,9 @@ const tooHigh = (what: string) =>
  * 결과 상한 (evaluate의 사냥 검사를 층마다로 늘린 것): 깬 층의 계획 몬스터를 다 잡았고, 깬 층마다 최소 시간이 지났고,
  * 처치 수가 (깬 층 + 지금 층)에서 나올 수 있는 수와 레벨 처치 속도 상한 안. serverElapsedMs = 서버가 잰 시작~지금
  */
+/** 11/15 층마다 테마 졸개를 계획 밖으로 더 셀 수 있는 수 (옥상 불꽃 상한 8에 여유) */
+export const MINION_FLOOR_ALLOW = 12;
+
 export function evalTower(
   t: TowerTicket,
   r: HuntResult,
@@ -564,6 +567,9 @@ export function evalTower(
     for (const w of plan)
       for (const m of w.monsters) need[m] = (need[m] ?? 0) + 1;
   }
+  // 11/15 테마 졸개(옥상 피뢰침의 정전기 불꽃 등)는 판 화면이 층마다 상한까지 더 불러낸다 — 계획 표에 없는 만큼 층마다 넉넉히 더 센다.
+  // (61층 판이 「정전기 불꽃 기록이 … 넘었어요」로 거절됐다. 전체 처치 수는 아래 처치 속도 상한이 막는다)
+  for (const id of MONSTER_IDS) if (MONSTERS[id].minion) can[id] = (can[id] ?? 0) + (k + 1) * MINION_FLOOR_ALLOW;
   let total = 0;
   for (const [id, n] of Object.entries(r.kills) as [MonsterId, number][]) {
     if (!MONSTER_IDS.includes(id) || !Number.isInteger(n) || n < 0)

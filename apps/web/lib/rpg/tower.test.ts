@@ -527,3 +527,18 @@ describe("입구 경비원", () => {
     expect(TOWER_TAUNTS).toContain(towerTaunt(0.99));
   });
 });
+
+describe("11/15 테마 졸개 (옥상 정전기 불꽃)", () => {
+  it("층마다 계획 밖 졸개를 MINION_FLOOR_ALLOW만큼 더 잡아도 거절하지 않는다", async () => {
+    const { evalTower, MINION_FLOOR_ALLOW, towerPlan } = await import("./tower");
+    const { huntSpawnable } = await import("./plan");
+    const start = 21;
+    const floors = 3;
+    const kills: Record<string, number> = {};
+    for (let i = 0; i <= floors; i++)
+      for (const [id, n] of Object.entries(huntSpawnable(towerPlan(77, start + i, start), Infinity))) kills[id] = (kills[id] ?? 0) + (n ?? 0);
+    kills.rf_spark = (kills.rf_spark ?? 0) + (floors + 1) * MINION_FLOOR_ALLOW;
+    const v = evalTower({ seed: 77, level: 50, start, gp: 3 }, { game: "hunt", durationMs: 3_000_000, kills, floors, floorMs: 2_900_000, wavesCleared: 0, died: true, potionsUsed: {} } as never, 3_100_000, { lax: true });
+    expect(v.ok, JSON.stringify(v)).toBe(true);
+  });
+});
