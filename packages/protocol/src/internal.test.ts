@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CLOSE } from "./constants";
 import { WHERE_MAX_IDS } from "./friends";
-import { INTERNAL_KICK_MAX, signInternal, verifyInternal } from "./internal";
+import { INTERNAL_KICK_MAX, INTERNAL_SAY_MAX, signInternal, verifyInternal } from "./internal";
 
 // 47번 서버 간 내부 요청 서명
 const S = "secret-a";
@@ -20,6 +20,11 @@ describe("내부 요청 서명", () => {
     expect(await verifyInternal(S, where.body, where.sig, now)).toEqual({ op: "where", visitorIds: ["abc_DEF-1", "x"], fresh: true, exp: now + 20 });
     const hello = await signInternal(S, { op: "hello", visitorId: "me_1", name: "가람", key: "abcdEFGH_-123456", friends: ["f1", "f2"], exp: now + 20 });
     expect(await verifyInternal(S, hello.body, hello.sig, now)).toEqual({ op: "hello", visitorId: "me_1", name: "가람", key: "abcdEFGH_-123456", friends: ["f1", "f2"], exp: now + 20 });
+    // 11/15 마을 공지 방송 (replaces는 있을 때만)
+    const say = await signInternal(S, { op: "say", id: "urg-t1-a1", name: "공지", text: "긴급 의뢰(생선 15마리)는 아무도 오지 않은 채 끝났어요.", at: 123, replaces: "urg-t1-a0", exp: now + 20 });
+    expect(await verifyInternal(S, say.body, say.sig, now)).toEqual({ op: "say", id: "urg-t1-a1", name: "공지", text: "긴급 의뢰(생선 15마리)는 아무도 오지 않은 채 끝났어요.", at: 123, replaces: "urg-t1-a0", exp: now + 20 });
+    const say2 = await signInternal(S, { op: "say", id: "abc", name: "공지", text: "한 줄", at: 1, exp: now + 20 });
+    expect(await verifyInternal(S, say2.body, say2.sig, now)).toEqual({ op: "say", id: "abc", name: "공지", text: "한 줄", at: 1, exp: now + 20 });
     const plain = await signInternal(S, { op: "where", visitorIds: ["x"], exp: now + 20 });
     expect(await verifyInternal(S, plain.body, plain.sig, now)).toEqual({ op: "where", visitorIds: ["x"], exp: now + 20 });
   });
@@ -52,6 +57,12 @@ describe("내부 요청 서명", () => {
       { op: "hello", visitorId: "a", name: "가람", key: "abcdEFGH_-123456", friends: ["a b"], exp: now + 5 },
       { op: "where", visitorIds: Array.from({ length: WHERE_MAX_IDS + 1 }, (_, i) => `v${i}`), exp: now + 5 },
       { op: "where", visitorIds: ["a b"], exp: now + 5 },
+      { op: "say", id: "a b", name: "공지", text: "x", at: 1, exp: now + 5 },
+      { op: "say", id: "a", name: "", text: "x", at: 1, exp: now + 5 },
+      { op: "say", id: "a", name: "공지", text: "", at: 1, exp: now + 5 },
+      { op: "say", id: "a", name: "공지", text: "가".repeat(INTERNAL_SAY_MAX + 1), at: 1, exp: now + 5 },
+      { op: "say", id: "a", name: "공지", text: "x", at: 0, exp: now + 5 },
+      { op: "say", id: "a", name: "공지", text: "x", at: 1, replaces: "a b", exp: now + 5 },
       { op: "zap", exp: now + 5 },
     ];
     for (const b of bad) {

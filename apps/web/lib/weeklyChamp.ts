@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { CHAMP_BOARDS, CHAMP_ITEM_IDS, CHAMP_TITLE, champBitsOf, champBoards, champHatOf, itemById, type AvatarDye, type ChampBoard } from "@tomb/protocol";
-import { notifyMe } from "./ban";
+import { runAfter } from "./analyticsService";
+import { notifyMe, sayAll } from "./ban";
 import { speciesById } from "./forage/catalog";
 import { getFishRank } from "./forage/fishRank";
 import { staffAccountId } from "./staff";
@@ -76,9 +77,15 @@ export function champValueText(w: Pick<ChampWinner, "board" | "value" | "sp">): 
   return `${sp ? `${sp} ` : ""}${(w.value / 10).toFixed(1)}cm`;
 }
 
-/** 마을 확성기 줄에 시스템 공지 한 줄 (모든 채널, 5분 동안 — 확성기 기록과 같은 자리) */
-export async function pushVillageNotice(text: string, now = Date.now()): Promise<void> {
-  await getMegaphone().push({ id: nanoid(10), name: CHAMP_NOTICE_NAME, text, scope: "all", ch: 1, at: now, accountId: CHAMP_NOTICE_ACCOUNT });
+/**
+ * 마을 확성기 줄에 시스템 공지 한 줄 (모든 채널, 5분 동안 — 확성기 기록과 같은 자리).
+ * 기록에 남기고, 응답 뒤에 실시간 서버로 지금 접속한 화면들의 확성기 줄에도 바로 띄운다 (11/15 — 예전엔 기록만 남아 다시 열어야 보였다).
+ * opts.id = 정해 둔 id (나중에 바꿔 끼울 공지), opts.replaces = 이 줄로 바꿔 끼울 앞 공지 id (목록·화면에서 그 줄을 뺀다)
+ */
+export async function pushVillageNotice(text: string, now = Date.now(), opts: { id?: string; replaces?: string } = {}): Promise<void> {
+  const line = { id: opts.id ?? nanoid(10), name: CHAMP_NOTICE_NAME, text, at: now, ...(opts.replaces ? { replaces: opts.replaces } : {}) };
+  await getMegaphone().push({ ...line, scope: "all", ch: 1, accountId: CHAMP_NOTICE_ACCOUNT });
+  runAfter(() => sayAll(line));
 }
 
 export type ChampSettle = {

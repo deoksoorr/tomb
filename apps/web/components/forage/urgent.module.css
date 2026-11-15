@@ -175,6 +175,27 @@
   color: var(--bone);
 }
 
+/* 11/15 끝난 뒤: 보상 한 줄 (좁으면 줄바꿈) · 아무도 안 냈을 때 한 줄 */
+.hudReward {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 8px;
+  color: var(--bone);
+  font-size: 11px;
+}
+
+.claimHint {
+  color: var(--candle);
+}
+
+.endLine {
+  flex: 1;
+  min-width: 0;
+  color: var(--bone);
+  font-size: 13px;
+}
+
 .festLeft {
   color: #ffd86a;
 }
@@ -342,7 +363,8 @@
     flex-basis: 100%;
     font-size: 11px;
   }
-  .clock {
+  .clock,
+  .close {
     margin-left: auto;
   }
   .hudHint {

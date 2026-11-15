@@ -183,6 +183,15 @@ export async function notifyMe(accountIds: string[]): Promise<number | null> {
   return r ? r.sent : null;
 }
 
+/**
+ * 11/15 마을 공지 한 줄을 열린 채널 모두의 확성기 줄에 지금 띄운다 (확성기 기록에 남긴 것과 같은 id — 채널이 같은 id는 한 번만 띄운다).
+ * 띄운 채널 수, 실시간 서버에 닿지 못하면(옛 실시간 서버 포함) null — 그때는 다음 기록 조회·새로 들어올 때 보인다
+ */
+export async function sayAll(line: { id: string; name: string; text: string; at: number; replaces?: string }): Promise<number | null> {
+  const r = await internal<{ sent: number }>("/internal/say", { op: "say", ...line }, 2000);
+  return r ? r.sent : null;
+}
+
 /** 채널·방의 sid가 누구인지 (유저 신고). 없거나 실시간 서버에 닿지 못하면 null */
 export async function peerOf(where: { ch: number } | { room: string }, sid: number): Promise<{ visitorId: string; name: string } | null> {
   const r = await internal<{ peer: { visitorId: string; name: string } | null }>("/internal/peer", { op: "peer", ...where, sid });

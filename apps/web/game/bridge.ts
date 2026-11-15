@@ -99,7 +99,20 @@ export type GameEvents = {
   /** 22번 황금 고블린을 내가 가장 먼저 잡았다 → UI가 증서로 /api/goblin에 보상을 받는다 */
   "goblin:grant": { id: string; grant: string; points: number };
   /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
-  "megaphone:heard": { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; /** 운영자 계정이 외친 것 → 이름 금색 */ staff?: true };
+  "megaphone:heard": {
+    id: string;
+    name: string;
+    text: string;
+    scope: "channel" | "all";
+    ch: number;
+    at: number;
+    /** 운영자 계정이 외친 것 → 이름 금색 */
+    staff?: true;
+    /** 11/15 마을 공지 줄 (실시간 서버 /internal/say) — 금색, "운영자" 딱지·신고 없음 */
+    system?: true;
+    /** 이 줄로 바꿔 끼울 앞 공지 id (긴급 의뢰 끝 → 시작 공지를 뺀다) */
+    replaces?: string;
+  };
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
   "scene:changed": {
     scene: "world" | "shop" | "hunt" | "minigame" | "house";

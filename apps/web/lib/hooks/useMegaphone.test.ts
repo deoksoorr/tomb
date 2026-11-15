@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MegaphoneEntry } from "@/lib/types";
 import { MEGAPHONE_TTL_MS } from "@tomb/protocol";
-import { flashEndsAt, liveMegaphones, MEGA_FLASH_MS, MEGA_FLASH_QUEUED_MS, MEGA_QUEUE_MAX, megaphoneStore } from "./useMegaphone";
+import { dropReplaced, flashEndsAt, liveMegaphones, MEGA_FLASH_MS, MEGA_FLASH_QUEUED_MS, MEGA_QUEUE_MAX, megaphoneStore } from "./useMegaphone";
 
 let n = 0;
 const entry = (text: string): MegaphoneEntry => ({ id: `m${++n}`, name: `이름${n}`, text, scope: "channel", ch: 1, at: Date.now() });
@@ -80,5 +80,21 @@ describe("확성기 가운데 표시 차례", () => {
     expect(megaphoneStore.getSnapshot().entries.some((e) => e.id === fresh.id)).toBe(true);
     vi.advanceTimersByTime(2_000);
     expect(megaphoneStore.getSnapshot().entries.some((e) => e.id === fresh.id)).toBe(false);
+  });
+
+  it("11/15 끝 공지(replaces)가 오면 바꿔 끼울 시작 공지를 기록·기다리는 줄에서 뺀다", () => {
+    const start = { ...entry("📢 긴급! … (20분)"), id: "urg-t1-a0", system: true as const, staff: true as const };
+    const other = entry("다른 말");
+    megaphoneStore.push(other);
+    megaphoneStore.push(start);
+    expect(megaphoneStore.getSnapshot().queue.map((e) => e.id)).toContain(start.id);
+    const end = { ...entry("긴급 의뢰(생선 15마리)는 아무도 오지 않은 채 끝났어요."), id: "urg-t1-a1", replaces: start.id, system: true as const, staff: true as const };
+    megaphoneStore.push(end);
+    const ids = megaphoneStore.getSnapshot().entries.map((e) => e.id);
+    expect(ids).not.toContain(start.id);
+    expect(ids.slice(-1)).toEqual([end.id]);
+    expect(megaphoneStore.getSnapshot().queue.map((e) => e.id)).not.toContain(start.id);
+    // 서버 목록으로 다시 맞출 때도 (목록에 둘 다 있어도) 바꿔 끼운 쪽만
+    expect(dropReplaced([start, other, end]).map((e) => e.id)).toEqual([other.id, end.id]);
   });
 });

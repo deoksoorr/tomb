@@ -23,16 +23,18 @@ export const GET = handler(async (req) => {
   const ch = Number(req.nextUrl.searchParams.get("channel") ?? 1);
   const channel = isGraveChannel(ch) ? ch : 1;
   const [rows, staffId] = await Promise.all([getMegaphone().recent(MEGA_KEEP), staffAccountId()]);
+  // 11/15 뒤 공지가 바꿔 끼운 앞 공지(긴급 의뢰 시작 → 끝)는 뺀다
+  const replaced = new Set(rows.flatMap((r) => (r.replaces ? [r.replaces] : [])));
   const entries: MegaphoneEntry[] = rows
-    .filter((r) => !r.hidden && (r.scope === "all" || r.ch === channel))
+    .filter((r) => !r.hidden && !replaced.has(r.id) && (r.scope === "all" || r.ch === channel))
     .slice(0, MEGA_SHOW)
     .reverse()
     // 운영자로 지정되기 전에 남긴 기록도 금색·"운영자" 딱지로 (이름은 남긴 그대로)
-    .map(({ id, name, text, scope, ch, at, accountId }) => {
+    .map(({ id, name, text, scope, ch, at, accountId, replaces }) => {
       const staff = !!staffId && accountId === staffId;
       // 주간 1위 소식 같은 마을 공지(시스템 줄)는 보낸 이 이름("마을 소식") 그대로, 운영자처럼 금색·신고 버튼 없이
       const system = accountId === CHAMP_NOTICE_ACCOUNT;
-      return { id, name, text, scope, ch, at, ...(staff || system ? { staff: true as const } : {}), ...(system ? { system: true as const } : {}) };
+      return { id, name, text, scope, ch, at, ...(staff || system ? { staff: true as const } : {}), ...(system ? { system: true as const } : {}), ...(system && replaces ? { replaces } : {}) };
     });
   return json<MegaphoneListResponse>(
     { entries },
