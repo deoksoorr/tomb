@@ -125,7 +125,7 @@ export default function RankingList({ graves, onPick }: Props) {
             ))}
           </div>
           {tab === "house" && <span className={styles.hint}>안팎에 놓은 물건 점수에 좋아요 × 3을 더해요.</span>}
-          {tab === "tower" && <span className={styles.hint}>높이 오른 순이에요. 같으면 빨리 오른 순이에요. 이번 주 1위는 다음 주에 칭호 「이번 주 최고층」을 달아요.</span>}
+          {tab === "tower" && <span className={styles.hint}>높이 오른 순이에요. 같으면 빨리 오른 순이에요. 이번 주 1위는 다음 한 주 동안 신화 칭호 「이번 주 최고층」을 달아요.</span>}
           {tab === "fish" && <span className={styles.hint}>직접 낚은 물고기만 올라요. 자동 낚시로 낚은 것은 도감에만 남아요.</span>}
           {tab === "fish" && (
             <select className={styles.zone} value={fish} onChange={(e) => setFish(e.target.value)} aria-label="물고기">
