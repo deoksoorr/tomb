@@ -7,13 +7,12 @@ import { FIRST_PLAYLIST_ID, needsAttribution, nextShuffled, parseManifest, pickT
 describe("parseManifest", () => {
   it("저장소의 tracks.json은 모든 플레이리스트에 곡이 있다", () => {
     const lists = parseManifest(tracksJson);
-    // 로파이·재즈·어쿠스틱 기타는 픽사베이 곡으로 바꾸고, 나머지 6개는 예전 그대로
+    // 로파이·재즈·어쿠스틱 기타는 픽사베이 곡으로 바꾸고, 나머지 5개는 예전 그대로 (11/15 빗소리 뺌)
     expect(lists.map((p) => [p.id, p.title])).toEqual([
       ["lofi", "로파이"],
       ["acoustic", "어쿠스틱 기타"],
       ["jazz", "재즈"],
       ["orgel", "오르골"],
-      ["rain", "빗소리"],
       ["piano", "피아노"],
       ["chiptune", "8비트"],
       ["ambient", "앰비언트"],
@@ -157,13 +156,19 @@ describe("randomStart", () => {
     { id: "lofi", title: "로파이", tracks: [track(0), track(1)] },
   ];
 
-  it("처음에는 무조건 로파이(기본값)의 아무 곡", () => {
-    expect(randomStart(lists, undefined, () => 0.99)).toEqual({ playlistId: "lofi", index: 1 });
-    expect(randomStart(lists, undefined, () => 0)).toEqual({ playlistId: "lofi", index: 0 });
+  it("처음에는 아무 플레이리스트의 아무 곡 (로파이 고정 아님)", () => {
+    expect(randomStart(lists, undefined, seq(0.1, 0.8))).toEqual({ playlistId: "jazz", index: 3 });
+    expect(randomStart(lists, undefined, seq(0.6, 0.3))).toEqual({ playlistId: "lofi", index: 0 });
   });
 
-  it("저장소의 tracks.json으로도 첫 곡은 로파이", () => {
-    for (const r of [0, 0.5, 0.999]) expect(randomStart(parseManifest(tracksJson), FIRST_PLAYLIST_ID, () => r).playlistId).toBe("lofi");
+  it("저장소의 tracks.json으로 시작하면 플레이리스트가 골고루 나온다", () => {
+    const all = parseManifest(tracksJson);
+    const seen = new Set(all.map((_, i) => randomStart(all, undefined, seq((i + 0.5) / all.length, 0.5)).playlistId));
+    expect(seen.size).toBe(all.length);
+  });
+
+  it("firstId를 주면 그 플레이리스트의 아무 곡", () => {
+    expect(randomStart(lists, "lofi", () => 0.99)).toEqual({ playlistId: "lofi", index: 1 });
   });
 
   it("그 목록이 없으면 아무 플레이리스트의 아무 곡", () => {

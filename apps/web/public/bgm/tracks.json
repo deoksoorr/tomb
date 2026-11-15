@@ -102,32 +102,6 @@
       ]
     },
     {
-      "id": "rain",
-      "title": "빗소리",
-      "tracks": [
-        { "file": "/bgm/rain/rain-on-stones.mp3", "title": "보도블록에 떨어지는 비", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 126 },
-        { "file": "/bgm/rain/distant-thunder.mp3", "title": "먼 천둥 치는 출근길", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 134 },
-        { "file": "/bgm/rain/rainy-night-etude.mp3", "title": "비 오는 밤 창가 피아노", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 130 },
-        { "file": "/bgm/rain/night-crickets.mp3", "title": "비 그친 밤 풀벌레", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 120 },
-        { "file": "/bgm/rain/wind-in-the-trees.mp3", "title": "비 갠 뒤 회사 앞 가로수", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 124 },
-        { "file": "/bgm/rain/tin-roof.mp3", "title": "옥상 창고 양철 지붕의 비", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 116 },
-        { "file": "/bgm/rain/drizzle-far-bell.mp3", "title": "이슬비 속 먼 종소리", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 128 },
-        { "file": "/bgm/rain/foggy-dawn.mp3", "title": "비 그친 새벽 안개", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 132 },
-        { "file": "/bgm/rain/umbrella-crosswalk.mp3", "title": "우산 쓰고 건너는 횡단보도", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
-        { "file": "/bgm/rain/bus-stop-downpour.mp3", "title": "장대비 내리는 버스 정류장", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
-        { "file": "/bgm/rain/cafe-window-seat.mp3", "title": "출근 전 카페 창가", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
-        { "file": "/bgm/rain/meeting-room-monsoon.mp3", "title": "회의실 창밖 장맛비", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 74 },
-        { "file": "/bgm/rain/rainy-monday-morning.mp3", "title": "비 오는 월요일 아침", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
-        { "file": "/bgm/rain/wet-sneakers.mp3", "title": "젖은 우산 접고 자리에 앉기", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 74 },
-        { "file": "/bgm/rain/waiting-under-the-eaves.mp3", "title": "처마 밑에서 비 피하기", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
-        { "file": "/bgm/rain/no-umbrella-going-home.mp3", "title": "우산 없이 나온 퇴근길", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
-        { "file": "/bgm/rain/convenience-store-awning.mp3", "title": "편의점 차양 아래 비 구경", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 70 },
-        { "file": "/bgm/rain/thunder-overtime.mp3", "title": "천둥 치는 야근 밤", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 74 },
-        { "file": "/bgm/rain/foggy-bus-window.mp3", "title": "김 서린 버스 창문", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 },
-        { "file": "/bgm/rain/monsoon-office-afternoon.mp3", "title": "장마철 사무실 오후", "artist": "At one time... (자체 제작)", "sourceUrl": "", "license": "CC0", "durationSec": 72 }
-      ]
-    },
-    {
       "id": "piano",
       "title": "피아노",
       "tracks": [
