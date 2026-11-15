@@ -4,7 +4,7 @@ import { addCanvasTexture, TEX } from "../assets/manifest";
 import { makeCanvas } from "../sprites/pixel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 
-// 주간 랭킹 1위 배지: 이름표 바로 위 작은 판 "♛ 이번 주 포인트왕" (2·3개면 "이번 주 2관왕/3관왕").
+// 주간 랭킹 1위 배지: 이름표 바로 위 작은 판 "♛ 지난주 포인트왕" (2·3개면 "지난주 2관왕/3관왕").
 // 판 테두리·글자 색은 랭킹 색(포인트 금 · 사냥 빨강 · 낚시 파랑), 다관왕은 두 색이 번갈아, 3관왕은 무지개로 돈다.
 // 배지는 오라 끔(본인 설정)과 상관없이 늘 보인다. 1위 값은 실시간 서버가 입장 토큰·착용 증서(Vercel 서명)에서 받은 것만 온다.
 

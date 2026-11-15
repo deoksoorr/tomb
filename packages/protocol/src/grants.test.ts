@@ -131,9 +131,9 @@ describe("주간 랭킹 1위", () => {
     expect(c.isChampBits(16)).toBe(false);
     expect(c.champAuraOn(1)).toBe(true);
     expect(c.champAuraOn(1 | c.CHAMP_AURA_OFF)).toBe(false);
-    expect(c.champBadgeText(2)).toBe("이번 주 사냥왕");
-    expect(c.champBadgeText(3)).toBe("이번 주 2관왕");
-    expect(c.champBadgeText(7 | c.CHAMP_AURA_OFF)).toBe("이번 주 3관왕");
+    expect(c.champBadgeText(2)).toBe("지난주 사냥왕");
+    expect(c.champBadgeText(3)).toBe("지난주 2관왕");
+    expect(c.champBadgeText(7 | c.CHAMP_AURA_OFF)).toBe("지난주 3관왕");
     expect(c.champBadgeText(0)).toBe("");
   });
   it("입장 토큰·착용 증서에 1위 값이 실리고, 틀린 값은 버린다", async () => {

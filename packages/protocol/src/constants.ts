@@ -397,7 +397,7 @@ export function dexBadgeCats(v: number | undefined): DexBadgeCat[] {
 
 /**
  * 주간 랭킹 1위(챔피언) 표시: 랭킹별 비트 (입장 토큰·PeerInfo의 champ). 지난주(월요일 새벽 5시 한국 시간 마감) 1위만 Vercel이 넣는다.
- * 이름표 위 작은 배지("이번 주 포인트왕")와 몸 둘레 1위 오라로 그린다. 옛 클라이언트는 모르는 필드라 무시한다
+ * 이름표 위 작은 배지("지난주 포인트왕")와 몸 둘레 1위 오라로 그린다. 옛 클라이언트는 모르는 필드라 무시한다
  */
 export const CHAMP_BOARDS = ["points", "huntKills", "fish"] as const;
 export type ChampBoard = (typeof CHAMP_BOARDS)[number];
@@ -443,9 +443,9 @@ export function champBitsOf(boards: readonly ChampBoard[], auraOff = false): num
   const n = boards.reduce((v, b) => v | (1 << CHAMP_BOARDS.indexOf(b)), 0);
   return n && auraOff ? n | CHAMP_AURA_OFF : n;
 }
-/** 배지 글자: 하나면 "이번 주 포인트왕", 둘·셋이면 "이번 주 2관왕"·"이번 주 3관왕" (없으면 "") */
+/** 배지 글자: 하나면 "지난주 포인트왕", 둘·셋이면 "지난주 2관왕"·"지난주 3관왕" (없으면 ""). 11/16 지난주 레이스 1위가 이번 주에 다는 배지라 "지난주" */
 export function champBadgeText(v: number | undefined): string {
   const b = champBoards(v);
   if (!b.length) return "";
-  return b.length === 1 ? `이번 주 ${CHAMP_TITLE[b[0]]}` : `이번 주 ${b.length}관왕`;
+  return b.length === 1 ? `지난주 ${CHAMP_TITLE[b[0]]}` : `지난주 ${b.length}관왕`;
 }

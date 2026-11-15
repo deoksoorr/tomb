@@ -7,7 +7,7 @@ import { OutfitStage, STAGE_H, STAGE_W } from "../shop/outfitStage";
 import ItemIcon from "../ui/ItemIcon";
 import styles from "./WeeklyRace.module.css";
 
-// 레이스 창의 1위 보상 그림: 전용 모자(아이템 아이콘) + 전용 오라 미리보기(상점 입어 보기 무대에 그 랭킹 색 오라) + "이번 주 ○○왕" 배지 + 포인트.
+// 레이스 창의 1위 보상 그림: 전용 모자(아이템 아이콘) + 전용 오라 미리보기(상점 입어 보기 무대에 그 랭킹 색 오라) + "지난주 ○○왕" 배지 (다음 주 한 주 동안 다는 배지) + 포인트.
 // 오라 미리보기는 은은히 움직이고(초당 약 20장), 움직임 줄이기면 멈춘 그림 한 장.
 
 /** 랭킹별 전용 오라 이름 */
@@ -49,7 +49,7 @@ export function AuraPreview({ bits, look, label, scale = 1, staff = false }: { b
 export function ChampReward({ board, points }: { board: ChampBoard; points: number }) {
   const hat = CHAMP_HAT[board];
   return (
-    <div className={styles.rewardRow} aria-label={`1위 보상: ${itemName(hat)} · ${CHAMP_AURA_NAME[board]} · 이번 주 ${CHAMP_TITLE[board]} 배지 · ${points.toLocaleString("ko-KR")}P`}>
+    <div className={styles.rewardRow} aria-label={`1위 보상: ${itemName(hat)} · ${CHAMP_AURA_NAME[board]} · 지난주 ${CHAMP_TITLE[board]} 배지 · ${points.toLocaleString("ko-KR")}P`}>
       <AuraPreview bits={champBitsOf([board])} look={[hat]} label={`${CHAMP_AURA_NAME[board]} 미리보기`} />
       <div className={styles.rewardItems}>
         <span className={styles.rewardHat}>
@@ -57,7 +57,7 @@ export function ChampReward({ board, points }: { board: ChampBoard; points: numb
           <span className={styles.rewardName}>{itemName(hat)}</span>
         </span>
         <span className={styles.badge} data-board={board}>
-          ♛ 이번 주 {CHAMP_TITLE[board]}
+          ♛ 지난주 {CHAMP_TITLE[board]}
         </span>
         <span className={styles.rewardPoints}>+{points.toLocaleString("ko-KR")}P</span>
         <span className={styles.rewardCaption}>

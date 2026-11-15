@@ -151,7 +151,7 @@ export default function ChampNotice() {
             </span>
             <span>
               <b>전용 오라 · 이름표 배지</b>
-              <span className={styles.note}>{n > 1 ? `이번 주 ${n}관왕 전용 오라 하나로 합쳐져요.` : "이번 주 동안 저절로 켜져요."} 오라는 가방 [레이스 보상]에서 끌 수 있어요.</span>
+              <span className={styles.note}>{n > 1 ? `${n}관왕 전용 오라 하나로 합쳐져요.` : "이번 주 동안 저절로 켜져요."} 오라는 가방 [레이스 보상]에서 끌 수 있어요.</span>
             </span>
           </li>
           <li>

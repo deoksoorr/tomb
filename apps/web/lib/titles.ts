@@ -192,7 +192,7 @@ const MYTHIC_ROWS: readonly (readonly [TitleId, string, string, boolean])[] = [
   ["t_first100", "빌딩의 전설", "서버에서 가장 먼저 야근 빌딩 100층을 깬 한 사람 (영원히)", false],
   ["t_firstStar100", "첫 번째 상무", "서버에서 가장 먼저 초월 레벨 ★100에 오른 한 사람 (영원히)", false],
   ["t_topFloor", "최고층 기록 보유자", "지금 야근 빌딩 최고 층 기록을 가진 한 사람 (기록을 뺏기면 넘어가요)", true],
-  ["t_weekFloor", "이번 주 최고층", "지난주 야근 빌딩 주간 최고 층 1위 (이번 주 한 주 동안)", true],
+  ["t_weekFloor", "지난주 최고층", "지난주 야근 빌딩 주간 최고 층 1위 (이번 주 한 주 동안)", true],
   ["t_firstEnh15", "강화의 시작", "서버에서 가장 먼저 장비를 +15까지 강화한 한 사람 (영원히)", false],
 ];
 const MYTHIC_OF = new Map(MYTHIC_ROWS.map((r) => [r[0], r]));
