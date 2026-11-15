@@ -134,7 +134,7 @@ const FRIENDS: ReactNode[][] = [
 
 const PLACES: ReactNode[][] = [
   ["모닥불", "모닥불 광장", "곁에 앉아 같이 불멍해요"],
-  ["소원 분수", "광장 입구", "동전 던지기 (하루 3번)"],
+  ["소원 분수", "광장 입구", "하루 한 번 동전 던지기"],
   ["귀신의집", "광장 입구, 소원 분수 옆", "혼자 들어가는 공포 미로예요"],
   ["유령 잡화점", "상점 주인장에게 E", "꾸미기, 폭죽, 확성기, 염색권을 팔아요"],
   ["동물원", "서쪽 다리 건너 바로", `사육사에게 펫 분양 (${won(Math.min(...petPrices))}~${won(Math.max(...petPrices))}P)`],
@@ -299,7 +299,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table head={["하는 일", "컴퓨터", "휴대폰"]} rows={HUNT_KEYS} />
           <ul className={styles.points}>
             <li>
-              {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비나 물약을 판 값도 여기에 들어가요. 한도를 넘으면 EXP와 아이템만 받아요. 상점에서 산 장비를 되파는 건 한도와 상관없어요. 벌레 잡기와 별자리 잇기는 게임마다 따로 하루 ${won(earnRule("bugs").dailyMax)}P까지예요.`}
+              {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비나 물약을 판 값도 여기에 들어가요. 한도를 넘으면 EXP와 아이템만 받아요. 상점에서 산 장비를 되파는 건 한도와 상관없어요. 마을 곤충 채집과 별자리 잇기는 따로 하루 ${won(earnRule("bugs").dailyMax)}P까지예요.`}
             </li>
             <li>
               {`레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 초월 레벨(★51~★100)을 올려요. 초월 레벨이 5 오를 때마다 능력치 포인트를 1개 받아요. 하루에 할 수 있는 판 수는 정해져 있지 않아요.`}

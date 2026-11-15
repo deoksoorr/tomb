@@ -39,7 +39,7 @@ import s from "./forage.module.css";
 type Gather = { ticket: string; node: string; kind: string; endsAt: number; ms: number };
 type Insect = { ticket: string; node: string; seed: number; timeLimitSec: number };
 /** 곤충 채집 결과 카드. items가 null이면 아직 서버 답을 기다리는 중 */
-type InsectDone = { result: BugsResult; aborted: boolean; items: CatchResult[] | null; message?: string };
+type InsectDone = { result: BugsResult; aborted: boolean; items: CatchResult[] | null; message?: string; points?: number };
 /** 잡은 것 카드. cosmetic이면 물에 빠진 꾸미기 (영구 소장) */
 type Card = { item: CatchResult; more: number; cosmetic?: SunkenCatch };
 
@@ -184,7 +184,8 @@ export default function ForageLayer() {
         forageStore.set(r.state);
         noteDexGain(r.dex);
         for (const it of r.items.slice(0, 3)) bridge.emit("forage:pop", { itemId: it.id });
-        setInsectDone((d) => (d ? { ...d, items: r.items, message: r.items.length ? undefined : (r.message ?? "곤충이 모두 날아갔어요.") } : d));
+        setInsectDone((d) => (d ? { ...d, items: r.items, points: r.points, message: r.items.length ? undefined : (r.message ?? "곤충이 모두 날아갔어요.") } : d));
+        if (r.points) void meStore.refresh();
       })
       .catch((e) => {
         setInsectDone(null);
@@ -313,7 +314,7 @@ function GatherDock({ gather, onCancel }: { gather: Gather; onCancel: () => void
 
 /** 곤충 채집 결과 카드: 잡은 수·황금·최고 콤보·점수, 서버가 답하면 챙긴 곤충. 다 받으면 잠시 뒤 저절로 닫힌다 */
 function InsectResultCard({ done, onClose }: { done: InsectDone; onClose: () => void }) {
-  const { result, aborted, items, message } = done;
+  const { result, aborted, items, message, points } = done;
   useEffect(() => {
     if (!items) return;
     const t = setTimeout(onClose, 7_000);
@@ -359,6 +360,9 @@ function InsectResultCard({ done, onClose }: { done: InsectDone; onClose: () => 
         </ul>
       ) : (
         <p className={s.insectNote}>{message}</p>
+      )}
+      {items !== null && points !== undefined && (
+        <p className={s.insectNote}>{points > 0 ? `포인트 +${points}P` : result.caught + result.golden > 0 ? "오늘 곤충 채집 포인트는 다 받았어요. 곤충은 그대로 챙겨요." : null}</p>
       )}
       <button type="button" className={cx(ui.button, ui.primary)} onClick={onClose}>
         확인

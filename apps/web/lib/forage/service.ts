@@ -32,6 +32,7 @@ import {
   reelMinMs,
   rollSize10,
   verifyBugs,
+  insectPoints,
   windowEndsAt,
 } from "./rules";
 import { AUTO_FISH_DAILY_MAX, newAutoSession } from "./auto";
@@ -311,10 +312,12 @@ export async function finishGather(acct: string, token: string, result: BugsResu
   const elapsed = now - t.t;
   let items: GrantItem[];
   let message: string | undefined;
+  let bugPoints = 0;
   if (n.kind === "bug") {
     if (!result || t.s === undefined) throw new HttpError(400, "INVALID_RESULT", "곤충 잡기 결과가 없어요.");
     const v = verifyBugs(t.s, result, elapsed);
     if (!v.ok) throw new HttpError(422, "RESULT_REJECTED", `${v.message} 이번엔 빈손이에요.`);
+    bugPoints = insectPoints(t.s, v.caught, v.golden, v.mistakes);
     const r = insectRolls(v.caught, v.golden, v.mistakes);
     const cond = conditionsAt(t.t);
     const common = candidates("bug", n.where, cond, (s) => s.rarity <= 2);
@@ -336,7 +339,9 @@ export async function finishGather(acct: string, token: string, result: BugsResu
   const got = await store.grant(acct, kstDay(now), "gather", items, STACK_MAX, { window: t.w, node: n.id });
   if (!got) throw new HttpError(409, "NODE_EMPTY", "이미 캔 자리예요.");
   const dex = await dexGainOf(store, acct, got, ip, now);
-  return { items: got satisfies CatchResult[], ...withDex(dex), state: await forageState(acct, now, store), ...(message ? { message } : {}) };
+  // 11/15 곤충 채집은 잡은 만큼 포인트도 (「곤충 채집」 하루 한도 — 옛 사냥터 벌레 잡기 한도 자리)
+  const points = bugPoints > 0 ? (await earnPoints(acct, "bugs", bugPoints, ip)).earned : 0;
+  return { items: got satisfies CatchResult[], ...withDex(dex), state: await forageState(acct, now, store), ...(message ? { message } : {}), ...(n.kind === "bug" ? { points } : {}) };
 }
 
 // ── NPC 판매 ──

@@ -25,8 +25,8 @@ export const STAT_LABELS: Record<StatKey, { name: string; desc: string }> = {
   agi: { name: "AGI", desc: "공격 속도, 회피, 이동 속도가 올라요" },
   vit: { name: "VIT", desc: "최대 HP와 방어가 올라요" },
   int: { name: "INT", desc: "최대 SP와 스킬 위력이 올라요" },
-  dex: { name: "DEX", desc: "명중과 공격력이 조금 올라요. 벌레 잡기에선 벌레가 오래 보여요" },
-  luk: { name: "LUK", desc: "치명타와 회피가 조금 올라요. 벌레 잡기에선 황금 벌레가 잘 나와요" },
+  dex: { name: "DEX", desc: "명중과 공격력이 조금 올라요. 별자리 잇기에선 판정이 넓어져요" },
+  luk: { name: "LUK", desc: "치명타와 회피가 조금 올라요" },
 };
 
 /** 장비·버프가 더해 주는 값 */
