@@ -1,7 +1,7 @@
 import { css, darken, hash2, lighten, type Color } from "../../sprites/pixel";
 
 // 11/15 지하 서버실 지도: 방 종류 아홉 가지 배치(layout.ts MAKE가 부른다) + 바닥·벽·소품 그림(arena/art.ts가 부른다). Phaser 없음.
-// 층마다 방이 다르다 — 어느 층이 어느 방인지는 lib/rpg/serverRoom svRoom(f) (한 블록의 보통 층 넷은 모두 다른 방, 우두머리 층은 메인프레임 홀).
+// 층마다 방이 다르다 — 어느 층이 어느 방인지는 lib/rpg/serverRoom svRoom(판 시드, 층) (한 블록의 보통 층 넷은 모두 다른 방, 우두머리 층은 메인프레임 홀).
 // 움직이는 것(랙 LED·찬 바람 안개·케이블 트레이 데이터 빛·경광등·과열 바닥·층 번호)은 serverRoomStage.ts가 그린다.
 // 순환 참조를 피하려고 layout.ts·art.ts를 가져오지 않는다 → 지도 크기는 여기 숫자를 같이 쓴다 (layout.ts AW·AH·TOP·SIDE와 같다).
 

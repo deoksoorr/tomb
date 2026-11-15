@@ -5,11 +5,13 @@ import {
   CURSES,
   cursesAt,
   TOWER_CHECKPOINT_EVERY,
+  TOWER_CHEST_GEAR_CHANCE,
   towerFloorSec,
   towerHpMul,
-  towerZone,
+  TOWER_THEMES,
 } from "@/lib/rpg/tower";
 import type { RpgView } from "@/lib/rpg/types";
+import { CHEST_COSMETIC_CHANCE, SG_PITY } from "@/lib/rpg/setGearRoll";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { mmss } from "./format";
@@ -43,7 +45,7 @@ export default function TowerEntrance({
   const top = lit[lit.length - 1];
   // 처음엔 내 기록으로 열린 가장 높은 층 (슈퍼 계정도 기록 기준 — 위층은 골라서)
   const [pick, setPick] = useState(
-    () => lit.filter((f) => f <= Math.max(1, t.best)).at(-1) ?? 1,
+    () => lit.filter((f) => f <= t.best + 1).at(-1) ?? 1,
   );
   const start = lit.includes(pick) ? pick : top;
   const buttons = [...lit];
@@ -51,7 +53,6 @@ export default function TowerEntrance({
     buttons.push(top + i * TOWER_CHECKPOINT_EVERY);
   const on = new Set(cursesAt(start));
   const curses = CURSES.filter((c) => on.has(c.id));
-  const zone = towerZone(start);
   const canStart = !busy && view.today.runsPerHour > 0;
   return (
     <div className={s.lobby}>
@@ -70,17 +71,15 @@ export default function TowerEntrance({
             <b>{t.week ? `${t.week.floor}F` : "--"}</b>
             {t.week && <span>{mmss(t.week.ms)}</span>}
           </div>
-          <div className={s.liftDisplay} aria-label="오늘 우두머리 상자">
-            <span>오늘 상자</span>
-            <b>
-              {t.chests}/{t.chestsMax}
-            </b>
+          <div className={s.liftDisplay} aria-label="오늘 연 우두머리 상자">
+            <span>오늘 연 상자</span>
+            <b>{t.chestsMax > 0 ? `${t.chests}/${t.chestsMax}` : t.chests}</b>
           </div>
         </div>
         <h3 id="tower-lift" className={s.sectionTitle}>
           몇 층부터 오를까요?{" "}
           <span className={s.meta}>
-            · 최고 기록 아래 1·11·21 …층에 불이 들어와요
+            · 10층 우두머리를 잡으면 11층, 20층을 잡으면 21층 버튼에 불이 들어와요
             {view.superHunter ? " · 슈퍼 계정: 101층까지 열림" : ""}
           </span>
         </h3>
@@ -106,8 +105,9 @@ export default function TowerEntrance({
         </div>
         <p className={s.meta}>
           <b className={s.zoneGimmick}>
-            {start}층 · {zone.name}
+            {start}층부터
           </b>{" "}
+          다섯 층마다 테마 {TOWER_THEMES.length}곳 중 하나가 나오는데, 어떤 순서일지는 타 봐야 알아요.
           몬스터는 한 층 오를 때마다 조금씩 세져요 (이 층은 처음보다 ×{towerHpMul(start).toFixed(2)}). 한 층에 {towerFloorSec(start)}초,
           5층마다 우두머리가 기다리고 잡으면 체력이 30% 차고 상자가 나와요.
         </p>
@@ -119,7 +119,7 @@ export default function TowerEntrance({
         </p>
         <div className={s.zoneGo}>
           <span className={s.meta}>
-            몇 번이든 다시 오를 수 있어요. 우두머리 상자는 하루 {t.chestsMax}개까지 (새벽 5시에 다시 차요)
+            몇 번이든 다시 오를 수 있어요. 우두머리 상자도 잡는 만큼 열려요.
           </span>
           <button
             type="button"
@@ -135,6 +135,30 @@ export default function TowerEntrance({
             <input type="checkbox" checked={boost} onChange={(e) => setBoost(e.target.checked)} /> 테스트용 무적·공격력 ×20 (슈퍼 계정만 · 운영 서버엔 없음)
           </label>
         )}
+        {/* 11/15 오르기 전에 무엇이 떨어지는지 */}
+        <section className={s.towerDrops} aria-labelledby="tower-drops">
+          <h4 id="tower-drops">우두머리 상자에서 나오는 것</h4>
+          <p>5층마다 우두머리가 있어요. 잡고 그 층을 다 깨면 상자가 열려요. 하루에 몇 개든 열 수 있어요.</p>
+          <ul>
+            <li>
+              <b>물약 1~2개</b> 늘 들어 있어요 (커피 · 에너지드링크 · 야근 도시락)
+            </li>
+            <li>
+              <b>세트 장비</b> {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률이에요. {SG_PITY}번 연속으로 못 받으면 다음 상자엔 꼭 들어 있어요.
+              높이 오를수록 직급이 올라요. 15층부터 대리급, 30층부터 과장급, 50층부터 임원급이에요.
+              {(view.character.sgPity ?? 0) > 0 && <span className={s.meta}> 지금 {view.character.sgPity}번째 기다리는 중</span>}
+            </li>
+            <li>
+              <b>강화 재료</b> 상자마다 결재 서류 2장에 10층마다 1장씩 더 들어요. 25층부터는 인감 도장도 나와요. 이번 주 기록이 10층 단위를 넘으면 보호 문서를
+              받아요. 한 주에 2장까지예요.
+            </li>
+            <li>
+              <b>꾸미기 이용권</b> {Math.round(CHEST_COSMETIC_CHANCE * 100)}% 확률이에요. 기간은 1일, 3일, 7일, 30일 중 하나예요. 15층부터 희귀,
+              30층부터는 전설도 나와요.
+            </li>
+          </ul>
+          <p className={s.meta}>떨어진 건 다음 층으로 가기 전에 저절로 모여서 놓칠 일은 없어요.</p>
+        </section>
         <ul className={s.towerWhy}>
           <li>
             올라간 층만큼 초월 경험치가 쌓여요. 높이 갈수록 한 층에 주는 양도 늘고, 쓰러져도 그때까지 오른 만큼은 챙겨 가요.

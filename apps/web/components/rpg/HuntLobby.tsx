@@ -43,6 +43,7 @@ import { EndgameResult, TranscendBar } from "./Endgame";
 import { CharacterPanel, GearPanel, LOBBY_HIDDEN, ShopPanel, SkillPanel, StartPanel } from "./Panels";
 import LevelUpSound from "./LevelUpSound";
 import RpgIcon from "./RpgIcon";
+import { SetDropChip } from "./SetGearBag";
 import ItemIcon from "../ui/ItemIcon";
 import RunHud from "./RunHud";
 import TowerEntrance, { towerBoostAllowed } from "./TowerEntrance";
@@ -298,13 +299,17 @@ export default function HuntLobby({
           ? {
               tower: {
                 start: res.tower,
-                chestsLeft: tw ? Math.max(0, tw.chestsMax - tw.chests) : 0,
+                chestsLeft: !tw ? 0 : tw.chestsMax > 0 ? Math.max(0, tw.chestsMax - tw.chests) : Infinity,
+                // 11/15 세트 장비 천장 (서버가 판 끝에 같은 값에서 센다)
+                pity: res.view.character.sgPity ?? 0,
                 // 11/15 테스트 서버 슈퍼 계정만 (서버가 준 superHunter — 운영 서버에서는 늘 없다)
                 ...(boost && res.view.superHunter && towerBoostAllowed() ? { boost: true } : {}),
               },
             }
           : {}),
         ...(res.tier === "practice" ? { noDrops: true } : {}),
+        // 11/15 테스트 서버 슈퍼 계정 시험 드롭 (서버가 계정으로 정한 값 — 운영 빌드에서는 켜지 않는다)
+        ...(res.superDrops && towerBoostAllowed() ? { superDrops: true } : {}),
       });
     } catch (e) {
       setNotice(errorMessage(e));
@@ -527,7 +532,7 @@ export default function HuntLobby({
                 />
               )}
               {tab === "character" && <CharacterPanel view={view} busy={busy} onCharacter={onCharacter} />}
-              {tab === "gear" && <GearPanel view={view} busy={busy} onCharacter={onCharacter} onSell={onSell} figure={figure} />}
+              {tab === "gear" && <GearPanel view={view} busy={busy} onCharacter={onCharacter} onSell={onSell} onView={setView} figure={figure} />}
               {tab === "skills" && <SkillPanel view={view} busy={busy} onCharacter={onCharacter} />}
               {tab === "shop" && <ShopPanel view={view} busy={busy} onBuy={onBuy} />}
             </div>
@@ -667,13 +672,18 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
           {r && r.drops.length > 0 ? (
             <div className={s.drops}>
               {r.drops.map((d, i) => {
+                // 11/15 세트 장비·강화 재료
+                if (d.kind === "set" || d.kind === "mat") return <SetDropChip key={i} d={d} />;
                 // 11/12 기간제 코디(꾸미기 하루권): 상점 아이템 이름·아이콘, 꾸미기 가방으로 들어간다
                 if (d.kind === "cosmetic")
                   return (
                     <span key={i} className={s.drop}>
                       <ItemIcon itemId={d.id} size={32} />
-                      <span>{itemName(d.id)}</span>
-                      <span className={s.meta}>기간제 코디 · 꾸미기 가방</span>
+                      <span>
+                        {itemName(d.id)}
+                        {d.days ? ` · ${d.days}일` : ""}
+                      </span>
+                      <span className={s.meta}>{d.days ? "꾸미기 이용권 · 꾸미기 가방" : "기간제 코디 · 꾸미기 가방"}</span>
                     </span>
                   );
                 const def = d.kind === "gear" ? gearById(d.id) : potionById(d.id);

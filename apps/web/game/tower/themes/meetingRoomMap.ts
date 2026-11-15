@@ -1,4 +1,5 @@
 import { seeded } from "@/lib/rpg/formulas";
+import { blockRoom } from "@/lib/rpg/towerSchedule";
 import { MT_ROOM_MIN, type MtRoom } from "@/lib/rpg/towerThemes/meetingRoom";
 
 // 11/15 끝없는 회의실 배치 (순수 함수 — Phaser·캔버스 없이 테스트한다).
@@ -75,23 +76,15 @@ const CARPETS: [number, number][] = [
 ];
 
 
-/** 11/15 층별 방 순서 (블록마다 보통 층 넷, 겹치지 않는다): 6층 작은 회의실 → 오픈 오피스 → 대회의실(회의록 담당) → 교육장, 그 뒤 바퀴마다 다른 순서 */
-export const MT_ROOM_ORDER: readonly (readonly MtRoomType[])[] = [
-  ["huddle", "open", "board", "training"],
-  ["cafe", "booths", "exec", "open"],
-  ["training", "huddle", "cafe", "booths"],
-  ["exec", "board", "booths", "huddle"],
-];
+/** 11/15 방 고르기 섞는 값 (towerSchedule blockRoom) */
+const MT_ROOM_SALT = 0x4d54524d;
 
 /**
- * f층 방 종류: 우두머리 층(5의 배수)은 주재자의 대회의실, 보통 층은 층 순서표대로 (같은 층은 늘 같은 방 — 외워서 오른다).
- * runSeed는 예전 호출과 맞추려고 받기만 한다
+ * 판 시드·f층 방 종류: 블록의 우두머리 층은 주재자의 대회의실, 보통 층 넷은 일곱 방 중 서로 다른 넷 (같은 판 같은 층은 늘 같은 방)
  */
-export function mtRoomType(_runSeed: number, f: number): MtRoomType {
-  const fl = Math.max(1, Math.floor(f));
-  if (fl % 5 === 0) return "boss";
-  const block = Math.floor((fl - 1) / 10);
-  return MT_ROOM_ORDER[block % MT_ROOM_ORDER.length][(fl - 1) % 5];
+export function mtRoomType(runSeed: number, f: number): MtRoomType {
+  const k = blockRoom(runSeed, f, MT_ROOM_TYPES.length - 1, MT_ROOM_SALT);
+  return k < 0 ? "boss" : MT_ROOM_TYPES[k];
 }
 
 const box = (kind: MtFurnKind, x: number, y: number, w: number, h: number, solid = true, v?: number): MtFurn => ({ kind, x, y, w, h, solid, ...(v !== undefined ? { v } : {}) });

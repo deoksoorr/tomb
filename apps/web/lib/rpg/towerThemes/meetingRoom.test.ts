@@ -2,24 +2,38 @@ import { describe, expect, it } from "vitest";
 import { MONSTERS, type MonsterId } from "../catalog";
 import { huntSpawnable } from "../plan";
 import { killRateCeiling } from "../rewards";
-import { evalTower, floorMinSec, towerPlan, towerZone } from "../tower";
+import { evalTower, floorMinSec, towerBlock, towerPlan, towerZone } from "../tower";
 import type { HuntResult } from "../types";
-import { clockText, meetingClock, meetingTime, MT_ELITE, MT_MID, MT_POOL, MT_ROOM_MIN, MT_ZONE, mtLoop, mtNextSide, mtShrink, mtSlack, type MtRoom } from "./meetingRoom";
+import { clockText, meetingClock, meetingTime, MT_ELITE, MT_MID, MT_POOL, MT_ROOM_MIN, MT_ZONE, mtNextSide, mtShrink, mtSlack, type MtRoom } from "./meetingRoom";
 import { MT_MAIL_CAP, mtAgendaAdds } from "./meetingRoomPlan";
 
 // 11/15 끝없는 회의실: 층→테마, 층 계획(참조 메일 상한·무리·중간 우두머리·안건 추가 adds), 서버 검증, 방이 좁아지는 경계, 벽시계
 
-const MEETING = [6, 7, 8, 9, 10, 16, 17, 18, 19, 20, 26, 30, 36, 46, 56];
+// 11/15 테마 순서가 판마다 무작위 → 1층부터 오르는 판에서 회의실 층을 시드로 모은다 (정예가 늘 섞이는 100층 웨이브는 우두머리 층뿐)
+type MtFloor = { seed: number; f: number; visit: number; pos: number };
+function mtFloors(seed: number): MtFloor[] {
+  const out: MtFloor[] = [];
+  for (let f = 1; f <= 100; f++) {
+    const at = towerBlock(seed, 1, f);
+    if (at.zone === MT_ZONE) out.push({ seed, f, visit: at.visit, pos: at.pos });
+  }
+  return out;
+}
+const allMt = (n: number) => Array.from({ length: n }, (_, i) => mtFloors(i + 1)).flat();
+const plan = (x: MtFloor) => towerPlan(x.seed, x.f, 1);
 
 describe("끝없는 회의실: 층과 테마", () => {
-  it("6~10층, 그 뒤 10층마다 (16~20·26~30 …)는 회의실, 1~5·11~15는 아니다", () => {
-    for (const f of MEETING) expect(towerZone(f).id).toBe(MT_ZONE);
-    for (const f of [1, 2, 5, 11, 15, 21, 25]) expect(towerZone(f).id).not.toBe(MT_ZONE);
-    expect(towerZone(10).boss).toBe("mt_chair");
-    expect(towerZone(20).boss).toBe("mt_chair");
-    expect(mtLoop(6)).toBe(0);
-    expect(mtLoop(16)).toBe(1);
-    expect(mtLoop(26)).toBe(2);
+  it("판마다 회의실 블록이 다섯 층씩, 우두머리 층은 회의 주재자, 다시 올 때마다 visit이 하나씩", () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const fl = mtFloors(seed);
+      expect(fl.length % 5).toBe(0);
+      expect(fl.length).toBeGreaterThanOrEqual(5);
+      for (let i = 0; i < fl.length; i += 5) {
+        expect(fl.slice(i, i + 5).map((x) => x.pos)).toEqual([0, 1, 2, 3, 4]);
+        expect(fl[i].visit).toBe(i / 5);
+        expect(towerZone(seed, 1, fl[i + 4].f).boss).toBe("mt_chair");
+      }
+    }
   });
 
   it("몬스터는 모두 새것 (mt_), 일반 10종 · 정예 · 중간 우두머리 · 우두머리", () => {
@@ -36,24 +50,24 @@ describe("끝없는 회의실: 층과 테마", () => {
 
 describe("끝없는 회의실: 층 계획", () => {
   it("참조 메일은 한 층에 셋까지·무리로 안 나오고, 무리는 몰려다니는 것만", () => {
-    for (let seed = 1; seed <= 120; seed++)
-      for (const f of MEETING) {
-        const p = towerPlan(seed, f);
+    for (const x of allMt(120))
+      {
+        const p = plan(x);
         const mails = p.flatMap((w) => w.monsters).filter((m) => m === "mt_cc_mail").length;
         expect(mails).toBeLessThanOrEqual(MT_MAIL_CAP);
         for (const w of p) if (w.pack) expect(["mt_chat_ping", "mt_no_opinion", "mt_chair_intern", "mt_coffee"]).toContain(w.monsters[w.monsters.length - 1]);
       }
   });
 
-  it("8·18·28층은 둘째 웨이브에 회의록 담당이 정예로, 우두머리 층은 회의 주재자", () => {
-    for (let seed = 1; seed <= 40; seed++) {
-      for (const f of [8, 18, 28]) {
-        const w = towerPlan(seed, f)[1];
+  it("블록 3번째 층은 둘째 웨이브에 회의록 담당이 정예로, 우두머리 층은 회의 주재자", () => {
+    for (const x of allMt(40)) {
+      if (x.pos === 2) {
+        const w = plan(x)[1];
         expect(w.elite).toBeDefined();
         expect(w.monsters[w.elite!]).toBe(MT_MID);
       }
-      for (const f of [10, 20, 30]) {
-        const last = towerPlan(seed, f).at(-1)!;
+      if (x.pos === 4) {
+        const last = plan(x).at(-1)!;
         expect(last.boss).toBe(true);
         expect(last.monsters[0]).toBe("mt_chair");
         expect(last.summon).toEqual({ id: "mt_attendee", n: 4 });
@@ -61,33 +75,34 @@ describe("끝없는 회의실: 층 계획", () => {
     }
   });
 
-  it("안건 추가가 있는 웨이브는 불러들이는 몫(adds)이 있고, 밤샘 회의(4바퀴째)부터는 보통 층마다 나온다", () => {
+  it("안건 추가가 있는 웨이브는 불러들이는 몫(adds)이 있고, 네 번째로 온 밤샘 회의부터는 보통 층마다 나온다", () => {
     let seen = 0;
-    for (let seed = 1; seed <= 200; seed++)
-      for (const f of [6, 7, 9, 16, 17, 19]) {
-        for (const w of towerPlan(seed, f)) {
-          if (w.elite === undefined || w.monsters[w.elite] !== MT_ELITE) {
-            expect(w.adds).toBeUndefined();
-            continue;
-          }
-          seen++;
-          expect(w.adds!.reduce((n, a) => n + a.n, 0)).toBe(mtAgendaAdds(mtLoop(f)));
-          for (const a of w.adds!) expect(a.id).not.toBe("mt_cc_mail");
+    for (const x of allMt(200)) {
+      if (x.pos === 2 || x.pos === 4) continue;
+      for (const w of plan(x)) {
+        if (w.elite === undefined || w.monsters[w.elite] !== MT_ELITE) {
+          expect(w.adds).toBeUndefined();
+          continue;
         }
+        seen++;
+        expect(w.adds!.reduce((n, a) => n + a.n, 0)).toBe(mtAgendaAdds(x.visit));
+        for (const a of w.adds!) expect(a.id).not.toBe("mt_cc_mail");
       }
+    }
     expect(seen).toBeGreaterThan(50);
-    for (let seed = 1; seed <= 30; seed++)
-      for (const f of [36, 37, 39]) {
-        const w = towerPlan(seed, f)[1];
-        expect(w.monsters[w.elite!]).toBe(MT_ELITE);
-        expect(w.adds!.reduce((n, a) => n + a.n, 0)).toBe(8);
-      }
+    const late = allMt(600).filter((x) => x.visit >= 3 && x.pos !== 2 && x.pos !== 4);
+    expect(late.length).toBeGreaterThan(0);
+    for (const x of late) {
+      const w = plan(x)[1];
+      expect(w.monsters[w.elite!]).toBe(MT_ELITE);
+      expect(w.adds!.reduce((n, a) => n + a.n, 0)).toBe(8);
+    }
   });
 
   it("출현 상한: 참조 메일 1통 = 회신 2 + 전달 4, 안건 추가 몫·졸개까지 센다", () => {
-    for (let seed = 1; seed <= 60; seed++)
-      for (const f of MEETING) {
-        const p = towerPlan(seed, f);
+    for (const x of allMt(60))
+      {
+        const p = plan(x);
         const can = huntSpawnable(p, Infinity);
         const mails = p.flatMap((w) => w.monsters).filter((m) => m === "mt_cc_mail").length;
         const adds = p.flatMap((w) => w.adds ?? []);
@@ -95,23 +110,18 @@ describe("끝없는 회의실: 층 계획", () => {
         expect(can.mt_cc_reply ?? 0).toBe(mails * 2);
         expect(can.mt_cc_fwd ?? 0).toBe(mails * 4);
         for (const id of MT_POOL.filter((x) => x !== "mt_cc_mail")) expect(can[id] ?? 0).toBe(p.flatMap((w) => w.monsters).filter((m) => m === id).length + addN(id));
-        if (f % 5 === 0) expect(can.mt_attendee).toBe(8);
+        if (x.pos === 4) expect(can.mt_attendee).toBe(8);
       }
   });
 
-  it("두 층이 같은 구성인 일이 드물다", () => {
+  it("두 층이 같은 구성인 일이 드물고, 같은 자리(몇 번째로 왔나·블록 안 몇 번째 층)면 몬스터 종류는 같다", () => {
     const lineups = new Set<string>();
-    let n = 0;
-    for (let seed = 1; seed <= 20; seed++)
-      for (const f of [6, 7, 8, 9, 16, 17]) {
-        n++;
-        lineups.add(JSON.stringify(towerPlan(seed, f).map((w) => w.monsters)));
-      }
+    const xs = allMt(20).filter((x) => x.pos < 4);
+    for (const x of xs) lineups.add(JSON.stringify(plan(x).map((w) => w.monsters)));
     // 11/15 몬스터 종류는 층 순서표로 정해져서, 마릿수·순서만 판마다 다르다
-    expect(lineups.size).toBeGreaterThan(n * 0.85);
-    // 11/15 층 순서표: 몬스터 종류는 판 시드와 상관없이 층마다 같다 (lib/rpg/towerSchedule) — 마릿수·무리·자리만 다르다
+    expect(lineups.size).toBeGreaterThan(xs.length * 0.85);
     const rosters = new Set<string>();
-    for (let seed = 1; seed <= 40; seed++) rosters.add([...new Set(towerPlan(seed, 7).flatMap((w) => w.monsters))].sort().join());
+    for (const x of allMt(40).filter((y) => y.visit === 0 && y.pos === 1)) rosters.add([...new Set(plan(x).flatMap((w) => w.monsters))].sort().join());
     expect(rosters.size).toBe(1);
   });
 });
@@ -121,7 +131,7 @@ function climbAll(seed: number, start: number, floors: number): { r: HuntResult;
   const kills: Partial<Record<MonsterId, number>> = {};
   let minSec = 0;
   for (let i = 0; i < floors; i++) {
-    const p = towerPlan(seed, start + i);
+    const p = towerPlan(seed, start + i, start);
     minSec += floorMinSec(p);
     for (const [id, n] of Object.entries(huntSpawnable(p, Infinity)) as [MonsterId, number][]) kills[id] = (kills[id] ?? 0) + n;
   }
@@ -140,19 +150,22 @@ describe("끝없는 회의실: 서버 검증", () => {
   });
 
   it("회의실 한 층의 처치 수도 최소 시간 안에서 처치 속도 상한 아래", () => {
-    for (let seed = 1; seed <= 200; seed++)
-      for (const f of MEETING) {
-        const p = towerPlan(seed, f);
+    for (const x of allMt(200))
+      {
+        const p = plan(x);
         const total = Object.values(huntSpawnable(p, Infinity)).reduce((a, b) => a + (b ?? 0), 0);
         expect(total).toBeLessThanOrEqual(3 + floorMinSec(p) * killRateCeiling("hell", 50));
       }
   });
 
   it("나올 수 없는 만큼 잡았다고 하면 거절 (전달 메일 한 통 더)", () => {
-    const seed = 7;
+    // 첫 블록이 회의실인 판 (1층부터 참조 메일이 나온다)
+    let seed = 7;
+    while (towerZone(seed, 1, 1).id !== MT_ZONE) seed++;
     const { r } = climbAll(seed, 1, 10);
     const fwd = r.kills.mt_cc_fwd ?? 0;
-    const cheat = { ...r, kills: { ...r.kills, mt_cc_fwd: fwd + 4 + huntSpawnable(towerPlan(seed, 11), Infinity).mt_cc_fwd! } };
+    expect(fwd).toBeGreaterThan(0);
+    const cheat = { ...r, kills: { ...r.kills, mt_cc_fwd: fwd + 4 + (huntSpawnable(towerPlan(seed, 11, 1), Infinity).mt_cc_fwd ?? 0) } };
     expect(evalTower({ seed, level: 50, start: 1 }, cheat, r.durationMs + 500).ok).toBe(false);
   });
 });
@@ -189,13 +202,13 @@ describe("회의 연장: 방이 좁아지는 경계", () => {
 });
 
 describe("벽시계", () => {
-  it("6층 17:00부터 층마다 25분 — 바퀴마다 다른 때 (노을 → 야근 → 새벽 → 아침 → 다음 날)", () => {
-    expect(clockText(meetingClock(6))).toBe("17:00");
-    expect(clockText(meetingClock(10))).toBe("18:40");
-    expect(meetingTime(meetingClock(6))).toBe("sunset");
-    expect(meetingTime(meetingClock(16))).toBe("night");
-    expect(meetingTime(meetingClock(26))).toBe("dawn");
-    expect(meetingTime(meetingClock(36))).toBe("sunrise");
-    expect(meetingTime(meetingClock(46))).toBe("day");
+  it("처음 온 블록 첫 층 17:00부터 층마다 25분 — 다시 올 때마다 다른 때 (노을 → 야근 → 새벽 → 아침 → 다음 날)", () => {
+    expect(clockText(meetingClock(0, 0))).toBe("17:00");
+    expect(clockText(meetingClock(4, 0))).toBe("18:40");
+    expect(meetingTime(meetingClock(0, 0))).toBe("sunset");
+    expect(meetingTime(meetingClock(0, 1))).toBe("night");
+    expect(meetingTime(meetingClock(0, 2))).toBe("dawn");
+    expect(meetingTime(meetingClock(0, 3))).toBe("sunrise");
+    expect(meetingTime(meetingClock(0, 4))).toBe("day");
   });
 });

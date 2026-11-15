@@ -2,7 +2,8 @@ import * as Phaser from "phaser";
 import { foldMultiply } from "./overlay";
 import { MONSTERS } from "@/lib/rpg/catalog";
 import { seeded } from "@/lib/rpg/formulas";
-import { clockText, meetingClock, meetingTime, mtLoop, mtNextSide, mtShrink, mtShrinkEvery, mtShrinkStep, type MtRoom, type MtSide, type MtTime } from "@/lib/rpg/towerThemes/meetingRoom";
+import { towerBlock } from "@/lib/rpg/tower";
+import { clockText, meetingClock, meetingTime, mtNextSide, mtShrink, mtShrinkEvery, mtShrinkStep, type MtRoom, type MtSide, type MtTime } from "@/lib/rpg/towerThemes/meetingRoom";
 import { RTEX } from "../../rpg/sprites";
 import type { ArenaHooks, ArenaMon } from "../../rpg/arena/Arena";
 import type { ArenaLayout, Pt } from "../../rpg/arena/layout";
@@ -82,12 +83,15 @@ export class MeetingArena {
     readonly floor: number,
     readonly runSeed: number,
     private readonly hooks: ArenaHooks,
+    /** 11/15 판 시작 층 (테마 순서가 판마다 다르다 — 회의실에 몇 번째로 왔는지) */
+    readonly start = 1,
   ) {
     MT_ARENAS.set(scene, this);
     this.plan = mtRoomPlan(MT_ROOM_TYPES[layout.variant % MT_ROOM_TYPES.length], seed);
     this.rnd = seeded((seed ^ 0x53485249) >>> 0);
-    this.clock0 = meetingClock(floor);
-    this.loop = mtLoop(floor);
+    const at = towerBlock(runSeed, start, floor);
+    this.clock0 = meetingClock(at.pos, at.visit);
+    this.loop = at.visit;
     // 비는 바깥이 보이는 방에서만 (거울 유리·교육장 스크린 벽은 창이 없다)
     this.view = { time: meetingTime(this.clock0), rain: this.rnd() < 0.3 && mtWindows(this.plan.wall).length > 0 };
     this.full = { ...this.plan.room0 };

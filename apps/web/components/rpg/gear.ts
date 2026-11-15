@@ -1,6 +1,7 @@
 import { GEAR_SLOTS, gearById, type GearDef, type GearKind, type GearSlot } from "@/lib/rpg/catalog";
 import { derive, type Derived } from "@/lib/rpg/formulas";
 import type { CharacterState } from "@/lib/rpg/types";
+import { decodeSg, isSgCode, SG_GRADE_COLORS, SG_GRADE_NAMES, SG_PIECE_KIND, SG_REQ_LEVEL, SG_SETS, sgDef, sgPieceOf, sgSetOf, sgUid, shopEnhOf, type SgItem, type SgSet } from "@/lib/rpg/setGear";
 
 // 사냥 장비창 순수 함수: 등급, 낄 칸, 능력치 비교, 되팔기 확인
 
@@ -18,7 +19,7 @@ export function gearGrade(g: Pick<GearDef, "reqLevel">): Grade {
 }
 
 /** 그 장비가 장착된 칸 수 */
-const wornCount = (c: Pick<CharacterState, "equip">, id: string) => GEAR_SLOTS.filter((s) => c.equip[s] === id).length;
+const wornCount = (c: Pick<CharacterState, "equip">, id: string) => GEAR_SLOTS.filter((s) => !!c.equip[s] && shopEnhOf(c.equip[s]!)[0] === id).length;
 
 /** 이 장비를 끼면 들어갈 칸: 장신구는 빈 칸 먼저 (둘 다 차 있으면 1번 칸을 바꾼다) */
 export function equipTarget(c: Pick<CharacterState, "equip">, kind: GearKind): GearSlot {
@@ -95,4 +96,66 @@ export function bagGear(c: Pick<CharacterState, "equip" | "inv">): { gear: GearD
         KIND_ORDER[a.gear.kind] - KIND_ORDER[b.gear.kind] ||
         b.gear.reqLevel - a.gear.reqLevel,
     );
+}
+
+// ── 11/15 장비창 가방 (세트 장비 + 상점·주운 장비) ──
+
+/** 가방 거르기 칸: 부위별 · 재료 · 물약 */
+export type BagTab = "all" | GearKind | "mats" | "potions";
+
+export type BagSg = { type: "sg"; key: string; code: string; it: SgItem; gear: GearDef; slot: GearSlot | null; low: boolean };
+export type BagShop = { type: "shop"; key: string; gear: GearDef; count: number; equipped: number; enh: number; low: boolean };
+export type BagEntry = BagSg | BagShop;
+
+const gradeRank: Record<Grade["id"], number> = { common: 0, fine: 1, rare: 2, legend: 3 };
+
+/** 세트 장비 등급 표시 (사원급… · 직급 색) */
+export const sgGrade = (it: Pick<SgItem, "g">) => ({ label: SG_GRADE_NAMES[it.g], color: SG_GRADE_COLORS[it.g] });
+
+/** 장착 칸 id → 등급 이름·색 (세트 장비는 직급, 상점 장비는 요구 레벨 등급) */
+export function slotGrade(id: string | null | undefined): { label: string; color: string } | null {
+  if (!id) return null;
+  if (isSgCode(id)) {
+    const it = decodeSg(id);
+    return it ? sgGrade(it) : null;
+  }
+  const g = gearById(id);
+  return g ? gearGrade(g) : null;
+}
+
+/**
+ * 가방 목록: 세트 장비 먼저 (세트 순서대로, 그 안에서 직급·강화 높은 순) → 상점·주운 장비 (등급·강화·요구 레벨 높은 순).
+ * 낄 수 없는 것(레벨)은 각 묶음 맨 아래. level = 요구 레벨 검사 레벨 (슈퍼 계정은 최대)
+ */
+export function bagEntries(c: Pick<CharacterState, "equip" | "inv" | "sg" | "enh">, level: number, tab: BagTab = "all"): { sets: { set: SgSet; items: BagSg[] }[]; shop: BagShop[] } {
+  const want = (k: GearKind) => tab === "all" || tab === k;
+  const worn = new Map<number, GearSlot>();
+  for (const s of GEAR_SLOTS) {
+    const id = c.equip[s];
+    const u = isSgCode(id) ? sgUid(id) : null;
+    if (u !== null) worn.set(u, s);
+  }
+  const sgs: BagSg[] = [];
+  for (const code of c.sg ?? []) {
+    const it = decodeSg(code);
+    if (!it || !want(SG_PIECE_KIND[sgPieceOf(it)])) continue;
+    sgs.push({ type: "sg", key: `sg${it.u}`, code, it, gear: sgDef(it, code), slot: worn.get(it.u) ?? null, low: level < SG_REQ_LEVEL });
+  }
+  const sgSort = (a: BagSg, b: BagSg) => Number(a.low) - Number(b.low) || Number(!!b.slot) - Number(!!a.slot) || b.it.g - a.it.g || b.it.e - a.it.e || a.it.p - b.it.p || a.it.u - b.it.u;
+  const sets = SG_SETS.map((set) => ({ set, items: sgs.filter((x) => sgSetOf(x.it) === set).sort(sgSort) })).filter((x) => x.items.length > 0);
+  const shop: BagShop[] = Object.entries(c.inv)
+    .flatMap(([id, count]) => {
+      const gear = gearById(id);
+      if (!gear || isSgCode(id) || count <= 0 || !want(gear.kind)) return [];
+      return [{ type: "shop" as const, key: id, gear, count, equipped: wornCount(c, id), enh: c.enh?.[id] ?? 0, low: level < gear.reqLevel }];
+    })
+    .sort(
+      (a, b) =>
+        Number(a.low) - Number(b.low) ||
+        Number(b.equipped > 0) - Number(a.equipped > 0) ||
+        gradeRank[gearGrade(b.gear).id] - gradeRank[gearGrade(a.gear).id] ||
+        b.enh - a.enh ||
+        b.gear.reqLevel - a.gear.reqLevel,
+    );
+  return { sets, shop };
 }

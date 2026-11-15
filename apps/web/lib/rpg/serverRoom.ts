@@ -1,6 +1,7 @@
 import type { MonsterDef, ZoneDef } from "./catalog";
+import { blockRoom } from "./towerSchedule";
 
-// 11/15 야근 빌딩 테마 「지하 서버실」 (1~5층, 그 뒤 10층마다 11~15·21~25 …): 몬스터 표·사냥터 정의·바퀴마다 달라지는 판.
+// 11/15 야근 빌딩 테마 「지하 서버실」 (다섯 층 블록 — 판마다 어느 블록에 나올지는 lib/rpg/tower towerBlock): 몬스터 표·사냥터 정의·다시 올 때마다 달라지는 판.
 // 순수 데이터 — 서버(층 계획·출현 상한)와 게임(game/tower/themes/serverRoom*)·안내서가 같이 쓴다. catalog.ts가 MONSTERS·HUNT_ZONES에 끼워 넣는다.
 // 몬스터 id는 모두 sv_ 로 시작한다 (같은 표에 끼는 다른 테마와 겹치지 않게).
 
@@ -254,7 +255,7 @@ export const SV_ZONE: ZoneDef = {
   deco: 0x3ab0ff,
 };
 
-// ── 바퀴마다 달라지는 판 (10층마다 같은 테마가 돌아올 때 1~5 → 11~15 → 21~25 …) ──
+// ── 다시 올 때마다 달라지는 판 (그 판에서 서버실에 처음 → 두 번째 → 세 번째 …) ──
 
 export type SvLoop = {
   name: string;
@@ -309,24 +310,13 @@ export const svLoop = (loop: number): SvLoop => SV_LOOPS[Math.max(0, Math.min(SV
 export const SV_ROOMS = 8;
 export const SV_BOSS_ROOM = 8;
 
-/**
- * 층별 방 순서 (블록마다 보통 층 넷 — 블록 안에서 겹치지 않는다). 첫 바퀴 1층 랙 통로 → 2층 세로 랙 → 3층 유리 냉복도 → 4층 케이블 금고,
- * 둘째 바퀴 11층 엇갈린 랙 → 배터리실 → 관제실 → 테이프 보관실, 그 뒤로는 섞은 두 벌을 번갈아. 우두머리 층은 늘 메인프레임 홀
- */
-export const SV_ROOM_ORDER: readonly (readonly number[])[] = [
-  [0, 2, 3, 4],
-  [1, 5, 6, 7],
-  [3, 0, 7, 5],
-  [2, 6, 4, 1],
-];
+/** 11/15 방 고르기 섞는 값 (towerSchedule blockRoom) */
+const SV_ROOM_SALT = 0x53565250;
 
-/** f층(서버실 층)의 방 종류: 층 번호로만 정해진다 (같은 층은 늘 같은 방) */
-export function svRoom(f: number): number {
-  const n = Math.max(1, Math.floor(f));
-  const k = (n - 1) % 5;
-  if (k === 4) return SV_BOSS_ROOM;
-  const block = Math.floor((n - 1) / 10);
-  return SV_ROOM_ORDER[block % SV_ROOM_ORDER.length][k];
+/** 판 시드·f층(서버실 층)의 방 종류: 블록의 보통 층 넷은 서로 다른 방, 우두머리 층은 메인프레임 홀 (같은 판 같은 층은 늘 같은 방) */
+export function svRoom(seed: number, f: number): number {
+  const k = blockRoom(seed, f, SV_ROOMS, SV_ROOM_SALT);
+  return k < 0 ? SV_BOSS_ROOM : k;
 }
 
 /** 층마다 조명 색 (파랑·초록·호박·빨강 비상) — 층 번호로 */

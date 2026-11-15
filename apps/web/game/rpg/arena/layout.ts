@@ -4,6 +4,14 @@ import { serverRoomLayout, SV_PROP_META, SV_ROOM_COUNT } from "../../tower/theme
 import { svRoom } from "@/lib/rpg/serverRoom";
 // 11/15 야근 빌딩 끝없는 회의실: 층마다 다른 방 (작은 회의실·대회의실·오픈 오피스·교육장 …)
 import { meetingRoomLayout, MT_ROOM_TYPES, mtRoomType } from "../../tower/themes/meetingRoomMap";
+// 11/15 야근 빌딩 지하 주차장·구내식당: 판 시드 + 층으로 방을 고른다
+import { parkingLayout, PK_PROP_META } from "../../tower/themes/parkingMap";
+import { cafeteriaLayout, CF_PROP_META } from "../../tower/themes/cafeteriaMap";
+import { PK_ROOM_NAMES, pkRoom } from "@/lib/rpg/towerThemes/parking";
+import { CF_ROOM_NAMES, cfRoom } from "@/lib/rpg/towerThemes/cafeteria";
+// 11/15 야근 빌딩 옥상 정원 폭풍·임원층: 판 시드 + 층으로 방을 고른다 (블록의 보통 층 넷은 서로 다른 방)
+import { RF_PROP_META, RF_ROOM_NAMES, rfRoom, rooftopLayout } from "../../tower/themes/rooftopMap";
+import { EX_PROP_META, EX_ROOM_NAMES, exRoom, execLayout } from "../../tower/themes/execMap";
 
 // 40번 사냥터 지도 (순수 함수: Phaser·캔버스 없이 테스트한다).
 // 사냥터마다 소품(그림+충돌)·바닥 무늬·지형 구역(컨베이어·늪·덩굴·웅덩이·문·엘리베이터)·조명·출현 지점을 정한다.
@@ -104,6 +112,12 @@ export const PROP_META: Record<string, PropMeta> = {
   box_stack: { w: 22, h: 26, solid: R(-10, -10, 20, 10) },
   // 11/15 지하 서버실 (game/tower/themes/serverRoomMap.ts)
   ...SV_PROP_META,
+  // 11/15 지하 주차장·구내식당
+  ...PK_PROP_META,
+  ...CF_PROP_META,
+  // 11/15 옥상 정원 폭풍·임원층
+  ...RF_PROP_META,
+  ...EX_PROP_META,
 };
 
 // ── 만들기 도구 ──
@@ -165,7 +179,8 @@ const EDGE_SPAWNS: [number, number][] = [
 
 type Make = (b: Builder, v: number, seed: number) => void;
 /** 11/15 야근 빌딩: 배치를 층·판 시드로 고르는 테마용 (없으면 seed로) */
-export type LayoutCtx = { floor: number; runSeed: number };
+/** 11/15 야근 빌딩: 층·판 시드·판 시작 층 (테마 순서와 방이 판마다 다르다) */
+export type LayoutCtx = { floor: number; runSeed: number; start: number };
 
 const MAKE: Record<ZoneId, { variants: number; make: Make; pick?: (seed: number, ctx?: LayoutCtx) => number }> = {
   // 월요일 회의실: 회의 탁자 셋, 구석 화분, 커피 카트. 기믹은 움직이는 발표 조명 (HP 회복)
@@ -432,13 +447,19 @@ const MAKE: Record<ZoneId, { variants: number; make: Make; pick?: (seed: number,
 
   // 11/15 야근 빌딩 지하 서버실: 서버 랙 줄·냉각기·바닥 통풍 타일·네온 띠·바닥 회로 (game/tower/themes/serverRoomMap.ts)
   // 층마다 방 종류 아홉 중 하나 (한 블록의 보통 층 넷은 모두 다른 방, 우두머리 층은 메인프레임 홀 — lib/rpg/serverRoom svRoom)
-  "server-room": { variants: SV_ROOM_COUNT, pick: (seed, ctx) => (ctx ? svRoom(ctx.floor) : Math.abs(seed) % SV_ROOM_COUNT), make: (b, v) => serverRoomLayout(b, v) },
+  "server-room": { variants: SV_ROOM_COUNT, pick: (seed, ctx) => (ctx ? svRoom(ctx.runSeed, ctx.floor) : Math.abs(seed) % SV_ROOM_COUNT), make: (b, v) => serverRoomLayout(b, v) },
   // 11/15 끝없는 회의실: 한 블록의 보통 층 넷은 서로 다른 방, 우두머리 층은 주재자의 대회의실 (game/tower/themes/meetingRoomMap.ts)
   mt_meeting: {
     variants: MT_ROOM_TYPES.length,
     pick: (seed, ctx) => MT_ROOM_TYPES.indexOf(mtRoomType(ctx?.runSeed ?? seed, ctx?.floor ?? 6)),
     make: (b, v, seed) => meetingRoomLayout(b, v, seed),
   },
+  // 11/15 지하 주차장·구내식당: 다섯 층 묶음의 보통 층 넷은 서로 다른 방 (판 시드로 섞는다), 우두머리 층은 견인 차고지·특식 배식대
+  pk_parking: { variants: PK_ROOM_NAMES.length, pick: (seed, ctx) => (ctx ? pkRoom(ctx.runSeed, ctx.floor) : Math.abs(seed) % PK_ROOM_NAMES.length), make: (b, v, seed) => parkingLayout(b, v, seed) },
+  // 11/15 옥상 정원 폭풍·임원층 (game/tower/themes/rooftopMap.ts·execMap.ts)
+  rf_rooftop: { variants: RF_ROOM_NAMES.length, pick: (seed, ctx) => (ctx ? rfRoom(ctx.runSeed, ctx.floor) : Math.abs(seed) % RF_ROOM_NAMES.length), make: (b, v, seed) => rooftopLayout(b, v, seed) },
+  ex_exec: { variants: EX_ROOM_NAMES.length, pick: (seed, ctx) => (ctx ? exRoom(ctx.runSeed, ctx.floor) : Math.abs(seed) % EX_ROOM_NAMES.length), make: (b, v, seed) => execLayout(b, v, seed) },
+  cf_cafeteria: { variants: CF_ROOM_NAMES.length, pick: (seed, ctx) => (ctx ? cfRoom(ctx.runSeed, ctx.floor) : Math.abs(seed) % CF_ROOM_NAMES.length), make: (b, v, seed) => cafeteriaLayout(b, v, seed) },
 };
 
 /** 사냥터 지도. seed로 배치 하나를 고른다 (같은 시드면 같은 지도) */

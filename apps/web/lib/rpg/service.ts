@@ -1,4 +1,5 @@
 import { nanoid } from "nanoid";
+import { itemById } from "@tomb/protocol";
 import { recordEvent } from "../analyticsService";
 import { earnPoints, getAccounts, refundPoints, spendPoints } from "../store";
 import { kstDay, kstWeek } from "../store/accounts";
@@ -51,6 +52,8 @@ import { ALL_SKILLS_POINTS, respecCost, skillPointsEarned, spentPoints } from ".
 import { isSuperHunter, testServerEnv } from "./superHunter";
 import { takeTestDrops } from "./testDrops";
 import { evaluate, FINISH_GRACE_SEC, type StarsDone } from "./rewards";
+import { CHEST_COSMETICS, cosTierOf, crossesTen, gearPower, nextPity, PROT_PER_WEEK } from "./setGearRoll";
+import { grantSgDrops } from "./enhance";
 import { payNewDex } from "../forage/dexReward";
 import { getForageStore } from "../forage/store";
 import type { DexGain } from "../forage/types";
@@ -292,6 +295,8 @@ export async function startRun(
   const c = await loadChar(acct, store, sup);
   const lv = effectiveLevel(c.level, sup);
   const d = derive(lv, c.stats, c.equip);
+  // 11/15 장비 힘 배율 (세트 장비·강화·옵션): 저장된 장착 칸으로 재서 티켓에 싣는다 → 센 장비로 빨리 잡은 정직한 판이 거절되지 않게
+  const gp = game === "hunt" ? gearPower(lv, c.stats, c.equip) : 1;
   const day = kstDay(now);
   // 11/15 야근 빌딩: 지옥 사냥만, 시작 층은 최고 기록으로 연 체크포인트 (층마다 사냥터는 정해져 있다 — 화면이 보낸 사냥터는 보지 않는다)
   if (tower !== undefined) {
@@ -299,7 +304,9 @@ export async function startRun(
     const bad = checkTowerStart({ level: lv, start: tower, best: c.fBest, sup });
     if (bad) throw new HttpError(bad.code === "INVALID_INPUT" ? 400 : 403, bad.code, bad.message);
   }
-  const zone = game === "hunt" ? (tower ? towerZone(tower) : zoneFor(difficulty, zoneId)) : null;
+  // 11/15 야근 빌딩: 층마다 테마는 판 시드로 정해진다 (시작 층의 테마를 티켓에 싣는다)
+  const seed = newSeed();
+  const zone = game === "hunt" ? (tower ? towerZone(seed, tower, tower) : zoneFor(difficulty, zoneId)) : null;
   if (zone && zoneId && zone.id !== zoneId && !tower) throw new HttpError(400, "INVALID_INPUT", "그 사냥터는 이 난이도에 없어요.");
   if (zone && !tower && lv < zone.unlockLevel && !zoneUnlockBypass())
     throw new HttpError(403, "ZONE_LOCKED", `${zone.name}은(는) Lv.${zone.unlockLevel}부터 갈 수 있어요.`);
@@ -324,7 +331,6 @@ export async function startRun(
     tier = r.result;
     started = r.state;
   }
-  const seed = newSeed();
   const sv = game === "stars" ? (planVer === STARS_PLAN_VER ? STARS_PLAN_VER : 1) : undefined;
   // 테스트 서버 운영자(슈퍼) 계정의 시험 드롭 예약: 맨 앞 묶음을 꺼내 티켓에 싣는다 (운영 서버·일반 계정은 꺼내지도 않는다)
   const td = game === "hunt" && sup && !tower ? await takeTestDrops(acct, difficulty, zone?.id) : null;
@@ -342,6 +348,7 @@ export async function startRun(
     ...(td ? { td } : {}),
     ...(tower ? { tw: tower } : {}),
     ...(tier ? { tt: tier } : {}),
+    ...(gp > 1 ? { gp } : {}),
   });
   // 별자리 잇기: 판 시작 시각의 하늘(맑은 밤 = 전설, 계절, 새벽)에 따라 계획에 들어가는 별자리가 달라진다 (끝낼 때 티켓 시각으로 다시 계산)
   const sky = starSkyAt(now);
@@ -357,6 +364,8 @@ export async function startRun(
     ...(tier ? { tier } : {}),
     ...stars,
     ...(td ? { testDrops: td } : {}),
+    // 11/15 테스트 서버 슈퍼 계정 시험 드롭 (운영 서버에서는 isSuperHunter가 늘 false)
+    ...(sup && game === "hunt" ? { superDrops: true } : {}),
     view: await rpgView(acct, store, now, started),
   };
 }
@@ -375,6 +384,19 @@ export async function grantCosmetics(acct: string, drops: Drop[], now: number): 
   for (const d of drops) {
     if (d.kind !== "cosmetic") {
       out.push(d);
+      continue;
+    }
+    // 11/15 야근 빌딩 상자 꾸미기 (n일 이용권): 갖고 있으면 기간이 늘어난다. 이미 영구로 가진 것이면 같은 등급의 다음 후보, 다 영구면 없던 것으로
+    if (d.days) {
+      const pool = CHEST_COSMETICS.filter((i) => cosTierOf(i.price) === cosTierOf(itemById(d.id)?.price ?? 0));
+      const start = Math.max(0, pool.findIndex((i) => i.id === d.id));
+      for (let i = 0; i < Math.min(COSMETIC_TRIES, pool.length); i++) {
+        const id = pool[(start + i) % pool.length].id;
+        if ((await accounts.grantTerm(acct, id, d.days * 86_400_000, now)) === "ok") {
+          out.push({ kind: "cosmetic", id, qty: 1, days: d.days });
+          break;
+        }
+      }
       continue;
     }
     const start = Math.max(0, COSMETIC_DROPS.indexOf(d.id));
@@ -444,7 +466,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   if (claim === "reused") throw new HttpError(409, "TICKET_USED", "이미 결과를 받은 판이에요.");
   if (expired) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래된 판이라 결과를 받을 수 없어요.");
   if (claim === "stale") throw new HttpError(409, "TICKET_STALE", "그 뒤에 새 판을 시작해서 이 판은 끝났어요.");
-  if (t.tw) return finishTower(acct, t.tw, t.s, t.lv, result, elapsed, ipHash, now);
+  if (t.tw) return finishTower(acct, t.tw, t.s, t.lv, result, elapsed, ipHash, now, t.gp);
 
   // 22번: 별자리 잇기를 진짜 맑은 밤(판 시작 시각, KST)에 했으면 포인트 보너스 + 전설 별자리. 계절·새벽 별자리도 판 시작 시각으로
   const sky = t.g === "stars" ? starSkyAt(t.t) : null;
@@ -459,6 +481,9 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       ...(t.z ? { zone: t.z } : {}),
       ...(sky ? { sky } : {}),
       ...(t.sv !== undefined ? { planVer: t.sv } : {}),
+      ...(t.gp ? { gp: t.gp } : {}),
+      // 11/15 테스트 서버 슈퍼 계정 시험 드롭: 서버가 계정으로 다시 정한다 (화면 말은 안 믿는다)
+      ...(t.g === "hunt" && (await isSuperHunter(acct)) ? { sup: true } : {}),
     },
     result,
     elapsed,
@@ -545,7 +570,7 @@ async function nameOf(acct: string, now: number): Promise<string> {
 }
 
 /** 서버 최초 칭호 받기 (원자적, 한 사람만). 받은 칭호마다 확성기 알림. 받은 칭호 id */
-async function claimFirstTitles(acct: string, ids: readonly string[], now: number, text: (id: string) => string): Promise<string[]> {
+export async function claimFirstTitles(acct: string, ids: readonly string[], now: number, text: (id: string) => string): Promise<string[]> {
   const got: string[] = [];
   const towers = getTowerStore();
   for (const id of ids) {
@@ -571,11 +596,12 @@ const topSeen = globalThis as typeof globalThis & { __tombTowerTop?: number };
  * 판 끝 (야근 빌딩): 층마다 결과 검증 → 캐릭터 저장 한 번(물약·초월 EXP·초월 판 수·상자·최고 기록) → 기록이 오른 사람만 랭킹·서버 최초·꼭대기 층.
  * 운영자(슈퍼) 계정은 랭킹·최초·꼭대기·개척자에서 빠진다
  */
-async function finishTower(acct: string, start: number, seed: number, level: number, result: RunResult, elapsed: number, ipHash: string, now: number): Promise<RunFinishResponse> {
+async function finishTower(acct: string, start: number, seed: number, level: number, result: RunResult, elapsed: number, ipHash: string, now: number, gp?: number): Promise<RunFinishResponse> {
   const store = getRpgStore();
   if (result.game !== "hunt") throw new HttpError(422, "INVALID_RESULT", "결과가 시작한 게임과 달라요.");
   // 11/15 테스트 서버 슈퍼 계정만 처치 속도 상한을 빼고 (테스트용 무적·공격력 ×20) — 운영 서버에서는 isSuperHunter가 늘 false
-  const v = evalTower({ seed, level, start }, result, elapsed, { lax: await isSuperHunter(acct) });
+  const sup = await isSuperHunter(acct);
+  const v = evalTower({ seed, level, start, ...(gp ? { gp } : {}) }, result, elapsed, { lax: sup });
   if (!v.ok) throw new HttpError(422, v.code, v.message);
   const day = kstDay(now);
   const week = kstWeek(now);
@@ -585,8 +611,21 @@ async function finishTower(acct: string, start: number, seed: number, level: num
       const st: TowerSettle = towerSettle(cur, { day, week, start, floors: v.floors, floorMs: v.floorMs });
       const settled = { ...cur, ...st.patch };
       const g = gainTranscend(settled, st.tExp);
-      const drops = st.chests.flatMap((f) => towerChestDrops(seed, f));
-      const dr = addDrops(g.state, drops);
+      // 11/15 상자마다 세트 장비 천장을 이어서 센다 (게임이 판 안에서 같은 순서로 센다) · 슈퍼 계정 시험 드롭(sup)
+      let pity = cur.sgPity ?? 0;
+      const rolled = st.chests.flatMap((f) => {
+        const d = towerChestDrops(seed, f, start, pity, sup);
+        pity = nextPity(d, pity);
+        return d;
+      });
+      // 11/15 보호 문서: 이번 주 최고 층이 10층 단위를 새로 넘으면 1장 (한 주 2장까지)
+      const prevWk = cur.fWk === week ? cur.fWkBest : 0;
+      const protN = cur.protWk === week ? (cur.protN ?? 0) : 0;
+      const prot = st.newWeek && crossesTen(prevWk, st.patch.fWkBest) && protN < PROT_PER_WEEK;
+      if (prot) rolled.push({ kind: "mat", id: "m_prot", qty: 1 });
+      const sgd = grantSgDrops({ ...g.state, sgPity: pity, protWk: week, protN: protN + (prot ? 1 : 0) }, rolled);
+      const drops = sgd.drops;
+      const dr = addDrops(sgd.state, drops);
       return {
         state: { ...dr.state, runs: dr.state.runs + 1 },
         result: { st, prevBest: cur.fBest, levels: g.levelsGained, lost: dr.lost, drops, star100: cur.tLevel < TRANSCEND_MAX && g.state.tLevel >= TRANSCEND_MAX },

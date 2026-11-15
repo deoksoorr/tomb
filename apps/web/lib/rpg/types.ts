@@ -61,6 +61,26 @@ export type CharacterState = {
   fWkMs: number;
   /** 개척자 번호와 받은 시각 (끝판이 열린 뒤 14일 안에 ★51 또는 야근 빌딩 5층) */
   pioneer?: { n: number; at: number };
+  // ── 11/15 세트 장비·강화 (lib/rpg/setGear · lib/rpg/enhance). 옛 저장값에 없으면 normalize가 채운다 ──
+  /** 가진 세트 장비 코드 (장착 중 포함, 하나하나 따로 — 최대 SG_INV_MAX) */
+  sg?: string[];
+  /** 다음 세트 장비 번호 */
+  sgN?: number;
+  /** 세트 장비 없이 연 우두머리 상자 수 (SG_PITY번이면 다음 상자는 반드시) */
+  sgPity?: number;
+  /** 강화 재료: 결재 서류·인감 도장·보호 문서 */
+  mats?: { doc: number; seal: number; prot: number };
+  /** 보호 문서를 받은 주(그 주 월요일)와 그 주에 받은 장 수 */
+  protWk?: string;
+  protN?: number;
+  /** 상점 장비 강화 (장비 id → 1..5) · 연속 실패 수 */
+  enh?: Record<string, number>;
+  enhF?: Record<string, number>;
+  /** 4세트를 처음 맞춘 세트 (비트: 야근 1·결재 2·회의 4·출장 8) · 지금까지 가장 높은 강화 */
+  sgDone?: number;
+  enhMax?: number;
+  /** +15 확성기 알림을 이미 한 세트 장비 번호 (장비마다 한 번) */
+  sg15?: number[];
 };
 
 export type DailyStats = { points: number; runs: number; exp: number };
@@ -153,11 +173,19 @@ export type RunStartResponse = {
   planVer?: number;
   /** 테스트 서버 운영자 시험 드롭 (lib/rpg/testDrops): 이 판 끝에 화면이 떨구고 서버가 굴림 대신 준다 */
   testDrops?: Drop[];
+  /** 11/15 테스트 서버 슈퍼 계정: 우두머리마다 드롭이 늘 나온다 (서버가 계정으로 정한다 — 화면은 같은 값으로 미리 굴린다) */
+  superDrops?: boolean;
   view: RpgView;
 };
 
 /** cosmetic = 기간제 코디(캐릭터 꾸미기 하루권). 사냥 캐릭터 가방이 아니라 계정 가방(상점 꾸미기)에 들어간다 */
-export type Drop = { kind: DropKind; id: string; qty: number };
+export type Drop = {
+  kind: DropKind;
+  id: string;
+  qty: number;
+  /** 11/15 야근 빌딩 상자 꾸미기: 이용권 일수 (없으면 예전 하루권) */
+  days?: number;
+};
 
 export type RunReward = {
   score: number;
@@ -229,11 +257,15 @@ export type RpgPlay = {
   tower?: {
     start: number;
     chestsLeft: number;
+    /** 11/15 세트 장비 천장: 판 시작 때 세트 장비 없이 연 상자 수 (서버 towerChestDrops와 같은 값에서 센다) */
+    pity?: number;
     /** 11/15 테스트 서버 슈퍼 계정만: 무적·공격력 ×20 (높은 층 구경용). 서버는 이 값을 받지도 믿지도 않는다 — 운영 서버에서는 화면이 켜지 못한다 */
     boost?: boolean;
   };
   /** 11/15 연습 판 (초월 구간을 다 써서 드롭이 없다) — 바닥 드롭 연출을 하지 않는다 */
   noDrops?: boolean;
+  /** 11/15 테스트 서버 슈퍼 계정 시험 드롭 (판 시작 응답의 superDrops 그대로 — 운영 서버에서는 늘 없다): 우두머리 장비·상자 세트 장비·꾸미기가 늘 나온다 */
+  superDrops?: boolean;
 };
 
 /** 곤충 채집 들판 시간대: 낮(나비) · 노을(잠자리) · 밤(반딧불이) */

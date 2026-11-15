@@ -46,7 +46,7 @@ function honest(seed: number, plan: { k: OfferKind; i: number; r?: number }[]): 
 
 function climb(seed: number, start: number, floors: number): HuntResult {
   const kills: Partial<Record<MonsterId, number>> = {};
-  for (let i = 0; i < floors; i++) for (const w of towerPlan(seed, start + i)) for (const m of w.monsters) kills[m] = (kills[m] ?? 0) + 1;
+  for (let i = 0; i < floors; i++) for (const w of towerPlan(seed, start + i, start)) for (const m of w.monsters) kills[m] = (kills[m] ?? 0) + 1;
   return { game: "hunt", durationMs: floors * 45_000 + 5_000, kills, wavesCleared: 0, died: true, potionsUsed: {}, floors, floorMs: floors * 45_000 };
 }
 
@@ -135,7 +135,7 @@ describe("판 레벨·다시 뽑기·체크포인트·상사의 제안", () => {
   it("1층부터 15층쯤 오르면 판 레벨이 10~14번 오른다", () => {
     for (const seed of [1, 42, 1234, 99_999]) {
       const kills: Partial<Record<MonsterId, number>> = {};
-      for (let f = 1; f <= 15; f++) for (const w of towerPlan(seed, f)) for (const m of w.monsters) kills[m] = (kills[m] ?? 0) + 1;
+      for (let f = 1; f <= 15; f++) for (const w of towerPlan(seed, f, 1)) for (const m of w.monsters) kills[m] = (kills[m] ?? 0) + 1;
       const lv = runLevel(runXp(kills)).level;
       expect(lv).toBeGreaterThanOrEqual(10);
       expect(lv).toBeLessThanOrEqual(14);
@@ -231,7 +231,7 @@ describe("야근 빌딩 결과 검증에 카드", () => {
     const t1 = { seed, level: 1, start: 1 };
     const r0 = climb(seed, 1, 1);
     const kills = { ...r0.kills };
-    for (const [id, n] of Object.entries(huntSpawnable(towerPlan(seed, 2), Infinity)) as [MonsterId, number][]) kills[id] = (kills[id] ?? 0) + n;
+    for (const [id, n] of Object.entries(huntSpawnable(towerPlan(seed, 2, 1), Infinity)) as [MonsterId, number][]) kills[id] = (kills[id] ?? 0) + n;
     const total = Object.values(kills).reduce((a, b) => a + (b ?? 0), 0);
     const dur = 11_000;
     const fast = { ...r0, kills, durationMs: dur, floorMs: 10_000 };

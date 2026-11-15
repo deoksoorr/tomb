@@ -58,6 +58,10 @@ export type TicketInfo = {
   sky?: StarSky;
   /** 별자리 잇기: 판을 시작할 때의 계획 판 번호 (티켓의 sv). 없으면 판 번호가 생기기 전 티켓 */
   planVer?: number;
+  /** 11/15 장비 힘 배율 (세트 장비·강화·옵션 — 판 시작 때 서버가 잰 값, lib/rpg/setGearRoll gearPower). 처치 속도 상한에 곱한다 */
+  gp?: number;
+  /** 11/15 테스트 서버 슈퍼 계정 시험 드롭 (서버가 계정으로 정한다 — 운영 서버는 늘 false): 우두머리를 잡으면 장비가 늘 하나 */
+  sup?: boolean;
 };
 
 /** 별자리 잇기에서 검증을 통과한 완성 별자리 (무리 번호·별자리 id·완벽으로만 이었는지) */
@@ -104,7 +108,7 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
     total += n;
     exp += n * monsterStats(id, t.difficulty, zone.power).exp;
   }
-  if (total > 3 + effSec * killRateCeiling(t.difficulty, t.level)) return tooHigh("처치 수");
+  if (total > 3 + effSec * killRateCeiling(t.difficulty, t.level) * (t.gp ?? 1)) return tooHigh("처치 수");
   // 웨이브를 k개 깼다면 그 웨이브들의 몬스터를 모두 잡았어야 하고, 마지막으로 깬 웨이브가 나올 시간이 지났어야 한다
   const k = r.wavesCleared;
   if (!Number.isInteger(k) || k < 0 || k > plan.length) return reject("INVALID_RESULT", "웨이브 기록 형식이 맞지 않아요.");
@@ -235,7 +239,7 @@ function miniReward(t: TicketInfo, score: number, perf: number): Verdict {
 }
 
 /** 드롭 굴림에 쓰는 티켓 값 (화면의 바닥 드롭 연출도 같은 값으로 굴린다) */
-export type DropTicket = Pick<TicketInfo, "game" | "difficulty" | "seed" | "zone">;
+export type DropTicket = Pick<TicketInfo, "game" | "difficulty" | "seed" | "zone" | "sup">;
 
 /**
  * 사냥터 한 판의 드롭: 우두머리 몫(맨 앞) + 처치 수만큼 굴림 + 깔끔한 클리어 코디. 서버 판정(evalHunt)과 화면 연출(huntDropsFor)이 같은 식을 쓴다.
@@ -271,25 +275,32 @@ export function huntBossDrop(t: DropTicket): Drop | null {
  * 11/12: 확률을 다시 절반쯤으로, 우두머리 장비도 확률(bossDropChance), 포션은 1개씩.
  * clearedClean(사냥터를 쓰러지지 않고 다 깼다)이면 기간제 코디를 아주 낮은 확률(cosmeticChance)로 굴린다
  */
+/** 드롭 장비 하나 고르기: 싼 장비가 더 잘 나온다. 사냥터마다 잘 나오는 장비(ZoneDef.favor)는 ×3 (40번) */
+export function pickDropGear(t: DropTicket, r: () => number): Drop {
+  const D = DIFFS[t.difficulty];
+  const pool = GEAR.filter((g) => g.reqLevel <= D.dropMaxLevel && g.reqLevel >= D.dropMaxLevel - 20);
+  const favor = t.game === "hunt" ? zoneFor(t.difficulty, t.zone).favor : [];
+  const weights = pool.map((g) => (favor.includes(g.id) ? 3 : 1) / Math.sqrt(g.price));
+  let x = r() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < pool.length; i++) if ((x -= weights[i]) <= 0) return { kind: "gear", id: pool[i].id, qty: 1 };
+  return { kind: "gear", id: pool[pool.length - 1].id, qty: 1 };
+}
+
+/** 드롭 물약 하나 고르기: 커피 50% · 에너지드링크 35% · 야근 도시락 15% */
+export function pickDropPotion(r: () => number): Drop {
+  const x = r();
+  const id = x < 0.5 ? "p_coffee" : x < 0.85 ? "p_energy" : "p_lunchbox";
+  return { kind: "potion", id, qty: 1 };
+}
+
 export function rollDrops(t: DropTicket, rolls: number, bossKilled: boolean, potionsOnly = false, clearedClean = false): Drop[] {
   const D = DIFFS[t.difficulty];
   const r = seeded(t.seed ^ 0x44524f50);
   const drops: Drop[] = [];
-  const pickGear = (): Drop => {
-    const pool = GEAR.filter((g) => g.reqLevel <= D.dropMaxLevel && g.reqLevel >= D.dropMaxLevel - 20);
-    // 싼 장비가 더 잘 나온다. 사냥터마다 잘 나오는 장비(ZoneDef.favor)는 ×3 (40번)
-    const favor = t.game === "hunt" ? zoneFor(t.difficulty, t.zone).favor : [];
-    const weights = pool.map((g) => (favor.includes(g.id) ? 3 : 1) / Math.sqrt(g.price));
-    let x = r() * weights.reduce((a, b) => a + b, 0);
-    for (let i = 0; i < pool.length; i++) if ((x -= weights[i]) <= 0) return { kind: "gear", id: pool[i].id, qty: 1 };
-    return { kind: "gear", id: pool[pool.length - 1].id, qty: 1 };
-  };
-  const pickPotion = (): Drop => {
-    const x = r();
-    const id = x < 0.5 ? "p_coffee" : x < 0.85 ? "p_energy" : "p_lunchbox";
-    return { kind: "potion", id, qty: 1 };
-  };
-  if (bossKilled && r() < D.bossDropChance) drops.push(pickGear());
+  const pickGear = () => pickDropGear(t, r);
+  const pickPotion = () => pickDropPotion(r);
+  // 11/15 테스트 서버 슈퍼 계정(sup)은 우두머리 장비가 늘 나온다 (굴림 순서는 같게 — 확률 굴림을 먼저 뽑는다)
+  if (bossKilled && (r() < D.bossDropChance || t.sup)) drops.push(pickGear());
   for (let i = 0; i < rolls; i++) {
     if (r() >= D.dropChance) continue;
     drops.push(potionsOnly || r() < 0.55 ? pickPotion() : pickGear());

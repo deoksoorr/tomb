@@ -133,7 +133,7 @@ describe("하루 초월 판 구간 (새벽 5시 기준)", () => {
     const c = { ...newCharacter(), level: 50, tDay: "20261116", tRuns: 25, tBank: 0, tFl: 2, tChest: 4, fBest: 23, fBestMs: 600_000, fWk: "20261116", fWkBest: 12, fWkMs: 300_000 };
     const v = endgameView(c, "20261116", "20261116", 1_000, false);
     expect(v.day).toEqual({ runs: 25, full: 20, bank: 0, tier: "full", floors: 2 });
-    expect(v.tower).toEqual({ best: 23, week: { floor: 12, ms: 300_000 }, checkpoints: [1, 11, 21], chests: 4, chestsMax: 15 });
+    expect(v.tower).toEqual({ best: 23, week: { floor: 12, ms: 300_000 }, checkpoints: [1, 11, 21], chests: 4, chestsMax: 0 });
     expect(v.pioneer.until).toBe(pioneerUntil(1_000));
     // 다음 날·다음 주: 하루 칸은 넘기고, 지난주 기록은 보이지 않는다. 슈퍼 계정은 101층까지
     const next = endgameView(c, "20261124", "20261123", null, true);

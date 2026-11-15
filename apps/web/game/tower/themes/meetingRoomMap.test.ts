@@ -15,9 +15,10 @@ describe("끝없는 회의실 방 종류", () => {
         expect(mtRoomType(seed, base + 5)).toBe("boss");
       }
     }
-    // 11/15 층 번호로만 정해진다 (판이 달라도 6층은 작은 회의실)
+    // 11/15 판 시드·층으로 정해진다 (같은 판 같은 층은 늘 같은 방, 판이 다르면 첫 층 방도 여러 가지)
+    expect(mtRoomType(9, 7)).toBe(mtRoomType(9, 7));
     const firsts = new Set(Array.from({ length: 40 }, (_, i) => mtRoomType(i + 1, 6)));
-    expect([...firsts]).toEqual(["huddle"]);
+    expect(firsts.size).toBeGreaterThan(3);
   });
 
   it("층 배치는 층 시드로 정해진다 (카펫 색·가구 자리)", () => {
@@ -29,7 +30,7 @@ describe("끝없는 회의실 방 종류", () => {
 
   it("arena/layout이 층·판 시드로 방을 고른다", () => {
     for (let f = 6; f <= 10; f++) {
-      const l = buildLayout("mt_meeting", floorSeed(42, f), { floor: f, runSeed: 42 });
+      const l = buildLayout("mt_meeting", floorSeed(42, f), { floor: f, runSeed: 42, start: 1 });
       expect(MT_ROOM_TYPES[l.variant]).toBe(mtRoomType(42, f));
     }
   });
@@ -63,10 +64,10 @@ describe("끝없는 회의실 방 종류", () => {
 
 /** 방 종류 v를 고르게 하는 판 시드·층을 찾아 배치를 만든다 */
 function buildLayoutFor(v: number, seed: number) {
-  // 11/15 방은 층 번호로만 정해진다 → 여러 바퀴의 회의실 층을 훑는다
-  for (let run = 1; run < 3; run++)
-    for (let f = 6; f <= 80; f += f % 10 === 0 ? 6 : 1) {
-      if (MT_ROOM_TYPES.indexOf(mtRoomType(run, f)) === v) return buildLayout("mt_meeting", seed, { floor: f, runSeed: run });
+  // 11/15 방은 판 시드·층으로 정해진다 → 여러 판·층을 훑는다
+  for (let run = 1; run < 20; run++)
+    for (let f = 1; f <= 30; f++) {
+      if (MT_ROOM_TYPES.indexOf(mtRoomType(run, f)) === v) return buildLayout("mt_meeting", seed, { floor: f, runSeed: run, start: 1 });
     }
   throw new Error(`no layout for ${v}`);
 }

@@ -636,6 +636,21 @@ export class MemoryAccounts implements AccountStore {
     return "ok";
   }
 
+  async grantTerm(id: string, itemId: string, ms: number, now: number): Promise<"ok" | "owned"> {
+    const a = this.acct(id);
+    const slot = itemById(itemId)?.slot;
+    if (!slot) return "owned";
+    this.prune(a, now);
+    const cur = a.look.get(slot);
+    const wearing = cur?.itemId === itemId && cur.until > now;
+    const had = wearing ? cur!.until : (this.stashOf(a).get(itemId) ?? 0);
+    if (had >= PERMANENT_UNTIL) return "owned";
+    const until = Math.min(PERMANENT_UNTIL, Math.max(had, now) + ms);
+    if (wearing) a.look.set(slot, { itemId, until });
+    else this.stashOf(a).set(itemId, until);
+    return "ok";
+  }
+
   async consume(id: string, itemId: string): Promise<boolean> {
     return this.take(this.acct(id), itemId);
   }

@@ -2,10 +2,18 @@
 import { isNameSlot, isShopListed, itemById, ITEMS } from "@tomb/protocol";
 import type { BossPhase, PatternId } from "./patterns";
 import type { WeaponStyleId } from "./weapons";
+// 11/15 세트 장비·재료 (setGear는 이 파일을 타입으로만 본다 — 순환 없음)
+import { decodeSg, extGearById, isMatId, isSgCode, itemOfSpec, MAT_INFO, SG_GRADE_NAMES, sgDef } from "./setGear";
 // 11/15 야근 빌딩 지하 서버실 (sv_ 몬스터·사냥터) — 타입만 거꾸로 쓰므로 순환 없음
-import { SV_MONSTERS, SV_ZONE, type SvMonsterId } from "./serverRoom";
+import { SV_LOOPS, SV_MONSTERS, SV_ZONE, type SvMonsterId } from "./serverRoom";
 // 11/15 야근 빌딩 끝없는 회의실 (mt_ 몬스터·사냥터) — 이쪽도 타입만 거꾸로
-import { MT_MONSTERS, MT_ZONE_DEF, type MtMonsterId } from "./towerThemes/meetingRoom";
+import { MT_LOOPS, MT_MONSTERS, MT_ZONE_DEF, type MtMonsterId } from "./towerThemes/meetingRoom";
+// 11/15 야근 빌딩 옥상 정원 폭풍 (rf_)·임원층 (ex_) — 이쪽도 타입만 거꾸로
+import { RF_MONSTERS, RF_ZONE_DEF, type RfMonsterId } from "./towerThemes/rooftop";
+import { EX_MONSTERS, EX_ZONE_DEF, type ExMonsterId } from "./towerThemes/exec";
+// 11/15 야근 빌딩 지하 주차장 (pk_)·구내식당 (cf_) — 이쪽도 타입만 거꾸로
+import { PK_MONSTERS, PK_ZONE_DEF, type PkMonsterId } from "./towerThemes/parking";
+import { CF_MONSTERS, CF_ZONE_DEF, type CfMonsterId } from "./towerThemes/cafeteria";
 // 이름은 회사 생활(월요병·야근·결재·회식)과 누구나 한 번쯤 그만둔 다짐에서 따왔다.
 
 export const STAT_KEYS = ["str", "agi", "vit", "int", "dex", "luk"] as const;
@@ -144,7 +152,9 @@ const KIND_ORDER: Record<GearKind, number> = { weapon: 0, armor: 1, head: 2, acc
 /** 종류 → 요구 레벨 순 (상점·가방 목록이 이 순서를 그대로 쓴다) */
 export const GEAR: readonly GearDef[] = [...GEAR_RAW].sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.reqLevel - b.reqLevel);
 
-export const gearById = (id: string): GearDef | undefined => GEAR.find((g) => g.id === id);
+const shopGearById = (id: string): GearDef | undefined => GEAR.find((g) => g.id === id);
+/** 11/15 세트 장비 코드("s032.…")·강화한 상점 장비("w_stamp+3")도 찾는다 (lib/rpg/setGear) */
+export const gearById = (id: string): GearDef | undefined => shopGearById(id) ?? extGearById(id, shopGearById);
 
 // ── 포션 (쌓임, 사냥터에서 단축키로 마심) ──
 
@@ -302,7 +312,13 @@ export type MonsterId =
   // 11/15 야근 빌딩 지하 서버실 (lib/rpg/serverRoom.ts)
   | SvMonsterId
   // 11/15 야근 빌딩 끝없는 회의실 (lib/rpg/towerThemes/meetingRoom.ts)
-  | MtMonsterId;
+  | MtMonsterId
+  // 11/15 야근 빌딩 옥상 정원 폭풍·임원층 (lib/rpg/towerThemes/rooftop.ts·exec.ts)
+  | RfMonsterId
+  | ExMonsterId
+  // 11/15 야근 빌딩 지하 주차장·구내식당 (lib/rpg/towerThemes/parking.ts·cafeteria.ts)
+  | PkMonsterId
+  | CfMonsterId;
 
 export type MonsterDef = {
   id: MonsterId;
@@ -448,6 +464,12 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
   ...SV_MONSTERS,
   // ── 11/15 야근 빌딩 끝없는 회의실 (lib/rpg/towerThemes/meetingRoom.ts) ──
   ...MT_MONSTERS,
+  // ── 11/15 야근 빌딩 옥상 정원 폭풍·임원층 (lib/rpg/towerThemes/rooftop.ts·exec.ts) ──
+  ...RF_MONSTERS,
+  ...EX_MONSTERS,
+  // ── 11/15 야근 빌딩 지하 주차장·구내식당 (lib/rpg/towerThemes/parking.ts·cafeteria.ts) ──
+  ...PK_MONSTERS,
+  ...CF_MONSTERS,
 };
 
 export const MONSTER_IDS = Object.keys(MONSTERS) as MonsterId[];
@@ -469,7 +491,7 @@ export const ZONE_IDS = [
   "layoff-day",
 ] as const;
 /** 11/15 야근 빌딩 전용 테마 (사냥터 고르기·함께 사냥 방·판 시작 입력에는 없다 — lib/rpg/tower TOWER_THEMES가 층마다 고른다) */
-export const TOWER_ZONE_IDS = ["server-room", "mt_meeting"] as const;
+export const TOWER_ZONE_IDS = ["server-room", "mt_meeting", "rf_rooftop", "ex_exec", "pk_parking", "cf_cafeteria"] as const;
 export type TowerZoneId = (typeof TOWER_ZONE_IDS)[number];
 export const isTowerZoneId = (v: unknown): v is TowerZoneId => typeof v === "string" && (TOWER_ZONE_IDS as readonly string[]).includes(v);
 /** 사냥터 id (보통 사냥터 + 야근 빌딩 전용 테마). isZoneId는 보통 사냥터만 */
@@ -496,6 +518,8 @@ export type ZoneDef = {
   elite?: MonsterId;
   /** 11/15 야근 빌딩 테마의 중간 우두머리 (끝없는 회의실: 블록 3층째 둘째 웨이브 정예 자리 — lib/rpg/towerThemes) */
   mid?: MonsterId;
+  /** 11/15 야근 빌딩 테마: 그 판에서 다시 올 때마다 바뀌는 판 이름·설명 (첫 번째·두 번째 … 마지막 것이 계속) */
+  visits?: readonly { name: string; desc: string }[];
   /** 우두머리가 화날 때(체력 60%·30%)마다 불러내는 졸개. 서버 출현 상한에 2번 몫이 더해진다 */
   summon: { id: MonsterId; n: number };
   /** 이 사냥터에서 더 잘 나오는 장비 (드롭 장비 굴림에서 가중치 ×3) */
@@ -705,8 +729,12 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     deco: 0xe8e0c8,
   }),
   // ── 11/15 야근 빌딩 전용 테마 ──
-  "server-room": SV_ZONE,
-  mt_meeting: MT_ZONE_DEF,
+  "server-room": { ...SV_ZONE, visits: SV_LOOPS },
+  mt_meeting: { ...MT_ZONE_DEF, visits: MT_LOOPS.map((l) => ({ name: l.name, desc: l.trait ? `특성 「${l.trait}」 ${l.desc}` : l.desc })) },
+  rf_rooftop: RF_ZONE_DEF,
+  ex_exec: EX_ZONE_DEF,
+  pk_parking: PK_ZONE_DEF,
+  cf_cafeteria: CF_ZONE_DEF,
 };
 
 /** 난이도마다 처음 열리는 사냥터 (예전 API·저장된 선택이 사냥터 없이 난이도만 보낼 때) */
@@ -771,7 +799,8 @@ export const COSMETIC_DROPS: readonly string[] = ITEMS.filter((i) => i.kind === 
 /** 코디 드롭 아이콘 (선물 상자) */
 export const COSMETIC_DROP_ART: IconArt = { shape: "gift", main: 0xffb0c8, accent: 0xe8b830 };
 
-export type DropKind = "gear" | "potion" | "cosmetic";
+/** 11/15 set = 세트 장비 (id = 세트·부위·직급·옵션 lib/rpg/setGear sgSpec), mat = 강화 재료 (m_doc·m_seal·m_prot, 쌓인다) */
+export type DropKind = "gear" | "potion" | "cosmetic" | "set" | "mat";
 export type DropInfo = { name: string; art: IconArt; kind: DropKind; note?: string };
 
 /** 판 결과 드롭 한 줄 → 이름·아이콘 (UI가 결과 화면에 그대로 쓴다). 모르는 id면 null */
@@ -784,6 +813,14 @@ export function dropInfo(d: { kind: DropKind; id: string }): DropInfo | null {
     const p = potionById(d.id);
     return p ? { name: p.name, art: p.art, kind: "potion" } : null;
   }
+  // 11/15 세트 장비 (번호 없이 세트·부위·직급·옵션) · 강화 재료
+  if (d.kind === "set") {
+    const it = isSgCode(d.id) ? (decodeSg(d.id) ?? itemOfSpec(d.id, 0)) : null;
+    if (!it) return null;
+    const g = sgDef(it);
+    return { name: g.name, art: g.art, kind: "set", note: SG_GRADE_NAMES[it.g] };
+  }
+  if (d.kind === "mat") return isMatId(d.id) ? { name: MAT_INFO[d.id].name, art: MAT_INFO[d.id].art, kind: "mat" } : null;
   const it = itemById(d.id);
   return it ? { name: it.name, art: COSMETIC_DROP_ART, kind: "cosmetic", note: "캐릭터 꾸미기 하루권 · 상점 가방에 들어갔어요" } : null;
 }

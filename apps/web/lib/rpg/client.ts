@@ -4,6 +4,7 @@ import { REALTIME_HTTP_URL } from "../realtime";
 import { HUNT_ZONES, isZoneId, type Difficulty, type GameKind, type GearSlot, type SkillId, type Stats, type ZoneId } from "./catalog";
 import type { HotAuto } from "./hotbar";
 import type { RpgView, RunFinishResponse, RunResult, RunStartResponse, SoldInfo } from "./types";
+import type { GearActionResponse } from "./gearService";
 
 // 브라우저 → 사냥터 API. 실패하면 서버의 한국어 메시지를 담은 ApiRequestError를 던진다 (lib/api의 request).
 
@@ -20,6 +21,14 @@ export type CharacterAction =
 
 export type ShopResponse = RpgView & { sold?: SoldInfo };
 
+/** 11/15 세트 장비·강화 (app/api/rpg/gear) */
+export type GearAction =
+  | { type: "enhance"; sg?: number; shop?: string; protect: boolean; cost: number }
+  | { type: "reroll"; uid: number; lock: string | null; cost: number }
+  | { type: "exchange"; uids: number[]; set: number; piece: number }
+  | { type: "disassemble"; uids: number[] }
+  | { type: "equip"; slot: GearSlot; uid: number | null };
+
 export const rpgApi = {
   view: () => request<RpgView>("/api/rpg", { cache: "no-store" }),
   character: (a: CharacterAction) => request<RpgView>("/api/rpg/character", post(a)),
@@ -33,6 +42,7 @@ export const rpgApi = {
       post({ game, difficulty, ...(game === "hunt" && zone ? { zone } : {}), ...(planVer ? { planVer } : {}), ...(tower ? { tower } : {}) }),
     ),
   finish: (ticket: string, result: RunResult) => request<RunFinishResponse>("/api/rpg/run/finish", post({ ticket, result })),
+  gear: (a: GearAction) => request<GearActionResponse>("/api/rpg/gear", post(a)),
 };
 
 // ── 11/12 사냥터별 지금 사냥 중인 인원 ──

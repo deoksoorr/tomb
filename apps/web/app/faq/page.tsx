@@ -14,7 +14,6 @@ import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
 import { DEFAULT_PASS_DAYS, PRESENCE_INTERVAL_MS } from "@/lib/types";
 import { env } from "@/lib/env";
 import { PIONEER_DAYS, PIONEER_FLOOR } from "@/lib/rpg/endgame";
-import { TOWER_CHESTS_PER_DAY } from "@/lib/rpg/tower";
 import { MAX_LEVEL } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { QUEST_DAILY, QUEST_STAMPS } from "@/lib/forage/quests/catalog";
@@ -117,7 +116,7 @@ const FAQ = [
   {
     q: "사냥 레벨 50 다음엔 뭐가 있나요?",
     // 11/15 사냥 끝판 1단계 — 숫자는 lib/rpg/endgame.ts
-    a: `레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 얻는 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요. 초월 5레벨마다 능력치 포인트 1개를 받고, 사냥 레벨 랭킹은 레벨 → 초월 레벨 → 초월 EXP 순이에요. 하루에 할 수 있는 판 수 제한은 없어요. 마을 북쪽 분양 사무소 옆 야근 빌딩은 1층부터 쓰러질 때까지 이어서 오르는 곳으로, 도전 횟수 제한이 없어요. 층이 오를수록 몬스터가 세지고 10층부터 저주가 쌓이며, 깬 층마다 초월 EXP를 받아요. 5층마다 우두머리 상자(하루 ${TOWER_CHESTS_PER_DAY}개)가 열려요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51에 닿거나 야근 빌딩 ${PIONEER_FLOOR}층을 처음 넘으면 닿은 차례대로 칭호 「개척자 #번호」를 받아요.`,
+    a: `레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 얻는 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요. 초월 5레벨마다 능력치 포인트 1개를 받고, 사냥 레벨 랭킹은 레벨 → 초월 레벨 → 초월 EXP 순이에요. 하루에 할 수 있는 판 수 제한은 없어요. 마을 북쪽 분양 사무소 옆 야근 빌딩은 1층부터 쓰러질 때까지 이어서 오르는 곳으로, 도전 횟수 제한이 없어요. 층이 오를수록 몬스터가 세지고 10층부터 저주가 쌓이며, 깬 층마다 초월 EXP를 받아요. 5층마다 우두머리 상자가 열려요(하루 개수 제한 없음). 상자에서는 세트 장비(15%, 7번 연속 못 받으면 다음엔 꼭)와 강화 재료, 가끔 꾸미기 이용권이 나와요. 세트 장비는 장비 탭에서 +15까지 강화할 수 있어요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51에 닿거나 야근 빌딩 ${PIONEER_FLOOR}층을 처음 넘으면 닿은 차례대로 칭호 「개척자 #번호」를 받아요.`,
   },
   {
     q: "닉네임이 다른 사람과 같아도 되나요?",

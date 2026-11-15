@@ -4,6 +4,7 @@ import { monsterStats } from "./formulas";
 import { BOSS_RAGES, huntPlan, huntSpawnable, huntTotal } from "./plan";
 import { evaluate, huntBossDrop, killRateCeiling, type TicketInfo } from "./rewards";
 import { signTicket, verifyTicket } from "./ticket";
+import { towerPlan } from "./tower";
 
 // 40번 테마 사냥터: 카탈로그·출현 계획·서버 검증이 모든 사냥터·시드에서 맞물리는지
 
@@ -63,6 +64,8 @@ describe("40번 테마 사냥터 카탈로그", () => {
         for (let sp = MONSTERS[m].split; sp; sp = MONSTERS[sp.id].split) used.add(sp.id);
       }
     }
+    // 11/15 야근 빌딩 층 계획이 판 중에 불러들이는 몬스터 (구내식당 압력밥솥의 주먹밥 …)
+    for (let seed = 1; seed <= 30; seed++) for (let f = 1; f <= 60; f++) for (const w of towerPlan(seed, f, 1)) for (const ad of w.adds ?? []) used.add(ad.id);
     expect(MONSTER_IDS.filter((m) => !used.has(m))).toEqual([]);
   });
 

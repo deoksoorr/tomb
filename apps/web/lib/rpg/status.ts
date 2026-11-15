@@ -233,6 +233,45 @@ export const MONSTER_STATUS: Partial<Record<MonsterId, readonly StatusRule[]>> =
     { status: "slow", chance: 0.35, on: ["slam", "nova", "breath"] },
     { status: "confuse", chance: 0.3, on: ["cross", "rain"] },
   ],
+  // 11/15 야근 빌딩 지하 주차장 (딱지 느려짐·매연·라바콘은 게임이 직접 — game/tower/themes/parkingStage)
+  pk_tire: [{ status: "bleed", chance: 0.15 }],
+  pk_shadow: [{ status: "confuse", chance: 0.2 }],
+  pk_exhaust: [{ status: "poison", chance: 0.25 }],
+  pk_double_park: [{ status: "slow", chance: 0.3, on: ["charge"] }],
+  pk_tow_truck: [
+    { status: "slow", chance: 0.35, on: ["slam", "charge"] },
+    { status: "bleed", chance: 0.3, on: ["aimed_shot", "cross", "rain"] },
+  ],
+  // 11/15 야근 빌딩 구내식당 (국물 웅덩이·잔반통 빨아들이기는 게임이 직접 — game/tower/themes/cafeteriaStage)
+  cf_kimchi: [{ status: "burn", chance: 0.3 }],
+  cf_chopsticks: [{ status: "bleed", chance: 0.15 }],
+  cf_rice_cooker: [{ status: "burn", chance: 0.3, on: ["slam"] }],
+  cf_nutritionist: [
+    { status: "burn", chance: 0.35, on: ["rain", "nova", "slam"] },
+    { status: "slow", chance: 0.3, on: ["fan_volley", "cross"] },
+  ],
+  // 11/15 야근 빌딩 옥상 정원 폭풍 (연기 구름·뜨거운 바람·전기 줄·벼락은 게임이 직접 — game/tower/themes/rooftopStage)
+  rf_smoker: [{ status: "poison", chance: 0.25 }],
+  rf_leak: [{ status: "slow", chance: 0.2 }],
+  rf_droplet: [{ status: "slow", chance: 0.15 }],
+  rf_papers: [{ status: "bleed", chance: 0.18 }],
+  rf_rod_broken: [{ status: "silence", chance: 0.25, on: ["aimed_shot"] }],
+  rf_spark: [{ status: "silence", chance: 0.12 }],
+  rf_vane: [{ status: "bleed", chance: 0.35, on: ["charge"] }],
+  rf_lightning_rod: [
+    { status: "silence", chance: 0.3, on: ["aimed_shot", "cross", "rain"] },
+    { status: "burn", chance: 0.35, on: ["slam", "nova"] },
+  ],
+  // 11/15 야근 빌딩 임원층 (도장 자국·서류 더미·스포트라이트는 게임이 직접 — game/tower/themes/execStage)
+  ex_pen: [{ status: "silence", chance: 0.15 }],
+  ex_wine: [{ status: "confuse", chance: 0.2 }],
+  ex_card: [{ status: "bleed", chance: 0.15 }],
+  ex_bonsai: [{ status: "bleed", chance: 0.25 }],
+  ex_secretary: [{ status: "slow", chance: 0.3, on: ["aimed_shot"] }],
+  ex_ceo: [
+    { status: "slow", chance: 0.3, on: ["slam", "nova", "charge"] },
+    { status: "silence", chance: 0.3, on: ["fan_volley", "cross", "rain"] },
+  ],
 };
 
 /** 한 번 걸리는 상태 (지속·세기는 난이도가 반영된 값) */

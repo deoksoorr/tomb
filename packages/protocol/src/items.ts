@@ -613,6 +613,12 @@ export const TITLE_IDS = [
   "t_floor50",
   "t_floor100",
   "t_pioneer",
+  // 11/15 세트 장비: 세트마다 4세트 처음 완성 (야근·결재·회의·출장) · 장비 하나 +15
+  "t_sgOvertime",
+  "t_sgApproval",
+  "t_sgMeeting",
+  "t_sgTrip",
+  "t_enh15",
   // 11/15 신화 (서버에 한 사람): 서버 최초 30·50·100층 · 첫 ★100 · 꼭대기 층 주인(기록을 뺏기면 넘어감) · 이번 주 최고층(지난주 1위, 한 주 동안)
   "t_first30",
   "t_first50",
@@ -620,6 +626,8 @@ export const TITLE_IDS = [
   "t_firstStar100",
   "t_topFloor",
   "t_weekFloor",
+  // 11/15 서버 최초 +15 (신화)
+  "t_firstEnh15",
   // 낚시 누적 마리 수
   "t_fishn50",
   "t_fishn300",

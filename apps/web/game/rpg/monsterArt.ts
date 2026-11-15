@@ -5,6 +5,12 @@ import { darken, Grid, lighten, mix, type Color } from "../sprites/pixel";
 import { SV_PAINT } from "../tower/themes/serverRoomMonsters";
 // 11/15 야근 빌딩 끝없는 회의실 몬스터 그림 (mt_)
 import { MT_PAINTS } from "../tower/themes/meetingRoomArt";
+// 11/15 야근 빌딩 지하 주차장 (pk_)·구내식당 (cf_) 몬스터 그림
+import { PK_PAINT } from "../tower/themes/parkingMonsters";
+import { CF_PAINT } from "../tower/themes/cafeteriaMonsters";
+// 11/15 야근 빌딩 옥상 정원 폭풍 (rf_)·임원층 (ex_) 몬스터 그림
+import { RF_PAINT } from "../tower/themes/rooftopMonsters";
+import { EX_PAINT } from "../tower/themes/execMonsters";
 
 // 40번 몬스터 디자인: 종류마다 코드로 그린 픽셀아트 + 동작별 프레임.
 // 한 장의 시트에 12프레임 — 0·1 가만히, 2~5 걷기, 6·7 공격(준비·내지름), 8 맞음, 9~11 쓰러짐.
@@ -1074,6 +1080,12 @@ const P: Record<MonsterId, Paint> = {
   ...SV_PAINT,
   // ── 11/15 야근 빌딩 끝없는 회의실 (game/tower/themes/meetingRoomArt.ts) ──
   ...MT_PAINTS,
+  // ── 11/15 야근 빌딩 지하 주차장·구내식당 (game/tower/themes/parkingMonsters.ts·cafeteriaMonsters.ts) ──
+  ...PK_PAINT,
+  ...CF_PAINT,
+  // ── 11/15 야근 빌딩 옥상 정원 폭풍·임원층 (game/tower/themes/rooftopMonsters.ts·execMonsters.ts) ──
+  ...RF_PAINT,
+  ...EX_PAINT,
 };
 
 // ── 공통 변형 ──

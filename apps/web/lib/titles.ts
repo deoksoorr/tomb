@@ -62,6 +62,12 @@ export type TitleMetric =
   | "floor"
   | "pioneer"
   | "pioneerAt"
+  // 11/15 세트 장비: 4세트를 처음 맞춘 적 있음(1/0, 세트마다) · 지금까지 가장 높은 강화
+  | "sgOvertime"
+  | "sgApproval"
+  | "sgMeeting"
+  | "sgTrip"
+  | "enh"
   // 11/15 수집 의뢰: 끝낸 의뢰 수 · 수집가 유령 외형 받음(1/0)
   | "quests"
   | "qking"
@@ -133,6 +139,12 @@ const STEP_ROWS: readonly StepRow[] = [
     ["t_floor50", "퇴근을 잊은 자", "gold", "야근 빌딩 50층을 깨면", "floor", 50, "hunt"],
     ["t_floor100", "사무실이 집", "legend", "야근 빌딩 100층을 깨면", "floor", 100, "hunt"],
     ["t_pioneer", "개척자", "gold", "끝판이 열린 뒤 14일 안에 ★51에 닿거나 야근 빌딩 5층을 처음 넘으면 (닿은 차례대로 번호, 그 뒤로는 못 얻음)", "pioneer", 1, "hunt"],
+    // 11/15 세트 장비 (lib/rpg/setGear): 같은 세트 네 부위를 처음 함께 끼면 · 장비 하나를 +15까지
+    ["t_sgOvertime", "야근 세트 착용자", "silver", "야근 세트 네 부위를 함께 끼면", "sgOvertime", 1, "hunt"],
+    ["t_sgApproval", "결재 세트 착용자", "silver", "결재 세트 네 부위를 함께 끼면", "sgApproval", 1, "hunt"],
+    ["t_sgMeeting", "회의 세트 착용자", "silver", "회의 세트 네 부위를 함께 끼면", "sgMeeting", 1, "hunt"],
+    ["t_sgTrip", "출장 세트 착용자", "silver", "출장 세트 네 부위를 함께 끼면", "sgTrip", 1, "hunt"],
+    ["t_enh15", "강화의 신", "legend", "장비 하나를 +15까지 강화하면", "enh", 15, "hunt"],
     ["t_fishn50", "점심시간 낚시꾼", "bronze", "물고기를 모두 합쳐 50마리 낚으면 (자동 낚시 포함)", "fishn", 50, "fish"],
     ["t_fishn300", "주말 강태공", "silver", "물고기 누적 300마리", "fishn", 300, "fish"],
     ["t_fishn1k", "어부 출신 대리", "gold", "물고기 누적 1,000마리", "fishn", 1000, "fish"],
@@ -174,6 +186,7 @@ const MYTHIC_ROWS: readonly (readonly [TitleId, string, string, boolean])[] = [
   ["t_firstStar100", "첫 번째 상무", "서버에서 가장 먼저 초월 레벨 ★100에 오른 한 사람 (영원히)", false],
   ["t_topFloor", "꼭대기 층 주인", "지금 야근 빌딩 최고 층 기록을 가진 한 사람 (기록을 뺏기면 넘어가요)", true],
   ["t_weekFloor", "이번 주 최고층", "지난주 야근 빌딩 주간 최고 층 1위 (이번 주 한 주 동안)", true],
+  ["t_firstEnh15", "강화의 시작", "서버에서 가장 먼저 장비를 +15까지 강화한 한 사람 (영원히)", false],
 ];
 const MYTHIC_OF = new Map(MYTHIC_ROWS.map((r) => [r[0], r]));
 
@@ -277,6 +290,8 @@ export function progressText(t: TitleDef, value: number): string {
   if (t.metric === "floor") return `${Math.min(value, t.need)}층 / ${t.need}층`;
   if (t.metric === "pioneer") return value > 0 ? `#${value}` : "아직";
   if (t.metric === "qking") return value > 0 ? "받음" : "아직";
+  if (t.metric === "sgOvertime" || t.metric === "sgApproval" || t.metric === "sgMeeting" || t.metric === "sgTrip") return value > 0 ? "완성" : "아직";
+  if (t.metric === "enh") return `+${Math.min(value, t.need)} / +${t.need}`;
   return `${v.toLocaleString("ko-KR")} / ${t.need.toLocaleString("ko-KR")}`;
 }
 

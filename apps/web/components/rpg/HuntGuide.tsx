@@ -5,6 +5,7 @@ import {
   DIFFICULTIES,
   DIFFS,
   GEAR,
+  HUNT_ZONES,
   MONSTERS,
   POTION_COOLDOWN_MS,
   POTIONS,
@@ -30,19 +31,14 @@ import {
   TOWER_BOSS_EVERY,
   TOWER_BOSS_FLOOR_SEC,
   TOWER_CHECKPOINT_EVERY,
-  TOWER_CHESTS_PER_DAY,
   TOWER_DEF,
   TOWER_FLOOR_SEC,
-  TOWER_FLOORS_PER_RUN,
   TOWER_HP_ATK,
   TOWER_THEMES,
   FLOORS_PER_THEME,
 } from "@/lib/rpg/tower";
+import { monsterIdleCanvas } from "@/game/rpg/monsterArt";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
-import { MT_BOSS, MT_ELITE, MT_LOOPS, MT_MID, MT_POOL, MT_ZONE_DEF } from "@/lib/rpg/towerThemes/meetingRoom";
-import { SV_LOOPS, SV_POOL, SV_ROOMS, SV_ZONE } from "@/lib/rpg/serverRoom";
-import { SV_ROOM_NAMES } from "@/game/tower/themes/serverRoomMap";
-import { scheduleRows } from "@/game/tower/scheduleRows";
 import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
 import { earnRule } from "@/lib/economy";
@@ -58,7 +54,6 @@ import { BOSS_DEAL_HP_COST, CARD_IDS, FOCUS_ASPD, START_PICKS_PER_10 } from "@/l
 import s from "./rpg.module.css";
 
 /** 11/15 끝없는 회의실 층 (테마 표 두 번째 칸 — 10층마다) */
-const MT_FLOORS = "6~10·16~20·26~30 …층";
 
 // 사냥 안내서: 사냥 로비·멈춤 창에서 연다. 짧은 페이지를 넘겨 본다 (←/→ 키도 된다).
 // 숫자·이름은 catalog·patterns·weapons·rewards에서 읽는다 → 스킬·무기·패턴이 늘어도 안내가 따라간다.
@@ -186,6 +181,34 @@ function Keys({ k }: { k: string[] }) {
 function CardPic({ id }: { id: (typeof CARD_IDS)[number] }) {
   // eslint-disable-next-line @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트
   return <img src={cardIconUrl(id, 2)} width={32} height={32} alt="" aria-hidden="true" style={{ imageRendering: "pixelated" }} />;
+}
+
+/** 11/15 몬스터 가만히 그림 한 장 (캔버스 → dataURL, 처음 한 번만) */
+const monUrls = new Map<MonsterId, string>();
+function MonPic({ id }: { id: MonsterId }) {
+  let url = monUrls.get(id) ?? "";
+  if (!url && typeof document !== "undefined") {
+    url = monsterIdleCanvas(id).toDataURL("image/png");
+    monUrls.set(id, url);
+  }
+  // eslint-disable-next-line @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트
+  return url ? <img src={url} width={32} height={32} alt="" aria-hidden="true" style={{ imageRendering: "pixelated", objectFit: "contain" }} /> : null;
+}
+
+/** 11/15 야근 빌딩 테마 한 장: 이름·분위기·기믹·다시 올 때 바뀌는 판·몬스터·정예·우두머리 */
+function ThemeCard({ id }: { id: (typeof TOWER_THEMES)[number] }) {
+  const z = HUNT_ZONES[id];
+  const names = (ids: readonly MonsterId[]) => ids.map((m) => MONSTERS[m].name).join(", ");
+  const boss = MONSTERS[z.boss];
+  return (
+    <Item pic={<MonPic id={z.boss} />} title={z.name}>
+      {z.desc} 기믹은 「{z.gimmick.name}」. {z.gimmick.desc}
+      {z.visits && z.visits.length > 1 ? ` 같은 판에서 다시 들르면 ${z.visits.slice(1).map((v) => v.name).join(" → ")} 순서로 바뀌어요.` : ""} 나오는 몬스터는 {names(z.pool)}.
+      {z.elite ? ` 정예는 「${MONSTERS[z.elite].name}」` : ""}
+      {z.mid ? `, 중간 우두머리는 「${MONSTERS[z.mid].name}」` : ""}
+      {z.elite ? "," : ""} 우두머리는 「{boss.name}」. {boss.desc.replace(/^"[^"]*"\s*/, "")}
+    </Item>
+  );
 }
 
 function Item({ art, pic, title, children }: { art?: IconArt; pic?: ReactNode; title: ReactNode; children: ReactNode }) {
@@ -509,27 +532,14 @@ function pages(): Page[] {
             </Item>
             <Item art={skillArt("so_lamp")} title="야근 빌딩">
               마을 북쪽 분양 사무소 옆 높은 건물 (사냥 레벨 50부터). 1층부터 쓰러질 때까지 이어서 올라가요 — 한 층은 방 하나({TOWER_FLOOR_SEC}초 안), {TOWER_BOSS_EVERY}층마다 우두머리
-              층({TOWER_BOSS_FLOOR_SEC}초, 깨면 체력 30% 회복). 체력·SP·버프는 다음 층으로 이어져요. 층마다 몬스터 체력·공격력 ×{TOWER_HP_ATK}, 방어 ×{TOWER_DEF}. 테마{" "}
-              {TOWER_THEMES.length}곳이 {FLOORS_PER_THEME}층씩 번갈아 나오고, 층을 깨면 엘리베이터를 타고 다음 층으로 (층 표시가 붉게 깜빡이면 우두머리 층). 쓰러지면 끝 (부활 쿠키 없음), Esc →
-              그만두기는 그 층까지 기록. 도전 횟수 제한은 없어요.
+              층({TOWER_BOSS_FLOOR_SEC}초, 깨면 체력 30% 회복). 체력·SP·버프는 다음 층으로 이어져요. 층마다 몬스터 체력·공격력 ×{TOWER_HP_ATK}, 방어 ×{TOWER_DEF}. 층을 깨면 엘리베이터를 타고 다음 층으로
+              가고, 층 표시가 붉게 깜빡이면 우두머리 층이에요. 쓰러지면 끝이고 부활 쿠키는 못 써요. Esc로 그만두면 그 층까지 기록돼요. 도전 횟수 제한은 없어요.
             </Item>
-            {/* 11/15 지하 서버실 테마 (lib/rpg/serverRoom) */}
-            <Item art={skillArt("em_spark")} title="지하 서버실 (1~5·11~15·21~25 …층)">
-              파란 네온과 끝없는 랙. 층마다 방이 달라요 ({SV_ROOM_NAMES.slice(0, SV_ROOMS).join("·")}, 우두머리 층은 {SV_ROOM_NAMES[SV_ROOMS]}). 기믹 「{SV_ZONE.gimmick.name}」: 한 칸에 가만히
-              서 있으면 바닥이 주황으로 달아오르다 불길이 솟아요 — 「냉각 실패」 경보(붉은 화면 테두리)면 두 배로 빨리. 10층마다 돌아올 때 판이 바뀌어요 ({SV_LOOPS.slice(1)
-                .map((l) => l.name)
-                .join(" → ")}). 몬스터: {SV_POOL.map((id) => MONSTERS[id].name).join("·")} · 정예 「{MONSTERS.sv_backup_tape.name}」(쓰러지면 최근에 쓰러진 셋을 복원) · 우두머리 「
-              {MONSTERS.sv_legacy_system.name}」 (코드 조각 탄막 → 바닥 회로 전류 → 전체 재부팅, 초록 안전 구역으로). 랜선은 감아 끌어당기고, 블루스크린에 맞으면 1초 방향이 뒤집히고, 무한
-              재부팅은 재부팅 중에 밟거나 쳐야 꺼지고, 자물쇠 사슬에 묶인 몬스터는 자물쇠부터 깨야 해요.
-            </Item>
-            {/* 11/15 끝없는 회의실 테마 (lib/rpg/towerThemes/meetingRoom) */}
-            <Item art={skillArt("so_lamp")} title={`끝없는 회의실 (${MT_FLOORS})`}>
-              유리벽 너머로 회의실이 끝없이 비치는 층. 층마다 방이 달라요 (작은 회의실·대회의실·오픈 오피스·교육장·임원 회의실·카페테리아·폰부스 복도) — 벽시계는 층마다 25분씩
-              흘러 노을 → 야근 → 새벽 → 아침으로, 10층마다 돌아올 때 몬스터 특성이 붙어요 ({MT_LOOPS.slice(1, 4)
-                .map((l) => l.trait)
-                .join("·")}). 기믹 「{MT_ZONE_DEF.gimmick.name}」: 바닥에 노란 줄이 그어지면 그 자리로 테이블이 밀려와 방이 좁아져요 (우두머리가 오래 버틸수록 더 좁게).
-              몬스터: {MT_POOL.map((id) => MONSTERS[id].name).join("·")} · 정예 「{MONSTERS[MT_ELITE].name}」(살아 있으면 계속 들어온다) · 중간 우두머리 「{MONSTERS[MT_MID].name}」
-              (내 지난 길을 되밟는 그림자) · 우두머리 「{MONSTERS[MT_BOSS].name}」 (「한 가지만 더」 → 방이 좁아지고, 끝에 의자를 돌리며 사방 사격).
+            {/* 11/15 테마는 판마다 무작위 (lib/rpg/tower towerBlock) */}
+            <Item art={skillArt("em_spark")} title="층마다 바뀌는 테마">
+              {FLOORS_PER_THEME}층마다 테마가 바뀌는데 순서는 판마다 달라요. 한 판 안에서는 아직 안 나온 테마부터 나와서 {TOWER_THEMES.length * FLOORS_PER_THEME}층을 오르면{" "}
+              {TOWER_THEMES.length}곳을 모두 만나고, 그다음부터는 방금 나온 곳만 빼고 아무 데나 나와요. 처음 들른 테마는 층마다 새 몬스터가 한두 종씩 섞여 들어오고, 같은
+              판에서 다시 들르면 판 분위기가 바뀌면서 몬스터 구성도 새로 섞여요. 블록 마지막 층에는 그 테마의 우두머리가 기다려요.
             </Item>
             {/* 11/15 능력 카드 · 상사의 제안 · 멈추면 집중 (lib/rpg/cards) */}
             <Item pic={<CardPic id="boards" />} title="능력 카드">
@@ -542,11 +552,19 @@ function pages(): Page[] {
               10층마다 우두머리를 잡으면 상사가 슬쩍 제안을 해요. 최대 체력 {Math.round(BOSS_DEAL_HP_COST * 100)}%를 내주면 희귀 이상 카드 한 장을 주고, 거절하면 체력을 가득
               채워 줘요. 기본 공격은 직접 해요 (Space·J, 누르고 있으면 계속). 가만히 서서 치면 공격 속도가 {Math.round(FOCUS_ASPD * 100)}% 빨라져요 — 피할 땐 움직이고 칠 땐 멈추는 게 요령이에요.
             </Item>
+            {/* 11/15 세트 장비·강화 */}
+            <Item art={{ shape: "sg:003", main: 0, accent: 0 }} title="세트 장비와 강화">
+              세트 장비는 야근 빌딩 상자에서만 나와요. 야근·결재·회의·출장 네 세트에 다섯 부위가 있고, 높은 층일수록 사원급에서 임원급으로 올라가요.
+              같은 세트를 두 개, 네 개 끼면 세트 효과가 붙어요. 장비 탭에서 강화하면 기본 능력치가 한 번에 5%씩 올라요. 세트 장비는 +15, 상점 장비는 +5까지예요.
+              +11부터는 실패하면 한 단계 내려가는데, 보호 문서로 막을 수 있어요. 안 쓰는 세트 장비는 분해해서 재료로 바꾸거나, 같은 직급 세 개를 원하는 부위로
+              바꿀 수 있어요.
+            </Item>
             <Item art={POTIONS[0]?.art} title="야근 빌딩 보상">
-              깬 층마다 초월 EXP 약 320 × (1 + 0.02 × 층) (1층 {floorTExp(1)} · 30층 {floorTExp(30)} · 100층 {floorTExp(100)}) — 쓰러져도 깬 층만큼. {TOWER_FLOORS_PER_RUN}층 = 초월 판
-              1판이라 하루 구간(100%·30%·10%)을 같이 써요. 우두머리 층을 깨면 우두머리 상자 (지옥 사냥터를 다 깬 판의 드롭 굴림, 하루 {TOWER_CHESTS_PER_DAY}개 — 그 뒤 상자는 비어 있어요).
-              깬 층마다 포인트 조금 (사냥 하루 한도 안). 처치 수는 주간 사냥 레이스에 들어가요. 최고 층이 오르면 시작 층이 열려요 (1·{1 + TOWER_CHECKPOINT_EVERY}·
-              {1 + TOWER_CHECKPOINT_EVERY * 2} …층).
+              올라간 층마다 초월 경험치를 받아요. 1층은 {floorTExp(1)}, 30층은 {floorTExp(30)}, 100층은 {floorTExp(100)}이고, 쓰러져도 깬 층만큼은 받아요.
+              우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있고, 세트 장비는 15%로 나와요. 7번 연속 못 받으면 다음엔 꼭 나와요.
+              꾸미기 이용권도 가끔 나와요.
+              깬 층마다 포인트도 조금 줘요 (사냥 하루 한도 안). 처치 수는 주간 사냥 레이스에 들어가요. {TOWER_CHECKPOINT_EVERY}층 우두머리를 잡으면 다음부터 {1 + TOWER_CHECKPOINT_EVERY}층에서, {TOWER_CHECKPOINT_EVERY * 2}층을 깨면{" "}
+              {1 + TOWER_CHECKPOINT_EVERY * 2}층에서 바로 시작할 수 있어요.
             </Item>
             <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="칭호·랭킹">
               층 칭호 10 「야근 입문」·20 「번아웃 생존자」·30 「야근이 일상」·50 「퇴근을 잊은 자」·100 「사무실이 집」. 신화(서버에 한 사람): 처음 30층 「최초 결재자」·50층 「최초
@@ -554,35 +572,12 @@ function pages(): Page[] {
               층 높은 순, 같으면 빨리 오른 순. 끝판이 열린 뒤 {PIONEER_DAYS}일 안에 ★51에 닿거나 {PIONEER_FLOOR}층을 넘으면 「개척자 #번호」. 운영자는 랭킹·최초·번호에서 빠져요.
             </Item>
           </ul>
-          {/* 11/15 층 순서표: 같은 층은 늘 같은 방·같은 몬스터 (★ = 그 층에서 처음 나오는 몬스터) */}
-          <table className={s.guideTable}>
-            <caption>층 순서 (1~30층 — 같은 층은 늘 같은 방·몬스터, ★ 처음 나오는 몬스터)</caption>
-            <thead>
-              <tr>
-                <th>층</th>
-                <th>방</th>
-                <th>몬스터</th>
-                <th>정예·우두머리</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scheduleRows(30).map((r) => (
-                <tr key={r.floor}>
-                  <th>{r.floor}</th>
-                  <td>
-                    {r.theme} · {r.room}
-                    {r.loop && r.floor % 10 !== 1 && r.floor % 10 !== 6 ? "" : r.loop ? ` (${r.loop})` : ""}
-                  </td>
-                  <td>{r.mons.map((m) => `${m.fresh ? "★" : ""}${m.name}`).join(", ")}</td>
-                  <td>
-                    {r.special.length
-                      ? r.special.map((x) => `${x.kind === "boss" ? "우두머리" : x.kind === "mid" ? "중간 우두머리" : "정예"} ${x.fresh ? "★" : ""}${x.name}`).join(", ")
-                      : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* 11/15 테마 카드 (테마 모음 TOWER_THEMES를 그대로 — 새 테마가 생기면 저절로 한 장 더) */}
+          <ul className={s.guideList}>
+            {TOWER_THEMES.map((id) => (
+              <ThemeCard key={id} id={id} />
+            ))}
+          </ul>
           <table className={s.guideTable}>
             <thead>
               <tr>
