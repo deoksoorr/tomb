@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { bbqItem, DRUNK_STEP_MS, type PeerInfo } from "@tomb/protocol";
-import { addFood, applyFoodView, DRUNK_NAMES, foodGauge, foodIdle, foodOfPeer, gaugeClock, RIDE_OBJECT_KINDS, swayFor, trailTint, type FoodView } from "./foodState";
+import { addFood, applyFoodView, DRUNK_NAMES, foodGauge, foodIdle, foodOfPeer, gaugeClock, RIDE_OBJECT_KINDS, swayFor, trailTint, type FoodView, bigSeatBlocked } from "./foodState";
 
 // 11/15 바베큐장 먹거리·마실 거리 효과: 커지기·빨라지기·취기는 따로 겹친다
 describe("foodFx", () => {
@@ -74,5 +74,16 @@ describe("foodFx", () => {
   it("타는 상호작용 목록 (커진 동안 막는다)", () => {
     for (const k of ["swing", "bumper", "bus", "dock", "seesaw", "trampoline", "carousel", "ferris", "balloon"]) expect(RIDE_OBJECT_KINDS.has(k)).toBe(true);
     for (const k of ["tree", "hammock", "bell", "telescope"]) expect(RIDE_OBJECT_KINDS.has(k)).toBe(false);
+  });
+});
+
+describe("11/16 2배 넘게 커지면 못 앉는 자리", () => {
+  it("캠핑카 문간·정류장 녹슨 벤치만, 2배까지는 앉는다", () => {
+    for (const id of ["qV1", "qV2", "qV3", "qB-0", "qB-1"]) {
+      expect(bigSeatBlocked(id, 2.5)).toBe(true);
+      expect(bigSeatBlocked(id, 2)).toBe(false);
+      expect(bigSeatBlocked(id, 1)).toBe(false);
+    }
+    for (const id of ["qR1", "qO1-0", "qT1-1"]) expect(bigSeatBlocked(id, 3)).toBe(false);
   });
 });

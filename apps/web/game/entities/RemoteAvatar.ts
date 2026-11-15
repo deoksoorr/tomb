@@ -1,5 +1,5 @@
 import type * as Phaser from "phaser";
-import { DIR, JUMP_MS, STATE, STATE_NAMES, seatSlot, type DirId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
+import { DIR, JUMP_MS, STATE, STATE_NAMES, seatSlotIn, type DirId, type MapId, type PeerInfo, type Sid, type StateId } from "@tomb/protocol";
 import { jumpHeight, shadowScale } from "../logic/jump";
 import { Interpolator, type InterpOut } from "../net/Interpolator";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
@@ -32,6 +32,11 @@ export class RemoteAvatar {
   private readonly out: InterpOut = { x: 0, y: 0, state: STATE.idle, dir: DIR.down };
   /** 서버 좌석 점유표에서 이 사람이 차지한 1인 자리 (의자·벤치 좌석 또는 나무·그네·해먹) */
   seatId: string | null = null;
+  /**
+   * 11/16 이 아바타가 있는 맵 (좌석 id를 그 맵 자리로 푼다). 캠핑장 씬이 "camp"로 둔다 — 마을 좌석표로만 찾으면 캠핑장 의자(q…)를 못 찾아
+   * 앉은 사람이 자리에 고정되지 않고 depth도 의자보다 낮아 통나무·캠핑 의자·벤치 뒤에 가려졌다
+   */
+  map: MapId = "village";
   /** 조각배 뒷자리처럼 다른 사람(노 젓는 사람)에 붙어 그려야 할 때의 자리 (BoatRide가 넣는다). null이면 보간 위치 */
   posOverride: { x: number; y: number } | null = null;
   /** 이름표 위 "하는 중" 글자를 씬이 정할 때 (11/16 범퍼카 「쿵 ×12」). 망원경 표시가 먼저다 */
@@ -110,7 +115,7 @@ export class RemoteAvatar {
     let y = o.y;
     this.view.depthOverride = null;
     // 차지한 자리(의자·나무·그네)에 있는 동안은 그 앵커에 고정한다 (보간이 늦어도 자리 위에 정확히)
-    const slot = this.seatId ? seatSlot(this.seatId) : undefined;
+    const slot = this.seatId ? seatSlotIn(this.map, this.seatId) : undefined;
     this.view.setDoing(slot?.kind === "telescope" ? STARGAZE_TAG : this.tag);
     // 움직이는 자리(조각배)는 앵커(나루터)에 묶지 않는다 — 배를 따라 보간 위치 그대로
     if (slot && slot.state === o.state && !slot.mobile) {

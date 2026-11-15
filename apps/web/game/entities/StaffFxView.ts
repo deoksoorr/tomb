@@ -71,6 +71,8 @@ export type StaffSync = {
   /** 물속·해먹·눕기처럼 손이 안 보이는 자세 */
   hidden: boolean;
   reduced: boolean;
+  /** 11/16 바베큐로 커진 배율 (없으면 1): 낫·손 자리·발밑 안개를 발밑 기준으로 같이 키운다 */
+  scale?: number;
 };
 
 export class StaffFxView {
@@ -94,10 +96,12 @@ export class StaffFxView {
     const side = s.dir === DIR.left || s.dir === DIR.right;
     const flip = s.dir === DIR.left;
     const bob = s.moving && !s.reduced ? Math.round(Math.sin(s.now / 110)) : 0;
+    const k = s.scale ?? 1;
+    if (this.scythe.scaleX !== k) this.scythe.setScale(k);
     this.scythe
       .setFlipX(flip)
       .setOrigin((flip ? SCYTHE_W - GRIP_X : GRIP_X) / SCYTHE_W, GRIP_Y / SCYTHE_H)
-      .setPosition(Math.round(s.x + s.hand.dx), Math.round(s.y - s.hand.up + bob))
+      .setPosition(Math.round(s.x + s.hand.dx * k), Math.round(s.y - s.hand.up * k + bob))
       // 뒷모습이면 몸 뒤, 나머지는 앞 (옆모습은 손이 앞에 있다)
       .setDepth(s.dir === DIR.up ? s.depth - 0.06 : s.depth + (side ? 0.06 : 0.04))
       .setVisible(vis && !s.hidden);
@@ -107,8 +111,9 @@ export class StaffFxView {
       const dark = i % 2 === 0;
       const breathe = s.reduced ? 0 : Math.sin(s.now / 900 + i);
       const soft = this.soft;
-      this.fog[i]
-        .setPosition(s.x + Math.cos(a) * 7, s.y - 1 + Math.sin(a * 1.3) * 1.5)
+      const f = this.fog[i];
+      if (f.scaleX !== 0.5 * k) f.setScale(0.5 * k, 0.16 * k);
+      f.setPosition(s.x + Math.cos(a) * 7 * k, s.y - 1 + Math.sin(a * 1.3) * 1.5 * k)
         .setAlpha((dark ? 0.32 + 0.06 * breathe : 0.1 + 0.04 * breathe) * (soft ?? 1))
         .setDepth(s.depth + (dark ? -0.08 : soft !== null ? -0.07 : 0.08))
         .setVisible(vis && !s.hidden);

@@ -117,6 +117,32 @@ describe("F8 effects (CosmeticFxSim)", () => {
     for (const v of [c.x, c.y, c.alpha, c.sx, c.sy, c.rot, c.depth]) expect(Number.isFinite(v)).toBe(true);
   };
 
+  it("11/16 커진 몸(scale): 날개·우산·풍선은 원래 크기 그림을 발밑 기준으로 키운다, scale 1은 그대로", () => {
+    for (const id of ["hand_umbrella", "hand_balloon", "back_wings_angel", "q_back_kite"]) {
+      const run = (o: Partial<FxInput>) => {
+        const sim = new CosmeticFxSim();
+        sim.setLook([id]);
+        const out: FxCmd[] = [];
+        sim.step(input({ reduced: true, dir: DIR.right, ...o }), out);
+        return out;
+      };
+      const base = run({});
+      expect(run({ scale: 1 }), id).toEqual(base);
+      // AvatarView는 artTop·shoulder에 이미 배율을 곱해 넘긴다
+      const big = run({ scale: 2.5, artTop: 18 * 2.5, shoulder: 7 * 2.5 });
+      expect(big.length, id).toBe(base.length);
+      expect(big.length, id).toBeGreaterThan(0);
+      big.forEach((c, i) => {
+        const b = base[i];
+        expect(c.art).toBe(b.art);
+        expect(c.x, id).toBeCloseTo(100 + (b.x - 100) * 2.5, 6);
+        expect(c.y, id).toBeCloseTo(200 + (b.y - 200) * 2.5, 6);
+        expect(c.sx, id).toBeCloseTo(b.sx * 2.5, 6);
+        expect(c.sy, id).toBeCloseTo(b.sy * 2.5, 6);
+      });
+    }
+  });
+
   it("every effect item draws something (walking, a few seconds), with valid frames", () => {
     for (const id of COSMETIC_FX_IDS) {
       const sim = new CosmeticFxSim();

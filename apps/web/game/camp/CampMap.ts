@@ -239,7 +239,9 @@ export class CampMap implements CampMapApi {
     this.prop(T.office, CAMP_OFFICE.x, CAMP_OFFICE.y, CAMP_OFFICE.y, 3);
     this.prop(T.board, CAMP_BOARD_SPOT.x, CAMP_BOARD_SPOT.y);
     // 버스 정류장
-    this.prop(T.shelter, CAMP_BUS_STOP.x, CAMP_BUS_STOP.y);
+    // 11/16 뒷벽은 벤치(qB, 정류장 − 8) 바로 뒤, 지붕·앞 기둥만 정류장 depth로 한 번 더 (앉은 사람 머리가 뒷벽에 가리지 않게)
+    this.prop(T.shelter, CAMP_BUS_STOP.x, CAMP_BUS_STOP.y, CAMP_BUS_STOP.y - 9);
+    for (const [cx, cy, cw, ch] of Art.SHELTER_FRONT) this.prop(T.shelter, CAMP_BUS_STOP.x, CAMP_BUS_STOP.y).setCrop(cx, cy, cw, ch);
     this.prop(T.busSign, CAMP_BUS_SIGN.x, CAMP_BUS_SIGN.y);
     this.prop(T.timetable, CAMP_BUS_TIMETABLE.x, CAMP_BUS_TIMETABLE.y);
     // 캠핑카 3대
