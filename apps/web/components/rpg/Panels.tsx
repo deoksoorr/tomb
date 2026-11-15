@@ -138,7 +138,7 @@ export function StartPanel({
                 {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
                 {!zoneLocked && noRace && (
                   <p className={s.warn}>
-                    이 사냥터가 열리는 레벨(Lv.{zone.unlockLevel})보다 10 넘게 높아요. EXP는 {Math.round(expCut * 100)}%만 받고, 주간 레이스(사냥 처치)에는 들어가지 않아요.
+                    이 사냥터가 열리는 레벨(Lv.{zone.unlockLevel})보다 10 넘게 높아요. EXP는 {Math.round(expCut * 100)}%만 받고, 잡은 몬스터는 사냥 랭킹과 주간 레이스에 들어가지 않아요.
                   </p>
                 )}
                 <div className={s.zoneGo}>
