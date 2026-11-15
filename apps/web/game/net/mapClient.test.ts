@@ -137,16 +137,39 @@ describe("RealtimeClient 맵 옮기기 (11/15 캠핑장)", () => {
     c.stop();
   });
 
-  it("맵을 모르는 옛 서버: 답이 없으면 4초 뒤 처음 맵으로 되돌린다", async () => {
+  it("맵을 모르는 옛 서버: 4초마다 두 번 더 보내 보고, 그래도 답이 없으면 처음 맵으로 되돌린다", async () => {
     const log: string[] = [];
     const c = new RealtimeClient({ name: "가람", color: "#e8d9b0", channel: 3 }, callbacks(log, "w"));
-    await online(c);
+    const ws = await online(c);
     vi.useFakeTimers();
     c.switchMap("camp", 156, 758);
-    expect(c.map).toBe("camp");
+    const maps = () => ws.sent.filter((d) => typeof d === "string" && d.includes('"t":"map"')).length;
+    expect(maps()).toBe(1);
     vi.advanceTimersByTime(4100);
+    expect(c.map).toBe("camp");
+    expect(maps()).toBe(2);
+    vi.advanceTimersByTime(4000);
+    expect(maps()).toBe(3);
+    expect(c.map).toBe("camp");
+    vi.advanceTimersByTime(4000);
     expect(c.map).toBe("village");
     expect(log.at(-1)).toBe("w:mapped:village:");
+    vi.useRealTimers();
+    c.stop();
+  });
+
+  it("11/16 첫 요청의 답이 없어도 다시 보낸 요청에 답이 오면 그 맵으로", async () => {
+    const log: string[] = [];
+    const c = new RealtimeClient({ name: "가람", color: "#e8d9b0", channel: 3 }, callbacks(log, "w"));
+    const ws = await online(c);
+    c.divert(callbacks(log, "c"));
+    vi.useFakeTimers();
+    c.switchMap("camp", 156, 758);
+    vi.advanceTimersByTime(4100);
+    ws.recv({ t: "mapped", m: "camp", peers: [], seats: {} });
+    vi.advanceTimersByTime(20_000);
+    expect(c.map).toBe("camp");
+    expect(log.filter((l) => l.includes("mapped"))).toEqual(["c:mapped:camp:"]);
     vi.useRealTimers();
     c.stop();
   });

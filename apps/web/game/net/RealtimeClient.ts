@@ -130,6 +130,8 @@ export type NetCallbacks = {
 const GLOBAL_CALLBACKS = ["onMegaphone", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant"] as const;
 /** 맵 옮기기 답을 기다리는 시간 */
 const MAP_REPLY_MS = 4000;
+/** 맵 옮기기 답이 없을 때 다시 보내는 횟수 (서버는 맵 요청을 1초에 한 번만 받는다 — MAP_REPLY_MS 간격이면 넉넉하다) */
+const MAP_RETRIES = 2;
 /** 맵을 옮기는 중에 버리는 옛 맵 소식 (사람·자리·몸짓·말풍선) */
 const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "goblinCaught", "chatLog", "bbq"]);
 
@@ -280,14 +282,24 @@ export class RealtimeClient {
     this.mapPending = map;
     this.peers.clear();
     this.throttle.reset();
-    this.send({ t: "map", m: map, x: Math.round(x), y: Math.round(y) });
-    // 답이 없으면 (맵을 모르는 옛 서버) 옮기지 못한 것으로 — 처음 맵 그대로, 목록은 다시 받는다
-    this.mapTimer = setTimeout(() => {
-      this.mapTimer = null;
-      if (this.mapPending === null) return;
-      this.onMapped(from, [], {});
-      this.requestSync();
-    }, MAP_REPLY_MS);
+    const msg = { t: "map", m: map, x: Math.round(x), y: Math.round(y) } as const;
+    this.send(msg);
+    // 답이 없으면 MAP_RETRIES번 다시 보낸다 (11/16 운영: 사람이 많은 채널에서 캠핑장에 내리자마자 마을로 돌아온 문의 — 서버는 같은 맵 요청을 자리 옮기기로만 받는다).
+    // 그래도 없으면 (맵을 모르는 옛 서버) 옮기지 못한 것으로 — 처음 맵 그대로, 목록은 다시 받는다
+    let tries = 0;
+    const wait = (): void => {
+      this.mapTimer = setTimeout(() => {
+        this.mapTimer = null;
+        if (this.mapPending !== map) return;
+        if (tries++ < MAP_RETRIES && this.online) {
+          this.send(msg);
+          return wait();
+        }
+        this.onMapped(from, [], {});
+        this.requestSync();
+      }, MAP_REPLY_MS);
+    };
+    wait();
     this.emitStatus();
     return true;
   }
