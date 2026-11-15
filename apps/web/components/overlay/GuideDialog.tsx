@@ -42,7 +42,6 @@ import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { BRANCH_INFO, BRANCHES, POTIONS, TIER_GATES } from "@/lib/rpg/catalog";
 import { SKILL_SLOTS } from "@/lib/rpg/hotbar";
 import { PIONEER_DAYS, PIONEER_FLOOR } from "@/lib/rpg/endgame";
-import { TOWER_CHESTS_PER_DAY } from "@/lib/rpg/tower";
 import { MAX_LEVEL } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
@@ -299,13 +298,13 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
           <Table head={["하는 일", "컴퓨터", "휴대폰"]} rows={HUNT_KEYS} />
           <ul className={styles.points}>
             <li>
-              {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비·물약을 되파는 값도 이 한도 안이고, 넘으면 EXP와 드롭만 받아요. 상점에서 산 장비 되팔기는 한도와 상관없어요. 곤충 잡기·별자리 잇기는 사냥과 따로 하루 ${won(earnRule("mini").dailyMax)}P까지예요.`}
+              {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비·물약을 되파는 값도 이 한도 안이고, 넘으면 EXP와 드롭만 받아요. 상점에서 산 장비 되팔기는 한도와 상관없어요. 벌레 잡기와 별자리 잇기는 사냥과 따로, 게임마다 하루 ${won(earnRule("bugs").dailyMax)}P까지예요.`}
             </li>
             <li>
               {`레벨 ${MAX_LEVEL}부터는 지옥 사냥터·야근 빌딩 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요(초월 5레벨마다 능력치 1포인트). 하루에 할 수 있는 판 수 제한은 없어요.`}
             </li>
             <li>
-              {`야근 빌딩(마을 북쪽 분양 사무소 옆, 사냥 레벨 ${MAX_LEVEL}부터)은 1층부터 쓰러질 때까지 이어서 오르는 곳이에요. 층이 오를수록 몬스터가 세지고 10층부터 저주(물약 절반·물약 금지·회복 절반·몬스터 빨라짐·제한 시간 −20%·정예 섞임)가 쌓여요. 깬 층마다 초월 EXP(쓰러져도 깬 만큼), 5층마다 우두머리 상자(하루 ${TOWER_CHESTS_PER_DAY}개). 도전은 무제한이고, 최고 기록 아래 1·11·21…층에서 시작할 수 있어요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51 또는 ${PIONEER_FLOOR}층을 처음 넘으면 칭호 「개척자 #번호」, 서버에서 처음 30·50·100층을 깬 사람과 지금 최고 층 주인은 신화 칭호.`}
+              {`야근 빌딩(마을 북쪽 분양 사무소 옆, 사냥 레벨 ${MAX_LEVEL}부터)은 1층부터 쓰러질 때까지 이어서 오르는 곳이에요. 층이 오를수록 몬스터가 세지고 10층부터 저주(물약 절반·물약 금지·회복 절반·몬스터 빨라짐·제한 시간 −20%·정예 섞임)가 쌓여요. 깬 층마다 초월 EXP(쓰러져도 깬 만큼), 5층마다 우두머리 상자. 도전은 무제한이고, 최고 기록 아래 1·11·21…층에서 시작할 수 있어요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51 또는 ${PIONEER_FLOOR}층을 처음 넘으면 칭호 「개척자 #번호」, 서버에서 처음 30·50·100층을 깬 사람과 지금 최고 층 주인은 신화 칭호.`}
             </li>
             <li>자세한 공격·스킬·패턴·끝판은 사냥터의 [사냥 안내서]에서 봐요.</li>
           </ul>

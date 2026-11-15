@@ -10,6 +10,7 @@ import type { GameContext } from "./scenes/context";
 import { ShopScene } from "./scenes/ShopScene";
 import { installRenderGuard } from "./renderGuard";
 import { WorldScene } from "./scenes/WorldScene";
+import { installWorldTint } from "./world/worldTint";
 
 // Phaser 게임 생성. GameCanvas가 브라우저에서만 동적 import 한다 (Phaser는 이 경로로만 로드된다).
 
@@ -36,6 +37,8 @@ export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHan
       autoRound: true,
     },
     render: { powerPreference: "high-performance", antialiasGL: false },
+    // 마을 색조를 화면 곱하기 판 대신 셰이더로 (맵은 그대로, 캐릭터는 절반만 — game/world/worldTint)
+    callbacks: { postBoot: (g) => void installWorldTint(g) },
     physics: {
       default: "arcade",
       arcade: { gravity: { x: 0, y: 0 }, debug: false, fixedStep: false },

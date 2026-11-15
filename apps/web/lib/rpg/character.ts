@@ -1,4 +1,5 @@
 import {
+  GEAR,
   gearById,
   GEAR_SLOTS,
   HOTBAR_SIZE,
@@ -17,6 +18,7 @@ import { TOWER_FLOORS_PER_RUN } from "./tower";
 import { checkAllocation, checkLearn, cleanAlloc, SKILL_TREE_VERSION, skillPointsEarned, spentPoints, type Alloc } from "./skillRules";
 import { arrangeHotbar, cleanAuto, emptySlotFor, type HotAuto } from "./hotbar";
 import type { CharacterState } from "./types";
+import { encodeShopPiece, MAT_MAX, normalizeSg, SG_INV_MAX, sgUid, shopEnhOf, SHOP_ENH_MAX, shopPieceOf, syncEquip } from "./setGear";
 
 // 캐릭터 상태를 바꾸는 순수 함수들. 저장소(메모리·Redis)는 이 함수를 원자적 갱신(CAS) 안에서 부른다.
 // 규칙을 어기면 RpgError를 던지고, 라우트가 그대로 한국어 에러로 돌려준다.
@@ -112,9 +114,7 @@ export function normalize(raw: unknown): CharacterState {
     // 능력치 초기화 횟수: 옛 저장값에는 없다 → 0
     statResets: Number.isInteger(r.statResets) && r.statResets! > 0 ? r.statResets! : 0,
     ...(notice ? { treeNotice: true } : {}),
-    inv: { ...(r.inv ?? base.inv) },
     bought: { ...r.bought },
-    equip: { ...base.equip, ...(r.equip ?? {}) },
     potions: { ...(r.potions ?? base.potions) },
     // 11/15 끝판: 옛 저장값에는 없다 → 0 (초월 능력치 포인트는 초월 레벨이 오를 때 한 번만 더한다 — gainTranscend)
     tLevel: nat(r.tLevel, TRANSCEND_MAX),
@@ -131,8 +131,59 @@ export function normalize(raw: unknown): CharacterState {
     ...(typeof r.fWk === "string" && /^\d{8}$/.test(r.fWk) ? { fWk: r.fWk } : { fWk: undefined }),
     ...(typeof r.tDay === "string" && /^\d{8}$/.test(r.tDay) ? { tDay: r.tDay } : { tDay: undefined }),
     ...(r.pioneer && nat(r.pioneer.n) > 0 && Number.isFinite(r.pioneer.at) ? { pioneer: { n: r.pioneer.n, at: r.pioneer.at } } : { pioneer: undefined }),
+    // 11/15 세트 장비·재료·강화 (옛 저장값에는 없다 → 빈 가방·0). 장착 칸은 가방·강화 원본에 다시 맞춘다
+    ...normSg(r, { ...base.equip, ...(r.equip ?? {}) }, r.inv ?? base.inv),
   };
 }
+
+/** 11/15 세트 장비 칸 정리 + 장착 칸 맞추기 (lib/rpg/setGear syncEquip) */
+function normSg(r: Partial<CharacterState>, equip0: CharacterState["equip"], inv0: Record<string, number>) {
+  const norm = normalizeSg(r.sg, r.sgN);
+  const sg = norm.sg;
+  let sgN = norm.sgN;
+  // 11/15 강화한 상점 장비 한 개씩 (si). 번호가 세트 장비와 겹치거나 형식이 틀리면 버린다
+  const used = new Set(sg.map((c) => sgUid(c)));
+  const si: string[] = [];
+  for (const c of Array.isArray(r.si) ? r.si : []) {
+    const p = typeof c === "string" ? shopPieceOf(c) : null;
+    if (!p || !isShopGear(p.id) || used.has(p.u)) continue;
+    used.add(p.u);
+    sgN = Math.max(sgN, p.u + 1);
+    si.push(encodeShopPiece(p));
+  }
+  // 예전 저장값: 장비 id마다 붙던 강화(enh)를 그 장비 한 개에만 옮긴다 (낀 것이 있으면 그것, 없으면 가방의 한 개)
+  const inv = { ...inv0 };
+  let equip = { ...equip0 };
+  for (const [id, e0] of Object.entries(r.enh ?? {})) {
+    const e = nat(e0, SHOP_ENH_MAX);
+    if (!e || !isShopGear(id) || (inv[id] ?? 0) < 1) continue;
+    const code = encodeShopPiece({ id, e, u: sgN++, f: nat(r.enhF?.[id], 50) });
+    si.push(code);
+    if (inv[id] === 1) delete inv[id];
+    else inv[id] -= 1;
+    const slot = GEAR_SLOTS.find((k) => !!equip[k] && !shopPieceOf(equip[k]) && shopEnhOf(equip[k]!)[0] === id);
+    if (slot) equip = { ...equip, [slot]: code };
+  }
+  const m = r.mats;
+  return {
+    inv,
+    sg,
+    si,
+    sgN,
+    sgPity: nat(r.sgPity, 1000),
+    mats: { doc: nat(m?.doc, MAT_MAX), seal: nat(m?.seal, MAT_MAX), prot: nat(m?.prot, MAT_MAX) },
+    ...(typeof r.protWk === "string" && /^[\w-]{4,12}$/.test(r.protWk) ? { protWk: r.protWk, protN: nat(r.protN, 99) } : { protWk: undefined, protN: 0 }),
+    enh: undefined,
+    enhF: undefined,
+    sgDone: nat(r.sgDone, 15),
+    sg15: Array.isArray(r.sg15) ? r.sg15.filter((u) => nat(u) > 0).slice(-SG_INV_MAX) : [],
+    enhMax: nat(r.enhMax, 15),
+    equip: syncEquip(equip, sg, si),
+  };
+}
+
+/** 상점 장비 id인가 (세트 장비 코드·강화 표시 붙은 id는 아니다) */
+export const isShopGear = (id: string) => GEAR.some((g) => g.id === id);
 
 const clone = (s: CharacterState): CharacterState => structuredClone(s);
 
@@ -274,8 +325,10 @@ export function fitSkillBudget(s: CharacterState, budget: number): CharacterStat
 }
 
 /** 그 장비가 장착된 칸 수 */
-export const equippedCount = (s: CharacterState, id: string) => GEAR_SLOTS.filter((k) => s.equip[k] === id).length;
-const gearCount = (s: CharacterState) => Object.values(s.inv).reduce((a, b) => a + b, 0);
+/** 그 장비가 장착된 칸 수 (묶음에서 낀 것만 — 강화해서 떼어 낸 한 개는 따로) */
+export const equippedCount = (s: CharacterState, id: string) => GEAR_SLOTS.filter((k) => !!s.equip[k] && !shopPieceOf(s.equip[k]) && shopEnhOf(s.equip[k]!)[0] === id).length;
+/** 상점·주운 장비 수 (묶음 + 강화해서 떼어 낸 것) */
+export const gearCount = (s: CharacterState) => Object.values(s.inv).reduce((a, b) => a + b, 0) + (s.si?.length ?? 0);
 
 /** level: 요구 레벨 검사에 쓰는 레벨 (테스트 서버 슈퍼 계정은 서비스가 최대 레벨을 넘긴다) */
 export function equip(s: CharacterState, slot: GearSlot, id: string | null, level = s.level): CharacterState {
@@ -284,19 +337,21 @@ export function equip(s: CharacterState, slot: GearSlot, id: string | null, leve
     next.equip[slot] = null;
     return next;
   }
-  const g = gearById(id);
+  // 11/15 세트 장비는 따로 (lib/rpg/enhance equipSg — 가방의 번호로만 낀다)
+  const g = isShopGear(id) ? gearById(id) : undefined;
   if (!g) throw new RpgError(400, "INVALID_INPUT", "없는 장비예요.");
   if (g.kind !== slotKind(slot)) throw new RpgError(400, "WRONG_SLOT", "그 칸에는 낄 수 없는 장비예요.");
   if (level < g.reqLevel) throw new RpgError(409, "LEVEL_LOW", `레벨 ${g.reqLevel}부터 낄 수 있어요.`);
   const owned = s.inv[id] ?? 0;
-  const usedElsewhere = equippedCount(s, id) - (s.equip[slot] === id ? 1 : 0);
+  const cur = s.equip[slot];
+  const usedElsewhere = equippedCount(s, id) - (cur && !shopPieceOf(cur) && shopEnhOf(cur)[0] === id ? 1 : 0);
   if (owned - usedElsewhere < 1) throw new RpgError(409, "NOT_OWNED", "가방에 그 장비가 없어요.");
   next.equip[slot] = id;
   return next;
 }
 
 export function addGear(s: CharacterState, id: string, bought: boolean): CharacterState {
-  if (!gearById(id)) throw new RpgError(400, "INVALID_INPUT", "없는 장비예요.");
+  if (!isShopGear(id)) throw new RpgError(400, "INVALID_INPUT", "없는 장비예요.");
   if (gearCount(s) >= GEAR_INV_MAX) throw new RpgError(409, "INVENTORY_FULL", `장비는 ${GEAR_INV_MAX}개까지 가질 수 있어요. 안 쓰는 것을 팔아 주세요.`);
   const next = clone(s);
   next.inv[id] = (next.inv[id] ?? 0) + 1;
@@ -309,7 +364,7 @@ export function addGear(s: CharacterState, id: string, bought: boolean): Charact
  * 드롭으로 얻은 것을 팔면 sellValue를 사냥 포인트(하루 한도 안)로 준다 → 드롭 되팔기로 한도를 넘지 못한다.
  */
 export function removeGearForSale(s: CharacterState, id: string): { state: CharacterState; bought: boolean; value: number } {
-  if (!gearById(id)) throw new RpgError(400, "INVALID_INPUT", "없는 장비예요.");
+  if (!isShopGear(id)) throw new RpgError(400, "INVALID_INPUT", "없는 장비예요.");
   const r = removeForSale(s, id, 1);
   return { state: r.state, bought: r.bought > 0, value: r.unit };
 }
@@ -328,7 +383,7 @@ export function removeForSale(
   count: number,
 ): { state: CharacterState; kind: "gear" | "potion"; bought: number; drop: number; unit: number } {
   if (!Number.isInteger(count) || count < 1 || count > SELL_MAX) throw new RpgError(400, "INVALID_INPUT", "팔 개수가 맞지 않아요.");
-  const g = gearById(id);
+  const g = isShopGear(id) ? gearById(id) : undefined;
   const p = g ? undefined : potionById(id);
   if (!g && !p) throw new RpgError(400, "INVALID_INPUT", "없는 물건이에요.");
   const next = clone(s);
@@ -360,12 +415,35 @@ export function removeForSale(
 export function returnUnsold(s: CharacterState, id: string, n: number): CharacterState {
   if (n <= 0) return s;
   const next = clone(s);
-  if (gearById(id)) next.inv[id] = (next.inv[id] ?? 0) + n;
+  // 11/15 강화한 한 개(코드)는 그 코드 그대로 되돌린다
+  if (shopPieceOf(id)) next.si = [...(next.si ?? []), id];
+  else if (isShopGear(id)) next.inv[id] = (next.inv[id] ?? 0) + n;
   else if (potionById(id)) next.potions[id] = Math.min(POTION_MAX_STACK, (next.potions[id] ?? 0) + n);
   return next;
 }
 
 export const sellValue = (price: number) => Math.floor(price * SELL_RATE);
+
+/**
+ * 11/15 강화한 상점 장비 한 개 되팔기 (번호로). 장착 중이면 못 판다. 산 기록이 묶음보다 많으면 산 것으로 쳐서 환불,
+ * 아니면 주운 것 (사냥 포인트 한도 안). 강화 값은 쳐 주지 않는다 (값은 장비 값의 50%). code = 되돌릴 때 쓰는 코드
+ */
+export function removePieceForSale(s: CharacterState, uid: number): { state: CharacterState; kind: "gear"; bought: number; drop: number; unit: number; code: string; id: string } {
+  const code = (s.si ?? []).find((c) => shopPieceOf(c)?.u === uid);
+  const p = code ? shopPieceOf(code) : null;
+  const g = p ? gearById(p.id) : undefined;
+  if (!code || !p || !g) throw new RpgError(404, "NOT_OWNED", "가방에 그 장비가 없어요.");
+  if (GEAR_SLOTS.some((k) => s.equip[k] === code)) throw new RpgError(409, "NOT_OWNED", "장착 중인 장비는 먼저 빼고 팔아 주세요.");
+  const next = clone(s);
+  next.si = (next.si ?? []).filter((c) => c !== code);
+  const had = s.bought[p.id] ?? 0;
+  const bought = had > (s.inv[p.id] ?? 0) ? 1 : 0;
+  if (bought) {
+    if (had === 1) delete next.bought[p.id];
+    else next.bought[p.id] = had - 1;
+  }
+  return { state: next, kind: "gear", bought, drop: 1 - bought, unit: sellValue(g.price), code, id: p.id };
+}
 
 export function addPotions(s: CharacterState, id: string, qty: number): CharacterState {
   if (!potionById(id)) throw new RpgError(400, "INVALID_INPUT", "없는 포션이에요.");
@@ -415,13 +493,13 @@ export function gainTranscend(s: CharacterState, exp: number): { state: Characte
 /** 드롭 장비는 가방이 가득 차면 버린다 (판 결과는 그대로 받는다) */
 export function addDrops(
   s: CharacterState,
-  drops: { kind: "gear" | "potion" | "cosmetic"; id: string; qty: number }[],
+  drops: { kind: "gear" | "potion" | "cosmetic" | "set" | "mat"; id: string; qty: number }[],
 ): { state: CharacterState; lost: number } {
   let cur = s;
   let lost = 0;
   for (const d of drops) {
-    // 기간제 코디는 계정 가방으로 (service.finishRun)
-    if (d.kind === "cosmetic") continue;
+    // 기간제 코디는 계정 가방으로 (service.finishRun). 11/15 세트 장비·재료는 lib/rpg/enhance grantSgDrops가 먼저 넣는다
+    if (d.kind === "cosmetic" || d.kind === "set" || d.kind === "mat") continue;
     try {
       if (d.kind === "gear") cur = addGear(cur, d.id, false);
       else cur = addPotions(cur, d.id, Math.min(d.qty, POTION_MAX_STACK - (cur.potions[d.id] ?? 0)) || 0);

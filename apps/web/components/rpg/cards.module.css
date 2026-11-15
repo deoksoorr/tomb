@@ -89,15 +89,18 @@
 
 /* 카드 한 장: 뒤집혀 들어온다 (앞면·뒷면) */
 .card {
-  --frame: #8a7a62;
-  --frame-hi: #c8b894;
-  --frame-lo: #4a4234;
-  --face: #2a2620;
-  --tag: #c8b894;
+  --frame: #84848c;
+  --frame-hi: #c8c8d0;
+  --frame-lo: #38383e;
+  --face: #26262b;
+  --tag: #c0c0c8;
+  /* 11/15 높이: 가장 긴 설명 + 단계 + 수치 변화 줄이 다 들어가게 (한 줄에 놓인 카드는 늘 같은 높이) */
+  --card-h: 272px;
   position: relative;
-  flex: 0 1 178px;
+  display: grid;
+  flex: 0 1 184px;
   min-width: 0;
-  height: 232px;
+  min-height: var(--card-h);
   padding: 0;
   border: 0;
   background: none;
@@ -110,7 +113,8 @@
   transition: transform 140ms ease;
 }
 
-.rare {
+/* 11/15 다섯 등급: 일반 회색 · 매직 파랑 · 레어 금색 · 유니크 주황 · 전설 보라 */
+.magic {
   --frame: #3a78c8;
   --frame-hi: #9ad0ff;
   --frame-lo: #1e3a6a;
@@ -118,12 +122,89 @@
   --tag: #9ad0ff;
 }
 
-.legend {
-  --frame: #d8a03a;
-  --frame-hi: #fff0a0;
-  --frame-lo: #6a3a10;
-  --face: #2e1a14;
+.rare {
+  --frame: #c89a2a;
+  --frame-hi: #ffe58a;
+  --frame-lo: #5a4010;
+  --face: #2a2312;
   --tag: #ffd84a;
+}
+
+.unique {
+  --frame: #e0782a;
+  --frame-hi: #ffc890;
+  --frame-lo: #6a2a08;
+  --face: #2e1a10;
+  --tag: #ffa860;
+}
+
+.legend {
+  --frame: #9a5ae8;
+  --frame-hi: #ecd0ff;
+  --frame-lo: #3a1a6a;
+  --face: #1e1430;
+  --tag: #dcb0ff;
+  animation-name: flipLegend;
+  animation-duration: 1050ms;
+}
+
+/* 전설: 뒷면인 채로 떠올라 떨다가 빛을 터뜨리며 뒤집힌다 */
+@keyframes flipLegend {
+  0% {
+    transform: translateY(40px) rotateY(180deg) scale(0.7);
+    opacity: 0;
+  }
+  25% {
+    transform: translateY(-6px) rotateY(180deg) scale(1.02);
+    opacity: 1;
+  }
+  45% {
+    transform: translateY(-6px) rotateY(180deg) rotateZ(-2deg) scale(1.04);
+  }
+  55% {
+    transform: translateY(-6px) rotateY(180deg) rotateZ(2deg) scale(1.04);
+  }
+  80% {
+    transform: translateY(-10px) rotateY(0deg) scale(1.1);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* 뒤집히는 순간 뒤에서 터지는 빛 (유니크 작게, 전설 크게) */
+.burst {
+  position: absolute;
+  inset: -30%;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--frame-hi) 70%, transparent) 0 6deg, transparent 6deg 22deg),
+    radial-gradient(circle, color-mix(in srgb, var(--frame-hi) 90%, transparent) 0 18%, color-mix(in srgb, var(--frame) 50%, transparent) 40%, transparent 68%);
+  animation: burst 900ms ease-out both;
+  animation-delay: calc(var(--i) * 110ms + 380ms);
+}
+
+.legend .burst {
+  inset: -70%;
+  animation: burst 1300ms ease-out both;
+  animation-delay: calc(var(--i) * 110ms + 760ms);
+}
+
+@keyframes burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.3) rotate(40deg);
+  }
 }
 
 @keyframes flipIn {
@@ -151,16 +232,25 @@
 
 .face,
 .back {
-  position: absolute;
-  inset: 0;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
 
+.back {
+  position: absolute;
+  inset: 0;
+}
+
+.face {
+  position: relative;
+}
+
 .face {
   display: grid;
-  /* 그림 · 등급 · 이름 · (가진 카드면 단계) · 설명 — 단계가 없으면 설명이 넷째 줄, 남는 칸은 맨 아래 */
-  grid-template-rows: auto auto auto auto 1fr;
+  /* 그림 · 등급 · 이름 · (가진 카드면 단계 · 수치 변화) · 설명 — 없으면 설명이 위로 붙고, 남는 칸은 맨 아래 */
+  grid-template-rows: auto auto auto auto auto 1fr;
+  /* 좁은 카드에서도 긴 줄이 카드 밖으로 밀어내지 않게 */
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   justify-items: center;
   gap: 4px;
@@ -203,22 +293,55 @@
   font-size: 14px;
 }
 
-/* 전설: 테두리에 빛이 흐른다 */
-.legend .face::before {
+/* 전설: 보랏빛이 카드 위로 흐른다 · 유니크: 주황 빛이 천천히 */
+.legend .face::before,
+.unique .face::before {
   content: "";
   position: absolute;
   inset: -40%;
-  background: conic-gradient(from 0deg, transparent 0 70%, rgba(255, 240, 160, 0.35) 80%, transparent 90%);
+  background: conic-gradient(from 0deg, transparent 0 70%, rgba(236, 208, 255, 0.4) 80%, transparent 90%);
   animation: spin 2.4s linear infinite;
   pointer-events: none;
 }
 
-.legend {
-  filter: drop-shadow(0 0 10px rgba(255, 216, 74, 0.55));
+.unique .face::before {
+  background: conic-gradient(from 0deg, transparent 0 82%, rgba(255, 200, 140, 0.28) 88%, transparent 94%);
+  animation-duration: 3.6s;
 }
 
-.rare {
-  filter: drop-shadow(0 0 6px rgba(122, 184, 255, 0.35));
+.legend .face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.18) 45%, rgba(200, 160, 255, 0.25) 50%, transparent 65%);
+  background-size: 300% 100%;
+  animation: shimmer 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.legend .face {
+  filter: drop-shadow(0 0 12px rgba(180, 120, 255, 0.65));
+}
+
+.unique .face {
+  filter: drop-shadow(0 0 9px rgba(255, 140, 60, 0.5));
+}
+
+.rare .face {
+  filter: drop-shadow(0 0 6px rgba(255, 216, 74, 0.35));
+}
+
+.magic .face {
+  filter: drop-shadow(0 0 5px rgba(122, 184, 255, 0.3));
 }
 
 @keyframes spin {
@@ -379,8 +502,8 @@
     gap: 8px;
   }
   .card {
-    flex-basis: 116px;
-    height: 220px;
+    flex-basis: 118px;
+    --card-h: 318px;
   }
   .face {
     padding: 8px 6px 10px;
@@ -397,6 +520,16 @@
     font-size: 10px;
     line-height: 1.45;
   }
+  .level {
+    padding: 1px 4px;
+    font-size: 10px;
+    white-space: normal;
+    word-break: keep-all;
+    text-align: center;
+  }
+  .stackLine {
+    font-size: 9px;
+  }
   .title {
     font-size: 19px;
   }
@@ -408,11 +541,17 @@
     gap: 8px;
   }
   .card {
-    height: 196px;
+    --card-h: 0px;
   }
   .art {
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
+  }
+  .head {
+    gap: 0;
+  }
+  .title {
+    font-size: 17px;
   }
 }
 
@@ -421,7 +560,10 @@
   .title,
   .chosen,
   .dropped,
-  .legend .face::before {
+  .legend .face::before,
+  .legend .face::after,
+  .unique .face::before,
+  .burst {
     animation: none;
   }
 }
@@ -498,13 +640,30 @@
   display: block;
 }
 
-.iconRare {
+/* 11/15 등급 테두리 (일반 회색 · 매직 파랑 · 레어 금색 · 유니크 주황 · 전설 보라) */
+.icon[data-tier="common"] {
+  box-shadow: 0 0 0 1px #6a6a72;
+}
+
+.icon[data-tier="magic"] {
   box-shadow: 0 0 0 1px #3a78c8;
 }
 
-.iconLegend {
-  box-shadow: 0 0 0 1px #d8a03a;
-  background: rgba(60, 40, 10, 0.7);
+.icon[data-tier="rare"] {
+  box-shadow: 0 0 0 1px #c89a2a;
+  background: rgba(50, 40, 10, 0.7);
+}
+
+.icon[data-tier="unique"] {
+  box-shadow: 0 0 0 1px #e0782a;
+  background: rgba(60, 28, 8, 0.7);
+}
+
+.icon[data-tier="legend"] {
+  box-shadow:
+    0 0 0 1px #9a5ae8,
+    0 0 6px rgba(180, 120, 255, 0.6);
+  background: rgba(40, 20, 70, 0.75);
 }
 
 .count {
@@ -540,4 +699,139 @@
 .tip span {
   font-family: var(--font-small);
   color: #d8ceb0;
+}
+
+/* 11/15 가진 카드: 지금 수치 → 더해진 수치 */
+.stackLine {
+  max-width: 100%;
+  word-break: keep-all;
+  color: #ffe08a;
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.tipTier {
+  display: block;
+  margin-bottom: 2px;
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.tipTier[data-tier="common"] {
+  color: #c0c0c8;
+}
+.tipTier[data-tier="magic"] {
+  color: #9ad0ff;
+}
+.tipTier[data-tier="rare"] {
+  color: #ffd84a;
+}
+.tipTier[data-tier="unique"] {
+  color: #ffa860;
+}
+.tipTier[data-tier="legend"] {
+  color: #dcb0ff;
+}
+
+/* ── 11/15 능력치 판 (StatBox) ── */
+
+.statBox {
+  justify-self: start;
+  display: grid;
+  gap: 4px;
+  width: 230px;
+  max-width: calc(100vw - 24px);
+  padding: 6px 9px 8px;
+  background: var(--panel);
+  box-shadow: var(--px-border);
+  pointer-events: auto;
+  font-size: 11px;
+}
+
+.statHead,
+.statOpen {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.statHead kbd,
+.statOpen kbd {
+  margin-left: auto;
+  padding: 0 3px;
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.statOpen {
+  justify-self: start;
+  padding: 4px 8px;
+  background: var(--panel);
+  box-shadow: var(--px-border);
+  pointer-events: auto;
+}
+
+.statRows {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+}
+
+.statRows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.statRows dt {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.statRows dd {
+  margin: 0;
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+
+.statRows dd b {
+  margin-left: 4px;
+  color: #7ae08a;
+  font-weight: 400;
+  font-size: 10px;
+}
+
+.statRows dd b.statMinus {
+  color: #ff8a7a;
+}
+
+.statChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding-top: 3px;
+  border-top: 1px solid var(--line);
+}
+
+.statChips span {
+  padding: 0 4px;
+  background: rgba(122, 224, 138, 0.08);
+  box-shadow: 0 0 0 1px rgba(122, 224, 138, 0.35);
+  color: #a8e8b0;
+  font-family: var(--font-small);
+  font-size: 9px;
+  white-space: nowrap;
 }

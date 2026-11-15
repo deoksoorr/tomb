@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { tExpToNext, TRANSCEND_EXP_MUL } from "@/lib/rpg/endgame";
-import { floorTExp, TOWER_FLOOR_POINTS, towerPlan } from "@/lib/rpg/tower";
+import { floorTExp, TOWER_FLOOR_POINTS, towerPlan, towerZone } from "@/lib/rpg/tower";
 import { getTowerStore } from "@/lib/rpg/towerStore";
 import { getMegaphone } from "@/lib/store";
 import type { MonsterId } from "@/lib/rpg/catalog";
@@ -135,7 +135,7 @@ describe("초월 판 보상", () => {
 /** 시작 층부터 floors층을 깨고 다음 층에서 쓰러진 결과 (층마다 45초) */
 function climbed(s: RunStartResponse, floors: number, extra: object = {}) {
   const kills: Partial<Record<MonsterId, number>> = {};
-  for (let i = 0; i < floors; i++) for (const w of towerPlan(s.seed, s.tower! + i)) for (const m of w.monsters) kills[m] = (kills[m] ?? 0) + 1;
+  for (let i = 0; i < floors; i++) for (const w of towerPlan(s.seed, s.tower! + i, s.tower!)) for (const m of w.monsters) kills[m] = (kills[m] ?? 0) + 1;
   return { game: "hunt" as const, durationMs: floors * 45_000 + 3_000, kills, wavesCleared: 0, died: true, potionsUsed: {}, floors, floorMs: floors * 45_000, ...extra };
 }
 const climbMs = (floors: number) => floors * 45_000 + 4_000;
@@ -152,10 +152,10 @@ describe("야근 빌딩 시작 검사 (서버)", () => {
     expect(r2.status).toBe(403);
     expect(await errCode(r2)).toBe("TOWER_LOCKED");
     expect((await start.POST(call("/api/rpg/run/start", v, startBody(5)))).status).toBe(400);
-    // 11층은 열렸다 — 사냥터는 화면이 보낸 것과 상관없이 층으로 정한다 (11/15: 11층 = 지하 서버실)
+    // 11층은 열렸다 — 사냥터는 화면이 보낸 것과 상관없이 판 시드로 정한다 (11/15: 테마 순서는 판마다 무작위)
     const ok = await begin(v, 11, "burnout-abyss");
     expect(ok.tower).toBe(11);
-    expect(ok.zone).toBe("server-room");
+    expect(ok.zone).toBe(towerZone(ok.seed, 11, 11).id);
     expect(ok.tier).toBeUndefined();
     // 시작할 때는 초월 판을 세지 않는다 (캐릭터 저장 없음)
     expect((await getRpgStore().get(v.id)).tRuns).toBe(0);
@@ -167,7 +167,7 @@ describe("야근 빌딩 시작 검사 (서버)", () => {
     const v = await newVisitor();
     for (let i = 0; i < 7; i++) expect((await begin(v, 1)).tower).toBe(1);
     const view = (await (await rpg.GET(call("/api/rpg", v))).json()) as RpgView;
-    expect(view.endgame?.tower).toEqual({ best: 0, week: null, checkpoints: [1], chests: 0, chestsMax: 15 });
+    expect(view.endgame?.tower).toEqual({ best: 0, week: null, checkpoints: [1], chests: 0, chestsMax: 0 });
     expect(view.endgame?.day.runs).toBe(0);
   });
 });
@@ -205,12 +205,12 @@ describe("야근 빌딩 판 끝 정산", () => {
     expect(q.reward.tower).toMatchObject({ floors: 3, best: 3 });
   });
 
-  it("우두머리 상자는 하루 15개까지 — 그 뒤 층은 기록·EXP만", async () => {
+  it("11/15 우두머리 상자는 하루 개수 제한 없음", async () => {
     const v = await newVisitor({ level: 50, tDay: kstDay(), tChest: 14 });
     const s = await begin(v, 1);
     const r = await end(v, s, climbed(s, 10), climbMs(10));
-    expect(r.reward.tower).toMatchObject({ chests: [5], emptyChests: 1 });
-    expect((await getRpgStore().get(v.id)).tChest).toBe(15);
+    expect(r.reward.tower).toMatchObject({ chests: [5, 10], emptyChests: 0 });
+    expect((await getRpgStore().get(v.id)).tChest).toBe(16);
   });
 });
 

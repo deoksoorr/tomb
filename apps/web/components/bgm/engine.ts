@@ -85,7 +85,7 @@ class BgmEngine {
         .then(parseManifest)
         .catch(() => []);
       // 처음 들어오면 저장해 둔 목록과 상관없이 로파이의 아무 곡부터 (그 뒤 고른 목록은 이 탭에서 그대로 따른다)
-      const start = randomStart(playlists, FIRST_PLAYLIST_ID);
+      const start = randomStart(playlists);
       const startTracks = playlists.find((p) => p.id === start.playlistId)?.tracks.length ?? 0;
       this.order = shuffledOrder(startTracks, start.index);
       const savedVolume = readItem(LS.volume);

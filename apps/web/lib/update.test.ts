@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countdownLeft, decideUpdate, IDLE_RELOAD_MS, REQUIRED_COUNTDOWN_MS, RETURN_WINDOW_MS, versionLevel, type UpdateInput } from "./update";
+import { CHECK_VISIBLE_MS, CHECK_WAITING_MS, countdownLeft, decideUpdate, IDLE_RELOAD_MS, nextCheckDelay, REQUIRED_COUNTDOWN_MS, RETURN_WINDOW_MS, VERSION_CDN_SEC, versionLevel, type UpdateInput } from "./update";
 
 const idle = { hard: false, soft: false };
 const at = (o: Partial<UpdateInput>): UpdateInput => ({
@@ -12,6 +12,19 @@ const at = (o: Partial<UpdateInput>): UpdateInput => ({
   requiredAt: null,
   deployReady: true,
   ...o,
+});
+
+describe("nextCheckDelay", () => {
+  it("숨은 탭은 타이머 없음, 보이는 탭은 평소/기다리는 중 주기", () => {
+    expect(nextCheckDelay({ hidden: true, waiting: false })).toBeNull();
+    expect(nextCheckDelay({ hidden: true, waiting: true })).toBeNull();
+    expect(nextCheckDelay({ hidden: false, waiting: false })).toBe(CHECK_VISIBLE_MS);
+    expect(nextCheckDelay({ hidden: false, waiting: true })).toBe(CHECK_WAITING_MS);
+  });
+
+  it("웹 배포 뒤 늦어도 2분 안에 알아챈다 (확인 주기 + CDN 캐시)", () => {
+    expect(CHECK_VISIBLE_MS + VERSION_CDN_SEC * 1000).toBeLessThanOrEqual(2 * 60_000);
+  });
 });
 
 describe("versionLevel", () => {

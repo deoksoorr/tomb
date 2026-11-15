@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { addCanvasTexture } from "../assets/manifest";
 import { DEPTH } from "../config";
 import { CosmeticFxSim, FX_ART, type FxArtId, type FxCmd, type FxInput } from "../sprites/cosmeticFx";
+import { markCharTint } from "../world/charTint";
 
 // F8 꾸미기 연출(우산·풍선·날개·발자국·오라·펫)을 Phaser 이미지로 그린다. 움직임은 CosmeticFxSim(상점 미리보기와 같은 계산)이 정하고
 // 여기서는 명령마다 이미지 하나를 돌려 쓴다 (텍스처는 처음 쓸 때 만든다).
@@ -23,9 +24,10 @@ function ensureTex(scene: Phaser.Scene, art: FxArtId): string {
  */
 /**
  * ground = 바닥 층 depth (또는 "body" = 몸 depth 바로 아래 — 탑승 장면처럼 그림이 순서대로 쌓이는 곳).
- * noCull = 화면 밖 생략을 하지 않는다 (탑승 장면은 카메라 worldView가 그림 좌표와 맞지 않는다)
+ * noCull = 화면 밖 생략을 하지 않는다 (탑승 장면은 카메라 worldView가 그림 좌표와 맞지 않는다).
+ * staffSoft = 운영자 오라·발밑 안개를 몸 뒤로 보내고 투명도에 곱할 값 (사냥 화면: 사냥 장비를 가리지 않게. 없으면 그대로 화려하게)
  */
-export type CfxDepth = { ground: number | "body"; lightOnBody: boolean; noCull?: true };
+export type CfxDepth = { ground: number | "body"; lightOnBody: boolean; noCull?: true; staffSoft?: number };
 
 export class CosmeticFxView {
   private readonly sim = new CosmeticFxSim();
@@ -60,6 +62,7 @@ export class CosmeticFxView {
       const by = input.aura?.base ?? input.headY;
       input.offscreen = input.x < view.x - m || input.x > view.right + m || by < view.y - m || by > view.bottom + m + 40;
     }
+    if (this.depthCfg?.staffSoft !== undefined) input.staffSoft = this.depthCfg.staffSoft;
     this.sim.step(input, this.cmds);
     let i = 0;
     for (; i < this.cmds.length; i++) {
@@ -67,7 +70,7 @@ export class CosmeticFxView {
       let img = this.pool[i];
       const key = ensureTex(this.scene, c.art);
       if (!img) {
-        img = this.scene.add.image(0, 0, key, c.frame);
+        img = markCharTint(this.scene.add.image(0, 0, key, c.frame));
         this.pool.push(img);
       } else if (img.texture.key !== key || String(img.frame.name) !== String(c.frame)) img.setTexture(key, c.frame);
       const cfg = this.depthCfg;

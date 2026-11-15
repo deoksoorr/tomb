@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { CHECK_HIDDEN_MS, CHECK_VISIBLE_MS, CHECK_WAITING_MS, versionLevel, type UpdateLevel } from "@/lib/update";
+import { VersionPoller, type VersionStatus } from "@/lib/versionPoller";
 import { useBridgeValue } from "./useBridge";
 
 /**
@@ -20,81 +20,46 @@ export function versionTracker(baseline: string | null): (current: string) => bo
   };
 }
 
-export type VersionStatus = {
-  level: UpdateLevel;
-  /** 새로고침하면 실제로 새 빌드를 받는지 (실시간 서버만 먼저 바뀌었으면 false) */
-  deployReady: boolean;
-};
+export type { VersionStatus } from "@/lib/versionPoller";
 
 /**
- * 배포 버전 확인: 보이는 탭은 2분마다, 숨은 탭은 5분마다, 창으로 돌아올 때 바로.
- * 실시간 서버가 옛 버전이라 거절했는데(app:outdated) 아직 새 배포가 안 보이면 15초마다 다시 본다.
- * 단계는 내려가지 않는다 (한 번 새 버전을 봤으면 새로고침 전까지 안내를 유지).
+ * 새 버전 확인 (일정은 lib/versionPoller.ts): 보이는 탭은 90초마다, 숨은 탭은 묻지 않고 다시 보일 때 한 번.
+ * 실시간 서버가 옛 버전이라 거절했으면(app:outdated) 바로 큰 패치 단계 + 새 배포가 보일 때까지 15초마다.
  */
 export function useNewVersion(): VersionStatus {
   const [status, setStatus] = useState<VersionStatus>({ level: "none", deployReady: false });
   const rejected = useBridgeValue("app:outdated") !== undefined;
-  const rejectedRef = useRef(rejected);
-  const statusRef = useRef(status);
-  useEffect(() => {
-    rejectedRef.current = rejected;
-    statusRef.current = status;
-  }, [rejected, status]);
+  const poller = useRef<VersionPoller | null>(null);
 
   useEffect(() => {
-    let base = process.env.NEXT_PUBLIC_APP_VERSION || null;
-    let alive = true;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const RANK: Record<UpdateLevel, number> = { none: 0, patch: 1, required: 2 };
-
-    const schedule = () => {
-      if (timer) clearTimeout(timer);
-      const s = statusRef.current;
-      const waiting = (rejectedRef.current || s.level === "required") && !s.deployReady;
-      const ms = waiting ? CHECK_WAITING_MS : document.hidden ? CHECK_HIDDEN_MS : CHECK_VISIBLE_MS;
-      timer = setTimeout(() => void check(), ms);
-    };
-    const check = async () => {
-      try {
-        const info = await api.version();
-        if (!alive) return;
-        if (!base) base = info.version;
-        const next = versionLevel(base, info);
-        setStatus((prev) => {
-          const level = RANK[next.level] > RANK[prev.level] ? next.level : prev.level;
-          const deployReady = prev.deployReady || next.deployReady;
-          if (level === prev.level && deployReady === prev.deployReady) return prev;
-          return { level, deployReady };
-        });
-      } catch {
-        // 확인 실패는 다음 주기에
-      }
-      if (alive) schedule();
-    };
-    const onVisible = () => {
-      if (!document.hidden) void check();
-    };
-    void check();
-    window.addEventListener("focus", onVisible);
-    document.addEventListener("visibilitychange", onVisible);
+    const p = new VersionPoller({
+      fetchVersion: () => api.version(),
+      isHidden: () => document.hidden,
+      now: () => Date.now(),
+      setTimer: (fn, ms) => setTimeout(fn, ms),
+      clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
+      baseline: process.env.NEXT_PUBLIC_APP_VERSION || null,
+      onChange: setStatus,
+    });
+    poller.current = p;
+    p.start();
+    const onVisibility = () => (document.hidden ? p.onHidden() : p.onVisible());
+    const onShow = () => p.onVisible();
+    window.addEventListener("focus", onShow);
+    window.addEventListener("pageshow", onShow);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      alive = false;
-      if (timer) clearTimeout(timer);
-      window.removeEventListener("focus", onVisible);
-      document.removeEventListener("visibilitychange", onVisible);
+      p.stop();
+      poller.current = null;
+      window.removeEventListener("focus", onShow);
+      window.removeEventListener("pageshow", onShow);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
-  // 실시간 서버가 거절했으면 /api/version을 기다리지 않고 바로 큰 패치 단계로. 새 배포가 보이는지 바로 확인한다
+  // 실시간 서버가 거절했으면 /api/version을 기다리지 않고 바로 큰 패치 단계로. 새 배포가 보이는지 바로·자주 확인한다
   useEffect(() => {
-    if (!rejected) return;
-    void api.version().then(
-      (info) => {
-        const base = process.env.NEXT_PUBLIC_APP_VERSION || null;
-        if (base && info.version !== base) setStatus((prev) => (prev.deployReady ? prev : { ...prev, deployReady: true }));
-      },
-      () => {},
-    );
+    if (rejected) poller.current?.markRejected();
   }, [rejected]);
 
   return rejected ? { level: "required", deployReady: status.deployReady } : status;

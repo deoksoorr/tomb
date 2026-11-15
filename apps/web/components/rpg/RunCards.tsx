@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트라 next/image 최적화가 필요 없다 */
 import { useEffect, useRef, useState } from "react";
 import { cardIconUrl } from "@/game/rpg/cards/cardArt";
-import { CARDS, cardText, type CardId } from "@/lib/rpg/cards";
+import { CARDS, cardText, RARITY_NAME, type CardId } from "@/lib/rpg/cards";
 import type { RpgHud } from "@/lib/rpg/types";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -42,7 +42,8 @@ export default function RunCards({ run }: { run: NonNullable<RpgHud["run"]> }) {
               <button
                 key={id}
                 type="button"
-                className={cx(c.icon, def.rarity === "rare" && c.iconRare, def.rarity === "legend" && c.iconLegend)}
+                className={c.icon}
+                data-tier={def.rarity}
                 onPointerEnter={(e) => {
                   if (e.pointerType !== "mouse") return;
                   byTouch.current = false;
@@ -70,6 +71,9 @@ export default function RunCards({ run }: { run: NonNullable<RpgHud["run"]> }) {
             {CARDS[shown].name}
             {(run.cards.find((x) => x.id === shown)?.n ?? 1) > 1 ? ` ×${run.cards.find((x) => x.id === shown)!.n}` : ""}
           </strong>
+          <em className={c.tipTier} data-tier={CARDS[shown].rarity}>
+            {RARITY_NAME[CARDS[shown].rarity]}
+          </em>
           <span>{cardText(shown, run.kind)}</span>
         </div>
       )}

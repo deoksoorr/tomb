@@ -12,6 +12,7 @@ export const HUNT_KEYS: readonly (readonly [string, string])[] = [
   ["X", "스킬 자동 한꺼번에 켜기·끄기"],
   ...POTIONS.filter((p) => p.key).map((p) => [p.key!, p.name] as const),
   ["Esc", "멈춤"],
+  ["C", "능력치 판 펴기·접기"],
   ["H", "키 안내 띄우기·숨기기"],
 ];
 

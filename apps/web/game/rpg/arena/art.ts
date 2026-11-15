@@ -6,6 +6,12 @@ import { AH, AW, PROP_META, SIDE, TOP, type ArenaLayout, type Decal, type Region
 import { serverRoomFloor, serverRoomWall, SV_PROPS, SV_SIDE } from "../../tower/themes/serverRoomMap";
 // 11/15 야근 빌딩 끝없는 회의실 (층마다 다른 배경은 MeetingRoom이 이 위에 한 장 더 깐다)
 import { MT_THEME } from "../../tower/themes/meetingRoomArt";
+// 11/15 야근 빌딩 지하 주차장·구내식당 바닥·벽·소품
+import { parkingFloor, parkingWall, PK_PROPS, PK_SIDE } from "../../tower/themes/parkingMap";
+import { cafeteriaFloor, cafeteriaWall, CF_PROPS, CF_SIDE } from "../../tower/themes/cafeteriaMap";
+// 11/15 야근 빌딩 옥상 정원 폭풍·임원층 바닥·벽·소품
+import { rooftopFloor, rooftopWall, RF_PROPS, RF_SIDE } from "../../tower/themes/rooftopMap";
+import { execFloor, execWall, EX_PROPS, EX_SIDE } from "../../tower/themes/execMap";
 
 // 40번 사냥터 그림 (캔버스 2D, Phaser 없이 — 로비 미리보기도 같은 함수로 그린다).
 // 바닥(벽·무늬·납작한 구역 포함)은 한 장, 키 있는 소품은 따로 (깊이 정렬), 움직이는 것(벨트·창밖·문)은 Arena가 따로 띄운다.
@@ -496,6 +502,12 @@ const THEMES: Record<ZoneId, Theme> = {
   // 11/15 야근 빌딩 지하 서버실 (game/tower/themes/serverRoomMap.ts)
   "server-room": { side: SV_SIDE, floor: (c, l) => serverRoomFloor(c, l.decals, l.variant), wall: (c, l) => serverRoomWall(c, l.variant) },
   mt_meeting: MT_THEME,
+  // 11/15 지하 주차장·구내식당 (game/tower/themes/parkingMap.ts·cafeteriaMap.ts)
+  pk_parking: { side: PK_SIDE, floor: (c, l) => parkingFloor(c, l), wall: (c, l) => parkingWall(c, l) },
+  // 11/15 옥상 정원 폭풍·임원층 (game/tower/themes/rooftopMap.ts·execMap.ts)
+  rf_rooftop: { side: RF_SIDE, floor: (c, l) => rooftopFloor(c, l), wall: (c, l) => rooftopWall(c, l) },
+  ex_exec: { side: EX_SIDE, floor: (c, l) => execFloor(c, l), wall: (c, l) => execWall(c, l) },
+  cf_cafeteria: { side: CF_SIDE, floor: (c, l) => cafeteriaFloor(c, l), wall: (c, l) => cafeteriaWall(c, l) },
 };
 
 // ── 바닥 무늬 ──
@@ -1082,6 +1094,12 @@ const PROPS: Record<string, PropPaint> = {
   },
   // 11/15 지하 서버실 랙·냉각기·UPS
   ...SV_PROPS,
+  // 11/15 지하 주차장·구내식당
+  ...PK_PROPS,
+  ...CF_PROPS,
+  // 11/15 옥상 정원 폭풍·임원층
+  ...RF_PROPS,
+  ...EX_PROPS,
 };
 
 /** 소품 하나의 그림 (Arena가 kind·v·flip마다 텍스처로 한 번 등록) */
@@ -1197,6 +1215,10 @@ export const PARTICLE_COLORS: Record<ZoneId, Color[]> = {
   "layoff-day": [0xf2ead3, 0xffffff, 0xe8e4d8],
   "server-room": [0x6ad0ff, 0x3a8aff],
   mt_meeting: [0xffe0b0, 0xfff4e0],
+  pk_parking: [0xc8ccd4, 0x8a8e96],
+  cf_cafeteria: [0xfff4e0, 0xf0e8d8],
+  rf_rooftop: [0xa8d8ff, 0xd8f0ff],
+  ex_exec: [0xffe8a0, 0xfff4d8],
 };
 
 /** 로비 카드 미리보기: 지도 + 소품 + 우두머리와 몬스터 몇 마리 (반 크기) */
@@ -1269,4 +1291,10 @@ export const AMBIENT: Record<ZoneId, { color: Color; alpha: number }> = {
   "server-room": { color: 0x5a6ab8, alpha: 0.4 },
   // 끝없는 회의실은 시계(층)마다 빛이 달라서 MeetingRoom이 따로 덮는다
   mt_meeting: { color: 0xffffff, alpha: 0 },
+  // 11/15 지하 주차장은 판(정전 …)마다 어둠이 달라서 실행부가 더 곱해 넣는다 (overlay.ts)
+  pk_parking: { color: 0x8a96b0, alpha: 0.35 },
+  cf_cafeteria: { color: 0xfff4e0, alpha: 0 },
+  // 11/15 옥상 정원 폭풍은 비 오는 밤 (판마다 더 어두운 건 실행부가 곱해 넣는다 — overlay.ts), 임원층은 금빛 오후
+  rf_rooftop: { color: 0x5a6aa0, alpha: 0.45 },
+  ex_exec: { color: 0xffe8c8, alpha: 0.12 },
 };

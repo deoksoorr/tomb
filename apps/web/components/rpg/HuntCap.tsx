@@ -4,7 +4,7 @@ import { SELL_RATE } from "@/lib/rpg/character";
 import type { RpgView } from "@/lib/rpg/types";
 import c from "./HuntCap.module.css";
 
-// 오늘 사냥 포인트 막대: "오늘 사냥 포인트 n / 600P". 숫자는 서버가 준 view.today (economy.ts의 hunt dailyMax와 오늘 받은 양).
+// 오늘 사냥 포인트 막대: "오늘 사냥 포인트 n / 1200P". 숫자는 서버가 준 view.today (economy.ts의 hunt dailyMax와 오늘 받은 양).
 // 한도에 닿으면 주운 물건은 내일 팔 수 있다고 안내한다 (산 장비 되팔기는 환불이라 한도와 상관없다).
 
 type Where = "start" | "bag" | "result";

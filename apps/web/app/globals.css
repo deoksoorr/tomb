@@ -56,6 +56,8 @@
   --moss: #9fc5a8;
   --moss-deep: #2f4234;
   --candle: #e0c36a;
+  /* 11/15 강화로 붙은 몫 "(+N)" (장비창·강화 창·전투 능력). 능력 카드 몫(초록)과 겹치지 않는 따뜻한 주황 */
+  --enh: #ffa04a;
   --danger: #d08a76;
   --status-ok: #8fc27a;
   --status-busy: #e0c36a;

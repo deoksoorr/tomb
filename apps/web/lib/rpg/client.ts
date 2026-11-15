@@ -4,6 +4,7 @@ import { REALTIME_HTTP_URL } from "../realtime";
 import { HUNT_ZONES, isZoneId, type Difficulty, type GameKind, type GearSlot, type SkillId, type Stats, type ZoneId } from "./catalog";
 import type { HotAuto } from "./hotbar";
 import type { RpgView, RunFinishResponse, RunResult, RunStartResponse, SoldInfo } from "./types";
+import type { GearActionResponse } from "./gearService";
 
 // 브라우저 → 사냥터 API. 실패하면 서버의 한국어 메시지를 담은 ApiRequestError를 던진다 (lib/api의 request).
 
@@ -20,11 +21,21 @@ export type CharacterAction =
 
 export type ShopResponse = RpgView & { sold?: SoldInfo };
 
+/** 11/15 세트 장비·강화 (app/api/rpg/gear) */
+export type GearAction =
+  | { type: "enhance"; sg?: number; shop?: string; piece?: number; protect: boolean; cost: number }
+  | { type: "reroll"; uid: number; lock: string | null; cost: number }
+  | { type: "exchange"; uids: number[]; set: number; piece: number }
+  | { type: "disassemble"; uids: number[] }
+  | { type: "equip"; slot: GearSlot; uid: number | null };
+
 export const rpgApi = {
   view: () => request<RpgView>("/api/rpg", { cache: "no-store" }),
   character: (a: CharacterAction) => request<RpgView>("/api/rpg/character", post(a)),
   buy: (itemId: string, qty = 1) => request<ShopResponse>("/api/rpg/shop", post({ type: "buy", itemId, qty })),
   sell: (itemId: string, count = 1) => request<ShopResponse>("/api/rpg/shop", post({ type: "sell", itemId, count })),
+  /** 11/15 강화한 장비 한 개 되팔기 (번호) */
+  sellPiece: (itemId: string, piece: number) => request<ShopResponse>("/api/rpg/shop", post({ type: "sell", itemId, piece })),
   // planVer: 별자리 잇기 화면이 쓰는 계획 판 번호 (서버가 티켓에 실어 그 판으로 검사한다)
   // tower: 11/15 야근 빌딩 시작 층 (지옥 사냥만 — 사냥터는 서버가 층으로 정한다)
   start: (game: GameKind, difficulty: Difficulty, zone?: ZoneId, planVer?: number, tower?: number) =>
@@ -33,6 +44,7 @@ export const rpgApi = {
       post({ game, difficulty, ...(game === "hunt" && zone ? { zone } : {}), ...(planVer ? { planVer } : {}), ...(tower ? { tower } : {}) }),
     ),
   finish: (ticket: string, result: RunResult) => request<RunFinishResponse>("/api/rpg/run/finish", post({ ticket, result })),
+  gear: (a: GearAction) => request<GearActionResponse>("/api/rpg/gear", post(a)),
 };
 
 // ── 11/12 사냥터별 지금 사냥 중인 인원 ──

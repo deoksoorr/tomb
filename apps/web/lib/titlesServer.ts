@@ -172,6 +172,12 @@ async function readFacts(accountId: string, now: number): Promise<{ facts: Title
     tlv: rpg?.tLevel ?? 0,
     floor: rpg?.fBest ?? 0,
     pioneer: rpg?.pioneer?.n ?? 0,
+    // 11/15 세트 장비: 4세트 처음 완성(비트) · 가장 높은 강화 (사냥 캐릭터에서 같이 읽는다 — 명령 추가 없음)
+    sgOvertime: (rpg?.sgDone ?? 0) & 1 ? 1 : 0,
+    sgApproval: (rpg?.sgDone ?? 0) & 2 ? 1 : 0,
+    sgMeeting: (rpg?.sgDone ?? 0) & 4 ? 1 : 0,
+    sgTrip: (rpg?.sgDone ?? 0) & 8 ? 1 : 0,
+    enh: rpg?.enhMax ?? 0,
     ...(rpg?.pioneer ? { pioneerAt: rpg.pioneer.at } : {}),
     kills: l?.kills ?? 0,
     hard: l?.hard ?? 0,

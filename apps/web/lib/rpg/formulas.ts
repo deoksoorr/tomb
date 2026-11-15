@@ -1,5 +1,6 @@
 import { DIFFS, gearById, GEAR_SLOTS, MONSTERS, STAT_KEYS, type Bonus, type Difficulty, type GearSlot, type MonsterId, type Stats } from "./catalog";
 import { weaponArea } from "./weapons";
+import { sgStatic } from "./setGear";
 
 // 성장·전투 공식 (서버 검증과 게임이 같은 함수를 쓴다). 숫자는 라그나로크 느낌을 살리되 단순하게.
 
@@ -82,19 +83,21 @@ export const ATK_PER_STR = 3;
 export function derive(level: number, stats: Stats, equip: Partial<Record<GearSlot, string | null>>): Derived {
   const b = gearBonus(equip);
   const s = Object.fromEntries(STAT_KEYS.map((k) => [k, stats[k] + b[k]])) as Stats;
+  // 11/15 세트 장비 옵션·2세트 효과 (비율). 세트 장비가 없으면 모두 0 → 예전 값 그대로
+  const g = sgStatic(equip);
   return {
     stats: s,
-    maxHp: Math.round((90 + level * 14 + b.hp) * (1 + s.vit * 0.02)),
-    maxSp: Math.round((24 + level * 3 + b.sp) * (1 + s.int * 0.02)),
-    atk: s.str * ATK_PER_STR + Math.floor(s.dex / 4) + Math.floor(s.luk / 5) + level + b.atk,
+    maxHp: Math.round((90 + level * 14 + b.hp) * (1 + s.vit * 0.02) * (1 + g.hpPct)),
+    maxSp: Math.round((24 + level * 3 + b.sp) * (1 + s.int * 0.02) * (1 + g.spPct)),
+    atk: Math.round((s.str * ATK_PER_STR + Math.floor(s.dex / 4) + Math.floor(s.luk / 5) + level + b.atk) * (1 + g.atkPct)),
     def: b.def + Math.floor(s.vit / 2),
     // 재미 위주: 기본 공격을 초당 3회로(후딜레이 약 0.33초). 어려움은 몬스터 패턴으로 준다
-    aspd: round2(clamp(3 + s.agi * 0.03 + s.dex * 0.01 + b.aspd, 1, 6)),
-    crit: round2(clamp(1 + s.luk * 0.3 + b.crit, 0, 60)),
+    aspd: round2(clamp((3 + s.agi * 0.03 + s.dex * 0.01 + b.aspd) * (1 + g.aspdPct), 1, 6)),
+    crit: round2(clamp(1 + s.luk * 0.3 + b.crit + g.crit, 0, 60)),
     hit: level + s.dex + b.hit,
     flee: level + s.agi + Math.floor(s.luk / 5) + b.flee,
-    move: Math.round(80 + s.agi * 0.5 + b.move),
-    skillPower: round2(1 + s.int * 0.015),
+    move: Math.round((80 + s.agi * 0.5 + b.move) * (1 + g.movePct)),
+    skillPower: round2((1 + s.int * 0.015) * (1 + g.skillPct)),
   };
 }
 
@@ -212,3 +215,10 @@ export function seeded(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/**
+ * 11/15 사냥 중 초당 SP 회복 (예전 1 + 최대 SP 1%). 스킬 한 줄을 다 돌리려면 초당 SP가 10 넘게 들어 SP에 자주 막혔다 —
+ * 조금만 올린다 (몬스터가 몰려 있으면 광역 스킬이 여러 마리를 쳐서, 판 안 측정으로는 예전에도 스킬 몫이 40~65%였다)
+ */
+export const HUNT_SP_REGEN = { base: 1.5, pct: 0.015 } as const;
+export const huntSpRegen = (maxSp: number) => HUNT_SP_REGEN.base + maxSp * HUNT_SP_REGEN.pct;

@@ -1,0 +1,610 @@
+/* 11/15 사냥 장비창: 왼쪽 인형·능력치, 오른쪽 가방 (폰은 한 줄로: 인형 → 칸 → 목록) */
+
+.wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.left,
+.right {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.left {
+  position: sticky;
+  top: 0;
+}
+
+/* 인형 무대를 조금 작게 (왼쪽 칸이 좁아서 칸 이름이 잘리지 않게) */
+.left [role="group"] {
+  --scale: 3;
+}
+
+/* 세트 효과 진행 */
+.sets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.setChip {
+  --set: var(--muted);
+  padding: 2px 6px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--set) 45%, var(--line));
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.setChip[data-on] {
+  color: var(--bone);
+  box-shadow:
+    0 0 0 1px var(--set),
+    inset 0 0 8px color-mix(in srgb, var(--set) 30%, transparent);
+}
+
+.setChip b {
+  color: var(--set);
+  font-weight: 400;
+}
+
+/* 가방 거르기 칸 */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tabs button {
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+.tabs button[aria-selected="true"] {
+  background: var(--moss-deep);
+  color: var(--bone);
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}
+
+.mats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 6px 8px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.mat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mat b {
+  color: var(--bone);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.groupHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-top: 4px;
+  padding-bottom: 2px;
+  border-bottom: 2px solid var(--line);
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 13px;
+}
+
+.groupHead small {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.groupHead button {
+  min-height: 32px;
+}
+
+.list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 가방 한 줄 */
+.row {
+  --grade: var(--text);
+  display: grid;
+  background: var(--bg-deep);
+  box-shadow:
+    0 0 0 1px var(--line),
+    inset 3px 0 0 var(--grade);
+}
+
+.row[data-low] {
+  opacity: 0.55;
+}
+
+.row[data-open] {
+  background: rgba(47, 66, 52, 0.55);
+  box-shadow:
+    0 0 0 2px var(--candle),
+    inset 3px 0 0 var(--grade);
+}
+
+.pick {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.pick:focus-visible {
+  outline: 2px solid var(--candle);
+  outline-offset: -2px;
+}
+
+.icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--grade) 24%, transparent), transparent 70%), var(--surface);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--grade) 70%, var(--line));
+}
+
+.enh {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  padding: 0 2px;
+  background: rgba(0, 0, 0, 0.78);
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 13px;
+}
+
+.enh[data-tier="1"] {
+  color: #8cc8ff;
+}
+
+.enh[data-tier="2"] {
+  color: #d0a8ff;
+}
+
+.enh[data-tier="3"] {
+  color: #ffd76a;
+}
+
+.count {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  padding: 0 2px;
+  background: rgba(0, 0, 0, 0.7);
+  color: var(--bone);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.info {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  color: var(--grade);
+  font-family: var(--font-read);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+.opts {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.tag {
+  justify-self: end;
+  padding: 0 6px;
+  background: var(--moss-deep);
+  color: var(--moss);
+  font-family: var(--font-small);
+  font-size: 10px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* 고른 장비 자세히 */
+.detail {
+  display: grid;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.diff {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 2px 10px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.diff div {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.diff dt {
+  color: var(--muted);
+}
+
+.diff dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.up {
+  color: #8fd27a;
+}
+
+.down {
+  color: #e0806a;
+}
+
+.optList {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.optList li::before {
+  content: "· ";
+  color: var(--muted);
+}
+
+.legend {
+  color: #ffd76a;
+}
+
+.setFx {
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.setFx [data-on] {
+  color: var(--bone);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.actions > button {
+  flex: 1 1 88px;
+  min-height: 44px;
+}
+
+.note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.confirm {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(208, 138, 118, 0.12);
+  box-shadow: 0 0 0 1px var(--danger);
+  color: var(--bone);
+  font-size: 12px;
+}
+
+/* 결과 칩 (판 결과 주운 것) */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .wrap {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 폰: 인형 → 가방 칸·목록 → 전투 능력 */
+  .left {
+    display: contents;
+  }
+
+  .right {
+    order: 2;
+  }
+
+  .statBox {
+    order: 3;
+  }
+}
+
+/* ── 강화 창 ── */
+
+.enhance {
+  display: grid;
+  gap: 12px;
+}
+
+.enhTop {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.bigIcon {
+  --grade: var(--text);
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--grade) 30%, transparent), transparent 70%), var(--bg-deep);
+  box-shadow: 0 0 0 2px var(--grade);
+}
+
+.bigIcon[data-fx="ok"] {
+  animation: enhOk 0.9s ease-out;
+}
+
+.bigIcon[data-fx="fail"] {
+  animation: enhFail 0.5s ease-out;
+}
+
+@keyframes enhOk {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  25% {
+    transform: scale(1.18);
+    filter: brightness(2.2) drop-shadow(0 0 14px #ffd76a);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes enhFail {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+    filter: grayscale(0.8);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+.levels {
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 22px;
+}
+
+.levels span {
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.rate {
+  color: var(--candle);
+  font-size: 15px;
+}
+
+.costs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+
+.costs [data-short] {
+  color: var(--danger);
+}
+
+.result {
+  padding: 8px 10px;
+  background: var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--line);
+  font-size: 14px;
+}
+
+.result[data-ok] {
+  color: #ffd76a;
+  box-shadow: 0 0 0 2px #c8a040;
+  animation: resultIn 0.5s ease-out;
+}
+
+.result[data-bad] {
+  color: #e0806a;
+  animation: resultIn 0.4s ease-out;
+}
+
+@keyframes resultIn {
+  from {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 13px;
+}
+
+.toggle input {
+  width: 20px;
+  height: 20px;
+}
+
+.lockList {
+  display: grid;
+  gap: 4px;
+}
+
+.lockList label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 8px;
+  background: var(--bg-deep);
+  font-size: 13px;
+}
+
+.lockList label[data-new] {
+  box-shadow: 0 0 0 1px var(--candle);
+}
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.picker button {
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.picker button[aria-pressed="true"] {
+  background: var(--moss-deep);
+  color: var(--bone);
+  box-shadow: 0 0 0 2px var(--candle);
+}
+
+/* 강화로 더해진 몫 "(+136)" */
+.enhPart {
+  color: var(--enh);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 전투 능력 요약 안에서는 작게 */
+dd .enhPart {
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+/* 강화 미리보기: 다음 단계 몫은 조금 더 밝게 */
+.enhNext {
+  filter: brightness(1.15);
+  font-weight: 700;
+}
+
+.tick {
+  display: inline-block;
+  animation: tick 0.6s ease-out;
+}
+
+.statRows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 2px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.statRows li {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.statRows li > span {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.statRows b {
+  white-space: nowrap;
+  color: var(--bone);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes tick {
+  0% {
+    transform: translateY(-6px) scale(1.25);
+    opacity: 0.3;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}

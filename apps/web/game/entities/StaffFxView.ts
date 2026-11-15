@@ -2,13 +2,14 @@ import * as Phaser from "phaser";
 import { DIR, type DirId } from "@tomb/protocol";
 import { addCanvasTexture, TEX } from "../assets/manifest";
 import { makeCanvas } from "../sprites/pixel";
+import type { CfxDepth } from "./CosmeticFxView";
+import { markCharTint } from "../world/charTint";
 
-// 31번 운영자 계정의 저승사자 차림: 검은 망토(AvatarView가 색을 STAFF_COLOR로 바꾼다) + 손에 든 낫 + 발밑에 은은한 안개.
+// 31번 운영자 계정의 저승사자 차림: 손에 든 낫 + 발밑에 은은한 안개. 몸·색·염색은 그 사람이 고른 그대로 (가방·상점에 보이는 모습과 같게).
+// 검은 저승사자 모습을 원하면 운영자 전용 몸(저승사자, STAFF_BODIES)을 고른다.
 // 이름표는 일반 유저와 같다 (11/15: 장식 판은 칭호와 겹쳐 과해서 뺐다). 머리 위 「운영자」 칭호는 TitleView가 그린다.
 // 운영자 표시는 실시간 서버가 입장 토큰(Vercel 서명)에서 받은 것만 오므로 흉내 낼 수 없다.
 
-/** 저승사자 망토 색 표기 (기본|머리|몸|포인트): 거의 검은 두건·망토, 보랏빛 회색 목도리 */
-export const STAFF_COLOR = "#3a3446|#2b2734|#24212c|#6f6488";
 // 낫 그림 (오른쪽을 보고 든 모습). L 외곽선, S 날, H 날 반짝임, W 자루, w 자루 그늘
 const SCYTHE = [
   "....LLLLL....",
@@ -75,12 +76,14 @@ export type StaffSync = {
 export class StaffFxView {
   private readonly scythe: Phaser.GameObjects.Image;
   private readonly fog: Phaser.GameObjects.Image[] = [];
+  /** 사냥 화면(scene.data "cfxDepth".staffSoft): 안개를 모두 몸 뒤로 보내고 투명도에 이 값을 곱한다. 마을·집은 1 (그대로) */
+  private readonly soft: number | null;
   constructor(scene: Phaser.Scene) {
-    this.scythe = scene.add.image(0, 0, ensureScythe(scene));
+    this.soft = (scene.data?.get("cfxDepth") as CfxDepth | undefined)?.staffSoft ?? null;
+    this.scythe = markCharTint(scene.add.image(0, 0, ensureScythe(scene)));
     for (let i = 0; i < 4; i++)
       this.fog.push(
-        scene.add
-          .image(0, 0, TEX.glow)
+        markCharTint(scene.add.image(0, 0, TEX.glow))
           .setTint(i % 2 ? 0x8a7cb0 : 0x15121c)
           .setBlendMode(i % 2 ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL)
           .setScale(0.5, 0.16),
@@ -103,10 +106,11 @@ export class StaffFxView {
       const a = s.now / 2100 + i * 1.7;
       const dark = i % 2 === 0;
       const breathe = s.reduced ? 0 : Math.sin(s.now / 900 + i);
+      const soft = this.soft;
       this.fog[i]
         .setPosition(s.x + Math.cos(a) * 7, s.y - 1 + Math.sin(a * 1.3) * 1.5)
-        .setAlpha(dark ? 0.32 + 0.06 * breathe : 0.1 + 0.04 * breathe)
-        .setDepth(s.depth + (dark ? -0.08 : 0.08))
+        .setAlpha((dark ? 0.32 + 0.06 * breathe : 0.1 + 0.04 * breathe) * (soft ?? 1))
+        .setDepth(s.depth + (dark ? -0.08 : soft !== null ? -0.07 : 0.08))
         .setVisible(vis && !s.hidden);
     }
   }

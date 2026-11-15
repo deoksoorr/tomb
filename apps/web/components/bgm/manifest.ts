@@ -51,16 +51,16 @@ export function trackSrc(file: string, base: string | undefined = process.env.NE
   return b + file.slice("/bgm".length);
 }
 
-/** 처음 들어오면(입장 화면·마을 모두) 저장해 둔 목록과 상관없이 이 플레이리스트로 시작한다 */
+/** 곡 목록을 받기 전 자리 표시용 플레이리스트 (실제 첫 곡은 randomStart가 아무 플레이리스트에서 고른다 — 11/15 로파이 고정 → 무작위) */
 export const FIRST_PLAYLIST_ID = "lofi";
 
 /**
- * 처음 들어올 때 시작할 곡: firstId 플레이리스트(기본 로파이)의 아무 곡. 그 목록이 없으면 아무 플레이리스트의 아무 곡.
+ * 처음 들어올 때 시작할 곡: 아무 플레이리스트의 아무 곡. firstId를 주면 그 플레이리스트의 아무 곡 (없으면 아무 플레이리스트).
  * rand는 [0,1) (테스트에서 고정값을 넣는다)
  */
 export function randomStart(
   playlists: readonly Playlist[],
-  firstId: string | null = FIRST_PLAYLIST_ID,
+  firstId: string | null = null,
   rand: () => number = Math.random,
 ): { playlistId: string | null; index: number } {
   const first = playlists.find((p) => p.id === firstId);

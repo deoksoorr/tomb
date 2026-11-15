@@ -25,18 +25,25 @@ import {
 } from "./plan";
 import {
   CLOCK_SLACK_MS,
-  HUNT_DROP_ROLLS,
   killRateCeiling,
   MIN_RUN_MS,
-  rollDrops,
+  pickDropPotion,
 } from "./rewards";
 import type { Drop, EndgameView, HuntResult } from "./types";
+// 11/15 우두머리 상자: 세트 장비·재료·꾸미기 굴림
+import { chestCosmetic, chestMats, chestSetGear, SG_CHEST_CHANCE, SG_PITY } from "./setGearRoll";
 // 11/15 능력 카드: 고른 카드 검사·처치 속도 상한 배율
-import { cardPower, isBossDealFloor, replayPicks, rerollsAllowed, runLevel, runXp, startPicks } from "./cards";
+import { cardPower, cardXpMul, isBossDealFloor, replayPicks, rerollsAllowed, runLevel, runXp, runXpNeed, runXpOf, startPicks } from "./cards";
 // 11/15 층 순서표 (테마마다 층별 몬스터 구성·정예 자리)
 import { floorElite, floorRoster } from "./towerSchedule";
 // 11/15 끝없는 회의실 층 계획 손질 (참조 메일 상한·무리·중간 우두머리·안건 추가가 불러들이는 몫)
 import { meetingPlan } from "./towerThemes/meetingRoomPlan";
+// 11/15 옥상 정원 폭풍·임원층 층 계획 손질
+import { rooftopPlan } from "./towerThemes/rooftopPlan";
+import { execPlan } from "./towerThemes/execPlan";
+// 11/15 지하 주차장·구내식당 층 계획 손질 (견인차가 깨우는 경보 차·밥솥 주먹밥·특식 배식 도우미 몫, 젤리·차단기 상한)
+import { parkingPlan } from "./towerThemes/parkingPlan";
+import { cafeteriaPlan } from "./towerThemes/cafeteriaPlan";
 
 // 11/15 야근 빌딩 (레벨 50 끝판): 1층부터 쓰러질 때까지 이어서 오른다. 한 층 = 방 하나(약 40~60초).
 // 순수 함수만 — 서버(판 시작 검사·결과 검증·보상·기록)와 게임(층 계획·배율·저주)·화면(엘리베이터·안내서)이 같은 표를 쓴다.
@@ -52,27 +59,76 @@ export const TOWER_MAX_RUN_SEC = 2 * 3600;
 // ── 층 테마 (맵·몬스터) ──
 
 /**
- * 테마 표: 다섯 층마다 다음 테마, 표를 다 돌면 처음부터 (한 바퀴 = 테마 수 × 5층).
- * 11/15: 1칸 지하 서버실 (1~5·11~15·21~25 …층), 2칸 끝없는 회의실 (6~10·16~20·26~30 …층).
- * 새 테마가 생기면 이 표만 바꾼다
+ * 11/15 테마 모음: 다섯 층(한 블록)마다 이 중 하나를 판 시드로 고른다 (towerBlock — 바로 앞 블록과 같은 테마는 안 나오고,
+ * 그 판에서 아직 안 나온 테마부터 → 다 나오면 앞 블록만 빼고 아무거나). 같은 판이면 서버 검증도 같은 순서.
+ * 새 테마는 여기 한 줄 + catalog(TOWER_ZONE_IDS·HUNT_ZONES·MonsterId) + towerSchedule TABLES + (있으면) PLAN_HOOKS + game/tower/themes 실행부 표
  */
 export const TOWER_THEMES: readonly ZoneId[] = [
   "server-room",
   "mt_meeting",
+  "rf_rooftop",
+  "ex_exec",
+  // 11/15 지하 주차장·구내식당
+  "pk_parking",
+  "cf_cafeteria",
 ];
 export const FLOORS_PER_THEME = 5;
 const fl = (f: number) => Math.max(1, Math.floor(f));
-/** f층의 사냥터(지도·몬스터·기믹·우두머리) */
-export const towerZone = (f: number): ZoneDef =>
-  HUNT_ZONES[
-    TOWER_THEMES[
-      Math.floor((fl(f) - 1) / FLOORS_PER_THEME) % TOWER_THEMES.length
-    ]
-  ];
+const blockOf = (f: number) => Math.floor((fl(f) - 1) / FLOORS_PER_THEME);
 
-/** f층이 테마 표를 몇 바퀴째 도는 중인가 (0부터). 같은 테마도 바퀴마다 조명·몬스터 성질이 달라진다 */
-export const towerLoop = (f: number) =>
-  Math.floor((fl(f) - 1) / (FLOORS_PER_THEME * TOWER_THEMES.length));
+/** f층 블록: 테마 · 그 판에서 이 테마에 몇 번째로 왔나(visit, 0부터) · 블록 안 자리(pos 0~3 보통 층, 4 우두머리 층) */
+export type TowerBlock = { zone: ZoneId; visit: number; pos: number };
+
+/** 판마다 블록 순서 (시작 블록부터 차례로 늘려 가며 기억 — 서버가 층마다 다시 부르므로) */
+const ORDERS = new Map<string, { zone: ZoneId; visit: number }[]>();
+function orderUpTo(seed: number, b0: number, n: number): { zone: ZoneId; visit: number }[] {
+  const key = `${seed}:${b0}`;
+  let o = ORDERS.get(key);
+  if (!o) {
+    if (ORDERS.size > 64) ORDERS.clear();
+    o = [];
+    ORDERS.set(key, o);
+  }
+  if (o.length >= n) return o;
+  // 판 시드로 처음부터 다시 굴린다 (몇 블록까지 물었는지와 상관없이 같은 순서)
+  const r = seeded((seed ^ 0x54484d45 ^ Math.imul(b0 + 1, 0x2c1b3c6d)) >>> 0);
+  const seen = new Map<ZoneId, number>();
+  const out: { zone: ZoneId; visit: number }[] = [];
+  let prev: ZoneId | null = null;
+  while (out.length < Math.max(n, o.length)) {
+    const others = TOWER_THEMES.filter((z) => z !== prev);
+    const cand = others.length ? others : TOWER_THEMES;
+    const fresh = cand.filter((z) => !seen.has(z));
+    const from = fresh.length ? fresh : cand;
+    const zone = from[Math.min(from.length - 1, Math.floor(r() * from.length))];
+    const visit = seen.get(zone) ?? 0;
+    seen.set(zone, visit + 1);
+    out.push({ zone, visit });
+    prev = zone;
+  }
+  ORDERS.set(key, out);
+  return out;
+}
+
+/** 판(seed, 시작 층 start)의 f층 블록. start 아래층은 시작 블록 취급 */
+export function towerBlock(seed: number, start: number, f: number): TowerBlock {
+  const b0 = blockOf(start);
+  const i = Math.max(0, blockOf(f) - b0);
+  const o = orderUpTo(seed, b0, i + 1)[i];
+  return { zone: o.zone, visit: o.visit, pos: (fl(f) - 1) % FLOORS_PER_THEME };
+}
+
+/** 판의 f층 사냥터(지도·몬스터·기믹·우두머리) */
+export const towerZone = (seed: number, start: number, f: number): ZoneDef =>
+  HUNT_ZONES[towerBlock(seed, start, f).zone];
+
+/** 판의 f층 테마에 몇 번째로 왔나 (0부터). 같은 테마도 다시 올 때마다 조명·몬스터 성질이 달라진다 */
+export const towerLoop = (seed: number, start: number, f: number) =>
+  towerBlock(seed, start, f).visit;
+
+/** 다시 올 때마다 바뀌는 판 이름 (없으면 빈 말) */
+export const towerVisitName = (zone: ZoneDef, visit: number) =>
+  zone.visits?.length ? zone.visits[Math.min(zone.visits.length - 1, Math.max(0, visit))].name : "";
 
 // ── 층 배율·저주 ──
 
@@ -227,16 +283,17 @@ const FORMATIONS: readonly WaveFormation[] = [
 const ELITE_CHANCE = 0.35;
 
 
-export function towerPlan(seed: number, f: number): HuntWave[] {
-  const zone0 = towerZone(f);
+/** 판(seed, 시작 층 start)의 f층 계획 */
+export function towerPlan(seed: number, f: number, start: number): HuntWave[] {
+  const at = towerBlock(seed, start, f);
+  const zone0 = HUNT_ZONES[at.zone];
   const r = seeded(floorSeed(seed, f) ^ 0x544f5752);
   const boss = isBossFloor(f);
   const mix = towerCurseFx(f).eliteMix;
-  // 11/15 전용 테마: 층 순서표의 구성 (같은 층은 늘 같은 몬스터 — lib/rpg/towerSchedule). 정예도 순서표대로 (둘째 웨이브)
-  const period = FLOORS_PER_THEME * TOWER_THEMES.length;
-  const roster = floorRoster(zone0.id, f, period);
+  // 11/15 전용 테마: 순서표의 구성 (그 판에서 이 테마에 몇 번째로 왔는지·블록 안 몇 번째 층인지로 — lib/rpg/towerSchedule). 정예도 순서표대로 (둘째 웨이브)
+  const roster = floorRoster(zone0.id, at.pos, at.visit);
   const zone = roster ? { ...zone0, pool: roster } : zone0;
-  const eliteHere = roster ? floorElite(f, period) : false;
+  const eliteHere = roster ? floorElite(at.pos, at.visit) : false;
   const sizes = boss ? BOSS_WAVES : FLOOR_WAVES;
   const waves = sizes.map((n, i): HuntWave => {
     const last = boss && i === sizes.length - 1;
@@ -282,12 +339,17 @@ export function towerPlan(seed: number, f: number): HuntWave[] {
   });
   // 11/15 테마가 층 계획을 손본다 (없으면 그대로)
   const hook = PLAN_HOOKS[zone0.id];
-  return hook ? hook(waves, { seed: floorSeed(seed, f), f, loop: towerLoop(f) }) : waves;
+  return hook ? hook(waves, { seed: floorSeed(seed, f), f, loop: at.visit, pos: at.pos }) : waves;
 }
 
-/** 11/15 테마별 층 계획 손질 (서버·게임이 같은 계획을 쓴다) */
-const PLAN_HOOKS: Partial<Record<ZoneId, (plan: HuntWave[], o: { seed: number; f: number; loop: number }) => HuntWave[]>> = {
+export type PlanHook = (plan: HuntWave[], o: { seed: number; f: number; loop: number; pos: number }) => HuntWave[];
+/** 11/15 테마별 층 계획 손질 (loop = 그 판에서 이 테마에 몇 번째로 왔나, pos = 블록 안 자리 0~4) */
+const PLAN_HOOKS: Partial<Record<ZoneId, PlanHook>> = {
   mt_meeting: meetingPlan,
+  rf_rooftop: rooftopPlan,
+  ex_exec: execPlan,
+  pk_parking: parkingPlan,
+  cf_cafeteria: cafeteriaPlan,
 };
 
 /** 층을 깨는 데 걸리는 가장 짧은 시간 (마지막 웨이브가 나오는 시각 + 엘리베이터) */
@@ -302,9 +364,11 @@ export const TOWER_CHECKPOINT_EVERY = 10;
 export const TOWER_SUPER_START = 101;
 export const isCheckpoint = (f: number) =>
   Number.isInteger(f) && f >= 1 && (f - 1) % TOWER_CHECKPOINT_EVERY === 0;
-/** 고를 수 있는 시작 층: 1층 + 최고 기록 층 이하의 체크포인트 (최고 23층 → 1·11·21) */
+/**
+ * 고를 수 있는 시작 층: 1층 + 그 바로 아래층까지 깬 체크포인트 (11/15: 10층을 깨면 11층이 열린다 — 최고 20층 → 1·11·21, 최고 19층 → 1·11)
+ */
 export function towerCheckpoints(best: number, sup = false): number[] {
-  const top = sup ? Math.max(best, TOWER_SUPER_START) : best;
+  const top = sup ? Math.max(best + 1, TOWER_SUPER_START) : best + 1;
   const out = [1];
   for (
     let f = 1 + TOWER_CHECKPOINT_EVERY;
@@ -335,7 +399,7 @@ export function checkTowerStart(a: {
   if (!towerCheckpoints(a.best, a.sup).includes(a.start))
     return {
       code: "TOWER_LOCKED",
-      message: `${a.start}층 버튼은 아직 불이 꺼져 있어요. ${a.start}층까지 올라가 본 적이 있어야 해요.`,
+      message: `${a.start}층 버튼은 아직 불이 꺼져 있어요. ${a.start - 1}층 우두머리를 잡으면 켜져요.`,
     };
   return null;
 }
@@ -352,26 +416,50 @@ export const floorTExp = (f: number) =>
   Math.round(TOWER_T_BASE * (1 + TOWER_T_GROWTH * fl(f)));
 /** 깬 4층 = 초월 판 1판 (하루 초월 판 구간 100%·30%·10%·연습에 들어간다) */
 export const TOWER_FLOORS_PER_RUN = 4;
-/** 하루 우두머리 상자 (= 우두머리 15번, 75층 분량). 그 뒤로도 오르고 기록은 남지만 상자는 비어 있다 */
-export const TOWER_CHESTS_PER_DAY = 15;
+/** 하루 우두머리 상자 한도. 11/15: 없앴다 (사냥터에도 판 수 제한이 없으니) — 화면에는 한도 0 = 무제한으로 보낸다 */
+export const TOWER_CHESTS_PER_DAY = Infinity;
 /** 깬 층마다 포인트 (지옥 한 판 ≈ 80~98P를 4층에 나눈 만큼, 사냥 하루 한도 안) */
 export const TOWER_FLOOR_POINTS = 23;
 
-/** f층 우두머리 상자: 지옥 사냥터를 다 깬 판의 드롭 굴림 그대로 (우두머리 몫 + 처치 굴림 + 기간제 코디) — 층 시드로 정해진다 */
-export function towerChestDrops(seed: number, f: number): Drop[] {
-  return rollDrops(
-    {
-      game: "hunt",
-      difficulty: "hell",
-      seed: floorSeed(seed, f),
-      zone: towerZone(f).id,
-    },
-    HUNT_DROP_ROLLS,
-    true,
-    false,
-    true,
-  );
+/**
+ * 11/15 상자를 여는 우두머리 층 (게임이 판 안에서 여는 순서 = 서버 towerSettle이 주는 순서): start층부터 깬 floors층 중 우두머리 층을,
+ * 오늘 이미 연 상자(used) 다음부터 하루 한도까지
+ */
+export function towerChestFloors(start: number, floors: number, used: number): number[] {
+  const out: number[] = [];
+  let n = used;
+  for (let i = 0; i < floors; i++) {
+    const f = start + i;
+    if (!isBossFloor(f)) continue;
+    if (n >= TOWER_CHESTS_PER_DAY) break;
+    n++;
+    out.push(f);
+  }
+  return out;
 }
+
+/** f층 우두머리 상자: 지옥 사냥터를 다 깬 판의 드롭 굴림 그대로 (우두머리 몫 + 처치 굴림 + 기간제 코디) — 층 시드로 정해진다 */
+export function towerChestDrops(seed: number, f: number, _start: number, pity = 0, sup = false): Drop[] {
+  void _start;
+  // 11/15: 지옥 드롭표를 그대로 굴리면 상자 넷 중 셋이 비어 있었다 → 상자 전용 굴림.
+  // 물약 1~2개는 늘 · 강화 재료 · 세트 장비 15% (7번 연속 못 받으면 다음엔 반드시 — pity = 판 시작 때 못 받은 상자 수, 상자마다 nextPity) ·
+  // 꾸미기 10% (층별 등급·랜덤 일수, 깔끔한 클리어와 상관없이) — lib/rpg/setGearRoll.
+  // sup = 테스트 서버 슈퍼 계정 시험 드롭 (서버가 계정으로 정한다): 세트 장비·꾸미기가 늘 하나씩
+  const fs = floorSeed(seed, f);
+  const r = seeded(fs ^ 0x43485354);
+  const drops: Drop[] = [];
+  const potions = r() < 0.5 ? 1 : 2;
+  for (let i = 0; i < potions; i++) drops.push(pickDropPotion(r));
+  drops.push(...chestMats(f));
+  const sg = chestSetGear(r, f, sup ? SG_PITY : pity);
+  if (sg) drops.push(sg);
+  const cos = chestCosmetic(fs, f, sup);
+  if (cos) drops.push(cos);
+  return drops;
+}
+
+/** 우두머리 상자에서 세트 장비가 나올 확률 (11/15 일반 장비 자리를 세트 장비가 대신한다) */
+export const TOWER_CHEST_GEAR_CHANCE = SG_CHEST_CHANCE;
 
 // ── 기록·랭킹 ──
 
@@ -407,7 +495,8 @@ export const FIRST_STAR_ID = "t_firstStar100";
 
 // ── 결과 검증 (서버) ──
 
-export type TowerTicket = { seed: number; level: number; start: number };
+/** gp = 11/15 장비 힘 배율 (세트 장비·강화 — 서버가 판 시작 때 쟀다). 처치 속도 상한에 곱한다 */
+export type TowerTicket = { seed: number; level: number; start: number; gp?: number };
 export type TowerVerdict =
   | {
       ok: true;
@@ -462,7 +551,7 @@ export function evalTower(
   const need: Partial<Record<MonsterId, number>> = {};
   let minSec = 0;
   for (let i = 0; i <= k; i++) {
-    const plan = towerPlan(t.seed, t.start + i);
+    const plan = towerPlan(t.seed, t.start + i, t.start);
     for (const [id, n] of Object.entries(huntSpawnable(plan, Infinity)) as [
       MonsterId,
       number,
@@ -483,18 +572,33 @@ export function evalTower(
   // 11/15 능력 카드: 고른 카드가 그때 제안된 카드인지 시드로 다시 굴려 보고, 처치 속도 상한에 카드 배율(멈추면 집중 포함)을 곱한다
   const bossFloors: number[] = [];
   for (let i = 0; i < k; i++) if (isBossDealFloor(t.start + i)) bossFloors.push(t.start + i);
+  // 11/15 카드 등급 개편: 레벨 업 층(높을수록 좋은 등급)은 시작~지금 층, 줄지 않고, 깬 층 몬스터 경험치만으로도 넘는 층보다 늦을 수 없다
+  const floorXp: number[] = [];
+  let xpAcc = 0;
+  for (let i = 0; i < k; i++) {
+    for (const w of towerPlan(t.seed, t.start + i, t.start)) for (const m of w.monsters) xpAcc += runXpOf(m);
+    floorXp.push(xpAcc);
+  }
   const cv = replayPicks(t.seed, r.cards ?? [], {
-    levels: runLevel(runXp(r.kills)).level,
+    levels: (owned) => runLevel(runXp(r.kills) * cardXpMul(owned)).level,
     starts: startPicks(t.start),
     bossFloors,
     rerolls: rerollsAllowed(k),
+    start: t.start,
+    top: t.start + k,
+    levelFloorMax: (i) => {
+      let need = 0;
+      for (let L = 0; L <= i; L++) need += runXpNeed(L);
+      const j = floorXp.findIndex((x) => x >= need);
+      return t.start + (j < 0 ? k : j);
+    },
   });
   if (!cv.ok)
     return tReject(
       "RESULT_REJECTED",
       "능력 카드 기록이 맞지 않아요. 이번 판은 보상 없이 끝나요.",
     );
-  if (!o.lax && total > 3 + effSec * killRateCeiling("hell", t.level) * cardPower(cv.owned))
+  if (!o.lax && total > 3 + effSec * killRateCeiling("hell", t.level) * cardPower(cv.owned) * (t.gp ?? 1))
     return tooHigh("처치 수");
   if (k > 0 && minSec > effSec + 1) return tooHigh("층");
   for (const [id, n] of Object.entries(need) as [MonsterId, number][])
@@ -648,7 +752,7 @@ export function endgameView(
           : null,
       checkpoints: towerCheckpoints(c.fBest, sup),
       chests: d.tChest,
-      chestsMax: TOWER_CHESTS_PER_DAY,
+      chestsMax: Number.isFinite(TOWER_CHESTS_PER_DAY) ? TOWER_CHESTS_PER_DAY : 0,
     },
     pioneer: {
       until: launch === null ? null : pioneerUntil(launch),

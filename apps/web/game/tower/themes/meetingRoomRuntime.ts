@@ -437,7 +437,7 @@ export class MeetingRuntime implements TowerThemeRuntime {
     const H = this.host;
     let left = this.adds.get(m.wave);
     if (!left) {
-      left = (towerPlan(A.runSeed, A.floor)[m.wave]?.adds ?? []).map((a) => ({ ...a }));
+      left = (towerPlan(A.runSeed, A.floor, A.start)[m.wave]?.adds ?? []).map((a) => ({ ...a }));
       this.adds.set(m.wave, left);
     }
     if (now < s.at || m.hidden) return;

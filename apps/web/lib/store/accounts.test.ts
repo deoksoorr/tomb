@@ -8,6 +8,9 @@ import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, EARN_RULES, earnRu
 import { env } from "../env";
 import type { Grave } from "../types";
 import { kstDay, kstWeek, kstYesterday, weekOfDay } from "./accounts";
+
+/** 사냥 하루 한도 (11/15: 600 → 1200 — 숫자를 시험에 박지 않는다) */
+const HUNT_MAX = earnRule("hunt").dailyMax;
 import { MemoryAccounts } from "./accounts-memory";
 import { RedisAccounts } from "./accounts-redis";
 import { K } from "./keys";
@@ -76,7 +79,7 @@ function contract(make: () => Kit) {
   it("하루 전체 한도: 모든 항목을 한도까지 받아도 하루 상한을 넘지 않는다 (사냥은 점수를 직접 준다)", async () => {
     const id = newId();
     const plan = [
-      ["hunt", 1, 600],
+      ["hunt", 1, HUNT_MAX],
       ["attend", 1],
       ["streak", 1],
       ["flower", 10],
@@ -518,9 +521,9 @@ function contract(make: () => Kit) {
   it("같은 IP 합계는 항목 한도 × 3 (계정 여러 개로 농사 방지), IP를 안 주면 계정 한도만", async () => {
     const ip = `ip-${nanoid(6)}`;
     const got = [];
-    for (let i = 0; i < 4; i++) got.push(await accounts.earn(newId(), "hunt", DAY, { amount: 600, ipHash: ip }));
-    expect(got).toEqual([600, 600, 600, 0]);
-    expect(await accounts.earn(newId(), "hunt", DAY, { amount: 600 })).toBe(600);
+    for (let i = 0; i < 4; i++) got.push(await accounts.earn(newId(), "hunt", DAY, { amount: HUNT_MAX, ipHash: ip }));
+    expect(got).toEqual([HUNT_MAX, HUNT_MAX, HUNT_MAX, 0]);
+    expect(await accounts.earn(newId(), "hunt", DAY, { amount: HUNT_MAX })).toBe(HUNT_MAX);
   });
 
   it("머무르기: 9.5분 간격, 하루 60점까지", async () => {

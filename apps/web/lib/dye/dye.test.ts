@@ -514,6 +514,11 @@ describe.skipIf(!!env.redis())("46·25·30번 서버 흐름 (메모리)", () => 
       // 운영자는 내 정보를 불러올 때 운영자 전용 꾸미기가 영구로 자동으로 들어온다 → 다시 받기는 이미 가짐
       expect(r.me.stash.some((e) => e.itemId === "staff_crown" && isPermanentUntil(e.until))).toBe(true);
       await expect(buyPermanent(op, "staff_crown")).rejects.toMatchObject({ code: "ALREADY_OWNED" });
+      // 11/15 모습 맞추기: 운영자 지정이 풀리면 남(입장 토큰)에게는 후드 유령 → 내 정보·가방·내 화면(착용 증서)도 같은 몸
+      await setStaff(null);
+      expect((await loadMe(getAccounts(), op)).body).toBe("hood");
+      await setStaff(op);
+      expect((await loadMe(getAccounts(), op)).body).toBe("reaper");
     } finally {
       await setStaff(null);
     }

@@ -2,7 +2,6 @@ import * as Phaser from "phaser";
 import { MONSTERS, type MonsterId } from "@/lib/rpg/catalog";
 import { revivable } from "@/lib/rpg/plan";
 import { SV_BOSS_CIRCUIT, SV_BOSS_REBOOT, svAccent, svLoop, type SvLoop } from "@/lib/rpg/serverRoom";
-import { towerLoop } from "@/lib/rpg/tower";
 import { css, makeCanvas, radial } from "../../sprites/pixel";
 import { towerSound, type TowerSoundEv } from "../towerSound";
 import type { ThemeHost, ThemeMon, TowerThemeRuntime } from "./runtime";
@@ -305,7 +304,8 @@ export class ServerRoomStage implements TowerThemeRuntime {
   ) {
     this.sc = host.scene;
     this.floor = host.floor();
-    this.loop = svLoop(towerLoop(this.floor));
+    // 11/15 그 판에서 서버실에 몇 번째로 왔는지로 판이 바뀐다 (평상시 → 정전 → 경보 → 멜트다운)
+    this.loop = svLoop(host.visit());
     this.room = host.layout().variant;
     // 정전 판은 초록 비상등, 경보 판은 붉은 빛이 섞인다
     this.accent = this.loop.dark > 0.5 ? 0x3aff9a : this.loop.alarm && this.floor % 2 ? 0xff4a4a : svAccent(this.floor);

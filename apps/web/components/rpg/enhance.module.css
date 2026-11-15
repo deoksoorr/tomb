@@ -1,0 +1,440 @@
+/* 11/15 강화 창: 책상 위 장비 + 큰 결재 도장. 기다림 → 쾅 → 승인·반려 도장 자국 */
+
+.stage {
+  --grade: var(--text);
+  --charge: 600ms;
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 220px;
+  overflow: hidden;
+  background:
+    linear-gradient(transparent 62%, #4a3524 62%, #3a2a1c 100%), radial-gradient(ellipse at 50% 30%, rgba(255, 230, 160, 0.12), transparent 60%), var(--bg-deep);
+  box-shadow: var(--px-border);
+  user-select: none;
+}
+
+.stage[data-phase="charge"] {
+  cursor: pointer;
+}
+
+/* 기다리는 동안 둘레가 살짝 어두워진다 */
+.dim {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 60%, transparent 30%, rgba(0, 0, 0, 0.55));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+
+.stage[data-phase="charge"][data-hi] .dim {
+  opacity: 1;
+}
+
+.paper {
+  position: absolute;
+  bottom: 30px;
+  width: 120px;
+  height: 46px;
+  background: #efe6cc;
+  box-shadow:
+    0 2px 0 #c8bc98,
+    0 4px 8px rgba(0, 0, 0, 0.4);
+  transform: perspective(200px) rotateX(38deg);
+}
+
+.item {
+  position: absolute;
+  bottom: 46px;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--grade) 30%, transparent), transparent 70%);
+}
+
+.stage[data-phase="charge"] .item {
+  animation: tremble 0.12s infinite;
+}
+
+.stage[data-result="ok"] .item {
+  animation: pop 0.7s ease-out;
+  filter: drop-shadow(0 0 10px #ffd76a);
+}
+
+.stage[data-result="fail"] .item,
+.stage[data-result="drop"] .item {
+  animation: shake 0.45s ease-out;
+  filter: grayscale(0.7);
+}
+
+/* 큰 결재 도장: 위에서 기다리다가 쾅 */
+.stamp {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  width: 54px;
+  height: 92px;
+  margin-left: -27px;
+  pointer-events: none;
+  transform: translateY(0);
+}
+
+.stamp::before {
+  /* 손잡이 */
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 15px;
+  width: 24px;
+  height: 40px;
+  background: linear-gradient(90deg, #6a3a22, #a8643a 50%, #6a3a22);
+  border-radius: 12px 12px 4px 4px;
+}
+
+.stamp::after {
+  /* 도장 몸통 */
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 54px;
+  height: 52px;
+  background: linear-gradient(90deg, #7a1e22, #c8323c 45%, #7a1e22);
+  box-shadow: inset 0 -6px 0 #4a1014;
+}
+
+.stage[data-phase="charge"] .stamp {
+  animation: raise var(--charge) ease-in forwards;
+}
+
+.stage[data-phase="show"] .stamp {
+  animation: slam 0.5s ease-in forwards;
+}
+
+/* 도장 자국 「승인」「반려」 */
+.mark {
+  position: absolute;
+  bottom: 22px;
+  left: calc(50% + 34px);
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 74px;
+  height: 74px;
+  border: 4px solid currentColor;
+  border-radius: 50%;
+  background: rgba(20, 16, 12, 0.35);
+  font-family: var(--font-read);
+  font-size: 22px;
+  letter-spacing: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transform: rotate(-14deg) scale(1.6);
+}
+
+.mark[data-kind="ok"] {
+  color: #4fd27a;
+  text-shadow: 0 0 6px rgba(255, 215, 106, 0.8);
+}
+
+.mark[data-kind="no"] {
+  color: #e8403c;
+}
+
+.stage[data-phase="show"] .mark {
+  animation: markIn 0.35s 0.22s ease-out forwards;
+}
+
+.big {
+  position: absolute;
+  top: 10px;
+  color: #ffd76a;
+  font-family: var(--font-read);
+  font-size: 26px;
+  text-shadow:
+    0 2px 0 #000,
+    0 0 10px rgba(255, 200, 80, 0.7);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.big[data-bad] {
+  color: #e8a090;
+  text-shadow: 0 2px 0 #000;
+}
+
+.stage[data-phase="show"] .big {
+  animation: bigIn 0.5s 0.35s ease-out forwards;
+}
+
+/* 금빛 불티·종이 조각 */
+.confetti {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  width: 4px;
+  height: 6px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.stage[data-result="ok"] .confetti {
+  animation: burst 1.1s 0.3s ease-out forwards;
+}
+
+/* 회색 연기 (실패) */
+.puff {
+  position: absolute;
+  bottom: 60px;
+  width: 110px;
+  height: 50px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(160, 160, 160, 0.55), transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.stage[data-result="fail"] .puff,
+.stage[data-result="drop"] .puff {
+  animation: puff 0.9s 0.3s ease-out forwards;
+}
+
+/* 금 가는 자국 (한 단계 내려감) */
+.crack {
+  position: absolute;
+  bottom: 58px;
+  width: 60px;
+  height: 60px;
+  background:
+    linear-gradient(115deg, transparent 46%, #111 47%, #111 50%, transparent 51%), linear-gradient(60deg, transparent 47%, #111 48%, #111 50%, transparent 51%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.stage[data-result="drop"] .crack {
+  animation: markIn 0.25s 0.3s ease-out forwards;
+}
+
+/* 보호 문서 방패 */
+.shield {
+  position: absolute;
+  bottom: 38px;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(108, 180, 240, 0.08) 50%, rgba(108, 180, 240, 0.55) 70%, transparent 72%);
+  box-shadow: 0 0 18px rgba(108, 180, 240, 0.7);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.stage[data-result="saved"] .shield {
+  animation: shield 1s 0.18s ease-out forwards;
+}
+
+/* +15 성공: 화면 전체 금빛 */
+.flash {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: radial-gradient(circle, rgba(255, 236, 160, 0.95), rgba(255, 196, 60, 0.55) 45%, transparent 75%);
+  pointer-events: none;
+  animation: flash 1.6s 0.3s ease-out forwards;
+  opacity: 0;
+}
+
+.tick {
+  color: var(--bone);
+  font-family: var(--font-read);
+  font-size: 18px;
+}
+
+.tick s {
+  color: var(--muted);
+}
+
+.skip {
+  position: absolute;
+  bottom: 4px;
+  right: 8px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
+@keyframes tremble {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(1px, -1px);
+  }
+}
+
+@keyframes raise {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-16px) rotate(-3deg);
+  }
+}
+
+@keyframes slam {
+  0% {
+    transform: translateY(-16px);
+  }
+  40% {
+    transform: translateY(62px);
+  }
+  70% {
+    transform: translateY(56px);
+  }
+  100% {
+    transform: translateY(-140px);
+  }
+}
+
+@keyframes markIn {
+  from {
+    opacity: 0;
+    transform: rotate(-14deg) scale(1.6);
+  }
+  to {
+    opacity: 0.9;
+    transform: rotate(-14deg) scale(1);
+  }
+}
+
+@keyframes bigIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-7px);
+  }
+  40% {
+    transform: translateX(7px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+@keyframes burst {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) rotate(var(--rot));
+  }
+}
+
+@keyframes puff {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5) translateY(-20px);
+  }
+}
+
+@keyframes shield {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+}
+
+@keyframes flash {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 움직임 줄이기: 흔들림·날아가는 것 없이 천천히 나타나기만 */
+@media (prefers-reduced-motion: reduce) {
+  .stage .item,
+  .stage .stamp,
+  .stage .confetti,
+  .stage .crack {
+    animation: none !important;
+  }
+
+  .stage[data-phase="show"] .stamp {
+    opacity: 0;
+  }
+
+  .stage[data-phase="show"] .mark,
+  .stage[data-phase="show"] .big,
+  .stage .puff,
+  .stage .shield,
+  .flash {
+    animation-name: fade !important;
+    animation-duration: 0.4s !important;
+  }
+
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 0.9;
+    }
+  }
+}

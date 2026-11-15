@@ -1,6 +1,6 @@
 import type { MonsterDef, ZoneDef } from "../catalog";
 
-// 11/15 야근 빌딩 테마 「끝없는 회의실」 (6~10층, 그다음 10층마다: 16~20 · 26~30 …).
+// 11/15 야근 빌딩 테마 「끝없는 회의실」 (다섯 층 블록 — 판마다 어느 블록에 나올지는 lib/rpg/tower towerBlock).
 // 몬스터·사냥터 정의와 순수 계산(벽시계·한 바퀴마다 바뀌는 회의·방이 좁아지는 칸)만 — 서버·게임·안내서가 같이 쓴다.
 // 이 파일은 catalog에서 타입만 가져온다 (catalog가 이 파일의 값을 가져가므로 런타임 순환이 없게). 층 계획은 meetingRoomPlan.ts
 
@@ -112,8 +112,11 @@ export const MT_ZONE_DEF: ZoneDef = {
 
 // ── 벽시계·한 바퀴 (10층마다 같은 테마로 돌아올 때 회의가 하루를 넘어간다) ──
 
-/** f층 벽시계 (분, 0~1439): 6층 17:00부터 층마다 25분 */
-export const meetingClock = (f: number) => (((17 * 60 + (Math.max(1, Math.floor(f)) - 6) * 25) % 1440) + 1440) % 1440;
+/**
+ * 벽시계 (분, 0~1439): 처음 온 블록 첫 층 17:00부터 층마다 25분, 다시 올 때마다 열 층 몫(4시간 10분)씩 흘러 있다.
+ * pos = 블록 안 자리 0~4, visit = 그 판에서 회의실에 몇 번째로 왔나 (0부터)
+ */
+export const meetingClock = (pos: number, visit: number) => (((17 * 60 + (Math.max(0, visit) * 10 + Math.max(0, pos)) * 25) % 1440) + 1440) % 1440;
 export const clockText = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
 export type MtTime = "sunset" | "night" | "dawn" | "sunrise" | "day";
@@ -127,7 +130,7 @@ export function meetingTime(min: number): MtTime {
   return "day";
 }
 
-/** 한 바퀴(10층)마다 붙는 회의 이름·몬스터 특성 (앞 바퀴 것도 계속) */
+/** 다시 올 때마다 붙는 회의 이름·몬스터 특성 (앞의 것도 계속) */
 export const MT_LOOPS: readonly { name: string; trait: string; desc: string }[] = [
   { name: "노을 회의", trait: "", desc: "블라인드 틈으로 주황 노을이 줄무늬로 든다." },
   { name: "야근 회의", trait: "카페인 각성", desc: "블라인드가 내려가고 형광등이 흐려진다. 몬스터가 가끔 커피 김을 뿜으며 확 빨라진다." },
@@ -135,8 +138,6 @@ export const MT_LOOPS: readonly { name: string; trait: string; desc: string }[] 
   { name: "밤샘 회의", trait: "안건 폭주", desc: "아침 해가 뜬다. 정예 「안건 추가」가 층마다 나오고 더 많이 불러들인다." },
   { name: "다음 날 회의", trait: "연장 또 연장", desc: "다음 날 낮. 테이블이 더 자주, 더 깊이 밀려온다." },
 ];
-/** f층이 끝없는 회의실 몇 바퀴째인가 (0 = 6~10층). period = 테마 한 바퀴 층 수 (테마 수 × 5) */
-export const mtLoop = (f: number, period = 10) => Math.max(0, Math.floor((Math.max(1, Math.floor(f)) - 1) / period));
 export const mtLoopInfo = (loop: number) => MT_LOOPS[Math.min(MT_LOOPS.length - 1, Math.max(0, loop))];
 
 // ── 회의 연장: 방이 좁아지는 칸 (게임이 그대로 쓰고, 테스트가 경계를 본다) ──

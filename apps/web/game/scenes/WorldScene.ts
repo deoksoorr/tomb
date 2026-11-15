@@ -28,6 +28,7 @@ import { RealtimeClient } from "../net/RealtimeClient";
 import type { NetPose } from "../net/sendThrottle";
 import { GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
+import { addWorldTintBounds, worldTintOf } from "../world/worldTint";
 import { CameraRig } from "../world/CameraRig";
 import { Effects } from "../world/Effects";
 import { Fireworks } from "../world/Fireworks";
@@ -279,7 +280,10 @@ export class WorldScene extends Phaser.Scene {
 
     this.rig = new CameraRig(this, this.player.sprite, canvas, (x, y) => this.onTap(x, y));
     this.rig.setMapHeight(this.map.height);
-    this.atmos = new Atmosphere(this, this.reduced, window.location.search);
+    // 마을 색조: 셰이더가 그림마다 곱한다 (맵은 그대로, 캐릭터는 절반만). WebGL이 아니면 예전 곱하기 판
+    const tint = worldTintOf(this.game);
+    if (tint) addWorldTintBounds(this, tint);
+    this.atmos = new Atmosphere(this, this.reduced, window.location.search, { shaderTint: tint });
     this.lighting = new Lighting(this);
     this.sfx = new Sfx();
     this.fireworks = new Fireworks(this, this.reduced, this.sfx);
@@ -1047,7 +1051,8 @@ export class WorldScene extends Phaser.Scene {
     if (a === "interact" && pl.inBoat && !this.boats.nearShore()) {
       const at = this.boats.fishingSpot();
       if (at) this.forage.fishFromBoat(at);
-      else this.boats.quack(); // 11/15 오리배: 오리 연못은 낚시 대신 꽥
+      // 11/15 오리배: E는 내리기 전용 (꽥은 Space만). 물가가 멀면 안내만
+      else this.toast("물가 가까이 가면 E로 내릴 수 있어요");
       return;
     }
     // 조각배 위: E = 물가에서 내리기, 앉기·점프 없음

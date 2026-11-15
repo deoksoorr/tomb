@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { customAlphabet } from "nanoid";
-import { GRANT_TTL_SEC, isAvatarBody, signGrant, type AvatarDye, type Look } from "@tomb/protocol";
+import { GRANT_TTL_SEC, isAvatarBody, signGrant, staffGateBody, type AvatarDye, type Look } from "@tomb/protocol";
 import { STAY_TICK_MINUTES } from "../calendar";
 import { CODE_ALPHABET, type EarnSource } from "../economy";
 import { gameDay, gameWeek, gameYesterday, weekOfDay } from "../gameDay";
@@ -68,6 +68,12 @@ export function toMe(accountId: string, a: AccountRecord, day: string, now: numb
   };
 }
 
+/**
+ * 남에게 보이는 몸 = 내 화면·가방·상점에 쓰는 몸 (운영자 전용 몸은 운영자일 때만 — 입장 토큰·실시간 서버와 같은 규칙).
+ * 운영자 지정이 풀린 계정에 저승사자 몸이 남아 있으면 남들은 후드 유령으로 보는데 내 화면만 저승사자로 보이던 차이를 없앤다
+ */
+export const shownBody = (body: string | null, staff: boolean): string | null => (body ? staffGateBody(body, staff) : body);
+
 export async function loadMe(accounts: AccountStore, accountId: string, now = Date.now()): Promise<Me> {
   const day = kstDay(now);
   // 31번 운영자 계정은 잔액을 지갑 상한까지 채운 뒤 읽는다 (포인트가 줄지 않는다)
@@ -78,6 +84,7 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
   const [a, style, champ] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId), champWireFor(accountId, staff, now).catch(() => 0)]);
   return {
     ...toMe(accountId, a, day, now),
+    body: shownBody(a.body, staff),
     dye: style.dye,
     ...(staff ? { staff: true } : {}),
     ...(style.bodies?.length ? { bodies: style.bodies } : {}),

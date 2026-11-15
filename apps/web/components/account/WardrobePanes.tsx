@@ -89,7 +89,8 @@ export function LookPane({
         areas={DOLL_AREAS}
         label="착용 부위"
         compact="large"
-        figure={<OutfitCanvas color={avatar.color} body={avatar.body} look={look} label="지금 내 모습" dir={view.dir} walking={view.walking} onRotate={view.rotate} />}
+        // 야광은 마을의 내 캐릭터처럼 해질녘·밤에만 (늘 켜 두면 낮에 가방과 마을 색이 달라 보인다)
+        figure={<OutfitCanvas color={avatar.color} body={avatar.body} look={look} label="지금 내 모습" dir={view.dir} walking={view.walking} onRotate={view.rotate} liveGlow />}
         caption={
           <span className={styles.namePv}>
             <StyledName name={name || "내 이름"} look={look} />

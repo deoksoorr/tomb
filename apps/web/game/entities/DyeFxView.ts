@@ -3,6 +3,7 @@ import { addCanvasTexture, TEX } from "../assets/manifest";
 import { DEPTH, prefersReducedMotion } from "../config";
 import { AV_H, AV_W } from "../sprites/avatar";
 import { buildPartMask, dyeFxAt, glintSpot, glowTime, maskPixels, specSpecials, type DyeFxPart } from "../sprites/dyeFx";
+import { markCharTint } from "../world/charTint";
 
 // 46번 특수 색 연출 (게임 안 아바타 하나): 특수 색 부위마다 "부위 가면" 텍스처를 아바타 위에 같은 프레임으로 겹쳐 색칠하고,
 // 반짝 별을 띄운다. 아바타가 다른 텍스처(해먹에 눕기·집 안 자세)를 쓰는 동안은 숨는다.
@@ -33,8 +34,8 @@ export class DyeFxView {
     for (const fx of specSpecials(spec)) {
       const key = `${texKey}#dye-${fx.part}`;
       if (!this.scene.textures.exists(key)) addCanvasTexture(this.scene, key, { canvas: buildPartMask(spec, look, body, fx.part), frameW: AV_W, frameH: AV_H });
-      const img = this.scene.add.sprite(0, 0, key, 0).setVisible(false);
-      const glint = this.scene.add.image(0, 0, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+      const img = markCharTint(this.scene.add.sprite(0, 0, key, 0).setVisible(false));
+      const glint = markCharTint(this.scene.add.image(0, 0, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
       this.layers.push({ fx, key, img, glint, frame: null });
     }
   }

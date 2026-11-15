@@ -1,6 +1,10 @@
 import { Redis } from "@upstash/redis";
 import { env } from "../env";
 import { normalize, RpgError } from "./character";
+import { getAccounts } from "../store";
+import { econKeyFor, kstDay } from "../store/accounts";
+import { K } from "../store/keys";
+import { ECON_TTL_SEC, spendCategory } from "../store/types";
 import type { CharacterState, DailyStats } from "./types";
 
 // 사냥터 저장소. 캐릭터는 계정마다 JSON 한 덩어리이고, 모든 변경은 "읽기 → 순수 함수 → 버전 비교 후 쓰기(Lua)"로
@@ -27,6 +31,16 @@ export interface RpgStore {
   get(acct: string): Promise<CharacterState>;
   /** fn을 최신 상태에 적용해 원자적으로 저장한다. fn이 던지면 저장하지 않는다 */
   update<T>(acct: string, fn: (s: CharacterState) => { state: CharacterState; result: T }): Promise<{ state: CharacterState; result: T }>;
+  /**
+   * 11/15 포인트를 같이 쓰는 갱신 (강화·옵션 굴리기): fn이 정한 cost만큼 지갑 포인트를 빼고 캐릭터를 쓰는 것을 저장소 명령 한 번에.
+   * 지갑에서만 뺀다 (모은 포인트·포인트 랭킹은 그대로 — spendPoints와 같다). 포인트가 모자라면 아무것도 바꾸지 않고 409
+   */
+  updatePaid<T>(
+    acct: string,
+    fn: (s: CharacterState) => { state: CharacterState; result: T; cost: number },
+    reason: string,
+    now?: number,
+  ): Promise<{ state: CharacterState; result: T }>;
   /** 시간당 한도를 세고 진행 중인 판으로 기록한다. 한도면 false */
   startRun(acct: string, nonce: string, ttlSec: number, hourBucket: string): Promise<boolean>;
   /** 끝내기: 처음 내는 티켓이고 지금 진행 중인 판이어야 ok */
@@ -54,6 +68,7 @@ export const rk = {
 };
 
 const conflict = () => new RpgError(409, "BUSY", "다른 곳에서 같은 캐릭터를 바꾸는 중이에요. 다시 시도해 주세요.");
+const noPoints = () => new RpgError(409, "NOT_ENOUGH_POINTS", "포인트가 모자라요.");
 
 // ── 메모리 (로컬·테스트). await 없이 끝나는 구간이라 이벤트 루프 안에서 원자적이다 ──
 
@@ -76,6 +91,13 @@ export class MemoryRpgStore implements RpgStore {
     return out;
   }
 
+  async updatePaid<T>(acct: string, fn: (s: CharacterState) => { state: CharacterState; result: T; cost: number }, reason: string, now = Date.now()) {
+    const out = fn(structuredClone(this.chars.get(acct) ?? normalize(null)));
+    // 메모리 계정 저장소의 쓰기는 기다릴 일이 없어 이 사이에 다른 갱신이 끼지 않는다
+    if (out.cost > 0 && (await getAccounts().spend(acct, out.cost, reason, now)) === null) throw noPoints();
+    this.chars.set(acct, structuredClone(out.state));
+    return { state: out.state, result: out.result };
+  }
   async startRun(acct: string, nonce: string, ttlSec: number, hour: string): Promise<boolean> {
     const k = rk.runs(acct, hour);
     const n = (this.runs.get(k) ?? 0) + 1;
@@ -148,6 +170,22 @@ redis.call('HSET', KEYS[1], 'rev', ARGV[2], 'data', ARGV[3])
 return 1
 `;
 
+// 11/15 포인트 쓰기 + 캐릭터 쓰기 한 번에 (lib/store/accounts-redis SPEND_LUA와 같은 장부·통계). 버전이 다르면 -2, 포인트가 모자라면 -1
+// KEYS: char, acct, ledger, econ  ARGV: 기대 버전, 새 버전, JSON, 포인트, 장부 JSON, 통계 필드
+const PAID_LUA = `
+if (redis.call('HGET', KEYS[1], 'rev') or '0') ~= ARGV[1] then return -2 end
+local cost = tonumber(ARGV[4])
+if cost > 0 then
+  if tonumber(redis.call('HGET', KEYS[2], 'points') or '0') < cost then return -1 end
+  redis.call('HINCRBY', KEYS[2], 'points', -cost)
+  redis.call('LPUSH', KEYS[3], ARGV[5])
+  redis.call('LTRIM', KEYS[3], 0, 99)
+  redis.call('HINCRBY', KEYS[4], ARGV[6], cost)
+  redis.call('EXPIRE', KEYS[4], ${ECON_TTL_SEC})
+end
+redis.call('HSET', KEYS[1], 'rev', ARGV[2], 'data', ARGV[3])
+return 1
+`;
 // KEYS: runs, active  ARGV: nonce, ttl, max
 const START_LUA = `
 local n = redis.call('INCR', KEYS[1])
@@ -207,6 +245,23 @@ export class RedisRpgStore implements RpgStore {
     throw conflict();
   }
 
+  async updatePaid<T>(acct: string, fn: (s: CharacterState) => { state: CharacterState; result: T; cost: number }, reason: string, now = Date.now()) {
+    const econ = await econKeyFor(acct, kstDay(now));
+    for (let i = 0; i < CAS_RETRIES; i++) {
+      const { rev, state } = await this.read(acct);
+      const out = fn(state);
+      const r = Number(
+        await this.redis.eval<string[], number>(
+          PAID_LUA,
+          [rk.char(acct), K.acct(acct), K.ledger(acct), econ],
+          [rev, String(Number(rev) + 1), JSON.stringify(out.state), String(Math.max(0, out.cost)), JSON.stringify({ at: now, amount: -out.cost, reason }), `spend:${spendCategory(reason)}`],
+        ),
+      );
+      if (r === 1) return { state: out.state, result: out.result };
+      if (r === -1) throw noPoints();
+    }
+    throw conflict();
+  }
   async startRun(acct: string, nonce: string, ttlSec: number, hour: string): Promise<boolean> {
     const r = await this.redis.eval<string[], number>(START_LUA, [rk.runs(acct, hour), rk.active(acct)], [nonce, String(ttlSec), String(RUNS_PER_HOUR)]);
     return Number(r) === 1;

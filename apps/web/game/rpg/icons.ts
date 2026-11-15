@@ -1,5 +1,7 @@
 import { darken, Grid, lighten, type Color } from "../sprites/pixel";
 import type { IconArt } from "@/lib/rpg/catalog";
+import { sgArtOf } from "@/lib/rpg/setGear";
+import { setGearIconGrid } from "../sprites/setGear";
 
 // 사냥터 장비·포션·스킬 아이콘 (16×16 픽셀아트, 코드로 그린다). UI는 dataURL로, 게임은 캔버스로 쓴다.
 // 그림 종류(shape)만 고르고 색은 카탈로그의 main/accent를 쓴다 → 새 장비는 카탈로그 한 줄로 추가된다.
@@ -778,6 +780,32 @@ const P: Record<string, Painter> = {
     g.rect(9, 7, 2, 2, a);
     g.set(13, 2, lighten(m, 0.3));
   },
+  // ── 11/15 강화 재료 ──
+  /** 결재 서류: 상아색 서류 묶음 + 빨간 결재 도장 */
+  mat_doc(g, m, a) {
+    g.rect(4, 2, 9, 12, darken(m, 0.18));
+    g.rect(3, 3, 9, 12, m);
+    for (let y = 5; y < 12; y += 2) g.hline(5, 10, y, darken(m, 0.35));
+    g.rect(8, 10, 3, 3, a);
+    g.set(9, 11, lighten(a, 0.4));
+  },
+  /** 인감 도장: 빨간 몸통 + 금 손잡이 */
+  mat_seal(g, m, a) {
+    g.ellipse(8, 4, 3, 2.5, a);
+    g.rect(6, 6, 5, 7, m);
+    g.rect(5, 12, 7, 2, darken(m, 0.25));
+    g.vline(7, 6, 11, lighten(m, 0.3));
+    g.set(8, 3, lighten(a, 0.5));
+  },
+  /** 보호 문서: 파란 파일 + 흰 방패 */
+  mat_prot(g, m, a) {
+    g.rect(3, 2, 10, 13, m);
+    g.rect(3, 2, 10, 2, darken(m, 0.25));
+    g.rect(6, 6, 5, 4, a);
+    g.rect(7, 10, 3, 1, a);
+    g.set(8, 11, a);
+    g.vline(8, 6, 9, m);
+  },
   /** 침묵: 엑스 친 말풍선 */
   st_silence(g, m, a) {
     g.rect(2, 3, 12, 8, m);
@@ -790,12 +818,19 @@ const P: Record<string, Painter> = {
   },
 };
 
-/** 아이콘 그림 (16×16 캔버스) */
-export function iconCanvas(art: IconArt): HTMLCanvasElement {
+/** 아이콘 그림 (16×16 픽셀). 11/15 "sg:…" = 세트 장비 (game/sprites/setGear — 직급 테·반짝임까지 그려져 있다) */
+export function iconGrid(art: IconArt, frame = 0): Grid {
+  const sg = sgArtOf(art.shape);
+  if (sg) return setGearIconGrid(sg[0], sg[1], sg[2], frame);
   const g = new Grid(16, 16);
   (P[art.shape] ?? P.chip)(g, art.main, art.accent);
   g.outline(OUT);
-  return g.toCanvas();
+  return g;
+}
+
+/** 아이콘 그림 (16×16 캔버스) */
+export function iconCanvas(art: IconArt): HTMLCanvasElement {
+  return iconGrid(art).toCanvas();
 }
 
 const cache = new Map<string, string>();

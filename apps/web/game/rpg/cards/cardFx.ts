@@ -167,7 +167,7 @@ export function ensureCardTextures(scene: Phaser.Scene): void {
 
 const tone = (at: number, dur: number, f0: number, f1: number, gain: number, wave: Layer["wave"] = "square"): Layer => ({ src: "osc", wave, at, dur, gain, atk: 0.005, env: "perc", f0, f1 });
 
-export const CARD_SND: Record<"level" | "flip" | "pick" | "legend" | "zap" | "board" | "block" | "deal" | "revive" | "oneshot", Layer[]> = {
+export const CARD_SND: Record<"level" | "flip" | "pick" | "legend" | "zap" | "board" | "block" | "deal" | "revive" | "oneshot" | "pop" | "revealUnique" | "revealLegend", Layer[]> = {
   // 판 레벨 업: 위로 올라가는 세 음
   level: [tone(0, 0.09, 660, 660, 0.18), tone(0.08, 0.09, 880, 880, 0.18), tone(0.16, 0.22, 1320, 1320, 0.2, "triangle")],
   flip: [{ src: "noise", at: 0, dur: 0.06, gain: 0.12, atk: 0.003, env: "perc", flt: { type: "bandpass", f0: 3000, f1: 1800, q: 2 } }],
@@ -179,4 +179,14 @@ export const CARD_SND: Record<"level" | "flip" | "pick" | "legend" | "zap" | "bo
   deal: [tone(0, 0.25, 220, 180, 0.16, "sawtooth"), tone(0.1, 0.35, 165, 130, 0.14, "square")],
   revive: [tone(0, 0.3, 330, 660, 0.16, "triangle"), tone(0.2, 0.5, 660, 1320, 0.14, "triangle")],
   oneshot: [{ src: "noise", at: 0, dur: 0.16, gain: 0.18, atk: 0.002, env: "perc", flt: { type: "lowpass", f0: 900, f1: 200, q: 2 } }, tone(0.02, 0.18, 300, 120, 0.16, "square")],
+  // 11/15 회식 2차 펑 · 유니크/전설 카드가 뒤집힐 때
+  pop: [{ src: "noise", at: 0, dur: 0.14, gain: 0.14, atk: 0.002, env: "perc", flt: { type: "lowpass", f0: 1400, f1: 300, q: 1 } }, tone(0, 0.1, 220, 90, 0.1, "square")],
+  revealUnique: [tone(0, 0.12, 660, 990, 0.12, "triangle"), tone(0.09, 0.22, 1320, 1320, 0.1, "triangle")],
+  revealLegend: [
+    { src: "noise", at: 0, dur: 0.5, gain: 0.08, atk: 0.2, env: "swell", flt: { type: "highpass", f0: 2000, f1: 7000, q: 1 } },
+    tone(0.3, 0.7, 523, 523, 0.12, "triangle"),
+    tone(0.3, 0.7, 784, 784, 0.1, "triangle"),
+    tone(0.42, 0.8, 1046, 1046, 0.1, "sine"),
+    tone(0.54, 0.9, 1568, 1568, 0.08, "sine"),
+  ],
 };

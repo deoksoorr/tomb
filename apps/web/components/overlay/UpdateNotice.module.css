@@ -1,7 +1,12 @@
-/* 새 버전 안내. 게임 오버레이(z-index 10)와 연결 끊김 어둡게(5) 위에 둔다 */
+/* 새 버전 안내. 게임 오버레이(z-index 10)와 연결 끊김 어둡게(5) 위에 둔다.
+   지원하는 브라우저에서는 top layer(배너 = popover, 창 = 모달 <dialog>)라 게임 창 위에 뜬다 — 기본 popover·dialog 모양을 지운다 */
 
 .banner {
   position: fixed;
+  inset: auto;
+  margin: 0;
+  border: 0;
+  overflow: visible;
   left: 50%;
   bottom: calc(var(--safe-bottom) + 8px);
   z-index: 30;
@@ -28,11 +33,26 @@
   position: fixed;
   inset: 0;
   z-index: 40;
-  display: grid;
+  display: none;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  color: inherit;
   place-items: center;
   padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
   background: rgba(9, 10, 8, 0.72);
   animation: fade 0.3s ease both;
+}
+
+.cover[open] {
+  display: grid;
+}
+
+.cover::backdrop {
+  background: transparent;
 }
 
 .card {

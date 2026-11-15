@@ -312,6 +312,11 @@ export interface AccountStore {
    * "owned"로 거절한다 (확인과 차감이 한 번에).
    */
   buy(id: string, itemId: string, price: number, opts?: { unique?: boolean; now?: number }): Promise<"ok" | "insufficient" | "owned">;
+  /**
+   * 11/15 기간 이용권 넣기 (야근 빌딩 상자 꾸미기, 0P): 입고 있으면 그 자리, 아니면 벗어 둔 꾸미기의 만료 시각을 ms만큼 늘린다
+   * (선물 기간 규칙 giftTermUntil과 같다). 이미 영구로 가졌으면 "owned" (아무것도 바꾸지 않는다)
+   */
+  grantTerm(id: string, itemId: string, ms: number, now: number): Promise<"ok" | "owned">;
   /** 가방에서 1개 쓰기. 없으면 false */
   consume(id: string, itemId: string): Promise<boolean>;
   /**

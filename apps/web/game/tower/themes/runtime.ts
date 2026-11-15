@@ -35,6 +35,8 @@ export type ThemeHost = {
   readonly reduced: boolean;
   now(): number;
   floor(): number;
+  /** 11/15 그 판에서 이 테마에 몇 번째로 왔나 (0부터 — 판 모양·몬스터 성질이 바뀐다) */
+  visit(): number;
   /** 엘리베이터·층 정리 중·쓰러짐 (바닥 과열 같은 기믹을 쉰다) */
   calm(): boolean;
   player(): { x: number; y: number };
@@ -62,6 +64,10 @@ export type ThemeHost = {
   sfx(name: RpgSound, gain?: number): void;
   synth(key: string, layers: Layer[]): void;
   shake(ms: number, k: number): void;
+  /** 11/15 내 버프 하나를 빼앗는다 (남은 시간이 가장 긴 것 — 옥상 고양이). 없으면 null */
+  takeBuff(): { id: string; left: number; v: number } | null;
+  /** 빼앗긴 버프를 돌려준다 (남은 시간 그대로) */
+  giveBuff(b: { id: string; left: number; v: number }): void;
 };
 
 export interface TowerThemeRuntime {
@@ -81,6 +87,8 @@ export interface TowerThemeRuntime {
   playerVelocity?(v: { x: number; y: number }, dt: number): { x: number; y: number };
   /** 11/15 내 공격 간격 배율 (끝없는 회의실 시계 보는 사람 곁이면 느려진다) */
   atkCdMul?(): number;
+  /** 11/15 탄(내 탄·몬스터 탄 모두)을 휩쓰는 바람 px/s (옥상 돌풍) */
+  shotWind?(): { x: number; y: number };
   /** 층 이름 뒤에 붙일 말 (방 종류·바퀴 판 이름) */
   title?(): string;
   update(now: number, dt: number): void;

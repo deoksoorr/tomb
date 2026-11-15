@@ -240,7 +240,7 @@ export class Arena {
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
     this.build();
-    if (zoneId === "mt_meeting") this.mt = new MeetingArena(scene, this.layout, seed, ctx?.floor ?? 6, ctx?.runSeed ?? seed, hooks);
+    if (zoneId === "mt_meeting") this.mt = new MeetingArena(scene, this.layout, seed, ctx?.floor ?? 6, ctx?.runSeed ?? seed, hooks, ctx?.start ?? 1);
   }
 
   /** 11/15 끝없는 회의실 지도 (다른 사냥터는 null) */

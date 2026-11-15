@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { CHAMP_ITEM_IDS, MAX_DECOR_PER_GRAVE, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
+import { CHAMP_ITEM_IDS, itemById, MAX_DECOR_PER_GRAVE, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
 import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import { STAY_BONUS_AMOUNTS, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
@@ -361,6 +361,26 @@ redis.call('HINCRBY', KEYS[1], 'points', -price)
 redis.call('HINCRBY', KEYS[2], ARGV[1], 1)
 redis.call('HINCRBY', KEYS[4], 'spend:shop', price)
 redis.call('EXPIRE', KEYS[4], ${ECON_TTL_SEC})
+return 1
+`;
+
+// 11/15 기간 이용권 넣기 (야근 빌딩 상자 꾸미기): 입고 있으면 그 자리, 아니면 벗어 둔 꾸미기의 만료 시각을 늘린다 (GIFT_CLAIM_LUA와 같은 규칙).
+// 이미 영구면 -1 (그대로)
+// KEYS: look, stash  ARGV: itemId, slot, ms, now, 영구 만료 ms
+const GRANT_TERM_LUA = `
+local cur = redis.call('HGET', KEYS[1], ARGV[2])
+local curItem, curUntil = nil, 0
+if cur then
+  local ci, cu = string.match(cur, '^([^|]+)|(.+)$')
+  curItem, curUntil = ci, tonumber(cu) or 0
+end
+local now, perm = tonumber(ARGV[4]), tonumber(ARGV[5])
+local wearing = curItem == ARGV[1] and curUntil > now
+local had = curUntil
+if not wearing then had = tonumber(redis.call('HGET', KEYS[2], ARGV[1]) or '0') end
+if had >= perm then return -1 end
+local u = math.min(perm, math.max(had, now) + tonumber(ARGV[3]))
+if wearing then redis.call('HSET', KEYS[1], ARGV[2], ARGV[1] .. '|' .. u) else redis.call('HSET', KEYS[2], ARGV[1], u) end
 return 1
 `;
 
@@ -1002,6 +1022,13 @@ export class RedisAccounts implements AccountStore {
       ]),
     );
     return r === 1 ? "ok" : r === 0 ? "insufficient" : "owned";
+  }
+
+  async grantTerm(id: string, itemId: string, ms: number, now: number): Promise<"ok" | "owned"> {
+    const slot = itemById(itemId)?.slot;
+    if (!slot) return "owned";
+    const r = await this.redis.eval<string[], number>(GRANT_TERM_LUA, [K.look(id), K.stash(id)], [itemId, slot, String(ms), String(now), String(PERMANENT_UNTIL)]);
+    return Number(r) === 1 ? "ok" : "owned";
   }
 
   async consume(id: string, itemId: string): Promise<boolean> {

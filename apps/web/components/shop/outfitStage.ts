@@ -1,7 +1,7 @@
 import { DIR, WALK_SPEED, type DirId } from "@tomb/protocol";
 import { AV_ANIM, AV_COLS, AV_H, AV_W, avatarArtTop, BODY_METRICS, bodyOf, buildAvatarSheet, handAnchor, lookKey } from "@/game/sprites/avatar";
 import { CosmeticFxSim, FX_ART, type FxArtId, type FxCmd } from "@/game/sprites/cosmeticFx";
-import { buildPartMask, drawDyeFx, specSpecials } from "@/game/sprites/dyeFx";
+import { buildPartMask, drawDyeFx, glowTime, specSpecials } from "@/game/sprites/dyeFx";
 import * as fx from "@/game/sprites/fx";
 import { grassTile } from "@/game/sprites/ground";
 import { css, makeCanvas, type Color } from "@/game/sprites/pixel";
@@ -25,7 +25,20 @@ const PET_LAG_MS = 240;
 
 export type StagePose = { dir: DirId; walking: boolean };
 /** champ = 주간 랭킹 1위 값 (전용 오라 미리보기 — 레이스 창 보상 칸) */
-export type StageLook = { color: string; body: string; look: readonly string[]; champ?: number; /** 31번 운영자 오라 미리보기 */ staff?: boolean };
+export type StageLook = {
+  color: string;
+  body: string;
+  look: readonly string[];
+  champ?: number;
+  /** 31번 운영자 오라 미리보기 */ staff?: boolean;
+  /** 야광을 게임처럼 지금 시각(해질녘·밤)에만 켠다 — 가방 [지금 모습]. 없으면 늘 켠다 (상점·염색 미리보기는 효과를 보여 주려고) */
+  liveGlow?: boolean;
+};
+
+/** 이 무대에서 야광 부위가 빛나는지: liveGlow면 게임(DyeFxView)과 같은 glowTime, 아니면 늘 */
+export function stageGlow(l: Pick<StageLook, "liveGlow">, now = Date.now()): boolean {
+  return !l.liveGlow || glowTime(now);
+}
 
 type Flower = { x: number; y: number; frame: number; born: number };
 
@@ -240,7 +253,7 @@ export class OutfitStage {
     const body = bodyOf(l.body);
     const m = BODY_METRICS[body];
     const sprites: Sprite[] = [];
-    // 46번 특수 색 부위: 몸 위에 가면을 색칠해 겹친다 (무지개·금빛 광택·반짝이·야광 — 미리보기는 야광을 늘 켠다)
+    // 46번 특수 색 부위: 몸 위에 가면을 색칠해 겹친다 (무지개·금빛 광택·반짝이·야광 — 야광은 liveGlow가 아니면 늘 켠다)
     const dyeFx = specSpecials(l.color);
     const masks = new Map(dyeFx.map((f) => [f.part, buildPartMask(l.color, l.look, l.body, f.part)] as const));
     sprites.push({
@@ -249,7 +262,7 @@ export class OutfitStage {
         const dx = sx(this.ax) - 10;
         const dy = sy(this.ay) - (AV_H - 1);
         ctx.drawImage(sheet, (col % AV_COLS) * AV_W, Math.floor(col / AV_COLS) * AV_H, AV_W, AV_H, dx, dy, AV_W, AV_H);
-        if (dyeFx.length) drawDyeFx(ctx, dyeFx, masks, col, dx, dy, still ? 0 : now);
+        if (dyeFx.length) drawDyeFx(ctx, dyeFx, masks, col, dx, dy, still ? 0 : now, stageGlow(l));
       },
     });
 

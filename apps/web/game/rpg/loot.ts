@@ -96,6 +96,8 @@ type Item = {
   /** 하늘 빔이 땅에 닿아 번쩍였나 */
   impacted: boolean;
   nextSpark: number;
+  /** 11/15 지금 바로 끌어온다 (rush 때 바닥에 있던 것만 — 뒤에 떨어진 것은 평소대로 보여 준다) */
+  rush?: boolean;
 };
 
 /** 빛기둥 그림: 가운데가 밝고 가장자리·위로 갈수록 계단처럼 옅어진다 (도트 느낌을 살리려고 최근접 필터) */
@@ -168,8 +170,6 @@ export class LootLayer {
   private notice: { text: Phaser.GameObjects.Text; t0: number; tier: number } | null = null;
   /** 움직일 수 없는 끝(쓰러짐·시간 끝)이면 빨리 날아온다 */
   private frozen = false;
-  /** 남은 것을 모두 지금 끌어온다 */
-  private rushing = false;
   private readonly mobile: boolean;
 
   constructor(
@@ -206,7 +206,8 @@ export class LootLayer {
   drop(drops: readonly Drop[], sx: number, sy: number, frozen: boolean, delay = 0): void {
     this.frozen = frozen;
     const looks = drops
-      .flatMap((d) => Array.from({ length: Math.max(1, Math.min(4, d.qty)) }, () => lootLook(d)))
+      // 11/15 재료(결재 서류 ×7 …)는 한 묶음으로
+      .flatMap((d) => Array.from({ length: d.kind === "mat" ? 1 : Math.max(1, Math.min(4, d.qty)) }, () => lootLook(d)))
       .filter((l): l is LootLook => !!l)
       .sort((a, b) => a.tier - b.tier);
     // 한 화면 상한: 넘치면 낮은 등급부터 바로 들어온 것으로 (연출 없이)
@@ -245,9 +246,16 @@ export class LootLayer {
     });
   }
 
-  /** 남은 것을 모두 지금 캐릭터에게 끌어온다 (판을 끝내기 직전) */
+  /**
+   * 남은 것을 모두 지금 캐릭터에게 끌어온다 (판을 끝내기 직전·11/15 야근 빌딩 엘리베이터가 닫히기 직전).
+   * 아직 튀어 오르지 않은 것도 바로 튀어 올라 착지하자마자 날아온다. 그 뒤에 새로 떨어진 것은 평소대로
+   */
   rush(): void {
-    this.rushing = true;
+    const now = this.host.now();
+    for (const it of this.items) {
+      it.rush = true;
+      if (it.state === "wait" && it.t0 > now) it.t0 = now;
+    }
   }
 
   /** 매 프레임 (게임 시간). 멈춤·히트스톱 동안은 부르지 않는다 */
@@ -280,7 +288,7 @@ export class LootLayer {
         this.idle(it, now);
         const shown = now - it.landedAt >= SHOW_MS + it.look.tier * SHOW_PER_TIER_MS;
         const near = shown && Math.hypot(tgt.x - it.x, tgt.y + 6 - it.y) < PICK_R;
-        const wait = this.rushing ? 0 : this.frozen ? AUTO_FROZEN_MS : AUTO_MS;
+        const wait = it.rush ? 0 : this.frozen ? AUTO_FROZEN_MS : AUTO_MS;
         if (near || now - it.landedAt >= wait) {
           it.state = "pull";
           it.pullAt = now;
@@ -292,7 +300,7 @@ export class LootLayer {
       }
       // 빨려 들어옴: 점점 빨라지며 캐릭터 몸 가운데로, 기둥·고리는 빨리 걷힌다
       const dt = dtMs / 1000;
-      it.speed += (this.rushing ? 1800 : 900) * dt;
+      it.speed += (it.rush ? 1800 : 900) * dt;
       const dx = tgt.x - it.cx;
       const dy = tgt.y - it.cy;
       const d = Math.hypot(dx, dy);

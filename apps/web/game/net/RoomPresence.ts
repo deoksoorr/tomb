@@ -12,6 +12,7 @@ import { declutter, type LabelBox } from "../world/labels";
 import { MeScreen } from "../world/MeScreen";
 import { RoomClient, type RoomClientOptions, type RoomStatus } from "./RoomClient";
 import type { NetPose } from "./sendThrottle";
+import { huntPeerLook, villageLook } from "../sprites/setGearWear";
 
 // 방(마을·집·사냥터)에 같이 있는 사람들을 씬에 그려 주는 재사용 모듈.
 // RoomClient(연결) + RemoteAvatar(보간·몸·꾸미기·점프 포물선·몸짓·말풍선)를 묶는다. 좌석은 없다.
@@ -54,6 +55,11 @@ export type RoomPresenceOptions = {
    * + 원형 목록이 열려 있으면 내 화면 위치를 UI에 알린다. 마을·집처럼 월드 HUD 대신 쓰는 방에서 켠다 (몸짓은 씬의 키 처리가 받는다)
    */
   expressions?: boolean;
+  /**
+   * 11/15 사냥터 방: 착용 목록을 사냥 화면 규칙으로 (다른 사람 = 서버가 서명한 사냥 장비 표시 → 같은 자리 꾸미기를 이긴다,
+   * 나 = 꾸미기를 바꿔도 낀 사냥 장비를 다시 얹는다). 없으면(마을·집) 사냥 장비 표시를 뺀다
+   */
+  huntGear?: { me: (look: string[]) => string[] };
   /** 테스트·디버그 */
   client?: RoomClientOptions;
 };
@@ -140,7 +146,7 @@ export class RoomPresence {
         },
         onLook: (sid, look, extra) => {
           const v = this.remotes.get(sid)?.view;
-          v?.setLook(look);
+          v?.setLook(this.peerLook(look));
           v?.applyAppearance(extra);
         },
         onAct: (sid, kind, x, y) => {
@@ -197,7 +203,7 @@ export class RoomPresence {
     if (o.me && !o.me.staff && bridge.last("me:staff")?.on === true) o.me.setStaff(true);
     this.offLook = bridge.on("look:set", ({ look, lookGrant, dye, body, champ }) => {
       const clean = Array.isArray(look) ? look.filter((x): x is string => typeof x === "string") : [];
-      o.me?.setLook(clean);
+      o.me?.setLook(o.huntGear ? o.huntGear.me(clean) : clean);
       o.me?.applyAppearance({ dye, body, champ });
       if (lookGrant) this.client.look(lookGrant);
     });
@@ -359,11 +365,16 @@ export class RoomPresence {
     return n + 1;
   }
 
+  /** 다른 사람 착용 목록: 사냥터 방이면 사냥 장비 규칙, 아니면 사냥 장비 표시를 뺀다 */
+  private peerLook(look: readonly string[]): string[] {
+    return this.o.huntGear ? huntPeerLook(look) : villageLook(look);
+  }
+
   private add(p: PeerInfo): void {
     if (p.sid === this.client.mySid) return;
     this.remotes.get(p.sid)?.destroy();
     const body = isAvatarBody(p.body) ? p.body : "hood";
-    const r = new RemoteAvatar(this.scene, this.o.atlas, p.sid, p.name, avatarColorSpec(p.color, sanitizeDye(p.dye)), p, performance.now(), p.look ?? [], body);
+    const r = new RemoteAvatar(this.scene, this.o.atlas, p.sid, p.name, avatarColorSpec(p.color, sanitizeDye(p.dye)), p, performance.now(), this.peerLook(p.look ?? []), body);
     r.view.setStaff(p.staff === true); // 31번 운영자 차림
     r.view.setChamp(p.champ); // 주간 랭킹 1위 배지·오라
     this.remotes.set(p.sid, r);
@@ -383,7 +394,7 @@ export class RoomPresence {
       const body = isAvatarBody(p.body) ? p.body : "hood";
       if (!r || r.name !== p.name || r.view.colorSpec !== avatarColorSpec(p.color, sanitizeDye(p.dye)) || r.view.bodyId !== body) this.add(p);
       else {
-        r.view.setLook(p.look ?? []);
+        r.view.setLook(this.peerLook(p.look ?? []));
         r.view.setChamp(p.champ);
       }
     }

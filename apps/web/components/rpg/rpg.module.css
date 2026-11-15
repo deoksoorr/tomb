@@ -2740,3 +2740,35 @@ button.hotSlot:disabled {
     display: inline;
   }
 }
+
+/* 11/15 야근 빌딩 버튼판: 우두머리 상자 드롭 안내 */
+.towerDrops {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.towerDrops h4 {
+  margin: 0;
+  color: var(--candle);
+  font-size: 12px;
+}
+
+.towerDrops p {
+  margin: 0;
+}
+
+.towerDrops ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.towerDrops b {
+  color: var(--bone);
+}

@@ -1,4 +1,6 @@
 import { COSMETIC_DROP_ART, dropInfo, gearById, type IconArt } from "@/lib/rpg/catalog";
+import { itemById } from "@tomb/protocol";
+import { decodeSg, isSgCode, itemOfSpec, SG_GRADE_COLORS, SG_GRADE_NAMES } from "@/lib/rpg/setGear";
 import type { Drop } from "@/lib/rpg/types";
 import { gearGrade } from "@/components/rpg/gear";
 
@@ -70,9 +72,51 @@ const GRADE_FX = {
 const SOUND: Record<LootTier, LootLook["sound"]> = { 0: "plain", 1: "fine", 2: "rare", 3: "legend" };
 
 /** 드롭 한 줄 → 바닥 연출 모양. 모르는 id면 null */
-export function lootLook(d: Pick<Drop, "kind" | "id">): LootLook | null {
+export function lootLook(d: Pick<Drop, "kind" | "id"> & { qty?: number; days?: number }): LootLook | null {
   const info = dropInfo(d);
   if (!info) return null;
+  // 11/15 세트 장비: 사원·대리 = 고급 빔, 과장 = 희귀(보라) 빔, 임원 = 전설 하늘 빔 (이름표는 직급 색)
+  if (d.kind === "set") {
+    const it = isSgCode(d.id) ? (decodeSg(d.id) ?? itemOfSpec(d.id, 0)) : null;
+    if (!it) return null;
+    const tier = (it.g >= 3 ? 3 : it.g === 2 ? 2 : 1) as LootTier;
+    const [, beam, light] = tier === 3 ? GRADE_FX.legend : tier === 2 ? GRADE_FX.rare : GRADE_FX.fine;
+    return {
+      tier,
+      grade: SG_GRADE_NAMES[it.g],
+      name: `${SG_GRADE_NAMES[it.g]} ${info.name}`,
+      text: SG_GRADE_COLORS[it.g],
+      beam,
+      light,
+      ...TIER[tier],
+      edge: tier >= 2,
+      notice: tier >= 2 ? `${SG_GRADE_NAMES[it.g]} 세트 장비!` : undefined,
+      art: info.art,
+      tex: `rpg-loot-set-${it.s}${it.p}${it.g}`,
+      sound: SOUND[tier],
+      ...(tier === 3 ? { sky: "gold" as const } : {}),
+    };
+  }
+  // 11/15 강화 재료: 물약처럼 작게 (묶음 수를 이름표에)
+  if (d.kind === "mat")
+    return { tier: 0, grade: "재료", name: `${info.name}${(d.qty ?? 1) > 1 ? ` ×${d.qty}` : ""}`, text: "#e8dcb8", beam: 0xd9d4c3, light: 0xfff3c8, ...TIER[0], edge: false, art: info.art, tex: `rpg-loot-mat-${d.id}`, sound: "plain" };
+  // 11/15 야근 빌딩 상자 꾸미기 (n일 이용권): 무엇인지·며칠인지 바로 보여 준다 ("고양이 귀 · 7일")
+  if (d.kind === "cosmetic" && d.days)
+    return {
+      tier: 2,
+      grade: "꾸미기",
+      name: `${itemById(d.id)?.name ?? "꾸미기"} · ${d.days}일`,
+      text: "#ffb0c8",
+      beam: 0xf06aa8,
+      light: 0xffe2ee,
+      ...TIER[3],
+      edge: true,
+      notice: "꾸미기 선물!",
+      art: COSMETIC_DROP_ART,
+      tex: "rpg-loot-cosmetic",
+      sound: "gift",
+      sky: "rainbow",
+    };
   if (d.kind === "gear") {
     const g = gearById(d.id)!;
     const grade = gearGrade(g);

@@ -168,4 +168,26 @@ describe("31번 운영자 오라", () => {
     expect(run(CHAMP_AURA_OFF, true, 10)).toEqual([]);
     expect(run(0, false, 10)).toEqual([]);
   });
+
+  it("사냥 화면(staffSoft): 운영자 오라는 모두 몸 뒤, 투명도는 그만큼만 — 1위 오라와 마을은 그대로", () => {
+    const step = (champ: number, staff: boolean, soft?: number) => {
+      const sim = new CosmeticFxSim();
+      sim.setLook([], "hood", champ, staff);
+      const all: FxCmd[] = [];
+      for (let i = 0; i < 60; i++) sim.step(input({ now: 1000 + i * 53, ...(soft !== undefined ? { staffSoft: soft } : {}) }), all);
+      return all;
+    };
+    const loud = step(0, true);
+    const soft = step(0, true, 0.45);
+    expect(soft).toHaveLength(loud.length);
+    expect(loud.some((c) => c.layer === "light")).toBe(true);
+    for (let i = 0; i < soft.length; i++) {
+      const c = soft[i];
+      expect(c.layer).not.toBe("light");
+      if (c.layer === "body") expect(c.depth).toBeLessThan(200);
+      expect(c.alpha).toBeCloseTo(loud[i].alpha * 0.45, 5);
+    }
+    // 1위 오라(운영자 아님)는 사냥 화면에서도 그대로
+    expect(step(1, false, 0.45)).toEqual(step(1, false));
+  });
 });
