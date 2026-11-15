@@ -14,7 +14,7 @@ import { cx } from "../ui/cx";
 import PixelIcon from "../ui/PixelIcon";
 import ui from "../ui/ui.module.css";
 import { mmss } from "./format";
-import { HUNT_KEYS } from "./huntKeys";
+import { HUNT_KEYS, HUNT_TOUCH } from "./huntKeys";
 // 11/15 야근 빌딩 능력 카드: 고르기 창 · 판 레벨·가진 카드
 import CardPick from "./CardPick";
 import RunCards from "./RunCards";
@@ -65,10 +65,11 @@ const AUTO_EDIT_IDLE_MS = 6000;
 
 /** 11/15 H: 사냥 키 안내 (키 목록은 huntKeys — 사냥터 고르기 화면과 같다) */
 function KeyHelp() {
-  const rows = HUNT_KEYS;
+  const coarse = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
+  const rows = coarse ? HUNT_TOUCH : HUNT_KEYS;
   return (
     <div className={s.keyHelp} role="note" aria-label="사냥 키 안내">
-      <strong>사냥 키</strong>
+      <strong>{coarse ? "조작" : "사냥 키"}</strong>
       <dl>
         {rows.map(([k, v]) => (
           <div key={k}>
@@ -329,6 +330,23 @@ export default function RunHud({
             </div>
           )}
           <div className={s.topButtons}>
+            {hunt && (
+              // 11/15 키 안내 버튼: 판 시작 6초 안내가 사라진 뒤에도 H가 있다는 걸 늘 보이게 (손가락 기기는 ?)
+              <button
+                type="button"
+                className={cx(ui.button, s.helpBtn, help && s.helpBtnOn)}
+                onPointerDown={stop}
+                onClick={() => {
+                  writeItem(LS_KEYS_KNOWN, "1");
+                  setHelp((h) => !h);
+                }}
+                aria-pressed={help}
+                aria-label="조작 키 안내"
+              >
+                <span className={s.helpKey}>키 안내</span> <kbd>H</kbd>
+                <span className={s.helpQ}>?</span>
+              </button>
+            )}
             <button type="button" className={cx(ui.button, ui.icon)} onPointerDown={stop} onClick={onPause} aria-label="멈춤">
               <PixelIcon name="pause" />
             </button>

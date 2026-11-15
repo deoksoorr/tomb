@@ -2707,3 +2707,36 @@ button.hotSlot:disabled {
   color: var(--text);
   min-width: 0;
 }
+
+/* 11/15 키 안내 버튼 (멈춤 옆). PC는 "키 안내 H", 손가락 기기는 "?" */
+.helpBtn {
+  min-height: 36px;
+  padding-inline: 8px;
+  font-size: 11px;
+}
+
+.helpBtn kbd {
+  font-family: var(--font-small);
+}
+
+.helpBtnOn {
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 2px var(--candle);
+}
+
+.helpQ {
+  display: none;
+  font-weight: 700;
+}
+
+@media (pointer: coarse) {
+  .helpKey,
+  .helpBtn kbd {
+    display: none;
+  }
+
+  .helpQ {
+    display: inline;
+  }
+}
