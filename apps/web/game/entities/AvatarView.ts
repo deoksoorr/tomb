@@ -27,6 +27,7 @@ const DEX_BADGE_STAR = "★";
 const FRIEND_HEART = "♥";
 const FRIEND_TINT = 0xff8fb8;
 const DEX_BADGE_TINT = 0xffd45e;
+const DOING_TINT = 0xbfd4ff;
 /** 칭호 위아래로 보이는 간격 (화면 px): 이름표 ↔ 칭호 ↔ 1위 배지·말풍선 */
 const TITLE_GAP = 6;
 
@@ -143,6 +144,8 @@ export class AvatarView {
   private staffFx: StaffFxView | null = null;
   /** 도감 100% 배지 (이름표 오른쪽 별) */
   private dexBadge: Phaser.GameObjects.BitmapText | null = null;
+  /** 11/15 하는 중 표시 (이름표·칭호·1위 배지 위, 말풍선 아래 — 예: 망원경 앞 "별 보는 중"). 있을 때만 만든다 */
+  private doingTag: Phaser.GameObjects.BitmapText | null = null;
   private dexBadgeN = 0;
   /** 주간 랭킹 1위 값 (비트 묶음 + 오라 끔 표시, 0 = 아님)과 이름표 위 배지 */
   private champ = 0;
@@ -277,6 +280,19 @@ export class AvatarView {
     this.atlas.ensure(text);
     if (this.dexBadge) this.dexBadge.setText(text);
     else this.dexBadge = this.scene.add.bitmapText(0, 0, FONT_KEY, text, FONT_PX).setOrigin(0, 1).setDepth(this.label.depth).setTint(DEX_BADGE_TINT);
+  }
+
+  /** 하는 중 표시 글자 (null이면 없앤다) */
+  setDoing(text: string | null): void {
+    if ((this.doingTag?.text ?? null) === text) return;
+    if (!text) {
+      this.doingTag?.destroy();
+      this.doingTag = null;
+      return;
+    }
+    this.atlas.ensure(text);
+    if (this.doingTag) this.doingTag.setText(text);
+    else this.doingTag = this.scene.add.bitmapText(0, 0, FONT_KEY, text, FONT_PX).setOrigin(0.5, 1).setDepth(this.label.depth).setTint(DOING_TINT);
   }
 
   get dexBadgeCount(): number {
@@ -926,6 +942,12 @@ export class AvatarView {
       lift = cellTop - sc - (titleInkTop - gap);
       labelTop = this.champBadge ? this.champBadge.sync(this.label, sc, vis, fa, now, this.reduced, lift) : titleInkTop - gap + sc;
     } else labelTop = this.champBadge ? this.champBadge.sync(this.label, labelScale, vis, fa, now, this.reduced, lift) : this.label.y - this.label.height - lift;
+    if (this.doingTag) {
+      const d = this.doingTag;
+      if (d.scaleX !== labelScale) d.setScale(labelScale);
+      d.setPosition(Math.round(this.label.x), Math.round(labelTop - labelScale)).setAlpha(fa).setVisible(vis && this.label.visible);
+      labelTop -= d.height + labelScale;
+    }
     if (this.speech) this.speech.place(this.label.x, labelTop - labelScale, labelScale, now, vis);
     // 벤치 상태를 고르면 기본 "…"은 띄우지 않는다
     const longSit = !speaking && !this.mood && this.sitSince > 0 && now - this.sitSince > SIT_IDLE_MS;
@@ -1127,6 +1149,7 @@ export class AvatarView {
     this.moodFx?.setVisible(v);
     this.staffFx?.setVisible(v);
     this.dexBadge?.setVisible(v);
+    this.doingTag?.setVisible(v);
     this.champBadge?.setVisible(v);
     this.nameFx?.setVisible(v);
     this.titleView?.setVisible(v);
@@ -1144,6 +1167,8 @@ export class AvatarView {
     this.sprite.destroy();
     this.label.destroy();
     this.dexBadge?.destroy();
+    this.doingTag?.destroy();
+    this.doingTag = null;
     this.champBadge?.destroy();
     this.champBadge = null;
     this.nameFx?.destroy();

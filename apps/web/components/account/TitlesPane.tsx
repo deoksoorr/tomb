@@ -75,7 +75,7 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
           <span className={styles.count}>
             {" "}
             · 얻은 칭호 {earned ? total : "–"}/{TITLES.length}
-            {staff && " · 운영자: 모든 칭호를 쓸 수 있어요"}
+            {staff && " · 운영자는 모든 칭호를 쓸 수 있어요"}
           </span>
           {cur && perkText(cur.grade) && <span className={styles.perkNow}>칭호 능력: {perkText(cur.grade)}</span>}
         </p>

@@ -64,7 +64,7 @@ export const CF_MONSTERS: Record<CfMonsterId, MonsterDef> = {
   cf_nutritionist: mon({
     id: "cf_nutritionist",
     name: "영양사",
-    desc: "\"오늘의 메뉴 바뀌었습니다.\" 메뉴를 바꿀 때마다 판이 달라진다. 매운 날엔 바닥이 끓고, 국 없는 날엔 식판이 날아오고, 특식 날엔 배식 도우미가 줄지어 들어온다.",
+    desc: "\"오늘의 메뉴 바뀌었습니다.\" 메뉴가 바뀔 때마다 판이 달라져요. 매운 날엔 바닥이 끓고, 국 없는 날엔 식판이 날아오고, 특식 날엔 배식 도우미가 줄지어 들어와요.",
     hp: 2300,
     atk: 24,
     def: 9,
@@ -108,9 +108,9 @@ export type CfLoop = {
 };
 export const CF_LOOPS: readonly CfLoop[] = [
   { name: "평소 점심", desc: "늘 먹던 백반. 줄이 길다.", dark: 0, queue: 1, spill: 1, speed: 1, festive: false },
-  { name: "특식의 날", desc: "현수막이 걸리고 줄이 두 배. 줄서기가 더 자주, 더 길게 밀려온다.", dark: 0, queue: 0.75, spill: 1, speed: 1.05, festive: true },
-  { name: "야식 시간", desc: "불 꺼진 식당에 국솥만 끓는다. 어둡고 국물이 더 자주 튄다.", dark: 0.55, queue: 1.1, spill: 0.75, speed: 1, festive: false },
-  { name: "단체 회식", desc: "회식 손님까지 몰려와 줄도 국물도 쉴 틈이 없다. 몬스터가 10% 빠르다.", dark: 0.3, queue: 0.7, spill: 0.75, speed: 1.1, festive: true },
+  { name: "특식의 날", desc: "현수막이 걸리고 줄이 두 배로 길어요. 줄 선 사람들이 더 자주, 더 길게 밀려와요.", dark: 0, queue: 0.75, spill: 1, speed: 1.05, festive: true },
+  { name: "야식 시간", desc: "불 꺼진 식당에 국솥만 끓어요. 어둡고 국물이 더 자주 튀어요.", dark: 0.55, queue: 1.1, spill: 0.75, speed: 1, festive: false },
+  { name: "단체 회식", desc: "회식 손님까지 몰려와 줄도 국물도 쉴 틈이 없어요. 몬스터가 10% 빨라요.", dark: 0.3, queue: 0.7, spill: 0.75, speed: 1.1, festive: true },
 ];
 export const cfLoop = (visit: number): CfLoop => CF_LOOPS[Math.max(0, Math.min(CF_LOOPS.length - 1, Math.floor(visit)))];
 
@@ -124,7 +124,7 @@ export const CF_ZONE_DEF: ZoneDef = {
   power: 1.2,
   gimmick: {
     name: "점심시간 줄서기",
-    desc: "「점심시간!」 알림이 뜨면 바닥의 줄서기 선을 따라 사람들이 밀려와 그 줄 안에 있으면 함께 떠밀린다. 배식대 국솥이 끓어 넘치면 국물이 튈 자리가 표시되고, 튄 국물은 한동안 뜨거운 웅덩이로 남는다.",
+    desc: "「점심시간!」 알림이 뜨면 바닥의 줄을 따라 사람들이 밀려와요. 그 줄 안에 있으면 같이 떠밀려요. 배식대 국솥이 끓어 넘치면 국물이 튈 자리가 표시돼요. 튄 국물은 한동안 뜨거운 웅덩이로 남아요.",
   },
   pool: [...CF_POOL],
   boss: CF_BOSS,

@@ -250,9 +250,9 @@ export default function HuntLobby({
         const left = count - n;
         setNotice(
           n <= 0
-            ? `오늘 사냥 포인트 한도라 ${name}을(를) 팔지 못했어요. 가방에 그대로 있어요.`
+            ? `오늘 받을 포인트를 다 채워서 ${name}을(를) 못 팔았어요. 가방에 그대로 있어요.`
             : v.sold?.capped
-              ? `${what}을(를) ${pts(v.sold.value)}에 팔았어요. 오늘 사냥 포인트 한도라 일부만 받았어요${left > 0 ? ` (${left}개는 가방에 그대로)` : ""}.`
+              ? `${what}을(를) ${pts(v.sold.value)}에 팔았어요. 오늘 받을 포인트를 다 채워서 일부만 받았어요.${left > 0 ? ` ${left}개는 가방에 남겨 뒀어요.` : ""}`
               : `${what}을(를) ${pts(v.sold?.value ?? 0)}에 팔았어요.`,
         );
       })
@@ -383,8 +383,8 @@ export default function HuntLobby({
             <div className={s.result}>
               <p>
                 {run.current?.tower
-                  ? "멈춘 동안 게임 시간은 흐르지 않아요. 그만두고 나가면 지금까지 깬 층까지 기록하고 끝나요."
-                  : "멈춘 동안 게임 시간은 흐르지 않아요. 너무 오래(2분 넘게) 멈추면 결과를 받을 수 없어요."}
+                  ? "멈춘 동안은 시간이 흐르지 않아요. 지금 나가면 깬 층까지 기록돼요."
+                  : "멈춘 동안은 시간이 흐르지 않아요. 2분 넘게 멈춰 있으면 보상을 못 받아요."}
               </p>
               <div className={s.buttons}>
                 <button type="button" className={cx(ui.button, ui.primary)} onClick={resume}>
@@ -644,13 +644,13 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
           </div>
           {r.capped && (
             <p className={ui.hint}>
-              오늘 사냥 포인트 한도(또는 하루 전체 한도)에 닿아서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
+              오늘 받을 포인트를 다 채워서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
             </p>
           )}
           <EndgameResult reward={r} />
           {r.levelsGained > 0 && (
             <p className={s.levelUp} role="status">
-              레벨 업! Lv.{r.newLevel} · 능력치·스킬 포인트를 받았어요
+              레벨 업! Lv.{r.newLevel}. 능력치 포인트와 스킬 포인트를 받았어요.
               <LevelUpSound level={r.newLevel} />
             </p>
           )}
@@ -683,7 +683,7 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
                         {itemName(d.id)}
                         {d.days ? ` · ${d.days}일` : ""}
                       </span>
-                      <span className={s.meta}>{d.days ? "꾸미기 이용권 · 꾸미기 가방" : "기간제 코디 · 꾸미기 가방"}</span>
+                      <span className={s.meta}>{d.days ? "꾸미기 이용권 (꾸미기 가방)" : "기간제 코디 (꾸미기 가방)"}</span>
                     </span>
                   );
                 const def = d.kind === "gear" ? gearById(d.id) : potionById(d.id);
@@ -706,7 +706,7 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
             </div>
           ) : (
             <p className={s.meta}>
-              {outcome.tower ? "이번 판엔 주운 게 없어요. 5층마다 우두머리를 잡으면 상자가 열려요 (하루 15개)." : "이번 판엔 주운 게 없어요. 많이 잡을수록, 우두머리까지 잡으면 더 잘 나와요."}
+              {outcome.tower ? "이번 판엔 주운 게 없어요. 5층마다 나오는 우두머리를 잡으면 상자가 열려요." : "이번 판엔 주운 게 없어요. 많이 잡을수록 잘 나와요. 우두머리를 잡으면 더 잘 나와요."}
             </p>
           )}
           {r && r.lostDrops > 0 && <p className={s.warn}>가방이 가득 차서 {r.lostDrops}개는 못 챙겼어요.</p>}

@@ -1,5 +1,6 @@
 import type * as Phaser from "phaser";
 import { DIR, FISH_ARCH, FISHING_SPOTS, type FishingSpot, type Sid } from "@tomb/protocol";
+import { bridge } from "../../bridge";
 import { DEPTH } from "../../config";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../../text/GlyphAtlas";
 import { BUS_BAY, BUS_SHELTER_H, BUS_SIGN, BUS_SIGN_H, BUS_STOP, BUS_TIMETABLE, BUS_TIMETABLE_H, FISH_ARCH_H, FISH_DECOR, fishZoneColliders, WHARF_BOARD, WHARF_BOARD_H, WHARF_PLACARD } from "../fishZone";
@@ -44,6 +45,10 @@ export class FishZoneView {
   private readonly markers: Marker[] = [];
   private readonly labels: Phaser.GameObjects.BitmapText[] = [];
   private labelScale = 1;
+  /** 11/15 긴급 의뢰 현판: 위 띠·서버 전체 막대 (bridge urgent:board) */
+  private placardFx!: Phaser.GameObjects.Graphics;
+  private placardLabel!: Phaser.GameObjects.BitmapText;
+  private placardKey = "";
 
   constructor(private readonly d: FishZoneDeps) {
     const scene = d.scene;
@@ -59,7 +64,8 @@ export class FishZoneView {
     // 현판 글씨 (아치) · 게시판 · 빈 현판 · 버스 정류장
     this.label(FISH_ARCH.x, FISH_ARCH.y - FISH_ARCH_H + 4, "납품 부두", 0xfff0b8, 0.5);
     this.label(WHARF_BOARD.x, WHARF_BOARD.y - WHARF_BOARD_H - 1, "의뢰 게시판", 0xffe0a8, 1);
-    this.label(WHARF_PLACARD.x, WHARF_PLACARD.y - 31, "긴급 의뢰", 0xd8c8b0, 1, 0.7);
+    this.placardLabel = this.label(WHARF_PLACARD.x, WHARF_PLACARD.y - 31, "긴급 의뢰", 0xd8c8b0, 1, 0.7);
+    this.placardFx = scene.add.graphics().setDepth(WHARF_PLACARD.y + 2);
     this.label(BUS_STOP.x, BUS_STOP.y - BUS_SHELTER_H - 1, "주말 버스 정류장", 0xc8f0d8, 1);
     this.label(BUS_SIGN.x, BUS_SIGN.y - BUS_SIGN_H - 1, "언젠가 캠핑장행 · Someday Camp", 0xffe9a8, 1, 0.9);
     this.label(BUS_TIMETABLE.x, BUS_TIMETABLE.y - BUS_TIMETABLE_H - 1, "다음 버스: 언젠가", 0xe8e0d0, 1, 0.85);
@@ -100,6 +106,33 @@ export class FishZoneView {
   }
 
   /**
+   * 11/15 긴급 의뢰 현판: 진행 중이면 위 띠가 빨갛게 깜빡이고 종이에 서버 전체 막대(50%·100% 눈금)를 그린다.
+   * 끝나면 막대가 멈춘 채 띠가 회색, 축제 중이면 금빛. 의뢰가 없으면 빈 종이 그대로 (그림은 zoneArt placard — 24×30, 바닥 가운데 기준)
+   */
+  private updatePlacard(now: number): void {
+    const st = bridge.last("urgent:board") ?? null;
+    const blink = !!st?.live && !this.d.reduced && Math.floor(now / 500) % 2 === 0;
+    const key = st ? `${st.live}|${st.fest}|${st.stage}|${Math.round(st.frac * 16)}|${blink}` : "";
+    if (key === this.placardKey) return;
+    this.placardKey = key;
+    const g = this.placardFx.clear();
+    this.placardLabel.setTint(st ? (st.fest ? 0xffe08a : st.live ? 0xff9a80 : 0xe8dcc0) : 0xd8c8b0).setAlpha(st ? 1 : 0.7);
+    if (!st) return;
+    // 종이 왼쪽 위 (그림 3,4 — 18×13)
+    const x0 = WHARF_PLACARD.x - 12 + 3;
+    const y0 = WHARF_PLACARD.y + 1 - 30 + 4;
+    g.fillStyle(st.fest ? 0xf2c43a : st.live ? (blink ? 0xff5a40 : 0xc8392a) : 0x9a8a80, 1).fillRect(x0, y0, 18, 2);
+    // 막대 칸 (16×4)
+    const bx = x0 + 1;
+    const by = y0 + 6;
+    g.fillStyle(0x2a1a14, 1).fillRect(bx, by, 16, 4);
+    const w = Math.round(16 * st.frac);
+    if (w > 0) g.fillStyle(st.fest ? 0xffd44a : st.live ? 0xff7a4a : 0xb8a080, 1).fillRect(bx, by, w, 4);
+    // 50% · 100% 눈금 (150%가 끝)
+    for (const [i, x] of [bx + 5, bx + 11].entries()) g.fillStyle(st.stage >= (i ? 100 : 50) ? 0xfff0b0 : 0x6b4a3a, 1).fillRect(x, by - 1, 1, 6);
+  }
+
+  /**
    * 매 프레임. seats = 서버 좌석 점유표, mine = 내가 앉은 낚시 자리 id, me = 내 발 위치 (낚시 중이면 말풍선을 띄우지 않는다)
    */
   update(now: number, view: Phaser.Geom.Rectangle, labelScale: number, seats: ReadonlyMap<string, Sid>, mySid: Sid | null, mine: string | null, me: { x: number; y: number }): void {
@@ -107,6 +140,7 @@ export class FishZoneView {
       this.labelScale = labelScale;
       for (const l of this.labels) l.setScale(labelScale);
     }
+    this.updatePlacard(now);
     // 말풍선: 가장 가까운 자리 하나만 (낚시 중이면 없음)
     let hookAt: Marker | null = null;
     let best = HOOK_RADIUS;

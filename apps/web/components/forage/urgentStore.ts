@@ -1,0 +1,181 @@
+"use client";
+
+import { useEffect, useSyncExternalStore } from "react";
+import { bridge } from "@/game/bridge";
+import { errorMessage } from "@/lib/api";
+import { urgentApi } from "@/lib/forage/quests/urgentClient";
+import { urgentAnnounce, urgentStage } from "@/lib/forage/quests/urgent";
+import type { UrgentDeliverResponse, UrgentMeResponse, UrgentPublic } from "@/lib/forage/quests/urgentTypes";
+
+// 11/15: 긴급 의뢰의 클라이언트 사본 (위쪽 막대·게시판 칸이 같이 본다).
+//  - 서버 전체 상태(/api/forage/urgent)는 누구에게나 같아 CDN이 몇 초 캐시한다 → 진행 중 5초, 막 끝났으면 20초, 없으면 30초마다 묻는다 (탭이 숨으면 멈춘다)
+//  - 내 것(/api/forage/urgent/me)은 게시판을 열 때·의뢰가 끝났을 때만
+//  - 축제 끝 시각은 게임에 urgent:fest로 알린다 (폭죽·금빛 모닥불)
+
+/** 시작 알림 (until까지 크게) */
+export type UrgentAnnounce = { id: string; text: string; until: number };
+export type UrgentSnapshot = { pub: UrgentPublic | null; mine: UrgentMeResponse | null; error: string | null; announce: UrgentAnnounce | null };
+
+const SEEN_KEY = "tomb:urgentSeen";
+/** 시작 알림을 띄운 의뢰 (이 브라우저가 기억 — 새로고침해도 다시 안 뜬다) */
+function seenIds(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(SEEN_KEY) ?? "[]") as string[];
+  } catch {
+    return [];
+  }
+}
+function markSeen(id: string) {
+  try {
+    localStorage.setItem(SEEN_KEY, JSON.stringify([...seenIds().filter((x) => x !== id), id].slice(-8)));
+  } catch {
+    /* 저장 못 해도 알림만 한 번 더 뜬다 */
+  }
+}
+/** 시작 알림을 보이는 시간 */
+const ANNOUNCE_MS = 9_000;
+
+class UrgentClientStore {
+  private snap: UrgentSnapshot = { pub: null, mine: null, error: null, announce: null };
+  private listeners = new Set<() => void>();
+  private users = 0;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private inflight: Promise<void> | null = null;
+  private mineInflight: Promise<void> | null = null;
+  /** 끝난 것을 본 의뢰 (끝나면 내 것을 한 번 다시 받는다) */
+  private doneSeen = new Set<string>();
+
+  subscribe = (fn: () => void) => {
+    this.listeners.add(fn);
+    return () => {
+      this.listeners.delete(fn);
+    };
+  };
+  getSnapshot = () => this.snap;
+
+  private set(next: Partial<UrgentSnapshot>) {
+    this.snap = { ...this.snap, ...next };
+    this.listeners.forEach((fn) => fn());
+    const until = this.snap.pub?.ev?.festUntil ?? 0;
+    if ((bridge.last("urgent:fest")?.until ?? 0) !== until) bridge.emit("urgent:fest", { until });
+    // 납품 부두 현판 막대
+    const ev = this.snap.pub?.ev;
+    const now = Date.now();
+    const board = ev ? { live: now < ev.end, frac: ev.goal > 0 ? Math.min(1, ev.n / (ev.goal * 1.5)) : 0, stage: urgentStage(ev.n, ev.goal), fest: until > now } : null;
+    const prev = bridge.last("urgent:board");
+    if (JSON.stringify(prev ?? null) !== JSON.stringify(board)) bridge.emit("urgent:board", board);
+  }
+
+  /** 서버 전체 상태 다시 받기 */
+  refresh(): Promise<void> {
+    this.inflight ??= urgentApi
+      .status()
+      .then((pub) => this.accept(pub))
+      .catch((e) => this.set({ error: errorMessage(e) }))
+      .finally(() => {
+        this.inflight = null;
+      });
+    return this.inflight;
+  }
+
+  /** 내 것 다시 받기 */
+  refreshMine(): Promise<void> {
+    this.mineInflight ??= urgentApi
+      .me()
+      .then((mine) => this.set({ mine }))
+      .catch(() => undefined)
+      .finally(() => {
+        this.mineInflight = null;
+      });
+    return this.mineInflight;
+  }
+
+  /** 새 서버 상태 받기: 진행 중인 의뢰를 처음 보면 시작 알림, 끝난 걸 처음 보면 내 보상 확인 */
+  private accept(pub: UrgentPublic) {
+    const ev = pub.ev;
+    const now = Date.now();
+    if (ev && now < ev.end && !seenIds().includes(ev.id)) {
+      markSeen(ev.id);
+      const mins = Math.max(1, Math.ceil((ev.end - now) / 60_000));
+      this.set({ pub, error: null, announce: { id: ev.id, text: `${urgentAnnounce(ev.kind, ev.goal)} (${mins}분)`, until: now + ANNOUNCE_MS } });
+    } else this.set({ pub, error: null });
+    if (ev && now >= ev.end && !this.doneSeen.has(ev.id)) {
+      this.doneSeen.add(ev.id);
+      void this.refreshMine();
+    }
+  }
+
+  /** 시험 버튼 응답 등으로 받은 상태 (물음 간격도 새 상태에 맞춰 바로 다시 잡는다) */
+  setPublic(pub: UrgentPublic) {
+    this.accept(pub);
+    if (this.users) {
+      if (this.timer) clearTimeout(this.timer);
+      const gen = ++this.gen;
+      this.timer = setTimeout(() => this.loop(gen), this.nextDelay());
+    }
+  }
+
+  /** 납품 응답으로 막대·내 수를 바로 고친다 (다음 물음까지 기다리지 않게) */
+  applyDeliver(id: string, r: UrgentDeliverResponse) {
+    const ev = this.snap.pub?.ev;
+    if (ev && ev.id === id) this.set({ pub: { ...this.snap.pub!, ev: { ...ev, n: Math.max(ev.n, r.n), festUntil: r.festUntil || ev.festUntil } } });
+    const mine = this.snap.mine;
+    if (mine) this.set({ mine: { ...mine, rows: mine.rows.map((row) => (row.id === id ? { ...row, mine: r.mine, n: Math.max(row.n, r.n) } : row)) } });
+  }
+
+  private nextDelay(): number {
+    const ev = this.snap.pub?.ev;
+    const now = Date.now();
+    if (!ev) return 30_000;
+    if (now < ev.end) return 5_000;
+    return 20_000;
+  }
+
+  /** 묻기 고리 세대 (탭이 다시 보이면 새로 시작 — 고리가 둘로 갈라지지 않게) */
+  private gen = 0;
+
+  private loop = (gen: number) => {
+    if (gen !== this.gen || !this.users) return;
+    this.timer = null;
+    const go = typeof document === "undefined" || document.visibilityState === "visible";
+    const p = go ? this.refresh() : Promise.resolve();
+    void p.finally(() => {
+      if (gen === this.gen && this.users) this.timer = setTimeout(() => this.loop(gen), this.nextDelay());
+    });
+  };
+
+  private restart() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.loop(++this.gen);
+  }
+
+  private onVisible = () => {
+    if (document.visibilityState === "visible" && this.users) this.restart();
+  };
+
+  /** 화면이 쓰는 동안 주기적으로 묻는다 (몇 군데서 불러도 한 번만) */
+  use(): () => void {
+    this.users++;
+    if (this.users === 1) {
+      document.addEventListener("visibilitychange", this.onVisible);
+      this.restart();
+    }
+    return () => {
+      this.users--;
+      if (this.users > 0) return;
+      document.removeEventListener("visibilitychange", this.onVisible);
+      this.gen++;
+      if (this.timer) clearTimeout(this.timer);
+      this.timer = null;
+    };
+  }
+}
+
+export const urgentStore = new UrgentClientStore();
+
+/** 긴급 의뢰 상태 (쓰는 동안 주기적으로 받는다) */
+export function useUrgent(): UrgentSnapshot {
+  useEffect(() => urgentStore.use(), []);
+  return useSyncExternalStore(urgentStore.subscribe, urgentStore.getSnapshot, urgentStore.getSnapshot);
+}

@@ -206,7 +206,7 @@ export function allocStats(s: CharacterState, alloc: Partial<Stats>, budget?: nu
   let total = 0;
   for (const k of STAT_KEYS) {
     const n = alloc[k] ?? 0;
-    if (!Number.isInteger(n) || n < 0) throw new RpgError(400, "INVALID_INPUT", "능력치는 0 이상의 정수로 올려 주세요.");
+    if (!Number.isInteger(n) || n < 0) throw new RpgError(400, "INVALID_INPUT", "올릴 능력치 숫자가 맞지 않아요.");
     if (next.stats[k] + n > STAT_MAX) throw new RpgError(409, "STAT_MAX", `능력치는 ${STAT_MAX}까지 올릴 수 있어요.`);
     next.stats[k] += n;
     total += n;

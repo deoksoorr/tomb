@@ -178,7 +178,7 @@ export default function BgmPlayer({ compact = false }: { compact?: boolean }) {
             </button>
           </div>
           <div className={styles.row}>
-            <p className={cx(styles.now, styles.grow)}>{track ? `♪ ${track.title}` : "음원 준비 중 · 지금은 조용히 머물러요"}</p>
+            <p className={cx(styles.now, styles.grow)}>{track ? `♪ ${track.title}` : "음원을 준비하고 있어요"}</p>
             <button
               type="button"
               className={cx(ui.button, ui.quiet, ui.icon)}
@@ -217,8 +217,8 @@ function BgmCredits({ playlists, now, onClose }: { playlists: Playlist[]; now: s
               <PixelIcon name="note" /> {now ? `지금 재생 중 · ${now}` : "지금은 음악이 멈춰 있어요"}
             </p>
             <p className={styles.creditsMeta}>
-              {withTracks.length}개 갈래 · 모두 {total}곡. 왼쪽 위 음악 창에서 갈래를 골라 들을 수 있어요. 저작자 표시가 필요한 곡은 저작자와 출처를 함께
-              적었어요.
+              {withTracks.length}개 갈래에 모두 {total}곡이 있어요. 왼쪽 위 음악 창에서 갈래를 골라 들어요. 저작자 표시가 필요한 곡은 저작자와
+              출처를 함께 적었어요.
             </p>
           </div>
           {withTracks.map((p) => (

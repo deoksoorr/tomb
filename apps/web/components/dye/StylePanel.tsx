@@ -139,7 +139,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
     const n = owned(item.id);
     title = item.name;
     const tier = item.dye?.mode === "random" ? item.dye.tier : 1;
-    desc = `${item.desc} 흔들림 ${wobbleLabel(tier)} · 특수 색은 ${specialLabel(tier)} — 끝없이 이어지는 판에 아주 드물게 숨은 특수 색(금빛 광택·반짝이·무지개·야광) 칸을 고르면 그 부위가 빛나요. 제한 시간은 모두 60초예요.`;
+    desc = `${item.desc} 흔들림 ${wobbleLabel(tier)}, 특수 색은 ${specialLabel(tier)}. 판에 드물게 숨은 특수 색을 고르면 그 부위가 빛나요. 금빛 광택, 반짝이, 무지개, 야광이 있어요. 제한 시간은 60초예요.`;
     action = (
       <>
         <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={!me || pending || short(item.price)} onClick={() => buyTicket(item)}>
@@ -157,7 +157,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
     const part = d?.parts?.[0] ?? "body";
     if (d) previewColor = withDyePart(avatar.color, part, d.color);
     title = d?.name ?? "고정 색 염색권";
-    desc = d ? `정해진 색 ${d.color}으로 바로 염색해요.${d.parts?.length ? ` 쓸 수 있는 부위: ${d.parts.map((p) => DYE_PART_NAMES[p]).join("·")}` : ""}` : "";
+    desc = d ? `정해진 색 ${d.color}으로 바로 염색해요.${d.parts?.length ? ` ${d.parts.map((p) => DYE_PART_NAMES[p]).join(", ")}에만 쓸 수 있어요.` : ""}` : "";
     action = d && (
       <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={pending || owned(d.id) < 1} onClick={() => setOpen({ ticket: fixedTicket(d), resume: null })}>
         쓰기 (가방에 {owned(d.id)}장)
@@ -176,10 +176,10 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
     desc = staffBody
       ? (STAFF_BODIES.find((b) => b.id === sel.body)?.desc ?? "")
       : questLocked
-        ? `${prem!.desc} 수집 의뢰 도장 교환소(도장 ${questRewardById(QUEST_BODY_REWARD)?.price ?? 200}개)에서 받으면 영구 소장이라, 그다음부터는 언제든 무료로 바꿔요.`
+        ? `${prem!.desc} 수집 의뢰 도장 교환소에서 도장 ${questRewardById(QUEST_BODY_REWARD)?.price ?? 200}개로 받아요. 한 번 받으면 언제든 무료로 바꿔요.`
         : prem
-        ? `${prem.desc} ${fresh ? `선택권(${price.toLocaleString("ko-KR")}P)을 한 번 사면 영구 소장이라, 그다음부터는 언제든 무료로 바꿔요.` : "소장 중인 외형이에요. 언제든 무료로 바꿀 수 있어요."} 염색한 색은 새 몸의 같은 부위로 따라가요.`
-        : `기본 외형은 ${BASE_RESHAPE_PRICE}P로 바꿔요. 염색한 머리·몸·포인트 색은 새 몸의 같은 부위로 그대로 따라가요.`;
+        ? `${prem.desc} ${fresh ? `선택권(${price.toLocaleString("ko-KR")}P)을 한 번 사면 그다음부터는 언제든 무료로 바꿔요.` : "소장 중인 외형이에요. 언제든 무료로 바꿀 수 있어요."} 염색한 색은 새 몸의 같은 부위로 따라가요.`
+        : `기본 외형은 ${BASE_RESHAPE_PRICE}P로 바꿔요. 염색한 색은 새 몸에도 그대로 따라가요.`;
     action = (
       <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={!me || pending || same || questLocked || short(price)} onClick={() => doReshape(sel.body)}>
         {same

@@ -74,7 +74,7 @@ export default function GuestbookDialog({ houseId, houseName, mine, onClose }: {
                 남기기
               </button>
             </div>
-            <p className={styles.small}>하루 10개까지, 링크는 넣을 수 없어요. 서로 다른 세 사람이 신고하면 가려져요.</p>
+            <p className={styles.small}>하루 10개까지 남길 수 있어요. 링크는 넣을 수 없어요. 서로 다른 세 사람이 신고하면 가려져요.</p>
           </form>
         )}
         {entries === null && !msg && <p className={styles.muted}>불러오는 중…</p>}

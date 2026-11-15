@@ -143,7 +143,7 @@ export default function TitleNotice() {
             </li>
           ))}
         </ul>
-        <p className={styles.note}>가방 [칭호]에서 언제든 바꿔 달 수 있어요. 단 칭호는 머리 위 이름표 위에 보여요.</p>
+        <p className={styles.note}>가방 [칭호]에서 언제든 바꿔 달 수 있어요. 달고 있는 칭호는 이름표 위에 떠요.</p>
         <div className={styles.actions}>
           <button type="button" className={cx(ui.button, ui.primary)} disabled={pending} onClick={() => void wearNow()}>
             {many ? `「${first.name}」 지금 달기` : "지금 달기"}

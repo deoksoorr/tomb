@@ -89,6 +89,8 @@ export type TitleDef = {
   holder?: true;
   /** 11/15 지금 주인일 때만 (기록을 뺏기거나 주가 바뀌면 사라진다 — 한 번 얻어도 남지 않는다) */
   transient?: true;
+  /** 11/15 받은 때부터 정해진 동안만 (긴급 의뢰 — 서버가 끝 시각을 안다: TitleFacts.timed) */
+  timed?: true;
 };
 
 /** 단계별 칭호 한 줄: [id, 이름, 등급, 얻는 방법, 진행 수치, 필요 값, 갈래] */
@@ -190,6 +192,13 @@ const MYTHIC_ROWS: readonly (readonly [TitleId, string, string, boolean])[] = [
 ];
 const MYTHIC_OF = new Map(MYTHIC_ROWS.map((r) => [r[0], r]));
 
+/** 11/15 긴급 의뢰 칭호 (받은 때부터 하루만 — lib/forage/quests/urgent) */
+const TIMED_ROWS: readonly (readonly [TitleId, string, TitleGrade, string])[] = [
+  ["t_urgKing", "긴급 배달왕", "gold", "긴급 의뢰에서 가장 많이 낸 사람 (받은 때부터 하루)"],
+  ["t_urgLast", "아슬아슬 마감", "silver", "긴급 의뢰 마지막 1분에 100%를 채운 사람 (받은 때부터 하루)"],
+];
+const TIMED_OF = new Map(TIMED_ROWS.map((r) => [r[0], r]));
+
 function def(id: TitleId): TitleDef {
   const dex = DEX_OF[id];
   if (dex) {
@@ -208,6 +217,8 @@ function def(id: TitleId): TitleDef {
   if (r) return { id, name: r[1], group: r[6], grade: r[2], how: r[3], metric: r[4], need: r[5] };
   const my = MYTHIC_OF.get(id);
   if (my) return { id, name: my[1], group: "hunt", grade: "mythic", how: my[2], holder: true, ...(my[3] ? { transient: true as const } : {}) };
+  const tm = TIMED_OF.get(id);
+  if (tm) return { id, name: tm[1], group: "fish", grade: tm[2], how: tm[3], transient: true, timed: true };
   return { id, name: id, group: "dex", grade: "bronze", how: "" };
 }
 
@@ -306,6 +317,8 @@ export type TitleFacts = {
   metrics: Partial<Record<TitleMetric, number>>;
   /** 11/15 지금 주인인 신화 칭호 (서버 최초·꼭대기 층 주인·이번 주 최고층) */
   mythic?: readonly string[];
+  /** 11/15 지금 기간 안인 긴급 의뢰 칭호 */
+  timed?: readonly string[];
 };
 
 /** 얻은 칭호 id (지금 기록 기준 — 서버는 예전에 알린 칭호를 더해 "한 번 얻으면 남게" 한다) */
@@ -314,6 +327,7 @@ export function earnedTitleIds(f: TitleFacts): TitleId[] {
     if (t.group === "dex") return f.dexTitleNames.includes(t.name);
     if (t.board) return f.champBoards.includes(t.board);
     if (t.holder) return !!f.mythic?.includes(t.id);
+    if (t.timed) return !!f.timed?.includes(t.id);
     return t.metric !== undefined && t.need !== undefined && (f.metrics[t.metric] ?? 0) >= t.need;
   }).map((t) => t.id);
 }

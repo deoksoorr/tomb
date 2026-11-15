@@ -1048,6 +1048,35 @@ export const FX_ART = {
       return g;
     },
   },
+  /** 11/15 사이렌 모자: 경광등에서 뻗는 빛줄기 (꼭짓점 = 왼쪽 가운데, 0 빨강 · 1 파랑, 더해 그린다) */
+  uSirenBeam: {
+    w: 22,
+    h: 9,
+    frames: 2,
+    build: frames(22, 9, 2, (g, f) => {
+      const c = f ? 0x5aa8ff : 0xff5a40;
+      for (let x = 0; x < 22; x++) {
+        const half = 0.5 + x * 0.19;
+        for (let y = 0; y < 9; y++) {
+          const d = Math.abs(y + 0.5 - 4.5);
+          if (d > half) continue;
+          const a = Math.round(150 * (1 - x / 22) * (1 - (d / half) * 0.55));
+          if (a > 4) g.set(x, y, c, a);
+        }
+      }
+    }),
+  },
+  /** 사이렌 모자: 경광등 둘레의 번쩍임 (0 빨강 · 1 파랑) */
+  uSirenFlare: {
+    w: 9,
+    h: 9,
+    frames: 2,
+    build: frames(9, 9, 2, (g, f) => {
+      const c = f ? 0x7ab8ff : 0xff6a50;
+      g.ellipse(4.5, 4.5, 4.5, 4.5, c, 70);
+      g.ellipse(4.5, 4.5, 2.2, 2.2, f ? 0xd8ecff : 0xffd8c8, 150);
+    }),
+  },
   // 11/15: 말랑 꾸미기 묶음 (cuteFx.ts)
   ...CUTE_FX_ART,
 } satisfies Record<string, ArtDef>;
@@ -1070,7 +1099,7 @@ type TrailSpec = { kind: "trail"; art: FxArtId; step: number; life: number; moti
 type AuraSpec = {
   kind: "aura";
   /** tier* = 25번 프리미엄 외형 등급 연출 (꾸미기가 아니라 몸에 딸린다) */
-  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ" | "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" | "qSnowGlobe" | "qSnowPuff" | "qWishGlow";
+  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ" | "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" | "qSnowGlobe" | "qSnowPuff" | "qWishGlow" | "uSiren";
   art?: FxArtId;
   light?: boolean;
   /** champ = 주간 랭킹 1위 오라 테마 (champTheme) */
@@ -1156,6 +1185,8 @@ export const GEAR_EXTRA_FX: Readonly<Record<string, FxSpec>> = {
   q_hat_miner: { kind: "aura", motion: "qLamp", light: true },
   q_hat_snow: { kind: "aura", motion: "qSnowPuff" },
   q_hand_wishlamp: { kind: "aura", motion: "qWishGlow", light: true },
+  // 11/15 긴급 의뢰: 사이렌 모자 경광등이 빙글빙글 (빨강·파랑 빛줄기)
+  u_hat_siren: { kind: "aura", motion: "uSiren", light: true },
 };
 
 /**
@@ -1749,6 +1780,9 @@ export class CosmeticFxSim {
       case "qWishGlow":
         questAura(s.motion, f, t, out);
         break;
+      case "uSiren":
+        sirenFx(f, t, out);
+        break;
       case "snow":
       case "petals": {
         const petals = s.motion === "petals";
@@ -2190,6 +2224,28 @@ function questAura(motion: "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" |
       break;
     }
   }
+}
+
+/**
+ * 11/15 사이렌 모자: 정수리 경광등에서 빨강·파랑 빛줄기 두 개가 마주 보고 빙글빙글 돈다 (앞으로 올 때 밝게, 뒤로 갈 때 흐리게).
+ * 돌 때마다 돔이 번쩍인다. 움직임 줄이기·미리보기는 멈춘 빛 한 쌍
+ */
+function sirenFx(f: FxInput, t: number, out: FxCmd[]): void {
+  if (f.hidden) return;
+  const calm = f.reduced || !!f.still;
+  const night = f.still || isNight(f.now);
+  const bx = Math.round(f.x - (f.dir === DIR.right ? 0 : f.dir === DIR.left ? 1 : 1));
+  const by = Math.round(f.headY - f.artTop + 1);
+  const a0 = calm ? 0.6 : t / 240;
+  for (let k = 0; k < 2; k++) {
+    const a = a0 + k * Math.PI;
+    // 옆에서 본 원 (위아래로 납작하게): 앞쪽(sin > 0)일수록 밝다
+    const z = Math.sin(a);
+    const al = (night ? 0.95 : 0.6) * (0.45 + 0.55 * Math.max(0, z * 0.5 + 0.5));
+    out.push(cmd("uSirenBeam", k, bx, by, { ox: 0, oy: 0.5, rot: Math.atan2(Math.sin(a) * 0.35, Math.cos(a)), sx: 0.55 + 0.45 * Math.abs(Math.cos(a)), alpha: al, layer: "light", depth: 0 }));
+  }
+  const flash = calm ? 0.7 : Math.max(0, Math.cos(a0 * 2));
+  out.push(cmd("uSirenFlare", Math.floor(((a0 / Math.PI) % 2 + 2) % 2), bx, by, { alpha: (night ? 0.9 : 0.55) * (0.35 + 0.65 * flash), layer: "light", depth: 0 }));
 }
 
 function cmd(art: FxArtId, frame: number, x: number, y: number, o: Partial<FxCmd> = {}): FxCmd {

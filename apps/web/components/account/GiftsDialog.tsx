@@ -141,7 +141,7 @@ export default function GiftsDialog({ onClose, onOpenCalendar }: { onClose: () =
         <InfoCard title="선물은 이럴 때 와요" icon="info">
           <TipList
             tips={[
-              "예를 들어 점검·오류로 불편을 겪은 날, 마을 관리인이 사과의 뜻으로 보내요.",
+              "점검이나 오류로 불편했던 날에는 마을 관리인이 사과 선물을 보내요.",
               "이벤트·명절·업데이트 기념 선물이 오기도 해요.",
               "받은 포인트는 바로 내 포인트에, 아이템은 가방에 들어가요.",
               "받은 선물 기록도 30일 동안 여기에 남아요. 필요 없으면 지워도 돼요.",

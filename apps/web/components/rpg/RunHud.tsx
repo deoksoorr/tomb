@@ -79,7 +79,7 @@ function KeyHelp() {
           </div>
         ))}
       </dl>
-      <small>자동 스킬은 쓸 만한 때를 기다렸다 써요. 궁극기·몸 옮기기 스킬은 자동이 안 돼요.</small>
+      <small>자동 스킬은 쓰기 좋은 때를 기다렸다가 써요. 궁극기와 이동 스킬은 자동이 안 돼요.</small>
     </div>
   );
 }
@@ -206,7 +206,7 @@ export default function RunHud({
       const touch = window.matchMedia?.("(pointer: coarse)").matches;
       setHint(
         touch
-          ? "[자동]을 누르고 스킬 칸을 고르면 자동 · 왼쪽 위 '스킬 자동'으로 한꺼번에 · 왼쪽 아무 데나 끌면 걷기"
+          ? "[자동]을 누르고 스킬 칸을 누르면 그 칸이 자동이 돼요. 화면 왼쪽을 누른 채 끌면 걸어요."
           : "H를 누르면 키 안내가 다시 떠요",
       );
       timer = setTimeout(() => setHint(null), AUTO_HINT_MS);
@@ -276,7 +276,7 @@ export default function RunHud({
                     className={cx(s.autoChip, hud.auto.on && s.autoChipOn)}
                     onPointerDown={(e) => act(e, { kind: "auto", slot: "all" })}
                     aria-pressed={hud.auto.on}
-                    title="자동으로 정한 스킬 칸을 한꺼번에 켜기·끄기 (X)"
+                    title="자동 스킬을 전부 켜고 꺼요 (X)"
                   >
                     스킬 자동 <kbd>X</kbd>
                   </button>
@@ -370,7 +370,7 @@ export default function RunHud({
         )}
         {editing && (
           <p className={cx(s.banner, s.autoHint)} role="status">
-            자동으로 쓸 스킬을 누르세요 · 다시 [자동]을 누르면 끝
+            자동으로 쓸 스킬 칸을 눌러요. 다 고르면 [자동]을 다시 눌러요.
           </p>
         )}
         {hint && !hud?.message && !editing && (
@@ -426,7 +426,7 @@ export default function RunHud({
                       e.stopPropagation();
                     }}
                     aria-label={`${sk.name} (${key})${auto ? (live ? ", 자동" : ", 자동 꺼둠") : ""}${short ? `, SP ${need} 필요` : ""}`}
-                    title={ult ? `${sk.name} · F (궁극기는 직접 써요)` : `${sk.name} · ${key} · Shift+${key}·우클릭·[자동]으로 자동`}
+                    title={ult ? `${sk.name} (F). 궁극기는 직접 써요` : `${sk.name} (${key}). 오른쪽 클릭이나 Shift+${key}로 자동을 켜고 꺼요`}
                   >
                     <RpgIcon art={sk.art} size={32} />
                     <span className={s.skillKey}>{key}</span>
@@ -446,8 +446,8 @@ export default function RunHud({
                     e.preventDefault();
                     setEdit(!editing);
                   }}
-                  aria-label={editing ? "자동 설정 끝내기" : "자동 설정: 누른 뒤 스킬 칸을 누르면 그 칸 자동 켜기·끄기"}
-                  title="누른 뒤 스킬 칸을 누르면 그 칸 자동 켜기·끄기 (쓰지 않음)"
+                  aria-label={editing ? "자동 고르기 끝내기" : "자동 고르기. 누른 다음 스킬 칸을 누르면 그 칸이 자동이 돼요"}
+                  title="누른 다음 스킬 칸을 누르면 그 칸이 자동이 돼요. 스킬은 나가지 않아요."
                 >
                   자동
                 </button>
@@ -466,7 +466,7 @@ export default function RunHud({
               onPointerUp={release}
               onPointerCancel={release}
               onLostPointerCapture={release}
-              aria-label="공격 (누르고 있으면 계속)"
+              aria-label="공격. 누르고 있으면 계속 때려요"
             >
               {(hud?.attack ?? 0) > 0 && <span className={s.cool} style={ring(hud!.attack!)} />}
               <span className={s.attackLabel}>공격</span>
@@ -474,7 +474,7 @@ export default function RunHud({
           </>
         )}
         {game !== "hunt" && (
-          <p className={s.keysHint}>{look === "meadow" ? "덤불 누르기 · Q W E / A S D / Z X C · 벌·낙엽은 그대로 두기 · Esc 멈춤" : `${GAMES[game].how} · Esc 멈춤`}</p>
+          <p className={s.keysHint}>{look === "meadow" ? "덤불을 눌러요 (Q W E / A S D / Z X C). 벌과 낙엽은 그냥 둬요. Esc는 멈춤." : `${GAMES[game].how} · Esc 멈춤`}</p>
         )}
       </div>
     </div>

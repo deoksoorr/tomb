@@ -26,7 +26,7 @@ export function valueScore(value: number): number {
 /** 꾸미기 한 점의 영구 소장 기준 가치 (꾸미기가 아니거나 운영자 전용·주간 1위 전용이면 0) */
 export function itemLookValue(itemId: string): number {
   const it = itemById(itemId);
-  if (!it || it.kind !== "cosmetic" || it.staff || it.champ) return 0;
+  if (!it || it.kind !== "cosmetic" || it.staff || it.champ || it.urgent) return 0;
   return petPrice(itemId) ?? it.price * PERMANENT_MULTIPLIER;
 }
 

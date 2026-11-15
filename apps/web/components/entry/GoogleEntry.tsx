@@ -35,18 +35,18 @@ export function GoogleNewStep({ onCode, onCreate, onBack }: { onCode: () => void
       </h2>
       <div id="google-new-warn" className={styles.warn}>
         <strong>이미 코드로 만든 계정이 있나요?</strong>
-        <p>여기서 새로 만들면 기존 계정과 합쳐지지 않아요.</p>
+        <p>여기서 새로 만들면 쓰던 계정과 합쳐지지 않아요.</p>
         <p>
-          기존 계정이 있다면 [코드로 시작]으로 들어간 뒤, 오른쪽 위 포인트 단추(내 정보)에서 구글을 연결해 주세요.
+          쓰던 계정이 있으면 [코드로 시작]으로 먼저 들어가요. 그다음 오른쪽 위 포인트 단추(내 정보)에서 구글을 연결해요.
         </p>
       </div>
       <div className={styles.choices}>
         <button type="button" className={cx(ui.button, styles.choice)} onClick={onCode} autoFocus>
-          기존 계정이 있어요 — 코드로 들어가기
-          <span className={entry.bigSub}>들어간 뒤 내 정보에서 구글을 연결해요</span>
+          쓰던 계정이 있어요
+          <span className={entry.bigSub}>코드로 들어간 뒤 내 정보에서 구글을 연결해요</span>
         </button>
         <button type="button" className={cx(ui.button, ui.primary, styles.choice)} onClick={onCreate}>
-          처음이에요 — 새로 만들기
+          처음이에요
           <span className={entry.bigSub}>이름과 모습을 정하면 이 구글 계정이 연결돼요</span>
         </button>
       </div>
@@ -89,11 +89,11 @@ export function GoogleDoneStep({ done, onEnter }: { done: GoogleDone; onEnter: (
               복사
             </button>
           </div>
-          <p className={ui.hint}>{message ?? "이 기기에서는 내 정보 → 개인 코드에서 다시 볼 수 있어요."}</p>
+          <p className={ui.hint}>{message ?? "이 기기에서는 내 정보의 개인 코드에서 다시 볼 수 있어요."}</p>
         </div>
       )}
       <button type="button" className={cx(ui.button, ui.primary, entry.enter)} onClick={onEnter} autoFocus={!done.code}>
-        {done.code ? "적어 뒀어요 — 입장하기" : "입장하기"}
+        {done.code ? "적어 뒀어요. 들어가기" : "들어가기"}
       </button>
     </div>
   );

@@ -11,14 +11,14 @@ export default function TermsPage() {
     <main className={styles.page}>
       <div className={styles.inner}>
         <Link href="/" className={styles.home}>
-          ← 묘지로 돌아가기
+          ← 마을로 돌아가기
         </Link>
         <h1 className={styles.title}>이용약관</h1>
         <p className={styles.date}>시행일 {EFFECTIVE}</p>
 
         <h2>1. 서비스</h2>
         <p>
-          「At one time...」은 누구나 한때 시작했다 그만둔 것들이 잠든 공동묘지 컨셉의 도트 마을이에요. 다른 방문자와 함께 쉬고, 사냥하고,
+          「At one time...」은 유령들이 모여 사는 도트 마을이에요. 다른 방문자와 함께 쉬고, 사냥하고,
           집을 꾸미고, 한 사람에 하나씩 묘비를 세울 수 있는 무료 웹 서비스예요. 들어오는 것만으로 이 약관에 동의한 것으로 봐요.
         </p>
         <p>

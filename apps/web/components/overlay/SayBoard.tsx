@@ -116,7 +116,7 @@ export default function SayBoard({ onSent }: { onSent: () => void }) {
           </section>
         ))}
       </div>
-      <p className={styles.muted}>말풍선은 머리 위에 4초쯤 떠요. 같은 채널(또는 같은 방) 사람들에게만 보여요. 직접 쓰고 싶으면 맨 위 입력칸(데스크톱은 게임 화면에서 Enter)을 쓰세요.</p>
+      <p className={styles.muted}>말풍선은 머리 위에 4초쯤 떠요. 같은 채널이나 같은 방에 있는 사람만 봐요. 직접 쓰려면 맨 위 입력칸에 써요. 컴퓨터는 게임 화면에서 Enter를 눌러도 돼요.</p>
     </div>
   );
 }

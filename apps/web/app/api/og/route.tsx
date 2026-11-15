@@ -98,7 +98,7 @@ function SiteCard() {
     <Frame>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 170 }}>
         <div style={{ fontSize: 120 }}>At one time...</div>
-        <div style={{ fontSize: 40, color: C.muted, marginTop: 28 }}>끝내지 못한 것들이 잠든 도트 마을</div>
+        <div style={{ fontSize: 40, color: C.muted, marginTop: 28 }}>유령들이 모여 사는 도트 마을</div>
       </div>
       <div
         style={{ position: "absolute", left: 0, right: 0, bottom: 0, display: "flex", justifyContent: "center", gap: 70, alignItems: "flex-end" }}

@@ -74,7 +74,7 @@ export const SG_SET_INFO: Record<SgSet, SgSetInfo> = {
       acc2: "목걸이 끝에 뚜껑 덮인 빈 종이컵.",
     },
     two: "최대 체력 +10%",
-    four: "체력이 30% 아래면 공격력 +25%, 받는 피해 −10%",
+    four: "체력이 30% 아래일 때 공격력 +25%, 받는 피해 −10%",
   },
   approval: {
     name: "결재 세트",
@@ -97,7 +97,7 @@ export const SG_SET_INFO: Record<SgSet, SgSetInfo> = {
       acc2: "붉은 목줄 출입증. 사장실 문이 열린다.",
     },
     two: "치명타 +6%",
-    four: "치명타가 터지면 3초 동안 공격 속도 +20%",
+    four: "치명타가 터질 때마다 3초 동안 공격 속도 +20%",
   },
   meeting: {
     name: "회의 세트",
@@ -120,7 +120,7 @@ export const SG_SET_INFO: Record<SgSet, SgSetInfo> = {
       acc2: "스프링 수첩. 회의록은 아무도 안 읽는다.",
     },
     two: "SP +20%, 스킬 피해 +8%",
-    four: "스킬을 쓰면 다음 스킬 재사용 시간 −15%",
+    four: "스킬을 쓸 때마다 다음 스킬 재사용 시간 −15%",
   },
   trip: {
     name: "출장 세트",
@@ -143,7 +143,7 @@ export const SG_SET_INFO: Record<SgSet, SgSetInfo> = {
       acc2: "바코드가 찍힌, 끝이 말린 영수증.",
     },
     two: "이동 속도 +8%",
-    four: "3초 동안 안 맞으면 다음 공격 피해 +40%",
+    four: "3초 동안 안 맞았을 때 다음 공격 피해 +40%",
   },
 };
 
@@ -247,7 +247,7 @@ export const SG_OPT_COUNT = [2, 2, 3, 3] as const;
 /** 임원급에만 붙는 전설 옵션 확률 */
 export const SG_LEGEND_CHANCE = 0.1;
 export const SG_LEGENDS: Record<number, { name: string; desc: string }> = {
-  1: { name: "결재 완료", desc: "우두머리 체력이 30% 아래면 주는 피해 +25%" },
+  1: { name: "결재 완료", desc: "우두머리 체력이 30% 아래일 때 주는 피해 +25%" },
   2: { name: "칼퇴", desc: "판 시작 20초 동안 공격 속도 +30%" },
   3: {
     name: "연차",
@@ -638,17 +638,17 @@ export const MAT_KEY: Record<MatId, keyof Mats> = {
 export const MAT_INFO: Record<MatId, { name: string; desc: string; art: IconArt }> = {
   m_doc: {
     name: "결재 서류",
-    desc: "우두머리 상자마다 나와요. 강화 +6부터, 옵션 굴리기에 써요.",
+    desc: "우두머리 상자마다 나와요. +6부터 강화할 때와 옵션을 굴릴 때 써요.",
     art: { shape: "mat_doc", main: 0xf2ead3, accent: 0xc8323c },
   },
   m_seal: {
     name: "인감 도장",
-    desc: "25층 넘는 우두머리 상자에서 나와요. 강화 +11부터, 옵션 고정에 써요.",
+    desc: "25층보다 높은 우두머리 상자에서 나와요. +11부터 강화할 때와 옵션을 고정할 때 써요.",
     art: { shape: "mat_seal", main: 0xc8323c, accent: 0xe8b830 },
   },
   m_prot: {
     name: "보호 문서",
-    desc: "이번 주 최고 층이 10층 단위를 넘으면 받아요. 강화가 실패해도 내려가지 않게 막아요.",
+    desc: "이번 주 최고 층이 10층, 20층처럼 새로 10층을 넘을 때 받아요. 강화에 실패해도 단계가 내려가지 않게 막아 줘요.",
     art: { shape: "mat_prot", main: 0x6cb4f0, accent: 0xf2f2f2 },
   },
 };

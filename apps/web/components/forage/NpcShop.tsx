@@ -66,7 +66,7 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
       if (count > 0) bridge.emit("forage:coin");
       setNotice(
         count === 0
-          ? "오늘은 더 못 사요. 한도가 다 찼어요 — 가방에 두었다가 내일 와요."
+          ? "오늘 한도가 다 차서 더 못 사요. 가방에 두었다가 내일 와요."
           : `${count}개를 팔아 +${res.earned}P 받았어요.${res.capped ? " 오늘 한도에 닿아서 나머지는 가방에 남겨 뒀어요." : ""}`,
       );
     } catch (e) {

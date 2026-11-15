@@ -266,7 +266,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                 className={g.setChip}
                 data-on={counts[set] >= 2 || undefined}
                 style={{ "--set": SG_SET_INFO[set].color } as CSSProperties}
-                title={`2세트 ${SG_SET_INFO[set].two} · 4세트 ${SG_SET_INFO[set].four}`}
+                title={`2개 끼면 ${SG_SET_INFO[set].two}, 4개 끼면 ${SG_SET_INFO[set].four}`}
               >
                 <b>{SG_SET_INFO[set].short}</b> {counts[set]}/4
               </span>
@@ -498,7 +498,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                   );
                 })}
               </ul>
-              <p className={g.note}>되팔면 산 값의 50%예요. 주운 장비는 오늘 사냥 포인트 한도 안에서 받아요.</p>
+              <p className={g.note}>되팔면 산 값의 50%를 받아요. 주운 장비는 오늘 사냥 포인트 한도까지만 받아요.</p>
             </>
           )}
         </div>
@@ -681,10 +681,10 @@ function SgDetail({
       </ul>
       <div className={g.setFx}>
         <span>
-          {info.name} {x.slot ? `${count}/4` : `${count}/4 → 끼면 ${Math.min(5, after)}/4`}
+          {info.name} {x.slot ? `${count}/4` : `${count}/4, 끼면 ${Math.min(5, after)}/4`}
         </span>
-        <span data-on={count >= 2 || undefined}>2세트 · {info.two}</span>
-        <span data-on={count >= 4 || undefined}>4세트 · {info.four}</span>
+        <span data-on={count >= 2 || undefined}>2개 끼면 {info.two}</span>
+        <span data-on={count >= 4 || undefined}>4개 끼면 {info.four}</span>
       </div>
       <p className={g.note}>
         {x.gear.desc}
@@ -797,7 +797,7 @@ function PotionList({
           </li>
         );
       })}
-      <li className={g.note}>되팔면 값의 50%예요. 오늘 사냥 포인트 한도에 막힌 것은 가방에 남아요.</li>
+      <li className={g.note}>되팔면 값의 50%를 받아요. 오늘 사냥 포인트 한도가 차면 못 팔고 가방에 남아요.</li>
     </ul>
   );
 }

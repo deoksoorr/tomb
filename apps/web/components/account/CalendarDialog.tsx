@@ -28,7 +28,7 @@ function syncAttendance(c: CalendarResponse): void {
 }
 const monthLabel = (m: string) => `${m.slice(0, 4)}년 ${Number(m.slice(4))}월`;
 /** 구간 코디 보상 알림: "출석 7일 보상: 나비넥타이 (7일)" */
-const tierRewardText = (g: AttendTierGrant) => `출석 ${g.days}일 보상: ${itemName(g.itemId)} (${tierTermText(g.termDays)})`;
+const tierRewardText = (g: AttendTierGrant) => `출석 ${g.days}일 보상 「${itemName(g.itemId)}」 (${tierTermText(g.termDays)})`;
 
 /**
  * 10번 출석 달력: 한 달을 보여 주고 오늘 칸을 눌러 받는다. 받은 날은 도장, 못 받고 지난 날은 회색.
@@ -85,7 +85,7 @@ export default function CalendarDialog({ onClose }: { onClose: () => void }) {
       setFreshTiers(new Set(tiers.map((g) => g.days)));
       setNotice([msg, ...tiers.map(tierRewardText)].join(" · "));
       showToast(`출석 도장 꾹! ${msg}`, 5_000);
-      for (const g of tiers) showToast(`반짝! ${tierRewardText(g)} — 가방 꾸미기에서 입어 보세요`, 7_000);
+      for (const g of tiers) showToast(`반짝! ${tierRewardText(g)} 도착! 가방 꾸미기에서 입어 보세요.`, 7_000);
     } catch (e) {
       setNotice(errorMessage(e));
     } finally {
@@ -122,7 +122,7 @@ export default function CalendarDialog({ onClose }: { onClose: () => void }) {
                   ? "오늘 출석 도장을 찍었어요. 내일 또 만나요!"
                   : cal.claimable
                     ? "오늘 칸을 눌러 출석 도장을 찍으세요!"
-                    : `${ATTEND_RULE_TEXT}. (다른 일을 해도 괜찮아요)`}
+                    : `${ATTEND_RULE_TEXT}. 다른 일을 해도 괜찮아요.`}
               </p>
               <p className={styles.streak}>
                 연속 출석 <b>{cal.streak}</b>일
@@ -215,7 +215,7 @@ export default function CalendarDialog({ onClose }: { onClose: () => void }) {
 
             <TierRoad cal={cal} stamped={stamped} isCurrent={isCurrent} fresh={freshTiers} />
 
-            <p className={ui.hint}>날짜는 한국 시간 새벽 5시에 바뀌어요 (새벽 5시 전까지는 전날 칸). 머문 시간은 {STAY_TICK_MINUTES}분마다 쌓여요.</p>
+            <p className={ui.hint}>날짜는 한국 시간 새벽 5시에 바뀌어요. 그 전까지는 전날 칸이에요. 머문 시간은 {STAY_TICK_MINUTES}분마다 쌓여요.</p>
           </>
         )}
         <p className={styles.notice} role="status">

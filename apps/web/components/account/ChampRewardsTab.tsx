@@ -61,7 +61,7 @@ export default function ChampRewardsTab({
     return (
       <div className={styles.champEmpty}>
         <p>이번 주 레이스에서 1위를 하면 여기에 보상이 들어와요.</p>
-        <p className={styles.meta}>포인트·사냥 처치·낚시 랭킹마다 1위에게 전용 모자(다음 발표까지) · 전용 오라 · 이름표 배지 · 1,000P</p>
+        <p className={styles.meta}>포인트, 사냥 처치, 낚시 랭킹에서 1위를 하면 전용 모자와 오라, 이름표 배지, 1,000P를 받아요.</p>
         {onOpenRace && (
           <button type="button" className={cx(ui.button, ui.primary)} onClick={onOpenRace}>
             레이스 보기
@@ -81,7 +81,7 @@ export default function ChampRewardsTab({
             <div className={styles.champNowText}>
               <span className={styles.champBadge}>운영자 오라</span>
               <span className={styles.name}>푸른 저승 등불빛 고리 · 떠도는 넋 불빛 · 검은 연기 띠</span>
-              <span className={styles.meta}>운영자 계정에 늘 붙어요 (전용 오라보다 우선) · 다른 사람 화면에도 보여요</span>
+              <span className={styles.meta}>운영자 계정에 늘 붙어요. 다른 사람 화면에도 보여요.</span>
             </div>
           </div>
         </section>

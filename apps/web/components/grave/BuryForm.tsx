@@ -165,7 +165,7 @@ function BuryFormInner({ mode, mourner, cache, channel, graveCount, onClose }: P
         saveOwnerToken(grave.id, ownerToken);
         cache.upsert(grave);
         meStore.addGrave(grave.id);
-        meStore.addEarned(earned);
+        meStore.addEarned(earned, "bury");
         if (spends) void meStore.refresh();
         bridge.emit("grave:buried", { graveId: grave.id });
         const index = cache.getSnapshot().graves.findIndex((g) => g.id === grave.id);

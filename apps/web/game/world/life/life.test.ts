@@ -1,4 +1,4 @@
-import { GOBLIN_ROUTES, MAP_HEIGHT, MAP_WIDTH, TELESCOPE_SPOT, goblinPos, spotSeatId, seatSlot, STATE, spotKindOfState, SPOT_KINDS } from "@tomb/protocol";
+import { GOBLIN_ROUTES, MAP_HEIGHT, MAP_WIDTH, TELESCOPE_SPOT, TELESCOPES, goblinPos, spotSeatId, seatSlot, STATE, spotKindOfState, SPOT_KINDS } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { lineOfSight } from "../../logic/pathfind";
 import { inWater, interactables, standable, walkableGrid, WALK } from "../layout";
@@ -125,6 +125,22 @@ describe("stargazing hill spots", () => {
     expect(spotKindOfState(STATE.idle)).toBeNull();
     expect(spotKindOfState(STATE.sitGround)).toBeNull();
     expect(spotKindOfState(SPOT_KINDS.hammock.state)).toBe("hammock");
+  });
+
+  it("11/15 망원경 두 대: 앞자리마다 다른 1인 자리 id, 서로 떨어져 있고 받침·다른 상호작용과 겹치지 않는다", () => {
+    const items = interactables();
+    const scopes = items.filter((o) => o.kind === "telescope");
+    expect(scopes).toHaveLength(TELESCOPES.length);
+    expect(TELESCOPES.length).toBeGreaterThanOrEqual(2);
+    const ids = scopes.map((o) => spotSeatId("telescope", o.ax, o.ay));
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(new Set(scopes.map((o) => o.id)).size).toBe(scopes.length);
+    for (const o of scopes) {
+      expect(standable(o.ax, o.ay)).toBe(true);
+      expect(seatSlot(spotSeatId("telescope", o.ax, o.ay))).toMatchObject({ kind: "telescope" });
+      // 다른 상호작용 자리(돗자리·열기구·옆 망원경)와 E 범위가 겹치지 않는다
+      for (const p of items) if (p !== o) expect(Math.hypot(p.x - o.x, p.y - o.y), `${o.id}↔${p.id}`).toBeGreaterThan(o.r + p.r);
+    }
   });
 });
 

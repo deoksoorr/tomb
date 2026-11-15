@@ -69,8 +69,8 @@ function MegaphoneDialog({ channel, onOpenShop, onClose }: { channel: number; on
     <Dialog title="확성기로 외치기" onClose={onClose} closable={!pending}>
       <form className={styles.form} onSubmit={(e) => void submit(e)}>
         <p className={ui.hint}>
-          내 닉네임과 한마디가 사람들 화면 가운데에 몇 초간 크게 뜨고, 확성기 기록(컴퓨터는 왼쪽 위, 휴대폰은 조이스틱 위)에{" "}
-          {MEGAPHONE_TTL_MS / 60_000}분 동안 남아요. 욕설·링크는 쓸 수 없고, 30초에 한 번만 외칠 수 있어요.
+          내 이름과 한마디가 모두의 화면 가운데에 몇 초 동안 크게 떠요. 확성기 기록에는 {MEGAPHONE_TTL_MS / 60_000}분 동안 남아요. 욕설과
+          링크는 쓸 수 없어요. 30초에 한 번 외칠 수 있어요.
         </p>
         <fieldset className={styles.kinds}>
           <legend className={ui.label}>어디에 외칠까요?</legend>
@@ -167,8 +167,8 @@ function MegaphoneDialog({ channel, onOpenShop, onClose }: { channel: number; on
                   <b>확성기</b>는 지금 채널({channel}채널)에만, <b>전체 확성기</b>는 모든 채널에 들려요.
                 </>,
                 "여러 사람이 한꺼번에 외치면 온 차례대로 하나씩 가운데에 떠요.",
-                "외친 기록은 확성기 창(컴퓨터는 왼쪽 위, 휴대폰은 조이스틱 위)에서 다시 볼 수 있고, 거기서 신고할 수 있어요.",
-                "만남 약속·모닥불 모임·사냥 동료 찾기에 쓰면 좋아요.",
+                "외친 기록은 확성기 창에서 다시 보고 신고할 수 있어요. 컴퓨터는 왼쪽 위, 휴대폰은 조이스틱 위에 있어요.",
+                "모닥불 모임을 열거나 같이 사냥할 사람을 찾을 때 써 보세요.",
               ]}
             />
             <p className={styles.meta}>

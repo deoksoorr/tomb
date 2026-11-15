@@ -72,7 +72,7 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
       const m = item.dye?.mode;
       if (n > 0 && (m === "pick" || m === "special")) return [{ key: item.id, name: item.name, desc: item.desc, count: n, icon: <ItemIcon itemId={item.id} size={32} />, ticket: { itemId: item.id, name: item.name, mode: m } }];
       const t = ticketOf(item);
-      return n > 0 && t ? [{ key: item.id, name: item.name, desc: t.mode === "random" ? `${item.desc} (흔들림 ${wobbleLabel(t.tier)} · 특수 색은 ${specialLabel(t.tier)})` : item.desc, count: n, icon: <ItemIcon itemId={item.id} size={32} />, ticket: t }] : [];
+      return n > 0 && t ? [{ key: item.id, name: item.name, desc: t.mode === "random" ? `${item.desc} (흔들림 ${wobbleLabel(t.tier)}, 특수 색은 ${specialLabel(t.tier)})` : item.desc, count: n, icon: <ItemIcon itemId={item.id} size={32} />, ticket: t }] : [];
     }),
     ...Object.values(tickets).flatMap((d): Row[] => {
       const n = me.inventory[d.id] ?? 0;
@@ -81,7 +81,7 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
             {
               key: d.id,
               name: d.name,
-              desc: `정해진 색 ${d.color} · ${d.parts?.length ? `${d.parts.map((p) => DYE_PART_NAMES[p]).join("·")}에만` : "모든 부위"}`,
+              desc: `정해진 색 ${d.color}. ${d.parts?.length ? `${d.parts.map((p) => DYE_PART_NAMES[p]).join(", ")}에만 써요.` : "모든 부위에 써요."}`,
               count: n,
               icon: <span className={styles.swatch} style={{ background: d.color, width: 32, height: 32 }} aria-hidden="true" />,
               ticket: fixedTicket(d),
@@ -152,7 +152,7 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
           ))}
         </ul>
         <div className={styles.banner}>
-          <span>원래 색 되돌리기·외형 바꾸기는 상점에서 해요.</span>
+          <span>원래 색으로 되돌리거나 외형을 바꾸려면 상점에 가요.</span>
           <button type="button" className={ui.button} onClick={toShop}>
             상점 염색·외형
           </button>

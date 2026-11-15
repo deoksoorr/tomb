@@ -62,7 +62,7 @@ export default function ActivityDialog({ onGoToGrave, onOpenHousing, onBury, foo
               { label: "분양 사무소", icon: "house", onClick: onOpenHousing } satisfies Shortcut,
             ]}
           >
-            묘비를 세우거나 집을 꾸며 두면, 자리를 비운 사이 누군가 찾아와 남긴 흔적이 여기에 모여요.
+            묘비를 세우거나 집을 꾸며 두면, 누가 다녀간 소식이 여기에 모여요.
           </EmptyHero>
         ) : (
           <ul className={styles.list}>
@@ -85,10 +85,10 @@ export default function ActivityDialog({ onGoToGrave, onOpenHousing, onBury, foo
         <InfoCard title="이런 소식이 와요" icon="info">
           <TipList
             tips={[
-              "누군가 내 묘비에 헌화하면 — 누르면 그 묘비 앞으로 가요.",
-              "내 집에 좋아요를 누르거나 방명록을 남기면 — 누르면 분양 사무소가 열려요.",
-              "내 묘비가 성불하거나 성황당에서 다시 모셔지면.",
-              "주간 랭킹(포인트·사냥 처치·낚시) 1위 보상을 받으면.",
+              "누가 내 묘비에 헌화하면 알려 줘요. 누르면 그 묘비 앞으로 가요.",
+              "누가 내 집에 좋아요나 방명록을 남기면 알려 줘요. 누르면 분양 사무소가 열려요.",
+              "내 묘비가 성불하거나 성황당에서 다시 모셔지면 알려 줘요.",
+              "주간 랭킹 1위 보상을 받으면 알려 줘요.",
               "새 소식이 오면 [소식] 버튼에 숫자가 붙고, 이 창을 열면 모두 읽음이 돼요.",
             ]}
           />

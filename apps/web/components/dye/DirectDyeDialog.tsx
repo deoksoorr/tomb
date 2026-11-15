@@ -127,8 +127,8 @@ export default function DirectDyeDialog({ ticket, avatar, look, onClose, onDone 
             <div className={base.side}>
               <p className={base.note}>
                 {pick
-                  ? "흔들림도 운도 없어요. 원하는 색을 골라 그대로 칠해요. (금빛 광택 같은 특수 색은 특수색 확정 염색권으로)"
-                  : "특수 색 하나를 골라 확실하게 입혀요. 금빛 광택은 금빛으로, 나머지는 이미 염색한 부위면 그 색 그대로 효과만 더해요."}
+                  ? "흔들림도 운도 없어요. 원하는 색을 골라 그대로 칠해요. 금빛 광택 같은 특수 색은 특수색 확정 염색권으로 칠해요."
+                  : "특수 색 하나를 골라 바로 입혀요. 금빛 광택은 금빛으로 칠해요. 다른 특수 색은 지금 색에 효과만 더해요."}
               </p>
               <div className={base.parts} role="group" aria-label="염색할 부위">
                 {DYE_PARTS.map((p) => {

@@ -60,8 +60,8 @@ export function StarsPreview({ starry }: { starry: boolean }) {
       ))}
       {LINKED[3] && <span className={styles.ring} style={{ left: `${LINKED[3][0]}%`, top: `${LINKED[3][1]}%` }} aria-hidden="true" />}
       <p className={styles.caption}>
-        지금 하늘 · {ambience ? `${PHASE_LABELS[ambience.phase]} · ${WEATHER_LABELS[ambience.weather]}` : "…"}
-        {starry ? " — 진짜 별이 잘 보이는 밤!" : ""}
+        지금 하늘은 {ambience ? `${PHASE_LABELS[ambience.phase]}, ${WEATHER_LABELS[ambience.weather]}` : "…"}
+        {starry ? ". 진짜 별이 잘 보이는 밤이에요!" : ""}
       </p>
     </div>
   );
@@ -73,7 +73,7 @@ export function StarsInfo({ records }: { records: StarsRecord[] }) {
   const best = records.reduce<StarsRecord | null>((b, r) => (!b || r.perfect > b.perfect ? r : b), null);
   return (
     <InfoGrid>
-      <InfoCard title="최근 기록" icon="list" aside={best ? `가장 많이 이은 판: 완벽 ${best.perfect}` : undefined}>
+      <InfoCard title="최근 기록" icon="list" aside={best ? `최고 완벽 ${best.perfect}개` : undefined}>
         {records.length === 0 ? (
           <p className={styles.muted}>아직 이 기기에서 본 기록이 없어요. 한 판 들여다보면 여기에 남아요.</p>
         ) : (
@@ -96,11 +96,12 @@ export function StarsInfo({ records }: { records: StarsRecord[] }) {
       <InfoCard title="잘 잇는 요령" icon="info">
         <TipList
           tips={[
-            "빛의 고리가 별에 딱 겹치는 순간에 누르면 '완벽'이에요. 서두르면 놓쳐요.",
-            "한 별자리의 별을 하나도 놓치지 않고 끝까지 이으면 도감 '별자리' 칸에 등록돼요.",
-            "어디를 눌러도 다음 별로 이어져요. 폰은 화면 아무 데나 탭하세요.",
-            "Esc(폰은 멈춤 버튼)로 잠깐 멈출 수 있어요. 2분 넘게 멈추면 결과를 받을 수 없어요.",
-            "레벨이 오를수록(DEX) 판정이 조금 너그러워져요. 사냥으로 레벨을 올려 보세요.",
+            "고리가 별에 딱 겹칠 때 누르면 '완벽'이에요. 서두르면 놓쳐요.",
+            "한 별자리를 하나도 놓치지 않고 이으면 도감의 '별자리' 칸에 올라가요.",
+            "어디를 눌러도 다음 별로 이어져요. 폰에서는 화면 아무 데나 탭하세요.",
+            "Esc를 누르면 잠깐 멈춰요. 폰에서는 멈춤 버튼을 눌러요. 2분 넘게 멈추면 결과를 받을 수 없어요.",
+            "DEX가 높을수록 판정이 넉넉해져요. 능력치 포인트나 장비로 DEX를 올릴 수 있어요.",
+            "누가 보고 있는 망원경은 쓸 수 없어요. 그럴 땐 옆 망원경으로 가 보세요.",
           ]}
         />
       </InfoCard>
@@ -115,9 +116,9 @@ export function StarsDexCard({ dex, starry }: { dex: Record<string, DexEntry> | 
   return (
     <InfoCard title="별자리 도감" icon="book" aside={dex ? `${got.length}/${CONSTELLATIONS.length}` : "…"}>
       <p className={styles.muted}>
-        흔한 별자리는 어느 난이도에서나, <b>희귀</b>는 어려움·지옥에서만, <b>전설</b>({legend.length}개)은 맑은 밤 판에서만 떠요. 계절 별자리는 그
-        계절에만, 새벽 별자리는 새벽(5~7시)에만. 한 판에 새로 등록되는 건 3개까지예요.
-        {starry ? " 지금은 맑은 밤 — 전설 별자리가 뜰 수 있어요!" : ""}
+        흔한 별자리는 어느 난이도에서나 떠요. <b>희귀</b> 별자리는 어려움과 지옥에서만 떠요. <b>전설</b> 별자리 {legend.length}개는 맑은 밤에만
+        떠요. 계절 별자리는 그 계절에만 떠요. 새벽 별자리는 새벽 5시부터 7시 사이에만 떠요. 한 판에 새로 등록되는 별자리는 3개까지예요.
+        {starry ? " 지금은 맑은 밤이라 전설 별자리가 뜰 수 있어요!" : ""}
       </p>
       {got.length > 0 && <p className={styles.consNames}>{got.map((c) => c.name).join(" · ")}</p>}
     </InfoCard>

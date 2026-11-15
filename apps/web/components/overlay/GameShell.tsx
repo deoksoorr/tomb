@@ -67,6 +67,7 @@ import RideButton from "@/components/zoo/RideButton";
 import ZooLayer from "@/components/zoo/ZooLayer";
 import WishDialog from "@/components/plaza/WishDialog";
 import SkyHud from "@/components/sky/SkyHud";
+import UrgentHud from "@/components/forage/UrgentHud";
 import Telescope from "@/components/rpg/Telescope";
 import HauntDialog from "@/components/haunt/HauntDialog";
 import GoblinClaim from "./GoblinClaim";
@@ -92,7 +93,7 @@ import { rememberChannel } from "@/lib/channelHistory";
 
 const GameCanvas = dynamic(() => import("@/game/GameCanvas"), { ssr: false });
 
-const KEY_HINTS = ["Space 점프 · E 살펴보기", "T 표현(말풍선·이모티콘) · Y 즐겨찾기 표현 원형", "휠: 확대·축소 · 우클릭 드래그: 둘러보기"];
+const KEY_HINTS = ["Space는 점프, E는 살펴보기", "T는 표현, Y는 즐겨찾기 표현", "휠로 확대·축소, 오른쪽 버튼으로 끌면 둘러보기"];
 
 /** 데스크톱에서 처음 입장했을 때 한 번만 키 조작 힌트를 띄운다 */
 function useKeyHints(active: boolean) {
@@ -162,7 +163,7 @@ function usePresencePoints(active: boolean) {
         .presence(PRESENCE_SID)
         .then(({ earned, me, tick }) => {
           if (me) meStore.set(me);
-          else if (tick) meStore.applyPresence(tick);
+          else if (tick) meStore.applyPresence(tick, earned);
           if (earned > 0) showToast(`머무른 덕분에 +${earned} 포인트`);
         })
         .catch(() => {
@@ -232,7 +233,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   // 탈 수 있는 펫을 데리고 다니기 시작하면 R 키 탑승을 알려 준다
   const ridePet = me?.equipped.find((e) => isRideablePet(e.itemId))?.itemId ?? null;
   useEffect(() => {
-    if (ridePet) showToast("R 키를 누르면 펫에 탑승해요 (다시 R을 누르면 내려요)", 7_000);
+    if (ridePet) showToast("R을 누르면 펫에 타요. 다시 누르면 내려요.", 7_000);
   }, [ridePet]);
   const myGraves = useMyGraves(me?.graves ?? [], graves);
   const [openGraveId, setOpenGraveId] = useState<string | null>(null);
@@ -500,6 +501,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <ZooLayer />}
       {/* 놀이기구 2: 관람차·열기구 안내 (지나가는 곳·남은 시간) */}
       {ready && <SkyHud />}
+      {/* 11/15 긴급 의뢰: 시작 알림 · 위쪽 남은 시간·서버 전체 막대 (마을 어디서든) */}
+      {ready && <UrgentHud />}
 
       {ready && (
         <div className={cx(styles.overlay, away && styles.away, campfire && styles.campfire)}>

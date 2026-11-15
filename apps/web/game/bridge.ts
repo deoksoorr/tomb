@@ -101,7 +101,13 @@ export type GameEvents = {
   /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
   "megaphone:heard": { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; /** 운영자 계정이 외친 것 → 이름 금색 */ staff?: true };
   /** 상점 맵에 들어감/나옴 (UI가 HUD 일부를 바꿀 때) */
-  "scene:changed": { scene: "world" | "shop" | "hunt" | "minigame" | "house"; /** 친구 위치용: "house" 장면 중 분양 마을인지 집 안인지 */ place?: "village" | "house"; /** 집 안이면 그 집 id */ houseId?: string };
+  "scene:changed": {
+    scene: "world" | "shop" | "hunt" | "minigame" | "house";
+    /** 친구 위치용: "house" 장면 중 분양 마을인지 집 안인지 */ place?: "village" | "house";
+    /** 집 안이면 그 집 id */ houseId?: string;
+    /** 11/15 마을 자리에 그대로 서서 하는 미니게임 (망원경 별자리 잇기): 다른 사람 화면에서 숨기지 않는다 (away를 보내지 않는다) */
+    stay?: boolean;
+  };
   /** 실시간 서버가 이 화면을 옛 버전이라 거절함(4010, 큰 패치) → UI가 업데이트 창을 띄운다 (sticky) */
   "app:outdated": { source: "channel" | "room" };
   /** 47번: 실시간 서버가 이용 제한으로 내보냄(4012) → UI가 새로고침해 제한 화면을 띄운다 */
@@ -313,6 +319,10 @@ export type UiEvents = {
   "forage:leave": undefined;
   /** 판매 동전 소리 */
   "forage:coin": undefined;
+  /** 11/15 긴급 의뢰 마을 축제 (sticky): until = 축제가 끝나는 시각 ms (0 = 축제 없음) → 게임이 폭죽을 저절로 쏘고 모닥불을 금빛으로 */
+  "urgent:fest": { until: number };
+  /** 11/15 긴급 의뢰 현판 (sticky, null = 없음): 납품 부두 현판에 서버 전체 막대를 그린다. frac = 낸 수 ÷ (목표 × 1.5), stage = 닿은 단계 */
+  "urgent:board": { live: boolean; frac: number; stage: number; fest: boolean } | null;
   /** 도감 열기 (UI 안에서 쓴다: HUD 버튼·메뉴·남의 도감) */
   "forage:dex": { accountId?: string; peer?: { sid: number; ch?: number; room?: string }; name?: string | null };
   /** 채널 이동 창: 지금 채널에 있는 사람들 닉네임을 달라 (월드가 peers:list로 답한다) */
@@ -367,6 +377,8 @@ const STICKY = new Set<keyof AllEvents>([
   "friends:here",
   "house:follow",
   "rpg:cards",
+  "urgent:fest",
+  "urgent:board",
 ]);
 
 class Bridge {

@@ -1,4 +1,4 @@
-import { GRAVE_AREAS, HILL, HILL_CLIFF, HILL_STAIRS, HOUSE_LOT_H, HOUSE_LOT_W, HOUSE_LOTS, MAP_HEIGHT, MAP_WIDTH, PONDS, RIVER_HALF_W, RIVER_PATH, STEP_STONE_R, STEP_STONES, TELESCOPE, TILE } from "@tomb/protocol";
+import { GRAVE_AREAS, HILL, HILL_CLIFF, HILL_STAIRS, HOUSE_LOT_H, HOUSE_LOT_W, HOUSE_LOTS, MAP_HEIGHT, MAP_WIDTH, PONDS, RIVER_HALF_W, RIVER_PATH, STEP_STONE_R, STEP_STONES, TELESCOPE, TELESCOPE_2, TILE } from "@tomb/protocol";
 import { DECKS, deckRails, ELLIPSES, ellipseD, groundKind, PLAZA_FIRE, PLAZA_RECT, PLAZA_TREES, riverDist, type GroundKind, type Rect } from "../world/layout";
 import { css, darken, hash2, lighten, makeCanvas, rng, type Color } from "./pixel";
 
@@ -568,20 +568,24 @@ function drawHill(ctx: CanvasRenderingContext2D, area: Rect): void {
       if (x >= area.x && x < area.x + area.w) px(ctx, x - area.x, y - area.y, c);
     }
   }
-  // 꼭대기 돌 마당: 둥글게 깐 납작 돌 + 테두리
+  // 꼭대기 돌 마당: 둥글게 깐 납작 돌 + 테두리. 11/15 둘째 망원경(TELESCOPE_2) 자리만큼 동쪽으로 작은 원을 이어 붙인다
   const cx = TELESCOPE.x;
   const cy = TELESCOPE.y - 2;
   const R = 30;
+  const R2 = 20;
+  const dx2 = TELESCOPE_2.x - cx;
+  const dy2 = TELESCOPE_2.y - TELESCOPE.y;
   for (let y = -R; y <= R; y++)
-    for (let x = -R; x <= R; x++) {
-      const r = Math.hypot(x, y * 1.4);
-      if (r > R) continue;
+    for (let x = -R; x <= dx2 + R2; x++) {
+      // 두 원 중 더 안쪽인 쪽으로 테두리 깊이를 잰다 (이어 붙인 자리에 테두리가 생기지 않게)
+      const depth = Math.max(R - Math.hypot(x, y * 1.4), R2 - Math.hypot(x - dx2, (y - dy2) * 1.4));
+      if (depth < 0) continue;
       const wx = cx + x;
       const wy = cy + y;
       if (wx < area.x || wy < area.y || wx >= area.x + area.w || wy >= area.y + area.h) continue;
       let c: Color;
-      if (r > R - 2) c = 0x5c5e56;
-      else if (r > R - 4) c = 0x9a9c92;
+      if (depth < 2) c = 0x5c5e56;
+      else if (depth < 4) c = 0x9a9c92;
       else {
         const cell = (Math.floor((wx + (Math.floor(wy / 5) % 2) * 3) / 6) * 7 + Math.floor(wy / 5) * 13) % 5;
         c = (wx % 6 === 0 || wy % 5 === 0) ? 0x5e5f58 : cell < 2 ? 0x8a8c84 : cell < 4 ? 0x7e8078 : 0x939589;

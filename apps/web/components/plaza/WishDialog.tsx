@@ -135,7 +135,7 @@ export default function WishDialog({ onClose }: { onClose: () => void }) {
             {result.bonus > 0 ? (
               <p className={styles.bonus}>동전이 반짝 튀어 돌아왔어요! +{result.bonus}P</p>
             ) : (
-              <p className={styles.points}>동전 {result.spent}P가 퐁당 — 소원이 물결에 실려 갔어요.</p>
+              <p className={styles.points}>동전 {result.spent}P가 퐁당! 소원이 물결에 실려 갔어요.</p>
             )}
           </div>
         )}
@@ -190,7 +190,7 @@ export default function WishDialog({ onClose }: { onClose: () => void }) {
         <InfoCard title="알아 두기" icon="info">
           <TipList
             tips={[
-              `${pct(WISH_BONUS_SPARKLE + WISH_BONUS_JACKPOT)} 확률로 동전이 튀어 돌아와요. 그중 ${pct(WISH_BONUS_JACKPOT)}는 대박 — 던진 것의 두 배 + 5P예요.`,
+              `${pct(WISH_BONUS_SPARKLE + WISH_BONUS_JACKPOT)} 확률로 동전이 튀어 돌아와요. 그중 ${pct(WISH_BONUS_JACKPOT)}는 대박이라 던진 것의 두 배에 5P를 더 받아요.`,
               "운세는 동전 크기와 상관없이 같은 확률로 나와요. 1P로도 충분해요.",
               "돌아온 포인트는 하루 포인트 한도에 들어가요. 한도가 차면 줄거나 0이 될 수 있어요.",
               `던진 횟수는 한국 시간 ${DAY_RESET_TEXT}에 다시 채워져요.`,

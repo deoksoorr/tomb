@@ -40,13 +40,13 @@ export function TranscendBar({ tLevel, tExp, eg }: { tLevel: number; tExp: numbe
 export function PioneerLine({ eg }: { eg: EndgameView }) {
   const [now] = useState(() => Date.now());
   const p = eg.pioneer;
-  if (p.n) return <p className={s.meta}>개척자 #{p.n} — 칭호 「개척자」를 받았어요.</p>;
+  if (p.n) return <p className={s.meta}>개척자 #{p.n}. 칭호 「개척자」를 받았어요.</p>;
   if (!p.until || now >= p.until) return null;
   const d = new Date(p.until + 9 * 3_600_000);
   return (
     <p className={s.meta}>
-      개척자 모집 중 ({d.getUTCMonth() + 1}월 {d.getUTCDate()}일 {d.getUTCHours()}시까지, 끝판이 열린 뒤 {PIONEER_DAYS}일): ★51에 닿거나 야근 빌딩{" "}
-      {PIONEER_FLOOR}층을 처음 넘으면 닿은 차례대로 「개척자 #번호」.
+      개척자를 {PIONEER_DAYS}일 동안 모아요. {d.getUTCMonth() + 1}월 {d.getUTCDate()}일 {d.getUTCHours()}시까지 ★51에 닿거나 야근 빌딩{" "}
+      {PIONEER_FLOOR}층을 넘으면 「개척자」 칭호와 번호를 받아요. 먼저 닿을수록 번호가 앞이에요.
     </p>
   );
 }
@@ -65,7 +65,7 @@ export function EndgameResult({ reward }: { reward: RunReward }) {
       {t && t.levelsGained > 0 && (
         <p className={s.levelUp} role="status">
           초월 레벨 업! {starLabel(t.tLevel)}
-          {Math.floor(t.tLevel / 5) > Math.floor((t.tLevel - t.levelsGained) / 5) ? " · 능력치 포인트를 받았어요" : ""}
+          {Math.floor(t.tLevel / 5) > Math.floor((t.tLevel - t.levelsGained) / 5) ? " 능력치 포인트를 받았어요." : ""}
         </p>
       )}
       {w && (w.newBest || w.newWeek) && (
@@ -77,7 +77,7 @@ export function EndgameResult({ reward }: { reward: RunReward }) {
       {w && (w.chests.length > 0 || w.emptyChests > 0) && (
         <p className={s.meta}>
           {w.chests.length > 0 && `우두머리 상자 ${w.chests.length}개 (${w.chests.map((f) => `${f}층`).join(" · ")})`}
-          {w.emptyChests > 0 && `${w.chests.length > 0 ? " · " : ""}오늘 상자를 다 열어서 ${w.emptyChests}개는 비어 있었어요`}
+          {w.emptyChests > 0 && `${w.chests.length > 0 ? ". " : ""}오늘 상자를 다 열어서 ${w.emptyChests}개는 비어 있었어요`}
         </p>
       )}
       {w &&

@@ -72,17 +72,17 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
     run(async () => {
       applyStyle(await zooApi.buy(pick.id));
       bridge.emit("forage:coin");
-      return `${item.name}이(가) 가족이 됐어요! 지금부터 데리고 다녀요.${isRideablePet(pick.id) ? " R 키(모바일은 타기 버튼)로 올라타 보세요." : ""}`;
+      return `${item.name}, 우리 가족이 됐어요! 지금부터 데리고 다녀요.${isRideablePet(pick.id) ? " R 키를 누르면 올라탈 수 있어요. 폰은 타기 버튼을 눌러요." : ""}`;
     });
   const bring = () =>
     run(async () => {
       await wearStashed(pick.id);
-      return `${item.name}을(를) 데리고 다녀요.`;
+      return `${item.name}, 같이 다녀요.`;
     });
   const home = () =>
     run(async () => {
       await takeOff("pet");
-      return `${item.name}은(는) 집에서 쉬고 있어요. 언제든 다시 데리고 나올 수 있어요.`;
+      return `${item.name}, 집에서 쉬고 있어요. 언제든 다시 데리고 나올 수 있어요.`;
     });
 
   function select(id: string) {
@@ -97,7 +97,7 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
         <div className={s.hello}>
           {portrait && <img src={portrait} width={48} height={56} alt="" style={{ imageRendering: "pixelated" }} />}
           <p>
-            어서 와요! 여기 아이들은 한 번 데려가면 평생 가족이에요. 한 번에 한 마리만 데리고 다닐 수 있고, 나머지는 집에서 기다려요.
+            어서 와요! 여기 아이들은 한 번 데려가면 평생 가족이에요. 한 번에 한 마리만 데리고 다닐 수 있어요. 나머지는 집에서 기다려요.
             <br />
             <span className={s.muted}>큰 개·왕거위·달빛 사슴은 등에 태워 줘요.</span>
           </p>
@@ -167,7 +167,7 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
               )}
             </div>
             {isRideablePet(pick.id) && (
-              <p className={ui.hint}>데리고 다니면서 R 키(모바일은 타기 버튼)로 올라타요. 조금 빨라져요. 앉기·낚시·놀이기구·배·물에 들어가면 저절로 내려요.</p>
+              <p className={ui.hint}>데리고 다닐 때 R 키를 누르면 올라타요. 폰은 타기 버튼을 눌러요. 타면 조금 빨라져요. 앉거나 낚시하거나 놀이기구나 배를 타면 저절로 내려요. 물에 들어가도 내려요.</p>
             )}
           </section>
 

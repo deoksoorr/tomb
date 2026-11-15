@@ -95,7 +95,7 @@ export function StartPanel({
   const todayLine = (
     <>
       <HuntCapMeter today={view.today} where="start" />
-      <p className={s.meta}>이번 시간 남은 판 {view.today.runsPerHour}</p>
+      <p className={s.meta}>이번 시간에 {view.today.runsPerHour}판 더 할 수 있어요.</p>
     </>
   );
   const startButton = (
@@ -112,7 +112,7 @@ export function StartPanel({
         {/* 11/15 레벨 50 이후의 중심은 마을의 야근 빌딩 (사냥터 창에서는 안내 한 줄만) */}
         {view.endgame && (
           <p className={s.towerHint}>
-            <b>레벨 50:</b> 마을의 야근 빌딩에 들어갈 수 있어요 (마을 북쪽 분양 사무소 옆 높은 건물). 지옥 사냥터도 초월 EXP를 줘요.
+            <b>레벨 50부터</b> 마을의 야근 빌딩에 들어갈 수 있어요. 마을 북쪽 분양 사무소 옆 높은 건물이에요. 지옥 사냥터에서도 초월 EXP를 받아요.
           </p>
         )}
         <section className={s.section} aria-label="사냥터 고르기">
@@ -125,18 +125,18 @@ export function StartPanel({
                 <ZoneInfo z={zone} />
                 {zoneLocked && (
                   <p className={s.warn}>
-                    {zone.name}은(는) Lv.{zone.unlockLevel}부터 갈 수 있어요.
+                    이 사냥터는 Lv.{zone.unlockLevel}부터 갈 수 있어요.
                   </p>
                 )}
                 {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
                 {!zoneLocked && noRace && (
                   <p className={s.warn}>
-                    이 사냥터가 열리는 레벨(Lv.{zone.unlockLevel})보다 10 넘게 높아요. EXP는 {Math.round(expCut * 100)}%만 받고, 잡은 몬스터는 사냥 랭킹과 주간 레이스에 들어가지 않아요.
+                    내 레벨이 이 사냥터(Lv.{zone.unlockLevel})보다 10 넘게 높아요. EXP는 {Math.round(expCut * 100)}%만 받아요. 잡은 몬스터는 사냥 랭킹과 주간 레이스에 들어가지 않아요.
                   </p>
                 )}
                 <div className={s.zoneGo}>
                   <p className={s.meta}>
-                    오늘 사냥 포인트 {view.today.huntPoints} / {view.today.cap}P · 이번 시간 남은 판 {view.today.runsPerHour}
+                    이번 시간에 {view.today.runsPerHour}판 더 할 수 있어요.
                   </p>
                   {/* 화면 흔들림 효과 켜기·끄기: 출발 전에 고른다 (이 기기에 기억) */}
                   <HuntKeysStrip />
@@ -149,7 +149,7 @@ export function StartPanel({
         </section>
         {onGuide && (
           <p className={s.meta}>
-            조작·몬스터 패턴·보상이 궁금하면{" "}
+            조작법이나 몬스터 패턴, 보상이 궁금하면{" "}
             <button type="button" className={s.linkBtn} onClick={onGuide}>
               사냥 안내서
             </button>
@@ -180,9 +180,9 @@ export function StartPanel({
         </div>
         {game === "hunt" ? (
           <p className={s.meta}>
-            <b>{zone.name}</b> — {zone.desc} 권장 Lv.{D.recLevel}+ · 웨이브 {zone.waves}개 · {zone.timeLimitSec}초
+            <b>{zone.name}</b> {zone.desc} 권장 Lv.{D.recLevel}+, 웨이브 {zone.waves}개, {zone.timeLimitSec}초
             <br />
-            나오는 것: {monsters.join(", ")} · 우두머리: {MONSTERS[zone.boss].name}
+            {monsters.join(", ")} 등이 나와요. 마지막엔 우두머리 {MONSTERS[zone.boss].name}도 나와요.
           </p>
         ) : (
           <p className={s.meta}>{GAMES[game].how}</p>
@@ -190,7 +190,7 @@ export function StartPanel({
         {low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
       </section>
 
-      <p className={s.meta}>{game === "hunt" ? GAMES.hunt.how : "끝나면 점수에 따라 포인트·EXP를 받아요."}</p>
+      <p className={s.meta}>{game === "hunt" ? GAMES.hunt.how : "끝나면 점수만큼 포인트와 EXP를 받아요."}</p>
 
       <div className={cx(s.startRow, s.startDock)}>
         {todayLine}
@@ -277,11 +277,11 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
             );
           })}
         </div>
-        <p className={s.meta}>{STAT_KEYS.map((k) => `${STAT_LABELS[k].name}: ${STAT_LABELS[k].desc}`).join(" · ")}</p>
+        <p className={s.meta}>{STAT_KEYS.map((k) => `${STAT_LABELS[k].name} ${STAT_LABELS[k].desc}.`).join(" ")}</p>
         <div className={s.startRow}>
           <span className={s.meta}>
-            레벨이 오를 때마다 능력치 포인트 3개 (5의 배수 레벨엔 5개)
-            {view.endgame ? ` · 초월 5레벨마다 1개 (지금 ${c.tLevel > 0 ? starLabel(c.tLevel) : "초월 전"}, 받은 ${transcendStatPoints(c.tLevel)}개)` : ""}
+            레벨이 오를 때마다 능력치 포인트를 3개 받아요. 5의 배수 레벨엔 5개예요.
+            {view.endgame ? ` 초월 레벨은 5레벨마다 1개씩 받아요. 초월로 지금까지 ${transcendStatPoints(c.tLevel)}개 받았어요.` : ""}
           </span>
           <button
             type="button"
@@ -297,8 +297,8 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
         </div>
         <div className={s.startRow}>
           <span className={s.meta}>
-            {view.superHunter ? "테스트 서버 슈퍼 계정 · 능력치 포인트는 최대 레벨 기준으로 모두 받아요 · " : ""}
-            {`배분을 되돌리면 지갑 ${view.points.toLocaleString("ko-KR")}P에서 ${resetCost}P가 빠져요 (레벨에 따라 최대 ${RESPEC_MAX_COST}P)`}
+            {view.superHunter ? "테스트 서버 슈퍼 계정이라 능력치 포인트를 최대 레벨만큼 다 받아요. " : ""}
+            {`능력치를 되돌리면 지갑(${view.points.toLocaleString("ko-KR")}P)에서 ${resetCost}P가 빠져요. 레벨이 오를수록 비싸지고, 가장 비싸면 ${RESPEC_MAX_COST}P예요.`}
           </span>
           <button type="button" className={ui.button} disabled={busy || spent === 0 || confirmReset} onClick={() => setConfirmReset(true)}>
             능력치 초기화 ({resetCost}P)
@@ -307,7 +307,7 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
         {confirmReset && (
           <div className={s.confirm} role="alert">
             <p>
-              배분한 능력치를 모두 되돌리고 포인트 {spent}개를 돌려받아요. 장비로 붙은 능력치와 레벨·스킬은 그대로예요.{" "}
+              올린 능력치를 모두 되돌리고 포인트 {spent}개를 돌려받아요. 장비로 붙은 능력치와 레벨, 스킬은 그대로예요.{" "}
               지갑에서 {resetCost}P가 빠져요.
             </p>
             <div className={s.cellActions}>
@@ -455,7 +455,7 @@ export function ShopPanel({ view, busy, onBuy }: { view: RpgView; busy: boolean;
               <section key={kind} className={s.shelfSection} aria-label={KIND_LABELS[kind]}>
                 {aisle.kinds.length > 1 && <h4 className={s.skGroup}>{KIND_LABELS[kind]}</h4>}
                 <p className={s.meta}>
-                  비교 기준: 지금 {SLOT_LABELS[slot]} 칸 — {worn ? worn.name : "비어 있음"}
+                  {worn ? `지금 낀 ${SLOT_LABELS[slot]} 장비(${worn.name})와 비교해요` : `지금 ${SLOT_LABELS[slot]} 칸은 비어 있어요`}
                 </p>
                 <div className={s.shelfRow}>
                   {items.map((g) => {

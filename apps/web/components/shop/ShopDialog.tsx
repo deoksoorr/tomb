@@ -189,7 +189,7 @@ export default function ShopDialog({ onClose, avatar }: Props) {
           <p className={styles.balance}>
             내 포인트 <strong>{me ? me.points.toLocaleString("ko-KR") : "–"}</strong>
           </p>
-          <p className={styles.topHint}>한 번 쓰면 사라져요 · 산 물건은 가방으로</p>
+          <p className={styles.topHint}>산 물건은 가방에 들어가요</p>
         </div>
         {!me && error && <p className={ui.error}>{error}</p>}
 

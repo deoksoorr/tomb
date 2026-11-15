@@ -9,7 +9,8 @@ import { meStore } from "@/lib/hooks/useMe";
 import { DIFFICULTIES, DIFFS, GAMES, potionById, type Difficulty } from "@/lib/rpg/catalog";
 import { rpgApi } from "@/lib/rpg/client";
 import { constellationById } from "@/lib/rpg/constellations";
-import { STARS_NEW_PER_RUN, STARS_PLAN_VER } from "@/lib/rpg/plan";
+import { levelPenalty } from "@/lib/rpg/formulas";
+import { STAR_DEX_MAX, STAR_REC_DEX, STARS_NEW_PER_RUN, STARS_PLAN_VER, starWindows } from "@/lib/rpg/plan";
 import type { RunReward, RunResult } from "@/lib/rpg/types";
 import { STARRY_NIGHT_BONUS, starryNight } from "@/lib/stargaze";
 import { dexGainText } from "../forage/autoToast";
@@ -66,9 +67,17 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
   // 별자리 도감 (이미 있는 별자리는 판 중 "도감 등록!"을 띄우지 않는다)
   const { state: forage } = useForage();
   const dex = forage?.dex;
+  // 판정을 넓혀 주는 DEX(장비 포함)와 EXP 감소를 보는 레벨 — 레벨은 판정과 상관없다
+  const [stat, setStat] = useState<{ dex: number; level: number } | null>(null);
 
   useEffect(() => {
     void forageStore.refresh();
+    rpgApi
+      .view()
+      .then((v) => setStat({ dex: v.derived.stats.dex, level: v.character.level }))
+      .catch(() => {
+        /* 못 받으면 내 DEX 줄만 빠진다 */
+      });
   }, []);
 
   useBlockingLayer(phase === "playing" || phase === "submitting");
@@ -122,6 +131,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
     try {
       const res = await rpgApi.start("stars", diff, undefined, STARS_PLAN_VER);
       const c = res.view.character;
+      setStat({ dex: res.view.derived.stats.dex, level: c.level });
       // 맑은 밤은 서버가 판 시작 시각으로 정한다 (옛 서버면 없으므로 시계로)
       const runStarry = res.starry ?? starryNight(Date.now());
       run.current = { ticket: res.ticket, difficulty: diff, starry: runStarry, totalMs: res.timeLimitSec * 1000 };
@@ -192,7 +202,7 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
         {phase === "paused" && (
           <Dialog kind="confirm" title="잠깐 멈춤" onClose={resume}>
             <div className={s.result}>
-              <p>멈춘 동안 별은 움직이지 않아요. 너무 오래(2분 넘게) 멈추면 결과를 받을 수 없어요.</p>
+              <p>멈춘 동안 별은 움직이지 않아요. 2분 넘게 멈추면 결과를 받을 수 없어요.</p>
               <div className={s.buttons}>
                 <button type="button" className={cx(ui.button, ui.primary)} onClick={resume}>
                   계속하기
@@ -241,11 +251,11 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
                     <strong>{r.score.toLocaleString("ko-KR")}</strong>점수
                   </div>
                 </div>
-                {r.nightBonus && <p className={s.levelUp}>맑은 밤 보너스 ×{STARRY_NIGHT_BONUS} — 진짜 별이 잘 보이는 밤이었어요</p>}
+                {r.nightBonus && <p className={s.levelUp}>맑은 밤이라 포인트를 {STARRY_NIGHT_BONUS}배 받았어요!</p>}
                 <ResultConstellations reward={r} />
                 {r.capped && (
                   <p className={ui.hint}>
-                    오늘 사냥·미니게임 포인트 한도(또는 하루 전체 한도)에 닿아서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
+                    오늘 받을 수 있는 포인트 한도에 닿아서 {r.pointsRaw}P 중 {r.points}P만 받았어요.
                   </p>
                 )}
                 {r.levelsGained > 0 && (
@@ -290,17 +300,21 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
   }
 
   const G = GAMES.stars;
+  const win = starWindows(diff, stat?.dex ?? 0);
+  const expCut = stat ? levelPenalty(stat.level, diff, null) : 1;
   return (
     <Dialog title="망원경" onClose={onClose}>
       <div className={s.lobby}>
         <p>
-          <b>{G.name}</b> — {G.desc}
+          <b>{G.name}</b> {G.desc}
         </p>
-        <p className={s.meta}>망원경 속은 언제나 밤하늘이라 낮에도 볼 수 있어요. {G.how}</p>
+        <p className={s.meta}>
+          망원경 속은 늘 밤하늘이라 낮에도 볼 수 있어요. 언덕에는 망원경이 두 대 있어요. 한 대에 한 사람씩 볼 수 있어요. {G.how}
+        </p>
         <p className={starry ? s.levelUp : ui.hint} role="status">
           {starry
-            ? `지금은 진짜 맑은 밤이에요 — 포인트 ×${STARRY_NIGHT_BONUS}!`
-            : `진짜 밤(한국 시간 저녁 7시 반~새벽 5시)에 하늘이 맑으면 포인트 ×${STARRY_NIGHT_BONUS}`}
+            ? `지금은 진짜 맑은 밤이에요. 포인트를 ${STARRY_NIGHT_BONUS}배 받아요!`
+            : `한국 시간 저녁 7시 반부터 새벽 5시 사이에 하늘이 맑으면 포인트를 ${STARRY_NIGHT_BONUS}배 받아요.`}
         </p>
         <section className={s.section} aria-labelledby="stars-diff">
           <h3 id="stars-diff" className={s.sectionTitle}>
@@ -311,13 +325,22 @@ export default function Telescope({ onClose }: { onClose: () => void }) {
               <button key={d} type="button" role="radio" aria-checked={diff === d} className={s.card} onClick={() => setDiff(d)}>
                 <span className={s.cardName}>{DIFFS[d].name}</span>
                 <span className={s.meta}>
-                  권장 Lv.{DIFFS[d].recLevel}+
+                  {STAR_REC_DEX[d] ? `권장 DEX ${STAR_REC_DEX[d]}+` : "누구나"}
                   <br />
                   최대 {starry ? Math.round(DIFFS[d].miniPoints * STARRY_NIGHT_BONUS) : DIFFS[d].miniPoints}P
                 </span>
               </button>
             ))}
           </div>
+          <p className={s.meta}>
+            {stat ? `내 DEX ${stat.dex} 기준으로 ` : ""}고리와 별의 차이가 ±{win[0]}ms 안이면 &apos;완벽&apos;, ±{win[1]}ms 안이면 &apos;좋아&apos;예요. DEX가 높을수록 이 범위가
+            넓어져요. DEX {STAR_DEX_MAX}이면 가장 넓어요. 레벨은 판정과 상관없어요.
+          </p>
+          {expCut < 1 && (
+            <p className={s.warn}>
+              내 레벨이 Lv.{DIFFS[diff].recLevel}보다 10 넘게 높아요. 이 난이도에서는 EXP를 {Math.round(expCut * 100)}%만 받아요. 포인트와 도감 등록은 그대로예요.
+            </p>
+          )}
         </section>
         <div className={s.buttons}>
           <button type="button" className={cx(ui.button, ui.primary)} disabled={phase === "starting"} onClick={() => void start()}>

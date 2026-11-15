@@ -219,7 +219,8 @@ export const ShopBuySchema = z.object({
     .refine((id) => itemById(id)?.slot !== "pet", "펫은 동물원 사육사에게서만 데려올 수 있어요.")
     .refine((id) => !itemById(id)?.staff, "운영자 전용 꾸미기는 살 수 없어요.")
     .refine((id) => !itemById(id)?.champ, "주간 1위 전용 꾸미기는 살 수 없어요.")
-    .refine((id) => !itemById(id)?.quest, "수집 의뢰 보상은 도장 교환소에서만 받을 수 있어요."),
+    .refine((id) => !itemById(id)?.quest, "수집 의뢰 보상은 도장 교환소에서만 받을 수 있어요.")
+    .refine((id) => !itemById(id)?.urgent, "긴급 의뢰 보상은 살 수 없어요."),
 });
 export const ShopUseSchema = z.object({
   itemId: shopItem,

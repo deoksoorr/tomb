@@ -170,7 +170,7 @@ export function validateLayout(layout: HouseLayout, tierId: PlotTierId, owned: R
   const counts = layoutCounts(layout);
   if (owned) {
     for (const [id, n] of Object.entries(counts))
-      if ((owned[id] ?? 0) < n) return fail("NOT_OWNED", `${furnitureById(id)?.name ?? id}을(를) 가진 것보다 많이 놓았어요.`);
+      if ((owned[id] ?? 0) < n) return fail("NOT_OWNED", `가진 ${furnitureById(id)?.name ?? id}보다 더 많이 놓았어요.`);
   }
   return { ok: true, counts, placedScore: placedScore(layout) };
 }
@@ -253,7 +253,7 @@ export function validateExterior(ext: Record<string, unknown>, owned: Record<str
     if (v === undefined) continue;
     if (typeof v !== "string" || !(isExtBase(v) ? EXT_SLOTS.find((s) => s.slot === slot)!.base === v : furnitureById(v)?.ext === slot))
       return fail("BAD_EXTERIOR", `${label}에 쓸 수 없는 아이템이에요.`);
-    if (!isExtBase(v) && owned && (owned[v] ?? 0) < 1) return fail("NOT_OWNED", `${furnitureById(v)!.name}을(를) 먼저 사 주세요.`);
+    if (!isExtBase(v) && owned && (owned[v] ?? 0) < 1) return fail("NOT_OWNED", `${furnitureById(v)!.name}부터 사 주세요.`);
     out[slot] = v;
   }
   return { ok: true, exterior: out };

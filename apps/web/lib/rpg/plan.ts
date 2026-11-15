@@ -237,11 +237,18 @@ const STAR_BEAT: Record<Difficulty, number> = { easy: 820, normal: 640, hard: 50
 const STAR_HALF_P: Record<Difficulty, number> = { easy: 0, normal: 0.12, hard: 0.25, hell: 0.35 };
 const STAR_WIN: Record<Difficulty, [number, number]> = { easy: [75, 160], normal: [65, 140], hard: [55, 120], hell: [45, 100] };
 
-/** 판정 범위 [완벽, 좋아] ms. DEX가 높으면 조금 너그럽다 */
+/** 판정 범위 [완벽, 좋아] ms. DEX가 높으면 조금 너그럽다 (레벨은 판정에 쓰지 않는다) */
 export function starWindows(d: Difficulty, dex: number): [number, number] {
   const k = 1 + clamp(dex * 0.004, 0, 0.25);
   return [Math.round(STAR_WIN[d][0] * k), Math.round(STAR_WIN[d][1] * k)];
 }
+/** 이 DEX부터는 판정이 더 넓어지지 않는다 (+25%) */
+export const STAR_DEX_MAX = 63;
+/**
+ * 망원경 난이도 카드의 권장 DEX. 이만큼이면 어려움은 보통, 지옥은 어려움의 기본 '완벽' 범위쯤으로 넓어진다 (보통은 쉬움과의 중간쯤).
+ * 쉬움은 DEX 없이도 넉넉하다 (0 = 권장 없음)
+ */
+export const STAR_REC_DEX: Record<Difficulty, number> = { easy: 0, normal: 20, hard: 40, hell: 60 };
 
 /** 별자리 계획 판 번호. 판 시작 때 티켓에 실려 서버가 그 판의 계획으로 검사한다 (1판 = lib/rpg/starsPlanV1, 별 5~7개) */
 export const STARS_PLAN_VER = 2;

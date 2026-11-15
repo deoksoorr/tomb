@@ -115,7 +115,7 @@ export default function UpdateNotice() {
     const what = scene === "hunt" ? "사냥이" : scene === "minigame" ? "미니게임이" : "하던 일이";
     return (
       <Banner testId="update-wait" top>
-        <span>새 버전이 나왔어요 · {what} 끝나면 바로 바꿔요</span>
+        <span>새 버전이 나왔어요. {what} 끝나면 바로 바꿔요.</span>
       </Banner>
     );
   }

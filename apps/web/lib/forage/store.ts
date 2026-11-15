@@ -304,6 +304,17 @@ export class MemoryForageStore implements ForageStore {
     return true;
   }
 
+  /** 가방의 그 칸 수 (동기 — 긴급 의뢰 메모리 저장소가 받기와 한 번에 본다) */
+  bagNow(acct: string, id: string): number {
+    return this.acct(acct).bag.get(id) ?? 0;
+  }
+
+  /** 가방에 더하기 (동기, 칸 상한은 부르는 쪽이 본다 — 긴급 의뢰 상자 물고기) */
+  giveNow(acct: string, id: string, n: number): void {
+    const a = this.acct(acct);
+    a.bag.set(id, (a.bag.get(id) ?? 0) + n);
+  }
+
   async restore(acct: string, items: Record<string, number>, stackMax: number) {
     const a = this.acct(acct);
     for (const [id, n] of Object.entries(items)) {

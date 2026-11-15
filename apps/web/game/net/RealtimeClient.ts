@@ -674,7 +674,7 @@ export class RealtimeClient {
     this.peers.clear();
     for (const p of m.peers) if (p.sid !== m.sid) this.peers.add(p.sid);
     if (this.admittedTo !== null) this.toast(`자리가 나서 ${m.channel}채널로 들어왔어요`);
-    else if (this.redirected) this.toast(`채널이 가득 차 ${m.channel}채널로 안내했어요`);
+    else if (this.redirected) this.toast(`채널이 가득 차서 ${m.channel}채널로 들어왔어요`);
     this.redirected = false;
     this.admittedTo = null;
     this.stopQueue();
@@ -825,7 +825,7 @@ export class RealtimeClient {
         this.scheduleReconnect();
         return;
       case CLOSE.RATE_LIMITED:
-        this.toast("움직임 신호가 너무 많아 잠시 연결이 끊겼어요. 곧 다시 이어집니다.");
+        this.toast("신호가 너무 많아서 잠깐 연결이 끊겼어요. 곧 다시 이어져요.");
         this.scheduleReconnect(Math.max(2000, backoffDelay(this.attempt++)));
         return;
       default:

@@ -30,7 +30,8 @@ const KEYS = new Set(["Space", "KeyE", "KeyJ", "Enter"]);
 /** 장력이 이 위로 올라가면 줄이 끊어진다 */
 const SNAP_AT = 1;
 /** 손을 놓고 이만큼 지나면 물고기가 도망간다 */
-const SLACK_MS = 3_200;
+// 11/15 낚시 난이도 살짝 올림: 느슨한 줄 3.2초 → 2.8초, 챔질 창 0.8 → 0.7, 당김·물고기 힘 조금 세게
+const SLACK_MS = 2_800;
 
 
 export default function FishingPanel({
@@ -127,7 +128,7 @@ export default function FishingPanel({
       .cast(spot)
       .then((c) => {
         const now = performance.now();
-        cast.current = { ...c, biteAt: now + c.biteInMs, hookUntil: now + c.biteInMs + c.hookMs * 0.8, nibbleAt: now + 1_500 + Math.random() * 2_500 };
+        cast.current = { ...c, biteAt: now + c.biteInMs, hookUntil: now + c.biteInMs + c.hookMs * 0.7, nibbleAt: now + 1_500 + Math.random() * 2_500 };
         go("wait");
         rod("wait");
         setMsg({ text: "기다리는 중… 찌가 쑥 들어가면 당기세요" });
@@ -337,12 +338,12 @@ export default function FishingPanel({
         }
         const surge = now < r.surgeUntil;
         if (holding.current) {
-          r.progress += (dt * 1000) / c.reelMs - (surge ? dt * (0.05 + 0.025 * power) : 0);
-          r.tension += dt * (0.22 + 0.08 * power) * (surge ? 2.6 : 1);
+          r.progress += (dt * 1000) / c.reelMs - (surge ? dt * (0.06 + 0.03 * power) : 0);
+          r.tension += dt * (0.25 + 0.09 * power) * (surge ? 2.8 : 1);
           r.slackSince = 0;
         } else {
           r.tension -= dt * 0.75;
-          r.progress -= dt * 0.012 * power;
+          r.progress -= dt * 0.015 * power;
           r.slackSince ||= now;
         }
         r.progress = Math.max(0, Math.min(1, r.progress));
@@ -443,7 +444,7 @@ export default function FishingPanel({
       </div>
       {/* 자동 낚시 켜기 버튼 바로 아래 안내 (감는 중엔 숨긴다) */}
       {phase !== "reel" && <p className={s.keys}>{AUTO_RANK_NOTE}</p>}
-      <p className={s.keys}>Space·E 던지기/당기기 (감을 땐 누르고 있기) · Esc·방향키 일어나기</p>
+      <p className={s.keys}>Space나 E로 던지고 당겨요. 감을 땐 누르고 있어요. Esc나 방향키로 일어나요.</p>
     </div>
   );
 }

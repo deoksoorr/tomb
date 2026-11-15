@@ -58,7 +58,7 @@ export const PK_MONSTERS: Record<PkMonsterId, MonsterDef> = {
   pk_tow_truck: mon({
     id: "pk_tow_truck",
     name: "견인차",
-    desc: "\"여기 주차하시면 안 돼요.\" 견인 고리를 던져 끌어당기고, 화나면 주차된 차를 끌고 와 장애물로 세운다. 끝에는 경광등을 켜고 줄마다 들이받는다.",
+    desc: "\"여기 주차하시면 안 돼요.\" 견인 고리를 던져 끌어당겨요. 화나면 주차된 차를 끌고 와 길을 막아요. 마지막엔 경광등을 켜고 줄마다 들이받아요.",
     hp: 2300,
     atk: 24,
     def: 9,
@@ -115,8 +115,8 @@ export type PkLoop = {
 export const PK_LOOPS: readonly PkLoop[] = [
   { name: "평일 밤", desc: "형광등 몇 개가 깜빡이는 늘 그런 주차장.", dark: 0.15, wet: false, rush: 1, alarm: 1, speed: 1 },
   { name: "정전 주차장", desc: "전기가 나가 비상등과 차 불빛만 남았다. 헤드라이트가 유난히 눈부시다.", dark: 0.62, wet: false, rush: 0.95, alarm: 1, speed: 1 },
-  { name: "비 오는 날", desc: "젖은 바퀴 자국과 넓은 웅덩이. 바닥이 미끄럽고 차가 더 자주 지나간다.", dark: 0.3, wet: true, rush: 0.8, alarm: 1, speed: 1.05 },
-  { name: "견인 단속", desc: "정전에 비까지. 출차 경보가 자주 울리고 몬스터가 10% 빠르다.", dark: 0.58, wet: true, rush: 0.8, alarm: 0.7, speed: 1.1 },
+  { name: "비 오는 날", desc: "젖은 바퀴 자국과 넓은 웅덩이가 있어요. 바닥이 미끄럽고 차가 더 자주 지나가요.", dark: 0.3, wet: true, rush: 0.8, alarm: 1, speed: 1.05 },
+  { name: "견인 단속", desc: "정전에 비까지 와요. 출차 경보가 자주 울리고 몬스터가 10% 빨라요.", dark: 0.58, wet: true, rush: 0.8, alarm: 0.7, speed: 1.1 },
 ];
 export const pkLoop = (visit: number): PkLoop => PK_LOOPS[Math.max(0, Math.min(PK_LOOPS.length - 1, Math.floor(visit)))];
 
@@ -130,7 +130,7 @@ export const PK_ZONE_DEF: ZoneDef = {
   power: 1.2,
   gimmick: {
     name: "헤드라이트 돌진",
-    desc: "통로 한 줄에 헤드라이트가 비치고 경적이 울리면 곧 차가 그 줄을 쏜살같이 지나간다 — 빛줄기 밖으로 비킬 것. 가끔 「출차 경보」가 울리면 몇 초 동안 몬스터가 빨라진다.",
+    desc: "통로 한 줄에 헤드라이트가 비치고 경적이 울리면 곧 차가 그 줄을 쏜살같이 지나가요. 빛줄기 밖으로 비키세요. 가끔 「출차 경보」가 울리면 몇 초 동안 몬스터가 빨라져요.",
   },
   pool: [...PK_POOL],
   boss: PK_BOSS,

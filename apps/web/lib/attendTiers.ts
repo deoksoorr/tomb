@@ -136,4 +136,4 @@ export function attendTierPlan(month: string, received: Readonly<Record<string, 
 }
 
 /** 안내 창·자주 묻는 질문 한 줄: "그달 출석 3일(3일)·7일(7일)·…·28일(영구)마다 코디 1개 — 갈수록 비싼 코디, 달마다 바뀌어요" */
-export const ATTEND_TIER_GUIDE = `그달 출석 ${ATTEND_TIERS.map((t) => `${t.days}일(${tierTermText(t.termDays)})`).join("·")}마다 코디 1개 — 갈수록 비싼 코디, 달마다 바뀌어요`;
+export const ATTEND_TIER_GUIDE = `그달 출석한 날 수에 따라 코디를 받아요. ${ATTEND_TIERS.map((t) => `${t.days}일 출석은 ${tierTermText(t.termDays)} 코디`).join(", ")}예요. 뒤로 갈수록 비싼 코디고, 달마다 바뀌어요`;

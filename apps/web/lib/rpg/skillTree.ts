@@ -24,7 +24,7 @@ export const BRANCH_INFO: Record<BranchId, BranchInfo> = {
   ember: {
     name: "모닥불지기",
     role: "화염 · 광역",
-    desc: "마을 한가운데 모닥불을 지키던 사람들. 불씨를 튕기고 장작을 던져 둘레를 한꺼번에 태운다.",
+    desc: "마을 모닥불을 지키던 사람들이에요. 불씨를 튕기고 장작을 던져 둘레 적을 한꺼번에 태워요.",
     color: 0xff7a2e,
     light: 0xffd27a,
     dark: 0xa82a14,
@@ -32,7 +32,7 @@ export const BRANCH_INFO: Record<BranchId, BranchInfo> = {
   frost: {
     name: "서리 묘지기",
     role: "제어 · 방어",
-    desc: "새벽마다 묘역의 서리를 쓸던 묘지기. 적을 얼려 묶고, 서리 방패로 버틴다.",
+    desc: "새벽마다 서리를 쓸던 묘지기예요. 적을 얼려 묶고, 서리 방패로 버텨요.",
     color: 0x8fd8ff,
     light: 0xf2fbff,
     dark: 0x2a6aa8,
@@ -40,7 +40,7 @@ export const BRANCH_INFO: Record<BranchId, BranchInfo> = {
   soul: {
     name: "넋 인도자",
     role: "흡수 · 소환 · 보조",
-    desc: "길 잃은 넋에게 등불을 비춰 주던 사람. 넋을 거둬 힘을 얻고, 길동무를 불러 함께 싸운다.",
+    desc: "길 잃은 넋에게 등불을 비춰 주던 사람이에요. 넋을 거둬 힘을 얻고, 길동무를 불러 함께 싸워요.",
     color: 0xb98aff,
     light: 0x9ff0dc,
     dark: 0x4a2a8a,
@@ -180,7 +180,7 @@ export const SKILLS: readonly SkillDef[] = [
     maxLevel: 5,
     sp: (lv) => 5 + lv,
     cooldownMs: () => 2200,
-    describe: (lv) => `가장 가까운 적에게 불씨를 튕긴다. 맞은 자리가 작게 터져 둘레 적에게 공격력의 ${pct(FX.em_kindle(lv).mult)} 피해.`,
+    describe: (lv) => `가장 가까운 적에게 불씨를 튕겨요. 맞은 자리가 작게 터져 둘레 적에게 공격력의 ${pct(FX.em_kindle(lv).mult)} 피해를 줘요.`,
     art: { shape: "sk_ember", main: E.color, accent: E.light },
   },
   {
@@ -193,7 +193,7 @@ export const SKILLS: readonly SkillDef[] = [
     kind: "passive",
     maxLevel: 5,
     ...passive,
-    describe: (lv) => `늘 공격력 +${pct(FX.em_hearth(lv).atkPct)}.`,
+    describe: (lv) => `공격력이 늘 ${pct(FX.em_hearth(lv).atkPct)} 올라요.`,
     art: { shape: "sk_hearth", main: E.color, accent: 0x6a4a30 },
   },
   {
@@ -209,7 +209,7 @@ export const SKILLS: readonly SkillDef[] = [
     requires: [{ id: "em_kindle", level: 1 }],
     sp: (lv) => 9 + lv,
     cooldownMs: () => 5000,
-    describe: (lv) => `앞쪽 부채꼴(${FX.em_fan(lv).arcDeg}°)로 불길을 쓸어 공격력의 ${pct(FX.em_fan(lv).mult)} 피해.`,
+    describe: (lv) => `앞쪽 ${FX.em_fan(lv).arcDeg}° 부채꼴로 불길을 뿜어 공격력의 ${pct(FX.em_fan(lv).mult)} 피해를 줘요.`,
     art: { shape: "sk_fan", main: E.color, accent: E.dark },
   },
   {
@@ -224,7 +224,7 @@ export const SKILLS: readonly SkillDef[] = [
     requires: [{ id: "em_hearth", level: 1 }],
     sp: () => 10,
     cooldownMs: () => 18_000,
-    describe: (lv) => `${sec(FX.em_stoke(lv).durMs)} 동안 공격력 +${pct(FX.em_stoke(lv).atk)}.`,
+    describe: (lv) => `${sec(FX.em_stoke(lv).durMs)} 동안 공격력이 ${pct(FX.em_stoke(lv).atk)} 올라요.`,
     art: { shape: "sk_logs", main: 0x8a5a30, accent: E.color },
   },
   {
@@ -238,7 +238,7 @@ export const SKILLS: readonly SkillDef[] = [
     maxLevel: 3,
     requires: [{ id: "em_hearth", level: 1 }],
     ...passive,
-    describe: (lv) => `늘 치명타 확률 +${FX.em_spark(lv).crit}%.`,
+    describe: (lv) => `치명타 확률이 늘 ${FX.em_spark(lv).crit}% 올라요.`,
     art: { shape: "sk_sparks", main: E.light, accent: E.color },
   },
   {
@@ -254,7 +254,7 @@ export const SKILLS: readonly SkillDef[] = [
     requires: [{ id: "em_fan", level: 2 }],
     sp: (lv) => 16 + 2 * lv,
     cooldownMs: () => 9000,
-    describe: (lv) => `발밑에서 불의 고리가 터져 둘레(반지름 ${FX.em_ring(lv).radius}) 모든 적에게 공격력의 ${pct(FX.em_ring(lv).mult)} 피해.`,
+    describe: (lv) => `내 발밑에서 불의 고리가 터져요. 반지름 ${FX.em_ring(lv).radius} 안의 적 모두에게 공격력의 ${pct(FX.em_ring(lv).mult)} 피해를 줘요.`,
     art: { shape: "sk_firering", main: E.color, accent: E.light },
   },
   {
@@ -268,7 +268,7 @@ export const SKILLS: readonly SkillDef[] = [
     maxLevel: 5,
     requires: [{ id: "em_stoke", level: 1 }],
     ...passive,
-    describe: (lv) => `기본 공격이 맞으면 ${pct(FX.em_ignite(lv).chance)} 확률로 불씨가 터져 둘레 적에게 공격력의 ${pct(FX.em_ignite(lv).mult)} 피해.`,
+    describe: (lv) => `기본 공격이 맞으면 ${pct(FX.em_ignite(lv).chance)} 확률로 불씨가 터져요. 둘레 적에게 공격력의 ${pct(FX.em_ignite(lv).mult)} 피해를 줘요.`,
     art: { shape: "sk_bomb", main: E.dark, accent: E.light },
   },
   {
@@ -285,7 +285,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: (lv) => 24 + 2 * lv,
     cooldownMs: () => 12_000,
     describe: (lv) =>
-      `가장 가까운 적 자리에 불붙은 장작을 별똥처럼 떨어뜨린다. ${sec(FX.em_meteor(lv).delayMs)} 뒤 둘레 적에게 공격력의 ${pct(FX.em_meteor(lv).mult)} 피해.`,
+      `가장 가까운 적 자리에 불붙은 장작을 떨어뜨려요. ${sec(FX.em_meteor(lv).delayMs)} 뒤 둘레 적에게 공격력의 ${pct(FX.em_meteor(lv).mult)} 피해를 줘요.`,
     art: { shape: "sk_meteor", main: E.color, accent: E.light },
   },
   {
@@ -302,7 +302,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: () => 20,
     cooldownMs: () => 18_000,
     describe: (lv) =>
-      `그 자리에 화톳불을 놓는다. ${sec(FX.em_brazier(lv).durMs)} 동안 ${sec(FX.em_brazier(lv).everyMs)}마다 둘레 적에게 공격력의 ${pct(FX.em_brazier(lv).mult)} 피해.`,
+      `그 자리에 화톳불을 놓아요. ${sec(FX.em_brazier(lv).durMs)} 동안 ${sec(FX.em_brazier(lv).everyMs)}마다 둘레 적에게 공격력의 ${pct(FX.em_brazier(lv).mult)} 피해를 줘요.`,
     art: { shape: "sk_brazier", main: 0x6a6e78, accent: E.color },
   },
   {
@@ -318,7 +318,7 @@ export const SKILLS: readonly SkillDef[] = [
     requires: [{ id: "em_meteor", level: 3 }],
     sp: (lv) => 36 + 4 * lv,
     cooldownMs: () => 24_000,
-    describe: (lv) => `마을 축제의 큰 모닥불을 피운다. 불기둥이 화면 전체를 뒤덮어 보이는 적 모두에게 ${FX.em_bonfire(lv).hitAt.length}번, 한 번에 공격력의 ${pct(FX.em_bonfire(lv).mult)} 피해.`,
+    describe: (lv) => `큰 모닥불을 피워요. 불기둥이 화면을 덮어 보이는 적 모두를 ${FX.em_bonfire(lv).hitAt.length}번 때려요. 한 번에 공격력의 ${pct(FX.em_bonfire(lv).mult)} 피해예요.`,
     art: { shape: "sk_bonfire", main: E.color, accent: E.light },
   },
   {
@@ -332,7 +332,7 @@ export const SKILLS: readonly SkillDef[] = [
     maxLevel: 3,
     requires: [{ id: "em_brazier", level: 1 }],
     ...passive,
-    describe: (lv) => `광역 스킬 피해 +${pct(FX.em_ashheart(lv).aoePct)}.`,
+    describe: (lv) => `광역 스킬 피해가 ${pct(FX.em_ashheart(lv).aoePct)} 올라요.`,
     art: { shape: "sk_heart", main: E.dark, accent: E.color },
   },
 
@@ -349,7 +349,7 @@ export const SKILLS: readonly SkillDef[] = [
     aoe: true,
     sp: () => 5,
     cooldownMs: () => 3000,
-    describe: (lv) => `앞쪽으로 차가운 입김을 내뿜어 공격력의 ${pct(FX.fr_breath(lv).mult)} 피해, ${sec(FX.fr_breath(lv).slowMs)} 동안 느리게.`,
+    describe: (lv) => `앞쪽으로 차가운 입김을 뿜어 공격력의 ${pct(FX.fr_breath(lv).mult)} 피해를 줘요. 맞은 적은 ${sec(FX.fr_breath(lv).slowMs)} 동안 느려져요.`,
     art: { shape: "sk_breath", main: F.color, accent: F.light },
   },
   {
@@ -362,7 +362,7 @@ export const SKILLS: readonly SkillDef[] = [
     kind: "passive",
     maxLevel: 5,
     ...passive,
-    describe: (lv) => `늘 방어 +${FX.fr_collar(lv).def}, 최대 HP +${pct(FX.fr_collar(lv).hpPct)}.`,
+    describe: (lv) => `방어가 늘 ${FX.fr_collar(lv).def}, 최대 HP가 늘 ${pct(FX.fr_collar(lv).hpPct)} 올라요.`,
     art: { shape: "sk_collar", main: F.dark, accent: F.light },
   },
   {
@@ -377,7 +377,7 @@ export const SKILLS: readonly SkillDef[] = [
     requires: [{ id: "fr_breath", level: 1 }],
     sp: (lv) => 8 + lv,
     cooldownMs: () => 5000,
-    describe: (lv) => `앞쪽 부채꼴로 고드름 ${FX.fr_icicle(lv).n}개를 날린다. 하나에 공격력의 ${pct(FX.fr_icicle(lv).mult)}, 한 마리를 꿰뚫는다.`,
+    describe: (lv) => `앞쪽 부채꼴로 고드름 ${FX.fr_icicle(lv).n}개를 날려요. 하나가 공격력의 ${pct(FX.fr_icicle(lv).mult)} 피해를 주고 한 마리를 꿰뚫어요.`,
     art: { shape: "sk_icicle", main: F.color, accent: F.light },
   },
   {
@@ -391,7 +391,7 @@ export const SKILLS: readonly SkillDef[] = [
     maxLevel: 4,
     requires: [{ id: "fr_breath", level: 1 }],
     ...passive,
-    describe: (lv) => `느려지거나 얼어붙은 적이 받는 피해 +${pct(FX.fr_brittle(lv).vsSlowed)}.`,
+    describe: (lv) => `느려지거나 얼어붙은 적은 피해를 ${pct(FX.fr_brittle(lv).vsSlowed)} 더 받아요.`,
     art: { shape: "sk_crack", main: F.light, accent: F.dark },
   },
   {
@@ -406,7 +406,7 @@ export const SKILLS: readonly SkillDef[] = [
     requires: [{ id: "fr_collar", level: 1 }],
     sp: () => 14,
     cooldownMs: () => 20_000,
-    describe: (lv) => `${sec(FX.fr_ward(lv).durMs)} 동안 최대 HP의 ${pct(FX.fr_ward(lv).shieldPct)}만큼 피해를 대신 받는 얼음 방패.`,
+    describe: (lv) => `${sec(FX.fr_ward(lv).durMs)} 동안 얼음 방패를 둘러요. 방패가 최대 HP의 ${pct(FX.fr_ward(lv).shieldPct)}만큼 피해를 대신 받아요.`,
     art: { shape: "sk_iceshield", main: F.color, accent: F.dark },
   },
   {
@@ -423,7 +423,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: (lv) => 16 + 2 * lv,
     cooldownMs: () => 10_000,
     describe: (lv) =>
-      `둘레(반지름 ${FX.fr_nova(lv).radius})에 서리꽃이 피어 공격력의 ${pct(FX.fr_nova(lv).mult)} 피해, ${sec(FX.fr_nova(lv).freezeMs)} 동안 얼려 묶는다.`,
+      `반지름 ${FX.fr_nova(lv).radius} 안에 서리꽃이 피어 공격력의 ${pct(FX.fr_nova(lv).mult)} 피해를 줘요. 맞은 적은 ${sec(FX.fr_nova(lv).freezeMs)} 동안 얼어서 못 움직여요.`,
     art: { shape: "sk_snow", main: F.color, accent: F.light },
   },
   {
@@ -439,7 +439,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: () => 10,
     cooldownMs: () => 8000,
     describe: (lv) =>
-      `새벽 안개가 되어 바라보는 쪽으로 ${FX.fr_mist(lv).dist}px 미끄러진다. 지나친 적에게 공격력의 ${pct(FX.fr_mist(lv).mult)} 피해 + 둔화. 미끄러지는 동안은 맞지 않는다.`,
+      `안개가 되어 바라보는 쪽으로 ${FX.fr_mist(lv).dist}px 미끄러져요. 지나간 적은 공격력의 ${pct(FX.fr_mist(lv).mult)} 피해를 받고 느려져요. 미끄러지는 동안은 안 맞아요.`,
     art: { shape: "sk_mist", main: F.light, accent: F.color },
   },
   {
@@ -456,7 +456,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: (lv) => 22 + 2 * lv,
     cooldownMs: () => 13_000,
     describe: (lv) =>
-      `가장 가까운 적 자리에 얼음 무덤을 솟게 한다. ${sec(FX.fr_tomb(lv).delayMs)} 뒤 공격력의 ${pct(FX.fr_tomb(lv).mult)} 피해, ${sec(FX.fr_tomb(lv).stunMs)} 묶고 받는 피해 +${pct(FX.fr_tomb(lv).vuln)}.`,
+      `가장 가까운 적 자리에 ${sec(FX.fr_tomb(lv).delayMs)} 뒤 얼음 무덤이 솟아 공격력의 ${pct(FX.fr_tomb(lv).mult)} 피해를 줘요. 갇힌 적은 ${sec(FX.fr_tomb(lv).stunMs)} 동안 못 움직이고 피해를 ${pct(FX.fr_tomb(lv).vuln)} 더 받아요.`,
     art: { shape: "sk_crystal", main: F.color, accent: F.light },
   },
   {
@@ -473,7 +473,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: () => 18,
     cooldownMs: () => 18_000,
     describe: (lv) =>
-      `${sec(FX.fr_field(lv).durMs)} 동안 그 자리에 서리밭이 깔린다. 안의 적은 느려지고 받는 피해 +${pct(FX.fr_field(lv).vuln)}, 1초마다 공격력의 ${pct(FX.fr_field(lv).mult)} 피해.`,
+      `그 자리에 ${sec(FX.fr_field(lv).durMs)} 동안 서리밭을 깔아요. 안에 있는 적은 느려지고 피해를 ${pct(FX.fr_field(lv).vuln)} 더 받아요. 1초마다 공격력의 ${pct(FX.fr_field(lv).mult)} 피해도 줘요.`,
     art: { shape: "sk_frostfield", main: F.color, accent: F.dark },
   },
   {
@@ -490,7 +490,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: () => 40,
     cooldownMs: () => 26_000,
     describe: (lv) =>
-      `화면 전체에 눈보라가 몰아친다. 보이는 적 모두에게 ${FX.fr_blizzard(lv).hitAt.length}번, 한 번에 공격력의 ${pct(FX.fr_blizzard(lv).mult)} 피해 + 둔화.`,
+      `화면 가득 눈보라가 몰아쳐요. 보이는 적 모두를 ${FX.fr_blizzard(lv).hitAt.length}번 때리고 느리게 해요. 한 번에 공격력의 ${pct(FX.fr_blizzard(lv).mult)} 피해예요.`,
     art: { shape: "sk_blizzard", main: F.light, accent: F.color },
   },
   {
@@ -504,7 +504,7 @@ export const SKILLS: readonly SkillDef[] = [
     maxLevel: 3,
     requires: [{ id: "fr_mist", level: 1 }],
     ...passive,
-    describe: (lv) => `모든 스킬 쿨타임 -${pct(FX.fr_solstice(lv).cdCut)}, 받는 피해 -${pct(FX.fr_solstice(lv).guard)}.`,
+    describe: (lv) => `모든 스킬 쿨타임이 ${pct(FX.fr_solstice(lv).cdCut)} 줄고, 받는 피해가 ${pct(FX.fr_solstice(lv).guard)} 줄어요.`,
     art: { shape: "sk_moonfrost", main: F.light, accent: F.dark },
   },
 
@@ -520,7 +520,7 @@ export const SKILLS: readonly SkillDef[] = [
     maxLevel: 5,
     sp: (lv) => 6 + lv,
     cooldownMs: () => 3000,
-    describe: (lv) => `넋불 ${FX.so_wisp(lv).n}개가 가까운 적을 따라가 하나에 공격력의 ${pct(FX.so_wisp(lv).mult)} 피해.`,
+    describe: (lv) => `넋불 ${FX.so_wisp(lv).n}개가 가까운 적을 따라가요. 하나가 공격력의 ${pct(FX.so_wisp(lv).mult)} 피해를 줘요.`,
     art: { shape: "sk_wisp", main: S.color, accent: S.light },
   },
   {
@@ -534,7 +534,7 @@ export const SKILLS: readonly SkillDef[] = [
     maxLevel: 5,
     sp: (lv) => 10 + 2 * lv,
     cooldownMs: () => 9000,
-    describe: (lv) => `잠깐(${sec(FX.so_lamp(lv).rootMs)}) 멈춰 등불에 빌어 최대 HP의 ${pct(FX.so_lamp(lv).healPct)} + INT×3을 회복한다.`,
+    describe: (lv) => `${sec(FX.so_lamp(lv).rootMs)} 동안 멈춰 서서 등불에 빌어요. 최대 HP의 ${pct(FX.so_lamp(lv).healPct)}에 INT×3을 더한 만큼 HP가 차요.`,
     art: { shape: "sk_lamp", main: 0xffd27a, accent: S.dark },
   },
   {
@@ -548,7 +548,7 @@ export const SKILLS: readonly SkillDef[] = [
     maxLevel: 5,
     requires: [{ id: "so_wisp", level: 1 }],
     ...passive,
-    describe: (lv) => `준 피해의 ${pct(FX.so_drain(lv).steal)}만큼 HP를 거둔다.`,
+    describe: (lv) => `내가 준 피해의 ${pct(FX.so_drain(lv).steal)}만큼 HP가 차요.`,
     art: { shape: "sk_drain", main: S.color, accent: 0xe84a6a },
   },
   {
@@ -564,7 +564,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: () => 12,
     cooldownMs: () => 18_000,
     describe: (lv) =>
-      `${sec(FX.so_swift(lv).durMs)} 동안 이동속도 +${pct(FX.so_swift(lv).move)}, 공격 속도 +${pct(FX.so_swift(lv).aspd)}.`,
+      `${sec(FX.so_swift(lv).durMs)} 동안 이동 속도가 ${pct(FX.so_swift(lv).move)}, 공격 속도가 ${pct(FX.so_swift(lv).aspd)} 올라요.`,
     art: { shape: "sk_gust", main: S.light, accent: S.color },
   },
   {
@@ -579,7 +579,7 @@ export const SKILLS: readonly SkillDef[] = [
     requires: [{ id: "so_lamp", level: 1 }],
     sp: () => 18,
     cooldownMs: () => 26_000,
-    describe: (lv) => `${sec(FX.so_friend(lv).durMs)} 동안 길동무 넋이 곁에서 공격력의 ${pct(FX.so_friend(lv).atkPct)}로 함께 싸운다.`,
+    describe: (lv) => `${sec(FX.so_friend(lv).durMs)} 동안 길동무 넋이 곁에서 함께 싸워요. 넋은 내 공격력의 ${pct(FX.so_friend(lv).atkPct)}로 때려요.`,
     art: { shape: "sk_ghost", main: 0xe8e4f8, accent: S.color },
   },
   {
@@ -596,7 +596,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: () => 16,
     cooldownMs: () => 15_000,
     describe: (lv) =>
-      `둘레 적을 넋 사슬로 내 앞에 끌어모아 공격력의 ${pct(FX.so_chain(lv).mult)} 피해, ${sec(FX.so_chain(lv).stunMs)} 묶고 받는 피해 +${pct(FX.so_chain(lv).vuln)}.`,
+      `넋 사슬로 둘레 적을 내 앞에 끌어모아 공격력의 ${pct(FX.so_chain(lv).mult)} 피해를 줘요. 묶인 적은 ${sec(FX.so_chain(lv).stunMs)} 동안 못 움직이고 피해를 ${pct(FX.so_chain(lv).vuln)} 더 받아요.`,
     art: { shape: "sk_chain", main: S.color, accent: S.light },
   },
   {
@@ -611,7 +611,7 @@ export const SKILLS: readonly SkillDef[] = [
     requires: [{ id: "so_friend", level: 1 }],
     sp: () => 10,
     cooldownMs: () => 15_000,
-    describe: (lv) => `가장 가까운 적의 반대쪽으로 사라졌다 나타나고 ${sec(FX.so_veil(lv).safeMs)} 동안 피해를 받지 않는다.`,
+    describe: (lv) => `가장 가까운 적의 반대쪽으로 순간이동해요. ${sec(FX.so_veil(lv).safeMs)} 동안 피해를 받지 않아요.`,
     art: { shape: "sk_veil", main: S.dark, accent: S.light },
   },
   {
@@ -628,7 +628,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: (lv) => 22 + 2 * lv,
     cooldownMs: () => 12_000,
     describe: (lv) =>
-      `가장 가까운 적 자리에 넋 소용돌이를 연다. ${FX.so_harvest(lv).ticks}번 휘몰아치며 한 번에 공격력의 ${pct(FX.so_harvest(lv).mult)} 피해, 맞힌 적마다 HP를 조금 거둔다(한 번에 최대 ${pct(FX.so_harvest(lv).healCap)}).`,
+      `가장 가까운 적 자리에 넋 소용돌이를 열어요. ${FX.so_harvest(lv).ticks}번 휘몰아치며 한 번에 공격력의 ${pct(FX.so_harvest(lv).mult)} 피해를 줘요. 맞힌 적마다 HP가 조금 차고, 한 번에 최대 ${pct(FX.so_harvest(lv).healCap)}까지 차요.`,
     art: { shape: "sk_vortex", main: S.color, accent: S.light },
   },
   {
@@ -644,7 +644,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: () => 22,
     cooldownMs: () => 24_000,
     describe: (lv) =>
-      `그 자리에 초롱을 건다. ${sec(FX.so_lantern(lv).durMs)} 동안 가까운 적에게 넋불을 쏘아 공격력의 ${pct(FX.so_lantern(lv).atkPct)} 피해.`,
+      `그 자리에 초롱을 걸어요. ${sec(FX.so_lantern(lv).durMs)} 동안 초롱이 가까운 적에게 넋불을 쏴서 공격력의 ${pct(FX.so_lantern(lv).atkPct)} 피해를 줘요.`,
     art: { shape: "sk_lantern", main: S.light, accent: S.dark },
   },
   {
@@ -661,7 +661,7 @@ export const SKILLS: readonly SkillDef[] = [
     sp: () => 40,
     cooldownMs: () => 28_000,
     describe: (lv) =>
-      `별빛을 따라 넋들의 행렬이 화면을 가로지른다. 보이는 적 모두에게 ${FX.so_procession(lv).hitAt.length}번, 한 번에 공격력의 ${pct(FX.so_procession(lv).mult)} 피해, 최대 HP의 ${pct(FX.so_procession(lv).healPct)}를 회복.`,
+      `넋들의 행렬이 화면을 가로질러요. 보이는 적 모두를 ${FX.so_procession(lv).hitAt.length}번 때리고, 한 번에 공격력의 ${pct(FX.so_procession(lv).mult)} 피해예요. 내 HP도 최대 HP의 ${pct(FX.so_procession(lv).healPct)}만큼 차요.`,
     art: { shape: "sk_starlight", main: 0xfff3c8, accent: S.color },
   },
   {
@@ -675,7 +675,7 @@ export const SKILLS: readonly SkillDef[] = [
     maxLevel: 3,
     requires: [{ id: "so_lantern", level: 1 }],
     ...passive,
-    describe: (lv) => `길동무 넋·망자의 초롱 피해 +${pct(FX.so_kinship(lv).summonPct)}, 머무는 시간 +${pct(FX.so_kinship(lv).durPct)}.`,
+    describe: (lv) => `길동무 넋과 망자의 초롱의 피해가 ${pct(FX.so_kinship(lv).summonPct)}, 머무는 시간이 ${pct(FX.so_kinship(lv).durPct)} 늘어요.`,
     art: { shape: "sk_bond", main: S.light, accent: S.color },
   },
 ];

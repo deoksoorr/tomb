@@ -21,10 +21,10 @@ const MODE_TEXT: Record<Exclude<NetMode, "online">, string> = {
 
 export function queueText(status: QueueStatus | undefined): string {
   if (status?.state === "waiting") {
-    return `지금 묘지가 꽉 찼어요 · 대기 ${status.position}번째 (앞에 ${status.position - 1}명) — 자리가 나면 자동으로 들어가요`;
+    return `지금 마을이 꽉 찼어요. 내 차례는 ${status.position}번째예요. 자리가 나면 저절로 들어가요.`;
   }
   if (status?.state === "admitted") return "자리가 났어요. 곧 들어가요…";
-  return "지금 묘지가 꽉 찼어요 — 자리가 나면 자동으로 들어가요";
+  return "지금 마을이 꽉 찼어요. 자리가 나면 저절로 들어가요.";
 }
 
 /** 상단 가운데: 채널·인원, 시간대·날씨. compact(터치 화면 위 가장자리 바)는 작은 한 줄 */
@@ -115,7 +115,7 @@ export function StatusBanners() {
   if (mode === "spectator") {
     return (
       <p className={styles.banner} role="status">
-        지금 묘지가 붐벼요. 자리가 나면 자동으로 합류합니다.
+        지금 마을이 붐벼요. 자리가 나면 저절로 들어가요.
       </p>
     );
   }

@@ -74,8 +74,8 @@ export default function ShrineDialog({ cache, onGo, onClose, onOpenPassed, foote
     <Dialog title="성황당" onClose={onClose}>
       <div className={styles.bag}>
         <p className={ui.hint}>
-          성황당은 묘역을 떠난 묘비들이 머무는 곳이에요. 이장한 내 묘비는 {SHRINE_KEEP_DAYS}일 동안 이곳에 모셔지고, 그 안에 다시
-          모시면 원래 채널 맨 뒤 자리로 돌아가요(지나면 지워져요).
+          성황당은 자리를 옮긴 묘비가 잠시 머무는 곳이에요. 이장한 내 묘비는 {SHRINE_KEEP_DAYS}일 동안 여기 있어요. 그 안에 다시
+          모시면 원래 채널 맨 뒤 자리로 돌아가요. 기간이 지나면 지워져요.
         </p>
         <p className={ui.hint}>
           세운 지 {DEFAULT_PASS_DAYS}일이 지난 묘비는 성불해 묘역을 떠나요. 묘역(채널마다 {GRAVEYARD_CAPACITY}자리)이 꽉 차면 가장

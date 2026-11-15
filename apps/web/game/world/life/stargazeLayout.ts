@@ -1,4 +1,4 @@
-import { TELESCOPE, TELESCOPE_SPOT } from "@tomb/protocol";
+import { TELESCOPES } from "@tomb/protocol";
 import type { Interactable, Rect } from "../layout";
 
 // 22번 별 보기 언덕의 망원경 배치 (순수 데이터). layout.ts가 충돌·상호작용 목록에 한 줄씩 더한다.
@@ -6,21 +6,19 @@ import type { Interactable, Rect } from "../layout";
 
 /** 망원경 삼각대 받침 충돌 */
 export function stargazeColliders(): Rect[] {
-  return [{ x: TELESCOPE.x - 5, y: TELESCOPE.y - 5, w: 10, h: 5 }];
+  return TELESCOPES.map((t) => ({ x: t.x - 5, y: t.y - 5, w: 10, h: 5 }));
 }
 
-/** 망원경 앞자리 (E → 별자리 잇기) */
+/** 망원경 앞자리 (E → 별자리 잇기). 망원경마다 1인 자리 (11/15 둘째 망원경 TELESCOPE_2) */
 export function stargazeInteractables(): Interactable[] {
-  return [
-    {
-      id: "telescope",
-      kind: "telescope",
-      x: TELESCOPE_SPOT.x,
-      y: TELESCOPE_SPOT.y,
-      r: 14,
-      ax: TELESCOPE_SPOT.x,
-      ay: TELESCOPE_SPOT.y,
-      label: "망원경 보기 · 별자리 잇기",
-    },
-  ];
+  return TELESCOPES.map((t, i) => ({
+    id: i ? `telescope${i + 1}` : "telescope",
+    kind: "telescope",
+    x: t.x,
+    y: t.y + 10,
+    r: 14,
+    ax: t.x,
+    ay: t.y + 10,
+    label: "망원경으로 별자리 잇기",
+  }));
 }

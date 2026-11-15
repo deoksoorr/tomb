@@ -939,7 +939,7 @@ export class ParkingStage implements TowerThemeRuntime {
       this.snd("horn");
       if (!this.rushTold) {
         this.rushTold = true;
-        H.flash("헤드라이트! 차가 지나가요 — 빛줄기 밖으로 비켜요", 1800);
+        H.flash("헤드라이트! 차가 지나가요. 빛줄기 밖으로 비켜요", 1800);
       }
       const every = PK_RUSH.every[this.boss ? 1 : 0] * this.loop.rush * (rampage ? 0.55 : 1);
       this.nextRush = now + warn + every;

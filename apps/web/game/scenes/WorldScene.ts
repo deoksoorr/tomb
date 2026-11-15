@@ -95,6 +95,9 @@ const TOAST_REPEAT_MS = 1500;
 /** F17 미니맵에 내 위치·다른 사람 위치를 알리는 간격 */
 const MINIMAP_MS = 250;
 
+/** 11/15 긴급 의뢰 축제 폭죽 (보통 크기만 — 화면을 덮는 대형·피날레는 빼고) */
+const FEST_FIREWORKS = ["fw_small", "fw_ring", "fw_heart", "fw_star", "fw_spiral", "fw_willow", "fw_crossette", "fw_triple"] as const;
+
 export class WorldScene extends Phaser.Scene {
   private ctx!: GameContext;
   private reduced = false;
@@ -147,6 +150,10 @@ export class WorldScene extends Phaser.Scene {
   private netStarted = false;
   private cleaned = false;
   private inShop = false;
+  /** 11/15 긴급 의뢰 마을 축제: 끝나는 시각(ms, Date.now 기준) · 다음 폭죽 시각(scene time) · 지금 켜짐 */
+  private festUntil = 0;
+  private festNext = 0;
+  private festOn = false;
   private seatHint!: SeatHint;
   /** 41번: 내 묘비까지 걸어가기 */
   private walker!: GraveWalker;
@@ -755,11 +762,11 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("channel:switch", ({ channel }) => this.switchChannel(channel)));
     // 실내(상점·집·분양 마을·사냥터·미니게임)에 들어가 있는 동안은 다른 사람 화면에서 숨긴다 (메인 맵의 나는 문 앞에 멈춰 있다)
     on.push(
-      bridge.on("scene:changed", ({ scene, place, houseId }) => {
+      bridge.on("scene:changed", ({ scene, place, houseId, stay }) => {
         this.awayScene = scene !== "world" && scene !== "shop";
         // 친구 위치용 장소 (친구 창에 "집 안"·"사냥터"처럼 보인다)
         const where = scene === "shop" ? "shop" : scene === "hunt" ? "hunt" : scene === "minigame" ? "game" : (place ?? "house");
-        this.net.setAway(scene !== "world", where, where === "house" ? houseId : undefined);
+        this.net.setAway(scene !== "world" && !stay, where, where === "house" ? houseId : undefined); // stay: 망원경 (RpgHostScene)
       }),
     );
     // 친구: 이 채널의 친구 표시 (이름표 하트·미니맵 하트)와 친구한테 가기
@@ -798,6 +805,8 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("camera:zoom", ({ delta }) => this.rig.zoomBy(delta)));
     on.push(bridge.on("net:reconnect", () => this.net.reconnect()));
     on.push(bridge.on("look:set", (e) => this.applyLook(e.look, e.lookGrant, e)));
+    this.festUntil = bridge.last("urgent:fest")?.until ?? 0;
+    on.push(bridge.on("urgent:fest", ({ until }) => (this.festUntil = until)));
     on.push(
       bridge.on("firework:fire", ({ item, grant }) => {
         // 누른 순간 내 자리에서 바로 터뜨리고, 서버에는 증서를 보낸다 (서버가 같은 채널에 알린다)
@@ -1492,6 +1501,26 @@ export class WorldScene extends Phaser.Scene {
     if (o && o.dist < 16 && Math.hypot(o.obj.x - pl.x, o.obj.y - pl.y) <= o.obj.r * 1.5 && !pl.airborne) this.useObject(o.obj);
   }
 
+  /**
+   * 11/15 긴급 의뢰 마을 축제 (150%): 모닥불이 금빛, 하늘에 폭죽이 저절로 오른다 (보는 화면 아래쪽에서 쏘아 화면 안에서 터지게).
+   * 폭죽 아이템 없이 그림만 — 서버·다른 사람에게 보내지 않는다 (모두가 같은 축제 상태를 보고 저마다 쏜다). 움직임 줄이기면 드물게
+   */
+  private updateFestival(now: number): void {
+    const on = Date.now() < this.festUntil;
+    if (on !== this.festOn) {
+      this.festOn = on;
+      this.map.setFestival(on);
+      this.festNext = now + 800;
+    }
+    if (!on || this.awayScene || this.inShop || now < this.festNext) return;
+    this.festNext = now + (this.reduced ? 7_000 : 1_600 + Math.random() * 2_600);
+    const v = this.fireworkView();
+    const x = v.x + v.width * (0.12 + Math.random() * 0.76);
+    const y = v.y + v.height * (0.82 + Math.random() * 0.15);
+    this.fireworks.launch(FEST_FIREWORKS[Math.floor(Math.random() * FEST_FIREWORKS.length)], x, y, v, false);
+    this.sky?.firework();
+  }
+
   /** 폭죽을 맞출 보이는 영역: 이번 프레임 화면, 불멍 중이면 위아래 레터박스를 뺀다 (8번: 불멍 중 폭죽이 잘림) */
   private fireworkView(): Phaser.Geom.Rectangle {
     const v = this.rig.frameView(this.fwView);
@@ -1645,6 +1674,7 @@ export class WorldScene extends Phaser.Scene {
     this.atmos.gather(longSit ? { x: pl.x, y: pl.y } : null);
     this.atmos.update(now, dt, view);
     this.fireworks.update(now, dt, view);
+    this.updateFestival(now);
     this.updateLighting(view);
 
     this.net.tick(pnow);

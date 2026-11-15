@@ -233,7 +233,7 @@ export default function ForageLayer() {
                 setPaused(false);
               }}
             >
-              <p className={ui.hint}>다섯 마리를 잡을 때마다 한 마리씩 가방에 챙겨요(최대 3), 금빛 곤충은 희귀종이에요. 벌과 낙엽은 건드리지 마세요.</p>
+              <p className={ui.hint}>다섯 마리를 잡을 때마다 한 마리씩 가방에 챙겨요. 3마리까지 챙길 수 있어요. 금빛 곤충은 희귀종이에요. 벌과 낙엽은 건드리지 마세요.</p>
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                 <button
                   type="button"

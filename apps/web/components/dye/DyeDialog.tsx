@@ -215,7 +215,7 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
                 {ticket?.name ?? "염색권"} ·{" "}
                 {ticket?.mode === "fixed"
                   ? "정해진 색으로 바로 염색해요."
-                  : `60초 안에 무작위 팔레트에서 색을 찾아요. 흔들림 ${ticket ? wobbleLabel(ticket.tier) : ""} · 특수 색은 ${ticket ? specialLabel(ticket.tier) : ""}.`}
+                  : `60초 안에 무작위 판에서 색을 찾아요. 흔들림 ${ticket ? wobbleLabel(ticket.tier) : ""}, 특수 색은 ${ticket ? specialLabel(ticket.tier) : ""}.`}
               </p>
               <div className={styles.parts} role="group" aria-label="염색할 부위">
                 {DYE_PARTS.map((p) => {
@@ -239,14 +239,14 @@ export default function DyeDialog({ ticket, resume, avatar, look, onClose, onDon
               {fixedColor && (
                 <p className={styles.pick}>
                   <span className={styles.swatchBig} style={{ background: fixedColor }} aria-hidden="true" />
-                  {fixedColor} — 왼쪽은 염색해 본 모습이에요.
+                  {fixedColor}. 왼쪽이 염색해 본 모습이에요.
                 </p>
               )}
               {ticket?.mode === "random" && (
                 <p className={styles.note}>
-                  시작하면 염색권 1장을 써요. 판은 일부만 보여요 — 끌어서 옮기고, 휠(폰은 두 손가락)로 확대·축소해 원하는 색을 찾으세요. 조준점 아래 색이 바로 고른
-                  색이 되고, [이 색으로 염색]을 누른 순간 정해져요. 시간이 끝나면 그 순간 조준점 아래 색과 지금 색 중에서 골라요. 도중에 창을
-                  닫으면 색은 그대로이고 염색권은 돌아오지 않아요.
+                  시작하면 염색권 1장을 써요. 판을 끌어서 옮기고, 휠로 확대·축소해요. 폰은 두 손가락을 써요. 가운데 조준점 아래 색이 지금 고른
+                  색이에요. [이 색으로 염색]을 누르면 정해져요. 시간이 끝나면 그때 색과 지금 색 중에서 골라요. 도중에 창을 닫으면 색은 그대로고
+                  염색권은 돌아오지 않아요.
                 </p>
               )}
               {error && <p className={ui.error}>{error}</p>}
@@ -647,8 +647,8 @@ function DyeBoard({
         </div>
         {/* 조작 안내 — 판 아래 늘 보인다 (터치 기기는 CSS로 터치 안내만) */}
         <p className={styles.keys}>
-          <span className={styles.keysMouse}>WASD·방향키: 판 이동 (Shift 빠르게) · 휠: 확대·축소 · 끌기: 판 이동 · 가운데 조준점 색이 골라져요</span>
-          <span className={styles.keysTouch}>끌기: 판 이동 · 두 손가락: 확대·축소 · 가운데 조준점 색이 골라져요</span>
+          <span className={styles.keysMouse}>WASD나 끌기로 판을 옮기고(Shift는 빠르게), 휠로 확대·축소해요. 가운데 조준점 색이 골라져요.</span>
+          <span className={styles.keysTouch}>끌어서 옮기고 두 손가락으로 확대·축소해요. 가운데 조준점 색이 골라져요.</span>
         </p>
       </div>
       <div className={styles.panel}>
@@ -668,8 +668,8 @@ function DyeBoard({
           />
         </div>
         <p className={cx(styles.note, styles.tip)}>
-          조준점 아래 색이 바로 고른 색이에요(폰은 화면 가운데 조준점). 흔들리니 원하는 색에서 잘 멈춰 확정하세요. 확대할수록 덜 흔들려요. 시간이 끝나면 그 순간 조준점
-          아래 색과 지금 색 중에서 골라요.
+          가운데 조준점 아래 색이 지금 고른 색이에요. 판이 흔들리니 원하는 색에서 멈추고 확정하세요. 확대할수록 덜 흔들려요. 시간이 끝나면 그때
+          색과 지금 색 중에서 골라요.
         </p>
         <div className={styles.actions}>
           <button type="button" className={cx(ui.button, ui.primary)} disabled={sending} onClick={() => void send(aimNow())}>

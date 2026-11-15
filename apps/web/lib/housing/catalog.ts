@@ -215,7 +215,7 @@ export const HOUSE_TITLES: readonly HouseTitle[] = [
   { min: 50, name: "아늑한 보금자리", desc: "누군가 머문 온기가 느껴지는 곳" },
   { min: 150, name: "정갈한 정원", desc: "손길이 닿은 티가 나는 곳" },
   { min: 400, name: "소문난 별장", desc: "지나가던 유령도 들르는 곳" },
-  { min: 900, name: "전설의 명당", desc: "묘지 사람들이 입을 모아 말하는 곳" },
+  { min: 900, name: "전설의 명당", desc: "마을 사람들이 입을 모아 말하는 곳" },
 ];
 
 export function houseTitle(score: number): HouseTitle {

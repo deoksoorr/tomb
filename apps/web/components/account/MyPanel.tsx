@@ -4,7 +4,6 @@ import { useEffect, useId, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { checkName, dexBadgeCats } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
-import { DAILY_EARN_CAP } from "@/lib/economy";
 import { CAT_LABEL, dexBadgeBits } from "@/lib/forage/catalog";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import { useNameTaken } from "@/lib/hooks/useNameTaken";
@@ -17,6 +16,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import type { MyGraveEntry } from "./items";
 import { InquiryButton } from "../notice/InquiryDialog";
+import EarnGauge from "./EarnGauge";
 import GoogleSection, { GoogleBadge, useGoogleStatus } from "./GoogleSection";
 import MyGraves from "./MyGraves";
 import styles from "./MyPanel.module.css";
@@ -117,11 +117,13 @@ export default function MyPanel({
             <strong>{me.points.toLocaleString("ko-KR")}</strong> 포인트
           </p>
           <p className={styles.sub}>
-            오늘 {me.todayEarned}/{DAILY_EARN_CAP} · 연속 출석 {me.attendance.streak}일
+            연속 출석 {me.attendance.streak}일
             {me.attendance.today && " · 오늘 출석 완료"}
           </p>
           <p className={styles.sub}>내 꾸미기 점수 {lookScore(me, openedAt)}점 (지금 입은 코디 기준)</p>
         </section>
+
+        <EarnGauge me={me} />
 
         <NameSection me={me} googleLinked={!!googleStatus?.linked} />
 
@@ -153,7 +155,7 @@ export default function MyPanel({
         <section className={styles.section}>
           {ending === "leave" ? (
             <div className={styles.confirm}>
-              <p>묘지를 떠날까요?</p>
+              <p>마을을 떠날까요?</p>
               <div className={styles.confirmButtons}>
                 <button type="button" className={cx(ui.button, ui.danger)} onClick={onLeave} autoFocus>
                   떠나기
@@ -300,8 +302,8 @@ function CodeSection({ me, buttonId }: { me: Me; buttonId: string }) {
       )}
       {!code && hasCode && (
         <p className={ui.hint}>
-          이 기기에는 코드가 저장돼 있지 않아요. 코드는 비밀번호처럼 원문을 보관하지 않아 다시 보여 드릴 수 없어요. 잊었다면
-          새로 발급받으세요.
+          이 기기에는 코드가 저장돼 있지 않아요. 코드는 안전을 위해 다시 보여 드리지 않아요. 잊었다면 새로
+          발급받으세요.
         </p>
       )}
       {confirming ? (

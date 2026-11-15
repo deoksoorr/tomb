@@ -90,21 +90,21 @@ export default function EntryScreen({ start, google, focusGraveId, entering, sta
         {hydrated && !entering ? (
           <>
             <EntryFlow start={start} google={google} focusGraveId={focusGraveId} onEnter={onEnter} />
-            <p className={styles.nonprofit}>개인 포트폴리오 · 후원·광고·유료 재화 없음</p>
+            <p className={styles.nonprofit}>개인이 만든 게임이에요. 후원도 광고도 유료 결제도 없어요.</p>
             <p className={styles.legal}>
               <Link href="/privacy">개인정보처리방침</Link> · <Link href="/terms">이용약관</Link> · <Link href="/faq">자주 묻는 질문</Link>
             </p>
           </>
         ) : entering && stalled ? (
           <div className={styles.stalled} role="alert">
-            <p>묘지 문이 열리지 않아요.</p>
+            <p>마을 문이 열리지 않아요.</p>
             <button type="button" className={cx(ui.button, ui.primary)} onClick={() => window.location.reload()}>
               새로고침
             </button>
           </div>
         ) : (
           <p className={styles.loading} role="status">
-            묘지 문을 여는 중…
+            마을 문을 여는 중…
           </p>
         )}
       </div>
@@ -135,7 +135,7 @@ type Step =
 const SUBMIT_LABELS: Record<Path["kind"], string> = {
   new: "입장하기",
   continue: "다시 들어가기",
-  code: "채널을 선택해서 접속하기",
+  code: "채널 골라서 들어가기",
 };
 
 /** 계정에 저장된 모습 (코드로 시작·이어서 들어가기에서는 바꾸지 않는다) */
@@ -361,7 +361,7 @@ function NameStep({ draft, takenName, onBack, onNext }: DraftProps & { takenName
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={() => setTouched(true)}
-            placeholder="묘지에서 불릴 이름"
+            placeholder="마을에서 불릴 이름"
             autoComplete="nickname"
             enterKeyHint="next"
             spellCheck={false}
@@ -371,7 +371,7 @@ function NameStep({ draft, takenName, onBack, onNext }: DraftProps & { takenName
           />
         </div>
         <p id={`${nameId}-hint`} className={nameError ? ui.error : ui.hint}>
-          {nameError ?? "2~12자 · 한글, 영문, 숫자, 공백, _"}
+          {nameError ?? "2~12자로 지어요. 한글, 영문, 숫자, 공백, _를 쓸 수 있어요."}
         </p>
       </div>
       <button type="submit" className={cx(ui.button, ui.primary, styles.enter)}>
@@ -579,7 +579,7 @@ function DormantRename({ me, onBack, onDone }: { me: Me; onBack: () => void; onD
               setName(e.target.value);
               setError(null);
             }}
-            placeholder="묘지에서 불릴 이름"
+            placeholder="마을에서 불릴 이름"
             autoComplete="nickname"
             spellCheck={false}
             aria-invalid={nameError !== null}
@@ -588,7 +588,7 @@ function DormantRename({ me, onBack, onDone }: { me: Me; onBack: () => void; onD
           />
         </div>
         <p id={`${nameId}-hint`} className={nameError ? ui.error : ui.hint}>
-          {nameError ?? "포인트·아이템·집·친구는 그대로예요. 2~12자 · 한글, 영문, 숫자, 공백, _"}
+          {nameError ?? "포인트, 아이템, 집, 친구는 그대로예요. 이름은 2~12자로 지어요."}
         </p>
       </div>
       <button type="submit" className={cx(ui.button, ui.primary, styles.enter)} disabled={pending}>

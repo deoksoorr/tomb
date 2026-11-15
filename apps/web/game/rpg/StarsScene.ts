@@ -406,7 +406,7 @@ export class StarsScene extends RpgScene {
       const bottom = this.place(v, 0.5, Math.max(...con.stars.map((s) => s[1])));
       const t = fresh
         ? this.nameLabel(bottom.x, Math.min(this.ah - 22, bottom.y + 16), "도감 등록!", "#9ef0c0", 12)
-        : this.nameLabel(bottom.x, Math.min(this.ah - 22, bottom.y + 16), "도감 칸이 가득 — 다음 판에", "#9aa3c8", 11);
+        : this.nameLabel(bottom.x, Math.min(this.ah - 22, bottom.y + 16), "도감이 가득 찼어요. 다음 판에", "#9aa3c8", 11);
       if (!this.reduced) this.tweens.add({ targets: t, y: t.y - 3, duration: 260, yoyo: true, repeat: 2, ease: "Sine.easeOut" });
       v.objs.push(t);
     }

@@ -12,7 +12,7 @@ export default function PrivacyPage() {
     <main className={styles.page}>
       <div className={styles.inner}>
         <Link href="/" className={styles.home}>
-          ← 묘지로 돌아가기
+          ← 마을로 돌아가기
         </Link>
         <h1 className={styles.title}>개인정보처리방침</h1>
         <p className={styles.date}>시행일 {EFFECTIVE}</p>
@@ -42,7 +42,7 @@ export default function PrivacyPage() {
             </tr>
             <tr>
               <td>닉네임, 아바타 색·몸 모양</td>
-              <td>묘지 안에서 다른 방문자에게 보이기 위해</td>
+              <td>마을 안에서 다른 방문자에게 보이기 위해</td>
             </tr>
             <tr>
               <td>묘비·집·방명록에 쓴 내용</td>

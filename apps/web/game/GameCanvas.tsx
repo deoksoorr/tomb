@@ -24,7 +24,7 @@ export default function GameCanvas(props: GameStartOptions) {
       })
       .catch((err: unknown) => {
         console.error(err);
-        bridge.emit("toast", { message: "묘지를 불러오지 못했어요. 새로고침해 주세요." });
+        bridge.emit("toast", { message: "마을을 불러오지 못했어요. 새로고침해 주세요." });
       });
     return () => {
       disposed = true;

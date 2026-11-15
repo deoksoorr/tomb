@@ -65,7 +65,7 @@ export default function CodeStart({ onLogin, onBack }: Props) {
         autoFocus
       />
       <p id={`${id}-msg`} className={error ? ui.error : ui.hint}>
-        {error ?? "내 정보 → 개인 코드에서 만든 코드예요. 포인트·가방·내 묘비가 그대로 따라와요."}
+        {error ?? "내 정보의 개인 코드에서 만든 코드예요. 포인트, 가방, 내 묘비가 그대로 따라와요."}
       </p>
       <button type="submit" className={cx(ui.button, ui.primary, styles.submit)} disabled={pending || !code.trim()}>
         {pending ? "확인 중…" : "코드 확인"}

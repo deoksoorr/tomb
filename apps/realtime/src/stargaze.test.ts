@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, DIR, STATE, TELESCOPE_SPOT, encodeEvent, encodeMove, spotSeatId, type S2C, type StateId } from "@tomb/protocol";
+import { AVATAR_COLORS, DIR, STATE, TELESCOPE_2, TELESCOPE_SPOT, encodeEvent, encodeMove, spotSeatId, type S2C, type StateId } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { ChannelCore, type ChannelHost } from "./channel";
 
@@ -47,6 +47,18 @@ describe("telescope / mat spots", () => {
     mv(a, TELESCOPE_SPOT.x + 5, TELESCOPE_SPOT.y + 5, STATE.walk, 400);
     expect(core.peer(1)?.seatId).toBeNull();
     expect(ev(b)).toContainEqual({ t: "seat", seatId: scope, sid: null });
+  });
+
+  it("11/15 two telescopes: two people look at the same time, each holding their own", () => {
+    const { core, join, ev } = setup();
+    const scope2 = spotSeatId("telescope", TELESCOPE_2.x, TELESCOPE_2.y + 10);
+    const a = join("a", TELESCOPE_SPOT.x, TELESCOPE_SPOT.y + 4);
+    const b = join("b", TELESCOPE_2.x, TELESCOPE_2.y + 14);
+    core.message(a, encodeEvent({ t: "sit", seatId: scope }), 10);
+    core.message(b, encodeEvent({ t: "sit", seatId: scope2 }), 11);
+    expect(ev(b)).not.toContainEqual({ t: "seatDenied", seatId: scope2 });
+    expect(core.peer(1)).toMatchObject({ seatId: scope, state: STATE.idle, dir: DIR.up });
+    expect(core.peer(2)).toMatchObject({ seatId: scope2, state: STATE.idle, dir: DIR.up });
   });
 
   it("an ordinary ground sit does not claim a mat id by itself", () => {

@@ -33,7 +33,7 @@ export const STATUSES: Record<StatusId, StatusDef> = {
   poison: {
     id: "poison",
     name: "독",
-    desc: "매초 최대 HP의 일부를 잃어요. 오래가요.",
+    desc: "1초마다 HP가 조금씩 줄어요. 오래가요.",
     color: 0x8ad04a,
     art: { shape: "st_poison", main: 0x8ad04a, accent: 0x3a6a1e },
     durMs: 6000,
@@ -44,7 +44,7 @@ export const STATUSES: Record<StatusId, StatusDef> = {
   burn: {
     id: "burn",
     name: "화상",
-    desc: "짧지만 독보다 아프게 타들어 가요.",
+    desc: "짧게 가지만 독보다 아파요.",
     color: 0xff8a3c,
     art: { shape: "st_burn", main: 0xff8a3c, accent: 0xffe08a },
     durMs: 3000,
@@ -55,7 +55,7 @@ export const STATUSES: Record<StatusId, StatusDef> = {
   bleed: {
     id: "bleed",
     name: "출혈",
-    desc: "움직이는 동안 더 많이 잃어요. 멈춰 서면 덜 아파요.",
+    desc: "움직이면 HP가 더 많이 줄어요. 멈춰 서면 덜 아파요.",
     color: 0xe04848,
     art: { shape: "st_bleed", main: 0xe04848, accent: 0x7a1a1a },
     durMs: 5000,
@@ -76,7 +76,7 @@ export const STATUSES: Record<StatusId, StatusDef> = {
   freeze: {
     id: "freeze",
     name: "빙결",
-    desc: "아주 잠깐 얼어붙어 움직이지도 때리지도 못해요.",
+    desc: "아주 잠깐 얼어서 움직이지도 때리지도 못해요.",
     color: 0xa8e8ff,
     art: { shape: "st_freeze", main: 0xa8e8ff, accent: 0x3a8ac8 },
     durMs: 800,
@@ -94,7 +94,7 @@ export const STATUSES: Record<StatusId, StatusDef> = {
   silence: {
     id: "silence",
     name: "침묵",
-    desc: "스킬을 쓸 수 없어요. 공격·포션은 돼요.",
+    desc: "스킬을 못 써요. 공격과 포션은 쓸 수 있어요.",
     color: 0xb0b0c0,
     art: { shape: "st_silence", main: 0xd8d8e0, accent: 0x5a5a6a },
     durMs: 3500,

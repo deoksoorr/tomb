@@ -26,8 +26,9 @@ export const WALL_THICKNESS = 2 * TILE;
  *     — 넓어진 물·우리 울타리·새 장식 자리에 옛 기록이 끼지 않게
  * 7 = 필지를 1~9번지로 (1번지 되살림, 10·11·12번지 없앰 → 버스 정류장 광장을 10번지 자리로) — 광장·필지 자리가 바뀌어서
  * 8 = 납품 부두 기록 수족관 자리에 주말 버스 정류장(지붕·벤치·팻말 충돌), 10번지 자리는 쉼터 광장 — 새 충돌 자리에 옛 기록이 끼지 않게
+ * 9 = 별 보기 언덕에 망원경 두 대 (둘째 받침 충돌·넓어진 돌 마당) — 새 충돌 자리에 옛 기록이 끼지 않게
  */
-export const MAP_VERSION = 8;
+export const MAP_VERSION = 9;
 
 const CX = MAP_WIDTH / 2; // 720
 
@@ -554,6 +555,10 @@ export const HILL_CLIFF = 32;
  */
 export const TELESCOPE = { x: 296, y: 92 } as const;
 export const TELESCOPE_SPOT = { x: TELESCOPE.x, y: TELESCOPE.y + 10 } as const;
+/** 11/15 둘째 망원경: 같은 돌 마당 동쪽 (망원경마다 한 명이라 둘이 같이 볼 수 있게). 자리 id가 앵커 좌표라 서버는 따로 알 필요가 없다 */
+export const TELESCOPE_2 = { x: 328, y: 92 } as const;
+/** 언덕의 망원경들 (받침 가운데). 앞자리는 각각 y + 10 */
+export const TELESCOPES: readonly { x: number; y: number }[] = [TELESCOPE, TELESCOPE_2];
 
 // ── 의자와 벤치 ── 좌석 점유는 서버가 판정한다.
 export type FurnitureKind = "bench" | "chair";

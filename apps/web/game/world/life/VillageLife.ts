@@ -3,7 +3,7 @@ import {
   DIR,
   GOBLIN_NAME,
   GOBLIN_TOUCH_RADIUS,
-  TELESCOPE,
+  TELESCOPES,
   goblinPos,
   goblinRoute,
   hashUnit,
@@ -18,6 +18,7 @@ import { bridge } from "../../bridge";
 import { DEPTH } from "../../config";
 import type { Player } from "../../entities/Player";
 import { SPOT_TAKEN_TOAST } from "../../logic/spots";
+import { STARGAZE_TAG } from "../../entities/RemoteAvatar";
 import type { RealtimeClient } from "../../net/RealtimeClient";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../../text/GlyphAtlas";
 import type { Interactable } from "../layout";
@@ -102,7 +103,7 @@ export class VillageLife {
   private readonly critters: CritterView[] = [];
   private seed = -1;
   private goblin: GoblinView | null = null;
-  private readonly telescope: Phaser.GameObjects.Image;
+  private readonly telescopes: Phaser.GameObjects.Image[];
   private readonly sparks: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly hearts: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly override: AmbienceOverride;
@@ -136,7 +137,7 @@ export class VillageLife {
     d.atlas.ensure(CRITTERS.map((c) => c.name).join("") + "황금 고블린" + PET_TEXT_CAT.join("") + PET_TEXT_GHOST.join(""));
     this.override = typeof window !== "undefined" ? parseAmbienceOverride(window.location.search) : {};
     // 망원경 (그림 + 받침 충돌)
-    this.telescope = scene.add.image(TELESCOPE.x, TELESCOPE.y + 1, LTEX.telescope).setOrigin(0.5, 1).setDepth(TELESCOPE.y);
+    this.telescopes = TELESCOPES.map((t) => scene.add.image(t.x, t.y + 1, LTEX.telescope).setOrigin(0.5, 1).setDepth(t.y));
     for (const r of stargazeColliders()) {
       const z = scene.add.zone(r.x + r.w / 2, r.y + r.h / 2, r.w, r.h);
       z.removeFromDisplayList();
@@ -498,7 +499,7 @@ export class VillageLife {
       if (judged) net.sit(id);
       return;
     }
-    pl.faceTo(TELESCOPE.x, TELESCOPE.y - 12, now);
+    pl.faceTo(o.ax, o.ay - 22, now); // 그 망원경 (앞자리 = 받침 + 10)
     pl.dir = DIR.up;
     pl.view.apply(pl.state, DIR.up, now);
     if (!judged || owner === net.mySid) {
@@ -548,6 +549,8 @@ export class VillageLife {
       const moved = Math.hypot(pl.x - h.x, pl.y - h.y) > 4;
       if (moved || (h.kind === "mat" && pl.state !== "sitGround")) this.held = null;
     }
+    // 내 캐릭터도 망원경 앞에 있는 동안 이름표 위에 "별 보는 중" (다른 사람 화면과 같은 표시)
+    this.d.player().view.setDoing(this.held?.kind === "telescope" ? STARGAZE_TAG : null);
     // 서버가 답이 없다(이전 서버·끊김) → 그냥 연다
     if (this.pendingScope && performance.now() > this.pendingScope.until) this.openTelescope();
   }
@@ -615,7 +618,7 @@ export class VillageLife {
       c.zzz?.destroy();
     }
     this.critters.length = 0;
-    this.telescope.destroy();
+    for (const t of this.telescopes) t.destroy();
     this.sparks.destroy();
     this.hearts.destroy();
   }

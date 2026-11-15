@@ -1,6 +1,7 @@
 import { CHAMP_ITEM_IDS, itemById, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
 import { tierUntil } from "../attendTiers";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
+import { earnedBySource } from "../earnGauge";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import { staffAccountIdNow } from "../staff";
 import { stayBonusSum, stayBonusTiers } from "../stayBonus";
@@ -239,6 +240,7 @@ export class MemoryAccounts implements AccountStore {
         .sort((x, y) => x.until - y.until || x.itemId.localeCompare(y.itemId)),
       graves: [...a.graves],
       todayEarned: a.earnDay === day ? (a.earned.get("_total") ?? 0) : 0,
+      earnedBy: a.earnDay === day ? earnedBySource(a.earned) : {},
       activityUnread: (a.activity ?? []).filter((x) => x.kind !== "revive" && x.at > (a.activitySeen ?? 0)).length,
       nameChangedAt: a.nameChangedAt ?? 0,
       nameChanges: a.nameChanges ?? 0,
