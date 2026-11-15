@@ -5,9 +5,6 @@ import {
   DUCK_DOCK,
   DUCK_DOCK_DECK,
   FERRY_DOCK,
-  FISH_PIER,
-  FISH_PIER_HEAD,
-  FISH_YARD,
   FURNITURE,
   GRAVE_AREAS,
   HILL,
@@ -229,10 +226,7 @@ export function waterCurrent(x: number, y: number): { vx: number; vy: number } {
  * 세로 판자(다리·나루터)는 좌우, 가로 판자(잔교)는 위아래에 둘러치고, 물 쪽 끝은 막는다. 뭍에 닿은 끝 8px은 비워 오르내린다.
  */
 export const RAIL = 2;
-/** 낚시터 판자 (데크 + 잔교): 서로 이어 붙어 있어 둘레 규칙으로 난간을 친다 (fishDeckRails) */
-const FISH_DECKS: readonly Rect[] = [FISH_PIER, FISH_PIER_HEAD];
 export function deckRails(d: Rect): Rect[] {
-  if (FISH_DECKS.some((f) => f.x === d.x && f.y === d.y && f.w === d.w && f.h === d.h)) return fishDeckRails(d);
   const vertical = d.h >= d.w;
   const wet = (x: number, y: number) => inWaterBody(x, y, 2);
   if (vertical) {
@@ -258,38 +252,6 @@ export function deckRails(d: Rect): Rect[] {
   ];
   if (leftWet) out.push({ x: d.x, y: d.y, w: RAIL, h: d.h });
   if (rightWet) out.push({ x: d.x + d.w - RAIL, y: d.y, w: RAIL, h: d.h });
-  return out;
-}
-/**
- * 낚시터 판자 난간: 둘레를 따라가며 바깥 바로 옆이 물이고 다른 판자가 아닌 곳에만 친다.
- * → 데크와 잔교가 만나는 곳은 열려 있고, 뭍에 닿은 쪽(둑)으로는 그냥 걸어 내려간다.
- */
-function fishDeckRails(d: Rect): Rect[] {
-  const out: Rect[] = [];
-  const STEP = 2;
-  const wetOutside = (x: number, y: number) => inWaterBody(x, y, 0) && !DECKS.some((o) => o !== d && inRect(o, x, y));
-  const sides: { along: "x" | "y"; fixed: number; out: number; railAt: number }[] = [
-    { along: "x", fixed: d.y, out: d.y - 3, railAt: d.y },
-    { along: "x", fixed: d.y + d.h, out: d.y + d.h + 3, railAt: d.y + d.h - RAIL },
-    { along: "y", fixed: d.x, out: d.x - 3, railAt: d.x },
-    { along: "y", fixed: d.x + d.w, out: d.x + d.w + 3, railAt: d.x + d.w - RAIL },
-  ];
-  for (const side of sides) {
-    const len = side.along === "x" ? d.w : d.h;
-    const start = side.along === "x" ? d.x : d.y;
-    let runFrom = -1;
-    for (let k = 0; k <= len; k += STEP) {
-      const v = start + Math.min(k, len - 1);
-      const wet = k < len && (side.along === "x" ? wetOutside(v, side.out) : wetOutside(side.out, v));
-      if (wet && runFrom < 0) runFrom = start + k;
-      if ((!wet || k + STEP > len) && runFrom >= 0) {
-        const end = wet ? start + len : start + k;
-        if (side.along === "x") out.push({ x: runFrom, y: side.railAt, w: end - runFrom, h: RAIL });
-        else out.push({ x: side.railAt, y: runFrom, w: RAIL, h: end - runFrom });
-        runFrom = -1;
-      }
-    }
-  }
   return out;
 }
 export function allDeckRails(): Rect[] {
@@ -479,7 +441,7 @@ const HAND_PROPS: readonly PropDef[] = [
   P("leaves", 780, 560, 1),
   P("flowers", 690, 612, 2),
   P("flowers", 752, 612, 0),
-  // ── 11/15 쉼터 광장 (예전 10번지: 가로등·꽃밭, 벤치 bY·bZ) · 납품 부두 위 마당 가로등 ──
+  // ── 11/15 쉼터 광장 (예전 10번지: 가로등·꽃밭, 벤치 bY·bZ) · 버스 정류장 마당 가로등 ──
   P("lamp", REST_PLAZA.x + 10, REST_PLAZA.y + 16),
   P("lamp", REST_PLAZA.x + REST_PLAZA.w - 10, REST_PLAZA.y + 16),
   P("flowers", REST_PLAZA.x + 14, REST_PLAZA.y + 88, 1),
@@ -581,7 +543,7 @@ function freeForProp(placed: readonly PropDef[], x: number, y: number, gap: numb
   if (x < WALL_THICKNESS + 10 || x > MAP_WIDTH - WALL_THICKNESS - 10 || y < WALL_THICKNESS + 30 || y > MAP_HEIGHT - TILE - 12) return false;
   if (inWaterBody(x, y, 10) || inWaterBody(x, y - 10, 4)) return false;
   for (const d of DECKS) if (inRect(d, x, y, 14)) return false;
-  if (inFishZone(x, y, 10)) return false; // 낚시터 (장식·자리는 fishZone.ts)
+  if (inFishZone(x, y, 10)) return false; // 예전 납품 부두 자리 (버스 정류장 마당·호수 북동쪽 둑 — fishZone.ts)
   if (inZoo(x, y, 14)) return false; // 동물원 (울타리·우리·장식은 zoo/zooLayout.ts)
   const k = groundKind(Math.floor(x / TILE), Math.floor(y / TILE));
   if (k !== "grass" && k !== "hill") return false;
@@ -594,7 +556,7 @@ function freeForProp(placed: readonly PropDef[], x: number, y: number, gap: numb
   for (const s of SEATS) if (Math.hypot(s.x - x, s.y - y) < (gap > 12 ? 30 : 22)) return false;
   for (const c of CAMPFIRES) if (Math.hypot(c.x - x, c.y - y) < (c.big ? 96 : 44)) return false;
   for (const l of HOUSE_LOTS) if (inRect({ x: l.x, y: l.y, w: HOUSE_LOT_W, h: HOUSE_LOT_H }, x, y, 6)) return false;
-  if (inRect(REST_PLAZA, x, y, 10) || inRect(WHARF_YARD, x, y, 10)) return false; // 11/15 쉼터 광장·납품 부두 위 마당
+  if (inRect(REST_PLAZA, x, y, 10) || inRect(WHARF_YARD, x, y, 10)) return false; // 11/15 쉼터 광장·버스 정류장 마당
   for (const p of placed) if (Math.hypot(p.x - x, p.y - y) < (isTree(p.kind) ? gap : 12)) return false;
   for (const p of HAND_PROPS) if (Math.hypot(p.x - x, p.y - y) < (isTree(p.kind) || p.kind === "hammock" || p.kind === "swing" || p.kind === "crypt" || p.kind === "mat" || p.kind === "oldGrave" ? gap : 14)) return false;
   for (const k of RIDE_KEEPOUT) if (Math.hypot(k.x - x, k.y - y) < k.r) return false; // 50번 광장 놀거리 (rides.ts)
@@ -971,7 +933,7 @@ export function groundKind(tx: number, ty: number): GroundKind {
   // ── 주거 구역: 서쪽 골목(세로)과 집 앞 골목(가로) ──
   if (between(tx, HOUSE_TX0, HOUSE_TX0 + 1) && between(ty, NORTH_ROAD_TY[1] + 1, LAST_STREET_TY)) return "cobble";
   if (between(tx, HOUSE_TX0, HOUSE_TX1) && STREET_TYS.includes(ty)) return "cobble";
-  // 11/15 쉼터 광장 (예전 10번지, 포석) · 납품 부두 위 마당 (예전 11·12번지, 자갈 — 주말 버스 정류장)
+  // 11/15 쉼터 광장 (예전 10번지, 포석) · 버스 정류장 마당 (예전 11·12번지, 자갈 — 의뢰 게시판·주말 버스 정류장)
   if (between(tx, T(REST_PLAZA.x), T(REST_PLAZA.x + REST_PLAZA.w) - 1) && between(ty, T(REST_PLAZA.y), T(REST_PLAZA.y + REST_PLAZA.h) - 1)) return "stone";
   if (between(tx, T(WHARF_YARD.x), T(WHARF_YARD.x + WHARF_YARD.w) - 1) && between(ty, T(WHARF_YARD.y), T(WHARF_YARD.y + WHARF_YARD.h) - 1)) return "gravel";
   // 광장 ↔ 주거 구역 골목 (첫째·셋째 골목 줄)
@@ -996,9 +958,6 @@ export function groundKind(tx: number, ty: number): GroundKind {
   if (ty === T(LAKE_PIER.y + LAKE_PIER.h / 2) && between(tx, T(LAKE_PIER.x) - 4, T(LAKE_PIER.x) - 1)) return "dirt";
   // 11/15 오리배 선착장 길 (강 건너 오솔길에서 판자까지)
   if (between(tx, T(DUCK_DOCK_DECK.x), T(DUCK_DOCK_DECK.x + DUCK_DOCK_DECK.w) - 1) && between(ty, SOUTH_PATH_TY + 1, T(DUCK_DOCK_DECK.y))) return "dirt";
-  // 낚시터: 어부 노점 마당(자갈) → 아치 → 낚시 데크
-  if (between(tx, T(FISH_YARD.x), T(FISH_YARD.x + FISH_YARD.w) - 1) && between(ty, T(FISH_YARD.y), T(FISH_YARD.y + FISH_YARD.h) - 1)) return "gravel";
-  if (between(tx, T(FISH_PIER.x), T(FISH_PIER.x + FISH_PIER.w) - 1) && ty === T(FISH_YARD.y + FISH_YARD.h)) return "gravel";
   return "grass";
 }
 
@@ -1032,7 +991,7 @@ const PORTALS: readonly Interactable[] = [
   { id: "portal:shrine", kind: "portal", portal: "shrine", x: SHRINE.x, y: SHRINE.y, r: PORTAL_RADIUS, ax: SHRINE.x, ay: SHRINE.y, label: "성황당 · 이장한 묘비 보기" },
   { id: "dock:ferry", kind: "dock", x: FERRY_DOCK.x, y: FERRY_DOCK.y, r: 14, ax: FERRY_DOCK.x, ay: FERRY_DOCK.y, label: "나루터 · 조각배 타기" },
   { id: "dock:duck", kind: "dock", x: DUCK_DOCK.x, y: DUCK_DOCK.y, r: 14, ax: DUCK_DOCK.x, ay: DUCK_DOCK.y, label: "오리배 타기" },
-  // 11/15 주말 버스 정류장 (납품 부두 위 마당). E → 캠핑장 버스 (운영에서 닫혀 있으면 안내만).
+  // 11/15 주말 버스 정류장 (버스 정류장 마당). E → 캠핑장 버스 (운영에서 닫혀 있으면 안내만).
   // 승강장·정차 칸 앞 어디서든 되게 넓게 (예전 r 20은 지붕 바로 앞 한 점이라 잘 안 잡혔다). 지붕 아래 벤치 바로 앞은 앉기가 더 가깝다
   { id: "bus:camp", kind: "bus", x: BUS_STOP.x - 6, y: BUS_STOP.y + 22, r: BUS_E_RADIUS, ax: BUS_STOP.x - 6, ay: BUS_STOP.y + 22, label: "주말 버스 정류장" },
   // 동물원 사육사 (노점 앞) → 펫 분양 창
@@ -1112,7 +1071,8 @@ export const LANDMARKS: readonly Landmark[] = [
   { id: "housing", label: "분양 사무소", x: HOUSING_OFFICE.x, y: HOUSING_OFFICE.y, kind: "housing" },
   { id: "shrine", label: "성황당", x: SHRINE.x, y: SHRINE.y, kind: "shrine" },
   { id: "dock", label: "나루터", x: FERRY_DOCK.x, y: FERRY_DOCK.y, kind: "dock" },
-  { id: "fish", label: "납품 부두", x: WHARF_YARD.x + WHARF_YARD.w / 2, y: WHARF_YARD.y + 60, kind: "fish" },
+  // 11/15 낚시: 납품 부두를 없애고 어부 영감 노점이 있는 호수 낚시 잔교로
+  { id: "fish", label: "낚시 잔교", x: LAKE_PIER.x + 24, y: LAKE_PIER.y + 8, kind: "fish" },
   { id: "zoo", label: "동물원", x: ZOOKEEPER.x - 16, y: ZOOKEEPER.y + 40, kind: "zoo" },
   { id: "telescope", label: "망원경", x: TELESCOPE.x, y: TELESCOPE.y, kind: "telescope" },
   { id: "wish", label: "소원 분수", x: WISH_FOUNTAIN.x, y: WISH_FOUNTAIN.y, kind: "wish" },

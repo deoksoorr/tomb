@@ -46,6 +46,17 @@ import { CAMP_GATHER_NODES } from "@/lib/forage/catalog";
 // 그림은 campArt.ts, 그리기·컬링은 CampMap.ts, 미니맵 바탕은 campMinimap.ts.
 
 export type Rect = { x: number; y: number; w: number; h: number };
+
+/**
+ * 11/15 야외 바베큐장 (큰 타프 오른쪽, 데크 고리와 산책로 사이 빈 마당): 숯불 그릴 + 나무 탁자.
+ * 그릴 앞에서 E → 메뉴 창(삼겹살·소시지·마시멜로 꼬치), 먹으면 잠깐 커진다 (protocol bbq.ts)
+ */
+export const CAMP_BBQ = {
+  grill: { x: 800, y: 686 },
+  table: { x: 848, y: 704 },
+  /** 나무가 서지 않는 마당 */
+  area: { x: 764, y: 640, w: 124, h: 92 },
+} as const;
 type Pt = { x: number; y: number };
 
 // ── 결정적 난수 (그림·배치가 매번 같게) ──
@@ -329,6 +340,7 @@ function keepClear(x: number, y: number): boolean {
   for (const s of CAMP_SEATS) if (Math.hypot(x - s.x, y - s.y) < 26) return true;
   for (const n of CAMP_NPCS) if (Math.hypot(x - n.x, y - n.y) < 28) return true;
   for (const b of CAMP_BOULDERS) if (Math.hypot(x - b.x, y - b.y) < 24) return true;
+  if (inRect(CAMP_BBQ.area, x, y, 14)) return true; // 바베큐장
   if (Math.hypot(x - CAMP_BOARD_SPOT.x, y - CAMP_BOARD_SPOT.y) < 26) return true;
   // A-6 계곡 낚시 자리·채집 지점 (나무가 그 자리를 비켜 선다)
   for (const f of CAMP_FISHING_SPOTS) if (Math.hypot(x - f.x, y - f.y) < 22) return true;
@@ -455,6 +467,9 @@ export function campStaticColliders(): Rect[] {
     { x: CAMP_BUS_TIMETABLE.x - 6, y: CAMP_BUS_TIMETABLE.y - 4, w: 12, h: 4 },
     { x: CAMP_BOARD_SPOT.x - 13, y: CAMP_BOARD_SPOT.y - 5, w: 26, h: 5 },
     ...campVanGearColliders(),
+    // 바베큐 그릴(다리 쪽)·나무 탁자
+    { x: CAMP_BBQ.grill.x - 12, y: CAMP_BBQ.grill.y - 5, w: 24, h: 5 },
+    { x: CAMP_BBQ.table.x - 22, y: CAMP_BBQ.table.y - 4, w: 44, h: 4 },
     ...lookoutRails(),
     ...streamColliders(),
     ...CAMP_BOULDERS.map(boulderCollider),
@@ -521,6 +536,7 @@ export const CAMP_INTERACTABLES: readonly CampInteractable[] = [
   { id: "board", kind: "board", x: CAMP_BOARD_SPOT.x, y: CAMP_BOARD_SPOT.y + 12, r: 20, label: "의뢰판 보기" },
   { id: "sign", kind: "sign", x: CAMP_BUS_SIGN.x, y: CAMP_BUS_SIGN.y + 12, r: 18, label: "표지판 보기" },
   { id: "lookout", kind: "lookout", x: SCOPE_STAND.x, y: SCOPE_STAND.y + 14, r: 20, label: "망원경으로 캠핑장 보기" },
+  { id: "bbq", kind: "bbq", x: CAMP_BBQ.grill.x, y: CAMP_BBQ.grill.y + 14, r: 28, label: "바베큐 사 먹기" },
 ];
 
 // ── 밤 빛 ──
@@ -542,6 +558,8 @@ export const CAMP_LIGHTS: readonly CampLight[] = [
   { x: CAMP_BUS_TIMETABLE.x, y: CAMP_BUS_TIMETABLE.y - 18, scale: 0.4, tint: 0xd8f0ff, base: 0.6 },
   // 캠핑카 창 (주황 불빛)
   ...CAMP_VANS.map((v) => ({ x: v.x - 8, y: v.y - 24, scale: 0.55, tint: 0xffb060, base: 0.7 })),
+  // 바베큐 숯불
+  { x: CAMP_BBQ.grill.x, y: CAMP_BBQ.grill.y - 12, scale: 1.1, tint: 0xff8a40, base: 0.9 },
   // 캠핑카 앞 화롯대·랜턴
   ...CAMP_VAN_GEAR.flatMap((g) => [
     { x: g.brazier.x, y: g.brazier.y - 10, scale: 1.0, tint: 0xff9a48, base: 0.9 },

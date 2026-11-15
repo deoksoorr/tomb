@@ -375,3 +375,26 @@ describe("channel total count (11/15 HUD — 맵이 달라도 채널 전체)", (
     expect(events(a).filter((e) => e.t === "count")).toEqual([{ t: "count", n: 1 }]);
   });
 });
+
+describe("camp BBQ (11/15 바베큐 — 먹으면 잠깐 커진다)", () => {
+  const bbq = (visitorId: string, nonce: string, until = 90_000) => send({ t: "bbq", grant: JSON.stringify({ kind: "bbq", visitorId, item: "pork", until, nonce, exp: 999 }) });
+  it("검증된 증서만, 같은 맵(보낸 사람 포함)에 알리고 늦게 온 사람도 PeerInfo로 본다. 같은 증서는 한 번만", async () => {
+    const { core, join } = setup();
+    const a = join("a", { camp: true, map: "camp", spawn: { x: 300, y: 600 } });
+    const b = join("b", { camp: true, map: "camp", spawn: { x: 320, y: 600 } });
+    const v = join("v");
+    clear(a, b, v);
+    core.message(a, bbq("a", "n1"), 1_000);
+    await flush();
+    expect(events(a).filter((e) => e.t === "bbq")).toEqual([{ t: "bbq", sid: 1, i: "pork", u: 90_000 }]);
+    expect(events(b).filter((e) => e.t === "bbq")).toHaveLength(1);
+    expect(events(v).some((e) => e.t === "bbq")).toBe(false); // 마을 사람(옛 클라이언트 포함)은 모른다
+    clear(a, b);
+    core.message(a, bbq("a", "n1"), 5_000); // 같은 증서 다시
+    core.message(b, bbq("a", "n2"), 5_000); // 남의 증서
+    await flush();
+    expect([...events(a), ...events(b)].some((e) => e.t === "bbq")).toBe(false);
+    const c = join("c", { camp: true, map: "camp", spawn: { x: 340, y: 600 } });
+    expect(welcome(c).peers.find((p) => p.sid === 1)?.bbq).toEqual({ i: "pork", u: 90_000 });
+  });
+});

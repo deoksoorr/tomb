@@ -81,6 +81,12 @@ export const CAMP_TEX = {
   lantern: `${P}lantern`,
   icebox: `${P}icebox`,
   plateSign: `${P}plateSign`,
+  // 11/15 야외 바베큐장
+  bbqGrill: `${P}bbqGrill`,
+  bbqTable: `${P}bbqTable`,
+  bbqSmoke: `${P}bbqSmoke`,
+  /** 먹을 때 머리 위에 잠깐 뜨는 접시 (메뉴마다) */
+  bbqPlate: (id: string) => `${P}bbqPlate-${id}`,
 } as const;
 
 /** 그리드 + (스프라이트 시트면) 프레임 크기 */
@@ -1335,6 +1341,14 @@ function groundColor(x: number, y: number, k: CampGround, nearPath: boolean): Co
 
 /** 바닥 덩어리 RGBA (CAMP_CHUNK × CAMP_CHUNK, 맵 밖은 가장자리 숲 바닥) */
 export function campGroundPixels(cx: number, cy: number, size = CAMP_CHUNK): Uint8ClampedArray {
+  const steps = campGroundSteps(cx, cy, size);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value;
+}
+
+/** 바닥 덩어리를 줄 묶음(band줄)마다 멈추며 굽는다 — 버스 창밖 연출 동안 프레임마다 조금씩 (campPrebake). 끝나면 RGBA를 돌려준다 */
+export function* campGroundSteps(cx: number, cy: number, size = CAMP_CHUNK, band = 32): Generator<void, Uint8ClampedArray> {
   const out = new Uint8ClampedArray(size * size * 4);
   const ox = cx * size;
   const oy = cy * size;
@@ -1345,18 +1359,24 @@ export function campGroundPixels(cx: number, cy: number, size = CAMP_CHUNK): Uin
   const hw = Math.ceil(w / 2);
   const kinds: CampGround[] = new Array(hw * Math.ceil(h / 2));
   const near = new Uint8Array(kinds.length);
-  for (let y = 0; y < h; y += 2)
-    for (let x = 0; x < w; x += 2) {
-      const i = (y >> 1) * hw + (x >> 1);
-      const kd = campGroundKind(ox + x, oy + y);
-      kinds[i] = kd;
-      near[i] = kd === "grass" && pathEdgeDist(ox + x, oy + y, 12) < 10 ? 1 : 0;
-    }
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
-      const i = (y >> 1) * hw + (x >> 1);
-      put(out, (y * size + x) * 4, groundColor(ox + x, oy + y, kinds[i], near[i] === 1));
-    }
+  // band줄씩 (짝수 줄에서 끊어 2px 칸 표가 묶음 안에서 끝난다)
+  const step = Math.max(2, band & ~1);
+  for (let y0 = 0; y0 < h; y0 += step) {
+    const y1 = Math.min(h, y0 + step);
+    for (let y = y0; y < y1; y += 2)
+      for (let x = 0; x < w; x += 2) {
+        const i = (y >> 1) * hw + (x >> 1);
+        const kd = campGroundKind(ox + x, oy + y);
+        kinds[i] = kd;
+        near[i] = kd === "grass" && pathEdgeDist(ox + x, oy + y, 12) < 10 ? 1 : 0;
+      }
+    for (let y = y0; y < y1; y++)
+      for (let x = 0; x < w; x++) {
+        const i = (y >> 1) * hw + (x >> 1);
+        put(out, (y * size + x) * 4, groundColor(ox + x, oy + y, kinds[i], near[i] === 1));
+      }
+    yield;
+  }
   // 징검다리 돌 (물 위에 얹힌 납작한 돌)
   for (const s of CAMP_STEP_STONES) {
     for (let y = -5; y <= 5; y++)
@@ -1569,5 +1589,95 @@ export function plateSignArt(): Grid {
   }
   g.outline(OUT);
   shadow(g, W / 2, H - 2, W / 2 - 6, 1.6, 54);
+  return g;
+}
+
+
+// ── 11/15 야외 바베큐장 ──
+
+/** 숯불 바베큐 그릴: 드럼통 반쪽 몸통 + 석쇠 위 고기·소시지·꼬치 + 빨간 숯 + 다리 둘 */
+export function bbqGrillArt(): Grid {
+  const g = new Grid(30, 26);
+  // 다리
+  line(g, 6, 15, 4, 24, 0x2e2a28);
+  line(g, 24, 15, 26, 24, 0x2e2a28);
+  g.hline(6, 24, 20, 0x3a3634);
+  // 몸통 (검은 드럼 반쪽)
+  g.ellipse(15, 13, 12, 5, 0x34302e);
+  g.rect(3, 9, 25, 5, 0x34302e);
+  g.hline(3, 27, 9, 0x5a5654);
+  g.hline(4, 26, 14, 0x24201e);
+  // 숯 (빨갛게)
+  g.ellipse(15, 9, 10.5, 2.6, 0x7a2a14);
+  for (const [x, y] of [[8, 9], [12, 8], [17, 10], [21, 9], [14, 10]] as const) g.set(x, y, 0xff8a30);
+  // 석쇠
+  for (let x = 5; x <= 25; x += 3) g.vline(x, 6, 9, 0x8a8e92);
+  g.hline(4, 26, 7, 0xa8acb0);
+  // 삼겹살 두 점 · 소시지 · 마시멜로 꼬치
+  g.rect(6, 4, 6, 3, 0xd8826a);
+  g.hline(6, 11, 5, 0xf2d8c8);
+  g.rect(13, 5, 4, 2, 0xc8705a);
+  g.rect(18, 5, 6, 2, 0xb05a34);
+  g.hline(18, 23, 5, 0xd8784a);
+  line(g, 25, 2, 28, 8, 0xc8a070);
+  g.rect(24, 2, 3, 2, 0xfaf4ec);
+  // 옆 손잡이
+  g.rect(0, 10, 3, 2, 0x5a5654);
+  g.outline(OUT);
+  shadow(g, 15, 24.5, 12, 1.4, 54);
+  return g;
+}
+
+/** 바베큐장 나무 탁자 (접시·양념병·컵) */
+export function bbqTableArt(): Grid {
+  const g = new Grid(48, 20);
+  g.rect(2, 3, 44, 9, WOOD.mid);
+  for (let y = 3; y < 12; y += 3) g.hline(2, 45, y, WOOD.hi);
+  g.hline(2, 45, 11, WOOD.lo);
+  g.rect(5, 12, 3, 6, WOOD.lo);
+  g.rect(40, 12, 3, 6, WOOD.lo);
+  // 접시 둘 + 고기
+  for (const cx of [12, 32]) {
+    g.ellipse(cx, 7, 5, 2.4, 0xf4f0e8);
+    g.rect(cx - 2, 6, 4, 2, 0xd08060);
+  }
+  // 양념병·컵
+  g.rect(21, 3, 2, 5, 0xc83a2a);
+  g.rect(24, 4, 2, 4, 0xe8c040);
+  g.rect(39, 5, 3, 3, 0x6aa0c8);
+  g.outline(OUT);
+  shadow(g, 24, 18.5, 21, 1.4, 50);
+  return g;
+}
+
+/** 고기 굽는 연기 한 점 (부드러운 회색 덩어리 — 위로 오르며 커지고 흐려진다) */
+export function bbqSmokeArt(): Grid {
+  const g = new Grid(10, 8);
+  g.ellipse(5, 4, 4.6, 3.4, 0xd8d4cc, 150);
+  g.ellipse(4, 3, 2.4, 1.8, 0xf0ece4, 170);
+  return g;
+}
+
+/** 먹을 때 뜨는 접시 (메뉴마다 위에 올린 것이 다르다) */
+export function bbqPlateArt(id: string): Grid {
+  const g = new Grid(16, 10);
+  g.ellipse(8, 6, 7, 3, 0xf8f4ec);
+  g.ellipse(8, 6.5, 5, 1.8, 0xe8e2d6);
+  if (id === "pork") {
+    g.rect(4, 3, 4, 3, 0xd8826a);
+    g.hline(4, 7, 4, 0xf2d8c8);
+    g.rect(9, 3, 4, 3, 0xc8705a);
+    g.hline(9, 12, 4, 0xf2d8c8);
+    g.set(13, 2, 0x5a9a4a); // 상추 한 장
+  } else if (id === "sausage") {
+    g.rect(4, 3, 8, 2, 0xb05a34);
+    g.hline(4, 11, 3, 0xd8784a);
+    g.set(12, 3, 0xe8c040); // 머스터드
+  } else {
+    line(g, 3, 6, 13, 1, 0xc8a070);
+    g.rect(5, 3, 3, 2, 0xfaf4ec);
+    g.rect(9, 1, 3, 2, 0xf0d8a8); // 살짝 그을린 마시멜로
+  }
+  g.outline(OUT);
   return g;
 }

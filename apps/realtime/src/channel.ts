@@ -37,6 +37,9 @@ import {
   isChampValue,
   isDexBadge,
   isAwayPlace,
+  isBbqEffect,
+  BBQ_INTERVAL_MS,
+  type BbqEffect,
   type AvatarDye,
   type AwayPlace,
   type C2S,
@@ -83,6 +86,8 @@ export type PeerRecord = {
   ride?: true;
   /** 4번 배 위 낚시: 낚싯대를 드리우고 있다 (조각배 자리에 앉아 있는 동안만) */
   rod?: true;
+  /** 11/15 캠핑장 바베큐를 먹고 커져 있다 (u = 끝나는 시각). 늦게 온 사람도 PeerInfo로 본다. 끝난 기록은 그냥 둔다 (클라이언트가 시각으로 거른다) */
+  bbq?: BbqEffect;
   /** 실내(상점·집·사냥터 등 하위 장면)에 들어가 있다 → 다른 사람 화면에서 숨긴다 (월드 채널만). 재접속 유예 동안에도 이어 간다 */
   away?: true;
   /** 친구: 실내에 있으면 어디인지 (집 안·사냥터 …). 다른 사람 화면에는 보내지 않고 친구 위치 조회(roster)에만 쓴다 */
@@ -279,6 +284,8 @@ type Peer<C> = PeerRecord & {
   lastRideAt?: number;
   lastRodAt?: number;
   lastAwayAt?: number;
+  /** 11/15 바베큐 증서 (없으면 아직 안 씀) */
+  lastBbqAt?: number;
   /** 11/13 사냥터 공격·스킬 동작 (없으면 아직 안 씀) */
   lastHuntAt?: number;
   /** 11/15 맵 옮기기 (없으면 아직 안 씀) */
@@ -789,7 +796,7 @@ export class ChannelCore<C extends object> {
   private onEvent(p: Peer<C>, m: C2S, now: number): void {
     // 3번: 방(집)도 1인 자리(집 안 가구)는 좌석처럼 판정한다 → sit/stand는 받는다 (월드 자리 id는 onSit이 거절)
     if (!this.cfg.room && m.t === "use") return;
-    if (this.cfg.room && (m.t === "emote" || m.t === "graveEvent" || m.t === "firework" || m.t === "megaphone")) return;
+    if (this.cfg.room && (m.t === "emote" || m.t === "graveEvent" || m.t === "firework" || m.t === "megaphone" || m.t === "bbq")) return;
     switch (m.t) {
       case "sit":
         return this.onSit(p, m.seatId, now);
@@ -811,6 +818,11 @@ export class ChannelCore<C extends object> {
         if (now - p.lastLookAt < LOOK_INTERVAL_MS) return;
         p.lastLookAt = now;
         return this.verifyThenApply(p, "look", m.grant);
+      case "bbq":
+        // 11/15 캠핑장 바베큐: 웹이 서명한 한 접시 증서 → 검증 뒤 같은 맵에 (applyGrant)
+        if (now - (p.lastBbqAt ?? -Infinity) < BBQ_INTERVAL_MS) return;
+        p.lastBbqAt = now;
+        return this.verifyThenApply(p, "bbq", m.grant);
       case "firework":
         if (now - p.lastFireworkAt < FIREWORK_INTERVAL_MS) return;
         p.lastFireworkAt = now;
@@ -971,6 +983,15 @@ export class ChannelCore<C extends object> {
       return;
     }
     if (g.kind === "megaphone") return this.applyMegaphone(g);
+    if (g.kind === "bbq") {
+      // 한 접시는 한 번만 (같은 증서를 다시 보내도 늘어나지 않는다)
+      if (!this.host.claimNonce(`b:${g.nonce}`, Math.max(g.until, g.exp * 1000))) return;
+      p.bbq = { i: g.item, u: g.until };
+      this.save(p);
+      this.host.liveChanged?.(true);
+      this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "bbq", sid: p.sid, i: g.item, u: g.until }));
+      return;
+    }
     if (g.kind !== "firework") return; // 고블린 증서는 실시간 서버가 내주기만 한다 (받지 않는다)
     if (!this.host.claimNonce(g.nonce, g.exp * 1000)) return; // 이미 쏜 폭죽
     this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "firework", sid: p.sid, item: g.item, x: p.x, y: p.y }));
@@ -1481,6 +1502,7 @@ export class ChannelCore<C extends object> {
       ...(p.ride ? { ride: true as const } : {}),
       ...(p.rod ? { rod: true as const } : {}),
       ...(p.away ? { away: true as const } : {}),
+      ...(p.bbq ? { bbq: p.bbq } : {}),
     };
   }
 
@@ -1494,6 +1516,6 @@ export class ChannelCore<C extends object> {
     const ride = r.ride === true && !seatId && ridePetOfLook(look) ? { ride: true as const } : {};
     // 배 위 낚싯대는 조각배 자리에 앉아 있을 때만 이어 간다
     const rod = r.rod === true && seatId && boatSeatById(seatId) ? { rod: true as const } : {};
-    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.away === true && r.place === "house" && typeof r.house === "string" ? { house: r.house } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), ...(isChampValue(r.champ) ? { champ: r.champ } : {}), joinedAt: r.joinedAt ?? 0, ...(r.map === "camp" ? { map: "camp" as const } : {}), ...(r.camp === true ? { camp: true as const } : {}) };
+    return { sid, visitorId, name, color, x, y, state, dir, seatId, look, body: r.body ?? "hood", ...(hasDye(r.dye) ? { dye: r.dye } : {}), ...mood, ...ride, ...rod, ...(r.away === true ? { away: true as const } : {}), ...(r.away === true && isAwayPlace(r.place) ? { place: r.place } : {}), ...(r.away === true && r.place === "house" && typeof r.house === "string" ? { house: r.house } : {}), ...(r.staff === true ? { staff: true as const } : {}), ...(isDexBadge(r.dex) ? { dex: r.dex } : {}), ...(isChampValue(r.champ) ? { champ: r.champ } : {}), joinedAt: r.joinedAt ?? 0, ...(r.map === "camp" ? { map: "camp" as const } : {}), ...(r.camp === true ? { camp: true as const } : {}), ...(isBbqEffect(r.bbq) ? { bbq: { i: r.bbq.i, u: r.bbq.u } } : {}) };
   }
 }

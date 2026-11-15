@@ -14,6 +14,9 @@ import {
   TELEPORT_DIST,
   campSeatById,
   dexBadgeCats,
+  bbqItem,
+  isBbqEffect,
+  type BbqItemId,
   isAvatarBody,
   isPhraseId,
   sanitizeDye,
@@ -57,6 +60,7 @@ import { WeatherSound } from "../world/WeatherSound";
 import { createBusArrival } from "../bus/BusArrival";
 import type { BusArrivalApi } from "../bus/busTypes";
 import { CampMap } from "./CampMap";
+import * as Art from "./campArt";
 import { CampForage } from "./campForage";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
 import { campLines, campNpcName, CAMP_WELCOME } from "./campTalk";
@@ -77,6 +81,8 @@ const ACT_COOLDOWN_MS = 700;
 const SAY_COOLDOWN_MS = 1000;
 /** NPC 말을 듣다가 이만큼 멀어지면 대화 창을 닫는다 */
 const TALK_LEAVE_DIST = 56;
+/** 캠핑장 버스: 손님을 내린 뒤 이만큼 서 있다가 흐려지며 사라진다 (11/15 사용자 — 돌지 않는다) */
+const CAMP_BUS_WAIT_MS = 3000;
 /** 처음 도착 안내를 이 브라우저에서 봤는지 */
 const WELCOMED_KEY = "tomb.camp.welcomed";
 
@@ -129,6 +135,9 @@ export class CampScene extends Phaser.Scene {
   /** 지금 말 거는 NPC (대화 창이 열려 있다) */
   private talking: { id: CampNpcId; lines: readonly string[]; at: number } | null = null;
   private readonly talkTurn = new Map<CampNpcId, number>();
+  /** 11/15 바베큐로 커진 사람 (sid → 끝나는 시각 epoch ms). 나는 "me" */
+  private readonly bigUntil = new Map<Sid | "me", number>();
+  private bigCheckAt = 0;
   /** 새로고침 복원 좌석: 첫 welcome에서 확인 */
   private resumeSeat: string | null = null;
   private readonly poseBuf: NetPose = { x: 0, y: 0, state: STATE.idle, dir: DIR.down };
@@ -276,7 +285,7 @@ export class CampScene extends Phaser.Scene {
   /** 버스가 캠핑장 정류장에 서고 문이 열리면 내려선다 */
   private arriveByBus(): void {
     this.locked = true;
-    this.bus = createBusArrival(this, { doorX: CAMP_BUS_STOP.x, laneY: CAMP_ROAD.y + CAMP_ROAD.h - 6, fromLeft: true, reduced: this.host.reduced });
+    this.bus = createBusArrival(this, { doorX: CAMP_BUS_STOP.x, laneY: CAMP_ROAD.y + CAMP_ROAD.h - 6, fromLeft: true, reduced: this.host.reduced, leave: "fade", waitMs: CAMP_BUS_WAIT_MS });
     this.bus.arrive(() => {
       if (this.cleaned) return;
       const pl = this.player;
@@ -380,6 +389,7 @@ export class CampScene extends Phaser.Scene {
       onGoblin: () => undefined,
       onGoblinGone: () => undefined,
       onGoblinCaught: () => undefined,
+      onBbq: (sid, item, until) => this.onBbq(sid, item, until),
       onMapped: (map, peers, seats) => {
         if (map !== "camp") return this.host.bail();
         this.clearRemotes();
@@ -470,6 +480,8 @@ export class CampScene extends Phaser.Scene {
     this.forage?.f.applyPeer(p);
     r.setAway(p.away === true, performance.now(), true);
     r.view.setFriend(this.isFriend(r));
+    // 11/15 바베큐로 커져 있는 사람 (늦게 와도 보인다)
+    if (isBbqEffect(p.bbq) && p.bbq.u > Date.now()) this.applyBig(p.sid, r.view, p.bbq.i, p.bbq.u);
     if (!r.seatId) for (const [seatId, owner] of this.seats) if (owner === p.sid) r.seatId = seatId;
     this.remotes.set(p.sid, r);
   }
@@ -493,6 +505,7 @@ export class CampScene extends Phaser.Scene {
       r.view.setMood(p.mood ?? null);
       this.riding.applyPeer(r, p);
       r.setAway(p.away === true, now);
+      if (isBbqEffect(p.bbq) && p.bbq.u > Date.now()) this.applyBig(p.sid, r.view, p.bbq.i, p.bbq.u);
       const last = r.interp.latest;
       if (!last || Math.hypot(last.x - p.x, last.y - p.y) > TELEPORT_DIST / 2) r.push(now, p.x, p.y, p.state, p.dir);
     }
@@ -574,6 +587,7 @@ export class CampScene extends Phaser.Scene {
       }),
     );
     on.push(bridge.on("camp:talkClose", () => (this.talking = null)));
+    on.push(bridge.on("camp:bbq:eat", ({ item, until, grant }) => this.eatBbq(item, until, grant)));
   }
 
   private fw(): Fireworks {
@@ -687,6 +701,13 @@ export class CampScene extends Phaser.Scene {
       case "sign":
         this.toast("시간표에는 '다음 버스: 언젠가'라고 적혀 있어요. 그래도 E를 누르면 와요.");
         break;
+      case "bbq":
+        // 11/15 야외 바베큐: 메뉴 창 (사면 camp:bbq:eat으로 돌아온다)
+        if (pl.sitting) pl.stand(now, this.seatReq);
+        pl.faceTo(o.x, o.y - 14, now);
+        this.closeTalk();
+        bridge.emit("camp:bbq:open");
+        break;
       case "lookout":
         // 전망대 망원경: 광장·데크를 내려다본다 (LookoutScope)
         this.closeTalk();
@@ -785,7 +806,7 @@ export class CampScene extends Phaser.Scene {
     if (pl.sitting) pl.stand(this.time.now, this.seatReq);
     this.leaveCampfire();
     this.riding.dismount(false);
-    this.bus = createBusArrival(this, { doorX: CAMP_BUS_STOP.x, laneY: CAMP_ROAD.y + CAMP_ROAD.h - 6, fromLeft: true, reduced: this.host.reduced });
+    this.bus = createBusArrival(this, { doorX: CAMP_BUS_STOP.x, laneY: CAMP_ROAD.y + CAMP_ROAD.h - 6, fromLeft: true, reduced: this.host.reduced, leave: "fade", waitMs: CAMP_BUS_WAIT_MS });
     this.bus.arrive(() => {
       if (this.cleaned) return;
       const go = () => {
@@ -904,7 +925,60 @@ export class CampScene extends Phaser.Scene {
     this.fireworks?.update(now, dt, view);
     this.updateLighting(view);
     if (pl.state === "run" && now - this.dustAt > DUST_MS) this.dustAt = now;
+    this.updateBig(pnow);
     net.tick(pnow);
+  }
+
+  // ── 11/15 야외 바베큐 (먹으면 잠깐 커진다 — 재미용) ──
+
+  /** 메뉴 창에서 샀다: 증서는 실시간 서버로, 나는 바로 먹는 연출·커지기 */
+  private eatBbq(item: BbqItemId, until: number, grant: string): void {
+    if (this.cleaned) return;
+    this.host.net.bbq(grant);
+    this.playEat(this.player.view, this.player.x, this.player.y, item, this.time.now);
+    this.applyBig("me", this.player.view, item, until);
+  }
+
+  /** 서버가 확인한 바베큐 (같은 캠핑장 사람, 내 것도 온다) */
+  private onBbq(sid: Sid, item: BbqItemId, until: number): void {
+    if (sid === this.host.net.mySid) {
+      this.applyBig("me", this.player.view, item, until);
+      return;
+    }
+    const r = this.remotes.get(sid);
+    if (!r) return;
+    if (r.visible) this.playEat(r.view, r.x, r.y, item, performance.now());
+    this.applyBig(sid, r.view, item, until);
+  }
+
+  private applyBig(key: Sid | "me", view: { setBig(scale: number, tint: number | null): void }, item: BbqItemId, until: number): void {
+    const m = bbqItem(item);
+    if (!m) return;
+    view.setBig(m.scale, m.tint);
+    this.bigUntil.set(key, until);
+  }
+
+  /** 접시가 머리 위로 떠올랐다 사라지고 "한 입!" 말풍선 */
+  private playEat(view: { say(text: string, now: number): void }, x: number, y: number, item: BbqItemId, now: number): void {
+    const m = bbqItem(item);
+    if (!m) return;
+    view.say(m.bite, now);
+    this.host.sfx.play("say", 0.4);
+    const plate = this.add.image(x, y - 26, Art.CAMP_TEX.bbqPlate(item)).setOrigin(0.5, 1).setDepth(y + 40);
+    this.tweens.add({ targets: plate, y: y - 40, alpha: 0, duration: this.host.reduced ? 600 : 1600, ease: "Sine.easeIn", onComplete: () => plate.destroy() });
+  }
+
+  /** 끝난 효과는 원래 크기로 (0.5초마다 확인) */
+  private updateBig(pnow: number): void {
+    if (pnow < this.bigCheckAt || this.bigUntil.size === 0) return;
+    this.bigCheckAt = pnow + 500;
+    const t = Date.now();
+    for (const [key, until] of this.bigUntil) {
+      if (until > t) continue;
+      this.bigUntil.delete(key);
+      if (key === "me") this.player.view.setBig(1, null);
+      else this.remotes.get(key)?.view.setBig(1, null);
+    }
   }
 
   private benchInput(now: number): MoveInput {

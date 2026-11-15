@@ -179,6 +179,8 @@ export type GameEvents = {
   "bus:state": { riding: boolean };
   /** 11/15 캠핑장 NPC 대화 창 (null이면 닫기, sticky) */
   "camp:talk": { npc: string; name: string; lines: string[] } | null;
+  /** 11/15 캠핑장 바베큐 그릴 앞에서 E → 메뉴 창 */
+  "camp:bbq:open": undefined;
   /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고) */
   "peers:list": { names: string[] };
 
@@ -345,7 +347,7 @@ export type UiEvents = {
   "urgent:fest": { until: number };
   /** 11/15 긴급 의뢰가 진행 중에 100%를 넘긴 순간 (한 번): 마을 하늘에 축하 폭죽 한 발 */
   "urgent:goal": undefined;
-  /** 11/15 긴급 의뢰 현판 (sticky, null = 없음): 납품 부두 현판에 서버 전체 막대를 그린다. frac = 낸 수 ÷ (목표 × 1.5), stage = 닿은 단계 */
+  /** 11/15 긴급 의뢰 현판 (sticky, null = 없음): 버스 정류장 마당 긴급 의뢰 현판에 서버 전체 막대를 그린다. frac = 낸 수 ÷ (목표 × 1.5), stage = 닿은 단계 */
   "urgent:board": { live: boolean; frac: number; stage: number; fest: boolean } | null;
   /** 도감 열기 (UI 안에서 쓴다: HUD 버튼·메뉴·남의 도감) */
   "forage:dex": { accountId?: string; peer?: { sid: number; ch?: number; room?: string }; name?: string | null };
@@ -359,6 +361,8 @@ export type UiEvents = {
   "friend:goto": { sid: number; name: string; x: number; y: number; /** 11/15 친구가 캠핑장에 있으면 "camp" (맵이 다르면 버스를 거쳐 간다) */ map?: "camp" };
   /** 11/15 캠핑장 대화 창: 다음 말 (E·Space·버튼) / 닫았다 */
   "camp:talkNext": undefined;
+  /** 11/15 바베큐를 샀다 (증서) → 게임이 먹는 연출·커지기, 실시간 서버로 증서 */
+  "camp:bbq:eat": { item: "pork" | "sausage" | "marsh"; until: number; grant: string };
   "camp:talkClose": undefined;
   /** 친구가 있는 집으로 따라 들어간다: 그 집 장면이 열리면 친구(이름)를 찾아 옆으로 옮긴다 (at = 누른 시각, 오래되면 무시. sticky) */
   "house:follow": { houseId: string; name: string; at: number } | null;
@@ -368,7 +372,7 @@ export type ForageUse =
   | { kind: "fish"; spot: string; water: "lake" | "river" }
   | { kind: "npc"; npc: "fishmonger" | "collector" }
   | { kind: "node"; node: string }
-  /** 11/15 납품 부두 의뢰 게시판 → 수집 의뢰판 */
+  /** 11/15 버스 정류장 마당 의뢰 게시판 → 수집 의뢰판 */
   | { kind: "board" };
 export type ForageRodPhase = "idle" | "cast" | "wait" | "nibble" | "bite" | "reel" | "catch" | "escape" | "snap";
 

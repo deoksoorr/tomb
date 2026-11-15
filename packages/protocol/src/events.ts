@@ -7,6 +7,7 @@ import type { AvatarDye } from "./dye";
 import { AWAY_HOUSE_RE, isAwayPlace, type AwayPlace } from "./friends";
 import type { PeerInfo, Sid } from "./types";
 import { isMapId, type MapId } from "./camp";
+import type { BbqItemId } from "./bbq";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
 
@@ -65,6 +66,8 @@ export type C2S =
    * 서버는 입장 토큰에 캠핑장 허락(camp)이 있을 때만 캠핑장으로 보내고, 결과를 mapped로 알린다. 옛 서버는 모르는 t라 버린다
    */
   | { t: "map"; m: MapId; x: number; y: number }
+  /** 11/15 캠핑장 바베큐 한 접시 증서 (웹이 포인트를 쓰고 서명). 서버가 검증해 같은 맵에 bbq로 알린다. 옛 서버는 버린다 */
+  | { t: "bbq"; grant: string }
   /**
    * 11/13 함께 사냥: 내 공격·스킬 동작 (사냥터 방 전용, 보여 주기만 — 판정·몬스터는 각자). 서버는 HUNT_ACT_INTERVAL_MS 간격으로
    * 같은 사냥터 방의 다른 사람에게만 중계하고 저장하지 않는다. 옛 서버는 모르는 t라 버린다
@@ -153,7 +156,9 @@ export type S2C =
    */
   | { t: "mapped"; m: MapId; peers: PeerInfo[]; seats: Record<string, Sid> }
   /** 11/15 채널 전체 인원이 바뀌었다 (들어옴·나감, 맵 상관없이 모두에게). 옛 클라이언트는 모르는 t라 버린다 */
-  | { t: "count"; n: number };
+  | { t: "count"; n: number }
+  /** 11/15 누가 바베큐를 먹고 u(epoch ms)까지 커졌다 (같은 맵, 보낸 사람 포함). 옛 클라이언트는 모르는 t라 버린다 */
+  | { t: "bbq"; sid: Sid; i: BbqItemId; u: number };
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 /** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */
@@ -266,6 +271,8 @@ export function parseC2S(text: string): C2S | null {
       const h = parseHuntAct(m);
       return h ? { t: "hunt", ...h } : null;
     }
+    case "bbq":
+      return typeof m.grant === "string" && m.grant.length <= MAX_GRANT_LEN ? { t: "bbq", grant: m.grant } : null;
     case "map":
       return isMapId(m.m) && isNum(m.x) && isNum(m.y) ? { t: "map", m: m.m, x: Math.round(m.x), y: Math.round(m.y) } : null;
     case "use":

@@ -83,6 +83,7 @@ import { useFriendPresence } from "./useFriendPresence";
 import FriendNotice from "./FriendNotice";
 import CampTalk from "../camp/CampTalk";
 import CampBgm from "../camp/CampBgm";
+import CampBbq from "../camp/CampBbq";
 import MegaphoneLayer from "./MegaphoneDialog";
 import MegaphoneFeed from "./MegaphoneFeed";
 import { useSocial } from "./useSocial";
@@ -505,6 +506,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {/* 11/15 캠핑장: NPC 대화 창·배경음 (캠핑장에 있을 때만 일한다) */}
       {ready && <CampTalk />}
       {ready && <CampBgm />}
+      {ready && <CampBbq />}
       {/* 4·32·51번 낚시·채집·판매·도감 (자기 창·HUD를 스스로 연다) */}
       {ready && <ForageLayer />}
       {ready && <ZooLayer />}

@@ -2,6 +2,7 @@ import { b64urlDecode, b64urlEncode, hmacSign, hmacVerify } from "./token";
 import { sanitizeLook, isFireworkId, MEGAPHONE_MAX, type Look, type MegaphoneScope } from "./items";
 import { CHAMP_ALL, CHAMP_AURA_OFF, isAvatarBody } from "./constants";
 import { packDye, unpackDye, type AvatarDye } from "./dye";
+import { bbqItem, isBbqId, type BbqItemId } from "./bbq";
 
 // Vercel(포인트·가방의 원천)이 서명하고 실시간 서버가 검증하는 짧은 증서. 비밀키는 JOIN_SECRET.
 //  - look: 지금 착용 중인 꾸미기. 실시간 서버는 검증 후 채널에 브로드캐스트한다.
@@ -18,7 +19,9 @@ export type Grant =
   | { kind: "firework"; visitorId: string; item: string; nonce: string; exp: number }
   | { kind: "goblin"; visitorId: string; points: number; nonce: string; exp: number }
   /** ch = 외친 채널 (scope가 channel이면 그 채널 DO만 받아 준다) */
-  | { kind: "megaphone"; visitorId: string; nonce: string; name: string; text: string; scope: MegaphoneScope; ch: number; exp: number; /** 운영자 계정 (이름 금색 표시용) */ staff?: true };
+  | { kind: "megaphone"; visitorId: string; nonce: string; name: string; text: string; scope: MegaphoneScope; ch: number; exp: number; /** 운영자 계정 (이름 금색 표시용) */ staff?: true }
+  /** 11/15 캠핑장 바베큐 한 접시: until(epoch ms)까지 커진다. nonce는 한 번만 (bbq.ts) */
+  | { kind: "bbq"; visitorId: string; item: BbqItemId; until: number; nonce: string; exp: number };
 
 export const GRANT_TTL_SEC = 60;
 /** 증서 최대 길이. 확성기 증서는 닉네임·문장(한글 60자)을 품어 다른 증서보다 길다 */
@@ -83,6 +86,17 @@ export async function verifyGrant(
     g.ch <= 100
   )
     return { kind: "megaphone", visitorId: g.visitorId, nonce: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, exp: g.exp, ...(g.staff === true ? { staff: true as const } : {}) };
+  // 11/15 바베큐: 끝나는 시각은 그 메뉴 길이(+여유) 안이어야 한다 (터무니없이 오래 커지지 않게)
+  if (
+    g.kind === "bbq" &&
+    isBbqId(g.item) &&
+    typeof g.until === "number" &&
+    Number.isFinite(g.until) &&
+    g.until <= nowSec * 1000 + (bbqItem(g.item)!.ms + GRANT_TTL_SEC * 1000) &&
+    typeof g.nonce === "string" &&
+    g.nonce.length <= 32
+  )
+    return { kind: "bbq", visitorId: g.visitorId, item: g.item, until: g.until, nonce: g.nonce, exp: g.exp };
   return null;
 }
 

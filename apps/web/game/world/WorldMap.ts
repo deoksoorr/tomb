@@ -184,14 +184,14 @@ export class WorldMap {
 
     // 구역 이름 (은은하게). 묘역 이름은 문 아치 팻말에 (addFences)
     for (const z of ZONES) {
-      if (z.id === "river" || z.id === "gate" || z.id === "graveyard" || z.id === "fishing" || z.id === "zoo") continue; // 낚시터·동물원 이름은 아치 현판에
+      if (z.id === "river" || z.id === "gate" || z.id === "graveyard" || z.id === "busyard" || z.id === "zoo") continue; // 동물원 이름은 아치 현판에, 버스 정류장 마당은 게시판·정류장 이름표가 대신한다
       const at = ZONE_LABEL_AT[z.name] ?? { x: z.x + z.w / 2, y: z.y + 10 };
       this.addLabel(at.x, at.y, z.name, z.id === "pond" ? 0xc8d8e0 : 0xd8ccb0, 1, 0.62);
     }
     this.addLabel(FERRY_DOCK.x, FERRY_DOCK.y - 44, "나루터", 0xd8ccb0, 1, 0.75);
     // 11/15 오리배 선착장 팻말 글씨 (팻말 그림은 BoatRide)
     this.addLabel(DUCK_DOCK_DECK.x - 12, DUCK_DOCK_DECK.y - 22, "오리배 · 2인승", 0xfff0b8, 1, 0.92);
-    // 납품 부두 등불 (아치·잔교 끝·게시판·수조). 장식 그림과 "납품 부두" 현판은 forage/FishZoneView
+    // 버스 정류장 마당 등불 (게시판·정류장 지붕·시간표). 장식 그림은 forage/FishZoneView
     this.staticLights.push(...FISH_ZONE_LIGHTS);
     // 동물원 등불 (정문 석등·아치·분양 노점). 울타리·우리·동물·사육사 그림은 zoo/ZooView
     this.staticLights.push(...ZOO_LIGHTS);

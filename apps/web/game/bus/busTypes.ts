@@ -20,12 +20,16 @@ export type BusArrivalOptions = {
   /** true면 왼쪽 화면 밖에서 들어와 오른쪽으로 떠난다 */
   fromLeft: boolean;
   reduced: boolean;
+  /** 떠나는 법: forward(기본) = 그대로 앞으로 달려 나간다, fade = 그 자리에서 흐려지며 사라진다 (캠핑장) */
+  leave?: "forward" | "fade";
+  /** leave "fade"일 때 문을 닫고 서 있는 시간 (ms) */
+  waitMs?: number;
 };
 
 export interface BusArrivalApi {
   /** 들어와 서고 문이 열리면 onOpen (약 2초) */
   arrive(onOpen: () => void): void;
-  /** 문을 닫고 정류장 앞에서 유턴해 왔던 길로 화면 밖까지 나가면 onGone (약 3초) */
+  /** 문을 닫고 떠난다 (앞으로 화면 밖까지, 또는 잠깐 서 있다 흐려진다) — 다 사라지면 onGone */
   depart(onGone: () => void): void;
   /** 열린 문 앞 (캐릭터가 걸어 들어가는 자리) */
   readonly door: { x: number; y: number };

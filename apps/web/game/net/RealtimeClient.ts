@@ -28,6 +28,8 @@ import {
   type GraveEventKind,
   type GoblinInfo,
   type MapId,
+  type BbqItemId,
+  isBbqId,
   type PeerInfo,
   type PeerState,
   type QueueStatus,
@@ -119,6 +121,8 @@ export type NetCallbacks = {
    * peers·seats = 그 맵 사람(나 빼고)과 그 사람들이 앉은 자리
    */
   onMapped?(map: MapId, peers: PeerInfo[], seats: Record<string, Sid>): void;
+  /** 11/15 캠핑장 바베큐: sid가 먹고 until(epoch ms)까지 커졌다 (서버가 증서를 확인한 것만, 내 것도 온다) */
+  onBbq?(sid: Sid, item: BbqItemId, until: number): void;
 };
 
 /** 맵이 바뀌어도 늘 처음 콜백(월드)이 받는 것: 계정·친구·확성기·내 몸 모양·고블린 보상 */
@@ -126,7 +130,7 @@ const GLOBAL_CALLBACKS = ["onMegaphone", "onMeStale", "onFriend", "onSelfBody", 
 /** 맵 옮기기 답을 기다리는 시간 */
 const MAP_REPLY_MS = 4000;
 /** 맵을 옮기는 중에 버리는 옛 맵 소식 (사람·자리·몸짓·말풍선) */
-const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "goblinCaught", "chatLog"]);
+const OLD_MAP_EVENTS = new Set(["join", "leave", "seat", "emote", "graveEvent", "look", "act", "say", "emo", "chat", "mood", "ride", "rod", "away", "firework", "peers", "goblin", "goblinGone", "goblinCaught", "chatLog", "bbq"]);
 
 export type NetOptions = { name: string; color: string; channel: number | "auto"; debug?: boolean; body?: string };
 
@@ -407,6 +411,11 @@ export class RealtimeClient {
     this.send({ t: "act", kind });
   }
 
+  /** 11/15 캠핑장 바베큐 한 접시 증서 (웹이 서명). 서버가 검증해 같은 맵에 알린다 */
+  bbq(grant: string): void {
+    this.send({ t: "bbq", grant });
+  }
+
   /** 22번: 황금 고블린에 닿았다 (판정은 서버) */
   claimGoblin(id: string): void {
     this.send({ t: "goblin", id });
@@ -626,6 +635,9 @@ export class RealtimeClient {
       switch (m.t) {
         case "mapped":
           this.onMapped(m.m, m.peers ?? [], m.seats ?? {});
+          break;
+        case "bbq":
+          if (isBbqId(m.i) && typeof m.u === "number" && Number.isFinite(m.u)) this.h.onBbq?.(m.sid, m.i, m.u);
           break;
         case "count":
           if (typeof m.n === "number" && Number.isFinite(m.n)) {

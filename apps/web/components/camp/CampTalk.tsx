@@ -12,10 +12,11 @@ import styles from "./CampTalk.module.css";
 
 export default function CampTalk() {
   const talk = useBridgeValue("camp:talk");
-  const [index, setIndex] = useState(0);
-
-  // 새 대화가 열리면 첫 줄부터
-  useEffect(() => setIndex(0), [talk]);
+  const [at, setAt] = useState<{ talk: typeof talk; index: number }>({ talk, index: 0 });
+  // 새 대화가 열리면 첫 줄부터 (렌더 중에 맞춘다 — 효과 안에서 상태를 바꾸지 않게)
+  if (at.talk !== talk) setAt({ talk, index: 0 });
+  const index = at.talk === talk ? at.index : 0;
+  const setIndex = (f: (i: number) => number) => setAt((a) => ({ talk: a.talk, index: f(a.index) }));
 
   useEffect(() => {
     if (!talk) return;

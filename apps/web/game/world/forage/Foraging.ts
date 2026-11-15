@@ -43,11 +43,11 @@ export type ForageDeps = {
   setItems: (items: Interactable[]) => void;
   toast: (message: string) => void;
   /**
-   * 11/15 캠핑장: 계곡 낚시 자리(CAMP_FISHING_SPOTS)·캠핑장 채집 지점만. NPC·의뢰 게시판·납품 부두 장식은 마을에만 (팔기·의뢰는 마을에서).
+   * 11/15 캠핑장: 계곡 낚시 자리(CAMP_FISHING_SPOTS)·캠핑장 채집 지점만. NPC·의뢰 게시판·정류장 마당 장식은 마을에만 (팔기·의뢰는 마을에서).
    * 없으면 마을 (예전과 같다)
    */
   map?: "camp";
-  /** 낚시 자리 표시 (의자·꽂아 둔 낚싯대·찌). 없으면 마을 납품 부두 FishZoneView */
+  /** 낚시 자리 표시 (의자·꽂아 둔 낚싯대·찌). 없으면 마을 FishZoneView */
   zone?: ForageZone;
 };
 
@@ -130,7 +130,7 @@ export class Foraging {
     // 어부 영감·수집가 유령은 마을에만 (캠핑장에서 잡은 것도 마을에서 판다)
     for (const npc of this.mapId === "village" ? NPCS : []) {
       const img = scene.add.image(npc.x, npc.y + 1, FTEX.npc(npc.id, 0)).setOrigin(0.5, 1).setDepth(npc.y);
-      const stall = npc.id === "fishmonger" ? { dx: -22, dy: 2 } : { dx: -20, dy: 6 }; // 어부 노점은 낚시터 마당 동쪽 끝 (catalog NPCS)
+      const stall = npc.id === "fishmonger" ? { dx: -22, dy: 2 } : { dx: -20, dy: 6 }; // 어부 노점은 호수 낚시 잔교 서쪽 끝 (catalog NPCS)
       scene.add.image(npc.x + stall.dx, npc.y + stall.dy, FTEX.stall(npc.id)).setOrigin(0.5, 1).setDepth(npc.y + stall.dy);
       const label = scene.add.bitmapText(npc.x, npc.y - 27, FONT_KEY, npc.name, FONT_PX).setOrigin(0.5, 1).setTint(0xffe8b0).setDepth(DEPTH.labels - 1);
       const title = scene.add.bitmapText(npc.x, npc.y - 35, FONT_KEY, npc.title, FONT_PX).setOrigin(0.5, 1).setTint(0xc8d8b0).setAlpha(0.85).setDepth(DEPTH.labels - 1);
@@ -185,7 +185,7 @@ export class Foraging {
     }
     for (const n of this.mapId === "village" ? NPCS : [])
       items.push({ id: `forage:npc:${n.id}`, kind: "forage", forage: `npc:${n.id}`, x: n.x, y: n.y + 10, r: 20, ax: n.x, ay: n.y + 10, label: `${n.name}에게 팔기` });
-    // 11/15 납품 부두 의뢰 게시판 (앞에서 E → 수집 의뢰판)
+    // 11/15 버스 정류장 마당 의뢰 게시판 (앞에서 E → 수집 의뢰판)
     if (this.mapId === "village") items.push({ id: "forage:board", kind: "forage", forage: "board:quest", x: WHARF_BOARD.x, y: WHARF_BOARD.y + 12, r: 22, ax: WHARF_BOARD.x, ay: WHARF_BOARD.y + 12, label: "의뢰 게시판 보기" });
     for (const id of this.nodeIds) {
       const n = gatherNodeById(id);

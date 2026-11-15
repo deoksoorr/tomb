@@ -28,8 +28,9 @@ export const WALL_THICKNESS = 2 * TILE;
  * 8 = 납품 부두 기록 수족관 자리에 주말 버스 정류장(지붕·벤치·팻말 충돌), 10번지 자리는 쉼터 광장 — 새 충돌 자리에 옛 기록이 끼지 않게
  * 9 = 별 보기 언덕에 망원경 두 대 (둘째 받침 충돌·넓어진 돌 마당) — 새 충돌 자리에 옛 기록이 끼지 않게
  * 10 = 납품 부두 좁힘(잔교·끝 데크·아래 마당)·나루터와 띄움, 주말 버스 정류장 승강장·정차 칸 — 새 충돌 자리에 옛 기록이 끼지 않게
+ * 11 = 납품 부두 없앰(잔교·데크·낚시 자리), 어부 노점 호박밭 옆, 강둑·호수 낚시 자리 — 새 충돌 자리에 옛 기록이 끼지 않게
  */
-export const MAP_VERSION = 10;
+export const MAP_VERSION = 11;
 
 const CX = MAP_WIDTH / 2; // 720
 
@@ -43,11 +44,11 @@ const CX = MAP_WIDTH / 2; // 720
 //         │ │ 철책·묘비  │═════│      ( 큰 모닥불 )        │ ║ 집 집 집      │
 //  y≈544  │ └────────────┘     │ 회전목마  해먹   시소      │ ║ 집 집 집      │
 //  y≈600  │ 묘지기 모닥불       └───────────────────────────┘ ╚═══════════════│
-//  y≈700  │ ~~~ 강 ~~[서쪽 다리]~~~~[징검다리]~~[가운데 다리]~~~╲  나루터·낚시터  │
+//  y≈700  │ ~~~ 강 ~~[서쪽 다리]~~~~[징검다리]~~[가운데 다리]~~~╲  나루터·정류장  │
 //  y≈784  │ ┌─ 동물원 (우리 5곳·사육사) ─┐ (오리 연못) ┌다리 건너 묘역 12┐ 호박밭 ╲( 호수 ·배 )│
 //  y≈1008 └──────────────────────────────────────────────────────────────────────┘
 
-export type ZoneId = "hill" | "graveyard" | "plaza" | "housing" | "river" | "lake" | "pond" | "forest" | "meadow" | "gate" | "fishing" | "zoo";
+export type ZoneId = "hill" | "graveyard" | "plaza" | "housing" | "river" | "lake" | "pond" | "forest" | "meadow" | "gate" | "busyard" | "zoo";
 export type Zone = { id: ZoneId; name: string; x: number; y: number; w: number; h: number };
 /** 구역 사각형 (이름표·안내·앞으로의 콘텐츠 배치 기준. 충돌과는 상관없다) */
 export const ZONES: readonly Zone[] = [
@@ -67,8 +68,8 @@ export const ZONES: readonly Zone[] = [
   // 동물원 (예전 버드나무 묘역 자리, 사용자 요청: 펫은 사육사에게서). ZOO와 같은 사각형
   { id: "zoo", name: "동물원", x: 48, y: 784, w: 256, h: 224 },
   { id: "meadow", name: "호박밭", x: 864, y: 864, w: 240, h: 144 },
-  // 11/15 납품 부두 (예전 낚시터: 호수 북동쪽 물가 + 없앤 11·12번지 자리의 위 마당 — 의뢰 게시판·주말 버스 정류장·어부 노점·작은 낚시 잔교). FISHING_ZONE과 같은 사각형
-  { id: "fishing", name: "납품 부두", x: 1144, y: 652, w: 256, h: 260 },
+  // 11/15 버스 정류장 마당 (없앤 11·12번지 자리 — 의뢰 게시판·긴급 의뢰 현판·주말 버스 정류장). 납품 부두(낚시 잔교·어부 노점)는 없앴다. WHARF_YARD와 같은 사각형
+  { id: "busyard", name: "버스 정류장 마당", x: 1144, y: 640, w: 256, h: 112 },
 ];
 
 export const SPAWN = { x: CX, y: 60 } as const;
@@ -226,7 +227,7 @@ export const PORTAL_RADIUS = 18;
 
 // ── 주거 구역 ── 분양 마을을 메인 맵에 합쳤다. 번지(1..WORLD_LOTS)마다 필지 하나, 그 집의 외관이 서 있다.
 // 필지 = 외관 캔버스(가로 128 × 세로 104, game/housing/art.ts FACADE_*) 크기. 문 앞은 필지 (x+64, y+92).
-// 광장 동쪽에 3열 × 3줄 = 1~9번지 (격자는 4줄 — 넷째 줄은 버스 정류장 광장·납품 부두 위 마당). 서쪽 골목(세로)과 줄마다 집 앞 골목(가로)이 있다.
+// 광장 동쪽에 3열 × 3줄 = 1~9번지 (격자는 4줄 — 넷째 줄은 쉼터 광장·버스 정류장 마당). 서쪽 골목(세로)과 줄마다 집 앞 골목(가로)이 있다.
 // 번지가 WORLD_LOTS보다 큰 집은 분양 사무소의 "분양 마을(2단지)"에서 본다.
 export const HOUSE_LOT_W = 128;
 export const HOUSE_LOT_H = 104;
@@ -235,7 +236,7 @@ export const HOUSE_COLS = 3;
 export const HOUSE_ROWS = 4;
 /**
  * 메인 맵 번지 1..WORLD_LOTS (11/15: 1~9번지만 — 넷째 줄 10·11·12번지 자리는 없앴다. 어느 채널에도 집이 없던 줄).
- * 10번지 자리 → 쉼터 광장 (REST_PLAZA), 11·12번지 자리 → 납품 부두 위 마당 (WHARF_YARD — 버스 정류장도 여기).
+ * 10번지 자리 → 쉼터 광장 (REST_PLAZA), 11·12번지 자리 → 버스 정류장 마당 (WHARF_YARD — 의뢰 게시판·주말 버스 정류장).
  * 그보다 큰 번지는 예전처럼 분양 마을(2단지) 번지다. 남은 집의 번지·자리는 그대로
  */
 export const WORLD_LOTS = HOUSE_COLS * 3;
@@ -266,7 +267,7 @@ export function houseLot(lot: number): HouseLot | null {
 export const HOUSE_LOTS: readonly HouseLot[] = Array.from({ length: WORLD_LOTS }, (_, i) => houseLot(i + 1)).filter((l): l is HouseLot => l !== null);
 /** 주거 구역 필지 격자 왼쪽 위 (없앤 번지와 상관없이 격자는 그대로 — 골목·길 계산용) */
 export const HOUSE_GRID = { x: HOUSE_X0, y: HOUSE_Y0, pitchX: HOUSE_PITCH_X, pitchY: HOUSE_PITCH_Y } as const;
-/** 11/15 쉼터 광장 (예전 10번지 필지, 마을 동쪽 끝 — 납품 부두 위 마당 바로 왼쪽): 포석·벤치·가로등·꽃밭. 버스 정류장은 부두 마당에 */
+/** 11/15 쉼터 광장 (예전 10번지 필지, 마을 동쪽 끝 — 버스 정류장 마당 바로 왼쪽): 포석·벤치·가로등·꽃밭. 버스 정류장은 그 옆 마당에 */
 export const REST_PLAZA = { x: HOUSE_X0, y: HOUSE_Y0 + 3 * HOUSE_PITCH_Y, w: HOUSE_LOT_W, h: HOUSE_LOT_H } as const;
 
 // ── 강·연못·호수 ── (물 판정·그림은 클라이언트 layout.ts, 좌표 원본은 여기)
@@ -325,26 +326,14 @@ export const STEP_STONE_R = 7;
 export const FERRY_DOCK = { x: 1244, y: 846 } as const;
 export const DOCK_DECK = { x: 1232, y: 800, w: 24, h: 56 } as const;
 export const BOAT_MOORING = { x: 1206, y: 862 } as const;
-/** 호수 낚시 잔교 (서쪽 둑에서 호수로 뻗은 판자) */
+/** 호수 낚시 잔교 (서쪽 둑에서 호수로 뻗은 판자). 11/15 납품 부두를 없애며 어부 영감 노점이 잔교 서쪽 끝(호박밭 쪽)으로 왔다 */
 export const LAKE_PIER = { x: 1108, y: 924, w: 72, h: 16 } as const;
-// ── 납품 부두 (11/15, 예전 낚시터) ── 호수 북동쪽 물가 + 없앤 11·12번지 자리.
-// 위 마당(WHARF_YARD, 마지막 골목 바로 위): 의뢰 게시판(E → 수집 의뢰판)·긴급 의뢰 자리(빈 현판)·주말 버스 정류장(캠핑장행 — 아직 준비 중)·벤치·가로등.
-// 아래 마당(FISH_YARD, 골목 바로 아래): 어부 노점 → 입구 아치(FISH_ARCH) → 짧은 낚시 잔교(FISH_PIER + 끝의 작은 가로 데크 FISH_PIER_HEAD).
-// 낚시는 잔교 양옆·끝과 둑의 몇 자리만 (FISHING_SPOTS 앞쪽 FISHING_ZONE_SPOTS곳) — 사람들이 잘 안 오던 큰 데크를 줄였다.
-// 11/15 사용자 요청("나루터랑 너무 붙어 있다"): 아래 마당·잔교를 더 좁게 줄여 동쪽 둑으로 옮겼다 — 나루터(DOCK_DECK)와 잔교 사이 56 → 72px, 잔교 24×56 → 24×44, 끝 가로 데크 56×20 → 40×20, 아래 마당 112 → 92px.
-// 그림·장식·충돌은 클라이언트(game/world/fishZone.ts, game/world/forage/FishZoneView.ts)
-/** 납품 부두 구역 (이름표·미니맵·안내·흩뿌리는 나무 비키기). ZONES의 "납품 부두"와 같다 */
-export const FISHING_ZONE = { x: 1144, y: 652, w: 256, h: 260 } as const;
-/** 납품 부두 위 마당 (자갈 바닥, 없앤 11·12번지 자리 — 마지막 골목 바로 위) */
+// ── 버스 정류장 마당 (11/15) ── 없앤 11·12번지 자리 (마지막 골목 바로 위, 자갈 바닥):
+// 의뢰 게시판(E → 수집 의뢰판)·긴급 의뢰 현판·주말 버스 정류장(캠핑장행)·벤치·가로등. 그림·장식·충돌은 클라이언트(game/world/fishZone.ts).
+// 11/15 사용자 요청으로 납품 부두(아래 마당·입구 아치·낚시 잔교·끝 데크·부두 낚시 자리)를 없앴다 — 호수 북동쪽은 다시 둑이고,
+// 어부 영감 노점은 호수 낚시 잔교 서쪽 끝(호박밭 옆)으로 옮겼다 (lib/forage/catalog NPCS).
+/** 버스 정류장 마당 (자갈 바닥, 없앤 11·12번지 자리 — 마지막 골목 바로 위). ZONES의 "버스 정류장 마당"과 같다 */
 export const WHARF_YARD = { x: 1144, y: 640, w: 256, h: 112 } as const;
-/** 어부 노점 마당 (자갈 바닥, 마지막 골목 바로 아래) */
-export const FISH_YARD = { x: 1304, y: 784, w: 92, h: 32 } as const;
-/** 낚시 잔교: 마당에서 호수 안쪽(남쪽)으로 짧게 뻗은 판자 */
-export const FISH_PIER = { x: 1328, y: 816, w: 24, h: 44 } as const;
-/** 잔교 끝의 작은 가로 데크 (ㅜ자 머리) */
-export const FISH_PIER_HEAD = { x: 1320, y: 860, w: 40, h: 20 } as const;
-/** 잔교 입구 아치 (잔교 북쪽 끝, 발 위치 = 아치 가운데 아래) */
-export const FISH_ARCH = { x: 1340, y: 826 } as const;
 // ── 동물원 (사용자 요청: "버드나무 묘역을 동물원으로, 펫은 사육사한테 산다") ── 예전 버드나무 묘역 자리.
 // 나무 울타리로 두르고(위쪽 정문은 서쪽 다리와 줄을 맞추고, 동쪽 문은 안개 숲으로), 안에 우리 다섯 곳과 사육사 노점이 있다.
 // 우리·장식·동물 움직임(결정적 시뮬레이션)은 클라이언트(game/world/zoo), 펫 가격은 items.ts ZOO_PETS.
@@ -362,8 +351,8 @@ export function inZoo(x: number, y: number, pad = 0): boolean {
   return x >= ZOO.x - pad && x <= ZOO.x + ZOO.w + pad && y >= ZOO.y - pad && y <= ZOO.y + ZOO.h + pad;
 }
 
-/** 낚시 판자 전부 (호수 잔교 + 낚시터 데크 둘 + 까마귀 연못 잔교). 판자 위는 물이 아니다 */
-export const PIERS: readonly { x: number; y: number; w: number; h: number }[] = [LAKE_PIER, FISH_PIER, FISH_PIER_HEAD, { x: 1212, y: 126, w: 24, h: 46 }];
+/** 낚시 판자 전부 (호수 잔교 + 까마귀 연못 잔교). 판자 위는 물이 아니다. 11/15 납품 부두 잔교·끝 데크는 없앴다 */
+export const PIERS: readonly { x: number; y: number; w: number; h: number }[] = [LAKE_PIER, { x: 1212, y: 126, w: 24, h: 46 }];
 
 // ── 낚시 자리 (4번·F13) ── 연못·호수 둑과 잔교·강 양쪽 둑. 자리마다 1인(SPOT_KINDS.fish, 서버 좌석 — 정해진 자리만).
 // 앵커(x,y) = 앉는 발 위치(물가 뭍 또는 잔교), facing = 물 쪽. 자리 id = spotSeatId("fish", x, y) — 예 "f_456_158".
@@ -373,14 +362,11 @@ const fishSpot = (water: FishingSpot["water"], x: number, y: number, facing: Dir
 /** 강 북쪽 둑(아래를 본다)·남쪽 둑(위를 본다) 낚시 자리 — 가운데 줄에서 27px */
 const riverSpot = (x: number, north: boolean) => fishSpot("river", x, Math.round(riverYAt(x) + (north ? -27 : 27)), north ? DIR.down : DIR.up);
 export const FISHING_SPOTS: readonly FishingSpot[] = [
-  // ── 납품 부두 (6) ── 짧은 잔교 옆·끝 가로 데크 양 끝과 가운데, 둘레 둑 (11/15: 큰 데크를 줄여 12 → 7, 잔교를 더 줄여 → 6)
-  fishSpot("lake", 1334, 846, DIR.left),
-  fishSpot("lake", 1327, 868, DIR.left),
-  fishSpot("lake", 1340, 874, DIR.down),
-  fishSpot("lake", 1353, 868, DIR.right),
+  // ── 호수 북동쪽 둑 (3) ── 11/15 납품 부두(잔교 위 4자리)를 없애고 둑 자리만 남겼다 (+1, 옛 아래 마당 둑)
   fishSpot("lake", 1384, 862, DIR.down),
   fishSpot("lake", 1398, 904, DIR.left),
-  // ── 다른 물가 (14) ── 연못·강·호수 서쪽에도 몇 자리씩 (낚시터가 붐빌 때)
+  fishSpot("lake", 1318, 824, DIR.down),
+  // ── 다른 물가 ── 연못·강·호수 서쪽 (어부 영감 노점이 있는 호수 잔교 쪽이 이제 낚시 중심)
   // 달빛 연못 (언덕 옆)
   fishSpot("lake", 456, 158, DIR.up),
   fishSpot("lake", 520, 116, DIR.left),
@@ -389,24 +375,19 @@ export const FISHING_SPOTS: readonly FishingSpot[] = [
   fishSpot("lake", 1224, 134, DIR.up),
   fishSpot("lake", 1346, 108, DIR.left),
   fishSpot("lake", 1102, 108, DIR.right),
-  // 강 양쪽 둑
+  // 강 양쪽 둑 (11/15 부두 자리를 없앤 만큼 둘 더)
   riverSpot(420, true),
   riverSpot(840, true),
   riverSpot(260, false),
   riverSpot(800, false),
+  riverSpot(540, false),
+  riverSpot(960, true),
   // 호수 서쪽 잔교·둑
   fishSpot("lake", 1172, 932, DIR.right),
   fishSpot("lake", 1148, 932, DIR.up),
   fishSpot("lake", 1180, 828, DIR.down),
   fishSpot("lake", 1180, 982, DIR.up),
 ];
-/** 납품 부두(예전 낚시터) 안의 낚시 자리 수 (FISHING_SPOTS 앞쪽) */
-export const FISHING_ZONE_SPOTS = 6;
-/** 이 낚시 자리가 납품 부두(낚시 구역) 안에 있는지 */
-export function inFishingZone(x: number, y: number): boolean {
-  const z = FISHING_ZONE;
-  return x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
-}
 /** 이 좌석 id의 낚시 자리 (없으면 undefined) */
 export function fishingSpotById(id: string): FishingSpot | undefined {
   return FISHING_SPOTS.find((s) => s.id === id);

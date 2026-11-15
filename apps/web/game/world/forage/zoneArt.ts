@@ -1,9 +1,9 @@
 import type * as Phaser from "phaser";
 import { darken, Grid, lighten } from "../../sprites/pixel";
-import { BUS_BAY, BUS_PLATFORM, BUS_SHELTER_H, BUS_SHELTER_W, BUS_SIGN_H, BUS_TIMETABLE_H, FISH_ARCH_H, FISH_ARCH_W, WHARF_BOARD_H, WHARF_BOARD_W, WHARF_CURB, type FishDecorKind } from "../fishZone";
+import { BUS_BAY, BUS_PLATFORM, BUS_SHELTER_H, BUS_SHELTER_W, BUS_SIGN_H, BUS_TIMETABLE_H, WHARF_BOARD_H, WHARF_BOARD_W, WHARF_CURB, type FishDecorKind } from "../fishZone";
 
-// 낚시터 그림 (코드로 그리는 픽셀아트): 입구 아치, 그물 말리는 대, 통발 더미, 물고기 상자, 물통, 등불 기둥,
-// 낚시 자리 표시(나무 낚시 의자 + 물결 고리 + 손짓 표시). 발 위치 = 그림 맨 아래 줄 가운데.
+// 낚시 자리·버스 정류장 마당 그림 (코드로 그리는 픽셀아트): 어부 노점 옆 물고기 상자·물통, 의뢰 게시판·긴급 의뢰 현판·정류장,
+// 낚시 자리 표시(나무 낚시 의자 + 물결 고리 + 손짓 표시). 발 위치 = 그림 맨 아래 줄 가운데. 11/15 납품 부두 아치·그물 대·통발·등불 기둥은 부두와 함께 없앴다.
 
 export const ZTEX = {
   decor: (k: FishDecorKind) => `fishzone-${k}`,
@@ -19,90 +19,7 @@ export const ZTEX = {
 const OUT = 0x16121a;
 const WOOD = 0x8a5e36;
 const WOOD_DARK = 0x5e3e22;
-const ROPE = 0xc8b48a;
 const LAMP = 0xffd27a;
-
-/** 입구 아치: 통나무 기둥 둘 + 가로대 + 현판(물고기 그림) + 기둥에 매단 등. 44×40 */
-function arch(): HTMLCanvasElement {
-  const W = FISH_ARCH_W;
-  const H = FISH_ARCH_H;
-  const g = new Grid(W, H);
-  // 기둥
-  for (const x0 of [1, W - 6]) {
-    g.rect(x0, 8, 5, H - 9, WOOD);
-    g.vline(x0, 8, H - 2, lighten(WOOD, 0.15));
-    g.vline(x0 + 4, 8, H - 2, WOOD_DARK);
-    for (let y = 12; y < H - 2; y += 7) g.hline(x0 + 1, x0 + 3, y, WOOD_DARK);
-  }
-  // 가로대 두 줄 (위는 양끝이 살짝 솟는다)
-  g.rect(0, 6, W, 3, WOOD);
-  g.hline(0, W - 1, 6, lighten(WOOD, 0.18));
-  g.set(0, 5, WOOD);
-  g.set(W - 1, 5, WOOD);
-  g.rect(2, 12, W - 4, 2, WOOD_DARK);
-  // 현판 (가운데 매단 판자) — 글씨는 이름표(비트맵 글꼴)로 위에 얹는다
-  g.rect(9, 0, W - 18, 6, 0xd8c08a);
-  g.hline(9, W - 10, 0, 0xeedcae);
-  g.hline(9, W - 10, 5, 0xa88a58);
-  // 현판 아래 물고기 장식 (매달린 나무 물고기)
-  const fx = W / 2;
-  g.vline(fx, 9, 15, ROPE);
-  g.ellipse(fx, 18, 4, 2, 0x6aa0c0);
-  g.set(fx - 5, 17, 0x6aa0c0);
-  g.set(fx - 5, 19, 0x6aa0c0);
-  g.set(fx + 2, 17, 0x101014);
-  g.recolor((x, y) => y >= 19 && Math.abs(x - fx) <= 4 && g.filled(x, y), 0x4a7a98);
-  // 기둥에 매단 등 (밤 빛 = FISH_ZONE_LIGHTS)
-  for (const lx of [3, W - 4]) {
-    g.vline(lx, 9, 11, ROPE);
-    g.rect(lx - 1, 12, 3, 4, LAMP);
-    g.set(lx, 12, 0xfff2c0);
-    g.hline(lx - 1, lx + 1, 16, 0x5a4a3a);
-  }
-  // 덩굴 (가을 잎)
-  for (const [x, y, c] of [[4, 7, 0xc86a2a], [6, 9, 0xe0a040], [W - 7, 8, 0xc86a2a], [W - 5, 10, 0xe0a040], [12, 7, 0xb84a2a]] as const) g.set(x, y, c);
-  g.outline(OUT);
-  return g.toCanvas();
-}
-
-/** 그물 말리는 대: 장대 둘에 걸친 그물 + 매달린 찌. 26×22 */
-function netRack(): HTMLCanvasElement {
-  const g = new Grid(26, 22);
-  for (const x of [2, 23]) g.rect(x - 1, 2, 2, 19, WOOD);
-  g.hline(1, 24, 3, WOOD_DARK);
-  // 그물 (격자, 아래로 처진다)
-  const net = 0x9aa89a;
-  for (let x = 3; x <= 22; x++) {
-    const sag = Math.round(Math.sin(((x - 3) / 19) * Math.PI) * 4);
-    for (let y = 4; y <= 12 + sag; y++) if ((x + y) % 3 === 0 || (x - y + 30) % 3 === 0) g.set(x, y, net);
-    g.set(x, 12 + sag, darken(net, 0.2));
-  }
-  // 걸린 찌 둘·작은 물고기 하나
-  g.set(8, 15, 0xe03a2a);
-  g.set(8, 16, 0xf4f4ee);
-  g.set(17, 16, 0xe03a2a);
-  g.set(17, 17, 0xf4f4ee);
-  g.ellipse(13, 15, 2, 1, 0xb0c0c8);
-  g.outline(OUT, false, 210);
-  return g.toCanvas();
-}
-
-/** 통발 더미: 대나무 통발 둘 + 감긴 밧줄. 18×12 */
-function traps(): HTMLCanvasElement {
-  const g = new Grid(18, 12);
-  const cane = 0xb8944a;
-  for (const [cx, cy] of [[5, 7], [12, 6]] as const) {
-    g.ellipse(cx, cy, 4.5, 3.5, cane);
-    for (let x = cx - 4; x <= cx + 4; x += 2) g.vline(x, cy - 3, cy + 3, darken(cane, 0.25));
-    g.set(cx - 4, cy, 0x2a2018);
-    g.set(cx - 4, cy - 1, 0x2a2018);
-  }
-  // 밧줄 뭉치
-  g.ellipse(14, 9.5, 3, 1.8, ROPE);
-  g.set(14, 9, darken(ROPE, 0.25));
-  g.outline(OUT, false, 210);
-  return g.toCanvas();
-}
 
 /** 물고기 상자 (두 단): 얼음·생선 꼬리가 삐죽. 18×16 */
 function crates(): HTMLCanvasElement {
@@ -135,20 +52,6 @@ function barrel(): HTMLCanvasElement {
   for (const y of [5, 9]) g.hline(1, 10, y, 0x5a5a64);
   g.vline(1, 2, 11, lighten(WOOD, 0.15));
   g.vline(10, 2, 11, WOOD_DARK);
-  g.outline(OUT);
-  return g.toCanvas();
-}
-
-/** 등불 기둥: 말뚝 + 갈고리에 매단 등. 10×22 */
-function lanternPost(): HTMLCanvasElement {
-  const g = new Grid(10, 22);
-  g.rect(2, 3, 3, 18, WOOD);
-  g.vline(2, 3, 20, lighten(WOOD, 0.15));
-  g.hline(3, 7, 3, WOOD_DARK);
-  g.vline(7, 4, 5, 0x5a5a64);
-  g.rect(6, 6, 3, 4, LAMP);
-  g.set(7, 6, 0xfff2c0);
-  g.hline(6, 8, 10, 0x5a4a3a);
   g.outline(OUT);
   return g.toCanvas();
 }
@@ -206,7 +109,7 @@ function hook(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-// ── 11/15 납품 부두 위 마당 ──
+// ── 11/15 버스 정류장 마당 (의뢰 게시판·긴급 의뢰 현판) ──
 
 /** 의뢰 게시판: 지붕 얹은 큰 나무 판 + 쪽지 여러 장(핀) + 꼭대기 작은 등. 글씨 "의뢰 게시판"은 이름표로 위에 얹는다. 56×48 */
 function questBoard(): HTMLCanvasElement {
@@ -476,7 +379,7 @@ function wharfCurb(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-const DECOR_ART: Record<FishDecorKind, () => HTMLCanvasElement> = { arch, netRack, traps, crates, barrel, lanternPost, questBoard, placard, busShelter, busSign, timetable };
+const DECOR_ART: Record<FishDecorKind, () => HTMLCanvasElement> = { crates, barrel, questBoard, placard, busShelter, busSign, timetable };
 
 export function ensureZoneTextures(scene: Phaser.Scene): void {
   const tx = scene.textures;

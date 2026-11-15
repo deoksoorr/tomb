@@ -116,6 +116,11 @@ export class AvatarView {
   depthOverride: number | null = null;
   /** 실내로 들어가며 흐려지는·문에서 나타나는 정도 (1 = 그대로). 원격 아바타(RemoteAvatar)가 넣는다 */
   fade = 1;
+  /** 11/15 캠핑장 바베큐: 잠깐 커진 배율 (1 = 그대로). bigGoal로 부드럽게 따라간다 — 재미용, 발 위치·충돌은 그대로 */
+  private big = 1;
+  private bigGoal = 1;
+  private bigTint: number | null = null;
+  private bigGlow: Phaser.GameObjects.Image | null = null;
   /**
    * 50번 조각배·시소·트램펄린·회전목마: 씬(PlazaRides·BoatRide)이 매 프레임 넣어 주는 그림 연출.
    * ox = 앵커에서 옆으로(회전목마), lift = 위로 띄우는 높이, depth = 그릴 순서 (null이면 그대로). 논리 위치는 그대로다.
@@ -331,6 +336,16 @@ export class AvatarView {
   }
 
   /** 친구면 이름표 왼쪽에 작은 하트 (UI가 알려 준 같은 채널 친구) */
+  /** 11/15 바베큐를 먹고 커진다 (scale 1이면 원래대로). tint = 발밑에 은은하게 빛나는 색 */
+  setBig(scale: number, tint: number | null): void {
+    this.bigGoal = scale > 1 ? scale : 1;
+    this.bigTint = scale > 1 ? tint : null;
+    if (this.bigTint !== null) {
+      this.bigGlow ??= this.scene.add.image(0, 0, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 1).setVisible(false);
+      this.bigGlow.setTint(this.bigTint);
+    }
+  }
+
   setFriend(on: boolean): void {
     if (on === !!this.friendMark) return;
     if (!on) {
@@ -816,7 +831,12 @@ export class AvatarView {
     } else this.setPose(0, 0);
     if (this.altFrame >= 0 && st !== "boat" && st !== "seesaw" && st !== "trampoline" && st !== "carousel" && st !== "ferris" && st !== "balloon") this.altFrame = -1;
     if (s.angle !== 0) s.setAngle(0);
-    if (st !== "swing" && s.scaleX !== 1) s.setScale(1);
+    // 11/15 바베큐로 커진 배율 (부드럽게 커지고 줄어든다)
+    if (this.big !== this.bigGoal) {
+      this.big += (this.bigGoal - this.big) * Math.min(1, dt / (this.reduced ? 60 : 260));
+      if (Math.abs(this.big - this.bigGoal) < 0.005) this.big = this.bigGoal;
+    }
+    if (st !== "swing" && s.scaleX !== this.big) s.setScale(this.big);
 
     s.setDepth(this.depthOverride ?? s.y);
     const sitLift = st === "sitGround" ? 3 : st === "sitChair" ? 1 : 0;
@@ -827,7 +847,7 @@ export class AvatarView {
     // 매달리기는 두 팔이 머리 위로 올라가 그만큼 더 띄운다
     const armsUp = st === "hang" ? 3 : 0;
     // 24번 벤치 상태 아이콘이 있으면 머리와 이름표 사이에 끼운다 (그만큼 이름표를 올린다)
-    const labelY = headY - this.labelGap + sitLift + waterDrop - armsUp;
+    const labelY = headY - this.labelGap + sitLift + waterDrop - armsUp - Math.round((this.big - 1) * this.artTop);
     // 오라(착용·전용)를 그릴 몸 자리 — 모든 자세에서 보이게 (auraFrame)
     const af = this.auraFrame(st, s.y, headY, labelY, waterDrop, sitLift, armsUp);
     const moodLift = this.moodFx?.lift(st) ?? 0;
@@ -835,6 +855,15 @@ export class AvatarView {
     if (this.shadow) this.shadow.setPosition(s.x, s.y - 1).setDepth((this.depthOverride ?? s.y) - 0.5);
     if (this.label.scaleX !== labelScale) this.label.setScale(labelScale);
     const vis = s.visible;
+    if (this.bigGlow) {
+      // 바베큐로 커진 동안 몸 둘레에 메뉴 색 빛 (끝나면 줄어드는 동안만 남는다)
+      const on = this.bigTint !== null && this.big > 1.01;
+      if (on) {
+        const pulse = this.reduced ? 1 : 0.8 + 0.2 * Math.sin(now / 260);
+        this.bigGlow.setPosition(s.x, s.y - 9 * this.big).setScale(0.42 * this.big).setAlpha(0.32 * this.fade * pulse);
+      }
+      if (this.bigGlow.visible !== (vis && on)) this.bigGlow.setVisible(vis && on);
+    }
     const bx = s.x - this.poseDx;
     const fa = this.fade;
     if (s.alpha !== fa) s.setAlpha(fa);
@@ -1164,6 +1193,8 @@ export class AvatarView {
   }
 
   destroy(): void {
+    this.bigGlow?.destroy();
+    this.bigGlow = null;
     this.sprite.destroy();
     this.label.destroy();
     this.dexBadge?.destroy();

@@ -292,15 +292,22 @@ function midObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: num
       if (!signs.ic) {
         signs.ic = true;
         const cx = Math.round((x0 + x1) / 2);
-        px(ctx, cx - 40, ground - 58, 2, 60, 0x6a6e72);
-        px(ctx, cx + 38, ground - 58, 2, 60, 0x6a6e72);
-        px(ctx, cx - 38, ground - 64, 76, 26, 0x1e6a3e);
-        px(ctx, cx - 37, ground - 63, 74, 1, 0xf0f0e8);
-        px(ctx, cx - 37, ground - 40, 74, 1, 0xf0f0e8);
-        pixelText(ctx, "언젠가 IC", cx - 30, ground - 61, 0xf4f4ec);
-        px(ctx, cx + 20, ground - 47, 10, 2, 0xf4f4ec); // 화살표
-        px(ctx, cx + 28, ground - 49, 2, 6, 0xf4f4ec);
-        px(lights, cx - 38, ground - 64, 76, 26, 0x1e3a2a); // 밤에 표지판이 은은하게 빛난다
+        // 11/15 판을 넓히고 둘째 줄을 두어 화살표가 판 안에 다 들어가게 (예전엔 오른쪽 끝에서 잘렸다)
+        px(ctx, cx - 46, ground - 62, 2, 64, 0x6a6e72);
+        px(ctx, cx + 44, ground - 62, 2, 64, 0x6a6e72);
+        px(ctx, cx - 48, ground - 70, 96, 34, 0x1e6a3e);
+        px(ctx, cx - 47, ground - 69, 94, 1, 0xf0f0e8);
+        px(ctx, cx - 47, ground - 38, 94, 1, 0xf0f0e8);
+        px(ctx, cx - 47, ground - 69, 1, 32, 0xf0f0e8);
+        px(ctx, cx + 46, ground - 69, 1, 32, 0xf0f0e8);
+        pixelText(ctx, "언젠가 IC", cx - 30, ground - 67, 0xf4f4ec);
+        // 화살표 (나가는 길 → 오른쪽): 줄기 + 세모 머리, 모두 판 안
+        px(ctx, cx - 14, ground - 47, 28, 2, 0xf4f4ec);
+        px(ctx, cx + 14, ground - 50, 2, 8, 0xf4f4ec);
+        px(ctx, cx + 16, ground - 49, 2, 6, 0xf4f4ec);
+        px(ctx, cx + 18, ground - 48, 2, 4, 0xf4f4ec);
+        px(ctx, cx + 20, ground - 47, 2, 2, 0xf4f4ec);
+        px(lights, cx - 48, ground - 70, 96, 34, 0x1e3a2a); // 밤에 표지판이 은은하게 빛난다
       }
       break;
     }

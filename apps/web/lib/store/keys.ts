@@ -106,6 +106,8 @@ export const K = {
 
   // ── 50번 소원 분수 (lib/store/wishDay.ts) ──
   wishDay: (id: string, day: string) => `wish:day:${day}:${id}`, // STRING NX EX 계정별 그날(KST) 한 번
+  // ── 11/15 캠핑장 바베큐 (lib/store/bbqDay.ts) ──
+  bbqDay: (id: string, day: string) => `camp:bbq:${day}:${id}`, // STRING INCR EX 2일 계정별 그날 먹은 접시 수
 };
 
 export const HIDDEN = "hidden:";

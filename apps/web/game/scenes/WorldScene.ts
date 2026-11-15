@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, FISH_ARCH, FURNITURE, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
+import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, FURNITURE, LAKE_PIER, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
 import { avatarColorSpec, type AppearanceChange } from "../sprites/avatar";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import { nameStyleIds } from "@/lib/nameStyle";
@@ -1248,7 +1248,7 @@ export class WorldScene extends Phaser.Scene {
         this.life.useStarSpot(o);
         break;
       case "bus":
-        // 11/15 주말 버스 정류장 (납품 부두): 캠핑장이 열린 서버면 버스가 온다 (CampTrip). 운영에서 닫혀 있으면 지금처럼 안내만
+        // 11/15 주말 버스 정류장 (버스 정류장 마당): 캠핑장이 열린 서버면 버스가 온다 (CampTrip). 운영에서 닫혀 있으면 지금처럼 안내만
         pl.faceTo(o.x, o.y - 20, now);
         if (this.net.campOpen) this.trip.board();
         else this.toast("캠핑장 가는 버스는 준비 중이에요.");
@@ -1484,8 +1484,8 @@ export class WorldScene extends Phaser.Scene {
         return c ? { x: c.x, y: c.y - 22, text: label ?? "모닥불" } : null;
       }
       case "fishing":
-        // 납품 부두 입구 아치 (현판 위)
-        return { x: FISH_ARCH.x, y: FISH_ARCH.y - 46, text: label ?? "납품 부두" };
+        // 11/15 납품 부두를 없앴다 → 호수 낚시 잔교 (어부 영감 노점이 잔교 서쪽 끝에 있다)
+        return { x: LAKE_PIER.x + 24, y: LAKE_PIER.y - 26, text: label ?? "낚시 잔교" };
       case "zoo":
         // 동물원 정문 아치 (현판 위)
         return { x: ZOO_ARCH_AT.x, y: ZOO_ARCH_AT.y - 46, text: label ?? "동물원" };

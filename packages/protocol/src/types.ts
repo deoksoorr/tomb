@@ -95,4 +95,6 @@ export type PeerInfo = PeerState & {
   rod?: true;
   /** 실내(상점·집·사냥터 등 하위 장면)에 들어가 있다 → 메인 맵에서 숨긴다. 옛 클라이언트는 무시한다(문 앞에 보인다) */
   away?: true;
+  /** 11/15 캠핑장 바베큐를 먹고 커져 있다 (i = 메뉴, u = 끝나는 시각 epoch ms). 옛 클라이언트는 무시한다 */
+  bbq?: { i: "pork" | "sausage" | "marsh"; u: number };
 };

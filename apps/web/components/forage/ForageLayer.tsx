@@ -68,7 +68,7 @@ function insectPlay(seed: number, timeLimitSec: number, night: boolean, phase?: 
 export default function ForageLayer() {
   const [fishing, setFishing] = useState<{ spot: string; water: "lake" | "river" } | null>(null);
   const [npc, setNpc] = useState<NpcId | null>(null);
-  /** 11/15 납품 부두 의뢰 게시판 (수집 의뢰판만 — NPC 창의 [의뢰] 칸과 같은 QuestBoard) */
+  /** 11/15 버스 정류장 마당 의뢰 게시판 (수집 의뢰판만 — NPC 창의 [의뢰] 칸과 같은 QuestBoard) */
   const [board, setBoard] = useState(false);
   const [dex, setDex] = useState<{ accountId?: string; peer?: DexPeer; name?: string | null } | null>(null);
   const [gather, setGather] = useState<Gather | null>(null);

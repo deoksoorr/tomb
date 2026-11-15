@@ -852,8 +852,7 @@ export function balloonStrip(width: number, segs: readonly StripSeg[]): Band {
       }
       case "river":
       case "lake":
-      case "pond":
-      case "fishing": {
+      case "pond": {
         const top = s.id === "pond" ? y0 + 10 : y0 + 4;
         const bot = s.id === "pond" ? y0 + 34 : h - 10;
         for (let x = Math.floor(x0); x < x1; x++) {
@@ -875,8 +874,6 @@ export function balloonStrip(width: number, segs: readonly StripSeg[]): Band {
           const bx = x0 + w * 0.3;
           for (let y = top - 1; y <= bot; y++) for (let i = 0; i < 10; i++) p.set(bx + i, y, i === 0 || i === 9 ? WOOD.lo : y % 2 ? WOOD.mid : WOOD.hi);
         }
-        if (s.id === "fishing")
-          for (let y = top - 1; y < top + 14; y++) for (let i = 0; i < Math.min(w - 4, 30); i++) p.set(x0 + 2 + i, y, y % 3 ? WOOD.mid : WOOD.lo);
         break;
       }
       case "meadow": {
@@ -918,6 +915,14 @@ export function balloonStrip(width: number, segs: readonly StripSeg[]): Band {
       case "housing": {
         for (let x = x0 + 14; x < x1 - 10; x += 30) p.stamp(house(16, 11, ROOFS[Math.floor(x) % ROOFS.length], true), x, y0 + 14 + (Math.floor(x) % 2) * 4);
         for (let x = x0 + 28; x < x1 - 10; x += 60) p.stamp(tree(7, Math.floor(x)), x, y0 + 8);
+        break;
+      }
+      case "busyard": {
+        // 11/15 버스 정류장 마당 (자갈 마당 + 초록 지붕 정류장)
+        p.rect(x0 + 4, y0 + 2, Math.max(0, w - 8), 12, STONE.lo);
+        p.rect(mid - 10, y0 - 10, 20, 3, 0x5a8a66);
+        p.rect(mid - 9, y0 - 7, 2, 9, STONE.mid);
+        p.rect(mid + 7, y0 - 7, 2, 9, STONE.mid);
         break;
       }
       case "gate": {

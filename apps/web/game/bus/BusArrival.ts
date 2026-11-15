@@ -2,19 +2,23 @@ import * as Phaser from "phaser";
 import { ambienceAt, parseAmbienceOverride } from "@/lib/ambience";
 import { DEPTH } from "../config";
 import { BUS_DOOR_DX, BUS_FOOT, BUS_FRAME, BUS_TEX, BUS_W, ensureBusTextures, removeBusTextures } from "./busArt";
-import { uturnAt, UTURN_MS } from "./busUturn";
 import { lightsOn } from "./busRideMath";
 import type { BusArrivalApi, BusArrivalFactory, BusArrivalOptions } from "./busTypes";
 
 // 정류장에 들어오는 버스 (월드 좌표). 화면 밖에서 들어와 감속해 문이 정류장 앞에 오게 서고 문을 연다 → 타면 문 닫고 떠난다.
 // 마을(납품 부두 위 마당 정차 칸)과 캠핑장(아래 왼쪽 길)이 같은 코드를 쓴다. 밤에는 창문 빛·전조등이 켜진다.
 // 텍스처는 처음 부를 때 굽고, 마지막 버스가 destroy되면 지운다 (게임 하나에 참조 수를 센다).
-// 11/15 떠날 때는 정류장 앞에서 유턴해 왔던 길로 되돌아 나간다 (옆모습이 좁아지며 → 앞모습 → 반대쪽 옆모습, 화면 쪽으로 반원을 그린다).
+// 시계는 performance.now — 장면 시계(scene.time.now)는 자고 있던 장면을 깨운 직후 한 프레임 동안 옛 값이라
+// (캠핑장에서 돌아와 마을을 깨우자마자 버스를 부르면) 들어오는 연출이 건너뛰어졌다.
+// 떠나는 법 (11/15 사용자): 마을은 돌지 않고 그대로 앞으로 달려 나간다(leave "forward"),
+// 캠핑장은 손님을 내린 뒤 잠깐(waitMs) 서 있다가 부드럽게 흐려지며 사라진다(leave "fade").
 
 const ARRIVE_MS = 1900;
 const DEPART_MS = 1400;
 const DOOR_STEP_MS = 140;
 const FADE_MS = 420;
+/** 캠핑장 버스가 사라지는 시간 (부드럽게) */
+const LEAVE_FADE_MS = 900;
 /** 바퀴 그림을 바꾸는 이동 거리 (px) */
 const WHEEL_STEP = 5;
 const DUST_POOL = 6;
@@ -27,8 +31,7 @@ type Phase =
   | { k: "in"; t0: number; from: number; to: number; done: () => void }
   | { k: "door"; t0: number; open: boolean; then: () => void }
   | { k: "out"; t0: number; from: number; dist: number; done: () => void }
-  | { k: "turn"; t0: number; x0: number; done: () => void }
-  | { k: "fade"; t0: number; to: 0 | 1; done: () => void };
+  | { k: "fade"; t0: number; to: 0 | 1; done: () => void; ms?: number };
 
 type Dust = { img: Phaser.GameObjects.Image; born: number; vx: number };
 
@@ -38,7 +41,7 @@ class BusArrival implements BusArrivalApi {
   private readonly windows: Phaser.GameObjects.Image;
   private readonly head: Phaser.GameObjects.Image;
   private readonly dust: Dust[] = [];
-  private dir: 1 | -1;
+  private readonly dir: 1 | -1;
   private readonly stopX: number;
   private readonly night: boolean;
   private phase: Phase = { k: "idle" };
@@ -98,7 +101,7 @@ class BusArrival implements BusArrivalApi {
 
   arrive(onOpen: () => void): void {
     if (this.destroyed) return;
-    const now = this.scene.time.now;
+    const now = performance.now();
     this.show(true);
     this.body.setFrame(BUS_FRAME.closedA);
     const open = () => this.doorTo(true, onOpen);
@@ -118,20 +121,30 @@ class BusArrival implements BusArrivalApi {
   depart(onGone: () => void): void {
     if (this.destroyed) return;
     const leave = () => {
-      const now = this.scene.time.now;
+      const now = performance.now();
       if (this.o.reduced) {
         this.phase = { k: "fade", t0: now, to: 0, done: onGone };
         return;
       }
-      // 유턴: 화면 쪽으로 반원을 그리며 방향을 바꾼 뒤, 왔던 쪽으로 화면 밖까지
-      this.phase = { k: "turn", t0: now, x0: this.body.x, done: () => this.driveOut(onGone) };
+      if (this.o.leave === "fade") {
+        // 캠핑장: 잠깐 서 있다가 그 자리에서 부드럽게 사라진다 (돌거나 달려 나가지 않는다)
+        this.timers.push(
+          this.scene.time.delayedCall(this.o.waitMs ?? 0, () => {
+            if (this.destroyed) return;
+            this.phase = { k: "fade", t0: performance.now(), to: 0, done: onGone, ms: LEAVE_FADE_MS };
+          }),
+        );
+        return;
+      }
+      // 마을: 돌지 않고 그대로 앞으로 화면 밖까지
+      this.driveOut(onGone);
     };
     this.doorTo(false, leave);
   }
 
-  /** 지금 방향으로 화면 밖까지 (유턴 뒤) */
+  /** 지금 방향(앞)으로 화면 밖까지 */
   private driveOut(onGone: () => void): void {
-    const now = this.scene.time.now;
+    const now = performance.now();
     const v = this.scene.cameras.main.worldView;
     const edge = this.dir > 0 ? Math.max(v.right, this.body.x + 200) + BUS_W : Math.min(v.x, this.body.x - 200) - BUS_W;
     this.phase = { k: "out", t0: now, from: this.body.x, dist: Math.abs(edge - this.body.x), done: onGone };
@@ -180,7 +193,7 @@ class BusArrival implements BusArrivalApi {
   /** 문을 반쯤 → 끝까지 (열기) 또는 반쯤 → 닫힘 */
   private doorTo(open: boolean, then: () => void): void {
     this.body.setFrame(BUS_FRAME.half);
-    this.phase = { k: "door", t0: this.scene.time.now, open, then };
+    this.phase = { k: "door", t0: performance.now(), open, then };
   }
 
   private puff(now: number, x: number): void {
@@ -193,7 +206,7 @@ class BusArrival implements BusArrivalApi {
 
   private tick(_time: number, delta: number): void {
     if (this.destroyed) return;
-    const now = this.scene.time.now;
+    const now = performance.now();
     const p = this.phase;
     switch (p.k) {
       case "in": {
@@ -221,38 +234,6 @@ class BusArrival implements BusArrivalApi {
         }
         break;
       }
-      case "turn": {
-        const st = uturnAt((now - p.t0) / UTURN_MS);
-        const x = p.x0 + this.dir * st.dx;
-        const y = this.o.laneY + st.dy;
-        if (st.view === "front") {
-          if (this.body.texture.key !== BUS_TEX.front) this.body.setTexture(BUS_TEX.front);
-          this.body.setFlipX(false);
-        } else {
-          if (this.body.texture.key !== BUS_TEX.body) this.body.setTexture(BUS_TEX.body, BUS_FRAME.closedA);
-          // 뒤 절반은 반대쪽을 본다
-          this.body.setFlipX(st.view === "back" ? this.dir > 0 : this.dir < 0);
-        }
-        this.body.setScale(st.sx, 1).setPosition(Math.round(x), Math.round(y)).setDepth(y - BUS_FOOT);
-        this.windows.setVisible(false);
-        this.head.setVisible(false);
-        if (now - this.dustAt > 120) {
-          this.dustAt = now;
-          this.puff(now, Math.round(x));
-        }
-        if (st.done) {
-          // 방향을 바꿨다: 옆모습·창·전조등을 새 방향으로
-          this.dir = this.dir > 0 ? -1 : 1;
-          this.body.setTexture(BUS_TEX.body, BUS_FRAME.closedA).setScale(1).setFlipX(this.dir < 0).setY(this.o.laneY).setDepth(this.o.laneY - BUS_FOOT);
-          this.windows.setFlipX(this.dir < 0);
-          this.head.setOrigin(this.dir > 0 ? 0 : 1, 0.5).setFlipX(this.dir < 0);
-          this.show(true);
-          this.placeAt(this.body.x);
-          this.phase = { k: "idle" };
-          p.done();
-        }
-        break;
-      }
       case "door": {
         if (now - p.t0 < DOOR_STEP_MS) break;
         this.body.setFrame(p.open ? BUS_FRAME.open : BUS_FRAME.closedA);
@@ -261,7 +242,7 @@ class BusArrival implements BusArrivalApi {
         break;
       }
       case "fade": {
-        const u = Math.min(1, (now - p.t0) / FADE_MS);
+        const u = Math.min(1, (now - p.t0) / (p.ms ?? FADE_MS));
         this.setAlpha(p.to === 1 ? u : 1 - u);
         if (u >= 1) {
           if (p.to === 0) this.show(false);
