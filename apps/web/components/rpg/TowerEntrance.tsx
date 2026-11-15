@@ -21,7 +21,8 @@ import s from "./rpg.module.css";
 // 11/15 야근 빌딩 입구 (마을의 야근 빌딩 → portal:open {kind:"tower"} → HuntLobby mode="tower"의 첫 탭).
 // 엘리베이터 버튼판: 체크포인트 층(1·11·21 …)에 불이 들어와 있고, 위 숫자판에 최고 층·이번 주 최고 층. 고른 층의 저주·몬스터 배율, 오늘 상자, 오르는 이유.
 
-/** 버튼판에 보이는 층 버튼 수 (불 꺼진 다음 체크포인트 몇 개까지 보여 준다) */
+/** 11/15 버튼판은 늘 100층대까지 전부 보여 준다 (1·11·…·101). 그 위로 오르면 지금 층에서 세 칸 더. 깬 곳까지 불이 들어온다(노란빛) */
+const PANEL_TOP = 101;
 const DARK_AHEAD = 3;
 
 /** 11/15 테스트용 강화를 켤 수 있는 빌드인가 (운영 배포는 늘 아니다 — 서버 superHunter도 운영에선 꺼져 있다) */
@@ -48,9 +49,9 @@ export default function TowerEntrance({
     () => lit.filter((f) => f <= t.best + 1).at(-1) ?? 1,
   );
   const start = lit.includes(pick) ? pick : top;
+  const last = Math.max(PANEL_TOP, top + DARK_AHEAD * TOWER_CHECKPOINT_EVERY);
   const buttons = [...lit];
-  for (let i = 1; i <= DARK_AHEAD; i++)
-    buttons.push(top + i * TOWER_CHECKPOINT_EVERY);
+  for (let f = top + TOWER_CHECKPOINT_EVERY; f <= last; f += TOWER_CHECKPOINT_EVERY) buttons.push(f);
   const on = new Set(cursesAt(start));
   const curses = CURSES.filter((c) => on.has(c.id));
   const canStart = !busy && view.today.runsPerHour > 0;
