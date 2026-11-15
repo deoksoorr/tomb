@@ -319,7 +319,36 @@ export function ensureTowerTextures(scene: Phaser.Scene): void {
   add(scene, TTEX.beacon, beaconCanvas());
 }
 
-// ── 옥상 간판 글씨 (픽셀 글꼴 Galmuri를 이진화) ──
+// ── 옥상 간판 글씨 ──
+// 11/15: 글꼴(Galmuri 11px)을 이진화하면 "빌"의 ㅂ 속이 메워져 "밀"로 읽혀서, 다섯 글자를 손으로 찍은 점 글씨로 바꿨다.
+// 1px 심(흰색) + 둘레 1px 분홍. 양쪽에 심이 있는 1px 틈은 분홍을 넣지 않아 ㅂ·ㄹ 속이 열려 보인다.
+const SIGN_GLYPHS: readonly (readonly string[])[] = [
+  // 야
+  ["       X  ", "       X  ", " XXX   X  ", "X   X  XXX", "X   X  X  ", "X   X  X  ", "X   X  X  ", "X   X  XXX", " XXX   X  ", "       X  ", "       X  ", "       X  "],
+  // 근
+  [" XXXXXXXX ", "        X ", "        X ", "        X ", "          ", "XXXXXXXXXX", "          ", "          ", " X        ", " X        ", " X        ", " XXXXXXXX "],
+  // (띄어쓰기)
+  ["   "],
+  // 빌
+  ["X   X  X ", "X   X  X ", "XXXXX  X ", "X   X  X ", "XXXXX  X ", "         ", "XXXXXXXX ", "       X ", "XXXXXXXX ", "X        ", "XXXXXXXX ", "         "],
+  // 딩
+  ["XXXXX  X", "X      X", "X      X", "X      X", "XXXXX  X", "       X", "        ", " XXXXX  ", "X     X ", "X     X ", "X     X ", " XXXXX  "],
+];
+const GLYPH_GAP = 3;
+
+/** 간판 글씨 심 (SIGN_BOX 크기, 가운데 맞춤) */
+function signCore(w: number, h: number): (x: number, y: number) => boolean {
+  const width = SIGN_GLYPHS.reduce((a, g) => a + g[0].length, 0) + GLYPH_GAP * (SIGN_GLYPHS.length - 1);
+  const x0 = Math.floor((w - width) / 2);
+  const y0 = Math.floor((h - 12) / 2);
+  const set = new Set<number>();
+  let gx = x0;
+  for (const g of SIGN_GLYPHS) {
+    g.forEach((row, y) => [...row].forEach((ch, x) => ch === "X" && set.add((y0 + y) * w + gx + x)));
+    gx += g[0].length + GLYPH_GAP;
+  }
+  return (x, y) => x >= 0 && y >= 0 && x < w && y < h && set.has(y * w + x);
+}
 
 const SIGN_FONT = `11px "Galmuri11", "Galmuri9", monospace`;
 export const TOWER_SIGN_TEXT = "야근 빌딩";
@@ -328,17 +357,11 @@ export const TOWER_SIGN_TEXT = "야근 빌딩";
 export function ensureTowerSign(scene: Phaser.Scene): void {
   if (scene.textures.exists(TTEX.sign)) return;
   const { w, h } = SIGN_BOX;
-  const t = makeCanvas(w, h).ctx;
-  t.font = SIGN_FONT;
-  t.textBaseline = "alphabetic";
-  t.fillStyle = "#ffffff";
-  const tw = Math.ceil(t.measureText(TOWER_SIGN_TEXT).width);
-  t.fillText(TOWER_SIGN_TEXT, Math.round((w - tw) / 2), 11);
-  const img = t.getImageData(0, 0, w, h);
-  const on = (x: number, y: number) =>
-    x >= 0 && y >= 0 && x < w && y < h && img.data[(y * w + x) * 4 + 3] >= 110;
+  const on = signCore(w, h);
+  // 양쪽(좌우 또는 위아래)에 심이 있는 1px 틈은 테두리를 넣지 않는다 (ㅂ·ㄹ 속이 열려 보이게)
+  const gap = (x: number, y: number) => (on(x - 1, y) && on(x + 1, y)) || (on(x, y - 1) && on(x, y + 1));
   const near = (x: number, y: number) =>
-    on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1);
+    !gap(x, y) && (on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1));
   const { canvas, ctx } = makeCanvas(w, h);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
