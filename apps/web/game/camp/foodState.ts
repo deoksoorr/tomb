@@ -54,6 +54,10 @@ export const RIDE_OBJECT_KINDS: ReadonlySet<string> = new Set(["swing", "bumper"
 /** 커진 채로 타려 할 때·타는 동안 먹으려 할 때 안내 */
 export const BIG_RIDE_TOAST = "몸이 너무 커서 탈 수 없어요. 효과가 끝나면 다시 와요.";
 export const RIDING_EAT_TOAST = "타는 동안엔 먹을 수 없어요. 내린 다음에 와요.";
+/** 11/16 커진 배율이 이보다 크면 못 앉는 캠핑장 자리: 캠핑카 문간(qV…)·정류장 녹슨 벤치(qB…) — 큰 몸이 차 밖으로 삐져나오고 정류장 지붕이 얼굴을 가린다 */
+export const BIG_SEAT_MAX = 2;
+export const bigSeatBlocked = (seatId: string, big: number): boolean => big > BIG_SEAT_MAX && (seatId.startsWith("qV") || seatId.startsWith("qB"));
+export const BIG_SEAT_TOAST = "몸이 너무 커서 여기엔 앉을 수 없어요. 효과가 끝나면 다시 와요.";
 function saveMine(): void {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(mine ?? {}));

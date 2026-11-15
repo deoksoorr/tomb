@@ -60,7 +60,7 @@ import { createBusArrival } from "../bus/BusArrival";
 import type { BusArrivalApi } from "../bus/busTypes";
 import { CampMap } from "./CampMap";
 import { FoodFx } from "./foodFx";
-import { BIG_RIDE_TOAST, foodOfPeer, myBig, RIDING_EAT_TOAST } from "./foodState";
+import { BIG_RIDE_TOAST, BIG_SEAT_TOAST, bigSeatBlocked, foodOfPeer, myBig, RIDING_EAT_TOAST } from "./foodState";
 import { CAMP_BBQ } from "./campLayout";
 import { CampForage } from "./campForage";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
@@ -674,7 +674,7 @@ export class CampScene extends Phaser.Scene {
     if (a === "sit") {
       if (moving) return;
       if (pl.sitting) pl.stand(now, this.seatReq);
-      else pl.sit(campPickSeat(pl.x, pl.y, occupied, mySid), now, this.seatReq);
+      else this.sitOn(campPickSeat(pl.x, pl.y, occupied, mySid), now);
       return;
     }
     if (a !== "interact") return;
@@ -698,7 +698,16 @@ export class CampScene extends Phaser.Scene {
       return;
     }
     if (obj && od <= sd) this.useObject(obj);
-    else if (seat) pl.sit(seat, now, this.seatReq);
+    else if (seat) this.sitOn(seat, now);
+  }
+
+  /** 앉기 (null = 땅바닥). 11/16 2배 넘게 커졌으면 캠핑카 문간·정류장 녹슨 벤치에는 못 앉는다 (bigSeatBlocked) */
+  private sitOn(seat: Seat | null, now: number): void {
+    if (seat && bigSeatBlocked(seat.id, myBig())) {
+      this.toast(BIG_SEAT_TOAST);
+      return;
+    }
+    this.player.sit(seat, now, this.seatReq);
   }
 
   private nearestObject(x: number, y: number): CampInteractable | null {
@@ -741,7 +750,7 @@ export class CampScene extends Phaser.Scene {
           this.toast("다른 사람이 캠핑카에 앉아 있어요.");
           return;
         }
-        pl.sit(seat, now, this.seatReq);
+        this.sitOn(seat, now);
         break;
       }
       case "deck":
