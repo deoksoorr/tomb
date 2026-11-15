@@ -605,7 +605,24 @@ async function finishTower(acct: string, start: number, seed: number, level: num
   // 11/15 테스트 서버 슈퍼 계정만 처치 속도 상한을 빼고 (테스트용 무적·공격력 ×20) — 운영 서버에서는 isSuperHunter가 늘 false
   const sup = await isSuperHunter(acct);
   const v = evalTower({ seed, level, start, ...(gp ? { gp } : {}) }, result, elapsed, { lax: sup });
-  if (!v.ok) throw new HttpError(422, v.code, v.message);
+  if (!v.ok) {
+    // 11/15 거절 사유를 운영 로그에 (정직한 판이 거절되면 원인을 바로 찾게 — 계정은 앞 6자리만)
+    console.warn("[tower] 결과 거절", {
+      code: v.code,
+      message: v.message,
+      ...(v.why ? { why: v.why } : {}),
+      acct: acct.slice(0, 6),
+      start,
+      floors: result.floors ?? 0,
+      level,
+      gp: gp ?? 1,
+      elapsed,
+      durationMs: result.durationMs,
+      kills: Object.values(result.kills).reduce((a, n) => a + (n ?? 0), 0),
+      cards: result.cards?.length ?? 0,
+    });
+    throw new HttpError(422, v.code, v.message);
+  }
   const day = kstDay(now);
   const week = kstWeek(now);
   const done = await http(

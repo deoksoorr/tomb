@@ -625,7 +625,11 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
         </p>
       </header>
       {outcome.error ? (
-        <p className={ui.error}>{outcome.error}</p>
+        <p className={ui.error} role="alert">
+          {/* 11/15 야근 빌딩: 쓰러짐 제목에 묻혀 거절을 못 알아챘다 → 기록이 안 남았다는 걸 먼저 분명히 */}
+          {outcome.tower && <strong>이번 판은 기록이 저장되지 않았어요 (최고 층·초월 EXP·상자 없음). </strong>}
+          {outcome.error}
+        </p>
       ) : r ? (
         <>
           <div className={s.rewards}>
