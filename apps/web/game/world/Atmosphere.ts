@@ -5,9 +5,11 @@ import { DEPTH, ZOOM_MIN } from "../config";
 import { LevelBlender, levelsFor, TRANSITION_MS, type Levels } from "./ambienceMix";
 import { isQuietHour, THUNDER_MIN_RAIN, thunderDelaySec, thunderFlash, thunderGapMs } from "./weatherMath";
 import { WeatherSound } from "./WeatherSound";
+import { charTintOf } from "./charTint";
+import type { WorldTintControl } from "./worldTint";
 import type { LightSpot } from "./WorldMap";
 
-// 분위기 레이어: [날씨 막(일반 섞기)] → KST 시간대 톤(곱하기 틴트) → [어둠·빛 구멍은 Lighting] → 빛(가산) → 반딧불 → 날씨(비·눈·낙엽) → 안개 → 번개 → 비네트.
+// 분위기 레이어: [날씨 막(일반 섞기)] → KST 시간대 톤(곱하기 틴트 — 마을은 판 대신 셰이더가 그림마다 곱하고 캐릭터는 절반만, worldTint) → [어둠·빛 구멍은 Lighting] → 빛(가산) → 반딧불 → 날씨(비·눈·낙엽) → 안개 → 번개 → 비네트.
 // 톤·날씨는 lib/ambience(공용, 시계 기반)로 1분마다 다시 계산하고 바뀌면 2.5초 동안 섞는다.
 // 모든 레이어는 화면 고정 오브젝트 몇 개와 작은 풀(pool)로만 그려서 프레임당 비용이 일정하다.
 // 소리: 비 세기·실내 여부를 게임 하나에 하나인 WeatherSound에 알려 주고(빗소리 루프), 센 비에는 가끔 천둥(번개 + 소리).
@@ -20,6 +22,11 @@ export type AtmosphereOptions = {
   indoor?: boolean;
   /** 바깥 색 보정(skyGrade: 7구간 색 온도·밤은 확실히 어둡게·날씨 막). 기본: 실내가 아니면 켬 */
   grade?: boolean;
+  /**
+   * 색조를 곱하기 판 대신 셰이더로 곱한다 (마을, world/worldTint): 맵은 색조 그대로, 캐릭터는 절반만 (charTint).
+   * 없으면(집·입장 화면·Canvas) 예전처럼 DEPTH.tint의 화면 크기 곱하기 판
+   */
+  shaderTint?: WorldTintControl | null;
 };
 
 const RECHECK_MS = 60_000;
@@ -49,6 +56,7 @@ export class Atmosphere {
   private readonly blender: LevelBlender;
   private nextCheck = 0;
   private readonly tint: Phaser.GameObjects.Image;
+  private readonly shaderTint: WorldTintControl | null;
   /** 톤 아래 옅은 막 (흐림·안개의 채도·대비 낮추기, 눈의 흰빛) */
   private readonly haze: Phaser.GameObjects.Image;
   private readonly grade: boolean;
@@ -85,6 +93,7 @@ export class Atmosphere {
     this.override = parseAmbienceOverride(search);
     this.indoor = opts.indoor ?? false;
     this.grade = opts.grade ?? !this.indoor;
+    this.shaderTint = opts.shaderTint ?? null;
     this.forceThunder = new URLSearchParams(search).get("thunder") === "1";
     this.sound = opts.sound === false ? null : WeatherSound.of(scene);
     this.blender = new LevelBlender(this.targetLevels(), TRANSITION_MS);
@@ -218,8 +227,14 @@ export class Atmosphere {
     this.updateThunder(time, L);
 
     // ── 톤 ──
-    this.tint.setTint(L.tint);
-    this.tint.setVisible(L.tint !== 0xffffff);
+    if (this.shaderTint) {
+      // 셰이더가 그림마다 곱한다 (곱하기 판은 쓰지 않는다): 맵은 그대로, 캐릭터는 막까지 절반만
+      this.shaderTint.set(L.tint, charTintOf(L.tint, L.haze > 0.005 ? L.haze : 0));
+      if (this.tint.visible) this.tint.setVisible(false);
+    } else {
+      this.tint.setTint(L.tint);
+      this.tint.setVisible(L.tint !== 0xffffff);
+    }
     this.haze.setTint(L.hazeColor).setAlpha(L.haze).setVisible(L.haze > 0.005);
     // 어둠은 Lighting이 그린다 (빛 구멍을 뚫기 위해)
     this.vignette

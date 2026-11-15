@@ -4,7 +4,7 @@ import { hasNameStyle, nameStyleRef } from "@/lib/nameStyle";
 import { headTitle } from "@/lib/titles";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
-import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange, isDyedSpec } from "../sprites/avatar";
+import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange } from "../sprites/avatar";
 import { CosmeticFxView } from "./CosmeticFxView";
 import { DyeFxView } from "./DyeFxView";
 import { bodyFx, riderLift } from "../sprites/cosmeticFx";
@@ -15,10 +15,11 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { wrapChat } from "../logic/chatWrap";
 import { SpeechBubble } from "./SpeechBubble";
 import { MoodView } from "./MoodView";
-import { STAFF_COLOR, StaffFxView } from "./StaffFxView";
+import { StaffFxView } from "./StaffFxView";
 import { ChampBadgeView } from "./ChampBadgeView";
 import { NameStyleView } from "./NameStyleView";
 import { TitleView } from "./TitleView";
+import { markCharTint } from "../world/charTint";
 
 /** 도감 100% 배지: 종류마다 별 하나 (금빛) */
 const DEX_BADGE_STAR = "★";
@@ -135,9 +136,11 @@ export class AvatarView {
   private dyeFx: DyeFxView | null = null;
   /** 24번 벤치 상태 (머리 위 작은 아이콘 + 손 소품) — 처음 고를 때 만든다 */
   private moodFx: MoodView | null = null;
-  /** 31번 운영자 저승사자 차림 (낫·안개·배지). 켜져 있는 동안 몸 색은 염색했으면 그 색, 아니면 STAFF_COLOR. 원래 색은 staffBase에 둔다 */
+  /**
+   * 31번 운영자 표시 (낫·안개·배지). 몸·색·염색은 건드리지 않는다 — 가방·상점·사냥 장비창에 보이는 내 모습과 마을·사냥터·다른 사람 화면이 같게
+   * (예전엔 염색 안 한 운영자의 몸 색을 검은 망토색으로 덮어, 가방의 연보라 유령이 마을에서는 검은 저승사자처럼 보였다)
+   */
   private staffFx: StaffFxView | null = null;
-  private staffBase = "";
   /** 도감 100% 배지 (이름표 오른쪽 별) */
   private dexBadge: Phaser.GameObjects.BitmapText | null = null;
   private dexBadgeN = 0;
@@ -190,7 +193,8 @@ export class AvatarView {
     this.labelGap = m.top + 2;
     this.shoulder = m.shoulder;
     this.texKey = ensureAvatarTexture(scene, color, look, this.body);
-    this.sprite = scene.add.sprite(x, y, this.texKey, avatarFrame("idle", DIR.down)).setOrigin(0.5, AV_ORIGIN_Y);
+    // 마을 시간대·날씨 색조는 캐릭터에 절반만 (world/worldTint — 꾸미기 연출·펫도 같이)
+    this.sprite = markCharTint(scene.add.sprite(x, y, this.texKey, avatarFrame("idle", DIR.down)).setOrigin(0.5, AV_ORIGIN_Y));
     this.baseOriginX = this.sprite.displayOriginX;
     this.baseOriginY = this.sprite.displayOriginY;
     this.walkX = x;
@@ -234,31 +238,24 @@ export class AvatarView {
 
   /** 46번: 색 표기 변경 (avatarColorSpec — 염색) */
   setColor(spec: string): void {
-    if (this.staffFx) this.staffBase = spec;
-    const next = this.staffFx ? staffColorOf(spec) : spec;
-    if (next === this.color) return;
-    this.color = next;
+    if (spec === this.color) return;
+    this.color = spec;
     this.retexture();
   }
 
   get colorSpec(): string {
-    return this.staffFx ? this.staffBase : this.color;
+    return this.color;
   }
 
   /** 31번 운영자 표시 켜기·끄기 (실시간 서버가 알린 staff, 내 캐릭터는 /api/me의 staff) */
   setStaff(on: boolean): void {
     if (on === !!this.staffFx) return;
-    if (on) {
-      this.staffBase = this.color;
-      this.staffFx = new StaffFxView(this.scene);
-      this.color = staffColorOf(this.color);
-    } else {
+    if (on) this.staffFx = new StaffFxView(this.scene);
+    else {
       this.staffFx?.destroy();
       this.staffFx = null;
-      this.color = this.staffBase;
     }
     this.setTitle(this.wornTitle);
-    this.retexture();
     this.refreshAura();
   }
 
@@ -416,7 +413,7 @@ export class AvatarView {
       this.haloGlow = null;
     }
     if (look.includes("back_wings")) {
-      this.wings ??= this.scene.add.image(0, 0, TEX.avWings, 0).setVisible(vis);
+      this.wings ??= markCharTint(this.scene.add.image(0, 0, TEX.avWings, 0).setVisible(vis));
     } else {
       this.wings?.destroy();
       this.wings = null;
@@ -425,7 +422,7 @@ export class AvatarView {
       if (!this.pet) {
         this.petX = this.sprite.x + 10;
         this.petY = this.sprite.y;
-        this.pet = this.scene.add.image(this.petX, this.petY, TEX.avPetGhost).setOrigin(0.5, 1).setAlpha(0.72).setVisible(vis);
+        this.pet = markCharTint(this.scene.add.image(this.petX, this.petY, TEX.avPetGhost).setOrigin(0.5, 1).setAlpha(0.72).setVisible(vis));
       }
     } else {
       this.pet?.destroy();
@@ -434,7 +431,7 @@ export class AvatarView {
     if (look.includes("aura_fog")) {
       if (!this.fog.length)
         for (let i = 0; i < 3; i++)
-          this.fog.push(this.scene.add.image(0, 0, TEX.glow).setTint(0xa8c8f0).setAlpha(0.22).setScale(0.42, 0.14).setVisible(vis));
+          this.fog.push(markCharTint(this.scene.add.image(0, 0, TEX.glow).setTint(0xa8c8f0).setAlpha(0.22).setScale(0.42, 0.14).setVisible(vis)));
     } else if (this.fog.length) {
       for (const f of this.fog) f.destroy();
       this.fog = [];
@@ -1188,6 +1185,3 @@ export class AvatarView {
     this.bubbles = [];
   }
 }
-
-/** 운영자 차림의 몸 색: 염색했으면 그 색을 그대로, 아니면 저승사자 검은 망토 */
-const staffColorOf = (spec: string): string => (isDyedSpec(spec) ? spec : STAFF_COLOR);

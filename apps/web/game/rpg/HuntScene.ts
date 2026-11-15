@@ -81,6 +81,8 @@ const GHOST_ALPHA = 0.42;
 /** 11/13 자리 비움(탭을 숨겼거나 판을 멈춘 사람)은 더 연하게 */
 const AWAY_ALPHA = 0.24;
 const DIR_ROW = { down: 0, left: 1, right: 2, up: 3 } as const;
+/** 사냥 화면의 운영자 오라·안개 투명도 배율 (몸 뒤로 보내고 이만큼만) */
+const STAFF_SOFT_ALPHA = 0.45;
 
 type Mon = {
   id: MonsterId;
@@ -447,8 +449,9 @@ export class HuntScene extends RpgScene {
 
     this.pShadow = this.add.image(this.px, this.py, RTEX.shadow).setDepth(-500);
     const atlas = this.data0.atlas;
-    // 착용 오라·전용 오라: 바닥 층은 바닥 효과 바로 아래, 빛 층은 몸 바로 앞 (전투 효과·몬스터 앞쪽·피해 숫자보다 아래)
-    this.data.set("cfxDepth", { ground: DEPTH_GROUND - 5, lightOnBody: true } satisfies CfxDepth);
+    // 착용 오라·전용 오라: 바닥 층은 바닥 효과 바로 아래, 빛 층은 몸 바로 앞 (전투 효과·몬스터 앞쪽·피해 숫자보다 아래).
+    // 운영자 오라·안개는 몸 뒤로 보내고 45%만 (사냥 장비 — 세트·상점 갑옷·머리 — 를 가리지 않게. 내 것·다른 사람 것 모두, 마을·집은 그대로)
+    this.data.set("cfxDepth", { ground: DEPTH_GROUND - 5, lightOnBody: true, staffSoft: STAFF_SOFT_ALPHA } satisfies CfxDepth);
     if (atlas) {
       this.me = new AvatarView(this, atlas, this.px, this.py, this.data0.color, this.data0.name, true, look, this.data0.body);
       this.player = this.me.sprite;

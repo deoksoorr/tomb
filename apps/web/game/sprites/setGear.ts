@@ -1068,12 +1068,14 @@ export function setGearDollGrid(set: SetGearSet, grade: SetGearGrade, frame = 0,
   return out;
 }
 
-// ── 11/15 사냥 장비창 인형: 기본 아바타(마을 꾸미기 없이)에 지금 낀 사냥 장비를 부위마다 따로 입힌다 ──
+// ── 11/15 사냥 장비창 인형: 내 아바타 시트(look = 사냥터와 같은 huntLook 착용 목록)에 무기를 손에 든다 ──
 
 export type HuntDollPiece = { set: SetGearSet; grade: SetGearGrade };
 export type HuntDollOpts = {
   color: string;
   body?: string;
+  /** 아바타 시트에 같이 그릴 착용 목록 (사냥터와 같은 huntLook 결과 — 입은 사냥 장비 sgw.·마을 꾸미기) */
+  look?: readonly string[];
   armor?: HuntDollPiece | null;
   head?: HuntDollPiece | null;
   /** 낀 세트 장신구 (세트마다 그 세트 장신구 그림 한 벌 — 몸에서는 몇 픽셀이라 부위는 나누지 않는다) */
@@ -1090,7 +1092,7 @@ export function huntDollGrid(o: HuntDollOpts): Grid {
   const body = o.body ?? "hood";
   const out = new Grid(DOLL_W, DOLL_H);
   const gearMask = new Grid(DOLL_W, DOLL_H);
-  const av = avatarFrameGrid(body, "down", 0, o.color, []);
+  const av = avatarFrameGrid(body, "down", 0, o.color, o.look ?? []);
   out.draw(av, AX, AY);
   const layer = (paint: (g: Grid) => void, soft = false) => {
     const l = new Grid(AV_W, AV_H);

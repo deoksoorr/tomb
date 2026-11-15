@@ -1252,6 +1252,11 @@ export type FxInput = {
    * base = 발밑 줄(물이면 수면, 공중이면 몸 아래), top = 보이는 몸 꼭대기, dim = 밝기 배율(잠수 중엔 은은하게)
    */
   aura?: { base: number; top: number; dim: number; wide?: number };
+  /**
+   * 운영자 오라를 은은하게 (사냥 화면 — 사냥 장비가 가리지 않게): 몸 앞에 그리던 빛까지 모두 몸 뒤로 보내고 투명도에 이 값을 곱한다.
+   * 없으면 그대로 (마을·집은 화려하게)
+   */
+  staffSoft?: number;
 };
 
 /** 몸에 붙은 연출의 기준 depth: 아바타 그림 depth (덮어쓴 값이 있으면 그것) */
@@ -1669,7 +1674,11 @@ export class CosmeticFxSim {
     const front = bodyDepth(f) + 0.2;
     switch (s.motion) {
       case "champ":
-        if (!f.offscreen) champAura(s.theme ?? 0, f, t, out);
+        if (!f.offscreen) {
+          const n = out.length;
+          champAura(s.theme ?? 0, f, t, out);
+          if (s.theme === STAFF_THEME && f.staffSoft !== undefined) softenBehind(out, n, bodyDepth(f), f.staffSoft);
+        }
         break;
       case "orbit":
         // 기울어진 고리를 따라 돈다: 위아래로 출렁이며 뒤쪽 반원은 몸 뒤로
@@ -1876,6 +1885,19 @@ export const CHAMP_FX_MAX = 36;
 /** 섬광 주기 */
 const CHAMP_FLASH_MS = 2_600;
 const CHAMP_FLASH_LEN = 0.2;
+
+/** out[from..]의 연출을 몸 뒤로 보내고(빛 층은 몸 바로 뒤에서 더해 그리기) 투명도에 alpha를 곱한다 — 몸·장비를 덮지 않는다 */
+export function softenBehind(out: FxCmd[], from: number, body: number, alpha: number): void {
+  for (let i = from; i < out.length; i++) {
+    const c = out[i];
+    c.alpha *= alpha;
+    if (c.layer === "light") {
+      c.layer = "body";
+      c.add = true;
+      c.depth = body - 0.39;
+    } else if (c.layer === "body" && c.depth > body - 0.39) c.depth = body - 0.39;
+  }
+}
 
 /**
  * 주간 랭킹 1위 오라 (착용 오라와 자리를 나눈다: 착용 오라는 머리 위·몸 둘레, 1위 오라는 발밑과 몸 뒤).

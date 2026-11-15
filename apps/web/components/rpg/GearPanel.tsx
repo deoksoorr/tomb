@@ -215,7 +215,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
     <PaperDoll
       areas={GEAR_AREAS}
       label="사냥 장비 칸"
-      figure={<HuntDoll equip={c.equip} color={figure.color} body={figure.body} label="지금 낀 사냥 장비를 입은 내 캐릭터" />}
+      figure={<HuntDoll equip={c.equip} color={figure.color} body={figure.body} look={figure.look} label="지금 낀 사냥 장비를 입은 내 캐릭터" />}
     >
       {GEAR_SLOTS.map((slot) => {
         const id = c.equip[slot];

@@ -4,6 +4,7 @@ import { addCanvasTexture } from "../assets/manifest";
 import { DEPTH } from "../config";
 import { seatedAnchors } from "../sprites/avatar";
 import { MOOD_ICON, MOOD_PROP_PLACE, moodIconGrid, moodIconKey, moodPropGrid, moodPropKey } from "../sprites/moodArt";
+import { markCharTint } from "../world/charTint";
 
 // 24번 벤치 상태: 의자·벤치에 앉아 있는 동안 머리 위 작은 아이콘 + 손에 든 소품 (AvatarView가 하나씩 가진다).
 // 아이콘은 머리와 이름표 사이에 놓고(이름표를 아이콘 높이만큼 올린다 → 머리 꾸미기 → 아이콘 → 이름표 → 말풍선 순),
@@ -61,7 +62,7 @@ export class MoodView {
     // ── 머리 위 아이콘 (천천히 1px 오르내림) ──
     const ik = moodIconKey(m);
     if (!this.scene.textures.exists(ik)) addCanvasTexture(this.scene, ik, { canvas: moodIconGrid(m).toCanvas() });
-    this.icon ??= this.scene.add.image(0, 0, ik).setOrigin(0.5, 1);
+    this.icon ??= markCharTint(this.scene.add.image(0, 0, ik).setOrigin(0.5, 1));
     const bob = this.reduced ? 0 : Math.sin(now / BOB_MS) > 0.4 ? 1 : 0;
     this.icon.setPosition(Math.round(x), Math.round(iconBottom) - bob).setDepth(DEPTH.labels - 0.5).setVisible(true);
 
@@ -75,7 +76,7 @@ export class MoodView {
     if (key !== this.propKey) {
       if (!this.scene.textures.exists(key)) addCanvasTexture(this.scene, key, { canvas: moodPropGrid(m, view, headW).toCanvas() });
       if (this.prop) this.prop.setTexture(key);
-      else this.prop = this.scene.add.image(0, 0, key);
+      else this.prop = markCharTint(this.scene.add.image(0, 0, key));
       this.propKey = key;
     }
     const p = this.prop!;
