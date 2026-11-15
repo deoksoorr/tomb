@@ -686,9 +686,11 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
                 )
               }
             />
-            자동 스킬이 궁극기 SP 남겨 두기
+            궁극기 쓸 SP는 남겨 두기
           </label>
-          <span className={t.dockSub}>칸 자동: 사냥 중 Shift+숫자 · 칸 우클릭 · [자동] 누르고 칸 / X로 한꺼번에</span>
+          <span className={t.dockSub}>
+            자동으로 쓸 스킬은 사냥 중에 정해요. 스킬 칸을 오른쪽 클릭하면 그 칸이 자동이 되고, X를 누르면 전부 한 번에 켜고 꺼요. 폰은 [자동]을 누른 다음 칸을 눌러요.
+          </span>
         </div>
       </section>
 
