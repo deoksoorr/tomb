@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { useNewVersion } from "@/lib/hooks/useNewVersion";
 import { busyNow } from "@/lib/busy";
 import { countdownLeft, decideUpdate } from "@/lib/update";
+import { keepOnTop, supportsPopover } from "@/lib/topLayer";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import styles from "./UpdateNotice.module.css";
@@ -13,6 +14,7 @@ import styles from "./UpdateNotice.module.css";
 // 새 버전 안내 (lib/update.ts 판정).
 //  - 평소 패치: 화면 아래 고정 배너(닫기 없음) + [지금 업데이트]. 3분 무조작이면 자동, 숨겨 둔 탭은 돌아온 순간 자동.
 //  - 큰 패치(최소 버전 미달): 게임을 가리는 창 + 10초 카운트다운 자동 새로고침. 사냥 한 판·묘비 작성은 끝날 때까지 기다린다.
+// 둘 다 브라우저 top layer에 띄운다(lib/topLayer.ts): 게임 창(<dialog> 모달)이 떠 있어도 그 위에 보이고, 나중에 열린 창 위로도 다시 올라온다.
 // 새로고침은 그냥 location.reload() — 페이지가 내려가는 순간(pagehide) 월드 씬이 채널·자리·자세를 저장하고
 // 다시 열리면 입장 화면을 건너뛰어 같은 자리로 돌아온다 (lib/resume.ts).
 
@@ -99,28 +101,28 @@ export default function UpdateNotice() {
 
   if (level === "patch") {
     return (
-      <div className={styles.banner} role="status" data-testid="update-banner">
+      <Banner testId="update-banner">
         <span>새 버전이 나왔어요</span>
         <button type="button" className={cx(ui.button, ui.primary)} onClick={reload}>
           지금 업데이트
         </button>
-      </div>
+      </Banner>
     );
   }
 
-  // 큰 패치: 사냥·미니게임·묘비 작성 중이면 가리지 않고 위쪽에 짧게만 알린다
+  // 큰 패치: 사냥·미니게임·묘비 작성 중이면 가리지 않고 위쪽에 짧게만 알린다 (끝나면 바로 아래 창)
   if (hardBusy) {
     const what = scene === "hunt" ? "사냥이" : scene === "minigame" ? "미니게임이" : "하던 일이";
     return (
-      <div className={cx(styles.banner, styles.top)} role="status" data-testid="update-wait">
-        <span>{what} 끝나면 새 버전으로 바꿔요</span>
-      </div>
+      <Banner testId="update-wait" top>
+        <span>새 버전이 나왔어요 · {what} 끝나면 바로 바꿔요</span>
+      </Banner>
     );
   }
 
   const left = countdownLeft(requiredAt, now);
   return (
-    <div className={styles.cover} role="alertdialog" aria-modal="true" aria-labelledby="update-title" data-testid="update-required">
+    <Cover>
       <div className={styles.card}>
         <p id="update-title" className={styles.title}>
           새 버전으로 바꿔야 계속 놀 수 있어요
@@ -141,9 +143,40 @@ export default function UpdateNotice() {
           )}
         </p>
         <button type="button" className={cx(ui.button, ui.primary)} onClick={reload} autoFocus>
-          업데이트
+          {deployReady ? "지금 새로고침" : "새로고침"}
         </button>
       </div>
+    </Cover>
+  );
+}
+
+/** 아래(또는 위) 고정 배너. popover가 되면 게임 창 위에도 보인다 (모달 창이 떠 있는 동안 버튼은 그 창이 닫혀야 눌린다) */
+function Banner({ testId, top = false, children }: { testId: string; top?: boolean; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [popover] = useState(supportsPopover);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !popover) return;
+    return keepOnTop(el, "popover");
+  }, [popover]);
+  return (
+    <div ref={ref} popover={popover ? "manual" : undefined} className={cx(styles.banner, top && styles.top)} role="status" data-testid={testId}>
+      {children}
     </div>
+  );
+}
+
+/** 게임을 가리는 업데이트 창: 모달 <dialog>로 맨 위에 띄운다 (Esc로 닫히지 않는다) */
+function Cover({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    return keepOnTop(el, "modal");
+  }, []);
+  return (
+    <dialog ref={ref} className={styles.cover} aria-labelledby="update-title" data-testid="update-required" onCancel={(e) => e.preventDefault()}>
+      {children}
+    </dialog>
   );
 }

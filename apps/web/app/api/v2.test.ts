@@ -6,6 +6,7 @@ import { BALANCE_CAP, CODE_RE } from "@/lib/economy";
 import { todayKst } from "@/lib/epitaph";
 import { verifySession } from "@/lib/session";
 import { getAccounts } from "@/lib/store";
+import { VERSION_CDN_SEC } from "@/lib/update";
 import type {
   ApiError,
   AttendResponse,
@@ -279,9 +280,9 @@ describe("상점", () => {
 });
 
 describe("GET /api/version", () => {
-  it("배포 식별자, 캐시하지 않는다", async () => {
+  it("배포 식별자, 브라우저는 캐시하지 않고 CDN만 잠깐", async () => {
     const res = await version.GET(call("/api/version"));
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe(`public, max-age=0, s-maxage=${VERSION_CDN_SEC}`);
     expect(await res.json()).toEqual({ version: "dev", minClient: MIN_CLIENT_VERSION });
     vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "abc123");
     try {
