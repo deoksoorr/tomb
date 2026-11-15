@@ -1,4 +1,4 @@
-import { CHAMP_TITLE, isTitleId, TITLE_IDS, titleOfLook, type ChampBoard, type TitleId } from "@tomb/protocol";
+import { CHAMP_TITLE, isTitleId, MANAGER_TITLE_ID, TITLE_IDS, titleOfLook, type ChampBoard, type TitleId } from "@tomb/protocol";
 import { DEX_CAT_LABEL, DEX_TITLES, dexTitleNeed, type DexCat, type DexTitleTier } from "./forage/catalog";
 import { HOUSE_TITLES } from "./housing/catalog";
 
@@ -10,9 +10,10 @@ import { HOUSE_TITLES } from "./housing/catalog";
 //  - 칭호 능력: 단 칭호 하나의 등급만큼 마을 이동 속도 + · 상점 구입 할인 (TITLE_PERKS)
 // 얻었는지는 서버(lib/titlesServer)가 판단하고, 착용도 얻은 칭호만 받는다 (운영자 계정은 모두 얻은 것으로 본다).
 
-export type TitleGrade = "bronze" | "silver" | "gold" | "legend" | "mythic";
-export const TITLE_GRADES: readonly TitleGrade[] = ["bronze", "silver", "gold", "legend", "mythic"];
-export const TITLE_GRADE_NAMES: Record<TitleGrade, string> = { bronze: "동", silver: "은", gold: "금", legend: "전설", mythic: "신화" };
+/** 11/16 manager = 매니저 전용 (관리자가 임명한 계정만 — 등급 순서 밖의 특별 등급, 칭호 능력 없음) */
+export type TitleGrade = "bronze" | "silver" | "gold" | "legend" | "mythic" | "manager";
+export const TITLE_GRADES: readonly TitleGrade[] = ["bronze", "silver", "gold", "legend", "mythic", "manager"];
+export const TITLE_GRADE_NAMES: Record<TitleGrade, string> = { bronze: "동", silver: "은", gold: "금", legend: "전설", mythic: "신화", manager: "매니저" };
 
 /**
  * 칭호 능력 (단 칭호 하나만): 등급이 높을수록 크다. 값은 여기 한 곳.
@@ -26,6 +27,8 @@ export const TITLE_PERKS: Readonly<Record<TitleGrade, { speed: number; discount:
   legend: { speed: 1.07, discount: 0.07 },
   // 11/15 신화: 능력은 전설과 같다 (실시간 서버 속도 검증 안 — 위 speed 설명)
   mythic: { speed: 1.07, discount: 0.07 },
+  // 11/16 매니저 칭호: 혜택은 칭호와 채팅 딱지뿐 (능력 없음)
+  manager: { speed: 1, discount: 0 },
 };
 
 export type TitleGroup = "dex" | "hunt" | "life" | "fish" | "look" | "champ" | "house";
@@ -91,6 +94,8 @@ export type TitleDef = {
   transient?: true;
   /** 11/15 받은 때부터 정해진 동안만 (긴급 의뢰 — 서버가 끝 시각을 안다: TitleFacts.timed) */
   timed?: true;
+  /** 11/16 매니저 전용 (매니저일 때만 — TitleFacts.manager. 칭호 창에도 매니저에게만 보인다) */
+  manager?: true;
 };
 
 /** 단계별 칭호 한 줄: [id, 이름, 등급, 얻는 방법, 진행 수치, 필요 값, 갈래] */
@@ -192,10 +197,16 @@ const MYTHIC_ROWS: readonly (readonly [TitleId, string, string, boolean])[] = [
 ];
 const MYTHIC_OF = new Map(MYTHIC_ROWS.map((r) => [r[0], r]));
 
+/**
+ * 11/16 매니저 전용 칭호 (관리자가 임명한 계정만 달 수 있다 — 해제하면 끼고 있던 것도 빠진다). 운영자 칭호처럼 농담 섞인 이름:
+ * 후보 「무급 마을 반장」 · 「운영자 대리」 · 「야근 자원봉사단장」 중 무보수로 마을을 돌보는 느낌이 가장 잘 사는 것으로
+ */
+export const MANAGER_TITLE = { name: "무급 마을 반장", how: "관리자가 임명한 매니저만 달 수 있어요. 칭호 능력은 없어요." } as const;
+
 /** 11/15 긴급 의뢰 칭호 (받은 때부터 하루만 — lib/forage/quests/urgent) */
 const TIMED_ROWS: readonly (readonly [TitleId, string, TitleGrade, string])[] = [
   ["t_urgKing", "긴급 배달왕", "gold", "긴급 의뢰에서 가장 많이 낸 사람 (받은 때부터 하루)"],
-  ["t_urgLast", "아슬아슬 마감", "silver", "긴급 의뢰 마지막 1분에 100%를 채운 사람 (받은 때부터 하루)"],
+  ["t_urgLast", "아슬아슬 마감", "silver", "긴급 의뢰 마지막 1분에 100%를 채우거나, 150%를 채워 일찍 끝낸 사람 (받은 때부터 하루)"],
 ];
 const TIMED_OF = new Map(TIMED_ROWS.map((r) => [r[0], r]));
 
@@ -217,6 +228,7 @@ function def(id: TitleId): TitleDef {
   if (r) return { id, name: r[1], group: r[6], grade: r[2], how: r[3], metric: r[4], need: r[5] };
   const my = MYTHIC_OF.get(id);
   if (my) return { id, name: my[1], group: "hunt", grade: "mythic", how: my[2], holder: true, ...(my[3] ? { transient: true as const } : {}) };
+  if (id === MANAGER_TITLE_ID) return { id, name: MANAGER_TITLE.name, group: "life", grade: "manager", how: MANAGER_TITLE.how, transient: true, manager: true };
   const tm = TIMED_OF.get(id);
   if (tm) return { id, name: tm[1], group: "fish", grade: tm[2], how: tm[3], transient: true, timed: true };
   return { id, name: id, group: "dex", grade: "bronze", how: "" };
@@ -248,8 +260,11 @@ export const STAFF_TITLE = { name: "서버비 내는 사람", gradeName: "신화
  * 머리 위에 띄울 칭호: 운영자 표시(서명된 staff)면 낀 칭호와 상관없이 운영자 전용 "staff", 아니면 낀 칭호 (없거나 모르는 id면 null).
  * 운영자 전용 칭호는 착용 목록 id가 아니라서 일반 계정은 어떤 착용 목록으로도 띄울 수 없다
  */
-export function headTitle(wornId: string | null | undefined, staff: boolean): TitleDef | "staff" | null {
-  return staff ? "staff" : titleDef(wornId);
+/** 11/16 매니저 전용 칭호는 매니저 표시(서명된 mgr)가 있을 때만 (해제된 뒤 남은 착용 목록으로는 뜨지 않는다) */
+export function headTitle(wornId: string | null | undefined, staff: boolean, mgr = false): TitleDef | "staff" | null {
+  if (staff) return "staff";
+  const t = titleDef(wornId);
+  return t?.manager && !mgr ? null : t;
 }
 
 /** 착용 목록의 칭호 정의 */
@@ -319,6 +334,8 @@ export type TitleFacts = {
   mythic?: readonly string[];
   /** 11/15 지금 기간 안인 긴급 의뢰 칭호 */
   timed?: readonly string[];
+  /** 11/16 지금 매니저 (lib/managers) */
+  manager?: boolean;
 };
 
 /** 얻은 칭호 id (지금 기록 기준 — 서버는 예전에 알린 칭호를 더해 "한 번 얻으면 남게" 한다) */
@@ -327,6 +344,7 @@ export function earnedTitleIds(f: TitleFacts): TitleId[] {
     if (t.group === "dex") return f.dexTitleNames.includes(t.name);
     if (t.board) return f.champBoards.includes(t.board);
     if (t.holder) return !!f.mythic?.includes(t.id);
+    if (t.manager) return !!f.manager;
     if (t.timed) return !!f.timed?.includes(t.id);
     return t.metric !== undefined && t.need !== undefined && (f.metrics[t.metric] ?? 0) >= t.need;
   }).map((t) => t.id);

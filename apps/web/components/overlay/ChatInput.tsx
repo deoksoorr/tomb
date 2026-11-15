@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import { CHAT_MAX, maskChat, newChatBucket, normalizeChat, takeChatToken } from "@tomb/protocol";
+import { CHAT_MAX, CHAT_STORE_MAX, maskChat, newChatBucket, normalizeChat, takeChatToken } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -11,7 +11,7 @@ import styles from "./ChatInput.module.css";
 import logStyles from "./ChatLog.module.css";
 
 // 말풍선 자유 채팅 입력칸: 데스크톱은 왼쪽 아래 채팅창(ChatLog) 안, 폰은 [채팅] 버튼으로 여는 키보드 위 줄(ChatSheet, 위에 채팅 기록)과 표현 창 위쪽.
-// 쓴 글은 머리 위 말풍선 + 같은 채널의 채팅창에 5분 동안 뜬다 (서버 메모리에 5분만 머물고 사라짐, 기기에는 저장 안 함). 도배 제한은 서버와 같은 토큰 버킷을 화면에서도 미리 지킨다.
+// 쓴 글은 머리 위 말풍선 + 같은 채널의 채팅창에 뜬다 (서버는 늦게 온 사람용으로 맵별 최근 CHAT_STORE_MAX줄을 하루까지 남긴다, 기기에는 저장 안 함). 도배 제한은 서버와 같은 토큰 버킷을 화면에서도 미리 지킨다.
 
 /** 화면 쪽 토큰 버킷 (입력칸이 여럿이어도 하나를 같이 쓴다) */
 const bucket = newChatBucket();
@@ -109,7 +109,7 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
           maxLength={CHAT_MAX}
           value={text}
           placeholder={placeholder}
-          aria-label={`채팅 (${CHAT_MAX}자까지, 서버에 5분만 머물고 사라져요)`}
+          aria-label={`채팅 (${CHAT_MAX}자까지, 같은 채널 최근 ${CHAT_STORE_MAX}줄은 하루 동안 남아요)`}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
         />
@@ -129,7 +129,7 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
         ) : masked ? (
           <span>일부 낱말·주소는 ***로 가려져요</span>
         ) : (
-          <span>같은 채널에 5분 동안 보이고 사라져요</span>
+          <span>같은 채널에 보이고, 최근 {CHAT_STORE_MAX}줄은 하루 동안 남아요</span>
         )}
         <span className={styles.count}>
           {[...text].length}/{CHAT_MAX}

@@ -163,6 +163,14 @@ export class CritterSim {
     return this.spots[Math.floor(hashUnit(this.seed, this.index, k) * n) % n];
   }
 
+  /** 11/15 시각 t의 구간을 미리 계산해 둬요 (마을로 돌아오는 버스 동안 — residentSim.warmLeg와 같아요). 새로 계산했으면 true */
+  warmLeg(t: number): boolean {
+    const k = Math.floor((t + this.phase) / this.def.legMs);
+    if (this.leg && this.leg.k === k) return false;
+    this.legAt(k);
+    return true;
+  }
+
   private legAt(k: number): Leg {
     if (this.leg && this.leg.k === k) return this.leg;
     const def = this.def;

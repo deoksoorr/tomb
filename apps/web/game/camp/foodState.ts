@@ -1,4 +1,4 @@
-import { bbqActive, bbqItem, drunkLevel, isBbqEffect, isDrunkState, type BbqEffect, type BbqItemId, type DrunkState, type PeerInfo } from "@tomb/protocol";
+import { bbqActive, bbqBig, bbqItem, DRUNK_STEP_MS, drunkLevel, isBbqEffect, isDrunkState, type BbqEffect, type BbqItemId, type DrunkState, type PeerInfo } from "@tomb/protocol";
 
 // 11/15 캠핑장 바베큐장 효과 상태 (Phaser 없음 — 테스트·UI도 쓴다). 그리기는 foodFx.ts
 
@@ -36,7 +36,24 @@ export function myFood(): FoodState {
 export function setMyFood(f: FoodState): void {
   mine = f;
   saveMine();
+  for (const fn of listeners) fn();
 }
+const listeners = new Set<() => void>();
+/** 내 효과가 바뀌면 부른다 (효과 게이지 HUD). 돌려준 함수로 끊는다 */
+export function onMyFood(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => void listeners.delete(fn);
+}
+
+/** 지금 내가 커져 있는 배율 (1 = 그대로). 커진 동안에는 타는 것을 못 탄다 */
+export function myBig(now = Date.now()): number {
+  return bbqBig(myFood().grow, now);
+}
+/** 마을에서 "타는" 상호작용 (그네·범퍼카·버스·나루터(조각배·오리배)·시소·트램펄린·회전목마·관람차·열기구) */
+export const RIDE_OBJECT_KINDS: ReadonlySet<string> = new Set(["swing", "bumper", "bus", "dock", "seesaw", "trampoline", "carousel", "ferris", "balloon"]);
+/** 커진 채로 타려 할 때·타는 동안 먹으려 할 때 안내 */
+export const BIG_RIDE_TOAST = "몸이 너무 커서 탈 수 없어요. 효과가 끝나면 다시 와요.";
+export const RIDING_EAT_TOAST = "타는 동안엔 먹을 수 없어요. 내린 다음에 와요.";
 function saveMine(): void {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(mine ?? {}));
@@ -49,6 +66,12 @@ function saveMine(): void {
 export function addFood(s: FoodState, item: BbqItemId, until: number, lv?: number, at?: number): FoodState {
   const kind = bbqItem(item)?.kind;
   if (kind === "drunk" && lv !== undefined && at !== undefined) return { ...s, drunk: { lv, at } };
+  // 컨디숑: 내린 단계 (0이면 다 깼다)
+  if (kind === "sober" && lv !== undefined && at !== undefined) {
+    const rest: FoodState = { ...s };
+    delete rest.drunk;
+    return lv > 0 ? { ...rest, drunk: { lv, at } } : rest;
+  }
   if (kind === "speed") return { ...s, spd: { i: item, u: until } };
   if (kind === "grow") return { ...s, grow: { i: item, u: until } };
   return s;
@@ -95,3 +118,37 @@ export function applyFoodView(view: FoodView, f: FoodState, t: number, cache: Fo
   return { big, drunk, trail };
 }
 
+
+// ── 효과 게이지 (HUD components/camp/FoodGauge) ──
+/** 취기 단계 이름 (1~5) */
+export const DRUNK_NAMES = ["", "알딸딸", "얼큰", "휘청휘청", "어질어질", "고주망태"] as const;
+
+export type GaugeRow =
+  | { kind: "grow" | "speed"; item: BbqItemId; name: string; text: string; left: number; frac: number; trail: boolean }
+  | { kind: "drunk"; level: number; name: string; /** 한 단계 깨기까지 남은 ms */ next: number; frac: number };
+
+/** 지금 걸려 있는 효과를 게이지 줄로 (없으면 빈 배열). frac = 남은 비율 0..1 */
+export function foodGauge(f: FoodState, now: number): GaugeRow[] {
+  const rows: GaugeRow[] = [];
+  for (const kind of ["grow", "speed"] as const) {
+    const e = kind === "grow" ? f.grow : f.spd;
+    const m = bbqActive(e, now) ? bbqItem(e.i) : undefined;
+    if (!e || !m || m.ms <= 0) continue;
+    const left = e.u - now;
+    const text = kind === "grow" ? `${m.scale >= 2 && Number.isInteger(m.scale) ? `${m.scale}배` : `+${Math.round((m.scale - 1) * 100)}%`} 커짐` : `걸음 +${Math.round((m.speed - 1) * 100)}%`;
+    rows.push({ kind, item: m.id, name: m.name, text, left, frac: Math.max(0, Math.min(1, left / m.ms)), trail: !!m.trail });
+  }
+  const lv = drunkLevel(f.drunk, now);
+  if (f.drunk && lv > 0) {
+    const into = Math.max(0, now - f.drunk.at) % DRUNK_STEP_MS;
+    const next = DRUNK_STEP_MS - into;
+    rows.push({ kind: "drunk", level: lv, name: DRUNK_NAMES[lv] ?? "", next, frac: next / DRUNK_STEP_MS });
+  }
+  return rows;
+}
+
+/** "2:05" (남은 ms) */
+export function gaugeClock(ms: number): string {
+  const sec = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+}

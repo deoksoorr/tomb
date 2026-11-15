@@ -3,11 +3,11 @@ import { MONSTERS, type MonsterId } from "../catalog";
 import { huntSpawnable } from "../plan";
 import { killRateCeiling } from "../rewards";
 import { MONSTER_STATUS } from "../status";
-import { evalTower, floorMinSec, towerBlock, towerPlan } from "../tower";
+import { evalTower, towerClean, floorMinSec, towerBlock, towerPlan } from "../tower";
 import type { HuntResult } from "../types";
 import { rfRoom } from "@/game/tower/themes/rooftopMap";
 import { RF_BOSS, RF_BOSS_ROOM, RF_ELITE, RF_MONSTER_IDS, RF_PACKABLE, RF_POOL, RF_ROOMS, RF_VISITS, RF_ZONE, rfWeather } from "./rooftop";
-import { RF_LEAK_CAP, rfVaneAdds } from "./rooftopPlan";
+import { RF_LEAK_CAP, RF_SPARK_CAP, rfVaneAdds } from "./rooftopPlan";
 
 // 11/15 옥상 정원 폭풍: 몬스터 모양·순서표·층 계획 상한(누수·수탉 서류·무리)·서버 검증·방·날씨
 
@@ -96,12 +96,12 @@ describe("옥상 정원 폭풍: 서버 검증", () => {
     while (towerBlock(seed, 1, 1).zone !== RF_ZONE) seed++;
     const r = climbAll(seed, 1, 5);
     expect((r.kills.rf_papers ?? 0) + (r.kills.rf_droplet ?? 0)).toBeGreaterThan(0);
-    expect(evalTower({ seed, level: 50, start: 1 }, r, r.durationMs + 500).ok).toBe(true);
+    expect(towerClean(evalTower({ seed, level: 50, start: 1 }, r, r.durationMs + 500))).toBe(true);
     const next = huntSpawnable(towerPlan(seed, 6, 1), Infinity).rf_papers ?? 0;
     const cheat = { ...r, kills: { ...r.kills, rf_papers: (r.kills.rf_papers ?? 0) + next + 1 } };
-    expect(evalTower({ seed, level: 50, start: 1 }, cheat, r.durationMs + 500).ok).toBe(false);
-    // 우두머리 불꽃은 두 번 부를 몫(여덟)까지
-    expect(huntSpawnable(towerPlan(seed, 5, 1), Infinity).rf_spark).toBe(8);
+    expect(towerClean(evalTower({ seed, level: 50, start: 1 }, cheat, r.durationMs + 500))).toBe(false);
+    // 우두머리 불꽃: 체력 단계마다 부르는 몫(4 × 두 번, Arena) + 피뢰침이 따로 흩뿌리는 몫(RF_SPARK_CAP, 옥상 화면과 같은 상수)
+    expect(huntSpawnable(towerPlan(seed, 5, 1), Infinity).rf_spark).toBe(8 + RF_SPARK_CAP);
   });
 });
 

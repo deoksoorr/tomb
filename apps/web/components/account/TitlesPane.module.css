@@ -362,3 +362,28 @@
     animation: none;
   }
 }
+
+/* 11/16 매니저 전용 「무급 마을 반장」: 짙은 청록 판 + 민트테 + 연민트·청록 이름 (매니저에게만 보인다) */
+.title[data-grade="manager"] .grade {
+  color: #5ff0c4;
+}
+
+.title[data-earned][data-grade="manager"] {
+  background: linear-gradient(180deg, #0f3a36, #071a18);
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 1px #5ff0c4,
+    inset 0 0 14px rgba(70, 230, 180, 0.28);
+}
+
+.title[data-earned][data-grade="manager"] .name,
+.nowName[data-grade="manager"] {
+  background: linear-gradient(180deg, #dcfff2 20%, #22b89c 85%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.title[data-earned][data-grade="manager"] .how {
+  color: #c8f4e6;
+}

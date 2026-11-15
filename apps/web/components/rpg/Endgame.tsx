@@ -68,6 +68,11 @@ export function EndgameResult({ reward }: { reward: RunReward }) {
           {Math.floor(t.tLevel / 5) > Math.floor((t.tLevel - t.levelsGained) / 5) ? " 능력치 포인트를 받았어요." : ""}
         </p>
       )}
+      {w?.suspect && (
+        <p className={s.meta} role="status">
+          기록은 저장했어요. 확인이 필요한 판이라 랭킹에는 오르지 않아요.
+        </p>
+      )}
       {w && (w.newBest || w.newWeek) && (
         <p className={s.levelUp} role="status">
           {w.newBest ? `최고 기록 ${w.best}층!` : `이번 주 기록 ${w.best}층!`}

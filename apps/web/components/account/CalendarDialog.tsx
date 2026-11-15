@@ -6,7 +6,7 @@ import { errorMessage } from "@/lib/api";
 import { ATTEND_RULE_TEXT, attendLeftText, STAY_TICK_MINUTES } from "@/lib/attendStay";
 import { tierTermText } from "@/lib/attendTiers";
 import { CALENDAR_BACK_MONTHS, shiftMonth } from "@/lib/calendar";
-import { meStore } from "@/lib/hooks/useMe";
+import { meStore, useMe } from "@/lib/hooks/useMe";
 import { showToast } from "@/lib/hooks/useToasts";
 import { socialApi } from "@/lib/socialApi";
 import type { AttendTierGrant, CalendarResponse } from "@/lib/types";
@@ -34,8 +34,10 @@ const tierRewardText = (g: AttendTierGrant) => `출석 ${g.days}일 보상 「${
  * 10번 출석 달력: 한 달을 보여 주고 오늘 칸을 눌러 받는다. 받은 날은 도장, 못 받고 지난 날은 회색.
  * 조건은 그날 정해진 시간 머물기 (서버가 머무르기 기록으로 판정). 7일 연속 보너스, 한 달 개근 보상.
  * 달력 아래 "보상 길": 그달 출석 3·7·14·21·28일마다 코디 1개 (lib/attendTiers.ts — 도장을 찍을 때 서버가 준다)
+ * 운영자 계정은 출석 도장을 받지 않는다 (서버도 403) → 달력 대신 안내만 (메뉴·위쪽 버튼에서도 빠져 있다)
  */
 export default function CalendarDialog({ onClose }: { onClose: () => void }) {
+  const staff = !!useMe().me?.staff;
   const [cal, setCal] = useState<CalendarResponse | null>(null);
   const [month, setMonth] = useState<string | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
@@ -47,6 +49,7 @@ export default function CalendarDialog({ onClose }: { onClose: () => void }) {
   const [freshTiers, setFreshTiers] = useState<ReadonlySet<number>>(new Set());
 
   useEffect(() => {
+    if (staff) return;
     let alive = true;
     socialApi.calendar(month ?? undefined).then(
       (c) => {
@@ -61,7 +64,7 @@ export default function CalendarDialog({ onClose }: { onClose: () => void }) {
     return () => {
       alive = false;
     };
-  }, [month]);
+  }, [month, staff]);
 
   async function claim() {
     if (!cal) return;
@@ -92,6 +95,13 @@ export default function CalendarDialog({ onClose }: { onClose: () => void }) {
       setPending(false);
     }
   }
+
+  if (staff)
+    return (
+      <Dialog title="출석 달력" onClose={onClose}>
+        <p className={ui.hint}>운영자 계정은 출석 도장과 접속 보너스를 받지 않아요.</p>
+      </Dialog>
+    );
 
   const viewing = cal?.month ?? month;
   const canPrev = !!(current && viewing && viewing > shiftMonth(current, -CALENDAR_BACK_MONTHS));

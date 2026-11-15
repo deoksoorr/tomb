@@ -15,6 +15,7 @@ import {
   campSeatById,
   dexBadgeCats,
   type BbqItemId,
+  type BbqStand,
   isAvatarBody,
   isPhraseId,
   sanitizeDye,
@@ -59,7 +60,8 @@ import { createBusArrival } from "../bus/BusArrival";
 import type { BusArrivalApi } from "../bus/busTypes";
 import { CampMap } from "./CampMap";
 import { FoodFx } from "./foodFx";
-import { foodOfPeer } from "./foodState";
+import { BIG_RIDE_TOAST, foodOfPeer, myBig, RIDING_EAT_TOAST } from "./foodState";
+import { CAMP_BBQ } from "./campLayout";
 import { CampForage } from "./campForage";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
 import { campLines, campNpcName, CAMP_WELCOME } from "./campTalk";
@@ -84,6 +86,8 @@ const TALK_LEAVE_DIST = 56;
 const CAMP_BUS_WAIT_MS = 3000;
 /** 처음 도착 안내를 이 브라우저에서 봤는지 */
 const WELCOMED_KEY = "tomb.camp.welcomed";
+/** 11/15 버스 연출 아래에서 장면을 만드는 한 프레임 예산 (ms) */
+const BUILD_BUDGET_MS = 4;
 
 export class CampScene extends Phaser.Scene {
   private host!: CampHost;
@@ -116,6 +120,8 @@ export class CampScene extends Phaser.Scene {
   private readonly unsubs: (() => void)[] = [];
   private friends: { ch: number; bySid: Map<Sid, string> } = { ch: 0, bySid: new Map() };
   private parked = false;
+  /** 11/15 조금씩 만드는 중인 장면 (다 만들면 null) */
+  private building: Generator<void, void> | null = null;
   private begun = false;
   private cleaned = false;
   /** 버스 타고 내리는 동안·숨은 동안 (입력을 받지 않는다) */
@@ -162,10 +168,44 @@ export class CampScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
+    this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanup, this);
+    // 11/15 버스 창밖 연출 아래에서 미리 만들 때(parked)는 프레임마다 조금씩 만들어요 (한 프레임에 몰면 100ms 가까이 멈췄어요)
+    // 지난 여행에서 남은 것을 다시 지우지 않게 비워 두고 시작해요 (다 만들기 전에 닫힐 수 있어요)
+    const self = this as unknown as Record<string, unknown>;
+    for (const k of ["map", "player", "rig", "scope", "atmos", "lighting", "expr", "campfire", "forage", "meScreen"]) self[k] = undefined;
+    this.building = this.build();
+    if (this.parked) {
+      this.scene.setVisible(false);
+      this.pumpBuild(BUILD_BUDGET_MS);
+    } else this.finishBuild();
+  }
+
+  /** 만들기를 budgetMs 동안만 이어 가요. 다 만들었으면 true */
+  private pumpBuild(budgetMs: number): boolean {
+    const it = this.building;
+    if (!it) return true;
+    const t0 = performance.now();
+    do {
+      if (it.next().done) {
+        this.building = null;
+        return true;
+      }
+    } while (performance.now() - t0 < budgetMs);
+    return false;
+  }
+
+  /** 남은 만들기를 지금 다 해요 (어두운 화면에서 내릴 때) */
+  private finishBuild(): void {
+    while (!this.pumpBuild(1000));
+  }
+
+  private *build(): Generator<void, void> {
     const t0 = performance.now();
     const h = this.host;
     const canvas = this.game.canvas;
-    this.map = new CampMap(this, h.atlas, h.reduced);
+    this.map = new CampMap(this, h.atlas, h.reduced, true);
+    yield* this.map.parts();
     this.physics.world.setBounds(CAMP_BOUNDS.minX, CAMP_BOUNDS.minY, CAMP_BOUNDS.maxX - CAMP_BOUNDS.minX, CAMP_BOUNDS.maxY - CAMP_BOUNDS.minY);
 
     const spawn = this.spawnPoint();
@@ -178,15 +218,18 @@ export class CampScene extends Phaser.Scene {
     this.furnitureCollider = furniture;
     this.playerGlow = this.add.image(spawn.x, spawn.y, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffe2a8).setDepth(DEPTH.lights);
     this.seatReq = { sit: (id) => h.net.sit(id), stand: () => h.net.stand() };
+    yield;
 
     this.rig = new CameraRig(this, this.player.sprite, canvas, (x, y) => this.onTap(x, y));
     this.rig.setMapSize(CAMP_WIDTH, CAMP_HEIGHT);
     this.scope = new LookoutScope(this, { rig: this.rig, atlas: h.atlas, reduced: h.reduced });
+    yield;
     const tint = worldTintOf(this.game);
     if (tint) addWorldTintBounds(this, tint);
     this.atmos = new Atmosphere(this, h.reduced, window.location.search, { shaderTint: tint });
     this.atmos.setStaticLights(this.map.staticLights.map((l) => ({ ...l })));
     this.lighting = new Lighting(this);
+    yield;
     this.seatHint = new SeatHint(this, h.atlas);
     this.meScreen = new MeScreen(this);
     this.expr = new Expressions({
@@ -198,17 +241,18 @@ export class CampScene extends Phaser.Scene {
       reduced: h.reduced,
       act: (kind) => this.doAct(kind),
     });
+    yield;
     this.campfire = new CampfireView(this, this.rig, this.map, h.reduced);
     this.riding = new Riding({ player: () => this.player, net: () => h.net, remotes: () => this.remotes, toast: (m) => this.toast(m) });
     this.food = new FoodFx({ scene: this, reduced: h.reduced, sfx: h.sfx, player: () => this.player, remotes: () => this.remotes });
+    yield;
     this.forage = new CampForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m) });
+
+    yield;
 
     this.applyArrivalPose();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.onResize, this);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
-    this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanup, this);
-    if (this.parked) this.scene.setVisible(false);
-    else this.begin();
+    if (!this.parked) this.begin();
     this.debugMark("campCreateMs", performance.now() - t0);
   }
 
@@ -217,6 +261,7 @@ export class CampScene extends Phaser.Scene {
   /** 버스 창밖 연출이 끝났다 → 보이고, 입력·실시간 소식을 받는다 */
   unpark(): void {
     if (!this.parked || this.cleaned) return;
+    this.finishBuild();
     this.parked = false;
     this.scene.setVisible(true);
     this.begin();
@@ -474,6 +519,7 @@ export class CampScene extends Phaser.Scene {
     r.view.setDexBadge(p.dex);
     r.view.setChamp(p.champ);
     r.view.setStaff(p.staff === true);
+    r.view.setMgr(p.mgr === true);
     r.seatId = prev?.seatId ?? null;
     r.view.setMood(p.mood);
     this.riding.applyPeer(r, p);
@@ -500,6 +546,7 @@ export class CampScene extends Phaser.Scene {
       }
       r.view.setLook(p.look ?? []);
       r.view.setChamp(p.champ);
+      r.view.setMgr(p.mgr === true);
       r.view.setMood(p.mood ?? null);
       this.riding.applyPeer(r, p);
       r.setAway(p.away === true, now);
@@ -585,7 +632,7 @@ export class CampScene extends Phaser.Scene {
       }),
     );
     on.push(bridge.on("camp:talkClose", () => (this.talking = null)));
-    on.push(bridge.on("camp:bbq:eat", ({ item, until, grant, lv, at }) => this.eatBbq(item, until, grant, lv, at)));
+    on.push(bridge.on("camp:bbq:eat", ({ item, until, grant, lv, at, stand }) => this.eatBbq(item, until, grant, lv, at, stand)));
   }
 
   private fw(): Fireworks {
@@ -672,6 +719,11 @@ export class CampScene extends Phaser.Scene {
     switch (o.kind) {
       case "bus":
         pl.faceTo(o.x, o.y + 10, now);
+        // 11/15 바베큐로 커진 동안에는 버스에도 못 탄다
+        if (myBig() > 1) {
+          this.toast(BIG_RIDE_TOAST);
+          break;
+        }
         this.boardBus();
         break;
       case "npc":
@@ -700,11 +752,17 @@ export class CampScene extends Phaser.Scene {
         this.toast("시간표에는 '다음 버스: 언젠가'라고 적혀 있어요. 그래도 E를 누르면 와요.");
         break;
       case "bbq":
-        // 11/15 야외 바베큐: 메뉴 창 (사면 camp:bbq:eat으로 돌아온다)
+      case "vending":
+        // 11/15 야외 바베큐 그릴(먹거리)·음료 자판기(마실 거리): 메뉴 창 (사면 camp:bbq:eat으로 돌아온다)
+        // 펫을 타고 있으면 먹지 못한다 (커진 채로 타는 일이 없게 — 내린 다음에 먹는다)
+        if (this.riding.on) {
+          this.toast(RIDING_EAT_TOAST);
+          break;
+        }
         if (pl.sitting) pl.stand(now, this.seatReq);
         pl.faceTo(o.x, o.y - 14, now);
         this.closeTalk();
-        bridge.emit("camp:bbq:open");
+        bridge.emit("camp:bbq:open", { stand: o.kind === "vending" ? "vending" : "grill" });
         break;
       case "lookout":
         // 전망대 망원경: 광장·데크를 내려다본다 (LookoutScope)
@@ -858,7 +916,11 @@ export class CampScene extends Phaser.Scene {
   // ── 매 프레임 ──
 
   update(time: number, delta: number): void {
-    if (this.cleaned || this.parked) return;
+    if (this.cleaned) return;
+    if (this.parked) {
+      this.pumpBuild(BUILD_BUDGET_MS);
+      return;
+    }
     const dt = Math.min(delta, 100);
     const now = time;
     const pl = this.player;
@@ -929,10 +991,12 @@ export class CampScene extends Phaser.Scene {
   // ── 11/15 야외 바베큐 (먹으면 잠깐 커진다 — 재미용) ──
 
   /** 메뉴 창에서 샀다: 증서는 실시간 서버로, 나는 바로 먹는·마시는 연출과 효과 */
-  private eatBbq(item: BbqItemId, until: number, grant: string, lv?: number, at?: number): void {
+  private eatBbq(item: BbqItemId, until: number, grant: string, lv?: number, at?: number, stand?: BbqStand): void {
     if (this.cleaned) return;
     this.host.net.bbq(grant);
-    this.food.eat(item, until, lv, at);
+    // 자판기: 캔·병이 덜컹 떨어지고 나서 마신다
+    if (stand === "vending") this.food.vend(CAMP_BBQ.vending.x, CAMP_BBQ.vending.y, item, () => this.food.eat(item, until, lv, at));
+    else this.food.eat(item, until, lv, at);
   }
 
   private benchInput(now: number): MoveInput {
@@ -1097,6 +1161,8 @@ export class CampScene extends Phaser.Scene {
   private cleanup(): void {
     if (this.cleaned) return;
     this.cleaned = true;
+    // 다 만들기 전에 닫혀도 남은 만들기는 버려요
+    this.building = null;
     for (const off of this.unsubs.splice(0)) off();
     if (this.talking) bridge.emit("camp:talk", null);
     this.talking = null;

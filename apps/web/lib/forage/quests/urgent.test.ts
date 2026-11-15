@@ -27,8 +27,10 @@ import {
   URGENT_KINDS,
   URGENT_MS,
   URGENT_REF_ONLINE,
+  urgentEndAt,
   urgentEndNotice,
   urgentFilled,
+  urgentLastAcct,
   urgentGoal,
   urgentPrize,
   urgentReward,
@@ -210,6 +212,18 @@ describe("끝난 뒤 문구 (위쪽 막대·게시판·확성기)", () => {
     expect(urgentRewardLine({ n: 11, goal: 20, mine: null })).toBe("");
   });
 
+  it("11/15 150%로 일찍 끝남: 끝 시각·문구·마감 칭호 계정", () => {
+    expect(urgentEndAt(10_000, 0)).toBe(10_000);
+    expect(urgentEndAt(10_000, 4_000)).toBe(4_000);
+    expect(urgentFilled("fish", 24, 15, true)).toBe("목표의 160%를 채워서 일찍 끝났어요");
+    expect(urgentEndNotice("fish", 15, 23, true)).toBe("긴급 의뢰(생선 15마리)가 목표의 153%를 채워서 일찍 끝났어요! 낸 사람은 게시판에서 보상을 받아요.");
+    // 마지막 1분에 100%를 넘긴 사람이 있으면 그 사람, 없으면 150%를 채워 끝낸 사람, 예전 기록(festBy 없음)은 없음
+    expect(urgentLastAcct({ fest: 5, festBy: "b", last: "a" })).toBe("a");
+    expect(urgentLastAcct({ fest: 5, festBy: "b", last: null })).toBe("b");
+    expect(urgentLastAcct({ fest: 5, festBy: null, last: null })).toBeNull();
+    expect(urgentLastAcct({ fest: 0, festBy: null, last: null })).toBeNull();
+  });
+
   it("아무도 안 냈을 때 게시판 한 줄은 종류마다 있다", () => {
     for (const k of URGENT_KINDS) expect(URGENT_DEF[k].nobody).toMatch(/요\.$/);
   });
@@ -386,8 +400,10 @@ describe("서버 흐름", () => {
     // 끝난 뒤 납품은 거절 → 막대가 멈춘다
     await expect(deliverUrgent(small, ev.id, await fill(small, ev, 2), ev.end + 2_000)).rejects.toMatchObject({ code: "URGENT_OVER" });
     expect((await urgentPublic(ev.end + 3_000)).body.ev!.n).toBe(fin.body.ev!.n);
-    // 진행 중엔 받을 수 없다
-    await expect(claimUrgent(big, ev.id, ev.end - 1)).rejects.toMatchObject({ code: "URGENT_LIVE" });
+    // 진행 중엔 받을 수 없다 (150%에 닿기 전). 11/15 150%에 닿은 뒤(ev.end − 10초)는 남은 시간이 있어도 끝난 것
+    await expect(claimUrgent(big, ev.id, ev.end - 20_000)).rejects.toMatchObject({ code: "URGENT_LIVE" });
+    expect(fin.body.ev).toMatchObject({ end: ev.end - 10_000, early: true, lastName: "막차" });
+    expect(fin.body.ev!.lastFest).toBeUndefined();
 
     const t = ev.end + 60_000;
     const stamps0 = (await questBoard(big, t)).stamps;
@@ -472,6 +488,39 @@ describe("서버 흐름", () => {
     expect(urgentEnabled()).toBe(true);
   });
 
+  it("11/15 150%에 닿으면 그 순간 끝난다: 끝 시각·끝 공지, 그 뒤 납품은 막고(가방 그대로) 보상은 바로, 마감 칭호는 150%를 채운 사람", async () => {
+    const ev = urgentSchedule(addDays(DAY, 2), env.sessionSecret())[0];
+    const goal = urgentGoal(ev.kind, URGENT_REF_ONLINE);
+    const helper = await newAcct("거든손", ev.start);
+    const closer = await newAcct("끝판왕", ev.start);
+    const lateComer = await newAcct("늦은손", ev.start);
+    await deliverUrgent(helper, ev.id, await fill(helper, ev, goal), ev.start + 30_000);
+    const t150 = ev.start + 60_000;
+    const r = await deliverUrgent(closer, ev.id, await fill(closer, ev, Math.ceil(goal / 2)), t150);
+    expect(r.festUntil).toBe(t150 + FEST_MS);
+    // 남은 시간이 18분이 넘어도 끝난 것으로 (끝 시각 = 150%에 닿은 시각)
+    const pub = await urgentPublic(t150 + 1_000);
+    expect(pub.body.ev).toMatchObject({ end: t150, early: true, lastName: "끝판왕", lastFest: true });
+    expect(pub.cacheSec).toBe(15);
+    expect((await urgentStore().state(ev.id)).a1).toBe(true);
+    // 그 뒤 납품은 막는다 (가방은 그대로)
+    const bag = await fill(lateComer, ev, 3);
+    await expect(deliverUrgent(lateComer, ev.id, bag, t150 + 2_000)).rejects.toMatchObject({ code: "URGENT_DONE" });
+    const snap = await getForageStore().snapshot(lateComer, DAY, 0);
+    for (const [id, n] of Object.entries(bag)) expect(snap.bag[id] ?? 0).toBeGreaterThanOrEqual(n);
+    expect((await urgentStore().state(ev.id)).n).toBe(goal + Math.ceil(goal / 2));
+    // 내 것: 끝난 줄 (끝 시각도 150% 시각), 받을 보상이 바로 보이고 받을 수 있다
+    const row = (await urgentMine(closer, t150 + 3_000)).rows.find((x) => x.id === ev.id)!;
+    expect(row).toMatchObject({ done: true, end: t150, reward: { stage: 150, last: true } });
+    const c = await claimUrgent(closer, ev.id, t150 + 3_000);
+    expect(c.claimed).toMatchObject({ stage: 150, last: true, king: false, pocket: true });
+    const h = await claimUrgent(helper, ev.id, t150 + 3_000);
+    expect(h.claimed).toMatchObject({ stage: 150, king: true, last: false });
+    expect((await getTitleStats().get(closer)).urgLast).toBe(t150 + 3_000 + 24 * HOUR);
+    // 안 낸 사람은 여전히 받을 것이 없다
+    await expect(claimUrgent(lateComer, ev.id, t150 + 3_000)).rejects.toMatchObject({ code: "NO_REWARD" });
+  });
+
   it("메모리 저장소 계약: 가방이 모자라면 아무것도 바뀌지 않는다", async () => {
     let bag: Record<string, number> = { f_crucian: 2 };
     const deps: UrgentMemDeps = {
@@ -498,6 +547,13 @@ describe("서버 흐름", () => {
     expect(await s.setGoal("x", 99)).toBe(10);
     expect(await s.mark("x", "a0")).toBe(true);
     expect(await s.mark("x", "a0")).toBe(false);
+    // 11/15 150%(목표 10 → 15)를 넘기면 fest·festBy가 남고, 그 뒤 납품은 done (가방도 막대도 그대로)
+    bag = { f_crucian: 20 };
+    expect(await s.deliver("x", "b", "비", { f_crucian: 14 }, { ...args, now: 1_500 })).toMatchObject({ status: "ok", n: 16, fest: 1_500 });
+    expect(await s.state("x")).toMatchObject({ fest: 1_500, festBy: "b" });
+    expect(await s.deliver("x", "a", "에이", { f_crucian: 1 }, { ...args, now: 1_600 })).toEqual({ status: "done" });
+    expect(bag.f_crucian).toBe(6);
+    expect((await s.state("x")).n).toBe(16);
     void urgentStore;
   });
 });
@@ -569,6 +625,30 @@ describe("끝 확성기 (기록 + 실시간 + 시작 공지 바꿔 끼우기)", 
     const a1 = urgentNoticeId(t.id, "a1");
     await vi.waitFor(() => expect(said.map((x) => x.id)).toContain(a1));
     expect(said.find((x) => x.id === a1)!.text).toBe(`긴급 의뢰(생선 ${goal}마리)가 끝났어요. 목표의 50%를 채웠어요! 낸 사람은 게시판에서 보상을 받아요.`);
+    await setStaff(null, now);
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new Error("offline"))));
+  });
+
+  it("11/15 시험 막대로 150%를 채우면 일찍 끝난 공지가 시작 공지를 바꿔 끼우고, 더 더하면 URGENT_DONE", async () => {
+    const said = fakeSay();
+    const now = Date.now() + 20_000;
+    const op = await newAcct("공지운영자3", now);
+    await setStaff(op, now);
+    const t = await testStartUrgent(op, "fish", now);
+    const goal = urgentGoal("fish", URGENT_REF_ONLINE);
+    await urgentPublic(now + 100);
+    await testAddUrgent(op, 150, now + 500);
+    await expect(testAddUrgent(op, 10, now + 600)).rejects.toMatchObject({ code: "URGENT_DONE" });
+    const pub = await urgentPublic(now + 700);
+    expect(pub.body.ev).toMatchObject({ end: now + 500, early: true });
+    const a1 = urgentNoticeId(t.id, "a1");
+    await vi.waitFor(() => expect(said.map((x) => x.id)).toContain(a1));
+    expect(said.find((x) => x.id === a1)).toMatchObject({
+      text: `긴급 의뢰(생선 ${goal}마리)가 목표의 150%를 채워서 일찍 끝났어요! 낸 사람은 게시판에서 보상을 받아요.`,
+      replaces: urgentNoticeId(t.id, "a0"),
+    });
+    // 바로 받는다 (시험 운영자가 낸 것으로 센다)
+    expect((await claimUrgent(op, t.id, now + 800)).claimed).toMatchObject({ stage: 150 });
     await setStaff(null, now);
     vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new Error("offline"))));
   });

@@ -6,8 +6,10 @@ import {
   AWAY_PLACES,
   BALLOON_FLIGHT_MS,
   BALLOON_SEATS_EACH,
+  CHAT_HISTORY_MS,
   CHAT_MAX,
   CHAT_RECENT_MS,
+  CHAT_STORE_MAX,
   CHAT_SHOW_MS,
   COSMETIC_DURATION_MS,
   DECOR_DURATION_MS,
@@ -119,7 +121,7 @@ const min = (ms: number) => Math.round(ms / 60_000);
 const CHAT: ReactNode[][] = [
   ["쓰기", `${CHAT_MAX}자까지 써요. 머리 위 말풍선에 ${sec(CHAT_SHOW_MS)}초 뜨고, 왼쪽 아래 채팅창에도 떠요.`],
   ["누구에게", "같은 채널 마을에 있는 사람에게 보여요. 집 안이면 그 집에 있는 사람에게만 보여요."],
-  ["기록", `채팅은 ${min(CHAT_RECENT_MS)}분 뒤 사라져요. 늦게 들어와도 최근 ${min(CHAT_RECENT_MS)}분 것은 보여요. 기기에는 저장하지 않아요.`],
+  ["기록", `채팅은 ${CHAT_HISTORY_MS / 3_600_000}시간 동안 남아요. 늦게 들어와도 같은 곳 최근 ${CHAT_STORE_MAX}줄은 보여요. ${min(CHAT_RECENT_MS)}분 지난 줄은 흐리게 보여요. 기기에는 저장하지 않아요.`],
   ["가림·막힘", "욕설은 ***로 가려져요. 너무 빨리 치면 잠깐 막혀요."],
   ["알림음", "다른 사람 글이 오면 작은 소리가 나요. 음악 창에서 끌 수 있어요."],
 ];

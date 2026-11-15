@@ -28,6 +28,7 @@ vi.mock("./AvatarView", () => ({
     }
     setDexBadge() {}
     setChamp() {}
+    setMgr() {}
     // 운영자면 내 이름표도 "운영자"로 바꾼다 (Player가 부른다)
     shownName = "";
     setName(n: string) {

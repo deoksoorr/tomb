@@ -64,12 +64,25 @@ function forestCells(): Map<number, number> {
   return m;
 }
 
-/** 캠핑장 미니맵 바탕 픽셀 (RGBA, CAMP_MINIMAP_W × CAMP_MINIMAP_H) */
+let pixels: Uint8ClampedArray | null = null;
+
+/** 캠핑장 미니맵 바탕 픽셀 (RGBA, CAMP_MINIMAP_W × CAMP_MINIMAP_H). 한 번 구우면 기억해요 */
 export function campMinimapPixels(): Uint8ClampedArray {
+  if (!pixels) {
+    const g = campMinimapSteps();
+    while (!g.next().done);
+  }
+  return pixels!;
+}
+
+/** 11/15 미니맵 바탕을 줄 묶음마다 쉬며 구워요 (버스 여행 미리 굽기 — 캠핑장에 내리는 프레임이 가벼워져요) */
+export function* campMinimapSteps(): Generator<void, void> {
+  if (pixels) return;
   const out = new Uint8ClampedArray(CAMP_MINIMAP_W * CAMP_MINIMAP_H * 4);
   const forest = forestCells();
   const office = { x: CAMP_OFFICE.x - CAMP_OFFICE_W / 2, y: CAMP_OFFICE.y - CAMP_OFFICE_H + 24, w: CAMP_OFFICE_W, h: CAMP_OFFICE_H - 24 };
-  for (let y = 0; y < CAMP_MINIMAP_H; y++)
+  for (let y = 0; y < CAMP_MINIMAP_H; y++) {
+    if (y > 0 && y % 10 === 0) yield;
     for (let x = 0; x < CAMP_MINIMAP_W; x++) {
       const wx = x * CAMP_MINIMAP_CELL + CAMP_MINIMAP_CELL / 2;
       const wy = y * CAMP_MINIMAP_CELL + CAMP_MINIMAP_CELL / 2;
@@ -87,7 +100,8 @@ export function campMinimapPixels(): Uint8ClampedArray {
       out[i + 2] = c & 255;
       out[i + 3] = 255;
     }
-  return out;
+  }
+  pixels = out;
 }
 
 /** 월드 좌표 → 미니맵 칸 좌표 (실수) */

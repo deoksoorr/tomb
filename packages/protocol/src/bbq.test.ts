@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BBQ_MENU, BBQ_THUD_SCALE, bbqActive, bbqItem, bbqSpeed, drinkOne, DRUNK_MAX, DRUNK_STEP_MS, drunkLevel, drunkUntil, isBbqEffect, isDrunkState } from "./bbq";
+import { BBQ_MENU, BBQ_THUD_SCALE, bbqActive, bbqBig, bbqItem, bbqStand, soberOne, bbqSpeed, drinkOne, DRUNK_MAX, DRUNK_STEP_MS, drunkLevel, drunkUntil, isBbqEffect, isDrunkState } from "./bbq";
 import { parseC2S } from "./events";
 import { signGrant, verifyGrant } from "./grants";
 
@@ -7,7 +7,9 @@ import { signGrant, verifyGrant } from "./grants";
 describe("바베큐 메뉴 (먹거리·마실 거리)", () => {
   it("먹거리·마실 거리 두 칸, 값은 8~30P, 커지기 3~5분·빨라지기 3~10분, 메뉴마다 색이 다르다", () => {
     expect(BBQ_MENU.filter((m) => m.cat === "food").map((m) => m.id)).toEqual(["wholepork", "tomahawk", "pork", "sausage", "marsh", "hotteok", "zap"]);
-    expect(BBQ_MENU.filter((m) => m.cat === "drink").map((m) => m.id)).toEqual(["coffee", "beer", "soju", "makgeolli"]);
+    expect(BBQ_MENU.filter((m) => m.cat === "drink").map((m) => m.id)).toEqual(["coffee", "beer", "soju", "makgeolli", "hangover"]);
+    // 파는 곳: 먹거리는 그릴, 마실 거리는 자판기
+    for (const m of BBQ_MENU) expect(bbqStand(m)).toBe(m.cat === "food" ? "grill" : "vending");
     for (const m of BBQ_MENU) {
       expect(m.price).toBeGreaterThanOrEqual(8);
       expect(m.price).toBeLessThanOrEqual(30);
@@ -45,6 +47,9 @@ describe("바베큐 메뉴 (먹거리·마실 거리)", () => {
     expect(bbqSpeed({ i: "coffee", u: 10 }, 10)).toBe(1);
     expect(bbqSpeed(undefined, 0)).toBe(1);
     expect(bbqSpeed({ i: "zap", u: 10 }, 5)).toBe(1.35);
+    expect(bbqBig({ i: "wholepork", u: 10 }, 5)).toBe(3);
+    expect(bbqBig({ i: "wholepork", u: 10 }, 10)).toBe(1);
+    expect(bbqBig(undefined, 0)).toBe(1);
   });
   it("취기: 한 잔마다 +1 (최대 DRUNK_MAX), 10분에 1씩 깬다", () => {
     let s = drinkOne(null, 0);
@@ -63,6 +68,11 @@ describe("바베큐 메뉴 (먹거리·마실 거리)", () => {
     const u = drinkOne(t, 80_000);
     expect(u).toEqual({ lv: DRUNK_MAX, at: 80_000 });
     expect(drunkLevel(u, 80_000 + DRUNK_STEP_MS)).toBe(DRUNK_MAX - 1);
+    // 컨디숑: 한 단계 내리고 깨는 시계는 지금부터, 다 깼으면 null
+    expect(soberOne({ lv: 3, at: 0 }, 1_000)).toEqual({ lv: 2, at: 1_000 });
+    expect(soberOne({ lv: 1, at: 0 }, 1_000)).toEqual({ lv: 0, at: 1_000 });
+    expect(soberOne({ lv: 1, at: 0 }, DRUNK_STEP_MS)).toBeNull();
+    expect(soberOne(null, 0)).toBeNull();
     expect(isDrunkState({ lv: 0, at: 1 })).toBe(false);
     expect(isDrunkState({ lv: 3, at: 1 })).toBe(true);
   });
@@ -85,6 +95,11 @@ describe("바베큐 증서·메시지", () => {
     expect(await verifyGrant("s", badUntil, now)).toBeNull();
     const tooDrunk = await signGrant("s", { kind: "bbq", visitorId: "v", item: "beer", until: at + 9 * DRUNK_STEP_MS, lv: 9, at, nonce: "n6", exp: now + 60 });
     expect(await verifyGrant("s", tooDrunk, now)).toBeNull();
+    // 컨디숑: 내린 단계 0~DRUNK_MAX-1, 끝 = 다 깨는 시각
+    const cure = await signGrant("s", { kind: "bbq", visitorId: "v", item: "hangover", until: at, lv: 0, at, nonce: "n7", exp: now + 60 });
+    expect(await verifyGrant("s", cure, now)).toMatchObject({ item: "hangover", lv: 0, at });
+    const cureBad = await signGrant("s", { kind: "bbq", visitorId: "v", item: "hangover", until: at + 5 * DRUNK_STEP_MS, lv: 5, at, nonce: "n8", exp: now + 60 });
+    expect(await verifyGrant("s", cureBad, now)).toBeNull();
     expect(await verifyGrant("other", ok, now)).toBeNull();
   });
   it("C2S bbq는 증서 문자열만 받는다", () => {

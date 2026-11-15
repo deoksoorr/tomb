@@ -5,6 +5,7 @@ import { serverNow } from "@/lib/devClock";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { ipHash, requireVisitor } from "@/lib/session";
+import { isStaff } from "@/lib/staff";
 import { getAccounts } from "@/lib/store";
 import { kstDay, kstYesterday, loadMe } from "@/lib/store/accounts";
 import type { CalendarClaimResponse } from "@/lib/types";
@@ -15,10 +16,12 @@ import type { CalendarClaimResponse } from "@/lib/types";
  * 보상: 출석 10P, 연속 7일째마다 +30P, 그달 모든 날을 찍으면 한 달 개근 +200P (lib/economy.ts EARN_RULES).
  * 같은 IP에서 하루에 포인트를 받는 계정 수는 ATTEND_ACCOUNTS_PER_IP개까지 (넘으면 도장만).
  * 출석 구간 코디: 그달 도장 수가 3·7·14·21·28일에 닿으면 그 구간 꾸미기 (lib/attendTiers.ts, 구간마다 한 번)
+ * 운영자 계정은 출석 도장(포인트·7일 연속·한 달 개근·구간 코디)을 받지 않는다 → 403
  */
 export const POST = handler(async (req) => {
   const visitorId = await requireVisitor(req);
   await rateLimit("calendar", req, visitorId);
+  if (await isStaff(visitorId)) throw new HttpError(403, "STAFF_NO_REWARD", "운영자 계정은 출석 도장을 받지 않아요.");
   const accounts = getAccounts();
   const now = serverNow(visitorId);
   const day = kstDay(now);

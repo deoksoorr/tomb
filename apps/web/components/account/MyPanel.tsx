@@ -116,10 +116,13 @@ export default function MyPanel({
           <p className={styles.balance}>
             <strong>{me.points.toLocaleString("ko-KR")}</strong> 포인트
           </p>
-          <p className={styles.sub}>
-            연속 출석 {me.attendance.streak}일
-            {me.attendance.today && " · 오늘 출석 완료"}
-          </p>
+          {/* 운영자 계정은 출석 도장을 받지 않는다 → 출석 줄을 뺀다 */}
+          {!me.staff && (
+            <p className={styles.sub}>
+              연속 출석 {me.attendance.streak}일
+              {me.attendance.today && " · 오늘 출석 완료"}
+            </p>
+          )}
           <p className={styles.sub}>내 꾸미기 점수 {lookScore(me, openedAt)}점 (지금 입은 코디 기준)</p>
         </section>
 

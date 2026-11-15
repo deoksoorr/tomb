@@ -11,3 +11,8 @@ export type BbqStatusResponse = { drunk: number };
  * 마실 거리면 lv·at = 마신 뒤 취기
  */
 export type BbqResponse = { me: Me; grant: string; item: BbqItemId; until: number; lv?: number; at?: number };
+
+/** 컨디숑: 취기가 없을 때 (포인트를 쓰지 않는다) */
+export const BBQ_NOT_TIPSY_MESSAGE = "지금은 말짱해요. 취했을 때 마셔요.";
+/** 그 메뉴를 파는 곳이 아니다 (먹거리는 그릴, 마실 거리는 자판기) */
+export const BBQ_WRONG_STAND_MESSAGE = "여기서는 팔지 않는 메뉴예요.";

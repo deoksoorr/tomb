@@ -85,6 +85,9 @@ export const CAMP_TEX = {
   bbqGrill: `${P}bbqGrill`,
   bbqTable: `${P}bbqTable`,
   bbqSmoke: `${P}bbqSmoke`,
+  /** 음료 자판기 · 밤에 겹쳐 빛나는 앞판 */
+  vending: `${P}vending`,
+  vendingLit: `${P}vendingLit`,
   /** 먹을 때 머리 위에 잠깐 뜨는 접시 (메뉴마다) */
   bbqPlate: (id: string) => `${P}bbqPlate-${id}`,
 } as const;
@@ -1628,6 +1631,54 @@ export function bbqGrillArt(): Grid {
   return g;
 }
 
+/** 음료 자판기 (빨간 몸통 + 불 들어오는 진열창 + 꺼내는 칸). 22×36, 원점 바닥 가운데 */
+export function vendingArt(): Grid {
+  const g = new Grid(22, 36);
+  // 몸통
+  g.rect(2, 2, 18, 31, 0xc8343a);
+  g.vline(2, 2, 32, 0xe0565a);
+  g.vline(19, 2, 32, 0x9a2228);
+  g.hline(2, 19, 2, 0xe86a6a);
+  // 위 간판 (흰 바탕 + 파란 줄)
+  g.rect(4, 4, 14, 3, 0xf4f4f0);
+  g.hline(5, 16, 5, 0x3a78c8);
+  // 진열창 (밝은 하늘색 바탕 + 캔·병 세 줄)
+  g.rect(4, 9, 14, 13, 0xd8f0fa);
+  const cans = [0xe84848, 0x48a8e8, 0xf0c040, 0x58c068, 0xf0f0f0, 0x8ac04a];
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 4; c++) {
+      const col = cans[(r * 4 + c) % cans.length];
+      const x = 5 + c * 3;
+      const y = 10 + r * 4;
+      g.rect(x, y, 2, 3, col);
+      g.set(x, y, 0xffffff);
+    }
+    g.hline(4, 17, 13 + r * 4, 0xa8c8d8); // 선반
+  }
+  // 버튼 줄 · 돈 넣는 곳
+  for (let c = 0; c < 4; c++) g.set(6 + c * 3, 23, 0xffe070);
+  g.rect(15, 24, 2, 3, 0x2a2a2a);
+  // 꺼내는 칸
+  g.rect(4, 27, 14, 4, 0x2a1a1c);
+  g.hline(4, 17, 27, 0x5a3a3c);
+  // 다리
+  g.rect(3, 33, 3, 2, 0x3a3a3a);
+  g.rect(16, 33, 3, 2, 0x3a3a3a);
+  g.outline(OUT);
+  shadow(g, 11, 34.5, 10, 1.3, 54);
+  return g;
+}
+
+/** 자판기 밤 불빛: 진열창·간판·버튼만 밝게 (ADD로 겹친다). vendingArt와 같은 크기 */
+export function vendingLitArt(): Grid {
+  const g = new Grid(22, 36);
+  g.rect(4, 9, 14, 13, 0x8ac8e8);
+  g.rect(5, 10, 12, 11, 0xb8e8ff);
+  g.rect(4, 4, 14, 3, 0x9aa8b8);
+  for (let c = 0; c < 4; c++) g.set(6 + c * 3, 23, 0xffd060);
+  return g;
+}
+
 /** 바베큐장 나무 탁자 (접시·양념병·컵) */
 export function bbqTableArt(): Grid {
   const g = new Grid(48, 20);
@@ -1661,7 +1712,7 @@ export function bbqSmokeArt(): Grid {
 /** 먹을 때 뜨는 접시 (메뉴마다 위에 올린 것이 다르다) */
 export function bbqPlateArt(id: string): Grid {
   // 11/15 마실 거리는 잔·사발·컵 그림
-  if (id === "beer" || id === "soju" || id === "makgeolli" || id === "coffee") return drinkArt(id);
+  if (id === "beer" || id === "soju" || id === "makgeolli" || id === "coffee" || id === "hangover") return drinkArt(id);
   const g = new Grid(16, 10);
   g.ellipse(8, 6, 7, 3, 0xf8f4ec);
   g.ellipse(8, 6.5, 5, 1.8, 0xe8e2d6);
@@ -1717,9 +1768,17 @@ export function bbqPlateArt(id: string): Grid {
 
 
 /** 11/15 마실 거리: 맥주잔(거품)·소주잔과 초록 병·막걸리 사발·캠핑 커피 컵(김). 16×12, 원점 바닥 가운데 */
-export function drinkArt(id: "beer" | "soju" | "makgeolli" | "coffee"): Grid {
+export function drinkArt(id: "beer" | "soju" | "makgeolli" | "coffee" | "hangover"): Grid {
   const g = new Grid(16, 12);
-  if (id === "beer") {
+  if (id === "hangover") {
+    // 컨디숑: 작은 갈색 병 + 초록 라벨 + 노란 뚜껑
+    g.rect(6, 4, 5, 7, 0x8a5428);
+    g.rect(7, 2, 3, 2, 0x8a5428);
+    g.rect(7, 1, 3, 1, 0xf0c040);
+    g.rect(6, 6, 5, 3, 0x8ac04a);
+    g.hline(7, 9, 7, 0xf4f8e8);
+    g.vline(7, 4, 10, 0xb07840);
+  } else if (id === "beer") {
     // 손잡이 달린 유리잔 + 호박색 맥주 + 흰 거품
     g.rect(4, 4, 7, 7, 0xe8a830);
     g.vline(5, 5, 10, 0xf8d070); // 반사

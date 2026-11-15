@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { HUNT_ZONES, isZoneId, MONSTERS, type MonsterId } from "../catalog";
 import { huntSpawnable } from "../plan";
 import { MONSTER_STATUS } from "../status";
-import { evalTower, towerBlock, towerPlan } from "../tower";
+import { evalTower, MINION_FLOOR_ALLOW, towerClean, towerBlock, towerPlan } from "../tower";
 import type { HuntResult } from "../types";
 import { EX_BOSS, EX_CARDS_CAP, EX_ELITE, EX_KEY_CAP, EX_MONSTER_IDS, EX_PACKABLE, EX_POOL, EX_ROOMS, EX_ZONE, exRules } from "./exec";
 import { exRoom } from "../../../game/tower/themes/execMap";
@@ -144,8 +144,8 @@ describe("임원층 결과 검증 (서버)", () => {
     const r = climb(seed, 5);
     // 6층(지금 층)에서 더 나올 수 있는 몫까지 더해도 넘게
     const more = huntSpawnable(towerPlan(seed, 6, 1), Infinity).ex_entourage ?? 0;
-    const bad = { ...r, kills: { ...r.kills, ex_entourage: 6 + more + 1 } };
-    expect(evalTower({ seed, level: 50, start: 1 }, bad, r.durationMs + 1000).ok).toBe(false);
+    const bad = { ...r, kills: { ...r.kills, ex_entourage: 6 + more + 6 * MINION_FLOOR_ALLOW + 1 } };
+    expect(towerClean(evalTower({ seed, level: 50, start: 1 }, bad, r.durationMs + 1000))).toBe(false);
   });
 
   it("명함 뭉치 몫보다 명함을 더 잡았다고 하면 거절 (두 번째로 온 임원층까지 오른 판)", () => {
@@ -153,9 +153,9 @@ describe("임원층 결과 검증 (서버)", () => {
     const floors = f + 4;
     const r = climb(seed, floors);
     expect(r.kills.ex_card ?? 0).toBeGreaterThan(0);
-    expect(evalTower({ seed, level: 50, start: 1 }, r, r.durationMs + 1000).ok).toBe(true);
+    expect(towerClean(evalTower({ seed, level: 50, start: 1 }, r, r.durationMs + 1000))).toBe(true);
     const more = huntSpawnable(towerPlan(seed, floors + 1, 1), Infinity).ex_card ?? 0;
-    const bad = { ...r, kills: { ...r.kills, ex_card: (r.kills.ex_card ?? 0) + more + 1 } };
-    expect(evalTower({ seed, level: 50, start: 1 }, bad, r.durationMs + 1000).ok).toBe(false);
+    const bad = { ...r, kills: { ...r.kills, ex_card: (r.kills.ex_card ?? 0) + more + (floors + 1) * MINION_FLOOR_ALLOW + 1 } };
+    expect(towerClean(evalTower({ seed, level: 50, start: 1 }, bad, r.durationMs + 1000))).toBe(false);
   });
 });

@@ -2,17 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
   addChatLine,
   CHAT_LOG_FADE_MS,
+  CHAT_LOG_HISTORY_MS,
   CHAT_LOG_KEEP,
   CHAT_LOG_MOBILE_LINES,
   CHAT_LOG_TTL_MS,
   chatLineOpacity,
   chatAtBottom,
   chatChannelOf,
+  chatLineAgo,
+  chatLineDim,
   chatLineTone,
   chatScrollAction,
   liveChatLines,
   mergeChatLines,
   readChatLog,
+  recentChatLines,
   visibleChatLines,
   type ChatLine,
   type IncomingChatLine,
@@ -21,16 +25,29 @@ import {
 const line = (id: number, at: number, mine = false): ChatLine => ({ id, name: mine ? "나" : `유령${id}`, text: `글${id}`, mine, at });
 
 describe("채팅 기록창", () => {
-  it("각 줄은 1분이 지나면 사라진다", () => {
+  it("각 줄은 하루 동안 기록으로 남고 지나면 사라진다", () => {
     const lines = [line(1, 0), line(2, 30_000)];
-    expect(liveChatLines(lines, CHAT_LOG_TTL_MS - 1).map((l) => l.id)).toEqual([1, 2]);
-    expect(liveChatLines(lines, CHAT_LOG_TTL_MS).map((l) => l.id)).toEqual([2]);
-    expect(liveChatLines(lines, 30_000 + CHAT_LOG_TTL_MS)).toEqual([]);
+    expect(liveChatLines(lines, CHAT_LOG_TTL_MS).map((l) => l.id)).toEqual([1, 2]);
+    expect(liveChatLines(lines, CHAT_LOG_HISTORY_MS - 1).map((l) => l.id)).toEqual([1, 2]);
+    expect(liveChatLines(lines, CHAT_LOG_HISTORY_MS).map((l) => l.id)).toEqual([2]);
+    expect(liveChatLines(lines, 30_000 + CHAT_LOG_HISTORY_MS)).toEqual([]);
   });
 
-  it("새 줄을 붙일 때 지난 줄은 빠진다", () => {
-    const next = addChatLine([line(1, 0)], line(2, CHAT_LOG_TTL_MS + 5));
-    expect(next.map((l) => l.id)).toEqual([2]);
+  it("새 줄을 붙일 때 하루 지난 줄은 빠진다 (5분 지난 줄은 남는다)", () => {
+    expect(addChatLine([line(1, 0)], line(2, CHAT_LOG_TTL_MS + 5)).map((l) => l.id)).toEqual([1, 2]);
+    expect(addChatLine([line(1, 0)], line(2, CHAT_LOG_HISTORY_MS + 5)).map((l) => l.id)).toEqual([2]);
+  });
+
+  it("폰 화면 글씨는 5분 안의 최근 줄만, 기록창은 지난 줄을 흐리게 + N분 전", () => {
+    const lines = [line(1, 0), line(2, 200_000), line(3, 250_000)];
+    expect(recentChatLines(lines, CHAT_LOG_TTL_MS + 1, 5).map((l) => l.id)).toEqual([2, 3]);
+    expect(recentChatLines(lines, 260_000, 2).map((l) => l.id)).toEqual([2, 3]);
+    expect(chatLineDim(lines[0], CHAT_LOG_TTL_MS - 1)).toBe(1);
+    expect(chatLineDim(lines[0], CHAT_LOG_TTL_MS)).toBeLessThan(1);
+    expect(chatLineAgo(lines[0], CHAT_LOG_TTL_MS - 1)).toBeNull();
+    expect(chatLineAgo(lines[0], CHAT_LOG_TTL_MS)).toBe("5분 전");
+    expect(chatLineAgo(lines[0], 59 * 60_000 + 59_000)).toBe("59분 전");
+    expect(chatLineAgo(lines[0], 3 * 3_600_000 + 1)).toBe("3시간 전");
   });
 
   it("마지막 몇 초 동안 서서히 흐려진다", () => {
@@ -49,7 +66,7 @@ describe("채팅 기록창", () => {
     expect(lines.at(-1)?.id).toBe(CHAT_LOG_KEEP + 6);
   });
 
-  it("모바일은 최근 줄만, 데스크톱은 1분 안의 전부", () => {
+  it("최근 max줄만 / 기록 전부", () => {
     let lines: ChatLine[] = [];
     for (let i = 0; i < 9; i++) lines = addChatLine(lines, line(i, i));
     expect(visibleChatLines(lines, 10, CHAT_LOG_MOBILE_LINES).map((l) => l.id)).toEqual([4, 5, 6, 7, 8]);
@@ -63,7 +80,7 @@ describe("채팅 기록창", () => {
   });
 });
 
-describe("채팅 기록창: 서버 최근 1분(chatLog) 합치기", () => {
+describe("채팅 기록창: 서버 최근 기록(chatLog) 합치기", () => {
   const inc = (key: string, at: number, text = `글${key}`, mine = false): IncomingChatLine => ({ key, name: mine ? "나" : "유령", text, mine, at });
   const counter = () => {
     let n = 100;
@@ -112,10 +129,11 @@ describe("채팅 기록창: 서버 최근 1분(chatLog) 합치기", () => {
     expect(mergeChatLines([mine], [inc("s.4", 10_000, "안녕")], 11_000, counter())).toHaveLength(2);
   });
 
-  it("늦게 받은 줄은 남은 시간만큼만 (1분 지난 줄은 넣지 않는다), 상한을 넘으면 오래된 것부터", () => {
-    const lines = mergeChatLines([], [inc("a", 0), inc("b", 30_000)], CHAT_LOG_TTL_MS + 1, counter());
+  it("늦게 받은 줄은 하루 안의 것만 (5분 지난 줄도 넣는다), 상한을 넘으면 오래된 것부터", () => {
+    expect(mergeChatLines([], [inc("a", 0), inc("b", 30_000)], CHAT_LOG_TTL_MS + 1, counter()).map((l) => l.key)).toEqual(["a", "b"]);
+    const lines = mergeChatLines([], [inc("a", 0), inc("b", 30_000)], CHAT_LOG_HISTORY_MS + 1, counter());
     expect(lines.map((l) => l.key)).toEqual(["b"]);
-    expect(visibleChatLines(lines, 30_000 + CHAT_LOG_TTL_MS)).toEqual([]);
+    expect(visibleChatLines(lines, 30_000 + CHAT_LOG_HISTORY_MS)).toEqual([]);
     const many = Array.from({ length: CHAT_LOG_KEEP + 3 }, (_, i) => inc(`k${i}`, i));
     const capped = mergeChatLines([], many, 100, counter());
     expect(capped).toHaveLength(CHAT_LOG_KEEP);

@@ -33,7 +33,7 @@ import type { Drop, EndgameView, HuntResult } from "./types";
 // 11/15 우두머리 상자: 세트 장비·재료·꾸미기 굴림
 import { chestCosmetic, chestMats, chestSetGear, SG_CHEST_CHANCE, SG_PITY } from "./setGearRoll";
 // 11/15 능력 카드: 고른 카드 검사·처치 속도 상한 배율
-import { cardPower, cardXpMul, isBossDealFloor, replayPicks, rerollsAllowed, runLevel, runXp, runXpNeed, runXpOf, startPicks } from "./cards";
+import { CARDS, cardPower, cardXpMul, isBossDealFloor, isCardId, replayPicks, rerollsAllowed, runLevel, runXp, runXpNeed, runXpOf, startPicks, type CardCounts, type CardId } from "./cards";
 // 11/15 층 순서표 (테마마다 층별 몬스터 구성·정예 자리)
 import { floorElite, floorRoster } from "./towerSchedule";
 // 11/15 끝없는 회의실 층 계획 손질 (참조 메일 상한·무리·중간 우두머리·안건 추가가 불러들이는 몫)
@@ -53,8 +53,13 @@ import { cafeteriaPlan } from "./towerThemes/cafeteriaPlan";
 export const TOWER_MIN_LEVEL = MAX_LEVEL;
 /** 한 판에 오를 수 있는 층 수 상한 (결과 형식 검사용 — 두 시간에 이만큼은 못 오른다) */
 export const TOWER_MAX_CLIMB = 400;
-/** 한 판 최대 길이 (티켓 수명 — 긴 등반도 받는다) */
+/** 한 판 최대 길이 (화면에 알려 주는 판 시간) */
 export const TOWER_MAX_RUN_SEC = 2 * 3600;
+/**
+ * 11/15 야근 빌딩 티켓 수명 (서버가 결과를 받는 벽시계 시간). 판 화면은 멈춤·카드 고르기·탭 숨김 동안 시간이 안 가서
+ * 두 시간 넘게 걸린 정직한 판이 「너무 오래된 판」으로 통째로 날아갈 수 있었다 → 넉넉히. 보상 검사는 게임 시간(durationMs)으로 한다
+ */
+export const TOWER_TICKET_SEC = 12 * 3600;
 
 // ── 층 테마 (맵·몬스터) ──
 
@@ -505,6 +510,11 @@ export type TowerVerdict =
       floorMs: number;
       kills: number;
       points: number;
+      /**
+       * 11/15 「부드러운 거절」: 계산 오차일 수 있는 검사(카드 기록·몬스터별 출현 상한·처치 속도·층 시간·깬 층 처치)에 조금 걸린 판.
+       * 층·초월 EXP·상자·포인트는 그대로 주고 랭킹·주간 기록·서버 최초·최고층 기록 보유자에서만 뺀다 (사유 목록 — 운영 로그용)
+       */
+      suspect?: string[];
     }
   /** why = 운영 로그용 자세한 사유 (화면에는 안 보인다) */
   | { ok: false; code: string; message: string; why?: string };
@@ -515,19 +525,41 @@ const tReject = (code: string, message: string, why?: string): TowerVerdict => (
   message,
   ...(why ? { why } : {}),
 });
-const tooHigh = (what: string) =>
-  tReject(
-    "RESULT_REJECTED",
-    `${what} 기록이 이 시간 안에 낼 수 있는 값을 넘었어요. 이번 판은 보상 없이 끝나요.`,
-  );
+/**
+ * 11/15 층마다 테마 졸개(catalog minion)를 계획 밖으로 더 셀 수 있는 수 — 안전 여유.
+ * 판 화면이 더 불러내는 몬스터는 이제 모두 층 계획(summon·adds·분열·복사·되살리기)에 같은 상수로 들어간다
+ * (옥상 피뢰침 불꽃 RF_SPARK_CAP도 우두머리 웨이브 adds). 그래도 놓친 변수가 있으면 판을 버리지 않게 졸개만 조금 더 센다
+ */
+export const MINION_FLOOR_ALLOW = 2;
+
+/*
+ * 11/15 부드러운 거절 (한도 없음): 계산·게임 쪽 변수로 넘을 수 있는 검사는 얼마나 넘든 판을 버리지 않고 의심 판(suspect)으로 받는다
+ * (보상은 그대로, 랭킹·주간 기록·서버 최초·최고층 기록 보유자에서만 빠지고 체크포인트는 fSus로 열린다):
+ *  - 몬스터별 출현 상한 (그 판에 오지 않은 테마의 몬스터도 — 테마끼리 몬스터를 빌려 쓰는 변경이 생겨도 판을 버리지 않게)
+ *  - 처치 속도 상한 · 층 최소 시간 · 깬 층 계획 몬스터 부족 · 카드 기록
+ * 거절(보상 없음)은 위조가 확실한 형식·시간만: 시간 형식(zod) · 서버가 잰 시간보다 긴 기록(+CLOCK_SLACK_MS) · 층 수 0~TOWER_MAX_CLIMB 밖 ·
+ * 처치 기록 형식(음수·정수 아님·모르는 몬스터 id) · 깬 층 최소 시간의 절반도 안 걸린 판
+ */
+
+/** 테마 몬스터 id 앞자리 (sv_·mt_·rf_ …) — 그 판에 온 테마의 몬스터인지 (우두머리 id로 정한다) */
+const themePrefix = (zone: ZoneDef) => `${zone.boss.split("_")[0]}_`;
+
+/** 카드 기록이 맞지 않을 때 처치 속도 상한에 쓰는 가진 카드 (실린 기록 그대로, 장마다 최대 겹침까지) */
+function claimedCards(picks: readonly { c: string }[]): CardCounts {
+  const o: CardCounts = {};
+  for (const p of picks) {
+    const id = p?.c as CardId;
+    if (!isCardId(id)) continue;
+    o[id] = Math.min(CARDS[id].max, (o[id] ?? 0) + 1);
+  }
+  return o;
+}
 
 /**
  * 결과 상한 (evaluate의 사냥 검사를 층마다로 늘린 것): 깬 층의 계획 몬스터를 다 잡았고, 깬 층마다 최소 시간이 지났고,
- * 처치 수가 (깬 층 + 지금 층)에서 나올 수 있는 수와 레벨 처치 속도 상한 안. serverElapsedMs = 서버가 잰 시작~지금
+ * 처치 수가 (깬 층 + 지금 층)에서 나올 수 있는 수와 레벨 처치 속도 상한 안. serverElapsedMs = 서버가 잰 시작~지금.
+ * 이 검사들은 넘어도 거절하지 않고 의심 판(suspect)으로 통과시킨다 (위 「부드러운 거절」)
  */
-/** 11/15 층마다 테마 졸개를 계획 밖으로 더 셀 수 있는 수 (옥상 불꽃 상한 8에 여유) */
-export const MINION_FLOOR_ALLOW = 12;
-
 export function evalTower(
   t: TowerTicket,
   r: HuntResult,
@@ -538,25 +570,22 @@ export function evalTower(
   if (r.game !== "hunt")
     return tReject("INVALID_RESULT", "결과가 시작한 게임과 달라요.");
   if (r.durationMs > serverElapsedMs + CLOCK_SLACK_MS)
-    return tReject("TOO_FAST", "기록된 시간이 실제로 흐른 시간보다 길어요.");
+    return tReject("TOO_FAST", "기록된 시간이 실제로 흐른 시간보다 길어요.", `duration:${r.durationMs}>${serverElapsedMs}`);
   const k = r.floors ?? 0;
   if (!Number.isInteger(k) || k < 0 || k > TOWER_MAX_CLIMB)
-    return tReject("INVALID_RESULT", "층 기록 형식이 맞지 않아요.");
-  const eff = Math.min(
-    r.durationMs,
-    serverElapsedMs,
-    TOWER_MAX_RUN_SEC * 1000 + CLOCK_SLACK_MS,
-  );
-  if (eff < MIN_RUN_MS)
-    return k > 0
-      ? tooHigh("층")
-      : { ok: true, floors: 0, best: 0, floorMs: 0, kills: 0, points: 0 };
+    return tReject("INVALID_RESULT", "층 기록 형식이 맞지 않아요.", `floors:${k}`);
+  const eff = Math.min(r.durationMs, serverElapsedMs, TOWER_TICKET_SEC * 1000 + CLOCK_SLACK_MS);
+  // 8초 미만 판: 깬 층이 없으면 보상 없이 끝. 층이 있으면 아래 층 최소 시간 검사가 의심 판으로 잡는다
+  if (eff < MIN_RUN_MS && k === 0) return { ok: true, floors: 0, best: 0, floorMs: 0, kills: 0, points: 0 };
   const effSec = eff / 1000;
+  const suspect: string[] = [];
   const can: Partial<Record<MonsterId, number>> = {};
   const need: Partial<Record<MonsterId, number>> = {};
+  const prefixes = new Set<string>();
   let minSec = 0;
   for (let i = 0; i <= k; i++) {
     const plan = towerPlan(t.seed, t.start + i, t.start);
+    prefixes.add(themePrefix(towerZone(t.seed, t.start, t.start + i)));
     for (const [id, n] of Object.entries(huntSpawnable(plan, Infinity)) as [
       MonsterId,
       number,
@@ -567,15 +596,18 @@ export function evalTower(
     for (const w of plan)
       for (const m of w.monsters) need[m] = (need[m] ?? 0) + 1;
   }
-  // 11/15 테마 졸개(옥상 피뢰침의 정전기 불꽃 등)는 판 화면이 층마다 상한까지 더 불러낸다 — 계획 표에 없는 만큼 층마다 넉넉히 더 센다.
-  // (61층 판이 「정전기 불꽃 기록이 … 넘었어요」로 거절됐다. 전체 처치 수는 아래 처치 속도 상한이 막는다)
-  for (const id of MONSTER_IDS) if (MONSTERS[id].minion) can[id] = (can[id] ?? 0) + (k + 1) * MINION_FLOOR_ALLOW;
+  // 테마 졸개 안전 여유 (위 MINION_FLOOR_ALLOW). 전체 처치 수는 아래 처치 속도 상한이 막는다
+  for (const id of MONSTER_IDS) if (MONSTERS[id].minion && (can[id] !== undefined || [...prefixes].some((p) => id.startsWith(p)))) can[id] = (can[id] ?? 0) + (k + 1) * MINION_FLOOR_ALLOW;
   let total = 0;
-  for (const [id, n] of Object.entries(r.kills) as [MonsterId, number][]) {
+  for (const [id, n] of Object.entries(r.kills) as [MonsterId, number][])
     if (!MONSTER_IDS.includes(id) || !Number.isInteger(n) || n < 0)
-      return tReject("INVALID_RESULT", "처치 기록 형식이 맞지 않아요.");
-    if (n > (can[id] ?? 0)) return tooHigh(MONSTERS[id].name);
+      return tReject("INVALID_RESULT", "처치 기록 형식이 맞지 않아요.", `kill:${id}`);
+  for (const [id, n] of Object.entries(r.kills) as [MonsterId, number][]) {
     total += n;
+    const c = can[id] ?? 0;
+    if (n <= c) continue;
+    // 그 판에 온 테마의 몬스터가 아니어도 의심 판으로만 (표시를 붙여 운영 로그에서 바로 보이게)
+    suspect.push(`kill:${id}:${n}/${c}${!c && ![...prefixes].some((p) => id.startsWith(p)) ? " (theme)" : ""}`);
   }
   // 11/15 능력 카드: 고른 카드가 그때 제안된 카드인지 시드로 다시 굴려 보고, 처치 속도 상한에 카드 배율(멈추면 집중 포함)을 곱한다
   const bossFloors: number[] = [];
@@ -602,17 +634,24 @@ export function evalTower(
       return t.start + (j < 0 ? k : j);
     },
   });
-  if (!cv.ok)
-    return tReject(
-      "RESULT_REJECTED",
-      "능력 카드 기록이 맞지 않아요. 이번 판은 보상 없이 끝나요.",
-      `cards:${cv.why}`,
-    );
-  if (!o.lax && total > 3 + effSec * killRateCeiling("hell", t.level) * cardPower(cv.owned) * (t.gp ?? 1))
-    return tooHigh("처치 수");
-  if (k > 0 && minSec > effSec + 1) return tooHigh("층");
-  for (const [id, n] of Object.entries(need) as [MonsterId, number][])
-    if ((r.kills[id] ?? 0) < n) return tooHigh("층");
+  // 11/15 카드 기록이 맞지 않아도 판은 버리지 않는다 (예전 판 끝 형식이 레벨 업 층 f를 지워 정직한 판이 통째로 날아갔다)
+  if (!cv.ok) suspect.push(`cards:${cv.why}`);
+  const owned = cv.ok ? cv.owned : claimedCards(r.cards ?? []);
+  const rate = 3 + effSec * killRateCeiling("hell", t.level) * cardPower(owned) * Math.max(1, t.gp ?? 1);
+  if (!o.lax && total > rate) suspect.push(`rate:${total}/${Math.floor(rate)}`);
+  // 11/15 깬 층 최소 시간의 절반도 안 걸린 판은 사람이 할 수 없는 속도라 거절 (절반~최소 사이는 의심 판)
+  if (k > 0 && effSec + 1 < minSec / 2)
+    return tReject("RESULT_REJECTED", "층을 깬 속도가 너무 빨라요. 이번 판은 보상 없이 끝나요.", `floorTime:${minSec}s/${Math.round(effSec)}s`);
+  if (k > 0 && minSec > effSec + 1) suspect.push(`floorTime:${minSec}s/${Math.round(effSec)}s`);
+  let short = 0;
+  const shortIds: string[] = [];
+  for (const [id, n] of Object.entries(need) as [MonsterId, number][]) {
+    const got = r.kills[id] ?? 0;
+    if (got >= n) continue;
+    short += n - got;
+    shortIds.push(`${id}:${got}/${n}`);
+  }
+  if (short > 0) suspect.push(`need:${short} ${shortIds.slice(0, 6).join(",")}`);
   // 마지막으로 층을 깬 시각 (같은 층이면 빨리 오른 순 랭킹): 판 시간 안, 깬 층의 최소 시간 뒤
   const floorMs =
     k > 0
@@ -625,6 +664,7 @@ export function evalTower(
     floorMs,
     kills: total,
     points: k * TOWER_FLOOR_POINTS,
+    ...(suspect.length ? { suspect } : {}),
   };
 }
 
@@ -637,7 +677,12 @@ export type TowerState = TDayState & {
   fWk?: string;
   fWkBest: number;
   fWkMs: number;
+  /** 11/15 의심 판(부드러운 거절)으로 오른 가장 높은 층 — 체크포인트만 연다 (최고 기록·랭킹·칭호는 확인된 판 fBest로) */
+  fSus?: number;
 };
+
+/** 체크포인트를 여는 층 (확인된 최고 기록과 의심 판 층 중 높은 쪽) */
+export const towerReach = (s: { fBest: number; fSus?: number }) => Math.max(s.fBest, s.fSus ?? 0);
 
 export type TowerSettle = {
   /** 바뀐 칸 (캐릭터에 덮어쓴다) */
@@ -647,6 +692,7 @@ export type TowerSettle = {
     fWk: string;
     fWkBest: number;
     fWkMs: number;
+    fSus?: number;
   };
   /** 받은 초월 EXP (구간 비율 적용) */
   tExp: number;
@@ -676,6 +722,8 @@ export function towerSettle(
     start: number;
     floors: number;
     floorMs: number;
+    /** 11/15 의심 판: 층·EXP·상자는 그대로, 최고 기록·이번 주 기록은 그대로 두고 fSus(체크포인트용)만 올린다 */
+    suspect?: boolean;
   },
 ): TowerSettle {
   const d = rollDay(s, a.day);
@@ -706,8 +754,8 @@ export function towerSettle(
   const ms = a.floorMs;
   const wkBest = s.fWk === a.week ? s.fWkBest : 0;
   const wkMs = s.fWk === a.week ? s.fWkMs : 0;
-  const newBest = betterRecord(best, ms, s.fBest, s.fBestMs);
-  const newWeek = betterRecord(best, ms, wkBest, wkMs);
+  const newBest = !a.suspect && betterRecord(best, ms, s.fBest, s.fBestMs);
+  const newWeek = !a.suspect && betterRecord(best, ms, wkBest, wkMs);
   return {
     patch: {
       tDay: d.tDay,
@@ -720,6 +768,7 @@ export function towerSettle(
       fWk: a.week,
       fWkBest: newWeek ? best : wkBest,
       fWkMs: newWeek ? ms : wkMs,
+      ...(a.suspect && best > (s.fSus ?? 0) ? { fSus: best } : {}),
     },
     tExp,
     tiers,
@@ -760,7 +809,7 @@ export function endgameView(
         c.fWk === week && c.fWkBest > 0
           ? { floor: c.fWkBest, ms: c.fWkMs }
           : null,
-      checkpoints: towerCheckpoints(c.fBest, sup),
+      checkpoints: towerCheckpoints(towerReach(c), sup),
       chests: d.tChest,
       chestsMax: Number.isFinite(TOWER_CHESTS_PER_DAY) ? TOWER_CHESTS_PER_DAY : 0,
     },
@@ -790,3 +839,6 @@ export const towerTaunt = (r = Math.random()) =>
   TOWER_TAUNTS[
     Math.min(TOWER_TAUNTS.length - 1, Math.floor(r * TOWER_TAUNTS.length))
   ];
+
+/** 11/15 깨끗하게 통과한 판인가 (거절도 의심 판도 아님) — 테스트·운영 도구용 */
+export const towerClean = (v: TowerVerdict): boolean => v.ok && !v.suspect;

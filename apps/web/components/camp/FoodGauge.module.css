@@ -1,0 +1,140 @@
+/* 11/15 먹거리·마실 거리 효과 게이지 */
+.gauge {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 5px 8px;
+  list-style: none;
+  background: rgba(20, 16, 14, 0.82);
+  box-shadow:
+    0 -2px 0 0 #5a4a3a,
+    0 2px 0 0 #5a4a3a,
+    -2px 0 0 0 #5a4a3a,
+    2px 0 0 0 #5a4a3a;
+  color: var(--text);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto 118px 64px auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+}
+
+.icon {
+  width: 24px;
+  height: 18px;
+  image-rendering: pixelated;
+}
+
+.name {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tag {
+  margin-left: 4px;
+  padding: 0 3px;
+  background: #2a5a78;
+  color: #d8f4ff;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.bar {
+  position: relative;
+  height: 6px;
+  background: #15110f;
+  box-shadow: inset 0 0 0 1px #4a3a2a;
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  transition: width 0.9s linear;
+}
+
+.row[data-kind="grow"] .fill {
+  background: linear-gradient(#ffb08a, #d4603a);
+}
+
+.row[data-kind="speed"] .fill {
+  background: linear-gradient(#a8ecff, #3aa0d4);
+}
+
+.row[data-kind="drunk"] .fill {
+  background: linear-gradient(#ffb0c8, #d45a84);
+}
+
+.time {
+  min-width: 30px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* 술잔 5칸: 빈 잔은 테두리만, 찬 잔은 분홍 */
+.cups {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.cup {
+  width: 6px;
+  height: 9px;
+  box-shadow: inset 0 0 0 1px #c8b8a8;
+}
+
+.cup[data-on] {
+  background: linear-gradient(transparent 25%, #ff8ab0 25%);
+}
+
+/* 터치: 오른쪽 지도 아래 작은 세로 줄 (그림 + 얇은 막대 + 시간) */
+.compact {
+  position: absolute;
+  z-index: 2;
+  /* 위 줄(touchBar) 안에서: 오른쪽 지도 바로 아래 (왼쪽은 긴급 의뢰 막대 자리) */
+  top: calc(var(--top-h, 40px) + var(--minimap-h, 110px) + 60px);
+  right: 0;
+  gap: 4px;
+  padding: 4px 5px;
+  font-size: 10px;
+}
+
+.compact .row {
+  grid-template-columns: 24px;
+  justify-items: center;
+  gap: 1px;
+}
+
+.compact .bar {
+  width: 24px;
+  height: 3px;
+}
+
+.compact .time {
+  min-width: 0;
+  text-align: center;
+}
+
+.badge {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  background: #6a2a3a;
+  box-shadow: inset 0 0 0 1px #ff8ab0;
+  color: #ffd8e4;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}

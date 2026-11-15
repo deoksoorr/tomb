@@ -26,6 +26,8 @@ function applyLook(res: { me: Me; lookGrant?: string }): void {
       ...(res.me.body ? { body: res.me.body } : {}),
       // 주간 1위 배지·오라 (1위가 아니면 0 → 내 아바타에서도 지운다)
       champ: res.me.champ ?? 0,
+      // 11/16 매니저 표시 (해제됐으면 0 → 내 머리 위 매니저 칭호도 뗀다)
+      mgr: res.me.manager ? 1 : 0,
     });
 }
 
@@ -65,8 +67,8 @@ export async function decorateGrave(itemId: string, graveId: string, cache: Grav
 }
 
 /** 지금 착용 상태(증서)를 게임에 알린다 */
-export function emitLook({ look, lookGrant, dye, body, champ }: LookGrantResponse): void {
-  if (lookGrant) bridge.emit("look:set", { look, lookGrant, dye: dye ?? {}, ...(body ? { body } : {}), champ: champ ?? 0 });
+export function emitLook({ look, lookGrant, dye, body, champ, mgr }: LookGrantResponse): void {
+  if (lookGrant) bridge.emit("look:set", { look, lookGrant, dye: dye ?? {}, ...(body ? { body } : {}), champ: champ ?? 0, ...(mgr !== undefined ? { mgr } : {}) });
 }
 
 /** 지금 착용 상태를 받아 게임에 알린다 (재접속·1위 값 변경) */

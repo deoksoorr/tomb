@@ -1,14 +1,20 @@
-// 채팅 기록창의 순수 규칙 (화면 쪽 메모리에만 두고 기기에 저장하지 않는다. 서버도 방별 최근 5분만 메모리에 들고 있다).
-// 각 줄은 5분 동안 보이고 마지막 몇 초 동안 서서히 흐려진다. 데스크톱은 상자 안에서 스크롤, 모바일은 평소 최근 몇 줄만 (기록 창을 열면 스크롤).
-// 방에 들어올 때 서버가 보내 주는 최근 5분(chatLog)은 받은 줄과 서버 줄 id(key)로 합친다 (내가 쓴 줄은 글·시각으로 맞춘다).
+// 채팅 기록창의 순수 규칙 (화면 쪽 메모리에만 두고 기기에 저장하지 않는다).
+// 줄은 하루(CHAT_LOG_HISTORY_MS) 동안 기록으로 남는다. 방금 오간 줄(CHAT_LOG_TTL_MS = 5분)만 폰 화면 글씨로 떠 있다가 흐려지고,
+// 기록창(데스크톱 상자·폰 [기록] 창·채팅 입력 줄)에서는 그보다 지난 줄을 흐리게 "N분 전"과 함께 보여 준다.
+// 방에 들어올 때 서버가 보내 주는 최근 기록(chatLog — 서버가 잠들었다 깨도 맵별 최근 50줄은 남는다)은 받은 줄과
+// 서버 줄 id(key)로 합친다 (내가 쓴 줄은 글·시각으로 맞춘다).
 
-import { CHAT_MAX, CHAT_RECENT_MAX, CHAT_RECENT_MS } from "@tomb/protocol";
+import { CHAT_HISTORY_MS, CHAT_MAX, CHAT_RECENT_MAX, CHAT_RECENT_MS } from "@tomb/protocol";
 
-/** 한 줄이 보이는 시간 */
+/** "방금 오간 글"로 보는 시간: 폰 화면 글씨가 떠 있는 시간, 기록창에서 흐려지지 않는 시간 */
 export const CHAT_LOG_TTL_MS = CHAT_RECENT_MS;
-/** 사라지기 전 서서히 흐려지는 시간 (TTL 끝부분) */
+/** 기록으로 들고 있는 시간 (이보다 지난 줄은 버린다) */
+export const CHAT_LOG_HISTORY_MS = CHAT_HISTORY_MS;
+/** 폰 화면 글씨가 사라지기 전 서서히 흐려지는 시간 (TTL 끝부분) */
 export const CHAT_LOG_FADE_MS = 10_000;
-/** 메모리에 들고 있는 최대 줄 수 (데스크톱 스크롤 안전 상한) */
+/** 기록창에서 지난 줄(TTL 지남)의 불투명도 */
+export const CHAT_LOG_OLD_OPACITY = 0.6;
+/** 메모리에 들고 있는 최대 줄 수 (스크롤 안전 상한) */
 export const CHAT_LOG_KEEP = CHAT_RECENT_MAX;
 /** 모바일 평소에 글씨만 띄우는 줄 수 (터치 통과). 지난 줄은 [기록] 창·채팅 입력 줄에서 스크롤로 본다 */
 export const CHAT_LOG_MOBILE_LINES = 5;
@@ -28,6 +34,8 @@ export type ChatLine = {
   at: number;
   /** 운영자 계정 (실시간 서버가 알린 staff 표시만, 이름이 같아도 흉내 불가) → 이름 금색 */
   staff?: true;
+  /** 11/16 매니저 계정 (실시간 서버가 알린 mgr 표시만) → "매니저" 딱지 */
+  mgr?: true;
   /** 보낸 사람의 닉네임 꾸미기 id (이름 글자·이름표 — 게임이 아는 그 사람 착용 목록에서). 없으면 그냥 이름 */
   ns?: string[];
 };
@@ -38,9 +46,15 @@ export type IncomingChatLine = Omit<ChatLine, "id"> & { key: string };
 /** 내가 보낸 줄(key 없음)과 서버가 돌려준 내 줄을 같은 줄로 보는 시각 차 (왕복 지연 여유) */
 export const CHAT_MINE_MATCH_MS = 15_000;
 
-/** 아직 5분이 안 지난 줄만 */
+/** 아직 기록으로 남는(하루가 안 지난) 줄만 */
 export function liveChatLines(lines: readonly ChatLine[], now: number): ChatLine[] {
-  return lines.filter((l) => now - l.at < CHAT_LOG_TTL_MS);
+  return lines.filter((l) => now - l.at < CHAT_LOG_HISTORY_MS);
+}
+
+/** 방금 오간(5분이 안 지난) 줄 중 최근 max줄 — 폰 화면 글씨 */
+export function recentChatLines(lines: readonly ChatLine[], now: number, max: number): ChatLine[] {
+  const fresh = lines.filter((l) => now - l.at < CHAT_LOG_TTL_MS);
+  return fresh.length > max ? fresh.slice(fresh.length - max) : fresh;
 }
 
 /** 새 줄을 맨 뒤에 붙인다. 지난 줄은 빼고, 넘치면 오래된 것부터 버린다 */
@@ -51,16 +65,29 @@ export function addChatLine(lines: readonly ChatLine[], line: ChatLine, max = CH
   return next.length > max ? next.slice(next.length - max) : next;
 }
 
-/** 지금 보여 줄 줄 (max가 있으면 최근 max줄만) */
+/** 기록창에 보여 줄 줄 (max가 있으면 최근 max줄만) */
 export function visibleChatLines(lines: readonly ChatLine[], now: number, max?: number): ChatLine[] {
   const live = liveChatLines(lines, now);
   return max !== undefined && live.length > max ? live.slice(live.length - max) : live;
 }
 
-/** 줄의 불투명도: 마지막 FADE 동안 1 → 0 */
+/** 폰 화면 글씨의 불투명도: 5분의 마지막 FADE 동안 1 → 0 */
 export function chatLineOpacity(line: ChatLine, now: number): number {
   const left = CHAT_LOG_TTL_MS - (now - line.at);
   return Math.max(0, Math.min(1, left / CHAT_LOG_FADE_MS));
+}
+
+/** 기록창 줄의 불투명도: 방금 오간 줄은 또렷하게, 지난 줄은 흐리게 */
+export function chatLineDim(line: ChatLine, now: number): number {
+  return now - line.at < CHAT_LOG_TTL_MS ? 1 : CHAT_LOG_OLD_OPACITY;
+}
+
+/** 지난 줄 옆 작은 시각: "N분 전"·"N시간 전" (방금 오간 줄이면 null) */
+export function chatLineAgo(line: ChatLine, now: number): string | null {
+  const ms = now - line.at;
+  if (ms < CHAT_LOG_TTL_MS) return null;
+  const min = Math.floor(ms / 60_000);
+  return min < 60 ? `${min}분 전` : `${Math.floor(min / 60)}시간 전`;
 }
 
 /** 글자색 구분: 내 줄은 촛불색, 다른 사람은 연한 이름 + 밝은 내용 */
@@ -70,12 +97,12 @@ export function chatLineTone(line: ChatLine): "mine" | "other" {
 
 /**
  * 서버 chatLog를 합친다: 같은 key는 건너뛰고, 내 줄은 key 없는 내 줄(같은 글, 시각 차 CHAT_MINE_MATCH_MS 이내)에 key만 붙인다.
- * 시각 순으로 늘어놓고, 5분 지난 줄은 빼고, 넘치면 오래된 것부터 버린다. nextId = 새 줄 화면 번호
+ * 시각 순으로 늘어놓고, 하루 지난 줄은 빼고, 넘치면 오래된 것부터 버린다. nextId = 새 줄 화면 번호
  */
 export function mergeChatLines(lines: readonly ChatLine[], incoming: readonly IncomingChatLine[], now: number, nextId: () => number, max = CHAT_LOG_KEEP): ChatLine[] {
   const out = lines.map((l) => ({ ...l }));
   for (const inc of incoming) {
-    if (now - inc.at >= CHAT_LOG_TTL_MS || out.some((l) => l.key === inc.key)) continue;
+    if (now - inc.at >= CHAT_LOG_HISTORY_MS || out.some((l) => l.key === inc.key)) continue;
     const own = inc.mine ? out.find((l) => l.mine && l.key === undefined && l.text === inc.text && Math.abs(l.at - inc.at) <= CHAT_MINE_MATCH_MS) : undefined;
     if (own) own.key = inc.key;
     else out.push({ ...inc, id: nextId() });
@@ -97,7 +124,7 @@ export function readChatLog(serverNow: unknown, raw: unknown, localNow: number):
     if (typeof l.id !== "string" || !l.id || l.id.length > 64 || typeof l.at !== "number" || !Number.isFinite(l.at)) continue;
     if (typeof l.name !== "string" || typeof l.text !== "string" || !l.text) continue;
     const age = Math.max(0, serverNow - l.at);
-    out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), at: localNow - age });
+    out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), ...(l.mgr === true ? { mgr: true } : {}), at: localNow - age });
   }
   return out;
 }

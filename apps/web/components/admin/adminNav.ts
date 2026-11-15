@@ -7,6 +7,7 @@ export type PanelId =
   | "members"
   | "codes"
   | "staff"
+  | "managers"
   | "reports"
   | "bans"
   | "megaphone"
@@ -45,6 +46,7 @@ export const NAV: NavGroup[] = [
       { id: "members", label: "회원 제재", desc: "회원 목록에서 코드 재발급·지금 내보내기·정지를 바로 해요." },
       { id: "codes", label: "코드 재발급 기록", desc: "누가 언제 누구의 접속 코드를 다시 만들었는지 남겨 둔 기록이에요." },
       { id: "staff", label: "운영자 지정", desc: "게임 안 운영자 계정(저승사자 차림·운영자 배지)을 한 명 지정해요." },
+      { id: "managers", label: "매니저 임명", desc: "매니저를 여러 명 임명하고 해제해요. 매니저는 전용 칭호와 채팅 딱지만 받아요." },
     ],
   },
   {
@@ -90,7 +92,7 @@ export const NAV: NavGroup[] = [
 
 const ITEMS: NavItem[] = NAV.flatMap((g) => g.items);
 /** 예전 탭 이름으로 들어와도 맞는 화면을 연다 */
-const ALIASES: Record<string, PanelId> = { content: "graves", staffs: "staff", "": "dashboard" };
+const ALIASES: Record<string, PanelId> = { content: "graves", staffs: "staff", manager: "managers", "": "dashboard" };
 
 export const DEFAULT_PANEL: PanelId = "dashboard";
 

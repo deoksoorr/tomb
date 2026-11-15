@@ -751,6 +751,13 @@ export type SpotKindDef = {
   /** 집 안 가구 자리: 방(집) 서버에서만 받고, 월드 채널에서는 받지 않는다 (반대로 월드 자리는 방에서 받지 않는다) */
   indoor?: boolean;
 };
+/**
+ * 11/15 "타는" 자리: 그네·조각배·오리배·시소·트램펄린·회전목마·관람차·열기구·범퍼카.
+ * 바베큐로 커진 동안(bbqBig > 1)에는 여기 앉지 못한다 (서버 onSit·claimSpot이 거절, 클라이언트는 안내)
+ */
+export const RIDE_SPOT_KINDS: readonly SpotKind[] = ["swing", "boat", "seesaw", "trampoline", "carousel", "ferris", "balloon", "bumper"];
+export const isRideSpotKind = (k: string | null | undefined): boolean => !!k && (RIDE_SPOT_KINDS as readonly string[]).includes(k);
+
 export const SPOT_KINDS: Readonly<Record<SpotKind, SpotKindDef>> = {
   /** 나무에 매달리기 (앵커 = 줄기 앞 발 위치) */
   hang: { code: "h", state: STATE.hang, facing: DIR.down },

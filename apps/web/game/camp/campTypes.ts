@@ -2,14 +2,14 @@ import type * as Phaser from "phaser";
 import type { CampNpcId } from "@tomb/protocol";
 
 // 11/15 캠핑장 (game/camp) 모듈 사이 약속. 맵 그림·충돌(CampMap) ↔ 장면(CampScene) ↔ 버스(game/bus).
-// 캠핑장 그림(텍스처)은 캠핑장 장면을 만들 때만 굽고, 장면을 닫으면 모두 지운다 (마을에 있는 동안 메모리를 쓰지 않는다).
-// 캠핑장 텍스처 키는 모두 CAMP_TEX_PREFIX로 시작한다 (한꺼번에 지우기).
+// 캠핑장 그림(텍스처)은 정류장 근처·버스 여행 동안 조금씩 굽고, 장면을 닫아도 남겨 둬요 (다시 갈 때 멈추지 않게).
+// 캠핑장 텍스처 키는 모두 CAMP_TEX_PREFIX로 시작한다.
 
 export const CAMP_TEX_PREFIX = "camp-";
 
 /** E로 쓰는 것 (자리 앉기는 좌석 체계 — CAMP_SEATS — 가 따로) */
 /** lookout = 전망대 망원경 (망원 뷰, LookoutScope) */
-export type CampInteractKind = "bus" | "npc" | "van" | "deck" | "board" | "sign" | "lookout" | "bbq";
+export type CampInteractKind = "bus" | "npc" | "van" | "deck" | "board" | "sign" | "lookout" | "bbq" | "vending";
 export type CampInteractable = {
   id: string;
   kind: CampInteractKind;

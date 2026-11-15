@@ -688,12 +688,20 @@ export const TITLE_IDS = [
   // 11/15 긴급 의뢰 (받은 뒤 하루만): 가장 많이 낸 사람 · 마지막 1분에 100%를 채운 사람
   "t_urgKing",
   "t_urgLast",
+  // 11/16 매니저 전용 (관리자가 임명한 계정만 — web lib/managers). 실시간 서버는 입장 토큰·착용 증서의 매니저 표시(mgr)가 있을 때만 받는다 (mgrGateLook)
+  "t_mgr",
 ] as const;
 export type TitleId = (typeof TITLE_IDS)[number];
 const titleSet = new Set<string>(TITLE_IDS);
 /** 칭호 id인지 */
 export function isTitleId(id: unknown): id is TitleId {
   return typeof id === "string" && titleSet.has(id);
+}
+/** 11/16 매니저 전용 칭호 id */
+export const MANAGER_TITLE_ID = "t_mgr" satisfies TitleId;
+/** 매니저 표시가 없으면 착용 목록에서 매니저 전용 칭호를 뺀다 (입장 토큰·실시간 서버 — 해제된 계정의 옛 착용 목록이 남아도 안 보이게) */
+export function mgrGateLook(look: Look, mgr: boolean): Look {
+  return mgr || !look.includes(MANAGER_TITLE_ID) ? look : look.filter((id) => id !== MANAGER_TITLE_ID);
 }
 /** 착용 목록의 칭호 (없으면 null) */
 export function titleOfLook(look: readonly string[] | null | undefined): TitleId | null {

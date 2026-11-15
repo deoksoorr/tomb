@@ -128,6 +128,7 @@ export function normalize(raw: unknown): CharacterState {
     fBestMs: nat(r.fBestMs),
     fWkBest: nat(r.fWkBest),
     fWkMs: nat(r.fWkMs),
+    ...(nat(r.fSus) > 0 ? { fSus: nat(r.fSus) } : { fSus: undefined }),
     ...(typeof r.fWk === "string" && /^\d{8}$/.test(r.fWk) ? { fWk: r.fWk } : { fWk: undefined }),
     ...(typeof r.tDay === "string" && /^\d{8}$/.test(r.tDay) ? { tDay: r.tDay } : { tDay: undefined }),
     ...(r.pioneer && nat(r.pioneer.n) > 0 && Number.isFinite(r.pioneer.at) ? { pioneer: { n: r.pioneer.n, at: r.pioneer.at } } : { pioneer: undefined }),

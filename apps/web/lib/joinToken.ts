@@ -52,7 +52,8 @@ async function resolveChannel(requested: number | "auto"): Promise<number | null
 /** dye = 46번 염색 */
 /** staff = 31번 운영자 계정 (라우트가 확인한 뒤에만), dex = 도감 100% 배지 비트 (서버가 도감 기록에서 계산), champ = 지난주 랭킹 1위 비트 */
 /** camp = 11/15 캠핑장 허락 (lib/camp campOpen) */
-type Claims = { visitorId: string; name: string; color: string; body: string; look: string[]; dye?: AvatarDye; staff?: true; dex?: number; champ?: number; camp?: true };
+/** mgr = 11/16 매니저 (lib/managers — 라우트가 확인한 뒤에만) */
+type Claims = { visitorId: string; name: string; color: string; body: string; look: string[]; dye?: AvatarDye; staff?: true; dex?: number; champ?: number; camp?: true; mgr?: true };
 
 /**
  * 입장 토큰 발급. 전체 만석이면 대기열 주소를 준다: 클라이언트가 QUEUE_POLL_MS마다 GET하다가

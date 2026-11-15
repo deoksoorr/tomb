@@ -1,26 +1,26 @@
 import * as Phaser from "phaser";
 import { ambienceAt, timePhase } from "@/lib/ambience";
-import { ART_H, buildCaption, buildClouds, buildEndSign, buildInterior, buildLeaf, buildPanorama, buildSky, buildStars, buildStrap, buildSunbeam, LAYERS, VIEW_MAX, WIN_BOT, WIN_TOP, type LayerSpec } from "./busRideArt";
-import { captionAlpha, captionAt, distanceAt, lightsOn, RIDE_ORDER, segmentAt, segmentsFor, shakeAt, skyColors, starsOn, strapAngle, type RideSegment } from "./busRideMath";
+import { ART_H, buildCaption, buildInterior, buildSky, LAYERS, VIEW_MAX, WIN_BOT, WIN_TOP, type LayerSpec } from "./busRideArt";
+import { LEAF_COLORS, rideBake, type RideBake } from "./busRideBake";
+import { captionAlpha, captionAt, distanceAt, lightsOn, segmentAt, segmentsFor, shakeAt, skyColors, starsOn, strapAngle, type RideSegment } from "./busRideMath";
 import { css } from "../sprites/pixel";
 import { BUS_RIDE_MS, BUS_RIDE_SCENE, BUS_TEX_PREFIX, type BusRideControl, type BusRideData } from "./busTypes";
 
 // 8초 버스 창밖 연출 (화면 전체). 버스 안 창가 자리에서 본 창밖: 여러 겹 파노라마가 시차로 흐르고(busRideArt),
 // 가는 길은 마을 → 고속도로 → 단풍 국도 → 숲길 → 「언젠가 캠핑장」 표지판 앞에서 멈춘다 (돌아오는 길은 반대, 끝은 마을 정류장).
 // 시간 계산은 busRideMath(순수). 하늘색·풍경 색조는 한국 시각(hour)으로 lib/ambience 팔레트를 그대로 쓴다.
-// 텍스처는 시작할 때 굽고 끝날 때 모두 지운다 (BUS_TEX_PREFIX + "ride-").
+// 11/15 창밖 그림(파노라마·표지판·자막)은 busRideBake가 미리 조금씩 굽고 지우지 않아요.
+// 덜 구워졌으면 검은 화면에서 프레임마다 조금씩 마저 굽고 시작해요. 하늘·버스 안만 장면이 굽고 끝날 때 지워요.
 // 끝나거나 skip()이면 짧게 어두워진 뒤 onDone을 한 번 부르고 스스로 멈춘다.
 
-/** 앞 차 거리 (가까운 층이 8초 동안 달리는 그림 픽셀). reduced면 짧게 = 천천히 */
-const DIST = 1100;
-const DIST_REDUCED = 440;
 const FADE_IN_MS = 350;
 const HOLD_MS = 450;
 const FADE_OUT_MS = 320;
 const SKIP_FADE_MS = 200;
 const LEAVES = 14;
 const LEAVES_REDUCED = 4;
-const LEAF_COLORS = [0xc8482a, 0xe06a34, 0xe8a83a, 0xd8b040] as const;
+/** 덜 구운 그림을 마저 굽는 한 프레임 예산 (ms) */
+const BAKE_MS = 6;
 
 const D = {
   sky: 0,
@@ -44,7 +44,11 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
   private ride!: BusRideData;
   private keys: string[] = [];
   private order: readonly RideSegment[] = [];
-  private dist = DIST;
+  private dist = 0;
+  private bake!: RideBake;
+  /** 그림을 마저 굽는 중 (검은 화면) */
+  private pending = false;
+  private skipped = false;
   private t0 = 0;
   /** 끝내기 시작한 시각 (어두워지는 중) */
   private endAt: number | null = null;
@@ -79,6 +83,11 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
   private leaves: Leaf[] = [];
   private beams: Phaser.GameObjects.Image[] = [];
   private fade!: Phaser.GameObjects.Rectangle;
+  /**
+   * 11/15 바탕 (카메라 배경색 대신 맨 아래 사각형). 카메라 배경색을 처음 그리는 프레임이
+   * 소프트웨어 그래픽(내장 그래픽 없는 PC)에서 100ms 가까이 멈췄어요
+   */
+  private back!: Phaser.GameObjects.Rectangle;
   private lastNear = 0;
 
   constructor() {
@@ -89,8 +98,9 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     this.ride = data;
     this.order = segmentsFor(data.leg);
     this.rev = data.leg === "toVillage";
-    this.dist = data.reduced ? DIST_REDUCED : DIST;
     this.endAt = null;
+    this.pending = false;
+    this.skipped = false;
     this.finished = false;
     this.layers = [];
     this.straps = [];
@@ -104,51 +114,71 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
   }
 
   create(): void {
+    this.bake = rideBake(this.textures, this.ride.reduced);
+    this.dist = this.bake.dist;
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
+    this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanup, this);
+    // 시작 시각은 첫 update에서 잡는다 (새 장면의 this.time.now는 첫 프레임 전엔 0이라 연출이 바로 끝나 버렸다)
+    this.t0 = -1;
+    if (this.bake.done) {
+      this.build();
+      return;
+    }
+    // 덜 구웠어요: 검은 화면에서 마저 굽고 시작해요
+    this.pending = true;
+    this.addBack(0x000000);
+  }
+
+  private addBack(color: number): void {
+    if (!this.back?.active) this.back = this.add.rectangle(0, 0, 1, 1, color).setOrigin(0, 0).setDepth(-1);
+    this.back.setFillStyle(color).setSize(Math.max(1, this.scale.width), Math.max(1, this.scale.height));
+  }
+
+  private build(): void {
     const { hour, leg, reduced } = this.ride;
+    const bake = this.bake;
     const amb = ambienceAt(Date.now(), { hour });
     const phase = timePhase(hour);
     this.night = lightsOn(hour);
     this.lightAlpha = this.night ? 0.5 + 0.45 * amb.palette.lightGlow : 0;
     this.dayLight = phase === "day" ? 1 : phase === "dawn" ? 0.8 : phase === "dusk" ? 0.45 : 0;
-    this.cameras.main.setBackgroundColor(0x5a4636);
-    const seed = (Math.floor(Date.now() / 60_000) % 997) + (leg === "toCamp" ? 0 : 500);
+    this.addBack(0x5a4636);
 
     this.outside = this.add.container(0, 0).setDepth(D.sky);
     // 흐림·비·눈·안개면 하늘을 회색 쪽으로 (날씨는 마을과 같은 시계)
     const overcast = amb.weather === "clear" ? 0 : amb.weather === "cloudy" || amb.weather === "fog" ? 0.6 : 1;
     const sky = skyColors(hour, overcast);
     this.sky = this.add.image(0, 0, this.tex("sky", buildSky(css(sky.top), css(sky.bottom)))).setOrigin(0, 0);
-    this.stars = this.add.tileSprite(0, 0, 16, 16, this.tex("stars", buildStars(seed))).setOrigin(0, 0).setAlpha(starsOn(hour) ? 0.9 : 0);
+    this.stars = this.add.tileSprite(0, 0, 16, 16, bake.key("stars")).setOrigin(0, 0).setAlpha(starsOn(hour) ? 0.9 : 0);
     this.clouds = this.add
-      .tileSprite(0, 0, 16, 16, this.tex("clouds", buildClouds(seed + 1)))
+      .tileSprite(0, 0, 16, 16, bake.key("clouds"))
       .setOrigin(0, 0)
       .setAlpha(this.night ? 0.22 : 0.85)
       .setTint(this.night ? 0x6a7090 : 0xffffff);
     this.outside.add([this.sky, this.stars, this.clouds]);
 
     const tint = amb.palette.worldTint;
-    LAYERS.forEach((spec, i) => {
-      // 돌아가는 길도 그림은 가는 길 순서로 (거꾸로 훑어 풍경이 반대로 흐른다)
-      const p = buildPanorama(spec, RIDE_ORDER, this.dist, seed * 7 + i * 131);
-      const img = this.add.image(0, 0, this.tex(`l-${spec.id}`, p.canvas)).setOrigin(0, 0).setTint(tint);
-      const lights = p.lights && this.lightAlpha > 0 ? this.add.image(0, 0, this.tex(`l-${spec.id}-lit`, p.lights)).setOrigin(0, 0).setBlendMode(Phaser.BlendModes.ADD).setAlpha(this.lightAlpha) : null;
+    for (const spec of LAYERS) {
+      // 돌아가는 길도 그림은 가는 길 순서로 (거꾸로 훑어 풍경이 반대로 흐른다 — busRideBake가 RIDE_ORDER로 구워요)
+      const img = this.add.image(0, 0, bake.key(`l-${spec.id}`)).setOrigin(0, 0).setTint(tint);
+      const litKey = bake.key(`l-${spec.id}-lit`);
+      const lights = this.lightAlpha > 0 && this.textures.exists(litKey) ? this.add.image(0, 0, litKey).setOrigin(0, 0).setBlendMode(Phaser.BlendModes.ADD).setAlpha(this.lightAlpha) : null;
       this.outside.add(img);
       if (lights) this.outside.add(lights);
       this.layers.push({ spec, img, lights });
-    });
+    }
 
-    const signCanvas = buildEndSign(leg);
-    this.sign = this.add.image(0, 0, this.tex("sign", signCanvas)).setOrigin(0, 1).setTint(tint);
+    this.sign = this.add.image(0, 0, bake.key(`sign-${leg}`)).setOrigin(0, 1).setTint(tint);
     this.outside.add(this.sign);
 
-    const leafKeys = LEAF_COLORS.map((c, i) => this.tex(`leaf-${i}`, buildLeaf(c)));
+    const leafKeys = LEAF_COLORS.map((_, i) => bake.key(`leaf-${i}`));
     const n = reduced ? LEAVES_REDUCED : LEAVES;
     for (let i = 0; i < n; i++) {
       const img = this.add.image(0, 0, leafKeys[i % leafKeys.length]).setOrigin(0.5).setAlpha(0);
       this.outside.add(img);
       this.leaves.push({ img, x: Math.random(), y: Math.random(), vy: 0.08 + Math.random() * 0.1, phase: Math.random() * 6 });
     }
-    const beamKey = this.tex("beam", buildSunbeam());
+    const beamKey = bake.key("beam");
     for (let i = 0; i < 3; i++) {
       const b = this.add.image(0, 0, beamKey).setOrigin(0.5, 0).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
       this.outside.add(b);
@@ -161,14 +191,14 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
 
     this.layout();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
-    this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanup, this);
-    // 시작 시각은 첫 update에서 잡는다 (새 장면의 this.time.now는 첫 프레임 전엔 0이라 연출이 바로 끝나 버렸다)
-    this.t0 = -1;
   }
 
   /** E·탭으로 건너뛰기: 짧게 어두워지고 끝 */
   skip(): void {
+    if (this.pending) {
+      this.skipped = true;
+      return;
+    }
     if (this.endAt !== null || this.finished || !this.sys.isActive()) return;
     this.endAt = this.lastTime;
     this.endMs = SKIP_FADE_MS;
@@ -176,6 +206,14 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
 
   update(time: number, delta: number): void {
     if (this.finished) return;
+    if (this.pending) {
+      // 건너뛰면 굽지 않고 바로 끝내요 (남은 그림은 다음 여행 전에 마저 구워요)
+      if (this.skipped) return this.finish();
+      if (!this.bake.step(BAKE_MS)) return;
+      this.pending = false;
+      this.build();
+      return;
+    }
     if (this.t0 < 0) this.t0 = time;
     this.lastTime = time;
     const ms = time - this.t0;
@@ -241,7 +279,7 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
       this.caption?.destroy();
       this.caption = null;
       if (text) {
-        const key = this.tex(`cap-${text.length}-${text.charCodeAt(0)}-${text.charCodeAt(text.length - 2)}`, buildCaption(text));
+        const key = this.bake.captionKey(text) ?? this.tex(`cap-${text.length}-${text.charCodeAt(0)}-${text.charCodeAt(text.length - 2)}`, buildCaption(text));
         this.caption = this.add.image(0, 0, key).setOrigin(0.5, 0.5).setDepth(D.caption);
         this.placeCaption();
       }
@@ -301,11 +339,12 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     this.ceil.setPosition(0, 0).setSize(W, Math.max(0, this.offY));
     this.floor.setPosition(0, this.offY + ART_H * S).setSize(W, Math.max(0, H - (this.offY + ART_H * S)));
     this.fade.setSize(W, H);
+    this.back.setSize(W, H);
 
     // 손잡이 (봉을 따라)
     for (const s of this.straps) s.destroy();
     this.straps = [];
-    const strapKey = this.keys.find((k) => k.endsWith("ride-strap")) ?? this.tex("strap", buildStrap());
+    const strapKey = this.bake.key("strap");
     for (let ax = 34; ax < this.viewW + 20; ax += 75) {
       this.straps.push(
         this.add

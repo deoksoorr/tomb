@@ -110,7 +110,7 @@ export type S2C =
   | { t: "emote"; sid: Sid; kind: EmoteKind; graveId: string }
   | { t: "graveEvent"; sid: Sid; kind: GraveEventKind; graveId: string }
   /** 꾸미기 변경. 46·25번: dye·body가 있으면 염색·몸 모양도 바뀐 것 (옛 클라이언트는 look만 본다) */
-  | { t: "look"; sid: Sid; look: string[]; dye?: AvatarDye; body?: string; /** 주간 1위 비트 (0 = 아님, 새 웹이 낸 증서일 때만). 옛 클라이언트는 무시한다 */ champ?: number }
+  | { t: "look"; sid: Sid; look: string[]; dye?: AvatarDye; body?: string; /** 주간 1위 비트 (0 = 아님, 새 웹이 낸 증서일 때만). 옛 클라이언트는 무시한다 */ champ?: number; /** 11/16 매니저 표시 (1 = 매니저, 0 = 해제, 새 웹이 낸 증서일 때만). 옛 클라이언트는 무시한다 */ mgr?: 0 | 1 }
   | { t: "firework"; sid: Sid; item: string; x: number; y: number }
   /** sync 응답: 나를 제외한 현재 접속자 전체와 좌석. 클라이언트는 이걸로 원격 아바타를 맞춘다 */
   | { t: "peers"; peers: PeerInfo[]; seats: Record<string, Sid> }
@@ -164,7 +164,8 @@ export type S2C =
 /** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */
 /** system = 마을 공지 줄 (/internal/say — 금색, "운영자" 딱지·신고 없음. 옛 클라이언트는 staff만 보고 금색으로 그린다) */
 /** replaces = 이 줄로 바꿔 끼울 앞 공지 id (긴급 의뢰가 끝나면 시작 공지를 끝 공지로) */
-export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number; staff?: true; system?: true; replaces?: string };
+/** mgr = 11/16 매니저 계정이 외친 것 (Vercel이 증서에 넣은 것만 → "매니저" 딱지. 옛 클라이언트는 무시한다) */
+export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number; staff?: true; system?: true; replaces?: string; mgr?: true };
 
 export function encodeEvent(msg: C2S | S2C): string {
   return JSON.stringify(msg);

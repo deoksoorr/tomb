@@ -37,6 +37,7 @@ function Spot({ entry, until }: { entry: MegaphoneEntry; until: number }) {
         </div>
         <p className={cx(styles.name, entry.staff && styles.staff)}>
           {entry.staff && !entry.system && <span className={styles.staffTag}>운영자</span>}
+          {entry.mgr && !entry.staff && <span className={styles.mgrTag}>매니저</span>}
           {entry.name}
         </p>
         <p className={styles.text}>{entry.text}</p>

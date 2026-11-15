@@ -13,13 +13,20 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 //    양옆 금줄·보랏빛 보석 + 보랏빛 빛무리 + 금·보라 반짝이
 //  - 11/15 신화(서버에 한 사람 — 서버 최초·꼭대기 층 주인·이번 주 최고층): 흰금빛 글자에 넓은 빛줄기가 천천히 흐르고 + 금빛 「」 +
 //    양옆 금줄·금빛 별 보석 + 따뜻한 금빛 빛무리 + 글자 둘레에서 금가루가 흩날려 내려앉는다 (운영자 보라는 없다)
+//  - 11/16 매니저(관리자가 임명한 계정만): 위 연민트·아래 청록 글자 + 지나가는 크림빛 반짝임 + 민트 「」 + 양옆 민트줄·서류판(클립보드) +
+//    민트 빛무리 + 민트·크림 반짝이 둘이 둘레를 돈다
 // 성능: 장식은 칭호를 달 때 한 번 만들고 고쳐 쓴다. 움직이는 색은 ANIM_STEP_MS마다만 다시 칠하고, 그리기는 보이는 아바타만(AvatarView.sync).
 // 움직임 줄이기 설정이면 멈춘 그림. 모두 밤 어둠 층 위(이름표 층)라 밤에도 그대로 밝다.
 
 /** 머리 위 칭호 모양 등급: 칭호 등급(신화 포함) + 운영자 전용 */
 type ViewGrade = TitleGrade | "staff";
 
-const TINT: Record<ViewGrade, number> = { bronze: 0xe2b07a, silver: 0xe8eef8, gold: 0xffd76a, legend: 0xffffff, mythic: 0xffffff, staff: 0xffffff };
+const TINT: Record<ViewGrade, number> = { bronze: 0xe2b07a, silver: 0xe8eef8, gold: 0xffd76a, legend: 0xffffff, mythic: 0xffffff, staff: 0xffffff, manager: 0xffffff };
+/** 매니저: 연민트·청록 글자 (위·아래) · 지나가는 크림빛 반짝임 · 「」 민트 */
+const MGR_TOP = 0xdcfff2;
+const MGR_BOT = 0x22b89c;
+const MGR_BRACKET = 0x5ff0c4;
+const MGR_GLINT_MS = 2800;
 /** 신화: 흰금빛 글자 (위·아래) · 흐르는 빛줄기 · 「」 금 · 금가루 */
 const MYTHIC_TOP = 0xfff4c8;
 const MYTHIC_BOT = 0xe8a838;
@@ -77,26 +84,27 @@ export class TitleView {
     this.step = -1;
     this.ornKey = "";
     // 장식: 등급에 맞게 만들거나 치운다
-    const nSparks = grade === "silver" ? 1 : grade === "gold" || grade === "staff" ? 2 : grade === "legend" ? 3 : grade === "mythic" ? MYTHIC_DUST : 0;
+    const nSparks = grade === "silver" ? 1 : grade === "gold" || grade === "staff" || grade === "manager" ? 2 : grade === "legend" ? 3 : grade === "mythic" ? MYTHIC_DUST : 0;
     while (this.sparks.length > nSparks) this.sparks.pop()!.destroy();
     while (this.sparks.length < nSparks)
       this.sparks.push(this.scene.add.image(0, 0, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setDepth(this.depth + 0.01).setVisible(false));
     // 운영자 반짝이는 금·보라 번갈아 (다른 등급은 흰빛)
     // 신화 금가루는 진한 금·밝은 금 번갈아
-    this.sparks.forEach((sp, i) => (grade === "staff" ? sp.setTint(i % 2 ? 0xc9a2ff : 0xffe08a) : grade === "mythic" ? sp.setTint(i % 2 ? 0xffc24a : 0xfff0b0) : sp.clearTint()));
-    const wantOrn = grade === "gold" || grade === "legend" || grade === "staff" || grade === "mythic";
+    // 매니저 반짝이는 민트·크림 번갈아
+    this.sparks.forEach((sp, i) => (grade === "staff" ? sp.setTint(i % 2 ? 0xc9a2ff : 0xffe08a) : grade === "mythic" ? sp.setTint(i % 2 ? 0xffc24a : 0xfff0b0) : grade === "manager" ? sp.setTint(i % 2 ? 0x6ff4cc : 0xfff4d8) : sp.clearTint()));
+    const wantOrn = grade === "gold" || grade === "legend" || grade === "staff" || grade === "mythic" || grade === "manager";
     if (wantOrn && !this.orn) this.orn = this.scene.add.graphics().setDepth(this.depth - 0.01).setVisible(false);
     if (!wantOrn && this.orn) {
       this.orn.destroy();
       this.orn = null;
     }
-    const wantHalo = grade === "legend" || grade === "staff" || grade === "mythic";
+    const wantHalo = grade === "legend" || grade === "staff" || grade === "mythic" || grade === "manager";
     if (wantHalo && !this.halo) this.halo = this.scene.add.image(0, 0, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setDepth(this.depth - 0.02).setVisible(false);
     if (!wantHalo && this.halo) {
       this.halo.destroy();
       this.halo = null;
     }
-    this.halo?.setTint(grade === "staff" ? 0xa070ff : grade === "mythic" ? 0xffb838 : 0xfff0c0);
+    this.halo?.setTint(grade === "staff" ? 0xa070ff : grade === "mythic" ? 0xffb838 : grade === "manager" ? 0x30d8a8 : 0xfff0c0);
   }
 
   get height(): number {
@@ -145,6 +153,26 @@ export class TitleView {
           const d = Math.abs(i - g);
           const top = d < 0.8 ? STAFF_GLINT_TOP : STAFF_TOP;
           const bot = d < 0.8 ? STAFF_GLINT_BOT : d < 1.6 ? 0xffd27a : STAFF_BOT;
+          t.setCharacterTint(i, 1, false, top, top, bot, bot);
+        }
+      }
+    }
+
+    // 매니저: 민트 글자에 크림빛 반짝임이 천천히 지나간다 (움직임 줄이기면 반짝임 없이)
+    if (this.grade === "manager" && vis) {
+      const step = this.reduced ? 0 : Math.floor(now / ANIM_STEP_MS);
+      if (step !== this.step) {
+        this.step = step;
+        const n = t.text.length;
+        const g = this.reduced ? -99 : ((now % MGR_GLINT_MS) / MGR_GLINT_MS) * (n + 6) - 3;
+        for (let i = 0; i < n; i++) {
+          if (i === 0 || i === n - 1) {
+            t.setCharacterTint(i, 1, false, MGR_BRACKET, MGR_BRACKET, MGR_BRACKET, MGR_BRACKET);
+            continue;
+          }
+          const d = Math.abs(i - g);
+          const top = d < 0.8 ? 0xffffff : MGR_TOP;
+          const bot = d < 0.8 ? 0xfff2cc : d < 1.6 ? 0x7ae8c8 : MGR_BOT;
           t.setCharacterTint(i, 1, false, top, top, bot, bot);
         }
       }
@@ -223,7 +251,7 @@ export class TitleView {
       } else {
         // 둘레를 천천히 돈다 (타원)
         const ang = (this.reduced ? 0 : now / 1400) + (i * Math.PI * 2) / this.sparks.length;
-        px = x + Math.cos(ang) * (w / 2 + (this.grade === "staff" ? 12 : 6) * sc);
+        px = x + Math.cos(ang) * (w / 2 + (this.grade === "staff" ? 12 : this.grade === "manager" ? 15 : 6) * sc);
         py = midY + Math.sin(ang) * (h / 2 + 1 * sc);
         a = this.reduced ? 0.8 : 0.55 + 0.45 * Math.sin(now / 260 + i * 2);
       }
@@ -257,6 +285,26 @@ export class TitleView {
 function drawOrnaments(g: Phaser.GameObjects.Graphics, grade: ViewGrade, w: number, h: number, sc: number): void {
   const u = sc;
   const half = Math.round(w / 2 + 2 * u);
+  if (grade === "manager") {
+    // 글자 쪽에서 바깥으로: 민트줄 두 가닥 → 서류판(청록 테 · 크림 종이 · 민트 글줄 · 위쪽 클립)
+    for (const s of [-1, 1]) {
+      const x0 = s * half;
+      const len = 4 * u;
+      const xa = s < 0 ? x0 - len : x0;
+      g.fillStyle(0x0a0b10, 0.85).fillRect(xa - u, -2 * u, len + 2 * u, 4 * u);
+      g.fillStyle(0xc8fff0, 1).fillRect(xa, -u, len, u);
+      g.fillStyle(0x22b89c, 1).fillRect(xa, 0, len, u);
+      const cx = x0 + s * (len + 4 * u);
+      g.fillStyle(0x0a0b10, 0.9).fillRect(cx - 4 * u, -5 * u, 8 * u, 10 * u);
+      g.fillStyle(0x1aa890, 1).fillRect(cx - 3 * u, -4 * u, 6 * u, 8 * u);
+      g.fillStyle(0xfffaf0, 1).fillRect(cx - 2 * u, -3 * u, 4 * u, 6 * u);
+      g.fillStyle(0x5fdcb8, 1).fillRect(cx - 2 * u, -u, 3 * u, u).fillRect(cx - 2 * u, u, 4 * u, u);
+      g.fillStyle(0xd8f4ea, 1).fillRect(cx + u, -3 * u, u, u);
+      g.fillStyle(0x0a0b10, 0.9).fillRect(cx - 2 * u, -6 * u, 4 * u, 2 * u);
+      g.fillStyle(0x9af0dc, 1).fillRect(cx - u, -6 * u, 2 * u, 2 * u);
+    }
+    return;
+  }
   if (grade === "mythic") {
     // 글자 쪽에서 바깥으로: 금줄 세 가닥(가운데 길게) → 금테 두른 금빛 네모 별(가운데 흰빛) → 위아래 작은 금가루 점
     for (const s of [-1, 1]) {

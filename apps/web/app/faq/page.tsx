@@ -4,7 +4,7 @@ import { pageMetadata } from "../seo";
 import { ATTEND_RULE_TEXT } from "@/lib/attendStay";
 import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
 import { DAILY_EARN_CAP, earnRule } from "@/lib/economy";
-import { CHAT_MAX, CHAT_RECENT_MS, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS, FRIEND_MAX, NAME_MAX, NAME_MIN, PERMANENT_MULTIPLIER } from "@tomb/protocol";
+import { CHAT_HISTORY_MS, CHAT_MAX, CHAT_STORE_MAX, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS, FRIEND_MAX, NAME_MAX, NAME_MIN, PERMANENT_MULTIPLIER } from "@tomb/protocol";
 import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, AUTO_FISH_MAX_MS } from "@/lib/forage/auto";
 import { DAILY_CATCH_MAX } from "@/lib/forage/catalog";
 import { DORMANT_DAYS } from "@/lib/store/types";
@@ -92,7 +92,7 @@ const FAQ = [
   },
   {
     q: "채팅할 수 있나요?",
-    a: `네. 컴퓨터는 Enter, 휴대폰은 [채팅] 버튼으로 ${CHAT_MAX}자까지 쓸 수 있어요. 글은 머리 위 말풍선과 왼쪽 아래 채팅창에 같이 뜨고, 같은 채널 마을(집 안이면 그 집)에 있는 사람에게 보여요. 서버에는 ${Math.round(CHAT_RECENT_MS / 60_000)}분만 머물고 사라져서, 늦게 들어와도 최근 ${Math.round(CHAT_RECENT_MS / 60_000)}분 글만 보여요. 욕설은 가려지고, 다른 사람 글이 오면 작은 알림음이 나요(음악 창에서 끌 수 있어요).`,
+    a: `네. 컴퓨터는 Enter, 휴대폰은 [채팅] 버튼으로 ${CHAT_MAX}자까지 쓸 수 있어요. 글은 머리 위 말풍선과 왼쪽 아래 채팅창에 같이 뜨고, 같은 채널 마을(집 안이면 그 집)에 있는 사람에게 보여요. 서버에는 같은 채널 최근 ${CHAT_STORE_MAX}줄이 ${CHAT_HISTORY_MS / 3_600_000}시간까지 남아서, 늦게 들어와도 최근 대화를 볼 수 있어요. 욕설은 가려지고, 다른 사람 글이 오면 작은 알림음이 나요(음악 창에서 끌 수 있어요).`,
   },
   {
     q: "돌아다니는 주민은 누구예요?",

@@ -104,6 +104,38 @@ describe("POST /api/camp/bbq", () => {
     expect(st).toEqual({ drunk: DRUNK_MAX });
   });
 
+  it("컨디숑: 취기가 없으면 포인트를 안 쓰고 안내만, 있으면 한 단계 내린다 (깨는 시계는 지금부터)", async () => {
+    const v = await newVisitor();
+    const accounts = getAccounts();
+    await accounts.earn(v.visitorId, "hunt", kstDay(), { amount: 200 });
+    const p0 = (await accounts.get(v.visitorId, kstDay(), Date.now())).points;
+    const none = await eat(v, "hangover");
+    expect(none.status).toBe(409);
+    expect((await accounts.get(v.visitorId, kstDay(), Date.now())).points).toBe(p0);
+    await eat(v, "beer");
+    await eat(v, "soju");
+    const r = (await (await eat(v, "hangover")).json()) as BbqResponse;
+    expect(r).toMatchObject({ item: "hangover", lv: 1 });
+    expect(r.until).toBe(r.at! + DRUNK_STEP_MS);
+    expect(await verifyGrant(env.joinSecret(), r.grant)).toMatchObject({ kind: "bbq", item: "hangover", lv: 1 });
+    const r2 = (await (await eat(v, "hangover")).json()) as BbqResponse;
+    expect(r2).toMatchObject({ lv: 0 });
+    expect(r2.until).toBe(r2.at);
+    const st = (await (await bbq.GET(call("/api/camp/bbq", v, "GET"))).json()) as BbqStatusResponse;
+    expect(st).toEqual({ drunk: 0 });
+    expect((await eat(v, "hangover")).status).toBe(409);
+  });
+
+  it("파는 곳을 보내면 맞는 곳에서만 판다 (먹거리는 그릴, 마실 거리는 자판기)", async () => {
+    const v = await newVisitor();
+    await getAccounts().earn(v.visitorId, "hunt", kstDay(), { amount: 200 });
+    const buy = (item: string, stand: string) => bbq.POST(call("/api/camp/bbq", v, "POST", { item, stand }));
+    expect((await buy("beer", "grill")).status).toBe(400);
+    expect((await buy("pork", "vending")).status).toBe(400);
+    expect((await buy("beer", "vending")).status).toBe(200);
+    expect((await buy("pork", "grill")).status).toBe(200);
+  });
+
   it("캠핑장이 닫힌 운영 서버에서는 없는 경로 (CAMP_ENABLED=1이면 열린다)", async () => {
     const v = await newVisitor();
     vi.stubEnv("VERCEL_ENV", "production");

@@ -22,6 +22,8 @@ export class CampPrebake {
   private cur = "";
   /** 오래 걸린 조각들 (QA, 최대 12개) */
   readonly slow: string[] = [];
+  /** 11/15 새로 올린 텍스처 (한 번 그려 두기 — takeFresh) */
+  private readonly fresh: string[] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -54,6 +56,11 @@ export class CampPrebake {
     return this.finished;
   }
 
+  /** 새로 올린 텍스처 키를 꺼내요 (꺼내면 비어요) */
+  takeFresh(): string[] {
+    return this.fresh.splice(0);
+  }
+
   /** 남은 것을 지금 다 굽는다 (연출이 먼저 끝났을 때 — 화면이 어두운 순간에) */
   finish(): void {
     while (!this.finished) this.step(1000);
@@ -69,6 +76,7 @@ export class CampPrebake {
       const out = build();
       const a: Art.ArtOut = "grid" in out ? out : { grid: out };
       addCanvasTexture(this.scene, key, { canvas: a.grid.toCanvas(), frameW: a.frameW, frameH: a.frameH, linear });
+      this.fresh.push(key);
       yield;
     }
     // 바닥 덩어리: 도착하는 곳에 가까운 것부터, 줄 묶음마다 끊어서
@@ -92,6 +100,7 @@ export class CampPrebake {
       if (!tex.exists(key)) {
         addCanvasTexture(this.scene, key, { canvas });
         clampEdges(this.scene, key);
+        this.fresh.push(key);
       }
       yield;
     }

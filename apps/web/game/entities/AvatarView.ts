@@ -170,6 +170,8 @@ export class AvatarView {
   private dexBadgeN = 0;
   /** 주간 랭킹 1위 값 (비트 묶음 + 오라 끔 표시, 0 = 아님)과 이름표 위 배지 */
   private champ = 0;
+  /** 11/16 매니저 (실시간 서버가 알린 mgr, 내 캐릭터는 착용 증서와 같이 온 값) → 매니저 전용 칭호를 띄워도 된다 */
+  private mgr = false;
   private champBadge: ChampBadgeView | null = null;
   /** 칭호 「…」 (이름표 바로 위, 연한 금빛). 칭호를 달았을 때만 만든다 */
   private titleView: TitleView | null = null;
@@ -343,6 +345,17 @@ export class AvatarView {
     if (this.cfx || champAuraOn(this.champ) || staff) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, this.body, this.champ, staff);
   }
 
+  /** 11/16 매니저 표시 켜기·끄기: 매니저 전용 칭호는 이 표시가 있을 때만 머리 위에 뜬다 (오라는 없다) */
+  setMgr(on: boolean): void {
+    if (on === this.mgr) return;
+    this.mgr = on;
+    this.setTitle(this.wornTitle);
+  }
+
+  get manager(): boolean {
+    return this.mgr;
+  }
+
   get champBits(): number {
     return this.champ;
   }
@@ -424,6 +437,7 @@ export class AvatarView {
     if (typeof extra.body === "string") this.setBody(extra.body);
     if (extra.dye !== undefined) this.setColor(avatarColorSpec(this.colorSpec, sanitizeDye(extra.dye)));
     if (typeof extra.champ === "number") this.setChamp(extra.champ);
+    if (typeof extra.mgr === "number") this.setMgr(extra.mgr === 1);
   }
 
   /** 몸 모양 변경 (AVATAR_BODIES id, 모르는 값은 hood) */
@@ -559,7 +573,7 @@ export class AvatarView {
    *  11/15 운영자 표시면 낀 칭호 대신 운영자 전용 「운영자」 (한 줄만 — 착용 목록이 아니라 서명된 staff 표시로만 뜬다) */
   private setTitle(id: string | null): void {
     this.wornTitle = id;
-    const t = headTitle(id, !!this.staffFx);
+    const t = headTitle(id, !!this.staffFx, this.mgr);
     if (t === "staff") {
       (this.titleView ??= new TitleView(this.scene, this.atlas, this.label.depth, this.reduced)).setStaff();
       return;

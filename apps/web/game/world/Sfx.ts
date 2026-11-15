@@ -8,7 +8,7 @@ import { AudioHost, type SoundBus } from "./audioHost";
 // 모닥불 루프·물소리(수영 물장구 루프·잠수 물방울)는 환경음 갈래(amb 버스)를 따른다.
 // WebAudio 컨텍스트·볼륨·깨우기는 AudioHost, 루프는 AmbientLoop (빗소리 WeatherSound와 같은 코드).
 
-export type SfxName = "launch" | "burst" | "say" | "swing" | "bubble";
+export type SfxName = "launch" | "burst" | "say" | "swing" | "bubble" | "thud" | "clack";
 
 const FILES: Record<SfxName, string> = {
   launch: "/sfx/firework-launch.mp3",
@@ -17,6 +17,9 @@ const FILES: Record<SfxName, string> = {
   // 14번: 그네 삐걱(앞으로·뒤로 한 번씩, 약 1.4초) · 잠수 물방울 (scripts/gen-bgm.mjs가 굽는다)
   swing: "/sfx/swing.mp3",
   bubble: "/sfx/bubble.mp3",
+  // 11/15 캠핑장: 음료 자판기 덜컹(캔이 떨어지는 소리), 3배 통삼겹 쿵 (사냥터와 같은 파일)
+  thud: "/sfx/thud.mp3",
+  clack: "/sfx/clack.mp3",
 };
 
 /** 파일마다 따르는 소리 갈래 (없으면 효과음) */

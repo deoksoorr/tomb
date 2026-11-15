@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { champBoards, TITLE_IDS, titleOfLook, type AvatarDye, type ChampBoard } from "@tomb/protocol";
+import { champBoards, MANAGER_TITLE_ID, TITLE_IDS, titleOfLook, type AvatarDye, type ChampBoard } from "@tomb/protocol";
 import { env } from "./env";
 import { DEX_CATS, dexIdsOf, speciesOf } from "./forage/catalog";
 import { titlesOf } from "./forage/dexReward";
@@ -11,6 +11,7 @@ import { getRpgStore } from "./rpg/store";
 import { getTowerStore } from "./rpg/towerStore";
 import { prevWeek } from "./gameDay";
 import { isSuperHunter, testServerEnv } from "./rpg/superHunter";
+import { isManager } from "./managers";
 import { isStaff } from "./staff";
 import { getAccounts } from "./store";
 import { kstDay, kstWeek, lookOf } from "./store/accounts";
@@ -243,15 +244,18 @@ export type TitleStatus = {
  * 가방에서 아직 안 본 칭호(unseen), first = 이 계정을 처음 확인 (기능 전에 얻어 둔 칭호를 "칭호가 n개 생겼어요"로 묶어 알린다), 진행 수치
  */
 export async function titleStatus(accountId: string, now = Date.now()): Promise<TitleStatus> {
-  if (await isStaff(accountId).catch(() => false)) {
+  // 11/16 매니저인지는 칭호 기억(몇 분)에 넣지 않고 매번 본다 (매니저 목록은 인스턴스가 1분 기억 — 해제가 빨리 반영되게)
+  const [staff, manager] = await Promise.all([isStaff(accountId).catch(() => false), isManager(accountId, now)]);
+  if (staff) {
     const equipped = await getAccounts()
       .get(accountId, kstDay(now), now)
       .then((a) => titleOfLook(lookOf(a)))
       .catch(() => null);
-    return { earned: [...TITLE_IDS], fresh: [], unseen: [], first: false, equipped, progress: {}, staff: true };
+    // 운영자도 매니저 전용 칭호는 매니저로 임명됐을 때만
+    return { earned: TITLE_IDS.filter((id) => manager || id !== MANAGER_TITLE_ID), fresh: [], unseen: [], first: false, equipped, progress: {}, staff: true };
   }
   const { facts, marks, equipped } = await cached(accountId, now);
-  const reached = new Set<string>(earnedTitleIds(facts));
+  const reached = new Set<string>(earnedTitleIds({ ...facts, manager }));
   // 한 번 알린 칭호는 기록이 내려가도 남는다 (연속 출석이 끊기거나 집·꾸미기 점수가 내려가도).
   // 11/15 꼭대기 층 주인·이번 주 최고층은 지금 주인일 때만 — 뺏기면 끼고 있던 것도 뺀다 (이 확인은 입장·칭호 창을 열 때)
   const earned = TITLE_IDS.filter((id) => reached.has(id) || (marks.announced.includes(id) && !titleDef(id)?.transient));

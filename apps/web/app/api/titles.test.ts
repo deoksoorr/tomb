@@ -71,7 +71,7 @@ describe("칭호 목록 (lib/titles)", () => {
   });
 
   it("등급: 같은 줄은 단계가 높을수록 등급이 같거나 높고, 동·은·금·전설·신화가 모두 있다", () => {
-    const order = { bronze: 0, silver: 1, gold: 2, legend: 3, mythic: 4 } as const;
+    const order = { bronze: 0, silver: 1, gold: 2, legend: 3, mythic: 4, manager: 5 } as const;
     expect(new Set(TITLES.map((t) => t.grade))).toEqual(new Set(TITLE_GRADES));
     const byMetric = new Map<string, typeof TITLES>();
     for (const t of TITLES) if (t.metric && t.need !== undefined) byMetric.set(t.metric, [...(byMetric.get(t.metric) ?? []), t]);
@@ -89,7 +89,9 @@ describe("칭호 목록 (lib/titles)", () => {
   it("칭호 능력: 등급이 높을수록 크고, 가장 빠른 타는 펫과 겹쳐도 실시간 서버 속도 검증(달리기 × 1.5) 안", () => {
     expect(TITLE_PERKS.bronze).toEqual({ speed: 1, discount: 0 });
     // 동 → 전설은 오르고, 11/15 신화는 전설과 같다 (속도 검증 상한 안)
-    const steps = TITLE_GRADES.filter((g) => g !== "mythic");
+    // 11/16 매니저 칭호는 능력이 없다 (혜택은 칭호·오라뿐)
+    expect(TITLE_PERKS.manager).toEqual({ speed: 1, discount: 0 });
+    const steps = TITLE_GRADES.filter((g) => g !== "mythic" && g !== "manager");
     for (let i = 1; i < steps.length; i++) {
       expect(TITLE_PERKS[steps[i]].speed).toBeGreaterThan(TITLE_PERKS[steps[i - 1]].speed);
       expect(TITLE_PERKS[steps[i]].discount).toBeGreaterThan(TITLE_PERKS[steps[i - 1]].discount);
@@ -205,7 +207,8 @@ describe("운영자 · 칭호 능력 · 누적 접속 시간", () => {
     expect((await staffRoute.POST(admin)).status).toBe(200);
     const r = (await (await titles.GET(call("/api/me/titles", v))).json()) as TitlesResponse;
     expect(r.staff).toBe(true);
-    expect(r.earned).toEqual([...TITLE_IDS]);
+    // 11/16 매니저 전용 칭호는 운영자도 매니저로 임명됐을 때만 (managers.test)
+    expect(r.earned).toEqual(TITLE_IDS.filter((id) => id !== "t_mgr"));
     expect(r.fresh).toEqual([]);
     expect(r.unseen).toEqual([]);
     expect((await titles.POST(call("/api/me/titles", v, { id: "t_kill20k" }))).status).toBe(200);

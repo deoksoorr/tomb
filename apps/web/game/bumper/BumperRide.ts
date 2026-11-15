@@ -4,8 +4,9 @@ import { bridge } from "../bridge";
 import { DEPTH } from "../config";
 import type { MoveInput } from "../logic/movement";
 import { DEADZONE_ENTER } from "../logic/movement";
-import { BUMP_BIG_POWER, BUMP_COUNT_POWER, CAR_BOUNDS, canExit, collideCar, dirAngle, headingDir, headingFrame, newMotion, pickCar, remoteBumpPower, stepCar, touching, wrapAngle, type Bump, type CarBody, type CarMotion } from "../logic/bumper";
+import { BUMP_BIG_POWER, BUMP_COUNT_POWER, CAR_BOUNDS, canExit, collideCar, dirAngle, exitSpot, headingDir, headingFrame, newMotion, pickCar, remoteBumpPower, stepCar, touching, wrapAngle, type Bump, type CarBody, type CarMotion, type ExitSpot } from "../logic/bumper";
 import { spotVerdict } from "../logic/restore";
+import { inWater, standable } from "../world/layout";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import type { RideHost } from "../world/PlazaRides";
 import { bystanderGain } from "../world/rides";
@@ -26,12 +27,12 @@ import {
   POLE_H,
   STRING_BULBS,
   stringSag,
-  whenBumperFont,
 } from "./bumperArt";
 import { BUMPER_ARCH, BUMPER_BOOTH, BUMPER_DOOR, BUMPER_POLES, BUMPER_POSTS, bumperColliders } from "./bumperLayout";
 
 // 범퍼카장 (11/16, 예전 다리 건너 묘역 자리). 그림 + 타기·운전·부딪힘을 한곳에서 (조각배 BoatRide와 같은 흐름).
-//  - 입구 앞에서 E → 세워 둔 빈 차 중 무작위 하나에 탄다 (차 색 = 차 번호, 서버 좌석으로 1인 1대). 입구 안쪽에서 E → 내린다
+//  - 입구 앞에서 E → 세워 둔 빈 차 중 무작위 하나에 탄다 (차 색 = 차 번호, 서버 좌석으로 1인 1대).
+//    테두리 어디든 차를 붙이고 E → 그 벽 바로 바깥에 내린다 (막혀 있으면 가까운 빈 곳, 입구 안쪽이면 입구 앞. logic/bumper exitSpot)
 //  - 운전: 방향키·WASD·조이스틱 (logic/bumper stepCar — 관성 있는 미끄러짐). Space = 빵빵 (act "honk": 같은 채널에 소리·말풍선)
 //  - 부딪힘: 테두리·기둥·타이어·다른 차 (logic/bumper collideCar). 내 화면은 내 차에만 반응을 준다 — 상대 차는 그 사람 화면이 움직인다.
 //    「쿵」 소리·별·차 흔들림, 세게 부딪히면 화면이 살짝 흔들린다 (움직임 줄이기면 끈다). 차 위에 「쿵 ×12」
@@ -115,7 +116,6 @@ export class BumperRide {
   private ridingShown = false;
   private chaseAt = 0;
   private chaseStep = 0;
-  private alive = true;
 
   constructor(private readonly host: BumperHost) {
     const scene = host.scene;
@@ -152,11 +152,8 @@ export class BumperRide {
       z.removeFromDisplayList();
       host.colliders.add(z);
     }
-    whenBumperFont(() => {
-      if (!this.alive) return;
-      ensureBumperSign(scene);
-      this.addSign();
-    });
+    ensureBumperSign(scene);
+    this.addSign();
     this.setSceneryVisible(false);
   }
 
@@ -177,11 +174,11 @@ export class BumperRide {
       } else this.keep(s.add.image(p.x, p.y + 4, BTEX.tyre).setOrigin(0.5, 1).setDepth(p.y));
     }
     for (const p of BUMPER_POLES) this.keep(s.add.image(p.x, p.y + 2, BTEX.pole).setOrigin(0.5, 1).setDepth(p.y + 0.5));
-    // 아치 기둥 (간판판은 글꼴을 불러온 뒤 addSign)
+    // 아치 기둥 (간판판·매표소는 addSign)
     this.keep(s.add.image(BUMPER_ARCH.x, BUMPER_ARCH.y + 1, BTEX.arch).setOrigin(0.5, 1).setDepth(BUMPER_ARCH.y + 0.4));
   }
 
-  /** 간판·매표소 (글씨가 들어간 그림) */
+  /** 간판·매표소 (손으로 찍은 점 글씨가 들어간 그림) */
   private addSign(): void {
     const s = this.host.scene;
     const top = BUMPER_ARCH.y + 1 - ARCH_H + 2;
@@ -190,6 +187,10 @@ export class BumperRide {
     this.keep(sg);
     this.glows.push({ img: sg, base: 0.85 });
     this.keep(s.add.image(BUMPER_BOOTH.x, BUMPER_BOOTH.y + 1, BTEX.booth).setOrigin(0.5, 1).setDepth(BUMPER_BOOTH.y));
+    // 밤: 「무료」 글씨도 불이 켜진다
+    const bg = s.add.image(BUMPER_BOOTH.x, BUMPER_BOOTH.y + 1, BTEX.boothGlow).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights).setAlpha(0);
+    this.keep(bg);
+    this.glows.push({ img: bg, base: 0.7 });
     this.setSceneryVisible(this.near);
   }
 
@@ -286,14 +287,14 @@ export class BumperRide {
 
   /**
    * 범퍼카 위에서의 키 (E·X·스페이스·타기). 타고 있으면 여기서 처리하고 true.
-   * E = 입구 안쪽에서 내리기, 스페이스 = 빵빵. 표현·채팅 키는 그대로 지나간다
+   * E = 테두리에 닿았거나 입구 안쪽이면 내리기, 스페이스 = 빵빵. 표현·채팅 키는 그대로 지나간다
    */
   onAction(a: string): boolean {
     const pl = this.host.player();
     if (!pl.inCar) return false;
     if (a === "interact") {
-      if (canExit(pl.x, pl.y)) this.leave();
-      else this.host.toast("입구 가까이 가서 E를 누르면 내려요");
+      if (canExit(pl.x, pl.y)) this.leave(undefined, exitSpot(pl.x, pl.y, (x, y) => standable(x, y) && !inWater(x, y)));
+      else this.host.toast("벽에 차를 붙이고 E를 누르면 내려요");
       return true;
     }
     if (a === "jump") {
@@ -329,14 +330,14 @@ export class BumperRide {
     if (best) best.flashUntil = now + 380;
   }
 
-  /** 내리기 (입구 앞으로). force면 어디서든 (자동 걷기·자리 놓침·순간이동) */
-  leave(toast?: string): void {
+  /** 내리기. to = 내려설 자리 (E로 내릴 때 exitSpot). 없으면 입구 앞 (자동 걷기·자리 놓침·순간이동) */
+  leave(toast?: string, to?: ExitSpot): void {
     const h = this.host;
     const pl = h.player();
     if (!pl.inCar) return;
     const seat = pl.carSeatId;
-    pl.leaveCar(BUMPER_DOOR.x, BUMPER_DOOR.y, h.scene.time.now);
-    pl.dir = DIR.down;
+    pl.leaveCar(to ? to.x : BUMPER_DOOR.x, to ? to.y : BUMPER_DOOR.y, h.scene.time.now);
+    pl.dir = to ? to.dir : DIR.down;
     pl.view.setDoing(null);
     // 서버도 곧 걷기 MOVE로 자리를 풀지만, 다른 사람이 바로 탈 수 있게 먼저 알린다
     if (seat && h.judged()) h.stand();
@@ -679,7 +680,6 @@ export class BumperRide {
   }
 
   destroy(): void {
-    this.alive = false;
     for (const c of this.cars) {
       c.fade?.stop();
       c.back?.destroy();

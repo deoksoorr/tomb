@@ -15,11 +15,12 @@ import { bbqItem, DRUNK_MAX, DRUNK_STEP_MS, isBbqId, type BbqItemId } from "./bb
 export type Grant =
   /** 46·25번: dye·body가 있으면 염색·몸 모양도 같이 바꾼다 (옛 웹이 낸 증서엔 없다 → 실시간 서버는 그대로 둔다) */
   /** 주간 1위: champ = 지금 1위 비트(+ 오라 끔 표시, 0 = 1위 아님)가 있으면 실시간 서버가 다른 사람 화면의 배지·오라도 바꾼다 */
-  | { kind: "look"; visitorId: string; look: Look; exp: number; dye?: AvatarDye; body?: string; champ?: number }
+  /** 11/16 mgr = 매니저 표시 (1 = 매니저, 0 = 아님 — 해제되면 실시간 서버가 칭호를 바로 뗀다). 옛 웹이 낸 증서엔 없다 → 그대로 */
+  | { kind: "look"; visitorId: string; look: Look; exp: number; dye?: AvatarDye; body?: string; champ?: number; mgr?: 0 | 1 }
   | { kind: "firework"; visitorId: string; item: string; nonce: string; exp: number }
   | { kind: "goblin"; visitorId: string; points: number; nonce: string; exp: number }
   /** ch = 외친 채널 (scope가 channel이면 그 채널 DO만 받아 준다) */
-  | { kind: "megaphone"; visitorId: string; nonce: string; name: string; text: string; scope: MegaphoneScope; ch: number; exp: number; /** 운영자 계정 (이름 금색 표시용) */ staff?: true }
+  | { kind: "megaphone"; visitorId: string; nonce: string; name: string; text: string; scope: MegaphoneScope; ch: number; exp: number; /** 운영자 계정 (이름 금색 표시용) */ staff?: true; /** 11/16 매니저 계정 ("매니저" 딱지) */ mgr?: true }
   /**
    * 11/15 캠핑장 바베큐 한 접시·한 잔: until(epoch ms)까지 효과 (bbq.ts). nonce는 한 번만.
    * 마실 거리(취기)면 lv = 마신 뒤 취기 단계, at = 마신 시각 (until = 다 깨는 시각)
@@ -68,6 +69,7 @@ export async function verifyGrant(
       ...(typeof g.dye === "string" ? { dye: unpackDye(g.dye) } : {}),
       ...(isAvatarBody(g.body) ? { body: g.body } : {}),
       ...(isChampField(g.champ) ? { champ: g.champ } : {}),
+      ...(g.mgr === 0 || g.mgr === 1 ? { mgr: g.mgr } : {}),
     };
   if (g.kind === "firework" && isFireworkId(g.item) && typeof g.nonce === "string" && g.nonce.length <= 32)
     return { kind: "firework", visitorId: g.visitorId, item: g.item, nonce: g.nonce, exp: g.exp };
@@ -88,7 +90,7 @@ export async function verifyGrant(
     g.ch >= 1 &&
     g.ch <= 100
   )
-    return { kind: "megaphone", visitorId: g.visitorId, nonce: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, exp: g.exp, ...(g.staff === true ? { staff: true as const } : {}) };
+    return { kind: "megaphone", visitorId: g.visitorId, nonce: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, exp: g.exp, ...(g.staff === true ? { staff: true as const } : {}), ...(g.mgr === true ? { mgr: true as const } : {}) };
   // 11/15 바베큐: 끝나는 시각은 그 메뉴 길이(+여유) 안이어야 한다 (터무니없이 오래 커지지 않게).
   // 마실 거리(취기)는 단계 1~DRUNK_MAX와 마신 시각이 있어야 하고, 끝나는 시각 = 다 깨는 시각
   if (
@@ -104,6 +106,14 @@ export async function verifyGrant(
       const lv = g.lv;
       const at = g.at;
       if (typeof lv !== "number" || !Number.isInteger(lv) || lv < 1 || lv > DRUNK_MAX || typeof at !== "number" || !Number.isFinite(at)) return null;
+      if (at > nowSec * 1000 + GRANT_TTL_SEC * 1000 || g.until !== at + lv * DRUNK_STEP_MS) return null;
+      return { kind: "bbq", visitorId: g.visitorId, item: g.item, until: g.until, nonce: g.nonce, exp: g.exp, lv, at };
+    }
+    // 컨디숑(술 깨기): 내린 뒤 단계 0~DRUNK_MAX-1 (0 = 다 깼다), 끝나는 시각 = 다 깨는 시각
+    if (item.kind === "sober") {
+      const lv = g.lv;
+      const at = g.at;
+      if (typeof lv !== "number" || !Number.isInteger(lv) || lv < 0 || lv >= DRUNK_MAX || typeof at !== "number" || !Number.isFinite(at)) return null;
       if (at > nowSec * 1000 + GRANT_TTL_SEC * 1000 || g.until !== at + lv * DRUNK_STEP_MS) return null;
       return { kind: "bbq", visitorId: g.visitorId, item: g.item, until: g.until, nonce: g.nonce, exp: g.exp, lv, at };
     }

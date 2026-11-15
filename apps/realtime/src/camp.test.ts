@@ -1,6 +1,8 @@
 import {
   AVATAR_COLORS,
   BOAT_SEATS,
+  BUMPER_GATE,
+  BUMPER_SEATS,
   CAMP_ARRIVE,
   CAMP_FISHING_SPOTS,
   DIR,
@@ -412,5 +414,52 @@ describe("camp BBQ (11/15 바베큐 — 먹으면 잠깐 커진다)", () => {
     core.message(a, toVillage(), 10_000);
     const seen = events(v).filter((e): e is Extract<S2C, { t: "join" }> => e.t === "join").at(-1)!;
     expect(seen).toMatchObject({ bbq: { i: "pork", u: 300_000 }, spd: { i: "coffee", u: 600_000 }, drunk: { lv: 2, at: 7_000 } });
+  });
+});
+
+describe("커진 채로는 못 탄다 (11/15 바베큐 커지기 × 타는 자리)", () => {
+  const DOOR = { x: BUMPER_GATE.x, y: BUMPER_GATE.y - 8 };
+  const g = (o: object) => send({ t: "bbq", grant: JSON.stringify({ kind: "bbq", visitorId: "a", exp: 999, ...o }) });
+  it("커진 동안 범퍼카 자리는 거절, 효과가 끝나면 탄다. 타고 있다가 커지면 내린다", async () => {
+    const { core, join } = setup();
+    const a = join("a", { spawn: DOOR });
+    core.message(a, g({ item: "wholepork", until: 180_000, nonce: "w1" }), 1_000);
+    await flush();
+    clear(a);
+    core.message(a, send({ t: "sit", seatId: BUMPER_SEATS[0].id }), 2_000);
+    expect(events(a)).toContainEqual({ t: "seatDenied", seatId: BUMPER_SEATS[0].id });
+    expect(core.peer(1)?.seatId).toBeNull();
+    // 효과가 끝난 뒤에는 탄다
+    core.message(a, send({ t: "sit", seatId: BUMPER_SEATS[0].id }), 181_000);
+    expect(core.peer(1)?.seatId).toBe(BUMPER_SEATS[0].id);
+    // 탄 채로 또 커지면 (서버도) 차에서 내린다
+    clear(a);
+    core.message(a, g({ item: "tomahawk", until: 400_000, nonce: "t1" }), 182_000);
+    await flush();
+    expect(core.peer(1)?.seatId).toBeNull();
+    expect(events(a)).toContainEqual({ t: "seat", seatId: BUMPER_SEATS[0].id, sid: null });
+  });
+  it("빨라지기·취기는 타기와 상관없다", async () => {
+    const { core, join } = setup();
+    const a = join("a", { spawn: DOOR });
+    core.message(a, g({ item: "zap", until: 200_000, nonce: "z1" }), 1_000);
+    await flush();
+    core.message(a, send({ t: "sit", seatId: BUMPER_SEATS[1].id }), 2_000);
+    expect(core.peer(1)?.seatId).toBe(BUMPER_SEATS[1].id);
+  });
+});
+
+describe("컨디숑 (11/15 술 깨기)", () => {
+  it("내린 단계·시각을 싣고 알린다. 0이 되면 취기가 사라진다", async () => {
+    const { core, join } = setup();
+    const a = join("a", { camp: true, map: "camp", spawn: { x: 300, y: 600 } });
+    const g = (o: object) => send({ t: "bbq", grant: JSON.stringify({ kind: "bbq", visitorId: "a", exp: 999, ...o }) });
+    core.message(a, g({ item: "beer", until: 1_000 + 600_000, lv: 1, at: 1_000, nonce: "b1" }), 1_000);
+    await flush();
+    core.message(a, g({ item: "hangover", until: 5_000, lv: 0, at: 5_000, nonce: "h1" }), 5_000);
+    await flush();
+    expect(events(a).filter((e) => e.t === "bbq").at(-1)).toEqual({ t: "bbq", sid: 1, i: "hangover", u: 5_000, lv: 0, at: 5_000 });
+    const c = join("c", { camp: true, map: "camp", spawn: { x: 320, y: 600 } });
+    expect(welcome(c).peers.find((p) => p.sid === 1)?.drunk).toBeUndefined();
   });
 });

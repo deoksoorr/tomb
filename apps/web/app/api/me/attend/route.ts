@@ -28,10 +28,11 @@ export const POST = handler(async (req) => {
   const look = lookOf(me);
   const appearance = { dye: me.dye, body: me.body };
   const champ = me.champ ?? 0;
+  const mgr = me.manager ? (1 as const) : (0 as const);
   await recordLook(visitorId, { equipped: me.equipped, ...appearance }, { now });
   return json<AttendResponse>({
     me,
     earned: 0,
-    look: { look, ...appearance, champ, lookGrant: await lookGrant(env.joinSecret(), visitorId, look, now, { ...appearance, champ }) },
+    look: { look, ...appearance, champ, mgr, lookGrant: await lookGrant(env.joinSecret(), visitorId, look, now, { ...appearance, champ, manager: !!mgr }) },
   });
 });

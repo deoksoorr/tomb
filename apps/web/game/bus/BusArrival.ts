@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { ambienceAt, parseAmbienceOverride } from "@/lib/ambience";
 import { DEPTH } from "../config";
-import { BUS_DOOR_DX, BUS_FOOT, BUS_FRAME, BUS_TEX, BUS_W, ensureBusTextures, removeBusTextures } from "./busArt";
+import { BUS_DOOR_DX, BUS_FOOT, BUS_FRAME, BUS_TEX, BUS_W, ensureBusTextures } from "./busArt";
 import { lightsOn } from "./busRideMath";
 import type { BusArrivalApi, BusArrivalFactory, BusArrivalOptions } from "./busTypes";
 
@@ -23,8 +23,6 @@ const LEAVE_FADE_MS = 900;
 const WHEEL_STEP = 5;
 const DUST_POOL = 6;
 const DUST_LIFE_MS = 520;
-
-const users = new WeakMap<Phaser.Textures.TextureManager, number>();
 
 type Phase =
   | { k: "idle" }
@@ -56,8 +54,8 @@ class BusArrival implements BusArrivalApi {
     private readonly scene: Phaser.Scene,
     private readonly o: BusArrivalOptions,
   ) {
+    // 11/15 버스 그림은 한 번 구우면 지우지 않아요 (버스를 부를 때마다 다시 굽느라 한 프레임씩 멈췄어요)
     ensureBusTextures(scene);
-    users.set(scene.textures, (users.get(scene.textures) ?? 0) + 1);
     this.dir = o.fromLeft ? 1 : -1;
     this.stopX = o.doorX - BUS_DOOR_DX * this.dir;
     // 열린 문 앞: 버스 옆면 위쪽 (캐릭터가 걸어 들어가면 버스 몸체 뒤로 가려진다)
@@ -161,11 +159,6 @@ class BusArrival implements BusArrivalApi {
     this.windows.destroy();
     this.head.destroy();
     for (const d of this.dust) d.img.destroy();
-    const left = (users.get(this.scene.textures) ?? 1) - 1;
-    if (left <= 0) {
-      users.delete(this.scene.textures);
-      removeBusTextures(this.scene);
-    } else users.set(this.scene.textures, left);
   }
 
   // ── 안쪽 ──

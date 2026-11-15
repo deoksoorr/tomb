@@ -234,6 +234,8 @@ export type Me = {
   renameRequired?: true;
   /** 주간 랭킹 1위 (지난주 1위인 랭킹 비트 + 본인이 오라를 껐으면 CHAMP_AURA_OFF — @tomb/protocol). 1위가 아니면 없음 */
   champ?: number;
+  /** 11/16 매니저 (관리자가 임명 — 전용 칭호·채팅 딱지뿐). 아니면 없음 */
+  manager?: true;
 };
 
 /** 휴면 계정이 돌아왔을 때 (입장 화면 안내·입장 거절 문구) */
@@ -291,7 +293,7 @@ export type BuyResponse = { me: Me };
 export type UseItemResponse = { me: Me; grant?: string; lookGrant?: string; grave?: PublicGrave };
 /** GET /api/me/look → 지금 착용 상태의 증서 (재접속 때) */
 /** dye·body = 46·25번 지금 염색·몸 모양 (게임이 내 아바타에 입힌다) */
-export type LookGrantResponse = { look: string[]; lookGrant: string; dye?: AvatarDye; body?: string | null; /** 주간 1위 값 (0 = 아님) */ champ?: number };
+export type LookGrantResponse = { look: string[]; lookGrant: string; dye?: AvatarDye; body?: string | null; /** 주간 1위 값 (0 = 아님) */ champ?: number; /** 11/16 매니저 (1 = 매니저, 0 = 아님, 옛 응답엔 없음) */ mgr?: 0 | 1 };
 /** GET /api/version → 배포 식별자. 다르면 새 버전 안내 */
 /** version = 배포 id (다르면 평소 패치 배너), minClient = 이 배포가 요구하는 최소 클라이언트 버전 (내 CLIENT_VERSION보다 크면 강제 업데이트 창) */
 export type VersionResponse = { version: string; minClient: number };
@@ -590,7 +592,7 @@ export type GiftClaimResponse = { gift: GiftEntry; me: Me; points: number };
 
 /** 확성기 기록 한 줄 */
 /** staff = 운영자 계정이 외친 것 (서버가 계정으로 판별 → 이름 금색) */
-export type MegaphoneEntry = { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; /** 마을 공지(주간 1위 소식 등) 줄 — 금색이지만 "운영자" 딱지는 없다 */ system?: true; /** 11/15 이 줄로 바꿔 끼운 앞 공지 id (긴급 의뢰 끝 공지 → 시작 공지를 뺀다) */ replaces?: string };
+export type MegaphoneEntry = { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; /** 마을 공지(주간 1위 소식 등) 줄 — 금색이지만 "운영자" 딱지는 없다 */ system?: true; /** 11/15 이 줄로 바꿔 끼운 앞 공지 id (긴급 의뢰 끝 공지 → 시작 공지를 뺀다) */ replaces?: string; /** 11/16 매니저 계정이 외친 것 → "매니저" 딱지 */ mgr?: true };
 /** GET /api/megaphone?channel=N → 그 채널에서 보이는 최근 확성기 (모든 채널 확성기 포함, 숨긴 것 빼고, 오래된 것 먼저 최대 20개) */
 export type MegaphoneListResponse = { entries: MegaphoneEntry[] };
 /** POST /api/megaphone { itemId, text, channel } → 확성기 1개를 쓰고 증서를 받는다 (게임이 실시간 서버로 보낸다) */

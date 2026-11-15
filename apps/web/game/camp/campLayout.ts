@@ -54,6 +54,8 @@ export type Rect = { x: number; y: number; w: number; h: number };
 export const CAMP_BBQ = {
   grill: { x: 800, y: 686 },
   table: { x: 848, y: 704 },
+  /** 음료 자판기 (마당 오른쪽 위, 밤에 앞판이 빛난다) — 마실 거리는 여기서만 판다 */
+  vending: { x: 876, y: 664 },
   /** 나무가 서지 않는 마당 */
   area: { x: 764, y: 640, w: 124, h: 92 },
 } as const;
@@ -470,6 +472,7 @@ export function campStaticColliders(): Rect[] {
     // 바베큐 그릴(다리 쪽)·나무 탁자
     { x: CAMP_BBQ.grill.x - 12, y: CAMP_BBQ.grill.y - 5, w: 24, h: 5 },
     { x: CAMP_BBQ.table.x - 22, y: CAMP_BBQ.table.y - 4, w: 44, h: 4 },
+    { x: CAMP_BBQ.vending.x - 10, y: CAMP_BBQ.vending.y - 6, w: 20, h: 6 },
     ...lookoutRails(),
     ...streamColliders(),
     ...CAMP_BOULDERS.map(boulderCollider),
@@ -537,6 +540,7 @@ export const CAMP_INTERACTABLES: readonly CampInteractable[] = [
   { id: "sign", kind: "sign", x: CAMP_BUS_SIGN.x, y: CAMP_BUS_SIGN.y + 12, r: 18, label: "표지판 보기" },
   { id: "lookout", kind: "lookout", x: SCOPE_STAND.x, y: SCOPE_STAND.y + 14, r: 20, label: "망원경으로 캠핑장 보기" },
   { id: "bbq", kind: "bbq", x: CAMP_BBQ.grill.x, y: CAMP_BBQ.grill.y + 14, r: 28, label: "바베큐 사 먹기" },
+  { id: "vending", kind: "vending", x: CAMP_BBQ.vending.x, y: CAMP_BBQ.vending.y + 12, r: 20, label: "음료 뽑기" },
 ];
 
 // ── 밤 빛 ──
@@ -560,6 +564,8 @@ export const CAMP_LIGHTS: readonly CampLight[] = [
   ...CAMP_VANS.map((v) => ({ x: v.x - 8, y: v.y - 24, scale: 0.55, tint: 0xffb060, base: 0.7 })),
   // 바베큐 숯불
   { x: CAMP_BBQ.grill.x, y: CAMP_BBQ.grill.y - 12, scale: 1.1, tint: 0xff8a40, base: 0.9 },
+  // 음료 자판기 앞판 (하얗고 파르스름한 불빛)
+  { x: CAMP_BBQ.vending.x, y: CAMP_BBQ.vending.y - 16, scale: 0.7, tint: 0xc8ecff, base: 0.85 },
   // 캠핑카 앞 화롯대·랜턴
   ...CAMP_VAN_GEAR.flatMap((g) => [
     { x: g.brazier.x, y: g.brazier.y - 10, scale: 1.0, tint: 0xff9a48, base: 0.9 },

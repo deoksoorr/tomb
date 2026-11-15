@@ -3,7 +3,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { tExpToNext, TRANSCEND_EXP_MUL } from "@/lib/rpg/endgame";
 import { floorTExp, TOWER_FLOOR_POINTS, towerPlan, towerZone } from "@/lib/rpg/tower";
 import { getTowerStore } from "@/lib/rpg/towerStore";
-import { getMegaphone } from "@/lib/store";
+import { getErrors, getMegaphone } from "@/lib/store";
+import { cardOffer, CARD_IDS } from "@/lib/rpg/cards";
 import type { MonsterId } from "@/lib/rpg/catalog";
 import * as rank from "../rank/route";
 import { huntPlan } from "@/lib/rpg/plan";
@@ -195,11 +196,23 @@ describe("야근 빌딩 판 끝 정산", () => {
     expect((await getTowerStore().scoreOf(v.id))).not.toBeNull();
   });
 
-  it("거짓 층은 보상 없이 거절, Esc로 그만두면 깬 층까지 기록", async () => {
+  it("서버가 잰 시간보다 긴 기록·층 수 범위 밖은 보상 없이 거절, 몬스터를 덜 잡은 층은 의심 판, Esc로 그만두면 깬 층까지 기록", async () => {
     const v = await newVisitor();
     const s = await begin(v, 1);
+    // 판 시작 직후 138초짜리 기록 (서버 시간보다 길다)
     const res = await finish.POST(call("/api/rpg/run/finish", v, { ticket: s.ticket, result: { ...climbed(s, 3), floors: 4 } }));
     expect(res.status).toBe(422);
+    expect(await errCode(res)).toBe("TOO_FAST");
+    const s1 = await begin(v, 1);
+    const real = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(real + climbMs(3));
+    const out = await finish.POST(call("/api/rpg/run/finish", v, { ticket: s1.ticket, result: { ...climbed(s1, 3), floors: 401 } }));
+    vi.restoreAllMocks();
+    expect(out.status).toBe(422);
+    // 4층을 깼다는데 4층 몬스터 처치가 없다 → 거절하지 않고 의심 판 (랭킹 제외)
+    const sx = await begin(v, 1);
+    const x = await end(v, sx, { ...climbed(sx, 3), floors: 4 }, climbMs(4));
+    expect(x.reward.tower).toMatchObject({ floors: 4, best: 4, suspect: true, newBest: false });
     const s2 = await begin(v, 1);
     const q = await end(v, s2, climbed(s2, 3, { died: false, quit: true }), climbMs(3));
     expect(q.reward.tower).toMatchObject({ floors: 3, best: 3 });
@@ -211,6 +224,35 @@ describe("야근 빌딩 판 끝 정산", () => {
     const r = await end(v, s, climbed(s, 10), climbMs(10));
     expect(r.reward.tower).toMatchObject({ chests: [5, 10], emptyChests: 0 });
     expect((await getRpgStore().get(v.id)).tChest).toBe(16);
+  });
+});
+
+describe("11/15 부드러운 거절 (의심 판) · 긴 판", () => {
+  it("카드 기록이 맞지 않는 판: 거절하지 않고 층·초월 EXP·상자·포인트는 주고, 최고·주간 기록·랭킹에서만 뺀다 (체크포인트는 열림, 관리자 오류 모음에 기록)", async () => {
+    const v = await newVisitor();
+    const s = await begin(v, 1);
+    const off = cardOffer(s.seed, "l", 0, 0, {}, 1);
+    const c = CARD_IDS.find((id) => !off.includes(id))!;
+    const r = await end(v, s, climbed(s, 10, { cards: [{ k: "l", i: 0, r: 0, c, f: 1 }] }), climbMs(10));
+    expect(r.reward.tower).toMatchObject({ floors: 10, best: 10, newBest: false, newWeek: false, chests: [5, 10], suspect: true });
+    expect(r.reward.transcend!.exp).toBe(Array.from({ length: 10 }, (_, i) => floorTExp(i + 1)).reduce((a, b) => a + b, 0));
+    expect(r.reward.pointsRaw).toBe(10 * TOWER_FLOOR_POINTS);
+    const c1 = await getRpgStore().get(v.id);
+    expect([c1.fBest, c1.fWkBest, c1.fSus, c1.tChest]).toEqual([0, 0, 10, 2]);
+    expect(r.view.endgame?.tower).toMatchObject({ best: 0, week: null, checkpoints: [1, 11] });
+    expect(await getTowerStore().scoreOf(v.id)).toBeNull();
+    // 11층 시작도 열렸다
+    expect((await begin(v, 11)).tower).toBe(11);
+    const logs = await getErrors().day(kstDay());
+    expect(logs.some((g) => g.kind === "tower" && g.message.includes("의심 판") && g.message.includes("cards:offer"))).toBe(true);
+  });
+
+  it("벽시계로 다섯 시간 걸린 판(멈춤·탭 숨김)도 받는다 (예전 두 시간 + 2분이면 「너무 오래된 판」)", async () => {
+    const v = await newVisitor();
+    const s = await begin(v, 1);
+    const r = await end(v, s, climbed(s, 6), 5 * 3600_000);
+    expect(r.reward.tower).toMatchObject({ floors: 6, best: 6, newBest: true });
+    expect(r.reward.tower?.suspect).toBeUndefined();
   });
 });
 

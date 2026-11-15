@@ -4,12 +4,15 @@
 //  - grow  (먹거리 고기·간식): 잠깐 캐릭터가 커진다 — PeerInfo.bbq
 //  - speed (캠핑 커피·꿀호떡·번개 닭꼬치): 마을·캠핑장에서 걸음이 빨라진다 (사냥터 제외) — PeerInfo.spd. 번개 닭꼬치는 몸 뒤로 잔상이 따라온다
 //  - drunk (맥주·소주·막걸리): 취기가 1씩 쌓이고 10분에 1씩 깬다 — PeerInfo.drunk (단계·시각)
+//  - sober (컨디숑): 취기를 1 내린다 (깨는 시계는 지금부터 다시)
+// 파는 곳은 둘: 먹거리는 바베큐 그릴, 마실 거리는 음료 자판기 (bbqStand).
+// 커진 동안(커지기 배율 > 1)에는 타는 것을 모두 못 탄다 (bbqBig·RIDE_SPOT_KINDS — 서버 onSit·onRide도 같은 규칙).
 // 하루 한도는 없다 (포인트로만 산다). 취기는 최대 DRUNK_MAX에서 멈추고 계속 마시면 깨는 시계만 다시 시작한다.
 // 옛 클라이언트는 모르는 t·필드라 무시한다.
 
-export type BbqKind = "grow" | "speed" | "drunk";
+export type BbqKind = "grow" | "speed" | "drunk" | "sober";
 export type BbqCat = "food" | "drink";
-export type BbqItemId = "wholepork" | "tomahawk" | "pork" | "sausage" | "marsh" | "hotteok" | "zap" | "coffee" | "beer" | "soju" | "makgeolli";
+export type BbqItemId = "wholepork" | "tomahawk" | "pork" | "sausage" | "marsh" | "hotteok" | "zap" | "coffee" | "beer" | "soju" | "makgeolli" | "hangover";
 export type BbqItem = {
   id: BbqItemId;
   name: string;
@@ -49,7 +52,15 @@ export const BBQ_MENU: readonly BbqItem[] = [
   { id: "beer", name: "맥주", cat: "drink", kind: "drunk", price: 12, scale: 1, speed: 1, tint: 0xf0c040, ms: 0, bite: "캬~ 시원해요", note: "시원한 캔맥주예요." },
   { id: "soju", name: "소주", cat: "drink", kind: "drunk", price: 15, scale: 1, speed: 1, tint: 0x9ad8c0, ms: 0, bite: "캬~ 쓰다", note: "초록 병 한 잔이에요." },
   { id: "makgeolli", name: "막걸리", cat: "drink", kind: "drunk", price: 14, scale: 1, speed: 1, tint: 0xf0ead8, ms: 0, bite: "캬~ 걸쭉해요", note: "사발에 따른 막걸리예요." },
+  { id: "hangover", name: "컨디숑", cat: "drink", kind: "sober", price: 10, scale: 1, speed: 1, tint: 0x8ac04a, ms: 0, bite: "크으~ 살 것 같아요", note: "술 깨는 작은 병 음료예요." },
 ];
+/** 파는 곳: 바베큐 그릴(먹거리)·음료 자판기(마실 거리) */
+export type BbqStand = "grill" | "vending";
+export const BBQ_STANDS: readonly BbqStand[] = ["grill", "vending"];
+export function bbqStand(m: BbqItem): BbqStand {
+  return m.cat === "drink" ? "vending" : "grill";
+}
+
 /** 같은 사람이 연달아 먹는 최소 간격 (서버 중계) */
 export const BBQ_INTERVAL_MS = 2_000;
 
@@ -89,6 +100,17 @@ export function drunkUntil(s: DrunkState): number {
 /** 한 잔 더 마셨다: 지금 단계 + 1 (최대 DRUNK_MAX), 깨는 시계는 지금부터 */
 export function drinkOne(prev: DrunkState | null | undefined, now: number): DrunkState {
   return { lv: Math.min(DRUNK_MAX, drunkLevel(prev, now) + 1), at: now };
+}
+
+/** 지금 커진 배율 (커지기 효과가 없거나 끝났으면 1) */
+export function bbqBig(e: BbqEffect | null | undefined, now: number): number {
+  return bbqActive(e, now) ? (bbqItem(e.i)?.scale ?? 1) : 1;
+}
+
+/** 컨디숑 한 병: 지금 단계 - 1, 깨는 시계는 지금부터. 이미 다 깼으면 null (마실 필요가 없다) */
+export function soberOne(prev: DrunkState | null | undefined, now: number): DrunkState | null {
+  const lv = drunkLevel(prev, now);
+  return lv > 0 ? { lv: lv - 1, at: now } : null;
 }
 
 /** 몸이 쿵 하고 커지는 큰 메뉴 (먹을 때 땅 울림·먼지) */

@@ -1,5 +1,5 @@
-import { BUMPER_SEATS, DIR, type BumperSeat, type DirId, type Sid } from "@tomb/protocol";
-import { BUMPER_EXIT_AT, BUMPER_EXIT_R, BUMPER_POSTS, RINK_INNER, type BumperPost } from "../bumper/bumperLayout";
+import { BUMPER_RINK, BUMPER_SEATS, DIR, type BumperSeat, type DirId, type Sid } from "@tomb/protocol";
+import { BUMPER_DOOR, BUMPER_EXIT_AT, BUMPER_EXIT_R, BUMPER_POSTS, RINK_INNER, type BumperPost } from "../bumper/bumperLayout";
 
 // 범퍼카 규칙 (11/16) — 순수 함수라 테스트한다 (그림·네트워크는 bumper/BumperRide.ts).
 //  - 운전: 방향키·조이스틱이 가리키는 쪽으로 차머리를 돌리며(회전 빠르기 제한) 앞으로 민다.
@@ -229,9 +229,90 @@ export function pickCar(occupied: ReadonlyMap<string, Sid>, mySid: Sid | null, p
   return free[Math.min(free.length - 1, Math.floor(rand() * free.length))];
 }
 
-/** 내릴 수 있는 곳인지 (입구 안쪽 둘레) */
-export function canExit(x: number, y: number): boolean {
+/** 링크 테두리 한 변 */
+export type RinkSide = "left" | "right" | "top" | "bottom";
+/** 차가 테두리에 닿았다고 보는 여유 (px). 벽에 붙이면 collideCar가 딱 CAR_BOUNDS에 세운다 */
+export const WALL_TOUCH = 4;
+
+/** 차가 테두리(벽)에 닿아 있으면 그 변 (모서리면 더 가까운 변). 아니면 null */
+export function wallSide(x: number, y: number, margin = WALL_TOUCH): RinkSide | null {
+  const b = CAR_BOUNDS;
+  const gaps: [RinkSide, number][] = [
+    ["left", x - b.x0],
+    ["right", b.x1 - x],
+    ["top", y - b.y0],
+    ["bottom", b.y1 - y],
+  ];
+  let best: RinkSide | null = null;
+  let bd = margin;
+  for (const [side, d] of gaps)
+    if (d <= bd) {
+      bd = d;
+      best = side;
+    }
+  return best;
+}
+
+/** 입구 안쪽 둘레인지 (예전처럼 입구 가까이에서도 내린다) */
+function nearGate(x: number, y: number): boolean {
   return Math.hypot(x - BUMPER_EXIT_AT.x, y - BUMPER_EXIT_AT.y) <= BUMPER_EXIT_R;
+}
+
+/** 내릴 수 있는 곳인지: 테두리 어디든 닿아 있거나 입구 안쪽 둘레 */
+export function canExit(x: number, y: number): boolean {
+  return wallSide(x, y) !== null || nearGate(x, y);
+}
+
+/** 내려설 자리 (발 위치) · 보는 방향 */
+export type ExitSpot = { x: number; y: number; dir: DirId };
+/** 링크 바깥선에서 이만큼 떨어진 곳에 선다 (발 상자 8×5가 테두리 충돌에 닿지 않게) */
+export const EXIT_OUT = 10;
+/** 바깥 둘레 후보 간격 (px) */
+const EXIT_STEP = 4;
+
+/** 링크 바깥 둘레를 한 바퀴 도는 내려설 후보 (변마다 바깥을 본다) */
+function exitRing(): ExitSpot[] {
+  const R = BUMPER_RINK;
+  const x0 = R.x - EXIT_OUT;
+  const x1 = R.x + R.w + EXIT_OUT;
+  const y0 = R.y - EXIT_OUT;
+  const y1 = R.y + R.h + EXIT_OUT;
+  const out: ExitSpot[] = [];
+  for (let x = x0; x <= x1; x += EXIT_STEP) {
+    out.push({ x, y: y0, dir: DIR.up });
+    out.push({ x, y: y1, dir: DIR.down });
+  }
+  for (let y = y0 + EXIT_STEP; y < y1; y += EXIT_STEP) {
+    out.push({ x: x0, y, dir: DIR.left });
+    out.push({ x: x1, y, dir: DIR.right });
+  }
+  return out;
+}
+let ring: ExitSpot[] | null = null;
+
+/**
+ * E로 내릴 때 설 자리. 닿은 벽 바로 바깥(차에서 가장 가까운 바깥 둘레)에 서고,
+ * 거기가 막혀 있으면(물·울타리·매표소·벤치·나무) 바깥 둘레에서 차와 가까운 순으로 빈 곳을 찾는다.
+ * 입구 안쪽 둘레(벽에 닿지 않음)는 예전처럼 입구 앞. 아무 데도 없으면 입구 앞.
+ * ok(x, y) = 그 발 위치에 설 수 있는지 (부르는 쪽이 충돌·물을 본다)
+ */
+export function exitSpot(x: number, y: number, ok: (x: number, y: number) => boolean): ExitSpot {
+  const door: ExitSpot = { x: BUMPER_DOOR.x, y: BUMPER_DOOR.y, dir: DIR.down };
+  const side = wallSide(x, y);
+  if (side === null && nearGate(x, y)) return door;
+  // 닿은 벽 바로 바깥 (차와 같은 줄)
+  if (side) {
+    const R = BUMPER_RINK;
+    const rx = Math.round(x);
+    const ry = Math.round(y);
+    const s: ExitSpot =
+      side === "left" ? { x: R.x - EXIT_OUT, y: ry, dir: DIR.left } : side === "right" ? { x: R.x + R.w + EXIT_OUT, y: ry, dir: DIR.right } : side === "top" ? { x: rx, y: R.y - EXIT_OUT, dir: DIR.up } : { x: rx, y: R.y + R.h + EXIT_OUT, dir: DIR.down };
+    if (ok(s.x, s.y)) return s;
+  }
+  ring ??= exitRing();
+  const near = ring.map((s) => ({ s, d: Math.hypot(s.x - x, s.y - y) })).sort((a, b) => a.d - b.d);
+  for (const { s } of near) if (ok(s.x, s.y)) return { ...s };
+  return door;
 }
 
 /**

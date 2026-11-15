@@ -7,10 +7,17 @@ import { RF_ELITE, RF_PACKABLE } from "./rooftop";
 //  - 물탱크 누수는 한 층에 넷까지 (잡으면 물방울 둘 — 처치 속도 상한 안에 들게), 넘치면 그 층 다른 몬스터로
 //  - 무리는 몰려다니는 것만 (비둘기 떼가 가장 자주, 서류 뭉치)
 //  - 정예 「풍향계 수탉」이 있는 웨이브는 바람에 서류 뭉치가 더 날아든다 (adds — 서버 출현 상한에 들어간다)
+//  - 우두머리 웨이브: 피뢰침이 따로 흩뿌리는 정전기 불꽃 RF_SPARK_CAP (adds — summon 두 번 몫과 따로)
 
 export const RF_LEAK_CAP = 4;
 /** 풍향계 수탉 한 마리가 살아 있는 동안 날려 오는 서류 뭉치 최대 수 */
 export const rfVaneAdds = (visit: number) => (visit >= 2 ? 8 : 5);
+/**
+ * 11/15 우두머리 피뢰침이 싸우는 중 따로 흩뿌리는 정전기 불꽃 상한 (한 층 합계 — game/tower/themes/rooftopStage가 같은 값을 쓴다).
+ * 체력 단계마다 부르는 몫(catalog summon 4 × 두 번 = 8, Arena)과 따로라 우두머리 층에는 불꽃이 16마리까지 나온다 →
+ * 우두머리 웨이브 adds로 서버 출현 상한에 넣는다 (예전엔 빠져 있어 「정전기 불꽃 기록이 … 넘었어요」로 정직한 판이 거절됐다)
+ */
+export const RF_SPARK_CAP = 8;
 
 const LEAK: MonsterId = "rf_leak";
 
@@ -34,6 +41,7 @@ export function rooftopPlan(base: HuntWave[], o: { seed: number; loop: number })
       for (let k = solo; k < w.monsters.length; k++) w.monsters[k] = id;
     }
     if (w.elite !== undefined && w.monsters[w.elite] === RF_ELITE) w.adds = [{ id: "rf_papers", n: rfVaneAdds(o.loop) }];
+    if (w.boss) w.adds = [...(w.adds ?? []), { id: "rf_spark", n: RF_SPARK_CAP }];
     if (w.elite !== undefined && MONSTERS[w.monsters[w.elite]].minion) delete w.elite;
     return w;
   });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TITLE_IDS, titleOfLook } from "@tomb/protocol";
+import { MANAGER_TITLE_ID, TITLE_IDS, titleOfLook } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { perkShort, perkText, pioneerText, progressText, STAFF_TITLE, TITLE_GRADE_NAMES, TITLE_GROUP_NAMES, TITLE_GROUPS, TITLES, titleDef, type TitleDef } from "@/lib/titles";
 import type { Me } from "@/lib/types";
@@ -14,6 +14,11 @@ import styles from "./TitlesPane.module.css";
 // 가방 [칭호] 칸: 모든 칭호를 갈래별로 늘어놓는다. 얻은 칭호는 흰 글자(누르면 끼우기·다시 누르면 빼기),
 // 못 얻은 칭호는 회색 + 얻는 방법. 한 번에 하나만 낀다. 낀 칭호는 머리 위 이름표 위에 「…」로 보인다.
 // 11/15 운영자 계정만: 맨 위에 운영자 전용 「운영자」(신화) 카드 — 끼우는 칭호가 아니라 운영자 표시로 머리 위에 저절로 뜬다 (낀 칭호 자리를 대신).
+// 11/16 매니저만: 매니저 전용 칭호 카드 (끼우고 빼는 칭호). 매니저가 아니면 칭호 목록·개수에서 아예 뺀다.
+
+/** 매니저 전용 칭호 정의와 그 밖의 모든 칭호 */
+const MGR_DEF = titleDef(MANAGER_TITLE_ID);
+const LISTED = TITLES.filter((t) => !t.manager);
 
 type Act = (task: () => Promise<void>, done: string) => Promise<void>;
 
@@ -23,7 +28,7 @@ const lastSeen = new Map<string, { earned: string[]; progress: Record<string, nu
 export default function TitlesPane({ me, pending, act }: { me: Me; pending: boolean; act: Act }) {
   // 처음 그림: 운영자는 내 정보의 staff로 처음부터 모두 얻은 것으로, 아니면 마지막으로 받은 값, 그것도 없으면 "불러오는 중"(null)
   const [earned, setEarned] = useState<Set<string> | null>(() =>
-    me.staff ? new Set(TITLE_IDS) : lastSeen.has(me.accountId) ? new Set(lastSeen.get(me.accountId)!.earned) : null,
+    me.staff ? new Set(TITLE_IDS.filter((id) => id !== MANAGER_TITLE_ID || me.manager)) : lastSeen.has(me.accountId) ? new Set(lastSeen.get(me.accountId)!.earned) : null,
   );
   /** 이번에 열었을 때 처음 본 새 칭호 ("NEW" — 닫았다 다시 열면 사라진다) */
   const [fresh, setFresh] = useState<Set<string>>(() => new Set());
@@ -63,7 +68,9 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
     else void act(() => wearTitle(t.id), `칭호 「${t.name}」을(를) 달았어요. 머리 위 이름표 위에 보여요.`);
   }
 
-  const total = earned ? TITLES.filter((t) => earned.has(t.id)).length : 0;
+  const total = earned ? LISTED.filter((t) => earned.has(t.id)).length : 0;
+  // 매니저 전용 칭호는 매니저에게만 (내 정보의 manager, 또는 서버가 얻은 칭호로 알려 준 것)
+  const mgr = !!MGR_DEF && (me.manager === true || !!earned?.has(MGR_DEF.id));
   return (
     <div className={styles.pane}>
       <div className={styles.now}>
@@ -74,7 +81,7 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
           </b>
           <span className={styles.count}>
             {" "}
-            · 얻은 칭호 {earned ? total : "–"}/{TITLES.length}
+            · 얻은 칭호 {earned ? total : "–"}/{LISTED.length}
             {staff && " · 운영자는 모든 칭호를 쓸 수 있어요"}
           </span>
           {cur && perkText(cur.grade) && <span className={styles.perkNow}>칭호 능력: {perkText(cur.grade)}</span>}
@@ -105,8 +112,36 @@ export default function TitlesPane({ me, pending, act }: { me: Me; pending: bool
           </ul>
         </section>
       )}
+      {mgr && MGR_DEF && (
+        <section className={styles.group} aria-label="매니저 전용 칭호">
+          <h3 className={styles.heading}>
+            매니저 전용<span className={styles.count}> 1/1</span>
+          </h3>
+          <ul className={styles.list}>
+            <li>
+              <button
+                type="button"
+                className={styles.title}
+                data-grade={MGR_DEF.grade}
+                data-earned
+                aria-pressed={equipped === MGR_DEF.id}
+                disabled={pending}
+                aria-label={`${MGR_DEF.name}, 매니저 전용 칭호, ${equipped === MGR_DEF.id ? "착용 중, 누르면 빼기" : "누르면 달기"}`}
+                onClick={() => toggle(MGR_DEF)}
+              >
+                <span className={styles.top}>
+                  <span className={styles.grade}>{TITLE_GRADE_NAMES[MGR_DEF.grade]}</span>
+                  <span className={styles.name}>「{MGR_DEF.name}」</span>
+                </span>
+                <span className={styles.how}>{equipped === MGR_DEF.id ? "착용 중 · 누르면 빼기" : "누르면 달기"}</span>
+                <span className={styles.progress}>{MGR_DEF.how}</span>
+              </button>
+            </li>
+          </ul>
+        </section>
+      )}
       {TITLE_GROUPS.map((g) => {
-        const list = TITLES.filter((t) => t.group === g);
+        const list = LISTED.filter((t) => t.group === g);
         return (
           <section key={g} className={styles.group} aria-label={`${TITLE_GROUP_NAMES[g]} 칭호`}>
             <h3 className={styles.heading}>

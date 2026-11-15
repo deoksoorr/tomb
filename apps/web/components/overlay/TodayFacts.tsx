@@ -11,7 +11,7 @@ import { FactGrid } from "../ui/InfoBlocks";
 export type TodayFact = "attend" | "cap" | "channel" | "sky";
 const ALL: readonly TodayFact[] = ["attend", "cap", "channel", "sky"];
 
-/** 오늘의 정보 칸: 출석 · 남은 포인트 한도 · 지금 채널 · 날씨/시간대 (메뉴·선물함이 같이 쓴다) */
+/** 오늘의 정보 칸: 출석 · 남은 포인트 한도 · 지금 채널 · 날씨/시간대 (메뉴·선물함이 같이 쓴다). 운영자 계정은 출석 칸을 뺀다 (출석 도장을 받지 않는다) */
 export default function TodayFacts({ show = ALL }: { show?: readonly TodayFact[] }) {
   const { me } = useMe();
   const ambience = useAmbience();
@@ -46,5 +46,5 @@ export default function TodayFacts({ show = ALL }: { show?: readonly TodayFact[]
       note: ambience?.phase === "night" ? "맑은 밤이면 망원경 포인트가 늘어요" : "한국 시간 기준으로 바뀌어요",
     },
   } as const;
-  return <FactGrid facts={show.map((k) => facts[k])} />;
+  return <FactGrid facts={show.filter((k) => !(me?.staff && k === "attend")).map((k) => facts[k])} />;
 }

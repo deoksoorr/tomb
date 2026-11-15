@@ -125,6 +125,39 @@ export class FoodFx {
     this.playEat(pl.view, pl.x, pl.y, item, this.h.scene.time.now);
   }
 
+  /**
+   * 음료 자판기에서 뽑았다: 진열창 높이에서 캔·병이 꺼내는 칸으로 덜컹 떨어지고(소리 + 내 말풍선 "덜컹!"), 그다음 마신다 (then).
+   * 움직임 줄이기면 떨어지는 그림 없이 소리·말풍선만
+   */
+  vend(vx: number, vy: number, item: BbqItemId, then: () => void): void {
+    const s = this.h.scene;
+    const pl = this.h.player();
+    const key = `camp-bbqPlate-${item}`;
+    const land = () => {
+      if (!s.sys.isActive()) return;
+      this.h.sfx.play("clack", 0.8, 0.9);
+      this.h.sfx.play("thud", 0.35, 1.4);
+      pl.view.say("덜컹!", s.time.now);
+      s.time.delayedCall(650, () => s.sys.isActive() && then());
+    };
+    if (this.h.reduced || !s.textures.exists(key)) {
+      land();
+      return;
+    }
+    // 꺼내는 칸(앞판 아래 어두운 칸) 바로 위까지 떨어진다
+    const can = s.add.image(vx, vy - 20, key).setOrigin(0.5, 1).setScale(0.6).setDepth(vy + 0.2);
+    s.tweens.add({
+      targets: can,
+      y: vy - 4,
+      duration: 320,
+      ease: "Bounce.easeOut",
+      onComplete: () => {
+        land();
+        s.tweens.add({ targets: can, alpha: 0, delay: 350, duration: 250, onComplete: () => can.destroy() });
+      },
+    });
+  }
+
   /** 접시·잔이 머리 위로 떠올랐다 사라지고 말풍선 ("한 입!" · "캬~") */
   private playEat(view: { say(text: string, now: number): void; readonly bigScale: number }, x: number, y: number, item: BbqItemId, now: number): void {
     const m = bbqItem(item);
@@ -147,7 +180,7 @@ export class FoodFx {
     if (!s.sys.isActive()) return;
     const pl = this.h.player();
     const near = Math.hypot(pl.x - x, pl.y - y) < 160;
-    if (near) this.h.sfx.play("burst", 0.3, 0.5);
+    if (near) this.h.sfx.play("thud", 0.7, 0.8);
     if (!this.h.reduced && near) s.cameras.main.shake(220, 0.006);
     const n = this.h.reduced ? 4 : THUD_DUST;
     for (let i = 0; i < n; i++) {

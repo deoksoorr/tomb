@@ -35,7 +35,7 @@ import { CAMP_TEX_PREFIX, type CampInteractable, type CampLight, type CampMapApi
 // 11/15 언젠가 캠핑장 맵 (CampMapApi 구현): 바닥(덩어리 텍스처, 화면 근처만), 나무·소품(칸 컬링, y 정렬), 이름표,
 // 충돌, 시간대 풍경(새벽 물안개·일출빛 / 낮 다람쥐·물 반짝임 / 노을 단풍 / 밤 줄 조명·은하수·반딧불 / 비 오는 날 타프 빗방울),
 // NPC(별지기 밤만, 기타 캠퍼 밤 9~11시), 캠핑카 문(문간 자리에 누가 앉으면 열린다).
-// 그림은 캠핑장에 갈 때만 굽고 destroy가 "camp-" 텍스처를 모두 지운다 (마을에 있는 동안 메모리를 쓰지 않는다).
+// 그림은 정류장 근처·버스 여행 동안 campPrebake가 조금씩 구워요. 한 번 구운 "camp-" 텍스처는 지우지 않아요 (다시 갈 때 멈추지 않게).
 // 매 프레임 일은 작은 풀(불티 8·반짝임 16·반딧불 10·다람쥐 3)과 컬링 칸 경계가 바뀔 때만이라 마을보다 가볍다.
 
 /** 소품 컬링 칸 */
@@ -78,6 +78,8 @@ export class CampMap implements CampMapApi {
   private readonly foliage: Phaser.GameObjects.Image[] = [];
   private sunsetK = -1;
   private readonly bulbs: { img: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; phase: number }[] = [];
+  /** 음료 자판기 앞판 불빛 (ADD, 어두울수록 밝다) */
+  private vendingLit: Phaser.GameObjects.Image | null = null;
   private lit = -1;
   private readonly embers: Mote[] = [];
   private fireBoost = false;
@@ -88,36 +90,68 @@ export class CampMap implements CampMapApi {
   private readonly drips: Mote[] = [];
   private readonly squirrels: Hopper[] = [];
   private readonly mists: { img: Phaser.GameObjects.Image; x: number; y: number; phase: number }[] = [];
-  private readonly sunGlow: Phaser.GameObjects.Image;
-  private readonly milky: Phaser.GameObjects.Image;
-  private readonly tarp: Phaser.GameObjects.Image;
+  private sunGlow!: Phaser.GameObjects.Image;
+  private milky!: Phaser.GameObjects.Image;
+  private tarp!: Phaser.GameObjects.Image;
   private tarpAlpha = 0.96;
   private hour: number;
   private destroyed = false;
+  /** 11/15 나눠 만들기를 시작했어요 (parts는 한 번만) */
+  private started = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly atlas: GlyphAtlas,
     private readonly reduced: boolean,
+    /** true면 장면이 parts()를 프레임마다 조금씩 불러요 (버스 창밖 연출 동안 멈추지 않게) */
+    staged = false,
   ) {
     this.hour = kstHour(Date.now());
     this.colliders = scene.physics.add.staticGroup();
     this.furnitureColliders = scene.physics.add.staticGroup();
     const b = CAMP_BOUNDS;
     scene.physics.world.setBounds(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
-    this.makeTextures();
+    if (!staged) {
+      const g = this.parts();
+      while (!g.next().done);
+    }
+  }
 
-    for (const r of Lay.campStaticColliders()) this.addCollider(this.colliders, r);
-    for (const r of Lay.campFurnitureColliders()) this.addCollider(this.furnitureColliders, r);
+  /** 11/15 맵을 조금씩 만들어요. 한 조각마다 쉬어요(yield). 다 돌아야 맵이 다 선 거예요 */
+  *parts(): Generator<void, void> {
+    if (this.started) return;
+    this.started = true;
+    const scene = this.scene;
+    this.makeTextures();
+    yield;
+
+    let n = 0;
+    for (const r of Lay.campStaticColliders()) {
+      this.addCollider(this.colliders, r);
+      if (++n % 40 === 0) yield;
+    }
+    for (const r of Lay.campFurnitureColliders()) {
+      this.addCollider(this.furnitureColliders, r);
+      if (++n % 40 === 0) yield;
+    }
+    yield;
 
     this.addGroundDecor();
+    yield;
     this.addTrees();
+    yield;
     this.addStructures();
+    yield;
     this.addFurniture();
+    yield;
     this.addFire();
+    yield;
     this.addStrings();
+    yield;
     this.addNpcs();
+    yield;
     this.addLabels();
+    yield;
 
     // 타프 천 (머리 위, 아래에 서면 옅어진다)
     this.tarp = this.keep(scene.add.image(CAMP_TARP.x + CAMP_TARP.w / 2, CAMP_TARP.y + CAMP_TARP.h / 2 - 22, Art.CAMP_TEX.tarp).setDepth(OVERHEAD - 5).setAlpha(this.tarpAlpha));
@@ -217,6 +251,9 @@ export class CampMap implements CampMapApi {
     const B = Lay.CAMP_BBQ;
     this.prop(T.bbqGrill, B.grill.x, B.grill.y);
     this.prop(T.bbqTable, B.table.x, B.table.y);
+    // 음료 자판기 + 밤에 빛나는 앞판 (updateLights)
+    this.prop(T.vending, B.vending.x, B.vending.y);
+    this.vendingLit = this.cull(B.vending.x, B.vending.y, s0.add.image(B.vending.x, B.vending.y + 2, T.vendingLit).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(B.vending.y + 0.1).setAlpha(0));
     for (let i = 0; i < (this.reduced ? 3 : 7); i++)
       this.smoke.push({ img: this.keep(s0.add.image(B.grill.x, B.grill.y, T.bbqSmoke).setDepth(B.grill.y + 30).setVisible(false)), t0: -1, life: 0, x: 0, y: 0, vx: 0 });
     // 캠핑카 앞 캠핑 도구 (탁자·탁자 위 랜턴·화롯대·아이스박스)
@@ -484,6 +521,7 @@ export class CampMap implements CampMapApi {
       this.lit = on;
       const tint = mix(0x8a7a60, 0xfff4c8, on);
       for (const b of this.bulbs) b.img.setTint(tint);
+      this.vendingLit?.setAlpha(0.15 + 0.7 * on);
     }
     if (on <= 0.01) {
       if (changed) for (const b of this.bulbs) b.glow.setAlpha(0);
@@ -722,7 +760,7 @@ export class CampMap implements CampMapApi {
     for (const g of [this.colliders, this.furnitureColliders]) if (g.children) g.clear(true, true);
     const s = this.scene;
     if (s.anims.exists(`${CAMP_TEX_PREFIX}flames`)) s.anims.remove(`${CAMP_TEX_PREFIX}flames`);
-    for (const key of s.textures.getTextureKeys()) if (key.startsWith(CAMP_TEX_PREFIX)) s.textures.remove(key);
+    // 11/15 그림(camp- 텍스처)은 지우지 않아요. 다시 올 때 굽지 않게 남겨 둬요 (지우면 다음 여행에서 다시 굽느라 멈췄어요)
   }
 }
 
@@ -786,6 +824,8 @@ export function forEachCampTexture(tex: (key: string, build: CampTexBuild, linea
   // 11/15 야외 바베큐장
   tex(T.bbqGrill, Art.bbqGrillArt);
   tex(T.bbqTable, Art.bbqTableArt);
+  tex(T.vending, Art.vendingArt);
+  tex(T.vendingLit, Art.vendingLitArt);
   tex(T.bbqSmoke, Art.bbqSmokeArt);
   for (const m of BBQ_MENU) tex(T.bbqPlate(m.id), () => Art.bbqPlateArt(m.id));
   tex(T.tarp, Art.tarpArt);

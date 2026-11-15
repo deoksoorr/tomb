@@ -444,6 +444,20 @@ function nearObjects(ctx: Ctx, lights: Ctx, seg: RideSegment, x0: number, x1: nu
 
 /** 층 하나의 파노라마 (구간 4개를 잇는다) */
 export function buildPanorama(spec: LayerSpec, order: readonly RideSegment[], dist: number, seed: number): Panorama {
+  const g = panoramaSteps(spec, order, dist, seed);
+  let r = g.next();
+  while (!r.done) r = g.next();
+  return r.value;
+}
+
+/** 한 번에 칠하는 열 수예요 (조금씩 굽기) */
+const PANO_COLS = 96;
+
+/**
+ * 11/15 층 하나의 파노라마를 조금씩 구워요. 열 묶음·구간 소품마다 한 번씩 쉬어요(yield).
+ * 다 구우면 Panorama를 돌려줘요. 한꺼번에 구우면 느린 기기에서 한 프레임이 길어졌어요.
+ */
+export function* panoramaSteps(spec: LayerSpec, order: readonly RideSegment[], dist: number, seed: number): Generator<void, Panorama> {
   const width = Math.ceil(spec.factor * dist) + VIEW_MAX + CENTER_OFF;
   const { canvas, ctx } = makeCanvas(width, spec.h);
   const { canvas: lc, ctx: lctx } = makeCanvas(width, spec.h);
@@ -453,6 +467,7 @@ export function buildPanorama(spec: LayerSpec, order: readonly RideSegment[], di
     const img = ctx.createImageData(width, spec.h);
     const d = img.data;
     for (let x = 0; x < width; x++) {
+      if (x > 0 && x % PANO_COLS === 0) yield;
       const { a, b, t } = blendAt(spec, dist, x);
       const top = spec.id === "far" ? farTop(order[a], x) * (1 - t) + farTop(order[b], x) * t : 0;
       for (let y = 0; y < spec.h; y++) {
@@ -466,12 +481,14 @@ export function buildPanorama(spec: LayerSpec, order: readonly RideSegment[], di
         d[i + 3] = 255;
       }
     }
+    yield;
     ctx.putImageData(img, 0, 0);
   }
   // 소품
   const r = rng(seed);
   const signs = { ic: false };
   for (let i = 0; i < 4; i++) {
+    yield;
     const [x0, x1] = segRange(spec, dist, width, i);
     const seg = order[i];
     if (spec.id === "far") farObjects(ctx, lctx, seg, x0, x1, r);

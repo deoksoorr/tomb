@@ -3,7 +3,7 @@ import type * as Phaser from "phaser";
 // 11/15 언젠가 캠핑장 버스 (game/bus) 약속.
 //  - BusArrival: 정류장(마을 납품 부두 위 마당·캠핑장 아래 왼쪽 길)에 버스가 들어와 서고 문이 열린다 → 타면 문 닫고 떠난다. 월드 좌표에 그린다
 //  - BusRideScene("busRide"): 8초 버스 창밖 연출 (화면 전체). 가는 길 마을 → 고속도로 → 단풍 국도 → 숲길, 돌아오는 길은 반대
-// 버스 텍스처 키는 BUS_TEX_PREFIX로 시작하고, 버스를 처음 부를 때만 굽는다 (끝나면 destroy가 지운다).
+// 버스 텍스처 키는 BUS_TEX_PREFIX로 시작하고, 정류장 근처나 버스를 처음 부를 때 구워요. 한 번 구우면 지우지 않아요.
 
 export const BUS_TEX_PREFIX = "bus-";
 export const BUS_RIDE_SCENE = "busRide";

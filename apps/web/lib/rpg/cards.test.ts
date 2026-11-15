@@ -30,7 +30,7 @@ import {
 import { huntSpawnable } from "./plan";
 import { killRateCeiling } from "./rewards";
 import { RunResultSchema } from "./schemas";
-import { evalTower, towerPlan } from "./tower";
+import { evalTower, towerClean, towerPlan } from "./tower";
 import type { HuntResult } from "./types";
 
 // 11/15 야근 빌딩 능력 카드 (lib/rpg/cards): 제안 굴림이 시드로 정해지는지, 서버가 고른 기록을 다시 굴려 확인하는지,
@@ -208,26 +208,26 @@ describe("야근 빌딩 결과 검증에 카드", () => {
     const r = climb(4321, 1, 10);
     const lv = runLevel(runXp(r.kills)).level;
     const picks = honest(4321, [...Array.from({ length: lv }, (_, i) => ({ k: "l" as const, i })), { k: "b", i: 10 }]);
-    expect(evalTower(t, { ...r, cards: picks }, r.durationMs + 1_000).ok).toBe(true);
+    expect(towerClean(evalTower(t, { ...r, cards: picks }, r.durationMs + 1_000))).toBe(true);
     const bad = [...picks];
     const off = cardOffer(4321, "l", 0, 0, {});
     bad[0] = { ...bad[0], c: CARD_IDS.find((id) => !off.includes(id) && CARDS[id].rarity === "legend")! };
-    expect(evalTower(t, { ...r, cards: bad }, r.durationMs + 1_000)).toMatchObject({ ok: false, code: "RESULT_REJECTED" });
+    expect(towerClean(evalTower(t, { ...r, cards: bad }, r.durationMs + 1_000))).toBe(false);
     // 처치 수로 오를 수 있는 판 레벨보다 많이 골랐다
     const extra = honest(4321, Array.from({ length: lv + 1 }, (_, i) => ({ k: "l" as const, i })));
-    expect(evalTower(t, { ...r, cards: extra }, r.durationMs + 1_000).ok).toBe(false);
+    expect(towerClean(evalTower(t, { ...r, cards: extra }, r.durationMs + 1_000))).toBe(false);
     // 10층을 안 깼으면 상사의 제안도 없다
     const r9 = climb(4321, 1, 9);
-    expect(evalTower(t, { ...r9, cards: honest(4321, [{ k: "b", i: 10 }]) }, r9.durationMs + 1_000).ok).toBe(false);
+    expect(towerClean(evalTower(t, { ...r9, cards: honest(4321, [{ k: "b", i: 10 }]) }, r9.durationMs + 1_000))).toBe(false);
   });
 
   it("체크포인트 시작 카드는 건너뛴 층만큼만", () => {
     const t21 = { seed: 77, level: 50, start: 21 };
     const r = climb(77, 21, 2);
     const six = honest(77, Array.from({ length: 6 }, (_, i) => ({ k: "s" as const, i })), 21);
-    expect(evalTower(t21, { ...r, cards: six }, r.durationMs + 1_000).ok).toBe(true);
+    expect(towerClean(evalTower(t21, { ...r, cards: six }, r.durationMs + 1_000))).toBe(true);
     const seven = honest(77, Array.from({ length: 7 }, (_, i) => ({ k: "s" as const, i })), 21);
-    expect(evalTower(t21, { ...r, cards: seven }, r.durationMs + 1_000).ok).toBe(false);
+    expect(towerClean(evalTower(t21, { ...r, cards: seven }, r.durationMs + 1_000))).toBe(false);
   });
 
   it("처치 속도 상한은 카드 배율만큼 늘어난다 (강한 정직한 판이 거절되지 않게)", () => {
@@ -247,7 +247,7 @@ describe("야근 빌딩 결과 검증에 카드", () => {
     const fast = { ...r0, kills, durationMs: dur, floorMs: 10_000 };
     const cap = (p: number) => 3 + (dur / 1000) * killRateCeiling("hell", 1) * p;
     expect(total).toBeGreaterThan(cap(cardPower({})));
-    expect(evalTower(t1, fast, dur + 500)).toMatchObject({ ok: false, code: "RESULT_REJECTED" });
+    expect(towerClean(evalTower(t1, fast, dur + 500))).toBe(false);
     const lv = runLevel(runXp(kills)).level;
     // 제안된 것 중 가장 센 카드를 고른다 (정직한 기록)
     const owned: CardCounts = {};
@@ -260,7 +260,7 @@ describe("야근 빌딩 결과 검증에 카드", () => {
     expect(v.ok).toBe(true);
     if (!v.ok) return;
     expect(total).toBeLessThanOrEqual(cap(cardPower(v.owned)));
-    expect(evalTower(t1, { ...fast, cards: picks }, dur + 500).ok).toBe(true);
+    expect(towerClean(evalTower(t1, { ...fast, cards: picks }, dur + 500))).toBe(true);
   });
 });
 
@@ -302,9 +302,9 @@ describe("11/15 등급 개편: 레벨 업 층·팀장 승진·능력치 판", ()
       while (steps.length < runLevel(xp).level) steps.push({ k: "l", i: steps.length, f });
     }
     expect(steps.length).toBeGreaterThan(6);
-    expect(evalTower(t, { ...r, cards: honest(909, steps) }, r.durationMs + 1_000).ok).toBe(true);
+    expect(towerClean(evalTower(t, { ...r, cards: honest(909, steps) }, r.durationMs + 1_000))).toBe(true);
     const lifted = steps.map((p) => ({ ...p, f: 13 }));
-    expect(evalTower(t, { ...r, cards: honest(909, lifted) }, r.durationMs + 1_000)).toMatchObject({ ok: false, code: "RESULT_REJECTED" });
+    expect(towerClean(evalTower(t, { ...r, cards: honest(909, lifted) }, r.durationMs + 1_000))).toBe(false);
   });
 
   it("팀장 승진은 다른 카드 수치를 1.5배로, 겹침 줄에도 반영", () => {

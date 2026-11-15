@@ -154,6 +154,16 @@
   white-space: nowrap;
 }
 
+.sub {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-small);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .blank {
   min-height: 1px;
 }

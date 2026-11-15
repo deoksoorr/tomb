@@ -5,6 +5,7 @@ import { getHouseStore } from "@/lib/housing/service";
 import { handler, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
+import { isManager } from "@/lib/managers";
 import { isStaff } from "@/lib/staff";
 import { getAccounts, NO_NAME } from "@/lib/store";
 import { getStyleStore } from "@/lib/store/style";
@@ -32,7 +33,7 @@ export const POST = handler(async (req) => {
   const now = Date.now();
   const accounts = getAccounts();
   // 계정 전체 대신 이름·색·몸·착용만 (명령 9개 → 2개)
-  const [a, style, staff, dex, champ, gear] = await Promise.all([
+  const [a, style, staff, dex, champ, gear, mgr] = await Promise.all([
     accounts.appearance(visitorId, now),
     getStyleStore(accounts).get(visitorId),
     isStaff(visitorId),
@@ -40,11 +41,13 @@ export const POST = handler(async (req) => {
     isStaff(visitorId).then((s) => champWireFor(visitorId, s, now)).catch(() => 0),
     // 11/15 사냥터 방: 낀 사냥 장비 표시 (캐릭터 저장값으로 — 화면이 주장할 수 없다). 사냥터 방만 명령 1개 더
     room.startsWith("hunt:") ? getRpgStore().get(visitorId).then((c) => huntGearIds(c.equip)).catch(() => []) : Promise.resolve([] as string[]),
+    // 11/16 매니저 (전용 칭호·채팅 딱지 — 사냥터에서도)
+    isManager(visitorId, now),
   ]);
   const token = await signJoinToken(
     env.joinSecret(),
     // 31번: 운영자 표시는 서버가 확인한 뒤에만. 11/15: 이름은 운영자도 닉네임 그대로
-    { visitorId, name: a.name ?? NO_NAME, color: a.color ?? AVATAR_COLORS[0], body: a.body ?? "hood", look: [...lookOf(a), ...gear], dye: style.dye, channel: 0, room, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}) },
+    { visitorId, name: a.name ?? NO_NAME, color: a.color ?? AVATAR_COLORS[0], body: a.body ?? "hood", look: [...lookOf(a), ...gear], dye: style.dye, channel: 0, room, ...(staff ? { staff: true as const } : {}), ...(dex ? { dex } : {}), ...(champ ? { champ } : {}), ...(mgr ? { mgr: true as const } : {}) },
     ROOM_TOKEN_TTL_SEC,
   );
   return json<RoomJoinResponse>({ room, token, wsUrl: `${env.realtimeWsUrl()}/room/${encodeURIComponent(room)}?t=${encodeURIComponent(token)}` });

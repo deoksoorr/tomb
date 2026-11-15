@@ -65,6 +65,7 @@ import type { GameContext } from "./context";
 import { FEST_FIREWORK_MS, FEST_MS } from "@/lib/forage/quests/urgent";
 import type { ShopContext } from "./ShopScene";
 import { CampTrip, VILLAGE_BUS_LAND } from "../camp/CampTrip";
+import { BIG_RIDE_TOAST, myBig, RIDE_OBJECT_KINDS } from "../camp/foodState";
 import type { CampFriend } from "../camp/campHost";
 
 // 월드 씬: 맵·묘비·내 캐릭터·원격 아바타·분위기·조명·카메라·네트워크를 묶고 bridge 이벤트를 처리한다.
@@ -354,6 +355,7 @@ export class WorldScene extends Phaser.Scene {
         this.seats.clear();
       },
       arrived: (friend) => this.arrivedByBus(friend),
+      warmLife: (aheadMs, budgetMs) => this.life?.warm(aheadMs, budgetMs) ?? true,
       isFriend: (sid, name) => this.net.channel === this.friends.ch && this.friends.bySid.get(sid) === name,
       toast: (m) => this.toast(m),
     });
@@ -727,6 +729,7 @@ export class WorldScene extends Phaser.Scene {
     r.view.setDexBadge(p.dex); // 도감 100% 배지 (입장 토큰에 서버가 넣은 것만 온다)
     r.view.setChamp(p.champ); // 주간 랭킹 1위 배지·오라 (입장 토큰·착용 증서에 서버가 넣은 것만 온다)
     r.view.setStaff(p.staff === true); // 31번 운영자: 저승사자 차림·"운영자" 배지 (서버가 넣은 표시만 온다)
+    r.view.setMgr(p.mgr === true); // 11/16 매니저 칭호 (서버가 넣은 표시만 온다)
     // 같은 sid가 다시 들어오면(이름·색 변경) 앉아 있던 좌석을 이어받는다
     r.seatId = prev?.seatId ?? null;
     r.view.setMood(p.mood); // 24번: 늦게 온 사람도 앉아 있는 사람의 상태를 본다
@@ -756,6 +759,7 @@ export class WorldScene extends Phaser.Scene {
       }
       r.view.setLook(p.look ?? []);
       r.view.setChamp(p.champ);
+      r.view.setMgr(p.mgr === true);
       r.view.setMood(p.mood ?? null);
       this.riding.applyPeer(r, p);
       this.forage.applyPeer(p);
@@ -1216,6 +1220,11 @@ export class WorldScene extends Phaser.Scene {
     const pl = this.player;
     const now = this.time.now;
     if (pl.inCar) return; // 범퍼카에 탄 채로는 다른 것과 상호작용하지 않는다 (내리기는 onAction)
+    // 11/15 바베큐로 커진 동안에는 타는 것(그네·배·놀이기구·범퍼카·버스)을 못 탄다 (서버 onSit도 거절)
+    if (RIDE_OBJECT_KINDS.has(o.kind) && myBig() > 1) {
+      this.toast(BIG_RIDE_TOAST);
+      return;
+    }
     switch (o.kind) {
       case "tree":
       case "swing":

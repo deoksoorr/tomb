@@ -17,6 +17,7 @@ export const BTEX = {
   pillar: "bumper-pillar",
   tyre: "bumper-tyre",
   booth: "bumper-booth",
+  boothGlow: "bumper-booth-glow",
   arch: "bumper-arch",
   sign: "bumper-sign",
   signGlow: "bumper-sign-glow",
@@ -289,12 +290,19 @@ function tyreCanvas(): HTMLCanvasElement {
 
 // ── 매표소 ──
 
-/** 매표소 (가로 28 × 세로 34): 분홍·흰 줄무늬 차양, 창 안 유령 직원, 「무료」 팻말. 원점 = 바닥 가운데 */
+/** 매표소 (가로 28 × 세로 41): 분홍·흰 줄무늬 차양, 창 안 유령 직원, 「무료」 팻말. 원점 = 바닥 가운데 */
 export const BOOTH_W = 28;
-export const BOOTH_H = 38;
+export const BOOTH_H = 41;
 /** 매표소 그림 위쪽 팻말 높이 (그 아래로 차양·몸통) */
-const BOOTH_SIGN_H = 11;
-function boothCanvas(text: ((b: Buf, x: number, y: number) => void) | null): HTMLCanvasElement {
+const BOOTH_SIGN_H = 14;
+// 11/16: 「무료」도 글꼴을 이진화하면 ㄹ이 메워져 「무됴」로 읽혀서, 손으로 찍은 점 글씨로 바꿨어요 (획 1px, 높이 9px)
+const FREE_GLYPHS: readonly (readonly string[])[] = [
+  // 무
+  [" XXXXX ", " X   X ", " X   X ", " XXXXX ", "       ", "XXXXXXX", "   X   ", "   X   ", "   X   "],
+  // 료
+  [" XXXXX ", "     X ", " XXXXX ", " X     ", " XXXXX ", "       ", "  X X  ", "  X X  ", "XXXXXXX"],
+];
+function boothCanvas(): HTMLCanvasElement {
   const b = new Buf(BOOTH_W, BOOTH_H);
   const o = BOOTH_SIGN_H - 7; // 팻말이 커진 만큼 차양·몸통을 아래로
   // 몸통
@@ -318,41 +326,36 @@ function boothCanvas(text: ((b: Buf, x: number, y: number) => void) | null): HTM
     }
   for (let x = 1; x < BOOTH_W - 1; x++) if (x % 3 !== 0) b.set(x, 13 + o, Math.floor((x - 1) / 3) % 2 === 0 ? 0xd04880 : 0xd8d0d8);
   // 지붕 위 「무료」 팻말 (기둥 둘)
-  b.rect(4, 0, 20, BOOTH_SIGN_H, 0x1e5a2e);
-  b.rect(5, 1, 18, BOOTH_SIGN_H - 2, 0x2f8a46);
-  b.rect(8, BOOTH_SIGN_H, 1, 7 + o - BOOTH_SIGN_H, 0x5a4a3a);
-  b.rect(19, BOOTH_SIGN_H, 1, 7 + o - BOOTH_SIGN_H, 0x5a4a3a);
-  if (text) text(b, 14, 0);
+  // 판 = 테두리 1px + 글씨 테두리 1px + 글씨 + 테두리·그림자 2px (왼쪽 끝은 예전 팻말 자리 그대로 — 입구 간판에 가리지 않게)
+  b.rect(4, 0, 21, BOOTH_SIGN_H, 0x1e5a2e);
+  b.rect(5, 1, 19, BOOTH_SIGN_H - 2, 0x2f8a46);
+  stampLetters(b, signCore(FREE_GLYPHS, 2), FREE_AT.x, FREE_AT.y, { core: 0xfff8d0, top: 0xffffff, ring: 0x0c2a14, shadow: 0x164a26 });
   b.outline();
+  return b.canvas();
+}
+/** 「무료」 글씨 심 왼쪽 위 (매표소 그림 안) */
+const FREE_AT = { x: 6, y: 2 } as const;
+
+/** 「무료」 빛 층 (매표소와 같은 크기, 밤에 ADD로 덧씌운다): 글씨는 따뜻하게, 둘레는 초록으로 번진다 */
+function boothGlowCanvas(): HTMLCanvasElement {
+  const b = new Buf(BOOTH_W, BOOTH_H);
+  const st = signCore(FREE_GLYPHS, 2);
+  const ring = ringOf(st.on);
+  for (let y = -1; y <= st.h; y++)
+    for (let x = -1; x <= st.w; x++) {
+      if (st.on(x, y)) b.set(FREE_AT.x + x, FREE_AT.y + y, 0xfff0b8);
+      else if (ring(x, y)) b.set(FREE_AT.x + x, FREE_AT.y + y, 0x6aff8a, 60);
+    }
   return b.canvas();
 }
 
 // ── 입구 간판 아치 ──
 
-const SIGN_FONT = `11px "Galmuri11", "Galmuri9", monospace`;
-const SMALL_FONT = `9px "Galmuri9", "Galmuri11", monospace`;
+/** 간판 글 (그림은 손으로 찍은 SIGN_GLYPHS) */
 export const SIGN_TEXT = "유령 범퍼카";
-const FREE_TEXT = "무료";
 /** 아치 기둥 사이 (가운데에서 양쪽으로) · 기둥 높이 */
 export const ARCH_HALF = 20;
 export const ARCH_H = 34;
-
-/** 글씨를 이진화해 찍는 함수 (글꼴이 늦게 오면 null) */
-function textStamp(font: string, text: string): { w: number; h: number; on: (x: number, y: number) => boolean } | null {
-  if (typeof document === "undefined") return null;
-  const probe = makeCanvas(8, 8).ctx;
-  probe.font = font;
-  const tw = Math.ceil(probe.measureText(text).width);
-  const h = 14;
-  const { ctx } = makeCanvas(tw + 2, h);
-  ctx.font = font;
-  ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = "#ffffff";
-  ctx.fillText(text, 1, 11);
-  const img = ctx.getImageData(0, 0, tw + 2, h);
-  const on = (x: number, y: number) => x >= 0 && y >= 0 && x < tw + 2 && y < h && img.data[(y * (tw + 2) + x) * 4 + 3] >= 110;
-  return { w: tw + 2, h, on };
-}
 
 /** 아치 기둥 둘 (사탕 줄무늬) — 간판판은 sign 텍스처. 원점 = 바닥 가운데 */
 function archCanvas(): HTMLCanvasElement {
@@ -371,54 +374,115 @@ function archCanvas(): HTMLCanvasElement {
   return b.canvas();
 }
 
-/** 간판판 (전구 테두리 + 글씨) 과 글씨만 있는 빛 층. 원점 = 아래 가운데 */
+// 11/16: 글꼴(Galmuri 11px)을 이진화하면 「령」의 ㄹ과 「범」의 ㅂ 속이 메워져 읽기 어려워서, 손으로 찍은 굵은 점 글씨로 바꿨어요.
+// 획은 2px, 글자 높이는 15px예요. 흰 노랑 심 + 둘레 1px 짙은 테두리 + 오른쪽 아래 그림자라 낮에도 잘 보여요.
+const SIGN_GLYPHS: readonly (readonly string[])[] = [
+  // 유
+  ["   XXXXXX   ", "  XXXXXXXX  ", " XX      XX ", " XX      XX ", " XX      XX ", "  XXXXXXXX  ", "   XXXXXX   ", "            ", "XXXXXXXXXXXX", "XXXXXXXXXXXX", "  XX    XX  ", "  XX    XX  ", "  XX    XX  ", "  XX    XX  ", "  XX    XX  "],
+  // 령
+  ["XXXXXX    XX", "XXXXXX    XX", "    XX XXXXX", "XXXXXX    XX", "XXXXXX    XX", "XX     XXXXX", "XXXXXX    XX", "XXXXXX    XX", "          XX", "            ", "  XXXXXXXX  ", " XX      XX ", " XX      XX ", " XX      XX ", "  XXXXXXXX  "],
+  // (띄어쓰기)
+  ["  "],
+  // 범
+  ["XX  XX    XX", "XX  XX    XX", "XXXXXX    XX", "XX  XX XXXXX", "XX  XX XXXXX", "XXXXXX    XX", "XXXXXX    XX", "          XX", "            ", " XXXXXXXXXX ", " XXXXXXXXXX ", " XX      XX ", " XX      XX ", " XXXXXXXXXX ", " XXXXXXXXXX "],
+  // 퍼
+  ["          XX", "XXXXXXXX  XX", "XXXXXXXX  XX", " XX  XX   XX", " XX  XX   XX", " XX  XX   XX", " XX  XX XXXX", " XX  XX XXXX", " XX  XX   XX", " XX  XX   XX", " XX  XX   XX", "XXXXXXXX  XX", "XXXXXXXX  XX", "          XX", "          XX"],
+  // 카
+  ["        XX  ", "XXXXXXX XX  ", "XXXXXXX XX  ", "     XX XX  ", "     XX XX  ", "XXXXXXX XX  ", "XXXXXXX XXXX", "     XX XXXX", "    XX  XX  ", "   XX   XX  ", "  XX    XX  ", " XX     XX  ", "XX      XX  ", "        XX  ", "        XX  "],
+];
+const GLYPH_GAP = 2;
+
+type LetterCore = { w: number; h: number; on: (x: number, y: number) => boolean };
+
+/** 점 글씨 심 (글자를 gap 띄워 붙인다). 높이 = 가장 높은 글자 */
+export function signCore(glyphs: readonly (readonly string[])[] = SIGN_GLYPHS, gap = GLYPH_GAP): LetterCore {
+  const w = glyphs.reduce((a, g) => a + g[0].length, 0) + gap * (glyphs.length - 1);
+  const h = Math.max(...glyphs.map((g) => g.length));
+  const set = new Set<number>();
+  let gx = 0;
+  for (const g of glyphs) {
+    g.forEach((row, y) => [...row].forEach((ch, x) => ch === "X" && set.add(y * w + gx + x)));
+    gx += g[0].length + gap;
+  }
+  return { w, h, on: (x, y) => x >= 0 && y >= 0 && x < w && y < h && set.has(y * w + x) };
+}
+
+/** 심 둘레 1px (8방향) */
+function ringOf(on: LetterCore["on"]): (x: number, y: number) => boolean {
+  return (x, y) => !on(x, y) && (on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1) || on(x - 1, y - 1) || on(x + 1, y - 1) || on(x - 1, y + 1) || on(x + 1, y + 1));
+}
+
+/**
+ * 점 글씨 찍기: 그림자(오른쪽 아래 1px) → 짙은 테두리(8방향 1px) → 심. (ox, oy) = 심 왼쪽 위.
+ * 심 색 = 윗변은 top, 나머지는 core (core가 함수면 줄 y에 따라)
+ */
+function stampLetters(b: Buf, st: LetterCore, ox: number, oy: number, c: { core: number | ((y: number) => number); top: number; ring: number; shadow: number }): void {
+  const { on } = st;
+  const ring = ringOf(on);
+  for (let y = -1; y <= st.h + 1; y++)
+    for (let x = -1; x <= st.w + 1; x++) {
+      if (on(x, y) || ring(x, y)) continue;
+      if (ring(x - 1, y - 1) || on(x - 1, y - 1)) b.set(ox + x, oy + y, c.shadow);
+    }
+  for (let y = -1; y <= st.h; y++) for (let x = -1; x <= st.w; x++) if (ring(x, y)) b.set(ox + x, oy + y, c.ring);
+  for (let y = 0; y < st.h; y++)
+    for (let x = 0; x < st.w; x++) {
+      if (!on(x, y)) continue;
+      b.set(ox + x, oy + y, !on(x, y - 1) ? c.top : typeof c.core === "number" ? c.core : c.core(y));
+    }
+}
+
+/**
+ * 간판판 (전구 테두리 + 굵은 점 글씨) 과 빛 층 (밤에 ADD로 덧씌운다 — 글씨가 불 켜진 네온처럼). 원점 = 아래 가운데.
+ * 판 둘레에 1px 짙은 테두리를 둘러 돌 바닥 위에서도 판이 또렷해요
+ */
 function signCanvases(): { sign: HTMLCanvasElement; glow: HTMLCanvasElement; w: number; h: number } {
-  const st = textStamp(SIGN_FONT, SIGN_TEXT);
-  const tw = st ? st.w : 56;
-  const W = tw + 12;
-  const H = 19;
+  const st = signCore();
+  // 판 = 글씨 + 양옆 4px · 위 3px · 아래 4px (그림자 자리). 바깥 1px은 판 테두리
+  const PW = st.w + 8;
+  const PH = st.h + 7;
+  const W = PW + 2;
+  const H = PH + 2;
   const b = new Buf(W, H);
   const gl = new Buf(W, H);
-  // 둥근 판
-  for (let y = 0; y < H; y++)
-    for (let x = 0; x < W; x++) {
-      const corner = (x < 2 || x > W - 3) && (y < 2 || y > H - 3);
+  // 둥근 판 (위는 조금 밝고 아래로 짙어진다)
+  for (let y = 0; y < PH; y++)
+    for (let x = 0; x < PW; x++) {
+      const corner = (x < 2 || x > PW - 3) && (y < 2 || y > PH - 3);
       if (corner) continue;
-      b.set(x, y, y < 2 || y > H - 3 || x < 2 || x > W - 3 ? 0x3a1a4a : 0x5a2a72);
+      const rim = y < 2 || y > PH - 3 || x < 2 || x > PW - 3;
+      b.set(1 + x, 1 + y, rim ? 0x2a1038 : mix(0x5a2a7e, 0x3c1858, y / PH));
     }
   // 테두리 전구 (번갈아 색)
   let k = 0;
-  for (let x = 3; x < W - 3; x += 4) {
+  for (let x = 3; x < PW - 3; x += 4) {
     const c = BULB_COLORS[k++ % BULB_COLORS.length];
-    b.set(x, 0, c);
-    b.set(x, H - 1, c);
-    gl.set(x, 0, c);
-    gl.set(x, H - 1, c);
+    for (const y of [0, PH - 1]) {
+      b.set(1 + x, 1 + y, c);
+      gl.set(1 + x, 1 + y, c);
+    }
   }
-  for (let y = 4; y < H - 3; y += 4) {
+  for (let y = 4; y < PH - 3; y += 4) {
     const c = BULB_COLORS[k++ % BULB_COLORS.length];
-    b.set(0, y, c);
-    b.set(W - 1, y, c);
-    gl.set(0, y, c);
-    gl.set(W - 1, y, c);
+    for (const x of [0, PW - 1]) {
+      b.set(1 + x, 1 + y, c);
+      gl.set(1 + x, 1 + y, c);
+    }
   }
-  if (st) {
-    const ox = 6;
-    const oy = 3;
-    for (let y = 0; y < st.h; y++)
-      for (let x = 0; x < st.w; x++) {
-        if (st.on(x, y)) continue;
-        if (st.on(x - 1, y) || st.on(x + 1, y) || st.on(x, y - 1) || st.on(x, y + 1)) b.set(ox + x, oy + y, 0x1a0a22);
-      }
-    for (let y = 0; y < st.h; y++)
-      for (let x = 0; x < st.w; x++) {
-        if (!st.on(x, y)) continue;
-        // 위는 하양, 아래로 갈수록 분홍 (네온 느낌)
-        const c = mix(0xffffff, 0xff8ad0, y / st.h);
-        b.set(ox + x, oy + y, c);
-        gl.set(ox + x, oy + y, c);
-      }
-  }
+  b.outline();
+  // 글씨: 위는 흰빛, 아래로 갈수록 노랑 (윗변 한 줄은 더 밝게)
+  const ox = 1 + 4;
+  const oy = 1 + 3;
+  const shade = (y: number) => mix(0xfff6d8, 0xffc838, y / st.h);
+  stampLetters(b, st, ox, oy, { core: shade, top: 0xffffff, ring: 0x12051a, shadow: 0x1c0a28 });
+  // 빛 층: 심은 따뜻하게, 둘레는 분홍으로 번진다
+  const { on } = st;
+  const ring = ringOf(on);
+  for (let y = -1; y <= st.h; y++)
+    for (let x = -1; x <= st.w; x++) {
+      if (ring(x, y)) gl.set(ox + x, oy + y, 0xff5aa8, 70);
+      else if (on(x, y)) gl.set(ox + x, oy + y, mix(on(x, y - 1) ? shade(y) : 0xffffff, 0xffe0a0, 0.3));
+    }
   return { sign: b.canvas(), glow: gl.canvas(), w: W, h: H };
 }
 
@@ -604,34 +668,13 @@ export function ensureCarTextures(scene: Phaser.Scene): void {
   });
 }
 
-/** 간판·매표소 (글씨가 들어가 글꼴을 불러온 뒤). 이미 있으면 그대로 */
+/** 간판·매표소 (손으로 찍은 점 글씨라 글꼴을 기다리지 않는다). 이미 있으면 그대로 */
 export function ensureBumperSign(scene: Phaser.Scene): void {
   if (!scene.textures.exists(BTEX.sign)) {
     const s = signCanvases();
     add(scene, BTEX.sign, s.sign);
     add(scene, BTEX.signGlow, s.glow);
   }
-  if (!scene.textures.exists(BTEX.booth)) {
-    const st = textStamp(SMALL_FONT, FREE_TEXT);
-    add(
-      scene,
-      BTEX.booth,
-      boothCanvas(
-        st
-          ? (b, cx, y) => {
-              const ox = Math.round(cx - st.w / 2);
-              // 글씨 기준선(11)이 팻말 아래쪽 안에 오게 (윗줄 1px 띄움)
-              for (let j = 0; j < st.h; j++) for (let i = 0; i < st.w; i++) if (st.on(i, j) && y + j - 1 >= 1 && y + j - 1 < BOOTH_SIGN_H - 1) b.set(ox + i, y + j - 1, 0xfff8d0);
-            }
-          : null,
-      ),
-    );
-  }
-}
-
-/** 간판 글꼴을 불러온 뒤 한 번 부른다 (이미 있으면 바로) */
-export function whenBumperFont(cb: () => void): void {
-  if (typeof document === "undefined" || !document.fonts) return cb();
-  if (document.fonts.check(SIGN_FONT, SIGN_TEXT) && document.fonts.check(SMALL_FONT, FREE_TEXT)) return cb();
-  Promise.all([document.fonts.load(SIGN_FONT, SIGN_TEXT), document.fonts.load(SMALL_FONT, FREE_TEXT)]).then(cb, cb);
+  add(scene, BTEX.booth, boothCanvas());
+  add(scene, BTEX.boothGlow, boothGlowCanvas());
 }

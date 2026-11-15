@@ -611,6 +611,19 @@ export class VillageLife {
     if (g && g.img.visible) lit.add(g.img.x, g.img.y - 8, 30, 0.7);
   }
 
+  /** 11/15 aheadMs 뒤(마을에 내릴 때)의 주민·고양이·유령·강아지 길을 budgetMs 동안만 미리 찾아요. 다 됐으면 true */
+  warm(aheadMs: number, budgetMs: number): boolean {
+    if (this.destroyed) return true;
+    const t = this.serverNow() + aheadMs;
+    if (!this.residents.warm(t, budgetMs)) return false;
+    const t0 = performance.now();
+    for (const c of this.critters) {
+      if (!c.sim.warmLeg(t)) continue;
+      if (performance.now() - t0 >= budgetMs) return false;
+    }
+    return this.dogs.warm(t, budgetMs);
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;

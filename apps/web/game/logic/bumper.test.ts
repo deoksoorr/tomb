@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BUMPER_GATE, BUMPER_RINK, BUMPER_SEATS, BUMPER_YARD, DIR, SPOT_KINDS, type Sid } from "@tomb/protocol";
+import { BUMPER_GATE, BUMPER_RIM, BUMPER_RINK, BUMPER_SEATS, BUMPER_YARD, DIR, SPOT_KINDS, type Sid } from "@tomb/protocol";
 import { BUMPER_DOOR, BUMPER_EXIT_AT, BUMPER_POSTS, bumperColliders, bumperGround, inBumperYardTiles, RINK_INNER } from "../bumper/bumperLayout";
-import { interactables, standable, staticColliders, walkableGrid, WALK } from "../world/layout";
+import { inWater, interactables, standable, staticColliders, walkableGrid, WALK } from "../world/layout";
 import {
   BUMP_BIG_POWER,
   BUMP_COUNT_POWER,
@@ -11,6 +11,8 @@ import {
   canExit,
   collideCar,
   dirAngle,
+  EXIT_OUT,
+  exitSpot,
   headingDir,
   headingFrame,
   newMotion,
@@ -18,6 +20,7 @@ import {
   remoteBumpPower,
   stepCar,
   touching,
+  wallSide,
   wrapAngle,
 } from "./bumper";
 
@@ -166,10 +169,48 @@ describe("범퍼카 방향·고르기·내리기", () => {
     expect(pickCar(new Map(), 3, () => false)).toBeNull();
   });
 
-  it("입구 안쪽에서만 내린다", () => {
+  it("테두리 어디든 닿아 있거나 입구 안쪽이면 내린다 (한가운데는 아니다)", () => {
     expect(canExit(BUMPER_EXIT_AT.x, BUMPER_EXIT_AT.y)).toBe(true);
-    expect(canExit(BUMPER_SEATS[0].x, BUMPER_SEATS[0].y)).toBe(false); // 왼쪽 끝 차 자리
-    expect(canExit(720, CAR_BOUNDS.y1)).toBe(false);
+    expect(canExit(BUMPER_SEATS[0].x, BUMPER_SEATS[0].y)).toBe(false); // 왼쪽 끝 차 자리 (벽에서 조금 떨어져 있다)
+    expect(canExit(720, CAR_BOUNDS.y1)).toBe(true); // 아래 벽
+    expect(canExit(CAR_BOUNDS.x0, 930)).toBe(true); // 왼쪽 벽
+    expect(canExit(CAR_BOUNDS.x1 - 3, 930)).toBe(true); // 오른쪽 벽 바로 앞
+    expect(canExit(700, 930)).toBe(false);
+    expect(canExit(CAR_BOUNDS.x0 + 10, 930)).toBe(false);
+  });
+
+  it("벽에 닿았는지: 닿은 변 (모서리면 더 가까운 변), 아니면 null", () => {
+    expect(wallSide(CAR_BOUNDS.x0, 930)).toBe("left");
+    expect(wallSide(CAR_BOUNDS.x1, 930)).toBe("right");
+    expect(wallSide(700, CAR_BOUNDS.y0 + 2)).toBe("top");
+    expect(wallSide(700, CAR_BOUNDS.y1)).toBe("bottom");
+    expect(wallSide(CAR_BOUNDS.x0 + 1, CAR_BOUNDS.y1)).toBe("bottom");
+    expect(wallSide(700, 930)).toBeNull();
+    expect(wallSide(CAR_BOUNDS.x0 + 5, 930)).toBeNull();
+  });
+
+  it("내려설 자리: 닿은 벽 바로 바깥, 막혀 있으면 가까운 빈 곳, 입구 안쪽은 입구 앞", () => {
+    const R = BUMPER_RINK;
+    const all = () => true;
+    expect(exitSpot(CAR_BOUNDS.x0, 920, all)).toEqual({ x: R.x - EXIT_OUT, y: 920, dir: DIR.left });
+    expect(exitSpot(CAR_BOUNDS.x1, 920, all)).toEqual({ x: R.x + R.w + EXIT_OUT, y: 920, dir: DIR.right });
+    expect(exitSpot(700, CAR_BOUNDS.y1, all)).toEqual({ x: 700, y: R.y + R.h + EXIT_OUT, dir: DIR.down });
+    expect(exitSpot(660, CAR_BOUNDS.y0, all)).toEqual({ x: 660, y: R.y - EXIT_OUT, dir: DIR.up });
+    // 입구 안쪽 둘레(벽에 닿지 않음)는 예전처럼 입구 앞
+    expect(exitSpot(BUMPER_EXIT_AT.x, BUMPER_EXIT_AT.y + 6, all)).toEqual({ x: BUMPER_DOOR.x, y: BUMPER_DOOR.y, dir: DIR.down });
+    // 바로 바깥이 막혔다 → 같은 변에서 가장 가까운 빈 곳
+    const leftBlocked = (x: number, y: number) => !(x === R.x - EXIT_OUT && y > 900 && y < 940);
+    const s = exitSpot(CAR_BOUNDS.x0, 920, leftBlocked);
+    expect(s.x).toBe(R.x - EXIT_OUT);
+    expect(Math.abs(s.y - 920)).toBeGreaterThanOrEqual(20);
+    expect(Math.abs(s.y - 920)).toBeLessThanOrEqual(24);
+    // 왼쪽 변이 통째로 막혔다 → 다른 변 (차에서 가까운 쪽)
+    const noLeft = (x: number) => x !== R.x - EXIT_OUT;
+    const t = exitSpot(CAR_BOUNDS.x0, CAR_BOUNDS.y1, noLeft);
+    expect(t.dir).toBe(DIR.down);
+    expect(t.y).toBe(R.y + R.h + EXIT_OUT);
+    // 아무 데도 없다 → 입구 앞
+    expect(exitSpot(CAR_BOUNDS.x0, 920, () => false)).toEqual({ x: BUMPER_DOOR.x, y: BUMPER_DOOR.y, dir: DIR.down });
   });
 
   it("닿아 있는지: 테두리·기둥·다른 차 바로 옆만 (한가운데 빈 곳은 아니다)", () => {
@@ -220,6 +261,58 @@ describe("범퍼카장 배치", () => {
     }
     expect(BUMPER_GATE.x0).toBeLessThan(BUMPER_DOOR.x);
     expect(BUMPER_GATE.x1).toBeGreaterThan(BUMPER_DOOR.x);
+  });
+
+  it("벽 어디서 내려도 링크 바깥 걸을 수 있는 땅에 서고, 입구 앞까지 걸어서 이어진다 (매표소 앞은 옆으로 비킨다)", () => {
+    const R = BUMPER_RINK;
+    const ok = (x: number, y: number) => standable(x, y) && !inWater(x, y);
+    const g = walkableGrid(8);
+    // 입구 앞에서 걸어서 닿는 칸 (물은 피한다)
+    const seen = new Uint8Array(g.cols * g.rows);
+    const start = Math.floor(BUMPER_DOOR.y / 8) * g.cols + Math.floor(BUMPER_DOOR.x / 8);
+    const q = [start];
+    seen[start] = 1;
+    while (q.length) {
+      const i = q.pop()!;
+      const cx = i % g.cols;
+      for (const j of [i - 1, i + 1, i - g.cols, i + g.cols]) {
+        if (j < 0 || j >= seen.length || seen[j] || g.cells[j] !== WALK.open) continue;
+        if ((j === i - 1 && cx === 0) || (j === i + 1 && cx === g.cols - 1)) continue;
+        seen[j] = 1;
+        q.push(j);
+      }
+    }
+    // 걷기 격자는 8px 칸이라 벽·매표소 바로 옆 칸은 막힘으로 굽힌다 → 이웃 칸까지 본다
+    const reach = (x: number, y: number) => {
+      const c = Math.floor(x / 8);
+      const r = Math.floor(y / 8);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (seen[(r + dy) * g.cols + c + dx] === 1) return true;
+      return false;
+    };
+    const cars: [number, number][] = [];
+    for (let y = CAR_BOUNDS.y0; y <= CAR_BOUNDS.y1; y += 6) cars.push([CAR_BOUNDS.x0, y], [CAR_BOUNDS.x1, y]);
+    for (let x = CAR_BOUNDS.x0; x <= CAR_BOUNDS.x1; x += 6) cars.push([x, CAR_BOUNDS.y0], [x, CAR_BOUNDS.y1]);
+    let moved = 0;
+    for (const [x, y] of cars) {
+      const s = exitSpot(x, y, ok);
+      const at = `${x},${y} → ${s.x},${s.y}`;
+      expect(ok(s.x, s.y), at).toBe(true);
+      expect(reach(s.x, s.y), at).toBe(true);
+      const inside = s.x > R.x - 4 && s.x < R.x + R.w + 4 && s.y > R.y && s.y < R.y + R.h + 5;
+      expect(inside, at).toBe(false);
+      // 바로 바깥(EXIT_OUT + 테두리 + 차 반지름 남짓)이거나, 막혀서 옆으로 조금 비킨 자리
+      const d = Math.hypot(s.x - x, s.y - y);
+      expect(d, at).toBeLessThan(48);
+      const side = wallSide(x, y);
+      const straight = side === "left" || side === "right" ? s.y === Math.round(y) : s.x === Math.round(x);
+      if (!straight) moved++;
+      else expect(d, at).toBeLessThanOrEqual(EXIT_OUT + BUMPER_RIM + CAR_R + 2);
+    }
+    // 매표소 앞(위 테두리 오른쪽)은 막혀 있어 옆으로 비킨다
+    expect(moved).toBeGreaterThan(0);
+    const booth = exitSpot(770, CAR_BOUNDS.y0, ok);
+    expect(booth.y).toBe(R.y - EXIT_OUT);
+    expect(Math.abs(booth.x - 770)).toBeGreaterThanOrEqual(14);
   });
 
   it("마당 바닥은 예전 다리 건너 묘역과 같은 타일 (돌 포장)", () => {

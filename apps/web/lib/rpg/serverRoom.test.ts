@@ -3,7 +3,7 @@ import { HUNT_ZONES, isZoneId, MONSTERS, zonesOf, type MonsterId } from "./catal
 import { huntSpawnable, revivable } from "./plan";
 import { SV_BOSS_ROOM, SV_LOOPS, SV_MONSTER_IDS, SV_POOL, SV_ROOMS, svLoop, svRoom } from "./serverRoom";
 import { MONSTER_STATUS } from "./status";
-import { evalTower, floorMinSec, isBossFloor, towerBlock, towerPlan, towerZone } from "./tower";
+import { evalTower, towerClean, floorMinSec, isBossFloor, towerBlock, towerPlan, towerZone } from "./tower";
 import type { HuntResult } from "./types";
 
 // 11/15 야근 빌딩 지하 서버실: 층 → 테마·방 종류, 층 계획(구성 섞기·정예 백업 테이프·우두머리), 서버 상한(복사·되살리기·재부팅)
@@ -166,11 +166,11 @@ describe("지하 서버실 결과 검증 (서버)", () => {
       const n = towerPlan(seed, f, 1).flatMap((w) => w.monsters).filter((m) => m === "sv_excel_macro").length;
       kills.sv_excel_macro = (kills.sv_excel_macro ?? 0) + n * 2;
     });
-    expect(evalTower(tt, r, r.durationMs + 1000).ok).toBe(true);
+    expect(towerClean(evalTower(tt, r, r.durationMs + 1000))).toBe(true);
     // 다음 층(지금 층)에서 나올 수 있는 만큼을 넘긴다
     const next = towerPlan(seed, 2, 1).flatMap((w) => w.monsters).filter((m) => m === "sv_excel_macro").length;
     const bad = { ...r, kills: { ...r.kills, sv_excel_macro: (r.kills.sv_excel_macro ?? 0) + next * 3 + 1 } };
-    expect(evalTower(tt, bad, r.durationMs + 1000).ok).toBe(false);
+    expect(towerClean(evalTower(tt, bad, r.durationMs + 1000))).toBe(false);
   });
 
   it("무한 재부팅은 한 마리 = 처치 하나 (재부팅해도 두 번 세지 않는다) — 계획만큼이면 통과, 두 배면 거절", () => {
@@ -179,9 +179,9 @@ describe("지하 서버실 결과 검증 (서버)", () => {
     const tt = { seed: at.seed, level: 50, start: 1 };
     const r = climb(at.seed, 1, at.f + 1);
     expect(r.kills.sv_reboot ?? 0).toBeGreaterThan(0);
-    expect(evalTower(tt, r, r.durationMs + 1000).ok).toBe(true);
+    expect(towerClean(evalTower(tt, r, r.durationMs + 1000))).toBe(true);
     const dbl = { ...r, kills: { ...r.kills, sv_reboot: (r.kills.sv_reboot ?? 0) * 2 + 1 } };
-    expect(evalTower(tt, dbl, r.durationMs + 1000).ok).toBe(false);
+    expect(towerClean(evalTower(tt, dbl, r.durationMs + 1000))).toBe(false);
   });
 
   it("테스트 서버 슈퍼 계정(서버가 판정)만 처치 속도 상한을 뺀다 — 계획에 없는 몬스터·층 부풀리기는 그대로 거절", () => {
@@ -199,7 +199,7 @@ describe("지하 서버실 결과 검증 (서버)", () => {
     const lax = evalTower({ seed: S, level: 1, start: 1 }, fast, ms + 1000, { lax: true });
     expect(lax.ok).toBe(true);
     // 상한을 넘을 만큼 빨랐는지 (아니면 이 시험은 의미가 없다)
-    expect(can.ok).toBe(false);
-    expect(evalTower({ seed: S, level: 1, start: 1 }, { ...fast, floors: 9 }, ms + 1000, { lax: true }).ok).toBe(false);
+    expect(towerClean(can)).toBe(false);
+    expect(towerClean(evalTower({ seed: S, level: 1, start: 1 }, { ...fast, floors: 9 }, ms + 1000, { lax: true }))).toBe(false);
   });
 });

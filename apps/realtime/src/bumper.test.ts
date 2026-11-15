@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, BUMPER_GATE, BUMPER_SEATS, DIR, STATE, decodeSnapshot, encodeEvent, encodeMove, type C2S, type DirId, type Grant, type S2C, type StateId } from "@tomb/protocol";
+import { AVATAR_COLORS, BUMPER_GATE, BUMPER_RIM, BUMPER_RINK, BUMPER_SEATS, DIR, STATE, decodeSnapshot, encodeEvent, encodeMove, type C2S, type DirId, type Grant, type S2C, type StateId } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { ChannelCore, type ChannelHost, type PeerRecord } from "./channel";
 
@@ -122,5 +122,32 @@ describe("범퍼카 자리 (11/16)", () => {
     core.message(a, send({ t: "sit", seatId: BUMPER_SEATS[5].id }), 0);
     const c = join("c", { x: 720, y: 790 }, 100);
     expect(welcome(c).seats).toEqual({ [BUMPER_SEATS[5].id]: 1 });
+  });
+
+  it("벽 어디서든 내린다: 차를 아래·왼쪽 벽에 붙이고 stand → 벽 바로 바깥으로 걸으면 서버도 그 자리를 받는다 (입구 앞이 아니어도)", () => {
+    const { core, join } = setup();
+    const a = join("a", DOOR);
+    const b = join("b", { x: 720, y: 790 });
+    const R = BUMPER_RINK;
+    const car = BUMPER_SEATS[1];
+    core.message(a, send({ t: "sit", seatId: car.id }), 0);
+    // 아래 벽에 닿은 차 (링크 안쪽 아래 끝)
+    core.message(a, move(700, R.y + R.h - BUMPER_RIM - 8, STATE.bumper, DIR.down), 1_000);
+    core.tick(1_050);
+    clear(a, b);
+    core.message(a, send({ t: "stand" }), 1_100);
+    expect(events(b)).toContainEqual({ t: "seat", seatId: car.id, sid: null });
+    core.message(a, move(700, R.y + R.h + 10, STATE.idle, DIR.down), 1_120);
+    for (let t = 1_150; t < 2_000; t += 50) core.tick(t);
+    expect(core.peer(1)).toMatchObject({ seatId: null, state: STATE.idle, x: 700, y: R.y + R.h + 10 });
+    // 다시 타고 왼쪽 벽에서 내려도 같다 (stand 없이 걷기 MOVE만 와도 자리가 풀린다)
+    core.message(a, move(DOOR.x, DOOR.y, STATE.idle), 2_000);
+    for (let t = 2_050; t < 4_000; t += 50) core.tick(t);
+    core.message(a, send({ t: "sit", seatId: car.id }), 4_000);
+    core.message(a, move(R.x + BUMPER_RIM + 8, 920, STATE.bumper, DIR.left), 5_000);
+    for (let t = 5_050; t < 7_000; t += 50) core.tick(t);
+    core.message(a, move(R.x - 10, 920, STATE.idle, DIR.left), 7_000);
+    for (let t = 7_050; t < 8_000; t += 50) core.tick(t);
+    expect(core.peer(1)).toMatchObject({ seatId: null, state: STATE.idle, x: R.x - 10, y: 920 });
   });
 });

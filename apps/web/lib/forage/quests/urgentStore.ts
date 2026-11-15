@@ -12,6 +12,7 @@ import { countOf, URGENT_TTL_SEC, type UrgentKind } from "./urgent";
 // Redis 키 (의뢰 id = "YYYYMMDD-0|1", 테스트 서버 시험 의뢰는 "t…"). 모두 TTL URGENT_TTL_SEC (약 4일)
 //  - urg:{id}       HASH  goal = 목표(처음 정한 값) · n = 낸 수(막대) · fest = 150%에 닿은 시각(ms, 축제 시작)
 //                         last = 마지막 1분에 100%를 넘긴 계정 · at100 = 100%에 처음 닿은 시각(ms, 화면 축하 폭죽) · a0·a2·a1 = 시작·축제·끝 확성기 남김
+//                         festBy = 150%를 넘긴 계정 (11/15 150%에 닿으면 그 시각(fest)에 의뢰가 일찍 끝난다 — 그 뒤 납품은 Lua가 'done'으로 막는다)
 //  - urg:{id}:by    ZSET  계정 → 낸 수 + 먼저 닿은 순서(소수부, lib/forage/quests/urgent rankScore)
 //  - urg:{id}:nm    HASH  계정 → 이름 (순위 3명 표시용)
 //  - urg:{id}:got   HASH  계정 → 받은 보상 JSON (한 번만 — HSETNX)
@@ -30,7 +31,7 @@ export const uk = {
   box: (a: string) => `urgbox:${a}`,
 };
 
-export type UrgentState = { goal: number; n: number; fest: number; at100: number; last: string | null; a0: boolean; a1: boolean; a2: boolean };
+export type UrgentState = { goal: number; n: number; fest: number; at100: number; last: string | null; festBy: string | null; a0: boolean; a1: boolean; a2: boolean };
 export type NoticeField = "a0" | "a1" | "a2";
 export type UrgentTop = { acct: string; name: string; n: number };
 export type UrgentMine = { id: string; n: number; got: string | null };
@@ -49,7 +50,8 @@ export type DeliverArgs = {
   /** 테스트 서버 시험(막대 +%): 가방을 보지 않고 낸 것으로만 센다 (순위·참여·보상에 들어간다) */
   free?: boolean;
 };
-export type UrgentDeliverResult = { status: "ok"; n: number; mine: number; fest: number } | { status: "bag" };
+/** done = 이미 150%를 채워 끝난 의뢰 (아무것도 바뀌지 않는다) */
+export type UrgentDeliverResult = { status: "ok"; n: number; mine: number; fest: number } | { status: "bag" | "done" };
 
 /** 받기: 단계 도장 + 상자(가방에 넣기만 — 여는 건 openPocket) + 칭호·모자를 한 번에 */
 export type ClaimPlan = {
@@ -94,7 +96,8 @@ export interface UrgentStore {
   mark(id: string, field: NoticeField): Promise<boolean>;
   /**
    * 납품 (원자적): 가방에 모자라면 bag (아무것도 바뀌지 않는다). 아니면 가방에서 빼고 막대 +낸 수, 순위 +낸 수, 이름 기억.
-   * 150%를 처음 넘기면 fest = now, 마지막 1분에 100%를 처음 넘기면 last = 이 계정
+   * 150%를 처음 넘기면 fest = now·festBy = 이 계정, 마지막 1분에 100%를 처음 넘기면 last = 이 계정.
+   * 이미 150%를 넘겨 끝난 의뢰면 done (가방도 막대도 그대로)
    */
   deliver(id: string, acct: string, name: string, items: Record<string, number>, a: DeliverArgs): Promise<UrgentDeliverResult>;
   /** 많이 낸 순 k명 (명령 2개) */
@@ -114,7 +117,7 @@ export interface UrgentStore {
 
 const num = (v: unknown) => Number(v) || 0;
 export function stateOf(h: Record<string, string>): UrgentState {
-  return { goal: num(h.goal), n: num(h.n), fest: num(h.fest), at100: num(h.at100), last: h.last || null, a0: h.a0 === "1", a1: h.a1 === "1", a2: h.a2 === "1" };
+  return { goal: num(h.goal), n: num(h.n), fest: num(h.fest), at100: num(h.at100), last: h.last || null, festBy: h.festBy || null, a0: h.a0 === "1", a1: h.a1 === "1", a2: h.a2 === "1" };
 }
 
 // ── 메모리 (로컬·시험) ──
@@ -170,6 +173,7 @@ export class MemoryUrgentStore implements UrgentStore {
     return true;
   }
   async deliver(id: string, acct: string, name: string, items: Record<string, number>, a: DeliverArgs): Promise<UrgentDeliverResult> {
+    if (num(this.evs.get(id)?.fest) > 0) return { status: "done" };
     if (!a.free && !this.deps().takeBag(acct, items)) return { status: "bag" };
     const e = this.ev(id);
     const add = Object.values(items).reduce((s, n) => s + n, 0);
@@ -180,7 +184,10 @@ export class MemoryUrgentStore implements UrgentStore {
     const mine = countOf(by.get(acct) ?? 0) + add;
     by.set(acct, mine + a.frac);
     this.map(this.nms, id).set(acct, name);
-    if (!e.fest && before * 2 < a.goal * 3 && n * 2 >= a.goal * 3) e.fest = String(a.now);
+    if (!e.fest && before * 2 < a.goal * 3 && n * 2 >= a.goal * 3) {
+      e.fest = String(a.now);
+      e.festBy = acct;
+    }
     if (!e.last && before < a.goal && n >= a.goal && a.now >= a.lastFrom) e.last = acct;
     if (!e.at100 && before < a.goal && n >= a.goal) e.at100 = String(a.now);
     return { status: "ok", n, mine, fest: num(e.fest) };
@@ -240,8 +247,9 @@ export class MemoryUrgentStore implements UrgentStore {
 // ── Redis (운영) ──
 
 // KEYS: ev, by, nm, bag  ARGV: 계정, 이름, 목표, 지금, 순위 소수부, 마지막 1분 시작, ttl, 'bag'|'free'(시험: 가방 안 봄), (id, 개수)...
-// → {'ok', 막대, 내 수, fest} | {'bag'}
+// → {'ok', 막대, 내 수, fest} | {'bag'} | {'done'} (11/15 이미 150%를 넘겨 끝난 의뢰 — 아무것도 바꾸지 않는다)
 export const URGENT_DELIVER_LUA = `
+if tonumber(redis.call('HGET', KEYS[1], 'fest') or '0') > 0 then return {'done'} end
 local free = ARGV[8] == 'free'
 if not free then
   for i = 9, #ARGV, 2 do
@@ -261,7 +269,10 @@ local old = tonumber(redis.call('ZSCORE', KEYS[2], ARGV[1]) or '0')
 local mine = math.floor(old + 1e-9) + add
 redis.call('ZADD', KEYS[2], mine + tonumber(ARGV[5]), ARGV[1])
 redis.call('HSET', KEYS[3], ARGV[1], ARGV[2])
-if before * 2 < goal * 3 and n * 2 >= goal * 3 then redis.call('HSETNX', KEYS[1], 'fest', ARGV[4]) end
+if before * 2 < goal * 3 and n * 2 >= goal * 3 then
+  redis.call('HSETNX', KEYS[1], 'fest', ARGV[4])
+  redis.call('HSETNX', KEYS[1], 'festBy', ARGV[1])
+end
 if before < goal and n >= goal and now >= tonumber(ARGV[6]) then redis.call('HSETNX', KEYS[1], 'last', ARGV[1]) end
 if before < goal and n >= goal then redis.call('HSETNX', KEYS[1], 'at100', ARGV[4]) end
 if before == 0 then redis.call('EXPIRE', KEYS[1], ARGV[7]) end
@@ -365,6 +376,7 @@ export class RedisUrgentStore implements UrgentStore {
       [uk.ev(id), uk.by(id), uk.nm(id), lk.bag(acct)],
       [acct, name, String(a.goal), String(a.now), String(a.frac), String(a.lastFrom), String(URGENT_TTL_SEC), a.free ? "free" : "bag", ...pairs],
     )) as unknown[];
+    if (String(r?.[0]) === "done") return { status: "done" };
     if (String(r?.[0]) !== "ok") return { status: "bag" };
     return { status: "ok", n: num(r[1]), mine: num(r[2]), fest: num(r[3]) };
   }

@@ -4,6 +4,7 @@ import { env } from "@/lib/env";
 import { handler, HttpError, json, notFound } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { requireVisitor } from "@/lib/session";
+import { isStaff } from "@/lib/staff";
 import { recordLook } from "@/lib/lookRank";
 import { getAccounts, getStore, toPublicGrave } from "@/lib/store";
 import { lookGrant, lookOf, loadMe } from "@/lib/store/accounts";
@@ -15,6 +16,7 @@ const noItem = () => new HttpError(409, "NO_ITEM", "가방에 그 아이템이 �
 /**
  * 사용 `{ itemId, graveId? }`. 모든 아이템은 쓰는 순간 가방에서 1개 빠진다.
  *  - 폭죽: 60초짜리 사용권(grant). 게임이 실시간 서버로 보내면 채널 모두에게 터진다 (nonce는 한 번만 쓸 수 있다)
+ *    운영자 계정은 가방에서 빼지 않는다 (없어도 모든 폭죽을 쏠 수 있다. 연사는 위 rateLimit("shop")·실시간 서버 간격이 막는다)
  *  - 캐릭터 꾸미기: 24시간 착용 (같은 부위에 입던 것은 벗어 둔 꾸미기로, 남은 시간 그대로) + 착용 증서(lookGrant)
  *  - 묘비 꾸미기: 내 계정으로 세운 묘비에만, 7일 유지 (묘비당 최대 3개, 넘으면 가장 오래된 것 교체)
  *  - 묘비 디자인권: 여기서는 쓰지 않는다 (묘비 세우기·수정의 style로 쓴다)
@@ -28,7 +30,7 @@ export const POST = handler(async (req) => {
   const now = Date.now();
 
   if (item.kind === "firework") {
-    if (!(await accounts.consume(visitorId, itemId))) throw noItem();
+    if (!(await isStaff(visitorId)) && !(await accounts.consume(visitorId, itemId))) throw noItem();
     const grant = await signGrant(env.joinSecret(), {
       kind: "firework",
       visitorId,

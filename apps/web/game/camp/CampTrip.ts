@@ -10,12 +10,31 @@ import type { GlyphAtlas } from "../text/GlyphAtlas";
 import type { Sfx } from "../world/Sfx";
 import { BUS_BAY, BUS_DOOR_X, BUS_FROM_LEFT, BUS_LANE_Y, BUS_STOP } from "../world/fishZone";
 import { createBusArrival } from "../bus/BusArrival";
-import { BUS_RIDE_SCENE, type BusArrivalApi, type BusLeg, type BusRideControl, type BusRideData } from "../bus/busTypes";
+import { BUS_TEX, ensureBusTextures } from "../bus/busArt";
+import { rideBake, type RideBake } from "../bus/busRideBake";
+import { campMinimapSteps } from "./campMinimap";
+import { BUS_RIDE_MS, BUS_RIDE_SCENE, type BusArrivalApi, type BusLeg, type BusRideControl, type BusRideData } from "../bus/busTypes";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
 import { CampPrebake } from "./campPrebake";
 
 /** 캠핑장 그림 미리 굽기: 한 프레임에 쓰는 시간 (ms) — 느린 기기에서도 버스·창밖 연출이 멈추지 않게 */
 const BAKE_BUDGET_MS = 4;
+/** 11/15 정류장에 이만큼 가까이 오면 버스·창밖·캠핑장 그림을 미리 굽기 시작해요 (px) */
+const WARM_RADIUS = 200;
+/** 정류장 거리를 이 프레임마다 한 번 봐요 */
+const WARM_CHECK_FRAMES = 12;
+/** 새 텍스처를 한 프레임에 이만큼 그려 둬요 */
+const PRIME_PER_FRAME = 6;
+/** 창밖 연출이 시작하고 이만큼 프레임 뒤에 캠핑장 장면을 띄워요 */
+const CAMP_LAUNCH_FRAMES = 4;
+/** 장면이 바뀌는 프레임과 화면 UI가 숨거나 보이는 프레임을 이만큼 떼어요 */
+const UI_DELAY_FRAMES = 3;
+/** 마을로 돌아가는 창밖 연출이 시작하고 이만큼 프레임 뒤에 캠핑장 장면을 닫아요 */
+const CAMP_CLOSE_FRAMES = 6;
+/** 마을로 돌아오는 창밖 연출 끝나기 이만큼 전부터 마을 주민 길을 미리 찾아요 (ms) */
+const LIFE_WARM_LEAD_MS = 3000;
+/** 창밖 연출이 끝나고 마을이 깨어나기까지 (머무름 + 어두워지기, 대략 ms) */
+const RIDE_TAIL_MS = 800;
 
 // 11/15 마을 ↔ 캠핑장 버스 여행 (월드 장면이 하나 가지고 있다).
 // 같은 채널 연결 그대로 맵만 옮긴다: 실시간 소식은 캠핑장에 있는 동안 캠핑장 장면이 받는다(net.divert).
@@ -44,6 +63,8 @@ export type WorldSide = {
   clearRemotes(): void;
   /** 마을 정류장에 내린 뒤 (친구 옆으로 가기 등) */
   arrived(friend: CampFriend | null): void;
+  /** 11/15 aheadMs 뒤 마을 주민 길을 budgetMs 동안만 미리 찾아요 (다 됐으면 true) */
+  warmLife(aheadMs: number, budgetMs: number): boolean;
   isFriend(sid: number, name: string): boolean;
   toast(message: string): void;
 };
@@ -61,14 +82,54 @@ export class CampTrip {
   private phase: Phase = "village";
   private bus: BusArrivalApi | null = null;
   private campLaunched = false;
-  /** 11/15 캠핑장 그림 미리 굽기 (버스를 기다리는 동안·창밖 연출 동안 프레임마다 조금씩) */
+  /** 11/15 캠핑장 그림 미리 굽기 (정류장 근처·버스를 기다리는 동안·창밖 연출 동안 프레임마다 조금씩) */
   private bake: CampPrebake | null = null;
+  private bakeNear: { x: number; y: number } | null = null;
+  /** 11/15 창밖 연출 그림 미리 굽기 (busRideBake — 한 번 구우면 남아요) */
+  private rideArt: RideBake | null = null;
+  /** 11/15 미니맵 바탕 굽기 (캠핑장에 내리는 프레임을 가볍게) */
+  private minimap: Generator<void, void> | null = campMinimapSteps();
+  private baking = false;
+  private warmN = 0;
+  /** 창밖 연출 아래에서 만들 캠핑장 장면 (그림이 다 구워지면 띄워요) */
+  private campPending: CampSceneData | null = null;
   private readonly bakeTick = (): void => {
-    if (!this.bake || this.bake.step(BAKE_BUDGET_MS)) this.stopBaking();
+    const t0 = performance.now();
+    const left = () => BAKE_BUDGET_MS - (performance.now() - t0);
+    // 지난 프레임에 그려 둔 것은 치우고, 새로 올린 텍스처를 한 번 그려 둬요
+    this.prime();
+    // 버스 그림이 먼저예요 (E를 누르면 바로 버스가 와요)
+    if (!this.game.textures.exists(BUS_TEX.body)) {
+      ensureBusTextures(this.w.scene);
+      this.fresh.push(...Object.values(BUS_TEX));
+      return;
+    }
+    const rideDone = !this.rideArt || this.rideArt.step(BAKE_BUDGET_MS);
+    if (this.rideArt) this.fresh.push(...this.rideArt.takeFresh());
+    if (!rideDone || left() <= 0) return;
+    const campDone = !this.bake || this.bake.step(left());
+    if (this.bake) this.fresh.push(...this.bake.takeFresh());
+    if (!campDone) return;
+    this.launchPendingCamp();
+    while (this.minimap && left() > 0) if (this.minimap.next().done) this.minimap = null;
+    if (!this.minimap && !this.fresh.length) this.stopBaking();
+  };
+  /** 11/15 새로 올린 텍스처: 다음 프레임에 1px로 한 번 그려 둬요 (처음 그리는 프레임에 그래픽 카드로 올리느라 멈추지 않게) */
+  private readonly fresh: string[] = [];
+  private primeImgs: Phaser.GameObjects.Image[] = [];
+  /** 11/15 정류장 근처에 오면 미리 굽기 시작 (E를 바로 눌러도 멈추지 않게) */
+  private readonly warmTick = (): void => {
+    if (this.phase !== "village" || this.baking || ++this.warmN % WARM_CHECK_FRAMES !== 0) return;
+    if (!this.w.net.campOpen) return;
+    const pl = this.w.player();
+    if (!pl || Math.hypot(pl.x - BUS_STOP.x, pl.y - BUS_STOP.y) > WARM_RADIUS || this.warm()) return;
+    this.startBaking(CAMP_ARRIVE);
   };
   private readonly hour = () => ambienceAt(Date.now(), parseAmbienceOverride(typeof window === "undefined" ? "" : window.location.search)).kstHour;
 
-  constructor(private readonly w: WorldSide) {}
+  constructor(private readonly w: WorldSide) {
+    this.game.events.on(Phaser.Core.Events.POST_STEP, this.warmTick);
+  }
 
   /** 캠핑장에 있거나 오가는 중 (월드는 입력을 받지 않는다) */
   get away(): boolean {
@@ -113,6 +174,7 @@ export class CampTrip {
       return;
     }
     this.phase = "toCamp";
+    this.campPending = null;
     w.lock(true);
     this.startBaking(friend ? { x: friend.x, y: friend.y } : CAMP_ARRIVE);
     const pl = w.player();
@@ -145,6 +207,8 @@ export class CampTrip {
     this.w.lock(true);
     this.w.net.map = "camp";
     this.launchCamp({ host: this.host(), arrive: "resume", resume });
+    // 돌아가는 버스·창밖 그림을 미리 조금씩 구워 둬요
+    this.startBaking(CAMP_ARRIVE);
     // 월드 create 안이라 아직 "켜진" 장면이 아니다 → 다음 틱에 재운다
     setTimeout(() => {
       if (this.phase === "camp") this.sleepWorld();
@@ -169,13 +233,13 @@ export class CampTrip {
       if (sm.isActive(BUS_RIDE_SCENE)) (sm.getScene(BUS_RIDE_SCENE) as unknown as BusRideControl).skip();
     });
     if (leg === "toCamp") {
-      // 창밖 연출이 화면을 덮은 다음 프레임에 월드를 재우고 캠핑장을 미리 만든다 (그림 굽는 시간을 연출 뒤에 숨긴다)
-      // 다 구웠으면 장면도 지금(창밖 연출이 어둠에서 밝아지는 동안) 만들고, 아직이면 연출 끝(어두워진 순간)에 만든다 — 연출 가운데서 멈추지 않게
-      this.w.scene.time.delayedCall(80, () => {
-        if (this.phase !== "toCamp") return;
-        this.dropBus();
-        this.sleepWorld();
-        if (this.bake?.done !== false) this.launchCamp({ host: this.host(), arrive: friend ? "friend" : "bus", friend, parked: true });
+      // 11/15 창밖 연출이 시작하는 프레임에 월드를 재워요 (연출 첫 화면은 검은색이라 보이지 않아요 — 마을과 창밖을 한 프레임에 함께 그리면 멈췄어요)
+      // 캠핑장 장면은 몇 프레임 뒤에, 그림이 다 구워졌으면(아니면 bakeTick이 다 구운 뒤) 띄우고 프레임마다 조금씩 만들어요 (CampScene parked)
+      this.dropBus();
+      this.sleepWorld();
+      this.campPending = { host: this.host(), arrive: friend ? "friend" : "bus", friend, parked: true };
+      this.afterFrames(CAMP_LAUNCH_FRAMES, () => {
+        if (this.bake?.done !== false) this.launchPendingCamp();
       });
     }
   }
@@ -185,7 +249,7 @@ export class CampTrip {
     if (!this.campLaunched) {
       // 느린 기기: 연출이 먼저 끝났다 → 남은 그림을 지금(화면이 어두운 순간) 굽고 장면을 만든 뒤 이어서
       this.bake?.finish();
-      this.stopBaking();
+      this.campPending = null;
       this.launchCamp({ host: this.host(), arrive: friend ? "friend" : "bus", friend, parked: true });
       this.whenCampReady(() => this.arriveCamp(friend));
       return;
@@ -203,9 +267,16 @@ export class CampTrip {
     // 서버에 맵 옮기기: 소식은 이제 캠핑장 장면이 받는다 (mapped → 캠핑장 사람들)
     camp.unpark();
     const to = friend ? { x: friend.x, y: friend.y } : CAMP_ARRIVE;
-    w.net.switchMap("camp", to.x, to.y);
-    w.net.setAway(false);
-    bridge.emit("bus:state", { riding: false });
+    // 11/15 맵 옮기기(화면 UI도 함께 바뀐다)는 다음 프레임에 (캠핑장을 처음 그리는 프레임을 가볍게)
+    this.afterFrames(2, () => {
+      if (this.phase !== "camp") return;
+      w.net.switchMap("camp", to.x, to.y);
+      w.net.setAway(false);
+    });
+    // 11/15 화면 UI는 몇 프레임 뒤에 다시 보여요 (캠핑장을 처음 그리는 프레임과 겹치면 한 번 멈췄어요)
+    this.afterFrames(UI_DELAY_FRAMES, () => {
+      if (this.phase === "camp") bridge.emit("bus:state", { riding: false });
+    });
   }
 
   // ── 캠핑장 → 마을 ──
@@ -214,17 +285,31 @@ export class CampTrip {
   private goVillage(friend: CampFriend | null): void {
     if (this.phase !== "camp") return;
     this.phase = "toVillage";
-    bridge.emit("bus:state", { riding: true });
     this.w.net.setAway(true, "bus");
     this.ride("toVillage", friend);
-    // 연출이 화면을 덮은 뒤 캠핑장을 닫고(그림도 지운다) 월드를 깨운다 — 마을 내 캐릭터는 정류장 버스 문 앞에 숨겨 둔다
+    // 11/15 화면 UI는 창밖 연출 첫 프레임 뒤에 숨겨요 (연출은 검은 화면에서 시작해요 — 같은 프레임에 겹치면 멈췄어요)
+    this.afterFrames(UI_DELAY_FRAMES, () => {
+      if (this.phase === "toVillage") bridge.emit("bus:state", { riding: true });
+    });
+    // 11/15 마을이 깨어나는 프레임이 가볍게: 끝나기 조금 전부터 주민 길을 프레임마다 조금씩 미리 찾아요
+    const wakeAt = performance.now() + BUS_RIDE_MS + RIDE_TAIL_MS;
+    const warmLife = (): void => {
+      const now = performance.now();
+      if (this.phase !== "toVillage" || this.w.warmLife(Math.max(0, wakeAt - now), BAKE_BUDGET_MS)) this.game.events.off(Phaser.Core.Events.POST_STEP, warmLife);
+    };
     // (월드가 자고 있어 월드 시계 대신 setTimeout)
-    // 월드는 연출이 끝날 때 깨운다 (연출 아래에서 마을을 함께 그리면 내장 그래픽에서 창밖이 끊긴다)
     setTimeout(() => {
+      if (this.phase === "toVillage") this.game.events.on(Phaser.Core.Events.POST_STEP, warmLife);
+    }, Math.max(0, BUS_RIDE_MS + RIDE_TAIL_MS - LIFE_WARM_LEAD_MS));
+    // 연출이 화면을 덮은 뒤 캠핑장을 닫는다 — 마을 내 캐릭터는 정류장 버스 문 앞에 숨겨 둔다
+    // 월드는 연출이 끝날 때 깨운다 (연출 아래에서 마을을 함께 그리면 내장 그래픽에서 창밖이 끊긴다)
+    // 11/15 캠핑장은 연출이 시작하는 프레임에 바로 숨겨요 (연출 첫 화면은 검은색 — 함께 그리면 멈췄어요). 닫기는 몇 프레임 뒤에
+    this.game.scene.getScene(CAMP_SCENE)?.scene.setVisible(false);
+    this.afterFrames(CAMP_CLOSE_FRAMES, () => {
       if (this.phase !== "toVillage") return;
       this.stopCamp();
       this.w.net.divert(null);
-    }, 120);
+    });
   }
 
   private arriveVillage(friend: CampFriend | null): void {
@@ -267,6 +352,7 @@ export class CampTrip {
   private bail(): void {
     const w = this.w;
     const was = this.phase;
+    this.campPending = null;
     this.stopCamp();
     w.net.divert(null);
     if (this.game.scene.isActive(BUS_RIDE_SCENE)) this.game.scene.stop(BUS_RIDE_SCENE);
@@ -286,14 +372,72 @@ export class CampTrip {
 
   // ── 도움 ──
 
+  /** 버스·창밖·캠핑장 그림이 다 구워져 있어요 */
+  private warm(): boolean {
+    this.rideArt = rideBake(this.game.textures, this.w.reduced);
+    return this.rideArt.done && !!this.bake?.done && !this.minimap && this.game.textures.exists(BUS_TEX.body);
+  }
+
+  /** 미리 굽기를 시작하거나 이어 가요. 다 구운 것은 다시 굽지 않아요 (텍스처를 남겨 둬요) */
   private startBaking(near: { x: number; y: number }): void {
-    this.stopBaking();
-    this.bake = new CampPrebake(this.w.scene, near);
+    // 캠핑장 그림: 도착하는 곳이 바뀌었고 아직 덜 구웠으면 그 근처 바닥부터 다시 줄을 세워요 (이미 있는 그림은 건너뛰어요)
+    const moved = !this.bakeNear || this.bakeNear.x !== near.x || this.bakeNear.y !== near.y;
+    if (!this.bake || (!this.bake.done && moved)) {
+      this.bake = new CampPrebake(this.w.scene, near);
+      this.bakeNear = { x: near.x, y: near.y };
+    }
+    this.rideArt = rideBake(this.game.textures, this.w.reduced);
+    if (this.baking) return;
+    this.baking = true;
     this.game.events.on(Phaser.Core.Events.POST_STEP, this.bakeTick);
   }
 
   private stopBaking(): void {
+    this.baking = false;
     this.game.events.off(Phaser.Core.Events.POST_STEP, this.bakeTick);
+    this.prime();
+  }
+
+  /** 지난번에 그려 둔 1px 그림을 치우고, 새로 올린 텍스처를 몇 장씩 그려 둬요 (보이는 장면 맨 아래, 거의 투명) */
+  private prime(): void {
+    for (const img of this.primeImgs) img.destroy();
+    this.primeImgs = [];
+    if (!this.baking || !this.fresh.length) return;
+    const s = this.primeScene();
+    if (!s) return;
+    for (const key of this.fresh.splice(0, PRIME_PER_FRAME)) {
+      if (!s.textures.exists(key)) continue;
+      this.primeImgs.push(s.add.image(0, 0, key).setOrigin(0, 0).setScrollFactor(0).setDisplaySize(1, 1).setAlpha(0.004).setDepth(-1e9));
+    }
+  }
+
+  /** 지금 화면에 그려지는 장면 (창밖 연출 → 캠핑장 → 마을 순) */
+  private primeScene(): Phaser.Scene | null {
+    const sm = this.game.scene;
+    for (const key of [BUS_RIDE_SCENE, CAMP_SCENE, "world"]) {
+      const s = sm.getScene(key);
+      if (s && sm.isActive(key) && s.sys.settings.visible) return s;
+    }
+    return null;
+  }
+
+  /** 창밖 연출 아래에 캠핑장 장면을 띄워요 (월드가 잠든 뒤·그림이 다 구워진 뒤) */
+  private launchPendingCamp(): void {
+    const data = this.campPending;
+    if (!data || this.phase !== "toCamp" || this.campLaunched) return;
+    this.campPending = null;
+    this.launchCamp(data);
+  }
+
+  /** n번째 POST_STEP에 한 번 (게임 시계 — 월드가 자고 있어도 돌아요). 장면 update 안에서 부르면 1 = 같은 프레임이에요 */
+  private afterFrames(n: number, fn: () => void): void {
+    let frames = 0;
+    const tick = (): void => {
+      if (++frames < n) return;
+      this.game.events.off(Phaser.Core.Events.POST_STEP, tick);
+      fn();
+    };
+    this.game.events.on(Phaser.Core.Events.POST_STEP, tick);
   }
 
   /** 캠핑장 장면 create가 끝나면 (다음 프레임들 중) */
@@ -389,6 +533,7 @@ export class CampTrip {
 
   destroy(): void {
     this.stopBaking();
+    this.game.events.off(Phaser.Core.Events.POST_STEP, this.warmTick);
     this.dropBus();
   }
 }

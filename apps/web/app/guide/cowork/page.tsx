@@ -1,6 +1,6 @@
 import { pageMetadata } from "../../seo";
 import GuidePage from "../GuidePage";
-import { CHAT_MAX, CHAT_RECENT_MS, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS } from "@tomb/protocol";
+import { CHAT_HISTORY_MS, CHAT_MAX, CHAT_STORE_MAX, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS } from "@tomb/protocol";
 import { earnRule } from "@/lib/economy";
 import { PRESENCE_INTERVAL_MS } from "@/lib/types";
 
@@ -18,7 +18,7 @@ const FACTS = [
   ["채널 수", `최대 ${DEFAULT_MAX_CHANNELS}채널 (가득 차면 대기열)`],
   ["지금 하는 일 표시 (벤치 상태)", "7가지 — 공부 중, 일하는 중, 밥 먹는 중, 쉬는 중, 음악 듣는 중, 통화 중, 커피 마시는 중"],
   ["누구에게 보이나", "같은 채널 모두에게 (일어나면 풀려요)"],
-  ["인사·대화", `정해진 문장 말풍선·이모티콘, 자유 채팅 (${CHAT_MAX}자, 같은 채널에 보이고 서버에 ${CHAT_RECENT_MS / 60_000}분만 머물러요)`],
+  ["인사·대화", `정해진 문장 말풍선·이모티콘, 자유 채팅 (${CHAT_MAX}자, 같은 채널에 보이고 최근 ${CHAT_STORE_MAX}줄은 서버에 ${CHAT_HISTORY_MS / 3_600_000}시간까지 남아요)`],
   ["틀어 두는 동안", `접속해 있는 ${PRESENCE_INTERVAL_MS / 60_000}분마다 ${earnRule("presence").points}포인트 (다른 창을 봐도 괜찮아요, 하루 최대 ${earnRule("presence").dailyMax}포인트)`],
   ["요금", "무료 (설치·회원가입 없음)"],
 ] as const;

@@ -25,6 +25,14 @@
   color: var(--candle);
 }
 
+/* 지난 줄(5분 넘음) 옆 작은 시각 "N분 전" */
+.ago {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 /* ── 데스크톱: 왼쪽 아래 바로 가기 줄(36px) 바로 위, 게임 패널 톤의 반투명 상자 ── */
 .box {
   position: fixed;
@@ -303,4 +311,20 @@
   vertical-align: 1px;
   text-shadow: none;
   box-shadow: inset 0 0 0 1px #c9962e;
+}
+
+/* 11/16 매니저 딱지: 이름 앞 작은 짙은 청록 판 + 민트테 (운영자 딱지와 구분되게) */
+.mgrTag {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 3px;
+  background: #0f3a36;
+  color: #6ff4cc;
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 14px;
+  vertical-align: 1px;
+  text-shadow: none;
+  box-shadow: inset 0 0 0 1px #2fbf9c;
 }

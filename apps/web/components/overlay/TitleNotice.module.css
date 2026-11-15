@@ -100,6 +100,12 @@
   color: #ffb0e0;
 }
 
+/* 11/16 매니저: 민트 + 은은한 빛 */
+.name[data-grade="manager"] {
+  color: #6ff4cc;
+  text-shadow: 0 0 8px rgba(70, 230, 180, 0.55);
+}
+
 /* 11/15 신화: 금빛 + 은은한 빛 */
 .name[data-grade="mythic"] {
   color: #ffd36a;

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MONSTERS, type MonsterId } from "../catalog";
 import { huntSpawnable } from "../plan";
 import { killRateCeiling } from "../rewards";
-import { evalTower, floorMinSec, towerBlock, towerPlan, towerZone } from "../tower";
+import { evalTower, MINION_FLOOR_ALLOW, towerClean, floorMinSec, towerBlock, towerPlan, towerZone } from "../tower";
 import type { HuntResult } from "../types";
 import { clockText, meetingClock, meetingTime, MT_ELITE, MT_MID, MT_POOL, MT_ROOM_MIN, MT_ZONE, mtNextSide, mtShrink, mtSlack, type MtRoom } from "./meetingRoom";
 import { MT_MAIL_CAP, mtAgendaAdds } from "./meetingRoomPlan";
@@ -165,8 +165,8 @@ describe("끝없는 회의실: 서버 검증", () => {
     const { r } = climbAll(seed, 1, 10);
     const fwd = r.kills.mt_cc_fwd ?? 0;
     expect(fwd).toBeGreaterThan(0);
-    const cheat = { ...r, kills: { ...r.kills, mt_cc_fwd: fwd + 4 + (huntSpawnable(towerPlan(seed, 11, 1), Infinity).mt_cc_fwd ?? 0) } };
-    expect(evalTower({ seed, level: 50, start: 1 }, cheat, r.durationMs + 500).ok).toBe(false);
+    const cheat = { ...r, kills: { ...r.kills, mt_cc_fwd: fwd + 4 + 11 * MINION_FLOOR_ALLOW + (huntSpawnable(towerPlan(seed, 11, 1), Infinity).mt_cc_fwd ?? 0) } };
+    expect(towerClean(evalTower({ seed, level: 50, start: 1 }, cheat, r.durationMs + 500))).toBe(false);
   });
 });
 

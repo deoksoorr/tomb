@@ -115,7 +115,7 @@ export type NetCallbacks = {
   onMeStale?(): void;
   /** 친구가 들어왔다·나갔다 (실시간 서버가 밀어 준다) */
   onFriend?(m: { key: string; name: string; on: boolean }): void;
-  onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; system?: true; replaces?: string }): void;
+  onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; system?: true; replaces?: string; mgr?: true }): void;
   /**
    * 11/15 맵을 옮겼다 (switchMap의 답). map = 서버가 정한 지금 맵 (허락이 없으면 옮기기 전 맵 그대로),
    * peers·seats = 그 맵 사람(나 빼고)과 그 사람들이 앉은 자리
@@ -674,7 +674,7 @@ export class RealtimeClient {
           if (m.sid !== this.mySid) this.h.onGraveEvent(m.sid, m.kind, m.graveId);
           break;
         case "look":
-          if (m.sid !== this.mySid) this.h.onLook(m.sid, m.look, { dye: m.dye, body: m.body, ...(typeof m.champ === "number" ? { champ: m.champ } : {}) });
+          if (m.sid !== this.mySid) this.h.onLook(m.sid, m.look, { dye: m.dye, body: m.body, ...(typeof m.champ === "number" ? { champ: m.champ } : {}), ...(m.mgr === 0 || m.mgr === 1 ? { mgr: m.mgr } : {}) });
           break;
         case "act":
           if (m.sid !== this.mySid && (ACT_KINDS as readonly string[]).includes(m.kind) && Number.isFinite(m.x) && Number.isFinite(m.y))
@@ -732,6 +732,8 @@ export class RealtimeClient {
               ch: Number(m.ch) || 0,
               at: Number(m.at) || Date.now(),
               ...(m.staff === true ? { staff: true as const } : {}),
+              // 11/16 매니저 계정이 외친 것
+              ...(m.mgr === true ? { mgr: true as const } : {}),
               // 11/15 마을 공지 줄 (실시간 서버가 /internal/say로 띄운 것)
               ...(m.system === true ? { system: true as const } : {}),
               ...(typeof m.replaces === "string" ? { replaces: m.replaces } : {}),

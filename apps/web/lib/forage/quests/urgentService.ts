@@ -35,8 +35,10 @@ import {
   URGENT_SHOW_MS,
   URGENT_TITLE_MS,
   urgentAnnounce,
+  urgentEndAt,
   urgentEndNotice,
   urgentGoal,
+  urgentLastAcct,
   urgentReward,
   urgentSchedule,
   type UrgentKind,
@@ -190,17 +192,21 @@ export async function urgentPublic(now = Date.now()): Promise<UrgentPublicResult
   const store = urgentStore();
   const [st, top] = await Promise.all([store.state(ev.id), store.top(ev.id, 3)]);
   const goal = await goalOf(ev, st.goal);
-  const live = now < ev.end;
+  // 11/15 150%에 닿았으면 그 시각에 끝난 것으로 (배포 전에 닿은 진행 중 의뢰도 저장된 fest로 바로 끝난다)
+  const end = urgentEndAt(ev.end, st.fest);
+  const early = end < ev.end;
+  const live = now < end;
   const festUntil = st.fest > 0 && now < st.fest + FEST_MS ? st.fest + FEST_MS : 0;
-  const lastName = st.last ? (top.find((t) => t.acct === st.last)?.name ?? (await nameOf(st.last, now).catch(() => null))) : null;
+  const lastAcct = urgentLastAcct(st);
+  const lastName = lastAcct ? (top.find((t) => t.acct === lastAcct)?.name ?? (await nameOf(lastAcct, now).catch(() => null))) : null;
   const body: UrgentPublic = {
     at: now,
-    ev: { id: ev.id, kind: ev.kind, goal, n: st.n, start: ev.start, end: ev.end, festUntil, goalAt: st.at100, top: top.map((t) => ({ name: t.name || NO_NAME, n: t.n })), lastName },
+    ev: { id: ev.id, kind: ev.kind, goal, n: st.n, start: ev.start, end, festUntil, goalAt: st.at100, top: top.map((t) => ({ name: t.name || NO_NAME, n: t.n })), lastName, ...(early ? { early } : {}), ...(lastAcct && !st.last ? { lastFest: true } : {}) },
   };
   // 확성기: 시작 · 150%(축제) · 끝 — 각각 한 번
-  if (live && !st.a0) await notice(ev, "a0", `📢 ${urgentAnnounce(ev.kind, goal)} (${Math.ceil((ev.end - now) / 60_000)}분)`, now);
+  if (live && !st.a0) await notice(ev, "a0", `📢 ${urgentAnnounce(ev.kind, goal)} (${Math.ceil((end - now) / 60_000)}분)`, now);
   if (st.fest > 0 && !st.a2) await notice(ev, "a2", `🎆 긴급 의뢰 150% 달성! 불꽃축제가 열렸어요`, now);
-  if (!live && !st.a1) await notice(ev, "a1", urgentEndNotice(ev.kind, goal, st.n), now);
+  if (!live && !st.a1) await notice(ev, "a1", urgentEndNotice(ev.kind, goal, st.n, early), now);
   return { body, cacheSec: live ? 5 : 15 };
 }
 
@@ -229,6 +235,8 @@ export async function deliverUrgent(acct: string, id: string, pick: Record<strin
   if (bad) throw new HttpError(400, "URGENT_PICK", bad);
   const [goal, name] = await Promise.all([goalOf(ev), nameOf(acct, now)]);
   const r = await urgentStore().deliver(ev.id, acct, name, items, { goal, end: ev.end, now, frac: rankScore(0, now, ev.end), lastFrom: ev.end - URGENT_LAST_MS });
+  // 11/15 이미 150%를 채워 끝난 의뢰 (Lua가 원자적으로 막는다 — 가방은 그대로)
+  if (r.status === "done") throw new HttpError(409, "URGENT_DONE", "이미 목표를 다 채웠어요. 게시판에서 보상을 받아 가세요.");
   if (r.status !== "ok") throw new HttpError(409, "BAG_CHANGED", "가방에 그만큼 없어요. 다시 골라 주세요.");
   // 이 인스턴스의 축제 기억을 바로 고친다 (150%에 닿았으면)
   if (r.fest > 0) memo().fest.set(ev.id, { at: now, fest: r.fest });
@@ -252,18 +260,22 @@ export async function urgentMine(acct: string, now = Date.now()): Promise<Urgent
   const rows: UrgentMineRow[] = [];
   for (const [i, ev] of evs.entries()) {
     const m = mine[i];
-    const done = now >= ev.end;
+    // 끝난 것이 확실하고 내가 안 냈으면 저장소를 읽지 않는다 (진행 중으로 보이는 것은 150% 일찍 끝남을 확인해야 해서 읽는다)
+    if (now >= ev.end && m.n <= 0) continue;
+    const st = await store.state(ev.id);
+    const end = urgentEndAt(ev.end, st.fest);
+    const done = now >= end;
     // 지금 진행 중인 것은 늘, 끝난 것은 내가 낸 것만
     if (done && m.n <= 0) continue;
-    const [st, top] = await Promise.all([store.state(ev.id), done && !m.got ? store.top(ev.id, 1) : Promise.resolve([])]);
+    const top = done && !m.got ? await store.top(ev.id, 1) : [];
     const goal = st.goal || (await goalOf(ev));
     const claimed = parseClaimed(m.got);
-    const r = done && !claimed ? urgentReward({ id: ev.id, acct, n: st.n, goal, mine: m.n, top: top[0]?.acct ?? null, last: st.last }) : null;
+    const r = done && !claimed ? urgentReward({ id: ev.id, acct, n: st.n, goal, mine: m.n, top: top[0]?.acct ?? null, last: urgentLastAcct(st) }) : null;
     rows.push({
       id: ev.id,
       kind: ev.kind,
       start: ev.start,
-      end: ev.end,
+      end,
       goal,
       n: st.n,
       mine: m.n,
@@ -279,13 +291,14 @@ export async function urgentMine(acct: string, now = Date.now()): Promise<Urgent
 export async function claimUrgent(acct: string, id: string, now = Date.now()): Promise<UrgentClaimResponse> {
   const ev = await eventById(id, now);
   if (!ev) throw new HttpError(404, "NOT_FOUND", "그런 긴급 의뢰는 없어요.");
-  if (now < ev.end) throw new HttpError(409, "URGENT_LIVE", "아직 진행 중이에요. 끝나면 받을 수 있어요.");
   if (now >= ev.end + URGENT_CLAIM_MS) throw new HttpError(409, "URGENT_EXPIRED", "보상을 받을 수 있는 기간이 지났어요.");
   const store = urgentStore();
   const [st, top, [m]] = await Promise.all([store.state(ev.id), store.top(ev.id, 1), store.mine([ev.id], acct)]);
+  // 11/15 150%를 채웠으면 그 순간 끝난 것 → 남은 시간과 상관없이 바로 받는다
+  if (now < urgentEndAt(ev.end, st.fest)) throw new HttpError(409, "URGENT_LIVE", "아직 진행 중이에요. 끝나면 받을 수 있어요.");
   if (m.got) throw new HttpError(409, "URGENT_CLAIMED", "이미 받았어요.");
   const goal = st.goal || (await goalOf(ev));
-  const r = urgentReward({ id: ev.id, acct, n: st.n, goal, mine: m.n, top: top[0]?.acct ?? null, last: st.last });
+  const r = urgentReward({ id: ev.id, acct, n: st.n, goal, mine: m.n, top: top[0]?.acct ?? null, last: urgentLastAcct(st) });
   if (!hasReward(r)) throw new HttpError(409, "NO_REWARD", m.n > 0 ? "목표의 절반을 못 채워서 이번엔 받을 보상이 없어요." : "이번 의뢰에 낸 것이 없어요.");
   // 「수집가의 뒷주머니」는 바로 열지 않고 가방에 넣는다 (가방에서 [열기] — openUrgentPocket). 내용물은 (의뢰, 계정) 시드로 이미 정해져 있다
   const claimed: UrgentClaimed = { stage: r.stage, stamps: r.stamps, box: null, pocket: !!r.box, king: r.king, last: r.last, at: now };
@@ -380,6 +393,7 @@ export async function testAddUrgent(acct: string, pctAdd: number, now = Date.now
   const [goal, name] = await Promise.all([goalOf(t), nameOf(acct, now)]);
   const add = Math.max(1, Math.round((goal * pctAdd) / 100));
   const r = await urgentStore().deliver(t.id, acct, name, { test: add }, { goal, end: t.end, now, frac: rankScore(0, now, t.end), lastFrom: t.end - URGENT_LAST_MS, free: true });
+  if (r.status === "done") throw new HttpError(409, "URGENT_DONE", "이미 목표를 다 채운 시험 의뢰예요.");
   if (r.status !== "ok") throw new HttpError(409, "NO_TEST", "시험 납품에 실패했어요.");
   if (r.fest > 0) memo().fest.set(t.id, { at: now, fest: r.fest });
   return r.n;

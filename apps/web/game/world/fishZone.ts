@@ -25,6 +25,8 @@ export const BUS_SHELTER_W = 64;
 export const BUS_SHELTER_H = 50;
 /** 노선 팻말 (승강장 오른쪽 끝 — 버스 앞머리 앞) · 시간표 (승강장 왼쪽 끝) */
 export const BUS_SIGN = { x: 1378, y: 742 } as const;
+/** 노선 팻말 그림 폭 (forage/zoneArt busSign) */
+export const BUS_SIGN_W = 18;
 export const BUS_SIGN_H = 44;
 export const BUS_TIMETABLE = { x: 1270, y: 734 } as const;
 export const BUS_TIMETABLE_H = 28;
@@ -40,12 +42,19 @@ export const BUS_E_RADIUS = 60;
  */
 export const BUS_FROM_LEFT = false;
 /**
- * 버스 문이 서는 x (지붕 가운데보다 조금 서쪽 — 왼쪽을 보는 버스 몸이 동쪽 담(MAP_WIDTH - WALL_THICKNESS = 1408) 안에 들어오게).
- * 문은 여전히 지붕 아래 앞이다 (지붕 1298~1362)
+ * 11/15 정류장 가운데 x: 지붕 왼쪽 끝(1298)부터 노선 팻말 오른쪽 끝(1387)까지의 가운데예요.
+ * 바닥 정차 칸(노란 칠·BUS 글씨)과 서는 버스가 이 가운데에 맞춰요 (예전엔 칸이 정류장보다 동쪽으로 치우쳤어요)
  */
-export const BUS_DOOR_X = BUS_STOP.x - 14;
-/** 골목 바닥의 버스 정차 칸 (노란 칠 — 바닥 장식, 막지 않는다). 버스 몸(문 기준 서쪽 19 · 동쪽 89px — 왼쪽을 본다)이 들어가고 담 안에서 끝난다 */
-export const BUS_BAY = { x: BUS_DOOR_X - 22, y: 756, w: 112, h: 24 } as const;
+export const BUS_STOP_MID_X = Math.round((BUS_STOP.x - BUS_SHELTER_W / 2 + BUS_SIGN.x + BUS_SIGN_W / 2) / 2);
+/** 왼쪽을 보는 버스의 문에서 몸 가운데까지 (busArt BUS_DOOR_DX — 몸은 문 기준 서쪽 19 · 동쪽 89px) */
+const BUS_DOOR_TO_MID = 35;
+/**
+ * 버스 문이 서는 x: 버스 몸 가운데가 정류장 가운데에 오게 (몸 1289~1397 — 동쪽 담 MAP_WIDTH - WALL_THICKNESS = 1408 안).
+ * 문은 지붕 아래 앞이다 (지붕 1298~1362)
+ */
+export const BUS_DOOR_X = BUS_STOP_MID_X - BUS_DOOR_TO_MID;
+/** 골목 바닥의 버스 정차 칸 (노란 칠 — 바닥 장식, 막지 않는다). 정류장 가운데에 맞추고, 버스 몸이 들어가며 담 안에서 끝난다 (1287~1399) */
+export const BUS_BAY = { x: BUS_STOP_MID_X - 56, y: 756, w: 112, h: 24 } as const;
 /** 버스 바퀴가 닿는 줄 (BusArrival laneY) */
 export const BUS_LANE_Y = BUS_BAY.y + BUS_BAY.h - 2;
 /** 위 마당 테두리 연석 (자갈 마당이 골목·광장과 갈리는 곳 — 바닥 장식) */

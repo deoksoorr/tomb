@@ -1,6 +1,6 @@
 import type * as Phaser from "phaser";
 import { darken, Grid, lighten } from "../../sprites/pixel";
-import { BUS_BAY, BUS_PLATFORM, BUS_SHELTER_H, BUS_SHELTER_W, BUS_SIGN_H, BUS_TIMETABLE_H, WHARF_BOARD_H, WHARF_BOARD_W, WHARF_CURB, type FishDecorKind } from "../fishZone";
+import { BUS_BAY, BUS_PLATFORM, BUS_SHELTER_H, BUS_SHELTER_W, BUS_SIGN_H, BUS_SIGN_W, BUS_TIMETABLE_H, WHARF_BOARD_H, WHARF_BOARD_W, WHARF_CURB, type FishDecorKind } from "../fishZone";
 
 // 낚시 자리·버스 정류장 마당 그림 (코드로 그리는 픽셀아트): 어부 노점 옆 물고기 상자·물통, 의뢰 게시판·긴급 의뢰 현판·정류장,
 // 낚시 자리 표시(나무 낚시 의자 + 물결 고리 + 손짓 표시). 발 위치 = 그림 맨 아래 줄 가운데. 11/15 납품 부두 아치·그물 대·통발·등불 기둥은 부두와 함께 없앴다.
@@ -241,7 +241,7 @@ function busShelter(): HTMLCanvasElement {
 
 /** 노선 팻말: 줄무늬 기둥 + 둥근 버스 표지(파란 판·흰 버스) + 아래 작은 판(텐트 그림). 18×44 */
 function busSign(): HTMLCanvasElement {
-  const W = 18;
+  const W = BUS_SIGN_W;
   const H = BUS_SIGN_H;
   const g = new Grid(W, H);
   const cx = W >> 1;

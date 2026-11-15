@@ -4,7 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { urgentApi } from "@/lib/forage/quests/urgentClient";
-import { GOAL_CHEER_MS, urgentAnnounce, urgentStage } from "@/lib/forage/quests/urgent";
+import { FEST_MS, GOAL_CHEER_MS, urgentAnnounce, urgentStage } from "@/lib/forage/quests/urgent";
 import type { UrgentDeliverResponse, UrgentMeResponse, UrgentPublic } from "@/lib/forage/quests/urgentTypes";
 
 // 11/15: 긴급 의뢰의 클라이언트 사본 (위쪽 막대·게시판 칸이 같이 본다).
@@ -131,7 +131,14 @@ class UrgentClientStore {
       // 내 납품으로 100%를 넘겼으면 다음 물음을 기다리지 않고 바로 축하
       const crossed = ev.goalAt === 0 && urgentStage(ev.n, ev.goal) < 100 && urgentStage(r.n, r.goal) >= 100;
       const at = Date.now();
-      this.set({ pub: { ...this.snap.pub!, at: crossed ? at : this.snap.pub!.at, ev: { ...ev, n: Math.max(ev.n, r.n), festUntil: r.festUntil || ev.festUntil, goalAt: crossed ? at : ev.goalAt } } });
+      // 11/15 150%에 닿았으면 그 시각에 끝난다 (축제 끝 − 1시간 = 닿은 시각) → 다음 물음을 기다리지 않고 바로 끝난 화면·보상 받기
+      const fest = r.festUntil > 0 ? r.festUntil - FEST_MS : 0;
+      const early = fest > 0 && fest < ev.end ? { end: fest, early: true } : {};
+      this.set({ pub: { ...this.snap.pub!, at: crossed ? at : this.snap.pub!.at, ev: { ...ev, n: Math.max(ev.n, r.n), festUntil: r.festUntil || ev.festUntil, goalAt: crossed ? at : ev.goalAt, ...early } } });
+      if (fest > 0 && !this.doneSeen.has(id)) {
+        this.doneSeen.add(id);
+        void this.refreshMine();
+      }
     }
     const mine = this.snap.mine;
     if (mine) this.set({ mine: { ...mine, rows: mine.rows.map((row) => (row.id === id ? { ...row, mine: r.mine, n: Math.max(row.n, r.n) } : row)) } });
