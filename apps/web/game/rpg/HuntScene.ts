@@ -1091,8 +1091,8 @@ export class HuntScene extends RpgScene {
       m.kby = ((m.y - this.py) / k) * power;
       m.stunUntil = this.now + (boss ? 60 : (crit ? 280 : 170) + (opts.stun ?? 0));
     }
-    // 히트스톱 강약: 기본 45 · 묵직 65 · 스킬 무게만큼 더 · 치명타는 더 길게 (짧은 정지)
-    this.hitstop = Math.max(this.hitstop, (crit ? 85 : opts.heavy ? 65 : 45) + w * 8 + (crit && sk ? 25 : 0));
+    // 11/15: 맞을 때마다 게임 전체를 멈추던 히트스톱(45~85ms)은 뺐다 — 1초에 여러 번 치면 화면 전체가 계속 끊겨 보였다.
+    // 타격감은 맞은 몬스터만의 흰 번쩍임·밀려남·경직(stunUntil)과 치명타 흔들림으로 낸다
     if (crit) this.fx.shake(80, 0.003);
     else if (opts.heavy && nth === 0) this.fx.shake(60, 0.002);
     this.combo++;
@@ -1146,7 +1146,8 @@ export class HuntScene extends RpgScene {
     const def = MONSTERS[m.id];
     cancelCast(this.patHost, m);
     this.sfx.play("kill", m.boss ? 0.8 : 0.55);
-    this.hitstop = Math.max(this.hitstop, m.boss ? 160 : 60);
+    // 히트스톱은 우두머리 처치에만 (보통 처치마다 멈추면 끊겨 보인다 — 11/15)
+    if (m.boss) this.hitstop = Math.max(this.hitstop, 140);
     m.sprite.setTintFill(0xffffff);
     const big = m.boss || def.behavior === "boss";
     this.fx.killBurst(m.x, m.y, def.color, def.accent, def.size, () => ({ x: this.px, y: this.py }), big ? 8 : m.st.exp >= 15 ? 2 : 1, big ? 6 : 2);
@@ -1276,7 +1277,7 @@ export class HuntScene extends RpgScene {
   /** 시전 컷인: 몸 둘레 오라 번쩍 + 아주 짧은 정지(히트스톱). 소리는 스킬마다 castSkill에서 따로 낸다 (skillSound.ts) */
   private cutIn(b: BranchId, big: boolean): void {
     this.skfx.cutIn(this.px, this.py, b, big);
-    this.hitstop = Math.max(this.hitstop, big ? 80 : 50);
+    // 11/15: 스킬마다 멈추던 정지는 뺐다 (자동 스킬과 겹치면 계속 끊겼다). 궁극기만 아래 castUltimate에서 멈춘다
   }
 
   /** 배운 스킬의 단·랭크 강도 (소리 크기·무게) */
@@ -1491,8 +1492,6 @@ export class HuntScene extends RpgScene {
           snd("hit");
           this.aoeAt(pt.x, pt.y, fx.radius, fx.mult * pow, this.sk(id, g, { aoe: true, kb: 2.2, heavy: true, stun: 200 }));
           fxs.punch(3, "ember");
-          this.slowMo(160);
-          this.hitstop = Math.max(this.hitstop, 90);
         });
         break;
       }
@@ -1620,8 +1619,6 @@ export class HuntScene extends RpgScene {
             this.weaken(m, fx.vuln, fx.vulnMs);
           });
           fxs.punch(3, "frost");
-          this.slowMo(160);
-          this.hitstop = Math.max(this.hitstop, 90);
         });
         break;
       }
