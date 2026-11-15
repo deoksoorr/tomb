@@ -198,7 +198,7 @@ describe("끝판 칭호", () => {
   it("신화: 지금 주인일 때만 (서버 최초는 영원히, 꼭대기 층·이번 주 최고층은 넘어간다)", () => {
     const ids = ["t_first30", "t_first50", "t_first100", "t_firstStar100", "t_topFloor", "t_weekFloor"];
     expect(ids.map((id) => titleDef(id)?.grade)).toEqual(Array(6).fill("mythic"));
-    expect(ids.map((id) => titleDef(id)?.name)).toEqual(["최초 결재자", "최초 임원", "빌딩의 전설", "첫 번째 상무", "꼭대기 층 주인", "이번 주 최고층"]);
+    expect(ids.map((id) => titleDef(id)?.name)).toEqual(["최초 결재자", "최초 임원", "빌딩의 전설", "첫 번째 상무", "최고층 기록 보유자", "이번 주 최고층"]);
     expect(ids.filter((id) => titleDef(id)?.transient)).toEqual(["t_topFloor", "t_weekFloor"]);
     // 층·초월이 아무리 높아도 주인이 아니면 못 얻는다
     expect(earnedTitleIds({ dexTitleNames: [], champBoards: [], metrics: { floor: 200, tlv: 50 } }).some((id) => ids.includes(id))).toBe(false);

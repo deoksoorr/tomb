@@ -689,7 +689,7 @@ async function settleTowerRun(
               titles.push("t_topFloor");
               forgetTitles(acct);
               if (r.prev) forgetTitles(r.prev.accountId);
-              await pushVillageNotice(`🏢 ${await nameOf(acct, now)}님이 꼭대기 층을 차지했어요 (${st.best}층)`, now).catch(() => undefined);
+              await pushVillageNotice(`🏢 ${await nameOf(acct, now)}님이 야근 빌딩 최고층 기록을 세웠어요 (${st.best}층)`, now).catch(() => undefined);
             }
           }
         } catch (e) {
