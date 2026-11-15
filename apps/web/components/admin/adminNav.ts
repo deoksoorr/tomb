@@ -16,6 +16,7 @@ export type PanelId =
   | "graves"
   | "passed"
   | "housing"
+  | "towerGrant"
   | "residents"
   | "graveRules"
   | "errors"
@@ -68,6 +69,7 @@ export const NAV: NavGroup[] = [
       { id: "graves", label: "묘역 묘비", desc: "묘역에 서 있는 묘비를 찾아 숨기기·신고 초기화·삭제해요." },
       { id: "passed", label: "성불한 묘비", desc: "성불한 묘비(숨김 포함)를 찾아보고 완전히 지워요." },
       { id: "housing", label: "하우징", desc: "집 목록과 신고된 방명록 글을 숨기거나 지워요." },
+      { id: "towerGrant", label: "야근 빌딩 대신 정산", desc: "서버가 잘못 거절한 야근 빌딩 판을 판 끝과 똑같이 정산해 넣어요. 상자는 새로 굴려요." },
     ],
   },
   {
