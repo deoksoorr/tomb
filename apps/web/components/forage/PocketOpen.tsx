@@ -80,7 +80,8 @@ export default function PocketOpen({ count, onClose }: { count: number; onClose:
   }
 
   return (
-    <Dialog title="수집가의 뒷주머니" onClose={onClose}>
+    // 11/15 작은 창 (내용만큼): 표준 창은 아래가 크게 비었다
+    <Dialog title="수집가의 뒷주머니" kind="confirm" onClose={onClose}>
       <div className={u.opener}>
         <div className={u.openStage} data-phase={phase}>
           {phase !== "done" && (

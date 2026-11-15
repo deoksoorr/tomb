@@ -653,8 +653,7 @@
   display: grid;
   justify-items: center;
   gap: 12px;
-  min-width: min(320px, calc(100vw - 64px));
-  padding: 8px 4px 4px;
+  padding: 4px 0 0;
 }
 
 .openStage {
