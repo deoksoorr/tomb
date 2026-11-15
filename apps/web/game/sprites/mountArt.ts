@@ -10,29 +10,37 @@ import { Grid, type Color } from "./pixel";
 export const MOUNT_W = 24;
 export const MOUNT_H = 22;
 export const MOUNT_FRAMES = 10;
-export type MountKind = "hound" | "goose" | "deer";
+export type MountKind = "hound" | "goose" | "deer" | "carp";
 /** 탄 사람의 발바닥이 오는 줄 (그림 맨 위에서) → 들어 올리는 높이 = MOUNT_H - 1 - 이 값 */
-export const MOUNT_SEAT: Record<MountKind, number> = { hound: 10, goose: 11, deer: 9 };
+export const MOUNT_SEAT: Record<MountKind, number> = { hound: 10, goose: 11, deer: 9, carp: 9 };
 /** 탄 사람을 들어 올리는 높이 (px) */
 export function mountLift(kind: MountKind): number {
   return MOUNT_H - 1 - MOUNT_SEAT[kind];
 }
 
 type Draw = (g: Grid, f: number) => void;
-type Views = { side: Draw; front: Draw; back: Draw; frontOver: Draw; backOver: Draw; line: Color };
+/** under = 외곽선을 두르지 않고 몸 밑에 까는 것 (월척 잉어의 물결 — 옆·앞·뒷모습에만) */
+type Views = { side: Draw; front: Draw; back: Draw; frontOver: Draw; backOver: Draw; line: Color; under?: Draw };
 
 function sheet(v: Views): Grid {
   const g = new Grid(MOUNT_W * MOUNT_FRAMES, MOUNT_H);
-  const put = (i: number, draw: Draw, f: number, outline = true) => {
+  const put = (i: number, draw: Draw, f: number, outline = true, under = false) => {
     const one = new Grid(MOUNT_W, MOUNT_H);
     draw(one, f);
     if (outline) one.outline(v.line, false, 225);
+    if (under && v.under) {
+      const base = new Grid(MOUNT_W, MOUNT_H);
+      v.under(base, f);
+      base.draw(one, 0, 0);
+      g.draw(base, i * MOUNT_W, 0);
+      return;
+    }
     g.draw(one, i * MOUNT_W, 0);
   };
   for (let f = 0; f < 2; f++) {
-    put(0 + f, v.side, f);
-    put(2 + f, v.front, f);
-    put(4 + f, v.back, f);
+    put(0 + f, v.side, f, true, true);
+    put(2 + f, v.front, f, true, true);
+    put(4 + f, v.back, f, true, true);
     put(6 + f, v.frontOver, f);
     put(8 + f, v.backOver, f);
   }
@@ -283,10 +291,111 @@ function deerBack(g: Grid, f: number): void {
   deerBackBody(g, f);
 }
 
+// ── 11/15 수집 의뢰 보상: 월척 잉어 (비단잉어 — 흰 바탕에 주홍 무늬, 등엔 금빛 비늘 윤기). 다리 대신 물결 위를 미끄러진다 ──
+const CARP = { white: 0xfaf6ee, shade: 0xd8d0c2, red: 0xf0582a, redLo: 0xb83a1a, gold: 0xffd25a, fin: 0xffe2d0, finLo: 0xf0b8a0, eye: 0x1a1210, whisker: 0xe8c890, line: 0x5a2a1a };
+
+function carpSide(g: Grid, f: number): void {
+  const c = CARP;
+  // 꼬리 (갈라진 지느러미, 프레임마다 위아래로 흔든다)
+  const sw = f ? 1 : -1;
+  for (const [x, y] of [[3, 11], [2, 10 + sw], [1, 9 + sw], [2, 13 + sw], [1, 14 + sw], [0, 8 + sw], [0, 15 + sw], [1, 11 + sw], [1, 12 + sw]]) g.set(x, y, c.fin);
+  g.set(0, 9 + sw, c.finLo);
+  g.set(0, 14 + sw, c.finLo);
+  // 몸통
+  g.ellipse(11.5, 12, 8.6, 3.7, c.white);
+  g.recolor((x, y) => y >= 14, c.shade);
+  // 주홍 무늬 (등 위 큰 무늬 둘 + 머리 꼭대기 단정 무늬)
+  g.recolor((x, y) => y <= 11 && ((x >= 6 && x <= 9) || (x >= 12 && x <= 15 && y <= 10)), c.red);
+  g.recolor((x, y) => y === 9 && x >= 7 && x <= 14, c.gold);
+  g.recolor((x, y) => y >= 12 && y <= 13 && x >= 7 && x <= 8, c.redLo);
+  g.set(18, 9, c.red);
+  g.set(17, 9, c.red);
+  // 머리·눈·입·수염
+  g.set(19, 11, c.eye);
+  g.set(21, 13, c.redLo);
+  g.set(21, 14, c.whisker);
+  g.set(22, 15, c.whisker);
+  // 가슴지느러미 (반투명 분홍)
+  g.set(14, 15, c.fin);
+  g.set(13, 16, f ? c.finLo : c.fin);
+  g.set(15, 16, c.fin);
+}
+/** 앞모습 머리 (탄 사람 앞에 덧그린다): 흰 얼굴 + 정수리 붉은 동그라미(단정) + 양옆 눈 + 동그란 입 + 수염 */
+function carpHeadFront(g: Grid): void {
+  const c = CARP;
+  g.ellipse(12, 14.5, 4.6, 3.4, c.white);
+  g.recolor((x, y) => y >= 16, c.shade);
+  g.ellipse(12, 12.8, 1.7, 1.2, c.red);
+  g.set(11, 12, c.gold);
+  g.set(8, 14, c.eye);
+  g.set(16, 14, c.eye);
+  g.set(8, 13, 0xffffff);
+  g.set(16, 13, 0xffffff);
+  g.rect(11, 16, 3, 2, 0xf0a0a0);
+  g.set(12, 17, 0x8a2a1a);
+  g.set(10, 17, c.whisker);
+  g.set(9, 18, c.whisker);
+  g.set(14, 17, c.whisker);
+  g.set(15, 18, c.whisker);
+}
+function carpFront(g: Grid, f: number): void {
+  const c = CARP;
+  // 가슴지느러미: 양옆으로 넓게 펼친 반투명 부채 (살랑)
+  const up = f ? 0 : 1;
+  for (const d of [-1, 1] as const) {
+    const x0 = d < 0 ? 7 : 16;
+    for (let i = 1; i <= 3; i++) {
+      g.set(x0 + d * i, 13 + up - (i === 3 ? 1 : 0), c.fin);
+      g.set(x0 + d * i, 14 + up, i === 3 ? c.finLo : c.fin);
+    }
+  }
+  // 몸통 (탄 사람 뒤로 멀어지는 등)
+  g.ellipse(12, 10.5, 5.2, 3.2, c.white);
+  g.recolor((x, y) => y <= 10 && (x <= 9 || x >= 15), c.red);
+  g.vline(12, 7, 9, c.gold);
+  carpHeadFront(g);
+}
+/** 뒷모습 꼬리 (탄 사람 앞에 덧그린다): 나비처럼 넓게 퍼지는 꼬리지느러미 + 엉덩이 */
+function carpBackBody(g: Grid, f: number): void {
+  const c = CARP;
+  const sw = f ? 1 : -1;
+  for (let y = 14; y <= 20; y++) {
+    const half = Math.round(1 + (y - 14) * 0.95);
+    const shift = y >= 17 ? sw : 0;
+    for (let x = 12 - half + shift; x <= 12 + half + shift; x++) {
+      if (y === 20 && (x + 20) % 2 === 0) continue;
+      const streak = (x - shift + 20) % 2 === 0;
+      g.set(x, y, y >= 19 ? c.finLo : streak ? c.fin : 0xfff2e8);
+    }
+  }
+  g.ellipse(12, 12.6, 3.2, 2.2, c.white);
+  g.recolor((x, y) => y <= 12 && x >= 12, c.red);
+}
+function carpBack(g: Grid, f: number): void {
+  const c = CARP;
+  g.ellipse(12, 10, 5.4, 3.4, c.white);
+  g.recolor((x, y) => y <= 9 && (x <= 9 || x >= 14), c.red);
+  g.vline(12, 6, 9, c.gold);
+  g.set(5, 11, c.fin);
+  g.set(4, 12, c.finLo);
+  g.set(18, 11, c.fin);
+  g.set(19, 12, c.finLo);
+  carpBackBody(g, f);
+}
+/** 잉어 밑 물결 (외곽선 없이, 반투명) */
+function carpWater(g: Grid, f: number): void {
+  // 물결 고리 두 겹 (가운데는 비친다)
+  g.ellipse(12, 20, 10, 1.9, 0x8ad0f4, 170);
+  g.ellipse(12, 20, 8.4, 1.1, 0x4a90c0, 70);
+  g.ellipse(12, 20, 5, 0.8, 0xbfe8fa, 170);
+  for (const [x, y] of f ? [[4, 19], [19, 20], [12, 21]] : [[6, 20], [17, 19], [10, 21]]) g.set(x, y, 0xffffff, 220);
+}
+
 const VIEWS: Record<MountKind, Views> = {
   hound: { side: houndSide, front: houndFront, back: houndBack, frontOver: houndHeadFront, backOver: houndBackBody, line: HOUND.line },
   goose: { side: gooseSide, front: gooseFront, back: gooseBack, frontOver: (g) => gooseNeckFront(g), backOver: gooseBackBody, line: GOOSE.line },
   deer: { side: deerSide, front: deerFront, back: deerBack, frontOver: (g) => deerHeadFront(g), backOver: deerBackBody, line: DEER.line },
+  carp: { side: carpSide, front: carpFront, back: carpBack, frontOver: (g) => carpHeadFront(g), backOver: carpBackBody, line: CARP.line, under: carpWater },
 };
 
 /** 타는 펫 시트 (MOUNT_W × MOUNT_H × MOUNT_FRAMES) */

@@ -13,9 +13,11 @@ import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
 import { DEFAULT_PASS_DAYS, PRESENCE_INTERVAL_MS } from "@/lib/types";
 import { env } from "@/lib/env";
-import { BURNOUT_MAX_TIER, BURNOUT_TRIES_PER_DAY, PIONEER_DAYS, TBANK_MAX, TDAY_FULL, TDAY_STEP } from "@/lib/rpg/endgame";
+import { PIONEER_DAYS, PIONEER_FLOOR, TBANK_MAX, TDAY_FULL, TDAY_STEP } from "@/lib/rpg/endgame";
+import { TOWER_CHESTS_PER_DAY, TOWER_FLOORS_PER_RUN } from "@/lib/rpg/tower";
 import { MAX_LEVEL } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
+import { QUEST_DAILY, QUEST_STAMPS } from "@/lib/forage/quests/catalog";
 
 const PATH = "/faq";
 const TITLE = "At one time... 자주 묻는 질문 — 무료인지, 설치·가입, 모바일, 함께 있는 인원, 노동요 곡 수";
@@ -74,11 +76,16 @@ const FAQ = [
   },
   {
     q: "무엇을 할 수 있나요?",
-    a: "모닥불 곁에서 쉬기, 채팅과 친구 맺기, 사냥터(스킬 트리)·미니게임, 낚시(자동 낚시 포함), 채집과 도감, 동물원 펫 분양, 캐릭터 꾸미기, 내 집 꾸미기, 묘비 세우기와 헌화, 관람차·열기구·조각배 타기, 귀신의집 탈출, 폭죽·확성기, 마을 주민과 강아지·고양이와 놀기를 할 수 있어요.",
+    a: "모닥불 곁에서 쉬기, 채팅과 친구 맺기, 사냥터(스킬 트리)·미니게임, 낚시(자동 낚시 포함), 채집과 도감, 동물원 펫 분양, 캐릭터 꾸미기, 내 집 꾸미기, 묘비 세우기와 헌화, 관람차·열기구·조각배·오리배 타기, 귀신의집 탈출, 폭죽·확성기, 마을 주민과 강아지·고양이와 놀기를 할 수 있어요.",
   },
   {
     q: "자리를 비워도 낚시가 되나요?",
     a: `낚시 자리에 앉아 [자동 낚시 켜기]를 누르면, 다른 탭을 보고 있어도 접속해 있는 동안 ${Math.round(AUTO_FISH_EVERY_MS / 1000)}초에 1마리씩 물고기가 쌓여요(자동 낚시는 하루 ${AUTO_FISH_DAILY_MAX}마리, 직접 낚은 것까지 합쳐 하루 ${DAILY_CATCH_MAX.fish}마리, 한 번에 최대 ${AUTO_FISH_MAX_MS / 3_600_000}시간). 접속이 끊긴 동안은 세지 않고, 움직이거나 일어나면 꺼져요. 희귀한 물고기는 덜 나와요. 자동 낚시로 낚은 물고기도 크기가 정해져 내 도감의 가장 큰 기록에는 들어가지만, 최대어 순위에는 오르지 않아요(순위는 직접 낚은 물고기만). 직접 낚든 자동으로 낚든 아주 드물게 물에 빠진 꾸미기가 걸려요(영구 소장).`,
+  },
+  {
+    // 11/15 수집 의뢰 (숫자는 lib/forage/quests/catalog.ts)
+    q: "수집 의뢰와 의뢰 도장은 무엇인가요?",
+    a: `숲 빈터의 수집가 유령에게 [의뢰]가 있어요(물고기 의뢰는 낚시터 어부 영감에게도 낼 수 있어요). 오늘의 의뢰는 하루 ${QUEST_DAILY}개로 한국 시간 새벽 5시에 새로 나오고, 하루 한 번 의뢰 하나를 무료로 바꿀 수 있어요. 월요일마다 이번 주 큰 의뢰도 1개 나와요. 모은 물고기·채집물을 납품하면(가방에서 사라져요) 의뢰 도장을 ${QUEST_STAMPS.easy}~${QUEST_STAMPS.hard}개, 큰 의뢰는 ${QUEST_STAMPS.weekly}개 받아요. 도장은 포인트로 바꾸거나 남에게 줄 수 없고, 수집가 유령의 도장 교환소에서 상점에 없는 전용 꾸미기·염색권·이모티콘·펫·외형으로만 바꿔요. 끝낸 의뢰 수로 칭호도 받아요.`,
   },
   {
     q: "묘비는 무엇인가요?",
@@ -110,7 +117,7 @@ const FAQ = [
   {
     q: "사냥 레벨 50 다음엔 뭐가 있나요?",
     // 11/15 사냥 끝판 1단계 — 숫자는 lib/rpg/endgame.ts
-    a: `레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 번아웃 단계에서 얻는 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요. 초월 5레벨마다 능력치 포인트 1개를 받고, 사냥 레벨 랭킹은 레벨 → 초월 레벨 → 초월 EXP 순이에요. 레벨 ${MAX_LEVEL} 지옥 판은 하루(한국 시간 새벽 5시 기준) 앞 ${TDAY_FULL}판은 초월 EXP 100%, 다음 ${TDAY_STEP}판 30%, 다음 ${TDAY_STEP}판 10%, 그 뒤는 연습 판(초월 EXP·드롭 없음)이에요. 못 쓴 100% 판은 다음 날로 적립돼요(최대 ${TBANK_MAX}판). 번아웃 단계(1~${BURNOUT_MAX_TIER}단계)는 하루 ${BURNOUT_TRIES_PER_DAY}번 도전할 수 있고, 단계가 오를수록 몬스터가 세지고 저주(물약 절반·물약 금지·회복 절반·제한 시간 −20%·부활 없음)가 쌓여요. 바로 아래 단계를 한 번도 쓰러지지 않고(부활 쿠키도 없이) 깨야 다음 단계가 열려요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51에 닿거나 번아웃 1단계를 처음 깨면 닿은 차례대로 칭호 「개척자 #번호」를 받아요.`,
+    a: `레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 얻는 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요. 초월 5레벨마다 능력치 포인트 1개를 받고, 사냥 레벨 랭킹은 레벨 → 초월 레벨 → 초월 EXP 순이에요. 레벨 ${MAX_LEVEL} 지옥 판은 하루(한국 시간 새벽 5시 기준) 앞 ${TDAY_FULL}판은 초월 EXP 100%, 다음 ${TDAY_STEP}판 30%, 다음 ${TDAY_STEP}판 10%, 그 뒤는 연습 판(초월 EXP·드롭 없음)이에요. 못 쓴 100% 판은 다음 날로 적립돼요(최대 ${TBANK_MAX}판). 마을 북쪽 분양 사무소 옆 야근 빌딩은 1층부터 쓰러질 때까지 이어서 오르는 곳으로, 도전 횟수 제한이 없어요. 층이 오를수록 몬스터가 세지고 10층부터 저주가 쌓이며, 깬 층마다 초월 EXP를 받고 ${TOWER_FLOORS_PER_RUN}층이 초월 판 1판으로 세져요. 5층마다 우두머리 상자(하루 ${TOWER_CHESTS_PER_DAY}개)가 열려요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51에 닿거나 야근 빌딩 ${PIONEER_FLOOR}층을 처음 넘으면 닿은 차례대로 칭호 「개척자 #번호」를 받아요.`,
   },
   {
     q: "닉네임이 다른 사람과 같아도 되나요?",

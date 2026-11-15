@@ -81,7 +81,8 @@ export default function BagDialog({ cache, myGraves, onClose, avatar, onOpenRace
   }
 
   // 염색권은 따로 "염색권" 칸에 (11/12)
-  const others = bagEntries(me.inventory).filter((e) => e.item.kind !== "cosmetic" && e.item.kind !== "dye");
+  // 11/15 이모티콘 묶음(unlock)은 쓰는 물건이 아니다 — 말풍선 창 [의뢰] 묶음이 열리는 것으로 보인다
+  const others = bagEntries(me.inventory).filter((e) => e.item.kind !== "cosmetic" && e.item.kind !== "dye" && e.item.kind !== "unlock");
   const wardrobe = wardrobeEntries(me, now);
 
   return (

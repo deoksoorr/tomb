@@ -14,11 +14,12 @@ export const RunStartSchema = z.object({
   zone: z.enum(ZONE_IDS).optional(),
   /** 별자리 잇기: 화면이 쓰는 계획 판 번호 (없으면 1판 화면) */
   planVer: z.number().int().min(1).max(99).optional(),
-  /** 11/15 번아웃 단계 (지옥 사냥만). 상한·열린 단계는 서버가 본다 */
-  burnout: z.number().int().min(1).max(99).optional(),
+  /** 11/15 야근 빌딩 시작 층 (지옥 사냥만, 1·11·21 …). 연 체크포인트인지는 서버가 본다 */
+  tower: z.number().int().min(1).max(10_000).optional(),
 });
 
-const duration = z.number().int().min(0).max(30 * 60_000);
+// 11/15 야근 빌딩 한 판은 두 시간까지 (lib/rpg/tower TOWER_MAX_RUN_SEC) — 실제 시간은 서버가 잰 경과로 자른다
+const duration = z.number().int().min(0).max(3 * 3_600_000);
 const starGroupList = z.array(z.number().int().min(0).max(200)).max(60).optional();
 
 export const RunResultSchema = z.discriminatedUnion("game", [
@@ -29,6 +30,10 @@ export const RunResultSchema = z.discriminatedUnion("game", [
     wavesCleared: z.number().int().min(0).max(20),
     died: z.boolean(),
     potionsUsed: z.record(itemId, count).default({}),
+    // 11/15 야근 빌딩: 깬 층 수 · 마지막 층을 깬 시각 · 그만두고 나옴
+    floors: z.number().int().min(0).max(1_000).optional(),
+    floorMs: duration.optional(),
+    quit: z.boolean().optional(),
   }),
   z.object({ game: z.literal("bugs"), durationMs: duration, caught: count, golden: count, wrong: count, decoy: count, maxCombo: count, score: z.number().int().min(0).max(1_000_000) }),
   z.object({
@@ -53,7 +58,12 @@ export const RunFinishSchema = z.object({
 export const CharacterActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("alloc"), stats: z.partialRecord(z.enum(STAT_KEYS), z.number().int().min(0).max(99)) }),
   z.object({ type: z.literal("learn"), skill: skillId }),
-  z.object({ type: z.literal("hotbar"), slots: z.array(skillId.nullable()).length(HOTBAR_SIZE) }),
+  // 11/15 auto: 자동 스킬 설정 (예전 화면은 안 보낸다 → 그대로). slots 없이 auto만 보내면 칸은 그대로 (사냥 중 자동 바꾸기)
+  z.object({
+    type: z.literal("hotbar"),
+    slots: z.array(skillId.nullable()).length(HOTBAR_SIZE).optional(),
+    auto: z.object({ ids: z.array(skillId).max(HOTBAR_SIZE), on: z.boolean(), keepUlt: z.boolean() }).optional(),
+  }),
   z.object({ type: z.literal("equip"), slot: z.enum(GEAR_SLOTS), itemId: itemId.nullable() }),
   // 스킬 초기화: cost = 화면에 보인 비용 (서버 비용과 다르면 거절, 돈을 받지 않는다)
   z.object({ type: z.literal("respec"), cost: z.number().int().min(0).max(10_000) }),

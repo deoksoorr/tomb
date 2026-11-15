@@ -13,7 +13,9 @@ import {
 } from "./catalog";
 import { applyExp, baseStats, MAX_LEVEL, START_SKILL_POINTS, START_STAT_POINTS, STAT_MAX, statPointsAt } from "./formulas";
 import { applyTranscend, TBANK_MAX, TRANSCEND_MAX, transcendStatPoints } from "./endgame";
+import { TOWER_FLOORS_PER_RUN } from "./tower";
 import { checkAllocation, checkLearn, cleanAlloc, SKILL_TREE_VERSION, skillPointsEarned, spentPoints, type Alloc } from "./skillRules";
+import { arrangeHotbar, cleanAuto, emptySlotFor, type HotAuto } from "./hotbar";
 import type { CharacterState } from "./types";
 
 // 캐릭터 상태를 바꾸는 순수 함수들. 저장소(메모리·Redis)는 이 함수를 원자적 갱신(CAS) 안에서 부른다.
@@ -55,8 +57,12 @@ export function newCharacter(): CharacterState {
     tExp: 0,
     tRuns: 0,
     tBank: 0,
-    bTries: 0,
-    bBest: 0,
+    tFl: 0,
+    tChest: 0,
+    fBest: 0,
+    fBestMs: 0,
+    fWkBest: 0,
+    fWkMs: 0,
   };
 }
 
@@ -66,18 +72,9 @@ const nat = (v: unknown, max = Number.MAX_SAFE_INTEGER) => (typeof v === "number
 /** 남은 스킬 포인트 = 레벨로 받은 포인트 - 쓴 포인트 (저장된 값은 믿지 않고 늘 다시 센다 → 포인트 합이 어긋날 수 없다) */
 const freePoints = (level: number, skills: Alloc) => Math.max(0, skillPointsEarned(level) - spentPoints(skills));
 
-/** 단축키: 배운 액티브만, 겹치지 않게 */
+/** 단축키: 배운 액티브만, 겹치지 않게. 11/15 궁극기는 궁극기 칸(F)으로, 나머지는 1~5 (옛 6칸 저장값도 여기서 옮긴다) */
 function cleanHotbar(hotbar: unknown, skills: Alloc): (SkillId | null)[] {
-  const raw = Array.isArray(hotbar) ? hotbar.slice(0, HOTBAR_SIZE) : [];
-  const seen = new Set<string>();
-  const out = raw.map((id) => {
-    const def = typeof id === "string" ? skillById(id) : undefined;
-    if (!def || def.kind !== "active" || !(skills[def.id] ?? 0) || seen.has(def.id)) return null;
-    seen.add(def.id);
-    return def.id;
-  });
-  while (out.length < HOTBAR_SIZE) out.push(null);
-  return out;
+  return arrangeHotbar(Array.isArray(hotbar) ? hotbar : [], (id) => !!(skills[id] ?? 0));
 }
 
 /** 저장된 JSON을 지금 형태로 맞춘다 (필드가 늘어도 예전 기록이 깨지지 않게) */
@@ -95,8 +92,11 @@ export function normalize(raw: unknown): CharacterState {
     skills = {};
     notice = true;
   }
-  const { treeNotice: _drop, ...rest } = r;
+  // 11/15 테스트 서버에만 있던 번아웃 단계 칸(bTries·bBest)은 버린다
+  const { treeNotice: _drop, bTries: _bt, bBest: _bb, ...rest } = r as Partial<CharacterState> & { bTries?: unknown; bBest?: unknown };
   void _drop;
+  void _bt;
+  void _bb;
   return {
     ...base,
     ...rest,
@@ -105,6 +105,8 @@ export function normalize(raw: unknown): CharacterState {
     skills,
     skillPoints: freePoints(level, skills),
     hotbar: old ? base.hotbar : cleanHotbar(r.hotbar, skills),
+    // 11/15 자동 스킬 설정 (옛 저장값에는 없다 → 없음 = 모두 끔·궁극기 SP 남김)
+    hotAuto: r.hotAuto ? cleanAuto(r.hotAuto, old ? base.hotbar : cleanHotbar(r.hotbar, skills)) : undefined,
     treeVer: SKILL_TREE_VERSION,
     respecs: Number.isInteger(r.respecs) && r.respecs! > 0 ? r.respecs! : 0,
     // 능력치 초기화 횟수: 옛 저장값에는 없다 → 0
@@ -119,8 +121,14 @@ export function normalize(raw: unknown): CharacterState {
     tExp: nat(r.tExp),
     tRuns: nat(r.tRuns),
     tBank: nat(r.tBank, TBANK_MAX),
-    bTries: nat(r.bTries),
-    bBest: nat(r.bBest),
+    // 11/15 야근 빌딩 (테스트 서버에만 있던 번아웃 단계 칸 bTries·bBest는 읽지 않는다)
+    tFl: nat(r.tFl, TOWER_FLOORS_PER_RUN - 1),
+    tChest: nat(r.tChest),
+    fBest: nat(r.fBest),
+    fBestMs: nat(r.fBestMs),
+    fWkBest: nat(r.fWkBest),
+    fWkMs: nat(r.fWkMs),
+    ...(typeof r.fWk === "string" && /^\d{8}$/.test(r.fWk) ? { fWk: r.fWk } : { fWk: undefined }),
     ...(typeof r.tDay === "string" && /^\d{8}$/.test(r.tDay) ? { tDay: r.tDay } : { tDay: undefined }),
     ...(r.pioneer && nat(r.pioneer.n) > 0 && Number.isFinite(r.pioneer.at) ? { pioneer: { n: r.pioneer.n, at: r.pioneer.at } } : { pioneer: undefined }),
   };
@@ -207,13 +215,22 @@ export function learnSkill(s: CharacterState, id: SkillId, budget = skillPointsE
   delete next.treeNotice;
   // 처음 배운 액티브는 빈 단축키 칸에 자동으로 놓는다
   if (cur === 0 && def.kind === "active" && !next.hotbar.includes(id)) {
-    const empty = next.hotbar.indexOf(null);
+    const empty = emptySlotFor(next.hotbar, id);
     if (empty >= 0) next.hotbar[empty] = id;
   }
   return next;
 }
 
-export function setHotbar(s: CharacterState, slots: (SkillId | null)[]): CharacterState {
+/**
+ * 단축키 저장. 11/15 궁극기는 궁극기 칸으로 옮겨 저장한다 (예전 화면이 아무 칸에 놓아도 거절하지 않는다).
+ * auto: 자동 스킬 설정 (칸에 있는 스킬만 남긴다). slots 없이 auto만 보내면 칸은 그대로 (사냥 중 Shift+숫자·X)
+ */
+export function setHotbar(s: CharacterState, slots?: (SkillId | null)[], auto?: HotAuto): CharacterState {
+  if (!slots) {
+    const next = clone(s);
+    next.hotAuto = cleanAuto(auto ?? next.hotAuto, next.hotbar);
+    return next;
+  }
   if (slots.length !== HOTBAR_SIZE) throw new RpgError(400, "INVALID_INPUT", `단축키는 ${HOTBAR_SIZE}칸이에요.`);
   const seen = new Set<string>();
   for (const id of slots) {
@@ -223,7 +240,9 @@ export function setHotbar(s: CharacterState, slots: (SkillId | null)[]): Charact
     if (seen.has(id)) throw new RpgError(400, "INVALID_INPUT", "같은 스킬을 두 칸에 놓을 수 없어요.");
     seen.add(id);
   }
-  return { ...clone(s), hotbar: [...slots] };
+  const hotbar = arrangeHotbar(slots, () => true);
+  const a = auto ?? s.hotAuto;
+  return { ...clone(s), hotbar, ...(a ? { hotAuto: cleanAuto(a, hotbar) } : {}) };
 }
 
 /**
@@ -235,6 +254,7 @@ export function resetSkills(s: CharacterState, count = true): CharacterState {
   next.skills = {};
   next.skillPoints = freePoints(next.level, next.skills);
   next.hotbar = new Array(HOTBAR_SIZE).fill(null);
+  if (next.hotAuto) next.hotAuto = cleanAuto(next.hotAuto, next.hotbar);
   if (count) next.respecs = (next.respecs ?? 0) + 1;
   delete next.treeNotice;
   return next;
@@ -380,7 +400,7 @@ export function gainExp(s: CharacterState, exp: number): { state: CharacterState
 }
 
 /**
- * 11/15 초월 EXP를 더한다 (레벨 50 지옥·번아웃 판). 초월 5레벨마다 능력치 포인트 1 — 레벨이 오른 이 갱신 안에서만 더하므로
+ * 11/15 초월 EXP를 더한다 (레벨 50 지옥 판·야근 빌딩 층). 초월 5레벨마다 능력치 포인트 1 — 레벨이 오른 이 갱신 안에서만 더하므로
  * 같은 판으로 두 번 받을 수 없다 (판 기록은 claim으로 한 번만, 저장은 CAS)
  */
 export function gainTranscend(s: CharacterState, exp: number): { state: CharacterState; levelsGained: number } {

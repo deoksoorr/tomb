@@ -938,6 +938,171 @@ export const EMO_ART = {
       g.set(6, 0, 0xffe0a0);
     },
   ),
+
+  // ── 11/15 수집 의뢰 이모티콘 묶음 (qe_pack — 가진 계정만 보낸다). 보상답게 금빛 반짝임을 하나씩 얹는다 ──
+  /** 월척 자랑: 통통한 푸른 물고기 + 금빛 반짝 */
+  bigfish: make(
+    (g) => {
+      g.ellipse(5.5, 6.5, 4.6, 3.2, 0x4f9ad8);
+      g.recolor((_, y) => y <= 4, 0x2f6fae);
+      g.recolor((_, y) => y >= 8, 0xc8ecff);
+      for (let i = 0; i < 3; i++) g.vline(10 + i, 5 - i, 8 + i, i === 2 ? 0x2f6fae : 0x4f9ad8);
+      g.set(5, 3, 0x2f6fae);
+      g.set(6, 2, 0x2f6fae);
+      g.set(7, 3, 0x2f6fae);
+      g.rect(2, 5, 2, 2, 0xffffff);
+      g.set(3, 6, INK);
+      g.set(1, 7, 0xe86a5a);
+      g.vline(6, 5, 7, 0x8fc8f0);
+    },
+    (g) => {
+      sparkle(g, 11, 1);
+      g.set(8, 11, 0xfff0a8);
+    },
+  ),
+  /** 빈 바구니: 위에서 들여다본 엮은 바구니 — 속이 텅 비어 어둡다 + 식은땀 */
+  nobasket: make(
+    (g) => {
+      // 손잡이 (반원 고리)
+      for (const [x, y] of [[3, 4], [3, 3], [4, 2], [5, 1], [6, 1], [7, 1], [8, 2], [9, 3], [9, 4]] as const) g.set(x, y, 0x9a6430);
+      for (let y = 5; y <= 11; y++) {
+        const inset = y >= 9 ? y - 8 : 0;
+        for (let x = 1 + inset; x <= 11 - inset; x++) g.set(x, y, (x + (y >> 1)) % 2 === 0 ? 0xc8904a : 0xa8743a);
+      }
+      // 텅 빈 속 (어두운 안쪽) + 테두리
+      g.ellipse(6.5, 6, 4.6, 1.6, 0x4a2c16);
+      g.hline(2, 10, 5, 0x6a4020);
+      g.hline(1, 11, 7, 0xe8b870);
+      g.hline(3, 9, 11, 0x8a5a2a);
+    },
+    (g) => {
+      g.set(11, 0, TEAR);
+      g.set(11, 1, TEAR);
+      g.set(12, 2, 0x9fd8ff);
+      g.set(10, 2, 0x9fd8ff);
+      g.set(11, 2, 0xd8f0ff);
+    },
+  ),
+  /** 금빛 곤충: 번쩍이는 금 딱정벌레 (위에서 본 모습) */
+  goldbug: make(
+    (g) => {
+      g.ellipse(6.5, 7.4, 3.6, 4.1, 0xf2c43a);
+      g.recolor((x) => x >= 8, 0xd4a020);
+      g.vline(6, 4, 11, 0x8a6414);
+      g.ellipse(6.5, 2.8, 1.8, 1.4, 0x8a6414);
+      g.set(5, 1, 0x6a4a10);
+      g.set(8, 1, 0x6a4a10);
+      g.vline(4, 5, 7, 0xfff0a0);
+      g.set(5, 5, 0xfff8d0);
+      g.set(8, 8, 0xfff0a0);
+    },
+    (g) => {
+      // 가는 다리 (외곽선 없이 — 몸 옆으로 비스듬히)
+      for (const [x, y] of [[1, 5], [1, 8], [1, 10], [11, 5], [11, 8], [11, 10]] as const) g.set(x, y, 0x7a5418);
+      for (const [x, y] of [[0, 4], [0, 9], [12, 4], [12, 9]] as const) g.set(x, y, 0x7a5418);
+      sparkle(g, 11, 1);
+    },
+  ),
+  /** 광맥 발견: 바위를 뚫고 솟은 수정 + 금 알갱이 */
+  orevein: make(
+    (g) => {
+      g.ellipse(6.5, 9.2, 5.4, 2.9, 0x7a7a8a);
+      g.recolor((_, y) => y <= 8, 0x9a9aaa);
+      g.vline(5, 3, 8, 0xb070ff);
+      g.vline(6, 2, 8, 0xd8b0ff);
+      g.vline(7, 4, 8, 0x8a4ae0);
+      g.vline(9, 5, 8, 0x4ad0e0);
+      g.vline(10, 6, 8, 0x2aa0b8);
+      g.vline(3, 6, 8, 0x4ad0e0);
+      g.set(3, 10, 0xf2c43a);
+      g.set(8, 10, 0xf2c43a);
+      g.set(10, 9, 0xffe27a);
+    },
+    (g) => {
+      sparkle(g, 11, 2);
+      g.set(2, 2, 0xd8b0ff);
+    },
+  ),
+  /** 발굴 성공: 손잡이 달린 옛 항아리 + 띠무늬 */
+  digfind: make(
+    (g) => {
+      g.ellipse(6.5, 7.6, 3.8, 3.7, 0xd8743a);
+      g.rect(5, 2, 3, 3, 0xd8743a);
+      g.hline(4, 8, 1, 0xe89a5a);
+      g.vline(2, 4, 6, 0xb8582a);
+      g.vline(10, 4, 6, 0xb8582a);
+      g.hline(3, 10, 7, 0x5a3020);
+      for (let x = 3; x <= 10; x += 2) g.set(x, 8, 0xf2c43a);
+      g.recolor((x, y) => x >= 9 && y >= 5, 0xb8582a);
+      g.vline(4, 5, 6, 0xf0a070);
+      g.hline(5, 8, 11, 0xb8582a);
+    },
+    (g) => {
+      sparkle(g, 11, 1);
+      sparkle(g, 1, 2, 0xffe27a);
+    },
+  ),
+  /** 도감 완성: 초록 도감 표지에 금별 + 책갈피 */
+  dexdone: make(
+    (g) => {
+      g.rect(2, 1, 9, 10, 0x3f8a5a);
+      g.vline(2, 1, 10, 0x2a6040);
+      g.vline(10, 2, 10, 0xf4ecd8);
+      g.hline(3, 9, 2, 0x5aa874);
+      const star: [number, number][] = [[6, 3], [6, 4], [5, 5], [6, 5], [7, 5], [3, 6], [4, 6], [5, 6], [6, 6], [7, 6], [8, 6], [9, 6], [4, 7], [5, 7], [6, 7], [7, 7], [8, 7], [5, 8], [6, 8], [7, 8], [4, 9], [5, 9], [7, 9], [8, 9]];
+      for (const [x, y] of star) g.set(x, y, 0xf2c43a);
+      g.set(6, 5, 0xfff0a0);
+      g.set(5, 6, 0xfff0a0);
+      g.vline(8, 11, 12, 0xe03a3a);
+      g.set(9, 11, 0xe03a3a);
+    },
+    (g) => {
+      sparkle(g, 11, 1);
+    },
+  ),
+  /** 낚싯대 휘청: 활처럼 휜 낚싯대 + 팽팽한 줄 + 물보라 */
+  rodbend: make(
+    (g) => {
+      const rod: [number, number][] = [[2, 10], [3, 9], [3, 8], [4, 7], [4, 6], [5, 5], [6, 4], [7, 3], [8, 3], [9, 3], [10, 4], [10, 5]];
+      for (const [x, y] of rod) g.set(x, y, 0xc8402a);
+      g.set(1, 11, 0xd8b080);
+      g.set(2, 11, 0xd8b080);
+      g.set(1, 10, 0xd8b080);
+      g.rect(3, 10, 2, 1, 0x9a9aaa);
+      g.set(10, 6, 0xe8e8f0);
+      g.set(10, 7, 0xe8e8f0);
+      g.set(10, 8, 0xe8e8f0);
+      g.hline(8, 11, 10, 0x6ab8f0);
+      g.set(7, 9, 0x9fd8ff);
+      g.set(11, 9, 0x9fd8ff);
+      g.set(10, 9, 0x4f9ad8);
+    },
+    (g) => {
+      g.set(12, 2, 0xfff0a8);
+      g.set(12, 3, 0xfff0a8);
+      g.set(11, 1, 0xfff0a8);
+      g.set(6, 1, 0xffffff);
+    },
+  ),
+  /** 의뢰 완료 도장: 붉은 원 인장 안에 굵은 체크 + 금테 */
+  qstamp: make(
+    (g) => {
+      g.ellipse(6.5, 6.5, 5.6, 5.6, 0xd8302a);
+      g.ellipse(6.5, 6.5, 4.3, 4.3, 0xfff1dc);
+      g.ellipse(6.5, 6.5, 3.4, 3.4, 0xfff8ec);
+      const tick: [number, number][] = [[4, 6], [5, 7], [6, 8], [7, 7], [8, 6], [9, 5]];
+      for (const [x, y] of tick) {
+        g.set(x, y, 0xd8302a);
+        g.set(x, y + 1, 0xd8302a);
+      }
+      g.recolor((x, y) => (x - 6) ** 2 + (y - 6) ** 2 >= 4.8 ** 2, 0xa81e1a);
+      g.set(3, 2, 0xff8a7a);
+      g.set(2, 3, 0xff8a7a);
+    },
+    (g) => {
+      sparkle(g, 11, 1);
+    },
+  ),
 } as const;
 
 export type EmoArtId = keyof typeof EMO_ART;

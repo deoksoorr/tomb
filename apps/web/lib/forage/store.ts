@@ -289,6 +289,11 @@ export class MemoryForageStore implements ForageStore {
   }
 
   async remove(acct: string, items: Record<string, number>) {
+    return this.removeNow(acct, items);
+  }
+
+  /** remove의 동기판 (수집 의뢰 메모리 저장소가 납품과 한 번에 부른다) */
+  removeNow(acct: string, items: Record<string, number>): boolean {
     const a = this.acct(acct);
     for (const [id, n] of Object.entries(items)) if ((a.bag.get(id) ?? 0) < n) return false;
     for (const [id, n] of Object.entries(items)) {

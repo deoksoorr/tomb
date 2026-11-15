@@ -61,6 +61,7 @@ import { graveChannelFor } from "@/game/world/graveChannel";
 import type { PublicHouse } from "@/lib/housing/types";
 import { isRideablePet, WORLD_LOTS } from "@tomb/protocol";
 import HuntLobby from "@/components/rpg/HuntLobby";
+import { towerTaunt } from "@/lib/rpg/tower";
 import ForageLayer from "@/components/forage/ForageLayer";
 import RideButton from "@/components/zoo/RideButton";
 import ZooLayer from "@/components/zoo/ZooLayer";
@@ -207,7 +208,8 @@ type Panel =
   | "calendar"
   | "gifts"
   | "friends"
-  | "haunt";
+  | "haunt"
+  | "tower";
 
 /** 다른 담당이 만드는 장소 창 (사냥터·분양 사무소). 컴포넌트가 들어오기 전까지 자리만 */
 type Props = {
@@ -814,6 +816,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         <HousingOffice key={housingIntent?.houseId ?? housingIntent?.lot ?? "office"} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
       )}
       {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
+      {/* 11/15 마을의 야근 빌딩 (사냥 레벨 50 전이면 창 없이 경비원 한마디) */}
+      {panel === "tower" && <HuntLobby mode="tower" onClose={closePanel} onTaunt={() => showToast(towerTaunt(), 5_000)} avatar={{ color: options.color, body: options.body }} />}
       {panel === "wish" && <WishDialog onClose={closePanel} />}
       {panel === "telescope" && <Telescope onClose={closePanel} />}
       {panel === "haunt" && <HauntDialog onClose={closePanel} />}

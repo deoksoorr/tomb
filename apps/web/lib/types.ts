@@ -443,7 +443,8 @@ export type MyGraveStatusResponse = { active: PublicGrave | null; passDays: numb
 /** house = 하우징 꾸밈 점수 (F11: 주간 = 이번 주에 꾸민 집, 전체 = 모든 집) */
 /** look = 외형 꾸미기 점수 (지금 착용 중인 코디 파츠 가격대 점수 합, 기간 구분 없음 — lib/lookScore.ts) */
 /** huntLevel = 사냥터 캐릭터 레벨 (같으면 경험치, 기간 구분 없음 — lib/huntLevelRank.ts) */
-export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish", "look", "huntLevel"] as const;
+/** tower = 11/15 야근 빌딩 최고 층 (이번 주·전체, 층 높은 순 → 빨리 오른 순. value = 층, sub = 그 층을 깬 시각 — lib/towerRank.ts) */
+export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish", "look", "huntLevel", "tower"] as const;
 export type RankBoard = (typeof RANK_BOARDS)[number];
 /** week = 이번 주(월요일 새벽 5시부터, lib/gameDay), all = 전체 */
 export type RankPeriod = "week" | "all";

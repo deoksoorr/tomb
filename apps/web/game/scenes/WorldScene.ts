@@ -52,6 +52,7 @@ import { SkyRides } from "../world/SkyRides";
 import { RideSound } from "../world/RideSound";
 import { VillageLife } from "../world/life/VillageLife";
 import { HauntHouseView } from "../haunt/HauntHouseView";
+import { TowerView } from "../tower/TowerView";
 import { Foraging } from "../world/forage/Foraging";
 import { Riding } from "../world/zoo/Riding";
 import { ZOO_ARCH_AT, ZooView } from "../world/zoo/ZooView";
@@ -311,6 +312,7 @@ export class WorldScene extends Phaser.Scene {
     this.net = this.createNet();
     this.seatReq = { sit: (id) => this.net.sit(id), stand: () => this.net.stand() };
     new HauntHouseView(this, this.map.colliders, this.reduced, () => this.player); // 귀신의집 건물·간판·등불·안개·근처 소리 (game/haunt)
+    new TowerView(this, this.map.colliders, this.reduced, () => this.atmos?.levels.darkness ?? 0); // 11/15 야근 빌딩 (game/tower)
     this.life = new VillageLife({
       scene: this,
       atlas: this.atlas,
@@ -1024,6 +1026,10 @@ export class WorldScene extends Phaser.Scene {
     const mySid = this.net.online ? this.net.mySid : null;
     // 놀이기구 2: 관람차가 돌거나 열기구가 떠 있는 동안 X·E·스페이스는 두 번 눌러 내리기 (SkyRides)
     if (this.sky.onAction(a)) return;
+    if (a === "jump" && pl.inBoat) {
+      this.boats.quack(); // 11/15 오리배 위 Space = 꽥 (조각배에서는 아무 일 없다)
+      return;
+    }
     if (a === "jump") {
       pl.jump(now, this.seatReq);
       return;
@@ -1041,6 +1047,7 @@ export class WorldScene extends Phaser.Scene {
     if (a === "interact" && pl.inBoat && !this.boats.nearShore()) {
       const at = this.boats.fishingSpot();
       if (at) this.forage.fishFromBoat(at);
+      else this.boats.quack(); // 11/15 오리배: 오리 연못은 낚시 대신 꽥
       return;
     }
     // 조각배 위: E = 물가에서 내리기, 앉기·점프 없음
@@ -1156,7 +1163,7 @@ export class WorldScene extends Phaser.Scene {
       case "dock":
         // 조각배(50번): 빈 배 앞자리에 타거나 2인승 뒷자리에 같이 탄다 (BoatRide)
         pl.faceTo(o.x, o.y + 10, now);
-        this.boats.useDock();
+        this.boats.useDock(o.id);
         break;
       // ── 50번 광장 놀거리 ── 시소·트램펄린은 그네처럼 1인 자리, 회전목마는 빈 목마를 골라 탄다, 소원 분수는 UI 창
       case "seesaw":
@@ -1422,6 +1429,9 @@ export class WorldScene extends Phaser.Scene {
       else if (fountain) this.fx.splash(fountain.x, fountain.y);
       else this.fx.splash(x, y);
       if (d < 360 || mine) this.sfx.splash(gain);
+    } else if (kind === "quack") {
+      // 11/15 오리배 꽥 (소리·물결은 BoatRide, "꽥!" 말풍선은 AvatarView.playAct)
+      this.boats.quackFx(x, y, mine, d);
     } else if (d < 400 || mine) {
       // 손 흔들기·환호 이모티콘은 아바타가 이름표 위에 띄운다 (AvatarView.playAct). 여기는 환호 반짝임과 소리 (이모티콘과 같은 톡 — 환호는 높게)
       this.fx.actSparks(x, y, kind);
@@ -1896,7 +1906,7 @@ export class WorldScene extends Phaser.Scene {
         h.dim = true;
       }
       if (o.obj.kind === "dock") {
-        const d = this.boats.dockHint(pre);
+        const d = this.boats.dockHint(pre, o.obj.id);
         h.text = d.text;
         h.dim = d.dim;
       } else if (o.obj.kind === "carousel" && this.rides.carouselFull(o.obj)) {
@@ -1942,7 +1952,7 @@ export class WorldScene extends Phaser.Scene {
       clock: () => this.net?.serverNow() ?? Date.now(),
     };
     this.rides = new PlazaRides(host);
-    this.boats = new BoatRide(host);
+    this.boats = new BoatRide({ ...host, act: (k) => this.doAct(k) });
     // 놀이기구 2: 날씨는 이 뒤에 만들어지므로 그때그때 읽는다
     const atmos = () => this.atmos;
     const rig = () => this.rig;

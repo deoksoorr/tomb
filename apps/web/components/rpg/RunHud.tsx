@@ -1,10 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { GAMES, POTIONS, SKILLS, type GameKind, type SkillId } from "@/lib/rpg/catalog";
 import { comboMult } from "@/lib/rpg/plan";
 import { STATUSES } from "@/lib/rpg/status";
+import { ULT_SLOT } from "@/lib/rpg/hotbar";
+import { readItem, writeItem } from "@/lib/storage";
+import FloatingStick from "../ui/FloatingStick";
 import type { RpgAction, RpgHud } from "@/lib/rpg/types";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -46,49 +49,37 @@ function Bar({ value, max, className, label }: { value: number; max: number; cla
   );
 }
 
-/** 왼쪽 아래 가상 조이스틱 (손가락 조작 기기에서만 보인다) */
-function Joystick() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [knob, setKnob] = useState({ x: 0, y: 0 });
-  const id = useRef<number | null>(null);
-  const move = (e: React.PointerEvent) => {
-    const r = ref.current!.getBoundingClientRect();
-    const R = r.width / 2;
-    let x = (e.clientX - (r.left + R)) / R;
-    let y = (e.clientY - (r.top + R)) / R;
-    const m = Math.hypot(x, y);
-    if (m > 1) {
-      x /= m;
-      y /= m;
-    }
-    setKnob({ x, y });
-    bridge.emit("rpg:joystick", { x, y });
-  };
-  // 멀티터치: 조이스틱을 잡은 손가락(pointerId) 하나만 따른다 — 다른 손가락이 떼어져도 멈추지 않는다
-  const end = (e: React.PointerEvent) => {
-    if (e.pointerId !== id.current) return;
-    id.current = null;
-    setKnob({ x: 0, y: 0 });
-    bridge.emit("rpg:joystick", { x: 0, y: 0 });
-  };
+/** 11/15 첫 사냥 안내 (한 번만) */
+const LS_AUTO_HINT = "tomb.rpg.autoHint";
+const AUTO_HINT_MS = 8000;
+/** [자동] 설정: 이만큼 아무것도 안 누르면 저절로 끝난다 */
+const AUTO_EDIT_IDLE_MS = 6000;
+
+/** 11/15 H: 사냥 키 안내 */
+function KeyHelp() {
+  const rows: [string, string][] = [
+    ["WASD · 방향키", "걷기"],
+    ["Space · J · 마우스 왼쪽", "기본 공격 (누르고 있으면 계속)"],
+    ["1 ~ 5", "스킬"],
+    ["F", "궁극기 (늘 직접)"],
+    ["Shift+1~5 · 칸 우클릭", "그 칸 자동 켜기·끄기"],
+    ["X", "스킬 자동 한꺼번에 켜기·끄기"],
+    ...POTIONS.filter((p) => p.key).map((p): [string, string] => [p.key!, p.name]),
+    ["Esc", "멈춤"],
+    ["H", "이 안내 띄우기·숨기기"],
+  ];
   return (
-    <div
-      ref={ref}
-      className={cx(s.joystick, s.touchOnly)}
-      aria-hidden="true"
-      onPointerDown={(e) => {
-        e.stopPropagation();
-        if (id.current !== null) return;
-        id.current = e.pointerId;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        move(e);
-      }}
-      onPointerMove={(e) => id.current === e.pointerId && move(e)}
-      onPointerUp={end}
-      onPointerCancel={end}
-      onLostPointerCapture={end}
-    >
-      <span className={s.knob} style={{ transform: `translate(${knob.x * 34}px, ${knob.y * 34}px)` }} />
+    <div className={s.keyHelp} role="note" aria-label="사냥 키 안내">
+      <strong>사냥 키</strong>
+      <dl>
+        {rows.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <small>자동 스킬은 쓸 만한 때를 기다렸다 써요. 궁극기·몸 옮기기 스킬은 자동이 안 돼요.</small>
     </div>
   );
 }
@@ -167,6 +158,56 @@ export default function RunHud({
   };
   const stop = (e: React.PointerEvent) => e.stopPropagation();
 
+  // 11/15 스킬 칸: 왼쪽 누름 = 쓰기, 우클릭 = 그 칸 자동 켜기·끄기.
+  // [자동] 설정 중(손가락용, 데스크톱도 됨)에는 칸을 눌러도 쓰지 않고 자동만 바꾼다. 다시 [자동]을 누르거나 6초 가만있으면 끝
+  const [editing, setEditing] = useState(false);
+  const editTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setEdit = (on: boolean) => {
+    if (editTimer.current) clearTimeout(editTimer.current);
+    editTimer.current = on ? setTimeout(() => setEditing(false), AUTO_EDIT_IDLE_MS) : null;
+    setEditing(on);
+  };
+  const slotDown = (e: React.PointerEvent, i: number) => {
+    if (e.button === 2 || editing) {
+      act(e, { kind: "auto", slot: i });
+      if (editing) setEdit(true);
+      return;
+    }
+    if (e.button !== 0) return stop(e);
+    act(e, { kind: "skill", slot: i });
+  };
+
+  // 11/15 H = 키 안내, 처음 사냥에 들어오면 자동 스킬 안내 한 번
+  const [help, setHelp] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+  useEffect(() => {
+    if (!hunt) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyH" || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      if (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (document.querySelector("dialog[open]")) return;
+      setHelp((h) => !h);
+    };
+    window.addEventListener("keydown", onKey);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (!readItem(LS_AUTO_HINT)) {
+      writeItem(LS_AUTO_HINT, "1");
+      const touch = window.matchMedia?.("(pointer: coarse)").matches;
+      setHint(
+        touch
+          ? "[자동]을 누르고 스킬 칸을 고르면 자동 · 왼쪽 위 '스킬 자동'으로 한꺼번에 · 왼쪽 아무 데나 끌면 걷기"
+          : "Shift+숫자로 스킬 자동 · X로 한꺼번에 · F 궁극기 · H 키 안내",
+      );
+      timer = setTimeout(() => setHint(null), AUTO_HINT_MS);
+    }
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (timer) clearTimeout(timer);
+      if (editTimer.current) clearTimeout(editTimer.current);
+    };
+  }, [hunt]);
+
   return (
     <div
       className={s.capture}
@@ -187,6 +228,8 @@ export default function RunHud({
       onLostPointerCapture={release}
       onContextMenu={(e) => e.preventDefault()}
     >
+      {/* 11/15 손가락: 왼쪽 아무 데나 누르면 그 자리에 조이스틱 (오른쪽은 예전처럼 누르기·끌기 공격) */}
+      {hunt && <FloatingStick className={s.stickZone} onStick={(x, y) => bridge.emit("rpg:joystick", { x, y })} />}
       {look === "meadow" && <div className={s.meadowGlow} data-tier={tierOf(hud?.combo ?? 0)} aria-hidden="true" />}
       <div className={s.hudTop}>
         <div className={s.hudLine}>
@@ -199,6 +242,12 @@ export default function RunHud({
                 <span>
                   남은 시간 <strong className={s.timer}>{hud ? mmss(hud.leftMs) : "–"}</strong>
                 </span>
+                {/* 11/15 야근 빌딩: 지금 층 */}
+                {hud?.floor !== undefined && (
+                  <span>
+                    <strong className={s.timer}>{hud.floor}층</strong>
+                  </span>
+                )}
                 {hud?.wave && (
                   <span>
                     웨이브 <strong>{hud.wave[0]}</strong>/{hud.wave[1]}
@@ -210,6 +259,17 @@ export default function RunHud({
                   </span>
                 )}
                 {game === "hunt" && (hud?.peers ?? 0) > 1 && <span className={s.together}>함께 {hud!.peers}명</span>}
+                {game === "hunt" && hud?.auto && (
+                  <button
+                    type="button"
+                    className={cx(s.autoChip, hud.auto.on && s.autoChipOn)}
+                    onPointerDown={(e) => act(e, { kind: "auto", slot: "all" })}
+                    aria-pressed={hud.auto.on}
+                    title="자동으로 정한 스킬 칸을 한꺼번에 켜기·끄기 (X)"
+                  >
+                    스킬 자동 <kbd>X</kbd>
+                  </button>
+                )}
                 {game !== "hunt" && (
                   <span>
                     점수 <strong>{hud?.score ?? 0}</strong>
@@ -277,13 +337,23 @@ export default function RunHud({
             {hud.message}
           </p>
         )}
+        {editing && (
+          <p className={cx(s.banner, s.autoHint)} role="status">
+            자동으로 쓸 스킬을 누르세요 · 다시 [자동]을 누르면 끝
+          </p>
+        )}
+        {hint && !hud?.message && !editing && (
+          <p className={cx(s.banner, s.autoHint)} role="status">
+            {hint}
+          </p>
+        )}
+        {help && <KeyHelp />}
       </div>
 
       <div className={s.hudBottom}>
         {game === "hunt" && (
           <>
-            <Joystick />
-            <div className={s.skillBar}>
+            <div className={s.skillBar} data-edit={editing || undefined}>
               {POTIONS.filter((p) => p.key).map((p) => {
                 const n = hud?.potions[p.id] ?? 0;
                 return (
@@ -306,20 +376,50 @@ export default function RunHud({
                 const sk = SKILLS.find((x) => x.id === id);
                 const cd = hud?.cooldowns[i] ?? 0;
                 if (!sk) return null;
+                // 11/15 1~5 + 궁극기 칸(F) · SP 모자람(어둡게 + 필요한 SP) · 자동(초록 테두리가 돈다, 전체 스위치가 꺼져 있으면 멈춘 점선)
+                const ult = i === ULT_SLOT;
+                const key = ult ? "F" : String(i + 1);
+                const need = hud?.skillSp?.[i] ?? 0;
+                const short = !!hud && need > hud.sp;
+                const auto = hud?.auto?.slots[i] ?? false;
+                const live = auto && !!hud?.auto?.on;
                 return (
                   <button
                     key={i}
                     type="button"
-                    className={s.skillBtn}
-                    onPointerDown={(e) => act(e, { kind: "skill", slot: i })}
-                    aria-label={`${sk.name} (${i + 1})`}
+                    className={cx(s.skillBtn, ult && s.ultBtn, short && s.spShort, auto && s.autoSlot, live && s.autoLive, editing && s.slotEdit)}
+                    onPointerDown={(e) => slotDown(e, i)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    aria-label={`${sk.name} (${key})${auto ? (live ? ", 자동" : ", 자동 꺼둠") : ""}${short ? `, SP ${need} 필요` : ""}`}
+                    title={ult ? `${sk.name} · F (궁극기는 직접 써요)` : `${sk.name} · ${key} · Shift+${key}·우클릭·[자동]으로 자동`}
                   >
                     <RpgIcon art={sk.art} size={32} />
-                    <span className={s.skillKey}>{i + 1}</span>
+                    <span className={s.skillKey}>{key}</span>
+                    {auto && <span className={s.autoMark}>자동</span>}
+                    {short && <span className={s.spNeed}>{need}</span>}
                     {cd > 0 && <span className={s.cool} style={ring(cd)} />}
                   </button>
                 );
               })}
+              {hotbar.some((id) => id) && (
+                <button
+                  type="button"
+                  className={cx(s.skillBtn, s.autoEditBtn)}
+                  aria-pressed={editing}
+                  onPointerDown={(e) => {
+                    stop(e);
+                    e.preventDefault();
+                    setEdit(!editing);
+                  }}
+                  aria-label={editing ? "자동 설정 끝내기" : "자동 설정: 누른 뒤 스킬 칸을 누르면 그 칸 자동 켜기·끄기"}
+                  title="누른 뒤 스킬 칸을 누르면 그 칸 자동 켜기·끄기 (쓰지 않음)"
+                >
+                  자동
+                </button>
+              )}
             </div>
             <button
               type="button"

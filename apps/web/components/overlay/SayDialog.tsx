@@ -4,10 +4,11 @@
 import { useEffect, useId, useState } from "react";
 import { SEAT_MOODS } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
-import { EMO_BOARD, EMO_GROUPS, EMO_HOTKEYS, type EmoGroupId, type EmoSlot } from "@/game/logic/emoBoard";
+import { EMO_BOARD, EMO_GROUPS, EMO_HOTKEYS, emoAllowed, QUEST_EMO_HINT, type EmoGroupId, type EmoSlot } from "@/game/logic/emoBoard";
 import { emoteDataUrl } from "@/game/sprites/emotes";
 import { moodIconDataUrl } from "@/game/sprites/moodArt";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
+import { useMe } from "@/lib/hooks/useMe";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import { InfoCard, TipList } from "../ui/InfoBlocks";
@@ -46,7 +47,8 @@ const favSlots = (favs: readonly FavKey[]): EmoSlot[] =>
 /**
  * 표현 창: 말풍선·이모티콘·벤치 상태 고르기 (데스크톱 T 키 · 바로 가기 [표현] · 메뉴).
  * - 말풍선·이모티콘마다 별(즐겨찾기, 최대 8개) → Y 키(폰은 [표현] 길게 누르기)로 내 캐릭터 둘레에 펼친다
- * - 이모티콘(5번): 손 흔들기·환호 + 이모티콘 60종. 기본·얼굴·회사·반응·자연·묘역 묶음(작은 탭, 전체는 묶음별 제목)으로 고르고,
+ * - 이모티콘(5번): 손 흔들기·환호 + 이모티콘 68종. 기본·얼굴·회사·반응·자연·묘역·의뢰 묶음(작은 탭, 전체는 묶음별 제목)으로 고르고,
+ *   [의뢰] 8종(11/15)은 수집 의뢰 보상 qe_pack을 가진 계정만 — 없으면 흐린 자물쇠 칸 (실시간 서버는 소유를 몰라 화면에서만 막는다)
  *   창 안에서도 숫자 1~9로 판의 1~9번 칸을 바로 고른다 (게임 화면에서도 같은 숫자 키 — 묶음을 바꿔도 같은 칸)
  * - 맨 위: 말풍선 자유 채팅 입력칸 (40자, 기록 안 남음 — 데스크톱은 게임 화면에서 Enter로도 연다)
  * - 말풍선: 정해진 문장
@@ -60,6 +62,9 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
   const current = moodState?.mood ?? "";
   const favs = useFavs();
   const favCount = favs.length;
+  // 11/15 의뢰 이모티콘 묶음(qe_pack)을 가졌는지 — 없으면 [의뢰] 칸은 잠금으로 보인다
+  const inventory = useMe().me?.inventory;
+  const locked = (slot: EmoSlot) => slot.kind === "emo" && !emoAllowed(slot.id, inventory);
   const [cat, setCatState] = useState<EmoCat>(() => lastCat);
   const setCat = (c: EmoCat) => {
     rememberCat(c);
@@ -74,6 +79,7 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
   };
 
   function pick(slot: EmoSlot) {
+    if (locked(slot)) return;
     onClose();
     if (slot.kind === "act") bridge.emit("input:act", { kind: slot.id });
     else bridge.emit("input:emo", { id: slot.id });
@@ -150,12 +156,18 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
             {sections.map((sec) => (
               <section key={sec.id} className={styles.group} aria-label={sec.label}>
                 {cat === "all" && <h3 className={styles.groupTitle}>{sec.label}</h3>}
+                {sec.id === "quest" && sec.slots.some(locked) && (
+                  <p className={styles.lockNote}>
+                    <span className={styles.lockIcon} aria-hidden="true" />
+                    수집 의뢰 보상이에요. 도장 교환소에서 {QUEST_EMO_HINT}로 받으면 8종 모두 계속 쓸 수 있어요.
+                  </p>
+                )}
                 {sec.slots.length === 0 ? (
                   <p className={styles.empty}>아직 즐겨찾기한 이모티콘이 없어요. 칸 오른쪽 위 별을 눌러 담아 보세요.</p>
                 ) : (
                   <div className={styles.board}>
                     {sec.slots.map((slot) => (
-                      <EmoCell key={`${slot.kind}-${slot.id}`} slot={slot} onPick={pick} />
+                      <EmoCell key={`${slot.kind}-${slot.id}`} slot={slot} onPick={pick} locked={locked(slot)} />
                     ))}
                   </div>
                 )}
@@ -166,7 +178,8 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
               <TipList
                 tips={[
                   "1 손 흔들기·2 환호는 캐릭터가 직접 몸짓을 해요. 3번부터는 머리 위에 그림이 떠요.",
-                  "위 작은 탭으로 기본·얼굴·회사·반응·자연·묘역 묶음만 골라 볼 수 있어요. 숫자 1~9는 언제나 [기본] 앞쪽 아홉 칸이에요.",
+                  "위 작은 탭으로 기본·얼굴·회사·반응·자연·묘역·의뢰 묶음만 골라 볼 수 있어요. 숫자 1~9는 언제나 [기본] 앞쪽 아홉 칸이에요.",
+                  `[의뢰] 묶음은 수집 의뢰 보상이에요. 도장 교환소에서 ${QUEST_EMO_HINT}로 받으면 열려요.`,
                   "데스크톱은 T 키로 이 창을 열고, 숫자 키로 창을 거치지 않고 바로 보낼 수 있어요.",
                   "자주 쓰는 건 별을 눌러 즐겨찾기 — Y 키(폰은 [표현] 길게 누르기)로 내 둘레에 펼쳐 한 번에 보내요.",
                   "정해진 문장이 필요하면 [말풍선] 탭, 벤치에 앉아 있다면 [벤치 상태] 탭을 써 보세요.",
@@ -224,10 +237,21 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** 이모티콘 판 한 칸: 그림·이름 + (판의 1~9번 칸이면) 단축키 숫자 + 즐겨찾기 별 */
-function EmoCell({ slot, onPick }: { slot: EmoSlot; onPick: (slot: EmoSlot) => void }) {
+/** 이모티콘 판 한 칸: 그림·이름 + (판의 1~9번 칸이면) 단축키 숫자 + 즐겨찾기 별. locked = 아직 못 쓰는 의뢰 이모티콘 (흐리게 + 자물쇠, 누를 수 없음) */
+function EmoCell({ slot, onPick, locked = false }: { slot: EmoSlot; onPick: (slot: EmoSlot) => void; locked?: boolean }) {
   const i = EMO_BOARD.indexOf(slot);
   const hot = i >= 0 && i < EMO_HOTKEYS;
+  if (locked)
+    return (
+      <div className={styles.cell}>
+        <span className={cx(styles.emo, styles.emoLocked)} data-emo={slot.id} title={`${slot.label} — ${QUEST_EMO_HINT}로 열려요`}>
+          <span className={styles.lockBadge} aria-hidden="true" />
+          <img src={emoteDataUrl(slot.icon, 3)} width={39} height={39} alt="" aria-hidden="true" />
+          <span>{slot.label}</span>
+          <span className="visually-hidden"> (잠김 — {QUEST_EMO_HINT})</span>
+        </span>
+      </div>
+    );
   return (
     <div className={styles.cell}>
       <button type="button" className={styles.emo} onClick={() => onPick(slot)} data-emo={slot.id}>

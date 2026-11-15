@@ -96,12 +96,14 @@ describe("events", () => {
   });
 
   it("5번 이모티콘·24번 벤치 상태: 정해진 id만 받는다", async () => {
-    const { EMOS, SEAT_MOODS } = await import("./constants");
+    const { EMOS, QUEST_EMO_IDS, SEAT_MOODS } = await import("./constants");
     expect(EMOS.length).toBeGreaterThanOrEqual(50);
     expect(new Set(EMOS.map((e) => e.id)).size).toBe(EMOS.length);
     // 앞 14개는 순서 그대로 (단축키 1~9·옛 즐겨찾기)
     expect(EMOS.slice(0, 14).map((e) => e.id)).toEqual(["heart", "laugh", "cry", "wow", "what", "bang", "clap", "angry", "zzz", "coffee", "fire", "note", "sweat", "idea"]);
-    for (const e of EMOS) expect(e.label.length, e.id).toBeLessThanOrEqual(5);
+    // 11/15 수집 의뢰 이모티콘(맨 끝 8개)은 이름이 조금 길다 ("의뢰 완료 도장")
+    for (const e of EMOS) expect(e.label.length, e.id).toBeLessThanOrEqual(QUEST_EMO_IDS.includes(e.id as never) ? 8 : 5);
+    expect(EMOS.slice(-QUEST_EMO_IDS.length).map((e) => e.id)).toEqual([...QUEST_EMO_IDS]);
     expect(parseC2S('{"t":"emo","id":"heart"}')).toEqual({ t: "emo", id: "heart" });
     expect(parseC2S('{"t":"emo","id":"ghost"}')).toEqual({ t: "emo", id: "ghost" });
     expect(parseC2S('{"t":"emo","id":"bomb"}')).toBeNull();

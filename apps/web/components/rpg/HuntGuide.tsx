@@ -5,7 +5,6 @@ import {
   DIFFICULTIES,
   DIFFS,
   GEAR,
-  HOTBAR_SIZE,
   MONSTERS,
   POTION_COOLDOWN_MS,
   POTIONS,
@@ -19,22 +18,29 @@ import {
   type MonsterId,
   type SkillId,
 } from "@/lib/rpg/catalog";
+import { SKILL_SLOTS } from "@/lib/rpg/hotbar";
 import { DEFAULT_BOSS_PHASES, MIN_WINDUP_MS, PATTERNS, type TelegraphShape } from "@/lib/rpg/patterns";
 import { HUNT_DROP_ROLLS, KILLS_PER_DROP_ROLL, MIN_RUN_MS } from "@/lib/rpg/rewards";
-import {
-  BURNOUT_DEF,
-  BURNOUT_HP_ATK,
-  BURNOUT_MAX_TIER,
-  BURNOUT_TRIES_PER_DAY,
-  BURNOUT_ZONES,
-  CURSES,
-  PIONEER_DAYS,
-  TBANK_MAX,
+import { PIONEER_DAYS, PIONEER_FLOOR, TBANK_MAX,
   TDAY_FULL,
   TDAY_STEP,
   tExpToNext,
   TRANSCEND_MAX,
 } from "@/lib/rpg/endgame";
+import {
+  CURSES,
+  floorTExp,
+  TOWER_BOSS_EVERY,
+  TOWER_BOSS_FLOOR_SEC,
+  TOWER_CHECKPOINT_EVERY,
+  TOWER_CHESTS_PER_DAY,
+  TOWER_DEF,
+  TOWER_FLOOR_SEC,
+  TOWER_FLOORS_PER_RUN,
+  TOWER_HP_ATK,
+  TOWER_THEMES,
+  FLOORS_PER_THEME,
+} from "@/lib/rpg/tower";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
@@ -202,7 +208,7 @@ function pages(): Page[] {
       body: (
         <ul className={s.guideList}>
           <Item pic={<Keys k={["W", "A", "S", "D"]} />} title="이동">
-            WASD 또는 방향키. 폰은 왼쪽 아래 조이스틱.
+            WASD 또는 방향키. 폰·태블릿은 화면 왼쪽 아무 데나 누르고 끌면 그 자리에 조이스틱이 생겨요.
           </Item>
           <Item pic={<Keys k={["Space", "J"]} />} title="공격">
             한 번 누르면 한 번. 공격 간격 전에 누르면 다음 공격으로 예약돼요 (발밑 게이지가 초록).
@@ -224,14 +230,14 @@ function pages(): Page[] {
     },
     {
       title: "스킬·포션",
-      lead: `스킬은 스킬 탭의 트리에서 찍고, 액티브 스킬은 단축키 1~${HOTBAR_SIZE}에 놓아야 써요.`,
+      lead: `스킬은 스킬 탭의 트리에서 찍고, 액티브 스킬은 단축키 1~${SKILL_SLOTS}(궁극기는 F 칸)에 놓아야 써요.`,
       body: (
         <>
           <div className={s.guideIcons} aria-hidden="true">
-            {BRANCHES.flatMap((b) => SKILLS.filter((sk) => sk.branch === b && (sk.tier === 1 || sk.tier === 5) && sk.kind === "active")).map((sk, i) => (
+            {BRANCHES.flatMap((b) => SKILLS.filter((sk) => sk.branch === b && (sk.tier === 1 || sk.tier === 5) && sk.kind === "active")).map((sk, i, all) => (
               <span key={sk.id} className={s.guideHot}>
                 <RpgIcon art={sk.art} size={32} />
-                <span>{i + 1}</span>
+                <span>{sk.tier === 5 ? "F" : all.slice(0, i + 1).filter((x) => x.tier !== 5).length}</span>
               </span>
             ))}
           </div>
@@ -258,14 +264,20 @@ function pages(): Page[] {
             <Item art={skillById("em_meteor")?.art} title="광역기">
               바닥에 마법진이 먼저 깔리고 터져요. 갈래마다 색이 달라요 (모닥불 주황·서리 하늘빛·넋 보라). 화면 흔들림은 사냥터 고르는 화면의 &lsquo;화면 흔들림 효과&rsquo;로 끌 수 있고, 흔들림·번쩍임 모두 기기의 &lsquo;동작 줄이기&rsquo;를 켜면 꺼져요.
             </Item>
-            <Item pic={<Keys k={["1", "…", String(HOTBAR_SIZE)]} />} title="단축 칸에 놓기">
-              스킬 탭 맨 아래 단축 줄로 배운 액티브 스킬을 끌어다 놓아요(손가락으로도). 또는 스킬을 고르고 칸이나 숫자 키 1~{HOTBAR_SIZE}를 눌러요. 칸끼리 끌면 자리를 바꾸고, 줄 밖으로 끌어내면 빠져요. 처음 배운 액티브는 빈 칸에 저절로 들어가요.
+            <Item pic={<Keys k={["1", "…", String(SKILL_SLOTS), "F"]} />} title="단축 칸에 놓기">
+              스킬 탭 맨 아래 단축 줄로 배운 액티브 스킬을 끌어다 놓아요(손가락으로도). 또는 스킬을 고르고 칸이나 숫자 키 1~{SKILL_SLOTS}를 눌러요. 칸은 스킬 {SKILL_SLOTS}칸 + 궁극기 칸(F) — 5단 궁극기는 F 칸에만, 다른 스킬은 1~{SKILL_SLOTS}에만 들어가요. 칸끼리 끌면 자리를 바꾸고, 줄 밖으로 끌어내면 빠져요. 처음 배운 액티브는 빈 칸에 저절로 들어가요.
             </Item>
-            <Item pic={<Keys k={["1", "…", String(HOTBAR_SIZE)]} />} title="스킬 쓰기">
-              숫자 키, 또는 화면 아래 스킬 버튼을 눌러요. 패시브(둥근 칸)는 칸이 필요 없이 늘 켜져 있어요.
+            <Item pic={<Keys k={["1", "…", String(SKILL_SLOTS), "F"]} />} title="스킬 쓰기">
+              숫자 키 1~{SKILL_SLOTS}, 궁극기는 F, 또는 화면 아래 스킬 버튼을 눌러요. 패시브(둥근 칸)는 칸이 필요 없이 늘 켜져 있어요. 걸으면서 쳐도 공격·스킬은 겨냥한 적 쪽으로 나가요 (물러나며 치기).
+            </Item>
+            <Item pic={<Keys k={["Shift", "1~" + SKILL_SLOTS]} />} title="스킬 자동">
+              Shift+숫자, 칸 우클릭으로 그 칸을 자동으로 정해요. 손가락은 스킬 줄의 [자동]을 누른 뒤 칸을 누르면 (쓰지 않고) 자동만 켜고 꺼져요 — 다시 [자동]을 누르거나 6초 가만있으면 끝. 자동 칸은 테두리가 초록으로 돌고, 쿨이 끝나도 &lsquo;쓸 만한 때&rsquo;(사거리 안 적, 광역은 3마리 이상, 방패는 체력이 줄었을 때 …)를 기다렸다 써요. X(또는 왼쪽 위 &lsquo;스킬 자동&rsquo;)로 자동 칸을 한꺼번에 켜고 꺼요. 궁극기·몸 옮기기 스킬(안개 걸음·저승 너울)은 자동이 안 돼요. 스킬 탭에서 &lsquo;궁극기 SP 남겨 두기&rsquo;를 켜 두면(기본) 자동 스킬이 궁극기 쓸 SP는 남겨요.
+            </Item>
+            <Item pic={<Keys k={["H"]} />} title="키 안내">
+              사냥 중 H를 누르면 사냥 키가 화면에 떠요. 한 번 더 누르면 숨어요.
             </Item>
             <Item pic={<span className={s.guideSp}>SP</span>} title="SP">
-              스킬마다 SP를 써요. 모자라면 &lsquo;SP가 모자라요&rsquo;가 뜨고 안 나가요. 최대 SP는 INT로 늘고(스킬 위력도), 에너지드링크로 채워요.
+              스킬마다 SP를 써요. 모자란 칸은 어둡게, 필요한 SP 숫자가 떠요. 최대 SP는 INT로 늘고(스킬 위력도), 에너지드링크로 채워요.
             </Item>
             <Item pic={<span className={s.guideCool} />} title="쿨타임">
               한 번 쓰면 아이콘 위 그림자가 시계 방향으로 걷힐 때까지 다시 못 써요. 스킬마다 다르고 스킬 탭에서 확인해요.
@@ -471,39 +483,47 @@ function pages(): Page[] {
       ),
     },
     {
-      // 11/15 사냥 끝판 1단계 (lib/rpg/endgame)
+      // 11/15 사냥 끝판 (lib/rpg/endgame · 야근 빌딩 lib/rpg/tower)
       title: "레벨 50 이후",
-      lead: "레벨 50부터는 초월 레벨(★51~★100)과 번아웃 단계로 더 올라가요. 보상은 포인트가 아니라 자랑거리예요.",
+      lead: "레벨 50부터는 초월 레벨(★51~★100)과 마을의 야근 빌딩으로 더 올라가요. 보상은 포인트가 아니라 자랑거리예요.",
       body: (
         <>
           <ul className={s.guideList}>
             <Item art={skillArt("em_spark")} title="초월 레벨 ★51~★100">
-              레벨 50에서 지옥 사냥터·번아웃 판의 EXP는 초월 EXP로 쌓여요 (다른 난이도·미니게임 EXP는 버려져요). ★51까지 {tExpToNext(0).toLocaleString("ko-KR")}, ★100 직전은 약{" "}
+              레벨 50에서 지옥 사냥터 판의 EXP와 야근 빌딩 층 EXP는 초월 EXP로 쌓여요 (다른 난이도·미니게임 EXP는 버려져요). ★51까지 {tExpToNext(0).toLocaleString("ko-KR")}, ★100 직전은 약{" "}
               {Math.round(tExpToNext(TRANSCEND_MAX - 1) / 10_000)}만. 초월 5레벨마다 능력치 포인트 1개. 회식 3차·축제장은 레벨 50에선 EXP가 10%라 분기 마감·구조조정이
               제값이에요. 레벨 랭킹은 레벨 → 초월 레벨 → 초월 EXP 순.
             </Item>
             <Item art={POTIONS[0]?.art} title="하루 초월 판">
-              레벨 50 지옥 판(번아웃 포함)은 시작하면 초월 판 1판으로 세요 (새벽 5시에 새로). 앞 {TDAY_FULL}판(+적립)은 100%, 다음 {TDAY_STEP}판 30%, 다음 {TDAY_STEP}판 10%, 그
+              레벨 50 지옥 판은 시작하면, 야근 빌딩은 깬 {TOWER_FLOORS_PER_RUN}층마다 초월 판 1판으로 세요 (새벽 5시에 새로). 앞 {TDAY_FULL}판(+적립)은 100%, 다음 {TDAY_STEP}판 30%, 다음 {TDAY_STEP}판 10%, 그
               뒤는 연습 판 (초월 EXP·드롭 없음, 포인트는 평소대로). 못 쓴 100% 판은 다음 날로 적립돼요 (쉰 날은 {TDAY_FULL}판씩, 최대 {TBANK_MAX}판).
             </Item>
-            <Item art={skillArt("so_lamp")} title={`번아웃 단계 1~${BURNOUT_MAX_TIER}`}>
-              지옥 사냥터 아래 [번아웃 단계]. {BURNOUT_ZONES.length}곳 지옥 사냥터를 차례로 돌며 몬스터 체력·공격력 ×{BURNOUT_HP_ATK}, 방어 ×{BURNOUT_DEF}씩 단계마다 곱해져요. EXP는
-              ×(1 + 0.1 × 단계)이고 레벨 50 감소가 없어요. 하루 {BURNOUT_TRIES_PER_DAY}번 도전 (시작하면 1번). 바로 아래 단계를 한 번도 쓰러지지 않고 부활 쿠키도 없이 끝까지 깨야
-              다음 단계가 열려요. 번아웃 판은 늘 주간 레이스에 들어가요.
+            <Item art={skillArt("so_lamp")} title="야근 빌딩">
+              마을 북쪽 분양 사무소 옆 높은 건물 (사냥 레벨 50부터). 1층부터 쓰러질 때까지 이어서 올라가요 — 한 층은 방 하나({TOWER_FLOOR_SEC}초 안), {TOWER_BOSS_EVERY}층마다 우두머리
+              층({TOWER_BOSS_FLOOR_SEC}초, 깨면 체력 30% 회복). 체력·SP·버프는 다음 층으로 이어져요. 층마다 몬스터 체력·공격력 ×{TOWER_HP_ATK}, 방어 ×{TOWER_DEF}. 지금은 지옥 사냥터{" "}
+              {TOWER_THEMES.length}곳이 {FLOORS_PER_THEME}층씩 번갈아 나와요. 쓰러지면 끝 (부활 쿠키 없음), Esc → 그만두기는 그 층까지 기록. 도전 횟수 제한은 없어요.
             </Item>
-            <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="개척자">
-              끝판이 열린 뒤 {PIONEER_DAYS}일 안에 ★51에 닿거나 번아웃 1단계를 처음 깨면 닿은 차례대로 칭호 「개척자 #번호」(운영자 제외). 그 뒤로는 얻을 수 없어요.
+            <Item art={POTIONS[0]?.art} title="야근 빌딩 보상">
+              깬 층마다 초월 EXP 약 320 × (1 + 0.02 × 층) (1층 {floorTExp(1)} · 30층 {floorTExp(30)} · 100층 {floorTExp(100)}) — 쓰러져도 깬 층만큼. {TOWER_FLOORS_PER_RUN}층 = 초월 판
+              1판이라 하루 구간(100%·30%·10%)을 같이 써요. 우두머리 층을 깨면 우두머리 상자 (지옥 사냥터를 다 깬 판의 드롭 굴림, 하루 {TOWER_CHESTS_PER_DAY}개 — 그 뒤 상자는 비어 있어요).
+              깬 층마다 포인트 조금 (사냥 하루 한도 안). 처치 수는 주간 사냥 레이스에 들어가요. 최고 층이 오르면 시작 층이 열려요 (1·{1 + TOWER_CHECKPOINT_EVERY}·
+              {1 + TOWER_CHECKPOINT_EVERY * 2} …층).
+            </Item>
+            <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="칭호·랭킹">
+              층 칭호 10 「야근 입문」·20 「번아웃 생존자」·30 「야근이 일상」·50 「퇴근을 잊은 자」·100 「사무실이 집」. 신화(서버에 한 사람): 처음 30층 「최초 결재자」·50층 「최초
+              임원」·100층 「빌딩의 전설」·처음 ★100 「첫 번째 상무」, 지금 최고 층 기록 「꼭대기 층 주인」(뺏기면 넘어감), 지난주 최고 층 1위 「이번 주 최고층」. 랭킹 창 [야근 빌딩]은
+              층 높은 순, 같으면 빨리 오른 순. 끝판이 열린 뒤 {PIONEER_DAYS}일 안에 ★51에 닿거나 {PIONEER_FLOOR}층을 넘으면 「개척자 #번호」. 운영자는 랭킹·최초·번호에서 빠져요.
             </Item>
           </ul>
           <table className={s.guideTable}>
             <thead>
               <tr>
-                <th>단계</th>
+                <th>층</th>
                 <th>저주 (누적)</th>
               </tr>
             </thead>
             <tbody>
-              {CURSES.filter((c) => c.from <= BURNOUT_MAX_TIER).map((c) => (
+              {CURSES.map((c) => (
                 <tr key={c.id}>
                   <th>{c.from}~</th>
                   <td>

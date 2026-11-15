@@ -278,3 +278,46 @@
   background: var(--candle);
   clip-path: polygon(50% 0, 62% 36%, 100% 38%, 70% 60%, 80% 98%, 50% 76%, 20% 98%, 30% 60%, 0 38%, 38% 36%);
 }
+
+/* 11/15 잠긴 의뢰 이모티콘 (qe_pack 없음): 흐리게 + 자물쇠, 누를 수 없다 */
+.emoLocked {
+  cursor: not-allowed;
+  color: var(--muted);
+}
+
+.emoLocked img {
+  opacity: 0.38;
+  filter: grayscale(0.7);
+}
+
+.emoLocked:hover {
+  background: var(--bg-deep);
+}
+
+/* 자물쇠 (고리 + 몸통) — 칸 오른쪽 위 */
+.lockBadge,
+.lockIcon {
+  flex: none;
+  width: 10px;
+  height: 12px;
+  background:
+    linear-gradient(var(--candle), var(--candle)) 0 5px / 10px 7px no-repeat,
+    radial-gradient(circle at 50% 100%, transparent 2px, var(--candle) 2px 4px, transparent 4px) 0 0 / 10px 6px no-repeat;
+}
+
+.lockBadge {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+}
+
+.lockNote {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+  line-height: 1.5;
+}

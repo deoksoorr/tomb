@@ -690,6 +690,233 @@ button.hotSlot:disabled {
     2px 0 0 0 var(--moss);
 }
 
+/* ── 11/15 스킬 칸: 궁극기 칸(F) · SP 모자람 · 자동 ── */
+.skillBtn,
+.autoChip {
+  --auto-green: #7fe08a;
+}
+
+.ultBtn {
+  margin-left: 6px;
+  outline: 2px solid color-mix(in srgb, var(--candle) 75%, transparent);
+  outline-offset: -2px;
+}
+
+/* SP가 모자란 칸: 어둡게 + 필요한 SP */
+.spShort::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 11, 9, 0.55);
+  pointer-events: none;
+}
+
+.spNeed {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  z-index: 3;
+  font-family: var(--font-small);
+  font-size: 9px;
+  color: #8fb6f0;
+}
+
+/* 자동 칸: 초록 점선 테두리가 시계 방향으로 돈다 (전체 스위치가 꺼져 있으면 흐린 점선으로 멈춤) */
+.autoSlot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image:
+    linear-gradient(90deg, var(--muted) 50%, transparent 50%),
+    linear-gradient(90deg, var(--muted) 50%, transparent 50%),
+    linear-gradient(0deg, var(--muted) 50%, transparent 50%),
+    linear-gradient(0deg, var(--muted) 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size:
+    8px 2px,
+    8px 2px,
+    2px 8px,
+    2px 8px;
+  background-position:
+    0 0,
+    0 100%,
+    0 0,
+    100% 0;
+}
+
+.autoLive::before {
+  opacity: 1;
+  background-image:
+    linear-gradient(90deg, var(--auto-green) 50%, transparent 50%),
+    linear-gradient(90deg, var(--auto-green) 50%, transparent 50%),
+    linear-gradient(0deg, var(--auto-green) 50%, transparent 50%),
+    linear-gradient(0deg, var(--auto-green) 50%, transparent 50%);
+  animation: autoMarch 0.9s linear infinite;
+}
+
+@keyframes autoMarch {
+  to {
+    background-position:
+      8px 0,
+      -8px 100%,
+      0 -8px,
+      100% 8px;
+  }
+}
+
+.autoMark {
+  position: absolute;
+  left: 2px;
+  bottom: 1px;
+  z-index: 3;
+  font-family: var(--font-small);
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.autoLive .autoMark {
+  color: var(--auto-green);
+}
+
+/* [자동] 설정 버튼 · 설정 중 칸: 흔들리며 점선 (누르면 쓰지 않고 자동만 바꾼다) */
+.autoEditBtn {
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.autoEditBtn[aria-pressed="true"] {
+  color: #1a2414;
+  background: var(--auto-green);
+}
+
+.slotEdit {
+  outline: 2px dashed var(--candle);
+  outline-offset: -3px;
+  animation: slotWiggle 0.5s ease-in-out infinite alternate;
+}
+
+.slotEdit:nth-child(2n) {
+  animation-delay: -0.25s;
+}
+
+@keyframes slotWiggle {
+  from {
+    transform: rotate(-3deg);
+  }
+  to {
+    transform: rotate(3deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slotEdit {
+    animation: none;
+  }
+}
+
+/* 11/15 떠다니는 조이스틱 영역: 손가락 기기에서만 */
+.stickZone {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .stickZone {
+    display: block;
+  }
+}
+
+/* 왼쪽 위 상태 칩: 스킬 자동 X (켜지면 초록) */
+.autoChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border: 0;
+  background: rgba(10, 11, 9, 0.6);
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 10px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.autoChip kbd {
+  font: inherit;
+  padding: 0 3px;
+  box-shadow: 0 0 0 1px currentColor;
+}
+
+/* 손가락 기기엔 X 키가 없다 */
+@media (pointer: coarse) {
+  .autoChip kbd {
+    display: none;
+  }
+}
+
+.autoChipOn {
+  color: var(--auto-green);
+  box-shadow: 0 0 0 1px var(--auto-green);
+}
+
+.autoHint {
+  color: var(--candle);
+}
+
+/* H: 사냥 키 안내 */
+.keyHelp {
+  justify-self: center;
+  display: grid;
+  gap: 6px;
+  width: min(380px, 100%);
+  padding: 10px 12px;
+  background: var(--panel);
+  box-shadow: var(--px-border);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.keyHelp strong {
+  color: var(--bone);
+}
+
+.keyHelp dl {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+}
+
+.keyHelp dl > div {
+  display: grid;
+  grid-template-columns: 11em 1fr;
+  gap: 8px;
+}
+
+.keyHelp dt {
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+.keyHelp dd {
+  margin: 0;
+}
+
+.keyHelp small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .autoLive::before {
+    animation: none;
+  }
+}
+
 @media (pointer: coarse) and (max-width: 560px) {
   .skillBar {
     display: grid;
@@ -700,6 +927,16 @@ button.hotSlot:disabled {
   .skillBtn {
     width: 44px;
     height: 44px;
+  }
+
+  .ultBtn {
+    margin-left: 0;
+  }
+
+  .autoEditBtn {
+    grid-column: 1 / -1;
+    width: auto;
+    height: 28px;
   }
 }
 
@@ -2283,7 +2520,7 @@ button.hotSlot:disabled {
   accent-color: var(--candle);
 }
 
-/* 11/15 사냥 끝판: 초월 막대 · 오늘 초월 판 · 구간 칩 · 번아웃 단계 */
+/* 11/15 사냥 끝판: 초월 막대 · 오늘 초월 판 · 구간 칩 · 야근 빌딩 */
 .tBar > span {
   background: var(--candle);
 }
@@ -2309,47 +2546,96 @@ button.hotSlot:disabled {
   vertical-align: 1px;
 }
 
-.burnBox {
-  padding: 10px 12px;
-  background: var(--bg-deep);
-  box-shadow: var(--px-border);
-}
-
-.burnTiers {
+/* 11/15 야근 빌딩 입구: 엘리베이터 버튼판 (어두운 철판 + 호박색 숫자판 + 불 들어온 층 버튼) */
+.towerBox {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
-  gap: 6px;
-}
-
-.burnTier {
-  min-height: 36px;
-  border: 0;
-  background: var(--surface);
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
+  gap: 10px;
+  padding: 12px;
+  background: linear-gradient(180deg, #23262e, #181a20);
   box-shadow: var(--px-border);
 }
 
-.burnTier[aria-disabled="true"] {
-  opacity: 0.35;
-  cursor: not-allowed;
+.liftTop {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: stretch;
 }
 
-.burnDone {
-  color: var(--moss);
-}
-
-.burnTier[aria-checked="true"] {
-  color: var(--bone);
+.liftDisplay {
+  display: grid;
+  gap: 2px;
+  min-width: 96px;
+  padding: 6px 10px;
+  background: #0b0906;
+  color: #ffb43c;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 6px rgba(255, 170, 60, 0.7);
   box-shadow:
-    0 -2px 0 0 var(--candle),
-    0 2px 0 0 var(--candle),
-    -2px 0 0 0 var(--candle),
-    2px 0 0 0 var(--candle);
+    inset 0 0 0 2px #3a2c18,
+    0 0 0 2px #0a0b10;
 }
 
-/* 11/15 번아웃을 하는 이유 (상자 맨 위 세 줄) */
-.burnWhy {
+.liftDisplay span {
+  color: #b98a4a;
+  font-size: 11px;
+  text-shadow: none;
+}
+
+.liftDisplay b {
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.liftPanel {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 8px;
+  padding: 10px;
+  background: #2c3038;
+  box-shadow:
+    inset 0 0 0 2px #454b56,
+    0 0 0 2px #0a0b10;
+}
+
+.liftBtn {
+  display: grid;
+  place-items: center;
+  min-height: 46px;
+  border: 0;
+  border-radius: 50%;
+  aspect-ratio: 1;
+  background: radial-gradient(circle at 40% 35%, #555b66, #30343c 70%);
+  color: #8d939e;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  box-shadow:
+    0 0 0 2px #1a1c22,
+    inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.liftBtn[data-lit] {
+  color: #fff2c8;
+  background: radial-gradient(circle at 40% 35%, #6a6050, #3a342a 70%);
+  box-shadow:
+    0 0 0 2px #ffb43c,
+    0 0 10px rgba(255, 180, 60, 0.55);
+  text-shadow: 0 0 6px rgba(255, 200, 90, 0.9);
+}
+
+.liftBtn[aria-checked="true"] {
+  color: #1a1206;
+  background: radial-gradient(circle at 40% 35%, #ffe7a6, #ffb43c 70%);
+  text-shadow: none;
+}
+
+.liftBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* 야근 빌딩을 오르는 이유 (세 줄) */
+.towerWhy {
   display: grid;
   gap: 4px;
   margin: 0;
@@ -2359,6 +2645,26 @@ button.hotSlot:disabled {
   line-height: 1.45;
 }
 
-.burnWhy b {
+.towerWhy b {
   color: var(--candle);
+}
+
+/* 사냥 로비의 야근 빌딩 안내 한 줄 */
+.towerHint {
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--bg-deep);
+  color: var(--text);
+  font-size: 12px;
+  box-shadow: var(--px-border);
+}
+
+.towerHint b {
+  color: #ffb43c;
+}
+
+/* 신화 칭호를 얻은 줄 */
+.mythicLine {
+  color: #ffd36a;
+  text-shadow: 0 0 8px rgba(255, 190, 70, 0.6);
 }

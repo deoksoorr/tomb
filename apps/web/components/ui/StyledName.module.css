@@ -26,7 +26,8 @@
 .text[data-kind="grad"],
 .text[data-kind="rainbow"],
 .text[data-kind="stars"],
-.text[data-kind="flame"] {
+.text[data-kind="flame"],
+.text[data-kind="leaves"] {
   background: var(--ns-grad);
   -webkit-background-clip: text;
   background-clip: text;
@@ -76,6 +77,40 @@
   background-clip: text;
   filter: drop-shadow(0 0 2px rgba(255, 138, 58, 0.55));
   animation: nsFlame 0.9s ease-in-out infinite alternate;
+}
+
+/* 11/15 나뭇잎 이름 글자: 잎 초록 그라데이션 + 이름 끝에서 작은 잎이 팔랑 떨어진다 */
+.wrap[data-fx="leaves"]::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 3px;
+  margin-left: 2px;
+  vertical-align: top;
+  background: linear-gradient(135deg, #eaffa0, #5cc96a);
+  border-radius: 0 100% 0 100%;
+  box-shadow: 0 0 0 1px rgba(10, 11, 16, 0.55);
+  animation: nsLeaf 2.6s ease-in-out infinite;
+}
+
+@keyframes nsLeaf {
+  0% {
+    opacity: 0;
+    transform: translate(0, -4px) rotate(-25deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(-2px, 2px) rotate(30deg) scaleX(-1);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(1px, 8px) rotate(-10deg);
+  }
 }
 
 @keyframes nsGlow {
@@ -134,7 +169,8 @@
 .wrap[data-plate] > .text[data-kind="grad"],
 .wrap[data-plate] > .text[data-kind="rainbow"],
 .wrap[data-plate] > .text[data-kind="stars"],
-.wrap[data-plate] > .text[data-kind="flame"] {
+.wrap[data-plate] > .text[data-kind="flame"],
+.wrap[data-plate] > .text[data-kind="leaves"] {
   color: transparent;
 }
 
@@ -172,9 +208,26 @@
     var(--np-fill);
 }
 
+/* 11/15 물결 이름표: 깊은 물빛 판 위로 윤슬(작은 타원 빛)이 오른쪽으로 흐른다 */
+.wrap[data-plate="wave"] {
+  border-radius: 3px;
+  background:
+    radial-gradient(ellipse 3px 1px at 50% 30%, var(--np-dot) 0 55%, transparent 75%) 0 0 / 14px 100% repeat-x,
+    radial-gradient(ellipse 2px 1px at 30% 80%, var(--np-dot) 0 55%, transparent 75%) 0 0 / 10px 100% repeat-x,
+    linear-gradient(180deg, var(--np-fill) 0 60%, color-mix(in srgb, var(--np-fill) 62%, var(--np-edge)) 60%);
+  animation: npWave 1.8s linear infinite;
+}
+
+@keyframes npWave {
+  to {
+    background-position: 14px 0, -10px 0, 0 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .text,
-  .wrap::after {
+  .wrap::after,
+  .wrap[data-plate="wave"] {
     animation: none !important;
   }
 }

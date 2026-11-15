@@ -8,7 +8,7 @@ import { emoteDataUrl } from "@/game/sprites/emotes";
 import { readItem, writeItem } from "@/lib/storage";
 import FavStar from "./FavStar";
 import styles from "./SayBoard.module.css";
-import { phraseText, slotKey, slotOf } from "./sayFavorites";
+import { canSendEmo, phraseText, slotKey, slotOf } from "./sayFavorites";
 import { SAY_GROUPS } from "./sayGroups";
 
 // 말풍선 탭: 정해진 문장을 상황별 묶음(sayGroups.ts)으로, 묶음마다 어울리는 이모티콘을 곁들인다.
@@ -83,7 +83,8 @@ export default function SayBoard({ onSent }: { onSent: () => void }) {
                   </button>
                 );
               const slot = slotOf(id);
-              return slot ? emoButton(slot) : null;
+              // 잠긴 의뢰 이모티콘(묶음을 잃었거나 다른 계정)은 최근 목록에서 숨긴다
+              return slot && (slot.kind === "act" || canSendEmo(slot.id)) ? emoButton(slot) : null;
             })}
           </div>
         )}

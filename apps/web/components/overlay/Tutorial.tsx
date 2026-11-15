@@ -20,7 +20,7 @@ function tutorialSteps(touch: boolean): Step[] {
   return [
     {
       title: "걸어 보기",
-      text: touch ? "왼쪽 아래 조이스틱으로 걸어요. [점프]로 낮은 것을 넘을 수 있어요." : "WASD나 방향키로 걸어요. Shift는 달리기, Space는 점프예요.",
+      text: touch ? "화면 왼쪽 아무 데나 누르고 끌면 걸어요. [점프]로 낮은 것을 넘을 수 있어요." : "WASD나 방향키로 걸어요. Shift는 달리기, Space는 점프예요.",
     },
     {
       title: "앉아 쉬기",

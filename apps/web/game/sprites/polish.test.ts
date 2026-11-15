@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AVATAR_BODIES, EMOS, SEAT_MOODS } from "@tomb/protocol";
 import { AV_ANIM, AV_H, AV_W, avatarFrameGrid, seatedAnchors } from "./avatar";
 import { EMOTE_ICONS, emoteGrid } from "./emotes";
-import { EMO_BOARD, EMO_GROUPS, emoIcon, emoSlotOfKey } from "../logic/emoBoard";
+import { EMO_BOARD, EMO_GROUPS, emoIcon, emoSlotOfKey, isQuestEmo } from "../logic/emoBoard";
 import { MOOD_ICON, moodIconGrid, moodPropGrid } from "./moodArt";
 
 // 다듬기 5·24·17번: 이모티콘 판·벤치 상태 그림·나무 매달리기 뒷모습
@@ -56,7 +56,8 @@ describe("5번 이모티콘 판", () => {
       expect(seen.get(sig), e.id).toBeUndefined();
       seen.set(sig, e.id);
       expect(e.label.length, e.id).toBeGreaterThan(0);
-      expect(e.label.length, e.id).toBeLessThanOrEqual(5);
+      // 11/15 의뢰 이모티콘 묶음은 이름이 조금 길다 ("의뢰 완료 도장")
+      expect(e.label.length, e.id).toBeLessThanOrEqual(isQuestEmo(e.id) ? 8 : 5);
     }
   });
 

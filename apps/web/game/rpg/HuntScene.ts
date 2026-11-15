@@ -6,7 +6,7 @@ import { attackCooldownMs, CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weapon
 import { gearById } from "@/lib/rpg/catalog";
 import { ELITE, huntPlan, STREAM_GAP_MS, WAVE_FORMATION_LABEL, WAVE_MAX_GAP_SEC, type HuntWave } from "@/lib/rpg/plan";
 import { POTION_CURES, rollStatus, STATUS_IDS, StatusBook, STATUSES, type StatusId } from "@/lib/rpg/status";
-import { burnoutScale, curseFx, type CurseFx } from "@/lib/rpg/endgame";
+import { CURSES, floorSeed, isBossFloor, NO_CURSE, TOWER_BOSS_HEAL, TOWER_POWER, towerChestDrops, towerCurseFx, towerFloorSec, towerPlan, towerScale, towerZone, type CurseFx } from "@/lib/rpg/tower";
 import type { HuntResult, RpgAction, RpgHud } from "@/lib/rpg/types";
 import { DIR, STATE, type DirId, type HuntAct } from "@tomb/protocol";
 import { FONT_KEY, FONT_PX } from "../text/GlyphAtlas";
@@ -28,16 +28,20 @@ import type { SoundEv, SoundOpt } from "./skillSound";
 import { TelegraphLayer } from "./telegraph";
 import { avFrame, ensureRpgTextures, makePlayer, RTEX } from "./sprites";
 // 40번 테마 사냥터: 지도·기믹·길찾기 (arena/), 몬스터 동작별 프레임 (monsterArt)
-import { Arena } from "./arena/Arena";
+import { Arena, type ArenaHooks } from "./arena/Arena";
 import { monsterFrame, monsterOrigin, playMonsterDeath } from "./monsterArt";
 // 바닥 드롭 연출: 판이 끝나는 순간 서버와 같은 식으로 굴린 드롭을 몬스터 자리에 떨군다 (보상은 서버가)
 import { huntBossDrop, huntDropsFor, MIN_RUN_MS, type DropTicket } from "@/lib/rpg/rewards";
 import { LootLayer } from "./loot";
+import { autoBlock, cleanAuto, SKILL_SLOTS, ULT_SLOT, type HotAuto } from "@/lib/rpg/hotbar";
+import { AUTO_GAP_MS, autoSpOk, ultReserve, wantsCast, type AutoCtx } from "@/lib/rpg/autoSkill";
+import { bridge } from "../bridge";
 
 // 사냥터: 위에서 내려다보는 실시간 전투. 웨이브는 서버가 준 시드의 계획(huntPlan)대로 나온다.
 //  - 웨이브 i는 앞 웨이브를 다 잡았고 i×8초가 지났을 때, 또는 앞 웨이브 뒤 35초가 지나면 나온다
 //  - 끝: 시간 끝 / 모든 웨이브 클리어 / 쓰러짐(부활 쿠키가 있으면 한 번 일어난다)
-//  - 11/15 번아웃 단계: 몬스터 배율(lib/rpg/endgame burnoutScale) + 저주(물약 절반·금지, 받는 회복 절반, 부활 없음 — 제한 시간은 서버가 준 timeLimitSec)
+//  - 11/15 야근 빌딩(play.tower): 층마다 방 하나 — 깨면 엘리베이터(어두워짐 + 층 표시)로 다음 층, 체력·SP·버프는 그대로.
+//    층 배율·저주(물약 절반·금지, 받는 회복 절반, 몬스터 이동·공격 속도, 제한 시간, 정예 섞임)·층 계획은 lib/rpg/tower. 쓰러지면 끝 (부활 쿠키 없음)
 //  - 공격: 바라보는 쪽 부채꼴(무기마다 다를 수 있음) 안의 몬스터를 모두 때린다.
 //    누를 때마다 한 번(쿨다운 중이면 버퍼에 한 번), 누르고 있으면(키·마우스·손가락) 공격 속도대로 계속.
 
@@ -185,8 +189,17 @@ export class HuntScene extends RpgScene {
   private died = false;
   private cookieUsed = false;
   /** 11/15 번아웃 저주 (번아웃이 아니면 모두 그대로) */
-  private curse: CurseFx = curseFx(0);
+  private curse: CurseFx = NO_CURSE;
   private victoryAt = 0;
+  /** 11/15 야근 빌딩: 지금 층 · 층이 시작된 시각 · 깬 층 수 · 마지막 층을 깬 시각 · 엘리베이터 중 · 오늘 남은 상자 · 그만두고 나옴 */
+  private floor = 0;
+  private floorAt = 0;
+  private floorsCleared = 0;
+  private floorMs = 0;
+  private lift = false;
+  private chestsLeft = 0;
+  private quit = false;
+  private arenaHooks!: ArenaHooks;
   private message: string | undefined;
   private messageUntil = 0;
 
@@ -248,6 +261,12 @@ export class HuntScene extends RpgScene {
   private holdOn = false;
   /** 누르고 있는 화면 좌표 (없으면 지금 방향으로) */
   private holdAim: { x: number; y: number } | null = null;
+  /** 11/15 공격 방향 고정: 휘두르는 동안(이 시각까지) 걷는 방향이 바라보는 쪽을 덮어쓰지 않는다 → 물러나며 쳐도 겨냥한 적을 친다 */
+  private faceLockUntil = 0;
+  /** 11/15 자동 스킬: 설정(칸·전체 스위치·궁극기 SP 남김) · 마지막 자동 시전 · 마지막으로 싸운(치거나 맞은) 시각 */
+  private auto: HotAuto = cleanAuto(null, []);
+  private autoAt = 0;
+  private fightAt = -1e9;
   private area: AttackArea = attackArea({});
   private atkCdMs = 1;
   /** 게이지가 다 찬 순간 반짝임 */
@@ -292,11 +311,11 @@ export class HuntScene extends RpgScene {
   create(): void {
     this.setupCommon();
     const play = this.play;
-    const zone = zoneFor(play.difficulty, play.zone);
+    const zone = play.tower ? towerZone(play.tower.start) : zoneFor(play.difficulty, play.zone);
     this.zone = zone;
     ensureRpgTextures(this);
     makePlayer(this, this.data0.color, this.data0.look, this.data0.body);
-    this.plan = huntPlan(play.seed, play.difficulty, zone.id);
+    this.plan = play.tower ? towerPlan(play.seed, play.tower.start) : huntPlan(play.seed, play.difficulty, zone.id);
     this.mons = [];
     this.shots = [];
     this.nextWave = 0;
@@ -310,7 +329,11 @@ export class HuntScene extends RpgScene {
     this.buffs.clear();
     this.died = false;
     this.cookieUsed = false;
-    this.curse = curseFx(play.burnout ?? 0);
+    this.curse = play.tower ? towerCurseFx(play.tower.start) : NO_CURSE;
+    this.floor = play.tower?.start ?? 0;
+    this.floorAt = this.floorsCleared = this.floorMs = 0;
+    this.lift = this.quit = false;
+    this.chestsLeft = play.tower?.chestsLeft ?? 0;
     this.victoryAt = 0;
     this.helper = null;
     this.turret = null;
@@ -345,7 +368,7 @@ export class HuntScene extends RpgScene {
 
     // 40번: 사냥터마다 다른 지도 (바닥·벽·소품 충돌·조명·입자·지형 기믹) — game/rpg/arena
     this.obstacles = [];
-    this.arena = new Arena(this, zone.id, play.seed, {
+    this.arena = new Arena(this, zone.id, play.tower ? floorSeed(play.seed, this.floor) : play.seed, (this.arenaHooks = {
       hurtPlayer: (dmg) => this.hurtPlayer(dmg),
       healPlayer: (n0) => {
         if (this.died || this.hp >= this.dv.maxHp) return;
@@ -368,7 +391,7 @@ export class HuntScene extends RpgScene {
       shake: (ms, k) => this.fx.shake(ms, k),
       maxHp: () => this.dv.maxHp,
       reduced: this.data0.reduced,
-    });
+    }));
     this.px = this.arena.start.x;
     this.py = this.arena.start.y;
 
@@ -379,7 +402,7 @@ export class HuntScene extends RpgScene {
     if (atlas) {
       this.me = new AvatarView(this, atlas, this.px, this.py, this.data0.color, this.data0.name, true, this.data0.look, this.data0.body);
       this.player = this.me.sprite;
-      const room = `hunt:${zone.slug}:${play.difficulty}`;
+      const room = `hunt:${play.tower ? "tower" : zone.slug}:${play.difficulty}`;
       this.peers = 0;
       this.presence = new RoomPresence(this, {
         atlas,
@@ -404,6 +427,10 @@ export class HuntScene extends RpgScene {
     this.atkBuffered = false;
     this.holdOn = false;
     this.holdAim = null;
+    this.faceLockUntil = 0;
+    this.auto = cleanAuto(play.hotAuto, play.hotbar);
+    this.autoAt = 0;
+    this.fightAt = -1e9;
     this.area = attackArea(play.equip);
     this.atkReadyAt = 0;
     this.atkCdMs = 1;
@@ -456,8 +483,8 @@ export class HuntScene extends RpgScene {
     this.applyZoom();
     cam.startFollow(this.player, true, 0.15, 0.15);
     this.flash(
-      play.burnout
-        ? `번아웃 ${play.burnout}단계 · ${zone.name}${play.testDrops?.length ? " · 시험 드롭 예약됨" : ""}`
+      play.tower
+        ? `야근 빌딩 ${this.floor}층 · ${zone.name}`
         : `${zone.name} · ${zone.desc}${play.testDrops?.length ? " · 시험 드롭 예약됨" : ""}`,
       2600,
     );
@@ -491,7 +518,13 @@ export class HuntScene extends RpgScene {
     // 판이 끝나 드롭만 줍는 중: 걷기만 (결과가 잡혀 있으니 포션·스킬은 막는다)
     if (this.endSnap) return;
     if (code === "Space" || code === "KeyJ") this.attack(true);
-    else if (/^Digit[1-6]$/.test(code)) this.useSkill(Number(code.slice(5)) - 1);
+    // 11/15 숫자 1~5 = 스킬 칸 (Shift+숫자 = 그 칸 자동 켜기·끄기), F = 궁극기 칸, X = 자동 전체 스위치
+    else if (/^Digit[1-5]$/.test(code)) {
+      const slot = Number(code.slice(5)) - 1;
+      if (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight")) this.toggleAuto(slot);
+      else this.useSkill(slot);
+    } else if (code === "KeyF") this.useSkill(ULT_SLOT);
+    else if (code === "KeyX") this.toggleAuto("all");
     else if (code === "KeyQ") this.usePotion("p_coffee");
     else if (code === "KeyE") this.usePotion("p_energy");
     else if (code === "KeyR") this.usePotion("p_lunchbox");
@@ -504,7 +537,83 @@ export class HuntScene extends RpgScene {
       this.holdOn = a.on;
       this.holdAim = a.on && a.x !== undefined && a.y !== undefined ? { x: a.x, y: a.y } : null;
     } else if (a.kind === "skill") this.useSkill(a.slot);
+    else if (a.kind === "auto") this.toggleAuto(a.slot);
     else if (a.kind === "potion") this.usePotion(a.id);
+  }
+
+  /** 11/15 칸 자동 켜기·끄기 (slot) / 전체 스위치 ("all" — 칸마다 정한 것은 그대로). 바뀌면 화면(HuntLobby)이 캐릭터에 저장한다 */
+  private toggleAuto(slot: number | "all"): void {
+    const a = this.auto;
+    if (slot === "all") {
+      if (!a.ids.length) {
+        this.flash("Shift+숫자(또는 칸 우클릭)로 자동 칸을 먼저 정해요", 1600);
+        return;
+      }
+      a.on = !a.on;
+      this.flash(a.on ? "스킬 자동 켬" : "스킬 자동 끔", 900);
+    } else {
+      const id = this.play.hotbar[slot];
+      if (!id) return;
+      const why = autoBlock(id);
+      if (why || slot >= SKILL_SLOTS) {
+        this.flash(why ?? "궁극기는 직접 써요", 1100);
+        this.sfx.play("miss", 0.4);
+        return;
+      }
+      const name = skillById(id)?.name ?? "";
+      if (a.ids.includes(id)) {
+        a.ids = a.ids.filter((x) => x !== id);
+        if (!a.ids.length) a.on = false;
+        this.flash(`${name} 자동 끔`, 900);
+      } else {
+        // 칸을 자동으로 정하면 전체 스위치도 켠다 (꺼 둔 채면 정해도 안 도니까)
+        a.ids = [...a.ids, id];
+        a.on = true;
+        this.flash(`${name} 자동`, 900);
+      }
+    }
+    bridge.emit("rpg:auto", { ids: [...a.ids], on: a.on, keepUlt: a.keepUlt });
+  }
+
+  /** 11/15 자동 스킬: 자동 칸을 앞에서부터 보고, 쓸 만한 때인 첫 스킬 하나를 쓴다 (손으로 쓰는 useSkill 그대로 — 쿨·침묵·빙결·SP) */
+  private autoCast(now: number): void {
+    const a = this.auto;
+    if (!a.ids.length || this.status.has("silence", now) || this.status.has("freeze", now)) return;
+    const reserve = ultReserve(this.play.hotbar[ULT_SLOT], this.play.skills);
+    let ctx: AutoCtx | null = null;
+    for (let slot = 0; slot < SKILL_SLOTS; slot++) {
+      const id = this.play.hotbar[slot];
+      if (!id || !a.ids.includes(id)) continue;
+      const lv = this.play.skills[id] ?? 0;
+      const def = skillById(id);
+      if (!def || lv < 1 || (this.skillReady[id] ?? 0) > now) continue;
+      if (!autoSpOk(this.sp, def.sp(lv), reserve, a.keepUlt)) continue;
+      ctx ??= this.autoCtx(now);
+      if (!wantsCast(id, lv, ctx)) continue;
+      if (this.useSkill(slot, true)) {
+        this.autoAt = now;
+        return;
+      }
+    }
+    // 쓸 게 없으면 0.1초 뒤에 다시 본다 (매 프레임 둘러보지 않게)
+    this.autoAt = Math.max(this.autoAt, now - AUTO_GAP_MS + 100);
+  }
+
+  private autoCtx(now: number): AutoCtx {
+    const buffs = new Set([...this.buffs].filter(([, b]) => b.until > now).map(([id]) => id));
+    // 서리 방패가 깨졌으면 (버프 시간이 남아도) 꺼진 것으로
+    if (this.shield <= 0) buffs.delete("fr_ward");
+    return {
+      px: this.px,
+      py: this.py,
+      hp: this.hp,
+      maxHp: this.dv.maxHp,
+      now,
+      lastFightAt: this.fightAt,
+      foes: this.mons.filter((m) => m.alive && !m.hidden).map((m) => ({ x: m.x, y: m.y, r: MONSTERS[m.id].size / 2, boss: !!m.boss || MONSTERS[m.id].behavior === "boss" })),
+      buffs,
+      teleOnMe: this.tele.covers(this.px, this.py, PLAYER_R),
+    };
   }
 
   /** 탭: 그쪽을 바라보고 공격 */
@@ -584,6 +693,10 @@ export class HuntScene extends RpgScene {
     this.lastAtkAt = this.now;
     const fin = this.chain === FINISHER_EVERY;
     const target = this.aim();
+    // 11/15 휘두르는 동안은 걷는 방향이 바라보는 쪽을 덮어쓰지 않는다 (판정이 동작 뒤에 나므로 — 물러나며 쳐도 겨냥한 적을 친다)
+    const hits = fin ? (st.finisher.hits ?? st.hits) : st.hits;
+    this.faceLockUntil = this.now + (st.projectile ? 120 : st.windupMs + Math.max(0, hits - 1) * st.hitGapMs + 60);
+    this.fightAt = this.now;
     this.swing(1);
     // 11/13 같은 사냥터 사람에게 공격 동작 (혼자면 안 보낸다)
     this.presence?.hunt({ k: "atk", a: Math.round((Math.atan2(this.face.y, this.face.x) * 180) / Math.PI), w: st.id, ...(fin ? { f: true as const } : {}) });
@@ -811,6 +924,7 @@ export class HuntScene extends RpgScene {
    */
   private hurtMonster(m: Mon, dmg: number, crit: boolean, nth = 0, opts: HitOpts = {}): void {
     if (!m.alive) return;
+    this.fightAt = this.now;
     m.hp -= dmg;
     const def = MONSTERS[m.id];
     const sk = opts.skill ? PALETTES[opts.skill] : null;
@@ -877,7 +991,7 @@ export class HuntScene extends RpgScene {
     m.alive = false;
     this.lastKill = { x: m.x, y: m.y };
     // 우두머리를 잡는 순간 그 자리에 우두머리 몫을 떨군다 (싸움은 계속 — 다가가면 빨려 오고 3초 뒤 날아온다)
-    if (m.id === this.zone.boss && !this.bossDropped && !this.endSnap) this.dropBossLoot(m.x, m.y);
+    if (m.id === this.zone.boss && !this.bossDropped && !this.endSnap && !this.play.tower) this.dropBossLoot(m.x, m.y);
     this.kills[m.id] = (this.kills[m.id] ?? 0) + 1;
     this.killCount++;
     if (!m.minion && !MONSTERS[m.id].minion) this.waveAlive[m.wave]--;
@@ -920,7 +1034,8 @@ export class HuntScene extends RpgScene {
       },
       player: () => ({ x: sc.px, y: sc.py, r: PLAYER_R }),
       size: (m) => MONSTERS[m.id].size,
-      haste: (m) => (m.phase > 0 ? (bossPhaseList(MONSTERS[m.id])[m.phase - 1]?.haste ?? 1) : 1),
+      // 11/15 야근 빌딩 '연달아 회의' 저주: 몬스터 공격 속도 +20% (쿨타임 ÷1.2)
+      haste: (m) => (m.phase > 0 ? (bossPhaseList(MONSTERS[m.id])[m.phase - 1]?.haste ?? 1) : 1) / sc.curse.monAtk,
       boss: (m) => m.boss,
       bite: (m, mult) => sc.monsterAttackRoll(m, mult),
       strikePlayer: (m, mult) => sc.hurtPlayer(damage(m.st.atk, mult, sc.dv.def, Math.random(), false), { id: m.id, pat: m.cast?.id }),
@@ -988,31 +1103,37 @@ export class HuntScene extends RpgScene {
     return def ? Math.round(def.cooldownMs(lv) * (1 - this.mods.cdCut)) : 1;
   }
 
-  private useSkill(slot: number): void {
+  /** 칸의 스킬 쓰기. quiet: 자동 시전 (못 쓸 때 알림·소리 없이). 썼으면 true */
+  private useSkill(slot: number, quiet = false): boolean {
     const id = this.play.hotbar[slot];
-    if (!id) return;
+    if (!id) return false;
     const lv = this.play.skills[id] ?? 0;
     const def = skillById(id);
-    if (!def || def.kind !== "active" || lv < 1) return;
-    if ((this.skillReady[id] ?? 0) > this.now) return;
-    if (this.died || this.status.has("freeze", this.now)) return;
+    if (!def || def.kind !== "active" || lv < 1) return false;
+    if ((this.skillReady[id] ?? 0) > this.now) return false;
+    if (this.died || this.status.has("freeze", this.now)) return false;
     if (this.status.has("silence", this.now)) {
+      if (quiet) return false;
       this.flash("침묵: 지금은 스킬을 못 써요", 900);
       this.sfx.play("miss", 0.4);
-      return;
+      return false;
     }
     const cost = def.sp(lv);
     if (this.sp < cost) {
+      if (quiet) return false;
       this.flash("SP가 모자라요", 900);
       this.sfx.play("miss", 0.4);
-      return;
+      return false;
     }
     this.sp -= cost;
     this.skillReady[id] = this.now + this.cdOf(id);
     this.passiveSnd("fr_solstice", 2000);
     this.castSkill(id, lv);
+    // 11/15 부채꼴 판정(80~90ms 뒤)까지 걷는 방향이 바라보는 쪽을 덮어쓰지 않게
+    this.faceLockUntil = Math.max(this.faceLockUntil, this.now + 160);
     // 11/13 같은 사냥터 사람에게 스킬 동작 (이름은 받는 쪽 카탈로그에서)
     this.presence?.hunt({ k: "skill", a: Math.round((Math.atan2(this.face.y, this.face.x) * 180) / Math.PI), s: id });
+    return true;
   }
 
   /** 시전 컷인: 몸 둘레 오라 번쩍 + 아주 짧은 정지(히트스톱). 소리는 스킬마다 castSkill에서 따로 낸다 (skillSound.ts) */
@@ -1704,6 +1825,7 @@ export class HuntScene extends RpgScene {
     // 판이 끝나 드롭만 줍는 중에는 다치지 않는다 (지형 함정이 결과를 바꾸지 않게)
     if (this.died || this.endSnap || this.now < this.hurtUntil || this.buff("invuln")) return false;
     this.hurtUntil = this.now + HURT_IFRAME_MS;
+    this.fightAt = this.now;
     // 11/12 부재중 자동응답: 보호막이 먼저 받는다
     // 동지의 맹세: 받는 피해 감소
     dmg = Math.max(1, Math.round(dmg * (1 - this.mods.guard)));
@@ -1853,8 +1975,8 @@ export class HuntScene extends RpgScene {
   // ── 몬스터 ──
 
   private spawn(id: MonsterId, x: number, y: number, wave: number, elite = false): void {
-    // 11/15 번아웃 단계: 체력·공격력 × 1.35^단계, 방어 × 1.12^단계 (서버 검증과 같은 식 — lib/rpg/endgame)
-    const base = monsterStats(id, this.play.difficulty, this.zone.power, burnoutScale(this.play.burnout));
+    // 11/15 야근 빌딩: 기본 세기 하나(TOWER_POWER) × 층 배율 (체력·공격력 × 1.06^층, 방어 × 1.023^층 — lib/rpg/tower)
+    const base = this.play.tower ? monsterStats(id, "hell", TOWER_POWER, towerScale(this.floor)) : monsterStats(id, this.play.difficulty, this.zone.power);
     // 11/12 정예: 더 크고 질기다. EXP는 서버가 그 웨이브를 깼을 때 보너스로 더한다 (plan.eliteBonusExp)
     const st = elite
       ? { ...base, maxHp: Math.round(base.maxHp * ELITE.hp), atk: Math.round(base.atk * ELITE.atk), def: Math.round(base.def * ELITE.def), exp: Math.round(base.exp * ELITE.exp) }
@@ -2180,7 +2302,9 @@ export class HuntScene extends RpgScene {
     if (this.nextWave < this.plan.length) {
       const w = this.plan[this.nextWave];
       const prevDone = !aliveAll;
-      if ((prevDone && now >= w.earliestSec * 1000) || now - this.lastWaveAt >= WAVE_MAX_GAP_SEC * 1000) this.spawnWave();
+      if ((prevDone && now - this.floorAt >= w.earliestSec * 1000) || now - this.lastWaveAt >= WAVE_MAX_GAP_SEC * 1000) this.spawnWave();
+    } else if (this.play.tower) {
+      if (!aliveAll && !this.lift && !this.died && !this.endSnap) this.clearFloor();
     } else if (!aliveAll && !this.victoryAt && !this.died && !this.endSnap) {
       this.victoryAt = now + 1200;
       this.flash("모든 웨이브를 막아 냈어요!", 2000);
@@ -2188,7 +2312,7 @@ export class HuntScene extends RpgScene {
       // 결과는 지금 잡는다 (걸린 시간은 예전처럼 1.2초 뒤 끝난 것으로 → 랭킹 기록이 드롭 줍는 시간만큼 늘지 않는다)
       this.endRun({ ...this.result(), durationMs: Math.round(Math.min(this.victoryAt, this.limitMs)) }, false, 1200);
     }
-    if (!this.endSnap && now >= this.limitMs && !this.died) {
+    if (!this.endSnap && !this.lift && now >= this.runLimitMs && !this.died) {
       this.flash("시간이 다 됐어요", 1500);
       this.endRun(this.result(), true, 0);
     }
@@ -2241,7 +2365,8 @@ export class HuntScene extends RpgScene {
         this.py = p.y;
       }
       if (moving) {
-        this.setFace(a.x, a.y);
+        // 11/15 공격·스킬 판정 중에는 겨냥한 쪽을 그대로 본다 (뒷걸음질로 걷는다)
+        if (now >= this.faceLockUntil) this.setFace(a.x, a.y);
         this.walkT += delta;
       }
       this.movingNow = moving;
@@ -2256,6 +2381,8 @@ export class HuntScene extends RpgScene {
         }
         this.attack(false);
       }
+      // 11/15 자동 스킬 (0.4초에 하나, 판이 끝나 드롭만 줍는 중에는 안 쓴다)
+      if (this.auto.on && !this.endSnap && now - this.autoAt >= AUTO_GAP_MS) this.autoCast(now);
     }
     if (this.me) {
       this.me.place(Math.round(this.px), Math.round(this.py));
@@ -2363,9 +2490,10 @@ export class HuntScene extends RpgScene {
       maxHp: d.maxHp,
       sp: Math.round(this.sp),
       maxSp: d.maxSp,
-      leftMs: Math.max(0, this.limitMs - now),
+      leftMs: Math.max(0, this.runLimitMs - (this.lift ? this.floorMs : now)),
       score: this.killCount,
       wave: [Math.max(1, this.nextWave), this.plan.length],
+      ...(this.play.tower ? { floor: this.floor } : {}),
       kills: this.killCount,
       combo: this.combo,
       cooldowns: this.play.hotbar.map((id) => {
@@ -2374,6 +2502,9 @@ export class HuntScene extends RpgScene {
         return left > 0 ? left / this.cdOf(id) : 0;
       }),
       potionCooldown: Math.max(0, (this.potionReadyAt - now) / POTION_COOLDOWN_MS),
+      // 11/15 칸별 SP 비용 · 자동 상태
+      skillSp: this.play.hotbar.map((id) => (id ? (skillById(id)?.sp(this.play.skills[id] ?? 1) ?? 0) : 0)),
+      auto: { slots: this.play.hotbar.map((id, i) => i < SKILL_SLOTS && !!id && this.auto.ids.includes(id)), on: this.auto.on, keepUlt: this.auto.keepUlt },
       attack: Math.max(0, (this.atkReadyAt - now) / this.atkCdMs),
       peers: this.presence ? this.peers || undefined : undefined,
       attackBuffered: this.atkBuffered,
@@ -2399,7 +2530,8 @@ export class HuntScene extends RpgScene {
       // 테스트 서버 시험 드롭이 실린 판이면 서버가 그것을 준다 (승리·쓰러짐 관계없이) → 예측 대신 그대로
       if (this.play.testDrops?.length) drops = this.bossDropped ? [] : this.play.testDrops;
       // 11/15 연습 판(그날 초월 구간을 다 썼다): 서버가 드롭을 주지 않는다 → 떨구지 않는다
-      else if (!this.play.noDrops) {
+      // 11/15 야근 빌딩은 우두머리 층을 깰 때 상자를 떨궜다 (clearFloor)
+      else if (!this.play.noDrops && !this.play.tower) {
         drops = huntDropsFor(this.dropTicket(), r);
         // 우두머리 몫은 잡는 순간 이미 떨궜다 → 맨 앞(우두머리 몫)을 뺀 나머지만
         const b = this.bossDropped ? huntBossDrop(this.dropTicket()) : null;
@@ -2456,7 +2588,77 @@ export class HuntScene extends RpgScene {
 
   /** 드롭만 줍던 중에 나가도 판은 이미 끝났으니 정상 종료로 */
   protected finish(aborted = false): void {
+    if (aborted && !this.endSnap) this.quit = true;
     super.finish(aborted && !this.endSnap);
+  }
+
+  // ── 11/15 야근 빌딩: 층을 깨면 엘리베이터 → 다음 층 (체력·SP·버프·상태 이상은 그대로) ──
+
+  /** 지금 판(보통 사냥) 또는 지금 층(야근 빌딩)이 끝나는 시각 */
+  private get runLimitMs(): number {
+    return this.play.tower ? this.floorAt + towerFloorSec(this.floor) * 1000 : this.limitMs;
+  }
+
+  /** 층 클리어: 우두머리 층이면 체력 회복 + 상자(오늘 남은 만큼 — 서버와 같은 굴림), 잠시 뒤 엘리베이터 */
+  private clearFloor(): void {
+    const f = this.floor;
+    this.lift = true;
+    this.floorsCleared++;
+    this.floorMs = this.now;
+    this.sfx.play("victory");
+    if (isBossFloor(f)) {
+      const heal = Math.round(this.dv.maxHp * TOWER_BOSS_HEAL * this.curse.healMul);
+      this.hp = Math.min(this.dv.maxHp, this.hp + heal);
+      this.dmg.heal(this.px, this.py - 20, heal);
+      if (this.chestsLeft > 0) {
+        this.chestsLeft--;
+        try {
+          const drops = towerChestDrops(this.play.seed, f);
+          const src = this.lootSrc(this.lastKill);
+          if (drops.length) this.loot.drop(drops, src.x, src.y, false, 380);
+        } catch {
+          // 연출만 빠진다 (보상은 서버가)
+        }
+        this.flash(`${f}층 우두머리 처치! 체력 회복 · 우두머리 상자`, 2200);
+      } else this.flash(`${f}층 우두머리 처치! 체력 회복 (오늘 상자는 다 열었어요)`, 2200);
+    } else this.flash(`${f}층 클리어!`, 1500);
+    // 바닥에 떨어진 것을 끌어오고, 문이 닫힌다
+    this.later(1600, () => this.loot.rush());
+    this.later(2400, () => this.liftTo(f + 1));
+  }
+
+  /** 엘리베이터: 어두워졌다가 새 층 방(층 시드의 지도)에서 밝아지고, 층 표시가 크게 뜬다 */
+  private liftTo(f: number): void {
+    if (this.endSnap || this.ended) return;
+    const cam = this.cameras.main;
+    cam.fadeOut(260, 8, 8, 12);
+    this.sfx.play("tick");
+    this.later(320, () => {
+      if (this.endSnap || this.ended) return;
+      this.floor = f;
+      this.zone = towerZone(f);
+      this.curse = towerCurseFx(f);
+      this.plan = towerPlan(this.play.seed, f);
+      this.nextWave = 0;
+      this.waveAlive = this.plan.map(() => 0);
+      for (const sh of this.shots) sh.sprite.destroy();
+      this.shots = [];
+      for (const t of [...this.tele.all()]) this.tele.cancel(t);
+      this.arena.destroy();
+      this.arena = new Arena(this, this.zone.id, floorSeed(this.play.seed, f), this.arenaHooks);
+      this.px = this.arena.start.x;
+      this.py = this.arena.start.y;
+      // 문이 열리고 잠깐 숨 고른 뒤 첫 웨이브 (층 이름을 읽을 틈)
+      this.floorAt = this.lastWaveAt = this.now + 1400;
+      this.lift = false;
+      cam.fadeIn(360, 8, 8, 12);
+      const boss = isBossFloor(f);
+      const curse = CURSES.find((c) => c.from === f);
+      this.flash(`${f}층 · ${this.zone.name}${boss ? " · 우두머리 층" : ""}${curse ? ` · 새 저주 「${curse.name}」 ${curse.desc}` : ""}`, curse ? 3600 : 2200);
+      const t = this.label(this.px, this.py - 26, `${f}F`, boss ? "#ff9a7a" : "#ffe08a", 30).setDepth(1e6).setAlpha(0);
+      this.tweens.add({ targets: t, alpha: 1, y: this.py - 34, duration: 260, ease: "Quad.easeOut" });
+      this.tweens.add({ targets: t, alpha: 0, delay: 1100, duration: 500, onComplete: () => t.destroy() });
+    });
   }
 
   protected result(): HuntResult {
@@ -2468,6 +2670,7 @@ export class HuntScene extends RpgScene {
       wavesCleared: this.wavesCleared(),
       died: this.died,
       potionsUsed: { ...this.potionsUsed },
+      ...(this.play.tower ? { floors: this.floorsCleared, floorMs: Math.round(this.floorMs), ...(this.quit ? { quit: true } : {}) } : {}),
     };
   }
 }

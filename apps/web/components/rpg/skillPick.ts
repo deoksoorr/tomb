@@ -1,4 +1,5 @@
 import { skillById, type BranchId, type SkillId } from "@/lib/rpg/catalog";
+import { fitsSlot, isUltimate } from "@/lib/rpg/hotbar";
 
 // 스킬 창의 "선택" 규칙을 한곳에 모은 순수 로직. 선택 상태는 트리에서 고른 스킬 하나뿐이다.
 // (단축 칸이 따로 '선택된 칸'으로 남는 상태는 없다 — 칸을 누르면 넣거나, 비어 있는 선택일 때 그 칸의 스킬을 고를 뿐)
@@ -10,7 +11,8 @@ import { skillById, type BranchId, type SkillId } from "@/lib/rpg/catalog";
 //   - 끌어다 놓은 뒤 따라온 click → 무시 (끌기는 선택을 바꾸지 않는다).
 //   - 마우스 올림·Tab 포커스는 사건으로 받지 않는다 → 선택·설명이 바뀌지 않는다.
 //
-// ▸ 단축 칸을 누름 (slotPress) / 숫자 키 1~6 (keyPress)
+// ▸ 단축 칸을 누름 (slotPress) / 숫자 키 1~5·F (keyPress, F = 6)
+//   - 11/15 궁극기는 궁극기 칸(F)에만, 나머지는 1~5에만 (lib/rpg/hotbar fitsSlot) — 아니면 안내(ultOnly·notUlt).
 //   - 선택 없음: 칸에 스킬이 있으면 그 스킬을 선택(트리·설명이 그 스킬로), 빈 칸이면 안내. 숫자 키는 안내만.
 //   - 선택했지만 넣을 수 없음(패시브·안 배움): 이유 안내.
 //   - 선택한 스킬이 이미 그 칸에 있음: 안내(그대로).
@@ -60,8 +62,8 @@ export type SlotAction =
   | { do: "place"; id: SkillId; to: number }
   /** 칸의 스킬을 고른다 (선택이 없을 때만) */
   | { do: "select"; id: SkillId }
-  /** 안내만: empty 빈 칸(고른 스킬 없음) · pickFirst 숫자 키(고른 스킬 없음) · blocked 넣을 수 없는 스킬 · already 이미 그 칸 */
-  | { do: "hint"; why: "empty" | "pickFirst" | "blocked" | "already" }
+  /** 안내만: empty 빈 칸(고른 스킬 없음) · pickFirst 숫자 키(고른 스킬 없음) · blocked 넣을 수 없는 스킬 · already 이미 그 칸 · ultOnly 궁극기는 F 칸에만 · notUlt F 칸은 궁극기만 */
+  | { do: "hint"; why: "empty" | "pickFirst" | "blocked" | "already" | "ultOnly" | "notUlt" }
   /** 아무것도 안 함 (끌어다 놓은 뒤 따라온 click) */
   | { do: "none" };
 
@@ -78,7 +80,7 @@ export function slotPress(picked: SkillId | null, placeable: boolean, hotbar: Sl
   return putPicked(picked, placeable, hotbar, i);
 }
 
-/** 숫자 키 n(1~6)을 눌렀을 때 할 일. 선택이 없으면 칸의 스킬을 고르지 않고 안내만 한다 */
+/** 숫자 키 n(1~5, F = 6)을 눌렀을 때 할 일. 선택이 없으면 칸의 스킬을 고르지 않고 안내만 한다 */
 export function keyPress(picked: SkillId | null, placeable: boolean, hotbar: Slots, n: number): SlotAction {
   if (picked === null) return { do: "hint", why: "pickFirst" };
   return putPicked(picked, placeable, hotbar, n - 1);
@@ -87,6 +89,7 @@ export function keyPress(picked: SkillId | null, placeable: boolean, hotbar: Slo
 function putPicked(picked: SkillId, placeable: boolean, hotbar: Slots, i: number): SlotAction {
   if (!placeable) return { do: "hint", why: "blocked" };
   if (hotbar[i] === picked) return { do: "hint", why: "already" };
+  if (!fitsSlot(picked, i)) return { do: "hint", why: isUltimate(picked) ? "ultOnly" : "notUlt" };
   return { do: "place", id: picked, to: i };
 }
 
@@ -99,19 +102,23 @@ export type SlotLook = {
   previewNow: boolean;
 };
 
-/** 단축 칸 i의 테두리. drag는 끌고 있을 때만 (from: 끌기 시작한 칸, 트리 노드면 null), over는 포인터 아래 칸 */
+/**
+ * 단축 칸 i의 테두리. drag는 끌고 있을 때만 (from: 끌기 시작한 칸, 트리 노드면 null · id: 끄는 스킬), over는 포인터 아래 칸.
+ * 11/15 놓을 수 없는 칸(궁극기 ↔ 일반 칸)은 미리보기하지 않는다
+ */
 export function slotLook(
   i: number,
   hotbar: Slots,
   picked: SkillId | null,
   placeable: boolean,
-  drag: { from: number | null } | null,
+  drag: { from: number | null; id?: SkillId } | null,
   over: number | null,
 ): SlotLook {
   const mine = picked !== null && hotbar[i] === picked;
+  const dragId = drag ? (drag.id ?? (drag.from !== null ? hotbar[drag.from] : picked)) : null;
   return {
     mine,
-    canPreview: !drag && picked !== null && placeable && !mine,
-    previewNow: !!drag && over === i && drag.from !== i,
+    canPreview: !drag && picked !== null && placeable && !mine && fitsSlot(picked, i),
+    previewNow: !!drag && over === i && drag.from !== i && (!dragId || fitsSlot(dragId, i)),
   };
 }

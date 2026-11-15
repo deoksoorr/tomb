@@ -12,7 +12,8 @@ const DAY = 24 * HOUR;
 
 // megaphone(23번): 확성기. 쓰는 순간 소모되고, 채널(또는 모든 채널) 사람들의 왼쪽 위 확성기 창에 한마디가 뜬다
 // dye(46번): 염색권. 쓰면 부위 하나의 색이 바뀐다 (random = 무작위 팔레트에서 찾기, fixed = 정해진 색)
-export type ItemKind = "firework" | "cosmetic" | "decor" | "graveStyle" | "megaphone" | "dye";
+// unlock(11/15 수집 의뢰): 쓰는 물건이 아니라 가지고 있으면 열리는 것 (이모티콘 묶음 · 외형). 소모되지 않는다
+export type ItemKind = "firework" | "cosmetic" | "decor" | "graveStyle" | "megaphone" | "dye" | "unlock";
 // nameColor·namePlate(닉네임 꾸미기): 머리 위 이름표 글자 색 · 이름표 바탕판. 몸 그림에는 그려지지 않고 이름표·화면의 이름에만 보인다
 export type CosmeticSlot = "head" | "hand" | "aura" | "neck" | "back" | "pet" | "feet" | "nameColor" | "namePlate";
 
@@ -34,6 +35,14 @@ export type ItemDef = {
   staff?: true;
   /** 주간 랭킹 1위 전용 꾸미기: 상점 목록에 없고 사거나 영구로 살 수 없다. 1위가 되면 다음 1위가 정해질 때까지 빌려 입는다 (값 0 → 꾸미기 점수 0) */
   champ?: true;
+  /** 11/15 수집 의뢰 보상: 상점 목록에 없고 포인트로 살 수 없다. 의뢰 도장 교환소에서 받기만 한다 (꾸미기는 영구로) */
+  quest?: true;
+  /** 11/15 수집 의뢰 보상 등급 (프리미엄 외형 등급과 같은 색·연출: 일반·고급·희귀·전설) */
+  grade?: "common" | "fine" | "rare" | "legend";
+  /** kind = "unlock": 여는 것 (emo = 의뢰 이모티콘 묶음 QUEST_EMO_IDS, body = 외형 body) */
+  unlock?: "emo" | "body";
+  /** unlock = "body"일 때 여는 몸 id (constants QUEST_BODIES) */
+  body?: string;
 };
 
 export const COSMETIC_DURATION_MS = DAY;
@@ -201,6 +210,35 @@ export const ITEMS: readonly ItemDef[] = [
     ["np_tomb", "namePlate", "묘비석 이름표", "이 마을다운 작은 묘비석에 이름을 새겨요.", 180],
     ["np_star", "namePlate", "별 이름표", "밤하늘 조각에 별이 콕콕 박힌 이름표.", 240],
   ]),
+  // ── 11/15: 말랑 꾸미기 묶음 — 작고 말랑한 동물 친구 느낌(파스텔·동그란 귀·볼터치·점 눈). 다른 꾸미기와 같은 24시간·영구 규칙.
+  //    그림: 머리·목·손·등 web game/sprites/cuteGear.ts · 발자국·오라·펫 cuteFx.ts. 펫 둘은 동물원 사육사가 판다 (ZOO_PETS)
+  ...cosmetics([
+    // 머리
+    ["hat_bearband", "head", "말랑 곰 귀 머리띠", "쓰는 순간 결재 서류도 조금 말랑해 보여요.", 100],
+    ["hat_mochibun", "head", "찹쌀떡 토끼 모자", "귀가 축 처진 찹쌀떡 토끼. 월요일 아침 컨디션 그대로.", 180],
+    ["hat_hamhood", "head", "햄찌 털모자", "볼에 간식을 숨긴 채 회의에 들어가요.", 160],
+    ["hat_chicknest", "head", "병아리 둥지", "머리 위 둥지에 병아리가 삐약. 신입 시절의 나.", 140],
+    // 목
+    ["neck_bib", "neck", "딸기우유 턱받이", "점심 메뉴가 짬뽕인 날의 필수품.", 80],
+    ["neck_mochi", "neck", "찹쌀 목도리", "말랑한 크림색 털실 목도리. 분홍 줄무늬는 덤.", 100],
+    // 손
+    ["hand_bungeo", "hand", "붕어빵", "머리부터 먹을지 꼬리부터 먹을지, 오늘의 최대 고민.", 60],
+    ["hand_plush", "hand", "곰돌이 인형", "책상 위 모니터 옆을 지키던 그 곰돌이.", 140],
+    ["hand_dango", "hand", "삼색 경단 꼬치", "분홍·하양·연두. 하나씩 아껴 먹어요.", 80],
+    // 등
+    ["back_bunnybag", "back", "토끼 백팩", "뒤에서 보면 토끼가 빤히 쳐다봐요.", 180],
+    ["back_milkcape", "back", "딸기우유 망토", "분홍 물방울 망토. 퇴근길이 조금 달콤해져요.", 200],
+    // 발
+    ["feet_jelly", "feet", "젤리 발자국", "분홍·민트·레몬 젤리 발바닥 도장이 콩콩.", 120],
+    ["feet_mochi", "feet", "말랑 찹쌀 걸음", "걸을 때마다 볼 빨간 찹쌀떡이 퐁퐁.", 160],
+    // 오라
+    ["aura_cotton", "aura", "솜사탕 구름 오라", "분홍·하늘색 솜사탕 구름이 몽실몽실 떠올라요.", 180],
+    ["aura_sweets", "aura", "디저트 비", "머리 위로 마카롱·사탕·딸기가 톡톡. 다이어트는 내일부터.", 200],
+    // 펫 (동물원 사육사에게서 영구로만 — ZOO_PETS)
+    // id가 짧은 까닭: 착용 증서 길이 (옛 실시간 서버 400자 — 부위마다 가장 긴 id보다 길지 않게)
+    ["pet_ham", "pet", "꼬마 햄찌", "볼 빵빵한 꼬마 햄스터가 종종걸음으로 따라와요.", 500],
+    ["pet_mochi", "pet", "찹쌀 토끼", "말랑말랑 하얀 토끼가 통통 튀며 따라와요.", 600],
+  ]),
   // ── 31번 운영자 전용 꾸미기 (값 0: 운영자만 상점에서 영구로 받는다. 일반 계정은 사거나 입을 수 없다) ──
   ...cosmetics([
     ["staff_crown", "head", "운영자 왕관", "마을을 지키는 운영자의 검은 왕관. 운영자 전용.", 0],
@@ -227,6 +265,25 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "pet_hound", kind: "cosmetic", slot: "pet", name: "듬직한 큰 개", desc: "등에 태워 주는 커다란 개. 출근길이 두 배로 즐거워요. (타고 다닐 수 있어요)", price: 2000, durationMs: COSMETIC_DURATION_MS },
   { id: "pet_goose", kind: "cosmetic", slot: "pet", name: "왕거위", desc: "아무도 못 말리는 거위. 등에 타면 뒤뚱뒤뚱 신나게 달려요. (타고 다닐 수 있어요)", price: 2400, durationMs: COSMETIC_DURATION_MS },
   { id: "pet_deer", kind: "cosmetic", slot: "pet", name: "달빛 사슴", desc: "별빛 뿔을 단 사슴. 등에 타면 바람처럼 가볍게 달려요. (타고 다닐 수 있어요)", price: 3000, durationMs: COSMETIC_DURATION_MS },
+  // ── 11/15 수집 의뢰 보상 (도장 교환소 전용 — quest: 상점·포인트로는 못 산다. price = 꾸미기 점수용 가치, 꾸미기는 영구로 받는다) ──
+  //    그림: 머리·손·등 avatarGear.ts · 오라·펫·타는 펫 cosmeticFx.ts · 이름 lib/nameStyle.ts · 외형 avatar.ts · 이모티콘 emoArt.ts
+  ...([
+    { id: "qe_pack", kind: "unlock", unlock: "emo", grade: "fine", name: "수집가 이모티콘 8종 묶음", desc: "월척 자랑·빈 바구니·금빛 곤충·광맥 발견·발굴 성공·도감 완성·낚싯대 휘청·의뢰 완료 도장. 한 번 받으면 계속 써요.", price: 0 },
+    { id: "q_dye_pick", kind: "dye", dye: { mode: "pick" }, grade: "fine", name: "색 확정 염색권", desc: "흔들림도 운도 없이, 원하는 색을 골라 그대로 칠해요. (특수 색 제외)", price: 0 },
+    { id: "q_dye_special", kind: "dye", dye: { mode: "special" }, grade: "rare", name: "특수색 확정 염색권", desc: "금빛 광택·반짝이·무지개·야광 중 하나를 골라 부위 하나에 확실하게 입혀요.", price: 0 },
+    { id: "q_hat_angler", kind: "cosmetic", slot: "head", grade: "common", name: "낚시꾼 모자", desc: "찌와 바늘이 꽂힌 챙 모자. 월척 이야기는 매번 조금씩 커져요.", price: 160 },
+    { id: "q_hand_net", kind: "cosmetic", slot: "hand", grade: "common", name: "채집망", desc: "나비도 매미도 잠자리도. 놓친 건 다음 의뢰 때.", price: 160 },
+    { id: "q_hat_miner", kind: "cosmetic", slot: "head", grade: "fine", name: "광부 헬멧", desc: "이마 등불이 어두운 밤길을 비춰요. 광맥은 늘 한 칸 옆에.", price: 240 },
+    { id: "q_hand_brush", kind: "cosmetic", slot: "hand", grade: "common", name: "발굴 붓", desc: "살살, 아주 살살. 유물은 서두르면 깨져요.", price: 160 },
+    { id: "q_name_wave", kind: "cosmetic", slot: "namePlate", grade: "rare", name: "물결 이름표", desc: "잔잔한 물결이 이름 밑을 일렁이며 흘러가요.", price: 300 },
+    { id: "q_name_leaf", kind: "cosmetic", slot: "nameColor", grade: "fine", name: "나뭇잎 이름 글자", desc: "새순 연두에서 짙은 잎 초록으로. 가끔 작은 잎이 팔랑 떨어져요.", price: 240 },
+    { id: "q_aura_firefly", kind: "cosmetic", slot: "aura", grade: "rare", name: "반딧불 수집가 오라", desc: "모아 둔 반딧불이 줄지어 몸 둘레를 돌아요. 밤엔 더 환하게.", price: 360 },
+    { id: "q_pet_goldfish", kind: "cosmetic", slot: "pet", grade: "rare", name: "금붕어 펫", desc: "동그란 물방울 어항 속 금붕어가 둥실둥실 따라와요.", price: 900 },
+    { id: "q_aura_nightfish", kind: "cosmetic", slot: "aura", grade: "rare", name: "밤낚시 오라", desc: "발밑에 물결이 번지고, 달빛 윤슬이 몸 둘레에서 반짝여요. 가끔 은빛 물고기가 뛰어올라요.", price: 480 },
+    { id: "q_back_cape", kind: "cosmetic", slot: "back", grade: "rare", name: "채집왕 망토", desc: "등에 금실 나비 문장을 수놓은 보랏빛 금테 망토. 끝자락에서 금가루가 흩날려요.", price: 480 },
+    { id: "q_ride_carp", kind: "cosmetic", slot: "pet", grade: "rare", name: "월척 잉어 (타는 펫)", desc: "전설의 월척 비단잉어. 등에 타면 물 흐르듯 미끄러져요. (타고 다닐 수 있어요)", price: 3000 },
+    { id: "q_body_collector", kind: "unlock", unlock: "body", body: "collector", grade: "legend", name: "수집가 유령 (전설 외형)", desc: "등불과 표본 가방을 든 채집 장인 유령. 받으면 외형에서 언제든 바꿀 수 있어요.", price: 0 },
+  ] satisfies ItemDef[]).map((it) => ({ ...it, ...(it.kind === "cosmetic" ? { durationMs: COSMETIC_DURATION_MS } : {}), quest: true as const })),
 
   { id: "decor_candles", kind: "decor", name: "촛불 한 쌍", desc: "묘비 양옆에 작은 촛불.", price: 90, durationMs: DECOR_DURATION_MS },
   { id: "decor_wreath", kind: "decor", name: "꽃 화환", desc: "묘비 앞에 둥근 화환.", price: 150, durationMs: DECOR_DURATION_MS },
@@ -309,8 +366,8 @@ export function styleItemId(id: string): string | null {
  */
 export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "megaphone", "dye"];
 /** 상점 목록에 나오는지. 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — ZOO_PETS) */
-export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true }): boolean {
-  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ;
+export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; quest?: true }): boolean {
+  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.quest;
 }
 
 const byId = new Map(ITEMS.map((i) => [i.id, i]));
@@ -338,6 +395,27 @@ export function isStaffItem(id: unknown): boolean {
 /** 주간 랭킹 1위 전용 꾸미기인지 (사거나 영구로 살 수 없다) */
 export function isChampItem(id: unknown): boolean {
   return typeof id === "string" && byId.get(id)?.champ === true;
+}
+/** 11/15 수집 의뢰 보상인지 (상점·포인트로 살 수 없다 — 도장 교환소에서 받기만) */
+export function isQuestItem(id: unknown): boolean {
+  return typeof id === "string" && byId.get(id)?.quest === true;
+}
+/** 11/15 수집 의뢰 보상 id 전부 (도장 교환소·검증용) */
+export const QUEST_ITEM_IDS: readonly string[] = ITEMS.filter((i) => i.quest).map((i) => i.id);
+/** 의뢰 이모티콘 묶음 아이템 (가방에 1개 있으면 constants QUEST_EMO_IDS를 쓸 수 있다) */
+export const QUEST_EMO_PACK = "qe_pack";
+/**
+ * 의뢰 보상을 받는 방법: permanent = 영구 꾸미기(착용·벗어 둔 꾸미기에 PERMANENT_UNTIL로, 이미 있으면 못 받음),
+ * count = 가방 개수 +1 (염색권 — 쓰면 1개 소모), own = 가방에 1개 (이모티콘 묶음 — 소모되지 않음, 이미 있으면 못 받음),
+ * body = 외형 해금 (style 저장소의 소장 외형 목록에 추가)
+ */
+export function questGrantKind(id: string): "permanent" | "count" | "own" | "body" | null {
+  const it = byId.get(id);
+  if (!it?.quest) return null;
+  if (it.kind === "cosmetic") return "permanent";
+  if (it.kind === "dye") return "count";
+  if (it.unlock === "body") return "body";
+  return it.unlock === "emo" ? "own" : null;
 }
 /** 주간 랭킹 1위 전용 꾸미기 id 전부 (랭킹 모자 3종 · 쌍둥이 왕관 3종 · 삼관왕 대관) — 새 전용 모자를 줄 때 나머지를 거둔다 */
 export const CHAMP_ITEM_IDS: readonly string[] = ITEMS.filter((i) => i.champ).map((i) => i.id);
@@ -409,7 +487,9 @@ export type PetDef = { id: string; price: number; ride?: { speed: number } };
 export const ZOO_PETS: readonly PetDef[] = [
   { id: "pet_slime", price: 450 },
   { id: "pet_duck", price: 450 },
+  { id: "pet_ham", price: 500 }, // 11/15 말랑 꾸미기 묶음
   { id: "pet_bird", price: 550 },
+  { id: "pet_mochi", price: 600 }, // 11/15 말랑 꾸미기 묶음
   { id: "pet_ghost", price: 650 },
   { id: "pet_wisp", price: 700 },
   { id: "pet_cat", price: 900 },
@@ -420,6 +500,9 @@ export const ZOO_PETS: readonly PetDef[] = [
   { id: "pet_deer", price: 3000, ride: { speed: 1.35 } },
 ];
 const petMap = new Map(ZOO_PETS.map((p) => [p.id, p]));
+/** 11/15 수집 의뢰 보상 타는 펫 (사육사에게서 팔지 않는다 — petDef·petPrice엔 없고, 타기 규칙만 같다). 속도는 같은 1.35 이하 규칙 */
+export const QUEST_RIDES: readonly PetDef[] = [{ id: "q_ride_carp", price: 0, ride: { speed: 1.3 } }];
+const rideMap = new Map([...ZOO_PETS, ...QUEST_RIDES].filter((p) => p.ride).map((p) => [p.id, p.ride!]));
 /** 동물원 펫이면 그 정의 */
 export function petDef(id: string): PetDef | undefined {
   return petMap.get(id);
@@ -430,7 +513,7 @@ export function petPrice(id: string): number | null {
 }
 /** 타고 다닐 수 있는 펫인지 */
 export function isRideablePet(id: string | null | undefined): boolean {
-  return !!id && !!petMap.get(id)?.ride;
+  return !!id && rideMap.has(id);
 }
 /** 착용 목록에서 데리고 다니는 펫 (없으면 null) */
 export function petOfLook(look: readonly string[] | null | undefined): string | null {
@@ -444,7 +527,7 @@ export function ridePetOfLook(look: readonly string[] | null | undefined): strin
 }
 /** 타고 걷는 속도 배율 (타는 펫이 아니면 1) */
 export function rideSpeed(id: string | null | undefined): number {
-  return (id && petMap.get(id)?.ride?.speed) || 1;
+  return (id && rideMap.get(id)?.speed) || 1;
 }
 
 // ── 닉네임 꾸미기: 착용 목록에서 이름 글자·이름표 바탕판 (그리기는 web lib/nameStyle.ts) ──
@@ -511,16 +594,24 @@ export const TITLE_IDS = [
   // 사냥터 끝까지 깨기 (어려움·지옥)
   "t_hard",
   "t_hell",
-  // 11/15 사냥 끝판: 초월 레벨 ★60·★75·★90·★100 · 번아웃 단계 첫 클리어 5·10·20·30 · 개척자 (끝판이 열린 뒤 14일 안, 번호는 web이 따로 저장)
+  // 11/15 사냥 끝판: 초월 레벨 ★60·★75·★90·★100 · 야근 빌딩 층 10·20·30·50·100 · 개척자 (끝판이 열린 뒤 14일 안, 번호는 web이 따로 저장)
   "t_tlv60",
   "t_tlv75",
   "t_tlv90",
   "t_tlv100",
-  "t_burn5",
-  "t_burn10",
-  "t_burn20",
-  "t_burn30",
+  "t_floor10",
+  "t_floor20",
+  "t_floor30",
+  "t_floor50",
+  "t_floor100",
   "t_pioneer",
+  // 11/15 신화 (서버에 한 사람): 서버 최초 30·50·100층 · 첫 ★100 · 꼭대기 층 주인(기록을 뺏기면 넘어감) · 이번 주 최고층(지난주 1위, 한 주 동안)
+  "t_first30",
+  "t_first50",
+  "t_first100",
+  "t_firstStar100",
+  "t_topFloor",
+  "t_weekFloor",
   // 낚시 누적 마리 수
   "t_fishn50",
   "t_fishn300",
@@ -551,6 +642,12 @@ export const TITLE_IDS = [
   "t_look600",
   "t_look1500",
   "t_look3000",
+  // 11/15 수집 의뢰: 끝낸 수 50·300·1000·2500 · 수집왕 (도장 교환소 수집가 유령 외형)
+  "t_quest50",
+  "t_quest300",
+  "t_quest1k",
+  "t_quest2500",
+  "t_qking",
 ] as const;
 export type TitleId = (typeof TITLE_IDS)[number];
 const titleSet = new Set<string>(TITLE_IDS);

@@ -1,8 +1,9 @@
 "use client";
 
 import { BASE_RESHAPE_PRICE } from "@/lib/dye/rules";
+import { QUEST_BODY_REWARD, questRewardById } from "@/lib/forage/quests/catalog";
 import { useEffect, useState, type ReactNode } from "react";
-import { BODY_TIER_INFO, bodyLabel, bodyUnlockPrice, DYE_PART_NAMES, DYE_PARTS, isStaffBody, ITEMS, PREMIUM_BODIES, premiumBody, STAFF_BODIES, STARTER_BODIES, type DyePart, type ItemDef } from "@tomb/protocol";
+import { BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PART_NAMES, DYE_PARTS, isStaffBody, ITEMS, PREMIUM_BODIES, premiumBody, QUEST_BODIES, questBody, STAFF_BODIES, STARTER_BODIES, type DyePart, type ItemDef } from "@tomb/protocol";
 import { specDye, withDyePart } from "@/game/sprites/avatar";
 import { api, errorMessage } from "@/lib/api";
 import { dyeApi } from "@/lib/dye/client";
@@ -41,7 +42,8 @@ type Props = {
 
 export function ticketOf(item: ItemDef): DyeTicket | null {
   const d = item.dye;
-  if (!d) return null;
+  // 11/15 색 확정·특수색 확정(수집 의뢰)은 판·고정 색 창이 아니라 따로 (components/dye/DirectDyeDialog)
+  if (!d || d.mode === "pick" || d.mode === "special") return null;
   return d.mode === "random" ? { itemId: item.id, name: item.name, mode: "random", tier: d.tier } : { itemId: item.id, name: item.name, mode: "fixed", color: d.color, parts: d.parts };
 }
 
@@ -111,9 +113,11 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
   // 25번: 소장한 프리미엄 외형 (지금 그 몸이면 소장한 것과 같다 — 서버도 바꿀 때 소장 기록을 채운다)
   const unlocked = (id: string) => id === myBody || !!me?.bodies?.includes(id);
   /** 그 몸으로 바꾸는 값: 기본 6종은 싸게, 해금 전 프리미엄은 선택권 값, 소장한 프리미엄·운영자 외형은 무료 */
-  const bodyPrice = (id: string) => (premiumBody(id) ? (unlocked(id) ? 0 : (bodyUnlockPrice(id) ?? 0)) : id === myBody ? 0 : BASE_RESHAPE_PRICE);
-  const ownedBodies = [...STARTER_BODIES, ...PREMIUM_BODIES.filter((b) => unlocked(b.id))];
+  const bodyPrice = (id: string) => (premiumBody(id) || questBody(id) ? (unlocked(id) ? 0 : (bodyUnlockPrice(id) ?? 0)) : id === myBody ? 0 : BASE_RESHAPE_PRICE);
+  const ownedBodies = [...STARTER_BODIES, ...PREMIUM_BODIES.filter((b) => unlocked(b.id)), ...QUEST_BODIES.filter((b) => unlocked(b.id))];
   const lockedBodies = PREMIUM_BODIES.filter((b) => !unlocked(b.id));
+  // 11/15 수집 의뢰 외형: 도장 교환소에서만 받는다 (선택권으로 살 수 없다 — 받기 전엔 미리 보기만)
+  const lockedQuestBodies = QUEST_BODIES.filter((b) => !unlocked(b.id));
 
   const doReset = (part: DyePart) =>
     run(async () => {
@@ -162,7 +166,8 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
   } else if (sel.kind === "body") {
     previewBody = sel.body;
     const same = sel.body === myBody;
-    const prem = premiumBody(sel.body);
+    const prem = premiumBody(sel.body) ?? questBody(sel.body);
+    const questLocked = !!questBody(sel.body) && !unlocked(sel.body);
     const staffBody = isStaffBody(sel.body);
     const fresh = !!prem && !unlocked(sel.body);
     const price = bodyPrice(sel.body);
@@ -170,13 +175,17 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
     title = `${fresh ? "외형 선택권" : "외형 바꾸기"} · ${bodyLabel(sel.body)}`;
     desc = staffBody
       ? (STAFF_BODIES.find((b) => b.id === sel.body)?.desc ?? "")
-      : prem
+      : questLocked
+        ? `${prem!.desc} 수집 의뢰 도장 교환소(도장 ${questRewardById(QUEST_BODY_REWARD)?.price ?? 200}개)에서 받으면 영구 소장이라, 그다음부터는 언제든 무료로 바꿔요.`
+        : prem
         ? `${prem.desc} ${fresh ? `선택권(${price.toLocaleString("ko-KR")}P)을 한 번 사면 영구 소장이라, 그다음부터는 언제든 무료로 바꿔요.` : "소장 중인 외형이에요. 언제든 무료로 바꿀 수 있어요."} 염색한 색은 새 몸의 같은 부위로 따라가요.`
         : `기본 외형은 ${BASE_RESHAPE_PRICE}P로 바꿔요. 염색한 머리·몸·포인트 색은 새 몸의 같은 부위로 그대로 따라가요.`;
     action = (
-      <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={!me || pending || same || short(price)} onClick={() => doReshape(sel.body)}>
+      <button type="button" className={cx(ui.button, ui.primary, shop.buy)} disabled={!me || pending || same || questLocked || short(price)} onClick={() => doReshape(sel.body)}>
         {same
           ? "지금 이 모습이에요"
+          : questLocked
+            ? "수집 의뢰 도장 교환소에서 받아요"
           : staffBody
             ? "운영자 전용 · 이 모습으로"
             : fresh
@@ -198,7 +207,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
     );
   }
 
-  const selTier = sel.kind === "body" ? premiumBody(sel.body)?.tier : undefined;
+  const selTier = sel.kind === "body" ? (bodyTier(sel.body) ?? undefined) : undefined;
   const fixedOwned = Object.values(tickets).filter((d) => owned(d.id) > 0);
 
   // 프리미엄 외형은 카드 테두리·썸네일 빛을 등급 색으로 (ShopDialog.module.css .tile[data-tier])
@@ -207,7 +216,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
       <button
         type="button"
         className={shop.tile}
-        data-tier={premiumBody(id)?.tier}
+        data-tier={bodyTier(id) ?? undefined}
         aria-pressed={sel.kind === "body" && sel.body === id}
         onClick={() => setSel({ kind: "body", body: id })}
       >
@@ -288,7 +297,7 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
                 b.label,
                 b.id === myBody ? (
                   <span className={shop.badge}>지금</span>
-                ) : premiumBody(b.id) ? (
+                ) : premiumBody(b.id) || questBody(b.id) ? (
                   <>
                     무료<span className={shop.badge}>소장 중</span>
                   </>
@@ -309,6 +318,23 @@ export default function StylePanel({ me, avatar, look, onNotice }: Props) {
                     b.label,
                     <>
                       {BODY_TIER_INFO[b.tier].price.toLocaleString("ko-KR")}P<span className={shop.badge} data-tier={b.tier}>{BODY_TIER_INFO[b.tier].label}</span>
+                    </>,
+                  ),
+                )}
+              </ul>
+            </>
+          )}
+
+          {lockedQuestBodies.length > 0 && (
+            <>
+              <h3 className={styles.heading}>수집 의뢰 외형 · 도장 교환소에서 받아요</h3>
+              <ul className={shop.grid} aria-label="수집 의뢰 외형">
+                {lockedQuestBodies.map((b) =>
+                  bodyTile(
+                    b.id,
+                    b.label,
+                    <>
+                      도장 교환소<span className={shop.badge} data-tier={b.tier}>{BODY_TIER_INFO[b.tier].label}</span>
                     </>,
                   ),
                 )}

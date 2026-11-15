@@ -1,6 +1,8 @@
 import {
   AVATAR_COLORS,
   BOAT_SEATS,
+  DUCK_DOCK,
+  DUCK_SIDE_SEAT,
   FERRY_DOCK,
   CLOSE,
   DIR,
@@ -1073,6 +1075,68 @@ describe("rowboat: a moving one-person seat (50)", () => {
     // 배의 앵커(나루터) 위로 새로 들어온 사람은 옮겨지지 않는다 (배는 나가 있다)
     const c = next.join("c", 11_000, { x: A.x, y: A.y });
     expect(next.core.peer(welcome(c).sid)).toMatchObject({ x: A.x, y: A.y });
+  });
+});
+
+describe("duck pedal boats on the duck pond: two seats side by side (11/15)", () => {
+  const L = BOAT_SEATS.find((b) => b.boatId === "duckB" && b.index === 0)!;
+  const R = BOAT_SEATS.find((b) => b.boatId === "duckB" && b.index === 1)!;
+  const DOCK = { x: DUCK_DOCK.x, y: DUCK_DOCK.y };
+
+  it("duck seats are fixed moving boat seats; the side seat sits to the right of the steering seat", () => {
+    expect(R.x - L.x).toBe(DUCK_SIDE_SEAT);
+    const { core, join } = setup();
+    const a = join("a", 0, DOCK);
+    const b = join("b", 0, DOCK);
+    core.message(a, send({ t: "sit", seatId: L.id }), 0);
+    core.message(b, send({ t: "sit", seatId: L.id }), 0);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: L.id });
+    core.message(b, send({ t: "sit", seatId: R.id }), 0);
+    expect(core.peer(1)).toMatchObject({ seatId: L.id, state: STATE.boat });
+    expect(core.peer(2)).toMatchObject({ seatId: R.id, state: STATE.boat });
+    // 같이 페달을 밟아 나간다 → 서버 위치가 따라간다
+    core.message(a, move(L.x - 24, L.y + 20, STATE.boat, DIR.left), 2_000);
+    core.message(b, move(R.x - 24, R.y + 20, STATE.boat, DIR.left), 2_000);
+    core.tick(2_050);
+    expect(core.peer(2)).toMatchObject({ seatId: R.id, x: R.x - 24, y: R.y + 20 });
+    // 조종하던 사람이 둑으로 내린다 → 옆자리 사람이 왼쪽 자리로 옮겨 앉아 조종 (같은 배 안이라 거리와 상관없이)
+    core.message(a, move(L.x - 24, L.y - 30, STATE.idle), 3_000);
+    core.message(b, send({ t: "sit", seatId: L.id }), 3_000);
+    expect(core.peer(2)).toMatchObject({ seatId: L.id, state: STATE.boat });
+    expect(events(a)).toContainEqual({ t: "seat", seatId: R.id, sid: null });
+  });
+
+  it("from the ferry dock (far from the duck pond) a duck boat is denied; beside a steering duck boat on the shore, the free side seat is allowed", () => {
+    const { core, join } = setup();
+    const f = join("f", 0, { x: FERRY_DOCK.x, y: FERRY_DOCK.y });
+    core.message(f, send({ t: "sit", seatId: L.id }), 0);
+    expect(events(f)).toContainEqual({ t: "seatDenied", seatId: L.id });
+    const r = join("r", 0, DOCK);
+    core.message(r, send({ t: "sit", seatId: L.id }), 0);
+    for (let i = 1; i <= 3; i++) {
+      core.message(r, move(L.x - 30 * i, L.y + 20 * i, STATE.boat, DIR.left), i * 1_000);
+      core.tick(i * 1_000 + 50);
+    }
+    const at = { x: L.x - 90, y: L.y + 60 };
+    expect(core.peer(2)).toMatchObject({ seatId: L.id, x: at.x, y: at.y });
+    const p = join("p", 4_000, { x: at.x + DUCK_SIDE_SEAT, y: at.y + 24 });
+    core.message(p, send({ t: "sit", seatId: R.id }), 4_000);
+    expect(core.peer(3)).toMatchObject({ seatId: R.id, state: STATE.boat });
+  });
+
+  it("quack is a relayed act, rate-limited like the others", () => {
+    const { core, join } = setup();
+    const a = join("a", 0, DOCK);
+    const b = join("b");
+    clear(a, b);
+    core.message(a, send({ t: "act", kind: "quack" }), 0);
+    core.message(a, send({ t: "act", kind: "quack" }), 1_500);
+    core.message(a, send({ t: "act", kind: "honk" } as never), 3_000);
+    core.message(a, send({ t: "act", kind: "quack" }), 3_000);
+    expect(events(b)).toEqual([
+      { t: "act", sid: 1, kind: "quack", x: DOCK.x, y: DOCK.y },
+      { t: "act", sid: 1, kind: "quack", x: DOCK.x, y: DOCK.y },
+    ]);
   });
 });
 

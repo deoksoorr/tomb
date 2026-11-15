@@ -83,7 +83,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 14 = 지옥 사냥터 2곳·사냥터 기준 EXP·레이스 — 모두 한 번 새로고침 (11/15)
 // 15 = 사냥 끝판 1단계(초월 레벨·번아웃 단계)·끝판 칭호 id — 모두 한 번 새로고침 (11/15)
 // 16 = 운영자 이름표·전용 칭호(운영자도 닉네임 그대로, 머리 위 「운영자」) — 모두 한 번 새로고침 (11/15)
-export const CLIENT_VERSION = 16;
+// 17 = 야근 빌딩·스킬 자동·떠다니는 조이스틱·수집 의뢰·의뢰 보상·귀여운 꾸미기·오리배 — 모두 한 번 새로고침 (11/15)
+export const CLIENT_VERSION = 17;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
@@ -165,8 +166,16 @@ export const PREMIUM_BODIES = [
 /** 운영자(31번) 계정만 쓸 수 있는 몸. 서버(web 외형 바꾸기·입장 토큰, 실시간 서버)가 운영자가 아니면 막는다 */
 export const STAFF_BODIES = [{ id: "reaper", label: "저승사자", desc: "갓과 검은 도포의 저승사자. 운영자 전용이에요. 포인트 색은 갓끈 구슬이에요." }] as const;
 
+/**
+ * 11/15 수집 의뢰 보상 외형: 선택권으로 살 수 없고, 도장 교환소에서 받은(items q_body_collector) 계정만 바꿀 수 있다
+ * (web 외형 바꾸기가 소장 목록을 확인한다). 등급 연출은 프리미엄 외형과 같다
+ */
+export const QUEST_BODIES = [
+  { id: "collector", label: "수집가 유령", tier: "legend", item: "q_body_collector", desc: "등불을 들고 표본 가방을 멘 채집 장인 유령. 수집 의뢰 전용이에요. 포인트 색은 가방 끈과 탐험 모자 띠예요." },
+] as const;
+
 /** 아바타 몸 모양 전부 (검증·그리기용). 옛 클라이언트는 모르는 몸을 후드 유령으로 그린다 */
-export const AVATAR_BODIES = [...STARTER_BODIES, ...PREMIUM_BODIES, ...STAFF_BODIES] as const;
+export const AVATAR_BODIES = [...STARTER_BODIES, ...PREMIUM_BODIES, ...STAFF_BODIES, ...QUEST_BODIES] as const;
 export type AvatarBody = (typeof AVATAR_BODIES)[number]["id"];
 export type PremiumBody = (typeof PREMIUM_BODIES)[number];
 export function isAvatarBody(b: unknown): b is AvatarBody {
@@ -179,6 +188,14 @@ export function isStarterBody(b: unknown): b is (typeof STARTER_BODIES)[number][
 /** 프리미엄 외형이면 그 정의 */
 export function premiumBody(b: unknown): PremiumBody | undefined {
   return PREMIUM_BODIES.find((x) => x.id === b);
+}
+/** 수집 의뢰 보상 외형이면 그 정의 */
+export function questBody(b: unknown): (typeof QUEST_BODIES)[number] | undefined {
+  return QUEST_BODIES.find((x) => x.id === b);
+}
+/** 외형 등급 (프리미엄·의뢰 보상 외형, 아니면 null) — 등급 연출·꾸미기 점수용 */
+export function bodyTier(b: unknown): BodyTier | null {
+  return premiumBody(b)?.tier ?? questBody(b)?.tier ?? null;
 }
 /** 운영자 전용 몸인지 */
 export function isStaffBody(b: unknown): boolean {
@@ -198,8 +215,11 @@ export function staffGateBody<T extends string>(body: T, staff: boolean): T | "h
   return !staff && isStaffBody(body) ? "hood" : body;
 }
 
-/** 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호 */
-export const ACT_KINDS = ["bell", "splash", "wave", "cheer"] as const;
+/**
+ * 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호·오리배 꽥(11/15).
+ * 서버가 이 목록으로 받을 동작을 정한다 (늘리면 realtime 재배포). 옛 클라이언트는 모르는 동작을 그냥 버린다
+ */
+export const ACT_KINDS = ["bell", "splash", "wave", "cheer", "quack"] as const;
 export type ActKind = (typeof ACT_KINDS)[number];
 
 /**
@@ -273,7 +293,18 @@ export const EMOS = [
   { id: "ghost", label: "유령" },
   { id: "tomb", label: "묘비" },
   { id: "candle", label: "촛불" },
+  // 11/15 수집 의뢰 이모티콘 묶음 (items qe_pack을 가진 계정만 — 창에서 잠금 표시. 실시간 서버는 소유를 모른다)
+  { id: "bigfish", label: "월척 자랑" },
+  { id: "nobasket", label: "빈 바구니" },
+  { id: "goldbug", label: "금빛 곤충" },
+  { id: "orevein", label: "광맥 발견" },
+  { id: "digfind", label: "발굴 성공" },
+  { id: "dexdone", label: "도감 완성" },
+  { id: "rodbend", label: "낚싯대 휘청" },
+  { id: "qstamp", label: "의뢰 완료 도장" },
 ] as const;
+/** 수집 의뢰 이모티콘 묶음 (qe_pack) — EMOS 맨 끝 8개 */
+export const QUEST_EMO_IDS = ["bigfish", "nobasket", "goldbug", "orevein", "digfind", "dexdone", "rodbend", "qstamp"] as const;
 export type EmoId = (typeof EMOS)[number]["id"];
 export function isEmoId(id: unknown): id is EmoId {
   return typeof id === "string" && EMOS.some((e) => e.id === id);

@@ -1,4 +1,4 @@
-import { premiumBody } from "@tomb/protocol";
+import { bodyTier } from "@tomb/protocol";
 import { BODY_PART_PREFIX } from "@/lib/lookScore";
 import { avatarFrameGrid } from "./avatar";
 import { Grid } from "./pixel";
@@ -13,7 +13,7 @@ const SIZE = 16;
 const SHRINK_OVER = 24;
 
 export function isBodyIconId(itemId: string): boolean {
-  return itemId.startsWith(BODY_PART_PREFIX) && !!premiumBody(itemId.slice(BODY_PART_PREFIX.length));
+  return itemId.startsWith(BODY_PART_PREFIX) && !!bodyTier(itemId.slice(BODY_PART_PREFIX.length));
 }
 
 /** 그림이 있는 칸의 경계 */

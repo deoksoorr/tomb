@@ -40,7 +40,7 @@ import { DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
 import { bonusText, pts } from "./format";
 import { bagGear, deltaText, equipTarget, gearDiff, gearGrade, sellable, sellWarning, slotAccepts } from "./gear";
-import { BurnoutBox, PioneerLine, TranscendDay } from "./Endgame";
+import { TranscendDay } from "./Endgame";
 import HuntCapMeter from "./HuntCap";
 import RpgIcon from "./RpgIcon";
 import ZonePicker, { ZoneInfo, zoneOpen, zoneUnlockAll } from "./ZonePicker";
@@ -74,7 +74,6 @@ export function StartPanel({
   onStart,
   busy,
   onGuide,
-  onBurnout,
 }: {
   view: RpgView;
   game: GameKind;
@@ -87,8 +86,6 @@ export function StartPanel({
   busy: boolean;
   /** 사냥 안내서 열기 */
   onGuide?: () => void;
-  /** 11/15 번아웃 단계 도전 (레벨 50) */
-  onBurnout?: (tier: number) => void;
 }) {
   const c = view.character;
   const zone = zoneFor(diff, zoneId);
@@ -119,12 +116,11 @@ export function StartPanel({
       <div className={s.lobby}>
         <HuntCapMeter today={view.today} where="start" />
         {view.endgame && <TranscendDay eg={view.endgame} />}
-        {/* 11/15 번아웃 단계: 레벨 50이면 사냥터 고르기보다 위에 (50 이후 성장의 중심) */}
-        {view.endgame && onBurnout && (
-          <>
-            <BurnoutBox view={view} busy={busy} onStart={onBurnout} />
-            <PioneerLine eg={view.endgame} />
-          </>
+        {/* 11/15 레벨 50 이후의 중심은 마을의 야근 빌딩 (사냥터 창에서는 안내 한 줄만) */}
+        {view.endgame && (
+          <p className={s.towerHint}>
+            <b>레벨 50:</b> 마을의 야근 빌딩에 들어갈 수 있어요 (마을 북쪽 분양 사무소 옆 높은 건물). 지옥 사냥터도 초월 EXP를 줘요.
+          </p>
         )}
         <section className={s.section} aria-label="사냥터 고르기">
           <ZonePicker

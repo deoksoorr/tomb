@@ -1,0 +1,61 @@
+/* 11/15 떠다니는 조이스틱: 왼쪽 약 45% (위 HUD 아래). 크기는 화면에 맞춘다 */
+.zone {
+  --stick: clamp(120px, 22vmin, 200px);
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 45%;
+  top: clamp(96px, 26%, 240px);
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.zone[data-hidden] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.base {
+  position: absolute;
+  width: var(--stick);
+  height: var(--stick);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(20, 21, 17, 0.45);
+  box-shadow:
+    inset 0 0 0 2px rgba(93, 97, 79, 0.7),
+    0 0 0 2px rgba(9, 10, 8, 0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  /* 놓으면 흐린 원만 (어디를 누르면 되는지) */
+  opacity: 0.28;
+  transition: opacity 0.15s;
+}
+
+/* 처음 자리: 왼쪽 아래 (안전 여백 + 반지름) */
+.base[data-default] {
+  left: calc(var(--safe-left, 12px) + var(--stick) / 2);
+  top: calc(100% - var(--safe-bottom, 12px) - var(--stick) / 2);
+}
+
+.base[data-active] {
+  opacity: 1;
+  transition: none;
+}
+
+.knob {
+  width: 42%;
+  height: 42%;
+  border-radius: 50%;
+  background: rgba(236, 224, 189, 0.22);
+  box-shadow: inset 0 0 0 2px rgba(236, 224, 189, 0.5);
+  pointer-events: none;
+}
+
+.base[data-active] .knob {
+  background: rgba(236, 224, 189, 0.32);
+}

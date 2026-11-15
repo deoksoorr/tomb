@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { BRANCHES, HOTBAR_SIZE, SKILLS, type SkillId } from "@/lib/rpg/catalog";
+import { fitsSlot, ULT_SLOT } from "@/lib/rpg/hotbar";
 import { initialPick, keyPress, nextPick, slotLook, slotPress, type PickState } from "./skillPick";
 
 const [b1, b2] = BRANCHES;
@@ -101,14 +102,16 @@ describe("slotLook (단축 칸 테두리는 두 경우뿐)", () => {
   it("① 고른 스킬이 든 칸만 mine, ② 나머지 칸은 마우스를 올리면 미리보기 가능", () => {
     const looks = all(A);
     expect(looks.map((l) => l.mine)).toEqual([true, false, false, false, false, false]);
-    expect(looks.map((l) => l.canPreview)).toEqual([false, true, true, true, true, true]);
+    // 11/15 6번째(궁극기 칸 F)는 일반 스킬을 받지 않는다
+    expect(looks.map((l) => l.canPreview)).toEqual([false, true, true, true, true, false]);
     expect(looks.some((l) => l.previewNow)).toBe(false);
   });
 
   it("고른 스킬이 아직 칸에 없으면 mine 없음, 모든 칸이 미리보기 가능", () => {
     const bar2: (SkillId | null)[] = [A, null, null, null, null, null];
     const looks = Array.from({ length: HOTBAR_SIZE }, (_, i) => slotLook(i, bar2, B, true, null, null));
-    expect(looks.every((l) => !l.mine && l.canPreview)).toBe(true);
+    expect(looks.slice(0, ULT_SLOT).every((l) => !l.mine && l.canPreview)).toBe(true);
+    expect(looks[ULT_SLOT].canPreview).toBe(false);
   });
 
   it("패시브·안 배운 스킬: 미리보기 없음 (칸에 들어 있을 수도 없으니 mine도 없음)", () => {
@@ -121,7 +124,9 @@ describe("slotLook (단축 칸 테두리는 두 경우뿐)", () => {
     expect(fromNode.some((l) => l.canPreview)).toBe(false);
     expect(fromNode[0].mine).toBe(true);
     expect(all(null, { from: 2 }, 2).some((l) => l.previewNow)).toBe(false);
-    expect(all(null, { from: 2 }, 5)[5].previewNow).toBe(true);
+    expect(all(null, { from: 2 }, 4)[4].previewNow).toBe(true);
+    // 일반 스킬을 궁극기 칸 위로 끌면 미리보기 없음
+    expect(all(null, { from: 2 }, 5)[5].previewNow).toBe(false);
     expect(all(null, { from: 2 }, null).some((l) => l.previewNow)).toBe(false);
   });
 });
@@ -195,7 +200,7 @@ describe("클릭 순서 조합 (모든 1~3단계 순서)", () => {
           // mine은 고른 스킬이 든 칸 하나뿐
           expect(looks.filter((l) => l.mine).length).toBe(p !== null && w.bar.includes(p) ? 1 : 0);
           // 미리보기는 넣을 수 있는 스킬을 골랐을 때만, mine 칸은 빼고
-          looks.forEach((l) => expect(l.canPreview).toBe(isPlaceable(p) && !l.mine));
+          looks.forEach((l, i) => expect(l.canPreview).toBe(isPlaceable(p) && !l.mine && fitsSlot(p!, i)));
           // 칸 누름·숫자 키: 선택이 있었으면 그대로 유지(등록 후에도), 없었으면 칸의 스킬 하나만 고르거나 그대로
           if (e.k === "slot" || e.k === "key") {
             if (before.sel.picked !== null) expect(w.sel.picked).toBe(before.sel.picked);
@@ -236,8 +241,22 @@ describe("클릭 순서 조합 (모든 1~3단계 순서)", () => {
   it("대표 흐름: 선택 없이 칸 누름 → 그 칸 스킬 선택(갈래도 이동) → 다른 칸 누름 → 옮김", () => {
     let w = step(start, { k: "slot", i: 2 });
     expect(w.sel).toEqual({ branch: b2, picked: C });
-    w = step(w, { k: "slot", i: 5 });
-    expect(w.bar).toEqual([A, null, null, null, null, C]);
+    w = step(w, { k: "slot", i: 4 });
+    expect(w.bar).toEqual([A, null, null, null, C, null]);
+    // 11/15 궁극기 칸(F)에는 일반 스킬이 안 들어간다 (안내만)
+    const before = w.bar;
+    w = step(w, { k: "slot", i: ULT_SLOT });
+    expect(w.bar).toBe(before);
+  });
+
+  it("11/15 궁극기: F 칸(키 6번째)에만, 1~5 칸은 안내", () => {
+    const ult = "em_bonfire" as SkillId;
+    const bar: (SkillId | null)[] = [A, null, null, null, null, null];
+    expect(slotPress(ult, true, bar, 1)).toEqual({ do: "hint", why: "ultOnly" });
+    expect(slotPress(A, true, bar, ULT_SLOT)).toEqual({ do: "hint", why: "notUlt" });
+    expect(keyPress(ult, true, bar, ULT_SLOT + 1)).toEqual({ do: "place", id: ult, to: ULT_SLOT });
+    expect(slotLook(ULT_SLOT, bar, ult, true, null, null).canPreview).toBe(true);
+    expect(slotLook(0, bar, ult, true, null, null).canPreview).toBe(false);
   });
 
   it("대표 흐름: 패시브 고른 채 채운 칸 누름 → 칸 스킬로 바뀌지 않고 안내만", () => {

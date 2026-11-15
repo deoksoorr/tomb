@@ -128,6 +128,12 @@ export class MemoryStyle implements StyleStore {
     return { dye: { ...(s?.dye ?? {}) }, session: s?.session ? { ...s.session } : null, bodies: [...(s?.bodies ?? [])] };
   }
 
+  /** 11/15 수집 의뢰 교환소: 외형 해금 (소장 기록 bodies에 더한다, 동기 — MemoryQuestStore가 부른다) */
+  giveBody(id: string, body: string): void {
+    const s = this.st(id);
+    if (!(s.bodies ?? []).includes(body)) s.bodies = [...(s.bodies ?? []), body];
+  }
+
   async begin(id: string, itemId: string, session: DyeSession) {
     const s = this.st(id);
     if (s.session) return { session: { ...s.session }, resumed: true };

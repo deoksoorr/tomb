@@ -347,6 +347,8 @@ export class AvatarView {
     if (b === this.body) return;
     this.body = b;
     this.shoulder = BODY_METRICS[b].shoulder;
+    // 11/15 수집가 유령은 채집 등불을 들고 있다 (밤 빛)
+    this.lantern = this.look.includes("hand_lantern") || this.look.includes("hand_lantern_blue") || this.look.includes("q_hat_miner") || b === "collector";
     // 25번 프리미엄 외형 등급 연출은 몸에 딸린다 (다른 사람 화면에서도 몸 id로 똑같이)
     if (this.cfx || bodyFx(b)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, b, this.champ, !!this.staffFx);
     this.relayout();
@@ -385,7 +387,8 @@ export class AvatarView {
   /** 꾸미기 착용 변경 (바로 반영) */
   setLook(look: readonly string[]): void {
     this.look = look.slice();
-    this.lantern = look.includes("hand_lantern") || look.includes("hand_lantern_blue");
+    // 11/15 광부 헬멧 이마 등불 · 수집가 유령 채집 등불도 밤에 둘레를 밝힌다
+    this.lantern = look.includes("hand_lantern") || look.includes("hand_lantern_blue") || look.includes("q_hat_miner") || this.body === "collector";
     const mount = ridePetOfLook(look);
     if (mount !== this.mountPet) {
       this.mountPet = mount;
@@ -611,6 +614,8 @@ export class AvatarView {
   playAct(kind: ActKind, now: number): void {
     // 이모티콘은 어떤 자세에서든 이름표 위에 뜬다 (같은 채널 모두에게)
     if (kind === "wave" || kind === "cheer") this.emote(kind, now);
+    // 11/15 오리배 꽥: 머리 위 "꽥!" 말풍선만 (몸짓 없음)
+    if (kind === "quack") return this.say("꽥!", now);
     const s = this.state;
     if (s === "swim" || s === "dive" || s === "hang" || s === "swing" || s === "hammock" || s === "sitGround" || s === "sitChair" || s === "jump") return;
     if (s === "boat" || s === "seesaw" || s === "trampoline" || s === "carousel") return;

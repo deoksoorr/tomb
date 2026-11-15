@@ -6,6 +6,7 @@ import { forageIconCanvas, isForageIcon } from "./forageIcons";
 import { GRAVE_STONE_H, graveCanvas } from "./graves";
 import { MEGAPHONE_ICON_IDS, megaphoneIcon } from "./megaphoneIcon";
 import { bodyIconGrid, isBodyIconId } from "./bodyIcons";
+import { BODY_PART_PREFIX } from "@/lib/lookScore";
 import { DYE_ICON_IDS, dyeIcon } from "./dyeIcons";
 import { NAME_STYLE_ICON_IDS, nameStyleIcon } from "./nameStyleIcons";
 import { Grid, type Color } from "./pixel";
@@ -834,7 +835,48 @@ const GEAR_ICONS: Record<string, Ascii> = {
     rows: ["", "..bb........bb", "..kkkkkkkkkkkk", "..kskkkkkkkkkr", ".kskkkkkkkkkkkr", ".kskkkkkkkkkkkr", "kskkkkkkkkkkkkkr", "kskkkkkkkkkkkkkr", "kskkkkkkkkkkkkkr", "kskkkkkkkkkkkkkr", "k.kk.kk.kk.kk.kr"],
     pal: { k: 0x24222c, s: 0x3a3846, r: 0x8a2430, b: 0x6ae0ff },
   },
+  // ── 11/15 수집 의뢰 보상 ──
+  q_hat_angler: {
+    rows: ["..........w", "..........r", "..........W", ".....hhhhhWhh", "....hcccccccccl", "....hcccccccccl", "....bbbbbbybfbl", "..lccccccccccccl", ".llllllllllllllll"],
+    pal: { h: 0x9ab46e, c: 0x76904e, l: 0x55703a, b: 0x3c4e2a, w: 0xfff4e0, r: 0xe8403a, W: 0xf4f0e6, y: 0xffd04a, f: 0x3ab0e0 },
+  },
+  q_hat_miner: {
+    rows: ["", "......hhhh", "....hhcccccl", "...hcccgggccl", "...hccgwwgccl", "..hcccgwwgcccl", "..hcccggggcccl", "..hccccccccccl", ".llllllllllllll"],
+    pal: { h: 0xf6c070, c: 0xd98a2e, l: 0xa2581a, g: 0x4a4a58, w: 0xfff8d8 },
+  },
+  q_hand_net: {
+    rows: [".....rrrr", "....rm.m.r", "...r.m.m.mr", "...rm.m.m.r", "....rm.m.r", ".....rrrr", ".....mfm", "......m", ".......p", "........P", ".........p", "..........p", "...........P", "............p", ".............p"],
+    pal: { r: 0x2e9a62, m: 0xeaf4f0, f: 0xff8a2a, p: 0xd0a868, P: 0x94703e },
+  },
+  q_hand_brush: {
+    rows: ["", "...b.b.b", "...bbBbb", "...bBbBb", "....bbb", ".....g", "......w", ".......w", "........W", ".........w", "..........w", "...........W", "............w"],
+    pal: { b: 0xf0dca8, B: 0xd8bc80, g: 0xe0b040, w: 0x8a5a32, W: 0x5a3820 },
+  },
+  q_back_cape: {
+    rows: ["", "..yy........yy", "..yyyyyyyyyyyy", "..rhrrrrrrrrrl", ".rhrrrryrrrrrrl", ".rhrryyyyyrrrrl", "rhrrrryyyrrrrrrl", "rhrrrrryrrrrrrrl", "rhrrrrrrrrrrrrrl", "yyyyyyyyyyyyyyyy", "y.yy.yy.yy.yy.yy"],
+    pal: { r: 0x5a3a9e, h: 0x7e5cc8, l: 0x3c2672, y: 0xf2c43a },
+  },
 };
+
+/** 11/15 수집 의뢰 보상 중 꾸미기가 아닌 것: 이모티콘 묶음(붉은 의뢰 도장 + 말풍선) · 수집가 유령 외형 */
+function questUnlockIcon(id: string): Grid | null {
+  if (id === "q_body_collector") return bodyIconGrid(`${BODY_PART_PREFIX}collector`);
+  if (id !== "qe_pack") return null;
+  const g = blank();
+  // 말풍선 (뒤)
+  g.rect(1, 1, 10, 7, 0xfff8ec);
+  g.set(3, 8, 0xfff8ec);
+  g.set(2, 9, 0xfff8ec);
+  g.set(4, 4, 0x2a2a34);
+  g.set(7, 4, 0x2a2a34);
+  g.hline(4, 7, 6, 0xe86a5a);
+  // 붉은 의뢰 도장 (앞, 금테)
+  g.ellipse(10.5, 10.5, 5, 5, 0xf2c43a);
+  g.ellipse(10.5, 10.5, 4, 4, 0xd8323a);
+  for (const [x, y] of [[8, 10], [9, 11], [10, 12], [11, 11], [12, 10], [13, 9]]) g.set(x, y, 0xfff4e0);
+  g.outline(OUT, false, 170);
+  return g;
+}
 
 function gearIcon(id: string): Grid | null {
   if (id === "neck_lei") {
@@ -949,7 +991,7 @@ function base(itemId: string): HTMLCanvasElement {
       return fwWaterfall().toCanvas();
     default: {
       // F8 추가 꾸미기 (시트 그림 → 문자 아이콘, 따로 그리는 연출 → 그 그림으로 만든 아이콘)
-      const f8 = gearIcon(itemId) ?? fxIconGrid(itemId) ?? megaphoneIcon(itemId) ?? dyeIcon(itemId) ?? nameStyleIcon(itemId) ?? bodyIconGrid(itemId);
+      const f8 = gearIcon(itemId) ?? questUnlockIcon(itemId) ?? fxIconGrid(itemId) ?? megaphoneIcon(itemId) ?? dyeIcon(itemId) ?? nameStyleIcon(itemId) ?? bodyIconGrid(itemId);
       if (f8) return f8.toCanvas();
       // 낚시·채집물 (4·32번: f_/b_/h_/o_/d_)
       return forageIconCanvas(itemId) ?? unknown().toCanvas();
@@ -974,6 +1016,9 @@ export const ICON_IDS: readonly string[] = [
   ...DYE_ICON_IDS,
   // 닉네임 꾸미기 (이름 글자·이름표 바탕판)
   ...NAME_STYLE_ICON_IDS,
+  // 11/15 수집 의뢰 보상 (이모티콘 묶음 · 외형)
+  "qe_pack",
+  "q_body_collector",
 ];
 
 /** 이 아이템에 전용 아이콘이 있는지 (없으면 물음표 아이콘). 꾸미기 랭킹의 프리미엄 외형("body:{id}")도 그림이 있다 */

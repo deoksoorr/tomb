@@ -40,6 +40,8 @@ const LIMITS = {
   // 10번 출석 달력 받기 · 11번 선물함 받기·지우기
   calendar: { visitor: 10, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   gift: { visitor: 30, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  // 11/15 수집 의뢰판 보기·납품·바꾸기·도장 교환 (1분 창 → 메모리 한도)
+  quest: { visitor: 40, ip: 160, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   // 친구: 신청·수락·삭제 / 목록·위치 (접속 알림은 30초 남짓마다 묻는다)
   friend: { visitor: 30, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   friendRead: { visitor: 30, ip: 240, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },

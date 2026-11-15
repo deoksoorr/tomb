@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from "react";
 import { isEmoId, isPhraseId, PHRASES } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
-import { EMO_BOARD, type EmoSlot } from "@/game/logic/emoBoard";
+import { EMO_BOARD, emoAllowed, type EmoSlot } from "@/game/logic/emoBoard";
+import { meStore } from "@/lib/hooks/useMe";
 import { readItem, writeItem } from "@/lib/storage";
 
 // 표현 즐겨찾기: 표현 창(T)에서 별로 고르고, Y 키(폰은 표현 버튼 길게 누르기)로 내 캐릭터 둘레에 원형으로 펼친다.
@@ -83,11 +84,16 @@ export function favLabel(key: FavKey): string {
   return key.startsWith("p:") ? phraseText(key.slice(2)) : (slotOf(key.slice(2))?.label ?? key.slice(2));
 }
 
-/** 표현 보내기 (이모티콘 방송·몸짓·말풍선). 도배 제한은 게임·서버가 그대로 건다 */
+/** 11/15 지금 계정이 보낼 수 있는 이모티콘인지 (의뢰 이모티콘은 qe_pack을 가졌을 때만 — 실시간 서버는 소유를 몰라 화면에서 막는다) */
+export function canSendEmo(id: string): boolean {
+  return emoAllowed(id, meStore.getSnapshot().me?.inventory);
+}
+
+/** 표현 보내기 (이모티콘 방송·몸짓·말풍선). 도배 제한은 게임·서버가 그대로 건다. 잠긴 의뢰 이모티콘은 보내지 않는다 */
 export function sendFav(key: FavKey): void {
   const id = key.slice(2);
   if (key.startsWith("p:")) bridge.emit("input:say", { id });
   else if (key.startsWith("a:")) {
     if (id === "wave" || id === "cheer") bridge.emit("input:act", { kind: id });
-  } else bridge.emit("input:emo", { id });
+  } else if (canSendEmo(id)) bridge.emit("input:emo", { id });
 }

@@ -1,4 +1,4 @@
-import { bodyLabel, bodyUnlockPrice, DYE_PARTS, dyeSpecialOf, itemById, PERMANENT_MULTIPLIER, petPrice, premiumBody, type AvatarDye, type CosmeticSlot } from "@tomb/protocol";
+import { BODY_TIER_INFO, bodyLabel, bodyTier, bodyUnlockPrice, DYE_PARTS, dyeSpecialOf, itemById, PERMANENT_MULTIPLIER, petPrice, type AvatarDye, type CosmeticSlot } from "@tomb/protocol";
 
 // 외형 꾸미기 점수 (서버 랭킹·내 정보·가방이 함께 쓰는 순수 계산. 서버 전용 모듈을 들이지 않는다).
 // 지금 "착용 중이고 만료 전"인 꾸미기만 센다 → 기간제가 끝나면 그 파츠 점수도 바로 사라진다.
@@ -37,7 +37,9 @@ export function itemLookScore(itemId: string): number {
 
 /** 프리미엄 외형 점수 (선택권 값 기준. 처음 6종·운영자 몸은 0) */
 export function bodyLookScore(body: string | null | undefined): number {
-  return valueScore(bodyUnlockPrice(body) ?? 0);
+  // 11/15 수집 의뢰 외형은 선택권 값이 없어 같은 등급 선택권 값으로 본다
+  const tier = bodyTier(body);
+  return valueScore(bodyUnlockPrice(body) ?? (tier ? BODY_TIER_INFO[tier].price : 0));
 }
 
 /** 점수를 매길 외형: 입은 꾸미기(만료 시각 포함) · 몸 모양 · 염색 */
@@ -84,7 +86,7 @@ export function wornParts(input: Pick<LookScoreInput, "equipped" | "body">, now:
     if (e.until > now && slot && !bySlot.has(slot)) bySlot.set(slot, e.itemId);
   }
   const parts = [...bySlot].sort(([a], [b]) => LOOK_SLOT_ORDER[a] - LOOK_SLOT_ORDER[b]).map(([, id]) => id);
-  return premiumBody(input.body) ? [...parts, `${BODY_PART_PREFIX}${input.body}`] : parts;
+  return bodyTier(input.body) ? [...parts, `${BODY_PART_PREFIX}${input.body}`] : parts;
 }
 
 /** 파츠 이름 (마우스를 올리면 보이는 이름. 프리미엄 외형은 몸 이름) */

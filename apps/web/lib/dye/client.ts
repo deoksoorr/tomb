@@ -1,4 +1,4 @@
-import type { DyePart } from "@tomb/protocol";
+import type { DyePart, DyeSpecial } from "@tomb/protocol";
 import { request } from "../api";
 import type { WearResponse } from "../types";
 import type { AdminDyeIssueResponse, AdminDyeResponse, DyeStartResponse, DyeStateResponse, DyeTimeoutResponse, StyleChangeResponse } from "./types";
@@ -19,6 +19,10 @@ export const dyeApi = {
   /** 염색 포기 (창 닫기): 색 그대로 */
   cancel: (seed: string) => request<{ cancelled: boolean }>("/api/dye/cancel", post({ seed })),
   fixed: (itemId: string, part: DyePart) => request<StyleChangeResponse>("/api/dye/fixed", post({ itemId, part })),
+  /** 11/15 색 확정 염색권: 고른 보통 색으로 */
+  pick: (itemId: string, part: DyePart, color: string) => request<StyleChangeResponse>("/api/dye/pick", post({ itemId, part, color })),
+  /** 11/15 특수색 확정 염색권: 특수 색 종류만 (바탕 색은 서버가) */
+  special: (itemId: string, part: DyePart, kind: DyeSpecial) => request<StyleChangeResponse>("/api/dye/special", post({ itemId, part, kind })),
   reset: (part: DyePart) => request<StyleChangeResponse>("/api/dye/reset", post({ part })),
   reshape: (body: string) => request<StyleChangeResponse>("/api/dye/body", post({ body })),
   buyPermanent: (itemId: string) => request<WearResponse>("/api/shop/permanent", post({ itemId })),

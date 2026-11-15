@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { BRANCH_INFO, BRANCHES, HOTBAR_SIZE, SKILLS, skillById, TIERS, type BranchId, type SkillDef, type SkillId } from "@/lib/rpg/catalog";
 import type { CharacterAction } from "@/lib/rpg/client";
+import { cleanAuto, fitsSlot, isUltimate, SKILL_SLOTS, ULT_SLOT } from "@/lib/rpg/hotbar";
 import { checkLearn, spentIn, spentPoints, tierGate, tierOpen } from "@/lib/rpg/skillRules";
 import {
   compareStats,
@@ -24,7 +25,8 @@ import s from "./rpg.module.css";
 import t from "./SkillTree.module.css";
 
 // 스킬 트리 창: 위에 남은 포인트·초기화 비용, 갈래 탭(쓴 포인트), 가운데 트리 + 오른쪽 상세(휴대폰은 아래 시트), 맨 아래 단축 슬롯 줄.
-// 단축 슬롯 놓기: 배운 액티브 노드를 슬롯으로 끌어다 놓기(마우스·터치) / 노드를 고르고 슬롯 누르기·숫자 키 1~6 /
+// 단축 슬롯 놓기: 배운 액티브 노드를 슬롯으로 끌어다 놓기(마우스·터치) / 노드를 고르고 슬롯 누르기·숫자 키 1~5·F /
+// 11/15 칸은 스킬 5칸(1~5) + 궁극기 칸(F). 궁극기는 F 칸에만, 나머지는 1~5에만 (lib/rpg/hotbar).
 // 슬롯끼리 끌어서 바꾸기 / 슬롯에서 밖으로 끌어내면 빼기. 사냥 화면 단축 줄과 같은 데이터(character.hotbar)다.
 // 선택·단축 칸 테두리 규칙은 skillPick.ts 한곳에 있다 (선택은 트리 스킬 하나뿐, 빈 곳·Esc로 해제).
 // 규칙(단·선행·포인트·단축 칸)은 서버가 다시 검사한다 — 화면은 보여 주기만.
@@ -44,6 +46,11 @@ const ROW = 96;
 const cxOf = (sk: SkillDef) => sk.col * 100 + 50;
 const cyOf = (sk: SkillDef) => (sk.tier - 1) * ROW + ROW / 2;
 const DRAG_START_PX = 6;
+/** 칸 이름: 1~5번 / 궁극기 칸(F) */
+const slotName = (i: number) => (i === ULT_SLOT ? "궁극기(F) 칸" : `${i + 1}번 칸`);
+const slotKey = (i: number) => (i === ULT_SLOT ? "F" : String(i + 1));
+const ULT_ONLY = "궁극기는 궁극기 칸(F)에만 놓아요.";
+const NOT_ULT = "궁극기 칸(F)에는 5단 궁극기만 놓아요. 다른 스킬은 1~5번 칸에.";
 
 /** 유형 태그 도트 아이콘 (7×7) */
 function Glyph({ tag }: { tag: SkillTypeTag }) {
@@ -107,7 +114,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
 
   function place(id: SkillId, to: number | null) {
     const def = skillById(id)!;
-    const block = slotBlock(def);
+    const block = slotBlock(def) ?? (to !== null && !fitsSlot(id, to) ? (isUltimate(id) ? ULT_ONLY : NOT_ULT) : null);
     if (block && to !== null) {
       setHint(block);
       return;
@@ -132,7 +139,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
         ? `${josa(def.name, "을", "를")} 단축 칸에서 뺐어요.`
         : swapped
           ? `${to + 1}번 ↔ ${from + 1}번 칸을 바꿨어요.`
-          : `${josa(def.name, "을", "를")} ${to + 1}번 칸에 놓았어요.`,
+          : `${josa(def.name, "을", "를")} ${slotName(to)}에 놓았어요.`,
     );
   }
   const pick = (b: BranchId) => setSel((p) => nextPick(p, { type: "branch", branch: b }));
@@ -156,11 +163,15 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
         return setHint(
           a.why === "blocked"
             ? pickBlock
-            : a.why === "already"
-              ? `${josa(d!.name, "은", "는")} 이미 ${i + 1}번 칸에 있어요. 빼려면 칸을 줄 밖으로 끌어내세요.`
-              : a.why === "pickFirst"
-                ? "먼저 스킬 트리에서 배운 액티브 스킬을 고르세요. 그다음 숫자 키를 누르면 그 칸에 놓여요."
-                : "스킬 트리에서 배운 액티브 스킬을 고른 뒤 이 칸을 누르거나, 노드를 끌어다 놓으세요.",
+            : a.why === "ultOnly"
+              ? ULT_ONLY
+              : a.why === "notUlt"
+                ? NOT_ULT
+                : a.why === "already"
+                  ? `${josa(d!.name, "은", "는")} 이미 ${slotName(i)}에 있어요. 빼려면 칸을 줄 밖으로 끌어내세요.`
+                  : a.why === "pickFirst"
+                    ? "먼저 스킬 트리에서 배운 액티브 스킬을 고르세요. 그다음 숫자 키를 누르면 그 칸에 놓여요."
+                    : "스킬 트리에서 배운 액티브 스킬을 고른 뒤 이 칸을 누르거나, 노드를 끌어다 놓으세요.",
         );
     }
   }
@@ -176,7 +187,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
     live.current = { busy, place, runSlot, clearPick, picked, placeable, hotbar };
   });
 
-  // 숫자 키 1~6: 고른 스킬을 그 칸에 놓는다 · Esc: 고른 게 있으면 선택만 해제(창은 안 닫힘), 없으면 창이 닫힌다
+  // 숫자 키 1~5·F(궁극기 칸): 고른 스킬을 그 칸에 놓는다 · Esc: 고른 게 있으면 선택만 해제(창은 안 닫힘), 없으면 창이 닫힌다
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -189,8 +200,8 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
       }
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
-      const n = Number(e.key);
-      if (!Number.isInteger(n) || n < 1 || n > HOTBAR_SIZE) return;
+      const n = e.code === "KeyF" ? ULT_SLOT + 1 : Number(e.key);
+      if (!Number.isInteger(n) || n < 1 || (n > SKILL_SLOTS && n !== ULT_SLOT + 1)) return;
       e.preventDefault();
       if (L.busy) return;
       L.runSlot(keyPress(L.picked, L.placeable, L.hotbar, n), n - 1);
@@ -256,10 +267,12 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
       : `${josa(skillById(drag.id)!.name, "을", "를")} 놓을 칸 위에서 손을 떼세요.`
     : (hint ??
       (!d
-        ? `트리에서 배운 액티브 스킬을 고른 뒤 칸이나 숫자 키 1~${HOTBAR_SIZE}을 누르면 놓여요. 노드를 칸으로 끌어와도 돼요.`
+        ? `트리에서 배운 액티브 스킬을 고른 뒤 칸이나 숫자 키 1~${SKILL_SLOTS}(궁극기는 F)을 누르면 놓여요. 노드를 칸으로 끌어와도 돼요.`
         : pickBlock
           ? pickBlock
-          : `${d.name}: ${dSlot >= 0 ? `지금 ${dSlot + 1}번 칸 · ` : ""}넣을 칸을 누르거나 숫자 키 1~${HOTBAR_SIZE}을 누르세요.`));
+          : isUltimate(d.id)
+            ? `${d.name}: 궁극기는 F 칸에만 놓여요${dSlot >= 0 ? " (지금 F 칸)" : ""}. 칸을 누르거나 F를 누르세요.`
+            : `${d.name}: ${dSlot >= 0 ? `지금 ${dSlot + 1}번 칸 · ` : ""}넣을 칸을 누르거나 숫자 키 1~${SKILL_SLOTS}을 누르세요.`));
 
   const resetLabel = `${view.respecCost}P`;
 
@@ -459,7 +472,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
               {info.name} · {info.role}
             </p>
             <p className={t.emptyText}>트리에서 스킬을 누르면 설명과 배우기 버튼이 여기 나와요.</p>
-            <p className={t.emptyText}>스킬을 고른 채로 아래 단축 칸이나 숫자 키 1~{HOTBAR_SIZE}을 누르면 그 칸에 들어가요. 빈 곳을 누르거나 Esc를 누르면 선택이 풀려요.</p>
+            <p className={t.emptyText}>스킬을 고른 채로 아래 단축 칸이나 숫자 키 1~{SKILL_SLOTS}(궁극기는 F)을 누르면 그 칸에 들어가요. 빈 곳을 누르거나 Esc를 누르면 선택이 풀려요.</p>
           </aside>
         ) : (
           <aside className={t.detail} data-sheet={sheet || undefined} aria-live="polite" aria-label={`${d.name} 설명`}>
@@ -506,19 +519,21 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
               {d.kind === "active" && dRank > 0 && (
                 <div className={t.quickSlots} role="group" aria-label={`${d.name} 단축 칸 고르기`}>
                   <span>단축 칸</span>
-                  {Array.from({ length: HOTBAR_SIZE }, (_, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      className={t.quickSlot}
-                      aria-pressed={dSlot === i}
-                      disabled={busy}
-                      onClick={() => (dSlot === i ? place(d.id, null) : place(d.id, i))}
-                      title={dSlot === i ? `${i + 1}번에서 빼기` : `${i + 1}번 칸에 놓기${hotbar[i] ? ` (${skillById(hotbar[i]!)!.name}과 자리 바꿈)` : ""}`}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
+                  {Array.from({ length: HOTBAR_SIZE }, (_, i) => i)
+                    .filter((i) => fitsSlot(d.id, i))
+                    .map((i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className={t.quickSlot}
+                        aria-pressed={dSlot === i}
+                        disabled={busy}
+                        onClick={() => (dSlot === i ? place(d.id, null) : place(d.id, i))}
+                        title={dSlot === i ? `${slotName(i)}에서 빼기` : `${slotName(i)}에 놓기${hotbar[i] ? ` (${skillById(hotbar[i]!)!.name}과 자리 바꿈)` : ""}`}
+                      >
+                        {slotKey(i)}
+                      </button>
+                    ))}
                   {dSlot >= 0 && (
                     <button type="button" className={cx(ui.button, t.unslot)} disabled={busy} onClick={() => place(d.id, null)}>
                       빼기
@@ -611,7 +626,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
           <h3 id="rpg-hotbar" className={t.dockTitle}>
             단축 스킬
           </h3>
-          <span className={t.dockSub}>사냥 화면 아래 1~{HOTBAR_SIZE}번 칸과 같아요</span>
+          <span className={t.dockSub}>사냥 화면 아래 1~{SKILL_SLOTS}번 칸 + 궁극기 F 칸과 같아요</span>
         </div>
         <p className={t.dockHint} data-warn={(!drag && !!hint) || undefined} role="status">
           {dockHint}
@@ -620,6 +635,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
           {Array.from({ length: HOTBAR_SIZE }, (_, i) => {
             const sk = skillById(hotbar[i] ?? "");
             const look = slotLook(i, hotbar, picked, placeable, drag, over);
+            const auto = !!sk && !!c.hotAuto?.ids.includes(sk.id);
             return (
               <button
                 key={i}
@@ -627,6 +643,8 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
                 data-slot={i}
                 className={t.slot}
                 data-filled={sk ? "" : undefined}
+                data-ult={i === ULT_SLOT || undefined}
+                data-auto={auto || undefined}
                 data-mine={look.mine || undefined}
                 data-preview={look.canPreview || undefined}
                 data-over={look.previewNow || undefined}
@@ -634,29 +652,50 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
                 disabled={busy}
                 aria-label={
                   look.mine
-                    ? `${i + 1}번 칸 ${sk!.name} (고른 스킬)`
+                    ? `${slotName(i)} ${sk!.name} (고른 스킬)`
                     : look.canPreview
-                      ? `${i + 1}번 칸에 ${d!.name} 놓기${sk ? ` (${josa(sk.name, "과", "와")} ${dSlot >= 0 ? "자리 바꿈" : "바꿔 넣기"})` : ""}`
+                      ? `${slotName(i)}에 ${d!.name} 놓기${sk ? ` (${josa(sk.name, "과", "와")} ${dSlot >= 0 ? "자리 바꿈" : "바꿔 넣기"})` : ""}`
                       : sk
-                        ? `${i + 1}번 칸 ${sk.name}${d ? "" : ". 누르면 이 스킬을 고름, 끌어서 옮기기"}`
-                        : `${i + 1}번 칸 비어 있음`
+                        ? `${slotName(i)} ${sk.name}${auto ? " (자동)" : ""}${d ? "" : ". 누르면 이 스킬을 고름, 끌어서 옮기기"}`
+                        : `${slotName(i)} 비어 있음`
                 }
                 onPointerDown={(e) => sk && startPointer(e, sk.id, i)}
                 onClick={() => runSlot(slotPress(picked, placeable, hotbar, i, suppressClick.current), i)}
               >
-                <span className={t.slotNum}>{i + 1}</span>
+                <span className={t.slotNum}>{slotKey(i)}</span>
                 {sk ? <RpgIcon art={sk.art} size={32} /> : <span className={t.slotEmpty} aria-hidden="true" />}
-                <span className={t.slotName}>{sk?.name ?? "비어 있음"}</span>
+                <span className={t.slotName}>
+                  {sk?.name ?? (i === ULT_SLOT ? "궁극기 칸" : "비어 있음")}
+                  {auto && <small className={t.slotAuto}> 자동</small>}
+                </span>
               </button>
             );
           })}
+        </div>
+        {/* 11/15 자동 스킬: 칸 자동은 사냥 중에 정하고(Shift+숫자·우클릭·[자동] 버튼), 여기서는 궁극기 SP 남겨 두기만 */}
+        <div className={t.autoRow}>
+          <label className={t.autoKeep}>
+            <input
+              type="checkbox"
+              checked={c.hotAuto?.keepUlt !== false}
+              disabled={busy}
+              onChange={(e) =>
+                onCharacter(
+                  { type: "hotbar", auto: { ...cleanAuto(c.hotAuto, c.hotbar), keepUlt: e.target.checked } },
+                  e.target.checked ? "자동 스킬이 궁극기 SP를 남겨 둬요." : "자동 스킬이 궁극기 SP까지 써요.",
+                )
+              }
+            />
+            자동 스킬이 궁극기 SP 남겨 두기
+          </label>
+          <span className={t.dockSub}>칸 자동: 사냥 중 Shift+숫자 · 칸 우클릭 · [자동] 누르고 칸 / X로 한꺼번에</span>
         </div>
       </section>
 
       {drag && (
         <div className={t.ghost} style={{ left: drag.x, top: drag.y }} aria-hidden="true">
           <RpgIcon art={skillById(drag.id)!.art} size={48} />
-          {over !== null ? <span>{over + 1}번 칸</span> : drag.from !== null ? <span>빼기</span> : null}
+          {over !== null ? <span>{slotName(over)}</span> : drag.from !== null ? <span>빼기</span> : null}
         </div>
       )}
     </div>

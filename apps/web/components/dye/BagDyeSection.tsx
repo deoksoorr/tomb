@@ -17,6 +17,7 @@ import { openShopTab } from "../shop/shopTab";
 import { cx } from "../ui/cx";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
+import DirectDyeDialog, { type DirectDyeTicket } from "./DirectDyeDialog";
 import DyeDialog, { type DyeTicket } from "./DyeDialog";
 import { fixedTicket, ticketOf } from "./StylePanel";
 import styles from "./StylePanel.module.css";
@@ -35,6 +36,8 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
   const [session, setSession] = useState<DyeSessionView | null>(null);
   const [tickets, setTickets] = useState<Record<string, FixedDyeDef>>({});
   const [open, setOpen] = useState<{ ticket: DyeTicket | null; resume: DyeSessionView | null } | null>(null);
+  /** 11/15 수집 의뢰 염색권 (색 확정·특수색 확정) 창 — 판이 없어 진행 중인 판과 상관없이 연다 */
+  const [direct, setDirect] = useState<DirectDyeTicket | null>(null);
   const invKey = Object.keys(me.inventory).join(",");
   const [openedAt] = useState(() => Date.now());
   const alive = useRef(true);
@@ -62,13 +65,16 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
     };
   }, [invKey, sync]);
 
-  const rows: { key: string; name: string; desc: string; count: number; icon: ReactNode; ticket: DyeTicket }[] = [
-    ...RANDOM.flatMap((item) => {
+  type Row = { key: string; name: string; desc: string; count: number; icon: ReactNode; ticket: DyeTicket | DirectDyeTicket };
+  const rows: Row[] = [
+    ...RANDOM.flatMap((item): Row[] => {
       const n = me.inventory[item.id] ?? 0;
+      const m = item.dye?.mode;
+      if (n > 0 && (m === "pick" || m === "special")) return [{ key: item.id, name: item.name, desc: item.desc, count: n, icon: <ItemIcon itemId={item.id} size={32} />, ticket: { itemId: item.id, name: item.name, mode: m } }];
       const t = ticketOf(item);
       return n > 0 && t ? [{ key: item.id, name: item.name, desc: t.mode === "random" ? `${item.desc} (흔들림 ${wobbleLabel(t.tier)} · 특수 색은 ${specialLabel(t.tier)})` : item.desc, count: n, icon: <ItemIcon itemId={item.id} size={32} />, ticket: t }] : [];
     }),
-    ...Object.values(tickets).flatMap((d) => {
+    ...Object.values(tickets).flatMap((d): Row[] => {
       const n = me.inventory[d.id] ?? 0;
       return n > 0
         ? [
@@ -117,10 +123,16 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
                   </span>
                   <span className={bag.meta}>{r.desc}</span>
                 </span>
-                {/* 진행 중인 판이 있으면 새 염색권을 쓰지 않고 그 판을 이어서 연다 (서버도 같은 규칙) */}
-                <button type="button" className={ui.button} onClick={() => setOpen(session ? { ticket: null, resume: session } : { ticket: r.ticket, resume: null })}>
-                  {session ? "이어서" : "쓰기"}
-                </button>
+                {/* 진행 중인 판이 있으면 새 염색권을 쓰지 않고 그 판을 이어서 연다 (서버도 같은 규칙). 색 확정·특수색 확정은 판이 없어 늘 바로 */}
+                {r.ticket.mode === "pick" || r.ticket.mode === "special" ? (
+                  <button type="button" className={ui.button} onClick={() => setDirect(r.ticket as DirectDyeTicket)}>
+                    쓰기
+                  </button>
+                ) : (
+                  <button type="button" className={ui.button} onClick={() => setOpen(session ? { ticket: null, resume: session } : { ticket: r.ticket as DyeTicket, resume: null })}>
+                    {session ? "이어서" : "쓰기"}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -146,6 +158,18 @@ export default function BagDyeSection({ me, avatar, onNotice }: { me: Me; avatar
           </button>
         </div>
       </section>
+      {direct && (
+        <DirectDyeDialog
+          ticket={direct}
+          avatar={avatar}
+          look={look}
+          onClose={() => {
+            setDirect(null);
+            sync();
+          }}
+          onDone={onNotice}
+        />
+      )}
       {open && (
         <DyeDialog
           ticket={open.ticket}

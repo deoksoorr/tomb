@@ -1,0 +1,387 @@
+/* 11/15 수집 의뢰판 · 도장 교환소 (NpcShop 창 안). 7개 의뢰가 데스크톱에선 한눈에, 휴대폰에선 줄마다 두 줄로 */
+
+.board {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.balance {
+  color: var(--text);
+}
+
+.balance strong {
+  color: var(--candle);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.list,
+.shop {
+  display: grid;
+  flex: 1;
+  grid-auto-rows: min-content;
+  gap: 4px;
+  min-height: 0;
+  margin: 0;
+  padding: 0 2px 0 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.item {
+  background: var(--surface);
+}
+
+.item[data-weekly] {
+  margin-bottom: 4px;
+  box-shadow: inset 2px 0 0 var(--candle);
+}
+
+.item[data-done] {
+  opacity: 0.55;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 4px 6px 4px 8px;
+}
+
+/* 도장 수: 붉은 인주 도장 모양 */
+.stamp {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px #b9574a;
+  color: #e08a7a;
+  font-size: 12px;
+  font-weight: 700;
+  transform: rotate(-8deg);
+}
+
+.stamp[data-hard] {
+  box-shadow:
+    inset 0 0 0 2px #d0684f,
+    0 0 0 2px rgba(208, 104, 79, 0.25);
+  color: #f0a08c;
+}
+
+.text {
+  display: grid;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.text b {
+  color: var(--bone);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.text small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weekTitle {
+  color: var(--candle);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prog {
+  min-width: 3.4ch;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.prog[data-ready] {
+  color: var(--status-ok, var(--moss));
+}
+
+.goBtn {
+  min-width: 56px;
+  min-height: 36px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.reBtn {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  font-size: 16px;
+}
+
+.doneTag {
+  padding: 2px 8px;
+  color: var(--moss);
+  font-size: 12px;
+  box-shadow: inset 0 0 0 1px var(--moss);
+}
+
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 4px 8px 8px 50px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.confirmBtns,
+.cardBtns {
+  display: flex;
+  gap: 6px;
+}
+
+.empty {
+  padding: 16px 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* 낼 것 고르기 */
+.pick {
+  display: grid;
+  gap: 6px;
+  padding: 4px 8px 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.pickHead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pickHead strong {
+  color: var(--bone);
+}
+
+.pickList {
+  display: grid;
+  gap: 2px;
+  max-height: 188px;
+  overflow-y: auto;
+}
+
+.pickRow {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+}
+
+.pickRow[data-on] {
+  background: rgba(224, 195, 106, 0.08);
+}
+
+.pickName {
+  display: grid;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.pickName small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.pickQty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pickQty button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  font-size: 15px;
+}
+
+.pickQty span {
+  min-width: 2ch;
+  color: var(--bone);
+  text-align: center;
+}
+
+.pickFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pickErr {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 교환소 */
+.card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: var(--surface);
+}
+
+.card[data-owned] {
+  opacity: 0.6;
+}
+
+.card[data-tier="legend"] {
+  box-shadow: inset 2px 0 0 var(--candle);
+}
+
+.cardText {
+  display: grid;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.cardText b {
+  color: var(--bone);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cardText small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cardText .got {
+  color: var(--moss);
+}
+
+.tier {
+  margin-left: 6px;
+  padding: 0 4px;
+  color: #b9a3e0;
+  font-size: 10px;
+  font-style: normal;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.card[data-tier="legend"] .tier {
+  color: var(--candle);
+}
+
+.priceBtn {
+  min-width: 76px;
+  font-size: 12px;
+}
+
+/* 탭 */
+.tabs {
+  display: flex;
+  border-bottom: 2px solid var(--line);
+}
+
+.tab {
+  flex: 1 0 auto;
+  min-height: 40px;
+  padding: 4px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.tab[aria-selected="true"] {
+  color: var(--bone);
+  box-shadow: inset 0 -2px 0 var(--candle);
+}
+
+.tabDot {
+  color: var(--candle);
+}
+
+@media (max-width: 520px) {
+  .row {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 6px;
+    padding: 4px 4px 4px 6px;
+  }
+
+  .stamp {
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
+  }
+
+  .text b {
+    font-size: 12px;
+  }
+
+  .goBtn {
+    min-width: 48px;
+    padding: 4px 8px;
+  }
+
+  .reBtn {
+    min-width: 32px;
+  }
+
+  .confirm {
+    padding-left: 8px;
+  }
+
+  .card {
+    gap: 8px;
+    padding: 6px;
+  }
+
+  /* 설명은 두 줄까지 (카드가 너무 길어지지 않게) */
+  .cardText small:not(.got) {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .priceBtn {
+    min-width: 64px;
+    padding: 6px 8px;
+  }
+
+  .cardBtns {
+    flex-direction: column;
+  }
+}

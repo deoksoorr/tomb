@@ -64,6 +64,22 @@ function colorIcon(id: string): Grid | null {
       }
       return g;
     }
+    case "leaves": {
+      // 11/15 나뭇잎 이름 글자: 잎 초록 그라데이션 + 둘레에 떨어지는 작은 잎 둘 (외곽선은 글자·잎 함께)
+      const g = new Grid(16, 16);
+      GA.forEach((row, y) => [...row].forEach((ch, x) => ch === "#" && g.set(x + 2, y + 2, gradientAt(spec.stops, x / 12))));
+      const leaf = (x: number, y: number, hi: number, c: number) => {
+        g.set(x + 2, y, hi);
+        g.set(x + 1, y + 1, hi);
+        g.set(x + 2, y + 1, c);
+        g.set(x, y + 2, c);
+        g.set(x + 1, y + 2, c);
+      };
+      leaf(8, 3, 0xeaffa0, 0x7fdc5c);
+      leaf(6, 11, 0xd8ff8a, 0x5cc96a);
+      g.outline(NAME_OUTLINE, true, 235);
+      return g;
+    }
     case "glow": {
       const g = new Grid(16, 16);
       GA.forEach((row, y) => [...row].forEach((ch, x) => ch === "#" && g.set(x + 2, y + 2, spec.stops[0])));
@@ -106,6 +122,16 @@ function plateIcon(p: NamePlateSpec): Grid {
       g.set(x0 + 3, y0 + h - 1, p.dots[0]);
       g.set(x0 + w - 3, y0 + h - 1, p.dots[0]);
       break;
+    case "wave":
+      // 물빛 판 + 물마루 둘 + 윤슬 (아래쪽은 깊은 물)
+      g.rect(x0, y0, w, h, p.fill);
+      g.rect(x0, y0 + 5, w, 2, mixDeep(p.fill, p.edge));
+      for (const cx of [x0 + 2, x0 + 8]) {
+        g.hline(cx, cx + 2, y0 - 1, p.light);
+        g.set(cx + 1, y0 - 2, p.dots[0]);
+      }
+      g.hline(x0, x0 + w - 1, y0, p.light);
+      break;
     default:
       g.rect(x0, y0, w, h, p.fill);
       g.hline(x0, x0 + w - 1, y0, p.light);
@@ -119,6 +145,9 @@ function plateIcon(p: NamePlateSpec): Grid {
     [x0 - 1, x0 + 3, x0 + 7, x0 + w].forEach((x, i) => g.set(x, i % 2 ? y0 - 1 : y0 + h, p.dots[i % p.dots.length]));
     g.set(x0 + w, y0 + 2, p.dots[0]);
     g.set(x0 - 1, y0 + 3, p.dots[1]);
+  } else if (p.kind === "wave") {
+    g.hline(x0 + 1, x0 + 2, y0 + 5, p.dots[1]);
+    g.hline(x0 + w - 4, x0 + w - 2, y0 + 6, p.dots[1]);
   } else if (p.kind === "star") {
     g.set(x0 + 1, y0 + 1, p.dots[0]);
     g.set(x0 + w - 2, y0 + h - 2, p.dots[0]);
@@ -130,6 +159,31 @@ function plateIcon(p: NamePlateSpec): Grid {
   g.hline(x0 + 3, x0 + 5, y0 + 3, ink);
   g.hline(x0 + 7, x0 + w - 4, y0 + 3, ink);
   g.hline(x0 + 3, x0 + w - 4, y0 + 4, ink);
+  return g;
+}
+
+/** 두 색 반반 (깊은 물빛) */
+function mixDeep(a: number, b: number): number {
+  const ch = (s: number) => ((((a >> s) & 255) + ((b >> s) & 255)) >> 1) << s;
+  return ch(16) | ch(8) | ch(0);
+}
+
+/** 11/15 나뭇잎 이름 글자의 떨어지는 잎 (5×4 두 프레임: 연두 잎 · 짙은 잎). 게임 이름표(NameStyleView)가 텍스처로 한 번 만든다 */
+export const NAME_LEAF_W = 5;
+export const NAME_LEAF_H = 4;
+export function nameLeafGrid(): Grid {
+  const g = new Grid(NAME_LEAF_W * 2, NAME_LEAF_H);
+  const pal = [
+    [0xeaffa0, 0xa8ec68, 0x4f9a3a],
+    [0xa8ec68, 0x5cc96a, 0x2f6f2e],
+  ];
+  pal.forEach(([hi, c, vein], f) => {
+    const o = f * NAME_LEAF_W;
+    // 비스듬한 잎 (오른쪽 위로 뾰족) + 가운데 잎맥 + 왼쪽 아래 꼭지
+["...hc", ".hhcc", "hcvc.", "v...."].forEach((row, y) =>
+      [...row].forEach((ch, x) => ch !== "." && g.set(o + x, y, ch === "h" ? hi : ch === "v" ? vein : c)),
+    );
+  });
   return g;
 }
 

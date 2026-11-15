@@ -146,12 +146,12 @@ export const MONSTER_TIER = { hp: 1.2, atk: 1.15, exp: 0.6 } as const;
 
 export type MonsterStats = { maxHp: number; atk: number; def: number; hit: number; flee: number; speed: number; exp: number };
 
-/** 11/15 번아웃 단계 몬스터 배율 (lib/rpg/endgame burnoutScale). EXP는 그대로 — 단계 보너스는 서버가 판 EXP에 곱한다 */
+/** 11/15 야근 빌딩 층 몬스터 배율 (lib/rpg/tower towerScale). EXP는 그대로 — 층 EXP는 서버가 층마다 정한다 */
 export type MonsterScale = { hp: number; atk: number; def: number; speed?: number };
 
 /**
  * 난이도를 반영한 몬스터 능력치. power: 사냥터 배율 (40번, 같은 난이도에서 뒤에 열리는 곳일수록 조금 세다 — ZoneDef.power).
- * scale: 번아웃 단계 배율 (없으면 그대로)
+ * scale: 야근 빌딩 층 배율 (없으면 그대로)
  */
 export function monsterStats(id: MonsterId, d: Difficulty, power = 1, scale?: MonsterScale): MonsterStats {
   const m = MONSTERS[id];

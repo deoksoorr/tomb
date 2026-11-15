@@ -2,6 +2,7 @@ import type { HuntRoomsInfo } from "@tomb/protocol";
 import { request } from "../api";
 import { REALTIME_HTTP_URL } from "../realtime";
 import { HUNT_ZONES, isZoneId, type Difficulty, type GameKind, type GearSlot, type SkillId, type Stats, type ZoneId } from "./catalog";
+import type { HotAuto } from "./hotbar";
 import type { RpgView, RunFinishResponse, RunResult, RunStartResponse, SoldInfo } from "./types";
 
 // 브라우저 → 사냥터 API. 실패하면 서버의 한국어 메시지를 담은 ApiRequestError를 던진다 (lib/api의 request).
@@ -11,7 +12,7 @@ const post = (data: unknown): RequestInit => ({ method: "POST", headers: { "cont
 export type CharacterAction =
   | { type: "alloc"; stats: Partial<Stats> }
   | { type: "learn"; skill: SkillId }
-  | { type: "hotbar"; slots: (SkillId | null)[] }
+  | { type: "hotbar"; slots?: (SkillId | null)[]; auto?: HotAuto }
   | { type: "equip"; slot: GearSlot; itemId: string | null }
   | { type: "respec"; cost: number }
   | { type: "ackTree" }
@@ -25,11 +26,11 @@ export const rpgApi = {
   buy: (itemId: string, qty = 1) => request<ShopResponse>("/api/rpg/shop", post({ type: "buy", itemId, qty })),
   sell: (itemId: string, count = 1) => request<ShopResponse>("/api/rpg/shop", post({ type: "sell", itemId, count })),
   // planVer: 별자리 잇기 화면이 쓰는 계획 판 번호 (서버가 티켓에 실어 그 판으로 검사한다)
-  // burnout: 11/15 번아웃 단계 (지옥 사냥만 — 사냥터는 서버가 단계로 정한다)
-  start: (game: GameKind, difficulty: Difficulty, zone?: ZoneId, planVer?: number, burnout?: number) =>
+  // tower: 11/15 야근 빌딩 시작 층 (지옥 사냥만 — 사냥터는 서버가 층으로 정한다)
+  start: (game: GameKind, difficulty: Difficulty, zone?: ZoneId, planVer?: number, tower?: number) =>
     request<RunStartResponse>(
       "/api/rpg/run/start",
-      post({ game, difficulty, ...(game === "hunt" && zone ? { zone } : {}), ...(planVer ? { planVer } : {}), ...(burnout ? { burnout } : {}) }),
+      post({ game, difficulty, ...(game === "hunt" && zone ? { zone } : {}), ...(planVer ? { planVer } : {}), ...(tower ? { tower } : {}) }),
     ),
   finish: (ticket: string, result: RunResult) => request<RunFinishResponse>("/api/rpg/run/finish", post({ ticket, result })),
 };

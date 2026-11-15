@@ -309,10 +309,189 @@ export function horsePole(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
+// ── 11/15 오리배 (오리 연못) ── 노란·흰 오리 몸통 + 큰 오리 머리(주황 부리)·작은 차양 지붕·나란한 두 자리·고물 물레바퀴.
+// 조각배처럼 뒤 판(바닥·좌석·차양 기둥, 사람 뒤) + 앞 판(가까운 뱃전·날개·물레바퀴·머리·지붕, 사람 앞)으로 나눠 앉은 사람의 다리를 가린다.
+// 프레임 3장 = 물레바퀴 날개 돌기. 뱃머리(머리)가 오른쪽인 그림, mirror면 왼쪽. 두 자리는 늘 화면 왼쪽(조종)·오른쪽(옆자리)
+export const DUCK_W = 46;
+export const DUCK_H = 38;
+/** 앉은 사람 발 위치 (위에서부터 px) */
+export const DUCK_FEET_Y = 26;
+/** 왼쪽 자리 x (뱃머리가 오른쪽일 때. 옆자리는 + DUCK_SIDE_SEAT) — 두 자리 가운데가 차양 가운데 */
+export const DUCK_SEAT_X = 13;
+export const DUCK_FRAMES = 3;
+export type DuckStyle = { body: Color; canopy: Color };
+/** 배마다 몸 색·차양 줄무늬 색 (노랑+빨강 / 하양+파랑 / 노랑+분홍) */
+export const DUCK_STYLES: readonly DuckStyle[] = [
+  { body: 0xf7d046, canopy: 0xe0524a },
+  { body: 0xf4f1e8, canopy: 0x4a8fd8 },
+  { body: 0xf7d046, canopy: 0xee86ae },
+];
+const BEAK = { hi: 0xffb04a, mid: 0xf08a24, lo: 0xc0601a };
+const CUSHION = { hi: 0x8cc8ec, mid: 0x5a9ccc };
+
+function duckFrame(layer: "back" | "front", frame: number, st: DuckStyle): Grid {
+  const g = new Grid(DUCK_W, DUCK_H);
+  const body = { hi: lighten(st.body, 0.45), mid: st.body, lo: darken(st.body, 0.16), dk: darken(st.body, 0.32), line: darken(st.body, 0.66) };
+  const white = lighten(st.body, 0.75);
+  // 몸통 가로 범위: 고물(왼쪽) X0 … 뱃머리 X1, 두 자리 가운데 = DUCK_SEAT_X + 6
+  const X0 = 3;
+  const X1 = 37;
+  const prof = (x: number) => {
+    const t = (x + 0.5 - X0) / (X1 - X0);
+    if (t < 0 || t > 1) return 0;
+    return t < 0.2 ? Math.sqrt(1 - ((0.2 - t) / 0.2) ** 2) : t > 0.8 ? Math.sqrt(1 - ((t - 0.8) / 0.2) ** 2) : 1;
+  };
+  const RIM = 23; // 뱃전 윗줄
+  const BOT = 33; // 몸통 아래 (물에 잠기는 쪽)
+  const POSTS = [5, 31];
+  if (layer === "back") {
+    // 물 위 그림자
+    for (let x = X0 + 2; x <= X1 - 2; x++) g.set(x, DUCK_H - 2, 0x000000, 55);
+    for (let x = X0 + 5; x <= X1 - 5; x++) g.set(x, DUCK_H - 1, 0x000000, 28);
+    // 먼 뱃전 (안쪽이 보이는 띠) + 물빛 바닥
+    for (let x = X0; x <= X1; x++) {
+      const f = prof(x);
+      if (f <= 0.05) continue;
+      const top = RIM - 2 - Math.round(1.5 * f);
+      g.set(x, top, body.hi);
+      g.set(x, top + 1, body.lo);
+      for (let y = top + 2; y <= RIM + 2; y++) g.set(x, y, (x + y) % 5 === 0 ? 0x8fd0d8 : 0xa8dce2);
+    }
+    // 꼬리 깃 (고물 위로 살짝 들린)
+    g.rect(1, 17, 3, 4, body.mid);
+    g.rect(0, 15, 2, 3, body.mid);
+    g.set(0, 15, body.hi);
+    g.hline(1, 3, 17, body.hi);
+    // 나란한 두 자리: 등받이 쿠션 (사람 뒤)
+    for (const sx of [DUCK_SEAT_X, DUCK_SEAT_X + 12]) {
+      g.rect(sx - 4, 18, 8, 6, CUSHION.mid);
+      g.hline(sx - 4, sx + 3, 18, CUSHION.hi);
+    }
+    // 차양 기둥 (뒤)
+    for (const px of POSTS) g.vline(px, 5, RIM, 0xc8bea8);
+    g.outline(body.line);
+  } else {
+    // 가까운 뱃전 (몸 앞을 가린다): 위는 흰 테, 아래로 갈수록 어둡게
+    for (let x = X0; x <= X1; x++) {
+      const f = prof(x);
+      if (f <= 0.05) continue;
+      const top = RIM + Math.round((1 - f) * 4);
+      const bot = BOT - Math.round((1 - f) * 3);
+      for (let y = top; y <= bot; y++) g.set(x, y, y === top ? white : y === top + 1 ? body.hi : y >= bot - 1 ? body.dk : y >= bot - 2 ? body.lo : body.mid);
+    }
+    // 날개 (몸통 옆구리, 깃 끝 세 겹)
+    const wx = 21;
+    const wy = 27;
+    g.ellipse(wx, wy + 1, 7.5, 3, body.lo);
+    g.ellipse(wx + 1, wy, 6.5, 2.2, body.hi);
+    g.ellipse(wx + 1, wy + 0.4, 6, 1.7, body.mid);
+    for (const fx of [wx - 6, wx - 3]) g.set(fx, wy + 2, body.dk);
+    // 물결선 (몸통 아랫단, 프레임마다 흐른다)
+    for (let x = X0 + 3; x <= X1 - 3; x++) if ((x + frame) % 4 === 0) g.set(x, BOT - 1, 0x9fd0e6, 170);
+    // 고물 물레바퀴 (흰 테 + 빨간 날개깃 셋, 프레임마다 20°씩)
+    const cx = 7;
+    const cy = 28;
+    for (let y = cy - 4; y <= cy + 4; y++)
+      for (let x = cx - 4; x <= cx + 4; x++) {
+        const d = Math.hypot(x - cx, y - cy);
+        if (d <= 4.3) g.set(x, y, d > 3.2 ? 0xf4f0e6 : 0x4a5a6a);
+      }
+    for (let k = 0; k < 3; k++) {
+      const a = (k * Math.PI) / 3 + (frame * Math.PI) / 9;
+      const ex = Math.cos(a) * 2.8;
+      const ey = Math.sin(a) * 2.8;
+      line(g, Math.round(cx - ex), Math.round(cy - ey), Math.round(cx + ex), Math.round(cy + ey), 0xe2604a);
+    }
+    g.set(cx, cy, 0xfaf6ec);
+    // 목 + 큰 머리 (뱃머리)
+    for (let y = 13; y <= RIM + 1; y++) {
+      const w = y < 18 ? 2 : 2 + Math.round((y - 18) * 0.5);
+      for (let x = 35 - w; x <= 37; x++) g.set(x, y, x === 35 - w ? body.lo : body.mid);
+    }
+    g.vline(36, 14, 20, body.hi);
+    g.ellipse(37, 9, 5.6, 5.2, body.mid);
+    g.ellipse(36, 7.8, 3.6, 3.2, body.hi);
+    g.ellipse(37.3, 9.3, 5, 4.6, body.mid);
+    // 삐친 깃털 한 가닥
+    g.set(36, 4, body.mid);
+    g.set(37, 3, body.mid);
+    g.set(38, 3, body.mid);
+    // 눈 (반짝)·볼
+    g.rect(38, 7, 2, 2, 0x1f1d1a);
+    g.set(38, 7, 0xffffff);
+    g.set(39, 11, 0xf2a0a0);
+    // 부리 (주황, 오른쪽으로 납작하게)
+    g.rect(42, 9, 3, 2, BEAK.mid);
+    g.hline(42, 44, 8, BEAK.hi);
+    g.hline(42, 43, 11, BEAK.lo);
+    g.set(45, 9, BEAK.mid);
+    // 지붕 (줄무늬 차양, 끝단이 물결)
+    const R0 = 3;
+    const R1 = 33;
+    for (let x = R0; x <= R1; x++) {
+      const stripe = Math.floor((x - R0) / 3) % 2 === 0 ? st.canopy : 0xfaf6ec;
+      g.vline(x, 2, 4, stripe);
+      if ((x - R0) % 3 !== 2) g.set(x, 5, stripe);
+    }
+    g.hline(R0 + 1, R1 - 1, 1, lighten(st.canopy, 0.35));
+    g.set(18, 0, st.canopy);
+    // 앞 기둥 꼭대기 (지붕 바로 아래)
+    for (const px of POSTS) g.vline(px, 5, 6, 0xd8d0c0);
+    g.outline(body.line);
+    g.recolor((x, y) => x >= 41 && y >= 7 && y <= 12 && g.get(x, y) === Grid.rgba(body.line), darken(BEAK.lo, 0.35));
+    g.recolor((x, y) => y <= 6 && g.get(x, y) === Grid.rgba(body.line), darken(st.canopy, 0.55));
+  }
+  return g;
+}
+
+/** 오리배 한 프레임 Grid (테스트·미리보기용). mirror면 뱃머리 왼쪽 */
+export function duckGrid(layer: "back" | "front", frame: number, style: DuckStyle, mirror = false): Grid {
+  const g = duckFrame(layer, frame, style);
+  return mirror ? g.mirrored() : g;
+}
+
+/** 3프레임 시트 (물레바퀴). mirror면 뱃머리 왼쪽 */
+export function duckSheet(layer: "back" | "front", mirror: boolean, style: DuckStyle): HTMLCanvasElement {
+  const sheet = new Grid(DUCK_W * DUCK_FRAMES, DUCK_H);
+  for (let f = 0; f < DUCK_FRAMES; f++) sheet.draw(duckGrid(layer, f, style, mirror), f * DUCK_W, 0);
+  return sheet.toCanvas();
+}
+
+/** 오리배 선착장 팻말 "오리배 · 2인승" (글씨는 WorldMap 이름표가 아니라 BoatRide가 팻말 위에 얹는다). 26×30, 받침 = 아래 가운데 */
+export const DUCK_SIGN_W = 26;
+export const DUCK_SIGN_H = 30;
+export function duckSign(): HTMLCanvasElement {
+  const g = new Grid(DUCK_SIGN_W, DUCK_SIGN_H);
+  // 기둥
+  g.rect(12, 12, 3, 16, WOOD.mid);
+  g.vline(12, 12, 27, WOOD.hi);
+  // 판자 (둥근 모서리)
+  g.rect(2, 3, 22, 11, WOOD.mid);
+  g.hline(3, 22, 2, WOOD.mid);
+  g.hline(2, 23, 3, WOOD.hi);
+  g.hline(2, 23, 13, WOOD.lo);
+  // 작은 오리 그림 (노랑 몸 + 주황 부리)
+  g.ellipse(9.5, 9.5, 4, 2.4, 0xf7d046);
+  g.ellipse(12, 6.5, 2, 2, 0xf7d046);
+  g.set(14, 6, 0xf08a24);
+  g.set(14, 7, 0xf08a24);
+  g.set(12, 6, 0x1f1d1a);
+  g.set(6, 8, 0xf7d046);
+  // 물결 두 줄
+  g.hline(16, 21, 7, 0x9fd0e6);
+  g.hline(17, 22, 10, 0x9fd0e6);
+  g.outline(WOOD.line);
+  for (let x = 7; x <= 18; x++) g.set(x, DUCK_SIGN_H - 1, 0x000000, 60);
+  return g.toCanvas();
+}
+
 // ── 텍스처 키 ──
 export const RIDE_TEX = {
   boatBack: (seats: 1 | 2, left: boolean, v: number) => `ride-boat${seats}-back-${left ? "l" : "r"}-${v}`,
   boatFront: (seats: 1 | 2, left: boolean, v: number) => `ride-boat${seats}-front-${left ? "l" : "r"}-${v}`,
+  duckBack: (left: boolean, v: number) => `ride-duck-back-${left ? "l" : "r"}-${v}`,
+  duckFront: (left: boolean, v: number) => `ride-duck-front-${left ? "l" : "r"}-${v}`,
+  duckSign: "ride-duck-sign",
   fountain: "ride-fountain",
   seesawBase: "ride-seesaw-base",
   seesawPlank: "ride-seesaw-plank",

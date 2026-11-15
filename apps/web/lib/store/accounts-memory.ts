@@ -897,6 +897,24 @@ export class MemoryAccounts implements AccountStore {
     return added;
   }
 
+  // ── 11/15 수집 의뢰 도장 교환소 (lib/forage/quests/store MemoryQuestStore가 부른다, 동기) ──
+
+  questHas(id: string): boolean {
+    return this.accts.has(id);
+  }
+  /** 가방에 1개 더하기 (flag면 1개로 둔다 — 가졌는지만 보는 표시) */
+  questGive(id: string, itemId: string, flag: boolean): void {
+    const a = this.accts.get(id);
+    if (a) a.inv.set(itemId, flag ? 1 : (a.inv.get(itemId) ?? 0) + 1);
+  }
+  /** 이미 영구로 가진 꾸미기인지 (입었거나 벗어 둔 것) */
+  questOwnsPermanent(id: string, itemId: string, slot: string, permUntil: number): boolean {
+    const a = this.accts.get(id);
+    if (!a) return false;
+    const cur = a.look.get(slot as CosmeticSlot);
+    return (cur?.itemId === itemId && cur.until >= permUntil) || (this.stashOf(a).get(itemId) ?? 0) >= permUntil;
+  }
+
   // ── 46·25·30번 꾸미기 (MemoryStyle이 부른다, lib/store/style.ts). 모두 동기 → 한 번에 일어난다 ──
 
   /** 가방에서 1개 꺼내기 (없으면 false) */

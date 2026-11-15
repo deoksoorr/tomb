@@ -65,6 +65,7 @@ export const LANDMARK_COLOR: Record<Landmark["kind"], string> = {
   haunt: "#a8ffd8",
   ferris: "#ff9ad0",
   balloon: "#ffb070",
+  tower: "#ffb43c",
 };
 
 /** 관람차 아이콘 (미니맵 px, 가운데 기준 — 동그란 바퀴 + 다리) */

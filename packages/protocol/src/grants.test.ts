@@ -4,8 +4,8 @@ import { ITEMS, sanitizeLook, signGrant, signJoinToken, verifyGrant, verifyJoinT
 describe("items", () => {
   it("ids are unique and prices positive", () => {
     expect(new Set(ITEMS.map((i) => i.id)).size).toBe(ITEMS.length);
-    // 31번 운영자 전용·주간 1위 전용 꾸미기만 값 0 (운영자만 영구로 받는다 / 1위만 빌려 입는다)
-    expect(ITEMS.every((i) => i.price > 0 || i.staff || i.champ)).toBe(true);
+    // 31번 운영자 전용·주간 1위 전용 꾸미기·11/15 수집 의뢰 보상(이모티콘 묶음·외형·확정 염색권)만 값 0 (운영자만 영구로 받는다 / 1위만 빌려 입는다 / 도장 교환소에서만)
+    expect(ITEMS.every((i) => i.price > 0 || i.staff || i.champ || i.quest)).toBe(true);
   });
   it("sanitizeLook keeps one cosmetic per slot and drops unknown/non-cosmetic ids", () => {
     expect(sanitizeLook(["hat_cat", "hat_straw", "fw_small", "nope", "aura_firefly"])).toEqual(["hat_cat", "aura_firefly"]);

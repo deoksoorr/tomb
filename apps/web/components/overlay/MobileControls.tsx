@@ -1,21 +1,19 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { bridge } from "@/game/bridge";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
+import FloatingStick, { tapCanvasAt } from "../ui/FloatingStick";
 import PixelIcon from "../ui/PixelIcon";
 import RideButton from "../zoo/RideButton";
 import { ExprButton } from "./ExprRadial";
 import { pressProps } from "./pressProps";
 import styles from "./MobileControls.module.css";
 
-/** 손잡이가 바닥 원 반지름의 몇 배까지 움직이는지 */
-const KNOB_TRAVEL = 0.55;
-
 /**
- * 터치 기기 전용: 좌하단 아날로그 조이스틱 + 우하단 [상호작용] [점프] [달리기] [앉기]
+ * 터치 기기 전용: 왼쪽 떠다니는 조이스틱(11/15 — 왼쪽 아무 데나 누르면 그 자리에, 짧은 탭은 아래 캔버스로 넘겨 소품·사람 누르기) + 우하단 [상호작용] [점프] [달리기] [앉기]
  * + 점프 왼쪽에 작은 [표현] (누르면 표현 창, 길게 누르면 즐겨찾기 원형 — 아래 바로 가기 줄이 없어져 여기로)
  * + 그 위 같은 크기 [채팅] (누르면 키보드 위 한 줄 입력칸, ChatSheet). 채팅 중에는 조이스틱·버튼을 숨긴다.
  */
@@ -36,6 +34,8 @@ export default function MobileControls({
   const nearGrave = useBridgeValue("grave:near") != null;
   const nearSeat = useBridgeValue("seat:near");
   const inShop = useBridgeValue("scene:changed")?.scene === "shop";
+  // 11/15 오리배 위에서는 점프 대신 꽥 (게임이 Space·점프를 꽥으로 받는다)
+  const duck = useBridgeValue("boat:duck")?.riding === true;
   useTouchGuards();
 
   function toggleRun() {
@@ -46,7 +46,7 @@ export default function MobileControls({
 
   return (
     <>
-      <Joystick hidden={chatOpen} />
+      <FloatingStick className={styles.stickZone} hidden={chatOpen} onStick={(x, y) => bridge.emit("input:joystick", { x, y })} onTap={tapCanvasAt} />
       <div className={styles.actions} data-hidden={chatOpen || undefined}>
         <button
           type="button"
@@ -57,8 +57,8 @@ export default function MobileControls({
         >
           {inShop ? "말 걸기" : nearGrave ? "살펴보기" : "상호작용"}
         </button>
-        <button type="button" className={styles.action} data-slot="jump" {...pressProps(() => bridge.emit("input:jump"))}>
-          점프
+        <button type="button" className={styles.action} data-slot="jump" aria-label={duck ? "꽥! 오리배 경적" : undefined} {...pressProps(() => bridge.emit("input:jump"))}>
+          {duck ? "꽥!" : "점프"}
         </button>
         <button
           type="button"
@@ -132,97 +132,4 @@ function useTouchGuards() {
       document.removeEventListener("dragstart", onDrag);
     };
   }, []);
-}
-
-function Joystick({ hidden = false }: { hidden?: boolean }) {
-  const baseRef = useRef<HTMLDivElement>(null);
-  const knobRef = useRef<HTMLDivElement>(null);
-  const pointerId = useRef<number | null>(null);
-  const last = useRef({ x: 0, y: 0 });
-
-  const send = (x: number, y: number) => {
-    if (x === last.current.x && y === last.current.y) return;
-    last.current = { x, y };
-    bridge.emit("input:joystick", { x, y });
-  };
-
-  /** 눌림을 풀고 손잡이를 가운데로 (다음 값이 0과 같아도 다시 보내도록 last도 0으로) */
-  const reset = useEffectEvent(() => {
-    const id = pointerId.current;
-    pointerId.current = null;
-    if (id !== null && baseRef.current?.hasPointerCapture(id)) baseRef.current.releasePointerCapture(id);
-    if (knobRef.current) knobRef.current.style.transform = "";
-    last.current = { x: 0, y: 0 };
-    bridge.emit("input:joystick", { x: 0, y: 0 });
-  });
-
-  // 화면을 떠날 때·앱 전환(창 blur·탭 숨김) 때 캐릭터가 계속 걸어가거나 '눌린 채'로 남지 않게
-  useEffect(() => {
-    const onLeave = () => reset();
-    const onVis = () => {
-      if (document.hidden) reset();
-    };
-    window.addEventListener("blur", onLeave);
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      window.removeEventListener("blur", onLeave);
-      document.removeEventListener("visibilitychange", onVis);
-      reset();
-    };
-  }, []);
-
-  // 채팅 중엔 숨긴다: 숨는 사이 손가락을 떼면 pointerup을 못 받아 다음 터치가 막힐 수 있어 미리 푼다
-  useEffect(() => {
-    if (hidden) reset();
-  }, [hidden]);
-
-  function move(e: PointerEvent<HTMLDivElement>) {
-    const base = baseRef.current;
-    const knob = knobRef.current;
-    if (!base || !knob) return;
-    const rect = base.getBoundingClientRect();
-    const radius = rect.width / 2;
-    let x = (e.clientX - (rect.left + radius)) / radius;
-    let y = (e.clientY - (rect.top + radius)) / radius;
-    const len = Math.hypot(x, y);
-    if (len > 1) {
-      x /= len;
-      y /= len;
-    }
-    knob.style.transform = `translate(${x * radius * KNOB_TRAVEL}px, ${y * radius * KNOB_TRAVEL}px)`;
-    // 데드존(히스테리시스 포함)은 게임이 처리한다 → 원시 값을 보낸다
-    send(Math.round(x * 100) / 100, Math.round(y * 100) / 100);
-  }
-
-  function release(e: PointerEvent<HTMLDivElement>) {
-    if (e.pointerId !== pointerId.current) return;
-    pointerId.current = null;
-    if (knobRef.current) knobRef.current.style.transform = "";
-    send(0, 0);
-  }
-
-  return (
-    <div
-      ref={baseRef}
-      className={styles.joystick}
-      data-hidden={hidden || undefined}
-      role="application"
-      aria-label="이동 조이스틱"
-      onPointerDown={(e) => {
-        // 이미 잡은 손가락이 있어도 캡처가 풀려 있으면(떼는 이벤트를 놓친 묵은 값) 새 손가락이 이어받는다
-        if (pointerId.current !== null && e.currentTarget.hasPointerCapture(pointerId.current)) return;
-        pointerId.current = e.pointerId;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        move(e);
-      }}
-      onPointerMove={(e) => {
-        if (e.pointerId === pointerId.current) move(e);
-      }}
-      onPointerUp={release}
-      onPointerCancel={release}
-      onLostPointerCapture={release}
-    >
-      <div ref={knobRef} className={styles.knob} />
-    </div>
-  );
 }

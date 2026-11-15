@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
-import { fillEdgeColors, flameColor, nameColorSpec, namePlateSpec, type NameColorSpec, type NamePlateSpec } from "@/lib/nameStyle";
-import { TEX } from "../assets/manifest";
+import { fillEdgeColors, flameColor, LEAF_COUNT, leafAt, nameColorSpec, namePlateSpec, waveFlow, type NameColorSpec, type NamePlateSpec } from "@/lib/nameStyle";
+import { addCanvasTexture, TEX } from "../assets/manifest";
+import { NAME_LEAF_H, NAME_LEAF_W, nameLeafGrid } from "../sprites/nameStyleIcons";
 import { LABEL_ME, LABEL_OTHER } from "../config";
 
 // 닉네임 꾸미기 (머리 위 이름표): 이름 글자 색(단색·그라데이션·움직이는 이름)과 이름표 바탕판.
@@ -12,6 +13,8 @@ import { LABEL_ME, LABEL_OTHER } from "../config";
 //  - 바탕판: Graphics 한 장. 이름표 크기·배율이 바뀔 때만 다시 그린다
 // 성능: 움직이는 색은 ANIM_STEP_MS마다만 다시 칠하고, sync는 보이는 아바타만 부른다(화면 밖이면 멈춘다).
 // 움직임 줄이기 설정이면 멈춘 그림(그라데이션·고정 빛·고정 반짝이).
+// 11/15 수집 의뢰: 나뭇잎 이름 글자 = 그라데이션 + 작은 잎 3장을 돌려 쓰며 떨어뜨린다(이미지 위치만),
+//  물결 이름표 = 바탕판은 그대로 두고 윤슬·물마루만 얇은 Graphics 한 장에 ANIM_STEP_MS마다 다시 그린다 (텍스처를 새로 만들지 않는다).
 // 이름표와 장식은 모두 밤 어둠 층 위(DEPTH.labels)라 밤에도 색이 그대로 보인다.
 // 내 이름표: 산 색이 있으면 그 색을 쓰고, 내 것이라는 표시는 이름표 아래 작은 촛불빛 삼각형으로 한다 (색이 없으면 예전처럼 촛불빛 글자).
 
@@ -29,6 +32,8 @@ const RAINBOW = [0xff9a9a, 0xffd27a, 0xb8f58a, 0x8ad8ff, 0xc2a2ff];
 /** 바탕판 여백 (화면 px): 옆·위·아래 */
 const PAD_X = 3;
 const PAD_Y = 1;
+/** 물결 이름표는 양옆을 조금 더 넓게 (글자 옆으로 흐르는 물결이 보이게) */
+const WAVE_PAD = 2;
 
 export class NameStyleView {
   private colorId: string | null = null;
@@ -39,6 +44,11 @@ export class NameStyleView {
   private plateKey = "";
   private halo: Phaser.GameObjects.Image | null = null;
   private sparks: Phaser.GameObjects.Image[] = [];
+  /** 나뭇잎 이름 글자의 떨어지는 잎 */
+  private leaves: Phaser.GameObjects.Image[] = [];
+  /** 물결 이름표의 흐르는 윤슬 (바탕판 위·글자 아래) */
+  private ripple: Phaser.GameObjects.Graphics | null = null;
+  private rippleStep = -1;
   private marker: Phaser.GameObjects.Graphics | null = null;
   private markerSc = 0;
   /** 글자 경계 색 (고쳐 쓴다) */
@@ -75,6 +85,13 @@ export class NameStyleView {
         this.plate?.destroy();
         this.plate = null;
       }
+      const wantRipple = plate?.kind === "wave";
+      if (wantRipple && !this.ripple) this.ripple = this.scene.add.graphics().setDepth(this.label.depth - 0.005).setVisible(false);
+      if (!wantRipple && this.ripple) {
+        this.ripple.destroy();
+        this.ripple = null;
+      }
+      this.rippleStep = -1;
     }
   }
 
@@ -97,12 +114,12 @@ export class NameStyleView {
   /** 이름표 옆에 붙는 표시(친구 하트·도감 별)가 바탕판 밖으로 비켜설 거리 (월드 단위) */
   sidePad(sc: number): number {
     if (!this.plateOn) return 0;
-    return (PAD_X + 1 + (this.plateSpec?.kind === "ribbon" ? 4 : 0)) * sc;
+    return (PAD_X + 1 + (this.plateSpec?.kind === "ribbon" ? 4 : this.plateSpec?.kind === "wave" ? WAVE_PAD : 0)) * sc;
   }
 
   /** 이름표 위에 얹는 것(1위 배지·말풍선)을 올릴 높이 (월드 단위) */
   topLift(sc: number): number {
-    return this.plateOn ? (PAD_Y + 1 + (this.plateSpec?.kind === "cloud" || this.plateSpec?.kind === "tomb" ? 1 : 0)) * sc : 0;
+    return this.plateOn ? (PAD_Y + 1 + (this.plateSpec?.kind === "cloud" || this.plateSpec?.kind === "tomb" || this.plateSpec?.kind === "wave" ? 1 : 0)) * sc : 0;
   }
 
   /** 빛 무리·반짝이·내 표시를 꾸미기에 맞춰 만들거나 치운다 */
@@ -121,6 +138,14 @@ export class NameStyleView {
     if (fx !== "stars" && this.sparks.length) {
       for (const s of this.sparks) s.destroy();
       this.sparks = [];
+    }
+    if (fx === "leaves" && !this.leaves.length) {
+      addCanvasTexture(this.scene, LEAF_TEX, { canvas: nameLeafGrid().toCanvas(), frameW: NAME_LEAF_W, frameH: NAME_LEAF_H });
+      for (let i = 0; i < LEAF_COUNT; i++) this.leaves.push(this.scene.add.image(0, 0, LEAF_TEX, i % 2).setDepth(this.label.depth + 0.01).setVisible(false));
+    }
+    if (fx !== "leaves" && this.leaves.length) {
+      for (const s of this.leaves) s.destroy();
+      this.leaves = [];
     }
     const wantMarker = this.isMe && c !== null;
     if (wantMarker && !this.marker) {
@@ -198,6 +223,36 @@ export class NameStyleView {
       this.plate.setVisible(show);
     }
 
+    if (this.ripple) {
+      const show = on && this.plateOn;
+      if (show) {
+        // 움직임 줄이기면 한 번만 (멈춘 물결)
+        const step = this.reduced ? 0 : Math.floor(now / ANIM_STEP_MS);
+        const key = `${w}|${h}|${sc}`;
+        if (step !== this.rippleStep || key !== this.plateKey) {
+          this.rippleStep = step;
+          drawWaveRipple(this.ripple.clear(), this.plateSpec!, w, h, sc, this.reduced ? 0.3 : waveFlow(step * ANIM_STEP_MS));
+        }
+        this.ripple.setPosition(cx, bottom).setAlpha(alpha);
+      }
+      this.ripple.setVisible(show);
+    }
+
+    for (let i = 0; i < this.leaves.length; i++) {
+      const s = this.leaves[i];
+      if (!on) {
+        if (s.visible) s.setVisible(false);
+        continue;
+      }
+      // 잎마다 이름표 위쪽에서 팔랑팔랑 떨어진다 (움직임 줄이기면 양 끝에 하나씩 멈춰 있다)
+      const p = this.reduced ? { x: i === 0 ? -0.5 : 0.5, y: i === 0 ? 0.1 : 0.9, rot: i ? 0.4 : -0.3, flip: 1, a: i < 2 ? 0.9 : 0 } : leafAt(i, now);
+      s.setPosition(Math.round(cx + p.x * (w + 6 * sc)), Math.round(bottom - h * 1.15 + p.y * h))
+        .setRotation(p.rot)
+        .setScale(sc * (0.35 + 0.65 * Math.abs(p.flip)) * (p.flip < 0 ? -1 : 1), sc)
+        .setAlpha(alpha * p.a)
+        .setVisible(p.a > 0.02);
+    }
+
     if (this.halo && c?.kind === "fx") {
       const breathe = this.reduced ? 0.5 : c.fx === "flame" ? 0.5 + 0.5 * Math.sin(now / 130) * Math.sin(now / 370) : 0.5 + 0.5 * Math.sin(now / 900);
       this.halo
@@ -259,7 +314,9 @@ export class NameStyleView {
     this.plate?.setVisible(false);
     this.halo?.setVisible(false);
     this.marker?.setVisible(false);
+    this.ripple?.setVisible(false);
     for (const s of this.sparks) s.setVisible(false);
+    for (const s of this.leaves) s.setVisible(false);
   }
 
   /** 꾸미기를 모두 걷고 원래 이름표 색으로 */
@@ -276,8 +333,15 @@ export class NameStyleView {
     this.marker = null;
     for (const s of this.sparks) s.destroy();
     this.sparks = [];
+    this.ripple?.destroy();
+    this.ripple = null;
+    for (const s of this.leaves) s.destroy();
+    this.leaves = [];
   }
 }
+
+/** 나뭇잎 이름 글자의 잎 텍스처 (nameStyleIcons nameLeafGrid, 처음 쓸 때 한 번) */
+const LEAF_TEX = "ns-leaf";
 
 /** 결정적 [0,1) (반짝이 자리) */
 function hash01(a: number, b: number): number {
@@ -288,12 +352,54 @@ function hash01(a: number, b: number): number {
 }
 
 /**
+ * 물결 이름표의 움직이는 층 (원점·단위는 drawPlate와 같다). flow = 0~1 흐름 단계:
+ *  물마루(판 위로 솟은 밝은 물결 머리 + 물거품 점)가 오른쪽으로, 윤슬 두 줄(위 줄 오른쪽 · 아래 줄 왼쪽으로 느리게)이 흐른다
+ */
+export function drawWaveRipple(g: Phaser.GameObjects.Graphics, p: NamePlateSpec, w: number, h: number, sc: number, flow: number): void {
+  const u = sc;
+  const padX = PAD_X + WAVE_PAD;
+  const L = Math.round(-w / 2 - padX * sc);
+  const R = Math.round(w / 2 + padX * sc);
+  const T = Math.round(-h - PAD_Y * sc);
+  const B = Math.round(PAD_Y * sc);
+  const H = B - T;
+  const snap = (x: number) => L + Math.round((x - L) / u) * u;
+  /** [x, x + len)를 [lo, hi) 안으로 잘라 칠한다 */
+  const dash = (x: number, y: number, len: number, c: number, a: number, lo = L + u, hi = R - u) => {
+    const x0 = Math.max(lo, snap(x));
+    const x1 = Math.min(hi, snap(x + len));
+    if (x1 > x0) g.fillStyle(c, a).fillRect(x0, y, x1 - x0, u);
+  };
+  // 물마루: 간격 8u마다 둥근 물결 머리가 판 위로 솟아 오른쪽으로 흐른다 (테두리 색으로 한 겹 두른 뒤 밝은 물빛 + 물거품 점)
+  const per = 8 * u;
+  const s0 = flow * per;
+  for (let x = L - per + s0; x < R + per; x += per) {
+    dash(x - u, T - 2 * u, 5 * u, p.edge, 1, L, R);
+    dash(x, T - 3 * u, 3 * u, p.edge, 1, L, R);
+    dash(x, T - 2 * u, 3 * u, p.light, 1, L, R);
+    dash(x + u, T - 3 * u, u, p.dots[0], 1, L, R);
+    // 물마루 사이 골은 밝은 띠를 끊어 물결 모양이 나게
+    dash(x + 4 * u, T, 2 * u, p.fill, 1);
+  }
+  // 윤슬: 양옆 여백(글자 밖)에서 위 줄은 오른쪽, 아래 줄은 왼쪽으로 흐른다
+  const yA = T + 2 * u;
+  const yB = T + Math.max(3 * u, Math.round((H * 0.72) / u) * u);
+  const perB = 6 * u;
+  const sB = (1 - flow) * perB;
+  for (let x = L - per + s0 + 3 * u; x < R; x += per) dash(x, yA, 2 * u, p.dots[1], 0.75);
+  for (let x = L - perB + sB; x < R; x += perB) dash(x, yB, 2 * u, p.dots[1], 0.55);
+  // 물거품 점 (아래 테두리)
+  for (let x = L - perB + sB + 3 * u; x < R; x += perB * 2) dash(x, B - u, u, p.dots[0], 0.8);
+}
+
+/**
  * 바탕판 그리기 (원점 = 이름표 아래 가운데, 단위 = 화면 1px × sc). 이름표 글자 칸(w×h)을 PAD만큼 둘러싼다.
  * 픽셀 느낌이 나게 sc 단위로만 그린다
  */
 export function drawPlate(g: Phaser.GameObjects.Graphics, p: NamePlateSpec, w: number, h: number, sc: number): void {
-  const L = Math.round(-w / 2 - PAD_X * sc);
-  const R = Math.round(w / 2 + PAD_X * sc);
+  const padX = PAD_X + (p.kind === "wave" ? WAVE_PAD : 0);
+  const L = Math.round(-w / 2 - padX * sc);
+  const R = Math.round(w / 2 + padX * sc);
   const T = Math.round(-h - PAD_Y * sc);
   const B = Math.round(PAD_Y * sc);
   const W = R - L;
@@ -366,6 +472,15 @@ export function drawPlate(g: Phaser.GameObjects.Graphics, p: NamePlateSpec, w: n
       g.fillStyle(p.light, p.alpha).fillRect(L + rad, top, W - 2 * rad, u);
       // 밑동 이끼
       g.fillStyle(p.dots[0], 1).fillRect(L, B - u, 3 * u, u).fillRect(R - 4 * u, B - u, 2 * u, u);
+      break;
+    }
+    case "wave": {
+      // 11/15 물결 이름표: 둥근 물빛 판, 아래쪽은 깊은 물, 위 테두리는 밝은 물마루 띠 (흐르는 윤슬은 drawWaveRipple)
+      g.fillStyle(p.edge, 1).fillRoundedRect(L - u, T - u, W + 2 * u, H + 2 * u, 2 * u);
+      g.fillStyle(p.fill, p.alpha).fillRoundedRect(L, T, W, H, u);
+      const deep = T + Math.round((H * 0.62) / u) * u;
+      g.fillStyle(p.edge, 0.38).fillRect(L + u, deep, W - 2 * u, B - deep - u);
+      g.fillStyle(p.light, 0.9).fillRect(L + u, T, W - 2 * u, u);
       break;
     }
     case "star": {

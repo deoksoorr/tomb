@@ -1,6 +1,7 @@
 import { b64urlDecode, b64urlEncode, hmacSign, hmacVerify } from "@tomb/protocol";
 import { DIFFICULTIES, GAME_KINDS, HUNT_ZONES, isZoneId, type Difficulty, type GameKind, type ZoneId } from "./catalog";
-import { burnoutZone, isBurnoutTier, RUN_TIERS, type RunTier } from "./endgame";
+import { RUN_TIERS, type RunTier } from "./endgame";
+import { isCheckpoint } from "./tower";
 import type { Drop } from "./types";
 
 // 런 티켓: 서버가 판을 시작할 때 서명해 주고, 끝낼 때 그대로 돌려받는다.
@@ -25,8 +26,8 @@ export type TicketClaims = {
   sv?: number;
   /** 테스트 서버 운영자 시험 드롭 (lib/rpg/testDrops). 있으면 판 끝에 굴림 대신 이것을 준다 — 운영 서버는 싣지도 읽지도 않는다 */
   td?: Drop[];
-  /** 11/15 번아웃 단계 (지옥만, 사냥터는 그 단계의 사냥터 — endgame.burnoutZone). 서버가 판 시작 때 레벨·열린 단계·남은 도전을 확인했다 */
-  bt?: number;
+  /** 11/15 야근 빌딩 시작 층 (지옥 사냥만, 체크포인트 1·11·21 …). 서버가 판 시작 때 레벨·최고 기록으로 연 체크포인트인지 확인했다. 시드는 s */
+  tw?: number;
   /** 11/15 초월 판 구간 (레벨 50 지옥 판만). 서버가 판 시작 때 그날 판 수로 정했다 — 결과에서 클라이언트 말을 믿지 않는다 */
   tt?: RunTier;
 };
@@ -69,7 +70,7 @@ export async function verifyTicket(secret: string, token: string): Promise<Ticke
       (c.z === undefined || (isZoneId(c.z) && HUNT_ZONES[c.z].difficulty === c.d)) &&
       (c.sv === undefined || Number.isInteger(c.sv)) &&
       (c.td === undefined || okDrops(c.td)) &&
-      (c.bt === undefined || (isBurnoutTier(c.bt) && c.g === "hunt" && c.d === "hell" && c.z === burnoutZone(c.bt).id)) &&
+      (c.tw === undefined || (isCheckpoint(c.tw) && c.tw <= 10_000 && c.g === "hunt" && c.d === "hell" && c.tt === undefined)) &&
       (c.tt === undefined || Object.hasOwn(RUN_TIERS, c.tt));
     return ok ? c : null;
   } catch {

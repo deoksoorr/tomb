@@ -80,7 +80,8 @@ describe("46번 염색 형식", () => {
 
 describe("46번 염색권·30번 영구 코디 카탈로그", () => {
   it("무작위 염색권 여덟 종류, 값 순으로 놓이고 처음 세 등급은 비쌀수록 높다", () => {
-    const dyes = ITEMS.filter((i) => i.kind === "dye");
+    // 11/15 수집 의뢰 보상(색 확정·특수색 확정)은 상점 염색권이 아니다 (판·조준 없음, 값 0)
+    const dyes = ITEMS.filter((i) => i.kind === "dye" && !i.quest);
     expect(dyes.map((i) => i.dye?.mode === "random" && i.dye.tier)).toEqual([1, 4, 5, 6, 2, 7, 3, 8]);
     for (let i = 1; i < dyes.length; i++) expect(dyes[i].price).toBeGreaterThanOrEqual(dyes[i - 1].price);
     const price = (t: number) => dyes.find((d) => d.dye?.mode === "random" && d.dye.tier === t)!.price;

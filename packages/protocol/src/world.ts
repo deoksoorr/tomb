@@ -38,7 +38,7 @@ const CX = MAP_WIDTH / 2; // 720
 //  y≈544  │ └────────────┘     │ 회전목마  해먹   시소      │ ║ 집 집 집      │
 //  y≈600  │ 묘지기 모닥불       └───────────────────────────┘ ╚═══════════════│
 //  y≈700  │ ~~~ 강 ~~[서쪽 다리]~~~~[징검다리]~~[가운데 다리]~~~╲  나루터·낚시터  │
-//  y≈784  │ ┌─ 동물원 (우리 5곳·사육사) ─┐ (안개 연못) ┌다리 건너 묘역 12┐ 호박밭 ╲( 호수 ·배 )│
+//  y≈784  │ ┌─ 동물원 (우리 5곳·사육사) ─┐ (오리 연못) ┌다리 건너 묘역 12┐ 호박밭 ╲( 호수 ·배 )│
 //  y≈1008 └──────────────────────────────────────────────────────────────────────┘
 
 export type ZoneId = "hill" | "graveyard" | "plaza" | "housing" | "river" | "lake" | "pond" | "forest" | "meadow" | "gate" | "fishing" | "zoo";
@@ -55,6 +55,8 @@ export const ZONES: readonly Zone[] = [
   { id: "pond", name: "달빛 연못", x: 398, y: 74, w: 116, h: 76 },
   { id: "pond", name: "까마귀 연못", x: 1108, y: 62, w: 232, h: 92 },
   { id: "forest", name: "안개 숲", x: 400, y: 784, w: 200, h: 224 },
+  // 11/15 오리 연못 (안개 숲 가운데, 오리배 선착장). DUCK_POND와 같은 타원을 두르는 사각형
+  { id: "pond", name: "오리 연못", x: 432, y: 836, w: 148, h: 120 },
   { id: "graveyard", name: "다리 건너 묘역", x: 600, y: 784, w: 256, h: 224 },
   // 동물원 (예전 버드나무 묘역 자리, 사용자 요청: 펫은 사육사에게서). ZOO와 같은 사각형
   { id: "zoo", name: "동물원", x: 48, y: 784, w: 352, h: 224 },
@@ -270,8 +272,11 @@ export const LAKE = { x: 1256, y: 904, rx: 136, ry: 84 } as const;
 export const PONDS: readonly Pond[] = [
   { id: "pondN", name: "달빛 연못", x: 456, y: 112, rx: 58, ry: 38 },
   { id: "pondNE", name: "까마귀 연못", x: 1224, y: 108, rx: 116, ry: 46 },
-  { id: "pondS", name: "안개 연못", x: 500, y: 888, rx: 60, ry: 38 },
+  // 11/15: 안개 연못을 넓혀 오리 연못으로 (오리배 선착장, 낚시는 하지 않는다 — 둑 낚시 자리를 뺐다)
+  { id: "pondS", name: "오리 연못", x: 506, y: 896, rx: 74, ry: 60 },
 ];
+/** 오리 연못 (PONDS "pondS"). 오리배는 이 연못 안에서만 다닌다 */
+export const DUCK_POND: Pond = PONDS.find((p) => p.id === "pondS")!;
 /** 강을 건너는 다리 (세로로 놓인 판자 길, 가운데 x와 위·아래 끝 y). 양 끝은 둑 위까지 넉넉히 걸친다 */
 export const BRIDGES: readonly { id: string; x: number; y0: number; y1: number; w: number }[] = [
   { id: "bridgeW", x: 176, y0: 660, y1: 744, w: 24 },
@@ -349,7 +354,7 @@ export const FISHING_SPOTS: readonly FishingSpot[] = [
   fishSpot("lake", 1366, 856, DIR.down),
   fishSpot("lake", 1384, 872, DIR.down),
   fishSpot("lake", 1398, 904, DIR.left),
-  // ── 다른 물가 (16) ── 연못·강·호수 서쪽에도 몇 자리씩 (낚시터가 붐빌 때)
+  // ── 다른 물가 (14) ── 연못·강·호수 서쪽에도 몇 자리씩 (낚시터가 붐빌 때)
   // 달빛 연못 (언덕 옆)
   fishSpot("lake", 456, 158, DIR.up),
   fishSpot("lake", 520, 116, DIR.left),
@@ -363,9 +368,6 @@ export const FISHING_SPOTS: readonly FishingSpot[] = [
   riverSpot(840, true),
   riverSpot(260, false),
   riverSpot(800, false),
-  // 안개 연못
-  fishSpot("lake", 500, 842, DIR.down),
-  fishSpot("lake", 500, 934, DIR.up),
   // 호수 서쪽 잔교·둑
   fishSpot("lake", 1172, 932, DIR.right),
   fishSpot("lake", 1148, 932, DIR.up),
@@ -404,18 +406,33 @@ export function fishingWaterOf(id: string): FishingSpot["water"] | null {
 // 1인승 2척(선착장 양옆) + 2인승 1척(선착장 끝 앞, 앞자리 = 노 젓는 사람, 뒷자리 = 같이 타는 사람). 모두 호수에 매어 둔다.
 // 앵커(x,y) = 나루터에 매어 둔 자리. 타면 위치는 클라이언트가 물 위로 옮기고(서버는 mobile 자리라 따라간다),
 // 내리면 배는 잠시 뒤 이 자리로 돌아온다 (클라이언트 연출). 자리 id = spotSeatId("boat", x, y) — 예 "b_1206_850"
-export type Boat = { id: string; x: number; y: number; seats: 1 | 2; facing: DirId };
+// 11/15 오리배: kind "duck" — 오리 연못(DUCK_POND) 선착장(DUCK_DOCK)에 3척, 2인승 나란히 앉기 (왼쪽 = 먼저 탄 사람이 페달·조종, 오른쪽 = 같이 타는 사람).
+// 옆자리는 뱃머리 방향과 상관없이 화면 오른쪽으로 DUCK_SIDE_SEAT. 서버 규칙(1인 1자리·같은 배 옆자리·mobile)은 조각배와 같다
+export type BoatKind = "row" | "duck";
+export type Boat = { id: string; x: number; y: number; seats: 1 | 2; facing: DirId; kind?: BoatKind };
 export const BOATS: readonly Boat[] = [
   { id: "boatA", x: 1206, y: 850, seats: 1, facing: DIR.left },
   { id: "boatB", x: 1282, y: 850, seats: 1, facing: DIR.right },
   { id: "boatC", x: 1250, y: 884, seats: 2, facing: DIR.right },
+  { id: "duckA", x: 466, y: 866, seats: 2, facing: DIR.left, kind: "duck" },
+  { id: "duckB", x: 534, y: 866, seats: 2, facing: DIR.right, kind: "duck" },
+  { id: "duckC", x: 500, y: 900, seats: 2, facing: DIR.right, kind: "duck" },
 ];
+/** 배 종류 (없으면 조각배) */
+export function boatKind(b: Boat): BoatKind {
+  return b.kind ?? "row";
+}
+/** 오리배 선착장 판자 (오리 연못 북쪽 둑에서 물로) · 타는 자리(판자 끝) */
+export const DUCK_DOCK_DECK = { x: 496, y: 820, w: 20, h: 40 } as const;
+export const DUCK_DOCK = { x: 506, y: 852 } as const;
 /** 2인승 뒷자리: 앞자리(노 젓는 자리)에서 뱃머리 반대쪽으로 이만큼 */
 export const BOAT_BACK_SEAT = 11;
+/** 오리배 옆자리: 왼쪽 자리(조종)에서 화면 오른쪽으로 이만큼 */
+export const DUCK_SIDE_SEAT = 12;
 export type BoatSeat = { id: string; boatId: string; index: 0 | 1; x: number; y: number; facing: DirId };
 /** 배 자리 전부 (앞자리 index 0, 2인승 뒷자리 index 1) */
 export const BOAT_SEATS: readonly BoatSeat[] = BOATS.flatMap((b) => {
-  const back = b.facing === DIR.right ? -BOAT_BACK_SEAT : BOAT_BACK_SEAT;
+  const back = boatKind(b) === "duck" ? DUCK_SIDE_SEAT : b.facing === DIR.right ? -BOAT_BACK_SEAT : BOAT_BACK_SEAT;
   const seats: BoatSeat[] = [{ id: `b_${b.x}_${b.y}`, boatId: b.id, index: 0, x: b.x, y: b.y, facing: b.facing }];
   if (b.seats === 2) seats.push({ id: `b_${b.x + back}_${b.y}`, boatId: b.id, index: 1, x: b.x + back, y: b.y, facing: b.facing });
   return seats;
@@ -622,7 +639,7 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "bW", kind: "bench", x: 784, y: 984, facing: DIR.up, seatOffsets: two },
   // ── 동물원 ── 큰 개 놀이터 옆 쉼터 벤치 (예전 버드나무 묘역 벤치를 옮겼다, id 그대로)
   { id: "bX", kind: "bench", x: 354, y: 990, facing: DIR.up, seatOffsets: two },
-  // ── 안개 연못 · 호박밭 ──
+  // ── 오리 연못(옛 안개 연못) · 호박밭 ──
   { id: "bS", kind: "bench", x: 440, y: 972, facing: DIR.up, seatOffsets: two },
   { id: "cE", kind: "chair", x: 1010, y: 960, facing: DIR.right, seatOffsets: [0] },
   { id: "cF", kind: "chair", x: 1050, y: 960, facing: DIR.left, seatOffsets: [0] },

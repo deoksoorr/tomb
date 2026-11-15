@@ -13,13 +13,14 @@ import styles from "./RankingPanel.module.css";
 
 // 49번: 랭킹은 포인트·사냥 중심. 묘비(헌화 순)는 작은 탭 하나로만 남긴다 (살려주세요 순위는 없어졌다).
 
-type Tab = "points" | "hunt" | "level" | "fish" | "look" | "house" | "flower";
+type Tab = "points" | "hunt" | "level" | "tower" | "fish" | "look" | "house" | "flower";
 type HuntMode = "huntKills" | "huntBest";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "points", label: "포인트" },
   { id: "hunt", label: "사냥" },
   { id: "level", label: "사냥 레벨" },
+  { id: "tower", label: "야근 빌딩" },
   { id: "fish", label: "낚시" },
   { id: "look", label: "꾸미기" },
   { id: "house", label: "집 꾸미기" },
@@ -37,6 +38,7 @@ const EMPTY: Record<RankBoard, string> = {
   fish: "아직 이 물고기를 낚은 사람이 없어요.",
   look: "아직 코디를 입은 사람이 없어요. 상점에서 꾸미기를 골라 입어 보세요.",
   huntLevel: "아직 사냥터에 다녀온 사람이 없어요.",
+  tower: "아직 야근 빌딩을 오른 사람이 없어요. 사냥 레벨 50부터 들어갈 수 있어요.",
 };
 /** 최대어 랭킹 물고기 고르기 (크기가 있는 물고기만) */
 const FISH_OPTIONS = speciesOf("fish").filter((sp) => sp.size);
@@ -56,6 +58,7 @@ export function clearTime(ms: number): string {
 export function rankValue(board: RankBoard, value: number): string {
   if (board === "huntBest") return clearTime(value);
   if (board === "huntLevel") return `Lv.${value}`;
+  if (board === "tower") return `${value.toLocaleString("ko-KR")}층`;
   if (board === "huntKills") return `${value.toLocaleString("ko-KR")}마리`;
   if (board === "house" || board === "look") return `${value.toLocaleString("ko-KR")}점`;
   if (board === "fish") return `${(value / 10).toFixed(1)}cm`;
@@ -69,7 +72,7 @@ type Props = {
   onPick: (graveId: string) => void;
 };
 
-/** 탭 7개: 포인트(이번 주·전체) · 사냥(처치 수·사냥터별 최단 클리어) · 사냥 레벨(같으면 경험치) · 낚시(물고기별·전체 최대어) · 꾸미기(지금 입은 코디 점수) · 집 꾸미기(F11 꾸밈 점수) · 헌화(지금 채널 묘비) */
+/** 탭 8개: 포인트(이번 주·전체) · 사냥(처치 수·사냥터별 최단 클리어) · 사냥 레벨(같으면 경험치) · 야근 빌딩(11/15 최고 층, 이번 주·전체) · 낚시(물고기별·전체 최대어) · 꾸미기(지금 입은 코디 점수) · 집 꾸미기(F11 꾸밈 점수) · 헌화(지금 채널 묘비) */
 export default function RankingList({ graves, onPick }: Props) {
   const [tab, setTab] = useState<Tab>("points");
   const [period, setPeriod] = useState<RankPeriod>("week");
@@ -81,7 +84,8 @@ export default function RankingList({ graves, onPick }: Props) {
     () => (tab === "flower" ? graves.filter((g) => g.flowers > 0).sort((a, b) => b.flowers - a.flowers).slice(0, LIMIT) : []),
     [graves, tab],
   );
-  const board: RankBoard = tab === "hunt" ? hunt : tab === "house" ? "house" : tab === "fish" ? "fish" : tab === "look" ? "look" : tab === "level" ? "huntLevel" : "points";
+  const board: RankBoard =
+    tab === "hunt" ? hunt : tab === "house" ? "house" : tab === "fish" ? "fish" : tab === "look" ? "look" : tab === "level" ? "huntLevel" : tab === "tower" ? "tower" : "points";
 
   return (
     <>
@@ -121,6 +125,7 @@ export default function RankingList({ graves, onPick }: Props) {
             ))}
           </div>
           {tab === "house" && <span className={styles.hint}>꾸밈 점수 = 안팎 물건 점수 + 좋아요 × 3</span>}
+          {tab === "tower" && <span className={styles.hint}>층 높은 순 · 같으면 빨리 오른 순 · 이번 주 1위는 다음 주 한 주 동안 신화 칭호 「이번 주 최고층」</span>}
           {tab === "fish" && <span className={styles.hint}>직접 낚은 물고기만 올라요 (자동 낚시로 낚은 것은 도감에만 기록돼요)</span>}
           {tab === "fish" && (
             <select className={styles.zone} value={fish} onChange={(e) => setFish(e.target.value)} aria-label="물고기">
