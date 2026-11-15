@@ -23,6 +23,7 @@ import {
   URGENT_DEF,
   URGENT_GAP_MS,
   URGENT_HAT,
+  URGENT_POCKET,
   URGENT_KINDS,
   URGENT_MS,
   URGENT_REF_ONLINE,
@@ -32,7 +33,8 @@ import {
   urgentStage,
   type UrgentSlot,
 } from "./urgent";
-import { claimUrgent, deliverUrgent, festivalOn, testStartUrgent, urgentMine, urgentPublic, urgentStore } from "./urgentService";
+import { claimUrgent, deliverUrgent, festivalOn, openUrgentPocket, testAddUrgent, testStartUrgent, urgentEnabled, urgentMine, urgentPublic, urgentStore } from "./urgentService";
+import { setStaff } from "../../staff";
 import { MemoryUrgentStore, type UrgentMemDeps } from "./urgentStore";
 
 // 11/15 긴급 의뢰: 시각(시드·범위)·목표·단계·보상·상자 확률·축제 범위, 그리고 서버 흐름(제한 시간·중복 수령)을 메모리 저장소로.
@@ -279,7 +281,7 @@ describe("서버 흐름", () => {
     const r = await urgentPublic(ev.start - 5 * 60_000);
     expect(r.body.ev).toBeNull();
     expect(spy).not.toHaveBeenCalled();
-    expect(r.cacheSec).toBeLessThanOrEqual(30);
+    expect(r.cacheSec).toBeLessThanOrEqual(10);
     spy.mockRestore();
   });
 
@@ -322,6 +324,8 @@ describe("서버 흐름", () => {
     expect(mid.body.ev!.n).toBe(goal + 1);
     expect(mid.body.ev!.top.map((t) => t.name)).toEqual(["큰손", "막차", "작은손"]);
     expect(mid.body.ev!.lastName).toBe("막차");
+    // 100%에 처음 닿은 시각 (화면 축하 폭죽 기준)
+    expect(mid.body.ev!.goalAt).toBe(ev.end - 30_000);
     // 150% → 축제 (참여 안 한 사람도)
     await deliverUrgent(big, ev.id, await fill(big, ev, Math.ceil(goal / 2)), ev.end - 10_000);
     expect(await festivalOn(ev.end - 5_000)).toBe(true);
@@ -342,10 +346,21 @@ describe("서버 흐름", () => {
     expect(row).toMatchObject({ done: true, mine: goal - 6 + Math.ceil(goal / 2), reward: { stage: 150, stamps: 5, box: true, king: true, last: false }, claimed: null });
 
     const r1 = await claimUrgent(big, ev.id, t);
-    expect(r1.claimed).toMatchObject({ stage: 150, stamps: 5, king: true });
-    const box = r1.claimed.box!;
-    const boxStamps = box.kind === "stamps" ? box.n : 0;
-    expect(r1.stamps).toBe(stamps0 + 5 + boxStamps);
+    // 상자는 바로 열지 않고 가방에 (내용물은 아직 안 준다)
+    expect(r1.claimed).toMatchObject({ stage: 150, stamps: 5, king: true, pocket: true, box: null });
+    expect(r1.stamps).toBe(stamps0 + 5);
+    expect((await getAccounts().get(big, DAY, t)).inventory[URGENT_POCKET]).toBe(1);
+    // 가방에서 열기: (의뢰, 계정) 시드 그대로, 상자 1개가 빠지고 내용물 지급. 두 번 열 수 없다
+    const prize = openBox(`${ev.id}|${big}`);
+    const [o1, o2] = await Promise.all([openUrgentPocket(big), openUrgentPocket(big).catch((e: { code: string }) => e.code)]);
+    expect(o1.prize).toEqual(prize);
+    expect(o2).toBe("NO_POCKET");
+    expect(o1.left).toBe(0);
+    expect((await getAccounts().get(big, DAY, t)).inventory[URGENT_POCKET] ?? 0).toBe(0);
+    expect(o1.stamps).toBe(r1.stamps + (prize.kind === "stamps" ? prize.n : 0));
+    if (prize.kind === "dye_pick") expect(o1.me.inventory.q_dye_pick).toBe(1);
+    if (prize.kind === "fish") expect((await getForageStore().snapshot(big, DAY, 0)).bag[prize.id]).toBe(1);
+    await expect(openUrgentPocket(big)).rejects.toMatchObject({ code: "NO_POCKET" });
     // 사이렌 모자 24시간 + 칭호 하루
     const me = await getAccounts().get(big, DAY, t);
     const hat = [...me.equipped, ...(me.stash ?? [])].find((e) => e.itemId === URGENT_HAT);
@@ -358,7 +373,7 @@ describe("서버 흐름", () => {
     });
     expect((await getTitleStats().get(late)).urgLast).toBe(t + 24 * HOUR);
     expect((await getTitleStats().get(small)).urgLast).toBe(0);
-    expect((await questBoard(big, t)).stamps).toBe(r1.stamps);
+    expect((await questBoard(big, t)).stamps).toBe(o1.stamps);
     // 이미 받은 기록이 보인다
     expect((await urgentMine(big, t)).rows.find((r) => r.id === ev.id)!.claimed).toMatchObject({ stage: 150 });
     // 낸 것이 없으면 보상 없음
@@ -367,12 +382,44 @@ describe("서버 흐름", () => {
     await expect(claimUrgent(small, ev.id, ev.end + 3 * 24 * HOUR)).rejects.toMatchObject({ code: "URGENT_EXPIRED" });
   });
 
+  it("시험 막대 +50%는 누른 운영자가 낸 것으로 센다 (순위·참여·보상), 100% 시각·150% 축제도 진짜 납품과 같다", async () => {
+    const now = Date.now();
+    const op = await newAcct("시험운영자", now);
+    await setStaff(op, now);
+    const t = await testStartUrgent(op, "fish", now);
+    const goal = urgentGoal("fish", URGENT_REF_ONLINE);
+    await testAddUrgent(op, 50, now + 1_000);
+    const half = (await urgentPublic(now + 1_500)).body.ev!;
+    expect(half).toMatchObject({ id: t.id, n: goal / 2, goalAt: 0 });
+    await testAddUrgent(op, 50, now + 2_000);
+    const full = (await urgentPublic(now + 2_500)).body.ev!;
+    expect(full).toMatchObject({ n: goal, goalAt: now + 2_000, festUntil: 0 });
+    expect(full.top[0]).toMatchObject({ name: "시험운영자", n: goal });
+    const row = (await urgentMine(op, now + 3_000)).rows.find((r) => r.id === t.id)!;
+    expect(row.mine).toBe(goal);
+    await testAddUrgent(op, 50, now + 4_000);
+    expect((await urgentPublic(now + 4_500)).body.ev!.festUntil).toBe(now + 4_000 + FEST_MS);
+    await setStaff(null, now);
+  });
+
   it("시험 의뢰는 테스트 서버 운영자만 (운영 서버에서는 404)", async () => {
     const a = await newAcct("운영아님", Date.now());
     await expect(testStartUrgent(a, "fish")).rejects.toMatchObject({ status: 404 });
     vi.stubEnv("VERCEL_ENV", "production");
     await expect(testStartUrgent(a, "fish")).rejects.toMatchObject({ status: 404 });
     vi.stubEnv("VERCEL_ENV", "");
+  });
+
+  it("운영 서버는 URGENT_ENABLED=1이 아니면 긴급 의뢰가 아예 없다 (일정·축제 모두)", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    expect(urgentEnabled()).toBe(false);
+    for (let h = 0; h < 48; h++) expect((await urgentPublic(Date.UTC(2026, 10, 16, h))).body.ev).toBeNull();
+    expect(await festivalOn()).toBe(false);
+    vi.stubEnv("URGENT_ENABLED", "1");
+    expect(urgentEnabled()).toBe(true);
+    vi.stubEnv("URGENT_ENABLED", "");
+    vi.stubEnv("VERCEL_ENV", "");
+    expect(urgentEnabled()).toBe(true);
   });
 
   it("메모리 저장소 계약: 가방이 모자라면 아무것도 바뀌지 않는다", async () => {
@@ -387,6 +434,7 @@ describe("서버 흐름", () => {
       giveBag: () => undefined,
       hasAccount: () => true,
       giveInv: () => undefined,
+      takeInv: () => true,
       addStamps: () => 0,
       grantTimed: () => undefined,
       setTitleUntil: () => undefined,

@@ -6,6 +6,7 @@ import { fetchLobbyServer } from "../../joinToken";
 import { isSuperHunter, testServerEnv } from "../../rpg/superHunter";
 import { getAccounts, NO_NAME } from "../../store";
 import type { MemoryAccounts } from "../../store/accounts-memory";
+import { loadMe } from "../../store/accounts";
 import { getTitleStats, type MemoryTitleStats } from "../../store/titleStats";
 import { forgetTitles } from "../../titlesServer";
 import { pushVillageNotice } from "../../weeklyChamp";
@@ -19,6 +20,8 @@ import {
   DYE_SPECIAL,
   FEST_MS,
   hasReward,
+  openBox,
+  URGENT_POCKET,
   rankScore,
   URGENT_CLAIM_MS,
   URGENT_DEF,
@@ -35,12 +38,11 @@ import {
   urgentGoal,
   urgentReward,
   urgentSchedule,
-  urgentStage,
   type UrgentKind,
   type UrgentSlot,
 } from "./urgent";
 import { getUrgentStore, type ClaimPlan, type UrgentMemDeps, type UrgentStore, type UrgentTest } from "./urgentStore";
-import type { UrgentClaimed, UrgentClaimResponse, UrgentDeliverResponse, UrgentMeResponse, UrgentMineRow, UrgentPublic } from "./urgentTypes";
+import type { UrgentClaimed, UrgentClaimResponse, UrgentDeliverResponse, UrgentMeResponse, UrgentMineRow, UrgentOpenResponse, UrgentPublic } from "./urgentTypes";
 
 // 11/15: 긴급 의뢰 서버 로직 (라우트는 세션 확인·입력 검증만).
 //  - 상태 보기(/api/forage/urgent): 의뢰가 없을 때는 저장소를 읽지 않는다 (시각은 시드). 있을 때 명령 2~3개, 누구에게나 같아 CDN이 몇 초 캐시한다
@@ -60,6 +62,7 @@ function memDeps(): UrgentMemDeps {
     giveBag: (a, id, n) => forage().giveNow(a, id, n),
     hasAccount: (a) => accts().questHas(a),
     giveInv: (a, id) => accts().questGive(a, id, false),
+    takeInv: (a, id) => accts().styleTake(a, id),
     addStamps: (a, n, cap) => (questStore() as MemoryQuestStore).addStampsNow(a, n, cap),
     grantTimed: (a, id, slot, until) => void accts().staffGrant(a, [{ itemId: id, slot }], until),
     setTitleUntil: (a, f, until) => (getTitleStats() as MemoryTitleStats).setUntil(a, f, until),
@@ -80,7 +83,16 @@ const g = globalThis as typeof globalThis & {
 const memo = () => (g.__tombUrgentMemo ??= { sched: new Map(), goal: new Map(), names: new Map(), fest: new Map(), test: null });
 
 /** 그날 일정 (인스턴스 기억) */
+/**
+ * 11/15 긴급 의뢰를 여는 서버인가: 테스트 서버는 늘, 운영은 URGENT_ENABLED=1일 때만 (운영 배포를 긴급 의뢰 없이 먼저 올리려고).
+ * 꺼져 있으면 일정이 비어 의뢰·축제·납품·보상이 모두 없고, 화면의 [긴급] 칸·위쪽 막대도 뜨지 않는다
+ */
+export function urgentEnabled(): boolean {
+  return testServerEnv() || process.env.URGENT_ENABLED?.trim() === "1";
+}
+
 function scheduleOf(day: string): UrgentSlot[] {
+  if (!urgentEnabled()) return [];
   const m = memo().sched;
   let s = m.get(day);
   if (!s) {
@@ -165,12 +177,13 @@ export type UrgentPublicResult = { body: UrgentPublic; cacheSec: number };
 
 /**
  * 서버 전체 상태 (위쪽 막대·게시판). 진행 중이거나 끝난 지 URGENT_SHOW_MS 안의 의뢰만 저장소를 읽는다.
- * 처음 본 요청이 시작·축제·끝 확성기를 한 번씩 남긴다. cacheSec = CDN 캐시 (진행 중 5초, 없으면 다음 시작까지 최대 30초)
+ * 처음 본 요청이 시작·축제·끝 확성기를 한 번씩 남긴다. cacheSec = CDN 캐시 (진행 중 5초, 없으면 다음 시작까지 최대 10초)
  */
 export async function urgentPublic(now = Date.now()): Promise<UrgentPublicResult> {
   const evs = await eventsAround(now);
   const ev = [...evs].reverse().find((e) => e.start <= now && now < e.end + URGENT_SHOW_MS) ?? null;
-  if (!ev) return { body: { at: now, ev: null }, cacheSec: Math.max(1, Math.min(30, secondsToNext(now) - 1)) };
+  // 없을 때도 CDN 캐시는 짧게 (10초): 시험 의뢰·막 시작한 의뢰를 다른 창이 빨리 보게 (저장소는 읽지 않는다 — 비용은 CDN 물음뿐)
+  if (!ev) return { body: { at: now, ev: null }, cacheSec: Math.max(1, Math.min(10, secondsToNext(now) - 1)) };
   const store = urgentStore();
   const [st, top] = await Promise.all([store.state(ev.id), store.top(ev.id, 3)]);
   const goal = await goalOf(ev, st.goal);
@@ -179,7 +192,7 @@ export async function urgentPublic(now = Date.now()): Promise<UrgentPublicResult
   const lastName = st.last ? (top.find((t) => t.acct === st.last)?.name ?? (await nameOf(st.last, now).catch(() => null))) : null;
   const body: UrgentPublic = {
     at: now,
-    ev: { id: ev.id, kind: ev.kind, goal, n: st.n, start: ev.start, end: ev.end, festUntil, top: top.map((t) => ({ name: t.name || NO_NAME, n: t.n })), lastName },
+    ev: { id: ev.id, kind: ev.kind, goal, n: st.n, start: ev.start, end: ev.end, festUntil, goalAt: st.at100, top: top.map((t) => ({ name: t.name || NO_NAME, n: t.n })), lastName },
   };
   // 확성기: 시작 · 150%(축제) · 끝 — 각각 한 번
   if (live && !st.a0) await notice(ev, "a0", `📢 ${urgentAnnounce(ev.kind, goal)} (${Math.ceil((ev.end - now) / 60_000)}분)`, now);
@@ -274,16 +287,13 @@ export async function claimUrgent(acct: string, id: string, now = Date.now()): P
   const goal = st.goal || (await goalOf(ev));
   const r = urgentReward({ id: ev.id, acct, n: st.n, goal, mine: m.n, top: top[0]?.acct ?? null, last: st.last });
   if (!hasReward(r)) throw new HttpError(409, "NO_REWARD", m.n > 0 ? "목표의 절반을 못 채워서 이번엔 받을 보상이 없어요." : "이번 의뢰에 낸 것이 없어요.");
-  const box = r.box;
-  const claimed: UrgentClaimed = { stage: r.stage, stamps: r.stamps, box, king: r.king, last: r.last, at: now };
+  // 「수집가의 뒷주머니」는 바로 열지 않고 가방에 넣는다 (가방에서 [열기] — openUrgentPocket). 내용물은 (의뢰, 계정) 시드로 이미 정해져 있다
+  const claimed: UrgentClaimed = { stage: r.stage, stamps: r.stamps, box: null, pocket: !!r.box, king: r.king, last: r.last, at: now };
   const plan: ClaimPlan = {
     record: JSON.stringify(claimed),
-    stamps: r.stamps + (box?.kind === "stamps" ? box.n : 0),
+    stamps: r.stamps,
     stampCap: STAMP_CAP,
-    dye: box?.kind === "dye_pick" ? DYE_PICK : box?.kind === "dye_special" ? DYE_SPECIAL : "",
-    fish: box?.kind === "fish" ? box.id : "",
-    fishFallback: FISH_FALLBACK_STAMPS,
-    stackMax: STACK_MAX,
+    pocket: r.box ? URGENT_POCKET : "",
     hat: r.king ? { id: URGENT_HAT, slot: itemById(URGENT_HAT)?.slot ?? "head", until: now + URGENT_HAT_MS } : null,
     now,
     kingUntil: r.king ? now + URGENT_TITLE_MS : 0,
@@ -295,7 +305,31 @@ export async function claimUrgent(acct: string, id: string, now = Date.now()): P
     throw new HttpError(409, "URGENT_CLAIMED", "이미 받았어요.");
   }
   if (r.king || r.last) forgetTitles(acct);
-  return { claimed: box?.kind === "fish" ? { ...claimed, fishKept: res.fish } : claimed, stamps: res.stamps };
+  return { claimed, stamps: res.stamps };
+}
+
+/**
+ * 가방의 「수집가의 뒷주머니」 하나 열기 (오래된 의뢰 것부터). 내용물은 (의뢰, 계정) 시드라 언제 열어도 같다.
+ * Lua 1번: 상자 표시·가방 상자 1개를 빼고 내용물 지급 (두 번 열 수 없다)
+ */
+export async function openUrgentPocket(acct: string): Promise<UrgentOpenResponse> {
+  const store = urgentStore();
+  const ids = await store.pockets(acct);
+  if (!ids.length) throw new HttpError(409, "NO_POCKET", "열 수 있는 수집가의 뒷주머니가 없어요.");
+  const id = ids[0];
+  const prize = openBox(`${id}|${acct}`);
+  const res = await store.openPocket(acct, {
+    id,
+    pocket: URGENT_POCKET,
+    stamps: prize.kind === "stamps" ? prize.n : 0,
+    stampCap: STAMP_CAP,
+    dye: prize.kind === "dye_pick" ? DYE_PICK : prize.kind === "dye_special" ? DYE_SPECIAL : "",
+    fish: prize.kind === "fish" ? prize.id : "",
+    fishFallback: FISH_FALLBACK_STAMPS,
+    stackMax: STACK_MAX,
+  });
+  if (res.status !== "ok") throw new HttpError(409, "NO_POCKET", "이미 연 주머니예요. 가방을 다시 열어 주세요.");
+  return { prize, fishKept: prize.kind === "fish" ? res.fish : undefined, stamps: res.stamps, left: ids.length - 1, me: await loadMe(getAccounts(), acct) };
 }
 
 // ── 축제 (낚시·채집 희귀 확률) ──
@@ -335,22 +369,20 @@ export async function testStartUrgent(acct: string, kind: UrgentKind | undefined
   return t;
 }
 
-/** 시험 의뢰 막대에 목표의 pct%만큼 더하기 (150%를 넘기면 축제도) */
+/**
+ * 시험 의뢰 막대에 목표의 pct%만큼 더하기. 누른 운영자가 낸 것으로 센다 (가방은 보지 않는다 — 순위·참여·보상 대상에 들어간다).
+ * 진짜 납품과 같은 Lua라 150% 축제·100% 시각·마지막 1분 표시도 똑같이 붙는다
+ */
 export async function testAddUrgent(acct: string, pctAdd: number, now = Date.now()): Promise<number> {
   await requireSuper(acct);
   const t = await urgentStore().testGet();
   if (!t || now >= t.end) throw new HttpError(409, "NO_TEST", "진행 중인 시험 의뢰가 없어요.");
-  const goal = await goalOf(t);
+  const [goal, name] = await Promise.all([goalOf(t), nameOf(acct, now)]);
   const add = Math.max(1, Math.round((goal * pctAdd) / 100));
-  const store = urgentStore();
-  const before = (await store.state(t.id)).n;
-  const n = await store.testAdd(t.id, add);
-  if (urgentStage(before, goal) < 150 && urgentStage(n, goal) === 150) {
-    // 시험에서도 축제가 붙게 (납품 Lua와 같은 표시)
-    await store.testFest(t.id, now);
-    memo().fest.set(t.id, { at: now, fest: now });
-  }
-  return n;
+  const r = await urgentStore().deliver(t.id, acct, name, { test: add }, { goal, end: t.end, now, frac: rankScore(0, now, t.end), lastFrom: t.end - URGENT_LAST_MS, free: true });
+  if (r.status !== "ok") throw new HttpError(409, "NO_TEST", "시험 납품에 실패했어요.");
+  if (r.fest > 0) memo().fest.set(t.id, { at: now, fest: r.fest });
+  return r.n;
 }
 
 /** 시험 의뢰를 지금 끝내기 (막대가 멈추고 보상을 받을 수 있다) 또는 지우기 */

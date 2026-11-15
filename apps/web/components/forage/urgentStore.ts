@@ -4,11 +4,11 @@ import { useEffect, useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { urgentApi } from "@/lib/forage/quests/urgentClient";
-import { urgentAnnounce, urgentStage } from "@/lib/forage/quests/urgent";
+import { GOAL_CHEER_MS, urgentAnnounce, urgentStage } from "@/lib/forage/quests/urgent";
 import type { UrgentDeliverResponse, UrgentMeResponse, UrgentPublic } from "@/lib/forage/quests/urgentTypes";
 
 // 11/15: 긴급 의뢰의 클라이언트 사본 (위쪽 막대·게시판 칸이 같이 본다).
-//  - 서버 전체 상태(/api/forage/urgent)는 누구에게나 같아 CDN이 몇 초 캐시한다 → 진행 중 5초, 막 끝났으면 20초, 없으면 30초마다 묻는다 (탭이 숨으면 멈춘다)
+//  - 서버 전체 상태(/api/forage/urgent)는 누구에게나 같아 CDN이 몇 초 캐시한다 → 진행 중 5초, 막 끝났으면 20초, 없으면 15초마다 묻는다 (탭이 숨으면 멈춘다)
 //  - 내 것(/api/forage/urgent/me)은 게시판을 열 때·의뢰가 끝났을 때만
 //  - 축제 끝 시각은 게임에 urgent:fest로 알린다 (폭죽·금빛 모닥불)
 
@@ -44,8 +44,8 @@ class UrgentClientStore {
   private mineInflight: Promise<void> | null = null;
   /** 끝난 것을 본 의뢰 (끝나면 내 것을 한 번 다시 받는다) */
   private doneSeen = new Set<string>();
-  /** 진행 중에 본 단계 (100% 밑에서 본 의뢰가 100%를 넘기면 축하 폭죽 한 번 — 들어왔을 때 이미 넘었으면 쏘지 않는다) */
-  private stageSeen = new Map<string, number>();
+  /** 100% 축하 폭죽을 쏜 의뢰 (한 번만) */
+  private cheered = new Set<string>();
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -64,11 +64,12 @@ class UrgentClientStore {
     const ev = this.snap.pub?.ev;
     const now = Date.now();
     const board = ev ? { live: now < ev.end, frac: ev.goal > 0 ? Math.min(1, ev.n / (ev.goal * 1.5)) : 0, stage: urgentStage(ev.n, ev.goal), fest: until > now } : null;
-    if (ev && now < ev.end) {
-      const stage = urgentStage(ev.n, ev.goal);
-      const before = this.stageSeen.get(ev.id);
-      this.stageSeen.set(ev.id, stage);
-      if (before !== undefined && before < 100 && stage >= 100) bridge.emit("urgent:goal");
+    // 100% 축하 폭죽: 서버가 남긴 "100%에 닿은 시각"(goalAt)이 막 지났으면 한 번 (응답을 만든 서버 시각 at 기준이라 기기 시계와 상관없다).
+    // 예전엔 "100% 밑에서 본 적이 있어야" 쐈는데, 물음 사이(5초)에 0%→100%로 바로 넘거나 처음 본 게 이미 100%면 놓쳤다
+    const pub = this.snap.pub;
+    if (ev && pub && ev.goalAt > 0 && !this.cheered.has(ev.id)) {
+      this.cheered.add(ev.id);
+      if (pub.at - ev.goalAt < GOAL_CHEER_MS) bridge.emit("urgent:goal");
     }
     const prev = bridge.last("urgent:board");
     if (JSON.stringify(prev ?? null) !== JSON.stringify(board)) bridge.emit("urgent:board", board);
@@ -126,7 +127,12 @@ class UrgentClientStore {
   /** 납품 응답으로 막대·내 수를 바로 고친다 (다음 물음까지 기다리지 않게) */
   applyDeliver(id: string, r: UrgentDeliverResponse) {
     const ev = this.snap.pub?.ev;
-    if (ev && ev.id === id) this.set({ pub: { ...this.snap.pub!, ev: { ...ev, n: Math.max(ev.n, r.n), festUntil: r.festUntil || ev.festUntil } } });
+    if (ev && ev.id === id) {
+      // 내 납품으로 100%를 넘겼으면 다음 물음을 기다리지 않고 바로 축하
+      const crossed = ev.goalAt === 0 && urgentStage(ev.n, ev.goal) < 100 && urgentStage(r.n, r.goal) >= 100;
+      const at = Date.now();
+      this.set({ pub: { ...this.snap.pub!, at: crossed ? at : this.snap.pub!.at, ev: { ...ev, n: Math.max(ev.n, r.n), festUntil: r.festUntil || ev.festUntil, goalAt: crossed ? at : ev.goalAt } } });
+    }
     const mine = this.snap.mine;
     if (mine) this.set({ mine: { ...mine, rows: mine.rows.map((row) => (row.id === id ? { ...row, mine: r.mine, n: Math.max(row.n, r.n) } : row)) } });
   }
@@ -134,7 +140,8 @@ class UrgentClientStore {
   private nextDelay(): number {
     const ev = this.snap.pub?.ev;
     const now = Date.now();
-    if (!ev) return 30_000;
+    // 없을 때 15초: 시작(또는 시험 시작)을 다른 창도 금방 알아채게 — 서버는 이때 저장소를 읽지 않는다
+    if (!ev) return 15_000;
     if (now < ev.end) return 5_000;
     return 20_000;
   }

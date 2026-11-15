@@ -63,8 +63,8 @@ export default function UrgentPanel() {
       setFresh((f) => ({ ...f, [row.id]: r.claimed }));
       void urgentStore.refreshMine();
       void questStore.refresh(true);
-      if (r.claimed.box?.kind === "fish") void forageStore.refresh();
-      if (r.claimed.king || r.claimed.box?.kind === "dye_pick" || r.claimed.box?.kind === "dye_special") void meStore.refresh();
+      // 사이렌 모자·가방에 넣은 상자가 바로 보이게
+      if (r.claimed.king || r.claimed.pocket) void meStore.refresh();
       bridge.emit("forage:coin");
     } catch (e) {
       setNotice(errorMessage(e));
@@ -362,7 +362,8 @@ function Prizes({ c, isNew, boxPending }: { c: UrgentClaimed; isNew: boolean; bo
     const icon = b.kind === "stamps" ? "印" : <ItemIcon itemId={b.kind === "fish" ? b.id : b.kind === "dye_pick" ? "q_dye_pick" : "q_dye_special"} size={24} />;
     const sub = b.kind === "fish" ? (c.fishKept === false ? "가방 칸이 가득해서 도장 3개로 바꿨어요" : `${RARITY_LABEL[speciesById(b.id)?.rarity ?? 3]} 물고기, 가방에 넣었어요`) : b.kind === "stamps" ? "상자에서 나온 도장" : "가방에 넣었어요";
     items.push({ key: "box", icon, title: `수집가의 뒷주머니에서 ${prizeText(b)}`, sub });
-  } else if (boxPending) items.push({ key: "box", icon: "?", title: "수집가의 뒷주머니", sub: "받을 때 열려요. 도장이나 염색권, 희귀 물고기가 들어 있어요" });
+  } else if (c.pocket) items.push({ key: "box", icon: <ItemIcon itemId="u_box_pocket" size={24} />, title: "수집가의 뒷주머니를 가방에 넣었어요", sub: "가방의 소모품 칸에서 열어 보세요" });
+  else if (boxPending) items.push({ key: "box", icon: <ItemIcon itemId="u_box_pocket" size={24} />, title: "수집가의 뒷주머니", sub: "가방에 들어가요. 열면 도장이나 염색권, 희귀 물고기가 나와요" });
   if (c.king) items.push({ key: "king", icon: <ItemIcon itemId="u_hat_siren" size={24} />, title: "칭호 「긴급 배달왕」과 사이렌 모자", sub: "하루 동안. 모자는 가방의 꾸미기에서 입어요" });
   if (c.last) items.push({ key: "last", icon: "⏱", title: "칭호 「아슬아슬 마감」", sub: "하루 동안. 가방의 칭호 칸에서 달아요" });
   return (
@@ -385,7 +386,7 @@ function ResultCard({ row, pub, now, fresh, busy, onClaim }: { row: UrgentMineRo
   const d = URGENT_DEF[row.kind];
   const pct = pctOf(row.n, row.goal);
   const claimed = fresh ?? row.claimed;
-  const ev: UrgentLive = pub ?? { id: row.id, kind: row.kind, goal: row.goal, n: row.n, start: row.start, end: row.end, festUntil: 0, top: [], lastName: null };
+  const ev: UrgentLive = pub ?? { id: row.id, kind: row.kind, goal: row.goal, n: row.n, start: row.start, end: row.end, festUntil: 0, goalAt: 0, top: [], lastName: null };
   return (
     <section className={u.card} data-done data-fest={ev.festUntil > now || undefined} aria-label="끝난 긴급 의뢰 결과">
       <div className={u.cardHead}>

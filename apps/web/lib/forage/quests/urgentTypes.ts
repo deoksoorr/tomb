@@ -1,3 +1,4 @@
+import type { Me } from "../../types";
 import type { BoxPrize, UrgentKind, UrgentReward, UrgentStage } from "./urgent";
 
 // 11/15: 긴급 의뢰 API 계약 (서버 ↔ UI)
@@ -13,6 +14,8 @@ export type UrgentLive = {
   end: number;
   /** 축제가 끝나는 시각 (ms, 축제가 없으면 0) */
   festUntil: number;
+  /** 100%에 처음 닿은 서버 시각 (ms, 아직이면 0) — 화면이 막 닿았을 때 축하 폭죽을 쏜다 */
+  goalAt: number;
   /** 많이 낸 순 3명 */
   top: { name: string; n: number }[];
   /** 마지막 1분에 100%를 채운 사람 이름 */
@@ -26,7 +29,8 @@ export type UrgentPublic = {
 };
 
 /** 받은 보상 (저장된 기록 그대로) */
-export type UrgentClaimed = { stage: UrgentStage; stamps: number; box: BoxPrize | null; king: boolean; last: boolean; at: number; fishKept?: boolean };
+/** 받은 보상 (저장된 기록 그대로). pocket = 「수집가의 뒷주머니」를 가방에 넣었다 (box는 예전 기록 — 받을 때 바로 열던 때의 내용물) */
+export type UrgentClaimed = { stage: UrgentStage; stamps: number; box: BoxPrize | null; pocket?: boolean; king: boolean; last: boolean; at: number; fishKept?: boolean };
 
 /** 나와 관련된 긴급 의뢰 한 줄 */
 export type UrgentMineRow = {
@@ -62,3 +66,5 @@ export type UrgentDeliverResponse = {
   used: Record<string, number>;
 };
 export type UrgentClaimResponse = { claimed: UrgentClaimed; stamps: number };
+/** 상자 열기: 나온 것, 물고기면 가방에 들어갔는지(가득이면 도장으로), 지금 도장 수, 남은 상자 수, 내 정보(가방) */
+export type UrgentOpenResponse = { prize: BoxPrize; fishKept?: boolean; stamps: number; left: number; me: Me };

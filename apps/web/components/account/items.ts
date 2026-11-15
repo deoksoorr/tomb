@@ -15,6 +15,7 @@ export const KIND_LABELS: Record<ItemKind, string> = {
   megaphone: "확성기",
   dye: "염색·외형",
   unlock: "수집 의뢰 보상",
+  box: "상자",
 };
 
 export type BagEntry = { item: ItemDef; count: number };

@@ -27,6 +27,10 @@ export const URGENT_TWICE = 0.5;
 export const URGENT_LAST_MS = MIN;
 /** 150%에 닿으면 마을 축제 */
 export const FEST_MS = HOUR;
+/** 축제가 열리고 하늘에 폭죽이 저절로 오르는 시간 (위쪽 「불꽃축제」 타이머도 같다). 금빛 모닥불·희귀 보너스는 FEST_MS 내내 */
+export const FEST_FIREWORK_MS = 30_000;
+/** 100%에 닿은 뒤 이 안에 처음 본 화면만 축하 폭죽을 쏜다 (늦게 들어온 사람은 안 쏜다 — 없을 때 물음 15초 + CDN 10초 + 진행 중 물음 5초 여유) */
+export const GOAL_CHEER_MS = 40_000;
 /** 끝난 뒤 결과를 위쪽 막대·게시판에 보여 주는 시간 */
 export const URGENT_SHOW_MS = HOUR;
 /** 끝난 뒤 보상을 받을 수 있는 시간 (저장 키는 하루 더 둔다) */
@@ -36,6 +40,8 @@ export const URGENT_TTL_SEC = Math.ceil((URGENT_MS + URGENT_CLAIM_MS + DAY) / 10
 export const URGENT_TITLE_MS = DAY;
 export const URGENT_HAT_MS = DAY;
 export const URGENT_HAT = "u_hat_siren";
+/** 100% 보상 상자 「수집가의 뒷주머니」 (가방에 들어가고 [열기]로 연다) */
+export const URGENT_POCKET = "u_box_pocket";
 export const URGENT_KING_TITLE = "t_urgKing";
 export const URGENT_LAST_TITLE = "t_urgLast";
 /** 한 번 납품에 낼 수 있는 수 */

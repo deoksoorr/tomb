@@ -13,7 +13,8 @@ const DAY = 24 * HOUR;
 // megaphone(23번): 확성기. 쓰는 순간 소모되고, 채널(또는 모든 채널) 사람들의 왼쪽 위 확성기 창에 한마디가 뜬다
 // dye(46번): 염색권. 쓰면 부위 하나의 색이 바뀐다 (random = 무작위 팔레트에서 찾기, fixed = 정해진 색)
 // unlock(11/15 수집 의뢰): 쓰는 물건이 아니라 가지고 있으면 열리는 것 (이모티콘 묶음 · 외형). 소모되지 않는다
-export type ItemKind = "firework" | "cosmetic" | "decor" | "graveStyle" | "megaphone" | "dye" | "unlock";
+/** box = 11/15 긴급 의뢰 「수집가의 뒷주머니」처럼 가방에서 [열기]로 여는 상자 (상점에 없다) */
+export type ItemKind = "firework" | "cosmetic" | "decor" | "graveStyle" | "megaphone" | "dye" | "unlock" | "box";
 // nameColor·namePlate(닉네임 꾸미기): 머리 위 이름표 글자 색 · 이름표 바탕판. 몸 그림에는 그려지지 않고 이름표·화면의 이름에만 보인다
 export type CosmeticSlot = "head" | "hand" | "aura" | "neck" | "back" | "pet" | "feet" | "nameColor" | "namePlate";
 
@@ -297,6 +298,8 @@ export const ITEMS: readonly ItemDef[] = [
 
   // ── 11/15 긴급 의뢰 가장 많이 낸 사람 (24시간 대여 — 상점·교환소에 없다). 그림: 머리 avatarGear.ts · 도는 불빛 cosmeticFx.ts ──
   { id: "u_hat_siren", kind: "cosmetic", slot: "head", grade: "rare", name: "사이렌 모자", desc: "긴급 배달왕의 모자. 머리 위 경광등이 빙글빙글 돌아요.", price: 0, durationMs: COSMETIC_DURATION_MS, urgent: true },
+  // 긴급 의뢰 100% 보상 상자: 받으면 가방(소모품)에 들어가고 [열기]로 연다. 내용물은 (의뢰, 계정)으로 미리 정해진다 (web lib/forage/quests/urgent openBox)
+  { id: "u_box_pocket", kind: "box", grade: "rare", name: "수집가의 뒷주머니", desc: "수집가 유령이 슬쩍 건넨 주머니. 열면 도장이나 염색권, 희귀 물고기가 나와요.", price: 0, urgent: true },
 
   { id: "decor_candles", kind: "decor", name: "촛불 한 쌍", desc: "묘비 양옆에 작은 촛불.", price: 90, durationMs: DECOR_DURATION_MS },
   { id: "decor_wreath", kind: "decor", name: "꽃 화환", desc: "묘비 앞에 둥근 화환.", price: 150, durationMs: DECOR_DURATION_MS },

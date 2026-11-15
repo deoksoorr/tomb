@@ -11,11 +11,13 @@ import { countOf, URGENT_TTL_SEC, type UrgentKind } from "./urgent";
 //
 // Redis 키 (의뢰 id = "YYYYMMDD-0|1", 테스트 서버 시험 의뢰는 "t…"). 모두 TTL URGENT_TTL_SEC (약 4일)
 //  - urg:{id}       HASH  goal = 목표(처음 정한 값) · n = 낸 수(막대) · fest = 150%에 닿은 시각(ms, 축제 시작)
-//                         last = 마지막 1분에 100%를 넘긴 계정 · a0·a2·a1 = 시작·축제·끝 확성기 남김
+//                         last = 마지막 1분에 100%를 넘긴 계정 · at100 = 100%에 처음 닿은 시각(ms, 화면 축하 폭죽) · a0·a2·a1 = 시작·축제·끝 확성기 남김
 //  - urg:{id}:by    ZSET  계정 → 낸 수 + 먼저 닿은 순서(소수부, lib/forage/quests/urgent rankScore)
 //  - urg:{id}:nm    HASH  계정 → 이름 (순위 3명 표시용)
 //  - urg:{id}:got   HASH  계정 → 받은 보상 JSON (한 번만 — HSETNX)
 //  - urg:test       STRING 테스트 서버 시험 의뢰 JSON (운영 서버에서는 읽지도 쓰지도 않는다)
+//  - urgbox:{a}     HASH  아직 안 연 「수집가의 뒷주머니」: 의뢰 id → 받은 시각 (내용물은 (의뢰, 계정) 시드라 저장하지 않는다. TTL 없음 — 열 때까지 남는다)
+//                         가방의 상자 개수(acct:{a}:inv u_box_pocket)와 함께 바뀐다
 // 함께 바꾸는 키: 가방 forage:{a}:bag(납품·상자 물고기) · 의뢰 도장 quest:{a}(st) · 계정 acct:{a}:inv(염색권)·:look·:stash(사이렌 모자)
 //                 · 칭호 누적 titles:stats:{a}(urgKing·urgLast = 칭호가 끝나는 시각 ms)
 
@@ -25,9 +27,10 @@ export const uk = {
   nm: (id: string) => `urg:${id}:nm`,
   got: (id: string) => `urg:${id}:got`,
   test: "urg:test",
+  box: (a: string) => `urgbox:${a}`,
 };
 
-export type UrgentState = { goal: number; n: number; fest: number; last: string | null; a0: boolean; a1: boolean; a2: boolean };
+export type UrgentState = { goal: number; n: number; fest: number; at100: number; last: string | null; a0: boolean; a1: boolean; a2: boolean };
 export type NoticeField = "a0" | "a1" | "a2";
 export type UrgentTop = { acct: string; name: string; n: number };
 export type UrgentMine = { id: string; n: number; got: string | null };
@@ -43,21 +46,19 @@ export type DeliverArgs = {
   frac: number;
   /** 마지막 1분이 시작하는 시각 */
   lastFrom: number;
+  /** 테스트 서버 시험(막대 +%): 가방을 보지 않고 낸 것으로만 센다 (순위·참여·보상에 들어간다) */
+  free?: boolean;
 };
 export type UrgentDeliverResult = { status: "ok"; n: number; mine: number; fest: number } | { status: "bag" };
 
-/** 받기: 단계 도장 + 상자 + 칭호·모자를 한 번에 */
+/** 받기: 단계 도장 + 상자(가방에 넣기만 — 여는 건 openPocket) + 칭호·모자를 한 번에 */
 export type ClaimPlan = {
   /** 받은 표시에 남길 JSON */
   record: string;
   stamps: number;
   stampCap: number;
-  /** 상자 염색권 아이템 id (없으면 "") */
-  dye: string;
-  /** 상자 물고기 id (없으면 "") — 가방 칸이 가득이면 대신 fishFallback 도장 */
-  fish: string;
-  fishFallback: number;
-  stackMax: number;
+  /** 「수집가의 뒷주머니」 가방에 넣기 (아이템 id, 없으면 "") */
+  pocket: string;
   /** 사이렌 모자 (없으면 null) */
   hat: { id: string; slot: string; until: number } | null;
   now: number;
@@ -65,7 +66,24 @@ export type ClaimPlan = {
   kingUntil: number;
   lastUntil: number;
 };
-export type ClaimResult = { status: "ok"; stamps: number; fish: boolean } | { status: "dup" | "noacct" };
+export type ClaimResult = { status: "ok"; stamps: number } | { status: "dup" | "noacct" };
+
+/** 상자 열기: 그 의뢰의 상자 하나를 빼고 내용물 지급 */
+export type OpenPlan = {
+  /** 상자를 준 의뢰 id */
+  id: string;
+  /** 가방의 상자 아이템 id */
+  pocket: string;
+  stamps: number;
+  stampCap: number;
+  /** 염색권 아이템 id (없으면 "") */
+  dye: string;
+  /** 물고기 id (없으면 "") — 가방 칸이 가득이면 대신 fishFallback 도장 */
+  fish: string;
+  fishFallback: number;
+  stackMax: number;
+};
+export type OpenResult = { status: "ok"; stamps: number; fish: boolean } | { status: "none" };
 
 export interface UrgentStore {
   /** 막대·목표 (명령 1개) */
@@ -85,18 +103,18 @@ export interface UrgentStore {
   mine(ids: readonly string[], acct: string): Promise<UrgentMine[]>;
   /** 보상 받기 (원자적, 의뢰·계정마다 한 번). 계정이 없으면 noacct, 이미 받았으면 dup */
   claim(id: string, acct: string, plan: ClaimPlan): Promise<ClaimResult>;
+  /** 아직 안 연 상자의 의뢰 id (오래된 것부터) */
+  pockets(acct: string): Promise<string[]>;
+  /** 상자 열기 (원자적): 그 의뢰의 상자가 없으면 none (두 번 열 수 없다). 있으면 표시·가방 상자 1개를 빼고 내용물 지급 */
+  openPocket(acct: string, plan: OpenPlan): Promise<OpenResult>;
   /** 시험 의뢰 (테스트 서버 전용) */
   testGet(): Promise<UrgentTest | null>;
   testSet(t: UrgentTest | null): Promise<void>;
-  /** 시험: 막대만 더하기 */
-  testAdd(id: string, n: number): Promise<number>;
-  /** 시험: 축제 시작 표시 (처음만) */
-  testFest(id: string, now: number): Promise<void>;
 }
 
 const num = (v: unknown) => Number(v) || 0;
 export function stateOf(h: Record<string, string>): UrgentState {
-  return { goal: num(h.goal), n: num(h.n), fest: num(h.fest), last: h.last || null, a0: h.a0 === "1", a1: h.a1 === "1", a2: h.a2 === "1" };
+  return { goal: num(h.goal), n: num(h.n), fest: num(h.fest), at100: num(h.at100), last: h.last || null, a0: h.a0 === "1", a1: h.a1 === "1", a2: h.a2 === "1" };
 }
 
 // ── 메모리 (로컬·시험) ──
@@ -108,6 +126,8 @@ export type UrgentMemDeps = {
   giveBag(acct: string, id: string, n: number): void;
   hasAccount(acct: string): boolean;
   giveInv(acct: string, itemId: string): void;
+  /** 계정 가방에서 1개 빼기 (없으면 false) */
+  takeInv(acct: string, itemId: string): boolean;
   /** 의뢰 도장 더하기 (상한까지). 새 도장 수 */
   addStamps(acct: string, n: number, cap: number): number;
   /** 기간 꾸미기 (입고 있으면 그 자리, 아니면 벗어 둔 꾸미기 — 더 길 때만) */
@@ -120,6 +140,7 @@ export class MemoryUrgentStore implements UrgentStore {
   private bys = new Map<string, Map<string, number>>();
   private nms = new Map<string, Map<string, string>>();
   private gots = new Map<string, Map<string, string>>();
+  private boxes = new Map<string, Map<string, string>>();
   private test: UrgentTest | null = null;
   constructor(private deps: () => UrgentMemDeps) {}
 
@@ -149,7 +170,7 @@ export class MemoryUrgentStore implements UrgentStore {
     return true;
   }
   async deliver(id: string, acct: string, name: string, items: Record<string, number>, a: DeliverArgs): Promise<UrgentDeliverResult> {
-    if (!this.deps().takeBag(acct, items)) return { status: "bag" };
+    if (!a.free && !this.deps().takeBag(acct, items)) return { status: "bag" };
     const e = this.ev(id);
     const add = Object.values(items).reduce((s, n) => s + n, 0);
     const before = num(e.n);
@@ -161,6 +182,7 @@ export class MemoryUrgentStore implements UrgentStore {
     this.map(this.nms, id).set(acct, name);
     if (!e.fest && before * 2 < a.goal * 3 && n * 2 >= a.goal * 3) e.fest = String(a.now);
     if (!e.last && before < a.goal && n >= a.goal && a.now >= a.lastFrom) e.last = acct;
+    if (!e.at100 && before < a.goal && n >= a.goal) e.at100 = String(a.now);
     return { status: "ok", n, mine, fest: num(e.fest) };
   }
   async top(id: string, k: number) {
@@ -177,6 +199,25 @@ export class MemoryUrgentStore implements UrgentStore {
     const got = this.map(this.gots, id);
     if (got.has(acct)) return { status: "dup" };
     got.set(acct, p.record);
+    if (p.pocket) {
+      d.giveInv(acct, p.pocket);
+      this.map(this.boxes, acct).set(id, String(p.now));
+    }
+    const stamps = d.addStamps(acct, p.stamps, p.stampCap);
+    if (p.hat) d.grantTimed(acct, p.hat.id, p.hat.slot, p.hat.until);
+    if (p.kingUntil > 0) d.setTitleUntil(acct, "urgKing", p.kingUntil);
+    if (p.lastUntil > 0) d.setTitleUntil(acct, "urgLast", p.lastUntil);
+    return { status: "ok", stamps };
+  }
+  async pockets(acct: string) {
+    return [...(this.boxes.get(acct)?.keys() ?? [])].sort();
+  }
+  async openPocket(acct: string, p: OpenPlan): Promise<OpenResult> {
+    const d = this.deps();
+    const box = this.boxes.get(acct);
+    if (!box?.has(p.id)) return { status: "none" };
+    box.delete(p.id);
+    d.takeInv(acct, p.pocket);
     let st = p.stamps;
     if (p.dye) d.giveInv(acct, p.dye);
     let fish = false;
@@ -186,11 +227,7 @@ export class MemoryUrgentStore implements UrgentStore {
         fish = true;
       } else st += p.fishFallback;
     }
-    const stamps = d.addStamps(acct, st, p.stampCap);
-    if (p.hat) d.grantTimed(acct, p.hat.id, p.hat.slot, p.hat.until);
-    if (p.kingUntil > 0) d.setTitleUntil(acct, "urgKing", p.kingUntil);
-    if (p.lastUntil > 0) d.setTitleUntil(acct, "urgLast", p.lastUntil);
-    return { status: "ok", stamps, fish };
+    return { status: "ok", stamps: d.addStamps(acct, st, p.stampCap), fish };
   }
   async testGet() {
     return this.test;
@@ -198,29 +235,24 @@ export class MemoryUrgentStore implements UrgentStore {
   async testSet(t: UrgentTest | null) {
     this.test = t;
   }
-  async testAdd(id: string, n: number) {
-    const e = this.ev(id);
-    e.n = String(num(e.n) + n);
-    return Number(e.n);
-  }
-  async testFest(id: string, now: number) {
-    this.ev(id).fest ??= String(now);
-  }
 }
 
 // ── Redis (운영) ──
 
-// KEYS: ev, by, nm, bag  ARGV: 계정, 이름, 목표, 지금, 순위 소수부, 마지막 1분 시작, ttl, (id, 개수)...
+// KEYS: ev, by, nm, bag  ARGV: 계정, 이름, 목표, 지금, 순위 소수부, 마지막 1분 시작, ttl, 'bag'|'free'(시험: 가방 안 봄), (id, 개수)...
 // → {'ok', 막대, 내 수, fest} | {'bag'}
 export const URGENT_DELIVER_LUA = `
-for i = 8, #ARGV, 2 do
-  if tonumber(redis.call('HGET', KEYS[4], ARGV[i]) or '0') < tonumber(ARGV[i + 1]) then return {'bag'} end
+local free = ARGV[8] == 'free'
+if not free then
+  for i = 9, #ARGV, 2 do
+    if tonumber(redis.call('HGET', KEYS[4], ARGV[i]) or '0') < tonumber(ARGV[i + 1]) then return {'bag'} end
+  end
 end
 local add = 0
-for i = 8, #ARGV, 2 do
+for i = 9, #ARGV, 2 do
   local k = tonumber(ARGV[i + 1])
   add = add + k
-  if redis.call('HINCRBY', KEYS[4], ARGV[i], -k) <= 0 then redis.call('HDEL', KEYS[4], ARGV[i]) end
+  if not free and redis.call('HINCRBY', KEYS[4], ARGV[i], -k) <= 0 then redis.call('HDEL', KEYS[4], ARGV[i]) end
 end
 local goal, now = tonumber(ARGV[3]), tonumber(ARGV[4])
 local n = redis.call('HINCRBY', KEYS[1], 'n', add)
@@ -231,6 +263,7 @@ redis.call('ZADD', KEYS[2], mine + tonumber(ARGV[5]), ARGV[1])
 redis.call('HSET', KEYS[3], ARGV[1], ARGV[2])
 if before * 2 < goal * 3 and n * 2 >= goal * 3 then redis.call('HSETNX', KEYS[1], 'fest', ARGV[4]) end
 if before < goal and n >= goal and now >= tonumber(ARGV[6]) then redis.call('HSETNX', KEYS[1], 'last', ARGV[1]) end
+if before < goal and n >= goal then redis.call('HSETNX', KEYS[1], 'at100', ARGV[4]) end
 if before == 0 then redis.call('EXPIRE', KEYS[1], ARGV[7]) end
 if mine == add then
   redis.call('EXPIRE', KEYS[2], ARGV[7])
@@ -239,16 +272,51 @@ end
 return {'ok', n, mine, redis.call('HGET', KEYS[1], 'fest') or '0'}
 `;
 
-// KEYS: got, quest, inv, bag, look, stash, tstats, acct
-// ARGV: 계정, 기록, 도장, 도장 상한, 염색권 id, 물고기 id, 가득일 때 도장, 칸 상한, 모자 id, 모자 부위, 모자 끝, 지금, 배달왕 끝, 마감 끝, ttl
+// KEYS: got, quest, inv, look, stash, tstats, acct, urgbox
+// ARGV: 계정, 기록, 도장, 도장 상한, 상자 아이템 id(없으면 ''), 의뢰 id, 모자 id, 모자 부위, 모자 끝, 지금, 배달왕 끝, 마감 끝, ttl
 // 기간 꾸미기는 lib/store/accounts-redis.ts TIER_LUA와 같은 자리 규칙 (입고 있으면 그 자리, 아니면 벗어 둔 꾸미기 — 더 길 때만)
-// → {'ok', 도장, 물고기 넣음(1/0)} | {'dup'} | {'noacct'}
+// → {'ok', 도장} | {'dup'} | {'noacct'}
 export const URGENT_CLAIM_LUA = `
-if redis.call('EXISTS', KEYS[8]) == 0 then return {'noacct'} end
+if redis.call('EXISTS', KEYS[7]) == 0 then return {'noacct'} end
 if redis.call('HSETNX', KEYS[1], ARGV[1], ARGV[2]) == 0 then return {'dup'} end
-redis.call('EXPIRE', KEYS[1], ARGV[15])
+redis.call('EXPIRE', KEYS[1], ARGV[13])
+if ARGV[5] ~= '' then
+  redis.call('HINCRBY', KEYS[3], ARGV[5], 1)
+  redis.call('HSET', KEYS[8], ARGV[6], ARGV[10])
+end
 local st = tonumber(ARGV[3])
-if ARGV[5] ~= '' then redis.call('HINCRBY', KEYS[3], ARGV[5], 1) end
+local total = tonumber(redis.call('HGET', KEYS[2], 'st') or '0')
+if st > 0 then
+  total = math.min(tonumber(ARGV[4]), total + st)
+  redis.call('HSET', KEYS[2], 'st', total)
+end
+if ARGV[7] ~= '' then
+  local id, slot, u, now = ARGV[7], ARGV[8], tonumber(ARGV[9]), tonumber(ARGV[10])
+  local cur = redis.call('HGET', KEYS[4], slot)
+  local ci, cu = nil, 0
+  if cur then
+    local a, b = string.match(cur, '^([^|]+)|(.+)$')
+    ci, cu = a, tonumber(b) or 0
+  end
+  if ci == id and cu > now then
+    if u > cu then redis.call('HSET', KEYS[4], slot, id .. '|' .. u) end
+  else
+    local had = tonumber(redis.call('HGET', KEYS[5], id) or '0')
+    if u > had then redis.call('HSET', KEYS[5], id, u) end
+  end
+end
+if tonumber(ARGV[11]) > 0 then redis.call('HSET', KEYS[6], 'urgKing', ARGV[11]) end
+if tonumber(ARGV[12]) > 0 then redis.call('HSET', KEYS[6], 'urgLast', ARGV[12]) end
+return {'ok', total}
+`;
+
+// 상자 열기. KEYS: urgbox, inv, quest, bag  ARGV: 의뢰 id, 상자 아이템 id, 도장, 도장 상한, 염색권 id, 물고기 id, 가득일 때 도장, 칸 상한
+// 표시 HDEL이 먼저라 같은 상자를 두 번 열 수 없다 → {'ok', 도장, 물고기 넣음(1/0)} | {'none'}
+export const URGENT_OPEN_LUA = `
+if redis.call('HDEL', KEYS[1], ARGV[1]) == 0 then return {'none'} end
+if redis.call('HINCRBY', KEYS[2], ARGV[2], -1) <= 0 then redis.call('HDEL', KEYS[2], ARGV[2]) end
+local st = tonumber(ARGV[3])
+if ARGV[5] ~= '' then redis.call('HINCRBY', KEYS[2], ARGV[5], 1) end
 local fish = 0
 if ARGV[6] ~= '' then
   if tonumber(redis.call('HGET', KEYS[4], ARGV[6]) or '0') < tonumber(ARGV[8]) then
@@ -258,28 +326,11 @@ if ARGV[6] ~= '' then
     st = st + tonumber(ARGV[7])
   end
 end
-local total = tonumber(redis.call('HGET', KEYS[2], 'st') or '0')
+local total = tonumber(redis.call('HGET', KEYS[3], 'st') or '0')
 if st > 0 then
   total = math.min(tonumber(ARGV[4]), total + st)
-  redis.call('HSET', KEYS[2], 'st', total)
+  redis.call('HSET', KEYS[3], 'st', total)
 end
-if ARGV[9] ~= '' then
-  local id, slot, u, now = ARGV[9], ARGV[10], tonumber(ARGV[11]), tonumber(ARGV[12])
-  local cur = redis.call('HGET', KEYS[5], slot)
-  local ci, cu = nil, 0
-  if cur then
-    local a, b = string.match(cur, '^([^|]+)|(.+)$')
-    ci, cu = a, tonumber(b) or 0
-  end
-  if ci == id and cu > now then
-    if u > cu then redis.call('HSET', KEYS[5], slot, id .. '|' .. u) end
-  else
-    local had = tonumber(redis.call('HGET', KEYS[6], id) or '0')
-    if u > had then redis.call('HSET', KEYS[6], id, u) end
-  end
-end
-if tonumber(ARGV[13]) > 0 then redis.call('HSET', KEYS[7], 'urgKing', ARGV[13]) end
-if tonumber(ARGV[14]) > 0 then redis.call('HSET', KEYS[7], 'urgLast', ARGV[14]) end
 return {'ok', total, fish}
 `;
 
@@ -312,7 +363,7 @@ export class RedisUrgentStore implements UrgentStore {
     const r = (await this.redis.eval<string[], unknown[]>(
       URGENT_DELIVER_LUA,
       [uk.ev(id), uk.by(id), uk.nm(id), lk.bag(acct)],
-      [acct, name, String(a.goal), String(a.now), String(a.frac), String(a.lastFrom), String(URGENT_TTL_SEC), ...pairs],
+      [acct, name, String(a.goal), String(a.now), String(a.frac), String(a.lastFrom), String(URGENT_TTL_SEC), a.free ? "free" : "bag", ...pairs],
     )) as unknown[];
     if (String(r?.[0]) !== "ok") return { status: "bag" };
     return { status: "ok", n: num(r[1]), mine: num(r[2]), fest: num(r[3]) };
@@ -336,16 +387,14 @@ export class RedisUrgentStore implements UrgentStore {
   async claim(id: string, acct: string, p: ClaimPlan): Promise<ClaimResult> {
     const r = (await this.redis.eval<string[], unknown[]>(
       URGENT_CLAIM_LUA,
-      [uk.got(id), questKey(acct), K.inv(acct), lk.bag(acct), K.look(acct), K.stash(acct), titleStatsKey(acct), K.acct(acct)],
+      [uk.got(id), questKey(acct), K.inv(acct), K.look(acct), K.stash(acct), titleStatsKey(acct), K.acct(acct), uk.box(acct)],
       [
         acct,
         p.record,
         String(p.stamps),
         String(p.stampCap),
-        p.dye,
-        p.fish,
-        String(p.fishFallback),
-        String(p.stackMax),
+        p.pocket,
+        id,
         p.hat?.id ?? "",
         p.hat?.slot ?? "",
         String(p.hat?.until ?? 0),
@@ -356,8 +405,21 @@ export class RedisUrgentStore implements UrgentStore {
       ],
     )) as unknown[];
     const s = String(r?.[0]);
-    if (s === "ok") return { status: "ok", stamps: num(r[1]), fish: num(r[2]) === 1 };
+    if (s === "ok") return { status: "ok", stamps: num(r[1]) };
     return { status: s === "noacct" ? "noacct" : "dup" };
+  }
+  async pockets(acct: string) {
+    const keys = ((await this.redis.hkeys(uk.box(acct))) as unknown[]) ?? [];
+    return keys.map(String).sort();
+  }
+  async openPocket(acct: string, p: OpenPlan): Promise<OpenResult> {
+    const r = (await this.redis.eval<string[], unknown[]>(
+      URGENT_OPEN_LUA,
+      [uk.box(acct), K.inv(acct), questKey(acct), lk.bag(acct)],
+      [p.id, p.pocket, String(p.stamps), String(p.stampCap), p.dye, p.fish, String(p.fishFallback), String(p.stackMax)],
+    )) as unknown[];
+    if (String(r?.[0]) !== "ok") return { status: "none" };
+    return { status: "ok", stamps: num(r[1]), fish: num(r[2]) === 1 };
   }
   async testGet() {
     const raw = await this.redis.get<string>(uk.test);
@@ -371,13 +433,6 @@ export class RedisUrgentStore implements UrgentStore {
   async testSet(t: UrgentTest | null) {
     if (t) await this.redis.set(uk.test, JSON.stringify(t), { ex: URGENT_TTL_SEC });
     else await this.redis.del(uk.test);
-  }
-  async testAdd(id: string, n: number) {
-    const [v] = (await this.redis.pipeline().hincrby(uk.ev(id), "n", n).expire(uk.ev(id), URGENT_TTL_SEC).exec()) as unknown[];
-    return num(v);
-  }
-  async testFest(id: string, now: number) {
-    await this.redis.hsetnx(uk.ev(id), "fest", String(now));
   }
 }
 
