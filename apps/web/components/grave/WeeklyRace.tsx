@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CHAMP_BOARDS, CHAMP_TITLE, type ChampBoard } from "@tomb/protocol";
+import { CHAMP_BOARDS, CHAMP_TITLE, champBitsOf, type ChampBoard } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { tabHidden } from "@/lib/hooks/visibleAgain";
 import type { ChampAvatar, ChampResponse, RaceResponse, RaceRow } from "@/lib/types";
@@ -151,7 +151,7 @@ function HallColumn({ board, champ }: { board: ChampBoard; champ: ChampResponse 
       </span>
       {last ? (
         <div className={styles.hallTop} data-me={last.me === true}>
-          <Avatar a={last.avatar} label={`지난주 ${CHAMP_TITLE[board]} ${last.name}`} scale={1.25} />
+          <Avatar a={last.avatar} label={`지난주 ${CHAMP_TITLE[board]} ${last.name}`} scale={1.25} champ={lastBits(champ, last.name)} />
           <span className={styles.lastText}>
             <span className={styles.hallWeek}>지난주 · {weekLabel(champ.week)}</span>
             <b>
@@ -177,8 +177,13 @@ function HallColumn({ board, champ }: { board: ChampBoard; champ: ChampResponse 
   );
 }
 
-function Avatar({ a, label, scale }: { a: ChampAvatar; label: string; scale: number }) {
-  return <AvatarThumb color={a.color} body={a.body} look={a.look} dye={a.dye} label={label} scale={scale} />;
+function Avatar({ a, label, scale, champ }: { a: ChampAvatar; label: string; scale: number; champ?: number }) {
+  return <AvatarThumb color={a.color} body={a.body} look={a.look} dye={a.dye} label={label} scale={scale} champ={champ} />;
+}
+
+/** 지난주 1위가 이번 주에 두른 오라: 그 사람이 1위한 랭킹을 모두 합친다 (여러 랭킹 1위면 게임처럼 합쳐진 오라) */
+function lastBits(champ: ChampResponse, name: string): number {
+  return champBitsOf(champ.last.filter((w) => w.name === name).map((w) => w.board));
 }
 
 /** 시상대 한 칸: 캐릭터 + 받침(등수) + 이름·값 */
