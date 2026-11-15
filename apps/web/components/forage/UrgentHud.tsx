@@ -10,7 +10,7 @@ import u from "./urgent.module.css";
 // 11/15: 긴급 의뢰 위쪽 막대 (GameShell이 게임이 뜨면 붙인다 — 마을 어디서든 보인다).
 //  - 시작하면 확성기처럼 큰 알림 한 번 (의뢰마다 한 번만 — urgentStore가 정한다)
 //  - 진행 중: 남은 시간(마지막 1분은 붉게 깜빡) · 서버 전체 막대(50%·100%·150% 눈금)
-//  - 끝나면 막대가 멈추고 결과 · 축제 남은 시간. 닫기(×)로 숨길 수 있다
+//  - 끝나면 막대가 멈추고 결과 · 축제 남은 시간. 닫기(×)로 숨기면 새 의뢰가 뜨기 전까지 다시 안 뜬다 (11/16 — 이 브라우저가 기억)
 //    (11/15 아무도 내지 않았으면 막대 없이 한 줄만 몇 초 보여 주고 저절로 내린다. 「게시판에서 보상 받기」는 내가 받을 보상이 있을 때만)
 // 사냥·미니게임 중에는 숨긴다 (그 화면 위쪽 막대와 겹치지 않게)
 
@@ -23,6 +23,16 @@ const mmss = (ms: number) => {
 /** 아무도 내지 않고 끝났을 때 한 줄을 보여 주는 시간 */
 const NOBODY_SHOW_MS = 8_000;
 
+/** 11/16 끝난 의뢰 막대를 닫은 의뢰 id (이 브라우저가 기억 — 새로고침·캠핑장 오가기에도 새 의뢰가 뜨기 전까지 다시 안 뜬다) */
+const CLOSED_KEY = "tomb:urgentClosed";
+const readClosed = (): string | null => {
+  try {
+    return localStorage.getItem(CLOSED_KEY);
+  } catch {
+    return null;
+  }
+};
+
 /** 막대 폭 (150%가 끝) */
 const fill = (n: number, goal: number) => `${Math.min(100, goal > 0 ? (n / (goal * 1.5)) * 100 : 0)}%`;
 
@@ -30,7 +40,15 @@ export default function UrgentHud() {
   const { pub, mine, announce: ann } = useUrgent();
   const scene = useBridgeValue("scene:changed")?.scene;
   const [now, setNow] = useState(() => Date.now());
-  const [hidden, setHidden] = useState<string | null>(null);
+  const [hidden, setHiddenState] = useState<string | null>(readClosed);
+  const setHidden = (id: string) => {
+    setHiddenState(id);
+    try {
+      localStorage.setItem(CLOSED_KEY, id);
+    } catch {
+      /* 저장 못 해도 이번 화면에서는 닫힌다 */
+    }
+  };
   const toasted = useRef(new Set<string>());
   const ev = pub?.ev ?? null;
   // 아무도 내지 않고 끝났으면 한 줄을 몇 초 보여 주고 저절로 닫는다 (닫기 ×도 그대로)
