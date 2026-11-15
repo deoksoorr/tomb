@@ -88,6 +88,41 @@ function giftContract(make: () => { gifts: GiftStore; accounts: AccountStore; cl
     await cleanup([me, other], [g.id]);
   });
 
+  it("여러 계정 선물: 고른 계정마다 선물함에 들어가 각자 한 번씩 받고, 발송 기록은 한 줄로 받은 수를 모은다", async () => {
+    const { gifts, accounts, cleanup } = make();
+    const [a, b, c, other] = [0, 1, 2, 3].map(() => `t-${nanoid(10)}`);
+    const g = gift({ target: a, targetName: "진순", targets: [a, b, c], points: 30 });
+    try {
+      await gifts.send(g);
+      for (const id of [a, b, c]) {
+        const box = await gifts.inbox(id, 0, T0 + 1);
+        expect(box.map((x) => x.id)).toContain(g.id);
+      }
+      expect((await gifts.inbox(other, T0 - 1, T0 + 1)).map((x) => x.id)).not.toContain(g.id);
+      expect(await gifts.claim(other, g.id, T0 - 1, T0 + 1)).toEqual({ ok: false, reason: "gone" });
+
+      // 받은 선물은 그 계정 앞 사본 (대상은 그 계정, 목록은 없다)
+      const got = await gifts.claim(b, g.id, 0, T0 + 2);
+      expect(got).toMatchObject({ ok: true, points: 30, gift: { id: g.id, target: b } });
+      expect(got.ok && got.gift.targets).toBeUndefined();
+      expect(await gifts.claim(b, g.id, 0, T0 + 3)).toEqual({ ok: false, reason: "done" });
+      expect(await gifts.claim(c, g.id, 0, T0 + 3)).toMatchObject({ ok: true });
+      expect((await accounts.get(b, "20261112", T0)).points).toBe(30);
+      // 한 계정이 지워도 다른 계정 선물함엔 남는다
+      expect(await gifts.remove(a, g.id, 0, T0 + 4)).toBe(true);
+      expect((await gifts.inbox(a, 0, T0 + 5)).map((x) => x.id)).not.toContain(g.id);
+      expect((await gifts.inbox(c, 0, T0 + 5)).find((x) => x.id === g.id)?.claimedAt).toBe(T0 + 3);
+
+      const row = (await gifts.log(50)).filter((x) => x.id === g.id);
+      expect(row).toHaveLength(1);
+      expect(row[0]).toMatchObject({ target: a, targetName: "진순", targets: [a, b, c], claims: 2 });
+      await cleanup([a, b, c, other], [g.id]);
+    } catch (e) {
+      await cleanup([a, b, c, other], [g.id]);
+      throw e;
+    }
+  });
+
   it("지갑 전용으로 받은 선물은 랭킹 정리(legacyClaims) 대상이 아니다 (받고 지워도)", async () => {
     const { gifts, cleanup } = make();
     const me = `t-${nanoid(10)}`;

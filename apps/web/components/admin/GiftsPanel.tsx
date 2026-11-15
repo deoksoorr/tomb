@@ -7,6 +7,7 @@ import { BALANCE_CAP } from "@/lib/economy";
 import {
   GIFT_MAX_COUNT,
   GIFT_MAX_ITEMS,
+  GIFT_MAX_TARGETS,
   GIFT_TERMS,
   giftHasTerm,
   isGiftTerm,
@@ -40,6 +41,9 @@ const clampCount = (n: number) =>
   Math.max(1, Math.min(GIFT_MAX_COUNT, Math.floor(n) || 1));
 const lineText = (i: GiftItem) =>
   `${itemName(i.itemId)} ${i.term ? `(${GIFT_TERMS[i.term].label})` : `×${i.count}`}`;
+/** 여러 명이면 「첫 사람 외 n명」 */
+const manyText = (first: string, count: number) =>
+  count > 1 ? `${first} 외 ${count - 1}명` : first;
 
 /** 아이템 묶음: 캐릭터 꾸미기는 부위별, 나머지는 종류별 (실제 카탈로그에 있는 것만, 운영자 전용 꾸미기는 뺀다) */
 const PICKABLE = ITEMS.filter((i) => !i.staff);
@@ -66,10 +70,11 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
     toast,
     onAuthLost,
   );
-  const [mode, setMode] = useState<"all" | "one">("one");
+  const [mode, setMode] = useState<"all" | "pick">("pick");
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<AdminAccountRow[] | null>(null);
-  const [target, setTarget] = useState<AdminAccountRow | null>(null);
+  /** 고른 계정 (고른 순서, 같은 계정은 한 번만, 최대 GIFT_MAX_TARGETS명) */
+  const [picked, setPicked] = useState<AdminAccountRow[]>([]);
   const [from, setFrom] = useState("");
   const [note, setNote] = useState("");
   const [points, setPoints] = useState(0);
@@ -93,6 +98,19 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
       fail(err);
     }
   }
+
+  // 찾은 계정을 누르면 담고, 이미 담긴 계정을 다시 누르면 뺀다
+  const pickedFull = picked.length >= GIFT_MAX_TARGETS;
+  const togglePick = (a: AdminAccountRow) =>
+    setPicked((prev) =>
+      prev.some((p) => p.accountId === a.accountId)
+        ? prev.filter((p) => p.accountId !== a.accountId)
+        : prev.length >= GIFT_MAX_TARGETS
+          ? prev
+          : [...prev, a],
+    );
+  const unpick = (accountId: string) =>
+    setPicked((prev) => prev.filter((p) => p.accountId !== accountId));
 
   // 검색어가 있으면 모든 묶음에서 찾고, 없으면 고른 묶음만
   const shown = useMemo(() => {
@@ -132,9 +150,11 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
       ? { itemId: l.itemId, count: 1, term: l.term }
       : { itemId: l.itemId, count: l.count },
   );
+  // 계정을 고르면 늘 targets로 보낸다 (한 명이면 서버가 target 하나로 맞춘다)
   const payload = {
-    target: mode === "all" ? "all" : (target?.accountId ?? ""),
-    targetName: mode === "all" ? null : (target?.name ?? null),
+    ...(mode === "all"
+      ? { target: "all" }
+      : { targets: picked.map((a) => ({ id: a.accountId, name: a.name })) }),
     from: from.trim() || null,
     note: note.trim(),
     points,
@@ -145,13 +165,16 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
   const ready =
     payload.note.length > 0 &&
     (points > 0 || items.length > 0) &&
-    (mode === "all" || !!target);
+    (mode === "all" || picked.length > 0);
+  const firstName = picked[0]?.name ?? "이름 없음";
   const targetText =
     mode === "all"
       ? "전체 (보낸 시각 이전에 들어온 모든 계정)"
-      : target
-        ? `${target.name ?? "이름 없음"} (${target.accountId})`
-        : "아직 안 골랐어요";
+      : picked.length === 0
+        ? "아직 안 골랐어요"
+        : picked.length === 1
+          ? `${firstName} (${picked[0].accountId})`
+          : manyText(firstName, picked.length);
 
   async function send(e: FormEvent) {
     e.preventDefault();
@@ -167,7 +190,7 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
       toast(
         mode === "all"
           ? "전체에게 선물을 보냈어요."
-          : `${target!.name ?? "그 계정"}에게 선물을 보냈어요.`,
+          : `${manyText(picked[0]?.name ?? "그 계정", picked.length)}에게 선물을 보냈어요.`,
       );
       setNote("");
       setPoints(0);
@@ -201,8 +224,8 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
             <button
               type="button"
               className={ui.button}
-              aria-pressed={mode === "one"}
-              onClick={() => setMode("one")}
+              aria-pressed={mode === "pick"}
+              onClick={() => setMode("pick")}
             >
               특정 계정
             </button>
@@ -257,9 +280,17 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
                         type="button"
                         className={cx(
                           ui.button,
-                          target?.accountId === a.accountId && ui.primary,
+                          picked.some((p) => p.accountId === a.accountId) &&
+                            ui.primary,
                         )}
-                        onClick={() => setTarget(a)}
+                        aria-pressed={picked.some(
+                          (p) => p.accountId === a.accountId,
+                        )}
+                        disabled={
+                          pickedFull &&
+                          !picked.some((p) => p.accountId === a.accountId)
+                        }
+                        onClick={() => togglePick(a)}
                       >
                         {a.name ?? "이름 없음"}{" "}
                         <span className={styles.meta}>
@@ -271,7 +302,39 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
                   ))}
                 </ul>
               )}
-              <p className={social.picked}>받는 사람: {targetText}</p>
+              <span className={ui.label}>
+                고른 계정{" "}
+                <span className={ui.counter}>
+                  {picked.length}/{GIFT_MAX_TARGETS}
+                </span>
+              </span>
+              {picked.length === 0 ? (
+                <p className={social.picked}>
+                  찾은 계정을 누르면 담겨요. 여러 명을 담아 한 번에 보낼 수
+                  있어요.
+                </p>
+              ) : (
+                <ul className={g.chips} aria-label="고른 계정">
+                  {picked.map((a) => (
+                    <li key={a.accountId} className={g.chip}>
+                      <span title={a.accountId}>{a.name ?? "이름 없음"}</span>
+                      <button
+                        type="button"
+                        className={g.chipX}
+                        aria-label={`${a.name ?? "이름 없음"} 빼기`}
+                        onClick={() => unpick(a.accountId)}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {pickedFull && (
+                <p className={ui.hint}>
+                  한 번에 {GIFT_MAX_TARGETS}명까지 보낼 수 있어요.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -514,7 +577,9 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
             {armed
               ? mode === "all"
                 ? "정말 전체에게 보낼까요? (한 번 더 누르기)"
-                : "이대로 보낼까요? (한 번 더 누르기)"
+                : picked.length > 1
+                  ? `${picked.length}명에게 보낼까요? (한 번 더 누르기)`
+                  : "이대로 보낼까요? (한 번 더 누르기)"
               : "확인"}
           </button>
           <p className={ui.hint}>
@@ -549,7 +614,10 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
                     <td>
                       {r.target === "all"
                         ? "전체"
-                        : (r.targetName ?? r.target.slice(0, 8))}
+                        : manyText(
+                            r.targetName ?? r.target.slice(0, 8),
+                            r.targets?.length ?? 1,
+                          )}
                     </td>
                     <td className={social.noteCell} title={r.note}>
                       <b>{r.from}</b> {r.note}

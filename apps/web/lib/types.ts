@@ -571,6 +571,8 @@ export const giftHasTerm = (id: string) => {
 /** 한 선물에 넣는 아이템 종류 수·개수 상한 (관리자 화면과 서버 검증 공용) */
 export const GIFT_MAX_ITEMS = 10;
 export const GIFT_MAX_COUNT = 99;
+/** 여러 계정에 한 번에 보낼 때 최대 계정 수 (접속 중 알림 notifyMe도 한 번에 50명까지) */
+export const GIFT_MAX_TARGETS = 50;
 
 /** 선물 아이템 (카탈로그 아이템 id × 개수). term = 기간 (꾸미기만, 이때 개수는 1) — 옛 선물엔 없다 */
 export type GiftItem = { itemId: string; count: number; term?: GiftTerm };
