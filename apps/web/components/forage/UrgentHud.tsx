@@ -111,7 +111,7 @@ export default function UrgentHud() {
               {d.unit}
             </span>
             {live && <span className={u.pct}>{pct}%</span>}
-            {fest ? <span className={u.festLeft}>마을 축제 {clockText(ev.festUntil - now)}</span> : <span className={u.hudHint}>{live ? "납품 부두 게시판" : "게시판에서 보상 받기"}</span>}
+            <span className={u.hudHint}>{live ? "납품 부두 게시판" : "게시판에서 보상 받기"}</span>
           </div>
         </div>
       )}

@@ -148,7 +148,7 @@ function Stages({ n, goal }: { n: number; goal: number }) {
       </li>
       <li className={u.stage} data-on={stage >= 150 || undefined}>
         <b>150%</b>
-        <span>마을 축제 1시간</span>
+        <span>불꽃축제</span>
       </li>
     </ul>
   );
@@ -174,7 +174,6 @@ function Bar({ ev, now }: { ev: UrgentLive; now: number }) {
         </span>
         <span>
           <strong>{pctOf(ev.n, ev.goal)}%</strong>
-          {ev.festUntil > now ? ` 축제 ${clockText(ev.festUntil - now)} 남음` : ""}
         </span>
       </div>
     </>
