@@ -37,6 +37,7 @@ import { FISH_ZONE_LIGHTS } from "./fishZone";
 import { ZOO_LIGHTS } from "./zoo/zooLayout";
 import { HAUNT_LIGHTS } from "../haunt/hauntLayout";
 import { TOWER_LIGHTS } from "../tower/towerLayout";
+import { BUMPER_LIGHTS } from "../bumper/bumperLayout";
 import {
   allDeckRails,
   allProps,
@@ -184,14 +185,14 @@ export class WorldMap {
 
     // 구역 이름 (은은하게). 묘역 이름은 문 아치 팻말에 (addFences)
     for (const z of ZONES) {
-      if (z.id === "river" || z.id === "gate" || z.id === "graveyard" || z.id === "fishing" || z.id === "zoo") continue; // 낚시터·동물원 이름은 아치 현판에
+      if (z.id === "river" || z.id === "gate" || z.id === "graveyard" || z.id === "busyard" || z.id === "zoo" || z.id === "bumper") continue; // 동물원 이름은 아치 현판에, 버스 정류장 마당은 게시판·정류장 이름표가 대신한다 (범퍼카장은 입구 간판)
       const at = ZONE_LABEL_AT[z.name] ?? { x: z.x + z.w / 2, y: z.y + 10 };
       this.addLabel(at.x, at.y, z.name, z.id === "pond" ? 0xc8d8e0 : 0xd8ccb0, 1, 0.62);
     }
     this.addLabel(FERRY_DOCK.x, FERRY_DOCK.y - 44, "나루터", 0xd8ccb0, 1, 0.75);
     // 11/15 오리배 선착장 팻말 글씨 (팻말 그림은 BoatRide)
     this.addLabel(DUCK_DOCK_DECK.x - 12, DUCK_DOCK_DECK.y - 22, "오리배 · 2인승", 0xfff0b8, 1, 0.92);
-    // 납품 부두 등불 (아치·잔교 끝·게시판·수조). 장식 그림과 "납품 부두" 현판은 forage/FishZoneView
+    // 버스 정류장 마당 등불 (게시판·정류장 지붕·시간표). 장식 그림은 forage/FishZoneView
     this.staticLights.push(...FISH_ZONE_LIGHTS);
     // 동물원 등불 (정문 석등·아치·분양 노점). 울타리·우리·동물·사육사 그림은 zoo/ZooView
     this.staticLights.push(...ZOO_LIGHTS);
@@ -199,6 +200,8 @@ export class WorldMap {
     this.staticLights.push(...HAUNT_LIGHTS);
     // 11/15 야근 빌딩 로비 유리문·옥상 네온 간판·창 불빛 (그림은 tower/TowerView)
     this.staticLights.push(...TOWER_LIGHTS);
+    // 11/16 범퍼카장 조명 기둥·간판·매표소 창 (그림은 bumper/BumperRide)
+    this.staticLights.push(...BUMPER_LIGHTS);
 
     // 아래 담 (맵 맨 아래 줄은 바닥 타일이 담 면으로 그린다)
     this.applyBounds();

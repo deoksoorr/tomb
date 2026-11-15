@@ -438,6 +438,17 @@ export class ResidentSim {
     return [s1, sw, s2].filter((s) => s.dur > 0);
   }
 
+  /**
+   * 11/15 시각 t의 구간을 미리 계산해 둬요. 새로 계산했으면 true.
+   * 캠핑장에서 마을로 돌아오는 버스 동안 불러요 (마을이 깨어나는 프레임에 주민 여럿이 한꺼번에 길을 찾느라 멈췄어요)
+   */
+  warmLeg(t: number): boolean {
+    const k = Math.floor((t + this.phase) / this.def.legMs);
+    if (this.leg && this.leg.k === k) return false;
+    this.legAt(k);
+    return true;
+  }
+
   private legAt(k: number): Leg {
     if (this.leg && this.leg.k === k) return this.leg;
     const def = this.def;

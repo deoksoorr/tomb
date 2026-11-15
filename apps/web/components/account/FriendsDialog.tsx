@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AWAY_PLACE_LABEL, FRIEND_MAX } from "@tomb/protocol";
+import { AWAY_PLACE_LABEL, FRIEND_MAX, MAP_NAME } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import type { FriendCard, FriendEntry, FriendListResponse, FriendWhere } from "@/lib/friendTypes";
@@ -19,15 +19,18 @@ import StyledName from "../ui/StyledName";
 import ui from "../ui/ui.module.css";
 import styles from "./FriendsDialog.module.css";
 
-/** 친구가 있는 곳 한 줄 */
-export function whereText(w: FriendWhere, myCh: number | null): string {
+/** 친구가 있는 곳 한 줄. myMap = 지금 내 맵 (11/15 같은 채널이어도 맵이 다르면 "여기"가 아니다) */
+export function whereText(w: FriendWhere, myCh: number | null, myMap: "village" | "camp" = "village"): string {
   switch (w.at) {
     case "offline":
       return "접속 안 함";
     case "unknown":
       return "위치를 알 수 없어요";
     case "world":
-      return w.ch === myCh ? `${w.ch}채널 마을 (여기)` : `${w.ch}채널 마을`;
+    {
+      const place = MAP_NAME[w.map === "camp" ? "camp" : "village"];
+      return w.ch === myCh && (w.map === "camp" ? "camp" : "village") === myMap ? `${w.ch}채널 ${place} (여기)` : `${w.ch}채널 ${place}`;
+    }
     case "away":
       return `${w.ch}채널 · ${w.place ? AWAY_PLACE_LABEL[w.place] : "실내"}`;
   }
@@ -86,6 +89,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
   const [loadedAt, setLoadedAt] = useState(0);
   const status = useBridgeValue("net:status");
   const myCh = status?.mode === "online" ? status.channel : null;
+  const myMap = status?.map === "camp" ? "camp" : "village";
 
   const load = useCallback(
     () =>
@@ -158,7 +162,8 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
         if (no) showFriendNotice(no);
         return;
       }
-      const goto = (x: { sid: number; x: number; y: number }) => bridge.emit("friend:goto", { sid: x.sid, name: now.name, x: x.x, y: x.y });
+      // 11/15 맵(마을·캠핑장)이 다르면 게임이 버스를 거쳐 간다
+      const goto = (x: { sid: number; x: number; y: number; map?: "camp" }) => bridge.emit("friend:goto", { sid: x.sid, name: now.name, x: x.x, y: x.y, ...(x.map === "camp" ? { map: "camp" as const } : {}) });
       // 가는 중… 안내 없이 옮기고, 도착하면 게임이 "도착했어요!"를 한 번만 띄운다
       if (w.ch === myCh) {
         onClose();
@@ -175,7 +180,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
             .where(f.key)
             .then((again) => {
               const a = again.where;
-              if (a.at === "world" && a.ch === w.ch) bridge.emit("friend:goto", { sid: a.sid, name: again.name, x: a.x, y: a.y });
+              if (a.at === "world" && a.ch === w.ch) bridge.emit("friend:goto", { sid: a.sid, name: again.name, x: a.x, y: a.y, ...(a.map === "camp" ? { map: "camp" as const } : {}) });
               else showFriendNotice(cannotGo(again.name, a) ?? `${again.name}님이 다른 곳으로 옮겼어요.`);
             })
             .catch((e) => showFriendNotice(errorMessage(e))),
@@ -279,7 +284,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
               <ul className={styles.list}>
                 {friends.map((f) => {
                   const online = isOnline(f.where);
-                  const here = f.where.at === "world" && f.where.ch === myCh;
+                  const here = f.where.at === "world" && f.where.ch === myCh && (f.where.map === "camp" ? "camp" : "village") === myMap;
                   return (
                     <li key={f.key} className={cx(styles.card, !online && styles.offline)}>
                       <div className={styles.top}>
@@ -294,7 +299,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
                               </span>
                             </span>
                             <span className={styles.where}>
-                              {f.where.at === "offline" ? `마지막 접속 ${lastSeenText(f.lastSeen, nowMs)}` : whereText(f.where, myCh)}
+                              {f.where.at === "offline" ? `마지막 접속 ${lastSeenText(f.lastSeen, nowMs)}` : whereText(f.where, myCh, myMap)}
                             </span>
                           </div>
                           {f.card && <Stats card={f.card} />}
@@ -303,7 +308,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
                       <div className={styles.actions}>
                         {/* 늘 보인다: 갈 수 없는 곳(사냥터·잡화점·접속 안 함 …)이면 누를 때 이유를 알려 준다 */}
                         <button type="button" className={cx(ui.button, online && ui.primary)} disabled={busy} onClick={() => void go(f)}>
-                          {f.where.at === "world" && !here ? `친구한테 가기 (${f.where.ch}채널)` : "친구한테 가기"}
+                          {f.where.at === "world" && !here ? `친구한테 가기 (${f.where.ch}채널 ${MAP_NAME[f.where.map === "camp" ? "camp" : "village"]})` : "친구한테 가기"}
                         </button>
                         {f.houseId && (
                           <button type="button" className={ui.button} disabled={busy} onClick={() => visit(f)}>

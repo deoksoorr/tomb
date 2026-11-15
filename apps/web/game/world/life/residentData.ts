@@ -382,7 +382,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "bun",
     color: MOSS,
     look: ["neck_scarf"],
-    home: { x: 720, y: 920, r: 150 }, // 다리 건너 묘역
+    home: { x: 720, y: 800, r: 130 }, // 범퍼카장 마당 (11/16 예전 다리 건너 묘역 — 링크 안은 차만 다녀 마당·강둑을 돈다)
     perches: ["bV", "bW"],
     grass: 4,
     legMs: 38_000,

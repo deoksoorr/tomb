@@ -852,8 +852,7 @@ export function balloonStrip(width: number, segs: readonly StripSeg[]): Band {
       }
       case "river":
       case "lake":
-      case "pond":
-      case "fishing": {
+      case "pond": {
         const top = s.id === "pond" ? y0 + 10 : y0 + 4;
         const bot = s.id === "pond" ? y0 + 34 : h - 10;
         for (let x = Math.floor(x0); x < x1; x++) {
@@ -875,8 +874,6 @@ export function balloonStrip(width: number, segs: readonly StripSeg[]): Band {
           const bx = x0 + w * 0.3;
           for (let y = top - 1; y <= bot; y++) for (let i = 0; i < 10; i++) p.set(bx + i, y, i === 0 || i === 9 ? WOOD.lo : y % 2 ? WOOD.mid : WOOD.hi);
         }
-        if (s.id === "fishing")
-          for (let y = top - 1; y < top + 14; y++) for (let i = 0; i < Math.min(w - 4, 30); i++) p.set(x0 + 2 + i, y, y % 3 ? WOOD.mid : WOOD.lo);
         break;
       }
       case "meadow": {
@@ -918,6 +915,36 @@ export function balloonStrip(width: number, segs: readonly StripSeg[]): Band {
       case "housing": {
         for (let x = x0 + 14; x < x1 - 10; x += 30) p.stamp(house(16, 11, ROOFS[Math.floor(x) % ROOFS.length], true), x, y0 + 14 + (Math.floor(x) % 2) * 4);
         for (let x = x0 + 28; x < x1 - 10; x += 60) p.stamp(tree(7, Math.floor(x)), x, y0 + 8);
+        break;
+      }
+      case "busyard": {
+        // 11/15 버스 정류장 마당 (자갈 마당 + 초록 지붕 정류장)
+        p.rect(x0 + 4, y0 + 2, Math.max(0, w - 8), 12, STONE.lo);
+        p.rect(mid - 10, y0 - 10, 20, 3, 0x5a8a66);
+        p.rect(mid - 9, y0 - 7, 2, 9, STONE.mid);
+        p.rect(mid + 7, y0 - 7, 2, 9, STONE.mid);
+        break;
+      }
+      case "bumper": {
+        // 11/16 범퍼카장 (빨강·노랑 고무 테두리 링크 + 알록달록 차 + 귀퉁이 조명 기둥)
+        const rx0 = Math.floor(x0) + 6;
+        const rw = Math.max(0, Math.floor(w) - 12);
+        p.rect(rx0, y0 + 4, rw, 16, 0x4e5666);
+        for (let x = rx0; x < rx0 + rw; x++) {
+          const c = Math.floor((x - rx0) / 5) % 2 === 0 ? 0xd8384a : 0xf0c03a;
+          p.set(x, y0 + 3, c);
+          p.set(x, y0 + 20, c);
+        }
+        const cars = [0xe8434f, 0xf2cf3a, 0x5cc85a, 0x3fc4d8, 0x9a5ae0, 0xf27ab8];
+        for (let i = 0, x = rx0 + 6; x < rx0 + rw - 6; x += 14, i++) {
+          p.rect(x, y0 + 9 + (i % 2) * 5, 6, 3, cars[i % cars.length]);
+          p.rect(x, y0 + 12 + (i % 2) * 5, 6, 1, 0x24222a);
+        }
+        if (w > 30)
+          for (const px of [rx0, rx0 + rw - 1]) {
+            p.rect(px, y0 - 10, 1, 13, 0xf0e8e0);
+            p.set(px, y0 - 11, 0xffd84a);
+          }
         break;
       }
       case "gate": {

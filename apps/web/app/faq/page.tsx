@@ -4,7 +4,7 @@ import { pageMetadata } from "../seo";
 import { ATTEND_RULE_TEXT } from "@/lib/attendStay";
 import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
 import { DAILY_EARN_CAP, earnRule } from "@/lib/economy";
-import { CHAT_MAX, CHAT_RECENT_MS, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS, FRIEND_MAX, NAME_MAX, NAME_MIN, PERMANENT_MULTIPLIER } from "@tomb/protocol";
+import { CHAT_HISTORY_MS, CHAT_MAX, CHAT_STORE_MAX, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS, FRIEND_MAX, NAME_MAX, NAME_MIN, PERMANENT_MULTIPLIER } from "@tomb/protocol";
 import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, AUTO_FISH_MAX_MS } from "@/lib/forage/auto";
 import { DAILY_CATCH_MAX } from "@/lib/forage/catalog";
 import { DORMANT_DAYS } from "@/lib/store/types";
@@ -84,7 +84,7 @@ const FAQ = [
   {
     // 11/15 수집 의뢰 (숫자는 lib/forage/quests/catalog.ts)
     q: "수집 의뢰와 의뢰 도장은 무엇인가요?",
-    a: `의뢰는 납품 부두의 의뢰 게시판에서 받아요. 오늘의 의뢰는 하루 ${QUEST_DAILY}개로 한국 시간 새벽 5시에 새로 나오고, 하루 한 번 의뢰 하나를 무료로 바꿀 수 있어요. 월요일마다 이번 주 큰 의뢰도 1개 나와요. 모은 물고기·채집물을 납품하면(가방에서 사라져요) 의뢰 도장을 ${QUEST_STAMPS.easy}~${QUEST_STAMPS.hard}개, 큰 의뢰는 ${QUEST_STAMPS.weekly}개 받아요. 도장은 포인트로 바꾸거나 남에게 줄 수 없고, 같은 게시판의 도장 교환소에서만 써요. 교환소 물건은 매달 1일 새벽 5시에 바뀌고(염색권은 늘 있어요), 도장은 사라지지 않아요. 끝낸 의뢰 수로 칭호도 받아요.`,
+    a: `의뢰는 버스 정류장 마당의 의뢰 게시판에서 받아요. 오늘의 의뢰는 하루 ${QUEST_DAILY}개로 한국 시간 새벽 5시에 새로 나오고, 하루 한 번 의뢰 하나를 무료로 바꿀 수 있어요. 월요일마다 이번 주 큰 의뢰도 1개 나와요. 모은 물고기·채집물을 납품하면(가방에서 사라져요) 의뢰 도장을 ${QUEST_STAMPS.easy}~${QUEST_STAMPS.hard}개, 큰 의뢰는 ${QUEST_STAMPS.weekly}개 받아요. 도장은 포인트로 바꾸거나 남에게 줄 수 없고, 같은 게시판의 도장 교환소에서만 써요. 교환소 물건은 매달 1일 새벽 5시에 바뀌고(염색권은 늘 있어요), 도장은 사라지지 않아요. 끝낸 의뢰 수로 칭호도 받아요.`,
   },
   {
     q: "묘비는 무엇인가요?",
@@ -92,13 +92,13 @@ const FAQ = [
   },
   {
     q: "채팅할 수 있나요?",
-    a: `네. 컴퓨터는 Enter, 휴대폰은 [채팅] 버튼으로 ${CHAT_MAX}자까지 쓸 수 있어요. 글은 머리 위 말풍선과 왼쪽 아래 채팅창에 같이 뜨고, 같은 채널 마을(집 안이면 그 집)에 있는 사람에게 보여요. 서버에는 ${Math.round(CHAT_RECENT_MS / 60_000)}분만 머물고 사라져서, 늦게 들어와도 최근 ${Math.round(CHAT_RECENT_MS / 60_000)}분 글만 보여요. 욕설은 가려지고, 다른 사람 글이 오면 작은 알림음이 나요(음악 창에서 끌 수 있어요).`,
+    a: `네. 컴퓨터는 Enter, 휴대폰은 [채팅] 버튼으로 ${CHAT_MAX}자까지 쓸 수 있어요. 글은 머리 위 말풍선과 왼쪽 아래 채팅창에 같이 뜨고, 같은 채널 마을(집 안이면 그 집)에 있는 사람에게 보여요. 서버에는 같은 채널 최근 ${CHAT_STORE_MAX}줄이 ${CHAT_HISTORY_MS / 3_600_000}시간까지 남아서, 늦게 들어와도 최근 대화를 볼 수 있어요. 욕설은 가려지고, 다른 사람 글이 오면 작은 알림음이 나요(음악 창에서 끌 수 있어요).`,
   },
   {
     q: "돌아다니는 주민은 누구예요?",
     a: `연한 초록 이름표를 단 마을 주민(${RESIDENTS.slice(0, 3)
       .map((r) => r.name)
-      .join(", ")} 등)이에요. 동물원·납품 부두·광장처럼 저마다 맡은 구역을 주로 걷고, 가끔 헤엄치거나 벤치·모닥불 곁에서 쉬어요. 가까이 가서 E(휴대폰은 상호작용 버튼)를 누르면 멈춰서 말을 걸어 주고, 가끔 게임 팁도 알려 줘요. 실제 사람이 아니라서 접속자 수에는 들어가지 않고, 운영 상황에 따라 나오는 수가 달라져요. 마을엔 강아지(비숑 우유 등)와 고양이도 있어 E로 쓰다듬을 수 있어요.`,
+      .join(", ")} 등)이에요. 동물원·호숫가·광장처럼 저마다 맡은 구역을 주로 걷고, 가끔 헤엄치거나 벤치·모닥불 곁에서 쉬어요. 가까이 가서 E(휴대폰은 상호작용 버튼)를 누르면 멈춰서 말을 걸어 주고, 가끔 게임 팁도 알려 줘요. 실제 사람이 아니라서 접속자 수에는 들어가지 않고, 운영 상황에 따라 나오는 수가 달라져요. 마을엔 강아지(비숑 우유 등)와 고양이도 있어 E로 쓰다듬을 수 있어요.`,
   },
   {
     q: "친구는 어떻게 맺나요?",

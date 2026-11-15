@@ -232,9 +232,47 @@ export const isSpeciesId = (id: unknown): id is string => typeof id === "string"
 export type NodeKind = "herb" | "ore" | "dig" | "bug";
 export const NODE_LABEL: Record<NodeKind, string> = { herb: "약초 캐기", ore: "광석 캐기", dig: "땅 파 보기", bug: "수풀에서 곤충 잡기" };
 export const NODE_CAT: Record<NodeKind, LifeCat> = { herb: "herb", ore: "ore", dig: "dig", bug: "bug" };
-export type GatherNode = { id: string; kind: NodeKind; where: Where; x: number; y: number };
+/** map = 11/15 캠핑장 지점이면 "camp" (좌표는 캠핑장 맵). 없으면 마을 */
+export type GatherNode = { id: string; kind: NodeKind; where: Where; x: number; y: number; map?: "camp" };
 
 const node = (kind: NodeKind, where: Where, x: number, y: number): GatherNode => ({ id: `${kind[0]}${x}_${y}`, kind, where, x, y });
+/** 캠핑장 지점: id 앞에 q (마을 지점 id와 겹치지 않게 — 캠핑장 좌석 id와 같은 규칙) */
+const campNode = (kind: NodeKind, where: Where, x: number, y: number): GatherNode => ({ id: `q${kind[0]}${x}_${y}`, kind, where, x, y, map: "camp" });
+
+/**
+ * 11/15 언젠가 캠핑장 채집 지점 (새 종은 없다 — 기존 종의 출현 장소만). 하루 한도·도감·피어나는 창은 마을과 같이 센다.
+ * 숲 산책로·데크 둘레 숲 = 숲(forest), 데크 고리 안 풀밭 = 풀밭(meadow), 산꼭대기·큰 바위 둘레 = 언덕(hill).
+ * game/camp/campLayout.test가 서 있을 수 있는 곳·물 밖·자리와 떨어짐을 본다 (나무는 이 자리를 비켜 선다)
+ */
+export const CAMP_GATHER_NODES: readonly GatherNode[] = [
+  // 곤충 수풀 (7): 산책로 숲·위쪽 숲·캠핑카 뒤 숲, 데크 고리 안 풀밭
+  campNode("bug", "forest", 1196, 440),
+  campNode("bug", "forest", 1122, 340),
+  campNode("bug", "forest", 860, 170),
+  campNode("bug", "forest", 420, 160),
+  campNode("bug", "forest", 250, 300),
+  campNode("bug", "meadow", 470, 330),
+  campNode("bug", "meadow", 770, 470),
+  // 약초 (7): 산책로·계곡 숲, 위쪽 숲, 타프 옆 숲, 산꼭대기 아래, 데크 고리 안 풀밭
+  campNode("herb", "forest", 1210, 360),
+  campNode("herb", "forest", 1110, 450),
+  campNode("herb", "forest", 900, 130),
+  campNode("herb", "forest", 560, 120),
+  campNode("herb", "forest", 880, 600),
+  campNode("herb", "hill", 1216, 260),
+  campNode("herb", "meadow", 720, 300),
+  // 광석 (5): 산꼭대기 바위·큰 바위 둘레
+  campNode("ore", "hill", 1248, 214),
+  campNode("ore", "hill", 1072, 190),
+  campNode("ore", "hill", 1100, 62),
+  campNode("ore", "hill", 980, 334),
+  campNode("ore", "hill", 1120, 656),
+  // 발굴 (4): 낙엽 숲 (위쪽 숲·산책로 옆·타프 아래 숲)
+  campNode("dig", "forest", 640, 150),
+  campNode("dig", "forest", 300, 140),
+  campNode("dig", "forest", 1190, 600),
+  campNode("dig", "forest", 880, 770),
+];
 
 /** lib/forage/forage.test.ts가 서 있을 수 있는 자리·물 밖·소품/좌석과 떨어짐을 검사한다 */
 export const GATHER_NODES: readonly GatherNode[] = [
@@ -281,7 +319,11 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("bug", "meadow", 960, 962),
   node("bug", "lakeside", 1390, 940),
   node("bug", "lakeside", 1290, 1000),
+  // 11/15 캠핑장 (map: "camp")
+  ...CAMP_GATHER_NODES,
 ];
+/** 그 맵의 채집 지점인지 (마을 지점은 map이 없다) */
+export const nodeOnMap = (n: GatherNode, map: "village" | "camp"): boolean => (n.map ?? "village") === map;
 const NODE_BY_ID = new Map(GATHER_NODES.map((n) => [n.id, n]));
 export const gatherNodeById = (id: string): GatherNode | undefined => NODE_BY_ID.get(id);
 
@@ -293,9 +335,10 @@ export const NPCS: readonly Npc[] = [
     id: "fishmonger",
     name: "어부 영감",
     title: "생선 삽니다",
-    // 낚시터 마당 동쪽 끝 (노점은 왼쪽, 입구 아치 옆)
-    x: 1384,
-    y: 806,
+    // 11/15 납품 부두를 없애며 호수 낚시 잔교 서쪽 끝 (호박밭 옆, 잔교로 가는 흙길 바로 위 — 손님은 길에 서서 판다).
+    // 노점은 왼쪽, 옆에 물통·물고기 상자 (game/world/fishZone.ts)
+    x: 1080,
+    y: 914,
     buys: ["fish"],
     hello: "허허, 오늘은 뭐 좀 낚았나? 신선한 놈이면 값 잘 쳐주지.",
   },

@@ -148,3 +148,39 @@ describe("11/16 매니저 채팅·확성기 딱지", () => {
     expect(events(u).find((e) => e.t === "megaphone")).toMatchObject({ t: "megaphone", name: "반장", mgr: true });
   });
 });
+
+
+describe("11/16 매니저 채팅 딱지 — 저장된 채팅 기록", () => {
+  it("DO에 저장했다 되살린 기록에도 매니저 표시가 남는다", () => {
+    const disk = new Map<string, unknown>();
+    const mk = () => {
+      const host: ChannelHost<Conn> = {
+        send: (c, d) => void c.out.push(d),
+        close: () => {},
+        persist: () => {},
+        saveReservation: () => {},
+        dropReservation: () => {},
+        requestTick: () => {},
+        countChanged: () => {},
+        lastPing: () => 0,
+        visitorJoined: () => {},
+        visitorLeft: () => {},
+        verifyGrant: async () => null,
+        claimNonce: () => true,
+        loadChats: (map) => disk.get(map) ?? null,
+        chatsChanged: () => {},
+      };
+      return new ChannelCore<Conn>({ capacity: 5, graceMs: 20_000 }, host);
+    };
+    const c1 = mk();
+    const m = conn("m");
+    c1.join(m, ticket("m", true), 0);
+    c1.message(m, encodeEvent({ t: "chat", text: "반장이에요" }), 1_000);
+    disk.set("village", JSON.parse(JSON.stringify(c1.chatSnapshot("village", 2_000))));
+    const c2 = mk();
+    const late = conn("late");
+    c2.join(late, ticket("late"), 3_000);
+    const log = events(late).find((e): e is Extract<S2C, { t: "chatLog" }> => e.t === "chatLog");
+    expect(log?.lines).toMatchObject([{ text: "반장이에요", mgr: true }]);
+  });
+});

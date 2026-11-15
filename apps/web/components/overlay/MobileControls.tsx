@@ -36,6 +36,8 @@ export default function MobileControls({
   const inShop = useBridgeValue("scene:changed")?.scene === "shop";
   // 11/15 오리배 위에서는 점프 대신 꽥 (게임이 Space·점프를 꽥으로 받는다)
   const duck = useBridgeValue("boat:duck")?.riding === true;
+  // 11/16 범퍼카 위에서도 점프 대신 빵빵
+  const car = useBridgeValue("bumper:riding")?.riding === true;
   useTouchGuards();
 
   function toggleRun() {
@@ -57,8 +59,14 @@ export default function MobileControls({
         >
           {inShop ? "말 걸기" : nearGrave ? "살펴보기" : "상호작용"}
         </button>
-        <button type="button" className={styles.action} data-slot="jump" aria-label={duck ? "꽥! 오리배 경적" : undefined} {...pressProps(() => bridge.emit("input:jump"))}>
-          {duck ? "꽥!" : "점프"}
+        <button
+          type="button"
+          className={styles.action}
+          data-slot="jump"
+          aria-label={duck ? "꽥! 오리배 경적" : car ? "빵빵! 범퍼카 경적" : undefined}
+          {...pressProps(() => bridge.emit("input:jump"))}
+        >
+          {duck ? "꽥!" : car ? "빵빵!" : "점프"}
         </button>
         <button
           type="button"

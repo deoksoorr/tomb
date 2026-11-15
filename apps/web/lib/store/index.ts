@@ -17,6 +17,7 @@ import { MemoryFriends, RedisFriends, type FriendStore } from "./friends";
 import { MemoryMegaphone, RedisMegaphone, type MegaphoneStore } from "./megaphone";
 import { MemoryNotices, RedisNotices, type NoticeStore } from "./notices";
 import { MemoryWishDay, RedisWishDay, type WishDayStore } from "./wishDay";
+import { MemoryBbqDay, RedisBbqDay, type BbqDayStore } from "./bbqDay";
 import { RedisStore } from "./redis";
 import { passAtOf } from "./passing";
 import type { AccountStore, GraveRecord, GraveSettings, GraveStore } from "./types";
@@ -32,6 +33,7 @@ const g = globalThis as typeof globalThis & {
   __tombGifts?: GiftStore;
   __tombMegaphone?: MegaphoneStore;
   __tombWishDay?: WishDayStore;
+  __tombBbqDay?: BbqDayStore;
   __tombFriends?: FriendStore;
 };
 
@@ -185,6 +187,16 @@ export function getWishDay(): WishDayStore {
   getStore();
   if (cur instanceof MemoryWishDay) return cur;
   return (g.__tombWishDay = cur ? Object.assign(new MemoryWishDay(), cur) : new MemoryWishDay());
+}
+
+/** 11/15 캠핑장 바베큐 하루 횟수 표 (묘비 저장소와 같은 백엔드) */
+export function getBbqDay(): BbqDayStore {
+  const cur = g.__tombBbqDay;
+  const conn = env.redis();
+  if (conn) return cur instanceof RedisBbqDay ? cur : (g.__tombBbqDay = new RedisBbqDay(conn));
+  getStore();
+  if (cur instanceof MemoryBbqDay) return cur;
+  return (g.__tombBbqDay = cur ? Object.assign(new MemoryBbqDay(), cur) : new MemoryBbqDay());
 }
 
 /** 공지사항 저장소 (묘비 저장소와 같은 백엔드) */

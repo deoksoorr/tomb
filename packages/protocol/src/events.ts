@@ -6,6 +6,8 @@ import { GOBLIN_ID_RE, type GoblinInfo } from "./npc";
 import type { AvatarDye } from "./dye";
 import { AWAY_HOUSE_RE, isAwayPlace, type AwayPlace } from "./friends";
 import type { PeerInfo, Sid } from "./types";
+import { isMapId, type MapId } from "./camp";
+import type { BbqItemId } from "./bbq";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
 
@@ -60,6 +62,13 @@ export type C2S =
   /** 말풍선 자유 채팅 (CHAT_MAX자). 서버가 토큰 버킷으로 도배를 막고 가려서(maskChat) 같은 채널·방에만 중계한다. 저장하지 않는다 */
   | { t: "chat"; text: string }
   /**
+   * 11/15 맵 옮기기 (버스): 같은 채널 연결 그대로 마을 ↔ 캠핑장. x,y = 새 맵에서 설 자리.
+   * 서버는 입장 토큰에 캠핑장 허락(camp)이 있을 때만 캠핑장으로 보내고, 결과를 mapped로 알린다. 옛 서버는 모르는 t라 버린다
+   */
+  | { t: "map"; m: MapId; x: number; y: number }
+  /** 11/15 캠핑장 바베큐 한 접시 증서 (웹이 포인트를 쓰고 서명). 서버가 검증해 같은 맵에 bbq로 알린다. 옛 서버는 버린다 */
+  | { t: "bbq"; grant: string }
+  /**
    * 11/13 함께 사냥: 내 공격·스킬 동작 (사냥터 방 전용, 보여 주기만 — 판정·몬스터는 각자). 서버는 HUNT_ACT_INTERVAL_MS 간격으로
    * 같은 사냥터 방의 다른 사람에게만 중계하고 저장하지 않는다. 옛 서버는 모르는 t라 버린다
    */
@@ -86,6 +95,10 @@ export type WelcomeMsg = {
   now?: number;
   /** 22번: 지금 나와 있는(아직 아무도 못 잡은) 황금 고블린 */
   goblin?: GoblinInfo;
+  /** 11/15 서버가 아는 내 맵 (캠핑장일 때만 "camp". 없으면 마을 — 옛 서버도 마을) */
+  m?: MapId;
+  /** 11/15 채널 전체 인원 (마을·캠핑장 합계, 유예 중 포함). 없으면 옛 서버 → 같은 맵 사람 수로 */
+  n?: number;
 };
 
 export type S2C =
@@ -136,7 +149,16 @@ export type S2C =
   /** 받는 사람에게만: 친구가 들어왔다(on)·나갔다 (key = 친구 창의 그 친구 키, 옛 클라이언트는 모르는 t라 버린다) */
   | { t: "friend"; key: string; name: string; on: boolean }
   /** 11/13 같은 사냥터 사람의 공격·스킬 동작 (보낸 사람 빼고. 옛 클라이언트는 모르는 t라 버린다) */
-  | ({ t: "hunt"; sid: Sid } & HuntAct);
+  | ({ t: "hunt"; sid: Sid } & HuntAct)
+  /**
+   * 받는 사람에게만: 11/15 맵을 옮겼다 (map 요청의 답). m = 서버가 정한 지금 맵 (허락이 없으면 그대로),
+   * peers·seats = 그 맵에 있는 사람(나 빼고)과 그 사람들이 앉은 자리. 옛 클라이언트는 map을 보내지 않아 받을 일이 없다
+   */
+  | { t: "mapped"; m: MapId; peers: PeerInfo[]; seats: Record<string, Sid> }
+  /** 11/15 채널 전체 인원이 바뀌었다 (들어옴·나감, 맵 상관없이 모두에게). 옛 클라이언트는 모르는 t라 버린다 */
+  | { t: "count"; n: number }
+  /** 11/15 누가 바베큐를 먹고 u(epoch ms)까지 커졌다 (같은 맵, 보낸 사람 포함). 옛 클라이언트는 모르는 t라 버린다 */
+  | { t: "bbq"; sid: Sid; i: BbqItemId; u: number; /** 마실 거리: 마신 뒤 취기 단계·마신 시각 */ lv?: number; at?: number };
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 /** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */
@@ -250,6 +272,10 @@ export function parseC2S(text: string): C2S | null {
       const h = parseHuntAct(m);
       return h ? { t: "hunt", ...h } : null;
     }
+    case "bbq":
+      return typeof m.grant === "string" && m.grant.length <= MAX_GRANT_LEN ? { t: "bbq", grant: m.grant } : null;
+    case "map":
+      return isMapId(m.m) && isNum(m.x) && isNum(m.y) ? { t: "map", m: m.m, x: Math.round(m.x), y: Math.round(m.y) } : null;
     case "use":
       return typeof m.u === "string" && USE_ID_RE.test(m.u) && typeof m.a === "number" && Number.isInteger(m.a) && m.a >= 0 && m.a <= 255
         ? { t: "use", u: m.u, a: m.a }

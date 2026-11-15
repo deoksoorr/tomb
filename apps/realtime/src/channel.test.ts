@@ -24,6 +24,8 @@ import {
   type S2C,
   type StateId,
   type DirId,
+  CHAT_HISTORY_MS,
+  CHAT_STORE_MAX,
 } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import {
@@ -83,7 +85,12 @@ function setup(capacity = 3, graceMs = 20_000, room = false) {
   return { core, reservations, counts, visitors, conn, join, host };
 }
 
-const events = (c: Conn) => c.out.filter((d): d is string => typeof d === "string").map((d) => JSON.parse(d) as S2C);
+// 11/15 채널 전체 인원(count)은 들어옴·나감마다 따라온다 — 여기 테스트들은 그 밖의 이벤트 순서를 보므로 뺀다 (camp.test가 따로 본다)
+const events = (c: Conn) =>
+  c.out
+    .filter((d): d is string => typeof d === "string")
+    .map((d) => JSON.parse(d) as S2C)
+    .filter((e) => e.t !== "count");
 const snapshots = (c: Conn) =>
   c.out.filter((d): d is ArrayBuffer => typeof d !== "string").map((d) => decodeSnapshot(d)!);
 const welcome = (c: Conn) => events(c).find((e) => e.t === "welcome") as Extract<S2C, { t: "welcome" }>;
@@ -1131,7 +1138,7 @@ describe("duck pedal boats on the duck pond: two seats side by side (11/15)", ()
     clear(a, b);
     core.message(a, send({ t: "act", kind: "quack" }), 0);
     core.message(a, send({ t: "act", kind: "quack" }), 1_500);
-    core.message(a, send({ t: "act", kind: "honk" } as never), 3_000);
+    core.message(a, send({ t: "act", kind: "moo" } as never), 3_000); // 모르는 동작은 버린다 (11/16부터 honk는 범퍼카 빵빵이라 받는다)
     core.message(a, send({ t: "act", kind: "quack" }), 3_000);
     expect(events(b)).toEqual([
       { t: "act", sid: 1, kind: "quack", x: DOCK.x, y: DOCK.y },
@@ -1461,8 +1468,8 @@ describe("말풍선 채팅", () => {
 
   const chatLogs = (c: Conn) => events(c).filter((e): e is Extract<S2C, { t: "chatLog" }> => e.t === "chatLog");
 
-  it("늦게 들어온 사람은 welcome 뒤에 이 방의 최근 5분 채팅(chatLog)을 받는다. 5분 지난 줄은 빠지고, 줄이 없으면 보내지 않는다", () => {
-    const { core, join } = setup();
+  it("늦게 들어온 사람은 welcome 뒤에 이 방의 최근 채팅(chatLog)을 받는다. 하루 지난 줄은 빠지고, 줄이 없으면 보내지 않는다", () => {
+    const { core, join } = setup(10);
     const a = join("a");
     expect(chatLogs(a)).toEqual([]);
     core.message(a, send({ t: "chat", text: "첫 줄" }), 1_000);
@@ -1472,12 +1479,15 @@ describe("말풍선 채팅", () => {
     expect(types.indexOf("chatLog")).toBeGreaterThan(types.indexOf("welcome"));
     expect(chatLogs(b)).toMatchObject([{ now: 40_000, lines: [{ at: 1_000, name: "a", text: "첫 줄" }, { at: 30_000, name: "a", text: "둘째 ***" }] }]);
     expect(chatLogs(b)[0].lines.every((l) => l.mine === undefined)).toBe(true);
-    // 5분 지난 첫 줄은 빠진다
+    // 5분이 지나도 하루 안이면 그대로 받는다
     const c = join("c", 301_000);
-    expect(chatLogs(c)[0].lines.map((l) => l.text)).toEqual(["둘째 ***"]);
+    expect(chatLogs(c)[0].lines.map((l) => l.text)).toEqual(["첫 줄", "둘째 ***"]);
+    // 하루 지난 첫 줄은 빠진다
+    const d = join("d", 1_000 + CHAT_HISTORY_MS);
+    expect(chatLogs(d)[0].lines.map((l) => l.text)).toEqual(["둘째 ***"]);
     // 모두 지나면 보내지 않는다
-    const d = join("d", 330_001);
-    expect(chatLogs(d)).toEqual([]);
+    const e = join("e", 30_000 + CHAT_HISTORY_MS);
+    expect(chatLogs(e)).toEqual([]);
   });
 
   it("chatLog 줄 id는 실시간 chat 방송의 id와 같다 (클라이언트 중복 제거)", () => {

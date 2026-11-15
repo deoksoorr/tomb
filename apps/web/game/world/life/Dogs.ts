@@ -223,6 +223,16 @@ export class Dogs {
     this.list = [];
   }
 
+  /** 11/15 시각 t의 강아지 길을 budgetMs 동안만 미리 찾아요. 다 됐으면 true */
+  warm(t: number, budgetMs: number): boolean {
+    const t0 = performance.now();
+    for (const d of this.list) {
+      if (!d.sim.crit.warmLeg(t)) continue;
+      if (performance.now() - t0 >= budgetMs) return false;
+    }
+    return true;
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;

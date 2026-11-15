@@ -60,7 +60,7 @@ class UrgentClientStore {
     this.listeners.forEach((fn) => fn());
     const until = this.snap.pub?.ev?.festUntil ?? 0;
     if ((bridge.last("urgent:fest")?.until ?? 0) !== until) bridge.emit("urgent:fest", { until });
-    // 납품 부두 현판 막대
+    // 버스 정류장 마당 긴급 의뢰 현판 막대
     const ev = this.snap.pub?.ev;
     const now = Date.now();
     const board = ev ? { live: now < ev.end, frac: ev.goal > 0 ? Math.min(1, ev.n / (ev.goal * 1.5)) : 0, stage: urgentStage(ev.n, ev.goal), fest: until > now } : null;

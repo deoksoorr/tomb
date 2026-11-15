@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
-import { boatFishingSpotId, DIR, FISHING_SPOTS, fishingSpotById, STATE, type DirId, type FishingSpot, type PeerInfo, type Sid, type WelcomeMsg } from "@tomb/protocol";
+import { boatFishingSpotId, CAMP_FISHING_SPOTS, campFishingSpotById, DIR, FISHING_SPOTS, fishingSpotById, STATE, type DirId, type FishingSpot, type PeerInfo, type Sid, type WelcomeMsg } from "@tomb/protocol";
 import { ambienceAt, parseAmbienceOverride, type AmbienceOverride } from "@/lib/ambience";
-import { gatherNodeById, NODE_LABEL, NPCS, type GatherNode, type Npc } from "@/lib/forage/catalog";
+import { gatherNodeById, NODE_LABEL, nodeOnMap, NPCS, type GatherNode, type Npc } from "@/lib/forage/catalog";
 import { bridge, type ForageRodPhase } from "../../bridge";
 import { DEPTH } from "../../config";
 import type { Player } from "../../entities/Player";
@@ -42,6 +42,18 @@ export type ForageDeps = {
   /** 상호작용 대상 덧붙이기 (WorldMap.setExtraItems) */
   setItems: (items: Interactable[]) => void;
   toast: (message: string) => void;
+  /**
+   * 11/15 캠핑장: 계곡 낚시 자리(CAMP_FISHING_SPOTS)·캠핑장 채집 지점만. NPC·의뢰 게시판·정류장 마당 장식은 마을에만 (팔기·의뢰는 마을에서).
+   * 없으면 마을 (예전과 같다)
+   */
+  map?: "camp";
+  /** 낚시 자리 표시 (의자·꽂아 둔 낚싯대·찌). 없으면 마을 FishZoneView */
+  zone?: ForageZone;
+};
+
+/** 낚시 자리 표시 (마을 FishZoneView · 캠핑장 game/camp/campForage) */
+export type ForageZone = {
+  update(now: number, view: Phaser.Geom.Rectangle, labelScale: number, seats: ReadonlyMap<string, Sid>, mySid: Sid | null, fishingId: string | null, player: Player): void;
 };
 
 /** 바라보는 방향 → 단위 벡터 */
@@ -100,7 +112,10 @@ export class Foraging {
   private readonly offs: (() => void)[] = [];
   private destroyed = false;
   /** 낚시터 장식·낚시 자리 표시 (의자·꽂아 둔 낚싯대·찌·물결·말풍선) */
-  private readonly zone: FishZoneView;
+  private readonly zone: ForageZone;
+  /** 이 맵의 낚시 자리 (마을 FISHING_SPOTS · 캠핑장 CAMP_FISHING_SPOTS) */
+  private readonly spots: readonly FishingSpot[];
+  private readonly mapId: "village" | "camp";
 
   constructor(private readonly d: ForageDeps) {
     const scene = (this.scene = d.scene);
@@ -109,10 +124,13 @@ export class Foraging {
     ensureForageTextures(scene, this.night);
     ensureNodeFxTextures(scene);
     d.atlas.ensure(NPCS.map((n) => n.name + n.title).join("") + "낚시하기" + Object.values(NODE_LABEL).join("") + "에게 팔기");
-    this.zone = new FishZoneView({ scene, atlas: d.atlas, reduced: d.reduced, addCollider: (x, y, w, h) => this.addCollider(x, y, w, h) });
-    for (const npc of NPCS) {
+    this.mapId = d.map === "camp" ? "camp" : "village";
+    this.spots = this.mapId === "camp" ? CAMP_FISHING_SPOTS : FISHING_SPOTS;
+    this.zone = d.zone ?? new FishZoneView({ scene, atlas: d.atlas, reduced: d.reduced, addCollider: (x, y, w, h) => this.addCollider(x, y, w, h) });
+    // 어부 영감·수집가 유령은 마을에만 (캠핑장에서 잡은 것도 마을에서 판다)
+    for (const npc of this.mapId === "village" ? NPCS : []) {
       const img = scene.add.image(npc.x, npc.y + 1, FTEX.npc(npc.id, 0)).setOrigin(0.5, 1).setDepth(npc.y);
-      const stall = npc.id === "fishmonger" ? { dx: -22, dy: 2 } : { dx: -20, dy: 6 }; // 어부 노점은 낚시터 마당 동쪽 끝 (catalog NPCS)
+      const stall = npc.id === "fishmonger" ? { dx: -22, dy: 2 } : { dx: -20, dy: 6 }; // 어부 노점은 호수 낚시 잔교 서쪽 끝 (catalog NPCS)
       scene.add.image(npc.x + stall.dx, npc.y + stall.dy, FTEX.stall(npc.id)).setOrigin(0.5, 1).setDepth(npc.y + stall.dy);
       const label = scene.add.bitmapText(npc.x, npc.y - 27, FONT_KEY, npc.name, FONT_PX).setOrigin(0.5, 1).setTint(0xffe8b0).setDepth(DEPTH.labels - 1);
       const title = scene.add.bitmapText(npc.x, npc.y - 35, FONT_KEY, npc.title, FONT_PX).setOrigin(0.5, 1).setTint(0xc8d8b0).setAlpha(0.85).setDepth(DEPTH.labels - 1);
@@ -123,11 +141,12 @@ export class Foraging {
     }
     this.offs.push(
       bridge.on("forage:nodes", ({ ids }) => this.setNodes(ids)),
-      bridge.on("forage:rod", ({ phase, tension }) => this.setRod(phase, tension ?? 0)),
-      bridge.on("forage:gauge", (e) => (e.phase === "start" ? this.startGauge(e.ms, e.kind, e.node) : this.endGauge(e.ok, e.node))),
-      bridge.on("forage:pop", ({ itemId, sparkle }) => this.pop(itemId, sparkle)),
-      bridge.on("forage:leave", () => this.leave()),
-      bridge.on("forage:coin", () => this.sfx.play("coin", 0.8)),
+      // 11/15 캠핑장에 가 있는 동안 마을 장면은 잔다 → 낚싯대·게이지·소리는 지금 깨어 있는 맵(캠핑장)의 것만 (두 번 울리지 않게)
+      bridge.on("forage:rod", ({ phase, tension }) => this.live() && this.setRod(phase, tension ?? 0)),
+      bridge.on("forage:gauge", (e) => this.live() && (e.phase === "start" ? this.startGauge(e.ms, e.kind, e.node) : this.endGauge(e.ok, e.node))),
+      bridge.on("forage:pop", ({ itemId, sparkle }) => this.live() && this.pop(itemId, sparkle)),
+      bridge.on("forage:leave", () => this.live() && this.leave()),
+      bridge.on("forage:coin", () => this.live() && this.sfx.play("coin", 0.8)),
     );
     const nodes = bridge.last("forage:nodes");
     if (nodes) this.setNodes(nodes.ids);
@@ -140,6 +159,16 @@ export class Foraging {
     this.d.colliders.add(z);
   }
 
+  /** 이 장면이 깨어 있는지 (캠핑장에 가 있으면 마을 장면은 잔다) */
+  private live(): boolean {
+    return !this.destroyed && this.scene.sys.isActive();
+  }
+
+  /** 이 맵의 낚시 자리 */
+  private spotById(id: string): FishingSpot | undefined {
+    return this.mapId === "camp" ? campFishingSpotById(id) : fishingSpotById(id);
+  }
+
   private isNight(): boolean {
     const p = ambienceAt(Date.now(), this.override).phase;
     return p === "night" || p === "dusk";
@@ -149,25 +178,29 @@ export class Foraging {
 
   private rebuildItems(): void {
     const items: Interactable[] = [];
-    for (const s of FISHING_SPOTS) {
+    for (const s of this.spots) {
       // 앉아 있는 동안은 낚시 창이 조작을 맡는다 (E 안내를 띄우지 않는다). 누가 앉은 자리의 회색 안내는 WorldScene이 (spots.ts spotOf)
       if (this.fishing?.id === s.id) continue;
       items.push({ id: `forage:fish:${s.id}`, kind: "forage", forage: `fish:${s.id}`, x: s.x, y: s.y, r: 16, ax: s.x, ay: s.y, label: "낚시하기" });
     }
-    for (const n of NPCS)
+    for (const n of this.mapId === "village" ? NPCS : [])
       items.push({ id: `forage:npc:${n.id}`, kind: "forage", forage: `npc:${n.id}`, x: n.x, y: n.y + 10, r: 20, ax: n.x, ay: n.y + 10, label: `${n.name}에게 팔기` });
-    // 11/15 납품 부두 의뢰 게시판 (앞에서 E → 수집 의뢰판)
-    items.push({ id: "forage:board", kind: "forage", forage: "board:quest", x: WHARF_BOARD.x, y: WHARF_BOARD.y + 12, r: 22, ax: WHARF_BOARD.x, ay: WHARF_BOARD.y + 12, label: "의뢰 게시판 보기" });
+    // 11/15 버스 정류장 마당 의뢰 게시판 (앞에서 E → 수집 의뢰판)
+    if (this.mapId === "village") items.push({ id: "forage:board", kind: "forage", forage: "board:quest", x: WHARF_BOARD.x, y: WHARF_BOARD.y + 12, r: 22, ax: WHARF_BOARD.x, ay: WHARF_BOARD.y + 12, label: "의뢰 게시판 보기" });
     for (const id of this.nodeIds) {
       const n = gatherNodeById(id);
       // 캐는 중인 지점은 안내를 띄우지 않는다
-      if (n && this.gauge?.node !== id) items.push({ id: `forage:node:${id}`, kind: "forage", forage: `node:${id}`, x: n.x, y: n.y + 6, r: 14, ax: n.x, ay: n.y, label: NODE_LABEL[n.kind] });
+      if (n && nodeOnMap(n, this.mapId) && this.gauge?.node !== id) items.push({ id: `forage:node:${id}`, kind: "forage", forage: `node:${id}`, x: n.x, y: n.y + 6, r: 14, ax: n.x, ay: n.y, label: NODE_LABEL[n.kind] });
     }
     this.d.setItems(items);
   }
 
   private setNodes(ids: string[]): void {
-    this.nodeIds = ids.filter((id) => gatherNodeById(id));
+    // 서버는 두 맵의 지점을 함께 알려 준다 → 이 맵 것만 (11/15 캠핑장)
+    this.nodeIds = ids.filter((id) => {
+      const n = gatherNodeById(id);
+      return !!n && nodeOnMap(n, this.mapId);
+    });
     this.nodesWindow = nodeWindow(Date.now());
     const keep = new Set(this.nodeIds);
     const pl = this.d.player();
@@ -247,7 +280,7 @@ export class Foraging {
   }
 
   private sitAt(id: string): void {
-    const spot = fishingSpotById(id);
+    const spot = this.spotById(id);
     if (!spot) return;
     const net = this.d.net();
     const judged = net.online && this.serverKnows;
@@ -480,7 +513,7 @@ export class Foraging {
     if (this.fishing) want.set(this.fishing.id, true);
     if (this.d.net().online) {
       const me = this.d.net().mySid;
-      for (const [id, sid] of this.d.seats()) if (id.startsWith("f_") && sid !== me && fishingSpotById(id)) want.set(id, false);
+      for (const [id, sid] of this.d.seats()) if (id.startsWith("f_") && sid !== me && this.spotById(id)) want.set(id, false);
       // 배 위에서 낚는 다른 사람 (지금 배에 타 있고 보이는 사람만)
       const remotes = this.d.remotes();
       for (const sid of [...this.boatRods]) {
@@ -511,7 +544,7 @@ export class Foraging {
         this.rods.set(id, { g, bob, spot, mine, follow: () => this.remoteBoatPose(sid) });
         continue;
       }
-      const spot = fishingSpotById(id)!;
+      const spot = this.spotById(id)!;
       const g = this.scene.add.graphics().setDepth(spot.y + (spot.facing === DIR.up ? -1 : 1));
       this.rods.set(id, { g, bob, spot, mine });
     }

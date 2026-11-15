@@ -40,6 +40,8 @@ export class CameraRig {
   private following = false;
   private panGoal: Pt | null = null;
   private mapH = mapHeight(0);
+  /** 맵 너비 (마을 MAP_WIDTH, 11/15 캠핑장은 setMapSize로) */
+  private mapW = MAP_WIDTH;
   private emitted: { detached: boolean; zoom: number } | null = null;
   private readonly touches = new Map<number, Pt>();
   private rightDrag: (Pt & { id: number; moved: boolean }) | null = null;
@@ -94,8 +96,15 @@ export class CameraRig {
     this.applyBounds();
   }
 
+  /** 11/15 마을이 아닌 맵(캠핑장): 너비·높이를 함께 */
+  setMapSize(w: number, h: number): void {
+    this.mapW = w;
+    this.mapH = h;
+    this.applyBounds();
+  }
+
   applyBounds(): void {
-    const b = cameraBounds(this.cam.width / this.cam.zoom, this.cam.height / this.cam.zoom, MAP_WIDTH, this.mapH);
+    const b = cameraBounds(this.cam.width / this.cam.zoom, this.cam.height / this.cam.zoom, this.mapW, this.mapH);
     this.cam.setBounds(b.x, b.y, b.w, b.h);
   }
 

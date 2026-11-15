@@ -66,12 +66,18 @@ export const LANDMARK_COLOR: Record<Landmark["kind"], string> = {
   ferris: "#ff9ad0",
   balloon: "#ffb070",
   tower: "#ffb43c",
+  bumper: "#ff8ab8",
 };
 
 /** 관람차 아이콘 (미니맵 px, 가운데 기준 — 동그란 바퀴 + 다리) */
 export const FERRIS_ICON: readonly (readonly [number, number])[] = [
   [-1, -3], [0, -3], [1, -3], [-2, -2], [2, -2], [-3, -1], [3, -1], [-3, 0], [0, 0], [3, 0], [-3, 1], [3, 1], [-2, 2], [2, 2], [-1, 3], [0, 3], [1, 3],
   [-2, 4], [2, 4],
+];
+/** 11/16 범퍼카 아이콘 (둥근 차 + 더듬이) */
+export const BUMPER_ICON: readonly (readonly [number, number])[] = [
+  [-2, -4], [-2, -3], [-1, -2], [0, -2], [1, -2], [-2, -1], [-1, -1], [0, -1], [1, -1], [2, -1], [-3, 0], [-2, 0], [-1, 0], [0, 0], [1, 0], [2, 0], [3, 0],
+  [-3, 1], [-2, 1], [-1, 1], [0, 1], [1, 1], [2, 1], [3, 1], [-2, 2], [2, 2],
 ];
 /** 열기구 아이콘 (풍선 + 바구니) */
 export const BALLOON_ICON: readonly (readonly [number, number])[] = [

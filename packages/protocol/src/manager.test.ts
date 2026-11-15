@@ -44,7 +44,7 @@ describe("11/16 매니저 입장 토큰", () => {
     expect(await verifyJoinToken(S, `${forged}.${sig}`)).toBeNull();
   });
 
-  it("가장 긴 채널 입장 토큰(운영자·매니저·도감·1위·9부위·가장 긴 칭호)도 새 한도 안", async () => {
+  it("가장 긴 채널 입장 토큰(운영자·매니저·도감·1위·캠핑장·9부위·가장 긴 칭호)도 옛 실시간 서버 한도 720자 안", async () => {
     const longest = new Map<string, string>();
     for (const i of ITEMS) if (i.kind === "cosmetic" && i.slot && (longest.get(i.slot)?.length ?? 0) < i.id.length) longest.set(i.slot, i.id);
     const look = [...longest.values(), [...TITLE_IDS].sort((a, b) => b.length - a.length)[0]];
@@ -59,13 +59,14 @@ describe("11/16 매니저 입장 토큰", () => {
       staff: true,
       dex: 31,
       champ: CHAMP_ALL | CHAMP_AURA_OFF,
+      camp: true,
       mgr: true,
     });
-    expect(token.length).toBeLessThanOrEqual(JOIN_TOKEN_MAX_LEN);
+    expect(token.length).toBeLessThanOrEqual(720);
     expect((await verifyJoinToken(S, token))?.mgr).toBe(true);
   });
 
-  it("가장 긴 사냥터 방 토큰(사냥 장비 3개·운영자·매니저)도 새 한도 안 (옛 한도 600은 넘을 수 있다)", async () => {
+  it("가장 긴 사냥터 방 토큰(사냥 장비 3개·운영자·매니저)도 새 한도 안 (옛 한도 720은 넘을 수 있다)", async () => {
     const longest = new Map<string, string>();
     for (const i of ITEMS) if (i.kind === "cosmetic" && i.slot && (longest.get(i.slot)?.length ?? 0) < i.id.length) longest.set(i.slot, i.id);
     const gear = ["sgw.a.a_standing_desk+", "sgw.h.h_standing_desk+", "sgw.c.c_standing_desk+"];

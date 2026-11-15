@@ -272,6 +272,18 @@ export class Residents {
     return out;
   }
 
+  /** 11/15 시각 t의 주민 구간을 budgetMs 동안만 미리 계산해요 (보이는 주민만). 다 됐으면 true */
+  warm(t: number, budgetMs: number): boolean {
+    if (this.destroyed) return true;
+    const t0 = performance.now();
+    const n = this.settings ? Math.min(RESIDENTS.length, activeResidentCount(this.settings)) : 0;
+    for (let i = 0; i < n && i < this.list.length; i++) {
+      if (!this.list[i].sim.warmLeg(t)) continue;
+      if (performance.now() - t0 >= budgetMs) return false;
+    }
+    return true;
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;

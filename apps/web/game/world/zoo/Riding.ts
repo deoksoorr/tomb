@@ -3,6 +3,7 @@ import { bridge } from "../../bridge";
 import type { Player } from "../../entities/Player";
 import type { RemoteAvatar } from "../../entities/RemoteAvatar";
 import type { RealtimeClient } from "../../net/RealtimeClient";
+import { BIG_RIDE_TOAST, myBig } from "../../camp/foodState";
 
 // 동물원 타는 펫 (월드 쪽): R 키·타기 버튼(input:ride)으로 올라타고 내린다. 다른 사람에게는 실시간 서버 ride 이벤트로 보인다.
 //
@@ -27,7 +28,7 @@ export type RidingDeps = {
 
 /** 올라탈 수 있는 자세 (서 있기·걷기·달리기·점프) */
 function freeToRide(pl: Player): boolean {
-  if (pl.sitting || pl.anchored || pl.inBoat || pl.inWater) return false;
+  if (pl.sitting || pl.anchored || pl.inBoat || pl.inCar || pl.inWater) return false;
   const st = pl.state;
   return st === "idle" || st === "walk" || st === "run" || st === "jump";
 }
@@ -65,6 +66,11 @@ export class Riding {
     }
     if (!freeToRide(pl)) {
       this.d.toast("서 있을 때만 펫에 올라탈 수 있어요.");
+      return;
+    }
+    // 11/15 바베큐로 커진 동안에는 못 탄다 (서버 onRide도 거절)
+    if (myBig() > 1) {
+      this.d.toast(BIG_RIDE_TOAST);
       return;
     }
     this.mount(pet);

@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import { CHAT_MAX, maskChat, newChatBucket, normalizeChat, takeChatToken } from "@tomb/protocol";
+import { CHAT_MAX, CHAT_STORE_MAX, maskChat, newChatBucket, normalizeChat, takeChatToken } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
+import { useChatLines } from "./chatLines";
+import ChatScroll from "./ChatScroll";
 import styles from "./ChatInput.module.css";
+import logStyles from "./ChatLog.module.css";
 
-// 말풍선 자유 채팅 입력칸: 데스크톱은 왼쪽 아래 채팅창(ChatLog) 안, 폰은 [채팅] 버튼으로 여는 키보드 위 줄(ChatSheet)과 표현 창 위쪽.
-// 쓴 글은 머리 위 말풍선 + 같은 채널의 채팅창에 5분 동안 뜬다 (서버 메모리에 5분만 머물고 사라짐, 기기에는 저장 안 함). 도배 제한은 서버와 같은 토큰 버킷을 화면에서도 미리 지킨다.
+// 말풍선 자유 채팅 입력칸: 데스크톱은 왼쪽 아래 채팅창(ChatLog) 안, 폰은 [채팅] 버튼으로 여는 키보드 위 줄(ChatSheet, 위에 채팅 기록)과 표현 창 위쪽.
+// 쓴 글은 머리 위 말풍선 + 같은 채널의 채팅창에 뜬다 (서버는 늦게 온 사람용으로 맵별 최근 CHAT_STORE_MAX줄을 하루까지 남긴다, 기기에는 저장 안 함). 도배 제한은 서버와 같은 토큰 버킷을 화면에서도 미리 지킨다.
 
 /** 화면 쪽 토큰 버킷 (입력칸이 여럿이어도 하나를 같이 쓴다) */
 const bucket = newChatBucket();
@@ -106,7 +109,7 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
           maxLength={CHAT_MAX}
           value={text}
           placeholder={placeholder}
-          aria-label={`채팅 (${CHAT_MAX}자까지, 서버에 5분만 머물고 사라져요)`}
+          aria-label={`채팅 (${CHAT_MAX}자까지, 같은 채널 최근 ${CHAT_STORE_MAX}줄은 하루 동안 남아요)`}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
         />
@@ -126,7 +129,7 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
         ) : masked ? (
           <span>일부 낱말·주소는 ***로 가려져요</span>
         ) : (
-          <span>같은 채널에 5분 동안 보이고 사라져요</span>
+          <span>같은 채널에 보이고, 최근 {CHAT_STORE_MAX}줄은 하루 동안 남아요</span>
         )}
         <span className={styles.count}>
           {[...text].length}/{CHAT_MAX}
@@ -136,9 +139,10 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
   );
 }
 
-/** 폰 [채팅] 버튼으로 여는 한 줄 입력칸: 키보드 바로 위에 붙고, 보내거나 바깥을 누르면 닫힌다 */
+/** 폰 [채팅] 버튼으로 여는 한 줄 입력칸: 키보드 바로 위에 붙고, 보내거나 바깥을 누르면 닫힌다. 위에 같은 채널 채팅 기록(손가락 스크롤) */
 export function ChatSheet({ onClose }: { onClose: () => void }) {
   const kb = useKeyboardInset();
+  const lines = useChatLines();
   // 키보드가 내려가며 iOS가 페이지를 밀어 올린 채 남으면 게임 화면·터치 좌표가 어긋난다 → 닫을 때 원위치
   useEffect(
     () => () => {
@@ -165,6 +169,8 @@ export function ChatSheet({ onClose }: { onClose: () => void }) {
         // 키보드가 떠 있으면 홈 막대 여백(safe-area)은 필요 없다
         style={kb > 0 ? { bottom: kb, paddingBottom: 6 } : undefined}
       >
+        {/* 게임 화면 글씨(ChatLog)가 같은 줄을 이미 읽어 주니 여기선 읽지 않는다 */}
+        {lines.length > 0 && <ChatScroll lines={lines} className={logStyles.sheetLog} live={false} />}
         <ChatInput autoFocus onSent={onClose} onCancel={onClose} />
       </div>
     </>

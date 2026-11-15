@@ -28,6 +28,8 @@ export type JoinClaims = {
   champ?: number;
   /** 11/16 매니저 (관리자가 임명, Vercel이 확인한 뒤에만 넣는다 → 매니저 전용 칭호·채팅 딱지). 일반 계정엔 없다 */
   mgr?: true;
+  /** 11/15 캠핑장에 갈 수 있다 (테스트 서버이거나 운영 CAMP_ENABLED=1일 때 Vercel이 넣는다). 없으면 버스를 타도 마을에 그대로 */
+  camp?: true;
   /** 만료 시각 (unix seconds) */
   exp: number;
 };
@@ -91,15 +93,17 @@ export async function signJoinToken(
   return `${body}.${await hmacSign(secret, body)}`;
 }
 
-/** 입장 토큰 최대 길이 (서명 검증 전에 거른다). 11/16 매니저 표시(mgr)·사냥 장비가 실린 사냥터 방 토큰도 넉넉하게 (예전 600) */
+/** 서명이 틀리거나 만료됐거나 형식이 맞지 않으면 null */
+/** 입장 토큰 최대 길이 (서명 검증 전에 거른다) */
 export const JOIN_TOKEN_MAX_LEN = 900;
 
-/** 서명이 틀리거나 만료됐거나 형식이 맞지 않으면 null */
 export async function verifyJoinToken(
   secret: string,
   token: string,
   nowSec = Math.floor(Date.now() / 1000),
 ): Promise<JoinClaims | null> {
+  // 11/15 캠핑장 허락(camp)이 실리며 16자 늘었다 — 꾸미기를 가득 입은 계정도 넉넉하게 (예전 600)
+  // 11/16 매니저 표시(mgr)까지 실린 사냥터 방 토큰(사냥 장비 3개 + 방 id)은 720을 넘을 수 있어 넉넉하게 (예전 720)
   if (typeof token !== "string" || token.length > JOIN_TOKEN_MAX_LEN) return null;
   const dot = token.indexOf(".");
   if (dot <= 0) return null;
@@ -115,7 +119,7 @@ export async function verifyJoinToken(
     return null;
   }
   if (!c || typeof c !== "object") return null;
-  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff, dex, champ, mgr } = c as Record<string, unknown>;
+  const { visitorId, name, color, channel, exp, look, body: rawBody, room, dye, staff, dex, champ, camp, mgr } = c as Record<string, unknown>;
   if (
     typeof visitorId !== "string" ||
     typeof name !== "string" ||
@@ -129,5 +133,5 @@ export async function verifyJoinToken(
   // 운영자 전용 몸·꾸미기는 토큰에 운영자 표시(staff)가 있을 때만 (없으면 후드 유령·빼고)
   const isStaff = staff === true;
   // 11/16 매니저 전용 칭호는 매니저 표시(mgr)가 있을 때만
-  return { visitorId, name, color, channel, exp, look: mgrGateLook(staffGateLook(sanitizeLook(look), isStaff), mgr === true), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}), ...(mgr === true ? { mgr: true as const } : {}) };
+  return { visitorId, name, color, channel, exp, look: mgrGateLook(staffGateLook(sanitizeLook(look), isStaff), mgr === true), body: staffGateBody(isAvatarBody(rawBody) ? rawBody : "hood", isStaff), ...(typeof room === "string" && ROOM_ID_RE.test(room) ? { room } : {}), ...(typeof dye === "string" && dye ? { dye: unpackDye(dye) } : {}), ...(staff === true ? { staff: true as const } : {}), ...(isDexBadge(dex) ? { dex } : {}), ...(isChampValue(champ) ? { champ } : {}), ...(camp === true ? { camp: true as const } : {}), ...(mgr === true ? { mgr: true as const } : {}) };
 }

@@ -16,6 +16,8 @@ const REGISTRY_KEY = "weatherSound";
 const STALE_MS = 400;
 /** 실내(먹먹)에서의 크기 */
 const MUFFLED_GAIN = 0.4;
+/** 11/15 타프 아래 빗소리 (천막 두드리는 소리 — 더 크고 가깝게) */
+const ROOF_GAIN = 1.4;
 const RAIN_URL = "/sfx/rain-loop.mp3";
 const THUNDER_URL = "/sfx/thunder.mp3";
 
@@ -26,6 +28,8 @@ export class WeatherSound extends AudioHost {
   private rainLevel = 0;
   private reportAt = -Infinity;
   private place: Place = "open";
+  /** 11/15 캠핑장 큰 타프 아래: 빗소리가 천막을 두드려 더 가깝게 (마을은 늘 false) */
+  private roof = false;
   private thunderBuf: AudioBuffer | null = null;
   private thunderLoading = false;
   private thunderFailed = false;
@@ -71,10 +75,17 @@ export class WeatherSound extends AudioHost {
     this.apply(scene === "shop" || scene === "house" ? "muffled" : "away");
   };
 
+  /** 11/15 지붕(타프) 아래인지 — 캠핑장 장면이 매 프레임 알려 준다 */
+  setRoof(on: boolean): void {
+    if (this.roof === on) return;
+    this.roof = on;
+    if (!this.dead) this.apply(this.place);
+  }
+
   private apply(place: Place): void {
     this.place = place;
     this.rain.setMuffled(place === "muffled");
-    const k = place === "open" ? 1 : place === "muffled" ? MUFFLED_GAIN : 0;
+    const k = (place === "open" ? 1 : place === "muffled" ? MUFFLED_GAIN : 0) * (this.roof && place === "open" ? ROOF_GAIN : 1);
     // 아주 약한 비는 소리를 내지 않는다 (날씨가 바뀌며 섞이는 동안)
     this.rain.set(this.rainLevel > 0.05 ? (0.35 + 0.65 * this.rainLevel) * k : 0);
     if (this.rainLevel > 0.3 && !this.thunderBuf) this.loadThunder();

@@ -103,3 +103,4 @@ describe("sayRelay (11/15 마을 공지 → 확성기 방송)", () => {
     expect(JSON.parse(sayRelay({ id: "x", name: "공지", text: "한 줄", at: 5 }).data)).not.toHaveProperty("replaces");
   });
 });
+

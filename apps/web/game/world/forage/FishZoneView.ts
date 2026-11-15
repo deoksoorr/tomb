@@ -1,18 +1,18 @@
 import type * as Phaser from "phaser";
-import { DIR, FISH_ARCH, FISHING_SPOTS, type FishingSpot, type Sid } from "@tomb/protocol";
+import { DIR, FISHING_SPOTS, type FishingSpot, type Sid } from "@tomb/protocol";
 import { bridge } from "../../bridge";
 import { DEPTH } from "../../config";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../../text/GlyphAtlas";
-import { BUS_BAY, BUS_SHELTER_H, BUS_SIGN, BUS_SIGN_H, BUS_STOP, BUS_TIMETABLE, BUS_TIMETABLE_H, FISH_ARCH_H, FISH_DECOR, fishZoneColliders, WHARF_BOARD, WHARF_BOARD_H, WHARF_PLACARD } from "../fishZone";
+import { BUS_BAY, BUS_PLATFORM, BUS_SHELTER_H, BUS_STOP, BUS_TIMETABLE, BUS_TIMETABLE_H, FISH_DECOR, fishZoneColliders, WHARF_BOARD, WHARF_BOARD_H, WHARF_CURB, WHARF_PLACARD } from "../fishZone";
 import { FTEX } from "./art";
 import { ensureZoneTextures, ZTEX } from "./zoneArt";
 
 // 낚시터·낚시 자리 표시 (사용자 요청: "낚시를 어디서 해야 하는지 한눈에").
-// - 낚시터 장식: 입구 아치("낚시터" 현판)·그물 말리는 대·통발·물고기 상자·물통·등불 기둥·팻말 (배치 = game/world/fishZone.ts)
+// - 장식: 어부 노점 옆 물고기 상자·물통 (배치 = game/world/fishZone.ts). 11/15 납품 부두(아치·잔교·등불 기둥)는 없앴다
 // - 낚시 자리마다: 낚시 의자 + 꽂아 둔 낚싯대 + 물 위에 떠 있는 찌(살짝 흔들림) + 찌 둘레 물결 고리.
 //   누가 앉으면 꽂아 둔 낚싯대·찌는 치우고(그 사람의 낚싯대를 Foraging이 그린다) 의자만 남긴다.
 // - 가까이 오면 의자 위에 낚싯바늘 말풍선이 떠오른다 (남이 쓰는 자리는 회색). "E 낚시하기" 안내는 WorldScene의 상호작용 안내.
-// - 11/15 납품 부두: 의뢰 게시판·빈 긴급 의뢰 현판 이름표, 주말 버스 정류장 (정류장 지붕·노선 팻말·시간표 글씨, 골목 바닥의 버스 정차 칸)
+// - 11/15 버스 정류장 마당: 의뢰 게시판·긴급 의뢰 현판 이름표, 주말 버스 정류장 (정류장 지붕·노선 팻말·시간표 글씨, 골목 바닥의 버스 정차 칸)
 
 /** 바라보는 방향 → 단위 벡터 */
 const STEP: Record<number, [number, number]> = { [DIR.down]: [0, 1], [DIR.up]: [0, -1], [DIR.left]: [-1, 0], [DIR.right]: [1, 0] };
@@ -53,21 +53,22 @@ export class FishZoneView {
   constructor(private readonly d: FishZoneDeps) {
     const scene = d.scene;
     ensureZoneTextures(scene);
-    for (const t of ["납품 부두", "의뢰 게시판", "긴급 의뢰", "주말 버스 정류장", "언젠가 캠핑장행 · Someday Camp", "다음 버스: 언젠가"]) d.atlas.ensure(t);
-    // 골목 바닥의 버스 정차 칸 (노란 칠, 바닥 장식 층)
-    scene.add.image(BUS_BAY.x + BUS_BAY.w / 2, BUS_BAY.y + BUS_BAY.h / 2, ZTEX.busBay).setDepth(DEPTH.decal + 1);
+    for (const t of ["의뢰 게시판", "긴급 의뢰", "주말 버스 정류장", "언젠가 캠핑장행 · Someday Camp", "다음 버스: 언젠가"]) d.atlas.ensure(t);
+    // 바닥 장식 층 (11/15 정류장 다듬기): 위 마당 테두리 연석 → 정류장 승강장(판석·점자 블록·연석) → 골목의 버스 정차 칸
+    scene.add.image(WHARF_CURB.x, WHARF_CURB.y, ZTEX.wharfCurb).setOrigin(0, 0).setDepth(DEPTH.decal + 1);
+    scene.add.image(BUS_PLATFORM.x, BUS_PLATFORM.y, ZTEX.busPlatform).setOrigin(0, 0).setDepth(DEPTH.decal + 2);
+    scene.add.image(BUS_BAY.x + BUS_BAY.w / 2, BUS_BAY.y + BUS_BAY.h / 2, ZTEX.busBay).setDepth(DEPTH.decal + 2);
     for (const o of FISH_DECOR) {
       // 정류장 지붕·뒷벽은 그 아래 벤치(bE)·앉은 사람보다 뒤에 그린다
       scene.add.image(o.x, o.y + 1, ZTEX.decor(o.kind)).setOrigin(0.5, 1).setDepth(o.kind === "busShelter" ? o.y - 14 : o.y);
     }
     for (const r of fishZoneColliders()) d.addCollider(r.x, r.y, r.w, r.h);
-    // 현판 글씨 (아치) · 게시판 · 빈 현판 · 버스 정류장
-    this.label(FISH_ARCH.x, FISH_ARCH.y - FISH_ARCH_H + 4, "납품 부두", 0xfff0b8, 0.5);
+    // 게시판 · 긴급 의뢰 현판 · 버스 정류장
     this.label(WHARF_BOARD.x, WHARF_BOARD.y - WHARF_BOARD_H - 1, "의뢰 게시판", 0xffe0a8, 1);
     this.placardLabel = this.label(WHARF_PLACARD.x, WHARF_PLACARD.y - 31, "긴급 의뢰", 0xd8c8b0, 1, 0.7);
     this.placardFx = scene.add.graphics().setDepth(WHARF_PLACARD.y + 2);
-    this.label(BUS_STOP.x, BUS_STOP.y - BUS_SHELTER_H - 1, "주말 버스 정류장", 0xc8f0d8, 1);
-    this.label(BUS_SIGN.x, BUS_SIGN.y - BUS_SIGN_H - 1, "언젠가 캠핑장행 · Someday Camp", 0xffe9a8, 1, 0.9);
+    // 정류장 이름과 노선은 지붕 위에 두 줄로 (예전엔 팻말 위 노선 글씨가 지붕 이름표와 겹쳤다)
+    this.label(BUS_STOP.x, BUS_STOP.y - BUS_SHELTER_H - 1, "주말 버스 정류장\n언젠가 캠핑장행 · Someday Camp", 0xc8f0d8, 1).setCenterAlign();
     this.label(BUS_TIMETABLE.x, BUS_TIMETABLE.y - BUS_TIMETABLE_H - 1, "다음 버스: 언젠가", 0xe8e0d0, 1, 0.85);
     for (const s of FISHING_SPOTS) this.markers.push(this.makeMarker(s));
   }

@@ -157,10 +157,8 @@ function HallColumn({ board, champ }: { board: ChampBoard; champ: ChampResponse 
             <b>
               <StyledName name={last.name} look={last.avatar.look} />
             </b>
-            <span className={styles.value}>
-              {last.sub ? `${last.sub} ` : ""}
-              {valueText(board, last.value)}
-            </span>
+            {last.sub && <span className={styles.sub}>{last.sub}</span>}
+            <span className={styles.value}>{valueText(board, last.value)}</span>
           </span>
         </div>
       ) : (
@@ -193,10 +191,9 @@ function Step({ row, board, place }: { row: RaceRow; board: ChampBoard; place: n
         <StyledName name={row.name} look={row.avatar.look} />
         {row.me && " (나)"}
       </span>
-      <span className={styles.value}>
-        {row.sub ? `${row.sub} ` : ""}
-        {valueText(board, row.value)}
-      </span>
+      {/* 물고기 이름과 길이를 한 줄에 넣으면 좁은 칸에서 잘려서 두 줄로 */}
+      {row.sub && <span className={styles.sub}>{row.sub}</span>}
+      <span className={styles.value}>{valueText(board, row.value)}</span>
     </li>
   );
 }

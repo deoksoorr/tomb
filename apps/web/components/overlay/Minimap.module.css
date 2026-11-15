@@ -30,3 +30,8 @@
   image-rendering: auto;
   opacity: 0.92;
 }
+
+/* 11/15 캠핑장 지도: 가로가 더 긴 맵 (1280×800) — 너비는 그대로, 높이를 비율대로 */
+.camp {
+  height: calc(var(--minimap-w) * 0.625);
+}

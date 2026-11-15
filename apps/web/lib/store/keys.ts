@@ -106,6 +106,9 @@ export const K = {
 
   // ── 50번 소원 분수 (lib/store/wishDay.ts) ──
   wishDay: (id: string, day: string) => `wish:day:${day}:${id}`, // STRING NX EX 계정별 그날(KST) 한 번
+  // ── 11/15 캠핑장 바베큐 (lib/store/bbqDay.ts) ──
+  // 하루 접시·잔 한도는 없앴다 (예전 camp:bbq:{day}:{id} 키는 2일 뒤 저절로 사라진다)
+  campDrunk: (id: string) => `camp:drunk:${id}`, // STRING JSON {lv, at} EX 다 깨는 시각까지(+10분) 계정별 지금 취기
 };
 
 export const HIDDEN = "hidden:";

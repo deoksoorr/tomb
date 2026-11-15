@@ -50,7 +50,7 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때" },
   // 11/15: 파는 한도 올림 (물고기 200 → 300, 채집 150 → 300)
   // 낚시·채집은 잡을 때가 아니라 NPC에게 팔 때 들어온다 (값은 lib/forage/catalog.ts). 한도를 넘는 만큼은 가방에 남아 내일 팔 수 있다
-  { source: "fish", label: "물고기 팔기", points: 0, dailyMax: 300, note: "납품 부두 어부에게 팔아요. 희귀할수록 비싸요." },
+  { source: "fish", label: "물고기 팔기", points: 0, dailyMax: 300, note: "호수 낚시 잔교의 어부 영감에게 팔아요. 희귀할수록 비싸요." },
   { source: "gather", label: "채집물 팔기", points: 0, dailyMax: 300, note: "오리 연못 둑의 수집가에게 팔아요" },
   // 11/14: 단계(25·50·75·100%) 보상 → 종마다 처음 등록 보상 (lib/forage/dexReward, 값은 catalog DEX_NEW_REWARD). 한도를 넘는 만큼은 도감 창에 쌓여 나중에 받는다
   { source: "dex", label: "도감 등록 보상", points: 0, dailyMax: 300, note: "새 종을 처음 올릴 때마다 3~50P, 희귀할수록 많이 받아요" },

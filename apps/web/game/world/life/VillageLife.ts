@@ -542,6 +542,9 @@ export class VillageLife {
   }
 
   /** 자리를 떠났는지 (움직이면 서버가 알아서 놓는다 — 여기서는 기록만 지운다) */
+  /** 내 이름표 위 "별 보는 중"을 이 모듈이 달아 두었는지 */
+  private scopeTag = false;
+
   private updateHeld(): void {
     const h = this.held;
     if (h) {
@@ -549,8 +552,11 @@ export class VillageLife {
       const moved = Math.hypot(pl.x - h.x, pl.y - h.y) > 4;
       if (moved || (h.kind === "mat" && pl.state !== "sitGround")) this.held = null;
     }
-    // 내 캐릭터도 망원경 앞에 있는 동안 이름표 위에 "별 보는 중" (다른 사람 화면과 같은 표시)
-    this.d.player().view.setDoing(this.held?.kind === "telescope" ? STARGAZE_TAG : null);
+    // 내 캐릭터도 망원경 앞에 있는 동안 이름표 위에 "별 보는 중" (다른 사람 화면과 같은 표시).
+    // 내가 단 글자만 지운다 (11/16 범퍼카 「쿵 ×N」처럼 다른 곳이 단 글자는 그대로)
+    const scope = this.held?.kind === "telescope";
+    if (scope || this.scopeTag) this.d.player().view.setDoing(scope ? STARGAZE_TAG : null);
+    this.scopeTag = scope;
     // 서버가 답이 없다(이전 서버·끊김) → 그냥 연다
     if (this.pendingScope && performance.now() > this.pendingScope.until) this.openTelescope();
   }
@@ -603,6 +609,19 @@ export class VillageLife {
     for (const c of this.critters) if (c.visible && c.sim.def.kind === "ghost") lit.add(c.x, c.y - 10, 18, 0.35);
     const g = this.goblin;
     if (g && g.img.visible) lit.add(g.img.x, g.img.y - 8, 30, 0.7);
+  }
+
+  /** 11/15 aheadMs 뒤(마을에 내릴 때)의 주민·고양이·유령·강아지 길을 budgetMs 동안만 미리 찾아요. 다 됐으면 true */
+  warm(aheadMs: number, budgetMs: number): boolean {
+    if (this.destroyed) return true;
+    const t = this.serverNow() + aheadMs;
+    if (!this.residents.warm(t, budgetMs)) return false;
+    const t0 = performance.now();
+    for (const c of this.critters) {
+      if (!c.sim.warmLeg(t)) continue;
+      if (performance.now() - t0 >= budgetMs) return false;
+    }
+    return this.dogs.warm(t, budgetMs);
   }
 
   destroy(): void {

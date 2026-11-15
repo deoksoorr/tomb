@@ -37,6 +37,7 @@ import {
   CLOSED_LOTS,
   isOpenLot,
   WHARF_YARD,
+  BUMPER_YARD,
   campfireOfSeat,
   graveSlot,
   inZoo,
@@ -186,7 +187,7 @@ describe("컴팩트한 묘지 마을 맵 (F1)", () => {
     expect(trees).toBeLessThan(140);
   });
 
-  it("무덤 컨셉이 맵 곳곳에: 오래된 묘비·촛불·땅안개·철책·종루가 묘역 두 곳 모두에 있다 (버드나무 묘역 자리는 동물원)", () => {
+  it("무덤 컨셉이 맵 곳곳에: 오래된 묘비·촛불·땅안개·철책·종루가 묘역에 있다 (버드나무 묘역 자리는 동물원, 다리 건너 묘역 자리는 범퍼카장)", () => {
     const props = allProps();
     const count = (k: string) => props.filter((p) => p.kind === k).length;
     expect(count("oldGrave")).toBeGreaterThanOrEqual(18);
@@ -335,11 +336,11 @@ describe("주거 구역 (분양 마을을 메인 맵에)", () => {
     expect(houseLot(4)).toMatchObject({ x: 1008, y: 360, door: { x: 1072, y: 452 } });
   });
 
-  it("없앤 10번지 자리는 쉼터 광장(포석·벤치·가로등), 11·12번지 자리는 납품 부두 위 마당(자갈 — 주말 버스 정류장)", () => {
+  it("없앤 10번지 자리는 쉼터 광장(포석·벤치·가로등), 11·12번지 자리는 버스 정류장 마당(자갈 — 의뢰 게시판·주말 버스 정류장)", () => {
     expect(REST_PLAZA).toMatchObject({ x: 1008, y: 648 });
     const t = (x: number, y: number) => groundKind(Math.floor(x / 16), Math.floor(y / 16));
     expect(t(REST_PLAZA.x + 40, REST_PLAZA.y + 40)).toBe("stone");
-    expect(t(REST_PLAZA.x + REST_PLAZA.w + 20, REST_PLAZA.y + 40)).toBe("gravel"); // 바로 오른쪽이 납품 부두 위 마당
+    expect(t(REST_PLAZA.x + REST_PLAZA.w + 20, REST_PLAZA.y + 40)).toBe("gravel"); // 바로 오른쪽이 버스 정류장 마당
     expect(t(WHARF_YARD.x + 60, WHARF_YARD.y + 40)).toBe("gravel");
     const benches = FURNITURE.filter((f) => inside(REST_PLAZA, f.x, f.y));
     expect(benches.length).toBeGreaterThanOrEqual(2);
@@ -349,7 +350,7 @@ describe("주거 구역 (분양 마을을 메인 맵에)", () => {
     expect(ok(WHARF_YARD.x + 128, WHARF_YARD.y + 100)).toBe(true);
   });
 
-  it("납품 부두 위 마당의 주말 버스 정류장: 상호작용 \"bus\" 하나, 지붕 아래 벤치 bE, 앞에서 걸어서 닿는다", () => {
+  it("버스 정류장 마당의 주말 버스 정류장: 상호작용 \"bus\" 하나, 지붕 아래 벤치 bE, 앞에서 걸어서 닿는다", () => {
     const bus = interactables().filter((i) => i.kind === "bus");
     expect(bus.map((i) => i.id)).toEqual(["bus:camp"]);
     expect(inside(WHARF_YARD, bus[0].x, bus[0].y)).toBe(true);
@@ -407,39 +408,58 @@ describe("길찾기 격자 / 옛 좌표", () => {
   });
 });
 
-describe("묘역 두 곳 (버드나무 묘역은 동물원 — 정원 합계 = 49번 성불의 GRAVEYARD_CAPACITY)", () => {
-  it("묘역 칸 수의 합 = GRAVEYARD_CAPACITY, 모든 자리가 제 묘역 안, 겹치지 않는다", () => {
-    expect(GRAVE_AREAS.length).toBe(2);
+describe("묘역은 옛 묘역 하나 (11/16 다리 건너 묘역은 범퍼카장 — 정원 = 49번 성불의 GRAVEYARD_CAPACITY)", () => {
+  it("칸 수 = GRAVEYARD_CAPACITY (8열 × 4줄), 모든 자리가 옛 묘역 안, 겹치지 않는다", () => {
+    expect(GRAVE_AREAS.length).toBe(1);
+    expect(GRAVE_AREAS[0]).toMatchObject({ id: "A", name: "옛 묘역", cols: 8, rows: 4 });
     expect(GRAVE_AREAS.reduce((n, a) => n + a.cols * a.rows, 0)).toBe(GRAVEYARD_CAPACITY);
     expect(GRID_COLS * GRID_ROWS).toBe(GRAVEYARD_CAPACITY); // 옛 이름 호환
     for (let i = 0; i < GRAVEYARD_CAPACITY; i++) {
       const s = graveSlot(i);
-      const a = GRAVE_AREAS.find((g) => g.id === s.area)!;
-      expect(inside(a.rect, s.x, s.y, -8), `${i}`).toBe(true);
-      expect(inside(a.rect, s.x, s.y + 22, -2), `${i}`).toBe(true);
+      expect(s.area).toBe("A");
+      expect(inside(GRAVEYARD_RECT, s.x, s.y, -8), `${i}`).toBe(true);
+      expect(inside(GRAVEYARD_RECT, s.x, s.y - 30, -2), `${i} 비석 꼭대기`).toBe(true);
+      expect(inside(GRAVEYARD_RECT, s.x, s.y + 22, -2), `${i} 서는 자리`).toBe(true);
     }
     expect(new Set(Array.from({ length: GRAVEYARD_CAPACITY }, (_, i) => `${graveSlot(i).x},${graveSlot(i).y}`)).size).toBe(GRAVEYARD_CAPACITY);
     expect(GRAVEYARD_RECT).toEqual(GRAVE_AREAS[0].rect);
   });
 
-  it("등록 순서대로 결정적으로, 두 묘역에 정원 비율(5 : 3)대로 골고루 (A·B·A·B·A·A·B·A …) 놓인다", () => {
-    expect([0, 1, 2, 3, 4, 5, 6, 7].map((i) => graveSlot(i).area)).toEqual(["A", "B", "A", "B", "A", "A", "B", "A"]);
+  it("등록 순서 index % 32 → 줄마다 왼쪽부터, 결정적으로 돌려 쓴다 (묘비 데이터는 등록 순서만이라 옮길 것이 없다)", () => {
+    expect([0, 1, 7, 8, 31].map((i) => [graveSlot(i).row, graveSlot(i).col])).toEqual([
+      [0, 0],
+      [0, 1],
+      [0, 7],
+      [1, 0],
+      [3, 7],
+    ]);
     expect(graveSlot(0)).toEqual(graveSlot(GRAVEYARD_CAPACITY)); // 돌려 쓴다
-    const per: Record<string, number> = { A: 0, B: 0 };
-    for (let i = 0; i < GRAVEYARD_CAPACITY; i++) per[graveSlot(i).area]++;
-    expect(per).toEqual({ A: 20, B: 12 });
+    expect(graveSlot(45)).toEqual(graveSlot(13));
     expect(plotLabel(0)).toBe("옛 묘역 1번째 줄 · 1번 자리");
-    expect(plotLabel(1)).toBe("다리 건너 묘역 1번째 줄 · 1번 자리");
-    expect(plotLabel(3)).toBe("다리 건너 묘역 1번째 줄 · 2번 자리");
-    expect(plotLabel(2)).toBe("옛 묘역 1번째 줄 · 2번 자리");
+    expect(plotLabel(1)).toBe("옛 묘역 1번째 줄 · 2번 자리");
+    expect(plotLabel(9)).toBe("옛 묘역 2번째 줄 · 2번 자리");
+    // 가운데 통로(언덕 계단과 같은 줄) 양쪽으로 4기씩, 줄 사이에 서서 헌화할 틈
+    const a = GRAVE_AREAS[0];
+    const xs = Array.from({ length: 8 }, (_, i) => graveSlot(i).x);
+    expect(xs.filter((x) => x < a.aisleX)).toHaveLength(4);
+    for (let i = 1; i < 8; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(20);
+    expect(graveSlot(8).y - graveSlot(0).y).toBeGreaterThanOrEqual(48);
   });
 
-  it("묘비 데이터는 그대로, 자리만 옮겨 놓인다: 32기 모두 동물원 밖 묘역 안", () => {
+  it("32기 모두 동물원·범퍼카장 밖 옛 묘역 안", () => {
     for (let i = 0; i < GRAVEYARD_CAPACITY; i++) {
       const s = graveSlot(i);
       expect(inZoo(s.x, s.y, 8), `${i}`).toBe(false);
-      expect(["A", "B"]).toContain(s.area);
+      expect(inside(BUMPER_YARD, s.x, s.y, 40), `${i}`).toBe(false);
     }
+  });
+
+  it("동문 오솔길(둘째 줄)이 성황당 쪽 흙길과 이어진다", () => {
+    const gateTy = Math.floor(392 / 16);
+    expect(groundKind(Math.floor(440 / 16), gateTy)).toBe("dirt");
+    expect(groundKind(Math.floor(424 / 16), gateTy)).toBe("gravel");
+    expect(groundKind(Math.floor(graveSlot(15).x / 16), gateTy)).toBe("gravel");
+    expect(Math.floor((graveSlot(8).y + 16) / 16)).toBe(gateTy);
   });
 
   it("등록 순서대로 결정적으로 놓이고, 넘치면 가장 최근 32기만 자리를 돌려 쓴다", () => {
@@ -650,38 +670,26 @@ describe("미니맵 (F17)", () => {
   });
 });
 
-describe("납품 부두 (11/15, 예전 낚시터 — 호수 북동쪽 물가)", () => {
-  it("낚시 자리 20곳 이상, 그중 몇 곳은 납품 부두 잔교에 있고 모두 걸어서 닿는다 (잔교·마당)", async () => {
-    const { FISHING_SPOTS, FISHING_ZONE, FISHING_ZONE_SPOTS, FISH_ARCH, FISH_PIER, FISH_PIER_HEAD, inFishingZone } = await import("@tomb/protocol");
+describe("낚시 (11/15 납품 부두를 없앤 뒤 — 호수 잔교·호수 둑·강둑·연못)", () => {
+  it("낚시 자리 18곳 이상 (부두 잔교 자리 4곳을 빼고 둑·강둑에 3곳을 더했다), 모두 걸어서 닿는다", async () => {
+    const { FISHING_SPOTS, LAKE_PIER } = await import("@tomb/protocol");
     const { NPCS } = await import("@/lib/forage/catalog");
-    expect(FISHING_SPOTS.length).toBeGreaterThanOrEqual(20);
-    const zone = FISHING_SPOTS.filter((s) => inFishingZone(s.x, s.y));
-    expect(zone.length).toBeGreaterThanOrEqual(5);
-    expect(FISHING_SPOTS.slice(0, FISHING_ZONE_SPOTS).every((s) => inFishingZone(s.x, s.y))).toBe(true);
-    expect(ZONES.some((z) => z.id === "fishing" && z.name === "납품 부두" && z.x === FISHING_ZONE.x && z.w === FISHING_ZONE.w)).toBe(true);
-    // 어부 영감은 낚시터 마당에
+    expect(FISHING_SPOTS.length).toBeGreaterThanOrEqual(18);
+    expect(FISHING_SPOTS.filter((s) => s.water === "lake").length).toBeGreaterThanOrEqual(12);
+    expect(FISHING_SPOTS.filter((s) => s.water === "river").length).toBeGreaterThanOrEqual(6);
+    // 부두는 없다: 구역 이름도 버스 정류장 마당으로
+    expect(ZONES.some((z) => z.name.includes("부두"))).toBe(false);
+    expect(ZONES.some((z) => z.id === "busyard" && z.name === "버스 정류장 마당" && z.x === WHARF_YARD.x && z.w === WHARF_YARD.w)).toBe(true);
+    // 어부 영감은 호수 낚시 잔교 서쪽 끝 (호박밭 옆) — 잔교 낚시 자리에서 가깝다
     const monger = NPCS.find((n) => n.id === "fishmonger")!;
-    expect(inFishingZone(monger.x, monger.y)).toBe(true);
-    // 데크 위는 물이 아니고, 데크·아치·자리 모두 정문에서 걸어서 닿는다
-    expect(inWater(FISH_PIER.x + FISH_PIER.w / 2, FISH_PIER.y + FISH_PIER.h - 6)).toBe(false);
-    expect(inWater(FISH_PIER_HEAD.x + 8, FISH_PIER_HEAD.y + 12)).toBe(false);
+    expect(Math.hypot(monger.x - LAKE_PIER.x, monger.y - LAKE_PIER.y)).toBeLessThan(60);
+    expect(Math.min(...FISHING_SPOTS.map((s) => Math.hypot(s.x - monger.x, s.y - monger.y)))).toBeLessThan(100);
+    expect(inWater(monger.x, monger.y)).toBe(false);
     const ok = reachable();
-    const miss = [...FISHING_SPOTS, { id: "arch", x: FISH_ARCH.x, y: FISH_ARCH.y + 6 }, { id: "monger", x: monger.x, y: monger.y + 10 }]
+    const miss = [...FISHING_SPOTS, { id: "monger", x: monger.x, y: monger.y + 10 }]
       .filter((t) => !ok(t.x, t.y) && !ok(t.x, t.y + 4) && !ok(t.x - 4, t.y + 4) && !ok(t.x + 4, t.y + 4))
       .map((t) => t.id);
     expect(miss).toEqual([]);
-  });
-
-  it("데크와 가로 데크가 만나는 곳은 난간이 없어 지나가고, 물 쪽 가장자리는 난간이 막는다", async () => {
-    const { FISH_PIER, FISH_PIER_HEAD } = await import("@tomb/protocol");
-    const { allDeckRails } = await import("./layout");
-    const rails = allDeckRails();
-    const hit = (x: number, y: number) => rails.some((r) => inside(r, x, y));
-    // 이음매 (데크 가운데 아래 끝 = 가로 데크 윗변)
-    expect(hit(FISH_PIER.x + FISH_PIER.w / 2, FISH_PIER_HEAD.y)).toBe(false);
-    expect(hit(FISH_PIER.x + 1, FISH_PIER.y + FISH_PIER.h - 12)).toBe(true); // 잔교 서쪽 가장자리 (물)
-    expect(hit(FISH_PIER_HEAD.x + 1, FISH_PIER_HEAD.y + 10)).toBe(true); // 가로 데크 서쪽 끝
-    expect(hit(FISH_PIER_HEAD.x + 20, FISH_PIER_HEAD.y + FISH_PIER_HEAD.h - 1)).toBe(true); // 가로 데크 남쪽 가장자리
   });
 
   it("강 어귀는 비어 있어 조각배가 호수에서 강으로 드나든다", async () => {

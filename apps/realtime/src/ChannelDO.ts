@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, ROOM_CAPACITY, TICK_MS, isHuntRoom, signGrant, verifyGrant } from "@tomb/protocol";
+import { CLOSE, LOBBY_DEBOUNCE_MS, PING, PONG, ROOM_CAPACITY, TICK_MS, isHuntRoom, signGrant, verifyGrant, type MapId } from "@tomb/protocol";
 import { TICKET_HEADER, decodeTicket, rejectSocket } from "./auth";
 import { ChannelCore, type PeerRecord, type Reservation } from "./channel";
 import { type Env, channelStub, lobbyStub, readConfig } from "./config";
@@ -20,6 +20,10 @@ import { type Env, channelStub, lobbyStub, readConfig } from "./config";
 //   쓰기 비용을 아끼려고 입장·퇴장·좌석·꾸미기 변화는 LIVE_DEBOUNCE_MS로 묶어 쓰고, 위치만 바뀐 것은
 //   LIVE_POS_MIN_MS에 한 번 정도만 쓴다(복귀하는 클라이언트가 어차피 자기 좌표를 다시 알려 준다). 방(room)은 쓰지 않는다.
 //
+// - 최근 채팅: storage("chat:village"·"chat:camp") = 맵별 최근 CHAT_STORE_MAX줄(키 하나에 묶어 쓰기 1건 = 행 1개).
+//   서버가 잠들었다 깨거나 재배포돼도 늦게 들어온 사람에게 최근 대화를 보낸다. 줄마다 쓰지 않고 CHAT_SAVE_MS로 모아 쓴다
+//   (대기 중인 타이머가 DO를 깨워 두므로 잠들기 전에 쓴다). 그 맵 기록을 처음 쓸 때 한 번 읽는다(ChannelCore.chatsOf). 방(room)은 쓰지 않는다.
+//
 // 알람 하나로 두 가지를 한다: 재연결 유예 만료, 그리고 연결이 있는 동안 5분마다 유령 연결 정리(reap).
 
 const RES_PREFIX = "r:";
@@ -30,6 +34,10 @@ const NONCE_PREFIX = "n:";
 const LIVE_KEY = "live";
 /** 22번 황금 고블린: 다음 등장 시각 + 지금 나와 있는 고블린(잡혔는지까지). 등장·잡힘·사라짐 때만 쓴다 */
 const GOBLIN_KEY = "goblin";
+/** 맵별 최근 채팅 저장 키 접두어 (+ "village" | "camp") */
+const CHAT_PREFIX = "chat:";
+/** 채팅이 바뀐 뒤 저장하기까지 모으는 시간 (그 사이 줄은 한 번에 쓴다 — 맵마다 이 간격에 최대 한 번) */
+const CHAT_SAVE_MS = 5_000;
 /** 좌석·입퇴장 변화를 저장하기까지 모으는 시간 */
 const LIVE_DEBOUNCE_MS = 500;
 /** 위치만 바뀐 경우 저장 최소 간격 (틱 루프가 멈출 때 이만큼 지났으면 쓴다) */
@@ -62,6 +70,8 @@ export class ChannelDO extends DurableObject<Env> {
   /** 위치만 바뀌어 아직 저장하지 않은 변화가 있다 */
   private livePosDirty = false;
   private liveSavedAt = 0;
+  /** 맵별 최근 채팅 저장 대기 타이머 */
+  private readonly chatTimers = new Map<MapId, ReturnType<typeof setTimeout>>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -187,6 +197,18 @@ export class ChannelDO extends DurableObject<Env> {
             )
             .catch((e) => console.error("megaphone relay failed", e));
           ctx.waitUntil(work);
+        },
+        loadChats: (map) => {
+          if (room) return null;
+          try {
+            return ctx.storage.kv.get(CHAT_PREFIX + map) ?? null;
+          } catch (e) {
+            console.error("chat log load failed", e);
+            return null;
+          }
+        },
+        chatsChanged: (map) => {
+          if (!room) this.scheduleChatSave(map);
         },
         goblinChanged: (s) => {
           if (room) return;
@@ -398,6 +420,30 @@ export class ChannelDO extends DurableObject<Env> {
       else this.ctx.storage.kv.delete(LIVE_KEY);
     } catch (e) {
       console.error("live snapshot save failed", e);
+    }
+  }
+
+  // ── 최근 채팅 저장 ──
+
+  private scheduleChatSave(map: MapId): void {
+    if (this.chatTimers.has(map)) return;
+    this.chatTimers.set(
+      map,
+      setTimeout(() => {
+        this.chatTimers.delete(map);
+        this.saveChats(map);
+      }, CHAT_SAVE_MS),
+    );
+  }
+
+  /** 그 맵의 최근 CHAT_STORE_MAX줄을 키 하나에 쓴다. 남은 줄이 없으면 지운다 */
+  private saveChats(map: MapId): void {
+    try {
+      const lines = this.core.chatSnapshot(map, Date.now());
+      if (lines.length > 0) this.ctx.storage.kv.put(CHAT_PREFIX + map, lines);
+      else this.ctx.storage.kv.delete(CHAT_PREFIX + map);
+    } catch (e) {
+      console.error("chat log save failed", e);
     }
   }
 
