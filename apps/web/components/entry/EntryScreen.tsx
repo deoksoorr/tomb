@@ -334,14 +334,27 @@ function NameStep({ draft, takenName, onBack, onNext }: DraftProps & { takenName
   const check = checkName(name);
   // 닉네임 중복: 입력 중 서버에 가볍게 미리 묻는다 (입장하려다 거절된 이름이면 바로 표시)
   const takenNow = useNameTaken(name);
-  const taken = takenNow ?? (check.ok && check.name === takenName ? NAME_TAKEN_MESSAGE : null);
+  // 11/16 「다음」을 누를 때 서버에 한 번 더 물어 본 결과 (입력 직후 바로 누르면 미리 확인이 아직 안 끝나 있었다)
+  const [late, setLate] = useState<{ name: string; reason: string } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const lateTaken = check.ok && late?.name === check.name ? late.reason : null;
+  const taken = takenNow ?? lateTaken ?? (check.ok && check.name === takenName ? NAME_TAKEN_MESSAGE : null);
   // 첫 글자를 치는 중에는 길이 경고를 띄우지 않는다
   const nameError = (!check.ok && (touched || [...name].length >= 2) ? check.reason : null) ?? taken;
 
-  function next(e: FormEvent<HTMLFormElement>) {
+  async function next(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setTouched(true);
-    if (check.ok && !taken) onNext({ ...draft, name: check.name });
+    if (!check.ok || taken || checking) return;
+    // 이름 단계에서 중복을 확정한다 (확인이 실패하면 그냥 넘어가고, 입장할 때 서버가 다시 본다)
+    setChecking(true);
+    const r = await api.checkName(check.name).catch(() => null);
+    setChecking(false);
+    if (r && !r.ok) {
+      setLate({ name: check.name, reason: r.reason });
+      return;
+    }
+    onNext({ ...draft, name: check.name });
   }
 
   return (
@@ -374,8 +387,8 @@ function NameStep({ draft, takenName, onBack, onNext }: DraftProps & { takenName
           {nameError ?? "2~12자로 지어요. 한글, 영문, 숫자, 공백, _를 쓸 수 있어요."}
         </p>
       </div>
-      <button type="submit" className={cx(ui.button, ui.primary, styles.enter)}>
-        다음
+      <button type="submit" className={cx(ui.button, ui.primary, styles.enter)} disabled={checking}>
+        {checking ? "이름 확인 중" : "다음"}
       </button>
     </form>
   );
