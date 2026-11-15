@@ -506,12 +506,14 @@ export type TowerVerdict =
       kills: number;
       points: number;
     }
-  | { ok: false; code: string; message: string };
+  /** why = 운영 로그용 자세한 사유 (화면에는 안 보인다) */
+  | { ok: false; code: string; message: string; why?: string };
 
-const tReject = (code: string, message: string): TowerVerdict => ({
+const tReject = (code: string, message: string, why?: string): TowerVerdict => ({
   ok: false,
   code,
   message,
+  ...(why ? { why } : {}),
 });
 const tooHigh = (what: string) =>
   tReject(
@@ -580,7 +582,8 @@ export function evalTower(
     floorXp.push(xpAcc);
   }
   const cv = replayPicks(t.seed, r.cards ?? [], {
-    levels: (owned) => runLevel(runXp(r.kills) * cardXpMul(owned)).level,
+    // 게임은 처치마다 경험치 × 배율을 소수로 더해 간다 → 문턱에 딱 닿는 판에서 곱셈 한 번과 끝자리가 갈릴 수 있어 아주 조금 여유
+    levels: (owned) => runLevel(runXp(r.kills) * cardXpMul(owned) + 1e-6).level,
     starts: startPicks(t.start),
     bossFloors,
     rerolls: rerollsAllowed(k),
@@ -597,6 +600,7 @@ export function evalTower(
     return tReject(
       "RESULT_REJECTED",
       "능력 카드 기록이 맞지 않아요. 이번 판은 보상 없이 끝나요.",
+      `cards:${cv.why}`,
     );
   if (!o.lax && total > 3 + effSec * killRateCeiling("hell", t.level) * cardPower(cv.owned) * (t.gp ?? 1))
     return tooHigh("처치 수");

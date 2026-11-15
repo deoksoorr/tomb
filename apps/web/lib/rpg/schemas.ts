@@ -35,9 +35,11 @@ export const RunResultSchema = z.discriminatedUnion("game", [
     floors: z.number().int().min(0).max(1_000).optional(),
     floorMs: duration.optional(),
     quit: z.boolean().optional(),
-    // 11/15 능력 카드 고른 기록 (lib/rpg/cards replayPicks가 내용을 본다)
+    // 11/15 능력 카드 고른 기록 (lib/rpg/cards replayPicks가 내용을 본다).
+    // f = 판 레벨이 오른 층 (레벨 업만 — 제안 등급 확률이 층으로 정해진다). 빠뜨리면 zod가 지워서 서버가 1층 확률로 다시 굴려
+    // 11층 위에서 고른 카드를 "제안에 없던 카드"로 거절했다 (11/15 운영 422)
     cards: z
-      .array(z.object({ k: z.enum(["l", "s", "b"]), i: z.number().int().min(0).max(100_000), r: z.number().int().min(0).max(1_000), c: z.enum(CARD_IDS) }))
+      .array(z.object({ k: z.enum(["l", "s", "b"]), i: z.number().int().min(0).max(100_000), r: z.number().int().min(0).max(1_000), c: z.enum(CARD_IDS), f: z.number().int().min(0).max(100_000).optional() }))
       .max(MAX_PICKS)
       .optional(),
   }),
