@@ -49,7 +49,6 @@ import {
   type AvatarDye,
   type AwayPlace,
   type C2S,
-  MAP_IDS,
   type MapId,
   type DirId,
   type Grant,
@@ -334,37 +333,37 @@ export class ChannelCore<C extends object> {
   /** 22번 황금 고블린 (등장·주인 판정) */
   private readonly goblin = new GoblinCore(() => (this.host.random ? this.host.random() : Math.random()));
   /**
-   * 맵(마을·캠핑장)별 최근 채팅 (채팅은 같은 맵끼리만). 처음 쓸 때 만들고, 그때 저장소의 기록(host.loadChats)을 되살린다 —
-   * DO가 잠들었다 깨면 메모리가 비므로 새 줄을 넣기 전에 반드시 먼저 읽어야 저장 기록을 덮어쓰지 않는다
+   * 최근 채팅. 11/16부터 마을·캠핑장이 한 기록이다 (줄마다 쓴 사람의 맵 m — 다른 맵에서 보면 [캠핑장]·[마을]).
+   * 처음 쓸 때 만들고, 그때 저장소의 기록(host.loadChats)을 되살린다 — DO가 잠들었다 깨면 메모리가 비므로 새 줄을 넣기 전에
+   * 반드시 먼저 읽어야 저장 기록을 덮어쓰지 않는다. 저장은 "village" 키 하나, 맵별로 따로 남기던 옛 "camp" 키는 합친 뒤 지운다
    */
-  private readonly chats = new Map<MapId, ChatRecent>();
+  private chats: ChatRecent | null = null;
 
-  private chatsOf(map: MapId, now: number): ChatRecent {
-    let c = this.chats.get(map);
-    if (!c) {
-      c = new ChatRecent(() => (this.host.random ? this.host.random() : Math.random()));
-      const saved = this.host.loadChats?.(map);
+  private chatLog(now: number): ChatRecent {
+    if (!this.chats) {
+      const c = (this.chats = new ChatRecent(() => (this.host.random ? this.host.random() : Math.random())));
+      const saved = this.host.loadChats?.("village");
       if (saved !== undefined && saved !== null) c.restore(saved, now);
-      this.chats.set(map, c);
-    }
-    return c;
-  }
-
-  /** 저장할 그 맵의 최근 채팅 (DO가 chatsChanged를 모아 부른다) */
-  chatSnapshot(map: MapId, now: number): RecentChat[] {
-    return this.chatsOf(map, now).snapshot(now);
-  }
-
-  /** 그 방문자의 채팅 기록을 모든 맵에서 지운다 (강퇴·이용 제한). 지운 맵마다 저장 예약 */
-  purgeChats(visitorId: string, now = Date.now()): boolean {
-    let any = false;
-    for (const map of MAP_IDS) {
-      if (this.chatsOf(map, now).purge(visitorId)) {
-        any = true;
-        this.host.chatsChanged?.(map);
+      const camp = this.host.loadChats?.("camp");
+      if (camp !== undefined && camp !== null) {
+        c.restore(camp, now, "camp");
+        this.host.chatsChanged?.("camp");
+        this.host.chatsChanged?.("village");
       }
     }
-    return any;
+    return this.chats;
+  }
+
+  /** 저장할 최근 채팅 (DO가 chatsChanged를 모아 부른다). 11/16 옛 캠핑장 키는 빈 값 → DO가 지운다 */
+  chatSnapshot(map: MapId, now: number): RecentChat[] {
+    return map === "camp" ? [] : this.chatLog(now).snapshot(now);
+  }
+
+  /** 그 방문자의 채팅 기록을 지운다 (강퇴·이용 제한). 지웠으면 저장 예약 */
+  purgeChats(visitorId: string, now = Date.now()): boolean {
+    if (!this.chatLog(now).purge(visitorId)) return false;
+    this.host.chatsChanged?.("village");
+    return true;
   }
 
   /** 그 맵 좌석 (와이어 id → sid) */
@@ -620,9 +619,9 @@ export class ChannelCore<C extends object> {
     this.sendChatLog(p, now);
   }
 
-  /** 이 방(맵)의 최근 채팅(하루 안, 최대 CHAT_RECENT_MAX줄)을 p에게 (없으면 보내지 않는다). 입장·재접속·실내에서 복귀·맵 이동 때 */
+  /** 이 방(채널)의 최근 채팅(하루 안, 최대 CHAT_RECENT_MAX줄)을 p에게 (없으면 보내지 않는다). 입장·재접속·실내에서 복귀·맵 이동 때 */
   private sendChatLog(p: Peer<C>, now: number): void {
-    const lines = this.chatsOf(mapOfPeer(p), now).recent(now, p.visitorId);
+    const lines = this.chatLog(now).recent(now, p.visitorId);
     if (lines.length) this.sendTo(p, { t: "chatLog", now, lines });
   }
 
@@ -926,10 +925,12 @@ export class ChannelCore<C extends object> {
       case "chat": {
         // 말풍선 채팅: 넘치면 조용히 버린다. 가린 글만 같은 채널·방에 중계하고, 늦게 온 사람용으로 기록에 둔다 (월드 채널은 저장소에도 모아 쓴다. 실내에 있으면 안 보이니 버린다)
         if (p.away || !takeChatToken((p.chatBucket ??= newChatBucket()), now)) return;
-        // 11/15 채팅은 같은 맵 사람끼리만 (최근 기록도 맵마다 따로)
-        const c = this.chatsOf(mapOfPeer(p), now).push({ sid: p.sid, visitorId: p.visitorId, name: p.name, text: maskChat(m.text), ...(p.staff ? { staff: true as const } : {}), ...(p.mgr ? { mgr: true as const } : {}) }, now);
-        this.host.chatsChanged?.(mapOfPeer(p));
-        return this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "chat", sid: p.sid, text: c.text, id: c.id, at: c.at }), p.sid);
+        // 11/16 채팅은 채널 전체(마을·캠핑장)로 — 줄마다 쓴 사람의 맵을 붙이고, 다른 맵 사람도 채팅창에 이름을 쓰게 이름·딱지를 싣는다
+        const camp = mapOfPeer(p) === "camp" ? { m: "camp" as const } : {};
+        const tags = { ...(p.staff ? { staff: true as const } : {}), ...(p.mgr ? { mgr: true as const } : {}) };
+        const c = this.chatLog(now).push({ sid: p.sid, visitorId: p.visitorId, name: p.name, text: maskChat(m.text), ...tags, ...camp }, now);
+        this.host.chatsChanged?.("village");
+        return this.broadcast(encodeEvent({ t: "chat", sid: p.sid, text: c.text, id: c.id, at: c.at, name: p.name, ...tags, ...camp }), p.sid);
       }
       case "goblin":
         return this.onGoblinClaim(p, m.id, now);

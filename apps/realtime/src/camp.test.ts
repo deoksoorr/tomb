@@ -159,7 +159,7 @@ describe("only the same map sees each other", () => {
     expect(snaps(c2)).toHaveLength(1);
   });
 
-  it("chat, say, act, emo stay in the map; chat history is per map; megaphone reaches everyone", async () => {
+  it("say, act, emo stay in the map; 11/16 chat (and its history) reaches the whole channel with the speaker's map; megaphone reaches everyone", async () => {
     const { core, join } = setup();
     const v = join("v");
     const c1 = join("c1", { camp: true, map: "camp" });
@@ -169,24 +169,27 @@ describe("only the same map sees each other", () => {
     core.message(c1, send({ t: "say", id: "hi" }), 0);
     core.message(c1, send({ t: "act", kind: "wave" }), 0);
     core.message(c1, send({ t: "emo", id: "heart" }), 0);
-    expect(events(v)).toEqual([]);
+    // 말풍선 채팅만 마을에도 간다 (캠핑장 표시·이름과 함께). 인사·몸짓·이모티콘은 그 맵 안에서만
+    expect(events(v).map((e) => e.t)).toEqual(["chat"]);
+    expect(events(v)[0]).toMatchObject({ t: "chat", text: "모닥불 따뜻해", name: "c1", m: "camp" });
     expect(events(c2).map((e) => e.t)).toEqual(expect.arrayContaining(["chat", "say", "act"]));
 
     core.message(v, send({ t: "chat", text: "마을이에요" }), 0);
-    expect(events(c2).filter((e) => e.t === "chat")).toHaveLength(1);
+    const fromVillage = events(c2).filter((e) => e.t === "chat");
+    expect(fromVillage).toHaveLength(2);
+    expect(fromVillage[1]).toMatchObject({ text: "마을이에요", name: "v" });
+    expect(fromVillage[1]).not.toHaveProperty("m");
 
-    // 늦게 온 캠핑장 사람은 캠핑장 채팅만, 마을 사람은 마을 채팅만
+    // 늦게 온 사람은 어느 맵이든 채널 기록 전체 (줄마다 맵 표시)
     const c3 = join("c3", { camp: true, map: "camp", now: 10 });
     const log3 = events(c3).find((e) => e.t === "chatLog") as Extract<S2C, { t: "chatLog" }>;
-    expect(log3.lines.map((l) => l.text)).toEqual(["모닥불 따뜻해"]);
+    expect(log3.lines.map((l) => [l.text, l.m ?? "village"])).toEqual([
+      ["모닥불 따뜻해", "camp"],
+      ["마을이에요", "village"],
+    ]);
     const v2 = join("v2", { now: 10 });
     const logV = events(v2).find((e) => e.t === "chatLog") as Extract<S2C, { t: "chatLog" }>;
-    expect(logV.lines.map((l) => l.text)).toEqual(["마을이에요"]);
-    // 버스로 마을에 가면 마을 기록을 받는다
-    clear(c3);
-    core.message(c3, toVillage(), 2_000);
-    const after = events(c3).find((e) => e.t === "chatLog") as Extract<S2C, { t: "chatLog" }>;
-    expect(after.lines.map((l) => l.text)).toEqual(["마을이에요"]);
+    expect(logV.lines.map((l) => l.text)).toEqual(["모닥불 따뜻해", "마을이에요"]);
 
     clear(v, c1);
     core.message(c1, send({ t: "megaphone", grant: JSON.stringify({ kind: "megaphone", visitorId: "c1", nonce: "m1", name: "c1", text: "다들 안녕", scope: "channel", ch: 1, exp: 9e9 }) }), 3_000);

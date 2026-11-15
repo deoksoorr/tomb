@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { chatAtBottom, chatLineAgo, chatLineDim, chatLineTone, chatScrollAction, type ChatLine } from "@/game/logic/chatLog";
+import { chatAtBottom, chatLineAgo, chatLineDim, chatLineTone, chatPlaceTag, chatScrollAction, type ChatLine } from "@/game/logic/chatLog";
+import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
 import StyledName from "../ui/StyledName";
 import styles from "./ChatLog.module.css";
@@ -15,8 +16,14 @@ const SELF_TICK_MS = 15_000;
 
 /** 한 줄. opacity = 불투명도(폰 화면 글씨의 흐려짐·기록창의 지난 줄), ago = 지난 줄 옆 작은 시각 */
 export function ChatLineItem({ line, opacity, ago }: { line: ChatLine; opacity?: number; ago?: string | null }) {
+  // 11/16 다른 맵에서 쓴 줄 앞에 [캠핑장]·[마을] (집 안·사냥터처럼 맵이 아닌 곳에서는 붙이지 않는다)
+  const status = useBridgeValue("net:status");
+  const scene = useBridgeValue("scene:changed")?.scene;
+  const here = !scene || scene === "world" ? (status?.map === "camp" ? "camp" : "village") : null;
+  const place = chatPlaceTag(line, here);
   return (
     <li className={cx(styles.line, styles[chatLineTone(line)])} style={opacity === undefined ? undefined : { opacity }}>
+      {place && <span className={styles.place}>{place} </span>}
       <b className={cx(styles.name, line.staff && styles.staff)}>
         {/* 운영자 이름은 금색 그대로 (닉네임 꾸미기를 입혀 헷갈리지 않게) + 11/15 "운영자" 딱지 (이름은 닉네임 그대로라) */}
         {line.staff && <span className={styles.staffTag}>운영자</span>}

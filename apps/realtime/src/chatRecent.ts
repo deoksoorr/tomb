@@ -6,7 +6,7 @@ import {
   type ChatLogLine,
 } from "@tomb/protocol";
 
-// 방(월드 채널 맵·집·사냥터)별 최근 채팅 링버퍼 (메모리 최대 CHAT_RECENT_MAX줄, CHAT_HISTORY_MS 지난 줄은 버린다).
+// 방(월드 채널·집·사냥터)별 최근 채팅 링버퍼 (11/16 월드 채널은 마을·캠핑장이 한 버퍼 — 줄마다 맵 표시 m) (메모리 최대 CHAT_RECENT_MAX줄, CHAT_HISTORY_MS 지난 줄은 버린다).
 // 늦게 들어온 사람(처음 입장·재접속·실내에서 복귀·맵 이동)에게 보내 주는 데만 쓴다.
 // 월드 채널은 DO가 snapshot()(최근 CHAT_STORE_MAX줄)을 저장소에 모아 쓰고, 깨어나면 restore()로 되살린다.
 
@@ -22,6 +22,8 @@ export type RecentChat = {
   staff?: true;
   /** 11/16 매니저가 쓴 줄 */
   mgr?: true;
+  /** 11/16 쓴 사람이 있던 맵 (캠핑장이면 "camp", 마을이면 없음) */
+  m?: "camp";
 };
 
 export class ChatRecent {
@@ -63,6 +65,7 @@ export class ChatRecent {
       text: l.text,
       ...(l.staff ? { staff: true as const } : {}),
       ...(l.mgr ? { mgr: true as const } : {}),
+      ...(l.m === "camp" ? { m: "camp" as const } : {}),
       ...(visitorId !== undefined && l.visitorId === visitorId
         ? { mine: true as const }
         : {}),
@@ -79,13 +82,15 @@ export class ChatRecent {
    * 저장소에서 읽은 줄로 되살린다 (깨어난 직후, 아직 새 줄이 없을 때). 형식이 이상한 줄·지난 줄은 버리고 시각 순으로 둔다.
    * 지금 버퍼에 있는 줄과 id가 같으면 건너뛴다. 되살린 줄 수
    */
-  restore(raw: unknown, now: number): number {
+  restore(raw: unknown, now: number, map?: "camp"): number {
     if (!Array.isArray(raw)) return 0;
     const have = new Set(this.buf.map((l) => l.id));
     let n = 0;
     for (const v of raw.slice(-this.max)) {
       const l = readStored(v);
       if (!l || have.has(l.id) || now - l.at >= this.ttlMs) continue;
+      // 11/16 맵별로 따로 남기던 옛 캠핑장 기록: 줄에 맵 표시가 없으니 붙여 준다
+      if (map === "camp") l.m = "camp";
       have.add(l.id);
       this.buf.push(l);
       n++;
@@ -129,5 +134,6 @@ function readStored(v: unknown): RecentChat | null {
     text: l.text.slice(0, CHAT_MAX * 2),
     ...(l.staff === true ? { staff: true as const } : {}),
     ...(l.mgr === true ? { mgr: true as const } : {}),
+    ...(l.m === "camp" ? { m: "camp" as const } : {}),
   };
 }

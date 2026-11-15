@@ -547,7 +547,7 @@ export class WorldScene extends Phaser.Scene {
         },
         onAct: (sid, kind, x, y) => this.playAct(sid, kind, x, y),
         onEmo: (sid, id) => this.expr.onRemoteEmo(sid, id),
-        onChat: (sid, text, id) => this.expr.onRemoteChat(sid, text, id),
+        onChat: (sid, text, id, meta) => this.expr.onRemoteChat(sid, text, id, meta),
         // 이 채널의 최근 1분 채팅 → 채팅창에 합친다 (채널 번호로 다른 채널 줄과 섞이지 않게)
         onChatLog: (lines) => bridge.emit("chat:log", { lines: this.withNameStyles(lines), ...(this.net.channel !== null ? { ch: this.net.channel } : {}) }),
         onMood: (sid, mood) => this.expr.onRemoteMood(sid, mood),

@@ -38,6 +38,8 @@ export type ChatLine = {
   mgr?: true;
   /** 보낸 사람의 닉네임 꾸미기 id (이름 글자·이름표 — 게임이 아는 그 사람 착용 목록에서). 없으면 그냥 이름 */
   ns?: string[];
+  /** 11/16 쓴 사람이 있던 맵 (캠핑장이면 "camp", 없으면 마을) → 다른 맵에서 보면 [캠핑장]·[마을] (chatPlaceTag) */
+  m?: "camp";
 };
 
 /** 서버 chatLog 한 줄을 이 기기 시계로 옮긴 것 */
@@ -124,14 +126,23 @@ export function readChatLog(serverNow: unknown, raw: unknown, localNow: number):
     if (typeof l.id !== "string" || !l.id || l.id.length > 64 || typeof l.at !== "number" || !Number.isFinite(l.at)) continue;
     if (typeof l.name !== "string" || typeof l.text !== "string" || !l.text) continue;
     const age = Math.max(0, serverNow - l.at);
-    out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), ...(l.mgr === true ? { mgr: true } : {}), at: localNow - age });
+    out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), ...(l.mgr === true ? { mgr: true } : {}), ...(l.m === "camp" ? { m: "camp" as const } : {}), at: localNow - age });
   }
   return out;
 }
 
 /**
- * 채팅 기록을 비우는 단위: GameShell이 넘기는 방 문자열("world:3", "house:3", 캠핑장 "world:3c")의 채널 부분.
- * 같은 채널 마을↔집은 그대로 이어지고, 채널을 옮기거나 마을↔캠핑장(3 ↔ 3c)을 오가면 비운다
+ * 11/16 다른 맵에서 쓴 줄 앞 표시: 지금 보는 맵(here)과 쓴 사람의 맵이 다르면 "[캠핑장]"·"[마을]", 같거나 맵을 모르면(집 안 등) null
+ */
+export function chatPlaceTag(line: Pick<ChatLine, "m">, here: "camp" | "village" | null): string | null {
+  if (!here) return null;
+  const from = line.m === "camp" ? "camp" : "village";
+  return from === here ? null : from === "camp" ? "[캠핑장]" : "[마을]";
+}
+
+/**
+ * 채팅 기록을 비우는 단위: GameShell이 넘기는 방 문자열("world:3", "house:3")의 채널 부분.
+ * 같은 채널 마을↔집↔캠핑장(11/16부터 한 기록)은 그대로 이어지고, 채널을 옮기면 비운다
  */
 export function chatChannelOf(room: string): string {
   const i = room.indexOf(":");

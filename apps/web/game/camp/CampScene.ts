@@ -424,9 +424,10 @@ export class CampScene extends Phaser.Scene {
         if (r.visible) this.host.sfx.play("say", 0.3);
       },
       onEmo: (sid, id) => this.expr.onRemoteEmo(sid, id),
-      onChat: (sid, text, id) => this.expr.onRemoteChat(sid, text, id),
+      onChat: (sid, text, id, meta) => this.expr.onRemoteChat(sid, text, id, meta),
       // 캠핑장 채팅 기록은 마을 기록과 따로 (채널 번호 뒤에 c)
-      onChatLog: (lines) => bridge.emit("chat:log", { lines, ...(this.host.net.channel !== null ? { ch: `${this.host.net.channel}c` } : {}) }),
+      // 11/16 채팅 기록은 채널 하나 (마을·캠핑장 같이) — 맵을 오가도 비우지 않게 마을과 같은 채널 번호로
+      onChatLog: (lines) => bridge.emit("chat:log", { lines, ...(this.host.net.channel !== null ? { ch: this.host.net.channel } : {}) }),
       onMood: (sid, mood) => this.expr.onRemoteMood(sid, mood),
       onRide: (sid, on) => this.riding.onRide(sid, on),
       onRod: (sid, on) => this.forage.f.onRod(sid, on),

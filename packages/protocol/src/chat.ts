@@ -19,13 +19,14 @@ export const CHAT_RECENT_MS = 300_000;
 export const CHAT_RECENT_MAX = 150;
 /** 지난 채팅을 들고 있는·보내 주는 시간 (이보다 오래된 줄은 보내지 않고 버린다) */
 export const CHAT_HISTORY_MS = 24 * 60 * 60_000;
-/** 월드 채널이 맵별로 DO 저장소에 남기는 최근 채팅 줄 수 (서버가 잠들었다 깨도 이어지는 기록) */
+/** 월드 채널이 DO 저장소에 남기는 최근 채팅 줄 수 (서버가 잠들었다 깨도 이어지는 기록. 11/16부터 마을·캠핑장 한 기록) */
 export const CHAT_STORE_MAX = 50;
 
 /** 방에 들어올 때 받는 최근 채팅 한 줄 (S2C chatLog). at = 서버 시각 ms, mine = 내가 쓴 줄 */
 /** staff = 운영자가 쓴 줄 → 채팅창 이름 금색 + "운영자" 딱지 */
 /** mgr = 11/16 매니저가 쓴 줄 (실시간 서버가 서명된 연결 정보로 붙인다) → "매니저" 딱지. 옛 클라이언트는 무시한다 */
-export type ChatLogLine = { id: string; at: number; name: string; text: string; mine?: true; staff?: true; mgr?: true };
+/** m = 11/16 그 줄을 쓴 사람이 있던 맵 (캠핑장이면 "camp", 마을이면 없음) → 다른 맵에서 보면 [캠핑장]·[마을] 표시 */
+export type ChatLogLine = { id: string; at: number; name: string; text: string; mine?: true; staff?: true; mgr?: true; m?: "camp" };
 
 /** 가린 자리 */
 export const CHAT_MASK = "***";
