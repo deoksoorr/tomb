@@ -1,4 +1,4 @@
-import type { CardId, CardKindStyle, CardPick } from "./cards";
+import type { CardId, CardKindStyle, CardPick, StatPanel } from "./cards";
 import type { Difficulty, DropKind, GameKind, GearSlot, MonsterId, SkillId, Stats, ZoneId } from "./catalog";
 import type { DexGain } from "../forage/types";
 import type { Derived } from "./formulas";
@@ -73,7 +73,9 @@ export type CharacterState = {
   /** 보호 문서를 받은 주(그 주 월요일)와 그 주에 받은 장 수 */
   protWk?: string;
   protN?: number;
-  /** 상점 장비 강화 (장비 id → 1..5) · 연속 실패 수 */
+  /** 강화한 상점·주운 장비 한 개씩 ("w_stamp+3@5k.1" — lib/rpg/setGear shopPieceOf). 같은 이름 장비도 따로 강화한다 */
+  si?: string[];
+  /** 예전 저장값: 상점 장비 강화 (장비 id → 1..5)·연속 실패 수 — normalize가 한 개(si)로 옮기고 지운다 */
   enh?: Record<string, number>;
   enhF?: Record<string, number>;
   /** 4세트를 처음 맞춘 세트 (비트: 야근 1·결재 2·회의 4·출장 8) · 지금까지 가장 높은 강화 */
@@ -312,6 +314,8 @@ export type RpgHud = {
   auto?: { slots: boolean[]; on: boolean; keepUlt: boolean };
   /** 11/15 야근 빌딩 능력 카드: 판 레벨·이번 레벨 경험치, 가진 카드(겹친 수), 남은 다시 뽑기, 멈추면 집중 중, 내 무기 갈래 */
   run?: { lv: number; xp: number; need: number; cards: { id: CardId; n: number }[]; rerolls: number; focus: boolean; kind: CardKindStyle };
+  /** 11/15 판 안 능력치 판 (기본 + 카드가 더한 만큼, 카드 효과 칩) — lib/rpg/cards statPanel */
+  stats?: StatPanel;
 };
 
 export type RpgAction =

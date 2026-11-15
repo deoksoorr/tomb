@@ -2,6 +2,8 @@ import { bodyTier, hasDye, isAvatarBody, type AvatarBody, type AvatarDye } from 
 import { darken, Grid, lighten, mix, parseHex, type Color } from "./pixel";
 import { COVERING_HATS, drawBackGear, drawHandGear, drawHandGlow, drawHeadGear, drawHeadGlow, drawNeckGear, extraGearOf, GEAR_SHEET_IDS, type ExtraGear } from "./avatarGear";
 import { COSMETIC_FX_IDS } from "./cosmeticFx";
+// 11/15 사냥 중 입은 세트 장비 (착용 목록의 "sgw.…" — game/sprites/setGearWear)
+import { drawSetAcc, drawSetArmor, drawSetHead, drawSetSpark, sgHeadCovers, sgWearOf, sparkFrame, SGW_PREFIX, type SgWear } from "./setGearWear";
 
 // 방문자 아바타 6종 (모두 오리지널 디자인, 같은 색 팔레트 규칙):
 //  hood  두건 쓴 작은 순례자 (두건 끝이 새싹처럼 접힘, 어두운 얼굴 구멍에 눈 두 점)
@@ -179,16 +181,19 @@ type Pal = {
 const SHEET_COSMETICS = ["hat_straw", "hat_cat", "hat_flower", "hat_halo", "hand_lantern", "neck_scarf", ...GEAR_SHEET_IDS] as const;
 /** 아바타가 그리는 꾸미기 전체: 시트에 그려지는 것 + AvatarView가 따로 붙이는 것(날개·유령 친구·발자국 꽃·안개) */
 export const SPRITE_COSMETICS = [...SHEET_COSMETICS, "back_wings", "pet_ghost", "feet_flowers", "aura_fog", ...COSMETIC_FX_IDS] as const;
-type Gear = { hat: "hat_straw" | "hat_cat" | "hat_flower" | "hat_halo" | null; lantern: boolean; scarf: boolean; /** F8 추가분 (avatarGear.ts) */ extra: ExtraGear };
+type Gear = { hat: "hat_straw" | "hat_cat" | "hat_flower" | "hat_halo" | null; lantern: boolean; scarf: boolean; /** F8 추가분 (avatarGear.ts) */ extra: ExtraGear; /** 11/15 사냥 중 세트 장비 */ sg: SgWear };
 
 export function gearOf(look: readonly string[]): Gear {
   const hat = look.find((id) => id === "hat_straw" || id === "hat_cat" || id === "hat_flower" || id === "hat_halo") as Gear["hat"] | undefined;
-  return { hat: hat ?? null, lantern: look.includes("hand_lantern"), scarf: look.includes("neck_scarf"), extra: extraGearOf(look) };
+  return { hat: hat ?? null, lantern: look.includes("hand_lantern"), scarf: look.includes("neck_scarf"), extra: extraGearOf(look), sg: sgWearOf(look) };
 }
 
 /** 시트 키에 들어가는 꾸미기 부분 (같은 조합이면 텍스처를 같이 쓴다) */
 export function lookKey(look: readonly string[]): string {
-  return (SHEET_COSMETICS as readonly string[]).filter((id) => look.includes(id)).join(".");
+  const base = (SHEET_COSMETICS as readonly string[]).filter((id) => look.includes(id));
+  // 11/15 사냥 중 세트 장비 조합도 시트 키에 (장비가 바뀔 때만 시트를 새로 만든다)
+  const sg = look.filter((id) => id.startsWith(SGW_PREFIX)).sort();
+  return [...base, ...sg].join(".");
 }
 
 /**
@@ -545,12 +550,17 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
 
   // ── 팔 (머리보다 먼저: 머리와 겹치는 곳은 머리가 덮는다) ──
   drawArms(g, view, pose, m, pal, false);
+  // 11/15 사냥 중 세트 갑옷: 몸통·팔을 세트 색으로 (머리는 그 위에 그린다)
+  const sgSpots: [number, number][] = [];
+  if (gear.sg.a)
+    sgSpots.push(drawSetArmor(g, view, fb, m, [pal.cloak, pal.cloakLo, pal.bodyMid, pal.bodyLo, pal.bodyHi, pal.hood, pal.hoodLo, pal.hoodHi], [pal.cloakLo, pal.bodyLo, pal.hoodLo], gear.sg.a));
   // F8 등 꾸미기: 뒷모습에서 등을 덮는 부분·앞모습 어깨끈 (머리보다 먼저)
   if (gear.extra.back) drawBackGear(g, view, gear.extra.back, m, fb, "front", pose.hem, pose.sit);
 
   // ── 목도리 (두건·키다리는 기본 천 목도리, 나머지는 목도리를 했을 때만) ──
   const plainNeck = body === "hood" || body === "tall";
-  if (plainNeck || gear.scarf) {
+  // 11/15 세트 갑옷을 입으면 기본 천 목도리는 옷깃에 가린다
+  if ((plainNeck && !gear.sg.a) || gear.scarf) {
     const sy = m.neck;
     const half = fb === "round" ? 6 : fb === "sheet" ? 6 : fb === "tall" ? 3 : 4;
     for (let x = cx - half; x < cx + half; x++) if (g.filled(x, sy) || x >= cx - half + 1) g.set(x, sy, pal.scarf);
@@ -574,7 +584,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
     if (fb === "hood" || fb === "tall") g.recolor((x, y) => y === Math.floor(hy + m.ry - 1) && Math.abs(x + 0.5 - cx) < m.rx - 1, pal.hoodLo);
   }
 
-  const hatCovers = COVERING_HATS.has(gear.hat ?? "") || COVERING_HATS.has(gear.extra.head ?? "");
+  const hatCovers = COVERING_HATS.has(gear.hat ?? "") || COVERING_HATS.has(gear.extra.head ?? "") || sgHeadCovers(gear.sg);
   if ((body === "hood" || body === "suit" || body === "box") && !hatCovers) {
     // 두건 끝: 새싹처럼 접힌 꼭지
     if (view === "down") {
@@ -618,6 +628,11 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   if (gear.extra.neck) drawNeckGear(g, view, gear.extra.neck, m, fb);
   if (gear.extra.head) drawHeadGear(g, view, gear.extra.head, m, fb, fb === "round" ? m.top - 1 : m.top);
   if (gear.extra.hand) drawHandGear(g, view, gear.extra.hand, m);
+  // 11/15 사냥 중 세트 장신구·머리 + 임원급 반짝임 (시트 프레임 홀짝으로 두 장)
+  for (const c of gear.sg.c) drawSetAcc(g, view, fb, m, c);
+  if (gear.sg.h) sgSpots.push(drawSetHead(g, view, fb, m, gear.sg.h));
+  const sgTop = [gear.sg.a, gear.sg.h, ...gear.sg.c].some((w) => w?.[1] === 3);
+  if (sgTop) drawSetSpark(g, sgSpots.length ? sgSpots : [[cx, m.shY]], sparkFrame(pose));
 
   // 귀는 모자 위로 튀어나오게 모자 다음에 (고양이 탈의 귀 안쪽은 늘 분홍 — 포인트 색은 사원증 줄)
   if (fb === "cat") drawCatEars(g, view, m, body === "catmask" ? { ...pal, accent: null } : pal);

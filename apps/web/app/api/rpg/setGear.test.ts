@@ -200,7 +200,7 @@ describe("강화·분해·끼기 (app/api/rpg/gear)", () => {
     const ok = await act(v, { type: "enhance", sg: 1, cost: 200 });
     expect(ok.status).toBe(200);
     expect(ok.body.points).toBe(before - 200);
-    expect(ok.body.character.mats!.doc).toBe(5);
+    expect(ok.body.character.mats!.doc).toBe(8);
     expect([5, 6]).toContain(ok.body.gear!.enhance!.to);
   });
 

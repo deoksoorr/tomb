@@ -18,6 +18,7 @@ import { HUNT_KEYS, HUNT_TOUCH } from "./huntKeys";
 // 11/15 야근 빌딩 능력 카드: 고르기 창 · 판 레벨·가진 카드
 import CardPick from "./CardPick";
 import RunCards from "./RunCards";
+import StatBox from "./StatBox";
 import RpgIcon from "./RpgIcon";
 import s from "./rpg.module.css";
 
@@ -352,6 +353,8 @@ export default function RunHud({
             </button>
           </div>
         </div>
+        {/* 11/15 능력치 판 (C로 접기, 폰은 [능력] 버튼) */}
+        {hunt && <StatBox stats={hud?.stats} />}
         {hud?.boss && (
           <div className={s.boss}>
             <span>{hud.boss.name}</span>

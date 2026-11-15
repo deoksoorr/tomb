@@ -93,8 +93,8 @@ function PickView({ view }: { view: CardOfferView }) {
                 type="button"
                 className={cx(
                   c.card,
-                  def.rarity === "rare" && c.rare,
-                  def.rarity === "legend" && c.legend,
+                  // 11/15 다섯 등급 (일반은 기본 테두리)
+                  def.rarity !== "common" && c[def.rarity],
                   chosen === i && c.chosen,
                   chosen !== null && chosen !== i && c.dropped,
                 )}
@@ -103,6 +103,7 @@ function PickView({ view }: { view: CardOfferView }) {
                 onClick={() => !deal && pick(i)}
                 aria-label={`${def.name}, ${RARITY_NAME[def.rarity]}${have > 0 && Number.isFinite(def.max) ? `, 지금 ${have}단계에서 ${have + 1}단계로` : ""}. ${cardText(id, view.style)}`}
               >
+                {(def.rarity === "legend" || def.rarity === "unique") && <span className={c.burst} aria-hidden="true" />}
                 <span className={c.back} aria-hidden="true" />
                 <span className={c.face}>
                   {!deal && <span className={c.key}>{i + 1}</span>}
@@ -117,7 +118,7 @@ function PickView({ view }: { view: CardOfferView }) {
                     </span>
                   )}
                   {/* 11/15 가진 카드면 지금 수치 → 더해진 수치 (+늘어나는 만큼) */}
-                  {have > 0 && cardStackLine(id, have) && <span className={c.stackLine}>{cardStackLine(id, have)}</span>}
+                  {have > 0 && cardStackLine(id, have, view.owned) && <span className={c.stackLine}>{cardStackLine(id, have, view.owned)}</span>}
                   <span className={c.desc}>{cardText(id, view.style)}</span>
                 </span>
               </button>
@@ -146,7 +147,7 @@ function PickView({ view }: { view: CardOfferView }) {
             </button>
           </div>
         )}
-        {!deal && <p className={c.hint}>누르거나 1·2·3으로 골라요. 다시 뽑으면 가끔 전설이 섞여요.</p>}
+        {!deal && <p className={c.hint}>누르거나 1·2·3으로 골라요. 높이 오를수록, 다시 뽑을수록 좋은 등급이 잘 나와요.</p>}
       </div>
     </div>
   );

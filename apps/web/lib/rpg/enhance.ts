@@ -19,7 +19,10 @@ import {
   sgPieceOf,
   sgUid,
   SHOP_ENH_MAX,
+  encodeShopPiece,
+  shopPieceOf,
   syncEquip,
+  type ShopPiece,
   type Mats,
   type SgGrade,
   type SgItem,
@@ -32,7 +35,7 @@ import type { CharacterState, Drop } from "./types";
 // 포인트는 서버가 같은 저장 명령(lib/rpg/store updatePaid) 안에서 지갑에서만 뺀다 (모은 포인트·랭킹은 그대로).
 // 규칙을 어기면 RpgError (한국어 메시지).
 
-/** 목표 강화 → 성공 확률·포인트·결재 서류·인감 도장 (index 0은 비움). 11/15 포인트는 기획 표의 약 40% (집 꾸미기 등에도 포인트를 써야 해서) — 확률·재료는 그대로 */
+/** 목표 강화 → 성공 확률·포인트·결재 서류·인감 도장 (index 0은 비움). 11/15 포인트는 기획 표의 약 40% (집 꾸미기 등에도 포인트를 써야 해서), 재료도 줄였다 (서류 +6부터 2~10장, 도장 +11부터 1·1·1·2·2개) — 확률은 그대로 */
 export const ENHANCE_TABLE: readonly {
   rate: number;
   cost: number;
@@ -45,16 +48,16 @@ export const ENHANCE_TABLE: readonly {
   { rate: 0.9, cost: 80, doc: 0, seal: 0 },
   { rate: 0.85, cost: 120, doc: 0, seal: 0 },
   { rate: 0.8, cost: 160, doc: 0, seal: 0 },
-  { rate: 0.75, cost: 200, doc: 5, seal: 0 },
-  { rate: 0.7, cost: 260, doc: 6, seal: 0 },
-  { rate: 0.65, cost: 320, doc: 7, seal: 0 },
-  { rate: 0.6, cost: 400, doc: 8, seal: 0 },
-  { rate: 0.55, cost: 480, doc: 10, seal: 0 },
-  { rate: 0.5, cost: 560, doc: 12, seal: 1 },
-  { rate: 0.45, cost: 640, doc: 14, seal: 1 },
-  { rate: 0.4, cost: 720, doc: 16, seal: 2 },
-  { rate: 0.33, cost: 800, doc: 18, seal: 2 },
-  { rate: 0.28, cost: 880, doc: 20, seal: 3 },
+  { rate: 0.75, cost: 200, doc: 2, seal: 0 },
+  { rate: 0.7, cost: 260, doc: 3, seal: 0 },
+  { rate: 0.65, cost: 320, doc: 3, seal: 0 },
+  { rate: 0.6, cost: 400, doc: 4, seal: 0 },
+  { rate: 0.55, cost: 480, doc: 5, seal: 0 },
+  { rate: 0.5, cost: 560, doc: 6, seal: 1 },
+  { rate: 0.45, cost: 640, doc: 7, seal: 1 },
+  { rate: 0.4, cost: 720, doc: 8, seal: 1 },
+  { rate: 0.33, cost: 800, doc: 9, seal: 2 },
+  { rate: 0.28, cost: 880, doc: 10, seal: 2 },
 ];
 /** 실패할 때마다 다음 성공 확률 +5%p (성공하면 처음부터) */
 export const ENH_FAIL_BONUS = 0.05;
@@ -65,7 +68,8 @@ export const enhanceRate = (target: number, fails: number) => Math.min(1, (ENHAN
 /** 지금 강화 e에서 실패하면 내려가나 */
 export const dropsOnFail = (e: number) => e >= ENH_DROP_FROM;
 
-export type EnhTarget = { sg: number } | { shop: string };
+/** sg = 세트 장비 번호 · shop = 묶음 상점 장비 (한 개를 떼어 강화한다) · piece = 이미 강화한 상점 장비 한 개 */
+export type EnhTarget = { sg: number } | { shop: string } | { piece: number };
 
 export type EnhanceResult = {
   ok: boolean;
@@ -81,6 +85,8 @@ export type EnhanceResult = {
   reached15: boolean;
   /** 이 장비가 처음 +15가 됐다 (확성기 알림 — 장비마다 한 번) */
   announce: boolean;
+  /** 상점 장비: 강화한 한 개의 번호 (묶음에서 떼어 냈으면 새 번호 — 창이 이 번호로 이어서 강화한다) */
+  piece?: number;
 };
 
 const mats = (s: CharacterState): Mats => ({
@@ -103,7 +109,7 @@ const equippedUids = (s: CharacterState) => new Set(Object.values(s.equip).flatM
 
 /** 장착 칸·4세트 기록을 원본에 맞춘다 */
 function settle(next: CharacterState): CharacterState {
-  next.equip = syncEquip(next.equip, next.sg ?? [], next.enh ?? {});
+  next.equip = syncEquip(next.equip, next.sg ?? [], next.si ?? []);
   let bits = next.sgDone ?? 0;
   for (const set of activeSets(next.equip).four) bits |= 1 << SG_SETS.indexOf(set);
   next.sgDone = bits;
@@ -124,12 +130,20 @@ export function enhanceState(s: CharacterState, t: EnhTarget): { e: number; f: n
     const { it } = findSg(s, t.sg);
     return { e: it.e, f: it.f, name: sgName(it) };
   }
+  if ("piece" in t) {
+    const p = findPiece(s, t.piece).p;
+    return { e: p.e, f: p.f, name: gearById(p.id)!.name };
+  }
   if (!isShopGear(t.shop) || !(s.inv[t.shop] ?? 0)) throw new RpgError(404, "NOT_OWNED", "가방에 그 장비가 없어요.");
-  return {
-    e: s.enh?.[t.shop] ?? 0,
-    f: s.enhF?.[t.shop] ?? 0,
-    name: gearById(t.shop)!.name,
-  };
+  return { e: 0, f: 0, name: gearById(t.shop)!.name };
+}
+
+function findPiece(s: CharacterState, uid: number): { i: number; p: ShopPiece } {
+  const list = s.si ?? [];
+  const i = list.findIndex((c) => shopPieceOf(c)?.u === uid);
+  const p = i >= 0 ? shopPieceOf(list[i]) : null;
+  if (!p) throw new RpgError(404, "NOT_OWNED", "가방에 그 장비가 없어요.");
+  return { i, p };
 }
 
 /**
@@ -156,16 +170,27 @@ export function enhance(s: CharacterState, t: EnhTarget, protect: boolean, rnd: 
     seal: m.seal - need.seal,
     prot: m.prot - (useProt ? 1 : 0),
   };
+  let piece: number | undefined;
   if ("sg" in t) {
     const { i, it } = findSg(s, t.sg);
     next.sg![i] = encodeSg({ ...it, e, f });
+  } else if ("piece" in t) {
+    const { i, p } = findPiece(s, t.piece);
+    const code = encodeShopPiece({ ...p, e, f });
+    const old = next.si![i];
+    next.si![i] = code;
+    for (const k of Object.keys(next.equip) as GearSlot[]) if (next.equip[k] === old) next.equip[k] = code;
+    piece = p.u;
   } else {
-    next.enh = { ...next.enh };
-    next.enhF = { ...next.enhF };
-    if (e > 0) next.enh[t.shop] = e;
-    else delete next.enh[t.shop];
-    if (f > 0) next.enhF[t.shop] = f;
-    else delete next.enhF[t.shop];
+    // 묶음에서 한 개를 떼어 낸다 (같은 장비를 낀 칸이 있으면 그 칸의 것을 — 첫 칸 하나만)
+    piece = next.sgN ?? 1;
+    next.sgN = piece + 1;
+    const code = encodeShopPiece({ id: t.shop, e: Math.max(1, e), u: piece, f });
+    next.si = [...(next.si ?? []), code];
+    if (next.inv[t.shop] <= 1) delete next.inv[t.shop];
+    else next.inv[t.shop] -= 1;
+    const slot = (Object.keys(next.equip) as GearSlot[]).find((k) => next.equip[k] === t.shop);
+    if (slot) next.equip[slot] = code;
   }
   const reached15 = e >= SG_ENH_MAX && (s.enhMax ?? 0) < SG_ENH_MAX;
   next.enhMax = Math.max(s.enhMax ?? 0, e);
@@ -184,6 +209,7 @@ export function enhance(s: CharacterState, t: EnhTarget, protect: boolean, rnd: 
       saved: !ok && useProt,
       reached15,
       announce,
+      ...(piece !== undefined ? { piece } : {}),
     },
   };
 }
@@ -192,7 +218,7 @@ export function enhance(s: CharacterState, t: EnhTarget, protect: boolean, rnd: 
 
 export const REROLL_BASE = 150;
 export const REROLL_MAX = 2400;
-export const REROLL_DOCS = 5;
+export const REROLL_DOCS = 3;
 export const REROLL_LOCK_SEALS = 2;
 /** n번째 굴리기 비용 (0부터): 150 → 300 → 600 → 1,200 → 2,400 (상한, 다시 내려가지 않는다) */
 export const rerollCost = (rr: number) => Math.min(REROLL_MAX, REROLL_BASE * 2 ** Math.min(10, rr));
@@ -304,6 +330,16 @@ export function equipSg(s: CharacterState, slot: GearSlot, uid: number | null, l
   const next = clone(s);
   if (uid === null) {
     next.equip[slot] = null;
+    return settle(next);
+  }
+  // 11/15 강화한 상점 장비 한 개 (번호는 세트 장비와 같은 줄)
+  const pc = (s.si ?? []).find((c) => shopPieceOf(c)?.u === uid);
+  if (pc) {
+    const g = gearById(pc)!;
+    if (g.kind !== (slot === "acc1" || slot === "acc2" ? "acc" : slot)) throw new RpgError(400, "WRONG_SLOT", "그 칸에는 낄 수 없는 장비예요.");
+    if (level < g.reqLevel) throw new RpgError(409, "LEVEL_LOW", `레벨 ${g.reqLevel}부터 낄 수 있어요.`);
+    for (const k of Object.keys(next.equip) as GearSlot[]) if (k !== slot && next.equip[k] === pc) next.equip[k] = null;
+    next.equip[slot] = pc;
     return settle(next);
   }
   const { i, it } = findSg(s, uid);

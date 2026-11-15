@@ -38,7 +38,7 @@ import { AUTO_GAP_MS, autoSpOk, ultReserve, wantsCast, type AutoCtx } from "@/li
 import { bridge } from "../bridge";
 // 11/15 야근 빌딩 능력 카드 (판 안에서 쌓는 힘)
 import { CardRun, type CardHost } from "./cards/CardRun";
-import { isBossDealFloor } from "@/lib/rpg/cards";
+import { isBossDealFloor, statPanel } from "@/lib/rpg/cards";
 // 11/15 야근 빌딩: 엘리베이터 연출 · 테마 실행부 (지하 서버실 몬스터 행동·과열·움직이는 배경)
 import { ElevatorCut } from "../tower/elevator";
 import { MonsterIntro } from "../tower/introCard";
@@ -46,6 +46,8 @@ import { BossChest } from "../tower/bossChest";
 // 11/15 세트 장비 싸움 효과·손에 든 무기 (강화 빛)
 import { SetGearRun } from "./setGearRun";
 import { HeldWeapon } from "./heldWeapon";
+import { huntLook } from "../sprites/setGearWear";
+import { SelfLight } from "./selfLight";
 import { enhOfId } from "@/lib/rpg/setGear";
 import { nextPity } from "@/lib/rpg/setGearRoll";
 import { towerSound } from "../tower/towerSound";
@@ -232,6 +234,7 @@ export class HuntScene extends RpgScene {
   private sg = new SetGearRun({});
   private sgPity = 0;
   private held: HeldWeapon | null = null;
+  private selfLight: SelfLight | null = null;
   /** 11/15 우두머리 상자 (그 층에서만) */
   private bossChest: BossChest | null = null;
   private quit = false;
@@ -355,7 +358,9 @@ export class HuntScene extends RpgScene {
     const zone = play.tower ? towerZone(play.seed, play.tower.start, play.tower.start) : zoneFor(play.difficulty, play.zone);
     this.zone = zone;
     ensureRpgTextures(this);
-    makePlayer(this, this.data0.color, this.data0.look, this.data0.body);
+    // 11/15 사냥 중에는 낀 세트 장비를 입는다 (같은 자리 마을 꾸미기보다 먼저 — game/sprites/setGearWear huntLook)
+    const look = huntLook(this.data0.look, play.equip);
+    makePlayer(this, this.data0.color, look, this.data0.body);
     this.plan = play.tower ? towerPlan(play.seed, play.tower.start, play.tower.start) : huntPlan(play.seed, play.difficulty, zone.id);
     this.mons = [];
     this.shots = [];
@@ -445,7 +450,7 @@ export class HuntScene extends RpgScene {
     // 착용 오라·전용 오라: 바닥 층은 바닥 효과 바로 아래, 빛 층은 몸 바로 앞 (전투 효과·몬스터 앞쪽·피해 숫자보다 아래)
     this.data.set("cfxDepth", { ground: DEPTH_GROUND - 5, lightOnBody: true } satisfies CfxDepth);
     if (atlas) {
-      this.me = new AvatarView(this, atlas, this.px, this.py, this.data0.color, this.data0.name, true, this.data0.look, this.data0.body);
+      this.me = new AvatarView(this, atlas, this.px, this.py, this.data0.color, this.data0.name, true, look, this.data0.body);
       this.player = this.me.sprite;
       const room = `hunt:${play.tower ? "tower" : zone.slug}:${play.difficulty}`;
       this.peers = 0;
@@ -466,9 +471,13 @@ export class HuntScene extends RpgScene {
     const wid = play.equip.weapon;
     const wdef = wid ? gearById(wid) : undefined;
     this.held = wdef ? new HeldWeapon(this, wdef.art, enhOfId(wid), RTEX.glow, this.data0.reduced) : null;
+    // 11/15 야근 빌딩 분위기 층이 내 캐릭터까지 어둡게 하지 않게 (캐릭터 둘레만 덜 칠한다)
+    this.selfLight = play.tower ? new SelfLight(this) : null;
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.held?.destroy();
       this.held = null;
+      this.selfLight?.destroy();
+      this.selfLight = null;
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.presence?.destroy();
@@ -1052,6 +1061,8 @@ export class HuntScene extends RpgScene {
     const cm = this.cards && opts.basic ? this.cards.hitMul : 1;
     let dmg = damage(this.atk(), mult * cm * (opts.aoe ? 1 + this.mods.aoePct : 1), m.st.def, Math.random(), crit, vuln);
     if (crit && this.cards) dmg = Math.round(dmg * this.cards.critMul);
+    // 11/15 퇴사 각·성과급
+    if (this.cards) dmg = Math.round(dmg * this.cards.dmgMul(m));
     if (this.cards?.oneshot(m)) dmg = Math.max(dmg, Math.ceil(m.hp));
     this.hurtMonster(m, dmg, crit, nth, opts);
     if (this.cards && opts.basic) this.cards.onBasicHit(m);
@@ -2014,6 +2025,11 @@ export class HuntScene extends RpgScene {
     dmg = Math.max(1, Math.round(dmg * (1 - this.mods.guard)));
     // 11/15 세트 장비: 받는 피해 옵션·야근 4세트 (맞은 시각도 적는다 — 출장 4세트)
     dmg = Math.max(1, Math.round(dmg * this.sg.takenMul(this.now, this.hp, this.dv.maxHp)));
+    // 11/15 능력 카드: 반차(층마다 첫 공격) · 사원증 목걸이 · 재택근무(서 있으면)
+    if (this.cards) {
+      dmg = this.cards.incoming(dmg, this.movingNow);
+      if (dmg <= 0) return false;
+    }
     // 서리 방패: 보호막이 먼저 받는다
     if (this.shield > 0 && this.buff("fr_ward")) {
       const take = Math.min(this.shield, dmg);
@@ -2663,6 +2679,7 @@ export class HuntScene extends RpgScene {
     this.player.setAlpha(this.died ? 0.5 : this.buff("invuln") ? 0.55 + 0.3 * Math.sin(now / 60) : 1);
     this.pShadow.setPosition(this.px, this.py);
     this.held?.update(Math.round(this.px), Math.round(this.py), this.face.x, this.face.y, this.py, this.player.alpha, now);
+    this.selfLight?.update(this.px, this.py - 10, now);
     this.drawGauge(now);
     this.drawStatus(now);
 
@@ -2790,6 +2807,8 @@ export class HuntScene extends RpgScene {
       boss: boss ? { name: MONSTERS[boss.id].name, ratio: Math.max(0, boss.hp / boss.st.maxHp) } : null,
       message: now < this.messageUntil ? this.message : undefined,
       ...(this.cards ? { run: this.cards.hud(!this.movingNow && !this.died) } : {}),
+      // 11/15 능력치 판: 카드를 얹기 전(dvBase)과 전투가 쓰는 지금(dv) — 보통 사냥은 카드 몫 없이
+      stats: statPanel(this.dvBase, this.dv, this.wstyle.cdMul, this.cards?.stats ?? null, this.cards?.spare),
     };
   }
 
@@ -2960,6 +2979,8 @@ export class HuntScene extends RpgScene {
       canPick: () => !sc.died && !sc.endSnap && !sc.ended && !sc.paused,
       floorsCleared: () => sc.floorsCleared,
       refresh: () => sc.refreshCards(),
+      addSp: (n) => (sc.sp = Math.min(sc.dv.maxSp, sc.sp + n)),
+      invuln: (ms) => sc.buffs.set("invuln", { until: sc.now + ms, v: 1 }),
       flash: (msg, ms) => sc.flash(msg, ms),
       float: (x, y, text, color, px) => sc.floatText(x, y, text, color, px ?? 10),
       synth: (key, layers) => sc.sfx.synth(key, layers),

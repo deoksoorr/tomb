@@ -4,6 +4,8 @@ import {
   BOSS_DEAL_HP_COST,
   CARDS,
   cardOffer,
+  RARITIES,
+  RARITY_COLOR,
   cardStats,
   cardStyleKind,
   FOCUS_ASPD,
@@ -90,6 +92,9 @@ export interface CardHost<M extends CardMon> {
   floorsCleared(): number;
   /** 카드가 바뀌어 능력치를 다시 계산하라 */
   refresh(): void;
+  /** 11/15 SP 더하기 (믹스커피) · 무적 ms (연차 몰아 쓰기) */
+  addSp(n: number): void;
+  invuln(ms: number): void;
   flash(msg: string, ms: number): void;
   float(x: number, y: number, text: string, color: string, px?: number): void;
   synth(key: string, layers: Layer[]): void;
@@ -131,8 +136,15 @@ type MonSt = {
   fxAt: number;
 };
 
-type Pending = { k: OfferKind; i: number; at: number };
-type Open = { k: OfferKind; i: number; r: number; cards: CardId[] };
+/** f = 제안 등급을 정하는 층 (레벨 업은 오른 층, 시작 카드는 시작 층) */
+type Pending = { k: OfferKind; i: number; at: number; f: number };
+type Open = { k: OfferKind; i: number; r: number; cards: CardId[]; f: number };
+/** 법인카드 혜택 */
+const PERKS = [
+  { key: "atk", label: "공격력", v: 0.4 },
+  { key: "aspd", label: "공격 속도", v: 0.4 },
+  { key: "move", label: "이동 속도", v: 0.3 },
+] as const;
 
 const SHOT_CAP = 220;
 const FX_CAP = 90;
@@ -169,6 +181,14 @@ export class CardRun<M extends CardMon> {
   private bolts: { pts: number[]; until: number }[] = [];
   private gfx: Phaser.GameObjects.Graphics;
   private boltsDrawn = false;
+  /** 11/15 법인카드 혜택 · 연차 몰아 쓰기(이 시각까지 공격 속도) · 반차가 남았나 · 층마다 한 번 · 지난번에 본 깬 층 수 · SP 쌓기 */
+  private temp: { key: string; v: number; until: number } = { key: "", v: 0, until: 0 };
+  private leaveUntil = 0;
+  private leaveUsed = false;
+  private halfReady = true;
+  private seenCleared = 0;
+  private spAt = 0;
+  private tempOn = false;
   /** 이번 공격에서 연쇄 번개·토스를 아직 안 썼다 */
   private chainReady = false;
   private tossReady = false;
@@ -186,7 +206,7 @@ export class CardRun<M extends CardMon> {
     this.gfx = h.scene.add.graphics().setDepth(DEPTH + 5);
     this.off = bridge.on("rpg:cardPick", (c) => this.choose(c));
     // 체크포인트 시작: 건너뛴 10층마다 세 장 (첫 층 전에)
-    for (let i = 0; i < startPicks(start); i++) this.queue.push({ k: "s", i, at: 0 });
+    for (let i = 0; i < startPicks(start); i++) this.queue.push({ k: "s", i, at: 0, f: start });
   }
 
   // ── 고르기 ──
@@ -200,10 +220,10 @@ export class CardRun<M extends CardMon> {
 
   /** 처치: 판 경험치 → 판 레벨 업이면 고르기를 줄 세운다. 칼퇴 의지 회복 */
   onKill(m: M): void {
-    this.xp += runXpOf(m.id);
+    this.xp += runXpOf(m.id) * this.s.xpMul;
     const lv = runLevel(this.xp).level;
     while (this.earned < lv) {
-      this.queue.push({ k: "l", i: this.earned, at: this.h.now() + 420 });
+      this.queue.push({ k: "l", i: this.earned, at: this.h.now() + 420, f: this.start + this.h.floorsCleared() });
       this.earned++;
       this.levelFx();
     }
@@ -212,6 +232,9 @@ export class CardRun<M extends CardMon> {
       this.h.heal(n, false);
       this.healShown += n;
     }
+    // 11/15 회식 2차: 펑 · 법인카드: 가끔 5초 혜택
+    if (this.s.explode > 0) this.explode(m);
+    if (this.s.corpcard > 0 && Math.random() < this.s.corpcard) this.perk();
     const sx = this.st.get(m);
     if (sx) sx.frzUntil = 0;
     const ice = this.iceOn.get(m);
@@ -223,7 +246,7 @@ export class CardRun<M extends CardMon> {
 
   /** 10층마다 우두머리를 잡으면 상사의 제안 */
   bossDeal(floor: number): void {
-    this.queue.push({ k: "b", i: floor, at: this.h.now() + 900 });
+    this.queue.push({ k: "b", i: floor, at: this.h.now() + 900, f: floor });
   }
 
   /** 매 프레임 맨 앞 (멈춤과 상관없이): 차례가 된 제안을 연다 */
@@ -232,7 +255,7 @@ export class CardRun<M extends CardMon> {
     const q = this.queue[0];
     if (this.h.now() < q.at || !this.h.canPick()) return;
     this.queue.shift();
-    this.cur = { k: q.k, i: q.i, r: 0, cards: cardOffer(this.seed, q.k, q.i, 0, this.owned) };
+    this.cur = { k: q.k, i: q.i, r: 0, f: q.f, cards: cardOffer(this.seed, q.k, q.i, 0, this.owned, q.f) };
     this.h.hold(true);
     this.emit();
   }
@@ -258,6 +281,10 @@ export class CardRun<M extends CardMon> {
       ...(c.k === "b" ? { floor: c.i } : {}),
     });
     this.h.synth("card-flip", CARD_SND.flip);
+    // 11/15 유니크·전설이 섞이면 뒤집히는 순간 따로 울린다
+    const top = Math.max(...c.cards.map((id) => RARITIES.indexOf(CARDS[id].rarity)));
+    if (top >= 4) this.h.synth("card-legend-in", CARD_SND.revealLegend);
+    else if (top >= 3) this.h.synth("card-unique-in", CARD_SND.revealUnique);
   }
 
   private choose(ch: CardChoice): void {
@@ -267,7 +294,7 @@ export class CardRun<M extends CardMon> {
       if (c.k === "b" || this.rerollsLeft <= 0) return;
       this.rerollsUsed++;
       c.r++;
-      c.cards = cardOffer(this.seed, c.k, c.i, c.r, this.owned);
+      c.cards = cardOffer(this.seed, c.k, c.i, c.r, this.owned, c.f);
       this.emit();
       return;
     }
@@ -290,7 +317,7 @@ export class CardRun<M extends CardMon> {
     }
     this.cur = null;
     if (id) {
-      this.log.push({ k: c.k, i: c.i, r: c.r, c: id });
+      this.log.push({ k: c.k, i: c.i, r: c.r, c: id, ...(c.k === "l" ? { f: c.f } : {}) });
       if (c.k === "b") {
         this.dealsTaken++;
         this.h.synth("card-deal", CARD_SND.deal);
@@ -301,7 +328,7 @@ export class CardRun<M extends CardMon> {
     const next = this.queue[0];
     if (next && this.h.canPick()) {
       this.queue.shift();
-      this.cur = { k: next.k, i: next.i, r: 0, cards: cardOffer(this.seed, next.k, next.i, 0, this.owned) };
+      this.cur = { k: next.k, i: next.i, r: 0, f: next.f, cards: cardOffer(this.seed, next.k, next.i, 0, this.owned, next.f) };
       this.emit();
       return;
     }
@@ -317,29 +344,32 @@ export class CardRun<M extends CardMon> {
     this.h.refresh();
     const after = this.h.maxHp();
     if (id === "health" && after > before) this.h.heal(after - before, true);
-    if (id === "coffee") this.h.heal(after * 0.4 * this.h.healMul(), true);
+    if (id === "coffee") this.h.heal(after * this.s.coffeeHeal * this.h.healMul(), true);
     this.rebuildOrbit();
     const def = CARDS[id];
     const p = this.h.player();
     const legend = def.rarity === "legend";
-    const color = legend ? 0xffd84a : def.rarity === "rare" ? 0x7ab8ff : 0xf2ead3;
+    const big = legend || def.rarity === "unique";
+    const color = RARITY_COLOR[def.rarity];
     this.h.ring(p.x, p.y, color, legend ? 52 : 34);
-    this.h.float(p.x, p.y - 26, def.name, legend ? "#ffd84a" : def.rarity === "rare" ? "#9ad0ff" : "#f2ead3", 12);
-    this.burst(p.x, p.y - 8, color, legend ? 22 : 12);
+    this.h.float(p.x, p.y - 26, def.name, `#${color.toString(16).padStart(6, "0")}`, 12);
+    this.burst(p.x, p.y - 8, color, legend ? 26 : big ? 18 : 12);
     this.h.synth(legend ? "card-legend" : "card-pick", legend ? CARD_SND.legend : CARD_SND.pick);
-    if (legend) this.h.shake(220, 0.006);
+    if (big) this.h.shake(legend ? 220 : 120, legend ? 0.006 : 0.003);
   }
 
   /** 능력치에 카드를 얹는다 (HuntScene이 기본 능력치로 부른다) */
   derive(base: Derived): Derived {
     const s = this.s;
+    const now = this.h.now();
+    const t = (key: string) => (this.temp.key === key && now < this.temp.until ? this.temp.v : 0) + (key === "aspd" && now < this.leaveUntil ? 0.5 : 0);
     return {
       ...base,
-      atk: base.atk * s.atkMul,
-      aspd: base.aspd * s.aspdMul,
+      atk: base.atk * s.atkMul * (1 + t("atk")),
+      aspd: base.aspd * s.aspdMul * (1 + t("aspd")),
       crit: base.crit + s.crit,
       maxHp: Math.max(1, Math.round(base.maxHp * s.hpMul * (1 - BOSS_DEAL_HP_COST) ** this.dealsTaken)),
-      move: base.move * s.moveMul,
+      move: base.move * s.moveMul * (1 + t("move")),
     };
   }
   /** 근접 닿는 거리 (직보) */
@@ -349,6 +379,30 @@ export class CardRun<M extends CardMon> {
   get blastMul(): number {
     return this.s.pierce && this.kind === "magic" ? 1.35 : 1;
   }
+  /** 11/15 이 적에게 주는 피해 배율: 퇴사 각(내 체력이 적을수록) · 성과급(우두머리·정예) */
+  dmgMul(m: M): number {
+    const s = this.s;
+    let k = 1;
+    if (s.resign > 0) k *= 1 + s.resign * Math.max(0, 1 - this.h.hp() / Math.max(1, this.h.maxHp()));
+    if (s.bossDmg > 0 && (m.boss || m.elite)) k *= 1 + s.bossDmg;
+    return k;
+  }
+
+  /** 11/15 받는 피해: 반차(층마다 첫 공격 0) · 사원증 목걸이 · 재택근무(서 있으면). 0이면 안 맞은 것 */
+  incoming(dmg: number, moving: boolean): number {
+    const s = this.s;
+    if (s.halfday && this.halfReady) {
+      this.halfReady = false;
+      const p = this.h.player();
+      this.h.float(p.x, p.y - 26, "반차 썼어요", "#f0d070", 10);
+      this.h.ring(p.x, p.y, 0xf0d070, 26);
+      this.h.synth("card-block", CARD_SND.block);
+      return 0;
+    }
+    const k = (1 - s.taken) * (moving ? 1 : 1 - s.stillTaken);
+    return k < 1 ? Math.max(1, Math.round(dmg * k)) : dmg;
+  }
+
   /** 참조 추가만큼 한 번 피해 */
   get hitMul(): number {
     return this.s.hitMul;
@@ -513,7 +567,7 @@ export class CardRun<M extends CardMon> {
 
   /** 원샷 결재: 일반 몬스터(우두머리·정예 빼고) 5% */
   oneshot(m: M): boolean {
-    if (!this.s.oneshot || m.boss || m.elite || Math.random() >= 0.05) return false;
+    if (!this.s.oneshot || m.boss || m.elite || Math.random() >= this.s.oneshotP) return false;
     const sz = this.h.size(m);
     this.h.float(m.x, m.y - sz - 6, "원샷 결재!", "#ffd84a", 11);
     this.burst(m.x, m.y - sz / 2, 0xffd84a, 8);
@@ -549,6 +603,8 @@ export class CardRun<M extends CardMon> {
       this.chainReady = false;
       this.chain(m);
     }
+    // 11/15 사내 정치: 맞은 적이 옆 적을 친다
+    if (s.politics > 0 && m.alive && Math.random() < s.politics) this.quarrel(m);
     if (s.toss && this.tossReady && this.kind !== "ranged") {
       this.tossReady = false;
       this.toss(m, s.toss);
@@ -581,9 +637,11 @@ export class CardRun<M extends CardMon> {
     const pts = [from.x, from.y - this.h.size(from) / 2];
     let cur: M = from;
     const victims: M[] = [];
-    for (let n = 0; n < 3; n++) {
+    const jumps = this.s.chainJumps;
+    const reach = jumps > 3 ? 95 : 78;
+    for (let n = 0; n < jumps; n++) {
       let best: M | null = null;
-      let bd = 78;
+      let bd = reach;
       for (const m of this.h.mons()) {
         if (!m.alive || m.hidden || seen.has(m)) continue;
         const d = Math.hypot(m.x - cur.x, m.y - cur.y);
@@ -601,7 +659,7 @@ export class CardRun<M extends CardMon> {
     if (!victims.length) return;
     this.bolts.push({ pts, until: this.h.now() + 140 });
     this.h.synth("card-zap", CARD_SND.zap);
-    victims.forEach((m, i) => this.h.later(25 * (i + 1), () => m.alive && this.h.strike(m, 0.45, i + 1, { sure: true, kb: 0.3 })));
+    victims.forEach((m, i) => this.h.later(25 * (i + 1), () => m.alive && this.h.strike(m, this.s.chainMult, i + 1, { sure: true, kb: 0.3 })));
   }
 
   /** 업무 토스 (근접·마법): 맞은 적에서 근처 적에게 서류가 날아간다 */
@@ -613,7 +671,7 @@ export class CardRun<M extends CardMon> {
       tex: CDT.plane,
       spin: 0,
       pierce: 0,
-      mult: 0.55,
+      mult: 0.55 * this.s.effMul,
       fall: 1,
       bounce: 0,
       toss: bounces - 1,
@@ -824,7 +882,7 @@ export class CardRun<M extends CardMon> {
         const st = this.mst(m);
         if (now < st.boardAt) continue;
         st.boardAt = now + 420;
-        this.h.strike(m, 0.5, 1, { sure: true, kb: 0.7 });
+        this.h.strike(m, 0.5 * this.s.effMul, 1, { sure: true, kb: 0.7 });
         this.h.synth("card-board", CARD_SND.board);
       }
     });
@@ -848,7 +906,7 @@ export class CardRun<M extends CardMon> {
         const st = this.mst(m);
         if (now < st.paperAt) continue;
         st.paperAt = now + 500;
-        this.h.strike(m, 0.2, 1, { sure: true, kb: 1.2 });
+        this.h.strike(m, 0.2 * this.s.effMul, 1, { sure: true, kb: 1.2 });
       }
     });
     for (const it of this.interns) {
@@ -863,7 +921,7 @@ export class CardRun<M extends CardMon> {
       it.next = now + 950;
       it.sprite.setFlipX(t.x < it.sprite.x);
       const ang = Math.atan2(t.y - this.h.size(t) * 0.45 - (it.sprite.y - 8), t.x - it.sprite.x);
-      const s = this.spawnShot(it.sprite.x, it.sprite.y - 8, ang, 230, 140, { tex: CDT.paper, spin: 0, pierce: 0, mult: 0.55, fall: 1, bounce: 0, toss: 0, basic: false, kb: 0.4, main: false });
+      const s = this.spawnShot(it.sprite.x, it.sprite.y - 8, ang, 230, 140, { tex: CDT.paper, spin: 0, pierce: 0, mult: 0.55 * this.s.effMul, fall: 1, bounce: 0, toss: 0, basic: false, kb: 0.4, main: false });
       if (s) s.home = t;
     }
   }
@@ -888,7 +946,7 @@ export class CardRun<M extends CardMon> {
             st.bonkAt = now + 500;
             this.puff(nx, ny - 4, 0xe84a4a, 1.2);
             this.h.float(m.x, m.y - this.h.size(m) - 4, "반려!", "#ff8a7a", 9);
-            this.h.strike(m, 0.5, 1, { sure: true, kb: 0 });
+            this.h.strike(m, 0.5 * this.s.effMul, 1, { sure: true, kb: 0 });
             m.kbx = m.kby = 0;
           }
         }
@@ -907,11 +965,11 @@ export class CardRun<M extends CardMon> {
       if (ice) ice.setPosition(m.x, m.y - this.h.size(m) / 2).setDepth(m.y + 1);
       if (x.burnUntil > now && now >= x.burnNext) {
         x.burnNext = now + 450;
-        this.h.dot(m, 0.16);
+        this.h.dot(m, 0.16 * this.s.effMul);
       }
       if (x.psn > 0 && x.psnUntil > now && now >= x.psnNext) {
         x.psnNext = now + 500;
-        this.h.dot(m, 0.05 * x.psn);
+        this.h.dot(m, 0.05 * x.psn * this.s.effMul);
       } else if (x.psnUntil <= now) x.psn = 0;
       // 연기·거품 (조금씩)
       if (now >= x.fxAt && m.alive && (x.burnUntil > now || x.psn > 0)) {
@@ -1013,6 +1071,7 @@ export class CardRun<M extends CardMon> {
   /** 매 프레임 (멈춤·히트스톱이 아닐 때) */
   update(dt: number): void {
     const now = this.h.now();
+    this.perFloor(now);
     this.updateShots(dt, now);
     if (this.boards.length || this.papers.length || this.interns.length) this.updateOrbit(dt, now);
     this.updateStatus(now);
@@ -1040,6 +1099,88 @@ export class CardRun<M extends CardMon> {
     this.h.synth("card-revive", CARD_SND.revive);
     this.h.shake(260, 0.006);
     return true;
+  }
+
+  // ── 11/15 등급 개편 카드 (회식 2차·사내 정치·법인카드·탕비실 간식·반차·믹스커피·연차 몰아 쓰기) ──
+
+  /** 층을 깰 때마다(반차·연차 다시, 탕비실 간식), 1초마다 SP, 체력이 바닥이면 연차, 혜택이 끝나면 능력치 다시 */
+  private perFloor(now: number): void {
+    const s = this.s;
+    const cleared = this.h.floorsCleared();
+    if (cleared > this.seenCleared) {
+      this.seenCleared = cleared;
+      this.halfReady = true;
+      this.leaveUsed = false;
+      if (s.floorHeal > 0 && this.h.hp() < this.h.maxHp()) this.h.heal(this.h.maxHp() * s.floorHeal * this.h.healMul(), true);
+    }
+    if (s.spRegen > 0 && now >= this.spAt) {
+      this.spAt = now + 1000;
+      this.h.addSp(s.spRegen);
+    }
+    if (s.leave && !this.leaveUsed && this.h.hp() > 0 && this.h.hp() < this.h.maxHp() * 0.3) {
+      this.leaveUsed = true;
+      this.leaveUntil = now + 5000;
+      this.tempOn = true;
+      this.h.invuln(3000);
+      this.h.refresh();
+      const p = this.h.player();
+      this.h.ring(p.x, p.y, 0x7ad0f0, 46);
+      this.burst(p.x, p.y - 10, 0x7ad0f0, 18);
+      this.h.flash("연차 몰아 쓰기! 3초 동안 무적이에요", 1800);
+      this.h.synth("card-revive", CARD_SND.revive);
+    }
+    if (this.tempOn && now >= this.temp.until && now >= this.leaveUntil) {
+      this.tempOn = false;
+      this.h.refresh();
+    }
+  }
+
+  /** 회식 2차: 잡은 자리에서 펑 (둘레 적, 터져 죽은 적도 또 터진다) */
+  private explode(m: M): void {
+    const x = m.x;
+    const y = m.y;
+    const r = 28;
+    this.h.later(60, () => {
+      this.burst(x, y - 6, 0xff8a3a, 10);
+      this.h.ring(x, y, 0xff8a3a, r);
+      this.h.synth("card-pop", CARD_SND.pop);
+      let k = 0;
+      for (const o of [...this.h.mons()])
+        if (o.alive && !o.hidden && o !== m && Math.hypot(o.x - x, o.y - y) < r + this.h.size(o) / 2) this.h.strike(o, this.s.explode, ++k, { sure: true, kb: 1.2 });
+    });
+  }
+
+  /** 법인카드: 5초 혜택 하나 (공격력·공격 속도·이동 속도) */
+  private perk(): void {
+    const now = this.h.now();
+    const pk = PERKS[Math.floor(Math.random() * PERKS.length)];
+    const v = pk.v * this.s.effMul;
+    this.temp = { key: pk.key, v, until: now + 5000 };
+    this.tempOn = true;
+    this.h.refresh();
+    const p = this.h.player();
+    this.h.float(p.x, p.y - 30, `법인카드! ${pk.label} +${Math.round(v * 100)}%`, "#e8c86a", 10);
+    this.h.synth("card-pick", CARD_SND.pick);
+  }
+
+  /** 사내 정치: 맞은 적이 옆 적에게 화풀이 */
+  private quarrel(m: M): void {
+    const t = this.nearestFrom(m.x, m.y, 60, new Set([m]));
+    if (!t) return;
+    this.h.float(m.x, m.y - this.h.size(m) - 6, "!?", "#d8a0ff", 10);
+    this.h.later(120, () => {
+      if (!t.alive) return;
+      this.puff(t.x, t.y - this.h.size(t) / 2, 0xb86ad8, 1.3);
+      this.h.strike(t, 0.6 * this.s.effMul, 1, { sure: true, kb: 1 });
+    });
+  }
+
+  /** 지금 카드 수치 (HUD 능력치 판) · 남은 반차·부활·연차 */
+  get stats(): CardStats {
+    return this.s;
+  }
+  get spare(): { revive: boolean; halfday: boolean; leave: boolean } {
+    return { revive: this.s.revive && !this.reviveUsed, halfday: this.s.halfday && this.halfReady, leave: this.s.leave && !this.leaveUsed };
   }
 
   // ── 화면·결과 ──

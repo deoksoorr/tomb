@@ -55,7 +55,7 @@ export async function gearAction(acct: string, a: z.output<typeof GearActionSche
   let gear: GearActionResponse["gear"];
   switch (a.type) {
     case "enhance": {
-      const t: EnhTarget | null = a.sg !== undefined ? { sg: a.sg } : a.shop ? { shop: a.shop } : null;
+      const t: EnhTarget | null = a.sg !== undefined ? { sg: a.sg } : a.piece !== undefined ? { piece: a.piece } : a.shop ? { shop: a.shop } : null;
       if (!t) throw new HttpError(400, "INVALID_INPUT", "강화할 장비를 골라 주세요.");
       const r = await http(
         store.updatePaid(

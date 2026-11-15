@@ -15,7 +15,7 @@ import {
   type EnhanceResult,
   type EnhTarget,
 } from "@/lib/rpg/enhance";
-import { decodeSg, optText, SG_LEGENDS, sgDef, sgUid, type SgItem, type SgOpt } from "@/lib/rpg/setGear";
+import { decodeSg, encodeSg, encodeShopPiece, enhSplit, optText, SG_LEGENDS, sgDef, sgUid, SHOP_ENH_MAX, shopPieceOf, type SgItem, type SgOpt } from "@/lib/rpg/setGear";
 import type { RpgView } from "@/lib/rpg/types";
 import { errorMessage } from "@/lib/api";
 import { josa } from "@/lib/rpg/skillText";
@@ -47,6 +47,9 @@ function targetInfo(
   t: EnhTarget,
 ): {
   def: GearDef;
+  /** 지금 장착 칸 id 꼴 코드 (능력치 계산용) · 한 단계 위 코드 */
+  code: string;
+  next: string | null;
   e: number;
   f: number;
   it: SgItem | null;
@@ -56,19 +59,26 @@ function targetInfo(
   if ("sg" in t) {
     const code = (c.sg ?? []).find((x) => sgUid(x) === t.sg);
     const it = code ? decodeSg(code) : null;
-    return it ? { def: sgDef(it, code), e: it.e, f: it.f, it, color: sgGrade(it).color } : null;
+    return it ? { def: sgDef(it, code), code: code!, next: it.e < 15 ? encodeSg({ ...it, e: it.e + 1 }) : null, e: it.e, f: it.f, it, color: sgGrade(it).color } : null;
+  }
+  if ("piece" in t) {
+    const code = (c.si ?? []).find((x) => shopPieceOf(x)?.u === t.piece);
+    const p = code ? shopPieceOf(code) : null;
+    const def = code ? gearById(code) : undefined;
+    return p && def
+      ? { def, code: code!, next: p.e < SHOP_ENH_MAX ? encodeShopPiece({ ...p, e: p.e + 1 }) : null, e: p.e, f: p.f, it: null, color: gearGrade(def).color }
+      : null;
   }
   const def = gearById(t.shop);
-  return def
-    ? {
-        def,
-        e: c.enh?.[t.shop] ?? 0,
-        f: c.enhF?.[t.shop] ?? 0,
-        it: null,
-        color: gearGrade(def).color,
-      }
-    : null;
+  return def ? { def, code: t.shop, next: encodeShopPiece({ id: t.shop, e: 1, u: 1, f: 0 }), e: 0, f: 0, it: null, color: gearGrade(def).color } : null;
 }
+
+/** 능력치 한 줄씩: 강화 전 값 (+강화 몫) */
+function statRows(code: string): { k: string; label: string; base: number; plus: number }[] {
+  return enhSplit(code, gearById).map(([k, base, plus]) => ({ k, label: STAT_NAMES[k] ?? k, base, plus }));
+}
+const STAT_NAMES: Record<string, string> = { atk: "공격력", def: "방어", hp: "체력", sp: "SP", str: "STR", agi: "AGI", vit: "VIT", int: "INT", dex: "DEX", luk: "LUK", aspd: "공속", crit: "치명", hit: "명중", flee: "회피", move: "이속" };
+const num = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(2));
 
 const CONFETTI = Array.from({ length: 18 }, (_, i) => {
   const a = (i / 18) * Math.PI * 2;
@@ -83,7 +93,7 @@ const CONFETTI = Array.from({ length: 18 }, (_, i) => {
 
 export default function EnhanceDialog({
   view,
-  target,
+  target: target0,
   tab: tab0 = "enhance",
   onClose,
   onView,
@@ -94,7 +104,11 @@ export default function EnhanceDialog({
   onClose: () => void;
   onView: (v: RpgView) => void;
 }) {
-  const [tab, setTab] = useState<EnhanceTab>("sg" in target ? tab0 : "enhance");
+  // 11/15 묶음 상점 장비는 처음 강화하면 한 개가 떼어진다 → 그 뒤로는 그 한 개(번호)를 이어서 강화
+  const [target, setTarget] = useState<EnhTarget>(target0);
+  const [tab, setTab] = useState<EnhanceTab>("sg" in target0 ? tab0 : "enhance");
+  /** 결과 직전 능력치 (숫자가 오르내리는 연출용) */
+  const [before, setBefore] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [shown, setShown] = useState<Shown | null>(null);
   const [fx, setFx] = useState(0);
@@ -117,7 +131,7 @@ export default function EnhanceDialog({
 
   const info = targetInfo(view, target);
   if (!info) return null;
-  const { def, e: lv, f, it, color } = info;
+  const { def, e: lv, f, it, color, code, next } = info;
   const m = { doc: 0, seal: 0, prot: 0, ...view.character.mats };
   const need = enhanceNeed(target, lv);
   const rate = need ? enhanceRate(need.target, f) : 0;
@@ -138,9 +152,10 @@ export default function EnhanceDialog({
     setBusy(true);
     setPhase("charge");
     playEnhance("charge", need.target, ms);
+    setBefore(code);
     const req = rpgApi.gear({
       type: "enhance",
-      ...("sg" in target ? { sg: target.sg } : { shop: target.shop }),
+      ...("sg" in target ? { sg: target.sg } : "piece" in target ? { piece: target.piece } : { shop: target.shop }),
       protect: useProt,
       cost: need.cost,
     });
@@ -151,6 +166,7 @@ export default function EnhanceDialog({
       const r = res.gear?.enhance;
       onView(res);
       if (!r) throw new Error("강화 결과를 받지 못했어요.");
+      if (r.piece !== undefined && !("piece" in target)) setTarget({ piece: r.piece });
       const kind: Shown["kind"] = r.ok ? "ok" : r.saved ? "saved" : r.dropped ? "drop" : "fail";
       setShown({ r, kind });
       setFx((x) => x + 1);
@@ -286,6 +302,23 @@ export default function EnhanceDialog({
                 {resultLine(shown)}
               </p>
             )}
+            {shown && phase === "show" && before && shown.r.from !== shown.r.to && (
+              <ul key={`t${fx}`} className={g.statRows} aria-label="바뀐 능력치">
+                {statRows(code).map((r1, i) => {
+                  const r0 = statRows(before)[i];
+                  const d = Math.round((r1.plus - (r0?.plus ?? 0)) * 100) / 100;
+                  return (
+                    <li key={r1.k}>
+                      <span>{r1.label}</span>
+                      <b>
+                        {num(r1.base)} <span className={d > 0 ? g.tickUp : d < 0 ? g.tickDown : undefined}>(+{num(r1.plus)})</span>
+                        <small className={g.note}> {d > 0 ? `▲ ${num(d)}` : d < 0 ? `▼ ${num(-d)}` : "그대로"}</small>
+                      </b>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
 
             {need ? (
               <>
@@ -318,9 +351,22 @@ export default function EnhanceDialog({
                     </span>
                   )}
                 </div>
-                <p className={g.note}>
-                  {risky ? `실패하면 +${lv - 1}로 내려가요. 장비가 깨지지는 않아요.` : "실패해도 내려가지 않아요."} 강화 한 번에 기본 능력치 +5%예요.
-                </p>
+                {next && (
+                  <ul className={g.statRows} aria-label="다음 강화 능력치">
+                    {statRows(code).map((r0, i) => {
+                      const r1 = statRows(next)[i];
+                      return (
+                        <li key={r0.k}>
+                          <span>{r0.label}</span>
+                          <b>
+                            {num(r0.base)} (+{num(r0.plus)}) → <span className={g.up}>{num(r1?.base ?? r0.base)} (+{num(r1?.plus ?? r0.plus)})</span>
+                          </b>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {risky && <p className={g.note}>실패하면 한 단계 내려가요.</p>}
                 {risky && (
                   <label className={g.toggle}>
                     <input

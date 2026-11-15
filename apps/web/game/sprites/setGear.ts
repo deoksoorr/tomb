@@ -105,7 +105,7 @@ const SILVER = { c: 0xb8c2d0, hi: 0xf0f6ff, lo: 0x6e7888 };
 const GOLD = { c: 0xf0c040, hi: 0xfff2a8, lo: 0xa8741c };
 
 /** 직급까지 반영한 색 묶음 (그림 함수가 받는다) */
-type T = SetPal & {
+export type SetTierPal = SetPal & {
   g: SetGearGrade;
   /** 테두리·띠: 사원 = 주재료 그늘, 대리 = 세트 포인트, 과장 = 은, 임원 = 금 */
   t: Color; tHi: Color; tLo: Color;
@@ -114,6 +114,8 @@ type T = SetPal & {
   /** 켜지는 빛(화면·렌즈): 사원 = 꺼짐, 대리 = 밝은 재료, 과장·임원 = 세트 빛 */
   L: Color; LHi: Color;
 };
+
+type T = SetTierPal;
 
 function gray(c: Color): Color {
   const l = Math.round(((c >> 16) & 255) * 0.3 + ((c >> 8) & 255) * 0.59 + (c & 255) * 0.11);
@@ -1164,3 +1166,7 @@ export function huntDollGrid(o: HuntDollOpts): Grid {
   if (topT) finishFx(out, topT, sparks, o.frame ?? 0, gearMask);
   return out;
 }
+
+/** 11/15 사냥 중 입은 모습 (game/sprites/setGearWear): 직급까지 반영한 세트 색 묶음 · 금빛 */
+export const setWearPal = (set: SetGearSet, g: SetGearGrade): SetTierPal => tierPal(set, g);
+export const SET_GOLD = GOLD;

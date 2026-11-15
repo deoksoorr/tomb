@@ -82,14 +82,14 @@ export const CharacterActionSchema = z.discriminatedUnion("type", [
 export const ShopActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("buy"), itemId, qty: z.number().int().min(1).max(20).default(1) }),
   // count: 한 번에 여러 개 되팔기 (없으면 1개, 예전 요청 그대로)
-  z.object({ type: z.literal("sell"), itemId, count: z.number().int().min(1).max(POTION_MAX_STACK).default(1) }),
+  z.object({ type: z.literal("sell"), itemId, count: z.number().int().min(1).max(POTION_MAX_STACK).default(1), piece: z.number().int().min(1).max(1e9).optional() }),
 ]);
 
 // 11/15 세트 장비·강화 (lib/rpg/gearService). 세트 장비는 가방 번호(uid)로만 가리킨다 — 코드·능력치는 서버 것만 쓴다
 const sgUidIn = z.number().int().min(1).max(1e9);
 export const GearActionSchema = z.discriminatedUnion("type", [
   // 강화: sg(세트 장비 번호) 또는 shop(상점 장비 id) 하나. cost = 화면에 보인 포인트 (서버 비용과 다르면 거절, 돈을 받지 않는다)
-  z.object({ type: z.literal("enhance"), sg: sgUidIn.optional(), shop: itemId.optional(), protect: z.boolean().default(false), cost: z.number().int().min(0).max(100_000) }),
+  z.object({ type: z.literal("enhance"), sg: sgUidIn.optional(), shop: itemId.optional(), piece: sgUidIn.optional(), protect: z.boolean().default(false), cost: z.number().int().min(0).max(100_000) }),
   // 옵션 다시 굴리기: lock = 그대로 둘 옵션 하나 (전설 옵션은 "L")
   z.object({ type: z.literal("reroll"), uid: sgUidIn, lock: z.enum(["a", "c", "d", "s", "b", "h", "r", "p", "m", "k", "L"]).nullable().default(null), cost: z.number().int().min(0).max(100_000) }),
   z.object({ type: z.literal("exchange"), uids: z.array(sgUidIn).min(3).max(5), set: z.number().int().min(0).max(3), piece: z.number().int().min(0).max(4) }),

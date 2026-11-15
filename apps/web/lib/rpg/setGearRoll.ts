@@ -168,15 +168,18 @@ export function baselineEquip(equip: Partial<Record<GearSlot, string | null>>): 
   return out;
 }
 
+/** 장비 힘 배율 상한 (11/15 강화 +15 = ×3.00으로 세져서 20 → 40) */
+export const GEAR_POWER_MAX = 40;
+
 const dps = (d: Derived) => d.atk * d.aspd * (1 + d.crit / 200) * d.skillPower;
 
 /**
  * 장비 힘 배율 (판 시작 때 서버가 저장된 장착 칸으로 재서 티켓에 싣는다 — 화면 말은 안 믿는다):
- * 지금 장비의 초당 피해 ÷ 세트 장비를 상점 최고 장비로, 강화를 뺀 장비의 초당 피해 × 옵션·세트 효과가 가장 잘 터질 때 배율. 1..20
+ * 지금 장비의 초당 피해 ÷ 세트 장비를 상점 최고 장비로, 강화를 뺀 장비의 초당 피해 × 옵션·세트 효과가 가장 잘 터질 때 배율. 1..GEAR_POWER_MAX
  */
 export function gearPower(level: number, stats: Stats, equip: Partial<Record<GearSlot, string | null>>): number {
   const now = derive(level, stats, equip);
   const base = derive(level, stats, baselineEquip(equip));
   const k = (dps(now) / Math.max(1e-6, dps(base))) * sgCombatPower(equip);
-  return Math.min(20, Math.max(1, Math.ceil(k * 100) / 100));
+  return Math.min(GEAR_POWER_MAX, Math.max(1, Math.ceil(k * 100) / 100));
 }

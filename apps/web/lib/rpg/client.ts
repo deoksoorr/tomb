@@ -23,7 +23,7 @@ export type ShopResponse = RpgView & { sold?: SoldInfo };
 
 /** 11/15 세트 장비·강화 (app/api/rpg/gear) */
 export type GearAction =
-  | { type: "enhance"; sg?: number; shop?: string; protect: boolean; cost: number }
+  | { type: "enhance"; sg?: number; shop?: string; piece?: number; protect: boolean; cost: number }
   | { type: "reroll"; uid: number; lock: string | null; cost: number }
   | { type: "exchange"; uids: number[]; set: number; piece: number }
   | { type: "disassemble"; uids: number[] }
@@ -34,6 +34,8 @@ export const rpgApi = {
   character: (a: CharacterAction) => request<RpgView>("/api/rpg/character", post(a)),
   buy: (itemId: string, qty = 1) => request<ShopResponse>("/api/rpg/shop", post({ type: "buy", itemId, qty })),
   sell: (itemId: string, count = 1) => request<ShopResponse>("/api/rpg/shop", post({ type: "sell", itemId, count })),
+  /** 11/15 강화한 장비 한 개 되팔기 (번호) */
+  sellPiece: (itemId: string, piece: number) => request<ShopResponse>("/api/rpg/shop", post({ type: "sell", itemId, piece })),
   // planVer: 별자리 잇기 화면이 쓰는 계획 판 번호 (서버가 티켓에 실어 그 판으로 검사한다)
   // tower: 11/15 야근 빌딩 시작 층 (지옥 사냥만 — 사냥터는 서버가 층으로 정한다)
   start: (game: GameKind, difficulty: Difficulty, zone?: ZoneId, planVer?: number, tower?: number) =>

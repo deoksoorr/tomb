@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GEAR, gearById, type GearKind, type GearSlot } from "./catalog";
-import { normalize } from "./character";
+import { normalize, removePieceForSale, sellValue } from "./character";
 import { disassemble, DISASSEMBLE, enhance, enhanceRate, ENHANCE_TABLE, equipSg, exchange, grantSgDrops, reroll, rerollCost, type EnhTarget } from "./enhance";
 import { baseStats, derive, seeded } from "./formulas";
 import {
@@ -20,6 +20,9 @@ import {
   sgDef,
   sgStatic,
   syncEquip,
+  enhMul,
+  shopPieceOf,
+  unenhanced,
   type SgGrade,
   type SgItem,
 } from "./setGear";
@@ -83,8 +86,12 @@ describe("세트 장비 기본 능력치·코드", () => {
     expect(SG_GRADE_MULT).toEqual([1.15, 1.3, 1.5, 1.75]);
     expect(sgDef(item({ g: 3 })).bonus.atk).toBe(207);
     expect(sgDef(item({ g: 0 })).bonus.atk).toBe(136);
-    // 강화 한 번 +5% (옵션은 그대로), +15 = ×1.75
-    expect(sgDef(item({ g: 0, e: 15 })).bonus.atk).toBe(Math.round(118 * 1.15 * 1.75));
+    // 11/15 강화 배율: +1~+5 한 단계 8%p, +6~+10 12%p, +11~+15 20%p → +5 ×1.40 · +10 ×2.00 · +15 ×3.00 (옵션은 그대로)
+    expect([0, 1, 5, 6, 10, 11, 15].map(enhMul)).toEqual([1, 1.08, 1.4, 1.52, 2, 2.2, 3]);
+    expect(sgDef(item({ g: 0, e: 15 })).bonus.atk).toBe(136 * 3);
+    expect(sgDef(item({ g: 0, e: 10 })).bonus.atk).toBe(136 * 2);
+    // 작은 능력치도 한 단계마다 오른다 (올림): 치명 5 → +1에 6
+    expect(sgDef(item({ g: 0, e: 1 })).bonus.crit).toBe(6);
     expect(sgDef(item()).reqLevel).toBe(50);
     expect(sgDef(item({ s: 2 })).name).toBe("끝없는 PPT 마법서");
     expect(sgDef(item({ s: 2 })).style).toBe("magic");
@@ -108,7 +115,8 @@ describe("세트 장비 기본 능력치·코드", () => {
       e: 0,
     });
     // 상점 장비 강화 표시
-    expect(gearById("w_stamp+3")?.bonus.atk).toBe(Math.round(118 * 1.15));
+    expect(gearById("w_stamp+3")?.bonus.atk).toBe(118 + Math.ceil(118 * 0.24));
+    expect(gearById("w_stamp+5@a.0")?.bonus.atk).toBe(118 + Math.ceil(118 * 0.4 - 1e-9));
     expect(gearById("w_stamp+6")).toBeUndefined();
   });
 });
@@ -366,7 +374,10 @@ describe("세트 효과·옵션 (능력치·싸움)", () => {
       armor: encodeSg(item({ p: 1, u: 2, o: [] })),
     };
     expect(gearPower(50, st, strong)).toBeGreaterThan(2);
-    expect(gearPower(50, st, { ...empty, weapon: "w_stamp+5" })).toBeGreaterThan(1.1);
+    expect(gearPower(50, st, { ...empty, weapon: "w_stamp+5@c.0" })).toBeGreaterThan(1.1);
+    // +15 임원 전부: 상한(40) 안
+    const all15 = { weapon: encodeSg(item({ e: 15, o: [["a", 8], ["s", 8], ["d", 20]], L: 2 })), armor: encodeSg(item({ p: 1, u: 2, e: 15, o: [] })), head: encodeSg(item({ p: 2, u: 3, e: 15, o: [] })), acc1: encodeSg(item({ p: 3, u: 4, e: 15, o: [["a", 8]] })), acc2: encodeSg(item({ p: 4, u: 5, e: 15, o: [["a", 8]] })) };
+    expect(gearPower(50, st, all15)).toBeLessThan(40);
   });
 });
 
@@ -383,18 +394,10 @@ describe("강화 (고정 난수)", () => {
   it("표대로: 확률·포인트·재료, 성공하면 +1, 연속 실패마다 +5%p (성공하면 처음부터)", () => {
     expect(ENHANCE_TABLE.slice(1).map((r) => r.cost)).toEqual([40, 60, 80, 120, 160, 200, 260, 320, 400, 480, 560, 640, 720, 800, 880]);
     expect(ENHANCE_TABLE[1]).toEqual({ rate: 1, cost: 40, doc: 0, seal: 0 });
-    expect(ENHANCE_TABLE[6]).toEqual({
-      rate: 0.75,
-      cost: 200,
-      doc: 5,
-      seal: 0,
-    });
-    expect(ENHANCE_TABLE[15]).toEqual({
-      rate: 0.28,
-      cost: 880,
-      doc: 20,
-      seal: 3,
-    });
+    expect(ENHANCE_TABLE.slice(1).map((r) => r.doc)).toEqual([0, 0, 0, 0, 0, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(ENHANCE_TABLE.slice(1).map((r) => r.seal)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2]);
+    expect(ENHANCE_TABLE[6]).toEqual({ rate: 0.75, cost: 200, doc: 2, seal: 0 });
+    expect(ENHANCE_TABLE[15]).toEqual({ rate: 0.28, cost: 880, doc: 10, seal: 2 });
     expect(enhanceRate(15, 2)).toBeCloseTo(0.38);
     expect(enhanceRate(2, 9)).toBe(1);
     const s = withSg(item({ e: 5 }));
@@ -402,7 +405,7 @@ describe("강화 (고정 난수)", () => {
     expect(ok.cost).toBe(200);
     expect(ok.result).toMatchObject({ ok: true, from: 5, to: 6 });
     expect(decodeSg(ok.state.sg![0])!.e).toBe(6);
-    expect(ok.state.mats!.doc).toBe(999 - 5);
+    expect(ok.state.mats!.doc).toBe(999 - 2);
     // 실패 (75%보다 큼) → 그대로, 연속 실패 1
     const no = enhance(s, sgT(1), false, fixed(0.9));
     expect(no.result).toMatchObject({
@@ -444,19 +447,71 @@ describe("강화 (고정 난수)", () => {
     expect(again.result).toMatchObject({ reached15: false, announce: false });
   });
 
-  it("상점 장비는 +5까지, 장착 칸에 강화가 붙는다", () => {
-    let s = char({
-      inv: { w_stamp: 1 },
-      equip: { ...empty, weapon: "w_stamp" },
-    });
-    for (let i = 0; i < 5; i++) s = enhance(s, { shop: "w_stamp" }, false, fixed(0)).state;
-    expect(s.enh!.w_stamp).toBe(5);
-    expect(s.equip.weapon).toBe("w_stamp+5");
-    expect(() => enhance(s, { shop: "w_stamp" }, false, fixed(0))).toThrow(/\+5/);
-    // 강화는 장착 칸·능력치에 반영된다
-    expect(derive(50, baseStats(), s.equip).atk).toBeGreaterThan(derive(50, baseStats(), { ...empty, weapon: "w_stamp" }).atk);
+  it("상점 장비는 한 개씩 따로 +5까지: 묶음에서 떼어 낸 한 개만, 낀 칸은 그 한 개를 가리킨다", () => {
+    let s = char({ inv: { w_stamp: 1 }, equip: { ...empty, weapon: "w_stamp" } });
+    const first = enhance(s, { shop: "w_stamp" }, false, fixed(0));
+    s = first.state;
+    const u = first.result.piece!;
+    for (let i = 0; i < 4; i++) s = enhance(s, { piece: u }, false, fixed(0)).state;
+    expect(s.inv.w_stamp).toBeUndefined();
+    expect(s.si).toEqual([`w_stamp+5@${u.toString(36)}.0`]);
+    expect(s.equip.weapon).toBe(s.si![0]);
+    expect(() => enhance(s, { piece: u }, false, fixed(0))).toThrow(/\+5/);
     // 다시 읽어도 그대로 (normalize가 장착 칸을 원본에 맞춘다)
-    expect(normalize(JSON.parse(JSON.stringify(s))).equip.weapon).toBe("w_stamp+5");
+    expect(normalize(JSON.parse(JSON.stringify(s))).equip.weapon).toBe(s.si![0]);
+  });
+
+  it("같은 장신구 두 개를 끼고 하나만 강화하면 그것만 오른다", () => {
+    let s = char({ inv: { c_bonus: 2 }, equip: { ...empty, acc1: "c_bonus", acc2: "c_bonus" } });
+    s = enhance(s, { shop: "c_bonus" }, false, fixed(0)).state;
+    expect(s.inv.c_bonus).toBe(1);
+    expect(shopPieceOf(s.equip.acc1)?.e).toBe(1);
+    expect(s.equip.acc2).toBe("c_bonus");
+    const d = derive(50, baseStats(), s.equip);
+    const plain = derive(50, baseStats(), { ...empty, acc1: "c_bonus", acc2: "c_bonus" });
+    expect(d.crit).toBeGreaterThan(plain.crit);
+    // 두 번째도 따로
+    s = enhance(s, { shop: "c_bonus" }, false, fixed(0)).state;
+    expect(s.inv.c_bonus).toBeUndefined();
+    expect(s.si).toHaveLength(2);
+    expect(shopPieceOf(s.equip.acc2)?.e).toBe(1);
+    expect(shopPieceOf(s.equip.acc1)!.u).not.toBe(shopPieceOf(s.equip.acc2)!.u);
+  });
+
+  it("예전 저장값(장비 id마다 붙던 강화)은 한 개에만 옮긴다", () => {
+    const s = normalize({ level: 50, inv: { c_bonus: 2 }, enh: { c_bonus: 3 }, enhF: { c_bonus: 1 }, equip: { ...empty, acc1: "c_bonus+3", acc2: "c_bonus+3" } });
+    expect(s.inv.c_bonus).toBe(1);
+    expect(s.si).toHaveLength(1);
+    expect(shopPieceOf(s.si![0])).toMatchObject({ id: "c_bonus", e: 3, f: 1 });
+    expect(s.equip.acc1).toBe(s.si![0]);
+    expect(s.equip.acc2).toBe("c_bonus");
+    expect(s.enh).toBeUndefined();
+    // 두 번 읽어도 같다
+    expect(normalize(JSON.parse(JSON.stringify(s)))).toMatchObject({ si: s.si, inv: { c_bonus: 1 } });
+  });
+
+  it("강화한 한 개 팔기: 그 한 개만 빠지고, 낀 것은 못 판다", () => {
+    let s = char({ inv: { c_bonus: 2 }, bought: { c_bonus: 2 }, equip: { ...empty } });
+    s = enhance(s, { shop: "c_bonus" }, false, fixed(0)).state;
+    const u = shopPieceOf(s.si![0])!.u;
+    const r = removePieceForSale(s, u);
+    expect(r.state.si).toEqual([]);
+    expect(r.state.inv.c_bonus).toBe(1);
+    expect(r.bought).toBe(1);
+    expect(r.unit).toBe(sellValue(gearById("c_bonus")!.price));
+    expect(() => removePieceForSale(equipSg(s, "acc1", u), u)).toThrow(/장착 중/);
+  });
+
+  it("강화가 능력치에 그대로 들어간다 (+5 vs +0: 공격력·방어)", () => {
+    const st = baseStats();
+    const w0 = derive(50, st, { ...empty, weapon: encodeSg(item({ e: 0, o: [] })) });
+    const w5 = derive(50, st, { ...empty, weapon: encodeSg(item({ e: 5, o: [] })) });
+    // 무기 공격력 +83 (207 × 0.4 올림) + STR 7 → 10 몫
+    expect(w5.atk - w0.atk).toBe(Math.ceil(207 * 0.4) + 3 * 3);
+    const a0 = derive(50, st, { ...empty, armor: "a_hazmat" });
+    const a5 = derive(50, st, { ...empty, armor: "a_hazmat+5@b.0" });
+    expect(a5.def).toBeGreaterThan(a0.def);
+    expect(unenhanced({ weapon: encodeSg(item({ e: 9 })), armor: "a_hazmat+5@b.0" })).toEqual({ weapon: encodeSg(item({ e: 0 })), armor: "a_hazmat" });
   });
 
   it("10만 번 모의: +15 평균 약 93번 시도 (기획 표와 같은 규칙)", () => {
@@ -477,7 +532,7 @@ describe("강화 (고정 난수)", () => {
 });
 
 describe("옵션 굴리기·바꾸기·분해", () => {
-  it("비용 150 → 두 배씩 → 2,400에서 멈춤 + 결재 서류 5, 고정하면 인감 도장 2", () => {
+  it("비용 150 → 두 배씩 → 2,400에서 멈춤 + 결재 서류 3, 고정하면 인감 도장 2", () => {
     expect([0, 1, 2, 3, 4, 5, 9].map(rerollCost)).toEqual([150, 300, 600, 1200, 2400, 2400, 2400]);
     const s = char({
       sg: [encodeSg(item({ L: 3 }))],
@@ -488,11 +543,11 @@ describe("옵션 굴리기·바꾸기·분해", () => {
     expect(it.o.find(([k]) => k === "c")).toEqual(["c", 5]);
     expect(it.rr).toBe(1);
     expect(r.cost).toBe(150);
-    expect(r.state.mats).toMatchObject({ doc: 5, seal: 0 });
+    expect(r.state.mats).toMatchObject({ doc: 7, seal: 0 });
     // 전설 고정
     const L = reroll(s, 1, "L", seeded(4));
     expect(decodeSg(L.state.sg![0])!.L).toBe(3);
-    expect(() => reroll(char({ sg: [encodeSg(item())], mats: { doc: 4, seal: 0, prot: 0 } }), 1, null, seeded(1))).toThrow(/결재 서류/);
+    expect(() => reroll(char({ sg: [encodeSg(item())], mats: { doc: 2, seal: 0, prot: 0 } }), 1, null, seeded(1))).toThrow(/결재 서류/);
   });
 
   it("바꾸기: 같은 직급 3개(무기 5개) → 고른 세트·부위, 장착 중인 것은 못 낸다", () => {
@@ -570,7 +625,7 @@ describe("옵션 굴리기·바꾸기·분해", () => {
     expect(s.equip.acc1).toBeNull();
     expect(equippedSg(s.equip)).toHaveLength(4);
     // 가방에서 사라진 장비는 장착 칸에서도 빠진다
-    expect(syncEquip(s.equip, codes.slice(1), {}).weapon).toBeNull();
+    expect(syncEquip(s.equip, codes.slice(1), []).weapon).toBeNull();
     // 코드를 조작한 장착 칸은 가방 것으로 되돌린다
     const forged = { ...s.equip, weapon: encodeSg(item({ u: 1, e: 15 })) };
     expect(normalize({ ...s, equip: forged }).equip.weapon).toBe(codes[0]);

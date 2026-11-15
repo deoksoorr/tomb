@@ -30,7 +30,7 @@ export type TicketClaims = {
   tw?: number;
   /** 11/15 초월 판 구간 (레벨 50 지옥 판만). 서버가 판 시작 때 그날 판 수로 정했다 — 결과에서 클라이언트 말을 믿지 않는다 */
   tt?: RunTier;
-  /** 11/15 장비 힘 배율 (세트 장비·강화·옵션 — 서버가 저장된 장착 칸으로 쟀다, 1..20). 처치 속도 상한에 곱한다 */
+  /** 11/15 장비 힘 배율 (세트 장비·강화·옵션 — 서버가 저장된 장착 칸으로 쟀다, 1..40). 처치 속도 상한에 곱한다 */
   gp?: number;
 };
 
@@ -75,7 +75,7 @@ export async function verifyTicket(secret: string, token: string): Promise<Ticke
       (c.td === undefined || okDrops(c.td)) &&
       (c.tw === undefined || (isCheckpoint(c.tw) && c.tw <= 10_000 && c.g === "hunt" && c.d === "hell" && c.tt === undefined)) &&
       (c.tt === undefined || Object.hasOwn(RUN_TIERS, c.tt)) &&
-      (c.gp === undefined || (typeof c.gp === "number" && c.gp >= 1 && c.gp <= 20));
+      (c.gp === undefined || (typeof c.gp === "number" && c.gp >= 1 && c.gp <= 40));
     return ok ? c : null;
   } catch {
     return null;

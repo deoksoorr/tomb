@@ -546,3 +546,60 @@
   color: var(--bone);
   box-shadow: 0 0 0 2px var(--candle);
 }
+
+/* 강화로 더해진 몫 "(+136)" */
+.enhPart {
+  color: #8cc8ff;
+  font-family: var(--font-small);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.statRows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 2px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.statRows li {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.statRows li > span {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.statRows b {
+  white-space: nowrap;
+  color: var(--bone);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.tickUp {
+  color: #ffd76a;
+  animation: tick 0.6s ease-out;
+}
+
+.tickDown {
+  color: #e0806a;
+  animation: tick 0.6s ease-out;
+}
+
+@keyframes tick {
+  0% {
+    transform: translateY(-6px) scale(1.25);
+    opacity: 0.3;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}

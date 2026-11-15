@@ -85,9 +85,9 @@ describe("bagEntries", () => {
   const sg = (u: number, s: number, p: number, g: 0 | 1 | 2 | 3, e = 0) => encodeSg({ s, p, g, u, e, o: [], L: 0, rr: 0, f: 0 });
   const c = {
     equip: { ...empty, weapon: sg(3, 0, 0, 1), acc1: "c_bonus" },
-    inv: { w_ruler: 1, w_stamp: 1, c_bonus: 2, a_hazmat: 1 },
+    inv: { w_ruler: 1, c_bonus: 2, a_hazmat: 1 },
     sg: [sg(1, 1, 1, 0), sg(2, 1, 1, 3, 4), sg(3, 0, 0, 1), sg(4, 0, 2, 3)],
-    enh: { w_stamp: 3 },
+    si: ["w_stamp+3@9.0"],
   };
   it("세트별 묶음 (야근 → 결재), 낀 것·높은 직급·강화 먼저, 상점 장비는 등급·강화·레벨 순", () => {
     const b = bagEntries(c, 50);
@@ -96,17 +96,17 @@ describe("bagEntries", () => {
     expect(b.sets[0].items[0].slot).toBe("weapon");
     expect(b.sets[1].items.map((x) => x.it.u)).toEqual([2, 1]);
     expect(b.shop[0]).toMatchObject({ key: "c_bonus", equipped: 1 });
-    expect(b.shop.find((x) => x.key === "w_stamp")!.enh).toBe(3);
+    expect(b.shop.find((x) => x.key === "si9")).toMatchObject({ enh: 3, piece: { u: 9 } });
     expect(b.shop[b.shop.length - 1].key).toBe("w_ruler");
   });
   it("부위 칸으로 거르고, 레벨이 모자라면 아래로 (흐리게)", () => {
     const w = bagEntries(c, 50, "weapon");
     expect(w.sets.flatMap((x) => x.items).every((x) => x.gear.kind === "weapon")).toBe(true);
-    expect(w.shop.map((x) => x.key)).toEqual(["w_stamp", "w_ruler"]);
+    expect(w.shop.map((x) => x.key)).toEqual(["si9", "w_ruler"]);
     const low = bagEntries(c, 20, "weapon");
     expect(low.shop.map((x) => [x.key, x.low])).toEqual([
       ["w_ruler", false],
-      ["w_stamp", true],
+      ["si9", true],
     ]);
     expect(low.sets[0].items[0].low).toBe(true);
   });

@@ -178,11 +178,33 @@ export function scaleBonus(b: Bonus, k: number): Bonus {
 
 // ── 강화 ──
 
-/** 강화 한 단계마다 기본 능력치 +5% (옵션 값은 그대로) */
-export const ENH_STEP = 0.05;
+/**
+ * 강화 배율 (기본 능력치에 곱한다, 옵션 값은 그대로). 11/15: +5%씩은 너무 약해서 단계마다 더 크게 —
+ * +1~+5는 한 단계 8%p, +6~+10은 12%p, +11~+15는 20%p → +5 = ×1.40, +10 = ×2.00, +15 = ×3.00
+ */
+export const ENH_STEPS = [0.08, 0.12, 0.2] as const;
 export const SG_ENH_MAX = 15;
 export const SHOP_ENH_MAX = 5;
-export const enhMul = (e: number) => 1 + ENH_STEP * e;
+export function enhMul(e: number): number {
+  const n = Math.max(0, Math.min(SG_ENH_MAX, Math.floor(e)));
+  const k = Math.min(n, 5) * ENH_STEPS[0] + Math.max(0, Math.min(n, 10) - 5) * ENH_STEPS[1] + Math.max(0, n - 10) * ENH_STEPS[2];
+  return Math.round((1 + k) * 100) / 100;
+}
+
+/**
+ * 강화한 능력치: 기본 + 기본 × (배율 − 1)을 올림 → 작은 능력치(치명 4 등)도 한 단계마다 티가 난다 (공격 속도는 소수 둘째 자리).
+ * 깎는 값은 그대로
+ */
+export function enhBonus(b: Bonus, e: number): Bonus {
+  if (e <= 0) return b;
+  const k = enhMul(e) - 1;
+  const out: Bonus = {};
+  for (const [key, v] of Object.entries(b) as [keyof Bonus, number][]) {
+    if (v <= 0) out[key] = v;
+    else out[key] = key === "aspd" ? Math.round(v * (1 + k) * 100) / 100 : v + Math.ceil(v * k - 1e-9);
+  }
+  return out;
+}
 
 // ── 랜덤 옵션 ──
 
@@ -367,7 +389,7 @@ export function sgDef(it: SgItem, id = encodeSg(it)): GearDef {
     desc: info.desc[piece],
     reqLevel: SG_REQ_LEVEL,
     price: 0,
-    bonus: scaleBonus(sgBaseBonus(set, piece), SG_GRADE_MULT[it.g] * enhMul(it.e)),
+    bonus: enhBonus(scaleBonus(sgBaseBonus(set, piece), SG_GRADE_MULT[it.g]), it.e),
     art: sgArt(it.s, it.p, it.g),
     ...(piece === "weapon" ? { style: info.style } : {}),
   };
@@ -375,13 +397,25 @@ export function sgDef(it: SgItem, id = encodeSg(it)): GearDef {
 
 // ── 상점 장비 강화 표시 ("w_stamp+3") ──
 
-const SHOP_ENH_RE = /^([a-z]_[a-z_]{1,30})\+([1-5])$/;
+// 11/15 상점·주운 장비 강화는 한 개씩 따로 (같은 장신구 두 개 중 하나만 강화할 수 있게): 강화한 것은 묶음에서 떼어
+// 캐릭터 si 목록에 "w_stamp+3@5k.1" (장비 id + 강화 @ 번호(36진) . 연속 실패) 로 둔다. 번호는 세트 장비와 같은 줄(sgN)에서 받는다.
+// 예전 저장값의 "w_stamp+3"(번호 없음 — 같은 이름 장비 모두에 붙던 강화)는 normalize가 한 개에만 옮긴다
+const SHOP_ENH_RE = /^([a-z]_[a-z_]{1,30})\+([1-5])(?:@([0-9a-z]{1,7})\.(\d{1,2}))?$/;
 /** 장착 칸 id → [상점 장비 id, 강화] (강화 없으면 0) */
 export function shopEnhOf(id: string): [string, number] {
   const m = SHOP_ENH_RE.exec(id);
   return m ? [m[1], Number(m[2])] : [id, 0];
 }
-export const withShopEnh = (base: string, e: number) => (e > 0 ? `${base}+${Math.min(SHOP_ENH_MAX, e)}` : base);
+export type ShopPiece = { id: string; e: number; u: number; f: number };
+/** 강화한 상점 장비 한 개 (코드가 아니면 null) */
+export function shopPieceOf(code: string | null | undefined): ShopPiece | null {
+  const m = code ? SHOP_ENH_RE.exec(code) : null;
+  return m && m[3] !== undefined ? { id: m[1], e: Number(m[2]), u: parseInt(m[3], 36), f: Number(m[4]) } : null;
+}
+export const isShopPiece = (code: string | null | undefined): code is string => !!shopPieceOf(code);
+export const encodeShopPiece = (p: ShopPiece) => `${p.id}+${Math.max(1, Math.min(SHOP_ENH_MAX, p.e))}@${p.u.toString(36)}.${Math.min(50, p.f)}`;
+/** 장착 칸 id의 번호 (세트 장비·강화한 상점 장비 — 같은 번호 줄). 묶음 장비면 null */
+export const pieceUid = (id: string | null | undefined): number | null => (!id ? null : isSgCode(id) ? sgUid(id) : (shopPieceOf(id)?.u ?? null));
 
 const defMemo = new Map<string, GearDef | null>();
 /**
@@ -398,15 +432,41 @@ export function extGearById(id: string, shop: (id: string) => GearDef | undefine
   } else {
     const [base, e] = shopEnhOf(id);
     const g = e ? shop(base) : undefined;
-    def = g ? { ...g, id, bonus: scaleBonus(g.bonus, enhMul(e)) } : null;
+    def = g ? { ...g, id, bonus: enhBonus(g.bonus, e) } : null;
   }
   if (defMemo.size > 4000) defMemo.clear();
   defMemo.set(id, def);
   return def ?? undefined;
 }
 
+/** 장착 칸에서 강화만 뺀 것 (전투 능력의 강화 몫을 보여 줄 때 비교용) */
+export function unenhanced<E extends Partial<Record<GearSlot, string | null>>>(equip: E): E {
+  const out = { ...equip };
+  for (const k of Object.keys(out) as GearSlot[]) {
+    const id = out[k];
+    if (!id) continue;
+    const it = isSgCode(id) ? decodeSg(id) : null;
+    out[k] = (it ? encodeSg({ ...it, e: 0 }) : shopEnhOf(id)[0]) as E[GearSlot];
+  }
+  return out;
+}
+
 /** 장착 칸 id의 바탕 (상점 장비 강화 표시를 뗀 id, 세트 장비는 코드 그대로) */
 export const baseGearId = (id: string) => (isSgCode(id) ? id : shopEnhOf(id)[0]);
+/**
+ * 기본 능력치 중 강화로 붙은 몫: [능력치, 강화 전 값, 강화로 더해진 값] — "공격력 136 (+136)".
+ * find = catalog.gearById (세트 장비 코드·강화한 상점 장비도 찾는다)
+ */
+export function enhSplit(id: string, find: (id: string) => GearDef | undefined): [keyof Bonus, number, number][] {
+  const now = find(id);
+  if (!now) return [];
+  const e = enhOfId(id);
+  const base = !e ? now : isSgCode(id) ? sgDef({ ...decodeSg(id)!, e: 0 }) : find(shopEnhOf(id)[0]);
+  return (Object.entries(now.bonus) as [keyof Bonus, number][]).map(([k, v]) => {
+    const b = base?.bonus[k] ?? v;
+    return [k, b, Math.round((v - b) * 100) / 100];
+  });
+}
 /** 장착 칸 id의 강화 수치 */
 export const enhOfId = (id: string | null | undefined): number => (!id ? 0 : isSgCode(id) ? (decodeSg(id)?.e ?? 0) : shopEnhOf(id)[1]);
 
@@ -538,16 +598,17 @@ export function sgCombatPower(equip: Equip): number {
 // ── 캐릭터 저장값 맞추기 ──
 
 /**
- * 장착 칸을 저장된 원본에 맞춘다: 세트 장비는 가방(sg)의 같은 번호 코드로 (가방에 없으면 뺀다, 부위가 칸에 안 맞아도 뺀다),
- * 상점 장비는 강화 표시(enh)를 붙이거나 뗀다. 바뀐 게 없으면 같은 객체
+ * 장착 칸을 저장된 원본에 맞춘다: 세트 장비·강화한 상점 장비는 가방(sg·si)의 같은 번호 코드로 (가방에 없거나 부위가 칸에 안 맞으면 뺀다),
+ * 묶음 상점 장비는 강화 표시를 뗀 id로. 바뀐 게 없으면 같은 객체
  */
-export function syncEquip<E extends Record<GearSlot, string | null>>(equip: E, sg: readonly string[], enh: Readonly<Record<string, number>>): E {
+export function syncEquip<E extends Record<GearSlot, string | null>>(equip: E, sg: readonly string[], si: readonly string[] = []): E {
   let out: E | null = null;
   const set = (slot: GearSlot, v: string | null) => {
     if (equip[slot] === v) return;
     out ??= { ...equip };
     out[slot] = v as E[GearSlot];
   };
+  const kindOf = (slot: GearSlot) => (slot === "acc1" || slot === "acc2" ? "acc" : slot);
   for (const slot of Object.keys(equip) as GearSlot[]) {
     const id = equip[slot];
     if (!id) continue;
@@ -556,11 +617,11 @@ export function syncEquip<E extends Record<GearSlot, string | null>>(equip: E, s
       const code = u === null ? undefined : sg.find((c) => sgUid(c) === u);
       const it = code ? decodeSg(code) : null;
       const kind = it ? SG_PIECE_KIND[sgPieceOf(it)] : null;
-      set(slot, it && kind === (slot === "acc1" || slot === "acc2" ? "acc" : slot) ? code! : null);
-    } else {
-      const base = shopEnhOf(id)[0];
-      set(slot, withShopEnh(base, enh[base] ?? 0));
-    }
+      set(slot, it && kind === kindOf(slot) ? code! : null);
+    } else if (shopPieceOf(id)) {
+      const u = shopPieceOf(id)!.u;
+      set(slot, si.find((c) => shopPieceOf(c)?.u === u) ?? null);
+    } else set(slot, shopEnhOf(id)[0]);
   }
   return out ?? equip;
 }

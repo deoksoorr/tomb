@@ -27,6 +27,7 @@ import {
   spentStats,
   statPointsEarned,
   removeForSale,
+  removePieceForSale,
   returnUnsold,
   RpgError,
   setHotbar,
@@ -230,10 +231,12 @@ export async function shopAction(acct: string, a: z.input<typeof ShopActionSchem
     }
   }
   // 1) 가방에서 count개를 한 번에 뺀다 (CAS: 모자라면 하나도 빼지 않는다). count가 없으면 예전처럼 1개
-  const count = a.count ?? 1;
+  // 11/15 강화한 장비 한 개(piece = 번호)는 그것만 판다 (강화 값은 쳐 주지 않는다)
+  const piece = a.type === "sell" ? a.piece : undefined;
+  const count = piece !== undefined ? 1 : (a.count ?? 1);
   const { state: removed, result } = await http(
     store.update(acct, (s) => {
-      const r = removeForSale(s, a.itemId, count);
+      const r = piece !== undefined ? removePieceForSale(s, piece) : { ...removeForSale(s, a.itemId, count), code: a.itemId };
       return { state: r.state, result: r };
     }),
   );
@@ -258,7 +261,7 @@ export async function shopAction(acct: string, a: z.input<typeof ShopActionSchem
     if (earned > 0) await store.addDaily(acct, kstDay(), { points: earned });
     // 한도에 막혀 값을 한 푼도 못 받은 만큼은 가방에 되돌린다 (일부만 받은 1개는 판 것으로 친다)
     unsold = Math.min(result.drop, Math.floor((want - earned) / result.unit));
-    if (unsold > 0) state = (await http(store.update(acct, (s) => ({ state: returnUnsold(s, a.itemId, unsold), result: null })))).state;
+    if (unsold > 0) state = (await http(store.update(acct, (s) => ({ state: returnUnsold(s, result.code, unsold), result: null })))).state;
   }
   return { ...(await rpgView(acct, store, Date.now(), state)), sold: { value, capped, count: count - unsold } };
 }

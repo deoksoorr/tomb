@@ -33,7 +33,7 @@ import type { Drop, EndgameView, HuntResult } from "./types";
 // 11/15 우두머리 상자: 세트 장비·재료·꾸미기 굴림
 import { chestCosmetic, chestMats, chestSetGear, SG_CHEST_CHANCE, SG_PITY } from "./setGearRoll";
 // 11/15 능력 카드: 고른 카드 검사·처치 속도 상한 배율
-import { cardPower, isBossDealFloor, replayPicks, rerollsAllowed, runLevel, runXp, startPicks } from "./cards";
+import { cardPower, cardXpMul, isBossDealFloor, replayPicks, rerollsAllowed, runLevel, runXp, runXpNeed, runXpOf, startPicks } from "./cards";
 // 11/15 층 순서표 (테마마다 층별 몬스터 구성·정예 자리)
 import { floorElite, floorRoster } from "./towerSchedule";
 // 11/15 끝없는 회의실 층 계획 손질 (참조 메일 상한·무리·중간 우두머리·안건 추가가 불러들이는 몫)
@@ -572,11 +572,26 @@ export function evalTower(
   // 11/15 능력 카드: 고른 카드가 그때 제안된 카드인지 시드로 다시 굴려 보고, 처치 속도 상한에 카드 배율(멈추면 집중 포함)을 곱한다
   const bossFloors: number[] = [];
   for (let i = 0; i < k; i++) if (isBossDealFloor(t.start + i)) bossFloors.push(t.start + i);
+  // 11/15 카드 등급 개편: 레벨 업 층(높을수록 좋은 등급)은 시작~지금 층, 줄지 않고, 깬 층 몬스터 경험치만으로도 넘는 층보다 늦을 수 없다
+  const floorXp: number[] = [];
+  let xpAcc = 0;
+  for (let i = 0; i < k; i++) {
+    for (const w of towerPlan(t.seed, t.start + i, t.start)) for (const m of w.monsters) xpAcc += runXpOf(m);
+    floorXp.push(xpAcc);
+  }
   const cv = replayPicks(t.seed, r.cards ?? [], {
-    levels: runLevel(runXp(r.kills)).level,
+    levels: (owned) => runLevel(runXp(r.kills) * cardXpMul(owned)).level,
     starts: startPicks(t.start),
     bossFloors,
     rerolls: rerollsAllowed(k),
+    start: t.start,
+    top: t.start + k,
+    levelFloorMax: (i) => {
+      let need = 0;
+      for (let L = 0; L <= i; L++) need += runXpNeed(L);
+      const j = floorXp.findIndex((x) => x >= need);
+      return t.start + (j < 0 ? k : j);
+    },
   });
   if (!cv.ok)
     return tReject(

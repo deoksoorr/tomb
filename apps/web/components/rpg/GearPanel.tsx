@@ -5,7 +5,7 @@ import { GEAR, GEAR_SLOTS, gearById, KIND_LABELS, POTIONS, SLOT_LABELS, slotKind
 import { GEAR_INV_MAX, sellValue } from "@/lib/rpg/character";
 import { rpgApi, type CharacterAction, type GearAction } from "@/lib/rpg/client";
 import { DISASSEMBLE } from "@/lib/rpg/enhance";
-import type { Derived } from "@/lib/rpg/formulas";
+import { derive, type Derived } from "@/lib/rpg/formulas";
 import {
   activeSets,
   baseGearId,
@@ -25,7 +25,9 @@ import {
   sgPieceOf,
   sgSetOf,
   sgUid,
-  withShopEnh,
+  pieceUid,
+  unenhanced,
+  shopPieceOf,
   type SgSet,
 } from "@/lib/rpg/setGear";
 import type { RpgView } from "@/lib/rpg/types";
@@ -49,6 +51,7 @@ import {
   type BagEntry,
   type BagTab,
   type StatDiff,
+  statLine,
 } from "./gear";
 import EnhanceDialog, { type EnhanceTab } from "./EnhanceDialog";
 import HuntCapMeter from "./HuntCap";
@@ -104,7 +107,7 @@ const TABS: [BagTab, string][] = [
 
 const enhTier = (e: number) => (e >= 15 ? 3 : e >= 13 ? 2 : e >= 10 ? 1 : 0);
 const plusName = (name: string, e: number) => (e > 0 ? `${name} +${e}` : name);
-type Dlg = { kind: "enhance"; sg?: number; shop?: string; tab: EnhanceTab } | { kind: "exchange" } | null;
+type Dlg = { kind: "enhance"; sg?: number; shop?: string; piece?: number; tab: EnhanceTab } | { kind: "exchange" } | null;
 
 export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: Props) {
   const c = view.character;
@@ -124,13 +127,16 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
   const openEntry = all.find((x) => x.key === open) ?? null;
   const counts = activeSets(c.equip).counts;
   const sgTotal = c.sg?.length ?? 0;
-  const shopTotal = Object.values(c.inv).reduce((a, b) => a + b, 0);
+  const shopTotal = Object.values(c.inv).reduce((a, b) => a + b, 0) + (c.si?.length ?? 0);
+  // 11/15 전투 능력 중 강화로 붙은 몫 (강화를 뺀 장착 칸과 비교)
+  const plain = derive(c.level, c.stats, unenhanced(c.equip));
+  const enhPart = (k: keyof Derived) => Math.round(((view.derived[k] as number) - (plain[k] as number)) * 100) / 100;
 
   /** 이 장비가 들어갈 칸: 칸을 먼저 골랐고 맞으면 그 칸, 아니면 빈 칸 먼저 */
   const targetOf = (gear: GearDef): GearSlot => (slotSel && slotAccepts(slotSel, gear.kind) ? slotSel : equipTarget(c, gear.kind));
-  const idOf = (x: BagEntry) => (x.type === "sg" ? x.code : withShopEnh(x.gear.id, x.enh));
+  const idOf = (x: BagEntry) => (x.type === "sg" ? x.code : (x.piece?.code ?? x.gear.id));
   const wornSlot = (x: BagEntry): GearSlot | null =>
-    x.type === "sg" ? x.slot : (GEAR_SLOTS.find((k) => c.equip[k] && baseGearId(c.equip[k]!) === x.gear.id) ?? null);
+    x.type === "sg" ? x.slot : x.piece ? x.piece.slot : (GEAR_SLOTS.find((k) => c.equip[k] && !shopPieceOf(c.equip[k]) && baseGearId(c.equip[k]!) === x.gear.id) ?? null);
   const diffOf = (x: BagEntry): StatDiff[] => (wornSlot(x) && (x.type === "sg" || x.count - x.equipped < 1) ? [] : gearDiff(c, targetOf(x.gear), idOf(x)));
   const openDiff = openEntry ? diffOf(openEntry) : [];
   const deltaOf = new Map(openDiff.map((d) => [d.key, d.delta]));
@@ -158,12 +164,12 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
     setSlotSel(slot);
     setTab(slotKind(slot));
     const id = c.equip[slot];
-    if (id) setOpen(isSgCode(id) ? `sg${sgUid(id)}` : baseGearId(id));
+    if (id) setOpen(isSgCode(id) ? `sg${sgUid(id)}` : shopPieceOf(id) ? `si${pieceUid(id)}` : baseGearId(id));
   }
 
   function equipEntry(x: BagEntry) {
     const slot = targetOf(x.gear);
-    if (x.type === "sg") void gear({ type: "equip", slot, uid: x.it.u }, `${josa(x.gear.name, "을", "를")} ${SLOT_LABELS[slot]}에 꼈어요.`);
+    if (x.type === "sg" || x.piece) void gear({ type: "equip", slot, uid: x.type === "sg" ? x.it.u : x.piece!.u }, `${josa(x.gear.name, "을", "를")} ${SLOT_LABELS[slot]}에 꼈어요.`);
     else onCharacter({ type: "equip", slot, itemId: x.gear.id }, `${josa(x.gear.name, "을", "를")} ${SLOT_LABELS[slot]}에 꼈어요.`);
   }
 
@@ -182,6 +188,20 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
     setConfirm(null);
     setQty((q) => ({ ...q, [x.key]: 0 }));
     if (x.count - x.equipped <= n) setOpen(null);
+    // 11/15 강화한 한 개는 번호로 판다
+    if (x.piece && onView) {
+      const base = shopPieceOf(x.piece.code)!.id;
+      setGBusy(true);
+      rpgApi
+        .sellPiece(base, x.piece.u)
+        .then((v) => {
+          onView(v);
+          setMsg(v.sold ? `${josa(plusName(x.gear.name, x.enh), "을", "를")} ${pts(v.sold.value)}에 팔았어요.` : null);
+        })
+        .catch((e) => setMsg(errorMessage(e)))
+        .finally(() => setGBusy(false));
+      return;
+    }
     onSell(x.gear.id, n);
   }
 
@@ -259,6 +279,12 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                     <dt>{label}</dt>
                     <dd>
                       {f(view.derived[k])}
+                      {enhPart(k) > 0 && (
+                        <span className={g.enhPart} title="강화로 더해진 몫">
+                          {" "}
+                          (+{f(enhPart(k)).replace("×", "")})
+                        </span>
+                      )}
                       {d !== undefined && <span className={d > 0 ? s.deltaUp : s.deltaDown}>{deltaText(d)}</span>}
                     </dd>
                   </div>
@@ -432,13 +458,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                                 type="button"
                                 className={ui.button}
                                 disabled={working || x.enh >= SHOP_ENH_MAX}
-                                onClick={() =>
-                                  setDlg({
-                                    kind: "enhance",
-                                    shop: x.gear.id,
-                                    tab: "enhance",
-                                  })
-                                }
+                                onClick={() => setDlg(x.piece ? { kind: "enhance", piece: x.piece.u, tab: "enhance" } : { kind: "enhance", shop: x.gear.id, tab: "enhance" })}
                               >
                                 {x.enh >= SHOP_ENH_MAX ? "강화 끝 +5" : "강화"}
                               </button>
@@ -465,7 +485,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
                             ) : null}
                           </div>
                         )}
-                        {x.enh > 0 && <p className={g.note}>강화는 같은 이름 장비에 같이 붙어요. 다 팔면 사라져요.</p>}
+                        {!x.piece && x.count > 1 && <p className={g.note}>강화하면 한 개만 떼어 따로 올려요.</p>}
                       </div>
                     </Row>
                   );
@@ -479,7 +499,7 @@ export function GearPanel({ view, busy, onCharacter, onSell, onView, figure }: P
       {dlg?.kind === "enhance" && onView && (
         <EnhanceDialog
           view={view}
-          target={dlg.sg !== undefined ? { sg: dlg.sg } : { shop: dlg.shop! }}
+          target={dlg.sg !== undefined ? { sg: dlg.sg } : dlg.piece !== undefined ? { piece: dlg.piece } : { shop: dlg.shop! }}
           tab={dlg.tab}
           onClose={() => setDlg(null)}
           onView={onView}
@@ -544,7 +564,7 @@ function Row({ x, open, onToggle, children }: { x: BagEntry; open: boolean; onTo
           <span className={g.name}>{plusName(x.gear.name, e)}</span>
           <span className={g.sub}>{sub}</span>
           <span className={g.opts}>
-            {isSg ? x.it.o.map(([k, v]) => optText(k, v)).join(" · ") + (x.it.L ? ` · ${SG_LEGENDS[x.it.L].name}` : "") : bonusText(x.gear.bonus)}
+            {isSg ? x.it.o.map(([k, v]) => optText(k, v)).join(" · ") + (x.it.L ? ` · ${SG_LEGENDS[x.it.L].name}` : "") : statLine(x.piece?.code ?? x.gear.id)}
           </span>
         </span>
         {worn ? (
@@ -621,7 +641,7 @@ function SgDetail({
     <div className={g.detail}>
       <Compare diff={diff} target={target} cur={cur} worn={!!x.slot} />
       <ul className={g.optList}>
-        <li>기본 {bonusText(x.gear.bonus)}</li>
+        <li>기본 {statLine(x.code)}</li>
         {x.it.o.map(([k, v]) => (
           <li key={k}>{optText(k, v)}</li>
         ))}

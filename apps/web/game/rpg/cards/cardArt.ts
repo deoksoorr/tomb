@@ -300,6 +300,180 @@ const P: Record<CardId, Painter> = {
     g.set(12, 2, 0xffffff);
     g.set(14, 5, lighten(m, 0.5));
   },
+  // ── 11/15 등급 개편 새 카드 16장 ──
+  // 믹스커피: 종이컵 + 비스듬한 막대 봉지
+  mix(g, m, a) {
+    g.rect(3, 8, 7, 7, PAPER);
+    g.rect(3, 8, 7, 2, 0x8a5a3a);
+    g.rect(2, 7, 9, 1, darken(PAPER, 0.1));
+    g.set(5, 5, 0xd8d8e8);
+    g.set(6, 4, 0xd8d8e8);
+    for (let i = 0; i < 7; i++) {
+      g.rect(9 + i * 0.75, 7 - i, 2, 2, m);
+      if (i === 3) g.rect(9 + i * 0.75, 7 - i, 2, 2, a);
+    }
+  },
+  // 메모 습관: 귀퉁이 접힌 포스트잇과 파란 글씨
+  memo(g, m, a) {
+    g.rect(2, 2, 12, 12, m);
+    g.rect(11, 11, 3, 3, darken(m, 0.25));
+    g.set(13, 11, 0);
+    g.hline(4, 11, 5, a);
+    g.hline(4, 9, 8, a);
+    g.hline(4, 10, 11, a);
+    g.set(12, 4, 0xe84a4a);
+  },
+  // 점심 산책: 둥근 나무와 해
+  walk(g, m, a) {
+    g.ellipse(7, 7, 5, 4.5, m);
+    g.ellipse(5, 6, 2, 2, lighten(m, 0.25));
+    g.rect(6, 11, 2, 4, a);
+    g.rect(3, 14, 9, 1, darken(m, 0.3));
+    g.ellipse(13, 3, 2, 2, 0xffe08a);
+  },
+  // 탕비실 간식: 분홍 아이싱 도넛
+  snack(g, m, a) {
+    g.ellipse(8, 8.5, 6.5, 5.5, m);
+    g.ellipse(8, 7.5, 5.5, 4, a);
+    g.ellipse(8, 8, 2, 1.5, 0);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (g.get(x, y) === Grid.rgba(0)) g.px[y * 16 + x] = 0;
+    g.set(5, 6, 0xffffff);
+    g.set(10, 5, 0x7ad0f0);
+    g.set(11, 8, 0xffe08a);
+    g.set(5, 9, 0x7ad07a);
+  },
+  // 사원증 목걸이: 줄 + 사진 붙은 카드
+  badge(g, m, a) {
+    for (let i = 0; i < 6; i++) {
+      g.set(3 + i, 1 + i, m);
+      g.set(12 - i, 1 + i, m);
+    }
+    g.rect(4, 7, 8, 8, a);
+    g.rect(5, 8, 3, 3, 0x9aa3ad);
+    g.hline(9, 10, 9, INK);
+    g.hline(5, 10, 12, m);
+    g.rect(7, 6, 2, 2, 0x9aa3ad);
+  },
+  // 반차: 반쯤 채운 시계 (오후는 쉰다)
+  halfday(g, m, a) {
+    g.ellipse(8, 8, 7, 7, a);
+    g.ellipse(8, 8, 5.5, 5.5, PAPER);
+    for (let y = 2; y < 15; y++) for (let x = 8; x < 15; x++) if (Math.hypot(x + 0.5 - 8, y + 0.5 - 8) < 5.5) g.set(x, y, m);
+    g.vline(8, 4, 8, INK);
+    g.hline(8, 11, 8, INK);
+  },
+  // 회의록 정리: 공책과 초록 체크
+  minutes(g, m, a) {
+    g.rect(3, 1, 10, 14, PAPER);
+    g.rect(3, 1, 2, 14, a);
+    for (const y of [4, 8, 12]) {
+      g.set(6, y, m);
+      g.set(7, y + 1, m);
+      g.set(8, y, m);
+      g.set(9, y - 1, m);
+      g.hline(10, 11, y, 0xb8ad94);
+    }
+  },
+  // 회식 2차: 거품 넘치는 맥주잔과 펑
+  afterparty(g, m, a) {
+    g.rect(3, 6, 8, 9, m);
+    g.rect(4, 7, 2, 6, lighten(m, 0.3));
+    g.rect(11, 8, 2, 4, darken(m, 0.2));
+    g.ellipse(7, 5, 5, 2.5, 0xffffff);
+    g.set(13, 2, a);
+    g.set(14, 4, a);
+    g.set(12, 1, a);
+    g.set(15, 1, a);
+  },
+  // 퇴사 각: 빨간 도장 찍은 사직서 봉투
+  resign(g, m, a) {
+    g.rect(1, 4, 14, 9, a);
+    for (let i = 0; i < 6; i++) {
+      g.set(1 + i, 4 + i * 0.6, darken(a, 0.2));
+      g.set(14 - i, 4 + i * 0.6, darken(a, 0.2));
+    }
+    g.hline(3, 8, 10, INK);
+    g.ellipse(11.5, 9.5, 2.2, 2.2, m);
+    g.set(11, 9, lighten(m, 0.5));
+  },
+  // 결재 라인: 결재 칸 셋을 잇는 번개
+  chainline(g, m, a) {
+    for (const x of [1, 6, 11]) {
+      g.rect(x, 9, 4, 5, PAPER);
+      g.rect(x, 9, 4, 1, m);
+      g.set(x + 1, 12, 0xe84a4a);
+    }
+    g.set(3, 7, a);
+    g.set(4, 6, a);
+    g.set(5, 5, a);
+    g.rect(6, 4, 3, 1, a);
+    g.set(9, 5, a);
+    g.set(10, 6, a);
+    g.set(11, 5, a);
+    g.set(12, 4, a);
+    g.set(13, 3, a);
+  },
+  // 재택근무: 지붕 아래 불 켜진 노트북
+  wfh(g, m, a) {
+    for (let i = 0; i < 7; i++) g.hline(7 - i, 8 + i, 1 + i, m);
+    g.rect(2, 8, 12, 7, a);
+    g.rect(5, 10, 6, 3, INK);
+    g.rect(6, 11, 4, 1, 0x7ad0f0);
+    g.rect(4, 13, 8, 1, 0x9aa3ad);
+  },
+  // 사내 정치: 왕관 쓴 체스 말
+  politics(g, m, a) {
+    g.rect(6, 4, 4, 7, m);
+    g.rect(5, 10, 6, 2, darken(m, 0.2));
+    g.rect(3, 12, 10, 3, m);
+    g.rect(5, 2, 6, 2, a);
+    g.set(5, 1, a);
+    g.set(8, 1, a);
+    g.set(10, 1, a);
+    g.set(7, 6, lighten(m, 0.4));
+  },
+  // 성과급: 띠를 두른 지폐 다발과 금화
+  bonus(g, m, a) {
+    g.rect(1, 9, 11, 5, darken(m, 0.3));
+    g.rect(1, 7, 11, 5, darken(m, 0.15));
+    g.rect(1, 5, 11, 5, m);
+    g.rect(2, 6, 9, 3, lighten(m, 0.2));
+    g.ellipse(6.5, 7.5, 1.5, 1.2, darken(m, 0.35));
+    g.rect(5, 5, 3, 9, 0xf2ead3);
+    g.ellipse(12.5, 12, 3, 3, a);
+    g.ellipse(12.5, 12, 1.5, 1.5, darken(a, 0.25));
+    g.set(11, 10, lighten(a, 0.5));
+  },
+  // 팀장 승진: 넥타이와 금별
+  promote(g, m, a) {
+    g.rect(6, 2, 4, 2, m);
+    g.rect(7, 4, 2, 2, m);
+    for (let y = 6; y < 13; y++) g.hline(6 - Math.min(1, y - 6), 9 + Math.min(1, y - 6), y, m);
+    g.rect(7, 13, 2, 1, m);
+    for (const y of [7, 10]) g.hline(6, 9, y, a);
+    g.set(13, 2, a);
+    g.hline(12, 14, 3, a);
+    g.set(13, 4, a);
+  },
+  // 법인카드: 금빛 칩 박힌 카드
+  corpcard(g, m, a) {
+    g.rect(1, 4, 14, 9, m);
+    g.rect(1, 6, 14, 1, lighten(m, 0.15));
+    g.rect(3, 8, 3, 3, a);
+    g.set(4, 9, darken(a, 0.3));
+    g.hline(8, 13, 11, lighten(m, 0.35));
+    g.ellipse(12, 9, 1.2, 1.2, a);
+  },
+  // 연차 몰아 쓰기: 줄무늬 파라솔과 모래
+  leave(g, m, a) {
+    for (let y = 2; y < 8; y++) {
+      const w = (y - 1) * 1.2;
+      for (let x = Math.round(8 - w); x <= Math.round(8 + w); x++) g.set(x, y, Math.floor((x + 16) / 2) % 2 ? m : a);
+    }
+    g.vline(8, 8, 14, 0x8a6a40);
+    g.rect(1, 14, 14, 2, 0xf0d890);
+    g.ellipse(13, 12, 1.5, 1.5, 0xff7a7a);
+  },
 };
 
 /** 카드 그림 (16×16) */
@@ -311,11 +485,13 @@ export function cardArtGrid(id: CardId): Grid {
   return g;
 }
 
-/** 희귀도 배경 (24×24 그림 칸): 일반은 종이, 희귀는 푸른빛, 전설은 금빛 햇살 */
+/** 등급 배경 (24×24 그림 칸): 일반 회색 · 매직 파랑 · 레어 금색 · 유니크 주황 햇살 · 전설 보라 햇살과 별 */
 const BACK: Record<CardRarity, [Color, Color]> = {
-  common: [0x4a4438, 0x5e5646],
-  rare: [0x1e3a5a, 0x2e5a8a],
-  legend: [0x5a2a1e, 0xa8682a],
+  common: [0x3e3e42, 0x58585e],
+  magic: [0x1e2e5a, 0x2e4a8a],
+  rare: [0x4a3a14, 0x7a6020],
+  unique: [0x5a2a10, 0x9a4a1a],
+  legend: [0x2a1448, 0x5a2a8a],
 };
 
 function windowGrid(id: CardId): Grid {
@@ -326,11 +502,12 @@ function windowGrid(id: CardId): Grid {
     for (let x = 0; x < 24; x++) {
       const d = Math.hypot(x - 11.5, y - 11.5);
       let c = d < 7 ? b1 : d < 10 ? mixC(b0, b1, 0.5) : b0;
-      if (r === "legend") {
+      if (r === "legend" || r === "unique") {
         const ang = Math.atan2(y - 11.5, x - 11.5);
-        if (Math.floor(((ang + Math.PI) / (Math.PI * 2)) * 12) % 2 === 0 && d > 5) c = lighten(c, 0.12);
+        if (Math.floor(((ang + Math.PI) / (Math.PI * 2)) * (r === "legend" ? 12 : 8)) % 2 === 0 && d > 5) c = lighten(c, 0.12);
       }
-      if (r === "rare" && (x + y) % 6 === 0 && d > 8) c = lighten(c, 0.08);
+      if (r === "legend" && (x * 7 + y * 13) % 29 === 0 && d > 9) c = 0xf0e0ff;
+      if ((r === "rare" || r === "magic") && (x + y) % 6 === 0 && d > 8) c = lighten(c, 0.08);
       g.set(x, y, c);
     }
   g.draw(cardArtGrid(id), 4, 4);
