@@ -2712,8 +2712,9 @@ export class HuntScene extends RpgScene {
       m.sprite.setPosition(Math.round(m.x), Math.round(m.y)).setDepth(m.y).setFrame(monsterFrame(m, now)).setFlipX(this.px < m.x);
       m.shadow.setPosition(m.x, m.y);
       const top = m.y - size - 3;
-      // 11/15 자동 소등: 어둠에 가린 몬스터는 체력 막대도 숨긴다 (막대는 어둠 위 깊이라 위치가 드러난다)
-      const showBar = (m.elite || m.hp < m.st.maxHp) && !m.hidden && !this.arena.inDark(m);
+      // 11/15: 체력 막대는 늘 보인다 — 어두운 맵·숨는 몬스터 때문에 어디 있는지 몰라 답답했다 (사용자 요청).
+      // 어둠·숨기 기믹은 몸 그림에만 걸린다
+      const showBar = true;
       const eTop = m.elite ? m.y - size * ELITE.scale - 3 : top;
       m.barBg.setPosition(m.x, eTop).setVisible(showBar);
       m.bar.setPosition(m.x - size / 2, eTop).setSize(Math.max(0, (size * m.hp) / m.st.maxHp), 2).setVisible(showBar);
