@@ -27,7 +27,7 @@ export type RidingDeps = {
 
 /** 올라탈 수 있는 자세 (서 있기·걷기·달리기·점프) */
 function freeToRide(pl: Player): boolean {
-  if (pl.sitting || pl.anchored || pl.inBoat || pl.inWater) return false;
+  if (pl.sitting || pl.anchored || pl.inBoat || pl.inCar || pl.inWater) return false;
   const st = pl.state;
   return st === "idle" || st === "walk" || st === "run" || st === "jump";
 }

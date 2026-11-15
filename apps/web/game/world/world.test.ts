@@ -37,6 +37,7 @@ import {
   CLOSED_LOTS,
   isOpenLot,
   WHARF_YARD,
+  BUMPER_YARD,
   campfireOfSeat,
   graveSlot,
   inZoo,
@@ -186,7 +187,7 @@ describe("컴팩트한 묘지 마을 맵 (F1)", () => {
     expect(trees).toBeLessThan(140);
   });
 
-  it("무덤 컨셉이 맵 곳곳에: 오래된 묘비·촛불·땅안개·철책·종루가 묘역 두 곳 모두에 있다 (버드나무 묘역 자리는 동물원)", () => {
+  it("무덤 컨셉이 맵 곳곳에: 오래된 묘비·촛불·땅안개·철책·종루가 묘역에 있다 (버드나무 묘역 자리는 동물원, 다리 건너 묘역 자리는 범퍼카장)", () => {
     const props = allProps();
     const count = (k: string) => props.filter((p) => p.kind === k).length;
     expect(count("oldGrave")).toBeGreaterThanOrEqual(18);
@@ -407,39 +408,58 @@ describe("길찾기 격자 / 옛 좌표", () => {
   });
 });
 
-describe("묘역 두 곳 (버드나무 묘역은 동물원 — 정원 합계 = 49번 성불의 GRAVEYARD_CAPACITY)", () => {
-  it("묘역 칸 수의 합 = GRAVEYARD_CAPACITY, 모든 자리가 제 묘역 안, 겹치지 않는다", () => {
-    expect(GRAVE_AREAS.length).toBe(2);
+describe("묘역은 옛 묘역 하나 (11/16 다리 건너 묘역은 범퍼카장 — 정원 = 49번 성불의 GRAVEYARD_CAPACITY)", () => {
+  it("칸 수 = GRAVEYARD_CAPACITY (8열 × 4줄), 모든 자리가 옛 묘역 안, 겹치지 않는다", () => {
+    expect(GRAVE_AREAS.length).toBe(1);
+    expect(GRAVE_AREAS[0]).toMatchObject({ id: "A", name: "옛 묘역", cols: 8, rows: 4 });
     expect(GRAVE_AREAS.reduce((n, a) => n + a.cols * a.rows, 0)).toBe(GRAVEYARD_CAPACITY);
     expect(GRID_COLS * GRID_ROWS).toBe(GRAVEYARD_CAPACITY); // 옛 이름 호환
     for (let i = 0; i < GRAVEYARD_CAPACITY; i++) {
       const s = graveSlot(i);
-      const a = GRAVE_AREAS.find((g) => g.id === s.area)!;
-      expect(inside(a.rect, s.x, s.y, -8), `${i}`).toBe(true);
-      expect(inside(a.rect, s.x, s.y + 22, -2), `${i}`).toBe(true);
+      expect(s.area).toBe("A");
+      expect(inside(GRAVEYARD_RECT, s.x, s.y, -8), `${i}`).toBe(true);
+      expect(inside(GRAVEYARD_RECT, s.x, s.y - 30, -2), `${i} 비석 꼭대기`).toBe(true);
+      expect(inside(GRAVEYARD_RECT, s.x, s.y + 22, -2), `${i} 서는 자리`).toBe(true);
     }
     expect(new Set(Array.from({ length: GRAVEYARD_CAPACITY }, (_, i) => `${graveSlot(i).x},${graveSlot(i).y}`)).size).toBe(GRAVEYARD_CAPACITY);
     expect(GRAVEYARD_RECT).toEqual(GRAVE_AREAS[0].rect);
   });
 
-  it("등록 순서대로 결정적으로, 두 묘역에 정원 비율(5 : 3)대로 골고루 (A·B·A·B·A·A·B·A …) 놓인다", () => {
-    expect([0, 1, 2, 3, 4, 5, 6, 7].map((i) => graveSlot(i).area)).toEqual(["A", "B", "A", "B", "A", "A", "B", "A"]);
+  it("등록 순서 index % 32 → 줄마다 왼쪽부터, 결정적으로 돌려 쓴다 (묘비 데이터는 등록 순서만이라 옮길 것이 없다)", () => {
+    expect([0, 1, 7, 8, 31].map((i) => [graveSlot(i).row, graveSlot(i).col])).toEqual([
+      [0, 0],
+      [0, 1],
+      [0, 7],
+      [1, 0],
+      [3, 7],
+    ]);
     expect(graveSlot(0)).toEqual(graveSlot(GRAVEYARD_CAPACITY)); // 돌려 쓴다
-    const per: Record<string, number> = { A: 0, B: 0 };
-    for (let i = 0; i < GRAVEYARD_CAPACITY; i++) per[graveSlot(i).area]++;
-    expect(per).toEqual({ A: 20, B: 12 });
+    expect(graveSlot(45)).toEqual(graveSlot(13));
     expect(plotLabel(0)).toBe("옛 묘역 1번째 줄 · 1번 자리");
-    expect(plotLabel(1)).toBe("다리 건너 묘역 1번째 줄 · 1번 자리");
-    expect(plotLabel(3)).toBe("다리 건너 묘역 1번째 줄 · 2번 자리");
-    expect(plotLabel(2)).toBe("옛 묘역 1번째 줄 · 2번 자리");
+    expect(plotLabel(1)).toBe("옛 묘역 1번째 줄 · 2번 자리");
+    expect(plotLabel(9)).toBe("옛 묘역 2번째 줄 · 2번 자리");
+    // 가운데 통로(언덕 계단과 같은 줄) 양쪽으로 4기씩, 줄 사이에 서서 헌화할 틈
+    const a = GRAVE_AREAS[0];
+    const xs = Array.from({ length: 8 }, (_, i) => graveSlot(i).x);
+    expect(xs.filter((x) => x < a.aisleX)).toHaveLength(4);
+    for (let i = 1; i < 8; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(20);
+    expect(graveSlot(8).y - graveSlot(0).y).toBeGreaterThanOrEqual(48);
   });
 
-  it("묘비 데이터는 그대로, 자리만 옮겨 놓인다: 32기 모두 동물원 밖 묘역 안", () => {
+  it("32기 모두 동물원·범퍼카장 밖 옛 묘역 안", () => {
     for (let i = 0; i < GRAVEYARD_CAPACITY; i++) {
       const s = graveSlot(i);
       expect(inZoo(s.x, s.y, 8), `${i}`).toBe(false);
-      expect(["A", "B"]).toContain(s.area);
+      expect(inside(BUMPER_YARD, s.x, s.y, 40), `${i}`).toBe(false);
     }
+  });
+
+  it("동문 오솔길(둘째 줄)이 성황당 쪽 흙길과 이어진다", () => {
+    const gateTy = Math.floor(392 / 16);
+    expect(groundKind(Math.floor(440 / 16), gateTy)).toBe("dirt");
+    expect(groundKind(Math.floor(424 / 16), gateTy)).toBe("gravel");
+    expect(groundKind(Math.floor(graveSlot(15).x / 16), gateTy)).toBe("gravel");
+    expect(Math.floor((graveSlot(8).y + 16) / 16)).toBe(gateTy);
   });
 
   it("등록 순서대로 결정적으로 놓이고, 넘치면 가장 최근 32기만 자리를 돌려 쓴다", () => {

@@ -1,39 +1,30 @@
 import { Redis } from "@upstash/redis";
+import { DRUNK_STEP_MS, isDrunkState, type DrunkState } from "@tomb/protocol";
 import { K } from "./keys";
 
-// 11/15 캠핑장 바베큐: 계정당 하루(게임 날짜, 한국 시간 새벽 5시에 바뀐다) 몇 접시까지 (protocol BBQ_DAILY).
-// 차감 전에 그날 횟수를 원자적으로 하나 올리고(INCR), 한도를 넘었거나 포인트가 모자라 실패하면 하나 내린다 → 실패한 시도는 세지 않는다.
-// 키는 날짜를 품고 있어 새벽 5시가 지나면 저절로 새로 센다.
-
-/** 키를 남겨 두는 시간 (날짜가 키에 들어 있으니 하루 남짓이면 충분) */
-export const BBQ_DAY_TTL_SEC = 2 * 24 * 60 * 60;
+// 11/15 캠핑장 바베큐: 계정마다 지금 취기 하나 (먹거리·마실 거리 모두 하루 한도는 없다 — 포인트로만 산다).
+// 취기는 마실 때마다 +1(최대 5)이고 10분에 1씩 깬다. 다 깨고 조금 지나면 키가 저절로 사라진다.
 
 export interface BbqDayStore {
-  /** 그날 횟수를 하나 올리고 올린 뒤 값을 돌려준다 */
-  take(accountId: string, day: string): Promise<number>;
-  /** 올린 것을 되돌린다 (실패) */
-  undo(accountId: string, day: string): Promise<void>;
-  /** 그날 먹은 횟수 */
-  count(accountId: string, day: string): Promise<number>;
+  /** 11/15 지금 취기 기록 (없으면 null — 다 깬 뒤에는 키가 사라진다) */
+  drunk(accountId: string): Promise<DrunkState | null>;
+  /** 취기 기록 (다 깨는 시각 + 10분까지 남긴다) */
+  setDrunk(accountId: string, s: DrunkState): Promise<void>;
+}
+
+/** 취기 키를 남겨 두는 시간 (초): 다 깨는 시각 + 한 단계 */
+export function drunkTtlSec(s: DrunkState, now: number): number {
+  return Math.max(60, Math.ceil((s.at + (s.lv + 1) * DRUNK_STEP_MS - now) / 1000));
 }
 
 export class MemoryBbqDay implements BbqDayStore {
-  private days = new Map<string, number>();
+  private drunks = new Map<string, DrunkState>();
 
-  async take(accountId: string, day: string): Promise<number> {
-    const k = `${day}:${accountId}`;
-    const n = (this.days.get(k) ?? 0) + 1;
-    this.days.set(k, n);
-    return n;
+  async drunk(accountId: string): Promise<DrunkState | null> {
+    return this.drunks.get(accountId) ?? null;
   }
-  async undo(accountId: string, day: string): Promise<void> {
-    const k = `${day}:${accountId}`;
-    const n = (this.days.get(k) ?? 0) - 1;
-    if (n > 0) this.days.set(k, n);
-    else this.days.delete(k);
-  }
-  async count(accountId: string, day: string): Promise<number> {
-    return this.days.get(`${day}:${accountId}`) ?? 0;
+  async setDrunk(accountId: string, s: DrunkState): Promise<void> {
+    this.drunks.set(accountId, s);
   }
 }
 
@@ -44,15 +35,17 @@ export class RedisBbqDay implements BbqDayStore {
     this.redis = new Redis({ ...conn, automaticDeserialization: false });
   }
 
-  async take(accountId: string, day: string): Promise<number> {
-    const key = K.bbqDay(accountId, day);
-    const [n] = await this.redis.pipeline().incr(key).expire(key, BBQ_DAY_TTL_SEC).exec<[number, number]>();
-    return Number(n);
+  async drunk(accountId: string): Promise<DrunkState | null> {
+    const raw = await this.redis.get<string>(K.campDrunk(accountId));
+    if (!raw) return null;
+    try {
+      const v: unknown = JSON.parse(raw);
+      return isDrunkState(v) ? v : null;
+    } catch {
+      return null;
+    }
   }
-  async undo(accountId: string, day: string): Promise<void> {
-    await this.redis.decr(K.bbqDay(accountId, day));
-  }
-  async count(accountId: string, day: string): Promise<number> {
-    return Number((await this.redis.get<string>(K.bbqDay(accountId, day))) ?? 0);
+  async setDrunk(accountId: string, s: DrunkState): Promise<void> {
+    await this.redis.set(K.campDrunk(accountId), JSON.stringify({ lv: s.lv, at: s.at }), { ex: drunkTtlSec(s, Date.now()) });
   }
 }

@@ -149,8 +149,9 @@ describe("token", () => {
 });
 
 describe("world", () => {
-  it("묘역 두 곳(버드나무 묘역은 동물원): 칸 수 합계 = 정원, 묘역마다 가운데 통로 기준 좌우 대칭, 결정적", () => {
-    expect(GRAVE_AREAS.map((a) => a.cols * a.rows)).toEqual([20, 12]);
+  it("묘역은 옛 묘역 하나(11/16 다리 건너 묘역은 범퍼카장): 칸 수 = 정원 32, 가운데 통로 기준 좌우 대칭, 결정적", () => {
+    expect(GRAVE_AREAS.map((a) => a.cols * a.rows)).toEqual([32]);
+    expect(GRAVE_AREAS.map((a) => a.id)).toEqual(["A"]);
     expect(GRAVE_AREAS.reduce((n, a) => n + a.cols * a.rows, 0)).toBe(GRAVEYARD_CAPACITY);
     expect(GRID_COLS * GRID_ROWS).toBe(GRAVEYARD_CAPACITY); // 옛 이름 호환
     expect(graveSlot(0)).toMatchObject({ x: GRAVE_AREAS[0].x0, y: GRAVE_AREAS[0].y0, col: 0, row: 0, area: "A" });
@@ -171,9 +172,10 @@ describe("world", () => {
   });
   it("plot labels: 묘역 이름 + 1부터 세는 줄·자리", () => {
     expect(plotLabel(0)).toBe("옛 묘역 1번째 줄 · 1번 자리");
-    expect(plotLabel(1)).toBe("다리 건너 묘역 1번째 줄 · 1번 자리");
-    expect(plotLabel(3)).toBe("다리 건너 묘역 1번째 줄 · 2번 자리");
-    expect(Array.from({ length: GRAVEYARD_CAPACITY }, (_, i) => plotLabel(i)).some((l) => l.includes("버드나무"))).toBe(false);
+    expect(plotLabel(1)).toBe("옛 묘역 1번째 줄 · 2번 자리");
+    expect(plotLabel(8)).toBe("옛 묘역 2번째 줄 · 1번 자리");
+    expect(plotLabel(31)).toBe("옛 묘역 4번째 줄 · 8번 자리");
+    expect(Array.from({ length: GRAVEYARD_CAPACITY }, (_, i) => plotLabel(i)).some((l) => l.includes("버드나무") || l.includes("다리 건너"))).toBe(false);
   });
   it("맵 크기는 고정 (묘비 수와 상관없다), 서버 범위도 맵 안", () => {
     expect(mapHeight(0)).toBe(MAP_HEIGHT);
@@ -316,10 +318,12 @@ describe("1인 자리 (좌석 체계 공통)", () => {
     }
     expect(spotKindOfState(STATE.boat)).toBe("boat");
     // 새 상태 값은 바이너리로 오가고, 범위 밖은 여전히 거절
-    expect(STATE_NAMES.length).toBe(20);
+    expect(STATE_NAMES.length).toBe(21);
     expect(STATE_NAMES[STATE.carousel]).toBe("carousel");
+    expect(STATE_NAMES[STATE.bumper]).toBe("bumper");
     expect(isStateId(14)).toBe(true);
-    expect(isStateId(20)).toBe(false);
+    expect(isStateId(20)).toBe(true);
+    expect(isStateId(21)).toBe(false);
     const snap = decodeSnapshot(encodeSnapshot(1, [{ sid: 3, x: 1338, y: 868, state: STATE.boat, dir: DIR.right }]));
     expect(snap?.entries[0]).toEqual({ sid: 3, x: 1338, y: 868, state: STATE.boat, dir: DIR.right });
   });
@@ -416,5 +420,42 @@ describe("배 위 낚시 (4번)", () => {
     expect(fishingWaterOf("boat:sea")).toBeNull();
     expect(fishingWaterOf("toString")).toBeNull();
     expect(fishingWaterOf(FISHING_SPOTS[0].id)).toBe(FISHING_SPOTS[0].water);
+  });
+});
+
+describe("11/16 범퍼카장: 차 자리 (정해진 자리만, 움직이는 자리)", () => {
+  it("차 8대, 차마다 한 자리, 링크 안 위쪽에 한 줄, 입구에서 가장 먼 차까지 radius 안", async () => {
+    const { BUMPER_SEATS, BUMPER_CARS, BUMPER_RINK, BUMPER_RIM, BUMPER_GATE, BUMPER_YARD, bumperSeatById, seatSlot, spotSeatId, spotKindOfState, SPOT_KINDS, ZONES } = await import("./index");
+    expect(BUMPER_SEATS).toHaveLength(BUMPER_CARS);
+    expect(BUMPER_CARS).toBe(8);
+    expect(new Set(BUMPER_SEATS.map((s) => s.id)).size).toBe(BUMPER_CARS);
+    const door = { x: BUMPER_GATE.x, y: BUMPER_GATE.y - 8 };
+    for (const s of BUMPER_SEATS) {
+      expect(s.id).toBe(spotSeatId("bumper", s.x, s.y));
+      expect(seatSlot(s.id)).toMatchObject({ kind: "bumper", state: STATE.bumper, mobile: true, furnitureId: `bumper${s.car}`, radius: SPOT_KINDS.bumper.radius });
+      expect(bumperSeatById(s.id)).toBe(s);
+      expect(s.x).toBeGreaterThan(BUMPER_RINK.x + BUMPER_RIM + 8);
+      expect(s.x).toBeLessThan(BUMPER_RINK.x + BUMPER_RINK.w - BUMPER_RIM - 8);
+      expect(s.y).toBeGreaterThan(BUMPER_RINK.y + BUMPER_RIM + 8);
+      expect(Math.hypot(s.x - door.x, s.y - door.y)).toBeLessThanOrEqual(SPOT_KINDS.bumper.radius!);
+    }
+    // 아무 좌표의 차 자리는 없다
+    expect(seatSlot(spotSeatId("bumper", 720, 900))).toBeUndefined();
+    expect(spotKindOfState(STATE.bumper)).toBe("bumper");
+    // 범퍼카장 구역 = 예전 다리 건너 묘역 자리
+    expect(ZONES.find((z) => z.id === "bumper")).toMatchObject({ name: "범퍼카장", ...BUMPER_YARD });
+    expect(ZONES.some((z) => z.name === "다리 건너 묘역")).toBe(false);
+    // 링크는 마당 안
+    expect(BUMPER_RINK.x).toBeGreaterThanOrEqual(BUMPER_YARD.x);
+    expect(BUMPER_RINK.x + BUMPER_RINK.w).toBeLessThanOrEqual(BUMPER_YARD.x + BUMPER_YARD.w);
+    expect(BUMPER_RINK.y + BUMPER_RINK.h).toBeLessThanOrEqual(BUMPER_YARD.y + BUMPER_YARD.h);
+  });
+
+  it("빵빵(honk)은 받는 동작, 범퍼카 상태는 스냅샷으로 오간다", async () => {
+    const { ACT_KINDS } = await import("./index");
+    expect(ACT_KINDS).toContain("honk");
+    expect(parseC2S(JSON.stringify({ t: "act", kind: "honk" }))).toEqual({ t: "act", kind: "honk" });
+    const snap = decodeSnapshot(encodeSnapshot(7, [{ sid: 5, x: 700, y: 900, state: STATE.bumper, dir: DIR.left }]));
+    expect(snap?.entries[0]).toEqual({ sid: 5, x: 700, y: 900, state: STATE.bumper, dir: DIR.left });
   });
 });

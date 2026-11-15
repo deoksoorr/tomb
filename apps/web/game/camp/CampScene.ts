@@ -14,8 +14,6 @@ import {
   TELEPORT_DIST,
   campSeatById,
   dexBadgeCats,
-  bbqItem,
-  isBbqEffect,
   type BbqItemId,
   isAvatarBody,
   isPhraseId,
@@ -60,7 +58,8 @@ import { WeatherSound } from "../world/WeatherSound";
 import { createBusArrival } from "../bus/BusArrival";
 import type { BusArrivalApi } from "../bus/busTypes";
 import { CampMap } from "./CampMap";
-import * as Art from "./campArt";
+import { FoodFx } from "./foodFx";
+import { foodOfPeer } from "./foodState";
 import { CampForage } from "./campForage";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
 import { campLines, campNpcName, CAMP_WELCOME } from "./campTalk";
@@ -136,8 +135,8 @@ export class CampScene extends Phaser.Scene {
   private talking: { id: CampNpcId; lines: readonly string[]; at: number } | null = null;
   private readonly talkTurn = new Map<CampNpcId, number>();
   /** 11/15 바베큐로 커진 사람 (sid → 끝나는 시각 epoch ms). 나는 "me" */
-  private readonly bigUntil = new Map<Sid | "me", number>();
-  private bigCheckAt = 0;
+  /** 11/15 바베큐장 먹거리·마실 거리 효과 (커지기·빨라지기·취기 — game/camp/foodFx) */
+  private food!: FoodFx;
   /** 새로고침 복원 좌석: 첫 welcome에서 확인 */
   private resumeSeat: string | null = null;
   private readonly poseBuf: NetPose = { x: 0, y: 0, state: STATE.idle, dir: DIR.down };
@@ -201,6 +200,7 @@ export class CampScene extends Phaser.Scene {
     });
     this.campfire = new CampfireView(this, this.rig, this.map, h.reduced);
     this.riding = new Riding({ player: () => this.player, net: () => h.net, remotes: () => this.remotes, toast: (m) => this.toast(m) });
+    this.food = new FoodFx({ scene: this, reduced: h.reduced, sfx: h.sfx, player: () => this.player, remotes: () => this.remotes });
     this.forage = new CampForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m) });
 
     this.applyArrivalPose();
@@ -389,7 +389,7 @@ export class CampScene extends Phaser.Scene {
       onGoblin: () => undefined,
       onGoblinGone: () => undefined,
       onGoblinCaught: () => undefined,
-      onBbq: (sid, item, until) => this.onBbq(sid, item, until),
+      onBbq: (sid, item, until, lv, at) => this.food.onBbq(sid, sid === this.host.net.mySid, item, until, lv, at),
       onMapped: (map, peers, seats) => {
         if (map !== "camp") return this.host.bail();
         this.clearRemotes();
@@ -480,8 +480,6 @@ export class CampScene extends Phaser.Scene {
     this.forage?.f.applyPeer(p);
     r.setAway(p.away === true, performance.now(), true);
     r.view.setFriend(this.isFriend(r));
-    // 11/15 바베큐로 커져 있는 사람 (늦게 와도 보인다)
-    if (isBbqEffect(p.bbq) && p.bbq.u > Date.now()) this.applyBig(p.sid, r.view, p.bbq.i, p.bbq.u);
     if (!r.seatId) for (const [seatId, owner] of this.seats) if (owner === p.sid) r.seatId = seatId;
     this.remotes.set(p.sid, r);
   }
@@ -505,7 +503,7 @@ export class CampScene extends Phaser.Scene {
       r.view.setMood(p.mood ?? null);
       this.riding.applyPeer(r, p);
       r.setAway(p.away === true, now);
-      if (isBbqEffect(p.bbq) && p.bbq.u > Date.now()) this.applyBig(p.sid, r.view, p.bbq.i, p.bbq.u);
+      r.applyFood(foodOfPeer(p)); // 11/15 바베큐 효과 (커지기·빨라지기·취기)
       const last = r.interp.latest;
       if (!last || Math.hypot(last.x - p.x, last.y - p.y) > TELEPORT_DIST / 2) r.push(now, p.x, p.y, p.state, p.dir);
     }
@@ -587,7 +585,7 @@ export class CampScene extends Phaser.Scene {
       }),
     );
     on.push(bridge.on("camp:talkClose", () => (this.talking = null)));
-    on.push(bridge.on("camp:bbq:eat", ({ item, until, grant }) => this.eatBbq(item, until, grant)));
+    on.push(bridge.on("camp:bbq:eat", ({ item, until, grant, lv, at }) => this.eatBbq(item, until, grant, lv, at)));
   }
 
   private fw(): Fireworks {
@@ -925,60 +923,16 @@ export class CampScene extends Phaser.Scene {
     this.fireworks?.update(now, dt, view);
     this.updateLighting(view);
     if (pl.state === "run" && now - this.dustAt > DUST_MS) this.dustAt = now;
-    this.updateBig(pnow);
     net.tick(pnow);
   }
 
   // ── 11/15 야외 바베큐 (먹으면 잠깐 커진다 — 재미용) ──
 
-  /** 메뉴 창에서 샀다: 증서는 실시간 서버로, 나는 바로 먹는 연출·커지기 */
-  private eatBbq(item: BbqItemId, until: number, grant: string): void {
+  /** 메뉴 창에서 샀다: 증서는 실시간 서버로, 나는 바로 먹는·마시는 연출과 효과 */
+  private eatBbq(item: BbqItemId, until: number, grant: string, lv?: number, at?: number): void {
     if (this.cleaned) return;
     this.host.net.bbq(grant);
-    this.playEat(this.player.view, this.player.x, this.player.y, item, this.time.now);
-    this.applyBig("me", this.player.view, item, until);
-  }
-
-  /** 서버가 확인한 바베큐 (같은 캠핑장 사람, 내 것도 온다) */
-  private onBbq(sid: Sid, item: BbqItemId, until: number): void {
-    if (sid === this.host.net.mySid) {
-      this.applyBig("me", this.player.view, item, until);
-      return;
-    }
-    const r = this.remotes.get(sid);
-    if (!r) return;
-    if (r.visible) this.playEat(r.view, r.x, r.y, item, performance.now());
-    this.applyBig(sid, r.view, item, until);
-  }
-
-  private applyBig(key: Sid | "me", view: { setBig(scale: number, tint: number | null): void }, item: BbqItemId, until: number): void {
-    const m = bbqItem(item);
-    if (!m) return;
-    view.setBig(m.scale, m.tint);
-    this.bigUntil.set(key, until);
-  }
-
-  /** 접시가 머리 위로 떠올랐다 사라지고 "한 입!" 말풍선 */
-  private playEat(view: { say(text: string, now: number): void }, x: number, y: number, item: BbqItemId, now: number): void {
-    const m = bbqItem(item);
-    if (!m) return;
-    view.say(m.bite, now);
-    this.host.sfx.play("say", 0.4);
-    const plate = this.add.image(x, y - 26, Art.CAMP_TEX.bbqPlate(item)).setOrigin(0.5, 1).setDepth(y + 40);
-    this.tweens.add({ targets: plate, y: y - 40, alpha: 0, duration: this.host.reduced ? 600 : 1600, ease: "Sine.easeIn", onComplete: () => plate.destroy() });
-  }
-
-  /** 끝난 효과는 원래 크기로 (0.5초마다 확인) */
-  private updateBig(pnow: number): void {
-    if (pnow < this.bigCheckAt || this.bigUntil.size === 0) return;
-    this.bigCheckAt = pnow + 500;
-    const t = Date.now();
-    for (const [key, until] of this.bigUntil) {
-      if (until > t) continue;
-      this.bigUntil.delete(key);
-      if (key === "me") this.player.view.setBig(1, null);
-      else this.remotes.get(key)?.view.setBig(1, null);
-    }
+    this.food.eat(item, until, lv, at);
   }
 
   private benchInput(now: number): MoveInput {

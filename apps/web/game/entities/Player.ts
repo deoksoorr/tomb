@@ -9,6 +9,8 @@ import type { GlyphAtlas } from "../text/GlyphAtlas";
 import { AvatarView, SIT_CHAIR_LIFT } from "./AvatarView";
 import { bridge } from "../bridge";
 import { avatarColorSpec } from "../sprites/avatar";
+import { prefersReducedMotion } from "../config";
+import { MyFoodView } from "../camp/foodFx";
 
 // 내 캐릭터. 입력은 즉시 로컬에서 반영한다 (서버를 기다리지 않음, 서버 보정도 없음).
 // 상태 머신: idle | walk | run | sitGround | sitChair | jump | hang | swing | swim | dive
@@ -30,6 +32,8 @@ const SNAP_MS = 160;
 /** 물속 이동 속도 배율 */
 export const SWIM_SPEED = 0.6;
 export const DIVE_SPEED = 0.45;
+/** 땅 위 걸음 배율 상한 (타는 펫 × 칭호 × 캠핑장 먹거리). 실시간 서버는 달리기 × 1.5를 넘는 이동을 버린다 → 그 안쪽 */
+export const MAX_GROUND_MUL = 1.48;
 
 /** 붙어 있는 자세(앵커): 나무·그네·해먹 + 50번 시소·트램펄린·회전목마 */
 export const ATTACH_KINDS = ["hang", "swing", "hammock", "seesaw", "trampoline", "carousel", "lie", "read", "bath", "ferris", "balloon"] as const;
@@ -73,8 +77,16 @@ export class Player {
   private moveFrom: Seat | null = null;
   /** 조각배(50번)에 타고 있으면 그 배 자리 id. 위치는 씬의 BoatRide가 물 위로 옮긴다 (물리 바디 끔) */
   boatSeatId: string | null = null;
+  /** 11/16 범퍼카에 타고 있으면 그 차 자리 id. 위치는 씬의 BumperRide가 링크 안에서 옮긴다 (물리 바디 끔) */
+  carSeatId: string | null = null;
   /** 동물원 타는 펫에 올라타 걸을 때의 속도 배율 (타지 않으면 1 — 씬의 zoo/Riding이 정한다, 물속에서는 쓰지 않는다) */
   rideMul = 1;
+  /** 11/15 캠핑장 커피·꿀호떡: 걸음 배율 (1 = 그대로). 장면(마을·캠핑장)이 매 프레임 넣는다 — 사냥터에는 없다 */
+  boost = 1;
+  /** 11/15 취기: 걸을 때 이동 방향이 좌우로 흔들리는 폭 (라디안, 0 = 똑바로). 조작은 그대로 된다 */
+  sway = 0;
+  /** 11/15 캠핑장 먹거리·마실 거리 효과 (마을·캠핑장 = titleSpeed인 장면에서만 — 집·상점에는 없다) */
+  private food: MyFoodView | null = null;
   /**
    * 단 칭호의 마을 이동 속도 (lib/titles TITLE_PERKS). 마을(WorldScene)만 켠다 — 상점·집·분양 마을 안은 그대로,
    * 물속·놀이기구·배는 원래 속도 (서버 속도 검증 안: 전설 1.07 × 타는 펫 1.35 < 1.5)
@@ -154,6 +166,10 @@ export class Player {
   get inBoat(): boolean {
     return this.boatSeatId !== null;
   }
+  /** 범퍼카에 타고 있다 (11/16) */
+  get inCar(): boolean {
+    return this.carSeatId !== null;
+  }
 
   /** 네트워크로 보낼 논리 상태. 의자에 앉으면 스냅 도중에도 좌석 앵커를 보낸다 */
   netPose(out: NetPose): NetPose {
@@ -182,7 +198,7 @@ export class Player {
       if (!this.rideLock) this.leaveAnchor(now);
       return false;
     }
-    if (this.inWater || this.inBoat) return false;
+    if (this.inWater || this.inBoat || this.inCar) return false;
     if (!canJump(now, this.airborne, this.landedAt) || !this.body.enable) return false;
     this.airborne = true;
     this.jumpStart = now;
@@ -218,6 +234,10 @@ export class Player {
 
   /** 매 프레임. 이번 프레임에 걷기 시작했으면 true (카메라 복귀 신호) */
   update(input: MoveInput, now: number, seats: SeatRequester): boolean {
+    if (this.titleSpeed) {
+      this.food ??= new MyFoodView(this.scene, prefersReducedMotion());
+      [this.boost, this.sway] = this.food.update(this.view, now);
+    }
     const moved = this.step(input, now, seats);
     this.syncPose();
     return moved;
@@ -236,8 +256,8 @@ export class Player {
       this.onLand?.();
     }
     resolveMove(input, this.dir, this.move);
-    // 조각배: 이동은 씬(BoatRide)이 노 젓기로 처리한다
-    if (this.boatSeatId) return false;
+    // 조각배·범퍼카: 이동은 씬(BoatRide·BumperRide)이 노 젓기·운전으로 처리한다
+    if (this.boatSeatId || this.carSeatId) return false;
     if (this.anchor) {
       if (!this.move.moving || this.rideLock) {
         this.view.apply(this.state, this.dir, now);
@@ -267,13 +287,23 @@ export class Player {
       this.titleLook = this.view.wearing;
       this.titleMul = titlePerk(titleOfLook(this.titleLook)).speed;
     }
-    const mul = wet ? (this.diving ? DIVE_SPEED : SWIM_SPEED) : this.rideMul * (this.titleSpeed ? this.titleMul : 1);
+    // 땅 위 배율: 타는 펫 × 칭호 × 11/15 캠핑장 먹거리 — 실시간 서버 속도 검증(달리기 × 1.5) 안에서 (MAX_GROUND_MUL)
+    const mul = wet ? (this.diving ? DIVE_SPEED : SWIM_SPEED) : Math.min(MAX_GROUND_MUL, this.rideMul * (this.titleSpeed ? this.titleMul : 1) * this.boost);
     // 강물에 떠내려가는 만큼 (가만히 있어도 흘러간다)
     const cur = wet && this.current ? this.current(this.x, this.y) : null;
     const cvx = cur ? cur.vx : 0;
     const cvy = cur ? cur.vy : 0;
     if (this.move.moving) {
-      this.body.setVelocity(this.move.vx * mul + cvx, this.move.vy * mul + cvy);
+      let vx = this.move.vx;
+      let vy = this.move.vy;
+      if (this.sway > 0 && !wet) {
+        // 취기: 가는 방향이 천천히 좌우로 기운다 (갈지자). 속도는 그대로
+        const a = this.sway * Math.sin(now / 330);
+        const c = Math.cos(a);
+        const sn = Math.sin(a);
+        [vx, vy] = [vx * c - vy * sn, vx * sn + vy * c];
+      }
+      this.body.setVelocity(vx * mul + cvx, vy * mul + cvy);
       this.dir = this.move.dir;
       this.state = wet ? (this.diving ? "dive" : "swim") : this.move.running ? "run" : "walk";
     } else {
@@ -395,6 +425,62 @@ export class Player {
     this.snap?.stop();
     this.snap = null;
     this.view.sprite.setPosition(x, y);
+  }
+
+  /** 범퍼카에 탄다 (세워 둔 차 자리 x,y로 미끄러지듯). 점유 요청은 씬이 보낸다 */
+  boardCar(seatId: string, x: number, y: number, dir: DirId, now: number, seats: SeatRequester | null): void {
+    if (this.airborne) this.endJump(now);
+    if (this.sitting) this.stand(now, seats);
+    if (this.anchor) this.leaveAnchor(now);
+    this.cancelSnap();
+    this.diving = false;
+    this.carSeatId = seatId;
+    this.state = "bumper";
+    this.dir = dir;
+    this.body.setVelocity(0, 0);
+    this.body.enable = false;
+    this.view.depthOverride = null;
+    this.view.apply(this.state, this.dir, now);
+    this.snap = this.scene.tweens.add({
+      targets: this.view.sprite,
+      x,
+      y,
+      duration: 200,
+      ease: "Sine.easeOut",
+      onComplete: () => {
+        this.snap = null;
+      },
+    });
+  }
+
+  /** 범퍼카 위치·방향 (BumperRide가 매 프레임). 타는 동작(스냅)이 끝나기 전엔 위치를 건드리지 않는다 */
+  carTo(x: number, y: number, dir: DirId, now: number): void {
+    if (!this.carSeatId) return;
+    if (!this.snap) this.view.sprite.setPosition(x, y);
+    if (dir !== this.dir) {
+      this.dir = dir;
+      this.view.apply(this.state, this.dir, now);
+    }
+  }
+
+  /** 타는 동작(스냅)이 끝났는지 — 끝나야 운전이 시작된다 */
+  get snapping(): boolean {
+    return this.snap !== null;
+  }
+
+  /** 범퍼카에서 내린다 (입구 앞 x,y로) */
+  leaveCar(x: number, y: number, now: number): void {
+    if (!this.carSeatId) return;
+    this.carSeatId = null;
+    this.snap?.stop();
+    this.snap = null;
+    this.view.depthOverride = null;
+    this.view.ride = null;
+    this.state = "idle";
+    this.view.apply(this.state, this.dir, now);
+    this.syncPose();
+    this.body.enable = true;
+    this.body.reset(x, y);
   }
 
   /** 배에서 내린다 (뭍 x,y로) */
@@ -553,6 +639,11 @@ export class Player {
       this.boatSeatId = null;
       this.view.depthOverride = null;
     }
+    if (this.carSeatId) {
+      this.carSeatId = null;
+      this.view.depthOverride = null;
+      this.view.ride = null;
+    }
     this.diving = false;
     if (this.sitting) this.stand(now, seats);
     this.cancelSnap();
@@ -570,6 +661,8 @@ export class Player {
   }
 
   destroy(): void {
+    this.food?.destroy();
+    this.food = null;
     this.offStaff();
     this.offDex();
     this.offLook();

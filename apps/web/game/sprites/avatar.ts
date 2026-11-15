@@ -81,6 +81,8 @@ export const AV_ANIM = {
   // 놀이기구 2: 관람차 칸에는 앉고, 열기구 바구니에는 선다 (AV_ALIASES)
   ferris: { col: 13, frames: 1, fps: 1 },
   balloon: { col: 0, frames: 2, fps: 2 },
+  // 11/16 범퍼카: 차 안에 앉은 자세 (AV_ALIASES)
+  bumper: { col: 13, frames: 1, fps: 1 },
 } as const;
 
 /** 다른 상태의 프레임을 그대로 쓰는 상태 (시트 열을 따로 차지하지 않는다) */
@@ -94,6 +96,7 @@ export const AV_ALIASES: Readonly<Partial<Record<keyof typeof AV_ANIM, keyof typ
   bath: "hammock",
   ferris: "sitChair",
   balloon: "idle",
+  bumper: "sitChair",
 };
 
 /** 한 번 하는 동작 애니메이션 (act) */

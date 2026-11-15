@@ -1,3 +1,4 @@
+import type { BbqItemId } from "./bbq";
 import type { AvatarDye } from "./dye";
 
 /** 캐릭터 상태 머신 값. 바이너리로 u8 전송. */
@@ -40,10 +41,13 @@ export const STATE = {
   ferris: 18,
   /** 열기구 바구니에 서서 맵 위를 날기 (기구마다 4자리). 서버 위치는 출발장 앵커 그대로, 비행 경로는 운항 시간표로 모두 같게 */
   balloon: 19,
+  // ── 11/16 범퍼카장 (1인 자리·서버 좌석, 움직이는 자리) ──
+  /** 범퍼카에 앉아 링크 안을 달린다. 위치는 보고된 그대로(조각배처럼), 차 색은 자리(차 번호)로 정해진다 */
+  bumper: 20,
 } as const;
 export type StateName = keyof typeof STATE;
 export type StateId = (typeof STATE)[StateName];
-export const STATE_NAMES: readonly StateName[] = ["idle", "walk", "run", "sitGround", "sitChair", "jump", "hang", "swim", "dive", "swing", "hammock", "boat", "seesaw", "trampoline", "carousel", "lie", "read", "bath", "ferris", "balloon"];
+export const STATE_NAMES: readonly StateName[] = ["idle", "walk", "run", "sitGround", "sitChair", "jump", "hang", "swim", "dive", "swing", "hammock", "boat", "seesaw", "trampoline", "carousel", "lie", "read", "bath", "ferris", "balloon", "bumper"];
 export function isStateId(n: number): n is StateId {
   return Number.isInteger(n) && n >= 0 && n < STATE_NAMES.length;
 }
@@ -96,5 +100,9 @@ export type PeerInfo = PeerState & {
   /** 실내(상점·집·사냥터 등 하위 장면)에 들어가 있다 → 메인 맵에서 숨긴다. 옛 클라이언트는 무시한다(문 앞에 보인다) */
   away?: true;
   /** 11/15 캠핑장 바베큐를 먹고 커져 있다 (i = 메뉴, u = 끝나는 시각 epoch ms). 옛 클라이언트는 무시한다 */
-  bbq?: { i: "pork" | "sausage" | "marsh"; u: number };
+  bbq?: { i: BbqItemId; u: number };
+  /** 11/15 캠핑장 커피·꿀호떡: 빨라진 걸음 (끝나는 시각 u). 옛 클라이언트는 무시한다 */
+  spd?: { i: BbqItemId; u: number };
+  /** 11/15 캠핑장 맥주·소주·막걸리: 취기 (at 무렵 lv단계, 10분에 1씩 깬다). 옛 클라이언트는 무시한다 */
+  drunk?: { lv: number; at: number };
 };

@@ -48,6 +48,8 @@ import { campfireLevel, LETTERBOX, nearestCampfire } from "../world/campfireMath
 import { Sfx } from "../world/Sfx";
 import { WorldMap } from "../world/WorldMap";
 import { BoatRide } from "../world/BoatRide";
+import { BumperRide } from "../bumper/BumperRide";
+import { BUMPER_DOOR } from "../bumper/bumperLayout";
 import { PlazaRides, type RideHost } from "../world/PlazaRides";
 import { SkyRides } from "../world/SkyRides";
 import { RideSound } from "../world/RideSound";
@@ -204,6 +206,8 @@ export class WorldScene extends Phaser.Scene {
   private rideSound!: RideSound;
   private rides!: PlazaRides;
   private boats!: BoatRide;
+  /** 11/16 범퍼카장 (bumper/BumperRide) */
+  private bumper!: BumperRide;
   /** 놀이기구 2: 관람차·열기구 (하늘 시점 포함) */
   private sky!: SkyRides;
   /** 11/15 마을 ↔ 캠핑장 버스 여행 (game/camp/CampTrip). 캠핑장에 있는 동안 이 장면은 잔다 */
@@ -470,6 +474,8 @@ export class WorldScene extends Phaser.Scene {
           }
           // 조각배에 탄 채로 (다시) 붙었다: 배 자리도 서버 점유표로 (놓쳤으면 뭍으로)
           this.boats.onWelcome(m);
+          // 범퍼카에 탄 채로 (다시) 붙었다: 차 자리도 서버 점유표로 (놓쳤으면 입구 앞으로)
+          this.bumper.onWelcome(m);
         },
         onJoin: (p) => this.addRemote(p),
         onLeave: (sid) => {
@@ -506,8 +512,10 @@ export class WorldScene extends Phaser.Scene {
           // 나무·그네를 동시에 잡았는데 다른 사람이 먼저였다 → 내려온다
           if (sid !== this.net.mySid && this.player.spotId === seatId) this.mySpotLost(seatId);
           this.boats.onSeat(seatId, sid);
+          this.bumper.onSeat(seatId, sid);
         },
         onSeatDenied: (seatId) => {
+          if (this.bumper.onSeatDenied(seatId)) return;
           if (this.boats.onSeatDenied(seatId)) return;
           if (this.life.seatDenied(seatId)) return;
           if (this.forage.seatDenied(seatId)) return;
@@ -621,6 +629,7 @@ export class WorldScene extends Phaser.Scene {
       if (pl.sitting) pl.stand(now, null);
       if (pl.anchored) pl.leaveAnchor(now);
       if (pl.inBoat) this.boats.disembark(true);
+      if (pl.inCar) this.bumper.leave();
       return;
     }
     if (pl.inBoat) return; // 배 자리는 boats.onWelcome이 판정한다
@@ -678,7 +687,12 @@ export class WorldScene extends Phaser.Scene {
     }
     const pl = this.player;
     const p = pl.netPose(this.poseBuf);
-    const st = pl.state;
+    // 11/16 범퍼카는 잇지 않는다: 다시 열면 입구 앞에 선다 (링크 안에 걸어서 서 있지 않게)
+    if (pl.inCar) {
+      p.x = BUMPER_DOOR.x;
+      p.y = BUMPER_DOOR.y;
+    }
+    const st = pl.inCar ? "idle" : pl.state;
     const ride = st === "seesaw" || st === "trampoline" || st === "carousel" || (st === "boat" && pl.boatSeatId);
     const pose: ResumePose = st === "sitChair" && pl.seat ? "sitChair" : st === "sitGround" || st === "swing" || st === "hang" || st === "hammock" || ride ? st : "idle";
     saveResume({
@@ -983,6 +997,7 @@ export class WorldScene extends Phaser.Scene {
     if (pl.anchored) pl.leaveAnchor(now);
     else if (pl.sitting) pl.stand(now, this.seatReq);
     if (pl.inBoat) this.boats.disembark(true);
+    if (pl.inCar) this.bumper.leave();
     this.rig.recenter();
     this.recenterAt = 0;
   }
@@ -1112,6 +1127,8 @@ export class WorldScene extends Phaser.Scene {
     const mySid = this.net.online ? this.net.mySid : null;
     // 놀이기구 2: 관람차가 돌거나 열기구가 떠 있는 동안 X·E·스페이스는 두 번 눌러 내리기 (SkyRides)
     if (this.sky.onAction(a)) return;
+    // 11/16 범퍼카 위: E = 입구 안쪽에서 내리기, Space = 빵빵 (표현·채팅 키는 그대로 지나간다)
+    if (this.bumper.onAction(a)) return;
     if (a === "jump" && pl.inBoat) {
       this.boats.quack(); // 11/15 오리배 위 Space = 꽥 (조각배에서는 아무 일 없다)
       return;
@@ -1198,6 +1215,7 @@ export class WorldScene extends Phaser.Scene {
   private useObject(o: Interactable): void {
     const pl = this.player;
     const now = this.time.now;
+    if (pl.inCar) return; // 범퍼카에 탄 채로는 다른 것과 상호작용하지 않는다 (내리기는 onAction)
     switch (o.kind) {
       case "tree":
       case "swing":
@@ -1246,6 +1264,11 @@ export class WorldScene extends Phaser.Scene {
       case "mat":
         // 22번 별 보기 언덕: 망원경(별자리 잇기)·돗자리 — 1인 자리
         this.life.useStarSpot(o);
+        break;
+      case "bumper":
+        // 11/16 범퍼카장 입구: 빈 차 중 무작위 하나에 탄다 (BumperRide)
+        pl.faceTo(o.x, o.y + 10, now);
+        this.bumper.use();
         break;
       case "bus":
         // 11/15 주말 버스 정류장 (버스 정류장 마당): 캠핑장이 열린 서버면 버스가 온다 (CampTrip). 운영에서 닫혀 있으면 지금처럼 안내만
@@ -1489,6 +1512,9 @@ export class WorldScene extends Phaser.Scene {
       case "zoo":
         // 동물원 정문 아치 (현판 위)
         return { x: ZOO_ARCH_AT.x, y: ZOO_ARCH_AT.y - 46, text: label ?? "동물원" };
+      case "bumper":
+        // 11/16 범퍼카장 입구 간판 위
+        return { x: BUMPER_DOOR.x, y: BUMPER_DOOR.y - 44, text: label ?? "범퍼카장" };
       default:
         return null;
     }
@@ -1561,6 +1587,9 @@ export class WorldScene extends Phaser.Scene {
     } else if (kind === "quack") {
       // 11/15 오리배 꽥 (소리·물결은 BoatRide, "꽥!" 말풍선은 AvatarView.playAct)
       this.boats.quackFx(x, y, mine, d);
+    } else if (kind === "honk") {
+      // 11/16 범퍼카 빵빵 (경적·헤드라이트 깜빡은 BumperRide, "빵빵!" 말풍선은 AvatarView.playAct)
+      this.bumper.honkFx(x, y, mine, d);
     } else if (d < 400 || mine) {
       // 손 흔들기·환호 이모티콘은 아바타가 이름표 위에 띄운다 (AvatarView.playAct). 여기는 환호 반짝임과 소리 (이모티콘과 같은 톡 — 환호는 높게)
       this.fx.actSparks(x, y, kind);
@@ -1678,6 +1707,7 @@ export class WorldScene extends Phaser.Scene {
     this.walker.steer(this.move, Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER, now);
     const started = pl.update(this.benchInput(now), now, this.seatReq);
     this.boats.steer(this.move, dt);
+    this.bumper.steer(this.move, dt);
     if (this.graveLock && !this.overlappingGrave()) this.graveLock = false;
     this.graveCollider.active = !pl.airborne && !this.graveLock;
     this.furnitureCollider.active = this.graveCollider.active;
@@ -1724,6 +1754,7 @@ export class WorldScene extends Phaser.Scene {
     const view = this.rig.frameView(this.view);
     this.rides.prepare();
     this.boats.prepare();
+    this.bumper.prepare();
     this.sky.prepare();
     this.expr.update(now);
     if (!this.awayScene) this.meScreen.update(pl.x, pl.y);
@@ -1772,6 +1803,7 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     this.boats.update(dt);
+    this.bumper.update(dt, view);
     this.rides.update();
     this.sky.update(dt);
 
@@ -1819,6 +1851,7 @@ export class WorldScene extends Phaser.Scene {
       // 가로등·모닥불·횃불·촛불: 깊은 밤에도 둘레가 또렷하게
       for (const sp of this.map.staticLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.4, 0.85);
       for (const sp of this.map.gridLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.4, 0.85);
+      this.bumper.lights(lit); // 11/16 범퍼카 헤드라이트
       const vis = this.field.visibleViews;
       for (let i = 0; i < vis.length; i++) {
         const v = vis[i];
@@ -1975,7 +2008,7 @@ export class WorldScene extends Phaser.Scene {
     const pl = this.player;
     const occupied = this.net.online ? this.seats : EMPTY_SEATS;
     const mySid = this.net.online ? this.net.mySid : null;
-    const seat: Seat | null = pl.sitting || pl.inBoat ? null : pickSeat(pl.x, pl.y, occupied, mySid);
+    const seat: Seat | null = pl.sitting || pl.inBoat || pl.inCar ? null : pickSeat(pl.x, pl.y, occupied, mySid);
     const id = seat ? seat.id : null;
     if (id !== this.nearSeatId) {
       this.nearSeatId = id;
@@ -2014,6 +2047,14 @@ export class WorldScene extends Phaser.Scene {
     const h = this.hintBuf;
     h.dim = false;
     if (pl.airborne) return null;
+    const carText = this.bumper.hint(pre, pre === "E ");
+    if (pl.inCar) {
+      if (!carText) return null;
+      h.x = pl.x;
+      h.y = pl.y + 2;
+      h.text = carText;
+      return h;
+    }
     const boatText = this.boats.hint(pre);
     if (boatText) {
       h.x = pl.x;
@@ -2067,6 +2108,10 @@ export class WorldScene extends Phaser.Scene {
       } else if (o.obj.kind === "carousel" && this.rides.carouselFull(o.obj)) {
         h.text = "목마가 모두 찼어요";
         h.dim = true;
+      } else if (o.obj.kind === "bumper") {
+        const b = this.bumper.gateHint(pre);
+        h.text = b.text;
+        h.dim = b.dim;
       } else if (o.obj.kind === "ferris" || o.obj.kind === "balloon") {
         const s = this.sky.hint(o.obj, pre);
         if (s) {
@@ -2108,6 +2153,7 @@ export class WorldScene extends Phaser.Scene {
     };
     this.rides = new PlazaRides(host);
     this.boats = new BoatRide({ ...host, act: (k) => this.doAct(k) });
+    this.bumper = new BumperRide({ ...host, atlas: this.atlas, colliders: this.map.colliders, act: (k) => this.doAct(k), darkness: () => this.atmos?.levels.darkness ?? 0 });
     // 놀이기구 2: 날씨는 이 뒤에 만들어지므로 그때그때 읽는다
     const atmos = () => this.atmos;
     const rig = () => this.rig;
@@ -2157,6 +2203,7 @@ export class WorldScene extends Phaser.Scene {
     this.houses?.destroy();
     this.houses = null;
     this.boats?.destroy();
+    this.bumper?.destroy();
     this.rides?.destroy();
     this.sky?.destroy();
     this.rideSound?.destroy();

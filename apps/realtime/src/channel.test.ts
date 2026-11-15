@@ -1136,7 +1136,7 @@ describe("duck pedal boats on the duck pond: two seats side by side (11/15)", ()
     clear(a, b);
     core.message(a, send({ t: "act", kind: "quack" }), 0);
     core.message(a, send({ t: "act", kind: "quack" }), 1_500);
-    core.message(a, send({ t: "act", kind: "honk" } as never), 3_000);
+    core.message(a, send({ t: "act", kind: "moo" } as never), 3_000); // 모르는 동작은 버린다 (11/16부터 honk는 범퍼카 빵빵이라 받는다)
     core.message(a, send({ t: "act", kind: "quack" }), 3_000);
     expect(events(b)).toEqual([
       { t: "act", sid: 1, kind: "quack", x: DOCK.x, y: DOCK.y },

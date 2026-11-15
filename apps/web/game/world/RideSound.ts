@@ -86,6 +86,89 @@ export class RideSound extends AudioHost {
     }
   }
 
+  /**
+   * 11/16 범퍼카 「쿵」: 파일 없이 합성한다 — 낮은 사인파가 뚝 떨어지고(고무 범퍼가 눌리는 둔한 울림) 짧은 잡음이 덧붙는다.
+   * gain 0..1 (세게 부딪힐수록 크게), rate = 음 높이 배율
+   */
+  thump(gain = 1, rate = 1): void {
+    if (this.muted || this.volume <= 0 || this.hidden || gain <= 0.01 || this.voices >= MAX_VOICES) return;
+    const ac = this.audio();
+    if (!ac) return;
+    const t = ac.currentTime + 0.005;
+    const v = Math.max(0.001, Math.min(1, this.volume * gain));
+    const out = ac.createGain();
+    out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(v * 0.9, t + 0.008);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+    out.connect(this.output);
+    const o = ac.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(150 * rate, t);
+    o.frequency.exponentialRampToValueAtTime(55 * rate, t + 0.2);
+    o.connect(out);
+    // 고무 「퉁」 소리 겉면: 짧은 잡음을 낮은 띠로
+    const len = Math.floor(ac.sampleRate * 0.06);
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const n = ac.createBufferSource();
+    n.buffer = buf;
+    const f = ac.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 900 * rate;
+    const ng = ac.createGain();
+    ng.gain.value = 0.45;
+    n.connect(f).connect(ng).connect(out);
+    this.voices++;
+    o.start(t);
+    o.stop(t + 0.28);
+    n.start(t);
+    o.onended = () => {
+      this.voices = Math.max(0, this.voices - 1);
+      out.disconnect();
+    };
+  }
+
+  /** 11/16 범퍼카 빵빵: 네모파 두 음(장3도)을 짧게 두 번. gain 0..1, rate = 음 높이 배율 */
+  honk(gain = 1, rate = 1): void {
+    if (this.muted || this.volume <= 0 || this.hidden || gain <= 0.01 || this.voices >= MAX_VOICES) return;
+    const ac = this.audio();
+    if (!ac) return;
+    const t0 = ac.currentTime + 0.01;
+    const v = Math.max(0.001, Math.min(1, this.volume * gain)) * 0.22;
+    const out = ac.createGain();
+    out.gain.value = 1;
+    const f = ac.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 2400;
+    f.connect(out);
+    out.connect(this.output);
+    this.voices++;
+    let last: OscillatorNode | null = null;
+    for (const at of [0, 0.19]) {
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t0 + at);
+      g.gain.exponentialRampToValueAtTime(v, t0 + at + 0.015);
+      g.gain.setValueAtTime(v, t0 + at + 0.11);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.15);
+      g.connect(f);
+      for (const hz of [392, 494]) {
+        const o = ac.createOscillator();
+        o.type = "square";
+        o.frequency.value = hz * rate;
+        o.connect(g);
+        o.start(t0 + at);
+        o.stop(t0 + at + 0.16);
+        last = o;
+      }
+    }
+    if (last)
+      last.onended = () => {
+        this.voices = Math.max(0, this.voices - 1);
+        out.disconnect();
+      };
+  }
+
   /** 회전목마 음악 크기 0..1 (매 프레임 불러도 된다) */
   carousel(level: number): void {
     this.organ.set(level);

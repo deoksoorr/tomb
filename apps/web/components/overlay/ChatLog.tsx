@@ -1,19 +1,21 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import { bridge } from "@/game/bridge";
-import { chatChime, chimeForChat } from "@/lib/chatChime";
+import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useBackground } from "@/lib/hooks/useBackground";
-import { addChatLine, CHAT_LOG_MOBILE_LINES, chatLineOpacity, chatLineTone, liveChatLines, mergeChatLines, visibleChatLines, type ChatLine } from "@/game/logic/chatLog";
-import { cx } from "../ui/cx";
-import StyledName from "../ui/StyledName";
+import { CHAT_LOG_MOBILE_LINES, chatChannelOf, visibleChatLines, type ChatLine } from "@/game/logic/chatLog";
+import PixelIcon from "../ui/PixelIcon";
 import ChatInput from "./ChatInput";
+import { chatStore, setChatShown, useChatLines } from "./chatLines";
+import ChatScroll, { ChatLineItem } from "./ChatScroll";
 import styles from "./ChatLog.module.css";
 
-// 채팅 기록창: 같은 채널(방)에서 오간 자유 채팅을 5분 동안 보여 준다 (말풍선과 함께). 화면 메모리에만 두고 기기에 저장하지 않는다.
+// 채팅 기록창: 같은 채널(방)에서 오간 자유 채팅을 5분 동안 보여 준다 (말풍선과 함께). 화면 메모리에만 두고 기기에 저장하지 않는다 (chatLines).
 // 방에 들어올 때(입장·새로고침·재접속·실내에서 복귀) 서버가 그 방의 최근 5분(chat:log)을 보내 주면 서버 줄 id로 겹치지 않게 합친다.
 //  - 데스크톱: 왼쪽 아래 바로 가기 줄 바로 위 반투명 상자. 상자 안에서 스크롤(하단 고정), 아래에 입력칸 (Enter 포커스 → Enter 전송 → Esc·빈 Enter 해제)
-//  - 모바일: 상자 없이 글씨만 최근 몇 줄, 터치는 통과. 입력은 기존 [채팅] 버튼
+//  - 모바일: 평소엔 상자 없이 글씨만 최근 몇 줄(터치 통과) + 옆 작은 [기록] 버튼.
+//    누르면 그 자리에 반투명 기록 창(손가락 스크롤, [말하기]로 채팅 입력 줄). 창 밖을 누르면 닫히고 그 터치는 게임(조이스틱)으로 그대로 간다.
+//    채팅 입력 줄(ChatSheet)에도 같은 기록이 위에 붙는다.
 
 /** 데스크톱 채팅창 입력칸 id (GameShell의 Enter가 찾아 포커스한다) */
 const INPUT_ID = "chat-log-input";
@@ -21,65 +23,6 @@ const INPUT_ID = "chat-log-input";
 const TICK_MS = 1000;
 /** 뒤로 간 동안(다른 창을 보는 중)은 흐려짐 갱신을 늦춘다 */
 const TICK_BG_MS = 5000;
-
-let lines: ChatLine[] = [];
-let seq = 0;
-/** 지금 줄들이 속한 채널 번호 (모르면 null) */
-let channelOf: string | null = null;
-/** 채팅창이 지금 화면에 보이는지 (숨은 장면·화면이 아직 없으면 알림음을 내지 않는다) */
-let shownNow = false;
-const subs = new Set<() => void>();
-const notify = () => subs.forEach((f) => f());
-const store = {
-  /** 새 줄이면 true */
-  push(name: string, text: string, mine: boolean, key?: string, staff?: true, ns?: string[]): boolean {
-    if (key && lines.some((l) => l.key === key)) return false; // chatLog로 이미 받은 줄
-    lines = addChatLine(lines, { id: ++seq, name, text, mine, at: Date.now(), ...(key ? { key } : {}), ...(staff ? { staff } : {}), ...(ns ? { ns } : {}) });
-    notify();
-    return true;
-  },
-  /** 서버 최근 5분 합치기 */
-  merge(incoming: Parameters<typeof mergeChatLines>[1]) {
-    if (!incoming.length) return;
-    lines = mergeChatLines(lines, incoming, Date.now(), () => ++seq);
-    notify();
-  },
-  /** 채널이 바뀌면 비운다 (처음 알게 된 채널이면 그대로 둔다) */
-  setChannel(ch: string) {
-    if (channelOf !== null && channelOf !== ch && lines.length) {
-      lines = [];
-      notify();
-    }
-    channelOf = ch;
-  },
-  /** 지난 줄 정리 (바뀐 게 있을 때만 알린다) */
-  prune(now: number) {
-    const live = liveChatLines(lines, now);
-    if (live.length === lines.length) return;
-    lines = live;
-    notify();
-  },
-  subscribe(f: () => void) {
-    subs.add(f);
-    return () => void subs.delete(f);
-  },
-  get: () => lines,
-};
-const EMPTY: ChatLine[] = [];
-
-// 화면이 아직 안 떴어도(입장 직후 welcome·chatLog가 먼저 올 수 있다) 받은 줄을 모은다 — 모듈에서 한 번만 구독
-if (typeof window !== "undefined") {
-  bridge.on("chat:line", ({ name, text, mine, key, staff, ns }) => {
-    const added = store.push(name, text, mine, key, staff, ns);
-    // 실시간으로 새로 온 다른 사람 채팅에만 작은 알림음 (지난 기록 chat:log에는 울리지 않는다)
-    chimeForChat({ mine, added, shown: shownNow, enabled: chatChime.getSnapshot() }, Date.now());
-  });
-  bridge.on("chat:log", ({ lines: incoming, ch }) => {
-    // 월드 채널 기록이면 그 채널로 맞춘 뒤 합친다 (화면의 채널 표시가 늦게 바뀌어도 새 채널 기록을 지우지 않게)
-    if (ch !== undefined) store.setChannel(String(ch));
-    store.merge(incoming);
-  });
-}
 
 /** 데스크톱 Enter: 채팅창 입력칸에 포커스. 입력칸이 없으면 false */
 export function focusChatLog(): boolean {
@@ -95,21 +38,21 @@ type Props = {
   room: string;
   /** 지금 채팅을 쓸 수 없는 장면(상점·사냥 등)이면 숨긴다 (받은 줄은 계속 모은다) */
   hidden?: boolean;
+  /** 모바일 기록 창의 [말하기]: 채팅 입력 줄(ChatSheet) 열기. 없으면 버튼을 안 보인다 */
+  onChat?: () => void;
 };
 
-export default function ChatLog({ mobile, room, hidden = false }: Props) {
-  const all = useSyncExternalStore(store.subscribe, store.get, () => EMPTY);
+export default function ChatLog({ mobile, room, hidden = false, onChat }: Props) {
+  const all = useChatLines();
   const [now, setNow] = useState(() => Date.now());
 
-  // 채널을 옮길 때만 비운다 (같은 채널 안에서 집에 들어갔다 나와도 5분 안의 글은 남는다)
-  const channel = room.split(":")[1] ?? room;
-  useEffect(() => store.setChannel(channel), [channel]);
+  // 채널을 옮길 때만 비운다 (같은 채널 안에서 집에 들어갔다 나와도 5분 안의 글은 남는다. 캠핑장 "3c"는 마을 "3"과 따로)
+  const channel = chatChannelOf(room);
+  useEffect(() => chatStore.setChannel(channel), [channel]);
   // 알림음은 채팅창이 보일 때만
   useEffect(() => {
-    shownNow = !hidden;
-    return () => {
-      shownNow = false;
-    };
+    setChatShown(!hidden);
+    return () => setChatShown(false);
   }, [hidden]);
   // 줄이 있는 동안만 1초마다 흐려짐·만료 갱신
   const any = all.length > 0;
@@ -119,7 +62,7 @@ export default function ChatLog({ mobile, room, hidden = false }: Props) {
     const t = setInterval(
       () => {
         const n = Date.now();
-        store.prune(n);
+        chatStore.prune(n);
         setNow(n);
       },
       background ? TICK_BG_MS : TICK_MS,
@@ -131,94 +74,84 @@ export default function ChatLog({ mobile, room, hidden = false }: Props) {
   // 막 추가된 줄은 렌더 시각이 받은 시각보다 앞설 수 있다 → 둘 중 늦은 쪽으로 (1초 안 흐려짐 없음)
   const at = Math.max(now, all.at(-1)?.at ?? 0);
   return mobile ? (
-    <MobileLines lines={visibleChatLines(all, at, CHAT_LOG_MOBILE_LINES)} now={at} />
+    <MobileChat all={visibleChatLines(all, at)} now={at} onChat={onChat} />
   ) : (
     <DesktopBox lines={visibleChatLines(all, at)} now={at} />
   );
 }
 
-function Line({ line, now }: { line: ChatLine; now: number }) {
-  return (
-    <li className={cx(styles.line, styles[chatLineTone(line)])} style={{ opacity: chatLineOpacity(line, now) }}>
-      <b className={cx(styles.name, line.staff && styles.staff)}>
-        {/* 운영자 이름은 금색 그대로 (닉네임 꾸미기를 입혀 헷갈리지 않게) + 11/15 "운영자" 딱지 (이름은 닉네임 그대로라) */}
-        {line.staff && <span className={styles.staffTag}>운영자</span>}
-        {line.staff ? line.name : <StyledName name={line.name} look={line.ns} />}
-      </b>
-      <span className={styles.sep}>: </span>
-      <span className={styles.text}>{line.text}</span>
-    </li>
-  );
-}
+/**
+ * 모바일: 평소엔 글씨만(최근 몇 줄, 흐려짐, 터치 통과) + 옆 작은 [기록] 버튼.
+ * [기록]을 누르면 같은 자리에 기록 창 — 손가락으로 위로 올려 읽고, 창 밖을 누르면 닫힌다 (그 터치는 막지 않아 조이스틱이 바로 잡힌다)
+ */
+function MobileChat({ all, now, onChat }: { all: ChatLine[]; now: number; onChat?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLElement>(null);
 
-/** 모바일: 게임 화면 위에 글씨만 (그림자 외곽선), 터치 통과 */
-function MobileLines({ lines: shown, now }: { lines: ChatLine[]; now: number }) {
-  if (!shown.length) return null;
+  // 창 밖 누르기 → 닫기. 캡처 단계에서 보기만 하고 막지 않는다 (게임 화면·조이스틱·버튼이 그 터치를 그대로 받는다)
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target;
+      if (t instanceof Node && panelRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [open]);
+
+  if (open) {
+    return (
+      <section ref={panelRef} className={styles.panel} aria-label="채팅 기록">
+        <header className={styles.panelHead}>
+          <span className={styles.panelTitle}>채팅 기록</span>
+          <span className={styles.panelNote}>5분 동안 보여요</span>
+          {onChat && (
+            <button
+              type="button"
+              className={styles.panelBtn}
+              // iOS는 탭 처리 안에서 포커스해야 키보드를 띄운다 → flushSync로 입력 줄을 바로 그린다 (MobileControls [채팅]과 같게)
+              onClick={() =>
+                flushSync(() => {
+                  setOpen(false);
+                  onChat();
+                })
+              }
+            >
+              <PixelIcon name="type" />
+              말하기
+            </button>
+          )}
+          <button type="button" className={styles.panelBtn} aria-label="채팅 기록 닫기" onClick={() => setOpen(false)}>
+            <PixelIcon name="close" />
+          </button>
+        </header>
+        {all.length > 0 ? <ChatScroll lines={all} className={styles.panelLog} /> : <p className={styles.empty}>아직 채팅이 없어요</p>}
+      </section>
+    );
+  }
+  const recent = all.length > CHAT_LOG_MOBILE_LINES ? all.slice(all.length - CHAT_LOG_MOBILE_LINES) : all;
   return (
-    <ol className={styles.mobile} aria-label="채팅" aria-live="polite">
-      {shown.map((l) => (
-        <Line key={l.id} line={l} now={now} />
-      ))}
-    </ol>
+    <>
+      <button type="button" className={styles.logBtn} aria-label="채팅 기록 보기" onClick={() => setOpen(true)}>
+        <PixelIcon name="chat" />
+      </button>
+      {recent.length > 0 && (
+        <ol className={styles.mobile} aria-label="채팅" aria-live="polite">
+          {recent.map((l) => (
+            <ChatLineItem key={l.id} line={l} now={now} />
+          ))}
+        </ol>
+      )}
+    </>
   );
 }
 
 /** 데스크톱: 반투명 상자 + 스크롤 기록(하단 고정) + 입력칸 */
 function DesktopBox({ lines: shown, now }: { lines: ChatLine[]; now: number }) {
-  const logRef = useRef<HTMLOListElement>(null);
-  /** 사용자가 맨 아래를 보고 있는지 (위로 올려 읽는 중이면 끌어내리지 않는다) */
-  const stick = useRef(true);
-  const [unread, setUnread] = useState(false);
-  const lastId = shown.at(-1)?.id ?? 0;
-  const prevLast = useRef(lastId);
-
-  // 새 줄: 맨 아래를 보고 있으면 따라 내려가고, 위를 읽는 중이면 [새 메시지 ↓]만 띄운다
-  useLayoutEffect(() => {
-    const el = logRef.current;
-    const added = lastId !== prevLast.current;
-    prevLast.current = lastId;
-    // 줄이 다 사라졌거나 스크롤할 만큼 없으면 다시 하단 고정
-    if (!el || el.scrollHeight <= el.clientHeight) {
-      stick.current = true;
-      setUnread(false);
-      return;
-    }
-    if (stick.current) el.scrollTop = el.scrollHeight;
-    else if (added) setUnread(true);
-  }, [lastId, shown.length]);
-
-  const toBottom = () => {
-    const el = logRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-    stick.current = true;
-    setUnread(false);
-  };
-
   return (
     <section className={styles.box} aria-label="채팅">
-      {shown.length > 0 && (
-        <div className={styles.logWrap}>
-          <ol
-            ref={logRef}
-            className={styles.log}
-            aria-live="polite"
-            onScroll={(e) => {
-              const el = e.currentTarget;
-              stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4;
-              if (stick.current) setUnread(false);
-            }}
-          >
-            {shown.map((l) => (
-              <Line key={l.id} line={l} now={now} />
-            ))}
-          </ol>
-          {unread && (
-            <button type="button" className={styles.newMsg} onClick={toBottom}>
-              새 메시지 ↓
-            </button>
-          )}
-        </div>
-      )}
+      {shown.length > 0 && <ChatScroll lines={shown} now={now} />}
       <ChatInput id={INPUT_ID} className={styles.input} placeholder="Enter로 채팅" onCancel={() => document.getElementById(INPUT_ID)?.blur()} />
     </section>
   );

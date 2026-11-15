@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { bridge } from "@/game/bridge";
-import { BALLOON_ICON, FERRIS_ICON, FISH_ICON, LANDMARK_COLOR, LANDMARKS, MINIMAP_H, MINIMAP_W, minimapPixels, NODE_DOT_COLOR, PAW_ICON, toMinimap } from "@/game/world/minimapArt";
+import { BALLOON_ICON, BUMPER_ICON, FERRIS_ICON, FISH_ICON, LANDMARK_COLOR, LANDMARKS, MINIMAP_H, MINIMAP_W, minimapPixels, NODE_DOT_COLOR, PAW_ICON, toMinimap } from "@/game/world/minimapArt";
 import { CAMP_LANDMARK_COLOR, CAMP_LANDMARKS, CAMP_MINIMAP_H, CAMP_MINIMAP_W, campMinimapPixels, toCampMinimap } from "@/game/camp/campMinimap";
 import { gatherNodeById } from "@/lib/forage/catalog";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
@@ -161,11 +161,11 @@ export default function Minimap() {
         ctx.fillRect(px + 1, py - 1, 1, 1); // 눈
         continue;
       }
-      if (l.kind === "ferris" || l.kind === "balloon") {
-        // 관람차·열기구: 테두리를 두른 작은 그림
+      if (l.kind === "ferris" || l.kind === "balloon" || l.kind === "bumper") {
+        // 관람차·열기구·범퍼카: 테두리를 두른 작은 그림
         const px = Math.round(p.x);
         const py = Math.round(p.y);
-        const icon = l.kind === "ferris" ? FERRIS_ICON : BALLOON_ICON;
+        const icon = l.kind === "ferris" ? FERRIS_ICON : l.kind === "balloon" ? BALLOON_ICON : BUMPER_ICON;
         ctx.fillStyle = "rgba(0,0,0,0.7)";
         for (const [dx, dy] of icon) ctx.fillRect(px + dx - 1, py + dy - 1, 3, 3);
         ctx.fillStyle = LANDMARK_COLOR[l.kind];

@@ -9,7 +9,7 @@ export const ZOOM = 3;
 export const MAP_COLS = 90;
 export const MAP_WIDTH = MAP_COLS * TILE; // 1440
 export const MAP_ROWS = 64;
-/** 맵 높이 (고정). 묘비 수와 상관없다 — 묘역 세 곳의 정원 합계는 GRAVEYARD_CAPACITY */
+/** 맵 높이 (고정). 묘비 수와 상관없다 — 묘역(옛 묘역 하나)의 정원은 GRAVEYARD_CAPACITY */
 export const MAP_HEIGHT = MAP_ROWS * TILE; // 1024
 /** @deprecated 예전 "묘비가 없을 때의 최소 높이". 이제 맵 높이는 MAP_HEIGHT로 고정 */
 export const MAP_MIN_HEIGHT = MAP_HEIGHT;
@@ -29,8 +29,10 @@ export const WALL_THICKNESS = 2 * TILE;
  * 9 = 별 보기 언덕에 망원경 두 대 (둘째 받침 충돌·넓어진 돌 마당) — 새 충돌 자리에 옛 기록이 끼지 않게
  * 10 = 납품 부두 좁힘(잔교·끝 데크·아래 마당)·나루터와 띄움, 주말 버스 정류장 승강장·정차 칸 — 새 충돌 자리에 옛 기록이 끼지 않게
  * 11 = 납품 부두 없앰(잔교·데크·낚시 자리), 어부 노점 호박밭 옆, 강둑·호수 낚시 자리 — 새 충돌 자리에 옛 기록이 끼지 않게
+ * (11/16 묘역 하나로 합침·범퍼카장 — 배포 때 12로 올릴 것: 묘비 줄·링크 테두리 자리에 옛 기록이 끼지 않게)
+ * 12 = 묘역 하나로 합침(옛 묘역 8×4), 다리 건너 묘역 자리에 범퍼카장 — 새 충돌 자리에 옛 기록이 끼지 않게
  */
-export const MAP_VERSION = 11;
+export const MAP_VERSION = 12;
 
 const CX = MAP_WIDTH / 2; // 720
 
@@ -40,15 +42,15 @@ const CX = MAP_WIDTH / 2; // 720
 //         │ ▲별 보기 언덕▲ (달빛 연못) 유령잡화점 SPAWN  ⚑팻말   분양사무소 (까마귀 연못)│
 //  y≈176  │ ▲망원경·벤치▲ ═══════════════ 북쪽 길 ═════════════════════════════════│
 //  y≈272  │ ▲절벽·계단▲    종루 ┌──────── 모닥불 광장 ────────┐ ║ 집 집 집      │
-//  y≈288  │ ┌─옛 묘역 20─┐ 성황당│ 분수  그네   트램펄린     │ ║ 집 집 집      │
+//  y≈288  │ ┌─옛 묘역 32─┐ 성황당│ 분수  그네   트램펄린     │ ║ 집 집 집      │
 //         │ │ 철책·묘비  │═════│      ( 큰 모닥불 )        │ ║ 집 집 집      │
 //  y≈544  │ └────────────┘     │ 회전목마  해먹   시소      │ ║ 집 집 집      │
 //  y≈600  │ 묘지기 모닥불       └───────────────────────────┘ ╚═══════════════│
 //  y≈700  │ ~~~ 강 ~~[서쪽 다리]~~~~[징검다리]~~[가운데 다리]~~~╲  나루터·정류장  │
-//  y≈784  │ ┌─ 동물원 (우리 5곳·사육사) ─┐ (오리 연못) ┌다리 건너 묘역 12┐ 호박밭 ╲( 호수 ·배 )│
+//  y≈784  │ ┌─ 동물원 (우리 5곳·사육사) ─┐ (오리 연못) ┌─ 범퍼카장 ─┐ 호박밭 ╲( 호수 ·배 )│
 //  y≈1008 └──────────────────────────────────────────────────────────────────────┘
 
-export type ZoneId = "hill" | "graveyard" | "plaza" | "housing" | "river" | "lake" | "pond" | "forest" | "meadow" | "gate" | "busyard" | "zoo";
+export type ZoneId = "hill" | "graveyard" | "plaza" | "housing" | "river" | "lake" | "pond" | "forest" | "meadow" | "gate" | "busyard" | "zoo" | "bumper";
 export type Zone = { id: ZoneId; name: string; x: number; y: number; w: number; h: number };
 /** 구역 사각형 (이름표·안내·앞으로의 콘텐츠 배치 기준. 충돌과는 상관없다) */
 export const ZONES: readonly Zone[] = [
@@ -64,7 +66,8 @@ export const ZONES: readonly Zone[] = [
   { id: "forest", name: "안개 숲", x: 304, y: 784, w: 296, h: 224 },
   // 11/15 오리 연못 (안개 숲 가운데, 오리배 선착장). DUCK_POND와 같은 타원을 두르는 사각형
   { id: "pond", name: "오리 연못", x: 338, y: 828, w: 248, h: 144 },
-  { id: "graveyard", name: "다리 건너 묘역", x: 600, y: 784, w: 256, h: 224 },
+  // 11/16 범퍼카장 (예전 다리 건너 묘역 자리 — 묘비 자리는 옛 묘역 하나로 합쳤다). BUMPER_YARD와 같은 사각형
+  { id: "bumper", name: "범퍼카장", x: 600, y: 784, w: 256, h: 224 },
   // 동물원 (예전 버드나무 묘역 자리, 사용자 요청: 펫은 사육사에게서). ZOO와 같은 사각형
   { id: "zoo", name: "동물원", x: 48, y: 784, w: 256, h: 224 },
   { id: "meadow", name: "호박밭", x: 864, y: 864, w: 240, h: 144 },
@@ -74,10 +77,10 @@ export const ZONES: readonly Zone[] = [
 
 export const SPAWN = { x: CX, y: 60 } as const;
 
-// ── 묘역 (F1·F4: 두 곳에 나눠 배치, 49번 성불과 같은 정원) ──
+// ── 묘역 (F1·F4 → 11/16 옛 묘역 하나, 49번 성불과 같은 정원) ──
 /**
- * 한 채널 묘역 두 곳에 동시에 놓일 수 있는 묘비 수 (GRAVE_AREAS 칸 수의 합 = 20 + 12).
- * 버드나무 묘역이 동물원이 되면서 그 8자리를 옛 묘역(16 → 20)과 다리 건너 묘역(8 → 12)으로 나눠 옮겼다 — 정원은 그대로 32.
+ * 한 채널 묘역에 동시에 놓일 수 있는 묘비 수 (GRAVE_AREAS 칸 수 = 8열 × 4줄).
+ * 버드나무 묘역이 동물원이 되고(7), 다리 건너 묘역이 범퍼카장이 되면서(11/16) 묘비 자리는 모두 옛 묘역으로 모였다 — 정원은 그대로 32.
  * 넘치면 가장 오래된 묘비부터 앞당겨 성불한다(서버 lib/store/passing.ts). 서버·클라이언트가 같은 값을 쓴다.
  */
 export const GRAVEYARD_CAPACITY = 32;
@@ -108,47 +111,29 @@ export type GraveArea = {
   x0: number;
   y0: number;
 };
-function area(id: GraveArea["id"], name: string, rect: GraveArea["rect"], cols: number, rows: number, aisleX: number, dx: number, y0: number): GraveArea {
+function area(id: GraveArea["id"], name: string, rect: GraveArea["rect"], cols: number, rows: number, aisleX: number, dx: number, y0: number, dy: number): GraveArea {
   const aisle = 32;
-  return { id, name, rect, cols, rows, block: cols / 2, aisleX, aisle, dx, dy: 80, x0: aisleX - ((cols - 1) * dx + aisle) / 2, y0 };
+  return { id, name, rect, cols, rows, block: cols / 2, aisleX, aisle, dx, dy, x0: aisleX - ((cols - 1) * dx + aisle) / 2, y0 };
 }
 /**
- * 옛 묘역(언덕 아래, 20기 = 10열 × 2줄) · 다리 건너 묘역(12기 = 6열 × 2줄).
- * 예전 버드나무 묘역(C)은 동물원이 됐다 — 묘비 데이터는 그대로이고 자리(graveSlot)만 두 묘역으로 옮겨 놓인다.
+ * 옛 묘역(언덕 아래, 32기 = 8열 × 4줄, 가운데 자갈 통로는 언덕 계단과 줄을 맞춘다).
+ * 둘째 줄 오솔길(타일 y 24)이 동문(성황당 쪽 길)과 이어지게 줄을 놓았다.
+ * 예전 버드나무 묘역(C)은 동물원, 다리 건너 묘역(B)은 범퍼카장이 됐다 — 묘비 데이터(등록 순서)는 그대로이고 자리(graveSlot)만 옛 묘역으로 모인다.
  */
-export const GRAVE_AREAS: readonly GraveArea[] = [
-  area("A", "옛 묘역", { x: 48, y: 288, w: 384, h: 256 }, 10, 2, 240, 34, 368),
-  area("B", "다리 건너 묘역", { x: 600, y: 784, w: 256, h: 224 }, 6, 2, 720, 34, 848),
-];
-/**
- * 등록 순서(index % 32) → (묘역, 그 묘역의 칸). 묘역마다 골고루 먼저 차도록 A·B·A·B·A·A·B·A(정원 비율 5 : 3) 순서를 되풀이한다
- * (묘비가 몇 개 없어도 두 묘역 모두에 사람이 세운 묘비가 보인다).
- */
-const SLOT_TABLE: readonly { area: GraveArea; k: number }[] = (() => {
-  const order = [0, 1, 0, 1, 0, 0, 1, 0];
-  const used = [0, 0];
-  const out: { area: GraveArea; k: number }[] = [];
-  for (let i = 0; out.length < GRAVEYARD_CAPACITY; i++) {
-    const a = order[i % order.length];
-    const g = GRAVE_AREAS[a];
-    if (used[a] >= g.cols * g.rows) continue;
-    out.push({ area: g, k: used[a]++ });
-  }
-  return out;
-})();
+export const GRAVE_AREAS: readonly GraveArea[] = [area("A", "옛 묘역", { x: 48, y: 288, w: 384, h: 256 }, 8, 4, 240, 40, 320, 52)];
 
-/** @deprecated 예전 한 묘역 격자 이름 (호환용). 이제 묘역은 GRAVE_AREAS 두 곳 — 칸 수 합계만 같다 (8 × 4 = 32) */
-export const GRID_COLS = 8;
+/** @deprecated 예전 한 묘역 격자 이름 (호환용). 이제 옛 묘역 하나의 격자와 같다 (8 × 4 = 32) */
+export const GRID_COLS = GRAVE_AREAS[0].cols;
 /** @deprecated GRID_COLS 참고 */
-export const GRID_ROWS = 4;
+export const GRID_ROWS = GRAVE_AREAS[0].rows;
 /** @deprecated 옛 묘역(A)의 값 */
-export const GRID_BLOCK = 4;
+export const GRID_BLOCK = GRAVE_AREAS[0].block;
 /** @deprecated 옛 묘역(A)의 첫 줄 y */
 export const GRID_Y0 = GRAVE_AREAS[0].y0;
 /** @deprecated 옛 묘역(A)의 값 */
 export const GRID_DX = GRAVE_AREAS[0].dx;
-/** @deprecated 묘역 줄 간격 (두 묘역 같다) */
-export const GRID_DY = 80;
+/** @deprecated 옛 묘역(A)의 줄 간격 */
+export const GRID_DY = GRAVE_AREAS[0].dy;
 /** @deprecated */
 export const GRID_WALK = 0;
 /** @deprecated */
@@ -158,10 +143,13 @@ export const GRAVEYARD_AISLE_X = GRAVE_AREAS[0].aisleX;
 /** @deprecated 옛 묘역(A) 첫 열 x */
 export const GRID_X0 = GRAVE_AREAS[0].x0;
 
-/** 묘비 자리 (index는 등록 순서. 묘역 정원을 넘으면 자리를 돌려 쓴다) */
+/**
+ * 묘비 자리 (index는 등록 순서. 묘역 정원을 넘으면 자리를 돌려 쓴다).
+ * 등록 순서 index % 32 = k → 옛 묘역 k번 칸 (줄 = k ÷ 8, 열 = k % 8, 왼쪽 위부터 줄마다 채운다)
+ */
 export function graveSlot(index: number): { x: number; y: number; col: number; row: number; area: GraveArea["id"] } {
-  const i = ((index % GRAVEYARD_CAPACITY) + GRAVEYARD_CAPACITY) % GRAVEYARD_CAPACITY;
-  const { area: g, k } = SLOT_TABLE[i];
+  const k = ((index % GRAVEYARD_CAPACITY) + GRAVEYARD_CAPACITY) % GRAVEYARD_CAPACITY;
+  const g = GRAVE_AREAS[0];
   const col = k % g.cols;
   const row = Math.floor(k / g.cols);
   const x = g.x0 + col * g.dx + (col >= g.block ? g.aisle : 0);
@@ -170,7 +158,7 @@ export function graveSlot(index: number): { x: number; y: number; col: number; r
 
 /** 이 묘역 id의 묘역 */
 export function graveArea(id: GraveArea["id"]): GraveArea {
-  return GRAVE_AREAS.find((a) => a.id === id)!;
+  return GRAVE_AREAS.find((a) => a.id === id) ?? GRAVE_AREAS[0];
 }
 
 /** 이 index의 묘비가 지금 묘역에 보이는지 (가장 최근 GRAVEYARD_CAPACITY기만) */
@@ -524,6 +512,29 @@ export function balloonSeatById(id: string): BalloonSeat | undefined {
   return BALLOON_SEATS.find((s) => s.id === id);
 }
 
+// ── 범퍼카장 (11/16, 예전 다리 건너 묘역 자리) ──
+// 고무 테두리를 두른 네모난 링크 + 위쪽 가운데 입구(문 앞에서 E → 빈 범퍼카에 탄다). 차는 BUMPER_CARS대, 차마다 1인(SPOT_KINDS.bumper, 서버 좌석).
+// 앵커 = 링크 위쪽에 한 줄로 세워 둔 자리. 타면 위치는 클라이언트가 링크 안에서 움직이고(서버는 mobile 자리라 따라간다),
+// 내리면 빈 차는 잠시 뒤 제자리로 돌아온다 (클라이언트 연출). 부딪힘은 저마다 자기 차에만 적용한다 (서버 물리 없음, 네트워크 추가 없음).
+/** 범퍼카장 마당 (ZONES "범퍼카장"과 같은 사각형) */
+export const BUMPER_YARD = { x: 600, y: 784, w: 256, h: 224 } as const;
+/** 링크 바깥 사각형 (고무 테두리 바깥선). 안쪽 달리는 바닥은 BUMPER_RIM만큼 안으로 */
+export const BUMPER_RINK = { x: 624, y: 844, w: 192, h: 148 } as const;
+export const BUMPER_RIM = 6;
+/** 입구 (위 테두리 가운데 틈 x0..x1). 걷는 사람은 틈의 막대에 막히고, 문 앞(BUMPER_GATE.x, y − 8)에서 E로 탄다 */
+export const BUMPER_GATE = { x: 720, y: 844, x0: 704, x1: 736 } as const;
+export const BUMPER_CARS = 8;
+export type BumperSeat = { id: string; car: number; x: number; y: number };
+/** 범퍼카 자리 전부 (차 c 하나에 한 자리). 링크 위쪽 테두리 안에 한 줄로 세워 둔다. id = spotSeatId("bumper", x, y) — 예 "v_643_858" */
+export const BUMPER_SEATS: readonly BumperSeat[] = Array.from({ length: BUMPER_CARS }, (_, car) => {
+  const x = BUMPER_GATE.x - 77 + car * 22;
+  const y = BUMPER_RINK.y + BUMPER_RIM + 16;
+  return { id: `v_${x}_${y}`, car, x, y };
+});
+export function bumperSeatById(id: string): BumperSeat | undefined {
+  return BUMPER_SEATS.find((s) => s.id === id);
+}
+
 // ── 별 보기 언덕 ── 북서쪽 구석의 높은 대지 (F3). 남쪽은 두 칸 높이 절벽, 동쪽은 바위 비탈이고 계단(HILL_STAIRS)으로만 오른다.
 // 계단은 옛 묘역 북문과 줄을 맞춘다 (언덕 위에서 묘역을 내려다본다)
 export const HILL = { x: 32, y: 32, w: 336, h: 208 } as const;
@@ -650,9 +661,9 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "bE", kind: "bench", x: 1330, y: 716, facing: DIR.down, seatOffsets: two }, // 주말 버스 정류장 지붕 아래 (game/world/fishZone.ts BUS_STOP)
   // ── 사냥터 동굴 앞 ──
   { id: "bQ", kind: "bench", x: 912, y: 112, facing: DIR.down, seatOffsets: two },
-  // ── 다리 건너 묘역 ── 묘비를 바라보는 벤치
-  { id: "bV", kind: "bench", x: 656, y: 984, facing: DIR.up, seatOffsets: two },
-  { id: "bW", kind: "bench", x: 784, y: 984, facing: DIR.up, seatOffsets: two },
+  // ── 범퍼카장 ── 링크를 내려다보는 구경 벤치 (예전 다리 건너 묘역 벤치를 옮겼다, id 그대로)
+  { id: "bV", kind: "bench", x: 644, y: 812, facing: DIR.down, seatOffsets: two },
+  { id: "bW", kind: "bench", x: 816, y: 812, facing: DIR.down, seatOffsets: two },
   // ── 동물원 ── 큰 개 놀이터 옆 쉼터 벤치 (예전 버드나무 묘역 벤치를 옮겼다, id 그대로)
   { id: "bX", kind: "bench", x: 354, y: 990, facing: DIR.up, seatOffsets: two },
   // ── 오리 연못(옛 안개 연못) · 호박밭 ──
@@ -718,6 +729,7 @@ export type SpotKind =
   | "fish"
   | "ferris"
   | "balloon"
+  | "bumper"
   // 3번 집 안 가구 (indoor: 방(집) 서버에서만 받는다)
   | "chair"
   | "bed"
@@ -768,6 +780,9 @@ export const SPOT_KINDS: Readonly<Record<SpotKind, SpotKindDef>> = {
   ferris: { code: "w", state: STATE.ferris, facing: DIR.down, fixed: true },
   /** 열기구 바구니 자리 (앵커 = 출발장 바구니 앞). 비행 중 탑승은 서버가 거절한다 (balloonBoarding) */
   balloon: { code: "o", state: STATE.balloon, facing: DIR.down, fixed: true },
+  // ── 11/16 범퍼카장 ── 정해진 자리(BUMPER_SEATS)만. 타고 나면 링크 안을 움직인다 (조각배처럼 mobile). 입구에서 가장 먼 차까지 닿게 radius를 넉넉히
+  /** 범퍼카 (앵커 = 링크 위쪽에 세워 둔 자리) */
+  bumper: { code: "v", state: STATE.bumper, facing: DIR.down, mobile: true, radius: 120, fixed: true },
   // ── 3번 집 안 가구 ── 앵커 = 집 씬 좌표의 발 위치(가구 배치에서 계산, game/housing/interact.ts). 집마다 배치가 달라 형식만 본다
   /** 의자·소파·책상·피아노 의자에 앉기 (의자와 같은 sitChair라 shared — sit 요청으로만) */
   chair: { code: "c", state: STATE.sitChair, facing: DIR.down, shared: true, indoor: true },
@@ -830,6 +845,11 @@ for (const f of FISHING_SPOTS) seatSlots.set(f.id, { id: f.id, kind: "fish", x: 
 // 같은 칸·같은 기구 안에서는 옮겨 앉기(furnitureId가 같다)
 for (const w of FERRIS_SEATS) seatSlots.set(w.id, { id: w.id, kind: "ferris", x: w.x, y: w.y, facing: DIR.down, state: STATE.ferris, furnitureId: `ferris${w.car}` });
 for (const o of BALLOON_SEATS) seatSlots.set(o.id, { id: o.id, kind: "balloon", x: o.x, y: o.y, facing: DIR.down, state: STATE.balloon, furnitureId: `balloon${o.balloon}` });
+// 범퍼카는 차마다 한 자리 (다른 차로 옮겨 앉기 없음)
+for (const v of BUMPER_SEATS) {
+  const k = SPOT_KINDS.bumper;
+  seatSlots.set(v.id, { id: v.id, kind: "bumper", x: v.x, y: v.y, facing: k.facing, state: k.state, furnitureId: `bumper${v.car}`, mobile: true, radius: k.radius });
+}
 
 /** id → 자리 (의자·벤치 좌석 또는 형식이 맞는 소품 자리). 모르는 id면 undefined */
 export function seatSlot(id: string): SeatSlot | undefined {

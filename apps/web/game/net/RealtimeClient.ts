@@ -122,7 +122,8 @@ export type NetCallbacks = {
    */
   onMapped?(map: MapId, peers: PeerInfo[], seats: Record<string, Sid>): void;
   /** 11/15 캠핑장 바베큐: sid가 먹고 until(epoch ms)까지 커졌다 (서버가 증서를 확인한 것만, 내 것도 온다) */
-  onBbq?(sid: Sid, item: BbqItemId, until: number): void;
+  /** 11/15 바베큐 한 접시·한 잔 (같은 맵, 내 것 포함). 마실 거리면 lv·at = 취기 */
+  onBbq?(sid: Sid, item: BbqItemId, until: number, lv?: number, at?: number): void;
 };
 
 /** 맵이 바뀌어도 늘 처음 콜백(월드)이 받는 것: 계정·친구·확성기·내 몸 모양·고블린 보상 */
@@ -637,7 +638,8 @@ export class RealtimeClient {
           this.onMapped(m.m, m.peers ?? [], m.seats ?? {});
           break;
         case "bbq":
-          if (isBbqId(m.i) && typeof m.u === "number" && Number.isFinite(m.u)) this.h.onBbq?.(m.sid, m.i, m.u);
+          if (isBbqId(m.i) && typeof m.u === "number" && Number.isFinite(m.u))
+            this.h.onBbq?.(m.sid, m.i, m.u, typeof m.lv === "number" ? m.lv : undefined, typeof m.at === "number" ? m.at : undefined);
           break;
         case "count":
           if (typeof m.n === "number" && Number.isFinite(m.n)) {

@@ -14,6 +14,7 @@ import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { wrapChat } from "../logic/chatWrap";
 import { SpeechBubble } from "./SpeechBubble";
+import { SpeedTrail } from "./SpeedTrail";
 import { MoodView } from "./MoodView";
 import { StaffFxView } from "./StaffFxView";
 import { ChampBadgeView } from "./ChampBadgeView";
@@ -68,6 +69,12 @@ const SPARKLE_MS = 520;
 /** 날개 그림: 어깨에서 이만큼 위가 날개 끝 */
 const WING_TIP = 9;
 
+/** 11/15 바베큐로 이만큼 커지면 뒤에 가려진 사람이 보이게 몸을 반투명하게 (SEE_THRU_ALPHA) */
+const SEE_THRU_BIG = 1.6;
+const SEE_THRU_ALPHA = 0.5;
+/** 살아 있는 아바타 그림 (커진 몸이 같은 장면의 누구를 가리는지 본다) */
+const LIVE = new Set<AvatarView>();
+
 export class AvatarView {
   readonly sprite: Phaser.GameObjects.Sprite;
   readonly label: Phaser.GameObjects.BitmapText;
@@ -121,6 +128,15 @@ export class AvatarView {
   private bigGoal = 1;
   private bigTint: number | null = null;
   private bigGlow: Phaser.GameObjects.Image | null = null;
+  /** 11/15 캠핑장 술: 취기 단계 (0 = 맨정신). 1↑ 볼 홍조, 2↑ 걸을 때 휘청 — 재미용 */
+  private drunk = 0;
+  private blush: Phaser.GameObjects.Image | null = null;
+  /** 11/15 번개 닭꼬치: 걸을 때 몸 뒤로 잔상 */
+  private trail: SpeedTrail | null = null;
+  /** 커진 몸이 뒤 사람을 가리면 1 → SEE_THRU_ALPHA (부드럽게) */
+  private seeThru = 1;
+  private seeThruAt = 0;
+  private covering = false;
   /**
    * 50번 조각배·시소·트램펄린·회전목마: 씬(PlazaRides·BoatRide)이 매 프레임 넣어 주는 그림 연출.
    * ox = 앵커에서 옆으로(회전목마), lift = 위로 띄우는 높이, depth = 그릴 순서 (null이면 그대로). 논리 위치는 그대로다.
@@ -195,6 +211,7 @@ export class AvatarView {
     body: string = "hood",
   ) {
     this.isMe = isMe;
+    LIVE.add(this);
     this.body = bodyOf(body);
     const m = BODY_METRICS[bodyOf(body)];
     this.artTop = m.top;
@@ -344,6 +361,46 @@ export class AvatarView {
       this.bigGlow ??= this.scene.add.image(0, 0, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 1).setVisible(false);
       this.bigGlow.setTint(this.bigTint);
     }
+  }
+
+  /** 11/15 취기 단계 (0이면 원래대로). 홍조는 1부터, 걸을 때 휘청은 2부터 */
+  setDrunk(level: number): void {
+    const lv = Math.max(0, Math.min(5, Math.floor(level)));
+    if (lv === this.drunk) return;
+    this.drunk = lv;
+    if (lv > 0 && !this.blush) {
+      const key = "fx-blush";
+      if (!this.scene.textures.exists(key)) {
+        const t = this.scene.textures.createCanvas(key, 11, 3);
+        if (t) {
+          const ctx = t.getContext();
+          ctx.fillStyle = "rgba(255,120,150,0.95)";
+          for (const x of [0, 8]) ctx.fillRect(x, 0, 3, 2);
+          ctx.fillStyle = "rgba(255,170,190,0.7)";
+          for (const x of [1, 9]) ctx.fillRect(x, 2, 1, 1);
+          t.refresh();
+        }
+      }
+      this.blush = this.scene.add.image(0, 0, key).setVisible(false);
+    }
+  }
+
+  get drunkLevel(): number {
+    return this.drunk;
+  }
+
+  /** 11/15 바베큐로 커질(커진) 배율 */
+  get bigScale(): number {
+    return this.bigGoal;
+  }
+
+  /** 11/15 잔상 메뉴 색 (null이면 끈다) */
+  setTrail(tint: number | null): void {
+    if (tint === null) {
+      this.trail?.destroy();
+      this.trail = null;
+    } else if (this.trail) this.trail.setTint(tint);
+    else this.trail = new SpeedTrail(this.scene, tint, this.reduced);
   }
 
   setFriend(on: boolean): void {
@@ -562,7 +619,7 @@ export class AvatarView {
       return;
     }
     // 놀거리가 잠깐 다른 자세 프레임을 쓰는 중 (sync가 고른다)
-    if (this.altFrame >= 0 && this.ride?.alt && (state === "seesaw" || state === "carousel" || state === "trampoline" || state === "boat" || state === "ferris" || state === "balloon")) return;
+    if (this.altFrame >= 0 && this.ride?.alt && (state === "seesaw" || state === "carousel" || state === "trampoline" || state === "boat" || state === "ferris" || state === "balloon" || state === "bumper")) return;
     this.altFrame = -1;
     if (state === "swing") {
       // 그네 프레임은 진자 위상에 맞춰 sync에서 고른다
@@ -644,9 +701,11 @@ export class AvatarView {
     if (kind === "wave" || kind === "cheer") this.emote(kind, now);
     // 11/15 오리배 꽥: 머리 위 "꽥!" 말풍선만 (몸짓 없음)
     if (kind === "quack") return this.say("꽥!", now);
+    // 11/16 범퍼카 빵빵: 머리 위 "빵빵!" 말풍선만 (몸짓 없음)
+    if (kind === "honk") return this.say("빵빵!", now);
     const s = this.state;
     if (s === "swim" || s === "dive" || s === "hang" || s === "swing" || s === "hammock" || s === "sitGround" || s === "sitChair" || s === "jump") return;
-    if (s === "boat" || s === "seesaw" || s === "trampoline" || s === "carousel") return;
+    if (s === "boat" || s === "seesaw" || s === "trampoline" || s === "carousel" || s === "bumper") return;
     if (isIndoorPose(s)) return;
     if (this.mountedIn(s)) return; // 타는 펫 위에서는 몸짓 없이 이모티콘만
     const act = kind === "cheer" || kind === "splash" ? "cheer" : "wave";
@@ -792,7 +851,7 @@ export class AvatarView {
         this.lieFrame = f;
         s.setFrame(f);
       }
-    } else if (st === "boat" || st === "seesaw" || st === "trampoline" || st === "carousel" || st === "ferris" || st === "balloon") {
+    } else if (st === "boat" || st === "seesaw" || st === "trampoline" || st === "carousel" || st === "ferris" || st === "balloon" || st === "bumper") {
       // 놀거리 연출은 씬이 정해 준다 (회전목마는 앵커 둘레를 돌고, 트램펄린은 통통, 시소는 오르락내리락, 배는 물결에 살짝)
       const r = this.ride;
       this.setPose(r ? -Math.round(r.ox) : 0, r ? Math.round(r.lift) : 0);
@@ -829,8 +888,10 @@ export class AvatarView {
       const bob = (st === "walk" || st === "run") && !this.reduced ? Math.floor(now / (st === "run" ? 90 : 140)) % 2 : 0;
       this.setPose(0, riderLift(this.mountPet) + bob);
     } else this.setPose(0, 0);
-    if (this.altFrame >= 0 && st !== "boat" && st !== "seesaw" && st !== "trampoline" && st !== "carousel" && st !== "ferris" && st !== "balloon") this.altFrame = -1;
-    if (s.angle !== 0) s.setAngle(0);
+    if (this.altFrame >= 0 && st !== "boat" && st !== "seesaw" && st !== "trampoline" && st !== "carousel" && st !== "ferris" && st !== "balloon" && st !== "bumper") this.altFrame = -1;
+    // 11/15 취기 2↑: 걸을 때 몸이 좌우로 휘청 (발 위치·이동은 그대로, 움직임 줄이기면 작게)
+    const sway = this.drunk >= 2 && (st === "walk" || st === "run") ? (this.reduced ? 2 : this.drunk >= 3 ? 7 : 4.5) * Math.sin(now / (st === "run" ? 120 : 170)) : 0;
+    if (s.angle !== sway) s.setAngle(sway);
     // 11/15 바베큐로 커진 배율 (부드럽게 커지고 줄어든다)
     if (this.big !== this.bigGoal) {
       this.big += (this.bigGoal - this.big) * Math.min(1, dt / (this.reduced ? 60 : 260));
@@ -847,7 +908,8 @@ export class AvatarView {
     // 매달리기는 두 팔이 머리 위로 올라가 그만큼 더 띄운다
     const armsUp = st === "hang" ? 3 : 0;
     // 24번 벤치 상태 아이콘이 있으면 머리와 이름표 사이에 끼운다 (그만큼 이름표를 올린다)
-    const labelY = headY - this.labelGap + sitLift + waterDrop - armsUp - Math.round((this.big - 1) * this.artTop);
+    // 11/15 바베큐로 커지면 (몸·날개·우산 중 가장 높은 꼭대기)가 커진 만큼 더 올린다 → 칭호·1위 배지·말풍선도 이름표를 따라 올라간다
+    const labelY = headY - this.labelGap + sitLift + waterDrop - armsUp - Math.round((this.big - 1) * (this.labelGap - 2));
     // 오라(착용·전용)를 그릴 몸 자리 — 모든 자세에서 보이게 (auraFrame)
     const af = this.auraFrame(st, s.y, headY, labelY, waterDrop, sitLift, armsUp);
     const moodLift = this.moodFx?.lift(st) ?? 0;
@@ -864,9 +926,38 @@ export class AvatarView {
       }
       if (this.bigGlow.visible !== (vis && on)) this.bigGlow.setVisible(vis && on);
     }
+    if (this.blush) {
+      // 11/15 취기 1↑: 볼 홍조 (뒷모습·누운 자세에는 없다). 옆모습은 한쪽 볼만 보이게 살짝 비켜 놓는다
+      const on = this.drunk > 0 && vis && this.dir !== DIR.up && st !== "hammock" && st !== "lie" && st !== "bath" && st !== "dive";
+      if (on) {
+        const side = this.dir === DIR.left ? -3 : this.dir === DIR.right ? 3 : 0;
+        this.blush
+          .setPosition(Math.round(s.x - this.poseDx + side * this.big), Math.round(s.y - this.hop - this.poseDy - (this.shoulder + 3 + sitLift) * this.big))
+          .setScale(this.big)
+          .setAngle(s.angle)
+          .setCrop(side < 0 ? 0 : side > 0 ? 8 : 0, 0, side === 0 ? 11 : 3, 3)
+          .setDepth((this.depthOverride ?? s.y) + 0.2)
+          .setAlpha(Math.min(1, 0.45 + 0.15 * this.drunk) * this.fade);
+      }
+      if (this.blush.visible !== on) this.blush.setVisible(on);
+    }
+    this.trail?.sync(now, s, (st === "walk" || st === "run") && !this.mountedIn(st), vis, this.fade, this.big);
     const bx = s.x - this.poseDx;
     const fa = this.fade;
-    if (s.alpha !== fa) s.setAlpha(fa);
+    // 11/15 크게 커진 몸 바로 뒤(위쪽)에 다른 사람이 서 있으면 몸을 반투명하게 → 가려진 사람이 보인다
+    if (this.big >= SEE_THRU_BIG && vis) {
+      if (now >= this.seeThruAt) {
+        this.seeThruAt = now + 150;
+        this.covering = this.coversSomeone();
+      }
+    } else this.covering = false;
+    const goal = this.covering ? SEE_THRU_ALPHA : 1;
+    if (this.seeThru !== goal) {
+      this.seeThru += (goal - this.seeThru) * Math.min(1, dt / 120);
+      if (Math.abs(this.seeThru - goal) < 0.02) this.seeThru = goal;
+    }
+    const bodyAlpha = fa * this.seeThru;
+    if (s.alpha !== bodyAlpha) s.setAlpha(bodyAlpha);
     if (this.label.alpha !== fa) this.label.setAlpha(fa);
     // 닉네임 꾸미기 (바탕판이 있으면 옆 표시·위 배지를 그만큼 비켜 놓는다)
     this.nameFx?.sync(now, labelScale, vis, fa);
@@ -930,8 +1021,9 @@ export class AvatarView {
           dir: d,
           moving: st === "walk" || st === "run",
           hidden: st === "dive" || st === "hammock" || st === "swim" || st === "hang" || st === "lie" || st === "bath",
-          artTop: this.artTop,
-          shoulder: this.shoulder,
+          // 11/15 바베큐로 커지면 날개·꾸미기 연출 자리도 커진 몸에 맞춘다
+          artTop: Math.round(this.artTop * this.big),
+          shoulder: Math.round(this.shoulder * this.big),
           hand: handAnchor(this.body, d === DIR.left ? "left" : d === DIR.right ? "right" : d === DIR.up ? "up" : "down"),
           reduced: this.reduced,
           riding: this.mountedIn(st),
@@ -1001,17 +1093,19 @@ export class AvatarView {
    * 매달리기·점프·놀이기구·타는 펫은 들어 올린 몸 아래(headY), 앉기는 낮아진 머리에 맞춘다
    */
   private auraFrame(st: StateName, y: number, headY: number, labelY: number, waterDrop: number, sitLift: number, armsUp: number): { base: number; top: number; dim: number; wide?: number } {
-    if (st === "swim" || st === "dive") return { base: y - WATER_LINE, top: headY - this.artTop + waterDrop, dim: st === "dive" ? 0.45 : 1 };
+    // 11/15 바베큐로 커지면 몸 꼭대기도 그만큼 높다
+    const artTop = Math.round(this.artTop * this.big);
+    if (st === "swim" || st === "dive") return { base: y - WATER_LINE, top: headY - artTop + waterDrop, dim: st === "dive" ? 0.45 : 1 };
     // 타는 펫에 올라탔으면 펫 발밑(땅, 점프하면 같이)을 발밑 줄로, 펫과 사람 전체를 감싸게 넓게 (옆모습은 펫이 길다)
     if (this.mountedIn(st)) {
       const side = this.dir === DIR.left || this.dir === DIR.right;
-      return { base: y - this.hop, top: headY - this.artTop, dim: 1, wide: side ? 1.75 : 1.3 };
+      return { base: y - this.hop, top: headY - artTop, dim: 1, wide: side ? 1.75 : 1.3 };
     }
     if (st === "hammock" || st === "lie" || st === "bath") {
       const top = labelY + 2;
       return { base: top + 12, top, dim: 1 };
     }
-    return { base: headY, top: headY - this.artTop + sitLift - armsUp, dim: 1 };
+    return { base: headY, top: headY - artTop + sitLift - armsUp, dim: 1 };
   }
 
   /** 수영·잠수: 수면 물결 고리, 잠수면 물방울 */
@@ -1075,7 +1169,7 @@ export class AvatarView {
       // 후광 고리는 그림 맨 위 (물에 들어가면 가라앉은 만큼 내려간다)
       const sink = wet ? waterSink(this.body, st) : 0;
       const sitDrop = st === "sitGround" ? 3 : st === "sitChair" ? 1 : 0;
-      this.haloGlow.setPosition(x, headY - this.artTop + 1 + sink + sitDrop).setAlpha(pulse).setVisible(vis && st !== "dive" && st !== "hammock");
+      this.haloGlow.setPosition(x, headY - Math.round(this.artTop * this.big) + 1 + sink + sitDrop).setAlpha(pulse).setVisible(vis && st !== "dive" && st !== "hammock");
     }
     if (this.wings) {
       const side = this.dir === DIR.left || this.dir === DIR.right;
@@ -1083,8 +1177,8 @@ export class AvatarView {
       const w = this.wings;
       if (w.frame.name !== (side ? "1" : "0")) w.setFrame(side ? 1 : 0);
       w.setFlipX(this.dir === DIR.right)
-        .setPosition(x + (this.dir === DIR.right ? 2 : this.dir === DIR.left ? -2 : 0), headY - this.shoulder - 3)
-        .setScale(flap, 1)
+        .setPosition(x + (this.dir === DIR.right ? 2 : this.dir === DIR.left ? -2 : 0) * this.big, headY - (this.shoulder + 3) * this.big)
+        .setScale(flap * this.big, this.big)
         // 뒷모습(up)이면 날개가 앞에 보이고, 나머지는 몸 뒤
         .setDepth(this.dir === DIR.up ? depth + 0.05 : depth - 0.05)
         // 이불 속·욕조 물속에서는 날개를 숨긴다 (꾸미기 연출과 같은 규칙)
@@ -1109,7 +1203,7 @@ export class AvatarView {
       if (now >= this.sparkleAt + SPARKLE_EVERY_MS) {
         this.sparkleAt = now + Math.random() * 600;
         const head = this.look.some((id) => id.startsWith("hat_"));
-        const top = head ? this.artTop - 2 : Math.round(this.artTop * 0.55);
+        const top = Math.round((head ? this.artTop - 2 : this.artTop * 0.55) * this.big);
         this.sparkle.setData("dx", Math.round((Math.random() - 0.5) * 12)).setData("dy", top - Math.round(Math.random() * 3));
       }
       const u = (now - this.sparkleAt) / SPARKLE_MS;
@@ -1192,9 +1286,32 @@ export class AvatarView {
     return this.sprite.visible;
   }
 
+  /** 커진 내 몸 그림 안쪽(발이 내 발보다 위, 몸 너비 안)에 같은 장면의 다른 사람이 서 있는지 */
+  private coversSomeone(): boolean {
+    const s = this.sprite;
+    const top = s.y - this.artTop * this.big;
+    const half = 7 * this.big;
+    for (const v of LIVE) {
+      // 장면이 내려가며 destroy 없이 사라진 그림은 여기서 뺀다
+      if (!v.sprite.scene) {
+        LIVE.delete(v);
+        continue;
+      }
+      if (v === this || v.scene !== this.scene || v.big >= this.big) continue;
+      const o = v.sprite;
+      if (o.visible && o.y < s.y && o.y > top + 6 && Math.abs(o.x - s.x) < half) return true;
+    }
+    return false;
+  }
+
   destroy(): void {
+    LIVE.delete(this);
     this.bigGlow?.destroy();
     this.bigGlow = null;
+    this.trail?.destroy();
+    this.trail = null;
+    this.blush?.destroy();
+    this.blush = null;
     this.sprite.destroy();
     this.label.destroy();
     this.dexBadge?.destroy();

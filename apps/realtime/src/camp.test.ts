@@ -397,4 +397,20 @@ describe("camp BBQ (11/15 바베큐 — 먹으면 잠깐 커진다)", () => {
     const c = join("c", { camp: true, map: "camp", spawn: { x: 340, y: 600 } });
     expect(welcome(c).peers.find((p) => p.sid === 1)?.bbq).toEqual({ i: "pork", u: 90_000 });
   });
+  it("커지기·빨라지기·취기는 따로 겹친다 (취기는 단계·마신 시각을 싣는다). 맵을 옮겨도 PeerInfo로 따라간다", async () => {
+    const { core, join } = setup();
+    const a = join("a", { camp: true, map: "camp", spawn: { x: 300, y: 600 } });
+    const g = (o: object) => send({ t: "bbq", grant: JSON.stringify({ kind: "bbq", visitorId: "a", exp: 999, ...o }) });
+    core.message(a, g({ item: "pork", until: 300_000, nonce: "p1" }), 1_000);
+    await flush();
+    core.message(a, g({ item: "coffee", until: 600_000, nonce: "c1" }), 4_000);
+    await flush();
+    core.message(a, g({ item: "soju", until: 7_000 + 2 * 600_000, lv: 2, at: 7_000, nonce: "s1" }), 7_000);
+    await flush();
+    expect(events(a).filter((e) => e.t === "bbq").at(-1)).toEqual({ t: "bbq", sid: 1, i: "soju", u: 7_000 + 2 * 600_000, lv: 2, at: 7_000 });
+    const v = join("v");
+    core.message(a, toVillage(), 10_000);
+    const seen = events(v).filter((e): e is Extract<S2C, { t: "join" }> => e.t === "join").at(-1)!;
+    expect(seen).toMatchObject({ bbq: { i: "pork", u: 300_000 }, spd: { i: "coffee", u: 600_000 }, drunk: { lv: 2, at: 7_000 } });
+  });
 });

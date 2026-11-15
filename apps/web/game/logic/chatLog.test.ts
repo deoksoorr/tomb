@@ -6,7 +6,10 @@ import {
   CHAT_LOG_MOBILE_LINES,
   CHAT_LOG_TTL_MS,
   chatLineOpacity,
+  chatAtBottom,
+  chatChannelOf,
   chatLineTone,
+  chatScrollAction,
   liveChatLines,
   mergeChatLines,
   readChatLog,
@@ -117,5 +120,31 @@ describe("채팅 기록창: 서버 최근 1분(chatLog) 합치기", () => {
     const capped = mergeChatLines([], many, 100, counter());
     expect(capped).toHaveLength(CHAT_LOG_KEEP);
     expect(capped[0].key).toBe("k3");
+  });
+});
+
+describe("채팅 기록 스크롤·비우는 단위", () => {
+  it("방 문자열의 채널 부분: 마을·집은 같고 캠핑장은 따로", () => {
+    expect(chatChannelOf("world:3")).toBe("3");
+    expect(chatChannelOf("house:3")).toBe(chatChannelOf("world:3"));
+    expect(chatChannelOf("world:3c")).toBe("3c");
+    expect(chatChannelOf("world:3c")).not.toBe(chatChannelOf("world:3"));
+    expect(chatChannelOf("world:4")).not.toBe(chatChannelOf("world:3"));
+    expect(chatChannelOf("lobby")).toBe("lobby");
+  });
+
+  it("맨 아래 판정은 몇 px 여유를 둔다", () => {
+    expect(chatAtBottom(500, 300, 200)).toBe(true);
+    expect(chatAtBottom(500, 297, 200)).toBe(true);
+    expect(chatAtBottom(500, 290, 200)).toBe(false);
+    expect(chatAtBottom(500, 0, 200)).toBe(false);
+  });
+
+  it("맨 아래면 따라 내려가고, 위를 읽는 중 새 줄이면 [새 메시지]만", () => {
+    expect(chatScrollAction({ overflow: false, stick: false, added: true })).toBe("reset");
+    expect(chatScrollAction({ overflow: true, stick: true, added: true })).toBe("follow");
+    expect(chatScrollAction({ overflow: true, stick: true, added: false })).toBe("follow");
+    expect(chatScrollAction({ overflow: true, stick: false, added: true })).toBe("unread");
+    expect(chatScrollAction({ overflow: true, stick: false, added: false })).toBe("none");
   });
 });

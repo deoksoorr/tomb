@@ -925,6 +925,28 @@ export function balloonStrip(width: number, segs: readonly StripSeg[]): Band {
         p.rect(mid + 7, y0 - 7, 2, 9, STONE.mid);
         break;
       }
+      case "bumper": {
+        // 11/16 범퍼카장 (빨강·노랑 고무 테두리 링크 + 알록달록 차 + 귀퉁이 조명 기둥)
+        const rx0 = Math.floor(x0) + 6;
+        const rw = Math.max(0, Math.floor(w) - 12);
+        p.rect(rx0, y0 + 4, rw, 16, 0x4e5666);
+        for (let x = rx0; x < rx0 + rw; x++) {
+          const c = Math.floor((x - rx0) / 5) % 2 === 0 ? 0xd8384a : 0xf0c03a;
+          p.set(x, y0 + 3, c);
+          p.set(x, y0 + 20, c);
+        }
+        const cars = [0xe8434f, 0xf2cf3a, 0x5cc85a, 0x3fc4d8, 0x9a5ae0, 0xf27ab8];
+        for (let i = 0, x = rx0 + 6; x < rx0 + rw - 6; x += 14, i++) {
+          p.rect(x, y0 + 9 + (i % 2) * 5, 6, 3, cars[i % cars.length]);
+          p.rect(x, y0 + 12 + (i % 2) * 5, 6, 1, 0x24222a);
+        }
+        if (w > 30)
+          for (const px of [rx0, rx0 + rw - 1]) {
+            p.rect(px, y0 - 10, 1, 13, 0xf0e8e0);
+            p.set(px, y0 - 11, 0xffd84a);
+          }
+        break;
+      }
       case "gate": {
         p.rect(mid - 14, y0 - 16, 4, 20, STONE.mid);
         p.rect(mid + 10, y0 - 16, 4, 20, STONE.mid);

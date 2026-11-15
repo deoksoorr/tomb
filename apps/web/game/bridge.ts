@@ -1,4 +1,4 @@
-import type { AvatarDye, GraveEventKind, QueueStatus } from "@tomb/protocol";
+import type { AvatarDye, BbqItemId, GraveEventKind, QueueStatus } from "@tomb/protocol";
 import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
@@ -197,6 +197,8 @@ export type GameEvents = {
   "ride:state": { pet: string | null; riding: boolean; can: boolean };
   /** 11/15 오리배에 타 있음 (sticky) → 터치 [점프] 버튼이 [꽥!]이 된다 (오리배 위 Space = 꽥) */
   "boat:duck": { riding: boolean };
+  /** 11/16 범퍼카에 타 있음 (sticky) → 터치 [점프] 버튼이 [빵빵!]이 된다 (범퍼카 위 Space = 빵빵) */
+  "bumper:riding": { riding: boolean };
   /** 내 캐릭터의 화면 위치 (CSS px, 뷰포트 기준). ui:radial이 열려 있는 동안 움직일 때만 */
   "me:screen": { x: number; y: number };
 };
@@ -249,7 +251,7 @@ export type UiEvents = {
   /** 24번 벤치 상태 고르기 (SEAT_MOODS id, "" = 풀기). 앉아 있을 때만 */
   "input:mood": { mood: string };
   /** 첫 방문 안내: 월드의 한 지점을 화살표로 가리킨다 (null이면 지움). target이 있으면 게임이 그 대상의 좌표를 찾는다 */
-  "guide:point": { target: "nearestGrave" | "shop" | "hunt" | "housing" | "bench" | "campfire" | "fishing" | "zoo" | null; label?: string };
+  "guide:point": { target: "nearestGrave" | "shop" | "hunt" | "housing" | "bench" | "campfire" | "fishing" | "zoo" | "bumper" | null; label?: string };
   "input:interact": undefined;
   /** 모달·폼이 열려 있는 동안 게임 키보드 입력을 막는다 */
   "ui:blockKeys": { blocked: boolean };
@@ -362,7 +364,7 @@ export type UiEvents = {
   /** 11/15 캠핑장 대화 창: 다음 말 (E·Space·버튼) / 닫았다 */
   "camp:talkNext": undefined;
   /** 11/15 바베큐를 샀다 (증서) → 게임이 먹는 연출·커지기, 실시간 서버로 증서 */
-  "camp:bbq:eat": { item: "pork" | "sausage" | "marsh"; until: number; grant: string };
+  "camp:bbq:eat": { item: BbqItemId; until: number; grant: string; /** 마실 거리: 마신 뒤 취기 단계·마신 시각 */ lv?: number; at?: number };
   "camp:talkClose": undefined;
   /** 친구가 있는 집으로 따라 들어간다: 그 집 장면이 열리면 친구(이름)를 찾아 옆으로 옮긴다 (at = 누른 시각, 오래되면 무시. sticky) */
   "house:follow": { houseId: string; name: string; at: number } | null;
@@ -403,6 +405,7 @@ const STICKY = new Set<keyof AllEvents>([
   "audio:mix",
   "ride:state",
   "boat:duck",
+  "bumper:riding",
   "ui:radial",
   "sky:hud",
   "friends:here",

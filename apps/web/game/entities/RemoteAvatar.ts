@@ -5,6 +5,7 @@ import { Interpolator, type InterpOut } from "../net/Interpolator";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
 import { AvatarView } from "./AvatarView";
 import { awayFade } from "./awayFade";
+import { applyFoodView, foodOfPeer, type FoodApplied, type FoodState } from "../camp/foodState";
 
 // 원격 아바타: 받은 상태 값만으로 같은 상태 머신·애니메이션을 재생한다.
 // 위치는 Interpolator(경로 따라가기 + 적응형 버퍼, 짧은 외삽, 96px 스냅)가 정한다.
@@ -24,14 +25,22 @@ export const STARGAZE_TAG = "별 보는 중";
 export class RemoteAvatar {
   readonly view: AvatarView;
   readonly interp = new Interpolator();
+  /** 11/15 캠핑장 먹거리·마실 거리 효과 (커지기·빨라지기·취기) */
+  food: FoodState = {};
+  private foodAt = 0;
+  private foodCache: FoodApplied | null = null;
   private readonly out: InterpOut = { x: 0, y: 0, state: STATE.idle, dir: DIR.down };
   /** 서버 좌석 점유표에서 이 사람이 차지한 1인 자리 (의자·벤치 좌석 또는 나무·그네·해먹) */
   seatId: string | null = null;
   /** 조각배 뒷자리처럼 다른 사람(노 젓는 사람)에 붙어 그려야 할 때의 자리 (BoatRide가 넣는다). null이면 보간 위치 */
   posOverride: { x: number; y: number } | null = null;
+  /** 이름표 위 "하는 중" 글자를 씬이 정할 때 (11/16 범퍼카 「쿵 ×12」). 망원경 표시가 먼저다 */
+  tag: string | null = null;
   x = 0;
   y = 0;
   stateId: StateId = STATE.idle;
+  /** 받은(보간한) 방향 그대로 (그림 방향은 놀이기구가 덮어쓸 수 있다 — 11/16 범퍼카 차머리 추정용) */
+  netDir: DirId = DIR.down;
   /** 달리는 중 먼지 타이머 */
   dustAt = 0;
   /** 점프를 시작한 (내 시계) 시각. 보간과 따로, 상태가 jump로 바뀐 순간부터 같은 포물선을 그린다 */
@@ -53,12 +62,14 @@ export class RemoteAvatar {
     readonly sid: Sid,
     public name: string,
     readonly color: string,
-    init: Pick<PeerInfo, "x" | "y" | "state" | "dir">,
+    init: Pick<PeerInfo, "x" | "y" | "state" | "dir"> & Partial<Pick<PeerInfo, "bbq" | "spd" | "drunk">>,
     now: number,
     look: readonly string[] = [],
     readonly body = "hood",
   ) {
     this.view = new AvatarView(scene, atlas, init.x, init.y, color, name, false, look, body);
+    // 11/15 캠핑장 먹거리·마실 거리 효과 (접속자 정보에 실려 온다 — 마을에서도 보인다)
+    this.food = foodOfPeer(init as PeerInfo);
     this.push(now, init.x, init.y, init.state, init.dir);
     this.update(now, null, 1);
   }
@@ -80,16 +91,27 @@ export class RemoteAvatar {
   }
 
   /** view가 null이면 컬링 없이 갱신 */
+  /** 11/15 효과를 바꾼다 (서버 소식·sync) */
+  applyFood(f: FoodState): void {
+    this.food = f;
+    this.foodAt = 0;
+  }
+
   update(now: number, view: Phaser.Geom.Rectangle | null, labelScale: number): void {
+    if (now >= this.foodAt) {
+      this.foodAt = now + 400;
+      this.foodCache = applyFoodView(this.view, this.food, Date.now(), this.foodCache);
+    }
     if (!this.interp.sample(now, this.out)) return;
     const o = this.out;
     this.stateId = o.state;
+    this.netDir = o.dir;
     let x = o.x;
     let y = o.y;
     this.view.depthOverride = null;
     // 차지한 자리(의자·나무·그네)에 있는 동안은 그 앵커에 고정한다 (보간이 늦어도 자리 위에 정확히)
     const slot = this.seatId ? seatSlot(this.seatId) : undefined;
-    this.view.setDoing(slot?.kind === "telescope" ? STARGAZE_TAG : null);
+    this.view.setDoing(slot?.kind === "telescope" ? STARGAZE_TAG : this.tag);
     // 움직이는 자리(조각배)는 앵커(나루터)에 묶지 않는다 — 배를 따라 보간 위치 그대로
     if (slot && slot.state === o.state && !slot.mobile) {
       x = slot.x;

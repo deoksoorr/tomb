@@ -1660,6 +1660,8 @@ export function bbqSmokeArt(): Grid {
 
 /** 먹을 때 뜨는 접시 (메뉴마다 위에 올린 것이 다르다) */
 export function bbqPlateArt(id: string): Grid {
+  // 11/15 마실 거리는 잔·사발·컵 그림
+  if (id === "beer" || id === "soju" || id === "makgeolli" || id === "coffee") return drinkArt(id);
   const g = new Grid(16, 10);
   g.ellipse(8, 6, 7, 3, 0xf8f4ec);
   g.ellipse(8, 6.5, 5, 1.8, 0xe8e2d6);
@@ -1673,10 +1675,87 @@ export function bbqPlateArt(id: string): Grid {
     g.rect(4, 3, 8, 2, 0xb05a34);
     g.hline(4, 11, 3, 0xd8784a);
     g.set(12, 3, 0xe8c040); // 머스터드
+  } else if (id === "hotteok") {
+    // 꿀호떡: 노릇한 둥근 떡 + 꿀이 비치는 가운데
+    g.ellipse(8, 4.5, 4.5, 2.4, 0xd89040);
+    g.ellipse(8, 4.2, 3.4, 1.6, 0xeab05a);
+    g.hline(7, 9, 4, 0x8a4a1c);
+    g.set(11, 6, 0xc87a28); // 흘러내린 꿀
+  } else if (id === "wholepork") {
+    // 통삼겹 바비큐: 접시를 덮는 큰 덩어리 (윤기 나는 껍질 + 비계 줄) + 꽂힌 꼬챙이
+    g.ellipse(8, 4.5, 6.5, 3.6, 0x9a3e22);
+    g.ellipse(8, 4, 5.5, 2.6, 0xc8582e);
+    g.hline(3, 13, 5, 0xf2d8c8);
+    g.hline(4, 12, 6, 0xb04a2a);
+    g.set(6, 2, 0xf0a070); // 윤기
+    g.set(7, 2, 0xf0a070);
+    g.vline(12, 0, 3, 0xd8c8a0);
+    g.set(13, 0, 0x5a9a4a); // 허브 한 줄기
+  } else if (id === "tomahawk") {
+    // 도끼 스테이크: 두툼한 고기 + 길게 뻗은 뼈
+    g.ellipse(6, 5, 4, 2.4, 0x8a2e24);
+    g.ellipse(6, 4.6, 3, 1.5, 0xb84a3a);
+    g.hline(4, 8, 4, 0x6a2018); // 그릴 자국
+    line(g, 9, 4, 14, 1, 0xf4ecdc);
+    g.set(14, 0, 0xf4ecdc);
+    g.set(15, 1, 0xf4ecdc);
+  } else if (id === "zap") {
+    // 번개 닭꼬치: 꼬치에 꿴 고기 세 덩이 + 노란 번개
+    line(g, 2, 7, 14, 3, 0xc8a070);
+    g.rect(4, 4, 2, 2, 0xd8783a);
+    g.rect(7, 4, 2, 2, 0xc8602a);
+    g.rect(10, 3, 2, 2, 0xd8783a);
+    for (const [x, y] of [[13, 0], [12, 1], [13, 1], [12, 2], [13, 2], [14, 2], [13, 3], [14, 4]] as const) g.set(x, y, 0xffe040);
   } else {
     line(g, 3, 6, 13, 1, 0xc8a070);
     g.rect(5, 3, 3, 2, 0xfaf4ec);
     g.rect(9, 1, 3, 2, 0xf0d8a8); // 살짝 그을린 마시멜로
+  }
+  g.outline(OUT);
+  return g;
+}
+
+
+/** 11/15 마실 거리: 맥주잔(거품)·소주잔과 초록 병·막걸리 사발·캠핑 커피 컵(김). 16×12, 원점 바닥 가운데 */
+export function drinkArt(id: "beer" | "soju" | "makgeolli" | "coffee"): Grid {
+  const g = new Grid(16, 12);
+  if (id === "beer") {
+    // 손잡이 달린 유리잔 + 호박색 맥주 + 흰 거품
+    g.rect(4, 4, 7, 7, 0xe8a830);
+    g.vline(5, 5, 10, 0xf8d070); // 반사
+    g.rect(4, 2, 7, 3, 0xfaf6ec);
+    g.set(3, 3, 0xfaf6ec);
+    g.set(11, 2, 0xfaf6ec);
+    g.vline(12, 5, 9, 0xd8e4ec);
+    g.set(13, 6, 0xd8e4ec);
+    g.set(13, 7, 0xd8e4ec);
+    g.set(13, 8, 0xd8e4ec);
+    g.hline(4, 10, 10, 0xc88820);
+  } else if (id === "soju") {
+    // 초록 병 + 작은 잔
+    g.rect(2, 3, 4, 8, 0x3a9a6a);
+    g.rect(3, 1, 2, 2, 0x3a9a6a);
+    g.vline(3, 4, 9, 0x8ad8b0);
+    g.rect(2, 6, 4, 2, 0xe8f0e8); // 라벨
+    g.rect(9, 7, 4, 4, 0xe8f0f4);
+    g.hline(9, 12, 8, 0xc8e8e0);
+    g.set(10, 9, 0xffffff);
+  } else if (id === "makgeolli") {
+    // 납작한 양은 사발 + 뽀얀 막걸리
+    g.ellipse(8, 7, 6.5, 3, 0xd8c088);
+    g.ellipse(8, 6.2, 5.5, 2, 0xf4ecd8);
+    g.hline(3, 13, 9, 0xb09860);
+    g.set(6, 6, 0xffffff);
+  } else {
+    // 법랑 캠핑 컵 (하늘색 + 테두리) + 김
+    g.rect(4, 5, 7, 6, 0x6aa8d0);
+    g.hline(4, 10, 5, 0xe8f0f4);
+    g.rect(5, 6, 5, 1, 0x5a3a20); // 커피
+    g.vline(11, 6, 9, 0x4a88b0);
+    g.set(12, 7, 0x4a88b0);
+    g.set(12, 8, 0x4a88b0);
+    g.vline(4, 6, 10, 0x8ac4e8);
+    for (const [x, y] of [[6, 3], [7, 2], [8, 3], [9, 1]] as const) g.set(x, y, 0xe8e8e8);
   }
   g.outline(OUT);
   return g;

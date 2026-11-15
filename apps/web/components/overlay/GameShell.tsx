@@ -763,8 +763,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       )}
       {sayOpen && <SayDialog onClose={() => setSayOpen(false)} />}
       {chatOpen && canRadial && !sayOpen && <ChatSheet onClose={() => setChatOpen(false)} />}
-      {/* 채팅 기록창: 데스크톱은 바로 가기 줄 위 상자(입력칸 포함), 터치는 확성기 위에 글씨만. 채널·집 드나들면 비운다 */}
-      {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}${scene !== "house" && netMap === "camp" ? "c" : ""}`} hidden={!canRadial || riding} />}
+      {/* 채팅 기록창: 데스크톱은 바로 가기 줄 위 상자(입력칸 포함), 터치는 확성기 위에 글씨만 + [기록] 창([말하기] → 채팅 입력 줄). 채널을 옮기면 비운다 */}
+      {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}${scene !== "house" && netMap === "camp" ? "c" : ""}`} hidden={!canRadial || riding} onChat={() => setChatOpen(true)} />}
       {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
       {/* 마을·집 안: 월드 바로 가기 줄이 숨으니 [표현] 버튼만 왼쪽 아래에 따로 */}
       {ready && scene === "house" && !coarse && (

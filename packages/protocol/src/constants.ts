@@ -98,7 +98,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 29 = 언젠가 캠핑장 1차(여러 맵·같은 채널 안 맵 이동·주말 버스·캠핑장 맵·NPC 5명, 테스트 서버만 — 운영은 CAMP_ENABLED=1일 때만) — 모두 한 번 새로고침 (11/15)
 // 30 = 캠핑장 수정(정류장·전망대 망원 뷰·캠핑카 앞마당·캠핑장 채집·버스 유턴·돌아가는 창밖 반대로·채널 전체 인원), 납품 부두 좁힘, 긴급 의뢰 끝 문구·마을 공지 바로 뜨기 — 모두 한 번 새로고침 (11/15)
 // 31 = 버스 유턴 없앰(마을은 오른쪽에서 와서 왼쪽으로, 캠핑장은 섰다가 흐려짐)·창밖 끊김 고침(미리 나눠 굽기)·IC 표지판, 납품 부두 없앰(어부 노점 호박밭 옆), 캠핑장 바베큐장(먹으면 잠깐 커짐) — 모두 한 번 새로고침 (11/15)
-export const CLIENT_VERSION = 31;
+// 32 = 범퍼카장(강 아래 묘역 자리)·묘역 하나로 합침(32칸), 캠핑장 먹거리·술(취기)·잔상 메뉴·3배 통삼겹·한도 없음, 모바일 채팅 기록 창 — 모두 한 번 새로고침 (11/15)
+export const CLIENT_VERSION = 32;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
@@ -230,10 +231,10 @@ export function staffGateBody<T extends string>(body: T, staff: boolean): T | "h
 }
 
 /**
- * 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호·오리배 꽥(11/15).
+ * 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호·오리배 꽥(11/15)·범퍼카 빵빵(11/16).
  * 서버가 이 목록으로 받을 동작을 정한다 (늘리면 realtime 재배포). 옛 클라이언트는 모르는 동작을 그냥 버린다
  */
-export const ACT_KINDS = ["bell", "splash", "wave", "cheer", "quack"] as const;
+export const ACT_KINDS = ["bell", "splash", "wave", "cheer", "quack", "honk"] as const;
 export type ActKind = (typeof ACT_KINDS)[number];
 
 /**

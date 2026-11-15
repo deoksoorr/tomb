@@ -47,6 +47,11 @@ function tutorialSteps(touch: boolean): Step[] {
       point: "fishing",
     },
     {
+      title: "범퍼카장",
+      text: `강 건너 범퍼카장 입구에서 ${touch ? "[상호작용]" : "E"}를 누르면 범퍼카에 타요. 다른 사람 차와 쿵 부딪혀 보세요. ${touch ? "[빵빵!]" : "Space"}로 경적도 울려요.`,
+      point: "bumper",
+    },
+    {
       title: "작은 묘역",
       text: `한때 하다 만 것들이 쉬는 곳이에요. 묘비 앞에서 ${touch ? "[상호작용]" : "E"}를 누르면 꽃을 놓을 수 있어요. 꽃 하나에 ${earnRule("flower").points}P예요. 내 묘비도 메뉴에서 하나 세울 수 있어요.`,
       point: "nearestGrave",

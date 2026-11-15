@@ -1,5 +1,5 @@
 // 채팅 기록창의 순수 규칙 (화면 쪽 메모리에만 두고 기기에 저장하지 않는다. 서버도 방별 최근 5분만 메모리에 들고 있다).
-// 각 줄은 5분 동안 보이고 마지막 몇 초 동안 서서히 흐려진다. 데스크톱은 상자 안에서 스크롤, 모바일은 최근 몇 줄만.
+// 각 줄은 5분 동안 보이고 마지막 몇 초 동안 서서히 흐려진다. 데스크톱은 상자 안에서 스크롤, 모바일은 평소 최근 몇 줄만 (기록 창을 열면 스크롤).
 // 방에 들어올 때 서버가 보내 주는 최근 5분(chatLog)은 받은 줄과 서버 줄 id(key)로 합친다 (내가 쓴 줄은 글·시각으로 맞춘다).
 
 import { CHAT_MAX, CHAT_RECENT_MAX, CHAT_RECENT_MS } from "@tomb/protocol";
@@ -10,7 +10,7 @@ export const CHAT_LOG_TTL_MS = CHAT_RECENT_MS;
 export const CHAT_LOG_FADE_MS = 10_000;
 /** 메모리에 들고 있는 최대 줄 수 (데스크톱 스크롤 안전 상한) */
 export const CHAT_LOG_KEEP = CHAT_RECENT_MAX;
-/** 모바일 글씨만 띄우는 줄 수 (터치 통과라 스크롤이 없다) */
+/** 모바일 평소에 글씨만 띄우는 줄 수 (터치 통과). 지난 줄은 [기록] 창·채팅 입력 줄에서 스크롤로 본다 */
 export const CHAT_LOG_MOBILE_LINES = 5;
 
 export type ChatLine = {
@@ -100,4 +100,34 @@ export function readChatLog(serverNow: unknown, raw: unknown, localNow: number):
     out.push({ key: l.id, name: l.name.slice(0, 40), text: l.text.slice(0, CHAT_MAX * 2), mine: l.mine === true, ...(l.staff === true ? { staff: true } : {}), at: localNow - age });
   }
   return out;
+}
+
+/**
+ * 채팅 기록을 비우는 단위: GameShell이 넘기는 방 문자열("world:3", "house:3", 캠핑장 "world:3c")의 채널 부분.
+ * 같은 채널 마을↔집은 그대로 이어지고, 채널을 옮기거나 마을↔캠핑장(3 ↔ 3c)을 오가면 비운다
+ */
+export function chatChannelOf(room: string): string {
+  const i = room.indexOf(":");
+  return i < 0 ? room : room.slice(i + 1);
+}
+
+/** 스크롤 기록: 이만큼(px) 안이면 맨 아래를 보고 있는 것으로 본다 */
+export const CHAT_STICK_PX = 4;
+
+/** 스크롤 기록에서 지금 맨 아래를 보고 있는지 */
+export function chatAtBottom(scrollHeight: number, scrollTop: number, clientHeight: number): boolean {
+  return scrollHeight - scrollTop - clientHeight < CHAT_STICK_PX;
+}
+
+/**
+ * 줄이 바뀐 뒤 스크롤 기록이 할 일 (데스크톱 상자·폰 기록 창·폰 채팅 입력 줄 공통)
+ *  - reset: 스크롤할 만큼 줄이 없다 → 다시 맨 아래 고정, [새 메시지 ↓] 끄기
+ *  - follow: 맨 아래를 보고 있다 → 따라 내려가기
+ *  - unread: 위를 읽는 중에 새 줄 → 끌어내리지 않고 [새 메시지 ↓]만
+ *  - none: 위를 읽는 중, 새 줄 없음(지난 줄이 빠짐 등) → 그대로
+ */
+export function chatScrollAction(s: { overflow: boolean; stick: boolean; added: boolean }): "reset" | "follow" | "unread" | "none" {
+  if (!s.overflow) return "reset";
+  if (s.stick) return "follow";
+  return s.added ? "unread" : "none";
 }
