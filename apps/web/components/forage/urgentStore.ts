@@ -44,6 +44,8 @@ class UrgentClientStore {
   private mineInflight: Promise<void> | null = null;
   /** 끝난 것을 본 의뢰 (끝나면 내 것을 한 번 다시 받는다) */
   private doneSeen = new Set<string>();
+  /** 진행 중에 본 단계 (100% 밑에서 본 의뢰가 100%를 넘기면 축하 폭죽 한 번 — 들어왔을 때 이미 넘었으면 쏘지 않는다) */
+  private stageSeen = new Map<string, number>();
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -62,6 +64,12 @@ class UrgentClientStore {
     const ev = this.snap.pub?.ev;
     const now = Date.now();
     const board = ev ? { live: now < ev.end, frac: ev.goal > 0 ? Math.min(1, ev.n / (ev.goal * 1.5)) : 0, stage: urgentStage(ev.n, ev.goal), fest: until > now } : null;
+    if (ev && now < ev.end) {
+      const stage = urgentStage(ev.n, ev.goal);
+      const before = this.stageSeen.get(ev.id);
+      this.stageSeen.set(ev.id, stage);
+      if (before !== undefined && before < 100 && stage >= 100) bridge.emit("urgent:goal");
+    }
     const prev = bridge.last("urgent:board");
     if (JSON.stringify(prev ?? null) !== JSON.stringify(board)) bridge.emit("urgent:board", board);
   }

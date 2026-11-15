@@ -321,6 +321,8 @@ export type UiEvents = {
   "forage:coin": undefined;
   /** 11/15 긴급 의뢰 마을 축제 (sticky): until = 축제가 끝나는 시각 ms (0 = 축제 없음) → 게임이 폭죽을 저절로 쏘고 모닥불을 금빛으로 */
   "urgent:fest": { until: number };
+  /** 11/15 긴급 의뢰가 진행 중에 100%를 넘긴 순간 (한 번): 마을 하늘에 축하 폭죽 한 발 */
+  "urgent:goal": undefined;
   /** 11/15 긴급 의뢰 현판 (sticky, null = 없음): 납품 부두 현판에 서버 전체 막대를 그린다. frac = 낸 수 ÷ (목표 × 1.5), stage = 닿은 단계 */
   "urgent:board": { live: boolean; frac: number; stage: number; fest: boolean } | null;
   /** 도감 열기 (UI 안에서 쓴다: HUD 버튼·메뉴·남의 도감) */

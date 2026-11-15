@@ -808,6 +808,15 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("look:set", (e) => this.applyLook(e.look, e.lookGrant, e)));
     this.festUntil = bridge.last("urgent:fest")?.until ?? 0;
     on.push(bridge.on("urgent:fest", ({ until }) => (this.festUntil = until)));
+    // 11/15 긴급 의뢰 100% 달성: 축하 폭죽 한 발
+    on.push(
+      bridge.on("urgent:goal", () => {
+        if (this.awayScene || this.inShop) return;
+        const v = this.fireworkView();
+        this.fireworks.launch("fw_triple", v.x + v.width / 2, v.y + v.height * 0.9, v, false);
+        this.sky?.firework();
+      }),
+    );
     on.push(
       bridge.on("firework:fire", ({ item, grant }) => {
         // 누른 순간 내 자리에서 바로 터뜨리고, 서버에는 증서를 보낸다 (서버가 같은 채널에 알린다)
@@ -1503,7 +1512,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
-   * 11/15 긴급 의뢰 마을 축제 (150%): 모닥불이 금빛, 하늘에 폭죽이 저절로 오른다 (처음 90초만 자주, 그 뒤엔 드물게) (보는 화면 아래쪽에서 쏘아 화면 안에서 터지게).
+   * 11/15 긴급 의뢰 마을 축제 (150%): 모닥불이 금빛, 하늘에 폭죽이 저절로 오른다 (처음 20초만) (보는 화면 아래쪽에서 쏘아 화면 안에서 터지게).
    * 폭죽 아이템 없이 그림만 — 서버·다른 사람에게 보내지 않는다 (모두가 같은 축제 상태를 보고 저마다 쏜다). 움직임 줄이기면 드물게
    */
   private updateFestival(now: number): void {
@@ -1514,9 +1523,9 @@ export class WorldScene extends Phaser.Scene {
       this.festNext = now + 800;
     }
     if (!on || this.awayScene || this.inShop || now < this.festNext) return;
-    // 11/15 폭죽은 축제가 열린 처음 90초만 자주 (1.6~4.2초마다), 그 뒤엔 1~2분에 한 발 — 1시간 내내 터지면 시끄럽고 산 폭죽이 묻힌다
-    const burst = Date.now() < this.festUntil - FEST_MS + 90_000;
-    this.festNext = now + (this.reduced ? (burst ? 7_000 : 120_000) : burst ? 1_600 + Math.random() * 2_600 : 60_000 + Math.random() * 60_000);
+    // 11/15 폭죽은 축제가 열린 처음 20초만 (1.6~4.2초마다). 그 뒤엔 금빛 모닥불·희귀 보너스만 남는다 — 1시간 내내 터지면 시끄럽고 산 폭죽이 묻힌다
+    if (Date.now() >= this.festUntil - FEST_MS + 20_000) return;
+    this.festNext = now + (this.reduced ? 7_000 : 1_600 + Math.random() * 2_600);
     const v = this.fireworkView();
     const x = v.x + v.width * (0.12 + Math.random() * 0.76);
     const y = v.y + v.height * (0.82 + Math.random() * 0.15);
