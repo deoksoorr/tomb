@@ -56,8 +56,9 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "dex", label: "도감 등록 보상", points: 0, dailyMax: 300, note: "새 종을 처음 올릴 때마다 3~50P, 희귀할수록 많이 받아요" },
   // 실시간 서버가 "가장 먼저 잡은 한 명"에게 서명한 증서로만 받는다 (고블린 한 마리당 한 번, lib/goblin.ts)
   { source: "goblin", label: "황금 고블린 잡기", points: 0, dailyMax: 150, note: "가끔 나타나는 황금 고블린을 가장 먼저 잡으면 20~100P" },
-  // 광장 소원 분수에 동전(1~5P)을 던지면 가끔 튀어 돌아온다 (하루 3번)
-  { source: "wish", label: "소원 분수", points: 0, dailyMax: 30, note: "광장 분수에 동전을 던지면 가끔 포인트가 돌아와요. 하루 3번까지예요." },
+  // 광장 소원 분수에 동전(1~5P)을 던지면 가끔 튀어 돌아온다 (하루 한 번)
+  // 11/15 소원은 하루 한 번(lib/wish WISH_DAILY) — 한 번에 돌아올 수 있는 최대(5P를 던져 대박 = 15P)에 맞춰 30 → 15
+  { source: "wish", label: "소원 분수", points: 0, dailyMax: 15, note: "광장 분수에 하루 한 번 동전을 던질 수 있어요. 가끔 포인트가 튀어 돌아와요." },
 ];
 
 /** 하루 전체 합계에 들어가지 않는 항목 (출석 달력 보상·접속 시간 보너스 — 각자 따로 정산) */
