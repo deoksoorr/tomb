@@ -9,6 +9,7 @@ import ui from "../ui/ui.module.css";
 import { forageStore, useForage } from "./forageStore";
 import { questStore, useQuests } from "./questStore";
 import s from "./forage.module.css";
+import q from "./quest.module.css";
 
 // 가방의 "물고기·채집물" 칸 (BagDialog 안). 겹쳐 쌓이고, 파는 것은 NPC 앞에서만 (어부 영감·수집가 유령).
 
@@ -47,15 +48,18 @@ export default function ForageBag() {
           ))}
         </div>
       )}
+      {/* 11/15 의뢰 도장 (가방이 아니라 계정에 쌓인다): 하나라도 있으면 작은 칩으로만 */}
+      {board && board.stamps > 0 && (
+        <div className={q.stampChip} title="의뢰 도장 (납품 부두 게시판에서 바꿔요)">
+          <span className={q.seal} aria-hidden>
+            印
+          </span>
+          <span>
+            도장 <strong>{board.stamps}</strong>
+          </span>
+        </div>
+      )}
       <p className={ui.hint}>
-        물고기는 납품 부두의 <b>어부 영감</b>, 나머지는 오리 연못 둑의 <b>수집가 유령</b>에게 팔 수 있어요. 수집가 유령의 의뢰에 납품하면 의뢰 도장
-        {board ? (
-          <>
-            {" "}
-            (지금 <b>{board.stamps}</b>개)
-          </>
-        ) : null}
-        을 받아 도장 교환소에서 써요.{" "}
         <button type="button" className={ui.button} style={{ minHeight: 28, padding: "2px 8px" }} onClick={() => bridge.emit("forage:dex", {})}>
           도감 보기
         </button>

@@ -132,6 +132,12 @@ function plateIcon(p: NamePlateSpec): Grid {
       }
       g.hline(x0, x0 + w - 1, y0, p.light);
       break;
+    case "newyear":
+      // 다홍 판 + 아래 금실 + 위 금가루 (양옆 매듭은 테두리 다음에)
+      g.rect(x0, y0, w, h, p.fill);
+      g.hline(x0, x0 + w - 1, y0, p.light);
+      g.hline(x0 + 1, x0 + w - 2, y0 + h - 2, p.edge);
+      break;
     default:
       g.rect(x0, y0, w, h, p.fill);
       g.hline(x0, x0 + w - 1, y0, p.light);
@@ -148,6 +154,18 @@ function plateIcon(p: NamePlateSpec): Grid {
   } else if (p.kind === "wave") {
     g.hline(x0 + 1, x0 + 2, y0 + 5, p.dots[1]);
     g.hline(x0 + w - 4, x0 + w - 2, y0 + 6, p.dots[1]);
+  } else if (p.kind === "newyear") {
+    // 양옆 복 매듭 (금 마름모 + 다홍 술) · 위로 떠오르는 금가루
+    for (const kx of [0, 15]) {
+      g.set(kx, y0 + 2, p.dots[0]);
+      g.set(kx, y0 + 4, p.dots[0]);
+      g.set(kx, y0 + 3, 0xfff2b0);
+      g.set(kx, y0 + 5, p.dots[1]);
+      g.set(kx, y0 + 6, p.dots[1]);
+    }
+    g.set(x0 + 2, y0 - 3, p.dots[0]);
+    g.set(x0 + w - 3, y0 - 2, p.dots[0]);
+    g.set(x0 + 6, y0 - 4, 0xfff2b0);
   } else if (p.kind === "star") {
     g.set(x0 + 1, y0 + 1, p.dots[0]);
     g.set(x0 + w - 2, y0 + h - 2, p.dots[0]);

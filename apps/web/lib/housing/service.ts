@@ -134,7 +134,7 @@ export async function buyPlot(
   if (had) throw new HttpError(409, "ALREADY_OWNED", `이미 ${lotLabel(had.ch, had.lot)}에 내 집이 있어요. 한 계정에 하나만 분양받을 수 있어요.`);
   if (lot !== null && (!Number.isInteger(lot) || lot < 1 || lot > VILLAGE_MAX_LOTS))
     throw new HttpError(400, "INVALID_INPUT", `번지는 1~${VILLAGE_MAX_LOTS} 중에서 골라 주세요.`);
-  // 11/15 없앤 번지 (1·11·12번지 — 광장·납품 부두가 됐다)
+  // 11/15 비운 번지 (CLOSED_LOTS — 지금은 없다)
   if (lot !== null && !isOpenLot(lot)) throw new HttpError(400, "INVALID_INPUT", "그 번지는 이제 분양하지 않아요. 다른 번지를 골라 주세요.");
   if (lot !== null && (await store.village(ch)).some((h) => h.lot === lot)) throw lotTaken();
   await spend(accountId, cost, tier.id === PLOT_TIERS[0].id ? "plot" : `plot:${tier.id}`);

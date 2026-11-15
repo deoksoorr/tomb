@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { fillEdgeColors, flameColor, LEAF_COUNT, leafAt, nameColorSpec, namePlateSpec, waveFlow, type NameColorSpec, type NamePlateSpec } from "@/lib/nameStyle";
+import { fillEdgeColors, flameColor, LEAF_COUNT, leafAt, nameColorSpec, namePlateSpec, NY_DUST_COUNT, nyDustAt, waveFlow, type NameColorSpec, type NamePlateSpec } from "@/lib/nameStyle";
 import { addCanvasTexture, TEX } from "../assets/manifest";
 import { NAME_LEAF_H, NAME_LEAF_W, nameLeafGrid } from "../sprites/nameStyleIcons";
 import { LABEL_ME, LABEL_OTHER } from "../config";
@@ -34,6 +34,8 @@ const PAD_X = 3;
 const PAD_Y = 1;
 /** 물결 이름표는 양옆을 조금 더 넓게 (글자 옆으로 흐르는 물결이 보이게) */
 const WAVE_PAD = 2;
+/** 새해 복 이름표: 양옆 복 매듭 자리만큼 판 밖 여백 */
+const NY_PAD = 1;
 
 export class NameStyleView {
   private colorId: string | null = null;
@@ -49,6 +51,8 @@ export class NameStyleView {
   /** 물결 이름표의 흐르는 윤슬 (바탕판 위·글자 아래) */
   private ripple: Phaser.GameObjects.Graphics | null = null;
   private rippleStep = -1;
+  /** 새해 복 이름표의 떠오르는 금가루 (위치만 바꾼다) */
+  private dust: Phaser.GameObjects.Image[] = [];
   private marker: Phaser.GameObjects.Graphics | null = null;
   private markerSc = 0;
   /** 글자 경계 색 (고쳐 쓴다) */
@@ -92,6 +96,14 @@ export class NameStyleView {
         this.ripple = null;
       }
       this.rippleStep = -1;
+      const wantDust = plate?.kind === "newyear";
+      if (wantDust && !this.dust.length)
+        for (let i = 0; i < NY_DUST_COUNT; i++)
+          this.dust.push(this.scene.add.image(0, 0, TEX.spark).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffd25a).setDepth(this.label.depth + 0.01).setVisible(false));
+      if (!wantDust && this.dust.length) {
+        for (const s of this.dust) s.destroy();
+        this.dust = [];
+      }
     }
   }
 
@@ -114,12 +126,12 @@ export class NameStyleView {
   /** 이름표 옆에 붙는 표시(친구 하트·도감 별)가 바탕판 밖으로 비켜설 거리 (월드 단위) */
   sidePad(sc: number): number {
     if (!this.plateOn) return 0;
-    return (PAD_X + 1 + (this.plateSpec?.kind === "ribbon" ? 4 : this.plateSpec?.kind === "wave" ? WAVE_PAD : 0)) * sc;
+    return (PAD_X + 1 + (this.plateSpec?.kind === "ribbon" ? 4 : this.plateSpec?.kind === "wave" ? WAVE_PAD : this.plateSpec?.kind === "newyear" ? NY_PAD + 7 : 0)) * sc;
   }
 
   /** 이름표 위에 얹는 것(1위 배지·말풍선)을 올릴 높이 (월드 단위) */
   topLift(sc: number): number {
-    return this.plateOn ? (PAD_Y + 1 + (this.plateSpec?.kind === "cloud" || this.plateSpec?.kind === "tomb" || this.plateSpec?.kind === "wave" ? 1 : 0)) * sc : 0;
+    return this.plateOn ? (PAD_Y + 1 + (this.plateSpec?.kind === "cloud" || this.plateSpec?.kind === "tomb" || this.plateSpec?.kind === "wave" || this.plateSpec?.kind === "newyear" ? 1 : 0)) * sc : 0;
   }
 
   /** 빛 무리·반짝이·내 표시를 꾸미기에 맞춰 만들거나 치운다 */
@@ -238,6 +250,20 @@ export class NameStyleView {
       this.ripple.setVisible(show);
     }
 
+    // 새해 복 이름표 금가루: 판 둘레에서 둥실 떠올라 사라진다 (움직임 줄이기면 양 끝 위에 하나씩 멈춰 있다)
+    for (let i = 0; i < this.dust.length; i++) {
+      const s = this.dust[i];
+      if (!on || !this.plateOn) {
+        if (s.visible) s.setVisible(false);
+        continue;
+      }
+      const p = this.reduced ? { x: i % 2 ? 0.5 : -0.5, y: 0.9, a: i < 2 ? 0.8 : 0 } : nyDustAt(i, now);
+      s.setPosition(Math.round(cx + p.x * (w + 8 * sc)), Math.round(bottom - p.y * (h + 2 * sc)))
+        .setScale(sc * (0.5 + 0.5 * p.a))
+        .setAlpha(alpha * p.a)
+        .setVisible(p.a > 0.02);
+    }
+
     for (let i = 0; i < this.leaves.length; i++) {
       const s = this.leaves[i];
       if (!on) {
@@ -315,6 +341,7 @@ export class NameStyleView {
     this.halo?.setVisible(false);
     this.marker?.setVisible(false);
     this.ripple?.setVisible(false);
+    for (const s of this.dust) s.setVisible(false);
     for (const s of this.sparks) s.setVisible(false);
     for (const s of this.leaves) s.setVisible(false);
   }
@@ -335,6 +362,8 @@ export class NameStyleView {
     this.sparks = [];
     this.ripple?.destroy();
     this.ripple = null;
+    for (const s of this.dust) s.destroy();
+    this.dust = [];
     for (const s of this.leaves) s.destroy();
     this.leaves = [];
   }
@@ -397,7 +426,7 @@ export function drawWaveRipple(g: Phaser.GameObjects.Graphics, p: NamePlateSpec,
  * 픽셀 느낌이 나게 sc 단위로만 그린다
  */
 export function drawPlate(g: Phaser.GameObjects.Graphics, p: NamePlateSpec, w: number, h: number, sc: number): void {
-  const padX = PAD_X + (p.kind === "wave" ? WAVE_PAD : 0);
+  const padX = PAD_X + (p.kind === "wave" ? WAVE_PAD : p.kind === "newyear" ? NY_PAD : 0);
   const L = Math.round(-w / 2 - padX * sc);
   const R = Math.round(w / 2 + padX * sc);
   const T = Math.round(-h - PAD_Y * sc);
@@ -481,6 +510,28 @@ export function drawPlate(g: Phaser.GameObjects.Graphics, p: NamePlateSpec, w: n
       const deep = T + Math.round((H * 0.62) / u) * u;
       g.fillStyle(p.edge, 0.38).fillRect(L + u, deep, W - 2 * u, B - deep - u);
       g.fillStyle(p.light, 0.9).fillRect(L + u, T, W - 2 * u, u);
+      break;
+    }
+    case "newyear": {
+      // 11/15 새해 복 이름표: 금테 두른 다홍 판 + 위 밝은 띠 + 아래 금실 줄, 양옆 밖으로 복 매듭(마름모 금 매듭 + 다홍 술)
+      g.fillStyle(0x4a0a10, 1).fillRect(L - 2 * u, T - 2 * u, W + 4 * u, H + 4 * u);
+      g.fillStyle(p.edge, 1).fillRect(L - u, T - u, W + 2 * u, H + 2 * u);
+      g.fillStyle(p.fill, p.alpha).fillRect(L, T, W, H);
+      g.fillStyle(p.light, p.alpha).fillRect(L, T, W, u);
+      g.fillStyle(p.edge, 0.55).fillRect(L + u, B - 2 * u, W - 2 * u, u);
+      // 귀퉁이 금 구름무늬 점
+      g.fillStyle(p.dots[0], 1).fillRect(L + u, T + u, u, u).fillRect(R - 2 * u, T + u, u, u);
+      for (const s of [-1, 1]) {
+        const kx = s < 0 ? L - 4 * u : R + 3 * u;
+        const ky = T + Math.round(H / 2 / u) * u - u;
+        // 매듭 고리 (판에 잇는 끈) → 마름모 매듭 → 술
+        g.fillStyle(p.edge, 1).fillRect(s < 0 ? kx + u : R + u, ky, 2 * u, u);
+        g.fillStyle(0x4a0a10, 1).fillRect(kx - u, ky - 2 * u, 3 * u, 5 * u).fillRect(kx - 2 * u, ky - u, 5 * u, 3 * u);
+        g.fillStyle(p.dots[0], 1).fillRect(kx, ky - u, u, 3 * u).fillRect(kx - u, ky, 3 * u, u);
+        g.fillStyle(0xfff2b0, 1).fillRect(kx, ky, u, u);
+        g.fillStyle(p.dots[1], 1).fillRect(kx, ky + 2 * u, u, 3 * u);
+        g.fillStyle(p.edge, 1).fillRect(kx, ky + 5 * u, u, u);
+      }
       break;
     }
     case "star": {

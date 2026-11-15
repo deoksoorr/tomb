@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { foldMultiply } from "./overlay";
 import { MONSTERS } from "@/lib/rpg/catalog";
 import { seeded } from "@/lib/rpg/formulas";
 import { clockText, meetingClock, meetingTime, mtLoop, mtNextSide, mtShrink, mtShrinkEvery, mtShrinkStep, type MtRoom, type MtSide, type MtTime } from "@/lib/rpg/towerThemes/meetingRoom";
@@ -162,7 +163,11 @@ export class MeetingArena {
     const sc = this.scene;
     const tone = TONE[this.view.time];
     const mul = this.view.rain ? Phaser.Display.Color.GetColor(...rgbMix(tone.mul, 0x9aa0b0, 0.35)) : tone.mul;
-    if (mul !== 0xffffff) this.keep(sc.add.rectangle(-200, -200, 848, 688, mul).setOrigin(0, 0).setDepth(D_OVERLAY).setBlendMode(Phaser.BlendModes.MULTIPLY));
+    // 11/15 성능: 지도 분위기 층이 있으면 그 색에 곱해 넣는다 (화면 전체 층 하나 덜 — game/tower/themes/overlay)
+    if (mul !== 0xffffff) {
+      const own = foldMultiply(sc, mul, D_OVERLAY, () => sc.add.rectangle(-200, -200, 848, 688, mul).setOrigin(0, 0).setDepth(D_OVERLAY).setBlendMode(Phaser.BlendModes.MULTIPLY));
+      if (own) this.keep(own);
+    }
     if (tone.stripeA > 0 && !this.view.rain) {
       const k = `mt-stripes-${this.seed & 7}`;
       if (!sc.textures.exists(k)) sc.textures.addCanvas(k, stripesCanvas(this.seed & 7));

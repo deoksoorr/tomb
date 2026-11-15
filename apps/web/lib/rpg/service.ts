@@ -573,7 +573,8 @@ const topSeen = globalThis as typeof globalThis & { __tombTowerTop?: number };
 async function finishTower(acct: string, start: number, seed: number, level: number, result: RunResult, elapsed: number, ipHash: string, now: number): Promise<RunFinishResponse> {
   const store = getRpgStore();
   if (result.game !== "hunt") throw new HttpError(422, "INVALID_RESULT", "결과가 시작한 게임과 달라요.");
-  const v = evalTower({ seed, level, start }, result, elapsed);
+  // 11/15 테스트 서버 슈퍼 계정만 처치 속도 상한을 빼고 (테스트용 무적·공격력 ×20) — 운영 서버에서는 isSuperHunter가 늘 false
+  const v = evalTower({ seed, level, start }, result, elapsed, { lax: await isSuperHunter(acct) });
   if (!v.ok) throw new HttpError(422, v.code, v.message);
   const day = kstDay(now);
   const week = kstWeek(now);

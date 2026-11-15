@@ -8,7 +8,20 @@ import { getTitleStats } from "../../store/titleStats";
 import { earnedTitleIds, titleDef } from "../../titles";
 import { LIFE_CATS, SPECIES, STACK_MAX, speciesById } from "../catalog";
 import { getForageStore } from "../store";
-import { QUEST_DAILY, QUEST_REWARDS, QUEST_STAMPS, QUEST_TITLE_STEPS, questRewardById, slotStamps } from "./catalog";
+import {
+  inMonthShop,
+  monthPreview,
+  monthRewards,
+  nextMonth,
+  QUEST_ALWAYS,
+  QUEST_DAILY,
+  QUEST_MONTHS,
+  QUEST_REWARDS,
+  QUEST_STAMPS,
+  QUEST_TITLE_STEPS,
+  questRewardById,
+  slotStamps,
+} from "./catalog";
 import { dailyQuests, dayAvailability, defaultPick, matches, pickError, questText, weekAvailability, weeklyQuest, type Quest, type QuestSpec } from "./gen";
 import { deliverQuest, exchangeQuest, questBoard, questStore, rerollQuest } from "./service";
 import { MemoryQuestStore, questView, rowOf } from "./store";
@@ -23,6 +36,7 @@ beforeAll(() => {
 
 const DAY = "20261115";
 const T0 = dayStartMs(DAY) + 6 * 3_600_000; // 그날 KST 11:00
+const TJAN = dayStartMs("20270110") + 6 * 3_600_000; // 1월 칸 (수집가 유령 외형)
 const acct = () => `t-quest-${nanoid(8)}`;
 
 /** 의뢰를 채울 만큼 가방에 넣는다 (그 의뢰에 맞는 종 중 값이 싼 것부터, 서로 다른 종 의뢰면 종마다 1개) */
@@ -293,54 +307,134 @@ describe("도장 교환소", () => {
     expect((await questBoard(a, T0)).stamps).toBe(180);
   });
 
-  it("수집가 유령 외형: 외형 해금 + 칭호 「수집왕」, 받은 뒤 외형을 바꿀 수 있다", async () => {
+  it("수집가 유령 외형(1월 칸): 외형 해금 + 칭호 「수집왕」, 받은 뒤 외형을 바꿀 수 있다", async () => {
     const a = await newAcct();
     await stamps(a, 200);
-    await exchangeQuest(a, "q_body_collector", T0);
+    // 11월에는 교환소에 없다
+    await expect(exchangeQuest(a, "q_body_collector", T0)).rejects.toMatchObject({ code: "NOT_THIS_MONTH" });
+    await exchangeQuest(a, "q_body_collector", TJAN);
     const body = QUEST_BODIES[0].id;
     expect((await getStyleStore(getAccounts()).get(a)).bodies).toContain(body);
     expect((await getTitleStats().get(a)).qking).toBe(1);
-    expect((await questBoard(a, T0)).stamps).toBe(0);
+    expect((await questBoard(a, TJAN)).stamps).toBe(0);
     const { reshape } = await import("../../dye/service");
-    await expect(reshape(a, body, T0)).resolves.toBeTruthy();
+    await expect(reshape(a, body, TJAN)).resolves.toBeTruthy();
     const b = await newAcct();
-    await expect(reshape(b, body, T0)).rejects.toMatchObject({ status: 403 });
+    await expect(reshape(b, body, TJAN)).rejects.toMatchObject({ status: 403 });
   });
 
-  it("교환소 표: 기획 값·한 번짜리·염색권", () => {
-    expect(QUEST_REWARDS.map((r) => [r.id, r.price])).toEqual([
-      ["qe_pack", 20],
-      ["q_dye_pick", 25],
-      ["q_hat_angler", 25],
-      ["q_hand_net", 25],
-      ["q_hat_miner", 25],
-      ["q_hand_brush", 25],
-      ["q_name_wave", 30],
-      ["q_name_leaf", 30],
-      ["q_aura_firefly", 45],
-      ["q_dye_special", 60],
-      ["q_pet_goldfish", 80],
-      ["q_aura_nightfish", 100],
-      ["q_back_cape", 120],
-      ["q_ride_carp", 150],
-      ["q_body_collector", 200],
-    ]);
+  it("교환소 표: 기획 값·전설은 하나", () => {
+    const price = Object.fromEntries(QUEST_REWARDS.map((r) => [r.id, r.price]));
+    expect(price).toMatchObject({
+      qe_pack: 20,
+      q_dye_pick: 25,
+      q_dye_special: 60,
+      q_hat_angler: 25,
+      q_hand_net: 25,
+      q_name_wave: 30,
+      q_aura_firefly: 45,
+      q_hat_snow: 25,
+      q_hat_miner: 25,
+      q_hand_brush: 25,
+      q_name_leaf: 30,
+      q_aura_snowglobe: 70,
+      q_pet_goldfish: 80,
+      q_body_collector: 200,
+      q_hand_wishlamp: 40,
+      q_name_newyear: 50,
+      q_ride_carp: 150,
+      q_back_cape: 120,
+      q_aura_nightfish: 100,
+      q_pet_penguin: 90,
+      q_back_kite: 45,
+    });
     expect(QUEST_REWARDS.filter((r) => r.tier === "legend").map((r) => r.id)).toEqual(["q_body_collector"]);
     expect(questRewardById("nope")).toBeUndefined();
   });
 
-  it("교환소 id가 모두 아이템 표에 있고(같은 지급 방식·부위), 상점·영구 구매·사육사에서는 살 수 없다", () => {
+  it("교환소 id(달마다 칸 포함)가 모두 아이템 표에 있고(같은 지급 방식·부위), 상점·영구 구매에서는 살 수 없다", () => {
     const kindOf = { flag: "own", ticket: "count", cosmetic: "permanent", body: "body" } as const;
+    const scheduled = new Set([...QUEST_ALWAYS, ...Object.values(QUEST_MONTHS).flat()]);
+    for (const id of scheduled) expect(questRewardById(id), `교환소 표에 없음: ${id}`).toBeDefined();
+    const missing = QUEST_REWARDS.filter((r) => !itemById(r.id)).map((r) => r.id);
+    expect(missing, "items.ts에 아직 없는 id").toEqual([]);
     for (const r of QUEST_REWARDS) {
-      const it = itemById(r.id);
-      expect(it, r.id).toBeDefined();
+      const it = itemById(r.id)!;
       expect(questGrantKind(r.id), r.id).toBe(kindOf[r.kind]);
-      if (r.kind === "cosmetic") expect(it!.slot, r.id).toBe(r.slot);
-      expect(isShopListed(it!), r.id).toBe(false);
+      if (r.slot) expect(it.slot, r.id).toBe(r.slot);
+      expect(isShopListed(it), r.id).toBe(false);
       expect(permanentPrice(r.id), r.id).toBeNull();
     }
     // 아이템 표의 의뢰 보상은 모두 교환소에 있다
     expect(ITEMS.filter((i) => (i as { quest?: true }).quest).map((i) => i.id).sort()).toEqual(QUEST_REWARDS.map((r) => r.id).sort());
+  });
+});
+
+describe("이달의 교환소", () => {
+  const ids = (m: string) => monthRewards(m).map((r) => r.id);
+  it("달 경계는 1일 새벽 5시 (KST): 11월 30일 → 12월 1일 04:59는 11월, 05:00부터 12월", async () => {
+    const a = acct();
+    const dec1 = dayStartMs("20261201");
+    const before = await questBoard(a, dec1 - 60_000);
+    const after = await questBoard(a, dec1);
+    expect(before.shop.month).toBe("202611");
+    expect(before.shop.endsAt).toBe(dec1);
+    expect(after.shop.month).toBe("202612");
+    expect(after.shop.items).toEqual(ids("202612"));
+    // 서버도 그 시각 기준으로만 받는다 (11월 칸인 낚시꾼 모자 → 12월엔 거절, 12월 칸 광부 헬멧 → 11월엔 거절)
+    await expect(exchangeQuest(a, "q_hat_angler", dec1)).rejects.toMatchObject({ code: "NOT_THIS_MONTH" });
+    await expect(exchangeQuest(a, "q_hat_miner", dec1 - 60_000)).rejects.toMatchObject({ code: "NOT_THIS_MONTH" });
+  });
+
+  it("달마다 칸 (기획 표, 싼 것부터)과 늘 있는 염색권 2종", () => {
+    expect(ids("202611")).toEqual(["qe_pack", "q_hat_angler", "q_hand_net", "q_name_wave", "q_aura_firefly"]);
+    expect(ids("202612")).toEqual(["q_hat_snow", "q_hat_miner", "q_hand_brush", "q_name_leaf", "q_aura_snowglobe", "q_pet_goldfish"]);
+    expect(ids("202701")).toEqual(["q_hand_wishlamp", "q_name_newyear", "q_body_collector"]);
+    expect(ids("202702")).toEqual(["qe_pack", "q_back_cape", "q_ride_carp"]);
+    expect(ids("202703")).toEqual(["q_hat_angler", "q_hand_net", "q_back_kite", "q_pet_penguin", "q_aura_nightfish"]);
+    expect(ids("202704")).toEqual(["q_name_wave", "q_aura_firefly", "q_body_collector"]);
+    expect(QUEST_ALWAYS).toEqual(["q_dye_pick", "q_dye_special"]);
+    for (const m of ["202611", "202701", "202803"]) for (const id of QUEST_ALWAYS) expect(inMonthShop(m, id)).toBe(true);
+    expect(inMonthShop("202611", "q_ride_carp")).toBe(false);
+  });
+
+  it("2027년 4월 뒤로는 12월~4월 다섯 달을 차례로 돌려 쓴다", () => {
+    expect(ids("202705")).toEqual(ids("202612"));
+    expect(ids("202706")).toEqual(ids("202701"));
+    expect(ids("202709")).toEqual(ids("202704"));
+    expect(ids("202710")).toEqual(ids("202612"));
+    // 2030년 1월 = 2027년 4월 뒤 33번째 달 → (33 − 1) % 5 = 2 → 2월 칸
+    expect(ids("203001")).toEqual(ids("202702"));
+    // 표보다 앞 달은 첫 달
+    expect(ids("202610")).toEqual(ids("202611"));
+    expect(nextMonth("202612")).toBe("202701");
+    // 5년치 모든 달에 칸이 있다
+    let m = "202611";
+    for (let n = 0; n < 60; n++, m = nextMonth(m)) expect(monthRewards(m).length, m).toBeGreaterThan(0);
+  });
+
+  it("다음 달 미리 보기: 다음 달 칸에서 가장 비싼 것 하나", async () => {
+    expect(monthPreview("202611")?.id).toBe("q_pet_goldfish");
+    expect(monthPreview("202612")?.id).toBe("q_body_collector");
+    expect(monthPreview("202704")?.id).toBe("q_pet_goldfish");
+    const b = await questBoard(acct(), T0);
+    expect(b.shop.preview).toEqual({ month: "202612", id: "q_pet_goldfish" });
+    expect(b.shop.always).toEqual([...QUEST_ALWAYS]);
+  });
+
+  it("받은 한 번짜리는 의뢰판에 가짐(owned)으로 남고 다시 못 받는다, 도장은 달이 바뀌어도 그대로", async () => {
+    const a = acct();
+    await getAccounts().enter(a, { name: `달${a.slice(-4)}` }, T0);
+    const s = questStore();
+    await getForageStore().grant(a, DAY, "fish", [{ id: "f_crucian", size: 0 }], STACK_MAX);
+    await s.deliver(a, "20200101", "20200101", { kind: "week" }, 100, 9_999, { f_crucian: 1 });
+    await exchangeQuest(a, "q_hand_net", T0);
+    const mar = dayStartMs("20270310") + 3_600_000;
+    const b = await questBoard(a, mar);
+    expect(b.owned).toContain("q_hand_net");
+    expect(b.stamps).toBe(75);
+    expect(b.shop.items).toContain("q_hand_net");
+    await expect(exchangeQuest(a, "q_hand_net", mar)).rejects.toMatchObject({ code: "OWNED" });
   });
 });
 

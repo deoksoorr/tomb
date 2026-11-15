@@ -42,6 +42,7 @@ import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { MT_BOSS, MT_ELITE, MT_LOOPS, MT_MID, MT_POOL, MT_ZONE_DEF } from "@/lib/rpg/towerThemes/meetingRoom";
 import { SV_LOOPS, SV_POOL, SV_ROOMS, SV_ZONE } from "@/lib/rpg/serverRoom";
 import { SV_ROOM_NAMES } from "@/game/tower/themes/serverRoomMap";
+import { scheduleRows } from "@/game/tower/scheduleRows";
 import { MAX_SLOW, MONSTER_STATUS, POTION_CURES, STATUS_DIFF, STATUS_IDS, STATUSES, statusFor, type StatusId } from "@/lib/rpg/status";
 import { CHAIN_GRACE_MS, FINISHER_EVERY, WEAPON_STYLES, weaponStyleOf } from "@/lib/rpg/weapons";
 import { earnRule } from "@/lib/economy";
@@ -539,7 +540,7 @@ function pages(): Page[] {
             </Item>
             <Item pic={<CardPic id="oneshot" />} title="상사의 제안과 멈추면 집중">
               10층마다 우두머리를 잡으면 상사가 슬쩍 제안을 해요. 최대 체력 {Math.round(BOSS_DEAL_HP_COST * 100)}%를 내주면 희귀 이상 카드 한 장을 주고, 거절하면 체력을 가득
-              채워 줘요. 기본 공격은 저절로 나가고, 가만히 서 있으면 공격 속도가 {Math.round(FOCUS_ASPD * 100)}% 빨라져요. 피할 땐 움직이고 칠 땐 멈추는 게 요령이에요.
+              채워 줘요. 기본 공격은 직접 해요 (Space·J, 누르고 있으면 계속). 가만히 서서 치면 공격 속도가 {Math.round(FOCUS_ASPD * 100)}% 빨라져요 — 피할 땐 움직이고 칠 땐 멈추는 게 요령이에요.
             </Item>
             <Item art={POTIONS[0]?.art} title="야근 빌딩 보상">
               깬 층마다 초월 EXP 약 320 × (1 + 0.02 × 층) (1층 {floorTExp(1)} · 30층 {floorTExp(30)} · 100층 {floorTExp(100)}) — 쓰러져도 깬 층만큼. {TOWER_FLOORS_PER_RUN}층 = 초월 판
@@ -553,6 +554,35 @@ function pages(): Page[] {
               층 높은 순, 같으면 빨리 오른 순. 끝판이 열린 뒤 {PIONEER_DAYS}일 안에 ★51에 닿거나 {PIONEER_FLOOR}층을 넘으면 「개척자 #번호」. 운영자는 랭킹·최초·번호에서 빠져요.
             </Item>
           </ul>
+          {/* 11/15 층 순서표: 같은 층은 늘 같은 방·같은 몬스터 (★ = 그 층에서 처음 나오는 몬스터) */}
+          <table className={s.guideTable}>
+            <caption>층 순서 (1~30층 — 같은 층은 늘 같은 방·몬스터, ★ 처음 나오는 몬스터)</caption>
+            <thead>
+              <tr>
+                <th>층</th>
+                <th>방</th>
+                <th>몬스터</th>
+                <th>정예·우두머리</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scheduleRows(30).map((r) => (
+                <tr key={r.floor}>
+                  <th>{r.floor}</th>
+                  <td>
+                    {r.theme} · {r.room}
+                    {r.loop && r.floor % 10 !== 1 && r.floor % 10 !== 6 ? "" : r.loop ? ` (${r.loop})` : ""}
+                  </td>
+                  <td>{r.mons.map((m) => `${m.fresh ? "★" : ""}${m.name}`).join(", ")}</td>
+                  <td>
+                    {r.special.length
+                      ? r.special.map((x) => `${x.kind === "boss" ? "우두머리" : x.kind === "mid" ? "중간 우두머리" : "정예"} ${x.fresh ? "★" : ""}${x.name}`).join(", ")
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           <table className={s.guideTable}>
             <thead>
               <tr>

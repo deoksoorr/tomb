@@ -226,7 +226,12 @@ export type RpgPlay = {
   /** 테스트 서버 운영자 시험 드롭 (판 시작 응답 그대로). 있으면 화면은 드롭 예측 대신 이것을 판 끝에 떨군다 */
   testDrops?: Drop[];
   /** 11/15 야근 빌딩: 시작 층 · 오늘 남은 우두머리 상자 (몬스터 배율·저주는 층마다 — lib/rpg/tower) */
-  tower?: { start: number; chestsLeft: number };
+  tower?: {
+    start: number;
+    chestsLeft: number;
+    /** 11/15 테스트 서버 슈퍼 계정만: 무적·공격력 ×20 (높은 층 구경용). 서버는 이 값을 받지도 믿지도 않는다 — 운영 서버에서는 화면이 켜지 못한다 */
+    boost?: boolean;
+  };
   /** 11/15 연습 판 (초월 구간을 다 써서 드롭이 없다) — 바닥 드롭 연출을 하지 않는다 */
   noDrops?: boolean;
 };

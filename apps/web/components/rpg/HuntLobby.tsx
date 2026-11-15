@@ -45,7 +45,7 @@ import LevelUpSound from "./LevelUpSound";
 import RpgIcon from "./RpgIcon";
 import ItemIcon from "../ui/ItemIcon";
 import RunHud from "./RunHud";
-import TowerEntrance from "./TowerEntrance";
+import TowerEntrance, { towerBoostAllowed } from "./TowerEntrance";
 import s from "./rpg.module.css";
 
 // 사냥터 입구 창 (월드의 사냥터 입구에서 portal:open {kind:"hunt"} → UI가 이 컴포넌트를 띄운다).
@@ -259,7 +259,7 @@ export default function HuntLobby({
       .finally(() => setBusy(false));
   };
 
-  async function start(game = cur.game, difficulty = cur.diff, towerFloor?: number) {
+  async function start(game = cur.game, difficulty = cur.diff, towerFloor?: number, boost = false) {
     setPhase("starting");
     setNotice(null);
     try {
@@ -294,7 +294,16 @@ export default function HuntLobby({
         // 테스트 서버 운영자 시험 드롭 (판 끝에 우두머리 자리에서 떨어진다)
         ...(res.testDrops?.length ? { testDrops: res.testDrops } : {}),
         // 11/15 야근 빌딩 (층마다 배율·저주 — 오늘 남은 우두머리 상자만큼 상자를 떨군다), 연습 판(드롭 없음)
-        ...(res.tower ? { tower: { start: res.tower, chestsLeft: tw ? Math.max(0, tw.chestsMax - tw.chests) : 0 } } : {}),
+        ...(res.tower
+          ? {
+              tower: {
+                start: res.tower,
+                chestsLeft: tw ? Math.max(0, tw.chestsMax - tw.chests) : 0,
+                // 11/15 테스트 서버 슈퍼 계정만 (서버가 준 superHunter — 운영 서버에서는 늘 없다)
+                ...(boost && res.view.superHunter && towerBoostAllowed() ? { boost: true } : {}),
+              },
+            }
+          : {}),
         ...(res.tier === "practice" ? { noDrops: true } : {}),
       });
     } catch (e) {
@@ -503,7 +512,7 @@ export default function HuntLobby({
               ))}
             </div>
             <div id={`${baseId}-panel`} role="tabpanel" aria-labelledby={`${baseId}-${tab}`} className={s.tabPanel}>
-              {tab === "start" && tower && view.endgame && <TowerEntrance view={view} busy={phase === "starting"} onStart={(f) => void start("hunt", "hell", f)} />}
+              {tab === "start" && tower && view.endgame && <TowerEntrance view={view} busy={phase === "starting"} onStart={(f, boost) => void start("hunt", "hell", f, boost)} />}
               {tab === "start" && !tower && (
                 <StartPanel
                   view={view}

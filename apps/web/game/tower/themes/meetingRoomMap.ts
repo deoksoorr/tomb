@@ -74,23 +74,24 @@ const CARPETS: [number, number][] = [
   [0x2e4240, 0x2a3c3a],
 ];
 
-const NORMAL: readonly MtRoomType[] = ["huddle", "board", "open", "training", "exec", "cafe", "booths"];
+
+/** 11/15 층별 방 순서 (블록마다 보통 층 넷, 겹치지 않는다): 6층 작은 회의실 → 오픈 오피스 → 대회의실(회의록 담당) → 교육장, 그 뒤 바퀴마다 다른 순서 */
+export const MT_ROOM_ORDER: readonly (readonly MtRoomType[])[] = [
+  ["huddle", "open", "board", "training"],
+  ["cafe", "booths", "exec", "open"],
+  ["training", "huddle", "cafe", "booths"],
+  ["exec", "board", "booths", "huddle"],
+];
 
 /**
- * f층 방 종류: 우두머리 층(5의 배수)은 주재자의 대회의실, 보통 층 넷은 블록 시드로 섞은 순서의 앞 넷 (한 블록 안에서 겹치지 않는다).
- * runSeed = 판 시드 (서버 티켓 시드와 같다)
+ * f층 방 종류: 우두머리 층(5의 배수)은 주재자의 대회의실, 보통 층은 층 순서표대로 (같은 층은 늘 같은 방 — 외워서 오른다).
+ * runSeed는 예전 호출과 맞추려고 받기만 한다
  */
-export function mtRoomType(runSeed: number, f: number): MtRoomType {
+export function mtRoomType(_runSeed: number, f: number): MtRoomType {
   const fl = Math.max(1, Math.floor(f));
   if (fl % 5 === 0) return "boss";
-  const block = Math.floor((fl - 1) / 5);
-  const r = seeded(((runSeed ^ Math.imul(block + 1, 0x2c1b3c6d)) >>> 0) ^ 0x4d524f4f);
-  const a = [...NORMAL];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(r() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a[(fl - 1) % 5];
+  const block = Math.floor((fl - 1) / 10);
+  return MT_ROOM_ORDER[block % MT_ROOM_ORDER.length][(fl - 1) % 5];
 }
 
 const box = (kind: MtFurnKind, x: number, y: number, w: number, h: number, solid = true, v?: number): MtFurn => ({ kind, x, y, w, h, solid, ...(v !== undefined ? { v } : {}) });

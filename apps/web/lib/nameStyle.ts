@@ -24,7 +24,8 @@ export type NameColorSpec =
   | { kind: "fx"; fx: NameFx; stops: readonly number[]; /** 빛 무리 색 (glow·flame) */ halo?: number };
 
 // 11/15 wave = 수집 의뢰 「물결 이름표」: 깊은 물빛 판 위로 물결 윤슬이 흘러간다 (dots = 물거품·윤슬 색)
-export type NamePlateKind = "wood" | "ribbon" | "cloud" | "wreath" | "tomb" | "star" | "wave";
+// 11/15 newyear = 수집 의뢰 「새해 복 이름표」: 붉은 비단 판 + 금테 + 양옆 복 매듭(술 달린 금 매듭), 금가루가 둥실 떠오른다
+export type NamePlateKind = "wood" | "ribbon" | "cloud" | "wreath" | "tomb" | "star" | "wave" | "newyear";
 /** 이름표 바탕판: fill 바탕 · light 위쪽 밝은 띠 · edge 테두리 · dots 장식 점 색 (꽃·별·못·이끼) */
 export type NamePlateSpec = { kind: NamePlateKind; fill: number; light: number; edge: number; dots: readonly number[]; /** 바탕 투명도 */ alpha: number };
 
@@ -64,6 +65,8 @@ export const NAME_PLATES: Readonly<Record<string, NamePlateSpec>> = {
   np_star: { kind: "star", fill: 0x1b2048, light: 0x2a3170, edge: 0x9fb4ff, dots: [0xfff3b0, 0xffffff], alpha: 0.92 },
   // 11/15 수집 의뢰 보상: 깊은 청록 물빛 (밝은 글자가 낮·밤 모두 또렷), 물마루 하이라이트 · dots = [물거품, 윤슬]
   q_name_wave: { kind: "wave", fill: 0x175a7e, light: 0x4fb8d8, edge: 0x0b2a40, dots: [0xe4fbff, 0x8fe2f0], alpha: 0.94 },
+  // 11/15 수집 의뢰 보상 (월 교환소): 짙은 다홍 판 (밝은 글자가 또렷) · edge = 금테 · dots = [금 매듭·금가루, 매듭 술 다홍]
+  q_name_newyear: { kind: "newyear", fill: 0x9a1c26, light: 0xd8483a, edge: 0xe8b23a, dots: [0xffd25a, 0xff6a4a], alpha: 0.95 },
 };
 
 export function nameColorSpec(id: string | null | undefined): NameColorSpec | null {
@@ -146,6 +149,22 @@ export function flameColor(i: number, t: number, top: boolean): number {
 export const WAVE_FLOW_MS = 1800;
 export function waveFlow(t: number): number {
   return (((t / WAVE_FLOW_MS) % 1) + 1) % 1;
+}
+
+/** 새해 복 이름표 금가루: 한 알이 떠오르는 시간 (ms) · 한 번에 보이는 수 */
+export const NY_DUST_MS = 2200;
+export const NY_DUST_COUNT = 4;
+/**
+ * 금가루 i의 자리 (t = ms): x = 이름표 가로 비율 (양끝 ±0.36..0.54), y = 판 아래에서 위로 떠오른 비율 (0 → 1.3), a = 투명도. 결정적
+ */
+export function nyDustAt(i: number, t: number): { x: number; y: number; a: number } {
+  const off = t + (i * NY_DUST_MS) / NY_DUST_COUNT;
+  const k = Math.floor(off / NY_DUST_MS);
+  const u = (off - k * NY_DUST_MS) / NY_DUST_MS;
+  const seed = hashUnit(k * 13 + i * 71);
+  // 글자를 가리지 않게 판 양끝 쪽에서 떠오른다 (번갈아 왼쪽·오른쪽)
+  const side = (k + i) % 2 ? 1 : -1;
+  return { x: side * (0.36 + seed * 0.18) + Math.sin(u * Math.PI * 2 + seed * 7) * 0.03, y: 0.1 + u * 1.2, a: Math.sin(Math.PI * u) };
 }
 
 /** 나뭇잎 하나가 떨어지는 길이 (ms) · 한 번에 보이는 잎 수 */

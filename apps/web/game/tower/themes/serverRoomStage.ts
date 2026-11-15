@@ -6,6 +6,7 @@ import { towerLoop } from "@/lib/rpg/tower";
 import { css, makeCanvas, radial } from "../../sprites/pixel";
 import { towerSound, type TowerSoundEv } from "../towerSound";
 import type { ThemeHost, ThemeMon, TowerThemeRuntime } from "./runtime";
+import { foldMultiply } from "./overlay";
 import { digits, propLeds, SV_BEACON, SV_ROOM_NAMES, SV_TRACES } from "./serverRoomMap";
 
 // 11/15 지하 서버실 실행부 (층마다 하나): 움직이는 배경(랙 LED·찬 바람 안개·케이블 트레이 데이터 빛·네온·경광등·층 번호),
@@ -21,10 +22,8 @@ const COLS = Math.ceil(AW / TILE);
 const ROWS = Math.ceil(AH / TILE);
 
 const D_HEAT = -790;
-const D_PUDDLE = -786;
 const D_STENCIL = -796;
 const D_FLOORLIGHT = -700;
-const D_CONE = -447;
 const D_DARK = 9002;
 const D_TRAY = 9030;
 const D_GLOW = 9056;
@@ -33,7 +32,8 @@ const D_VIG = 9600;
 const T = {
   soft: "sv-soft",
   mist: "sv-mist",
-  vig: "sv-vig",
+  edgeV: "sv-edge-v",
+  edgeH: "sv-edge-h",
   px: "sv-px",
   seg: "sv-seg",
   paper: "sv-paper",
@@ -109,14 +109,27 @@ function ensureTextures(scene: Phaser.Scene): void {
   };
   add(T.soft, () => radial(32, [[0, "rgba(255,255,255,0.9)"], [0.5, "rgba(255,255,255,0.35)"], [1, "rgba(255,255,255,0)"]]));
   add(T.mist, () => radial(32, [[0, "rgba(255,255,255,0.7)"], [0.6, "rgba(255,255,255,0.18)"], [1, "rgba(255,255,255,0)"]]));
-  add(T.vig, () =>
-    radial(128, [
-      [0, "rgba(255,255,255,0)"],
-      [0.55, "rgba(255,255,255,0)"],
-      [0.85, "rgba(255,255,255,0.55)"],
-      [1, "rgba(255,255,255,1)"],
-    ]),
-  );
+  // 가장자리 띠: 바깥이 진하고 안쪽으로 사라진다
+  add(T.edgeV, () => {
+    const { canvas, ctx } = makeCanvas(4, 64);
+    const g = ctx.createLinearGradient(0, 0, 0, 64);
+    g.addColorStop(0, "rgba(255,255,255,1)");
+    g.addColorStop(0.45, "rgba(255,255,255,0.35)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 4, 64);
+    return canvas;
+  });
+  add(T.edgeH, () => {
+    const { canvas, ctx } = makeCanvas(64, 4);
+    const g = ctx.createLinearGradient(0, 0, 64, 0);
+    g.addColorStop(0, "rgba(255,255,255,1)");
+    g.addColorStop(0.45, "rgba(255,255,255,0.35)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 4);
+    return canvas;
+  });
   add(T.px, () => {
     const { canvas, ctx } = makeCanvas(2, 2);
     ctx.fillStyle = "#fff";
@@ -246,7 +259,8 @@ export class ServerRoomStage implements TowerThemeRuntime {
   private readonly t0: number;
   private rnd: () => number;
   // 배경
-  private leds: { g: Phaser.GameObjects.Graphics; list: Led[] }[] = [];
+  /** 11/15 성능: LED는 소품마다 그림을 두지 않고 빛 층 하나에 모아 그린다 */
+  private leds: { list: Led[] }[] = [];
   private ledGlow!: Phaser.GameObjects.Graphics;
   private ledAt = 0;
   private neon: { img: Phaser.GameObjects.Image; base: number; ph: number }[] = [];
@@ -257,8 +271,8 @@ export class ServerRoomStage implements TowerThemeRuntime {
   private countdown: Phaser.GameObjects.Image | null = null;
   private beam: Phaser.GameObjects.Image | null = null;
   private sweep: Phaser.GameObjects.Image | null = null;
-  private vig!: Phaser.GameObjects.Image;
-  private blueVig!: Phaser.GameObjects.Image;
+  /** 화면 가장자리 띠 넷 (위·아래·왼쪽·오른쪽) */
+  private edges: Phaser.GameObjects.Image[] = [];
   private glitch!: Phaser.GameObjects.Graphics;
   // 과열
   private heat = new Float32Array(COLS * ROWS);
@@ -282,6 +296,7 @@ export class ServerRoomStage implements TowerThemeRuntime {
   private shielded = new Set<ThemeMon>();
   private recent: { id: MonsterId; x: number; y: number; wave: number }[] = [];
   private blueUntil = 0;
+  private lockNoteAt = 0;
   private laters: { at: number; fn: () => void }[] = [];
 
   constructor(
@@ -373,7 +388,7 @@ export class ServerRoomStage implements TowerThemeRuntime {
         const col = p.kind === "sv_mainframe" ? (r < 0.5 ? 0xffb03a : 0x3aff6a) : r < (dim ? 0.55 : 0.14) ? 0xffa030 : r < 0.2 ? this.accent : 0x3aff6a;
         return { x: q.x, y: q.y, col, period: base * (0.5 + this.rnd() * 1.8), phase: this.rnd() * 5000, duty: dim ? 0.25 : 0.35 + this.rnd() * 0.5 };
       });
-      this.leds.push({ g: this.keep(sc.add.graphics().setDepth(p.y + 0.2)), list });
+      this.leds.push({ list });
     }
     this.ledGlow = this.keep(sc.add.graphics().setDepth(D_GLOW).setBlendMode(Phaser.BlendModes.ADD));
 
@@ -410,7 +425,9 @@ export class ServerRoomStage implements TowerThemeRuntime {
       const k = this.loop.dark;
       const c = Phaser.Display.Color.IntegerToColor(0x1a2238);
       const mixc = Phaser.Display.Color.GetColor(255 - (255 - c.red) * k, 255 - (255 - c.green) * k, 255 - (255 - c.blue) * k);
-      this.keep(sc.add.rectangle(-200, -200, AW + 400, AH + 400, mixc).setOrigin(0, 0).setDepth(D_DARK).setBlendMode(Phaser.BlendModes.MULTIPLY));
+      // 11/15 성능: 화면 전체를 덮는 곱하기 층을 하나 더 두지 않고, 지도(arena)의 분위기 층 색에 곱해 넣는다 (곱하기 둘 = 색 곱)
+      const own = foldMultiply(sc, mixc, 9000, () => sc.add.rectangle(-200, -200, AW + 400, AH + 400, mixc).setOrigin(0, 0).setDepth(D_DARK).setBlendMode(Phaser.BlendModes.MULTIPLY));
+      if (own) this.keep(own);
       // 비상 전원 초록 등 (UPS 위)
       for (const p of l.props)
         if (p.kind === "sv_ups") this.neon.push({ img: this.keep(sc.add.image(p.x, p.y - 14, T.soft).setDisplaySize(70, 44).setTint(0x3aff7a).setBlendMode(Phaser.BlendModes.ADD).setDepth(D_GLOW)), base: 0.7, ph: 0 });
@@ -434,12 +451,17 @@ export class ServerRoomStage implements TowerThemeRuntime {
 
     // 과열 바닥·몬스터 연출 그림
     this.heatG = this.keep(sc.add.graphics().setDepth(D_HEAT));
-    this.puddleG = this.keep(sc.add.graphics().setDepth(D_PUDDLE));
-    this.coneG = this.keep(sc.add.graphics().setDepth(D_CONE));
+    // 11/15 성능: 바닥 그림(과열·웅덩이)과 바닥 위 연출(카메라 빛·고리·사슬)은 그림 하나씩에 모아 그린다
+    this.puddleG = this.heatG;
     this.fxG = this.keep(sc.add.graphics().setDepth(-440));
+    this.coneG = this.fxG;
     // 화면 테두리 (붉은 경보·파란 화면)
-    this.vig = this.keep(sc.add.image(0, 0, T.vig).setTint(0xff1a1a).setDepth(D_VIG).setAlpha(0));
-    this.blueVig = this.keep(sc.add.image(0, 0, T.vig).setTint(0x2a6aff).setDepth(D_VIG).setAlpha(0));
+    this.edges = [
+      this.keep(sc.add.image(0, 0, T.edgeV).setOrigin(0.5, 0).setDepth(D_VIG).setVisible(false)),
+      this.keep(sc.add.image(0, 0, T.edgeV).setOrigin(0.5, 1).setFlipY(true).setDepth(D_VIG).setVisible(false)),
+      this.keep(sc.add.image(0, 0, T.edgeH).setOrigin(0, 0.5).setDepth(D_VIG).setVisible(false)),
+      this.keep(sc.add.image(0, 0, T.edgeH).setOrigin(1, 0.5).setFlipX(true).setDepth(D_VIG).setVisible(false)),
+    ];
     this.glitch = this.keep(sc.add.graphics().setDepth(D_VIG + 1));
     if (reduced) for (const n of this.neon) n.ph = 0;
   }
@@ -521,8 +543,10 @@ export class ServerRoomStage implements TowerThemeRuntime {
     if (!this.shielded.has(m)) return 1;
     const s = this.s(m);
     const now = this.host.now();
-    if ((s.lockNote ?? 0) < now) {
-      s.lockNote = now + 900;
+    // 「잠김」 글자는 방 전체에서 1.2초에 한 번만 (몬스터가 많을 때 글자가 쏟아지지 않게)
+    if (this.lockNoteAt < now) {
+      this.lockNoteAt = now + 1200;
+      s.lockNote = now;
       this.host.float(m.x, m.y - MONSTERS[m.id].size - 8, "잠김", "#ffd04a");
     }
     return 0.15;
@@ -643,13 +667,12 @@ export class ServerRoomStage implements TowerThemeRuntime {
       this.ledAt = now + 80;
       this.ledGlow.clear();
       for (const r of this.leds) {
-        r.g.clear();
         for (const l of r.list) {
           const on = reduced ? l.duty > 0.3 : ((now + l.phase) % l.period) / l.period < l.duty;
           if (!on) continue;
           const col = failing && l.col === 0x3aff6a && (l.phase | 0) % 3 === 0 ? 0xff3a2a : l.col;
-          r.g.fillStyle(col, 1).fillRect(l.x, l.y, 1, 1);
-          this.ledGlow.fillStyle(col, 0.35).fillRect(l.x - 1, l.y - 1, 3, 3);
+          this.ledGlow.fillStyle(col, 0.3).fillRect(l.x - 1, l.y - 1, 3, 3);
+          this.ledGlow.fillStyle(col, 1).fillRect(l.x, l.y, 1, 1);
         }
       }
     }
@@ -657,7 +680,7 @@ export class ServerRoomStage implements TowerThemeRuntime {
     // 찬 바람 안개 (냉각 실패면 멎는다)
     if (!failing)
       for (const v of this.vents) {
-        if (now < v.next || this.mist.length > 60) continue;
+        if (now < v.next || this.mist.length > 36) continue;
         v.next = now + 140 + this.rnd() * 160;
         const img = this.sc.add.image(v.x + (this.rnd() - 0.5) * 18, v.y + (this.rnd() - 0.5) * 10, T.mist).setTint(0xd8f0ff).setAlpha(0).setScale(0.35).setDepth(v.y + 4);
         this.mist.push({ img, vx: (this.rnd() - 0.5) * 14, vy: -(6 + this.rnd() * 9), life: 0, max: 2000 + this.rnd() * 1400 });
@@ -794,7 +817,6 @@ export class ServerRoomStage implements TowerThemeRuntime {
     const mons = H.mons();
     const fx = this.fxG;
     fx.clear();
-    this.coneG.clear();
     // 랜섬 자물쇠: 사슬로 묶인 몬스터 (매 프레임 다시 센다)
     this.shielded.clear();
     const locks = mons.filter((m) => m.alive && m.id === "sv_ransom_lock" && !m.hidden);
@@ -804,7 +826,7 @@ export class ServerRoomStage implements TowerThemeRuntime {
         if (Math.hypot(m.x - L.x, m.y - L.y) > 84) continue;
         this.shielded.add(m);
         // 사슬: 금빛 점선 + 맞는 쪽에 작은 자물쇠 고리
-        const n = Math.max(2, Math.floor(Math.hypot(m.x - L.x, m.y - L.y) / 5));
+        const n = Math.max(2, Math.floor(Math.hypot(m.x - L.x, m.y - L.y) / 7));
         for (let k = 0; k <= n; k++) {
           const t = k / n;
           const wob = Math.sin(now / 200 + k) * 1.2;
@@ -971,7 +993,6 @@ export class ServerRoomStage implements TowerThemeRuntime {
     this.rings = this.rings.filter((r) => r.r < 170);
     // 냉각수 웅덩이
     const pg = this.puddleG;
-    pg.clear();
     this.puddles = this.puddles.filter((q) => q.until > now);
     for (const q of this.puddles) {
       const fade = Math.min(1, (q.until - now) / 1200);
@@ -1231,9 +1252,20 @@ export class ServerRoomStage implements TowerThemeRuntime {
     const warn = this.fail.warned;
     const hot = (this.heat[this.cur] ?? 0) > 0.65 || this.burnUntil[this.cur] > now;
     const red = failing ? 0.4 + 0.25 * Math.sin(now / 160) : warn ? 0.25 + 0.2 * Math.sin(now / 90) : hot ? 0.1 + 0.07 * Math.sin(now / 120) : this.loop.alarm ? 0.08 + 0.06 * Math.sin(now / 400) : 0;
-    this.vig.setPosition(cx, cy).setDisplaySize(v.width * 1.05, v.height * 1.05).setAlpha(this.host.reduced ? Math.min(0.35, red) : Math.max(0, red));
     const blue = this.blueUntil > now ? (this.blueUntil - now) / 1000 : 0;
-    this.blueVig.setPosition(cx, cy).setDisplaySize(v.width * 1.05, v.height * 1.05).setAlpha(blue * 0.9);
+    // 11/15 성능: 화면 전체 대신 네 가장자리 띠만 (가운데는 그리지 않는다). 파란 화면이 붉은 경보보다 먼저
+    const a = blue > 0 ? blue * 0.9 : this.host.reduced ? Math.min(0.35, red) : Math.max(0, red);
+    const col = blue > 0 ? 0x2a6aff : 0xff1a1a;
+    const bw = v.width * 0.16;
+    const bh = v.height * 0.2;
+    const [top, bot, left, right] = this.edges;
+    for (const e of this.edges) e.setTint(col).setAlpha(a).setVisible(a > 0.01);
+    if (a > 0.01) {
+      top.setPosition(cx, v.y).setDisplaySize(v.width, bh);
+      bot.setPosition(cx, v.y + v.height).setDisplaySize(v.width, bh);
+      left.setPosition(v.x, cy).setDisplaySize(bw, v.height);
+      right.setPosition(v.x + v.width, cy).setDisplaySize(bw, v.height);
+    }
     this.glitch.clear();
     if (blue > 0 && !this.host.reduced)
       for (let k = 0; k < 5; k++) this.glitch.fillStyle(k % 2 ? 0x2a6aff : 0xd8e8ff, 0.18 * blue).fillRect(v.x, v.y + this.rnd() * v.height, v.width, 1 + this.rnd() * 3);

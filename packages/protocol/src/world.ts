@@ -24,8 +24,9 @@ export const WALL_THICKNESS = 2 * TILE;
  * 5 = 동물원(버드나무 묘역 자리 — 울타리·우리·사육사 노점, 묘비 자리는 옛 묘역·다리 건너 묘역으로 옮김) — 우리 안에 옛 기록이 끼지 않게
  * 6 = 11/15 오리 연못(동물원을 줄이고 연못을 넓힘)·납품 부두(낚시 데크를 줄이고 의뢰 게시판·수족관 마당)·필지 1·11·12번 없앰(버스 정류장 광장)
  *     — 넓어진 물·우리 울타리·새 장식 자리에 옛 기록이 끼지 않게
+ * 7 = 필지를 1~9번지로 (1번지 되살림, 10·11·12번지 없앰 → 버스 정류장 광장을 10번지 자리로) — 광장·필지 자리가 바뀌어서
  */
-export const MAP_VERSION = 6;
+export const MAP_VERSION = 7;
 
 const CX = MAP_WIDTH / 2; // 720
 
@@ -222,21 +223,21 @@ export const PORTAL_RADIUS = 18;
 
 // ── 주거 구역 ── 분양 마을을 메인 맵에 합쳤다. 번지(1..WORLD_LOTS)마다 필지 하나, 그 집의 외관이 서 있다.
 // 필지 = 외관 캔버스(가로 128 × 세로 104, game/housing/art.ts FACADE_*) 크기. 문 앞은 필지 (x+64, y+92).
-// 광장 동쪽에 3열 × 4줄. 서쪽 골목(세로)과 줄마다 집 앞 골목(가로)이 있다.
+// 광장 동쪽에 3열 × 3줄 = 1~9번지 (격자는 4줄 — 넷째 줄은 버스 정류장 광장·납품 부두 위 마당). 서쪽 골목(세로)과 줄마다 집 앞 골목(가로)이 있다.
 // 번지가 WORLD_LOTS보다 큰 집은 분양 사무소의 "분양 마을(2단지)"에서 본다.
 export const HOUSE_LOT_W = 128;
 export const HOUSE_LOT_H = 104;
 export const HOUSE_COLS = 3;
+/** 필지 격자 줄 수 (골목 계산용). 필지는 위 세 줄에만 선다 */
 export const HOUSE_ROWS = 4;
-/** 메인 맵 번지의 끝 번호 (1..WORLD_LOTS 중 CLOSED_LOTS를 뺀 번지만 메인 맵에 선다. 그보다 크면 2단지) */
-export const WORLD_LOTS = HOUSE_COLS * HOUSE_ROWS;
 /**
- * 11/15 없앤 번지 (어느 채널에도 집이 없던 1·11·12번지). 번지를 다시 매기지 않는다: 남은 집의 번지·자리는 그대로,
- * 없앤 번지는 분양·자동 배정·필지 그림·충돌에서 모두 빠진다.
- *  - 1번지 자리(야근 빌딩·분양 사무소 바로 아래) → 주말 버스 정류장 광장 자리 (BUS_PLAZA, 지금은 포장된 빈 광장·벤치·가로등)
- *  - 11·12번지 자리(주거 구역 오른쪽 아래, 호수 낚시터 바로 위) → 납품 부두 위 마당 (WHARF_YARD: 의뢰 게시판·기록 수족관)
+ * 메인 맵 번지 1..WORLD_LOTS (11/15: 1~9번지만 — 넷째 줄 10·11·12번지 자리는 없앴다. 어느 채널에도 집이 없던 줄).
+ * 10번지 자리 → 주말 버스 정류장 광장 (BUS_PLAZA), 11·12번지 자리 → 납품 부두 위 마당 (WHARF_YARD).
+ * 그보다 큰 번지는 예전처럼 분양 마을(2단지) 번지다. 남은 집의 번지·자리는 그대로
  */
-export const CLOSED_LOTS: readonly number[] = [1, 11, 12];
+export const WORLD_LOTS = HOUSE_COLS * 3;
+/** 중간에 비운 번지 (지금은 없다 — 번호를 다시 매기지 않고 한 번지만 빼야 할 때 쓴다) */
+export const CLOSED_LOTS: readonly number[] = [];
 /** 분양할 수 있는 번지인지 (1 이상 정수, 없앤 번지가 아님. WORLD_LOTS보다 크면 2단지) */
 export function isOpenLot(lot: number): boolean {
   return Number.isInteger(lot) && lot >= 1 && !CLOSED_LOTS.includes(lot);
@@ -262,8 +263,8 @@ export function houseLot(lot: number): HouseLot | null {
 export const HOUSE_LOTS: readonly HouseLot[] = Array.from({ length: WORLD_LOTS }, (_, i) => houseLot(i + 1)).filter((l): l is HouseLot => l !== null);
 /** 주거 구역 필지 격자 왼쪽 위 (없앤 번지와 상관없이 격자는 그대로 — 골목·길 계산용) */
 export const HOUSE_GRID = { x: HOUSE_X0, y: HOUSE_Y0, pitchX: HOUSE_PITCH_X, pitchY: HOUSE_PITCH_Y } as const;
-/** 11/15 주말 버스 정류장 광장 자리 (예전 1번지 필지, 야근 빌딩 바로 아래). 지금은 포장된 빈 광장 + 벤치·가로등 (버스는 아직) */
-export const BUS_PLAZA = { x: HOUSE_X0, y: HOUSE_Y0, w: HOUSE_LOT_W, h: HOUSE_LOT_H } as const;
+/** 11/15 주말 버스 정류장 광장 자리 (예전 10번지 필지, 마을 동쪽 끝 — 납품 부두 위 마당 바로 왼쪽). 지금은 포장된 빈 광장 + 벤치·가로등 (버스는 아직) */
+export const BUS_PLAZA = { x: HOUSE_X0, y: HOUSE_Y0 + 3 * HOUSE_PITCH_Y, w: HOUSE_LOT_W, h: HOUSE_LOT_H } as const;
 
 // ── 강·연못·호수 ── (물 판정·그림은 클라이언트 layout.ts, 좌표 원본은 여기)
 /** 강 가운데 줄 (서쪽 담 밑에서 흘러나와 광장 남쪽을 지나 남동쪽 호수로). 물살은 이 순서 방향. x는 늘어나는 순서 */
@@ -654,9 +655,9 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "bN", kind: "bench", x: 952, y: 262, facing: DIR.down, seatOffsets: two },
   { id: "bO", kind: "bench", x: 1060, y: 800, facing: DIR.down, seatOffsets: two },
   { id: "lE", kind: "bench", x: 1144, y: 800, facing: DIR.down, seatOffsets: four }, // 낚시터가 생기며 나루터 서쪽 호숫가로 옮김
-  // ── 11/15 주말 버스 정류장 광장 (예전 1번지, 북쪽 길을 바라본다) · 납품 부두 위 마당 (게시판·수족관 앞) ──
-  { id: "bY", kind: "bench", x: 1044, y: 300, facing: DIR.up, seatOffsets: two },
-  { id: "bZ", kind: "bench", x: 1100, y: 300, facing: DIR.up, seatOffsets: two },
+  // ── 11/15 주말 버스 정류장 광장 (예전 10번지, 아래 골목을 바라본다) · 납품 부두 위 마당 (게시판·수족관 앞) ──
+  { id: "bY", kind: "bench", x: 1044, y: 704, facing: DIR.down, seatOffsets: two },
+  { id: "bZ", kind: "bench", x: 1100, y: 704, facing: DIR.down, seatOffsets: two },
   { id: "bD", kind: "bench", x: 1192, y: 744, facing: DIR.up, seatOffsets: two },
   { id: "bE", kind: "bench", x: 1336, y: 744, facing: DIR.up, seatOffsets: two },
   // ── 사냥터 동굴 앞 ──

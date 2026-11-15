@@ -3,7 +3,8 @@ import type { CosmeticSlot } from "@tomb/protocol";
 // 11/15: 수집 의뢰 (next-plans 기획 2) 숫자·교환소 표. 화면·서버가 같이 쓰는 순수 데이터.
 //  - 오늘의 의뢰: 계정마다 하루 7개 (새벽 5시에 새로). 앞 5개는 쉬운 것(도장 1), 뒤 2개는 어려운 것(도장 2) → 하루 9개
 //  - 이번 주 큰 의뢰: 계정마다 주 1개 (월요일 새벽 5시에 새로), 도장 8
-//  - 의뢰 도장은 포인트로 바꿀 수 없고 남에게 줄 수 없다. 도장 교환소(수집가 유령)에서만 쓴다 — 상점에 없는 것들
+//  - 의뢰 도장은 포인트로 바꿀 수 없고 남에게 줄 수 없다. 도장 교환소(납품 부두 의뢰 게시판)에서만 쓴다 — 상점에 없는 것들
+//  - 11/15 이달의 교환소: 염색권 2종은 늘, 나머지는 달마다 바뀌는 칸에서만 (QUEST_MONTHS — 달은 1일 새벽 5시에 바뀐다). 도장은 사라지지 않는다
 
 /** 오늘의 의뢰 수 */
 export const QUEST_DAILY = 7;
@@ -36,7 +37,7 @@ export type QuestReward = {
   name: string;
   price: number;
   kind: QuestRewardKind;
-  /** cosmetic의 부위 (등록된 아이템의 부위와 같아야 한다 — 테스트가 본다) */
+  /** cosmetic의 부위 (적어 두면 등록된 아이템의 부위와 같아야 한다 — 테스트가 본다. 없으면 등록된 부위를 그대로 쓴다) */
   slot?: CosmeticSlot;
   /** 타는 펫 */
   ride?: true;
@@ -65,9 +66,64 @@ export const QUEST_REWARDS: readonly QuestReward[] = [
   { id: "q_back_cape", name: "채집왕 망토", price: 120, kind: "cosmetic", slot: "back", tier: "rare", desc: "의뢰를 끝낸 자의 망토" },
   { id: "q_ride_carp", name: "월척 잉어", price: 150, kind: "cosmetic", slot: "pet", ride: true, desc: "타고 다니는 커다란 잉어" },
   { id: QUEST_BODY_REWARD, name: "수집가 유령 외형", price: 200, kind: "body", tier: "legend", desc: "수집가 유령의 모습 + 칭호 「수집왕」" },
+  // 11/15 이달의 교환소 추가분 (화면은 protocol items.ts에 등록된 이름·설명을 먼저 쓴다)
+  { id: "q_hat_snow", name: "눈 털모자", price: 25, kind: "cosmetic", slot: "head", desc: "눈꽃 무늬 털모자" },
+  { id: "q_hand_wishlamp", name: "새해 소원 등불", price: 40, kind: "cosmetic", slot: "hand", desc: "소원을 적은 한지 풍등" },
+  { id: "q_back_kite", name: "연 날리는 등", price: 45, kind: "cosmetic", slot: "back", desc: "등 뒤에서 펄럭이는 방패연" },
+  { id: "q_name_newyear", name: "새해 복 이름표", price: 50, kind: "cosmetic", slot: "namePlate", desc: "금테 두른 다홍 이름표" },
+  { id: "q_aura_snowglobe", name: "스노볼 오라", price: 70, kind: "cosmetic", slot: "aura", desc: "유리 돔 안에 눈이 소용돌이쳐요" },
+  { id: "q_pet_penguin", name: "꼬마 펭귄 펫", price: 90, kind: "cosmetic", slot: "pet", desc: "뒤뚱뒤뚱 따라오는 펭귄" },
 ];
 
 const BY_ID = new Map(QUEST_REWARDS.map((r) => [r.id, r]));
 export const questRewardById = (id: string): QuestReward | undefined => BY_ID.get(id);
 /** 한 번만 받는 것 (염색권 말고 전부) */
 export const isOneTime = (r: Pick<QuestReward, "kind">) => r.kind !== "ticket";
+
+// ── 이달의 교환소 ──
+
+/** 늘 있는 것 (염색권 2종) */
+export const QUEST_ALWAYS: readonly string[] = ["q_dye_pick", "q_dye_special"];
+
+/**
+ * 달마다 바뀌는 칸 (게임 날짜 기준 YYYYMM — 1일 새벽 5시에 바뀐다). 달을 더하려면 줄만 넣으면 된다.
+ * 표의 마지막 달 뒤로는 QUEST_CYCLE_FROM부터 마지막 달까지를 차례로 돌려 쓴다 (달마다 늘 목록이 있다)
+ */
+export const QUEST_MONTHS: Readonly<Record<string, readonly string[]>> = {
+  "202611": ["qe_pack", "q_hat_angler", "q_hand_net", "q_name_wave", "q_aura_firefly"],
+  "202612": ["q_hat_snow", "q_hat_miner", "q_hand_brush", "q_name_leaf", "q_aura_snowglobe", "q_pet_goldfish"],
+  "202701": [QUEST_BODY_REWARD, "q_hand_wishlamp", "q_name_newyear"],
+  "202702": ["q_ride_carp", "q_back_cape", "qe_pack"],
+  "202703": ["q_aura_nightfish", "q_pet_penguin", "q_back_kite", "q_hat_angler", "q_hand_net"],
+  "202704": [QUEST_BODY_REWARD, "q_aura_firefly", "q_name_wave"],
+};
+/** 표가 끝난 뒤 돌려 쓰는 첫 달 */
+export const QUEST_CYCLE_FROM = "202612";
+
+const MONTH_KEYS = Object.keys(QUEST_MONTHS).sort();
+const monthNo = (m: string) => Number(m.slice(0, 4)) * 12 + Number(m.slice(4, 6)) - 1;
+const monthOfNo = (n: number) => `${Math.floor(n / 12)}${String((n % 12) + 1).padStart(2, "0")}`;
+/** 다음 달 YYYYMM */
+export const nextMonth = (m: string) => monthOfNo(monthNo(m) + 1);
+
+/** 그달(YYYYMM)의 이달의 칸 (값이 싼 것부터). 표 앞의 달은 첫 달, 표 뒤의 달은 돌려 쓴다 */
+export function monthRewards(month: string): QuestReward[] {
+  const first = MONTH_KEYS[0];
+  const last = MONTH_KEYS[MONTH_KEYS.length - 1];
+  let key = month;
+  if (month < first) key = first;
+  else if (month > last) {
+    const cycle = MONTH_KEYS.filter((k) => k >= QUEST_CYCLE_FROM);
+    key = cycle[(monthNo(month) - monthNo(last) - 1) % cycle.length];
+  } else if (!QUEST_MONTHS[month]) key = MONTH_KEYS.filter((k) => k <= month).pop() ?? first;
+  return QUEST_MONTHS[key]
+    .map((id) => BY_ID.get(id))
+    .filter((r): r is QuestReward => !!r)
+    .sort((a, b) => a.price - b.price);
+}
+
+/** 그달 교환소에서 받을 수 있는지 (늘 있는 것 + 이달의 칸) */
+export const inMonthShop = (month: string, id: string) => QUEST_ALWAYS.includes(id) || monthRewards(month).some((r) => r.id === id);
+
+/** 다음 달 미리 보기: 다음 달 칸에서 가장 비싼 것 하나 */
+export const monthPreview = (month: string): QuestReward | null => monthRewards(nextMonth(month)).at(-1) ?? null;

@@ -1,6 +1,5 @@
 import {
   HUNT_ZONES,
-  isTowerZoneId,
   MONSTER_IDS,
   MONSTERS,
   type MonsterId,
@@ -34,6 +33,8 @@ import {
 import type { Drop, EndgameView, HuntResult } from "./types";
 // 11/15 능력 카드: 고른 카드 검사·처치 속도 상한 배율
 import { cardPower, isBossDealFloor, replayPicks, rerollsAllowed, runLevel, runXp, startPicks } from "./cards";
+// 11/15 층 순서표 (테마마다 층별 몬스터 구성·정예 자리)
+import { floorElite, floorRoster } from "./towerSchedule";
 // 11/15 끝없는 회의실 층 계획 손질 (참조 메일 상한·무리·중간 우두머리·안건 추가가 불러들이는 몫)
 import { meetingPlan } from "./towerThemes/meetingRoomPlan";
 
@@ -225,24 +226,17 @@ const FORMATIONS: readonly WaveFormation[] = [
 ];
 const ELITE_CHANCE = 0.35;
 
-/** 11/15 전용 테마 층은 테마 몬스터 중 이만큼만 골라 섞는다 (층마다 구성이 다르게) */
-const ROSTER = 4;
-/** 바퀴마다 정예 확률 + (최대 3바퀴) */
-const ELITE_LOOP = 0.12;
 
 export function towerPlan(seed: number, f: number): HuntWave[] {
   const zone0 = towerZone(f);
   const r = seeded(floorSeed(seed, f) ^ 0x544f5752);
   const boss = isBossFloor(f);
   const mix = towerCurseFx(f).eliteMix;
-  // 11/15 전용 테마: 층 시드로 몬스터 넷을 골라 그 층의 구성으로 (두 층이 같은 구성일 일이 드물다)
-  const own = isTowerZoneId(zone0.id) && zone0.pool.length > ROSTER;
-  const rr = seeded(floorSeed(seed, f) ^ 0x524f5354);
-  const pool = own ? pickRoster(zone0.pool, ROSTER, rr) : zone0.pool;
-  const zone = { ...zone0, pool };
-  const eliteChance = own
-    ? ELITE_CHANCE + ELITE_LOOP * Math.min(3, towerLoop(f))
-    : ELITE_CHANCE;
+  // 11/15 전용 테마: 층 순서표의 구성 (같은 층은 늘 같은 몬스터 — lib/rpg/towerSchedule). 정예도 순서표대로 (둘째 웨이브)
+  const period = FLOORS_PER_THEME * TOWER_THEMES.length;
+  const roster = floorRoster(zone0.id, f, period);
+  const zone = roster ? { ...zone0, pool: roster } : zone0;
+  const eliteHere = roster ? floorElite(f, period) : false;
   const sizes = boss ? BOSS_WAVES : FLOOR_WAVES;
   const waves = sizes.map((n, i): HuntWave => {
     const last = boss && i === sizes.length - 1;
@@ -253,8 +247,13 @@ export function towerPlan(seed: number, f: number): HuntWave[] {
       i === 0
         ? 0
         : Math.min(room, PACK[0] + Math.floor(r() * (PACK[1] - PACK[0] + 1)));
+    // 11/15 순서표 층: 웨이브마다 그 층 몬스터가 한 마리씩은 꼭 나온다 (나머지는 섞어서)
     for (let k = 0; k < room - pack; k++)
-      monsters.push(zone.pool[Math.floor(r() * zone.pool.length)]);
+      monsters.push(
+        roster && k < roster.length
+          ? roster[(k + i) % roster.length]
+          : zone.pool[Math.floor(r() * zone.pool.length)],
+      );
     const packId = zone.pool[Math.floor(r() * zone.pool.length)];
     for (let k = 0; k < pack; k++) monsters.push(packId);
     const formation: WaveFormation =
@@ -263,7 +262,8 @@ export function towerPlan(seed: number, f: number): HuntWave[] {
     let elite: number | undefined;
     const solo = monsters.length - pack;
     const roll = r();
-    if (!last && solo > 0 && (mix || (i > 0 && roll < eliteChance))) {
+    const want = roster ? mix || (eliteHere && i === 1) : mix || (i > 0 && roll < ELITE_CHANCE);
+    if (!last && solo > 0 && want) {
       const k = Math.floor(r() * solo);
       if (!MONSTERS[monsters[k]].minion) elite = k;
       // 11/15 테마 정예(백업 테이프 …)가 있으면 그 자리가 정예로 바뀐다
@@ -289,16 +289,6 @@ export function towerPlan(seed: number, f: number): HuntWave[] {
 const PLAN_HOOKS: Partial<Record<ZoneId, (plan: HuntWave[], o: { seed: number; f: number; loop: number }) => HuntWave[]>> = {
   mt_meeting: meetingPlan,
 };
-
-/** 시드로 pool에서 n종을 고른다 (순서 섞기 앞부분) */
-function pickRoster<T>(pool: readonly T[], n: number, r: () => number): T[] {
-  const a = [...pool];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(r() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a.slice(0, n);
-}
 
 /** 층을 깨는 데 걸리는 가장 짧은 시간 (마지막 웨이브가 나오는 시각 + 엘리베이터) */
 export const floorMinSec = (plan: HuntWave[]) =>
@@ -448,6 +438,8 @@ export function evalTower(
   t: TowerTicket,
   r: HuntResult,
   serverElapsedMs: number,
+  /** 11/15 테스트 서버 슈퍼 계정 (서버가 판정 — 화면 말은 안 믿는다): 처치 속도 상한만 빼고 본다 (테스트용 강화로 빨리 잡는다) */
+  o: { lax?: boolean } = {},
 ): TowerVerdict {
   if (r.game !== "hunt")
     return tReject("INVALID_RESULT", "결과가 시작한 게임과 달라요.");
@@ -502,7 +494,7 @@ export function evalTower(
       "RESULT_REJECTED",
       "능력 카드 기록이 맞지 않아요. 이번 판은 보상 없이 끝나요.",
     );
-  if (total > 3 + effSec * killRateCeiling("hell", t.level) * cardPower(cv.owned))
+  if (!o.lax && total > 3 + effSec * killRateCeiling("hell", t.level) * cardPower(cv.owned))
     return tooHigh("처치 수");
   if (k > 0 && minSec > effSec + 1) return tooHigh("층");
   for (const [id, n] of Object.entries(need) as [MonsterId, number][])

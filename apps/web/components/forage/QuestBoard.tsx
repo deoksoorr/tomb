@@ -161,9 +161,7 @@ export default function QuestBoard({ only }: { only?: LifeCat }) {
   return (
     <div className={q.board}>
       <div className={q.head}>
-        <span className={q.balance}>
-          의뢰 도장 <strong>{board.stamps}</strong>개
-        </span>
+        {/* 도장 수는 게시판 창 맨 위에 크게 (WharfBoard) */}
         <span>
           오늘 {doneCount}/{QUEST_DAILY} 끝냄 · 지금까지 {board.total}개
         </span>
@@ -172,13 +170,13 @@ export default function QuestBoard({ only }: { only?: LifeCat }) {
       </div>
       <ul className={q.list} aria-label="수집 의뢰">
         {weekly && row(weekly)}
-        {only && !daily.length && !weekly && <li className={q.empty}>오늘은 {CAT_LABEL[only]} 의뢰가 없어요. 숲 빈터의 수집가 유령에게 다른 의뢰가 있어요.</li>}
+        {only && !daily.length && !weekly && <li className={q.empty}>오늘은 {CAT_LABEL[only]} 의뢰가 없어요. 다른 의뢰는 납품 부두 게시판에 있어요.</li>}
         {daily.map(row)}
       </ul>
       <p className={ui.hint} role="status">
         {notice ??
           (only
-            ? `${CAT_LABEL[only]} 의뢰만 여기서 받아요. 모든 의뢰와 도장 교환소는 숲 빈터의 수집가 유령에게.`
+            ? `${CAT_LABEL[only]} 의뢰만 보여요. 모든 의뢰는 납품 부두 게시판에 있어요.`
             : "납품한 것은 가방에서 사라져요. 도장은 포인트로 바꿀 수 없고, 도장 교환소에서만 써요.")}
       </p>
     </div>

@@ -22,17 +22,17 @@ describe("집 문 앞 설 자리", () => {
   });
 
   it("다른 사람이 서 있으면 옆 칸, 다 막혔으면 문 바로 아래", () => {
-    const l = houseLot(2)!;
-    const first = doorFront(2, [], () => false)!;
+    const l = houseLot(1)!;
+    const first = doorFront(1, [], () => false)!;
     expect(first).toEqual({ x: l.door.x, y: l.door.y + 14 });
-    const next = doorFront(2, [first], () => false)!;
+    const next = doorFront(1, [first], () => false)!;
     expect(next).not.toEqual(first);
-    expect(doorFront(2, [], () => true)).toEqual(first);
+    expect(doorFront(1, [], () => true)).toEqual(first);
   });
 
   it("메인 맵에 없는 번지(2단지)는 null", () => {
     expect(doorFront(WORLD_LOTS + 1, [], () => false)).toBeNull();
-    expect(doorFront(1, [], () => false)).toBeNull(); // 11/15 없앤 번지
+    expect(doorFront(10, [], () => false)).toBeNull(); // 11/15 넷째 줄(10~12번지)은 없앴다
     expect(doorFront(0, [], () => false)).toBeNull();
   });
 });

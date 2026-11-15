@@ -1,4 +1,5 @@
 import { nanoid } from "nanoid";
+import { isWorldLot } from "@tomb/protocol";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "../env";
 import { getAccounts } from "../store";
@@ -325,12 +326,14 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
     expect(await points(rich)).toBe(700);
   });
 
-  it("11/15 없앤 번지(1·11·12)는 골라서 살 수 없다 — 포인트도 그대로", async () => {
+  it("11/15 메인 맵은 1~9번지, 10번지부터는 2단지 번지로 그대로 살 수 있다 · 0번지는 안 된다", async () => {
     const id = await account(PLOT + 50);
-    for (const lot of [1, 11, 12]) await expect(buyPlot(store, id, "없는 번지", "", "a", lot)).rejects.toMatchObject({ status: 400, code: "INVALID_INPUT" });
+    await expect(buyPlot(store, id, "없는 번지", "", "a", 0)).rejects.toMatchObject({ status: 400, code: "INVALID_INPUT" });
     expect(await points(id)).toBe(PLOT + 50);
-    const r = await buyPlot(store, id, "열린 번지", "", "a", 13, 7);
-    expect(r.house?.lot).toBe(13);
+    const r = await buyPlot(store, id, "2단지 집", "", "a", 10, 7);
+    expect(r.house?.lot).toBe(10);
+    expect(isWorldLot(10)).toBe(false);
+    expect(isWorldLot(9)).toBe(true);
   });
 
   it("분양 때 크기를 골라 바로 산다: 크기별 누적 값을 쓰고 그 크기로 생긴다", async () => {

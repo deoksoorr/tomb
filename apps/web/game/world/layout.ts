@@ -967,8 +967,8 @@ export function groundKind(tx: number, ty: number): GroundKind {
   // ── 주거 구역: 서쪽 골목(세로)과 집 앞 골목(가로) ──
   if (between(tx, HOUSE_TX0, HOUSE_TX0 + 1) && between(ty, NORTH_ROAD_TY[1] + 1, LAST_STREET_TY)) return "cobble";
   if (between(tx, HOUSE_TX0, HOUSE_TX1) && STREET_TYS.includes(ty)) return "cobble";
-  // 11/15 주말 버스 정류장 광장 (예전 1번지, 북쪽 길까지 포석) · 납품 부두 위 마당 (예전 11·12번지, 자갈)
-  if (between(tx, T(BUS_PLAZA.x), T(BUS_PLAZA.x + BUS_PLAZA.w) - 1) && between(ty, NORTH_ROAD_TY[1] + 1, T(BUS_PLAZA.y + BUS_PLAZA.h) - 1)) return "stone";
+  // 11/15 주말 버스 정류장 광장 (예전 10번지, 포석) · 납품 부두 위 마당 (예전 11·12번지, 자갈)
+  if (between(tx, T(BUS_PLAZA.x), T(BUS_PLAZA.x + BUS_PLAZA.w) - 1) && between(ty, T(BUS_PLAZA.y), T(BUS_PLAZA.y + BUS_PLAZA.h) - 1)) return "stone";
   if (between(tx, T(WHARF_YARD.x), T(WHARF_YARD.x + WHARF_YARD.w) - 1) && between(ty, T(WHARF_YARD.y), T(WHARF_YARD.y + WHARF_YARD.h) - 1)) return "gravel";
   // 광장 ↔ 주거 구역 골목 (첫째·셋째 골목 줄)
   if (between(tx, PZ_TX1 + 1, HOUSE_TX0 - 1) && (STREET_TYS.slice(0, 2).includes(ty) || STREET_TYS.slice(4, 6).includes(ty))) return "dirt";

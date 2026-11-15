@@ -22,6 +22,9 @@ import s from "./rpg.module.css";
 /** 버튼판에 보이는 층 버튼 수 (불 꺼진 다음 체크포인트 몇 개까지 보여 준다) */
 const DARK_AHEAD = 3;
 
+/** 11/15 테스트용 강화를 켤 수 있는 빌드인가 (운영 배포는 늘 아니다 — 서버 superHunter도 운영에선 꺼져 있다) */
+export const towerBoostAllowed = () => process.env.NEXT_PUBLIC_VERCEL_ENV !== "production";
+
 export default function TowerEntrance({
   view,
   busy,
@@ -29,8 +32,11 @@ export default function TowerEntrance({
 }: {
   view: RpgView;
   busy: boolean;
-  onStart: (start: number) => void;
+  onStart: (start: number, boost: boolean) => void;
 }) {
+  // 11/15 테스트 서버 슈퍼 계정: 무적·공격력 ×20 (기본 켬). 운영 서버(빌드)에서는 보이지도 않는다
+  const canBoost = !!view.superHunter && towerBoostAllowed();
+  const [boost, setBoost] = useState(true);
   const eg = view.endgame!;
   const t = eg.tower;
   const lit = t.checkpoints;
@@ -119,11 +125,16 @@ export default function TowerEntrance({
             type="button"
             className={cx(ui.button, ui.primary, s.start)}
             disabled={!canStart}
-            onClick={() => onStart(start)}
+            onClick={() => onStart(start, canBoost && boost)}
           >
             {busy ? "엘리베이터 부르는 중…" : `▲ ${start}층부터 오르기`}
           </button>
         </div>
+        {canBoost && (
+          <label className={s.meta}>
+            <input type="checkbox" checked={boost} onChange={(e) => setBoost(e.target.checked)} /> 테스트용 무적·공격력 ×20 (슈퍼 계정만 · 운영 서버엔 없음)
+          </label>
+        )}
         <ul className={s.towerWhy}>
           <li>
             올라간 층만큼 초월 경험치가 쌓여요. 높이 갈수록 한 층에 주는 양도 늘고, 쓰러져도 그때까지 오른 만큼은 챙겨 가요.

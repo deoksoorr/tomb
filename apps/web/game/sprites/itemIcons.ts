@@ -852,6 +852,14 @@ const GEAR_ICONS: Record<string, Ascii> = {
     rows: ["", "...b.b.b", "...bbBbb", "...bBbBb", "....bbb", ".....g", "......w", ".......w", "........W", ".........w", "..........w", "...........W", "............w"],
     pal: { b: 0xf0dca8, B: 0xd8bc80, g: 0xe0b040, w: 0x8a5a32, W: 0x5a3820 },
   },
+  q_hat_snow: {
+    rows: [".......ww", "......wwww", ".......ww", ".....nnnnnn", "....nnnsnnnn", "...nnslsnnslN", "...nnnsnnnsnN", "..nnnnnnnnnnnN", "..wbwbwbwbwbwb", "..bwbwbwbwbwbw"],
+    pal: { n: 0x2e4a8e, N: 0x1e3270, s: 0xf4f8ff, l: 0xb8d0ff, w: 0xf4f8ff, b: 0xc8d8f0 },
+  },
+  q_hand_wishlamp: {
+    rows: ["....rrrrrr", "...oohooooo", "..oohgggoooo", "..ohgwwwgooO", "..oogwwwgooO", "..ooogggoooO", "...ooooooOO", "....dddddd", ".....fyf", "......k", "......k", "......k", ".......k"],
+    pal: { r: 0xb83a2a, o: 0xf0903a, O: 0xc85a1a, h: 0xffc070, g: 0xffd27a, w: 0xfff2c0, d: 0x6a3a1a, f: 0xffe08a, y: 0xfff6d0, k: 0xe8d8b0 },
+  },
   q_back_cape: {
     rows: ["", "..yy........yy", "..yyyyyyyyyyyy", "..rhrrrrrrrrrl", ".rhrrrryrrrrrrl", ".rhrryyyyyrrrrl", "rhrrrryyyrrrrrrl", "rhrrrrryrrrrrrrl", "rhrrrrrrrrrrrrrl", "yyyyyyyyyyyyyyyy", "y.yy.yy.yy.yy.yy"],
     pal: { r: 0x5a3a9e, h: 0x7e5cc8, l: 0x3c2672, y: 0xf2c43a },

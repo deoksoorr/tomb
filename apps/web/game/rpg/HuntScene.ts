@@ -41,9 +41,10 @@ import { CardRun, type CardHost } from "./cards/CardRun";
 import { isBossDealFloor } from "@/lib/rpg/cards";
 // 11/15 야근 빌딩: 엘리베이터 연출 · 테마 실행부 (지하 서버실 몬스터 행동·과열·움직이는 배경)
 import { ElevatorCut } from "../tower/elevator";
+import { MonsterIntro } from "../tower/introCard";
 import { towerSound } from "../tower/towerSound";
 import { TOWER_THEME_RUNTIMES } from "../tower/themes";
-import type { ThemeHost, ThemeMon, TowerThemeRuntime } from "../tower/themes/runtime";
+import type { ThemeHost, TowerThemeRuntime } from "../tower/themes/runtime";
 
 // 사냥터: 위에서 내려다보는 실시간 전투. 웨이브는 서버가 준 시드의 계획(huntPlan)대로 나온다.
 //  - 웨이브 i는 앞 웨이브를 다 잡았고 i×8초가 지났을 때, 또는 앞 웨이브 뒤 35초가 지나면 나온다
@@ -58,6 +59,15 @@ const H = 288;
 const WALL = 10;
 const PLAYER_R = 5;
 const HURT_IFRAME_MS = 450;
+/** 11/15 몬스터가 이보다 많으면 밀어내기를 격자로 (칸 크기 px — 가장 큰 일반 몬스터 두 마리 거리보다 크게) */
+const SEP_GRID_FROM = 24;
+const SEP_CELL = 32;
+const SEP_NEIGHBORS: readonly [number, number][] = [
+  [1, 0],
+  [-1, 1],
+  [0, 1],
+  [1, 1],
+];
 /** 같은 방 다른 사람 아바타 투명도 */
 const GHOST_ALPHA = 0.42;
 /** 11/13 자리 비움(탭을 숨겼거나 판을 멈춘 사람)은 더 연하게 */
@@ -207,6 +217,9 @@ export class HuntScene extends RpgScene {
   private lift = false;
   /** 11/15 엘리베이터 연출 (야근 빌딩만) · 층 테마 실행부 (없으면 null) */
   private liftCut: ElevatorCut | null = null;
+  /** 11/15 그 판에서 처음 나온 몬스터 알림 카드 · 이미 본 몬스터 */
+  private intro: MonsterIntro | null = null;
+  private seenMons = new Set<MonsterId>();
   private theme: TowerThemeRuntime | null = null;
   private chestsLeft = 0;
   private quit = false;
@@ -516,6 +529,10 @@ export class HuntScene extends RpgScene {
     this.theme = this.makeTheme();
     this.liftCut?.destroy();
     this.liftCut = null;
+    this.intro?.destroy();
+    this.intro = play.tower ? new MonsterIntro(this, RTEX.monster) : null;
+    this.seenMons = new Set();
+    if (play.tower?.boost) this.flash("테스트용 무적·공격력 ×20 (슈퍼 계정)", 3000);
     if (play.tower) {
       this.liftCut = new ElevatorCut(this, this.data0.reduced, (ev) => this.sfx.synth(`tw-${ev}`, towerSound(ev)));
       this.lift = true;
@@ -530,6 +547,8 @@ export class HuntScene extends RpgScene {
       this.theme = null;
       this.liftCut?.destroy();
       this.liftCut = null;
+      this.intro?.destroy();
+      this.intro = null;
     });
   }
 
@@ -1037,6 +1056,8 @@ export class HuntScene extends RpgScene {
     this.fightAt = this.now;
     // 11/15 야근 빌딩 테마: 받는 피해 배율 (랜섬 자물쇠 사슬에 묶이면 거의 안 다친다)
     if (this.theme?.damageMul) dmg = Math.max(1, Math.round(dmg * this.theme.damageMul(m)));
+    // 11/15 테스트 서버 슈퍼 계정 구경: 공격력 ×20
+    if (this.play.tower?.boost) dmg *= 20;
     m.hp -= dmg;
     const def = MONSTERS[m.id];
     const sk = opts.skill ? PALETTES[opts.skill] : null;
@@ -1940,6 +1961,8 @@ export class HuntScene extends RpgScene {
   private hurtPlayer(dmg: number, src?: HitSrc): boolean {
     // 판이 끝나 드롭만 줍는 중에는 다치지 않는다 (지형 함정이 결과를 바꾸지 않게)
     if (this.died || this.endSnap || this.now < this.hurtUntil || this.buff("invuln")) return false;
+    // 11/15 테스트 서버 슈퍼 계정의 야근 빌딩 구경 (무적) — 화면이 슈퍼 계정에만 켠다 (lib/rpg/types RpgPlay.tower.boost)
+    if (this.play.tower?.boost) return false;
     this.hurtUntil = this.now + HURT_IFRAME_MS;
     this.fightAt = this.now;
     // 11/12 부재중 자동응답: 보호막이 먼저 받는다
@@ -2163,6 +2186,11 @@ export class HuntScene extends RpgScene {
     m.pats = monsterPatterns(MONSTERS[id], { boss: m.boss, hpRatio: 1, difficulty: this.play.difficulty });
     seedPatternTimers(m, m.pats, this.now, this.play.difficulty);
     this.theme?.spawned?.(m);
+    // 11/15 이 판에서 처음 나온 몬스터는 카드로 알린다 (졸개 조각은 빼고)
+    if (this.intro && !MONSTERS[id].minion && !this.seenMons.has(id)) {
+      this.seenMons.add(id);
+      this.intro.push(id);
+    }
   }
 
   /** 지도의 출현 지점 중 나에게서 충분히 먼 곳 (40번: 사냥터마다 문·입구 쪽) */
@@ -2232,9 +2260,13 @@ export class HuntScene extends RpgScene {
     if (f === "surround") this.fx.shake(90, 0.002);
   }
 
-  /** 몬스터끼리 살짝 밀어내기 (무리가 한 점으로 뭉쳐 보이지 않게). n²이지만 수십 마리라 가볍다 */
+  /**
+   * 몬스터끼리 살짝 밀어내기 (무리가 한 점으로 뭉쳐 보이지 않게). 11/15 많을 때(야근 빌딩 분열·복사·불러들이기)는
+   * 32px 칸 격자로 이웃 칸끼리만 본다 (n² → 거의 n). 격자 배열은 판마다 하나를 돌려 쓴다
+   */
   private separate(): void {
     const ms = this.mons;
+    if (ms.length > SEP_GRID_FROM) return this.separateGrid();
     for (let i = 0; i < ms.length; i++) {
       const a = ms[i];
       if (!a.alive || a.hidden) continue;
@@ -2255,6 +2287,51 @@ export class HuntScene extends RpgScene {
         this.moveMon(b, ux * push, uy * push);
       }
     }
+  }
+
+  private sepCells: Mon[][] = [];
+  private separateGrid(): void {
+    const C = SEP_CELL;
+    const cols = Math.ceil(W / C);
+    const rows = Math.ceil(H / C);
+    const cells = this.sepCells;
+    for (let k = 0; k < cols * rows; k++) {
+      if (cells[k]) cells[k].length = 0;
+      else cells[k] = [];
+    }
+    for (const m of this.mons) {
+      if (!m.alive || m.hidden) continue;
+      const cx = Math.min(cols - 1, Math.max(0, Math.floor(m.x / C)));
+      const cy = Math.min(rows - 1, Math.max(0, Math.floor(m.y / C)));
+      cells[cy * cols + cx].push(m);
+    }
+    const pair = (a: Mon, b: Mon) => {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const min = (MONSTERS[a.id].size / 2 + MONSTERS[b.id].size / 2) * 0.7;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= min * min) return;
+      const d = Math.sqrt(d2) || 0.01;
+      const push = (min - d) / 2;
+      const ux = d2 > 0.0001 ? dx / d : Math.random() - 0.5;
+      const uy = d2 > 0.0001 ? dy / d : Math.random() - 0.5;
+      this.moveMon(a, -ux * push, -uy * push);
+      this.moveMon(b, ux * push, uy * push);
+    };
+    // 같은 칸 + 오른쪽·아래·오른쪽 아래·왼쪽 아래 칸 (한 쌍을 한 번만)
+    for (let cy = 0; cy < rows; cy++)
+      for (let cx = 0; cx < cols; cx++) {
+        const c = cells[cy * cols + cx];
+        if (!c.length) continue;
+        for (let i = 0; i < c.length; i++) for (let j = i + 1; j < c.length; j++) pair(c[i], c[j]);
+        for (const [ox, oy] of SEP_NEIGHBORS) {
+          const nx = cx + ox;
+          const ny = cy + oy;
+          if (nx < 0 || ny >= rows || nx >= cols) continue;
+          const n = cells[ny * cols + nx];
+          for (const a of c) for (const b of n) pair(a, b);
+        }
+      }
   }
 
   private moveMon(m: Mon, dx: number, dy: number): void {
@@ -2424,6 +2501,7 @@ export class HuntScene extends RpgScene {
     const now = this.now;
     const d = this.dv;
     this.liftCut?.update(now);
+    this.intro?.update(now);
     // 미뤄 둔 일 (휘두르는 동작 뒤 판정 등)
     if (this.laters.length) {
       const due = this.laters.filter((l) => l.at <= now);
@@ -2511,9 +2589,8 @@ export class HuntScene extends RpgScene {
       else this.player.setFrame(avFrame(this.dirRow, moving ? 2 + (Math.floor(this.walkT / 120) % 4) : Math.floor(now / 500) % 2));
       // 버퍼에 한 번 있거나, 공격 키·마우스·손가락을 누르고 있으면 쿨다운이 끝나는 순간 친다
       const held = this.holdOn || this.keys.has("Space") || this.keys.has("KeyJ");
-      // 11/15 야근 빌딩: 기본 공격은 늘 자동 (닿는 데 적이 있으면) — 서 있으면 멈추면 집중으로 더 빠르다
-      const autoHit = !!this.cards && !this.endSnap && !!this.nearest(this.area.range);
-      if ((held || this.atkBuffered || autoHit) && now >= this.atkReadyAt && now >= this.rootUntil && !frozen) {
+      // 11/15 야근 빌딩도 기본 공격은 직접 (자동 공격 없음) — 서서 치면 멈추면 집중으로 더 빠르다
+      if ((held || this.atkBuffered) && now >= this.atkReadyAt && now >= this.rootUntil && !frozen) {
         if (this.holdOn && this.holdAim) {
           const p = this.toWorld(this.holdAim.x, this.holdAim.y);
           if (Math.hypot(p.x - this.px, p.y - this.py) > 2) this.setFace(p.x - this.px, p.y - this.py);

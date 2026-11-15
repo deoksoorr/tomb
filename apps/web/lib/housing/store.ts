@@ -174,7 +174,7 @@ export class MemoryHouseStore implements HouseStore {
   }
 
   private freeLot(ch: number): number | null {
-    for (let l = 1; l <= VILLAGE_MAX_LOTS; l++) if (isOpenLot(l) && !this.lotTaken(ch, l)) return l; // 11/15 없앤 번지는 건너뛴다
+    for (let l = 1; l <= VILLAGE_MAX_LOTS; l++) if (isOpenLot(l) && !this.lotTaken(ch, l)) return l; // 비운 번지(CLOSED_LOTS)는 건너뛴다
     return null;
   }
 

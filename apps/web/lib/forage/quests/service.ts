@@ -9,7 +9,7 @@ import { getTitleStats, type MemoryTitleStats } from "../../store/titleStats";
 import { forgetTitles } from "../../titlesServer";
 import { conditionsAt } from "../rules";
 import { getForageStore, type MemoryForageStore } from "../store";
-import { isOneTime, QUEST_DAILY, QUEST_REROLLS, QUEST_TITLE_STEPS, questRewardById, STAMP_CAP, type QuestReward } from "./catalog";
+import { inMonthShop, isOneTime, monthPreview, monthRewards, nextMonth, QUEST_ALWAYS, QUEST_DAILY, QUEST_REROLLS, QUEST_TITLE_STEPS, questRewardById, STAMP_CAP, type QuestReward } from "./catalog";
 import { dailyQuests, pickError, weeklyQuest, type Quest } from "./gen";
 import { getQuestStore, questView, type QuestMemDeps, type QuestRow, type QuestStore } from "./store";
 import type { QuestBoard, QuestDeliverResponse, QuestExchangeResponse, QuestRerollResponse } from "./types";
@@ -56,6 +56,21 @@ function boardOf(acct: string, row: QuestRow, now: number): QuestBoard {
     bought: row.bought,
     dayResetAt: dayStartMs(day) + DAY_MS,
     weekResetAt: nextWeekStartMs(now),
+    shop: shopOf(day),
+  };
+}
+
+/** 이달의 교환소 (게임 날짜의 달 — 1일 새벽 5시에 바뀐다) */
+function shopOf(day: string): QuestBoard["shop"] {
+  const month = day.slice(0, 6);
+  const next = nextMonth(month);
+  const p = monthPreview(month);
+  return {
+    month,
+    items: monthRewards(month).map((r) => r.id),
+    always: [...QUEST_ALWAYS],
+    endsAt: dayStartMs(`${next}01`),
+    preview: p ? { month: next, id: p.id } : null,
   };
 }
 
@@ -117,13 +132,15 @@ function exchangeItem(r: QuestReward) {
   if (r.kind === "body") return item?.body && isAvatarBody(item.body) ? { id: r.id, price: r.price, kind: r.kind, body: item.body } : null;
   if (r.kind === "flag") return { id: r.id, price: r.price, kind: r.kind };
   if (r.kind === "ticket") return item ? { id: r.id, price: r.price, kind: r.kind } : null;
-  return item?.kind === "cosmetic" && item.slot === r.slot ? { id: r.id, price: r.price, kind: r.kind, slot: item.slot } : null;
+  return item?.kind === "cosmetic" && item.slot && (!r.slot || item.slot === r.slot) ? { id: r.id, price: r.price, kind: r.kind, slot: item.slot } : null;
 }
 
 /** 도장 교환 (원자적: 도장 빼기 + 지급) */
 export async function exchangeQuest(acct: string, rewardId: string, now = Date.now()): Promise<QuestExchangeResponse> {
   const r = questRewardById(rewardId);
   if (!r) throw new HttpError(400, "INVALID_INPUT", "그런 물건은 없어요.");
+  // 이달의 교환소에 있는 것만 (달은 서버 시각으로)
+  if (!inMonthShop(kstDay(now).slice(0, 6), r.id)) throw new HttpError(409, "NOT_THIS_MONTH", "이번 달 교환소에는 없는 물건이에요.");
   const item = exchangeItem(r);
   if (!item) throw new HttpError(409, "NOT_READY", "아직 준비 중인 물건이에요. 조금만 기다려 주세요.");
   const res = await questStore().exchange(acct, kstDay(now), item, PERMANENT_UNTIL);

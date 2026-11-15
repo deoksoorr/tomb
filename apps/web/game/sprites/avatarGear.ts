@@ -28,15 +28,15 @@ export type GearM = {
 
 // 추가분 2(11/12): 머리 5·목 5·손 5·등 3 + 31번 운영자 전용(왕관·완장·명부·등불·도포)
 // 주간 랭킹 1위 전용 머리 3종 (금화 왕관·붉은 깃털 투구·황금 물고기 모자 — protocol CHAMP_HAT)
-export const GEAR_HEAD = ["hat_beanie", "hat_headphones", "hat_crown", "hat_ribbon", "hat_party", "hat_glasses", "hat_wizard", "hat_cap", "hat_sprout", "hat_beret", "hat_hardhat", "hat_chef", "hat_horns", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", ...CUTE_HEAD] as const;
+export const GEAR_HEAD = ["hat_beanie", "hat_headphones", "hat_crown", "hat_ribbon", "hat_party", "hat_glasses", "hat_wizard", "hat_cap", "hat_sprout", "hat_beret", "hat_hardhat", "hat_chef", "hat_horns", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", ...CUTE_HEAD] as const;
 export const GEAR_NECK = ["neck_tie", "neck_badge", "neck_bowtie", "neck_bell", "neck_lei", "neck_collar", "neck_whistle", "neck_camera", "neck_pearl", "neck_medal", "staff_armband", ...CUTE_NECK] as const;
-export const GEAR_HAND = ["hand_coffee", "hand_briefcase", "hand_phone", "hand_lantern_blue", "hand_donut", "hand_clipboard", "hand_mic", "hand_bouquet", "hand_wand", "staff_ledger", "staff_lamp", "q_hand_net", "q_hand_brush", ...CUTE_HAND] as const;
+export const GEAR_HAND = ["hand_coffee", "hand_briefcase", "hand_phone", "hand_lantern_blue", "hand_donut", "hand_clipboard", "hand_mic", "hand_bouquet", "hand_wand", "staff_ledger", "staff_lamp", "q_hand_net", "q_hand_brush", "q_hand_wishlamp", ...CUTE_HAND] as const;
 export const GEAR_BACK = ["back_backpack", "back_cape", "back_shell", "back_guitar", "back_jetpack", "staff_robe", "q_back_cape", ...CUTE_BACK] as const;
 /** 시트에 그려지는 추가 꾸미기 전부 (시트 키에 들어간다) */
 export const GEAR_SHEET_IDS: readonly string[] = [...GEAR_HEAD, ...GEAR_NECK, ...GEAR_HAND, ...GEAR_BACK];
 
 /** 두건·키다리 끝·동글이 새싹을 덮는 모자 (그 위에 꼭지를 그리지 않는다) */
-export const COVERING_HATS: ReadonlySet<string> = new Set(["hat_straw", "hat_cat", "hat_beanie", "hat_crown", "hat_party", "hat_wizard", "hat_cap", "hat_beret", "hat_hardhat", "hat_chef", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", ...CUTE_COVERING]);
+export const COVERING_HATS: ReadonlySet<string> = new Set(["hat_straw", "hat_cat", "hat_beanie", "hat_crown", "hat_party", "hat_wizard", "hat_cap", "hat_beret", "hat_hardhat", "hat_chef", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", ...CUTE_COVERING]);
 
 export type ExtraGear = { head: string | null; neck: string | null; hand: string | null; back: string | null };
 
@@ -497,6 +497,37 @@ export function drawHeadGear(g: Grid, view: GearView, id: string, m: GearM, body
       }
       break;
     }
+    case "q_hat_snow": {
+      // 11/15 수집 의뢰 눈 털모자: 남색 털실 + 흰 눈꽃 무늬 두 송이 + 흰 골지 단 + 동그란 흰 방울 (떨어지는 눈송이는 cosmeticFx)
+      const c = 0x2e4a8e;
+      const lo = 0x1e3270;
+      const hi = 0x4a6ab8;
+      const snow = 0xf4f8ff;
+      const rows: [number, number][] = [
+        [top - 2, Math.max(2, Math.round(rx * 0.6))],
+        [top - 1, Math.round(rx * 0.9)],
+        [top, rx],
+        [top + 1, rx],
+      ];
+      for (const [y, h] of rows) for (let x = cx - h; x < cx + h; x++) g.set(x, y, x >= cx + h - 2 ? lo : x === cx - h ? hi : c);
+      // 눈꽃 두 송이 (흰 점 + 하늘색 가지)
+      for (const x of side ? [cx - 3, cx + 1] : [cx - 3, cx + 2]) {
+        g.set(x, top, snow);
+        g.set(x - 1, top, 0x9ab8f0);
+        g.set(x + 1, top, 0x9ab8f0);
+        g.set(x, top + 1, 0x9ab8f0);
+      }
+      // 골지 단 (흰·하늘 번갈아)
+      for (let x = cx - rx; x < cx + rx; x++) g.set(x, top + 2, (x + cx) % 2 ? snow : 0xc8d8f0);
+      // 동그란 방울
+      const px = side ? cx - 2 : cx - 1;
+      g.set(px, top - 4, snow);
+      g.hline(px - 1, px + 1, top - 3, snow);
+      g.hline(px - 1, px + 1, top - 2, snow);
+      g.set(px + 1, top - 2, 0xb8cce8);
+      g.set(px - 1, top - 3, 0xffffff);
+      break;
+    }
     case "q_hat_miner": {
       // 11/15 수집 의뢰: 광부 헬멧 — 구릿빛 둥근 헬멧 + 가운데 등줄 + 챙, 이마에 둥근 등불 (불빛은 drawHeadGlow · 밤 빛은 AvatarView lantern)
       const c = 0xd98a2e;
@@ -875,6 +906,22 @@ export function drawHandGear(g: Grid, view: GearView, id: string, m: GearM): voi
       g.set(x - 1, hy + 3, 0xffb84a);
       break;
     }
+    case "q_hand_wishlamp":
+      // 11/15 수집 의뢰 새해 소원 등불: 손에서 끈으로 띄운 귤빛 한지 풍등 (안쪽은 따뜻한 불빛, 불꽃은 drawHandGlow)
+      g.set(x, y - 1, 0xe8d8b0);
+      g.hline(x - 1, x + 1, y - 7, 0xb83a2a);
+      g.hline(x - 2, x + 2, y - 6, 0xf0903a);
+      g.hline(x - 2, x + 2, y - 5, 0xf0903a);
+      g.hline(x - 2, x + 2, y - 4, 0xe8782a);
+      g.hline(x - 1, x + 1, y - 3, 0xe06a24);
+      g.set(x - 1, y - 6, 0xffc070);
+      g.set(x, y - 5, 0xffe6a0);
+      g.set(x - 1, y - 5, 0xffd27a);
+      g.set(x + 1, y - 5, 0xffd27a);
+      g.set(x, y - 4, 0xffd27a);
+      g.set(x + 2, y - 4, 0xc85a1a);
+      g.set(x, y - 2, 0x6a3a1a);
+      break;
     case "q_hand_brush":
       // 11/15 수집 의뢰 발굴 붓: 짙은 나무 자루 + 놋쇠 고리 + 부채꼴 솔
       g.set(x + 1, y + 2, 0x5a3820);
@@ -909,6 +956,9 @@ export function drawHandGlow(g: Grid, view: GearView, id: string, m: GearM): voi
   else if (id === "staff_lamp") {
     g.set(m.hx, m.hY + 1, 0x9af0ff);
     g.set(m.hx, m.hY, 0xd8faff);
+  } else if (id === "q_hand_wishlamp") {
+    g.set(m.hx, m.hY - 5, 0xfff6d0);
+    g.set(m.hx, m.hY - 3, 0xffe08a);
   }
 }
 

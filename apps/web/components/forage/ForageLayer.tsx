@@ -25,7 +25,7 @@ import { noteDexGain, toastAutoCatch } from "./autoToast";
 import FishingPanel from "./FishingPanel";
 import { forageStore } from "./forageStore";
 import NpcShop from "./NpcShop";
-import QuestBoard from "./QuestBoard";
+import WharfBoard from "./WharfBoard";
 import s from "./forage.module.css";
 
 // 4·32·51번 낚시·채집·판매·도감 UI의 뿌리 (GameShell이 게임이 뜨면 붙인다).
@@ -264,11 +264,7 @@ export default function ForageLayer() {
       {card && <CatchCard card={card} />}
       {insectDone && <InsectResultCard done={insectDone} onClose={closeInsectDone} />}
       {npc && <NpcShop npcId={npc} onClose={() => setNpc(null)} />}
-      {board && (
-        <Dialog title="의뢰 게시판 · 납품 부두" onClose={() => setBoard(false)}>
-          <QuestBoard />
-        </Dialog>
-      )}
+      {board && <WharfBoard onClose={() => setBoard(false)} />}
       {dex && <DexDialog accountId={dex.accountId} peer={dex.peer} name={dex.name} onClose={() => setDex(null)} />}
     </>
   );

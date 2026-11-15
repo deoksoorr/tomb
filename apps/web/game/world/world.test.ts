@@ -307,9 +307,10 @@ describe("강·호수 (50번)", () => {
 });
 
 describe("주거 구역 (분양 마을을 메인 맵에)", () => {
-  it("필지 9곳 (11/15: 1·11·12번지를 없앰): 겹치지 않고 주거 구역 안, 문 앞은 골목", () => {
-    expect(HOUSE_LOTS.length).toBe(WORLD_LOTS - CLOSED_LOTS.length);
-    expect(HOUSE_LOTS.map((l) => l.lot)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  it("필지 9곳 (11/15: 1~9번지만, 10·11·12번지 자리는 광장·부두): 겹치지 않고 주거 구역 안, 문 앞은 골목", () => {
+    expect(WORLD_LOTS).toBe(9);
+    expect(CLOSED_LOTS).toEqual([]);
+    expect(HOUSE_LOTS.map((l) => l.lot)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     const zone = ZONES.find((z) => z.id === "housing")!;
     for (const l of HOUSE_LOTS) {
       expect(inside(zone, l.x, l.y, 32) && inside(zone, l.x + HOUSE_LOT_W, l.y + HOUSE_LOT_H, 32), `lot${l.lot}`).toBe(true);
@@ -318,31 +319,33 @@ describe("주거 구역 (분양 마을을 메인 맵에)", () => {
     }
     expect(houseLot(0)).toBeNull();
     expect(houseLot(WORLD_LOTS + 1)).toBeNull();
-    expect(houseLot(2)?.door).toEqual(HOUSE_LOTS[0].door);
-    for (const c of CLOSED_LOTS) {
+    expect(houseLot(1)?.door).toEqual(HOUSE_LOTS[0].door);
+    for (const c of [10, 11, 12]) {
       expect(houseLot(c)).toBeNull();
-      expect(isOpenLot(c)).toBe(false);
+      expect(isOpenLot(c)).toBe(true); // 2단지 번지로는 그대로
       expect(lotInteractable(c, null)).toBeNull();
     }
-    expect(isOpenLot(13)).toBe(true); // 2단지 번지는 그대로
   });
 
-  it("집이 있는 2·3·4번지는 번호도 자리도 그대로 (11/15 필지 정리 전과 같은 좌표)", () => {
+  it("1~9번지는 번호도 자리도 그대로 (집이 있는 2·3·4번지 포함, 11/15 필지 정리 전과 같은 좌표)", () => {
+    expect(houseLot(1)).toMatchObject({ x: 1008, y: 216 });
+    expect(houseLot(9)).toMatchObject({ x: 1272, y: 504 });
     expect(houseLot(2)).toMatchObject({ x: 1140, y: 216, door: { x: 1204, y: 308 } });
     expect(houseLot(3)).toMatchObject({ x: 1272, y: 216, door: { x: 1336, y: 308 } });
     expect(houseLot(4)).toMatchObject({ x: 1008, y: 360, door: { x: 1072, y: 452 } });
   });
 
-  it("없앤 1번지 자리는 버스 정류장 광장(포석·벤치·가로등), 11·12번지 자리는 납품 부두 위 마당(자갈)", () => {
+  it("없앤 10번지 자리는 버스 정류장 광장(포석·벤치·가로등), 11·12번지 자리는 납품 부두 위 마당(자갈)", () => {
+    expect(BUS_PLAZA).toMatchObject({ x: 1008, y: 648 });
     const t = (x: number, y: number) => groundKind(Math.floor(x / 16), Math.floor(y / 16));
     expect(t(BUS_PLAZA.x + 40, BUS_PLAZA.y + 40)).toBe("stone");
-    expect(t(BUS_PLAZA.x + 40, BUS_PLAZA.y - 4)).toBe("stone"); // 북쪽 길까지 이어진다
+    expect(t(BUS_PLAZA.x + BUS_PLAZA.w + 20, BUS_PLAZA.y + 40)).toBe("gravel"); // 바로 오른쪽이 납품 부두 위 마당
     expect(t(WHARF_YARD.x + 60, WHARF_YARD.y + 40)).toBe("gravel");
     const benches = FURNITURE.filter((f) => inside(BUS_PLAZA, f.x, f.y));
     expect(benches.length).toBeGreaterThanOrEqual(2);
     expect(allProps().filter((p) => p.kind === "lamp" && inside(BUS_PLAZA, p.x, p.y)).length).toBeGreaterThanOrEqual(2);
     const ok = reachable();
-    expect(ok(BUS_PLAZA.x + 64, BUS_PLAZA.y + 50)).toBe(true);
+    expect(ok(BUS_PLAZA.x + 64, BUS_PLAZA.y + 84)).toBe(true);
     expect(ok(WHARF_YARD.x + 128, WHARF_YARD.y + 100)).toBe(true);
   });
 

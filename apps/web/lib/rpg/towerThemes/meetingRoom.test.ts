@@ -107,10 +107,12 @@ describe("끝없는 회의실: 층 계획", () => {
         n++;
         lineups.add(JSON.stringify(towerPlan(seed, f).map((w) => w.monsters)));
       }
-    expect(lineups.size).toBe(n);
+    // 11/15 몬스터 종류는 층 순서표로 정해져서, 마릿수·순서만 판마다 다르다
+    expect(lineups.size).toBeGreaterThan(n * 0.85);
+    // 11/15 층 순서표: 몬스터 종류는 판 시드와 상관없이 층마다 같다 (lib/rpg/towerSchedule) — 마릿수·무리·자리만 다르다
     const rosters = new Set<string>();
     for (let seed = 1; seed <= 40; seed++) rosters.add([...new Set(towerPlan(seed, 7).flatMap((w) => w.monsters))].sort().join());
-    expect(rosters.size).toBeGreaterThan(25);
+    expect(rosters.size).toBe(1);
   });
 });
 

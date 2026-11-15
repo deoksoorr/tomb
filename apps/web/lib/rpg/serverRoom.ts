@@ -216,7 +216,7 @@ export const SV_MONSTERS: Record<SvMonsterId, SvDef> = {
 export const SV_BOSS_CIRCUIT = 0.66;
 export const SV_BOSS_REBOOT = 0.3;
 
-/** 일반 웨이브에 나오는 열 종 (층마다 이 중 넷을 골라 섞는다 — lib/rpg/tower towerPlan) */
+/** 일반 웨이브에 나오는 열 종 (층마다 어느 종이 나오는지는 층 순서표 — lib/rpg/towerSchedule) */
 export const SV_POOL: SvMonsterId[] = [
   "sv_tangled_lan",
   "sv_hot_fan",
@@ -310,24 +310,29 @@ export const SV_ROOMS = 8;
 export const SV_BOSS_ROOM = 8;
 
 /**
- * f층(서버실 층)의 방 종류: 층 번호로만 정해진다 (같은 층은 늘 같은 방).
- * 한 블록(5층)의 보통 층 넷은 모두 다른 방이고, 두 블록(1~5·11~15)이 여덟 방을 나눠 쓴다 — 블록 쌍마다 순서를 섞는다
+ * 층별 방 순서 (블록마다 보통 층 넷 — 블록 안에서 겹치지 않는다). 첫 바퀴 1층 랙 통로 → 2층 세로 랙 → 3층 유리 냉복도 → 4층 케이블 금고,
+ * 둘째 바퀴 11층 엇갈린 랙 → 배터리실 → 관제실 → 테이프 보관실, 그 뒤로는 섞은 두 벌을 번갈아. 우두머리 층은 늘 메인프레임 홀
  */
+export const SV_ROOM_ORDER: readonly (readonly number[])[] = [
+  [0, 2, 3, 4],
+  [1, 5, 6, 7],
+  [3, 0, 7, 5],
+  [2, 6, 4, 1],
+];
+
+/** f층(서버실 층)의 방 종류: 층 번호로만 정해진다 (같은 층은 늘 같은 방) */
 export function svRoom(f: number): number {
   const n = Math.max(1, Math.floor(f));
   const k = (n - 1) % 5;
   if (k === 4) return SV_BOSS_ROOM;
   const block = Math.floor((n - 1) / 10);
-  const perm = Array.from({ length: SV_ROOMS }, (_, i) => i);
-  let s = (Math.floor(block / 2) * 0x9e3779b1 + 0x5652) >>> 0;
-  for (let i = perm.length - 1; i > 0; i--) {
-    s = (Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) + 0x297a2d39) >>> 0;
-    const j = s % (i + 1);
-    [perm[i], perm[j]] = [perm[j], perm[i]];
-  }
-  return perm[k + (block % 2) * 4];
+  return SV_ROOM_ORDER[block % SV_ROOM_ORDER.length][k];
 }
 
 /** 층마다 조명 색 (파랑·초록·호박·빨강 비상) — 층 번호로 */
 export const SV_ACCENTS = [0x3ab0ff, 0x3aff9a, 0xffb43a, 0xff4a4a] as const;
-export const svAccent = (f: number) => SV_ACCENTS[(Math.imul(Math.max(1, Math.floor(f)), 0x9e3779b1) >>> 7) % SV_ACCENTS.length];
+/** 층별 조명 색도 층 순서대로: 보통 층은 파랑 → 초록 → 호박 → 파랑 …, 우두머리 층은 빨강 비상 */
+export const svAccent = (f: number) => {
+  const n = Math.max(1, Math.floor(f));
+  return (n - 1) % 5 === 4 ? SV_ACCENTS[3] : SV_ACCENTS[(n - 1) % 3];
+};

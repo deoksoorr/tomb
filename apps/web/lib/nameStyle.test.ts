@@ -25,6 +25,8 @@ import {
   namePlateSpec,
   nameStyleIds,
   nameStyleRef,
+  NY_DUST_COUNT,
+  nyDustAt,
   WAVE_FLOW_MS,
   waveFlow,
 } from "./nameStyle";
@@ -58,6 +60,29 @@ describe("색 정의", () => {
     expect(kinds.filter((k) => k === "solid").length).toBe(8);
     expect(kinds.filter((k) => k === "gradient").length).toBe(6);
     expect(kinds.filter((k) => k !== "solid" && k !== "gradient").sort()).toEqual(["flame", "glow", "leaves", "rainbow", "stars"]);
+  });
+
+  it("11/15 새해 복 이름표: 다홍 판 + 금가루 (판 양끝에서만 떠오르고 결정적), 상점엔 없다", () => {
+    expect(namePlateSpec("q_name_newyear")?.kind).toBe("newyear");
+    expect(nameColorSpec("q_name_newyear")).toBeNull();
+    expect(itemById("q_name_newyear")?.quest).toBe(true);
+    expect(isShopListed(itemById("q_name_newyear")!)).toBe(false);
+    expect(hasItemIcon("q_name_newyear")).toBe(true);
+    const g = nameStyleIcon("q_name_newyear")!;
+    let px = 0;
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (g.get(x, y) & 255) px++;
+    expect(px).toBeGreaterThan(40);
+    // 기본 이름 글자(뼛빛)가 판 위에서 또렷하다
+    expect(contrast(0xf2ead3, namePlateSpec("q_name_newyear")!.fill)).toBeGreaterThan(4.5);
+    for (let i = 0; i < NY_DUST_COUNT; i++)
+      for (const t of [0, 777, 5_000, 123_456]) {
+        const p = nyDustAt(i, t);
+        expect(p).toEqual(nyDustAt(i, t));
+        expect(Math.abs(p.x)).toBeGreaterThanOrEqual(0.3);
+        expect(Math.abs(p.x)).toBeLessThanOrEqual(0.6);
+        expect(p.a).toBeGreaterThanOrEqual(0);
+        expect(p.a).toBeLessThanOrEqual(1);
+      }
   });
 
   it("11/15 수집 의뢰 이름 꾸미기: 물결 이름표·나뭇잎 이름 글자 — 정의·아이콘이 있고 상점엔 없다", () => {

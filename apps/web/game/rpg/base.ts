@@ -22,6 +22,8 @@ export type RpgSceneData = {
 
 const HUD_MS = 125;
 const FONT = '"Galmuri11", "Galmuri9", monospace';
+/** 11/15 동시에 떠 있는 글자 수 상한 (돌려 쓴다) */
+const FLOAT_CAP = 18;
 
 function isEditable(t: EventTarget | null): boolean {
   return t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -79,6 +81,10 @@ export abstract class RpgScene extends Phaser.Scene {
   }
 
   private cleanupCommon(): void {
+    // 씬이 닫히면 글자 객체도 같이 사라진다 (다음 판은 새로)
+    for (const t of this.floatFree) t.destroy();
+    this.floats = [];
+    this.floatFree = [];
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("blur", this.clearKeys);
@@ -177,11 +183,42 @@ export abstract class RpgScene extends Phaser.Scene {
     return t;
   }
 
-  /** 떠오르며 사라지는 숫자·글자 */
+  /**
+   * 떠오르며 사라지는 숫자·글자. 11/15 글자 객체는 돌려 쓴다 (새로 만들면 캔버스·텍스처를 매번 새로 올려 몬스터가 많을 때 끊긴다).
+   * 동시에 FLOAT_CAP개까지 — 넘치면 가장 오래된 것을 다시 쓴다. 같은 글자가 같은 자리 근처에 이미 떠 있으면 새로 띄우지 않는다
+   */
   protected floatText(x: number, y: number, text: string, color: string, px = 12): void {
-    const t = this.label(x, y, text, color, px).setDepth(1e6);
-    this.tweens.add({ targets: t, y: y - 14, alpha: 0, duration: 700, ease: "Quad.easeOut", onComplete: () => t.destroy() });
+    const live = this.floats;
+    for (const f of live) if (f.active && f.visible && f.text === text && Math.abs(f.x - x) < 10 && Math.abs(f.y - y) < 8) return;
+    let t = this.floatFree.pop();
+    if (!t || !t.scene) {
+      if (live.length >= FLOAT_CAP) {
+        t = live.shift()!;
+        this.tweens.killTweensOf(t);
+      } else t = this.label(x, y, text, color, px);
+    } else t.addToDisplayList();
+    if (t.style.color !== color) t.setColor(color);
+    if (t.style.fontSize !== `${px}px`) t.setFontSize(px);
+    if (t.text !== text) t.setText(text);
+    t.setPosition(x, y).setAlpha(1).setVisible(true).setDepth(1e6).setScale(1 / this.cameras.main.zoom);
+    if (!live.includes(t)) live.push(t);
+    const tt = t;
+    this.tweens.add({
+      targets: tt,
+      y: y - 14,
+      alpha: 0,
+      duration: 700,
+      ease: "Quad.easeOut",
+      onComplete: () => {
+        tt.setVisible(false).removeFromDisplayList();
+        const i = this.floats.indexOf(tt);
+        if (i >= 0) this.floats.splice(i, 1);
+        this.floatFree.push(tt);
+      },
+    });
   }
+  private floats: Phaser.GameObjects.Text[] = [];
+  private floatFree: Phaser.GameObjects.Text[] = [];
 
   protected onResize(): void {}
   protected abstract onKey(code: string): void;

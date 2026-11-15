@@ -47,10 +47,17 @@ const IDS = [
   "q_back_cape",
   "q_ride_carp",
   "q_body_collector",
+  // 11/15 월마다 바뀌는 교환소 겨울·새해 묶음
+  "q_hat_snow",
+  "q_aura_snowglobe",
+  "q_hand_wishlamp",
+  "q_name_newyear",
+  "q_pet_penguin",
+  "q_back_kite",
 ];
 
 describe("수집 의뢰 보상 카탈로그", () => {
-  it("15종 모두 quest 표시, 상점 목록·영구 구매·동물원에 없다", () => {
+  it("21종 모두 quest 표시, 상점 목록·영구 구매·동물원에 없다", () => {
     expect([...QUEST_ITEM_IDS].sort()).toEqual([...IDS].sort());
     for (const id of IDS) {
       const it = itemById(id)!;
@@ -82,6 +89,9 @@ describe("수집 의뢰 보상 카탈로그", () => {
     const look = ["q_hat_miner", "q_hand_net", "q_back_cape", "q_aura_nightfish", "q_ride_carp", "q_name_wave", "q_name_leaf"];
     expect(sanitizeLook(look)).toEqual(look);
     expect(staffGateLook(sanitizeLook(look), false)).toEqual(look);
+    const winter = ["q_hat_snow", "q_hand_wishlamp", "q_back_kite", "q_aura_snowglobe", "q_pet_penguin", "q_name_newyear"];
+    expect(staffGateLook(sanitizeLook(winter), false)).toEqual(winter);
+    for (const id of winter) expect(itemById(id)!.grade, id).not.toBe("legend");
     // 쓰는 물건(이모티콘 묶음·염색권·외형)은 착용 목록에 실리지 않는다
     expect(sanitizeLook(["qe_pack", "q_dye_pick", "q_body_collector"])).toEqual([]);
     const tok = await signJoinToken("s", { visitorId: "v", name: "n", color: "#e8d9b0", channel: 1, look, body: "collector" });

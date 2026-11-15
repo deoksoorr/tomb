@@ -3,7 +3,7 @@ import { HUNT_ZONES, isZoneId, MONSTERS, zonesOf, type MonsterId } from "./catal
 import { huntSpawnable, revivable } from "./plan";
 import { SV_BOSS_ROOM, SV_LOOPS, SV_MONSTER_IDS, SV_POOL, svLoop, svRoom } from "./serverRoom";
 import { MONSTER_STATUS } from "./status";
-import { evalTower, isBossFloor, towerLoop, towerPlan, towerZone } from "./tower";
+import { evalTower, floorMinSec, isBossFloor, towerLoop, towerPlan, towerZone } from "./tower";
 import type { HuntResult } from "./types";
 
 // 11/15 야근 빌딩 지하 서버실: 층 → 테마·방 종류, 층 계획(구성 섞기·정예 백업 테이프·우두머리), 서버 상한(복사·되살리기·재부팅)
@@ -65,34 +65,33 @@ describe("지하 서버실 몬스터·층 계획", () => {
     expect(MONSTER_STATUS.sv_hot_fan?.[0].status).toBe("burn");
   });
 
-  it("층마다 넷을 골라 섞는다 — 같은 판에서 두 층의 구성이 거의 겹치지 않는다", () => {
-    const rosters: string[] = [];
-    for (const f of [1, 2, 3, 4, 11, 12, 13, 14, 21, 22, 23, 24]) {
-      const ids = new Set(towerPlan(77, f).flatMap((w) => w.monsters));
-      ids.delete("sv_backup_tape");
-      for (const id of ids) expect(SV_POOL).toContain(id);
-      expect(ids.size).toBeLessThanOrEqual(4);
-      rosters.push([...ids].sort().join(","));
+  it("층 순서표: 1층은 두 종, 첫 바퀴는 층마다 새 몬스터 한두 종, 11~14층에 남은 종이 들어오고, 판 시드와 상관없이 같은 층은 같은 구성", () => {
+    const ids = (seed: number, f: number) => new Set(towerPlan(seed, f).flatMap((w) => w.monsters).filter((m) => !MONSTERS[m].minion && m !== "sv_backup_tape" && m !== "sv_legacy_system"));
+    expect([...ids(1, 1)].sort()).toEqual(["sv_excel_macro", "sv_tangled_lan"]);
+    const seen = new Set<string>();
+    for (const f of [1, 2, 3, 4, 5, 11, 12, 13, 14, 15]) {
+      const now = ids(7, f);
+      for (const s2 of [11, 99, 1234]) expect([...ids(s2, f)].sort(), `${f}층`).toEqual([...now].sort());
+      const fresh = [...now].filter((m) => !seen.has(m));
+      expect(fresh.length, `${f}층 새 몬스터`).toBeLessThanOrEqual(2);
+      for (const m of now) seen.add(m);
     }
-    expect(new Set(rosters).size).toBeGreaterThanOrEqual(10);
+    for (const id of SV_POOL) expect(seen.has(id), id).toBe(true);
   });
 
-  it("정예 자리는 백업 테이프, 우두머리 층 마지막 웨이브는 레거시 시스템", () => {
-    let elites = 0;
-    for (let seed = 1; seed < 60; seed++)
-      for (const w of towerPlan(seed, 3))
-        if (w.elite !== undefined) {
-          elites++;
-          expect(w.monsters[w.elite]).toBe("sv_backup_tape");
-        }
-    expect(elites).toBeGreaterThan(5);
+  it("정예 백업 테이프는 4층, 13·14층, 22~24층 … 둘째 웨이브 / 우두머리 층 마지막 웨이브는 레거시 시스템", () => {
+    const elite = (seed: number, f: number) => towerPlan(seed, f).some((w) => w.elite !== undefined);
+    for (let seed = 1; seed < 30; seed++) {
+      expect([1, 2, 3, 4].map((f) => elite(seed, f))).toEqual([false, false, false, true]);
+      expect([11, 12, 13, 14].map((f) => elite(seed, f))).toEqual([false, false, true, true]);
+      expect([21, 22, 23, 24].map((f) => elite(seed, f))).toEqual([false, true, true, true]);
+      const w = towerPlan(seed, 4)[1];
+      expect(w.monsters[w.elite!]).toBe("sv_backup_tape");
+    }
     expect(isBossFloor(5)).toBe(true);
     const boss = towerPlan(9, 5);
     expect(boss.at(-1)!.monsters[0]).toBe("sv_legacy_system");
     expect(boss.at(-1)!.summon?.id).toBe("sv_excel_macro");
-    // 바퀴가 돌수록 정예가 자주 섞인다
-    const count = (f: number) => Array.from({ length: 200 }, (_, s) => towerPlan(s + 1, f).filter((w) => w.elite !== undefined).length).reduce((a, b) => a + b, 0);
-    expect(count(33)).toBeGreaterThan(count(3));
   });
 
   it("출현 상한: 엑셀 매크로는 복사 둘까지, 백업 테이프는 되살릴 수 있는 종류마다 셋, 재부팅은 덤이 없다", () => {
@@ -130,8 +129,8 @@ describe("지하 서버실 결과 검증 (서버)", () => {
 
   it("복사 몫보다 많이 잡았다고 하면 거절", () => {
     // 매크로가 나오는 층을 찾아 복사 둘보다 하나 더
-    let seed = 1;
-    while (!towerPlan(seed, 1).some((w) => w.monsters.includes("sv_excel_macro"))) seed++;
+    const seed = 5;
+    expect(towerPlan(seed, 1).some((w) => w.monsters.includes("sv_excel_macro"))).toBe(true);
     const tt = { ...t, seed };
     const r = climb(seed, 1, 1, (f, kills) => {
       const n = towerPlan(seed, f).flatMap((w) => w.monsters).filter((m) => m === "sv_excel_macro").length;
@@ -145,13 +144,33 @@ describe("지하 서버실 결과 검증 (서버)", () => {
   });
 
   it("무한 재부팅은 한 마리 = 처치 하나 (재부팅해도 두 번 세지 않는다) — 계획만큼이면 통과, 두 배면 거절", () => {
-    let seed = 1;
-    const has = (s: number) => towerPlan(s, 2).some((w) => w.monsters.includes("sv_reboot")) && !towerPlan(s, 2).some((w) => w.elite !== undefined) && !towerPlan(s, 3).some((w) => w.monsters.includes("sv_reboot"));
-    while (!has(seed)) seed++;
-    const tt = { ...t, seed };
-    const r = climb(seed, 1, 2);
+    // 11층부터 12층까지 (재부팅은 12층에만, 13층엔 없다 — 정예 없는 층)
+    const tt = { seed: 77, level: 50, start: 11 };
+    const r = climb(77, 11, 2);
+    expect(r.kills.sv_reboot ?? 0).toBeGreaterThan(0);
     expect(evalTower(tt, r, r.durationMs + 1000).ok).toBe(true);
     const dbl = { ...r, kills: { ...r.kills, sv_reboot: (r.kills.sv_reboot ?? 0) * 2 + 1 } };
     expect(evalTower(tt, dbl, r.durationMs + 1000).ok).toBe(false);
+  });
+
+
+  it("테스트 서버 슈퍼 계정(서버가 판정)만 처치 속도 상한을 뺀다 — 계획에 없는 몬스터·층 부풀리기는 그대로 거절", () => {
+    // 레벨이 낮을수록 처치 속도 상한이 낮다 → 같은 판도 레벨 1이면 상한에 걸린다
+    // 나올 수 있는 만큼(복사·되살림·졸개까지) 다 잡고 최소 시간에 4층 — 레벨 1이면 처치 속도 상한에 걸린다
+    const kills: Partial<Record<MonsterId, number>> = {};
+    let minSec = 0;
+    for (let f = 1; f <= 5; f++) {
+      const p = towerPlan(4321, f);
+      if (f <= 4) minSec += floorMinSec(p);
+      for (const [id, n] of Object.entries(huntSpawnable(p, Infinity)) as [MonsterId, number][]) kills[id] = (kills[id] ?? 0) + n;
+    }
+    const ms = Math.round(minSec * 1000) + 1500;
+    const fast: HuntResult = { game: "hunt", durationMs: ms, kills, wavesCleared: 0, died: true, potionsUsed: {}, floors: 4, floorMs: ms };
+    const can = evalTower({ seed: 4321, level: 1, start: 1 }, fast, ms + 1000);
+    const lax = evalTower({ seed: 4321, level: 1, start: 1 }, fast, ms + 1000, { lax: true });
+    expect(lax.ok).toBe(true);
+    // 상한을 넘을 만큼 빨랐는지 (아니면 이 시험은 의미가 없다)
+    expect(can.ok).toBe(false);
+    expect(evalTower({ seed: 4321, level: 1, start: 1 }, { ...fast, floors: 9 }, ms + 1000, { lax: true }).ok).toBe(false);
   });
 });

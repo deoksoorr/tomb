@@ -265,7 +265,8 @@ export const ITEMS: readonly ItemDef[] = [
   { id: "pet_hound", kind: "cosmetic", slot: "pet", name: "듬직한 큰 개", desc: "등에 태워 주는 커다란 개. 출근길이 두 배로 즐거워요. (타고 다닐 수 있어요)", price: 2000, durationMs: COSMETIC_DURATION_MS },
   { id: "pet_goose", kind: "cosmetic", slot: "pet", name: "왕거위", desc: "아무도 못 말리는 거위. 등에 타면 뒤뚱뒤뚱 신나게 달려요. (타고 다닐 수 있어요)", price: 2400, durationMs: COSMETIC_DURATION_MS },
   { id: "pet_deer", kind: "cosmetic", slot: "pet", name: "달빛 사슴", desc: "별빛 뿔을 단 사슴. 등에 타면 바람처럼 가볍게 달려요. (타고 다닐 수 있어요)", price: 3000, durationMs: COSMETIC_DURATION_MS },
-  // ── 11/15 수집 의뢰 보상 (도장 교환소 전용 — quest: 상점·포인트로는 못 산다. price = 꾸미기 점수용 가치, 꾸미기는 영구로 받는다) ──
+  // ── 11/15 수집 의뢰 보상 (도장 교환소 전용 — quest: 상점·포인트로는 못 산다. price = 꾸미기 점수용 가치(영구 가치 = ×4, 펫도 같은 식이라
+  //    동물원 펫 값에 맞춰 희귀 펫 240 → 960, 타는 잉어 600 → 2,400), 꾸미기는 영구로 받는다) ──
   //    그림: 머리·손·등 avatarGear.ts · 오라·펫·타는 펫 cosmeticFx.ts · 이름 lib/nameStyle.ts · 외형 avatar.ts · 이모티콘 emoArt.ts
   ...([
     { id: "qe_pack", kind: "unlock", unlock: "emo", grade: "fine", name: "수집가 이모티콘 8종 묶음", desc: "월척 자랑·빈 바구니·금빛 곤충·광맥 발견·발굴 성공·도감 완성·낚싯대 휘청·의뢰 완료 도장. 한 번 받으면 계속 써요.", price: 0 },
@@ -278,11 +279,18 @@ export const ITEMS: readonly ItemDef[] = [
     { id: "q_name_wave", kind: "cosmetic", slot: "namePlate", grade: "rare", name: "물결 이름표", desc: "잔잔한 물결이 이름 밑을 일렁이며 흘러가요.", price: 300 },
     { id: "q_name_leaf", kind: "cosmetic", slot: "nameColor", grade: "fine", name: "나뭇잎 이름 글자", desc: "새순 연두에서 짙은 잎 초록으로. 가끔 작은 잎이 팔랑 떨어져요.", price: 240 },
     { id: "q_aura_firefly", kind: "cosmetic", slot: "aura", grade: "rare", name: "반딧불 수집가 오라", desc: "모아 둔 반딧불이 줄지어 몸 둘레를 돌아요. 밤엔 더 환하게.", price: 360 },
-    { id: "q_pet_goldfish", kind: "cosmetic", slot: "pet", grade: "rare", name: "금붕어 펫", desc: "동그란 물방울 어항 속 금붕어가 둥실둥실 따라와요.", price: 900 },
+    { id: "q_pet_goldfish", kind: "cosmetic", slot: "pet", grade: "rare", name: "금붕어 펫", desc: "동그란 물방울 어항 속 금붕어가 둥실둥실 따라와요.", price: 240 },
     { id: "q_aura_nightfish", kind: "cosmetic", slot: "aura", grade: "rare", name: "밤낚시 오라", desc: "발밑에 물결이 번지고, 달빛 윤슬이 몸 둘레에서 반짝여요. 가끔 은빛 물고기가 뛰어올라요.", price: 480 },
     { id: "q_back_cape", kind: "cosmetic", slot: "back", grade: "rare", name: "채집왕 망토", desc: "등에 금실 나비 문장을 수놓은 보랏빛 금테 망토. 끝자락에서 금가루가 흩날려요.", price: 480 },
-    { id: "q_ride_carp", kind: "cosmetic", slot: "pet", grade: "rare", name: "월척 잉어 (타는 펫)", desc: "전설의 월척 비단잉어. 등에 타면 물 흐르듯 미끄러져요. (타고 다닐 수 있어요)", price: 3000 },
+    { id: "q_ride_carp", kind: "cosmetic", slot: "pet", grade: "rare", name: "월척 잉어 (타는 펫)", desc: "전설의 월척 비단잉어. 등에 타면 물 흐르듯 미끄러져요. (타고 다닐 수 있어요)", price: 600 },
     { id: "q_body_collector", kind: "unlock", unlock: "body", body: "collector", grade: "legend", name: "수집가 유령 (전설 외형)", desc: "등불과 표본 가방을 든 채집 장인 유령. 받으면 외형에서 언제든 바꿀 수 있어요.", price: 0 },
+    // 11/15 월마다 바뀌는 교환소 겨울·새해 묶음 (전설 없음)
+    { id: "q_hat_snow", kind: "cosmetic", slot: "head", grade: "common", name: "눈 털모자", desc: "눈꽃 무늬 털모자. 방울에서 가끔 눈송이가 톡 떨어져요.", price: 160 },
+    { id: "q_aura_snowglobe", kind: "cosmetic", slot: "aura", grade: "rare", name: "스노볼 오라", desc: "유리 돔 안에 눈이 천천히 소용돌이쳐요. 밤엔 더 반짝여요.", price: 360 },
+    { id: "q_hand_wishlamp", kind: "cosmetic", slot: "hand", grade: "fine", name: "새해 소원 등불", desc: "소원을 적은 한지 풍등. 밤이면 둘레를 따뜻하게 밝혀요.", price: 240 },
+    { id: "q_name_newyear", kind: "cosmetic", slot: "namePlate", grade: "rare", name: "새해 복 이름표", desc: "금테 두른 다홍 이름표에 복 매듭. 금가루가 둥실 떠올라요.", price: 300 },
+    { id: "q_pet_penguin", kind: "cosmetic", slot: "pet", grade: "rare", name: "꼬마 펭귄 펫", desc: "뒤뚱뒤뚱 따라오다가 가끔 배로 쭉 미끄러져요.", price: 240 },
+    { id: "q_back_kite", kind: "cosmetic", slot: "back", grade: "fine", name: "연 날리는 등", desc: "등에 맨 얼레에서 방패연이 바람 따라 펄럭여요.", price: 240 },
   ] satisfies ItemDef[]).map((it) => ({ ...it, ...(it.kind === "cosmetic" ? { durationMs: COSMETIC_DURATION_MS } : {}), quest: true as const })),
 
   { id: "decor_candles", kind: "decor", name: "촛불 한 쌍", desc: "묘비 양옆에 작은 촛불.", price: 90, durationMs: DECOR_DURATION_MS },

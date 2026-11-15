@@ -348,7 +348,7 @@ export class AvatarView {
     this.body = b;
     this.shoulder = BODY_METRICS[b].shoulder;
     // 11/15 수집가 유령은 채집 등불을 들고 있다 (밤 빛)
-    this.lantern = this.look.includes("hand_lantern") || this.look.includes("hand_lantern_blue") || this.look.includes("q_hat_miner") || b === "collector";
+    this.lantern = this.look.includes("hand_lantern") || this.look.includes("hand_lantern_blue") || this.look.includes("q_hat_miner") || this.look.includes("q_hand_wishlamp") || b === "collector";
     // 25번 프리미엄 외형 등급 연출은 몸에 딸린다 (다른 사람 화면에서도 몸 id로 똑같이)
     if (this.cfx || bodyFx(b)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, b, this.champ, !!this.staffFx);
     this.relayout();
@@ -388,7 +388,7 @@ export class AvatarView {
   setLook(look: readonly string[]): void {
     this.look = look.slice();
     // 11/15 광부 헬멧 이마 등불 · 수집가 유령 채집 등불도 밤에 둘레를 밝힌다
-    this.lantern = look.includes("hand_lantern") || look.includes("hand_lantern_blue") || look.includes("q_hat_miner") || this.body === "collector";
+    this.lantern = look.includes("hand_lantern") || look.includes("hand_lantern_blue") || look.includes("q_hat_miner") || look.includes("q_hand_wishlamp") || this.body === "collector";
     const mount = ridePetOfLook(look);
     if (mount !== this.mountPet) {
       this.mountPet = mount;

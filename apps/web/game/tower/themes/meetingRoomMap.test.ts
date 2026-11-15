@@ -15,9 +15,9 @@ describe("끝없는 회의실 방 종류", () => {
         expect(mtRoomType(seed, base + 5)).toBe("boss");
       }
     }
-    // 판마다 다른 순서
+    // 11/15 층 번호로만 정해진다 (판이 달라도 6층은 작은 회의실)
     const firsts = new Set(Array.from({ length: 40 }, (_, i) => mtRoomType(i + 1, 6)));
-    expect(firsts.size).toBeGreaterThanOrEqual(5);
+    expect([...firsts]).toEqual(["huddle"]);
   });
 
   it("층 배치는 층 시드로 정해진다 (카펫 색·가구 자리)", () => {
@@ -63,8 +63,9 @@ describe("끝없는 회의실 방 종류", () => {
 
 /** 방 종류 v를 고르게 하는 판 시드·층을 찾아 배치를 만든다 */
 function buildLayoutFor(v: number, seed: number) {
-  for (let run = 1; run < 500; run++)
-    for (const f of [6, 7, 8, 9, 10]) {
+  // 11/15 방은 층 번호로만 정해진다 → 여러 바퀴의 회의실 층을 훑는다
+  for (let run = 1; run < 3; run++)
+    for (let f = 6; f <= 80; f += f % 10 === 0 ? 6 : 1) {
       if (MT_ROOM_TYPES.indexOf(mtRoomType(run, f)) === v) return buildLayout("mt_meeting", seed, { floor: f, runSeed: run });
     }
   throw new Error(`no layout for ${v}`);
