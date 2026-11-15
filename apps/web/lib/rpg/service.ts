@@ -44,7 +44,9 @@ import {
   towerScore,
   towerSettle,
   towerZone,
+  TOWER_FLOOR_POINTS,
   type TowerSettle,
+  type TowerVerdict,
 } from "./tower";
 import { getTowerStore } from "./towerStore";
 import { pushVillageNotice } from "../weeklyChamp";
@@ -600,7 +602,6 @@ const topSeen = globalThis as typeof globalThis & { __tombTowerTop?: number };
  * 운영자(슈퍼) 계정은 랭킹·최초·꼭대기·개척자에서 빠진다
  */
 async function finishTower(acct: string, start: number, seed: number, level: number, result: RunResult, elapsed: number, ipHash: string, now: number, gp?: number): Promise<RunFinishResponse> {
-  const store = getRpgStore();
   if (result.game !== "hunt") throw new HttpError(422, "INVALID_RESULT", "결과가 시작한 게임과 달라요.");
   // 11/15 테스트 서버 슈퍼 계정만 처치 속도 상한을 빼고 (테스트용 무적·공격력 ×20) — 운영 서버에서는 isSuperHunter가 늘 false
   const sup = await isSuperHunter(acct);
@@ -623,11 +624,29 @@ async function finishTower(acct: string, start: number, seed: number, level: num
     });
     throw new HttpError(422, v.code, v.message);
   }
+  return settleTowerRun(acct, start, seed, v, result.potionsUsed, ipHash, now, sup);
+}
+
+/**
+ * 11/15 야근 빌딩 판 정산 (검증을 통과한 결과 v로): 캐릭터 저장 한 번(물약·초월 EXP·초월 판 수·상자·최고 기록) → 기록이 오른 사람만 랭킹·서버 최초·꼭대기 층.
+ * 판 끝(finishTower)과 관리자 대신 정산(grantTowerRun — 서버가 잘못 거절한 판)이 같은 길을 쓴다
+ */
+async function settleTowerRun(
+  acct: string,
+  start: number,
+  seed: number,
+  v: Extract<TowerVerdict, { ok: true }>,
+  potionsUsed: Record<string, number>,
+  ipHash: string,
+  now: number,
+  sup: boolean,
+): Promise<RunFinishResponse> {
+  const store = getRpgStore();
   const day = kstDay(now);
   const week = kstWeek(now);
   const done = await http(
     store.update(acct, (s) => {
-      const cur = consumePotions(s, result.potionsUsed).state;
+      const cur = consumePotions(s, potionsUsed).state;
       const st: TowerSettle = towerSettle(cur, { day, week, start, floors: v.floors, floorMs: v.floorMs });
       const settled = { ...cur, ...st.patch };
       const g = gainTranscend(settled, st.tExp);
@@ -716,4 +735,21 @@ async function finishTower(acct: string, start: number, seed: number, level: num
     },
     view: await rpgView(acct, store, now, state),
   };
+}
+
+/**
+ * 11/15 관리자: 서버가 잘못 거절한 야근 빌딩 판을 대신 정산한다 (판 끝과 같은 정산 — 우두머리 상자는 새 시드로 다시 굴린다).
+ * floors = 깬 층 수 (start층부터), floorMs = 마지막 층을 깬 시각(판 시작부터, 랭킹 동점 순서), kills = 주간 레이스 처치 수(모르면 0)
+ */
+export async function grantTowerRun(acct: string, o: { start: number; floors: number; floorMs: number; kills?: number }, now = Date.now()): Promise<RunFinishResponse> {
+  const v: Extract<TowerVerdict, { ok: true }> = {
+    ok: true,
+    floors: o.floors,
+    best: o.floors > 0 ? o.start + o.floors - 1 : 0,
+    floorMs: o.floorMs,
+    kills: o.kills ?? 0,
+    points: o.floors * TOWER_FLOOR_POINTS,
+  };
+  const seed = Math.floor(Math.random() * 2 ** 31);
+  return settleTowerRun(acct, o.start, seed, v, {}, "admin-grant", now, false);
 }
