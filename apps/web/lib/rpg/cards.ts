@@ -141,6 +141,46 @@ export function cardStyleKind(style: string): CardKindStyle {
 /** 카드에 적는 말 (내 무기에 맞게) */
 export const cardText = (id: CardId, kind: CardKindStyle) => CARDS[id].by?.[kind] ?? CARDS[id].desc;
 
+/**
+ * 11/15 겹치는 카드를 또 고를 때 보여 줄 숫자: "공격력 +15% → +30% (+15%)". 가진 장 수(have) 기준.
+ * 카드 효과는 장마다 똑같이 쌓인다 (cardStats와 같은 숫자). 숫자로 말하기 어려운 카드는 null
+ */
+export function cardStackLine(id: CardId, have: number): string | null {
+  const step = (label: string, per: number, unit = "%") => `${label} +${per * have}${unit} → +${per * (have + 1)}${unit} (+${per}${unit})`;
+  const count = (label: string, from: number, to: number, unit: string) => `${label} ${from}${unit} → ${to}${unit} (+${to - from}${unit})`;
+  switch (id) {
+    case "raise":
+      return step("공격력", 15);
+    case "quick":
+      return step("공격 속도", 12);
+    case "sharp":
+      return `치명타 +${8 * have}% → +${8 * (have + 1)}% (+8%), 치명타 피해 +${20 * have}% → +${20 * (have + 1)}% (+20%)`;
+    case "health":
+      return step("최대 체력", 15);
+    case "commute":
+      return step("이동 속도", 10);
+    case "offwork":
+      return step("처치할 때 체력", 1);
+    case "cc":
+      return `공격 횟수 +${have} → +${have + 1} (+1), 한 번 피해 −${10 * have}% → −${10 * (have + 1)}%`;
+    case "parallel":
+    case "circular":
+    case "side":
+    case "backbite":
+      return count("갈래", have, have + 1, "개");
+    case "toss":
+      return count("튕기는 횟수", have, have + 1, "번");
+    case "boards":
+      return count("결재판", have + 1, have + 2, "장");
+    case "papers":
+      return count("서류", 2 * have, 2 * (have + 1), "장");
+    case "intern":
+      return count("인턴", have, have + 1, "명");
+    default:
+      return null;
+  }
+}
+
 // ── 판 레벨 ──
 
 /** 처치 하나의 판 경험치 (몬스터 id만으로 정한다 — 서버가 처치 기록으로 똑같이 센다) */

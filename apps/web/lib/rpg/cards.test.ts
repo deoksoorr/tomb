@@ -8,6 +8,7 @@ import {
   cardPower,
   cardStats,
   cardStyleKind,
+  cardStackLine,
   cardText,
   isBossDealFloor,
   LEGEND_BOSS,
@@ -245,5 +246,15 @@ describe("야근 빌딩 결과 검증에 카드", () => {
     if (!v.ok) return;
     expect(total).toBeLessThanOrEqual(cap(cardPower(v.owned)));
     expect(evalTower(t1, { ...fast, cards: picks }, dur + 500).ok).toBe(true);
+  });
+});
+
+describe("11/15 겹치는 카드 수치 표시", () => {
+  it("지금 수치 → 더해진 수치 (+늘어나는 만큼), 효과 계산과 같은 숫자", () => {
+    expect(cardStackLine("raise", 1)).toBe("공격력 +15% → +30% (+15%)");
+    expect(cardStackLine("quick", 2)).toBe("공격 속도 +24% → +36% (+12%)");
+    expect(cardStackLine("boards", 1)).toBe("결재판 2장 → 3장 (+1장)");
+    expect(cardStackLine("coffee", 3)).toBeNull();
+    for (const id of CARD_IDS) expect(cardStackLine(id, 1) ?? "").not.toMatch(/[:：]/);
   });
 });

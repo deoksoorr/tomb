@@ -4,7 +4,7 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { cardWindowUrl } from "@/game/rpg/cards/cardArt";
-import { BOSS_DEAL_HP_COST, CARDS, cardText, RARITY_NAME, type CardChoice, type CardOfferView } from "@/lib/rpg/cards";
+import { BOSS_DEAL_HP_COST, CARDS, cardStackLine, cardText, RARITY_NAME, type CardChoice, type CardOfferView } from "@/lib/rpg/cards";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -116,6 +116,8 @@ function PickView({ view }: { view: CardOfferView }) {
                       {have + 1 >= def.max && <em> 마지막</em>}
                     </span>
                   )}
+                  {/* 11/15 가진 카드면 지금 수치 → 더해진 수치 (+늘어나는 만큼) */}
+                  {have > 0 && cardStackLine(id, have) && <span className={c.stackLine}>{cardStackLine(id, have)}</span>}
                   <span className={c.desc}>{cardText(id, view.style)}</span>
                 </span>
               </button>
