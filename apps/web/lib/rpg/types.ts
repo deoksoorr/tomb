@@ -109,7 +109,8 @@ export type RpgView = {
   /** 지갑 포인트 */
   points: number;
   /** 오늘 사냥터로 받은 포인트와 하루 한도 (곤충·별자리는 미니게임 한도로 따로) */
-  today: { huntPoints: number; cap: number; runs: number; runsPerHour: number };
+  /** runsPerHour = 이번 한 시간에 남은 판 수, runsHourMax = 한 시간에 할 수 있는 판 수 (매크로 막기) */
+  today: { huntPoints: number; cap: number; runs: number; runsPerHour: number; runsHourMax?: number };
   /** 다음 스킬 초기화 비용 (지갑 포인트, 레벨에 따라 32~120) */
   respecCost: number;
   /** 다음 능력치 초기화 비용 (지갑 포인트). 공식은 스킬 초기화와 같고 횟수만 따로 */
