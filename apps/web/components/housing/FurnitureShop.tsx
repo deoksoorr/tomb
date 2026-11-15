@@ -95,7 +95,9 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
       // 미리보기 그림 칸을 뺀 나머지 (단추 줄·설명·사기 단추)
       const rest = wrap.offsetHeight - inner + gap + info.offsetHeight;
       const avail = Math.floor(el.clientHeight - pad - rest);
-      setStageFit(Math.max(STAGE_MIN_H, Math.min(STAGE_MAX_H, avail)));
+      const next = Math.max(STAGE_MIN_H, Math.min(STAGE_MAX_H, avail));
+      // 1~2px 차이로 다시 맞추면 줄바꿈이 바뀌어 크기가 오락가락한다 → 작은 차이는 무시
+      setStageFit((cur) => (Math.abs(cur - next) < 3 ? cur : next));
     };
     const ro = new ResizeObserver(measure);
     ro.observe(el);
