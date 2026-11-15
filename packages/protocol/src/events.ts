@@ -143,7 +143,8 @@ export type S2C =
   /** 받는 사람에게만: 서버에서 내 계정(포인트·선물함)이 바뀌었다 → /api/me를 다시 받는다 (관리자 지급 등. 옛 클라이언트는 버린다) */
   | { t: "me" }
   /** 말풍선 자유 채팅 (보낸 사람 빼고, 서버가 가린 글. 옛 클라이언트는 모르는 t라 버린다). id = 줄 id(chatLog와 중복 제거), at = 서버 시각 */
-  | { t: "chat"; sid: Sid; text: string; id?: string; at?: number }
+  /** 11/16 채팅은 채널 전체(마을·캠핑장)로 간다: name·staff·mgr = 다른 맵이라 화면에 없는 사람도 채팅창에 이름을 쓰게, m = 쓴 사람의 맵(캠핑장이면 "camp") */
+  | { t: "chat"; sid: Sid; text: string; id?: string; at?: number; name?: string; staff?: true; mgr?: true; m?: "camp" }
   /** 받는 사람에게만: 방에 들어올 때(입장·재접속·실내에서 복귀) 이 방의 최근 1분 채팅. now = 서버 시각 (옛 클라이언트는 모르는 t라 버린다) */
   | { t: "chatLog"; now: number; lines: ChatLogLine[] }
   /** 받는 사람에게만: 친구가 들어왔다(on)·나갔다 (key = 친구 창의 그 친구 키, 옛 클라이언트는 모르는 t라 버린다) */

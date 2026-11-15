@@ -69,7 +69,7 @@ describe("최근 채팅 저장 (월드 채널)", () => {
     const s2 = boot(disk);
     const b = s2.join("b", 600_000);
     expect(texts(b)).toEqual(["안녕하세요", "다들 어디 있어요?"]);
-    expect(s2.loads).toEqual(["village"]);
+    expect(s2.loads).toEqual(["village", "camp"]);
     // 깬 뒤 새 줄: 저장된 기록 뒤에 붙는다
     s2.core.message(b, send({ t: "chat", text: "광장이요" }), 601_000);
     s2.flush(602_000);
@@ -132,21 +132,38 @@ describe("최근 채팅 저장 (월드 채널)", () => {
     expect(s3.pending.size).toBe(0);
   });
 
-  it("마을·캠핑장 기록은 따로 저장되고, 그 맵 사람에게만 간다", () => {
+  it("11/16 마을·캠핑장은 한 기록: 줄마다 쓴 사람의 맵(캠핑장 m), 어느 맵에서 들어와도 둘 다 받는다", () => {
     const disk: Disk = new Map();
     const s1 = boot(disk);
     const v = s1.join("v", 0);
     const c = s1.join("c", 0, "camp");
     s1.core.message(v, send({ t: "chat", text: "마을 얘기" }), 1_000);
     s1.core.message(c, send({ t: "chat", text: "모닥불 얘기" }), 2_000);
-    expect([...s1.pending].sort()).toEqual(["camp", "village"]);
+    expect([...s1.pending]).toEqual(["village"]);
     s1.flush(3_000);
-    expect(JSON.stringify(disk.get("village"))).toContain("마을 얘기");
-    expect(JSON.stringify(disk.get("village"))).not.toContain("모닥불");
-    expect(JSON.stringify(disk.get("camp"))).toContain("모닥불 얘기");
+    expect(JSON.stringify(disk.get("village"))).toContain("모닥불 얘기");
 
     const s2 = boot(disk);
-    expect(texts(s2.join("v2", 10_000))).toEqual(["마을 얘기"]);
-    expect(texts(s2.join("c2", 10_000, "camp"))).toEqual(["모닥불 얘기"]);
+    for (const late of [s2.join("v2", 10_000), s2.join("c2", 10_000, "camp")]) {
+      expect(chatLog(late)?.lines.map((l) => [l.text, l.m ?? "village"])).toEqual([
+        ["마을 얘기", "village"],
+        ["모닥불 얘기", "camp"],
+      ]);
+    }
+  });
+
+  it("11/16 맵별로 따로 남기던 옛 캠핑장 기록은 캠핑장 표시를 붙여 합치고, 옛 키는 지운다", () => {
+    const disk: Disk = new Map();
+    disk.set("village", [{ id: "a.1", at: 1_000, sid: 1, visitorId: "v", name: "v", text: "마을 옛말" }]);
+    disk.set("camp", [{ id: "b.1", at: 2_000, sid: 2, visitorId: "c", name: "c", text: "캠핑장 옛말" }]);
+    const s1 = boot(disk);
+    const late = s1.join("late", 5_000);
+    expect(chatLog(late)?.lines.map((l) => [l.text, l.m ?? "village"])).toEqual([
+      ["마을 옛말", "village"],
+      ["캠핑장 옛말", "camp"],
+    ]);
+    s1.flush(6_000);
+    expect(disk.get("camp")).toEqual([]);
+    expect(JSON.stringify(disk.get("village"))).toContain("캠핑장 옛말");
   });
 });

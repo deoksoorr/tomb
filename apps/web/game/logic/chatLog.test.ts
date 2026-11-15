@@ -12,6 +12,7 @@ import {
   chatLineAgo,
   chatLineDim,
   chatLineTone,
+  chatPlaceTag,
   chatScrollAction,
   liveChatLines,
   mergeChatLines,
@@ -145,8 +146,7 @@ describe("채팅 기록 스크롤·비우는 단위", () => {
   it("방 문자열의 채널 부분: 마을·집은 같고 캠핑장은 따로", () => {
     expect(chatChannelOf("world:3")).toBe("3");
     expect(chatChannelOf("house:3")).toBe(chatChannelOf("world:3"));
-    expect(chatChannelOf("world:3c")).toBe("3c");
-    expect(chatChannelOf("world:3c")).not.toBe(chatChannelOf("world:3"));
+    expect(chatChannelOf("world:4")).not.toBe(chatChannelOf("world:3"));
     expect(chatChannelOf("world:4")).not.toBe(chatChannelOf("world:3"));
     expect(chatChannelOf("lobby")).toBe("lobby");
   });
@@ -164,5 +164,24 @@ describe("채팅 기록 스크롤·비우는 단위", () => {
     expect(chatScrollAction({ overflow: true, stick: true, added: false })).toBe("follow");
     expect(chatScrollAction({ overflow: true, stick: false, added: true })).toBe("unread");
     expect(chatScrollAction({ overflow: true, stick: false, added: false })).toBe("none");
+  });
+});
+
+describe("11/16 다른 맵 채팅 표시 [캠핑장]·[마을]", () => {
+  it("보는 맵과 쓴 맵이 다를 때만, 맵이 아닌 곳(집 안 등)에서는 붙이지 않는다", () => {
+    expect(chatPlaceTag({ m: "camp" }, "village")).toBe("[캠핑장]");
+    expect(chatPlaceTag({}, "camp")).toBe("[마을]");
+    expect(chatPlaceTag({ m: "camp" }, "camp")).toBeNull();
+    expect(chatPlaceTag({}, "village")).toBeNull();
+    expect(chatPlaceTag({ m: "camp" }, null)).toBeNull();
+  });
+
+  it("서버 기록의 맵 표시를 읽는다 (캠핑장만, 이상한 값은 마을)", () => {
+    const got = readChatLog(10_000, [
+      { id: "a.1", at: 9_000, name: "캠퍼", text: "모닥불", m: "camp" },
+      { id: "a.2", at: 9_500, name: "주민", text: "광장" },
+      { id: "a.3", at: 9_600, name: "누구", text: "이상한 맵", m: "moon" },
+    ], 50_000);
+    expect(got.map((l) => l.m ?? "village")).toEqual(["camp", "village", "village"]);
   });
 });

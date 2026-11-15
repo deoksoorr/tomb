@@ -52,7 +52,7 @@ function callbacks(log: string[], tag: string): NetCallbacks {
     onFirework: rec("firework"),
     onAct: rec("act"),
     onSay: rec("say"),
-    onChat: (sid, text) => log.push(`${tag}:chat:${sid}:${text}`),
+    onChat: (sid, text, _id, meta) => log.push(`${tag}:chat:${sid}:${text}${meta?.m ? `:${meta.m}:${meta.name}` : ""}`),
     onMegaphone: (m) => log.push(`${tag}:megaphone:${m.text}${m.system ? `:system:${m.replaces ?? ""}` : ""}`),
     onMapped: (map, peers) => log.push(`${tag}:mapped:${map}:${peers.map((p) => p.sid).join(",")}`),
   };
@@ -122,6 +122,16 @@ describe("RealtimeClient 맵 옮기기 (11/15 캠핑장)", () => {
     expect(log).toEqual(["c:mapped:camp:7", "c:chat:7:캠핑장 말", "w:megaphone:전체 공지", "w:megaphone:끝 공지:system:urg-t1-a0"]);
     expect(c.map).toBe("camp");
     expect(c.peerCount).toBe(1);
+    c.stop();
+  });
+
+  it("11/16 다른 맵에서 온 채팅: 서버가 실은 이름·맵을 넘긴다 (화면에 없는 사람도 채팅창에)", async () => {
+    const log: string[] = [];
+    const c = new RealtimeClient({ name: "가람", color: "#e8d9b0", channel: 3 }, callbacks(log, "w"));
+    const ws = await online(c);
+    ws.recv({ t: "chat", sid: 9, text: "모닥불 따뜻해요", id: "x.1", at: 1, name: "캠퍼", m: "camp" });
+    ws.recv({ t: "chat", sid: 8, text: "마을 말", id: "x.2", at: 2, name: "주민" });
+    expect(log.filter((l) => l.includes(":chat:"))).toEqual(["w:chat:9:모닥불 따뜻해요:camp:캠퍼", "w:chat:8:마을 말"]);
     c.stop();
   });
 

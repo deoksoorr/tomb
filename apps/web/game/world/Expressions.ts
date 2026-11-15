@@ -5,7 +5,7 @@ import type { Player } from "../entities/Player";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
 import type { KeyAction } from "../input/Keyboard";
 import { EMO_COOLDOWN_MS, EMO_SHOW_MS, emoIcon, emoSlotOfKey } from "../logic/emoBoard";
-import type { RealtimeClient } from "../net/RealtimeClient";
+import type { ChatMeta, RealtimeClient } from "../net/RealtimeClient";
 import type { CameraRig } from "./CameraRig";
 import type { Sfx } from "./Sfx";
 
@@ -67,17 +67,25 @@ export class Expressions {
     this.h.net().chat(text);
     // 채팅 기록창: 내 글도 보낼 때 바로 (이름은 이름표 그대로 — 운영자면 금색 + "운영자" 딱지)
     const ns = nameStyleIds(view.wearing);
-    bridge.emit("chat:line", { name: view.label.text, text: shown, mine: true, ...(view.staff ? { staff: true as const } : {}), ...(view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}) });
+    const camp = this.h.net().map === "camp" ? { m: "camp" as const } : {};
+    bridge.emit("chat:line", { name: view.label.text, text: shown, mine: true, ...(view.staff ? { staff: true as const } : {}), ...(view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), ...camp });
     this.h.sfx.play("say", 0.35);
   }
 
-  /** 다른 사람의 자유 채팅 (서버가 가린 글). 떠 있던 말풍선·이모티콘은 바로 바뀐다 */
-  onRemoteChat(sid: Sid, text: string, key?: string): void {
+  /**
+   * 다른 사람의 자유 채팅 (서버가 가린 글). 떠 있던 말풍선·이모티콘은 바로 바뀐다.
+   * 11/16 채팅은 채널 전체로 온다: 다른 맵 사람(화면에 없음)은 말풍선 없이 채팅창에만 (서버가 실은 이름·딱지, [캠핑장]·[마을] 표시용 맵)
+   */
+  onRemoteChat(sid: Sid, text: string, key?: string, meta?: ChatMeta): void {
+    const camp = meta?.m === "camp" ? { m: "camp" as const } : {};
     const r = this.h.remotes().get(sid);
-    if (!r) return;
+    if (!r) {
+      if (meta?.name) bridge.emit("chat:line", { name: meta.name, text, mine: false, ...(key ? { key } : {}), ...(meta.staff ? { staff: true as const } : {}), ...(meta.mgr ? { mgr: true as const } : {}), ...camp });
+      return;
+    }
     r.view.chat(text, performance.now());
     const ns = nameStyleIds(r.view.wearing);
-    bridge.emit("chat:line", { name: r.name, text, mine: false, ...(key ? { key } : {}), ...(r.view.staff ? { staff: true as const } : {}), ...(r.view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}) });
+    bridge.emit("chat:line", { name: r.name, text, mine: false, ...(key ? { key } : {}), ...(r.view.staff ? { staff: true as const } : {}), ...(r.view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), ...camp });
     if (r.visible) this.h.sfx.play("say", 0.2, 1.1, 6);
   }
 

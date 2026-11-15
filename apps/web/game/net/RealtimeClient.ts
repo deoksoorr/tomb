@@ -88,7 +88,8 @@ export type NetCallbacks = {
   /** 5번 이모티콘 (EMOS id). 내 것은 오지 않는다 */
   onEmo?(sid: Sid, id: EmoId): void;
   /** 말풍선 자유 채팅 (서버가 가린 글). 내 것은 오지 않는다. id = 서버 줄 id (옛 서버는 없음) */
-  onChat?(sid: Sid, text: string, id?: string): void;
+  /** 11/16 meta = 실시간 서버가 실은 이름·딱지·맵 (다른 맵 사람은 화면에 없어 이름을 여기서 안다) */
+  onChat?(sid: Sid, text: string, id?: string, meta?: ChatMeta): void;
   /** 입장·재접속·실내에서 복귀 때 이 채널의 최근 1분 채팅 (이 기기 시계로 옮긴 줄, 내 줄은 mine) */
   onChatLog?(lines: IncomingChatLine[]): void;
   /** 24번 벤치 상태 (SEAT_MOODS id, "" = 풀림). 서버가 받아들인 내 것도 온다 */
@@ -125,6 +126,9 @@ export type NetCallbacks = {
   /** 11/15 바베큐 한 접시·한 잔 (같은 맵, 내 것 포함). 마실 거리면 lv·at = 취기 */
   onBbq?(sid: Sid, item: BbqItemId, until: number, lv?: number, at?: number): void;
 };
+
+/** 11/16 채팅에 실려 오는 보낸 사람 정보 (맵이 달라 화면에 없는 사람도 채팅창에 쓰게) */
+export type ChatMeta = { name?: string; staff?: true; mgr?: true; m?: "camp" };
 
 /** 맵이 바뀌어도 늘 처음 콜백(월드)이 받는 것: 계정·친구·확성기·내 몸 모양·고블린 보상 */
 const GLOBAL_CALLBACKS = ["onMegaphone", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant"] as const;
@@ -699,7 +703,13 @@ export class RealtimeClient {
           if (m.sid !== this.mySid && isEmoId(m.id)) this.h.onEmo?.(m.sid, m.id);
           break;
         case "chat":
-          if (m.sid !== this.mySid && typeof m.text === "string") this.h.onChat?.(m.sid, m.text.slice(0, CHAT_MAX * 2), typeof m.id === "string" ? m.id : undefined);
+          if (m.sid !== this.mySid && typeof m.text === "string")
+            this.h.onChat?.(m.sid, m.text.slice(0, CHAT_MAX * 2), typeof m.id === "string" ? m.id : undefined, {
+              ...(typeof m.name === "string" && m.name ? { name: m.name.slice(0, 40) } : {}),
+              ...(m.staff === true ? { staff: true as const } : {}),
+              ...(m.mgr === true ? { mgr: true as const } : {}),
+              ...(m.m === "camp" ? { m: "camp" as const } : {}),
+            });
           break;
         case "chatLog":
           this.h.onChatLog?.(readChatLog(m.now, m.lines, Date.now()));

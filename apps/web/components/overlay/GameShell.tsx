@@ -230,8 +230,6 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const status = useBridgeValue("net:status");
   // 채널마다 묘지가 따로다. 채널을 아직 모르면 고른 채널, 자동 배정이면 1채널
   const channel = status?.channel ?? (typeof options.channel === "number" ? options.channel : 1);
-  /** 11/15 지금 맵 (캠핑장이면 채팅 기록을 마을과 따로) */
-  const netMap = status?.map === "camp" ? "camp" : "village";
   // 채널마다 주거 구역도 따로다. 게임이 지금 보여 주는 채널과 같게 (관람·오프라인이면 1채널)
   const houseChannel = graveChannelFor(status, options.channel);
   const graves = useGraves(channel);
@@ -777,7 +775,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {sayOpen && <SayDialog onClose={() => setSayOpen(false)} />}
       {chatOpen && canRadial && !sayOpen && !riding && <ChatSheet onClose={() => setChatOpen(false)} />}
       {/* 채팅 기록창: 데스크톱은 바로 가기 줄 위 상자(입력칸 포함), 터치는 확성기 위에 글씨만 + [기록] 창([말하기] → 채팅 입력 줄). 채널을 옮기면 비운다 */}
-      {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}${scene !== "house" && netMap === "camp" ? "c" : ""}`} hidden={!canRadial || riding} onChat={() => setChatOpen(true)} />}
+      {ready && <ChatLog mobile={coarse} room={`${scene === "house" ? "house" : "world"}:${channel}`} hidden={!canRadial || riding} onChat={() => setChatOpen(true)} />}
       {radial && canRadial && <ExprRadial onClose={() => setRadial(false)} />}
       {/* 마을·집 안: 월드 바로 가기 줄이 숨으니 [표현] 버튼만 왼쪽 아래에 따로 */}
       {ready && scene === "house" && !coarse && (
