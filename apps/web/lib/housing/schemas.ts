@@ -63,7 +63,11 @@ export const LayoutSchema = z.object({
 export const GuestSchema = z.object({ text: text(checkGuestText) });
 export const SortSchema = z.enum(SORTS).catch("score");
 
-export const AdminHouseSchema = z.object({ action: z.enum(["hide", "unhide", "delete"], "알 수 없는 작업이에요.") });
+// 11/15 move: 같은 채널 안에서 번지 옮기기 (lot 필요)
+export const AdminHouseSchema = z.object({
+  action: z.enum(["hide", "unhide", "delete", "move"], "알 수 없는 작업이에요."),
+  lot: z.number("번지가 올바르지 않아요.").int().min(1).max(VILLAGE_MAX_LOTS, "번지가 올바르지 않아요.").optional(),
+});
 export const AdminGuestSchema = z.object({ action: z.enum(["hide", "unhide", "delete"], "알 수 없는 작업이에요.") });
 
 const ENTRY_RE = /^[A-Za-z0-9_-]{1,20}$/;

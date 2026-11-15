@@ -93,7 +93,8 @@ export function drawEmptyLot(scene: Phaser.Scene, atlas: GlyphAtlas, lot: LotSpo
   const kind = taken ? "taken" : "free";
   const ground = scene.add.image(lot.x, lot.y, canvasTex(scene, `lot-empty-ground-${kind}-${size.w}x${size.h}`, () => L.ground.toCanvas())).setOrigin(0, 0).setDepth(DEPTH.decal + 1);
   const front = scene.add.image(lot.x, lot.y, canvasTex(scene, `lot-empty-front-${kind}-${size.w}x${size.h}`, () => L.front.toCanvas())).setOrigin(0, 0).setDepth(lot.y + L.signY);
-  const text = taken ? `${lot.lot}번지 · 공사 중` : `${lot.lot}번지 · 분양 중`;
+  // 11/15 「분양 중」을 「누가 사는 중」으로 읽은 사람이 있어서 → 빈 집터 (E로 분양받기)
+  const text = taken ? `${lot.lot}번지 · 공사 중` : `${lot.lot}번지 · 빈 집터`;
   atlas.ensure(text);
   const label = scene.add
     .bitmapText(lot.x + size.w / 2, lot.y + L.signY - 24, FONT_KEY, text, FONT_PX)

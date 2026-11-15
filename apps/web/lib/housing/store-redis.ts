@@ -165,6 +165,30 @@ if redis.call('HGET', KEYS[2], ARGV[1]) == ARGV[2] then redis.call('HDEL', KEYS[
 return 1
 `;
 
+// 관리자 번지 옮기기: 새 번지가 비어 있을 때만, 옛 번지 칸(이 집일 때만)을 비우고 새 칸에 넣는다
+// KEYS: meta, lots(ch), legacyLots  ARGV: id, lot, legacy('1'|'0')  반환: 1 옮김, -1 집 없음, -2 그 번지에 다른 집
+const MOVE_LOT_LUA = `${MIGRATE_FN}
+if redis.call('EXISTS', KEYS[1]) == 0 then return -1 end
+if ARGV[3] == '1' then migrateLegacy(KEYS[3], KEYS[2]) end
+local cur = redis.call('HGET', KEYS[2], ARGV[2])
+if cur and cur ~= ARGV[1] then return -2 end
+local old = redis.call('HGET', KEYS[1], 'lot')
+if old and redis.call('HGET', KEYS[2], old) == ARGV[1] then redis.call('HDEL', KEYS[2], old) end
+redis.call('HSET', KEYS[2], ARGV[2], ARGV[1])
+redis.call('HSET', KEYS[1], 'lot', ARGV[2])
+return 1
+`;
+
+// 11/15 낡은 번지 칸 정리: 색인 칸이 가리키는 집이 이제 없거나(삭제됨) 다른 번지에 있으면 그 칸을 비운다.
+// 철거한 번지가 화면에는 빈 땅인데(마을 목록은 기록과 맞는 칸만 보인다) 분양은 HEXISTS로 「이미 분양됨」이 되던 일 (운영 1채널 1번지)
+// KEYS: lots(ch), meta(칸의 집)  ARGV: lot, 칸의 집 id
+const CLEAR_STALE_LOT_LUA = `
+if redis.call('HGET', KEYS[1], ARGV[1]) ~= ARGV[2] then return 0 end
+if redis.call('EXISTS', KEYS[2]) == 1 and tostring(redis.call('HGET', KEYS[2], 'lot')) == ARGV[1] then return 0 end
+redis.call('HDEL', KEYS[1], ARGV[1])
+return 1
+`;
+
 // KEYS: meta  ARGV: from, to, now
 const UPGRADE_LUA = `
 if redis.call('HGET', KEYS[1], 'tier') ~= ARGV[1] then return 0 end
@@ -383,6 +407,7 @@ export class RedisHouseStore implements HouseStore {
 
   async create(n: NewHouse): Promise<CreateResult> {
     const ch = housingChannelOf(n.ch ?? LEGACY_HOUSING_CHANNEL);
+    if (n.lot !== null) await this.clearStaleLot(ch, n.lot);
     const r = Number(
       await this.redis.eval<string[], number>(
         CREATE_LUA,
@@ -428,6 +453,20 @@ export class RedisHouseStore implements HouseStore {
     const recs = await this.records([...byLot.keys()], false);
     // 색인과 집 기록이 서로 맞는 것만 (채널·번지가 다르면 색인이 낡은 것)
     return recs.filter((r) => r.lot > 0 && r.ch === ch && byLot.get(r.id) === r.lot).sort((a, b) => a.lot - b.lot);
+  }
+
+  /** 번지 칸이 낡았으면(가리키는 집이 없거나 다른 번지) 비운다 */
+  private async clearStaleLot(ch: number, lot: number) {
+    if (isLegacyCh(ch) === "1") await this.redis.eval<string[], number[]>(MIGRATE_LUA, [HK.legacyLots, HK.lots(ch)], []);
+    const holder = await this.redis.hget<string>(HK.lots(ch), String(lot));
+    if (holder) await this.redis.eval<string[], number>(CLEAR_STALE_LOT_LUA, [HK.lots(ch), HK.meta(String(holder))], [String(lot), String(holder)]);
+  }
+
+  async moveLot(id: string, lot: number) {
+    const ch = housingChannelOf((await this.redis.hget<string>(HK.meta(id), "ch")) ?? undefined);
+    await this.clearStaleLot(ch, lot);
+    const r = Number(await this.redis.eval<string[], number>(MOVE_LOT_LUA, [HK.meta(id), HK.lots(ch), HK.legacyLots], [id, String(lot), isLegacyCh(ch)]));
+    return r === 1 ? ("ok" as const) : r === -1 ? ("no_house" as const) : ("taken" as const);
   }
 
   async remove(id: string) {

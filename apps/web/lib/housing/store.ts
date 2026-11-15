@@ -48,6 +48,8 @@ export interface HouseStore {
   village(ch?: number): Promise<HouseRecord[]>;
   /** 집과 딸린 키를 모두 지운다 (분양 결제 실패 보상·관리자 삭제) */
   remove(id: string): Promise<void>;
+  /** 관리자: 같은 채널 안에서 번지를 옮긴다 (그 번지에 다른 집이 있으면 taken) */
+  moveLot(id: string, lot: number): Promise<"ok" | "no_house" | "taken">;
   setProfile(id: string, name: string, intro: string, now: number): Promise<boolean>;
   /** tier가 from일 때만 to로 바꾼다 */
   upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number): Promise<boolean>;
@@ -225,6 +227,15 @@ export class MemoryHouseStore implements HouseStore {
       .filter((h) => h.rec.lot > 0 && housingChannelOf(h.rec.ch) === ch)
       .map((h) => this.view(h))
       .sort((a, b) => a.lot - b.lot);
+  }
+
+  async moveLot(id: string, lot: number) {
+    const h = this.houses.get(id);
+    if (!h) return "no_house" as const;
+    const ch = housingChannelOf(h.rec.ch);
+    for (const [oid, o] of this.houses) if (oid !== id && o.rec.lot === lot && housingChannelOf(o.rec.ch) === ch) return "taken" as const;
+    h.rec.lot = lot;
+    return "ok" as const;
   }
 
   async remove(id: string) {
