@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/admin";
+import { ECON_STAFF_EXCLUDED_FROM } from "@/lib/economy";
 import { handler, json } from "@/lib/http";
 import { staffAccountId } from "@/lib/staff";
 import { getAccounts } from "@/lib/store";
@@ -11,13 +12,14 @@ const MAX_DAYS = 90;
  * 경제 통계 (최근 days일, 기본 14, 최대 90, 최근 날짜 먼저).
  * earned: 적립 항목별 + `admin`(관리자 지급) + `refund`(되팔기·환불), spent: 사용 분류별(shop/rpg/housing/name/admin/other).
  * totals: 포인트를 모은 적 있는 계정 수와 지갑 잔액 합계.
- * 운영자 계정은 빠진다: 날짜별 통계는 기록할 때(ECON_STAFF_EXCLUDED_FROM부터), totals는 여기서 뺀다
+ * 운영자 계정은 빠진다: 날짜별 통계는 기록할 때(ECON_STAFF_EXCLUDED_FROM부터), totals는 여기서 뺀다.
+ * 11/16 그 전 날짜는 운영자 활동이 섞여 있어 아예 보내지 않는다 (운영자 활동은 하나도 안 보이게)
  */
 export const GET = handler(async (req) => {
   await requireAdmin(req);
   const days = Math.min(MAX_DAYS, Math.max(1, Number(req.nextUrl.searchParams.get("days") ?? 14) || 14));
   const now = Date.now();
-  const dates = Array.from({ length: days }, (_, i) => kstDay(now - i * 86_400_000));
+  const dates = Array.from({ length: days }, (_, i) => kstDay(now - i * 86_400_000)).filter((d) => d >= ECON_STAFF_EXCLUDED_FROM);
   const accounts = getAccounts();
   const [rows, totals] = await Promise.all([accounts.economy(dates), staffAccountId().then((staff) => accounts.walletTotals(staff))]);
   const out: EconomyDay[] = rows.map(({ date, fields }) => {

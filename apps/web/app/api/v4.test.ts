@@ -18,6 +18,7 @@ import type {
 import { NAME_CHANGE_PRICE } from "@/lib/types";
 import * as adminPoints from "./admin/accounts/points/route";
 import * as adminEconomy from "./admin/economy/route";
+import { ECON_STAFF_EXCLUDED_FROM } from "@/lib/economy";
 import * as adminErrors from "./admin/errors/route";
 import * as errorsRoute from "./errors/route";
 import * as flower from "./graves/[id]/flower/route";
@@ -287,6 +288,12 @@ describe("경제 통계", () => {
     expect(after.totals.accounts - before.totals.accounts).toBe(1);
     expect(after.totals.wallets - before.totals.wallets).toBe(balance);
     expect((await adminEconomy.GET(call("/api/admin/economy"))).status).toBe(401);
+  });
+
+  it("11/16 운영자 활동이 섞인 적용일 이전 날짜는 보내지 않는다", async () => {
+    const e = await bodyOf<EconomyResponse>(adminEconomy.GET(call("/api/admin/economy?days=90", { headers: ADMIN })));
+    expect(e.days.length).toBeGreaterThan(0);
+    expect(e.days.every((d) => d.date >= ECON_STAFF_EXCLUDED_FROM)).toBe(true);
   });
 
   it("닉네임 변경 비용은 spend:name", async () => {
