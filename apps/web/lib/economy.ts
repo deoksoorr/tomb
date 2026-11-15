@@ -12,8 +12,9 @@ export type EarnSource =
   | "gotFlower"
   | "presence"
   | "hunt"
-  // 11/15: 미니게임(곤충 잡기·별자리 잇기)은 사냥 한도와 따로 — 사냥으로 600을 채우면 별자리가 늘 0P였다
-  | "mini"
+  // 11/15: 미니게임은 사냥 한도와 따로 — 사냥으로 600을 채우면 별자리가 늘 0P였다. 같은 날 벌레 잡기·별자리 잇기도 게임마다 따로
+  | "bugs"
+  | "stars"
   | "houseLike"
   // ── 4·32·51번 낚시·채집·도감 (lib/forage) ──
   | "fish"
@@ -43,11 +44,14 @@ export const EARN_RULES: readonly EarnRule[] = [
   { source: "stayBonus", label: "접속 시간 보너스", points: 0, dailyMax: STAY_BONUS_DAILY_MAX, note: `${STAY_BONUS_EVERY_MINUTES}분 머물 때마다 10→15→20→25P (구석 창의 [받기], 안 받으면 쌓여요)` },
   // 11/15: 사냥 한도 600 → 1200 (사람이 적을 때 레이스가 붙게 — 야근 빌딩 층 포인트도 이 한도 안)
   { source: "hunt", label: "사냥터", points: 0, dailyMax: 1200, note: "난이도와 성적에 따라, 주운 장비·물약 되팔기 포함 (한 판 보상은 게임 결과로)" },
-  { source: "mini", label: "곤충 잡기·별자리 잇기", points: 0, dailyMax: 150, note: "미니게임 성적에 따라 (사냥 한도와 따로)" },
+  // 11/15: 미니게임 한도를 게임마다 따로 300 (합쳐서 150이던 것)
+  { source: "bugs", label: "벌레 잡기", points: 0, dailyMax: 300, note: "성적에 따라 달라요. 사냥·별자리 잇기 한도와 따로 세요." },
+  { source: "stars", label: "별자리 잇기", points: 0, dailyMax: 300, note: "성적에 따라 달라요. 사냥·벌레 잡기 한도와 따로 세요." },
   { source: "houseLike", label: "내 집이 좋아요 받음", points: 2, dailyMax: 20, note: "다른 사람이 내 집에 좋아요를 누를 때" },
+  // 11/15: 파는 한도 올림 (물고기 200 → 300, 채집 150 → 300)
   // 낚시·채집은 잡을 때가 아니라 NPC에게 팔 때 들어온다 (값은 lib/forage/catalog.ts). 한도를 넘는 만큼은 가방에 남아 내일 팔 수 있다
-  { source: "fish", label: "물고기 팔기", points: 0, dailyMax: 200, note: "납품 부두 어부에게 (희귀할수록 비싸요)" },
-  { source: "gather", label: "채집물 팔기", points: 0, dailyMax: 150, note: "오리 연못 둑의 수집가에게 (약초·광석·발굴품·곤충)" },
+  { source: "fish", label: "물고기 팔기", points: 0, dailyMax: 300, note: "납품 부두 어부에게 (희귀할수록 비싸요)" },
+  { source: "gather", label: "채집물 팔기", points: 0, dailyMax: 300, note: "오리 연못 둑의 수집가에게 (약초·광석·발굴품·곤충)" },
   // 11/14: 단계(25·50·75·100%) 보상 → 종마다 처음 등록 보상 (lib/forage/dexReward, 값은 catalog DEX_NEW_REWARD). 한도를 넘는 만큼은 도감 창에 쌓여 나중에 받는다
   { source: "dex", label: "도감 등록 보상", points: 0, dailyMax: 300, note: "새 종을 도감에 처음 등록할 때마다 3~50P (희귀할수록 많이)" },
   // 실시간 서버가 "가장 먼저 잡은 한 명"에게 서명한 증서로만 받는다 (고블린 한 마리당 한 번, lib/goblin.ts)
