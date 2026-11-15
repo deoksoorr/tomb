@@ -95,7 +95,8 @@ export function StartPanel({
   const todayLine = (
     <>
       <HuntCapMeter today={view.today} where="start" />
-      <p className={s.meta}>이번 시간에 {view.today.runsPerHour}판 더 할 수 있어요.</p>
+      {/* 11/15 시간당 판 수 한도(자동 반복 막기)는 거의 닿지 않아서 5판 이하로 남았을 때만 알린다 */}
+      {view.today.runsPerHour <= 5 && <p className={s.meta}>이번 한 시간 동안은 {view.today.runsPerHour}판만 더 할 수 있어요.</p>}
     </>
   );
   const startButton = (
@@ -135,9 +136,7 @@ export function StartPanel({
                   </p>
                 )}
                 <div className={s.zoneGo}>
-                  <p className={s.meta}>
-                    이번 시간에 {view.today.runsPerHour}판 더 할 수 있어요.
-                  </p>
+                  {view.today.runsPerHour <= 5 && <p className={s.meta}>이번 한 시간 동안은 {view.today.runsPerHour}판만 더 할 수 있어요.</p>}
                   {/* 화면 흔들림 효과 켜기·끄기: 출발 전에 고른다 (이 기기에 기억) */}
                   <HuntKeysStrip />
                   <ShakeToggle />
