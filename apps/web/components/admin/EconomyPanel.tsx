@@ -98,10 +98,8 @@ export default function EconomyPanel({ toast, onAuthLost }: Props) {
               <span className={styles.statLabel}>기간 순증가 (적립 − 사용)</span>
             </div>
           </div>
-          {/* 고른 기간에 적용일 이전 날짜가 있을 때만 안내한다 */}
-          {data.days.some((d) => d.date < ECON_STAFF_EXCLUDED_FROM) && (
-            <p className={ui.hint}>운영자 제외는 {STAFF_FROM_LABEL}부터 적용, 이전 날짜에는 운영자 활동이 섞여 있어요.</p>
-          )}
+          {/* 11/16 적용일 이전 날짜는 서버가 보내지 않는다 (운영자 활동이 섞여 있어서) */}
+          <p className={ui.hint}>운영자 계정이 쓰고 모은 포인트는 빼고 세요. 기록은 {STAFF_FROM_LABEL}부터 보여요.</p>
           <div className={styles.split}>
             <Bars title="적립 (항목별)" totals={earnedTotal} labels={EARN_LABELS} />
             <Bars title="사용 (분류별)" totals={spentTotal} labels={SPEND_LABELS} />
