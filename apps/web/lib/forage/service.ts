@@ -279,7 +279,8 @@ export async function startGather(acct: string, nodeId: string, now = Date.now()
   const w = nodeWindow(now);
   const snap = await store.snapshot(acct, kstDay(now), w);
   if (!nodeActive(acct, n, w) || snap.taken.includes(n.id)) throw new HttpError(409, "NODE_EMPTY", "지금은 비어 있어요. 조금 뒤에 다시 피어나요.");
-  if (snap.day.gather >= DAILY_CATCH_MAX.gather) throw new HttpError(429, "DAILY_LIMIT", "오늘은 충분히 모았어요. 내일 또 와요.");
+  // 11/15 곤충 채집은 채집물 개수 한도를 채워도 할 수 있다 (곤충은 못 챙기고 포인트만 — 「곤충 채집」 포인트 한도는 따로)
+  if (n.kind !== "bug" && snap.day.gather >= DAILY_CATCH_MAX.gather) throw new HttpError(429, "DAILY_LIMIT", "오늘은 충분히 모았어요. 내일 또 와요.");
   const nonce = nanoid(16);
   const begin = async (payload: GatherPayload, ttl: number) => {
     if (!(await store.begin(acct, nonce, JSON.stringify(payload), ttl, hourBucket(now), FORAGE_STARTS_PER_HOUR)))
@@ -332,6 +333,11 @@ export async function finishGather(acct: string, token: string, result: BugsResu
       if (s) items.push({ id: s.id, size: rollSize10(s, rand()) });
     }
     if (!items.length) message = "곤충이 모두 날아갔어요. 다섯 마리는 잡아야 하나라도 챙겨요.";
+    // 11/15 채집물 개수 한도를 채웠으면 곤충은 못 챙기고 포인트만
+    if ((await store.snapshot(acct, kstDay(now), t.w)).day.gather >= DAILY_CATCH_MAX.gather) {
+      items = [];
+      message = "오늘은 곤충을 더 챙길 수 없어요. 포인트만 받아요.";
+    }
   } else {
     if (elapsed < (t.m ?? 0) - GATHER_SLACK_MS) throw new HttpError(422, "TOO_FAST", "다 캐기 전에 끝냈어요. 이번엔 빈손이에요.");
     items = payload.items ?? [];
