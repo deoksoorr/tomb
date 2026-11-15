@@ -8,6 +8,7 @@ import { RPG_SCENES } from "./rpg";
 import { BootScene } from "./scenes/BootScene";
 import type { GameContext } from "./scenes/context";
 import { ShopScene } from "./scenes/ShopScene";
+import { installRenderGuard } from "./renderGuard";
 import { WorldScene } from "./scenes/WorldScene";
 
 // Phaser 게임 생성. GameCanvas가 브라우저에서만 동적 import 한다 (Phaser는 이 경로로만 로드된다).
@@ -15,6 +16,7 @@ import { WorldScene } from "./scenes/WorldScene";
 export type GameHandle = { destroy(): void };
 
 export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHandle {
+  installRenderGuard();
   const ctx: GameContext = { opts, disposers: [], disposed: false };
   const game = new Phaser.Game({
     type: Phaser.AUTO,
@@ -29,6 +31,8 @@ export function createGame(parent: HTMLElement, opts: GameStartOptions): GameHan
       mode: Phaser.Scale.RESIZE,
       width: parent.clientWidth || window.innerWidth,
       height: parent.clientHeight || window.innerHeight,
+      // 창을 숨기거나 접어 부모 크기가 0이 되면 0×0 화면 버퍼를 만들다 예외가 난다 (Framebuffer Incomplete Attachment) → 최소 1×1
+      min: { width: 1, height: 1 },
       autoRound: true,
     },
     render: { powerPreference: "high-performance", antialiasGL: false },
