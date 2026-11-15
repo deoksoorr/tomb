@@ -27,13 +27,33 @@ import {
   URGENT_KINDS,
   URGENT_MS,
   URGENT_REF_ONLINE,
+  urgentEndNotice,
+  urgentFilled,
   urgentGoal,
+  urgentPrize,
   urgentReward,
+  urgentRewardLine,
   urgentSchedule,
   urgentStage,
   type UrgentSlot,
 } from "./urgent";
-import { claimUrgent, deliverUrgent, festivalOn, openUrgentPocket, testAddUrgent, testStartUrgent, urgentEnabled, urgentMine, urgentPublic, urgentStore } from "./urgentService";
+import {
+  claimUrgent,
+  deliverUrgent,
+  festivalOn,
+  openUrgentPocket,
+  testAddUrgent,
+  testEndUrgent,
+  testStartUrgent,
+  urgentEnabled,
+  urgentMine,
+  urgentNoticeId,
+  urgentPublic,
+  urgentStore,
+} from "./urgentService";
+import { verifyInternal, type InternalSay } from "@tomb/protocol";
+import { NextRequest } from "next/server";
+import { getMegaphone } from "../../store";
 import { setStaff } from "../../staff";
 import { MemoryUrgentStore, type UrgentMemDeps } from "./urgentStore";
 
@@ -162,6 +182,36 @@ describe("단계 · 보상 판정", () => {
     expect(countOf(late)).toBe(10);
     expect(early).toBeGreaterThan(late);
     expect(rankScore(11, end - 1, end)).toBeGreaterThan(early);
+  });
+});
+
+describe("끝난 뒤 문구 (위쪽 막대·게시판·확성기)", () => {
+  it("끝 확성기: 0개면 '아무도 오지 않은 채', 채웠으면 몇 %를 채웠는지 ('멈춤' 같은 말은 쓰지 않는다)", () => {
+    expect(urgentEndNotice("dig", 5, 0)).toBe("긴급 의뢰(발굴품 5개)는 아무도 오지 않은 채 끝났어요.");
+    expect(urgentEndNotice("fish", 20, 9)).toBe("긴급 의뢰(생선 20마리)가 끝났어요. 목표의 45%를 채웠어요.");
+    expect(urgentEndNotice("dig", 5, 6)).toBe("긴급 의뢰(발굴품 5개)가 끝났어요. 목표의 120%를 채웠어요! 낸 사람은 게시판에서 보상을 받아요.");
+    for (const k of URGENT_KINDS) for (const n of [0, 1, 7, 10, 15, 30]) expect(urgentEndNotice(k, 10, n)).not.toMatch(/멈/);
+  });
+
+  it("모은 양: 1%가 안 되면 0%라고 하지 않고 수로", () => {
+    expect(urgentFilled("ore", 9, 20)).toBe("목표의 45%를 채웠어요");
+    expect(urgentFilled("fish", 1, 200)).toBe("1마리를 모았어요");
+  });
+
+  it("보상 한 줄: 낸 사람·안 낸 사람·받은 뒤·50% 못 넘김", () => {
+    expect(urgentPrize(50)).toBe("도장 2개");
+    expect(urgentPrize(150)).toBe("도장 5개와 수집가의 뒷주머니");
+    expect(urgentRewardLine({ n: 9, goal: 20, mine: true })).toBe("50%를 못 넘겨 이번엔 보상이 없어요.");
+    expect(urgentRewardLine({ n: 11, goal: 20, mine: true })).toBe("50%를 넘겨 도장 2개를 받아요.");
+    expect(urgentRewardLine({ n: 10, goal: 20, mine: true })).toBe("50%를 채워 도장 2개를 받아요.");
+    expect(urgentRewardLine({ n: 24, goal: 20, mine: true, claimed: true })).toBe("100%를 넘겨 도장 5개와 수집가의 뒷주머니를 받았어요.");
+    expect(urgentRewardLine({ n: 11, goal: 20, mine: false })).toBe("낸 사람은 도장 2개를 받아요.");
+    // 내 것을 아직 모르면 비운다
+    expect(urgentRewardLine({ n: 11, goal: 20, mine: null })).toBe("");
+  });
+
+  it("아무도 안 냈을 때 게시판 한 줄은 종류마다 있다", () => {
+    for (const k of URGENT_KINDS) expect(URGENT_DEF[k].nobody).toMatch(/요\.$/);
   });
 });
 
@@ -449,5 +499,77 @@ describe("서버 흐름", () => {
     expect(await s.mark("x", "a0")).toBe(true);
     expect(await s.mark("x", "a0")).toBe(false);
     void urgentStore;
+  });
+});
+
+describe("끝 확성기 (기록 + 실시간 + 시작 공지 바꿔 끼우기)", () => {
+  /** 실시간 서버 흉내: /internal/say만 받아 기록한다 (나머지는 연결 실패) */
+  function fakeSay() {
+    const said: InternalSay[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (!url.includes("/internal/say")) throw new Error("offline");
+        const r = await verifyInternal(env.joinSecret(), String(init?.body ?? ""), new Headers(init?.headers).get("X-Tomb-Internal"));
+        if (r?.op !== "say") return new Response("not found", { status: 404 });
+        said.push(r);
+        return Response.json({ sent: 1 });
+      }),
+    );
+    return said;
+  }
+  const listed = async () => {
+    const megaphone = await import("@/app/api/megaphone/route");
+    const res = await megaphone.GET(new NextRequest("http://localhost/api/megaphone?channel=1"));
+    return ((await res.json()) as { entries: { id: string; text: string; system?: true; replaces?: string }[] }).entries;
+  };
+
+  it("0개로 끝나면 '아무도 오지 않은 채' 끝 공지가 시작 공지를 바꿔 끼우고, 시작·끝 모두 실시간 서버로 바로 보낸다", async () => {
+    const said = fakeSay();
+    const now = Date.now();
+    const op = await newAcct("공지운영자", now);
+    await setStaff(op, now);
+    const t = await testStartUrgent(op, "dig", now);
+    const goal = urgentGoal("dig", URGENT_REF_ONLINE);
+    await urgentPublic(now + 100);
+    const a0 = urgentNoticeId(t.id, "a0");
+    const a1 = urgentNoticeId(t.id, "a1");
+    // 앞 시험들이 남긴 공지도 늦게 올 수 있어 이 의뢰 것만 본다
+    const mineSaid = () => said.filter((x) => x.id.startsWith(`urg-${t.id}-`));
+    await vi.waitFor(() => expect(mineSaid().map((x) => x.id)).toEqual([a0]));
+    expect(mineSaid()[0].text).toMatch(/\(20분\)$/);
+    expect((await listed()).map((e) => e.id)).toContain(a0);
+
+    await testEndUrgent(op, false, now + 1_000);
+    await urgentPublic(now + 1_500);
+    await urgentPublic(now + 2_000); // 두 번 물어도 끝 공지는 한 번
+    const rec = (await getMegaphone().recent(100)).find((r) => r.id === a1)!;
+    expect(rec).toMatchObject({ text: `긴급 의뢰(발굴품 ${goal}개)는 아무도 오지 않은 채 끝났어요.`, replaces: a0, name: "공지" });
+    await vi.waitFor(() => expect(mineSaid().map((x) => x.id)).toEqual([a0, a1]));
+    expect(mineSaid()[1]).toMatchObject({ replaces: a0, name: "공지", text: rec.text });
+    // 확성기 목록에서는 시작 공지("(20분)")가 빠지고 끝 공지만
+    const ids = (await listed()).map((e) => e.id);
+    expect(ids).toContain(a1);
+    expect(ids).not.toContain(a0);
+    await setStaff(null, now);
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new Error("offline"))));
+  });
+
+  it("일부 채우고 끝나면 '목표의 50%를 채웠어요!' 끝 공지", async () => {
+    const said = fakeSay();
+    const now = Date.now() + 10_000;
+    const op = await newAcct("공지운영자2", now);
+    await setStaff(op, now);
+    const t = await testStartUrgent(op, "fish", now);
+    const goal = urgentGoal("fish", URGENT_REF_ONLINE);
+    await testAddUrgent(op, 50, now + 500);
+    await testEndUrgent(op, false, now + 1_000);
+    await urgentPublic(now + 1_500);
+    const a1 = urgentNoticeId(t.id, "a1");
+    await vi.waitFor(() => expect(said.map((x) => x.id)).toContain(a1));
+    expect(said.find((x) => x.id === a1)!.text).toBe(`긴급 의뢰(생선 ${goal}마리)가 끝났어요. 목표의 50%를 채웠어요! 낸 사람은 게시판에서 보상을 받아요.`);
+    await setStaff(null, now);
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new Error("offline"))));
   });
 });

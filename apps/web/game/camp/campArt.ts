@@ -72,6 +72,15 @@ export const CAMP_TEX = {
   firefly: `${P}firefly`,
   drip: `${P}drip`,
   ground: (cx: number, cy: number) => `${P}ground-${cx}-${cy}`,
+  // 11/15 캠핑카 앞 캠핑 도구 · 문패 팻말
+  foldTable: `${P}foldTable`,
+  campChairFront: (i: number) => `${P}campChairF${i}`,
+  campChairSide: (i: number) => `${P}campChairS${i}`,
+  brazier: `${P}brazier`,
+  brazierFire: `${P}brazierFire`,
+  lantern: `${P}lantern`,
+  icebox: `${P}icebox`,
+  plateSign: `${P}plateSign`,
 } as const;
 
 /** 그리드 + (스프라이트 시트면) 프레임 크기 */
@@ -1268,8 +1277,9 @@ function groundColor(x: number, y: number, k: CampGround, nearPath: boolean): Co
       // 길 위 가장자리 연석
       if (y < CAMP_ROAD.y + 5) c = n < 0.5 ? 0x9a968c : 0xb4b0a4;
       // 정류장 앞 노란 정차 칸 (테두리 점선)
-      const bx0 = CAMP_BUS_STOP.x - 64;
-      const bx1 = CAMP_BUS_STOP.x + 64;
+      // 버스는 문이 정류장 앞에 오게 서고(문은 차 앞쪽), 왼쪽에서 들어온다 → 칸은 정류장 왼쪽으로 치우친다
+      const bx0 = CAMP_BUS_STOP.x - 98;
+      const bx1 = CAMP_BUS_STOP.x + 30;
       const by0 = CAMP_ROAD.y + 9;
       const by1 = CAMP_ROAD.y + 38;
       if (x >= bx0 && x <= bx1 && y >= by0 && y <= by1) {
@@ -1300,7 +1310,7 @@ function groundColor(x: number, y: number, k: CampGround, nearPath: boolean): Co
       return n < 0.14 ? GC.plaza[1] : n > 0.88 ? GC.plaza[2] : hashU(x >> 1, y >> 1, 53) < 0.03 ? 0xd8a840 : GC.plaza[0];
     }
     case "path": {
-      if (hashU(x >> 1, y >> 1, 61) < 0.06) return LEAF_COLORS[Math.floor(hashU(x, y, 62) * LEAF_COLORS.length)];
+      if (hashU(x >> 1, y >> 1, 61) < 0.1) return LEAF_COLORS[Math.floor(hashU(x, y, 62) * LEAF_COLORS.length)];
       if (hashU(x, y, 63) > 0.97) return 0xc8b89a; // 자갈
       return n < 0.16 ? GC.path[1] : n > 0.86 ? GC.path[2] : GC.path[0];
     }
@@ -1309,7 +1319,8 @@ function groundColor(x: number, y: number, k: CampGround, nearPath: boolean): Co
     default: {
       // 낙엽 깔린 풀: 군데군데 잎이 수북한 곳 (큰 얼룩) + 흩어진 잎
       const pile = hashU(x >> 4, y >> 4, 71);
-      const rate = 0.12 + (pile > 0.7 ? 0.22 : 0) + (nearPath ? 0.06 : 0);
+      // 11/15 더 촘촘하게 (사용자: 낙엽 점을 늘려 달라)
+      const rate = 0.22 + (pile > 0.65 ? 0.24 : 0) + (nearPath ? 0.08 : 0);
       if (hashU(x >> 1, y >> 1, 72) < rate) {
         const li = Math.floor(hashU(x >> 1, y >> 1, 73) * LEAF_COLORS.length);
         return n < 0.25 ? darken(LEAF_COLORS[li], 0.12) : LEAF_COLORS[li];
@@ -1377,3 +1388,186 @@ export function bridgePlacement(): { x: number; y: number } {
 
 /** 산꼭대기 정보 (일출빛 자리) */
 export const CAMP_SUNRISE = { x: CAMP_SUMMIT.x + 40, y: CAMP_SUMMIT.y - 70 } as const;
+
+
+// ── 11/15 캠핑카 앞 캠핑 도구 ──
+
+/** 캠핑 의자 천 색 (캠핑카마다 다르게) */
+const CHAIR_CLOTH: readonly Pal3[] = [
+  { hi: 0x7ec4b0, mid: 0x4f9a88, lo: 0x2f6a5e },
+  { hi: 0xf0b860, mid: 0xd08a34, lo: 0x94561c },
+  { hi: 0xe88a7a, mid: 0xc45a50, lo: 0x8a3430 },
+];
+const METAL: Pal3 = { hi: 0xc8ccd0, mid: 0x8a9096, lo: 0x5a6066 };
+
+/** 접이식 탁자 (알루미늄 다리 + 나무 상판) */
+export function foldTableArt(): Grid {
+  const g = new Grid(30, 18);
+  g.rect(2, 3, 26, 7, WOOD_DECK.mid);
+  for (let x = 4; x < 28; x += 4) g.vline(x, 3, 9, WOOD_DECK.lo);
+  g.hline(2, 27, 3, WOOD_DECK.hi);
+  g.hline(2, 27, 9, WOOD_DECK.lo);
+  // X자 다리
+  line(g, 5, 10, 11, 15, METAL.mid);
+  line(g, 11, 10, 5, 15, METAL.lo);
+  line(g, 19, 10, 25, 15, METAL.mid);
+  line(g, 25, 10, 19, 15, METAL.lo);
+  // 컵 두 개와 작은 냄비
+  g.rect(8, 4, 2, 3, 0xe8e0d0);
+  g.rect(20, 4, 2, 3, 0x6aa0c8);
+  g.outline(OUT);
+  shadow(g, 15, 16, 13, 1.4, 50);
+  return g;
+}
+
+/** 캠핑 의자 (앞모습 — 아래를 보고 앉는다) */
+export function campChairFrontArt(i: number): Grid {
+  const c = CHAIR_CLOTH[i % CHAIR_CLOTH.length];
+  const g = new Grid(16, 18);
+  // 등받이 천
+  g.rect(3, 2, 10, 7, c.mid);
+  g.hline(3, 12, 2, c.hi);
+  g.vline(3, 2, 8, c.lo);
+  g.vline(12, 2, 8, c.lo);
+  // 팔걸이·앉는 천
+  g.rect(2, 9, 12, 3, c.lo);
+  g.hline(2, 13, 9, METAL.hi);
+  g.rect(1, 8, 2, 2, METAL.mid);
+  g.rect(13, 8, 2, 2, METAL.mid);
+  g.set(14, 10, 0x4a7ac8); // 컵꽂이
+  // 다리
+  line(g, 3, 12, 2, 16, METAL.lo);
+  line(g, 12, 12, 13, 16, METAL.lo);
+  line(g, 4, 12, 11, 16, METAL.mid);
+  g.outline(OUT);
+  shadow(g, 8, 17, 7, 1.2, 50);
+  return g;
+}
+
+/** 캠핑 의자 (옆모습 — 오른쪽을 보고 앉는다. 왼쪽은 좌우 뒤집기) */
+export function campChairSideArt(i: number): Grid {
+  const c = CHAIR_CLOTH[i % CHAIR_CLOTH.length];
+  const g = new Grid(16, 18);
+  // 등받이 (왼쪽, 살짝 눕힘)
+  line(g, 3, 2, 4, 10, c.mid, 2);
+  g.set(3, 2, c.hi);
+  // 앉는 천 (오른쪽으로 처짐)
+  g.rect(4, 9, 8, 3, c.mid);
+  g.hline(4, 11, 9, c.hi);
+  g.hline(5, 10, 11, c.lo);
+  // 팔걸이
+  g.hline(4, 12, 7, METAL.mid);
+  // X자 다리
+  line(g, 4, 12, 11, 16, METAL.mid);
+  line(g, 11, 12, 4, 16, METAL.lo);
+  g.outline(OUT);
+  shadow(g, 8, 17, 7, 1.2, 50);
+  return g;
+}
+
+/** 화롯대 (검은 쇠 그릇 + 다리 + 장작 숯, 불꽃은 brazierFireArt가 위에서 일렁인다) */
+export function brazierArt(): Grid {
+  const g = new Grid(18, 16);
+  g.ellipse(9, 6, 8, 3, 0x3a3634);
+  g.ellipse(9, 5.5, 6.5, 2, 0x8a3a1c); // 숯
+  for (const [x, y] of [[6, 5], [10, 6], [12, 5]] as const) g.set(x, y, 0xffb040);
+  g.rect(3, 6, 12, 3, 0x2e2a28);
+  g.hline(3, 14, 6, 0x5a5654);
+  line(g, 5, 9, 3, 14, 0x2e2a28);
+  line(g, 13, 9, 15, 14, 0x2e2a28);
+  line(g, 9, 9, 9, 14, 0x2e2a28);
+  g.outline(OUT);
+  shadow(g, 9, 15, 8, 1.2, 50);
+  return g;
+}
+
+/** 화롯대 작은 불꽃 (3프레임 시트, 원점 아래 가운데) */
+export function brazierFireArt(): ArtOut {
+  const F = 3;
+  const W = 10;
+  const H = 12;
+  const g = new Grid(W * F, H);
+  for (let f = 0; f < F; f++) {
+    const ox = f * W;
+    const sway = [0, 1, -1][f];
+    g.ellipse(ox + 5, 9, 4, 3, 0xd8582a);
+    g.ellipse(ox + 5 + sway * 0.5, 6, 3, 4, 0xf08a30);
+    g.ellipse(ox + 5 + sway, 4, 1.6, 3, 0xffc850);
+    g.set(ox + 5 + sway, 1 + (f % 2), 0xfff0a0);
+  }
+  return { grid: g, frameW: W, frameH: H };
+}
+
+/** 탁자 위 캠핑 랜턴 (손잡이 + 불빛 유리) */
+export function lanternArt(): Grid {
+  const g = new Grid(8, 12);
+  g.rect(2, 3, 4, 6, 0xffd890);
+  g.vline(2, 3, 8, 0xf0b860);
+  g.set(4, 5, 0xfff8d8);
+  g.rect(1, 9, 6, 2, 0x3a5a4a);
+  g.rect(1, 2, 6, 1, 0x3a5a4a);
+  g.hline(2, 5, 0, METAL.mid);
+  g.set(1, 1, METAL.mid);
+  g.set(6, 1, METAL.mid);
+  g.outline(OUT);
+  return g;
+}
+
+/** 아이스박스 (하늘색 몸통 + 흰 뚜껑) */
+export function iceboxArt(): Grid {
+  const g = new Grid(18, 14);
+  g.rect(2, 5, 14, 7, 0x5aa8d8);
+  g.hline(2, 15, 11, 0x3a7aa8);
+  g.vline(2, 5, 11, 0x7ac4ec);
+  g.rect(1, 3, 16, 3, 0xf0f0e8);
+  g.hline(1, 16, 3, 0xffffff);
+  g.rect(6, 1, 6, 2, 0xd8d8d0); // 손잡이
+  g.rect(12, 7, 2, 2, 0xffffff); // 스티커
+  g.outline(OUT);
+  shadow(g, 9, 13, 8, 1.2, 50);
+  return g;
+}
+
+export const PLATE_SIGN_W = 64;
+export const PLATE_SIGN_H = 40;
+/**
+ * 「언젠가 씨네」 문패 팻말 (가운데 캠핑카 옆에 세운 나무 간판): 둥근 지붕 띠, 넓은 판(글씨는 CampMap이 얹는다),
+ * 아래 꽃 상자, 기둥 둘. 원점 = 바닥 가운데
+ */
+export function plateSignArt(): Grid {
+  const W = PLATE_SIGN_W;
+  const H = PLATE_SIGN_H;
+  const g = new Grid(W, H);
+  // 기둥
+  g.rect(8, 18, 3, H - 20, WOOD.lo);
+  g.rect(W - 11, 18, 3, H - 20, WOOD.lo);
+  // 판 (크림색 바탕 + 나무 테두리)
+  g.rect(3, 6, W - 6, 18, WOOD.mid);
+  g.rect(5, 8, W - 10, 14, 0xf6e6c0);
+  g.hline(5, W - 6, 8, 0xfff4dc);
+  frame(g, 4, 7, W - 8, 16, WOOD.line);
+  // 지붕 띠 (둥글게)
+  for (let x = 2; x < W - 2; x++) {
+    const t = (x - W / 2) / (W / 2);
+    const y = Math.round(5 - (1 - t * t) * 4);
+    g.vline(x, y, 6, WOOD.lo);
+    g.set(x, y, WOOD.hi);
+  }
+  // 모서리 별 장식
+  for (const x of [8, W - 9]) {
+    g.set(x, 11, 0xe8b040);
+    g.set(x - 1, 12, 0xe8b040);
+    g.set(x + 1, 12, 0xe8b040);
+    g.set(x, 13, 0xe8b040);
+  }
+  // 꽃 상자
+  g.rect(14, H - 9, W - 28, 4, 0x9a6a40);
+  g.hline(14, W - 15, H - 9, 0xc08a58);
+  for (let x = 16; x < W - 16; x += 4) {
+    g.set(x, H - 11, x % 8 ? 0xe86a6a : 0xf0d060);
+    g.set(x + 1, H - 10, 0x5a9a4a);
+  }
+  g.outline(OUT);
+  shadow(g, W / 2, H - 2, W / 2 - 6, 1.6, 54);
+  return g;
+}

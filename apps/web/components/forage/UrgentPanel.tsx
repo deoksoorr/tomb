@@ -4,7 +4,20 @@ import { useEffect, useMemo, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { RARITY_LABEL, speciesById } from "@/lib/forage/catalog";
-import { clockText, prizeText, URGENT_DEF, URGENT_LAST_MS, URGENT_PICK_MAX, URGENT_STAMPS, urgentAnnounce, urgentStage, type UrgentKind } from "@/lib/forage/quests/urgent";
+import {
+  clockText,
+  prizeText,
+  URGENT_DEF,
+  URGENT_LAST_MS,
+  URGENT_NEXT_HINT,
+  URGENT_PICK_MAX,
+  URGENT_STAMPS,
+  urgentAnnounce,
+  urgentFilled,
+  urgentRewardLine,
+  urgentStage,
+  type UrgentKind,
+} from "@/lib/forage/quests/urgent";
 import { urgentApi } from "@/lib/forage/quests/urgentClient";
 import type { UrgentClaimed, UrgentLive, UrgentMineRow } from "@/lib/forage/quests/urgentTypes";
 import { meStore } from "@/lib/hooks/useMe";
@@ -20,7 +33,6 @@ import u from "./urgent.module.css";
 // 11/15: 납품 부두 의뢰 게시판의 [긴급] 칸. 진행 중이면 남은 시간·서버 전체 막대·단계·내가 낸 수·순위 3명·납품,
 // 끝났으면 결과와 [보상 받기]. 테스트 서버 운영자에게는 시험 버튼(지금 시작·막대 더하기·지금 끝내기)이 보인다.
 
-const KIND_NAME: Record<UrgentKind, string> = { fish: "생선", herb: "약초", ore: "광석", dig: "발굴품" };
 /** 받침에 맞춘 "이/가" */
 const KIND_SUBJ: Record<UrgentKind, string> = { fish: "생선이", herb: "약초가", ore: "광석이", dig: "발굴품이" };
 const fill = (n: number, goal: number) => `${Math.min(100, goal > 0 ? (n / (goal * 1.5)) * 100 : 0)}%`;
@@ -115,7 +127,7 @@ export default function UrgentPanel() {
           </button>
           {(["fish", "herb", "ore", "dig"] as const).map((k) => (
             <button key={k} type="button" className={ui.button} disabled={busy} onClick={() => void test({ action: "start", kind: k })}>
-              {KIND_NAME[k]}
+              {URGENT_DEF[k].noun}
             </button>
           ))}
           <button type="button" className={ui.button} disabled={busy || !live} onClick={() => void test({ action: "add", pct: 50 })}>
@@ -180,8 +192,9 @@ function Bar({ ev, now }: { ev: UrgentLive; now: number }) {
   );
 }
 
-function Top3({ ev }: { ev: UrgentLive }) {
-  if (!ev.top.length) return <p className={u.subhead}>아직 낸 사람이 없어요. 첫 납품의 주인공이 되어 보세요.</p>;
+function Top3({ ev, ended = false }: { ev: UrgentLive; ended?: boolean }) {
+  // 끝난 뒤에는 "첫 납품의 주인공" 같은 진행 중 문구를 쓰지 않는다
+  if (!ev.top.length) return ended ? null : <p className={u.subhead}>아직 낸 사람이 없어요. 첫 납품의 주인공이 되어 보세요.</p>;
   const unit = URGENT_DEF[ev.kind].unit;
   return (
     <>
@@ -278,7 +291,7 @@ function LiveCard({ ev, now, mine, bag }: { ev: UrgentLive; now: number; mine: n
         </div>
         <div className={u.liveCol}>
           <p className={u.subhead}>
-            가방의 {KIND_NAME[ev.kind]} {rows.reduce((a, r) => a + r.n, 0)}
+            가방의 {URGENT_DEF[ev.kind].noun} {rows.reduce((a, r) => a + r.n, 0)}
             {d.unit}
           </p>
           {rows.length ? (
@@ -338,16 +351,27 @@ function LiveCard({ ev, now, mine, bag }: { ev: UrgentLive; now: number; mine: n
   );
 }
 
-/** 끝났지만 내가 내지 않은 의뢰 (결과만) */
+/** 끝났지만 내가 내지 않은 의뢰 (결과만). 아무도 안 냈으면 종류별 한 줄 */
 function EndedSummary({ ev, now }: { ev: UrgentLive; now: number }) {
   const d = URGENT_DEF[ev.kind];
+  if (ev.n <= 0)
+    return (
+      <section className={u.card} data-done aria-label="끝난 긴급 의뢰">
+        <span className={u.cardTitle}>{d.label} 긴급 의뢰가 끝났어요</span>
+        <p className={u.subhead}>{d.nobody}</p>
+        <p className={ui.hint}>{URGENT_NEXT_HINT}</p>
+      </section>
+    );
   return (
     <section className={u.card} data-done data-fest={ev.festUntil > now || undefined} aria-label="끝난 긴급 의뢰">
       <span className={u.cardTitle}>{d.label} 긴급 의뢰가 끝났어요</span>
       <Bar ev={ev} now={now} />
+      <p className={u.subhead}>
+        {urgentFilled(ev.kind, ev.n, ev.goal)}. {urgentRewardLine({ n: ev.n, goal: ev.goal, mine: false })}
+      </p>
       <Stages n={ev.n} goal={ev.goal} />
-      <Top3 ev={ev} />
-      <p className={ui.hint}>보상은 1개라도 낸 사람만 받아요. 다음 긴급 의뢰를 기다려 주세요.</p>
+      <Top3 ev={ev} ended />
+      <p className={ui.hint}>{urgentStage(ev.n, ev.goal) >= 50 ? `이번엔 낸 게 없어서 받을 보상이 없어요. ${URGENT_NEXT_HINT}` : URGENT_NEXT_HINT}</p>
     </section>
   );
 }
@@ -403,7 +427,7 @@ function ResultCard({ row, pub, now, fresh, busy, onClaim }: { row: UrgentMineRo
             </span>
             {pub?.lastName && <span className={ui.hint}>마지막 1분에 채운 사람은 {pub.lastName}님</span>}
           </div>
-          {pub && <Top3 ev={pub} />}
+          {pub && <Top3 ev={pub} ended />}
         </div>
         <div className={u.liveCol}>
           {claimed ? (
@@ -420,7 +444,7 @@ function ResultCard({ row, pub, now, fresh, busy, onClaim }: { row: UrgentMineRo
               </button>
             </>
           ) : (
-            <p className={ui.hint}>목표의 절반을 못 채워서 이번엔 보상이 없어요. 다음엔 꼭!</p>
+            <p className={ui.hint}>{urgentRewardLine({ n: row.n, goal: row.goal, mine: true })} 다음 긴급 의뢰 때 다시 모아 봐요.</p>
           )}
         </div>
       </div>

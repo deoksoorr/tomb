@@ -1,4 +1,4 @@
-import { MAX_VALID_SPEED, MIN_CLIENT_VERSION, RATE_LIMIT_KICK_SEC, RATE_LIMIT_PER_SEC, inMapBounds, parseClientVersion, type MapId } from "@tomb/protocol";
+import { MAX_VALID_SPEED, MEGAPHONE_TTL_MS, MIN_CLIENT_VERSION, RATE_LIMIT_KICK_SEC, RATE_LIMIT_PER_SEC, encodeEvent, inMapBounds, parseClientVersion, type InternalSay, type MapId } from "@tomb/protocol";
 
 // Workers 런타임 API에 의존하지 않는 작은 순수 로직. vitest로 단위 테스트한다(logic.test.ts).
 
@@ -124,3 +124,15 @@ export function parseMap(raw: string | null): MapId {
 export function isOutdatedClient(rawVersion: string | null, min: number = MIN_CLIENT_VERSION): boolean {
   return parseClientVersion(rawVersion) < min;
 }
+
+// ── 11/15 마을 공지 (/internal/say) ──
+
+/**
+ * 마을 공지 한 줄을 채널에 보낼 확성기 방송으로. nonce는 사람 확성기(증서 nonce)와 겹치지 않게 "s:" 앞붙임, until = 중복 막기 기억 시간.
+ * staff는 옛 클라이언트가 금색·신고 버튼 없이 그리게, system·replaces는 새 클라이언트가 공지 줄로 그리고 앞 공지를 바꿔 끼우게
+ */
+export function sayRelay(r: Pick<InternalSay, "id" | "name" | "text" | "at" | "replaces">): { nonce: string; until: number; data: string } {
+  const data = encodeEvent({ t: "megaphone", id: r.id, name: r.name, text: r.text, scope: "all", ch: 0, at: r.at, staff: true, system: true, ...(r.replaces ? { replaces: r.replaces } : {}) });
+  return { nonce: `s:${r.id}`, until: r.at + MEGAPHONE_TTL_MS, data };
+}
+

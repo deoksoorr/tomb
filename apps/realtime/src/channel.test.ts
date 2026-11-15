@@ -83,7 +83,12 @@ function setup(capacity = 3, graceMs = 20_000, room = false) {
   return { core, reservations, counts, visitors, conn, join, host };
 }
 
-const events = (c: Conn) => c.out.filter((d): d is string => typeof d === "string").map((d) => JSON.parse(d) as S2C);
+// 11/15 채널 전체 인원(count)은 들어옴·나감마다 따라온다 — 여기 테스트들은 그 밖의 이벤트 순서를 보므로 뺀다 (camp.test가 따로 본다)
+const events = (c: Conn) =>
+  c.out
+    .filter((d): d is string => typeof d === "string")
+    .map((d) => JSON.parse(d) as S2C)
+    .filter((e) => e.t !== "count");
 const snapshots = (c: Conn) =>
   c.out.filter((d): d is ArrayBuffer => typeof d !== "string").map((d) => decodeSnapshot(d)!);
 const welcome = (c: Conn) => events(c).find((e) => e.t === "welcome") as Extract<S2C, { t: "welcome" }>;

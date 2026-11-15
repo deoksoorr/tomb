@@ -1,3 +1,4 @@
+import { SCOPE_STAND } from "./lookoutMath";
 import {
   CAMP_BOARD,
   CAMP_BOARD_SPOT,
@@ -27,12 +28,15 @@ import {
   CAMP_TARP,
   CAMP_VAN_DOOR_DX,
   CAMP_VANS,
+  CAMP_VAN_GEAR,
   CAMP_WIDTH,
   campStreamX,
   type CampNpcId,
   type Furniture,
 } from "@tomb/protocol";
 import type { CampInteractable, CampLight } from "./campTypes";
+import { CAMP_FISHING_SPOTS } from "@tomb/protocol";
+import { CAMP_GATHER_NODES } from "@/lib/forage/catalog";
 
 // 11/15 언젠가 캠핑장 배치 — 순수 데이터 (Phaser 없음 → campLayout.test.ts가 충돌·길을 검사한다).
 // 좌석·NPC·구역 좌표의 원본은 packages/protocol/src/camp.ts (서버 좌석 판정과 같다). 여기서는 그 위에
@@ -70,9 +74,9 @@ export const CAMP_PATHS: readonly CampPath[] = [
     id: "trail",
     hw: 10,
     pts: [
-      { x: 150, y: 748 },
-      { x: 236, y: 734 },
-      { x: 300, y: 724 },
+      { x: 214, y: 640 },
+      { x: 284, y: 650 },
+      { x: 318, y: 690 },
       { x: 404, y: 718 },
       { x: 520, y: 716 },
       { x: 556, y: 772 },
@@ -122,8 +126,8 @@ export const CAMP_PATHS: readonly CampPath[] = [
       { x: 178, y: 232 },
       { x: 180, y: 420 },
       { x: 180, y: 560 },
-      { x: 214, y: 660 },
-      { x: 236, y: 734 },
+      { x: 196, y: 610 },
+      { x: 214, y: 640 },
     ],
   },
   // 캠핑카 → 광장
@@ -312,16 +316,23 @@ function keepClear(x: number, y: number): boolean {
   if (Math.abs(x - campStreamX(y)) < CAMP_STREAM_HALF_W + 14) return true;
   if (Math.hypot(x - CAMP_FIRE.x, (y - CAMP_FIRE.y) * 1.1) < CAMP_PLAZA_R + 22) return true;
   if (inRect({ x: CAMP_OFFICE.x - CAMP_OFFICE_W / 2, y: CAMP_OFFICE.y - CAMP_OFFICE_H, w: CAMP_OFFICE_W, h: CAMP_OFFICE_H }, x, y, 22)) return true;
-  if (x < 500 && y > 660) return true; // 정류장·버스 길·관리소 앞마당
+  // 정류장·보도·버스 길 (그 아래는 숲) · 관리소 앞마당
+  // (길 아래 나무는 줄기가 길에서 충분히 떨어져야 잎이 길을 덮지 않는다)
+  if (x < 330 && y > CAMP_BUS_STOP.y - CAMP_SHELTER_H - 10 && y < CAMP_ROAD.y + CAMP_ROAD.h + 40) return true;
+  if (x >= 290 && x < 540 && y > 660) return true;
   if (inRect(CAMP_TARP, x, y, 26)) return true;
   if (inRect(CAMP_LOOKOUT, x, y, 22)) return true;
   if (x > CAMP_LOOKOUT_STAIRS.x - 20 && x < CAMP_LOOKOUT_STAIRS.x + CAMP_LOOKOUT_STAIRS.w + 20 && y > CAMP_LOOKOUT.y + CAMP_LOOKOUT.h - 4 && y < CAMP_LOOKOUT.y + CAMP_LOOKOUT.h + 40) return true;
-  for (const v of CAMP_VANS) if (x > v.x - 56 && x < v.x + 70 && y > v.y - 58 && y < v.y + 34) return true;
+  // 캠핑카와 앞마당 캠핑 도구
+  for (const v of CAMP_VANS) if (x > v.x - (v.plate ? 112 : 76) && x < v.x + 70 && y > v.y - 58 && y < v.y + 58) return true;
   for (const d of CAMP_DECKS) if (Math.abs(x - d.x) < CAMP_DECK_W / 2 + 20 && Math.abs(y - d.y) < CAMP_DECK_H / 2 + 22) return true;
   for (const s of CAMP_SEATS) if (Math.hypot(x - s.x, y - s.y) < 26) return true;
   for (const n of CAMP_NPCS) if (Math.hypot(x - n.x, y - n.y) < 28) return true;
   for (const b of CAMP_BOULDERS) if (Math.hypot(x - b.x, y - b.y) < 24) return true;
   if (Math.hypot(x - CAMP_BOARD_SPOT.x, y - CAMP_BOARD_SPOT.y) < 26) return true;
+  // A-6 계곡 낚시 자리·채집 지점 (나무가 그 자리를 비켜 선다)
+  for (const f of CAMP_FISHING_SPOTS) if (Math.hypot(x - f.x, y - f.y) < 22) return true;
+  for (const n of CAMP_GATHER_NODES) if (Math.hypot(x - n.x, y - n.y) < 20) return true;
   return false;
 }
 
@@ -443,6 +454,7 @@ export function campStaticColliders(): Rect[] {
     { x: CAMP_BUS_SIGN.x - 2, y: CAMP_BUS_SIGN.y - 4, w: 4, h: 4 },
     { x: CAMP_BUS_TIMETABLE.x - 6, y: CAMP_BUS_TIMETABLE.y - 4, w: 12, h: 4 },
     { x: CAMP_BOARD_SPOT.x - 13, y: CAMP_BOARD_SPOT.y - 5, w: 26, h: 5 },
+    ...campVanGearColliders(),
     ...lookoutRails(),
     ...streamColliders(),
     ...CAMP_BOULDERS.map(boulderCollider),
@@ -451,6 +463,15 @@ export function campStaticColliders(): Rect[] {
     ...CAMP_TREES.map(treeCollider),
   ];
 }
+/** 캠핑카 앞 캠핑 도구: 접이식 탁자(다리 쪽만, 랜턴은 그 위)·화롯대·아이스박스 (의자는 가구 충돌) */
+export function campVanGearColliders(): Rect[] {
+  return CAMP_VAN_GEAR.flatMap((g) => [
+    { x: g.table.x - 12, y: g.table.y - 3, w: 24, h: 3 },
+    { x: g.brazier.x - 7, y: g.brazier.y - 5, w: 14, h: 5 },
+    { x: g.icebox.x - 8, y: g.icebox.y - 5, w: 16, h: 5 },
+  ]);
+}
+
 export function campFurnitureColliders(): Rect[] {
   return [...CAMP_FURNITURE.map(campFurnitureCollider).filter((r): r is Rect => r !== null), CAMP_TABLE_COLLIDER];
 }
@@ -499,6 +520,7 @@ export const CAMP_INTERACTABLES: readonly CampInteractable[] = [
   ...CAMP_DECKS.map((d): CampInteractable => ({ id: `deck:${d.n}`, kind: "deck", deck: d.n, x: d.x, y: d.y + 2, r: 18, label: `${d.n}번 데크` })),
   { id: "board", kind: "board", x: CAMP_BOARD_SPOT.x, y: CAMP_BOARD_SPOT.y + 12, r: 20, label: "의뢰판 보기" },
   { id: "sign", kind: "sign", x: CAMP_BUS_SIGN.x, y: CAMP_BUS_SIGN.y + 12, r: 18, label: "표지판 보기" },
+  { id: "lookout", kind: "lookout", x: SCOPE_STAND.x, y: SCOPE_STAND.y + 14, r: 20, label: "망원경으로 캠핑장 보기" },
 ];
 
 // ── 밤 빛 ──
@@ -520,6 +542,11 @@ export const CAMP_LIGHTS: readonly CampLight[] = [
   { x: CAMP_BUS_TIMETABLE.x, y: CAMP_BUS_TIMETABLE.y - 18, scale: 0.4, tint: 0xd8f0ff, base: 0.6 },
   // 캠핑카 창 (주황 불빛)
   ...CAMP_VANS.map((v) => ({ x: v.x - 8, y: v.y - 24, scale: 0.55, tint: 0xffb060, base: 0.7 })),
+  // 캠핑카 앞 화롯대·랜턴
+  ...CAMP_VAN_GEAR.flatMap((g) => [
+    { x: g.brazier.x, y: g.brazier.y - 10, scale: 1.0, tint: 0xff9a48, base: 0.9 },
+    { x: g.lantern.x, y: g.lantern.y - 14, scale: 0.55, tint: 0xffd890, base: 0.8 },
+  ]),
   // 타프 아래 걸린 랜턴
   { x: CAMP_TABLE.x, y: CAMP_TABLE.y - 30, scale: 1.1, tint: 0xffc070, base: 0.85 },
   // 전망대 랜턴 둘

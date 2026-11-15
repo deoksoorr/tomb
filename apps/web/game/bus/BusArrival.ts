@@ -2,12 +2,14 @@ import * as Phaser from "phaser";
 import { ambienceAt, parseAmbienceOverride } from "@/lib/ambience";
 import { DEPTH } from "../config";
 import { BUS_DOOR_DX, BUS_FOOT, BUS_FRAME, BUS_TEX, BUS_W, ensureBusTextures, removeBusTextures } from "./busArt";
+import { uturnAt, UTURN_MS } from "./busUturn";
 import { lightsOn } from "./busRideMath";
 import type { BusArrivalApi, BusArrivalFactory, BusArrivalOptions } from "./busTypes";
 
 // 정류장에 들어오는 버스 (월드 좌표). 화면 밖에서 들어와 감속해 문이 정류장 앞에 오게 서고 문을 연다 → 타면 문 닫고 떠난다.
 // 마을(납품 부두 위 마당 정차 칸)과 캠핑장(아래 왼쪽 길)이 같은 코드를 쓴다. 밤에는 창문 빛·전조등이 켜진다.
 // 텍스처는 처음 부를 때 굽고, 마지막 버스가 destroy되면 지운다 (게임 하나에 참조 수를 센다).
+// 11/15 떠날 때는 정류장 앞에서 유턴해 왔던 길로 되돌아 나간다 (옆모습이 좁아지며 → 앞모습 → 반대쪽 옆모습, 화면 쪽으로 반원을 그린다).
 
 const ARRIVE_MS = 1900;
 const DEPART_MS = 1400;
@@ -25,6 +27,7 @@ type Phase =
   | { k: "in"; t0: number; from: number; to: number; done: () => void }
   | { k: "door"; t0: number; open: boolean; then: () => void }
   | { k: "out"; t0: number; from: number; dist: number; done: () => void }
+  | { k: "turn"; t0: number; x0: number; done: () => void }
   | { k: "fade"; t0: number; to: 0 | 1; done: () => void };
 
 type Dust = { img: Phaser.GameObjects.Image; born: number; vx: number };
@@ -35,7 +38,7 @@ class BusArrival implements BusArrivalApi {
   private readonly windows: Phaser.GameObjects.Image;
   private readonly head: Phaser.GameObjects.Image;
   private readonly dust: Dust[] = [];
-  private readonly dir: 1 | -1;
+  private dir: 1 | -1;
   private readonly stopX: number;
   private readonly night: boolean;
   private phase: Phase = { k: "idle" };
@@ -120,11 +123,18 @@ class BusArrival implements BusArrivalApi {
         this.phase = { k: "fade", t0: now, to: 0, done: onGone };
         return;
       }
-      const v = this.scene.cameras.main.worldView;
-      const edge = this.dir > 0 ? Math.max(v.right, this.body.x + 200) + BUS_W : Math.min(v.x, this.body.x - 200) - BUS_W;
-      this.phase = { k: "out", t0: now, from: this.body.x, dist: Math.abs(edge - this.body.x), done: onGone };
+      // 유턴: 화면 쪽으로 반원을 그리며 방향을 바꾼 뒤, 왔던 쪽으로 화면 밖까지
+      this.phase = { k: "turn", t0: now, x0: this.body.x, done: () => this.driveOut(onGone) };
     };
     this.doorTo(false, leave);
+  }
+
+  /** 지금 방향으로 화면 밖까지 (유턴 뒤) */
+  private driveOut(onGone: () => void): void {
+    const now = this.scene.time.now;
+    const v = this.scene.cameras.main.worldView;
+    const edge = this.dir > 0 ? Math.max(v.right, this.body.x + 200) + BUS_W : Math.min(v.x, this.body.x - 200) - BUS_W;
+    this.phase = { k: "out", t0: now, from: this.body.x, dist: Math.abs(edge - this.body.x), done: onGone };
   }
 
   destroy(): void {
@@ -206,6 +216,38 @@ class BusArrival implements BusArrivalApi {
         this.move(p.from + this.dir * p.dist * e, now, e);
         if (u >= 1) {
           this.show(false);
+          this.phase = { k: "idle" };
+          p.done();
+        }
+        break;
+      }
+      case "turn": {
+        const st = uturnAt((now - p.t0) / UTURN_MS);
+        const x = p.x0 + this.dir * st.dx;
+        const y = this.o.laneY + st.dy;
+        if (st.view === "front") {
+          if (this.body.texture.key !== BUS_TEX.front) this.body.setTexture(BUS_TEX.front);
+          this.body.setFlipX(false);
+        } else {
+          if (this.body.texture.key !== BUS_TEX.body) this.body.setTexture(BUS_TEX.body, BUS_FRAME.closedA);
+          // 뒤 절반은 반대쪽을 본다
+          this.body.setFlipX(st.view === "back" ? this.dir > 0 : this.dir < 0);
+        }
+        this.body.setScale(st.sx, 1).setPosition(Math.round(x), Math.round(y)).setDepth(y - BUS_FOOT);
+        this.windows.setVisible(false);
+        this.head.setVisible(false);
+        if (now - this.dustAt > 120) {
+          this.dustAt = now;
+          this.puff(now, Math.round(x));
+        }
+        if (st.done) {
+          // 방향을 바꿨다: 옆모습·창·전조등을 새 방향으로
+          this.dir = this.dir > 0 ? -1 : 1;
+          this.body.setTexture(BUS_TEX.body, BUS_FRAME.closedA).setScale(1).setFlipX(this.dir < 0).setY(this.o.laneY).setDepth(this.o.laneY - BUS_FOOT);
+          this.windows.setFlipX(this.dir < 0);
+          this.head.setOrigin(this.dir > 0 ? 0 : 1, 0.5).setFlipX(this.dir < 0);
+          this.show(true);
+          this.placeAt(this.body.x);
           this.phase = { k: "idle" };
           p.done();
         }

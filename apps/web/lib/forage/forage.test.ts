@@ -243,7 +243,9 @@ describe("맵 배치", () => {
   });
 
   it("채집 지점·NPC: 서 있을 수 있고, 물·소품·좌석·낚시 자리와 겹치지 않는다", () => {
-    const spots = [...GATHER_NODES.map((n) => ({ id: n.id, x: n.x, y: n.y })), ...NPCS.map((n) => ({ id: n.id, x: n.x, y: n.y }))];
+    // 마을 지점만 (11/15 캠핑장 지점 map: "camp"은 캠핑장 맵 좌표 — game/camp/campForage.test가 본다)
+    const village = GATHER_NODES.filter((n) => !n.map);
+    const spots = [...village.map((n) => ({ id: n.id, x: n.x, y: n.y })), ...NPCS.map((n) => ({ id: n.id, x: n.x, y: n.y }))];
     expect(new Set(GATHER_NODES.map((n) => n.id)).size).toBe(GATHER_NODES.length);
     for (const p of spots) {
       expect(standable(p.x, p.y), p.id).toBe(true);

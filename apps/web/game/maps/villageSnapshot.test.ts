@@ -6,6 +6,8 @@ import { BUS_STOP, FISH_DECOR } from "../world/fishZone";
 
 // 11/15 두 번째 맵(캠핑장)을 더하면서 마을 데이터가 한 칸도 바뀌지 않았는지 지문으로 확인한다.
 // 마을을 일부러 고친 패치라면 아래 값을 새로 찍어 바꾼다 (MAP_VERSION도 함께 올릴 일인지 먼저 본다).
+// 고친 기록: 11/15 주말 버스 정류장 다듬기(승강장·정차 칸·E 범위·시간표 자리) + 납품 부두 좁히기(아래 마당·잔교·낚시 자리 7 → 6, 나루터와 띄움)
+//   — 바뀐 충돌·소품·상호작용·걷기 격자는 모두 납품 부두·정류장 구역(x 1136~1408, y 632~920) 안이다
 
 function fnv(s: string): string {
   let h = 0x811c9dc5;
@@ -42,13 +44,13 @@ const layoutPrint = () =>
 
 describe("마을 지문 (캠핑장이 생겨도 그대로)", () => {
   it("배치·좌석·상호작용·충돌·소품", () => {
-    expect(layoutPrint()).toBe("df7457a5");
+    expect(layoutPrint()).toBe("245f3d22");
   });
   it("걷기 격자", () => {
     const g = walkableGrid(8);
-    expect(fnv(Array.from(g.cells as ArrayLike<number>).join(""))).toBe("6b5a3a75");
+    expect(fnv(Array.from(g.cells as ArrayLike<number>).join(""))).toBe("11b892dc");
   });
   it("미니맵 바탕", () => {
-    expect(fnv(Array.from(minimapPixels()).join(","))).toBe("dbe6a07a");
+    expect(fnv(Array.from(minimapPixels()).join(","))).toBe("2116b7cc");
   });
 });

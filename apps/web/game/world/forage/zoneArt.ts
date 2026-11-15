@@ -1,6 +1,6 @@
 import type * as Phaser from "phaser";
 import { darken, Grid, lighten } from "../../sprites/pixel";
-import { BUS_BAY, BUS_SHELTER_H, BUS_SHELTER_W, BUS_SIGN_H, BUS_TIMETABLE_H, FISH_ARCH_H, FISH_ARCH_W, WHARF_BOARD_H, WHARF_BOARD_W, type FishDecorKind } from "../fishZone";
+import { BUS_BAY, BUS_PLATFORM, BUS_SHELTER_H, BUS_SHELTER_W, BUS_SIGN_H, BUS_TIMETABLE_H, FISH_ARCH_H, FISH_ARCH_W, WHARF_BOARD_H, WHARF_BOARD_W, WHARF_CURB, type FishDecorKind } from "../fishZone";
 
 // 낚시터 그림 (코드로 그리는 픽셀아트): 입구 아치, 그물 말리는 대, 통발 더미, 물고기 상자, 물통, 등불 기둥,
 // 낚시 자리 표시(나무 낚시 의자 + 물결 고리 + 손짓 표시). 발 위치 = 그림 맨 아래 줄 가운데.
@@ -11,6 +11,9 @@ export const ZTEX = {
   ripple: (f: number) => `fishzone-ripple-${f}`,
   hook: "fishzone-hook",
   busBay: "fishzone-bus-bay",
+  /** 11/15 정류장 승강장 바닥 · 위 마당 테두리 연석 */
+  busPlatform: "fishzone-bus-platform",
+  wharfCurb: "fishzone-wharf-curb",
 } as const;
 
 const OUT = 0x16121a;
@@ -383,25 +386,27 @@ function timetable(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-/** 골목 바닥 버스 정차 칸: 노란 테두리 + 앞쪽 지그재그 + 가운데 "BUS" 글자 (바닥 칠, 반투명) */
+/**
+ * 골목 바닥 버스 정차 칸 (11/15 다시 그림): 연석 쪽(위 변)을 따라 노란 지그재그, 양 끝 노란 막대, 가운데 흰 "BUS" — 버스 몸이 꼭 들어가는 길이.
+ * 예전엔 칸이 골목 가운데에 떠 있고 지그재그가 골목 바깥쪽에 있었다
+ */
 function busBay(): HTMLCanvasElement {
   const W = BUS_BAY.w;
   const H = BUS_BAY.h;
   const g = new Grid(W, H);
   const Y = 0xe8c040;
-  const a = 200;
-  for (let x = 0; x < W; x++) {
-    if (x % 6 < 4) g.set(x, 0, Y, a);
-  }
-  g.vline(0, 0, H - 1, Y);
-  g.vline(W - 1, 0, H - 1, Y);
-  // 앞쪽(골목 가운데 쪽) 지그재그
+  const a = 210;
+  // 연석 쪽 지그재그 (위 변을 따라 위아래로)
   for (let x = 0; x < W; x++) {
     const p = x % 8;
-    const y = H - 2 - (p < 4 ? p : 8 - p);
+    const y = 1 + (p < 4 ? p : 8 - p);
     g.set(x, y, Y, a);
   }
-  // BUS (3×5 글자)
+  // 양 끝 막대 (칸의 앞뒤)
+  for (const x of [0, 1, W - 2, W - 1]) g.rect(x, 0, 1, H - 3, Y, a);
+  // 골목 가운데 쪽 경계: 짧은 흰 점선
+  for (let x = 4; x < W - 4; x++) if (x % 10 < 5) g.set(x, H - 2, 0xe8e2d0, 120);
+  // BUS (3×5 글자, 칸 가운데)
   const F: Record<string, string[]> = {
     B: ["110", "101", "111", "101", "110"],
     U: ["101", "101", "101", "101", "111"],
@@ -409,8 +414,65 @@ function busBay(): HTMLCanvasElement {
   };
   const tx = (W >> 1) - 11;
   [..."BUS"].forEach((ch, k) =>
-    F[ch].forEach((row, y) => [...row].forEach((v, x) => v === "1" && g.rect(tx + k * 8 + x * 2, 6 + y * 2, 2, 2, 0xf0e8d0, 190))),
+    F[ch].forEach((row, y) => [...row].forEach((v, x) => v === "1" && g.rect(tx + k * 8 + x * 2, 8 + y * 2, 2, 2, 0xf0e8d0, 150))),
   );
+  return g.toCanvas();
+}
+
+/**
+ * 정류장 승강장 (11/15): 자갈 마당 위에 한 단 높인 포장 바닥. 네모 판석 + 골목 쪽 노란 점자 블록 띠 + 아래 변 연석(위 밝은 줄·옆면·그림자).
+ * 지붕·시간표·팻말이 이 위에 서서 한 정류장으로 읽힌다
+ */
+function busPlatform(): HTMLCanvasElement {
+  const W = BUS_PLATFORM.w;
+  const H = BUS_PLATFORM.h;
+  const g = new Grid(W, H);
+  const SLAB = 0xb4ae9f;
+  for (let y = 1; y < H - 4; y++)
+    for (let x = 1; x < W - 1; x++) {
+      const joint = x % 14 === 0 || y % 12 === 0;
+      const n = ((x * 7 + y * 13) % 11) / 11;
+      g.set(x, y, joint ? darken(SLAB, 0.16) : n > 0.82 ? lighten(SLAB, 0.06) : n < 0.12 ? darken(SLAB, 0.05) : SLAB);
+    }
+  // 가장자리 (자갈과 만나는 테)
+  g.hline(0, W - 1, 0, darken(SLAB, 0.3));
+  g.vline(0, 0, H - 4, darken(SLAB, 0.3));
+  g.vline(W - 1, 0, H - 4, darken(SLAB, 0.3));
+  // 노란 점자 블록 띠 (연석에서 한 뼘 안쪽)
+  const ty = H - 10;
+  g.rect(2, ty, W - 4, 3, 0xd8b03a);
+  for (let x = 3; x < W - 3; x += 2) g.set(x, ty + 1, 0xf0d070);
+  // 연석: 위 밝은 줄 · 옆면 · 아래 그림자
+  g.hline(0, W - 1, H - 4, 0xddd8ca);
+  g.rect(0, H - 3, W, 2, 0x8e897d);
+  for (let x = 0; x < W; x += 9) g.vline(x, H - 3, H - 2, 0x6e6a60);
+  for (let x = 0; x < W; x++) g.set(x, H - 1, 0x000000, 70);
+  // 배수구 (오른쪽 끝)
+  g.rect(W - 16, H - 7, 8, 2, 0x4a4a48);
+  for (let x = W - 15; x < W - 8; x += 2) g.set(x, H - 7, 0x2a2a28);
+  return g.toCanvas();
+}
+
+/** 위 마당 테두리 연석 (11/15): 자갈 마당 네 변에 낮은 판석 테 — 골목·광장과 마당이 갈리게. 안쪽은 비어 있다 (자갈과 비슷한 톤으로 은은하게) */
+function wharfCurb(): HTMLCanvasElement {
+  const W = WHARF_CURB.w;
+  const H = WHARF_CURB.h;
+  const g = new Grid(W, H);
+  const C = 0x857f74;
+  const HI = 0xa29c90;
+  const stone = (along: number) => (along % 10 === 0 ? darken(C, 0.22) : C);
+  for (let x = 0; x < W; x++) {
+    g.set(x, 0, stone(x));
+    g.set(x, 1, HI, 200);
+    g.set(x, H - 2, stone(x));
+    g.set(x, H - 1, darken(C, 0.3));
+  }
+  for (let y = 0; y < H; y++) {
+    g.set(0, y, stone(y));
+    g.set(1, y, HI, 200);
+    g.set(W - 1, y, stone(y));
+    g.set(W - 2, y, darken(C, 0.08), 200);
+  }
   return g.toCanvas();
 }
 
@@ -425,4 +487,6 @@ export function ensureZoneTextures(scene: Phaser.Scene): void {
   tx.addCanvas(ZTEX.ripple(1), ripple(1));
   tx.addCanvas(ZTEX.hook, hook());
   tx.addCanvas(ZTEX.busBay, busBay());
+  tx.addCanvas(ZTEX.busPlatform, busPlatform());
+  tx.addCanvas(ZTEX.wharfCurb, wharfCurb());
 }

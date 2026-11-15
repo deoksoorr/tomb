@@ -113,7 +113,7 @@ export type NetCallbacks = {
   onMeStale?(): void;
   /** 친구가 들어왔다·나갔다 (실시간 서버가 밀어 준다) */
   onFriend?(m: { key: string; name: string; on: boolean }): void;
-  onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true }): void;
+  onMegaphone?(m: { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; system?: true; replaces?: string }): void;
   /**
    * 11/15 맵을 옮겼다 (switchMap의 답). map = 서버가 정한 지금 맵 (허락이 없으면 옮기기 전 맵 그대로),
    * peers·seats = 그 맵 사람(나 빼고)과 그 사람들이 앉은 자리
@@ -167,6 +167,8 @@ export class RealtimeClient {
   private mapTimer: ReturnType<typeof setTimeout> | null = null;
   /** 11/15 다른 맵 장면(캠핑장)이 받는 콜백. 없으면 처음 콜백(월드) */
   private alt: NetCallbacks | null = null;
+  /** 11/15 채널 전체 인원 (마을·캠핑장 합계, 서버 welcome.n·count). 옛 서버면 null → 같은 맵 사람 수 */
+  private total: number | null = null;
   cap = 0;
   mySid: Sid | null = null;
   private readonly peers = new Set<Sid>();
@@ -625,6 +627,12 @@ export class RealtimeClient {
         case "mapped":
           this.onMapped(m.m, m.peers ?? [], m.seats ?? {});
           break;
+        case "count":
+          if (typeof m.n === "number" && Number.isFinite(m.n)) {
+            this.total = m.n;
+            this.emitStatus();
+          }
+          break;
         case "welcome":
           this.onWelcome(m);
           break;
@@ -702,7 +710,18 @@ export class RealtimeClient {
         // ── 23번 확성기 ──
         case "megaphone":
           if (typeof m.id === "string" && typeof m.text === "string" && typeof m.name === "string")
-            this.cb.onMegaphone?.({ id: m.id, name: m.name, text: m.text, scope: m.scope === "all" ? "all" : "channel", ch: Number(m.ch) || 0, at: Number(m.at) || Date.now(), ...(m.staff === true ? { staff: true as const } : {}) });
+            this.cb.onMegaphone?.({
+              id: m.id,
+              name: m.name,
+              text: m.text,
+              scope: m.scope === "all" ? "all" : "channel",
+              ch: Number(m.ch) || 0,
+              at: Number(m.at) || Date.now(),
+              ...(m.staff === true ? { staff: true as const } : {}),
+              // 11/15 마을 공지 줄 (실시간 서버가 /internal/say로 띄운 것)
+              ...(m.system === true ? { system: true as const } : {}),
+              ...(typeof m.replaces === "string" ? { replaces: m.replaces } : {}),
+            });
           break;
         case "me":
           this.cb.onMeStale?.();
@@ -763,6 +782,7 @@ export class RealtimeClient {
     // 11/15 서버가 아는 내 맵 (없으면 마을 — 허락이 없거나 옛 서버)
     this.map = m.m === "camp" ? "camp" : "village";
     this.mapPending = null;
+    this.total = typeof m.n === "number" && Number.isFinite(m.n) ? m.n : null;
     // 22번: 서버 시계 맞추기 (왕복 절반만큼 늦게 도착했다고 본다)
     if (typeof m.now === "number" && Number.isFinite(m.now)) this.clockOffset = m.now + (this.rtt ?? 60) / 2 - Date.now();
     this.target = m.channel;
@@ -1087,7 +1107,8 @@ export class RealtimeClient {
     const pending = this.mode === "reconnecting" || this.mode === "connecting";
     const channel = online || pending ? (this.channel ?? (typeof this.target === "number" ? this.target : null)) : null;
     // 나를 포함한 인원. 혼자 걷는 동안(관람·오프라인)은 나 하나
-    const status = { mode: this.mode, channel, count: online ? this.peers.size + 1 : 1, cap: this.cap, ...(this.map === "camp" ? { map: "camp" as const } : {}) };
+    // 11/15 HUD는 맵이 달라도 채널 전체 인원 (서버가 알려 준 값, 옛 서버면 같은 맵 사람 수)
+    const status = { mode: this.mode, channel, count: online ? (this.total ?? this.peers.size + 1) : 1, cap: this.cap, ...(this.map === "camp" ? { map: "camp" as const } : {}) };
     const prev = bridge.last("net:status");
     // 재시도마다 같은 상태를 다시 보내지 않는다
     if (prev && prev.mode === status.mode && prev.channel === status.channel && prev.count === status.count && prev.cap === status.cap && prev.map === status.map) return;

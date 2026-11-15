@@ -94,6 +94,8 @@ export type WelcomeMsg = {
   goblin?: GoblinInfo;
   /** 11/15 서버가 아는 내 맵 (캠핑장일 때만 "camp". 없으면 마을 — 옛 서버도 마을) */
   m?: MapId;
+  /** 11/15 채널 전체 인원 (마을·캠핑장 합계, 유예 중 포함). 없으면 옛 서버 → 같은 맵 사람 수로 */
+  n?: number;
 };
 
 export type S2C =
@@ -149,11 +151,15 @@ export type S2C =
    * 받는 사람에게만: 11/15 맵을 옮겼다 (map 요청의 답). m = 서버가 정한 지금 맵 (허락이 없으면 그대로),
    * peers·seats = 그 맵에 있는 사람(나 빼고)과 그 사람들이 앉은 자리. 옛 클라이언트는 map을 보내지 않아 받을 일이 없다
    */
-  | { t: "mapped"; m: MapId; peers: PeerInfo[]; seats: Record<string, Sid> };
+  | { t: "mapped"; m: MapId; peers: PeerInfo[]; seats: Record<string, Sid> }
+  /** 11/15 채널 전체 인원이 바뀌었다 (들어옴·나감, 맵 상관없이 모두에게). 옛 클라이언트는 모르는 t라 버린다 */
+  | { t: "count"; n: number };
 
 /** 23번 확성기 방송 (보낸 사람에게도 간다) */
 /** staff = 운영자 계정이 외친 것 (Vercel이 증서에 넣은 것만 → 이름 금색) */
-export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number; staff?: true };
+/** system = 마을 공지 줄 (/internal/say — 금색, "운영자" 딱지·신고 없음. 옛 클라이언트는 staff만 보고 금색으로 그린다) */
+/** replaces = 이 줄로 바꿔 끼울 앞 공지 id (긴급 의뢰가 끝나면 시작 공지를 끝 공지로) */
+export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number; staff?: true; system?: true; replaces?: string };
 
 export function encodeEvent(msg: C2S | S2C): string {
   return JSON.stringify(msg);

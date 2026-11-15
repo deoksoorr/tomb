@@ -2,6 +2,7 @@ import {
   AVATAR_COLORS,
   BOAT_SEATS,
   CAMP_ARRIVE,
+  CAMP_FISHING_SPOTS,
   DIR,
   SPAWN,
   STATE,
@@ -224,6 +225,21 @@ describe("seats per map", () => {
     expect(events(v)).toContainEqual({ t: "seatDenied", seatId: "qL1" });
   });
 
+  it("A-6 camp fishing spots: one person per spot in camp, unknown in the village", () => {
+    const { core, join } = setup();
+    const f = CAMP_FISHING_SPOTS[0];
+    const a = join("a", { camp: true, map: "camp", spawn: { x: f.x, y: f.y } });
+    core.message(a, send({ t: "sit", seatId: f.id }), 0);
+    expect(core.peer(1)).toMatchObject({ seatId: f.id });
+    const b = join("b", { camp: true, map: "camp", spawn: { x: f.x, y: f.y + 2 } });
+    core.message(b, send({ t: "sit", seatId: f.id }), 0);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: f.id });
+    // 마을 맵에서는 없는 자리
+    const v = join("v", { spawn: { x: f.x, y: f.y } });
+    core.message(v, send({ t: "sit", seatId: f.id }), 0);
+    expect(events(v)).toContainEqual({ t: "seatDenied", seatId: f.id });
+  });
+
   it("the same coordinate spot id can be held in both maps at once (wire id stays the same)", () => {
     const { core, join } = setup();
     const spot = spotSeatId("hang", 300, 500);
@@ -344,3 +360,18 @@ describe("worker side (?m=camp)", () => {
   });
 });
 
+
+describe("channel total count (11/15 HUD — 맵이 달라도 채널 전체)", () => {
+  it("welcome.n = 채널 전체, 들어옴·나감마다 count를 모두에게 (맵 상관없이)", () => {
+    const { core, join } = setup();
+    const a = join("a", { camp: true, map: "camp", spawn: { x: 300, y: 700 } });
+    expect(welcome(a).n).toBe(1);
+    const v = join("v");
+    expect(welcome(v).n).toBe(2);
+    expect(events(a).filter((e) => e.t === "count")).toEqual([{ t: "count", n: 2 }]); // 캠핑장 사람도 마을 입장을 센다
+    expect(events(v).some((e) => e.t === "count")).toBe(false); // 방금 들어온 사람은 welcome에 이미 있다
+    clear(a, v);
+    core.disconnect(v, 1000, 10);
+    expect(events(a).filter((e) => e.t === "count")).toEqual([{ t: "count", n: 1 }]);
+  });
+});

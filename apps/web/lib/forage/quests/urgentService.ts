@@ -35,6 +35,7 @@ import {
   URGENT_SHOW_MS,
   URGENT_TITLE_MS,
   urgentAnnounce,
+  urgentEndNotice,
   urgentGoal,
   urgentReward,
   urgentSchedule,
@@ -162,12 +163,14 @@ async function nameOf(acct: string, now: number): Promise<string> {
   return name;
 }
 
-const pct = (n: number, goal: number) => (goal > 0 ? Math.floor((n * 100) / goal) : 0);
+/** 확성기 공지 id (의뢰·공지마다 정해 둔다 — 끝 공지가 시작 공지를 바꿔 끼울 수 있게) */
+export const urgentNoticeId = (evId: string, field: "a0" | "a1" | "a2") => `urg-${evId}-${field}`;
 
-/** 마을 확성기 줄 (모든 채널). 실패해도 의뢰는 그대로 */
+/** 마을 확성기 줄 (모든 채널, 접속 중인 화면에는 바로). 끝 공지(a1)는 시작 공지(a0)를 바꿔 끼운다 — 끝난 뒤 "(20분)"이 남지 않게. 실패해도 의뢰는 그대로 */
 async function notice(ev: UrgentSlot, field: "a0" | "a1" | "a2", text: string, now: number): Promise<void> {
   try {
-    if (await urgentStore().mark(ev.id, field)) await pushVillageNotice(text, now);
+    if (await urgentStore().mark(ev.id, field))
+      await pushVillageNotice(text, now, { id: urgentNoticeId(ev.id, field), ...(field === "a1" ? { replaces: urgentNoticeId(ev.id, "a0") } : {}) });
   } catch (e) {
     console.warn("[urgent] 확성기 실패", e);
   }
@@ -197,10 +200,7 @@ export async function urgentPublic(now = Date.now()): Promise<UrgentPublicResult
   // 확성기: 시작 · 150%(축제) · 끝 — 각각 한 번
   if (live && !st.a0) await notice(ev, "a0", `📢 ${urgentAnnounce(ev.kind, goal)} (${Math.ceil((ev.end - now) / 60_000)}분)`, now);
   if (st.fest > 0 && !st.a2) await notice(ev, "a2", `🎆 긴급 의뢰 150% 달성! 불꽃축제가 열렸어요`, now);
-  if (!live && !st.a1) {
-    const p = pct(st.n, goal);
-    await notice(ev, "a1", p >= 50 ? `긴급 의뢰가 끝났어요. 목표의 ${p}%를 채웠어요! 게시판에서 보상을 받아 가세요` : `긴급 의뢰가 끝났어요. 목표의 ${p}%에서 멈췄어요`, now);
-  }
+  if (!live && !st.a1) await notice(ev, "a1", urgentEndNotice(ev.kind, goal, st.n), now);
   return { body, cacheSec: live ? 5 : 15 };
 }
 

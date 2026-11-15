@@ -9,6 +9,8 @@ import { hmacSign, hmacVerify } from "./token";
 //  - POST /internal/me    { visitorIds, exp }              → 접속 중인 그 방문자들에게 "내 정보 새로 받기"(관리자 포인트 지급 등)
 //  - POST /internal/where { visitorIds, fresh?, exp }      → 친구: 그 방문자들이 지금 어느 채널·자리에 있는지 (접속 안 했으면 빠진다)
 //  - POST /internal/hello { visitorId, name, key, friends, exp } → 친구: 입장 직전 "이 사람이 들어오면·나가면 이 친구들에게 알려 달라"
+//  - POST /internal/say   { id, name, text, at, replaces?, exp } → 11/15 마을 공지 한 줄을 열린 채널 모두의 확성기 줄에 지금 띄운다
+//                          (긴급 의뢰 시작·끝, 최고층 기록 등 — 웹이 확성기 기록에 남긴 것과 같은 id. replaces = 이 줄로 바꿔 끼울 앞 공지 id)
 
 export const INTERNAL_SIG_HEADER = "X-Tomb-Internal";
 /** 내부 요청 유효 시간 (초). 서버끼리라 짧게 */
@@ -23,7 +25,12 @@ export type InternalMe = { op: "me"; visitorIds: string[]; exp: number };
 export type InternalWhere = { op: "where"; visitorIds: string[]; fresh?: boolean; exp: number };
 /** 친구 들고 남 알림 등록 (웹 /api/join이 입장 토큰을 주기 직전). friends = 알릴 친구 방문자 id, key = 이 사람의 친구 키 */
 export type InternalHello = { op: "hello"; visitorId: string; name: string; key: string; friends: string[]; exp: number };
-export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere | InternalHello;
+/** 마을 공지 방송 (웹이 남긴 시스템 확성기 줄). at = 남긴 시각(ms) */
+export type InternalSay = { op: "say"; id: string; name: string; text: string; at: number; replaces?: string; exp: number };
+export type InternalRequest = InternalKick | InternalPeer | InternalMe | InternalWhere | InternalHello | InternalSay;
+/** 마을 공지 한 줄 최대 길이 (확성기 60자보다 넉넉히 — 시스템이 만든 문장이라 서명만 확인한다) */
+export const INTERNAL_SAY_MAX = 200;
+const SAY_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 const sigData = (body: string) => "internal:" + body;
 
@@ -71,6 +78,14 @@ export async function verifyInternal(
     if (typeof r.key !== "string" || !FRIEND_KEY_RE.test(r.key)) return null;
     if (!Array.isArray(ids) || ids.length > FRIEND_MAX || !ids.every((v) => typeof v === "string" && VISITOR_RE.test(v))) return null;
     return { op: "hello", visitorId: r.visitorId, name: r.name, key: r.key, friends: ids as string[], exp: r.exp };
+  }
+  if (r.op === "say") {
+    if (typeof r.id !== "string" || !SAY_ID_RE.test(r.id)) return null;
+    if (typeof r.name !== "string" || !r.name || r.name.length > 20) return null;
+    if (typeof r.text !== "string" || !r.text || [...r.text].length > INTERNAL_SAY_MAX) return null;
+    if (typeof r.at !== "number" || !Number.isFinite(r.at) || r.at <= 0) return null;
+    if (r.replaces !== undefined && (typeof r.replaces !== "string" || !SAY_ID_RE.test(r.replaces))) return null;
+    return { op: "say", id: r.id, name: r.name, text: r.text, at: r.at, ...(r.replaces !== undefined ? { replaces: r.replaces } : {}), exp: r.exp };
   }
   if (r.op === "where") {
     const ids = r.visitorIds;

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  CAMP_ARRIVE,
+  CAMP_BOARD,
+  CAMP_BUS_STOP,
+  CAMP_CAMPFIRE,
+  campCampfireOfSeat,
   CAMP_DECKS,
   CAMP_FURNITURE,
   CAMP_HEIGHT,
@@ -16,7 +21,7 @@ import {
 import { parseC2S } from "./events";
 import { signJoinToken, verifyJoinToken } from "./token";
 import { BOAT_SEATS, FERRIS_SEATS, FISHING_SPOTS, SEATS, spotSeatId } from "./world";
-import { STATE } from "./types";
+import { DIR, STATE } from "./types";
 
 describe("맵 목록 (11/15 캠핑장)", () => {
   it("마을·캠핑장 두 맵, 이름, 모르는 값은 마을", () => {
@@ -81,5 +86,23 @@ describe("맵 옮기기 메시지·입장 토큰", () => {
     const no = await verifyJoinToken("s", await signJoinToken("s", base));
     expect(yes?.camp).toBe(true);
     expect(no?.camp).toBeUndefined();
+  });
+});
+
+describe("11/15 캠핑장 2차 다듬기", () => {
+  it("모닥불 둘레 통나무 의자는 큰 모닥불 불멍 (마을 모닥불과 같은 연출)", () => {
+    expect(campCampfireOfSeat("qL1")).toEqual(CAMP_CAMPFIRE);
+    expect(campCampfireOfSeat("qL12")?.big).toBe(true);
+    expect(campCampfireOfSeat("qB-0")).toBeNull();
+  });
+  it("전망대 벤치는 경치(아래 캠핑장) 쪽을 본다", () => {
+    for (const id of ["qO1", "qO2"]) expect(CAMP_FURNITURE.find((f) => f.id === id)?.facing).toBe(DIR.down);
+  });
+  it("정류장은 맵 맨 아래가 아니다 (화면 아래 채팅창에 가리지 않게) — 정류장·타는 자리·내리는 자리가 아래 150px 밖", () => {
+    for (const p of [CAMP_BUS_STOP, CAMP_BOARD, CAMP_ARRIVE]) expect(p.y).toBeLessThan(CAMP_HEIGHT - 150);
+  });
+  it("캠핑카 앞 캠핑 의자 9개 (캠핑카마다 셋)", () => {
+    expect(CAMP_SEATS.filter((s) => s.id.startsWith("qC"))).toHaveLength(9);
+    expect(seatSlotIn("camp", "qC11")?.kind).toBe("seat");
   });
 });

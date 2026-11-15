@@ -8,7 +8,7 @@ import type { InputHub } from "../input/InputHub";
 import type { RealtimeClient } from "../net/RealtimeClient";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
 import type { Sfx } from "../world/Sfx";
-import { BUS_BAY, BUS_STOP } from "../world/fishZone";
+import { BUS_BAY, BUS_FROM_LEFT, BUS_LANE_Y, BUS_STOP } from "../world/fishZone";
 import { createBusArrival } from "../bus/BusArrival";
 import { BUS_RIDE_SCENE, type BusArrivalApi, type BusLeg, type BusRideControl, type BusRideData } from "../bus/busTypes";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
@@ -113,7 +113,7 @@ export class CampTrip {
       return;
     }
     pl.faceTo(VILLAGE_BUS_DOOR.x, VILLAGE_BUS_DOOR.y + 10, now);
-    this.bus = createBusArrival(w.scene, { doorX: VILLAGE_BUS_DOOR.x, laneY: BUS_BAY.y + BUS_BAY.h - 2, fromLeft: false, reduced: w.reduced });
+    this.bus = createBusArrival(w.scene, { doorX: VILLAGE_BUS_DOOR.x, laneY: BUS_LANE_Y, fromLeft: BUS_FROM_LEFT, reduced: w.reduced });
     this.bus.arrive(() => {
       if (this.phase !== "toCamp") return;
       this.walkIn(() => {
@@ -216,7 +216,7 @@ export class CampTrip {
       this.finishVillage(friend);
       return;
     }
-    this.bus = createBusArrival(w.scene, { doorX: VILLAGE_BUS_DOOR.x, laneY: BUS_BAY.y + BUS_BAY.h - 2, fromLeft: false, reduced: w.reduced });
+    this.bus = createBusArrival(w.scene, { doorX: VILLAGE_BUS_DOOR.x, laneY: BUS_LANE_Y, fromLeft: BUS_FROM_LEFT, reduced: w.reduced });
     this.bus.arrive(() => {
       if (this.phase !== "toVillage") return;
       this.stepOut(VILLAGE_BUS_LAND, () => {

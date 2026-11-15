@@ -27,7 +27,8 @@ export class CampfireView {
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly rig: CameraRig,
-    private readonly map: WorldMap,
+    /** 불티를 늘릴 맵 (마을 WorldMap, 11/15 캠핑장 CampMap) */
+    private readonly map: Pick<WorldMap, "boostCampfire">,
     private readonly reduced: boolean,
   ) {
     const bar = (): Phaser.GameObjects.Rectangle =>

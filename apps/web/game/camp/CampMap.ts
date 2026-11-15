@@ -16,6 +16,7 @@ import {
   CAMP_TABLE,
   CAMP_TARP,
   CAMP_VANS,
+  CAMP_VAN_GEAR,
   CAMP_WIDTH,
   CAMP_ZONES,
   campStreamX,
@@ -48,7 +49,7 @@ const FLAT = DEPTH.decal;
 /** 머리 위 (줄 조명·타프 천·물안개) — 어둠 막(DEPTH.dark)보다는 아래 */
 const OVERHEAD = 90_000;
 
-type Culled = Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
+type Culled = Phaser.GameObjects.Image | Phaser.GameObjects.Sprite | Phaser.GameObjects.BitmapText;
 type Npc = { id: CampNpcId; img: Phaser.GameObjects.Image; label: Phaser.GameObjects.BitmapText; x: number; y: number; on: boolean; phase: number; frame: number };
 type Hopper = { img: Phaser.GameObjects.Image; from: { x: number; y: number }; to: { x: number; y: number }; t0: number; dur: number; rest: number };
 type Mote = { img: Phaser.GameObjects.Image; x: number; y: number; t0: number; life: number; vx: number; vy: number };
@@ -78,6 +79,7 @@ export class CampMap implements CampMapApi {
   private readonly bulbs: { img: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; phase: number }[] = [];
   private lit = -1;
   private readonly embers: Mote[] = [];
+  private fireBoost = false;
   private readonly sparkles: Mote[] = [];
   private readonly fireflies: Mote[] = [];
   private readonly drips: Mote[] = [];
@@ -162,10 +164,22 @@ export class CampMap implements CampMapApi {
     this.tex(T.fireRing, Art.fireRingArt);
     this.tex(T.flames, Art.flamesArt);
     this.tex(T.bridge, Art.bridgeArt);
-    CAMP_VANS.forEach((v, i) => {
-      this.tex(T.van(i, false), () => Art.vanArt(i, false, !!v.plate));
-      this.tex(T.van(i, true), () => Art.vanArt(i, true, !!v.plate));
+    // 문패는 차에 붙은 작은 판 대신 옆에 세운 큰 팻말로 (plateSign)
+    CAMP_VANS.forEach((_v, i) => {
+      this.tex(T.van(i, false), () => Art.vanArt(i, false, false));
+      this.tex(T.van(i, true), () => Art.vanArt(i, true, false));
     });
+    // 11/15 캠핑카 앞 캠핑 도구·문패 팻말
+    this.tex(T.foldTable, Art.foldTableArt);
+    for (let i = 0; i < 3; i++) {
+      this.tex(T.campChairFront(i), () => Art.campChairFrontArt(i));
+      this.tex(T.campChairSide(i), () => Art.campChairSideArt(i));
+    }
+    this.tex(T.brazier, Art.brazierArt);
+    this.tex(T.brazierFire, Art.brazierFireArt);
+    this.tex(T.lantern, Art.lanternArt);
+    this.tex(T.icebox, Art.iceboxArt);
+    this.tex(T.plateSign, Art.plateSignArt);
     this.tex(T.tarp, Art.tarpArt);
     this.tex(T.tarpPole, Art.tarpPoleArt);
     this.tex(T.lookoutFloor, Art.lookoutFloorArt);
@@ -246,6 +260,7 @@ export class CampMap implements CampMapApi {
 
   private addStructures(): void {
     const T = Art.CAMP_TEX;
+    const s0 = this.scene;
     // 관리소·매점
     this.prop(T.office, CAMP_OFFICE.x, CAMP_OFFICE.y, CAMP_OFFICE.y, 3);
     this.prop(T.board, CAMP_BOARD_SPOT.x, CAMP_BOARD_SPOT.y);
@@ -258,6 +273,30 @@ export class CampMap implements CampMapApi {
       const img = this.prop(T.van(i, false), v.x, v.y, v.y, 6);
       this.vans.set(v.id, { img, i, open: false });
     });
+    // 캠핑카 앞 캠핑 도구 (탁자·탁자 위 랜턴·화롯대·아이스박스)
+    for (const g of CAMP_VAN_GEAR) {
+      this.prop(T.foldTable, g.table.x, g.table.y);
+      this.prop(T.lantern, g.lantern.x + 6, g.lantern.y - 8, g.table.y + 1, 0);
+      this.prop(T.brazier, g.brazier.x, g.brazier.y);
+      this.prop(T.icebox, g.icebox.x, g.icebox.y);
+      if (!s0.anims.exists(`${CAMP_TEX_PREFIX}brazier`)) {
+        s0.anims.create({ key: `${CAMP_TEX_PREFIX}brazier`, frames: Array.from({ length: 3 }, (_, i) => ({ key: T.brazierFire, frame: i })), frameRate: this.reduced ? 3 : 7, repeat: -1 });
+      }
+      const fire = s0.add.sprite(g.brazier.x, g.brazier.y - 5, T.brazierFire, 0).setOrigin(0.5, 1).setDepth(g.brazier.y + 0.5);
+      fire.play({ key: `${CAMP_TEX_PREFIX}brazier`, startFrame: g.van.charCodeAt(1) % 3 });
+      this.cull(g.brazier.x, g.brazier.y, fire);
+    }
+    // 「언젠가 씨네」 문패 팻말 (캠핑카 왼쪽에 세운다 — 문간에 앉은 사람 이름표와 겹치지 않게)
+    for (const v of CAMP_VANS) {
+      if (!v.plate) continue;
+      const px = v.x - 64;
+      const py = v.y + 2;
+      this.prop(T.plateSign, px, py);
+      this.atlas.ensure(v.plate);
+      const t = this.cull(px, py, this.keep(s0.add.bitmapText(px, py - Art.PLATE_SIGN_H + 16, FONT_KEY, v.plate, FONT_PX).setOrigin(0.5, 0.5).setTint(0x5a3018).setDepth(py + 0.5)));
+      // 판 안에 꽉 차게 (월드 크기 그대로 — 이름표처럼 줌에 따라 줄지 않는다)
+      t.setScale(Math.min(1, (Art.PLATE_SIGN_W - 14) / Math.max(1, t.width)));
+    }
     // 타프 기둥·피크닉 탁자
     for (const p of Lay.CAMP_TARP_POLES) this.prop(T.tarpPole, p.x, p.y);
     this.prop(T.table, CAMP_TABLE.x, CAMP_TABLE.y + 8, CAMP_TABLE.y + 8, 2);
@@ -269,6 +308,14 @@ export class CampMap implements CampMapApi {
     const T = Art.CAMP_TEX;
     for (const f of CAMP_FURNITURE) {
       if (f.id.startsWith("qV")) continue; // 캠핑카 문간 (차 그림에 있다)
+      if (f.id.startsWith("qC")) {
+        // 캠핑카 앞 캠핑 의자: 아래를 보면 앞모습, 옆을 보면 옆모습(왼쪽은 뒤집기). 천 색은 캠핑카마다
+        const vi = Number(f.id[2]) - 1;
+        const front = f.facing === 0;
+        const img = this.prop(front ? T.campChairFront(vi) : T.campChairSide(vi), f.x, f.y + 1, f.y - 1);
+        if (f.facing === 1) img.setFlipX(true);
+        continue;
+      }
       const key = f.id.startsWith("qL") ? T.logChair : f.id.startsWith("qR") ? T.rockSeat : f.id === "qB" ? T.rustyBench : f.id === "qF" ? T.bench : f.id.startsWith("qT") ? T.plankBench3 : T.plankBench2;
       this.prop(key, f.x, f.y, f.y);
     }
@@ -342,8 +389,6 @@ export class CampMap implements CampMapApi {
     this.addLabel(CAMP_OFFICE.x - 50, CAMP_OFFICE.y - 37, "관리소", 0x5a3a22, 1, 0.5);
     this.addLabel(CAMP_OFFICE.x + 44, CAMP_OFFICE.y - 40, "매점", 0x5a3a22, 1, 0.5);
     this.addLabel(CAMP_BOARD_SPOT.x, CAMP_BOARD_SPOT.y - 36, "의뢰판", 0xf0dcb0, 0.8);
-    // 캠핑카 문패
-    for (const v of CAMP_VANS) if (v.plate) this.addLabel(v.x + 6, v.y - 21, v.plate, 0x5a3a22, 1, 0.5);
   }
 
   /** 반짝임·불티·반딧불·빗방울·다람쥐·물안개 (작은 풀) */
@@ -351,7 +396,7 @@ export class CampMap implements CampMapApi {
     const s = this.scene;
     const T = Art.CAMP_TEX;
     const n = (full: number, low: number) => (this.reduced ? low : full);
-    for (let i = 0; i < n(8, 3); i++) this.embers.push({ img: this.keep(s.add.image(0, 0, T.ember).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 2).setVisible(false)), x: 0, y: 0, t0: -1, life: 0, vx: 0, vy: 0 });
+    for (let i = 0; i < n(16, 5); i++) this.embers.push({ img: this.keep(s.add.image(0, 0, T.ember).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 2).setVisible(false)), x: 0, y: 0, t0: -1, life: 0, vx: 0, vy: 0 });
     for (let i = 0; i < n(16, 6); i++) this.sparkles.push({ img: this.keep(s.add.image(0, 0, T.sparkle).setDepth(FLAT + 2500).setVisible(false)), x: 0, y: 0, t0: -1, life: 0, vx: 0, vy: 0 });
     for (let i = 0; i < n(10, 4); i++) this.fireflies.push({ img: this.keep(s.add.image(0, 0, T.firefly).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.fireflies).setVisible(false)), x: 0, y: 0, t0: -1, life: 0, vx: 0, vy: 0 });
     for (let i = 0; i < n(14, 5); i++) this.drips.push({ img: this.keep(s.add.image(0, 0, T.drip).setDepth(OVERHEAD - 4).setVisible(false)), x: 0, y: 0, t0: -1, life: 0, vx: 0, vy: 0 });
@@ -372,6 +417,11 @@ export class CampMap implements CampMapApi {
 
   standable(x: number, y: number): boolean {
     return Lay.campStandable(x, y);
+  }
+
+  /** 모닥불 둘레에 앉아 불멍 중 (CampfireView가 부른다 — 마을 WorldMap.boostCampfire와 같은 자리) */
+  boostCampfire(id: string | null): void {
+    this.fireBoost = id !== null;
   }
 
   setSeatTaken(seatId: string, taken: boolean): void {
@@ -524,7 +574,8 @@ export class CampMap implements CampMapApi {
     const dt = delta / 1000;
     for (const e of this.embers) {
       if (e.t0 < 0 || time - e.t0 > e.life) {
-        if (Math.random() > 0.04) {
+        // 불멍 중(모닥불 둘레에 앉음)이면 불티가 더 많이 (마을 boostCampfire와 같은 뜻)
+        if (Math.random() > (this.fireBoost ? 0.14 : 0.04)) {
           if (e.t0 >= 0) e.img.setVisible(false);
           e.t0 = -1;
           continue;

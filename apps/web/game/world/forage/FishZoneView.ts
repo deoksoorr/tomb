@@ -3,7 +3,7 @@ import { DIR, FISH_ARCH, FISHING_SPOTS, type FishingSpot, type Sid } from "@tomb
 import { bridge } from "../../bridge";
 import { DEPTH } from "../../config";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../../text/GlyphAtlas";
-import { BUS_BAY, BUS_SHELTER_H, BUS_SIGN, BUS_SIGN_H, BUS_STOP, BUS_TIMETABLE, BUS_TIMETABLE_H, FISH_ARCH_H, FISH_DECOR, fishZoneColliders, WHARF_BOARD, WHARF_BOARD_H, WHARF_PLACARD } from "../fishZone";
+import { BUS_BAY, BUS_PLATFORM, BUS_SHELTER_H, BUS_STOP, BUS_TIMETABLE, BUS_TIMETABLE_H, FISH_ARCH_H, FISH_DECOR, fishZoneColliders, WHARF_BOARD, WHARF_BOARD_H, WHARF_CURB, WHARF_PLACARD } from "../fishZone";
 import { FTEX } from "./art";
 import { ensureZoneTextures, ZTEX } from "./zoneArt";
 
@@ -54,8 +54,10 @@ export class FishZoneView {
     const scene = d.scene;
     ensureZoneTextures(scene);
     for (const t of ["납품 부두", "의뢰 게시판", "긴급 의뢰", "주말 버스 정류장", "언젠가 캠핑장행 · Someday Camp", "다음 버스: 언젠가"]) d.atlas.ensure(t);
-    // 골목 바닥의 버스 정차 칸 (노란 칠, 바닥 장식 층)
-    scene.add.image(BUS_BAY.x + BUS_BAY.w / 2, BUS_BAY.y + BUS_BAY.h / 2, ZTEX.busBay).setDepth(DEPTH.decal + 1);
+    // 바닥 장식 층 (11/15 정류장 다듬기): 위 마당 테두리 연석 → 정류장 승강장(판석·점자 블록·연석) → 골목의 버스 정차 칸
+    scene.add.image(WHARF_CURB.x, WHARF_CURB.y, ZTEX.wharfCurb).setOrigin(0, 0).setDepth(DEPTH.decal + 1);
+    scene.add.image(BUS_PLATFORM.x, BUS_PLATFORM.y, ZTEX.busPlatform).setOrigin(0, 0).setDepth(DEPTH.decal + 2);
+    scene.add.image(BUS_BAY.x + BUS_BAY.w / 2, BUS_BAY.y + BUS_BAY.h / 2, ZTEX.busBay).setDepth(DEPTH.decal + 2);
     for (const o of FISH_DECOR) {
       // 정류장 지붕·뒷벽은 그 아래 벤치(bE)·앉은 사람보다 뒤에 그린다
       scene.add.image(o.x, o.y + 1, ZTEX.decor(o.kind)).setOrigin(0.5, 1).setDepth(o.kind === "busShelter" ? o.y - 14 : o.y);
@@ -66,8 +68,8 @@ export class FishZoneView {
     this.label(WHARF_BOARD.x, WHARF_BOARD.y - WHARF_BOARD_H - 1, "의뢰 게시판", 0xffe0a8, 1);
     this.placardLabel = this.label(WHARF_PLACARD.x, WHARF_PLACARD.y - 31, "긴급 의뢰", 0xd8c8b0, 1, 0.7);
     this.placardFx = scene.add.graphics().setDepth(WHARF_PLACARD.y + 2);
-    this.label(BUS_STOP.x, BUS_STOP.y - BUS_SHELTER_H - 1, "주말 버스 정류장", 0xc8f0d8, 1);
-    this.label(BUS_SIGN.x, BUS_SIGN.y - BUS_SIGN_H - 1, "언젠가 캠핑장행 · Someday Camp", 0xffe9a8, 1, 0.9);
+    // 정류장 이름과 노선은 지붕 위에 두 줄로 (예전엔 팻말 위 노선 글씨가 지붕 이름표와 겹쳤다)
+    this.label(BUS_STOP.x, BUS_STOP.y - BUS_SHELTER_H - 1, "주말 버스 정류장\n언젠가 캠핑장행 · Someday Camp", 0xc8f0d8, 1).setCenterAlign();
     this.label(BUS_TIMETABLE.x, BUS_TIMETABLE.y - BUS_TIMETABLE_H - 1, "다음 버스: 언젠가", 0xe8e0d0, 1, 0.85);
     for (const s of FISHING_SPOTS) this.markers.push(this.makeMarker(s));
   }

@@ -82,7 +82,7 @@ function readOpen(): boolean {
 }
 
 /** 11/15 캠핑장 지도: 바탕·주요 장소·같은 캠핑장 사람 */
-function drawCamp(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, d: { me: { x: number; y: number }; others: number[]; friends?: number[] } | null): void {
+function drawCamp(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, d: { me: { x: number; y: number }; others: number[]; friends?: number[] } | null, nodeIds: readonly string[] = []): void {
   ctx.drawImage(campImage(), 0, 0);
   for (const l of CAMP_LANDMARKS) {
     const p = toCampMinimap(l.x, l.y);
@@ -91,6 +91,16 @@ function drawCamp(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, d: { me: 
     ctx.fillRect(Math.round(p.x) - 2, Math.round(p.y) - 2, big ? 5 : 4, big ? 5 : 4);
     ctx.fillStyle = CAMP_LANDMARK_COLOR[l.kind];
     ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, big ? 3 : 2, big ? 3 : 2);
+  }
+  // A-6 캠핑장 채집 지점 (나에게 피어 있는 것만, 종류 색의 작은 점)
+  for (const id of nodeIds) {
+    const n = gatherNodeById(id);
+    if (!n || n.map !== "camp") continue;
+    const p = toCampMinimap(n.x, n.y);
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 3, 3);
+    ctx.fillStyle = NODE_DOT_COLOR[n.kind] ?? "#ffffff";
+    ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
   }
   if (!d) return;
   const unit = c.clientWidth / CAMP_MINIMAP_W || 1;
@@ -133,7 +143,7 @@ export default function Minimap() {
     ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
     ctx.imageSmoothingEnabled = false;
     if (last.current?.map === "camp") {
-      drawCamp(ctx, c, last.current);
+      drawCamp(ctx, c, last.current, nodes.current);
       return;
     }
     ctx.drawImage(baseImage(), 0, 0);
@@ -184,7 +194,7 @@ export default function Minimap() {
     // 채집 지점: 종류 색의 작은 점 (테두리)
     for (const id of nodes.current) {
       const n = gatherNodeById(id);
-      if (!n) continue;
+      if (!n || n.map) continue; // 캠핑장 지점은 캠핑장 지도에
       const p = toMinimap(n.x, n.y);
       ctx.fillStyle = "rgba(0,0,0,0.55)";
       ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 3, 3);

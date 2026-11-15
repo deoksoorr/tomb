@@ -94,3 +94,17 @@ describe("버스 창밖 연출 계산", () => {
     expect(sat(gray.top)).toBeLessThan(sat(day.top));
   });
 });
+
+describe("정류장 버스 유턴 (11/15)", () => {
+  it("옆모습 → 앞모습 → 반대쪽 옆모습, 화면 쪽으로 반원을 그리고 원래 줄로 돌아온다", async () => {
+    const { uturnAt, UTURN_RX } = await import("./busUturn");
+    expect(uturnAt(0)).toMatchObject({ dx: 0, view: "side", sx: 1, done: false });
+    expect(uturnAt(0.5).view).toBe("front");
+    expect(uturnAt(0.5).dy).toBeGreaterThan(10);
+    const end = uturnAt(1);
+    expect(end).toMatchObject({ view: "back", done: true });
+    expect(end.sx).toBeCloseTo(1);
+    expect(end.dx).toBeCloseTo(UTURN_RX * 2);
+    expect(Math.abs(end.dy)).toBeLessThan(1e-9);
+  });
+});

@@ -1,5 +1,5 @@
 import { DIR, STATE, type DirId } from "./types";
-import { MAP_HEIGHT, MAP_WIDTH, SPOT_KINDS, seatSlot, spotKindOfState, type Furniture, type Seat, type SeatSlot } from "./world";
+import { MAP_HEIGHT, MAP_WIDTH, SPOT_KINDS, fishingWaterOf, seatSlot, spotKindOfState, type FishingSpot, type Campfire, type Furniture, type Seat, type SeatSlot } from "./world";
 
 // 11/15 두 번째 맵 「언젠가 캠핑장 · Someday Camp」 (1차: 맵·버스·앉기·NPC 말 걸기).
 // "언젠가 캠핑 가야지" 하고 장비만 사 두고 못 간 그곳 — 늦가을 숲, 계곡, 캠프파이어 광장, 번호 붙은 빈 데크 24자리.
@@ -27,8 +27,9 @@ export const CAMP_HEIGHT = CAMP_ROWS * 16; // 800
 /**
  * 캠핑장 배치 버전. 좌표가 바뀌는 개편마다 올린다 → 옛 캠핑장 자리 기록(lib/resume.ts)은 위치를 버리고 정류장에서 시작한다.
  * 1 = 11/15 1차 (정류장·관리소·광장·데크 24·계곡·산책로·전망대·캠핑카 3·큰 타프)
+ * 2 = 정류장을 위로 (화면 아래 채팅창에 가리지 않게) · 캠핑카 앞 캠핑 도구(의자 앉기) — 정류장·길 자리가 바뀌어서
  */
-export const CAMP_MAP_VERSION = 1;
+export const CAMP_MAP_VERSION = 2;
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -46,7 +47,7 @@ export const CAMP_BOUNDS = { minX: 24, maxX: CAMP_WIDTH - 24, minY: 44, maxY: CA
 export type CampZoneId = "busStop" | "office" | "plaza" | "decks" | "stream" | "trail" | "lookout" | "campers" | "tarp";
 export type CampZone = { id: CampZoneId; name: string } & Rect;
 export const CAMP_ZONES: readonly CampZone[] = [
-  { id: "busStop", name: "버스 정류장", x: 40, y: 664, w: 220, h: 132 },
+  { id: "busStop", name: "버스 정류장", x: 40, y: 560, w: 260, h: 132 },
   { id: "office", name: "관리소·매점", x: 292, y: 588, w: 236, h: 132 },
   { id: "plaza", name: "캠프파이어 광장", x: 524, y: 304, w: 192, h: 184 },
   { id: "decks", name: "캠핑 데크", x: 330, y: 206, w: 580, h: 392 },
@@ -57,16 +58,17 @@ export const CAMP_ZONES: readonly CampZone[] = [
   { id: "tarp", name: "큰 타프", x: 568, y: 644, w: 184, h: 124 },
 ];
 
-// ── 버스 정류장 (아래 왼쪽) ── 정류장 지붕 받침 가운데. 지붕 아래 녹슨 벤치(qB), 오른쪽 기둥에 노선 팻말, 왼쪽에 시간표.
-export const CAMP_BUS_STOP = { x: 156, y: 730 } as const;
-export const CAMP_BUS_SIGN = { x: 206, y: 736 } as const;
-export const CAMP_BUS_TIMETABLE = { x: 108, y: 734 } as const;
-/** 버스가 서는 길 (아래 왼쪽 끝 → 정류장 앞). 바닥 장식, 막지 않는다 */
-export const CAMP_ROAD = { x: 0, y: 752, w: 470, h: 44 } as const;
-/** 버스에서 내리는 자리 (정류장 앞 길가). 처음 도착·새로고침 자리가 막혔을 때도 여기 */
-export const CAMP_ARRIVE = { x: 156, y: 758 } as const;
-/** 버스에 타는 자리 (정류장 앞 — 여기서 E) */
-export const CAMP_BOARD = { x: CAMP_BUS_STOP.x, y: CAMP_BUS_STOP.y + 14 } as const;
+// ── 버스 정류장 (왼쪽 아래) ── 정류장 지붕 받침 가운데. 지붕 아래 녹슨 벤치(qB), 오른쪽 기둥에 노선 팻말, 왼쪽에 시간표.
+// 맵 맨 아래에 두면 화면 아래 채팅창에 가려서 (11/15) 한 줄 위로 올렸다. 정류장 앞 보도 → 그 아래 버스 길 → 그 아래는 숲
+export const CAMP_BUS_STOP = { x: 150, y: 622 } as const;
+export const CAMP_BUS_SIGN = { x: 200, y: 628 } as const;
+export const CAMP_BUS_TIMETABLE = { x: 102, y: 626 } as const;
+/** 버스가 서는 길 (왼쪽 끝 → 정류장 앞 → 둥글게 돌아 나가는 끝). 바닥 장식, 막지 않는다 */
+export const CAMP_ROAD = { x: 0, y: 646, w: 300, h: 42 } as const;
+/** 버스에서 내리는 자리 (정류장 앞 보도). 처음 도착·새로고침 자리가 막혔을 때도 여기 */
+export const CAMP_ARRIVE = { x: 150, y: 640 } as const;
+/** 버스에 타는 자리 (정류장 앞 보도 — 여기서 E) */
+export const CAMP_BOARD = { x: CAMP_BUS_STOP.x, y: CAMP_BUS_STOP.y + 16 } as const;
 
 // ── 관리소·매점 (정류장 오른쪽) ── 오두막 받침 가운데. 왼쪽 반은 관리소(문), 오른쪽 반은 매점(창구·차양). 처마에 줄 조명
 export const CAMP_OFFICE = { x: 404, y: 676 } as const;
@@ -79,6 +81,8 @@ export const CAMP_BOARD_SPOT = { x: 520, y: 684 } as const;
 export const CAMP_FIRE = { x: 620, y: 392 } as const;
 /** 광장 바닥 반지름 (흙·돌 원) */
 export const CAMP_PLAZA_R = 92;
+/** 광장 큰 모닥불 (마을 모닥불과 같은 "불멍" 연출 — 통나무 의자 qL1~12에 앉으면) */
+export const CAMP_CAMPFIRE: Campfire = { id: "fireC", x: CAMP_FIRE.x, y: CAMP_FIRE.y, big: true };
 /** 통나무 의자 고리 (불 가운데 기준 타원) */
 export const CAMP_LOG_RX = 66;
 export const CAMP_LOG_RY = 52;
@@ -132,6 +136,32 @@ export function inCampStream(x: number, y: number, pad = 0): boolean {
   return Math.abs(x - campStreamX(y)) <= CAMP_STREAM_HALF_W + pad;
 }
 
+// ── 계곡 낚시 자리 (A-6) ── 마을 낚시와 같은 1인 자리(SPOT_KINDS.fish, 서버 좌석 — 정해진 자리만). 계곡 물은 강(river) 물고기.
+// 앵커 = 물가 둑의 발 위치(물 가운데에서 CAMP_FISH_BANK), facing = 물 쪽. id = "f_x_y" (마을 낚시 자리 id와 겹치지 않는다 — camp.test가 본다)
+export const CAMP_FISH_BANK = 30;
+const campBank = (y: number, side: -1 | 1): FishingSpot => {
+  const x = Math.round(campStreamX(y) + side * CAMP_FISH_BANK);
+  return { id: `f_${x}_${y}`, water: "river", x, y, facing: side < 0 ? DIR.right : DIR.left };
+};
+/** 왼쪽 둑(-1, 오른쪽을 본다)·오른쪽 둑(1, 왼쪽을 본다) — 앉는 바위·할머니·큰 바위·건너는 곳을 피해서 */
+export const CAMP_FISHING_SPOTS: readonly FishingSpot[] = [
+  campBank(124, -1),
+  campBank(172, 1),
+  campBank(244, -1),
+  campBank(400, 1),
+  campBank(486, -1),
+  campBank(624, -1),
+  campBank(700, 1),
+  campBank(750, -1),
+];
+export function campFishingSpotById(id: string): FishingSpot | undefined {
+  return CAMP_FISHING_SPOTS.find((s) => s.id === id);
+}
+/** 낚시 자리 id → 물 종류 (마을 자리·배 위 가상 자리·캠핑장 계곡 자리). 웹 서버(lib/forage)가 쓴다 */
+export function anyFishingWaterOf(id: string): FishingSpot["water"] | null {
+  return fishingWaterOf(id) ?? campFishingSpotById(id)?.water ?? null;
+}
+
 // ── 전망대 (오른쪽 위 산꼭대기) ── 나무 데크 (난간, 아래쪽 가운데 계단)
 export const CAMP_LOOKOUT: Rect = { x: 1104, y: 76, w: 136, h: 80 };
 export const CAMP_LOOKOUT_STAIRS = { x: 1156, w: 32 } as const;
@@ -146,6 +176,31 @@ export const CAMP_VAN_W = 76;
 export const CAMP_VAN_H = 46;
 /** 캠핑카 문 (받침 기준 오프셋) */
 export const CAMP_VAN_DOOR_DX = 20;
+
+/**
+ * 캠핑카 앞 캠핑 도구 (11/15): 접이식 탁자 + 캠핑 의자 셋(앉을 수 있다) + 화롯대 + 랜턴 + 아이스박스.
+ * 좌표는 받침 가운데. 차 앞(아래) 마당에 두고, 캠핑카 골목(x≈180)은 비운다
+ */
+export type CampVanGear = {
+  van: string;
+  table: { x: number; y: number };
+  chairs: readonly { x: number; y: number; facing: DirId }[];
+  brazier: { x: number; y: number };
+  lantern: { x: number; y: number };
+  icebox: { x: number; y: number };
+};
+export const CAMP_VAN_GEAR: readonly CampVanGear[] = CAMP_VANS.map((v) => ({
+  van: v.id,
+  table: { x: v.x - 10, y: v.y + 40 },
+  chairs: [
+    { x: v.x - 34, y: v.y + 40, facing: DIR.right },
+    { x: v.x + 14, y: v.y + 40, facing: DIR.left },
+    { x: v.x - 10, y: v.y + 16, facing: DIR.down },
+  ],
+  brazier: { x: v.x + 42, y: v.y + 44 },
+  lantern: { x: v.x - 2, y: v.y + 40 }, // 탁자 위
+  icebox: { x: v.x - 58, y: v.y + 52 },
+}));
 
 // ── 큰 타프 (아래 가운데) ── 비 피하는 지붕 + 피크닉 탁자와 긴 의자 둘
 export const CAMP_TARP: Rect = { x: 572, y: 650, w: 176, h: 112 };
@@ -170,7 +225,7 @@ function logChairs(): Furniture[] {
     const dy = Math.sin(a);
     // 불을 바라본다 (가까운 네 방향)
     const facing: DirId = Math.abs(dx) > Math.abs(dy) * 1.1 ? (dx > 0 ? DIR.left : DIR.right) : dy > 0 ? DIR.up : DIR.down;
-    out.push({ id: `qL${i + 1}`, kind: "chair", x: Math.round(CAMP_FIRE.x + dx * CAMP_LOG_RX), y: Math.round(CAMP_FIRE.y + 6 + dy * CAMP_LOG_RY), facing, seatOffsets: [0] });
+    out.push({ id: `qL${i + 1}`, kind: "chair", x: Math.round(CAMP_FIRE.x + dx * CAMP_LOG_RX), y: Math.round(CAMP_FIRE.y + 6 + dy * CAMP_LOG_RY), facing, seatOffsets: [0], campfire: CAMP_CAMPFIRE.id });
   }
   return out;
 }
@@ -188,11 +243,13 @@ export const CAMP_FURNITURE: readonly Furniture[] = [
   { id: "qR3", kind: "chair", x: 984, y: 660, facing: DIR.right, seatOffsets: [0] },
   { id: "qR4", kind: "chair", x: 1080, y: 352, facing: DIR.left, seatOffsets: [0] },
   { id: "qR5", kind: "chair", x: 966, y: 214, facing: DIR.right, seatOffsets: [0] },
-  // 전망대 데크 벤치 (하늘을 본다)
-  { id: "qO1", kind: "bench", x: 1134, y: 104, facing: DIR.up, seatOffsets: [-10, 10] },
-  { id: "qO2", kind: "bench", x: 1206, y: 104, facing: DIR.up, seatOffsets: [-10, 10] },
+  // 전망대 데크 벤치 (산 아래 캠핑장·계곡 경치를 내려다본다 — 등은 난간 쪽)
+  { id: "qO1", kind: "bench", x: 1134, y: 104, facing: DIR.down, seatOffsets: [-10, 10] },
+  { id: "qO2", kind: "bench", x: 1206, y: 104, facing: DIR.down, seatOffsets: [-10, 10] },
   // 캠핑카 문간 (안에 들어가 앉는 자리 — 열린 문 안쪽 발판)
   ...CAMP_VANS.map((v): Furniture => ({ id: `qV${v.id.slice(1)}`, kind: "chair", x: v.x + CAMP_VAN_DOOR_DX, y: v.y + 4, facing: DIR.down, seatOffsets: [0] })),
+  // 캠핑카 앞 캠핑 의자 (접이식 탁자를 둘러싼다)
+  ...CAMP_VAN_GEAR.flatMap((g): Furniture[] => g.chairs.map((c, i) => ({ id: `qC${g.van.slice(1)}${i + 1}`, kind: "chair", x: c.x, y: c.y, facing: c.facing, seatOffsets: [0] }))),
   // 큰 타프 아래 피크닉 의자 (탁자를 사이에 두고 마주 본다)
   { id: "qT1", kind: "bench", x: CAMP_TABLE.x, y: CAMP_TABLE.y - 14, facing: DIR.down, seatOffsets: [-18, 0, 18] },
   { id: "qT2", kind: "bench", x: CAMP_TABLE.x, y: CAMP_TABLE.y + 16, facing: DIR.up, seatOffsets: [-18, 0, 18] },
@@ -206,7 +263,14 @@ const campSeatMap = new Map(CAMP_SEATS.map((s) => [s.id, s]));
 export function campSeatById(id: string): Seat | undefined {
   return campSeatMap.get(id);
 }
+/** 이 캠핑장 좌석이 큰 모닥불 둘레 통나무 의자면 그 모닥불 (마을 campfireOfSeat과 같은 뜻) */
+export function campCampfireOfSeat(seatId: string): Campfire | null {
+  const s = campSeatMap.get(seatId);
+  return s && CAMP_FURNITURE.some((f) => f.id === s.furnitureId && f.campfire === CAMP_CAMPFIRE.id) ? CAMP_CAMPFIRE : null;
+}
 const campSlots = new Map<string, SeatSlot>(CAMP_SEATS.map((s) => [s.id, { id: s.id, kind: "seat", x: s.x, y: s.y, facing: s.facing, state: STATE.sitChair, furnitureId: s.furnitureId }]));
+// 계곡 낚시 자리도 정해진 자리로 받는다 (마을 낚시 자리처럼 kind "fish")
+for (const f of CAMP_FISHING_SPOTS) campSlots.set(f.id, { id: f.id, kind: "fish", x: f.x, y: f.y, facing: f.facing, state: SPOT_KINDS.fish.state, furnitureId: null });
 
 // ── 맵별 판정 (서버·클라이언트 공통) ──
 

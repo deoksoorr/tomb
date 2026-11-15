@@ -61,13 +61,17 @@ type KindDef = {
   label: string;
   /** 무엇이 필요한지 ("사장님이 회식에 쓸 생선") */
   what: string;
+  /** 종류 이름 ("생선" — 끝 공지 「긴급 의뢰(생선 15마리)」) */
+  noun: string;
+  /** 아무도 내지 않고 끝났을 때 게시판에 남기는 한 줄 (가볍게 웃기게) */
+  nobody: string;
 };
 
 export const URGENT_DEF: Readonly<Record<UrgentKind, KindDef>> = {
-  fish: { cat: "fish", base: 100, min: 15, unit: "마리", label: "회식용 생선", what: "사장님이 회식에 쓸 생선" },
-  herb: { cat: "herb", base: 80, min: 12, unit: "개", label: "난초 화분용 약초", what: "대표님 난초 화분에 쓸 약초" },
-  ore: { cat: "ore", base: 60, min: 10, unit: "개", label: "감사 대비 광석", what: "감사에 대비할 광석" },
-  dig: { cat: "dig", base: 30, min: 5, unit: "개", label: "시상식 트로피용 발굴품", what: "연말 시상식 트로피로 쓸 발굴품" },
+  fish: { cat: "fish", base: 100, min: 15, unit: "마리", label: "회식용 생선", what: "사장님이 회식에 쓸 생선", noun: "생선", nobody: "사장님이 회식을 삼겹살집으로 바꿨대요." },
+  herb: { cat: "herb", base: 80, min: 12, unit: "개", label: "난초 화분용 약초", what: "대표님 난초 화분에 쓸 약초", noun: "약초", nobody: "대표님 난초는 결국 조화로 바꿨대요." },
+  ore: { cat: "ore", base: 60, min: 10, unit: "개", label: "감사 대비 광석", what: "감사에 대비할 광석", noun: "광석", nobody: "감사는 다음 달로 미뤄졌대요." },
+  dig: { cat: "dig", base: 30, min: 5, unit: "개", label: "시상식 트로피용 발굴품", what: "연말 시상식 트로피로 쓸 발굴품", noun: "발굴품", nobody: "시상식 트로피는 문구점에서 샀대요." },
 };
 
 /** 시작 알림 한 줄 */
@@ -136,6 +140,58 @@ export function urgentStage(n: number, goal: number): UrgentStage {
 
 /** 단계별 도장 (닿은 단계까지 모두 더한다: 50% = 2, 100% = 2 + 3) */
 export const URGENT_STAMPS = { 50: 2, 100: 3 } as const;
+
+// ── 끝난 뒤 문구 (위쪽 막대·게시판·확성기가 같이 쓴다) ──
+
+/** 목표의 몇 % (내림) */
+export const urgentPct = (n: number, goal: number) => (goal > 0 ? Math.floor((n * 100) / goal) : 0);
+
+/** "발굴품 5개" (끝 공지의 의뢰 이름) */
+export const urgentWhat = (kind: UrgentKind, goal: number) => `${URGENT_DEF[kind].noun} ${goal}${URGENT_DEF[kind].unit}`;
+
+/** 다음엔 내 보라는 한 줄 (끝난 의뢰에 내지 않은 사람) */
+export const URGENT_NEXT_HINT = "다음 긴급 의뢰 때 1개라도 내면 보상을 받아요.";
+
+/** 아무도 내지 않고 끝났을 때 위쪽 막대 한 줄 */
+export const URGENT_NOBODY_LINE = "긴급 의뢰가 끝났어요. 이번엔 아무도 오지 않았어요.";
+
+/** 모은 양: "목표의 45%를 채웠어요" (1%가 안 되면 "3개를 모았어요" — 0%라고 쓰지 않는다). n > 0일 때만 쓴다 */
+export function urgentFilled(kind: UrgentKind, n: number, goal: number): string {
+  const p = urgentPct(n, goal);
+  return p > 0 ? `목표의 ${p}%를 채웠어요` : `${n}${URGENT_DEF[kind].unit}를 모았어요`;
+}
+
+/** 단계 보상 이름: "도장 2개" · "도장 5개와 수집가의 뒷주머니" */
+export function urgentPrize(stage: UrgentStage): string {
+  if (stage < 50) return "";
+  if (stage < 100) return `도장 ${URGENT_STAMPS[50]}개`;
+  return `도장 ${URGENT_STAMPS[50] + URGENT_STAMPS[100]}개와 수집가의 뒷주머니`;
+}
+
+/**
+ * 끝난 의뢰의 보상 한 줄 (n > 0).
+ *  - 50%를 못 넘겼으면 모두에게 "50%를 못 넘겨 이번엔 보상이 없어요."
+ *  - 낸 사람: "50%를 넘겨 도장 2개를 받아요." (받았으면 "…받았어요.")
+ *  - 내지 않은 사람(mine=false): "낸 사람은 도장 2개를 받아요."
+ *  - 아직 모르면(mine=null) 빈 문자열
+ */
+export function urgentRewardLine(o: { n: number; goal: number; mine: boolean | null; claimed?: boolean }): string {
+  const stage = urgentStage(o.n, o.goal);
+  if (stage < 50) return "50%를 못 넘겨 이번엔 보상이 없어요.";
+  if (o.mine === null) return "";
+  const prize = urgentPrize(stage);
+  if (!o.mine) return `낸 사람은 ${prize}를 받아요.`;
+  const reach = `${stage}%를 ${urgentPct(o.n, o.goal) > stage ? "넘겨" : "채워"}`;
+  return o.claimed ? `${reach} ${prize}를 받았어요.` : `${reach} ${prize}를 받아요.`;
+}
+
+/** 끝 확성기 한 줄 (150% 축제 공지는 따로) */
+export function urgentEndNotice(kind: UrgentKind, goal: number, n: number): string {
+  const name = `긴급 의뢰(${urgentWhat(kind, goal)})`;
+  if (n <= 0) return `${name}는 아무도 오지 않은 채 끝났어요.`;
+  const filled = urgentFilled(kind, n, goal);
+  return urgentStage(n, goal) >= 50 ? `${name}가 끝났어요. ${filled}! 낸 사람은 게시판에서 보상을 받아요.` : `${name}가 끝났어요. ${filled}.`;
+}
 
 // ── 수집가의 뒷주머니 (100% 상자) ──
 

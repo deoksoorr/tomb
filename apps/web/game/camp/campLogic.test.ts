@@ -10,6 +10,12 @@ describe("캠핑장 앉기 (campSit)", () => {
     expect(campPickSeat(log.x, log.y + 6, new Map([["qL1", 4]]), 9)?.id).not.toBe("qL1");
     expect(campPickSeat(log.x, log.y + 6, new Map([["qL1", 9]]), 9)?.id).toBe("qL1");
   });
+  it("캠핑카 문간 자리는 좌석 안내에 안 뜬다 (캠핑카 E 하나로), 캠핑카 앞 캠핑 의자는 앉을 수 있다", () => {
+    const door = CAMP_SEATS.find((s) => s.id === "qV2")!;
+    expect(campPickSeat(door.x, door.y + 6, new Map(), null)?.id).not.toBe("qV2");
+    const chair = CAMP_SEATS.find((s) => s.id === "qC21")!;
+    expect(campPickSeat(chair.x, chair.y + 9, new Map(), null)?.id).toBe("qC21");
+  });
   it("타프 아래 긴 의자는 옆자리로 옮겨 앉는다", () => {
     expect(CAMP_MULTI_SEAT.has("qT1")).toBe(true);
     const left = CAMP_SEATS.find((s) => s.id === "qT1-0")!;

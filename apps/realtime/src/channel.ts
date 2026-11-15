@@ -449,6 +449,7 @@ export class ChannelCore<C extends object> {
     this.welcome(p, t.channel, false, now);
     this.broadcastMap(map, encodeEvent({ t: "join", ...this.info(p) }), p.sid);
     this.host.countChanged(this.peers.size);
+    this.broadcastCount(p.sid);
     this.host.visitorJoined(p.visitorId, p.joinedAt);
     this.host.liveChanged?.(true);
   }
@@ -557,6 +558,8 @@ export class ChannelCore<C extends object> {
       ...(goblin ? { goblin } : {}),
       // 11/15 캠핑장에 있으면 알린다 (마을이면 없다 — 옛 서버와 같은 모양)
       ...(map === "camp" ? { m: "camp" as const } : {}),
+      // 11/15 채널 전체 인원 (마을·캠핑장 합계 — HUD "N/40명"). 방에는 없다
+      ...(this.cfg.room ? {} : { n: this.peers.size }),
     });
     // 고블린을 잡았는데 증서를 받기 전에 끊겼다 → 다시 보낸다 (웹은 같은 고블린을 한 번만 지급한다)
     const owed = this.goblinOn ? this.goblin.grantFor(p.visitorId, now) : null;
@@ -1362,6 +1365,7 @@ export class ChannelCore<C extends object> {
     this.chasing.delete(p.sid);
     this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "leave", sid: p.sid }));
     this.host.countChanged(this.peers.size);
+    this.broadcastCount();
     this.host.visitorLeft(p.visitorId);
     this.host.liveChanged?.(true);
   }
@@ -1439,6 +1443,15 @@ export class ChannelCore<C extends object> {
   }
 
   /** 접속 중인 모두에게 (except 제외). 유예 중인 피어는 소켓이 없으므로 건너뛴다. */
+  /**
+   * 11/15 채널 전체 인원이 바뀌었다 → 모두에게 (맵 상관없이). 같은 맵 사람만 보이게 된 뒤에도 HUD는 채널 전체 인원을 보여 준다.
+   * 옛 클라이언트는 모르는 t라 버린다. 방(집·사냥터)은 보내지 않는다. except = 방금 들어온 사람 (welcome에 이미 n이 있다)
+   */
+  private broadcastCount(except?: number): void {
+    if (this.cfg.room) return;
+    this.broadcast(encodeEvent({ t: "count", n: this.peers.size }), except);
+  }
+
   private broadcast(data: string | ArrayBuffer, except?: number): void {
     for (const p of this.peers.values()) if (p.conn && p.sid !== except) this.host.send(p.conn, data);
   }

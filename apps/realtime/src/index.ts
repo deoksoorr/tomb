@@ -25,6 +25,7 @@
  *   POST /internal/peer      47번 Vercel → 이 서버: 채널·방의 sid가 누구인지 (유저 신고). 본문 서명 필수
  *   POST /internal/hello     친구 Vercel → 이 서버: 입장 직전 "들고 날 때 알릴 친구들" 등록 (로비가 들어옴·나감을 밀어 준다). 본문 서명 필수
  *   POST /internal/where     친구 Vercel → 이 서버: 그 방문자들이 지금 어느 채널·자리에 있는지 (WHERE_CACHE_MS 기억). 본문 서명 필수
+ *   POST /internal/say       11/15 Vercel → 이 서버: 마을 공지 한 줄을 사람이 있는 채널 모두의 확성기 줄에 지금 띄운다. 본문 서명 필수
  */
 import { CLOSE, HUNT_ROOMS_CACHE_SEC, INTERNAL_SIG_HEADER, LOBBY_CACHE_SEC, ROOM_ID_RE, WHERE_CACHE_MS, verifyInternal, type PeerWhere } from "@tomb/protocol";
 import type { JoinTicket } from "./channel";
@@ -40,7 +41,7 @@ import {
   rejectSocket,
 } from "./auth";
 import { type Env, channelStub, lobbyStub, readConfig, roomStub } from "./config";
-import { isOutdatedClient, parseChannel, parseMap, parseSpawn } from "./logic";
+import { isOutdatedClient, parseChannel, parseMap, parseSpawn, sayRelay } from "./logic";
 
 export { ChannelDO } from "./ChannelDO";
 export { LobbyDO } from "./LobbyDO";
@@ -56,8 +57,7 @@ export default {
     if (ch) return channel(req, env, url, ch[1]);
     const rm = /^\/room\/([^/]*)$/.exec(url.pathname);
     if (rm) return room(req, env, url, rm[1]);
-    if (url.pathname === "/internal/kick" || url.pathname === "/internal/peer" || url.pathname === "/internal/me" || url.pathname === "/internal/where" || url.pathname === "/internal/hello")
-      return internal(req, env, url.pathname);
+    if (INTERNAL_PATHS.has(url.pathname)) return internal(req, env, url.pathname);
     if (url.pathname === "/dev/goblin" && env.DEV_HOOKS === "1" && req.method === "POST") {
       const n = parseChannel(url.searchParams.get("ch") ?? "1", readConfig(env).maxChannels);
       if (n === null) return new Response("bad channel", { status: 400 });
@@ -69,6 +69,8 @@ export default {
 
 // ── POST /internal/* (47번, 서버끼리) ──
 // 브라우저가 부르는 경로가 아니라 CORS가 없다. 서명이 틀리면 경로가 없는 것처럼 404.
+
+const INTERNAL_PATHS = new Set(["/internal/kick", "/internal/peer", "/internal/me", "/internal/where", "/internal/hello", "/internal/say"]);
 
 async function internal(req: Request, env: Env, path: string): Promise<Response> {
   const notFound = new Response("not found", { status: 404 });
@@ -106,6 +108,24 @@ async function internal(req: Request, env: Env, path: string): Promise<Response>
       ),
     );
     return Response.json({ sent: counts.reduce((a, b) => a + b, 0) });
+  }
+  if (r.op === "say") {
+    // 마을 공지: 확성기 방송과 같은 모양(scope all)으로, 사람이 있는 채널마다 한 번 (채널이 nonce로 중복을 막는다 — 웹이 다시 보내도 한 번)
+    const { nonce, until, data } = sayRelay(r);
+    const info = await lobbyStub(env).info();
+    const sent = await Promise.all(
+      info.channels
+        .filter((c) => c.count > 0)
+        .map((c) =>
+          channelStub(env, c.id)
+            .megaphoneRelay(nonce, until, data)
+            .catch((e) => {
+              console.error("say relay failed", c.id, e);
+              return false;
+            }),
+        ),
+    );
+    return Response.json({ sent: sent.filter(Boolean).length });
   }
   if (r.op === "hello") {
     await lobbyStub(env).friendHello(r.visitorId, r.name, r.key, r.friends);

@@ -1,6 +1,6 @@
 import { CLIENT_VERSION, MAP_WIDTH, MAX_VALID_SPEED, RUN_SPEED } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { MoveBudget, RateLimiter, allocSid, isOutdatedClient, parseChannel, parseSpawn, stepToward } from "./logic";
+import { MoveBudget, RateLimiter, allocSid, isOutdatedClient, parseChannel, parseSpawn, sayRelay, stepToward } from "./logic";
 
 describe("RateLimiter", () => {
   it("drops messages over 20/s for the rest of that second", () => {
@@ -93,3 +93,14 @@ describe("isOutdatedClient (큰 패치 강제 새로고침)", () => {
     expect(isOutdatedClient(String(CLIENT_VERSION))).toBe(false); // 지금 빌드의 클라이언트는 언제나 받는다
   });
 });
+
+describe("sayRelay (11/15 마을 공지 → 확성기 방송)", () => {
+  it("모든 채널 확성기 모양 + 공지 표시, nonce는 사람 확성기와 겹치지 않게", () => {
+    const r = sayRelay({ id: "urg-t1-a1", name: "공지", text: "끝났어요.", at: 1_000, replaces: "urg-t1-a0" });
+    expect(r.nonce).toBe("s:urg-t1-a1");
+    expect(r.until).toBe(1_000 + 5 * 60_000);
+    expect(JSON.parse(r.data)).toEqual({ t: "megaphone", id: "urg-t1-a1", name: "공지", text: "끝났어요.", scope: "all", ch: 0, at: 1_000, staff: true, system: true, replaces: "urg-t1-a0" });
+    expect(JSON.parse(sayRelay({ id: "x", name: "공지", text: "한 줄", at: 5 }).data)).not.toHaveProperty("replaces");
+  });
+});
+

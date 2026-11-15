@@ -53,7 +53,7 @@ function callbacks(log: string[], tag: string): NetCallbacks {
     onAct: rec("act"),
     onSay: rec("say"),
     onChat: (sid, text) => log.push(`${tag}:chat:${sid}:${text}`),
-    onMegaphone: (m) => log.push(`${tag}:megaphone:${m.text}`),
+    onMegaphone: (m) => log.push(`${tag}:megaphone:${m.text}${m.system ? `:system:${m.replaces ?? ""}` : ""}`),
     onMapped: (map, peers) => log.push(`${tag}:mapped:${map}:${peers.map((p) => p.sid).join(",")}`),
   };
 }
@@ -117,7 +117,9 @@ describe("RealtimeClient 맵 옮기기 (11/15 캠핑장)", () => {
     ws.recv({ t: "mapped", m: "camp", peers: [peer(7, "캠퍼")], seats: {} });
     ws.recv({ t: "chat", sid: 7, text: "캠핑장 말" });
     ws.recv({ t: "megaphone", id: "m1", name: "누구", text: "전체 공지", scope: "all", ch: 2, at: 1 });
-    expect(log).toEqual(["c:mapped:camp:7", "c:chat:7:캠핑장 말", "w:megaphone:전체 공지"]);
+    // 11/15 마을 공지 줄 (실시간 서버 /internal/say): system·replaces를 그대로 넘긴다
+    ws.recv({ t: "megaphone", id: "urg-t1-a1", name: "공지", text: "끝 공지", scope: "all", ch: 0, at: 2, staff: true, system: true, replaces: "urg-t1-a0" });
+    expect(log).toEqual(["c:mapped:camp:7", "c:chat:7:캠핑장 말", "w:megaphone:전체 공지", "w:megaphone:끝 공지:system:urg-t1-a0"]);
     expect(c.map).toBe("camp");
     expect(c.peerCount).toBe(1);
     c.stop();

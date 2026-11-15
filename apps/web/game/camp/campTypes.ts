@@ -8,7 +8,8 @@ import type { CampNpcId } from "@tomb/protocol";
 export const CAMP_TEX_PREFIX = "camp-";
 
 /** E로 쓰는 것 (자리 앉기는 좌석 체계 — CAMP_SEATS — 가 따로) */
-export type CampInteractKind = "bus" | "npc" | "van" | "deck" | "board" | "sign";
+/** lookout = 전망대 망원경 (망원 뷰, LookoutScope) */
+export type CampInteractKind = "bus" | "npc" | "van" | "deck" | "board" | "sign" | "lookout";
 export type CampInteractable = {
   id: string;
   kind: CampInteractKind;
@@ -62,6 +63,8 @@ export interface CampMapApi {
   npcVisible(id: CampNpcId): boolean;
   /** NPC 머리 위 말풍선 자리 (없으면 null) */
   npcAnchor(id: CampNpcId): { x: number; y: number } | null;
+  /** 큰 모닥불 둘레에 앉아 불멍 중이면 불티를 더 (CampfireView) */
+  boostCampfire(id: string | null): void;
   /** (x,y)가 큰 타프 지붕 아래인지 (빗소리) */
   underTarp(x: number, y: number): boolean;
   /** 모든 오브젝트·캠핑장 텍스처 정리 */

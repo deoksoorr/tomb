@@ -1,9 +1,10 @@
-import { FISH_ARCH, FISH_PIER_HEAD, FISHING_ZONE } from "@tomb/protocol";
+import { FISH_ARCH, FISH_PIER_HEAD, FISHING_ZONE, WHARF_YARD } from "@tomb/protocol";
 
 // 납품 부두 (11/15, 예전 낚시터 — 호수 북동쪽 물가 + 없앤 11·12번지 자리의 위 마당) 장식 배치 — 순수 데이터 (Phaser 없음 → world.test.ts가 충돌·길을 검사한다).
 //  - 위 마당: 의뢰 게시판(E → 수집 의뢰판) + 옆의 빈 현판(나중에 서버 전체 "긴급 의뢰" 진행 막대 자리)
-//    + 주말 버스 정류장 (정류장 지붕·벤치 bE·노선 팻말 「언젠가 캠핑장행」·시간표·골목 바닥 정차 칸. E → 아직 준비 중 — 앞으로 캠핑장 버스가 붙을 자리)
-//  - 아래 마당: 어부 노점·그물 대·통발·상자·물통, 입구 아치 → 짧은 낚시 잔교
+//    + 주말 버스 정류장 (포장한 승강장·연석 위에 정류장 지붕·벤치 bE·노선 팻말 「언젠가 캠핑장행」·시간표, 골목 바닥 정차 칸.
+//      정류장 앞 어디서든 E → 캠핑장 버스 (운영에서 닫혀 있으면 안내만). 버스는 골목 서쪽에서 들어와 정차 칸에 서고 문이 지붕 앞에 온다)
+//  - 아래 마당 (11/15 좁게 줄여 나루터와 띄움): 어부 노점·통발·상자·물통, 입구 아치 → 짧은 낚시 잔교
 // 그림은 forage/zoneArt.ts + forage/FishZoneView.ts, 판자·자리 좌표 원본은 protocol world.ts(FISH_PIER·FISH_PIER_HEAD·FISHING_SPOTS).
 // 충돌은 layout.staticColliders()에 들어가 걷기 격자·고양이 길찾기·새로고침 복원 판정이 모두 같은 상자를 본다.
 
@@ -21,13 +22,25 @@ export const WHARF_PLACARD = { x: 1230, y: 700 } as const;
 export const BUS_STOP = { x: 1330, y: 724 } as const;
 export const BUS_SHELTER_W = 64;
 export const BUS_SHELTER_H = 50;
-/** 노선 팻말 (정류장 오른쪽 기둥) · 시간표 (왼쪽) */
-export const BUS_SIGN = { x: 1378, y: 730 } as const;
+/** 노선 팻말 (승강장 오른쪽 끝 — 버스 앞머리 앞) · 시간표 (승강장 왼쪽 끝) */
+export const BUS_SIGN = { x: 1378, y: 742 } as const;
 export const BUS_SIGN_H = 44;
-export const BUS_TIMETABLE = { x: 1284, y: 728 } as const;
+export const BUS_TIMETABLE = { x: 1270, y: 734 } as const;
 export const BUS_TIMETABLE_H = 28;
-/** 골목 바닥의 버스 정차 칸 (노란 칠 — 바닥 장식, 막지 않는다) */
-export const BUS_BAY = { x: 1276, y: 756, w: 112, h: 24 } as const;
+/**
+ * 승강장: 위 마당 오른쪽 아래의 포장한 바닥 (연석은 골목 쪽 아래 변). 지붕·시간표·팻말이 이 위에 선다. 바닥 장식, 막지 않는다
+ */
+export const BUS_PLATFORM = { x: 1254, y: 700, w: 146, h: 52 } as const;
+/** 정류장 E 범위 (승강장 앞 골목·정차 칸·시간표·팻말 앞까지) */
+export const BUS_E_RADIUS = 60;
+/** 버스는 골목 서쪽에서 들어와(오른쪽을 보고) 문이 지붕 가운데 앞에 오게 선다 (game/bus BusArrival fromLeft) */
+export const BUS_FROM_LEFT = true;
+/** 골목 바닥의 버스 정차 칸 (노란 칠 — 바닥 장식, 막지 않는다). 버스 몸(문 기준 서쪽 89 · 동쪽 19px)이 꼭 들어가는 길이 */
+export const BUS_BAY = { x: BUS_STOP.x - 94, y: 756, w: 120, h: 24 } as const;
+/** 버스 바퀴가 닿는 줄 (BusArrival laneY) */
+export const BUS_LANE_Y = BUS_BAY.y + BUS_BAY.h - 2;
+/** 위 마당 테두리 연석 (자갈 마당이 골목·광장과 갈리는 곳 — 바닥 장식) */
+export const WHARF_CURB = WHARF_YARD;
 
 /** 장식 (x,y = 받침 가운데, 그림 맨 아래 줄) */
 export const FISH_DECOR: readonly FishDecor[] = [
@@ -37,13 +50,12 @@ export const FISH_DECOR: readonly FishDecor[] = [
   { kind: "busShelter", x: BUS_STOP.x, y: BUS_STOP.y },
   { kind: "busSign", x: BUS_SIGN.x, y: BUS_SIGN.y },
   { kind: "timetable", x: BUS_TIMETABLE.x, y: BUS_TIMETABLE.y },
-  // 입구 아치: 데크 북쪽 끝에 "낚시터" 현판 + 양쪽 기둥에 등불
+  // 입구 아치: 잔교 북쪽 끝에 "납품 부두" 현판 + 양쪽 기둥에 등불
   { kind: "arch", x: FISH_ARCH.x, y: FISH_ARCH.y },
-  // 어부 노점 마당: 그물 말리는 대, 통발 더미 (서쪽) · 물고기 상자, 물통 (동쪽, 어부 노점 옆)
-  { kind: "netRack", x: 1292, y: 800 },
-  { kind: "traps", x: 1284, y: 816 },
-  { kind: "crates", x: 1396, y: 826 },
-  { kind: "barrel", x: 1398, y: 792 },
+  // 어부 노점 마당 (11/15 좁게): 물통·통발 (서쪽, 잔교 입구 왼편) · 물고기 상자 (동쪽, 어부 노점 아래 둑)
+  { kind: "barrel", x: 1312, y: 794 },
+  { kind: "traps", x: 1316, y: 812 },
+  { kind: "crates", x: 1396, y: 830 },
   // 가로 데크 양 끝 등불 기둥 (난간 위)
   { kind: "lanternPost", x: FISH_PIER_HEAD.x + 2, y: FISH_PIER_HEAD.y + 1 },
   { kind: "lanternPost", x: FISH_PIER_HEAD.x + FISH_PIER_HEAD.w - 2, y: FISH_PIER_HEAD.y + 1 },

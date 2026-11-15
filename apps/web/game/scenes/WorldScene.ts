@@ -2002,6 +2002,8 @@ export class WorldScene extends Phaser.Scene {
         : null;
     // 불멍 구도에서는 화면을 가리지 않게 앉기 안내를 띄우지 않는다
     if (this.campfire.active) hidden = true;
+    // 11/15 버스를 기다리거나 타고 내리는 동안은 정류장 안내("E 주말 버스 정류장")를 띄우지 않는다
+    if (this.tripLock) hidden = true;
     this.seatHint.update(seat, pl, sittingFor, hidden, labelScale, seat || pl.sitting ? null : this.objectHint(), standText);
   }
 

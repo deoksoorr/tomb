@@ -28,6 +28,12 @@ export function liveMegaphones(entries: MegaphoneEntry[], now: number): Megaphon
   return entries.filter((e) => now - e.at < MEGAPHONE_TTL_MS);
 }
 
+/** 뒤 공지가 바꿔 끼운 앞 공지를 뺀다 (긴급 의뢰 시작 → 끝) */
+export function dropReplaced(entries: MegaphoneEntry[]): MegaphoneEntry[] {
+  const gone = new Set(entries.flatMap((e) => (e.replaces ? [e.replaces] : [])));
+  return gone.size ? entries.filter((e) => !gone.has(e.id)) : entries;
+}
+
 export type MegaphoneState = {
   entries: MegaphoneEntry[];
   /** 지금 화면 가운데에 크게 떠 있는 한마디 */
@@ -84,16 +90,18 @@ class MegaphoneStore {
       const { entries } = await socialApi.megaphones(channel);
       const ids = new Set(entries.map((e) => e.id));
       const fresh = this.state.entries.filter((e) => !ids.has(e.id) && e.at > Date.now() - 60_000 && (e.scope === "all" || e.ch === channel));
-      this.update({ entries: [...entries, ...fresh].sort((a, b) => a.at - b.at).slice(-MEGA_FEED_MAX) });
+      this.update({ entries: dropReplaced([...entries, ...fresh]).sort((a, b) => a.at - b.at).slice(-MEGA_FEED_MAX) });
     } catch {
       // 다음 갱신 때 다시
     }
   }
 
-  /** 새 한마디 (실시간 방송 또는 내가 방금 외친 것). 같은 id는 한 번만. 가운데 표시는 앞의 것이 끝나면 차례로 */
+  /** 새 한마디 (실시간 방송 또는 내가 방금 외친 것). 같은 id는 한 번만. 가운데 표시는 앞의 것이 끝나면 차례로.
+   * 11/15 replaces가 있으면(긴급 의뢰 끝 공지) 바꿔 끼울 앞 공지를 기록·기다리는 줄에서 뺀다 */
   push(e: MegaphoneEntry): void {
     if (this.state.entries.some((x) => x.id === e.id)) return;
-    const entries = [...this.state.entries, e].slice(-MEGA_FEED_MAX);
+    const entries = [...this.state.entries.filter((x) => x.id !== e.replaces), e].slice(-MEGA_FEED_MAX);
+    if (e.replaces && this.state.queue.some((x) => x.id === e.replaces)) this.update({ queue: this.state.queue.filter((x) => x.id !== e.replaces) });
     if (!this.state.flash) {
       this.update({ entries });
       this.show(e);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAMP_ARRIVE, CAMP_BOARD, CAMP_DECKS, CAMP_FURNITURE, CAMP_NPCS, CAMP_SEATS, CAMP_VANS, campStreamX, CAMP_STREAM_HALF_W, CAMP_CROSSINGS } from "@tomb/protocol";
+import { CAMP_ROAD, CAMP_ARRIVE, CAMP_BOARD, CAMP_DECKS, CAMP_FURNITURE, CAMP_NPCS, CAMP_SEATS, CAMP_VANS, campStreamX, CAMP_STREAM_HALF_W, CAMP_CROSSINGS } from "@tomb/protocol";
 import {
   CAMP_DECOR,
   CAMP_INTERACTABLES,
@@ -136,7 +136,9 @@ describe("언젠가 캠핑장 배치", () => {
   });
 
   it("바닥 종류: 정류장 앞은 길, 계곡 가운데는 물, 광장은 흙 마당, 전망대 둘레는 바위", () => {
-    expect(campGroundKind(140, 780)).toBe("road");
+    // 11/15 정류장을 한 줄 올렸다 (채팅창에 가리지 않게): 버스 길은 정류장 바로 아래, 맵 맨 아래는 숲
+    expect(campGroundKind(140, CAMP_ROAD.y + 20)).toBe("road");
+    expect(campGroundKind(140, 780)).not.toBe("road");
     expect(campGroundKind(campStreamX(420), 420)).toBe("water");
     expect(campGroundKind(620, 440)).toBe("plaza");
     expect(campGroundKind(1172, 60)).toBe("rock");

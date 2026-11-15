@@ -10,6 +10,8 @@ export function campPickSeat(x: number, y: number, occupied: ReadonlyMap<string,
   let best: Seat | null = null;
   let bd = Infinity;
   for (const s of CAMP_SEATS) {
+    // 캠핑카 문간 자리는 캠핑카 E 하나로만 (좌석 안내가 따로 뜨면 같은 캠핑카에 E가 둘이 된다)
+    if (s.furnitureId.startsWith("qV")) continue;
     const d = Math.hypot(s.x - x, s.y - y);
     if (d > radius || d >= bd) continue;
     const owner = occupied.get(s.id);

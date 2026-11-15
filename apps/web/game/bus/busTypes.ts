@@ -25,7 +25,7 @@ export type BusArrivalOptions = {
 export interface BusArrivalApi {
   /** 들어와 서고 문이 열리면 onOpen (약 2초) */
   arrive(onOpen: () => void): void;
-  /** 문을 닫고 떠나 화면 밖으로 나가면 onGone (약 1.6초) */
+  /** 문을 닫고 정류장 앞에서 유턴해 왔던 길로 화면 밖까지 나가면 onGone (약 3초) */
   depart(onGone: () => void): void;
   /** 열린 문 앞 (캐릭터가 걸어 들어가는 자리) */
   readonly door: { x: number; y: number };

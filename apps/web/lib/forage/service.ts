@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { fishingWaterOf } from "@tomb/protocol";
+import { anyFishingWaterOf } from "@tomb/protocol";
 import { BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
 import { env } from "../env";
 import { peerOf } from "../ban";
@@ -151,7 +151,7 @@ type FishPayload = { k: "fish"; sp: string; sz: number; g?: number; alt?: string
 export async function castLine(acct: string, spotId: string, now = Date.now(), ip?: string): Promise<CastResponse> {
   const store = getForageStore();
   // 정해진 낚시 자리 또는 배 위 가상 자리(boat:river·boat:lake) — 물 종류로 물고기를 고른다
-  const water = fishingWaterOf(spotId);
+  const water = anyFishingWaterOf(spotId);
   if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
   // 직접 던지면 자동 낚시는 끝난다 (둘을 한꺼번에 할 수 없다). 그때까지 낚은 것은 정산해 넣는다 (처음 등록 보상도 조용히 지급)
   if (await store.autoGet(acct)) await dexGainOf(store, acct, (await settleAuto(store, acct, now, true)).items, ip, now);
@@ -220,7 +220,7 @@ async function autoResponse(store: ForageStore, acct: string, r: AutoSettled, no
 /** 켜기: 낚시 자리(배 위 포함)에서. 이미 켜 둔 세션이 있으면 정산하고 새로 시작한다 */
 export async function startAutoFish(acct: string, spotId: string, ch: number | null, now = Date.now(), ip?: string): Promise<AutoFishResponse> {
   const store = getForageStore();
-  const water = fishingWaterOf(spotId);
+  const water = anyFishingWaterOf(spotId);
   if (!water) throw new HttpError(400, "INVALID_INPUT", "여기서는 낚시를 할 수 없어요.");
   const prev = await settleAuto(store, acct, now, true);
   const day = (await store.snapshot(acct, kstDay(now), nodeWindow(now))).day;

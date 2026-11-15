@@ -20,7 +20,13 @@ export const BUS_TEX = {
   windows: `${BUS_TEX_PREFIX}win`,
   head: `${BUS_TEX_PREFIX}head`,
   dust: `${BUS_TEX_PREFIX}dust`,
+  /** 11/15 유턴할 때 잠깐 보이는 앞모습 (화면 쪽을 본다) */
+  front: `${BUS_TEX_PREFIX}front`,
 } as const;
+
+/** 앞모습 크기 (원점 = 바닥 가운데) */
+export const BUS_FRONT_W = 48;
+export const BUS_FRONT_H = 54;
 
 export const BUS_FRAME = { closedA: 0, closedB: 1, half: 2, open: 3 } as const;
 
@@ -204,12 +210,68 @@ function buildDust(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
+/**
+ * 11/15 앞모습 (유턴하며 화면 쪽을 볼 때): 크림 지붕·행선지 판·넓은 앞유리·주황 띠·전조등 둘·범퍼·바퀴 끝.
+ * 옆모습과 같은 색·외곽선 규칙
+ */
+function buildBusFront(): HTMLCanvasElement {
+  const W = BUS_FRONT_W;
+  const H = BUS_FRONT_H;
+  const g = new Grid(W, H);
+  const x0 = 3;
+  const x1 = W - 4;
+  // 지붕·몸통 (크림)
+  g.rect(x0 + 1, 3, x1 - x0 - 1, 4, CREAM.hi);
+  g.rect(x0, 6, x1 - x0 + 1, 38, CREAM.mid);
+  g.vline(x0, 6, 43, CREAM.lo);
+  g.vline(x1, 6, 43, CREAM.lo);
+  // 행선지 판 (어두운 띠 + 주황 글자 점)
+  g.rect(x0 + 6, 8, x1 - x0 - 11, 5, 0x2a2622);
+  for (let x = x0 + 8; x < x1 - 6; x += 3) g.rect(x, 9, 2, 3, x % 2 ? 0xf0a040 : 0xffc860);
+  // 앞유리 (두 장)
+  g.rect(x0 + 3, 15, x1 - x0 - 5, 13, GLASS.mid);
+  g.hline(x0 + 3, x1 - 3, 15, GLASS.hi);
+  g.vline(Math.round(W / 2), 15, 27, CREAM.lo);
+  for (let i = 0; i < 4; i++) g.set(x0 + 6 + i, 17 + i, GLASS.hi); // 반사
+  g.hline(x0 + 3, x1 - 3, 27, GLASS.lo);
+  // 와이퍼
+  g.hline(x0 + 8, x0 + 14, 26, METAL.lo);
+  g.hline(x1 - 14, x1 - 8, 26, METAL.lo);
+  // 주황 띠
+  g.rect(x0, 30, x1 - x0 + 1, 7, ORANGE.mid);
+  g.hline(x0, x1, 30, ORANGE.hi);
+  g.hline(x0, x1, 36, ORANGE.lo);
+  // 전조등·방향 지시등
+  for (const cx of [x0 + 6, x1 - 6]) {
+    g.ellipse(cx, 33, 3, 2.4, 0xfff4c8);
+    g.set(cx, 33, 0xffffff);
+  }
+  g.rect(x0 + 2, 38, 3, 2, 0xf0a040);
+  g.rect(x1 - 4, 38, 3, 2, 0xf0a040);
+  // 범퍼·번호판
+  g.rect(x0 - 1, 41, x1 - x0 + 3, 3, METAL.mid);
+  g.hline(x0 - 1, x1 + 1, 41, METAL.hi);
+  g.rect(Math.round(W / 2) - 5, 38, 10, 3, 0xe8e4d8);
+  // 바퀴 끝 (아래 양쪽)
+  for (const cx of [x0 + 5, x1 - 5]) g.rect(cx - 3, 44, 6, 4, TIRE);
+  g.outline(OUT);
+  // 그림자
+  for (let y = H - 6; y < H; y++)
+    for (let x = 1; x < W - 1; x++) {
+      const dx = (x + 0.5 - W / 2) / (W / 2 - 2);
+      const dy = (y + 0.5 - (H - 3)) / 3;
+      if (dx * dx + dy * dy <= 1 && !g.filled(x, y)) g.set(x, y, 0x000000, 70);
+    }
+  return g.toCanvas();
+}
+
 /** 정류장 버스 텍스처를 (없으면) 굽는다 */
 export function ensureBusTextures(scene: Phaser.Scene): void {
   if (!scene.textures.exists(BUS_TEX.body)) addCanvasTexture(scene, BUS_TEX.body, { canvas: buildBusSheet(), frameW: BUS_W, frameH: BUS_H });
   if (!scene.textures.exists(BUS_TEX.windows)) addCanvasTexture(scene, BUS_TEX.windows, { canvas: buildBusWindows() });
   if (!scene.textures.exists(BUS_TEX.head)) addCanvasTexture(scene, BUS_TEX.head, { canvas: buildHead(), linear: true });
   if (!scene.textures.exists(BUS_TEX.dust)) addCanvasTexture(scene, BUS_TEX.dust, { canvas: buildDust() });
+  if (!scene.textures.exists(BUS_TEX.front)) addCanvasTexture(scene, BUS_TEX.front, { canvas: buildBusFront() });
 }
 
 /** 정류장 버스 텍스처를 지운다 */

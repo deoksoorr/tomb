@@ -1,6 +1,8 @@
 import * as Phaser from "phaser";
 import {
   CAMP_ARRIVE,
+  CAMP_CAMPFIRE,
+  campCampfireOfSeat,
   CAMP_BOUNDS,
   CAMP_BUS_STOP,
   CAMP_HEIGHT,
@@ -48,10 +50,14 @@ import { Lighting, playerLightRadius } from "../world/Lighting";
 import { MeScreen } from "../world/MeScreen";
 import { addWorldTintBounds, worldTintOf } from "../world/worldTint";
 import { Riding } from "../world/zoo/Riding";
+import { CampfireView } from "../world/Campfire";
+import { campfireLevel, nearestCampfire } from "../world/campfireMath";
+import { LookoutScope } from "./LookoutScope";
 import { WeatherSound } from "../world/WeatherSound";
 import { createBusArrival } from "../bus/BusArrival";
 import type { BusArrivalApi } from "../bus/busTypes";
 import { CampMap } from "./CampMap";
+import { CampForage } from "./campForage";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
 import { campLines, campNpcName, CAMP_WELCOME } from "./campTalk";
 import { campNeighborSeat, campPickSeat, CAMP_MULTI_SEAT } from "./campSit";
@@ -86,8 +92,14 @@ export class CampScene extends Phaser.Scene {
   private seatHint!: SeatHint;
   private expr!: Expressions;
   private riding!: Riding;
+  /** A-6 계곡 낚시·숲 채집 (마을 Foraging을 캠핑장 맵으로 — game/camp/campForage) */
+  private forage!: CampForage;
+  /** 전망대 망원경 (망원 뷰) */
+  private scope!: LookoutScope;
   private meScreen!: MeScreen;
   private fireworks: Fireworks | null = null;
+  /** 11/15 큰 모닥불 불멍 (마을 모닥불과 같은 연출 — game/world/Campfire.ts) */
+  private campfire!: CampfireView;
   private seatReq!: SeatRequester;
   private readonly remotes = new Map<Sid, RemoteAvatar>();
   private readonly seats = new Map<string, Sid>();
@@ -161,6 +173,7 @@ export class CampScene extends Phaser.Scene {
 
     this.rig = new CameraRig(this, this.player.sprite, canvas, (x, y) => this.onTap(x, y));
     this.rig.setMapSize(CAMP_WIDTH, CAMP_HEIGHT);
+    this.scope = new LookoutScope(this, { rig: this.rig, atlas: h.atlas, reduced: h.reduced });
     const tint = worldTintOf(this.game);
     if (tint) addWorldTintBounds(this, tint);
     this.atmos = new Atmosphere(this, h.reduced, window.location.search, { shaderTint: tint });
@@ -177,7 +190,9 @@ export class CampScene extends Phaser.Scene {
       reduced: h.reduced,
       act: (kind) => this.doAct(kind),
     });
+    this.campfire = new CampfireView(this, this.rig, this.map, h.reduced);
     this.riding = new Riding({ player: () => this.player, net: () => h.net, remotes: () => this.remotes, toast: (m) => this.toast(m) });
+    this.forage = new CampForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m) });
 
     this.applyArrivalPose();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.onResize, this);
@@ -321,8 +336,12 @@ export class CampScene extends Phaser.Scene {
         const me = this.host.net.mySid;
         for (const e of entries) if (e.sid !== me) this.remotes.get(e.sid)?.push(t, e.x, e.y, e.state, e.dir);
       },
-      onSeat: (seatId, sid) => this.onSeat(seatId, sid),
+      onSeat: (seatId, sid) => {
+        this.forage.f.seatChanged(seatId, sid);
+        this.onSeat(seatId, sid);
+      },
       onSeatDenied: (seatId) => {
+        if (this.forage.f.seatDenied(seatId)) return;
         if (this.player.seat?.id === seatId) this.player.seatDenied(seatId, this.time.now);
       },
       onEmote: () => undefined,
@@ -356,7 +375,7 @@ export class CampScene extends Phaser.Scene {
       onChatLog: (lines) => bridge.emit("chat:log", { lines, ...(this.host.net.channel !== null ? { ch: `${this.host.net.channel}c` } : {}) }),
       onMood: (sid, mood) => this.expr.onRemoteMood(sid, mood),
       onRide: (sid, on) => this.riding.onRide(sid, on),
-      onRod: () => undefined,
+      onRod: (sid, on) => this.forage.f.onRod(sid, on),
       onAway: (sid, on) => this.remotes.get(sid)?.setAway(on, performance.now()),
       onGoblin: () => undefined,
       onGoblinGone: () => undefined,
@@ -367,6 +386,9 @@ export class CampScene extends Phaser.Scene {
         this.syncSeats(seats);
         for (const p of peers) this.addRemote(p);
         this.spotsJudged = true;
+        // 낚시 자리 점유표를 캠핑장 것으로 (마을 입장 정보와 같은 모양으로 넘긴다)
+        const net = this.host.net;
+        this.forage.f.onWelcome({ t: "welcome", sid: net.mySid ?? 0, channel: net.channel ?? 0, cap: net.cap, peers, seats, resumed: false, spots: true });
         this.reclaimSeat();
       },
     };
@@ -384,6 +406,7 @@ export class CampScene extends Phaser.Scene {
     this.syncSeats(m.seats);
     for (const p of m.peers) this.addRemote(p);
     this.riding.onWelcome();
+    this.forage.f.onWelcome(m);
     this.reclaimSeat();
   }
 
@@ -444,6 +467,7 @@ export class CampScene extends Phaser.Scene {
     r.seatId = prev?.seatId ?? null;
     r.view.setMood(p.mood);
     this.riding.applyPeer(r, p);
+    this.forage?.f.applyPeer(p);
     r.setAway(p.away === true, performance.now(), true);
     r.view.setFriend(this.isFriend(r));
     if (!r.seatId) for (const [seatId, owner] of this.seats) if (owner === p.sid) r.seatId = seatId;
@@ -562,6 +586,11 @@ export class CampScene extends Phaser.Scene {
   private onAction(a: KeyAction): void {
     const h = this.host;
     if (h.hub.isBlocked || this.cleaned || this.locked || this.covered || this.parked) return;
+    // 망원경을 보는 중: E·Space·X로 내려놓는다
+    if (this.scope.isOpen) {
+      if (a === "interact" || a === "jump" || a === "sit") this.scope.close();
+      return;
+    }
     const pl = this.player;
     const now = this.time.now;
     if (a === "jump") {
@@ -601,6 +630,12 @@ export class CampScene extends Phaser.Scene {
     const obj = this.nearestObject(pl.x, pl.y);
     const sd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
     const od = obj ? Math.hypot(obj.x - pl.x, obj.y - pl.y) : Infinity;
+    // A-6 낚시 자리·채집 지점이 더 가까우면 그것부터 (마을 Foraging.use와 같다)
+    const fo = this.forage.nearest(pl.x, pl.y);
+    if (fo && Math.hypot(fo.x - pl.x, fo.y - pl.y) <= Math.min(sd, od)) {
+      this.forage.f.use(fo);
+      return;
+    }
     if (obj && od <= sd) this.useObject(obj);
     else if (seat) pl.sit(seat, now, this.seatReq);
   }
@@ -652,12 +687,18 @@ export class CampScene extends Phaser.Scene {
       case "sign":
         this.toast("시간표에는 '다음 버스: 언젠가'라고 적혀 있어요. 그래도 E를 누르면 와요.");
         break;
+      case "lookout":
+        // 전망대 망원경: 광장·데크를 내려다본다 (LookoutScope)
+        this.closeTalk();
+        this.scope.open();
+        break;
     }
   }
 
   private onTap(wx: number, wy: number): void {
     const h = this.host;
     if (h.hub.isBlocked || this.cleaned || this.locked || this.covered || this.parked) return;
+    if (this.scope.isOpen) return this.scope.close();
     const hit = peerAt(
       [...this.remotes.values()].map((r) => ({ sid: r.sid, name: r.name, x: r.x, y: r.y, visible: r.visible, label: r.view.label.getBounds() })),
       wx,
@@ -742,6 +783,7 @@ export class CampScene extends Phaser.Scene {
     this.locked = true;
     const pl = this.player;
     if (pl.sitting) pl.stand(this.time.now, this.seatReq);
+    this.leaveCampfire();
     this.riding.dismount(false);
     this.bus = createBusArrival(this, { doorX: CAMP_BUS_STOP.x, laneY: CAMP_ROAD.y + CAMP_ROAD.h - 6, fromLeft: true, reduced: this.host.reduced });
     this.bus.arrive(() => {
@@ -773,6 +815,7 @@ export class CampScene extends Phaser.Scene {
     if (live?.away) return notice(`${name}님은 지금 실내에 있어요.`);
     const at = live ? { x: live.x, y: live.y } : { x: fx, y: fy };
     this.closeTalk();
+    this.leaveCampfire();
     const pl = this.player;
     const now = this.time.now;
     if (pl.sitting) pl.stand(now, this.seatReq);
@@ -814,6 +857,11 @@ export class CampScene extends Phaser.Scene {
     }
     this.host.hub.read(this.move);
     if (this.host.hub.isBlocked || this.locked) this.move.ax = this.move.ay = 0;
+    // 전망대 망원경: 방향키는 망원경을 겨누고 캐릭터는 그대로
+    if (this.scope.isOpen) {
+      this.scope.update(now, dt, this.move, this.atmos.levels.darkness);
+      this.move.ax = this.move.ay = 0;
+    }
     const started = pl.update(this.benchInput(now), now, this.seatReq);
     if (this.furnitureCollider) this.furnitureCollider.active = !pl.airborne;
     if (net.online && pnow >= this.peerCheckAt) {
@@ -826,6 +874,15 @@ export class CampScene extends Phaser.Scene {
     }
     if (started && this.rig.detached) this.rig.recenter();
     this.rig.update(dt);
+    // 통나무 의자(모닥불 둘레)에 앉으면 마을 모닥불과 같은 불멍 구도 (카메라·레터박스·온기·불티), 일어나면 원래대로. 불 소리는 거리에 따라
+    const fire = pl.state === "sitChair" && pl.seat ? campCampfireOfSeat(pl.seat.id) : null;
+    if (fire && this.campfire.active?.id !== fire.id) {
+      this.campfire.enter(fire);
+      bridge.emit("view:mode", { mode: "campfire" });
+    } else if (!fire && this.campfire.active) this.leaveCampfire();
+    this.campfire.update(now, dt);
+    const nf = nearestCampfire(pl.x, pl.y, [CAMP_CAMPFIRE]);
+    this.host.sfx.campfire(nf ? campfireLevel(nf.dist, !!fire) : 0);
     const s = this.rig.labelScale;
     const view = this.rig.frameView(this.view);
     this.expr.update(now);
@@ -834,6 +891,7 @@ export class CampScene extends Phaser.Scene {
     const L = this.atmos.levels;
     this.map.update(now, dt, view, { hour: this.hour, darkness: L.darkness, rain: L.rain, fog: L.fog });
     this.riding.update();
+    this.forage.f.update(dt, view, s);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
     this.declutterLabels(now, pnow);
     this.updateSeatHint(now, s);
@@ -883,11 +941,15 @@ export class CampScene extends Phaser.Scene {
     const obj = !pl.sitting && !this.locked ? this.nearestObject(pl.x, pl.y) : null;
     const objSd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
     const objOd = obj ? Math.hypot(obj.x - pl.x, obj.y - pl.y) : Infinity;
-    const other = obj && objOd <= objSd ? { x: obj.x, y: obj.y + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
+    let other = obj && objOd <= objSd ? { x: obj.x, y: obj.y + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
+    // A-6 낚시 자리·채집 지점 안내 ("E 낚시하기"·"E 약초 캐기")
+    const fo = !pl.sitting && !this.locked ? this.forage.nearest(pl.x, pl.y) : null;
+    if (fo && Math.hypot(fo.x - pl.x, fo.y - pl.y) <= Math.min(objSd, objOd)) other = { x: fo.x, y: fo.y + 2, text: `${this.seatHint.prefix}${fo.label}` };
     const bench = pl.state === "sitChair" && pl.seat && CAMP_MULTI_SEAT.has(pl.seat.furnitureId);
     const keys = this.seatHint.prefix === "E ";
     const standText = bench ? (keys ? "←→ 옆자리 · ↑↓ 일어나기 · T 벤치 상태" : "좌우로 옆자리 · 위아래로 일어나기") : pl.state === "sitChair" && keys ? "이동하면 일어나요 · T 상태 고르기" : null;
-    this.seatHint.update(other ? null : seat, pl, sittingFor, this.talking !== null, labelScale, other, standText);
+    // 불멍 구도에서는 화면을 가리지 않게 앉기 안내를 띄우지 않는다 (마을과 같다)
+    this.seatHint.update(other ? null : seat, pl, sittingFor, this.talking !== null || this.campfire.active !== null, labelScale, other, standText);
   }
 
   /** 대화 창: NPC에게서 멀어지면 닫는다 */
@@ -976,6 +1038,7 @@ export class CampScene extends Phaser.Scene {
       const lr = 40 + 24 * L.glow;
       for (const sp of this.map.staticLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.4, 0.88);
       this.fireworks?.addLights(lit);
+      this.forage.f.addLights(lit);
     }
     lit.end();
   }
@@ -988,10 +1051,19 @@ export class CampScene extends Phaser.Scene {
     bridge.emit("minimap:dots", { me: { x: Math.round(this.player.x), y: Math.round(this.player.y) }, others, friends, map: "camp" });
   }
 
+  /** 불멍에서 나온다 (일어남·버스·친구한테 가기) */
+  private leaveCampfire(): void {
+    if (!this.campfire?.active) return;
+    this.campfire.exit();
+    bridge.emit("view:mode", { mode: "normal" });
+  }
+
   private onResize(): void {
     this.rig?.applyBounds();
+    this.campfire?.resize();
     this.atmos?.resize();
     this.lighting?.resize();
+    this.scope?.resize();
   }
 
   private cleanup(): void {
@@ -1003,14 +1075,19 @@ export class CampScene extends Phaser.Scene {
     this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this);
     this.dropBus();
     WeatherSound.of(this).setRoof(false);
+    if (this.campfire?.active) bridge.emit("view:mode", { mode: "normal" });
+    this.campfire?.destroy();
+    this.host.sfx.campfire(0);
     this.clearRemotes();
     this.expr?.destroy();
+    this.forage?.f.destroy();
     this.meScreen?.destroy();
     this.rig?.destroy();
     this.atmos?.destroy();
     this.lighting?.destroy();
     this.fireworks = null;
     this.player?.destroy();
+    this.scope?.destroy();
     this.map?.destroy();
     // 소식은 월드로 돌려준다 (CampTrip이 먼저 했어도 한 번 더 — 남은 콜백이 지운 장면을 부르지 않게)
     if (this.begun) this.host.net.divert(null);

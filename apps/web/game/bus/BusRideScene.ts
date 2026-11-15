@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { ambienceAt, timePhase } from "@/lib/ambience";
 import { ART_H, buildCaption, buildClouds, buildEndSign, buildInterior, buildLeaf, buildPanorama, buildSky, buildStars, buildStrap, buildSunbeam, LAYERS, VIEW_MAX, WIN_BOT, WIN_TOP, type LayerSpec } from "./busRideArt";
-import { captionAlpha, captionAt, distanceAt, lightsOn, segmentAt, segmentsFor, shakeAt, skyColors, starsOn, strapAngle, type RideSegment } from "./busRideMath";
+import { captionAlpha, captionAt, distanceAt, lightsOn, RIDE_ORDER, segmentAt, segmentsFor, shakeAt, skyColors, starsOn, strapAngle, type RideSegment } from "./busRideMath";
 import { css } from "../sprites/pixel";
 import { BUS_RIDE_MS, BUS_RIDE_SCENE, BUS_TEX_PREFIX, type BusRideControl, type BusRideData } from "./busTypes";
 
@@ -65,6 +65,11 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
   private layers: LayerView[] = [];
   private sign!: Phaser.GameObjects.Image;
   private signX = 0;
+  /**
+   * 11/15 돌아가는 길(toVillage): 버스가 반대로 달린다 → 창밖이 왼쪽에서 오른쪽으로 흐른다.
+   * 그림은 가는 길과 같은 순서(마을 → 숲)로 굽고, 숲 쪽 끝에서 마을 쪽 처음으로 거꾸로 훑는다
+   */
+  private rev = false;
   private interior: Phaser.GameObjects.Image | null = null;
   private ceil!: Phaser.GameObjects.Rectangle;
   private floor!: Phaser.GameObjects.Rectangle;
@@ -83,6 +88,7 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
   init(data: BusRideData): void {
     this.ride = data;
     this.order = segmentsFor(data.leg);
+    this.rev = data.leg === "toVillage";
     this.dist = data.reduced ? DIST_REDUCED : DIST;
     this.endAt = null;
     this.finished = false;
@@ -122,7 +128,8 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
 
     const tint = amb.palette.worldTint;
     LAYERS.forEach((spec, i) => {
-      const p = buildPanorama(spec, this.order, this.dist, seed * 7 + i * 131);
+      // 돌아가는 길도 그림은 가는 길 순서로 (거꾸로 훑어 풍경이 반대로 흐른다)
+      const p = buildPanorama(spec, RIDE_ORDER, this.dist, seed * 7 + i * 131);
       const img = this.add.image(0, 0, this.tex(`l-${spec.id}`, p.canvas)).setOrigin(0, 0).setTint(tint);
       const lights = p.lights && this.lightAlpha > 0 ? this.add.image(0, 0, this.tex(`l-${spec.id}-lit`, p.lights)).setOrigin(0, 0).setBlendMode(Phaser.BlendModes.ADD).setAlpha(this.lightAlpha) : null;
       this.outside.add(img);
@@ -183,16 +190,17 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     // 층 스크롤
     let near = 0;
     for (const l of this.layers) {
-      const scroll = l.spec.factor * this.dist * d;
+      const scroll = l.spec.factor * this.dist * (this.rev ? 1 - d : d);
       if (l.spec.id === "near") near = scroll;
       const x = -Math.round(scroll * S);
       l.img.x = x;
       if (l.lights) l.lights.x = x;
     }
-    const v = delta > 0 ? Math.min(600, (near - this.lastNear) / (delta / 1000)) : 0; // 가까운 층 속도 (그림 px/s)
+    const v = delta > 0 ? Math.min(600, Math.abs(near - this.lastNear) / (delta / 1000)) : 0; // 가까운 층 속도 (그림 px/s)
+    const way = this.rev ? -1 : 1; // 풍경이 흐르는 쪽 (1 = 왼쪽으로)
     this.lastNear = near;
-    this.clouds.tilePositionX = (this.dist * 0.05 * d + ms * 0.002) % 10_000;
-    this.stars.tilePositionX = this.dist * 0.01 * d;
+    this.clouds.tilePositionX = way * ((this.dist * 0.05 * d + ms * 0.002) % 10_000);
+    this.stars.tilePositionX = way * this.dist * 0.01 * d;
     this.sign.x = Math.round((this.signX - near) * S);
 
     // 구간 비중 (낙엽·햇살)
@@ -206,10 +214,10 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
     const W = this.scale.width;
     const dt = Math.min(delta, 50) / 1000; // 프레임이 밀려도 낙엽이 한 줄로 몰리지 않게
     for (const lf of this.leaves) {
-      lf.x -= ((v * 1.25 + 18) * S * dt) / W;
+      lf.x -= (way * (v * 1.25 + 18) * S * dt) / W;
       lf.y += lf.vy * dt;
-      if (lf.x < -0.05) {
-        lf.x = 1.02 + Math.random() * 0.3;
+      if (way > 0 ? lf.x < -0.05 : lf.x > 1.05) {
+        lf.x = way > 0 ? 1.02 + Math.random() * 0.3 : -0.02 - Math.random() * 0.3;
         lf.y = Math.random() * 0.6;
       }
       if (lf.y > 1.05) lf.y = -0.05;
@@ -279,7 +287,8 @@ export class BusRideScene extends Phaser.Scene implements BusRideControl {
       l.lights?.setScale(S).setY(y(l.spec.y0));
     }
     // 끝 표지판: 마지막에 화면 가운데로 온다 (가까운 층과 같이 움직인다)
-    this.signX = this.dist + this.viewW / 2 - this.sign.width / 2;
+    // 돌아가는 길은 그림의 처음(마을 쪽)이 마지막에 온다
+    this.signX = (this.rev ? 0 : this.dist) + this.viewW / 2 - this.sign.width / 2;
     this.sign.setScale(S).setY(y(124));
     this.beams.forEach((b, i) => b.setScale(S).setPosition(Math.round(W * (0.22 + i * 0.3)), y(WIN_TOP)));
 
