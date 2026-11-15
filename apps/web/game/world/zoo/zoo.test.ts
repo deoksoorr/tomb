@@ -59,7 +59,7 @@ describe("동물원 배치", () => {
       { x: ZOO_EAST_GATE.x + 12, y: (ZOO_EAST_GATE.y0 + ZOO_EAST_GATE.y1) / 2, what: "동문 밖" },
       { x: ZOO_EAST_GATE.x - 12, y: (ZOO_EAST_GATE.y0 + ZOO_EAST_GATE.y1) / 2, what: "동문 안" },
       { x: ZOOKEEPER_SPOT.x, y: ZOOKEEPER_SPOT.y, what: "사육사 앞" },
-      { x: 354, y: 999, what: "벤치 bX 앞" },
+      { x: 354, y: 999, what: "벤치 bX 앞 (동문 밖 오리 연못 둑)" },
       ...ZOO_DECOR.filter((d) => d.kind === "sign").map((d) => ({ x: d.x, y: d.y < 890 ? d.y + 8 : d.y - 18, what: `팻말 ${d.label}` })),
     ];
     const miss = targets.filter((t) => !ok(t.x, t.y) && !ok(t.x, t.y + 4) && !ok(t.x - 4, t.y + 4) && !ok(t.x + 4, t.y + 4)).map((t) => t.what);
@@ -76,7 +76,7 @@ describe("동물원 배치", () => {
   it("바닥: 자갈길·우리 안 흙바닥, 동문 밖 흙길", () => {
     expect(groundKind(Math.floor((ZOO_GATE.x0 + 8) / 16), Math.floor((ZOO.y + 20) / 16))).toBe("gravel");
     expect(groundKind(Math.floor(300 / 16), Math.floor(888 / 16))).toBe("gravel");
-    expect(groundKind(26, 55)).toBe("dirt");
+    expect(groundKind(20, 55)).toBe("dirt");
     for (const p of ZOO_PENS) expect(groundKind(Math.floor((p.rect.x + p.rect.w / 2) / 16), Math.floor((p.rect.y + p.rect.h / 2) / 16)), p.id).toBe("dirt");
   });
 
@@ -88,9 +88,10 @@ describe("동물원 배치", () => {
     for (const c of zooColliders()) expect(all).toContainEqual(c);
     expect(zooColliders().some((c) => inside(c, ZOOKEEPER.x, ZOOKEEPER.y - 2))).toBe(true);
     expect(ZOO_FENCES.every((f) => f.x0 === f.x1 || f.y0 === f.y1)).toBe(true);
-    // 동물원 벤치 (예전 버드나무 묘역 벤치를 옮겼다)
+    // 11/15 동물원을 줄여 벤치 bX는 동문 밖 오리 연못 둑이 됐다 (자리는 그대로)
     const bx = FURNITURE.find((f) => f.id === "bX")!;
-    expect(inside(ZOO, bx.x, bx.y)).toBe(true);
+    expect(inside(ZOO, bx.x, bx.y)).toBe(false);
+    expect(ZOO.w).toBeLessThan(300);
   });
 });
 

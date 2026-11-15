@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { DIR } from "@tomb/protocol";
+import { DIR, isOpenLot } from "@tomb/protocol";
 import { VILLAGE_COLS } from "@/lib/housing/catalog";
 import type { VillageHouse, VillageResponse } from "@/lib/housing/types";
 import { bridge } from "../bridge";
@@ -116,6 +116,7 @@ export class VillageScene extends Phaser.Scene {
     const taken = new Set(village.taken);
     for (let lot = 1; lot <= village.lots; lot++) {
       const h = byLot.get(lot);
+      if (!h && !isOpenLot(lot)) continue; // 11/15 없앤 번지는 빈 필지도 그리지 않는다
       if (h) this.drawHouse(h);
       else this.drawEmptyLot(lot, taken.has(lot));
     }

@@ -3,6 +3,8 @@ import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
 import type { RpgAction, RpgHud, RpgPlay, RunResult } from "@/lib/rpg/types";
+import type { HotAuto } from "@/lib/rpg/hotbar";
+import type { CardChoice, CardOfferView } from "@/lib/rpg/cards";
 import type { ResumeState } from "@/lib/resume";
 import type { SoundMix } from "@/lib/soundMix";
 import type { IncomingChatLine } from "@/game/logic/chatLog";
@@ -93,7 +95,7 @@ export type GameEvents = {
    * 월드의 특별한 장소와 상호작용: 사냥터 입구 / 분양 사무소(하우징) / 성황당 → UI가 해당 창을 연다.
    * 주거 구역(메인 맵의 분양 마을): 집 문이면 houseId(그 집으로 들어가기), 빈 필지 팻말이면 lot(그 번지로 분양 문의)
    */
-  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt"; houseId?: string; lot?: number };
+  "portal:open": { kind: "hunt" | "housing" | "shrine" | "telescope" | "wish" | "haunt" | "tower"; houseId?: string; lot?: number };
   /** 22번 황금 고블린을 내가 가장 먼저 잡았다 → UI가 증서로 /api/goblin에 보상을 받는다 */
   "goblin:grant": { id: string; grant: string; points: number };
   /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
@@ -134,6 +136,10 @@ export type GameEvents = {
   "rpg:hud": RpgHud;
   /** 판이 끝남 (시간 끝·전멸·클리어·포기). UI가 결과를 서버로 보내고 결과 창을 연다. 월드는 이미 다시 보인다 */
   "rpg:ended": { result: RunResult; aborted: boolean };
+  /** 11/15 사냥 중 자동 스킬 설정이 바뀜 (Shift+숫자·칸 우클릭·X) → UI가 캐릭터에 저장한다 */
+  "rpg:auto": HotAuto;
+  /** 11/15 야근 빌딩 능력 카드 고르기 (sticky, null = 닫힘). 게임은 멈춘 채 rpg:cardPick을 기다린다 */
+  "rpg:cards": CardOfferView | null;
   /** 귀신의집 미로 진행 (초당 4번): 걸린 시간·놀란 횟수 (game/haunt → components/haunt) */
   "haunt:hud": { ms: number; scares: number };
   /** 귀신의집이 끝남 (출구로 빠져나옴 = escaped, 아니면 중간에 나감). 월드는 이미 다시 보인다 */
@@ -159,6 +165,8 @@ export type GameEvents = {
   "zoo:open": undefined;
   /** 타는 펫 (sticky): pet = 데리고 다니는 타는 펫 id(없으면 null), riding = 올라타 있음, can = 지금 올라탈 수 있음 (UI 타기 버튼) */
   "ride:state": { pet: string | null; riding: boolean; can: boolean };
+  /** 11/15 오리배에 타 있음 (sticky) → 터치 [점프] 버튼이 [꽥!]이 된다 (오리배 위 Space = 꽥) */
+  "boat:duck": { riding: boolean };
   /** 내 캐릭터의 화면 위치 (CSS px, 뷰포트 기준). ui:radial이 열려 있는 동안 움직일 때만 */
   "me:screen": { x: number; y: number };
 };
@@ -279,6 +287,8 @@ export type UiEvents = {
   "rpg:pause": { paused: boolean };
   /** 포기하고 나가기 → 지금까지의 결과로 rpg:ended(aborted=true) */
   "rpg:quit": undefined;
+  /** 11/15 능력 카드: 고름·다시 뽑기·상사의 제안 받기/거절 */
+  "rpg:cardPick": CardChoice;
   /** 함께 사냥: 정해진 문장 말풍선 (PHRASES id) — 내 머리 위에 띄우고 같은 방에 보낸다 */
   "rpg:say": { id: string };
 
@@ -317,7 +327,12 @@ export type UiEvents = {
   "house:follow": { houseId: string; name: string; at: number } | null;
 };
 
-export type ForageUse = { kind: "fish"; spot: string; water: "lake" | "river" } | { kind: "npc"; npc: "fishmonger" | "collector" } | { kind: "node"; node: string };
+export type ForageUse =
+  | { kind: "fish"; spot: string; water: "lake" | "river" }
+  | { kind: "npc"; npc: "fishmonger" | "collector" }
+  | { kind: "node"; node: string }
+  /** 11/15 납품 부두 의뢰 게시판 → 수집 의뢰판 */
+  | { kind: "board" };
 export type ForageRodPhase = "idle" | "cast" | "wait" | "nibble" | "bite" | "reel" | "catch" | "escape" | "snap";
 
 type AllEvents = GameEvents & UiEvents;
@@ -346,10 +361,12 @@ const STICKY = new Set<keyof AllEvents>([
   "mood:state",
   "audio:mix",
   "ride:state",
+  "boat:duck",
   "ui:radial",
   "sky:hud",
   "friends:here",
   "house:follow",
+  "rpg:cards",
 ]);
 
 class Bridge {

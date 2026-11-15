@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { isNameSlot, ITEMS, PERMANENT_MULTIPLIER, PERMANENT_UNTIL } from "@tomb/protocol";
+import { isNameSlot, isShopListed, itemById, ITEMS, PERMANENT_MULTIPLIER, PERMANENT_UNTIL } from "@tomb/protocol";
 import { hasItemIcon } from "@/game/sprites/itemIcons";
+import { nameStyleIcon } from "@/game/sprites/nameStyleIcons";
 import { COSMETIC_DROPS } from "./rpg/catalog";
 import { itemLookScore, itemLookValue, LOOK_SCORE_DIVISOR, lookScore, wornParts } from "./lookScore";
 import {
@@ -11,6 +12,9 @@ import {
   flameColor,
   gradientAt,
   hasNameStyle,
+  LEAF_COUNT,
+  leafAt,
+  luminance,
   mixColor,
   NAME_COLORS,
   NAME_OUTLINE,
@@ -21,6 +25,10 @@ import {
   namePlateSpec,
   nameStyleIds,
   nameStyleRef,
+  NY_DUST_COUNT,
+  nyDustAt,
+  WAVE_FLOW_MS,
+  waveFlow,
 } from "./nameStyle";
 import { boardWithNameStyles, withNameStyles } from "./nameStyleRank";
 import { MemoryLookRank } from "./store/lookRank";
@@ -47,11 +55,72 @@ describe("색 정의", () => {
     expect(nameColorSpec(null)).toBeNull();
   });
 
-  it("종류: 단색 8 · 그라데이션 6 · 움직이는 4 (빛 테두리·무지개·별가루·불꽃)", () => {
+  it("종류: 단색 8 · 그라데이션 6 · 움직이는 5 (빛 테두리·무지개·별가루·불꽃 + 11/15 의뢰 나뭇잎)", () => {
     const kinds = Object.values(NAME_COLORS).map((s) => (s.kind === "fx" ? s.fx : s.kind));
     expect(kinds.filter((k) => k === "solid").length).toBe(8);
     expect(kinds.filter((k) => k === "gradient").length).toBe(6);
-    expect(kinds.filter((k) => k !== "solid" && k !== "gradient").sort()).toEqual(["flame", "glow", "rainbow", "stars"]);
+    expect(kinds.filter((k) => k !== "solid" && k !== "gradient").sort()).toEqual(["flame", "glow", "leaves", "rainbow", "stars"]);
+  });
+
+  it("11/15 새해 복 이름표: 다홍 판 + 금가루 (판 양끝에서만 떠오르고 결정적), 상점엔 없다", () => {
+    expect(namePlateSpec("q_name_newyear")?.kind).toBe("newyear");
+    expect(nameColorSpec("q_name_newyear")).toBeNull();
+    expect(itemById("q_name_newyear")?.quest).toBe(true);
+    expect(isShopListed(itemById("q_name_newyear")!)).toBe(false);
+    expect(hasItemIcon("q_name_newyear")).toBe(true);
+    const g = nameStyleIcon("q_name_newyear")!;
+    let px = 0;
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (g.get(x, y) & 255) px++;
+    expect(px).toBeGreaterThan(40);
+    // 기본 이름 글자(뼛빛)가 판 위에서 또렷하다
+    expect(contrast(0xf2ead3, namePlateSpec("q_name_newyear")!.fill)).toBeGreaterThan(4.5);
+    for (let i = 0; i < NY_DUST_COUNT; i++)
+      for (const t of [0, 777, 5_000, 123_456]) {
+        const p = nyDustAt(i, t);
+        expect(p).toEqual(nyDustAt(i, t));
+        expect(Math.abs(p.x)).toBeGreaterThanOrEqual(0.3);
+        expect(Math.abs(p.x)).toBeLessThanOrEqual(0.6);
+        expect(p.a).toBeGreaterThanOrEqual(0);
+        expect(p.a).toBeLessThanOrEqual(1);
+      }
+  });
+
+  it("11/15 수집 의뢰 이름 꾸미기: 물결 이름표·나뭇잎 이름 글자 — 정의·아이콘이 있고 상점엔 없다", () => {
+    expect(namePlateSpec("q_name_wave")?.kind).toBe("wave");
+    expect(nameColorSpec("q_name_leaf")).toMatchObject({ kind: "fx", fx: "leaves" });
+    // 부위가 엇갈리면 없음
+    expect(nameColorSpec("q_name_wave")).toBeNull();
+    expect(namePlateSpec("q_name_leaf")).toBeNull();
+    for (const id of ["q_name_wave", "q_name_leaf"]) {
+      expect(itemById(id)?.quest, id).toBe(true);
+      expect(isShopListed(itemById(id)!), id).toBe(false);
+      expect(hasItemIcon(id), id).toBe(true);
+      const g = nameStyleIcon(id)!;
+      let px = 0;
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (g.get(x, y) & 255) px++;
+      expect(px, id).toBeGreaterThan(40);
+    }
+    expect(nameStyleRef(["q_name_leaf", "q_name_wave"])).toEqual({ color: "q_name_leaf", plate: "q_name_wave" });
+    // 잎 그라데이션: 연두 → 짙은 초록 (첫 색이 더 밝다)
+    const e = nameEdgeColors("q_name_leaf", 4)!;
+    expect(luminance(e[0])).toBeGreaterThan(luminance(e[4]));
+  });
+
+  it("나뭇잎·물결 움직임: 결정적이고 범위 안", () => {
+    for (let t = 0; t < 10_000; t += 97)
+      for (let i = 0; i < LEAF_COUNT; i++) {
+        const p = leafAt(i, t);
+        expect(p).toEqual(leafAt(i, t));
+        expect(Math.abs(p.x)).toBeLessThanOrEqual(0.6);
+        expect(p.y).toBeGreaterThanOrEqual(0);
+        expect(p.y).toBeLessThanOrEqual(1.4);
+        expect(p.a).toBeGreaterThanOrEqual(0);
+        expect(p.a).toBeLessThanOrEqual(1);
+      }
+    expect(waveFlow(0)).toBe(0);
+    expect(waveFlow(WAVE_FLOW_MS / 2)).toBeCloseTo(0.5);
+    expect(waveFlow(WAVE_FLOW_MS * 3 + 1)).toBeCloseTo(waveFlow(1));
+    expect(waveFlow(-1)).toBeGreaterThanOrEqual(0);
   });
 
   it("읽기 쉬움: 모든 글자 색이 이름표 외곽선(밤 어둠 위)과 7:1 이상 대비, 기본 이름표 색과는 다르다", () => {

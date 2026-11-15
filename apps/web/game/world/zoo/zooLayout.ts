@@ -4,12 +4,13 @@ import { ZOO, ZOO_EAST_GATE, ZOO_GATE, ZOOKEEPER } from "@tomb/protocol";
 // 그림은 zoo/zooArt.ts + zoo/ZooView.ts, 구역·문·사육사 좌표 원본은 protocol world.ts(ZOO·ZOO_GATE·ZOO_EAST_GATE·ZOOKEEPER).
 // 충돌은 layout.staticColliders()에 들어가 걷기 격자·고양이 길찾기·새로고침 복원 판정이 모두 같은 상자를 본다.
 //
-//   y=784 ━━━━━━━━━━━[정문 x160~192]━━━━━━━━━━━━━━━━━━━━━━━━━┓
-//         ┃ ┌사슴 우리┐  ║  사육사·노점  ┌여우 굴┬작은 친구들┐ ┃
-//         ┃ └────────┘  ║              └──────┴──────────┘ ┃
-//   y≈888 ┃ ═══════════ 가로 길 ═════════════════════════════ [동문 → 안개 숲]
-//         ┃ ┌거위 연못┐  ║  ┌큰 개 놀이터┐   쉼터(벤치·버드나무)  ┃
-//   y=1008┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ (아래 담)
+// 11/15: 동쪽을 96px 줄였다 (x 48~304) — 쉼터를 빼고 우리를 촘촘히, 정문 길은 가로 길에서 멈춘다. 빈 자리는 오리 연못.
+//   y=784 ━━━━━━━━━━━[정문 x160~192]━━━━━━━━━━━━━━┓
+//         ┃ ┌사슴 우리┐  ║  사육사·노점  ┌여우 굴┐┃
+//         ┃ └────────┘  ║              └──────┘┃
+//   y≈888 ┃ ═══════════ 가로 길 ════════════════════ [동문 → 안개 숲·오리 연못]
+//         ┃ ┌거위 연못┐┌큰 개 놀이터┐┌작은 친구들┐┃
+//   y=1008┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ (아래 담)
 
 type Box = { x: number; y: number; w: number; h: number };
 
@@ -19,10 +20,10 @@ export type Pen = { id: PenId; name: string; rect: Box };
 /** 우리 다섯 곳 (나무 울타리로 네 변을 막는다 — 사람은 못 들어가고 동물은 안에서만 돌아다닌다) */
 export const ZOO_PENS: readonly Pen[] = [
   { id: "deer", name: "사슴 우리", rect: { x: 56, y: 792, w: 92, h: 72 } },
-  { id: "fox", name: "여우 굴", rect: { x: 252, y: 792, w: 68, h: 72 } },
-  { id: "friends", name: "작은 친구들", rect: { x: 320, y: 792, w: 72, h: 72 } },
-  { id: "geese", name: "거위 연못", rect: { x: 56, y: 912, w: 92, h: 88 } },
-  { id: "hounds", name: "큰 개 놀이터", rect: { x: 204, y: 912, w: 104, h: 88 } },
+  { id: "fox", name: "여우 굴", rect: { x: 254, y: 792, w: 44, h: 72 } },
+  { id: "geese", name: "거위 연못", rect: { x: 56, y: 912, w: 80, h: 88 } },
+  { id: "hounds", name: "큰 개 놀이터", rect: { x: 140, y: 912, w: 88, h: 88 } },
+  { id: "friends", name: "작은 친구들", rect: { x: 232, y: 912, w: 66, h: 88 } },
 ];
 export function penById(id: PenId): Pen {
   return ZOO_PENS.find((p) => p.id === id)!;
@@ -30,14 +31,14 @@ export function penById(id: PenId): Pen {
 
 /** 자갈길 (타일 단위, 포함 범위): 정문에서 내려오는 세로 길 · 가운데 가로 길 · 사육사 앞마당 */
 export const ZOO_PATHS: readonly { tx0: number; tx1: number; ty0: number; ty1: number }[] = [
-  { tx0: 10, tx1: 11, ty0: 49, ty1: 62 },
-  { tx0: 3, tx1: 24, ty0: 55, ty1: 55 },
-  { tx0: 12, tx1: 14, ty0: 50, ty1: 53 },
+  { tx0: 10, tx1: 11, ty0: 49, ty1: 55 },
+  { tx0: 3, tx1: 18, ty0: 55, ty1: 55 },
+  { tx0: 12, tx1: 15, ty0: 50, ty1: 53 },
 ];
-/** 동문 → 안개 숲 흙길 (가로 길 줄, 울타리 밖 세 칸) */
-export const ZOO_EAST_TRAIL = { tx0: 25, tx1: 27, ty: 55 } as const;
+/** 동문 → 안개 숲 흙길 (가로 길 줄, 울타리 밖 두 칸 — 그 앞이 오리 연못 서쪽 둑) */
+export const ZOO_EAST_TRAIL = { tx0: 19, tx1: 20, ty: 55 } as const;
 /** 거위 연못 물 (그림만 — 우리 안이라 사람이 들어갈 수 없다) */
-export const ZOO_POND = { x: 100, y: 958, rx: 24, ry: 12 } as const;
+export const ZOO_POND = { x: 94, y: 958, rx: 22, ry: 12 } as const;
 /** 사육사 노점 (사육사 오른쪽, 받침 가운데) */
 export const ZOO_STALL = { x: ZOOKEEPER.x + 24, y: ZOOKEEPER.y + 2 } as const;
 
@@ -55,27 +56,23 @@ export const ZOO_DECOR: readonly ZooDecor[] = [
   { kind: "hay", x: 130, y: 818 },
   { kind: "trough", x: 104, y: 858 },
   // 여우 굴: 바위 굴
-  { kind: "den", x: 300, y: 812 },
-  { kind: "flowers", x: 268, y: 852 },
-  // 작은 친구들: 횃대·여물통
-  { kind: "perch", x: 376, y: 812 },
-  { kind: "trough", x: 340, y: 858 },
+  { kind: "den", x: 280, y: 814 },
+  { kind: "flowers", x: 266, y: 856 },
   // 거위 연못
   { kind: "pond", x: ZOO_POND.x, y: ZOO_POND.y + ZOO_POND.ry },
-  { kind: "hay", x: 138, y: 930 },
+  { kind: "hay", x: 126, y: 930 },
   // 큰 개 놀이터: 개집·여물통
-  { kind: "doghouse", x: 228, y: 938 },
-  { kind: "trough", x: 286, y: 992 },
-  // 쉼터 (벤치 bX 둘레)
-  { kind: "willow", x: 384, y: 936 },
-  { kind: "bush", x: 322, y: 958 },
-  { kind: "flowers", x: 330, y: 1000 },
+  { kind: "doghouse", x: 162, y: 938 },
+  { kind: "trough", x: 210, y: 992 },
+  // 작은 친구들: 횃대·여물통
+  { kind: "perch", x: 280, y: 934 },
+  { kind: "trough", x: 252, y: 992 },
   // 우리 이름 팻말 (가로 길에서 보이게)
   { kind: "sign", x: 102, y: 878, label: "사슴 우리" },
-  { kind: "sign", x: 286, y: 878, label: "여우 굴" },
-  { kind: "sign", x: 356, y: 878, label: "작은 친구들" },
-  { kind: "sign", x: 102, y: 908, label: "거위 연못" },
-  { kind: "sign", x: 256, y: 908, label: "큰 개 놀이터" },
+  { kind: "sign", x: 276, y: 878, label: "여우 굴" },
+  { kind: "sign", x: 96, y: 908, label: "거위 연못" },
+  { kind: "sign", x: 184, y: 908, label: "큰 개 놀이터" },
+  { kind: "sign", x: 265, y: 908, label: "작은 친구들" },
 ];
 
 /** 바깥 울타리·우리 울타리 한 줄 (가로 y0 = y1, 세로 x0 = x1) */

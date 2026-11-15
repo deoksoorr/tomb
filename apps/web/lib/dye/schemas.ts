@@ -1,4 +1,4 @@
-import { AVATAR_BODIES, DYE_PARTS, isFixedDyeId, itemById, normalizeDyeColor, permanentPrice } from "@tomb/protocol";
+import { AVATAR_BODIES, DYE_PARTS, DYE_SPECIALS, isFixedDyeId, itemById, normalizeDyeColor, permanentPrice } from "@tomb/protocol";
 import { z } from "zod";
 import { DYE_LIMIT } from "./palette";
 
@@ -21,6 +21,20 @@ export const DyeTimeoutSchema = DyeFinishSchema;
 export const DyeChooseSchema = z.object({ seed: DyeFinishSchema.shape.seed, apply: z.boolean() });
 export const DyeCancelSchema = z.object({ seed: DyeFinishSchema.shape.seed });
 export const DyeFixedSchema = z.object({ itemId: fixedTicket, part });
+// 11/15 수집 의뢰 염색권: 색 확정은 사용자가 보통 색("#rrggbb")을 직접 보낸다 (특수 표시 "~x"는 받지 않는다 — 특수 색은 특수색 확정 염색권만)
+const pickTicket = z.string().refine((id) => itemById(id)?.dye?.mode === "pick", "색 확정 염색권이 아니에요.");
+const specialTicket = z.string().refine((id) => itemById(id)?.dye?.mode === "special", "특수색 확정 염색권이 아니에요.");
+export const DyePickSchema = z.object({
+  itemId: pickTicket,
+  part,
+  color: z
+    .string()
+    .max(7)
+    .refine((c) => /^#[0-9a-fA-F]{6}$/.test(c), "색은 #RRGGBB 모양이에요.")
+    .transform((c) => normalizeDyeColor(c)!),
+});
+/** 특수색 확정: 종류만 받는다 (바탕 색은 서버가 lib/dye/rules specialDyeColor로 정한다) */
+export const DyeSpecialSchema = z.object({ itemId: specialTicket, part, kind: z.enum(DYE_SPECIALS) });
 export const DyeResetSchema = z.object({ part });
 export const ReshapeSchema = z.object({ body: z.enum(AVATAR_BODIES.map((b) => b.id) as [string, ...string[]]) });
 /** POST /api/shop/permanent { itemId } — 영구로 살 수 있는 꾸미기만 */

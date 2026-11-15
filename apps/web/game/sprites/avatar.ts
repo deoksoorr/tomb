@@ -1,6 +1,6 @@
-import { hasDye, isAvatarBody, premiumBody, type AvatarBody, type AvatarDye } from "@tomb/protocol";
+import { bodyTier, hasDye, isAvatarBody, type AvatarBody, type AvatarDye } from "@tomb/protocol";
 import { darken, Grid, lighten, mix, parseHex, type Color } from "./pixel";
-import { COVERING_HATS, drawBackGear, drawHandGear, drawHandGlow, drawHeadGear, drawNeckGear, extraGearOf, GEAR_SHEET_IDS, type ExtraGear } from "./avatarGear";
+import { COVERING_HATS, drawBackGear, drawHandGear, drawHandGlow, drawHeadGear, drawHeadGlow, drawNeckGear, extraGearOf, GEAR_SHEET_IDS, type ExtraGear } from "./avatarGear";
 import { COSMETIC_FX_IDS } from "./cosmeticFx";
 
 // 방문자 아바타 6종 (모두 오리지널 디자인, 같은 색 팔레트 규칙):
@@ -39,9 +39,10 @@ export const BODY_BASE: Readonly<Record<AvatarBody, BaseBody>> = {
   tube: "round",
   king: "hood",
   reaper: "tall",
+  collector: "hood",
 };
 /** 염색하지 않은 몸 부위의 원래 색 (몸 부위 = 상자·머그잔·망토·도포. 없으면 고른 색) */
-const BODY_DEFAULT: Partial<Record<AvatarBody, Color>> = { suit: 0x3e465c, box: 0xc89a5e, umbrella: 0xe8b83a, cup: 0xf0ebe2, king: 0xb02a3a, reaper: 0x2c2a34 };
+const BODY_DEFAULT: Partial<Record<AvatarBody, Color>> = { suit: 0x3e465c, box: 0xc89a5e, umbrella: 0xe8b83a, cup: 0xf0ebe2, king: 0xb02a3a, reaper: 0x2c2a34, collector: 0xc4a66a };
 
 export const AV_W = 20;
 export const AV_H = 28;
@@ -118,6 +119,7 @@ export const BODY_METRICS: Record<AvatarBody, { top: number; shoulder: number }>
   tube: { top: 16, shoulder: 9 },
   king: { top: 21, shoulder: 7 },
   reaper: { top: 24, shoulder: 12 },
+  collector: { top: 21, shoulder: 7 },
 };
 
 export function bodyOf(body: string | null | undefined): AvatarBody {
@@ -663,6 +665,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   // 등불 창은 외곽선 뒤에도 밝게 (빛나는 점)
   if (gear.lantern && view !== "up") g.set(m.hx, m.hY + 1, 0xfff0b0);
   if (gear.extra.hand) drawHandGlow(g, view, gear.extra.hand, m);
+  if (gear.extra.head) drawHeadGlow(g, view, gear.extra.head, m, fb === "round" ? m.top - 1 : m.top);
   if (gear.hat === "hat_halo") drawHalo(g, m, view);
   // 손 흔들기·환호: 팔 없는 몸은 몸 전체를 기울이고, 손은 밝은 색 + 외곽선으로 몸 밖에 크게 그린다
   const tilt = (fb === "round" || fb === "sheet") && pose.tilt ? pose.tilt : 0;
@@ -690,7 +693,7 @@ function drawFrame(body: AvatarBody, view: View, pose: Pose, pal: Pal, gear: Gea
   }
 
   // 25번 등급 외곽선: 희귀 = 금, 전설 = 무지개 (어두운 외곽선 바깥에 한 줄 더)
-  const tier = premiumBody(body)?.tier;
+  const tier = bodyTier(body);
   if (tier === "rare" || tier === "legend") tierRim(g, tier === "legend");
 
   // 발밑 그림자 (외곽선 뒤, 투명한 곳에만). 공중·물·의자에서는 그리지 않는다
@@ -721,6 +724,7 @@ function tierRim(g: Grid, rainbow: boolean): void {
 
 /** 외곽선 다음에 그리는 가는 선 (외곽선에 묻히지 않게): 고양이 탈의 밖으로 뻗은 수염 */
 function drawBodyAfterOutline(g: Grid, body: AvatarBody, view: View, pose: Pose, m: M): void {
+  if (body === "collector") return collectorGlow(g, view, pose, m);
   if (body !== "catmask" || pose.lie || view === "up") return;
   const { cx } = m;
   const hy = Math.round(m.hy);
@@ -741,6 +745,13 @@ function drawBodyAfterOutline(g: Grid, body: AvatarBody, view: View, pose: Pose,
     g.set(cx + 5, hy + 3, w, 230);
     g.set(cx + 6, hy + 3, w, 200);
   }
+}
+
+/** 11/15 수집가 유령: 등불 불꽃 · 표본병 반짝 (외곽선 뒤에도 밝게) */
+function collectorGlow(g: Grid, view: View, pose: Pose, m: M): void {
+  if (pose.lie || pose.sink || pose.arms === "up" || pose.arms === "rope" || view === "up") return;
+  g.set(m.hx, m.hY + 1, 0xfff6c8);
+  g.set(m.hx, m.hY, 0xffe08a);
 }
 
 // ── 25번 프리미엄·운영자 외형 덧그림 ──
@@ -864,6 +875,29 @@ function drawBodyExtra(g: Grid, body: AvatarBody, phase: "torso" | "front", view
         else if (side) g.set(cx + 2, neck + 1, 0xf2c43a);
         return;
       }
+      case "collector": {
+        // 11/15 수집가 유령: 탐험 외투(몸 부위 색) + 초록 목수건 + 가슴을 가로지르는 가방 끈(포인트, 원래 적갈색) + 단추
+        const strap = accent(0xb8582e);
+        const strapLo = accentLo(0x8a3e1e);
+        const kerchief = 0x3a9a72;
+        if (view === "down") {
+          g.hline(cx - 2, cx + 1, neck, kerchief);
+          g.set(cx - 1, neck + 1, kerchief);
+          g.set(cx, neck + 1, 0x2a7a58);
+          // 오른 어깨에서 왼쪽 허리 가방으로 (오른손엔 등불)
+          line(g, m.shR - 1, neck, cx - 4, cloakBot - 2, strap);
+          line(g, m.shR - 1, neck + 1, cx - 4, cloakBot - 1, strapLo);
+          g.set(cx, neck + 2, 0xe0b040);
+        } else if (side) {
+          g.vline(cx + 2, neck, neck + 1, kerchief);
+          g.vline(cx, neck, cloakBot - 2, strap);
+          g.set(cx + 2, neck + 3, 0xe0b040);
+        } else {
+          g.hline(cx - 3, cx + 2, neck, kerchief);
+          line(g, m.shL + 1, neck, cx + 3, cloakBot - 2, strap);
+        }
+        return;
+      }
       case "reaper": {
         // 흰 동정(V 옷깃) + 붉은 띠
         const sash = 0x9a2a2a;
@@ -982,6 +1016,38 @@ function drawBodyExtra(g: Grid, body: AvatarBody, phase: "torso" | "front", view
       g.set(bx + 2, by - 1, pal.hand);
       return;
     }
+    case "collector": {
+      // 11/15 수집가 유령: 허리의 표본 가방(유리 표본병이 삐죽) + 손에 든 채집 등불 (불꽃은 외곽선 다음 collectorGlow)
+      if (pose.lie) break;
+      const strap = accent(0xb8582e);
+      // 왼쪽 허리 (뒷모습은 보는 쪽 오른편, 옆모습은 등 뒤)
+      const bx = view === "down" ? cx - 9 : side ? cx - 8 : cx + 4;
+      const by = cloakBot - 4;
+      g.rect(bx, by, 5, 4, 0x5e3620);
+      g.hline(bx, bx + 4, by, 0x9a6a3a);
+      g.hline(bx, bx + 4, by + 1, 0x8a5a30);
+      g.vline(bx + 4, by + 1, by + 3, 0x40220f);
+      g.set(bx + 2, by + 1, 0xf0c048);
+      g.set(bx + 2, by + 2, 0x7a4a28);
+      g.set(bx + (view === "up" ? 0 : 4), by - 1, strap);
+      // 표본병 (뚜껑 + 유리 + 안의 잎)
+      g.set(bx + 1, by - 2, 0xc89a5a);
+      g.set(bx + 1, by - 1, 0xbfe8f0);
+      g.set(bx + 2, by - 1, 0x6ac06a);
+      if (pose.sink || pose.arms === "up" || pose.arms === "rope" || up) break;
+      // 채집 등불: 고리 + 놋쇠 틀 + 따뜻한 유리
+      const lx = m.hx;
+      const ly = m.hY;
+      g.set(lx, ly - 2, 0x2a2018);
+      g.hline(lx - 1, lx + 1, ly - 1, 0x4a3418);
+      g.rect(lx - 1, ly, 3, 3, 0xffe9a0);
+      g.set(lx - 1, ly, 0x6a4a1e);
+      g.set(lx + 1, ly, 0x6a4a1e);
+      g.set(lx - 1, ly + 2, 0xf0b84a);
+      g.set(lx + 1, ly + 2, 0xf0b84a);
+      g.hline(lx - 1, lx + 1, ly + 3, 0x4a3418);
+      break;
+    }
     case "umbrella": {
       // 우산: 매달리기·그네·해먹에서는 내려놓는다
       if (pose.lie || pose.arms === "up" || pose.arms === "rope") return;
@@ -1043,6 +1109,21 @@ function drawBodyExtra(g: Grid, body: AvatarBody, phase: "torso" | "front", view
   }
   if (headWorn) return;
   switch (body) {
+    case "collector": {
+      // 탐험 모자 (크림빛 둥근 헬멧 + 띠는 포인트 색 + 넓은 챙)
+      const c = 0xeee2b8;
+      const lo = 0xc4b282;
+      const band = accent(0xb8582e);
+      const sh = side ? -1 : 0;
+      g.hline(cx - 2 + sh, cx + 1 + sh, top - 3, c);
+      g.hline(cx - 4 + sh, cx + 3 + sh, top - 2, c);
+      g.set(cx + 3 + sh, top - 2, lo);
+      g.set(cx - 3 + sh, top - 3, 0xfff8e0);
+      g.hline(cx - 4 + sh, cx + 3 + sh, top - 1, band);
+      if (side) g.hline(cx - 6, cx + 5, top, lo);
+      else g.hline(cx - 6, cx + 5, top, view === "down" ? lo : c);
+      return;
+    }
     case "king": {
       // 왕관: 포인트 색(원래 금색), 보석 셋
       const gold = accent(0xf2c43a);

@@ -6,9 +6,9 @@ import { PRESENCE_INTERVAL_MS } from "@/lib/types";
 
 const PATH = "/guide/cowork";
 const H1 = "재택근무할 때 같이 일하는 느낌 나는 사이트";
-const TITLE = "재택근무할 때 같이 일하는 느낌 나는 사이트 — 최대 40명 실시간 도트 마을 | 한때는...";
+const TITLE = "재택근무할 때 같이 일하는 느낌 나는 사이트 — 최대 40명 실시간 도트 마을 | At one time...";
 const DESCRIPTION =
-  "혼자 재택근무할 때 누군가 곁에 있는 느낌이 필요하다면 한때는...에 들어와 보세요. 채널마다 최대 40명이 한 마을에 모이고, 벤치에 앉아 '일하는 중' 상태를 띄워 두면 같은 채널 모두에게 보여요. 무료, 설치·가입 없이.";
+  "혼자 재택근무할 때 누군가 곁에 있는 느낌이 필요하다면 At one time...에 들어와 보세요. 채널마다 최대 40명이 한 마을에 모이고, 벤치에 앉아 '일하는 중' 상태를 띄워 두면 같은 채널 모두에게 보여요. 무료, 설치·가입 없이.";
 
 export const metadata = pageMetadata(PATH, TITLE, DESCRIPTION);
 
@@ -29,7 +29,7 @@ export default function CoworkPage() {
       path={PATH}
       h1={H1}
       description={DESCRIPTION}
-      lead="「한때는...」은 여러 사람이 실시간으로 함께 있는 도트 마을이에요. 벤치에 앉아 '일하는 중'을 띄우고 같이 일해요."
+      lead="「At one time...」은 여러 사람이 실시간으로 함께 있는 도트 마을이에요. 벤치에 앉아 '일하는 중'을 띄우고 같이 일해요."
       facts={FACTS}
       steps={[
         "아래 [마을 들어가기]를 눌러 이름과 모습을 정하고 채널을 골라 들어가요.",

@@ -4,6 +4,7 @@ import { DIFFICULTIES } from "@/lib/rpg/catalog";
 import { handler, HttpError, json } from "@/lib/http";
 import { getHouseStore, houseRank } from "@/lib/housing/service";
 import { huntLevelRank } from "@/lib/huntLevelRank";
+import { towerRank } from "@/lib/towerRank";
 import { lookRank } from "@/lib/lookRank";
 import { boardWithNameStyles } from "@/lib/nameStyleRank";
 import { rateLimit } from "@/lib/ratelimit";
@@ -25,6 +26,7 @@ const RANK_SIZE = 50;
  *  - house: 하우징 꾸밈 점수 (F11. 전체 = 모든 집, 주간 = 이번 주에 꾸민 집. name = 집 이름, sub = 번지 · 주인)
  *  - fish: 최대어 `&fish=<물고기 id>|all` (value = 크기 cm×10. all이면 sub = 그 물고기 이름)
  *  - huntLevel: 사냥 캐릭터 레벨 (같으면 경험치. 기간 없음. value = 레벨, sub = 경험치, gear = 장착 무기. 정지 계정 제외)
+ *  - tower: 11/15 야근 빌딩 최고 층 (주간·전체. value = 층, sub = 그 층을 깬 시각. 정지 계정 제외)
  *  - look: 외형 꾸미기 점수 (기간 없음. 읽을 때 상위 후보를 지금 착용으로 다시 계산 — 만료된 코디는 0점. items = 지금 착용 파츠 전부(부위 순). 정지 계정 제외)
  * 운영자 계정은 어느 판에도 나오지 않는다 (lib/staffRank). 운영자 본인이 보면 mine = null, staff = true
  * 사람 줄(집 랭킹 빼고)에는 ns = 그 사람이 지금 입은 닉네임 꾸미기 id (lib/nameStyleRank — 화면이 이름 색·이름표로 그린다)
@@ -69,6 +71,16 @@ export const GET = handler(async (req) => {
     };
     const { rows, mine } = await boardWithNameStyles(r.rows, r.mine);
     return json<RankResponse>({ board, period: "all", rows: rows.map(strip), mine: mine ? strip(mine) : null, ...staff }, { headers: cacheHeaders(personal) });
+  }
+  if (board === "tower") {
+    const r = await towerRank(me, RANK_SIZE, week, { staffId });
+    const strip = (x: (typeof r.rows)[number] & { ns?: string[] }): RankRow => {
+      const row: RankRow & { accountId?: string } = { ...x };
+      delete row.accountId;
+      return row;
+    };
+    const { rows, mine } = await boardWithNameStyles(r.rows, r.mine);
+    return json<RankResponse>({ board, period, rows: rows.map(strip), mine: mine ? strip(mine) : null, ...staff }, { headers: cacheHeaders(personal) });
   }
   if (board === "house") {
     const r = await houseRank(getHouseStore(), period, me, RANK_SIZE, Date.now(), staffId);

@@ -1,8 +1,11 @@
+import type { CardId, CardKindStyle, CardPick } from "./cards";
 import type { Difficulty, DropKind, GameKind, GearSlot, MonsterId, SkillId, Stats, ZoneId } from "./catalog";
 import type { DexGain } from "../forage/types";
 import type { Derived } from "./formulas";
 import type { StarSky } from "./plan";
+import type { RunTier } from "./endgame";
 import type { StatusId } from "./status";
+import type { HotAuto } from "./hotbar";
 
 // 사냥터(RPG) 데이터 형태: 저장 원본, API 응답, 게임 ↔ UI 브리지 페이로드.
 
@@ -16,8 +19,10 @@ export type CharacterState = {
   stats: Stats;
   /** 스킬 트리 배분 (스킬 → 랭크). 검증 규칙은 skillRules.ts */
   skills: Partial<Record<SkillId, number>>;
-  /** 단축키 1~6에 놓은 스킬 (액티브만) */
+  /** 단축키에 놓은 스킬 (액티브만). 11/15 0~4 = 숫자 키 1~5, 5 = 궁극기 칸(F) — lib/rpg/hotbar */
   hotbar: (SkillId | null)[];
+  /** 11/15 자동 스킬 (칸마다·전체 스위치·궁극기 SP 남김). 옛 저장값에는 없다 = 모두 끔 */
+  hotAuto?: HotAuto;
   /** 스킬 저장 형식 버전 (2 = 갈래 3개 트리). 다르면 normalize가 스킬을 비우고 포인트를 돌려준다 */
   treeVer: number;
   /** 스킬 초기화한 횟수 (비용에는 영향 없음, 기록용) */
@@ -34,12 +39,46 @@ export type CharacterState = {
   potions: Record<string, number>;
   /** 끝낸 판 수 */
   runs: number;
+  // ── 11/15 사냥 끝판 (lib/rpg/endgame). 옛 저장값에 없으면 normalize가 0으로 ──
+  /** 초월 레벨 0..50 (표시 ★51..★100, 0 = 아직). 레벨 50에서 지옥 사냥 판 EXP·야근 빌딩 층 EXP만 여기로 */
+  tLevel: number;
+  tExp: number;
+  /**
+   * 하루 초월 판 기록: 게임 날짜(새벽 5시 기준)·그날 센 초월 판 수·그날 적립된 100% 판 수 ·
+   * 11/15 야근 빌딩: 아직 한 판(4층)이 안 된 깬 층 수 · 오늘 연 우두머리 상자 수
+   */
+  tDay?: string;
+  tRuns: number;
+  tBank: number;
+  tFl: number;
+  tChest: number;
+  /** 11/15 야근 빌딩 최고 기록: 깬 가장 높은 층(0 = 없음)과 그 판에서 그 층을 깬 시각(판 시작부터 ms — 같은 층이면 빠른 쪽) */
+  fBest: number;
+  fBestMs: number;
+  /** 이번 주(fWk = 그 주 월요일) 최고 층·시각 (주가 바뀌면 0부터) */
+  fWk?: string;
+  fWkBest: number;
+  fWkMs: number;
+  /** 개척자 번호와 받은 시각 (끝판이 열린 뒤 14일 안에 ★51 또는 야근 빌딩 5층) */
+  pioneer?: { n: number; at: number };
 };
 
 export type DailyStats = { points: number; runs: number; exp: number };
 
 /** 되팔기 결과: 받은 포인트(환불+사냥 수입), 한도에 닿았는지, 실제로 판 개수 (한도에 막혀 못 판 것은 가방에 그대로) */
 export type SoldInfo = { value: number; capped: boolean; count: number };
+
+/** 11/15 끝판 화면 정보 (레벨 50 — 슈퍼 계정 포함 — 일 때만) */
+export type EndgameView = {
+  /** 다음 초월 레벨까지 (최대면 0) */
+  tExpToNext: number;
+  /** 오늘 초월 판: 센 판 수 · 100% 판 수(20 + 적립) · 적립 · 다음 판의 구간 · 야근 빌딩에서 다음 판까지 깬 층(0..3) */
+  day: { runs: number; full: number; bank: number; tier: RunTier; floors: number };
+  /** 야근 빌딩: 최고 층 · 이번 주 최고(층·ms) · 고를 수 있는 시작 층 · 오늘 연 우두머리 상자 / 하루 상자 */
+  tower: { best: number; week: { floor: number; ms: number } | null; checkpoints: number[]; chests: number; chestsMax: number };
+  /** 개척자: 모집 마감 시각(없으면 아직 끝판이 안 열림) · 받은 번호 */
+  pioneer: { until: number | null; n?: number; at?: number };
+};
 
 export type RpgView = {
   character: CharacterState;
@@ -55,6 +94,8 @@ export type RpgView = {
   statResetCost: number;
   /** 테스트 서버 슈퍼 계정 (운영 서버에서는 늘 없음): 스킬 포인트 넉넉히·레벨 최대 취급·사냥터 모두 열림 (초기화는 비용을 내되 횟수는 안 센다) */
   superHunter?: boolean;
+  /** 11/15 끝판 (레벨 50일 때만) */
+  endgame?: EndgameView;
 };
 
 // ── 판 결과 (클라이언트가 보낸다, 서버가 계획·시간으로 검증한다) ──
@@ -66,6 +107,12 @@ export type HuntResult = {
   wavesCleared: number;
   died: boolean;
   potionsUsed: Record<string, number>;
+  /** 11/15 야근 빌딩: 이번 판에 깬 층 수 · 마지막 층을 깬 시각(판 시작부터 ms) · Esc로 그만두고 나왔는지 */
+  floors?: number;
+  floorMs?: number;
+  quit?: boolean;
+  /** 11/15 야근 빌딩 능력 카드: 고른 순서대로 (서버가 시드로 제안을 다시 굴려 확인한다 — lib/rpg/cards) */
+  cards?: CardPick[];
 };
 /** wrong: '기능'을 누른 수, decoy: 주석 처리된 가짜 버그를 누른 수, score: 콤보 배수까지 넣은 점수(서버가 상한으로 자른다) */
 export type BugsResult = { game: "bugs"; durationMs: number; caught: number; golden: number; wrong: number; decoy: number; maxCombo: number; score: number };
@@ -93,7 +140,12 @@ export type RunStartResponse = {
   /** 사냥터 id (40번, 사냥만) */
   zone?: ZoneId;
   seed: number;
+  /** 판 제한 시간 (야근 빌딩은 층마다 따로 — 이 값은 한 판 최대 길이) */
   timeLimitSec: number;
+  /** 11/15 야근 빌딩 시작 층 (없으면 보통 판) */
+  tower?: number;
+  /** 11/15 초월 판 구간 (레벨 50 지옥 판만). practice면 초월 EXP·드롭 없음 */
+  tier?: RunTier;
   /** 별자리 잇기: 판 시작 시각이 맑은 밤 (전설 별자리가 나올 수 있다, 포인트 보너스). 1판 화면도 읽는다 */
   starry?: boolean;
   /** 별자리 잇기: 판 시작 시각의 하늘 (맑은 밤·계절·새벽)과 서버가 받아들인 계획 판 번호 */
@@ -129,6 +181,15 @@ export type RunReward = {
   constellations?: { id: string; isNew: boolean; perfect: boolean; later?: boolean }[];
   /** 별자리를 도감에 처음 등록해서 받은 도감 보상 (lib/forage/dexReward) */
   dexReward?: DexGain;
+  /** 11/15 초월 판: 받은 초월 EXP·그 판의 구간·오른 초월 레벨·지금 초월 레벨 */
+  transcend?: { exp: number; tier: RunTier; levelsGained: number; tLevel: number };
+  /**
+   * 11/15 야근 빌딩: 시작 층·깬 층 수·이번 최고 층 · 새 최고 기록·이번 주 기록 · 초월 판으로 센 판 수 ·
+   * 상자를 연 우두머리 층·오늘 한도로 비어 있던 상자 수 · 서버 최초·꼭대기 층 주인으로 받은 칭호 id
+   */
+  tower?: { start: number; floors: number; best: number; newBest: boolean; newWeek: boolean; runs: number; chests: number[]; emptyChests: number; titles: string[] };
+  /** 11/15 이번 판으로 개척자 번호를 받았다 */
+  pioneer?: number;
 };
 
 export type RunFinishResponse = { reward: RunReward; view: RpgView };
@@ -147,6 +208,8 @@ export type RpgPlay = {
   derived: Derived;
   skills: Partial<Record<SkillId, number>>;
   hotbar: (SkillId | null)[];
+  /** 11/15 자동 스킬 설정 (판 시작 때 캐릭터 것 그대로) */
+  hotAuto?: HotAuto;
   potions: Record<string, number>;
   equip: Record<GearSlot, string | null>;
   /** 32번 곤충 채집: 벌레 잡기를 마을 수풀 그림(나비·반딧불이)으로. night면 반딧불이 */
@@ -162,6 +225,15 @@ export type RpgPlay = {
   starsKnown?: string[];
   /** 테스트 서버 운영자 시험 드롭 (판 시작 응답 그대로). 있으면 화면은 드롭 예측 대신 이것을 판 끝에 떨군다 */
   testDrops?: Drop[];
+  /** 11/15 야근 빌딩: 시작 층 · 오늘 남은 우두머리 상자 (몬스터 배율·저주는 층마다 — lib/rpg/tower) */
+  tower?: {
+    start: number;
+    chestsLeft: number;
+    /** 11/15 테스트 서버 슈퍼 계정만: 무적·공격력 ×20 (높은 층 구경용). 서버는 이 값을 받지도 믿지도 않는다 — 운영 서버에서는 화면이 켜지 못한다 */
+    boost?: boolean;
+  };
+  /** 11/15 연습 판 (초월 구간을 다 써서 드롭이 없다) — 바닥 드롭 연출을 하지 않는다 */
+  noDrops?: boolean;
 };
 
 /** 곤충 채집 들판 시간대: 낮(나비) · 노을(잠자리) · 밤(반딧불이) */
@@ -179,6 +251,8 @@ export type RpgHud = {
   score: number;
   /** 사냥터: 웨이브 i/n, 처치 수 */
   wave?: [number, number];
+  /** 11/15 야근 빌딩: 지금 층 */
+  floor?: number;
   kills?: number;
   combo?: number;
   /** 함께 사냥: 같은 사냥터·난이도 방에 있는 사람 수 (나 포함, 접속 전이면 없음) */
@@ -201,6 +275,11 @@ export type RpgHud = {
   boss: { name: string; ratio: number } | null;
   /** 쓰러졌다가 쿠키로 일어남 등 짧은 알림 */
   message?: string;
+  /** 11/15 칸별 SP 비용 (모자람 표시) · 자동 스킬 상태 (칸에 있는 스킬 중 자동으로 정한 것, 전체 스위치) */
+  skillSp?: number[];
+  auto?: { slots: boolean[]; on: boolean; keepUlt: boolean };
+  /** 11/15 야근 빌딩 능력 카드: 판 레벨·이번 레벨 경험치, 가진 카드(겹친 수), 남은 다시 뽑기, 멈추면 집중 중, 내 무기 갈래 */
+  run?: { lv: number; xp: number; need: number; cards: { id: CardId; n: number }[]; rerolls: number; focus: boolean; kind: CardKindStyle };
 };
 
 export type RpgAction =
@@ -211,6 +290,8 @@ export type RpgAction =
    */
   | { kind: "hold"; on: boolean; x?: number; y?: number }
   | { kind: "skill"; slot: number }
+  /** 11/15 칸 자동 켜기·끄기 (칸 우클릭·길게 누르기). "all" = 전체 스위치 (X) */
+  | { kind: "auto"; slot: number | "all" }
   | { kind: "potion"; id: string }
   /** 버그 잡기 칸 누르기 */
   | { kind: "slot"; slot: number };

@@ -28,7 +28,6 @@ import {
   NAME_MIN,
   PERMANENT_MULTIPLIER,
   permanentPrice,
-  STAFF_PUBLIC_NAME,
   ZOO_PETS,
 } from "@tomb/protocol";
 import { ATTEND_STAY_TEXT } from "@/lib/attendStay";
@@ -40,7 +39,11 @@ import { DAILY_CATCH_MAX, DEX_NEW_REWARD } from "@/lib/forage/catalog";
 import { PHASE_LABELS, TIME_PHASES, WEATHER_BLOCK_MS, WEATHER_LABELS, WEATHERS } from "@/lib/ambience";
 import { PLOT_TIERS, plotCost } from "@/lib/housing/catalog";
 import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
-import { BRANCH_INFO, BRANCHES, HOTBAR_SIZE, POTIONS, TIER_GATES } from "@/lib/rpg/catalog";
+import { BRANCH_INFO, BRANCHES, POTIONS, TIER_GATES } from "@/lib/rpg/catalog";
+import { SKILL_SLOTS } from "@/lib/rpg/hotbar";
+import { PIONEER_DAYS, PIONEER_FLOOR } from "@/lib/rpg/endgame";
+import { TOWER_CHESTS_PER_DAY } from "@/lib/rpg/tower";
+import { MAX_LEVEL } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
 import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
 import { DORMANT_DAYS } from "@/lib/store/types";
@@ -52,6 +55,7 @@ import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
 import ItemIcon from "../ui/ItemIcon";
 import { InquiryButton } from "../notice/InquiryDialog";
+import { QUEST_DAILY, QUEST_STAMPS } from "@/lib/forage/quests/catalog";
 import styles from "./GuideDialog.module.css";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -87,7 +91,7 @@ function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
 }
 
 const CONTROLS: ReactNode[][] = [
-  ["걷기", "WASD · 방향키", "왼쪽 아래 조이스틱"],
+  ["걷기", "WASD · 방향키", "화면 왼쪽 아무 데나 누르고 끌기 (그 자리에 조이스틱)"],
   ["달리기", "Shift 누른 채 걷기", "달리기 버튼"],
   ["점프", "Space", "점프 버튼"],
   ["앉기·일어서기", "X 또는 C", "앉기 버튼"],
@@ -135,8 +139,9 @@ const PLACES: ReactNode[][] = [
   ["귀신의집", "광장 입구, 소원 분수 옆", "혼자 공포 미로 · 기록만 남아요"],
   ["유령 잡화점", "상점 주인장에게 E", "꾸미기·폭죽·확성기·염색권"],
   ["동물원", "서쪽 다리 건너 바로", `사육사에게 펫 분양 (${won(Math.min(...petPrices))}~${won(Math.max(...petPrices))}P)`],
-  ["낚시터", "호수 북동쪽, 나루터 옆 데크", "낚시 의자 앞에서 E"],
-  ["수집가", "숲 빈터", "약초·광석·발굴품·곤충 팔기"],
+  ["납품 부두", "호수 북동쪽, 주거 구역 오른쪽 아래", "의뢰 게시판 E · 어부 영감 · 작은 낚시 잔교 · 주말 버스 정류장(캠핑장행은 준비 중)"],
+  ["낚시", "부두 잔교·강둑·연못·호수 서쪽 잔교·조각배 위", "낚시 의자 앞에서 E (자동 낚시도)"],
+  ["수집가", "오리 연못 북서쪽 둑", "약초·광석·발굴품·곤충 팔기"],
   ["사냥터", "메뉴 → 사냥터", "혼자·함께 사냥 · 미니게임"],
   ["분양 사무소", "메뉴 → 집·분양 마을", "내 집 분양·꾸미기·좋아요"],
   ["성황당", "옛 묘역 동문 옆", "묘역을 떠난 묘비 모시기"],
@@ -157,12 +162,15 @@ const RIDES: ReactNode[][] = [
   ["도중에 내리기", "X 두 번 (E·Space도)", "앉기 버튼 두 번"],
   ["시점 바꾸기", "V · [시점 변경하기]", "[시점 변경하기]"],
   ["조각배", "나루터에서 E (2인승)", "물가 가까이에서 E로 내려요"],
+  ["오리배", "오리 연못 선착장에서 E (나란히 2인승) · Space 꽥!", "물가에서 E로 내려요 · [꽥!] 버튼"],
   ["타는 펫", "R (데리고 있을 때)", "앉기·낚시·물에선 저절로 내려요"],
 ];
 
 const HUNT_KEYS: ReactNode[][] = [
   ["공격", "Space · J", "공격 버튼"],
-  ["스킬", `1~${HOTBAR_SIZE} (단축 칸)`, "스킬 버튼"],
+  ["스킬", `1~${SKILL_SLOTS} (단축 칸) · 궁극기 F`, "스킬 버튼"],
+  ["스킬 자동", "Shift+숫자 · 칸 우클릭 · X 한꺼번에", "[자동] → 칸 누르기 · 왼쪽 위 칩으로 한꺼번에"],
+  ["키 안내", "H", "—"],
   ["물약", "Q · E · R", "물약 버튼"],
   ["멈춤", "Esc", "멈춤 버튼"],
 ];
@@ -172,7 +180,7 @@ const SKILL_TREE: ReactNode[][] = [
   ["갈래", BRANCHES.map((b) => `${BRANCH_INFO[b].name}(${BRANCH_INFO[b].role.replaceAll(" · ", "·")})`).join(" · ")],
   ["단", `갈래마다 ${TIER_GATES.length}단 · 위 단은 그 갈래 아래 단에 ${TIER_GATES.slice(1).join("·")}포인트를 쓰면 열려요`],
   ["선행", "선으로 이어진 스킬은 앞 스킬을 정해진 랭크까지 찍어야 배워요"],
-  ["단축 칸", `배운 액티브 스킬을 사냥 → 스킬 탭 아래 ${HOTBAR_SIZE}칸에 끌어다 놓기(손가락도) · 패시브는 칸 없이 늘 켜져요`],
+  ["단축 칸", `배운 액티브 스킬을 사냥 → 스킬 탭 아래 ${SKILL_SLOTS}칸 + 궁극기 칸(F)에 끌어다 놓기(손가락도) · 궁극기는 F 칸에만 · 패시브는 칸 없이 늘 켜져요`],
   ["초기화", `레벨에 따라 ${respecCost(1)}~${RESPEC_MAX_COST}P`],
 ];
 
@@ -185,6 +193,13 @@ const FORAGE: ReactNode[][] = [
   ],
   ["팔기", "물고기는 어부 영감, 채집물은 수집가", "희귀할수록 비싸요"],
   ["도감", "왼쪽 아래 [도감] · 메뉴 → 도감", `새 종을 처음 등록할 때마다 ${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[5]}P (희귀할수록 많이, 오늘 한도를 넘은 건 도감 창에서 받기) · 절반·전부 등록하면 칭호`],
+  // 11/15 수집 의뢰 (lib/forage/quests)
+  [
+    "수집 의뢰",
+    "납품 부두 의뢰 게시판에서 E",
+    `오늘의 의뢰 ${QUEST_DAILY}개(새벽 5시에 새로, 하루 1번 무료로 바꾸기) · 이번 주 큰 의뢰 1개(월요일) · 모은 것을 납품하면 의뢰 도장 ${QUEST_STAMPS.easy}~${QUEST_STAMPS.hard}개, 큰 의뢰는 ${QUEST_STAMPS.weekly}개 · 끝낸 수로 칭호`,
+  ],
+  ["도장 교환소", "의뢰 게시판 → [도장 교환소]", "이달의 물건은 매달 1일 새벽 5시에 바뀌어요 · 염색권은 늘 · 도장은 사라지지 않고, 포인트로 못 바꾸고 남에게 못 줘요"],
 ];
 
 const DYE: ReactNode[][] = [
@@ -202,7 +217,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
     .map((s) => s.name)
     .join(" · ");
   return (
-    <Dialog title="한때는... 안내" onClose={onClose}>
+    <Dialog title="At one time... 안내" onClose={onClose}>
       <div className={styles.guide}>
         <section>
           <h3>조작</h3>
@@ -286,7 +301,13 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
             <li>
               {`사냥 포인트는 하루 ${won(earnRule("hunt").dailyMax)}P까지예요. 주운 장비·물약을 되파는 값도 이 한도 안이고, 넘으면 EXP와 드롭만 받아요. 상점에서 산 장비 되팔기는 한도와 상관없어요. 곤충 잡기·별자리 잇기는 사냥과 따로 하루 ${won(earnRule("mini").dailyMax)}P까지예요.`}
             </li>
-            <li>자세한 공격·스킬·패턴은 사냥터의 [사냥 안내서]에서 봐요.</li>
+            <li>
+              {`레벨 ${MAX_LEVEL}부터는 지옥 사냥터·야근 빌딩 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요(초월 5레벨마다 능력치 1포인트). 하루에 할 수 있는 판 수 제한은 없어요.`}
+            </li>
+            <li>
+              {`야근 빌딩(마을 북쪽 분양 사무소 옆, 사냥 레벨 ${MAX_LEVEL}부터)은 1층부터 쓰러질 때까지 이어서 오르는 곳이에요. 층이 오를수록 몬스터가 세지고 10층부터 저주(물약 절반·물약 금지·회복 절반·몬스터 빨라짐·제한 시간 −20%·정예 섞임)가 쌓여요. 깬 층마다 초월 EXP(쓰러져도 깬 만큼), 5층마다 우두머리 상자(하루 ${TOWER_CHESTS_PER_DAY}개). 도전은 무제한이고, 최고 기록 아래 1·11·21…층에서 시작할 수 있어요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51 또는 ${PIONEER_FLOOR}층을 처음 넘으면 칭호 「개척자 #번호」, 서버에서 처음 30·50·100층을 깬 사람과 지금 최고 층 주인은 신화 칭호.`}
+            </li>
+            <li>자세한 공격·스킬·패턴·끝판은 사냥터의 [사냥 안내서]에서 봐요.</li>
           </ul>
           <Table head={["스킬 트리", "내용"]} rows={SKILL_TREE} />
           <ul className={styles.points}>
@@ -426,7 +447,7 @@ export default function GuideDialog({ onClose, onReplayTutorial }: Props) {
               ["코드가 새면", "내 정보 → [새 코드 발급] (예전 코드는 바로 막혀요)"],
               ["닉네임", `${NAME_MIN}~${NAME_MAX}자 · 다른 사람과 같은 이름은 못 써요 · 첫 변경 무료, 그 뒤 ${won(NAME_CHANGE_PRICE)}P · ${NAME_CHANGE_COOLDOWN_DAYS}일에 한 번`],
               ["오래 쉬면", `${DORMANT_DAYS}일 넘게 안 들어오면 휴면 · 그 이름을 다른 사람이 쓸 수 있고, 돌아오면 닉네임을 다시 정해요`],
-              ["운영자", `금빛 '${STAFF_PUBLIC_NAME}' 이름표 · 채팅·확성기 이름도 금색이에요`],
+              ["운영자", "머리 위 무지갯빛 「서버비 내는 사람」 칭호 + 저승사자 차림 · 채팅·확성기 이름도 금색에 '운영자' 딱지"],
               ["채널", `정원 ${DEFAULT_CHANNEL_CAPACITY}명 · 최대 ${DEFAULT_MAX_CHANNELS}채널 · 위 채널 표시로 옮기기`],
               ["대기열", "꽉 차면 줄 서기 · 차례가 오면 자동 입장"],
               ["다 놀았으면", "내 정보 → 접속 종료로 자리 비우기"],

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { WORLD_LOTS } from "@tomb/protocol";
+import { HOUSE_LOTS, WORLD_LOTS } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { meStore } from "@/lib/hooks/useMe";
@@ -92,7 +92,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
       if (!inScene.current && (lot === null || lot <= WORLD_LOTS)) {
         emitVillage(village, myHouseId);
         if (lot !== null) bridge.emit("world:lot", { lot, label: mine?.ch === ch && mine.lot === lot ? "내 집" : `${lot}번지` });
-        else bridge.emit("world:lot", { lot: 1, label: "주거 구역" });
+        else bridge.emit("world:lot", { lot: HOUSE_LOTS[0].lot, label: "주거 구역" }); // 11/15 1번지는 없앴다 — 맨 앞 필지
         onCloseRef.current();
         return;
       }

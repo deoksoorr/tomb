@@ -38,6 +38,54 @@ export class RideSound extends AudioHost {
     if (started) this.voices++;
   }
 
+  /**
+   * 11/15 오리배 꽥: 파일 없이 바로 합성한다 — 톱니파 두 가닥(살짝 어긋난 음)이 높았다 떨어지고,
+   * 콧소리 같은 띠 통과 필터 두 개(꽥의 "ㅙ")를 지나 짧게 끊긴다. gain 0..1, rate = 음 높이 배율
+   */
+  quack(gain = 1, rate = 1): void {
+    if (this.muted || this.volume <= 0 || this.hidden || gain <= 0.01 || this.voices >= MAX_VOICES) return;
+    const ac = this.audio();
+    if (!ac) return;
+    const t = ac.currentTime + 0.01;
+    const dur = 0.24;
+    const out = ac.createGain();
+    out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(Math.max(0.001, Math.min(1, this.volume * gain) * 0.5), t + 0.02);
+    out.gain.setValueAtTime(Math.max(0.001, Math.min(1, this.volume * gain) * 0.42), t + dur * 0.55);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    out.connect(this.output);
+    const f1 = ac.createBiquadFilter();
+    f1.type = "bandpass";
+    f1.Q.value = 5;
+    f1.frequency.setValueAtTime(1300 * rate, t);
+    f1.frequency.linearRampToValueAtTime(900 * rate, t + dur);
+    const f2 = ac.createBiquadFilter();
+    f2.type = "bandpass";
+    f2.Q.value = 7;
+    f2.frequency.value = 2600 * rate;
+    const mixF2 = ac.createGain();
+    mixF2.gain.value = 0.55;
+    f1.connect(out);
+    f2.connect(mixF2).connect(out);
+    this.voices++;
+    for (const det of [1, 1.012]) {
+      const o = ac.createOscillator();
+      o.type = "sawtooth";
+      o.frequency.setValueAtTime(330 * rate * det, t);
+      o.frequency.linearRampToValueAtTime(420 * rate * det, t + 0.05);
+      o.frequency.exponentialRampToValueAtTime(250 * rate * det, t + dur);
+      o.connect(f1);
+      o.connect(f2);
+      o.start(t);
+      o.stop(t + dur + 0.02);
+      if (det === 1)
+        o.onended = () => {
+          this.voices = Math.max(0, this.voices - 1);
+          out.disconnect();
+        };
+    }
+  }
+
   /** 회전목마 음악 크기 0..1 (매 프레임 불러도 된다) */
   carousel(level: number): void {
     this.organ.set(level);

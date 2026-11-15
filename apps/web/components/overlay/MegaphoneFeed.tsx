@@ -68,7 +68,11 @@ export default function MegaphoneFeed({ channel, floating = false }: { channel: 
           {entries.map((e) => (
             <li key={e.id} className={cx(styles.line, flash?.id === e.id && styles.newLine)}>
               {e.scope === "all" && <span className={styles.all}>전체</span>}
-              <b className={cx(styles.name, e.staff && styles.staff)}>{e.name}</b>
+              <b className={cx(styles.name, e.staff && styles.staff)}>
+                {/* 11/15 운영자는 닉네임 그대로라 "운영자" 딱지로 알린다 (마을 공지 줄은 빼고) */}
+                {e.staff && !e.system && <span className={styles.staffTag}>운영자</span>}
+                {e.name}
+              </b>
               <span className={styles.text}>{e.text}</span>
               {/* 47번 확성기 신고 (운영자 확성기는 신고 대상이 아니라 버튼이 없다) */}
               {!e.staff && (

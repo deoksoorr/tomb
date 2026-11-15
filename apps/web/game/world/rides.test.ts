@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { BOAT_SEATS, BOATS, FERRY_DOCK, FURNITURE, LAKE, seatSlot, spotSeatId, SPOT_KINDS } from "@tomb/protocol";
-import { boatWater, joinSeat, JOIN_REACH, pickBoatSeat, shorePoint, stepBoat, ROW_SPEED, type BoatPresence } from "../logic/boat";
+import { BOAT_SEATS, BOATS, boatKind, DIR, DUCK_DOCK, DUCK_POND, DUCK_SIDE_SEAT, FERRY_DOCK, FISHING_SPOTS, FURNITURE, LAKE, PONDS, seatSlot, spotSeatId, SPOT_KINDS } from "@tomb/protocol";
+import { boatWater, DUCK_SPEED, duckBump, duckWater, joinSeat, JOIN_REACH, pickBoatSeat, seatOffset, shorePoint, stepBoat, ROW_SPEED, type BoatPresence } from "../logic/boat";
 import { furnitureCollider, houseCollider, inWater, interactables, standable, staticColliders, walkableGrid, WALK, waterCurrent, type Rect } from "./layout";
 import {
   bystanderGain,
@@ -105,8 +105,10 @@ describe("광장 놀거리 자리", () => {
 
 describe("조각배", () => {
   it("나루터 배 자리는 물 위(배가 뜰 수 있는 곳)이고, 나루터 앞에서 서버 판정 거리 안", () => {
-    for (const b of BOATS) expect(boatWater(b.x, b.y), b.id).toBe(true);
-    for (const s of BOAT_SEATS) expect(Math.hypot(s.x - FERRY_DOCK.x, s.y - FERRY_DOCK.y)).toBeLessThanOrEqual(SPOT_KINDS.boat.radius! - 14);
+    for (const b of BOATS) expect(boatKind(b) === "duck" ? duckWater(b.x, b.y) : boatWater(b.x, b.y), b.id).toBe(true);
+    const rowSeats = BOAT_SEATS.filter((s) => boatKind(BOATS.find((b) => b.id === s.boatId)!) === "row");
+    expect(rowSeats.length).toBe(4);
+    for (const s of rowSeats) expect(Math.hypot(s.x - FERRY_DOCK.x, s.y - FERRY_DOCK.y)).toBeLessThanOrEqual(SPOT_KINDS.boat.radius! - 14);
     expect(boatWater(FERRY_DOCK.x, FERRY_DOCK.y)).toBe(false); // 판자 위
     expect(boatWater(720, 706)).toBe(false); // 가운데 다리 밑으로는 못 지나간다
     expect(boatWater(LAKE.x, LAKE.y)).toBe(true);
@@ -167,6 +169,133 @@ describe("조각배", () => {
     const allOut = (): BoatPresence => ({ docked: false, rower: null, at: null });
     expect(pickBoatSeat(FERRY_DOCK.x, FERRY_DOCK.y, empty, allOut)).toBeNull();
     expect(spotSeatId("boat", front.x, front.y)).toBe(front.id);
+  });
+});
+
+describe("11/15 오리배 (오리 연못)", () => {
+  const ducks = BOATS.filter((b) => boatKind(b) === "duck");
+  const docked = (): BoatPresence => ({ docked: true, rower: null, at: null });
+  const empty = new Map<string, number>();
+
+  it("오리배 3척 · 모두 2인승, 오리 연못 선착장 앞(서버 판정 거리 안)에 매여 있고 연못 안에 떠 있다", () => {
+    expect(ducks.length).toBe(3);
+    expect(PONDS.find((p) => p.id === "pondS")?.name).toBe("오리 연못");
+    for (const b of ducks) {
+      expect(b.seats).toBe(2);
+      expect(duckWater(b.x, b.y), b.id).toBe(true);
+      for (const s of BOAT_SEATS.filter((x) => x.boatId === b.id)) {
+        expect(Math.hypot(s.x - DUCK_DOCK.x, s.y - DUCK_DOCK.y)).toBeLessThanOrEqual(SPOT_KINDS.boat.radius! - 14);
+        expect(seatSlot(s.id)).toMatchObject({ kind: "boat", mobile: true, furnitureId: b.id });
+        expect(spotSeatId("boat", s.x, s.y)).toBe(s.id);
+      }
+    }
+    expect(new Set(BOAT_SEATS.map((s) => s.id)).size).toBe(BOAT_SEATS.length);
+  });
+
+  it("두 자리는 나란히: 옆자리는 뱃머리 방향과 상관없이 왼쪽 자리(조종)에서 화면 오른쪽으로 DUCK_SIDE_SEAT", () => {
+    for (const b of ducks) {
+      const [a, c] = BOAT_SEATS.filter((x) => x.boatId === b.id);
+      expect(a.index).toBe(0);
+      expect(c.index).toBe(1);
+      expect(c.x - a.x).toBe(DUCK_SIDE_SEAT);
+      expect(c.y).toBe(a.y);
+    }
+    const d = ducks[0];
+    expect(seatOffset(d, true)).toBe(DUCK_SIDE_SEAT);
+    expect(seatOffset(d, false)).toBe(DUCK_SIDE_SEAT);
+    // 조각배 뒷자리는 그대로 뱃머리 반대쪽
+    const row = BOATS.find((b) => b.seats === 2 && boatKind(b) === "row")!;
+    expect(seatOffset(row, false)).toBeLessThan(0);
+    expect(seatOffset(row, true)).toBeGreaterThan(0);
+    expect(ducks.some((b) => b.facing === DIR.left) && ducks.some((b) => b.facing === DIR.right)).toBe(true);
+  });
+
+  it("선착장마다 그 종류의 배만: 오리배 선착장 = 오리배 왼쪽 자리, 나루터 = 조각배", () => {
+    const d = pickBoatSeat(DUCK_DOCK.x, DUCK_DOCK.y, empty, docked, "duck");
+    expect(d && boatKind(BOATS.find((b) => b.id === d.boatId)!)).toBe("duck");
+    expect(d?.index).toBe(0);
+    const r = pickBoatSeat(FERRY_DOCK.x, FERRY_DOCK.y, empty, docked);
+    expect(r && boatKind(BOATS.find((b) => b.id === r.boatId)!)).toBe("row");
+    // 오리배가 모두 나가 있으면 (조각배가 남아 있어도) 없음
+    const ducksOut = (id: string): BoatPresence => (id.startsWith("duck") ? { docked: false, rower: null, at: null } : docked());
+    expect(pickBoatSeat(DUCK_DOCK.x, DUCK_DOCK.y, empty, ducksOut, "duck")).toBeNull();
+  });
+
+  it("오리 연못 안에서만: 호수·강·다른 연못·뭍·선착장 판자에는 못 가고, 오래 페달을 밟아도 연못 밖으로 나가지 않는다", () => {
+    expect(duckWater(DUCK_POND.x, DUCK_POND.y)).toBe(true);
+    expect(duckWater(LAKE.x, LAKE.y)).toBe(false);
+    expect(duckWater(800, 716)).toBe(false); // 강
+    for (const p of PONDS) if (p.id !== "pondS") expect(duckWater(p.x, p.y)).toBe(false);
+    expect(duckWater(DUCK_DOCK.x - DUCK_SIDE_SEAT / 2, DUCK_DOCK.y)).toBe(false); // 판자 옆
+    for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, -0.7]]) {
+      const m = { x: DUCK_POND.x - DUCK_SIDE_SEAT / 2, y: DUCK_POND.y, vx: 0, vy: 0 };
+      for (let i = 0; i < 600; i++) {
+        stepBoat(m, ax, ay, 16, { vx: 30, vy: 0 }, "duck");
+        expect(duckWater(m.x, m.y)).toBe(true);
+        expect(inWater(m.x + DUCK_SIDE_SEAT / 2, m.y)).toBe(true);
+      }
+    }
+  });
+
+  it("조각배보다 느리고 둥실: 최고 DUCK_SPEED, 가속·감속이 느리고 물살이 없다", () => {
+    const m = { x: 480, y: 900, vx: 0, vy: 0 };
+    const r = { x: 1180, y: 900, vx: 0, vy: 0 };
+    for (let i = 0; i < 20; i++) {
+      stepBoat(m, 1, 0, 16, { vx: 0, vy: 0 }, "duck");
+      stepBoat(r, 1, 0, 16, { vx: 0, vy: 0 });
+    }
+    expect(m.vx).toBeLessThan(r.vx);
+    expect(DUCK_SPEED).toBeLessThan(ROW_SPEED);
+    // 손을 떼면 조금 더 미끄러진다
+    const glide = { ...m };
+    stepBoat(glide, 0, 0, 200, { vx: 0, vy: 0 }, "duck");
+    expect(glide.vx).toBeGreaterThan(m.vx * 0.6);
+    // 물살을 넘겨도 무시한다
+    const still = { x: 480, y: 900, vx: 0, vy: 0 };
+    for (let i = 0; i < 30; i++) stepBoat(still, 0, 0, 16, { vx: 20, vy: 10 }, "duck");
+    expect(still.x).toBe(480);
+    expect(still.y).toBe(900);
+  });
+
+  it("범퍼카: 닿은 두 오리배는 서로 반대쪽으로 튕기고 (각자 계산해도 대칭), 떨어져 있으면 그대로", () => {
+    const a = { x: 480, y: 900, vx: 20, vy: 0 };
+    const b = { x: 510, y: 902, vx: -20, vy: 0 };
+    const pa = { x: a.x, y: a.y };
+    const pb = { x: b.x, y: b.y };
+    expect(duckBump(a, [pb])).toBe(true);
+    expect(duckBump(b, [pa])).toBe(true);
+    expect(a.vx).toBeLessThan(0);
+    expect(b.vx).toBeGreaterThan(0);
+    expect(a.vx).toBeCloseTo(-b.vx, 5);
+    // 가만히 있다가 받혀도 밀려난다
+    const c = { x: 480, y: 900, vx: 0, vy: 0 };
+    expect(duckBump(c, [{ x: 470, y: 900 }])).toBe(true);
+    expect(c.vx).toBeGreaterThan(0);
+    // 멀면 아무 일 없다
+    const d = { x: 480, y: 900, vx: 5, vy: 3 };
+    expect(duckBump(d, [{ x: 560, y: 900 }, { x: 480, y: 940 }])).toBe(false);
+    expect(d).toEqual({ x: 480, y: 900, vx: 5, vy: 3 });
+    // 매여 있는 오리배끼리는 닿아 있지 않다
+    const ducks2 = BOATS.filter((x) => boatKind(x) === "duck");
+    for (const x of ducks2) expect(duckBump({ x: x.x, y: x.y, vx: 0, vy: 0 }, ducks2.filter((o) => o !== x))).toBe(false);
+  });
+
+  it("물가에서 옆자리에 같이 타기 (F13 규칙 그대로) · 오리 연못에는 낚시 자리가 없다", () => {
+    const d = ducks[1];
+    const [front, side] = BOAT_SEATS.filter((x) => x.boatId === d.id);
+    const at = { x: 470, y: 930 };
+    const pres = (id: string): BoatPresence => (id === d.id ? { docked: false, rower: 7, at, left: true } : docked());
+    // 옆자리(오른쪽) 곁에 서 있어도 닿는다
+    expect(joinSeat(at.x + DUCK_SIDE_SEAT + 4, at.y + JOIN_REACH - 4, new Map([[front.id, 7]]), pres)?.id).toBe(side.id);
+    expect(joinSeat(at.x, at.y + 10, new Map([[front.id, 7], [side.id, 8]]), pres)).toBeNull();
+    for (const f of FISHING_SPOTS) {
+      const dx = (f.x - DUCK_POND.x) / (DUCK_POND.rx + 40);
+      const dy = (f.y - DUCK_POND.y) / (DUCK_POND.ry + 40);
+      expect(dx * dx + dy * dy, f.id).toBeGreaterThan(1);
+    }
+    // 연못 둑 가까이면 내릴 뭍이 있다
+    expect(shorePoint(DUCK_POND.x, DUCK_POND.y + DUCK_POND.ry - 14, standable)).not.toBeNull();
+    expect(shorePoint(DUCK_POND.x, DUCK_POND.y, standable)).toBeNull();
   });
 });
 

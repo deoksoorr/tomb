@@ -35,9 +35,9 @@ describe("admit", () => {
     expect(withLook?.look).toEqual(["hat_cat"]); // 카탈로그에 없는 것·같은 부위 중복은 빠진다
   });
 
-  it("shows the staff account as 대장 (STAFF_PUBLIC_NAME) instead of its nickname", async () => {
+  it("keeps the staff account's own nickname (staff flag only marks it)", async () => {
     const t = await admit(SECRET, await signJoinToken(SECRET, { ...claims, staff: true }), 3, undefined);
-    expect(t?.name).toBe("대장");
+    expect(t?.name).toBe("달빛 산책");
     expect(t?.staff).toBe(true);
     expect((await admit(SECRET, await signJoinToken(SECRET, claims), 3, undefined))?.name).toBe("달빛 산책");
   });

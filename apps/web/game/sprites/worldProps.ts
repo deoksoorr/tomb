@@ -1,6 +1,6 @@
 import { darken, Grid, hash2, lighten, rng, type Color } from "./pixel";
 import { tree, type LeafPal } from "./props";
-import { fabricBack, fabricBackTop, fabricFront, FABRIC_X0, FABRIC_X1, HAMMOCK_H, HAMMOCK_W } from "./hammockArt";
+import { fabricBack, fabricFront, HAMMOCK_H, HAMMOCK_W, hammockRopes } from "./hammockArt";
 
 // v3 월드 소품 픽셀아트: 여러 종류 나무(가을나무·소나무·덤불), 우물, 그네, 종루, 돌무더기, 꽃밭, 버섯, 허수아비,
 // 작은 다리, 갈대, 반딧불 항아리, 특별한 장소(사냥터 동굴 입구·분양 사무소·성황당 나무).
@@ -312,7 +312,8 @@ export function bridge(): HTMLCanvasElement {
 // ── 해먹 (HAMMOCK_W×HAMMOCK_H): 양쪽 나무 기둥 사이에 늘어진 줄무늬 천 주머니. 받침 = 기둥 발밑 가운데 ──
 // 천(뒤 테·안쪽 그늘·앞 겉면)은 sprites/hammockArt가 그린다 — 누운 사람 텍스처가 같은 천을 픽셀 1:1로 겹쳐 그린다 (F5)
 export { HAMMOCK_W, HAMMOCK_H } from "./hammockArt";
-export function hammock(): HTMLCanvasElement {
+/** 기둥만 (누가 누우면 줄·천은 누운 사람 텍스처가 흔들리며 그린다 — 11/15) */
+function hammockPostGrid(): Grid {
   const g = new Grid(HAMMOCK_W, HAMMOCK_H);
   const w = WOOD;
   // 기둥 (x=4, x=43)
@@ -321,11 +322,18 @@ export function hammock(): HTMLCanvasElement {
   g.rect(42, 6, 3, 21, w.lo);
   g.rect(2, 4, 5, 2, w.lo);
   g.rect(41, 4, 5, 2, w.lo);
-  // 줄 (기둥 → 천 끝)
-  line(g, 6, 8, FABRIC_X0, fabricBackTop(FABRIC_X0), 0xc8b894);
-  line(g, 41, 8, FABRIC_X1, fabricBackTop(FABRIC_X1), 0xc8b894);
   g.outline(OUT);
-  // 천 주머니 (뒤 → 앞)
+  return g;
+}
+export function hammockPosts(): HTMLCanvasElement {
+  const g = hammockPostGrid();
+  shadow(g, 24, 27.5, 18, 1.6, 55);
+  return g.toCanvas();
+}
+export function hammock(): HTMLCanvasElement {
+  const g = hammockPostGrid();
+  // 줄 (기둥 → 천 끝) + 천 주머니 (뒤 → 앞)
+  g.draw(hammockRopes(), 0, 0);
   g.draw(fabricBack(), 0, 0);
   g.draw(fabricFront(), 0, 0);
   shadow(g, 24, 27.5, 18, 1.6, 55);
@@ -737,6 +745,7 @@ export const WP = {
   snowPine0: "prop-snowpine-0",
   snowPine1: "prop-snowpine-1",
   hammock: "prop-hammock",
+  hammockPosts: "prop-hammock-posts",
   boat: "prop-boat",
   leaves0: "prop-leaves-0",
   leaves1: "prop-leaves-1",
@@ -787,6 +796,7 @@ export const WORLD_PROP_ART: Readonly<Record<string, () => HTMLCanvasElement>> =
   [WP.snowPine0]: () => snowPine(0),
   [WP.snowPine1]: () => snowPine(1),
   [WP.hammock]: hammock,
+  [WP.hammockPosts]: hammockPosts,
   [WP.boat]: boat,
   [WP.leaves0]: () => leafPile(0),
   [WP.leaves1]: () => leafPile(1),

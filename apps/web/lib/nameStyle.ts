@@ -10,7 +10,8 @@ import { itemById, nameStyleOfLook } from "@tomb/protocol";
 /** 이름표 외곽선 색 (GlyphAtlas OUTLINE과 같다) */
 export const NAME_OUTLINE = 0x0a0b10;
 
-export type NameFx = "glow" | "rainbow" | "stars" | "flame";
+// 11/15 leaves = 수집 의뢰 「나뭇잎 이름 글자」: 잎 초록 그라데이션 + 이름 둘레로 작은 잎이 가끔 팔랑 떨어진다
+export type NameFx = "glow" | "rainbow" | "stars" | "flame" | "leaves";
 /**
  * 이름 글자 꾸미기.
  *  - solid: 한 색
@@ -22,7 +23,9 @@ export type NameColorSpec =
   | { kind: "gradient"; stops: readonly number[] }
   | { kind: "fx"; fx: NameFx; stops: readonly number[]; /** 빛 무리 색 (glow·flame) */ halo?: number };
 
-export type NamePlateKind = "wood" | "ribbon" | "cloud" | "wreath" | "tomb" | "star";
+// 11/15 wave = 수집 의뢰 「물결 이름표」: 깊은 물빛 판 위로 물결 윤슬이 흘러간다 (dots = 물거품·윤슬 색)
+// 11/15 newyear = 수집 의뢰 「새해 복 이름표」: 붉은 비단 판 + 금테 + 양옆 복 매듭(술 달린 금 매듭), 금가루가 둥실 떠오른다
+export type NamePlateKind = "wood" | "ribbon" | "cloud" | "wreath" | "tomb" | "star" | "wave" | "newyear";
 /** 이름표 바탕판: fill 바탕 · light 위쪽 밝은 띠 · edge 테두리 · dots 장식 점 색 (꽃·별·못·이끼) */
 export type NamePlateSpec = { kind: NamePlateKind; fill: number; light: number; edge: number; dots: readonly number[]; /** 바탕 투명도 */ alpha: number };
 
@@ -49,6 +52,8 @@ export const NAME_COLORS: Readonly<Record<string, NameColorSpec>> = {
   nf_rainbow: { kind: "fx", fx: "rainbow", stops: [0xff9a9a, 0xffd27a, 0xb8f58a, 0x8ad8ff, 0xc2a2ff] },
   nf_stars: { kind: "fx", fx: "stars", stops: [0xfff4c2, 0xd6e4ff] },
   nf_flame: { kind: "fx", fx: "flame", stops: [0xffe066, 0xff8a3a], halo: 0xff8a3a },
+  // 11/15 수집 의뢰 보상 (도장 교환소 전용): 새순 연두 → 잎 초록 → 짙은 잎 초록 (짙은 쪽도 밤 외곽선과 7:1 이상)
+  q_name_leaf: { kind: "fx", fx: "leaves", stops: [0xeaffa0, 0xa8ec68, 0x5cc96a] },
 };
 
 export const NAME_PLATES: Readonly<Record<string, NamePlateSpec>> = {
@@ -58,6 +63,10 @@ export const NAME_PLATES: Readonly<Record<string, NamePlateSpec>> = {
   np_wreath: { kind: "wreath", fill: 0x24361f, light: 0x3b5a2e, edge: 0x5f8f3e, dots: [0xff9fc0, 0xffe08a, 0xffffff], alpha: 0.9 },
   np_tomb: { kind: "tomb", fill: 0x7d838b, light: 0x9aa1aa, edge: 0x3a3e45, dots: [0x6f8f4a], alpha: 0.95 },
   np_star: { kind: "star", fill: 0x1b2048, light: 0x2a3170, edge: 0x9fb4ff, dots: [0xfff3b0, 0xffffff], alpha: 0.92 },
+  // 11/15 수집 의뢰 보상: 깊은 청록 물빛 (밝은 글자가 낮·밤 모두 또렷), 물마루 하이라이트 · dots = [물거품, 윤슬]
+  q_name_wave: { kind: "wave", fill: 0x175a7e, light: 0x4fb8d8, edge: 0x0b2a40, dots: [0xe4fbff, 0x8fe2f0], alpha: 0.94 },
+  // 11/15 수집 의뢰 보상 (월 교환소): 짙은 다홍 판 (밝은 글자가 또렷) · edge = 금테 · dots = [금 매듭·금가루, 매듭 술 다홍]
+  q_name_newyear: { kind: "newyear", fill: 0x9a1c26, light: 0xd8483a, edge: 0xe8b23a, dots: [0xffd25a, 0xff6a4a], alpha: 0.95 },
 };
 
 export function nameColorSpec(id: string | null | undefined): NameColorSpec | null {
@@ -134,6 +143,59 @@ export function nameEdgeColors(id: string | null | undefined, n: number): number
 export function flameColor(i: number, t: number, top: boolean): number {
   const w = 0.5 + 0.5 * Math.sin(t / 170 + i * 1.9) * Math.sin(t / 290 + i * 0.7);
   return top ? mixColor(0xffd25a, 0xfff2b0, w) : mixColor(0xff7a3a, 0xffa040, 1 - w);
+}
+
+/** 물결 이름표 윤슬 한 줄의 흐름 (0~1, t = ms): 한 주기 WAVE_FLOW_MS마다 한 칸(period) 흐른다 */
+export const WAVE_FLOW_MS = 1800;
+export function waveFlow(t: number): number {
+  return (((t / WAVE_FLOW_MS) % 1) + 1) % 1;
+}
+
+/** 새해 복 이름표 금가루: 한 알이 떠오르는 시간 (ms) · 한 번에 보이는 수 */
+export const NY_DUST_MS = 2200;
+export const NY_DUST_COUNT = 4;
+/**
+ * 금가루 i의 자리 (t = ms): x = 이름표 가로 비율 (양끝 ±0.36..0.54), y = 판 아래에서 위로 떠오른 비율 (0 → 1.3), a = 투명도. 결정적
+ */
+export function nyDustAt(i: number, t: number): { x: number; y: number; a: number } {
+  const off = t + (i * NY_DUST_MS) / NY_DUST_COUNT;
+  const k = Math.floor(off / NY_DUST_MS);
+  const u = (off - k * NY_DUST_MS) / NY_DUST_MS;
+  const seed = hashUnit(k * 13 + i * 71);
+  // 글자를 가리지 않게 판 양끝 쪽에서 떠오른다 (번갈아 왼쪽·오른쪽)
+  const side = (k + i) % 2 ? 1 : -1;
+  return { x: side * (0.36 + seed * 0.18) + Math.sin(u * Math.PI * 2 + seed * 7) * 0.03, y: 0.1 + u * 1.2, a: Math.sin(Math.PI * u) };
+}
+
+/** 나뭇잎 하나가 떨어지는 길이 (ms) · 한 번에 보이는 잎 수 */
+export const LEAF_FALL_MS = 2600;
+export const LEAF_COUNT = 3;
+/**
+ * 나뭇잎 i의 자리 (t = ms): x = 이름표 가로 비율(양옆 가장자리 ±0.4..0.6), y = 이름표 위쪽에서 아래로 떨어진 비율(0 → 1.4),
+ * rot = 기울기(라디안), flip = 뒤집힘(-1..1, 팔랑임), a = 투명도 (떨어지기 시작·끝은 흐리게). 결정적 (같은 시각 = 같은 자리)
+ */
+export function leafAt(i: number, t: number): { x: number; y: number; rot: number; flip: number; a: number } {
+  const off = t + (i * LEAF_FALL_MS) / LEAF_COUNT;
+  const k = Math.floor(off / LEAF_FALL_MS);
+  const u = (off - k * LEAF_FALL_MS) / LEAF_FALL_MS;
+  const seed = hashUnit(k * 7 + i * 131);
+  // 글자를 가리지 않게 이름 양옆 가장자리로만 떨어진다 (번갈아 왼쪽·오른쪽)
+  const side = (k + i) % 2 ? 1 : -1;
+  const sway = Math.sin(u * Math.PI * 2.2 + seed * 6) * 0.05;
+  return {
+    x: side * (0.44 + seed * 0.1) + sway,
+    y: u * 1.4,
+    rot: Math.sin(u * Math.PI * 3 + seed * 5) * 0.6,
+    flip: Math.cos(u * Math.PI * 4 + seed * 3),
+    a: Math.min(1, u * 6, (1 - u) * 3),
+  };
+}
+function hashUnit(n: number): number {
+  let h = Math.imul(n | 0, 2654435761);
+  h ^= h >>> 15;
+  h = Math.imul(h, 2246822519);
+  h ^= h >>> 13;
+  return (h >>> 0) / 4294967296;
 }
 
 // ── 대비 (읽기 쉬움 시험·도구) ──

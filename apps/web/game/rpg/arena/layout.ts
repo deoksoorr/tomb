@@ -1,4 +1,9 @@
-import { isZoneId, type ZoneId } from "@/lib/rpg/catalog";
+import { isTowerZoneId, isZoneId, type ZoneId } from "@/lib/rpg/catalog";
+// 11/15 야근 빌딩 지하 서버실 배치·소품 크기
+import { serverRoomLayout, SV_PROP_META, SV_ROOM_COUNT } from "../../tower/themes/serverRoomMap";
+import { svRoom } from "@/lib/rpg/serverRoom";
+// 11/15 야근 빌딩 끝없는 회의실: 층마다 다른 방 (작은 회의실·대회의실·오픈 오피스·교육장 …)
+import { meetingRoomLayout, MT_ROOM_TYPES, mtRoomType } from "../../tower/themes/meetingRoomMap";
 
 // 40번 사냥터 지도 (순수 함수: Phaser·캔버스 없이 테스트한다).
 // 사냥터마다 소품(그림+충돌)·바닥 무늬·지형 구역(컨베이어·늪·덩굴·웅덩이·문·엘리베이터)·조명·출현 지점을 정한다.
@@ -97,6 +102,8 @@ export const PROP_META: Record<string, PropMeta> = {
   file_cabinet: { w: 18, h: 30, solid: R(-8, -12, 16, 12) },
   empty_desk: { w: 44, h: 30, solid: R(-20, -14, 40, 12) },
   box_stack: { w: 22, h: 26, solid: R(-10, -10, 20, 10) },
+  // 11/15 지하 서버실 (game/tower/themes/serverRoomMap.ts)
+  ...SV_PROP_META,
 };
 
 // ── 만들기 도구 ──
@@ -156,9 +163,11 @@ const EDGE_SPAWNS: [number, number][] = [
   [AW / 2, AH - 24],
 ];
 
-type Make = (b: Builder, v: number) => void;
+type Make = (b: Builder, v: number, seed: number) => void;
+/** 11/15 야근 빌딩: 배치를 층·판 시드로 고르는 테마용 (없으면 seed로) */
+export type LayoutCtx = { floor: number; runSeed: number };
 
-const MAKE: Record<ZoneId, { variants: number; make: Make }> = {
+const MAKE: Record<ZoneId, { variants: number; make: Make; pick?: (seed: number, ctx?: LayoutCtx) => number }> = {
   // 월요일 회의실: 회의 탁자 셋, 구석 화분, 커피 카트. 기믹은 움직이는 발표 조명 (HP 회복)
   "meeting-room": {
     variants: 2,
@@ -420,19 +429,30 @@ const MAKE: Record<ZoneId, { variants: number; make: Make }> = {
       b.spawn([40, 62], [AW - 40, 62], [40, AH - 30], [AW - 40, AH - 30], [AW / 2, AH - 22], [AW / 2, 40], [150, AH - 22], [298, 44]);
     },
   },
+
+  // 11/15 야근 빌딩 지하 서버실: 서버 랙 줄·냉각기·바닥 통풍 타일·네온 띠·바닥 회로 (game/tower/themes/serverRoomMap.ts)
+  // 층마다 방 종류 아홉 중 하나 (한 블록의 보통 층 넷은 모두 다른 방, 우두머리 층은 메인프레임 홀 — lib/rpg/serverRoom svRoom)
+  "server-room": { variants: SV_ROOM_COUNT, pick: (seed, ctx) => (ctx ? svRoom(ctx.floor) : Math.abs(seed) % SV_ROOM_COUNT), make: (b, v) => serverRoomLayout(b, v) },
+  // 11/15 끝없는 회의실: 한 블록의 보통 층 넷은 서로 다른 방, 우두머리 층은 주재자의 대회의실 (game/tower/themes/meetingRoomMap.ts)
+  mt_meeting: {
+    variants: MT_ROOM_TYPES.length,
+    pick: (seed, ctx) => MT_ROOM_TYPES.indexOf(mtRoomType(ctx?.runSeed ?? seed, ctx?.floor ?? 6)),
+    make: (b, v, seed) => meetingRoomLayout(b, v, seed),
+  },
 };
 
 /** 사냥터 지도. seed로 배치 하나를 고른다 (같은 시드면 같은 지도) */
-export function buildLayout(zone: ZoneId | string, seed: number): ArenaLayout {
-  const id: ZoneId = isZoneId(zone) ? zone : "meeting-room";
+export function buildLayout(zone: ZoneId | string, seed: number, ctx?: LayoutCtx): ArenaLayout {
+  const id: ZoneId = isZoneId(zone) || isTowerZoneId(zone) ? zone : "meeting-room";
   const def = MAKE[id];
-  const variant = Math.abs(seed) % def.variants;
-  return layoutVariant(id, variant);
+  const variant = def.pick ? def.pick(seed, ctx) : Math.abs(seed) % def.variants;
+  return layoutVariant(id, variant, seed);
 }
 
-export function layoutVariant(id: ZoneId, variant: number): ArenaLayout {
+/** seed: 11/15 배치 안의 작은 흔들림을 시드로 정하는 테마용 (보통 사냥터는 안 쓴다) */
+export function layoutVariant(id: ZoneId, variant: number, seed = 0): ArenaLayout {
   const b = new Builder();
-  MAKE[id].make(b, variant);
+  MAKE[id].make(b, variant, seed);
   return { zone: id, variant, props: b.props, solids: b.solids, decals: b.decals, regions: b.regions, lights: b.lights, spawns: b.spawns, start: b.start };
 }
 

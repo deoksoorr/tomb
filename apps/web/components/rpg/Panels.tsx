@@ -29,9 +29,11 @@ import {
 } from "@/lib/rpg/catalog";
 import { GEAR_INV_MAX, sellValue, spentStats } from "@/lib/rpg/character";
 import type { CharacterAction } from "@/lib/rpg/client";
+import { starLabel, transcendStatPoints } from "@/lib/rpg/endgame";
 import { countsForRace, derive, levelPenalty, STAT_MAX, type Derived } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST } from "@/lib/rpg/skillRules";
 import type { RpgView } from "@/lib/rpg/types";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { weaponStyleOf, weaponStyleText } from "@/lib/rpg/weapons";
 import { OutfitCanvas } from "../shop/OutfitPreview";
 import { cx } from "../ui/cx";
@@ -39,6 +41,7 @@ import { DollSlot, PaperDoll } from "../ui/PaperDoll";
 import ui from "../ui/ui.module.css";
 import { bonusText, pts } from "./format";
 import { bagGear, deltaText, equipTarget, gearDiff, gearGrade, sellable, sellWarning, slotAccepts } from "./gear";
+import { HUNT_KEYS, HUNT_TOUCH } from "./huntKeys";
 import HuntCapMeter from "./HuntCap";
 import RpgIcon from "./RpgIcon";
 import ZonePicker, { ZoneInfo, zoneOpen, zoneUnlockAll } from "./ZonePicker";
@@ -113,6 +116,12 @@ export function StartPanel({
     return (
       <div className={s.lobby}>
         <HuntCapMeter today={view.today} where="start" />
+        {/* 11/15 레벨 50 이후의 중심은 마을의 야근 빌딩 (사냥터 창에서는 안내 한 줄만) */}
+        {view.endgame && (
+          <p className={s.towerHint}>
+            <b>레벨 50:</b> 마을의 야근 빌딩에 들어갈 수 있어요 (마을 북쪽 분양 사무소 옆 높은 건물). 지옥 사냥터도 초월 EXP를 줘요.
+          </p>
+        )}
         <section className={s.section} aria-label="사냥터 고르기">
           <ZonePicker
             level={c.level}
@@ -129,7 +138,7 @@ export function StartPanel({
                 {!zoneLocked && low && <p className={s.warn}>권장 레벨보다 낮아요. 쓰러지면 보상이 절반이에요.</p>}
                 {!zoneLocked && noRace && (
                   <p className={s.warn}>
-                    이 사냥터가 열리는 레벨(Lv.{zone.unlockLevel})보다 10 넘게 높아요. EXP는 {Math.round(expCut * 100)}%만 받고, 주간 레이스(사냥 처치)에는 들어가지 않아요.
+                    이 사냥터가 열리는 레벨(Lv.{zone.unlockLevel})보다 10 넘게 높아요. EXP는 {Math.round(expCut * 100)}%만 받고, 잡은 몬스터는 사냥 랭킹과 주간 레이스에 들어가지 않아요.
                   </p>
                 )}
                 <div className={s.zoneGo}>
@@ -137,6 +146,7 @@ export function StartPanel({
                     오늘 사냥 포인트 {view.today.huntPoints} / {view.today.cap}P · 이번 시간 남은 판 {view.today.runsPerHour}
                   </p>
                   {/* 화면 흔들림 효과 켜기·끄기: 출발 전에 고른다 (이 기기에 기억) */}
+                  <HuntKeysStrip />
                   <ShakeToggle />
                   {startButton}
                 </div>
@@ -228,7 +238,9 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
     <div className={s.lobby}>
       <section className={s.section} aria-labelledby="rpg-stats">
         <h3 id="rpg-stats" className={s.sectionTitle}>
-          능력치 <span className={s.meta}>· 남은 포인트 {left}</span>
+          {/* 11/15 레벨 50: 초월 레벨 ★ */}
+          Lv.{c.level}
+          {c.tLevel > 0 && view.endgame ? ` ${starLabel(c.tLevel)}` : ""} 능력치 <span className={s.meta}>· 남은 포인트 {left}</span>
         </h3>
         <div className={s.statGrid}>
           {STAT_KEYS.map((k) => {
@@ -274,7 +286,10 @@ export function CharacterPanel({ view, busy, onCharacter }: Common) {
         </div>
         <p className={s.meta}>{STAT_KEYS.map((k) => `${STAT_LABELS[k].name}: ${STAT_LABELS[k].desc}`).join(" · ")}</p>
         <div className={s.startRow}>
-          <span className={s.meta}>레벨이 오를 때마다 능력치 포인트 3개 (5의 배수 레벨엔 5개)</span>
+          <span className={s.meta}>
+            레벨이 오를 때마다 능력치 포인트 3개 (5의 배수 레벨엔 5개)
+            {view.endgame ? ` · 초월 5레벨마다 1개 (지금 ${c.tLevel > 0 ? starLabel(c.tLevel) : "초월 전"}, 받은 ${transcendStatPoints(c.tLevel)}개)` : ""}
+          </span>
           <button
             type="button"
             className={cx(ui.button, ui.primary)}
@@ -935,5 +950,24 @@ export function ShopPanel({ view, busy, onBuy }: { view: RpgView; busy: boolean;
         )}
       </div>
     </div>
+  );
+}
+
+/** 11/15 출발 전 조작 키 한눈에 (PC는 키, 손가락 기기는 터치 조작). 판 안에서는 H로 다시 본다 */
+function HuntKeysStrip() {
+  const coarse = useMediaQuery("(pointer: coarse)");
+  const rows = coarse ? HUNT_TOUCH : HUNT_KEYS;
+  return (
+    <details className={s.keysStrip} open={!coarse}>
+      <summary>조작 키</summary>
+      <dl>
+        {rows.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
   );
 }

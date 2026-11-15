@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DIFFICULTIES, DIFFS, GEAR, HUNT_ZONES, MONSTER_IDS, MONSTERS, timeLimitSec, ZONE_IDS, ZONES, zoneFor, zonesOf } from "./catalog";
+import { DIFFICULTIES, DIFFS, GEAR, HUNT_ZONES, MONSTER_IDS, MONSTERS, timeLimitSec, TOWER_ZONE_IDS, ZONE_IDS, ZONES, zoneFor, zonesOf, type ZoneId } from "./catalog";
 import { monsterStats } from "./formulas";
 import { BOSS_RAGES, huntPlan, huntSpawnable, huntTotal } from "./plan";
 import { evaluate, huntBossDrop, killRateCeiling, type TicketInfo } from "./rewards";
@@ -54,12 +54,13 @@ describe("40번 테마 사냥터 카탈로그", () => {
     expect(new Set(bosses).size).toBeGreaterThanOrEqual(ZONE_IDS.length - 1);
     // 모든 몬스터가 어딘가에 나온다 (조각은 갈라져서)
     const used = new Set<string>();
-    for (const id of ZONE_IDS) {
+    // 11/15 야근 빌딩 전용 테마도 (정예 자리 포함)
+    for (const id of [...ZONE_IDS, ...TOWER_ZONE_IDS]) {
       const z = HUNT_ZONES[id];
-      for (const m of [...z.pool, z.boss, z.summon.id]) {
+      for (const m of [...z.pool, z.boss, z.summon.id, ...(z.elite ? [z.elite] : []), ...(z.mid ? [z.mid] : [])]) {
         used.add(m);
-        const sp = MONSTERS[m].split;
-        if (sp) used.add(sp.id);
+        // 갈라진 조각이 또 갈라지면 (참조 메일 → 회신 → 전달) 끝까지
+        for (let sp = MONSTERS[m].split; sp; sp = MONSTERS[sp.id].split) used.add(sp.id);
       }
     }
     expect(MONSTER_IDS.filter((m) => !used.has(m))).toEqual([]);
@@ -122,7 +123,7 @@ describe("40번 출현 계획·서버 검증 (사냥터마다)", () => {
   });
 
   it("보상은 난이도(티어)를 따라 오르고, 같은 난이도에서 뒤에 열리는 곳이 조금 더", () => {
-    const clear = (id: (typeof ZONE_IDS)[number], seed = 9) => {
+    const clear = (id: ZoneId, seed = 9) => {
       const z = HUNT_ZONES[id];
       const p = huntPlan(seed, z.difficulty, id);
       const kills = huntSpawnable(p, Infinity) as Record<string, number>;

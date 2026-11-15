@@ -141,7 +141,8 @@ function Line({ line, now }: { line: ChatLine; now: number }) {
   return (
     <li className={cx(styles.line, styles[chatLineTone(line)])} style={{ opacity: chatLineOpacity(line, now) }}>
       <b className={cx(styles.name, line.staff && styles.staff)}>
-        {/* 운영자 이름은 금색 그대로 (닉네임 꾸미기를 입혀 헷갈리지 않게) */}
+        {/* 운영자 이름은 금색 그대로 (닉네임 꾸미기를 입혀 헷갈리지 않게) + 11/15 "운영자" 딱지 (이름은 닉네임 그대로라) */}
+        {line.staff && <span className={styles.staffTag}>운영자</span>}
         {line.staff ? line.name : <StyledName name={line.name} look={line.ns} />}
       </b>
       <span className={styles.sep}>: </span>

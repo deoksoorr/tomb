@@ -18,7 +18,7 @@ export type ChatLine = {
   id: number;
   /** 서버 줄 id (chat 방송·chatLog). 없으면 내가 보낸 줄이거나 옛 서버 */
   key?: string;
-  /** 보낸 사람 이름 (운영자는 서버·이름표 규칙대로 이미 공개 이름 "대장") */
+  /** 보낸 사람 이름 (운영자도 닉네임 그대로 — staff 표시로 금색·"운영자" 딱지) */
   name: string;
   /** 가림 처리된 글 그대로 */
   text: string;

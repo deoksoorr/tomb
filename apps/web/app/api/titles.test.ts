@@ -70,8 +70,8 @@ describe("칭호 목록 (lib/titles)", () => {
     expect(got).toEqual(["t_champ3", "t_lv10", "t_lv20", "t_lv30", "t_kill100", "t_kill1k", "t_hell", "t_big50", "t_big100", "t_att7", "t_stay1", "t_stay10"]);
   });
 
-  it("등급: 같은 줄은 단계가 높을수록 등급이 같거나 높고, 동·은·금·전설이 모두 있다", () => {
-    const order = { bronze: 0, silver: 1, gold: 2, legend: 3 } as const;
+  it("등급: 같은 줄은 단계가 높을수록 등급이 같거나 높고, 동·은·금·전설·신화가 모두 있다", () => {
+    const order = { bronze: 0, silver: 1, gold: 2, legend: 3, mythic: 4 } as const;
     expect(new Set(TITLES.map((t) => t.grade))).toEqual(new Set(TITLE_GRADES));
     const byMetric = new Map<string, typeof TITLES>();
     for (const t of TITLES) if (t.metric && t.need !== undefined) byMetric.set(t.metric, [...(byMetric.get(t.metric) ?? []), t]);
@@ -88,12 +88,15 @@ describe("칭호 목록 (lib/titles)", () => {
 
   it("칭호 능력: 등급이 높을수록 크고, 가장 빠른 타는 펫과 겹쳐도 실시간 서버 속도 검증(달리기 × 1.5) 안", () => {
     expect(TITLE_PERKS.bronze).toEqual({ speed: 1, discount: 0 });
-    for (let i = 1; i < TITLE_GRADES.length; i++) {
-      expect(TITLE_PERKS[TITLE_GRADES[i]].speed).toBeGreaterThan(TITLE_PERKS[TITLE_GRADES[i - 1]].speed);
-      expect(TITLE_PERKS[TITLE_GRADES[i]].discount).toBeGreaterThan(TITLE_PERKS[TITLE_GRADES[i - 1]].discount);
+    // 동 → 전설은 오르고, 11/15 신화는 전설과 같다 (속도 검증 상한 안)
+    const steps = TITLE_GRADES.filter((g) => g !== "mythic");
+    for (let i = 1; i < steps.length; i++) {
+      expect(TITLE_PERKS[steps[i]].speed).toBeGreaterThan(TITLE_PERKS[steps[i - 1]].speed);
+      expect(TITLE_PERKS[steps[i]].discount).toBeGreaterThan(TITLE_PERKS[steps[i - 1]].discount);
     }
+    expect(TITLE_PERKS.mythic).toEqual(TITLE_PERKS.legend);
     const fastestPet = Math.max(...ZOO_PETS.map((p) => p.ride?.speed ?? 1));
-    expect(RUN_SPEED * fastestPet * TITLE_PERKS.legend.speed).toBeLessThan(MAX_VALID_SPEED);
+    expect(RUN_SPEED * fastestPet * TITLE_PERKS.mythic.speed).toBeLessThan(MAX_VALID_SPEED);
     expect(titlePerk("t_hell")).toEqual(TITLE_PERKS.gold);
     expect(titlePerk(null)).toEqual(TITLE_PERKS.bronze);
     expect(perkText("legend")).toBe("마을 이동 속도 +7% · 상점 7% 할인");

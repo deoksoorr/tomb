@@ -5,9 +5,9 @@ import { PRESENCE_INTERVAL_MS } from "@/lib/types";
 
 const PATH = "/guide/work-music";
 const H1 = "일할 때 틀어 두는 노동요 사이트";
-const TITLE = "일할 때 틀어 두는 노동요 사이트 — 9가지 장르 175곡 무료 배경음악, 설치 없이 | 한때는...";
+const TITLE = "일할 때 틀어 두는 노동요 사이트 — 9가지 장르 175곡 무료 배경음악, 설치 없이 | At one time...";
 const DESCRIPTION =
-  "일할 때 틀어 둘 노동요를 찾나요? 한때는...에서 로파이·오르골·빗소리·피아노·재즈 등 9가지 장르 175곡을 무료로 틀어 둘 수 있어요. 설치·가입 없이 브라우저에서 바로, 다른 탭으로 옮겨도 음악이 계속 나와요.";
+  "일할 때 틀어 둘 노동요를 찾나요? At one time...에서 로파이·오르골·빗소리·피아노·재즈 등 9가지 장르 175곡을 무료로 틀어 둘 수 있어요. 설치·가입 없이 브라우저에서 바로, 다른 탭으로 옮겨도 음악이 계속 나와요.";
 
 export const metadata = pageMetadata(PATH, TITLE, DESCRIPTION);
 
@@ -29,7 +29,7 @@ export default function WorkMusicPage() {
       path={PATH}
       h1={H1}
       description={DESCRIPTION}
-      lead="「한때는...」에서 9가지 장르 175곡을 무료로 틀어 둘 수 있어요. 설치·가입 없이 브라우저에서 바로요."
+      lead="「At one time...」에서 9가지 장르 175곡을 무료로 틀어 둘 수 있어요. 설치·가입 없이 브라우저에서 바로요."
       facts={FACTS}
       steps={[
         "아래 [마을 들어가기]를 눌러 이름과 모습을 정하고 채널을 골라 들어가요.",

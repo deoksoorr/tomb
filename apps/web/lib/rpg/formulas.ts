@@ -146,18 +146,25 @@ export const MONSTER_TIER = { hp: 1.2, atk: 1.15, exp: 0.6 } as const;
 
 export type MonsterStats = { maxHp: number; atk: number; def: number; hit: number; flee: number; speed: number; exp: number };
 
-/** 난이도를 반영한 몬스터 능력치. power: 사냥터 배율 (40번, 같은 난이도에서 뒤에 열리는 곳일수록 조금 세다 — ZoneDef.power) */
-export function monsterStats(id: MonsterId, d: Difficulty, power = 1): MonsterStats {
+/** 11/15 야근 빌딩 층 몬스터 배율 (lib/rpg/tower towerScale). EXP는 그대로 — 층 EXP는 서버가 층마다 정한다 */
+export type MonsterScale = { hp: number; atk: number; def: number; speed?: number };
+
+/**
+ * 난이도를 반영한 몬스터 능력치. power: 사냥터 배율 (40번, 같은 난이도에서 뒤에 열리는 곳일수록 조금 세다 — ZoneDef.power).
+ * scale: 야근 빌딩 층 배율 (없으면 그대로)
+ */
+export function monsterStats(id: MonsterId, d: Difficulty, power = 1, scale?: MonsterScale): MonsterStats {
   const m = MONSTERS[id];
   const D = DIFFS[d];
   const lv = D.monsterLevel;
+  const k = scale ?? { hp: 1, atk: 1, def: 1 };
   return {
-    maxHp: Math.round(m.hp * D.hpMul * MONSTER_TIER.hp * power),
-    atk: Math.round(m.atk * D.atkMul * MONSTER_TIER.atk * power),
-    def: Math.round(m.def * D.defMul),
+    maxHp: Math.round(m.hp * D.hpMul * MONSTER_TIER.hp * power * k.hp),
+    atk: Math.round(m.atk * D.atkMul * MONSTER_TIER.atk * power * k.atk),
+    def: Math.round(m.def * D.defMul * k.def),
     hit: 10 + lv * 2,
     flee: 6 + lv * 2,
-    speed: m.speed * (d === "hell" ? 1.2 : d === "hard" ? 1.1 : 1),
+    speed: m.speed * (d === "hell" ? 1.2 : d === "hard" ? 1.1 : 1) * (k.speed ?? 1),
     exp: Math.max(1, Math.round(m.exp * D.expMul * MONSTER_TIER.exp * power)),
   };
 }

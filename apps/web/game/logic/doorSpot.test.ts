@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { houseLot, WORLD_LOTS } from "@tomb/protocol";
+import { HOUSE_LOTS, houseLot, WORLD_LOTS } from "@tomb/protocol";
 import { inWater, lotInteractable, standable } from "../world/layout";
 import { doorFront } from "./doorSpot";
 
@@ -9,7 +9,7 @@ const blocked = (x: number, y: number) => !standable(x, y) || inWater(x, y);
 
 describe("집 문 앞 설 자리", () => {
   it("모든 번지: 걸을 수 있고, 문 아래 가까이, 문 들어가기 반경 안", () => {
-    for (let lot = 1; lot <= WORLD_LOTS; lot++) {
+    for (const { lot } of HOUSE_LOTS) {
       const s = doorFront(lot, [], blocked)!;
       const l = houseLot(lot)!;
       expect(blocked(s.x, s.y), `${lot}번지`).toBe(false);
@@ -32,6 +32,7 @@ describe("집 문 앞 설 자리", () => {
 
   it("메인 맵에 없는 번지(2단지)는 null", () => {
     expect(doorFront(WORLD_LOTS + 1, [], () => false)).toBeNull();
+    expect(doorFront(10, [], () => false)).toBeNull(); // 11/15 넷째 줄(10~12번지)은 없앴다
     expect(doorFront(0, [], () => false)).toBeNull();
   });
 });

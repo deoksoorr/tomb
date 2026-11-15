@@ -20,7 +20,7 @@ function tutorialSteps(touch: boolean): Step[] {
   return [
     {
       title: "걸어 보기",
-      text: touch ? "왼쪽 아래 조이스틱으로 걸어요. [점프]로 낮은 것을 넘을 수 있어요." : "WASD나 방향키로 걸어요. Shift는 달리기, Space는 점프예요.",
+      text: touch ? "화면 왼쪽 아무 데나 누르고 끌면 걸어요. [점프]로 낮은 것을 넘을 수 있어요." : "WASD나 방향키로 걸어요. Shift는 달리기, Space는 점프예요.",
     },
     {
       title: "앉아 쉬기",
@@ -42,8 +42,8 @@ function tutorialSteps(touch: boolean): Step[] {
     },
     { title: "상점", text: "유령 잡화점이에요. 주인장에게 말을 걸면 포인트로 꾸미기·폭죽을 살 수 있어요.", point: "shop" },
     {
-      title: "낚시터",
-      text: `낚시는 호수 옆 낚시터에서 해요. 나무 데크의 낚시 의자 앞에서 ${touch ? "[상호작용]" : "E"}를 누르면 낚싯대를 드리우고, 잡은 물고기는 어부 영감에게 팔아요.`,
+      title: "납품 부두",
+      text: `호수 옆 납품 부두 잔교나 강둑·연못가의 낚시 의자 앞에서 ${touch ? "[상호작용]" : "E"}를 누르면 낚싯대를 드리워요. 잡은 물고기는 부두의 어부 영감에게 팔고, 의뢰 게시판에서 수집 의뢰를 받아요.`,
       point: "fishing",
     },
     {

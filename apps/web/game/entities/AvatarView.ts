@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { champAuraOn, CHAT_SHOW_MS, dexBadgeCats, DIR, isChampBits, isChampValue, isNameSlot, itemById, ridePetOfLook, sanitizeDye, titleOfLook, type ActKind, type DirId, type StateName } from "@tomb/protocol";
 import { hasNameStyle, nameStyleRef } from "@/lib/nameStyle";
-import { titleDef } from "@/lib/titles";
+import { headTitle } from "@/lib/titles";
 import { addCanvasTexture, avatarActAnimKey, avatarAnimKey, avatarFrame, ensureAvatarTexture, TEX } from "../assets/manifest";
 import { DEPTH, LABEL_ME, LABEL_OTHER, prefersReducedMotion, SIT_IDLE_MS } from "../config";
 import { AV_ORIGIN_Y, avatarArtTop, avatarColorSpec, BODY_METRICS, bodyOf, handAnchor, waterSink, type AppearanceChange, isDyedSpec } from "../sprites/avatar";
@@ -9,7 +9,7 @@ import { CosmeticFxView } from "./CosmeticFxView";
 import { DyeFxView } from "./DyeFxView";
 import { bodyFx, riderLift } from "../sprites/cosmeticFx";
 import type { EmoteIcon } from "../sprites/emotes";
-import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
+import { HAMMOCK_H, HAMMOCK_W, hammockLieKey, hammockLieSheet, lieFrameOf, LIE_ORIGIN_X, LIE_ORIGIN_Y } from "../sprites/hammockArt";
 import { INDOOR_POSE_PERIOD, indoorPoseKey, indoorPoseSheet, isIndoorPose, POSE_H, POSE_W, type IndoorPose } from "../sprites/indoorPose";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { wrapChat } from "../logic/chatWrap";
@@ -33,7 +33,7 @@ const TITLE_GAP = 6;
 // 상태 값과 방향만 받아서 애니메이션을 고르고, 상태별 연출은 그림에만 얹는다 (논리 위치는 그대로):
 //  - hang: HANG_LIFT만큼 들어 올리고 살짝 흔들린다     - swing: 그네처럼 좌우로 왕복 (진자)
 //  - swim: 수면 물결 고리                              - dive: 물결 + 물방울이 올라온다
-//  - hammock: 해먹 천 안에 누운 그림(sprites/hammockArt — 천 곡선을 따라 휜 몸 + 앞 천)으로 바꿔 천천히 흔들린다 (F5)
+//  - hammock: 해먹 천 안에 누운 그림(sprites/hammockArt — 줄 + 천 곡선을 따라 휜 몸 + 앞 천)으로 바꿔 좌우로 흔들린다 (F5, 11/15)
 // 꾸미기: 모자·후광 고리·목도리·손등불은 시트에 함께 그려지고, 날개·후광 빛·그림자 유령 친구·발자국 꽃·
 // 안개 망토·반딧불 오라는 따로 붙는 오브젝트다. 몸 모양(AVATAR_BODIES)은 시트를 바꾼다.
 // 머리 위는 아래에서부터 머리 꾸미기(귀·모자·후광·날개 끝) → 이름표 → 말풍선/이모티콘 순으로 쌓는다:
@@ -48,6 +48,8 @@ const SWING_AMP = 3;
 const SWING_PERIOD = 1600;
 /** 해먹 흔들림 주기 (몸이 천 안으로 1px 가라앉았다 올라온다) */
 const LIE_PERIOD = 2400;
+/** 해먹 좌우 흔들림 주기 (11/15) */
+const HAMMOCK_SWAY_PERIOD = 2800;
 /** 해먹 누운 그림: 텍스처마다 몸 맨 윗줄 (이름표 자리) */
 const lieTops = new Map<string, number>();
 /** 수면 줄: 발바닥에서 위로 */
@@ -144,6 +146,8 @@ export class AvatarView {
   private champBadge: ChampBadgeView | null = null;
   /** 칭호 「…」 (이름표 바로 위, 연한 금빛). 칭호를 달았을 때만 만든다 */
   private titleView: TitleView | null = null;
+  /** 착용 목록의 칭호 id (운영자 표시가 꺼지면 이것으로 되돌린다) */
+  private wornTitle: string | null = null;
   /** 닉네임 꾸미기 (이름 글자 색·이름표 바탕판). 착용했을 때만 만든다 */
   private nameFx: NameStyleView | null = null;
   private readonly isMe: boolean;
@@ -246,14 +250,14 @@ export class AvatarView {
     if (on === !!this.staffFx) return;
     if (on) {
       this.staffBase = this.color;
-      this.staffFx = new StaffFxView(this.scene, this.atlas, this.label.depth);
+      this.staffFx = new StaffFxView(this.scene);
       this.color = staffColorOf(this.color);
     } else {
       this.staffFx?.destroy();
       this.staffFx = null;
       this.color = this.staffBase;
     }
-    this.nameFx?.setStaff(on);
+    this.setTitle(this.wornTitle);
     this.retexture();
     this.refreshAura();
   }
@@ -343,6 +347,8 @@ export class AvatarView {
     if (b === this.body) return;
     this.body = b;
     this.shoulder = BODY_METRICS[b].shoulder;
+    // 11/15 수집가 유령은 채집 등불을 들고 있다 (밤 빛)
+    this.lantern = this.look.includes("hand_lantern") || this.look.includes("hand_lantern_blue") || this.look.includes("q_hat_miner") || this.look.includes("q_hand_wishlamp") || b === "collector";
     // 25번 프리미엄 외형 등급 연출은 몸에 딸린다 (다른 사람 화면에서도 몸 id로 똑같이)
     if (this.cfx || bodyFx(b)) (this.cfx ??= new CosmeticFxView(this.scene)).setLook(this.look, b, this.champ, !!this.staffFx);
     this.relayout();
@@ -381,7 +387,8 @@ export class AvatarView {
   /** 꾸미기 착용 변경 (바로 반영) */
   setLook(look: readonly string[]): void {
     this.look = look.slice();
-    this.lantern = look.includes("hand_lantern") || look.includes("hand_lantern_blue");
+    // 11/15 광부 헬멧 이마 등불 · 수집가 유령 채집 등불도 밤에 둘레를 밝힌다
+    this.lantern = look.includes("hand_lantern") || look.includes("hand_lantern_blue") || look.includes("q_hat_miner") || look.includes("q_hand_wishlamp") || this.body === "collector";
     const mount = ridePetOfLook(look);
     if (mount !== this.mountPet) {
       this.mountPet = mount;
@@ -463,9 +470,15 @@ export class AvatarView {
     return this.look;
   }
 
-  /** 칭호 글자 (null = 없앤다). 이름표와 같은 글꼴, 구분되게 연한 금빛 */
+  /** 칭호 글자 (null = 없앤다). 이름표와 같은 글꼴, 구분되게 연한 금빛.
+   *  11/15 운영자 표시면 낀 칭호 대신 운영자 전용 「운영자」 (한 줄만 — 착용 목록이 아니라 서명된 staff 표시로만 뜬다) */
   private setTitle(id: string | null): void {
-    const t = titleDef(id);
+    this.wornTitle = id;
+    const t = headTitle(id, !!this.staffFx);
+    if (t === "staff") {
+      (this.titleView ??= new TitleView(this.scene, this.atlas, this.label.depth, this.reduced)).setStaff();
+      return;
+    }
     if (!t) {
       this.titleView?.destroy();
       this.titleView = null;
@@ -483,10 +496,7 @@ export class AvatarView {
       this.nameFx = null;
       return;
     }
-    if (!this.nameFx) {
-      this.nameFx = new NameStyleView(this.scene, this.label, this.isMe, this.reduced);
-      this.nameFx.setStaff(this.staff);
-    }
+    this.nameFx ??= new NameStyleView(this.scene, this.label, this.isMe, this.reduced);
     this.nameFx.set(ref.color, ref.plate);
   }
 
@@ -604,6 +614,8 @@ export class AvatarView {
   playAct(kind: ActKind, now: number): void {
     // 이모티콘은 어떤 자세에서든 이름표 위에 뜬다 (같은 채널 모두에게)
     if (kind === "wave" || kind === "cheer") this.emote(kind, now);
+    // 11/15 오리배 꽥: 머리 위 "꽥!" 말풍선만 (몸짓 없음)
+    if (kind === "quack") return this.say("꽥!", now);
     const s = this.state;
     if (s === "swim" || s === "dive" || s === "hang" || s === "swing" || s === "hammock" || s === "sitGround" || s === "sitChair" || s === "jump") return;
     if (s === "boat" || s === "seesaw" || s === "trampoline" || s === "carousel") return;
@@ -743,9 +755,11 @@ export class AvatarView {
         s.setFrame(avatarFrame("swing", this.dir, f));
       }
     } else if (st === "hammock") {
-      // 천 안에서 몸이 천천히 1px 가라앉았다 올라온다 (천은 그대로라 밑의 해먹 소품과 어긋나지 않는다)
+      // 11/15: 해먹이 좌우로 흔들린다 (천·줄·몸이 함께 −2..2px, 기둥은 WorldMap이 남긴 소품 그대로) + 몸이 천천히 1px 가라앉았다 올라온다
       this.setPose(0, 0);
-      const f = this.reduced ? 0 : Math.sin(((now % LIE_PERIOD) / LIE_PERIOD) * Math.PI * 2) > 0.2 ? 1 : 0;
+      const sway = this.reduced ? 0 : Math.round(Math.sin(((now % HAMMOCK_SWAY_PERIOD) / HAMMOCK_SWAY_PERIOD) * Math.PI * 2) * 2);
+      const breath = this.reduced ? 0 : Math.sin(((now % LIE_PERIOD) / LIE_PERIOD) * Math.PI * 2) > 0.2 ? 1 : 0;
+      const f = lieFrameOf(sway, breath);
       if (this.lying && f !== this.lieFrame) {
         this.lieFrame = f;
         s.setFrame(f);
@@ -858,8 +872,6 @@ export class AvatarView {
           moving: st === "walk" || st === "run",
           hidden: st === "dive" || st === "swim" || st === "hammock" || st === "hang" || st === "lie" || st === "bath" || st === "swing",
           reduced: this.reduced,
-          label: this.label,
-          labelScale,
         },
         vis,
       );
@@ -899,7 +911,7 @@ export class AvatarView {
     // 이름표 높이(height)는 이미 배율이 들어간 월드 높이 (displayHeight는 배율이 한 번 더 곱해져 이름표에 겹쳤다)
     // 주간 1위 배지가 있으면 이름표 위에 얹고, 말풍선은 그 위로
     // 이름표 위로 쌓기: (바탕판 여백) → 칭호 → 주간 1위 배지 → 말풍선.
-    // 칭호가 있으면 보이는 간격을 모두 TITLE_GAP으로 맞춘다: 이름표(바탕판이 있으면 판 윗변, 운영자면 금빛 테두리, 그냥 글자면 글자 윗선) ↔ 칭호 글자 ↔ 1위 배지 판·말풍선
+    // 칭호가 있으면 보이는 간격을 모두 TITLE_GAP으로 맞춘다: 이름표(바탕판이 있으면 판 윗변, 그냥 글자면 글자 윗선) ↔ 칭호 글자 ↔ 1위 배지 판·말풍선
     let lift = this.nameFx?.topLift(labelScale) ?? 0;
     let labelTop: number;
     if (this.titleView) {
@@ -909,7 +921,7 @@ export class AvatarView {
       const pad = this.atlas.inkPad;
       const gap = (TITLE_GAP + t.padY) * sc;
       const cellTop = this.label.y - this.label.height;
-      const visibleTop = cellTop - (lift > 0 ? lift : this.staffFx ? 1.5 * sc : -pad.top * sc);
+      const visibleTop = cellTop - (lift > 0 ? lift : -pad.top * sc);
       const titleBottom = visibleTop - gap + pad.bottom * sc;
       t.place(Math.round(this.label.x), Math.round(titleBottom), sc, vis && this.label.visible, fa, now);
       const titleInkTop = titleBottom - t.height + pad.top * sc;

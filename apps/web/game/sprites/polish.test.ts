@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AVATAR_BODIES, EMOS, SEAT_MOODS } from "@tomb/protocol";
 import { AV_ANIM, AV_H, AV_W, avatarFrameGrid, seatedAnchors } from "./avatar";
 import { EMOTE_ICONS, emoteGrid } from "./emotes";
-import { EMO_BOARD, emoIcon, emoSlotOfKey } from "../logic/emoBoard";
+import { EMO_BOARD, EMO_GROUPS, emoIcon, emoSlotOfKey, isQuestEmo } from "../logic/emoBoard";
 import { MOOD_ICON, moodIconGrid, moodPropGrid } from "./moodArt";
 
 // 다듬기 5·24·17번: 이모티콘 판·벤치 상태 그림·나무 매달리기 뒷모습
@@ -31,6 +31,47 @@ describe("5번 이모티콘 판", () => {
     expect(emoSlotOfKey(10)).toBeNull();
     // 음표는 어두운 말풍선에서도 보이게 집 안 음표와 다른 밝은 그림
     expect(emoIcon("note")).toBe("tune");
+  });
+
+  it("이모티콘 50종 이상: 모두 13×13 외곽선 그림, 그림이 서로 겹치지 않는다", () => {
+    expect(EMOS.length).toBeGreaterThanOrEqual(50);
+    expect(new Set(EMOTE_ICONS).size).toBe(EMOTE_ICONS.length);
+    const OUTLINE = 0x2a2420ff;
+    const seen = new Map<string, string>();
+    for (const e of EMOS) {
+      const icon = emoIcon(e.id);
+      expect(EMOTE_ICONS, e.id).toContain(icon);
+      const g = emoteGrid(icon);
+      expect([g.w, g.h], e.id).toEqual([13, 13]);
+      let n = 0;
+      let line = 0;
+      for (let i = 0; i < g.px.length; i++) {
+        if (g.px[i] & 255) n++;
+        if (g.px[i] === OUTLINE) line++;
+      }
+      expect(n, e.id).toBeGreaterThan(40);
+      expect(line, e.id).toBeGreaterThan(8);
+      // 그림이 다른 이모티콘과 똑같으면 안 된다
+      const sig = Array.from(g.px).join(",");
+      expect(seen.get(sig), e.id).toBeUndefined();
+      seen.set(sig, e.id);
+      expect(e.label.length, e.id).toBeGreaterThan(0);
+      // 11/15 의뢰 이모티콘 묶음은 이름이 조금 길다 ("의뢰 완료 도장")
+      expect(e.label.length, e.id).toBeLessThanOrEqual(isQuestEmo(e.id) ? 8 : 5);
+    }
+  });
+
+  it("단축키 1~9는 늘 같은 칸 (손 흔들기·환호 + 처음 7개)", () => {
+    expect(Array.from({ length: 9 }, (_, i) => emoSlotOfKey(i + 1)?.id)).toEqual(["wave", "cheer", "heart", "laugh", "cry", "wow", "what", "bang", "clap"]);
+  });
+
+  it("묶음: 판의 모든 칸이 꼭 한 묶음에, 기본 묶음이 맨 앞 (단축키 칸 포함)", () => {
+    const all = EMO_GROUPS.flatMap((g) => g.slots);
+    expect(all).toHaveLength(EMO_BOARD.length);
+    expect(new Set(all).size).toBe(EMO_BOARD.length);
+    for (const s of EMO_BOARD) expect(all, s.id).toContain(s);
+    expect(EMO_GROUPS[0].slots.slice(0, 9)).toEqual(EMO_BOARD.slice(0, 9));
+    for (const g of EMO_GROUPS) expect(g.slots.length, g.id).toBeGreaterThan(0);
   });
 });
 

@@ -191,7 +191,7 @@ export default function AdminApp() {
             묘
           </span>
           <span className={styles.brandText}>
-            <span className={styles.brandName}>한때는...</span>
+            <span className={styles.brandName}>At one time...</span>
             <span className={styles.brandSub}>관리 도구</span>
           </span>
         </div>
@@ -358,7 +358,7 @@ function LoginForm({ onDone }: { onDone: () => void }) {
           묘
         </span>
         <span className={styles.brandText}>
-          <span className={styles.brandName}>한때는...</span>
+          <span className={styles.brandName}>At one time...</span>
           <span className={styles.brandSub}>관리 도구</span>
         </span>
       </div>

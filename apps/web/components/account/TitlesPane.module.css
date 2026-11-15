@@ -294,3 +294,71 @@
     height: 112px;
   }
 }
+
+/* 11/15 운영자 전용 「운영자」(신화): 자줏빛 판 + 금테 + 금속빛 이름 (운영자 계정에만 보인다, 누르는 카드가 아님) */
+.title[data-grade="staff"] {
+  background: linear-gradient(180deg, #37214f, #170c24);
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 1px #ffd36a,
+    inset 0 0 0 2px rgba(122, 85, 36, 0.9),
+    inset 0 0 16px rgba(185, 140, 255, 0.28);
+  cursor: default;
+}
+
+.title[data-grade="staff"] .grade {
+  color: #c9a2ff;
+}
+
+.title[data-grade="staff"] .name {
+  background: linear-gradient(180deg, #ffeaa0 20%, #ffa22e 85%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.title[data-grade="staff"] .how {
+  color: #e6d8ff;
+}
+
+/* 11/15 신화 (서버에 한 사람 — 서버 최초·꼭대기 층 주인·이번 주 최고층): 짙은 금빛 판 + 금테 + 흰금빛 이름에 빛줄기가 천천히 흐른다 (운영자 보라 없음) */
+.title[data-grade="mythic"] .grade {
+  color: #ffcf4a;
+}
+
+.title[data-earned][data-grade="mythic"] {
+  background: linear-gradient(180deg, #3a2a0e, #1a1206);
+  box-shadow:
+    var(--px-border),
+    inset 0 0 0 1px #ffcf4a,
+    inset 0 0 14px rgba(255, 190, 70, 0.3);
+}
+
+.title[data-earned][data-grade="mythic"] .name,
+.nowName[data-grade="mythic"] {
+  background: linear-gradient(100deg, #e8a838 0%, #fff4c8 40%, #ffffff 50%, #fff4c8 60%, #e8a838 100%) 0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: mythicFlow 3.4s linear infinite;
+}
+
+.title[data-earned][data-grade="mythic"] .how {
+  color: #f6e2b0;
+}
+
+@keyframes mythicFlow {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title[data-earned][data-grade="mythic"] .name,
+  .nowName[data-grade="mythic"] {
+    animation: none;
+  }
+}

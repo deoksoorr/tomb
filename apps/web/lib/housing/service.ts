@@ -1,10 +1,9 @@
 import { createHmac } from "node:crypto";
-import { staffPublicName } from "@tomb/protocol";
+import { isOpenLot } from "@tomb/protocol";
 import { nanoid } from "nanoid";
 import { env } from "../env";
 import { weekStartMs } from "../gameDay";
 import { HttpError } from "../http";
-import { publicNameOf, staffAccountId } from "../staff";
 import { kstDay, kstWeek } from "../store/accounts";
 import type { Me } from "../types";
 import {
@@ -57,22 +56,20 @@ export const isHouseId = (id: string) => HOUSE_ID_RE.test(id);
 export const houseNotFound = () => new HttpError(404, "NOT_FOUND", "그 집을 찾을 수 없어요.");
 const noHouse = () => new HttpError(409, "NO_HOUSE", "먼저 분양 사무소에서 내 집을 분양받아 주세요.");
 
-/** 집주인 이름: 운영자 집이면 공개 이름("대장") (staffId = 운영자 계정 id. 관리자 화면은 넘기지 않아 원래 닉네임) */
-const ownerNameOf = (r: HouseRecord, staffId: string | null): string => staffPublicName(r.ownerName, !!staffId && r.owner === staffId);
-
-export function toPublicHouse(r: HouseRecord, staffId: string | null = null): PublicHouse {
+// 11/15: 집주인 이름은 운영자 집도 저장된 닉네임 그대로 (예전처럼 "대장"으로 바꾸지 않는다)
+export function toPublicHouse(r: HouseRecord): PublicHouse {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { owner, hidden, items, ...pub } = r;
-  return { ...pub, ownerName: ownerNameOf(r, staffId) };
+  return pub;
 }
 
-export function toSummary(r: HouseRecord, staffId: string | null = null): HouseSummary {
+export function toSummary(r: HouseRecord): HouseSummary {
   return {
     id: r.id,
     ch: r.ch,
     lot: r.lot,
     name: r.name,
-    ownerName: ownerNameOf(r, staffId),
+    ownerName: r.ownerName,
     tier: r.tier,
     score: r.score,
     likes: r.likes,
@@ -91,10 +88,10 @@ export async function findVisibleHouse(store: HouseStore, id: string): Promise<H
 export async function myHouse(store: HouseStore, accountId: string, me?: Me): Promise<MyHouseResponse> {
   const id = houseIdFor(accountId);
   // 잔액만 쓰므로 계정 전체를 읽지 않는다 (myBrief = HMGET 1개)
-  const [h0, inventory, m, staffId] = await Promise.all([store.get(id), store.inventory(id), me ?? myBrief(accountId), staffAccountId()]);
+  const [h0, inventory, m] = await Promise.all([store.get(id), store.inventory(id), me ?? myBrief(accountId)]);
   // 마을이 생기기 전에 분양받은 집은 처음 열 때 번지를 받는다
   const h = h0 && !h0.lot && (await store.assignLot(id)) ? await store.get(id) : h0;
-  return { house: h ? toPublicHouse(h, staffId) : null, inventory, points: m.points };
+  return { house: h ? toPublicHouse(h) : null, inventory, points: m.points };
 }
 
 const mustHave = async (store: HouseStore, accountId: string): Promise<HouseRecord> => {
@@ -137,10 +134,11 @@ export async function buyPlot(
   if (had) throw new HttpError(409, "ALREADY_OWNED", `이미 ${lotLabel(had.ch, had.lot)}에 내 집이 있어요. 한 계정에 하나만 분양받을 수 있어요.`);
   if (lot !== null && (!Number.isInteger(lot) || lot < 1 || lot > VILLAGE_MAX_LOTS))
     throw new HttpError(400, "INVALID_INPUT", `번지는 1~${VILLAGE_MAX_LOTS} 중에서 골라 주세요.`);
+  // 11/15 비운 번지 (CLOSED_LOTS — 지금은 없다)
+  if (lot !== null && !isOpenLot(lot)) throw new HttpError(400, "INVALID_INPUT", "그 번지는 이제 분양하지 않아요. 다른 번지를 골라 주세요.");
   if (lot !== null && (await store.village(ch)).some((h) => h.lot === lot)) throw lotTaken();
   await spend(accountId, cost, tier.id === PLOT_TIERS[0].id ? "plot" : `plot:${tier.id}`);
-  // 운영자는 집주인 이름도 공개 이름("대장")으로 남긴다
-  const r = await store.create({ id, owner: accountId, name, intro, ownerName: await publicNameOf(accountId, ownerName), tier: tier.id, ch, lot, now: Date.now() });
+  const r = await store.create({ id, owner: accountId, name, intro, ownerName, tier: tier.id, ch, lot, now: Date.now() });
   if (r === "exists") await refundAndThrow(accountId, cost, new HttpError(409, "ALREADY_OWNED", "이미 내 집이 있어요."));
   if (r === "lot_taken") await refundAndThrow(accountId, cost, lotTaken());
   if (r === "full") await refundAndThrow(accountId, cost, new HttpError(409, "VILLAGE_FULL", "마을에 빈 번지가 없어요."));
@@ -170,12 +168,11 @@ export async function village(store: HouseStore, ch: number = LEGACY_HOUSING_CHA
     }
   }
   const shown = all.filter((h) => !h.hidden);
-  const staffId = await staffAccountId();
   const maxLot = all.reduce((m, h) => Math.max(m, h.lot), 0);
   return {
     ch,
     lots: villageLots(maxLot, all.length),
-    houses: shown.map((h) => ({ ...toSummary(h, staffId), exterior: h.exterior })),
+    houses: shown.map((h) => ({ ...toSummary(h), exterior: h.exterior })),
     taken: all.filter((h) => h.hidden).map((h) => h.lot),
     generatedAt: now,
   };
@@ -320,15 +317,14 @@ export async function postGuest(
   now = Date.now(),
 ): Promise<void> {
   const h = await findVisibleHouse(store, houseId);
-  const r = await store.addGuest(h.id, { id: nanoid(10), name: await publicNameOf(visitorId, name), text, at: now, author: visitorId }, kstDay(now));
+  const r = await store.addGuest(h.id, { id: nanoid(10), name, text, at: now, author: visitorId }, kstDay(now));
   if (r === "no_house") throw houseNotFound();
   if (r === "limit") throw new HttpError(429, "RATE_LIMITED", "방명록은 하루에 10번까지 남길 수 있어요.");
 }
 
 export async function guestView(store: HouseStore, houseId: string, visitorId: string | null): Promise<GuestEntryView[]> {
-  const [rows, staffId] = await Promise.all([store.guestbook(houseId, false), staffAccountId()]);
-  // 운영자로 지정되기 전에 쓴 글도 공개 이름("대장")으로
-  return rows.map((g) => ({ id: g.id, name: staffPublicName(g.name, !!staffId && g.author === staffId), text: g.text, at: g.at, mine: !!visitorId && g.author === visitorId }));
+  const rows = await store.guestbook(houseId, false);
+  return rows.map((g) => ({ id: g.id, name: g.name, text: g.text, at: g.at, mine: !!visitorId && g.author === visitorId }));
 }
 
 /** 글쓴이 또는 집주인만 지울 수 있다 */

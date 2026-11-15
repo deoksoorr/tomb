@@ -1,31 +1,6 @@
-.joystick {
-  position: absolute;
-  left: var(--safe-left);
-  /* 화면 아래 가장자리 여백 바로 위 (위에는 확성기 창, MegaphoneFeed .floating) */
-  bottom: var(--safe-bottom);
-  width: 120px;
-  height: 120px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(20, 21, 17, 0.45);
-  box-shadow:
-    inset 0 0 0 2px rgba(93, 97, 79, 0.7),
-    0 0 0 2px rgba(9, 10, 8, 0.35);
-  pointer-events: auto;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
-
-.knob {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: rgba(236, 224, 189, 0.22);
-  box-shadow: inset 0 0 0 2px rgba(236, 224, 189, 0.5);
-  pointer-events: none;
+/* 11/15 떠다니는 조이스틱 영역(components/ui/FloatingStick): 다른 HUD(확성기 창·토스트·버튼) 아래 깊이 — 그것들이 먼저 터치를 받는다 */
+.stickZone {
+  z-index: -1;
 }
 
 .actions {
@@ -148,7 +123,6 @@
 }
 
 /* 채팅 입력 중: 키보드 위 입력칸과 겹치지 않게 숨긴다 (펼침 상태는 그대로 두려고 지우지 않는다) */
-.joystick[data-hidden],
 .actions[data-hidden] {
   visibility: hidden;
 }

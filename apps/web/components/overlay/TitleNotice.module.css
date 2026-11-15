@@ -100,6 +100,12 @@
   color: #ffb0e0;
 }
 
+/* 11/15 신화: 금빛 + 은은한 빛 */
+.name[data-grade="mythic"] {
+  color: #ffd36a;
+  text-shadow: 0 0 8px rgba(255, 190, 70, 0.6);
+}
+
 .perk {
   color: var(--moss);
   font-family: var(--font-small);

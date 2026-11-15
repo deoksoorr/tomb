@@ -35,8 +35,12 @@ describe("동물원 펫 카탈로그", () => {
       expect(p.price).toBeLessThan(p.ride ? 10_000 : 2_000);
       expect(petPrice(p.id)).toBe(p.price);
     }
-    // 카탈로그의 모든 펫은 동물원에서 판다
-    for (const it of ITEMS) if (it.slot === "pet") expect(petPrice(it.id), it.id).not.toBeNull();
+    // 카탈로그의 모든 펫은 동물원에서 판다 (11/15 수집 의뢰 보상 펫은 도장 교환소에서만 — 동물원에 없다)
+    for (const it of ITEMS)
+      if (it.slot === "pet") {
+        if (it.quest) expect(petPrice(it.id), it.id).toBeNull();
+        else expect(petPrice(it.id), it.id).not.toBeNull();
+      }
     // 싼 것부터
     const prices = ZOO_PETS.map((p) => p.price);
     expect([...prices].sort((a, b) => a - b)).toEqual(prices);

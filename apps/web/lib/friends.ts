@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { FRIEND_MAX, staffPublicName, type PeerWhere } from "@tomb/protocol";
+import { FRIEND_MAX, type PeerWhere } from "@tomb/protocol";
 import { findBan, friendHello, notifyMe, peerOf, whereOf } from "./ban";
 import { env } from "./env";
 import { friendCard } from "./friendCard";
@@ -13,7 +13,6 @@ import type { FriendLink, FriendLists, FriendStore } from "./store/friends";
 // 친구: 라우트가 쓰는 동작. 저장은 lib/store/friends.ts, 위치는 실시간 서버(/internal/where)에 묻는다.
 //  - 브라우저는 계정 id를 모른다: 친구마다 key(계정 id의 HMAC)로 가리키고, 신청은 게임 안에서 누른 사람(채널·방 + sid)을 서버가 푼다
 //  - 정지된 계정은 목록·신청·수락에서 뺀다 (기록은 남겨 두어 정지가 풀리면 다시 보인다)
-//  - 운영자는 다른 사람에게 공개 이름("대장")으로
 //  - 위치(좌표)는 친구 사이에만 내보낸다
 //  - 운영자 계정과는 친구를 맺을 수 없다 (신청·수락 모두). 지정 전에 맺어 둔 관계·신청은 읽을 때 빼고 저장소에서도 지운다
 //  - 친구 한 명의 이름·위치·자랑거리를 읽다 실패해도 나머지는 보인다 (그 줄만 비운다)
@@ -44,10 +43,10 @@ async function orElse<T>(read: () => Promise<T>, fallback: T, what: string): Pro
   }
 }
 
-/** 계정 id들의 표시 이름 (운영자는 "대장", 이름이 없으면 "이름 없는 유령"). 이름을 못 읽으면 그 줄만 "이름 없는 유령" */
+/** 계정 id들의 표시 이름 (이름이 없으면 "이름 없는 유령"). 이름을 못 읽으면 그 줄만 "이름 없는 유령" */
 async function namesOf(store: FriendStore, ids: string[]): Promise<string[]> {
-  const [names, staffId] = await Promise.all([orElse(() => store.names(ids), [] as (string | null)[], "이름"), orElse(() => staffAccountId(), null, "운영자")]);
-  return ids.map((id, i) => staffPublicName(names[i] ?? NO_NAME, !!staffId && id === staffId));
+  const names = await orElse(() => store.names(ids), [] as (string | null)[], "이름");
+  return ids.map((_, i) => names[i] ?? NO_NAME);
 }
 
 /** 운영자와는 친구를 맺을 수 없다 (신청·수락 모두) */
@@ -178,7 +177,7 @@ export async function withHouseCheck(w: FriendWhere): Promise<FriendWhere> {
 
 /**
  * 친구 들고 남 등록 (/api/join이 입장 토큰을 주기 직전): 친구가 있으면 실시간 서버에 "이 사람이 들어오면·나가면 이 친구들에게"를 맡긴다.
- * 이름은 친구 창과 같게 (운영자는 "대장"). 친구가 없으면 아무것도 안 한다
+ * 이름은 친구 창과 같게. 친구가 없으면 아무것도 안 한다
  */
 export async function announceFriends(me: string, now = Date.now()): Promise<void> {
   const store = getFriends();

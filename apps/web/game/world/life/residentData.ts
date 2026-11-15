@@ -262,7 +262,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     body: "catmask",
     color: BONE,
     look: [],
-    home: { x: 500, y: 880, r: 130 }, // 안개 숲·안개 연못
+    home: { x: 420, y: 900, r: 130 }, // 안개 숲·오리 연못 둑 (물 위 자리는 쉬는 자리에서 빠진다)
     perches: ["bS"],
     grass: 3,
     legMs: 44_000,
@@ -272,7 +272,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     lines: [
       { t: "수집가는 숲 빈터에… 있었는데 어디더라" },
       { t: "약초·광석·곤충은 수집가가 사 가~" },
-      { t: "희귀한 걸수록 비싸게 쳐 준대!" },
+      { t: "오리배 타면 Space 눌러 봐, 꽥! 하고 울어~" },
       { t: "숲 쪽 동문으로 가면 동물원이야… 아마" },
       { t: "지도 보고 걸었는데 또 여기네, 헤헤" },
       { t: "구름 구경하며 걷다 보면 길을 잃어~" },
@@ -368,7 +368,7 @@ export const RESIDENTS: readonly ResidentDef[] = [
     lines: [
       { t: "저, 저기… 호박 구경 왔어?" },
       { t: "이 모닥불은 아는 사람만 오는 곳이야" },
-      { t: "채집한 건 숲 빈터 수집가한테 팔아~" },
+      { t: "채집한 건 오리 연못 둑 수집가한테 팔아~" },
       { t: "앉아서 T, '밥 먹는 중' 띄우고 쉬어 봐" },
       { t: "호박이 쑥쑥 크면 나도 쑥쑥 기뻐…" },
       { t: "말 걸어 줘서 고마워, 헤헤…" },

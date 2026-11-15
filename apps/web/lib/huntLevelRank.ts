@@ -2,6 +2,7 @@ import { Redis } from "@upstash/redis";
 import { findBan } from "./ban";
 import { env } from "./env";
 import { gearById } from "./rpg/catalog";
+import { MAX_LEVEL } from "./rpg/formulas";
 import { autoFill, FILL_BATCH, FILL_DONE, MemoryFillMark, RedisFillMark, type FillMark } from "./rankFill";
 import { getRpgStore, type RpgStore } from "./rpg/store";
 import { staffAccountId } from "./staff";
@@ -11,13 +12,14 @@ import { K } from "./store/keys";
 import type { AccountStore } from "./store/types";
 import type { RankRow } from "./types";
 
-// 사냥 레벨 랭킹: 사냥터 캐릭터 레벨 높은 순, 같으면 경험치 많은 순. 사냥 저장소(lib/rpg)는 읽기만 한다 —
+// 사냥 레벨 랭킹: 사냥터 캐릭터 레벨 높은 순, 같으면 경험치 많은 순 (11/15 레벨 50은 초월 레벨 → 초월 EXP 순). 사냥 저장소(lib/rpg)는 읽기만 한다 —
 // 기록은 판 끝(/api/rpg/run/finish)·캐릭터 조회(/api/rpg) 라우트와, 랭킹을 볼 때 내 캐릭터에서 한다.
 // 랭킹이 생기기 전부터 있던 캐릭터는 처음 읽을 때 사냥 저장소를 한 번 훑어 채운다 (lib/rankFill, 관리자 「운영 점검」에서 다시 채우기).
 // 운영자(lib/staffRank 규칙: 목록에 없고 본인이 보면 mine = null · staff)·정지 계정은 목록에서 뺀다.
 //
 // Redis 키 (이 파일에서만 쓴다)
-//  - rank:huntLevel       ZSET 계정 id → 레벨 × LEVEL_SCALE + 경험치 (레벨이 같으면 경험치로 줄 세운다)
+//  - rank:huntLevel       ZSET 계정 id → 레벨 × LEVEL_SCALE + 경험치 (레벨이 같으면 경험치로 줄 세운다).
+//    11/15 레벨 50(경험치는 늘 0)이면 경험치 자리에 초월 레벨 × T_SCALE + 초월 EXP → 레벨 → 초월 레벨 → 초월 EXP 순. 옛 기록(50, 0)은 그대로 맞다
 //  - rank:huntLevel:gear  HASH 계정 id → 장착한 무기 id (랭킹 아이콘용, 없으면 필드 없음)
 //  - rank:huntLevel:filled       STRING 기존 캐릭터 채우기 표시 ("done" 또는 이어서 훑을 커서)
 //  - rank:huntLevel:filled:lock  STRING 채우기 잠금 (30초)
@@ -30,12 +32,23 @@ export const LEVEL_SCALE = 1e9;
 /** 정지·운영자로 빠질 몫까지 더 읽는다 */
 const EXTRA = 10;
 
-export const levelScore = (level: number, exp: number) => Math.max(1, Math.floor(level)) * LEVEL_SCALE + Math.min(LEVEL_SCALE - 1, Math.max(0, Math.floor(exp)));
+/** 초월 레벨 한 칸 (초월 EXP는 한 레벨에 많아야 약 41만 — 이 아래에 들어간다. 50 × T_SCALE < LEVEL_SCALE) */
+export const T_SCALE = 1e7;
+
+/** 레벨 50이면 tLevel·tExp(초월)가 경험치 자리에 들어간다 */
+export function levelScore(level: number, exp: number, tLevel = 0, tExp = 0): number {
+  const lv = Math.max(1, Math.floor(level));
+  const rest = lv >= MAX_LEVEL ? Math.max(0, Math.floor(tLevel)) * T_SCALE + Math.min(T_SCALE - 1, Math.max(0, Math.floor(tExp))) : Math.max(0, Math.floor(exp));
+  return lv * LEVEL_SCALE + Math.min(LEVEL_SCALE - 1, rest);
+}
 export const levelOf = (score: number) => Math.floor(score / LEVEL_SCALE);
 export const expOf = (score: number) => score % LEVEL_SCALE;
+/** 레벨 50 기록의 초월 레벨·초월 EXP */
+export const transcendOf = (score: number) => (levelOf(score) >= MAX_LEVEL ? { tLevel: Math.floor(expOf(score) / T_SCALE), tExp: expOf(score) % T_SCALE } : { tLevel: 0, tExp: 0 });
 
-/** 랭킹에 올릴 사냥 캐릭터 상태 (lib/rpg CharacterState에서 필요한 것만) */
-export type HuntLevelInput = { level: number; exp: number; runs: number; equip: { weapon?: string | null } };
+/** 랭킹에 올릴 사냥 캐릭터 상태 (lib/rpg CharacterState에서 필요한 것만). tLevel·tExp: 11/15 초월 (옛 값엔 없다) */
+export type HuntLevelInput = { level: number; exp: number; runs: number; equip: { weapon?: string | null }; tLevel?: number; tExp?: number };
+const scoreOf = (c: HuntLevelInput) => levelScore(c.level, c.exp, c.tLevel, c.tExp);
 type Entry = { accountId: string; score: number };
 type PutRow = Entry & { weapon: string | null };
 
@@ -170,7 +183,7 @@ export async function recordHuntLevel(accountId: string, c: HuntLevelInput, opts
   try {
     const staff = accountId === (opts.staffId === undefined ? await staffAccountId() : opts.staffId);
     const store = opts.store ?? getHuntLevelStore();
-    await store.put(accountId, staff || !ranked(c) ? 0 : levelScore(c.level, c.exp), c.equip.weapon ?? null);
+    await store.put(accountId, staff || !ranked(c) ? 0 : scoreOf(c), c.equip.weapon ?? null);
   } catch (e) {
     console.warn("[huntLevel] 기록 실패", e);
   }
@@ -186,7 +199,7 @@ export async function fillHuntLevel(cursor: string, count: number, opts: HuntLev
   const { next, chars } = await (opts.rpg ?? getRpgStore()).scanChars(cursor, count);
   const rows = chars.map(([accountId, c]): PutRow => ({
     accountId,
-    score: accountId === staffId || !ranked(c) ? 0 : levelScore(c.level, c.exp),
+    score: accountId === staffId || !ranked(c) ? 0 : scoreOf(c),
     weapon: c.equip.weapon ?? null,
   }));
   await store.putMany(rows);
@@ -213,7 +226,7 @@ export async function huntLevelRank(me: string | null, size: number, opts: HuntL
   let myScore = 0;
   if (me && !isStaffMe) {
     const c = await rpg.get(me);
-    myScore = ranked(c) ? levelScore(c.level, c.exp) : 0;
+    myScore = ranked(c) ? scoreOf(c) : 0;
     await store.put(me, myScore, c.equip.weapon ?? null).catch(() => undefined);
   }
 
@@ -225,13 +238,16 @@ export async function huntLevelRank(me: string | null, size: number, opts: HuntL
   const row = (e: Entry, rank: number): HuntLevelRow => {
     const i = info.get(e.accountId);
     const weapon = i?.weapon && gearById(i.weapon) ? i.weapon : null;
+    const tr = transcendOf(e.score);
     return {
       rank,
       accountId: e.accountId,
       name: i?.name ?? NO_NAME,
       value: levelOf(e.score),
       me: e.accountId === me,
-      sub: `경험치 ${expOf(e.score).toLocaleString("ko-KR")}`,
+      // 레벨 50: 초월 경험치 (★는 값 옆에 — RankRow.star)
+      sub: tr.tLevel > 0 || tr.tExp > 0 ? `초월 경험치 ${tr.tExp.toLocaleString("ko-KR")}` : `경험치 ${expOf(e.score).toLocaleString("ko-KR")}`,
+      ...(tr.tLevel > 0 ? { star: MAX_LEVEL + tr.tLevel } : {}),
       ...(weapon ? { gear: weapon } : {}),
     };
   };

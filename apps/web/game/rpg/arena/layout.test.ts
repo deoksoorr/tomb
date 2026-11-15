@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HUNT_ZONES, ZONE_IDS } from "@/lib/rpg/catalog";
+import { HUNT_ZONES, TOWER_ZONE_IDS, ZONE_IDS } from "@/lib/rpg/catalog";
 import { allSolids, AW, AH, buildLayout, cellOf, CELL, collide, COLS, distanceField, FlowField, freeGrid, inRegion, layoutVariant, layoutVariants, nearestFree, ROWS, standable } from "./layout";
 
 // 40번 사냥터 지도 검사: 장애물이 플레이어·몬스터를 가두지 않는지 (모든 사냥터·모든 배치).
@@ -29,7 +29,8 @@ describe("사냥터 지도 (40번)", () => {
     expect(buildLayout("없는곳", 1).zone).toBe("meeting-room");
   });
 
-  for (const id of ZONE_IDS) {
+  // 11/15 야근 빌딩 전용 테마(층마다 방 종류)도 모든 배치를 본다
+  for (const id of [...ZONE_IDS, ...TOWER_ZONE_IDS]) {
     for (let v = 0; v < layoutVariants(id); v++) {
       it(`${HUNT_ZONES[id].name} 배치 ${v}: 갇히는 곳이 없다`, () => {
         const l = layoutVariant(id, v);

@@ -443,7 +443,8 @@ export type MyGraveStatusResponse = { active: PublicGrave | null; passDays: numb
 /** house = 하우징 꾸밈 점수 (F11: 주간 = 이번 주에 꾸민 집, 전체 = 모든 집) */
 /** look = 외형 꾸미기 점수 (지금 착용 중인 코디 파츠 가격대 점수 합, 기간 구분 없음 — lib/lookScore.ts) */
 /** huntLevel = 사냥터 캐릭터 레벨 (같으면 경험치, 기간 구분 없음 — lib/huntLevelRank.ts) */
-export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish", "look", "huntLevel"] as const;
+/** tower = 11/15 야근 빌딩 최고 층 (이번 주·전체, 층 높은 순 → 빨리 오른 순. value = 층, sub = 그 층을 깬 시각 — lib/towerRank.ts) */
+export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish", "look", "huntLevel", "tower"] as const;
 export type RankBoard = (typeof RANK_BOARDS)[number];
 /** week = 이번 주(월요일 새벽 5시부터, lib/gameDay), all = 전체 */
 export type RankPeriod = "week" | "all";
@@ -451,7 +452,8 @@ export type RankPeriod = "week" | "all";
  * sub: 보조 줄 (house 랭킹은 "번지 · 주인 이름"). items: look 랭킹의 지금 착용 파츠 전부 (부위 순, 프리미엄 외형은 "body:{id}" — lib/lookScore.wornParts). gear: huntLevel 랭킹의 장착 무기 id.
  * ns: 그 사람의 닉네임 꾸미기 id (이름 글자·이름표, 만료 전 착용만 — lib/nameStyleRank). 없거나 집 랭킹이면 없다 (옛 화면은 무시한다)
  */
-export type RankRow = { rank: number; name: string; value: number; me: boolean; sub?: string; items?: string[]; gear?: string; ns?: string[] };
+/** star: 11/15 사냥 레벨 랭킹의 초월 레벨 표시 (★51..★100, 레벨 50만) */
+export type RankRow = { rank: number; name: string; value: number; me: boolean; sub?: string; items?: string[]; gear?: string; ns?: string[]; star?: number };
 /** GET /api/rank?board=&period=&zone=&me=1 */
 export type RankResponse = {
   board: RankBoard;
@@ -584,7 +586,7 @@ export type GiftClaimResponse = { gift: GiftEntry; me: Me; points: number };
 
 /** 확성기 기록 한 줄 */
 /** staff = 운영자 계정이 외친 것 (서버가 계정으로 판별 → 이름 금색) */
-export type MegaphoneEntry = { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true };
+export type MegaphoneEntry = { id: string; name: string; text: string; scope: "channel" | "all"; ch: number; at: number; staff?: true; /** 마을 공지(주간 1위 소식 등) 줄 — 금색이지만 "운영자" 딱지는 없다 */ system?: true };
 /** GET /api/megaphone?channel=N → 그 채널에서 보이는 최근 확성기 (모든 채널 확성기 포함, 숨긴 것 빼고, 오래된 것 먼저 최대 20개) */
 export type MegaphoneListResponse = { entries: MegaphoneEntry[] };
 /** POST /api/megaphone { itemId, text, channel } → 확성기 1개를 쓰고 증서를 받는다 (게임이 실시간 서버로 보낸다) */

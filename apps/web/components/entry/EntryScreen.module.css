@@ -21,7 +21,9 @@
 
 .title {
   color: var(--bone);
-  font-size: 48px;
+  /* 11/15 영문 이름(At one time...)은 폰에서도 한 줄로: 폭에 맞춰 줄인다 */
+  font-size: min(48px, 10.5vw);
+  white-space: nowrap;
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: 0.02em;
@@ -410,6 +412,14 @@
   .content:has(.form) {
     justify-content: flex-start;
     padding-top: calc(var(--safe-top) + 16px);
+  }
+
+  /* 11/15: 짧은 단계(로그인 뒤 확인·이름 등)까지 위에 붙어 아래가 텅 비어 보였다 →
+     위아래에 늘어나는 빈칸을 두어, 화면에 다 들어가면 가운데, 넘치면 위에서부터 (safe center를 못 쓰는 브라우저도 같게) */
+  .content:has(.form)::before,
+  .content:has(.form)::after {
+    content: "";
+    flex: 1 0 0;
   }
 
   .content:has(.form) .title {

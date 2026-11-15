@@ -467,16 +467,55 @@
     min-height: 96px;
   }
 
-  .fwPreview {
+  /* 2클래스: FireworkPreview의 .stage { width: 100% }를 이긴다 (예전엔 1클래스라 CSS 순서에 따라 무대가 칸 폭을 꽉 채워
+     설명·사기 버튼이 오른쪽 끝 한 글자 폭으로 밀려나 살 수가 없었다 — 11/15) */
+  .detail .fwPreview {
     width: 150px;
+  }
+
+  /* 탭 이름이 두 줄로 꺾이지 않게: 한 줄로, 넘치면 옆으로 밀어 본다 */
+  .tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab {
+    flex: 1 0 auto;
+    padding-inline: 8px;
+    white-space: nowrap;
   }
 
   .desc {
     font-size: 12px;
   }
 
+  /* 폰은 목록 칸이 낮다 → 카드를 작게 4칸으로 (한 화면에 더 많이) */
   .grid {
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    gap: 4px;
+  }
+
+  .tile {
+    padding: 4px 2px;
+  }
+
+  .tileName {
+    font-size: 10px;
+  }
+
+  /* 부위 칩: 폰에서는 두세 줄이 목록 자리를 먹어서 한 줄로 두고 옆으로 밀어 본다 (끝 칩이 잘려 보여 밀 수 있다는 게 보인다) */
+  .slotFilter {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .slotFilter::-webkit-scrollbar {
+    display: none;
   }
 
   .topHint {

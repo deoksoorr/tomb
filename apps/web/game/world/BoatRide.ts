@@ -1,13 +1,31 @@
 import * as Phaser from "phaser";
-import { BOATS, DIR, FERRY_DOCK, STATE, type Boat, type BoatSeat, type DirId, type Sid, type WelcomeMsg } from "@tomb/protocol";
+import { BOATS, boatKind, DIR, DUCK_DOCK, DUCK_DOCK_DECK, DUCK_SIDE_SEAT, FERRY_DOCK, STATE, type Boat, type BoatKind, type BoatSeat, type DirId, type Sid, type WelcomeMsg } from "@tomb/protocol";
 import type { ResumeState } from "@/lib/resume";
 import { TEX } from "../assets/manifest";
+import { bridge } from "../bridge";
 import { DEPTH } from "../config";
 import type { MoveInput } from "../logic/movement";
 import { DEADZONE_ENTER } from "../logic/movement";
-import { backSeatOffset, boatOf, DOCKED_DIST, joinSeat, pickBoatSeat, seatsOf, shorePoint, stepBoat, type BoatMotion, type BoatPresence } from "../logic/boat";
+import { boatOf, DOCKED_DIST, duckBump, joinSeat, pickBoatSeat, seatOffset, seatsOf, shorePoint, stepBoat, type BoatMotion, type BoatPresence } from "../logic/boat";
 import { spotVerdict } from "../logic/restore";
-import { BOAT_FEET_Y, BOAT_FRAMES, BOAT_H, BOAT_TINTS, boatRowerX, boatSheet, boatW, RIDE_TEX } from "../sprites/rideProps";
+import {
+  BOAT_FEET_Y,
+  BOAT_FRAMES,
+  BOAT_H,
+  BOAT_TINTS,
+  boatRowerX,
+  boatSheet,
+  boatW,
+  DUCK_FEET_Y,
+  DUCK_FRAMES,
+  DUCK_H,
+  DUCK_SEAT_X,
+  DUCK_STYLES,
+  DUCK_W,
+  duckSheet,
+  duckSign,
+  RIDE_TEX,
+} from "../sprites/rideProps";
 import { inWater, standable, waterCurrent } from "./layout";
 import { ensureRideTextures, type RideHost } from "./PlazaRides";
 import { bystanderGain } from "./rides";
@@ -21,6 +39,21 @@ import { bystanderGain } from "./rides";
 //  - 다른 사람에게는 노 젓는 사람의 위치(보간)에 배를 그리고, 뒷자리 사람은 그 배에 붙여 그린다
 //  - 새로고침(자리 복원)·실시간 서버 재배포: 서버가 배 자리를 기억하면 그대로, 놓쳤으면 가까운 뭍(없으면 나루터)에 내려 준다
 //  - 배 위 낚시(4번): 물가가 아닌 물 위에서 E → fishingSpot()이 알려 준 물(강·호수)로 낚시 (world/forage Foraging.fishFromBoat)
+//  - 11/15 오리배 (kind "duck"): 오리 연못 선착장(DUCK_DOCK)에서 같은 규칙으로 탄다. 두 자리가 나란히(왼쪽 = 먼저 탄 사람이 페달·조종),
+//    연못 밖으로 못 나가고 물살이 없다. 움직이면 물레바퀴가 돌며 물이 튀고, 탄 사람들이 번갈아 페달을 밟는다(들썩).
+//    Space·E(물 위) = 꽥! (act "quack": 같은 채널에 소리·"꽥!" 말풍선). 오리배끼리 닿으면 살짝 튕겨 나간다 (logic/boat duckBump).
+//    오리 연못은 낚시터가 아니라 배 위 낚시도 없다
+
+/** 오리배 꽥 간격 (서버 act 간격과 같게 — 내 화면과 남의 화면이 같은 횟수) */
+const QUACK_MS = 2000;
+/** 오리배 물레바퀴 한 칸 도는 시간 · 물방울 간격 */
+const WHEEL_MS = 110;
+const DROP_MS = 170;
+/** 부딪힘 소리 간격 */
+const BUMP_MS = 650;
+
+/** 오리배 탑승자를 위한 호스트: 꽥은 WorldScene의 동작(act) 경로로 보낸다 */
+export type BoatHost = RideHost & { act(kind: "quack"): void };
 
 /** 빈 배가 나루터로 돌아오기 시작하기까지 (내린 자리에서 잠시 떠 있다가) */
 export const BOAT_RETURN_DELAY_MS = 3000;
@@ -33,6 +66,9 @@ const WAKE_MS = 260;
 
 type BoatView = {
   def: Boat;
+  duck: boolean;
+  /** 그림 갈래 (조각배 = BOATS 순서, 오리배 = 오리배끼리 순서) */
+  tex: number;
   back: Phaser.GameObjects.Sprite;
   front: Phaser.GameObjects.Sprite;
   /** 앞자리(노 젓는 자리) 위치 */
@@ -57,18 +93,42 @@ export class BoatRide {
   /** 내가 탄 배에서 마지막으로 본 방향 (배는 좌우로만 그린다) */
   private left = false;
   private lastSeat: string | null = null;
+  private quackAt = -Infinity;
+  private bumpAt = -Infinity;
+  /** 지금 오리배에 타 있는지 (UI 터치 버튼 "꽥!" — boat:duck) */
+  private duckShown = false;
+  private readonly drops: Phaser.GameObjects.Particles.ParticleEmitter;
+  private readonly sign: Phaser.GameObjects.Image;
 
-  constructor(private readonly host: RideHost) {
+  constructor(private readonly host: BoatHost) {
     const scene = host.scene;
     ensureRideTextures(scene);
     ensureBoatTextures(scene);
+    let ducks = 0;
     BOATS.forEach((def, i) => {
       const left = def.facing === DIR.left;
-      const back = scene.add.sprite(def.x, def.y, RIDE_TEX.boatBack(def.seats, left, i), 0);
-      const front = scene.add.sprite(def.x, def.y, RIDE_TEX.boatFront(def.seats, left, i), 0);
-      const v: BoatView = { def, back, front, x: def.x, y: def.y, left, mode: "docked", returnAt: 0, px: def.x, py: def.y, speed: 0, strokeAt: 0, wakeAt: 0, fade: null };
+      const duck = boatKind(def) === "duck";
+      const tex = duck ? ducks++ : i;
+      const back = scene.add.sprite(def.x, def.y, duck ? RIDE_TEX.duckBack(left, tex) : RIDE_TEX.boatBack(def.seats, left, tex), 0);
+      const front = scene.add.sprite(def.x, def.y, duck ? RIDE_TEX.duckFront(left, tex) : RIDE_TEX.boatFront(def.seats, left, tex), 0);
+      const v: BoatView = { def, duck, tex, back, front, x: def.x, y: def.y, left, mode: "docked", returnAt: 0, px: def.x, py: def.y, speed: 0, strokeAt: 0, wakeAt: 0, fade: null };
       this.place(v, 0);
       this.views.push(v);
+    });
+    // 오리배 선착장 팻말 (판자 왼쪽 둑) — 글씨 "오리배 · 2인승"은 WorldMap 이름표
+    const sx = DUCK_DOCK_DECK.x - 12;
+    const sy = DUCK_DOCK_DECK.y + 8;
+    this.sign = scene.add.image(sx, sy + 1, RIDE_TEX.duckSign).setOrigin(0.5, 1).setDepth(sy);
+    // 물레바퀴 물방울
+    this.drops = scene.add.particles(0, 0, TEX.spark, {
+      lifespan: { min: 280, max: 460 },
+      speed: { min: 14, max: 34 },
+      angle: { min: 230, max: 310 },
+      gravityY: 150,
+      scale: { start: 0.5, end: 0.2 },
+      alpha: { start: 0.85, end: 0 },
+      tint: [0xbfe8ff, 0x8fd0ff, 0xffffff],
+      emitting: false,
     });
   }
 
@@ -103,8 +163,8 @@ export class BoatRide {
         y = r.y;
         left = r.view.dir === DIR.left;
       }
-      // 뒷자리 사람이 기준이면 앞자리 자리로 옮겨 그린다
-      if (i === 1) x -= backSeatOffset(left);
+      // 뒷자리(오리배는 옆자리) 사람이 기준이면 앞자리 자리로 옮겨 그린다
+      if (i === 1) x -= seatOffset(def, left);
       return { x, y, left, rower: i === 0 };
     }
     return null;
@@ -127,15 +187,16 @@ export class BoatRide {
 
   // ── 입력 ──
 
-  /** 나루터에서 E: 빈 배에 타거나, 2인승에서 기다리는 사람 뒷자리에 같이 탄다 */
-  useDock(): void {
+  /** 나루터에서 E: 빈 배에 타거나, 2인승에서 기다리는 사람 뒷자리에 같이 탄다. dockId "dock:duck" = 오리배 선착장 */
+  useDock(dockId = "dock:ferry"): void {
     const h = this.host;
     const pl = h.player();
     if (pl.inBoat) return;
+    const kind = dockKind(dockId);
     const occupied = h.judged() ? h.seats() : new Map<string, Sid>();
-    const seat = pickBoatSeat(pl.x, pl.y, occupied, this.presence);
+    const seat = pickBoatSeat(pl.x, pl.y, occupied, this.presence, kind);
     if (!seat) {
-      h.toast("배가 모두 나가 있어요. 빈 배는 곧 나루터로 돌아와요");
+      h.toast(kind === "duck" ? "오리배가 모두 나가 있어요. 빈 오리배는 곧 선착장으로 돌아와요" : "배가 모두 나가 있어요. 빈 배는 곧 나루터로 돌아와요");
       return;
     }
     this.boardSeat(seat);
@@ -152,7 +213,7 @@ export class BoatRide {
     let dir: DirId = seat.facing;
     if (seat.index === 1 && v.mode === "out") {
       // 기다리는 배의 뒷자리 (배가 나루터에서 살짝 떠 있거나, 물가에 와 있다)
-      x = v.x + backSeatOffset(v.left);
+      x = v.x + seatOffset(v.def, v.left);
       y = v.y;
       dir = v.left ? DIR.left : DIR.right;
     }
@@ -181,7 +242,36 @@ export class BoatRide {
       return true;
     }
     if (a === "interact") this.disembark(false);
+    else if (a === "jump") this.quack(); // 오리배: Space = 꽥 (조각배는 아무것도 하지 않는다)
     return a === "interact" || a === "sit" || a === "jump";
+  }
+
+  /** 지금 오리배에 타 있는지 */
+  private inDuck(): boolean {
+    const seat = this.host.player().boatSeatId;
+    const ref = seat ? boatOf(seat) : null;
+    return !!ref && boatKind(ref.boat) === "duck";
+  }
+
+  /** 오리배 꽥! (오리배에 타 있을 때만, QUACK_MS 간격). 소리·말풍선은 WorldScene의 act 경로 → quackFx */
+  quack(): void {
+    if (!this.inDuck()) return;
+    const now = this.host.scene.time.now;
+    if (now - this.quackAt < QUACK_MS) return;
+    this.quackAt = now;
+    this.host.act("quack");
+  }
+
+  /** 꽥 연출 (나·다른 사람 공통): 오리 머리 쪽에서 소리 + 물결 한 겹. d = 나와의 거리 */
+  quackFx(x: number, y: number, mine: boolean, d: number): void {
+    const h = this.host;
+    const g = mine ? 0.8 : 0.8 * Math.max(0, 1 - d / 420);
+    if (g > 0.02) h.sound.quack(g, 0.94 + Math.random() * 0.12);
+    if (h.reduced) return;
+    const v = this.views.find((w) => w.duck && w.mode === "out" && Math.hypot(w.x - x, w.y - y) < 20);
+    const hx = v ? v.x + DUCK_SIDE_SEAT / 2 + (v.left ? -20 : 20) : x;
+    const ring = h.scene.add.image(hx, y + 3, TEX.avRipple).setDepth(DEPTH.decal + 3).setAlpha(0.6).setScale(0.6);
+    h.scene.tweens.add({ targets: ring, alpha: 0, scaleX: 1.8, scaleY: 1.4, duration: 700, onComplete: () => ring.destroy() });
   }
 
   /** 물가에서 내리기. force면 뭍이 멀어도 (나루터로) 내린다 — 자동 걷기·복원 실패 등 */
@@ -198,8 +288,9 @@ export class BoatRide {
     return true;
   }
 
+  /** 뭍이 멀 때 내려 줄 선착장 (내가 탄 배 종류의 선착장 판자 끝) */
   private dockStand(): { x: number; y: number } {
-    return { x: FERRY_DOCK.x, y: FERRY_DOCK.y };
+    return this.inDuck() ? { x: DUCK_DOCK.x, y: DUCK_DOCK.y - 6 } : { x: FERRY_DOCK.x, y: FERRY_DOCK.y };
   }
 
   private leave(to: { x: number; y: number }, toast?: string): void {
@@ -297,12 +388,12 @@ export class BoatRide {
       if (r && r.stateId === STATE.boat) {
         const left = r.view.dir === DIR.left;
         this.left = left;
-        pl.boatTo(r.x + backSeatOffset(left), r.y, left ? DIR.left : DIR.right, now);
+        pl.boatTo(r.x + seatOffset(ref.boat, left), r.y, left ? DIR.left : DIR.right, now);
         return;
       }
       if (who === null && h.judged()) {
         // 앞자리가 비었다 → 그 자리로 (서버는 같은 배 안 옮겨 앉기로 거리와 상관없이 받아 준다)
-        const x = pl.x - backSeatOffset(this.left);
+        const x = pl.x - seatOffset(ref.boat, this.left);
         pl.boardSlide(front.id, x, pl.y);
         this.motion.x = x;
         this.motion.y = pl.y;
@@ -311,9 +402,33 @@ export class BoatRide {
       return;
     }
     const moving = Math.hypot(move.ax, move.ay) >= DEADZONE_ENTER;
-    const m = stepBoat(this.motion, moving ? move.ax : 0, moving ? move.ay : 0, dtMs, inWater(this.motion.x, this.motion.y) ? waterCurrent(this.motion.x, this.motion.y) : { vx: 0, vy: 0 });
+    const kind = boatKind(ref.boat);
+    const m = stepBoat(this.motion, moving ? move.ax : 0, moving ? move.ay : 0, dtMs, inWater(this.motion.x, this.motion.y) ? waterCurrent(this.motion.x, this.motion.y) : { vx: 0, vy: 0 }, kind);
+    if (kind === "duck") this.bumpDucks(ref.boat.id, now);
     if (Math.abs(m.vx) > 4) this.left = m.vx < 0;
     pl.boatTo(Math.round(m.x * 10) / 10, Math.round(m.y * 10) / 10, this.left ? DIR.left : DIR.right, now);
+  }
+
+  /** 오리배 범퍼카: 내 오리배가 다른 오리배(떠 있거나 매여 있는)에 닿으면 살짝 튕겨 나간다 */
+  private bumpDucks(boatId: string, now: number): void {
+    const others: { x: number; y: number }[] = [];
+    for (const v of this.views) if (v.duck && v.def.id !== boatId && !v.fade) others.push({ x: v.x, y: v.y });
+    if (!duckBump(this.motion, others) || now - this.bumpAt < BUMP_MS) return;
+    this.bumpAt = now;
+    const h = this.host;
+    h.sound.play("boing", 0.32, 1.35);
+    if (!h.reduced) this.drops.setDepth(this.motion.y + 2).explode(5, this.motion.x + DUCK_SIDE_SEAT / 2, this.motion.y + 2);
+  }
+
+  /** 탄 사람 들썩임: 물결 흔들림 + 오리배가 움직이는 동안 두 사람이 번갈아 페달을 밟는다 (1px) */
+  private riderLift(ref: { boat: Boat; seat: BoatSeat }, wall: number): number {
+    if (this.host.reduced) return 0;
+    const bi = BOATS.indexOf(ref.boat);
+    const bob = Math.sin(wall / 520 + bi * 1.3) * 0.9;
+    if (boatKind(ref.boat) !== "duck") return bob;
+    const v = this.views[bi];
+    const pedal = v && v.mode === "out" && v.speed > 6 ? (Math.floor(wall / 150) + ref.seat.index) % 2 : 0;
+    return bob * 0.7 + pedal;
   }
 
   /**
@@ -323,26 +438,29 @@ export class BoatRide {
     const h = this.host;
     const wall = Date.now();
     const pl = h.player();
-    const bob = (i: number) => (h.reduced ? 0 : Math.sin(wall / 520 + i * 1.3) * 0.9);
     for (const r of h.remotes().values()) {
       r.posOverride = null;
       if (r.stateId !== STATE.boat) continue;
       const ref = r.seatId ? boatOf(r.seatId) : null;
       if (!ref) continue;
-      const bi = BOATS.indexOf(ref.boat);
-      r.view.ride = { ox: 0, lift: bob(bi), depth: null };
+      r.view.ride = { ox: 0, lift: this.riderLift(ref, wall), depth: null };
       if (ref.seat.index !== 1) continue;
       const front = seatsOf(ref.boat.id)[0];
       const who = this.occupant(front.id);
-      if (who === -1) r.posOverride = { x: pl.x + backSeatOffset(pl.dir === DIR.left), y: pl.y };
+      if (who === -1) r.posOverride = { x: pl.x + seatOffset(ref.boat, pl.dir === DIR.left), y: pl.y };
       else if (who !== null) {
         const f = h.remotes().get(who);
-        if (f && f.stateId === STATE.boat) r.posOverride = { x: f.x + backSeatOffset(f.view.dir === DIR.left), y: f.y };
+        if (f && f.stateId === STATE.boat) r.posOverride = { x: f.x + seatOffset(ref.boat, f.view.dir === DIR.left), y: f.y };
       }
     }
     if (pl.inBoat) {
       const ref = boatOf(pl.boatSeatId!);
-      pl.view.ride = { ox: 0, lift: bob(ref ? BOATS.indexOf(ref.boat) : 0), depth: null };
+      pl.view.ride = { ox: 0, lift: ref ? this.riderLift(ref, wall) : 0, depth: null };
+    }
+    const duck = pl.inBoat && this.inDuck();
+    if (duck !== this.duckShown) {
+      this.duckShown = duck;
+      bridge.emit("boat:duck", { riding: duck });
     }
   }
 
@@ -379,7 +497,17 @@ export class BoatRide {
       v.py = v.y;
       const rowing = v.mode === "out" && v.speed > 6 && !!rider?.rower;
       let frame = 0;
-      if (rowing) {
+      if (v.duck) {
+        // 오리배: 움직이는 동안 물레바퀴가 돌고 고물에서 물이 튄다 (페달 소리는 없다 — 꽥이 주인공)
+        if (v.mode === "out" && v.speed > 6) {
+          frame = Math.floor(wall / WHEEL_MS) % DUCK_FRAMES;
+          if (now - v.strokeAt >= DROP_MS && !h.reduced) {
+            v.strokeAt = now;
+            const sx = v.x + DUCK_SIDE_SEAT / 2 + (v.left ? 13 : -13);
+            this.drops.setDepth(v.y + 2).explode(2, sx, v.y + 1);
+          }
+        }
+      } else if (rowing) {
         const ph = (wall % STROKE_MS) / STROKE_MS;
         frame = ph < 0.5 ? 1 : 2;
         if (now - v.strokeAt >= STROKE_MS) {
@@ -394,18 +522,25 @@ export class BoatRide {
         v.wakeAt = now;
         this.wake(v);
       }
-      v.back.setTexture(RIDE_TEX.boatBack(v.def.seats, v.left, i), frame);
-      v.front.setTexture(RIDE_TEX.boatFront(v.def.seats, v.left, i), frame);
-      this.place(v, h.reduced ? 0 : Math.sin(wall / 520 + i * 1.3) * 0.9);
+      v.back.setTexture(v.duck ? RIDE_TEX.duckBack(v.left, v.tex) : RIDE_TEX.boatBack(v.def.seats, v.left, v.tex), frame);
+      v.front.setTexture(v.duck ? RIDE_TEX.duckFront(v.left, v.tex) : RIDE_TEX.boatFront(v.def.seats, v.left, v.tex), frame);
+      this.place(v, h.reduced ? 0 : Math.sin(wall / 520 + i * 1.3) * (v.duck ? 0.65 : 0.9));
     });
   }
 
-  /** 앞자리 위치(v.x, v.y)에 배 그림을 놓는다. 뒤 판은 사람 뒤, 앞 판은 사람 앞 */
+  /** 앞자리 위치(v.x, v.y)에 배 그림을 놓는다. 뒤 판은 사람 뒤, 앞 판은 사람 앞. 오리배는 왼쪽 자리가 기준 (뱃머리와 상관없이) */
   private place(v: BoatView, bob: number): void {
-    const W = boatW(v.def.seats);
-    const rx = boatRowerX(v.def.seats);
-    const ox = (v.left ? W - rx - 0.5 : rx + 0.5) / W;
-    const oy = BOAT_FEET_Y / BOAT_H;
+    let ox: number;
+    let oy: number;
+    if (v.duck) {
+      ox = (v.left ? DUCK_W - DUCK_SEAT_X - DUCK_SIDE_SEAT - 0.5 : DUCK_SEAT_X + 0.5) / DUCK_W;
+      oy = DUCK_FEET_Y / DUCK_H;
+    } else {
+      const W = boatW(v.def.seats);
+      const rx = boatRowerX(v.def.seats);
+      ox = (v.left ? W - rx - 0.5 : rx + 0.5) / W;
+      oy = BOAT_FEET_Y / BOAT_H;
+    }
     const y = Math.round(v.y - bob);
     v.back.setOrigin(ox, oy).setPosition(Math.round(v.x), y).setDepth(v.y - 1);
     v.front.setOrigin(ox, oy).setPosition(Math.round(v.x), y).setDepth(v.y + 1.5);
@@ -438,7 +573,7 @@ export class BoatRide {
 
   private wake(v: BoatView): void {
     const scene = this.host.scene;
-    const sx = v.x + (v.left ? 14 : -14);
+    const sx = v.duck ? v.x + DUCK_SIDE_SEAT / 2 + (v.left ? 17 : -17) : v.x + (v.left ? 14 : -14);
     const img = scene.add.image(sx, v.y + 3, TEX.avRipple).setDepth(DEPTH.decal + 3).setAlpha(0.5).setScale(0.7);
     scene.tweens.add({ targets: img, alpha: 0, scaleX: 1.6, scaleY: 1.3, duration: 900, onComplete: () => img.destroy() });
   }
@@ -451,16 +586,26 @@ export class BoatRide {
     if (!pl.inBoat) return this.joinTarget() ? `${prefix}뒷자리에 같이 타기` : null;
     const ref = boatOf(pl.boatSeatId!);
     const shore = shorePoint(pl.x, pl.y, standable) !== null;
+    if (ref && boatKind(ref.boat) === "duck") {
+      // 오리배: 물 위 E·Space = 꽥 (낚시 없음)
+      if (ref.seat.index === 1) return shore ? `${prefix}내리기 · 같이 타는 중 · Space 꽥` : `${prefix}꽥! · 옆자리에 같이 타는 중`;
+      return shore ? `${prefix}내리기 · Space 꽥 · 방향키로 페달` : `${prefix}꽥! · 방향키로 페달 밟기`;
+    }
     if (ref?.seat.index === 1) return shore ? `${prefix}내리기 · 같이 타는 중` : `${prefix}낚시하기 · 같이 타는 중`;
     return shore ? `${prefix}내리기 · 방향키로 노 젓기` : `${prefix}낚시하기 · 방향키로 노 젓기`;
   }
 
   /** 나루터 안내: 탈 배가 없으면 회색, 2인승에서 기다리는 사람이 있으면 같이 타기 */
-  dockHint(prefix: string): { text: string; dim: boolean } {
+  dockHint(prefix: string, dockId = "dock:ferry"): { text: string; dim: boolean } {
     const h = this.host;
     const pl = h.player();
+    const kind = dockKind(dockId);
     const occupied = h.judged() ? h.seats() : new Map<string, Sid>();
-    const seat = pickBoatSeat(pl.x, pl.y, occupied, this.presence);
+    const seat = pickBoatSeat(pl.x, pl.y, occupied, this.presence, kind);
+    if (kind === "duck") {
+      if (!seat) return { text: "오리배가 모두 나가 있어요", dim: true };
+      return { text: seat.index === 1 ? `${prefix}오리배 옆자리에 같이 타기` : `${prefix}오리배 타기 (2인승)`, dim: false };
+    }
     if (!seat) return { text: "배가 모두 나가 있어요", dim: true };
     return { text: seat.index === 1 ? `${prefix}뒷자리에 같이 타기` : `${prefix}조각배 타기`, dim: false };
   }
@@ -474,7 +619,7 @@ export class BoatRide {
   /** 배 위 낚시: 지금 내 배가 떠 있는 물과 자리. 배에 타고 있지 않으면 null */
   fishingSpot(): { x: number; y: number; water: "river" | "lake" } | null {
     const pl = this.host.player();
-    if (!pl.inBoat) return null;
+    if (!pl.inBoat || this.inDuck()) return null; // 오리 연못은 낚시터가 아니다
     const lake = waterCurrent(pl.x, pl.y).vx === 0 && waterCurrent(pl.x, pl.y).vy === 0;
     return { x: pl.x, y: pl.y, water: lake ? "lake" : "river" };
   }
@@ -485,11 +630,32 @@ export class BoatRide {
       v.back.destroy();
       v.front.destroy();
     }
+    this.drops.destroy();
+    this.sign.destroy();
+    if (this.duckShown) bridge.emit("boat:duck", { riding: false });
   }
 }
 
+/** 선착장 상호작용 id → 배 종류 */
+function dockKind(dockId: string): BoatKind {
+  return dockId === "dock:duck" ? "duck" : "row";
+}
+
 function ensureBoatTextures(scene: Phaser.Scene): void {
+  if (!scene.textures.exists(RIDE_TEX.duckSign)) scene.textures.addCanvas(RIDE_TEX.duckSign, duckSign());
+  let ducks = 0;
   BOATS.forEach((def, i) => {
+    if (boatKind(def) === "duck") {
+      const t = ducks++;
+      const style = DUCK_STYLES[t % DUCK_STYLES.length];
+      for (const left of [false, true]) {
+        const bk = RIDE_TEX.duckBack(left, t);
+        const fk = RIDE_TEX.duckFront(left, t);
+        if (!scene.textures.exists(bk)) addSheet(scene, bk, duckSheet("back", left, style), DUCK_W, DUCK_FRAMES, DUCK_H);
+        if (!scene.textures.exists(fk)) addSheet(scene, fk, duckSheet("front", left, style), DUCK_W, DUCK_FRAMES, DUCK_H);
+      }
+      return;
+    }
     const tint = BOAT_TINTS[i % BOAT_TINTS.length];
     for (const left of [false, true]) {
       const bk = RIDE_TEX.boatBack(def.seats, left, i);
@@ -501,8 +667,8 @@ function ensureBoatTextures(scene: Phaser.Scene): void {
   });
 }
 
-function addSheet(scene: Phaser.Scene, key: string, canvas: HTMLCanvasElement, frameW: number): void {
+function addSheet(scene: Phaser.Scene, key: string, canvas: HTMLCanvasElement, frameW: number, frames = BOAT_FRAMES, frameH = BOAT_H): void {
   const tex = scene.textures.addCanvas(key, canvas);
   if (!tex) return;
-  for (let f = 0; f < BOAT_FRAMES; f++) tex.add(f, 0, f * frameW, 0, frameW, BOAT_H);
+  for (let f = 0; f < frames; f++) tex.add(f, 0, f * frameW, 0, frameW, frameH);
 }

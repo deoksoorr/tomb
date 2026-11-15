@@ -239,13 +239,13 @@ const node = (kind: NodeKind, where: Where, x: number, y: number): GatherNode =>
 /** lib/forage/forage.test.ts가 서 있을 수 있는 자리·물 밖·소품/좌석과 떨어짐을 검사한다 */
 export const GATHER_NODES: readonly GatherNode[] = [
   // 약초 (14)
-  node("herb", "forest", 420, 830),
+  node("herb", "forest", 398, 812), // 11/15 오리 연못이 넓어져 둑 위로 옮김 (아래 숲 지점들도)
   node("herb", "forest", 588, 940),
-  node("herb", "forest", 470, 800),
-  node("herb", "forest", 520, 1000),
+  node("herb", "forest", 498, 796),
+  node("herb", "forest", 536, 1002),
   node("herb", "forest", 60, 640),
   node("herb", "forest", 412, 1000),
-  node("herb", "forest", 586, 872),
+  node("herb", "forest", 588, 846),
   node("herb", "meadow", 880, 870),
   node("herb", "meadow", 1050, 906),
   node("herb", "meadow", 1110, 962),
@@ -267,14 +267,14 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("dig", "meadow", 1080, 942),
   node("dig", "meadow", 1046, 1004),
   node("dig", "meadow", 870, 920),
-  node("dig", "forest", 440, 940),
+  node("dig", "forest", 380, 972),
   node("dig", "forest", 560, 960),
   node("dig", "hill", 250, 120),
   node("dig", "lakeside", 1390, 1000),
   // 곤충 수풀 (9)
   node("bug", "forest", 450, 780),
   node("bug", "forest", 590, 800),
-  node("bug", "forest", 410, 900),
+  node("bug", "forest", 322, 920),
   node("bug", "meadow", 930, 868),
   node("bug", "meadow", 1120, 1000),
   node("bug", "meadow", 872, 1004),
@@ -303,8 +303,9 @@ export const NPCS: readonly Npc[] = [
     id: "collector",
     name: "수집가 유령",
     title: "뭐든 삽니다",
-    x: 412,
-    y: 872,
+    // 11/15 오리 연못 북서쪽 둑 (동물원 동문에서 북동쪽으로 몇 걸음)
+    x: 360,
+    y: 806,
     buys: ["bug", "herb", "ore", "dig"],
     hello: "끝내지 못한 것들도 누군가에겐 보물이지요. 약초·광석·발굴품·곤충, 다 삽니다.",
   },

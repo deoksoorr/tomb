@@ -2,7 +2,6 @@ import { handler, json } from "@/lib/http";
 import { LIST_LIMIT } from "@/lib/housing/catalog";
 import { SortSchema } from "@/lib/housing/schemas";
 import { getHouseStore, toSummary } from "@/lib/housing/service";
-import { staffAccountId } from "@/lib/staff";
 import type { HouseListResponse } from "@/lib/housing/types";
 
 /**
@@ -11,8 +10,7 @@ import type { HouseListResponse } from "@/lib/housing/types";
  */
 export const GET = handler(async (req) => {
   const sort = SortSchema.parse(req.nextUrl.searchParams.get("sort") ?? "score");
-  const [list, staffId] = await Promise.all([getHouseStore().list(sort, LIST_LIMIT), staffAccountId()]);
-  const houses = list.map((h) => toSummary(h, staffId)); // 운영자 집주인은 공개 이름("대장")으로
+  const houses = (await getHouseStore().list(sort, LIST_LIMIT)).map((h) => toSummary(h));
   return json<HouseListResponse>(
     { sort, houses, generatedAt: Date.now() },
     { headers: { "Vercel-CDN-Cache-Control": "max-age=30, stale-while-revalidate=86400", "Cache-Control": "no-store" } },

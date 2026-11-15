@@ -97,7 +97,7 @@ function SiteCard() {
   return (
     <Frame>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 170 }}>
-        <div style={{ fontSize: 120 }}>한때는...</div>
+        <div style={{ fontSize: 120 }}>At one time...</div>
         <div style={{ fontSize: 40, color: C.muted, marginTop: 28 }}>끝내지 못한 것들이 잠든 도트 마을</div>
       </div>
       <div
@@ -123,7 +123,7 @@ function GraveCard({ grave }: { grave: GraveRecord }) {
         </Stone>
       </div>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "110px 90px 70px 70px" }}>
-        <div style={{ fontSize: 28, color: C.muted }}>한때는...</div>
+        <div style={{ fontSize: 28, color: C.muted }}>At one time...</div>
         <div style={{ fontSize: nameSize, marginTop: 26, lineHeight: 1.2 }}>{grave.name}</div>
         <div style={{ fontSize: 38, color: C.muted, marginTop: 22 }}>{grave.epitaph}</div>
         <div style={{ fontSize: 28, marginTop: 22 }}>{lifespanLabel(grave.bornAt, grave.diedAt, grave.ageDays)}</div>

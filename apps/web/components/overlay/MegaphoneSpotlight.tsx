@@ -35,7 +35,10 @@ function Spot({ entry, until }: { entry: MegaphoneEntry; until: number }) {
           </span>
           <span className={styles.tag}>{all ? "전체 확성기" : `${entry.ch}채널 확성기`}</span>
         </div>
-        <p className={cx(styles.name, entry.staff && styles.staff)}>{entry.name}</p>
+        <p className={cx(styles.name, entry.staff && styles.staff)}>
+          {entry.staff && !entry.system && <span className={styles.staffTag}>운영자</span>}
+          {entry.name}
+        </p>
         <p className={styles.text}>{entry.text}</p>
       </div>
     </div>

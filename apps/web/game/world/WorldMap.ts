@@ -15,6 +15,7 @@ import {
   WORLD_LOTS,
   ZONES,
   FERRY_DOCK,
+  DUCK_DOCK_DECK,
   GRAVE_AREAS,
   PONDS,
   RIVER_PATH,
@@ -34,6 +35,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { FISH_ZONE_LIGHTS } from "./fishZone";
 import { ZOO_LIGHTS } from "./zoo/zooLayout";
 import { HAUNT_LIGHTS } from "../haunt/hauntLayout";
+import { TOWER_LIGHTS } from "../tower/towerLayout";
 import {
   allDeckRails,
   allProps,
@@ -48,6 +50,7 @@ import {
   campfireCollider,
   cliffColliders,
   furnitureCollider,
+  HAMMOCK_LIFT,
   hammockPosts,
   houseCollider,
   interactables,
@@ -112,6 +115,8 @@ export class WorldMap {
   private houseKey = "";
   /** 그네 줄·판 (받침 좌표 x*65536+y → 이미지) */
   private readonly swingSeats = new Map<number, Phaser.GameObjects.Image>();
+  /** 해먹 소품 (받침 x·y 키). 누가 누우면 기둥만 남긴다 (11/15) */
+  private readonly hammocks = new Map<number, Phaser.GameObjects.Image>();
   /** 모닥불 id → 불티·연기 이미터 */
   private readonly fires = new Map<string, { embers: Phaser.GameObjects.Particles.ParticleEmitter; smoke: Phaser.GameObjects.Particles.ParticleEmitter; big?: boolean }>();
   private readonly reduced: boolean;
@@ -170,12 +175,16 @@ export class WorldMap {
       this.addLabel(at.x, at.y, z.name, z.id === "pond" ? 0xc8d8e0 : 0xd8ccb0, 1, 0.62);
     }
     this.addLabel(FERRY_DOCK.x, FERRY_DOCK.y - 44, "나루터", 0xd8ccb0, 1, 0.75);
-    // 낚시터 등불 (아치·잔교 끝·데크 남쪽 끝). 장식 그림과 "낚시터" 현판은 forage/FishZoneView
+    // 11/15 오리배 선착장 팻말 글씨 (팻말 그림은 BoatRide)
+    this.addLabel(DUCK_DOCK_DECK.x - 12, DUCK_DOCK_DECK.y - 22, "오리배 · 2인승", 0xfff0b8, 1, 0.92);
+    // 납품 부두 등불 (아치·잔교 끝·게시판·수조). 장식 그림과 "납품 부두" 현판은 forage/FishZoneView
     this.staticLights.push(...FISH_ZONE_LIGHTS);
     // 동물원 등불 (정문 석등·아치·분양 노점). 울타리·우리·동물·사육사 그림은 zoo/ZooView
     this.staticLights.push(...ZOO_LIGHTS);
     // 귀신의집 보라·초록 벽등·간판·깨진 창 (그림은 haunt/HauntHouseView)
     this.staticLights.push(...HAUNT_LIGHTS);
+    // 11/15 야근 빌딩 로비 유리문·옥상 네온 간판·창 불빛 (그림은 tower/TowerView)
+    this.staticLights.push(...TOWER_LIGHTS);
 
     // 아래 담 (맵 맨 아래 줄은 바닥 타일이 담 면으로 그린다)
     this.applyBounds();
@@ -345,7 +354,9 @@ export class WorldMap {
     }
     // 해먹: 누운 사람(받침 + 1)보다 뒤에
     const depth = FLAT.has(p.kind) ? DEPTH.decal + 3 : p.kind === "hammock" ? p.y - 2 : p.y;
-    return this.scene.add.image(p.x, p.y + 1, this.propTexture(p)).setOrigin(0.5, 1).setDepth(depth);
+    const img = this.scene.add.image(p.x, p.y + 1, this.propTexture(p)).setOrigin(0.5, 1).setDepth(depth);
+    if (p.kind === "hammock") this.hammocks.set(p.x * 65536 + p.y, img);
+    return img;
   }
 
   /**
@@ -366,6 +377,26 @@ export class WorldMap {
       // 컬링으로 숨긴 칸이면 그대로 둔다 (칸이 보이면 다음 프레임에 맞춘다)
       const want = !busy && this.shownCells.has(Math.floor(py / CELL) * CELL_COLS + Math.floor(px / CELL));
       if (seat.visible !== want) seat.setVisible(want);
+    }
+  }
+
+  /**
+   * 해먹에 누운 사람 자리(앵커 = 받침 y − HAMMOCK_LIFT)들을 받아, 사람이 있는 해먹은 기둥만 남긴다
+   * (줄·천은 누운 사람 텍스처가 흔들리며 그린다). riders: [x0, y0, x1, y1, …]
+   */
+  updateHammocks(riders: readonly number[], n: number): void {
+    for (const [key, img] of this.hammocks) {
+      const px = Math.floor(key / 65536);
+      const py = key % 65536;
+      let busy = false;
+      for (let i = 0; i < n; i += 2) {
+        if (Math.abs(riders[i] - px) <= 6 && Math.abs(riders[i + 1] - (py - HAMMOCK_LIFT)) <= 6) {
+          busy = true;
+          break;
+        }
+      }
+      const tex = busy ? WP.hammockPosts : WP.hammock;
+      if (img.texture.key !== tex) img.setTexture(tex);
     }
   }
 
@@ -659,7 +690,7 @@ const ZONE_LABEL_AT: Partial<Record<string, { x: number; y: number }>> = {
   "호수": { x: 1236, y: 962 },
   "달빛 연못": { x: PONDS[0].x, y: PONDS[0].y + PONDS[0].ry + 26 },
   "까마귀 연못": { x: PONDS[1].x - 40, y: PONDS[1].y - 8 },
-  "안개 연못": { x: PONDS[2].x, y: PONDS[2].y + 6 },
-  "안개 숲": { x: 500, y: 800 },
+  "오리 연못": { x: PONDS[2].x, y: PONDS[2].y + PONDS[2].ry + 16 },
+  "안개 숲": { x: 560, y: 796 },
   "호박밭": { x: 990, y: 1000 },
 };

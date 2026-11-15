@@ -59,8 +59,9 @@ import HousingOffice from "@/components/housing/HousingOffice";
 import { hopChannel } from "@/components/housing/channelHop";
 import { graveChannelFor } from "@/game/world/graveChannel";
 import type { PublicHouse } from "@/lib/housing/types";
-import { isRideablePet, WORLD_LOTS } from "@tomb/protocol";
+import { isRideablePet, isWorldLot } from "@tomb/protocol";
 import HuntLobby from "@/components/rpg/HuntLobby";
+import { towerTaunt } from "@/lib/rpg/tower";
 import ForageLayer from "@/components/forage/ForageLayer";
 import RideButton from "@/components/zoo/RideButton";
 import ZooLayer from "@/components/zoo/ZooLayer";
@@ -207,7 +208,8 @@ type Panel =
   | "calendar"
   | "gifts"
   | "friends"
-  | "haunt";
+  | "haunt"
+  | "tower";
 
 /** 다른 담당이 만드는 장소 창 (사냥터·분양 사무소). 컴포넌트가 들어오기 전까지 자리만 */
 type Props = {
@@ -346,6 +348,28 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     return () => window.removeEventListener("keydown", onKey);
   }, [ready, quiet, roomQuiet, canRadial, chatOpen, coarse]);
 
+  // 11/15: 단축키로 연 창은 같은 단축키로 닫는다 (I = 가방, T = 표현 창. Y 원형 목록은 ExprRadial이 직접 닫는다)
+  const bagOpen = panel === "bag";
+  useEffect(() => {
+    if (!bagOpen && !sayOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.code !== "KeyI" && e.code !== "KeyT") || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+      const el = document.activeElement;
+      if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]")) return;
+      // 가방 위에 다른 창(염색·확인 등)이 겹쳐 있으면 그 창 몫
+      if (document.querySelectorAll("dialog[open]").length > 1) return;
+      if (e.code === "KeyI" && bagOpen) {
+        e.preventDefault();
+        setPanel(null);
+      } else if (e.code === "KeyT" && sayOpen) {
+        e.preventDefault();
+        setSayOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [bagOpen, sayOpen]);
+
   // 게임이 맵에 내 묘비를 표시한다 (sticky)
   const myGraveIds = me?.graves;
   useEffect(() => {
@@ -399,7 +423,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       house.ch,
       houseChannel,
       () => {
-        if (house.lot >= 1 && house.lot <= WORLD_LOTS) bridge.emit("world:lot", { lot: house.lot, label: "내 집" });
+        if (isWorldLot(house.lot)) bridge.emit("world:lot", { lot: house.lot, label: "내 집" });
         else {
           setHousingIntent(null);
           setPanel("housing");
@@ -792,6 +816,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         <HousingOffice key={housingIntent?.houseId ?? housingIntent?.lot ?? "office"} intent={housingIntent} channel={houseChannel} onClose={closePanel} />
       )}
       {panel === "hunt" && <HuntLobby onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
+      {/* 11/15 마을의 야근 빌딩 (사냥 레벨 50 전이면 창 없이 경비원 한마디) */}
+      {panel === "tower" && <HuntLobby mode="tower" onClose={closePanel} onTaunt={() => showToast(towerTaunt(), 5_000)} avatar={{ color: options.color, body: options.body }} />}
       {panel === "wish" && <WishDialog onClose={closePanel} />}
       {panel === "telescope" && <Telescope onClose={closePanel} />}
       {panel === "haunt" && <HauntDialog onClose={closePanel} />}

@@ -52,3 +52,5 @@ export const weekEndMs = (week: string) => weekStartMs(week) + 7 * DAY_MS;
 export const prevWeek = (week: string) => addDays(week, -7);
 /** now 다음에 오는 주 마감 (다음 월요일 새벽 5시, ms) */
 export const nextWeekStartMs = (now = Date.now()) => weekEndMs(gameWeek(now));
+/** 두 게임 날짜(YYYYMMDD) 사이 날 수 (b − a, 같은 날이면 0) */
+export const daysBetween = (a: string, b: string) => Math.round((utcOfDay(b) - utcOfDay(a)) / DAY_MS);

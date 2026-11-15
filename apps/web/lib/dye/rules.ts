@@ -1,4 +1,4 @@
-import { isFixedDyeId, itemById, type DyePart, type DyeTicketSpec, type ItemDef } from "@tomb/protocol";
+import { dyeHex, isDyeColor, isFixedDyeId, itemById, withDyeSpecial, type DyePart, type DyeSpecial, type DyeTicketSpec, type ItemDef } from "@tomb/protocol";
 import type { DyeTier } from "./palette";
 
 // 46·25번 꾸미기 서비스 값 (포인트). 염색권 가격은 카탈로그(packages/protocol items.ts)에 있다.
@@ -49,4 +49,30 @@ export function dyeCountsDiffer(inventory: Record<string, number>, server: Recor
   const ids = new Set([...Object.keys(mine), ...Object.keys(server)]);
   for (const id of ids) if ((mine[id] ?? 0) !== (server[id] ?? 0)) return true;
   return false;
+}
+
+// ── 11/15 수집 의뢰 염색권 (판·조준 없음): 색 확정(pick) = 보통 색 아무거나, 특수색 확정(special) = 특수 색 4종 중 하나 ──
+
+/** 카탈로그 염색권의 쓰는 방식 (pick·special이면 그 값, 아니면 null) */
+export function directDyeMode(itemId: string): "pick" | "special" | null {
+  const m = itemById(itemId)?.dye?.mode;
+  return m === "pick" || m === "special" ? m : null;
+}
+
+/** 색 확정 염색권 창의 견본 색 (밝은 색 · 짙은 색 · 흑백이 고루) */
+export const DYE_PICK_SWATCHES: readonly string[] = [
+  "#ff5a5a", "#ff9a3a", "#ffd23a", "#9adf4a", "#3ec46a", "#3ac8c0", "#4aa8f0", "#4a6ae8", "#8a5ae8", "#d05ae0", "#ff6aa8", "#b8865a",
+  "#ffb8b8", "#ffd8a8", "#fff2a8", "#d8f4b0", "#b8ecd0", "#b8e8f4", "#c8d8ff", "#dcc8ff", "#f8c8ec", "#f0e4d0", "#ffffff", "#c8c8cc",
+  "#a8282e", "#a8541c", "#a8861a", "#4a7a24", "#1e6a40", "#1a6a6a", "#1e5a9a", "#26307a", "#4a2a8a", "#7a2a7a", "#8a2a5a", "#5a3a22",
+  "#8a8a90", "#5a5a62", "#34343c", "#1a1a20",
+];
+
+/**
+ * 특수색 확정 염색권의 바탕 색 (서버가 정하고, 화면 미리보기도 같은 함수): 금빛 광택은 늘 금빛,
+ * 나머지는 그 부위에 이미 염색한 색이 있으면 그 바탕 색 그대로(특수 색이었으면 바탕 hex만), 없으면 종류마다 정한 대표 색
+ */
+export const SPECIAL_DYE_BASE: Readonly<Record<DyeSpecial, string>> = { g: "#e2b24a", s: "#bcd4ff", r: "#ff7a9c", n: "#8dffb8" };
+export function specialDyeColor(kind: DyeSpecial, current: string | null | undefined): string {
+  const keep = kind !== "g" && isDyeColor(current) ? dyeHex(current) : null;
+  return withDyeSpecial(keep ?? SPECIAL_DYE_BASE[kind], kind);
 }

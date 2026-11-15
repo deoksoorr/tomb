@@ -7,7 +7,7 @@ const NAME_RE = /^[가-힣A-Za-z0-9 _]+$/;
 // 공백·_ 제거 + 소문자로 비교. 사칭 방지 단어 포함.
 const BANNED = [
   "시발", "씨발", "씨빨", "시바", "ㅅㅂ", "병신", "븅신", "ㅂㅅ", "좆", "존나", "졸라", "개새", "개색", "새끼",
-  "미친놈", "미친년", "니미", "느금", "애미", "애비", "섹스", "자지", "보지", "운영자", "관리자", "admin",
+  "미친놈", "미친년", "니미", "느금", "애미", "애비", "섹스", "자지", "보지", "운영자", "운영진", "운영팀", "관리자", "admin",
   "fuck", "shit", "bitch", "sex", "nigger", "nigga", "cunt", "dick", "pussy",
 ];
 
@@ -36,7 +36,8 @@ export function checkName(raw: unknown): NameCheck {
   if (!NAME_RE.test(name)) return { ok: false, reason: "한글, 영문, 숫자, 공백, _ 만 쓸 수 있어요." };
   const flat = nameKey(name);
   if (BANNED.some((w) => flat.includes(w))) return { ok: false, reason: "쓸 수 없는 단어가 들어 있어요." };
-  // 운영자 공개 이름 "대장" 흉내 막기: "대장"이나 "○○대장"은 안 되고, "대장장이"처럼 다른 낱말 안에 든 건 된다
+  // 11/15: 운영자는 이제 닉네임 그대로(머리 위 「운영자」 칭호로 구분)지만, 예전에 운영자가 "대장"으로 남긴 기록(묘비 상주·방명록 등)을 흉내 내지 못하게
+  // "대장"이나 "○○대장"은 계속 막는다 ("대장장이"처럼 다른 낱말 안에 든 건 된다). "운영자"·"관리자"는 위 금칙어
   if (flat === "대장" || flat.endsWith("대장")) return { ok: false, reason: "쓸 수 없는 단어가 들어 있어요." };
   return { ok: true, name };
 }

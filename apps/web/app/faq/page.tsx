@@ -4,7 +4,7 @@ import { pageMetadata } from "../seo";
 import { ATTEND_RULE_TEXT } from "@/lib/attendStay";
 import { ATTEND_TIER_GUIDE } from "@/lib/attendTiers";
 import { DAILY_EARN_CAP, earnRule } from "@/lib/economy";
-import { CHAT_MAX, CHAT_RECENT_MS, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS, FRIEND_MAX, NAME_MAX, NAME_MIN, PERMANENT_MULTIPLIER, STAFF_PUBLIC_NAME } from "@tomb/protocol";
+import { CHAT_MAX, CHAT_RECENT_MS, DEFAULT_CHANNEL_CAPACITY, DEFAULT_MAX_CHANNELS, FRIEND_MAX, NAME_MAX, NAME_MIN, PERMANENT_MULTIPLIER } from "@tomb/protocol";
 import { AUTO_FISH_DAILY_MAX, AUTO_FISH_EVERY_MS, AUTO_FISH_MAX_MS } from "@/lib/forage/auto";
 import { DAILY_CATCH_MAX } from "@/lib/forage/catalog";
 import { DORMANT_DAYS } from "@/lib/store/types";
@@ -13,12 +13,16 @@ import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
 import { STAY_BONUS_DAILY_MAX } from "@/lib/stayBonus";
 import { DEFAULT_PASS_DAYS, PRESENCE_INTERVAL_MS } from "@/lib/types";
 import { env } from "@/lib/env";
+import { PIONEER_DAYS, PIONEER_FLOOR } from "@/lib/rpg/endgame";
+import { TOWER_CHESTS_PER_DAY } from "@/lib/rpg/tower";
+import { MAX_LEVEL } from "@/lib/rpg/formulas";
 import { RESPEC_MAX_COST, respecCost } from "@/lib/rpg/skillRules";
+import { QUEST_DAILY, QUEST_STAMPS } from "@/lib/forage/quests/catalog";
 
 const PATH = "/faq";
-const TITLE = "한때는... 자주 묻는 질문 — 무료인지, 설치·가입, 모바일, 함께 있는 인원, 노동요 곡 수";
+const TITLE = "At one time... 자주 묻는 질문 — 무료인지, 설치·가입, 모바일, 함께 있는 인원, 노동요 곡 수";
 const DESCRIPTION =
-  "한때는...에 대해 자주 묻는 질문을 모았어요. 무료인지, 설치나 회원가입이 필요한지, 휴대폰에서도 되는지, 몇 명이 같이 있는지, 노동요는 몇 곡인지, 다른 탭에서도 소리가 나는지, 포인트·채팅·친구·자동 낚시·랭킹·닉네임은 어떻게 되는지 답해요.";
+  "At one time...에 대해 자주 묻는 질문을 모았어요. 무료인지, 설치나 회원가입이 필요한지, 휴대폰에서도 되는지, 몇 명이 같이 있는지, 노동요는 몇 곡인지, 다른 탭에서도 소리가 나는지, 포인트·채팅·친구·자동 낚시·랭킹·닉네임은 어떻게 되는지 답해요.";
 
 export const metadata = pageMetadata(PATH, TITLE, DESCRIPTION);
 
@@ -72,11 +76,16 @@ const FAQ = [
   },
   {
     q: "무엇을 할 수 있나요?",
-    a: "모닥불 곁에서 쉬기, 채팅과 친구 맺기, 사냥터(스킬 트리)·미니게임, 낚시(자동 낚시 포함), 채집과 도감, 동물원 펫 분양, 캐릭터 꾸미기, 내 집 꾸미기, 묘비 세우기와 헌화, 관람차·열기구·조각배 타기, 귀신의집 탈출, 폭죽·확성기, 마을 주민과 강아지·고양이와 놀기를 할 수 있어요.",
+    a: "모닥불 곁에서 쉬기, 채팅과 친구 맺기, 사냥터(스킬 트리)·미니게임, 낚시(자동 낚시 포함), 채집과 도감, 동물원 펫 분양, 캐릭터 꾸미기, 내 집 꾸미기, 묘비 세우기와 헌화, 관람차·열기구·조각배·오리배 타기, 귀신의집 탈출, 폭죽·확성기, 마을 주민과 강아지·고양이와 놀기를 할 수 있어요.",
   },
   {
     q: "자리를 비워도 낚시가 되나요?",
     a: `낚시 자리에 앉아 [자동 낚시 켜기]를 누르면, 다른 탭을 보고 있어도 접속해 있는 동안 ${Math.round(AUTO_FISH_EVERY_MS / 1000)}초에 1마리씩 물고기가 쌓여요(자동 낚시는 하루 ${AUTO_FISH_DAILY_MAX}마리, 직접 낚은 것까지 합쳐 하루 ${DAILY_CATCH_MAX.fish}마리, 한 번에 최대 ${AUTO_FISH_MAX_MS / 3_600_000}시간). 접속이 끊긴 동안은 세지 않고, 움직이거나 일어나면 꺼져요. 희귀한 물고기는 덜 나와요. 자동 낚시로 낚은 물고기도 크기가 정해져 내 도감의 가장 큰 기록에는 들어가지만, 최대어 순위에는 오르지 않아요(순위는 직접 낚은 물고기만). 직접 낚든 자동으로 낚든 아주 드물게 물에 빠진 꾸미기가 걸려요(영구 소장).`,
+  },
+  {
+    // 11/15 수집 의뢰 (숫자는 lib/forage/quests/catalog.ts)
+    q: "수집 의뢰와 의뢰 도장은 무엇인가요?",
+    a: `의뢰는 납품 부두의 의뢰 게시판에서 받아요. 오늘의 의뢰는 하루 ${QUEST_DAILY}개로 한국 시간 새벽 5시에 새로 나오고, 하루 한 번 의뢰 하나를 무료로 바꿀 수 있어요. 월요일마다 이번 주 큰 의뢰도 1개 나와요. 모은 물고기·채집물을 납품하면(가방에서 사라져요) 의뢰 도장을 ${QUEST_STAMPS.easy}~${QUEST_STAMPS.hard}개, 큰 의뢰는 ${QUEST_STAMPS.weekly}개 받아요. 도장은 포인트로 바꾸거나 남에게 줄 수 없고, 같은 게시판의 도장 교환소에서만 써요. 교환소 물건은 매달 1일 새벽 5시에 바뀌고(염색권은 늘 있어요), 도장은 사라지지 않아요. 끝낸 의뢰 수로 칭호도 받아요.`,
   },
   {
     q: "묘비는 무엇인가요?",
@@ -90,7 +99,7 @@ const FAQ = [
     q: "돌아다니는 주민은 누구예요?",
     a: `연한 초록 이름표를 단 마을 주민(${RESIDENTS.slice(0, 3)
       .map((r) => r.name)
-      .join(", ")} 등)이에요. 동물원·낚시터·광장처럼 저마다 맡은 구역을 주로 걷고, 가끔 헤엄치거나 벤치·모닥불 곁에서 쉬어요. 가까이 가서 E(휴대폰은 상호작용 버튼)를 누르면 멈춰서 말을 걸어 주고, 가끔 게임 팁도 알려 줘요. 실제 사람이 아니라서 접속자 수에는 들어가지 않고, 운영 상황에 따라 나오는 수가 달라져요. 마을엔 강아지(비숑 우유 등)와 고양이도 있어 E로 쓰다듬을 수 있어요.`,
+      .join(", ")} 등)이에요. 동물원·납품 부두·광장처럼 저마다 맡은 구역을 주로 걷고, 가끔 헤엄치거나 벤치·모닥불 곁에서 쉬어요. 가까이 가서 E(휴대폰은 상호작용 버튼)를 누르면 멈춰서 말을 걸어 주고, 가끔 게임 팁도 알려 줘요. 실제 사람이 아니라서 접속자 수에는 들어가지 않고, 운영 상황에 따라 나오는 수가 달라져요. 마을엔 강아지(비숑 우유 등)와 고양이도 있어 E로 쓰다듬을 수 있어요.`,
   },
   {
     q: "친구는 어떻게 맺나요?",
@@ -106,8 +115,13 @@ const FAQ = [
     a: `네. 사냥터 [캐릭터] 탭의 [능력치 초기화], [스킬] 탭의 [초기화]로 배분한 포인트를 모두 돌려받아요. 둘 다 레벨에 따라 ${respecCost(1)}~${RESPEC_MAX_COST}포인트가 들어요. 장비·레벨·경험치는 그대로예요.`,
   },
   {
+    q: "사냥 레벨 50 다음엔 뭐가 있나요?",
+    // 11/15 사냥 끝판 1단계 — 숫자는 lib/rpg/endgame.ts
+    a: `레벨 ${MAX_LEVEL}부터는 지옥 사냥터와 야근 빌딩에서 얻는 EXP가 초월 EXP로 쌓여 초월 레벨(★51~★100)이 올라요. 초월 5레벨마다 능력치 포인트 1개를 받고, 사냥 레벨 랭킹은 레벨 → 초월 레벨 → 초월 EXP 순이에요. 하루에 할 수 있는 판 수 제한은 없어요. 마을 북쪽 분양 사무소 옆 야근 빌딩은 1층부터 쓰러질 때까지 이어서 오르는 곳으로, 도전 횟수 제한이 없어요. 층이 오를수록 몬스터가 세지고 10층부터 저주가 쌓이며, 깬 층마다 초월 EXP를 받아요. 5층마다 우두머리 상자(하루 ${TOWER_CHESTS_PER_DAY}개)가 열려요. 끝판이 열린 뒤 ${PIONEER_DAYS}일 안에 ★51에 닿거나 야근 빌딩 ${PIONEER_FLOOR}층을 처음 넘으면 닿은 차례대로 칭호 「개척자 #번호」를 받아요.`,
+  },
+  {
     q: "닉네임이 다른 사람과 같아도 되나요?",
-    a: `아니요. 닉네임은 ${NAME_MIN}~${NAME_MAX}자이고 다른 사람이 쓰는 이름은 쓸 수 없어요. ${DORMANT_DAYS}일 넘게 들어오지 않은 계정은 휴면이 되어 그 이름을 다른 사람이 쓸 수 있고, 돌아오면 닉네임을 다시 정해요. 금빛 '${STAFF_PUBLIC_NAME}' 이름표는 운영자예요.`,
+    a: `아니요. 닉네임은 ${NAME_MIN}~${NAME_MAX}자이고 다른 사람이 쓰는 이름은 쓸 수 없어요. ${DORMANT_DAYS}일 넘게 들어오지 않은 계정은 휴면이 되어 그 이름을 다른 사람이 쓸 수 있고, 돌아오면 닉네임을 다시 정해요. 운영자도 닉네임 그대로 보이고, 머리 위 「서버비 내는 사람」 칭호와 저승사자 차림으로 알아볼 수 있어요. 일반 계정은 이 칭호를 달 수 없고 '운영자' 같은 이름도 쓸 수 없어요.`,
   },
   {
     q: "닉네임을 꾸밀 수 있나요?",
@@ -150,7 +164,7 @@ export default function FaqPage() {
       path={PATH}
       h1="자주 묻는 질문"
       description={DESCRIPTION}
-      lead="「한때는...」은 설치·가입 없이 브라우저에서 바로 하는 무료 실시간 멀티 도트 마을이에요. 자주 묻는 것들을 모았어요."
+      lead="「At one time...」은 설치·가입 없이 브라우저에서 바로 하는 무료 실시간 멀티 도트 마을이에요. 자주 묻는 것들을 모았어요."
       extraJsonLd={[FAQ_LD]}
     >
       <dl className={guide.qa}>

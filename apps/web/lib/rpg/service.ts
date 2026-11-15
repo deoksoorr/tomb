@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import { recordEvent } from "../analyticsService";
 import { earnPoints, getAccounts, refundPoints, spendPoints } from "../store";
 import { kstDay, kstWeek } from "../store/accounts";
+import { forgetTitles, forgetTowerTitles } from "../titlesServer";
 import { earnRule } from "../economy";
 import { env } from "../env";
 import { HttpError } from "../http";
@@ -18,6 +19,7 @@ import {
   fitSkillBudget,
   fitToLevel,
   gainExp,
+  gainTranscend,
   learnSkill,
   resetSkills,
   resetStats,
@@ -28,6 +30,22 @@ import {
   RpgError,
   setHotbar,
 } from "./character";
+import { isTranscendRun, pioneerEligible, rollDay, RUN_TIERS, runTier, TRANSCEND_EXP_MUL, TRANSCEND_MAX, type RunTier } from "./endgame";
+import {
+  checkTowerStart,
+  endgameView,
+  evalTower,
+  FIRST_STAR_ID,
+  TOWER_FIRSTS,
+  TOWER_MAX_RUN_SEC,
+  towerChestDrops,
+  towerScore,
+  towerSettle,
+  towerZone,
+  type TowerSettle,
+} from "./tower";
+import { getTowerStore } from "./towerStore";
+import { pushVillageNotice } from "../weeklyChamp";
 import { countsForRace, derive, expToNext, MAX_LEVEL } from "./formulas";
 import { ALL_SKILLS_POINTS, respecCost, skillPointsEarned, spentPoints } from "./skillRules";
 import { isSuperHunter, testServerEnv } from "./superHunter";
@@ -62,8 +80,8 @@ async function http<T>(p: Promise<T>): Promise<T> {
 
 /** 스킬 포인트 예산: 보통은 레벨로 받은 만큼, 테스트 서버 슈퍼 계정은 모든 스킬 최대치 */
 const skillBudget = (level: number, sup: boolean) => (sup ? Math.max(ALL_SKILLS_POINTS, skillPointsEarned(level)) : skillPointsEarned(level));
-/** 슈퍼 계정의 능력치 포인트: 최대 레벨까지 받는 포인트 전부 */
-const SUPER_STAT_POINTS = statPointsEarned(MAX_LEVEL);
+/** 슈퍼 계정의 능력치 포인트: 최대 레벨까지 받는 포인트 전부 (+ 초월 몫) */
+const superStatPoints = (tLevel: number) => statPointsEarned(MAX_LEVEL, tLevel);
 /**
  * 레벨을 보는 모든 검사(장비 요구 레벨·사냥터 잠금·판 기록·능력치 계산)에 쓰는 레벨.
  * 테스트 서버 슈퍼 계정은 최대 레벨 취급, 저장된 레벨은 그대로
@@ -83,6 +101,14 @@ async function loadChar(acct: string, store: RpgStore, sup: boolean): Promise<Ch
   return (await http(store.update(acct, (s) => ({ state: fitAll(s, sup), result: null })))).state;
 }
 
+/** 11/15 끝판이 이 서버에서 처음 열린 시각 (저장소에 한 번만 적고, 인스턴스 메모리에 기억 — 거의 Redis를 읽지 않는다) */
+const eg = globalThis as typeof globalThis & { __tombEndgameLaunch?: number };
+export async function endgameLaunch(store: RpgStore = getRpgStore(), now = Date.now()): Promise<number> {
+  return (eg.__tombEndgameLaunch ??= await store.endgameLaunch(now));
+}
+/** 시험용: 기억한 시각을 지운다 */
+export const forgetEndgameLaunch = () => void delete eg.__tombEndgameLaunch;
+
 export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now = Date.now(), state?: CharacterState): Promise<RpgView> {
   const day = kstDay(now);
   const sup = await isSuperHunter(acct);
@@ -99,9 +125,11 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
         ...stored,
         level: effectiveLevel(stored.level, true),
         skillPoints: Math.max(0, skillBudget(stored.level, true) - spentPoints(stored.skills)),
-        statPoints: Math.max(0, SUPER_STAT_POINTS - spentStats(stored)),
+        statPoints: Math.max(0, superStatPoints(stored.tLevel) - spentStats(stored)),
       }
     : stored;
+  // 11/15 끝판 (레벨 50): 오늘 초월 판·야근 빌딩·개척자 모집. 끝판이 열린 시각은 레벨 50이 처음 볼 때 적는다
+  const endgame = character.level >= MAX_LEVEL ? endgameView(stored, day, kstWeek(now), await endgameLaunch(store, now).catch(() => null), sup) : undefined;
   return {
     character,
     derived: derive(character.level, character.stats, character.equip),
@@ -111,6 +139,7 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
     respecCost: respecCost(stored.level),
     statResetCost: respecCost(stored.level),
     ...(sup ? { superHunter: true } : {}),
+    ...(endgame ? { endgame } : {}),
   };
 }
 
@@ -126,13 +155,13 @@ export async function characterAction(acct: string, a: z.output<typeof Character
       const s = fitAll(s0, sup);
       switch (a.type) {
         case "alloc":
-          return { state: allocStats(s, a.stats, sup ? SUPER_STAT_POINTS : undefined), result: null };
+          return { state: allocStats(s, a.stats, sup ? superStatPoints(s.tLevel) : undefined), result: null };
         case "learn":
           return { state: learnSkill(s, a.skill, skillBudget(s.level, sup)), result: null };
         case "ackTree":
           return { state: ackTreeNotice(s), result: null };
         case "hotbar":
-          return { state: setHotbar(s, a.slots), result: null };
+          return { state: setHotbar(s, a.slots, a.auto), result: null };
         case "equip":
           return { state: equip(s, a.slot, a.itemId, effectiveLevel(s.level, sup)), result: null };
       }
@@ -256,24 +285,49 @@ export async function startRun(
   now = Date.now(),
   zoneId?: ZoneId,
   planVer?: number,
+  tower?: number,
 ): Promise<RunStartResponse> {
   const store = getRpgStore();
   const sup = await isSuperHunter(acct);
   const c = await loadChar(acct, store, sup);
   const lv = effectiveLevel(c.level, sup);
   const d = derive(lv, c.stats, c.equip);
-  const zone = game === "hunt" ? zoneFor(difficulty, zoneId) : null;
-  if (zone && zoneId && zone.id !== zoneId) throw new HttpError(400, "INVALID_INPUT", "그 사냥터는 이 난이도에 없어요.");
-  if (zone && lv < zone.unlockLevel && !zoneUnlockBypass())
+  const day = kstDay(now);
+  // 11/15 야근 빌딩: 지옥 사냥만, 시작 층은 최고 기록으로 연 체크포인트 (층마다 사냥터는 정해져 있다 — 화면이 보낸 사냥터는 보지 않는다)
+  if (tower !== undefined) {
+    if (game !== "hunt" || difficulty !== "hell") throw new HttpError(400, "INVALID_INPUT", "야근 빌딩은 지옥 사냥에서만 갈 수 있어요.");
+    const bad = checkTowerStart({ level: lv, start: tower, best: c.fBest, sup });
+    if (bad) throw new HttpError(bad.code === "INVALID_INPUT" ? 400 : 403, bad.code, bad.message);
+  }
+  const zone = game === "hunt" ? (tower ? towerZone(tower) : zoneFor(difficulty, zoneId)) : null;
+  if (zone && zoneId && zone.id !== zoneId && !tower) throw new HttpError(400, "INVALID_INPUT", "그 사냥터는 이 난이도에 없어요.");
+  if (zone && !tower && lv < zone.unlockLevel && !zoneUnlockBypass())
     throw new HttpError(403, "ZONE_LOCKED", `${zone.name}은(는) Lv.${zone.unlockLevel}부터 갈 수 있어요.`);
-  const limit = timeLimitSec(game, difficulty, zone?.id);
+  // 야근 빌딩은 층마다 제한 시간이 따로 있고, 티켓은 긴 등반을 받도록 두 시간
+  const limit = tower ? TOWER_MAX_RUN_SEC : timeLimitSec(game, difficulty, zone?.id);
   const nonce = nanoid(16);
   if (!(await store.startRun(acct, nonce, limit + FINISH_GRACE_SEC, hourBucket(now))))
     throw new HttpError(429, "RATE_LIMITED", `한 시간에 ${RUNS_PER_HOUR}판까지 할 수 있어요. 잠시 쉬었다 와요.`);
+  // 11/15 초월 판(레벨 50 지옥): 그날 몇 번째 판인지를 서버가 센다 (시작하면 한 판 — 끝내지 않아도).
+  // 구간(100%·30%·10%·연습)은 여기서 정해 티켓에 싣는다 → 결과를 낼 때 화면 말을 믿지 않는다.
+  // 야근 빌딩은 시작할 때 세지 않는다 — 판 끝에 깬 4층마다 1판 (캐릭터 저장도 판 끝 한 번)
+  let tier: RunTier | undefined;
+  let started: CharacterState | undefined;
+  if (isTranscendRun(lv, game, difficulty) && !tower) {
+    const r = await http(
+      store.update(acct, (s) => {
+        const day0 = rollDay(s, day);
+        const next = { ...s, ...day0, tRuns: day0.tRuns + 1 };
+        return { state: next, result: runTier(day0.tRuns, day0.tBank) };
+      }),
+    );
+    tier = r.result;
+    started = r.state;
+  }
   const seed = newSeed();
   const sv = game === "stars" ? (planVer === STARS_PLAN_VER ? STARS_PLAN_VER : 1) : undefined;
   // 테스트 서버 운영자(슈퍼) 계정의 시험 드롭 예약: 맨 앞 묶음을 꺼내 티켓에 싣는다 (운영 서버·일반 계정은 꺼내지도 않는다)
-  const td = game === "hunt" && sup ? await takeTestDrops(acct, difficulty, zone?.id) : null;
+  const td = game === "hunt" && sup && !tower ? await takeTestDrops(acct, difficulty, zone?.id) : null;
   const ticket = await signTicket(env.sessionSecret(), {
     n: nonce,
     a: acct,
@@ -286,11 +340,25 @@ export async function startRun(
     ...(zone ? { z: zone.id } : {}),
     ...(sv ? { sv } : {}),
     ...(td ? { td } : {}),
+    ...(tower ? { tw: tower } : {}),
+    ...(tier ? { tt: tier } : {}),
   });
   // 별자리 잇기: 판 시작 시각의 하늘(맑은 밤 = 전설, 계절, 새벽)에 따라 계획에 들어가는 별자리가 달라진다 (끝낼 때 티켓 시각으로 다시 계산)
   const sky = starSkyAt(now);
   const stars = game === "stars" ? { starry: sky.starry, sky, planVer: sv } : {};
-  return { ticket, game, difficulty, ...(zone ? { zone: zone.id } : {}), seed, timeLimitSec: limit, ...stars, ...(td ? { testDrops: td } : {}), view: await rpgView(acct, store, now) };
+  return {
+    ticket,
+    game,
+    difficulty,
+    ...(zone ? { zone: zone.id } : {}),
+    seed,
+    timeLimitSec: limit,
+    ...(tower ? { tower } : {}),
+    ...(tier ? { tier } : {}),
+    ...stars,
+    ...(td ? { testDrops: td } : {}),
+    view: await rpgView(acct, store, now, started),
+  };
 }
 
 /** 코디 드롭 하나에 시도해 볼 후보 수 (이미 가진 것이면 다음 것) */
@@ -371,11 +439,12 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   if (!t) throw new HttpError(400, "BAD_TICKET", "판 기록이 올바르지 않아요. 다시 시작해 주세요.");
   if (t.a !== acct) throw new HttpError(403, "BAD_TICKET", "다른 계정으로 시작한 판이에요.");
   const elapsed = now - t.t;
-  const expired = elapsed > (timeLimitSec(t.g, t.d, t.z) + FINISH_GRACE_SEC) * 1000 || elapsed < 0;
+  const expired = elapsed > ((t.tw ? TOWER_MAX_RUN_SEC : timeLimitSec(t.g, t.d, t.z)) + FINISH_GRACE_SEC) * 1000 || elapsed < 0;
   const claim = await store.claimRun(acct, t.n);
   if (claim === "reused") throw new HttpError(409, "TICKET_USED", "이미 결과를 받은 판이에요.");
   if (expired) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래된 판이라 결과를 받을 수 없어요.");
   if (claim === "stale") throw new HttpError(409, "TICKET_STALE", "그 뒤에 새 판을 시작해서 이 판은 끝났어요.");
+  if (t.tw) return finishTower(acct, t.tw, t.s, t.lv, result, elapsed, ipHash, now);
 
   // 22번: 별자리 잇기를 진짜 맑은 밤(판 시작 시각, KST)에 했으면 포인트 보너스 + 전설 별자리. 계절·새벽 별자리도 판 시작 시각으로
   const sky = t.g === "stars" ? starSkyAt(t.t) : null;
@@ -395,18 +464,35 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
     elapsed,
   );
   if (!v.ok) throw new HttpError(422, v.code, v.message);
-  // 시험 드롭이 실린 판(테스트 서버 운영자): 굴림 대신 예약 드롭을 준다 (운영 서버에서는 실려 있어도 무시)
-  const vDrops = t.td && testServerEnv() ? t.td : v.drops;
+  // 시험 드롭이 실린 판(테스트 서버 운영자): 굴림 대신 예약 드롭을 준다 (운영 서버에서는 실려 있어도 무시).
+  // 11/15 연습 판(그날 초월 구간을 다 쓴 판)은 드롭이 없다
+  const vDrops = t.td && testServerEnv() ? t.td : t.tt === "practice" ? [] : v.drops;
+  // 11/15 초월 판: 판 EXP × 배율 × 그날 구간 비율 → 초월 EXP (일반 EXP는 레벨 50이라 어차피 버려진다)
+  const tGain = t.tt ? Math.round(v.exp * TRANSCEND_EXP_MUL * RUN_TIERS[t.tt].rate) : 0;
 
-  const { state, result: applied } = await http(
+  const done = await http(
     store.update(acct, (s) => {
       let cur = s;
       if (result.game === "hunt") cur = consumePotions(cur, result.potionsUsed).state;
-      const g = gainExp(cur, v.exp);
+      const g = t.tt ? gainTranscend(cur, tGain) : gainExp(cur, v.exp);
       const dr = addDrops(g.state, vDrops);
-      return { state: { ...dr.state, runs: dr.state.runs + 1 }, result: { levelsGained: g.levelsGained, lost: dr.lost } };
+      return {
+        state: { ...dr.state, runs: dr.state.runs + 1 },
+        result: { levelsGained: t.tt ? 0 : g.levelsGained, tLevels: t.tt ? g.levelsGained : 0, lost: dr.lost, star100: cur.tLevel < TRANSCEND_MAX && g.state.tLevel >= TRANSCEND_MAX },
+      };
     }),
   );
+  const applied = done.result;
+  let state = done.state;
+  // 11/15 개척자: 끝판이 열린 뒤 14일 안에 ★51 또는 야근 빌딩 5층을 처음 넘은 사람 (운영자 제외) — 번호는 저장소가 차례로 붙인다 (계정마다 한 번)
+  const staff = await isStaff(acct);
+  let pioneer: number | undefined;
+  if (t.tt && !staff) {
+    const p = await claimPioneerIf(acct, state, store, now);
+    if (p) [state, pioneer] = p;
+  }
+  // ★100 서버 최초 (신화 「첫 번째 상무」)
+  if (applied.star100 && !staff) await claimFirstTitles(acct, [FIRST_STAR_ID], now, () => `서버 최초로 ★100에 올랐어요!`);
   const drops = await grantCosmetics(acct, vDrops, now);
   const stars = v.stars ? await registerStars(acct, v.stars, now, ipHash) : undefined;
   const constellations = stars?.list;
@@ -416,9 +502,10 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   await store.addDaily(acct, kstDay(now), { points: t.g === "hunt" ? earned : 0, runs: 1, exp: v.exp });
   if (t.g === "hunt") await recordEvent("hunt", now); // 47번 방문 분석: 사냥 판 수
   // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터). 운영자 계정은 순위에 남기지 않는다.
-  // 11/15: 자기 레벨이 그 사냥터가 열리는 레벨(티켓의 사냥터 t.z)보다 10 넘게 높으면 주간 레이스(그 주 처치·최단)에는 넣지 않는다 (지옥 예외 없음) — 전체 기록·칭호는 그대로
-  if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null) && !(await isStaff(acct)))
-    await getAccounts().recordHunt(acct, t.d, v.hunt, kstWeek(now), countsForRace(t.lv, t.d, zoneFor(t.d, t.z)));
+  // 11/15: 자기 레벨이 그 사냥터가 열리는 레벨(티켓의 사냥터 t.z)보다 10 넘게 높으면 랭킹에 아예 넣지 않는다 —
+  // 주간 레이스뿐 아니라 전체 처치 수·최단 기록도 (사용자 요청 "다 적정 레벨만 세게"). 지나간 기록은 그대로
+  if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null) && !staff && countsForRace(t.lv, t.d, zoneFor(t.d, t.z)))
+    await getAccounts().recordHunt(acct, t.d, v.hunt, kstWeek(now), true);
   return {
     reward: {
       score: v.score,
@@ -433,6 +520,140 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       levelsGained: applied.levelsGained,
       newLevel: state.level,
       lostDrops: applied.lost,
+      ...(t.tt ? { transcend: { exp: tGain, tier: t.tt, levelsGained: applied.tLevels, tLevel: state.tLevel } } : {}),
+      ...(pioneer ? { pioneer } : {}),
+    },
+    view: await rpgView(acct, store, now, state),
+  };
+}
+
+// ── 11/15 야근 빌딩 ──
+
+/** 개척자 번호 받기 (조건·기간이 맞을 때만, 계정마다 한 번). 받았으면 [새 상태, 번호] */
+async function claimPioneerIf(acct: string, state: CharacterState, store: RpgStore, now: number): Promise<[CharacterState, number] | null> {
+  if (state.pioneer || (state.tLevel < 1 && state.fBest < 5)) return null;
+  const launch = await endgameLaunch(store, now);
+  if (!pioneerEligible(state, launch, now, false)) return null;
+  const p = await store.claimPioneer(acct, now);
+  const next = (await http(store.update(acct, (s) => ({ state: { ...s, pioneer: s.pioneer ?? p }, result: null })))).state;
+  return [next, p.n];
+}
+
+/** 이름 (확성기 알림용 — 칭호를 받는 드문 판에서만 읽는다) */
+async function nameOf(acct: string, now: number): Promise<string> {
+  return (await getAccounts().get(acct, kstDay(now), now)).name ?? "누군가";
+}
+
+/** 서버 최초 칭호 받기 (원자적, 한 사람만). 받은 칭호마다 확성기 알림. 받은 칭호 id */
+async function claimFirstTitles(acct: string, ids: readonly string[], now: number, text: (id: string) => string): Promise<string[]> {
+  const got: string[] = [];
+  const towers = getTowerStore();
+  for (const id of ids) {
+    try {
+      if (await towers.claimFirst(id, acct, now)) got.push(id);
+    } catch (e) {
+      console.warn("[tower] 서버 최초 기록 실패", e);
+    }
+  }
+  if (got.length) {
+    forgetTitles(acct);
+    forgetTowerTitles();
+    const name = await nameOf(acct, now).catch(() => "누군가");
+    for (const id of got) await pushVillageNotice(`🏆 ${name}님이 ${text(id)}`, now).catch(() => undefined);
+  }
+  return got;
+}
+
+/** 이 인스턴스가 마지막으로 본 꼭대기 층 (이보다 낮은 기록은 Redis에 묻지 않는다) */
+const topSeen = globalThis as typeof globalThis & { __tombTowerTop?: number };
+
+/**
+ * 판 끝 (야근 빌딩): 층마다 결과 검증 → 캐릭터 저장 한 번(물약·초월 EXP·초월 판 수·상자·최고 기록) → 기록이 오른 사람만 랭킹·서버 최초·꼭대기 층.
+ * 운영자(슈퍼) 계정은 랭킹·최초·꼭대기·개척자에서 빠진다
+ */
+async function finishTower(acct: string, start: number, seed: number, level: number, result: RunResult, elapsed: number, ipHash: string, now: number): Promise<RunFinishResponse> {
+  const store = getRpgStore();
+  if (result.game !== "hunt") throw new HttpError(422, "INVALID_RESULT", "결과가 시작한 게임과 달라요.");
+  // 11/15 테스트 서버 슈퍼 계정만 처치 속도 상한을 빼고 (테스트용 무적·공격력 ×20) — 운영 서버에서는 isSuperHunter가 늘 false
+  const v = evalTower({ seed, level, start }, result, elapsed, { lax: await isSuperHunter(acct) });
+  if (!v.ok) throw new HttpError(422, v.code, v.message);
+  const day = kstDay(now);
+  const week = kstWeek(now);
+  const done = await http(
+    store.update(acct, (s) => {
+      const cur = consumePotions(s, result.potionsUsed).state;
+      const st: TowerSettle = towerSettle(cur, { day, week, start, floors: v.floors, floorMs: v.floorMs });
+      const settled = { ...cur, ...st.patch };
+      const g = gainTranscend(settled, st.tExp);
+      const drops = st.chests.flatMap((f) => towerChestDrops(seed, f));
+      const dr = addDrops(g.state, drops);
+      return {
+        state: { ...dr.state, runs: dr.state.runs + 1 },
+        result: { st, prevBest: cur.fBest, levels: g.levelsGained, lost: dr.lost, drops, star100: cur.tLevel < TRANSCEND_MAX && g.state.tLevel >= TRANSCEND_MAX },
+      };
+    }),
+  );
+  let state = done.state;
+  const { st, prevBest } = done.result;
+  const staff = await isStaff(acct);
+  const titles: string[] = [];
+  let pioneer: number | undefined;
+  if (!staff) {
+    // 랭킹: 기록이 오른 판만 (주간·전체 — 파이프라인 한 번)
+    if (st.newWeek || st.newBest) {
+      const score = towerScore(st.best, v.floorMs);
+      await getTowerStore()
+        .record(acct, week, st.newWeek ? score : null, st.newBest ? score : null)
+        .catch((e) => console.warn("[tower] 랭킹 기록 실패", e));
+    }
+    const p = await claimPioneerIf(acct, state, store, now);
+    if (p) [state, pioneer] = p;
+    if (st.newBest && st.best > prevBest) {
+      // 서버 최초 (30·50·100층) — 이번에 처음 넘은 층만 묻는다
+      const ids = TOWER_FIRSTS.filter((x) => prevBest < x.floor && st.best >= x.floor).map((x) => x.id);
+      if (ids.length) titles.push(...(await claimFirstTitles(acct, ids, now, (id) => `서버 최초로 ${TOWER_FIRSTS.find((x) => x.id === id)!.floor}층에 올랐어요!`)));
+      // 꼭대기 층 주인: 이 인스턴스가 본 꼭대기보다 높을 때만 Redis에 묻는다
+      if (st.best > (topSeen.__tombTowerTop ?? 0)) {
+        try {
+          const r = await getTowerStore().claimTop(acct, st.best, v.floorMs, now);
+          topSeen.__tombTowerTop = Math.max(r.prev?.floor ?? 0, r.took ? st.best : 0);
+          if (r.took) {
+            forgetTowerTitles();
+            if (r.prev?.accountId !== acct) {
+              titles.push("t_topFloor");
+              forgetTitles(acct);
+              if (r.prev) forgetTitles(r.prev.accountId);
+              await pushVillageNotice(`🏢 ${await nameOf(acct, now)}님이 꼭대기 층을 차지했어요 (${st.best}층)`, now).catch(() => undefined);
+            }
+          }
+        } catch (e) {
+          console.warn("[tower] 꼭대기 층 기록 실패", e);
+        }
+      }
+    }
+    if (done.result.star100) titles.push(...(await claimFirstTitles(acct, [FIRST_STAR_ID], now, () => "서버 최초로 ★100에 올랐어요!")));
+  }
+  const drops = await grantCosmetics(acct, done.result.drops, now);
+  const earned = v.points > 0 ? (await earnPoints(acct, "hunt", v.points, ipHash)).earned : 0;
+  await store.addDaily(acct, day, { points: earned, runs: 1 });
+  await recordEvent("hunt", now);
+  // 처치 수는 주간 사냥 레이스에 그대로 (지옥, 레벨 50 콘텐츠라 늘 레이스에 든다)
+  if (v.kills > 0 && !staff) await getAccounts().recordHunt(acct, "hell", { kills: v.kills, clearMs: null }, week, true);
+  const lastTier = st.tiers[st.tiers.length - 1] ?? runTier(rollDay(state, day).tRuns, rollDay(state, day).tBank);
+  return {
+    reward: {
+      score: v.kills,
+      exp: 0,
+      pointsRaw: v.points,
+      points: earned,
+      capped: earned < v.points,
+      drops,
+      levelsGained: 0,
+      newLevel: state.level,
+      lostDrops: done.result.lost,
+      transcend: { exp: st.tExp, tier: lastTier, levelsGained: done.result.levels, tLevel: state.tLevel },
+      tower: { start, floors: v.floors, best: st.best, newBest: st.newBest, newWeek: st.newWeek, runs: st.runs, chests: st.chests, emptyChests: st.emptyChests, titles },
+      ...(pioneer ? { pioneer } : {}),
     },
     view: await rpgView(acct, store, now, state),
   };

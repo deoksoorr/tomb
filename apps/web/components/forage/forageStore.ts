@@ -37,6 +37,20 @@ class ForageStore {
     this.listeners.forEach((fn) => fn());
   }
 
+  /** 11/15 수집 의뢰 납품: 가방 사본에서 낸 것만 뺀다 (낚시 상태를 다시 읽지 않게) */
+  takeFromBag(used: Record<string, number>): void {
+    const st = this.snap.state;
+    if (!st) return;
+    const bag = { ...st.bag };
+    for (const [id, n] of Object.entries(used)) {
+      const left = (bag[id] ?? 0) - n;
+      if (left > 0) bag[id] = left;
+      else delete bag[id];
+    }
+    this.snap = { state: { ...st, bag }, error: null };
+    this.listeners.forEach((fn) => fn());
+  }
+
   /** 다음 창(지점이 다시 피는 시각)에 맞춰 다시 받는다 */
   private schedule(at: number): void {
     if (this.timer) clearTimeout(this.timer);

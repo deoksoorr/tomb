@@ -122,7 +122,12 @@ export type DyeTierId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
  * 염색권 종류. random = 무작위 팔레트에서 직접 찾기(종류마다 색 범위·흔들림·특수 색 확률이 다르다),
  * fixed = 정해진 색 (관리자·이벤트 발급, parts가 있으면 그 부위에만)
  */
-export type DyeTicketSpec = { mode: "random"; tier: DyeTierId } | { mode: "fixed"; color: string; parts?: DyePart[] };
+export type DyeTicketSpec =
+  | { mode: "random"; tier: DyeTierId }
+  | { mode: "fixed"; color: string; parts?: DyePart[] }
+  // 11/15 수집 의뢰 보상: pick = 보통 색(특수 색 제외) 아무거나 직접 골라 칠한다, special = 특수 색 4종 중 하나를 골라 입힌다 (판·조준 없음)
+  | { mode: "pick" }
+  | { mode: "special" };
 
 /** 고정 색 염색권 아이템 id (관리자가 발급할 때 만든다): "dyefix_" + 영숫자 */
 export const FIXED_DYE_ID_RE = /^dyefix_[a-z0-9]{6,16}$/;

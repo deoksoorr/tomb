@@ -81,7 +81,13 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 12 = 저장소(Redis) 사용량 절감 — 예전 화면의 잦은 확인 호출을 끊으려고 모두 한 번 새로고침시킨다 (11/14)
 // 13 = 휴식 중 어두운 막 없앰 — 창을 옆에 띄워 두고 구경하는 플레이가 되게 모두 한 번 새로고침 (11/14)
 // 14 = 지옥 사냥터 2곳·사냥터 기준 EXP·레이스 — 모두 한 번 새로고침 (11/15)
-export const CLIENT_VERSION = 14;
+// 15 = 사냥 끝판 1단계(초월 레벨·번아웃 단계)·끝판 칭호 id — 모두 한 번 새로고침 (11/15)
+// 16 = 운영자 이름표·전용 칭호(운영자도 닉네임 그대로, 머리 위 「운영자」) — 모두 한 번 새로고침 (11/15)
+// 17 = 야근 빌딩·스킬 자동·떠다니는 조이스틱·수집 의뢰·의뢰 보상·귀여운 꾸미기·오리배 — 모두 한 번 새로고침 (11/15)
+// 18 = 야근 빌딩 서버실·회의실 테마·엘리베이터·능력 카드, 지도 개편(분양 3칸·동물원·오리 연못·납품 부두), 초월 하루 제한 없앰 — 모두 한 번 새로고침 (11/15)
+// 19 = 분양 1~9번지·버스 정류장 광장 이동·의뢰는 납품 부두 게시판에서만·이달의 교환소·새 보상 6종·야근 빌딩 층 순서표·렉 줄이기·기본 공격 직접 — 모두 한 번 새로고침 (11/15)
+// 20 = 기록 수족관 → 주말 버스 정류장(납품 부두), 쉼터 광장, 이달의 교환소 11월 큰 목표·미리 보기 3칸 — 모두 한 번 새로고침 (11/15)
+export const CLIENT_VERSION = 20;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
@@ -163,8 +169,16 @@ export const PREMIUM_BODIES = [
 /** 운영자(31번) 계정만 쓸 수 있는 몸. 서버(web 외형 바꾸기·입장 토큰, 실시간 서버)가 운영자가 아니면 막는다 */
 export const STAFF_BODIES = [{ id: "reaper", label: "저승사자", desc: "갓과 검은 도포의 저승사자. 운영자 전용이에요. 포인트 색은 갓끈 구슬이에요." }] as const;
 
+/**
+ * 11/15 수집 의뢰 보상 외형: 선택권으로 살 수 없고, 도장 교환소에서 받은(items q_body_collector) 계정만 바꿀 수 있다
+ * (web 외형 바꾸기가 소장 목록을 확인한다). 등급 연출은 프리미엄 외형과 같다
+ */
+export const QUEST_BODIES = [
+  { id: "collector", label: "수집가 유령", tier: "legend", item: "q_body_collector", desc: "등불을 들고 표본 가방을 멘 채집 장인 유령. 수집 의뢰 전용이에요. 포인트 색은 가방 끈과 탐험 모자 띠예요." },
+] as const;
+
 /** 아바타 몸 모양 전부 (검증·그리기용). 옛 클라이언트는 모르는 몸을 후드 유령으로 그린다 */
-export const AVATAR_BODIES = [...STARTER_BODIES, ...PREMIUM_BODIES, ...STAFF_BODIES] as const;
+export const AVATAR_BODIES = [...STARTER_BODIES, ...PREMIUM_BODIES, ...STAFF_BODIES, ...QUEST_BODIES] as const;
 export type AvatarBody = (typeof AVATAR_BODIES)[number]["id"];
 export type PremiumBody = (typeof PREMIUM_BODIES)[number];
 export function isAvatarBody(b: unknown): b is AvatarBody {
@@ -177,6 +191,14 @@ export function isStarterBody(b: unknown): b is (typeof STARTER_BODIES)[number][
 /** 프리미엄 외형이면 그 정의 */
 export function premiumBody(b: unknown): PremiumBody | undefined {
   return PREMIUM_BODIES.find((x) => x.id === b);
+}
+/** 수집 의뢰 보상 외형이면 그 정의 */
+export function questBody(b: unknown): (typeof QUEST_BODIES)[number] | undefined {
+  return QUEST_BODIES.find((x) => x.id === b);
+}
+/** 외형 등급 (프리미엄·의뢰 보상 외형, 아니면 null) — 등급 연출·꾸미기 점수용 */
+export function bodyTier(b: unknown): BodyTier | null {
+  return premiumBody(b)?.tier ?? questBody(b)?.tier ?? null;
 }
 /** 운영자 전용 몸인지 */
 export function isStaffBody(b: unknown): boolean {
@@ -191,25 +213,23 @@ export function bodyUnlockPrice(b: unknown): number | null {
 export function bodyLabel(b: unknown): string {
   return AVATAR_BODIES.find((x) => x.id === b)?.label ?? String(b ?? "");
 }
-/** 운영자 계정이 다른 사람에게 보이는 이름 (닉네임 대신, 재미있게 "대장"). 관리자 페이지에서는 원래 닉네임.
- *  일반 닉네임으로는 못 쓴다 (names.ts 금칙어). 이미 "운영자"로 저장된 옛 기록은 그대로 둔다 */
-export const STAFF_PUBLIC_NAME = "대장";
-/** 운영자면 공개 이름("대장"), 아니면 원래 이름 */
-export function staffPublicName(name: string, staff: boolean): string {
-  return staff ? STAFF_PUBLIC_NAME : name;
-}
 /** 운영자가 아니면 운영자 전용 몸은 후드 유령으로 (입장 토큰·실시간 서버가 쓴다) */
 export function staffGateBody<T extends string>(body: T, staff: boolean): T | "hood" {
   return !staff && isStaffBody(body) ? "hood" : body;
 }
 
-/** 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호 */
-export const ACT_KINDS = ["bell", "splash", "wave", "cheer"] as const;
+/**
+ * 한 번 하는 동작 (같은 채널에 보이고 들린다): 종 치기·물 튀기기·손 흔들기·환호·오리배 꽥(11/15).
+ * 서버가 이 목록으로 받을 동작을 정한다 (늘리면 realtime 재배포). 옛 클라이언트는 모르는 동작을 그냥 버린다
+ */
+export const ACT_KINDS = ["bell", "splash", "wave", "cheer", "quack"] as const;
 export type ActKind = (typeof ACT_KINDS)[number];
 
 /**
  * 5번 이모티콘: 머리 위에 3~4초 뜨는 그림 (말풍선과 같은 자리·쌓기 규칙). id만 주고받고 그림은 클라이언트가 그린다.
- * 옛 클라이언트는 모르는 이벤트(emo)라 그냥 버린다. 순서 = 이모티콘 판 순서 (손 흔들기·환호 다음 3번부터 단축키)
+ * 옛 클라이언트는 모르는 이벤트(emo)라 그냥 버린다. 새 id도 마찬가지 — 받는 쪽이 isEmoId로 걸러 모르는 그림은 조용히 버린다.
+ * 서버가 isEmoId로 받을 id를 정하므로 id를 늘리면 realtime도 다시 배포해야 한다.
+ * 순서 = 이모티콘 판 순서 (손 흔들기·환호 다음 3번부터 단축키 — 앞 14개 순서는 바꾸지 않는다)
  */
 export const EMOS = [
   { id: "heart", label: "하트" },
@@ -226,7 +246,68 @@ export const EMOS = [
   { id: "note", label: "음표" },
   { id: "sweat", label: "진땀" },
   { id: "idea", label: "번뜩" },
+  // 얼굴 (여기부터는 단축키 없이 창에서 고른다 — 앞 14개 순서는 그대로 둔다: 단축키 1~9)
+  { id: "grin", label: "씨익" },
+  { id: "wink", label: "윙크" },
+  { id: "blank", label: "멍" },
+  { id: "panic", label: "당황" },
+  { id: "shy", label: "부끄" },
+  { id: "moved", label: "감동" },
+  { id: "tongue", label: "메롱" },
+  { id: "annoyed", label: "짜증" },
+  { id: "doubt", label: "의심" },
+  { id: "zen", label: "해탈" },
+  { id: "faint", label: "기절" },
+  { id: "yawn", label: "하품" },
+  { id: "proud", label: "뿌듯" },
+  { id: "gloom", label: "현타" },
+  // 회사
+  { id: "leave", label: "퇴근" },
+  { id: "overtime", label: "야근" },
+  { id: "payday", label: "월급날" },
+  { id: "meeting", label: "회의" },
+  { id: "approve", label: "결재" },
+  { id: "laptop", label: "노트북" },
+  { id: "excel", label: "엑셀" },
+  { id: "subway", label: "지옥철" },
+  { id: "vacation", label: "연차" },
+  { id: "clockout", label: "칼퇴" },
+  { id: "beer", label: "회식" },
+  { id: "soju", label: "소주" },
+  // 반응
+  { id: "thumbs", label: "엄지척" },
+  { id: "ok", label: "OK" },
+  { id: "thanks", label: "감사" },
+  { id: "vein", label: "빠직" },
+  { id: "lol", label: "ㅋㅋ" },
+  { id: "sob", label: "ㅠㅠ" },
+  { id: "gg", label: "GG" },
+  { id: "party", label: "축하" },
+  { id: "gift", label: "선물" },
+  { id: "check", label: "확인" },
+  // 자연·묘역
+  { id: "sun", label: "맑음" },
+  { id: "rain", label: "비" },
+  { id: "moon", label: "달" },
+  { id: "rainbow", label: "무지개" },
+  { id: "flower", label: "꽃" },
+  { id: "cat", label: "고양이" },
+  { id: "dog", label: "강아지" },
+  { id: "ghost", label: "유령" },
+  { id: "tomb", label: "묘비" },
+  { id: "candle", label: "촛불" },
+  // 11/15 수집 의뢰 이모티콘 묶음 (items qe_pack을 가진 계정만 — 창에서 잠금 표시. 실시간 서버는 소유를 모른다)
+  { id: "bigfish", label: "월척 자랑" },
+  { id: "nobasket", label: "빈 바구니" },
+  { id: "goldbug", label: "금빛 곤충" },
+  { id: "orevein", label: "광맥 발견" },
+  { id: "digfind", label: "발굴 성공" },
+  { id: "dexdone", label: "도감 완성" },
+  { id: "rodbend", label: "낚싯대 휘청" },
+  { id: "qstamp", label: "의뢰 완료 도장" },
 ] as const;
+/** 수집 의뢰 이모티콘 묶음 (qe_pack) — EMOS 맨 끝 8개 */
+export const QUEST_EMO_IDS = ["bigfish", "nobasket", "goldbug", "orevein", "digfind", "dexdone", "rodbend", "qstamp"] as const;
 export type EmoId = (typeof EMOS)[number]["id"];
 export function isEmoId(id: unknown): id is EmoId {
   return typeof id === "string" && EMOS.some((e) => e.id === id);

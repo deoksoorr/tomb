@@ -18,6 +18,7 @@ import s from "./forage.module.css";
 
 // NPC 판매 창 (어부 영감 = 물고기, 수집가 유령 = 약초·광석·발굴품·곤충). NPC 앞에서 E를 눌렀을 때만 열린다.
 // 비싼 것부터 오늘 남은 한도 안에서 판다 (서버가 정한다). 못 판 것은 가방에 그대로 남아 내일 팔 수 있다.
+// 11/15: NPC는 사기만 한다. 수집 의뢰·도장 교환소는 납품 부두 의뢰 게시판 한 곳 (WharfBoard)
 
 export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () => void }) {
   const npc = npcById(npcId)!;
@@ -82,72 +83,76 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
           {portrait && <img src={portrait} width={48} height={52} alt="" style={{ imageRendering: "pixelated" }} />}
           <p style={{ margin: 0 }}>{npc.hello}</p>
         </div>
-        <div className={s.limits}>
-          <span>
-            오늘 판 값 <strong>{soldToday}</strong> / {cap}P
-          </span>
-          <span>
-            오늘 모은 포인트 <strong>{me?.todayEarned ?? 0}</strong> / {DAILY_EARN_CAP}P
-          </span>
-          <span>사는 것: {npc.buys.map((c) => CAT_LABEL[c]).join("·")}</span>
-        </div>
-        {rows.length === 0 ? (
-          <p className={s.empty}>{npc.id === "fishmonger" ? "팔 물고기가 없어요. 나루터 옆 낚시터(나무 데크)에서 낚아 와요." : "팔 게 없어요. 숲·풀밭·언덕에서 캐거나 수풀에서 곤충을 잡아 와요."}</p>
-        ) : (
-          <div className={s.sellList} role="list">
-            {rows.map(({ sp, n }) => {
-              const q = qty(sp.id, n);
-              return (
-                <div key={sp.id} className={s.sellRow} role="listitem">
-                  <ItemIcon itemId={sp.id} size={32} />
-                  <span>
-                    {sp.name}
-                    <small>
-                      {RARITY_LABEL[sp.rarity]} · {sp.price}P · {n}개 있음
-                    </small>
-                  </span>
-                  <span className={s.qty}>
-                    <button type="button" className={ui.button} onClick={() => setQty(sp.id, n, q - 1)} disabled={busy || q <= 0} aria-label={`${sp.name} 하나 덜`}>
-                      −
-                    </button>
-                    <span className={s.qtyNum} aria-label={`${sp.name} 팔 개수`} aria-live="polite">
-                      {q}
-                    </span>
-                    <button type="button" className={ui.button} onClick={() => setQty(sp.id, n, q + 1)} disabled={busy || q >= n} aria-label={`${sp.name} 하나 더`}>
-                      +
-                    </button>
-                    <button
-                      type="button"
-                      className={cx(ui.button, ui.quiet, s.qtyAll)}
-                      onClick={() => setQty(sp.id, n, q >= n ? 0 : n)}
-                      disabled={busy}
-                      aria-label={q >= n ? `${sp.name} 고른 것 비우기` : `${sp.name} ${n}개 모두 고르기`}
-                    >
-                      {q >= n ? "0" : "모두"}
-                    </button>
-                  </span>
-                  <span className={s.price}>{q * sp.price}P</span>
-                </div>
-              );
-            })}
+        {(
+          <>
+          <div className={s.limits}>
+            <span>
+              오늘 판 값 <strong>{soldToday}</strong> / {cap}P
+            </span>
+            <span>
+              오늘 모은 포인트 <strong>{me?.todayEarned ?? 0}</strong> / {DAILY_EARN_CAP}P
+            </span>
+            <span>사는 것: {npc.buys.map((c) => CAT_LABEL[c]).join("·")}</span>
           </div>
+          {rows.length === 0 ? (
+            <p className={s.empty}>{npc.id === "fishmonger" ? "팔 물고기가 없어요. 부두 잔교나 강둑·연못가 낚시 의자에서 낚아 와요." : "팔 게 없어요. 숲·풀밭·언덕에서 캐거나 수풀에서 곤충을 잡아 와요."}</p>
+          ) : (
+            <div className={s.sellList} role="list">
+              {rows.map(({ sp, n }) => {
+                const q = qty(sp.id, n);
+                return (
+                  <div key={sp.id} className={s.sellRow} role="listitem">
+                    <ItemIcon itemId={sp.id} size={32} />
+                    <span>
+                      {sp.name}
+                      <small>
+                        {RARITY_LABEL[sp.rarity]} · {sp.price}P · {n}개 있음
+                      </small>
+                    </span>
+                    <span className={s.qty}>
+                      <button type="button" className={ui.button} onClick={() => setQty(sp.id, n, q - 1)} disabled={busy || q <= 0} aria-label={`${sp.name} 하나 덜`}>
+                        −
+                      </button>
+                      <span className={s.qtyNum} aria-label={`${sp.name} 팔 개수`} aria-live="polite">
+                        {q}
+                      </span>
+                      <button type="button" className={ui.button} onClick={() => setQty(sp.id, n, q + 1)} disabled={busy || q >= n} aria-label={`${sp.name} 하나 더`}>
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        className={cx(ui.button, ui.quiet, s.qtyAll)}
+                        onClick={() => setQty(sp.id, n, q >= n ? 0 : n)}
+                        disabled={busy}
+                        aria-label={q >= n ? `${sp.name} 고른 것 비우기` : `${sp.name} ${n}개 모두 고르기`}
+                      >
+                        {q >= n ? "0" : "모두"}
+                      </button>
+                    </span>
+                    <span className={s.price}>{q * sp.price}P</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className={s.sellFoot}>
+            <span className={s.total}>
+              합계 <strong>{total}P</strong>
+            </span>
+            <span style={{ display: "flex", gap: 8 }}>
+              <button type="button" className={ui.button} disabled={busy || !rows.length} onClick={() => void sell(true)}>
+                전부 팔기
+              </button>
+              <button type="button" className={cx(ui.button, ui.primary)} disabled={busy || total <= 0} onClick={() => void sell(false)}>
+                {busy ? "파는 중…" : total > 0 ? `고른 것 팔기 (${total}P)` : "고른 것 팔기"}
+              </button>
+            </span>
+          </div>
+          <p className={ui.hint} role="status">
+            {notice ?? "비싼 것부터 오늘 남은 한도 안에서만 팔려요. 못 판 것은 가방에 남아요."}
+          </p>
+          </>
         )}
-        <div className={s.sellFoot}>
-          <span className={s.total}>
-            합계 <strong>{total}P</strong>
-          </span>
-          <span style={{ display: "flex", gap: 8 }}>
-            <button type="button" className={ui.button} disabled={busy || !rows.length} onClick={() => void sell(true)}>
-              전부 팔기
-            </button>
-            <button type="button" className={cx(ui.button, ui.primary)} disabled={busy || total <= 0} onClick={() => void sell(false)}>
-              {busy ? "파는 중…" : total > 0 ? `고른 것 팔기 (${total}P)` : "고른 것 팔기"}
-            </button>
-          </span>
-        </div>
-        <p className={ui.hint} role="status">
-          {notice ?? "비싼 것부터 오늘 남은 한도 안에서만 팔려요. 못 판 것은 가방에 남아요."}
-        </p>
       </div>
     </Dialog>
   );

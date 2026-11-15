@@ -1,5 +1,5 @@
 import { customAlphabet, nanoid } from "nanoid";
-import { bodyLabel, bodyUnlockPrice, isFixedDyeId, isStaffBody, itemById, PERMANENT_UNTIL, permanentPrice, type CosmeticSlot, type DyePart } from "@tomb/protocol";
+import { bodyLabel, bodyUnlockPrice, QUEST_BODIES, DYE_SPECIALS, isFixedDyeId, isStaffBody, itemById, PERMANENT_UNTIL, permanentPrice, type CosmeticSlot, type DyePart, type DyeSpecial } from "@tomb/protocol";
 import { env } from "../env";
 import { sendGift } from "../gifts";
 import { HttpError } from "../http";
@@ -10,7 +10,7 @@ import { kstDay, lookGrant, lookOf, loadMe } from "../store/accounts";
 import { getStyleStore, type DyeSession, type FixedDyeDef, type StyleStore } from "../store/style";
 import type { Me } from "../types";
 import { buildBoard, colorAt, DYE_GRACE_MS, DYE_TIME_MS } from "./palette";
-import { BASE_RESHAPE_PRICE, catalogDye, DYE_DECIDE_MS, DYE_RESET_PRICE, dyeTicketCounts, fixedAllows, randomTier } from "./rules";
+import { BASE_RESHAPE_PRICE, catalogDye, directDyeMode, DYE_DECIDE_MS, DYE_RESET_PRICE, dyeTicketCounts, fixedAllows, randomTier, specialDyeColor } from "./rules";
 import type { DyeSessionView, DyeStateResponse, DyeTimeoutResponse, StyleChangeResponse } from "./types";
 import { discountedPrice } from "../titles";
 import { titleDiscount } from "../titlesServer";
@@ -145,6 +145,24 @@ export async function applyFixedDye(accountId: string, itemId: string, part: Dye
   return changed(accountId, now, { color: def.color, part });
 }
 
+// ── 11/15 수집 의뢰 염색권 (판·조준 없음). 염색권 1장 빼기와 색 바꾸기는 고정 색과 같은 저장소 한 번(applyFixed)으로 원자적이다 ──
+
+/** 색 확정 염색권: 고른 보통 색 그대로 (특수 색은 받지 않는다 — 요청 검증 DyePickSchema) */
+export async function applyPickDye(accountId: string, itemId: string, part: DyePart, color: string, now = Date.now()): Promise<StyleChangeResponse> {
+  if (directDyeMode(itemId) !== "pick" || !/^#[0-9a-f]{6}$/.test(color)) throw new HttpError(400, "INVALID_INPUT", "색 확정 염색권으로 쓸 수 없는 색이에요.");
+  if (!(await style().applyFixed(accountId, itemId, part, color))) throw new HttpError(409, "NO_ITEM", "가방에 그 염색권이 없어요.");
+  return changed(accountId, now, { color, part });
+}
+
+/** 특수색 확정 염색권: 고른 특수 색 종류 + 서버가 정한 바탕 색 (rules specialDyeColor — 지금 그 부위 색을 이어받거나 대표 색) */
+export async function applySpecialDye(accountId: string, itemId: string, part: DyePart, kind: DyeSpecial, now = Date.now()): Promise<StyleChangeResponse> {
+  if (directDyeMode(itemId) !== "special" || !(DYE_SPECIALS as readonly string[]).includes(kind)) throw new HttpError(400, "INVALID_INPUT", "특수색 확정 염색권으로 쓸 수 없는 색이에요.");
+  const { dye } = await style().get(accountId);
+  const color = specialDyeColor(kind, dye[part]);
+  if (!(await style().applyFixed(accountId, itemId, part, color))) throw new HttpError(409, "NO_ITEM", "가방에 그 염색권이 없어요.");
+  return changed(accountId, now, { color, part });
+}
+
 const charged = (r: "ok" | "insufficient" | "same" | "unlocked", same: string) => {
   if (r === "insufficient") throw new HttpError(409, "NOT_ENOUGH_POINTS", "포인트가 모자라요.");
   if (r === "same") throw new HttpError(409, "NO_CHANGE", same);
@@ -162,6 +180,12 @@ export async function resetDye(accountId: string, part: DyePart, now = Date.now(
 export async function reshape(accountId: string, body: string, now = Date.now()): Promise<StyleChangeResponse> {
   if (isStaffBody(body)) {
     if (!(await isStaff(accountId))) throw new HttpError(403, "FORBIDDEN", "운영자만 쓸 수 있는 외형이에요.");
+    charged(await style().reshape(accountId, body, now), "지금 그 모습이에요.");
+    return changed(accountId, now);
+  }
+  // 11/15 수집 의뢰 외형(수집가 유령): 도장 교환소에서 받은 사람만 (소장 기록 bodies), 받은 뒤로는 무료로 바꾼다
+  if (QUEST_BODIES.some((b) => b.id === body)) {
+    if (!(await style().get(accountId)).bodies.includes(body)) throw new HttpError(403, "FORBIDDEN", "수집 의뢰 도장 교환소에서 받는 외형이에요.");
     charged(await style().reshape(accountId, body, now), "지금 그 모습이에요.");
     return changed(accountId, now);
   }

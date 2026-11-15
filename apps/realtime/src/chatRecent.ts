@@ -15,7 +15,7 @@ export type RecentChat = {
   visitorId: string;
   name: string;
   text: string;
-  /** 운영자(대장)가 쓴 줄 */
+  /** 운영자가 쓴 줄 */
   staff?: true;
 };
 

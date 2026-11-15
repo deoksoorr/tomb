@@ -3,7 +3,7 @@ import Link from "next/link";
 import { SHRINE_KEEP_DAYS } from "@/lib/types";
 import styles from "../legal.module.css";
 
-export const metadata: Metadata = { title: "개인정보처리방침 · 한때는...", alternates: { canonical: "/privacy" } };
+export const metadata: Metadata = { title: "개인정보처리방침 · At one time...", alternates: { canonical: "/privacy" } };
 
 const EFFECTIVE = "2026년 11월 14일";
 
@@ -19,7 +19,7 @@ export default function PrivacyPage() {
 
         <h2>1. 이렇게 운영해요</h2>
         <p>
-          「한때는...」은 회원가입 없이 쓰는 서비스예요. 이름·이메일 같은 신원 정보를 요구하지 않고, 서비스를 돌리는 데 꼭
+          「At one time...」은 회원가입 없이 쓰는 서비스예요. 이름·이메일 같은 신원 정보를 요구하지 않고, 서비스를 돌리는 데 꼭
           필요한 것만 다뤄요.
         </p>
         <p>

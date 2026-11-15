@@ -13,6 +13,7 @@ import type { Lighting } from "../Lighting";
 import { ensureForageTextures, ensureIconTexture, FTEX } from "./art";
 import { nodeWindow, windowEndsAt } from "@/lib/forage/rules";
 import { FishZoneView } from "./FishZoneView";
+import { WHARF_BOARD } from "../fishZone";
 import { destroyAura, ensureNodeFxTextures, gatheredFx, makeAura, spawnFx, updateAura, vanishFx, type NodeAura } from "./nodeFx";
 import { ForageSfx } from "./sounds";
 import { itemById } from "@tomb/protocol";
@@ -155,6 +156,8 @@ export class Foraging {
     }
     for (const n of NPCS)
       items.push({ id: `forage:npc:${n.id}`, kind: "forage", forage: `npc:${n.id}`, x: n.x, y: n.y + 10, r: 20, ax: n.x, ay: n.y + 10, label: `${n.name}에게 팔기` });
+    // 11/15 납품 부두 의뢰 게시판 (앞에서 E → 수집 의뢰판)
+    items.push({ id: "forage:board", kind: "forage", forage: "board:quest", x: WHARF_BOARD.x, y: WHARF_BOARD.y + 12, r: 22, ax: WHARF_BOARD.x, ay: WHARF_BOARD.y + 12, label: "의뢰 게시판 보기" });
     for (const id of this.nodeIds) {
       const n = gatherNodeById(id);
       // 캐는 중인 지점은 안내를 띄우지 않는다
@@ -225,6 +228,12 @@ export class Foraging {
       if (pl.sitting) pl.stand(now, null);
       pl.faceTo(npc.x, npc.y - 8, now);
       bridge.emit("forage:use", { kind: "npc", npc: npc.id });
+      return;
+    }
+    if (kind === "board") {
+      if (pl.sitting) pl.stand(now, null);
+      pl.faceTo(WHARF_BOARD.x, WHARF_BOARD.y - 20, now);
+      bridge.emit("forage:use", { kind: "board" });
       return;
     }
     if (kind === "node") {

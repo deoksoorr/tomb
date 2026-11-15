@@ -31,6 +31,8 @@ export const FXT = {
 
 const FONT = '"Galmuri11", "Galmuri9", monospace';
 const DEPTH_TOP = 1e6;
+/** 고리 그림 (sprites RTEX.ring — 64px 흰 고리) */
+const RING_TEX = "rpg-ring";
 
 function addSheet(scene: Phaser.Scene, key: string, g: Grid, fw: number, fh: number): void {
   if (scene.textures.exists(key)) return;
@@ -91,9 +93,45 @@ export const COMBO_TIERS: readonly ComboTier[] = [
 /** 마지막으로 맞힌 뒤 이 시간이 지나면 콤보가 끊긴다 */
 export const COMBO_RESET_MS = 2200;
 
+/** 11/15 한꺼번에 떠 있는 파편·고리 상한 (몬스터가 많을 때 새로 만들고 지우느라 끊기지 않게 돌려 쓴다) */
+const FX_CAP = 240;
+/** 이만큼 넘게 떠 있으면 파편 수를 줄인다 */
+const FX_BUSY = 120;
+/** 동시에 도는 충격 별 상한 */
+const IMPACT_CAP = 28;
+
 export class CombatFx {
   private comboText: Phaser.GameObjects.Text | null = null;
   private comboShown = 0;
+  // 11/15 파편·고리 그림 돌려 쓰기
+  private free: Phaser.GameObjects.Image[] = [];
+  private live = 0;
+  private impacts = 0;
+
+  /** 돌려 쓰는 그림 하나 (상한이면 null — 그 연출은 건너뛴다) */
+  private take(tex: string, x: number, y: number, frame?: number): Phaser.GameObjects.Image | null {
+    if (this.live >= FX_CAP) return null;
+    let o = this.free.pop();
+    while (o && !o.scene) o = this.free.pop();
+    if (!o) o = this.scene.add.image(x, y, tex, frame);
+    // 쉬는 동안은 그리기 목록에서 빼 둔다 (깊이 정렬·그리기 순회에 들지 않게)
+    else o.addToDisplayList().setTexture(tex, frame).setPosition(x, y).setVisible(true).setActive(true);
+    o.setAlpha(1).setScale(1).setRotation(0).clearTint().setBlendMode(Phaser.BlendModes.NORMAL);
+    this.live++;
+    return o;
+  }
+
+  private give(o: Phaser.GameObjects.Image): void {
+    this.live--;
+    if (!o.scene) return;
+    o.setVisible(false).setActive(false).removeFromDisplayList();
+    this.free.push(o);
+  }
+
+  /** 지금 떠 있는 파편 수에 맞춰 줄인 개수 */
+  private budget(n: number): number {
+    return this.live > FX_BUSY ? Math.max(1, Math.round(n / 3)) : n;
+  }
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -159,16 +197,23 @@ export class CombatFx {
 
   /** 맞은 자리 충격 (별 + 파편). heavy면 크게 */
   impact(x: number, y: number, crit: boolean, heavy = false, tint = 0xffffff): void {
-    const s = this.scene.add.sprite(x, y, FXT.impact, 0).setDepth(DEPTH_TOP - 10).setBlendMode(Phaser.BlendModes.ADD);
-    s.setScale(crit || heavy ? 1.15 : 0.75).setRotation(Math.random() * Math.PI);
-    if (tint !== 0xffffff) s.setTint(tint);
-    playFrames(this.scene, s, 4, crit ? 45 : 35);
-    const n = crit ? 7 : heavy ? 6 : 3;
+    // 11/15 충격 별은 동시에 IMPACT_CAP개까지 (치명타·묵직한 타격은 늘)
+    if (this.impacts < IMPACT_CAP || crit || heavy) {
+      const s = this.scene.add.sprite(x, y, FXT.impact, 0).setDepth(DEPTH_TOP - 10).setBlendMode(Phaser.BlendModes.ADD);
+      s.setScale(crit || heavy ? 1.15 : 0.75).setRotation(Math.random() * Math.PI);
+      if (tint !== 0xffffff) s.setTint(tint);
+      this.impacts++;
+      s.once(Phaser.GameObjects.Events.DESTROY, () => this.impacts--);
+      playFrames(this.scene, s, 4, crit ? 45 : 35);
+    }
+    const n = this.budget(crit ? 7 : heavy ? 6 : 3);
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
       const d = (crit ? 14 : 9) + Math.random() * 6;
-      const p = this.scene.add.image(x, y, FXT.shard).setDepth(DEPTH_TOP - 9).setTint(crit ? 0xffd04a : 0xffffff);
-      this.scene.tweens.add({ targets: p, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, alpha: 0, scale: 0.4, duration: 220 + Math.random() * 120, ease: "Quad.easeOut", onComplete: () => p.destroy() });
+      const p = this.take(FXT.shard, x, y);
+      if (!p) break;
+      p.setDepth(DEPTH_TOP - 9).setTint(crit ? 0xffd04a : 0xffffff);
+      this.scene.tweens.add({ targets: p, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, alpha: 0, scale: 0.4, duration: 220 + Math.random() * 120, ease: "Quad.easeOut", onComplete: () => this.give(p) });
     }
   }
 
@@ -177,22 +222,19 @@ export class CombatFx {
     const sc = this.scene;
     const flash = sc.add.image(x, y - size / 2, FXT.impact, 1).setDepth(DEPTH_TOP - 8).setScale(size / 12).setBlendMode(Phaser.BlendModes.ADD);
     sc.tweens.add({ targets: flash, alpha: 0, scale: size / 8, duration: 220, onComplete: () => flash.destroy() });
-    const ring = sc.add.graphics().setDepth(DEPTH_TOP - 8);
-    const ringR = { r: size * 0.3, a: 1 };
-    sc.tweens.add({
-      targets: ringR,
-      r: size * 1.3,
-      a: 0,
-      duration: 320,
-      ease: "Quad.easeOut",
-      onUpdate: () => ring.clear().lineStyle(2, 0xfff3c8, ringR.a).strokeCircle(x, y - size / 2, ringR.r),
-      onComplete: () => ring.destroy(),
-    });
-    const n = Math.min(16, 8 + Math.round(size / 3));
+    // 11/15 퍼지는 고리: 그때마다 그림을 새로 그리던 것을 고리 그림 하나를 키우는 것으로 (돌려 쓴다)
+    const ring = this.take(RING_TEX, x, y - size / 2);
+    if (ring) {
+      ring.setDepth(DEPTH_TOP - 8).setTint(0xfff3c8).setScale((size * 0.3) / 32);
+      sc.tweens.add({ targets: ring, scale: (size * 1.3) / 32, alpha: 0, duration: 320, ease: "Quad.easeOut", onComplete: () => this.give(ring) });
+    }
+    const n = this.budget(Math.min(16, 8 + Math.round(size / 3)));
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + Math.random() * 0.4;
       const d = size * 0.8 + Math.random() * size * 0.7;
-      const p = sc.add.image(x, y - size / 2, FXT.shard).setDepth(DEPTH_TOP - 7).setTint(i % 3 === 0 ? accent : color).setScale(1 + Math.random() * 0.8);
+      const p = this.take(FXT.shard, x, y - size / 2);
+      if (!p) break;
+      p.setDepth(DEPTH_TOP - 7).setTint(i % 3 === 0 ? accent : color).setScale(1 + Math.random() * 0.8);
       sc.tweens.add({
         targets: p,
         x: x + Math.cos(a) * d,
@@ -201,13 +243,15 @@ export class CombatFx {
         alpha: 0,
         duration: 380 + Math.random() * 220,
         ease: "Cubic.easeOut",
-        onComplete: () => p.destroy(),
+        onComplete: () => this.give(p),
       });
     }
     // 동전·구슬: 튀어나와 잠깐 떠 있다가 나에게 빨려 온다
     const items: { tex: string; frame: number }[] = [];
-    for (let i = 0; i < coins; i++) items.push({ tex: FXT.coin, frame: 0 });
-    for (let i = 0; i < orbs; i++) items.push({ tex: FXT.orb, frame: 0 });
+    // 11/15 많이 잡을 때는 동전·구슬을 하나씩만 (몬스터가 많아도 끊기지 않게)
+    const busy = this.live > FX_BUSY;
+    for (let i = 0; i < (busy ? Math.min(1, coins) : coins); i++) items.push({ tex: FXT.coin, frame: 0 });
+    for (let i = 0; i < (busy ? Math.min(1, orbs) : orbs); i++) items.push({ tex: FXT.orb, frame: 0 });
     let collected = 0;
     items.forEach((it, i) => {
       const a = -Math.PI / 2 + (i - (items.length - 1) / 2) * 0.6 + (Math.random() - 0.5) * 0.3;
@@ -386,5 +430,8 @@ export class CombatFx {
   destroy(): void {
     this.comboText?.destroy();
     this.comboText = null;
+    // 그리기 목록에서 빼 둔 것은 씬이 지우지 않으니 직접
+    for (const o of this.free) o.destroy();
+    this.free = [];
   }
 }

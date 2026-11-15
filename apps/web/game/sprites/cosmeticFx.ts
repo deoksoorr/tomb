@@ -1,5 +1,7 @@
-import { champAuraOn, CHAMP_AURA_OFF, champBoards, CHAMP_BOARDS, DIR, premiumBody, type DirId } from "@tomb/protocol";
+import { bodyTier, champAuraOn, CHAMP_AURA_OFF, champBoards, CHAMP_BOARDS, DIR, type DirId } from "@tomb/protocol";
 import { foxSheet, MOUNT_FRAMES, MOUNT_H, MOUNT_W, mountLift, mountSheet, type MountKind } from "./mountArt";
+import { kstHour, parseAmbienceOverride, timePhase } from "@/lib/ambience";
+import { CUTE_FX, CUTE_FX_ART, cuteIconGrid } from "./cuteFx";
 import { Grid, type Color } from "./pixel";
 
 // F8 캐릭터 꾸미기 추가분 중 "아바타 시트 밖에 따로 그리는 연출" (날개 2종·우산·풍선·발자국 5종·오라 6종·펫 6종).
@@ -758,6 +760,296 @@ export const FX_ART = {
       return g;
     },
   },
+  // ── 11/15 수집 의뢰 보상 ──
+  /** 반딧불 수집가 오라: 노란 연둣빛 반딧불 (0 = 켜짐, 1 = 희미) */
+  qFirefly: {
+    w: 5,
+    h: 5,
+    frames: 2,
+    build: frames(5, 5, 2, (g, f) => {
+      if (f === 0) {
+        g.ellipse(2.5, 2.5, 2.5, 2.5, 0xc8ff5a, 70);
+        for (const [x, y] of [[2, 1], [1, 2], [3, 2], [2, 3]]) g.set(x, y, 0xe4ff8a, 220);
+        g.set(2, 2, 0xfdffd8);
+      } else {
+        for (const [x, y] of [[2, 1], [1, 2], [3, 2], [2, 3]]) g.set(x, y, 0xb8f04a, 90);
+        g.set(2, 2, 0xe4ff8a, 230);
+      }
+    }),
+  },
+  /** 금붕어 펫: 둥근 물방울 어항 속 금붕어 (꼬리 살랑 2프레임) */
+  qGoldfish: {
+    w: 13,
+    h: 13,
+    frames: 2,
+    build: frames(13, 13, 2, (g, f) => {
+      // 물방울 (안쪽은 옅은 물빛, 테두리는 밝게, 왼쪽 위 반사광)
+      g.ellipse(6.5, 6.5, 6.4, 6.4, 0xbfe8ff, 150);
+      g.ellipse(6.5, 6.5, 5.3, 5.3, 0x8ad0f4, 70);
+      g.ellipse(6.5, 7.8, 4.6, 3.4, 0x6ab8e8, 60);
+      // 금붕어 (오른쪽을 본다)
+      g.ellipse(7, 6.5, 2.7, 1.9, 0xff8a2a);
+      g.set(8, 5, 0xffc04a);
+      g.set(7, 5, 0xffb03a);
+      g.set(5, 7, 0xe8601a);
+      g.set(9, 6, 0x1a1210);
+      g.set(10, 7, 0xffd8a0);
+      // 꼬리 (나풀)
+      const ty = f ? 1 : 0;
+      g.set(4, 5 + ty, 0xffa040);
+      g.set(3, 5 + ty, 0xffc070);
+      g.set(3, 7 + ty, 0xffc070);
+      g.set(4, 7, 0xffa040);
+      g.set(2, 6 + ty, 0xffe0b0, 220);
+      // 지느러미 · 반사광 · 작은 공기 방울
+      g.set(7, 8, 0xffc070);
+      g.set(3, 3, 0xffffff, 230);
+      g.set(4, 2, 0xffffff, 200);
+      g.set(2, 4, 0xffffff, 160);
+      g.set(9, 3 - (f ? 1 : 0), 0xffffff, 200);
+    }),
+  },
+  mountCarp: { w: MOUNT_W, h: MOUNT_H, frames: MOUNT_FRAMES, build: () => mountSheet("carp") },
+  /** 밤낚시 오라: 발밑에서 퍼지는 물결 고리 */
+  qRipple: {
+    w: 26,
+    h: 8,
+    frames: 1,
+    build: () => {
+      const g = new Grid(26, 8);
+      g.ellipse(13, 4, 13, 4, 0xbfe6ff, 210);
+      g.ellipse(13, 4, 11.4, 3, 0x000000, 0);
+      for (let i = 0; i < g.px.length; i++) if ((g.px[i] & 255) === 0) g.px[i] = 0;
+      for (const x of [3, 9, 17, 23]) g.set(x, x < 13 ? 1 : 6, 0xffffff, 240);
+      return g;
+    },
+  },
+  /** 밤낚시 오라: 달빛 윤슬 (은빛·연보랏빛 반짝) */
+  qGlint: {
+    w: 5,
+    h: 5,
+    frames: 2,
+    build: frames(5, 5, 2, (g, f) => {
+      const c = f ? 0xd8c8ff : 0xe8f4ff;
+      g.set(2, 2, 0xffffff);
+      for (const [x, y] of [[2, 1], [2, 3], [1, 2], [3, 2]]) g.set(x, y, c, 230);
+      for (const [x, y] of [[0, 2], [4, 2]]) g.set(x, y, c, 110);
+    }),
+  },
+  /** 밤낚시 오라: 몸 뒤 달빛 (희귀 등급 보랏빛에 푸른 달빛) */
+  qMoonGlow: {
+    w: 28,
+    h: 30,
+    frames: 1,
+    build: () => {
+      const g = new Grid(28, 30);
+      g.ellipse(14, 15, 14, 15, 0x7a8af0, 30);
+      g.ellipse(14, 15, 10, 11, 0xa8b8ff, 38);
+      g.ellipse(14, 15, 6, 7, 0xe0e8ff, 44);
+      return g;
+    },
+  },
+  /** 밤낚시 오라: 물결에서 뛰어오르는 은빛 물고기 */
+  qJumpFish: {
+    w: 6,
+    h: 3,
+    frames: 1,
+    build: () => {
+      const g = new Grid(6, 3);
+      g.hline(1, 4, 1, 0xd8e4f0);
+      g.set(2, 0, 0xf4f8ff);
+      g.set(3, 0, 0xf4f8ff);
+      g.set(2, 2, 0xa8b8cc);
+      g.set(3, 2, 0xa8b8cc);
+      g.set(0, 0, 0xc8d4e4);
+      g.set(0, 2, 0xc8d4e4);
+      g.set(4, 1, 0x1a2a3a);
+      g.set(5, 1, 0xe8f0ff);
+      return g;
+    },
+  },
+  /** 채집왕 망토: 끝자락에서 흩날리는 금가루 */
+  qGoldDust: {
+    w: 3,
+    h: 3,
+    frames: 2,
+    build: frames(3, 3, 2, (g, f) => {
+      g.set(1, 1, f ? 0xfff0b0 : 0xffffff);
+      if (!f) for (const [x, y] of [[1, 0], [0, 1], [2, 1], [1, 2]]) g.set(x, y, 0xffd25a, 170);
+    }),
+  },
+  /** 광부 헬멧: 옆을 볼 때 앞으로 뻗는 이마 등불 빛 (꼭짓점 = 왼쪽 가운데, 더해 그린다) */
+  qLampBeam: {
+    w: 18,
+    h: 11,
+    frames: 1,
+    build: () => {
+      const g = new Grid(18, 11);
+      for (let x = 0; x < 18; x++) {
+        const half = 0.6 + x * 0.27;
+        for (let y = 0; y < 11; y++) {
+          const d = Math.abs(y + 0.5 - 5.5);
+          if (d > half) continue;
+          const a = Math.round(120 * (1 - x / 18) * (1 - (d / half) * 0.6));
+          if (a > 4) g.set(x, y, 0xfff0b0, a);
+        }
+      }
+      return g;
+    },
+  },
+  /** 스노볼 오라: 유리 돔 테두리 (안은 비고, 왼쪽 위에 반사광) */
+  qGlobe: {
+    w: 34,
+    h: 40,
+    frames: 1,
+    build: () => {
+      const g = new Grid(34, 40);
+      const cx = 17;
+      const cy = 21;
+      for (let y = 0; y < 40; y++)
+        for (let x = 0; x < 34; x++) {
+          const d = Math.hypot((x + 0.5 - cx) / 16.5, (y + 0.5 - cy) / 19.5);
+          if (y > 36) continue;
+          if (d <= 1 && d > 0.93) g.set(x, y, 0xd8f4ff, 120);
+          else if (d <= 0.93 && d > 0.86) g.set(x, y, 0xb8e4ff, 34);
+        }
+      // 반사광 (왼쪽 위 호 + 작은 점)
+      for (let i = 0; i < 9; i++) {
+        const a = Math.PI * (1.1 + i * 0.06);
+        g.set(Math.round(cx + Math.cos(a) * 13), Math.round(cy + Math.sin(a) * 15.5), 0xffffff, 210 - i * 10);
+      }
+      g.set(cx + 9, cy - 13, 0xffffff, 180);
+      return g;
+    },
+  },
+  /** 스노볼 오라: 발밑 눈 둔덕 + 붉은 받침 테 */
+  qSnowMound: {
+    w: 30,
+    h: 7,
+    frames: 1,
+    build: () => {
+      const g = new Grid(30, 7);
+      g.ellipse(15, 4, 15, 3, 0xb8323a, 200);
+      g.ellipse(15, 3.2, 13.5, 2.4, 0xf2f6ff, 230);
+      g.ellipse(15, 2.6, 9, 1.4, 0xffffff, 240);
+      for (const x of [4, 11, 19, 25]) g.set(x, 4, 0xc8d8f0, 230);
+      for (let x = 2; x < 28; x += 3) g.set(x, 6, 0xf2c43a, 230);
+      return g;
+    },
+  },
+  /** 꼬마 펭귄 펫: 0·1 뒤뚱 걷기 (번갈아 기울기) · 2 배로 미끄러지기. 빨간 목도리 */
+  qPenguin: {
+    w: 11,
+    h: 11,
+    frames: 3,
+    build: frames(11, 11, 3, (g, f) => {
+      const ink = 0x22263a;
+      const belly = 0xf6f4ee;
+      const beak = 0xf2a03a;
+      const scarf = 0xe0404a;
+      if (f === 2) {
+        // 배를 깔고 앞으로 쭉 (머리는 오른쪽)
+        g.ellipse(5, 7.5, 4.8, 2.4, ink);
+        g.ellipse(5.4, 8.6, 3.6, 1.3, belly);
+        g.ellipse(8.6, 6.4, 2, 1.8, ink);
+        g.set(9, 6, 0xffffff);
+        g.set(9, 5, 0xffffff);
+        g.set(10, 7, beak);
+        g.set(8, 7, 0xff9ab0);
+        g.vline(7, 6, 8, scarf);
+        g.set(6, 5, scarf);
+        g.set(1, 6, ink);
+        g.set(0, 8, beak);
+        g.set(0, 9, beak);
+        return;
+      }
+      const lean = f ? 1 : 0;
+      g.ellipse(5 + lean * 0.4, 6.4, 3.6, 4.3, ink);
+      g.ellipse(5.8 + lean * 0.4, 7.2, 2.4, 3.1, belly);
+      g.ellipse(5.6 + lean * 0.4, 3, 2.6, 2.3, ink);
+      // 얼굴: 흰 눈 테 + 눈 + 볼터치 + 부리
+      g.set(6 + lean, 3, 0xffffff);
+      g.set(7 + lean, 3, 0x0a0b10);
+      g.set(7 + lean, 4, 0xff9ab0);
+      g.set(8 + lean, 4, beak);
+      g.set(9 + lean, 4, beak);
+      // 목도리 (끝자락이 뒤로 펄럭)
+      g.hline(3 + lean, 7 + lean, 5, scarf);
+      g.set(2 + lean, 5 + lean, scarf);
+      g.set(1 + lean, 6, 0xb82a34);
+      // 날개 · 발 (번갈아)
+      g.set(2 + lean, f ? 7 : 8, ink);
+      g.set(1 + lean, f ? 8 : 9, ink);
+      g.hline(f ? 3 : 4, f ? 4 : 5, 10, beak);
+      g.hline(f ? 6 : 7, f ? 7 : 8, f ? 10 : 9, beak);
+      g.outline(0x101420, false, 150);
+    }),
+  },
+  /** 연 날리는 등: 방패연 (흰 한지 · 붉은 꼭지 · 가운데 방구멍 · 대살) + 꼬리 두 줄 펄럭 2프레임 */
+  qKite: {
+    w: 11,
+    h: 15,
+    frames: 2,
+    build: frames(11, 15, 2, (g, f) => {
+      const paper = 0xf8f4e8;
+      const stick = 0xc8a060;
+      g.rect(1, 0, 9, 11, paper);
+      // 꼭지 (위 가운데 붉은 반달) · 아래 귀퉁이 파랑·노랑
+      g.ellipse(5.5, 0.5, 2.6, 2.4, 0xd8302a);
+      g.set(1, 10, 0x3a6ad8);
+      g.set(2, 10, 0x3a6ad8);
+      g.set(9, 10, 0xf2c43a);
+      g.set(8, 10, 0xf2c43a);
+      // 대살 (대각선 둘 + 가로 하나)
+      for (let i = 0; i < 9; i++) {
+        g.set(1 + i, Math.round(1 + i * 1.1), stick);
+        g.set(9 - i, Math.round(1 + i * 1.1), stick);
+      }
+      g.hline(1, 9, 3, stick);
+      // 방구멍 (가운데 동그란 구멍)
+      g.ellipse(5.5, 5.5, 1.7, 1.7, 0x000000, 0);
+      for (let i = 0; i < g.px.length; i++) if ((g.px[i] & 255) === 0) g.px[i] = 0;
+      g.set(4, 4, stick);
+      g.set(6, 4, stick);
+      // 꼬리 두 줄 (펄럭)
+      const sw = f ? 1 : -1;
+      for (let i = 0; i < 4; i++) {
+        g.set(2 + (i % 2 ? sw : 0), 11 + i, i % 2 ? 0x3a6ad8 : 0xd8302a, 230);
+        g.set(8 + (i % 2 ? -sw : 0), 11 + i, i % 2 ? 0xd8302a : 0xf2c43a, 230);
+      }
+      g.outline(0x3a2a1a, false, 200);
+    }),
+  },
+  /** 연 날리는 등: 등에 멘 작은 얼레 */
+  qReel: {
+    w: 5,
+    h: 5,
+    frames: 1,
+    build: () => {
+      const g = new Grid(5, 5);
+      g.rect(1, 0, 3, 5, 0x8a5a2a);
+      g.vline(2, 0, 4, 0xe8d8b0);
+      g.hline(0, 4, 0, 0x5a3a1a);
+      g.hline(0, 4, 4, 0x5a3a1a);
+      g.outline(0x2a1a0e, false, 200);
+      return g;
+    },
+  },
+  /** 광부 헬멧: 앞을 볼 때 이마 등불의 번짐 */
+  qLampFlare: {
+    w: 11,
+    h: 11,
+    frames: 1,
+    build: () => {
+      const g = new Grid(11, 11);
+      g.ellipse(5.5, 5.5, 5.5, 5.5, 0xffe08a, 50);
+      g.ellipse(5.5, 5.5, 3, 3, 0xfff0b8, 90);
+      for (const [x, y] of [[5, 0], [5, 10], [0, 5], [10, 5]]) g.set(x, y, 0xfff4c8, 70);
+      return g;
+    },
+  },
+  // 11/15: 말랑 꾸미기 묶음 (cuteFx.ts)
+  ...CUTE_FX_ART,
 } satisfies Record<string, ArtDef>;
 
 export type FxArtId = keyof typeof FX_ART;
@@ -771,20 +1063,21 @@ function fill(w: number, h: number, c: Color, a: number): Grid {
 // ── 아이템 → 연출 규칙 ──
 
 /** mount = 타는 펫 (그림은 mountArt 시트, 따라올 때는 몸집만큼 far배 떨어져 걷는다) */
-type PetSpec = { kind: "pet"; art: FxArtId; hover: number; fps: number; idleFps: number; alpha?: number; squash?: boolean; glow?: boolean; mount?: MountKind; far?: number };
+/** slide = 걷는 동안 가끔 배로 미끄러진다 (그림 프레임 2, 꼬마 펭귄) */
+type PetSpec = { kind: "pet"; art: FxArtId; hover: number; fps: number; idleFps: number; alpha?: number; squash?: boolean; glow?: boolean; mount?: MountKind; far?: number; slide?: boolean };
 type TrailSpec = { kind: "trail"; art: FxArtId; step: number; life: number; motion: "prints" | "splash" | "rise" | "scatter" | "pop"; light?: boolean };
 /** 추가분 2: fall = 머리 위에서 떨어짐, float = 옆에서 떠오름, steam = 머리 위로 김, ring = 몸 둘레를 돈다 (art로 그림을 고른다) */
 type AuraSpec = {
   kind: "aura";
   /** tier* = 25번 프리미엄 외형 등급 연출 (꾸미기가 아니라 몸에 딸린다) */
-  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ";
+  motion: "orbit" | "snow" | "petals" | "cloud" | "notes" | "zzz" | "fall" | "float" | "steam" | "ring" | "tierFine" | "tierRare" | "tierLegend" | "champ" | "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" | "qSnowGlobe" | "qSnowPuff" | "qWishGlow";
   art?: FxArtId;
   light?: boolean;
   /** champ = 주간 랭킹 1위 오라 테마 (champTheme) */
   theme?: number;
 };
 type WingSpec = { kind: "wings"; art: FxArtId; flapMs: number; amp: number };
-type HeldSpec = { kind: "held"; item: "umbrella" | "balloon" };
+type HeldSpec = { kind: "held"; item: "umbrella" | "balloon" | "kite" };
 export type FxSpec = PetSpec | TrailSpec | AuraSpec | WingSpec | HeldSpec;
 
 export const COSMETIC_FX: Readonly<Record<string, FxSpec>> = {
@@ -831,6 +1124,16 @@ export const COSMETIC_FX: Readonly<Record<string, FxSpec>> = {
   pet_hound: { kind: "pet", art: "mountHound", hover: 0, fps: 7, idleFps: 2, mount: "hound", far: 1.7 },
   pet_goose: { kind: "pet", art: "mountGoose", hover: 0, fps: 6, idleFps: 1.5, mount: "goose", far: 1.6 },
   pet_deer: { kind: "pet", art: "mountDeer", hover: 0, fps: 7, idleFps: 1.5, mount: "deer", far: 1.7 },
+  // 11/15 수집 의뢰 보상 (머리·손 그림은 avatarGear 시트, 여기는 따로 붙는 연출)
+  q_aura_firefly: { kind: "aura", motion: "qFireflies", light: true },
+  q_aura_nightfish: { kind: "aura", motion: "qNightfish", light: true },
+  q_pet_goldfish: { kind: "pet", art: "qGoldfish", hover: 9, fps: 5, idleFps: 2.5 },
+  q_aura_snowglobe: { kind: "aura", motion: "qSnowGlobe", light: true },
+  q_pet_penguin: { kind: "pet", art: "qPenguin", hover: 0, fps: 7, idleFps: 1.5, slide: true },
+  q_back_kite: { kind: "held", item: "kite" },
+  q_ride_carp: { kind: "pet", art: "mountCarp", hover: 0, fps: 4, idleFps: 1.5, mount: "carp", far: 1.7 },
+  // 11/15: 말랑 꾸미기 묶음 (cuteFx.ts)
+  ...CUTE_FX,
 };
 
 /** 이 펫이 타는 펫이면 그 그림 종류 (아니면 null) */
@@ -847,6 +1150,14 @@ export function riderLift(petId: string | null | undefined): number {
 /** 따로 그리는 F8 꾸미기 id 전부 (SPRITE_COSMETICS에 들어간다) */
 export const COSMETIC_FX_IDS: readonly string[] = Object.keys(COSMETIC_FX);
 
+/** 11/15: 시트에 그려지는 꾸미기(avatarGear)에 덧붙는 연출 — 채집왕 망토 금가루 · 광부 헬멧 이마 등불 빛 (아이콘·목록은 시트 쪽) */
+export const GEAR_EXTRA_FX: Readonly<Record<string, FxSpec>> = {
+  q_back_cape: { kind: "aura", motion: "qCapeDust", light: true },
+  q_hat_miner: { kind: "aura", motion: "qLamp", light: true },
+  q_hat_snow: { kind: "aura", motion: "qSnowPuff" },
+  q_hand_wishlamp: { kind: "aura", motion: "qWishGlow", light: true },
+};
+
 /**
  * 25번 프리미엄 외형 등급 연출 (몸 id만 알면 되므로 내 화면·다른 사람 화면·상점 미리보기가 똑같다).
  * 고급 = 가끔 반짝, 희귀 = 보랏빛 + 금 반짝이가 몸 둘레를 돈다, 전설 = 금빛 + 무지개 반짝이가 나선으로 피어오른다. 일반은 없음
@@ -859,7 +1170,7 @@ const TIER_FX: Readonly<Record<string, AuraSpec>> = {
 
 /** 몸에 딸린 등급 연출 (없으면 null) */
 export function bodyFx(body: string | null | undefined): FxSpec | null {
-  const tier = premiumBody(body)?.tier;
+  const tier = bodyTier(body);
   return (tier && TIER_FX[tier]) || null;
 }
 
@@ -1010,10 +1321,13 @@ export class CosmeticFxSim {
   private balX = 0;
   private balY = 0;
   private balOn = false;
+  private kiteX = 0;
+  private kiteY = 0;
+  private kiteOn = false;
 
   /** body = 몸 id (프리미엄 외형 등급 연출을 함께 건다), champ = 주간 랭킹 1위 값 (1위 오라를 함께 건다 — 착용 오라와 자리를 나눠 둘 다 보인다) */
   setLook(look: readonly string[], body?: string | null, champ?: number, staff?: boolean): void {
-    const next = look.filter((id) => id in COSMETIC_FX).map((id) => [id, COSMETIC_FX[id]] as [string, FxSpec]);
+    const next = look.filter((id) => id in COSMETIC_FX || id in GEAR_EXTRA_FX).map((id) => [id, COSMETIC_FX[id] ?? GEAR_EXTRA_FX[id]] as [string, FxSpec]);
     const tier = bodyFx(body);
     if (tier) next.push(["@body", tier]);
     // 31번 운영자 오라가 우선 (본인이 끄면 champ에 CHAMP_AURA_OFF) — 아니면 주간 1위 오라
@@ -1029,6 +1343,7 @@ export class CosmeticFxSim {
       this.partNext = 0;
     }
     if (!next.some(([, s]) => s.kind === "held" && s.item === "balloon")) this.balOn = false;
+    if (!next.some(([, s]) => s.kind === "held" && s.item === "kite")) this.kiteOn = false;
     this.specs = next;
   }
 
@@ -1055,6 +1370,7 @@ export class CosmeticFxSim {
     let top = 0;
     for (const [, s] of this.specs) {
       if (s.kind === "wings") top = Math.max(top, shoulder + 9);
+      else if (s.kind === "held" && s.item === "kite") continue; // 연은 머리 옆 위 — 이름표 자리를 비켜 난다
       else if (s.kind === "held") top = Math.max(top, s.item === "umbrella" ? artTop + 8 : artTop + 6);
       else if (s.kind === "aura" && s.motion === "cloud") top = Math.max(top, artTop + 10);
     }
@@ -1070,6 +1386,7 @@ export class CosmeticFxSim {
           break;
         case "held":
           if (s.item === "umbrella") this.umbrella(f, out);
+          else if (s.item === "kite") this.kite(f, t, out);
           else this.balloon(f, t, out);
           break;
         case "pet":
@@ -1148,6 +1465,43 @@ export class CosmeticFxSim {
     out.push(cmd("balloon", 0, bx, by + 1, { oy: 1, layer: "body", depth: depth + 0.01 }));
   }
 
+  /**
+   * 11/15 연 날리는 등: 등에 멘 얼레에서 줄이 풀려 방패연이 머리 옆 위에서 펄럭인다.
+   * 옆으로 걸으면 지나온 쪽으로, 위아래로 걸으면 오른쪽 위에. 걸을수록 높이 뜨고 빨리 흔들린다 (풍선처럼 늦게 따라온다)
+   */
+  private kite(f: FxInput, t: number, out: FxCmd[]): void {
+    const [hx] = heading(f.dir);
+    const side = hx !== 0 ? -hx : 1;
+    const run = f.moving && !f.reduced ? 1 : 0;
+    const sway = f.reduced ? 0 : Math.sin(t / (run ? 260 : 620)) * (run ? 2.5 : 1.5);
+    const tx = f.x + side * (13 + run * 4) + sway;
+    const ty = f.headY - f.artTop - 9 - run * 3 + (f.reduced ? 0 : Math.sin(t / 470) * 1.5);
+    if (!this.kiteOn || f.still) {
+      this.kiteOn = true;
+      this.kiteX = tx;
+      this.kiteY = ty;
+    } else {
+      const k = 1 - Math.exp(-f.dt / 380);
+      this.kiteX += (tx - this.kiteX) * k;
+      this.kiteY += (ty - this.kiteY) * k;
+    }
+    if (f.hidden) return;
+    const up = f.dir === DIR.up;
+    const depth = bodyDepth(f) + (up ? 0.06 : -0.06);
+    // 얼레: 등 (뒷모습이면 등 가운데, 옆모습이면 등 쪽, 앞모습이면 어깨 너머로 살짝)
+    const ax = Math.round(f.x + (hx !== 0 ? -hx * 4 : up ? 0 : 4));
+    const ay = Math.round(f.headY - f.shoulder - (up ? 0 : 3));
+    out.push(cmd("qReel", 0, ax, ay, { layer: "body", depth: up ? bodyDepth(f) + 0.05 : bodyDepth(f) - 0.05 }));
+    const kx = Math.round(this.kiteX);
+    const ky = Math.round(this.kiteY);
+    const dx = kx - ax;
+    const dy = ky + 5 - ay;
+    const len = Math.max(1, Math.hypot(dx, dy));
+    out.push(cmd("string", 0, ax, ay, { oy: 1, sy: len / 8, rot: Math.atan2(dx, -dy), alpha: 0.8, layer: "body", depth }));
+    const fr = f.reduced ? 0 : Math.floor(t / (run ? 120 : 260)) % 2;
+    out.push(cmd("qKite", fr, kx, ky, { rot: f.reduced ? 0 : (Math.sin(t / 380) * 0.12 + side * 0.08), layer: "body", depth: depth + 0.01 }));
+  }
+
   private pet(s: PetSpec, f: FxInput, t: number, out: FxCmd[]): void {
     if (s.mount && f.riding) return this.mounted(s, f, t, out);
     const back = petBack(f.dir);
@@ -1179,13 +1533,15 @@ export class CosmeticFxSim {
     const sink = Math.round(this.petSink);
     const wet = sink > 0;
     const fps = walking ? s.fps : s.idleFps;
-    const frame = Math.floor((t / 1000) * (wet ? fps * 0.6 : fps)) % 2;
+    // 꼬마 펭귄: 걷는 동안 4.2초에 한 번 1.1초쯤 배로 미끄러진다 (뒤뚱 흔들림 없이 바닥에 붙어)
+    const sliding = !!s.slide && walking && !wet && !f.reduced && !f.still && t % 4200 > 3100;
+    const frame = sliding ? 2 : Math.floor((t / 1000) * (wet ? fps * 0.6 : fps)) % 2;
     let lift = s.hover;
     let sx = 1;
     let sy = 1;
     if (s.hover) lift += f.reduced ? 0 : Math.sin(t / 420) * 1.5;
     else if (wet) lift += f.reduced ? 0 : Math.round(Math.sin(t / 380) * 0.6); // 물에 떠서 천천히 출렁
-    else if (walking && !f.reduced) lift += Math.abs(Math.sin(t / 110)) * (s.squash ? 2 : 1.2);
+    else if (walking && !f.reduced && !sliding) lift += Math.abs(Math.sin(t / 110)) * (s.squash ? 2 : 1.2);
     if (s.squash && !f.reduced && !wet) {
       const q = Math.sin(t / (walking ? 110 : 260));
       sx = 1 + 0.1 * q;
@@ -1375,6 +1731,15 @@ export class CosmeticFxSim {
         }
         break;
       }
+      case "qFireflies":
+      case "qNightfish":
+      case "qCapeDust":
+      case "qLamp":
+      case "qSnowGlobe":
+      case "qSnowPuff":
+      case "qWishGlow":
+        questAura(s.motion, f, t, out);
+        break;
       case "snow":
       case "petals": {
         const petals = s.motion === "petals";
@@ -1646,6 +2011,165 @@ function champAura(theme: number, f: FxInput, t: number, out: FxCmd[]): void {
   }
 }
 
+// ── 11/15 수집 의뢰 보상 연출 ──
+
+/** 반딧불 수집가 오라의 반딧불 수 (도감 곤충 종 수는 다른 사람 화면에서 알 수 없어 고정) */
+export const QUEST_FIREFLY_COUNT = 8;
+
+let nightAt = -Infinity;
+let nightNow = false;
+/** 지금이 밤(해질녘·밤)인지 — 1초에 한 번만 (dyeFx glowTime과 같은 규칙, 주소 ?time= 시험 값도 따른다) */
+function isNight(now: number): boolean {
+  if (Math.abs(now - nightAt) < 1000) return nightNow;
+  nightAt = now;
+  const hour = typeof location !== "undefined" ? parseAmbienceOverride(location.search).hour : undefined;
+  const p = timePhase(hour ?? kstHour(Date.now()));
+  nightNow = p === "night" || p === "dusk";
+  return nightNow;
+}
+
+/** 수집 의뢰 오라·망토 금가루·이마 등불 (밤이면 더 밝게, 미리보기(still)는 늘 밤처럼) */
+function questAura(motion: "qFireflies" | "qNightfish" | "qCapeDust" | "qLamp" | "qSnowGlobe" | "qSnowPuff" | "qWishGlow", f: FxInput, t: number, out: FxCmd[]): void {
+  const night = f.still || isNight(f.now);
+  const bx = f.x;
+  const calm = f.reduced || !!f.still;
+  switch (motion) {
+    case "qFireflies": {
+      // 8마리가 기울어진 고리 셋을 따라 제각각 돌며 깜빡인다 (밤엔 더 크고 환하게)
+      const n = QUEST_FIREFLY_COUNT;
+      for (let i = 0; i < n; i++) {
+        // 같은 빠르기로 줄지어 돈다 (고리마다 방향·속도만 조금 다르게)
+        const ring = i % 2;
+        const a = (calm ? 0 : (ring ? -t : t) / (ring ? 1900 : 1500)) + (i * Math.PI * 2) / n;
+        const r = 9 + ring * 3 + Math.sin(t / 700 + i) * 1.2;
+        const z = Math.sin(a);
+        const y = f.headY - f.artTop * (ring ? 0.7 : 0.35) + z * 2.5 + Math.sin(t / 430 + i * 1.3) * 1.5;
+        const blink = calm ? 0.9 : Math.max(0, Math.sin(t / (380 + i * 37) + i * 2.1));
+        const on = blink > 0.35;
+        const al = (night ? 0.55 + 0.45 * blink : 0.35 + 0.4 * blink) * (on ? 1 : 0.7);
+        const sc = night ? 1.1 : 0.85;
+        out.push(cmd("qFirefly", on ? 0 : 1, Math.round(bx + Math.cos(a) * r), Math.round(y), around(f, z, { sx: sc, sy: sc, alpha: al }, true)));
+      }
+      break;
+    }
+    case "qNightfish": {
+      // 몸 뒤 달빛 (숨 쉬듯)
+      const breathe = calm ? 0.85 : 0.75 + 0.25 * Math.sin(t / 1100);
+      out.push(cmd("qMoonGlow", 0, bx, Math.round(f.headY - f.artTop * 0.5), { alpha: (night ? 0.95 : 0.55) * breathe, layer: "body", depth: bodyDepth(f) - 0.3, add: true }));
+      // 발밑에서 퍼지는 물결 고리 셋
+      for (let i = 0; i < 3; i++) {
+        const u = calm ? (i + 0.5) / 3 : (t / 2600 + i / 3) % 1;
+        const k = 0.35 + u * 1.1;
+        out.push(cmd("qRipple", 0, Math.round(bx), Math.round(f.headY), { sx: k, sy: k, alpha: (1 - u) * (night ? 0.9 : 0.65), layer: "ground", depth: 0 }));
+      }
+      // 달빛 윤슬: 몸 둘레 여기저기서 반짝
+      for (let i = 0; i < 6; i++) {
+        const cyc = 1700 + i * 230;
+        const k = Math.floor(t / cyc);
+        const ph = (t % cyc) / cyc;
+        const tw = calm ? 0.8 : Math.max(0, Math.sin(Math.min(1, ph * 2) * Math.PI));
+        if (tw < 0.05) continue;
+        const a = h01(k * 7 + i, 61) * Math.PI * 2;
+        const z = Math.sin(a);
+        const x = bx + Math.cos(a) * (8 + h01(k + i, 62) * 6);
+        const y = f.headY - 2 - h01(k * 3 + i, 63) * (f.artTop + 4);
+        out.push(cmd("qGlint", i % 2, Math.round(x), Math.round(y), around(f, z, { sx: 0.6 + 0.6 * tw, sy: 0.6 + 0.6 * tw, alpha: tw * (night ? 1 : 0.8) }, true)));
+      }
+      // 가끔 물결에서 은빛 물고기가 뛰어오른다 (3.6초마다, 몸 옆으로 포물선)
+      if (!calm) {
+        const cyc = 3600;
+        const k = Math.floor(t / cyc);
+        const u = (t % cyc) / 900;
+        if (u < 1) {
+          const d = h01(k, 64) < 0.5 ? -1 : 1;
+          const x0 = bx + d * 7;
+          const x = x0 + d * u * 9;
+          const y = f.headY - Math.sin(u * Math.PI) * 9;
+          out.push(cmd("qJumpFish", 0, Math.round(x), Math.round(y), { rot: d * (u - 0.5) * 1.6, flip: d < 0, alpha: Math.min(1, Math.sin(u * Math.PI) * 2), layer: "body", depth: bodyDepth(f) + (h01(k, 65) < 0.5 ? 0.2 : -0.2) }));
+        }
+      }
+      break;
+    }
+    case "qCapeDust": {
+      if (f.hidden) return;
+      // 망토 끝자락 (몸 뒤 양옆 아래)에서 금가루가 흩날려 내려앉는다 + 가끔 금테가 반짝
+      const n = calm ? 3 : 5;
+      for (let i = 0; i < n; i++) {
+        const u = calm ? (i + 0.5) / n : (t / 1900 + i / n + h01(i, 71) * 0.3) % 1;
+        const d = i % 2 ? 1 : -1;
+        const x = bx + d * (5 + h01(i, 72) * 3 + u * 4) + Math.sin(t / 300 + i) * 0.8;
+        const y = f.headY - f.shoulder + 2 + u * (f.shoulder + 1);
+        out.push(cmd("qGoldDust", Math.floor(t / 160 + i) % 2, Math.round(x), Math.round(y), { alpha: Math.sin(u * Math.PI) * (night ? 1 : 0.85), layer: "body", add: true, depth: bodyDepth(f) - 0.1 }));
+      }
+      const cyc = 2300;
+      const ph = (t % cyc) / cyc;
+      const tw = calm ? 0.7 : Math.max(0, Math.sin(Math.min(1, ph * 3) * Math.PI));
+      if (tw > 0.05) {
+        const k = Math.floor(t / cyc);
+        const d = h01(k, 73) < 0.5 ? -1 : 1;
+        out.push(cmd("sparkStar", 0, Math.round(bx + d * (5 + h01(k, 74) * 2)), Math.round(f.headY - 2), { sx: 0.6 + 0.5 * tw, sy: 0.6 + 0.5 * tw, alpha: tw, layer: "body", add: true, depth: bodyDepth(f) - 0.1 }));
+      }
+      break;
+    }
+    case "qSnowGlobe": {
+      // 유리 돔 (몸보다 넓어 몸을 덮지 않는다) + 발밑 눈 둔덕 + 돔 안을 천천히 도는 눈송이. 테두리 반사광이 은은히 숨 쉰다
+      const k = Math.max(1, (f.artTop + 6) / 34);
+      const shimmer = calm ? 0.8 : 0.7 + 0.3 * Math.sin(t / 900);
+      out.push(cmd("qSnowMound", 0, Math.round(bx), Math.round(f.headY + 1), { alpha: night ? 0.95 : 0.85, layer: "ground", depth: 0 }));
+      out.push(cmd("qGlobe", 0, Math.round(bx), Math.round(f.headY + 2), { oy: 37 / 40, sx: k, sy: k, alpha: (night ? 0.95 : 0.45) * shimmer, layer: "light", depth: 0 }));
+      // 테두리를 따라 미끄러지는 반짝
+      if (!calm) {
+        const a = -Math.PI / 2 + Math.sin(t / 1600) * 1.3;
+        out.push(cmd("qGlint", 0, Math.round(bx + Math.cos(a) * 16 * k), Math.round(f.headY - 15 * k + Math.sin(a) * 19 * k), { sx: 0.8, sy: 0.8, alpha: 0.5 + 0.4 * shimmer, layer: "light", depth: 0 }));
+      }
+      const n = 9;
+      for (let i = 0; i < n; i++) {
+        // 눈송이: 돔 안에서 소용돌이 (천천히 돌며 오르내린다)
+        const a = (calm ? 0 : t / 2600) + (i * Math.PI * 2) / n + h01(i, 81);
+        const r = (5 + h01(i, 82) * 8) * k;
+        const z = Math.sin(a);
+        const u = calm ? h01(i, 83) : (t / (3200 + i * 170) + h01(i, 84)) % 1;
+        const y = f.headY - 3 - (1 - Math.abs(u * 2 - 1)) * (f.artTop + 2);
+        out.push(cmd("snowflake", i % 2, Math.round(bx + Math.cos(a) * r), Math.round(y + z * 2), around(f, z, { oy: 0.5, alpha: night ? 1 : 0.9 }, night)));
+      }
+      break;
+    }
+    case "qSnowPuff": {
+      // 눈 털모자 방울에서 3초에 한 번 눈송이가 톡 떨어진다 (움직임 줄이기·미리보기면 없음)
+      if (calm || f.hidden) return;
+      const cyc = 3000;
+      const u = (t % cyc) / 1300;
+      if (u >= 1) return;
+      const k = Math.floor(t / cyc);
+      const d = h01(k, 91) < 0.5 ? -1 : 1;
+      const x = bx + (f.dir === DIR.right ? -2 : f.dir === DIR.left ? 2 : -1) + d * u * 4 + Math.sin(u * 9) * 0.8;
+      const y = f.headY - f.artTop + 1 + u * 11;
+      out.push(cmd("snowflake", k % 2, Math.round(x), Math.round(y), { oy: 0.5, alpha: Math.min(1, (1 - u) * 2), layer: "body", depth: bodyDepth(f) + 0.15 }));
+      break;
+    }
+    case "qWishGlow": {
+      // 새해 소원 등불: 손에 든 풍등 둘레의 따뜻한 번짐 (밤에 밝게, 뒷모습은 몸에 가려 없음)
+      if (f.hidden || f.dir === DIR.up) return;
+      const flick = calm ? 1 : 0.85 + 0.15 * Math.sin(t / 110) * Math.sin(t / 47);
+      out.push(cmd("qLampFlare", 0, Math.round(f.x + f.hand.dx), Math.round(f.headY - f.hand.up - 5), { alpha: (night ? 0.9 : 0.25) * flick, sx: 1.1, sy: 1.1, layer: "light", depth: 0 }));
+      break;
+    }
+    case "qLamp": {
+      if (f.hidden || f.dir === DIR.up) return;
+      // 이마 등불: 옆을 보면 앞으로 뻗는 빛줄기, 앞을 보면 번짐 (밤엔 환하게, 낮엔 은은하게)
+      const flick = calm ? 1 : 0.9 + 0.1 * Math.sin(t / 90) * Math.sin(t / 37);
+      const al = (night ? 1 : 0.35) * flick;
+      const ly = Math.round(f.headY - f.artTop + 3);
+      if (f.dir === DIR.down) out.push(cmd("qLampFlare", 0, Math.round(bx - 0.5), ly - 1, { alpha: al * 0.8, sx: 0.75, sy: 0.75, layer: "light", depth: 0 }));
+      else {
+        const d = f.dir === DIR.right ? 1 : -1;
+        out.push(cmd("qLampBeam", 0, Math.round(bx + d * 5), ly, { ox: d > 0 ? 0 : 1, flip: d < 0, alpha: al, layer: "light", depth: 0 }));
+      }
+      break;
+    }
+  }
+}
+
 function cmd(art: FxArtId, frame: number, x: number, y: number, o: Partial<FxCmd> = {}): FxCmd {
   return { art, frame, x, y, ox: 0.5, oy: 0.5, alpha: 1, sx: 1, sy: 1, rot: 0, flip: false, layer: "body", depth: y, ...o };
 }
@@ -1817,6 +2341,48 @@ export function fxIconGrid(id: string): Grid | null {
       blit(g, art, 0, Math.floor((16 - a.w) / 2), 15 - a.h);
       return g;
     }
+    case "q_pet_goldfish":
+      blit(g, "qGoldfish", 0, 1, 2);
+      return g;
+    case "q_pet_penguin":
+      blit(g, "qPenguin", 0, 2, 4);
+      return g;
+    case "q_back_kite":
+      blit(g, "qKite", 0, 4, 0);
+      for (let i = 0; i < 5; i++) g.set(3 - Math.floor(i / 2), 11 + i, 0xeae6dc);
+      blit(g, "qReel", 0, 0, 11);
+      return g;
+    case "q_aura_snowglobe": {
+      // 붉은 받침 위 유리 구슬 + 눈송이
+      g.ellipse(8, 7, 6.5, 6.5, 0xd8f4ff, 90);
+      g.ellipse(8, 7, 5.5, 5.5, 0x7ab8e8, 60);
+      g.ellipse(8, 10.5, 4.5, 1.5, 0xffffff);
+      g.rect(3, 13, 10, 3, 0xb8323a);
+      g.hline(3, 12, 13, 0xf2c43a);
+      blit(g, "snowflake", 0, 5, 3);
+      blit(g, "snowflake", 1, 9, 6);
+      g.set(5, 3, 0xffffff);
+      g.set(4, 4, 0xffffff);
+      g.outline(0x2a3a5a, false, 170);
+      return g;
+    }
+    case "q_aura_firefly":
+      for (const [x, y, fr] of [[1, 2, 0], [9, 1, 0], [5, 6, 1], [11, 8, 0], [2, 11, 0], [8, 12, 1]] as const) blit(g, "qFirefly", fr, x, y);
+      return g;
+    case "q_aura_nightfish": {
+      // 달 + 물결 고리 + 뛰어오르는 물고기
+      g.ellipse(11.5, 3.5, 3, 3, 0xf4f0d8);
+      g.ellipse(13, 2.6, 2.2, 2.2, 0x000000, 0);
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if ((g.px[y * 16 + x] & 255) === 0) g.px[y * 16 + x] = 0;
+      g.ellipse(8, 12.5, 7.5, 2.6, 0x8ac8f0, 200);
+      g.ellipse(8, 12.5, 6, 1.6, 0x2a3a6a, 255);
+      g.ellipse(8, 12.5, 3.6, 0.9, 0x8ac8f0, 200);
+      blit(g, "qJumpFish", 0, 3, 6);
+      blit(g, "qGlint", 0, 0, 1);
+      blit(g, "qGlint", 1, 5, 2);
+      return g;
+    }
+    case "q_ride_carp":
     case "pet_hound":
     case "pet_goose":
     case "pet_deer": {
@@ -1836,6 +2402,7 @@ export function fxIconGrid(id: string): Grid | null {
       return g;
     }
     default:
-      return null;
+      // 11/15: 말랑 꾸미기 묶음 (시트 그림·따로 그리는 연출 둘 다)
+      return cuteIconGrid(id);
   }
 }

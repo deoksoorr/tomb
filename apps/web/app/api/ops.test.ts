@@ -180,6 +180,11 @@ describe("31번 운영자 계정", () => {
     await setStaff(op.visitorId);
     const ok = await megaphone.POST(call("/api/megaphone", { visitor: op, body: { itemId: "mega_all", text: "오늘 밤 모닥불 모여요", channel: 1 } }));
     expect(ok.status).toBe(200);
+    // 11/15: 보낸 이는 운영자도 닉네임 그대로 + staff 표시 (화면이 금색·"운영자" 딱지)
+    const sent = (await ok.json()) as { entry: { name: string; staff?: true; system?: true } };
+    expect(sent.entry.name).toBe((await bodyOf<Me>(me.GET(call("/api/me", { visitor: op })))).name);
+    expect(sent.entry.staff).toBe(true);
+    expect(sent.entry.system).toBeUndefined();
     const no = await megaphone.POST(call("/api/megaphone", { visitor: user, body: { itemId: "mega_ch", text: "안녕하세요", channel: 1 } }));
     expect(no.status).toBe(409);
   });
@@ -193,8 +198,13 @@ describe("31번 운영자 계정", () => {
       if (r.mode !== "channel") throw new Error("채널 입장이 아님");
       return verifyJoinToken("dev-join-secret-change-me", r.token);
     };
-    expect((await tokenOf(op))?.staff).toBe(true);
+    const opToken = await tokenOf(op);
+    expect(opToken?.staff).toBe(true);
     expect((await tokenOf(user))?.staff).toBeUndefined();
+    // 11/15: 운영자도 이름은 닉네임 그대로 (예전처럼 "대장"으로 바꾸지 않는다)
+    const opName = (await bodyOf<Me>(me.GET(call("/api/me", { visitor: op })))).name;
+    expect(opToken?.name).toBe(opName);
+    expect(opToken?.name).not.toBe("대장");
   });
 
   it("묘비 삭제: 운영자 계정 + 관리자 IP 둘 다 맞아야 한다", async () => {

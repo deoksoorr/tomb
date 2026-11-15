@@ -96,10 +96,16 @@ describe("events", () => {
   });
 
   it("5번 이모티콘·24번 벤치 상태: 정해진 id만 받는다", async () => {
-    const { EMOS, SEAT_MOODS } = await import("./constants");
-    expect(EMOS.length).toBeGreaterThanOrEqual(12);
+    const { EMOS, QUEST_EMO_IDS, SEAT_MOODS } = await import("./constants");
+    expect(EMOS.length).toBeGreaterThanOrEqual(50);
     expect(new Set(EMOS.map((e) => e.id)).size).toBe(EMOS.length);
+    // 앞 14개는 순서 그대로 (단축키 1~9·옛 즐겨찾기)
+    expect(EMOS.slice(0, 14).map((e) => e.id)).toEqual(["heart", "laugh", "cry", "wow", "what", "bang", "clap", "angry", "zzz", "coffee", "fire", "note", "sweat", "idea"]);
+    // 11/15 수집 의뢰 이모티콘(맨 끝 8개)은 이름이 조금 길다 ("의뢰 완료 도장")
+    for (const e of EMOS) expect(e.label.length, e.id).toBeLessThanOrEqual(QUEST_EMO_IDS.includes(e.id as never) ? 8 : 5);
+    expect(EMOS.slice(-QUEST_EMO_IDS.length).map((e) => e.id)).toEqual([...QUEST_EMO_IDS]);
     expect(parseC2S('{"t":"emo","id":"heart"}')).toEqual({ t: "emo", id: "heart" });
+    expect(parseC2S('{"t":"emo","id":"ghost"}')).toEqual({ t: "emo", id: "ghost" });
     expect(parseC2S('{"t":"emo","id":"bomb"}')).toBeNull();
     expect(parseC2S('{"t":"emo"}')).toBeNull();
     expect(SEAT_MOODS.length).toBeGreaterThanOrEqual(6);
@@ -226,11 +232,14 @@ describe("names", () => {
     expect(checkName("가".repeat(13)).ok).toBe(false);
     expect(checkName("hi!").ok).toBe(false);
     expect(checkName("관리 자").ok).toBe(false);
-    // 운영자 공개 이름("대장")·옛 이름("운영자")은 일반 닉네임으로 흉내 낼 수 없다
+    // 운영자 흉내 막기: "운영자"·"운영진"·"운영팀", 예전 공개 이름 "대장"은 일반 닉네임으로 쓸 수 없다
     expect(checkName("대장").ok).toBe(false);
     expect(checkName("진짜 대장").ok).toBe(false);
     expect(checkName("대장장이").ok).toBe(true);
     expect(checkName("운영자").ok).toBe(false);
+    expect(checkName("진짜 운영자").ok).toBe(false);
+    expect(checkName("운영 진").ok).toBe(false);
+    expect(checkName("운영팀장").ok).toBe(false);
     expect(checkName("Fu_ck").ok).toBe(false);
     expect(checkName("dev_kim 2").ok).toBe(true);
   });

@@ -1115,6 +1115,36 @@
   line-height: 12px;
 }
 
+/* 11/15 궁극기 칸(F): 왼쪽에 살짝 띄우고 금빛 점선 테 · 자동 칸 표시 · 궁극기 SP 남겨 두기 */
+.slot[data-ult] {
+  margin-left: 6px;
+  outline: 1px dashed color-mix(in srgb, var(--candle) 60%, transparent);
+  outline-offset: -4px;
+}
+
+.slotAuto {
+  color: var(--moss);
+  font-family: var(--font-small);
+  font-size: 9px;
+}
+
+.autoRow {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.autoKeep {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
 .slotEmpty {
   width: 32px;
   height: 32px;

@@ -120,7 +120,7 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
   const progress = clamp((k + (total / Math.max(1, huntTotal(plan))) * 0.999) / (plan.length + 1), 0, 1);
   // 같은 난이도에서 뒤에 열리는 사냥터는 포인트도 조금 더 (power 1.3 → ×1.15)
   let points = total > 0 ? D.huntPoints * (1 + (zone.power - 1) / 2) * (0.15 + 0.85 * (cleared ? 1 : progress)) : 0;
-  // 11/15: EXP 감소 기준은 그 사냥터가 열리는 레벨
+  // 11/15: EXP 감소 기준은 그 사냥터가 열리는 레벨 (야근 빌딩은 층마다 정해진 초월 EXP — lib/rpg/tower)
   let xp = exp * levelPenalty(t.level, t.difficulty, zone);
   if (r.died) {
     points *= 0.5;

@@ -3,16 +3,16 @@ import { DEX_CAT_LABEL, DEX_TITLES, dexTitleNeed, type DexCat, type DexTitleTier
 import { HOUSE_TITLES } from "./housing/catalog";
 
 // 칭호 목록 (화면·게임·서버 공용 순수 정의). id는 @tomb/protocol TITLE_IDS (착용 목록에 실려 다른 사람에게도 보인다).
-//  - 등급 4단계 (동 · 은 · 금 · 전설): 머리 위 칭호 모양(game/entities/TitleView)·가방 카드 색·칭호 능력이 등급을 따른다
-//  - 얻는 방법: 도감 절반·전부 / 주간 1위 (랭킹별 · 누적 횟수) / 집 꾸밈 점수 / 사냥 레벨·누적 처치·어려운 사냥터 완주 /
+//  - 등급 4단계 (동 · 은 · 금 · 전설) + 11/15 신화 (서버에 한 사람 — 서버 최초·꼭대기 층 주인·이번 주 최고층): 머리 위 칭호 모양(game/entities/TitleView)·가방 카드 색·칭호 능력이 등급을 따른다
+//  - 얻는 방법: 도감 절반·전부 / 주간 1위 (랭킹별 · 누적 횟수) / 집 꾸밈 점수 / 사냥 레벨·누적 처치·어려운 사냥터 완주·초월 레벨·야근 빌딩 층·개척자 /
 //    낚시 누적·가장 큰 물고기 / 채집 누적 / 연속 출석 / 누적 접속 시간 / 꾸미기 점수
 //  - 한 번 얻은 칭호는 기록이 내려가도(연속 출석이 끊기거나 집 점수·꾸미기 점수가 내려가도) 남는다 — 서버가 알린 칭호 기록을 함께 본다 (lib/titlesServer)
 //  - 칭호 능력: 단 칭호 하나의 등급만큼 마을 이동 속도 + · 상점 구입 할인 (TITLE_PERKS)
 // 얻었는지는 서버(lib/titlesServer)가 판단하고, 착용도 얻은 칭호만 받는다 (운영자 계정은 모두 얻은 것으로 본다).
 
-export type TitleGrade = "bronze" | "silver" | "gold" | "legend";
-export const TITLE_GRADES: readonly TitleGrade[] = ["bronze", "silver", "gold", "legend"];
-export const TITLE_GRADE_NAMES: Record<TitleGrade, string> = { bronze: "동", silver: "은", gold: "금", legend: "전설" };
+export type TitleGrade = "bronze" | "silver" | "gold" | "legend" | "mythic";
+export const TITLE_GRADES: readonly TitleGrade[] = ["bronze", "silver", "gold", "legend", "mythic"];
+export const TITLE_GRADE_NAMES: Record<TitleGrade, string> = { bronze: "동", silver: "은", gold: "금", legend: "전설", mythic: "신화" };
 
 /**
  * 칭호 능력 (단 칭호 하나만): 등급이 높을수록 크다. 값은 여기 한 곳.
@@ -24,6 +24,8 @@ export const TITLE_PERKS: Readonly<Record<TitleGrade, { speed: number; discount:
   silver: { speed: 1.02, discount: 0.02 },
   gold: { speed: 1.04, discount: 0.04 },
   legend: { speed: 1.07, discount: 0.07 },
+  // 11/15 신화: 능력은 전설과 같다 (실시간 서버 속도 검증 안 — 위 speed 설명)
+  mythic: { speed: 1.07, discount: 0.07 },
 };
 
 export type TitleGroup = "dex" | "hunt" | "life" | "fish" | "look" | "champ" | "house";
@@ -40,7 +42,8 @@ export const TITLE_GROUPS: readonly TitleGroup[] = ["dex", "hunt", "fish", "life
 
 /**
  * 진행 수치 (서버 lib/titlesServer가 센다). 단위: 레벨·마리·종·일·점, stay = 머문 기록 수(10분씩), big = 가장 큰 물고기 mm,
- * dex_{칸} = 그 도감 칸 등록 종 수, champ = 주간 1위 누적 횟수, hard·hell = 끝까지 깬 적 있음(1/0)
+ * dex_{칸} = 그 도감 칸 등록 종 수, champ = 주간 1위 누적 횟수, hard·hell = 끝까지 깬 적 있음(1/0).
+ * 11/15 tlv = 초월 레벨(1 = ★51), floor = 야근 빌딩 최고 층, pioneer = 개척자 번호(0 = 없음), pioneerAt = 개척자 받은 시각 ms (진행 표시용, 칭호 조건 아님)
  */
 export type TitleMetric =
   | "lv"
@@ -55,6 +58,13 @@ export type TitleMetric =
   | "look"
   | "champ"
   | "house"
+  | "tlv"
+  | "floor"
+  | "pioneer"
+  | "pioneerAt"
+  // 11/15 수집 의뢰: 끝낸 의뢰 수 · 수집가 유령 외형 받음(1/0)
+  | "quests"
+  | "qking"
   | `dex_${DexCat}`;
 
 export type TitleDef = {
@@ -69,6 +79,10 @@ export type TitleDef = {
   need?: number;
   /** 주간 1위 랭킹별 칭호 */
   board?: ChampBoard;
+  /** 11/15 신화: 서버에 한 사람만 (서버가 주인을 정한다 — TitleFacts.mythic) */
+  holder?: true;
+  /** 11/15 지금 주인일 때만 (기록을 뺏기거나 주가 바뀌면 사라진다 — 한 번 얻어도 남지 않는다) */
+  transient?: true;
 };
 
 /** 단계별 칭호 한 줄: [id, 이름, 등급, 얻는 방법, 진행 수치, 필요 값, 갈래] */
@@ -108,6 +122,17 @@ const STEP_ROWS: readonly StepRow[] = [
     ["t_kill20k", "몬스터 감원 위원장", "legend", "누적 처치 20,000마리", "kills", 20000, "hunt"],
     ["t_hard", "고난도 출장 완료", "silver", "어려움 사냥터를 쓰러지지 않고 끝까지 깨면", "hard", 1, "hunt"],
     ["t_hell", "지옥 출장 생환자", "gold", "지옥 사냥터를 쓰러지지 않고 끝까지 깨면", "hell", 1, "hunt"],
+    // 11/15 사냥 끝판 (lib/rpg/endgame · 야근 빌딩 lib/rpg/tower)
+    ["t_tlv60", "연봉 협상 대상자", "silver", "초월 레벨 ★60 (레벨 50에서 지옥 사냥으로)", "tlv", 10, "hunt"],
+    ["t_tlv75", "임원 후보", "gold", "초월 레벨 ★75", "tlv", 25, "hunt"],
+    ["t_tlv90", "상무님", "gold", "초월 레벨 ★90", "tlv", 40, "hunt"],
+    ["t_tlv100", "퇴사가 불가능한 자", "legend", "초월 레벨 ★100 (최고)", "tlv", 50, "hunt"],
+    ["t_floor10", "야근 입문", "bronze", "마을의 야근 빌딩에서 10층을 깨면", "floor", 10, "hunt"],
+    ["t_floor20", "번아웃 생존자", "silver", "야근 빌딩 20층을 깨면", "floor", 20, "hunt"],
+    ["t_floor30", "야근이 일상", "gold", "야근 빌딩 30층을 깨면", "floor", 30, "hunt"],
+    ["t_floor50", "퇴근을 잊은 자", "gold", "야근 빌딩 50층을 깨면", "floor", 50, "hunt"],
+    ["t_floor100", "사무실이 집", "legend", "야근 빌딩 100층을 깨면", "floor", 100, "hunt"],
+    ["t_pioneer", "개척자", "gold", "끝판이 열린 뒤 14일 안에 ★51에 닿거나 야근 빌딩 5층을 처음 넘으면 (닿은 차례대로 번호, 그 뒤로는 못 얻음)", "pioneer", 1, "hunt"],
     ["t_fishn50", "점심시간 낚시꾼", "bronze", "물고기를 모두 합쳐 50마리 낚으면 (자동 낚시 포함)", "fishn", 50, "fish"],
     ["t_fishn300", "주말 강태공", "silver", "물고기 누적 300마리", "fishn", 300, "fish"],
     ["t_fishn1k", "어부 출신 대리", "gold", "물고기 누적 1,000마리", "fishn", 1000, "fish"],
@@ -132,8 +157,25 @@ const STEP_ROWS: readonly StepRow[] = [
     ["t_look600", "멋쟁이 사원", "silver", "꾸미기 점수 600점", "look", 600, "look"],
     ["t_look1500", "출근룩 장인", "gold", "꾸미기 점수 1,500점", "look", 1500, "look"],
     ["t_look3000", "마을 패션 아이콘", "legend", "꾸미기 점수 3,000점", "look", 3000, "look"],
+    // 11/15 수집 의뢰 (lib/forage/quests): 오늘의 의뢰·이번 주 큰 의뢰를 끝낸 수 · 도장 교환소의 수집가 유령 외형
+    ["t_quest50", "단골 납품업자", "bronze", "수집 의뢰를 모두 합쳐 50개 끝내면", "quests", 50, "fish"],
+    ["t_quest300", "수집가 유령의 오른팔", "silver", "수집 의뢰 300개", "quests", 300, "fish"],
+    ["t_quest1k", "의뢰 해결사", "gold", "수집 의뢰 1,000개", "quests", 1000, "fish"],
+    ["t_quest2500", "전설의 납품왕", "legend", "수집 의뢰 2,500개", "quests", 2500, "fish"],
+    ["t_qking", "수집왕", "gold", "도장 교환소에서 수집가 유령 외형을 받으면", "qking", 1, "fish"],
 ];
 const STEP_OF = new Map(STEP_ROWS.map((r) => [r[0], r]));
+
+/** 11/15 신화 (서버에 한 사람). transient = 지금 주인일 때만 */
+const MYTHIC_ROWS: readonly (readonly [TitleId, string, string, boolean])[] = [
+  ["t_first30", "최초 결재자", "서버에서 가장 먼저 야근 빌딩 30층을 깬 한 사람 (영원히)", false],
+  ["t_first50", "최초 임원", "서버에서 가장 먼저 야근 빌딩 50층을 깬 한 사람 (영원히)", false],
+  ["t_first100", "빌딩의 전설", "서버에서 가장 먼저 야근 빌딩 100층을 깬 한 사람 (영원히)", false],
+  ["t_firstStar100", "첫 번째 상무", "서버에서 가장 먼저 초월 레벨 ★100에 오른 한 사람 (영원히)", false],
+  ["t_topFloor", "꼭대기 층 주인", "지금 야근 빌딩 최고 층 기록을 가진 한 사람 (기록을 뺏기면 넘어가요)", true],
+  ["t_weekFloor", "이번 주 최고층", "지난주 야근 빌딩 주간 최고 층 1위 (이번 주 한 주 동안)", true],
+];
+const MYTHIC_OF = new Map(MYTHIC_ROWS.map((r) => [r[0], r]));
 
 function def(id: TitleId): TitleDef {
   const dex = DEX_OF[id];
@@ -151,6 +193,8 @@ function def(id: TitleId): TitleDef {
   }
   const r = STEP_OF.get(id);
   if (r) return { id, name: r[1], group: r[6], grade: r[2], how: r[3], metric: r[4], need: r[5] };
+  const my = MYTHIC_OF.get(id);
+  if (my) return { id, name: my[1], group: "hunt", grade: "mythic", how: my[2], holder: true, ...(my[3] ? { transient: true as const } : {}) };
   return { id, name: id, group: "dex", grade: "bronze", how: "" };
 }
 
@@ -166,6 +210,22 @@ export function titleDef(id: string | null | undefined): TitleDef | null {
 export function titleLabel(id: string | null | undefined): string | null {
   const t = titleDef(id);
   return t ? `「${t.name}」` : null;
+}
+
+/**
+ * 11/15 운영자 전용 칭호 「서버비 내는 사람」 (등급 "신화" — 전설 위). 착용 목록(TITLE_IDS)에 없는 표시 전용 칭호:
+ * 실시간 서버·/api/me가 알린 운영자 표시(Vercel 서명)일 때만 머리 위에 저절로 뜨고, 낀 칭호가 있어도 그 자리를 이 칭호가 대신한다.
+ * 일반 계정은 달 수도, 착용 목록으로 흉내 낼 수도 없다 (가방 칭호 칸에도 운영자에게만 보인다). 칭호 능력은 없다 (낀 칭호의 능력은 그대로)
+ */
+/** 11/15: 이름은 정직한 "운영자" 대신 운영자다운 농담으로 (저승사자 차림과 같이 보면 누군지 안다) */
+export const STAFF_TITLE = { name: "서버비 내는 사람", gradeName: "신화", how: "운영자 계정에만 보여요. 칭호 능력은 없어요." } as const;
+
+/**
+ * 머리 위에 띄울 칭호: 운영자 표시(서명된 staff)면 낀 칭호와 상관없이 운영자 전용 "staff", 아니면 낀 칭호 (없거나 모르는 id면 null).
+ * 운영자 전용 칭호는 착용 목록 id가 아니라서 일반 계정은 어떤 착용 목록으로도 띄울 수 없다
+ */
+export function headTitle(wornId: string | null | undefined, staff: boolean): TitleDef | "staff" | null {
+  return staff ? "staff" : titleDef(wornId);
 }
 
 /** 착용 목록의 칭호 정의 */
@@ -198,6 +258,14 @@ export function discountedPrice(price: number, discount: number): number {
   return Math.max(0, Math.min(price - 1, Math.floor(price * (1 - discount))));
 }
 
+/** 개척자 칭호 카드 한 줄 ("#3 · 2026.11.20 달성"). 번호가 없으면 "" */
+export function pioneerText(n: number | undefined, at: number | undefined): string {
+  if (!n) return "";
+  if (!at) return `#${n}`;
+  const d = new Date(at + 9 * 3_600_000);
+  return `#${n} · ${d.getUTCFullYear()}.${d.getUTCMonth() + 1}.${d.getUTCDate()} 달성`;
+}
+
 /** 진행 표시 ("1,234 / 5,000", 접속 시간은 "12시간 / 50시간", 큰 물고기는 cm) */
 export function progressText(t: TitleDef, value: number): string {
   if (!t.metric || t.need === undefined) return "";
@@ -205,6 +273,10 @@ export function progressText(t: TitleDef, value: number): string {
   if (t.metric === "stay") return `${Math.floor(hours(value))}시간 / ${hours(t.need)}시간`;
   if (t.metric === "big") return `${(value / 10).toFixed(1)}cm / ${t.need / 10}cm`;
   if (t.metric === "hard" || t.metric === "hell") return value > 0 ? "완주" : "아직";
+  if (t.metric === "tlv") return `${value > 0 ? `★${50 + Math.min(value, t.need)}` : "초월 전"} / ★${50 + t.need}`;
+  if (t.metric === "floor") return `${Math.min(value, t.need)}층 / ${t.need}층`;
+  if (t.metric === "pioneer") return value > 0 ? `#${value}` : "아직";
+  if (t.metric === "qking") return value > 0 ? "받음" : "아직";
   return `${v.toLocaleString("ko-KR")} / ${t.need.toLocaleString("ko-KR")}`;
 }
 
@@ -217,6 +289,8 @@ export type TitleFacts = {
   champBoards: readonly ChampBoard[];
   /** 진행 수치 (TitleMetric → 값). 없는 값은 0 */
   metrics: Partial<Record<TitleMetric, number>>;
+  /** 11/15 지금 주인인 신화 칭호 (서버 최초·꼭대기 층 주인·이번 주 최고층) */
+  mythic?: readonly string[];
 };
 
 /** 얻은 칭호 id (지금 기록 기준 — 서버는 예전에 알린 칭호를 더해 "한 번 얻으면 남게" 한다) */
@@ -224,6 +298,7 @@ export function earnedTitleIds(f: TitleFacts): TitleId[] {
   return TITLES.filter((t) => {
     if (t.group === "dex") return f.dexTitleNames.includes(t.name);
     if (t.board) return f.champBoards.includes(t.board);
+    if (t.holder) return !!f.mythic?.includes(t.id);
     return t.metric !== undefined && t.need !== undefined && (f.metrics[t.metric] ?? 0) >= t.need;
   }).map((t) => t.id);
 }
