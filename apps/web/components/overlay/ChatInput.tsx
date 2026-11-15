@@ -122,11 +122,11 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
       </div>
       <p className={styles.meta} aria-live="polite">
         {slow ? (
-          <span className={styles.slow}>천천히 — 너무 빨리 치면 잠깐 막혀요</span>
+          <span className={styles.slow}>너무 빨리 치면 잠깐 막혀요</span>
         ) : masked ? (
           <span>일부 낱말·주소는 ***로 가려져요</span>
         ) : (
-          <span>같은 채널에 5분 동안 보여요 · 서버에 5분만 머물고 사라져요</span>
+          <span>같은 채널에 5분 동안 보이고 사라져요</span>
         )}
         <span className={styles.count}>
           {[...text].length}/{CHAT_MAX}

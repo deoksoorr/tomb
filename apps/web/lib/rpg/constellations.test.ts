@@ -6,7 +6,7 @@ import { SEASONS } from "../ambience";
 import { DIFFICULTIES, type Difficulty } from "./catalog";
 import { CONSTELLATIONS, constellationById, STAR_COUNT } from "./constellations";
 import { clamp, seeded } from "./formulas";
-import { STAR_APPROACH, starGroups, starsCount, starsPlan, STARS_PLAN_VER, type StarSky } from "./plan";
+import { STAR_APPROACH, STAR_DEX_MAX, STAR_REC_DEX, starGroups, starsCount, starsPlan, STARS_PLAN_VER, starWindows, type StarSky } from "./plan";
 import { checkStarGroups, evaluate, type TicketInfo } from "./rewards";
 import { starsPlanV1, V1_SIZE, V1_TABLE } from "./starsPlanV1";
 import type { StarsResult } from "./types";
@@ -338,5 +338,17 @@ describe("별자리 도감", () => {
     expect(s.dex.c_diet).toEqual({ n: 1, max: 0, first: "20261115", pf: 1 });
     expect(dexPercent(s.dex, "star")).toBe(Math.floor((2 * 100) / CONSTELLATIONS.length));
     expect(dexFromHash({ "n:c_gym": "3", "first:c_gym": "20261114", "pf:c_gym": "2" })).toEqual({ c_gym: { n: 3, max: 0, first: "20261114", pf: 2 } });
+  });
+
+  it("판정은 DEX로만 넓어진다: STAR_DEX_MAX에서 끝 · 권장 DEX는 그 안에서 난이도 순 · 권장 DEX면 한 단계 쉬운 난이도의 기본 '완벽' 범위쯤", () => {
+    for (const d of DIFFICULTIES) {
+      expect(starWindows(d, STAR_DEX_MAX)).toEqual(starWindows(d, 999));
+      expect(starWindows(d, STAR_DEX_MAX - 1)[1]).toBeLessThanOrEqual(starWindows(d, STAR_DEX_MAX)[1]);
+      expect(STAR_REC_DEX[d]).toBeLessThanOrEqual(STAR_DEX_MAX);
+    }
+    const rec = DIFFICULTIES.map((d) => STAR_REC_DEX[d]);
+    expect([...rec].sort((a, b) => a - b)).toEqual(rec);
+    expect(Math.abs(starWindows("hard", STAR_REC_DEX.hard)[0] - starWindows("normal", 0)[0])).toBeLessThanOrEqual(2);
+    expect(Math.abs(starWindows("hell", STAR_REC_DEX.hell)[0] - starWindows("hard", 0)[0])).toBeLessThanOrEqual(2);
   });
 });

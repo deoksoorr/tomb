@@ -36,7 +36,7 @@ export default function RideButton({ variant, className }: { variant: "desktop" 
             },
           })}
       aria-label={ride.riding ? `${name}에서 내리기` : `${name}에 올라타기`}
-      title={ride.riding ? "내리기 (R)" : ride.can ? "올라타기 (R)" : "지금은 탈 수 없어요 (물·자리·놀이기구에서 내린 뒤)"}
+      title={ride.riding ? "내리기 (R)" : ride.can ? "올라타기 (R)" : "지금은 탈 수 없어요. 물이나 자리, 놀이기구에서 먼저 나와 주세요"}
     >
       {ride.riding ? "내리기" : "타기"}
       {variant === "desktop" && <kbd>R</kbd>}

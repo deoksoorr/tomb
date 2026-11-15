@@ -19,6 +19,8 @@ export const HAMMOCK_FRONT = 6;
 export const INDOOR_FRONT = 2;
 /** 발밑에서 이름표 위까지 (말풍선 포함) */
 const LABEL_TOP = 34;
+/** 11/15 망원경 자리를 쓰는 사람 이름표 위 표시 (1인 1망원경 — 쓰는 중인 게 보이게) */
+export const STARGAZE_TAG = "별 보는 중";
 export class RemoteAvatar {
   readonly view: AvatarView;
   readonly interp = new Interpolator();
@@ -87,6 +89,7 @@ export class RemoteAvatar {
     this.view.depthOverride = null;
     // 차지한 자리(의자·나무·그네)에 있는 동안은 그 앵커에 고정한다 (보간이 늦어도 자리 위에 정확히)
     const slot = this.seatId ? seatSlot(this.seatId) : undefined;
+    this.view.setDoing(slot?.kind === "telescope" ? STARGAZE_TAG : null);
     // 움직이는 자리(조각배)는 앵커(나루터)에 묶지 않는다 — 배를 따라 보간 위치 그대로
     if (slot && slot.state === o.state && !slot.mobile) {
       x = slot.x;

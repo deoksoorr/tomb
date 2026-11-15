@@ -54,15 +54,15 @@ export function checkLearn(a: Alloc, id: string, budget: number): RuleError | nu
 export function checkAllocation(a: Record<string, unknown>, budget: number): RuleError | null {
   for (const [id, n] of Object.entries(a)) {
     const def = skillById(id);
-    if (!def) return err(400, "INVALID_INPUT", `없는 스킬이 있어요: ${id}`);
+    if (!def) return err(400, "INVALID_INPUT", `없는 스킬이 들어 있어요 (${id}).`);
     if (typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > def.maxLevel) return err(400, "INVALID_INPUT", `${def.name} 랭크가 맞지 않아요.`);
   }
   const alloc = a as Alloc;
   for (const def of SKILLS) {
     if (!(alloc[def.id] ?? 0)) continue;
-    if (!tierOpen(alloc, def.branch, def.tier)) return err(409, "TIER_LOCKED", `${def.name}: ${def.tier}단이 아직 안 열렸어요.`);
+    if (!tierOpen(alloc, def.branch, def.tier)) return err(409, "TIER_LOCKED", `${def.name} 스킬은 ${def.tier}단이 아직 안 열려서 못 찍어요.`);
     for (const r of def.requires ?? [])
-      if ((alloc[r.id] ?? 0) < r.level) return err(409, "SKILL_REQUIRED", `${def.name}: ${skillById(r.id)!.name} ${r.level}랭크가 먼저 필요해요.`);
+      if ((alloc[r.id] ?? 0) < r.level) return err(409, "SKILL_REQUIRED", `${def.name} 스킬을 찍으려면 ${skillById(r.id)!.name} ${r.level}랭크가 먼저 필요해요.`);
   }
   if (spentPoints(alloc) > budget) return err(409, "NO_SKILL_POINTS", "쓴 스킬 포인트가 가진 것보다 많아요.");
   return null;

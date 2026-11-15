@@ -12,7 +12,7 @@ export function dexGainText(g: DexGain | undefined): string {
   if (!g || g.points <= 0) return "";
   const parts: string[] = [];
   if (g.earned > 0) parts.push(`도감 +${g.earned}P`);
-  if (g.pending > 0) parts.push(`받을 도감 보상 +${g.pending}P (오늘 한도 — 도감 창에서 받기)`);
+  if (g.pending > 0) parts.push(`받을 도감 보상 +${g.pending}P (오늘 한도라 도감 창에서 받아요)`);
   for (const t of g.titles) parts.push(`칭호 「${t}」`);
   return parts.join(" · ");
 }

@@ -67,7 +67,7 @@ export const MT_MONSTERS: Record<MtMonsterId, MonsterDef> = {
   mt_chair: mon({
     id: "mt_chair",
     name: "회의 주재자",
-    desc: "\"마지막으로 한 가지만 더.\" 말할 때마다 테이블이 밀려와 방이 좁아지고 참석자가 늘어난다. 끝에는 의자를 돌리며 사방으로 쏜다.",
+    desc: "\"마지막으로 한 가지만 더.\" 말할 때마다 테이블이 밀려와 방이 좁아지고 참석자가 늘어나요. 마지막엔 의자를 돌리며 사방으로 쏴요.",
     hp: 2200,
     atk: 24,
     def: 9,
@@ -96,7 +96,7 @@ export const MT_ZONE_DEF: ZoneDef = {
   power: 1.2,
   gimmick: {
     name: "회의 연장",
-    desc: "주기적으로 바닥에 노란 줄이 그어지고, 그 자리로 가장자리 테이블이 밀려 들어와 방이 좁아진다. 움직이는 테이블에 닿으면 밀리고 다친다. 우두머리를 오래 붙잡을수록 방이 작아진다 (층마다 처음으로).",
+    desc: "가끔 바닥에 노란 줄이 그어지면 그 자리로 가장자리 테이블이 밀려 들어와 방이 좁아져요. 움직이는 테이블에 닿으면 밀리고 다쳐요. 우두머리와 오래 싸울수록 방이 작아져요. 층마다 처음 크기로 돌아가요.",
   },
   pool: [...MT_POOL],
   boss: MT_BOSS,
@@ -133,10 +133,10 @@ export function meetingTime(min: number): MtTime {
 /** 다시 올 때마다 붙는 회의 이름·몬스터 특성 (앞의 것도 계속) */
 export const MT_LOOPS: readonly { name: string; trait: string; desc: string }[] = [
   { name: "노을 회의", trait: "", desc: "블라인드 틈으로 주황 노을이 줄무늬로 든다." },
-  { name: "야근 회의", trait: "카페인 각성", desc: "블라인드가 내려가고 형광등이 흐려진다. 몬스터가 가끔 커피 김을 뿜으며 확 빨라진다." },
-  { name: "새벽 회의", trait: "회의록 공유", desc: "푸른 새벽빛. 몬스터가 쓰러지면 가까운 몬스터 둘의 체력이 찬다." },
-  { name: "밤샘 회의", trait: "안건 폭주", desc: "아침 해가 뜬다. 정예 「안건 추가」가 층마다 나오고 더 많이 불러들인다." },
-  { name: "다음 날 회의", trait: "연장 또 연장", desc: "다음 날 낮. 테이블이 더 자주, 더 깊이 밀려온다." },
+  { name: "야근 회의", trait: "카페인 각성", desc: "블라인드가 내려가고 형광등이 흐려져요. 몬스터가 가끔 커피 김을 뿜으며 확 빨라져요." },
+  { name: "새벽 회의", trait: "회의록 공유", desc: "푸른 새벽빛이 들어요. 몬스터가 쓰러지면 가까운 몬스터 둘의 체력이 차요." },
+  { name: "밤샘 회의", trait: "안건 폭주", desc: "아침 해가 떠요. 정예 「안건 추가」가 층마다 나오고 졸개를 더 많이 불러요." },
+  { name: "다음 날 회의", trait: "연장 또 연장", desc: "다음 날 낮이에요. 테이블이 더 자주, 더 깊이 밀려와요." },
 ];
 export const mtLoopInfo = (loop: number) => MT_LOOPS[Math.min(MT_LOOPS.length - 1, Math.max(0, loop))];
 

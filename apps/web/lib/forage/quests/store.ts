@@ -156,6 +156,14 @@ export class MemoryQuestStore implements QuestStore {
     return { status: "ok", stamps: st, total: Number(h.n) };
   }
 
+  /** 도장 더하기 (상한까지, 동기 — 긴급 의뢰 메모리 저장소가 받기와 한 번에 부른다). 새 도장 수 */
+  addStampsNow(acct: string, n: number, cap: number): number {
+    const h = this.h(acct);
+    const st = Math.min(cap, (Number(h.st) || 0) + Math.max(0, n));
+    if (n > 0) h.st = String(st);
+    return Number(h.st) || 0;
+  }
+
   async reroll(acct: string, today: string, slot: number): Promise<RerollResult> {
     const h = this.h(acct);
     if (h.day !== today) {

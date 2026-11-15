@@ -142,7 +142,7 @@ export function TierCompare({ exterior, current }: { exterior?: HouseExteriorMap
 function tierHint(i: number): string {
   if (i === 0) {
     const up = PLOT_TIERS[1];
-    return up ? `분양 뒤 ${up.name}(+${fmt(up.price)}P)·더 큰 터로 넓힐 수 있어요` : "";
+    return up ? `분양받은 뒤 더 큰 터로 넓힐 수 있어요 (${up.name} +${fmt(up.price)}P)` : "";
   }
   const steps = PLOT_TIERS.slice(0, i + 1).map((t) => `${fmt(t.price)}P`).join(" + ");
   return `${PLOT_TIERS[0].name}에서 업그레이드로도 넓힐 수 있어요 (${steps})`;

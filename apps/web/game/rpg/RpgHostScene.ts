@@ -56,7 +56,8 @@ export class RpgHostScene extends Phaser.Scene {
     };
     this.scene.launch(key, data);
     this.scene.bringToTop(key);
-    bridge.emit("scene:changed", { scene: play.game === "hunt" ? "hunt" : "minigame" });
+    // 별자리 잇기는 망원경 앞에 선 채로 한다 → 다른 사람 화면에 망원경 앞 모습이 남는다 (1인 1망원경 — 쓰는 중인 게 보이게)
+    bridge.emit("scene:changed", { scene: play.game === "hunt" ? "hunt" : "minigame", ...(play.game === "stars" ? { stay: true } : {}) });
   }
 
   private end(key: string, worldOn: boolean, result: RunResult, aborted: boolean): void {

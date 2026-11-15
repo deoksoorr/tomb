@@ -1470,7 +1470,7 @@ export class ExecStage implements TowerThemeRuntime {
     }
     // 25%부터 「구조조정」: 방을 훑는 붉은 빛줄기 (틈이 하나 있다)
     if (ratio <= EX_BOSS_FINAL && !this.beam && now >= (s.beamAt ?? 0)) {
-      if (!s.beamAt) H.flash("「구조조정」! 붉은 빛줄기가 방을 훑어요, 초록 틈으로!", 2600);
+      if (!s.beamAt) H.flash("「구조조정」! 붉은 빛줄기가 방을 훑어요. 초록 틈으로 피해요!", 2600);
       s.beamAt = now + 7600;
       const hor = ((s.stamps = (s.stamps ?? 0) + 1) % 2) === 1;
       const lo = hor ? 30 : FLOOR_Y0 + 20;

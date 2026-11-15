@@ -10,8 +10,8 @@ import c from "./HuntCap.module.css";
 type Where = "start" | "bag" | "result";
 
 const FULL_TEXT: Record<Where, string> = {
-  start: "그래도 사냥은 할 수 있어요 — EXP와 주운 물건은 그대로 받아요.",
-  bag: "주운 장비·물약은 지금 팔면 값을 못 받아 가방에 그대로 남아요.",
+  start: "그래도 사냥은 할 수 있어요. EXP와 주운 물건은 그대로 받아요.",
+  bag: "그때까지 가방에 그대로 남아요.",
   result: "이번 판 EXP와 주운 물건은 그대로 받았어요.",
 };
 
@@ -44,11 +44,11 @@ export default function HuntCapMeter({ today, where }: { today: RpgView["today"]
       </div>
       {full ? (
         <p className={c.msg} role="status">
-          <b>오늘 사냥으로 받을 수 있는 포인트를 다 받았어요</b> — 주운 물건은 내일 팔 수 있어요 (상점에서 산 장비는 지금도 {refund} 환불). {FULL_TEXT[where]} 한도는 한국 시간 새벽 5시에
-          다시 차요.
+          <b>오늘 사냥 포인트를 다 받았어요.</b> 주운 물건은 내일 팔 수 있어요. {FULL_TEXT[where]} 상점에서 산 장비는 지금도 {refund} 돌려받아요. 한도는 한국 시간
+          새벽 5시에 다시 차요.
         </p>
       ) : near ? (
-        <p className={c.msg}>곧 오늘 한도예요. 한도를 넘는 포인트는 내일 다시 받을 수 있어요.</p>
+        <p className={c.msg}>곧 오늘 한도에 닿아요. 넘는 만큼은 내일 다시 벌 수 있어요.</p>
       ) : null}
     </div>
   );

@@ -54,6 +54,8 @@ export function toMe(accountId: string, a: AccountRecord, day: string, now: numb
     points: a.points,
     lifetimePoints: a.lifetimePoints,
     todayEarned: a.todayEarned,
+    // 오늘 항목별 적립 (내 정보 게이지). 하나도 없으면 싣지 않는다
+    ...(Object.keys(a.earnedBy).length ? { earnedBy: a.earnedBy } : {}),
     attendance: { today: a.lastAttend === day, streak: a.streak, stayMinutes: a.stayTicks * STAY_TICK_MINUTES, bonusClaimed: a.bonusClaimed },
     hasCode: a.hasCode,
     inventory: a.inventory,

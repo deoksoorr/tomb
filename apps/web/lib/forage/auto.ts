@@ -149,7 +149,7 @@ export function autoNextLabel(ms: number): string {
 }
 
 /** 자동 낚시 안내 (낚시 창·결과 알림이 같이 쓴다) */
-export const AUTO_RANK_NOTE = "자동 낚시로 낚은 물고기는 최대어 순위에 오르지 않아요(크기는 도감에 기록돼요)";
+export const AUTO_RANK_NOTE = "자동 낚시로 낚은 물고기는 최대어 순위에 안 올라가요. 크기는 도감에 남아요.";
 
 /**
  * 종류별 마릿수 요약: "월요병 붕어 5(최대 42.3cm), 야근 메기 1(새 도감·61.0cm) 외 2종".

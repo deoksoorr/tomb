@@ -14,8 +14,8 @@ export default function NotFound() {
         background: "var(--bg)",
       }}
     >
-      <p style={{ color: "var(--bone)", fontSize: 24 }}>여기엔 아무것도 묻혀 있지 않아요.</p>
-      <Link href="/">묘지 입구로 돌아가기</Link>
+      <p style={{ color: "var(--bone)", fontSize: 24 }}>여기엔 아무것도 없어요.</p>
+      <Link href="/">마을로 돌아가기</Link>
     </main>
   );
 }

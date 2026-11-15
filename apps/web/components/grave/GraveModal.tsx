@@ -109,7 +109,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
         const { count, earned } = await api.flower(graveId);
         cache.patch(graveId, { flowers: count });
         setMine((m) => m && { ...m, floweredToday: true });
-        meStore.addEarned(earned);
+        meStore.addEarned(earned, "flower");
         bridge.emit("grave:flowered", { graveId });
         setNotice(withPoints("꽃을 놓았어요.", earned));
       } catch (e) {
@@ -164,7 +164,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
     run("decorate", async () => {
       await decorateGrave(itemId, graveId, cache);
       setTool(null);
-      setNotice(`${itemById(itemId)?.name ?? "꾸미기"}을(를) 놓았어요.`);
+      setNotice(`${itemById(itemId)?.name ?? "꾸미기"} 놓았어요.`);
     });
 
   /** 디자인 바꾸기 = 나머지는 그대로 둔 전체 교체 PATCH. 유료 디자인으로 바꾸면 디자인권 1개 */
@@ -175,7 +175,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
       bridge.emit("grave:changed", { graveId, kind: "updated" });
       if (spendsTicket(style, current.style)) void meStore.refresh();
       setTool(null);
-      setNotice(`${styleName(style)}(으)로 바꿨어요.`);
+      setNotice(`${styleName(style)} 디자인으로 바꿨어요.`);
     });
 
   // 상세를 한 번 받은 뒤 목록에서 사라졌으면(이장·숨김) 더는 보여 줄 것이 없다
@@ -448,7 +448,7 @@ export default function GraveModal({ graveId, graves, onClose, onEdit }: Props) 
               {decor.length >= MAX_DECOR_PER_GRAVE ? (
                 <p>묘비 하나에는 {MAX_DECOR_PER_GRAVE}개까지 놓을 수 있어요. 기간이 끝나면 다시 놓을 수 있어요.</p>
               ) : decorInBag.length === 0 ? (
-                <p>가방에 묘비 꾸미기가 없어요. (묘비 꾸미기는 지금 상점에서 팔지 않아요.)</p>
+                <p>가방에 묘비 꾸미기가 없어요. 지금은 상점에서 팔지 않아요.</p>
               ) : (
                 <>
                   <p className={ui.hint}>

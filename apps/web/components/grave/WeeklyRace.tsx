@@ -83,7 +83,7 @@ export default function WeeklyRace() {
         마감까지 <b>{leftText(race.endsAt - now)}</b>
         <span className={styles.when}> · 월요일 새벽 5시</span>
       </p>
-      <p className={styles.reward}>1위 보상: 전용 모자(한 주) · 전용 오라 · 이름표 배지 · {(champ?.points ?? CHAMP_POINTS_DEFAULT).toLocaleString("ko-KR")}P</p>
+      <p className={styles.reward}>1위는 전용 모자(한 주), 전용 오라, 이름표 배지와 {(champ?.points ?? CHAMP_POINTS_DEFAULT).toLocaleString("ko-KR")}P를 받아요.</p>
       {/* 시상대 3개: 넓은 창은 가로로 나란히, 좁은 창은 세로로 */}
       <div className={styles.boards}>
         {race.boards.map((b) => (
@@ -127,7 +127,7 @@ export default function WeeklyRace() {
         </section>
       )}
       <section className={styles.hallBox} aria-label="여러 랭킹 1위면 합쳐진 오라">
-        <h3 className={styles.title}>여러 개 1위면 · 다관왕 모자 하나 + 합쳐진 오라 하나</h3>
+        <h3 className={styles.title}>여러 랭킹에서 1위면 다관왕 모자와 합쳐진 오라를 받아요</h3>
         <ComboAuras />
       </section>
     </div>

@@ -103,7 +103,7 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
       const r = await forageApi.payDex(cat);
       forageStore.set(r.state);
       meStore.set(r.me);
-      showToast(`${DEX_CAT_LABEL[cat]} 도감 보상 +${r.earned}P${r.left > 0 ? ` (오늘 한도로 ${r.left}P는 남겨 뒀어요 — 내일 또 받기)` : ""}`, 5_000);
+      showToast(`${DEX_CAT_LABEL[cat]} 도감 보상 +${r.earned}P${r.left > 0 ? ` (오늘 한도라 ${r.left}P는 남겨 뒀어요. 내일 또 받아요)` : ""}`, 5_000);
     } catch (e) {
       showToast(errorMessage(e));
       void forageStore.refresh();
@@ -178,8 +178,8 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
                     </button>
                   )}
                   <p className={ui.hint}>
-                    {nextTitle ? `다음 칭호 「${nextTitle.name}」까지 ${Math.max(0, nextTitle.need - got)}종` : "이 분류 칭호를 모두 받았어요"} · 새 종을 처음 등록할 때마다{" "}
-                    {REWARD_RANGE} (희귀할수록 많이)
+                    {nextTitle ? `다음 칭호 「${nextTitle.name}」까지 ${Math.max(0, nextTitle.need - got)}종` : "이 분류 칭호를 모두 받았어요"}. 새 종을 처음 올리면 {REWARD_RANGE}를 받아요. 희귀할수록
+                    많이 받아요.
                   </p>
                 </div>
               )}
@@ -276,8 +276,8 @@ function DexGuide({ list, dex, ambience }: { list: readonly Species[]; dex: Reco
       <FactGrid facts={[...where].map(([w, v]) => ({ label: WHERE_LABEL[w], value: `${v.got}/${v.all}`, tone: v.got === v.all ? ("good" as const) : undefined }))} />
       {ambience && (
         <p className={ui.hint}>
-          지금({PHASE_LABEL[ambience.phase]} · {WEATHER_LABEL[ambience.weather]} · {SEASON_LABEL[ambience.season]}) 나오는 것 {now.length}종 — 그중 아직 못 모은 것{" "}
-          {newNow.length}종
+          지금({PHASE_LABEL[ambience.phase]}, {WEATHER_LABEL[ambience.weather]}, {SEASON_LABEL[ambience.season]}) 나오는 건 {now.length}종이에요. 그중{" "}
+          {newNow.length}종은 아직 못 모았어요.
         </p>
       )}
     </InfoCard>

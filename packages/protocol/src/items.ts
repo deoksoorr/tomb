@@ -13,7 +13,8 @@ const DAY = 24 * HOUR;
 // megaphone(23번): 확성기. 쓰는 순간 소모되고, 채널(또는 모든 채널) 사람들의 왼쪽 위 확성기 창에 한마디가 뜬다
 // dye(46번): 염색권. 쓰면 부위 하나의 색이 바뀐다 (random = 무작위 팔레트에서 찾기, fixed = 정해진 색)
 // unlock(11/15 수집 의뢰): 쓰는 물건이 아니라 가지고 있으면 열리는 것 (이모티콘 묶음 · 외형). 소모되지 않는다
-export type ItemKind = "firework" | "cosmetic" | "decor" | "graveStyle" | "megaphone" | "dye" | "unlock";
+/** box = 11/15 긴급 의뢰 「수집가의 뒷주머니」처럼 가방에서 [열기]로 여는 상자 (상점에 없다) */
+export type ItemKind = "firework" | "cosmetic" | "decor" | "graveStyle" | "megaphone" | "dye" | "unlock" | "box";
 // nameColor·namePlate(닉네임 꾸미기): 머리 위 이름표 글자 색 · 이름표 바탕판. 몸 그림에는 그려지지 않고 이름표·화면의 이름에만 보인다
 export type CosmeticSlot = "head" | "hand" | "aura" | "neck" | "back" | "pet" | "feet" | "nameColor" | "namePlate";
 
@@ -37,6 +38,8 @@ export type ItemDef = {
   champ?: true;
   /** 11/15 수집 의뢰 보상: 상점 목록에 없고 포인트로 살 수 없다. 의뢰 도장 교환소에서 받기만 한다 (꾸미기는 영구로) */
   quest?: true;
+  /** 11/15 긴급 의뢰 보상 (가장 많이 낸 사람의 사이렌 모자): 상점 목록에 없고 살 수 없다. 받으면 24시간 빌려 입는다 (값 0 → 꾸미기 점수 0) */
+  urgent?: true;
   /** 11/15 수집 의뢰 보상 등급 (프리미엄 외형 등급과 같은 색·연출: 일반·고급·희귀·전설) */
   grade?: "common" | "fine" | "rare" | "legend";
   /** kind = "unlock": 여는 것 (emo = 의뢰 이모티콘 묶음 QUEST_EMO_IDS, body = 외형 body) */
@@ -293,6 +296,11 @@ export const ITEMS: readonly ItemDef[] = [
     { id: "q_back_kite", kind: "cosmetic", slot: "back", grade: "fine", name: "연 날리는 등", desc: "등에 맨 얼레에서 방패연이 바람 따라 펄럭여요.", price: 240 },
   ] satisfies ItemDef[]).map((it) => ({ ...it, ...(it.kind === "cosmetic" ? { durationMs: COSMETIC_DURATION_MS } : {}), quest: true as const })),
 
+  // ── 11/15 긴급 의뢰 가장 많이 낸 사람 (24시간 대여 — 상점·교환소에 없다). 그림: 머리 avatarGear.ts · 도는 불빛 cosmeticFx.ts ──
+  { id: "u_hat_siren", kind: "cosmetic", slot: "head", grade: "rare", name: "사이렌 모자", desc: "긴급 배달왕의 모자. 머리 위 경광등이 빙글빙글 돌아요.", price: 0, durationMs: COSMETIC_DURATION_MS, urgent: true },
+  // 긴급 의뢰 100% 보상 상자: 받으면 가방(소모품)에 들어가고 [열기]로 연다. 내용물은 (의뢰, 계정)으로 미리 정해진다 (web lib/forage/quests/urgent openBox)
+  { id: "u_box_pocket", kind: "box", grade: "rare", name: "수집가의 뒷주머니", desc: "수집가 유령이 슬쩍 건넨 주머니. 열면 도장이나 염색권, 희귀 물고기가 나와요.", price: 0, urgent: true },
+
   { id: "decor_candles", kind: "decor", name: "촛불 한 쌍", desc: "묘비 양옆에 작은 촛불.", price: 90, durationMs: DECOR_DURATION_MS },
   { id: "decor_wreath", kind: "decor", name: "꽃 화환", desc: "묘비 앞에 둥근 화환.", price: 150, durationMs: DECOR_DURATION_MS },
   { id: "decor_ribbon", kind: "decor", name: "추모 리본", desc: "검은 리본 하나.", price: 90, durationMs: DECOR_DURATION_MS },
@@ -374,8 +382,8 @@ export function styleItemId(id: string): string | null {
  */
 export const SHOP_KINDS: readonly ItemKind[] = ["firework", "cosmetic", "graveStyle", "megaphone", "dye"];
 /** 상점 목록에 나오는지. 펫은 상점에서 팔지 않는다 (동물원 사육사에게서 영구로만 — ZOO_PETS) */
-export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; quest?: true }): boolean {
-  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.quest;
+export function isShopListed(item: Pick<ItemDef, "kind"> & { slot?: CosmeticSlot; staff?: true; champ?: true; quest?: true; urgent?: true }): boolean {
+  return SHOP_KINDS.includes(item.kind) && item.slot !== "pet" && !item.staff && !item.champ && !item.quest && !item.urgent;
 }
 
 const byId = new Map(ITEMS.map((i) => [i.id, i]));
@@ -677,6 +685,9 @@ export const TITLE_IDS = [
   "t_quest1k",
   "t_quest2500",
   "t_qking",
+  // 11/15 긴급 의뢰 (받은 뒤 하루만): 가장 많이 낸 사람 · 마지막 1분에 100%를 채운 사람
+  "t_urgKing",
+  "t_urgLast",
 ] as const;
 export type TitleId = (typeof TITLE_IDS)[number];
 const titleSet = new Set<string>(TITLE_IDS);

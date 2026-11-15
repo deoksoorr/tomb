@@ -68,7 +68,7 @@ const DARK: Partial<Record<ZoneId, DarkCfg>> = {
     depth: 0.985,
     vision: "narrow",
     warnMsg: "형광등이 깜빡여요… 곧 자동 소등!",
-    onMsg: "자동 소등! 발밑만 보여요 — 경고도 원 안에서만 보여요",
+    onMsg: "자동 소등! 발밑만 보여요. 경고도 그 안에서만 보여요",
     bossFall: true,
   },
 };
@@ -118,7 +118,7 @@ const STORM: Partial<Record<ZoneId, StormCfg>> = {
     shots: true,
     shelter: true,
     gust: true,
-    warnMsg: (a) => `서류 폭풍이 와요! ${a} 쪽으로 밀려요 — 책상·박스 바로 뒤로!`,
+    warnMsg: (a) => `서류 폭풍이 와요! ${a} 쪽으로 밀려요. 책상이나 박스 뒤에 숨어요!`,
   },
 };
 /** 소품 바로 뒤(바람이 오는 쪽에 막힌 것)에 서면 이만큼만 밀린다 */

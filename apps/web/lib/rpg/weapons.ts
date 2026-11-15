@@ -43,7 +43,7 @@ export const WEAPON_STYLES: Record<WeaponStyleId, WeaponStyle> = {
   swing: {
     id: "swing",
     name: "휘두르기",
-    desc: "앞쪽 부채꼴을 넓게 벤다. 3번째 연속 공격은 더 넓고 세게.",
+    desc: "앞쪽 부채꼴을 넓게 베요. 3번째 연속 공격은 더 넓고 세게 나가요.",
     area: { range: 26, arcDeg: 120 },
     hits: 1,
     hitGapMs: 0,
@@ -57,7 +57,7 @@ export const WEAPON_STYLES: Record<WeaponStyleId, WeaponStyle> = {
   smash: {
     id: "smash",
     name: "내려찍기",
-    desc: "느리지만 묵직하다. 넓게 찍어 멀리 밀쳐 내고, 3번째는 바닥을 울려 사방을 친다.",
+    desc: "느리지만 묵직해요. 넓게 찍어 적을 멀리 밀쳐 내요. 3번째는 바닥을 울려 사방을 쳐요.",
     area: { range: 25, arcDeg: 150 },
     hits: 1,
     hitGapMs: 0,
@@ -71,7 +71,7 @@ export const WEAPON_STYLES: Record<WeaponStyleId, WeaponStyle> = {
   thrust: {
     id: "thrust",
     name: "찌르기",
-    desc: "길고 좁게 찔러 앞에 줄 선 적을 모두 꿰뚫는다. 3번째는 더 멀리.",
+    desc: "길고 좁게 찔러요. 앞에 줄 선 적을 모두 꿰뚫어요. 3번째는 더 멀리 닿아요.",
     area: { range: 44, arcDeg: 22 },
     hits: 1,
     hitGapMs: 0,
@@ -85,7 +85,7 @@ export const WEAPON_STYLES: Record<WeaponStyleId, WeaponStyle> = {
   combo: {
     id: "combo",
     name: "연타",
-    desc: "가까이서 두 번 빠르게 때린다. 3번째는 세 번 연속.",
+    desc: "가까이서 두 번 빠르게 때려요. 3번째는 세 번 연속으로 때려요.",
     area: { range: 22, arcDeg: 100 },
     hits: 2,
     hitGapMs: 90,
@@ -99,7 +99,7 @@ export const WEAPON_STYLES: Record<WeaponStyleId, WeaponStyle> = {
   shot: {
     id: "shot",
     name: "쏘기",
-    desc: "멀리 쏜다. 처음 맞은 적에서 멈춘다. 3번째는 세 갈래로.",
+    desc: "멀리 쏴요. 처음 맞은 적에서 멈춰요. 3번째는 세 갈래로 나가요.",
     area: { range: 120, arcDeg: 34 },
     hits: 1,
     hitGapMs: 0,
@@ -114,7 +114,7 @@ export const WEAPON_STYLES: Record<WeaponStyleId, WeaponStyle> = {
   magic: {
     id: "magic",
     name: "범위 마법",
-    desc: "앞쪽 적 발밑에 잉크를 터뜨려 둘레를 모두 친다. 3번째는 더 크게.",
+    desc: "앞쪽 적 발밑에 잉크를 터뜨려 둘레를 모두 쳐요. 3번째는 더 크게 터져요.",
     area: { range: 80, arcDeg: 70 },
     hits: 1,
     hitGapMs: 0,
@@ -129,7 +129,7 @@ export const WEAPON_STYLES: Record<WeaponStyleId, WeaponStyle> = {
   card: {
     id: "card",
     name: "던지기",
-    desc: "카드를 날려 지나가는 적을 모두 긁는다. 3번째는 세 장.",
+    desc: "카드를 날려 지나가는 적을 모두 긁어요. 3번째는 세 장을 날려요.",
     area: { range: 100, arcDeg: 30 },
     hits: 1,
     hitGapMs: 0,

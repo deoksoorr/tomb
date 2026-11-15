@@ -17,7 +17,7 @@ export const SPOT_TAKEN_TOAST: Readonly<Record<SpotKind, string>> = {
   seesaw: "누가 먼저 앉아 있어요",
   trampoline: "누가 먼저 뛰고 있어요",
   carousel: "누가 먼저 타고 있어요",
-  telescope: "누가 먼저 망원경을 보고 있어요",
+  telescope: "누가 이 망원경을 보고 있어요. 옆 망원경으로 가 보세요.",
   mat: "누가 먼저 앉아 있어요",
   fish: "누가 먼저 낚시하고 있어요",
   // 놀이기구 2

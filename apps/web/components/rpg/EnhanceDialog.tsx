@@ -244,8 +244,8 @@ export default function EnhanceDialog({
     const r = s.r;
     if (s.kind === "ok") return `성공! +${r.from} → +${r.to}`;
     if (s.kind === "saved") return `보호 문서가 막아 줬어요. +${r.to} 그대로예요.`;
-    if (s.kind === "drop") return `실패해서 한 단계 내려갔어요. 다음 성공 확률 +${Math.round(ENH_FAIL_BONUS * 100)}%p`;
-    return `실패 · 다음 성공 확률 +${Math.round(ENH_FAIL_BONUS * 100)}%p`;
+    if (s.kind === "drop") return `실패해서 한 단계 내려갔어요. 다음엔 성공 확률이 ${Math.round(ENH_FAIL_BONUS * 100)}%p 올라요.`;
+    return `실패했어요. 다음엔 성공 확률이 ${Math.round(ENH_FAIL_BONUS * 100)}%p 올라요.`;
   };
 
   const rrCost = it ? rerollCost(it.rr) : 0;
@@ -365,7 +365,7 @@ export default function EnhanceDialog({
                     {f > 0 && (
                       <span className={g.note}>
                         {" "}
-                        (연속 실패 {f}번 · +{Math.round(f * ENH_FAIL_BONUS * 100)}%p)
+                        (연속 {f}번 실패해서 +{Math.round(f * ENH_FAIL_BONUS * 100)}%p)
                       </span>
                     )}
                   </p>
@@ -410,7 +410,7 @@ export default function EnhanceDialog({
                       disabled={m.prot < 1 || phase === "charge"}
                       onChange={(x) => setProtect(x.target.checked)}
                     />
-                    보호 문서 쓰기 <span className={g.note}>· {m.prot}장 있어요</span>
+                    보호 문서 쓰기 <span className={g.note}>({m.prot}장 있어요)</span>
                   </label>
                 )}
                 {short.length > 0 && <p className={g.note}>{josa(short.join(", "), "이", "가")} 모자라요.</p>}
@@ -431,7 +431,7 @@ export default function EnhanceDialog({
         ) : it ? (
           <>
             <p className={g.note}>
-              옵션을 새로 굴려요. 하나를 고정하면 그 옵션은 그대로 두고 나머지만 바뀌어요. 굴릴 때마다 비용이 두 배가 되고 {pts(REROLL_MAX)}에서 멈춰요.
+              옵션을 새로 굴려요. 하나를 고정하면 그 옵션만 남고 나머지가 바뀌어요. 굴릴 때마다 값이 두 배로 올라요. 가장 비싸도 {pts(REROLL_MAX)}예요.
             </p>
             <div className={g.lockList} role="radiogroup" aria-label="고정할 옵션">
               <label>
@@ -463,8 +463,8 @@ export default function EnhanceDialog({
             </div>
             {rolled && newOpts && (
               <p className={g.result} data-ok role="status">
-                새 옵션: {newOpts.o.map(([k, v]) => optText(k as SgOpt, v)).join(" · ")}
-                {newOpts.L ? ` · ${SG_LEGENDS[newOpts.L].name}` : ""}
+                {newOpts.o.map(([k, v]) => optText(k as SgOpt, v)).join(", ")}
+                {newOpts.L ? `, ${SG_LEGENDS[newOpts.L].name}` : ""} 옵션이 붙었어요.
               </p>
             )}
             {rrShort.length > 0 && <p className={g.note}>{josa(rrShort.join(", "), "이", "가")} 모자라요.</p>}

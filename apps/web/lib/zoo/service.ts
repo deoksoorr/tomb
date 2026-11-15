@@ -19,7 +19,7 @@ export async function buyPet(accountId: string, petId: string, now = Date.now())
   const accounts = getAccounts();
   const r = await getStyleStore(accounts).buyPermanent(accountId, petId, "pet", def.price, PERMANENT_UNTIL, `shop:동물원 ${petId}`, now);
   if (r === "owned") throw new HttpError(409, "ALREADY_OWNED", "이미 가족이 된 펫이에요. 가방이나 사육사 창에서 데리고 다닐 수 있어요.");
-  if (r === "ticket") throw new HttpError(409, "HAS_TICKET", "가방에 같은 펫 이용권이 있어요. 가방에서 먼저 데리고 나온 뒤에 사육사에게 영구로 맡겨 주세요.");
+  if (r === "ticket") throw new HttpError(409, "HAS_TICKET", "가방에 같은 펫 이용권이 있어요. 가방에서 먼저 데리고 나온 다음 영구 분양을 받아 주세요.");
   if (r === "insufficient") throw new HttpError(409, "NOT_ENOUGH_POINTS", "포인트가 모자라요.");
   // 집(벗어 둔 꾸미기)에 들어간 새 펫을 바로 데리고 나온다. 입고 있던 기간제가 영구로 바뀐 경우엔 이미 데리고 있다 (false여도 괜찮다)
   await accounts.wear(accountId, petId, "pet", now);

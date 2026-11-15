@@ -21,12 +21,12 @@ export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
 export const STAT_LABELS: Record<StatKey, { name: string; desc: string }> = {
-  str: { name: "STR", desc: "공격력 (1당 ATK +3)" },
-  agi: { name: "AGI", desc: "공격속도·회피·이동속도" },
-  vit: { name: "VIT", desc: "최대 HP·방어" },
-  int: { name: "INT", desc: "최대 SP·스킬 위력" },
-  dex: { name: "DEX", desc: "명중·공격력 조금 (벌레 잡기: 벌레가 오래 보임)" },
-  luk: { name: "LUK", desc: "치명타·회피 조금 (벌레 잡기: 황금 벌레)" },
+  str: { name: "STR", desc: "공격력이 올라요 (1당 ATK +3)" },
+  agi: { name: "AGI", desc: "공격 속도, 회피, 이동 속도가 올라요" },
+  vit: { name: "VIT", desc: "최대 HP와 방어가 올라요" },
+  int: { name: "INT", desc: "최대 SP와 스킬 위력이 올라요" },
+  dex: { name: "DEX", desc: "명중과 공격력이 조금 올라요. 벌레 잡기에선 벌레가 오래 보여요" },
+  luk: { name: "LUK", desc: "치명타와 회피가 조금 올라요. 벌레 잡기에선 황금 벌레가 잘 나와요" },
 };
 
 /** 장비·버프가 더해 주는 값 */
@@ -173,10 +173,10 @@ export type PotionDef = {
 };
 
 export const POTIONS: readonly PotionDef[] = [
-  { id: "p_coffee", name: "커피", desc: "HP 150 회복 · 독·화상·출혈 풀기", price: 8, hp: 150, key: "Q", art: { shape: "cup", main: 0x6a4a30, accent: 0xe8d9b0 } },
-  { id: "p_energy", name: "에너지드링크", desc: "SP 60 회복 · 둔화·빙결·혼란·침묵 풀기", price: 10, sp: 60, key: "E", art: { shape: "can", main: 0x3c8ac8, accent: 0xf0f0f0 } },
-  { id: "p_lunchbox", name: "야근 도시락", desc: "HP 400·SP 120 회복 · 상태 이상 모두 풀기", price: 30, hp: 400, sp: 120, key: "R", art: { shape: "box", main: 0xc85a3c, accent: 0xf2ead3 } },
-  { id: "p_cookie", name: "부활 쿠키", desc: "쓰러지면 자동으로 먹고 HP 50%로 일어나요 (한 판에 1번)", price: 60, revive: true, art: { shape: "cookie", main: 0xc89a5a, accent: 0x5a3e22 } },
+  { id: "p_coffee", name: "커피", desc: "HP를 150 채우고 독, 화상, 출혈을 풀어요", price: 8, hp: 150, key: "Q", art: { shape: "cup", main: 0x6a4a30, accent: 0xe8d9b0 } },
+  { id: "p_energy", name: "에너지드링크", desc: "SP를 60 채우고 둔화, 빙결, 혼란, 침묵을 풀어요", price: 10, sp: 60, key: "E", art: { shape: "can", main: 0x3c8ac8, accent: 0xf0f0f0 } },
+  { id: "p_lunchbox", name: "야근 도시락", desc: "HP 400, SP 120을 채우고 상태 이상을 모두 풀어요", price: 30, hp: 400, sp: 120, key: "R", art: { shape: "box", main: 0xc85a3c, accent: 0xf2ead3 } },
+  { id: "p_cookie", name: "부활 쿠키", desc: "쓰러지면 저절로 먹고 HP 50%로 일어나요. 한 판에 한 번이에요", price: 60, revive: true, art: { shape: "cookie", main: 0xc89a5a, accent: 0x5a3e22 } },
 ];
 
 export const potionById = (id: string): PotionDef | undefined => POTIONS.find((p) => p.id === id);
@@ -548,7 +548,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     desc: "새 다짐이 처음으로 반대에 부딪히는 곳.",
     unlockLevel: 1,
     power: 1,
-    gimmick: { name: "발표 조명", desc: "천천히 움직이는 프로젝터 조명 안에 서 있으면 HP가 차오른다." },
+    gimmick: { name: "발표 조명", desc: "천천히 움직이는 프로젝터 조명 안에 서 있으면 HP가 차요." },
     pool: ["scope_creep", "endless_meeting", "req_change"],
     boss: "opposing_lead",
     summon: { id: "scope_creep", n: 2 },
@@ -563,7 +563,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     desc: "8시 40분, 한 칸에 이백 명. 내릴 역은 아직 멀었다.",
     unlockLevel: 3,
     power: 1.15,
-    gimmick: { name: "문이 열립니다", desc: "역에 설 때마다 문이 열리고 인파가 밀려 들어와 문 앞을 밀어낸다. 문 위 불이 깜빡이면 비켜서자." },
+    gimmick: { name: "문이 열립니다", desc: "역에 설 때마다 문이 열리고 인파가 밀려 들어와요. 문 앞에 있으면 밀려나요. 문 위 불이 깜빡이면 비켜서요." },
     pool: ["rush_commuter", "phone_zombie", "backpack_turtle", "scope_creep"],
     boss: "express_train",
     summon: { id: "rush_commuter", n: 2 },
@@ -578,7 +578,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     desc: "1월 2일엔 줄을 섰는데, 1월 4일부터 텅 비었다.",
     unlockLevel: 5,
     power: 1.3,
-    gimmick: { name: "러닝머신 컨베이어", desc: "러닝머신 위에서는 몸이 한쪽으로 끌려간다. 화살표가 깜빡이면 방향이 바뀐다." },
+    gimmick: { name: "러닝머신 컨베이어", desc: "러닝머신 위에서는 몸이 한쪽으로 끌려가요. 화살표가 깜빡이면 방향이 바뀌어요." },
     pool: ["dumbbell_imp", "protein_shaker", "treadmill_ghost", "req_change"],
     boss: "membership_titan",
     summon: { id: "dumbbell_imp", n: 2 },
@@ -593,7 +593,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     desc: "아무도 손대지 못한 서류가 나무처럼 쌓여 있다. 칸막이 사이로 길을 찾아야 한다.",
     unlockLevel: 8,
     power: 1,
-    gimmick: { name: "칸막이 미로·엘리베이터", desc: "책상 칸막이가 미로처럼 막고 있다. 양쪽 끝 엘리베이터에 타면 반대편 엘리베이터로 순간 이동." },
+    gimmick: { name: "칸막이 미로·엘리베이터", desc: "책상 칸막이가 미로처럼 길을 막아요. 한쪽 끝 엘리베이터에 타면 반대편 엘리베이터로 순간 이동해요." },
     pool: ["tech_debt_slime", "already_exists", "merge_conflict", "req_change", "scope_creep"],
     boss: "legacy_golem",
     summon: { id: "tech_debt_slime", n: 2 },
@@ -608,7 +608,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     desc: "열람실 불이 하나둘 꺼진다. 아직 1단원도 못 봤다.",
     unlockLevel: 11,
     power: 1.15,
-    gimmick: { name: "정전", desc: "가끔 불이 나가 내 주변만 보인다. 불빛이 깜빡이면 곧 꺼진다는 신호." },
+    gimmick: { name: "정전", desc: "가끔 불이 나가서 내 주변만 보여요. 불빛이 깜빡이면 곧 꺼져요." },
     pool: ["flying_book", "night_owl", "eraser_crumb", "already_exists"],
     boss: "exam_paper",
     summon: { id: "flying_book", n: 2 },
@@ -623,7 +623,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     desc: "\"구경만 할게요\"라고 들어왔다가 길을 잃은 쇼핑몰.",
     unlockLevel: 14,
     power: 1.3,
-    gimmick: { name: "충동구매 덩굴밭", desc: "바닥의 덩굴밭에서는 발이 묶여 느려진다. 덩굴은 숨을 쉬듯 커졌다 작아진다." },
+    gimmick: { name: "충동구매 덩굴밭", desc: "덩굴밭에 들어가면 발이 묶여 느려져요. 덩굴은 숨을 쉬듯 커졌다 작아져요." },
     pool: ["sale_tag", "impulse_vine", "runaway_cart", "server_bill"],
     boss: "black_friday",
     summon: { id: "sale_tag", n: 3 },
@@ -638,7 +638,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     desc: "올린 결재는 돌아오지 않고, 발을 디딜수록 일정이 가라앉는다.",
     unlockLevel: 18,
     power: 1,
-    gimmick: { name: "끓는 늪", desc: "늪에서는 느려지고, 거품이 크게 일면 곧 끓어올라 안에 있는 모두가 다친다." },
+    gimmick: { name: "끓는 늪", desc: "늪에 들어가면 느려져요. 거품이 크게 일면 곧 끓어올라 안에 있는 모두가 다쳐요." },
     pool: ["merge_conflict", "server_bill", "opposing_lead", "legacy_golem", "tech_debt_slime"],
     boss: "prod_dragon",
     summon: { id: "tech_debt_slime", n: 2 },
@@ -653,7 +653,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     desc: "개학까지 사흘. 한 달 치 숙제가 모래처럼 쌓여 있다.",
     unlockLevel: 22,
     power: 1.15,
-    gimmick: { name: "모래 폭풍", desc: "모래 폭풍이 불면 앞이 흐려지고 바람 부는 쪽으로 밀린다. 지평선이 흔들리면 곧 분다." },
+    gimmick: { name: "모래 폭풍", desc: "모래 폭풍이 불면 앞이 흐려지고 바람 부는 쪽으로 밀려요. 지평선이 흔들리면 곧 불어요." },
     pool: ["diary_mummy", "essay_cactus", "sand_worm", "server_bill"],
     boss: "homework_sphinx",
     summon: { id: "diary_mummy", n: 2 },
@@ -668,7 +668,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     desc: "모든 다짐이 마지막으로 무너지는 곳. 아무도 먼저 못 일어난다.",
     unlockLevel: 30,
     power: 1,
-    gimmick: { name: "미끄러운 바닥", desc: "엎질러진 술 웅덩이에서는 미끄러져 멈추기 어렵다." },
+    gimmick: { name: "미끄러운 바닥", desc: "엎질러진 술 웅덩이에서는 미끄러져서 멈추기 어려워요." },
     pool: ["burnout_wraith", "server_bill", "legacy_golem", "already_exists", "opposing_lead", "merge_conflict"],
     boss: "endless_toast",
     summon: { id: "burnout_wraith", n: 2 },
@@ -683,7 +683,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     desc: "올해의 다짐이 전부 몰려나오는 마지막 밤. 자정까지 버텨라.",
     unlockLevel: 36,
     power: 1.15,
-    gimmick: { name: "불꽃놀이", desc: "하늘에서 폭죽이 떨어진다. 바닥에 빨간 원이 보이면 피하자 — 몬스터도 맞는다." },
+    gimmick: { name: "불꽃놀이", desc: "하늘에서 폭죽이 떨어져요. 바닥에 빨간 원이 보이면 피하세요. 몬스터도 맞아요." },
     pool: ["firecracker_kid", "resolution_card", "countdown_clock", "party_popper", "burnout_wraith"],
     boss: "midnight_bell",
     summon: { id: "firecracker_kid", n: 3 },
@@ -701,7 +701,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     power: 1.3,
     gimmick: {
       name: "자동 소등",
-      desc: "18초마다 층 전체 불이 7초 동안 꺼진다. 내 발밑 작은 원 밖은 바닥 경고까지 보이지 않는다. 형광등이 깜빡이면 곧 꺼진다 — 우두머리는 어둠 속에서 하락 그래프를 내리꽂는다.",
+      desc: "18초마다 층 전체 불이 7초 동안 꺼져요. 그동안은 내 발밑 작은 원 밖이 안 보이고, 바닥 경고도 안 보여요. 형광등이 깜빡이면 곧 꺼져요. 우두머리는 어둠 속에서 하락 그래프를 내리꽂아요.",
     },
     pool: ["afterglow_monitor", "night_rider", "pending_binder", "drowsiness", "burnout_wraith", "server_bill"],
     boss: "quarterly_report",
@@ -719,7 +719,7 @@ export const HUNT_ZONES: Record<ZoneId, ZoneDef> = {
     power: 1.45,
     gimmick: {
       name: "서류 폭풍",
-      desc: "회의실 문이 열릴 때마다 한쪽으로 서류 폭풍이 몰아쳐 나와 나와 몬스터, 날아오는 탄까지 휩쓴다. 양쪽 벽의 파쇄기에 밀려 들어가면 크게 다친다. 책상·박스 바로 뒤에 붙으면 덜 밀린다. 우두머리가 화날수록 폭풍이 도중에 방향을 바꾼다.",
+      desc: "회의실 문이 열릴 때마다 서류 폭풍이 한쪽으로 몰아쳐요. 나도 몬스터도 날아오는 탄도 함께 밀려요. 양쪽 벽 파쇄기에 밀려 들어가면 크게 다쳐요. 책상이나 박스 바로 뒤에 붙으면 덜 밀려요. 우두머리가 화날수록 폭풍이 도중에 방향을 바꿔요.",
     },
     pool: ["one_on_one", "desk_box", "standby_shadow", "opposing_lead", "legacy_golem", "burnout_wraith"],
     boss: "hr_chair",
@@ -764,21 +764,21 @@ export type GameKind = (typeof GAME_KINDS)[number];
 export const GAMES: Record<GameKind, { name: string; desc: string; how: string; statNote: string }> = {
   hunt: {
     name: "사냥터",
-    desc: "다짐을 망치는 것들을 웨이브마다 물리친다. 장비·스킬·포션을 모두 쓴다.",
-    how: "WASD/방향키 이동 · Space/J 공격(누르고 있으면 계속 공격, 앞쪽 부채꼴 안의 적을 모두 때림) · 마우스·손가락을 누르고 있으면 그쪽으로 계속 공격 · 1~6 스킬 · Q/E/R 포션 · Esc 멈춤",
-    statNote: "모든 능력치와 장비가 그대로 쓰인다",
+    desc: "웨이브마다 몰려오는 몬스터를 물리쳐요. 장비, 스킬, 포션을 모두 써요.",
+    how: "WASD나 방향키로 걷고, Space나 J로 공격해요. 누르고 있으면 계속 때려요. 1~5는 스킬, Q/E/R은 포션, Esc는 멈춤이에요.",
+    statNote: "모든 능력치와 장비가 그대로 쓰여요",
   },
   bugs: {
     name: "벌레 잡기",
-    desc: "아홉 개의 창에서 튀어나오는 벌레를 잡는다. 초록 체크 표시와 줄 그어진 회색 '이미 잡은 벌레'는 건드리지 말 것. 콤보가 쌓일수록 점수 배수가 오른다.",
-    how: "클릭·탭, 또는 Q W E / A S D / Z X C 키로 칸을 누른다",
-    statNote: "DEX: 벌레가 조금 더 오래 보임 · LUK: 황금 벌레가 더 자주",
+    desc: "아홉 개의 창에서 튀어나오는 벌레를 잡아요. 초록 체크와 줄 그어진 회색 벌레는 이미 잡은 거라 건드리면 안 돼요. 콤보가 쌓일수록 점수가 더 많이 올라요.",
+    how: "칸 누르기 (클릭, 탭, Q W E / A S D / Z X C)",
+    statNote: "DEX가 높으면 벌레가 조금 더 오래 보이고, LUK가 높으면 황금 벌레가 자주 나와요",
   },
   stars: {
     name: "별자리 잇기",
-    desc: "끝내지 못한 다짐들이 밤하늘의 별로 떠오른다. 빛의 고리가 별에 닿는 순간 눌러 하나의 별자리로 잇는다. 하나도 놓치지 않고 이으면 그 별자리가 도감에 오른다.",
-    how: "고리가 별에 겹치는 순간 Space·J·클릭·탭 (어디를 눌러도 다음 별) · 너무 일찍 누르면 놓침",
-    statNote: "DEX: 판정이 조금 너그러워짐",
+    desc: "밤하늘에 별이 하나씩 떠올라요. 빛의 고리가 별에 닿을 때 누르면 별이 이어져요. 한 별자리를 하나도 놓치지 않고 이으면 도감에 올라가요.",
+    how: "고리가 별에 겹칠 때 Space나 J를 눌러요. 클릭하거나 탭해도 돼요. 너무 일찍 누르면 놓쳐요.",
+    statNote: "DEX가 높을수록 판정이 넉넉해져요",
   },
 };
 
@@ -822,5 +822,5 @@ export function dropInfo(d: { kind: DropKind; id: string }): DropInfo | null {
   }
   if (d.kind === "mat") return isMatId(d.id) ? { name: MAT_INFO[d.id].name, art: MAT_INFO[d.id].art, kind: "mat" } : null;
   const it = itemById(d.id);
-  return it ? { name: it.name, art: COSMETIC_DROP_ART, kind: "cosmetic", note: "캐릭터 꾸미기 하루권 · 상점 가방에 들어갔어요" } : null;
+  return it ? { name: it.name, art: COSMETIC_DROP_ART, kind: "cosmetic", note: "캐릭터 꾸미기 하루권이에요. 상점 가방에 들어갔어요" } : null;
 }

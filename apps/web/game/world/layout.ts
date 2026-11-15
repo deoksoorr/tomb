@@ -44,6 +44,7 @@ import {
   STEP_STONES,
   TABLES,
   TELESCOPE,
+  TELESCOPE_2,
   TILE,
   WALL_THICKNESS,
   graveSlot,
@@ -598,7 +599,7 @@ function freeForProp(placed: readonly PropDef[], x: number, y: number, gap: numb
   for (const p of HAND_PROPS) if (Math.hypot(p.x - x, p.y - y) < (isTree(p.kind) || p.kind === "hammock" || p.kind === "swing" || p.kind === "crypt" || p.kind === "mat" || p.kind === "oldGrave" ? gap : 14)) return false;
   for (const k of RIDE_KEEPOUT) if (Math.hypot(k.x - x, k.y - y) < k.r) return false; // 50번 광장 놀거리 (rides.ts)
   for (const k of SKY_KEEPOUT) if (Math.hypot(k.x - x, k.y - y) < k.r) return false; // 관람차·열기구 출발장 (skyRides.ts)
-  for (const p of [SHOP, HOUSING_OFFICE, HUNT_SIGN, SHRINE, TELESCOPE, FERRY_DOCK, DUCK_DOCK, WISH_FOUNTAIN]) if (Math.hypot(p.x - x, p.y - y) < 44) return false;
+  for (const p of [SHOP, HOUSING_OFFICE, HUNT_SIGN, SHRINE, TELESCOPE, TELESCOPE_2, FERRY_DOCK, DUCK_DOCK, WISH_FOUNTAIN]) if (Math.hypot(p.x - x, p.y - y) < 44) return false;
   if (Math.hypot(HUNT_GATE.x - x, HUNT_GATE.y - y) < 50) return false;
   return true;
 }

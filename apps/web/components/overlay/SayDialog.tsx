@@ -133,7 +133,7 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
       {tab !== "mood" && (
         <p className={styles.favLine}>
           <span className={styles.favStar} aria-hidden="true" />
-          즐겨찾기 {favCount}/{FAV_MAX} · 별을 누르면 Y 키(폰은 [표현] 길게 누르기)로 내 캐릭터 둘레에 펼쳐져요
+          즐겨찾기 {favCount}/{FAV_MAX}. 별을 누른 표현은 Y 키로 바로 꺼내요. 폰은 [표현]을 길게 눌러요.
         </p>
       )}
 
@@ -178,10 +178,10 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
               <TipList
                 tips={[
                   "1 손 흔들기·2 환호는 캐릭터가 직접 몸짓을 해요. 3번부터는 머리 위에 그림이 떠요.",
-                  "위 작은 탭으로 기본·얼굴·회사·반응·자연·묘역·의뢰 묶음만 골라 볼 수 있어요. 숫자 1~9는 언제나 [기본] 앞쪽 아홉 칸이에요.",
+                  "위 작은 탭을 누르면 묶음별로 볼 수 있어요. 숫자 1~9는 늘 [기본] 앞쪽 아홉 칸이에요.",
                   `[의뢰] 묶음은 수집 의뢰 보상이에요. 도장 교환소에서 ${QUEST_EMO_HINT}로 받으면 열려요.`,
-                  "데스크톱은 T 키로 이 창을 열고, 숫자 키로 창을 거치지 않고 바로 보낼 수 있어요.",
-                  "자주 쓰는 건 별을 눌러 즐겨찾기 — Y 키(폰은 [표현] 길게 누르기)로 내 둘레에 펼쳐 한 번에 보내요.",
+                  "컴퓨터는 T 키로 이 창을 열어요. 숫자 키를 누르면 창을 열지 않고 바로 보내요.",
+                  "자주 쓰는 건 별을 눌러 즐겨찾기에 넣어요. Y 키를 누르면 내 둘레에 펼쳐져요. 폰은 [표현]을 길게 눌러요.",
                   "정해진 문장이 필요하면 [말풍선] 탭, 벤치에 앉아 있다면 [벤치 상태] 탭을 써 보세요.",
                   "너무 빨리 연달아 누르면 1초 동안은 다시 뜨지 않아요.",
                 ]}
@@ -212,7 +212,7 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
             </>
           ) : (
             <>
-              <p className={styles.empty}>벤치나 의자에 앉으면 지금 하는 일을 고를 수 있어요. 앉으면 아래 상태들이 켜져요.</p>
+              <p className={styles.empty}>벤치나 의자에 앉으면 지금 하는 일을 고를 수 있어요.</p>
               <div className={styles.moods} role="group" aria-label="고를 수 있는 상태 (앉으면 켜져요)">
                 {SEAT_MOODS.map((m) => (
                   <span key={m.id} className={cx(styles.mood, styles.moodOff)}>

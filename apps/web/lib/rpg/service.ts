@@ -312,7 +312,7 @@ export async function startRun(
   const zone = game === "hunt" ? (tower ? towerZone(seed, tower, tower) : zoneFor(difficulty, zoneId)) : null;
   if (zone && zoneId && zone.id !== zoneId && !tower) throw new HttpError(400, "INVALID_INPUT", "그 사냥터는 이 난이도에 없어요.");
   if (zone && !tower && lv < zone.unlockLevel && !zoneUnlockBypass())
-    throw new HttpError(403, "ZONE_LOCKED", `${zone.name}은(는) Lv.${zone.unlockLevel}부터 갈 수 있어요.`);
+    throw new HttpError(403, "ZONE_LOCKED", `${zone.name} 사냥터는 Lv.${zone.unlockLevel}부터 갈 수 있어요.`);
   // 야근 빌딩은 층마다 제한 시간이 따로 있고, 티켓은 긴 등반을 받도록 두 시간
   const limit = tower ? TOWER_MAX_RUN_SEC : timeLimitSec(game, difficulty, zone?.id);
   const nonce = nanoid(16);

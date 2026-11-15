@@ -340,7 +340,7 @@ export default function HousingOffice({ onClose, intent = null, channel }: { onC
               분양 마을{villageCount ? <span className={styles.tag}> · 지금 {villageCount}명</span> : null}
             </span>
             <span className={styles.small}>
-              {channel}채널 · {h ? `내 집 ${lotLabel(h.ch, h.lot)} · ${h.name}` : "빈 필지의 팻말에서 분양받을 수 있어요"} · 문 앞에서 E 또는 집을 눌러 들어가기
+              {channel}채널 · {h ? `내 집 ${lotLabel(h.ch, h.lot)} · ${h.name}` : "빈 자리 팻말에서 분양받을 수 있어요"} · 문 앞에서 E를 누르거나 집을 눌러 들어가요
             </span>
           </div>
           <div className={styles.hudButtons}>

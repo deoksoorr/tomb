@@ -412,7 +412,7 @@ export class RooftopStage implements TowerThemeRuntime {
       case "rf_vane":
         s.at = now + 2500;
         s.adds = 0;
-        this.host.flash("정예 「풍향계 수탉」 — 살아 있는 동안 돌풍이 더 자주 불고 서류가 날아들어요!", 2400);
+        this.host.flash("정예 「풍향계 수탉」 등장! 살아 있으면 돌풍이 잦고 서류가 날아들어요!", 2400);
         if (this.gust.next > now + 3000 && !this.gust.warn && this.gust.until < now) this.gust.next = now + 3000;
         break;
       case "rf_lightning_rod":
@@ -864,7 +864,7 @@ export class RooftopStage implements TowerThemeRuntime {
       }
       this.strike(Phaser.Math.Clamp(x, SIDE + 16, AW - SIDE - 16), Phaser.Math.Clamp(y, TOP + 18, AH - SIDE - 8), this.w.strikeWarn + i * 160, this.w.strikeR);
     }
-    this.tell("strike", "노란 원 자리에 벼락이 떨어져요. 웅덩이에 떨어지면 웅덩이 전체가 찌릿해요", 2200);
+    this.tell("strike", "노란 원에 벼락이 떨어져요. 웅덩이에 맞으면 웅덩이 전체가 찌릿해요", 2200);
   }
 
   /** 노란 원 → 벼락 (웅덩이에 떨어지면 그 웅덩이 전체가 감전) */
@@ -1371,7 +1371,7 @@ export class RooftopStage implements TowerThemeRuntime {
       } else if (m.phase >= 2) {
         s.finalAt = now + 3600;
         this.flash(1);
-        this.later(now + 1500, () => this.host.flash("번개 폭포가 와요! 초록 테두리 고무 매트 위로", 2200));
+        this.later(now + 1500, () => this.host.flash("번개 폭포가 와요! 초록 테두리 고무 매트 위로 가요", 2200));
       }
     }
     if (H.calm() || m.hidden) return;

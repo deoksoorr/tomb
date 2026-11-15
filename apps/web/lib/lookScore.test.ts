@@ -32,7 +32,7 @@ describe("가치 비례 점수 (영구 소장 기준 가치 ÷ 5, 1점 단위)",
     expect(itemLookScore("nope")).toBe(0);
     // 운영자 전용이 아닌 모든 코디는 1점 이상, 공식 그대로
     for (const it of ITEMS)
-      if (it.kind === "cosmetic" && !it.staff && !it.champ) {
+      if (it.kind === "cosmetic" && !it.staff && !it.champ && !it.urgent) {
         expect(itemLookScore(it.id)).toBeGreaterThan(0);
         expect(itemLookScore(it.id)).toBe(Math.round(itemLookValue(it.id) / LOOK_SCORE_DIVISOR));
       }

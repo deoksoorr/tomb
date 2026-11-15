@@ -94,9 +94,9 @@ export default function MenuSheet({
   };
   const entries: Entry[] = [
     { target: "say", icon: "chat", label: "표현 (T)", desc: "말풍선·이모티콘으로 인사하기" },
-    { target: "favs", icon: "spark", label: "즐겨찾기 표현 (Y)", desc: "별 표시한 표현을 내 둘레에 펼치기" },
+    { target: "favs", icon: "spark", label: "즐겨찾기 표현 (Y)", desc: "별 표시한 표현을 바로 보내기" },
     { target: "bag", icon: "bag", label: "가방", desc: titleNew ? "새 칭호를 얻었어요!" : "꾸미기·폭죽·잡은 것 꺼내기", badge: bagCount ? String(bagCount) : undefined, dot: titleNew },
-    { target: "hunt", icon: "sword", label: "사냥터", desc: "몬스터 사냥 · 경험치와 포인트" },
+    { target: "hunt", icon: "sword", label: "사냥터", desc: "몬스터를 잡고 포인트 모으기" },
     { target: "dex", icon: "book", label: "도감", desc: "물고기·곤충·약초 모으기" },
     { target: "housing", icon: "house", label: "집·분양 마을", desc: "내 집 분양받고 꾸미기" },
     ...(fireworkCount > 0
@@ -118,13 +118,13 @@ export default function MenuSheet({
             target: "friends" as const,
             icon: "friends" as const,
             label: "친구",
-            desc: friendIncoming > 0 ? `받은 친구 신청 ${friendIncoming}개` : "친구 위치·가기·집 놀러 가기",
+            desc: friendIncoming > 0 ? `받은 친구 신청 ${friendIncoming}개` : "친구가 어디 있는지 보고 찾아가기",
             badge: friendIncoming ? String(friendIncoming) : undefined,
             redDot: friendIncoming > 0,
           },
         ]),
     { target: "activity", icon: "heart", label: "내 소식", desc: "헌화·방명록·좋아요 소식", badge: activityUnread ? String(activityUnread) : undefined },
-    { target: "race", icon: "trophy", label: "이번 주 레이스", desc: "주간 1위 다툼 · 마감까지 남은 시간" },
+    { target: "race", icon: "trophy", label: "이번 주 레이스", desc: "이번 주 1위를 겨뤄요" },
     { target: "ranking", icon: "list", label: "랭킹", desc: "포인트·사냥·집·헌화 순위" },
     { target: "notices", icon: "bell", label: "공지", desc: unreadNotice ? "새 공지가 있어요" : "업데이트·점검 소식", dot: unreadNotice },
     { target: "me", icon: "user", label: "내 정보", desc: "닉네임·개인 코드·내 집", badge: points !== null ? `${points.toLocaleString("ko-KR")}P` : undefined },

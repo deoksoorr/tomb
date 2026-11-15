@@ -120,6 +120,6 @@ describe("출석 안내 문구", () => {
     expect(ATTEND_RULE_TEXT).not.toContain("묘지에");
     expect(EARN_RULES.find((r) => r.source === "attend")!.note).toContain(ATTEND_STAY_TEXT);
     expect(EARN_RULES.some((r) => r.note.includes("묘지에") || r.label.includes("묘지에"))).toBe(false);
-    expect(ATTEND_TIER_GUIDE).toBe("그달 출석 3일(3일)·7일(7일)·14일(14일)·21일(30일)·28일(영구)마다 코디 1개 — 갈수록 비싼 코디, 달마다 바뀌어요");
+    expect(ATTEND_TIER_GUIDE).toBe("그달 출석한 날 수에 따라 코디를 받아요. 3일 출석은 3일 코디, 7일 출석은 7일 코디, 14일 출석은 14일 코디, 21일 출석은 30일 코디, 28일 출석은 영구 코디예요. 뒤로 갈수록 비싼 코디고, 달마다 바뀌어요");
   });
 });

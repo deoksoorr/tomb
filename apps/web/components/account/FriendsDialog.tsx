@@ -37,7 +37,7 @@ export function whereText(w: FriendWhere, myCh: number | null): string {
 function cannotGo(name: string, w: FriendWhere): string | null {
   if (w.at === "offline") return `${name}님은 지금 접속하지 않았어요.`;
   if (w.at === "unknown") return "지금은 위치를 알 수 없어요. 잠시 뒤 다시 해 주세요.";
-  if (w.at === "away" && w.place === "house") return `${name}님은 집 안에 있는데 어느 집인지 알 수 없어 따라갈 수 없어요.`;
+  if (w.at === "away" && w.place === "house") return `${name}님이 어느 집에 있는지 몰라서 따라갈 수 없어요.`;
   if (w.at === "away") return `${name}님은 지금 ${w.place ? AWAY_PLACE_LABEL[w.place] : "실내"}에 있어 따라갈 수 없어요.`;
   return null;
 }
@@ -218,7 +218,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
         {!data && !error && <p className={ui.hint}>불러오는 중…</p>}
         {data?.staff && (
           <p className={ui.hint} role="status">
-            운영자 계정은 친구 기능을 쓸 수 없어요. (운영자와는 친구를 맺을 수 없어요)
+            운영자 계정은 친구 기능을 쓸 수 없어요.
           </p>
         )}
 
@@ -386,9 +386,9 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
             tips={[
               `친구는 ${FRIEND_MAX}명까지예요. 서로 받아 줘야 친구가 되고, 한쪽이 끊으면 둘 다 목록에서 사라져요.`,
               "같은 채널 마을에 있는 친구는 지도에 분홍 하트로, 이름표 옆에 작은 하트로 보여요.",
-              "[친구한테 가기]는 같은 채널이면 친구 옆으로 바로, 다른 채널이면 그 채널로 옮긴 뒤 친구 옆으로 가요.",
-              "친구가 집 안이면 그 집으로 따라 들어가요 · 사냥터·잡화점은 따라갈 수 없어요. 친구 집이 있으면 [집 놀러 가기]로 구경할 수 있어요.",
-              "친구에게는 포인트·아이템 보상이 없어요. 답하지 않은 신청은 14일 뒤 사라져요.",
+              "[친구한테 가기]를 누르면 친구 옆으로 가요. 다른 채널이면 채널도 같이 옮겨요.",
+              "친구가 집 안에 있으면 그 집으로 따라 들어가요. 사냥터나 잡화점에는 따라갈 수 없어요. 친구 집은 [집 놀러 가기]로 구경해요.",
+              "친구를 맺어도 포인트나 아이템은 주지 않아요. 답하지 않은 신청은 14일 뒤 사라져요.",
             ]}
           />
         </InfoCard>

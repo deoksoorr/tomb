@@ -170,13 +170,13 @@ export function ZoneInfo({ z }: { z: ZoneDef }) {
         <b className={s.zoneGimmick}>{z.gimmick.name}</b> {z.gimmick.desc}
       </p>
       <p className={s.meta}>
-        나오는 것: {[...new Set(z.pool)].map((id) => MONSTERS[id].name).join(", ")}
+        나오는 몬스터 {[...new Set(z.pool)].map((id) => MONSTERS[id].name).join(", ")}
         <br />
-        우두머리: <b>{MONSTERS[z.boss].name}</b> — 화나면 {MONSTERS[z.summon.id].name}을(를) 불러요
+        우두머리 <b>{MONSTERS[z.boss].name}</b>, 화나면 {MONSTERS[z.summon.id].name}을(를) 불러요
         <br />
-        웨이브 {z.waves}개 · {z.timeLimitSec}초 · 장비 드롭 Lv.
+        웨이브 {z.waves}개, 제한 시간 {z.timeLimitSec}초, 장비 드롭 Lv.
         {Math.max(1, D.dropMaxLevel - 20)}~{D.dropMaxLevel}
-        {favor.length > 0 && ` · 잘 나오는 것: ${favor.join(", ")}`}
+        {favor.length > 0 && <><br />잘 나오는 장비 {favor.join(", ")}</>}
       </p>
     </div>
   );

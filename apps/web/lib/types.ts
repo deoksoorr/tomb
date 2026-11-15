@@ -1,6 +1,7 @@
 // web 안에서 공유하는 데이터 타입과 API 응답 형태 (계약). 바꿀 때는 모든 사용처를 같이 고친다.
 
 import { itemById, type AvatarDye, type ChampBoard } from "@tomb/protocol";
+import type { EarnSource } from "./economy";
 
 export const CAUSE_TAGS = [
   "time",
@@ -205,6 +206,8 @@ export type Me = {
   points: number;
   /** 오늘 쌓은 포인트 (DAILY_EARN_CAP 대비) */
   todayEarned: number;
+  /** 오늘 항목별로 쌓은 포인트 (lib/economy.ts EARN_RULES의 source → 점수, 0인 항목은 없음). 하나도 없으면 빠진다. 내 정보의 항목별 게이지 */
+  earnedBy?: Partial<Record<EarnSource, number>>;
   /**
    * today = 오늘 출석 도장을 받았는지, stayMinutes = 오늘 머문 시간(분, 10분 단위 — 60분이면 오늘 칸을 받을 수 있다),
    * bonusClaimed = 오늘 받은 접속 시간 보너스 구간 수 (lib/stayBonus.ts)

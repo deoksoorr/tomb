@@ -138,10 +138,10 @@ function Telegraph({ shape }: { shape: TelegraphShape["kind"] }) {
 }
 
 const SHAPES: [TelegraphShape["kind"], string, string][] = [
-  ["circle", "원", "그 자리에 떨어진다 — 원 밖으로"],
-  ["line", "줄", "그 줄을 따라 돌진·사격 — 옆으로 비켜서기"],
-  ["cone", "부채꼴", "몬스터 앞쪽 — 뒤나 옆으로 돌아가기"],
-  ["ring", "고리", "몬스터 둘레 도넛 — 오히려 바짝 붙으면 안전"],
+  ["circle", "원", "그 자리에 떨어져요. 원 밖으로 피해요."],
+  ["line", "줄", "줄을 따라 돌진하거나 쏴요. 옆으로 비켜요."],
+  ["cone", "부채꼴", "몬스터 앞쪽을 쳐요. 뒤나 옆으로 돌아가요."],
+  ["ring", "고리", "몬스터 둘레를 도넛 모양으로 쳐요. 오히려 바짝 붙으면 안전해요."],
 ];
 
 /** 모양별 패턴 이름 (PATTERNS에서 읽는다) */
@@ -158,12 +158,12 @@ const statusMonsters = (id: StatusId) =>
   [...new Set(Object.entries(MONSTER_STATUS).filter(([, rules]) => rules?.some((r) => r.status === id)).map(([m]) => m))]
     .map((m) => MONSTERS[m as MonsterId].name)
     .slice(0, 3)
-    .join("·");
+    .join(", ");
 /** 이 상태를 푸는 포션 이름 */
 const curers = (id: StatusId) =>
   POTIONS.filter((p) => POTION_CURES[p.id]?.includes(id))
     .map((p) => (p.key ? `${p.name}(${p.key})` : p.name))
-    .join("·");
+    .join(", ");
 const autoPotions = POTIONS.filter((p) => !p.key);
 
 function Keys({ k }: { k: string[] }) {
@@ -202,11 +202,11 @@ function ThemeCard({ id }: { id: (typeof TOWER_THEMES)[number] }) {
   const boss = MONSTERS[z.boss];
   return (
     <Item pic={<MonPic id={z.boss} />} title={z.name}>
-      {z.desc} 기믹은 「{z.gimmick.name}」. {z.gimmick.desc}
-      {z.visits && z.visits.length > 1 ? ` 같은 판에서 다시 들르면 ${z.visits.slice(1).map((v) => v.name).join(" → ")} 순서로 바뀌어요.` : ""} 나오는 몬스터는 {names(z.pool)}.
-      {z.elite ? ` 정예는 「${MONSTERS[z.elite].name}」` : ""}
-      {z.mid ? `, 중간 우두머리는 「${MONSTERS[z.mid].name}」` : ""}
-      {z.elite ? "," : ""} 우두머리는 「{boss.name}」. {boss.desc.replace(/^"[^"]*"\s*/, "")}
+      {z.desc} 「{z.gimmick.name}」 기믹이 있어요. {z.gimmick.desc}
+      {z.visits && z.visits.length > 1 ? ` 같은 판에서 다시 오면 ${z.visits.slice(1).map((v) => v.name).join(", ")} 차례로 바뀌어요.` : ""} {names(z.pool)} 등이 나와요.
+      {z.elite ? ` 정예 「${MONSTERS[z.elite].name}」` : ""}
+      {z.mid ? `, 중간 우두머리 「${MONSTERS[z.mid].name}」` : ""}
+      {z.elite ? "," : ""} 우두머리 「{boss.name}」도 나와요. {boss.desc.replace(/^"[^"]*"\s*/, "")}
     </Item>
   );
 }
@@ -239,24 +239,24 @@ function pages(): Page[] {
     .map((w) => w.name);
   return [
     {
-      title: "움직이기·공격",
+      title: "이동과 공격",
       lead: "공격은 바라보는 쪽으로 나가요. 꾹 누르고 있으면 알아서 계속 때려요.",
       body: (
         <ul className={s.guideList}>
           <Item pic={<Keys k={["W", "A", "S", "D"]} />} title="이동">
-            WASD 또는 방향키. 폰·태블릿은 화면 왼쪽 아무 데나 누르고 끌면 그 자리에 조이스틱이 생겨요.
+            WASD나 방향키로 걸어요. 폰과 태블릿은 화면 왼쪽을 누른 채 끌면 그 자리에 조이스틱이 생겨요.
           </Item>
           <Item pic={<Keys k={["Space", "J"]} />} title="공격">
-            한 번 누르면 한 번. 공격 간격 전에 누르면 다음 공격으로 예약돼요 (발밑 게이지가 초록).
+            한 번 누르면 한 번 때려요. 다음 공격을 미리 눌러 두면 때가 되자마자 나가요. 이때 발밑 게이지가 초록색이 돼요.
           </Item>
-          <Item pic={<Keys k={["꾹"]} />} title="꾹 누르기 = 연속 공격">
-            Space·J, 마우스, 손가락을 누르고 있으면 계속 공격해요. 마우스·손가락은 누른 쪽을 향해 쳐요.
+          <Item pic={<Keys k={["꾹"]} />} title="꾹 누르면 연속 공격">
+            Space나 J, 마우스, 손가락을 누르고 있으면 계속 때려요. 마우스나 손가락은 누른 쪽으로 때려요.
           </Item>
-          <Item art={GEAR.find((g) => g.kind === "weapon")?.art} title={`${FINISHER_EVERY}번째 연속 공격 = 마무리`}>
-            공격 간격 + {sec(CHAIN_GRACE_MS)} 안에 이어 치면 연속으로 세요. {FINISHER_EVERY}번째는 더 넓고 세게 나가요.
+          <Item art={GEAR.find((g) => g.kind === "weapon")?.art} title={`${FINISHER_EVERY}번째 공격은 마무리 일격`}>
+            쉬지 않고 이어 치면 연속 공격으로 세요. 공격 간격보다 {sec(CHAIN_GRACE_MS)} 넘게 쉬면 처음부터 다시 세요. {FINISHER_EVERY}번째 공격은 더 넓고 세게 나가요.
           </Item>
           <Item pic={<span className={s.guideGauge} />} title="발밑 게이지">
-            공격 대기 시간. 차오르다 다 차면 반짝 — 그때 다시 칠 수 있어요.
+            다음 공격까지 남은 시간이에요. 게이지가 다 차서 반짝이면 다시 칠 수 있어요.
           </Item>
           <Item pic={<Keys k={["Esc"]} />} title="멈춤">
             게임 시간이 멈춰요. 멈춤 창에서도 이 안내서를 볼 수 있어요.
@@ -265,8 +265,8 @@ function pages(): Page[] {
       ),
     },
     {
-      title: "스킬·포션",
-      lead: `스킬은 스킬 탭의 트리에서 찍고, 액티브 스킬은 단축키 1~${SKILL_SLOTS}(궁극기는 F 칸)에 놓아야 써요.`,
+      title: "스킬과 포션",
+      lead: `스킬은 스킬 탭에서 배워요. 쓰는 스킬은 1~${SKILL_SLOTS} 칸에, 궁극기는 F 칸에 놓아야 써요.`,
       body: (
         <>
           <div className={s.guideIcons} aria-hidden="true">
@@ -280,46 +280,46 @@ function pages(): Page[] {
           <ul className={s.guideList}>
             {BRANCHES.map((b) => (
               <Item key={b} art={SKILLS.find((sk) => sk.branch === b && sk.tier === 5 && sk.kind === "active")?.art} title={`${BRANCH_INFO[b].name} (${BRANCH_INFO[b].role})`}>
-                {BRANCH_INFO[b].desc} 궁극기: {SKILLS.filter((sk) => sk.branch === b && sk.tier === 5 && sk.kind === "active").map((sk) => sk.name).join("·")}.
+                {BRANCH_INFO[b].desc} 궁극기 「{SKILLS.filter((sk) => sk.branch === b && sk.tier === 5 && sk.kind === "active").map((sk) => sk.name).join(", ")}」도 있어요.
               </Item>
             ))}
-            <Item pic={<Keys k={["1단", "…", "5단"]} />} title="단·선행 스킬">
-              갈래마다 5단. 위 단은 그 갈래의 아래 단에 포인트를 {TIER_GATES.slice(1).join("·")}만큼 쓰면 열려요. 선 이어진 스킬은 앞 스킬을 정해진 랭크까지 찍어야 배워요.
+            <Item pic={<Keys k={["1단", "…", "5단"]} />} title="단과 선행 스킬">
+              갈래마다 1단부터 5단까지 있어요. 그 갈래에 포인트를 {TIER_GATES.slice(1).join(", ")}개 쓰면 2단부터 5단까지 차례로 열려요. 선으로 이어진 스킬은 앞 스킬을 정해진 랭크까지 찍어야 배울 수 있어요.
             </Item>
             <Item pic={<span className={s.guideSp}>+1</span>} title="스킬 포인트">
-              레벨이 오를 때마다 1포인트(10의 배수 레벨엔 2). 랭크 하나에 1포인트. 패시브(둥근 칸)는 찍으면 늘 켜져 있어요.
+              레벨이 오를 때마다 1포인트를 받아요. 10, 20, 30처럼 10의 배수 레벨에선 2포인트예요. 랭크 하나를 올리는 데 1포인트가 들어요. 둥근 칸은 패시브예요. 찍어 두면 늘 켜져 있어요.
             </Item>
             <Item pic={<Keys k={["↺"]} />} title="초기화">
-              스킬 탭의 [초기화]로 찍은 포인트를 모두 돌려받아요. 레벨에 따라 {respecCost(1)}~{RESPEC_MAX_COST}P.
+              스킬 탭에서 [초기화]를 누르면 찍은 포인트를 모두 돌려받아요. 비용은 레벨에 따라 {respecCost(1)}~{RESPEC_MAX_COST}P예요.
               <br />
-              <small>스킬 트리가 바뀌는 업데이트가 있으면 모두의 스킬이 초기화되고 포인트를 전부 돌려받아요.</small>
+              <small>스킬 트리가 바뀌는 업데이트 때는 모두의 스킬이 초기화돼요. 포인트는 전부 돌려받아요.</small>
             </Item>
             <Item pic={<Keys k={["↺"]} />} title="능력치 초기화">
-              캐릭터 탭의 [능력치 초기화]로 배분한 능력치 포인트를 모두 돌려받아요. 스킬 초기화와 같은 비용으로, 레벨에 따라 {respecCost(1)}~{RESPEC_MAX_COST}P. 장비로 붙은 능력치는 그대로예요.
+              캐릭터 탭에서 [능력치 초기화]를 누르면 나눠 준 능력치 포인트를 모두 돌려받아요. 비용은 스킬 초기화와 같아요. 장비로 오른 능력치는 그대로예요.
             </Item>
             <Item art={skillById("em_meteor")?.art} title="광역기">
-              바닥에 마법진이 먼저 깔리고 터져요. 갈래마다 색이 달라요 (모닥불 주황·서리 하늘빛·넋 보라). 화면 흔들림은 사냥터 고르는 화면의 &lsquo;화면 흔들림 효과&rsquo;로 끌 수 있고, 흔들림·번쩍임 모두 기기의 &lsquo;동작 줄이기&rsquo;를 켜면 꺼져요.
+              바닥에 마법진이 먼저 깔린 다음 터져요. 마법진 색은 갈래마다 달라요. 화면 흔들림은 사냥터 고르는 화면의 &lsquo;화면 흔들림 효과&rsquo;에서 끌 수 있어요. 기기에서 &lsquo;동작 줄이기&rsquo;를 켜면 흔들림과 번쩍임이 모두 꺼져요.
             </Item>
             <Item pic={<Keys k={["1", "…", String(SKILL_SLOTS), "F"]} />} title="단축 칸에 놓기">
-              스킬 탭 맨 아래 단축 줄로 배운 액티브 스킬을 끌어다 놓아요(손가락으로도). 또는 스킬을 고르고 칸이나 숫자 키 1~{SKILL_SLOTS}를 눌러요. 칸은 스킬 {SKILL_SLOTS}칸 + 궁극기 칸(F) — 5단 궁극기는 F 칸에만, 다른 스킬은 1~{SKILL_SLOTS}에만 들어가요. 칸끼리 끌면 자리를 바꾸고, 줄 밖으로 끌어내면 빠져요. 처음 배운 액티브는 빈 칸에 저절로 들어가요.
+              스킬 탭 맨 아래 단축 줄에 배운 스킬을 끌어다 놓아요. 손가락으로도 돼요. 스킬을 고른 다음 칸이나 숫자 키 1~{SKILL_SLOTS}를 눌러도 돼요. 궁극기는 F 칸에만, 다른 스킬은 1~{SKILL_SLOTS} 칸에만 들어가요. 칸끼리 끌면 자리가 바뀌고, 줄 밖으로 끌어내면 빠져요. 처음 배운 스킬은 빈 칸에 저절로 들어가요.
             </Item>
             <Item pic={<Keys k={["1", "…", String(SKILL_SLOTS), "F"]} />} title="스킬 쓰기">
-              숫자 키 1~{SKILL_SLOTS}, 궁극기는 F, 또는 화면 아래 스킬 버튼을 눌러요. 패시브(둥근 칸)는 칸이 필요 없이 늘 켜져 있어요. 걸으면서 쳐도 공격·스킬은 겨냥한 적 쪽으로 나가요 (물러나며 치기).
+              숫자 키 1~{SKILL_SLOTS}를 누르거나 화면 아래 스킬 버튼을 눌러요. 궁극기는 F예요. 패시브는 칸에 놓지 않아도 늘 켜져 있어요. 걸으면서 써도 공격과 스킬은 겨냥한 적 쪽으로 나가요. 그래서 물러나면서 칠 수 있어요.
             </Item>
             <Item pic={<Keys k={["Shift", "1~" + SKILL_SLOTS]} />} title="스킬 자동">
-              Shift+숫자, 칸 우클릭으로 그 칸을 자동으로 정해요. 손가락은 스킬 줄의 [자동]을 누른 뒤 칸을 누르면 (쓰지 않고) 자동만 켜고 꺼져요 — 다시 [자동]을 누르거나 6초 가만있으면 끝. 자동 칸은 테두리가 초록으로 돌고, 쿨이 끝나도 &lsquo;쓸 만한 때&rsquo;(사거리 안 적, 광역은 3마리 이상, 방패는 체력이 줄었을 때 …)를 기다렸다 써요. X(또는 왼쪽 위 &lsquo;스킬 자동&rsquo;)로 자동 칸을 한꺼번에 켜고 꺼요. 궁극기·몸 옮기기 스킬(안개 걸음·저승 너울)은 자동이 안 돼요. 스킬 탭에서 &lsquo;궁극기 SP 남겨 두기&rsquo;를 켜 두면(기본) 자동 스킬이 궁극기 쓸 SP는 남겨요.
+              자동으로 쓸 스킬은 사냥 중에 정해요. 스킬 칸을 오른쪽 클릭하거나 Shift+숫자를 누르면 그 칸이 자동이 돼요. 폰은 [자동]을 누른 다음 칸을 눌러요. 자동 칸은 테두리가 초록색으로 돌아요. 자동 스킬은 쓰기 좋은 때를 기다렸다가 써요. 예를 들어 광역 스킬은 적이 3마리 넘게 모이면 써요. X를 누르면 자동을 전부 한 번에 켜고 꺼요. 폰은 왼쪽 위 &lsquo;스킬 자동&rsquo;을 눌러요. 궁극기와 이동 스킬은 자동이 안 돼요. 스킬 탭의 &lsquo;궁극기 SP 남겨 두기&rsquo;가 켜져 있으면 자동 스킬이 궁극기 쓸 SP를 남겨 둬요.
             </Item>
             <Item pic={<Keys k={["H"]} />} title="키 안내">
               사냥 중 H를 누르면 사냥 키가 화면에 떠요. 한 번 더 누르면 숨어요.
             </Item>
             <Item pic={<span className={s.guideSp}>SP</span>} title="SP">
-              스킬마다 SP를 써요. 모자란 칸은 어둡게, 필요한 SP 숫자가 떠요. 최대 SP는 INT로 늘고(스킬 위력도), 에너지드링크로 채워요.
+              스킬을 쓰면 SP가 들어요. SP가 모자란 칸은 어두워지고 필요한 SP가 떠요. INT를 올리면 최대 SP와 스킬 위력이 같이 올라요. SP는 에너지드링크로 채워요.
             </Item>
             <Item pic={<span className={s.guideCool} />} title="쿨타임">
-              한 번 쓰면 아이콘 위 그림자가 시계 방향으로 걷힐 때까지 다시 못 써요. 스킬마다 다르고 스킬 탭에서 확인해요.
+              스킬을 쓰면 아이콘을 덮은 그림자가 시계 방향으로 걷혀요. 다 걷히기 전엔 다시 못 써요. 쿨타임은 스킬마다 다르고, 스킬 탭에서 볼 수 있어요.
             </Item>
             <Item art={keyedPotions[0]?.art} title={`포션 ${keyedPotions.map((p) => p.key).join("/")}`}>
-              {keyedPotions.map((p) => `${p.key} ${p.name}(${p.desc})`).join(" · ")}. 한 번 먹으면 {sec(POTION_COOLDOWN_MS)} 뒤에 또 먹을 수 있어요.
+              {keyedPotions.map((p) => `${p.key} ${p.name}. ${p.desc}.`).join(" ")} 한 번 먹으면 {sec(POTION_COOLDOWN_MS)} 뒤에 또 먹을 수 있어요.
             </Item>
             {autoPotions.map((p) => (
               <Item key={p.id} art={p.art} title={`${p.name} (자동)`}>
@@ -332,7 +332,7 @@ function pages(): Page[] {
     },
     {
       title: "무기별 공격 방식",
-      lead: "낀 무기에 따라 공격 모양이 달라요. 장비 탭·상점에서 무기마다 방식이 적혀 있어요.",
+      lead: "어떤 무기를 끼느냐에 따라 공격 모양이 달라요. 무기마다 공격 방식은 장비 탭과 상점에서 볼 수 있어요.",
       body: (
         <ul className={cx(s.guideList, s.guideGrid)}>
           {Object.values(WEAPON_STYLES).map((w) => (
@@ -345,7 +345,7 @@ function pages(): Page[] {
     },
     {
       title: "몬스터 패턴",
-      lead: "몬스터는 치기 전에 바닥에 빨간 경고를 깔아요. 안쪽이 다 차오르면 맞으니 그 전에 밖으로!",
+      lead: "몬스터는 치기 전에 바닥에 빨간 경고를 깔아요. 안쪽이 다 차면 맞으니까 그 전에 빠져나와요.",
       body: (
         <>
           <ul className={cx(s.guideList, s.guideGrid)}>
@@ -357,7 +357,7 @@ function pages(): Page[] {
             ))}
           </ul>
           <p className={s.meta}>
-            어려운 사냥터일수록 경고가 짧고 개수가 많아져요. 그래도 경고는 적어도 {sec(MIN_WINDUP_MS)}는 보여요. 맞은 직후에는 아주 잠깐 무적이에요.
+            어려운 사냥터일수록 경고가 짧아지고 많아져요. 그래도 경고는 적어도 {sec(MIN_WINDUP_MS)}는 보여요. 맞은 직후에는 아주 잠깐 무적이에요.
           </p>
         </>
       ),
@@ -370,7 +370,7 @@ function pages(): Page[] {
           <ol className={s.guidePhases}>
             <li>
               <b>처음</b>
-              <span className={s.meta}>물기·부채 사격·내려찍기 같은 기본 패턴</span>
+              <span className={s.meta}>물기, 부채 사격, 내려찍기 같은 기본 패턴</span>
             </li>
             {DEFAULT_BOSS_PHASES.map((ph) => (
               <li key={ph.below}>
@@ -378,25 +378,25 @@ function pages(): Page[] {
                   HP {pct(ph.below)} 아래 · {ph.label}
                 </b>
                 <span className={s.meta}>
-                  {ph.add.map((id) => PATTERNS[id].name).join("·")} 추가 · 패턴 간격 {pct(1 - ph.haste)} 빨라짐
+                  {ph.add.map((id) => PATTERNS[id].name).join(", ")} 패턴이 더해져요. 패턴 간격이 {pct(1 - ph.haste)} 짧아져요.
                 </span>
               </li>
             ))}
           </ol>
           <ul className={s.guideList}>
             <Item art={skillArt("so_friend")} title="졸개 부르기">
-              단계가 오를 때마다 사냥터마다 정해진 졸개 무리를 부르고, 지형 기믹도 더 거칠어져요. 우두머리 둘레엔 붉은 기운이 돌아요.
+              단계가 오를 때마다 졸개 무리를 불러요. 지형 기믹도 더 거세져요. 우두머리 둘레에는 붉은 기운이 돌아요.
             </Item>
             <Item art={skillArt("fr_tomb")} title="잘 안 밀려요">
-              우두머리는 넉백·경직이 거의 없고 지형에 느려지지도 않아요. 묶기·끌어당기기도 1/3만 먹혀요. 경고를 보고 빠지는 게 핵심.
+              우두머리는 거의 밀리지도 멈추지도 않아요. 지형 때문에 느려지지도 않아요. 묶기와 끌어당기기는 1/3만 통해요. 경고를 보고 피하는 게 가장 중요해요.
             </Item>
             {deepBosses.length > 0 && (
               <Item art={skillArt("em_spark")} title="한 번 더 폭주하는 우두머리">
                 {deepBosses.map((b) => {
                   const ph = b.phases!.at(-1)!;
-                  return `${b.name}(HP ${pct(ph.below)} 아래 · ${ph.add.map((id) => PATTERNS[id].name).join("·")})`;
+                  return `${b.name}(HP ${pct(ph.below)} 아래, ${ph.add.map((id) => PATTERNS[id].name).join(", ")})`;
                 }).join(", ")}
-                는 마지막에 한 번 더 단계가 올라 패턴 간격이 더 짧아져요. 졸개는 두 번까지만 불러요.
+                는 마지막에 단계가 한 번 더 올라요. 그러면 패턴이 더 자주 와요. 졸개는 두 번까지만 불러요.
               </Item>
             )}
           </ul>
@@ -410,30 +410,30 @@ function pages(): Page[] {
         <>
           <ul className={cx(s.guideList, s.guideGrid)}>
             <Item art={skillArt("so_veil")} title="무적">
-              {skillName("so_veil")}({sec(veil.safeMs)}~), {skillName("fr_mist")}, 부활 쿠키(2초): 몸이 깜빡이며 어떤 피해도 안 받아요.
+              몸이 깜빡이는 동안은 어떤 피해도 안 받아요. {skillName("so_veil")}({sec(veil.safeMs)}~), {skillName("fr_mist")}, 부활 쿠키(2초)로 무적이 돼요.
             </Item>
-            <Item art={skillArt("so_swift")} title="빨라짐·공격↑">
-              {skillName("so_swift")}는 이동·공격 속도, {skillName("em_stoke")}는 공격력(+{pct(stoke.atk)}~)을 잠깐 올려요.
+            <Item art={skillArt("so_swift")} title="빨라짐과 공격력 업">
+              {skillName("so_swift")} 스킬은 이동 속도와 공격 속도를 잠깐 올려요. {skillName("em_stoke")} 스킬은 공격력을 잠깐 올려요. 1랭크에 +{pct(stoke.atk)}예요.
             </Item>
             <Item art={skillArt("so_friend")} title="도우미">
-              {skillName("so_friend")}: 길동무 넋이 곁에서 같이 때려요. {skillName("so_lantern")}은 그 자리에서 넋불을 쏴요.
+              {skillName("so_friend")} 스킬을 쓰면 넋이 곁에서 같이 때려요. {skillName("so_lantern")} 스킬은 놓은 자리에서 넋불을 쏴요.
             </Item>
             <Item art={skillArt("fr_ward")} title="보호막">
-              {skillName("fr_ward")}: 얼음 방패가 피해를 먼저 받아 줘요.
+              {skillName("fr_ward")} 스킬을 쓰면 얼음 방패가 피해를 먼저 막아 줘요.
             </Item>
             <Item art={skillArt("so_lamp")} title="멈춰 섬">
-              {skillName("so_lamp")}을 쓰면 {sec(lamp.rootMs)} 동안 움직이지도 공격하지도 못해요.
+              {skillName("so_lamp")} 스킬을 쓰면 {sec(lamp.rootMs)} 동안 움직이지도 공격하지도 못해요.
             </Item>
-            <Item art={skillArt("so_chain")} title="약화·묶기 (몬스터)">
-              {skillName("so_chain")}·{skillName("fr_tomb")}에 걸린 적은 잠깐({sec(chain.stunMs)}~{sec(tomb.stunMs)}) 묶이고 받는 피해가 늘어요. 서리 스킬은 적을 느리게 해요.
+            <Item art={skillArt("so_chain")} title="몬스터 약화와 묶기">
+              {skillName("so_chain")}, {skillName("fr_tomb")} 스킬에 걸린 적은 {sec(chain.stunMs)}~{sec(tomb.stunMs)} 동안 묶여요. 묶인 적은 피해를 더 받아요. 서리 스킬은 적을 느리게 해요.
             </Item>
-            <Item art={skillArt("em_kindle")} title="경직·넉백 (몬스터)">
-              맞은 몬스터는 잠깐 밀려나고 멈춰요. 치명타는 더 오래.
-              {stunStyles.length > 0 && ` ${stunStyles.join("·")}는 경직이 더 길고,`}
-              {pushStyles.length > 0 && ` ${pushStyles.join("·")}는 멀리 밀쳐요.`}
+            <Item art={skillArt("em_kindle")} title="몬스터 경직과 넉백">
+              맞은 몬스터는 잠깐 밀려나고 멈춰요. 치명타를 맞으면 더 오래 멈춰요.
+              {stunStyles.length > 0 && ` ${stunStyles.join(", ")} 무기는 더 오래 멈추게 해요.`}
+              {pushStyles.length > 0 && ` ${pushStyles.join(", ")} 무기는 멀리 밀쳐요.`}
             </Item>
             <Item pic={<span className={s.guideMud} />} title="지형">
-              늪·덩굴은 느려지고, 컨베이어·바람은 밀고, 웅덩이는 미끄러워요. 사냥터 설명의 기믹을 확인해요.
+              늪과 덩굴에선 느려져요. 컨베이어와 바람은 몸을 밀어요. 웅덩이는 미끄러워요. 사냥터마다 기믹이 설명에 적혀 있어요.
             </Item>
           </ul>
           <h4 className={s.guideSub}>몬스터가 거는 상태 이상</h4>
@@ -445,44 +445,44 @@ function pages(): Page[] {
               return (
                 <Item key={id} art={st.art} title={`${st.name} (${sec(f.durMs)})`}>
                   {st.desc}
-                  {id === "slow" && ` 이동속도 -${pct(st.slow ?? 0)}.`}
-                  {st.dotPct && ` 초당 최대 HP의 ${pct(st.dotPct)}.`}
+                  {id === "slow" && ` 이동 속도가 ${pct(st.slow ?? 0)} 줄어요.`}
+                  {st.dotPct && ` 1초마다 최대 HP의 ${pct(st.dotPct)}가 깎여요.`}
                   {who && ` ${who} 등이 걸어요.`}
                   <br />
-                  <small>풀기: {curers(id) || "시간이 지나면"}</small>
+                  <small>{curers(id) ? `${curers(id)}을 먹으면 풀려요.` : "시간이 지나면 풀려요."}</small>
                 </Item>
               );
             })}
           </ul>
           <p className={s.meta}>
-            몇몇 몬스터의 공격과 우두머리의 큰 기술에 맞으면 가끔 걸려요. 같은 상태는 겹치지 않고 남은 시간만 새로 채워지고, 풀린 직후엔 잠깐 같은 상태에 안 걸려요. 지속
-            피해로는 쓰러지지 않아요(HP 1에서 멈춤). 어려운 사냥터일수록 더 자주·오래·세게 걸려요 (지옥: 가장 자주 걸리고 세기 ×
-            {STATUS_DIFF.hell.power}, 둔화는 최대 -{pct(MAX_SLOW)}). 무적 중에는 안 걸리고, 부활 쿠키로 일어나면 모두 풀려요.
+            몇몇 몬스터의 공격이나 우두머리의 큰 기술에 맞으면 가끔 걸려요. 같은 상태에 또 걸리면 남은 시간만 다시 채워져요. 풀린 직후엔 잠깐 같은 상태에 안 걸려요.
+            지속 피해로는 쓰러지지 않고 HP 1에서 멈춰요. 어려운 사냥터일수록 더 자주, 더 오래, 더 세게 걸려요. 지옥에선 세기가 ×
+            {STATUS_DIFF.hell.power}이고, 둔화는 최대 -{pct(MAX_SLOW)}까지예요. 무적일 땐 안 걸리고, 부활 쿠키로 일어나면 모두 풀려요.
           </p>
         </>
       ),
     },
     {
-      title: "드롭·보상",
-      lead: "끝나면 처치한 만큼 EXP, 진행한 만큼 포인트를 받아요. 모든 웨이브를 깨면 포인트 최대.",
+      title: "드롭과 보상",
+      lead: "판이 끝나면 잡은 만큼 EXP를, 나아간 만큼 포인트를 받아요. 모든 웨이브를 깨면 포인트를 가장 많이 받아요.",
       body: (
         <>
           <ul className={s.guideList}>
             <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="드롭">
-              {KILLS_PER_DROP_ROLL}마리 잡을 때마다 한 번(한 판 최대 {HUNT_DROP_ROLLS}번) 장비·물약이 나올 기회. 우두머리를 잡으면 그 자리에서 장비가
+              {KILLS_PER_DROP_ROLL}마리 잡을 때마다 장비나 물약이 나올 기회가 한 번 생겨요. 한 판에 {HUNT_DROP_ROLLS}번까지예요. 우두머리를 잡으면 장비가
               나올 기회가 한 번 더 있어요.
               <br />
-              <small>쓰러지지 않고 다 깨면 아주 가끔 기간제 코디(꾸미기 하루권)가 꾸미기 가방에 들어와요.</small>
+              <small>쓰러지지 않고 다 깨면 아주 가끔 하루짜리 코디가 꾸미기 가방에 들어와요.</small>
             </Item>
             <Item art={POTIONS[0]?.art} title="잘 나오는 것">
-              사냥터마다 잘 나오는 장비가 있어요(사냥터 설명). 싼 장비일수록 자주 나와요. 가방이 가득 차면 못 챙겨요.
+              사냥터마다 잘 나오는 장비가 있어요. 사냥터 설명에서 볼 수 있어요. 싼 장비일수록 자주 나와요. 가방이 가득 차면 못 주워요.
             </Item>
             <Item art={skillArt("so_lamp")} title="쓰러지면">
-              포인트는 절반, EXP는 조금 깎여요. 권장 레벨보다 낮으면 조심!
+              포인트는 절반만 받고 EXP도 조금 깎여요. 권장 레벨보다 낮으면 조심해요.
             </Item>
             <Item art={skillArt("em_spark")} title="하루 한도">
-              사냥 포인트는 하루 {HUNT_DAILY_MAX}P까지예요(출발 창·가방·결과 화면 막대에 오늘 받은 양이 나와요). 넘으면 EXP와 드롭만 받아요. 주운 장비·물약 되팔기도 이 한도
-              안이라 다 차면 내일 팔아요 — 상점에서 산 장비는 언제든 50% 환불. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
+              사냥 포인트는 하루 {HUNT_DAILY_MAX}P까지 받아요. 오늘 받은 양은 출발 창, 가방, 결과 화면 막대에 나와요. 다 채우면 EXP와 드롭만 받아요. 주운 장비와 물약을 파는 것도
+              이 한도에 들어가요. 다 채웠으면 내일 팔아요. 상점에서 산 장비는 언제든 50%를 돌려받아요. {sec(MIN_RUN_MS)}도 안 된 판은 보상이 없어요.
             </Item>
           </ul>
           <table className={s.guideTable}>
@@ -521,55 +521,58 @@ function pages(): Page[] {
     {
       // 11/15 사냥 끝판 (lib/rpg/endgame · 야근 빌딩 lib/rpg/tower)
       title: "레벨 50 이후",
-      lead: "레벨 50부터는 초월 레벨(★51~★100)과 마을의 야근 빌딩으로 더 올라가요. 보상은 포인트가 아니라 자랑거리예요.",
+      lead: "레벨 50이 되면 초월 레벨 ★51~★100을 올리고 마을의 야근 빌딩에 도전해요. 여기선 포인트보다 기록과 칭호가 보상이에요.",
       body: (
         <>
           <ul className={s.guideList}>
             <Item art={skillArt("em_spark")} title="초월 레벨 ★51~★100">
-              레벨 50에서 지옥 사냥터 판의 EXP와 야근 빌딩 층 EXP는 초월 EXP로 쌓여요 (다른 난이도·미니게임 EXP는 버려져요). ★51까지 {tExpToNext(0).toLocaleString("ko-KR")}, ★100 직전은 약{" "}
-              {Math.round(tExpToNext(TRANSCEND_MAX - 1) / 10_000)}만. 초월 5레벨마다 능력치 포인트 1개. 회식 3차·축제장은 레벨 50에선 EXP가 10%라 분기 마감·구조조정이
-              제값이에요. 레벨 랭킹은 레벨 → 초월 레벨 → 초월 EXP 순.
+              레벨 50부터는 지옥 사냥터와 야근 빌딩에서 얻은 EXP가 초월 EXP로 쌓여요. 다른 난이도와 미니게임 EXP는 쌓이지 않아요. 필요한 초월 EXP는 ★51까지 {tExpToNext(0).toLocaleString("ko-KR")}, ★100 바로 앞은 약{" "}
+              {Math.round(tExpToNext(TRANSCEND_MAX - 1) / 10_000)}만이에요. 초월 레벨이 5 오를 때마다 능력치 포인트를 1개 받아요. 회식 3차와 축제장은 레벨 50부터 EXP가 10%만 나와요.
+              분기 마감이나 구조조정에서 사냥하는 게 좋아요. 레벨 랭킹은 레벨 순서예요. 레벨이 같으면 초월 레벨, 그다음엔 초월 EXP로 정해요.
             </Item>
             <Item art={skillArt("so_lamp")} title="야근 빌딩">
-              마을 북쪽 분양 사무소 옆 높은 건물 (사냥 레벨 50부터). 1층부터 쓰러질 때까지 이어서 올라가요 — 한 층은 방 하나({TOWER_FLOOR_SEC}초 안), {TOWER_BOSS_EVERY}층마다 우두머리
-              층({TOWER_BOSS_FLOOR_SEC}초, 깨면 체력 30% 회복). 체력·SP·버프는 다음 층으로 이어져요. 층마다 몬스터 체력·공격력 ×{TOWER_HP_ATK}, 방어 ×{TOWER_DEF}. 층을 깨면 엘리베이터를 타고 다음 층으로
-              가고, 층 표시가 붉게 깜빡이면 우두머리 층이에요. 쓰러지면 끝이고 부활 쿠키는 못 써요. Esc로 그만두면 그 층까지 기록돼요. 도전 횟수 제한은 없어요.
+              마을 북쪽 분양 사무소 옆에 있는 높은 건물이에요. 사냥 레벨 50부터 들어가요. 1층부터 쓰러질 때까지 계속 올라가요. 한 층은 방 하나이고 {TOWER_FLOOR_SEC}초 안에 깨야 해요.{" "}
+              {TOWER_BOSS_EVERY}층마다 우두머리 층이 있어요. 우두머리 층은 {TOWER_BOSS_FLOOR_SEC}초이고, 깨면 체력이 30% 차요. 체력, SP, 버프는 다음 층까지 이어져요. 한 층 오를 때마다 몬스터 체력과 공격력은
+              ×{TOWER_HP_ATK}, 방어는 ×{TOWER_DEF}씩 세져요. 층을 깨면 엘리베이터를 타고 다음 층으로 가요. 층 표시가 붉게 깜빡이면 우두머리 층이에요. 쓰러지면 끝이고 부활 쿠키는 못 써요.
+              Esc로 그만두면 그 층까지 기록돼요. 몇 번이든 다시 도전할 수 있어요.
             </Item>
             {/* 11/15 테마는 판마다 무작위 (lib/rpg/tower towerBlock) */}
             <Item art={skillArt("em_spark")} title="층마다 바뀌는 테마">
-              {FLOORS_PER_THEME}층마다 테마가 바뀌는데 순서는 판마다 달라요. 한 판 안에서는 아직 안 나온 테마부터 나와서 {TOWER_THEMES.length * FLOORS_PER_THEME}층을 오르면{" "}
-              {TOWER_THEMES.length}곳을 모두 만나고, 그다음부터는 방금 나온 곳만 빼고 아무 데나 나와요. 처음 들른 테마는 층마다 새 몬스터가 한두 종씩 섞여 들어오고, 같은
-              판에서 다시 들르면 판 분위기가 바뀌면서 몬스터 구성도 새로 섞여요. 블록 마지막 층에는 그 테마의 우두머리가 기다려요.
+              테마는 {FLOORS_PER_THEME}층마다 바뀌고, 순서는 판마다 달라요. 한 판에서는 아직 안 나온 테마가 먼저 나와요. 그래서 {TOWER_THEMES.length * FLOORS_PER_THEME}층까지 오르면{" "}
+              {TOWER_THEMES.length}곳을 모두 만나요. 그다음부터는 방금 나온 곳만 빼고 아무 데나 나와요. 처음 간 테마에서는 층마다 새 몬스터가 한두 종씩 늘어요. 같은
+              판에서 다시 가면 분위기와 몬스터가 바뀌어요. 테마의 마지막 층에는 그 테마의 우두머리가 기다려요.
             </Item>
             {/* 11/15 능력 카드 · 상사의 제안 · 멈추면 집중 (lib/rpg/cards) */}
             <Item pic={<CardPic id="boards" />} title="능력 카드">
-              몬스터를 잡으면 판 레벨 막대가 차요. 오를 때마다 게임이 잠깐 멈추고 카드 세 장 중 하나를 골라요. 카드는 {CARD_IDS.length}장이고, 그 판에서만 쌓였다가 판이
-              끝나면 사라져요. 같은 카드를 여러 번 고르면 더 세져요. 무기에 따라 붙는 모양이 달라서, 쏘는 무기는 한 발 더 날아가고 휘두르는 무기는 다른 방향으로도 같이
-              휘둘러요. 마음에 드는 게 없으면 다시 뽑기를 써요. 판마다 한 번, 10층을 깰 때마다 한 번씩 더 생겨요. 카드는 일반, 매직, 레어, 유니크, 전설 다섯 등급이에요.
-              1층에선 전설이 백 장에 한 장꼴이지만 높이 오를수록, 다시 뽑을수록 좋은 등급이 잘 나와요. 지금 능력치는 왼쪽 위 능력치 판(C)에서 봐요. {1 + TOWER_CHECKPOINT_EVERY}층처럼 위에서 시작하면 건너뛴 10층마다 카드 {START_PICKS_PER_10}장을 먼저 고르고 올라가요.
+              몬스터를 잡으면 판 레벨 막대가 차요. 판 레벨이 오를 때마다 게임이 잠깐 멈추고, 카드 세 장 중 하나를 골라요. 카드는 모두 {CARD_IDS.length}장이에요. 고른 카드는
+              그 판에서만 쓰고, 판이 끝나면 사라져요. 같은 카드를 또 고르면 더 세져요. 쏘는 무기는 한 발 더 날아가고, 휘두르는 무기는 다른 방향으로도 같이 휘둘러요.
+              마음에 드는 카드가 없으면 다시 뽑아요. 다시 뽑기는 판마다 한 번 있고, 10층을 깰 때마다 한 번씩 늘어요. 카드 등급은 일반, 매직, 레어, 유니크, 전설 다섯 가지예요.
+              1층에선 전설이 백 장에 한 장꼴이에요. 높이 오르거나 다시 뽑을수록 좋은 등급이 잘 나와요. 지금 능력치는 왼쪽 위 능력치 판에서 봐요. C를 누르면 열고 닫혀요.{" "}
+              {1 + TOWER_CHECKPOINT_EVERY}층처럼 위에서 시작하면 건너뛴 10층마다 카드를 {START_PICKS_PER_10}장씩 먼저 골라요.
             </Item>
             <Item pic={<CardPic id="oneshot" />} title="상사의 제안과 멈추면 집중">
-              10층마다 우두머리를 잡으면 상사가 슬쩍 제안을 해요. 최대 체력 {Math.round(BOSS_DEAL_HP_COST * 100)}%를 내주면 레어 이상 카드 한 장을 주고, 거절하면 체력을 가득
-              채워 줘요. 기본 공격은 직접 해요 (Space·J, 누르고 있으면 계속). 가만히 서서 치면 공격 속도가 {Math.round(FOCUS_ASPD * 100)}% 빨라져요 — 피할 땐 움직이고 칠 땐 멈추는 게 요령이에요.
+              10층마다 우두머리를 잡으면 상사가 제안을 해요. 최대 체력을 {Math.round(BOSS_DEAL_HP_COST * 100)}% 내주면 레어 이상 카드를 한 장 받아요. 거절하면 체력을 가득
+              채워 줘요. 가만히 서서 때리면 공격 속도가 {Math.round(FOCUS_ASPD * 100)}% 빨라져요. 피할 땐 움직이고, 때릴 땐 멈춰 서요.
             </Item>
             {/* 11/15 세트 장비·강화 */}
             <Item art={{ shape: "sg:003", main: 0, accent: 0 }} title="세트 장비와 강화">
-              세트 장비는 야근 빌딩 상자에서만 나와요. 야근·결재·회의·출장 네 세트에 다섯 부위가 있고, 높은 층일수록 사원급에서 임원급으로 올라가요.
-              같은 세트를 두 개, 네 개 끼면 세트 효과가 붙어요. 장비 탭에서 강화하면 기본 능력치가 올라요. +5면 1.4배, +10이면 2배, +15면 3배예요. 세트 장비는 +15, 상점 장비는 +5까지고 하나씩 따로 올려요.
-              +11부터는 실패하면 한 단계 내려가는데, 보호 문서로 막을 수 있어요. 안 쓰는 세트 장비는 분해해서 재료로 바꾸거나, 같은 직급 세 개를 원하는 부위로
-              바꿀 수 있어요.
+              세트 장비는 야근 빌딩 상자에서만 나와요. 세트는 야근, 결재, 회의, 출장 네 가지이고, 세트마다 부위가 다섯 개예요. 높은 층일수록 사원급에서 임원급까지 좋은 직급이 나와요.
+              같은 세트를 두 개나 네 개 끼면 세트 효과가 붙어요. 장비 탭에서 강화하면 기본 능력치가 올라요. +5면 1.4배, +10이면 2배, +15면 3배예요. 세트 장비는 +15, 상점 장비는 +5까지 올릴 수 있어요.
+              +11부터는 실패하면 한 단계 내려가요. 보호 문서가 있으면 막을 수 있어요. 안 쓰는 세트 장비는 분해해서 재료로 바꿔요. 같은 직급 세 개를 원하는 부위 하나로
+              바꿀 수도 있어요.
             </Item>
             <Item art={POTIONS[0]?.art} title="야근 빌딩 보상">
-              올라간 층마다 초월 경험치를 받아요. 1층은 {floorTExp(1)}, 30층은 {floorTExp(30)}, 100층은 {floorTExp(100)}이고, 쓰러져도 깬 층만큼은 받아요.
-              우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있고, 세트 장비는 15%로 나와요. 7번 연속 못 받으면 다음엔 꼭 나와요.
+              깬 층마다 초월 경험치를 받아요. 1층은 {floorTExp(1)}, 30층은 {floorTExp(30)}, 100층은 {floorTExp(100)}만큼 받아요. 쓰러져도 깬 층만큼은 받아요.
+              우두머리 층을 깨면 우두머리 상자가 열려요. 물약과 강화 재료는 늘 들어 있어요. 세트 장비는 15% 확률로 나와요. 7번 내리 못 받으면 다음엔 꼭 나와요.
               꾸미기 이용권도 가끔 나와요.
-              깬 층마다 포인트도 조금 줘요 (사냥 하루 한도 안). 처치 수는 주간 사냥 레이스에 들어가요. {TOWER_CHECKPOINT_EVERY}층 우두머리를 잡으면 다음부터 {1 + TOWER_CHECKPOINT_EVERY}층에서, {TOWER_CHECKPOINT_EVERY * 2}층을 깨면{" "}
-              {1 + TOWER_CHECKPOINT_EVERY * 2}층에서 바로 시작할 수 있어요.
+              깬 층마다 포인트도 조금 받아요. 이 포인트도 사냥 하루 한도에 들어가요. 잡은 몬스터 수는 주간 사냥 레이스에 들어가요. {TOWER_CHECKPOINT_EVERY}층 우두머리를 잡으면 다음부터 {1 + TOWER_CHECKPOINT_EVERY}층에서 바로 시작할 수 있어요. {TOWER_CHECKPOINT_EVERY * 2}층을 깨면{" "}
+              {1 + TOWER_CHECKPOINT_EVERY * 2}층에서 시작할 수 있어요.
             </Item>
-            <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="칭호·랭킹">
-              층 칭호 10 「야근 입문」·20 「번아웃 생존자」·30 「야근이 일상」·50 「퇴근을 잊은 자」·100 「사무실이 집」. 신화(서버에 한 사람): 처음 30층 「최초 결재자」·50층 「최초
-              임원」·100층 「빌딩의 전설」·처음 ★100 「첫 번째 상무」, 지금 최고 층 기록 「꼭대기 층 주인」(뺏기면 넘어감), 지난주 최고 층 1위 「이번 주 최고층」. 랭킹 창 [야근 빌딩]은
-              층 높은 순, 같으면 빨리 오른 순. 끝판이 열린 뒤 {PIONEER_DAYS}일 안에 ★51에 닿거나 {PIONEER_FLOOR}층을 넘으면 「개척자 #번호」. 운영자는 랭킹·최초·번호에서 빠져요.
+            <Item art={GEAR.find((g) => g.kind === "acc")?.art} title="칭호와 랭킹">
+              층 칭호는 10층 「야근 입문」, 20층 「번아웃 생존자」, 30층 「야근이 일상」, 50층 「퇴근을 잊은 자」, 100층 「사무실이 집」이에요. 서버에서 한 사람만 받는 신화 칭호도 있어요.
+              30층에 처음 오르면 「최초 결재자」, 50층은 「최초 임원」, 100층은 「빌딩의 전설」, ★100에 처음 닿으면 「첫 번째 상무」예요. 지금 가장 높은 층 기록을 가진 사람은 「꼭대기 층 주인」을 달아요.
+              기록을 뺏기면 칭호도 넘어가요. 지난주 가장 높이 오른 사람은 한 주 동안 신화 칭호 「이번 주 최고층」을 달아요. 랭킹 창 [야근 빌딩]은 높은 층 순서예요. 층이 같으면 빨리 오른 사람이 앞이에요.
+              끝판이 열리고 {PIONEER_DAYS}일 안에 ★51에 닿거나 {PIONEER_FLOOR}층을 넘으면 「개척자 #번호」를 받아요. 운영자는 랭킹, 최초 칭호, 개척자 번호에서 빠져요.
             </Item>
           </ul>
           {/* 11/15 테마 카드 (테마 모음 TOWER_THEMES를 그대로 — 새 테마가 생기면 저절로 한 장 더) */}
@@ -582,7 +585,7 @@ function pages(): Page[] {
             <thead>
               <tr>
                 <th>층</th>
-                <th>저주 (누적)</th>
+                <th>저주 (계속 쌓여요)</th>
               </tr>
             </thead>
             <tbody>

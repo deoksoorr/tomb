@@ -2,6 +2,7 @@ import { Redis } from "@upstash/redis";
 import { CHAMP_ITEM_IDS, itemById, MAX_DECOR_PER_GRAVE, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
 import { CALENDAR_TTL_SEC, legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
+import { earnedBySource } from "../earnGauge";
 import { STAY_BONUS_AMOUNTS, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
 import type { ActivityItem, Grave, GraveDecor } from "../types";
 import { econKeyFor, kstDay, rankValue, WEEK_RANK_TTL_SEC, WEEK_TIE_SCALE, weekOfDay } from "./accounts";
@@ -669,18 +670,19 @@ export class RedisAccounts implements AccountStore {
   }
 
   async get(id: string, day: string, now: number): Promise<AccountRecord> {
-    // 오늘 적립 기록 세 필드는 HMGET 하나로 (명령 9개 → 7개)
+    // 오늘 적립 기록은 HGETALL 하나로 (합계·머문 기록·보너스 구간 + 항목별 적립 — 내 정보 게이지. 예전 HMGET 자리라 명령 수는 그대로)
     const [acct, inv, look, graves, earnToday, activity, stashRaw] = await this.redis
       .pipeline()
       .hgetall(K.acct(id))
       .hgetall(K.inv(id))
       .hgetall(K.look(id))
       .smembers(K.acctGraves(id))
-      .hmget(K.earn(id, day), "_total", "_stay", "_bonus")
+      .hgetall(K.earn(id, day))
       .lrange(K.activity(id), 0, -1)
       .hgetall(K.stash(id))
       .exec<[string[] | null, string[] | null, string[] | null, string[], unknown, string[], string[] | null]>();
-    const [today, stay, bonus] = hmgetList(earnToday, ["_total", "_stay", "_bonus"]);
+    const earnMap = hashEntries(earnToday);
+    const [today, stay, bonus] = [earnMap.get("_total"), earnMap.get("_stay"), earnMap.get("_bonus")];
     const a = pairs(acct);
     const equipped: EquippedItem[] = [...pairs(look).values()].flatMap((v) => {
       const [itemId, until] = v.split("|");
@@ -707,6 +709,7 @@ export class RedisAccounts implements AccountStore {
       stash,
       graves,
       todayEarned: Number(today ?? 0),
+      earnedBy: earnedBySource(earnMap),
       activityUnread: activity.filter((raw) => {
         const item = JSON.parse(raw) as ActivityItem;
         return item.kind !== "revive" && item.at > Number(a.get("activitySeen") ?? 0);
@@ -1276,6 +1279,12 @@ export class RedisAccounts implements AccountStore {
     const rows = await this.summaries(ids);
     return { next: String(next), accounts: rows.filter((r): r is AccountSummary => r !== null) };
   }
+}
+
+/** HGETALL 결과 → Map (automaticDeserialization: false면 [필드, 값, …] 배열, 혹시 객체로 와도) */
+function hashEntries(got: unknown): Map<string, string> {
+  if (Array.isArray(got)) return pairs(got as string[]);
+  return new Map(Object.entries((got ?? {}) as Record<string, unknown>).map(([k, v]) => [k, String(v)]));
 }
 
 /** HMGET 결과 → 필드 순서 값 (automaticDeserialization: false면 배열, 혹시 객체로 와도) */

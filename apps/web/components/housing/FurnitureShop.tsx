@@ -42,7 +42,7 @@ function abilities(f: FurnitureDef): string[] {
   if (f.ext) out.push("집 외관에 입혀요 (외관 꾸미기)");
   else if (f.skin) out.push(f.skin === "floor" ? "방 바닥 전체를 바꿔요" : "방 벽 전체를 바꿔요");
   // 칸에 놓는 물건의 크기는 점수 줄의 "3×2칸" 표시로 보여 준다
-  if (f.use) out.push(`E 키: ${f.use}`);
+  if (f.use) out.push(`E 키로 ${f.use}`);
   if (f.id === "stone_path") out.push("밟으면 또각또각 발소리가 나요");
   if (f.floor) out.push("밟고 지나갈 수 있고 위에 물건을 올려요");
   if (f.light) out.push("밤에 빛나요");
@@ -125,10 +125,10 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
       if (sell) {
         const r = await housingApi.sellItem(def.id);
         onMy(r);
-        setMsg(`${def.name}을(를) ${r.refunded}P에 팔았어요.`);
+        setMsg(`${def.name} 하나를 ${r.refunded}P에 팔았어요.`);
       } else {
         onMy(await housingApi.buyItem(def.id));
-        setMsg(`${def.name}을(를) 가방에 넣었어요.`);
+        setMsg(`가방에 ${def.name} 하나를 넣었어요.`);
       }
       void meStore.refresh();
     } catch (e) {
@@ -241,7 +241,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
           <p className={styles.points}>
             내 포인트 <strong>{fmt(my.points)}P</strong>
           </p>
-          <p className={cx(styles.small, styles.fsHint)}>되팔면 절반 · 놓인 물건은 치우고 저장한 뒤 팔 수 있어요</p>
+          <p className={cx(styles.small, styles.fsHint)}>되팔면 산 값의 절반을 받아요. 놓아 둔 물건은 치우고 저장한 뒤에 팔 수 있어요.</p>
         </div>
         <div className={styles.fsTabs} role="tablist" aria-label="물건 갈래">
           {CATS.map((c) => (

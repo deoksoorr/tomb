@@ -91,7 +91,7 @@ export default function StarsHud({ onPause, totalMs, starry }: { onPause: () => 
         </div>
       </div>
       <div className={r.hudBottom}>
-        <p className={r.keysHint}>{GAMES.stars.how} · 한 별자리를 놓치지 않고 이으면 도감 등록 · Esc 멈춤</p>
+        <p className={r.keysHint}>{GAMES.stars.how} Esc를 누르면 잠깐 멈춰요.</p>
       </div>
     </div>
   );

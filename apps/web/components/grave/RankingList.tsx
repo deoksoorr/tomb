@@ -107,12 +107,12 @@ export default function RankingList({ graves, onPick }: Props) {
       </div>
       {tab === "look" && (
         <div className={styles.filters}>
-          <span className={styles.hint}>꾸미기 점수 = 지금 입은 코디 파츠 점수 합 (비쌀수록 높아요 · 기간이 끝나면 빠져요)</span>
+          <span className={styles.hint}>지금 입은 코디 점수를 더한 값이에요. 비쌀수록 높고, 기간이 끝나면 빠져요.</span>
         </div>
       )}
       {tab === "level" && (
         <div className={styles.filters}>
-          <span className={styles.hint}>사냥 캐릭터 레벨 순 · 레벨이 같으면 경험치가 많은 순</span>
+          <span className={styles.hint}>레벨이 높은 순이에요. 같으면 경험치가 많은 순이에요.</span>
         </div>
       )}
       {tab !== "flower" && tab !== "look" && tab !== "level" && (
@@ -124,9 +124,9 @@ export default function RankingList({ graves, onPick }: Props) {
               </button>
             ))}
           </div>
-          {tab === "house" && <span className={styles.hint}>꾸밈 점수 = 안팎 물건 점수 + 좋아요 × 3</span>}
-          {tab === "tower" && <span className={styles.hint}>층 높은 순 · 같으면 빨리 오른 순 · 이번 주 1위는 다음 주 한 주 동안 신화 칭호 「이번 주 최고층」</span>}
-          {tab === "fish" && <span className={styles.hint}>직접 낚은 물고기만 올라요 (자동 낚시로 낚은 것은 도감에만 기록돼요)</span>}
+          {tab === "house" && <span className={styles.hint}>안팎에 놓은 물건 점수에 좋아요 × 3을 더해요.</span>}
+          {tab === "tower" && <span className={styles.hint}>높이 오른 순이에요. 같으면 빨리 오른 순이에요. 이번 주 1위는 다음 한 주 동안 신화 칭호 「이번 주 최고층」을 달아요.</span>}
+          {tab === "fish" && <span className={styles.hint}>직접 낚은 물고기만 올라요. 자동 낚시로 낚은 것은 도감에만 남아요.</span>}
           {tab === "fish" && (
             <select className={styles.zone} value={fish} onChange={(e) => setFish(e.target.value)} aria-label="물고기">
               <option value="all">모든 물고기</option>

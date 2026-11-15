@@ -36,7 +36,7 @@ export default function ChannelPicker({ lobby, value, onChange, allowAuto, curre
       {lobby.status === "unreachable" && (
         <p className={styles.note}>
           지금은 채널 정보를 불러오지 못했어요.
-          {allowAuto ? " 그래도 들어갈 수 있어요. 자리가 나는 대로 이어 드릴게요." : " 잠시 후 다시 열어 주세요."}
+          {allowAuto ? " 그래도 들어갈 수 있어요. 빈 채널로 알아서 넣어 드릴게요." : " 잠시 뒤 다시 열어 주세요."}
         </p>
       )}
 

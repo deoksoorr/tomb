@@ -79,8 +79,8 @@ export default function TowerEntrance({
         <h3 id="tower-lift" className={s.sectionTitle}>
           몇 층부터 오를까요?{" "}
           <span className={s.meta}>
-            · 10층 우두머리를 잡으면 11층, 20층을 잡으면 21층 버튼에 불이 들어와요
-            {view.superHunter ? " · 슈퍼 계정: 101층까지 열림" : ""}
+            10층 우두머리를 잡을 때마다 그다음 층 버튼에 불이 들어와요.
+            {view.superHunter ? " 슈퍼 계정은 101층까지 열려요." : ""}
           </span>
         </h3>
         <div className={s.liftPanel} role="radiogroup" aria-label="시작 층">
@@ -107,19 +107,18 @@ export default function TowerEntrance({
           <b className={s.zoneGimmick}>
             {start}층부터
           </b>{" "}
-          다섯 층마다 테마 {TOWER_THEMES.length}곳 중 하나가 나오는데, 어떤 순서일지는 타 봐야 알아요.
-          몬스터는 한 층 오를 때마다 조금씩 세져요 (이 층은 처음보다 ×{towerHpMul(start).toFixed(2)}). 한 층에 {towerFloorSec(start)}초,
-          5층마다 우두머리가 기다리고 잡으면 체력이 30% 차고 상자가 나와요.
+          테마는 다섯 층마다 바뀌어요. {TOWER_THEMES.length}곳 중 어디가 나올지는 타 봐야 알아요.
+          몬스터는 층이 오를수록 조금씩 세져요. 이 층은 1층보다 ×{towerHpMul(start).toFixed(2)}예요. 한 층은 {towerFloorSec(start)}초예요.
+          5층마다 우두머리가 나와요. 잡으면 체력이 30% 차고 상자가 열려요.
         </p>
         <p className={s.meta}>
-          저주:{" "}
           {curses.length
-            ? curses.map((c) => `${c.name}(${c.desc})`).join(" · ")
-            : "아직 없어요. 10층부터 하나씩 붙어요"}
+            ? `붙는 저주 ${curses.map((c) => `「${c.name}」 ${c.desc}.`).join(" ")}`
+            : "저주는 아직 없어요. 10층부터 하나씩 붙어요."}
         </p>
         <div className={s.zoneGo}>
           <span className={s.meta}>
-            몇 번이든 다시 오를 수 있어요. 우두머리 상자도 잡는 만큼 열려요.
+            몇 번이든 다시 오를 수 있어요.
           </span>
           <button
             type="button"
@@ -132,48 +131,48 @@ export default function TowerEntrance({
         </div>
         {canBoost && (
           <label className={s.meta}>
-            <input type="checkbox" checked={boost} onChange={(e) => setBoost(e.target.checked)} /> 테스트용 무적·공격력 ×20 (슈퍼 계정만 · 운영 서버엔 없음)
+            <input type="checkbox" checked={boost} onChange={(e) => setBoost(e.target.checked)} /> 테스트용 무적, 공격력 ×20 (슈퍼 계정만, 운영 서버엔 없어요)
           </label>
         )}
         {/* 11/15 오르기 전에 무엇이 떨어지는지 */}
         <section className={s.towerDrops} aria-labelledby="tower-drops">
           <h4 id="tower-drops">우두머리 상자에서 나오는 것</h4>
-          <p>5층마다 우두머리가 있어요. 잡고 그 층을 다 깨면 상자가 열려요. 하루에 몇 개든 열 수 있어요.</p>
+          <p>5층마다 우두머리가 있어요. 우두머리 층을 다 깨면 상자가 열려요. 상자는 하루에 몇 개든 열 수 있어요.</p>
           <ul>
             <li>
-              <b>물약 1~2개</b> 늘 들어 있어요 (커피 · 에너지드링크 · 야근 도시락)
+              <b>물약 1~2개</b> 커피, 에너지드링크, 야근 도시락 중에서 늘 들어 있어요.
             </li>
             <li>
-              <b>세트 장비</b> {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률이에요. {SG_PITY}번 연속으로 못 받으면 다음 상자엔 꼭 들어 있어요.
+              <b>세트 장비</b> {Math.round(TOWER_CHEST_GEAR_CHANCE * 100)}% 확률이에요. {SG_PITY}번 내리 못 받으면 다음 상자엔 꼭 들어 있어요.
               높이 오를수록 직급이 올라요. 15층부터 대리급, 30층부터 과장급, 50층부터 임원급이에요.
-              {(view.character.sgPity ?? 0) > 0 && <span className={s.meta}> 지금 {view.character.sgPity}번째 기다리는 중</span>}
+              {(view.character.sgPity ?? 0) > 0 && <span className={s.meta}> 지금 {view.character.sgPity}번째 못 받았어요.</span>}
             </li>
             <li>
-              <b>강화 재료</b> 상자마다 결재 서류 2장에 10층마다 1장씩 더 들어요. 25층부터는 인감 도장도 나와요. 이번 주 기록이 10층 단위를 넘으면 보호 문서를
-              받아요. 한 주에 2장까지예요.
+              <b>강화 재료</b> 결재 서류가 2장 들어 있고, 10층 오를 때마다 1장씩 늘어요. 25층부터는 인감 도장도 나와요.
+              이번 주 기록이 10층, 20층처럼 새 10층을 넘으면 보호 문서를 받아요. 한 주에 2장까지예요.
             </li>
             <li>
-              <b>꾸미기 이용권</b> {Math.round(CHEST_COSMETIC_CHANCE * 100)}% 확률이에요. 기간은 1일, 3일, 7일, 30일 중 하나예요. 15층부터 희귀,
+              <b>꾸미기 이용권</b> {Math.round(CHEST_COSMETIC_CHANCE * 100)}% 확률이에요. 기간은 1일, 3일, 7일, 30일 중 하나예요. 15층부터는 희귀,
               30층부터는 전설도 나와요.
             </li>
           </ul>
-          <p className={s.meta}>떨어진 건 다음 층으로 가기 전에 저절로 모여서 놓칠 일은 없어요.</p>
+          <p className={s.meta}>떨어진 물건은 다음 층으로 가기 전에 저절로 주워져요.</p>
         </section>
         <ul className={s.towerWhy}>
           <li>
-            올라간 층만큼 초월 경험치가 쌓여요. 높이 갈수록 한 층에 주는 양도 늘고, 쓰러져도 그때까지 오른 만큼은 챙겨 가요.
+            오른 층만큼 초월 경험치가 쌓여요. 높은 층일수록 더 많이 줘요. 쓰러져도 오른 만큼은 받아요.
           </li>
           <li>
-            10층, 20층, 30층, 50층, 100층마다 칭호가 기다려요. 서버에서 제일 먼저 오른 사람만 받는 칭호와, 지금 가장 높이 오른 사람이
-            달고 있는 칭호도 있어요.
+            10층, 20층, 30층, 50층, 100층에 오르면 칭호를 받아요. 서버에서 가장 먼저 오른 사람만 받는 칭호도 있어요.
+            지금 가장 높이 오른 사람이 다는 칭호도 있어요.
           </li>
-          <li>이번 주에 가장 높이 오른 사람은 다음 한 주 동안 「이번 주 최고층」을 달아요.</li>
+          <li>이번 주에 가장 높이 오른 사람은 다음 한 주 동안 신화 칭호 「이번 주 최고층」을 달아요.</li>
           {/* 11/15 능력 카드 */}
           <li>
-            몬스터를 잡으면 판 레벨이 오르고, 오를 때마다 능력 카드를 한 장 골라요. 카드는 그 판에서만 쌓여요. 11층처럼 위에서 시작하면
-            건너뛴 10층마다 카드 세 장을 먼저 챙겨 가요.
+            몬스터를 잡으면 판 레벨이 올라요. 오를 때마다 능력 카드를 한 장 골라요. 카드는 그 판에서만 써요.
+            11층처럼 위에서 시작하면 건너뛴 10층마다 카드를 세 장씩 먼저 골라요.
           </li>
-          <li>쓰러지면 그 자리에서 끝이에요. 부활 쿠키는 안 통하고, 전설 카드 「무한 야근」만 한 번 일으켜 줘요. Esc로 나가면 그 층까지는 기록돼요.</li>
+          <li>쓰러지면 그 자리에서 끝나요. 부활 쿠키는 못 써요. 전설 카드 「무한 야근」이 있으면 한 번 다시 일어나요. Esc로 나가도 그 층까지는 기록돼요.</li>
         </ul>
       </section>
       <PioneerLine eg={eg} />

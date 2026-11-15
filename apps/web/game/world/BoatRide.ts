@@ -281,7 +281,7 @@ export class BoatRide {
     if (!pl.inBoat) return false;
     const to = shorePoint(pl.x, pl.y, standable) ?? (force ? this.dockStand() : null);
     if (!to) {
-      h.toast("물가(둑·나루터·잔교) 가까이 가면 내릴 수 있어요");
+      h.toast("둑, 나루터, 잔교 가까이 가면 내릴 수 있어요");
       return false;
     }
     this.leave(to, toast);

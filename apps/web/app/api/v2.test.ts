@@ -205,6 +205,20 @@ describe("반응 포인트", () => {
     await flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: owner }), ctx(grave.id));
     expect((await getMe(owner)).points).toBe(23);
   });
+
+  it("/api/me의 오늘 항목별 적립(earnedBy): 묘비 세우기·헌화·헌화 받음이 항목마다 따로, 합 = 오늘 합계", async () => {
+    const owner = await newVisitor();
+    const { grave } = await bodyOf<CreateGraveResponse>(quickBury(owner));
+    const fan = await newVisitor();
+    await flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: fan }), ctx(grave.id));
+    await flower.POST(call(`/api/graves/${grave.id}/flower`, { method: "POST", visitor: owner }), ctx(grave.id));
+    const mine = await getMe(owner);
+    expect(mine.earnedBy).toEqual({ bury: 20, gotFlower: 1, flower: 2 });
+    expect(Object.values(mine.earnedBy!).reduce((n, v) => n + v, 0)).toBe(mine.todayEarned);
+    expect((await getMe(fan)).earnedBy).toEqual({ flower: 2 });
+    // 아직 아무것도 안 받았으면 싣지 않는다
+    expect((await getMe(await newVisitor())).earnedBy).toBeUndefined();
+  });
 });
 
 describe("상점", () => {

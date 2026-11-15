@@ -37,6 +37,8 @@ import {
 import { AUTO_FISH_DAILY_MAX, newAutoSession } from "./auto";
 import { autoStatus, settleAuto, type AutoSettled } from "./autoSettle";
 import { getFishRank } from "./fishRank";
+import { festWeight } from "./quests/urgent";
+import { festivalOn } from "./quests/urgentService";
 import { pickSunkenCosmetic, SUNKEN_CHANCE, sunkenFallbackFish, sunkenName } from "./sunken";
 import { grantSunkenCosmetic, ownedPermanent } from "./sunkenGrant";
 import { getForageStore, type GrantItem, type ForageStore, type Snapshot } from "./store";
@@ -136,7 +138,7 @@ async function ticketOf(acct: string, token: string, kind: ForageTicket["k"]): P
 async function claimOrThrow(store: ForageStore, acct: string, nonce: string): Promise<string> {
   const c = await store.claim(acct, nonce);
   if (c.status === "reused") throw new HttpError(409, "TICKET_USED", "이미 결과를 받았어요.");
-  if (c.status !== "ok") throw new HttpError(409, "TICKET_STALE", "그 뒤에 새로 시작했거나 너무 오래돼서 이 기록은 끝났어요.");
+  if (c.status !== "ok") throw new HttpError(409, "TICKET_STALE", "새로 시작했거나 시간이 너무 지나서 이 기록은 끝났어요.");
   return c.payload;
 }
 
@@ -155,7 +157,9 @@ export async function castLine(acct: string, spotId: string, now = Date.now(), i
   const snap = await store.snapshot(acct, kstDay(now), nodeWindow(now));
   if (snap.day.fish >= DAILY_CATCH_MAX.fish) throw new HttpError(429, "DAILY_LIMIT", "오늘은 물고기를 충분히 잡았어요. 내일 또 와요.");
   const cond = conditionsAt(now);
-  const s = pickWeighted(candidates("fish", water, cond), rand());
+  // 11/15 긴급 의뢰 마을 축제: 희귀 이상 조금 더 (축제가 있을 수 있는 때에만 저장소를 본다)
+  const fest = await festivalOn(now);
+  const s = pickWeighted(candidates("fish", water, cond), rand(), (x) => festWeight(x.rarity, fest));
   if (!s) throw new HttpError(409, "NO_FISH", "지금은 아무것도 물지 않아요.");
   const size = rollSize10(s, rand());
   const power = fishPower(s, size);
@@ -181,7 +185,7 @@ export async function reelIn(acct: string, token: string, ok: boolean, now = Dat
   const payload = JSON.parse(await claimOrThrow(store, acct, t.n)) as FishPayload;
   if (!ok) return { result: null, state: await forageState(acct, now, store) };
   const since = now - (t.b ?? t.t);
-  if (since < reelMinMs(t.p ?? 1) - REEL_SLACK_MS) throw new HttpError(422, "TOO_FAST", "입질도 전에, 또는 너무 빨리 감았어요. 이번 물고기는 놓쳤어요.");
+  if (since < reelMinMs(t.p ?? 1) - REEL_SLACK_MS) throw new HttpError(422, "TOO_FAST", "너무 빨리 감았어요. 이번 물고기는 놓쳤어요.");
   if (since > HOOK_WINDOW_MS + REEL_MAX_MS) throw new HttpError(410, "TICKET_EXPIRED", "너무 오래 걸려서 물고기가 도망갔어요.");
   const day = kstDay(now);
   if (payload.g !== undefined) return reelSunken(store, acct, payload, now, ip);
@@ -288,7 +292,8 @@ export async function startGather(acct: string, nodeId: string, now = Date.now()
     const ticket = await signForageTicket(secret, { n: nonce, a: acct, k: "gather", x: n.id, t: now, w, m: 0, s: seed });
     return { ticket, mode: "bugs", kind: "bug", seed, timeLimitSec: BUG_ROUND_SEC, night: phase === "night" || phase === "dusk", phase };
   }
-  const s = pickWeighted(candidates(NODE_CAT[n.kind], n.where, conditionsAt(now)), rand());
+  const fest = await festivalOn(now);
+  const s = pickWeighted(candidates(NODE_CAT[n.kind], n.where, conditionsAt(now)), rand(), (x) => festWeight(x.rarity, fest));
   if (!s) throw new HttpError(409, "NODE_EMPTY", "지금은 비어 있어요. 조금 뒤에 다시 피어나요.");
   const items = Array.from({ length: gatherCount(n.kind, rand()) }, () => ({ id: s.id, size: 0 }));
   const ms = GATHER_MS[n.kind];

@@ -98,7 +98,7 @@ function Hud({ onQuit }: { onQuit: () => void }) {
         </div>
         {hint && (
           <p className={h.hint} role="status">
-            어둠 속에서 출구(달빛이 새는 문)를 찾으세요
+            어둠 속에서 달빛이 새는 문을 찾으세요
             <span className={s.keysHint}> · WASD/방향키 걷기 · Shift 뛰기 · Esc 나가기</span>
           </p>
         )}
@@ -211,13 +211,13 @@ export default function HauntDialog({ onClose }: { onClose: () => void }) {
     <Dialog title="귀신의집" kind="confirm" onClose={onClose}>
       <div className={s.result}>
         <p>
-          낡은 집 안은 촛불 하나로는 앞이 잘 보이지 않는 미로예요. 들어갈 때마다 길이 조금씩 바뀌고,
-          어둠 속 어딘가에 저마다 다른 귀신들이 숨어 있어요 — 안으로 들어갈수록 더 무서운 것이 나와요. 혼자 출구를 찾아 빠져나와 보세요.
+          낡은 집 안은 촛불 하나로는 앞이 잘 안 보이는 미로예요. 들어갈 때마다 길이 조금씩 바뀌어요.
+          어둠 속 곳곳에 귀신이 숨어 있고, 안으로 들어갈수록 더 무서운 것이 나와요. 혼자 출구를 찾아 빠져나와 보세요.
         </p>
         <div className={h.warn} role="note">
           <strong>주의</strong> 깜짝 놀라는 장면·큰 소리·번쩍임이 있어요.
           <br />
-          기기의 &lsquo;동작 줄이기(움직임 줄이기)&rsquo;를 켜 두면 화면이 흔들리거나 번쩍이지 않고 귀신이 나타나기만 해요. 소리 크기는 설정의 효과음 음량을 따라요.
+          기기의 &lsquo;동작 줄이기&rsquo;를 켜 두면 화면이 흔들리거나 번쩍이지 않아요. 귀신은 그대로 나와요. 소리 크기는 설정의 효과음 음량을 따라요.
         </div>
         <ShakeToggle />
         <p className={ui.hint}>

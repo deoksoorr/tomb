@@ -106,9 +106,9 @@ export function ExchangeDialog({ view, onClose, onView }: { view: RpgView; onClo
   return (
     <Dialog title="세트 장비 바꾸기" onClose={onClose} fitHeight>
       <div className={g.enhance}>
-        <p className={g.note}>같은 직급 장비 3개를 내면 원하는 세트의 원하는 부위 하나로 바꿔 줘요. 무기는 5개가 들어요. 옵션은 새로 붙어요.</p>
+        <p className={g.note}>같은 직급 장비 3개를 내면 원하는 세트, 원하는 부위로 하나 바꿔 줘요. 무기로 받으려면 5개를 내요. 옵션은 새로 붙어요.</p>
         {grades.length === 0 ? (
-          <p className={g.note}>바꿀 수 있는 세트 장비가 없어요. 장착 중인 것은 빼야 고를 수 있어요.</p>
+          <p className={g.note}>바꿀 수 있는 세트 장비가 없어요. 끼고 있는 장비는 먼저 빼야 고를 수 있어요.</p>
         ) : (
           <>
             <div className={g.picker} role="group" aria-label="직급">
@@ -152,7 +152,7 @@ export function ExchangeDialog({ view, onClose, onView }: { view: RpgView; onClo
               ))}
             </div>
             <p className={g.note}>
-              낼 장비를 {need}개 골라요 · {picked.length}/{need}
+              낼 장비를 {need}개 골라요 ({picked.length}/{need})
             </p>
             <ul className={g.list}>
               {pool.map((it) => {

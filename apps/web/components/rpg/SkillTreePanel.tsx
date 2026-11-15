@@ -49,8 +49,8 @@ const DRAG_START_PX = 6;
 /** 칸 이름: 1~5번 / 궁극기 칸(F) */
 const slotName = (i: number) => (i === ULT_SLOT ? "궁극기(F) 칸" : `${i + 1}번 칸`);
 const slotKey = (i: number) => (i === ULT_SLOT ? "F" : String(i + 1));
-const ULT_ONLY = "궁극기는 궁극기 칸(F)에만 놓아요.";
-const NOT_ULT = "궁극기 칸(F)에는 5단 궁극기만 놓아요. 다른 스킬은 1~5번 칸에.";
+const ULT_ONLY = "궁극기는 F 칸에만 들어가요.";
+const NOT_ULT = "F 칸에는 5단 궁극기만 들어가요. 다른 스킬은 1~5번 칸에 놓아요.";
 
 /** 유형 태그 도트 아이콘 (7×7) */
 function Glyph({ tag }: { tag: SkillTypeTag }) {
@@ -96,7 +96,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
   /** 단축 칸에 놓을 수 없는 이유 (null이면 놓을 수 있음) */
   const slotBlock = (sk: SkillDef): string | null =>
     sk.kind === "passive"
-      ? `${josa(sk.name, "은", "는")} 패시브라 단축 칸에 넣지 않아요 — 배우면 늘 켜져 있어요.`
+      ? `${josa(sk.name, "은", "는")} 패시브라 배우면 늘 켜져 있어요. 단축 칸에 넣지 않아도 돼요.`
       : rank(sk.id) === 0
         ? `${josa(sk.name, "을", "를")} 먼저 배워야 단축 칸에 놓을 수 있어요.`
         : null;
@@ -138,7 +138,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
       to === null
         ? `${josa(def.name, "을", "를")} 단축 칸에서 뺐어요.`
         : swapped
-          ? `${to + 1}번 ↔ ${from + 1}번 칸을 바꿨어요.`
+          ? `${to + 1}번 칸과 ${from + 1}번 칸을 바꿨어요.`
           : `${josa(def.name, "을", "를")} ${slotName(to)}에 놓았어요.`,
     );
   }
@@ -171,7 +171,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
                   ? `${josa(d!.name, "은", "는")} 이미 ${slotName(i)}에 있어요. 빼려면 칸을 줄 밖으로 끌어내세요.`
                   : a.why === "pickFirst"
                     ? "먼저 스킬 트리에서 배운 액티브 스킬을 고르세요. 그다음 숫자 키를 누르면 그 칸에 놓여요."
-                    : "스킬 트리에서 배운 액티브 스킬을 고른 뒤 이 칸을 누르거나, 노드를 끌어다 놓으세요.",
+                    : "스킬 트리에서 배운 스킬을 고르고 이 칸을 누르세요. 스킬을 끌어다 놓아도 돼요.",
         );
     }
   }
@@ -267,12 +267,12 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
       : `${josa(skillById(drag.id)!.name, "을", "를")} 놓을 칸 위에서 손을 떼세요.`
     : (hint ??
       (!d
-        ? `트리에서 배운 액티브 스킬을 고른 뒤 칸이나 숫자 키 1~${SKILL_SLOTS}(궁극기는 F)을 누르면 놓여요. 노드를 칸으로 끌어와도 돼요.`
+        ? `트리에서 배운 스킬을 고르고 칸이나 숫자 키(1~${SKILL_SLOTS})를 누르면 놓여요. 궁극기는 F예요. 스킬을 칸으로 끌어와도 돼요.`
         : pickBlock
           ? pickBlock
           : isUltimate(d.id)
-            ? `${d.name}: 궁극기는 F 칸에만 놓여요${dSlot >= 0 ? " (지금 F 칸)" : ""}. 칸을 누르거나 F를 누르세요.`
-            : `${d.name}: ${dSlot >= 0 ? `지금 ${dSlot + 1}번 칸 · ` : ""}넣을 칸을 누르거나 숫자 키 1~${SKILL_SLOTS}을 누르세요.`));
+            ? `${josa(d.name, "은", "는")} 궁극기라 F 칸에만 놓여요.${dSlot >= 0 ? " 지금 F 칸에 있어요." : ""} F 칸을 누르거나 F 키를 누르세요.`
+            : `${dSlot >= 0 ? `${josa(d.name, "은", "는")} 지금 ${dSlot + 1}번 칸에 있어요. ` : ""}${josa(d.name, "을", "를")} 넣을 칸이나 숫자 키(1~${SKILL_SLOTS})를 누르세요.`));
 
   const resetLabel = `${view.respecCost}P`;
 
@@ -292,7 +292,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
       {c.treeNotice && (
         <div className={t.notice} role="status">
           <p>
-            <b>스킬 트리가 새로 바뀌었어요.</b> 예전에 배운 스킬은 없어지고 스킬 포인트 <b>{c.skillPoints}</b>를 모두 돌려드렸어요. 세 갈래 중에서 마음에 드는 길로 다시 찍어 보세요.
+            <b>스킬 트리가 새로 바뀌었어요.</b> 예전에 배운 스킬은 없어지고 스킬 포인트 <b>{c.skillPoints}</b>개를 모두 돌려드렸어요. 세 갈래 중 마음에 드는 길로 다시 찍어 보세요.
           </p>
           <button type="button" className={cx(ui.button, ui.quiet)} disabled={busy} onClick={() => onCharacter({ type: "ackTree" })}>
             알겠어요
@@ -309,7 +309,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
           </span>
         </div>
         {view.superHunter && (
-          <span className={t.super} title="운영이 아닌 서버의 운영자 계정: 포인트 넉넉히 · 레벨 최대 취급 · 사냥터 모두 열림 · 초기화 횟수 안 셈">
+          <span className={t.super} title="테스트 서버의 운영자 계정이에요. 포인트가 넉넉하고 레벨은 최대로 쳐요. 사냥터가 모두 열리고 초기화 횟수도 세지 않아요.">
             테스트 서버 슈퍼 계정
           </span>
         )}
@@ -326,7 +326,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
             </>
           ) : (
             <span className={t.confirm} role="alert">
-              {view.respecCost}P를 내고 포인트 {spentPoints(c.skills)}를 모두 되돌릴까요? 단축 칸도 비워져요.
+              {view.respecCost}P를 내고 스킬 포인트 {spentPoints(c.skills)}개를 모두 돌려받을까요? 단축 칸도 비워져요.
               <span className={t.confirmBtns}>
                 <button
                   type="button"
@@ -334,7 +334,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
                   disabled={busy || view.points < view.respecCost}
                   onClick={() => {
                     setConfirmReset(false);
-                    onCharacter({ type: "respec", cost: view.respecCost }, `스킬을 초기화했어요. 포인트 ${spentPoints(c.skills)}를 돌려받았어요.`);
+                    onCharacter({ type: "respec", cost: view.respecCost }, `스킬을 초기화했어요. 포인트 ${spentPoints(c.skills)}개를 돌려받았어요.`);
                   }}
                 >
                   {view.points < view.respecCost ? "포인트가 모자라요" : "초기화"}
@@ -461,7 +461,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
             })}
           </div>
           <p className={t.legend}>
-            <i data-k="locked" /> 잠김 <i data-k="open" /> 찍을 수 있음 <i data-k="learned" /> 찍음 <i data-k="max" /> 최대 · 둥근 칸은 패시브 · 선 위 숫자는 필요한 선행 랭크(없으면 1랭크)
+            <i data-k="locked" /> 잠김 <i data-k="open" /> 찍을 수 있음 <i data-k="learned" /> 찍음 <i data-k="max" /> 최대. 둥근 칸은 패시브예요. 선 위 숫자만큼 앞 스킬을 찍어야 열려요(숫자가 없으면 1랭크).
           </p>
           <p className={t.branchDesc}>{info.desc}</p>
         </section>
@@ -472,7 +472,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
               {info.name} · {info.role}
             </p>
             <p className={t.emptyText}>트리에서 스킬을 누르면 설명과 배우기 버튼이 여기 나와요.</p>
-            <p className={t.emptyText}>스킬을 고른 채로 아래 단축 칸이나 숫자 키 1~{SKILL_SLOTS}(궁극기는 F)을 누르면 그 칸에 들어가요. 빈 곳을 누르거나 Esc를 누르면 선택이 풀려요.</p>
+            <p className={t.emptyText}>스킬을 고른 채로 아래 단축 칸이나 숫자 키(1~{SKILL_SLOTS})를 누르면 그 칸에 들어가요. 궁극기는 F예요. 빈 곳이나 Esc를 누르면 선택이 풀려요.</p>
           </aside>
         ) : (
           <aside className={t.detail} data-sheet={sheet || undefined} aria-live="polite" aria-label={`${d.name} 설명`}>
@@ -572,7 +572,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
                 ))}
               </tbody>
             </table>
-            <p className={t.tableNote}>피해 %는 내 공격력 기준 (INT가 높으면 스킬이 더 세요) · 거리는 화면 점 단위</p>
+            <p className={t.tableNote}>피해 %는 내 공격력이 기준이에요. INT가 높으면 스킬이 더 세져요. 거리는 화면의 점 개수예요.</p>
 
             {text.synergy.length > 0 && (
               <div className={t.block}>
@@ -605,11 +605,11 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
                       {r.text} <span>({Math.min(r.have, r.need)}/{r.need})</span>
                     </li>
                   ))}
-                  {d.tier === 1 && (d.requires ?? []).length === 0 && <li data-ok>1단 · 바로 배울 수 있어요</li>}
+                  {d.tier === 1 && (d.requires ?? []).length === 0 && <li data-ok>1단이라 바로 배울 수 있어요</li>}
                 </ul>
                 {unlocks(d.id).length > 0 && (
                   <p className={t.unlocks}>
-                    다음에 열리는 스킬: {unlocks(d.id).map((u) => `${u.def.name}(${u.level}랭크)`).join(", ")}
+                    이 스킬을 찍으면 {unlocks(d.id).map((u) => `${u.def.name}(${u.level}랭크)`).join(", ")}가 열려요.
                   </p>
                 )}
               </div>
@@ -626,7 +626,7 @@ export function SkillPanel({ view, busy, onCharacter }: Props) {
           <h3 id="rpg-hotbar" className={t.dockTitle}>
             단축 스킬
           </h3>
-          <span className={t.dockSub}>사냥 화면 아래 1~{SKILL_SLOTS}번 칸 + 궁극기 F 칸과 같아요</span>
+          <span className={t.dockSub}>사냥 화면 아래 1~{SKILL_SLOTS}번 칸, F 칸과 같아요</span>
         </div>
         <p className={t.dockHint} data-warn={(!drag && !!hint) || undefined} role="status">
           {dockHint}

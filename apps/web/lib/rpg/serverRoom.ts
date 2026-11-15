@@ -28,7 +28,7 @@ export const SV_MONSTERS: Record<SvMonsterId, SvDef> = {
   sv_tangled_lan: {
     id: "sv_tangled_lan",
     name: "엉킨 랜선",
-    desc: "아무도 정리 안 한 랜선 뭉치. 뱀처럼 구불구불 기어 와 몸에 감기면 제 쪽으로 끌어당긴다.",
+    desc: "아무도 정리 안 한 랜선 뭉치. 뱀처럼 기어 와 몸에 감기면 끌어당긴다.",
     hp: 120,
     atk: 13,
     def: 2,
@@ -43,7 +43,7 @@ export const SV_MONSTERS: Record<SvMonsterId, SvDef> = {
   sv_hot_fan: {
     id: "sv_hot_fan",
     name: "과열 팬",
-    desc: "윙윙 돌다 멈춰 서서 뜨거운 바람을 부채꼴로 내뿜는다. 날개가 빨갛게 달아오르면 옆으로 비킬 것.",
+    desc: "윙윙 돌다 멈춰 서서 뜨거운 바람을 부채꼴로 내뿜는다. 날개가 빨개지면 옆으로 비키자.",
     hp: 150,
     atk: 15,
     def: 4,
@@ -88,7 +88,7 @@ export const SV_MONSTERS: Record<SvMonsterId, SvDef> = {
   sv_ransom_lock: {
     id: "sv_ransom_lock",
     name: "랜섬 자물쇠",
-    desc: "주변 몬스터를 사슬로 잠가 지킨다. 사슬에 묶인 몬스터는 거의 다치지 않는다 — 자물쇠부터 깨자.",
+    desc: "주변 몬스터를 사슬로 잠가 지킨다. 사슬에 묶인 몬스터는 거의 다치지 않으니 자물쇠부터 깨자.",
     hp: 170,
     atk: 10,
     def: 6,
@@ -103,7 +103,7 @@ export const SV_MONSTERS: Record<SvMonsterId, SvDef> = {
   sv_wifi_router: {
     id: "sv_wifi_router",
     name: "무선 공유기",
-    desc: "안테나에서 퍼지는 와이파이 고리를 쏜다. 고리에는 끊긴 틈이 있다 — 틈으로 빠져나갈 것.",
+    desc: "와이파이 고리를 퍼뜨린다. 고리에 끊긴 틈이 있으니 그리로 빠져나가자.",
     hp: 120,
     atk: 13,
     def: 2,
@@ -133,7 +133,7 @@ export const SV_MONSTERS: Record<SvMonsterId, SvDef> = {
   sv_excel_macro: {
     id: "sv_excel_macro",
     name: "엑셀 매크로",
-    desc: "작고 빠른 초록 칸. 빨리 못 잡으면 몇 초마다 자기를 복사해 늘어난다 (한 마리가 두 번까지).",
+    desc: "작고 빠른 초록 칸. 빨리 못 잡으면 몇 초마다 자기를 복사한다. 한 마리가 두 번까지 복사한다.",
     hp: 70,
     atk: 11,
     def: 0,
@@ -164,7 +164,7 @@ export const SV_MONSTERS: Record<SvMonsterId, SvDef> = {
   sv_coolant_leak: {
     id: "sv_coolant_leak",
     name: "냉각수 누수",
-    desc: "새는 냉각 호스. 지나간 자리에 미끄러운 웅덩이를 남긴다 — 웅덩이 위에선 멈추기 어렵다.",
+    desc: "새는 냉각 호스. 지나간 자리에 미끄러운 웅덩이를 남긴다. 웅덩이 위에선 잘 멈춰지지 않는다.",
     hp: 140,
     atk: 12,
     def: 2,
@@ -179,7 +179,7 @@ export const SV_MONSTERS: Record<SvMonsterId, SvDef> = {
   sv_backup_tape: {
     id: "sv_backup_tape",
     name: "백업 테이프",
-    desc: "정예. 10년 전 백업이 아직 돈다. 쓰러지면 테이프가 감기며 최근에 쓰러진 몬스터를 셋까지 복원한다.",
+    desc: "정예. 10년 전 백업이 아직 돈다. 쓰러지면 테이프가 감기며 방금 쓰러진 몬스터를 셋까지 되살린다.",
     hp: 260,
     atk: 16,
     def: 6,
@@ -195,7 +195,7 @@ export const SV_MONSTERS: Record<SvMonsterId, SvDef> = {
   sv_legacy_system: {
     id: "sv_legacy_system",
     name: "레거시 시스템",
-    desc: "아무도 끌 줄 모르는 20년 된 본체. 코드 조각을 흩뿌리고, 화나면 바닥 회로에 전기를 흘리고, 마지막엔 서버실 전체를 재부팅한다 — 안전 구역을 찾아라.",
+    desc: "아무도 끌 줄 모르는 20년 된 본체. 코드 조각을 흩뿌린다. 화나면 바닥 회로에 전기를 흘린다. 마지막엔 서버실 전체를 재부팅하니 안전 구역을 찾자.",
     hp: 2300,
     atk: 24,
     def: 9,
@@ -242,7 +242,7 @@ export const SV_ZONE: ZoneDef = {
   power: 1.2,
   gimmick: {
     name: "과열",
-    desc: "한 칸에 가만히 서 있으면 바닥이 주황으로 달아오르다 2.5초 뒤 불길이 솟아 그 위에 있으면 계속 다친다. 「냉각 실패」 경보(붉은 화면 테두리)가 울리면 두 배로 빨리 달아오른다 — 계속 움직일 것.",
+    desc: "한자리에 오래 서 있으면 바닥이 주황으로 달아오른다. 2.5초 뒤 불길이 솟고, 그 위에 있으면 계속 다친다. 화면 테두리가 붉어지면 두 배로 빨리 달아오르니 계속 움직이자.",
   },
   pool: SV_POOL,
   boss: "sv_legacy_system",
@@ -275,7 +275,7 @@ export const SV_LOOPS: readonly SvLoop[] = [
   { name: "평상시", desc: "파란 네온 아래 랙들이 돌아간다.", dark: 0, alarm: false, heatMs: 2500, speed: 1, discharge: false },
   {
     name: "정전 · 비상 전원",
-    desc: "주 전원이 나가 초록 비상등만 켜진다. 어둡고, 쓰러진 기계는 마지막 전기를 튀긴다 (방전 고리를 피할 것).",
+    desc: "전원이 나가 초록 비상등만 켜진다. 쓰러진 기계가 전기 고리를 튀기니 피하자.",
     dark: 0.55,
     alarm: false,
     heatMs: 2300,
@@ -293,7 +293,7 @@ export const SV_LOOPS: readonly SvLoop[] = [
   },
   {
     name: "멜트다운",
-    desc: "정전과 경보가 한꺼번에. 방전·빠른 과열·빠른 몬스터, 정예도 더 자주 섞인다.",
+    desc: "정전과 경보가 한꺼번에 온다. 바닥은 빨리 달아오르고 몬스터도 빠르다. 정예도 더 자주 나온다.",
     dark: 0.6,
     alarm: true,
     heatMs: 1700,

@@ -36,12 +36,13 @@ export function candidates(cat: LifeCat, where: Where, c: Cond, filter?: (s: Spe
 
 export const weightOf = (s: Species) => s.weight ?? RARITY_WEIGHT[s.rarity];
 
-/** 무게대로 하나 (rand: [0,1)) */
-export function pickWeighted(list: readonly Species[], rand: number): Species | null {
+/** 무게대로 하나 (rand: [0,1)). mult = 종마다 무게 배율 (11/15 긴급 의뢰 마을 축제: 희귀 이상 조금 더 — lib/forage/quests/urgent festWeight) */
+export function pickWeighted(list: readonly Species[], rand: number, mult?: (s: Species) => number): Species | null {
   if (!list.length) return null;
-  const total = list.reduce((n, s) => n + weightOf(s), 0);
+  const w = (s: Species) => weightOf(s) * (mult ? mult(s) : 1);
+  const total = list.reduce((n, s) => n + w(s), 0);
   let x = rand * total;
-  for (const s of list) if ((x -= weightOf(s)) < 0) return s;
+  for (const s of list) if ((x -= w(s)) < 0) return s;
   return list[list.length - 1];
 }
 

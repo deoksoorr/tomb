@@ -307,7 +307,7 @@ export const NPCS: readonly Npc[] = [
     x: 360,
     y: 806,
     buys: ["bug", "herb", "ore", "dig"],
-    hello: "끝내지 못한 것들도 누군가에겐 보물이지요. 약초·광석·발굴품·곤충, 다 삽니다.",
+    hello: "남들이 지나친 것도 누군가에겐 보물이지요. 약초, 광석, 발굴품, 곤충 다 삽니다.",
   },
 ];
 export const npcById = (id: string): Npc | undefined => NPCS.find((n) => n.id === id);

@@ -70,9 +70,9 @@ function PickView({ view }: { view: CardOfferView }) {
   const sub = deal
     ? `${view.floor}층 우두머리를 잡았더니 상사가 슬쩍 다가와요`
     : view.kind === "s"
-      ? `건너뛴 층만큼 카드를 먼저 챙겨요 (${view.step?.[0]}/${view.step?.[1]})`
+      ? `건너뛴 층만큼 카드를 먼저 골라요 (${view.step?.[0]}/${view.step?.[1]})`
       : view.more
-        ? `카드 한 장을 골라요. 뒤에 ${view.more}장 더 기다려요`
+        ? `카드 한 장을 골라요. 이어서 ${view.more}번 더 골라요`
         : "카드 한 장을 골라요";
 
   return (
@@ -113,7 +113,7 @@ function PickView({ view }: { view: CardOfferView }) {
                   {/* 11/15 이미 가진 카드면 지금 몇 단계인지 크게 (겹칠 수 있는 카드만) */}
                   {have > 0 && Number.isFinite(def.max) && (
                     <span className={c.level}>
-                      지금 {have}단계 → <b>{have + 1}단계</b>
+                      {have}단계에서 <b>{have + 1}단계</b>로
                       {have + 1 >= def.max && <em> 마지막</em>}
                     </span>
                   )}
@@ -147,7 +147,7 @@ function PickView({ view }: { view: CardOfferView }) {
             </button>
           </div>
         )}
-        {!deal && <p className={c.hint}>누르거나 1·2·3으로 골라요. 높이 오를수록, 다시 뽑을수록 좋은 등급이 잘 나와요.</p>}
+        {!deal && <p className={c.hint}>카드를 누르거나 1, 2, 3 키로 골라요. 높이 오르거나 다시 뽑을수록 좋은 카드가 잘 나와요.</p>}
       </div>
     </div>
   );

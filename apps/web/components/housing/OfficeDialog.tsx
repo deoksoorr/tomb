@@ -72,7 +72,7 @@ export default function OfficeDialog({
       <div className={styles.stack}>
         <div className={styles.spread}>
           <p className={styles.small}>
-            광장 동쪽 주거 구역에 번지마다 집이 서 있어요. 채널마다 주거 구역이 따로라, 지금 {channel}채널의 빈 필지를 골라 분양받을 수 있어요.
+            광장 동쪽 주거 구역에 집들이 있어요. 채널마다 주거 구역이 따로 있어요. 지금 {channel}채널의 빈 자리를 골라 분양받아요.
           </p>
           <button type="button" className={cx(ui.button, ui.primary)} onClick={() => (inVillage ? onClose() : onVillage(null))} disabled={busy}>
             {inVillage ? "마을로 돌아가기" : "주거 구역 보기"}
@@ -243,14 +243,14 @@ function MyPlot({
         <div className={styles.card}>
           <p className={styles.houseName}>나만의 집을 분양받아 보세요</p>
           <p className={styles.muted}>
-            주거 구역 한켠에 터를 드려요. 크기를 골라 바로 살 수도 있고, 작은 터로 시작해 나중에 넓힐 수도 있어요. 가구와 소품으로 꾸미면 꾸밈 점수가 오르고, 사람들이 놀러 와 좋아요와 방명록을 남길 수 있어요.
+            주거 구역에 내 터를 드려요. 큰 터를 바로 살 수도 있고, 작은 터로 시작해 나중에 넓혀도 돼요. 가구와 소품으로 꾸미면 꾸밈 점수가 올라요. 놀러 온 사람들이 좋아요와 방명록을 남겨 줘요.
           </p>
           <TierPicker value={pick} onChange={setPick} points={my.points} disabled={pending || busy} />
           <p className={styles.points}>
             {plot.name} 분양가 <strong>{fmt(cost)}P</strong> · 내 포인트 <strong>{fmt(my.points)}P</strong>
           </p>
           {lot !== null && <p className={styles.tag}>고른 자리: {lotLabel(channel, lot)}</p>}
-          {short && <p className={styles.error}>포인트가 {fmt(cost - my.points)}P 모자라요. 출석·헌화로 모으거나 더 작은 터를 골라 주세요.</p>}
+          {short && <p className={styles.error}>포인트가 {fmt(cost - my.points)}P 모자라요. 출석이나 헌화로 더 모으거나, 작은 터를 골라 주세요.</p>}
         </div>
         {!short &&
           form(
@@ -283,7 +283,7 @@ function MyPlot({
         </p>
         {away && (
           <p className={styles.tag}>
-            내 집은 {h.ch}채널에 있어요 (지금 {channel}채널). 보러 가기·들어가기·꾸미기를 누르면 {h.ch}채널로 옮긴 뒤 가요.
+            내 집은 {h.ch}채널에 있어요. 지금은 {channel}채널이에요. 아래 버튼을 누르면 {h.ch}채널로 옮긴 다음 가요.
           </p>
         )}
         <p className={styles.score}>
@@ -328,7 +328,7 @@ function MyPlot({
         {up ? (
           <>
             <p className={styles.muted}>
-              이미 내 집이 있어서 새로 분양받는 대신 넓히기로 키워요. {up.name}({up.w}×{up.h}칸, 물건 {up.maxItems}개)으로 넓힐 수 있어요. 놓아 둔 물건은 그대로이고, 주거 구역에 선 집도 더 크게 바뀌어요.
+              집은 한 채만 가질 수 있어요. 대신 {up.name}({up.w}×{up.h}칸, 물건 {up.maxItems}개)으로 넓힐 수 있어요. 놓아 둔 물건은 그대로예요. 마을에 있는 집도 더 크게 바뀌어요.
             </p>
             <TierCompare exterior={h.exterior} current={h.tier} />
             <button
@@ -384,7 +384,7 @@ function HouseList({ onVisit, myId, busy }: { onVisit: (id: string) => void; myI
         ))}
       </div>
       <p className={styles.small}>
-        {sort === "new" ? "최근에 분양된 집이에요." : `${SORT_LABELS[sort]} 순 상위 50곳. 꾸밈 점수 = 놓은 물건 점수 + 좋아요 × ${LIKE_WEIGHT}`}
+        {sort === "new" ? "최근에 분양된 집이에요." : `${SORT_LABELS[sort]} 순 상위 50곳이에요. 꾸밈 점수는 놓은 물건 점수에 좋아요 × ${LIKE_WEIGHT}를 더한 값이에요.`}
       </p>
       {error && <p className={styles.error}>{error}</p>}
       {!houses && !error && <p className={styles.muted}>불러오는 중…</p>}

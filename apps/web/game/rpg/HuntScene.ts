@@ -712,7 +712,7 @@ export class HuntScene extends RpgScene {
     const a = this.auto;
     if (slot === "all") {
       if (!a.ids.length) {
-        this.flash("Shift+숫자(또는 칸 우클릭)로 자동 칸을 먼저 정해요", 1600);
+        this.flash("자동 칸이 없어요. 칸을 우클릭하거나 Shift+숫자로 정해요", 1600);
         return;
       }
       a.on = !a.on;
@@ -735,7 +735,7 @@ export class HuntScene extends RpgScene {
         // 칸을 자동으로 정하면 전체 스위치도 켠다 (꺼 둔 채면 정해도 안 도니까)
         a.ids = [...a.ids, id];
         a.on = true;
-        this.flash(`${name} 자동`, 900);
+        this.flash(`${name} 자동 켬`, 900);
       }
     }
     bridge.emit("rpg:auto", { ids: [...a.ids], on: a.on, keepUlt: a.keepUlt });
@@ -1316,7 +1316,7 @@ export class HuntScene extends RpgScene {
     if (this.died || this.status.has("freeze", this.now)) return false;
     if (this.status.has("silence", this.now)) {
       if (quiet) return false;
-      this.flash("침묵: 지금은 스킬을 못 써요", 900);
+      this.flash("침묵 상태라 스킬을 못 써요", 900);
       this.sfx.play("miss", 0.4);
       return false;
     }
@@ -1996,11 +1996,11 @@ export class HuntScene extends RpgScene {
     if (!p || p.revive || this.now < this.potionReadyAt) return;
     // 11/15 번아웃 저주 '탕비실 폐쇄' (부활 쿠키는 그대로)
     if (!this.curse.potions) {
-      this.flash("탕비실 폐쇄: 이 단계에선 물약을 못 마셔요", 900);
+      this.flash("탕비실이 닫혀서 지금은 물약을 못 마셔요", 900);
       return;
     }
     if (this.potionLeft(id) <= 0) {
-      this.flash(`${p.name}이(가) 없어요`, 900);
+      this.flash(`${p.name} 다 썼어요`, 900);
       return;
     }
     this.potionsUsed[id] = (this.potionsUsed[id] ?? 0) + 1;
@@ -3043,11 +3043,11 @@ export class HuntScene extends RpgScene {
             // 연출만 빠진다 (보상은 서버가)
           }
         });
-        this.flash(`${f}층 우두머리 처치! 체력 회복 · 우두머리 상자가 열려요`, 2200);
+        this.flash(`${f}층 우두머리를 잡았어요! 체력이 회복되고 상자가 열려요`, 2200);
       } else {
         this.bossChest?.destroy();
         this.bossChest = null;
-        this.flash(`${f}층 우두머리 처치! 체력 회복 · 오늘 상자는 다 받았어요`, 2400);
+        this.flash(`${f}층 우두머리를 잡았어요! 체력이 회복됐어요. 오늘 상자는 다 받았어요`, 2400);
       }
       // 상자에서 나온 것을 보여 줄 틈: 다 주웠으면 바로, 아니면 잠시 뒤 끌어오고 엘리베이터 (아무것도 놓치지 않는다)
       if (opened) {

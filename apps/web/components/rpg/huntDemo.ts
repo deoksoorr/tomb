@@ -522,10 +522,10 @@ type Dodge = { name: string; shape: TelegraphShape; at: "me" | "mon"; from: [num
 const MX = 122;
 const MY = 52;
 const DODGES: Dodge[] = [
-  { name: "원 — 밖으로", shape: { kind: "circle", r: 22 }, at: "me", from: [70, 60], to: [70, 86] },
-  { name: "줄 — 옆으로 비켜서기", shape: { kind: "line", len: 96, width: 18 }, at: "mon", from: [62, 52], to: [62, 78] },
-  { name: "부채꼴 — 뒤나 옆으로", shape: { kind: "cone", r: 46, arcDeg: 80 }, at: "mon", from: [92, 54], to: [92, 86] },
-  { name: "고리 — 바짝 붙으면 안전", shape: { kind: "ring", r0: 13, r1: 44 }, at: "mon", from: [92, 58], to: [MX - 9, MY + 3] },
+  { name: "원 밖으로 피해요", shape: { kind: "circle", r: 22 }, at: "me", from: [70, 60], to: [70, 86] },
+  { name: "줄 옆으로 비켜요", shape: { kind: "line", len: 96, width: 18 }, at: "mon", from: [62, 52], to: [62, 78] },
+  { name: "부채꼴 뒤나 옆으로", shape: { kind: "cone", r: 46, arcDeg: 80 }, at: "mon", from: [92, 54], to: [92, 86] },
+  { name: "고리 안쪽은 안전해요", shape: { kind: "ring", r0: 13, r1: 44 }, at: "mon", from: [92, 58], to: [MX - 9, MY + 3] },
 ];
 const DSEG = 2200;
 const patterns: Scene = {
@@ -624,16 +624,16 @@ const boss: Scene = {
     }
     const shout = enter.findIndex((at) => t >= at && t < at + 900);
     if (shout >= 0) text(ctx, DEFAULT_BOSS_PHASES[shout].label, bx - 6, by - 44, Math.floor(now / 120) % 2 ? "#ff6a50" : "#ffd04a", { size: 13 });
-    text(ctx, phase === 0 ? "HP를 깎으면…" : `HP ${Math.round(DEFAULT_BOSS_PHASES[phase - 1].below * 100)}% 아래 · 패턴↑ 졸개↑`, DEMO_W / 2, 90, "#ffb0a0", { size: 10 });
+    text(ctx, phase === 0 ? "HP를 깎으면…" : `HP ${Math.round(DEFAULT_BOSS_PHASES[phase - 1].below * 100)}% 아래면 더 사나워져요`, DEMO_W / 2, 90, "#ffb0a0", { size: 10 });
   },
 };
 
 /** 6쪽: 상태 이상 4가지를 차례로 (머리 위 아이콘 + 남은 시간) */
 const STATES: { id: SkillId; name: string }[] = [
-  { id: "so_veil", name: "무적 — 깜빡이며 피해 0" },
+  { id: "so_veil", name: "무적이면 피해를 안 받아요" },
   { id: "so_swift", name: "빨라짐" },
-  { id: "so_friend", name: "도우미 — 같이 때려요" },
-  { id: "fr_field", name: "약화 — 몬스터가 느려져요" },
+  { id: "so_friend", name: "도우미가 같이 때려요" },
+  { id: "fr_field", name: "몬스터가 느려져요" },
 ];
 const SSEG = 1700;
 const status: Scene = {
@@ -748,7 +748,7 @@ const drops: Scene = {
       icon(ctx, gearArt, px - 6, py - 44 - span(t, 3000, 300) * 4, 12);
       text(ctx, "장비를 주웠어요!", px, py - 52, "#ffd04a", { size: 11 });
     }
-    text(ctx, `${t < 2500 ? "잡을수록 드롭 기회" : "가방에 쏙"}`, DEMO_W / 2, 90, "#c8d8b8", { size: 10 });
+    text(ctx, `${t < 2500 ? "많이 잡을수록 잘 나와요" : "가방에 쏙"}`, DEMO_W / 2, 90, "#c8d8b8", { size: 10 });
   },
 };
 

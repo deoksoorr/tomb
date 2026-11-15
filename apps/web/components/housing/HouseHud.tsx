@@ -117,7 +117,7 @@ export default function HouseHud({ house, mine, my, channel, onMy, onHouse, onLe
       onMy(await housingApi.buyItem(itemId));
       void meStore.refresh();
       bridge.emit("house:tool", { action: "tryEnd", keep: true });
-      setNotice(`${def.name}을(를) 사서 놓았어요. 저장하면 꾸밈 점수에 들어가요.`);
+      setNotice(`${def.name} 사서 놓았어요. 저장하면 꾸밈 점수에 들어가요.`);
     } catch (e) {
       setNotice(errorMessage(e));
     } finally {
@@ -295,7 +295,7 @@ function EditToolbar({
           <FurnitureIcon itemId={trial.itemId} size={32} />
           <span className={ui.label}>
             {trialDef.name} 놓아 보는 중{" "}
-            <span className={styles.small}>· 끌어서 옮기고 R로 {rotateMode(trialDef) === "turn" ? "돌려" : "뒤집어"} 보세요 · 저장되지 않아요</span>
+            <span className={styles.small}>· 끌어서 옮기고 R로 {rotateMode(trialDef) === "turn" ? "돌려" : "뒤집어"} 보세요. 저장은 안 돼요.</span>
           </span>
           <button type="button" className={ui.button} onClick={() => tool({ action: "rotate" })} aria-label={`${trialDef.name} ${rotateMode(trialDef) === "turn" ? "돌리기" : "좌우 뒤집기"}`}>
             {ROTATE_LABEL[rotateMode(trialDef)]}

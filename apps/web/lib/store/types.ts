@@ -167,6 +167,8 @@ export type AccountRecord = {
   graves: string[];
   /** 오늘 쌓은 포인트 */
   todayEarned: number;
+  /** 오늘 항목별로 쌓은 포인트 (0인 항목은 없음). 오늘 적립 해시를 그대로 읽는다 — 내 정보의 항목별 게이지 */
+  earnedBy: Partial<Record<EarnSource, number>>;
   /** 안 읽은 내 소식 수 (보관 중인 최근 50개 안에서) */
   activityUnread: number;
   /** 마지막 닉네임 변경 시각 (0 = 바꾼 적 없음)과 지금까지 바꾼 횟수 */

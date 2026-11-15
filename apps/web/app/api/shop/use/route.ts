@@ -50,6 +50,8 @@ export const POST = handler(async (req) => {
   if (item.kind === "dye") throw new HttpError(400, "INVALID_INPUT", "염색권은 가방이나 상점의 염색에서 부위를 골라 써요.");
   // 11/15 수집 의뢰 보상(이모티콘 묶음·외형)은 가지고 있으면 열린다 — 쓰는 물건이 아니다
   if (item.kind === "unlock") throw new HttpError(400, "INVALID_INPUT", "가지고 있으면 바로 열리는 보상이에요. 따로 쓸 필요가 없어요.");
+  // 11/15 긴급 의뢰 상자는 가방에서 [열기] (/api/forage/urgent/open)
+  if (item.kind === "box") throw new HttpError(400, "INVALID_INPUT", "상자는 가방에서 열어요.");
 
   if (item.kind === "graveStyle")
     throw new HttpError(400, "INVALID_INPUT", "묘비 디자인권은 묘비를 세우거나 고칠 때 디자인으로 골라 써요.");

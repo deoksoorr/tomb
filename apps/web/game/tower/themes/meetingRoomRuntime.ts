@@ -95,9 +95,9 @@ export class MeetingRuntime implements TowerThemeRuntime {
     }
     if (m.id === "mt_agenda") {
       s.at = H.now() + 2400;
-      H.flash("정예 「안건 추가」 — 살아 있는 동안 회의실 문이 계속 열려요!", 2200);
+      H.flash("정예 「안건 추가」 등장! 이 정예가 살아 있으면 문이 계속 열려요!", 2200);
     }
-    if (m.id === "mt_minutes") H.flash("중간 우두머리 「회의록 담당」 — 내가 지나온 길을 그림자가 되밟아요!", 2400);
+    if (m.id === "mt_minutes") H.flash("중간 우두머리 「회의록 담당」 등장! 그림자가 내가 지나온 길을 따라와요!", 2400);
     if (m.id === "mt_chair_intern") s.at = H.now() + 700 + Math.random() * 800;
   }
 
@@ -312,7 +312,7 @@ export class MeetingRuntime implements TowerThemeRuntime {
     } else this.shadow.setAlpha(0);
     if (this.slowed && !this.slowTold) {
       this.slowTold = true;
-      H.flash("시계 보는 사람 곁에선 초조해서 공격이 느려져요 — 금색 원 밖으로!", 1800);
+      H.flash("시계 보는 사람 곁에선 공격이 느려져요. 금색 원 밖으로!", 1800);
     }
     if (this.slowed && Math.random() < dt * 4) H.float(P.x + 8, P.y - 26, "째깍", "#ffd04a");
   }
@@ -472,7 +472,7 @@ export class MeetingRuntime implements TowerThemeRuntime {
       s.mode = 1;
       s.until = now + 1900;
       s.hitAt = now;
-      H.flash("의자를 돌린다! 탄 사이 틈으로", 1000);
+      H.flash("의자를 돌려요! 탄 사이 틈으로 피해요", 1000);
       H.sfx("roar", 0.5);
     }
     if (s.mode !== 1) return;

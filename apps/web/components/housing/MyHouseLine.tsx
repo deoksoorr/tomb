@@ -29,7 +29,7 @@ export default function MyHouseLine({ channel, onGo, onOffice }: { channel: numb
   if (!house)
     return (
       <div className={styles.spread}>
-        <p className={styles.muted}>아직 내 집이 없어요. 분양 사무소에서 지금 채널({channel}채널)의 빈 필지를 분양받을 수 있어요.</p>
+        <p className={styles.muted}>아직 내 집이 없어요. 분양 사무소에서 지금 채널({channel}채널)의 빈 자리를 분양받을 수 있어요.</p>
         <button type="button" className={ui.button} onClick={onOffice}>
           분양 사무소
         </button>

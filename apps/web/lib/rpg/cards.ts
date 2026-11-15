@@ -101,76 +101,76 @@ export const CARDS: Record<CardId, CardDef> = {
   commute: c("commute", "빠른 퇴근길", "common", 3, "이동 속도가 10% 빨라져요.", 0x7ac8f0, 0x2a3a5a),
   coffee: c("coffee", "커피 수혈", "common", Infinity, "지금 바로 내 체력이 40% 차요.", 0x8a5a3a, 0xf2ead3),
   offwork: c("offwork", "칼퇴 의지", "common", 2, "내가 적을 잡을 때마다 내 체력이 1% 차요.", 0x5ad08a, 0xf2ead3),
-  sharp: c("sharp", "예리한 지적", "common", 4, "치명타 확률 8%, 치명타 피해 20%가 올라요.", 0xe84a6a, 0xf2ead3),
+  sharp: c("sharp", "예리한 지적", "common", 4, "치명타 확률이 8%, 치명타 피해가 20% 올라요.", 0xe84a6a, 0xf2ead3),
   mix: c("mix", "믹스커피", "common", 3, "SP가 1초에 2씩 더 차요.", 0xe8b84a, 0xc83a3a),
   memo: c("memo", "메모 습관", "common", 3, "치명타 피해가 25% 올라요.", 0xf0e08a, 0x3a6ac8),
   walk: c("walk", "점심 산책", "common", 3, "최대 체력이 8%, 이동 속도가 5% 올라요.", 0x7ad07a, 0x8a6a40),
   // ── 매직 ──
-  circular: c("circular", "회람", "magic", 2, "양쪽 대각선으로도 나가요.", 0xe8c86a, 0x5a4a2a, {
+  circular: c("circular", "회람", "magic", 2, "내 공격이 양쪽 대각선으로도 나가요.", 0xe8c86a, 0x5a4a2a, {
     melee: "양쪽 대각선으로도 같이 휘둘러요.",
     ranged: "양쪽 대각선으로도 한 발씩 쏴요.",
     magic: "양쪽 대각선 쪽 적에게도 잉크가 터져요.",
   }),
-  side: c("side", "옆자리 협업", "magic", 2, "양옆으로도 나가요.", 0xe89a6a, 0x4a2a1e, {
+  side: c("side", "옆자리 협업", "magic", 2, "내 공격이 양옆으로도 나가요.", 0xe89a6a, 0x4a2a1e, {
     melee: "양옆으로도 같이 휘둘러요.",
     ranged: "양옆으로도 한 발씩 쏴요.",
     magic: "양옆 적에게도 잉크가 터져요.",
   }),
-  backbite: c("backbite", "뒷담화", "magic", 2, "뒤로도 나가요.", 0xa88ad8, 0x2a1e4a, {
+  backbite: c("backbite", "뒷담화", "magic", 2, "내 공격이 뒤로도 나가요.", 0xa88ad8, 0x2a1e4a, {
     melee: "뒤쪽으로도 같이 휘둘러요.",
     ranged: "뒤로도 한 발 쏴요.",
     magic: "뒤쪽 적에게도 잉크가 터져요.",
   }),
-  resubmit: c("resubmit", "반려 후 재상신", "magic", 1, "벽에 막혀도 다시 올라가요.", 0x8a9aa8, 0xe84a4a, {
-    melee: "내가 밀쳐 낸 적이 벽에 부딪히면 한 번 더 아파해요.",
+  resubmit: c("resubmit", "반려 후 재상신", "magic", 1, "벽에 부딪혀도 공격이 끝나지 않아요.", 0x8a9aa8, 0xe84a4a, {
+    melee: "내가 밀쳐 낸 적이 벽에 부딪히면 피해를 한 번 더 받아요.",
     ranged: "벽에 맞으면 튕겨서 다시 날아가요.",
-    magic: "내가 밀쳐 낸 적이 벽에 부딪히면 한 번 더 아파해요.",
+    magic: "내가 밀쳐 낸 적이 벽에 부딪히면 피해를 한 번 더 받아요.",
   }),
-  toss: c("toss", "업무 토스", "magic", 2, "내가 맞힌 적 근처의 다른 적에게도 일이 넘어가요.", 0xf0a040, 0x3a2a1a, {
+  toss: c("toss", "업무 토스", "magic", 2, "내 공격이 맞힌 적 옆의 다른 적에게도 튕겨 가요.", 0xf0a040, 0x3a2a1a, {
     melee: "때린 적에게서 서류가 근처 적에게 튕겨 가요.",
-    ranged: "맞힌 뒤 근처 적에게 튕겨 가요.",
+    ranged: "쏜 공격이 맞힌 뒤 근처 적에게 튕겨 가요.",
     magic: "터진 자리에서 서류가 근처 적에게 튕겨 가요.",
   }),
   papers: c("papers", "서류 방패", "magic", 2, "서류가 내 둘레를 돌며 날아오는 공격을 막아요.", 0xf2ead3, 0x7ab8e8),
   snack: c("snack", "탕비실 간식", "magic", 2, "층을 깰 때마다 내 체력이 8% 차요.", 0xe8a86a, 0xe84a6a),
   badge: c("badge", "사원증 목걸이", "magic", 3, "받는 피해가 6% 줄어요.", 0x4a8ad8, 0xf2ead3),
   halfday: c("halfday", "반차", "magic", 1, "층마다 내가 처음 맞는 공격 한 번은 안 아파요.", 0xf0d070, 0x5a8ad8),
-  minutes: c("minutes", "회의록 정리", "magic", 2, "판 경험치가 15% 더 들어와요.", 0x9ad0a0, 0x3a4a6a),
+  minutes: c("minutes", "회의록 정리", "magic", 2, "이번 판 경험치를 15% 더 받아요.", 0x9ad0a0, 0x3a4a6a),
   // ── 레어 ──
   cc: c("cc", "참조 추가", "rare", 3, "공격이 한 번 더 나가요. 대신 한 번 피해가 10% 줄어요.", 0x7ab8e8, 0xf2ead3, {
     melee: "한 번 더 휘둘러요. 대신 한 번 피해가 10% 줄어요.",
     ranged: "한 발 더 쏴요. 대신 한 발 피해가 10% 줄어요.",
     magic: "잉크가 한 번 더 터져요. 대신 한 번 피해가 10% 줄어요.",
   }),
-  parallel: c("parallel", "병렬 처리", "rare", 2, "앞으로 한 갈래 더 나가요.", 0x5ad0a0, 0x1e3a4a, {
+  parallel: c("parallel", "병렬 처리", "rare", 2, "내 공격이 앞으로 한 줄 더 나가요.", 0x5ad0a0, 0x1e3a4a, {
     melee: "휘두르면 앞으로 서류 바람이 날아가요. 적을 뚫고 가요.",
     ranged: "앞으로 나란히 한 발 더 쏴요.",
     magic: "앞쪽 다른 적 발밑에서도 잉크가 터져요.",
   }),
-  direct: c("direct", "직보", "rare", 1, "중간을 건너뛰고 곧장 꽂혀요.", 0xe85a5a, 0xffe08a, {
+  direct: c("direct", "직보", "rare", 1, "내 공격이 더 멀리 닿아요.", 0xe85a5a, 0xffe08a, {
     melee: "공격이 35% 더 멀리 닿아요.",
-    ranged: "적을 뚫고 지나가요. 원래 뚫는 무기면 피해가 20% 올라요.",
+    ranged: "쏜 공격이 적을 뚫고 지나가요. 원래 뚫는 무기면 피해가 20% 올라요.",
     magic: "잉크가 35% 더 넓게 터져요.",
   }),
   passion: c("passion", "야근 열정", "rare", 1, "내가 때린 적이 한동안 불타요.", 0xff7a3a, 0xffe08a),
   chill: c("chill", "냉랭한 분위기", "rare", 1, "내가 때린 적이 느려지고, 가끔 꽁꽁 얼어요.", 0x8ad8f0, 0xe8f8ff),
   solo: c("solo", "독박 업무", "rare", 1, "내가 때린 적에게 독이 쌓여요. 많이 쌓일수록 독 피해가 커져요.", 0x8ac83a, 0x2a3a1a),
-  urgent: c("urgent", "급한 호출", "rare", 1, "공격할 때마다 번개가 근처 적 셋을 타고 넘어가요.", 0xf0e05a, 0x3a3aa8),
+  urgent: c("urgent", "급한 호출", "rare", 1, "내가 공격할 때마다 번개가 근처 적 셋에게 옮겨 가요.", 0xf0e05a, 0x3a3aa8),
   boards: c("boards", "도는 결재판", "rare", 3, "결재판이 내 둘레를 돌며 닿는 적을 쳐요.", 0xc8884a, 0xf2ead3),
   intern: c("intern", "인턴 소환", "rare", 2, "인턴이 따라다니며 서류를 던져요.", 0x6ab0e8, 0xf0c8a0),
   // ── 유니크 ──
-  afterparty: c("afterparty", "회식 2차", "unique", 1, "내가 잡은 적이 펑 터져서 둘레 적까지 아파해요.", 0xff8a3a, 0xffe08a),
+  afterparty: c("afterparty", "회식 2차", "unique", 1, "내가 잡은 적이 펑 터져서 둘레 적도 피해를 받아요.", 0xff8a3a, 0xffe08a),
   resign: c("resign", "퇴사 각", "unique", 1, "내 체력이 적을수록 세게 쳐요. 내 체력이 거의 바닥이면 피해가 60% 올라요.", 0xd84a4a, 0xf2ead3),
-  chainline: c("chainline", "결재 라인", "unique", 1, "번개가 다섯 번 넘어가고 더 세져요. 급한 호출이 없어도 번개가 나가요.", 0x6a6ae8, 0xfff06a),
+  chainline: c("chainline", "결재 라인", "unique", 1, "번개가 다섯 번 옮겨 가고 더 세져요. 급한 호출이 없어도 번개가 나가요.", 0x6a6ae8, 0xfff06a),
   wfh: c("wfh", "재택근무", "unique", 2, "가만히 서 있으면 받는 피해가 15% 줄어요.", 0x7ac8a8, 0xe8d8b0),
   politics: c("politics", "사내 정치", "unique", 1, "내가 때린 적이 가끔 옆에 있는 적을 대신 때려요.", 0xb86ad8, 0xffd84a),
   bonus: c("bonus", "성과급", "unique", 2, "우두머리와 정예에게 주는 피해가 30% 올라요.", 0x5ad08a, 0xffd84a),
   // ── 전설 ──
-  oneshot: c("oneshot", "원샷 결재", "legend", 1, "일반 몬스터를 5% 확률로 한 번에 처리해요.", 0xffd84a, 0xa83c3c),
+  oneshot: c("oneshot", "원샷 결재", "legend", 1, "내 공격이 5% 확률로 일반 몬스터를 한 번에 잡아요.", 0xffd84a, 0xa83c3c),
   overtime: c("overtime", "무한 야근", "legend", 1, "내가 쓰러져도 한 번은 체력 30%로 다시 일어나요.", 0xe8dcff, 0xffd84a),
   promote: c("promote", "팀장 승진", "legend", 1, "다른 카드의 수치가 모두 50% 더 세져요.", 0x3a3a5a, 0xffd84a),
-  corpcard: c("corpcard", "법인카드", "legend", 1, "내가 적을 잡으면 가끔 5초짜리 혜택이 터져요. 공격력, 공격 속도, 이동 속도 중 하나예요.", 0x2a2a3a, 0xd8b84a),
-  leave: c("leave", "연차 몰아 쓰기", "legend", 1, "층마다 한 번, 내 체력이 30% 아래로 떨어지면 3초 무적에 공격 속도가 50% 올라요.", 0x7ad0f0, 0xf2ead3),
+  corpcard: c("corpcard", "법인카드", "legend", 1, "내가 적을 잡으면 가끔 5초 동안 공격력, 공격 속도, 이동 속도 중 하나가 올라요.", 0x2a2a3a, 0xd8b84a),
+  leave: c("leave", "연차 몰아 쓰기", "legend", 1, "내 체력이 30% 아래로 떨어지면 3초 동안 무적이 되고 공격 속도가 50% 올라요. 층마다 한 번이에요.", 0x7ad0f0, 0xf2ead3),
 };
 
 export const CARD_LIST: readonly CardDef[] = CARD_IDS.map((id) => CARDS[id]);

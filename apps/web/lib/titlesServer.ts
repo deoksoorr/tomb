@@ -161,7 +161,7 @@ async function readFacts(accountId: string, now: number): Promise<{ facts: Title
     safe(getRpgStore().get(accountId), null),
     safe(isSuperHunter(accountId), false),
     safe(light(accountId, now), null),
-    safe(getTitleStats().get(accountId), { stay: 0, quests: 0, qking: 0 }),
+    safe(getTitleStats().get(accountId), { stay: 0, quests: 0, qking: 0, urgKing: 0, urgLast: 0 }),
     safe(towerHolders(now), new Map<string, string>()),
   ]);
   const dex = forage?.dex ?? {};
@@ -202,6 +202,8 @@ async function readFacts(accountId: string, now: number): Promise<{ facts: Title
       metrics,
       // 11/15 신화: 지금 이 계정이 주인인 칭호 (운영자는 랭킹·최초에 들어가지 않는다 — lib/rpg/service)
       mythic: [...holders].filter(([, a]) => a === accountId).map(([id]) => id),
+      // 11/15 긴급 의뢰 칭호: 받은 때부터 하루 (칭호 누적 해시에서 같이 읽는다 — 명령 추가 없음)
+      timed: [...(stats.urgKing > now ? ["t_urgKing"] : []), ...(stats.urgLast > now ? ["t_urgLast"] : [])],
     },
     equipped: titleOfLook((l?.equipped ?? []).map((e) => e.itemId)),
   };

@@ -860,6 +860,16 @@ const GEAR_ICONS: Record<string, Ascii> = {
     rows: ["....rrrrrr", "...oohooooo", "..oohgggoooo", "..ohgwwwgooO", "..oogwwwgooO", "..ooogggoooO", "...ooooooOO", "....dddddd", ".....fyf", "......k", "......k", "......k", ".......k"],
     pal: { r: 0xb83a2a, o: 0xf0903a, O: 0xc85a1a, h: 0xffc070, g: 0xffd27a, w: 0xfff2c0, d: 0x6a3a1a, f: 0xffe08a, y: 0xfff6d0, k: 0xe8d8b0 },
   },
+  // 11/15 긴급 의뢰 100% 상자: 금실로 묶은 갈색 가죽 주머니 + 붉은 의뢰 도장 꼬리표
+  u_box_pocket: {
+    rows: ["......yyyy", ".....yYyyYy", "......cccc", ".....cccccc", "....chhccccl", "...chccccccll", "...cccccccccl", "..chcccrrccccl", "..cccccrRccccl", "..ccccccccccll", "...cccccccccl", "....lllllll"],
+    pal: { y: 0xf2c43a, Y: 0xc8961a, c: 0x9a6236, h: 0xc88a52, l: 0x6a3e1e, r: 0xc8432f, R: 0xffe0c8 },
+  },
+  // 11/15 긴급 의뢰 가장 많이 낸 사람: 남색 배달 모자 + 빨간 경광등 (양옆으로 빨강·파랑 빛)
+  u_hat_siren: {
+    rows: ["......wrr", "..b..rrrrr..B", ".b...rrRrr...B", ".....ssssS", "....nnnnnnN", "...hnnnnnnnN", "...hnnnnnnnnN", "...yYyYyYyYyY", "..llllllllll"],
+    pal: { r: 0xe8392a, R: 0xb02218, w: 0xffc0b0, s: 0xb8c0cc, S: 0x8a92a0, n: 0x2e3f74, N: 0x1d2850, h: 0x4a5e9e, y: 0xf2c43a, Y: 0xd8a62a, l: 0x1d2850, b: 0xff6a50, B: 0x5aa8ff },
+  },
   q_back_cape: {
     rows: ["", "..yy........yy", "..yyyyyyyyyyyy", "..rhrrrrrrrrrl", ".rhrrrryrrrrrrl", ".rhrryyyyyrrrrl", "rhrrrryyyrrrrrrl", "rhrrrrryrrrrrrrl", "rhrrrrrrrrrrrrrl", "yyyyyyyyyyyyyyyy", "y.yy.yy.yy.yy.yy"],
     pal: { r: 0x5a3a9e, h: 0x7e5cc8, l: 0x3c2672, y: 0xf2c43a },
@@ -1027,6 +1037,8 @@ export const ICON_IDS: readonly string[] = [
   // 11/15 수집 의뢰 보상 (이모티콘 묶음 · 외형)
   "qe_pack",
   "q_body_collector",
+  // 11/15 긴급 의뢰 상자
+  "u_box_pocket",
 ];
 
 /** 이 아이템에 전용 아이콘이 있는지 (없으면 물음표 아이콘). 꾸미기 랭킹의 프리미엄 외형("body:{id}")도 그림이 있다 */

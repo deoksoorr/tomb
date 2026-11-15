@@ -722,7 +722,7 @@ const SEASON_NAME: Record<Season, string> = { spring: "봄", summer: "여름", a
 
 /** 어디서 나오나 (도감 힌트) */
 export function constellationWhen(c: Constellation): string {
-  if (c.season) return `${SEASON_NAME[c.season]}에만 (어느 난이도나)`;
-  if (c.dawn) return "새벽(5~7시)에 시작한 판에서만 (어느 난이도나)";
-  return { 1: "어느 난이도에서나", 2: "어느 난이도에서나 (조금 드물게)", 3: "어려움·지옥 난이도에서만", 5: "맑은 밤 보너스 판에서만" }[c.rarity];
+  if (c.season) return `${SEASON_NAME[c.season]}에만, 난이도 상관없이`;
+  if (c.dawn) return "새벽 5~7시에 시작한 판에서만, 난이도 상관없이";
+  return { 1: "어느 난이도에서나", 2: "어느 난이도에서나, 조금 드물게", 3: "어려움과 지옥 난이도에서만", 5: "맑은 밤 보너스 판에서만" }[c.rarity];
 }

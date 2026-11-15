@@ -117,8 +117,21 @@ export class WorldMap {
   private readonly swingSeats = new Map<number, Phaser.GameObjects.Image>();
   /** 해먹 소품 (받침 x·y 키). 누가 누우면 기둥만 남긴다 (11/15) */
   private readonly hammocks = new Map<number, Phaser.GameObjects.Image>();
-  /** 모닥불 id → 불티·연기 이미터 */
-  private readonly fires = new Map<string, { embers: Phaser.GameObjects.Particles.ParticleEmitter; smoke: Phaser.GameObjects.Particles.ParticleEmitter; big?: boolean }>();
+  /** 모닥불 id → 불티·연기 이미터 (11/15 + 불꽃 그림·빛·자리 — 긴급 의뢰 축제에 금빛으로) */
+  private readonly fires = new Map<
+    string,
+    {
+      embers: Phaser.GameObjects.Particles.ParticleEmitter;
+      smoke: Phaser.GameObjects.Particles.ParticleEmitter;
+      big?: boolean;
+      flames: Phaser.GameObjects.Sprite[];
+      lights: LightSpot[];
+      x: number;
+      y: number;
+      gold?: Phaser.GameObjects.Particles.ParticleEmitter;
+    }
+  >();
+  private festival = false;
   private readonly reduced: boolean;
 
   constructor(
@@ -459,7 +472,8 @@ export class WorldMap {
       const fire = scene.add.sprite(c.x, c.y + 2, WP.fire, 0).setOrigin(0.5, 1).setDepth(c.y).setScale(CAMPFIRE_ART_SCALE);
       fire.play({ key: "fx-campfire-burn", startFrame: Math.floor(Math.random() * FIRE_FRAMES) });
       this.addCollider(this.colliders, campfireCollider(c));
-      this.staticLights.push({ x: c.x, y: c.y + CAMPFIRE_LIGHT.dy, scale: CAMPFIRE_LIGHT.scale, tint: CAMPFIRE_LIGHT.tint, base: CAMPFIRE_LIGHT.base });
+      const light: LightSpot = { x: c.x, y: c.y + CAMPFIRE_LIGHT.dy, scale: CAMPFIRE_LIGHT.scale, tint: CAMPFIRE_LIGHT.tint, base: CAMPFIRE_LIGHT.base };
+      this.staticLights.push(light);
       const embers = scene.add
         .particles(c.x, c.y - 10, TEX.spark, {
           lifespan: { min: 900, max: 1700 },
@@ -484,7 +498,7 @@ export class WorldMap {
           frequency: this.reduced ? 1400 : 650,
         })
         .setDepth(c.y + 30);
-      this.fires.set(c.id, { embers, smoke });
+      this.fires.set(c.id, { embers, smoke, flames: [fire], lights: [light], x: c.x, y: c.y - 10 });
     }
   }
 
@@ -498,8 +512,11 @@ export class WorldMap {
     const fire = scene.add.sprite(c.x + 2, c.y + 5, GY.bigFire, 0).setOrigin(0.5, 1).setDepth(c.y).setScale(1.45);
     fire.play({ key: "fx-bigfire-burn", startFrame: 0 });
     this.addCollider(this.colliders, campfireCollider(c));
-    this.staticLights.push({ x: c.x, y: c.y + BIG_FIRE_LIGHT.dy, scale: BIG_FIRE_LIGHT.scale, tint: BIG_FIRE_LIGHT.tint, base: BIG_FIRE_LIGHT.base });
-    this.staticLights.push({ x: c.x, y: c.y - 30, scale: 1.4, tint: 0xffd070, base: 0.9 });
+    const lights: LightSpot[] = [
+      { x: c.x, y: c.y + BIG_FIRE_LIGHT.dy, scale: BIG_FIRE_LIGHT.scale, tint: BIG_FIRE_LIGHT.tint, base: BIG_FIRE_LIGHT.base },
+      { x: c.x, y: c.y - 30, scale: 1.4, tint: 0xffd070, base: 0.9 },
+    ];
+    this.staticLights.push(...lights);
     const embers = scene.add
       .particles(c.x, c.y - 34, TEX.spark, {
         lifespan: { min: 1200, max: 2400 },
@@ -524,7 +541,42 @@ export class WorldMap {
         frequency: this.reduced ? 1200 : 420,
       })
       .setDepth(c.y + 60);
-    this.fires.set(c.id, { embers, smoke, big: true });
+    this.fires.set(c.id, { embers, smoke, big: true, flames: [back, fire], lights, x: c.x, y: c.y - 34 });
+  }
+
+  /**
+   * 11/15 긴급 의뢰 마을 축제: 모든 모닥불을 금빛으로 (불꽃 그림에 금빛을 얹고, 빛을 금색으로, 금가루가 피어오른다). off면 원래대로
+   */
+  setFestival(on: boolean): void {
+    if (this.festival === on) return;
+    this.festival = on;
+    for (const f of this.fires.values()) {
+      for (const s of f.flames) {
+        if (on) s.setTint(0xfff3b0, 0xfff3b0, 0xffc83a, 0xffc83a);
+        else s.clearTint();
+      }
+      for (const l of f.lights) {
+        l.tint = on ? 0xffd860 : f.big && l.scale < 2 ? 0xffd070 : f.big ? BIG_FIRE_LIGHT.tint : CAMPFIRE_LIGHT.tint;
+      }
+      if (on && !f.gold) {
+        f.gold = this.scene.add
+          .particles(f.x, f.y, TEX.spark, {
+            lifespan: { min: 1100, max: 2200 },
+            speedX: { min: -10, max: 10 },
+            speedY: { min: f.big ? -60 : -40, max: f.big ? -28 : -18 },
+            scale: { start: f.big ? 0.7 : 0.5, end: 0 },
+            alpha: { start: 1, end: 0 },
+            tint: [0xfffbe0, 0xffe070, 0xffcc30],
+            blendMode: Phaser.BlendModes.ADD,
+            frequency: this.reduced ? 500 : f.big ? 60 : 140,
+            x: { min: f.big ? -14 : -5, max: f.big ? 14 : 5 },
+          })
+          .setDepth(DEPTH.lights + 4);
+      } else if (!on && f.gold) {
+        f.gold.destroy();
+        f.gold = undefined;
+      }
+    }
   }
 
   /** 불멍 중인 모닥불은 불티를 더 많이 (null이면 모두 평소대로) */

@@ -70,7 +70,7 @@ export default function ExteriorDialog({
 
   const set = (slot: ExtSlot, id: string) => {
     setDraft((d) => ({ ...d, [slot]: id }));
-    setMsg(owns(id) ? null : `${furnitureById(id)?.name ?? "아이템"}을(를) 입혀 봤어요. "사고 적용"을 누르면 사서 저장해요.`);
+    setMsg(owns(id) ? null : `${furnitureById(id)?.name ?? "아이템"} 입혀 보는 중이에요. [사고 적용]을 누르면 사서 저장해요.`);
   };
   const peek = (slot: ExtSlot, id: string) => ({
     onMouseEnter: () => setHover({ slot, id }),
@@ -115,8 +115,8 @@ export default function ExteriorDialog({
             </p>
             {toBuy.length > 0 && (
               <p className={cx(styles.small, short && styles.error)}>
-                미리보기 중 · 아직 안 산 아이템 {toBuy.length}개 ({toBuy.map((id) => furnitureById(id)?.name).join(", ")}) · 합계 {fmt(cost)}P
-                {short ? ` · ${fmt(cost - my.points)}P 모자라요` : ""}
+                미리보는 중이에요. 안 산 아이템 {toBuy.length}개({toBuy.map((id) => furnitureById(id)?.name).join(", ")})는 모두 {fmt(cost)}P예요.
+                {short ? ` ${fmt(cost - my.points)}P 모자라요.` : ""}
               </p>
             )}
             <div className={styles.row}>

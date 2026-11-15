@@ -286,7 +286,7 @@ export class SkyRides {
       return true;
     }
     r.armAt = now;
-    this.host.toast(r.kind === "ferris" ? "한 번 더 누르면 관람차에서 바로 내려요" : "한 번 더 누르면 바로 내려요 (출발장으로 돌아가요)");
+    this.host.toast(r.kind === "ferris" ? "한 번 더 누르면 관람차에서 바로 내려요" : "한 번 더 누르면 내려서 출발장으로 돌아가요");
     return true;
   }
 
@@ -588,7 +588,7 @@ export class SkyRides {
     const left = Math.max(0, Math.ceil(((r.kind === "balloon" && t < r.departAt ? r.departAt : r.end) - t) / 1000));
     let hud: NonNullable<Parameters<typeof bridge.emit<"sky:hud">>[1]>;
     if (r.kind === "ferris") {
-      hud = { kind: "ferris", title: "관람차", place: null, hint: "X 두 번: 내리기", left, sky: r.sky, view: this.view };
+      hud = { kind: "ferris", title: "관람차", place: null, hint: "X 두 번 누르면 내려요", left, sky: r.sky, view: this.view };
     } else if (t < r.departAt) {
       hud = { kind: "balloon", title: "열기구", place: null, hint: "곧 떠나요 · 움직이면 내려요", left, sky: false, view: this.view };
     } else {
@@ -597,7 +597,7 @@ export class SkyRides {
         kind: "balloon",
         title: "열기구",
         place: st && st.alt > 8 ? placeName(st.x, st.y) : null,
-        hint: "X 두 번: 내리기",
+        hint: "X 두 번 누르면 내려요",
         left,
         sky: r.sky,
         view: this.view,

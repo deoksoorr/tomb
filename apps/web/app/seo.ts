@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const SITE_TITLE = "At one time...";
 export const SITE_DESCRIPTION =
-  "At one time...(한때는)은 누구나 한때 시작했다 그만둔 것들이 잠든 공동묘지 컨셉의 도트 마을입니다. 다른 사람들과 실시간으로 모여 모닥불 앞에서 쉬고, 사냥과 미니게임으로 포인트를 모아 내 집을 꾸며 보세요. 설치 없이 브라우저에서 바로.";
+  "At one time...은 유령들이 모여 사는 아늑한 도트 마을이에요. 여러 사람과 실시간으로 만나 모닥불 앞에서 쉬어요. 사냥하고, 낚시하고, 야근 빌딩을 오르고, 내 집을 꾸며요. 설치 없이 브라우저에서 바로 할 수 있어요.";
 
 // 페이지가 openGraph를 덮어쓰면 레이아웃 값이 통째로 바뀌므로 공유 카드 필드는 매번 전부 채운다.
 export function shareMetadata(image: string): Metadata {

@@ -333,7 +333,7 @@ export class MeetingArena {
     const to = mtShrink(this.settled, side, mtShrinkStep(this.loop) + (forced ? 8 : 0));
     this.warn = { at: now + (forced ? 1400 : WARN_MS), side, to, forced };
     const arrow = { left: "→", right: "←", top: "↓", bottom: "↑" }[side];
-    this.hooks.flash(forced ? `"한 가지만 더…" 회의 연장! 테이블이 밀려와요 ${arrow}` : `회의 연장! 노란 줄 밖으로 — 테이블이 밀려와요 ${arrow}`, 1600);
+    this.hooks.flash(forced ? `"한 가지만 더…" 회의 연장! 테이블이 밀려와요 ${arrow}` : `회의 연장! 테이블이 밀려와요. 노란 줄 밖으로 ${arrow}`, 1600);
     this.hooks.sfx("warn", 0.45);
   }
 

@@ -76,6 +76,20 @@ function contract(make: () => Kit) {
     expect((await accounts.get(id, "20261109", 0)).todayEarned).toBe(2);
   });
 
+  it("오늘 항목별 적립(earnedBy): 받은 항목만, 한도에 잘린 값 그대로, 다음 날엔 비어 있다", async () => {
+    const id = newId();
+    expect((await accounts.get(id, DAY, 0)).earnedBy).toEqual({});
+    await accounts.earn(id, "hunt", DAY, { amount: 120 });
+    await accounts.earn(id, "bugs", DAY, { amount: earnRule("bugs").dailyMax + 50 });
+    await accounts.earn(id, "flower", DAY);
+    await accounts.presenceTick(id, DAY, 1_000_000);
+    const a = await accounts.get(id, DAY, 0);
+    expect(a.earnedBy).toEqual({ hunt: 120, bugs: earnRule("bugs").dailyMax, flower: 2, presence: earnRule("presence").points });
+    // 내부 필드(_total·_stay)는 섞이지 않고, 항목 합 = 하루 합계
+    expect(Object.values(a.earnedBy).reduce((n, v) => n + v, 0)).toBe(a.todayEarned);
+    expect((await accounts.get(id, "20261109", 0)).earnedBy).toEqual({});
+  });
+
   it("하루 전체 한도: 모든 항목을 한도까지 받아도 하루 상한을 넘지 않는다 (사냥은 점수를 직접 준다)", async () => {
     const id = newId();
     const plan = [

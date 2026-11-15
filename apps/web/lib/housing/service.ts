@@ -199,14 +199,14 @@ export async function buyFurniture(store: HouseStore, accountId: string, itemId:
   if (!def) throw new HttpError(400, "INVALID_INPUT", "알 수 없는 물건이에요.");
   const h = await mustHave(store, accountId);
   const owned = (await store.inventory(h.id))[itemId] ?? 0;
-  if (owned >= MAX_OWN_PER_ITEM) throw new HttpError(409, "MAX_OWNED", `${def.name}은(는) ${MAX_OWN_PER_ITEM}개까지 가질 수 있어요.`);
+  if (owned >= MAX_OWN_PER_ITEM) throw new HttpError(409, "MAX_OWNED", `${def.name}, 이미 ${MAX_OWN_PER_ITEM}개를 다 가졌어요.`);
   const me = await spend(accountId, def.price, `furniture:${itemId}`);
   const r = await store.addItem(h.id, itemId, MAX_OWN_PER_ITEM);
   if (r !== "ok")
     await refundAndThrow(
       accountId,
       def.price,
-      r === "max" ? new HttpError(409, "MAX_OWNED", `${def.name}은(는) ${MAX_OWN_PER_ITEM}개까지 가질 수 있어요.`) : noHouse(),
+      r === "max" ? new HttpError(409, "MAX_OWNED", `${def.name}, 이미 ${MAX_OWN_PER_ITEM}개를 다 가졌어요.`) : noHouse(),
     );
   return myHouse(store, accountId, me);
 }

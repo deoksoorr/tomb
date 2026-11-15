@@ -164,38 +164,38 @@ export const CURSES: readonly {
     id: "potion_half",
     from: 10,
     name: "탕비실 절약",
-    desc: "물약 회복량이 절반",
+    desc: "물약 회복량이 절반이 돼요",
   },
   {
     id: "no_potion",
     from: 20,
     name: "탕비실 폐쇄",
-    desc: "물약을 마실 수 없다",
+    desc: "물약을 마실 수 없어요",
   },
   {
     id: "heal_half",
     from: 30,
     name: "연차 반려",
-    desc: "받는 회복이 모두 절반 (스킬·재생·지형·우두머리 층 회복)",
+    desc: "스킬, 재생, 지형, 우두머리 층 회복까지 모두 절반이 돼요",
   },
   {
     id: "mon_move",
     from: 40,
     name: "독촉 메일",
-    desc: "몬스터 이동 속도 +20%",
+    desc: "몬스터 이동 속도가 20% 빨라져요",
   },
   {
     id: "mon_atk",
     from: 50,
     name: "연달아 회의",
-    desc: "몬스터 공격 속도 +20%",
+    desc: "몬스터 공격 속도가 20% 빨라져요",
   },
-  { id: "time_20", from: 70, name: "마감 당김", desc: "층마다 제한 시간 −20%" },
+  { id: "time_20", from: 70, name: "마감 당김", desc: "층마다 제한 시간이 20% 줄어요" },
   {
     id: "elite_mix",
     from: 100,
     name: "임원 순시",
-    desc: "정예가 일반 몬스터처럼 섞여 나온다",
+    desc: "정예가 일반 몬스터 사이에 섞여 나와요",
   },
 ];
 
@@ -394,7 +394,7 @@ export function checkTowerStart(a: {
   if (!isCheckpoint(a.start))
     return {
       code: "INVALID_INPUT",
-      message: "시작 층은 1·11·21 … 층 중에서 골라요.",
+      message: "시작 층은 1층, 11층, 21층처럼 10층 간격으로 골라요.",
     };
   if (!towerCheckpoints(a.best, a.sup).includes(a.start))
     return {

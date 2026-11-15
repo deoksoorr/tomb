@@ -28,7 +28,7 @@ export type GearM = {
 
 // 추가분 2(11/12): 머리 5·목 5·손 5·등 3 + 31번 운영자 전용(왕관·완장·명부·등불·도포)
 // 주간 랭킹 1위 전용 머리 3종 (금화 왕관·붉은 깃털 투구·황금 물고기 모자 — protocol CHAMP_HAT)
-export const GEAR_HEAD = ["hat_beanie", "hat_headphones", "hat_crown", "hat_ribbon", "hat_party", "hat_glasses", "hat_wizard", "hat_cap", "hat_sprout", "hat_beret", "hat_hardhat", "hat_chef", "hat_horns", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", ...CUTE_HEAD] as const;
+export const GEAR_HEAD = ["hat_beanie", "hat_headphones", "hat_crown", "hat_ribbon", "hat_party", "hat_glasses", "hat_wizard", "hat_cap", "hat_sprout", "hat_beret", "hat_hardhat", "hat_chef", "hat_horns", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", "u_hat_siren", ...CUTE_HEAD] as const;
 export const GEAR_NECK = ["neck_tie", "neck_badge", "neck_bowtie", "neck_bell", "neck_lei", "neck_collar", "neck_whistle", "neck_camera", "neck_pearl", "neck_medal", "staff_armband", ...CUTE_NECK] as const;
 export const GEAR_HAND = ["hand_coffee", "hand_briefcase", "hand_phone", "hand_lantern_blue", "hand_donut", "hand_clipboard", "hand_mic", "hand_bouquet", "hand_wand", "staff_ledger", "staff_lamp", "q_hand_net", "q_hand_brush", "q_hand_wishlamp", ...CUTE_HAND] as const;
 export const GEAR_BACK = ["back_backpack", "back_cape", "back_shell", "back_guitar", "back_jetpack", "staff_robe", "q_back_cape", ...CUTE_BACK] as const;
@@ -36,7 +36,7 @@ export const GEAR_BACK = ["back_backpack", "back_cape", "back_shell", "back_guit
 export const GEAR_SHEET_IDS: readonly string[] = [...GEAR_HEAD, ...GEAR_NECK, ...GEAR_HAND, ...GEAR_BACK];
 
 /** 두건·키다리 끝·동글이 새싹을 덮는 모자 (그 위에 꼭지를 그리지 않는다) */
-export const COVERING_HATS: ReadonlySet<string> = new Set(["hat_straw", "hat_cat", "hat_beanie", "hat_crown", "hat_party", "hat_wizard", "hat_cap", "hat_beret", "hat_hardhat", "hat_chef", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", ...CUTE_COVERING]);
+export const COVERING_HATS: ReadonlySet<string> = new Set(["hat_straw", "hat_cat", "hat_beanie", "hat_crown", "hat_party", "hat_wizard", "hat_cap", "hat_beret", "hat_hardhat", "hat_chef", "hat_santa", "staff_crown", "champ_crown", "champ_plume", "champ_fishhat", "champ_duo_ph", "champ_duo_pf", "champ_duo_hf", "champ_triple", "q_hat_angler", "q_hat_miner", "q_hat_snow", "u_hat_siren", ...CUTE_COVERING]);
 
 export type ExtraGear = { head: string | null; neck: string | null; hand: string | null; back: string | null };
 
@@ -555,6 +555,30 @@ export function drawHeadGear(g: Grid, view: GearView, id: string, m: GearM, body
       }
       break;
     }
+    case "u_hat_siren": {
+      // 11/15 긴급 의뢰 가장 많이 낸 사람: 남색 배달 모자 + 정수리 은색 받침 위 빨간 경광등 (도는 불빛은 cosmeticFx uSiren)
+      const c = 0x2e3f74;
+      const lo = 0x1d2850;
+      const hi = 0x4a5e9e;
+      const rows: [number, number][] = [
+        [top - 1, Math.max(2, rx - 1)],
+        [top, rx],
+      ];
+      for (const [y, h] of rows) for (let x = cx - h; x < cx + h; x++) g.set(x, y, x >= cx + h - 2 ? lo : x <= cx - h ? hi : c);
+      // 노란 띠 (배달 모자)
+      for (let x = cx - rx; x < cx + rx; x++) g.set(x, top + 1, x % 2 ? 0xf2c43a : 0xd8a62a);
+      // 챙: 앞모습은 아래로, 옆모습은 앞(+x)으로
+      if (view === "down") g.hline(cx - rx + 1, cx + rx - 2, top + 2, lo);
+      else if (side) g.hline(cx + rx - 2, cx + rx + 1, top + 1, lo);
+      // 경광등 받침 (은색) + 빨간 돔
+      g.hline(cx - 2, cx + 1, top - 2, 0xb8c0cc);
+      g.set(cx + 1, top - 2, 0x8a92a0);
+      g.hline(cx - 2, cx + 1, top - 3, 0xe8392a);
+      g.set(cx + 1, top - 3, 0xb02218);
+      g.hline(cx - 1, cx, top - 4, 0xff5a44);
+      g.set(cx - 1, top - 4, 0xffb0a0);
+      break;
+    }
     case "champ_fishhat": {
       // 주간 낚시 1위: 머리 위에 통통한 황금 물고기 (머리 쪽에 큰 눈, 반대쪽에 위로 갈라진 꼬리, 등에 지느러미)
       // 옆모습은 앞(+x)을 보고, 앞·뒷모습은 머리가 왼쪽
@@ -964,6 +988,13 @@ export function drawHandGlow(g: Grid, view: GearView, id: string, m: GearM): voi
 
 /** 외곽선 뒤에도 밝게 남는 점 (머리 꾸미기): 광부 헬멧 이마 등불 */
 export function drawHeadGlow(g: Grid, view: GearView, id: string, m: GearM, top: number): void {
+  if (id === "u_hat_siren") {
+    // 경광등 돔은 외곽선 뒤에도 밝게
+    g.set(m.cx - 1, top - 4, 0xffd0c4);
+    g.set(m.cx, top - 4, 0xff6a50);
+    g.set(m.cx - 1, top - 3, 0xff7a60);
+    return;
+  }
   if (id !== "q_hat_miner" || view === "up") return;
   if (view === "down") {
     g.set(m.cx - 1, top - 1, 0xfff8d8);
