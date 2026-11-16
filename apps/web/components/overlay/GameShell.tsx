@@ -704,6 +704,12 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                     포인트 현황
                   </button>
                 )}
+                {/* 11/17 운영자만: 「다람쥐를 뿌려라」 채널 쿨타임 바로 풀기 */}
+                {iAmStaff && (
+                  <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => bridge.emit("fx:squirrelsReset")}>
+                    다람쥐 초기화
+                  </button>
+                )}
                 <button
                   type="button"
                   className={cx(ui.button, ui.icon, ui.top, styles.topButton)}

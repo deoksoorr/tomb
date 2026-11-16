@@ -18,6 +18,7 @@ import {
   takeChatToken,
   isSquirrelRainChat,
   squirrelRainReady,
+  squirrelRainLeftMs,
   type ChatBucket,
   inMapBounds,
   isAwayMap,
@@ -978,6 +979,11 @@ export class ChannelCore<C extends object> {
         this.broadcast(encodeEvent({ t: "chat", sid: p.sid, text: c.text, id: c.id, at: c.at, name: p.name, ...tags, ...camp }), p.sid);
         return this.maybeSquirrels(p, c.text, now);
       }
+      case "squirrelsReset":
+        // 11/17 운영자만: 다람쥐 쿨다운을 바로 풀고, 남은 시간 0으로 알려 준다
+        if (!p.staff) return;
+        this.squirrelAt = -Infinity;
+        return this.sendTo(p, { t: "squirrelsWait", left: 0 });
       case "whisper":
         return this.onWhisper(p, m.to, m.text, now);
       case "whoOn": {
@@ -1006,7 +1012,12 @@ export class ChannelCore<C extends object> {
    * 쿨다운은 DO 메모리에만 (잠들었다 깨면 처음부터 — 괜찮다). 방(집·사냥터)에서 친 줄은 보지 않는다
    */
   private maybeSquirrels(p: Peer<C>, text: string, now: number): void {
-    if (this.cfg.room || !isSquirrelRainChat(text) || !squirrelRainReady(this.squirrelAt, now)) return;
+    if (this.cfg.room || !isSquirrelRainChat(text)) return;
+    if (!squirrelRainReady(this.squirrelAt, now)) {
+      // 11/17 쿨다운 중: 운영자에게만 남은 시간을 알려 준다 (다른 사람에게는 아무 반응 없음)
+      if (p.staff) this.sendTo(p, { t: "squirrelsWait", left: squirrelRainLeftMs(this.squirrelAt, now) });
+      return;
+    }
     this.squirrelAt = now;
     const seed = Math.floor((this.host.random ? this.host.random() : Math.random()) * 0x7fffffff);
     this.broadcast(encodeEvent({ t: "squirrels", by: p.name, seed, at: now }));

@@ -208,6 +208,8 @@ export type GameEvents = {
   "friend:presence": { key: string; name: string; on: boolean };
   /** 11/16 이스터에그 「다람쥐를 뿌려라」: 채널 누군가 주문을 쳤다 (실시간 서버 판정) → 지금 보이는 장면에 다람쥐가 쏟아진다 (game/fx/SquirrelRain) */
   "fx:squirrels": { by: string; seed: number; at: number };
+  /** 11/17 운영자 버튼 → 다람쥐 쿨다운 초기화 */
+  "fx:squirrelsReset": undefined;
   "minimap:dots": { me: { x: number; y: number }; others: number[]; residents?: number[]; /** 친구 (others에서 뺀 같은 채널 친구 위치, 하트로 그린다) */ friends?: number[]; /** 11/15 캠핑장이면 "camp", 11/16 바닷가면 "sea" (그 맵 바탕) */ map?: AwayMapId };
   /** 11/15 지금 맵 (캠핑장 장면이 뜨면 camp, 11/16 바닷가 장면이면 sea, 닫히면 village). HUD·미니맵·채팅·음악이 본다 (sticky) */
   "map:changed": { map: MapId };

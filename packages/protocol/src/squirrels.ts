@@ -39,3 +39,17 @@ export function isSquirrelRainChat(text: unknown): boolean {
 export function squirrelRainReady(last: number, now: number): boolean {
   return now - last >= SQUIRREL_RAIN_COOLDOWN_MS;
 }
+
+/** 11/17 쿨다운이 얼마나 남았나 (ms, 0이면 지금 뿌릴 수 있다) */
+export function squirrelRainLeftMs(last: number, now: number): number {
+  return Math.max(0, SQUIRREL_RAIN_COOLDOWN_MS - (now - last));
+}
+
+/** 11/17 운영자에게만 보이는 쿨다운 안내 (쿨다운 중에 주문을 쳤을 때) */
+export function squirrelWaitText(leftMs: number): string {
+  if (leftMs <= 0) return "다람쥐 쿨타임을 초기화했어요. 바로 뿌릴 수 있어요.";
+  const s = Math.max(1, Math.ceil(leftMs / 1000));
+  const m = Math.floor(s / 60);
+  const left = m > 0 ? `${m}분 ${s % 60}초` : `${s}초`;
+  return `다람쥐 쿨타임이 ${left} 남았어요. (운영자에게만 보여요)`;
+}

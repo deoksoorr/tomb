@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, MAP_NAME, type AwayMapId, FURNITURE, LAKE_PIER, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
+import { CAMPFIRES, campfireOfSeat, dexBadgeCats, DIR, MAP_NAME, type AwayMapId, FURNITURE, LAKE_PIER, houseLot, HOUSING_DOOR, HUNT_GATE, isAvatarBody, isPhraseId, sanitizeDye, seatById, seatSlot, SHOP, SHOP_DOOR, SPAWN, spotSeatId, squirrelWaitText, STATE, TELEPORT_DIST, type ActKind, type DirId, type EmoteKind, type PeerInfo, type Seat, type Sid, type SpotKind, type WelcomeMsg } from "@tomb/protocol";
 import { avatarColorSpec, type AppearanceChange } from "../sprites/avatar";
 import { saveResume, type ResumePose, type ResumeState } from "@/lib/resume";
 import { nameStyleIds } from "@/lib/nameStyle";
@@ -580,6 +580,7 @@ export class WorldScene extends Phaser.Scene {
         onMeStale: () => bridge.emit("me:stale"),
         onFriend: (m) => bridge.emit("friend:presence", m),
         onSquirrels: (m) => bridge.emit("fx:squirrels", m),
+        onSquirrelsWait: (left) => bridge.emit("toast", { message: squirrelWaitText(left) }),
         onSelfBody: (body) => {
           if (!isAvatarBody(body)) return;
           this.selfBody = body;
@@ -812,6 +813,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("net:status", (st) => this.onNetStatus(st)));
     // 휴식 중(탭이 숨겨져 게임 루프를 재움)은 실시간 연결에서 탭 숨김과 같게
     on.push(bridge.on("game:rest", ({ on: resting }) => this.net.setResting(resting)));
+    on.push(bridge.on("fx:squirrelsReset", () => this.net.squirrelsReset()));
     on.push(bridge.on("grave:focus", ({ graveId, walk }) => (this.trip.away ? this.toast("묘비는 마을에 있어요. 버스를 타고 마을로 돌아가요.") : this.focusGrave(graveId, walk))));
     // 11/16 [사냥] 버튼 → 사냥터 입구까지 걸어가기 (lib/huntWalk — 캠핑장·바닷가·탈것은 UI가 먼저 거른다). null = 그만 걷기
     on.push(bridge.on("portal:walkTo", ({ kind }) => this.walkToPortal(kind)));
