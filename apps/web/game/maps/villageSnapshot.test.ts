@@ -59,8 +59,8 @@ const layoutPrint = () =>
 
 describe("마을 지문 (캠핑장이 생겨도 그대로)", () => {
   it("배치·좌석·상호작용·충돌·소품", () => {
-    // 11/16 MAP_VERSION 12 → 13 (행운권 판매대·범퍼카장/오리 연못 넓힘)으로 다시 찍음 (예전 값 cf1f8667), 정류장 이름 「언젠가 버스 정류장」으로 다시 (3aa43fe6)
-    expect(layoutPrint()).toBe("6da629a4");
+    // 11/16 MAP_VERSION 12 → 13 (행운권 판매대·범퍼카장/오리 연못 넓힘)으로 다시 찍음 (예전 값 cf1f8667), 정류장 이름 「언젠가 버스 정류장」(3aa43fe6) → 「버스 정류장」(6da629a4)으로 다시
+    expect(layoutPrint()).toBe("68d19e6c");
   });
   it("걷기 격자", () => {
     const g = walkableGrid(8);

@@ -1046,7 +1046,7 @@ const PORTALS: readonly Interactable[] = [
   { id: "dock:duck", kind: "dock", x: DUCK_DOCK.x, y: DUCK_DOCK.y, r: 14, ax: DUCK_DOCK.x, ay: DUCK_DOCK.y, label: "오리배 타기" },
   // 11/15 주말 버스 정류장 (버스 정류장 마당). E → 캠핑장 버스 (운영에서 닫혀 있으면 안내만).
   // 승강장·정차 칸 앞 어디서든 되게 넓게 (예전 r 20은 지붕 바로 앞 한 점이라 잘 안 잡혔다). 지붕 아래 벤치 바로 앞은 앉기가 더 가깝다
-  { id: "bus:camp", kind: "bus", x: BUS_STOP.x - 6, y: BUS_STOP.y + 22, r: BUS_E_RADIUS, ax: BUS_STOP.x - 6, ay: BUS_STOP.y + 22, label: "언젠가 버스 정류장" },
+  { id: "bus:camp", kind: "bus", x: BUS_STOP.x - 6, y: BUS_STOP.y + 22, r: BUS_E_RADIUS, ax: BUS_STOP.x - 6, ay: BUS_STOP.y + 22, label: "버스 정류장" },
   // 동물원 사육사 (노점 앞) → 펫 분양 창
   { id: "zoo:keeper", kind: "zoo", x: ZOOKEEPER_SPOT.x, y: ZOOKEEPER_SPOT.y, r: 20, ax: ZOOKEEPER_SPOT.x, ay: ZOOKEEPER_SPOT.y, label: "사육사에게 펫 분양 받기" },
 ];
