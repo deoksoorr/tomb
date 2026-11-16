@@ -2234,7 +2234,7 @@ export function cargoArt(): Grid {
 /** 오징어잡이배: 작은 흰 배 + 앞뒤 기둥 사이에 줄줄이 매단 등 (등은 따로 squidLampsArt — 밤에 더해 밝혀요) */
 export const SQUID_W = 50;
 export const SQUID_H = 28;
-const SQUID_BULBS: readonly [number, number][] = (() => {
+export const SQUID_BULBS: readonly [number, number][] = (() => {
   const out: [number, number][] = [];
   for (let x = 8; x <= 42; x += 4) out.push([x, 9 + Math.round(Math.sin(((x - 8) / 34) * Math.PI) * 2)]);
   for (let x = 10; x <= 40; x += 5) out.push([x, 14]);

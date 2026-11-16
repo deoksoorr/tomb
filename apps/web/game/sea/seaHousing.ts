@@ -323,6 +323,11 @@ export class SeaHousing {
     this.lamp.update(time, on, s);
   }
 
+  /** 11/16 r19 등대 불빛이 밤 어둠을 밝혀요 (SeaScene 빛 모으기) */
+  addLights(lit: { add(x: number, y: number, r: number, a: number): void }): void {
+    if (!this.destroyed) this.lamp.addLights(lit);
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;

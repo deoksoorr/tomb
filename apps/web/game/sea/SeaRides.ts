@@ -4,7 +4,7 @@ import { BIG_RIDE_TOAST, myBig } from "../camp/foodState";
 import type { Player } from "../entities/Player";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
 import { hullBlocks } from "../logic/boat";
-import { Bounce, knockMove, nudgeAmp, nudgeOffset, resolveHulls, touchContact, type Box } from "../logic/bounce";
+import { Bounce, knockMove, nudgeAmp, nudgeOffset, resolveHulls, SHIP_GAIN, touchContact, type Box } from "../logic/bounce";
 import type { MoveInput } from "../logic/movement";
 import { RideSound } from "../world/RideSound";
 import { bystanderGain } from "../world/rides";
@@ -42,10 +42,13 @@ export type SeaRideHost = {
   /** 11/16 r19 바다의 모든 놀거리 몸 (튜브·제트스키·카약 — 부딪혀 튕기기) · 빈 놀거리를 살짝 밀기 */
   hulls(): readonly SeaHull[];
   nudge(id: string, nx: number, ny: number, amp: number): void;
+  /** 11/16 r19 움직이는 배에 부딪혔어요 (큰 물보라 · 큰 배는 뱃고동) · 그 자리 배 물결 세기 0..1 (튜브·카약이 흔들려요) */
+  shipHit(heavy: "big" | "medium", x: number, y: number): void;
+  wake(x: number, y: number): number;
 };
 
 /** 11/16 r19 놀거리 하나의 몸 상자 (id = 놀거리 id · 카약은 pK1 같은 카약 id, empty = 아무도 안 탐) */
-export type SeaHull = { id: string; box: Box; empty: boolean };
+export type SeaHull = { id: string; box: Box; empty: boolean; ship?: { heavy: "big" | "medium"; vx: number; vy: number } };
 
 type View = {
   def: SeaRide;
@@ -337,11 +340,15 @@ export class SeaRides {
     const others = h.hulls().filter((o) => o.id !== v.def.id);
     const hit = resolveHulls(m, (x, y) => rideBox(v.def.kind, m.dir, x, y), others.map((o) => o.box), ok);
     if (hit) {
-      const sp = this.bounce.hit(now, hit.contact, v.def.kind, hit.vx, hit.vy);
+      const o = others[hit.index];
+      // 움직이는 배: 배 속도만큼 서로 다가간 것으로 쳐서 세게 (가만히 있다 배에 밀려도 튕겨요)
+      const sp = o.ship
+        ? this.bounce.hit(now, hit.contact, v.def.kind, hit.vx - o.ship.vx, hit.vy - o.ship.vy, { gain: SHIP_GAIN[o.ship.heavy], minInto: 0 })
+        : this.bounce.hit(now, hit.contact, v.def.kind, hit.vx, hit.vy);
       if (sp > 0) {
         this.sound.thump(tube ? 0.3 : 0.55, tube ? 1.3 : 1.05);
-        if (!h.reduced) h.splash(m.x - hit.contact.nx * 8, m.y - hit.contact.ny * 4);
-        const o = others[hit.index];
+        if (o.ship) h.shipHit(o.ship.heavy, m.x - hit.contact.nx * 8, m.y - hit.contact.ny * 4);
+        else if (!h.reduced) h.splash(m.x - hit.contact.nx * 8, m.y - hit.contact.ny * 4);
         if (o.empty) h.nudge(o.id, -hit.contact.nx, -hit.contact.ny, nudgeAmp(sp));
       }
     }
@@ -467,7 +474,9 @@ export class SeaRides {
   private draw(v: View, now: number, wall: number, rider: RemoteAvatar | null): void {
     const T = Art.SEA_TEX;
     const ridden = v.owner !== null;
-    const bob = this.host.reduced ? 0 : Math.sin(wall / 620 + v.def.n * 1.9) * (v.def.kind === "tube" ? 0.9 : 0.6);
+    // 11/16 r19 배가 가까이 지나가면 물결에 더 흔들려요
+    const wk = this.host.reduced ? 0 : this.host.wake(v.x, v.y);
+    const bob = this.host.reduced ? 0 : Math.sin(wall / 620 + v.def.n * 1.9) * (v.def.kind === "tube" ? 0.9 : 0.6) + wk * 2.2 * Math.sin(wall / 170 + v.def.n);
     // 11/16 r19 받힌 빈 놀거리는 살짝 밀렸다 돌아와요
     const nd = v.nudge && !ridden ? nudgeOffset(v.nudge.amp, now - v.nudge.at) : 0;
     if (v.nudge && now - v.nudge.at > 1000) v.nudge = null;

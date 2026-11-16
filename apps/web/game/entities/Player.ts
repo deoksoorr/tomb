@@ -11,7 +11,7 @@ import { bridge } from "../bridge";
 import { avatarColorSpec } from "../sprites/avatar";
 import { prefersReducedMotion } from "../config";
 import { MyFoodView } from "../camp/foodFx";
-import { Bounce, type BounceKind, type Contact } from "../logic/bounce";
+import { Bounce, type BounceKind, type BounceOpts, type Contact } from "../logic/bounce";
 
 // 내 캐릭터. 입력은 즉시 로컬에서 반영한다 (서버를 기다리지 않음, 서버 보정도 없음).
 // 상태 머신: idle | walk | run | sitGround | sitChair | jump | hang | swing | swim | dive
@@ -348,9 +348,10 @@ export class Player {
    * 11/16 r19 헤엄치다 배·놀거리에 부딪혔어요 (씬의 충돌 콜백): 닿은 면 바깥으로 살짝 튕겨 나가요 (들이받던 속도에 비례).
    * 데크·난간은 물리 충돌이 그대로 막아요. 튕겼으면 그 세기 (방금 튕겼으면 0)
    */
-  knock(c: Pick<Contact, "nx" | "ny">, now: number, kind: BounceKind = "swim"): number {
+  knock(c: Pick<Contact, "nx" | "ny">, now: number, kind: BounceKind = "swim", opts: BounceOpts & { rvx?: number; rvy?: number } = {}): number {
     if (this.boatSeatId || this.carSeatId || !this.inWater) return 0;
-    return this.bounce.hit(now, c, kind, this.lastVx, this.lastVy);
+    // rvx·rvy = 부딪힌 것의 속도 (움직이는 배) — 서로 다가간 만큼 세게
+    return this.bounce.hit(now, c, kind, this.lastVx - (opts.rvx ?? 0), this.lastVy - (opts.rvy ?? 0), opts);
   }
 
   /** 좌석에 앉기 (요청과 동시에 스냅 시작) — seat가 null이면 바닥 앉기 */

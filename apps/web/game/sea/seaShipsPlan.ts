@@ -1,4 +1,5 @@
 import { SEA_HEIGHT, SEA_WIDTH } from "@tomb/protocol";
+import type { Box } from "../logic/bounce";
 
 // 11/16 r15 사용자: 먼바다 풍경 (그림·소리만 — 서버·저장 없음). 순수 계산이라 시험(seaShipsPlan.test)으로 봐요.
 //  - 먼 배: 몇 분마다 큰 유조선·컨테이너선·고깃배가 먼바다 띠를 천천히 가로질러요. 시각 칸(SHIP_SLOT_MS)마다
@@ -109,4 +110,40 @@ export function squidBoatsAt(now: number): { x: number; y: number; i: number }[]
     out.push({ x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e, i });
   }
   return out;
+}
+
+// ── 11/16 r19 배 몸통 (헤엄·놀거리가 뚫고 지나가지 않게 — 모두의 화면에서 같은 시계로 같은 자리) ──
+/** 물높이 몸통 너비 (그림 너비 — seaArt SHIP_W·SQUID_W와 같아요) */
+export const SHIP_HULL_W = { tanker: 128, cargo: 116, fishing: 34, squid: 50 } as const;
+/** 배 몸통: 그림 받침(물높이) 둘레 얇은 상자 · 지금 속도(px/s) · 세기 (화물선·유조선 = big, 고깃배·오징어잡이배 = medium) */
+export type ShipHull = { id: string; box: Box; vx: number; vy: number; heavy: "big" | "medium" };
+
+/** 지금 몸통들. squid = 오징어잡이배도 넣을지 (밤에만 떠 있어요) */
+export function shipHulls(now: number, squid: boolean): ShipHull[] {
+  const out: ShipHull[] = [];
+  for (const { pass, x } of shipsAt(now)) {
+    const w = SHIP_HULL_W[pass.kind];
+    out.push({ id: `ship:${pass.slot}`, box: { x: Math.round(x - w / 2 + 6), y: pass.y - 10, w: w - 12, h: 12 }, vx: pass.dir * pass.speed, vy: 0, heavy: pass.kind === "fishing" ? "medium" : "big" });
+  }
+  if (squid) {
+    const later = squidBoatsAt(now + 1000);
+    squidBoatsAt(now).forEach((b, j) => {
+      const w = SHIP_HULL_W.squid;
+      const n = later[j];
+      out.push({ id: `squid:${b.i}`, box: { x: Math.round(b.x - w / 2 + 5), y: Math.round(b.y - 9), w: w - 10, h: 10 }, vx: n ? n.x - b.x : 0, vy: n ? n.y - b.y : 0, heavy: "medium" });
+    });
+  }
+  return out;
+}
+
+/** 배 가까이 물결 세기 0..1 (뱃머리·옆 물결이 튜브·카약을 살짝 흔들어요) — 몸통에서 60px 안 */
+export function shipWakeAt(x: number, y: number, hulls: readonly ShipHull[]): number {
+  let best = 0;
+  for (const h of hulls) {
+    const dx = Math.max(h.box.x - x, 0, x - (h.box.x + h.box.w));
+    const dy = Math.max(h.box.y - y, 0, y - (h.box.y + h.box.h));
+    const d = Math.hypot(dx, dy);
+    if (d < 60) best = Math.max(best, (1 - d / 60) * (h.heavy === "big" ? 1 : 0.6));
+  }
+  return best;
 }

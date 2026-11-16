@@ -29,6 +29,7 @@ import {
   seaCampfireOfSeat,
   SEA_CAMPFIRE,
   seaWet,
+  onSeaDeck,
   SEA_DECKS,
   SEA_FLAT_Y0,
   type SeaRestSeat,
@@ -84,6 +85,9 @@ import { SeaForage } from "./seaForage";
 import { SeaLife } from "./seaLife";
 import { SeaRides } from "./SeaRides";
 import { SeaKayaks } from "./SeaKayaks";
+import { resolveHulls, SHIP_GAIN } from "../logic/bounce";
+import { seaStandable } from "./seaLayout";
+import { shipHulls, shipWakeAt, type ShipHull } from "./seaShipsPlan";
 import { StarScopes } from "../scopes/StarScopes";
 import { SeaHornSound, SeaShips } from "./seaShips";
 
@@ -337,7 +341,14 @@ export class SeaScene extends Phaser.Scene {
         return true;
       },
       // 11/16 r19 놀거리끼리 부딪혀 튕기기 (튜브·제트스키·카약 모두)
-      hulls: () => [...(this.rides?.hullBoxes() ?? []), ...(this.kayaks?.hullBoxes() ?? [])],
+      hulls: () => [
+        ...(this.rides?.hullBoxes() ?? []),
+        ...(this.kayaks?.hullBoxes() ?? []),
+        // 11/16 r19 지나가는 배·오징어잡이배도 단단해요 (세게 밀어내요)
+        ...this.shipHullsNow.map((s) => ({ id: s.id, box: s.box, empty: false, ship: { heavy: s.heavy, vx: s.vx, vy: s.vy } })),
+      ],
+      shipHit: (heavy, x, y) => this.shipHit(heavy, x, y),
+      wake: (x, y) => shipWakeAt(x, y, this.shipHullsNow),
       nudge: (id, nx, ny, amp) => {
         this.rides?.nudge(id, nx, ny, amp);
         this.kayaks?.nudge(id, nx, ny, amp);
@@ -1320,10 +1331,13 @@ export class SeaScene extends Phaser.Scene {
     this.host.hub.read(this.move);
     if (this.host.hub.isBlocked || this.locked) this.move.ax = this.move.ay = 0;
     const started = pl.update(this.benchInput(now), now, this.seatReq);
+    // 11/16 r19 움직이는 배 몸통 (이번 프레임 — 놀거리·헤엄이 같이 써요)
+    this.shipHullsNow = shipHulls(Date.now(), this.atmos.levels.darkness > 0.3);
     // 11/16 r13 튜브·제트스키 조종 (Player.update는 탄 동안 움직이지 않아요)
     this.rides?.steer(this.move, dt);
     this.kayaks?.steer(this.move, dt);
     this.deckGuard();
+    this.shipPush(now);
     if (this.furnitureCollider) this.furnitureCollider.active = !pl.airborne;
     if (net.online && pnow >= this.peerCheckAt) {
       this.peerCheckAt = pnow + PEER_CHECK_MS;
@@ -1502,6 +1516,9 @@ export class SeaScene extends Phaser.Scene {
       this.fireworks?.addLights(lit);
       this.forage.f.addLights(lit);
       this.life?.addLights(lit);
+      // 11/16 r19 오징어잡이배 · 등대 빛줄기도 밤 어둠을 밝혀요
+      this.ships?.addLights(lit, L.darkness);
+      this.housing?.addLights(lit);
     }
     lit.end();
   }
@@ -1551,6 +1568,37 @@ export class SeaScene extends Phaser.Scene {
     }
     this.deckLast.x = pl.x;
     this.deckLast.y = pl.y;
+  }
+
+  /** 11/16 r19 지금 지나가는 배 몸통 (프레임마다) */
+  private shipHullsNow: ShipHull[] = [];
+
+  /**
+   * 11/16 r19 헤엄치다 움직이는 배에 닿으면: 겹친 만큼 물 쪽으로 밀려나고 (데크·땅으로는 안 밀어요) 세게 튕겨요.
+   * 배가 나에게 다가와도 (가만히 있어도) 밀려나요 — 배 속도만큼 서로 다가간 것으로 쳐요
+   */
+  private shipPush(now: number): void {
+    const pl = this.player;
+    if (!pl.inWater || pl.inBoat || !this.shipHullsNow.length) return;
+    const body = pl.sprite.body as Phaser.Physics.Arcade.Body;
+    const ox = body.x - pl.x;
+    const oy = body.y - pl.y;
+    const m = { x: pl.x, y: pl.y, vx: body.velocity.x, vy: body.velocity.y };
+    const ok = (x: number, y: number) => (pl.water?.(x, y) ?? true) && seaStandable(x, y) && !onSeaDeck(x, y);
+    const hit = resolveHulls(m, (x, y) => ({ x: x + ox, y: y + oy, w: body.width, h: body.height }), this.shipHullsNow.map((s) => s.box), ok);
+    if (!hit) return;
+    if (m.x !== pl.x || m.y !== pl.y) body.reset(m.x, m.y);
+    const s = this.shipHullsNow[hit.index];
+    const sp = pl.knock(hit.contact, now, "swim", { gain: SHIP_GAIN[s.heavy], minInto: 0, rvx: s.vx, rvy: s.vy });
+    if (sp > 0) this.shipHit(s.heavy, pl.x - hit.contact.nx * 6, pl.y - hit.contact.ny * 4);
+  }
+
+  /** 11/16 r19 배에 부딪혔어요: 큰 물보라 (큰 배는 더 크게) · 화물선·유조선은 뱃고동도 */
+  private shipHit(heavy: "big" | "medium", x: number, y: number): void {
+    const n = heavy === "big" ? 4 : 2;
+    if (!this.host.reduced) for (let i = 0; i < n; i++) this.fx.splash(x + (Math.random() - 0.5) * 14, y + (Math.random() - 0.5) * 6);
+    else this.fx.splash(x, y);
+    if (heavy === "big") this.horn?.horn(0.9, Math.max(-1, Math.min(1, (x - this.player.x) / 200)));
   }
 
   /** 11/16 r13 튜브·제트스키를 타고 있는지 (장면을 바꾸는 입구를 막는 공용 "타는 중" 검사가 불러요) */

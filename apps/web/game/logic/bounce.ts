@@ -41,18 +41,33 @@ export function hullContact(me: Box, o: Box): Contact | null {
   const ox = Math.min(me.x + me.w, o.x + o.w) - Math.max(me.x, o.x);
   const oy = Math.min(me.y + me.h, o.y + o.h) - Math.max(me.y, o.y);
   if (ox <= 0 || oy <= 0) return null;
+  // 네 쪽으로 빠져나가는 거리 (나를 그쪽으로 이만큼 옮기면 안 겹쳐요) — 가장 짧은 쪽, 같으면 가운데가 치우친 쪽
   const dx = me.x + me.w / 2 - (o.x + o.w / 2);
   const dy = me.y + me.h / 2 - (o.y + o.h / 2);
-  const xAxis = ox < oy || (ox === oy && Math.abs(dx) * o.h >= Math.abs(dy) * o.w);
-  if (xAxis) return { nx: dx >= 0 ? 1 : -1, ny: 0, depth: ox };
-  return { nx: 0, ny: dy >= 0 ? 1 : -1, depth: oy };
+  const outs: Contact[] = [
+    { nx: -1, ny: 0, depth: me.x + me.w - o.x },
+    { nx: 1, ny: 0, depth: o.x + o.w - me.x },
+    { nx: 0, ny: -1, depth: me.y + me.h - o.y },
+    { nx: 0, ny: 1, depth: o.y + o.h - me.y },
+  ];
+  const lean = (c: Contact) => (c.nx !== 0 ? c.nx * dx * o.h : c.ny * dy * o.w);
+  outs.sort((a, b) => a.depth - b.depth || lean(b) - lean(a));
+  return outs[0];
 }
 
-/** 튕겨 나가는 첫 속도: 법선 쪽으로 들이받던 속도에 비례 (base부터) */
-export function bounceSpeed(kind: BounceKind, vx: number, vy: number, c: Pick<Contact, "nx" | "ny">): number {
+/**
+ * 11/16 r19 움직이는 큰 배에 부딪혔을 때 (내 놀거리·헤엄 종류와 상관없이 배가 세게 밀어내요): 화물선·유조선은 세게, 오징어잡이배·고깃배는 중간
+ */
+export const SHIP_GAIN: Readonly<Record<"big" | "medium", { base: number; k: number; max: number }>> = {
+  big: { base: 70, k: 1, max: 170 },
+  medium: { base: 42, k: 0.8, max: 100 },
+};
+export type BounceOpts = { gain?: { base: number; k: number; max: number }; minInto?: number };
+
+/** 튕겨 나가는 첫 속도: 법선 쪽으로 들이받던 속도에 비례 (base부터). gain을 주면 그 세기로 (움직이는 배) */
+export function bounceSpeed(kind: BounceKind, vx: number, vy: number, c: Pick<Contact, "nx" | "ny">, gain = BOUNCE_GAIN[kind]): number {
   const into = Math.max(0, -(vx * c.nx + vy * c.ny));
-  const g = BOUNCE_GAIN[kind];
-  return Math.min(g.max, g.base + g.k * into);
+  return Math.min(gain.max, gain.base + gain.k * into);
 }
 
 /** 한 사람(내 몸·내 놀거리)의 튕김 상태 */
@@ -63,10 +78,10 @@ export class Bounce {
   private lastAt = -Infinity;
 
   /** 부딪혔어요: 법선 쪽으로 튕겨요. 쉬는 중(방금 튕김)이거나 거의 서서 닿았으면 0, 아니면 튕긴 속도 */
-  hit(now: number, c: Pick<Contact, "nx" | "ny">, kind: BounceKind, vx: number, vy: number): number {
+  hit(now: number, c: Pick<Contact, "nx" | "ny">, kind: BounceKind, vx: number, vy: number, opts: BounceOpts = {}): number {
     if (now - this.lastAt < BOUNCE_COOLDOWN_MS) return 0;
-    if (-(vx * c.nx + vy * c.ny) < BOUNCE_MIN_INTO) return 0;
-    const s = bounceSpeed(kind, vx, vy, c);
+    if (-(vx * c.nx + vy * c.ny) < (opts.minInto ?? BOUNCE_MIN_INTO)) return 0;
+    const s = bounceSpeed(kind, vx, vy, c, opts.gain);
     this.vx = c.nx * s;
     this.vy = c.ny * s;
     this.lastAt = now;
@@ -142,11 +157,25 @@ export function resolveHulls(
     const c = hullContact(box(m.x, m.y), o);
     if (!c) return;
     first ??= { contact: c, index, vx, vy };
-    const px = m.x + c.nx * (c.depth + 0.5);
-    const py = m.y + c.ny * (c.depth + 0.5);
-    if (ok(px, py)) {
-      m.x = px;
-      m.y = py;
+    // 덜 겹친 쪽으로 밀어내요. 그쪽이 데크·바위·땅이면 다른 쪽(옆 → 반대)으로 — 물 쪽으로만, 갈 곳이 없으면 그대로 (가두지도 파묻지도 않아요)
+    const me = box(m.x, m.y);
+    const dxL = me.x + me.w - o.x;
+    const dxR = o.x + o.w - me.x;
+    const dyU = me.y + me.h - o.y;
+    const dyD = o.y + o.h - me.y;
+    const tries: [number, number][] = [
+      [c.nx * (c.depth + 0.5), c.ny * (c.depth + 0.5)],
+      ...([
+        [-(dxL + 0.5), 0],
+        [dxR + 0.5, 0],
+        [0, -(dyU + 0.5)],
+        [0, dyD + 0.5],
+      ] as [number, number][]).sort((a, b) => Math.abs(a[0] + a[1]) - Math.abs(b[0] + b[1])),
+    ];
+    const t = tries.find(([dx, dy]) => ok(m.x + dx, m.y + dy));
+    if (t) {
+      m.x += t[0];
+      m.y += t[1];
     }
     const vn = m.vx * c.nx + m.vy * c.ny;
     if (vn < 0) {

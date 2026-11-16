@@ -3,7 +3,7 @@ import { DIR, SEA_KAYAK_DOCK, SEA_KAYAKS, seaKayakDismount, seaKayakSeatById, se
 import { BIG_RIDE_TOAST, myBig } from "../camp/foodState";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
 import { hullBlocks } from "../logic/boat";
-import { Bounce, knockMove, nudgeAmp, nudgeOffset, resolveHulls, touchContact } from "../logic/bounce";
+import { Bounce, knockMove, nudgeAmp, nudgeOffset, resolveHulls, SHIP_GAIN, touchContact } from "../logic/bounce";
 import type { MoveInput } from "../logic/movement";
 import { RideSound } from "../world/RideSound";
 import * as Art from "./seaArt";
@@ -279,11 +279,15 @@ export class SeaKayaks {
     const others = h.hulls().filter((o) => o.id !== `pK${v.n + 1}`);
     const hit = resolveHulls(m, (x, y) => kayakBox(m.dir, x, y), others.map((o) => o.box), ok);
     if (!hit) return;
-    const sp = this.bounce.hit(now, hit.contact, "kayak", hit.vx, hit.vy);
+    const o = others[hit.index];
+    // 움직이는 배: 배 속도만큼 서로 다가간 것으로 쳐서 세게 (가만히 있다 배에 밀려도 튕겨요)
+    const sp = o.ship
+      ? this.bounce.hit(now, hit.contact, "kayak", hit.vx - o.ship.vx, hit.vy - o.ship.vy, { gain: SHIP_GAIN[o.ship.heavy], minInto: 0 })
+      : this.bounce.hit(now, hit.contact, "kayak", hit.vx, hit.vy);
     if (sp <= 0) return;
     this.sound.thump(0.45, 1.1);
-    if (!h.reduced) h.splash(m.x - hit.contact.nx * 14, m.y - hit.contact.ny * 4);
-    const o = others[hit.index];
+    if (o.ship) h.shipHit(o.ship.heavy, m.x - hit.contact.nx * 14, m.y - hit.contact.ny * 4);
+    else if (!h.reduced) h.splash(m.x - hit.contact.nx * 14, m.y - hit.contact.ny * 4);
     if (o.empty) h.nudge(o.id, -hit.contact.nx, -hit.contact.ny, nudgeAmp(sp));
   }
 
@@ -375,7 +379,9 @@ export class SeaKayaks {
     const side = v.dir === DIR.left || v.dir === DIR.right;
     const key = T.kayak(side ? "side" : "vert", v.n);
     if (v.body.texture.key !== key) v.body.setTexture(key);
-    const bob = this.host.reduced ? 0 : Math.sin(wall / 700 + v.n * 1.7) * 0.7;
+    // 11/16 r19 배가 가까이 지나가면 물결에 더 흔들려요
+    const wk = this.host.reduced ? 0 : this.host.wake(v.x, v.y);
+    const bob = this.host.reduced ? 0 : Math.sin(wall / 700 + v.n * 1.7) * 0.7 + wk * 2 * Math.sin(wall / 190 + v.n);
     // 11/16 r19 받힌 빈 카약은 살짝 밀렸다 돌아와요
     const empty = v.seat[0] === null && v.seat[1] === null;
     const nd = v.nudge && empty ? nudgeOffset(v.nudge.amp, now - v.nudge.at) : 0;

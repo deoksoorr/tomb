@@ -522,9 +522,10 @@ export class SeaView {
         if (!b) return;
         const x = Math.round(VW * (1 - b.x / SEA_WIDTH));
         const fl = this.reduced ? 1 : 0.85 + 0.15 * Math.sin(now / 110 + i * 2);
-        l.glow.setPosition(x, hz).setScale(0.9, 0.55).setAlpha(on * 0.8 * fl);
+        // r19 아주 밝게: 큰 빛무리 · 물에 길게 일렁이는 빛 기둥
+        l.glow.setPosition(x, hz - 1).setScale(1.8, 1).setAlpha(Math.min(1, on * 1.1 * fl));
         l.hull?.setVisible(true).setPosition(x, hz + 2).setTint(mixRgb(shade, 0x6a7894, 0.5)).setAlpha(on);
-        l.col.setPosition(x, hz).setScale(0.7, (0.5 + (this.reduced ? 0 : 0.12 * Math.sin(now / 500 + i))) * Math.max(1, (this.VH - hz) / 160)).setAlpha(on * 0.55);
+        l.col.setPosition(x, hz).setScale(1.2, (0.75 + (this.reduced ? 0 : 0.18 * Math.sin(now / 420 + i))) * Math.max(1, (this.VH - hz) / 120)).setAlpha(on * 0.95);
       });
     }
     // 물결 마루 흐름
@@ -782,8 +783,8 @@ export class SeaView {
       this.beam
         .setVisible(on > 0.01)
         .setRotation(-Math.PI / 2 + sweep * 1.1)
-        .setScale(1.4 + Math.abs(sweep) * 0.6, 1.2)
-        .setAlpha(on * 0.55);
+        .setScale(1.9 + Math.abs(sweep) * 0.8, 1.6)
+        .setAlpha(Math.min(1, on * 0.9));
     }
   }
 

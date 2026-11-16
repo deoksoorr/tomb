@@ -1,20 +1,34 @@
 import * as Phaser from "phaser";
 import { SEA_WIDTH } from "@tomb/protocol";
+import { DEPTH } from "../config";
 import { AudioHost } from "../world/audioHost";
 import * as Art from "./seaArt";
 import { SEA_DEPTH } from "./SeaMap";
 import { shipsAt, squidBoatsAt, type ShipPass } from "./seaShipsPlan";
 
 // 11/16 r15 먼바다 풍경 (그림·소리만): 먼 배가 가끔 지나가며 뱃고동을 울리고, 밤엔 오징어잡이배 등불이 먼바다에 떠요.
-// 모두 물 층 바로 위(SEA_DEPTH — 바닥 장식 쪽)라 놀거리·사람·물건보다 늘 뒤에 그려지고, 아무것도 막지 않아요.
+// 모두 물 층 바로 위(SEA_DEPTH — 바닥 장식 쪽)라 놀거리·사람·물건보다 늘 뒤에 그려져요.
+// 11/16 r19 배 몸통은 단단해요 (seaShipsPlan.shipHulls — 헤엄·놀거리가 부딪혀 튕겨요), 오징어잡이배 불빛은 밤 어둠 위(빛 층)에.
 // 그림은 처음 한 번 구운 것만 쓰고(풀), 매 프레임은 자리·색만 바꿔요.
 
 const SHIP_DEPTH = SEA_DEPTH.shimmer + 6;
 const MAX_SHIPS = 2;
 const MAX_SQUID = 4;
 
-type ShipView = { body: Phaser.GameObjects.Image; wake: Phaser.GameObjects.Image; light: Phaser.GameObjects.Image; refl: Phaser.GameObjects.Image; slot: number };
-type SquidView = { hull: Phaser.GameObjects.Image; lamps: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; cols: Phaser.GameObjects.Image[] };
+type ShipView = { body: Phaser.GameObjects.Image; wake: Phaser.GameObjects.Image; bow: Phaser.GameObjects.Image; light: Phaser.GameObjects.Image; refl: Phaser.GameObjects.Image; slot: number };
+type SquidView = {
+  hull: Phaser.GameObjects.Image;
+  lamps: Phaser.GameObjects.Image;
+  glow: Phaser.GameObjects.Image;
+  cols: Phaser.GameObjects.Image[];
+  /** 11/16 r19 줄줄이 매단 전구마다 작은 빛 · 배 아래 물에 고인 빛 */
+  bulbs: Phaser.GameObjects.Image[];
+  pool: Phaser.GameObjects.Image;
+};
+/** 11/16 r19 사용자 "오징어잡이배 불빛이 너무 약해요" → 등불·빛무리·물빛은 밤 어둠 막 위(빛 층)에 그려요 (어둠에 묻히지 않게) */
+const LIGHT_DEPTH = DEPTH.lights + 2;
+/** 전구 빛을 따로 얹을 자리 (등 줄에서 몇 개 골라요) */
+const BULB_PICK = [0, 3, 6, 9, 11, 14];
 
 /** 뱃고동 (파일 없이 합성 — 낮게 깔리는 두 음 + 멀리서 들리듯 낮은 통과 필터. 환경음 갈래 볼륨을 따라요) */
 export class SeaHornSound extends AudioHost {
@@ -82,14 +96,18 @@ export class SeaShips {
       const light = s.add.image(0, 0, T.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setDepth(SHIP_DEPTH + 1).setVisible(false);
       // r15 물빛 반사 (물높이 아래로 깨진 짙은 줄 — 배가 물에 잠겨 보여요)
       const refl = s.add.image(0, 0, T.shipReflect("tanker")).setOrigin(0.5, 0).setDepth(SHIP_DEPTH - 1).setVisible(false);
-      this.ships.push({ body, wake, light, refl, slot: -1 });
+      // r19 뱃머리 물결 (배가 단단해지며 — 가까운 튜브·카약이 이 물결에 흔들려요)
+      const bow = s.add.image(0, 0, T.wake).setDepth(SHIP_DEPTH - 1).setVisible(false);
+      this.ships.push({ body, wake, bow, light, refl, slot: -1 });
     }
     for (let i = 0; i < MAX_SQUID; i++) {
-      const cols = [0, 1, 2].map(() => s.add.image(0, 0, T.lightColumn).setOrigin(0.5, 0).setBlendMode(Phaser.BlendModes.ADD).setDepth(SHIP_DEPTH - 2).setVisible(false));
+      const cols = [0, 1, 2, 3, 4].map(() => s.add.image(0, 0, T.lightColumn).setOrigin(0.5, 0).setBlendMode(Phaser.BlendModes.ADD).setDepth(LIGHT_DEPTH - 1).setVisible(false));
       const hull = s.add.image(0, 0, T.squid).setOrigin(0.5, 1).setDepth(SHIP_DEPTH).setVisible(false);
-      const lamps = s.add.image(0, 0, T.squidLamps).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(SHIP_DEPTH + 1).setVisible(false);
-      const glow = s.add.image(0, 0, T.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xe8ffd8).setDepth(SHIP_DEPTH + 2).setVisible(false);
-      this.squids.push({ hull, lamps, glow, cols });
+      const pool = s.add.image(0, 0, T.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xd8ffe0).setDepth(LIGHT_DEPTH - 1).setVisible(false);
+      const lamps = s.add.image(0, 0, T.squidLamps).setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setDepth(LIGHT_DEPTH + 1).setVisible(false);
+      const glow = s.add.image(0, 0, T.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xe8ffd8).setDepth(LIGHT_DEPTH).setVisible(false);
+      const bulbs = BULB_PICK.map((_, j) => s.add.image(0, 0, T.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setTint(j % 2 ? 0xd8ffd0 : 0xffffff).setDepth(LIGHT_DEPTH + 2).setVisible(false));
+      this.squids.push({ hull, lamps, glow, cols, bulbs, pool });
     }
   }
 
@@ -104,6 +122,7 @@ export class SeaShips {
       if (!s) {
         v.body.setVisible(false);
         v.wake.setVisible(false);
+        v.bow.setVisible(false);
         v.light.setVisible(false);
         v.refl.setVisible(false);
         return;
@@ -120,7 +139,9 @@ export class SeaShips {
       v.hull.setVisible(vis);
       v.lamps.setVisible(vis);
       v.glow.setVisible(vis);
+      v.pool.setVisible(vis);
       for (const c of v.cols) c.setVisible(vis);
+      for (const g of v.bulbs) g.setVisible(vis);
       if (!b) return;
       const k = this.reduced ? 0 : 1;
       const bob = Math.sin(now / 1300 + b.i * 2.1) * 0.8 * k;
@@ -128,14 +149,30 @@ export class SeaShips {
       const y = Math.round(b.y + bob);
       v.hull.setPosition(x, y).setTint(0x6a7894).setAlpha(on * 0.9);
       const flick = 0.85 + (this.reduced ? 0 : 0.15 * Math.sin(now / 90 + b.i * 3));
-      v.lamps.setPosition(x, y).setAlpha(on * flick);
-      v.glow.setPosition(x, y - 16).setScale(3.4, 2).setAlpha(on * 0.55 * flick);
-      // 물에 비친 등불 기둥 (위아래로 일렁여요)
+      // r19 아주 밝게: 등 줄 (두 번 겹쳐 더 하얗게) · 큰 빛무리 · 전구마다 작은 빛 · 물에 고인 빛 · 길게 일렁이는 빛 기둥
+      v.lamps.setPosition(x, y).setScale(1).setAlpha(Math.min(1, on * 1.2 * flick));
+      v.glow.setPosition(x, y - 14).setScale(6, 3.4).setAlpha(on * 0.95 * flick);
+      v.bulbs.forEach((g, j) => {
+        const [bx, by] = Art.SQUID_BULBS[BULB_PICK[j]] ?? [Art.SQUID_W / 2, 10];
+        const tw = this.reduced ? 1 : 0.8 + 0.2 * Math.sin(now / (70 + j * 13) + j * 1.7 + b.i);
+        g.setPosition(x - Art.SQUID_W / 2 + bx, y - Art.SQUID_H + by).setScale(0.7).setAlpha(on * tw);
+      });
+      v.pool.setPosition(x, y + 6).setScale(7.5, 1.6).setAlpha(on * 0.7 * flick);
       v.cols.forEach((c, j) => {
-        const sway = this.reduced ? 1 : 0.85 + 0.2 * Math.sin(now / (420 + j * 130) + b.i + j);
-        c.setPosition(x - 12 + j * 12, y + 1).setScale(1, sway).setAlpha(on * (0.55 + 0.15 * Math.sin(now / 300 + j * 2 + b.i)));
+        const sway = this.reduced ? 1 : 0.85 + 0.25 * Math.sin(now / (380 + j * 110) + b.i + j);
+        c.setPosition(x - 20 + j * 10, y + 1).setScale(1.3, 1.8 * sway).setAlpha(on * (0.85 + 0.15 * Math.sin(now / 260 + j * 2 + b.i)));
       });
     });
+  }
+
+  /** 11/16 r19 밤 어둠 막에 오징어잡이배 불빛 구멍 (배 위 · 물에 고인 빛) */
+  addLights(lit: { add(x: number, y: number, r: number, a: number): void }, darkness: number): void {
+    const on = Math.max(0, Math.min(1, (darkness - 0.25) / 0.35));
+    if (on <= 0.01) return;
+    for (const b of squidBoatsAt(Date.now())) {
+      lit.add(b.x, b.y - 14, 120, on * 0.95);
+      lit.add(b.x, b.y + 20, 110, on * 0.75);
+    }
   }
 
   private drawShip(v: ShipView, p: ShipPass, x: number, now: number, haze: number, darkness: number): void {
@@ -171,6 +208,12 @@ export class SeaShips {
       .setPosition(Math.round(x - p.dir * (w / 2 + 10)), p.y - 1)
       .setScale(4.5, 0.9)
       .setAlpha(0.28 * bodyAlpha);
+    const surge = this.reduced ? 1 : 1 + 0.12 * Math.sin(now / 260 + p.slot);
+    v.bow
+      .setVisible(true)
+      .setPosition(Math.round(x + p.dir * (w / 2 - 2)), p.y - 2)
+      .setScale(1.6 * surge, 1.1)
+      .setAlpha(0.45 * bodyAlpha);
     // 밤: 선교 불빛 하나
     const lit = Math.max(0, Math.min(1, (darkness - 0.3) * 2));
     v.light
@@ -197,6 +240,7 @@ export class SeaShips {
     for (const v of this.ships) {
       v.body.destroy();
       v.wake.destroy();
+      v.bow.destroy();
       v.light.destroy();
       v.refl.destroy();
     }
@@ -204,6 +248,8 @@ export class SeaShips {
       v.hull.destroy();
       v.lamps.destroy();
       v.glow.destroy();
+      v.pool.destroy();
+      for (const g of v.bulbs) g.destroy();
       for (const c of v.cols) c.destroy();
     }
     this.ships.length = 0;
