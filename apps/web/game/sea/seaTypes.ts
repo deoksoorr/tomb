@@ -39,6 +39,8 @@ export type SeaTime = {
   tide: number;
   /** 물 높이가 오르는 중이면 1, 내리는 중이면 -1 (젖은 모래 마르기·물거품 방향) */
   trend: -1 | 1;
+  /** 11/16 저녁 무게 0..1 (seaTone duskWeight) — 노을 물빛·금빛 물결 길 */
+  dusk: number;
   /** 근처 사람들 발 위치 (나 + 같은 맵 사람) — 갈매기가 가까이 오면 날아올라요 */
   actors: readonly { x: number; y: number }[];
 };

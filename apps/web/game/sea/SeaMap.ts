@@ -33,6 +33,7 @@ import { DEPTH } from "../config";
 import { makeCanvas, mix } from "../sprites/pixel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { PLATE_MINT, PLATE_WOOD, SignPlate } from "../world/SignPlate";
+import { worldTintOf } from "../world/worldTint";
 import * as Art from "./seaArt";
 import { noise1, shoreDelay, shoreReach, WaveTrain } from "./seaWaves";
 import * as Lay from "./seaLayout";
@@ -170,7 +171,12 @@ export class SeaMap implements SeaMapApi {
   private readonly reachTop: number[] = [];
   private readonly segSurge: number[] = [];
   private readonly laceSegs: Phaser.GameObjects.TileSprite[] = [];
-  private readonly sheenSegs: Phaser.GameObjects.Image[] = [];
+  private readonly sheenSegs: Phaser.GameObjects.TileSprite[] = [];
+  /** 11/16 저녁 물 (노을이 비친 물·거품 — 저녁에만 낮 물 위에 겹쳐요) */
+  private readonly duskWater: Phaser.GameObjects.TileSprite[] = [];
+  private readonly duskFoam: Phaser.GameObjects.TileSprite[] = [];
+  /** 11/16 저녁 해가 비친 금빛 물결 길 (작은 풀) */
+  private readonly golds: Phaser.GameObjects.Image[] = [];
   /** 물보라 다음 기회 시각 (포아송 — 들쭉날쭉) */
   private nextSprayAt = 0;
   private readonly glints: Mote[] = [];
@@ -296,7 +302,9 @@ export class SeaMap implements SeaMapApi {
       const ow = Math.min(w + 1, SEA_WIDTH - x);
       this.waterSegs.push(this.keep(s.add.tileSprite(x, TIDE_HIGH_Y, ow, BODY_H, T.water).setOrigin(0, 0).setDepth(SEA_DEPTH.water)));
       this.foamSegs.push(this.keep(s.add.tileSprite(x, TIDE_HIGH_Y, ow, Art.FOAM_H, T.foam).setOrigin(0, 0).setDepth(SEA_DEPTH.foam)));
-      this.sheenSegs.push(this.keep(s.add.image(x, TIDE_HIGH_Y, T.sheenWet).setOrigin(0, 0).setDisplaySize(ow, 1).setDepth(SEA_DEPTH.wet + 10).setVisible(false)));
+      this.sheenSegs.push(this.keep(s.add.tileSprite(x, TIDE_HIGH_Y, ow, 32, T.sheenWet).setOrigin(0, 0).setDepth(SEA_DEPTH.wet + 10).setVisible(false)));
+      this.duskWater.push(this.keep(s.add.tileSprite(x, TIDE_HIGH_Y, ow, BODY_H, T.duskWater).setOrigin(0, 0).setDepth(SEA_DEPTH.water + 1).setVisible(false)));
+      this.duskFoam.push(this.keep(s.add.tileSprite(x, TIDE_HIGH_Y, ow, Art.FOAM_H, T.duskFoam).setOrigin(0, 0).setDepth(SEA_DEPTH.foam + 1).setVisible(false)));
       this.laceSegs.push(this.keep(s.add.tileSprite(x, TIDE_HIGH_Y, ow, 6, T.lace).setOrigin(0, 0).setDepth(SEA_DEPTH.lace).setVisible(false)));
       this.reachTop.push(Number.NaN);
       this.segSurge.push(0);
@@ -304,6 +312,22 @@ export class SeaMap implements SeaMapApi {
     this.water = this.waterSegs[0];
     this.foam = this.foamSegs[0];
     // 11/16 깊이 띠는 물 몸통 그림이 맡아요 (따로 덮던 그늘은 뺐어요)
+    // 11/16 물 층(물 몸통·거품·반짝임)은 땅 색조 곱하기에서 빼요 — 저녁엔 땅만 주황 햇빛을 곱하고 물은 노을이 비친 그림으로 (시안).
+    // 물 층 앞(젖은 모래·거품 자국 다음)에서 끄고 선착장·방파제 판 앞에서 다시 켜요. 낮·밤 물빛은 SeaMap이 같은 색조를 직접 곱해요
+    const ctl = worldTintOf(s.game);
+    if (ctl) {
+      for (const [depth, on] of [
+        [SEA_DEPTH.lace + 50, false],
+        [SEA_DEPTH.deck - 10, true],
+      ] as const) {
+        const e = s.add.extern();
+        (e as unknown as { render: () => void }).render = () => {
+          ctl.active = on;
+        };
+        this.keep(e.setDepth(depth));
+      }
+    }
+    for (let i = 0; i < (this.reduced ? 36 : 120); i++) this.golds.push(this.keep(s.add.image(0, 0, T.goldStreak).setOrigin(0, 0.5).setDepth(SEA_DEPTH.glint + 2).setVisible(false))); // 시안처럼 금빛으로 덮어요 (더하기면 분홍 물 위에서 하얗게 바래요)
     this.sheen = this.keep(s.add.image(0, TIDE_HIGH_Y, T.sheen).setOrigin(0.5, 0).setBlendMode(Phaser.BlendModes.ADD).setDepth(SEA_DEPTH.shimmer + 10).setAlpha(0).setVisible(!this.reduced));
     this.shimmer = this.keep(s.add.tileSprite(0, SEA_DEEP_Y - 6, SEA_WIDTH, SEA_HEIGHT - SEA_DEEP_Y + 6, T.shimmer).setOrigin(0, 0).setDepth(SEA_DEPTH.shimmer).setAlpha(0.5));
   }
@@ -641,8 +665,11 @@ export class SeaMap implements SeaMapApi {
     const lineY = tideLineY(this.level);
     // 밤엔 물빛을 깊은 남색 쪽으로, 거품은 달빛 도는 흰색 (전체 어둠은 Atmosphere가 덮어요)
     const night = Math.min(1, t.darkness);
-    const waterTint = mix(0xffffff, 0x8c9ce0, night * 0.6);
-    const foamTint = mix(0xffffff, 0xd4dcff, night * 0.5);
+    // 물은 땅 색조 곱하기에서 빠져 있어요 → 같은 색조(저녁 주황은 빼고)를 직접 곱하고, 밤엔 깊은 남색으로 조금 더
+    const world = this.tintNow(t.dusk);
+    const waterTint = mulColor(world, mix(0xffffff, 0x8c9ce0, night * 0.6));
+    const foamTint = mulColor(world, mix(0xffffff, 0xd4dcff, night * 0.5));
+    const duskOn = t.dusk > 0.01 && !this.reduced ? t.dusk : t.dusk > 0.5 ? 1 : 0;
     const scrollX = this.reduced ? 0 : time * 0.003;
     const foamScroll = this.reduced ? 0 : time * 0.006;
     let minEdge = Infinity;
@@ -667,6 +694,18 @@ export class SeaMap implements SeaMapApi {
       // 물 띠는 물가 선(물때)에 맞춰요 — 파도로 오르내리는 조각끼리 띠가 어긋나지 않게
       w.tilePositionY = bodyY - lineY + Art.WATER_ROW0;
       w.tilePositionX = x0 + (scrollX % Art.WATER_TILE_W);
+      const dw = this.duskWater[i];
+      const df = this.duskFoam[i];
+      if (duskOn > 0) {
+        dw.setVisible(true).setAlpha(duskOn).setY(bodyY);
+        dw.tilePositionY = w.tilePositionY;
+        dw.tilePositionX = w.tilePositionX;
+        df.setVisible(true).setAlpha(duskOn).setY(foamY);
+        df.tilePositionX = f.tilePositionX;
+      } else if (dw.visible) {
+        dw.setVisible(false);
+        df.setVisible(false);
+      }
       // 파도가 닿은 가장 높은 곳: 밀려오면 바로 따라 오르고, 빠질 땐 천천히 (그 사이 젖은 윤기·거품 자국)
       let top = this.reachTop[i];
       if (Number.isNaN(top) || edge < top) top = edge;
@@ -676,8 +715,10 @@ export class SeaMap implements SeaMapApi {
       const sh = this.sheenSegs[i];
       const la = this.laceSegs[i];
       if (gap > 2 && !this.reduced) {
-        sh.setVisible(true).setY(Math.round(top)).setDisplaySize(sh.displayWidth, Math.max(1, Math.round(gap + 6))).setAlpha(Math.min(1, gap / 14) * (1 - night * 0.5));
-        la.setVisible(true).setY(Math.round(top - 2)).setAlpha(Math.min(0.9, gap / 10) * (1 - night * 0.4)).setTint(foamTint);
+        sh.setVisible(true).setY(Math.round(top)).setSize(sh.width, Math.max(1, Math.round(gap + 6))).setAlpha(Math.min(1, gap / 14) * (1 - night * 0.5));
+        sh.tilePositionX = x0;
+        sh.tilePositionY = Math.round(top);
+        la.setVisible(true).setY(Math.round(top - 2)).setAlpha(Math.min(0.9, gap / 10) * (1 - night * 0.4)).setTint(duskOn > 0 ? mix(0xffffff, 0xffe1dc, duskOn) : 0xffffff);
         la.tilePositionX = x0 + i * 53;
       } else {
         if (sh.visible) sh.setVisible(false);
@@ -846,6 +887,41 @@ export class SeaMap implements SeaMapApi {
     }
     this.updateStars(time, view, t);
     this.updateGlows(time, view, t);
+    this.updateGold(time, view, t);
+  }
+
+  /** 지금 땅에 곱하는 색조 (저녁 주황은 빼고 — 물은 노을 그림이 맡아요) */
+  private tintNow(dusk: number): number {
+    const ctl = worldTintOf(this.scene.game);
+    if (!ctl) return 0xffffff;
+    // 저녁엔 땅 색조가 주황 햇빛이라 물에는 그만큼 흰색 쪽으로
+    return mix(ctl.world, 0xffffff, Math.min(1, dusk));
+  }
+
+  /**
+   * 11/16 저녁 금빛 물결 길 (시안): 화면 가운데 조금 왼쪽(선착장 판에 덜 가리게), 물가에서 아래로 갈수록 넓게 흔들리는 짧은 금빛 가로 줄 (세기 0.75).
+   * 줄마다 길이·흔들림이 달라 반짝여요. 저녁에만, 물 위에만
+   */
+  private updateGold(time: number, view: Phaser.Geom.Rectangle, t: SeaTime): void {
+    const on = t.dusk * (1 - t.rain * 0.7) * (1 - t.fog * 0.6);
+    if (on <= 0.02) {
+      if (this.golds.length && this.golds[0].visible) for (const g of this.golds) g.setVisible(false);
+      return;
+    }
+    const top = Math.max(this.waterState.edgeY + 16, view.y);
+    const cx = view.x + view.width * 0.42;
+    const ts = this.reduced ? 0 : time / 1000;
+    let k = 0;
+    for (let y = Math.ceil(top / 6) * 6; y < Math.min(SEA_HEIGHT, view.bottom) && k < this.golds.length; y += 6) {
+      const spread = 16 + (y - top) * 0.35;
+      for (let j = 0; j < 3 && k < this.golds.length; j++, k++) {
+        const x = cx + Math.sin(y * 0.175 + ts * 2 + j * 2.1) * spread;
+        const len = 10 + ((y / 6 + j) % 4) * 4;
+        const shimmer = this.reduced ? 1 : 0.65 + 0.35 * Math.sin(ts * 5 + y * 0.31 + j);
+        this.golds[k].setVisible(true).setPosition(Math.round(x), y).setDisplaySize(len, 2).setAlpha(Math.min(1, 0.95 * on * shimmer));
+      }
+    }
+    for (; k < this.golds.length; k++) if (this.golds[k].visible) this.golds[k].setVisible(false);
   }
 
   /**
@@ -931,6 +1007,9 @@ export class SeaMap implements SeaMapApi {
     this.wet = this.boat = this.beacon = this.depthShade = this.sheen = null;
     this.laceSegs.length = 0;
     this.sheenSegs.length = 0;
+    this.duskWater.length = 0;
+    this.duskFoam.length = 0;
+    this.golds.length = 0;
     for (const g of [this.colliders, this.furnitureColliders]) if (g.children) g.clear(true, true);
     // 그림(sea- 텍스처)은 지우지 않아요. 다시 올 때 굽지 않게 남겨 둬요
   }
@@ -970,7 +1049,10 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.glowDot, Art.glowDotArt);
   tex(T.sheen, Art.sheenArt, true);
   tex(T.depthShade, Art.depthShadeArt, true);
-  tex(T.sheenWet, Art.sheenWetArt, true);
+  tex(T.sheenWet, Art.sheenWetArt);
+  tex(T.duskWater, Art.duskWaterArt);
+  tex(T.duskFoam, Art.duskFoamArt);
+  tex(T.goldStreak, Art.goldStreakArt);
   tex(T.shelter, Art.shelterArt);
   tex(T.busSign, Art.busSignArt);
   tex(T.timetable, Art.timetableArt);
@@ -998,4 +1080,10 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.gull, Art.gullArt);
   tex(T.spray, Art.sprayArt);
   tex(T.sparkle, Art.sparkleArt);
+}
+
+/** 두 색 곱하기 (0xRRGGBB) */
+function mulColor(a: number, b: number): number {
+  const c = (s: number) => Math.round((((a >> s) & 255) * ((b >> s) & 255)) / 255);
+  return (c(16) << 16) | (c(8) << 8) | c(0);
 }

@@ -202,6 +202,15 @@ function buildTrees(): SeaTree[] {
   ])
     if (!keepClear(p.x, p.y, 6)) out.push({ kind: "bush", x: p.x, y: p.y, v: 1 });
   for (const p of SEA_PALMS) out.push({ kind: "palm", x: p.x, y: p.y, v: 0 });
+  // 11/16 시안: 풀밭 곳곳에 둥근 덤불 (사용자가 마음에 들어 했어요) — 건물·터·길·정류장을 비켜서
+  for (let i = 0; i < 90 && out.filter((t) => t.kind === "bush").length < 30; i++) {
+    const x = 24 + Math.floor(hashU(i, 31, 13) * (SEA_WIDTH - 48));
+    const y = SEA_ROAD.y + SEA_ROAD.h + 16 + Math.floor(hashU(i, 32, 13) * (SEA_BOARDWALK.y - SEA_ROAD.y - SEA_ROAD.h - 28));
+    if (keepClear(x, y, 14)) continue;
+    if (SEA_LOTS.some((l) => x > l.x - 14 && x < l.x + l.w + 14 && y > l.y - 14 && y < l.y + l.h + 18)) continue;
+    if (out.some((t) => Math.hypot(t.x - x, t.y - y) < 34)) continue;
+    out.push({ kind: "bush", x, y, v: i % 2 });
+  }
   return out;
 }
 

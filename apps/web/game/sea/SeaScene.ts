@@ -57,7 +57,7 @@ import { WeatherSound } from "../world/WeatherSound";
 import { createBusArrival } from "../bus/BusArrival";
 import type { BusArrivalApi } from "../bus/busTypes";
 import { SeaMap } from "./SeaMap";
-import { SeaToneTint } from "./seaTone";
+import { duskWeight, SeaToneTint } from "./seaTone";
 import { SEA_SCENE, type SeaFriend, type SeaHost, type SeaSceneData } from "./seaHost";
 import { seaNeighborSeat, seaPickSeat, SEA_MULTI_SEAT } from "./seaSit";
 import type { SeaInteractable } from "./seaTypes";
@@ -101,6 +101,8 @@ export class SeaScene extends Phaser.Scene {
   private meScreen!: MeScreen;
   /** 11/16 잠수할 때 물 튀김 (마을 Effects 그대로) */
   private fx!: Effects;
+  /** 11/16 바닷가 색조 (저녁 무게를 매 프레임 넣어요) */
+  private tone: SeaToneTint | null = null;
   private fireworks: Fireworks | null = null;
   private seatReq!: SeatRequester;
   private furnitureCollider: Phaser.Physics.Arcade.Collider | null = null;
@@ -217,7 +219,8 @@ export class SeaScene extends Phaser.Scene {
     const tint = worldTintOf(this.game);
     if (tint) addWorldTintBounds(this, tint);
     // 11/16 바닷가 색조 (노을은 라벤더, 밤은 깊은 파랑 — sea/seaTone)
-    this.atmos = new Atmosphere(this, h.reduced, window.location.search, { shaderTint: tint ? new SeaToneTint(tint) : null });
+    this.tone = tint ? new SeaToneTint(tint) : null;
+    this.atmos = new Atmosphere(this, h.reduced, window.location.search, { shaderTint: this.tone });
     this.atmos.setStaticLights(this.map.staticLights.map((l) => ({ ...l })));
     this.lighting = new Lighting(this);
     yield;
@@ -886,7 +889,9 @@ export class SeaScene extends Phaser.Scene {
     this.actors.length = 0;
     this.actors.push({ x: pl.x, y: pl.y });
     for (const r of this.remotes.values()) if (r.visible && !r.away) this.actors.push({ x: r.x, y: r.y });
-    this.map.update(now, dt, view, { hour: this.hour, darkness: L.darkness, rain: L.rain, fog: L.fog, tide: this.tide, trend: this.trend, actors: this.actors });
+    const dusk = duskWeight(this.hour);
+    if (this.tone) this.tone.dusk = dusk;
+    this.map.update(now, dt, view, { hour: this.hour, darkness: L.darkness, rain: L.rain, fog: L.fog, tide: this.tide, trend: this.trend, actors: this.actors, dusk });
     this.riding.update();
     for (const r of this.remotes.values()) r.update(pnow, view, s);
     this.declutterLabels(now, pnow);
