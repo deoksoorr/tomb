@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { channelStatus, type ChannelInfo, type ChannelStatus } from "@tomb/protocol";
+import { channelStatus, type ChannelInfo, type ChannelStatus, type MapId } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
 import { lastChannel } from "@/lib/channelHistory";
 import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
 import { isChannelSelectable, useLobby, visibleChannels } from "@/lib/hooks/useLobby";
 import { useMyHouseChannel } from "@/lib/hooks/useMyHouseChannel";
+import { aloneLine, elsewhereCount, elsewhereLine, hereLabel } from "@/lib/peerPreview";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import { InfoCard, TipList } from "../ui/InfoBlocks";
@@ -26,16 +27,18 @@ type Props = {
   graveChannels?: readonly number[];
 };
 
-/** 지금 같은 채널에 보이는 사람들 닉네임 (게임에 물어본다) */
-function usePeerNames(): string[] | null {
-  const [names, setNames] = useState<string[] | null>(null);
-  useBridgeEvent("peers:list", ({ names: n }) => setNames(n));
+type Peers = { names: string[]; map: MapId };
+
+/** 지금 맵에 보이는 사람들 닉네임과 그 맵 (게임에 물어본다) */
+function usePeerNames(): Peers | null {
+  const [peers, setPeers] = useState<Peers | null>(null);
+  useBridgeEvent("peers:list", (p) => setPeers({ names: p.names, map: p.map ?? "village" }));
   useEffect(() => {
     bridge.emit("peers:ask");
     const t = setInterval(() => bridge.emit("peers:ask"), PEERS_POLL_MS);
     return () => clearInterval(t);
   }, []);
-  return names;
+  return peers;
 }
 
 /**
@@ -111,7 +114,7 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
             )}
           </span>
         )}
-        {here && <PeerPreview names={peers} />}
+        {here && <PeerPreview peers={peers} channelCount={ch.count} />}
       </label>
     );
   }
@@ -161,13 +164,17 @@ export default function ChannelMenu({ onClose, graveChannels = [] }: Props) {
 }
 
 /** 지금 채널 카드 안: 같이 있는 사람 닉네임 몇 명 */
-function PeerPreview({ names }: { names: string[] | null }) {
-  if (names === null) return <span className={styles.peers}>같이 있는 사람을 살펴보는 중…</span>;
-  if (names.length === 0) return <span className={styles.peers}>지금은 나 혼자 있어요. 확성기로 사람을 불러 보세요.</span>;
+function PeerPreview({ peers, channelCount }: { peers: Peers | null; channelCount: number }) {
+  if (peers === null) return <span className={styles.peers}>같이 있는 사람을 살펴보는 중…</span>;
+  const { names, map } = peers;
+  // 11/17 게임은 지금 맵에 보이는 사람만 안다 → 채널 인원과 견줘 다른 곳에 있는 사람도 알려 준다
+  const elsewhere = elsewhereCount(channelCount, names.length);
+  if (names.length === 0) return <span className={styles.peers}>{aloneLine(map, elsewhere)}</span>;
   const shown = names.slice(0, NAME_PREVIEW);
+  const more = elsewhereLine(elsewhere);
   return (
     <span className={styles.peers}>
-      <span className={styles.peersLabel}>같이 있는 사람</span>
+      <span className={styles.peersLabel}>{hereLabel(map)}</span>
       <span className={styles.names}>
         {shown.map((n, i) => (
           <span key={`${n}-${i}`} className={styles.peerName}>
@@ -176,6 +183,7 @@ function PeerPreview({ names }: { names: string[] | null }) {
         ))}
         {names.length > shown.length && <span className={styles.more}>외 {names.length - shown.length}명</span>}
       </span>
+      {more && <span className={styles.more}>{more}</span>}
     </span>
   );
 }

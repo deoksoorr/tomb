@@ -820,7 +820,7 @@ export class SeaScene extends Phaser.Scene {
         this.rig.recenter();
       }),
     );
-    on.push(bridge.on("peers:ask", () => bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name) })));
+    on.push(bridge.on("peers:ask", () => bridge.emit("peers:list", { names: [...this.remotes.values()].map((r) => r.name), map: "sea" })));
     on.push(
       bridge.on("firework:fire", ({ item }) => {
         this.fw().launch(item, this.player.x, this.player.y, this.rig.frameView(this.view), true, this.host.name);

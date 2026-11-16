@@ -219,8 +219,8 @@ export type GameEvents = {
   "camp:talk": { npc: string; name: string; lines: string[] } | null;
   /** 11/15 캠핑장 바베큐 그릴 앞에서 E → 메뉴 창 */
   "camp:bbq:open": { stand: BbqStand };
-  /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고) */
-  "peers:list": { names: string[] };
+  /** 채널 이동 창: 지금 같은 채널에 보이는 사람들 닉네임 (peers:ask에 답한다, 나는 빼고). map = 지금 맵 (11/17 그 맵에 보이는 사람만이라서) */
+  "peers:list": { names: string[]; map: MapId };
 
   // ── 낚시·채집 (4·32번) ── (game/world/forage, components/forage)
   /** 낚시 자리에 앉음 / NPC 앞 / 채집 지점에서 E → UI가 낚시 창·판매 창·채집(게이지·곤충 미니게임)을 연다 */
