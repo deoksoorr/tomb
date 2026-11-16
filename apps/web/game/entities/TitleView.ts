@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { fillEdgeColors } from "@/lib/nameStyle";
 import { STAFF_TITLE, type TitleDef, type TitleGrade } from "@/lib/titles";
 import { TEX } from "../assets/manifest";
+import { BakedShape, type BakeBounds } from "../sprites/bakedShape";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 
 // 머리 위 칭호 「…」 (이름표 바로 위). 등급이 높을수록 화려하게:
@@ -15,7 +16,7 @@ import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 //    양옆 금줄·금빛 별 보석 + 따뜻한 금빛 빛무리 + 글자 둘레에서 금가루가 흩날려 내려앉는다 (운영자 보라는 없다)
 //  - 11/16 매니저(관리자가 임명한 계정만): 위 연민트·아래 청록 글자 + 지나가는 크림빛 반짝임 + 민트 「」 + 양옆 민트줄·서류판(클립보드) +
 //    민트 빛무리 + 민트·크림 반짝이 둘이 둘레를 돈다
-// 성능: 장식은 칭호를 달 때 한 번 만들고 고쳐 쓴다. 움직이는 색은 ANIM_STEP_MS마다만 다시 칠하고, 그리기는 보이는 아바타만(AvatarView.sync).
+// 성능: 장식은 칭호를 달 때 한 번 만들고 고쳐 쓴다. 11/16 양옆 장식(마름모·날개·보석)은 텍스처로 한 번 굽는다 (BakedShape — 매 프레임 다각형 삼각분할을 하지 않게). 움직이는 색은 ANIM_STEP_MS마다만 다시 칠하고, 그리기는 보이는 아바타만(AvatarView.sync).
 // 움직임 줄이기 설정이면 멈춘 그림. 모두 밤 어둠 층 위(이름표 층)라 밤에도 그대로 밝다.
 
 /** 머리 위 칭호 모양 등급: 칭호 등급(신화 포함) + 운영자 전용 */
@@ -49,8 +50,11 @@ export class TitleView {
   readonly text: Phaser.GameObjects.BitmapText;
   private grade: ViewGrade = "bronze";
   private sparks: Phaser.GameObjects.Image[] = [];
-  private orn: Phaser.GameObjects.Graphics | null = null;
-  private ornKey = "";
+  private orn: BakedShape | null = null;
+  /** 구운 장식의 키 (등급·글자 폭·높이가 바뀔 때만 다시 고른다) */
+  private ornW = -1;
+  private ornH = -1;
+  private ornGrade: ViewGrade | null = null;
   private halo: Phaser.GameObjects.Image | null = null;
   private readonly edges: number[] = [];
   private step = -1;
@@ -82,7 +86,6 @@ export class TitleView {
     this.grade = grade;
     this.text.setTint(TINT[grade]);
     this.step = -1;
-    this.ornKey = "";
     // 장식: 등급에 맞게 만들거나 치운다
     const nSparks = grade === "silver" ? 1 : grade === "gold" || grade === "staff" || grade === "manager" ? 2 : grade === "legend" ? 3 : grade === "mythic" ? MYTHIC_DUST : 0;
     while (this.sparks.length > nSparks) this.sparks.pop()!.destroy();
@@ -93,7 +96,10 @@ export class TitleView {
     // 매니저 반짝이는 민트·크림 번갈아
     this.sparks.forEach((sp, i) => (grade === "staff" ? sp.setTint(i % 2 ? 0xc9a2ff : 0xffe08a) : grade === "mythic" ? sp.setTint(i % 2 ? 0xffc24a : 0xfff0b0) : grade === "manager" ? sp.setTint(i % 2 ? 0x6ff4cc : 0xfff4d8) : sp.clearTint()));
     const wantOrn = grade === "gold" || grade === "legend" || grade === "staff" || grade === "mythic" || grade === "manager";
-    if (wantOrn && !this.orn) this.orn = this.scene.add.graphics().setDepth(this.depth - 0.01).setVisible(false);
+    if (wantOrn && !this.orn) {
+      this.orn = new BakedShape(this.scene, this.depth - 0.01);
+      this.ornGrade = null;
+    }
     if (!wantOrn && this.orn) {
       this.orn.destroy();
       this.orn = null;
@@ -199,12 +205,20 @@ export class TitleView {
     }
 
     if (this.orn) {
-      const key = `${w}|${sc}|${this.grade}`;
-      if (vis && key !== this.ornKey) {
-        this.ornKey = key;
-        drawOrnaments(this.orn.clear(), this.grade, w, inkH, sc);
+      if (vis) {
+        // 화면 px 단위로 굽는다 (글자 폭·높이가 같으면 줌과 상관없이 같은 텍스처)
+        const wp = Math.round(w / sc);
+        const hp = Math.round(inkH / sc);
+        const grade = this.grade;
+        if (wp !== this.ornW || hp !== this.ornH || grade !== this.ornGrade) {
+          this.ornW = wp;
+          this.ornH = hp;
+          this.ornGrade = grade;
+          this.orn.show(`to|${grade}|${wp}|${hp}`, ornamentBounds(wp, hp), (g) => drawOrnaments(g, grade, wp, hp, 1));
+        }
+        this.orn.place(x, midY, sc, alpha);
       }
-      this.orn.setPosition(x, midY).setAlpha(alpha).setVisible(vis);
+      this.orn.setVisible(vis);
     }
 
     if (this.halo) {
@@ -279,6 +293,14 @@ export class TitleView {
     for (const s of this.sparks) s.destroy();
     this.sparks = [];
   }
+}
+
+/** 장식을 구울 영역 (화면 px, drawOrnaments와 같은 원점). 양옆 날개·보석·서류판과 금 등급 띠까지 넉넉히 */
+function ornamentBounds(w: number, h: number): BakeBounds {
+  const half = Math.round(w / 2 + 2);
+  const X = half + 28;
+  const Y = Math.ceil(h / 2) + 14;
+  return { x: -X, y: -Y, w: 2 * X, h: 2 * Y };
 }
 
 /** 장식 (원점 = 글자 가운데). 금: 금빛 테두리판(위아래 금줄) + 양옆 금빛 마름모, 전설: 양옆 날개, 운영자: 양옆 금줄 + 보랏빛 보석 */

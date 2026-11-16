@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { fillEdgeColors, flameColor, LEAF_COUNT, leafAt, nameColorSpec, namePlateSpec, NY_DUST_COUNT, nyDustAt, waveFlow, type NameColorSpec, type NamePlateSpec } from "@/lib/nameStyle";
 import { addCanvasTexture, TEX } from "../assets/manifest";
+import { BakedShape, type BakeBounds } from "../sprites/bakedShape";
 import { NAME_LEAF_H, NAME_LEAF_W, nameLeafGrid } from "../sprites/nameStyleIcons";
 import { LABEL_ME, LABEL_OTHER } from "../config";
 
@@ -10,7 +11,8 @@ import { LABEL_ME, LABEL_OTHER } from "../config";
 //  - 그라데이션·무지개·불꽃: 글자마다 네 귀퉁이 tint (setCharacterTint — 글자 i의 왼쪽 = 경계 색 i, 오른쪽 = 경계 색 i+1 → 이름 전체가 한 띠)
 //    Phaser는 글자 색 객체를 한 번 만든 뒤 고쳐 쓰므로, 움직이는 이름도 매 프레임 새 객체를 만들지 않는다 (경계 색 배열도 고쳐 쓴다)
 //  - 빛 테두리·불꽃: 이름표 뒤 빛 무리 한 장 (가산 섞기), 별가루: 반짝이 3개를 돌려 쓴다
-//  - 바탕판: Graphics 한 장. 이름표 크기·배율이 바뀔 때만 다시 그린다
+//  - 바탕판: 11/16 텍스처로 한 번 굽는다 (BakedShape — 이름표 글자 크기(화면 px)·종류가 같으면 아바타끼리 나눠 쓰고, 줌이 바뀌어도 다시 굽지 않는다.
+//    Graphics로 두면 둥근 판·꼬리를 매 프레임 다시 삼각분할해 사람이 많은 채널에서 무거웠다)
 // 성능: 움직이는 색은 ANIM_STEP_MS마다만 다시 칠하고, sync는 보이는 아바타만 부른다(화면 밖이면 멈춘다).
 // 움직임 줄이기 설정이면 멈춘 그림(그라데이션·고정 빛·고정 반짝이).
 // 11/15 수집 의뢰: 나뭇잎 이름 글자 = 그라데이션 + 작은 잎 3장을 돌려 쓰며 떨어뜨린다(이미지 위치만),
@@ -42,7 +44,10 @@ export class NameStyleView {
   private plateId: string | null = null;
   private color: NameColorSpec | null = null;
   private plateSpec: NamePlateSpec | null = null;
-  private plate: Phaser.GameObjects.Graphics | null = null;
+  private plate: BakedShape | null = null;
+  /** 구운 바탕판의 글자 칸 크기 (화면 px, 바뀔 때만 다시 고른다. -1 = 다시) */
+  private plateW = -1;
+  private plateH = -1;
   private plateKey = "";
   private halo: Phaser.GameObjects.Image | null = null;
   private sparks: Phaser.GameObjects.Image[] = [];
@@ -84,7 +89,8 @@ export class NameStyleView {
       this.plateId = pid;
       this.plateSpec = plate;
       this.plateKey = "";
-      if (plate && !this.plate) this.plate = this.scene.add.graphics().setDepth(this.label.depth - 0.01).setVisible(false);
+      this.plateW = -1;
+      if (plate && !this.plate) this.plate = new BakedShape(this.scene, this.label.depth - 0.01);
       if (!plate) {
         this.plate?.destroy();
         this.plate = null;
@@ -225,12 +231,16 @@ export class NameStyleView {
     if (this.plate) {
       const show = on && this.plateOn;
       if (show) {
-        const key = `${w}|${h}|${sc}`;
-        if (key !== this.plateKey) {
-          this.plateKey = key;
-          drawPlate(this.plate.clear(), this.plateSpec!, w, h, sc);
+        // 화면 px 단위로 굽는다 (글자 칸 크기가 같으면 줌과 상관없이 같은 텍스처)
+        const wp = Math.round(w / sc);
+        const hp = Math.round(h / sc);
+        if (wp !== this.plateW || hp !== this.plateH) {
+          this.plateW = wp;
+          this.plateH = hp;
+          const spec = this.plateSpec!;
+          this.plate.show(`np|${this.plateId}|${wp}|${hp}`, plateBounds(spec, wp, hp), (g) => drawPlate(g, spec, wp, hp, 1));
         }
-        this.plate.setPosition(cx, bottom).setAlpha(alpha);
+        this.plate.place(cx, bottom, sc, alpha);
       }
       this.plate.setVisible(show);
     }
@@ -240,11 +250,16 @@ export class NameStyleView {
       if (show) {
         // 움직임 줄이기면 한 번만 (멈춘 물결)
         const step = this.reduced ? 0 : Math.floor(now / ANIM_STEP_MS);
-        const key = `${w}|${h}|${sc}`;
+        // 바탕판(구운 텍스처)과 같은 화면 px 단위로 그리고 배율만 sc (줌이 바뀌어도 판과 어긋나지 않게)
+        const wp = Math.round(w / sc);
+        const hp = Math.round(h / sc);
+        const key = `${wp}|${hp}`;
         if (step !== this.rippleStep || key !== this.plateKey) {
           this.rippleStep = step;
-          drawWaveRipple(this.ripple.clear(), this.plateSpec!, w, h, sc, this.reduced ? 0.3 : waveFlow(step * ANIM_STEP_MS));
+          this.plateKey = key;
+          drawWaveRipple(this.ripple.clear(), this.plateSpec!, wp, hp, 1, this.reduced ? 0.3 : waveFlow(step * ANIM_STEP_MS));
         }
+        if (this.ripple.scaleX !== sc) this.ripple.setScale(sc);
         this.ripple.setPosition(cx, bottom).setAlpha(alpha);
       }
       this.ripple.setVisible(show);
@@ -425,6 +440,16 @@ export function drawWaveRipple(g: Phaser.GameObjects.Graphics, p: NamePlateSpec,
  * 바탕판 그리기 (원점 = 이름표 아래 가운데, 단위 = 화면 1px × sc). 이름표 글자 칸(w×h)을 PAD만큼 둘러싼다.
  * 픽셀 느낌이 나게 sc 단위로만 그린다
  */
+/** 바탕판을 구울 영역 (화면 px, drawPlate와 같은 원점). 꼬리·복 매듭·구름 봉우리까지 넉넉히 */
+export function plateBounds(p: NamePlateSpec, w: number, h: number): BakeBounds {
+  const padX = PAD_X + (p.kind === "wave" ? WAVE_PAD : p.kind === "newyear" ? NY_PAD : 0);
+  const L = Math.round(-w / 2 - padX) - 8;
+  const R = Math.round(w / 2 + padX) + 8;
+  const T = Math.round(-h - PAD_Y) - Math.ceil(h / 2) - 4;
+  const B = Math.round(PAD_Y) + 4;
+  return { x: L, y: T, w: R - L, h: B - T };
+}
+
 export function drawPlate(g: Phaser.GameObjects.Graphics, p: NamePlateSpec, w: number, h: number, sc: number): void {
   const padX = PAD_X + (p.kind === "wave" ? WAVE_PAD : p.kind === "newyear" ? NY_PAD : 0);
   const L = Math.round(-w / 2 - padX * sc);
