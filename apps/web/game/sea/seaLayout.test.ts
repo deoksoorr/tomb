@@ -10,6 +10,7 @@ import {
   SEA_LIGHTHOUSE_DOOR,
   SEA_LOTS,
   SEA_DIG_HOLES,
+  SEA_FISHING_SPOTS,
   seaLotFront,
   seaLotGate,
   SEA_MARKET_STALLS,
@@ -81,6 +82,11 @@ describe("seaLayout — 걷기", () => {
       const f = seaLotFront(l);
       expect(reachableNear(f.x, f.y, 8), `lot ${l.n} gate`).toBe(true);
       expect(reachableNear(l.x + l.w / 2, l.y + l.h / 2, 8), `lot ${l.n} inside`).toBe(true);
+    }
+    // 11/16 갯바위 낚시 자리: 앞(바다 쪽)에서 걸어 닿고, 일어서는 자리(앞 9px)에 설 수 있어요
+    for (const f of SEA_FISHING_SPOTS) {
+      expect(reachableNear(f.x, f.y + 9, 14), `fish ${f.id}`).toBe(true);
+      expect(seaStandable(f.x, f.y + 9), `fish stand ${f.id}`).toBe(true);
     }
     // 11/16 갯벌 캐기 구멍은 바위가 늘어도 다 걸어서 닿아요
     for (const h of SEA_DIG_HOLES) expect(reachableNear(h.x, h.y, 10), `hole ${h.x},${h.y}`).toBe(true);

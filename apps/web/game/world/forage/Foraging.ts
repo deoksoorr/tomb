@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { boatFishingSpotId, CAMP_FISHING_SPOTS, campFishingSpotById, DIR, FISHING_SPOTS, fishingSpotById, STATE, type DirId, type FishingSpot, type PeerInfo, type Sid, type WelcomeMsg } from "@tomb/protocol";
+import { boatFishingSpotId, CAMP_FISHING_SPOTS, campFishingSpotById, DIR, FISHING_SPOTS, fishingSpotById, SEA_FISHING_SPOTS, seaFishingSpotById, STATE, type DirId, type FishingSpot, type PeerInfo, type Sid, type WelcomeMsg } from "@tomb/protocol";
 import { ambienceAt, parseAmbienceOverride, type AmbienceOverride } from "@/lib/ambience";
 import { gatherNodeById, NODE_LABEL, nodeOnMap, NPCS, type GatherNode, type Npc } from "@/lib/forage/catalog";
 import { bridge, type ForageRodPhase } from "../../bridge";
@@ -46,7 +46,7 @@ export type ForageDeps = {
    * 11/15 캠핑장: 계곡 낚시 자리(CAMP_FISHING_SPOTS)·캠핑장 채집 지점만. NPC·의뢰 게시판·정류장 마당 장식은 마을에만 (팔기·의뢰는 마을에서).
    * 없으면 마을 (예전과 같다)
    */
-  map?: "camp";
+  map?: "camp" | "sea";
   /** 낚시 자리 표시 (의자·꽂아 둔 낚싯대·찌). 없으면 마을 FishZoneView */
   zone?: ForageZone;
 };
@@ -115,7 +115,7 @@ export class Foraging {
   private readonly zone: ForageZone;
   /** 이 맵의 낚시 자리 (마을 FISHING_SPOTS · 캠핑장 CAMP_FISHING_SPOTS) */
   private readonly spots: readonly FishingSpot[];
-  private readonly mapId: "village" | "camp";
+  private readonly mapId: "village" | "camp" | "sea";
 
   constructor(private readonly d: ForageDeps) {
     const scene = (this.scene = d.scene);
@@ -124,8 +124,9 @@ export class Foraging {
     ensureForageTextures(scene, this.night);
     ensureNodeFxTextures(scene);
     d.atlas.ensure(NPCS.map((n) => n.name + n.title).join("") + "낚시하기" + Object.values(NODE_LABEL).join("") + "에게 팔기");
-    this.mapId = d.map === "camp" ? "camp" : "village";
-    this.spots = this.mapId === "camp" ? CAMP_FISHING_SPOTS : FISHING_SPOTS;
+    this.mapId = d.map ?? "village";
+    // 11/16 바닷가 갯바위 낚시 자리 (SEA_FISHING_SPOTS)
+    this.spots = this.mapId === "camp" ? CAMP_FISHING_SPOTS : this.mapId === "sea" ? SEA_FISHING_SPOTS : FISHING_SPOTS;
     this.zone = d.zone ?? new FishZoneView({ scene, atlas: d.atlas, reduced: d.reduced, addCollider: (x, y, w, h) => this.addCollider(x, y, w, h) });
     // 어부 영감·수집가 유령은 마을에만 (캠핑장에서 잡은 것도 마을에서 판다)
     for (const npc of this.mapId === "village" ? NPCS : []) {
@@ -166,7 +167,7 @@ export class Foraging {
 
   /** 이 맵의 낚시 자리 */
   private spotById(id: string): FishingSpot | undefined {
-    return this.mapId === "camp" ? campFishingSpotById(id) : fishingSpotById(id);
+    return this.mapId === "camp" ? campFishingSpotById(id) : this.mapId === "sea" ? seaFishingSpotById(id) : fishingSpotById(id);
   }
 
   private isNight(): boolean {

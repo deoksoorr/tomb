@@ -35,29 +35,30 @@ type Marker = {
   busy: boolean;
 };
 
-/** 계곡 낚시 자리 표시 (Foraging의 ForageZone) */
+/** 계곡 낚시 자리 표시 (Foraging의 ForageZone). 11/16 바닷가 갯바위 낚시 자리도 같은 표시 (spots로 넘겨요, 아래를 보는 자리도) */
 export class CampFishMarkers implements ForageZone {
   private readonly markers: Marker[] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly reduced: boolean,
+    spots: readonly FishingSpot[] = CAMP_FISHING_SPOTS,
   ) {
     ensureZoneTextures(scene);
-    for (const s of CAMP_FISHING_SPOTS) this.markers.push(this.make(s));
+    for (const s of spots) this.markers.push(this.make(s));
   }
 
   private make(s: FishingSpot): Marker {
     const scene = this.scene;
-    const [dx] = STEP[s.facing];
+    const [dx, dy] = STEP[s.facing];
     scene.add.image(s.x, s.y + 2, ZTEX.stool).setOrigin(0.5, 1).setDepth(s.y - 1);
-    // 꽂아 둔 낚싯대: 의자 옆 받침대 → 물 쪽으로 비스듬히 → 늘어진 줄 (계곡 자리는 모두 옆을 본다)
-    const hx = s.x - dx * 2;
+    // 꽂아 둔 낚싯대: 의자 옆 받침대 → 물 쪽으로 비스듬히 → 늘어진 줄 (계곡 자리는 옆, 바닷가 자리는 아래를 봐요)
+    const hx = dy ? s.x + 7 : s.x - dx * 2;
     const hy = s.y + 3;
-    const tipX = hx + dx * 12;
-    const tipY = hy - 9;
-    const bx = s.x + dx * CAST;
-    const by = s.y - 2;
+    const tipX = dy ? hx + 3 : hx + dx * 12;
+    const tipY = dy ? hy - 10 + dy * 4 : hy - 9;
+    const bx = dy ? hx + 3 : s.x + dx * CAST;
+    const by = dy ? s.y + dy * CAST : s.y - 2;
     const rod = scene.add.graphics().setDepth(s.y + 1);
     rod.lineStyle(1, 0x3a2a1a, 1).lineBetween(hx - 1, hy, hx - 1, hy - 4).lineBetween(hx + 1, hy, hx + 1, hy - 4);
     rod.lineStyle(1, 0x7a5432, 1).lineBetween(hx, hy - 3, tipX, tipY);

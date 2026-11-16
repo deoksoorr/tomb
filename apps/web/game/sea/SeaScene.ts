@@ -61,6 +61,8 @@ import { SeaMap } from "./SeaMap";
 import { duskWeight, SeaToneTint } from "./seaTone";
 import { SEA_SCENE, type SeaFriend, type SeaHost, type SeaSceneData } from "./seaHost";
 import { seaNeighborSeat, seaPickSeat, SEA_MULTI_SEAT } from "./seaSit";
+import { BIG_SEAT_MAX, BIG_SEAT_TOAST, myBig } from "../camp/foodState";
+import { SeaForage } from "./seaForage";
 import type { SeaInteractable } from "./seaTypes";
 import { tideNow, tideNowLevel, tideWarnNow } from "./tideClock";
 
@@ -99,6 +101,8 @@ export class SeaScene extends Phaser.Scene {
   private seatHint!: SeatHint;
   private expr!: Expressions;
   private riding!: Riding;
+  /** 11/16 갯바위 낚시 (마을 낚시를 바닷가로) */
+  private forage!: SeaForage;
   private meScreen!: MeScreen;
   /** 11/16 잠수할 때 물 튀김 (마을 Effects 그대로) */
   private fx!: Effects;
@@ -163,7 +167,7 @@ export class SeaScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanup, this);
     // 버스 창밖 연출 아래에서 미리 만들 때(parked)는 프레임마다 조금씩 만들어요 (캠핑장과 같아요)
     const self = this as unknown as Record<string, unknown>;
-    for (const k of ["map", "player", "rig", "atmos", "lighting", "expr", "meScreen", "riding", "seatHint"]) self[k] = undefined;
+    for (const k of ["map", "player", "rig", "atmos", "lighting", "expr", "meScreen", "riding", "seatHint", "forage"]) self[k] = undefined;
     const t = tideNowLevel();
     this.tide = t.level;
     this.trend = t.trend;
@@ -238,6 +242,7 @@ export class SeaScene extends Phaser.Scene {
       act: (kind) => this.doAct(kind),
     });
     this.riding = new Riding({ player: () => this.player, net: () => h.net, remotes: () => this.remotes, toast: (m) => this.toast(m) });
+    this.forage = new SeaForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m) });
     yield;
 
     this.applyArrivalPose();
@@ -381,8 +386,12 @@ export class SeaScene extends Phaser.Scene {
         const me = this.host.net.mySid;
         for (const e of entries) if (e.sid !== me) this.remotes.get(e.sid)?.push(t, e.x, e.y, e.state, e.dir);
       },
-      onSeat: (seatId, sid) => this.onSeat(seatId, sid),
+      onSeat: (seatId, sid) => {
+        this.forage.f.seatChanged(seatId, sid);
+        this.onSeat(seatId, sid);
+      },
       onSeatDenied: (seatId) => {
+        if (this.forage.f.seatDenied(seatId)) return;
         if (this.player.seat?.id === seatId) this.player.seatDenied(seatId, this.time.now);
       },
       onEmote: () => undefined,
@@ -415,7 +424,7 @@ export class SeaScene extends Phaser.Scene {
       onChatLog: (lines) => bridge.emit("chat:log", { lines, ...(this.host.net.channel !== null ? { ch: this.host.net.channel } : {}) }),
       onMood: (sid, mood) => this.expr.onRemoteMood(sid, mood),
       onRide: (sid, on) => this.riding.onRide(sid, on),
-      onRod: () => undefined,
+      onRod: (sid, on) => this.forage.f.onRod(sid, on),
       onAway: (sid, on) => this.remotes.get(sid)?.setAway(on, performance.now()),
       onGoblin: () => undefined,
       onGoblinGone: () => undefined,
@@ -426,6 +435,9 @@ export class SeaScene extends Phaser.Scene {
         this.clearRemotes();
         this.syncSeats(seats);
         for (const p of peers) this.addRemote(p);
+        // 낚시 자리 점유표를 바닷가 것으로 (마을 입장 정보와 같은 모양으로 넘겨요)
+        const net = this.host.net;
+        this.forage.f.onWelcome({ t: "welcome", sid: net.mySid ?? 0, channel: net.channel ?? 0, cap: net.cap, peers, seats, resumed: false, spots: true });
         this.reclaimSeat();
       },
     };
@@ -442,6 +454,7 @@ export class SeaScene extends Phaser.Scene {
     this.syncSeats(m.seats);
     for (const p of m.peers) this.addRemote(p);
     this.riding.onWelcome();
+    this.forage.f.onWelcome(m);
     this.reclaimSeat();
   }
 
@@ -504,6 +517,7 @@ export class SeaScene extends Phaser.Scene {
     r.seatId = prev?.seatId ?? null;
     r.view.setMood(p.mood);
     this.riding.applyPeer(r, p);
+    this.forage?.f.applyPeer(p);
     r.setAway(p.away === true, performance.now(), true);
     r.view.setFriend(this.isFriend(r));
     if (!r.seatId) for (const [seatId, owner] of this.seats) if (owner === p.sid) r.seatId = seatId;
@@ -650,7 +664,7 @@ export class SeaScene extends Phaser.Scene {
     if (a === "sit") {
       if (moving || pl.inWater) return;
       if (pl.sitting) pl.stand(now, this.seatReq);
-      else pl.sit(seaPickSeat(pl.x, pl.y, occupied, mySid), now, this.seatReq);
+      else this.sitOn(seaPickSeat(pl.x, pl.y, occupied, mySid), now);
       return;
     }
     if (a !== "interact") return;
@@ -669,8 +683,23 @@ export class SeaScene extends Phaser.Scene {
     const obj = this.nearestObject(pl.x, pl.y);
     const sd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
     const od = obj ? Math.hypot(obj.x - pl.x, obj.y - pl.y) : Infinity;
+    // 11/16 갯바위 낚시 자리가 더 가까우면 그것부터 (캠핑장과 같아요)
+    const fo = this.forage.nearest(pl.x, pl.y);
+    if (fo && Math.hypot(fo.x - pl.x, fo.y - pl.y) <= Math.min(sd, od)) {
+      this.forage.f.use(fo);
+      return;
+    }
     if (obj && od <= sd) this.useObject(obj);
-    else if (seat) pl.sit(seat, now, this.seatReq);
+    else if (seat) this.sitOn(seat, now);
+  }
+
+  /** 앉기 (null = 땅바닥). 11/16 2배 넘게 커졌으면 정류장 지붕 밑 벤치(pB)에는 못 앉아요 — 지붕이 얼굴을 가려요 (캠핑장 정류장과 같은 규칙) */
+  private sitOn(seat: Seat | null, now: number): void {
+    if (seat && seat.id.startsWith("pB") && myBig() > BIG_SEAT_MAX) {
+      this.toast(BIG_SEAT_TOAST);
+      return;
+    }
+    this.player.sit(seat, now, this.seatReq);
   }
 
   private nearestObject(x: number, y: number): SeaInteractable | null {
@@ -894,6 +923,7 @@ export class SeaScene extends Phaser.Scene {
     if (this.tone) this.tone.dusk = dusk;
     this.map.update(now, dt, view, { hour: this.hour, darkness: L.darkness, rain: L.rain, fog: L.fog, tide: this.tide, trend: this.trend, actors: this.actors, dusk });
     this.riding.update();
+    this.forage.f.update(dt, view, s);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
     this.declutterLabels(now, pnow);
     this.updateSeatHint(now, s);
@@ -957,6 +987,9 @@ export class SeaScene extends Phaser.Scene {
     const objSd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
     const objOd = obj ? Math.hypot(obj.x - pl.x, obj.y - pl.y) : Infinity;
     let other = obj && objOd <= objSd ? { x: obj.x, y: obj.y + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
+    // 11/16 갯바위 낚시 자리 안내 ("E 낚시하기")
+    const fo = !pl.sitting && !this.locked ? this.forage.nearest(pl.x, pl.y) : null;
+    if (fo && Math.hypot(fo.x - pl.x, fo.y - pl.y) <= Math.min(objSd, objOd)) other = { x: fo.x, y: fo.y + 2, text: `${this.seatHint.prefix}${fo.label}` };
     // 11/16 물속: 잠수·떠오르기 안내 (마을과 같은 글)
     if (pl.state === "swim" || pl.state === "dive") other = { x: pl.x, y: pl.y + 2, text: `${this.seatHint.prefix}${pl.state === "swim" ? "잠수" : "떠오르기"}` };
     const bench = pl.state === "sitChair" && pl.seat && SEA_MULTI_SEAT.has(pl.seat.furnitureId);
@@ -995,6 +1028,7 @@ export class SeaScene extends Phaser.Scene {
       const lr = 40 + 24 * L.glow;
       for (const sp of this.map.staticLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.4, 0.88);
       this.fireworks?.addLights(lit);
+      this.forage.f.addLights(lit);
     }
     lit.end();
   }
@@ -1025,6 +1059,7 @@ export class SeaScene extends Phaser.Scene {
     this.host.sfx.water(null, false, performance.now());
     this.clearRemotes();
     this.expr?.destroy();
+    this.forage?.f.destroy();
     this.meScreen?.destroy();
     this.rig?.destroy();
     this.atmos?.destroy();

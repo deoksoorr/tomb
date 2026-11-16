@@ -3,7 +3,7 @@
 // 물가 앞줄은 한 줄로 오지 않아요: x마다 닿는 시각(조금 늦게)과 밀려오는 폭이 여러 겹 잡음으로 달라지고, 그 잡음이 옆으로 천천히 흘러요.
 // 씨앗으로 정해진 차례라 한 화면 안에서는 늘 같은 흐름이에요 (다른 사람과 맞출 필요는 없어요).
 
-export type Wave = { id: number; t0: number; dur: number; amp: number; big: boolean };
+export type Wave = { id: number; t0: number; dur: number; amp: number; big: boolean; next: number };
 
 /** 결정적 난수 (mulberry32) */
 function mulberry(seed: number): () => number {
@@ -62,36 +62,42 @@ export class WaveTrain {
     let dur: number;
     let amp: number;
     let big = false;
+    // 11/16 사용자 "파도가 더 세게, 더 들쭉날쭉하게" → 세트는 더 크고 길게, 가끔 백사장 깊이 밀고 올라오는 큰 너울
     if (this.setLeft > 0) {
-      // 세트: 큰 파도가 연달아
+      // 세트: 큰 파도가 연달아 (뒤로 갈수록 조금씩 달라요)
       this.setLeft--;
-      dur = 6500 + r() * 3500;
-      amp = 26 + r() * 16;
+      dur = 6500 + r() * 4500;
+      amp = 34 + r() * 26;
       big = true;
-      if (this.setLeft === 0) this.calmLeft = 1 + Math.floor(r() * 2);
+      if (this.setLeft === 0) this.calmLeft = 1 + Math.floor(r() * 3);
     } else if (this.calmLeft > 0) {
       this.calmLeft--;
-      dur = 3500 + r() * 2500;
-      amp = 3 + r() * 3;
-    } else if (r() < 0.16) {
-      this.setLeft = 1 + (r() < 0.45 ? 2 : 1);
-      dur = 6500 + r() * 3500;
-      amp = 24 + r() * 16;
+      dur = 3000 + r() * 3000;
+      amp = 3 + r() * 5;
+    } else if (r() < 0.05) {
+      // 드물게 홀로 오는 큰 너울
+      dur = 9000 + r() * 3000;
+      amp = 62 + r() * 14;
+      big = true;
+    } else if (r() < 0.2) {
+      this.setLeft = 1 + Math.floor(r() * 3);
+      dur = 6500 + r() * 4500;
+      amp = 32 + r() * 24;
       big = true;
     } else {
       // 보통 파도도 높이가 넓게 퍼져요 (찰랑 ~ 제법 큰 파도)
-      dur = 4000 + r() * 5000;
-      amp = 6 + r() * r() * 22;
+      dur = 3000 + r() * 7000;
+      amp = 5 + r() * r() * 34;
     }
-    // 다음 파도는 앞 파도가 다 빠지기 조금 전에 와요 (겹쳐서 이어져요)
-    return { id: this.nextId++, t0, dur, amp, big };
+    // 다음 파도는 앞 파도가 빠지는 중 아무 때나 (55~100%) — 박자가 일정하지 않게
+    return { id: this.nextId++, t0, dur, amp, big, next: 0.55 + r() * 0.45 };
   }
 
   /** time까지 파도를 만들어 둬요 (앞으로 한 파도 더) */
   private fill(time: number): void {
     let last = this.waves[this.waves.length - 1];
-    while (last.t0 + last.dur * 0.85 < time + 3000) {
-      last = this.make(last.t0 + last.dur * 0.85);
+    while (last.t0 + last.dur * last.next < time + 3000) {
+      last = this.make(last.t0 + last.dur * last.next);
       this.waves.push(last);
     }
     // 오래된 파도는 버려요 (지연 계산용으로 4초쯤은 남겨요)
@@ -122,8 +128,8 @@ export function shoreDelay(x: number, time: number): number {
   return (0.55 * noise1(x / 380 + time * 0.000025, 11) + 0.45 * noise1(x / 150 - time * 0.00004, 12)) * 2400;
 }
 
-/** x에서 밀려오는 폭 배율 (0.25..1.35) — 여러 겹 잡음 */
+/** x에서 밀려오는 폭 배율 (0.2..1.45) — 여러 겹 잡음 */
 export function shoreReach(x: number, time: number): number {
   const n = 0.5 * noise1(x / 260 + time * 0.00004, 21) + 0.3 * noise1(x / 110 - time * 0.00007, 22) + 0.2 * noise1(x / 46 + time * 0.0001, 23);
-  return 0.25 + 1.1 * n;
+  return 0.2 + 1.25 * n;
 }

@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, CAMP_ARRIVE, DIR, SEA_ARRIVE, SPAWN, STATE, decodeSnapshot, encodeEvent, encodeMove, seaSeatById, signJoinToken, type C2S, type S2C, type StateId } from "@tomb/protocol";
+import { AVATAR_COLORS, CAMP_ARRIVE, DIR, SEA_ARRIVE, SPAWN, STATE, decodeSnapshot, encodeEvent, encodeMove, seaSeatById, SEA_FISHING_SPOTS, signJoinToken, type C2S, type S2C, type StateId } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { admit } from "./auth";
 import { ChannelCore, MAP_INTERVAL_MS, type ChannelHost, type JoinTicket } from "./channel";
@@ -123,6 +123,20 @@ describe("sea map (11/16 달물결 포구)", () => {
     clear(v);
     core.message(v, send({ t: "sit", seatId: "pB-0" }), 0);
     expect(events(v)).toContainEqual({ t: "seatDenied", seatId: "pB-0" });
+  });
+
+  it("11/16 rock fishing spots: one person per spot at the sea, unknown in the village", () => {
+    const { core, join } = setup();
+    const f = SEA_FISHING_SPOTS[0];
+    const a = join("a", { sea: true, map: "sea", spawn: { x: f.x, y: f.y } });
+    core.message(a, send({ t: "sit", seatId: f.id }), 0);
+    expect(core.peer(1)).toMatchObject({ seatId: f.id });
+    const b = join("b", { sea: true, map: "sea", spawn: { x: f.x, y: f.y + 2 } });
+    core.message(b, send({ t: "sit", seatId: f.id }), 0);
+    expect(events(b)).toContainEqual({ t: "seatDenied", seatId: f.id });
+    const v = join("v", { spawn: { x: f.x, y: f.y } });
+    core.message(v, send({ t: "sit", seatId: f.id }), 0);
+    expect(events(v)).toContainEqual({ t: "seatDenied", seatId: f.id });
   });
 
   it("?m=sea goes to the sea only with the sea claim", async () => {

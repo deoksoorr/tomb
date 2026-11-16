@@ -325,7 +325,7 @@ export const GATHER_NODES: readonly GatherNode[] = [
   ...CAMP_GATHER_NODES,
 ];
 /** 그 맵의 채집 지점인지 (마을 지점은 map이 없다) */
-export const nodeOnMap = (n: GatherNode, map: "village" | "camp"): boolean => (n.map ?? "village") === map;
+export const nodeOnMap = (n: GatherNode, map: "village" | "camp" | "sea"): boolean => (n.map ?? "village") === map;
 const NODE_BY_ID = new Map(GATHER_NODES.map((n) => [n.id, n]));
 export const gatherNodeById = (id: string): GatherNode | undefined => NODE_BY_ID.get(id);
 

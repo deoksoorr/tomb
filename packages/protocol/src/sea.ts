@@ -1,5 +1,5 @@
 import { DIR, type DirId } from "./types";
-import type { Furniture, Seat } from "./world";
+import type { Furniture, FishingSpot, Seat } from "./world";
 
 // 11/16 세 번째 맵 「달물결 포구」 (1차 바탕: 맵·버스·물때·갈매기). 캠핑장처럼 같은 채널(같은 Channel DO) 안의 따로 된 맵이에요.
 // 위쪽이 뭍, 아래쪽이 바다예요. 버스는 맨 위 길을 따라 오른쪽 끝에서 들어와 오른쪽 위 정류장에 서요.
@@ -31,8 +31,9 @@ export const SEA_HEIGHT = SEA_ROWS * 16; // 960
  * 2 = 11/16 정류장을 왼쪽으로 (오른쪽 위 미니맵에 가리지 않게) · 먼바다 띠에서도 헤엄·잠수 (막지 않아요)
  * 3 = 11/16 버스 길을 오른쪽 끝 ~ 정류장 지나 돌림 마당까지만 (나머지는 풀밭·나무) · 유령선 자리를 비우려고 부표 하나를 옮김
  *     · 오두막 터 6을 굽은 골목을 따라 흩어 놓음 (크기·출입구 쪽·울타리가 터마다 달라요) · 갯바위 구간 (방파제 쪽 곶·물가 바위)
+ * 4 = 11/16 갯바위 낚시 자리·발판 (물이 차도 마른 자리) · 오두막 벤치를 조금 아래로, 두 자리 간격 20
  */
-export const SEA_MAP_VERSION = 3;
+export const SEA_MAP_VERSION = 4;
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Pt = { x: number; y: number };
@@ -357,6 +358,37 @@ export const SEA_SPOTS = {
   breakwaterEnd: { x: SEA_BREAKWATER_TIP.x + 16, y: SEA_BREAKWATER_TIP.y + SEA_BREAKWATER_TIP.h - 6, facing: DIR.down },
   lighthouseDoor: SEA_LIGHTHOUSE_DOOR,
 } as const;
+/**
+ * 11/16 갯바위 낚시 자리 (마을 낚시와 같은 1인 자리 — SPOT_KINDS.fish, 서버 좌석). 큰 갯바위 앞 (바다 쪽)과 선착장 끝 데크.
+ * 바닷물고기 도감이 아직 없어서 물 종류는 호수(lake) 물고기로 둬요 (다음 차수에 바다 물고기를 더하면 "sea"로).
+ * id = "f_x_y" (마을·캠핑장 낚시 자리 id와 겹치지 않아요 — sea.test가 봐요). 앉아 있는 동안은 물이 차도 그대로 앉아 있어요
+ */
+const rockSpot = (i: number): FishingSpot => {
+  const r = SEA_ROCKS[i];
+  const x = Math.round(r.x);
+  // 바위 그림 밑동 바로 앞 (사람이 바위 앞에 그려지고, 일어서도 바위에 걸리지 않게)
+  const y = Math.round(r.y + r.ry * 0.7 + 4);
+  return { id: `f_${x}_${y}`, water: "lake", x, y, facing: DIR.down };
+};
+export const SEA_FISHING_SPOTS: readonly FishingSpot[] = [
+  // 왼쪽 갯바위
+  rockSpot(0),
+  rockSpot(1),
+  rockSpot(3),
+  // 방파제 쪽 바위 곶
+  rockSpot(8),
+  rockSpot(11),
+  // 물가 사이 바위
+  rockSpot(15),
+  // 선착장 끝 데크 (가운데 걸터앉기 자리 양옆)
+  { id: "f_604_930", water: "lake", x: 604, y: 930, facing: DIR.down },
+  { id: "f_636_930", water: "lake", x: 636, y: 930, facing: DIR.down },
+];
+/** 갯바위 낚시 자리 발판 (바위 앞 넓적한 바위 턱 — 물이 차도 올라서 있어요, 선착장처럼 마른 자리) */
+export const SEA_FISHING_LEDGES: readonly Rect[] = SEA_FISHING_SPOTS.filter((f) => !onSeaDeckBase(f.x, f.y)).map((f) => ({ x: f.x - 15, y: f.y - 6, w: 30, h: 14 }));
+export function seaFishingSpotById(id: string): FishingSpot | undefined {
+  return SEA_FISHING_SPOTS.find((s) => s.id === id);
+}
 /** 갯벌 구멍 (다음 차수 캐기 자리 — 물이 빠지면 드러나요) */
 export const SEA_DIG_HOLES: readonly Pt[] = [
   { x: 300, y: 640 },
@@ -386,8 +418,8 @@ export const SEA_GULL_PERCHES: readonly Pt[] = [
 export const SEA_FURNITURE: readonly Furniture[] = [
   // 정류장 지붕 아래 벤치
   { id: "pB", kind: "bench", x: SEA_BUS_STOP.x, y: SEA_BUS_STOP.y - 8, facing: DIR.down, seatOffsets: [-12, 12] },
-  // 11/16 오두막 단지 함께 쓰는 작은 벤치 (5·6번 터 사이, 바다 쪽을 봐요)
-  { id: "pL", kind: "bench", x: 355, y: 378, facing: DIR.down, seatOffsets: [-7, 7] },
+  // 11/16 오두막 단지 함께 쓰는 벤치 (5·6번 터 사이 앞, 바다 쪽을 봐요). 두 자리 간격은 캠핑장 벤치처럼 20 (울타리와 겹치지 않게 조금 아래로)
+  { id: "pL", kind: "bench", x: 362, y: 384, facing: DIR.down, seatOffsets: [-10, 10] },
 ];
 export const SEA_SEATS: readonly Seat[] = SEA_FURNITURE.flatMap((f) =>
   f.seatOffsets.map((dx, i) => ({ id: f.seatOffsets.length > 1 ? `${f.id}-${i}` : f.id, furnitureId: f.id, x: f.x + dx, y: f.y, facing: f.facing as DirId })),
@@ -497,9 +529,15 @@ export function seaColliders(): Rect[] {
 }
 
 /** (x,y)가 선착장·방파제 위인지 (물이 덮어도 젖지 않아요) */
-export function onSeaDeck(x: number, y: number): boolean {
+function onSeaDeckBase(x: number, y: number): boolean {
   const inR = (r: Rect) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
   return inR(SEA_PIER) || inR(SEA_PIER_END) || inR(SEA_BREAKWATER) || inR(SEA_BREAKWATER_TIP);
+}
+/** 선착장·방파제 데크 위, 11/16 또는 갯바위 낚시 발판 위 (물이 차도 마른 자리) */
+export function onSeaDeck(x: number, y: number): boolean {
+  if (onSeaDeckBase(x, y)) return true;
+  for (const r of SEA_FISHING_LEDGES) if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return true;
+  return false;
 }
 
 /**

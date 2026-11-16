@@ -1,13 +1,13 @@
 import { z } from "zod";
-import { BOAT_FISHING_SPOTS, CAMP_FISHING_SPOTS, FISHING_SPOTS } from "@tomb/protocol";
+import { BOAT_FISHING_SPOTS, CAMP_FISHING_SPOTS, FISHING_SPOTS, SEA_FISHING_SPOTS } from "@tomb/protocol";
 import { DEX_CATS, GATHER_NODES, NPCS, SPECIES, type DexCat } from "./catalog";
 
 // 낚시·채집·판매·도감 API 입력 검증 (zod)
 
 const ticket = z.string().min(10).max(1000);
 // 정해진 낚시 자리 + 배 위 가상 자리 (boat:river·boat:lake)
-// 11/15 캠핑장 계곡 낚시 자리도 (CAMP_FISHING_SPOTS)
-const spotId = z.enum([...FISHING_SPOTS.map((s) => s.id), ...Object.keys(BOAT_FISHING_SPOTS), ...CAMP_FISHING_SPOTS.map((s) => s.id)] as [string, ...string[]], "여기서는 낚시를 할 수 없어요.");
+// 11/15 캠핑장 계곡 낚시 자리도 (CAMP_FISHING_SPOTS) · 11/16 바닷가 갯바위 낚시 자리도 (SEA_FISHING_SPOTS)
+const spotId = z.enum([...FISHING_SPOTS.map((s) => s.id), ...Object.keys(BOAT_FISHING_SPOTS), ...CAMP_FISHING_SPOTS.map((s) => s.id), ...SEA_FISHING_SPOTS.map((s) => s.id)] as [string, ...string[]], "여기서는 낚시를 할 수 없어요.");
 const nodeId = z.enum(GATHER_NODES.map((n) => n.id) as [string, ...string[]], "여기서는 캘 게 없어요.");
 const speciesId = z.enum(SPECIES.map((s) => s.id) as [string, ...string[]], "모르는 물건이에요.");
 

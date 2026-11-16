@@ -172,6 +172,7 @@ export const SEA_TEX = {
   mailbox: `${P}mailbox`,
   stone: (v: number) => `${P}stone${v}`,
   crab: `${P}crab`,
+  ledge: `${P}ledge`,
   duskWater: `${P}duskWater`,
   duskFoam: `${P}duskFoam`,
   goldStreak: `${P}goldStreak`,
@@ -818,6 +819,24 @@ export function mailboxArt(): Grid {
   shadow(g, 6, base + 1, 5, 1.2, 50);
   return g;
 }
+/** 11/16 갯바위 낚시 발판 (넓적한 바위 턱 32×16 — 위가 평평하고 물에 젖은 아래 끝) */
+export function ledgeArt(): Grid {
+  const g = new Grid(34, 18);
+  blobPaint(
+    g,
+    [
+      [10, 9, 7],
+      [18, 8, 8],
+      [26, 9.5, 6.5],
+    ],
+    RAMP.rock,
+    true,
+    71,
+  );
+  for (let x = 0; x < 34; x++) for (let y = 13; y < 17; y++) if (g.filled(x, y) && hashU(x, y, 72) < 0.3) g.set(x, y, RAMP.roofM[2]);
+  softOutline(g);
+  return g;
+}
 /** 11/16 디딤돌 (둥근 납작 돌) */
 export function stoneArt(v: number): Grid {
   const g = new Grid(14, 9);
@@ -1334,7 +1353,7 @@ export function duskWaterArt(): Grid {
  */
 export function duskFoamArt(): Grid {
   const day = foamArt();
-  const g = new Grid(FOAM_W, FOAM_H);
+  const g = new Grid(FOAM_W, FOAM_TEX_H);
   for (let y = 0; y < FOAM_H; y++)
     for (let x = 0; x < FOAM_W; x++) {
       const v = day.get(x, y);
@@ -1364,6 +1383,9 @@ export function goldStreakArt(): Grid {
  */
 export const FOAM_W = 128;
 export const FOAM_H = 48;
+/** 11/16 물가 띠는 이어진 곡선(Rope)으로 그려요 — 텍스처를 되풀이(REPEAT)하려고 높이를 2의 거듭제곱(64)으로, 48줄 아래는 비워요 */
+export const FOAM_TEX_H = 64;
+export const LACE_TEX_H = 8;
 /** 거품 위 끝이 이만큼 아래부터 (SeaMap이 물가 선에서 이만큼 위에 띠를 놓아요) */
 export const FOAM_TOP = 6;
 export function foamProfile(x: number): number {
@@ -1372,7 +1394,7 @@ export function foamProfile(x: number): number {
   return Math.round(FOAM_TOP - 1 + 2.2 * Math.sin(a * 3) + 1.4 * Math.sin(a * 7 + 1) + blob - 2);
 }
 export function foamArt(): Grid {
-  const g = new Grid(FOAM_W, FOAM_H);
+  const g = new Grid(FOAM_W, FOAM_TEX_H);
   for (let x = 0; x < FOAM_W; x++) {
     const p = Math.max(0, foamProfile(x));
     for (let y = p; y < FOAM_H; y++) {
@@ -1388,7 +1410,7 @@ export function foamArt(): Grid {
 }
 /** 물러난 거품 자국 (구멍 난 가는 레이스 줄, 128 × 6) */
 export function laceArt(): Grid {
-  const g = new Grid(FOAM_W, 6);
+  const g = new Grid(FOAM_W, LACE_TEX_H);
   for (let x = 0; x < FOAM_W; x++) {
     const y = Math.round(2.5 + 1.6 * Math.sin((x / FOAM_W) * Math.PI * 2 * 5 + 2) + (hashU(x >> 2, 0, 85) - 0.5) * 1.5);
     if (hashU(x, 1, 85) < 0.7) g.set(x, Math.max(0, Math.min(5, y)), RAMP.water[0], 235);
@@ -1397,12 +1419,17 @@ export function laceArt(): Grid {
   return g;
 }
 /** 11/16 파도가 쓸고 간 젖은 윤기 (시안: 젖은 모래 단계 위에 water[1] 물빛 점 — 32×32 타일, 조각마다 이어 깔아요) */
+// 11/16 사용자 "간조 갯벌이 하늘색 물결무늬 벽지처럼 반복돼요" → 하늘색 점을 빼고, 큰 타일(128)에 젖은 모래 한 단계 얼룩 + 드문 윤기만
+export const SHEEN_WET_TILE = 128;
 export function sheenWetArt(): Grid {
-  const g = new Grid(32, 32);
-  for (let y = 0; y < 32; y++)
-    for (let x = 0; x < 32; x++) {
-      g.set(x, y, pick(RAMP.wet, 0.25 + fbm(x / 8, y / 8, 4) * 0.4, x, y), 150);
-      if (fbm(x / 4, y / 3, 8) > 0.66) g.set(x, y, RAMP.water[1], 210);
+  const N = SHEEN_WET_TILE;
+  const g = new Grid(N, N);
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      const n = fbm(x / 32, y / 32, 4);
+      g.set(x, y, RAMP.wet[n > 0.55 ? 2 : 1], Math.round(60 + n * 90));
+      // 물기 윤기 (아주 드물게 밝은 모래빛)
+      if (fbm(x / 16, y / 8, 8) > 0.8) g.set(x, y, RAMP.sand[1], 110);
     }
   return g;
 }
@@ -1561,9 +1588,18 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
       return pick(RAMP.water, 0.05 + d * 0.35 + (fbm(x * 0.1, y * 0.1) - 0.5) * 0.1, x, y);
     }
     case "flat": {
-      // 드러난 갯벌: 젖은 모래 단계, 큰 얼룩 + 아주 옅은 물결 자국
-      const ry = y + Math.round(3 * Math.sin(x * 0.05 + y * 0.013));
-      return pick(RAMP.wet, 0.15 + fbm(x * 0.012, y * 0.02) * 0.6 + (ry % 12 === 0 && fbm(x * 0.03, y * 0.03) > 0.5 ? 0.1 : 0) + Math.max(0, (y - (SEA_DEEP_Y - 30)) / 30) * 0.3, x, y);
+      // 드러난 갯벌: 젖은 모래 단계. 11/16 차분하게 — 큰 축축한 얼룩(낮은 주파수) 위에,
+      // 물결 자국은 잡음이 고른 몇 군데에만 짧게, 색은 한 단계만 진하게 (반복 무늬가 생기지 않게 위치·간격·휨을 모두 잡음으로)
+      const damp = fbm(x * 0.006 + 3.1, y * 0.009);
+      let t = 0.12 + fbm(x * 0.014, y * 0.02) * 0.32 + Math.max(0, damp - 0.5) * 0.9 + Math.max(0, (y - (SEA_DEEP_Y - 30)) / 30) * 0.3;
+      const mask = fbm(x * 0.01 + 11, y * 0.014 + 7);
+      if (mask > 0.6) {
+        const bend = (fbm(x * 0.02, y * 0.05 + 5) - 0.5) * 14;
+        const ph = (y + bend + x * 0.08) / (7 + fbm(x * 0.008, y * 0.008 + 2) * 4);
+        const on = ph - Math.floor(ph) < 0.16 && hashU(x >> 3, Math.floor(ph), 77) < 0.7;
+        if (on) t += 0.14 * Math.min(1, (mask - 0.6) / 0.08);
+      }
+      return pick(RAMP.wet, Math.min(0.92, t), x, y);
     }
     case "deep":
       return RAMP.water[7];

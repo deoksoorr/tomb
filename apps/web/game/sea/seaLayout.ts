@@ -313,9 +313,10 @@ export function seaStaticColliders(): Rect[] {
 }
 
 /** 의자·벤치 (점프 중엔 넘어요) */
+// 11/16 앉는 모습이 어색했어요 → 막는 상자를 캠핑장 벤치와 같게 (그림 폭 40, 앉는 판 깊이 7) — 위에서 다가와 판 속에 서 있다가 앉으며 판을 뚫고 내려오지 않게
 export function seaFurnitureCollider(f: Furniture): Rect {
-  const half = f.seatOffsets.length > 1 ? Math.abs(f.seatOffsets[0]) + 9 : 7;
-  return { x: f.x - half, y: f.y - 4, w: half * 2, h: 4 };
+  if (f.kind === "bench") return { x: f.x - 20, y: f.y - 7, w: 40, h: 7 };
+  return { x: f.x - 6, y: f.y - 6, w: 12, h: 6 };
 }
 export function seaFurnitureColliders(): Rect[] {
   return SEA_FURNITURE.map(seaFurnitureCollider);

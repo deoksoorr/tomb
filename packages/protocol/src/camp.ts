@@ -1,6 +1,6 @@
 import { DIR, STATE, type DirId } from "./types";
 import { MAP_HEIGHT, MAP_WIDTH, SPOT_KINDS, fishingWaterOf, seatSlot, spotKindOfState, type FishingSpot, type Campfire, type Furniture, type Seat, type SeatSlot } from "./world";
-import { SEA_ARRIVE, SEA_HEIGHT, SEA_SEATS, SEA_WIDTH } from "./sea";
+import { SEA_ARRIVE, SEA_FISHING_SPOTS, SEA_HEIGHT, SEA_SEATS, SEA_WIDTH, seaFishingSpotById } from "./sea";
 
 // 11/15 두 번째 맵 「언젠가 캠핑장 · Someday Camp」 (1차: 맵·버스·앉기·NPC 말 걸기).
 // "언젠가 캠핑 가야지" 하고 장비만 사 두고 못 간 그곳 — 늦가을 숲, 계곡, 캠프파이어 광장, 번호 붙은 빈 데크 24자리.
@@ -168,7 +168,7 @@ export function campFishingSpotById(id: string): FishingSpot | undefined {
 }
 /** 낚시 자리 id → 물 종류 (마을 자리·배 위 가상 자리·캠핑장 계곡 자리). 웹 서버(lib/forage)가 쓴다 */
 export function anyFishingWaterOf(id: string): FishingSpot["water"] | null {
-  return fishingWaterOf(id) ?? campFishingSpotById(id)?.water ?? null;
+  return fishingWaterOf(id) ?? campFishingSpotById(id)?.water ?? seaFishingSpotById(id)?.water ?? null;
 }
 
 // ── 전망대 (오른쪽 위 산꼭대기) ── 나무 데크 (난간, 아래쪽 가운데 계단)
@@ -282,6 +282,8 @@ const campSlots = new Map<string, SeatSlot>(CAMP_SEATS.map((s) => [s.id, { id: s
 for (const f of CAMP_FISHING_SPOTS) campSlots.set(f.id, { id: f.id, kind: "fish", x: f.x, y: f.y, facing: f.facing, state: SPOT_KINDS.fish.state, furnitureId: null });
 /** 11/16 바닷가 좌석 (정류장 벤치 — 쉴거리 자리는 다음 차수에 여기에 더해요) */
 const seaSlots = new Map<string, SeatSlot>(SEA_SEATS.map((s) => [s.id, { id: s.id, kind: "seat", x: s.x, y: s.y, facing: s.facing, state: STATE.sitChair, furnitureId: s.furnitureId }]));
+// 11/16 갯바위 낚시 자리도 정해진 자리로 (캠핑장 계곡 낚시 자리처럼 kind "fish")
+for (const f of SEA_FISHING_SPOTS) seaSlots.set(f.id, { id: f.id, kind: "fish", x: f.x, y: f.y, facing: f.facing, state: SPOT_KINDS.fish.state, furnitureId: null });
 
 // ── 맵별 판정 (서버·클라이언트 공통) ──
 

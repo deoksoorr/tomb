@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAMP_SEATS, MAP_TAG, SEATS, SEA_ARRIVE, SEA_BOARD, SEA_SEATS, inMapBounds, isAwayMap, mapAllowed, mapOf, mapSpawn, seaColliders, seatSlotIn, SEA_HEIGHT, SEA_WIDTH, SEA_LOTS, SEA_SPOTS, SPAWN, seaWet, tideLineY, SEA_GHOST_BERTH, SEA_PIER_END, SEA_BUOYS, SEA_ROCKS, onSeaRoad, SEA_ROAD, SEA_BUS_STOP, TIDE_HIGH_Y, TIDE_LOW_Y, SEA_DEEP_Y } from "./index";
+import { CAMP_SEATS, MAP_TAG, SEATS, SEA_ARRIVE, SEA_BOARD, SEA_SEATS, inMapBounds, isAwayMap, mapAllowed, mapOf, mapSpawn, seaColliders, seatSlotIn, SEA_HEIGHT, SEA_WIDTH, SEA_LOTS, SEA_SPOTS, SPAWN, seaWet, tideLineY, SEA_GHOST_BERTH, SEA_PIER_END, SEA_FISHING_SPOTS, FISHING_SPOTS, CAMP_FISHING_SPOTS, anyFishingWaterOf, SEA_BUOYS, SEA_ROCKS, onSeaRoad, SEA_ROAD, SEA_BUS_STOP, TIDE_HIGH_Y, TIDE_LOW_Y, SEA_DEEP_Y } from "./index";
 
 // 11/16 달물결 포구: 세 번째 맵 (protocol sea.ts). 맵 id·허락·좌석·충돌 기본 규칙
 
@@ -48,6 +48,23 @@ describe("sea map (protocol)", () => {
     expect(B.gangway.x).toBeGreaterThanOrEqual(P.x);
     expect(B.gangway.y).toBeGreaterThanOrEqual(P.y);
     expect(B.gangway.y).toBeLessThanOrEqual(P.y + P.h);
+  });
+  it("11/16 갯바위 낚시 자리: 마을·캠핑장 자리와 id가 겹치지 않고, 바닷가 좌석(낚시 자리)으로 받아요", () => {
+    const others = new Set([...FISHING_SPOTS, ...CAMP_FISHING_SPOTS].map((s) => s.id));
+    const ids = new Set<string>();
+    for (const f of SEA_FISHING_SPOTS) {
+      expect(f.id.startsWith("f_"), f.id).toBe(true);
+      expect(others.has(f.id), f.id).toBe(false);
+      expect(ids.has(f.id), f.id).toBe(false);
+      ids.add(f.id);
+      expect(seatSlotIn("sea", f.id)).toMatchObject({ kind: "fish", x: f.x, y: f.y });
+      expect(seatSlotIn("village", f.id)).toBeUndefined();
+      expect(anyFishingWaterOf(f.id)).toBe(f.water);
+      expect(inMapBounds("sea", f.x, f.y)).toBe(true);
+      // 만조에도 발판(데크) 위라 헤엄치지 않고 앉아요
+      expect(seaWet(f.x, f.y, 1)).toBe(false);
+    }
+    expect(SEA_FISHING_SPOTS.length).toBeGreaterThanOrEqual(6);
   });
   it("11/16 버스 길은 오른쪽 끝에서 정류장을 지난 돌림 마당까지만", () => {
     expect(onSeaRoad(SEA_WIDTH - 2, SEA_ROAD.y + 20)).toBe(true);
