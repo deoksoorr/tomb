@@ -13,6 +13,7 @@ import {
   SEA_PIER_ARM,
   SEA_KAYAK_WALK,
   SEA_KAYAK_DOCK,
+  SEA_KAYAK_WALK_HEAD,
   SEA_LOTS,
   SEA_PONTOON,
   SEA_PONTOON_RAMP,
@@ -233,6 +234,7 @@ export const SEA_TEX = {
   paddle: `${P}paddle`,
   kayakWalk: `${P}kayakWalk`,
   kayakDock: `${P}kayakDock`,
+  kayakHead: `${P}kayakHead`,
   pontoon: `${P}pontoon`,
   pierArm: `${P}pierArm`,
   pontoonRamp: `${P}pontoonRamp`,
@@ -2435,6 +2437,17 @@ export function kayakWalkArt(): Grid {
     g.set(W - 1, y, 0xc8b070);
   }
   planks(g, { x0: 1, y0: 0, x1: W - 2, y1: H - 1 }, 6, false, 24, 13);
+  softOutline(g);
+  return g;
+}
+/** 11/16 r19 카약 선착장 다리 입구 (백사장 쪽으로 넓게 벌린 가로 판자 — 다리보다 살짝 밝게, 위 끝은 모래에 묻혀요) */
+export function kayakHeadArt(): Grid {
+  const W = SEA_KAYAK_WALK_HEAD.w;
+  const H = SEA_KAYAK_WALK_HEAD.h;
+  const g = new Grid(W, H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) g.set(x, y, x % 7 === 6 ? DECK.line : x % 7 === 0 ? DECK.hi : DECK.mid);
+  g.rect(0, H - 2, W, 2, DECK.lo);
+  planks(g, { x0: 0, y0: 0, x1: W - 1, y1: H - 3 }, 7, true, 30, 11);
   softOutline(g);
   return g;
 }

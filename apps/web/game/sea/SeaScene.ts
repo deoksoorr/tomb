@@ -351,13 +351,8 @@ export class SeaScene extends Phaser.Scene {
       toast: (m) => this.toast(m),
       sfx: h.sfx,
       colliders: this.map.colliders,
-      night: () => this.atmos.levels.darkness >= 0.5,
-      // 낮: 등대 꼭대기처럼 먼바다를 넓게 (움직이면 내려와요)
-      dayView: () => {
-        this.lookout = true;
-        this.lookoutAt = { x: this.player.x, y: this.player.y };
-        this.toggleView();
-      },
+      // 11/16 r19 E는 언제나 별자리 잇기, 망원경 앞에서 V·「바다 보기」 버튼은 등대 꼭대기처럼 먼바다를 넓게 (움직이면 내려와요)
+      seaView: true,
     });
     this.seaView.onGullCall = (vol, pan) => this.host.sfx.gull(vol, pan);
     // 지도의 갈매기가 날아오르며 울면: 가까울수록 크게, 내 쪽 좌우로
@@ -970,6 +965,8 @@ export class SeaScene extends Phaser.Scene {
     const pl = this.player;
     // 11/16 등대 꼭대기에 올라가 있는 동안 (움직이면 내려와요)
     if (this.lookout) return { kind: "lighthouse", group: "lighthouse", mat: 0, variant: 0 };
+    // 11/16 r19 동전 망원경 앞에 서 있으면 (낮·밤 모두) 바다 보기 버튼·V
+    if (this.stars?.viewSpot()) return { kind: "lighthouse", group: "scope", mat: 0, variant: 0 };
     const id = this.rest ? this.rest.id : pl.state === "sitChair" && pl.seat ? pl.seat.id : null;
     if (!id) return null;
     const kind = seaViewOfSeat(id);
@@ -1049,6 +1046,11 @@ export class SeaScene extends Phaser.Scene {
     if (this.cleaned || this.covered || this.locked) return;
     const v = this.viewKindNow();
     if (!v || this.viewOn) return this.leaveView();
+    if (v.group === "scope") {
+      // 망원경으로 보는 바다: 움직이면 내려와요 (등대 꼭대기와 같아요)
+      this.lookout = true;
+      this.lookoutAt = { x: this.player.x, y: this.player.y };
+    }
     this.viewOn = true;
     this.viewAt = this.time.now;
     this.viewFore = v.kind === "beach" ? this.benchFore(v.group) : null;

@@ -47,9 +47,10 @@ export const SEA_HEIGHT = SEA_ROWS * 16; // 960
  * 14 = 11/16 r15 선착장을 길게 (끝 데크는 걸터앉기만), 서쪽 낚시 가지(낚시 자리 둘), 넓은 부잔교 다리, 유령선 자리 서남쪽으로,
  *      데크 가장자리 빙 둘러 난간 (물로 걸어 내려가지 못해요)
  * 15 = 11/16 r18 카약 선착장(다리·뜬 데크)·2인승 카약 셋, 바위 둘을 서쪽 해안으로, 갯벌 구멍 하나 옮김
+ * 17 = 11/16 r19 카약 선착장 다리를 넓히고(24 → 44) 백사장 쪽 입구를 넓게 벌림, 앞줄 선베드 하나를 옆으로
  * 16 = 11/16 r19 카약 선착장을 선착장 서쪽으로 (바위 둘·갯벌 구멍은 r18 전 자리로 되돌림), 서쪽 튜브 하나·부표 하나·갯벌 구멍 하나 비켜 옮김
  */
-export const SEA_MAP_VERSION = 16;
+export const SEA_MAP_VERSION = 17;
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Pt = { x: number; y: number };
@@ -299,9 +300,11 @@ export const SEA_BREAKWATER_TIP = { x: 1376, y: 616, w: 96, h: 92 } as const;
  * 2인승 카약 셋을 데크 바로 아래 물에 매어 둬요 (간조에도 물 — 얕은 물은 다닐 수 있어요)
  * 11/16 r19 사용자: 선착장 서쪽으로 (동쪽 제트스키 부잔교와 떨어지게). 낚시 가지와는 50px, 유령선 빈 물(아래)·서쪽 갯바위와도 넉넉히
  */
-export const SEA_KAYAK_WALK = { x: 658, y: 480, w: 24, h: 120 } as const;
+// r19 사용자 "다리 입구가 좁아요" → 둘이 나란히 걸을 만큼 넓게(44px), 백사장 쪽 입구는 더 넓게 벌린 판(HEAD — 앞줄 선베드 사이 틈 전체)
+export const SEA_KAYAK_WALK = { x: 648, y: 480, w: 44, h: 120 } as const;
+export const SEA_KAYAK_WALK_HEAD = { x: 640, y: 482, w: 60, h: 16 } as const;
 export const SEA_KAYAK_DOCK = { x: 600, y: 596, w: 110, h: 32 } as const;
-export const SEA_DECKS: readonly Rect[] = [SEA_PIER, SEA_PIER_END, SEA_PIER_ARM, SEA_PONTOON, SEA_PONTOON_RAMP, SEA_BREAKWATER, SEA_BREAKWATER_TIP, SEA_KAYAK_WALK, SEA_KAYAK_DOCK];
+export const SEA_DECKS: readonly Rect[] = [SEA_PIER, SEA_PIER_END, SEA_PIER_ARM, SEA_PONTOON, SEA_PONTOON_RAMP, SEA_BREAKWATER, SEA_BREAKWATER_TIP, SEA_KAYAK_WALK, SEA_KAYAK_DOCK, SEA_KAYAK_WALK_HEAD];
 /** 등대 받침 가운데 (끝 데크 뒤쪽) */
 export const SEA_LIGHTHOUSE = { x: 1424, y: 664 } as const;
 export const SEA_LIGHTHOUSE_W = 36;
@@ -414,7 +417,8 @@ export const SEA_SPOTS = {
       { x: c + 24, y: SEA_LOUNGER_Y },
     ]),
     // 11/16 사용자 "돗자리 빼고 앞 백사장도 선베드로": 앞줄은 뒷줄 사이 틈마다 (뒷줄 선베드 발치로 가는 길이 남아요)
-    ...SEA_BEACH_UNITS.flatMap((c, i) => [c, ...(SEA_BEACH_UNITS[i + 1] !== undefined && SEA_BEACH_UNITS[i + 1] - c <= 120 ? [c + 60] : [])]).map((x) => ({ x, y: SEA_LOUNGER_FRONT_Y })),
+    // r19 카약 선착장 다리 입구 오른쪽 선베드(700)는 16px 옆으로 (입구 틈을 넓혀요)
+    ...SEA_BEACH_UNITS.flatMap((c, i) => [c, ...(SEA_BEACH_UNITS[i + 1] !== undefined && SEA_BEACH_UNITS[i + 1] - c <= 120 ? [c + 60] : [])]).map((x) => ({ x: x === 700 ? 716 : x, y: SEA_LOUNGER_FRONT_Y })),
   ],
   /** 파라솔 6 (선베드 한 벌 가운데 — 갓이 두 선베드 머리 쪽을 덮어요) */
   parasols: SEA_BEACH_UNITS.map((c) => ({ x: c, y: SEA_LOUNGER_Y - 12 })),
@@ -730,7 +734,15 @@ function railColliders(): Rect[] {
     if (last && last.y === cy * C && last.x + last.w === cx * C) last.w += C;
     else out.push({ x: cx * C, y: cy * C, w: C, h: C });
   }
-  return out;
+  // r19 같은 너비의 줄이 위아래로 이어지면 한 상자로 (곧은 가장자리를 비스듬히 밀 때 4px 칸 이음매에 걸려 위아래로 튀지 않게)
+  out.sort((a, b) => a.x - b.x || a.w - b.w || a.y - b.y);
+  const merged: Rect[] = [];
+  for (const r of out) {
+    const last = merged[merged.length - 1];
+    if (last && last.x === r.x && last.w === r.w && last.y + last.h === r.y) last.h += r.h;
+    else merged.push({ ...r });
+  }
+  return merged;
 }
 
 /**

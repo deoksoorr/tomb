@@ -33,6 +33,7 @@ import {
   SEA_PIER_ARM,
   SEA_KAYAK_WALK,
   SEA_KAYAK_DOCK,
+  SEA_KAYAK_WALK_HEAD,
   SEA_PONTOON,
   SEA_PONTOON_RAMP,
   SEA_REALTY,
@@ -383,6 +384,8 @@ export class SeaMap implements SeaMapApi {
     this.keep(s.add.image(SEA_PIER_ARM.x, SEA_PIER_ARM.y, T.pierArm).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 1));
     // 11/16 r18 카약 선착장 (다리 · 뜬 데크 — 선착장 판보다 낮게)
     this.keep(s.add.image(SEA_KAYAK_WALK.x, SEA_KAYAK_WALK.y, T.kayakWalk).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 2));
+    // r19 백사장 쪽으로 넓게 벌린 입구 판
+    this.keep(s.add.image(SEA_KAYAK_WALK_HEAD.x, SEA_KAYAK_WALK_HEAD.y, T.kayakHead).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 1.5));
     this.keep(s.add.image(SEA_KAYAK_DOCK.x - 2, SEA_KAYAK_DOCK.y, T.kayakDock).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 1));
     // 11/16 r14 제트스키 부잔교 (물에 떠서 선착장보다 낮게 — 선착장 판 아래 depth) · 다리
     this.keep(s.add.image(SEA_PONTOON.x - 2, SEA_PONTOON.y, T.pontoon).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 2));
@@ -1381,6 +1384,7 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.paddle, Art.paddleArt);
   tex(T.kayakWalk, () => Art.withDetail(Art.kayakWalkArt(), { wood: true }));
   tex(T.kayakDock, () => Art.withDetail(Art.kayakDockArt(), { wood: true }));
+  tex(T.kayakHead, () => Art.withDetail(Art.kayakHeadArt(), { wood: true }));
   tex(T.pontoonRamp, () => Art.withDetail(Art.pontoonRampArt(), { wood: true }));
   tex(T.post, () => Art.withDetail(Art.postArt(), { wood: true }));
   tex(T.breakwater, () => Art.withDetail(Art.breakwaterArt(), {}));

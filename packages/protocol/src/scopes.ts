@@ -31,11 +31,14 @@ export const CAMP_SCOPES: readonly ScopeSpot[] = [
   telescope("scope:trail", 1124, 330, "계곡 별 망원경"),
 ];
 
-/** 바닷가 동전 망원경 (산책로 바다 쪽 가장자리 · 방파제 들머리 · 서쪽 모래 언덕) */
+/**
+ * 바닷가 동전 망원경. 11/16 r19 사용자 "바닷가 별자리는 어디서 해? 안 보여" → 눈에 띄는 자리로:
+ * 버스에서 내려 백사장으로 내려오는 길목 산책로 · 방파제 들머리 · 선착장 머리 (서쪽 끝 모래 언덕은 너무 외져서 뺐어요)
+ */
 export const SEA_SCOPES: readonly ScopeSpot[] = [
-  binocular("scope:boardwalk", 600, 341, "산책로 망원경"),
+  binocular("scope:boardwalk", 1628, 341, "산책로 망원경"),
   binocular("scope:breakwater", 1372, 482, "방파제 망원경"),
-  binocular("scope:dune", 90, 480, "모래 언덕 망원경"),
+  binocular("scope:pier", 900, 484, "선착장 망원경"),
 ];
 
 /** 그 망원경의 1인 자리 id */

@@ -13,6 +13,7 @@ import {
   SEA_DECKS,
   SEA_KAYAK_DOCK,
   SEA_KAYAK_WALK,
+  SEA_KAYAK_WALK_HEAD,
   SEA_REALTY,
   SEA_REALTY_W,
   SEA_ROCKS,
@@ -85,7 +86,7 @@ export function* seaMinimapSteps(): Generator<void, void> {
       if (inRect(kiosk, wx, wy)) c = KIOSK;
       if (inRect(shelter, wx, wy)) c = ROOF;
       if (SEA_DECKS.slice(0, 5).some((r) => inRect(r, wx, wy))) c = DECK; // r15 선착장·끝 데크·낚시 가지·부잔교·다리
-      if (inRect(SEA_KAYAK_WALK, wx, wy) || inRect(SEA_KAYAK_DOCK, wx, wy)) c = DECK; // r19 카약 선착장 (선착장 서쪽)
+      if (inRect(SEA_KAYAK_WALK, wx, wy) || inRect(SEA_KAYAK_DOCK, wx, wy) || inRect(SEA_KAYAK_WALK_HEAD, wx, wy)) c = DECK; // r19 카약 선착장 (선착장 서쪽)
       if (inRect(SEA_BREAKWATER, wx, wy) || inRect(SEA_BREAKWATER_TIP, wx, wy)) c = CONCRETE;
       if (SEA_ROCKS.some((r) => ((wx - r.x) / r.rx) ** 2 + ((wy - r.y) / r.ry) ** 2 <= 1)) c = ROCK;
       if (Math.abs(wx - SEA_LIGHTHOUSE.x) <= 8 && wy >= SEA_LIGHTHOUSE.y - 20 && wy <= SEA_LIGHTHOUSE.y) c = LIGHTHOUSE;

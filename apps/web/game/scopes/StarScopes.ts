@@ -4,6 +4,7 @@ import { bridge } from "../bridge";
 import type { Player } from "../entities/Player";
 import { STARGAZE_TAG } from "../entities/RemoteAvatar";
 import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST } from "../logic/spots";
+import { isTouchUi } from "../input/keyHint";
 import type { Sfx } from "../world/Sfx";
 import { playLife } from "../world/life/sounds";
 import { campScopeGrid, coinScopeGrid, SCOPE_TEX } from "./scopeArt";
@@ -12,7 +13,7 @@ import { SCOPE_E_RADIUS, scopeBaseRect } from "./scopeGeom";
 // 11/16 망원경 늘리기 — 캠핑장·바닷가 망원경 (자리 좌표는 protocol scopes.ts).
 // 마을 망원경(world/life/VillageLife.useStarSpot)과 같은 흐름: E → 앞자리로 서서 1인 자리(서버 좌석)를 청하고, 자리를 얻으면 별자리 잇기 창(portal:open telescope).
 // 서버 답이 없으면(끊김·옛 서버) 1.5초 뒤 그냥 연다. 서버가 거절했는데 주인이 없으면(이 자리 종류를 모르는 옛 서버) 역시 그냥 연다.
-// 바닷가 동전 망원경은 낮에 쓰면 바다 보기(장면이 넘겨 준 dayView)로, 밤에는 별자리 잇기.
+// 11/16 r19 사용자: 마을·캠핑장처럼 E는 언제나(낮에도) 별자리 잇기. 바닷가 동전 망원경 앞에서는 따로 「바다 보기」(V·아래 버튼 — 장면이 seaView로).
 //  - 캠핑장: 충돌·E 안내는 캠핑장 배치(campLayout)가 맡고, 이 모듈은 그림·자리 청하기만 (use)
 //  - 바닷가: 바닷가 맵 모듈을 건드리지 않게 그림·충돌(맵 충돌 묶음에 더한다)·E(interact)·안내(hint)까지 여기서
 
@@ -29,10 +30,8 @@ export type StarScopesDeps = {
   sfx: Sfx;
   /** 주면 받침 충돌을 이 묶음에 더한다 (바닷가 — 플레이어와의 충돌은 장면이 이미 이 묶음에 걸어 두었다) */
   colliders?: Phaser.Physics.Arcade.StaticGroup;
-  /** 지금 밤인지 (dayView가 있을 때만 본다) */
-  night?: () => boolean;
-  /** 낮에 쓰면 (바닷가: 바다 보기) */
-  dayView?: () => void;
+  /** 바닷가: 망원경 앞에서 V·버튼으로 바다 보기를 할 수 있어요 (안내에 덧붙여요) */
+  seaView?: boolean;
 };
 
 export function ensureScopeTextures(scene: Phaser.Scene): void {
@@ -107,10 +106,17 @@ export class StarScopes {
     return { x: s.ax, y: s.ay + 2, text: `${prefix}${this.label(s)}` };
   }
 
-  /** 안내 글 (바닷가 동전 망원경은 낮·밤이 다르다) */
+  /** 안내 글 (바닷가 동전 망원경은 「V 바다 보기」도 — 터치는 아래 버튼) */
   label(s: ScopeSpot): string {
-    if (s.kind === "binocular" && this.d.dayView && !this.d.night?.()) return "망원경으로 바다 보기";
+    if (s.kind === "binocular" && this.d.seaView && !isTouchUi()) return "망원경으로 별자리 잇기 · V 바다 보기";
     return "망원경으로 별자리 잇기";
+  }
+
+  /** 11/16 r19 바닷가: 지금 망원경 앞(E 범위)에 서 있으면 그 망원경 (바다 보기 버튼·V) */
+  viewSpot(): ScopeSpot | null {
+    if (!this.d.seaView || !this.free()) return null;
+    const pl = this.d.player();
+    return this.nearest(pl.x, pl.y);
   }
 
   /** 이 망원경 앞에 서서 본다 (캠핑장 E·탭은 장면이 여기로) */
@@ -141,10 +147,6 @@ export class StarScopes {
   private open(s: ScopeSpot): void {
     this.pending = null;
     playLife(this.d.sfx, "sparkle", 0.3);
-    if (s.kind === "binocular" && this.d.dayView && !this.d.night?.()) {
-      this.d.dayView();
-      return;
-    }
     bridge.emit("portal:open", { kind: "telescope" });
   }
 
@@ -192,8 +194,12 @@ export class StarScopes {
 
   destroy(): void {
     for (const i of this.images) i.destroy();
+    // 11/16 장면이 닫힐 때(SHUTDOWN)는 Phaser가 충돌 그룹을 먼저 지워 children이 없어요 — 그대로 remove하면 예외가 나
+    // 게임 루프가 멈췄어요 (바닷가 → 마을 버스 창밖이 그대로 멈춤). 그룹이 살아 있을 때만 빼고, 아니면 영역만 지워요
+    const g = this.d.colliders;
     for (const z of this.zones) {
-      this.d.colliders?.remove(z, true, true);
+      if (g?.children) g.remove(z, true, true);
+      else z.destroy();
     }
     this.images.length = 0;
     this.zones.length = 0;

@@ -16,6 +16,10 @@ import {
   SEA_KAYAK_SEATS,
   SEA_KAYAK_DOCK,
   SEA_KAYAK_WALK,
+  SEA_KAYAK_WALK_HEAD,
+  SEA_SPOTS,
+  SEA_LOUNGER_FRONT_Y,
+  seaLoungerCollider,
   SEA_KAYAK_SPEED,
   SEA_DECKS,
   SEA_FLAT_Y0,
@@ -134,6 +138,19 @@ describe("sea rides", () => {
     expect(SEA_DECKS).toContain(SEA_KAYAK_DOCK);
     expect(SEA_DECKS).toContain(SEA_KAYAK_WALK);
     expect(SEA_KAYAK_WALK.y).toBeLessThan(SEA_FLAT_Y0);
+    // r19 다리는 둘이 나란히 걸을 만큼 넓고(40px 이상), 백사장 쪽 입구 판은 더 넓어요. 입구 위 앞줄 선베드 틈은 입구보다 좁지 않아요
+    expect(SEA_KAYAK_WALK.w).toBeGreaterThanOrEqual(40);
+    expect(SEA_DECKS).toContain(SEA_KAYAK_WALK_HEAD);
+    expect(SEA_KAYAK_WALK_HEAD.w).toBeGreaterThan(SEA_KAYAK_WALK.w);
+    expect(SEA_KAYAK_WALK_HEAD.x).toBeLessThan(SEA_KAYAK_WALK.x);
+    expect(SEA_KAYAK_WALK_HEAD.x + SEA_KAYAK_WALK_HEAD.w).toBeGreaterThan(SEA_KAYAK_WALK.x + SEA_KAYAK_WALK.w);
+    expect(SEA_KAYAK_WALK_HEAD.y).toBeLessThan(SEA_FLAT_Y0);
+    const front = SEA_SPOTS.loungers.filter((l) => l.y === SEA_LOUNGER_FRONT_Y).map(seaLoungerCollider);
+    const mid = SEA_KAYAK_WALK.x + SEA_KAYAK_WALK.w / 2;
+    const left = Math.max(...front.filter((r) => r.x + r.w <= mid).map((r) => r.x + r.w));
+    const right = Math.min(...front.filter((r) => r.x >= mid).map((r) => r.x));
+    expect(right - left).toBeGreaterThanOrEqual(SEA_KAYAK_WALK.w + 8);
+    for (const r of front) expect(r.y + r.h).toBeLessThanOrEqual(SEA_KAYAK_WALK_HEAD.y);
     expect(SEA_KAYAK_SPEED).toBeGreaterThan(SEA_TUBE_SPEED);
     expect(SEA_KAYAK_SPEED).toBeLessThan(46);
     // 마른 갯벌(간조)은 못 다녀요, 얕은 물은 다녀요
