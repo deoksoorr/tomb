@@ -22,13 +22,17 @@ export function nextLobbyState(prev: LobbyState, result: LobbyInfo | null): Lobb
   return { ...prev, failures, status: failures >= LOBBY_FAILURES_TO_GIVE_UP ? "unreachable" : prev.status };
 }
 
+/** 11/16 집이 하나라도 있는 채널 (GET /api/housing/channels, useLobby가 2분마다 채운다). 이 채널들은 비어도 목록에서 숨지 않는다 */
+let houseChannels: readonly number[] = [];
+const HOUSE_CHANNELS_POLL_MS = 120_000;
+
 /**
- * 목록에 보일 채널: 열린 채널(평소 몇 개 + 붐비면 자동으로 더) + 나와 관계있는 채널(내 집·내 묘비·지금 채널).
- * 채널마다 주거 구역이 따로라, 지금은 닫혀 있는 채널에 집이 있는 사람도 그 채널을 골라 갈 수 있게 한다
+ * 목록에 보일 채널: 열린 채널(평소 몇 개 + 붐비면 자동으로 더) + 집이 있는 채널(누구에게나) + 나와 관계있는 채널(내 집·내 묘비·지금 채널).
+ * 채널마다 주거 구역이 따로라, 누가 집을 산 채널은 비어 있어도 늘 고를 수 있게 한다 (자동 배정은 여전히 열린 채널만)
  */
 export function visibleChannels(lobby: LobbyInfo | null, mine: Iterable<number | null | undefined> = []): ChannelInfo[] {
   if (!lobby) return [];
-  const keep = new Set<number>();
+  const keep = new Set<number>(houseChannels);
   for (const id of mine) if (typeof id === "number") keep.add(id);
   return lobby.channels.filter((c) => c.open || keep.has(c.id));
 }
@@ -48,11 +52,28 @@ export function useLobby(): LobbyState {
       const lobby = await fetchLobby(ctrl.signal);
       if (!ctrl.signal.aborted) setState((prev) => nextLobbyState(prev, lobby));
     };
+    // 집이 있는 채널: 바뀌면 다시 그린다 (실패하면 지난 목록 그대로)
+    const pollHouses = async () => {
+      try {
+        const res = await fetch("/api/housing/channels", { signal: ctrl.signal });
+        if (!res.ok) return;
+        const { channels } = (await res.json()) as { channels?: unknown };
+        const next = Array.isArray(channels) ? channels.filter((c): c is number => Number.isInteger(c)) : [];
+        if (ctrl.signal.aborted || next.join() === houseChannels.join()) return;
+        houseChannels = next;
+        setState((prev) => ({ ...prev }));
+      } catch {
+        // 다음에 다시 묻는다
+      }
+    };
     void poll();
+    void pollHouses();
     const timer = setInterval(poll, LOBBY_POLL_MS);
+    const houseTimer = setInterval(pollHouses, HOUSE_CHANNELS_POLL_MS);
     return () => {
       ctrl.abort();
       clearInterval(timer);
+      clearInterval(houseTimer);
     };
   }, []);
   return state;
