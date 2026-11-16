@@ -4,6 +4,10 @@ import { boatHull } from "./boat";
 import {
   Bounce,
   BOUNCE_CONTROL,
+  GENTLE_STEP,
+  strongerGain,
+  TOUCH_MARGIN,
+  touchHit,
   BOUNCE_DAMP_MS,
   BOUNCE_GAIN,
   bounceSpeed,
@@ -134,5 +138,45 @@ describe("nudgeOffset — 받힌 빈 놀거리", () => {
     expect(nudgeOffset(4, 90)).toBeCloseTo(4, 5);
     expect(nudgeOffset(4, NUDGE_MS)).toBe(0);
     for (let t = 0; t < NUDGE_MS; t += 20) expect(nudgeOffset(4, t)).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("r19 바다의 모든 것끼리 — 다른 사람·다른 사람이 탄 것", () => {
+  it("서서 겹친 것(내리자마자·태어나자마자)은 한 번에 조금씩만 떼어 놓아요 (덜컥 튀지 않게)", () => {
+    const m = { x: 500, y: 800, vx: 0, vy: 0 };
+    const other = rideBox("jetski", DIR.right, 505, 800);
+    const box = (x: number, y: number) => rideBox("jetski", DIR.right, x, y);
+    const x0 = m.x;
+    resolveHulls(m, box, [other], () => true, { gentle: () => true });
+    expect(Math.abs(m.x - x0) + Math.abs(m.y - 800)).toBeLessThanOrEqual(GENTLE_STEP + 1e-9);
+    // 몇 프레임이면 떨어져요
+    for (let i = 0; i < 40; i++) resolveHulls(m, box, [other], () => true, { gentle: () => true });
+    expect(overlap(box(m.x, m.y), other)).toBe(false);
+  });
+  it("다른 사람이 탄 것이 나를 받으면 (내가 가만히 있어도) 그 속도만큼 — 더 센 쪽 세기로 튕겨요", () => {
+    const m = { x: 500, y: 800, vx: 0, vy: 0 };
+    const box = (x: number, y: number): Box => ({ x: x - 4, y: y - 5, w: 8, h: 5 });
+    // 오른쪽에서 제트스키가 왼쪽으로 90px/s로 받아요
+    const jet = rideBox("jetski", DIR.left, 514, 801);
+    const hit = resolveHulls(m, box, [jet], () => true, { gentle: () => true, vel: () => ({ vx: -90, vy: 0 }) });
+    expect(hit?.contact.nx).toBe(-1);
+    // 받히는 쪽은 그 속도만큼 다 밀려나요 (조금씩이 아니라)
+    expect(overlap(box(m.x, m.y), jet)).toBe(false);
+    const b = new Bounce();
+    const sp = b.hit(0, hit!.contact, "swim", hit!.vx - -90, hit!.vy, { gain: strongerGain("swim", "jetski") });
+    expect(sp).toBeGreaterThan(BOUNCE_GAIN.swim.max);
+    expect(b.vx).toBeLessThan(0);
+    expect(strongerGain("tube", "jetski")).toBe(BOUNCE_GAIN.jetski);
+    expect(strongerGain("kayak")).toBe(BOUNCE_GAIN.kayak);
+  });
+});
+
+describe("r19 touchHit — 겹치기 전 가까이 닿음 (상대가 자기 화면에서 먼저 튕겨 나간 경우도 나도 튕겨요)", () => {
+  it("TOUCH_MARGIN 안이면 닿음, 밖이면 아님 — 방향은 상대 반대쪽", () => {
+    const me = { x: 100, y: 100, w: 8, h: 5 };
+    const near = { x: 108 + TOUCH_MARGIN - 1, y: 100, w: 28, h: 8 };
+    const far = { x: 108 + TOUCH_MARGIN + 1, y: 100, w: 28, h: 8 };
+    expect(touchHit(me, [near])?.contact.nx).toBe(-1);
+    expect(touchHit(me, [far])).toBeNull();
   });
 });

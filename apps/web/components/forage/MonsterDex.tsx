@@ -79,7 +79,7 @@ export default function MonsterDex({ dex }: { dex: Record<string, DexEntry> }) {
                     onClick={() => setSel(id)}
                   >
                     <span className={fs.num}>{NO.get(id)}</span>
-                    <MobPic id={id} size={36} />
+                    <MobPic id={id} size={32} />
                     {role === "boss" && (
                       <span className={s.boss} aria-hidden="true">
                         ♛

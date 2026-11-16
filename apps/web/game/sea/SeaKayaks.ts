@@ -3,12 +3,12 @@ import { DIR, SEA_KAYAK_DOCK, SEA_KAYAKS, seaKayakDismount, seaKayakSeatById, se
 import { BIG_RIDE_TOAST, myBig } from "../camp/foodState";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
 import { hullBlocks } from "../logic/boat";
-import { Bounce, knockMove, nudgeAmp, nudgeOffset, resolveHulls, SHIP_GAIN, touchContact } from "../logic/bounce";
+import { Bounce, knockMove, nudgeAmp, nudgeOffset, resolveHulls, SHIP_GAIN, strongerGain, touchContact } from "../logic/bounce";
 import type { MoveInput } from "../logic/movement";
 import { RideSound } from "../world/RideSound";
 import * as Art from "./seaArt";
 import { kayakBox, kayakSeatOffset, stepKayak, tubeReturnK, type RideMotion } from "./seaRideLogic";
-import type { SeaHull, SeaRideHost } from "./SeaRides";
+import { remoteTouch, type SeaHull, type SeaRideHost } from "./SeaRides";
 
 // 11/16 r18 사용자: 카약 선착장 2인승 카약 셋. 마을 2인승 조각배와 같은 흐름 (서버 좌석 두 자리 — 같은 카약 = 같은 가구).
 //  - 앞 자리(0) = 먼저 탄 사람이 조종 (방향키), 뒤 자리(1) = 같이 탄 사람 (조종은 못 하고 같이 저어요).
@@ -40,6 +40,9 @@ type View = {
   block: Phaser.GameObjects.Zone;
   blockKey: string;
   passUntil: number;
+  /** 11/16 r19 지금 속도 (px/s — 다른 사람이 젓는 카약을 받을 때 서로 다가간 만큼) */
+  vx: number;
+  vy: number;
   /** 11/16 r19 받혀 살짝 밀린 쪽 · 세기 · 때 (빈 카약 그림만) */
   nudge: { nx: number; ny: number; amp: number; at: number } | null;
 };
@@ -77,7 +80,7 @@ export class SeaKayaks {
       const block = s.add.zone(p.x, p.y, 1, 1).setOrigin(0, 0);
       block.removeFromDisplayList();
       this.blocks.add(block);
-      this.views.push({ n, moor: p, body, paddles, covers, x: p.x, y: p.y, dir: DIR.right, seat: [null, null], leftFrom: null, leftAt: 0, speed: 0, lastX: p.x, lastY: p.y, wakeAt: 0, block, blockKey: "", passUntil: 0, nudge: null });
+      this.views.push({ n, moor: p, body, paddles, covers, x: p.x, y: p.y, dir: DIR.right, seat: [null, null], leftFrom: null, leftAt: 0, speed: 0, lastX: p.x, lastY: p.y, wakeAt: 0, block, blockKey: "", passUntil: 0, vx: 0, vy: 0, nudge: null });
     });
     for (let i = 0; i < (host.reduced ? 8 : 24); i++) this.wakes.push(s.add.image(0, 0, T.wake).setVisible(false));
     // 헤엄치는 사람은 카약에 부딪혀요 (마을 배 hullBlocks와 같은 규칙 — 내 카약·막 내린 카약은 빼요)
@@ -277,13 +280,26 @@ export class SeaKayaks {
     const ok = (x: number, y: number) => seaKayakWater(x, y, level);
     knockMove(m, this.bounce.take(dtMs), ok, this.bounce);
     const others = h.hulls().filter((o) => o.id !== `pK${v.n + 1}`);
-    const hit = resolveHulls(m, (x, y) => kayakBox(m.dir, x, y), others.map((o) => o.box), ok);
-    if (!hit) return;
+    const hit = resolveHulls(m, (x, y) => kayakBox(m.dir, x, y), others.map((o) => o.box), ok, {
+      gentle: (i) => !others[i].ship,
+      vel: (i) => ({ vx: others[i].vx ?? 0, vy: others[i].vy ?? 0 }),
+    });
+    if (!hit) {
+      // 다른 사람이 가까이 닿았어요 (그쪽 화면에선 이미 튕겨 나갔어요) → 나도 튕겨요
+      const t = remoteTouch(kayakBox(m.dir, m.x, m.y), m, others);
+      if (t && this.bounce.hit(now, t.contact, "kayak", t.rvx, t.rvy, { gain: strongerGain("kayak", t.o.kind) }) > 0) {
+        this.sound.thump(0.45, 1.1);
+        if (!h.reduced) h.splash(m.x - t.contact.nx * 14, m.y - t.contact.ny * 4);
+      }
+      return;
+    }
     const o = others[hit.index];
-    // 움직이는 배: 배 속도만큼 서로 다가간 것으로 쳐서 세게 (가만히 있다 배에 밀려도 튕겨요)
+    // 서로 다가간 만큼 (움직이는 배·다른 사람이 탄 것·헤엄치는 사람), 더 센 쪽 세기로
+    const rvx = hit.vx - (o.vx ?? 0);
+    const rvy = hit.vy - (o.vy ?? 0);
     const sp = o.ship
-      ? this.bounce.hit(now, hit.contact, "kayak", hit.vx - o.ship.vx, hit.vy - o.ship.vy, { gain: SHIP_GAIN[o.ship.heavy], minInto: 0 })
-      : this.bounce.hit(now, hit.contact, "kayak", hit.vx, hit.vy);
+      ? this.bounce.hit(now, hit.contact, "kayak", rvx, rvy, { gain: SHIP_GAIN[o.ship.heavy], minInto: 0 })
+      : this.bounce.hit(now, hit.contact, "kayak", rvx, rvy, { gain: strongerGain("kayak", o.kind) });
     if (sp <= 0) return;
     this.sound.thump(0.45, 1.1);
     if (o.ship) h.shipHit(o.ship.heavy, m.x - hit.contact.nx * 14, m.y - hit.contact.ny * 4);
@@ -300,7 +316,8 @@ export class SeaKayaks {
     const now = this.host.scene.time.now;
     const c = touchContact({ x: pl.body.x, y: pl.body.y, w: pl.body.width, h: pl.body.height }, { x: zb.x, y: zb.y, w: zb.width, h: zb.height });
     if (!c) return;
-    const sp = pl.knock(c, now);
+    // 11/16 r19 다른 사람이 젓는 카약이 나를 받아도 튕겨요 (카약 속도만큼)
+    const sp = pl.knock(c, now, "swim", { rvx: v.vx, rvy: v.vy, gain: strongerGain("swim", "kayak") });
     if (sp <= 0) return;
     this.sound.thump(0.22, 1.3);
     if (!this.host.reduced) this.host.splash(pl.x - c.nx * 5, pl.y - c.ny * 3);
@@ -309,7 +326,10 @@ export class SeaKayaks {
 
   /** 11/16 r19 카약 몸 상자들 (부딪혀 튕기기) */
   hullBoxes(): SeaHull[] {
-    return this.views.map((v) => ({ id: `pK${v.n + 1}`, box: kayakBox(v.dir, Math.round(v.x), Math.round(v.y)), empty: v.seat[0] === null && v.seat[1] === null }));
+    return this.views.map((v) => {
+      const remote = (v.seat[0] !== null && v.seat[0] !== -1) || (v.seat[1] !== null && v.seat[1] !== -1);
+      return { id: `pK${v.n + 1}`, box: kayakBox(v.dir, Math.round(v.x), Math.round(v.y)), empty: v.seat[0] === null && v.seat[1] === null, vx: v.vx, vy: v.vy, kind: "kayak" as const, ...(remote ? { remote: true } : {}) };
+    });
   }
 
   /** 받힌 빈 카약을 살짝 밀어요 (그림만 — 곧 제자리) */
@@ -365,6 +385,11 @@ export class SeaKayaks {
       const dt = Math.max(1, dtMs);
       const inst = (Math.hypot(v.x - v.lastX, v.y - v.lastY) / dt) * 1000;
       v.speed = inst > 300 ? v.speed : v.speed + (inst - v.speed) * Math.min(1, dt / 160);
+      if (inst <= 300) {
+        const kk = Math.min(1, dt / 120);
+        v.vx += (((v.x - v.lastX) / dt) * 1000 - v.vx) * kk;
+        v.vy += (((v.y - v.lastY) / dt) * 1000 - v.vy) * kk;
+      }
       v.lastX = v.x;
       v.lastY = v.y;
       this.draw(v, now, wall, seen, remotes);
