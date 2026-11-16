@@ -29,8 +29,10 @@ export const SEA_HEIGHT = SEA_ROWS * 16; // 960
  * 바닷가 배치 버전. 좌표가 바뀌는 개편마다 올려요 → 옛 바닷가 자리 기록(lib/resume.ts)은 위치를 버리고 정류장에서 시작해요.
  * 1 = 11/16 1차 바탕 (정류장·시장·부동산·오두막 터 6·산책로·백사장·갯벌·선착장·방파제·등대·갯바위)
  * 2 = 11/16 정류장을 왼쪽으로 (오른쪽 위 미니맵에 가리지 않게) · 먼바다 띠에서도 헤엄·잠수 (막지 않아요)
+ * 3 = 11/16 버스 길을 오른쪽 끝 ~ 정류장 지나 돌림 마당까지만 (나머지는 풀밭·나무) · 유령선 자리를 비우려고 부표 하나를 옮김
+ *     · 오두막 터 6을 굽은 골목을 따라 흩어 놓음 (크기·출입구 쪽·울타리가 터마다 달라요) · 갯바위 구간 (방파제 쪽 곶·물가 바위)
  */
-export const SEA_MAP_VERSION = 2;
+export const SEA_MAP_VERSION = 3;
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Pt = { x: number; y: number };
@@ -41,8 +43,19 @@ export const SEA_BOUNDS = { minX: 20, maxX: SEA_WIDTH - 20, minY: 60, maxY: SEA_
 // ── 띠 (위 → 아래) ──
 /** 뒤 언덕 (소나무·바위, 막혀요). 이 아래부터 걸어요 */
 export const SEA_HILL_H = 56;
-/** 버스 길 (맨 위, 오른쪽 끝에서 들어와 정류장 앞에 서요). 바닥 장식, 막지 않아요 */
-export const SEA_ROAD = { x: 0, y: 104, w: SEA_WIDTH, h: 42 } as const;
+/**
+ * 버스 길 (맨 위). 11/16 사용자 "길이 쓸데없이 길어요" → 오른쪽 맵 끝에서 들어와 정류장을 조금 지난 돌림 마당(SEA_ROAD_LOOP)에서 끝나요.
+ * 길 왼쪽 띠는 풀밭·덤불·나무. 바닥 장식이라 막지 않아요
+ */
+export const SEA_ROAD = { x: 920, y: 104, w: SEA_WIDTH - 920, h: 42 } as const;
+/** 버스 돌림 마당 (길 왼쪽 끝의 둥근 자리 — 가운데·반지름) */
+export const SEA_ROAD_LOOP = { x: SEA_ROAD.x, y: SEA_ROAD.y + SEA_ROAD.h / 2, r: 34 } as const;
+/** (x,y)가 버스 길(돌림 마당 포함) 위인지 */
+export function onSeaRoad(x: number, y: number): boolean {
+  const R = SEA_ROAD;
+  if (x >= R.x && x <= R.x + R.w && y >= R.y && y <= R.y + R.h) return true;
+  return Math.hypot(x - SEA_ROAD_LOOP.x, y - SEA_ROAD_LOOP.y) <= SEA_ROAD_LOOP.r;
+}
 /** 뭍 (풀밭·흙길) — 길 아래부터 산책로 위까지 */
 export const SEA_LAND_Y0 = SEA_ROAD.y + SEA_ROAD.h;
 /** 나무 산책로 (뭍과 백사장 사이, 맵 가로 전체) */
@@ -165,18 +178,60 @@ export const SEA_REALTY_W = 128;
 export const SEA_REALTY_H = 100;
 export const SEA_REALTY_DOOR = { x: SEA_REALTY.x, y: SEA_REALTY.y + 8 } as const;
 
-// ── 오두막 터 6 (왼쪽 위) ── 두 줄에 세 채씩, 모두 바다를 봐요. 터 하나는 가로 9칸 세로 6칸 (뒤 4칸 오두막, 앞 2칸 데크).
-// 지금은 울타리 친 빈 터와 「분양 준비 중」 팻말만 (오두막은 다음 차수). 울타리는 앞 가운데가 열려 있어요
-export const SEA_LOT_W = 144;
-export const SEA_LOT_H = 96;
-export type SeaLot = { n: number } & Rect;
-export const SEA_LOTS: readonly SeaLot[] = [0, 1, 2, 3, 4, 5].map((i) => ({ n: i + 1, x: 40 + (i % 3) * 156, y: 164 + Math.floor(i / 3) * 112, w: SEA_LOT_W, h: SEA_LOT_H }));
-/** 터 앞 팻말 (왼쪽 앞 기둥 옆) */
-export function seaLotSign(l: SeaLot): Pt {
-  return { x: l.x + 22, y: l.y + l.h - 4 };
-}
-/** 터 울타리 출입구 (앞 가운데, 폭) */
+// ── 오두막 터 6 (왼쪽 위) ── 11/16 사용자 "바둑판 같아요" → 작은 모래 언덕 위 굽은 골목(SEA_LOT_LANE)을 따라 흩어진 터.
+// 터마다 크기·출입구 쪽(남·동·서)·울타리(나무 울타리·밧줄·생울타리)가 달라요. 바다 쪽 아랫줄 셋은 앞에 작은 데크가 바다를 봐요.
+// 하우징 계산이 쉽게 모두 축에 맞춘 사각형이에요. 지금은 빈 터와 「분양 준비 중」 팻말만 (오두막은 다음 차수)
+/** 보통 터 크기 (터마다 조금씩 달라요 — SEA_LOTS 각 w·h) */
+export const SEA_LOT_W = 136;
+export const SEA_LOT_H = 86;
+export type SeaLotGate = "s" | "e" | "w";
+export type SeaLotFence = "picket" | "rope" | "hedge";
+export type SeaLot = { n: number; gate: SeaLotGate; fence: SeaLotFence; deck: boolean } & Rect;
+export const SEA_LOTS: readonly SeaLot[] = [
+  { n: 1, x: 24, y: 154, w: 136, h: 86, gate: "e", fence: "picket", deck: false },
+  { n: 2, x: 220, y: 166, w: 124, h: 80, gate: "s", fence: "rope", deck: false },
+  { n: 3, x: 384, y: 154, w: 140, h: 84, gate: "w", fence: "hedge", deck: false },
+  { n: 4, x: 36, y: 268, w: 128, h: 92, gate: "s", fence: "picket", deck: true },
+  { n: 5, x: 200, y: 288, w: 138, h: 82, gate: "s", fence: "hedge", deck: true },
+  { n: 6, x: 372, y: 270, w: 152, h: 90, gate: "s", fence: "rope", deck: true },
+];
+/** 터 출입구 폭 */
 export const SEA_LOT_GATE_W = 32;
+/** 터 출입구 가운데 (울타리 선 위) */
+export function seaLotGate(l: SeaLot): Pt {
+  return l.gate === "s" ? { x: l.x + l.w / 2, y: l.y + l.h } : l.gate === "e" ? { x: l.x + l.w, y: l.y + l.h / 2 } : { x: l.x, y: l.y + l.h / 2 };
+}
+/** 출입구 바로 바깥 (상호작용·걸어 닿는 자리) */
+export function seaLotFront(l: SeaLot, d = 8): Pt {
+  const g = seaLotGate(l);
+  return l.gate === "s" ? { x: g.x, y: g.y + d } : l.gate === "e" ? { x: g.x + d, y: g.y + 4 } : { x: g.x - d, y: g.y + 4 };
+}
+/** 터 팻말 (출입구 옆 바깥, 땅에 꽂은 작은 판) */
+export function seaLotSign(l: SeaLot): Pt {
+  const g = seaLotGate(l);
+  return l.gate === "s" ? { x: g.x - SEA_LOT_GATE_W / 2 - 14, y: g.y + 12 } : l.gate === "e" ? { x: g.x + 14, y: g.y - 12 } : { x: g.x - 14, y: g.y - 12 };
+}
+/** 오두막 단지 굽은 골목 (산책로에서 올라와 터 사이를 지나요) · 동쪽 가지 골목 (디딤돌) */
+export const SEA_LOT_LANE: readonly Pt[] = [
+  { x: 182, y: 390 },
+  { x: 184, y: 332 },
+  { x: 176, y: 268 },
+  { x: 194, y: 210 },
+  { x: 190, y: 150 },
+];
+export const SEA_LOT_BRANCH: readonly Pt[] = [
+  { x: 178, y: 264 },
+  { x: 262, y: 266 },
+  { x: 362, y: 258 },
+  { x: 470, y: 254 },
+  { x: 540, y: 250 },
+];
+/** 오두막 단지 함께 쓰는 우편함 · 등불 기둥 둘 */
+export const SEA_LOT_MAILBOX = { x: 170, y: 296 } as const;
+export const SEA_LOT_LANTERNS: readonly Pt[] = [
+  { x: 196, y: 336 },
+  { x: 468, y: 244 },
+];
 
 // ── 선착장 (가운데, 백사장 끝에서 먼바다까지) ── 나무 데크. 양옆은 난간이라 갯벌에서 오르내리지 못해요 (머리에서 올라요)
 export const SEA_PIER = { x: 600, y: 540, w: 40, h: 370 } as const;
@@ -190,10 +245,24 @@ export const SEA_KIOSK_H = 56;
 export const SEA_BOAT = { x: 700, y: 924 } as const;
 /** 빨간 부표 */
 export const SEA_BUOYS: readonly Pt[] = [
-  { x: 548, y: 918 },
+  { x: 380, y: 920 }, // 11/16 유령선 자리를 비우려고 서쪽으로 (예전 548)
   { x: 780, y: 906 },
   { x: 1086, y: 920 },
 ];
+
+/**
+ * 11/16 유령선이 대는 자리 (토요일 밤 행사 — 다음 차수). 선착장 끝 서쪽 깊은 물 (묶인 낚싯배 반대편).
+ *  - ship = 배 그림 받침 가운데(용골 아래), w·h = 배 그림 크기 (160×90)
+ *  - clear = 배가 들어올 빈 물 (부표·장식·물보라 자리를 두지 않아요)
+ *  - gangway = 선착장 끝 데크 서쪽 가장자리의 건널판 자리 (다음 차수에 난간을 열어요). 토요일 장터는 이 둘레 선착장에
+ */
+export const SEA_GHOST_BERTH = {
+  ship: { x: 494, y: 952 },
+  w: 160,
+  h: 90,
+  clear: { x: 404, y: 862, w: 178, h: 98 },
+  gangway: { x: 588, y: 916 },
+} as const;
 
 // ── 방파제 (오른쪽) ── 백사장 끝에서 먼바다로. 양옆은 테트라포드라 막혀요. 끝 데크에 등대 (오르기·등불은 다음 차수)
 export const SEA_BREAKWATER = { x: 1160, y: 540, w: 48, h: 320 } as const;
@@ -206,12 +275,32 @@ export const SEA_LIGHTHOUSE_H = 96;
 export const SEA_LIGHTHOUSE_DOOR = { x: SEA_LIGHTHOUSE.x, y: SEA_LIGHTHOUSE.y + 12 } as const;
 
 // ── 갯바위 (왼쪽 아래) ── 바위 덩어리 (막혀요). 족욕 바위는 물웅덩이 옆 납작 바위 (앉기는 다음 차수)
-export const SEA_ROCKS: readonly { x: number; y: number; rx: number; ry: number }[] = [
+/**
+ * 바위 (small = 작은 돌, 막지 않고 그리기만). 11/16 사용자 "백사장만 있지 말고 갯바위 구간도" →
+ * 왼쪽 아래 갯바위 + 방파제 쪽 바위 곶 + 물가 사이사이 바위 (가운데 백사장은 모래 그대로). 물가 바위는 만조에 반쯤 잠겨 파도가 부서져요
+ */
+export type SeaRock = { x: number; y: number; rx: number; ry: number; small?: true };
+export const SEA_ROCKS: readonly SeaRock[] = [
   { x: 82, y: 640, rx: 46, ry: 22 },
   { x: 150, y: 712, rx: 34, ry: 17 },
   { x: 62, y: 772, rx: 30, ry: 15 },
   { x: 214, y: 820, rx: 26, ry: 13 },
   { x: 40, y: 860, rx: 24, ry: 12 },
+  // 11/16 오두막 언덕 아래 물가
+  { x: 36, y: 590, rx: 20, ry: 10 },
+  { x: 120, y: 590, rx: 14, ry: 7, small: true },
+  { x: 248, y: 604, rx: 12, ry: 6, small: true },
+  // 11/16 방파제 쪽 바위 곶
+  { x: 1100, y: 600, rx: 28, ry: 14 },
+  { x: 1128, y: 646, rx: 22, ry: 11 },
+  { x: 1072, y: 652, rx: 16, ry: 8, small: true },
+  { x: 1112, y: 700, rx: 20, ry: 10 },
+  { x: 1138, y: 588, rx: 12, ry: 6, small: true },
+  // 11/16 물가 사이사이
+  { x: 540, y: 606, rx: 12, ry: 6, small: true },
+  { x: 796, y: 606, rx: 18, ry: 9 },
+  { x: 934, y: 676, rx: 20, ry: 10 },
+  { x: 686, y: 716, rx: 10, ry: 5, small: true },
 ];
 export const SEA_FOOTBATH = { x: 196, y: 650 } as const;
 /** 간조에도 남는 물웅덩이 (갯벌 위, 장식 — 걸을 수 있어요) */
@@ -221,6 +310,10 @@ export const SEA_TIDE_POOLS: readonly { x: number; y: number; rx: number; ry: nu
   { x: 860, y: 820, rx: 54, ry: 16 },
   { x: 1010, y: 650, rx: 30, ry: 10 },
   { x: 470, y: 690, rx: 24, ry: 8 },
+  // 11/16 새 바위 둘레 웅덩이
+  { x: 1062, y: 690, rx: 16, ry: 6 },
+  { x: 66, y: 618, rx: 14, ry: 5 },
+  { x: 812, y: 628, rx: 12, ry: 4 },
 ];
 
 // ── 다음 차수 자리 (쉴거리·갯벌 캐기·모래성 등). 지금은 그리기만 하거나 비워 둬요 ──
@@ -293,6 +386,8 @@ export const SEA_GULL_PERCHES: readonly Pt[] = [
 export const SEA_FURNITURE: readonly Furniture[] = [
   // 정류장 지붕 아래 벤치
   { id: "pB", kind: "bench", x: SEA_BUS_STOP.x, y: SEA_BUS_STOP.y - 8, facing: DIR.down, seatOffsets: [-12, 12] },
+  // 11/16 오두막 단지 함께 쓰는 작은 벤치 (5·6번 터 사이, 바다 쪽을 봐요)
+  { id: "pL", kind: "bench", x: 355, y: 378, facing: DIR.down, seatOffsets: [-7, 7] },
 ];
 export const SEA_SEATS: readonly Seat[] = SEA_FURNITURE.flatMap((f) =>
   f.seatOffsets.map((dx, i) => ({ id: f.seatOffsets.length > 1 ? `${f.id}-${i}` : f.id, furnitureId: f.id, x: f.x + dx, y: f.y, facing: f.facing as DirId })),
@@ -315,17 +410,26 @@ function shelterColliders(): Rect[] {
   ];
 }
 
-/** 오두막 터 울타리 (뒤·양옆 + 앞 가운데 출입구를 뺀 앞 두 토막) */
+/** 오두막 터 울타리 (네 변, 출입구 쪽 변은 가운데를 비워요) */
 export function seaLotFences(l: SeaLot): Rect[] {
   const t = 4;
-  const gx = l.x + l.w / 2 - SEA_LOT_GATE_W / 2;
-  return [
-    { x: l.x, y: l.y, w: l.w, h: t },
-    { x: l.x, y: l.y, w: t, h: l.h },
-    { x: l.x + l.w - t, y: l.y, w: t, h: l.h },
-    { x: l.x, y: l.y + l.h - t, w: gx - l.x, h: t },
-    { x: gx + SEA_LOT_GATE_W, y: l.y + l.h - t, w: l.x + l.w - gx - SEA_LOT_GATE_W, h: t },
-  ];
+  const G = SEA_LOT_GATE_W;
+  const out: Rect[] = [];
+  const top = { x: l.x, y: l.y, w: l.w, h: t };
+  const bottom = { x: l.x, y: l.y + l.h - t, w: l.w, h: t };
+  const left = { x: l.x, y: l.y, w: t, h: l.h };
+  const right = { x: l.x + l.w - t, y: l.y, w: t, h: l.h };
+  out.push(top);
+  if (l.gate === "s") {
+    const gx = l.x + l.w / 2 - G / 2;
+    out.push({ x: l.x, y: bottom.y, w: gx - l.x, h: t }, { x: gx + G, y: bottom.y, w: l.x + l.w - gx - G, h: t });
+  } else out.push(bottom);
+  const gy = l.y + l.h / 2 - G / 2;
+  if (l.gate === "w") out.push({ x: l.x, y: l.y, w: t, h: gy - l.y }, { x: l.x, y: gy + G, w: t, h: l.y + l.h - gy - G });
+  else out.push(left);
+  if (l.gate === "e") out.push({ x: right.x, y: l.y, w: t, h: gy - l.y }, { x: right.x, y: gy + G, w: t, h: l.y + l.h - gy - G });
+  else out.push(right);
+  return out;
 }
 
 /** 바위 덩어리 하나의 막는 상자 (타원 안쪽) */
@@ -382,10 +486,12 @@ export function seaColliders(): Rect[] {
     { x: SEA_KIOSK.x - SEA_KIOSK_W / 2 + 2, y: SEA_KIOSK.y - 22, w: SEA_KIOSK_W - 4, h: 22 },
     // 오두막 터 울타리
     ...SEA_LOTS.flatMap(seaLotFences),
+    { x: SEA_LOT_MAILBOX.x - 3, y: SEA_LOT_MAILBOX.y - 3, w: 6, h: 3 },
+    ...SEA_LOT_LANTERNS.map((p) => ({ x: p.x - 2, y: p.y - 3, w: 4, h: 3 })),
     // 등대 (몸통)
     { x: SEA_LIGHTHOUSE.x - SEA_LIGHTHOUSE_W / 2, y: SEA_LIGHTHOUSE.y - 20, w: SEA_LIGHTHOUSE_W, h: 20 },
     ...railColliders(),
-    ...SEA_ROCKS.map(seaRockCollider),
+    ...SEA_ROCKS.filter((r) => !r.small).map(seaRockCollider),
     ...deepSeaColliders(),
   ];
 }

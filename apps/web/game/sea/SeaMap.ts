@@ -11,11 +11,14 @@ import {
   SEA_FLAT_Y0,
   SEA_FOOTBATH,
   SEA_FURNITURE,
+  SEA_GHOST_BERTH,
   SEA_GULL_PERCHES,
   SEA_HEIGHT,
   SEA_KIOSK,
   SEA_LIGHTHOUSE,
   SEA_LOTS,
+  SEA_LOT_LANTERNS,
+  SEA_LOT_MAILBOX,
   SEA_MARKET,
   SEA_PIER,
   SEA_PIER_END,
@@ -181,6 +184,8 @@ export class SeaMap implements SeaMapApi {
   private nextSprayAt = 0;
   private readonly glints: Mote[] = [];
   private readonly lampGlows: Phaser.GameObjects.Image[] = [];
+  private readonly rockFoams: { img: Phaser.GameObjects.Image; y: number; phase: number }[] = [];
+  private readonly crabs: { img: Phaser.GameObjects.Image; x: number; y: number }[] = [];
   private beacon: Phaser.GameObjects.Image | null = null;
   private lit = -1;
   private readonly gulls: Gull[] = [];
@@ -282,7 +287,7 @@ export class SeaMap implements SeaMapApi {
   private addGroundDecor(): void {
     const T = Art.SEA_TEX;
     for (const d of Lay.SEA_DECOR) {
-      const key = d.kind === "beachGrass" ? T.beachGrass(d.v) : d.kind === "shell" ? T.shell(d.v) : d.kind === "flower" ? T.flower(d.v) : T.drift;
+      const key = d.kind === "beachGrass" ? T.beachGrass(d.v) : d.kind === "shell" ? T.shell(d.v) : d.kind === "flower" ? T.flower(d.v) : d.kind === "stone" ? T.stone(d.v % 2) : T.drift;
       this.prop(key, d.x, d.y, FLAT + d.y, 1);
     }
   }
@@ -369,11 +374,18 @@ export class SeaMap implements SeaMapApi {
       const x = l.x - 2;
       const y = l.y - Art.LOT_RISE;
       const key = T.lot(l.n);
-      this.cull(l.x + l.w / 2, l.y, s.add.image(x, y, key).setOrigin(0, 0).setDepth(l.y + 1).setCrop(0, 0, Art.LOT_ART_W, Art.LOT_FRONT_Y));
-      this.cull(l.x + l.w / 2, l.y + l.h, s.add.image(x, y, key).setOrigin(0, 0).setDepth(l.y + l.h).setCrop(0, Art.LOT_FRONT_Y, Art.LOT_ART_W, Art.LOT_ART_H - Art.LOT_FRONT_Y));
+      const sz = Art.lotArtSize(l);
+      this.cull(l.x + l.w / 2, l.y, s.add.image(x, y, key).setOrigin(0, 0).setDepth(l.y + 1).setCrop(0, 0, sz.w, sz.front));
+      this.cull(l.x + l.w / 2, l.y + l.h, s.add.image(x, y, key).setOrigin(0, 0).setDepth(l.y + l.h).setCrop(0, sz.front, sz.w, sz.h - sz.front));
       const sg = seaLotSign(l);
       // 11/16 「분양 준비 중」은 땅에 꽂은 작은 민트 칠 판 하나로 (예전 팻말 그림 + 두꺼운 판은 뺐어요). 터 번호는 출입구 기둥 패에
       this.plate(sg.x, sg.y, "분양 준비 중", PLATE_MINT);
+    }
+    // 11/16 오두막 단지 우편함·등불 기둥 (골목 옆)
+    this.prop(T.mailbox, SEA_LOT_MAILBOX.x, SEA_LOT_MAILBOX.y);
+    for (const p of SEA_LOT_LANTERNS) {
+      this.prop(T.lamp, p.x, p.y);
+      this.lampGlows.push(this.cull(p.x, p.y, s.add.image(p.x, p.y - 32, T.lampGlow).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.lights + 1).setAlpha(0)));
     }
     // 등대 (끝 데크 뒤쪽)
     this.prop(T.lighthouse, SEA_LIGHTHOUSE.x, SEA_LIGHTHOUSE.y, SEA_LIGHTHOUSE.y, 3);
@@ -392,7 +404,14 @@ export class SeaMap implements SeaMapApi {
     const s = this.scene;
     for (const p of Lay.SEA_PIER_POSTS) this.prop(T.post, p.x, p.y);
     for (const t of Lay.SEA_TETRAPODS) this.prop(T.tetra(t.v), t.x, t.y);
-    SEA_ROCKS.forEach((r, i) => this.prop(T.rock(i), r.x, Math.round(r.y + r.ry * 0.7 + 2), r.y + r.ry * 0.5));
+    SEA_ROCKS.forEach((r, i) => {
+      this.prop(T.rock(i), r.x, Math.round(r.y + r.ry * 0.7 + 2), r.y + r.ry * 0.5);
+      // 11/16 갯바위에 물이 차면 밑동에 거품 고리 (물이 빠지면 투명)
+      const foam = this.cull(r.x, r.y, s.add.image(r.x, Math.round(r.y + r.ry * 0.55), T.rockFoam(i)).setDepth(r.y + r.ry * 0.5 - 1).setAlpha(0));
+      this.rockFoams.push({ img: foam, y: r.y + r.ry * 0.55, phase: i * 1.7 });
+    });
+    // 11/16 게 (물이 빠졌을 때만 바위 둘레에 나와요)
+    for (const c of Lay.SEA_CRABS) this.crabs.push({ img: this.cull(c.x, c.y, s.add.image(c.x, c.y + 1, T.crab).setOrigin(0.5, 1).setDepth(c.y).setAlpha(0)), x: c.x, y: c.y });
     this.prop(T.footbath, SEA_FOOTBATH.x, SEA_FOOTBATH.y + 8, SEA_FOOTBATH.y - 6, 0);
     // 배·부표는 매 프레임 흔들려서 컬링하지 않아요 (몇 개뿐)
     this.boat = this.keep(s.add.image(SEA_BOAT.x, SEA_BOAT.y + 6, T.boat).setOrigin(0.5, 1).setDepth(SEA_BOAT.y));
@@ -599,6 +618,7 @@ export class SeaMap implements SeaMapApi {
     this.updateTide(time, delta, t);
     this.updateBoats(time);
     this.updateSpray(time, view);
+    this.updateRocks(time);
     this.updateGlints(time, view, t);
     this.updateLights(time, t);
     if (this.gulls.length) this.updateGulls(time, Math.min(delta, 100), t);
@@ -841,18 +861,40 @@ export class SeaMap implements SeaMapApi {
   }
 
   /** 물보라가 이는 자리 하나 (없으면 null): 방파제 양옆(물에 잠긴 곳)·끝 데크 앞·물에 닿은 갯바위 */
+  /** 11/16 갯바위 거품 고리 (물에 잠긴 바위만, 물결 따라 숨 쉬듯) · 게는 물이 빠진 동안만 */
+  private updateRocks(time: number): void {
+    const edgeY = this.waterState.edgeY;
+    for (const f of this.rockFoams) {
+      const wet = edgeY < f.y;
+      f.img.setAlpha(wet ? 0.55 + 0.35 * Math.sin(time / 700 + f.phase) : 0);
+    }
+    for (const c of this.crabs) {
+      const dry = edgeY > c.y + 20;
+      c.img.setAlpha(dry ? 1 : 0);
+      // 옆걸음 조금
+      if (dry) c.img.x = Math.round(c.x + Math.sin(time / 1600 + c.x) * 6);
+    }
+  }
+
   private sprayPoint(edgeY: number): { x: number; y: number } | null {
     const B = SEA_BREAKWATER;
     const T = SEA_BREAKWATER_TIP;
     const r = Math.random();
-    if (r < 0.55) {
+    // 11/16 갯바위가 잠겨 있으면 물보라 반은 바위에서
+    if (r < 0.5) {
+      const k = this.wetRockSpray(edgeY);
+      if (k) return k;
+    }
+    if (r < 0.78) {
       const y0 = Math.max(edgeY + 4, SEA_FLAT_Y0 + 14);
       const y1 = T.y + T.h;
       if (y1 <= y0) return null;
       const right = Math.random() < 0.5;
       return { x: right ? B.x + B.w + 12 + Math.random() * 6 : B.x - 12 - Math.random() * 6, y: y0 + Math.random() * (y1 - y0) };
     }
-    if (r < 0.7) return { x: T.x + Math.random() * T.w, y: T.y + T.h + 4 };
+    return { x: T.x + Math.random() * T.w, y: T.y + T.h + 4 };
+  }
+  private wetRockSpray(edgeY: number): { x: number; y: number } | null {
     const wetRocks = SEA_ROCKS.filter((k) => edgeY < k.y + k.ry);
     if (!wetRocks.length) return null;
     const k = wetRocks[Math.floor(Math.random() * wetRocks.length)];
@@ -941,6 +983,9 @@ export class SeaMap implements SeaMapApi {
         if (bottom <= top || Math.random() > want * (this.reduced ? 0.02 : 0.08)) continue;
         g.x = Math.round(view.x + Math.random() * view.width);
         g.y = Math.round(top + Math.random() * (bottom - top));
+        // 11/16 유령선 자리는 비워 둬요 (다음 차수에 배가 들어와요)
+        const C = SEA_GHOST_BERTH.clear;
+        if (g.x >= C.x && g.x <= C.x + C.w && g.y >= C.y && g.y <= C.y + C.h) continue;
         g.t0 = time;
         g.life = (this.reduced ? 1400 : 600) + Math.random() * 900;
         g.s = 0.6 + Math.random() * 0.7;
@@ -1003,6 +1048,8 @@ export class SeaMap implements SeaMapApi {
     this.foamSegs.length = 0;
     this.buoys.length = 0;
     this.lampGlows.length = 0;
+    this.rockFoams.length = 0;
+    this.crabs.length = 0;
     this.water = this.foam = this.lace = this.shimmer = null;
     this.wet = this.boat = this.beacon = this.depthShade = this.sheen = null;
     this.laceSegs.length = 0;
@@ -1060,7 +1107,11 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.market, Art.marketArt);
   tex(T.realty, Art.realtyArt);
   tex(T.kiosk, Art.kioskArt);
-  for (const l of SEA_LOTS) tex(T.lot(l.n), () => Art.lotArt(l.n));
+  for (const l of SEA_LOTS) tex(T.lot(l.n), () => Art.lotArt(l));
+  tex(T.mailbox, Art.mailboxArt);
+  tex(T.stone(0), () => Art.stoneArt(0));
+  tex(T.stone(1), () => Art.stoneArt(1));
+  tex(T.crab, Art.crabArt);
   tex(T.lotSign, Art.lotSignArt);
   tex(T.pier, Art.pierArt);
   tex(T.pierEnd, Art.pierEndArt);
@@ -1070,7 +1121,10 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.lighthouse, Art.lighthouseArt);
   tex(T.boat, Art.boatArt);
   tex(T.buoy, Art.buoyArt);
-  SEA_ROCKS.forEach((_r, i) => tex(T.rock(i), () => Art.rockArt(i)));
+  SEA_ROCKS.forEach((_r, i) => {
+    tex(T.rock(i), () => Art.rockArt(i));
+    tex(T.rockFoam(i), () => Art.rockFoamArt(i));
+  });
   tex(T.footbath, Art.footbathArt);
   tex(T.lamp, Art.lampArt);
   tex(T.lampGlow, () => Art.glowArt(24, 0xffe2a8, 1.8), true);

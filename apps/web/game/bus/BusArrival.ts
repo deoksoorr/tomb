@@ -28,7 +28,7 @@ type Phase =
   | { k: "idle" }
   | { k: "in"; t0: number; from: number; to: number; done: () => void }
   | { k: "door"; t0: number; open: boolean; then: () => void }
-  | { k: "out"; t0: number; from: number; dist: number; done: () => void }
+  | { k: "out"; t0: number; from: number; dist: number; done: () => void; fade?: boolean }
   | { k: "fade"; t0: number; to: 0 | 1; done: () => void; ms?: number };
 
 type Dust = { img: Phaser.GameObjects.Image; born: number; vx: number };
@@ -122,6 +122,16 @@ class BusArrival implements BusArrivalApi {
       const now = performance.now();
       if (this.o.reduced) {
         this.phase = { k: "fade", t0: now, to: 0, done: onGone };
+        return;
+      }
+      if (this.o.leave === "loop") {
+        // 11/16 바닷가: 잠깐 서 있다가 길 끝 돌림 마당으로 굴러 들어가며 흐려져요
+        this.timers.push(
+          this.scene.time.delayedCall(this.o.waitMs ?? 0, () => {
+            if (this.destroyed) return;
+            this.phase = { k: "out", t0: performance.now(), from: this.body.x, dist: this.o.loopDist ?? 80, done: onGone, fade: true };
+          }),
+        );
         return;
       }
       if (this.o.leave === "fade") {
@@ -220,6 +230,7 @@ class BusArrival implements BusArrivalApi {
         const u = Math.min(1, (now - p.t0) / DEPART_MS);
         const e = Math.pow(u, 2.4);
         this.move(p.from + this.dir * p.dist * e, now, e);
+        if (p.fade) this.setAlpha(1 - Math.min(1, u * 1.15));
         if (u >= 1) {
           this.show(false);
           this.phase = { k: "idle" };

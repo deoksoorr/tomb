@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAMP_SEATS, MAP_TAG, SEATS, SEA_ARRIVE, SEA_BOARD, SEA_SEATS, inMapBounds, isAwayMap, mapAllowed, mapOf, mapSpawn, seaColliders, seatSlotIn, SEA_HEIGHT, SEA_WIDTH, SEA_LOTS, SEA_SPOTS, SPAWN, seaWet, tideLineY, TIDE_HIGH_Y, TIDE_LOW_Y, SEA_DEEP_Y } from "./index";
+import { CAMP_SEATS, MAP_TAG, SEATS, SEA_ARRIVE, SEA_BOARD, SEA_SEATS, inMapBounds, isAwayMap, mapAllowed, mapOf, mapSpawn, seaColliders, seatSlotIn, SEA_HEIGHT, SEA_WIDTH, SEA_LOTS, SEA_SPOTS, SPAWN, seaWet, tideLineY, SEA_GHOST_BERTH, SEA_PIER_END, SEA_BUOYS, SEA_ROCKS, onSeaRoad, SEA_ROAD, SEA_BUS_STOP, TIDE_HIGH_Y, TIDE_LOW_Y, SEA_DEEP_Y } from "./index";
 
 // 11/16 달물결 포구: 세 번째 맵 (protocol sea.ts). 맵 id·허락·좌석·충돌 기본 규칙
 
@@ -36,6 +36,24 @@ describe("sea map (protocol)", () => {
     // 갯벌은 물때와 상관없이 막지 않는다
     for (let y = TIDE_HIGH_Y + 4; y < TIDE_LOW_Y; y += 16) expect(hit(420, y), `${y}`).toBe(false);
     expect(tideLineY(1)).toBeLessThan(tideLineY(0));
+  });
+  it("11/16 유령선 자리: 선착장 끝 서쪽 깊은 물이 비어 있고 건널판은 선착장 끝 데크 가장자리", () => {
+    const B = SEA_GHOST_BERTH;
+    const P = SEA_PIER_END;
+    expect(B.clear.x + B.clear.w).toBeLessThanOrEqual(P.x);
+    expect(B.clear.w).toBeGreaterThanOrEqual(B.w);
+    expect(B.ship.y).toBeGreaterThan(SEA_DEEP_Y);
+    for (const b of SEA_BUOYS) expect(b.x >= B.clear.x && b.x <= B.clear.x + B.clear.w && b.y >= B.clear.y && b.y <= B.clear.y + B.clear.h).toBe(false);
+    for (const r of SEA_ROCKS) expect(r.x + r.rx < B.clear.x || r.y + r.ry < B.clear.y).toBe(true);
+    expect(B.gangway.x).toBeGreaterThanOrEqual(P.x);
+    expect(B.gangway.y).toBeGreaterThanOrEqual(P.y);
+    expect(B.gangway.y).toBeLessThanOrEqual(P.y + P.h);
+  });
+  it("11/16 버스 길은 오른쪽 끝에서 정류장을 지난 돌림 마당까지만", () => {
+    expect(onSeaRoad(SEA_WIDTH - 2, SEA_ROAD.y + 20)).toBe(true);
+    expect(onSeaRoad(SEA_BUS_STOP.x, SEA_ROAD.y + 20)).toBe(true);
+    expect(onSeaRoad(200, SEA_ROAD.y + 20)).toBe(false);
+    expect(SEA_ROAD.x).toBeLessThan(SEA_BUS_STOP.x - 60);
   });
   it("다음 차수 자리: 오두막 터 6, 모래성 자리 3, 바다 보기 벤치 4", () => {
     expect(SEA_LOTS).toHaveLength(6);

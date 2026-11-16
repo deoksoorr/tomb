@@ -8,16 +8,16 @@ import {
   SEA_FLAT_Y0,
   SEA_HEIGHT,
   SEA_LOT_GATE_W,
-  SEA_LOT_H,
-  SEA_LOT_W,
   SEA_PIER,
   SEA_PIER_END,
   SEA_ROAD,
+  SEA_ROAD_LOOP,
   SEA_ROCKS,
   SEA_SAND_Y0,
   SEA_WIDTH,
 } from "@tomb/protocol";
 import { darken, Grid, lighten, mix, rng, type Color } from "../sprites/pixel";
+import type { SeaLot } from "@tomb/protocol";
 import { hashU, poolDepth, seaGroundKind, SEA_PLATFORM, type SeaGround } from "./seaLayout";
 import { SEA_TEX_PREFIX } from "./seaTypes";
 
@@ -148,6 +148,7 @@ export const SEA_TEX = {
   boat: `${P}boat`,
   buoy: `${P}buoy`,
   rock: (i: number) => `${P}rock${i}`,
+  rockFoam: (i: number) => `${P}rockFoam${i}`,
   footbath: `${P}footbath`,
   lamp: `${P}lamp`,
   lampGlow: `${P}lampGlow`,
@@ -168,6 +169,9 @@ export const SEA_TEX = {
   sheen: `${P}sheen`,
   depthShade: `${P}depthShade`,
   sheenWet: `${P}sheenWet`,
+  mailbox: `${P}mailbox`,
+  stone: (v: number) => `${P}stone${v}`,
+  crab: `${P}crab`,
   duskWater: `${P}duskWater`,
   duskFoam: `${P}duskFoam`,
   goldStreak: `${P}goldStreak`,
@@ -679,66 +683,159 @@ export function kioskArt(): Grid {
   return g;
 }
 
-// ── 오두막 터 (울타리 친 빈 터) ── 그림 원점 = 왼쪽 위 (터 사각형에서 (-2, -LOT_RISE))
+// ── 오두막 터 (울타리 친 빈 터) ── 그림 원점 = 왼쪽 위 (터 사각형에서 (-2, -LOT_RISE)).
+// 11/16 터마다 크기·출입구 쪽·울타리(나무 울타리·밧줄·생울타리)·바다 쪽 데크가 달라요 (protocol SEA_LOTS)
 export const LOT_RISE = 10;
-export const LOT_ART_W = SEA_LOT_W + 4;
-export const LOT_ART_H = SEA_LOT_H + LOT_RISE + 4;
-/** 앞 울타리 줄 (그림 y) — 이 아래를 앞 depth로 한 번 더 그려요 */
-export const LOT_FRONT_Y = LOT_RISE + SEA_LOT_H - 16;
-export function lotArt(n: number): Grid {
-  const W = LOT_ART_W;
-  const H = LOT_ART_H;
+export function lotArtSize(l: SeaLot): { w: number; h: number; front: number } {
+  return { w: l.w + 4, h: l.h + LOT_RISE + 4, front: LOT_RISE + l.h - 16 };
+}
+export function lotArt(l: SeaLot): Grid {
+  const { w: W, h: H } = lotArtSize(l);
   const g = new Grid(W, H);
   const ox = 2;
   const top = LOT_RISE; // 뒤 울타리 받침 줄
-  const bot = LOT_RISE + SEA_LOT_H - 2; // 앞 울타리 받침 줄
-  const gx0 = ox + SEA_LOT_W / 2 - SEA_LOT_GATE_W / 2;
-  const gx1 = gx0 + SEA_LOT_GATE_W;
-  const post = (x: number, y: number, tall = 9) => {
-    g.rect(x - 1, y - tall, 3, tall + 1, DRIFTWOOD.mid);
-    g.vline(x - 1, y - tall, y, DRIFTWOOD.hi);
-    g.set(x, y - tall - 1, DRIFTWOOD.hi);
+  const bot = LOT_RISE + l.h - 2; // 앞 울타리 받침 줄
+  const x0 = ox;
+  const x1 = ox + l.w - 1;
+  const G = SEA_LOT_GATE_W;
+  const gx0 = ox + l.w / 2 - G / 2;
+  const gx1 = gx0 + G;
+  const gy0 = top + l.h / 2 - G / 2;
+  const gy1 = gy0 + G;
+  const r = rng(1600 + l.n * 31);
+  // 바다 쪽 데크 (앞 22px 안쪽 판자 — 바다를 봐요)
+  if (l.deck)
+    for (let y = bot - 24; y < bot - 3; y++)
+      for (let x = x0 + 6; x <= x1 - 6; x++) g.set(x, y, pick(RAMP.wood, 0.15 + ((y - (bot - 24)) / 21) * 0.4 + ((x - x0) % 12 === 0 ? 0.3 : 0), x, y));
+  // 울타리 한 변 (가로: y 고정, 세로: x 고정). 출입구 자리는 비워요
+  const post = (x: number, y: number, tall: number) => {
+    for (let k = 0; k <= tall; k++) {
+      g.set(x - 1, y - k, RAMP.wood[1]);
+      g.set(x, y - k, RAMP.wood[2]);
+      g.set(x + 1, y - k, RAMP.wood[3]);
+    }
   };
-  const rail = (x0: number, x1: number, y: number) => {
-    g.hline(x0, x1, y - 6, PAINT.mid);
-    g.hline(x0, x1, y - 3, PAINT.lo);
+  const hedge = (cx: number, cy: number) =>
+    blobPaint(
+      g,
+      [
+        [cx, cy - 4, 4.6],
+        [cx + 3, cy - 3, 3.4],
+      ],
+      RAMP.leaf,
+      true,
+      cx * 0.3 + cy,
+    );
+  const run = (ax: number, ay: number, bx: number, by: number) => {
+    const horiz = ay === by;
+    const len = horiz ? bx - ax : by - ay;
+    if (len <= 0) return;
+    if (l.fence === "hedge") {
+      for (let k = 0; k <= len; k += 6) hedge(horiz ? ax + k : ax, horiz ? ay : ay + k);
+      return;
+    }
+    const step = l.fence === "picket" ? 6 : 16;
+    if (horiz) {
+      if (l.fence === "picket") {
+        g.hline(ax, bx, ay - 5, RAMP.wood[1]);
+        g.hline(ax, bx, ay - 2, RAMP.wood[2]);
+      } else for (let x = ax; x <= bx; x++) g.set(x, ay - 5 + Math.round(Math.sin(((x - ax) % step) / step * Math.PI) * 1.5), 0xc9b48f);
+      for (let x = ax; x <= bx; x += step) post(Math.min(x, bx), ay, l.fence === "picket" ? 7 : 9);
+      post(bx, ay, l.fence === "picket" ? 7 : 9);
+    } else {
+      for (let y = ay; y <= by; y++) g.set(ax, y - 4, l.fence === "picket" ? RAMP.wood[2] : 0xc9b48f);
+      for (let y = ay; y <= by; y += step) post(ax, y, l.fence === "picket" ? 5 : 7);
+      post(ax, by, 5);
+    }
   };
-  // 뒤·앞 가로 울타리
-  rail(ox, ox + SEA_LOT_W - 1, top);
-  for (let x = ox; x <= ox + SEA_LOT_W; x += 12) post(Math.min(x, ox + SEA_LOT_W - 1), top);
-  rail(ox, gx0, bot);
-  rail(gx1, ox + SEA_LOT_W - 1, bot);
-  for (let x = ox; x <= gx0; x += 12) post(x, bot);
-  for (let x = gx1; x <= ox + SEA_LOT_W; x += 12) post(Math.min(x, ox + SEA_LOT_W - 1), bot);
-  post(gx0, bot, 12);
-  post(gx1, bot, 12);
-  // 옆 울타리 (위에서 내려다본 세로 줄)
-  for (const x of [ox, ox + SEA_LOT_W - 1]) {
-    for (let y = top; y <= bot; y++) g.set(x, y - 4, (y - top) % 12 === 0 ? DRIFTWOOD.lo : PAINT.lo);
-    for (let y = top; y <= bot; y += 12) post(x, y, 6);
-  }
-  // 출입구 기둥 번호 패
-  g.rect(gx1 + 2, bot - 12, 9, 8, 0xf4ecd8);
-  frame(g, gx1 + 2, bot - 12, 9, 8, DRIFTWOOD.line);
-  drawNumber(g, n, gx1 + 5, bot - 11, 0x4a3a2a);
-  // 말뚝 줄 (오두막 자리 표시 — 뒤쪽 4칸)
+  // 뒤
+  run(x0, top, x1, top);
+  // 왼쪽·오른쪽 (서·동 출입구면 가운데를 비워요)
+  if (l.gate === "w") {
+    run(x0, top, x0, gy0);
+    run(x0, gy1, x0, bot);
+  } else run(x0, top, x0, bot);
+  if (l.gate === "e") {
+    run(x1, top, x1, gy0);
+    run(x1, gy1, x1, bot);
+  } else run(x1, top, x1, bot);
+  // 앞 (남 출입구면 가운데를 비워요)
+  if (l.gate === "s") {
+    run(x0, bot, gx0, bot);
+    run(gx1, bot, x1, bot);
+  } else run(x0, bot, x1, bot);
+  // 출입구 기둥 (조금 높게) + 번호 패
+  const gp: [number, number][] = l.gate === "s" ? [[gx0, bot], [gx1, bot]] : l.gate === "e" ? [[x1, gy0], [x1, gy1]] : [[x0, gy0], [x0, gy1]];
+  for (const [x, y] of gp) post(x, y, 11);
+  const [nx, ny] = l.gate === "s" ? [gx1 + 3, bot - 12] : l.gate === "e" ? [x1 - 13, gy1 + 2] : [x0 + 4, gy1 + 2];
+  g.rect(nx, ny, 9, 8, RAMP.wall[0]);
+  frame(g, nx, ny, 9, 8, DRIFTWOOD.line);
+  drawNumber(g, l.n, nx + 3, ny + 1, RAMP.trunk[2]);
+  // 말뚝 줄 (오두막 자리 표시 — 데크 뒤쪽)
+  const sx0 = x0 + 16;
+  const sx1 = x1 - 16;
+  const sy0 = top + 12;
+  const sy1 = l.deck ? bot - 28 : bot - 14;
   for (const [x, y] of [
-    [ox + 16, top + 14],
-    [ox + SEA_LOT_W - 16, top + 14],
-    [ox + 16, top + 62],
-    [ox + SEA_LOT_W - 16, top + 62],
+    [sx0, sy0],
+    [sx1, sy0],
+    [sx0, sy1],
+    [sx1, sy1],
   ]) {
     g.rect(x, y - 3, 2, 4, DRIFTWOOD.lo);
-    g.set(x, y - 4, 0xe85a3a); // 측량 깃
+    g.set(x, y - 4, RAMP.roofC[2]); // 측량 깃
   }
-  for (let x = ox + 17; x < ox + SEA_LOT_W - 16; x += 2) {
-    g.set(x, top + 13, 0xe8e0c8);
-    g.set(x, top + 61, 0xe8e0c8);
+  for (let x = sx0 + 1; x < sx1; x += 2) {
+    g.set(x, sy0 - 1, RAMP.wall[1]);
+    g.set(x, sy1 - 1, RAMP.wall[1]);
   }
-  for (let y = top + 14; y < top + 61; y += 2) {
-    g.set(ox + 16, y, 0xe8e0c8);
-    g.set(ox + SEA_LOT_W - 16, y, 0xe8e0c8);
+  for (let y = sy0; y < sy1; y += 2) {
+    g.set(sx0, y, RAMP.wall[1]);
+    g.set(sx1, y, RAMP.wall[1]);
   }
+  // 갯그령 몇 포기 (울타리 안 모서리)
+  for (let k = 0; k < 3; k++) {
+    const x = Math.round(x0 + 6 + r() * (l.w - 12));
+    const y = Math.round(top + 6 + r() * 8);
+    for (let j = 0; j < 4; j++) g.set(x + (j - 1), y - (j % 2) - 1, RAMP.leaf[2 + (j % 2)]);
+  }
+  softOutline(g);
+  return g;
+}
+
+/** 11/16 오두막 단지 함께 쓰는 우편함 (나무 기둥 + 하늘빛 통) */
+export function mailboxArt(): Grid {
+  const g = new Grid(12, 20);
+  const base = 17;
+  g.rect(5, 8, 2, base - 8, RAMP.wood[2]);
+  g.vline(5, 8, base - 1, RAMP.wood[1]);
+  g.rect(1, 2, 10, 7, RAMP.towel[1]);
+  g.hline(1, 10, 2, RAMP.towel[0]);
+  g.hline(1, 10, 8, RAMP.towel[2]);
+  g.rect(9, 0, 1, 4, RAMP.roofC[2]); // 깃발
+  g.rect(10, 0, 2, 2, RAMP.roofC[2]);
+  softOutline(g);
+  shadow(g, 6, base + 1, 5, 1.2, 50);
+  return g;
+}
+/** 11/16 디딤돌 (둥근 납작 돌) */
+export function stoneArt(v: number): Grid {
+  const g = new Grid(14, 9);
+  blobPaint(g, [[7, 4.5, v ? 4.5 : 3.8], [v ? 9 : 5, 5, 3]], RAMP.rock, true, v * 5);
+  return g;
+}
+/** 11/16 갯바위 게 (작은 코럴빛 게) */
+export function crabArt(): Grid {
+  const g = new Grid(12, 8);
+  g.ellipse(6, 5, 3.4, 2.2, RAMP.roofC[2]);
+  g.hline(4, 7, 4, RAMP.roofC[1]);
+  for (const x of [1, 2, 9, 10]) g.set(x, 6, RAMP.roofC[3]);
+  g.set(2, 2, RAMP.roofC[3]);
+  g.set(9, 2, RAMP.roofC[3]);
+  g.set(1, 1, RAMP.roofC[2]);
+  g.set(10, 1, RAMP.roofC[2]);
+  g.set(5, 3, 0x3a3440);
+  g.set(7, 3, 0x3a3440);
   softOutline(g);
   return g;
 }
@@ -980,10 +1077,42 @@ export function rockArt(i: number): Grid {
   ];
   if (r() < 0.6) circles.push([cx + R.rx * 0.1, base - rr * 1.3, rr * 0.55]);
   blobPaint(g, circles, RAMP.rock, true, i * 13);
+  // 11/16 따개비 (물에 잠기는 아래쪽에 작은 점 무리) · 미역 몇 가닥
+  for (let k = 0; k < Math.round(R.rx * 0.35); k++) {
+    const x = Math.round(cx + (r() - 0.5) * R.rx * 1.5);
+    const y = Math.round(base - 4 - r() * rr * 0.5);
+    if (g.filled(x, y) && g.filled(x + 1, y)) {
+      g.set(x, y, RAMP.rock[0]);
+      g.set(x + 1, y, RAMP.rock[1]);
+    }
+  }
+  for (let k = 0; k < Math.round(R.rx / 10); k++) {
+    const x = Math.round(cx + (r() - 0.5) * R.rx * 1.2);
+    for (let j = 0; j < 3; j++) if (g.filled(x, base - j)) g.set(x + (j === 1 ? 1 : 0), base - j, RAMP.leaf[3]);
+  }
   // 젖은 아래 끝 (물이끼 대신 옅은 민트 몇 점)
   for (let x = 0; x < W; x++) for (let y = base - 3; y <= base; y++) if (g.filled(x, y) && hashU(x, y, i + 3) < 0.25) g.set(x, y, RAMP.roofM[2]);
   softOutline(g);
   shadow(g, cx + 2, base + 1, R.rx + 2, 3, 60);
+  return g;
+}
+/** 11/16 갯바위 밑동 거품 고리 (바위보다 조금 큰 성긴 흰 레이스) */
+export function rockFoamArt(i: number): Grid {
+  const R = SEA_ROCKS[i];
+  const rx = R.rx + 5;
+  const ry = R.ry * 0.45 + 3;
+  const W = Math.ceil(rx * 2) + 4;
+  const H = Math.ceil(ry * 2) + 4;
+  const g = new Grid(W, H);
+  const cx = W / 2;
+  const cy = H / 2;
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const d = Math.hypot((x - cx) / rx, (y - cy) / ry);
+      if (d > 1 || d < 0.62) continue;
+      const n = hashU(x, y, 900 + i);
+      if (d > 0.86 ? n < 0.75 : n < 0.3) g.set(x, y, d > 0.86 ? RAMP.water[0] : RAMP.water[1], 220);
+    }
   return g;
 }
 /** 족욕 바위: 물웅덩이를 품은 납작 바위 고리 (앉기는 다음 차수) */
@@ -1163,7 +1292,8 @@ export function duskOf(c: Color, depth: number): Color {
   const b0 = c & 255;
   const l = (r0 * 0.3 + g0 * 0.55 + b0 * 0.15) / 255;
   if (l > 0.9) return (Math.round(r0 * 0.4 + 255 * 0.6) << 16) | (Math.round(g0 * 0.4 + 225 * 0.6) << 8) | Math.round(b0 * 0.4 + 220 * 0.6);
-  const f = Math.max(0, Math.min(1, depth / 240));
+  // 11/16 노을 바다가 한 가지 라벤더로 보인다 → 물가에서 더 빨리 분홍·주황으로 넘어가게 (깊이 170px에 주황)
+  const f = Math.max(0, Math.min(1, depth / 170));
   const sky = f < 0.5 ? [172 + 70 * f * 2, 150 - 4 * f * 2, 226 - 40 * f * 2] : [242 + 13 * (f - 0.5) * 2, 146 + 20 * (f - 0.5) * 2, 186 - 86 * (f - 0.5) * 2];
   const v = 0.62 + l * 0.48;
   const k = 0.08;
@@ -1172,7 +1302,7 @@ export function duskOf(c: Color, depth: number): Color {
   const b = Math.min(255, Math.round(sky[2] * v * (1 - k) + b0 * 0.75 * k));
   return (r << 16) | (g << 8) | b;
 }
-/** 저녁 물 몸통 (낮 물 그림을 노을빛으로 옮겨요 — 줄마다 깊이가 달라요) */
+/** 저녁 물 몸통 (낮 물 그림을 노을빛으로 옮겨요 — 줄마다 깊이가 다르고, 얼룩마다 깊이를 조금씩 흔들어 띠가 살아 보여요) */
 export function duskWaterArt(): Grid {
   const day = waterArt();
   const g = new Grid(WATER_TILE_W, WATER_TILE_H);
@@ -1180,11 +1310,28 @@ export function duskWaterArt(): Grid {
     for (let x = 0; x < WATER_TILE_W; x++) {
       const v = day.get(x, y);
       if ((v & 255) === 0) continue;
-      g.set(x, y, duskOf(v >>> 8, y - WATER_ROW0), v & 255);
+      const depth = y - WATER_ROW0 + (fbm(x / 48, y * 0.03, 5) - 0.5) * 50;
+      g.set(x, y, duskOf(v >>> 8, depth), v & 255);
     }
+  // 조금 짙은 물결 줄 (보랏빛 남색 쪽으로 16%) — 노을 물이 평평해 보이지 않게
+  const r = rng(1777);
+  for (let i = 0; i < 220; i++) {
+    const x = Math.floor(r() * WATER_TILE_W);
+    const y = WATER_ROW0 + 24 + Math.floor(r() * (WATER_TILE_H - WATER_ROW0 - 24));
+    const len = 10 + Math.floor(r() * 26);
+    for (let k = 0; k < len; k++) {
+      const xx = (x + k) % WATER_TILE_W;
+      const v = g.get(xx, y);
+      if ((v & 255) === 0) continue;
+      g.set(xx, y, mix(v >>> 8, 0x6a5a96, 0.16));
+    }
+  }
   return g;
 }
-/** 저녁 물가 거품 띠 (거품은 분홍빛 흰색, 얕은 물은 라벤더) */
+/**
+ * 저녁 물가 거품 띠: 낮과 같은 레이스 모양을 깨끗하게 — 거품(water[0])은 분홍빛 흰색, 그 사이 얕은 물(water[1..])은 한 가지 연분홍 라벤더.
+ * (낮 색을 깊이로 섞으면 점이 섞여 잿빛 자글자글해 보였어요)
+ */
 export function duskFoamArt(): Grid {
   const day = foamArt();
   const g = new Grid(FOAM_W, FOAM_H);
@@ -1192,7 +1339,11 @@ export function duskFoamArt(): Grid {
     for (let x = 0; x < FOAM_W; x++) {
       const v = day.get(x, y);
       if ((v & 255) === 0) continue;
-      g.set(x, y, duskOf(v >>> 8, Math.max(0, y - 14)), v & 255);
+      const c = v >>> 8;
+      // 물 몸통과 겹치는 아래쪽(14줄부터)은 저녁 물빛으로 서서히 — 디더 점이 흰 바둑판으로 보이지 않게
+      const k = Math.max(0, Math.min(1, (y - 12) / 14));
+      const top = c === RAMP.water[0] ? 0xffe6e0 : 0xeccbe6;
+      g.set(x, y, k > 0 ? mix(top, duskOf(c, Math.max(0, y - 14)), k) : top, v & 255);
     }
   return g;
 }
@@ -1370,6 +1521,12 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
       return pick(RAMP.rock, 0.05 + fbm(x * 0.05, y * 0.05) * 0.25 + (seam ? 0.25 : 0), x, y);
     }
     case "road": {
+      // 11/16 길 왼쪽 끝은 둥근 돌림 마당 (가장자리는 연석)
+      if (x < SEA_ROAD.x) {
+        const d = Math.hypot(x - SEA_ROAD_LOOP.x, y - SEA_ROAD_LOOP.y);
+        if (d > SEA_ROAD_LOOP.r - 3) return pick(RAMP.rock, 0.05, x, y);
+        return pick(RAMP.road, 0.25 + (d / SEA_ROAD_LOOP.r) * 0.3 + (fbm(x * 0.05, y * 0.05) - 0.5) * 0.4, x, y);
+      }
       if (y < SEA_ROAD.y + 3 || y > SEA_ROAD.y + SEA_ROAD.h - 3) return pick(RAMP.rock, 0.05, x, y); // 연석
       let c = pick(RAMP.road, 0.2 + ((y - SEA_ROAD.y) / SEA_ROAD.h) * 0.5 + (fbm(x * 0.05, y * 0.05) - 0.5) * 0.4, x, y);
       if (x >= BAY.x0 && x <= BAY.x1 && y >= BAY.y0 && y <= BAY.y1) {
@@ -1378,7 +1535,7 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
         return c;
       }
       const mid = SEA_ROAD.y + Math.floor(SEA_ROAD.h / 2);
-      if ((y === mid || y === mid + 1) && (x >> 3) % 2 === 0) c = RAMP.wall[0];
+      if ((y === mid || y === mid + 1) && (x >> 3) % 2 === 0 && x > SEA_ROAD.x + 16) c = RAMP.wall[0];
       return c;
     }
     case "path":

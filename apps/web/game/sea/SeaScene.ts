@@ -8,6 +8,7 @@ import {
   SEA_BUS_STOP,
   SEA_HEIGHT,
   SEA_ROAD,
+  SEA_ROAD_LOOP,
   SEA_WIDTH,
   STATE,
   TELEPORT_DIST,
@@ -315,7 +316,7 @@ export class SeaScene extends Phaser.Scene {
   }
 
   private busOptions() {
-    return { doorX: BUS_DOOR_X, laneY: SEA_BUS_LANE_Y, fromLeft: SEA_BUS_FROM_LEFT, reduced: this.host.reduced, leave: "fade" as const, waitMs: SEA_BUS_WAIT_MS };
+    return { doorX: BUS_DOOR_X, laneY: SEA_BUS_LANE_Y, fromLeft: SEA_BUS_FROM_LEFT, reduced: this.host.reduced, leave: "loop" as const, waitMs: SEA_BUS_WAIT_MS, loopDist: BUS_DOOR_X - SEA_ROAD_LOOP.x };
   }
 
   /** 버스가 바닷가 정류장에 서고 문이 열리면 내려서요 (내려서면 오른쪽 아래 방파제 끝 등대가 먼저 보여요) */

@@ -9,6 +9,9 @@ import {
   SEA_FOOTBATH,
   SEA_LIGHTHOUSE_DOOR,
   SEA_LOTS,
+  SEA_DIG_HOLES,
+  seaLotFront,
+  seaLotGate,
   SEA_MARKET_STALLS,
   SEA_PIER,
   SEA_PIER_END,
@@ -73,16 +76,26 @@ describe("seaLayout — 걷기", () => {
   });
   it("시장 앞·오두막 터 출입구·선착장 끝·등대 문·족욕 바위까지 걸어서 가요", () => {
     for (const s of SEA_MARKET_STALLS) expect(reachableNear(s.x, s.y, 10)).toBe(true);
+    // 11/16 터마다 출입구 쪽이 달라요 (seaLotFront)
     for (const l of SEA_LOTS) {
-      expect(reachableNear(l.x + l.w / 2, l.y + l.h + 8, 8), `lot ${l.n} gate`).toBe(true);
+      const f = seaLotFront(l);
+      expect(reachableNear(f.x, f.y, 8), `lot ${l.n} gate`).toBe(true);
       expect(reachableNear(l.x + l.w / 2, l.y + l.h / 2, 8), `lot ${l.n} inside`).toBe(true);
     }
+    // 11/16 갯벌 캐기 구멍은 바위가 늘어도 다 걸어서 닿아요
+    for (const h of SEA_DIG_HOLES) expect(reachableNear(h.x, h.y, 10), `hole ${h.x},${h.y}`).toBe(true);
     expect(reachableNear(SEA_PIER_END.x + SEA_PIER_END.w / 2, SEA_PIER_END.y + SEA_PIER_END.h - 6, 8)).toBe(true);
     expect(reachableNear(SEA_LIGHTHOUSE_DOOR.x, SEA_LIGHTHOUSE_DOOR.y + 6, 8)).toBe(true);
     expect(reachableNear(SEA_FOOTBATH.x, SEA_FOOTBATH.y, 12)).toBe(true);
   });
   it("오두막 터 출입구는 열려 있다", () => {
-    for (const l of SEA_LOTS) expect(seaStandable(l.x + l.w / 2, l.y + l.h - 1), `lot ${l.n}`).toBe(true);
+    for (const l of SEA_LOTS) {
+      const g = seaLotGate(l);
+      expect(seaStandable(g.x, g.y + (l.gate === "s" ? -1 : 6)), `lot ${l.n}`).toBe(true);
+    }
+    // 11/16 터는 서로 겹치지 않고 조금씩 크기가 달라요 (바둑판이 아니에요)
+    for (const a of SEA_LOTS) for (const b of SEA_LOTS) if (a !== b) expect(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y, `${a.n}/${b.n}`).toBe(true);
+    expect(new Set(SEA_LOTS.map((l) => `${l.w}x${l.h}`)).size).toBeGreaterThan(3);
   });
   it("선착장 머리·가운데·끝, 방파제 몸통·끝 데크에 설 수 있다", () => {
     const px = SEA_PIER.x + SEA_PIER.w / 2;
@@ -126,7 +139,9 @@ describe("seaLayout — 물·바닥", () => {
     expect(seaWet(SEA_BREAKWATER.x + 20, 700, 1)).toBe(false);
   });
   it("바닥 종류가 띠 순서대로다", () => {
-    expect(seaGroundKind(600, 125)).toBe("road");
+    // 11/16 버스 길은 오른쪽 끝 ~ 돌림 마당까지만, 그 왼쪽 띠는 풀밭
+    expect(seaGroundKind(1200, 125)).toBe("road");
+    expect(seaGroundKind(600, 125)).toBe("grass");
     expect(seaGroundKind(600, 401)).toBe("boardwalk");
     expect(seaGroundKind(300, 480)).toBe("sand");
     expect(seaGroundKind(560, 720)).toBe("flat");

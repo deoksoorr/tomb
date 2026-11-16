@@ -27,9 +27,11 @@ export type BusArrivalOptions = {
   fromLeft: boolean;
   reduced: boolean;
   /** 떠나는 법: forward(기본) = 그대로 앞으로 달려 나간다, fade = 그 자리에서 흐려지며 사라진다 (캠핑장) */
-  leave?: "forward" | "fade";
-  /** leave "fade"일 때 문을 닫고 서 있는 시간 (ms) */
+  leave?: "forward" | "fade" | "loop";
+  /** leave "fade"·"loop"일 때 문을 닫고 서 있는 시간 (ms) */
   waitMs?: number;
+  /** 11/16 leave "loop" = 앞의 돌림 마당으로 이만큼(px) 천천히 굴러 들어가며 흐려져요 (돌아서 왔던 길로 나가는 셈 — 바닷가) */
+  loopDist?: number;
 };
 
 export interface BusArrivalApi {
