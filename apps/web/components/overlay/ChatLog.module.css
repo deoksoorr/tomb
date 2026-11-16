@@ -121,137 +121,37 @@
   display: none;
 }
 
-/* ── 모바일: 평소엔 상자 없이 글씨만, 어떤 배경에서도 읽히게 외곽선 그림자. 터치는 통과 ──
-   11/16 왼쪽 아래 조이스틱(120px) 바로 위에 붙인다 (그 자리에 있던 확성기는 위쪽 [메뉴] 아래로). 안내 줄(--hud-bottom)은 이 채팅 위.
-   왼쪽에 작은 [기록] 버튼, 글씨는 그 오른쪽 */
-.mobile,
-.logBtn,
-.panel {
+/* ── 모바일: 11/16 왼쪽 아래 조이스틱(120px) 바로 위에 붙인다 (그 자리에 있던 확성기는 위쪽 [메뉴] 아래로). 안내 줄(--hud-bottom)은 이 채팅 위 ── */
+.mobileBox {
   --chat-bottom: calc(var(--safe-bottom) + 120px + 8px);
 }
 
-.mobile {
+
+
+
+
+/* 11/16 모바일 채팅 상자: 조이스틱 바로 위에 늘 보이는 반투명 기록 (손가락으로 위로 올려 지난 줄 읽기). 입력은 행동 버튼 [채팅] */
+.mobileBox {
   position: fixed;
-  z-index: 9;
-  left: calc(var(--safe-left) + 38px);
+  /* 게임 안내층(.overlay·집 안 .roomTouch, z 10 — 조이스틱 영역이 왼쪽을 덮는다) 위라야 스크롤된다 */
+  z-index: 11;
+  left: var(--safe-left);
   bottom: var(--chat-bottom);
-  display: grid;
-  gap: 1px;
-  width: min(300px, 72vw);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  pointer-events: none;
-  user-select: none;
-  font-family: var(--font-chat);
-  font-size: 13px;
-  text-shadow:
-    -1px 0 0 rgba(0, 0, 0, 0.9),
-    1px 0 0 rgba(0, 0, 0, 0.9),
-    0 -1px 0 rgba(0, 0, 0, 0.9),
-    0 1px 0 rgba(0, 0, 0, 0.9),
-    0 1px 3px rgba(0, 0, 0, 0.8);
-}
-
-.mobile .name {
-  color: #c9c1a6;
-}
-
-.mobile .mine .name {
-  color: var(--candle);
-}
-
-.mobile .whisper .name {
-  color: #e99ab2;
-}
-
-/* [기록]: 글씨 맨 아랫줄 왼쪽의 작은 동그라미 (행동 버튼과 같은 반투명 톤, 눈에 덜 띄게 작게) */
-.logBtn {
-  position: fixed;
-  /* 게임 안내층(.overlay·집 안 .roomTouch, z 10 — 조이스틱 영역이 왼쪽을 덮는다) 위라야 눌린다 */
-  z-index: 11;
-  left: var(--safe-left);
-  bottom: calc(var(--chat-bottom) - 6px);
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(20, 21, 17, 0.55);
-  color: var(--bone);
-  box-shadow: inset 0 0 0 2px rgba(93, 97, 79, 0.8);
-  pointer-events: auto;
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
-
-.logBtn:active {
-  background: rgba(47, 66, 52, 0.85);
-}
-
-/* 기록 창: [기록] 자리에서 위로 열린다. 반투명 패널, 손가락으로 위로 올려 읽기. 창 밖 터치는 막지 않는다(닫히기만) */
-.panel {
-  position: fixed;
-  z-index: 11;
-  left: var(--safe-left);
-  bottom: calc(var(--chat-bottom) - 6px);
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  width: min(360px, calc(100vw - var(--safe-left) - var(--safe-right)));
-  max-height: min(320px, calc(100dvh - var(--chat-bottom) + 6px - var(--safe-top) - var(--top-h) - 12px));
-  padding: 4px 8px 8px;
-  background: rgba(17, 18, 15, 0.84);
+  width: min(300px, 72vw);
+  padding: 4px 8px;
+  background: rgba(17, 18, 15, 0.5);
   box-shadow: var(--px-border);
   font-family: var(--font-chat);
   font-size: 13px;
   pointer-events: auto;
 }
 
-.panelHead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: none;
-}
-
-.panelTitle {
-  color: var(--bone);
-  font-family: var(--font-body);
-  font-size: 13px;
-}
-
-.panelNote {
-  flex: 1;
-  min-width: 0;
-  color: var(--muted);
-  font-family: var(--font-small);
-  font-size: 10px;
-}
-
-.panelBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 30px;
-  min-width: 30px;
-  justify-content: center;
-  padding: 0 8px;
-  border: 0;
-  background: var(--panel-solid);
-  box-shadow: var(--px-border);
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 12px;
-  touch-action: manipulation;
-}
-
-.panelBtn:active {
-  background: rgba(47, 66, 52, 0.85);
+/* 모바일 채팅 상자 안 기록: 다섯 줄 높이, 넘치면 손가락으로 위로 올려 읽는다 (맨 아래 줄 고정은 ChatScroll) */
+.mobileLog {
+  height: calc(5 * 1.45em + 4px);
+  touch-action: pan-y;
 }
 
 /* 창 높이를 채우고 넘치면 손가락 스크롤 (데스크톱 상자의 고정 높이 대신) */
@@ -261,12 +161,6 @@
   max-height: none;
   min-height: 0;
   touch-action: pan-y;
-}
-
-.panel .logWrap {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
 }
 
 .empty {
@@ -285,23 +179,15 @@
   touch-action: pan-y;
 }
 
-/* 가로 폰: 세로와 같이 조이스틱 바로 위 (기록 창도 같은 자리라 나침반·조이스틱을 가리지 않는다) */
+/* 가로 폰: 세로와 같이 조이스틱 바로 위, 가운데 내 캐릭터에 닿지 않게 왼쪽 38vw 안·네 줄 */
 @media (pointer: coarse) and (max-height: 520px) {
-  .mobile {
-    left: var(--safe-left);
+  .mobileBox {
+    width: min(300px, 38vw);
     font-size: 12px;
   }
 
-  /* 가로 폰은 글씨를 왼쪽 끝부터 쓰려고 [기록]을 행동 버튼 [채팅] 바로 위로 (MobileControls .chat: 오른쪽 150px, 아래 54px, 46px) */
-  .logBtn {
-    left: auto;
-    right: calc(var(--safe-right) + 157px);
-    bottom: calc(var(--safe-bottom) + 108px);
-  }
-
-  /* 가로 폰은 가운데 내 캐릭터에 닿지 않게 왼쪽 42vw 안 */
-  .panel {
-    width: min(340px, 42vw);
+  .mobileLog {
+    height: calc(4 * 1.45em + 3px);
   }
 }
 
@@ -311,15 +197,6 @@
   text-shadow: 0 0 6px rgba(255, 190, 64, 0.55);
 }
 
-/* 모바일은 글자 외곽선을 유지한 채 금빛을 더한다 */
-.mobile .line .name.staff {
-  text-shadow:
-    -1px 0 0 rgba(0, 0, 0, 0.9),
-    1px 0 0 rgba(0, 0, 0, 0.9),
-    0 -1px 0 rgba(0, 0, 0, 0.9),
-    0 1px 0 rgba(0, 0, 0, 0.9),
-    0 0 6px rgba(255, 190, 64, 0.7);
-}
 
 /* 11/15 운영자 딱지: 이름 앞 작은 자줏빛 판 + 금테 (운영자도 닉네임 그대로라 이것으로 구분) */
 .staffTag {
