@@ -225,7 +225,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
               onClick={() => act(f, false)}
               aria-label={`${f.name}, ${cost(f)}포인트에 사기${cost(f) < f.price ? ` (칭호 할인, 원래 ${f.price}포인트)` : ""}`}
             >
-              {pending === f.id ? "…" : once ? "가짐" : full ? "더 못 가져요" : `${fmt(cost(f))}P${short ? " · 모자라요" : " · 사기"}`}
+              {pending === f.id ? "…" : once ? "가짐" : full ? "더 못 가져요" : `${fmt(cost(f))}P${short ? ` · ${fmt(cost(f) - my.points)}P 부족해요` : " · 사기"}`}
             </button>
             {owned > 0 && (
               <button

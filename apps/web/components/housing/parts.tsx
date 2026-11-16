@@ -237,7 +237,7 @@ export function TierPicker({
             </span>
             <span className={styles.points}>
               <strong>{fmt(cost)}P</strong>
-              {short ? " · 모자라요" : ""}
+              {short ? ` · ${fmt(cost - points)}P 부족해요` : ""}
             </span>
             <span className={styles.small}>{hintOf(i)}</span>
           </button>

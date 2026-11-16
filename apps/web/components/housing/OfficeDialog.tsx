@@ -318,7 +318,12 @@ function MyPlot({
             {plot.name} 분양가 <strong>{fmt(cost)}P</strong> · 내 포인트 <strong>{fmt(my.points)}P</strong>
           </p>
           {lot !== null && <p className={styles.tag}>고른 자리: {labelOf(channel, lot)}</p>}
-          {short && <p className={styles.error}>포인트가 {fmt(cost - my.points)}P 모자라요. 출석이나 헌화로 더 모으거나, 작은 터를 골라 주세요.</p>}
+          {short && (
+            <p className={styles.error}>
+              {plot.name} 분양까지 {fmt(cost - my.points)}P 부족해요. 출석이나 헌화로 더 모아 주세요.
+              {pick !== "small" && my.points >= (sea ? seaCost("small") : plotCost("small")) ? " 작은 터는 지금 바로 살 수 있어요." : ""}
+            </p>
+          )}
           {sea && free?.length === 0 && <p className={styles.error}>{channel}채널 포구에는 빈 오두막 터가 없어요. 다른 채널에서 찾아봐요.</p>}
         </div>
         {!short &&
@@ -436,7 +441,7 @@ function MyPlot({
               disabled={pending || busy || my.points < upPrice || away}
               onClick={() => run(() => housingApi.upgrade(channel, up.id, sea ? "sea" : "village"), `${up.name}으로 넓혔어요!`)}
             >
-              {fmt(upPrice)}P로 {up.name} 만들기{away ? ` · ${h.ch}채널에서 할 수 있어요` : my.points < upPrice ? " · 모자라요" : ""}
+              {fmt(upPrice)}P로 {up.name} 만들기{away ? ` · ${h.ch}채널에서 할 수 있어요` : my.points < upPrice ? ` · ${fmt(upPrice - my.points)}P 부족해요` : ""}
             </button>
           </>
         ) : (
