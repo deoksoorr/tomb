@@ -325,3 +325,38 @@
   justify-items: center;
   gap: 3px;
 }
+
+/* 11/16 데스크톱 표준 창(760×660)에 스크롤 없이 다 들어가게 (세 랭킹 모두 시상대가 있어도). 폰은 원래대로 세로로 길게 */
+@media (min-width: 561px) {
+  .race {
+    gap: 8px;
+  }
+
+  .board,
+  .hallBox {
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .rewardRow .auraCanvas {
+    width: 60px;
+    height: 53px;
+  }
+
+  .combo .auraCanvas {
+    width: 54px;
+    height: 48px;
+  }
+
+  /* 다관왕 오라: 이름을 그림 오른쪽에 (그림 아래에 두면 한 줄이 더 든다) */
+  .combo li {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    justify-items: start;
+    gap: 6px;
+  }
+
+  .hallCol {
+    padding: 4px 6px;
+  }
+}

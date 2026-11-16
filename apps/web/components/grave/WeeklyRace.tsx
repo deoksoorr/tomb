@@ -83,7 +83,12 @@ export default function WeeklyRace() {
         마감까지 <b>{leftText(race.endsAt - now)}</b>
         <span className={styles.when}> · 월요일 새벽 5시</span>
       </p>
-      <p className={styles.reward}>1위는 전용 모자(한 주), 전용 오라, 이름표 배지와 {(champ?.points ?? CHAMP_POINTS_DEFAULT).toLocaleString("ko-KR")}P를 받아요.</p>
+      <p className={styles.reward}>
+        1위는 전용 모자(한 주), 전용 오라, 이름표 배지와 {(champ?.points ?? CHAMP_POINTS_DEFAULT).toLocaleString("ko-KR")}P를 받아요.
+        {/* 11/16 사냥 칸 안에 두 줄로 있던 안내 (그 칸만 길어져 창에 스크롤이 생겼다) → 위 안내 줄로 */}
+        <br />
+        사냥 처치는 내 레벨이 그 사냥터가 열리는 레벨보다 10 넘게 높으면 세지 않아요.
+      </p>
       {/* 시상대 3개: 넓은 창은 가로로 나란히, 좁은 창은 세로로 */}
       <div className={styles.boards}>
         {race.boards.map((b) => (
@@ -95,7 +100,6 @@ export default function WeeklyRace() {
               {BOARD_NAME[b.board]}
             </h3>
             <ChampReward board={b.board} points={champ?.points ?? CHAMP_POINTS_DEFAULT} />
-            {b.board === "huntKills" && <p className={styles.rewardCaption}>내 레벨이 그 사냥터가 열리는 레벨보다 10 넘게 높으면 처치를 세지 않아요</p>}
             {b.top.length === 0 ? (
               <p className={styles.none}>아직 기록이 없어요. 지금 1위가 될 기회!</p>
             ) : (
@@ -151,7 +155,7 @@ function HallColumn({ board, champ }: { board: ChampBoard; champ: ChampResponse 
       </span>
       {last ? (
         <div className={styles.hallTop} data-me={last.me === true}>
-          <Avatar a={last.avatar} label={`지난주 ${CHAMP_TITLE[board]} ${last.name}`} scale={1.25} champ={lastBits(champ, last.name)} />
+          <Avatar a={last.avatar} label={`지난주 ${CHAMP_TITLE[board]} ${last.name}`} scale={1.1} champ={lastBits(champ, last.name)} />
           <span className={styles.lastText}>
             <span className={styles.hallWeek}>지난주 · {weekLabel(champ.week)}</span>
             <b>
@@ -190,7 +194,7 @@ function lastBits(champ: ChampResponse, name: string): number {
 function Step({ row, board, place }: { row: RaceRow; board: ChampBoard; place: number }) {
   return (
     <li className={styles.step} data-place={place} data-me={row.me}>
-      <Avatar a={row.avatar} label={`${place}등 ${row.name}`} scale={place === 1 ? 2 : 1.6} />
+      <Avatar a={row.avatar} label={`${place}등 ${row.name}`} scale={place === 1 ? 1.7 : 1.4} />
       <span className={styles.block}>{place}</span>
       <span className={styles.who}>
         <StyledName name={row.name} look={row.avatar.look} />

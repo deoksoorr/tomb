@@ -83,7 +83,9 @@ export function ComboAuras() {
         <li key={c.name}>
           <AuraPreview bits={champBitsOf(c.boards)} look={[champHatOf(c.boards)]} label={`${c.name} 오라 미리보기`} />
           <span className={styles.rewardCaption}>
-            {c.name} · {itemName(champHatOf(c.boards))}
+            {c.name}
+            <br />
+            {itemName(champHatOf(c.boards))}
           </span>
         </li>
       ))}
