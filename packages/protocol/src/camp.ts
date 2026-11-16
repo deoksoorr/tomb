@@ -37,8 +37,9 @@ export const CAMP_HEIGHT = CAMP_ROWS * 16; // 800
  * 캠핑장 배치 버전. 좌표가 바뀌는 개편마다 올린다 → 옛 캠핑장 자리 기록(lib/resume.ts)은 위치를 버리고 정류장에서 시작한다.
  * 1 = 11/15 1차 (정류장·관리소·광장·데크 24·계곡·산책로·전망대·캠핑카 3·큰 타프)
  * 2 = 정류장을 위로 (화면 아래 채팅창에 가리지 않게) · 캠핑카 앞 캠핑 도구(의자 앉기) — 정류장·길 자리가 바뀌어서
+ * 3 = 11/16 별 망원경 둘 (전망대 계단 아래·계곡 둑 받침 충돌, scopes.ts CAMP_SCOPES) — 새 충돌 자리에 옛 기록이 끼지 않게
  */
-export const CAMP_MAP_VERSION = 2;
+export const CAMP_MAP_VERSION = 3;
 
 type Rect = { x: number; y: number; w: number; h: number };
 

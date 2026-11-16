@@ -1,14 +1,15 @@
 import * as Phaser from "phaser";
-import { DIR, SEA_JET_SHALLOW_MSG, SEA_JETSKI_SPEED, SEA_RIDES, seaJetDismount, SEA_TUBE_SPEED, onSeaDeck, seaTubeDriftAt, seaWet, type DirId, type SeaRide, type Sid } from "@tomb/protocol";
+import { DIR, SEA_JET_SHALLOW_MSG, SEA_JETSKI_SPEED, SEA_RIDES, seaJetDismount, seaJetWater, SEA_TUBE_SPEED, onSeaDeck, seaTubeDriftAt, seaTubeWater, seaWet, type DirId, type SeaRide, type Sid } from "@tomb/protocol";
 import { BIG_RIDE_TOAST, myBig } from "../camp/foodState";
 import type { Player } from "../entities/Player";
 import type { RemoteAvatar } from "../entities/RemoteAvatar";
 import { hullBlocks } from "../logic/boat";
+import { Bounce, knockMove, nudgeAmp, nudgeOffset, resolveHulls, touchContact, type Box } from "../logic/bounce";
 import type { MoveInput } from "../logic/movement";
 import { RideSound } from "../world/RideSound";
 import { bystanderGain } from "../world/rides";
 import * as Art from "./seaArt";
-import { stepJet, stepTube, tubeReturnK, type RideMotion } from "./seaRideLogic";
+import { rideBox, stepJet, stepTube, tubeReturnK, type RideMotion } from "./seaRideLogic";
 import { SeaEngineSound } from "./seaRideSound";
 
 // 11/16 r13 바다 놀거리 (사용자): 튜브 다섯 · 제트스키 둘. 그림·타기·움직임·소리를 한곳에서 (마을 조각배 BoatRide와 같은 흐름).
@@ -38,7 +39,13 @@ export type SeaRideHost = {
   splash(x: number, y: number): void;
   /** 타기 전에 (펫에서 내리기·쉴거리에서 일어나기). false면 타지 않아요 */
   beforeBoard(): boolean;
+  /** 11/16 r19 바다의 모든 놀거리 몸 (튜브·제트스키·카약 — 부딪혀 튕기기) · 빈 놀거리를 살짝 밀기 */
+  hulls(): readonly SeaHull[];
+  nudge(id: string, nx: number, ny: number, amp: number): void;
 };
+
+/** 11/16 r19 놀거리 하나의 몸 상자 (id = 놀거리 id · 카약은 pK1 같은 카약 id, empty = 아무도 안 탐) */
+export type SeaHull = { id: string; box: Box; empty: boolean };
 
 type View = {
   def: SeaRide;
@@ -58,6 +65,8 @@ type View = {
   lastY: number;
   wakeAt: number;
   sprayAt: number;
+  /** 11/16 r19 받혀 살짝 밀린 쪽 · 세기 · 때 (빈 놀거리 그림만) */
+  nudge: { nx: number; ny: number; amp: number; at: number } | null;
   /** 11/16 r14 헤엄치는 사람이 부딪히는 몸 (탄 사람 자신은 빼요) */
   block: Phaser.GameObjects.Zone;
   blockKey: string;
@@ -85,10 +94,6 @@ const JET_FADE_MS = 500;
 const PADDLE_MS = 900;
 /** 내린 뒤 그 놀거리를 통과하는 시간 */
 const PASS_AFTER_LEAVE_MS = 2000;
-/** 부딪히는 몸 크기 (튜브는 작게 — 옆에서 E로 탈 수 있게, 제트스키는 방향마다) */
-const TUBE_BLOCK = { w: 14, h: 6 };
-const JET_BLOCK_SIDE = { w: 28, h: 8 };
-const JET_BLOCK_FB = { w: 12, h: 12 };
 
 export class SeaRides {
   private readonly views: View[] = [];
@@ -99,6 +104,8 @@ export class SeaRides {
   private motion: RideMotion = { x: 0, y: 0, vx: 0, vy: 0, dir: DIR.down };
   private shallowAt = -Infinity;
   private bumpAt = -Infinity;
+  /** 11/16 r19 내 놀거리가 부딪혀 튕기는 중 */
+  private readonly bounce = new Bounce();
   private paddleAt = 0;
   /** 이번 프레임에 탄 모습을 넣어 준 원격 아바타 (내리면 되돌려요) */
   private riders = new Set<RemoteAvatar>();
@@ -118,14 +125,14 @@ export class SeaRides {
         : s.add.image(def.x, def.y, key).setOrigin(0.5, 1).setVisible(false);
       const block = s.add.zone(def.x, def.y, 1, 1).setOrigin(0, 0);
       block.removeFromDisplayList();
-      this.views.push({ def, body, front, x: def.x, y: def.y, dir: DIR.down, owner: null, leftFrom: null, leftAt: 0, speed: 0, lastX: def.x, lastY: def.y, wakeAt: 0, sprayAt: 0, block, blockKey: "", passUntil: 0 });
+      this.views.push({ def, body, front, x: def.x, y: def.y, dir: DIR.down, owner: null, leftFrom: null, leftAt: 0, speed: 0, lastX: def.x, lastY: def.y, wakeAt: 0, sprayAt: 0, nudge: null, block, blockKey: "", passUntil: 0 });
     }
     // 11/16 r14 사용자: 헤엄치다 제트스키·튜브를 그냥 지나가요 → 부딪혀요 (내가 탄 것·막 내린 것은 빼요)
     // 마을 배(BoatRide hullBlocks)와 같은 규칙: 헤엄·잠수 중이고 아무것도 안 탔을 때만, 보이는 놀거리만, 막 내린 것은 잠깐 통과.
     // 떠다니는 빈 튜브가 가만히 있는 사람 쪽으로 밀려오면 밀어내지 않아요 (그 사람이 튜브 쪽으로 헤엄칠 때만 막아요)
     this.blocks = s.physics.add.staticGroup();
     for (const v of this.views) this.blocks.add(v.block);
-    this.blockCollider = s.physics.add.collider(host.player().sprite, this.blocks, undefined, (_a, b) => {
+    this.blockCollider = s.physics.add.collider(host.player().sprite, this.blocks, (_a, b) => this.swimBump(b as Phaser.GameObjects.Zone), (_a, b) => {
       const v = this.views.find((w) => w.block === b);
       const pl = host.player();
       if (!v || v.owner === -1 || s.time.now < v.passUntil || v.body.alpha < 0.5 || !hullBlocks(pl, true)) return false;
@@ -222,6 +229,7 @@ export class SeaRides {
     const dir: DirId = v.def.kind === "jetski" ? DIR.right : DIR.down;
     pl.board(v.def.id, v.x, v.y, dir, now, null);
     this.motion = { x: v.x, y: v.y, vx: 0, vy: 0, dir };
+    this.bounce.reset();
     v.owner = -1;
     v.leftFrom = null;
     if (h.online()) h.sit(v.def.id);
@@ -295,13 +303,17 @@ export class SeaRides {
     const now = h.scene.time.now;
     const m = this.motion;
     const level = h.tide();
-    if (v.def.kind === "tube") {
+    // 11/16 r19 부딪혀 튕긴 직후엔 방향키가 잠깐 덜 먹어요
+    const ctrl = this.bounce.control(now);
+    const input = { ax: move.ax * ctrl, ay: move.ay * ctrl };
+    const tube = v.def.kind === "tube";
+    if (tube) {
       // 물이 빠져 튜브 아래가 말랐어요 → 그 자리에 내려서요
       if (!seaWet(m.x, m.y, level, 4)) {
         this.leave(v, { x: m.x, y: m.y });
         return;
       }
-      const r = stepTube(m, move, dtMs, level, Date.now(), v.def.n * 1.7);
+      const r = stepTube(m, input, dtMs, level, Date.now(), v.def.n * 1.7);
       if (r.land) {
         this.leave(v, r.land);
         return;
@@ -312,17 +324,58 @@ export class SeaRides {
         this.sound.play("row", 0.35, 1.2 + Math.random() * 0.1);
       }
     } else {
-      const r = stepJet(m, move, dtMs);
+      const r = stepJet(m, input, dtMs);
       if (r.shallow && now - this.shallowAt > SHALLOW_TOAST_MS) {
         this.shallowAt = now;
         h.toast(SEA_JET_SHALLOW_MSG);
       }
       if (r.bumped) this.bump(now, 0.7);
     }
+    // 11/16 r19 다른 놀거리(튜브·제트스키·카약)에 닿으면 튕겨 나가요 — 밀려나는 길은 물만 (데크·바위로는 안 밀어요)
+    const ok = tube ? (x: number, y: number) => seaTubeWater(x, y, level) : (x: number, y: number) => seaJetWater(x, y);
+    knockMove(m, this.bounce.take(dtMs), ok, this.bounce);
+    const others = h.hulls().filter((o) => o.id !== v.def.id);
+    const hit = resolveHulls(m, (x, y) => rideBox(v.def.kind, m.dir, x, y), others.map((o) => o.box), ok);
+    if (hit) {
+      const sp = this.bounce.hit(now, hit.contact, v.def.kind, hit.vx, hit.vy);
+      if (sp > 0) {
+        this.sound.thump(tube ? 0.3 : 0.55, tube ? 1.3 : 1.05);
+        if (!h.reduced) h.splash(m.x - hit.contact.nx * 8, m.y - hit.contact.ny * 4);
+        const o = others[hit.index];
+        if (o.empty) h.nudge(o.id, -hit.contact.nx, -hit.contact.ny, nudgeAmp(sp));
+      }
+    }
     v.x = m.x;
     v.y = m.y;
     v.dir = m.dir;
     pl.boatTo(Math.round(m.x * 10) / 10, Math.round(m.y * 10) / 10, m.dir, now);
+  }
+
+  /** 11/16 r19 헤엄치다 튜브·제트스키에 부딪혔어요 (물리 충돌 콜백): 살짝 튕겨 나가고, 빈 놀거리는 살짝 밀려요 */
+  private swimBump(zone: Phaser.GameObjects.Zone): void {
+    const v = this.views.find((w) => w.block === zone);
+    const pl = this.host.player();
+    const zb = zone.body as Phaser.Physics.Arcade.StaticBody | null;
+    if (!v || !zb) return;
+    const now = this.host.scene.time.now;
+    const c = touchContact({ x: pl.body.x, y: pl.body.y, w: pl.body.width, h: pl.body.height }, { x: zb.x, y: zb.y, w: zb.width, h: zb.height });
+    if (!c) return;
+    const sp = pl.knock(c, now);
+    if (sp <= 0) return;
+    this.sound.thump(0.22, 1.4);
+    if (!this.host.reduced) this.host.splash(pl.x - c.nx * 5, pl.y - c.ny * 3);
+    if (v.owner === null) this.nudge(v.def.id, -c.nx, -c.ny, nudgeAmp(sp));
+  }
+
+  /** 11/16 r19 놀거리 몸 상자들 (부딪혀 튕기기 — 사라지는 중인 제트스키는 빼요) */
+  hullBoxes(): SeaHull[] {
+    return this.views.filter((v) => v.body.alpha >= 0.5).map((v) => ({ id: v.def.id, box: rideBox(v.def.kind, v.dir, Math.round(v.x), Math.round(v.y)), empty: v.owner === null }));
+  }
+
+  /** 받힌 빈 놀거리를 살짝 밀어요 (그림만 — 곧 제자리) */
+  nudge(id: string, nx: number, ny: number, amp: number): void {
+    const v = this.views.find((w) => w.def.id === id);
+    if (v && v.owner === null) v.nudge = { nx, ny, amp, at: this.host.scene.time.now };
   }
 
   private bump(now: number, gain: number): void {
@@ -415,8 +468,11 @@ export class SeaRides {
     const T = Art.SEA_TEX;
     const ridden = v.owner !== null;
     const bob = this.host.reduced ? 0 : Math.sin(wall / 620 + v.def.n * 1.9) * (v.def.kind === "tube" ? 0.9 : 0.6);
-    const x = Math.round(v.x);
-    const y = Math.round(v.y + bob);
+    // 11/16 r19 받힌 빈 놀거리는 살짝 밀렸다 돌아와요
+    const nd = v.nudge && !ridden ? nudgeOffset(v.nudge.amp, now - v.nudge.at) : 0;
+    if (v.nudge && now - v.nudge.at > 1000) v.nudge = null;
+    const x = Math.round(v.x + (v.nudge?.nx ?? 0) * nd);
+    const y = Math.round(v.y + bob + (v.nudge?.ny ?? 0) * nd);
     let alpha = 1;
     if (!ridden && v.def.kind === "jetski" && v.leftFrom) {
       const t = now - v.leftAt - JET_RETURN_MS;
@@ -461,15 +517,11 @@ export class SeaRides {
 
   /** 부딪히는 몸을 그림 자리·방향에 맞춰요 (바뀔 때만 — 마을 배 hull과 같은 방식) */
   private syncBlock(v: View, x: number, y: number): void {
-    const side = v.def.kind === "jetski" && (v.dir === DIR.left || v.dir === DIR.right);
-    const sz = v.def.kind === "tube" ? TUBE_BLOCK : side ? JET_BLOCK_SIDE : JET_BLOCK_FB;
-    const cy = v.def.kind === "tube" ? y : y - 2;
-    const rx = Math.round(x - sz.w / 2);
-    const ry = Math.round(cy - sz.h / 2);
-    const key = `${rx},${ry},${sz.w},${sz.h}`;
+    const b = rideBox(v.def.kind, v.dir, x, y);
+    const key = `${b.x},${b.y},${b.w},${b.h}`;
     if (key === v.blockKey) return;
     v.blockKey = key;
-    v.block.setPosition(rx, ry).setSize(sz.w, sz.h);
+    v.block.setPosition(b.x, b.y).setSize(b.w, b.h);
     (v.block.body as Phaser.Physics.Arcade.StaticBody | null)?.updateFromGameObject();
   }
 

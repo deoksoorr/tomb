@@ -11,6 +11,7 @@ import { bridge } from "../bridge";
 import { avatarColorSpec } from "../sprites/avatar";
 import { prefersReducedMotion } from "../config";
 import { MyFoodView } from "../camp/foodFx";
+import { Bounce, type BounceKind, type Contact } from "../logic/bounce";
 
 // 내 캐릭터. 입력은 즉시 로컬에서 반영한다 (서버를 기다리지 않음, 서버 보정도 없음).
 // 상태 머신: idle | walk | run | sitGround | sitChair | jump | hang | swing | swim | dive
@@ -77,6 +78,11 @@ export class Player {
   private wetRaw = false;
   private wetSince = 0;
   private wetNow: boolean | null = null;
+  /** 11/16 r19 헤엄치다 배·놀거리에 부딪혀 튕겨 나가는 중 (물리 충돌이 데크·난간을 그대로 막아요) · 지난 프레임 속도 · 시각 */
+  private readonly bounce = new Bounce();
+  private lastVx = 0;
+  private lastVy = 0;
+  private lastStepAt = 0;
   /** 물살 (px/초, 씬이 넣어 준다). 물속에 있는 동안 이동 속도에 더한다 */
   current: ((x: number, y: number) => { vx: number; vy: number }) | null = null;
   /** 옆자리로 옮겨 앉는 중이면 원래 좌석 (서버가 거절하면 되돌아간다) */
@@ -307,9 +313,17 @@ export class Player {
     const cur = wet && this.current ? this.current(this.x, this.y) : null;
     const cvx = cur ? cur.vx : 0;
     const cvy = cur ? cur.vy : 0;
+    // 11/16 r19 부딪혀 튕기는 중: 밀려나는 속도를 더하고, 잠깐 방향키가 덜 먹어요 (물 밖이면 그만)
+    const dt = this.lastStepAt ? Math.min(100, now - this.lastStepAt) : 16;
+    this.lastStepAt = now;
+    if (!wet) this.bounce.reset();
+    const kick = this.bounce.take(dt);
+    const kvx = dt > 0 ? (kick.dx * 1000) / dt : 0;
+    const kvy = dt > 0 ? (kick.dy * 1000) / dt : 0;
+    const ctrl = wet ? this.bounce.control(now) : 1;
     if (this.move.moving) {
-      let vx = this.move.vx;
-      let vy = this.move.vy;
+      let vx = this.move.vx * ctrl;
+      let vy = this.move.vy * ctrl;
       if (this.sway > 0 && !wet) {
         // 취기: 가는 방향이 천천히 좌우로 기운다 (갈지자). 속도는 그대로
         const a = this.sway * Math.sin(now / 330);
@@ -317,15 +331,26 @@ export class Player {
         const sn = Math.sin(a);
         [vx, vy] = [vx * c - vy * sn, vx * sn + vy * c];
       }
-      this.body.setVelocity(vx * mul + cvx, vy * mul + cvy);
+      this.body.setVelocity(vx * mul + cvx + kvx, vy * mul + cvy + kvy);
       this.dir = this.move.dir;
       this.state = wet ? (this.diving ? "dive" : "swim") : this.move.running ? "run" : "walk";
     } else {
-      this.body.setVelocity(cvx, cvy);
+      this.body.setVelocity(cvx + kvx, cvy + kvy);
       this.state = wet ? (this.diving ? "dive" : "swim") : "idle";
     }
+    this.lastVx = this.body.velocity.x;
+    this.lastVy = this.body.velocity.y;
     this.view.apply(this.state, this.dir, now);
     return this.move.moving && !wasMoving;
+  }
+
+  /**
+   * 11/16 r19 헤엄치다 배·놀거리에 부딪혔어요 (씬의 충돌 콜백): 닿은 면 바깥으로 살짝 튕겨 나가요 (들이받던 속도에 비례).
+   * 데크·난간은 물리 충돌이 그대로 막아요. 튕겼으면 그 세기 (방금 튕겼으면 0)
+   */
+  knock(c: Pick<Contact, "nx" | "ny">, now: number, kind: BounceKind = "swim"): number {
+    if (this.boatSeatId || this.carSeatId || !this.inWater) return 0;
+    return this.bounce.hit(now, c, kind, this.lastVx, this.lastVy);
   }
 
   /** 좌석에 앉기 (요청과 동시에 스냅 시작) — seat가 null이면 바닥 앉기 */

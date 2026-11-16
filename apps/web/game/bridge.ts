@@ -123,15 +123,6 @@ export type GameEvents = {
   "sea:lot": { lot: number };
   /** 22번 황금 고블린을 내가 가장 먼저 잡았다 → UI가 증서로 /api/goblin에 보상을 받는다 */
   "goblin:grant": { id: string; grant: string; points: number };
-  /** 11/16 r18 카약 「같이 타요」: 채널에 외친 것 · 끝남(자리 참·내림) · 내 외침이 거절됨(환불 증서) */
-  "kayak:shout": { id: string; name: string; kayak: string; ch: number; at: number; until: number };
-  "kayak:shoutEnd": { id: string; why: "full" | "gone" };
-  "kayak:shoutDenied": { id: string; refund: string };
-  /** 바닷가 장면 → UI: 지금 「같이 탈 사람 부르기」를 할 수 있는 카약 (없으면 null) */
-  "kayak:shoutable": { kayak: string } | null;
-  /** UI → 장면: [같이 타기] (그 카약으로 — 마을이면 버스로 바닷가 카약 선착장 옆, 바닷가면 걸어서) · 「같이 탈 사람 부르기」 증서를 실시간 서버로 */
-  "kayak:join": { kayak: string };
-  "kayak:send": { grant: string };
   /** 23번 확성기 한마디가 실시간 서버에서 왔다 (내 것 포함) → UI의 확성기 창에 띄운다 */
   "megaphone:heard": {
     id: string;
@@ -472,7 +463,6 @@ const STICKY = new Set<keyof AllEvents>([
   "urgent:fest",
   "urgent:board",
   "map:changed",
-  "kayak:shoutable",
   "bus:state",
   "camp:talk",
   "portal:walk",

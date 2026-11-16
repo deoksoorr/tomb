@@ -19,6 +19,7 @@ import {
   sanitizeDye,
   seaSeatById,
   SEA_REST_SEATS,
+  SEA_SCOPES,
   SEA_SEATS,
   SEA_LOUNGER_LIE_DY,
   SEA_LIGHTHOUSE,
@@ -80,11 +81,10 @@ import { seaNeighborSeat, seaPickSeat, SEA_MULTI_SEAT } from "./seaSit";
 import { BIG_SEAT_MAX, BIG_SEAT_TOAST, foodOfPeer, myBig, RIDING_EAT_TOAST } from "../camp/foodState";
 import { FoodFx } from "../camp/foodFx";
 import { SeaForage } from "./seaForage";
+import { SeaLife } from "./seaLife";
 import { SeaRides } from "./SeaRides";
 import { SeaKayaks } from "./SeaKayaks";
-import { AutoWalk } from "../logic/autoWalk";
-import { seaWalkGrid } from "./seaLayout";
-import type { WalkGrid } from "../logic/pathfind";
+import { StarScopes } from "../scopes/StarScopes";
 import { SeaHornSound, SeaShips } from "./seaShips";
 
 import { SeaView, seaViewFore, seaViewLandmarks, type SeaViewFore, type SeaViewSitter, type ViewKind } from "./seaView";
@@ -137,16 +137,17 @@ export class SeaScene extends Phaser.Scene {
   private riding!: Riding;
   /** 11/16 r13 튜브·제트스키 */
   private rides: SeaRides | null = null;
-  /** 11/16 r18 2인승 카약 · [같이 타기] 걷기 · 지금 부를 수 있는 카약 */
+  /** 11/16 r18 2인승 카약 */
   private kayaks: SeaKayaks | null = null;
-  private readonly kayakWalk = new AutoWalk();
-  private shoutableKayak: string | null = null;
-  private walkGridCache: ReturnType<typeof seaWalkGrid> | null = null;
+  /** 11/16 동전 망원경 (밤 별자리 잇기·낮 바다 보기 — game/scopes, 자리는 protocol SEA_SCOPES) */
+  private stars: StarScopes | null = null;
   /** 11/16 r15 먼바다 배·뱃고동·오징어잡이배 */
   private ships: SeaShips | null = null;
   private horn: SeaHornSound | null = null;
   /** 11/16 갯바위 낚시 (마을 낚시를 바닷가로) */
   private forage!: SeaForage;
+  /** 11/16 포구 주민 (돌아다니는 유령들 — game/sea/seaLife) */
+  private life: SeaLife | null = null;
   /** 11/16 포구 오두막·등대 등불 (game/sea/seaHousing) */
   private housing: SeaHousing | null = null;
   /** 11/16 매점 먹거리·마실 거리 효과 (캠핑장 바베큐 효과 그대로 — game/camp/foodFx) */
@@ -331,9 +332,33 @@ export class SeaScene extends Phaser.Scene {
         if (this.rest) this.leaveRest(this.time.now);
         return true;
       },
+      // 11/16 r19 놀거리끼리 부딪혀 튕기기 (튜브·제트스키·카약 모두)
+      hulls: () => [...(this.rides?.hullBoxes() ?? []), ...(this.kayaks?.hullBoxes() ?? [])],
+      nudge: (id, nx, ny, amp) => {
+        this.rides?.nudge(id, nx, ny, amp);
+        this.kayaks?.nudge(id, nx, ny, amp);
+      },
     });
     // 11/16 r18 2인승 카약 (튜브·제트스키와 같은 바탕)
     this.kayaks = new SeaKayaks(this.rides.host);
+    this.stars = new StarScopes(this, {
+      spots: SEA_SCOPES,
+      style: "coin",
+      player: () => this.player,
+      net: () => h.net,
+      seats: () => this.seats,
+      judged: () => h.net.online,
+      toast: (m) => this.toast(m),
+      sfx: h.sfx,
+      colliders: this.map.colliders,
+      night: () => this.atmos.levels.darkness >= 0.5,
+      // 낮: 등대 꼭대기처럼 먼바다를 넓게 (움직이면 내려와요)
+      dayView: () => {
+        this.lookout = true;
+        this.lookoutAt = { x: this.player.x, y: this.player.y };
+        this.toggleView();
+      },
+    });
     this.seaView.onGullCall = (vol, pan) => this.host.sfx.gull(vol, pan);
     // 지도의 갈매기가 날아오르며 울면: 가까울수록 크게, 내 쪽 좌우로
     this.map.onGullCall = (x, y, scared) => {
@@ -342,6 +367,7 @@ export class SeaScene extends Phaser.Scene {
       this.host.sfx.gull((scared ? 0.9 : 0.6) * Math.max(0.15, 1 - d / 420), Math.max(-1, Math.min(1, (x - this.player.x) / 260)));
     };
     this.forage = new SeaForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m), tide: () => this.tide });
+    this.life = new SeaLife({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, water: () => this.map.waterState, override: this.hourOverride });
     this.housing = new SeaHousing({
       scene: this,
       atlas: h.atlas,
@@ -512,12 +538,14 @@ export class SeaScene extends Phaser.Scene {
       onSeat: (seatId, sid) => {
         this.rides?.onSeat(seatId, sid);
         this.kayaks?.onSeat(seatId, sid);
+        this.stars?.onSeat(seatId, sid);
         this.forage.f.seatChanged(seatId, sid);
         this.onSeat(seatId, sid);
       },
       onSeatDenied: (seatId) => {
         if (this.rides?.onSeatDenied(seatId)) return;
         if (this.kayaks?.onSeatDenied(seatId)) return;
+        if (this.stars?.onSeatDenied(seatId)) return;
         if (this.forage.f.seatDenied(seatId)) return;
         if (this.rest?.id === seatId) {
           // 11/16 사용자 "빈 자리인데 누가 먼저 앉았다고 해요": 내 좌석표에 주인이 없으면(서버가 앞 자리를 늦게 놓은 경우 등) 한 번 더 청해 봐요.
@@ -725,23 +753,6 @@ export class SeaScene extends Phaser.Scene {
     on.push(bridge.on("player:stand", () => standForGate(this.player, this.time.now, this.seatReq)));
     // 11/16 바다 보기 켜기·끄기 (「바다 보기」 버튼·V)
     on.push(bridge.on("sea:view", () => this.toggleView()));
-    // 11/16 r18 카약 「같이 타요」: 증서를 실시간 서버로 · [같이 타기]로 그 카약 옆 선착장까지 걸어가요
-    on.push(bridge.on("kayak:send", ({ grant }) => this.host.net.kayakShout(grant)));
-    on.push(
-      bridge.on("kayak:join", ({ kayak }) => {
-        if (this.cleaned || this.locked || this.player.inBoat) return;
-        const goal = this.kayaks?.joinSpot(kayak);
-        if (!goal) return;
-        const pl = this.player;
-        if (pl.sitting) pl.stand(this.time.now, this.seatReq);
-        if (this.rest) this.leaveRest(this.time.now);
-        const g = (this.walkGridCache ??= seaWalkGrid());
-        const grid: WalkGrid = { cols: g.cols, rows: g.rows, cell: g.cell, ox: 0, oy: 0, blocked: (cx, cy) => cx < 0 || cy < 0 || cx >= g.cols || cy >= g.rows || g.cells[cy * g.cols + cx] === 1 };
-        const r = this.kayakWalk.start(kayak, { x: pl.x, y: pl.y }, goal, goal, grid, this.time.now);
-        if (r === "unreachable") this.toast("카약 선착장까지 가는 길을 못 찾았어요");
-        else if (r === "near") this.toast(`${keyJosa("E", "로")} 같이 타요`);
-      }),
-    );
     // 11/16 매점에서 샀어요: 증서를 실시간 서버로 보내고 먹어요
     on.push(
       bridge.on("camp:bbq:eat", ({ item, until, grant, lv, at, stand }) => {
@@ -863,7 +874,7 @@ export class SeaScene extends Phaser.Scene {
     }
     if (a !== "interact") return;
     // 11/16 r13 가까운 빈 튜브·제트스키가 있으면 타기 (헤엄치는 중에도 — 잠수보다 먼저)
-    if (!moving && (this.rides?.interact() || this.kayaks?.interact())) return;
+    if (!moving && (this.rides?.interact() || this.kayaks?.interact() || this.stars?.interact())) return;
     // 11/16 물속이면 E = 잠수·떠오르기 (마을 강·호수와 같은 규칙 — 물이 덮은 갯벌·먼바다 어디서든)
     if (pl.state === "swim" || pl.state === "dive") {
       const diving = pl.state === "swim";
@@ -879,6 +890,7 @@ export class SeaScene extends Phaser.Scene {
       pl.stand(now, this.seatReq);
       return;
     }
+    if (this.life?.talk()) return;
     const seat = moving ? null : seaPickSeat(pl.x, pl.y, occupied, mySid);
     // 11/16 쉴거리 자리 (선베드·돗자리)가 좌석보다 가까우면 그것부터
     const rest = moving ? null : this.pickRest(pl.x, pl.y);
@@ -1288,24 +1300,6 @@ export class SeaScene extends Phaser.Scene {
       return;
     }
     this.host.hub.read(this.move);
-    // 11/16 r18 [같이 타기] 걷는 중: 손으로 움직이면 그만, 아니면 길을 따라가요
-    if (this.kayakWalk.active) {
-      if (Math.hypot(this.move.ax, this.move.ay) >= DEADZONE_ENTER) this.kayakWalk.cancel();
-      else {
-        const st = this.kayakWalk.steer({ x: this.player.x, y: this.player.y }, time, this.move);
-        if (st === "arrived") {
-          this.kayakWalk.cancel();
-          this.toast(`${keyJosa("E", "로")} 같이 타요`);
-        } else if (st === "stuck") this.kayakWalk.cancel();
-      }
-    }
-    {
-      const k = this.kayaks?.shoutable() ?? null;
-      if (k !== this.shoutableKayak) {
-        this.shoutableKayak = k;
-        bridge.emit("kayak:shoutable", k ? { kayak: k } : null);
-      }
-    }
     if (this.host.hub.isBlocked || this.locked) this.move.ax = this.move.ay = 0;
     const started = pl.update(this.benchInput(now), now, this.seatReq);
     // 11/16 r13 튜브·제트스키 조종 (Player.update는 탄 동안 움직이지 않아요)
@@ -1344,6 +1338,7 @@ export class SeaScene extends Phaser.Scene {
     this.actors.length = 0;
     this.actors.push({ x: pl.x, y: pl.y });
     for (const r of this.remotes.values()) if (r.visible && !r.away) this.actors.push({ x: r.x, y: r.y });
+    this.life?.movers(this.actors);
     const dusk = duskWeight(this.hour);
     if (this.tone) this.tone.dusk = dusk;
     this.housing?.update(now, L.darkness, L.fog, s);
@@ -1361,8 +1356,10 @@ export class SeaScene extends Phaser.Scene {
     }
     this.updateSeaView(now, dt, dusk);
     this.forage.f.update(dt, view, s);
+    this.life?.update(dt, view, s);
     this.rides?.update(dt);
     this.kayaks?.update(dt);
+    this.stars?.update();
     this.ships?.update(now, L.darkness, dusk, pl.x);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
     this.declutterLabels(now, pnow);
@@ -1445,7 +1442,9 @@ export class SeaScene extends Phaser.Scene {
     // 11/16 물속: 잠수·떠오르기 안내 (마을과 같은 글). 물에 잠긴 갯벌 구멍 위에선 그 안내를 먼저
     if ((pl.state === "swim" || pl.state === "dive") && !foHint) other = { x: pl.x, y: pl.y + 2, text: `${this.seatHint.prefix}${pl.state === "swim" ? "잠수" : "떠오르기"}` };
     // 11/16 r13 튜브·제트스키 타기·내리기 안내 (가까우면 잠수 안내보다 먼저)
-    const rideHint = !this.locked ? (this.rides?.hint(this.seatHint.prefix) ?? this.kayaks?.hint(this.seatHint.prefix) ?? null) : null;
+    const lifeHint = !pl.sitting && !this.rest && !this.locked ? this.life?.hint(this.seatHint.prefix) : null;
+    if (lifeHint) other = lifeHint;
+    const rideHint = !this.locked ? (this.rides?.hint(this.seatHint.prefix) ?? this.kayaks?.hint(this.seatHint.prefix) ?? this.stars?.hint(this.seatHint.prefix) ?? null) : null;
     if (rideHint) other = rideHint;
     const bench = pl.state === "sitChair" && pl.seat && SEA_MULTI_SEAT.has(pl.seat.furnitureId);
     const keys = this.seatHint.prefix === "E ";
@@ -1484,6 +1483,7 @@ export class SeaScene extends Phaser.Scene {
       for (const sp of this.map.staticLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.4, 0.88);
       this.fireworks?.addLights(lit);
       this.forage.f.addLights(lit);
+      this.life?.addLights(lit);
     }
     lit.end();
   }
@@ -1574,9 +1574,8 @@ export class SeaScene extends Phaser.Scene {
     this.rides = null;
     this.kayaks?.destroy();
     this.kayaks = null;
-    this.kayakWalk.cancel();
-    if (this.shoutableKayak) bridge.emit("kayak:shoutable", null);
-    this.shoutableKayak = null;
+    this.stars?.destroy();
+    this.stars = null;
     this.ships?.destroy();
     this.ships = null;
     this.horn?.destroy();
@@ -1586,6 +1585,8 @@ export class SeaScene extends Phaser.Scene {
     this.seaView = null;
     bridge.emit("sea:hud", null);
     this.forage?.f.destroy();
+    this.life?.destroy();
+    this.life = null;
     this.housing?.destroy();
     this.housing = null;
     this.meScreen?.destroy();

@@ -5,6 +5,7 @@ export * from "./events";
 export * from "./token";
 export * from "./world";
 export * from "./camp";
+export * from "./scopes";
 export * from "./sea";
 export * from "./seaForage";
 export * from "./bbq";

@@ -8,6 +8,7 @@ import {
   CAMP_HEIGHT,
   CAMP_NPCS,
   CAMP_ROAD,
+  CAMP_SCOPES,
   CAMP_WIDTH,
   DIR,
   STATE,
@@ -56,6 +57,7 @@ import { Riding } from "../world/zoo/Riding";
 import { CampfireView } from "../world/Campfire";
 import { campfireLevel, nearestCampfire } from "../world/campfireMath";
 import { LookoutScope } from "./LookoutScope";
+import { StarScopes } from "../scopes/StarScopes";
 import { WeatherSound } from "../world/WeatherSound";
 import { createBusArrival } from "../bus/BusArrival";
 import type { BusArrivalApi } from "../bus/busTypes";
@@ -64,6 +66,7 @@ import { FoodFx } from "./foodFx";
 import { BIG_RIDE_TOAST, BIG_SEAT_TOAST, bigSeatBlocked, foodOfPeer, myBig, RIDING_EAT_TOAST } from "./foodState";
 import { CAMP_BBQ } from "./campLayout";
 import { CampForage } from "./campForage";
+import { CampLife } from "./campLife";
 import { CAMP_SCENE, type CampFriend, type CampHost, type CampSceneData } from "./campHost";
 import { campLines, campNpcName, CAMP_WELCOME } from "./campTalk";
 import { campNeighborSeat, campPickSeat, CAMP_MULTI_SEAT } from "./campSit";
@@ -105,8 +108,12 @@ export class CampScene extends Phaser.Scene {
   private riding!: Riding;
   /** A-6 계곡 낚시·숲 채집 (마을 Foraging을 캠핑장 맵으로 — game/camp/campForage) */
   private forage!: CampForage;
+  /** 11/16 캠핑장 주민 (돌아다니는 캠퍼 유령들 — game/camp/campLife) */
+  private life: CampLife | null = null;
   /** 전망대 망원경 (망원 뷰) */
   private scope!: LookoutScope;
+  /** 11/16 별 망원경 (전망대 계단 아래·계곡 둑 — 별자리 잇기, game/scopes) */
+  private stars: StarScopes | null = null;
   private meScreen!: MeScreen;
   private fireworks: Fireworks | null = null;
   /** 11/15 큰 모닥불 불멍 (마을 모닥불과 같은 연출 — game/world/Campfire.ts) */
@@ -173,7 +180,7 @@ export class CampScene extends Phaser.Scene {
     // 11/15 버스 창밖 연출 아래에서 미리 만들 때(parked)는 프레임마다 조금씩 만들어요 (한 프레임에 몰면 100ms 가까이 멈췄어요)
     // 지난 여행에서 남은 것을 다시 지우지 않게 비워 두고 시작해요 (다 만들기 전에 닫힐 수 있어요)
     const self = this as unknown as Record<string, unknown>;
-    for (const k of ["map", "player", "rig", "scope", "atmos", "lighting", "expr", "campfire", "forage", "meScreen"]) self[k] = undefined;
+    for (const k of ["map", "player", "rig", "scope", "stars", "atmos", "lighting", "expr", "campfire", "forage", "meScreen"]) self[k] = undefined;
     this.building = this.build();
     if (this.parked) {
       this.scene.setVisible(false);
@@ -247,6 +254,8 @@ export class CampScene extends Phaser.Scene {
     this.food = new FoodFx({ scene: this, reduced: h.reduced, sfx: h.sfx, player: () => this.player, remotes: () => this.remotes });
     yield;
     this.forage = new CampForage({ scene: this, atlas: h.atlas, reduced: h.reduced, colliders: this.map.colliders, player: () => this.player, net: () => h.net, seats: () => this.seats, remotes: () => this.remotes, toast: (m) => this.toast(m) });
+    this.life = new CampLife({ scene: this, atlas: h.atlas, sfx: h.sfx, reduced: h.reduced, player: () => this.player, net: () => h.net, override: this.hourOverride });
+    this.stars = new StarScopes(this, { spots: CAMP_SCOPES, style: "camp", player: () => this.player, net: () => h.net, seats: () => this.seats, judged: () => this.spotsJudged, toast: (m) => this.toast(m), sfx: h.sfx });
 
     yield;
 
@@ -392,10 +401,12 @@ export class CampScene extends Phaser.Scene {
       },
       onSeat: (seatId, sid) => {
         this.forage.f.seatChanged(seatId, sid);
+        this.stars?.onSeat(seatId, sid);
         this.onSeat(seatId, sid);
       },
       onSeatDenied: (seatId) => {
         if (this.forage.f.seatDenied(seatId)) return;
+        if (this.stars?.onSeatDenied(seatId)) return;
         if (this.player.seat?.id === seatId) this.player.seatDenied(seatId, this.time.now);
       },
       onEmote: () => undefined,
@@ -701,6 +712,7 @@ export class CampScene extends Phaser.Scene {
       pl.stand(now, this.seatReq);
       return;
     }
+    if (this.life?.talk()) return;
     const seat = moving ? null : campPickSeat(pl.x, pl.y, occupied, mySid);
     const obj = this.nearestObject(pl.x, pl.y);
     const sd = seat ? Math.hypot(seat.x - pl.x, seat.y - pl.y) : Infinity;
@@ -789,6 +801,14 @@ export class CampScene extends Phaser.Scene {
         this.closeTalk();
         bridge.emit("camp:bbq:open", { stand: o.kind === "vending" ? "vending" : "grill" });
         break;
+      case "telescope": {
+        // 11/16 별 망원경: 앞자리에 서서 별자리 잇기 (StarScopes — 마을 망원경과 같은 1인 자리)
+        const spot = CAMP_SCOPES.find((s) => s.id === o.id);
+        if (!spot || !this.stars) return;
+        this.closeTalk();
+        this.stars.use(spot);
+        break;
+      }
       case "lookout":
         // 전망대 망원경: 광장·데크를 내려다본다 (LookoutScope)
         this.closeTalk();
@@ -980,6 +1000,7 @@ export class CampScene extends Phaser.Scene {
       this.move.ax = this.move.ay = 0;
     }
     const started = pl.update(this.benchInput(now), now, this.seatReq);
+    this.stars?.update();
     if (this.furnitureCollider) this.furnitureCollider.active = !pl.airborne;
     if (net.online && pnow >= this.peerCheckAt) {
       this.peerCheckAt = pnow + PEER_CHECK_MS;
@@ -1010,6 +1031,7 @@ export class CampScene extends Phaser.Scene {
     this.riding.update();
     publishRide(pl, this.riding.on); // 11/16 탄 것·앉은 자리 → UI (lib/rideGate)
     this.forage.f.update(dt, view, s);
+    this.life?.update(dt, view, s);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
     this.declutterLabels(now, pnow);
     this.updateSeatHint(now, s);
@@ -1078,6 +1100,8 @@ export class CampScene extends Phaser.Scene {
     const keys = this.seatHint.prefix === "E ";
     const standText = bench ? (keys ? "←→ 옆자리 · ↑↓ 일어나기 · T 벤치 상태" : "좌우로 옆자리 · 위아래로 일어나기") : pl.state === "sitChair" && keys ? "이동하면 일어나요 · T 상태 고르기" : null;
     // 불멍 구도에서는 화면을 가리지 않게 앉기 안내를 띄우지 않는다 (마을과 같다)
+    const lifeHint = !pl.sitting && !this.locked ? this.life?.hint(this.seatHint.prefix) : null;
+    if (lifeHint) other = lifeHint;
     this.seatHint.update(other ? null : seat, pl, sittingFor, this.talking !== null || this.campfire.active !== null, labelScale, other, standText);
   }
 
@@ -1125,6 +1149,7 @@ export class CampScene extends Phaser.Scene {
       for (const sp of this.map.staticLights) lit.add(sp.x, sp.y + 6, lr * sp.scale * 1.4, 0.88);
       this.fireworks?.addLights(lit);
       this.forage.f.addLights(lit);
+      this.life?.addLights(lit);
     }
     lit.end();
   }
@@ -1169,6 +1194,8 @@ export class CampScene extends Phaser.Scene {
     this.clearRemotes();
     this.expr?.destroy();
     this.forage?.f.destroy();
+    this.life?.destroy();
+    this.life = null;
     this.meScreen?.destroy();
     this.rig?.destroy();
     this.atmos?.destroy();
@@ -1176,6 +1203,8 @@ export class CampScene extends Phaser.Scene {
     this.fireworks = null;
     this.player?.destroy();
     this.scope?.destroy();
+    this.stars?.destroy();
+    this.stars = null;
     this.map?.destroy();
     // 소식은 월드로 돌려준다 (CampTrip이 먼저 했어도 한 번 더 — 남은 콜백이 지운 장면을 부르지 않게)
     if (this.begun) this.host.net.divert(null);

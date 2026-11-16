@@ -84,6 +84,22 @@ export function critterGrid(): WalkGrid {
   return gridCache;
 }
 
+/** 길(점들을 잇는 선)이 1px 간격으로 봐도 막힌 칸을 스치지 않는지 (발 둘레 0.75px까지) */
+function pathClear(g: WalkGrid, path: readonly Pt[]): boolean {
+  const hit = (x: number, y: number) => g.blocked(Math.floor((x - g.ox) / g.cell), Math.floor((y - g.oy) / g.cell));
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1];
+    const b = path[i];
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)));
+    for (let j = 0; j <= n; j++) {
+      const x = a.x + ((b.x - a.x) * j) / n;
+      const y = a.y + ((b.y - a.y) * j) / n;
+      if (hit(x - 0.75, y - 0.75) || hit(x + 0.75, y - 0.75) || hit(x - 0.75, y + 0.75) || hit(x + 0.75, y + 0.75)) return false;
+    }
+  }
+  return true;
+}
+
 /** 이 점 둘레 3×3칸이 모두 열려 있고 물가가 아닌지 (쉼 자리로 쓸 수 있는지) */
 export function restable(g: WalkGrid, x: number, y: number): boolean {
   if (x < 40 || y < 48 || x > MAP_WIDTH - 40 || y > MAP_HEIGHT - 24) return false;
@@ -232,7 +248,9 @@ export class CritterSim {
     const to = this.spotAt(k + 1);
     const path: Pt[] = [{ x: from.x, y: from.y }];
     if (from !== to) {
-      const p = findPath(this.grid, from, to, { maxNodes: 30_000, snapRadius: 2 });
+      let p = findPath(this.grid, from, to, { maxNodes: 30_000, snapRadius: 2 });
+      // 11/16 줄 당기기(smoothPath)는 2px 간격 표본이라 물·막힌 칸 모서리를 살짝 스칠 수 있다 → 그러면 다듬지 않은 칸 길로 (residentSim과 같다)
+      if (p && p.length && !pathClear(this.grid, [from, ...p])) p = findPath(this.grid, from, to, { maxNodes: 30_000, snapRadius: 2, smooth: false }) ?? p;
       if (p && p.length) path.push(...p);
     }
     const lens: number[] = [0];

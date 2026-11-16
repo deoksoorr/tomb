@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { BALLOON_ICON, BUMPER_ICON, FERRIS_ICON, FISH_ICON, LANDMARK_COLOR, LANDMARKS, MINIMAP_H, MINIMAP_W, minimapPixels, NODE_DOT_COLOR, PAW_ICON, toMinimap } from "@/game/world/minimapArt";
-import type { AwayMapId, MapId } from "@tomb/protocol";
+import { SEA_SCOPES, type AwayMapId, type MapId } from "@tomb/protocol";
 import { CAMP_LANDMARK_COLOR, CAMP_LANDMARKS, CAMP_MINIMAP_H, CAMP_MINIMAP_W, campMinimapPixels, toCampMinimap } from "@/game/camp/campMinimap";
 import { SEA_LANDMARK_COLOR, SEA_LANDMARKS, SEA_MINIMAP_H, SEA_MINIMAP_W, seaMinimapPixels, toSeaMinimap } from "@/game/sea/seaMinimap";
 import { gatherNodeById } from "@/lib/forage/catalog";
@@ -47,7 +47,8 @@ type AwayMinimap = {
 };
 const AWAY_MINIMAP: Record<AwayMapId, AwayMinimap> = {
   camp: { w: CAMP_MINIMAP_W, h: CAMP_MINIMAP_H, pixels: campMinimapPixels, to: toCampMinimap, landmarks: CAMP_LANDMARKS, color: (k) => CAMP_LANDMARK_COLOR[k as keyof typeof CAMP_LANDMARK_COLOR] ?? "#ffffff", big: new Set(["fire"]), label: "캠핑장 지도" },
-  sea: { w: SEA_MINIMAP_W, h: SEA_MINIMAP_H, pixels: seaMinimapPixels, to: toSeaMinimap, landmarks: SEA_LANDMARKS, color: (k) => SEA_LANDMARK_COLOR[k as keyof typeof SEA_LANDMARK_COLOR] ?? "#ffffff", big: new Set(["lighthouse"]), label: "바닷가 지도" },
+  // 11/16 바닷가 동전 망원경은 바닷가 맵 모듈 밖(protocol scopes.ts)에 있어서 여기서 덧붙인다
+  sea: { w: SEA_MINIMAP_W, h: SEA_MINIMAP_H, pixels: seaMinimapPixels, to: toSeaMinimap, landmarks: [...SEA_LANDMARKS, ...SEA_SCOPES.map((s) => ({ x: s.x, y: s.y, kind: "telescope" }))], color: (k) => SEA_LANDMARK_COLOR[k as keyof typeof SEA_LANDMARK_COLOR] ?? "#ffffff", big: new Set(["lighthouse"]), label: "바닷가 지도" },
 };
 
 /** 11/15 캠핑장·바닷가 바탕 (그 맵에 처음 갈 때 한 번 굽는다) */
@@ -321,9 +322,11 @@ export default function Minimap() {
       {open && (
         <canvas
           ref={canvas}
-          className={cx(styles.map, map === "camp" && styles.camp, map === "sea" && styles.sea)}
+          className={styles.map}
           width={(map !== "village" ? AWAY_MINIMAP[map].w : MINIMAP_W) * SCALE}
           height={(map !== "village" ? AWAY_MINIMAP[map].h : MINIMAP_H) * SCALE}
+          // 11/16 r19 지도 비율 그대로 (가로세로 같은 배율 — 바닷가 지도가 늘어나 보이던 것 고침)
+          style={{ aspectRatio: map !== "village" ? `${AWAY_MINIMAP[map].w} / ${AWAY_MINIMAP[map].h}` : `${MINIMAP_W} / ${MINIMAP_H}` }}
           aria-label={`${map !== "village" ? AWAY_MINIMAP[map].label : "마을 지도"} (노란 점이 나, 분홍 하트가 친구)`}
           role="img"
         />

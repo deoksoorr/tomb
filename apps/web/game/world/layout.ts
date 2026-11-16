@@ -44,6 +44,7 @@ import {
   TELESCOPE,
   TELESCOPE_2,
   TILE,
+  VILLAGE_SCOPES,
   WALL_THICKNESS,
   graveSlot,
   GRAVEYARD_CAPACITY,
@@ -1136,6 +1137,8 @@ export const LANDMARKS: readonly Landmark[] = [
   { id: "fish", label: "낚시 잔교", x: LAKE_PIER.x + 24, y: LAKE_PIER.y + 8, kind: "fish" },
   { id: "zoo", label: "동물원", x: ZOOKEEPER.x - 16, y: ZOOKEEPER.y + 40, kind: "zoo" },
   { id: "telescope", label: "망원경", x: TELESCOPE.x, y: TELESCOPE.y, kind: "telescope" },
+  // 11/16 마을 곳곳 망원경 (광장·다리·호숫가·쉼터 — protocol VILLAGE_SCOPES)
+  ...VILLAGE_SCOPES.map((t, i) => ({ id: `telescope${i + 3}`, label: t.name, x: t.x, y: t.y, kind: "telescope" as const })),
   { id: "wish", label: "소원 분수", x: WISH_FOUNTAIN.x, y: WISH_FOUNTAIN.y, kind: "wish" },
   { id: "haunt", label: "귀신의집", x: HAUNT_HOUSE.x, y: HAUNT_HOUSE.y - 8, kind: "haunt" },
   { id: "tower", label: "야근 빌딩", x: TOWER.x, y: TOWER.y - 8, kind: "tower" },

@@ -24,11 +24,13 @@ import {
   shorePoint,
   steerToward,
   stepBoat,
+  waterOf,
   type BoatMotion,
   type BoatPresence,
   type DuckLanding,
 } from "../logic/boat";
 import { spotVerdict } from "../logic/restore";
+import { Bounce, knockMove, nudgeAmp, nudgeOffset, resolveHulls, touchContact } from "../logic/bounce";
 import { BOAT_FRAMES, BOAT_TINTS, boatGeom, boatSheet, boatVSheet, DUCK_FRAMES, DUCK_STYLES, duckGeom, duckSheet, duckSign, duckVSheet, RIDE_TEX } from "../sprites/rideProps";
 import { inWater, waterCurrent } from "./layout";
 import { safeGround } from "./walkReach";
@@ -103,6 +105,8 @@ type BoatView = {
   hull: Phaser.GameObjects.Zone;
   /** 지난번 상자 (x,y,w,h) — 바뀔 때만 물리 트리를 고친다 */
   hullKey: string;
+  /** 11/16 r19 받혀 살짝 밀린 쪽 · 세기 · 때 (빈 배 그림만) */
+  nudge: { nx: number; ny: number; amp: number; at: number } | null;
 };
 
 export class BoatRide {
@@ -113,6 +117,8 @@ export class BoatRide {
   private lastSeat: string | null = null;
   private quackAt = -Infinity;
   private bumpAt = -Infinity;
+  /** 11/16 r19 내 배가 다른 배에 부딪혀 튕기는 중 */
+  private readonly bounce = new Bounce();
   /** 지금 오리배에 타 있는지 (UI 터치 버튼 "꽥!" — boat:duck) */
   private duckShown = false;
   /** 오리 연못 둘레 내려설 자리 (처음 쓸 때 한 번) */
@@ -140,13 +146,13 @@ export class BoatRide {
       const hull = scene.add.zone(def.x, def.y, 1, 1).setOrigin(0, 0);
       hull.removeFromDisplayList();
       this.hulls.add(hull);
-      const v: BoatView = { def, duck, tex, back, front, x: def.x, y: def.y, dir, mode: "docked", returnAt: 0, px: def.x, py: def.y, speed: 0, strokeAt: 0, wakeAt: 0, fade: null, hull, hullKey: "" };
+      const v: BoatView = { def, duck, tex, back, front, x: def.x, y: def.y, dir, mode: "docked", returnAt: 0, px: def.x, py: def.y, speed: 0, strokeAt: 0, wakeAt: 0, fade: null, hull, hullKey: "", nudge: null };
       this.place(v, 0);
       this.syncHull(v);
       this.views.push(v);
     });
     // 헤엄·잠수 중일 때만, 보이는 배만 (사라졌다 나루터에 나타나는 중에는 막지 않는다). 배에 탄 나는 내 배·남의 배 모두 그대로
-    this.hullCollider = scene.physics.add.collider(host.player().sprite, this.hulls, undefined, (_pl, z) => {
+    this.hullCollider = scene.physics.add.collider(host.player().sprite, this.hulls, (_pl, z) => this.swimBump(z as Phaser.GameObjects.Zone), (_pl, z) => {
       const v = this.views.find((w) => w.hull === z);
       return !!v && hullBlocks(this.host.player(), !v.fade);
     });
@@ -449,6 +455,7 @@ export class BoatRide {
         this.motion.x = pl.x;
         this.motion.y = pl.y;
         this.motion.vx = this.motion.vy = 0;
+        this.bounce.reset();
       }
     }
     if (!seat) return;
@@ -483,8 +490,11 @@ export class BoatRide {
     // 11/16 오리배 저절로 둑으로 (방향키를 잡으면 그만두고 직접 몬다)
     if (this.auto && (moving || kind !== "duck")) this.auto = null;
     const go = this.auto ? steerToward(this.motion.x, this.motion.y, this.auto.boat.x, this.auto.boat.y) : moving ? { ax: move.ax, ay: move.ay } : { ax: 0, ay: 0 };
-    const m = stepBoat(this.motion, go.ax, go.ay, dtMs, inWater(this.motion.x, this.motion.y) ? waterCurrent(this.motion.x, this.motion.y) : { vx: 0, vy: 0 }, kind);
+    // 11/16 r19 부딪혀 튕긴 직후엔 노·페달이 잠깐 덜 먹어요
+    const ctrl = this.bounce.control(now);
+    const m = stepBoat(this.motion, go.ax * ctrl, go.ay * ctrl, dtMs, inWater(this.motion.x, this.motion.y) ? waterCurrent(this.motion.x, this.motion.y) : { vx: 0, vy: 0 }, kind);
     if (kind === "duck") this.bumpDucks(ref.boat.id, now);
+    this.collideBoats(ref.boat, kind, now, dtMs);
     this.dir = boatFacing(this.dir, m.vx, m.vy);
     pl.boatTo(Math.round(m.x * 10) / 10, Math.round(m.y * 10) / 10, this.dir, now);
     if (this.auto) this.autoLand(now);
@@ -503,6 +513,43 @@ export class BoatRide {
     this.auto = null;
     if (Math.hypot(t.land.x - pl.x, t.land.y - pl.y) <= AUTO_SHORE_GIVE && safeGround(t.land.x, t.land.y)) this.leave(t.land);
     else this.host.toast(isTouchUi() ? "둑에 닿지 못했어요. 조이스틱으로 저어 가 주세요" : "둑에 닿지 못했어요. 방향키로 저어 가 주세요");
+  }
+
+  /**
+   * 11/16 r19 내 배가 다른 배(매여 있거나 누가 타고 있는 조각배·오리배)에 닿으면 튕겨 나간다 (바다 놀거리와 같은 규칙 — logic/bounce).
+   * 밀려나는 길은 그 배가 다니는 물만 (판자·둑으로는 안 민다). 오리배끼리는 범퍼카(duckBump)가 맡는다
+   */
+  private collideBoats(boat: Boat, kind: BoatKind, now: number, dtMs: number): void {
+    const h = this.host;
+    const m = this.motion;
+    const ok = waterOf(kind);
+    knockMove(m, this.bounce.take(dtMs), ok, this.bounce);
+    const others = this.views.filter((v) => v.def.id !== boat.id && !v.fade && !(kind === "duck" && v.duck));
+    const hit = resolveHulls(m, (x, y) => boatHull(boat, this.dir, x, y), others.map((v) => boatHull(v.def, v.dir, Math.round(v.x), Math.round(v.y))), ok);
+    if (!hit) return;
+    const sp = this.bounce.hit(now, hit.contact, kind === "duck" ? "duck" : "row", hit.vx, hit.vy);
+    if (sp <= 0) return;
+    h.sound.thump(0.45, 1.1);
+    if (!h.reduced) this.drops.setDepth(m.y + 2).explode(5, m.x - hit.contact.nx * 10, m.y + 2);
+    const o = others[hit.index];
+    if (o.mode !== "out") o.nudge = { nx: -hit.contact.nx, ny: -hit.contact.ny, amp: nudgeAmp(sp), at: now };
+  }
+
+  /** 11/16 r19 헤엄치다 배에 부딪혔다 (물리 충돌 콜백): 살짝 튕겨 나가고, 빈 배는 살짝 밀린다 */
+  private swimBump(z: Phaser.GameObjects.Zone): void {
+    const v = this.views.find((w) => w.hull === z);
+    const h = this.host;
+    const pl = h.player();
+    const zb = z.body as Phaser.Physics.Arcade.StaticBody | null;
+    if (!v || !zb) return;
+    const now = h.scene.time.now;
+    const c = touchContact({ x: pl.body.x, y: pl.body.y, w: pl.body.width, h: pl.body.height }, { x: zb.x, y: zb.y, w: zb.width, h: zb.height });
+    if (!c) return;
+    const sp = pl.knock(c, now);
+    if (sp <= 0) return;
+    h.sound.thump(0.22, 1.35);
+    if (!h.reduced) this.drops.setDepth(pl.y + 2).explode(4, pl.x - c.nx * 5, pl.y);
+    if (v.mode !== "out") v.nudge = { nx: -c.nx, ny: -c.ny, amp: nudgeAmp(sp), at: now };
   }
 
   /** 오리배 범퍼카: 내 오리배가 다른 오리배(떠 있거나 매여 있는)에 닿으면 살짝 튕겨 나간다 */
@@ -646,9 +693,14 @@ export class BoatRide {
     const ox = (g.ax + 0.5) / g.w;
     const oy = g.ay / g.h;
     const dy = v.def.seats === 2 ? seatDelta(v.def, v.dir).dy : 0;
-    const y = Math.round(v.y - bob);
-    v.back.setOrigin(ox, oy).setPosition(Math.round(v.x), y).setDepth(v.y + Math.min(0, dy) - 1);
-    v.front.setOrigin(ox, oy).setPosition(Math.round(v.x), y).setDepth(v.y + Math.max(0, dy) + 1.5);
+    // 11/16 r19 받힌 빈 배는 살짝 밀렸다 돌아온다 (그림만)
+    const since = v.nudge ? this.host.scene.time.now - v.nudge.at : 0;
+    const nd = v.nudge && v.mode !== "out" ? nudgeOffset(v.nudge.amp, since) : 0;
+    if (v.nudge && since > 1000) v.nudge = null;
+    const x = Math.round(v.x + (v.nudge?.nx ?? 0) * nd);
+    const y = Math.round(v.y - bob + (v.nudge?.ny ?? 0) * nd);
+    v.back.setOrigin(ox, oy).setPosition(x, y).setDepth(v.y + Math.min(0, dy) - 1);
+    v.front.setOrigin(ox, oy).setPosition(x, y).setDepth(v.y + Math.max(0, dy) + 1.5);
   }
 
   /** 빈 배: 스르르 사라졌다가 나루터에 다시 나타난다 */

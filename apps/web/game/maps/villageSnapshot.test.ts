@@ -26,6 +26,9 @@ import { BUS_STOP, FISH_DECOR } from "../world/fishZone";
 // 고친 기록: 11/16 서쪽 모닥불(fireW)과 둘레 통나무(kW*)를 치우고 그 자리에 바닷가행 정류장(seaStop.ts — 지붕·벤치 bU·팻말·시간표 충돌, 상호작용 bus:sea),
 //   승강장 모서리에 걸린 마른 나무(58,572)를 뺌, 흩뿌린 나무는 정류장·정차 칸을 비운다(inSeaStop), MAP_VERSION 13 → 14
 //   — 바뀐 충돌·좌석·상호작용·소품·걷기 격자는 묘역 아래 강가 띠(x 32~200, y 544~670)뿐이고, 캠핑장행 정류장 안내 글만 「캠핑장행 버스 타기」로. 미니맵 바탕은 그대로
+// 고친 기록: 11/16 사용자 "망원경 갯수를 여기저기 좀 늘렸으면" — 마을 곳곳 망원경 넷(protocol VILLAGE_SCOPES: 광장 북쪽 (860,226)·징검다리 남쪽 둑 (622,742)·
+//   호수 북동쪽 둑 (1352,818)·쉼터 광장 (1072,740)), MAP_VERSION 14 → 15
+//   — 바뀐 것은 망원경마다 받침 충돌(10×5) 하나와 앞자리 상호작용(telescope3~6) 하나뿐이다 (소품·흩뿌린 나무·좌석·미니맵 바탕은 그대로)
 
 function fnv(s: string): string {
   let h = 0x811c9dc5;
@@ -64,12 +67,14 @@ describe("마을 지문 (캠핑장이 생겨도 그대로)", () => {
   it("배치·좌석·상호작용·충돌·소품", () => {
     // 11/16 MAP_VERSION 12 → 13 (행운권 판매대·범퍼카장/오리 연못 넓힘)으로 다시 찍음 (예전 값 cf1f8667), 정류장 이름 「언젠가 버스 정류장」(3aa43fe6) → 「버스 정류장」(6da629a4)으로 다시
     // 11/16 MAP_VERSION 13 → 14 바닷가행 정류장으로 다시 찍음 (예전 값 68d19e6c)
-    expect(layoutPrint()).toBe("346977fa");
+    // 11/16 MAP_VERSION 14 → 15 마을 곳곳 망원경 넷으로 다시 찍음 (예전 값 346977fa)
+    expect(layoutPrint()).toBe("3b633e15");
   });
   it("걷기 격자", () => {
     const g = walkableGrid(8);
     // 11/16 바닷가행 정류장 (예전 값 bb5ee238)
-    expect(fnv(Array.from(g.cells as ArrayLike<number>).join(""))).toBe("b7139c7c");
+    // 11/16 마을 곳곳 망원경 받침 넷 (예전 값 b7139c7c)
+    expect(fnv(Array.from(g.cells as ArrayLike<number>).join(""))).toBe("592aed61");
   });
   it("미니맵 바탕", () => {
     expect(fnv(Array.from(minimapPixels()).join(","))).toBe("092dccbd");

@@ -1,3 +1,4 @@
+import type { Box } from "../logic/bounce";
 import { DIR, SEA_JET_MIN_Y, SEA_JETSKI_SPEED, SEA_KAYAK_SEAT_GAP, SEA_KAYAK_SPEED, SEA_TUBE_SPEED, seaJetWater, seaKayakWater, seaRideBlocked, seaTubeWater, tideLineY, type DirId } from "@tomb/protocol";
 
 // 11/16 r13 바다 놀거리 움직임 (순수 — 시험은 seaRideLogic.test).
@@ -146,4 +147,23 @@ export function kayakSeatOffset(dir: DirId, k: 0 | 1): { dx: number; dy: number 
   if (dir === DIR.left) return { dx: -g, dy: 0 };
   if (dir === DIR.up) return { dx: 0, dy: -g };
   return { dx: 0, dy: g };
+}
+
+// ── 11/16 r19 몸 상자 (헤엄치는 사람을 막는 상자 = 놀거리끼리 부딪혀 튕기는 상자 — logic/bounce) ──
+const TUBE_BOX = { w: 14, h: 6 };
+const JET_BOX_SIDE = { w: 28, h: 8 };
+const JET_BOX_FB = { w: 12, h: 12 };
+/** 튜브·제트스키 (x,y = 놀거리 자리 — 제트스키는 몸통 가운데가 2px 위) */
+export function rideBox(kind: "tube" | "jetski", dir: DirId, x: number, y: number): Box {
+  const side = kind === "jetski" && (dir === DIR.left || dir === DIR.right);
+  const sz = kind === "tube" ? TUBE_BOX : side ? JET_BOX_SIDE : JET_BOX_FB;
+  const cy = kind === "tube" ? y : y - 2;
+  return { x: Math.round(x - sz.w / 2), y: Math.round(cy - sz.h / 2), w: sz.w, h: sz.h };
+}
+/** 카약: 옆모습은 가로로 길고 세로 모습은 세로로 길어요 (매어 둔 셋이 35px 간격이라 34px — 타자마자 옆 카약에 닿지 않게) */
+export function kayakBox(dir: DirId, x: number, y: number): Box {
+  const side = dir === DIR.left || dir === DIR.right;
+  const w = side ? 34 : 10;
+  const h = side ? 8 : 32;
+  return { x: Math.round(x - w / 2), y: Math.round(y - h / 2), w, h };
 }

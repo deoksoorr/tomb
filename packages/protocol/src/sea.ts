@@ -47,8 +47,9 @@ export const SEA_HEIGHT = SEA_ROWS * 16; // 960
  * 14 = 11/16 r15 선착장을 길게 (끝 데크는 걸터앉기만), 서쪽 낚시 가지(낚시 자리 둘), 넓은 부잔교 다리, 유령선 자리 서남쪽으로,
  *      데크 가장자리 빙 둘러 난간 (물로 걸어 내려가지 못해요)
  * 15 = 11/16 r18 카약 선착장(다리·뜬 데크)·2인승 카약 셋, 바위 둘을 서쪽 해안으로, 갯벌 구멍 하나 옮김
+ * 16 = 11/16 r19 카약 선착장을 선착장 서쪽으로 (바위 둘·갯벌 구멍은 r18 전 자리로 되돌림), 서쪽 튜브 하나·부표 하나·갯벌 구멍 하나 비켜 옮김
  */
-export const SEA_MAP_VERSION = 15;
+export const SEA_MAP_VERSION = 16;
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Pt = { x: number; y: number };
@@ -263,7 +264,7 @@ export const SEA_KIOSK_H = 56;
 // 11/16 r13 사용자: 선착장 끝 낚싯배(SEA_BOAT)는 뺐어요 (배 타기 계획도 접었어요). 그 자리에 제트스키를 매어 둬요
 /** 빨간 부표 */
 export const SEA_BUOYS: readonly Pt[] = [
-  { x: 690, y: 700 }, // r15 유령선 자리·낚시 가지를 비켜서
+  { x: 530, y: 700 }, // r15 유령선 자리·낚시 가지를 비켜서, r19 카약 선착장 앞 물길도 비켜서
   { x: 1020, y: 724 },
   { x: 1326, y: 730 },
   // 11/16 r12 아래로 넓힌 먼바다에 드문드문
@@ -294,11 +295,12 @@ export const SEA_BREAKWATER = { x: 1400, y: 468, w: 48, h: 156 } as const;
 export const SEA_BREAKWATER_TIP = { x: 1376, y: 616, w: 96, h: 92 } as const;
 /** 걸어 다니는 데크 (선착장 몸통·끝 데크·낚시 가지·부잔교·다리·방파제·끝 데크) */
 /**
- * 11/16 r18 사용자: 카약 선착장 — 선착장 동쪽 백사장에서 짧은 다리(선베드 앞줄 사이 틈)로 이어진 낮은 뜬 데크.
+ * 11/16 r18 사용자: 카약 선착장 — 백사장에서 짧은 다리(선베드 앞줄 사이 틈)로 이어진 낮은 뜬 데크.
  * 2인승 카약 셋을 데크 바로 아래 물에 매어 둬요 (간조에도 물 — 얕은 물은 다닐 수 있어요)
+ * 11/16 r19 사용자: 선착장 서쪽으로 (동쪽 제트스키 부잔교와 떨어지게). 낚시 가지와는 50px, 유령선 빈 물(아래)·서쪽 갯바위와도 넉넉히
  */
-export const SEA_KAYAK_WALK = { x: 1038, y: 480, w: 24, h: 120 } as const;
-export const SEA_KAYAK_DOCK = { x: 1000, y: 596, w: 110, h: 32 } as const;
+export const SEA_KAYAK_WALK = { x: 658, y: 480, w: 24, h: 120 } as const;
+export const SEA_KAYAK_DOCK = { x: 600, y: 596, w: 110, h: 32 } as const;
 export const SEA_DECKS: readonly Rect[] = [SEA_PIER, SEA_PIER_END, SEA_PIER_ARM, SEA_PONTOON, SEA_PONTOON_RAMP, SEA_BREAKWATER, SEA_BREAKWATER_TIP, SEA_KAYAK_WALK, SEA_KAYAK_DOCK];
 /** 등대 받침 가운데 (끝 데크 뒤쪽) */
 export const SEA_LIGHTHOUSE = { x: 1424, y: 664 } as const;
@@ -332,9 +334,9 @@ export const SEA_ROCKS: readonly SeaRock[] = [
   { x: 1368, y: 504, rx: 12, ry: 6, small: true },
   // 11/16 물가 사이사이
   { x: 780, y: 518, rx: 12, ry: 6, small: true },
-  { x: 100, y: 700, rx: 18, ry: 9 }, // r18 카약 선착장 다리 자리를 비우려고 서쪽 바위 해안으로 옮겼어요 (번호는 그대로)
+  { x: 1036, y: 518, rx: 18, ry: 9 }, // r19 카약 선착장이 서쪽으로 가서 r18 전 자리로 되돌림
   { x: 1174, y: 563, rx: 20, ry: 10 },
-  { x: 232, y: 650, rx: 10, ry: 5, small: true }, // r18 카약 선착장 자리를 비우려고 서쪽으로
+  { x: 1004, y: 596, rx: 10, ry: 5, small: true }, // r15 부잔교 다리 자리를 비켜서 (r19 r18 전 자리로 되돌림)
   // 11/16 r12 동쪽으로 넓힌 땅: 방파제 너머 갯바위 해안
   { x: 1546, y: 514, rx: 26, ry: 13 },
   { x: 1592, y: 552, rx: 32, ry: 16 },
@@ -515,11 +517,11 @@ export const SEA_DIG_HOLES: readonly Pt[] = [
   { x: 500, y: 566 },
   { x: 710, y: 527 },
   { x: 960, y: 540 },
-  { x: 1000, y: 560 }, // r18 카약 선착장 다리를 비켜서
+  { x: 1060, y: 566 }, // r19 카약 선착장이 서쪽으로 가서 r18 전 자리(id)로 되돌림
   { x: 1120, y: 533 },
   { x: 1220, y: 546 },
   { x: 930, y: 572 },
-  { x: 680, y: 559 },
+  { x: 450, y: 548 }, // r19 카약 선착장 다리 자리를 비켜서 서쪽으로
   { x: 1270, y: 572 },
   { x: 780, y: 576 },
 ];
@@ -813,7 +815,7 @@ export function seaKayakWater(x: number, y: number, level: number): boolean {
 export type SeaRide = { id: string; kind: SeaRideKind; n: number; x: number; y: number };
 /** 튜브 다섯 (떠다니는 길의 가운데 — 간조 물가보다 넉넉히 바깥) */
 export const SEA_TUBES: readonly Pt[] = [
-  { x: 560, y: 700 },
+  { x: 380, y: 740 }, // r19 카약 선착장 앞 물길을 비켜서 서쪽으로 (유령선 빈 물 바깥)
   { x: 1080, y: 704 },
   { x: 1240, y: 764 },
   { x: 120, y: 760 }, // r14 서쪽 작은 만
@@ -876,13 +878,4 @@ export function seaTubeDriftAt(i: number, t: number, level: number): Pt {
   const x = h.x + Math.sin((t / 23_000) * TAU + ph) * SEA_TUBE_DRIFT.ax + Math.sin((t / 9_100) * TAU + ph * 2) * 4;
   const y = Math.max(h.y + Math.sin((t / 31_000) * TAU + ph * 1.3) * SEA_TUBE_DRIFT.ay, tideLineY(level) + 26);
   return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
-}
-
-// ── 11/16 r18 카약 「같이 타요」 외치기 ──
-/** 한 번 외치는 값 (포인트) · 계정마다 간격 · 저절로 끝나는 시간 */
-export const SEA_KAYAK_SHOUT_COST = 20;
-export const SEA_KAYAK_SHOUT_COOLDOWN_MS = 60_000;
-export const SEA_KAYAK_SHOUT_TTL_MS = 120_000;
-export function seaKayakShoutText(name: string): string {
-  return `달물결 포구에서 ${name}님이 외쳐요! 카약 같이 타요!`;
 }

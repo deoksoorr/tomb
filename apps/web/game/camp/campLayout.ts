@@ -1,4 +1,5 @@
 import { SCOPE_STAND } from "./lookoutMath";
+import { SCOPE_E_RADIUS, scopeBaseRect } from "../scopes/scopeGeom";
 import {
   CAMP_BOARD,
   CAMP_BOARD_SPOT,
@@ -35,7 +36,7 @@ import {
   type Furniture,
 } from "@tomb/protocol";
 import type { CampInteractable, CampLight } from "./campTypes";
-import { CAMP_FISHING_SPOTS } from "@tomb/protocol";
+import { CAMP_FISHING_SPOTS, CAMP_SCOPES } from "@tomb/protocol";
 import { CAMP_GATHER_NODES } from "@/lib/forage/catalog";
 
 // 11/15 언젠가 캠핑장 배치 — 순수 데이터 (Phaser 없음 → campLayout.test.ts가 충돌·길을 검사한다).
@@ -474,6 +475,7 @@ export function campStaticColliders(): Rect[] {
     { x: CAMP_BBQ.table.x - 22, y: CAMP_BBQ.table.y - 4, w: 44, h: 4 },
     { x: CAMP_BBQ.vending.x - 10, y: CAMP_BBQ.vending.y - 6, w: 20, h: 6 },
     ...lookoutRails(),
+    ...CAMP_SCOPES.map(scopeBaseRect), // 11/16 별 망원경 받침 (protocol scopes.ts)
     ...streamColliders(),
     ...CAMP_BOULDERS.map(boulderCollider),
     ...CAMP_LIGHT_POLES.map((p) => ({ x: p.x - 2, y: p.y - 3, w: 4, h: 3 })),
@@ -539,6 +541,8 @@ export const CAMP_INTERACTABLES: readonly CampInteractable[] = [
   { id: "board", kind: "board", x: CAMP_BOARD_SPOT.x, y: CAMP_BOARD_SPOT.y + 12, r: 20, label: "의뢰판 보기" },
   { id: "sign", kind: "sign", x: CAMP_BUS_SIGN.x, y: CAMP_BUS_SIGN.y + 12, r: 18, label: "표지판 보기" },
   { id: "lookout", kind: "lookout", x: SCOPE_STAND.x, y: SCOPE_STAND.y + 14, r: 20, label: "망원경으로 캠핑장 보기" },
+  // 11/16 별 망원경 (전망대 계단 아래·계곡 둑): 앞자리에서 E → 별자리 잇기 (game/scopes/StarScopes)
+  ...CAMP_SCOPES.map((s): CampInteractable => ({ id: s.id, kind: "telescope", x: s.ax, y: s.ay, r: SCOPE_E_RADIUS, label: "망원경으로 별자리 잇기" })),
   { id: "bbq", kind: "bbq", x: CAMP_BBQ.grill.x, y: CAMP_BBQ.grill.y + 14, r: 28, label: "바베큐 사 먹기" },
   { id: "vending", kind: "vending", x: CAMP_BBQ.vending.x, y: CAMP_BBQ.vending.y + 12, r: 20, label: "음료 뽑기" },
 ];

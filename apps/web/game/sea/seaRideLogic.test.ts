@@ -37,7 +37,8 @@ describe("seaRideLogic (11/16 r13)", () => {
   });
   it("튜브는 헤엄보다 느리고, 물가로 저어 가면 모래에 내려요", () => {
     const level = 1;
-    const m = at(SEA_PIER.x - 240, tideLineY(level) + 60);
+    // r19 카약 선착장(선착장 서쪽)을 비켜 더 서쪽에서
+    const m = at(SEA_PIER.x - 340, tideLineY(level) + 60);
     let land: { x: number; y: number } | null = null;
     let max = 0;
     for (let i = 0; i < 1000 && !land; i++) {

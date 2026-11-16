@@ -33,8 +33,9 @@ export const WALL_THICKNESS = 2 * TILE;
  * 12 = 묘역 하나로 합침(옛 묘역 8×4), 다리 건너 묘역 자리에 범퍼카장 — 새 충돌 자리에 옛 기록이 끼지 않게
  * 13 = 행운권 판매대 충돌 · 범퍼카장 링크/오리 연못 넓힘
  * 14 = 11/16 서쪽 모닥불을 치우고 바닷가행 정류장 — 새 충돌 자리에 옛 기록이 끼지 않게
+ * 15 = 11/16 마을 곳곳 망원경 넷 (광장 북쪽·징검다리 남쪽 둑·호숫가·쉼터 광장 받침 충돌, VILLAGE_SCOPES) — 새 충돌 자리에 옛 기록이 끼지 않게
  */
-export const MAP_VERSION = 14; // 14 = 서쪽 모닥불(fireW) 치우고 그 자리에 바닷가행 정류장(지붕·벤치 bU·팻말 충돌) (11/16)
+export const MAP_VERSION = 15; // 15 = 마을 곳곳 망원경 넷 (받침 충돌 VILLAGE_SCOPES) (11/16)
 
 const CX = MAP_WIDTH / 2; // 720
 
@@ -557,8 +558,20 @@ export const TELESCOPE = { x: 296, y: 92 } as const;
 export const TELESCOPE_SPOT = { x: TELESCOPE.x, y: TELESCOPE.y + 10 } as const;
 /** 11/15 둘째 망원경: 같은 돌 마당 동쪽 (망원경마다 한 명이라 둘이 같이 볼 수 있게). 자리 id가 앵커 좌표라 서버는 따로 알 필요가 없다 */
 export const TELESCOPE_2 = { x: 328, y: 92 } as const;
-/** 언덕의 망원경들 (받침 가운데). 앞자리는 각각 y + 10 */
-export const TELESCOPES: readonly { x: number; y: number }[] = [TELESCOPE, TELESCOPE_2];
+/**
+ * 11/16 사용자 "망원경 갯수를 여기저기 좀 늘렸으면": 언덕 밖 경치 좋은 곳 네 대 (광장 북쪽 끝·징검다리 남쪽 둑·호수 북동쪽 둑·쉼터 광장).
+ * 낚시 자리·배·좌석·정류장 E 범위와 떨어뜨려 놓았다 (game/scopes/scopes.test.ts).
+ * 언덕 망원경과 똑같이 앞자리(y + 10)에서 E → 별자리 잇기, 망원경마다 한 명. 자리 id가 앵커 좌표라 서버는 새로 알 것이 없다.
+ * name = 미니맵·안내 이름
+ */
+export const VILLAGE_SCOPES: readonly { x: number; y: number; name: string }[] = [
+  { x: 860, y: 226, name: "광장 망원경" },
+  { x: 622, y: 742, name: "징검다리 망원경" },
+  { x: 1352, y: 818, name: "호숫가 망원경" },
+  { x: 1072, y: 740, name: "쉼터 망원경" },
+];
+/** 마을의 망원경 전부 (받침 가운데 — 언덕 둘 + 마을 곳곳). 앞자리는 각각 y + 10 */
+export const TELESCOPES: readonly { x: number; y: number }[] = [TELESCOPE, TELESCOPE_2, ...VILLAGE_SCOPES];
 
 // ── 의자와 벤치 ── 좌석 점유는 서버가 판정한다.
 export type FurnitureKind = "bench" | "chair";
@@ -744,6 +757,8 @@ export type SpotKind =
   | "trampoline"
   | "carousel"
   | "telescope"
+  // 11/16 바닷가 동전 망원경 (바다 쪽을 본다)
+  | "binocular"
   | "mat"
   | "fish"
   | "ferris"
@@ -800,6 +815,11 @@ export const SPOT_KINDS: Readonly<Record<SpotKind, SpotKindDef>> = {
   telescope: { code: "t", state: STATE.idle, facing: DIR.up, shared: true },
   /** 돗자리에 앉기 (앵커 = 돗자리 가운데) */
   mat: { code: "n", state: STATE.sitGround, facing: DIR.down, shared: true },
+  /**
+   * 11/16 바닷가 동전 망원경 (관광지 쌍안 망원경, protocol scopes.ts SEA_SCOPES). 앵커 = 망원경 뒤(바다 반대쪽) 서는 자리, 바다(아래)를 본다.
+   * 망원경과 같은 서 있기 상태라 shared (sit 요청으로만)
+   */
+  binocular: { code: "y", state: STATE.idle, facing: DIR.down, shared: true },
   // ── 4번 낚시 ── 물가에 앉아 낚싯대를 드리운다 (바닥 앉기와 같은 상태라 shared). 정해진 자리(FISHING_SPOTS)만
   /** 낚시 자리 (앵커 = 앉는 발 위치, 방향은 자리마다 물 쪽) */
   fish: { code: "f", state: STATE.sitGround, facing: DIR.down, shared: true, fixed: true },
