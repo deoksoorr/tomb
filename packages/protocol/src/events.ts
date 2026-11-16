@@ -7,7 +7,7 @@ import { GOBLIN_ID_RE, type GoblinInfo } from "./npc";
 import type { AvatarDye } from "./dye";
 import { AWAY_HOUSE_RE, isAwayPlace, type AwayPlace } from "./friends";
 import type { PeerInfo, Sid } from "./types";
-import { isMapId, type AwayMapId, type MapId } from "./camp";
+import { isMapId, type AwayMapId, type ChatPlace, type MapId } from "./camp";
 import type { BbqItemId } from "./bbq";
 
 // 드문 이벤트는 짧은 JSON text 프레임. 이름과 색은 입장 때(welcome/join) 한 번만 보낸다.
@@ -158,7 +158,7 @@ export type S2C =
   | { t: "me" }
   /** 말풍선 자유 채팅 (보낸 사람 빼고, 서버가 가린 글. 옛 클라이언트는 모르는 t라 버린다). id = 줄 id(chatLog와 중복 제거), at = 서버 시각 */
   /** 11/16 채팅은 채널 전체(마을·캠핑장·바닷가)로 간다: name·staff·mgr = 다른 맵이라 화면에 없는 사람도 채팅창에 이름을 쓰게, m = 쓴 사람의 맵(캠핑장 "camp"·바닷가 "sea", 마을이면 없음) */
-  | { t: "chat"; sid: Sid; text: string; id?: string; at?: number; name?: string; staff?: true; mgr?: true; m?: AwayMapId }
+  | { t: "chat"; sid: Sid; text: string; id?: string; at?: number; name?: string; staff?: true; mgr?: true; /** 11/17 사냥 중이면 "hunt" */ m?: ChatPlace }
   /**
    * 11/16 귓속말 (받는 사람과 보낸 사람에게만, 서버가 가린 글. 기록에 남기지 않는다). from·fromName = 보낸 사람, to·toName = 받는 사람,
    * staff·mgr = 보낸 사람 딱지, toStaff·toMgr = 받는 사람 딱지. 옛 클라이언트는 모르는 t라 버린다

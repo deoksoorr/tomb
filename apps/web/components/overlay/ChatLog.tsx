@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useBackground } from "@/lib/hooks/useBackground";
 import { CHAT_LOG_TTL_MS, chatChannelOf, visibleChatLines, type ChatLine } from "@/game/logic/chatLog";
+import { cx } from "../ui/cx";
 import ChatInput from "./ChatInput";
 import { chatStore, setChatShown, useChatLines } from "./chatLines";
 import ChatScroll from "./ChatScroll";
@@ -36,11 +37,13 @@ type Props = {
   mobile: boolean;
   /** 지금 공간 (예: "world:3", "house:3"). 채널 번호가 바뀔 때만 비운다 */
   room: string;
-  /** 지금 채팅을 쓸 수 없는 장면(상점·사냥 등)이면 숨긴다 (받은 줄은 계속 모은다) */
+  /** 지금 채팅을 쓸 수 없는 장면(상점·미니게임 등)이면 숨긴다 (받은 줄은 계속 모은다) */
   hidden?: boolean;
+  /** 11/17 사냥 중: 데스크톱 상자를 사냥 HUD 위·맨 아래로 (폰 기록은 사냥 HUD 아래라 조이스틱 터치를 막지 않는다) */
+  hunt?: boolean;
 };
 
-export default function ChatLog({ mobile, room, hidden = false }: Props) {
+export default function ChatLog({ mobile, room, hidden = false, hunt = false }: Props) {
   const all = useChatLines();
   const [now, setNow] = useState(() => Date.now());
 
@@ -75,7 +78,7 @@ export default function ChatLog({ mobile, room, hidden = false }: Props) {
   return mobile ? (
     <MobileChat all={visibleChatLines(all, at)} now={at} />
   ) : (
-    <DesktopBox lines={visibleChatLines(all, at)} now={at} />
+    <DesktopBox lines={visibleChatLines(all, at)} now={at} hunt={hunt} />
   );
 }
 
@@ -93,9 +96,9 @@ function MobileChat({ all, now }: { all: ChatLine[]; now: number }) {
 }
 
 /** 데스크톱: 반투명 상자 + 스크롤 기록(하단 고정) + 입력칸 */
-function DesktopBox({ lines: shown, now }: { lines: ChatLine[]; now: number }) {
+function DesktopBox({ lines: shown, now, hunt }: { lines: ChatLine[]; now: number; hunt: boolean }) {
   return (
-    <section className={styles.box} aria-label="채팅">
+    <section className={cx(styles.box, hunt && styles.huntBox)} aria-label="채팅">
       {shown.length > 0 && <ChatScroll lines={shown} now={now} />}
       <ChatInput id={INPUT_ID} className={styles.input} placeholder="Enter로 채팅" onCancel={() => document.getElementById(INPUT_ID)?.blur()} />
     </section>

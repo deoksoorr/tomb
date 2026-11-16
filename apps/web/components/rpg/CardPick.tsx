@@ -4,7 +4,7 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { cardWindowUrl } from "@/game/rpg/cards/cardArt";
-import { BOSS_DEAL_HP_COST, CARDS, cardStackLine, cardText, RARITY_NAME, type CardChoice, type CardOfferView } from "@/lib/rpg/cards";
+import { BOSS_DEAL_HP_COST, CARDS, cardPromoLine, cardStackLine, cardText, RARITY_NAME, type CardChoice, type CardOfferView } from "@/lib/rpg/cards";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
@@ -49,6 +49,9 @@ function PickView({ view }: { view: CardOfferView }) {
   // 키: 1·2·3 고르기, R 다시 뽑기 / 상사의 제안은 1 받기·2 거절
   const onKey = useEffectEvent((e: KeyboardEvent) => {
     if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || document.querySelector("dialog[open]")) return;
+    // 11/17 사냥 중 채팅 입력칸에 숫자·R을 쳐도 카드를 고르지 않는다
+    const t = e.target;
+    if (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
     const n = /^Digit([1-3])$/.exec(e.code)?.[1];
     if (deal) {
       if (n === "1") answer(true);
@@ -119,6 +122,8 @@ function PickView({ view }: { view: CardOfferView }) {
                   )}
                   {/* 11/15 가진 카드면 지금 수치 → 더해진 수치 (+늘어나는 만큼) */}
                   {have > 0 && cardStackLine(id, have, view.owned) && <span className={c.stackLine}>{cardStackLine(id, have, view.owned)}</span>}
+                  {/* 11/17 처음 고르는 카드인데 팀장 승진이 있으면: 적힌 숫자 대신 실제로 받는 숫자 */}
+                  {have === 0 && cardPromoLine(id, 1, view.owned, view.style) && <span className={c.stackLine}>{cardPromoLine(id, 1, view.owned, view.style)}</span>}
                   <span className={c.desc}>{cardText(id, view.style)}</span>
                 </span>
               </button>

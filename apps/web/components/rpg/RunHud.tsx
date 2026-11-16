@@ -134,10 +134,13 @@ export default function RunHud({
   title,
   look,
   totalMs = 0,
+  onChat,
 }: {
   game: GameKind;
   hotbar: (SkillId | null)[];
   onPause: () => void;
+  /** 11/17 손가락 기기 사냥 중 [채팅] (채널 채팅 한 줄 입력칸 — 멈춤 아래, 조이스틱·스킬 칸을 가리지 않는 자리) */
+  onChat?: () => void;
   title?: string;
   look?: "meadow";
   totalMs?: number;
@@ -351,6 +354,11 @@ export default function RunHud({
             <button type="button" className={cx(ui.button, ui.icon)} onPointerDown={stop} onClick={onPause} aria-label="멈춤">
               <PixelIcon name="pause" />
             </button>
+            {hunt && onChat && (
+              <button type="button" className={cx(ui.button, ui.icon)} onPointerDown={stop} onClick={onChat} aria-label="채팅">
+                <PixelIcon name="chat" />
+              </button>
+            )}
           </div>
         </div>
         {/* 11/15 능력치 판 (C로 접기, 폰은 [능력] 버튼) */}

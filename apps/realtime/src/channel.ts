@@ -20,6 +20,7 @@ import {
   squirrelRainReady,
   squirrelRainLeftMs,
   type ChatBucket,
+  type ChatPlace,
   inMapBounds,
   isAwayMap,
   awayTag,
@@ -279,6 +280,8 @@ export const MAP_INTERVAL_MS = 1_000;
 const SEAT_KEY_PREFIX: Record<AwayMapId, string> = { camp: "@c:", sea: "@s:" };
 /** 이 사람이 있는 맵 */
 const mapOfPeer = (p: { map?: AwayMapId }): MapId => mapOf(p.map);
+/** 11/17 월드 채널에서 사냥터에 들어가 있는 사람(away + 장소 hunt)은 실내여도 채널 채팅을 쓴다 */
+const huntChatOk = (room: boolean | undefined, p: { away?: true; place?: AwayPlace }): boolean => !room && p.away === true && p.place === "hunt";
 /** 맵 + 와이어 좌석 id → 좌석표 키 */
 const seatKey = (map: MapId, id: string): string => (map === "village" ? id : SEAT_KEY_PREFIX[map] + id);
 /** 좌석표 키 → 그 맵과 와이어 id */
@@ -970,9 +973,11 @@ export class ChannelCore<C extends object> {
         return this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "say", sid: p.sid, id: m.id }));
       case "chat": {
         // 말풍선 채팅: 넘치면 조용히 버린다. 가린 글만 같은 채널·방에 중계하고, 늦게 온 사람용으로 기록에 둔다 (월드 채널은 저장소에도 모아 쓴다. 실내에 있으면 안 보이니 버린다)
-        if (p.away || !takeChatToken((p.chatBucket ??= newChatBucket()), now)) return;
+        // 11/17 사냥터(실내 장소 hunt)는 예외: 사냥 중에도 채널 채팅을 쓴다 (말풍선 없이 채팅창 [사냥터] 줄). 집·상점 등은 그대로 버린다 (집은 집 방 채팅)
+        const hunting = huntChatOk(this.cfg.room, p);
+        if ((p.away && !hunting) || !takeChatToken((p.chatBucket ??= newChatBucket()), now)) return;
         // 11/16 채팅은 채널 전체(마을·캠핑장)로 — 줄마다 쓴 사람의 맵을 붙이고, 다른 맵 사람도 채팅창에 이름을 쓰게 이름·딱지를 싣는다
-        const camp = awayTag(mapOfPeer(p));
+        const camp: { m?: ChatPlace } = hunting ? { m: "hunt" } : awayTag(mapOfPeer(p));
         const tags = { ...(p.staff ? { staff: true as const } : {}), ...(p.mgr ? { mgr: true as const } : {}) };
         const c = this.chatLog(now).push({ sid: p.sid, visitorId: p.visitorId, name: p.name, text: maskChat(m.text), ...tags, ...camp }, now);
         this.host.chatsChanged?.("village");

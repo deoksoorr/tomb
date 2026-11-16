@@ -28,8 +28,8 @@ import {
   type GraveEventKind,
   type GoblinInfo,
   type MapId,
-  type AwayMapId,
-  awayTag,
+  type ChatPlace,
+  chatTagOf,
   mapOf,
   type BbqItemId,
   isBbqId,
@@ -142,7 +142,7 @@ export type NetCallbacks = {
 };
 
 /** 11/16 채팅에 실려 오는 보낸 사람 정보 (맵이 달라 화면에 없는 사람도 채팅창에 쓰게) */
-export type ChatMeta = { name?: string; staff?: true; mgr?: true; m?: AwayMapId };
+export type ChatMeta = { name?: string; staff?: true; mgr?: true; /** 11/17 사냥 중이면 "hunt" */ m?: ChatPlace };
 
 /** 맵이 바뀌어도 늘 처음 콜백(월드)이 받는 것: 계정·친구·확성기·내 몸 모양·고블린 보상 */
 const GLOBAL_CALLBACKS = ["onMegaphone", "onMeStale", "onFriend", "onSelfBody", "onGoblinGrant", "onSquirrels", "onSquirrelsWait"] as const;
@@ -812,7 +812,7 @@ export class RealtimeClient {
               ...(typeof m.name === "string" && m.name ? { name: m.name.slice(0, 40) } : {}),
               ...(m.staff === true ? { staff: true as const } : {}),
               ...(m.mgr === true ? { mgr: true as const } : {}),
-              ...awayTag(m.m),
+              ...chatTagOf(m.m),
             });
           break;
         case "chatLog":

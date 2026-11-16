@@ -229,3 +229,14 @@
   text-shadow: none;
   box-shadow: inset 0 0 0 1px #2fbf9c;
 }
+
+/* 11/17 사냥 중 데스크톱 채팅창: 사냥 HUD(.capture, z 40) 위라야 입력칸을 누른다. 바로 가기 줄이 없으니 맨 아래로, 오른쪽 스킬 칸에 닿지 않게 좁고 낮게 */
+.box.huntBox {
+  z-index: 41;
+  bottom: calc(var(--safe-bottom) + 8px);
+  width: min(400px, 40vw);
+}
+
+.huntBox .log {
+  height: calc(6 * 1.45em + 5px);
+}

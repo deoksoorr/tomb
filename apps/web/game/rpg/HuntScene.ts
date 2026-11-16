@@ -469,6 +469,13 @@ export class HuntScene extends RpgScene {
         // 11/13 같은 사냥터 사람의 공격·스킬 동작 (보여 주기만)
         onHunt: (r, h) => this.remoteHunt(r, h),
       });
+      // 11/17 사냥 중 채널 채팅([사냥터] 줄): 내 말은 내 머리 위에, 같은 사냥터 방에 보이는 사람 말은 그 사람 머리 위에 (방 번호가 채널 번호와 달라 이름으로 찾는다)
+      const offChat = bridge.on("chat:line", ({ name, text, mine, m, w }) => {
+        if (w || m !== "hunt") return;
+        if (mine) this.me?.chat(text, this.time.now);
+        else for (const r of this.presence?.remotes.values() ?? []) if (r.name === name) r.view.chat(text, performance.now());
+      });
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, offChat);
     } else {
       this.me = null;
       this.player = this.add.sprite(this.px, this.py, RTEX.player, avFrame(0, 0)).setOrigin(0.5, 19 / 20);
@@ -2093,7 +2100,8 @@ export class HuntScene extends RpgScene {
     }
     // 11/15 전설 카드 「무한 야근」: 한 번 체력 30%로 다시 일어난다 (야근 빌딩에서 다시 일어나는 유일한 길)
     if (this.cards?.revive()) {
-      this.hp = Math.round(this.dv.maxHp * 0.3);
+      // 11/17 체력 30% (팀장 승진이면 45% — 카드 「다른 카드의 수치가 모두 50% 더」)
+      this.hp = Math.max(1, Math.round(this.dv.maxHp * this.cards.reviveHp));
       this.buffs.set("invuln", { until: this.now + 2000, v: 1 });
       this.status.cure(STATUS_IDS, this.now);
       return true;
@@ -2792,7 +2800,8 @@ export class HuntScene extends RpgScene {
       maxHp: d.maxHp,
       sp: Math.round(this.sp),
       maxSp: d.maxSp,
-      leftMs: Math.max(0, this.runLimitMs - (this.lift ? this.floorMs : now)),
+      // 11/17 야근 빌딩: 엘리베이터 문이 열리기 전(floorAt이 앞날)에는 새 층 제한 시간 그대로 (예전엔 1:34처럼 층 시간보다 크게 보였다)
+      leftMs: Math.max(0, this.runLimitMs - Math.max(this.lift ? this.floorMs : now, this.floorAt)),
       score: this.killCount,
       wave: [Math.max(1, this.nextWave), this.plan.length],
       ...(this.play.tower ? { floor: this.floor } : {}),

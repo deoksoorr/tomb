@@ -1,4 +1,4 @@
-import { awayTag, isEmoId, isSeatMood, maskChat, normalizeChat, type Sid } from "@tomb/protocol";
+import { awayTag, chatTagOf, isEmoId, isSeatMood, maskChat, normalizeChat, type Sid } from "@tomb/protocol";
 import { nameStyleIds } from "@/lib/nameStyle";
 import { bridge } from "../bridge";
 import type { Player } from "../entities/Player";
@@ -73,20 +73,35 @@ export class Expressions {
   }
 
   /**
+   * 11/17 사냥 중 채팅: 마을의 나는 숨어 있으니 말풍선 없이 같은 채널에 보내고 채팅창에 [사냥터] 줄로 (내 머리 위 말풍선은 사냥터 장면이 띄운다).
+   * 서버가 실내 장소 hunt로 받아 m: "hunt"를 붙여 채널 전체에 중계한다
+   */
+  chatHunting(raw: string): void {
+    const text = normalizeChat(raw);
+    if (!text) return;
+    const view = this.h.player().view;
+    this.h.net().chat(text);
+    const ns = nameStyleIds(view.wearing);
+    bridge.emit("chat:line", { name: view.label.text, text: maskChat(text), mine: true, ...(view.staff ? { staff: true as const } : {}), ...(view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), m: "hunt" });
+  }
+
+  /**
    * 다른 사람의 자유 채팅 (서버가 가린 글). 떠 있던 말풍선·이모티콘은 바로 바뀐다.
    * 11/16 채팅은 채널 전체로 온다: 다른 맵 사람(화면에 없음)은 말풍선 없이 채팅창에만 (서버가 실은 이름·딱지, [캠핑장]·[마을] 표시용 맵)
+   * 11/17 사냥 중인 사람(실내라 숨어 있다)도 말풍선 없이 채팅창에만 ([사냥터])
    */
   onRemoteChat(sid: Sid, text: string, key?: string, meta?: ChatMeta): void {
-    const camp = awayTag(meta?.m);
+    const camp = chatTagOf(meta?.m);
     const r = this.h.remotes().get(sid);
     if (!r) {
       if (meta?.name) bridge.emit("chat:line", { name: meta.name, text, mine: false, ...(key ? { key } : {}), ...(meta.staff ? { staff: true as const } : {}), ...(meta.mgr ? { mgr: true as const } : {}), ...camp });
       return;
     }
-    r.view.chat(text, performance.now());
+    const bubble = !r.away && meta?.m !== "hunt";
+    if (bubble) r.view.chat(text, performance.now());
     const ns = nameStyleIds(r.view.wearing);
     bridge.emit("chat:line", { name: r.name, text, mine: false, ...(key ? { key } : {}), ...(r.view.staff ? { staff: true as const } : {}), ...(r.view.manager ? { mgr: true as const } : {}), ...(ns ? { ns } : {}), ...camp });
-    if (r.visible) this.h.sfx.play("say", 0.2, 1.1, 6);
+    if (bubble && r.visible) this.h.sfx.play("say", 0.2, 1.1, 6);
   }
 
   /** 다른 사람의 이모티콘 (원격 아바타는 performance.now 시계로 그린다) */

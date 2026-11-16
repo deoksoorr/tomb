@@ -188,7 +188,8 @@ export class CardRun<M extends CardMon> {
   private halfReady = true;
   private seenCleared = 0;
   private spAt = 0;
-  private tempOn = false;
+  /** 11/17 능력치에 얹혀 있는 잠깐 혜택 (1 = 법인카드, 2 = 연차 몰아 쓰기) — 하나라도 켜지거나 꺼지면 능력치를 다시 (예전엔 둘 다 끝나야 다시 계산해서 먼저 끝난 쪽이 최대 5초 더 남았다) */
+  private buffMask = 0;
   private skillChainAt = 0;
   /** 이번 공격에서 연쇄 번개·토스를 아직 안 썼다 */
   private chainReady = false;
@@ -363,7 +364,7 @@ export class CardRun<M extends CardMon> {
   derive(base: Derived): Derived {
     const s = this.s;
     const now = this.h.now();
-    const t = (key: string) => (this.temp.key === key && now < this.temp.until ? this.temp.v : 0) + (key === "aspd" && now < this.leaveUntil ? 0.5 : 0);
+    const t = (key: string) => (this.temp.key === key && now < this.temp.until ? this.temp.v : 0) + (key === "aspd" && now < this.leaveUntil ? s.leaveAspd : 0);
     return {
       ...base,
       atk: base.atk * s.atkMul * (1 + t("atk")),
@@ -375,10 +376,10 @@ export class CardRun<M extends CardMon> {
   }
   /** 근접 닿는 거리 (직보) */
   area(base: AttackArea): AttackArea {
-    return this.s.pierce && this.kind === "melee" ? { range: Math.round(base.range * 1.35), arcDeg: base.arcDeg } : base;
+    return this.s.pierce && this.kind === "melee" ? { range: Math.round(base.range * (1 + this.s.reach)), arcDeg: base.arcDeg } : base;
   }
   get blastMul(): number {
-    return this.s.pierce && this.kind === "magic" ? 1.35 : 1;
+    return this.s.pierce && this.kind === "magic" ? 1 + this.s.reach : 1;
   }
   /** 11/15 이 적에게 주는 피해 배율: 퇴사 각(내 체력이 적을수록) · 성과급(우두머리·정예) */
   dmgMul(m: M): number {
@@ -464,7 +465,7 @@ export class CardRun<M extends CardMon> {
     const dirs = [0, ...s.dirs];
     const front = 1 + s.front;
     const pierce = s.pierce ? 99 : pj.pierce;
-    const m0 = mult * (s.pierce && pj.pierce > 0 ? 1.2 : 1);
+    const m0 = mult * (s.pierce && pj.pierce > 0 ? 1 + s.pierceDmg : 1);
     const range = this.h.area().range;
     const card = st.id === "card";
     this.chainReady = true;
@@ -1124,7 +1125,12 @@ export class CardRun<M extends CardMon> {
     }
   }
 
-  /** 무한 야근: 쓰러지는 순간 한 번 (true면 일어났다 — 체력·무적은 부르는 쪽이) */
+  /** 11/17 무한 야근으로 일어날 때 체력 비율 (팀장 승진이면 더) */
+  get reviveHp(): number {
+    return this.s.reviveHp;
+  }
+
+  /** 무한 야근: 쓰러지는 순간 한 번 (true면 일어났다 — 체력(reviveHp)·무적은 부르는 쪽이) */
   revive(): boolean {
     if (!this.s.revive || this.reviveUsed) return false;
     this.reviveUsed = true;
@@ -1156,7 +1162,7 @@ export class CardRun<M extends CardMon> {
     if (s.leave && !this.leaveUsed && this.h.hp() > 0 && this.h.hp() < this.h.maxHp() * 0.3) {
       this.leaveUsed = true;
       this.leaveUntil = now + 5000;
-      this.tempOn = true;
+      this.buffMask |= 2;
       this.h.invuln(3000);
       this.h.refresh();
       const p = this.h.player();
@@ -1165,8 +1171,9 @@ export class CardRun<M extends CardMon> {
       this.h.flash("연차 몰아 쓰기! 3초 동안 무적이에요", 1800);
       this.h.synth("card-revive", CARD_SND.revive);
     }
-    if (this.tempOn && now >= this.temp.until && now >= this.leaveUntil) {
-      this.tempOn = false;
+    const mask = (now < this.temp.until ? 1 : 0) | (now < this.leaveUntil ? 2 : 0);
+    if (mask !== this.buffMask) {
+      this.buffMask = mask;
       this.h.refresh();
     }
   }
@@ -1192,7 +1199,7 @@ export class CardRun<M extends CardMon> {
     const pk = PERKS[Math.floor(Math.random() * PERKS.length)];
     const v = pk.v * this.s.effMul;
     this.temp = { key: pk.key, v, until: now + 5000 };
-    this.tempOn = true;
+    this.buffMask |= 1;
     this.h.refresh();
     const p = this.h.player();
     this.h.float(p.x, p.y - 30, `법인카드! ${pk.label} +${Math.round(v * 100)}%`, "#e8c86a", 10);

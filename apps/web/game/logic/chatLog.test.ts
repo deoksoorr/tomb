@@ -196,4 +196,15 @@ describe("11/16 다른 맵 채팅 표시 [캠핑장]·[마을]", () => {
     ], 50_000);
     expect(got.map((l) => l.m ?? "village")).toEqual(["camp", "village", "village"]);
   });
+
+  it("11/17 사냥 중에 쓴 줄은 [사냥터], 사냥터에서 보면 마을·캠핑장 줄에 그 맵 표시", () => {
+    expect(chatPlaceTag({ m: "hunt" }, "village")).toBe("[사냥터]");
+    expect(chatPlaceTag({ m: "hunt" }, "camp")).toBe("[사냥터]");
+    expect(chatPlaceTag({ m: "hunt" }, "hunt")).toBeNull();
+    expect(chatPlaceTag({}, "hunt")).toBe("[마을]");
+    expect(chatPlaceTag({ m: "sea" }, "hunt")).toBe("[바닷가]");
+    expect(chatPlaceTag({ m: "hunt" }, null)).toBeNull();
+    const got = readChatLog(10_000, [{ id: "h.1", at: 9_000, name: "사냥꾼", text: "보스", m: "hunt" }], 50_000);
+    expect(got[0].m).toBe("hunt");
+  });
 });

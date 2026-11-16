@@ -256,6 +256,64 @@ export function cardStackLine(id: CardId, have: number, owned?: CardCounts): str
   }
 }
 
+/**
+ * 11/17 팀장 승진을 가졌을 때 카드에 적힌 숫자 대신 실제로 받는 숫자 ("팀장 승진으로 공격력 +22.5%").
+ * n = 이 카드를 몇 장 가진 셈으로 (새로 고르는 카드면 1). 승진이 없거나 숫자로 말할 수 없는 카드면 null — cardStats와 같은 숫자
+ */
+export function cardPromoLine(id: CardId, n: number, owned: CardCounts | undefined, kind: CardKindStyle = "melee"): string | null {
+  if (id === "promote" || promoteMul(owned) === 1) return null;
+  const k = PROMOTE_MUL;
+  const up = (label: string, per: number, unit = "%") => `${label} +${fmt(per * k * n)}${unit}`;
+  const down = (label: string, per: number) => `${label} −${fmt(per * k * n)}%`;
+  const line = (() => {
+    switch (id) {
+      case "raise":
+        return up("공격력", 15);
+      case "quick":
+        return up("공격 속도", 12);
+      case "health":
+        return up("최대 체력", 15);
+      case "commute":
+        return up("이동 속도", 10);
+      case "coffee":
+        return `바로 체력 +${fmt(40 * k)}%`;
+      case "offwork":
+        return up("처치할 때 체력", 1);
+      case "sharp":
+        return `${up("치명타", 8)}, ${up("치명타 피해", 20)}`;
+      case "mix":
+        return up("SP 회복", 2, "/초");
+      case "memo":
+        return up("치명타 피해", 25);
+      case "walk":
+        return `${up("최대 체력", 8)}, ${up("이동 속도", 5)}`;
+      case "snack":
+        return up("층을 깰 때 체력", 8);
+      case "badge":
+        return down("받는 피해", 6);
+      case "minutes":
+        return up("판 경험치", 15);
+      case "direct":
+        return kind === "melee" ? up("닿는 거리", 35) : kind === "magic" ? up("터지는 범위", 35) : `원래 뚫는 무기면 피해 +${fmt(20 * k)}%`;
+      case "resign":
+        return `체력이 바닥일 때 피해 +${fmt(60 * k)}%`;
+      case "wfh":
+        return down("서 있을 때 받는 피해", 15);
+      case "bonus":
+        return up("우두머리·정예 피해", 30);
+      case "oneshot":
+        return `원샷 확률 ${fmt(5 * k)}%`;
+      case "overtime":
+        return `다시 일어날 때 체력 ${fmt(30 * k)}%`;
+      case "leave":
+        return `공격 속도 +${fmt(50 * k)}%`;
+      default:
+        return null;
+    }
+  })();
+  return line ? `팀장 승진으로 ${line}` : null;
+}
+
 // ── 판 레벨 ──
 
 /** 처치 하나의 판 경험치 (몬스터 id만으로 정한다 — 서버가 처치 기록으로 똑같이 센다) */
@@ -483,6 +541,13 @@ export type CardStats = {
   /** 원샷 결재 확률 */
   oneshotP: number;
   revive: boolean;
+  /** 11/17 무한 야근으로 다시 일어날 때 체력 비율 (팀장 승진이면 더) */
+  reviveHp: number;
+  /** 11/17 직보: 근접 닿는 거리·마법 터지는 범위 + · 원래 뚫는 원거리 무기 피해 + (팀장 승진이면 더) */
+  reach: number;
+  pierceDmg: number;
+  /** 11/17 연차 몰아 쓰기 공격 속도 + (팀장 승진이면 더) */
+  leaveAspd: number;
   /** 11/15 등급 개편으로 새로 붙은 것 */
   /** 초당 SP (믹스커피) */
   spRegen: number;
@@ -550,6 +615,8 @@ export function cardStats(o: CardCounts): CardStats {
     front: n("parallel"),
     dirs,
     pierce: n("direct") > 0,
+    reach: n("direct") > 0 ? 0.35 * k : 0,
+    pierceDmg: n("direct") > 0 ? 0.2 * k : 0,
     toss: n("toss"),
     wall: n("resubmit") > 0,
     burn: n("passion") > 0,
@@ -565,6 +632,7 @@ export function cardStats(o: CardCounts): CardStats {
     oneshot: n("oneshot") > 0,
     oneshotP: 0.05 * k,
     revive: n("overtime") > 0,
+    reviveHp: 0.3 * k,
     spRegen: 2 * k * n("mix"),
     floorHeal: 0.08 * k * n("snack"),
     taken: Math.min(0.6, 0.06 * k * n("badge")),
@@ -579,6 +647,7 @@ export function cardStats(o: CardCounts): CardStats {
     coffeeHeal: 0.4 * k,
     corpcard: n("corpcard") > 0 ? 0.08 : 0,
     leave: n("leave") > 0,
+    leaveAspd: 0.5 * k,
     promote: k > 1,
     skillDmg: CARD_IDS.reduce((a, id) => a + (id === "coffee" ? 0 : n(id) * SKILL_DMG_PER_CARD[CARDS[id].rarity]), 0),
   };
@@ -598,7 +667,7 @@ export function cardPower(o: CardCounts): number {
   p *= s.atkMul * s.aspdMul * (1 + (s.crit / 100) * (0.5 + s.critDmg) + 0.1 * s.critDmg);
   p *= (1 + s.extra) * Math.max(0.5, s.hitMul);
   p *= 1 + 0.25 * (s.front + s.dirs.length);
-  if (s.pierce) p *= 1.35;
+  if (s.pierce) p *= 1 + s.reach;
   p *= 1 + 0.3 * s.toss;
   if (s.wall) p *= 1.15;
   if (s.burn) p *= 1 + 0.3 * s.effMul;
@@ -611,8 +680,10 @@ export function cardPower(o: CardCounts): number {
   p *= 1 + s.resign;
   p *= 1 + s.politics * 1.5;
   p *= 1 + s.bossDmg * 0.5;
-  if (s.corpcard) p *= 1.25;
-  if (s.leave) p *= 1.05;
+  if (s.corpcard) p *= 1 + 0.25 * s.effMul;
+  if (s.leave) p *= 1 + 0.1 * s.leaveAspd;
+  // 11/17 믹스커피: SP가 빨리 차면 스킬을 더 자주 쓴다 (기본 SP 회복이 초당 3쯤 — 넉넉하게 SP 1/초마다 +5%)
+  p *= 1 + 0.05 * s.spRegen;
   // 11/15 스킬 피해 + (스킬 몫이 전체의 절반쯤이라 넉넉히 절반을 곱한다)
   p *= 1 + 0.5 * s.skillDmg;
   return Math.min(CARD_POWER_MAX, p);

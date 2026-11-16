@@ -3,9 +3,9 @@ import {
   CHAT_MAX,
   CHAT_RECENT_MAX,
   CHAT_STORE_MAX,
-  isAwayMap,
-  type AwayMapId,
+  isChatPlace,
   type ChatLogLine,
+  type ChatPlace,
 } from "@tomb/protocol";
 
 // 방(월드 채널·집·사냥터)별 최근 채팅 링버퍼 (11/16 월드 채널은 마을·캠핑장이 한 버퍼 — 줄마다 맵 표시 m) (메모리 최대 CHAT_RECENT_MAX줄, CHAT_HISTORY_MS 지난 줄은 버린다).
@@ -24,8 +24,8 @@ export type RecentChat = {
   staff?: true;
   /** 11/16 매니저가 쓴 줄 */
   mgr?: true;
-  /** 11/16 쓴 사람이 있던 맵 (캠핑장 "camp"·바닷가 "sea", 마을이면 없음) */
-  m?: AwayMapId;
+  /** 11/16 쓴 사람이 있던 맵 (캠핑장 "camp"·바닷가 "sea", 마을이면 없음). 11/17 사냥 중에 쓴 줄은 "hunt" */
+  m?: ChatPlace;
 };
 
 export class ChatRecent {
@@ -67,7 +67,7 @@ export class ChatRecent {
       text: l.text,
       ...(l.staff ? { staff: true as const } : {}),
       ...(l.mgr ? { mgr: true as const } : {}),
-      ...(isAwayMap(l.m) ? { m: l.m } : {}),
+      ...(isChatPlace(l.m) ? { m: l.m } : {}),
       ...(visitorId !== undefined && l.visitorId === visitorId
         ? { mine: true as const }
         : {}),
@@ -136,6 +136,6 @@ function readStored(v: unknown): RecentChat | null {
     text: l.text.slice(0, CHAT_MAX * 2),
     ...(l.staff === true ? { staff: true as const } : {}),
     ...(l.mgr === true ? { mgr: true as const } : {}),
-    ...(isAwayMap(l.m) ? { m: l.m } : {}),
+    ...(isChatPlace(l.m) ? { m: l.m } : {}),
   };
 }

@@ -110,6 +110,17 @@ describe("다람쥐를 뿌려라", () => {
     expect(rains(b)).toHaveLength(1);
   });
 
+  it("11/17 사냥터(실내 장소 hunt)에서 친 주문도 채널 전체에 쏟아진다", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    const h = join("h");
+    core.message(h, send({ t: "away", on: true, p: "hunt" }), 0);
+    clear(a, h);
+    core.message(h, chat(SPELL), 1_000);
+    expect(chats(a)).toMatchObject([{ t: "chat", text: SPELL, name: "h", m: "hunt" }]);
+    for (const c of [a, h]) expect(rains(c)).toMatchObject([{ t: "squirrels", by: "h" }]);
+  });
+
   it("귓속말·주문이 아닌 말·집(방) 채팅은 아니다", () => {
     const { core, join } = setup();
     const a = join("a");
