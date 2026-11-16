@@ -124,8 +124,8 @@ export function starsOn(hour: number): boolean {
 /** 자막 한 줄 (해요체, 짧게). 처음 2.4초는 출발 안내, 마지막 2.8초는 다음 정류장, 그 사이는 없다 */
 export function captionAt(ms: number, total: number, leg: BusLeg, route: BusRoute = "camp"): string | null {
   const sea = route === "sea";
-  if (ms < 2400) return leg === "toCamp" ? (sea ? "달물결 포구행 버스가 출발해요." : "언젠가 캠핑장행 버스가 출발해요.") : "마을로 돌아가는 버스예요.";
-  if (ms > total - 2800) return leg === "toCamp" ? (sea ? "다음 정류장은 달물결 포구예요." : "다음 정류장은 언젠가 캠핑장이에요.") : "다음 정류장은 마을이에요.";
+  if (ms < 2400) return leg === "toCamp" ? (sea ? "달물결 포구행 버스가 출발해요." : "언젠가 캠핑장행 버스가 출발해요.") : "기억숲 마을로 돌아가는 버스예요.";
+  if (ms > total - 2800) return leg === "toCamp" ? (sea ? "다음 정류장은 달물결 포구예요." : "다음 정류장은 언젠가 캠핑장이에요.") : "다음 정류장은 기억숲 마을이에요.";
   return null;
 }
 

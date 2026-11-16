@@ -28,8 +28,8 @@ describe("버스 창밖 연출 계산", () => {
   it("바닷가 노선 자막", () => {
     expect(captionAt(500, BUS_RIDE_MS, "toCamp", "sea")).toBe("달물결 포구행 버스가 출발해요.");
     expect(captionAt(BUS_RIDE_MS - 500, BUS_RIDE_MS, "toCamp", "sea")).toBe("다음 정류장은 달물결 포구예요.");
-    expect(captionAt(500, BUS_RIDE_MS, "toVillage", "sea")).toBe("마을로 돌아가는 버스예요.");
-    expect(captionAt(BUS_RIDE_MS - 500, BUS_RIDE_MS, "toVillage", "sea")).toBe("다음 정류장은 마을이에요.");
+    expect(captionAt(500, BUS_RIDE_MS, "toVillage", "sea")).toBe("기억숲 마을로 돌아가는 버스예요.");
+    expect(captionAt(BUS_RIDE_MS - 500, BUS_RIDE_MS, "toVillage", "sea")).toBe("다음 정류장은 기억숲 마을이에요.");
     expect(captionAt(4000, BUS_RIDE_MS, "toCamp", "sea")).toBeNull();
     expect(captionAt(500, BUS_RIDE_MS, "toCamp")).toBe("언젠가 캠핑장행 버스가 출발해요.");
   });
@@ -98,7 +98,7 @@ describe("버스 창밖 연출 계산", () => {
     expect(captionAt(500, BUS_RIDE_MS, "toCamp")).toContain("출발");
     expect(captionAt(4000, BUS_RIDE_MS, "toCamp")).toBeNull();
     expect(captionAt(BUS_RIDE_MS - 500, BUS_RIDE_MS, "toCamp")).toBe("다음 정류장은 언젠가 캠핑장이에요.");
-    expect(captionAt(BUS_RIDE_MS - 500, BUS_RIDE_MS, "toVillage")).toBe("다음 정류장은 마을이에요.");
+    expect(captionAt(BUS_RIDE_MS - 500, BUS_RIDE_MS, "toVillage")).toBe("다음 정류장은 기억숲 마을이에요.");
     expect(captionAlpha(0, BUS_RIDE_MS)).toBe(0);
     expect(captionAlpha(1200, BUS_RIDE_MS)).toBe(1);
     expect(captionAlpha(4000, BUS_RIDE_MS)).toBe(0);
