@@ -71,10 +71,10 @@ if (typeof window !== "undefined") {
     const added = chatStore.push(name, text, mine, key, staff, ns, mgr, m, w);
     // 실시간으로 새로 온 다른 사람 채팅에만 작은 알림음 (지난 기록 chat:log에는 울리지 않는다)
     chimeForChat({ mine, added, shown: shownNow, enabled: chatChime.getSnapshot() }, Date.now());
-    // 11/16 귓속말 상대는 최근 목록 맨 앞으로 (입력칸 이름 칩·/답). 처음 받은 귓속말 뒤에는 답장하는 법을 한 번 알려 준다
+    // 11/16 귓속말 상대는 최근 목록 맨 앞으로 (입력칸 이름 칩·/w + Enter). 처음 받은 귓속말 뒤에는 답장하는 법을 한 번 알려 준다
     if (added && name && (w === "in" || w === "out")) {
       whisperPartners.note(name, w);
-      if (w === "in" && takeReplyHint()) chatStore.push("", "/답 으로 바로 답장할 수 있어요", true, undefined, undefined, undefined, undefined, undefined, "note");
+      if (w === "in" && takeReplyHint()) chatStore.push("", "/w 하고 Enter를 누르면 바로 답장할 수 있어요", true, undefined, undefined, undefined, undefined, undefined, "note");
     }
   });
   bridge.on("chat:log", ({ lines: incoming, ch }) => {

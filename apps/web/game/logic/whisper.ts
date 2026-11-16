@@ -1,25 +1,18 @@
-// 11/16 귓속말 입력: 채팅 입력칸에 "/귓 닉네임 할 말" (또는 "/w 닉네임 할 말"), 답장은 "/답 할 말" (또는 "/r 할 말").
+// 11/16 귓속말 입력: 채팅 입력칸에 "/w 닉네임 할 말". "/w"만 치고 Enter면 가장 최근 상대로 채운다 (/귓·/답·/r는 없앴다 — 명령은 /w 하나).
 // 이름에 공백이 들 수 있어 아는 이름(최근 귓속말 상대·채팅창에 보인 사람들) 중 가장 긴 것으로 나눈다. 모르는 이름이면 첫 낱말을 이름으로 보낸다
 // (실시간 서버가 접속자 이름으로 다시 맞추므로 여기서 조금 틀려도 맞는 사람에게 간다).
 // 최근 귓속말 상대 목록 규칙(addPartner·filterPartners·readPartners)과 입력칸 위 이름 칩(whisperChips)도 여기.
 
 import { WHO_ON_MAX, matchWhisperTarget, nameKey, normalizeChat } from "@tomb/protocol";
 
-const COMMAND_RE = /^\/(?:귓|w)(?=\s|$)/i;
-const REPLY_RE = /^\/(?:답|r)(?=\s|$)/i;
+const COMMAND_RE = /^\/w(?=\s|$)/i;
 
-/** send = 보낼 수 있음, empty = 이름이나 할 말이 아직 없음, long = 할 말이 너무 김 (size = 할 말 글자 수), noReply = 답장할 귓속말이 없음 */
-export type WhisperDraft = { kind: "send"; to: string; text: string } | { kind: "empty" } | { kind: "long"; size: number } | { kind: "noReply" };
+/** send = 보낼 수 있음, empty = 이름이나 할 말이 아직 없음, long = 할 말이 너무 김 (size = 할 말 글자 수) */
+export type WhisperDraft = { kind: "send"; to: string; text: string } | { kind: "empty" } | { kind: "long"; size: number };
 
-/** 입력이 귓속말(답장 포함) 명령으로 시작하는지 */
+/** 입력이 귓속말 명령(/w)으로 시작하는지 */
 export function isWhisperCommand(raw: string): boolean {
-  const s = raw.trimStart();
-  return COMMAND_RE.test(s) || REPLY_RE.test(s);
-}
-
-/** 답장(/답·/r) 명령으로 시작하는지 */
-export function isReplyCommand(raw: string): boolean {
-  return REPLY_RE.test(raw.trimStart());
+  return COMMAND_RE.test(raw.trimStart());
 }
 
 /** 할 말 정리: 비었으면 empty, 너무 길면 long */
@@ -29,10 +22,9 @@ function draftOf(to: string, rest: string): WhisperDraft {
   return text ? { kind: "send", to, text } : { kind: "long", size: [...rest.trim()].length };
 }
 
-/** 귓속말 명령 나누기. replyTo = /답 대상 (마지막으로 나에게 귓속말한 사람). 귓속말 명령이 아니면 null */
-export function parseWhisper(raw: string, names: Iterable<string>, replyTo?: string | null): WhisperDraft | null {
+/** 귓속말 명령 나누기. 귓속말 명령이 아니면 null */
+export function parseWhisper(raw: string, names: Iterable<string>): WhisperDraft | null {
   const s = raw.normalize("NFC").trimStart();
-  if (REPLY_RE.test(s)) return replyTo ? draftOf(replyTo, s.replace(REPLY_RE, "")) : { kind: "noReply" };
   if (!COMMAND_RE.test(s)) return null;
   const body = s.replace(COMMAND_RE, "").replace(/\s+/g, " ").trim();
   const hit = matchWhisperTarget(body, names, (n) => n);
@@ -43,12 +35,12 @@ export function parseWhisper(raw: string, names: Iterable<string>, replyTo?: str
 
 /** 캐릭터 메뉴 [귓속말]·이름 칩이 채워 넣는 글 */
 export function whisperPrefill(name: string): string {
-  return `/귓 ${name} `;
+  return `/w ${name} `;
 }
 
-/** 11/16 이름 없이 명령만 친 상태 ("/w", "/귓", 뒤 공백 포함): 이때 Enter면 가장 최근 귓속말 상대로 채운다 */
+/** 11/16 이름 없이 명령만 친 상태 ("/w", 뒤 공백 포함): 이때 Enter면 가장 최근 귓속말 상대로 채운다 */
 export function isBareWhisper(raw: string): boolean {
-  return /^\/(?:귓|w)\s*$/i.test(raw.normalize("NFC").trimStart());
+  return /^\/w\s*$/i.test(raw.normalize("NFC").trimStart());
 }
 
 // ── 최근 귓속말 상대 ──
@@ -81,11 +73,11 @@ export function readPartners(raw: string | null): string[] {
 }
 
 /**
- * 입력칸 위 이름 칩: 입력이 "/귓 " 뒤에 이름을 쓰는 중이면 그 앞부분에 맞는 최근 상대 (이름을 다 쓰고 띄었으면 그 이름은 뺀다).
+ * 입력칸 위 이름 칩: 입력이 "/w " 뒤에 이름을 쓰는 중이면 그 앞부분에 맞는 최근 상대 (이름을 다 쓰고 띄었으면 그 이름은 뺀다).
  * 이름을 쓰는 중이 아니면 null
  */
 export function whisperChips(raw: string, partners: readonly string[]): string[] | null {
-  const m = /^\/(?:귓|w)\s+([\s\S]*)$/i.exec(raw.normalize("NFC").trimStart());
+  const m = /^\/w\s+([\s\S]*)$/i.exec(raw.normalize("NFC").trimStart());
   if (!m) return null;
   const q = m[1].replace(/\s+/g, " ").trim();
   const done = /\s$/.test(m[1]) ? nameKey(q) : null;

@@ -81,7 +81,7 @@ export default function ReportLayer() {
             role="menuitem"
             className={cx(ui.button, styles.menuItem)}
             onClick={() => {
-              // 11/16 채팅 입력칸에 "/귓 닉네임 "을 채우고 연다 (GameShell·ChatInput)
+              // 11/16 채팅 입력칸에 "/w 닉네임 "을 채우고 연다 (GameShell·ChatInput)
               setMenu(null);
               bridge.emit("chat:prefill", { text: whisperPrefill(menu.name) });
             }}

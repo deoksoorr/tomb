@@ -343,7 +343,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     setSayOpen(false);
     setRadial(true);
   };
-  // 11/16 캐릭터 메뉴 [귓속말]: 입력칸이 "/귓 닉네임 "을 받는다 (ChatInput). 데스크톱은 채팅창 입력칸에 포커스, 터치는 한 줄 입력칸을 연다
+  // 11/16 캐릭터 메뉴 [귓속말]: 입력칸이 "/w 닉네임 "을 받는다 (ChatInput). 데스크톱은 채팅창 입력칸에 포커스, 터치는 한 줄 입력칸을 연다
   // (iOS는 탭 처리 안에서 포커스해야 키보드를 띄운다 → flushSync로 바로 그린다)
   useBridgeEvent("chat:prefill", () => {
     if (!canRadial || bridge.last("bus:state")?.riding) return;
