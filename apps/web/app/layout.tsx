@@ -14,6 +14,8 @@ export const metadata: Metadata = {
   ...shareMetadata("/api/og"),
   // 운영이 아닌 배포(미리보기·테스트 서버)는 검색에 올리지 않는다
   ...(IS_PRODUCTION ? {} : { robots: { index: false, follow: false } }),
+  // 11/16 네이버 서치어드바이저 소유 확인 (구글은 DNS TXT로 확인해서 여기엔 없다)
+  verification: { other: { "naver-site-verification": "a748d3ef789799d143f494908b56e39b3e025933" } },
 };
 
 // 입력칸 글자를 16px 이상으로 둬서 iOS 확대를 막으므로 maximumScale로 확대를 막지 않는다 (접근성).
