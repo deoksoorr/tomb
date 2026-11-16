@@ -1,6 +1,6 @@
 import { CLIENT_VERSION, MAP_WIDTH, MAX_VALID_SPEED, RUN_SPEED } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { MoveBudget, RateLimiter, allocSid, isOutdatedClient, parseChannel, parseSpawn, sayRelay, stepToward } from "./logic";
+import { IsolateMemo, MoveBudget, RateLimiter, allocSid, isOutdatedClient, parseChannel, parseSpawn, sayRelay, stepToward } from "./logic";
 
 describe("RateLimiter", () => {
   it("drops messages over 20/s for the rest of that second", () => {
@@ -104,3 +104,26 @@ describe("sayRelay (11/15 마을 공지 → 확성기 방송)", () => {
   });
 });
 
+
+describe("11/17 IsolateMemo (GET /lobby·/hunt-rooms 아이솔레이트 메모)", () => {
+  it("ttl 안에서는 다시 묻지 않고, 지나면 다시 묻는다. 실패는 기억하지 않는다", async () => {
+    const memo = new IsolateMemo<string>(5000);
+    let calls = 0;
+    const load = async () => ({ v: `v${++calls}` });
+    expect(await memo.get(0, load)).toBe("v1");
+    expect(await memo.get(4999, load)).toBe("v1");
+    expect(await memo.get(5000, load)).toBe("v2");
+    const fail = async (): Promise<{ v: string }> => {
+      throw new Error("lobby down");
+    };
+    await expect(memo.get(20_000, fail)).rejects.toThrow("lobby down");
+    expect(await memo.get(20_001, load)).toBe("v3");
+  });
+
+  it("엣지 캐시에서 꺼낸 값은 그 값이 만들어진 시각(at)부터 센다", async () => {
+    const memo = new IsolateMemo<string>(5000);
+    expect(await memo.get(10_000, async () => ({ v: "edge", at: 7_000 }))).toBe("edge");
+    expect(await memo.get(11_999, async () => ({ v: "fresh" }))).toBe("edge");
+    expect(await memo.get(12_000, async () => ({ v: "fresh" }))).toBe("fresh");
+  });
+});

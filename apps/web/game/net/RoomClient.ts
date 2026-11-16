@@ -1,9 +1,9 @@
-import { decodeSnapshot, DIR, encodeEvent, encodeMove, HUNT_ACT_INTERVAL_MS, isEmoId, isHuntRoom, isPhraseId, PING, PONG, STATE, type ActKind, type C2S, type HuntAct, type PeerInfo, type PeerState, type Sid } from "@tomb/protocol";
+import { decodeSnapshot, DIR, encodeEvent, encodeMove, HUNT_ACT_INTERVAL_MS, isEmoId, isHuntRoom, isPhraseId, MOVE_STEADY_MS, PING, PONG, ROOM_SOLO_STEADY_MS, STATE, type ActKind, type C2S, type HuntAct, type PeerInfo, type PeerState, type Sid } from "@tomb/protocol";
 import type { AppearanceChange } from "../sprites/avatar";
 import type { RoomJoinRequest, RoomJoinResponse } from "@/lib/types";
 import type { IncomingChatLine } from "../logic/chatLog";
 import { bridge } from "../bridge";
-import { backoffDelay } from "./backoff";
+import { backoffDelay, retryDelay, retrySoonOnVisible } from "./backoff";
 import { JoinLimiter, TOKEN_REUSE_MS } from "./joinPolicy";
 import { LookPacer } from "./lookPacer";
 import { isRoomId, parseRoomMessage, roomCloseAction, roomSocketUrl, type RoomWelcome } from "./roomPolicy";
@@ -17,6 +17,8 @@ import { SYNC_EVERY_MS, SyncPolicy } from "./syncPolicy";
 //  - 끊기면 같은 방으로 백오프 재접속 (토큰은 45초까지 재사용, 만료·잘못된 요청이면 새로)
 //  - leave(): close 1000 (서버가 바로 자리를 비운다)
 //  - MOVE는 MoveThrottle 규칙 그대로 (≤10Hz, 바뀔 때만, 숨은 탭은 멈춤 1회 후 쉼)
+//    11/17 꾸준히 걷는 동안은 MOVE_STEADY_MS, 방에 나 혼자면 ROOM_SOLO_STEADY_MS 간격 (받을 사람이 없다).
+//    누가 들어오면 지금 자세를 바로 한 번 보낸다. 앉기·가구 쓰기 직전에는 밀린 위치를 먼저 보낸다
 //  - sync는 SyncPolicy 그대로 (보이는 탭에서 3분마다, 탭 복귀·모르는 sid 스냅샷일 때만 바로). 숨은 탭은 핑만
 
 export type RoomMode = "idle" | "connecting" | "online" | "reconnecting" | "offline";
@@ -111,11 +113,13 @@ export class RoomClient {
   private readonly peers = new Set<Sid>();
   private token: { room: string; at: number; res: RoomJoinResponse } | null = null;
   private readonly limiter = new JoinLimiter();
-  private readonly throttle = new MoveThrottle();
+  private readonly throttle = new MoveThrottle(MOVE_STEADY_MS);
   private readonly syncPolicy = new SyncPolicy();
   private readonly pose: NetPose = { x: 0, y: 0, state: STATE.idle, dir: DIR.down };
   private hidden = false;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 11/17 예약된 재접속 시각 (Date.now 기준) — 탭이 다시 보이면 긴 대기를 줄인다 */
+  private retryDueAt: number | null = null;
   private welcomeTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private syncTimer: ReturnType<typeof setInterval> | null = null;
@@ -195,7 +199,17 @@ export class RoomClient {
   tick(now: number): void {
     if (!this.online) return;
     const pose = this.cb.getPose(this.pose);
-    if (!this.throttle.shouldSend(now, pose, this.hidden)) return;
+    if (!this.throttle.shouldSend(now, pose, this.hidden, this.peers.size === 0 ? ROOM_SOLO_STEADY_MS : MOVE_STEADY_MS)) return;
+    const seq = this.throttle.markSent(now, pose);
+    this.ws!.send(encodeMove({ x: pose.x, y: pose.y, state: pose.state, dir: pose.dir, seq }));
+  }
+
+  /** 11/17 서버가 마지막으로 보고한 위치로 판정하는 요청(앉기·가구 쓰기) 직전: 밀린 지금 위치를 먼저 보낸다 (100ms 간격은 지킨다) */
+  private flushPose(): void {
+    if (!this.online) return;
+    const now = performance.now();
+    const pose = this.cb.getPose(this.pose);
+    if (!this.throttle.flushDue(now, pose, this.hidden)) return;
     const seq = this.throttle.markSent(now, pose);
     this.ws!.send(encodeMove({ x: pose.x, y: pose.y, state: pose.state, dir: pose.dir, seq }));
   }
@@ -264,12 +278,14 @@ export class RoomClient {
 
   /** 3번 집 안 1인 자리 점유 요청 / 일어나기 / 가구 쓰기 */
   sit(seatId: string): void {
+    this.flushPose();
     this.send({ t: "sit", seatId });
   }
   stand(): void {
     this.send({ t: "stand" });
   }
   use(u: string, a: number): void {
+    this.flushPose();
     this.send({ t: "use", u, a });
   }
 
@@ -415,6 +431,8 @@ export class RoomClient {
           this.onWelcome(ev.m);
           break;
         case "join":
+          // 11/17 혼자라 드물게 보내던 위치를 바로 맞춘다 (다음 프레임에 지금 자세 1회)
+          if (this.peers.size === 0) this.throttle.reset();
           this.peers.add(ev.p.sid);
           this.cb.onJoin?.(ev.p);
           this.emitStatus();
@@ -562,10 +580,13 @@ export class RoomClient {
   private scheduleReconnect(delay?: number): void {
     if (this.target === null) return;
     if (this.retryTimer) clearTimeout(this.retryTimer);
-    const d = delay ?? backoffDelay(this.attempt++);
+    // 11/17 연달아 오래 실패하면 30초, 숨은 탭이면 60초 간격 (backoff.ts retryDelay)
+    const d = delay ?? retryDelay(this.attempt++, this.hidden);
     this.setMode(this.attempt > OFFLINE_AFTER ? "offline" : this.everOnline ? "reconnecting" : "connecting");
+    this.retryDueAt = Date.now() + d;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
+      this.retryDueAt = null;
       void this.connect();
     }, d);
   }
@@ -664,6 +685,8 @@ export class RoomClient {
       this.lastPongAt = performance.now();
       if (this.hiddenIdleTimer) clearTimeout(this.hiddenIdleTimer);
       this.hiddenIdleTimer = null;
+      // 11/17 숨어 있는 동안 늘려 둔 재접속 대기가 남았으면 곧바로 다시 시도한다
+      if (this.retryTimer && retrySoonOnVisible(this.retryDueAt, Date.now())) this.scheduleReconnect(backoffDelay(0));
       this.requestSync();
       return;
     }

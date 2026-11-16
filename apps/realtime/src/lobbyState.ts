@@ -56,6 +56,20 @@ export function refreshTargets(s: LobbyState, cfg: LobbyConfig, now: number): nu
   return ids;
 }
 
+/**
+ * 11/17 로비 DO가 새로 떴을 때 다시 물을 채널: 스냅샷에 사람이 있거나 최근(LOBBY_REFRESH_MS 안)에 있었던 채널만.
+ * 예전에는 10채널 모두를 물어, 사람이 없는 시간에도 로비가 깨어날 때마다 빈 채널 DO 10개를 깨웠다.
+ * 오래 비어 있던 채널은 사람이 들어오면 채널 DO가 바로 보고하고, 보고가 유실됐어도 연결이 있는 동안 5분마다(유령 정리 알람) 다시 보고한다.
+ */
+export function startupTargets(s: LobbyState, cfg: LobbyConfig, now: number): number[] {
+  const ids: number[] = [];
+  for (let id = 1; id <= cfg.maxChannels; id++) {
+    const r = s.channels[id];
+    if (r && (r.count > 0 || now - r.lastNonEmptyAt < LOBBY_REFRESH_MS)) ids.push(id);
+  }
+  return ids;
+}
+
 /** 재확인할 거리가 있는지 (알람을 걸지 정할 때) */
 export const hasRecentChannels = (s: LobbyState, cfg: LobbyConfig, now: number) =>
   Object.entries(s.channels).some(

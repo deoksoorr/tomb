@@ -1,4 +1,4 @@
-import { verifyJoinToken, type LobbyInfo } from "@tomb/protocol";
+import { LOBBY_CACHE_SEC, verifyJoinToken, type LobbyInfo } from "@tomb/protocol";
 import { del, issueSignedToken } from "@vercel/blob";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,7 +23,7 @@ import * as revive from "./graves/[id]/revive/route";
 import * as graveById from "./graves/[id]/route";
 import * as graves from "./graves/route";
 import * as join from "./join/route";
-import { issueJoin } from "@/lib/joinToken";
+import { fetchLobbyServer, issueJoin, resetLobbyMemo } from "@/lib/joinToken";
 import { getStore, sweepShrine } from "@/lib/store";
 import * as og from "./og/route";
 import * as session from "./session/route";
@@ -489,8 +489,9 @@ describe("POST /api/join", () => {
     maxChannels: counts.length,
     threshold: 0.8,
   });
-  // 기본은 로비 무응답. 로비가 필요한 테스트는 mockResolvedValueOnce로 덮는다
+  // 기본은 로비 무응답. 로비가 필요한 테스트는 mockResolvedValueOnce로 덮는다 (11/17 인스턴스가 기억한 로비는 테스트마다 비운다)
   beforeEach(() => {
+    resetLobbyMemo();
     body = { ...body, name: `새벽코더${++nameSeq}` };
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no lobby"));
   });
@@ -538,6 +539,28 @@ describe("POST /api/join", () => {
       vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json(weird));
       const res = await join.POST(call("/api/join", { method: "POST", visitor: v, body }));
       expect(await res.json()).toMatchObject({ mode: "channel", channel: 1 });
+    }
+  });
+
+  it("11/17 서버 로비 조회는 LOBBY_CACHE_SEC 동안 인스턴스가 기억한다 (실패는 기억하지 않고, maxAgeMs 0이면 늘 새로)", async () => {
+    const spy = vi.spyOn(globalThis, "fetch");
+    spy.mockClear();
+    spy.mockRejectedValueOnce(new Error("down"));
+    expect(await fetchLobbyServer()).toBeNull();
+    spy.mockResolvedValueOnce(Response.json(lobby([5, 0])));
+    expect((await fetchLobbyServer())?.total).toBe(5);
+    expect((await fetchLobbyServer())?.total).toBe(5);
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockResolvedValueOnce(Response.json(lobby([9, 0])));
+    expect((await fetchLobbyServer(1500, 0))?.total).toBe(9);
+    expect(spy).toHaveBeenCalledTimes(3);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + LOBBY_CACHE_SEC * 1000);
+      spy.mockResolvedValueOnce(Response.json(lobby([1, 0])));
+      expect((await fetchLobbyServer())?.total).toBe(1);
+    } finally {
+      vi.useRealTimers();
     }
   });
 

@@ -76,7 +76,7 @@ function mulberry(seed: number): () => number {
 
 type Truth = { t: number; x: number; y: number; vx: number; vy: number; leg: number };
 
-export function simulate(make: () => RemoteInterp, profile: NetProfile, seed = 1, legs: readonly Leg[] = DEFAULT_LEGS): SimMetrics {
+export function simulate(make: () => RemoteInterp, profile: NetProfile, seed = 1, legs: readonly Leg[] = DEFAULT_LEGS, steadyMs?: number): SimMetrics {
   const rnd = mulberry(seed);
   const lat = () => {
     let d = profile.base - Math.log(1 - rnd()) * profile.jitter;
@@ -87,7 +87,7 @@ export function simulate(make: () => RemoteInterp, profile: NetProfile, seed = 1
   // ── 보내는 쪽 ──
   const truth: Truth[] = [];
   const sends: { t: number; pose: NetPose }[] = [];
-  const th = new MoveThrottle();
+  const th = new MoveThrottle(steadyMs);
   const mv = emptyMove();
   const input: MoveInput = { ax: 0, ay: 0, run: false };
   let x = 300;
@@ -217,8 +217,8 @@ export function simulate(make: () => RemoteInterp, profile: NetProfile, seed = 1
 }
 
 /** 여러 시드의 평균 */
-export function simulateAvg(make: () => RemoteInterp, profile: NetProfile, seeds = 6): SimMetrics {
-  const runs = Array.from({ length: seeds }, (_, k) => simulate(make, profile, k + 1));
+export function simulateAvg(make: () => RemoteInterp, profile: NetProfile, seeds = 6, steadyMs?: number): SimMetrics {
+  const runs = Array.from({ length: seeds }, (_, k) => simulate(make, profile, k + 1, DEFAULT_LEGS, steadyMs));
   const avg = (f: (m: SimMetrics) => number) => runs.reduce((s, m) => s + f(m), 0) / runs.length;
   return {
     speedCv: avg((m) => m.speedCv),

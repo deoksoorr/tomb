@@ -7,6 +7,7 @@ import {
   isSeatMood,
   CLOSE,
   MAX_JOIN_RETRIES,
+  MOVE_STEADY_MS,
   QUEUE_POLL_MS,
   STATE,
   PING,
@@ -46,7 +47,7 @@ import { readChatLog, type IncomingChatLine } from "../logic/chatLog";
 import { fetchLobby } from "@/lib/realtime";
 import type { ApiError, JoinRequest, JoinResponse } from "@/lib/types";
 import { bridge, type NetMode } from "../bridge";
-import { backoffDelay } from "./backoff";
+import { backoffDelay, retryDelay, retrySoonOnVisible } from "./backoff";
 import { LookPacer } from "./lookPacer";
 import { isPermanentJoinError, JoinLimiter, reusableToken, utf8Bytes, type CachedToken } from "./joinPolicy";
 import { MoveThrottle, type NetPose } from "./sendThrottle";
@@ -223,11 +224,13 @@ export class RealtimeClient {
   private awayHouse: string | undefined;
   private consecutiveInvalid = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 11/17 예약된 재접속 시각 (Date.now 기준, 없으면 null) — 탭이 다시 보이면 긴 대기를 줄인다 */
+  private retryDueAt: number | null = null;
   private spectatorTimer: ReturnType<typeof setInterval> | null = null;
   private welcomeTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private statsTimer: ReturnType<typeof setInterval> | null = null;
-  private readonly throttle = new MoveThrottle();
+  private readonly throttle = new MoveThrottle(MOVE_STEADY_MS);
   private hidden = false;
   /** 휴식 중 (다른 창을 보는 중이라 게임 루프를 재움 — game/backgroundLoop). 탭 숨김과 똑같이 다룬다 */
   private resting = false;
@@ -453,11 +456,25 @@ export class RealtimeClient {
     this.ws!.send(encodeMove({ x: pose.x, y: pose.y, state: pose.state, dir: pose.dir, seq }));
   }
 
+  /**
+   * 11/17 서버가 "마지막으로 보고한 위치"로 판정하는 요청(앉기·고블린 잡기) 직전: 꾸준한 걷기 간격(MOVE_STEADY_MS) 때문에
+   * 밀려 있던 지금 위치를 먼저 보낸다 (100ms 간격은 지킨다 → 서버 위치는 예전처럼 최대 100ms 전 것)
+   */
+  private flushPose(): void {
+    if (!this.online || this.pendingWarp) return;
+    const now = performance.now();
+    const pose = this.h.getPose(this.pose);
+    if (!this.throttle.flushDue(now, pose, this.hidden)) return;
+    const seq = this.throttle.markSent(now, pose);
+    this.ws!.send(encodeMove({ x: pose.x, y: pose.y, state: pose.state, dir: pose.dir, seq }));
+  }
+
   warp(x: number, y: number): void {
     this.pendingWarp = { x, y };
   }
 
   sit(seatId: string): void {
+    this.flushPose();
     this.send({ t: "sit", seatId });
   }
 
@@ -500,6 +517,7 @@ export class RealtimeClient {
 
   /** 22번: 황금 고블린에 닿았다 (판정은 서버) */
   claimGoblin(id: string): void {
+    this.flushPose();
     this.send({ t: "goblin", id });
   }
 
@@ -1176,14 +1194,17 @@ export class RealtimeClient {
   private scheduleReconnect(delay?: number): void {
     if (this.stopped || this.mode === "replaced") return;
     this.clearRetry();
-    const d = delay ?? backoffDelay(this.attempt);
+    // 11/17 연달아 오래 실패하면 30초, 숨은 탭이면 60초 간격 (backoff.ts retryDelay)
+    const d = delay ?? retryDelay(this.attempt, this.hidden);
     this.attempt++;
     // 한 번도 붙지 못했으면 서버가 없는 것 → offline (혼자 계속 플레이), 붙어 있다 끊긴 거면 잠시 reconnecting
     const mode: NetMode = this.everOnline && this.attempt <= RECONNECTING_ATTEMPTS ? "reconnecting" : "offline";
     if (this.mode !== "spectator") this.setMode(mode);
     const channel = this.channel ?? this.target;
+    this.retryDueAt = Date.now() + d;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
+      this.retryDueAt = null;
       if (this.mode === "spectator") return;
       void this.connect(channel);
     }, d);
@@ -1192,6 +1213,7 @@ export class RealtimeClient {
   private clearRetry(): void {
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
+    this.retryDueAt = null;
   }
 
   private clearTimers(): void {
@@ -1299,6 +1321,8 @@ export class RealtimeClient {
       this.lastPongAt = performance.now();
       if (this.hiddenIdleTimer) clearTimeout(this.hiddenIdleTimer);
       this.hiddenIdleTimer = null;
+      // 11/17 숨어 있는 동안 늘려 둔 재접속 대기(30·60초)가 남았으면 곧바로 다시 시도한다
+      if (retrySoonOnVisible(this.retryDueAt, Date.now())) this.scheduleReconnect(backoffDelay(0));
       // 숨어 있는 동안 놓친 입장·퇴장을 서버 기준으로 다시 맞춘다 (1회, 최소 간격 유지)
       this.requestSync();
       return;

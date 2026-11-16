@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DIR, EXTRAPOLATE_MAX_MS, PEER_SYNC_MS, SEND_INTERVAL_MS, STATE } from "@tomb/protocol";
+import { DIR, EXTRAPOLATE_MAX_MS, MOVE_STEADY_MS, PEER_SYNC_MS, SEND_INTERVAL_MS, STATE } from "@tomb/protocol";
 import { bodyFromWsUrl, SYNC_EVERY_MS, SYNC_MIN_GAP_MS, SyncPolicy } from "./syncPolicy";
-import { BACKOFF_MAX_MS, backoffDelay } from "./backoff";
+import { BACKOFF_MAX_MS, HIDDEN_RETRY_AFTER, HIDDEN_RETRY_MS, SLOW_RETRY_AFTER, SLOW_RETRY_MS, backoffDelay, retryDelay, retrySoonOnVisible } from "./backoff";
 import { Interpolator, type InterpOut } from "./Interpolator";
 import { MAX_MOVES_PER_SEC, PROFILES, simulateAvg } from "./netsim";
 import type { DirId } from "@tomb/protocol";
@@ -212,6 +212,43 @@ describe("send throttle", () => {
     expect(th.shouldSend(100, sit, false)).toBe(true);
   });
 
+  it("11/17 꾸준히 걷기(위치만 바뀜)는 steadyMs 간격, 상태·방향이 바뀌면 100ms 간격 그대로", () => {
+    const th = new MoveThrottle(MOVE_STEADY_MS);
+    th.markSent(0, pose(0));
+    expect(th.shouldSend(SEND_INTERVAL_MS, pose(5), false)).toBe(false);
+    expect(th.shouldSend(MOVE_STEADY_MS, pose(8), false)).toBe(true);
+    th.markSent(MOVE_STEADY_MS, pose(8));
+    expect(th.shouldSend(MOVE_STEADY_MS + SEND_INTERVAL_MS, pose(12, STATE.idle), false)).toBe(true);
+    // 이번 판단만 더 긴 간격 (방에 혼자)
+    expect(th.shouldSend(MOVE_STEADY_MS * 2, pose(20), false, 500)).toBe(false);
+    expect(th.shouldSend(MOVE_STEADY_MS + 500, pose(20), false, 500)).toBe(true);
+    // 100ms보다 짧은 간격은 받지 않는다
+    expect(th.shouldSend(MOVE_STEADY_MS + 50, pose(20), false, 10)).toBe(false);
+  });
+
+  it("11/17 flushDue: 위치가 밀려 있으면 꾸준한 간격을 기다리지 않는다 (100ms 간격은 지킨다)", () => {
+    const th = new MoveThrottle(MOVE_STEADY_MS);
+    th.markSent(0, pose(0));
+    expect(th.flushDue(50, pose(3), false)).toBe(false);
+    expect(th.flushDue(SEND_INTERVAL_MS, pose(5), false)).toBe(true);
+    expect(th.flushDue(SEND_INTERVAL_MS, pose(0), false)).toBe(false); // 그대로면 보낼 것 없음
+    expect(th.flushDue(SEND_INTERVAL_MS, pose(5), true)).toBe(false); // 숨은 탭
+  });
+
+  it("11/17 1초 꾸준히 걸으면 MOVE는 1000/MOVE_STEADY_MS + 1번 이하", () => {
+    const th = new MoveThrottle(MOVE_STEADY_MS);
+    let sent = 0;
+    for (let t = 0; t <= 1000; t += 16) {
+      const p = pose(t / 10);
+      if (th.shouldSend(t, p, false)) {
+        th.markSent(t, p);
+        sent++;
+      }
+    }
+    expect(sent).toBeLessThanOrEqual(Math.floor(1000 / MOVE_STEADY_MS) + 1);
+    expect(sent).toBeGreaterThanOrEqual(6);
+  });
+
   it("seq wraps at u16", () => {
     const th = new MoveThrottle();
     let seq = 0;
@@ -294,6 +331,43 @@ describe("backoff", () => {
     }
     expect(backoffDelay(0, 0)).toBe(375);
     expect(backoffDelay(1, 0.999)).toBeLessThanOrEqual(1250);
+  });
+});
+
+describe("11/17 오래 실패할 때 재접속 간격", () => {
+  it("처음 몇 번은 예전 백오프 그대로, 연달아 실패하면 30초, 숨은 탭이면 60초 (±25%)", () => {
+    for (let a = 0; a < SLOW_RETRY_AFTER; a++) expect(retryDelay(a, false, 0.5)).toBe(backoffDelay(a, 0.5));
+    expect(retryDelay(SLOW_RETRY_AFTER, false, 0.5)).toBe(SLOW_RETRY_MS);
+    expect(retryDelay(HIDDEN_RETRY_AFTER - 1, true, 0.5)).toBe(backoffDelay(HIDDEN_RETRY_AFTER - 1, 0.5));
+    expect(retryDelay(HIDDEN_RETRY_AFTER, true, 0.5)).toBe(HIDDEN_RETRY_MS);
+    expect(retryDelay(50, false, 0)).toBe(SLOW_RETRY_MS * 0.75);
+    expect(retryDelay(50, true, 1)).toBe(HIDDEN_RETRY_MS * 1.25);
+  });
+
+  it("붙지 못하는 화면 하나가 1시간에 보내는 /api/join: 예전 8초 상한이면 약 450번 → 130번 아래 (숨은 탭은 70번 아래)", () => {
+    const joinsPerHour = (hidden: boolean, delay: (a: number) => number) => {
+      const l = new JoinLimiter();
+      let now = 0;
+      let attempt = 0;
+      let posts = 0;
+      while (now < 3_600_000) {
+        now += l.delay(now);
+        l.record(now);
+        posts++;
+        now += delay(attempt++); // 서버가 계속 거절한다고 가정 (자동 배정이라 토큰 재사용 없음)
+      }
+      return { hidden, posts };
+    };
+    const old = joinsPerHour(false, (a) => backoffDelay(a, 0.5));
+    expect(old.posts).toBeGreaterThan(400);
+    expect(joinsPerHour(false, (a) => retryDelay(a, false, 0.5)).posts).toBeLessThan(130);
+    expect(joinsPerHour(true, (a) => retryDelay(a, true, 0.5)).posts).toBeLessThan(70);
+  });
+
+  it("탭이 다시 보이면 백오프 상한보다 긴 대기만 앞당긴다", () => {
+    expect(retrySoonOnVisible(null, 0)).toBe(false);
+    expect(retrySoonOnVisible(BACKOFF_MAX_MS, 0)).toBe(false);
+    expect(retrySoonOnVisible(SLOW_RETRY_MS, 0)).toBe(true);
   });
 });
 

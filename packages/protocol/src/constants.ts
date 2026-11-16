@@ -20,6 +20,18 @@ export const TICK_MS = 50;
 /** 클라이언트 MOVE 최대 전송 주기 (10Hz) */
 export const SEND_INTERVAL_MS = 100;
 /**
+ * 11/17 상태·방향은 그대로인 채 위치만 바뀌는(꾸준히 걷는) 동안의 MOVE 간격. 상태·방향이 바뀌면 SEND_INTERVAL_MS 그대로 바로 보낸다.
+ * 수신 메시지 20건 = DO 요청 1건이라 MOVE가 Channel DO 요청의 대부분이다. 받는 쪽 보간(경로 따라가기 + 적응형 버퍼)이
+ * 도착 간격에 맞춰 버퍼를 늘리므로 매끄러움은 그대로이고(netsim: 속도 변동·멈칫·뒤로 밀림 같음), 원격 아바타가 약 50ms 늦게 보인다.
+ * 꾸준히 걷는 동안 MOVE 수 약 30% 감소 (10Hz → 약 6.7Hz)
+ */
+export const MOVE_STEADY_MS = 150;
+/**
+ * 11/17 방(집·사냥터)에 나 혼자일 때의 꾸준한 걷기 MOVE 간격. 받을 사람이 없어 서버 위치만 맞추면 된다.
+ * 누가 들어오면 바로 지금 자세를 한 번 보내고 MOVE_STEADY_MS로 돌아간다 (걷기 0.5초 ≈ 28px — 순간이동 거리 96px보다 짧아 들어온 사람 화면에서도 미끄러져 맞는다)
+ */
+export const ROOM_SOLO_STEADY_MS = 500;
+/**
  * 원격 아바타 보간 지연 버퍼. 명세는 120ms였지만 틱을 50ms로 줄인 뒤에는 한 사람의 샘플 간격이
  * 전송 간격(≥100ms, 프레임 단위로 ~117ms)+틱 대기(≤50ms) ≈ 최대 170ms가 되어, 120ms 버퍼가 자주 비고
  * 외삽 후 되돌림(뒤로 1~3px)이 생겼다. 걷는 중엔 외삽 없이 보간만 하도록 버퍼를 샘플 간격에 맞췄다.
@@ -38,8 +50,10 @@ export const RATE_LIMIT_KICK_SEC = 10;
 
 export const JOIN_TOKEN_TTL_SEC = 60;
 
-export const LOBBY_POLL_MS = 5_000;
-export const LOBBY_CACHE_SEC = 2;
+/** 채널 목록 폴링 (입장 화면·채널 창). 11/17 5초 → 10초: 화면 하나당 로비 DO 요청을 줄인다 (탭이 숨으면 아예 멈춘다) */
+export const LOBBY_POLL_MS = 10_000;
+/** GET /lobby 캐시 (Worker 아이솔레이트 메모·엣지·Vercel 서버 메모). 11/17 2초 → 5초 */
+export const LOBBY_CACHE_SEC = 5;
 export const SPECTATOR_POLL_MS = 30_000;
 /** 접속자 목록 자가 복구 주기 (C2S sync) */
 export const PEER_SYNC_MS = 60_000;

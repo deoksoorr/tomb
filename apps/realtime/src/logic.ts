@@ -136,3 +136,22 @@ export function sayRelay(r: Pick<InternalSay, "id" | "name" | "text" | "at" | "r
   return { nonce: `s:${r.id}`, until: r.at + MEGAPHONE_TTL_MS, data };
 }
 
+
+// ── 11/17 아이솔레이트 메모 (GET /lobby·/hunt-rooms) ──
+// 값을 ttlMs 동안 다시 쓴다. 실패는 기억하지 않는다(다음 요청이 다시 묻는다).
+// 진행 중인 호출(Promise)을 다른 요청과 나눠 기다리지는 않는다 — Workers는 다른 요청 맥락에서 만든 Promise를 기다리면
+// 경고를 내고, 처음 요청이 끊기면 함께 실패하거나 멈출 수 있다.
+
+export class IsolateMemo<T> {
+  private value: { v: T; at: number } | null = null;
+
+  constructor(private readonly ttlMs: number) {}
+
+  /** ttl 안의 값, 아니면 load()의 결과를 기억해 돌려준다 (at = 그 값을 만든 시각, 기본 now) */
+  async get(now: number, load: () => Promise<{ v: T; at?: number }>): Promise<T> {
+    if (this.value && now - this.value.at < this.ttlMs) return this.value.v;
+    const { v, at } = await load();
+    this.value = { v, at: at ?? now };
+    return v;
+  }
+}

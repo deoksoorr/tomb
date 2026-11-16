@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
-import type { LobbyInfo } from "@tomb/protocol";
-import { INITIAL_LOBBY, isChannelSelectable, nextLobbyState, visibleChannels } from "./useLobby";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LOBBY_POLL_MS, type LobbyInfo } from "@tomb/protocol";
+import { INITIAL_LOBBY, isChannelSelectable, LobbyPoller, nextLobbyState, visibleChannels, type LobbyState } from "./useLobby";
 
 const lobby: LobbyInfo = {
   channels: [
@@ -47,5 +47,109 @@ describe("isChannelSelectable", () => {
     expect(visibleChannels(lobby).map((c) => c.id)).toEqual([1, 2]);
     expect(visibleChannels(lobby, [null, 3, undefined]).map((c) => c.id)).toEqual([1, 2, 3]);
     expect(visibleChannels(null, [3])).toEqual([]);
+  });
+});
+
+// ── 11/17 폴러 하나로 묶기 · 뒤로 가면 멈추기 ──
+
+describe("LobbyPoller", () => {
+  function setup(bg = false) {
+    let background = bg;
+    const bgSubs = new Set<(b: boolean) => void>();
+    const calls = { lobby: 0, houses: 0 };
+    let now = 0;
+    const poller = new LobbyPoller(
+      {
+        fetchLobby: async () => {
+          calls.lobby++;
+          return lobby;
+        },
+        fetchHouses: async () => {
+          calls.houses++;
+          return [];
+        },
+        background: () => background,
+        onBackground: (fn) => {
+          bgSubs.add(fn);
+          return () => bgSubs.delete(fn);
+        },
+        now: () => now,
+      },
+      LOBBY_POLL_MS,
+      120_000,
+    );
+    const setBg = (b: boolean) => {
+      background = b;
+      for (const fn of bgSubs) fn(b);
+    };
+    const advance = async (ms: number) => {
+      now += ms;
+      await vi.advanceTimersByTimeAsync(ms);
+    };
+    return { poller, calls, setBg, advance, bgSubs };
+  }
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("구독하는 곳이 여럿이어도 LOBBY_POLL_MS마다 한 번만 묻고, 모두에게 같은 상태를 준다", async () => {
+    const { poller, calls, advance } = setup();
+    const a: LobbyState[] = [];
+    const b: LobbyState[] = [];
+    const offA = poller.subscribe((s) => a.push(s));
+    const offB = poller.subscribe((s) => b.push(s));
+    await advance(0);
+    expect(calls.lobby).toBe(1);
+    await advance(LOBBY_POLL_MS * 3);
+    expect(calls.lobby).toBe(4);
+    expect(a.at(-1)).toMatchObject({ status: "ok", lobby });
+    expect(b.at(-1)).toBe(a.at(-1));
+    offA();
+    await advance(LOBBY_POLL_MS);
+    expect(calls.lobby).toBe(5);
+    offB();
+    expect(poller.running).toBe(false);
+    await advance(LOBBY_POLL_MS * 5);
+    expect(calls.lobby).toBe(5);
+  });
+
+  it("뒤로 가면 멈추고, 돌아오면 바로 한 번 받은 뒤 다시 돈다", async () => {
+    const { poller, calls, setBg, advance } = setup();
+    const off = poller.subscribe(() => undefined);
+    await advance(0);
+    expect(calls.lobby).toBe(1);
+    setBg(true);
+    await advance(LOBBY_POLL_MS * 30);
+    expect(calls.lobby).toBe(1);
+    setBg(false);
+    await advance(0);
+    expect(calls.lobby).toBe(2);
+    await advance(LOBBY_POLL_MS);
+    expect(calls.lobby).toBe(3);
+    off();
+  });
+
+  it("처음부터 뒤에 있으면 묻지 않는다 (열어 둔 채 잊은 탭)", async () => {
+    const { poller, calls, advance } = setup(true);
+    const off = poller.subscribe(() => undefined);
+    await advance(LOBBY_POLL_MS * 100);
+    expect(calls.lobby).toBe(0);
+    expect(calls.houses).toBe(0);
+    off();
+  });
+
+  it("집이 있는 채널은 2분에 한 번만 (돌아왔을 때도 그만큼 지났을 때만)", async () => {
+    const { poller, calls, setBg, advance, bgSubs } = setup();
+    const off = poller.subscribe(() => undefined);
+    await advance(0);
+    expect(calls.houses).toBe(1);
+    setBg(true);
+    setBg(false);
+    await advance(0);
+    expect(calls.houses).toBe(1);
+    await advance(120_000);
+    expect(calls.houses).toBe(2);
+    off();
+    expect(bgSubs.size).toBe(0);
   });
 });

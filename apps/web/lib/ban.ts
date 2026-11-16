@@ -213,7 +213,29 @@ export async function whereOf(visitorIds: string[], fresh = false): Promise<Reco
  * 친구 들고 남 등록 (입장 토큰을 주기 직전): 이 사람이 채널에 들어오면·나가면 friendIds에게 바로 알리게 실시간 서버에 맡긴다.
  * 입장을 늦추지 않게 짧게 기다리고, 실패하면(옛 실시간 서버 등) 조용히 넘어간다 — 친구 창의 주기 조회가 남는다
  */
-export async function friendHello(visitorId: string, name: string, key: string, friendIds: string[]): Promise<boolean> {
-  const r = await internal<{ ok: true }>("/internal/hello", { op: "hello", visitorId, name, key, friends: friendIds.slice(0, 50) }, 1500);
-  return !!r;
+export async function friendHello(visitorId: string, name: string, key: string, friendIds: string[], now = Date.now()): Promise<boolean> {
+  const friends = friendIds.slice(0, 50);
+  // 11/17 같은 내용을 방금 맡겼으면 건너뛴다 (재접속마다 로비 DO를 깨우지 않게). 로비는 storage에 두어 다시 떠도 그대로다
+  const sig = JSON.stringify([name, key, friends]);
+  const prev = helloMemo.get(visitorId);
+  if (prev && prev.sig === sig && now - prev.at < HELLO_REUSE_MS) return true;
+  const r = await internal<{ ok: true }>("/internal/hello", { op: "hello", visitorId, name, key, friends }, 1500);
+  if (!r) return false;
+  helloMemo.delete(visitorId); // 삽입 순서 = 오래된 순서
+  helloMemo.set(visitorId, { sig, at: now });
+  if (helloMemo.size > HELLO_MEMO_MAX) helloMemo.delete(helloMemo.keys().next().value!);
+  return true;
+}
+
+/**
+ * 11/17 이 인스턴스가 최근에 맡긴 친구 등록 (방문자 → 내용·시각). 로비 DO의 hello는 같은 내용이면 덮어도 그대로라,
+ * 이 시간 안에 같은 내용이면 다시 보내지 않는다. 다른 인스턴스가 사이에 다른 목록을 맡겼다가 되돌아온 드문 경우에도 이 시간 뒤에는 맞는다
+ */
+const HELLO_REUSE_MS = 5 * 60_000;
+const HELLO_MEMO_MAX = 5_000;
+const helloMemo = new Map<string, { sig: string; at: number }>();
+
+/** 시험용 */
+export function resetHelloMemo(): void {
+  helloMemo.clear();
 }
