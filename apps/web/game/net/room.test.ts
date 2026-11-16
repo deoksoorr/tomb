@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CLIENT_VERSION, CLOSE, decodeMove, encodeSnapshot, PING, PONG, STATE, DIR } from "@tomb/protocol";
+import { CLIENT_VERSION, CLOSE, decodeMove, encodeSnapshot, MOVE_STEADY_MS, PING, PONG, ROOM_SOLO_STEADY_MS, SEND_INTERVAL_MS, STATE, DIR } from "@tomb/protocol";
 import { RoomClient, type RoomStatus, type WsCtor } from "./RoomClient";
 import { isRoomId, parseRoomMessage, roomCloseAction, roomSocketUrl } from "./roomPolicy";
-import { BACKOFF_MAX_MS } from "./backoff";
+import { BACKOFF_MAX_MS, SLOW_RETRY_AFTER, SLOW_RETRY_MS } from "./backoff";
 
 // ── 순수 규칙 ──
 
@@ -276,15 +276,64 @@ describe("RoomClient", () => {
     await flush();
     const ws = FakeWs.last!;
     ws.open();
-    ws.recv({ t: "welcome", sid: 1, cap: 30, resumed: false, peers: [] });
+    ws.recv({ t: "welcome", sid: 1, cap: 30, resumed: false, peers: [{ sid: 2, x: 0, y: 0, name: "b", color: "#fff", state: 0, dir: 0 }] });
     c.tick(1000);
     c.tick(1050);
     pose.x = 110;
     c.tick(1060); // 100ms 안 → 보류
-    c.tick(1101);
+    c.tick(1101); // 위치만 바뀜 → 꾸준한 간격(MOVE_STEADY_MS) 전이라 보류
+    c.tick(1000 + MOVE_STEADY_MS);
     c.tick(1300); // 바뀐 게 없다
+    pose.state = STATE.walk;
+    c.tick(1260 + SEND_INTERVAL_MS); // 상태가 바뀌면 100ms 간격만 지키고 바로
     const moves = ws.sent.filter((s): s is ArrayBuffer => s instanceof ArrayBuffer).map((b) => decodeMove(b)!);
-    expect(moves.map((m) => m.x)).toEqual([100, 110]);
+    expect(moves.map((m) => [m.x, m.state])).toEqual([
+      [100, STATE.idle],
+      [110, STATE.idle],
+      [110, STATE.walk],
+    ]);
+    pose.x = 100;
+    pose.state = STATE.idle;
+  });
+
+  it("11/17 방에 혼자면 꾸준한 걷기 MOVE를 ROOM_SOLO_STEADY_MS 간격으로, 누가 들어오면 지금 자세를 바로 1회", async () => {
+    const c = make();
+    c.joinRoom("village");
+    await flush();
+    const ws = FakeWs.last!;
+    ws.open();
+    ws.recv({ t: "welcome", sid: 1, cap: 30, resumed: false, peers: [] });
+    pose.state = STATE.walk;
+    const moves = () => ws.sent.filter((s): s is ArrayBuffer => s instanceof ArrayBuffer).map((b) => decodeMove(b)!.x);
+    let t = 1000;
+    for (; t <= 2000; t += 16) {
+      pose.x = 100 + Math.floor((t - 1000) / 16);
+      c.tick(t);
+    }
+    // 1초 걷기: 첫 자세 + 0.5초마다 (예전 10Hz면 10번)
+    expect(moves().length).toBeLessThanOrEqual(1 + 1000 / ROOM_SOLO_STEADY_MS);
+    const before = moves().length;
+    ws.recv({ t: "join", sid: 2, x: 0, y: 0, name: "b", color: "#fff", state: 0, dir: 0 });
+    pose.x += 1;
+    c.tick(t + SEND_INTERVAL_MS);
+    expect(moves().length).toBe(before + 1);
+    expect(moves().at(-1)).toBe(pose.x);
+    pose.x = 100;
+    pose.state = STATE.idle;
+  });
+
+  it("11/17 앉기·가구 쓰기 직전에는 밀린 지금 위치를 먼저 보낸다", async () => {
+    const c = make();
+    c.joinRoom("village");
+    await flush();
+    const ws = FakeWs.last!;
+    ws.open();
+    ws.recv({ t: "welcome", sid: 1, cap: 30, resumed: false, peers: [] });
+    c.tick(performance.now() - 500); // 마지막 MOVE는 0.5초 전 (혼자라 꾸준한 걷기는 아직 보류 중)
+    pose.x = 130;
+    c.sit("l_10_20");
+    const kinds = ws.sent.map((s) => (s instanceof ArrayBuffer ? `move:${decodeMove(s)!.x}` : (JSON.parse(s) as { t: string }).t));
+    expect(kinds.slice(-2)).toEqual(["move:130", "sit"]);
     pose.x = 100;
   });
 
@@ -346,6 +395,27 @@ describe("RoomClient", () => {
     vi.advanceTimersByTime(8_100);
     expect(ws.closed).toBe(4000);
     expect(d.status.mode).toBe("connecting");
+  });
+
+  it("11/17 연달아 오래 실패하면 30초 간격으로 천천히 다시 시도한다", async () => {
+    const c = make();
+    c.joinRoom("village");
+    await flush();
+    // 서버가 계속 끊는다(1006) — 토큰은 재사용되니 소켓 수로 시도 횟수를 센다
+    for (let i = 0; i < SLOW_RETRY_AFTER + 1; i++) {
+      FakeWs.last!.serverClose(1006);
+      vi.advanceTimersByTime(BACKOFF_MAX_MS * 1.25 + 1);
+      await flush();
+    }
+    const tries = FakeWs.all.length;
+    FakeWs.last!.serverClose(1006);
+    vi.advanceTimersByTime(BACKOFF_MAX_MS * 1.25 + 1);
+    await flush();
+    expect(FakeWs.all.length).toBe(tries); // 아직 기다리는 중
+    vi.advanceTimersByTime(SLOW_RETRY_MS * 1.25);
+    await flush();
+    expect(FakeWs.all.length).toBe(tries + 1);
+    c.leave();
   });
 
   it("leave() closes with 1000 and stops everything; switching rooms leaves the old one", async () => {

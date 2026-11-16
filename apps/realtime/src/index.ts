@@ -13,7 +13,7 @@
  *
  * ── 경로 ──
  *   GET /health              상태 확인
- *   GET /lobby               채널 목록과 인원(LobbyInfo). CORS는 ALLOWED_ORIGINS만, 엣지 캐시 2초
+ *   GET /lobby               채널 목록과 인원(LobbyInfo). CORS는 ALLOWED_ORIGINS만, 아이솔레이트 메모·엣지 캐시 LOBBY_CACHE_SEC(5초)
  *   GET /hunt-rooms          11/12 사냥터 방별 지금 인원(HuntRoomsInfo). CORS는 ALLOWED_ORIGINS만, 메모리·엣지 캐시 10초
  *   GET /queue?t=            대기열 자리 확인(QueueStatus). 대기열 토큰(channel 0)만 받는다. 캐시 없음
  *   GET /ch/:n?t=&x=&y=&v=&m=   채널 WebSocket. Origin·클라이언트 버전·토큰(그 채널용)을 검증한 뒤 Channel DO로 넘긴다 (m=camp: 11/15 캠핑장으로, 토큰에 camp 허락이 있을 때만. m=sea: 11/16 바닷가, sea 허락)
@@ -41,7 +41,7 @@ import {
   rejectSocket,
 } from "./auth";
 import { type Env, channelStub, lobbyStub, readConfig, roomStub } from "./config";
-import { isOutdatedClient, parseChannel, parseMap, parseSpawn, sayRelay } from "./logic";
+import { IsolateMemo, isOutdatedClient, parseChannel, parseMap, parseSpawn, sayRelay } from "./logic";
 
 export { ChannelDO } from "./ChannelDO";
 export { LobbyDO } from "./LobbyDO";
@@ -239,13 +239,15 @@ async function room(req: Request, env: Env, url: URL, rawId: string): Promise<Re
 }
 
 // ── GET /lobby ──
-// 입장 화면이 5초마다 폴링한다. 엣지 캐시 2초: isolate 안 메모 → caches.default → Lobby DO 순으로 찾는다.
-// (workers.dev 도메인에서는 Cache API가 동작하지 않아 메모만 효과가 있다. 커스텀 도메인에서 둘 다 동작)
+// 입장 화면·채널 창이 LOBBY_POLL_MS(10초)마다(화면 하나에 한 번, 숨은 탭은 멈춤), 웹 서버가 입장 토큰을 줄 때 묻는다.
+// 캐시 LOBBY_CACHE_SEC(5초): 아이솔레이트 안 메모 → caches.default → Lobby DO 순으로 찾는다.
+// 주의: 운영은 workers.dev 주소라 Cache API(caches.default)가 아무것도 저장하지 않는다(match는 늘 없음, put은 무시) → 아이솔레이트 메모만 효과가 있다.
+//   커스텀 도메인(wrangler.toml routes)으로 옮기면 같은 지역 아이솔레이트들이 엣지 캐시를 나눠 써서 DO 요청이 더 준다.
 // 캐시에는 Origin과 무관한 본문만 두고, CORS 헤더는 응답할 때 Origin마다 붙인다.
 
 const LOBBY_TTL_MS = LOBBY_CACHE_SEC * 1000;
 const CACHED_AT_HEADER = "X-Lobby-At";
-let memo: { body: string; at: number } | null = null;
+const lobbyMemo = new IsolateMemo<string>(LOBBY_TTL_MS);
 
 /** GET 전용 JSON 경로의 CORS 헤더. OPTIONS(preflight)·GET 외 메서드면 바로 보낼 응답도 돌려준다 */
 function corsFor(req: Request, env: Env): { cors: Record<string, string>; early?: Response } {
@@ -273,43 +275,38 @@ async function lobby(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   }
 }
 
-async function lobbyBody(req: Request, env: Env, ctx: ExecutionContext): Promise<string> {
-  const now = Date.now();
-  if (memo && now - memo.at < LOBBY_TTL_MS) return memo.body;
+function lobbyBody(req: Request, env: Env, ctx: ExecutionContext): Promise<string> {
+  return lobbyMemo.get(Date.now(), async () => {
+    const key = new Request(new URL("/lobby", req.url).toString());
+    const hit = await caches.default.match(key);
+    if (hit) return { v: await hit.text(), at: Number(hit.headers.get(CACHED_AT_HEADER)) || Date.now() };
 
-  const key = new Request(new URL("/lobby", req.url).toString());
-  const hit = await caches.default.match(key);
-  if (hit) {
-    memo = { body: await hit.text(), at: Number(hit.headers.get(CACHED_AT_HEADER)) || now };
-    return memo.body;
-  }
-
-  const body = JSON.stringify(await lobbyStub(env).info());
-  memo = { body, at: now };
-  const cached = new Response(body, {
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": `public, max-age=${LOBBY_CACHE_SEC}`,
-      [CACHED_AT_HEADER]: String(now),
-    },
+    const now = Date.now();
+    const body = JSON.stringify(await lobbyStub(env).info());
+    const cached = new Response(body, {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": `public, max-age=${LOBBY_CACHE_SEC}`,
+        [CACHED_AT_HEADER]: String(now),
+      },
+    });
+    ctx.waitUntil(caches.default.put(key, cached));
+    return { v: body, at: now };
   });
-  ctx.waitUntil(caches.default.put(key, cached));
-  return body;
 }
 
 // ── GET /hunt-rooms (11/12) ──
 // 사냥터 고르는 화면이 "n명 사냥 중"을 보여 주려고 묻는다. 방 DO들이 로비에 보고해 둔 값을 그대로 돌려준다(방을 깨우지 않는다).
 // 아이솔레이트 메모리에 10초 + 브라우저·엣지 Cache-Control 10초 → 로비 DO 호출은 아이솔레이트마다 10초에 한 번.
 
-let huntMemo: { body: string; at: number } | null = null;
+const huntMemo = new IsolateMemo<string>(HUNT_ROOMS_CACHE_SEC * 1000);
 
 async function huntRooms(req: Request, env: Env): Promise<Response> {
   const { cors, early } = corsFor(req, env);
   if (early) return early;
-  const now = Date.now();
   try {
-    if (!huntMemo || now - huntMemo.at >= HUNT_ROOMS_CACHE_SEC * 1000) huntMemo = { body: JSON.stringify(await lobbyStub(env).huntRooms()), at: now };
-    return new Response(huntMemo.body, {
+    const body = await huntMemo.get(Date.now(), async () => ({ v: JSON.stringify(await lobbyStub(env).huntRooms()) }));
+    return new Response(body, {
       headers: { ...cors, "Content-Type": "application/json", "Cache-Control": `public, max-age=${HUNT_ROOMS_CACHE_SEC}` },
     });
   } catch (e) {

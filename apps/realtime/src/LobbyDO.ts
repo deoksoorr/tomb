@@ -10,6 +10,7 @@ import {
   emptyLobby,
   hasRecentChannels,
   refreshTargets,
+  startupTargets,
   type LobbyState,
 } from "./lobbyState";
 import { AdmissionQueue, type QueueSnapshot } from "./queue";
@@ -20,7 +21,7 @@ import { FriendPresence, type FriendNotice, type PresenceRec } from "./friendPre
 // - 각 Channel DO가 인원 변화를 1초 단위로 디바운스해 RPC(report)로 알려 준다(push).
 // - Worker의 GET /lobby가 info()를, GET /queue가 queuePoll()을 부른다.
 // - 채널 인원은 메모리에 두고 30초마다(바뀐 경우만) storage에 스냅샷한다.
-// - 인원의 정답은 각 Channel DO다. (1) 새로 뜰 때 모든 채널에 인원을 다시 묻고(스냅샷은 최대 30초 늦다),
+// - 인원의 정답은 각 Channel DO다. (1) 새로 뜰 때 사람이 있거나 최근에 있었던 채널에 인원을 다시 묻고(스냅샷은 최대 30초 늦다),
 //   (2) 5분마다, 최근 쓰인 채널 중 5분 동안 push가 없던 채널만 다시 확인한다(보고 유실 대비).
 // - 대기열(queue.ts): 순서와 잡아 둔 자리(hold)는 바뀔 때마다 바로 저장한다(재시작해도 순서를 잃지 않게).
 //   Channel DO는 새 방문자를 받기 전에 admit()으로 묻는다 → 줄이 있으면 새치기 불가, 잡아 둔 자리는 그 사람만.
@@ -65,9 +66,9 @@ export class LobbyDO extends DurableObject<Env> {
       kv.get<[string, number][]>(FP_PENDING_KEY) ?? [],
     );
     // 새로 떴다 = 메모리를 잃었다(유휴 DO는 로컬 workerd에서 약 10초, 운영에서 70~140초 뒤 내려간다).
-    // 요청을 받기 전에 각 채널의 현재 인원으로 맞춘다.
-    const all = Array.from({ length: this.cfg.maxChannels }, (_, i) => i + 1);
-    void ctx.blockConcurrencyWhile(() => this.refresh(all));
+    // 요청을 받기 전에 채널의 현재 인원으로 맞춘다. 11/17 스냅샷에 사람이 있거나 최근에 있었던 채널만 (빈 채널 DO를 깨우지 않게)
+    const targets = startupTargets(this.state, this.cfg, Date.now());
+    if (targets.length) void ctx.blockConcurrencyWhile(() => this.refresh(targets));
   }
 
   /** Channel DO → 인원 보고 (변화 시 1초 디바운스). seq는 채널 DO 안에서 단조 증가 */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOBBY_REFRESH_MS, VisitorRegistry, applyReport, computeLobby, emptyLobby, hasRecentChannels, refreshTargets, type LobbyState } from "./lobbyState";
+import { LOBBY_REFRESH_MS, VisitorRegistry, applyReport, computeLobby, emptyLobby, hasRecentChannels, refreshTargets, startupTargets, type LobbyState } from "./lobbyState";
 
 const cfg = { capacity: 40, maxChannels: 10, baseChannels: 2, threshold: 0.8 };
 const openIds = (s: LobbyState, now: number, held?: (id: number) => number) =>
@@ -113,5 +113,22 @@ describe("VisitorRegistry", () => {
     r.claim("c", 1);
     expect(r.channelOf("a")).toBeUndefined();
     expect(r.channelOf("c")).toBe(1);
+  });
+});
+
+describe("11/17 startupTargets (로비 DO가 새로 떴을 때 다시 물을 채널)", () => {
+  it("스냅샷에 사람이 있거나 최근에 있었던 채널만 — 오래 빈 채널·기록 없는 채널은 깨우지 않는다", () => {
+    const s = emptyLobby();
+    const t0 = 1_000_000;
+    push(s, 1, 5, t0); // 사람 있음
+    push(s, 2, 3, t0);
+    push(s, 2, 0, t0 + 1000); // 방금 비었다 (최근)
+    push(s, 3, 2, t0 - LOBBY_REFRESH_MS * 3);
+    push(s, 3, 0, t0 - LOBBY_REFRESH_MS * 2); // 오래 비어 있다
+    const now = t0 + 2000;
+    expect(startupTargets(s, cfg, now)).toEqual([1, 2]);
+    expect(startupTargets(emptyLobby(), cfg, now)).toEqual([]);
+    // 시간이 지나 2채널도 오래 빈 채널이 되면 빠진다
+    expect(startupTargets(s, cfg, t0 + 1000 + LOBBY_REFRESH_MS)).toEqual([1]);
   });
 });

@@ -1,4 +1,4 @@
-import { pickChannel, signJoinToken, type AvatarDye, type LobbyInfo } from "@tomb/protocol";
+import { LOBBY_CACHE_SEC, pickChannel, signJoinToken, type AvatarDye, type LobbyInfo } from "@tomb/protocol";
 import { z } from "zod";
 import { env } from "./env";
 import { HttpError } from "./http";
@@ -20,15 +20,30 @@ const LobbySchema = z.object({
   threshold: z.number().min(0).max(1),
 });
 
-/** 서버에서 로비 조회. 느리거나 실패하거나 형태가 이상하면 null (입장 자체를 막지는 않는다) */
-export async function fetchLobbyServer(timeoutMs = LOBBY_TIMEOUT_MS): Promise<LobbyInfo | null> {
+/** 11/17 이 인스턴스가 마지막으로 받은 로비 (실시간 서버의 /lobby 캐시와 같은 LOBBY_CACHE_SEC 동안 다시 쓴다) */
+let lobbyMemo: { at: number; lobby: LobbyInfo } | null = null;
+
+/** 시험용: 인스턴스 기억 비우기 */
+export function resetLobbyMemo(): void {
+  lobbyMemo = null;
+}
+
+/**
+ * 서버에서 로비 조회. 느리거나 실패하거나 형태가 이상하면 null (입장 자체를 막지는 않는다).
+ * 11/17 입장·동시 접속 표본·긴급 의뢰가 부를 때마다 로비 DO까지 가지 않게, 받은 값을 maxAgeMs(기본 LOBBY_CACHE_SEC) 동안 다시 쓴다.
+ * 채널 상한은 Channel DO가 지키므로 몇 초 늦은 인원으로 골라도 넘치지 않는다 (만석이면 4001 → 클라이언트가 다른 채널로). 관리 화면은 0(늘 새로)
+ */
+export async function fetchLobbyServer(timeoutMs = LOBBY_TIMEOUT_MS, maxAgeMs = LOBBY_CACHE_SEC * 1000): Promise<LobbyInfo | null> {
   // 주소 설정 누락은 네트워크 실패와 달리 숨기지 않고 던진다
   const url = `${env.realtimeHttpUrl()}/lobby`;
+  if (lobbyMemo && Date.now() - lobbyMemo.at < maxAgeMs) return lobbyMemo.lobby;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), cache: "no-store" });
     if (!res.ok) return null;
     const parsed = LobbySchema.safeParse(await res.json());
-    return parsed.success ? parsed.data : null;
+    if (!parsed.success) return null;
+    lobbyMemo = { at: Date.now(), lobby: parsed.data };
+    return parsed.data;
   } catch {
     return null;
   }

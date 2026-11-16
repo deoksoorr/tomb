@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { FRIEND_MAX, FRIEND_PENDING_MAX, verifyInternal, type PeerWhere } from "@tomb/protocol";
 import { createBan } from "@/lib/banAdmin";
-import { invalidateBanCache } from "@/lib/ban";
+import { invalidateBanCache, resetHelloMemo } from "@/lib/ban";
 import { friendKeyFor, requestFriendById } from "@/lib/friends";
 import type { FriendListResponse, FriendPresenceResponse, FriendRequestResponse, FriendWhereResponse } from "@/lib/friendTypes";
 import { setStaff } from "@/lib/staff";
@@ -370,6 +370,10 @@ describe("친구 들고 남 밀어 주기 등록", () => {
     const accepted = calls.filter((x) => x.op === "hello");
     expect(accepted.map((x) => x.visitorId).sort()).toEqual([a.id, b.id].sort());
     calls.length = 0;
+    // 11/17 방금(수락 때) 같은 내용을 맡겼으면 입장 때 다시 보내지 않는다 (재접속마다 로비 DO를 깨우지 않게)
+    expect((await join.POST(call("/api/join", b, { channel: 1, name: "들고남보리", color: "#9fc5a8" }))).status).toBe(200);
+    expect(calls.filter((x) => x.op === "hello")).toEqual([]);
+    resetHelloMemo(); // 다른 인스턴스이거나 5분이 지났다
     const res = await join.POST(call("/api/join", b, { channel: 1, name: "들고남보리", color: "#9fc5a8" }));
     expect(res.status).toBe(200);
     expect(calls.filter((x) => x.op === "hello")).toEqual([{ op: "hello", visitorId: b.id, name: "들고남보리", key: friendKeyFor(b.id), ids: [a.id] }]);
