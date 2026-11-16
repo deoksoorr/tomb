@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { itemById, PERMANENT_UNTIL } from "@tomb/protocol";
 import { BALANCE_CAP } from "../economy";
 import { GIFT_TERMS, type GiftEntry, type GiftItem, type GiftTerm } from "../types";
@@ -300,7 +301,7 @@ export class RedisGifts implements GiftStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "gifts");
   }
 
   async send(gift: GiftRecord): Promise<void> {

@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 
 // 11/15 야근 빌딩 기록 저장소 (랭킹·서버 최초·꼭대기 층 주인). 캐릭터 기록(최고 층·이번 주 최고)은 캐릭터 JSON에 있고,
@@ -143,7 +144,7 @@ return {1, cur or ''}
 export class RedisTowerStore implements TowerStore {
   private redis: Redis;
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "rpg/towerStore");
   }
   async record(
     acct: string,

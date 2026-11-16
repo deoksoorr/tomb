@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { DRUNK_STEP_MS, isDrunkState, type DrunkState } from "@tomb/protocol";
 import { K } from "./keys";
 
@@ -32,7 +33,7 @@ export class RedisBbqDay implements BbqDayStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "bbqDay");
   }
 
   async drunk(accountId: string): Promise<DrunkState | null> {

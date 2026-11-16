@@ -214,7 +214,7 @@ export const MANAGER_TITLE = { name: "무급 마을 반장", how: "관리자가 
 
 /** 11/15 긴급 의뢰 칭호 (받은 때부터 하루만 — lib/forage/quests/urgent) */
 const TIMED_ROWS: readonly (readonly [TitleId, string, TitleGrade, string])[] = [
-  ["t_urgKing", "긴급 배달왕", "gold", "긴급 의뢰에서 가장 많이 낸 사람 (받은 때부터 하루)"],
+  ["t_urgKing", "긴급 배달왕", "gold", "긴급 의뢰에서 가장 많이 내거나 한 사람 몫을 다 채운 사람 (받은 때부터 하루)"],
   ["t_urgLast", "아슬아슬 마감", "silver", "긴급 의뢰 마지막 1분에 100%를 채우거나, 150%를 채워 일찍 끝낸 사람 (받은 때부터 하루)"],
 ];
 const TIMED_OF = new Map(TIMED_ROWS.map((r) => [r[0], r]));

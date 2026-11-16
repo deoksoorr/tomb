@@ -49,6 +49,28 @@ async function namesOf(store: FriendStore, ids: string[]): Promise<string[]> {
   return ids.map((_, i) => names[i] ?? NO_NAME);
 }
 
+/**
+ * 접속 알림(3분마다 묻는 주기 호출)용 친구 이름: 운영(Redis)에서는 인스턴스가 PRESENCE_NAME_MS 동안 기억해 친구 수만큼의 HGET을 아낀다.
+ * 친구가 이름을 바꾸면 접속 알림에는 길어야 그만큼 늦게 보인다 (친구 창·위치 보기는 늘 새로 읽는다). 메모리 저장소(로컬·시험)는 매번 읽는다
+ */
+const PRESENCE_NAME_MS = 5 * 60_000;
+const presenceNames = new Map<string, { at: number; name: string }>();
+async function presenceNamesOf(store: FriendStore, ids: string[], now: number): Promise<string[]> {
+  if (!env.redis()) return namesOf(store, ids);
+  const missing = ids.filter((id) => {
+    const c = presenceNames.get(id);
+    return !c || now - c.at >= PRESENCE_NAME_MS;
+  });
+  if (missing.length) {
+    const names = await orElse<(string | null)[] | null>(() => store.names(missing), null, "이름");
+    if (presenceNames.size > 20_000) presenceNames.clear();
+    // 읽기가 실패하면 기억하지 않는다 (다음 부름이 다시 읽는다)
+    if (names) missing.forEach((id, i) => presenceNames.set(id, { at: now, name: names[i] ?? NO_NAME }));
+    else return ids.map((id) => presenceNames.get(id)?.name ?? NO_NAME);
+  }
+  return ids.map((id) => presenceNames.get(id)?.name ?? NO_NAME);
+}
+
 /** 운영자와는 친구를 맺을 수 없다 (신청·수락 모두) */
 export const STAFF_FRIEND_MESSAGE = "운영자와는 친구를 맺을 수 없어요.";
 const staffFriendError = () => new HttpError(403, "STAFF", STAFF_FRIEND_MESSAGE);
@@ -150,7 +172,7 @@ export async function friendPresence(me: string, now = Date.now()): Promise<Frie
   const lists = await cleanLists(store, me, now);
   const [friends, incoming] = await Promise.all([withoutBanned(lists.friends, now), withoutBanned(lists.incoming, now)]);
   if (!friends.length) return { friends: [], incoming: incoming.length };
-  const [names, where] = await Promise.all([namesOf(store, friends.map((f) => f.id)), orElse(() => whereOf(friends.map((f) => f.id)), null, "위치")]);
+  const [names, where] = await Promise.all([presenceNamesOf(store, friends.map((f) => f.id), now), orElse(() => whereOf(friends.map((f) => f.id)), null, "위치")]);
   return {
     friends: friends.map((f, i) => ({ key: friendKeyFor(f.id), name: names[i], where: toFriendWhere(where?.[f.id], where !== null) })),
     incoming: incoming.length,

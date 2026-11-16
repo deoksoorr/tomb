@@ -26,7 +26,7 @@ import {
 import type { VillageHouse, VillageResponse } from "@/lib/housing/types";
 import { addCanvasTexture, TEX } from "../assets/manifest";
 import { DEPTH } from "../config";
-import { drawEmptyLot, drawHouseLot, type LotGfx } from "../housing/worldLots";
+import { drawEmptyLot, drawHouseLot, scaleLotLabel, type LotGfx } from "../housing/worldLots";
 import { CHUNK, CHUNK_COLS, CHUNK_ROWS, drawGroundChunk } from "../sprites/ground";
 import { SHOP_HUT_H } from "../sprites/extras";
 import { BENCH_UP_BACK_ROW } from "../sprites/props";
@@ -134,6 +134,8 @@ export class WorldMap {
       x: number;
       y: number;
       gold?: Phaser.GameObjects.Particles.ParticleEmitter;
+      /** 11/16 축제 때만 얹는 것 (낮에도 보이는 금빛 후광·바닥 빛·금가루 터짐, 원래 빛 크기) */
+      fest?: { objs: Phaser.GameObjects.GameObject[]; tweens: Phaser.Tweens.Tween[]; timer: Phaser.Time.TimerEvent; scales: number[] };
     }
   >();
   private festival = false;
@@ -270,7 +272,8 @@ export class WorldMap {
   /** 1/zoom 배율 글씨 (장소·구역·집 이름) */
   scaleLabels(s: number): void {
     for (const l of this.labels) if (l.scaleX !== s) l.setScale(s);
-    for (const l of this.houseLabels) if (l.scaleX !== s) l.setScale(s);
+    // 문패는 줌에 맞춰 글씨 길이도 다시 맞춘다 (닉네임·집 이름이 길면 이웃 문패와 겹치지 않게 "…")
+    for (const l of this.houseLabels) scaleLotLabel(l, s);
   }
 
   private addCollider(group: Phaser.Physics.Arcade.StaticGroup, r: Rect): void {
@@ -581,6 +584,15 @@ export class WorldMap {
         if (on) s.setTint(0xfff3b0, 0xfff3b0, 0xffc83a, 0xffc83a);
         else s.clearTint();
       }
+      if (on && !f.fest) f.fest = this.festDressing(f);
+      else if (!on && f.fest) {
+        // 원래 빛 크기로 되돌리고 얹은 것을 치운다
+        f.lights.forEach((l, i) => (l.scale = f.fest!.scales[i] ?? l.scale));
+        f.fest.tweens.forEach((t) => t.remove());
+        f.fest.timer.remove();
+        f.fest.objs.forEach((o) => o.destroy());
+        f.fest = undefined;
+      }
       for (const l of f.lights) {
         l.tint = on ? 0xffd860 : f.big && l.scale < 2 ? 0xffd070 : f.big ? BIG_FIRE_LIGHT.tint : CAMPFIRE_LIGHT.tint;
       }
@@ -590,11 +602,11 @@ export class WorldMap {
             lifespan: { min: 1100, max: 2200 },
             speedX: { min: -10, max: 10 },
             speedY: { min: f.big ? -60 : -40, max: f.big ? -28 : -18 },
-            scale: { start: f.big ? 0.7 : 0.5, end: 0 },
+            scale: { start: f.big ? 1 : 0.6, end: 0 },
             alpha: { start: 1, end: 0 },
             tint: [0xfffbe0, 0xffe070, 0xffcc30],
             blendMode: Phaser.BlendModes.ADD,
-            frequency: this.reduced ? 500 : f.big ? 60 : 140,
+            frequency: this.reduced ? 500 : f.big ? 35 : 90,
             x: { min: f.big ? -14 : -5, max: f.big ? 14 : 5 },
           })
           .setDepth(DEPTH.lights + 4);
@@ -603,6 +615,52 @@ export class WorldMap {
         f.gold = undefined;
       }
     }
+  }
+
+  /**
+   * 11/16 축제 금빛이 티가 덜 났다 (불꽃 색만 살짝 바뀌고, 밤 빛은 낮엔 안 보인다) → 낮에도 보이게 덧그린다.
+   * 불 위 금빛 후광(숨 쉬듯 밝아졌다 어두워짐), 바닥에 번지는 금빛 원, 몇 초마다 금가루가 둥글게 터짐, 밤 빛 범위 1.5배
+   */
+  private festDressing(f: { big?: boolean; lights: LightSpot[]; x: number; y: number }): {
+    objs: Phaser.GameObjects.GameObject[];
+    tweens: Phaser.Tweens.Tween[];
+    timer: Phaser.Time.TimerEvent;
+    scales: number[];
+  } {
+    const scene = this.scene;
+    const k = f.big ? 1 : 0.5;
+    const scales = f.lights.map((l) => l.scale);
+    f.lights.forEach((l) => (l.scale *= 1.5));
+    const halo = scene.add.image(f.x, f.y, TEX.glow).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffd23a).setScale(3.2 * k).setAlpha(0.55).setDepth(DEPTH.lights + 2);
+    const floor = scene.add
+      .image(f.x, f.y + (f.big ? 34 : 10), TEX.glow)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setTint(0xffc030)
+      .setScale(5 * k, 1.8 * k)
+      .setAlpha(0.45)
+      .setDepth(DEPTH.lights + 1);
+    const burst = scene.add
+      .particles(f.x, f.y, TEX.spark, {
+        lifespan: { min: 900, max: 1500 },
+        speed: { min: f.big ? 70 : 40, max: f.big ? 130 : 70 },
+        angle: { min: 200, max: 340 },
+        gravityY: 60,
+        scale: { start: f.big ? 0.9 : 0.6, end: 0 },
+        alpha: { start: 1, end: 0 },
+        tint: [0xffffff, 0xffe070, 0xffc030],
+        blendMode: Phaser.BlendModes.ADD,
+        emitting: false,
+      })
+      .setDepth(DEPTH.lights + 4);
+    const tweens = this.reduced
+      ? []
+      : [
+          scene.tweens.add({ targets: halo, alpha: { from: 0.35, to: 0.8 }, scale: { from: 2.8 * k, to: 3.6 * k }, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.easeInOut" }),
+          scene.tweens.add({ targets: floor, alpha: { from: 0.3, to: 0.6 }, duration: 1600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" }),
+        ];
+    const timer = scene.time.addEvent({ delay: this.reduced ? 6000 : 2400, loop: true, callback: () => burst.explode(f.big ? 26 : 10) });
+    burst.explode(f.big ? 26 : 10);
+    return { objs: [halo, floor, burst], tweens, timer, scales };
   }
 
   /** 불멍 중인 모닥불은 불티를 더 많이 (null이면 모두 평소대로) */

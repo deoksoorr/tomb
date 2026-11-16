@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { CLOSED_LOTS } from "@tomb/protocol";
 import {
   defaultExterior,
@@ -434,7 +435,7 @@ export class RedisHouseStore implements HouseStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "housing/store");
   }
 
   async get(id: string) {

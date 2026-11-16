@@ -10,6 +10,7 @@ import { CURSES, floorSeed, isBossFloor, NO_CURSE, TOWER_BOSS_HEAL, TOWER_POWER,
 import type { HuntResult, RpgAction, RpgHud } from "@/lib/rpg/types";
 import { DIR, STATE, type DirId, type HuntAct } from "@tomb/protocol";
 import { FONT_KEY, FONT_PX } from "../text/GlyphAtlas";
+import { isTouchUi } from "../input/keyHint";
 import { AvatarView } from "../entities/AvatarView";
 import type { CfxDepth } from "../entities/CosmeticFxView";
 import { RoomPresence } from "../net/RoomPresence";
@@ -712,7 +713,8 @@ export class HuntScene extends RpgScene {
     const a = this.auto;
     if (slot === "all") {
       if (!a.ids.length) {
-        this.flash("자동 칸이 없어요. 칸을 우클릭하거나 Shift+숫자로 정해요", 1600);
+        // 터치는 [자동]을 누른 다음 칸을 눌러 정한다 (HUNT_TOUCH)
+        this.flash(isTouchUi() ? "자동 칸이 없어요. [자동]을 누른 다음 칸을 눌러 정해요" : "자동 칸이 없어요. 칸을 우클릭하거나 Shift+숫자로 정해요", 1600);
         return;
       }
       a.on = !a.on;

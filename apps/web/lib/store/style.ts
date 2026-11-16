@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { DYE_PARTS, premiumBody, PREMIUM_BODIES, type AvatarDye, type CosmeticSlot, type DyePart } from "@tomb/protocol";
 import { env } from "../env";
 import type { DyeTier } from "../dye/palette";
@@ -351,7 +352,7 @@ export class RedisStyle implements StyleStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "style");
   }
 
   async get(id: string): Promise<StyleState> {

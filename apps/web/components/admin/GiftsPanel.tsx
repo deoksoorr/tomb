@@ -93,6 +93,11 @@ export default function GiftsPanel({ toast, onAuthLost, preset, onPresetUsed }: 
   const [busy, setBusy] = useState(false);
   /** 확인을 누른 때의 보낼 내용 (내용이 바뀌면 확인이 풀린다) */
   const [armedSig, setArmedSig] = useState<string | null>(null);
+  /**
+   * 11/16 이번 보내기의 요청 번호 (확인을 누를 때 정한다). 서버는 같은 번호를 한 번만 보낸다 — 두 번 눌러도, 응답이 늦어 다시 눌러도 한 번만.
+   * 실패해서 같은 내용으로 다시 보내면 같은 번호를 쓴다 (사실은 서버에 들어갔던 거라면 두 번 나가지 않게). 내용을 바꾸면 새 번호
+   */
+  const [request, setRequest] = useState<{ id: string; sig: string } | null>(null);
 
   const fail = (e: unknown) => {
     if (e instanceof ApiRequestError && e.status === 401) onAuthLost();
@@ -187,15 +192,17 @@ export default function GiftsPanel({ toast, onAuthLost, preset, onPresetUsed }: 
 
   async function send(e: FormEvent) {
     e.preventDefault();
-    if (!ready) return;
+    if (!ready || busy) return;
     if (!armed) {
       setArmedSig(sig);
+      if (request?.sig !== sig) setRequest({ id: crypto.randomUUID().replace(/-/g, ""), sig });
       return;
     }
     setBusy(true);
     setArmedSig(null);
     try {
-      await socialAdminApi.sendGift(payload);
+      await socialAdminApi.sendGift({ ...payload, requestId: request?.sig === sig ? request.id : null });
+      setRequest(null);
       toast(
         mode === "all"
           ? "전체에게 선물을 보냈어요."

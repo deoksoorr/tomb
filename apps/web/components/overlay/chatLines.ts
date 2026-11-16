@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { bridge } from "@/game/bridge";
+import { isTouchUi } from "@/game/input/keyHint";
 import { chatChime, chimeForChat } from "@/lib/chatChime";
 import { addChatLine, liveChatLines, mergeChatLines, type ChatLine } from "@/game/logic/chatLog";
 import { takeReplyHint, whisperPartners } from "@/lib/whisperPartners";
@@ -74,7 +75,7 @@ if (typeof window !== "undefined") {
     // 11/16 귓속말 상대는 최근 목록 맨 앞으로 (입력칸 이름 칩·/w + Enter). 처음 받은 귓속말 뒤에는 답장하는 법을 한 번 알려 준다
     if (added && name && (w === "in" || w === "out")) {
       whisperPartners.note(name, w);
-      if (w === "in" && takeReplyHint()) chatStore.push("", "/w 하고 Enter를 누르면 바로 답장할 수 있어요", true, undefined, undefined, undefined, undefined, undefined, "note");
+      if (w === "in" && takeReplyHint()) chatStore.push("", isTouchUi() ? "/w 하고 보내면 바로 답장할 수 있어요" : "/w 하고 Enter를 누르면 바로 답장할 수 있어요", true, undefined, undefined, undefined, undefined, undefined, "note");
     }
   });
   bridge.on("chat:log", ({ lines: incoming, ch }) => {

@@ -1,3 +1,4 @@
+import { rateLimit } from "@/lib/ratelimit";
 import { handler, json } from "@/lib/http";
 import { LIST_LIMIT } from "@/lib/housing/catalog";
 import { SortSchema } from "@/lib/housing/schemas";
@@ -9,6 +10,8 @@ import type { HouseListResponse } from "@/lib/housing/types";
  * 브라우저는 캐시하지 않는다 (묘비 목록과 같은 정책).
  */
 export const GET = handler(async (req) => {
+  // 공개 조회: 쿼리를 바꿔 CDN 캐시를 건너뛰는 반복 호출 방지 (메모리 한도)
+  await rateLimit("publicGet", req);
   const sort = SortSchema.parse(req.nextUrl.searchParams.get("sort") ?? "score");
   const houses = (await getHouseStore().list(sort, LIST_LIMIT)).map((h) => toSummary(h));
   return json<HouseListResponse>(

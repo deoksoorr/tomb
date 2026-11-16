@@ -36,13 +36,13 @@ const STAGE_MIN_H = 72;
 /** 칸에 놓는 물건인지 (바닥·벽지·외관은 돌리거나 놓아 볼 수 없다) */
 const placeable = (f: FurnitureDef) => !f.skin && !f.ext;
 
-/** 물건이 하는 일 (자세히 보기의 "할 수 있는 일" 줄) */
-function abilities(f: FurnitureDef): string[] {
+/** 물건이 하는 일 (자세히 보기의 "할 수 있는 일" 줄). touch = 화면 버튼을 쓰는 기기 */
+function abilities(f: FurnitureDef, touch: boolean): string[] {
   const out: string[] = [];
   if (f.ext) out.push("집 외관에 입혀요 (외관 꾸미기)");
   else if (f.skin) out.push(f.skin === "floor" ? "방 바닥 전체를 바꿔요" : "방 벽 전체를 바꿔요");
   // 칸에 놓는 물건의 크기는 점수 줄의 "3×2칸" 표시로 보여 준다
-  if (f.use) out.push(`E 키로 ${f.use}`);
+  if (f.use) out.push(touch ? `[상호작용] 버튼으로 ${f.use}` : `E 키로 ${f.use}`);
   if (f.id === "stone_path") out.push("밟으면 또각또각 발소리가 나요");
   if (f.floor) out.push("밟고 지나갈 수 있고 위에 물건을 올려요");
   if (f.light) out.push("밤에 빛나요");
@@ -67,6 +67,7 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
   const [night, setNight] = useState(false);
   const [frame, setFrame] = useState(0);
   const phone = useMediaQuery("(max-width: 560px)");
+  const coarse = useMediaQuery("(pointer: coarse)");
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
 
   const items = FURNITURE.filter((f) => f.category === cat);
@@ -187,9 +188,9 @@ export default function FurnitureShop({ my, placed, onMy, onClose, onTry }: Prop
             꾸밈 점수 <strong>+{f.score}</strong>
             {owned > 0 && <span className={styles.small}> · 가진 것 {owned}{placed[f.id] ? ` (놓은 것 ${placed[f.id]})` : ""}</span>}
           </p>
-          {abilities(f).length > 0 && (
+          {abilities(f, coarse).length > 0 && (
             <ul className={styles.fsAbilities} aria-label="할 수 있는 일">
-              {abilities(f).map((a) => (
+              {abilities(f, coarse).map((a) => (
                 <li key={a}>{a}</li>
               ))}
             </ul>

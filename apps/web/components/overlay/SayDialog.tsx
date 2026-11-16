@@ -8,6 +8,7 @@ import { EMO_BOARD, EMO_GROUPS, EMO_HOTKEYS, emoAllowed, QUEST_EMO_HINT, type Em
 import { emoteDataUrl } from "@/game/sprites/emotes";
 import { moodIconDataUrl } from "@/game/sprites/moodArt";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { useMe } from "@/lib/hooks/useMe";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -57,6 +58,8 @@ const favSlots = (favs: readonly FavKey[]): EmoSlot[] =>
 export default function SayDialog({ onClose }: { onClose: () => void }) {
   const [tab, setTabState] = useState<Tab>(() => lastTab);
   const baseId = useId();
+  // 터치 기기(화면 버튼)는 키 안내 대신 버튼 안내만
+  const coarse = useMediaQuery("(pointer: coarse)");
   const moodState = useBridgeValue("mood:state");
   const seated = moodState?.seated ?? false;
   const current = moodState?.mood ?? "";
@@ -133,7 +136,7 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
       {tab !== "mood" && (
         <p className={styles.favLine}>
           <span className={styles.favStar} aria-hidden="true" />
-          즐겨찾기 {favCount}/{FAV_MAX}. 별을 누른 표현은 Y 키로 바로 꺼내요. 폰은 [표현]을 길게 눌러요.
+          즐겨찾기 {favCount}/{FAV_MAX}. 별을 누른 표현은 {coarse ? "[표현]을 길게 눌러" : "Y 키로"} 바로 꺼내요.
         </p>
       )}
 
@@ -173,18 +176,29 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
                 )}
               </section>
             ))}
-            <p className={styles.hint}>머리 위에 3~4초 떠요. 게임 화면에서도 숫자 1~9로 바로 보낼 수 있어요.</p>
+            <p className={styles.hint}>{coarse ? "머리 위에 3~4초 떠요." : "머리 위에 3~4초 떠요. 게임 화면에서도 숫자 1~9로 바로 보낼 수 있어요."}</p>
             <InfoCard title="이렇게 써 보세요" icon="info" className={styles.tips}>
               <TipList
-                tips={[
-                  "1 손 흔들기·2 환호는 캐릭터가 직접 몸짓을 해요. 3번부터는 머리 위에 그림이 떠요.",
-                  "위 작은 탭을 누르면 묶음별로 볼 수 있어요. 숫자 1~9는 늘 [기본] 앞쪽 아홉 칸이에요.",
-                  `[의뢰] 묶음은 수집 의뢰 보상이에요. 도장 교환소에서 ${QUEST_EMO_HINT}로 받으면 열려요.`,
-                  "컴퓨터는 T 키로 이 창을 열어요. 숫자 키를 누르면 창을 열지 않고 바로 보내요.",
-                  "자주 쓰는 건 별을 눌러 즐겨찾기에 넣어요. Y 키를 누르면 내 둘레에 펼쳐져요. 폰은 [표현]을 길게 눌러요.",
-                  "정해진 문장이 필요하면 [말풍선] 탭, 벤치에 앉아 있다면 [벤치 상태] 탭을 써 보세요.",
-                  "너무 빨리 연달아 누르면 1초 동안은 다시 뜨지 않아요.",
-                ]}
+                tips={
+                  coarse
+                    ? [
+                        "손 흔들기·환호는 캐릭터가 직접 몸짓을 해요. 나머지는 머리 위에 그림이 떠요.",
+                        "위 작은 탭을 누르면 묶음별로 볼 수 있어요.",
+                        `[의뢰] 묶음은 수집 의뢰 보상이에요. 도장 교환소에서 ${QUEST_EMO_HINT}로 받으면 열려요.`,
+                        "자주 쓰는 건 별을 눌러 즐겨찾기에 넣어요. [표현]을 길게 누르면 내 둘레에 펼쳐져요.",
+                        "정해진 문장이 필요하면 [말풍선] 탭, 벤치에 앉아 있다면 [벤치 상태] 탭을 써 보세요.",
+                        "너무 빨리 연달아 누르면 1초 동안은 다시 뜨지 않아요.",
+                      ]
+                    : [
+                        "1 손 흔들기·2 환호는 캐릭터가 직접 몸짓을 해요. 3번부터는 머리 위에 그림이 떠요.",
+                        "위 작은 탭을 누르면 묶음별로 볼 수 있어요. 숫자 1~9는 늘 [기본] 앞쪽 아홉 칸이에요.",
+                        `[의뢰] 묶음은 수집 의뢰 보상이에요. 도장 교환소에서 ${QUEST_EMO_HINT}로 받으면 열려요.`,
+                        "컴퓨터는 T 키로 이 창을 열어요. 숫자 키를 누르면 창을 열지 않고 바로 보내요.",
+                        "자주 쓰는 건 별을 눌러 즐겨찾기에 넣어요. Y 키를 누르면 내 둘레에 펼쳐져요. 폰은 [표현]을 길게 눌러요.",
+                        "정해진 문장이 필요하면 [말풍선] 탭, 벤치에 앉아 있다면 [벤치 상태] 탭을 써 보세요.",
+                        "너무 빨리 연달아 누르면 1초 동안은 다시 뜨지 않아요.",
+                      ]
+                }
               />
             </InfoCard>
           </>
@@ -224,7 +238,7 @@ export default function SayDialog({ onClose }: { onClose: () => void }) {
               <InfoCard title="벤치 상태란?" icon="info" className={styles.tips}>
                 <TipList
                   tips={[
-                    "광장·모닥불 둘레의 벤치나 의자 앞에서 E(폰은 앉기 버튼)를 누르면 앉아요.",
+                    coarse ? "광장·모닥불 둘레의 벤치나 의자 앞에서 [앉기] 버튼을 누르면 앉아요." : "광장·모닥불 둘레의 벤치나 의자 앞에서 E를 누르면 앉아요.",
                     "고른 상태는 머리 위 작은 아이콘과 손에 든 소품으로 같은 채널 모두에게 보여요.",
                     "일어나면 저절로 풀려요. 앉은 채로 다시 누르면 바로 풀 수 있어요.",
                   ]}

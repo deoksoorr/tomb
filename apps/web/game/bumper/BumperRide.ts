@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { BUMPER_RINK, BUMPER_SEATS, BUMPER_YARD, DIR, STATE, bumperSeatById, type BumperSeat, type Sid, type WelcomeMsg } from "@tomb/protocol";
 import { bridge } from "../bridge";
 import { DEPTH } from "../config";
+import { keyJosa } from "../input/keyHint";
 import type { MoveInput } from "../logic/movement";
 import { DEADZONE_ENTER } from "../logic/movement";
 import { BUMP_BIG_POWER, BUMP_COUNT_POWER, CAR_BOUNDS, canExit, collideCar, dirAngle, exitSpot, headingDir, headingFrame, newMotion, pickCar, remoteBumpPower, stepCar, touching, wrapAngle, type Bump, type CarBody, type CarMotion, type ExitSpot } from "../logic/bumper";
@@ -294,7 +295,7 @@ export class BumperRide {
     if (!pl.inCar) return false;
     if (a === "interact") {
       if (canExit(pl.x, pl.y)) this.leave(undefined, exitSpot(pl.x, pl.y, (x, y) => standable(x, y) && !inWater(x, y)));
-      else this.host.toast("벽에 차를 붙이고 E를 누르면 내려요");
+      else this.host.toast(`벽에 차를 붙이고 ${keyJosa("E", "를")} 누르면 내려요`);
       return true;
     }
     if (a === "jump") {

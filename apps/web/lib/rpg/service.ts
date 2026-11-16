@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import { itemById } from "@tomb/protocol";
 import { recordEvent } from "../analyticsService";
-import { earnPoints, getAccounts, refundPoints, spendPoints } from "../store";
+import { earnPointsOnly, getAccounts, refundPoints, spendPoints } from "../store";
 import { kstDay, kstWeek } from "../store/accounts";
 import { capsMult } from "../pointEvent";
 import { earnBoost } from "../store/pointEvent";
@@ -72,7 +72,7 @@ import type { z } from "zod";
 import type { CharacterActionSchema, ShopActionSchema } from "./schemas";
 import { getRpgStore, RUNS_PER_HOUR, type RpgStore } from "./store";
 import { signTicket, verifyTicket } from "./ticket";
-import type { CharacterState, Drop, RpgView, SoldInfo, RunFinishResponse, RunResult, RunReward, RunStartResponse } from "./types";
+import type { CharacterState, DailyStats, Drop, RpgView, SoldInfo, RunFinishResponse, RunResult, RunReward, RunStartResponse } from "./types";
 
 // 사냥터 서버 로직 (라우트는 세션 확인·입력 검증·레이트리밋만 하고 여기로 넘긴다).
 // 포인트는 백엔드 공용 함수(earnPoints/spendPoints)로만 움직인다. 사냥터 자체에는 포인트 장부가 없다.
@@ -121,13 +121,15 @@ export async function endgameLaunch(store: RpgStore = getRpgStore(), now = Date.
 /** 시험용: 기억한 시각을 지운다 */
 export const forgetEndgameLaunch = () => void delete eg.__tombEndgameLaunch;
 
-export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now = Date.now(), state?: CharacterState): Promise<RpgView> {
+export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now = Date.now(), state?: CharacterState, known?: DailyStats): Promise<RpgView> {
   const day = kstDay(now);
   const sup = await isSuperHunter(acct);
-  const [loaded, daily, me, runs, boost] = await Promise.all([
+  const [loaded, daily, summary, runs, boost] = await Promise.all([
     state ?? loadChar(acct, store, sup),
-    store.daily(acct, day),
-    getAccounts().get(acct, day, now),
+    // 판 끝은 방금 더한 오늘 기록(addDaily가 돌려준 값)을 그대로 쓴다 (다시 읽지 않게)
+    known ?? store.daily(acct, day),
+    // 잔액만 쓴다 → 계정 전체(get = 명령 7개)가 아니라 요약 HMGET 1개
+    getAccounts().summaries([acct]),
     store.runsThisHour(acct, hourBucket(now)),
     earnBoost(now),
   ]);
@@ -149,7 +151,7 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
     character,
     derived: derive(character.level, character.stats, character.equip),
     expToNext: Number.isFinite(expToNext(character.level)) ? expToNext(character.level) : 0,
-    points: me.points,
+    points: summary[0]?.points ?? 0,
     today: { huntPoints: Math.min(daily.points, huntCap), cap: huntCap, runs: daily.runs, runsPerHour: RUNS_PER_HOUR - runs, runsHourMax: RUNS_PER_HOUR },
     respecCost: respecCost(stored.level),
     statResetCost: respecCost(stored.level),
@@ -267,7 +269,7 @@ export async function shopAction(acct: string, a: z.input<typeof ShopActionSchem
   const want = result.drop * result.unit;
   if (want > 0) {
     // paid = 받은 포인트가 판 값으로 얼마어치인지 (포인트 배수 이벤트면 earned보다 적다, lib/pointEvent)
-    const { earned, paid } = await earnPoints(acct, "hunt", want, ipHash);
+    const { earned, paid } = await earnPointsOnly(acct, "hunt", want, ipHash);
     capped = paid < want;
     value += earned;
     if (earned > 0) await store.addDaily(acct, kstDay(), { points: earned });
@@ -382,7 +384,8 @@ export async function startRun(
     ...(td ? { testDrops: td } : {}),
     // 11/15 테스트 서버 슈퍼 계정 시험 드롭 (운영 서버에서는 isSuperHunter가 늘 false)
     ...(sup && game === "hunt" ? { superDrops: true } : {}),
-    view: await rpgView(acct, store, now, started),
+    // 보통 판은 위에서 읽은 캐릭터를 그대로 (시작은 캐릭터를 바꾸지 않는다 — 다시 읽지 않게)
+    view: await rpgView(acct, store, now, started ?? c),
   };
 }
 
@@ -574,8 +577,8 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   const dexReward = stars?.dex ?? mobs?.dex;
   const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
   // 사냥은 사냥 한도, 곤충·별자리는 미니게임 한도 (사냥 화면의 오늘 사냥 포인트(daily.points)에는 사냥 몫만)
-  const earned = pointsRaw > 0 ? (await earnPoints(acct, t.g, pointsRaw, ipHash)).earned : 0;
-  await store.addDaily(acct, kstDay(now), { points: t.g === "hunt" ? earned : 0, runs: 1, exp: v.exp });
+  const earned = pointsRaw > 0 ? (await earnPointsOnly(acct, t.g, pointsRaw, ipHash)).earned : 0;
+  const daily = await store.addDaily(acct, kstDay(now), { points: t.g === "hunt" ? earned : 0, runs: 1, exp: v.exp });
   if (t.g === "hunt") await recordEvent("hunt", now); // 47번 방문 분석: 사냥 판 수
   // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터). 운영자 계정은 순위에 남기지 않는다.
   // 11/15: 자기 레벨이 그 사냥터가 열리는 레벨(티켓의 사냥터 t.z)보다 10 넘게 높으면 랭킹에 아예 넣지 않는다 —
@@ -600,7 +603,7 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       ...(t.tt ? { transcend: { exp: tGain, tier: t.tt, levelsGained: applied.tLevels, tLevel: state.tLevel } } : {}),
       ...(pioneer ? { pioneer } : {}),
     },
-    view: await rpgView(acct, store, now, state),
+    view: await rpgView(acct, store, now, state, daily),
   };
 }
 
@@ -782,10 +785,10 @@ async function settleTowerRun(
     if (done.result.star100 && !suspect) titles.push(...(await claimFirstTitles(acct, [FIRST_STAR_ID], now, () => "서버 최초로 ★100에 올랐어요!")));
   }
   const drops = await grantCosmetics(acct, done.result.drops, now);
-  const earned = v.points > 0 ? (await earnPoints(acct, "hunt", v.points, ipHash)).earned : 0;
+  const earned = v.points > 0 ? (await earnPointsOnly(acct, "hunt", v.points, ipHash)).earned : 0;
   // 11/16 몬스터 도감: 의심 판이 아닐 때만 evalTower가 mobs를 싣는다 (관리자 대신 정산 grantTowerRun은 처치 기록이 없다)
   const mobs = v.mobs && !suspect ? await recordMobKills(acct, v.mobs, now, ipHash) : undefined;
-  await store.addDaily(acct, day, { points: earned, runs: 1 });
+  const daily = await store.addDaily(acct, day, { points: earned, runs: 1 });
   await recordEvent("hunt", now);
   // 처치 수는 주간 사냥 레이스에 그대로 (지옥, 레벨 50 콘텐츠라 늘 레이스에 든다)
   if (v.kills > 0 && !staff && !suspect) await getAccounts().recordHunt(acct, "hell", { kills: v.kills, clearMs: null }, week, true);
@@ -807,7 +810,7 @@ async function settleTowerRun(
       tower: { start, floors: v.floors, best: st.best, newBest: st.newBest, newWeek: st.newWeek, runs: st.runs, chests: st.chests, emptyChests: st.emptyChests, titles, ...(suspect ? { suspect: true } : {}) },
       ...(pioneer ? { pioneer } : {}),
     },
-    view: await rpgView(acct, store, now, state),
+    view: await rpgView(acct, store, now, state, day === kstDay(now) ? daily : undefined),
   };
 }
 

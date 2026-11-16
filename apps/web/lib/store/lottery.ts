@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import type { LotteryResult } from "../lottery";
 import { K } from "./keys";
 
@@ -167,7 +168,7 @@ export class RedisLottery implements LotteryStore {
   private token = new Map<string, string>();
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "lottery");
   }
 
   async has(round: string, accountId: string): Promise<boolean> {

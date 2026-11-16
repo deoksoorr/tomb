@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- 캔버스로 만든 dataURL 픽셀아트라 next/image 최적화가 필요 없다 */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { bridge } from "@/game/bridge";
+import { isTouchUi } from "@/game/input/keyHint";
 import { emoteDataUrl } from "@/game/sprites/emotes";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
@@ -94,7 +95,7 @@ export default function ExprRadial({ onClose }: { onClose: () => void }) {
     <div ref={rootRef} className={styles.root} style={{ left: cxp, top: cyp }} role="menu" aria-label="즐겨찾기 표현 (숫자 1~8로 고르기, Y·Esc로 닫기)">
       <span className={styles.ring} style={{ width: R * 2, height: R * 2 }} aria-hidden="true" />
       {n === 0 ? (
-        <p className={styles.empty}>즐겨찾기가 없어요. T(표현 창)에서 별을 눌러 넣어 보세요.</p>
+        <p className={styles.empty}>{isTouchUi() ? "즐겨찾기가 없어요. [표현] 창에서 별을 눌러 넣어 보세요." : "즐겨찾기가 없어요. T(표현 창)에서 별을 눌러 넣어 보세요."}</p>
       ) : (
         favs.map((key, i) => {
           // 12시 방향부터 시계 방향

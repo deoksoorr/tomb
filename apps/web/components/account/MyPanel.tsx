@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { checkName, dexBadgeCats } from "@tomb/protocol";
+import { checkNewName, dexBadgeCats } from "@tomb/protocol";
 import { api, errorMessage } from "@/lib/api";
 import { CAT_LABEL, dexBadgeBits } from "@/lib/forage/catalog";
 import { meStore, useMe } from "@/lib/hooks/useMe";
@@ -359,7 +359,8 @@ function NameSection({ me, googleLinked }: { me: Me; googleLinked: boolean }) {
   const id = useId();
   const { nextAllowedAt, cost } = me.nameChange;
   const waiting = nextAllowedAt > openedAt;
-  const check = checkName(name);
+  // 11/16 바꾸는 이름은 8자까지 (지금 이름 그대로는 예전 길이)
+  const check = checkNewName(name, me.name);
   // 닉네임 중복: 입력 중 가볍게 미리 확인 (지금 내 이름은 묻지 않는다). 저장 때 서버가 다시 판정한다
   const taken = useNameTaken(open ? name : "", me.name);
   const price = cost === 0 ? "이번 변경은 무료예요." : `바꾸면 ${cost.toLocaleString("ko-KR")} 포인트가 들어요.`;

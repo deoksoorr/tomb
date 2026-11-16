@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "./redisUsage";
 import { nanoid } from "nanoid";
 import type { NextRequest, NextResponse } from "next/server";
 import { canonicalIp, requestIpHash } from "./ban";
@@ -128,7 +129,7 @@ async function activeOn(ids: readonly string[], days: readonly string[]): Promis
   }
   const conn = env.redis();
   if (!conn) return ids.map(() => days.map(() => false));
-  const redis = (gm.__tombSigRedis ??= new Redis({ ...conn, automaticDeserialization: false }));
+  const redis = (gm.__tombSigRedis ??= redisClient(conn, "sameUser"));
   const p = redis.pipeline();
   for (const id of ids) for (const d of days) p.sismember(K.actDay(d), id);
   const r = await p.exec<unknown[]>();

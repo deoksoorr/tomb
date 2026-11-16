@@ -36,8 +36,7 @@ import {
   SYNC_INTERVAL_MS,
   type ChannelHost,
   type PeerRecord,
-  type Reservation,
-} from "./channel";
+  type Reservation, REJOIN_MAX, REJOIN_WINDOW_MS } from "./channel";
 
 type Conn = {
   id: string;
@@ -124,6 +123,20 @@ describe("join / capacity / duplicate", () => {
     const c = join("c");
     expect(c.closed?.code).toBe(CLOSE.CHANNEL_FULL);
     expect(c.out).toHaveLength(0);
+  });
+
+  it("rejoin flood: more than REJOIN_MAX takeovers inside REJOIN_WINDOW_MS closes only the new socket with 4008", () => {
+    const { join, conn } = setup(3);
+    let last = join("a", 0);
+    for (let i = 1; i <= REJOIN_MAX; i++) last = join("a", i * 100, undefined, conn(`a${i}`)); // 첫 입장 + 다시 붙기 REJOIN_MAX번
+    const extra = join("a", (REJOIN_MAX + 1) * 100, undefined, conn("flood"));
+    expect(extra.closed?.code).toBe(CLOSE.RATE_LIMITED);
+    expect(extra.out).toHaveLength(0);
+    expect(last.closed).toBeUndefined(); // 붙어 있던 연결은 그대로
+    // 창이 지나면 다시 붙을 수 있다
+    const later = join("a", REJOIN_WINDOW_MS + 1_000, undefined, conn("later"));
+    expect(later.closed).toBeUndefined();
+    expect(events(later)[0].t).toBe("welcome");
   });
 
   it("replaces the old socket of the same visitor with 4002 and keeps sid/seat (even when full)", () => {

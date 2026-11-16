@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { DEPTH } from "../config";
+import { isTouchUi } from "../input/keyHint";
 import { Grid } from "../sprites/pixel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import type { CameraRig } from "../world/CameraRig";
@@ -68,7 +69,7 @@ export class LookoutScope {
     this.buildLens();
     if (!s.textures.exists(TEX.glare)) s.textures.addCanvas(TEX.glare, radial(64, [[0, "rgba(255,240,200,0.9)"], [0.5, "rgba(255,220,150,0.25)"], [1, "rgba(255,220,150,0)"]]));
     this.glare = s.add.image(0, 0, TEX.glare).setScrollFactor(0).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH_LENS - 1).setAlpha(0);
-    this.o.atlas.ensure("0123456789번데크는비어있어요.에텐트가불이켜져방향키로둘러봐요E를누르면내려놓아요");
+    this.o.atlas.ensure("0123456789번데크는비어있어요.에텐트가불이켜져방향키로둘러봐요E를누르면내려놓아요조이스틱[상호작용]버튼을");
     this.caption = s.add.bitmapText(0, 0, FONT_KEY, "", FONT_PX).setOrigin(0.5, 0).setScrollFactor(0).setDepth(DEPTH_LENS + 1).setTint(0xf2e6c8);
     this.captionText = "";
     this.buildTents();
@@ -114,7 +115,7 @@ export class LookoutScope {
       this.fix(this.glare, cx - r * 0.42 + sway.x, cy - r * 0.42 + sway.y, (r * 0.9) / 64).setAlpha(0.22 * Math.max(0, 1 - darkness * 1.6));
     }
     if (this.caption) this.fix(this.caption, Math.round(cx), Math.round(cy + lensRadius(cam.width, cam.height) * 0.78), 1);
-    const text = scopeCaption(aimedDeck(clampAim(this.aim)), this.fx.map((f) => f.view));
+    const text = scopeCaption(aimedDeck(clampAim(this.aim)), this.fx.map((f) => f.view), isTouchUi());
     if (text !== this.captionText && this.caption) {
       this.captionText = text;
       this.o.atlas.ensure(text);

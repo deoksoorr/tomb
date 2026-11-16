@@ -1,4 +1,5 @@
-import { BOAT_BACK_SEAT, BOAT_SEATS, BOATS, boatKind, DUCK_DOCK_DECK, DUCK_POND, DUCK_SIDE_SEAT, STEP_STONES, type Boat, type BoatKind, type BoatSeat, type Sid } from "@tomb/protocol";
+import { BOAT_BACK_SEAT, BOAT_SEATS, BOATS, boatKind, DIR, DUCK_DOCK_DECK, DUCK_POND, DUCK_SIDE_SEAT, STEP_STONES, type Boat, type BoatKind, type BoatSeat, type DirId, type Sid } from "@tomb/protocol";
+import { BOAT_BACK_SEAT_Y } from "../sprites/rideProps";
 import { DECKS, inWater, inWaterBody, type Rect } from "../world/layout";
 
 // 조각배(50번) 규칙 — 순수 함수라 테스트한다 (그림·네트워크는 world/BoatRide.ts).
@@ -8,6 +9,8 @@ import { DECKS, inWater, inWaterBody, type Rect } from "../world/layout";
 //  - 11/15 오리배(kind "duck"): 오리 연못 안에서만, 물살 없음, 조금 느리고 더 미끄러지듯(가속·감속이 느리다).
 //    자리는 나란히 (왼쪽 = 조종, 오른쪽 = DUCK_SIDE_SEAT). 두 오리배가 닿으면 살짝 튕겨 나간다 (duckBump, 각자 자기 배만)
 //  - 11/16 오리배는 연못 어느 둑에서든 내린다 (duckShoreRing): 둑 가까이면 E로 바로, 한가운데서 E면 가장 가까운 둑으로 저절로 저어 가서 내린다
+//  - 11/16 배를 앞·뒤·옆 네 방향으로 그린다 (boatFacing): 노 젓는 속도의 큰 축을 따르되, 대각선에서 깜빡이지 않게 축을 바꿀 때는 넉넉히 기다린다.
+//    방향은 노 젓는 사람의 아바타 방향(dir, 원래 4방향 u8로 오간다)에 실려 다른 사람 화면에도 그대로 간다 — 프로토콜은 그대로
 
 /** 노 저을 때 최고 속도 (px/초). 걷기(56)보다 조금 느리다 */
 export const ROW_SPEED = 46;
@@ -160,14 +163,39 @@ export function shorePoint(x: number, y: number, standable: (x: number, y: numbe
   return null;
 }
 
-/** 뒷자리(손님) 자리: 노 젓는 사람에서 뱃머리 반대쪽으로 */
-export function backSeatOffset(left: boolean): number {
-  return left ? BOAT_BACK_SEAT : -BOAT_BACK_SEAT;
+/**
+ * 두 번째 자리가 노 젓는 자리(오리배는 왼쪽 자리)에서 떨어진 만큼 (배 종류·뱃머리 방향별).
+ * 조각배 = 뒷자리(뱃머리 반대쪽 — 옆모습은 가로, 앞·뒷모습은 세로), 오리배 = 옆자리(어느 방향이든 화면 오른쪽으로 나란히)
+ */
+export function seatDelta(boat: Boat, dir: DirId): { dx: number; dy: number } {
+  if (boatKind(boat) === "duck") return { dx: DUCK_SIDE_SEAT, dy: 0 };
+  if (dir === DIR.left) return { dx: BOAT_BACK_SEAT, dy: 0 };
+  if (dir === DIR.right) return { dx: -BOAT_BACK_SEAT, dy: 0 };
+  return { dx: 0, dy: dir === DIR.down ? -BOAT_BACK_SEAT_Y : BOAT_BACK_SEAT_Y };
 }
 
-/** 두 번째 자리 x 차이 (배 종류별): 조각배 = 뒷자리(뱃머리 반대쪽), 오리배 = 옆자리(늘 화면 오른쪽) */
-export function seatOffset(boat: Boat, left: boolean): number {
-  return boatKind(boat) === "duck" ? DUCK_SIDE_SEAT : backSeatOffset(left);
+/** 배가 보는 방향을 바꾸는 최소 속도 (px/초) — 멈춰 가는 배는 마지막 방향 그대로 */
+export const FACING_MIN_SPEED = 4;
+/** 옆 ↔ 앞뒤로 축을 바꾸려면 새 축 속도가 지금 축 속도의 이만큼은 넘어야 한다 (대각선에서 그림이 깜빡이지 않게) */
+export const FACING_SWITCH = 1.4;
+
+/**
+ * 배가 볼 방향 (4방향). prev = 지금 방향, vx·vy = 노 젓는 속도 (물살 제외).
+ * 큰 축을 따르되 지금 축을 유지하는 쪽에 무게를 둔다: 다른 축이 FACING_SWITCH배를 넘어야 바꾸고,
+ * 같은 축 안에서 반대로 가면(왼↔오른, 위↔아래) 바로 돌아선다. 느리면(FACING_MIN_SPEED 미만) 그대로
+ */
+export function boatFacing(prev: DirId, vx: number, vy: number): DirId {
+  const ax = Math.abs(vx);
+  const ay = Math.abs(vy);
+  const side: DirId = vx < 0 ? DIR.left : DIR.right;
+  const fore: DirId = vy < 0 ? DIR.up : DIR.down;
+  const vertical = prev === DIR.up || prev === DIR.down;
+  if (vertical) {
+    if (ax >= FACING_MIN_SPEED && ax > ay * FACING_SWITCH) return side;
+    return ay >= FACING_MIN_SPEED ? fore : prev;
+  }
+  if (ay >= FACING_MIN_SPEED && ay > ax * FACING_SWITCH) return fore;
+  return ax >= FACING_MIN_SPEED ? side : prev;
 }
 
 /** 배 하나의 자리들 (앞자리 먼저) */
@@ -188,8 +216,8 @@ export type BoatPresence = {
   rower: Sid | null;
   /** 노 젓는 사람이 있는 지금 배 자리 (rower가 있을 때) */
   at: { x: number; y: number } | null;
-  /** 뱃머리가 왼쪽 (뒷자리 위치 계산용, 없으면 오른쪽) */
-  left?: boolean;
+  /** 뱃머리 방향 (뒷자리 위치 계산용, 없으면 오른쪽) */
+  dir?: DirId;
 };
 
 /**
@@ -206,8 +234,8 @@ export function joinSeat(px: number, py: number, occupied: ReadonlyMap<string, S
     const back = seats[1];
     const p = presence(b.id);
     if (!back || p.rower === null || !p.at || occupied.has(back.id) || !occupied.has(seats[0].id)) continue;
-    const bx = p.at.x + seatOffset(b, !!p.left);
-    const d = Math.min(Math.hypot(p.at.x - px, p.at.y - py), Math.hypot(bx - px, p.at.y - py));
+    const o = seatDelta(b, p.dir ?? DIR.right);
+    const d = Math.min(Math.hypot(p.at.x - px, p.at.y - py), Math.hypot(p.at.x + o.dx - px, p.at.y + o.dy - py));
     if (d <= reach && d < bd) {
       bd = d;
       best = back;

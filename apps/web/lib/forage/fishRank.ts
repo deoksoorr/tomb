@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import { getAccounts } from "../store";
 import { kstDay, rankValue, WEEK_RANK_TTL_SEC, WEEK_TIE_SCALE } from "../store/accounts";
@@ -42,11 +43,15 @@ for i = 1, 4 do
   if not cur or size > math.floor(tonumber(cur)) then
     if i == 2 or i == 4 then redis.call('ZADD', KEYS[i], string.format('%.17g', size + frac), ARGV[1]) else redis.call('ZADD', KEYS[i], size, ARGV[1]) end
     if i >= 3 then redis.call('HSET', KEYS[i + 2], ARGV[1], ARGV[3]) end
+    -- 주간 키 만료는 그 키에 쓸 때만 다시 건다 (키가 생기는 것도 늘 여기라 만료가 빠지지 않는다). 예전엔 낚을 때마다 EXPIRE 3개 —
+    -- Upstash는 스크립트 안 명령도 하나씩 세므로, 기록이 아닌 대부분의 낚시에서 3개를 아낀다 (주간 판은 그 주가 끝나면 더 쓰이지 않아 지워지는 때는 거의 같다)
+    if i == 2 then redis.call('EXPIRE', KEYS[2], ARGV[4]) end
+    if i == 4 then
+      redis.call('EXPIRE', KEYS[4], ARGV[4])
+      redis.call('EXPIRE', KEYS[6], ARGV[4])
+    end
   end
 end
-redis.call('EXPIRE', KEYS[2], ARGV[4])
-redis.call('EXPIRE', KEYS[4], ARGV[4])
-redis.call('EXPIRE', KEYS[6], ARGV[4])
 return 1
 `;
 
@@ -59,7 +64,7 @@ export class RedisFishRank implements FishRankStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "forage/fishRank");
   }
 
   async record(acct: string, sp: string, size: number, week: string): Promise<void> {

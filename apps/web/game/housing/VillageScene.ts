@@ -7,16 +7,18 @@ import { DEPTH } from "../config";
 import { Player, type SeatRequester } from "../entities/Player";
 import type { InputHub } from "../input/InputHub";
 import type { KeyAction } from "../input/Keyboard";
+import { interactLabel } from "../input/keyHint";
 import { emoSlotOfKey } from "../logic/emoBoard";
 import type { MoveInput } from "../logic/movement";
 import { RoomPresence } from "../net/RoomPresence";
 import type { NetPose } from "../net/sendThrottle";
+import { clampChars, DOOR_NAME_MAX } from "../text/fitLabel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
 import { Atmosphere } from "../world/Atmosphere";
 import { Lighting, playerLightRadius } from "../world/Lighting";
 import type { LightSpot } from "../world/WorldMap";
 import { FACADE_H, FACADE_W, yardGrid } from "./art";
-import { drawEmptyLot, drawHouseLot } from "./worldLots";
+import { drawEmptyLot, drawHouseLot, scaleLotLabel } from "./worldLots";
 
 // 분양 마을 씬. 분양 사무소에서 들어오는 밤 골목 마을이다.
 //  - 번지(필지)마다 그 집의 외관이 서 있고, 지붕 위에 문패(집 이름 · 주인 · 호칭 · 꾸밈 점수)가 뜬다.
@@ -356,13 +358,13 @@ export class VillageScene extends Phaser.Scene {
         }
       }
     }
-    for (const l of this.labels) l.setScale(s);
+    for (const l of this.labels) scaleLotLabel(l, s);
 
     const n = this.nearest();
     if (n !== this.near) {
       this.near = n;
       if (n) {
-        const text = n.kind === "door" ? `E · ${n.house.name} 들어가기` : `E · ${n.lot}번지 분양 문의`;
+        const text = interactLabel(n.kind === "door" ? `${clampChars(n.house.name, DOOR_NAME_MAX)} 들어가기` : `${n.lot}번지 분양 문의`);
         this.d.atlas.ensure(text);
         this.prompt.setText(text).setPosition(n.x, n.y - 30);
       }

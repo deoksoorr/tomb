@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import { normalize, RpgError } from "./character";
 import { getAccounts } from "../store";
@@ -223,7 +224,7 @@ export class RedisRpgStore implements RpgStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "rpg/store");
   }
 
   private async read(acct: string): Promise<{ rev: string; state: CharacterState }> {

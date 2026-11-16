@@ -1,10 +1,10 @@
 import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
 import type { NextRequest } from "next/server";
 import { env } from "./env";
 import { clientIp, HttpError } from "./http";
 import { isAdminIp } from "./ipAllow";
-import { ipHash } from "./session";
+import { redisClient } from "./redisUsage";
+import { ipHash, ipNetHash } from "./session";
 
 const MIN = 60;
 const DAY = 24 * 60 * MIN;
@@ -22,6 +22,9 @@ const LIMITS = {
   join: { visitor: 10, ip: 60, windowSec: MIN, message: "입장 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   report: { visitor: 10, ip: 10, windowSec: DAY, message: "오늘은 더 신고할 수 없어요." },
   detail: { visitor: null, ip: 120, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
+  // 11/16 공개 조회(공지·묘역·주민·분양 마을·긴급 의뢰)는 CDN을 건너뛴 요청만 여기 닿는다. 같은 와이파이(PC방·학교) 여럿이
+  // 화면마다 주기적으로 부르므로 detail보다 넉넉히 — 주소만 바꿔 캐시를 피하는 도배만 막는다 (메모리 한도, Redis 명령 0)
+  publicGet: { visitor: null, ip: 600, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   shop: { visitor: 20, ip: 60, windowSec: MIN, message: "상점 요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요." },
   // 사냥 스킬 트리: 한 랭크에 한 번씩 누르므로 (초기화 뒤 다시 찍기 등) 상점보다 넉넉히
   rpgSkill: { visitor: 90, ip: 240, windowSec: MIN, message: "스킬을 너무 빨리 찍고 있어요. 잠시 뒤에 다시 시도해 주세요." },
@@ -55,11 +58,13 @@ const LIMITS = {
   megaphone: { visitor: 20, ip: 60, windowSec: DAY, message: "확성기는 하루에 20번까지 쓸 수 있어요." },
   // 47번 방문 분석 기록 (방문·체류 신호). 넘치면 조용히 버린다
   visit: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요.", memory: true },
+  // 방문자 쿠키 발급 (쿠키 없이 부르는 공개 경로라 IP 한도만 — 반복 호출로 가입 통계·기기 기록이 부풀지 않게)
+  session: { visitor: null, ip: 60, windowSec: MIN, message: "요청이 너무 잦아요. 잠시 뒤에 다시 시도해 주세요.", memory: true },
 } as const satisfies Record<string, { visitor: number | null; ip: number; windowSec: number; message: string; memory?: true }>;
 
-/** 관리자 키 대입 방지: IP당 분당 실패 10회 */
+/** 관리자 키 대입 방지: IP당 분당 실패 10회 (IPv6는 /64 대역 단위 — 주소를 바꿔 가며 우회하지 못하게) */
 const ADMIN_FAILURES = { tokens: 10, windowSec: MIN };
-/** 개인 코드 대입 방지: IP당 시간당 실패 10회 */
+/** 개인 코드 대입 방지: IP당 시간당 실패 10회 (IPv6는 /64 대역 단위) */
 const CODE_FAILURES = { tokens: 10, windowSec: 60 * MIN };
 
 export type LimitAction = keyof typeof LIMITS;
@@ -74,7 +79,7 @@ function upstashLimiter(name: string, { tokens, windowSec }: Rule, conn: { url: 
   let rl = upstash.get(name);
   if (!rl) {
     rl = new Ratelimit({
-      redis: new Redis(conn),
+      redis: redisClient(conn, "ratelimit", { automaticDeserialization: true }),
       limiter: Ratelimit.slidingWindow(tokens, `${windowSec} s`),
       prefix: `rl:${name}`,
     });
@@ -169,12 +174,12 @@ export async function assertRateLimitOpen(action: LimitAction, req: NextRequest,
 
 /** 실패가 한도에 닿은 IP는 키가 맞아도 잠시 막는다 (맞았는지 여부로 키를 알아내지 못하게) */
 export async function assertAdminNotLocked(req: NextRequest): Promise<void> {
-  const v = await limiter("admin-fail", ADMIN_FAILURES).peek(ipHash(req));
+  const v = await limiter("admin-fail", ADMIN_FAILURES).peek(ipNetHash(req));
   if (!v.success) throw tooMany("시도가 너무 많아요. 잠시 뒤에 다시 시도해 주세요.", v.reset);
 }
 
 export async function recordAdminFailure(req: NextRequest): Promise<void> {
-  await limiter("admin-fail", ADMIN_FAILURES).take(ipHash(req));
+  await limiter("admin-fail", ADMIN_FAILURES).take(ipNetHash(req));
 }
 
 /**
@@ -182,10 +187,10 @@ export async function recordAdminFailure(req: NextRequest): Promise<void> {
  * 계정을 통째로 가져가는 경로라 운영자 IP도 예외로 두지 않는다.
  */
 export async function assertCodeLoginOpen(req: NextRequest): Promise<void> {
-  const v = await limiter("code-fail", CODE_FAILURES).peek(ipHash(req));
+  const v = await limiter("code-fail", CODE_FAILURES).peek(ipNetHash(req));
   if (!v.success) throw tooMany("코드 입력을 너무 많이 틀렸어요. 한 시간 뒤에 다시 시도해 주세요.", v.reset);
 }
 
 export async function recordCodeLoginFailure(req: NextRequest): Promise<void> {
-  await limiter("code-fail", CODE_FAILURES).take(ipHash(req));
+  await limiter("code-fail", CODE_FAILURES).take(ipNetHash(req));
 }

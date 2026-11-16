@@ -56,6 +56,7 @@ import {
   type GraveArea,
 } from "@tomb/protocol";
 import { facadeInfo } from "../housing/art";
+import { clampChars, DOOR_NAME_MAX } from "../text/fitLabel";
 import { BUS_E_RADIUS, BUS_STOP, fishZoneColliders, inFishZone } from "./fishZone";
 import { stargazeColliders, stargazeInteractables } from "./life/stargazeLayout";
 import { RIDE_KEEPOUT, rideColliders, rideInteractables, WISH_FOUNTAIN } from "./rides";
@@ -1100,7 +1101,7 @@ export function interactables(): Interactable[] {
 export function lotInteractable(lot: number, house: { id: string; name: string } | null): Interactable | null {
   const l = houseLot(lot);
   if (!l) return null;
-  if (house) return { id: `door:${lot}`, kind: "door", x: l.door.x, y: l.door.y + 4, r: 16, ax: l.door.x, ay: l.door.y, houseId: house.id, lot, label: `${house.name} 들어가기` };
+  if (house) return { id: `door:${lot}`, kind: "door", x: l.door.x, y: l.door.y + 4, r: 16, ax: l.door.x, ay: l.door.y, houseId: house.id, lot, label: `${clampChars(house.name, DOOR_NAME_MAX)} 들어가기` };
   const sx = l.x + HOUSE_LOT_W / 2;
   const sy = l.y + HOUSE_LOT_H - 24;
   return { id: `lot:${lot}`, kind: "lot", x: sx, y: sy + 8, r: 16, ax: sx, ay: sy + 8, lot, label: `${lot}번지 분양 문의` };

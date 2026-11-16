@@ -76,6 +76,13 @@ export type GameEvents = {
   "grave:walk": { graveId: string; status: "started" | "arrived" | "cancelled" | "unreachable" };
   "net:status": NetStatus;
   "net:stats": NetStats;
+  /** 일부러 옮기는 채널 이동이 로비 확인을 통과해 지금 채널을 떠난다 → 장면이 지금 자리를 기억하고 새 채널 처음 자리로 */
+  "channel:leave": { channel: number };
+  /**
+   * 꽉 찬 채널이라 옮기지 않았다 (안내 토스트는 실시간 클라이언트가 띄운다).
+   * back = 이미 떠났다가(들어가는 순간 꽉 참) 온 채널로 돌아가는 중 → 장면이 떠나기 전 자리로 되돌린다
+   */
+  "channel:refused": { channel: number; message: string; back: boolean };
   /** 같은 채널의 다른 사람이 묘비를 세움/수정/삭제 → UI가 상세를 받아 목록에 반영 */
   "net:graveEvent": { kind: GraveEventKind; graveId: string };
   toast: { message: string };
@@ -237,7 +244,8 @@ export type UiEvents = {
   /** 헌화 저장 성공: 내 캐릭터가 꽃을 놓는 연출 + emote(flower) 전송 */
   "grave:flowered": { graveId: string };
   /** 게임 안 채널 이동 메뉴. 연결을 닫고 새 채널에 입장, 캐릭터 위치는 유지 */
-  "channel:switch": { channel: number };
+  /** fullMsg = 그 채널이 꽉 차 못 갈 때 안내 (없으면 CHANNEL_FULL_MSG). 꽉 찬 채널로는 옮기지 않는다 (channel:refused) */
+  "channel:switch": { channel: number; fullMsg?: string };
   /** 모바일 가상 조이스틱. -1..1, 손을 떼면 {0,0} */
   "input:joystick": { x: number; y: number };
   "input:runToggle": { on: boolean };

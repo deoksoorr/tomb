@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { nameKey } from "@tomb/protocol";
 import type { EarnSource } from "../economy";
 import { earnedBySource } from "../earnGauge";
@@ -39,7 +40,7 @@ function hashPairs(flat: unknown): [string, string][] {
 export class RedisEarnStatus implements EarnStatusStore {
   private redis: Redis;
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "earnStatus");
   }
   async owners(names: readonly string[]): Promise<(string | null)[]> {
     if (!names.length) return [];

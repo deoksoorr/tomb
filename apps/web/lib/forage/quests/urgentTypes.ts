@@ -24,6 +24,10 @@ export type UrgentLive = {
   early?: boolean;
   /** 11/15 lastName이 마지막 1분 100%가 아니라 150%를 채워 끝낸 사람이다 */
   lastFest?: boolean;
+  /** 11/16 한 사람이 낼 수 있는 수 (없으면 상한 없음 — 그 전 의뢰). 내가 더 낼 수 있는 수는 UrgentMineRow.left */
+  cap?: number;
+  /** 11/16 상한까지 다 낸 사람 수 (공동 배달왕, 상한이 있을 때만) */
+  kings?: number;
 };
 export type UrgentPublic = {
   /** 응답을 만든 서버 시각 (ms) */
@@ -46,6 +50,9 @@ export type UrgentMineRow = {
   n: number;
   /** 내가 낸 수 */
   mine: number;
+  /** 11/16 한 사람이 낼 수 있는 수와 내가 앞으로 더 낼 수 있는 수 (상한이 없는 의뢰면 없다) */
+  cap?: number;
+  left?: number;
   /** 끝났는지 (서버 시각 기준) */
   done: boolean;
   /** 끝났고 받을 것이 있으면 미리 보기 (상자 내용은 받을 때 공개 — box는 상자가 있는지만) */
@@ -65,6 +72,8 @@ export type UrgentDeliverResponse = {
   goal: number;
   /** 내가 지금까지 낸 수 */
   mine: number;
+  /** 11/16 한 사람 상한 (없으면 상한 없음) */
+  cap?: number;
   festUntil: number;
   /** 가방에서 빠진 것 */
   used: Record<string, number>;

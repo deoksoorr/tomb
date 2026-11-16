@@ -10,6 +10,7 @@ import {
   towerHpMul,
   TOWER_THEMES,
 } from "@/lib/rpg/tower";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import type { RpgView } from "@/lib/rpg/types";
 import { CHEST_COSMETIC_CHANCE, SG_PITY } from "@/lib/rpg/setGearRoll";
 import { cx } from "../ui/cx";
@@ -40,6 +41,8 @@ export default function TowerEntrance({
   // 11/15 테스트 서버 슈퍼 계정: 무적·공격력 ×20 (기본 켬). 운영 서버(빌드)에서는 보이지도 않는다
   const canBoost = !!view.superHunter && towerBoostAllowed();
   const [boost, setBoost] = useState(true);
+  // 터치 기기는 Esc 대신 [멈춤]에서 나간다
+  const coarse = useMediaQuery("(pointer: coarse)");
   const eg = view.endgame!;
   const t = eg.tower;
   const lit = t.checkpoints;
@@ -173,7 +176,7 @@ export default function TowerEntrance({
             몬스터를 잡으면 판 레벨이 올라요. 오를 때마다 능력 카드를 한 장 골라요. 카드는 그 판에서만 써요.
             11층처럼 위에서 시작하면 건너뛴 10층마다 카드를 세 장씩 먼저 골라요.
           </li>
-          <li>쓰러지면 그 자리에서 끝나요. 부활 쿠키는 못 써요. 전설 카드 「무한 야근」이 있으면 한 번 다시 일어나요. Esc로 나가도 그 층까지는 기록돼요.</li>
+          <li>쓰러지면 그 자리에서 끝나요. 부활 쿠키는 못 써요. 전설 카드 「무한 야근」이 있으면 한 번 다시 일어나요. {coarse ? "멈춤 버튼으로" : "Esc로"} 나가도 그 층까지는 기록돼요.</li>
         </ul>
       </section>
       <PioneerLine eg={eg} />

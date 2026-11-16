@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import { normalizeResidentSettings, RESIDENTS_DEFAULT, type ResidentSettings } from "../residents";
 
@@ -26,7 +27,7 @@ export class MemoryResidentSettings implements ResidentSettingsStore {
 export class RedisResidentSettings implements ResidentSettingsStore {
   private redis: Redis;
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "residents");
   }
   async get(): Promise<ResidentSettings> {
     const raw = await this.redis.get<string>(RESIDENTS_KEY);

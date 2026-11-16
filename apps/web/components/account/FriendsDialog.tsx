@@ -6,6 +6,9 @@ import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import type { FriendCard, FriendEntry, FriendListResponse, FriendWhere } from "@/lib/friendTypes";
 import { useBridgeValue } from "@/lib/hooks/useBridge";
+import { useLobby } from "@/lib/hooks/useLobby";
+import { friendChannelFullMsg, lobbyChannelFull } from "@/game/net/switchPolicy";
+import type { LobbyInfo } from "@tomb/protocol";
 import { tabHidden } from "@/lib/hooks/visibleAgain";
 import { friendJoinToastOn, friendsApi, friendsStore, isOnline, lastSeenText, setFriendJoinToast } from "@/lib/hooks/useFriends";
 import { showFriendNotice } from "../overlay/FriendNotice";
@@ -43,6 +46,13 @@ function cannotGo(name: string, w: FriendWhere): string | null {
   if (w.at === "away" && w.place === "house") return `${name}님이 어느 집에 있는지 몰라서 따라갈 수 없어요.`;
   if (w.at === "away") return `${name}님은 지금 ${w.place ? AWAY_PLACE_LABEL[w.place] : "실내"}에 있어 따라갈 수 없어요.`;
   return null;
+}
+
+/** 친구가 다른 채널에 있고 그 채널이 꽉 찼으면 그 안내 (로비를 이미 아는 동안 [친구한테 가기]를 막는다) */
+export function friendFullReason(name: string, w: FriendWhere, myCh: number | null, lobby: LobbyInfo | null): string | null {
+  if (w.at !== "world" && w.at !== "away") return null;
+  if (w.ch === myCh || !lobbyChannelFull(lobby, w.ch)) return null;
+  return friendChannelFullMsg(name);
 }
 
 /** 자랑거리 칸들 (꾸미기·집·사냥·도감·최대어). 좁은 화면에서는 줄바꿈된다 */
@@ -90,6 +100,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
   const status = useBridgeValue("net:status");
   const myCh = status?.mode === "online" ? status.channel : null;
   const myMap = status?.map === "camp" ? "camp" : "village";
+  const lobby = useLobby().lobby;
 
   const load = useCallback(
     () =>
@@ -153,7 +164,8 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
         onClose();
         // 가는 중… 안내는 띄우지 않는다: 도착하면 집 장면이 "도착했어요!"를 한 번만 띄운다
         if (myCh === null || w.ch === myCh) enter();
-        else hopTo(w.ch, myCh, enter, () => showFriendNotice(`${w.ch}채널로 옮기지 못했어요. 채널이 가득 찼을 수 있어요.`));
+        // 꽉 찬 채널이면 게임이 옮기지 않고(지금 자리 그대로) 이미 안내했다
+        else hopTo(w.ch, myCh, enter, (full) => !full && showFriendNotice(`${w.ch}채널로 옮기지 못했어요. 잠시 뒤 다시 해 주세요.`), { fullMsg: friendChannelFullMsg(now.name) });
         return;
       }
       const no = cannotGo(f.name, w);
@@ -184,7 +196,9 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
               else showFriendNotice(cannotGo(again.name, a) ?? `${again.name}님이 다른 곳으로 옮겼어요.`);
             })
             .catch((e) => showFriendNotice(errorMessage(e))),
-        () => showFriendNotice(`${w.ch}채널로 옮기지 못했어요. 채널이 가득 찼을 수 있어요.`),
+        // 꽉 찬 채널이면 게임이 옮기지 않고(지금 자리 그대로) 이미 안내했다
+        (full) => !full && showFriendNotice(`${w.ch}채널로 옮기지 못했어요. 잠시 뒤 다시 해 주세요.`),
+        { fullMsg: friendChannelFullMsg(now.name) },
       );
     } catch (e) {
       setNotice(errorMessage(e));
@@ -285,6 +299,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
                 {friends.map((f) => {
                   const online = isOnline(f.where);
                   const here = f.where.at === "world" && f.where.ch === myCh && (f.where.map === "camp" ? "camp" : "village") === myMap;
+                  const full = friendFullReason(f.name, f.where, myCh, lobby);
                   return (
                     <li key={f.key} className={cx(styles.card, !online && styles.offline)}>
                       <div className={styles.top}>
@@ -307,7 +322,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
                       </div>
                       <div className={styles.actions}>
                         {/* 늘 보인다: 갈 수 없는 곳(사냥터·잡화점·접속 안 함 …)이면 누를 때 이유를 알려 준다 */}
-                        <button type="button" className={cx(ui.button, online && ui.primary)} disabled={busy} onClick={() => void go(f)}>
+                        <button type="button" className={cx(ui.button, online && !full && ui.primary)} disabled={busy || !!full} title={full ?? undefined} onClick={() => void go(f)}>
                           {f.where.at === "world" && !here ? `친구한테 가기 (${f.where.ch}채널 ${MAP_NAME[f.where.map === "camp" ? "camp" : "village"]})` : "친구한테 가기"}
                         </button>
                         {f.houseId && (
@@ -331,6 +346,7 @@ export default function FriendsDialog({ onClose }: { onClose: () => void }) {
                           {confirmDrop === f.key ? "정말 끊을까요?" : "삭제"}
                         </button>
                       </div>
+                      {full && <p className={ui.hint}>{full}</p>}
                     </li>
                   );
                 })}

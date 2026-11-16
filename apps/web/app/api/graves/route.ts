@@ -20,6 +20,8 @@ import { createGraveSchema, parseWith, readJson } from "@/lib/validate";
  *   (카운트가 잠깐 옛날 값일 수 있지만 클라이언트가 2분마다 다시 받아 맞춘다).
  */
 export const GET = handler(async (req) => {
+  // 공개 조회: 쿼리를 바꿔 CDN 캐시를 건너뛰는 반복 호출 방지 (메모리 한도)
+  await rateLimit("publicGet", req);
   const raw = req.nextUrl.searchParams.get("channel");
   const channel = raw === null ? 1 : Number(raw);
   if (!isGraveChannel(channel)) throw new HttpError(400, "INVALID_INPUT", `채널은 1~${GRAVE_CHANNELS} 중 하나예요.`);

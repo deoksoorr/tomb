@@ -85,7 +85,7 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: "table", name: "둥근 탁자", desc: "찻잔 하나 놓기 좋은 크기.", category: "furniture", price: 80, score: 4, w: 1, h: 1, use: "차 한 잔 마시기" },
   { id: "rug", name: "러그", desc: "발이 따뜻해지는 낡은 러그. 위에 물건을 올릴 수 있다.", category: "furniture", price: 160, score: 8, w: 3, h: 2, floor: true, turn: true, use: "러그에 앉기" },
   // ── 생활 (3번 집 안 개편: 써 보는 가구) ──
-  { id: "piano", name: "피아노", desc: "건반을 누르면 방 안 모두에게 들린다. 숫자 1~8로 음을 고른다.", category: "living", price: 520, score: 26, w: 2, h: 1, use: "앉아서 연주", spin: true },
+  { id: "piano", name: "피아노", desc: "건반을 누르면 방 안 모두에게 들린다. 컴퓨터에서는 숫자 1~8로 음을 고른다.", category: "living", price: 520, score: 26, w: 2, h: 1, use: "앉아서 연주", spin: true },
   { id: "radio", name: "라디오", desc: "다이얼을 돌리면 지직, 노래가 바뀐다.", category: "living", price: 160, score: 8, w: 1, h: 1, use: "채널 돌리기", spin: true },
   { id: "fireplace", name: "벽난로", desc: "불을 지피면 방이 주황빛으로 따뜻해진다. 타닥타닥.", category: "living", price: 480, score: 24, w: 2, h: 1, use: "불 켜기·끄기" },
   { id: "floor_lamp", name: "스탠드 조명", desc: "딸깍 켜면 노란 빛이 동그랗게 번진다.", category: "living", price: 140, score: 7, w: 1, h: 1, use: "켜기·끄기" },

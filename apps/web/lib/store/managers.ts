@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 
 // 11/16 매니저 저장소. 관리자 화면(관리자 키 + 관리자 IP)에서만 임명·해제한다. 혜택은 매니저 전용 칭호·채팅 딱지뿐 (운영자 권한은 없다).
 // Redis 키: admin:managers  HASH 계정 id → JSON {setAt, name}  (임명한 사람 수만큼, 상한 MANAGER_MAX)
@@ -46,7 +47,7 @@ function parse(accountId: string, raw: unknown): ManagerRecord | null {
 export class RedisManagers implements ManagerStore {
   private redis: Redis;
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "managers");
   }
   async list(): Promise<ManagerRecord[]> {
     const raw = (await this.redis.hgetall(MANAGERS_KEY)) as unknown;

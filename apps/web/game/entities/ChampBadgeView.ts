@@ -36,6 +36,8 @@ export class ChampBadgeView {
   private frameKey = "";
   /** 판 맨 위 (말풍선을 그 위로 올린다) */
   top = 0;
+  /** 판 너비 (보일 때만, 이름표 겹침 풀기용) */
+  width = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -74,6 +76,7 @@ export class ChampBadgeView {
     const cx = label.x;
     const bottom = label.y - label.height - sc - lift;
     this.top = bottom - h;
+    this.width = on ? w : 0;
     if (this.text.scaleX !== sc) {
       this.text.setScale(sc);
       this.crown.setScale(sc);

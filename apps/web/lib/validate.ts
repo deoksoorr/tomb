@@ -258,6 +258,8 @@ export const AdminPointsSchema = z
     code: z.string().max(40).transform(normalizeCode).optional(),
     accountId: z.string().regex(/^[A-Za-z0-9_-]{21}$/, "계정 id 형식이 올바르지 않아요.").optional(),
     delta: z.number().int("정수로 적어 주세요.").min(-BALANCE_CAP).max(BALANCE_CAP).refine((d) => d !== 0, "0이 아닌 값을 적어 주세요."),
+    /** 11/16 요청 번호 (같은 번호는 한 번만 지급한다) */
+    requestId: z.string().regex(/^[A-Za-z0-9_-]{8,40}$/).optional(),
   })
   .refine((v) => !!v.code !== !!v.accountId, "개인 코드와 계정 id 중 하나만 적어 주세요.")
   .refine((v) => !v.code || CODE_RE.test(v.code), "코드는 XXXX-XXXX-XXXX 모양이에요.");

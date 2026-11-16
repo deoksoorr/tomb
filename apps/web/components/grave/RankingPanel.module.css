@@ -144,6 +144,24 @@ li:nth-child(-n + 3) .rank {
   white-space: nowrap;
 }
 
+/* 이름 줄: 이름만 말줄임, (나)·(내 집)은 그대로 */
+.nameLine {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.nameText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me {
+  flex: none;
+}
+
 /* F11 집 꾸미기: 집 이름 아래 "번지 · 주인" */
 .sub {
   display: block;
@@ -166,6 +184,8 @@ li:nth-child(-n + 3) .rank {
   color: var(--muted);
   font-family: var(--font-small);
   font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 /* 사냥 레벨 랭킹: 장착 무기 아이콘 */

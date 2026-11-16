@@ -7,6 +7,8 @@ import { huntLevelRank } from "@/lib/huntLevelRank";
 import { towerRank } from "@/lib/towerRank";
 import { lookRank } from "@/lib/lookRank";
 import { boardWithNameStyles } from "@/lib/nameStyleRank";
+import { memoTopFetch, styleMine } from "@/lib/rankMemo";
+import { env } from "@/lib/env";
 import { rateLimit } from "@/lib/ratelimit";
 import { getVisitorId } from "@/lib/session";
 import { staffAccountId } from "@/lib/staff";
@@ -50,15 +52,14 @@ export const GET = handler(async (req) => {
   if (board === "fish") {
     const fish = params.get("fish") ?? "all";
     if (fish !== "all" && speciesById(fish)?.cat !== "fish") throw new HttpError(400, "INVALID_INPUT", "모르는 물고기예요.");
-    const r = await rankWithoutStaff((n, who) => getFishRank().board(fish === "all" ? null : fish, week ?? null, n, who), RANK_SIZE, me, staffId);
-    const row = (e: FishRankEntry & { ns?: string[] }): RankRow => ({
-      rank: e.rank,
-      name: e.name ?? NO_NAME,
-      value: e.size,
-      me: e.accountId === me,
-      ...(e.sp ? { sub: speciesById(e.sp)?.name ?? e.sp } : {}),
-      ...(e.ns ? { ns: e.ns } : {}),
-    });
+    const fetch = (n: number, who: string | null) => getFishRank().board(fish === "all" ? null : fish, week ?? null, n, who);
+    if (memoOn()) {
+      const r = await rankWithoutStaff(memoTopFetch(`fish|${fish}|${week ?? ""}|${staffId ?? ""}`, fetch, staffId), RANK_SIZE, me, staffId);
+      const mine = await styleMine(r.rows, r.mine);
+      return json<RankResponse>({ board, period, fish, rows: r.rows.map(fishRow(me)), mine: mine ? fishRow(me)(mine) : null, ...staff }, { headers: cacheHeaders(personal) });
+    }
+    const r = await rankWithoutStaff(fetch, RANK_SIZE, me, staffId);
+    const row = fishRow(me);
     const { rows, mine } = await boardWithNameStyles(r.rows, r.mine);
     return json<RankResponse>({ board, period, fish, rows: rows.map(row), mine: mine ? row(mine) : null, ...staff }, { headers: cacheHeaders(personal) });
   }
@@ -88,24 +89,46 @@ export const GET = handler(async (req) => {
     return json<RankResponse>({ board, period, rows: r.rows, mine: r.mine, ...staff }, { headers: cacheHeaders(personal) });
   }
   const accounts = getAccounts();
-  const { rows, mine } = await rankWithoutStaff(
-    (n, who) =>
-      board === "points"
-        ? accounts.pointRank(n, who, week)
-        : board === "stay"
-          ? accounts.stayRank(n, who)
-          : accounts.huntRank(board === "huntKills" ? "kills" : "best", n, who, { zone, week }),
-    RANK_SIZE,
-    me,
-    staffId,
-  );
+  const fetch = (n: number, who: string | null) =>
+    board === "points"
+      ? accounts.pointRank(n, who, week)
+      : board === "stay"
+        ? accounts.stayRank(n, who)
+        : accounts.huntRank(board === "huntKills" ? "kills" : "best", n, who, { zone, week });
   const row = (r: RankEntry & { ns?: string[] }): RankRow => ({ rank: r.rank, name: r.name ?? NO_NAME, value: r.points, me: r.accountId === me, ...(r.ns ? { ns: r.ns } : {}) });
+  if (memoOn()) {
+    const key = `${board}|${period}|${week ?? ""}|${board === "huntBest" ? zone : ""}|${staffId ?? ""}`;
+    const r = await rankWithoutStaff(memoTopFetch(key, fetch, staffId), RANK_SIZE, me, staffId);
+    const styled = await styleMine(r.rows, r.mine);
+    return json<RankResponse>(
+      { board, period, ...(board === "huntBest" ? { zone } : {}), rows: r.rows.map(row), mine: styled ? row(styled) : null, ...staff },
+      { headers: cacheHeaders(personal) },
+    );
+  }
+  const { rows, mine } = await rankWithoutStaff(fetch, RANK_SIZE, me, staffId);
   const { rows: styledRows, mine: styledMine } = await boardWithNameStyles(rows, mine);
   return json<RankResponse>(
     { board, period, ...(board === "huntBest" ? { zone } : {}), rows: styledRows.map(row), mine: styledMine ? row(styledMine) : null, ...staff },
     { headers: cacheHeaders(personal) },
   );
 });
+
+/**
+ * 운영(Redis)에서는 상위 줄을 인스턴스마다 30초 기억하고 내 줄만 새로 읽는다 (lib/rankMemo — 요청마다 150개 남짓 → 5개 남짓).
+ * 메모리 저장소(로컬·테스트)는 한 프로세스라 아낄 명령이 없고, 바뀐 기록이 바로 보여야 시험이 맞으므로 예전처럼 매번 읽는다
+ */
+const memoOn = () => !!env.redis();
+
+const fishRow =
+  (me: string | null) =>
+  (e: FishRankEntry & { ns?: string[] }): RankRow => ({
+    rank: e.rank,
+    name: e.name ?? NO_NAME,
+    value: e.size,
+    me: e.accountId === me,
+    ...(e.sp ? { sub: speciesById(e.sp)?.name ?? e.sp } : {}),
+    ...(e.ns ? { ns: e.ns } : {}),
+  });
 
 const cacheHeaders = (personal: boolean): Record<string, string> =>
   personal ? { "Cache-Control": "private, no-store" } : { "Cache-Control": "no-store", "Vercel-CDN-Cache-Control": "s-maxage=30, stale-while-revalidate=300" };

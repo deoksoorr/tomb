@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { CHAMP_AURA_OFF, champBitsOf, champBoards, type ChampBoard } from "@tomb/protocol";
 import { env } from "../env";
 import { gameWeek, prevWeek, weekEndMs, weekStartMs } from "../gameDay";
@@ -123,7 +124,7 @@ export class RedisChamp implements ChampStore {
   private token = new Map<string, string>();
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "champ");
   }
 
   async get(week: string): Promise<ChampWeek | null> {

@@ -653,6 +653,10 @@ export function evalTower(
     short += n - got;
     shortIds.push(`${id}:${got}/${n}`);
   }
+  // 깬 층 계획 몬스터를 절반도 못 잡았다고 적힌 판은 계산 차이로 생길 수 없다 (처치 없이 층 수만 적은 위조) → 거절
+  const needTotal = Object.values(need).reduce((a, n) => a + (n ?? 0), 0);
+  if (needTotal > 0 && short * 2 > needTotal)
+    return tReject("RESULT_REJECTED", "깬 층의 몬스터 기록이 너무 모자라요. 이번 판은 보상 없이 끝나요.", `need:${short}/${needTotal}`);
   if (short > 0) suspect.push(`need:${short} ${shortIds.slice(0, 6).join(",")}`);
   // 마지막으로 층을 깬 시각 (같은 층이면 빨리 오른 순 랭킹): 판 시간 안, 깬 층의 최소 시간 뒤
   const floorMs =

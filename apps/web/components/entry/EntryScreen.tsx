@@ -7,6 +7,7 @@ import {
   STARTER_BODIES,
   AVATAR_COLORS,
   checkName,
+  checkNewName,
   isAvatarBody,
   isAvatarColor,
   NAME_TAKEN_MESSAGE,
@@ -334,7 +335,8 @@ function NameStep({ draft, takenName, referral, onBack, onNext }: DraftProps & {
   const [name, setName] = useState(draft.name);
   const [touched, setTouched] = useState(false);
   const nameId = useId();
-  const check = checkName(name);
+  // 11/16 새 이름은 8자까지
+  const check = checkNewName(name);
   // 닉네임 중복: 입력 중 서버에 가볍게 미리 묻는다 (입장하려다 거절된 이름이면 바로 표시)
   const takenNow = useNameTaken(name);
   // 11/16 「다음」을 누를 때 서버에 한 번 더 물어 본 결과 (입력 직후 바로 누르면 미리 확인이 아직 안 끝나 있었다)
@@ -387,7 +389,7 @@ function NameStep({ draft, takenName, referral, onBack, onNext }: DraftProps & {
           />
         </div>
         <p id={`${nameId}-hint`} className={nameError ? ui.error : ui.hint}>
-          {nameError ?? "2~12자로 지어요. 한글, 영문, 숫자, 공백, _를 쓸 수 있어요."}
+          {nameError ?? "2~8자로 지어요. 한글, 영문, 숫자, 공백, _를 쓸 수 있어요."}
         </p>
       </div>
       {/* 추천 코드: 새로 시작에서만 (선택, 계정을 만든 뒤 채널 단계에서 보낸다) */}
@@ -553,7 +555,8 @@ function DormantRename({ me, onBack, onDone }: { me: Me; onBack: () => void; onD
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameId = useId();
-  const check = checkName(name);
+  // 11/16 다시 정하는 이름은 8자까지 (옛 이름 그대로는 예전 길이)
+  const check = checkNewName(name, me.name);
   const taken = useNameTaken(name);
   const nameError = (!check.ok && [...name].length > 0 ? check.reason : null) ?? taken ?? error;
   const color = isAvatarColor(me.color) ? me.color : AVATAR_COLORS[0];
@@ -606,7 +609,7 @@ function DormantRename({ me, onBack, onDone }: { me: Me; onBack: () => void; onD
           />
         </div>
         <p id={`${nameId}-hint`} className={nameError ? ui.error : ui.hint}>
-          {nameError ?? "포인트, 아이템, 집, 친구는 그대로예요. 이름은 2~12자로 지어요."}
+          {nameError ?? "포인트, 아이템, 집, 친구는 그대로예요. 이름은 2~8자로 지어요."}
         </p>
       </div>
       <button type="submit" className={cx(ui.button, ui.primary, styles.enter)} disabled={pending}>

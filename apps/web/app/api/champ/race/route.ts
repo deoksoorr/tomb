@@ -1,5 +1,6 @@
 import { CHAMP_BOARDS } from "@tomb/protocol";
 import { speciesById } from "@/lib/forage/catalog";
+import { env } from "@/lib/env";
 import { handler, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
 import { getVisitorId } from "@/lib/session";
@@ -7,6 +8,9 @@ import { staffAccountId } from "@/lib/staff";
 import { kstWeek } from "@/lib/store/accounts";
 import type { ChampAvatar, RaceResponse } from "@/lib/types";
 import { champBoard, champLookOf, ensureChampSettled, noteLeaders, weekEndMs, type ChampRow } from "@/lib/weeklyChamp";
+
+/** 운영(Redis)에서만 내 순위 읽기의 상위 줄·운영자 순위를 기억한다 (메모리 저장소 시험은 매번 새로) */
+const memoOn = () => !!env.redis();
 
 /** 시상대 자리 수 */
 const PODIUM = 3;
@@ -59,7 +63,7 @@ export const GET = handler(async (req) => {
   const isStaff = !!me && me === staffId;
   const mineOf = async (i: number): Promise<ChampRow | null> => {
     if (!me || isStaff) return null;
-    return s.boards[i].rows.find((r) => r.accountId === me) ?? (await champBoard(CHAMP_BOARDS[i], week, 1, me, staffId)).mine;
+    return s.boards[i].rows.find((r) => r.accountId === me) ?? (await champBoard(CHAMP_BOARDS[i], week, 1, me, staffId, memoOn())).mine;
   };
   const out: RaceResponse = {
     week,

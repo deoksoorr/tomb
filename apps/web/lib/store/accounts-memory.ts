@@ -1,3 +1,4 @@
+import { assertPointAmount } from "./pointAmount";
 import { CHAMP_ITEM_IDS, itemById, nameKey, PERMANENT_UNTIL, type CosmeticSlot } from "@tomb/protocol";
 import { tierUntil } from "../attendTiers";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
@@ -268,6 +269,7 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async spend(id: string, amount: number, reason: string, now: number): Promise<number | null> {
+    assertPointAmount(amount);
     const a = this.acct(id);
     if (a.points < amount) return null;
     a.points -= amount;
@@ -277,6 +279,7 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async refund(id: string, amount: number, reason: string, now: number): Promise<number> {
+    assertPointAmount(amount);
     const a = this.acct(id);
     a.lifetime ??= a.points; // 모은 포인트는 그대로 (개편 전 계정은 지금 잔액에서 시작)
     const before = a.points;

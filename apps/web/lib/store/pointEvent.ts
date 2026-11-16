@@ -1,18 +1,25 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { env } from "../env";
 import { earnBoostAt, normalizePointEvent, type EarnBoost, type PointEvent } from "../pointEvent";
 
 // 포인트 배수 이벤트 설정 저장소 (관리자가 켜고 끈다, 규칙은 lib/pointEvent.ts). 마을 주민 설정(lib/store/residents)처럼 값 하나.
 // Redis 키: admin:pointEvent  STRING JSON {startAt, endAt, sources, mult}. 없으면 꺼짐 (sources·mult가 없는 예전 값은 전부·2배).
-// 적립 경로(AccountStore.earn·머무르기·내 정보)는 cachedPointEvent로 읽는다 — 인스턴스마다 CACHE_MS 동안 다시 묻지 않는다.
+// 적립 경로(AccountStore.earn·머무르기·내 정보)는 cachedPointEvent로 읽는다 — 인스턴스마다 POINT_EVENT_CACHE_MS 동안 다시 묻지 않는다.
 // 끝 공지: 정해 둔 시각에 끝난 이벤트는 그 뒤 처음 저장소를 읽는 요청이 한 번만 알린다 (claimEndNotice로 잡는다, lib/pointEventNotice).
 
 export const POINT_EVENT_KEY = "admin:pointEvent";
 /** 끝 공지를 보냈다는 표시 (이벤트마다 = 켠 시각마다 하나, SET NX) */
 const endNoticeKey = (startAt: number) => `admin:pointEvent:ended:${startAt}`;
 const END_NOTICE_TTL_SEC = 30 * 86_400;
-/** 적립 경로가 저장소를 다시 묻는 간격. 관리자가 바꾸면 그 인스턴스는 바로, 다른 서버 인스턴스는 이만큼 안에 따라온다 */
-const CACHE_MS = 5_000;
+/**
+ * 적립 경로가 저장소를 다시 묻는 간격. 관리자가 바꾸면 그 인스턴스는 바로, 다른 서버 인스턴스는 이만큼 안에 따라온다.
+ * 시작·끝 시각을 정해 둔 이벤트는 값이 미리 들어 있어 이 간격과 상관없이 제때 켜지고 꺼진다 (지금 시각으로 판정).
+ * 예전 5초는 바쁜 인스턴스마다 시간당 GET 720개였다 → 30초 (이벤트 공지를 들은 화면의 ?fresh는 FRESH_MS로 더 짧게)
+ */
+export const POINT_EVENT_CACHE_MS = 30_000;
+/** 이벤트 공지를 들은 화면(?fresh=)이 다시 물을 때의 간격 (공지 직후 바로 보이게, 그래도 인스턴스마다 5초에 한 번까지) */
+export const POINT_EVENT_FRESH_MS = 5_000;
 /** 정해 둔 시각에 끝난 뒤 이만큼 안에 첫 요청이 와야 끝 공지를 보낸다 (오래전에 끝난 이벤트를 배포 뒤 뒤늦게 알리지 않게) */
 const END_NOTICE_WINDOW_MS = 6 * 3_600_000;
 
@@ -44,7 +51,7 @@ export class MemoryPointEvent implements PointEventStore {
 export class RedisPointEvent implements PointEventStore {
   private redis: Redis;
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "pointEvent");
   }
   async get(): Promise<PointEvent | null> {
     const raw = await this.redis.get<string>(POINT_EVENT_KEY);
@@ -90,10 +97,10 @@ export async function setPointEvent(ev: PointEvent | null, now = Date.now()): Pr
   return v;
 }
 
-/** 적립 경로용 읽기 (CACHE_MS 캐시). 저장소를 못 읽으면 직전 값(없으면 꺼짐)으로 — 이벤트 때문에 적립이 실패하지 않게 */
-export async function cachedPointEvent(now = Date.now()): Promise<PointEvent | null> {
+/** 적립 경로용 읽기 (maxAgeMs 캐시). 저장소를 못 읽으면 직전 값(없으면 꺼짐)으로 — 이벤트 때문에 적립이 실패하지 않게 */
+export async function cachedPointEvent(now = Date.now(), maxAgeMs = POINT_EVENT_CACHE_MS): Promise<PointEvent | null> {
   const c = g.__tombPointEventCache;
-  if (c && now - c.at < CACHE_MS && now >= c.at) return c.value;
+  if (c && now - c.at < maxAgeMs && now >= c.at) return c.value;
   try {
     const value = await getPointEventStore().get();
     g.__tombPointEventCache = { at: now, value };

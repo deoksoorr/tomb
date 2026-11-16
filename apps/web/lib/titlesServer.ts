@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "./redisUsage";
 import { champBoards, MANAGER_TITLE_ID, TITLE_IDS, titleOfLook, type AvatarDye, type ChampBoard } from "@tomb/protocol";
 import { env } from "./env";
 import { DEX_CATS, dexIdsOf, speciesOf } from "./forage/catalog";
@@ -103,7 +104,7 @@ async function light(accountId: string, now: number): Promise<Light> {
     ]);
     return { streak: a.streak, body: a.body, equipped: a.equipped, dye: style.dye, kills, hard, hell };
   }
-  const redis = (g.__tombTitleRedis ??= new Redis({ ...conn, automaticDeserialization: false }));
+  const redis = (g.__tombTitleRedis ??= redisClient(conn, "titlesServer"));
   const [acct, look, style, kills, hard, hell] = (await redis
     .pipeline()
     .hmget(K.acct(accountId), "streak", "body")

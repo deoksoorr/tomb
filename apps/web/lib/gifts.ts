@@ -47,6 +47,8 @@ export const GiftSendSchema = z
     // 중복을 빼기 전이라 넉넉히 받고, 뺀 뒤 GIFT_MAX_TARGETS명이 넘으면 거절한다
     targets: z.array(giftTarget).max(GIFT_MAX_TARGETS * 2, `한 번에 ${GIFT_MAX_TARGETS}명까지 보낼 수 있어요.`).nullish(),
     from: z.string().trim().max(20, "보내는 이는 20자까지").nullish(),
+    /** 11/16 화면이 보낼 때마다 붙이는 요청 번호 (같은 번호는 한 번만 보낸다 — 두 번 눌러 두 번 나가지 않게) */
+    requestId: z.string().regex(/^[A-Za-z0-9_-]{8,40}$/).nullish(),
     note: z.string().trim().min(1, "쪽지를 적어 주세요.").max(GIFT_NOTE_MAX, `쪽지는 ${GIFT_NOTE_MAX}자까지 적을 수 있어요.`),
     points: z.number().int("정수로 적어 주세요.").min(0).max(BALANCE_CAP).default(0),
     items: z
@@ -86,6 +88,7 @@ export const GiftSendSchema = z
   });
 /** 보내기 입력 (검증 뒤). targets는 두 명 이상일 때만 (한 명·전체는 target 하나로) */
 export type GiftSendInput = {
+  requestId?: string | null;
   target: "all" | string;
   targetName?: string | null;
   targets?: GiftTarget[] | null;

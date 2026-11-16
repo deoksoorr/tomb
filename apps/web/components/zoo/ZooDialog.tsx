@@ -7,6 +7,7 @@ import { bridge } from "@/game/bridge";
 import { keeperPortraitUrl } from "@/game/world/zoo/zooArt";
 import { KEEPER_NAME, KEEPER_TITLE } from "@/game/world/zoo/ZooView";
 import { errorMessage } from "@/lib/api";
+import { useMediaQuery } from "@/lib/hooks/useMedia";
 import { meStore, useMe } from "@/lib/hooks/useMe";
 import type { Me } from "@/lib/types";
 import { zooApi } from "@/lib/zoo/client";
@@ -36,6 +37,8 @@ function ownedOf(me: Me | null, id: string, now: number): Owned {
 
 export default function ZooDialog({ onClose }: { onClose: () => void }) {
   const { me, error } = useMe();
+  // 터치 기기는 R 키 대신 [타기] 버튼
+  const coarse = useMediaQuery("(pointer: coarse)");
   const [openedAt] = useState(() => Date.now());
   const [pickId, setPickId] = useState<string>(ZOO_PETS[0].id);
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -72,7 +75,7 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
     run(async () => {
       applyStyle(await zooApi.buy(pick.id));
       bridge.emit("forage:coin");
-      return `${item.name}, 우리 가족이 됐어요! 지금부터 데리고 다녀요.${isRideablePet(pick.id) ? " R 키를 누르면 올라탈 수 있어요. 폰은 타기 버튼을 눌러요." : ""}`;
+      return `${item.name}, 우리 가족이 됐어요! 지금부터 데리고 다녀요.${isRideablePet(pick.id) ? (coarse ? " [타기] 버튼을 누르면 올라탈 수 있어요." : " R 키를 누르면 올라탈 수 있어요.") : ""}`;
     });
   const bring = () =>
     run(async () => {
@@ -167,7 +170,7 @@ export default function ZooDialog({ onClose }: { onClose: () => void }) {
               )}
             </div>
             {isRideablePet(pick.id) && (
-              <p className={ui.hint}>데리고 다닐 때 R 키를 누르면 올라타요. 폰은 타기 버튼을 눌러요. 타면 조금 빨라져요. 앉거나 낚시하거나 놀이기구나 배를 타면 저절로 내려요. 물에 들어가도 내려요.</p>
+              <p className={ui.hint}>데리고 다닐 때 {coarse ? "[타기] 버튼을" : "R 키를"} 누르면 올라타요. 타면 조금 빨라져요. 앉거나 낚시하거나 놀이기구나 배를 타면 저절로 내려요. 물에 들어가도 내려요.</p>
             )}
           </section>
 

@@ -86,11 +86,25 @@ export async function earnPoints(
   ip?: string,
   boost?: EarnBoost,
 ): Promise<{ earned: number; paid: number; me: Me }> {
-  const accounts = getAccounts();
+  const r = await earnPointsOnly(accountId, source, amount, ip, boost);
+  return { ...r, me: await loadMe(getAccounts(), accountId) };
+}
+
+/**
+ * earnPoints와 같은 적립인데 내 정보(me)를 다시 읽지 않는다 (loadMe = Redis 명령 8개 남짓).
+ * 응답에 me를 싣지 않는 쪽(사냥 판 끝·곤충 채집·집 좋아요 보상 등)은 이걸 쓴다
+ */
+export async function earnPointsOnly(
+  accountId: string,
+  source: EarnSource,
+  amount?: number,
+  ip?: string,
+  boost?: EarnBoost,
+): Promise<{ earned: number; paid: number }> {
   const now = Date.now();
   const b = boost ?? (await earnBoost(now));
-  const earned = await accounts.earn(accountId, source, kstDay(now), { amount, ipHash: ip, boost: b });
-  return { earned, paid: paidOf(earned, amount ?? earnRule(source).points, pointsMult(b, source)), me: await loadMe(accounts, accountId, now) };
+  const earned = await getAccounts().earn(accountId, source, kstDay(now), { amount, ipHash: ip, boost: b });
+  return { earned, paid: paidOf(earned, amount ?? earnRule(source).points, pointsMult(b, source)) };
 }
 
 /**

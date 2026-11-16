@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { MEGAPHONE_TTL_MS } from "@tomb/protocol";
 import type { MegaphoneEntry } from "../types";
 import { K } from "./keys";
@@ -74,7 +75,7 @@ export class RedisMegaphone implements MegaphoneStore {
   private redis: Redis;
 
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "megaphone");
   }
 
   async cooldown(accountId: string, ms: number): Promise<number> {

@@ -141,7 +141,7 @@ class UrgentClientStore {
       }
     }
     const mine = this.snap.mine;
-    if (mine) this.set({ mine: { ...mine, rows: mine.rows.map((row) => (row.id === id ? { ...row, mine: r.mine, n: Math.max(row.n, r.n) } : row)) } });
+    if (mine) this.set({ mine: { ...mine, rows: mine.rows.map((row) => (row.id === id ? { ...row, mine: r.mine, n: Math.max(row.n, r.n), ...(r.cap ? { cap: r.cap, left: Math.max(0, r.cap - r.mine) } : {}) } : row)) } });
   }
 
   private nextDelay(): number {

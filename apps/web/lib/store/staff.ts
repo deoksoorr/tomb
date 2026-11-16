@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "../redisUsage";
 import { K } from "./keys";
 import type { AccountStore } from "./types";
 
@@ -88,7 +89,7 @@ return added
 export class RedisStaff implements StaffStore {
   private redis: Redis;
   constructor(conn: { url: string; token: string }) {
-    this.redis = new Redis({ ...conn, automaticDeserialization: false });
+    this.redis = redisClient(conn, "staff");
   }
   async get(): Promise<StaffRecord | null> {
     const raw = await this.redis.get<string>(STAFF_KEY);

@@ -17,6 +17,19 @@ enabled = true
 # 무료 플랜 일일 로그 한도를 넘지 않게 요청 기록은 5%만 남긴다 (오류 확인용으로는 충분)
 head_sampling_rate = 0.05
 
+# 11/16 호출 로그(요청 주소째 남는 기록)는 끈다 — 주소에 입장 토큰(?t=)이 실려 기록에 남지 않게. 서버가 직접 남기는 오류 기록(console)은 그대로.
+# 그래도 남는 기록이 있으면 주소의 ?뒤(쿼리 문자열)는 가린다. 대시보드(관찰 가능성)와 같은 값이어야 배포 때 되돌아가지 않는다
+redact_query_string = true
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 0.05
+invocation_logs = false
+persist = true
+
+[observability.traces]
+enabled = false
+
 # SQLite 백엔드 (동기 KV API 사용, Workers Paid에서 권장되는 저장소)
 [[migrations]]
 tag = "v1"

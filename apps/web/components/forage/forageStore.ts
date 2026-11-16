@@ -5,6 +5,7 @@ import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
 import { dexBadgeBits } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
+import { onVisibleAgain, tabHidden } from "@/lib/hooks/visibleAgain";
 import type { ForageState } from "@/lib/forage/types";
 
 // 내 낚시·채집 상태(가방의 물고기·채집물, 도감, 오늘 기록, 피어 있는 채집 지점)의 클라이언트 사본.
@@ -17,6 +18,9 @@ class ForageStore {
   private listeners = new Set<() => void>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private inflight: Promise<ForageState | null> | null = null;
+  /** 뒤로 간 동안 새 창이 열렸다 (돌아오면 한 번 받는다) */
+  private due = false;
+  private offVisible: (() => void) | null = null;
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -28,6 +32,7 @@ class ForageStore {
   getSnapshot = () => this.snap;
 
   set(state: ForageState): void {
+    this.due = false;
     this.snap = { state, error: null };
     bridge.emit("forage:nodes", { ids: state.nodes.ids });
     // 도감 100% 배지: 바뀔 때만 게임에 알린다 (내 캐릭터 이름표 옆)
@@ -51,11 +56,21 @@ class ForageStore {
     this.listeners.forEach((fn) => fn());
   }
 
-  /** 다음 창(지점이 다시 피는 시각)에 맞춰 다시 받는다 */
+  /**
+   * 다음 창(지점이 다시 피는 시각)에 맞춰 다시 받는다.
+   * 뒤로 간 동안(숨긴 탭·다른 창)은 묻지 않고(아무도 안 보는 지점 갱신에 Redis 명령 7개 남짓), 돌아오면 (흩어서) 한 번 받는다
+   */
   private schedule(at: number): void {
     if (this.timer) clearTimeout(this.timer);
     const ms = Math.max(5_000, Math.min(20 * 60_000, at - Date.now() + 1_500));
-    this.timer = setTimeout(() => void this.refresh(), ms);
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      if (!tabHidden()) return void this.refresh();
+      this.due = true;
+      this.offVisible ??= onVisibleAgain(() => {
+        if (this.due) void this.refresh();
+      });
+    }, ms);
   }
 
   refresh(): Promise<ForageState | null> {
@@ -79,6 +94,9 @@ class ForageStore {
   stop(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    this.offVisible?.();
+    this.offVisible = null;
+    this.due = false;
   }
 }
 

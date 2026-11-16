@@ -237,9 +237,18 @@ function BoardRanking({ board, period, zone, fish }: { board: RankBoard; period:
           <li key={`${r.rank}-${r.name}`} className={styles.pointRow} data-me={r.me}>
             <span className={styles.rank}>{r.rank}</span>
             <span className={styles.name}>
-              <StyledName name={r.name} look={r.ns} />
-              {r.me && (board === "house" ? " (내 집)" : " (나)")}
-              {r.sub && <span className={styles.sub}>{r.sub}</span>}
+              {/* 11/16 긴 이름(닉네임 12자 · 집 이름 20자)은 이름만 "…" — (나)·(내 집)은 잘리지 않게 따로, 전체는 title */}
+              <span className={styles.nameLine}>
+                <span className={styles.nameText} title={r.name}>
+                  <StyledName name={r.name} look={r.ns} />
+                </span>
+                {r.me && <span className={styles.me}>{board === "house" ? "(내 집)" : "(나)"}</span>}
+              </span>
+              {r.sub && (
+                <span className={styles.sub} title={r.sub}>
+                  {r.sub}
+                </span>
+              )}
               {r.items && r.items.length > 0 && <WornParts items={r.items} />}
             </span>
             {r.gear && gearById(r.gear) && (

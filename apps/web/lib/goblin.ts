@@ -1,4 +1,5 @@
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
+import { redisClient } from "./redisUsage";
 import { verifyGrant } from "@tomb/protocol";
 import { env } from "./env";
 import { HttpError } from "./http";
@@ -20,7 +21,7 @@ const g = globalThis as typeof globalThis & { __tombGoblinOnce?: Map<string, num
 async function claimOnce(nonce: string, now: number): Promise<boolean> {
   const conn = env.redis();
   if (conn) {
-    g.__tombGoblinRedis ??= new Redis({ ...conn, automaticDeserialization: false });
+    g.__tombGoblinRedis ??= redisClient(conn, "goblin");
     return (await g.__tombGoblinRedis.set(`goblin:n:${nonce}`, "1", { nx: true, ex: ONCE_TTL_SEC })) !== null;
   }
   const m = (g.__tombGoblinOnce ??= new Map());

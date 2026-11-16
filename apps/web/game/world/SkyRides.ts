@@ -4,6 +4,7 @@ import { addCanvasTexture, avatarFrame } from "../assets/manifest";
 import { bridge } from "../bridge";
 import { DEPTH } from "../config";
 import type { Player } from "../entities/Player";
+import { keyJosa } from "../input/keyHint";
 import {
   BALLOON_COLORS,
   balloonPad,
@@ -588,7 +589,7 @@ export class SkyRides {
     const left = Math.max(0, Math.ceil(((r.kind === "balloon" && t < r.departAt ? r.departAt : r.end) - t) / 1000));
     let hud: NonNullable<Parameters<typeof bridge.emit<"sky:hud">>[1]>;
     if (r.kind === "ferris") {
-      hud = { kind: "ferris", title: "관람차", place: null, hint: "X 두 번 누르면 내려요", left, sky: r.sky, view: this.view };
+      hud = { kind: "ferris", title: "관람차", place: null, hint: `${keyJosa("X", "를")} 두 번 누르면 내려요`, left, sky: r.sky, view: this.view };
     } else if (t < r.departAt) {
       hud = { kind: "balloon", title: "열기구", place: null, hint: "곧 떠나요 · 움직이면 내려요", left, sky: false, view: this.view };
     } else {
@@ -597,7 +598,7 @@ export class SkyRides {
         kind: "balloon",
         title: "열기구",
         place: st && st.alt > 8 ? placeName(st.x, st.y) : null,
-        hint: "X 두 번 누르면 내려요",
+        hint: `${keyJosa("X", "를")} 두 번 누르면 내려요`,
         left,
         sky: r.sky,
         view: this.view,

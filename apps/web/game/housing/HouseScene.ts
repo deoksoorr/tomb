@@ -14,6 +14,7 @@ import { DEPTH } from "../config";
 import { Player, type SeatRequester } from "../entities/Player";
 import { INDOOR_FRONT } from "../entities/RemoteAvatar";
 import type { InputHub } from "../input/InputHub";
+import { interactLabel, isTouchUi, keyJosa } from "../input/keyHint";
 import type { KeyAction } from "../input/Keyboard";
 import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST } from "../logic/spots";
 import { besideFriend, findFollowed, FRIEND_ARRIVED, followDeadline } from "../logic/friendSpot";
@@ -108,9 +109,12 @@ const objectWord = (w: string) => {
   return w + (c >= 0 && c < 11172 && c % 28 !== 0 ? "을" : "를");
 };
 
-/** 화면에 뜰 수 있는 안내 문구 전부 (비트맵 글꼴에 미리 글자를 올린다) */
+/** 피아노 앞에 앉아 있을 때 안내 (터치는 숫자 키가 없어 [상호작용]으로 한 음씩) */
+const pianoPrompt = (touch: boolean) => (touch ? "연주하기 · 움직이면 일어나기" : "1~8 건반 · E 연주 · 움직이면 일어나기");
+
+/** 화면에 뜰 수 있는 안내 문구 전부 (비트맵 글꼴에 미리 글자를 올린다). 데스크톱·터치 문구 둘 다 */
 const allPrompts = () =>
-  [...Object.values(USE_LABEL), ...Object.values(SPOT_TAKEN_HINT), "벽난로 불 끄기", "스탠드 끄기", "창문 닫기", "1~8 건반 · E 연주 · 움직이면 일어나기", "E · 일어나기"].join("");
+  [...Object.values(USE_LABEL), ...Object.values(SPOT_TAKEN_HINT), "벽난로 불 끄기", "스탠드 끄기", "창문 닫기", pianoPrompt(false), pianoPrompt(true), "E · 일어나기"].join("");
 
 type ItemView = { p: Placed; img: Phaser.GameObjects.Image; variant: string };
 type Using = { spot: HouseSpot; pre: { x: number; y: number }; at: number; next: number; note: number };
@@ -279,7 +283,8 @@ export class HouseScene extends Phaser.Scene {
 
     // 이름표 (안쪽 벽 위) + 방명록 팻말 (문 밖 왼쪽)
     const title = `${house.name}`;
-    atlas.ensure(title + "E · 방명록 보기" + house.ownerName + "의 집" + allPrompts());
+    const guestbook = interactLabel("방명록 보기");
+    atlas.ensure(title + guestbook + house.ownerName + "의 집" + allPrompts());
     this.titleLabel = this.add
       .bitmapText(this.W / 2, this.oy - WALL_H - 4, FONT_KEY, title, FONT_PX)
       .setOrigin(0.5, 1)
@@ -293,7 +298,7 @@ export class HouseScene extends Phaser.Scene {
     this.add.rectangle(this.sign.x, this.sign.y - 14, 8, 1, 0x3a2c22).setDepth(this.sign.y + 0.2);
     this.add.rectangle(this.sign.x, this.sign.y - 11, 6, 1, 0x3a2c22).setDepth(this.sign.y + 0.2);
     this.prompt = this.add
-      .bitmapText(this.sign.x, this.sign.y - 20, FONT_KEY, "E · 방명록 보기", FONT_PX)
+      .bitmapText(this.sign.x, this.sign.y - 20, FONT_KEY, guestbook, FONT_PX)
       .setOrigin(0.5, 1)
       .setTint(0xffe39a)
       .setDepth(DEPTH.labels)
@@ -1303,7 +1308,7 @@ export class HouseScene extends Phaser.Scene {
       this.sfx.play("page");
       this.player.view.say(BOOK_LINES[i], performance.now());
       this.emitUse(s.u, i);
-    } else if (s.use === "piano") this.notice("숫자 1~8로 건반을 누르거나 E로 한 음씩 연주해요. 움직이면 일어나요.");
+    } else if (s.use === "piano") this.notice(isTouchUi() ? `${keyJosa("E", "를")} 누를 때마다 한 음씩 연주해요. 움직이면 일어나요.` : "숫자 1~8로 건반을 누르거나 E로 한 음씩 연주해요. 움직이면 일어나요.");
   }
 
   /**
@@ -1733,14 +1738,14 @@ export class HouseScene extends Phaser.Scene {
     let grey = false;
     if (this.using && !this.editing) {
       const u = this.using;
-      text = u.spot.use === "piano" ? "1~8 건반 · E 연주 · 움직이면 일어나기" : "E · 일어나기";
+      text = u.spot.use === "piano" ? pianoPrompt(isTouchUi()) : interactLabel("일어나기");
       x = this.player.x;
       y = this.player.y + 14;
       p.setOrigin(0.5, 0);
     } else if (this.target && !nearSign) {
       const t = this.target;
       grey = !!t.spot && this.takenByOther(t.spot.id);
-      text = grey ? this.labelOf(t) : `E · ${this.labelOf(t)}`;
+      text = grey ? this.labelOf(t) : interactLabel(this.labelOf(t));
       x = (t.rect.x0 + t.rect.x1) / 2;
       y = t.use === "window" ? this.oy + 2 : t.rect.y0 - Math.min(16, artUp(t.item) + 2);
       if (t.use === "window") p.setOrigin(0.5, 0);

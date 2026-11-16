@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BOAT_SEATS, BOATS, boatKind, DIR, DUCK_DOCK, DUCK_POND, DUCK_SIDE_SEAT, FERRY_DOCK, FISHING_SPOTS, FURNITURE, LAKE, PONDS, seatSlot, spotSeatId, SPOT_KINDS } from "@tomb/protocol";
-import { boatWater, DUCK_SPEED, duckBump, duckWater, joinSeat, JOIN_REACH, pickBoatSeat, seatOffset, shorePoint, stepBoat, ROW_SPEED, type BoatPresence } from "../logic/boat";
+import { BOAT_SEATS, BOATS, boatKind, DIR, DUCK_DOCK, DUCK_POND, DUCK_SIDE_SEAT, FERRY_DOCK, FISHING_SPOTS, FURNITURE, LAKE, PONDS, seatSlot, spotSeatId, SPOT_KINDS, type DirId } from "@tomb/protocol";
+import { BOAT_BACK_SEAT_Y } from "../sprites/rideProps";
+import { boatFacing, boatWater, DUCK_SPEED, duckBump, duckWater, FACING_MIN_SPEED, joinSeat, JOIN_REACH, pickBoatSeat, seatDelta, shorePoint, stepBoat, ROW_SPEED, type BoatPresence } from "../logic/boat";
 import { furnitureCollider, houseCollider, inWater, interactables, standable, staticColliders, walkableGrid, WALK, waterCurrent, type Rect } from "./layout";
 import {
   bystanderGain,
@@ -201,12 +202,14 @@ describe("11/15 오리배 (오리 연못)", () => {
       expect(c.y).toBe(a.y);
     }
     const d = ducks[0];
-    expect(seatOffset(d, true)).toBe(DUCK_SIDE_SEAT);
-    expect(seatOffset(d, false)).toBe(DUCK_SIDE_SEAT);
-    // 조각배 뒷자리는 그대로 뱃머리 반대쪽
+    // 오리배 옆자리는 어느 방향(앞·뒷모습 포함)이든 화면 오른쪽으로 나란히
+    for (const dir of [DIR.down, DIR.left, DIR.right, DIR.up]) expect(seatDelta(d, dir)).toEqual({ dx: DUCK_SIDE_SEAT, dy: 0 });
+    // 조각배 뒷자리는 그대로 뱃머리 반대쪽 (11/16 앞모습 = 위, 뒷모습 = 아래)
     const row = BOATS.find((b) => b.seats === 2 && boatKind(b) === "row")!;
-    expect(seatOffset(row, false)).toBeLessThan(0);
-    expect(seatOffset(row, true)).toBeGreaterThan(0);
+    expect(seatDelta(row, DIR.right).dx).toBeLessThan(0);
+    expect(seatDelta(row, DIR.left).dx).toBeGreaterThan(0);
+    expect(seatDelta(row, DIR.down)).toEqual({ dx: 0, dy: -BOAT_BACK_SEAT_Y });
+    expect(seatDelta(row, DIR.up)).toEqual({ dx: 0, dy: BOAT_BACK_SEAT_Y });
     expect(ducks.some((b) => b.facing === DIR.left) && ducks.some((b) => b.facing === DIR.right)).toBe(true);
   });
 
@@ -284,7 +287,7 @@ describe("11/15 오리배 (오리 연못)", () => {
     const d = ducks[1];
     const [front, side] = BOAT_SEATS.filter((x) => x.boatId === d.id);
     const at = { x: 470, y: 930 };
-    const pres = (id: string): BoatPresence => (id === d.id ? { docked: false, rower: 7, at, left: true } : docked());
+    const pres = (id: string): BoatPresence => (id === d.id ? { docked: false, rower: 7, at, dir: DIR.left } : docked());
     // 옆자리(오른쪽) 곁에 서 있어도 닿는다
     expect(joinSeat(at.x + DUCK_SIDE_SEAT + 4, at.y + JOIN_REACH - 4, new Map([[front.id, 7]]), pres)?.id).toBe(side.id);
     expect(joinSeat(at.x, at.y + 10, new Map([[front.id, 7], [side.id, 8]]), pres)).toBeNull();
@@ -305,7 +308,7 @@ describe("F13 2인승: 물가에서 빈 뒷자리에 같이 타기", () => {
   const back = BOAT_SEATS.find((s) => s.boatId === c.id && s.index === 1)!;
   const docked = (): BoatPresence => ({ docked: true, rower: null, at: null });
   const at = { x: c.x - 240, y: c.y + 3 };
-  const out = (left: boolean) => (id: string): BoatPresence => (id === c.id ? { docked: false, rower: 7, at, left } : docked());
+  const out = (left: boolean, dir: DirId = left ? DIR.left : DIR.right) => (id: string): BoatPresence => (id === c.id ? { docked: false, rower: 7, at, dir } : docked());
 
   it("다른 사람이 노 젓는 2인승이 물가 가까이 오면(나루터가 아니어도) 뒷자리, 멀면 없음", () => {
     const occ = new Map([[front.id, 7]]);
@@ -314,16 +317,20 @@ describe("F13 2인승: 물가에서 빈 뒷자리에 같이 타기", () => {
     expect(joinSeat(at.x - 11, at.y - JOIN_REACH + 2, occ, out(false))?.id).toBe(back.id);
     expect(joinSeat(at.x + 11, at.y - JOIN_REACH + 2, occ, out(true))?.id).toBe(back.id);
     expect(joinSeat(at.x, at.y - JOIN_REACH - 14, occ, out(false))).toBeNull();
+    // 11/16 앞모습(뱃머리 아래)이면 뒷자리는 위로 BOAT_BACK_SEAT_Y — 그 위쪽에 서 있어도 닿는다
+    const upper = { x: at.x, y: at.y - BOAT_BACK_SEAT_Y - JOIN_REACH + 2 };
+    expect(joinSeat(upper.x, upper.y, occ, out(false, DIR.down))?.id).toBe(back.id);
+    expect(joinSeat(upper.x, upper.y, occ, out(false, DIR.up))).toBeNull();
   });
 
   it("한 자리 한 명: 뒷자리가 찼거나, 앞자리가 비었거나(옮겨 앉는 중), 노 젓는 사람이 나면(내 배) 같이 타지 않는다", () => {
     expect(joinSeat(at.x, at.y - 10, new Map([[front.id, 7], [back.id, 8]]), out(false))).toBeNull();
     expect(joinSeat(at.x, at.y - 10, new Map([[back.id, 8]]), out(false))).toBeNull();
-    const mine = (id: string): BoatPresence => (id === c.id ? { docked: false, rower: null, at, left: false } : docked());
+    const mine = (id: string): BoatPresence => (id === c.id ? { docked: false, rower: null, at, dir: DIR.right } : docked());
     expect(joinSeat(at.x, at.y - 10, new Map([[front.id, 1]]), mine)).toBeNull();
     // 1인승 곁에서는 같이 탈 자리가 없다
     const one = BOATS.find((b) => b.seats === 1)!;
-    const onePres = (id: string): BoatPresence => (id === one.id ? { docked: false, rower: 7, at, left: false } : docked());
+    const onePres = (id: string): BoatPresence => (id === one.id ? { docked: false, rower: 7, at, dir: DIR.right } : docked());
     const oneSeat = BOAT_SEATS.find((s) => s.boatId === one.id)!;
     expect(joinSeat(at.x, at.y - 10, new Map([[oneSeat.id, 7]]), onePres)).toBeNull();
   });
@@ -483,5 +490,48 @@ describe("놀거리 소리 범위", () => {
   it("어느 모닥불에 앉아 있어도 놀거리 효과음이 들리지 않는다", () => {
     const sources = [...CAROUSELS, ...SEESAWS, ...TRAMPOLINES];
     for (const f of CAMPFIRES) for (const r of sources) expect(bystanderGain(Math.hypot(f.x - r.x, f.y - r.y)), `${f.id}`).toBe(0);
+  });
+});
+
+describe("11/16 배 앞·뒷모습: 보는 방향 고르기 (boatFacing)", () => {
+  const S = 30;
+  it("큰 축을 따른다: 위아래로 저으면 앞·뒷모습, 좌우면 옆모습", () => {
+    expect(boatFacing(DIR.right, 0, -S)).toBe(DIR.up);
+    expect(boatFacing(DIR.right, 0, S)).toBe(DIR.down);
+    expect(boatFacing(DIR.up, -S, 0)).toBe(DIR.left);
+    expect(boatFacing(DIR.down, S, 0)).toBe(DIR.right);
+  });
+
+  it("느리면(멈춰 가는 배) 그대로", () => {
+    for (const d of [DIR.down, DIR.left, DIR.right, DIR.up]) {
+      expect(boatFacing(d, 0, 0)).toBe(d);
+      expect(boatFacing(d, FACING_MIN_SPEED - 0.5, -(FACING_MIN_SPEED - 0.5))).toBe(d);
+    }
+  });
+
+  it("대각선에서는 지금 축을 지킨다 (히스테리시스) — 축은 다른 축이 넉넉히 클 때만 바뀐다", () => {
+    // 정대각선: 옆이면 옆, 앞뒤면 앞뒤 (같은 축 안에서는 방향만 따라간다)
+    expect(boatFacing(DIR.right, S, -S)).toBe(DIR.right);
+    expect(boatFacing(DIR.left, S, -S)).toBe(DIR.right);
+    expect(boatFacing(DIR.up, S, -S)).toBe(DIR.up);
+    expect(boatFacing(DIR.down, S, -S)).toBe(DIR.up);
+    // 조금 더 세로여도(1.2배) 옆모습 유지, 한참 세로면(2배) 바뀐다
+    expect(boatFacing(DIR.right, S, -S * 1.2)).toBe(DIR.right);
+    expect(boatFacing(DIR.right, S, -S * 2)).toBe(DIR.up);
+    expect(boatFacing(DIR.up, S * 1.2, -S)).toBe(DIR.up);
+    expect(boatFacing(DIR.up, S * 2, -S)).toBe(DIR.right);
+  });
+
+  it("대각선 근처에서 흔들려도 깜빡이지 않는다 (프레임마다 방향이 한 번도 바뀌지 않음)", () => {
+    let d: DirId = DIR.right;
+    let flips = 0;
+    for (let i = 0; i < 200; i++) {
+      const a = -Math.PI / 4 + Math.sin(i * 0.7) * 0.12; // 오른쪽 위 대각선 ± 7°
+      const n = boatFacing(d, Math.cos(a) * S, Math.sin(a) * S);
+      if (n !== d) flips++;
+      d = n;
+    }
+    expect(flips).toBe(0);
+    expect(d).toBe(DIR.right);
   });
 });

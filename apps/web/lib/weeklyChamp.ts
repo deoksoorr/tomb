@@ -5,6 +5,7 @@ import { notifyMe, sayAll } from "./ban";
 import { speciesById } from "./forage/catalog";
 import { getFishRank } from "./forage/fishRank";
 import { staffAccountId } from "./staff";
+import { memoTopFetch } from "./rankMemo";
 import { rankWithoutStaff } from "./staffRank";
 import { getAccounts, getMegaphone, NO_NAME } from "./store";
 import { kstDay, kstWeek, lookOf } from "./store/accounts";
@@ -39,15 +40,25 @@ export const CHAMP_BOARD_LABEL: Record<ChampBoard, string> = { points: "포인�
 export type ChampRow = { accountId: string; name: string; value: number; rank: number; sp?: string };
 
 /** 그 주 그 랭킹의 상위 limit명 + me (운영자 제외, 동점은 먼저 달성한 사람이 위) */
-export async function champBoard(board: ChampBoard, week: string, limit: number, me: string | null, staffId?: string | null): Promise<{ rows: ChampRow[]; mine: ChampRow | null; staff: boolean }> {
+export async function champBoard(
+  board: ChampBoard,
+  week: string,
+  limit: number,
+  me: string | null,
+  staffId?: string | null,
+  /** 레이스 창의 내 순위: 상위 줄·운영자 순위는 인스턴스가 30초 기억하고 내 줄만 읽는다 (lib/rankMemo — 판마다 11개 남짓 → 5개) */
+  memo = false,
+): Promise<{ rows: ChampRow[]; mine: ChampRow | null; staff: boolean }> {
+  const wrap = <T extends { accountId: string; rank: number }>(fetch: (n: number, who: string | null) => Promise<{ rows: T[]; mine: T | null }>) =>
+    memo && staffId !== undefined ? memoTopFetch(`champ|${board}|${week}|${staffId ?? ""}`, fetch, staffId, { style: false }) : fetch;
   if (board === "fish") {
-    const r = await rankWithoutStaff((n, who) => getFishRank().board(null, week, n, who), limit, me, staffId);
+    const r = await rankWithoutStaff(wrap((n, who) => getFishRank().board(null, week, n, who)), limit, me, staffId);
     const row = (e: (typeof r.rows)[number]): ChampRow => ({ accountId: e.accountId, name: e.name ?? NO_NAME, value: e.size, rank: e.rank, ...(e.sp ? { sp: e.sp } : {}) });
     return { rows: r.rows.map(row), mine: r.mine ? row(r.mine) : null, staff: r.staff };
   }
   const accounts = getAccounts();
   const r = await rankWithoutStaff(
-    (n, who) => (board === "points" ? accounts.pointRank(n, who, week) : accounts.huntRank("kills", n, who, { week })),
+    wrap((n, who) => (board === "points" ? accounts.pointRank(n, who, week) : accounts.huntRank("kills", n, who, { week }))),
     limit,
     me,
     staffId,
