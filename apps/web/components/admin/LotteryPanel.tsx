@@ -86,7 +86,7 @@ export default function LotteryPanel({ toast, onAuthLost }: Props) {
               상금 <strong>{fmt(view.pool.total)}P</strong>
             </p>
             <ul className={ui.hint}>
-              <li>지난주에서 넘어온 상금 {fmt(view.pool.carry)}P</li>
+              <li>지난 추첨에서 넘어온 이월 상금 {fmt(view.pool.carry)}P</li>
               <li>
                 판매 몫 {fmt(view.pool.salesShare)}P (판매액 {fmt(view.pool.sales)}P)
               </li>

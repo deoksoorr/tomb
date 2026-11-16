@@ -35,6 +35,7 @@ export default function RankingPanel({ graves, onPick, open, onOpenChange: setOp
       >
         <PixelIcon name="list" />
         <span>랭킹</span>
+        <span className={styles.key} aria-hidden="true">L</span>
       </button>
 
       {open && (

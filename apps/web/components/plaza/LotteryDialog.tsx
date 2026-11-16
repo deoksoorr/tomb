@@ -116,7 +116,7 @@ export default function LotteryDialog({ onClose }: { onClose: () => void }) {
             <span className={styles.parts}>
               <span>기본 상금 {fmt(pool.base)}P</span>
               <span>판매 몫 {fmt(pool.salesShare)}P</span>
-              {pool.carry > 0 && <span>지난주에서 {fmt(pool.carry)}P</span>}
+              {pool.carry > 0 && <span>이월 상금 {fmt(pool.carry)}P</span>}
               {pool.subsidy > 0 && <span>지원금 {fmt(pool.subsidy)}P</span>}
             </span>
           )}

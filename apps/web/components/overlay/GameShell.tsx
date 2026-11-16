@@ -637,6 +637,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   >
                     <PixelIcon name="heart" />
                     친구
+                    <span className={cx(styles.dockKey, styles.topKey)} aria-hidden="true">O</span>
                     {friendIncoming > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
                   </button>
                 )}
@@ -659,12 +660,14 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   <PixelIcon name="user" />
                   {/* 포인트는 내 정보 창 안에서 보여 준다 (위쪽 단추는 이름만) */}
                   <span className={styles.meLabel}>내 정보</span>
+                  <span className={cx(styles.dockKey, styles.topKey)} aria-hidden="true">P</span>
                 </button>
                 {/* 주간 랭킹 1위 레이스 (시상대·마감·내 순위·명예의 전당): 랭킹 옆 따로.
                     위쪽 줄이 가운데 채널 칸과 겹칠 만큼 좁은 화면에선 숨기고 [메뉴] 시트의 「이번 주 레이스」로 연다 */}
                 <button type="button" className={cx(ui.button, ui.top, styles.topButton, styles.raceTop)} onClick={() => setPanel("race")} title="이번 주 레이스 (U)">
                   <PixelIcon name="trophy" />
                   레이스
+                  <span className={cx(styles.dockKey, styles.topKey)} aria-hidden="true">U</span>
                 </button>
                 <RankingPanel graves={graves.graves} onPick={lookAtGrave} open={rankOpen} onOpenChange={setRankOpen} />
               </div>
@@ -687,6 +690,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
               <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("bag")}>
                 <PixelIcon name="bag" />
                 가방
+                <span className={styles.dockKey} aria-hidden="true">I</span>
                 {bagCount > 0 && <span className={styles.badge}>{bagCount}</span>}
                 {titleNew && (
                   <>
@@ -714,6 +718,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
               <button type="button" className={cx(ui.button, styles.dockButton)} onClick={() => setPanel("notices")}>
                 <PixelIcon name="bell" />
                 공지
+                <span className={styles.dockKey} aria-hidden="true">N</span>
                 {unreadNotice && (
                   <>
                     <span className={styles.dot} aria-hidden="true" />

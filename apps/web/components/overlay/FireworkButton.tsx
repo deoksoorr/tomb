@@ -24,7 +24,7 @@ export default function FireworkButton({ onOpen, variant = "dock" }: { onOpen: (
       className={top ? cx(ui.button, ui.icon, ui.top, styles.top) : styles.button}
       onClick={onOpen}
       aria-label={Number.isFinite(total) ? `폭죽 쏘기 (${total}개)` : "폭죽 쏘기 (무제한)"}
-      title={top ? "폭죽 쏘기" : undefined}
+      title="폭죽 쏘기 (G)"
     >
       <ItemIcon itemId={stock[0].item.id} size={top ? 24 : 32} />
       <span className={cx(styles.badge, top && styles.topBadge)} aria-hidden="true">
