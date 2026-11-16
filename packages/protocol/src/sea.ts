@@ -46,8 +46,9 @@ export const SEA_HEIGHT = SEA_ROWS * 16; // 960
  * 13 = 11/16 r14 제트스키 부잔교, 모닥불을 동쪽 빈 모래로, r15 정류장·버스 길을 동쪽 끝 가까이로 (+280)
  * 14 = 11/16 r15 선착장을 길게 (끝 데크는 걸터앉기만), 서쪽 낚시 가지(낚시 자리 둘), 넓은 부잔교 다리, 유령선 자리 서남쪽으로,
  *      데크 가장자리 빙 둘러 난간 (물로 걸어 내려가지 못해요)
+ * 15 = 11/16 r18 카약 선착장(다리·뜬 데크)·2인승 카약 셋, 바위 둘을 서쪽 해안으로, 갯벌 구멍 하나 옮김
  */
-export const SEA_MAP_VERSION = 14;
+export const SEA_MAP_VERSION = 15;
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Pt = { x: number; y: number };
@@ -292,7 +293,13 @@ export const SEA_GHOST_BERTH = {
 export const SEA_BREAKWATER = { x: 1400, y: 468, w: 48, h: 156 } as const;
 export const SEA_BREAKWATER_TIP = { x: 1376, y: 616, w: 96, h: 92 } as const;
 /** 걸어 다니는 데크 (선착장 몸통·끝 데크·낚시 가지·부잔교·다리·방파제·끝 데크) */
-export const SEA_DECKS: readonly Rect[] = [SEA_PIER, SEA_PIER_END, SEA_PIER_ARM, SEA_PONTOON, SEA_PONTOON_RAMP, SEA_BREAKWATER, SEA_BREAKWATER_TIP];
+/**
+ * 11/16 r18 사용자: 카약 선착장 — 선착장 동쪽 백사장에서 짧은 다리(선베드 앞줄 사이 틈)로 이어진 낮은 뜬 데크.
+ * 2인승 카약 셋을 데크 바로 아래 물에 매어 둬요 (간조에도 물 — 얕은 물은 다닐 수 있어요)
+ */
+export const SEA_KAYAK_WALK = { x: 1038, y: 480, w: 24, h: 120 } as const;
+export const SEA_KAYAK_DOCK = { x: 1000, y: 596, w: 110, h: 32 } as const;
+export const SEA_DECKS: readonly Rect[] = [SEA_PIER, SEA_PIER_END, SEA_PIER_ARM, SEA_PONTOON, SEA_PONTOON_RAMP, SEA_BREAKWATER, SEA_BREAKWATER_TIP, SEA_KAYAK_WALK, SEA_KAYAK_DOCK];
 /** 등대 받침 가운데 (끝 데크 뒤쪽) */
 export const SEA_LIGHTHOUSE = { x: 1424, y: 664 } as const;
 export const SEA_LIGHTHOUSE_W = 36;
@@ -325,9 +332,9 @@ export const SEA_ROCKS: readonly SeaRock[] = [
   { x: 1368, y: 504, rx: 12, ry: 6, small: true },
   // 11/16 물가 사이사이
   { x: 780, y: 518, rx: 12, ry: 6, small: true },
-  { x: 1036, y: 518, rx: 18, ry: 9 },
+  { x: 100, y: 700, rx: 18, ry: 9 }, // r18 카약 선착장 다리 자리를 비우려고 서쪽 바위 해안으로 옮겼어요 (번호는 그대로)
   { x: 1174, y: 563, rx: 20, ry: 10 },
-  { x: 1004, y: 596, rx: 10, ry: 5, small: true }, // r15 부잔교 다리 자리를 비켜서
+  { x: 232, y: 650, rx: 10, ry: 5, small: true }, // r18 카약 선착장 자리를 비우려고 서쪽으로
   // 11/16 r12 동쪽으로 넓힌 땅: 방파제 너머 갯바위 해안
   { x: 1546, y: 514, rx: 26, ry: 13 },
   { x: 1592, y: 552, rx: 32, ry: 16 },
@@ -422,8 +429,9 @@ export const SEA_SPOTS = {
   ],
   /** 족욕 바위 · 선착장 끝 걸터앉기 · 방파제 끝 걸터앉기 · 등대 문 */
   footbath: SEA_FOOTBATH,
-  pierEnd: { x: SEA_PIER_END.x + SEA_PIER_END.w / 2, y: SEA_PIER_END.y + SEA_PIER_END.h - 4, facing: DIR.down },
-  breakwaterEnd: { x: SEA_BREAKWATER_TIP.x + 24, y: SEA_BREAKWATER_TIP.y + SEA_BREAKWATER_TIP.h - 6, facing: DIR.down },
+  // r18 사용자 "걸터앉으면 데크 안쪽에 앉아요" → 앉는 자리는 데크 바깥 가장자리 바로 위 (다리가 물 쪽으로), 일어서는 자리는 데크 안 (SEA_EDGE_STAND_DY)
+  pierEnd: { x: SEA_PIER_END.x + SEA_PIER_END.w / 2, y: SEA_PIER_END.y + SEA_PIER_END.h + 2, facing: DIR.down },
+  breakwaterEnd: { x: SEA_BREAKWATER_TIP.x + 24, y: SEA_BREAKWATER_TIP.y + SEA_BREAKWATER_TIP.h + 2, facing: DIR.down },
   lighthouseDoor: SEA_LIGHTHOUSE_DOOR,
 } as const;
 /**
@@ -507,7 +515,7 @@ export const SEA_DIG_HOLES: readonly Pt[] = [
   { x: 500, y: 566 },
   { x: 710, y: 527 },
   { x: 960, y: 540 },
-  { x: 1060, y: 566 },
+  { x: 1000, y: 560 }, // r18 카약 선착장 다리를 비켜서
   { x: 1120, y: 533 },
   { x: 1220, y: 546 },
   { x: 930, y: 572 },
@@ -550,6 +558,9 @@ export const SEA_FURNITURE: readonly Furniture[] = [
   // 11/16 r12 별장 사이 정원 벤치 둘 (등불 옆)
   ...SEA_GARDEN_BENCHES.map((b, i): Furniture => ({ id: `pG${i + 1}`, kind: "bench", x: b.x, y: b.y, facing: DIR.down, seatOffsets: [-10, 10] })),
 ];
+/** 11/16 r18 끝 걸터앉기: 일어서는 자리는 앉는 자리(데크 가장자리)보다 이만큼 위 — 데크 안 걸을 수 있는 곳 · 고르는 거리 (데크 어디서든 가까운 빈 방석) */
+export const SEA_EDGE_STAND_DY = -14;
+export const SEA_EDGE_PICK_RADIUS = 28;
 export const SEA_SEATS: readonly Seat[] = SEA_FURNITURE.flatMap((f) =>
   f.seatOffsets.map((dx, i) => ({
     id: f.seatOffsets.length > 1 ? `${f.id}-${i}` : f.id,
@@ -558,7 +569,7 @@ export const SEA_SEATS: readonly Seat[] = SEA_FURNITURE.flatMap((f) =>
     y: f.y,
     facing: f.facing as DirId,
     // 끝 걸터앉기는 일어서면 데크 쪽(뒤)으로 — 앞은 물이에요
-    ...(SEA_EDGE_SEATS.includes(f.id) ? { standDy: -10 } : {}),
+    ...(SEA_EDGE_SEATS.includes(f.id) ? { standDy: SEA_EDGE_STAND_DY } : {}),
     // 피크닉 탁자 북쪽 벤치·모닥불 북쪽 통나무는 앞(남쪽)이 탁자·불이라 뒤(북쪽)로 일어서요
     ...((f.id.startsWith("pT") && f.id.endsWith("n")) || (f.campfire && f.facing === DIR.down) ? { standDy: -12 } : {}),
   })),
@@ -772,6 +783,33 @@ export function seaWet(x: number, y: number, level: number, edge = 10): boolean 
 // 서버 좌석은 조각배처럼 mobile 자리(상태 boat)라 탄 사람의 MOVE를 따라가요. 탄 사람이 없는 튜브는 모두의 화면에서
 // 같은 시계로 정해진 길(seaTubeDriftAt)을 떠다니고, 제트스키는 매어 둔 자리에 있어요.
 export type SeaRideKind = "tube" | "jetski";
+// ── 11/16 r18 2인승 카약 (앞 자리 0 = 먼저 탄 사람이 조종, 뒤 자리 1 = 같이 탄 사람). 서버 좌석은 조각배 2인승처럼 같은 가구 두 자리 ──
+/** 매어 둔 자리 (카약 선착장 바로 아래 물) */
+export const SEA_KAYAKS: readonly Pt[] = [0, 1, 2].map((i) => ({ x: SEA_KAYAK_DOCK.x + 20 + i * 35, y: SEA_KAYAK_DOCK.y + SEA_KAYAK_DOCK.h + 28 }));
+/** 카약 속도 (튜브와 조각배 사이) · 두 자리 사이 (카약 길이 방향) · 자리 받는 거리 */
+export const SEA_KAYAK_SPEED = 36;
+export const SEA_KAYAK_SEAT_GAP = 9;
+export const SEA_KAYAK_RADIUS = 56;
+export type SeaKayakSeat = { id: string; kayak: string; n: number; k: 0 | 1; x: number; y: number };
+export const SEA_KAYAK_SEATS: readonly SeaKayakSeat[] = SEA_KAYAKS.flatMap((p, n) =>
+  ([0, 1] as const).map((k): SeaKayakSeat => ({ id: `pK${n + 1}-${k}`, kayak: `pK${n + 1}`, n, k, x: p.x, y: p.y })),
+);
+const seaKayakSeatMap = new Map(SEA_KAYAK_SEATS.map((q) => [q.id, q]));
+export function seaKayakSeatById(id: string): SeaKayakSeat | undefined {
+  return seaKayakSeatMap.get(id);
+}
+/** 카약 선착장에서 내려서는 자리 (매어 둔 자리 바로 위 데크) */
+export function seaKayakDismount(p: Pt): Pt {
+  const D = SEA_KAYAK_DOCK;
+  return { x: Math.max(D.x + 8, Math.min(D.x + D.w - 8, p.x)), y: D.y + D.h - 8 };
+}
+/** 카약이 뜰 수 있는 물: 얕아도 물이면 돼요 (마른 갯벌·모래는 안 돼요), 데크·바위·매어 둔 제트스키에는 부딪혀요 */
+export function seaKayakWater(x: number, y: number, level: number): boolean {
+  if (!seaWet(x, y, level, 6) || y > SEA_HEIGHT - 12 || x < 12 || x > SEA_WIDTH - 12) return false;
+  if (seaRideBlocked(x, y, 7)) return false;
+  for (const j of SEA_JETSKIS) if (Math.abs(x - j.x) < 22 && Math.abs(y - j.y) < 9) return false;
+  return true;
+}
 export type SeaRide = { id: string; kind: SeaRideKind; n: number; x: number; y: number };
 /** 튜브 다섯 (떠다니는 길의 가운데 — 간조 물가보다 넉넉히 바깥) */
 export const SEA_TUBES: readonly Pt[] = [
@@ -838,4 +876,13 @@ export function seaTubeDriftAt(i: number, t: number, level: number): Pt {
   const x = h.x + Math.sin((t / 23_000) * TAU + ph) * SEA_TUBE_DRIFT.ax + Math.sin((t / 9_100) * TAU + ph * 2) * 4;
   const y = Math.max(h.y + Math.sin((t / 31_000) * TAU + ph * 1.3) * SEA_TUBE_DRIFT.ay, tideLineY(level) + 26);
   return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+}
+
+// ── 11/16 r18 카약 「같이 타요」 외치기 ──
+/** 한 번 외치는 값 (포인트) · 계정마다 간격 · 저절로 끝나는 시간 */
+export const SEA_KAYAK_SHOUT_COST = 20;
+export const SEA_KAYAK_SHOUT_COOLDOWN_MS = 60_000;
+export const SEA_KAYAK_SHOUT_TTL_MS = 120_000;
+export function seaKayakShoutText(name: string): string {
+  return `달물결 포구에서 ${name}님이 외쳐요! 카약 같이 타요!`;
 }

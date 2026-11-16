@@ -11,6 +11,8 @@ import {
   SEA_PIER,
   SEA_PIER_END,
   SEA_PIER_ARM,
+  SEA_KAYAK_WALK,
+  SEA_KAYAK_DOCK,
   SEA_LOTS,
   SEA_PONTOON,
   SEA_PONTOON_RAMP,
@@ -226,6 +228,11 @@ export const SEA_TEX = {
   squid: `${P}squid`,
   squidLamps: `${P}squidLamps`,
   lightColumn: `${P}lightColumn`,
+  /** 11/16 r18 카약(색 셋, 옆·세로) · 노 · 카약 선착장 다리·데크 */
+  kayak: (d: "side" | "vert", v: number) => `${P}kayak-${d}${v}`,
+  paddle: `${P}paddle`,
+  kayakWalk: `${P}kayakWalk`,
+  kayakDock: `${P}kayakDock`,
   pontoon: `${P}pontoon`,
   pierArm: `${P}pierArm`,
   pontoonRamp: `${P}pontoonRamp`,
@@ -2023,9 +2030,10 @@ export function cushionArt(v: number): Grid {
 
 // ── 11/16 r13 바다 놀거리: 튜브 · 제트스키 (부드러운 단계·옅은 테) ──
 /** 튜브 크기 (원점 = 가운데). 위쪽 반(뒤)과 아래쪽 반(앞)을 잘라 탄 사람 앞뒤로 그려요 */
-export const TUBE_W = 26;
-export const TUBE_H = 16;
-export const TUBE_CY = 8;
+// r18 사용자 "튜브가 접시처럼 아래에 깔려요" → 구멍을 몸통 폭만큼 넓게 (탄 사람이 구멍 안에 들어가요)
+export const TUBE_W = 32;
+export const TUBE_H = 18;
+export const TUBE_CY = 9;
 const TUBE_COLORS = [hexes(["#ffd0c4", "#f6a896", "#e48678"]), hexes(["#fff2c0", "#fbe08e", "#eec66e"]), hexes(["#cdf2dc", "#a6e2c0", "#84cba4"]), hexes(["#d4ecff", "#a8d4f6", "#86b8e4"]), hexes(["#ffd6ec", "#f6b0d2", "#e490ba"])];
 /** 줄무늬 튜브 (v = 색). 가운데 구멍은 비워 둬요 (물이 보여요) */
 export function tubeArt(v: number): Grid {
@@ -2034,11 +2042,11 @@ export function tubeArt(v: number): Grid {
   const cx = TUBE_W / 2;
   for (let y = 0; y < TUBE_H; y++)
     for (let x = 0; x < TUBE_W; x++) {
-      const dx = (x + 0.5 - cx) / 11.5;
-      const dy = (y + 0.5 - TUBE_CY) / 6.2;
+      const dx = (x + 0.5 - cx) / 14.5;
+      const dy = (y + 0.5 - TUBE_CY) / 7.6;
       const o = dx * dx + dy * dy;
-      const ix = (x + 0.5 - cx) / 5.2;
-      const iy = (y + 0.5 - TUBE_CY + 0.6) / 2.6;
+      const ix = (x + 0.5 - cx) / 7.2;
+      const iy = (y + 0.5 - TUBE_CY + 0.6) / 3.4;
       if (o > 1 || ix * ix + iy * iy < 1) continue;
       const a = Math.atan2(dy, dx);
       const stripe = Math.floor(((a + Math.PI) / (Math.PI * 2)) * 8) % 2 === 0;
@@ -2046,8 +2054,8 @@ export function tubeArt(v: number): Grid {
       const shade = dy < -0.35 ? 0 : dy > 0.45 ? 2 : 1;
       g.set(x, y, stripe ? ramp[shade] : shade === 2 ? 0xe8e4dc : shade === 0 ? 0xffffff : 0xf8f6f0);
     }
-  g.set(7, 4, 0xffffff);
   g.set(8, 4, 0xffffff);
+  g.set(9, 4, 0xffffff);
   softOutline(g, true);
   return g;
 }
@@ -2368,4 +2376,79 @@ export function stoneBlocks(g: Grid, b: Box, bw = 12, bh = 7, salt = 0): void {
     if (ry % bh === 0 || rx % bw === 1) o = mix(o, 0xffffff, 0.08);
     return o;
   });
+}
+
+// ── 11/16 r18 2인승 카약 (밝은 색 셋 — 산호·노랑·청록, 부드러운 단계·제 색 테두리) ──
+const KAYAK_COLORS = [hexes(["#ffc8b8", "#f4a08c", "#e07e6c"]), hexes(["#fff0b0", "#f8d878", "#e8b850"]), hexes(["#bfeee0", "#8ed8c4", "#62bca8"])];
+export const KAYAK_SIDE_W = 44;
+export const KAYAK_SIDE_H = 12;
+export const KAYAK_VERT_W = 12;
+export const KAYAK_VERT_H = 42;
+/** 옆모습 (오른쪽이 뱃머리 — 왼쪽은 뒤집어 그려요). 원점 = 가운데 물높이 */
+export function kayakSideArt(v: number): Grid {
+  const H = KAYAK_COLORS[v % 3];
+  const g = new Grid(KAYAK_SIDE_W, KAYAK_SIDE_H);
+  for (let x = 1; x < KAYAK_SIDE_W - 1; x++) {
+    const u = (x + 0.5) / KAYAK_SIDE_W;
+    const half = Math.round(4 * Math.sin(Math.PI * Math.min(1, u * 1.05)));
+    if (half <= 0) continue;
+    for (let y = 6 - half; y <= 6 + Math.min(2, half); y++) g.set(x, y, y < 6 - half + 1 ? H[0] : y >= 7 ? H[2] : H[1]);
+  }
+  // 앉는 구멍 둘 (짙은 남색) · 옆 띠
+  for (const cx of [14, 30]) g.rect(cx - 3, 3, 7, 2, 0x4a5878);
+  g.hline(6, KAYAK_SIDE_W - 7, 7, 0xffffff);
+  softOutline(g, true);
+  return g;
+}
+/** 위에서 본 세로 모습 (아래로 가요 — 위로 가면 뒤집어 그려요). 원점 = 가운데 */
+export function kayakVertArt(v: number): Grid {
+  const H = KAYAK_COLORS[v % 3];
+  const g = new Grid(KAYAK_VERT_W, KAYAK_VERT_H);
+  const cx = KAYAK_VERT_W / 2;
+  for (let y = 1; y < KAYAK_VERT_H - 1; y++) {
+    const u = (y + 0.5) / KAYAK_VERT_H;
+    const half = 4.6 * Math.sin(Math.PI * u);
+    for (let x = Math.round(cx - half); x < Math.round(cx + half); x++) g.set(x, y, x < cx - half + 1.5 ? H[0] : x > cx + half - 2 ? H[2] : H[1]);
+  }
+  for (const cy of [13, 29]) g.rect(cx - 2, cy - 3, 4, 6, 0x4a5878);
+  g.vline(cx, 3, 8, 0xffffff);
+  g.vline(cx, KAYAK_VERT_H - 9, KAYAK_VERT_H - 4, 0xffffff);
+  softOutline(g, true);
+  return g;
+}
+/** 노 (양쪽 날, 가운데가 원점 — 그리는 쪽에서 앞뒤로 기울여 저어요) */
+export function paddleArt(): Grid {
+  const g = new Grid(22, 5);
+  g.hline(3, 18, 2, 0xc8a070);
+  for (const x of [0, 19]) g.rect(x, 1, 3, 3, 0xf0d060);
+  softOutline(g, true);
+  return g;
+}
+/** 카약 선착장 다리 (세로 판자) · 뜬 데크 (가로 판자 + 양옆 부표 통) */
+export function kayakWalkArt(): Grid {
+  const W = SEA_KAYAK_WALK.w;
+  const H = SEA_KAYAK_WALK.h;
+  const g = new Grid(W, H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) g.set(x, y, y % 6 === 5 ? DECK.line : y % 6 === 0 ? DECK.hi : DECK.mid);
+  for (let y = 0; y < H; y++) {
+    g.set(0, y, 0xc8b070);
+    g.set(W - 1, y, 0xc8b070);
+  }
+  planks(g, { x0: 1, y0: 0, x1: W - 2, y1: H - 1 }, 6, false, 24, 13);
+  softOutline(g);
+  return g;
+}
+export function kayakDockArt(): Grid {
+  const W = SEA_KAYAK_DOCK.w;
+  const H = SEA_KAYAK_DOCK.h + 4;
+  const g = new Grid(W + 4, H);
+  for (let y = 0; y < H - 4; y++) for (let x = 2; x < W + 2; x++) g.set(x, y, (x - 2) % 7 === 6 ? DECK.line : x % 7 === 0 ? DECK.hi : mix(DECK.mid, DECK.lo, 0.25));
+  g.rect(2, H - 4, W, 2, DECK.lo);
+  g.rect(2, H - 2, W, 2, 0x9ac8c8);
+  for (let x = 8; x < W - 4; x += 26) {
+    g.rect(x, H - 3, 10, 2, 0x8ec8e8);
+  }
+  planks(g, { x0: 2, y0: 0, x1: W + 1, y1: H - 5 }, 7, true, 40, 17);
+  softOutline(g);
+  return g;
 }

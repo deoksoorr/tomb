@@ -25,7 +25,13 @@ export type Grant =
    * 11/15 캠핑장 바베큐 한 접시·한 잔: until(epoch ms)까지 효과 (bbq.ts). nonce는 한 번만.
    * 마실 거리(취기)면 lv = 마신 뒤 취기 단계, at = 마신 시각 (until = 다 깨는 시각)
    */
-  | { kind: "bbq"; visitorId: string; item: BbqItemId; until: number; nonce: string; exp: number; lv?: number; at?: number };
+  | { kind: "bbq"; visitorId: string; item: BbqItemId; until: number; nonce: string; exp: number; lv?: number; at?: number }
+  /**
+   * 11/16 r18 바닷가 카약 「같이 타요」 외치기: 웹이 20P를 받고 서명 → 실시간 서버가 그 사람이 정말 카약 앞자리에 (뒷자리는 비고) 앉아 있는지 보고
+   * 채널에 방송해요. 아니면 실시간 서버가 kayakRefund 증서를 내주고 웹이 20P를 돌려줘요 (nonce당 한 번)
+   */
+  | { kind: "kayakShout"; visitorId: string; nonce: string; name: string; kayak: string; ch: number; exp: number }
+  | { kind: "kayakRefund"; visitorId: string; nonce: string; exp: number };
 
 export const GRANT_TTL_SEC = 60;
 /** 증서 최대 길이. 확성기 증서는 닉네임·문장(한글 60자)을 품어 다른 증서보다 길다 */
@@ -73,6 +79,9 @@ export async function verifyGrant(
     };
   if (g.kind === "firework" && isFireworkId(g.item) && typeof g.nonce === "string" && g.nonce.length <= 32)
     return { kind: "firework", visitorId: g.visitorId, item: g.item, nonce: g.nonce, exp: g.exp };
+  if (g.kind === "kayakShout" && typeof g.nonce === "string" && g.nonce.length <= 32 && typeof g.name === "string" && [...g.name].length <= 20 && typeof g.kayak === "string" && /^pK\d$/.test(g.kayak) && typeof g.ch === "number" && Number.isInteger(g.ch) && g.ch >= 1 && g.ch <= 100)
+    return { kind: "kayakShout", visitorId: g.visitorId, nonce: g.nonce, name: g.name, kayak: g.kayak, ch: g.ch, exp: g.exp };
+  if (g.kind === "kayakRefund" && typeof g.nonce === "string" && g.nonce.length <= 32) return { kind: "kayakRefund", visitorId: g.visitorId, nonce: g.nonce, exp: g.exp };
   if (g.kind === "goblin" && typeof g.points === "number" && Number.isInteger(g.points) && g.points > 0 && g.points <= 1000 && typeof g.nonce === "string" && g.nonce.length <= 32)
     return { kind: "goblin", visitorId: g.visitorId, points: g.points, nonce: g.nonce, exp: g.exp };
   if (

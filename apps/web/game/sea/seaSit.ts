@@ -1,4 +1,4 @@
-import { SEA_FURNITURE, SEA_SEATS, SEAT_SEARCH_RADIUS, type Seat, type Sid } from "@tomb/protocol";
+import { SEA_EDGE_PICK_RADIUS, SEA_EDGE_SEATS, SEA_FURNITURE, SEA_SEATS, SEAT_SEARCH_RADIUS, type Seat, type Sid } from "@tomb/protocol";
 
 // 11/16 바닷가 좌석 고르기 (캠핑장 campSit과 같은 규칙, 좌석 목록만 바닷가 것). 쉴거리 자리가 늘면 SEA_FURNITURE에만 더해요
 
@@ -10,8 +10,10 @@ export function seaPickSeat(x: number, y: number, occupied: ReadonlyMap<string, 
   let best: Seat | null = null;
   let bd = Infinity;
   for (const s of SEA_SEATS) {
-    const d = Math.hypot(s.x - x, s.y - y);
-    if (d > radius || d >= bd) continue;
+    // 11/16 r18 끝 걸터앉기는 데크 안 일어서는 자리에서 재고, 조금 더 멀리서도 (데크 어디서든 가까운 빈 방석)
+    const edge = s.furnitureId !== null && SEA_EDGE_SEATS.includes(s.furnitureId);
+    const d = edge ? Math.hypot(s.x - x, s.y + (s.standDy ?? 0) - y) : Math.hypot(s.x - x, s.y - y);
+    if (d > (edge ? Math.max(radius, SEA_EDGE_PICK_RADIUS) : radius) || d >= bd) continue;
     const owner = occupied.get(s.id);
     if (owner !== undefined && (mySid === null || owner !== mySid)) continue;
     best = s;

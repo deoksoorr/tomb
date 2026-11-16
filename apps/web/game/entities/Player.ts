@@ -31,6 +31,8 @@ const BODY_H = 5;
 const SNAP_MS = 160;
 /** 물속 이동 속도 배율 */
 export const SWIM_SPEED = 0.6;
+/** 11/16 r18 물가 경계에서 헤엄↔걷기가 바뀌기까지 (ms) */
+export const WET_HOLD_MS = 160;
 export const DIVE_SPEED = 0.45;
 /** 땅 위 걸음 배율 상한 (타는 펫 × 칭호 × 캠핑장 먹거리). 실시간 서버는 달리기 × 1.5를 넘는 이동을 버린다 → 그 안쪽 */
 export const MAX_GROUND_MUL = 1.48;
@@ -71,6 +73,10 @@ export class Player {
   private diving = false;
   /** 발밑이 물인지 (씬이 넣어 준다) */
   water: ((x: number, y: number) => boolean) | null = null;
+  /** 물가 경계 히스테리시스 (r18): 보이는 헤엄 여부는 새 값이 WET_HOLD_MS 이어져야 바뀌어요 */
+  private wetRaw = false;
+  private wetSince = 0;
+  private wetNow: boolean | null = null;
   /** 물살 (px/초, 씬이 넣어 준다). 물속에 있는 동안 이동 속도에 더한다 */
   current: ((x: number, y: number) => { vx: number; vy: number }) | null = null;
   /** 옆자리로 옮겨 앉는 중이면 원래 좌석 (서버가 거절하면 되돌아간다) */
@@ -282,7 +288,14 @@ export class Player {
       }
       this.stand(now, seats);
     }
-    const wet = this.water?.(this.x, this.y) ?? false;
+    // 11/16 r18 사용자 "물가를 비스듬히 걸으면 튀어요" → 물가 경계에서 헤엄·걷기가 프레임마다 바뀌지 않게 잠깐 버텨요 (히스테리시스, 마을 강·호수도 같이)
+    const raw = this.water?.(this.x, this.y) ?? false;
+    if (raw !== this.wetRaw) {
+      this.wetRaw = raw;
+      this.wetSince = now;
+    }
+    if (this.wetNow !== raw && (now - this.wetSince >= WET_HOLD_MS || this.wetNow === null)) this.wetNow = raw;
+    const wet = this.wetNow ?? raw;
     if (!wet) this.diving = false;
     if (this.titleSpeed && this.view.wearing !== this.titleLook) {
       this.titleLook = this.view.wearing;

@@ -7,6 +7,7 @@ import {
   SNAPSHOT_MAX_ENTRIES,
   SPAWN,
   STATE,
+  SEA_KAYAK_SHOUT_TTL_MS,
   decodeMove,
   encodeEvent,
   encodeSnapshot,
@@ -359,6 +360,8 @@ export class ChannelCore<C extends object> {
   private readonly chasing = new Set<number>();
   /** 채널 단위 이벤트 중복 제거: 키 → 마지막 중계 시각 */
   private readonly recentEvents = new Map<string, number>();
+  /** 11/16 r18 지금 열린 카약 「같이 타요」 (카약 → 외친 사람) */
+  private readonly kayakShouts = new Map<string, { id: string; sid: number; visitorId: string; until: number }>();
   private tickNo = 0;
   /** 22번 황금 고블린 (등장·주인 판정) */
   private readonly goblin = new GoblinCore(() => (this.host.random ? this.host.random() : Math.random()));
@@ -988,6 +991,10 @@ export class ChannelCore<C extends object> {
         if (now - (p.lastMegaphoneAt ?? -Infinity) < MEGAPHONE_INTERVAL_MS) return;
         p.lastMegaphoneAt = now;
         return this.verifyThenApply(p, "megaphone", m.grant);
+      case "kayakShout":
+        if (this.cfg.room || now - (p.lastMegaphoneAt ?? -Infinity) < MEGAPHONE_INTERVAL_MS) return;
+        p.lastMegaphoneAt = now;
+        return this.verifyThenApply(p, "kayakShout", m.grant);
       case "map":
         if (this.cfg.room) return;
         if (now - (p.lastMapAt ?? -Infinity) < MAP_INTERVAL_MS) return;
@@ -1115,6 +1122,7 @@ export class ChannelCore<C extends object> {
       return;
     }
     if (g.kind === "megaphone") return this.applyMegaphone(g);
+    if (g.kind === "kayakShout") return this.applyKayakShout(p, g);
     if (g.kind === "bbq") {
       // 한 접시는 한 번만 (같은 증서를 다시 보내도 늘어나지 않는다)
       if (!this.host.claimNonce(`b:${g.nonce}`, Math.max(g.until, g.exp * 1000))) return;
@@ -1155,6 +1163,48 @@ export class ChannelCore<C extends object> {
     const data = encodeEvent({ t: "megaphone", id: g.nonce, name: g.name, text: g.text, scope: g.scope, ch: g.ch, at: Date.now(), ...(g.staff ? { staff: true as const } : {}), ...(g.mgr ? { mgr: true as const } : {}) });
     this.broadcast(data);
     if (g.scope === "all") this.host.relayMegaphone?.(g.nonce, g.exp * 1000, data);
+  }
+
+  /**
+   * 11/16 r18 카약 「같이 타요」: 그 사람이 정말 바닷가 카약 앞자리에 앉아 있고 뒷자리가 비었을 때만 이 채널 모두에게 (마을·캠핑장 포함).
+   * 한 계정에 하나씩. 아니면 환불 증서를 돌려줘요 (웹이 20P를 돌려줘요). 뒷자리가 차거나 그 사람이 내리면 끝 알림
+   */
+  private applyKayakShout(p: Peer<C>, g: Extract<Grant, { kind: "kayakShout" }>): void {
+    const now = Date.now();
+    this.kayakShoutCheck(now);
+    const front = `${g.kayak}-0`;
+    const back = `${g.kayak}-1`;
+    const ok =
+      mapOfPeer(p) === "sea" &&
+      p.seatId === front &&
+      this.seats.get(seatKey("sea", back)) === undefined &&
+      ![...this.kayakShouts.values()].some((k) => k.visitorId === p.visitorId);
+    if (!ok || !this.host.claimNonce(`k:${g.nonce}`, now + SEA_KAYAK_SHOUT_TTL_MS)) {
+      const sign = this.host.signGrant;
+      if (!sign) return;
+      void sign({ kind: "kayakRefund", visitorId: p.visitorId, nonce: g.nonce, exp: Math.floor(now / 1000) + 600 }).then((refund) => {
+        if (refund && p.conn) this.sendTo(p, { t: "kayakShoutDenied", id: g.nonce, refund });
+      });
+      return;
+    }
+    const until = now + SEA_KAYAK_SHOUT_TTL_MS;
+    this.kayakShouts.set(g.kayak, { id: g.nonce, sid: p.sid, visitorId: p.visitorId, until });
+    this.broadcast(encodeEvent({ t: "kayakShout", id: g.nonce, name: g.name, kayak: g.kayak, ch: g.ch, at: now, until }));
+  }
+
+  /** 카약 외침이 끝났는지 (뒷자리가 참·외친 사람이 앞자리를 떠남·시간 지남) — 자리가 바뀔 때마다 */
+  private kayakShoutCheck(now = Date.now()): void {
+    for (const [kayak, k] of this.kayakShouts) {
+      if (now >= k.until) {
+        this.kayakShouts.delete(kayak);
+        continue;
+      }
+      const full = this.seats.get(seatKey("sea", `${kayak}-1`)) !== undefined;
+      const gone = this.seats.get(seatKey("sea", `${kayak}-0`)) !== k.sid;
+      if (!full && !gone) continue;
+      this.kayakShouts.delete(kayak);
+      this.broadcast(encodeEvent({ t: "kayakShoutEnd", id: k.id, why: full ? "full" : "gone" }));
+    }
   }
 
   /** 다른 채널에서 전해 온 모든 채널 확성기 (RPC). 같은 nonce는 한 번만 방송한다. 방은 받지 않는다 */
@@ -1272,6 +1322,7 @@ export class ChannelCore<C extends object> {
     this.broadcastMap(map, encodeEvent({ t: "seat", seatId, sid: p.sid }));
     if (prevSeat) this.broadcastMap(map, encodeEvent({ t: "seat", seatId: prevSeat, sid: null }));
     this.host.liveChanged?.(true);
+    if (this.kayakShouts.size) this.kayakShoutCheck();
   }
 
   private onStand(p: Peer<C>): void {
@@ -1408,6 +1459,7 @@ export class ChannelCore<C extends object> {
     this.clearRod(p);
     this.broadcastMap(mapOfPeer(p), encodeEvent({ t: "seat", seatId, sid: null }));
     this.host.liveChanged?.(true);
+    if (this.kayakShouts.size) this.kayakShoutCheck();
   }
 
   /** 랭킹 클릭 등 의도된 순간이동: 속도 검증 없이 범위만 본다. 쿨다운 안의 요청은 무시. */

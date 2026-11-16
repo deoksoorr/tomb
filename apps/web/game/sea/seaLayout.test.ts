@@ -36,6 +36,7 @@ import {
   seaWet,
 } from "@tomb/protocol";
 import { SEA_FUTURE_SPOTS, SEA_INTERACTABLES, SEA_LIGHTS, SEA_PIER_POSTS, seaFurnitureColliders, seaGroundKind, seaStandable, seaStaticColliders, seaWalkGrid } from "./seaLayout";
+import { seaPickSeat } from "./seaSit";
 import { SEA_LANDMARKS, SEA_MINIMAP_H, SEA_MINIMAP_W, seaMinimapPixels, toSeaMinimap } from "./seaMinimap";
 
 // 11/16 달물결 포구 배치: 내리는 자리에서 걸어서 갈 곳에 다 닿는지, 갯벌은 물때와 상관없이 늘 걷는지, 먼바다는 막히는지
@@ -134,7 +135,7 @@ describe("seaLayout — 걷기", () => {
   });
   it("갯벌은 물때와 상관없이 늘 걷는다 (바위만 빼고)", () => {
     const inRock = (x: number, y: number) => SEA_ROCKS.some((r) => Math.abs(x - r.x) < r.rx + 6 && Math.abs(y - r.y) < r.ry + 8);
-    for (const x of [300, 420, 520, 760, 980, 1040, 1100])
+    for (const x of [300, 420, 520, 760, 980, 1040, 1240])
       for (let y = SEA_FLAT_Y0 + 2; y <= TIDE_LOW_Y; y += 6) {
         if (inRock(x, y)) continue;
         expect(seaStandable(x, y), `${x},${y}`).toBe(true);
@@ -216,6 +217,31 @@ describe("seaLayout — 걷기", () => {
           }
     }
     expect(runs).toBeGreaterThan(40);
+  });
+  // 11/16 r18 사용자 "끝 걸터앉기가 잘 안 잡혀요" — 데크 위 여러 자리(옆·비스듬히)에서 가장 가까운 빈 방석을 골라요, 일어서는 자리는 데크 안
+  it("끝 걸터앉기: 데크 위 어디서든 가까운 빈 방석, 일어서는 자리는 데크 안·앉는 자리는 가장자리", () => {
+    const empty = new Map<string, number>();
+    for (const fid of ["pE1", "pE2"]) {
+      const seats = SEA_SEATS.filter((q) => q.furnitureId === fid);
+      for (const q of seats) {
+        const stand = { x: q.x, y: q.y + (q.standDy ?? 0) };
+        expect(seaStandable(stand.x, stand.y), `${q.id} stand`).toBe(true);
+        expect(onSeaDeck(stand.x, stand.y), `${q.id} stand on deck`).toBe(true);
+        expect(onSeaDeck(q.x, q.y), `${q.id} sits on the rim`).toBe(false);
+        // 옆·비스듬히·바로 위에서 다가가도 그 방석이 골라져요
+        for (const [dx, dy] of [[0, -6], [-8, -10], [8, -10], [-14, 0], [14, 0], [0, -18]]) {
+          const p = { x: stand.x + dx, y: stand.y + dy };
+          if (!seaStandable(p.x, p.y)) continue;
+          const got = seaPickSeat(p.x, p.y, empty, null);
+          expect(got?.furnitureId, `${q.id} from ${dx},${dy}`).toBe(fid);
+        }
+      }
+      // 가운데 방석에 누가 있으면 옆 방석을 골라요
+      const mid = seats[1];
+      const taken = new Map([[mid.id, 99]]);
+      const got = seaPickSeat(mid.x, mid.y + (mid.standDy ?? 0), taken, null);
+      expect(got && got.id !== mid.id && got.furnitureId === fid).toBe(true);
+    }
   });
   // 11/16 r14 제트스키 부잔교: 내려서는 자리·다리는 막히지 않고, 다리로 선착장 몸통(→ 백사장)과 이어져요
   it("제트스키 부잔교에서 내려 선착장으로 걸어 나가요", () => {

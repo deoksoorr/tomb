@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DIR, MAX_VALID_SPEED, SEA_JET_MIN_Y, SEA_JETSKI_SPEED, SEA_JETSKIS, SEA_PIER, SEA_PIER_END, SEA_TUBE_SPEED, seaJetWater, tideLineY } from "@tomb/protocol";
+import { DIR, MAX_VALID_SPEED, SEA_JET_MIN_Y, SEA_JETSKI_SPEED, SEA_JETSKIS, SEA_KAYAK_SPEED, SEA_PIER, SEA_PIER_END, SEA_TUBE_SPEED, seaJetWater, tideLineY } from "@tomb/protocol";
 import { ROW_SPEED } from "../logic/boat";
-import { rideFacing, stepJet, stepTube, tubeReturnK, type RideMotion } from "./seaRideLogic";
+import { kayakSeatOffset, rideFacing, stepJet, stepKayak, stepTube, tubeReturnK, type RideMotion } from "./seaRideLogic";
 
 const at = (x: number, y: number): RideMotion => ({ x, y, vx: 0, vy: 0, dir: DIR.down });
 
@@ -78,5 +78,27 @@ describe("seaRideLogic (11/16 r13)", () => {
     expect(tubeReturnK(100, 0)).toBe(0);
     expect(tubeReturnK(100, 60_000)).toBe(1);
     expect(tubeReturnK(100, 2_500)).toBeGreaterThan(0.2);
+  });
+  // 11/16 r18 카약
+  it("카약: 얕은 물은 다니고, 마른 갯벌 쪽으로 저으면 모래에 대며 내려요, 선착장 몸통은 못 지나가요", () => {
+    const level = 0.5;
+    const line = tideLineY(level);
+    const m = at(1300, line + 40);
+    let land: { x: number; y: number } | null = null;
+    for (let i = 0; i < 600 && !land; i++) land = stepKayak(m, { ax: 0, ay: -1 }, 16, level, 0).land;
+    expect(land).not.toBeNull();
+    expect(land!.y).toBeLessThan(line + 4);
+    // 선착장 몸통 서쪽에서 동쪽으로 → 막혀요
+    const k = at(SEA_PIER.x - 20, 700);
+    for (let i = 0; i < 300; i++) stepKayak(k, { ax: 1, ay: 0 }, 16, 1, 0);
+    expect(k.x).toBeLessThan(SEA_PIER.x);
+    // 가만히 있어도 물결 따라 떠다녀요 (속도는 카약 속도보다 작아요)
+    const d = at(500, 820);
+    for (let i = 0; i < 2000; i++) stepKayak(d, { ax: 0, ay: 0 }, 16, 0.5, i * 16, 2.3);
+    expect(Math.hypot(d.x - 500, d.y - 820)).toBeGreaterThan(6);
+    expect(SEA_KAYAK_SPEED).toBe(36);
+    // 먼저 탄 사람(자리 0)은 앞에서 조종, 같이 탄 사람(자리 1)은 뒤
+    expect(kayakSeatOffset(DIR.right, 0).dx).toBeGreaterThan(0);
+    expect(kayakSeatOffset(DIR.right, 1).dx).toBeLessThan(0);
   });
 });

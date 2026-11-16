@@ -42,6 +42,8 @@ export type C2S =
   | { t: "goblin"; id: string }
   /** 23번: 확성기 1번. Vercel이 서명한 megaphone 증서 (닉네임·문장이 들어 있다) */
   | { t: "megaphone"; grant: string }
+  /** 11/16 r18 카약 「같이 타요」 (웹이 서명한 증서) */
+  | { t: "kayakShout"; grant: string }
   /**
    * 3번 집 안 가구 쓰기 (방 전용): u = 가구 배치 id(또는 창문 "w0"…), a = 동작 값 0..255 (피아노 음·불 켜짐·간식 번호 …).
    * 서버는 같은 방 다른 사람에게 그대로 중계한다 (USE_INTERVAL_MS 간격). 뜻은 클라이언트(game/housing/interact.ts)가 정한다
@@ -140,6 +142,10 @@ export type S2C =
   // ── 23번 확성기 (옛 클라이언트는 모르는 t라 그냥 버린다) ──
   /** 확성기 한마디. id = 확성기 기록 id(중복 표시 방지), ch = 외친 채널, scope = all이면 모든 채널에 퍼졌다 */
   | MegaphoneMsg
+  /** 11/16 r18 카약 「같이 타요」: 채널 모두에게 (id = 증서 nonce, until = 저절로 끝나는 시각) · 끝남(자리 참·내림) · 거절(환불 증서) */
+  | { t: "kayakShout"; id: string; name: string; kayak: string; ch: number; at: number; until: number }
+  | { t: "kayakShoutEnd"; id: string; why: "full" | "gone" }
+  | { t: "kayakShoutDenied"; id: string; refund: string }
   /** 3번: 같은 방 사람이 집 안 가구를 썼다 (옛 클라이언트는 모르는 t라 버린다) */
   | { t: "use"; sid: Sid; u: string; a: number }
   /** 5번: 이모티콘 (보낸 사람 빼고. 옛 클라이언트는 모르는 t라 버린다) */
@@ -288,6 +294,8 @@ export function parseC2S(text: string): C2S | null {
       return typeof m.id === "string" && GOBLIN_ID_RE.test(m.id) ? { t: "goblin", id: m.id } : null;
     case "megaphone":
       return typeof m.grant === "string" && m.grant.length <= MAX_GRANT_LEN ? { t: "megaphone", grant: m.grant } : null;
+    case "kayakShout":
+      return typeof m.grant === "string" && m.grant.length <= MAX_GRANT_LEN ? { t: "kayakShout", grant: m.grant } : null;
     case "act":
       return typeof m.kind === "string" && (ACT_KINDS as readonly string[]).includes(m.kind) ? { t: "act", kind: m.kind as ActKind } : null;
     case "emo":

@@ -66,8 +66,9 @@ type View = {
 };
 
 /** 튜브에 탄 사람이 물에 잠기는 깊이 · 제트스키 안장 높이 (px) */
-const TUBE_SINK = -2;
-const JET_LIFT = 4;
+// r18 사용자: 튜브는 몸통이 구멍 안에 (머리·어깨만 앞 고리 위로), 제트스키는 앉은 자세로 안장에 (다리는 앞 덮개에 가려요)
+const TUBE_SINK = -11;
+const JET_LIFT = 1;
 /** 올라타는 거리 (튜브 가운데·매어 둔 자리에서) */
 const TUBE_REACH = 22;
 const JET_REACH = 40;
@@ -104,14 +105,17 @@ export class SeaRides {
   private readonly blocks: Phaser.Physics.Arcade.StaticGroup;
   private readonly blockCollider: Phaser.Physics.Arcade.Collider;
 
-  constructor(private readonly host: SeaRideHost) {
+  constructor(readonly host: SeaRideHost) {
     const s = host.scene;
     const T = Art.SEA_TEX;
     for (const def of SEA_RIDES) {
       const tube = def.kind === "tube";
       const key = tube ? T.tube(def.n) : T.jetski("side", def.n);
       const body = s.add.image(def.x, def.y, key).setOrigin(0.5, tube ? Art.TUBE_CY / Art.TUBE_H : 1);
-      const front = tube ? s.add.image(def.x, def.y, key).setOrigin(0.5, Art.TUBE_CY / Art.TUBE_H).setCrop(0, Art.TUBE_CY, Art.TUBE_W, Art.TUBE_H - Art.TUBE_CY).setVisible(false) : null;
+      // 앞 덮개: 튜브는 앞 고리, 제트스키는 몸통 아래쪽 (탄 사람 다리를 가려요)
+      const front = tube
+        ? s.add.image(def.x, def.y, key).setOrigin(0.5, Art.TUBE_CY / Art.TUBE_H).setCrop(0, Art.TUBE_CY, Art.TUBE_W, Art.TUBE_H - Art.TUBE_CY).setVisible(false)
+        : s.add.image(def.x, def.y, key).setOrigin(0.5, 1).setVisible(false);
       const block = s.add.zone(def.x, def.y, 1, 1).setOrigin(0, 0);
       block.removeFromDisplayList();
       this.views.push({ def, body, front, x: def.x, y: def.y, dir: DIR.down, owner: null, leftFrom: null, leftAt: 0, speed: 0, lastX: def.x, lastY: def.y, wakeAt: 0, sprayAt: 0, block, blockKey: "", passUntil: 0 });
@@ -420,23 +424,39 @@ export class SeaRides {
     }
     let lift = 0;
     if (v.def.kind === "tube") {
-      v.body.setPosition(x, y).setDepth(ridden ? v.y - 1 : v.y).setAlpha(alpha);
+      // 탄 사람 크기(바베큐로 커진 것 포함)에 맞춰 고리도 커져요
+      const big = ridden ? this.riderBig(v, rider) : 1;
+      v.body.setPosition(x, y).setDepth(ridden ? v.y - 1 : v.y).setAlpha(alpha).setScale(big);
       if (ridden) v.body.setCrop(0, 0, Art.TUBE_W, Art.TUBE_CY);
       else v.body.setCrop();
-      v.front?.setVisible(ridden).setPosition(x, y).setDepth(v.y + 3);
-      lift = TUBE_SINK + bob;
+      v.front?.setVisible(ridden).setPosition(x, y).setDepth(v.y + 3).setScale(big);
+      lift = TUBE_SINK * big + bob;
     } else {
       const side = v.dir === DIR.left || v.dir === DIR.right;
       const key = T.jetski(side ? "side" : v.dir === DIR.up ? "back" : "front", v.def.n);
       if (v.body.texture.key !== key) v.body.setTexture(key);
       v.body.setFlipX(v.dir === DIR.left).setPosition(x, y + 5).setDepth(v.y).setAlpha(alpha);
+      // 앞 덮개: 몸통 아래쪽 줄(옆 8줄 · 앞뒤 8줄)만 탄 사람 앞에 한 번 더 — 앉은 사람 다리가 가려요
+      if (v.front) {
+        const fw = side ? Art.JET_SIDE_W : Art.JET_FB_W;
+        const fh = side ? Art.JET_SIDE_H : Art.JET_FB_H;
+        if (v.front.texture.key !== key) v.front.setTexture(key);
+        v.front.setVisible(ridden).setFlipX(v.dir === DIR.left).setPosition(x, y + 5).setCrop(0, fh - 8, fw, 8).setDepth(v.y + 3).setAlpha(alpha);
+      }
+      // 달릴 때 살짝 앞으로 (들썩)
       lift = JET_LIFT + bob + (v.speed > 30 && !this.host.reduced ? Math.sin(wall / 70) * 0.6 : 0);
     }
     this.syncBlock(v, x, y);
     // 11/16 r14 사용자: 튜브에선 머리(와 어깨)만 고리 위로 — 헤엄 자세 그림으로 몸을 물에 담가요 (뒤 고리 < 사람 < 앞 고리)
-    const ride = { ox: 0, lift: Math.round(lift), depth: v.y + 1, ...(v.def.kind === "tube" ? { alt: "swim" as const } : {}) };
+    const ride = { ox: 0, lift: Math.round(lift), depth: v.y + 1, alt: v.def.kind === "tube" ? ("swim" as const) : ("sitChair" as const) };
     if (v.owner === -1) this.host.player().view.ride = ride;
     else if (rider) rider.view.ride = ride;
+  }
+
+  /** 탄 사람 몸 크기 배율 (바베큐로 커진 것) */
+  private riderBig(v: View, rider: RemoteAvatar | null): number {
+    const view = v.owner === -1 ? this.host.player().view : rider?.view;
+    return view ? Math.max(1, view.bigScale) : 1;
   }
 
   /** 부딪히는 몸을 그림 자리·방향에 맞춰요 (바뀔 때만 — 마을 배 hull과 같은 방식) */

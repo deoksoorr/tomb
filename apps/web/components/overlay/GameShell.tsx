@@ -97,6 +97,7 @@ import CampBgm from "../camp/CampBgm";
 import CampBbq from "../camp/CampBbq";
 import MegaphoneLayer from "./MegaphoneDialog";
 import MegaphoneFeed from "./MegaphoneFeed";
+import KayakShout from "../sea/KayakShout";
 import { useSocial } from "./useSocial";
 // 창 빈자리 채우기: 묘비·랭킹 안내, 채널 기록
 import GraveGuide from "../account/GraveGuide";
@@ -968,6 +969,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "friends" && <FriendsDialog onClose={closePanel} />}
       {panel === "staffEarn" && iAmStaff && <StaffEarnDialog onClose={closePanel} />}
       <MegaphoneLayer channel={channel} onOpenShop={() => setPanel("shop")} />
+      {/* 11/16 r18 카약 「같이 타요」 (부르기 버튼 · 채널에 온 외침과 [같이 타기]) */}
+      <KayakShout channel={channel} />
       {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
     </div>
   );

@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, CAMP_ARRIVE, DIR, SEA_ARRIVE, SEA_JETSKIS, SEA_JETSKI_SPEED, SEA_TUBE_SPEED, SPAWN, STATE, decodeSnapshot, encodeEvent, encodeMove, seaSeatById, SEA_FISHING_SPOTS, SEA_REST_SEATS, signJoinToken, type C2S, type S2C, type StateId } from "@tomb/protocol";
+import { AVATAR_COLORS, CAMP_ARRIVE, DIR, SEA_ARRIVE, SEA_KAYAKS, SEA_KAYAK_SPEED, SEA_JETSKIS, SEA_JETSKI_SPEED, SEA_TUBE_SPEED, SPAWN, STATE, decodeSnapshot, encodeEvent, encodeMove, seaSeatById, SEA_FISHING_SPOTS, SEA_REST_SEATS, signJoinToken, type C2S, type S2C, type StateId } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
 import { admit } from "./auth";
 import { ChannelCore, MAP_INTERVAL_MS, type ChannelHost, type JoinTicket } from "./channel";
@@ -240,6 +240,34 @@ describe("sea map (11/16 달물결 포구)", () => {
     expect(core.peer(2)).toMatchObject({ seatId: "pJ1", x: Math.round(x), y: Math.round(y) });
   });
 
+  // 11/16 r18 2인승 카약: 노 젓는 사람(뒤 자리) + 같이 탄 사람(앞 자리). 같이 타기는 노 젓는 사람 곁이면 바다 위에서도
+  it("11/16 r18 two riders share a kayak: driver at the dock, a passenger joins beside the driver out at sea, both move at kayak speed", () => {
+    const { core, join } = setup();
+    const k = SEA_KAYAKS[0];
+    const w = join("w", { sea: true, map: "sea", spawn: { x: k.x, y: k.y - 30 } });
+    const a = join("a", { sea: true, map: "sea", spawn: { x: k.x, y: k.y - 26 } });
+    core.message(a, send({ t: "sit", seatId: "pK1-0" }), 1000);
+    expect(core.peer(2)).toMatchObject({ seatId: "pK1-0", state: STATE.boat });
+    // 노 저어 바다로 2초 (카약 속도)
+    let x = k.x;
+    let y = k.y;
+    for (let t = 1100; t <= 3000; t += 100) {
+      y += SEA_KAYAK_SPEED * 0.1;
+      core.message(a, move(Math.round(x), Math.round(y), STATE.boat), t);
+    }
+    expect(core.peer(2)).toMatchObject({ seatId: "pK1-0", y: Math.round(y) });
+    // 헤엄쳐 온 사람이 곁에서 앞 자리에 같이 타요 (매어 둔 자리에서 멀어도)
+    const b = join("b", { sea: true, map: "sea", spawn: { x: Math.round(x), y: Math.round(y) + 10 } });
+    core.message(b, send({ t: "sit", seatId: "pK1-1" }), 3100);
+    expect(events(b)).not.toContainEqual({ t: "seatDenied", seatId: "pK1-1" });
+    expect(core.peer(3)).toMatchObject({ seatId: "pK1-1", state: STATE.boat });
+    expect(events(w)).toContainEqual({ t: "seat", seatId: "pK1-1", sid: 3 });
+    // 같은 카약 두 자리는 한 사람씩
+    const c = join("c", { sea: true, map: "sea", spawn: { x: Math.round(x), y: Math.round(y) + 12 } });
+    core.message(c, send({ t: "sit", seatId: "pK1-1" }), 3200);
+    expect(events(c)).toContainEqual({ t: "seatDenied", seatId: "pK1-1" });
+  });
+
   it("?m=sea goes to the sea only with the sea claim", async () => {
     expect(parseMap("sea")).toBe("sea");
     expect(parseMap("ocean")).toBe("village");
@@ -254,5 +282,57 @@ describe("sea map (11/16 달물결 포구)", () => {
     const t = await admit("secret", without, 1, { x: 300, y: 600 }, "sea");
     expect(t?.map).toBeUndefined();
     expect(t?.spawn).toBeUndefined();
+  });
+
+  // 11/16 r18 카약 「같이 타요」: 앞자리에 앉아 뒷자리가 빈 사람만 채널에 외쳐요. 뒷자리가 차면 끝, 아니면 환불 증서
+  it("11/16 r18 kayak shout: broadcast only from a kayak front seat with an empty back seat, ends when the back seat fills, refund otherwise", async () => {
+    const host: ChannelHost<Conn> = {
+      send: (c, d) => void c.out.push(d),
+      close: () => {},
+      persist: () => {},
+      saveReservation: () => {},
+      dropReservation: () => {},
+      requestTick: () => {},
+      countChanged: () => {},
+      lastPing: () => 0,
+      visitorJoined: () => {},
+      visitorLeft: () => {},
+      verifyGrant: async (g) => JSON.parse(g),
+      signGrant: async (g) => JSON.stringify(g),
+      claimNonce: (() => {
+        const seen = new Set<string>();
+        return (k: string) => (seen.has(k) ? false : (seen.add(k), true));
+      })(),
+    };
+    const core = new ChannelCore<Conn>({ capacity: 10, graceMs: 20_000 }, host);
+    const join = (id: string, o: { sea?: boolean; map?: "sea"; spawn?: { x: number; y: number } } = {}) => {
+      const c: Conn = { id, out: [] };
+      core.join(c, { visitorId: id, name: id, color: AVATAR_COLORS[0], channel: 1, spawn: o.spawn, look: [], body: "hood", ...(o.sea ? { sea: true as const } : {}), ...(o.map ? { map: o.map } : {}) }, 0);
+      return c;
+    };
+    const k = SEA_KAYAKS[0];
+    const village = join("v");
+    const a = join("a", { sea: true, map: "sea", spawn: { x: k.x, y: k.y - 26 } });
+    const shout = (nonce: string, visitorId = "a") => send({ t: "kayakShout", grant: JSON.stringify({ kind: "kayakShout", visitorId, nonce, name: "가람", kayak: "pK1", ch: 1, exp: 9e12 }) });
+    const tick = () => new Promise((r) => setTimeout(r, 0));
+    // 앉지 않고 외치면 → 환불 증서
+    core.message(a, shout("n1"), 1000);
+    await tick();
+    await tick();
+    const denied = events(a).find((e) => e.t === "kayakShoutDenied") as Extract<S2C, { t: "kayakShoutDenied" }> | undefined;
+    expect(denied?.id).toBe("n1");
+    expect(JSON.parse(denied!.refund)).toMatchObject({ kind: "kayakRefund", visitorId: "a", nonce: "n1" });
+    // 앞자리에 앉아 외치면 → 마을에 있는 사람까지 채널 모두가 받아요
+    core.message(a, send({ t: "sit", seatId: "pK1-0" }), 5000);
+    clear(a, village);
+    core.message(a, shout("n2"), 9000);
+    await tick();
+    await tick();
+    expect(events(village)).toContainEqual(expect.objectContaining({ t: "kayakShout", id: "n2", kayak: "pK1", name: "가람" }));
+    // 뒷자리가 차면 → 끝 (자리 찼어요)
+    const b = join("b", { sea: true, map: "sea", spawn: { x: k.x, y: k.y - 20 } });
+    clear(village);
+    core.message(b, send({ t: "sit", seatId: "pK1-1" }), 9500);
+    expect(events(village)).toContainEqual({ t: "kayakShoutEnd", id: "n2", why: "full" });
   });
 });

@@ -1,6 +1,6 @@
 import { DIR, STATE, type DirId } from "./types";
 import { MAP_HEIGHT, MAP_WIDTH, SPOT_KINDS, fishingWaterOf, seatSlot, spotKindOfState, type FishingSpot, type Campfire, type Furniture, type Seat, type SeatSlot } from "./world";
-import { SEA_ARRIVE, SEA_FISHING_SPOTS, SEA_JETSKI_RADIUS, SEA_REST_SEATS, SEA_RIDES, SEA_HEIGHT, SEA_SEATS, SEA_TUBE_RADIUS, SEA_WIDTH, seaFishingSpotById } from "./sea";
+import { SEA_ARRIVE, SEA_FISHING_SPOTS, SEA_JETSKI_RADIUS, SEA_KAYAK_RADIUS, SEA_KAYAK_SEATS, SEA_REST_SEATS, SEA_RIDES, SEA_HEIGHT, SEA_SEATS, SEA_TUBE_RADIUS, SEA_WIDTH, seaFishingSpotById } from "./sea";
 
 // 11/15 두 번째 맵 「언젠가 캠핑장 · Someday Camp」 (1차: 맵·버스·앉기·NPC 말 걸기).
 // "언젠가 캠핑 가야지" 하고 장비만 사 두고 못 간 그곳 — 늦가을 숲, 계곡, 캠프파이어 광장, 번호 붙은 빈 데크 24자리.
@@ -301,6 +301,9 @@ for (const r of SEA_RIDES)
     radius: r.kind === "tube" ? SEA_TUBE_RADIUS : SEA_JETSKI_RADIUS,
     ...(r.kind === "tube" ? { drift: true } : {}),
   });
+// 11/16 r18 2인승 카약: 같은 카약 두 자리 (가구 id = 카약). 같이 타기는 노 젓는 사람 곁이면 바다 위에서도 (조각배 2인승과 같은 서버 규칙)
+for (const q of SEA_KAYAK_SEATS)
+  seaSlots.set(q.id, { id: q.id, kind: "boat", x: q.x, y: q.y, facing: DIR.down, state: STATE.boat, furnitureId: q.kayak, mobile: true, radius: SEA_KAYAK_RADIUS, drift: true });
 
 // ── 맵별 판정 (서버·클라이언트 공통) ──
 

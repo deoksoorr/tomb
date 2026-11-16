@@ -484,6 +484,11 @@ export class RealtimeClient {
     this.send({ t: "megaphone", grant });
   }
 
+  /** 11/16 r18 카약 「같이 타요」 증서 (Vercel 서명 — 실시간 서버가 카약 앞자리인지 보고 채널에 방송해요) */
+  kayakShout(grant: string): void {
+    this.send({ t: "kayakShout", grant });
+  }
+
   /** 한 번 하는 동작 (종 치기 등). 서버가 같은 채널에 중계한다 */
   act(kind: ActKind): void {
     this.send({ t: "act", kind });
@@ -852,6 +857,17 @@ export class RealtimeClient {
           break;
         case "goblinGrant":
           if (typeof m.grant === "string") this.cb.onGoblinGrant?.(m.id, m.grant, Number(m.points) || 0);
+          break;
+        // ── 11/16 r18 카약 「같이 타요」 (어느 장면에 있든 UI가 받아요 — 마을·캠핑장·바닷가) ──
+        case "kayakShout":
+          if (typeof m.id === "string" && typeof m.name === "string" && typeof m.kayak === "string")
+            bridge.emit("kayak:shout", { id: m.id, name: m.name, kayak: m.kayak, ch: Number(m.ch) || 0, at: Number(m.at) || Date.now(), until: Number(m.until) || Date.now() + 120_000 });
+          break;
+        case "kayakShoutEnd":
+          if (typeof m.id === "string") bridge.emit("kayak:shoutEnd", { id: m.id, why: m.why === "full" ? "full" : "gone" });
+          break;
+        case "kayakShoutDenied":
+          if (typeof m.id === "string" && typeof m.refund === "string") bridge.emit("kayak:shoutDenied", { id: m.id, refund: m.refund });
           break;
         // ── 23번 확성기 ──
         case "megaphone":

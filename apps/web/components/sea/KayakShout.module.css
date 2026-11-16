@@ -1,0 +1,38 @@
+.wrap {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 30;
+  max-width: calc(100vw - 32px);
+}
+.call,
+.join,
+.row {
+  pointer-events: auto;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(20, 28, 40, 0.86);
+  color: #f4f0e6;
+  font-size: 13px;
+}
+.text {
+  overflow-wrap: anywhere;
+}
+.note {
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(20, 28, 40, 0.8);
+  color: #f4f0e6;
+  font-size: 12px;
+}

@@ -1,4 +1,4 @@
-import { DIR, SEA_JET_MIN_Y, SEA_JETSKI_SPEED, SEA_TUBE_SPEED, seaJetWater, seaRideBlocked, seaTubeWater, tideLineY, type DirId } from "@tomb/protocol";
+import { DIR, SEA_JET_MIN_Y, SEA_JETSKI_SPEED, SEA_KAYAK_SEAT_GAP, SEA_KAYAK_SPEED, SEA_TUBE_SPEED, seaJetWater, seaKayakWater, seaRideBlocked, seaTubeWater, tideLineY, type DirId } from "@tomb/protocol";
 
 // 11/16 r13 바다 놀거리 움직임 (순수 — 시험은 seaRideLogic.test).
 //  - 튜브: 방향키로 천천히 노 젓기 (헤엄보다 느려요), 물결이 살짝 밀어요. 모래에 닿으면 내려요(land), 선착장·바위·배에는 살짝 멈춰요
@@ -109,4 +109,41 @@ export function tubeReturnK(dist: number, sinceMs: number): number {
   const dur = Math.min(20_000, Math.max(4_000, (dist / 20) * 1000));
   const k = Math.min(1, Math.max(0, sinceMs / dur));
   return k * k * (3 - 2 * k);
+}
+
+/**
+ * 11/16 r18 카약 한 걸음 (노 젓는 사람 쪽에서). 얕은 물도 다녀요 (마른 갯벌·모래·데크·바위·매어 둔 제트스키는 안 돼요).
+ * 아무도 노를 안 저어도 튜브와 같은 물결 흐름으로 떠다녀요 (노를 저으면 그 위에 더해요). 모래 쪽으로 저어 마른 곳에 닿으면 land (둘 다 내려요)
+ */
+export function stepKayak(m: RideMotion, input: RideInput, dtMs: number, level: number, t: number, phase = 0): RideStep {
+  const dt = Math.min(100, Math.max(0, dtMs));
+  const i = clampInput(input);
+  m.vx = approach(m.vx, i.ax * SEA_KAYAK_SPEED, dt, 450);
+  m.vy = approach(m.vy, i.ay * SEA_KAYAK_SPEED, dt, 450);
+  const c = tubeCurrent(t, phase);
+  const nx = m.x + ((m.vx + c.x) * dt) / 1000;
+  const ny = m.y + ((m.vy + c.y) * dt) / 1000;
+  const out: RideStep = { land: null, shallow: false, bumped: false };
+  if (seaKayakWater(nx, ny, level)) {
+    m.x = nx;
+    m.y = ny;
+  } else if (!seaRideBlocked(nx, ny, 7) && ny < tideLineY(level) + 10 && i.ay < 0) {
+    out.land = { x: Math.round(nx), y: Math.round(Math.min(ny, tideLineY(level) + 2) - 6) };
+  } else {
+    out.bumped = Math.hypot(m.vx, m.vy) > 10;
+    if (seaKayakWater(nx, m.y, level)) m.x = nx;
+    else m.vx *= -0.2;
+    if (seaKayakWater(m.x, ny, level)) m.y = ny;
+    else m.vy *= -0.2;
+  }
+  m.dir = rideFacing(m.vx, m.vy, m.dir);
+  return out;
+}
+/** 카약 두 자리 (0 = 앞 · 먼저 탄 사람이 노 저어 조종, 1 = 뒤 · 같이 탄 사람)가 카약 가운데에서 떨어진 만큼 (가는 쪽이 앞) */
+export function kayakSeatOffset(dir: DirId, k: 0 | 1): { dx: number; dy: number } {
+  const g = SEA_KAYAK_SEAT_GAP * (k === 0 ? 1 : -1);
+  if (dir === DIR.right) return { dx: g, dy: 0 };
+  if (dir === DIR.left) return { dx: -g, dy: 0 };
+  if (dir === DIR.up) return { dx: 0, dy: -g };
+  return { dx: 0, dy: g };
 }

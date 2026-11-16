@@ -31,6 +31,8 @@ import {
   SEA_PIER,
   SEA_PIER_END,
   SEA_PIER_ARM,
+  SEA_KAYAK_WALK,
+  SEA_KAYAK_DOCK,
   SEA_PONTOON,
   SEA_PONTOON_RAMP,
   SEA_REALTY,
@@ -379,6 +381,9 @@ export class SeaMap implements SeaMapApi {
     this.keep(s.add.image(SEA_PIER_END.x, SEA_PIER_END.y, T.pierEnd).setOrigin(0, 0).setDepth(SEA_DEPTH.deck + 1));
     // 11/16 r15 서쪽 낚시 가지 (몸통보다 한 단 아래 depth — 몸통 가장자리가 위에 겹쳐요)
     this.keep(s.add.image(SEA_PIER_ARM.x, SEA_PIER_ARM.y, T.pierArm).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 1));
+    // 11/16 r18 카약 선착장 (다리 · 뜬 데크 — 선착장 판보다 낮게)
+    this.keep(s.add.image(SEA_KAYAK_WALK.x, SEA_KAYAK_WALK.y, T.kayakWalk).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 2));
+    this.keep(s.add.image(SEA_KAYAK_DOCK.x - 2, SEA_KAYAK_DOCK.y, T.kayakDock).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 1));
     // 11/16 r14 제트스키 부잔교 (물에 떠서 선착장보다 낮게 — 선착장 판 아래 depth) · 다리
     this.keep(s.add.image(SEA_PONTOON.x - 2, SEA_PONTOON.y, T.pontoon).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 2));
     this.keep(s.add.image(SEA_PONTOON_RAMP.x, SEA_PONTOON_RAMP.y, T.pontoonRamp).setOrigin(0, 0).setDepth(SEA_DEPTH.deck - 1));
@@ -514,7 +519,8 @@ export class SeaMap implements SeaMapApi {
     // 끝 걸터앉기 방석 (선착장 끝·방파제 끝 같은 색 셋 — 앉는 자리가 눈에 띄게) + 작은 이름표
     for (const f of SEA_FURNITURE) {
       if (!SEA_EDGE_SEATS.includes(f.id)) continue;
-      f.seatOffsets.forEach((dx, i) => this.keep(s.add.image(f.x + dx, f.y + 3, T.cushion(i % 3)).setOrigin(0.5, 1).setDepth(SEA_DEPTH.deck + 2)));
+      // r18 방석은 데크 가장자리 바로 안쪽 (앉은 사람은 그 위 가장자리에 걸터앉아요)
+      f.seatOffsets.forEach((dx, i) => this.keep(s.add.image(f.x + dx, f.y - 1, T.cushion(i % 3)).setOrigin(0.5, 1).setDepth(SEA_DEPTH.deck + 2)));
       this.addLabel(f.x, f.y + 14, "걸터앉기", 0xfff0c8, 1);
     }
   }
@@ -1367,6 +1373,14 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.pierEnd, () => Art.withDetail(Art.pierEndArt(), { wood: true }));
   tex(T.pontoon, () => Art.withDetail(Art.pontoonArt(), { wood: true }));
   tex(T.pierArm, () => Art.withDetail(Art.pierArmArt(), { wood: true }));
+  // 11/16 r18 카약 · 노 · 카약 선착장
+  for (let v = 0; v < 3; v++) {
+    tex(T.kayak("side", v), () => Art.kayakSideArt(v));
+    tex(T.kayak("vert", v), () => Art.kayakVertArt(v));
+  }
+  tex(T.paddle, Art.paddleArt);
+  tex(T.kayakWalk, () => Art.withDetail(Art.kayakWalkArt(), { wood: true }));
+  tex(T.kayakDock, () => Art.withDetail(Art.kayakDockArt(), { wood: true }));
   tex(T.pontoonRamp, () => Art.withDetail(Art.pontoonRampArt(), { wood: true }));
   tex(T.post, () => Art.withDetail(Art.postArt(), { wood: true }));
   tex(T.breakwater, () => Art.withDetail(Art.breakwaterArt(), {}));

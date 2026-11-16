@@ -12,6 +12,16 @@ import {
   SEA_PONTOON_RAMP,
   SEA_PIER,
   SEA_PIER_ARM,
+  SEA_KAYAKS,
+  SEA_KAYAK_SEATS,
+  SEA_KAYAK_DOCK,
+  SEA_KAYAK_WALK,
+  SEA_KAYAK_SPEED,
+  SEA_DECKS,
+  SEA_FLAT_Y0,
+  seaKayakSeatById,
+  seaKayakWater,
+  seaKayakDismount,
   SEA_SEATS,
   SEA_FISHING_SPOTS,
   seaFishBobber,
@@ -107,5 +117,27 @@ describe("sea rides", () => {
       expect(seaRideById(r.id)).toBe(r);
       expect(seatSlotIn("village", r.id)).toBeUndefined();
     }
+  });
+  // 11/16 r18 2인승 카약
+  it("카약 자리: 같은 카약 두 자리(가구 = 카약), 움직이는 자리·탄 곳 그대로, 매어 둔 자리는 간조에도 물", () => {
+    expect(SEA_KAYAK_SEATS.map((q) => q.id)).toEqual(["pK1-0", "pK1-1", "pK2-0", "pK2-1", "pK3-0", "pK3-1"]);
+    for (const q of SEA_KAYAK_SEATS) {
+      expect(seatSlotIn("sea", q.id)).toMatchObject({ kind: "boat", state: STATE.boat, mobile: true, drift: true, furnitureId: q.kayak });
+      expect(seaKayakSeatById(q.id)).toBe(q);
+    }
+    for (const k of SEA_KAYAKS) {
+      expect(seaKayakWater(k.x, k.y, 0), `${k.x},${k.y}`).toBe(true);
+      const d = seaKayakDismount(k);
+      expect(onSeaDeck(d.x, d.y)).toBe(true);
+    }
+    // 카약 선착장은 데크 (난간·데크 몸 규칙 같아요), 백사장과 다리로 이어져요
+    expect(SEA_DECKS).toContain(SEA_KAYAK_DOCK);
+    expect(SEA_DECKS).toContain(SEA_KAYAK_WALK);
+    expect(SEA_KAYAK_WALK.y).toBeLessThan(SEA_FLAT_Y0);
+    expect(SEA_KAYAK_SPEED).toBeGreaterThan(SEA_TUBE_SPEED);
+    expect(SEA_KAYAK_SPEED).toBeLessThan(46);
+    // 마른 갯벌(간조)은 못 다녀요, 얕은 물은 다녀요
+    expect(seaKayakWater(1300, 560, 0)).toBe(false);
+    expect(seaKayakWater(1300, 640, 0)).toBe(true);
   });
 });

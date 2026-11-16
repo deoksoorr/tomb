@@ -20,7 +20,7 @@ export type RideBody = {
 };
 
 /** 장면이 매 프레임 (pet = 타는 펫에 올라타 있음, 11/16 r13 seaRide = 바닷가 튜브·제트스키): 바뀌었을 때만 알린다 */
-export function publishRide(pl: RideBody, pet: boolean, seaRide: "tube" | "jetski" | null = null): void {
+export function publishRide(pl: RideBody, pet: boolean, seaRide: "tube" | "jetski" | "kayak" | null = null): void {
   const st = rideStatusOf({ state: pl.state, inBoat: pl.inBoat, inCar: pl.inCar, pet, seaRide });
   if (sameRide(bridge.last("player:ride"), st)) return;
   bridge.emit("player:ride", st);

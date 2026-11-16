@@ -10,6 +10,7 @@ describe("rideStatusOf: 탈것은 막고 자리는 일어나기", () => {
     expect(rideStatusOf({ ...free, state: "boat", inBoat: true })).toEqual({ ride: "boat", seated: false });
     // 11/16 r13 바닷가 튜브·제트스키 (자세는 boat, 이름은 따로)
     expect(rideStatusOf({ ...free, state: "boat", inBoat: true, seaRide: "tube" })).toEqual({ ride: "tube", seated: false });
+    expect(rideBlockReason(rideStatusOf({ ...free, state: "boat", inBoat: true, seaRide: "kayak" }), false, "사냥터에 갈")).toBe("카약에서 내린 다음에 사냥터에 갈 수 있어요.");
     expect(rideBlockReason(rideStatusOf({ ...free, state: "boat", inBoat: true, seaRide: "jetski" }), false, "사냥터에 갈")).toBe("제트스키에서 내린 다음에 사냥터에 갈 수 있어요.");
     expect(rideStatusOf({ ...free, state: "bumper", inCar: true })).toEqual({ ride: "bumper", seated: false });
   });

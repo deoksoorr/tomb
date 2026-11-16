@@ -4,7 +4,7 @@
 //  - 자리(의자·벤치·바닥·그네·나무·해먹·침대·책·욕조): 저절로 일어난 다음 간다
 //  - 그 밖(서기·걷기·달리기·점프·수영·잠수): 그대로 간다
 
-export type RideKind = "boat" | "bumper" | "ferris" | "balloon" | "carousel" | "seesaw" | "trampoline" | "pet" | "bus" | "tube" | "jetski" | "other";
+export type RideKind = "boat" | "bumper" | "ferris" | "balloon" | "carousel" | "seesaw" | "trampoline" | "pet" | "bus" | "tube" | "jetski" | "kayak" | "other";
 
 /** 내 캐릭터가 지금 탄 것 (ride, 없으면 null)과 자리에 앉았는지 (seated) — 장면이 bridge "player:ride"로 알린다 */
 export type RideStatus = { ride: RideKind | null; seated: boolean };
@@ -39,6 +39,7 @@ const NOUN: Readonly<Record<RideKind, string>> = {
   // 11/16 r13 바닷가 튜브·제트스키 (자세는 조각배와 같은 boat — seaRide로 따로 알려요)
   tube: "튜브",
   jetski: "제트스키",
+  kayak: "카약",
   other: "탈것",
 };
 
@@ -52,7 +53,7 @@ export type PlayerRideInput = {
   /** 타는 펫에 올라타 있다 (Riding.on) */
   pet: boolean;
   /** 11/16 r13 바닷가 튜브·제트스키에 탔다 (SeaRides — 자세는 boat라 이름만 따로) */
-  seaRide?: "tube" | "jetski" | null;
+  seaRide?: "tube" | "jetski" | "kayak" | null;
 };
 
 /** 내 캐릭터 상태 → 탄 것·앉은 자리. 모르는 새 자세는 탈것으로 본다 (새 놀이기구가 생겨도 기본은 막기) */
