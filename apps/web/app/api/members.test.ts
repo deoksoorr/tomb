@@ -19,7 +19,7 @@ import * as myCode from "./me/code/route";
 import * as login from "./me/login/route";
 import * as session from "./session/route";
 
-// 관리자 '회원 제재' 탭: 회원 전체 목록(최근 접속 순·커서·검색) · 접속 코드 재발급 (메모리 구성으로 라우트를 직접 부른다)
+// 관리자 '회원 목록' 탭: 회원 전체 목록(최근 접속 순·커서·검색) · 접속 코드 재발급 (메모리 구성으로 라우트를 직접 부른다)
 
 const ADMIN = { "x-admin-key": "dev-admin" };
 
@@ -83,6 +83,8 @@ describe("회원 목록 자르기 (pageMembers)", () => {
     points: i,
     renameRequired: false,
     hasCode: false,
+    stayMinutes: (i % 7) * 10,
+    lifetimePoints: i,
   }));
 
   it("최근 접속 순 50명씩, 커서로 이어 보면 겹치거나 빠지지 않는다", () => {
@@ -107,6 +109,22 @@ describe("회원 목록 자르기 (pageMembers)", () => {
     const p2 = pageMembers(moved, { cursor: p1.next });
     expect(p2.rows[0].accountId).toBe("a050");
     expect(p2.rows.map((r) => r.accountId)).not.toContain("a110");
+  });
+
+  it("총 접속 시간 순 (같으면 계정 id 순), 커서로 이어 보면 겹치거나 빠지지 않는다", () => {
+    const sort = "stay" as const;
+    const p1 = pageMembers(rows, { sort });
+    const p2 = pageMembers(rows, { sort, cursor: p1.next });
+    const p3 = pageMembers(rows, { sort, cursor: p2.next });
+    const all = [...p1.rows, ...p2.rows, ...p3.rows];
+    expect(p3.next).toBeNull();
+    expect(new Set(all.map((r) => r.accountId)).size).toBe(120);
+    expect(all[0]).toMatchObject({ accountId: "a006", stayMinutes: 60 });
+    for (let i = 1; i < all.length; i++) {
+      const [a, b] = [all[i - 1], all[i]];
+      expect(a.stayMinutes > b.stayMinutes || (a.stayMinutes === b.stayMinutes && a.accountId < b.accountId)).toBe(true);
+    }
+    expect(p1.next).toBe(memberCursor(p1.rows[49], sort));
   });
 
   it("이름 검색은 공백·_·대소문자를 무시하고, 계정 id 앞부분도 찾는다", () => {
@@ -285,7 +303,7 @@ describe("접속 코드 재발급 (POST /api/admin/accounts/code)", () => {
   });
 });
 
-describe("회원 제재 탭 화면", () => {
+describe("회원 목록 탭 화면", () => {
   it("포인트 지급 칸이 없고, 회원 목록이 있다 (IP 차단·재발급 기록은 옆 메뉴로)", () => {
     const html = renderToStaticMarkup(
       createElement(MembersPanel, {
@@ -293,14 +311,14 @@ describe("회원 제재 탭 화면", () => {
         onAuthLost: () => undefined,
       }),
     );
-    expect(html).toContain('aria-label="회원 제재"');
+    expect(html).toContain('aria-label="회원 목록"');
     expect(html).toContain('aria-label="회원 찾기"');
     const bans = renderToStaticMarkup(
       createElement(BansPanel, { toast: () => undefined, onAuthLost: () => undefined, version: 0, onChanged: () => undefined }),
     );
     expect(bans).toContain("IP로 바로 차단");
     const menu = NAV.flatMap((g) => g.items.map((i) => i.label));
-    expect(menu).toEqual(expect.arrayContaining(["회원 제재", "코드 재발급 기록", "정지·차단 기록"]));
+    expect(menu).toEqual(expect.arrayContaining(["회원 목록", "코드 재발급 기록", "정지·차단 기록"]));
     expect(html).not.toContain("포인트 지급");
     expect(html).not.toContain("+100 / -50");
     expect(html).not.toContain("개인 코드 또는 계정 id");

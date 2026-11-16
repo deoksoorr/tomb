@@ -4,19 +4,19 @@ import { DAILY_EARN_CAP, EARN_RULES, earnRule } from "./economy";
 
 describe("gaugeOf (막대 하나)", () => {
   it("0이면 빈 막대, 아직 덜 찼으면 비율만큼", () => {
-    expect(gaugeOf(0, 300)).toEqual({ value: 0, max: 300, ratio: 0, full: false });
-    expect(gaugeOf(120, 1200)).toEqual({ value: 120, max: 1200, ratio: 0.1, full: false });
+    expect(gaugeOf(0, 300)).toEqual({ value: 0, earned: 0, extra: 0, max: 300, ratio: 0, full: false });
+    expect(gaugeOf(120, 1200)).toEqual({ value: 120, earned: 120, extra: 0, max: 1200, ratio: 0.1, full: false });
   });
 
-  it("딱 맞거나 넘치면 100%에서 멈추고 완료", () => {
-    expect(gaugeOf(300, 300)).toEqual({ value: 300, max: 300, ratio: 1, full: true });
-    expect(gaugeOf(999, 300)).toEqual({ value: 300, max: 300, ratio: 1, full: true });
+  it("딱 맞거나 넘치면 막대는 100%에서 멈추고 완료, 숫자는 실제로 받은 값과 넘친 몫 (11/16 이벤트로 더 받은 몫)", () => {
+    expect(gaugeOf(300, 300)).toEqual({ value: 300, earned: 300, extra: 0, max: 300, ratio: 1, full: true });
+    expect(gaugeOf(999, 300)).toEqual({ value: 300, earned: 999, extra: 699, max: 300, ratio: 1, full: true });
   });
 
   it("음수·NaN·한도 0은 빈 막대 (0으로 나누지 않는다)", () => {
     expect(gaugeOf(-5, 300)).toMatchObject({ value: 0, ratio: 0, full: false });
     expect(gaugeOf(Number.NaN, 300)).toMatchObject({ value: 0, ratio: 0 });
-    expect(gaugeOf(10, 0)).toEqual({ value: 0, max: 0, ratio: 0, full: false });
+    expect(gaugeOf(10, 0)).toEqual({ value: 0, earned: 10, extra: 10, max: 0, ratio: 0, full: false });
   });
 });
 

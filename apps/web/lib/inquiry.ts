@@ -1,8 +1,8 @@
 import { env } from "./env";
-import { HttpError } from "./http";
 import { INQUIRY_CATEGORIES, type InquiryCategory } from "./types";
 
-// 문의 → 운영자의 GitHub 저장소 이슈. 토큰과 이슈 주소는 클라이언트에 주지 않는다.
+// 문의는 우리 문의함(lib/store/inquiries.ts)에 먼저 남기고, GitHub 설정이 있으면 운영자 저장소 이슈로도 보낸다 (덤, 실패해도 접수는 된다).
+// 토큰과 이슈 주소는 클라이언트에 주지 않는다.
 
 const API = "https://api.github.com";
 const TIMEOUT_MS = 8_000;
@@ -28,12 +28,12 @@ function gh(conf: GitHub, path: string, init: RequestInit = {}): Promise<Respons
 let visibility: { repo: string; public: boolean; at: number } | null = null;
 
 /**
- * 저장소가 공개인지 (공개면 문의 내용이 누구에게나 보인다 → UI가 안내한다). 10분 캐시.
+ * 문의는 늘 받는다. public = GitHub으로도 보내고 그 저장소가 공개일 때만 true (문의 내용이 누구에게나 보인다 → UI가 안내한다). 10분 캐시.
  * 조회에 실패하면 공개로 본다 (공개인데 비공개라고 안내하는 쪽이 더 위험하다).
  */
 export async function inquiryInfo(now = Date.now()): Promise<{ enabled: boolean; public: boolean }> {
   const conf = env.github();
-  if (!conf) return { enabled: false, public: false };
+  if (!conf) return { enabled: true, public: false };
   if (visibility?.repo === conf.repo && now - visibility.at < VISIBILITY_TTL_MS) return { enabled: true, public: visibility.public };
   let isPublic = true;
   try {
@@ -91,31 +91,22 @@ export function buildIssue(i: InquiryIssue): { title: string; body: string; labe
   return { title: safeTitle(`[문의·${label}] ${head}`), body, labels: ["문의", label] };
 }
 
-/** 설정(토큰·저장소)이 없으면 503 */
-export function inquiryConfig(): GitHub {
-  const conf = env.github();
-  if (!conf) throw new HttpError(503, "INQUIRY_DISABLED", "문의 기능을 준비하고 있어요. 조금 뒤에 다시 찾아와 주세요.");
-  return conf;
-}
-
 /**
- * 이슈 만들기. 라벨을 못 붙이면(라벨이 없고 만들 권한도 없는 등 422) 라벨 없이 한 번 더 시도한다.
- * 설정이 없으면 503, GitHub이 실패하면 502.
+ * GitHub 이슈로도 보내기 (덤). 라벨을 못 붙이면(라벨이 없고 만들 권한도 없는 등 422) 라벨 없이 한 번 더 시도한다.
+ * 던지지 않는다: 설정이 없으면 "off", GitHub이 실패하면 로그만 남기고 "failed" (문의는 이미 문의함에 있다)
  */
-export async function createInquiryIssue(i: InquiryIssue): Promise<void> {
-  const conf = inquiryConfig();
+export async function createInquiryIssue(i: InquiryIssue): Promise<"sent" | "off" | "failed"> {
+  const conf = env.github();
+  if (!conf) return "off";
   const issue = buildIssue(i);
   const post = (payload: object) => gh(conf, `/repos/${conf.repo}/issues`, { method: "POST", body: JSON.stringify(payload) });
-  let res: Response;
   try {
-    res = await post(issue);
+    let res = await post(issue);
     if (res.status === 422) res = await post({ title: issue.title, body: issue.body });
+    if (res.ok) return "sent";
+    console.error("[inquiry] GitHub 이슈 생성 실패", res.status);
   } catch (e) {
     console.error("[inquiry] GitHub 요청 실패", e);
-    throw new HttpError(502, "INQUIRY_FAILED", "문의를 전하지 못했어요. 잠시 뒤에 다시 시도해 주세요.");
   }
-  if (!res.ok) {
-    console.error("[inquiry] GitHub 이슈 생성 실패", res.status);
-    throw new HttpError(502, "INQUIRY_FAILED", "문의를 전하지 못했어요. 잠시 뒤에 다시 시도해 주세요.");
-  }
+  return "failed";
 }

@@ -53,7 +53,7 @@ export class FishZoneView {
   constructor(private readonly d: FishZoneDeps) {
     const scene = d.scene;
     ensureZoneTextures(scene);
-    for (const t of ["의뢰 게시판", "긴급 의뢰", "주말 버스 정류장", "언젠가 캠핑장행 · Someday Camp", "다음 버스: 언젠가"]) d.atlas.ensure(t);
+    for (const t of ["의뢰 게시판", "긴급 의뢰", "언젠가 버스 정류장", "언젠가 캠핑장행 · Someday Camp", "다음 버스: 언젠가"]) d.atlas.ensure(t);
     // 바닥 장식 층 (11/15 정류장 다듬기): 위 마당 테두리 연석 → 정류장 승강장(판석·점자 블록·연석) → 골목의 버스 정차 칸
     scene.add.image(WHARF_CURB.x, WHARF_CURB.y, ZTEX.wharfCurb).setOrigin(0, 0).setDepth(DEPTH.decal + 1);
     scene.add.image(BUS_PLATFORM.x, BUS_PLATFORM.y, ZTEX.busPlatform).setOrigin(0, 0).setDepth(DEPTH.decal + 2);
@@ -68,7 +68,7 @@ export class FishZoneView {
     this.placardLabel = this.label(WHARF_PLACARD.x, WHARF_PLACARD.y - 31, "긴급 의뢰", 0xd8c8b0, 1, 0.7);
     this.placardFx = scene.add.graphics().setDepth(WHARF_PLACARD.y + 2);
     // 정류장 이름과 노선은 지붕 위에 두 줄로 (예전엔 팻말 위 노선 글씨가 지붕 이름표와 겹쳤다)
-    this.label(BUS_STOP.x, BUS_STOP.y - BUS_SHELTER_H - 1, "주말 버스 정류장\n언젠가 캠핑장행 · Someday Camp", 0xc8f0d8, 1).setCenterAlign();
+    this.label(BUS_STOP.x, BUS_STOP.y - BUS_SHELTER_H - 1, "언젠가 버스 정류장\n언젠가 캠핑장행 · Someday Camp", 0xc8f0d8, 1).setCenterAlign();
     this.label(BUS_TIMETABLE.x, BUS_TIMETABLE.y - BUS_TIMETABLE_H - 1, "다음 버스: 언젠가", 0xe8e0d0, 1, 0.85);
     for (const s of FISHING_SPOTS) this.markers.push(this.makeMarker(s));
   }

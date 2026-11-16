@@ -25,6 +25,7 @@ const SPEND_LABELS: Record<string, string> = {
   rpg: "사냥터",
   housing: "하우징",
   name: "닉네임 변경",
+  lottery: "행운권",
   admin: "관리자 회수",
   other: "기타",
 };

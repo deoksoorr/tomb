@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { LobbyInfo } from "@tomb/protocol";
 import type { AdminGrave } from "@/lib/admin";
+import type { AdminAccountRow } from "@/app/api/admin/accounts/search/route";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { cx } from "../ui/cx";
 import { isReported } from "./AdminRow";
@@ -11,6 +12,7 @@ import { adminApi } from "./adminApi";
 import ui from "./AdminUi.module.css";
 import styles from "./Admin.module.css";
 import AnalyticsPanel from "./AnalyticsPanel";
+import UserActivityPanel from "./UserActivityPanel";
 import type { BanTarget } from "./BanPanel";
 import BansPanel from "./BansPanel";
 import CodeLogPanel from "./CodeLogPanel";
@@ -24,12 +26,17 @@ import GravesPanel from "./GravesPanel";
 import HousingPanel from "./HousingPanel";
 import MegaphonePanel from "./MegaphonePanel";
 import ManagersPanel from "./ManagersPanel";
+import ReferralsPanel from "./ReferralsPanel";
+import InquiriesPanel from "./InquiriesPanel";
+import { inquiryAdminApi } from "./inquiryAdminApi";
 import MembersPanel from "./MembersPanel";
 import { moderationApi } from "./moderationApi";
 import NoticesPanel from "./NoticesPanel";
 import { Failed, Loading } from "./PanelState";
 import PassedPanel from "./PassedPanel";
 import ReportsPanel from "./ReportsPanel";
+import PointEventPanel from "./PointEventPanel";
+import LotteryPanel from "./LotteryPanel";
 import ResidentsPanel from "./ResidentsPanel";
 import StaffPanel from "./StaffPanel";
 import SystemPanel from "./SystemPanel";
@@ -76,8 +83,16 @@ export default function AdminApp() {
   const [reportsOpen, setReportsOpen] = useState<number | null>(null);
   const [activeBans, setActiveBans] = useState<number | null>(null);
   const [errorsToday, setErrorsToday] = useState<number | null>(null);
+  /** 처리 안 한 문의 수 (문의 탭 배지) */
+  const [inquiriesNew, setInquiriesNew] = useState<number | null>(null);
+  /** 문의 탭에서 이름을 누르면 회원 목록 탭을 이 계정 id로 찾은 채 연다 */
+  const [memberQuery, setMemberQuery] = useState<string | null>(null);
+  const clearMemberQuery = useCallback(() => setMemberQuery(null), []);
   const [banPreset, setBanPreset] = useState<BanTarget | null>(null);
   const clearBanPreset = useCallback(() => setBanPreset(null), []);
+  /** 추천 탭에서 고른 계정을 선물 탭에 담아 연다 */
+  const [giftPreset, setGiftPreset] = useState<AdminAccountRow[] | null>(null);
+  const clearGiftPreset = useCallback(() => setGiftPreset(null), []);
 
   const handleError = useCallback(
     (e: unknown) => {
@@ -130,6 +145,10 @@ export default function AdminApp() {
       (r) => alive && setErrorsToday(r.errors.length),
       () => {},
     );
+    inquiryAdminApi.list("new", 1).then(
+      (r) => alive && setInquiriesNew(r.newCount),
+      () => {},
+    );
     return () => {
       alive = false;
     };
@@ -155,6 +174,7 @@ export default function AdminApp() {
     graves: { n: reportedCount, tone: "warn" },
     bans: { n: activeBans ?? 0, tone: "plain" },
     errors: { n: errorsToday ?? 0, tone: "warn" },
+    inquiries: { n: inquiriesNew ?? 0, tone: "warn" },
   };
   const choose = (id: PanelId) => {
     go(id);
@@ -282,11 +302,35 @@ export default function AdminApp() {
           )}
           {panel === "economy" && <EconomyPanel key={version} {...p} />}
           {panel === "analytics" && <AnalyticsPanel {...p} version={version} />}
+          {panel === "activity" && (
+            <UserActivityPanel
+              {...p}
+              version={version}
+              onFindMember={(id) => {
+                setMemberQuery(id);
+                go("members");
+              }}
+            />
+          )}
 
-          {panel === "members" && <MembersPanel key={version} {...p} banPreset={banPreset} onBanPresetUsed={clearBanPreset} />}
+          {panel === "members" && <MembersPanel key={version} {...p} banPreset={banPreset} onBanPresetUsed={clearBanPreset} searchPreset={memberQuery} onSearchPresetUsed={clearMemberQuery} />}
           {panel === "codes" && <CodeLogPanel {...p} version={version} />}
           {panel === "staff" && <StaffPanel key={version} {...p} />}
           {panel === "managers" && <ManagersPanel key={version} {...p} />}
+          {panel === "referrals" && (
+            <ReferralsPanel
+              key={version}
+              {...p}
+              onFindMember={(id) => {
+                setMemberQuery(id);
+                go("members");
+              }}
+              onGift={(rows) => {
+                setGiftPreset(rows);
+                go("gifts");
+              }}
+            />
+          )}
 
           {panel === "reports" && (
             <ReportsPanel
@@ -303,7 +347,18 @@ export default function AdminApp() {
           {panel === "megaphone" && <MegaphonePanel key={version} {...p} />}
 
           {panel === "notices" && <NoticesPanel key={version} {...p} />}
-          {panel === "gifts" && <GiftsPanel {...p} />}
+          {panel === "inquiries" && (
+            <InquiriesPanel
+              key={version}
+              {...p}
+              onNewCount={setInquiriesNew}
+              onFindMember={(id) => {
+                setMemberQuery(id);
+                go("members");
+              }}
+            />
+          )}
+          {panel === "gifts" && <GiftsPanel {...p} preset={giftPreset} onPresetUsed={clearGiftPreset} />}
           {panel === "dye" && <DyePanel {...p} />}
 
           {panel === "graves" && <GravesPanel graves={graves} toast={toast} onError={handleError} onChanged={reload} />}
@@ -312,6 +367,8 @@ export default function AdminApp() {
           {panel === "towerGrant" && <TowerGrantPanel {...p} />}
 
           {panel === "residents" && <ResidentsPanel key={version} {...p} />}
+          {panel === "pointEvent" && <PointEventPanel key={version} {...p} />}
+          {panel === "lottery" && <LotteryPanel key={version} {...p} />}
           {panel === "graveRules" && <PassedPanel key={version} {...p} part="settings" onChanged={reload} />}
 
           {panel === "errors" && <ErrorsPanel key={version} {...p} />}

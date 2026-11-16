@@ -28,6 +28,7 @@ const RANK_SIZE = 50;
  *  - huntLevel: 사냥 캐릭터 레벨 (같으면 경험치. 기간 없음. value = 레벨, sub = 경험치, gear = 장착 무기. 정지 계정 제외)
  *  - tower: 11/15 야근 빌딩 최고 층 (주간·전체. value = 층, sub = 그 층을 깬 시각. 정지 계정 제외)
  *  - look: 외형 꾸미기 점수 (기간 없음. 읽을 때 상위 후보를 지금 착용으로 다시 계산 — 만료된 코디는 0점. items = 지금 착용 파츠 전부(부위 순). 정지 계정 제외)
+ *  - stay: 총 접속 시간 (기간 없음. value = 분, 머무르기 기록이 쌓인 만큼 — lib/stayTime)
  * 운영자 계정은 어느 판에도 나오지 않는다 (lib/staffRank). 운영자 본인이 보면 mine = null, staff = true
  * 사람 줄(집 랭킹 빼고)에는 ns = 그 사람이 지금 입은 닉네임 꾸미기 id (lib/nameStyleRank — 화면이 이름 색·이름표로 그린다)
  * 기본은 방문자와 무관한 응답이라 CDN에 30초 캐시하고, `?me=1`이면 내 줄·내 순위를 넣고 캐시하지 않는다
@@ -37,7 +38,7 @@ export const GET = handler(async (req) => {
   const params = req.nextUrl.searchParams;
   const board = (params.get("board") ?? "points") as RankBoard;
   if (!RANK_BOARDS.includes(board)) throw new HttpError(400, "INVALID_INPUT", "모르는 랭킹이에요.");
-  const period: RankPeriod = params.get("period") === "week" ? "week" : "all";
+  const period: RankPeriod = board !== "stay" && params.get("period") === "week" ? "week" : "all";
   const zone = params.get("zone") ?? DIFFICULTIES[0];
   if (board === "huntBest" && !(DIFFICULTIES as readonly string[]).includes(zone))
     throw new HttpError(400, "INVALID_INPUT", "모르는 사냥터예요.");
@@ -91,7 +92,9 @@ export const GET = handler(async (req) => {
     (n, who) =>
       board === "points"
         ? accounts.pointRank(n, who, week)
-        : accounts.huntRank(board === "huntKills" ? "kills" : "best", n, who, { zone, week }),
+        : board === "stay"
+          ? accounts.stayRank(n, who)
+          : accounts.huntRank(board === "huntKills" ? "kills" : "best", n, who, { zone, week }),
     RANK_SIZE,
     me,
     staffId,

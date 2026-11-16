@@ -167,3 +167,46 @@
   color: var(--text);
   overflow-wrap: anywhere;
 }
+
+/* 고른 계정: 지울 수 있는 칩 */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--ad-gold);
+  border-radius: 999px;
+  background: var(--ad-gold-soft);
+  color: var(--bone);
+  font-size: 13px;
+}
+
+.chipX {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chipX:hover,
+.chipX:focus-visible {
+  background: var(--ad-surface-3);
+  color: var(--bone);
+}

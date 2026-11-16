@@ -13,6 +13,7 @@ import { ECON_TTL_SEC } from "./types";
 //  - 전체 선물은 보낸 시각 이전에 처음 들어온 계정만 받을 수 있다 (새 계정을 만들어 같은 선물을 거듭 받지 못하게)
 //  - 받기는 원자적으로 한 번만: 상태 필드가 이미 있으면(받음·지움) 거절한다. 포인트·가방 반영도 같은 연산에서
 //  - 받지 않은 선물은 보낸 지 GIFT_KEEP_DAYS일이 지나면 사라진다
+//  - 여러 계정에 보낸 선물(targets)은 같은 id로 계정마다 선물함에 넣고(target = 그 계정), 발송 기록·받은 수는 한 줄로 센다
 
 export const GIFT_KEEP_DAYS = 30;
 export const GIFT_KEEP_MS = GIFT_KEEP_DAYS * 86_400_000;
@@ -31,7 +32,7 @@ export function giftTermUntil(term: GiftTerm, had: number, now: number): number 
   return Math.min(PERMANENT_UNTIL, Math.max(had, now) + ms);
 }
 
-/** 저장 형태. target = "all"(전체) 또는 받는 계정 id */
+/** 저장 형태. target = "all"(전체) 또는 받는 계정 id (여러 계정이면 첫 계정) */
 export type GiftRecord = {
   id: string;
   from: string;
@@ -41,8 +42,12 @@ export type GiftRecord = {
   createdAt: number;
   expiresAt: number;
   target: string;
-  /** 특정 계정에 보냈으면 그때의 닉네임 (관리자 기록 표시용) */
+  /** 특정 계정에 보냈으면 그때의 닉네임 (관리자 기록 표시용, 여러 계정이면 첫 사람) */
   targetName: string | null;
+  /** 여러 계정에 한 번에 보냈으면 받는 계정 id 전부 (발송 기록에만 남는다. 계정 선물함의 사본엔 없다) */
+  targets?: string[];
+  /** targets와 같은 순서의 그때 닉네임 (발송 기록에 받은 사람을 모두 보여 준다. 모르면 null) */
+  targetNames?: (string | null)[];
 };
 /** 관리자 발송 기록 한 줄: 받은 계정 수 포함 */
 export type GiftLogEntry = GiftRecord & { claims: number };
@@ -50,7 +55,7 @@ export type GiftLogEntry = GiftRecord & { claims: number };
 export type GiftClaimResult = { ok: true; gift: GiftRecord; points: number } | { ok: false; reason: "gone" | "done" };
 
 export interface GiftStore {
-  /** 보내기 (전체 또는 한 계정) + 발송 기록 */
+  /** 보내기 (전체·한 계정·여러 계정) + 발송 기록 */
   send(gift: GiftRecord): Promise<void>;
   /** 내 선물함: 보관 기간 안의 것 중 지우지 않은 것 (최신 먼저). acctCreatedAt = 계정이 처음 들어온 시각 (0 = 모름 → 전체 선물 없음) */
   inbox(accountId: string, acctCreatedAt: number, now: number): Promise<GiftEntry[]>;
@@ -124,6 +129,14 @@ export function legacyGiftPoints(
   return out;
 }
 
+/** 계정마다 선물함에 넣을 사본: [받는 계정 id, 그 계정 앞 선물]. 여러 계정 선물은 target을 그 계정으로 바꾸고 목록은 뺀다 */
+export function giftCopies(g: GiftRecord): [string, GiftRecord][] {
+  if (!g.targets?.length) return [[g.target, g]];
+  const { targets, ...one } = g;
+  delete one.targetNames;
+  return [...new Set(targets)].map((id) => [id, { ...one, target: id, targetName: null }]);
+}
+
 /** 이 계정이 받을 수 있는 선물인지 (보관 기간 안 + 대상) */
 export function giftFor(g: GiftRecord, accountId: string, acctCreatedAt: number, now: number): boolean {
   if (g.expiresAt <= now) return false;
@@ -162,11 +175,12 @@ export class MemoryGifts implements GiftStore {
 
   async send(gift: GiftRecord): Promise<void> {
     if (gift.target === "all") this.all.set(gift.id, gift);
-    else {
-      let m = this.to.get(gift.target);
-      if (!m) this.to.set(gift.target, (m = new Map()));
-      m.set(gift.id, gift);
-    }
+    else
+      for (const [id, copy] of giftCopies(gift)) {
+        let m = this.to.get(id);
+        if (!m) this.to.set(id, (m = new Map()));
+        m.set(gift.id, copy);
+      }
     this.sent = [gift, ...this.sent].slice(0, GIFT_LOG_KEEP);
   }
 
@@ -293,7 +307,7 @@ export class RedisGifts implements GiftStore {
     const json = JSON.stringify(gift);
     const p = this.redis.multi();
     if (gift.target === "all") p.hset(K.giftsAll, { [gift.id]: json });
-    else p.hset(K.giftsTo(gift.target), { [gift.id]: json }).expire(K.giftsTo(gift.target), STATE_TTL_SEC);
+    else for (const [id, copy] of giftCopies(gift)) p.hset(K.giftsTo(id), { [gift.id]: JSON.stringify(copy) }).expire(K.giftsTo(id), STATE_TTL_SEC);
     await p.lpush(K.giftLog, json).ltrim(K.giftLog, 0, GIFT_LOG_KEEP - 1).exec();
     await this.prune(gift.createdAt);
   }

@@ -40,6 +40,11 @@ export type ChatLine = {
   ns?: string[];
   /** 11/16 쓴 사람이 있던 맵 (캠핑장이면 "camp", 없으면 마을) → 다른 맵에서 보면 [캠핑장]·[마을] (chatPlaceTag) */
   m?: "camp";
+  /**
+   * 11/16 귓속말 줄 (이 화면에만, 서버 기록에는 없다). out = 내가 보냄(name = 받는 사람), in = 받음(name = 보낸 사람),
+   * fail = 못 보냄 안내, note = 쓰는 법 안내 (둘 다 text만). 채팅창에 "[귓속말] 나 → 진순: …"처럼 분홍색으로
+   */
+  w?: "out" | "in" | "fail" | "note";
 };
 
 /** 서버 chatLog 한 줄을 이 기기 시계로 옮긴 것 */
@@ -92,8 +97,9 @@ export function chatLineAgo(line: ChatLine, now: number): string | null {
   return min < 60 ? `${min}분 전` : `${Math.floor(min / 60)}시간 전`;
 }
 
-/** 글자색 구분: 내 줄은 촛불색, 다른 사람은 연한 이름 + 밝은 내용 */
-export function chatLineTone(line: ChatLine): "mine" | "other" {
+/** 글자색 구분: 내 줄은 촛불색, 다른 사람은 연한 이름 + 밝은 내용, 11/16 귓속말은 분홍색 */
+export function chatLineTone(line: ChatLine): "mine" | "other" | "whisper" {
+  if (line.w) return "whisper";
   return line.mine ? "mine" : "other";
 }
 
@@ -105,7 +111,7 @@ export function mergeChatLines(lines: readonly ChatLine[], incoming: readonly In
   const out = lines.map((l) => ({ ...l }));
   for (const inc of incoming) {
     if (now - inc.at >= CHAT_LOG_HISTORY_MS || out.some((l) => l.key === inc.key)) continue;
-    const own = inc.mine ? out.find((l) => l.mine && l.key === undefined && l.text === inc.text && Math.abs(l.at - inc.at) <= CHAT_MINE_MATCH_MS) : undefined;
+    const own = inc.mine ? out.find((l) => l.mine && !l.w && l.key === undefined && l.text === inc.text && Math.abs(l.at - inc.at) <= CHAT_MINE_MATCH_MS) : undefined;
     if (own) own.key = inc.key;
     else out.push({ ...inc, id: nextId() });
   }

@@ -3,7 +3,10 @@ import { faceToward } from "../../logic/movement";
 import { findPath, type Pt, type WalkGrid } from "../../logic/pathfind";
 import type { EmoteIcon } from "../../sprites/emotes";
 import { ELLIPSES, inWater, inWaterBody, onDeck, onStone, PLAZA_FIRE } from "../layout";
-import { critterGrid, restable, restSpots, seatFront, type CritterDef, type RestSpot } from "./critterSim";
+import { critterGrid, reachable, restable, restSpots, seatFront, type CritterDef, type RestSpot } from "./critterSim";
+
+// 마을 큰 길로 이어지는지(reachable)는 critterSim으로 옮겼다 (11/16 고양이·개 쉼 자리도 같은 규칙 — 넓어진 범퍼카 링크 안에 갇히지 않게)
+export { reachable };
 import { RESIDENTS, type ResidentDef, type ResidentTaste } from "./residentData";
 
 // 돌아다니는 마을 주민 — 결정적 시뮬레이션 (순수, Phaser 없음 → residents.test.ts).
@@ -98,59 +101,6 @@ export function residentCritterDef(r: ResidentDef): CritterDef {
   };
 }
 
-/** 마을의 가장 큰 이어진 걷기 영역 (격자마다 한 번만) — 동물원 우리 안처럼 갇힌 칸은 빠진다 */
-const mainCache = new WeakMap<WalkGrid, Uint8Array>();
-function mainArea(g: WalkGrid): Uint8Array {
-  const hit = mainCache.get(g);
-  if (hit) return hit;
-  const n = g.cols * g.rows;
-  const label = new Int32Array(n).fill(-1);
-  const q = new Int32Array(n);
-  let best = -1;
-  let bestSize = 0;
-  for (let i = 0, id = 0; i < n; i++) {
-    if (label[i] >= 0 || g.blocked(i % g.cols, Math.floor(i / g.cols))) continue;
-    let head = 0;
-    let tail = 0;
-    q[tail++] = i;
-    label[i] = id;
-    while (head < tail) {
-      const c = q[head++];
-      const cx = c % g.cols;
-      const cy = Math.floor(c / g.cols);
-      for (const [dx, dy] of NEIGH) {
-        const nx = cx + dx;
-        const ny = cy + dy;
-        const j = ny * g.cols + nx;
-        if (g.blocked(nx, ny) || label[j] >= 0) continue;
-        label[j] = id;
-        q[tail++] = j;
-      }
-    }
-    if (tail > bestSize) {
-      bestSize = tail;
-      best = id;
-    }
-    id++;
-  }
-  const out = new Uint8Array(n);
-  for (let i = 0; i < n; i++) if (label[i] === best) out[i] = 1;
-  mainCache.set(g, out);
-  return out;
-}
-const NEIGH: readonly (readonly [number, number])[] = [
-  [1, 0],
-  [-1, 0],
-  [0, 1],
-  [0, -1],
-];
-
-/** 이 점에서 마을 큰 길로 걸어 나갈 수 있는지 (갇힌 칸이면 그 자리로 가는 길이 없어 순간이동처럼 보인다) */
-export function reachable(g: WalkGrid, x: number, y: number): boolean {
-  const cx = Math.floor(x / g.cell);
-  const cy = Math.floor(y / g.cell);
-  return cx >= 0 && cy >= 0 && cx < g.cols && cy < g.rows && mainArea(g)[cy * g.cols + cx] === 1;
-}
 
 /**
  * 주민의 쉼 자리: 앉는 좌석마다 "그 앞에 서는 자리"를 바라보는 쪽(없으면 아래쪽)으로 10~24px 안에서 찾고,

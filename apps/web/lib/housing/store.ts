@@ -7,6 +7,7 @@ import {
   housingChannelOf,
   LEGACY_HOUSING_CHANNEL,
   LIKE_WEIGHT,
+  reclaimLastSeen,
   VILLAGE_MAX_LOTS,
   type HouseSort,
   type PlotTierId,
@@ -19,18 +20,45 @@ import type { GuestEntry, HouseExterior, HouseLayout, PublicHouse } from "./type
 // 하우징 저장소. 포인트는 여기서 다루지 않는다 (공용 spendPoints/earnPoints → lib/housing/points.ts).
 // 집 쪽 상태 변화(가방 개수·배치·좋아요·방명록)는 Redis에서는 Lua 하나, 메모리에서는 await 없는 동기 코드로 원자적이다.
 
-/** 저장소 원본. owner(계정 id)·hidden은 그대로 내보내지 않는다 (toPublicHouse) */
-export type HouseRecord = PublicHouse & { owner: string; hidden: boolean; items: number };
+/**
+ * 저장소 원본. owner(계정 id)·hidden·paid는 그대로 내보내지 않는다 (toPublicHouse).
+ * paid = 이 집에 낸 포인트 (분양가 + 넓히기). 이 기록이 생기기 전에 분양된 집은 없다 → 비울 때 지금 가격표로 센다 (reclaim.ts refundOf)
+ */
+export type HouseRecord = PublicHouse & { owner: string; hidden: boolean; items: number; paid?: number };
 
 /** 방명록 원본: author(계정 id)는 내보내지 않고 mine 판정에만 쓴다 */
 export type StoredGuest = GuestEntry & { author: string };
 
 /** ch: 분양받는 채널 (없으면 1), lot: 그 채널에서 고른 번지 (null이면 가장 앞의 빈 번지를 자동으로) */
-export type NewHouse = { id: string; owner: string; name: string; intro: string; ownerName: string; tier: PlotTierId; ch?: number; lot: number | null; now: number };
+export type NewHouse = { id: string; owner: string; name: string; intro: string; ownerName: string; tier: PlotTierId; ch?: number; lot: number | null; now: number; paid?: number };
 
 export type CreateResult = { lot: number } | "exists" | "lot_taken" | "full";
 
 export type SaveResult = "ok" | "no_house" | "tier" | "not_owned";
+
+/**
+ * 오래 비운 집 정리 (reclaim.ts). owner·tier·ch는 정리할 때 읽은 값이고, 그대로일 때만 비운다.
+ * cutoff = 이 시각 뒤에 들어온 주인이면 남긴다. since = 규칙을 켠 시각 (그 전 접속은 이 시각으로 센다, catalog RECLAIM_SINCE).
+ * lastSeenAt = 바로 앞에서 다시 읽은 주인의 마지막 접속 (메모리만 쓴다 — Redis는 Lua 안에서 계정 해시를 직접 본다)
+ * points = 돌려줄 포인트, label = 번지 표시 (선물 쪽지용)
+ */
+export type ReclaimInput = {
+  owner: string;
+  tier: PlotTierId;
+  ch: number;
+  points: number;
+  cutoff: number;
+  since: number;
+  lastSeenAt: number;
+  label: string;
+  now: number;
+};
+
+/** ok면 비웠다. gone = 이미 없거나 주인이 다름, changed = 그 사이 넓혔음, active = 주인이 돌아왔음 */
+export type ReclaimResult = { points: number } | "gone" | "changed" | "active";
+
+/** 아직 선물함으로 보내지 않은 정리 기록 (at = 비운 시각, 한 번 비울 때마다 한 줄) */
+export type PendingReclaim = { at: number; points: number; label: string };
 
 /** 좋아요 하루 1회 판정 기간 (KST 날짜를 키에 넣으므로 날짜가 바뀌면 다시 누를 수 있다. TTL은 정리용) */
 export const LIKE_TTL_SEC = 2 * 86_400;
@@ -49,11 +77,23 @@ export interface HouseStore {
   village(ch?: number): Promise<HouseRecord[]>;
   /** 집과 딸린 키를 모두 지운다 (분양 결제 실패 보상·관리자 삭제) */
   remove(id: string): Promise<void>;
+  /**
+   * 오래 비운 집을 비운다: 주인·터 크기가 그대로이고 주인이 cutoff 뒤로 들어오지 않았을 때만, 한 번에(Redis는 Lua 하나).
+   * 집·배치·방명록·번지 칸을 지우고 가방(inv)은 남긴다 (놓은 개수는 0으로 → 새로 분양받으면 다시 놓을 수 있다).
+   * 같은 단계에서 돌려줄 포인트를 정리 기록(pendingReclaims)에 남긴다 → 두 번 비우거나 두 번 돌려주지 않는다
+   */
+  reclaim(id: string, r: ReclaimInput): Promise<ReclaimResult>;
+  /** 아직 선물함으로 보내지 않은 정리 기록 (오래된 것 먼저) */
+  pendingReclaims(id: string): Promise<PendingReclaim[]>;
+  /** 선물함으로 보낸 정리 기록 한 줄을 지운다 (두 번 불러도 같다) */
+  settleReclaim(id: string, at: number): Promise<void>;
+  /** 정리 잠금 (함수 여러 개가 같은 정리를 겹쳐 하지 않게). 잡았으면 true */
+  lockReclaim(ttlMs: number): Promise<boolean>;
   /** 관리자: 같은 채널 안에서 번지를 옮긴다 (그 번지에 다른 집이 있으면 taken) */
   moveLot(id: string, lot: number): Promise<"ok" | "no_house" | "taken">;
   setProfile(id: string, name: string, intro: string, now: number): Promise<boolean>;
-  /** tier가 from일 때만 to로 바꾼다 */
-  upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number): Promise<boolean>;
+  /** tier가 from일 때만 to로 바꾼다. price = 넓히기 값 (낸 포인트 기록 paid가 있으면 더한다) */
+  upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number, price?: number): Promise<boolean>;
   /** 가방에 1개 (max 초과면 "max") */
   addItem(id: string, itemId: string, max: number): Promise<"ok" | "max" | "no_house">;
   /** 놓지 않은 1개를 뺀다 (되팔기). 전부 놓여 있으면 "placed", 없으면 "none" */
@@ -117,6 +157,10 @@ export class MemoryHouseStore implements HouseStore {
   private guestDay = new Map<string, number>();
   private plantMap = new Map<string, Record<string, PlantState>>();
   private stateMap = new Map<string, Record<string, HouseState>>();
+  /** 비운 집의 가방 (집이 없어도 남는다. 다시 분양받으면 그 집 가방이 된다) */
+  private keptInv = new Map<string, Map<string, number>>();
+  private pending = new Map<string, PendingReclaim[]>();
+  private reclaimLockUntil = 0;
 
   async states(id: string) {
     return { ...(this.stateMap.get(id) ?? {}) };
@@ -166,7 +210,7 @@ export class MemoryHouseStore implements HouseStore {
   }
 
   async inventory(id: string) {
-    return Object.fromEntries(this.houses.get(id)?.inv ?? []);
+    return Object.fromEntries(this.houses.get(id)?.inv ?? this.keptInv.get(id) ?? []);
   }
 
   /** 채널마다 번지 → 집 (메모리는 집 기록에서 바로 센다. 채널이 없는 예전 기록은 1채널로 본다) */
@@ -186,6 +230,8 @@ export class MemoryHouseStore implements HouseStore {
     if (n.lot !== null && this.lotTaken(ch, n.lot)) return "lot_taken";
     const lot = n.lot ?? this.freeLot(ch);
     if (lot === null) return "full";
+    const kept = this.keptInv.get(n.id);
+    this.keptInv.delete(n.id);
     this.houses.set(n.id, {
       rec: {
         id: n.id,
@@ -203,8 +249,9 @@ export class MemoryHouseStore implements HouseStore {
         createdAt: n.now,
         updatedAt: n.now,
         hidden: false,
+        ...(n.paid !== undefined ? { paid: n.paid } : {}),
       },
-      inv: new Map(),
+      inv: kept ?? new Map(),
       placed: new Map(),
       guests: [],
       guestHidden: new Set(),
@@ -241,8 +288,40 @@ export class MemoryHouseStore implements HouseStore {
 
   async remove(id: string) {
     this.houses.delete(id);
+    this.keptInv.delete(id);
     this.plantMap.delete(id);
     this.stateMap.delete(id);
+  }
+
+  async reclaim(id: string, r: ReclaimInput): Promise<ReclaimResult> {
+    const h = this.houses.get(id);
+    if (!h || h.rec.owner !== r.owner) return "gone";
+    if (h.rec.tier !== r.tier) return "changed";
+    const last = reclaimLastSeen(r.lastSeenAt, r.since);
+    if (!(last > 0 && last <= r.cutoff)) return "active";
+    this.houses.delete(id);
+    this.plantMap.delete(id);
+    this.stateMap.delete(id);
+    if (h.inv.size) this.keptInv.set(id, h.inv);
+    this.pending.set(id, [...(this.pending.get(id) ?? []), { at: r.now, points: r.points, label: r.label }]);
+    return { points: r.points };
+  }
+
+  async pendingReclaims(id: string) {
+    return [...(this.pending.get(id) ?? [])].sort((a, b) => a.at - b.at);
+  }
+
+  async settleReclaim(id: string, at: number) {
+    const left = (this.pending.get(id) ?? []).filter((p) => p.at !== at);
+    if (left.length) this.pending.set(id, left);
+    else this.pending.delete(id);
+  }
+
+  async lockReclaim(ttlMs: number) {
+    const now = Date.now();
+    if (now < this.reclaimLockUntil) return false;
+    this.reclaimLockUntil = now + ttlMs;
+    return true;
   }
 
   async setProfile(id: string, name: string, intro: string, now: number) {
@@ -252,10 +331,11 @@ export class MemoryHouseStore implements HouseStore {
     return true;
   }
 
-  async upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number) {
+  async upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number, price = 0) {
     const h = this.houses.get(id);
     if (!h || h.rec.tier !== from) return false;
     Object.assign(h.rec, { tier: to, updatedAt: now });
+    if (h.rec.paid !== undefined && price > 0) h.rec.paid += price;
     return true;
   }
 

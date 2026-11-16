@@ -25,6 +25,23 @@
   color: var(--candle);
 }
 
+/* 11/16 귓속말: 나와 상대만 보는 줄은 연분홍, 이름은 조금 진하게 (운영자 이름은 금색 그대로) */
+.whisper .sep,
+.whisper .text,
+.whisperTag {
+  color: #f4b6c8;
+}
+
+.whisper .name {
+  color: #e99ab2;
+}
+
+.whisperTag {
+  font-family: var(--font-small);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 /* 지난 줄(5분 넘음) 옆 작은 시각 "N분 전" */
 /* 11/16 다른 맵에서 쓴 줄 표시 [캠핑장]·[마을] */
 .place {
@@ -99,7 +116,8 @@
 }
 
 /* 입력칸 아래 안내 줄은 쓰는 중에만 */
-.input:not(:focus-within) > p {
+.input:not(:focus-within) > p,
+.input:not(:focus-within) > [data-chips] {
   display: none;
 }
 
@@ -141,6 +159,10 @@
 
 .mobile .mine .name {
   color: var(--candle);
+}
+
+.mobile .whisper .name {
+  color: #e99ab2;
 }
 
 /* [기록]: 글씨 맨 아랫줄 왼쪽의 작은 동그라미 (행동 버튼과 같은 반투명 톤, 눈에 덜 띄게 작게) */

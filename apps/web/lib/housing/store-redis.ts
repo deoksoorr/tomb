@@ -12,6 +12,7 @@ import {
   type HouseSort,
   type PlotTierId,
 } from "./catalog";
+import { K } from "../store/keys";
 import { emptyLayout, normalizeExterior } from "./layout";
 import {
   GUEST_DAY_TTL_SEC,
@@ -22,6 +23,9 @@ import {
   type CreateResult,
   type HouseStore,
   type NewHouse,
+  type PendingReclaim,
+  type ReclaimInput,
+  type ReclaimResult,
   type SaveResult,
   type StoredGuest,
 } from "./store";
@@ -30,8 +34,8 @@ import { parseState, stateSigs, WINDOW_SIG, type HouseState } from "./states";
 import type { HouseExterior, HouseLayout } from "./types";
 
 // Redis 키 (집 id = 계정 id의 HMAC. 계정 id는 키에도 공개 응답에도 드러나지 않는다)
-//  house:{id}                HASH owner, name, intro, ownerName, tier, ch, lot, exterior(JSON), createdAt, updatedAt, likes, placedScore, items, hidden
-//                            (ch가 없으면 채널이 생기기 전에 분양된 집 → 1채널)
+//  house:{id}                HASH owner, name, intro, ownerName, tier, ch, lot, exterior(JSON), createdAt, updatedAt, likes, placedScore, items, hidden, paid
+//                            (ch가 없으면 채널이 생기기 전에 분양된 집 → 1채널. paid = 낸 포인트, 이 기록이 생기기 전에 분양된 집은 없다)
 //  houses:lots:{ch}          HASH 번지 → 집 id (채널마다 분양 마을이 따로. 번지 배정은 HEXISTS 확인과 HSET을 Lua 하나로)
 //  houses:lots               HASH 옛 번지 색인 (채널 없음). 1채널 색인을 쓰는 Lua가 먼저 houses:lots:1로 옮긴다 (MIGRATE_FN)
 //  house:{id}:layout         STRING 배치 JSON
@@ -43,6 +47,8 @@ import type { HouseExterior, HouseLayout } from "./types";
 //  house:{id}:guestrep:{eid} SET 신고한 IP 해시 (30일)
 //  house:{id}:plants         HASH 화분 배치 id → {n, at} JSON (3번 물 주기)
 //  house:{id}:states         HASH 가구 배치 id(창문 "w0"…) → {a, s} JSON (3번 불·스탠드·라디오·창문. s = 서명, states.ts)
+//  house:{id}:reclaimed      HASH `r:{비운 시각}` → {points, label} JSON (오래 비워 정리한 집, 선물함으로 보내면 그 칸을 지운다. TTL 없음)
+//  houses:reclaim:lock       STRING 정리 잠금 (SET NX PX)
 //  house:{id}:like:{visitor}:{yyyymmdd}  STRING NX EX (하루 1회 좋아요)
 //  house:guestday:{visitor}:{yyyymmdd}   STRING 오늘 남긴 방명록 수
 //  houses:all                ZSET 분양 시각 (숨김 포함, 관리자 목록)
@@ -58,6 +64,8 @@ export const HK = {
   guestRepIps: (id: string, eid: string) => `house:${id}:guestrep:${eid}`,
   plants: (id: string) => `house:${id}:plants`,
   states: (id: string) => `house:${id}:states`,
+  reclaimed: (id: string) => `house:${id}:reclaimed`,
+  reclaimLock: "houses:reclaim:lock",
   like: (id: string, visitor: string, day: string) => `house:${id}:like:${visitor}:${day}`,
   guestDay: (visitor: string, day: string) => `house:guestday:${visitor}:${day}`,
   all: "houses:all",
@@ -122,7 +130,7 @@ return redis.call('HGETALL', KEYS[1])
 `;
 
 // KEYS: meta, layout, all, new, score, likes, lots(ch), legacyLots
-// ARGV: id, owner, name, intro, ownerName, tier, now, emptyLayout, lot(''=자동), maxLots, exteriorJson, ch, legacy('1'|'0')
+// ARGV: id, owner, name, intro, ownerName, tier, now, emptyLayout, lot(''=자동), maxLots, exteriorJson, ch, legacy('1'|'0'), paid(''=기록 없음)
 // 반환: 번지, -1 이미 있음, -2 그 번지는 이미 분양됨, -3 빈 번지 없음
 const CREATE_LUA = `${FREE_LOT_FN}${MIGRATE_FN}
 if redis.call('EXISTS', KEYS[1]) == 1 then return -1 end
@@ -138,6 +146,7 @@ end
 redis.call('HSET', KEYS[7], tostring(lot), ARGV[1])
 redis.call('HSET', KEYS[1], 'owner', ARGV[2], 'name', ARGV[3], 'intro', ARGV[4], 'ownerName', ARGV[5], 'tier', ARGV[6],
   'createdAt', ARGV[7], 'updatedAt', ARGV[7], 'likes', 0, 'placedScore', 0, 'items', 0, 'ch', ARGV[12], 'lot', lot, 'exterior', ARGV[11])
+if ARGV[14] and ARGV[14] ~= '' then redis.call('HSET', KEYS[1], 'paid', ARGV[14]) end
 redis.call('SET', KEYS[2], ARGV[8])
 redis.call('ZADD', KEYS[3], ARGV[7], ARGV[1])
 redis.call('ZADD', KEYS[4], ARGV[7], ARGV[1])
@@ -192,10 +201,43 @@ redis.call('HDEL', KEYS[1], ARGV[1])
 return 1
 `;
 
-// KEYS: meta  ARGV: from, to, now
+// 낸 포인트(paid)는 기록이 있을 때만 넓히기 값을 더한다 (기록 없는 옛 집에 넓히기 값만 남지 않게)
+// KEYS: meta  ARGV: from, to, now, price
 const UPGRADE_LUA = `
 if redis.call('HGET', KEYS[1], 'tier') ~= ARGV[1] then return 0 end
 redis.call('HSET', KEYS[1], 'tier', ARGV[2], 'updatedAt', ARGV[3])
+if tonumber(ARGV[4] or '0') > 0 and redis.call('HEXISTS', KEYS[1], 'paid') == 1 then redis.call('HINCRBY', KEYS[1], 'paid', ARGV[4]) end
+return 1
+`;
+
+// 오래 비운 집 정리: 주인·터 크기가 그대로이고 주인 계정의 마지막 접속(seenAt·presenceAt·createdAt 중 가장 늦은 것,
+// accounts-redis.ts NAME_FNS dormant와 같은 규칙. 규칙을 켠 시각 since 전 접속은 since로 센다 — catalog reclaimLastSeen)이 cutoff 이전일 때만. 확인·번지 칸 비우기·집 지우기·정리 기록을 한 번에 →
+// 비우는 도중에 그 번지가 팔리거나, 두 번 비워 두 번 돌려주거나, 그 사이 돌아온 주인의 집을 비우는 일이 없다.
+// 가방(inv)은 남기고 놓은 개수(placed)는 지운다 (새로 분양받으면 다시 놓을 수 있게)
+// KEYS: meta, layout, placed, guest, guestHide, guestRep, plants, states, all, new, score, likes, lots(ch), legacyLots, acct(주인), reclaimed
+// ARGV: id, owner, tier, cutoff, field(r:{now}), entryJson, since
+// 반환: 1 비움, -1 없음·주인 다름, -2 터 크기 바뀜, -3 주인이 돌아옴(또는 접속 기록 없음)
+const RECLAIM_LUA = `
+if redis.call('HGET', KEYS[1], 'owner') ~= ARGV[2] then return -1 end
+if redis.call('HGET', KEYS[1], 'tier') ~= ARGV[3] then return -2 end
+local v = redis.call('HMGET', KEYS[15], 'seenAt', 'presenceAt', 'createdAt')
+local last = 0
+for i = 1, 3 do
+  local n = tonumber(v[i] or '0') or 0
+  if n > last then last = n end
+end
+if last == 0 then return -3 end
+local since = tonumber(ARGV[7] or '0') or 0
+if since > last then last = since end
+if last > tonumber(ARGV[4]) then return -3 end
+local lot = redis.call('HGET', KEYS[1], 'lot')
+if lot then
+  if redis.call('HGET', KEYS[13], lot) == ARGV[1] then redis.call('HDEL', KEYS[13], lot) end
+  if redis.call('HGET', KEYS[14], lot) == ARGV[1] then redis.call('HDEL', KEYS[14], lot) end
+end
+redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7], KEYS[8])
+for i = 9, 12 do redis.call('ZREM', KEYS[i], ARGV[1]) end
+redis.call('HSET', KEYS[16], ARGV[5], ARGV[6])
 return 1
 `;
 
@@ -376,6 +418,7 @@ function toRecord(id: string, m: Map<string, string>, layout: HouseLayout | null
     createdAt: Number(m.get("createdAt") ?? 0),
     updatedAt: Number(m.get("updatedAt") ?? 0),
     hidden: m.get("hidden") === "1",
+    ...(m.has("paid") ? { paid: Number(m.get("paid")) || 0 } : {}),
   };
 }
 
@@ -429,6 +472,7 @@ export class RedisHouseStore implements HouseStore {
           JSON.stringify(defaultExterior()),
           String(ch),
           isLegacyCh(ch),
+          n.paid === undefined ? "" : String(n.paid),
         ],
       ),
     );
@@ -491,8 +535,65 @@ export class RedisHouseStore implements HouseStore {
     return true;
   }
 
-  async upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number) {
-    return Number(await this.redis.eval<string[], number>(UPGRADE_LUA, [HK.meta(id)], [from, to, String(now)])) === 1;
+  async upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number, price = 0) {
+    return Number(await this.redis.eval<string[], number>(UPGRADE_LUA, [HK.meta(id)], [from, to, String(now), String(price)])) === 1;
+  }
+
+  async reclaim(id: string, r: ReclaimInput): Promise<ReclaimResult> {
+    // 방명록 신고 IP 묶음(글마다 키)은 Lua 밖에서 지운다 (30일 TTL이라 남아도 사라진다)
+    const eids = (await this.guestbook(id, true)).map((g) => g.id);
+    const code = Number(
+      await this.redis.eval<string[], number>(
+        RECLAIM_LUA,
+        [
+          HK.meta(id),
+          HK.layout(id),
+          HK.placed(id),
+          HK.guest(id),
+          HK.guestHide(id),
+          HK.guestRep(id),
+          HK.plants(id),
+          HK.states(id),
+          HK.all,
+          HK.new,
+          HK.score,
+          HK.likes,
+          HK.lots(housingChannelOf(r.ch)),
+          HK.legacyLots,
+          K.acct(r.owner),
+          HK.reclaimed(id),
+        ],
+        [id, r.owner, r.tier, String(r.cutoff), `r:${r.now}`, JSON.stringify({ points: r.points, label: r.label }), String(r.since)],
+      ),
+    );
+    if (code === -1) return "gone";
+    if (code === -2) return "changed";
+    if (code === -3) return "active";
+    if (eids.length) await this.redis.del(...eids.map((e) => HK.guestRepIps(id, e)));
+    return { points: r.points };
+  }
+
+  async pendingReclaims(id: string): Promise<PendingReclaim[]> {
+    const flat = (await this.redis.hgetall(HK.reclaimed(id))) as unknown as string[] | null;
+    const out: PendingReclaim[] = [];
+    for (const [field, raw] of pairs(flat)) {
+      const at = Number(field.slice(2));
+      try {
+        const v = JSON.parse(raw) as { points?: unknown; label?: unknown };
+        if (field.startsWith("r:") && at > 0) out.push({ at, points: Number(v.points) || 0, label: String(v.label ?? "") });
+      } catch {
+        // 깨진 칸은 건너뛴다 (지우지 않고 남겨 둔다)
+      }
+    }
+    return out.sort((a, b) => a.at - b.at);
+  }
+
+  async settleReclaim(id: string, at: number) {
+    await this.redis.hdel(HK.reclaimed(id), `r:${at}`);
+  }
+
+  async lockReclaim(ttlMs: number) {
+    return (await this.redis.set(HK.reclaimLock, "1", { nx: true, px: ttlMs })) !== null;
   }
 
   async addItem(id: string, itemId: string, max: number) {

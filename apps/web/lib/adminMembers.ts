@@ -7,11 +7,13 @@ import { codeHash, newCode } from "./store/accounts";
 import { getAdminAudit, type AdminAuditEntry } from "./store/adminAudit";
 import { getBanStore } from "./store/bans";
 import { DORMANT_MS, type AccountStore, type AccountSummary } from "./store/types";
+import { memberLinks } from "./sameUser";
+import type { MemberLinks } from "./sameUserRules";
 
-// 관리자 '회원 제재' 탭의 회원 목록·접속 코드 재발급 (라우트: app/api/admin/accounts/list, app/api/admin/accounts/code).
+// 관리자 '회원 목록' 탭의 회원 목록·접속 코드 재발급 (라우트: app/api/admin/accounts/list, app/api/admin/accounts/code).
 //
-// 목록: 계정 저장소를 SCAN(메모리는 순번)으로 끝까지 훑어 요약을 모은 뒤 최근 접속 순으로 줄 세우고,
-// 커서(마지막 줄의 "마지막 접속~계정 id")로 다음 MEMBERS_PAGE명을 자른다 — 그 사이 순서가 바뀌어도 겹치거나 빠지지 않는다.
+// 목록: 계정 저장소를 SCAN(메모리는 순번)으로 끝까지 훑어 요약을 모은 뒤 최근 접속 순(또는 총 접속 시간 순)으로 줄 세우고,
+// 커서(마지막 줄의 "정렬 값~계정 id")로 다음 MEMBERS_PAGE명을 자른다 — 그 사이 순서가 바뀌어도 겹치거나 빠지지 않는다.
 // 훑은 결과는 이 서버 인스턴스에 SNAPSHOT_MS 동안 기억한다 (페이지를 넘길 때마다 다시 훑지 않게, fresh면 다시).
 
 export const MEMBERS_PAGE = 50;
@@ -43,7 +45,13 @@ export type AdminMemberRow = {
   /** 사냥 레벨 (랭킹에 기록된 것, 없으면 null) */
   huntLevel: number | null;
   hasCode: boolean;
+  /** 총 접속 시간 (분) */
+  stayMinutes: number;
+  /** 같은 IP(최근 30일)·같은 기기(90일)로 들어온 다른 계정 전부 (없으면 빈 목록, lib/sameUser.ts memberLinks) */
+  links: MemberLinks;
 };
+/** 목록 순서: recent = 최근 접속 순, stay = 총 접속 시간 순 (운영자 포함) */
+export type MemberSort = "recent" | "stay";
 /** GET /api/admin/accounts/list */
 export type AdminMembersResponse = {
   members: AdminMemberRow[];
@@ -89,18 +97,23 @@ async function snapshot(accounts: AccountStore, fresh: boolean, now: number): Pr
 
 // ── 정렬·검색·자르기 (순수 함수) ──
 
+type SortRow = Pick<AccountSummary, "lastSeenAt" | "accountId"> & { stayMinutes?: number };
+const byId = (a: SortRow, b: SortRow) => (a.accountId < b.accountId ? -1 : a.accountId > b.accountId ? 1 : 0);
 /** 최근 접속 순, 같으면 계정 id 순 */
-export const byRecent = (a: Pick<AccountSummary, "lastSeenAt" | "accountId">, b: Pick<AccountSummary, "lastSeenAt" | "accountId">) =>
-  b.lastSeenAt - a.lastSeenAt || (a.accountId < b.accountId ? -1 : a.accountId > b.accountId ? 1 : 0);
+export const byRecent = (a: SortRow, b: SortRow) => b.lastSeenAt - a.lastSeenAt || byId(a, b);
+/** 총 접속 시간 순, 같으면 계정 id 순 */
+export const byStay = (a: SortRow, b: SortRow) => (b.stayMinutes ?? 0) - (a.stayMinutes ?? 0) || byId(a, b);
+const sortValue = (r: SortRow, sort: MemberSort) => (sort === "stay" ? (r.stayMinutes ?? 0) : r.lastSeenAt);
 
-export const memberCursor = (r: Pick<AccountSummary, "lastSeenAt" | "accountId">) => `${r.lastSeenAt}~${r.accountId}`;
-function parseCursor(raw: string): Pick<AccountSummary, "lastSeenAt" | "accountId"> {
+export const memberCursor = (r: SortRow, sort: MemberSort = "recent") => `${sortValue(r, sort)}~${r.accountId}`;
+/** 커서 → 비교용 줄 (정렬 값을 두 기준 칸에 모두 넣는다 — 비교 함수는 자기 칸만 본다) */
+function parseCursor(raw: string): SortRow {
   const i = raw.indexOf("~");
-  const lastSeenAt = Number(raw.slice(0, i));
+  const value = Number(raw.slice(0, i));
   const accountId = raw.slice(i + 1);
-  if (i < 1 || !Number.isFinite(lastSeenAt) || !/^[A-Za-z0-9_-]{1,64}$/.test(accountId))
+  if (i < 1 || !Number.isFinite(value) || !/^[A-Za-z0-9_-]{1,64}$/.test(accountId))
     throw new HttpError(400, "INVALID_INPUT", "페이지 커서가 올바르지 않아요. 처음부터 다시 불러와 주세요.");
-  return { lastSeenAt, accountId };
+  return { lastSeenAt: value, stayMinutes: value, accountId };
 }
 
 /** 이름(공백·_·대소문자 무시 부분 일치) 또는 계정 id(앞부분 일치) */
@@ -113,27 +126,38 @@ export function matchesMember(r: Pick<AccountSummary, "name" | "accountId">, q: 
 
 export function pageMembers<T extends AccountSummary>(
   all: readonly T[],
-  opts: { q?: string; cursor?: string | null; size?: number } = {},
+  opts: { q?: string; cursor?: string | null; size?: number; sort?: MemberSort } = {},
 ): { rows: T[]; next: string | null; total: number } {
   const size = opts.size ?? MEMBERS_PAGE;
-  const sorted = all.filter((r) => matchesMember(r, opts.q ?? "")).sort(byRecent);
+  const sort = opts.sort ?? "recent";
+  const cmp = sort === "stay" ? byStay : byRecent;
+  const sorted = all.filter((r) => matchesMember(r, opts.q ?? "")).sort(cmp);
   const after = opts.cursor ? parseCursor(opts.cursor) : null;
-  const start = after ? sorted.findIndex((r) => byRecent(r, after) > 0) : 0;
+  const start = after ? sorted.findIndex((r) => cmp(r, after) > 0) : 0;
   const rows = start < 0 ? [] : sorted.slice(start, start + size);
   const more = start >= 0 && start + size < sorted.length;
   return {
     rows,
-    next: more && rows.length ? memberCursor(rows[rows.length - 1]) : null,
+    next: more && rows.length ? memberCursor(rows[rows.length - 1], sort) : null,
     total: sorted.length,
   };
 }
 
 // ── 목록 ──
 
+/** 훑어 둔 목록의 계정 → 이름 (같은 목록이면 한 번만 만든다) */
+const nameIdx = new WeakMap<Snapshot, Map<string, string | null>>();
+async function nameIndex(snap: Snapshot): Promise<Map<string, string | null>> {
+  let m = nameIdx.get(snap);
+  if (!m) nameIdx.set(snap, (m = new Map(snap.rows.map((r) => [r.accountId, r.name]))));
+  return m;
+}
+
 export async function listMembers(
   opts: {
     q?: string;
     cursor?: string | null;
+    sort?: MemberSort;
     fresh?: boolean;
     now?: number;
     accounts?: AccountStore;
@@ -142,14 +166,21 @@ export async function listMembers(
   const now = opts.now ?? Date.now();
   const accounts = opts.accounts ?? getAccounts();
   const snap = await snapshot(accounts, !!opts.fresh, now);
-  const page = pageMembers(snap.rows, { q: opts.q, cursor: opts.cursor });
+  const page = pageMembers(snap.rows, { q: opts.q, cursor: opts.cursor, sort: opts.sort });
   const ids = page.rows.map((r) => r.accountId);
-  const [staffId, bans, scores] = await Promise.all([
+  const [staffId, bans, scores, links] = await Promise.all([
     staffAccountId(now),
     getBanStore().index(),
     getHuntLevelStore(accounts)
       .scoresOf(ids)
       .catch(() => ids.map(() => null)),
+    // 한 페이지를 한 번에 (파이프라인 두 번씩). 이름은 훑어 둔 목록에서
+    nameIndex(snap)
+      .then((names) => memberLinks(ids, now, names))
+      .catch((e: unknown) => {
+        console.error("[members] 같은 IP·기기 계정 읽기 실패", e);
+        return new Map<string, MemberLinks>();
+      }),
   ]);
   const members = page.rows.map((r, i): AdminMemberRow => {
     const ban = bans.get(`a:${r.accountId}`);
@@ -167,6 +198,8 @@ export async function listMembers(
       ...(banned ? { banUntil: ban!.until } : {}),
       huntLevel: score ? levelOf(score) : null,
       hasCode: r.hasCode,
+      stayMinutes: r.stayMinutes,
+      links: links.get(r.accountId) ?? { ip: [], device: [] },
     };
   });
   return {

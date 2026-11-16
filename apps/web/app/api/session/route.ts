@@ -2,6 +2,7 @@ import { recordEvent } from "@/lib/analyticsService";
 import { handler, json } from "@/lib/http";
 import { getVisitorId, newVisitorId, setSessionCookie } from "@/lib/session";
 import type { SessionResponse } from "@/lib/types";
+import { recordSignals, setDeviceCookie } from "@/lib/sameUser";
 import { readBody, SessionSchema } from "@/lib/validate";
 
 /**
@@ -16,5 +17,7 @@ export const POST = handler(async (req) => {
   if (!known) await recordEvent("signup");
   const res = json<SessionResponse>({ visitorId });
   await setSessionCookie(res, visitorId);
+  // 같은 사람 판정용 기기 표시 쿠키 (계정 쿠키와 따로라 「새로 시작」에도 남는다)와 이 계정의 기기·브라우저 환경·대역 해시
+  await recordSignals(req, visitorId, Date.now(), setDeviceCookie(req, res));
   return res;
 });

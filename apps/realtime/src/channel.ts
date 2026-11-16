@@ -11,6 +11,9 @@ import {
   encodeEvent,
   encodeSnapshot,
   maskChat,
+  matchWhisperTarget,
+  nameKey,
+  WHO_ON_INTERVAL_MS,
   newChatBucket,
   takeChatToken,
   type ChatBucket,
@@ -309,6 +312,8 @@ type Peer<C> = PeerRecord & {
   lastHuntAt?: number;
   /** 11/15 맵 옮기기 (없으면 아직 안 씀) */
   lastMapAt?: number;
+  /** 11/16 귓속말 상대 접속 확인 (없으면 아직 안 씀) */
+  lastWhoOnAt?: number;
   /** 말풍선 채팅 도배 제한 (토큰 버킷). 재접속해도 피어에 남겨 다시 채워지지 않게 한다 */
   chatBucket?: ChatBucket;
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
@@ -338,6 +343,8 @@ export class ChannelCore<C extends object> {
    * 반드시 먼저 읽어야 저장 기록을 덮어쓰지 않는다. 저장은 "village" 키 하나, 맵별로 따로 남기던 옛 "camp" 키는 합친 뒤 지운다
    */
   private chats: ChatRecent | null = null;
+  /** 11/16 귓속말 줄 id 번호 (클라이언트가 중복을 거른다) */
+  private whisperSeq = 0;
 
   private chatLog(now: number): ChatRecent {
     if (!this.chats) {
@@ -932,6 +939,15 @@ export class ChannelCore<C extends object> {
         this.host.chatsChanged?.("village");
         return this.broadcast(encodeEvent({ t: "chat", sid: p.sid, text: c.text, id: c.id, at: c.at, name: p.name, ...tags, ...camp }), p.sid);
       }
+      case "whisper":
+        return this.onWhisper(p, m.to, m.text, now);
+      case "whoOn": {
+        // 11/16 최근 귓속말 상대가 지금 이 채널에 있는지 (물어본 이름만 답한다)
+        if (this.cfg.room || now - (p.lastWhoOnAt ?? -Infinity) < WHO_ON_INTERVAL_MS) return;
+        p.lastWhoOnAt = now;
+        const here = new Set([...this.peers.values()].filter((q) => q.conn).map((q) => nameKey(q.name)));
+        return this.sendTo(p, { t: "whoOn", on: m.names.filter((n) => here.has(nameKey(n))), off: m.names.filter((n) => !here.has(nameKey(n))) });
+      }
       case "goblin":
         return this.onGoblinClaim(p, m.id, now);
       case "megaphone":
@@ -944,6 +960,36 @@ export class ChannelCore<C extends object> {
         p.lastMapAt = now;
         return this.onMap(p, m.m, { x: m.x, y: m.y }, now);
     }
+  }
+
+  /**
+   * 11/16 귓속말: 같은 채널(마을·캠핑장 모두) 접속자 한 사람에게만. 채팅과 같은 토큰 버킷·가리기를 쓰고, 기록(chatLog)·말풍선에는 남기지 않는다.
+   * 받는 사람은 "to text"를 접속자 이름으로 다시 맞춰 고른다 (공백 든 이름 — 가장 긴 이름). 실내에 있어도 주고받는다 (말풍선이 아니라 채팅창 줄이라).
+   * 재연결 유예 중(소켓 없음)인 사람은 없는 것으로 본다. 보낸 사람에게도 같은 줄을 돌려준다 (가린 글 그대로 채팅창에)
+   */
+  private onWhisper(p: Peer<C>, to: string, text: string, now: number): void {
+    if (this.cfg.room || !takeChatToken((p.chatBucket ??= newChatBucket()), now)) return;
+    const online = [...this.peers.values()].filter((q) => q.conn);
+    const hit = matchWhisperTarget(`${to} ${text}`, online, (q) => q.name);
+    if (!hit) return this.sendTo(p, { t: "whisperFail", to, why: "absent" });
+    const q = hit.target;
+    if (q.sid === p.sid) return this.sendTo(p, { t: "whisperFail", to, why: "self" });
+    const data = encodeEvent({
+      t: "whisper",
+      id: `w${now.toString(36)}.${(++this.whisperSeq).toString(36)}`,
+      at: now,
+      from: p.sid,
+      fromName: p.name,
+      to: q.sid,
+      toName: q.name,
+      text: maskChat(hit.text),
+      ...(p.staff ? { staff: true as const } : {}),
+      ...(p.mgr ? { mgr: true as const } : {}),
+      ...(q.staff ? { toStaff: true as const } : {}),
+      ...(q.mgr ? { toMgr: true as const } : {}),
+    });
+    if (q.conn) this.host.send(q.conn, data);
+    if (p.conn) this.host.send(p.conn, data);
   }
 
   /**

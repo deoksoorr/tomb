@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { earnGaugeRows, resetLeftText, type Gauge, type GaugeRow } from "@/lib/earnGauge";
 import { DAY_RESET_TEXT, msUntilDayReset } from "@/lib/gameDay";
+import { NO_BOOST } from "@/lib/pointEvent";
 import type { Me } from "@/lib/types";
 import styles from "./EarnGauge.module.css";
 
@@ -18,7 +19,9 @@ export default function EarnGauge({ me }: { me: Me }) {
     return () => clearInterval(t);
   }, []);
 
-  const view = earnGaugeRows(me.todayEarned, me.earnedBy);
+  // 포인트 배수 이벤트 날은 고른 항목 한도가 늘어난 값으로 (서버가 me.earnBoost로 알려 준다)
+  const boost = me.earnBoost ?? NO_BOOST;
+  const view = earnGaugeRows(me.todayEarned, me.earnedBy, boost);
   const { total, main, rest } = view;
   // 운영자 계정은 출석 도장·접속 시간 보너스(7일 연속·한 달 개근 포함)를 받지 않는다 → 따로 세는 줄을 뺀다
   const separate = me.staff ? [] : view.separate;
@@ -29,11 +32,13 @@ export default function EarnGauge({ me }: { me: Me }) {
       <div className={styles.head}>
         <h3 className={styles.title}>오늘 받은 포인트</h3>
         <span className={styles.totalNums}>
-          <b>{fmt(total.value)}</b> / {fmt(total.max)}
+          <b>{fmt(total.earned)}</b> / {fmt(total.max)}
         </span>
       </div>
       <Bar g={total} big label="오늘 받은 포인트" />
+      {total.extra > 0 && <p className={styles.extra}>이벤트로 {fmt(total.extra)}P 더 받았어요</p>}
       <p className={styles.note}>
+        {boost.caps.length > 0 ? `포인트 ${boost.mult}배 이벤트 중에는 표시한 항목의 한도도 ${boost.mult}배예요. ` : ""}
         {total.full ? "오늘 한도를 다 채웠어요. " : ""}한도는 한국 시간 {DAY_RESET_TEXT}에 새로 시작해요. 다음 초기화까지 <span className={styles.nowrap}>{resetLeftText(msUntilDayReset(now))}</span> 남았어요.
       </p>
 
@@ -72,22 +77,25 @@ export default function EarnGauge({ me }: { me: Me }) {
   );
 }
 
-function Row({ r }: { r: GaugeRow }) {
+/** 항목 한 줄 (운영자 「포인트 현황」도 같은 줄을 쓴다) */
+export function Row({ r }: { r: GaugeRow }) {
   return (
     <li className={styles.row} data-full={r.full || undefined}>
       <span className={styles.label}>
         {r.label}
+        {r.boosted && <span className={styles.boosted}>{r.boosted}배</span>}
         {r.full && <span className={styles.done}>다 채웠어요</span>}
       </span>
       <span className={styles.nums}>
-        {fmt(r.value)} / {fmt(r.max)}
+        {fmt(r.earned)} / {fmt(r.max)}
       </span>
       <Bar g={r} label={r.label} />
+      {r.extra > 0 && <span className={styles.extra}>이벤트로 {fmt(r.extra)}P 더 받았어요</span>}
     </li>
   );
 }
 
-function Bar({ g, big, label }: { g: Gauge; big?: boolean; label: string }) {
+export function Bar({ g, big, label }: { g: Gauge; big?: boolean; label: string }) {
   return (
     <span
       className={big ? styles.bigBar : styles.bar}

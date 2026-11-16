@@ -1,4 +1,4 @@
-/* 회원 제재 탭: 회원 전체 목록 · 접속 코드 재발급 */
+/* 회원 목록 탭: 회원 전체 목록 · 접속 코드 재발급 */
 
 .head {
   display: flex;
@@ -28,6 +28,12 @@
 .head > button {
   flex: none;
   white-space: nowrap;
+}
+
+/* 정렬 고르기 (최근 접속 순·접속 시간 순) */
+.sort {
+  flex: none;
+  width: auto;
 }
 
 .nameCell {
@@ -128,4 +134,66 @@
   .nameCell {
     font-size: 15px;
   }
+}
+
+/* 같은 IP·같은 기기 계정 (회원 한 명 = tbody 하나 — 둘째 줄이 있어도 줄무늬가 회원 단위로 이어지게) */
+.group tr td {
+  background: transparent !important;
+}
+
+.group:nth-of-type(even) td {
+  background: var(--ad-zebra) !important;
+}
+
+.group:hover td {
+  background: rgba(110, 155, 240, 0.06) !important;
+}
+
+.group tr:first-child:not(:last-child) td {
+  border-bottom: 0;
+}
+
+.linkRow td {
+  padding-top: 0;
+}
+
+.links {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.linkLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  color: var(--ad-muted);
+  text-align: left;
+}
+
+.linkLabel {
+  flex: none;
+  font-weight: 600;
+}
+
+.linkName {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ad-strong);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.linkName:hover {
+  color: var(--ad-accent, var(--ad-strong));
+}
+
+.linkStaff {
+  margin-left: 2px;
+  color: var(--ad-faint);
+  font-size: 11px;
 }

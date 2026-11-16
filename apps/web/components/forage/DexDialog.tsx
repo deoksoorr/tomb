@@ -33,16 +33,19 @@ import { FactGrid, InfoCard } from "../ui/InfoBlocks";
 import ItemIcon from "../ui/ItemIcon";
 import ui from "../ui/ui.module.css";
 import ConstellationDex from "./ConstellationDex";
+import MonsterDex from "./MonsterDex";
 import { forageStore, useForage } from "./forageStore";
 import s from "./forage.module.css";
 
-// 도감 (51번): 물고기·곤충·약초/버섯·광석·발굴품 + 별자리(망원경 별자리 잇기, ConstellationDex). 처음 잡으면 등록 (실루엣 → 그림, 가장 큰 크기·처음 잡은 날).
+// 도감 (51번): 물고기·곤충·약초/버섯·광석·발굴품 + 별자리(망원경 별자리 잇기, ConstellationDex) + 11/16 몬스터(사냥터·야근 빌딩, MonsterDex). 처음 잡으면 등록 (실루엣 → 그림, 가장 큰 크기·처음 잡은 날).
 // 모르는 칸도 희귀도·잡히는 곳·시간대·날씨·계절 힌트는 보인다. 보상은 종(칸) 하나를 처음 등록할 때마다 희귀도별 포인트 (등록하는 순간 서버가 지급,
 // 오늘 한도에 걸려 못 받은 것은 칸마다 [도감 보상 받기]로). 칭호는 그 칸의 절반·전부를 등록하면 자동으로 (lib/forage/dexReward).
 // accountId를 주면 그 사람의 도감 구경 (보상 버튼 없이).
 
 const stars = (n: number) => "★".repeat(n) + "☆".repeat(5 - n);
 const REWARD_RANGE = `${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[5]}P`;
+/** 11/16 몬스터 칸 처음 등록 보상 범위 (몬스터는 ★4까지 — lib/forage/mobDex mobRarity) */
+const MOB_REWARD_RANGE = `${DEX_NEW_REWARD[1]}~${DEX_NEW_REWARD[4]}P`;
 const ymd = (d: string) => (d.length === 8 ? `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6)}` : d);
 
 function hints(sp: Species): string[] {
@@ -83,8 +86,8 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
   const dex: Record<string, DexEntry> = (mine ? state?.dex : other?.dex) ?? {};
   const titles = (mine ? state?.titles : other?.titles) ?? [];
   const reward = mine ? state?.reward : undefined;
-  // 별자리 칸은 종 목록이 없다 (ConstellationDex가 따로 그린다)
-  const list = cat === "star" ? [] : speciesOf(cat);
+  // 별자리·몬스터 칸은 종 목록이 없다 (ConstellationDex·MonsterDex가 따로 그린다)
+  const list = cat === "star" || cat === "mob" ? [] : speciesOf(cat);
   const ids = dexIdsOf(cat);
   const got = ids.filter((id) => (dex[id]?.n ?? 0) > 0).length;
   const pct = Math.floor((got * 100) / ids.length);
@@ -178,14 +181,17 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
                     </button>
                   )}
                   <p className={ui.hint}>
-                    {nextTitle ? `다음 칭호 「${nextTitle.name}」까지 ${Math.max(0, nextTitle.need - got)}종` : "이 분류 칭호를 모두 받았어요"}. 새 종을 처음 올리면 {REWARD_RANGE}를 받아요. 희귀할수록
-                    많이 받아요.
+                    {nextTitle ? `다음 칭호 「${nextTitle.name}」까지 ${Math.max(0, nextTitle.need - got)}종` : "이 분류 칭호를 모두 받았어요"}.{" "}
+                    {cat === "mob"
+                      ? `새 몬스터를 처음 쓰러뜨리면 ${MOB_REWARD_RANGE}를 받아요. 우두머리일수록 많이 받아요.`
+                      : `새 종을 처음 올리면 ${REWARD_RANGE}를 받아요. 희귀할수록 많이 받아요.`}
                   </p>
                 </div>
               )}
             </div>
             {cat === "star" && <ConstellationDex key={peerKey || accountId || "me"} dex={dex} />}
-            {/* 별자리 칸이면 list가 비어 있어 아무것도 그리지 않는다 */}
+            {cat === "mob" && <MonsterDex key={peerKey || accountId || "me"} dex={dex} />}
+            {/* 별자리·몬스터 칸이면 list가 비어 있어 아무것도 그리지 않는다 */}
             <div className={s.grid}>
               {list.map((sp, i) => {
                 const known = (dex[sp.id]?.n ?? 0) > 0;
@@ -208,7 +214,7 @@ export default function DexDialog({ accountId, peer, name, onClose }: { accountI
                 );
               })}
             </div>
-            {!pick && cat !== "star" && <DexGuide list={list} dex={dex} ambience={ambience} />}
+            {!pick && cat !== "star" && cat !== "mob" && <DexGuide list={list} dex={dex} ambience={ambience} />}
             {pick && (
               <div className={cx(s.detail, !entry && s.unknown)} role="status">
                 <ItemIcon itemId={pick.id} size={48} />

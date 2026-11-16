@@ -1,12 +1,14 @@
 import { nanoid } from "nanoid";
 import { anyFishingWaterOf } from "@tomb/protocol";
-import { BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
+import { BALANCE_CAP, earnRule, type EarnSource } from "../economy";
 import { env } from "../env";
 import { peerOf } from "../ban";
 import { HttpError } from "../http";
 import { isStaff } from "../staff";
 import { earnPoints, getAccounts } from "../store";
 import { kstDay, kstWeek, loadMe } from "../store/accounts";
+import { capsMult, earnLimits, NO_BOOST, type EarnBoost } from "../pointEvent";
+import { earnBoost } from "../store/pointEvent";
 import type { BugsResult } from "../rpg/types";
 import { DAILY_CATCH_MAX, dexBadgeBits, dexIdsOf, gatherNodeById, NODE_CAT, npcById, speciesById, STACK_MAX, type DexCat, type NpcId } from "./catalog";
 import { claimPendingDex, ensureDexSettled, payNewDex, reachedTitleKeys, rewardState, titlesOf } from "./dexReward";
@@ -79,7 +81,8 @@ const newSeed = () => Math.floor(rand() * 0x7fffffff);
 const SOURCE_OF_NPC: Record<NpcId, Extract<EarnSource, "fish" | "gather">> = { fishmonger: "fish", collector: "gather" };
 const DAY_FIELD = { fish: "fishP", gather: "gatherP", dex: "dexP" } as const;
 
-function toState(acct: string, snap: Snapshot, now: number): ForageState {
+/** boost = 포인트 배수 이벤트 (lib/pointEvent) — 고른 항목이면 팔기·도감 한도 표시가 늘어난 값 */
+function toState(acct: string, snap: Snapshot, now: number, boost: EarnBoost = NO_BOOST): ForageState {
   const w = nodeWindow(now);
   return {
     bag: snap.bag,
@@ -87,7 +90,7 @@ function toState(acct: string, snap: Snapshot, now: number): ForageState {
     claims: snap.claims,
     titles: titlesOf(snap.dex, snap.claims, snap.pay.marks),
     reward: rewardState(snap.claims, snap.pay),
-    today: { ...snap.day, fishCap: earnRule("fish").dailyMax, gatherCap: earnRule("gather").dailyMax, dexCap: earnRule("dex").dailyMax, autoCap: AUTO_FISH_DAILY_MAX },
+    today: { ...snap.day, fishCap: earnRule("fish").dailyMax * capsMult(boost, "fish"), gatherCap: earnRule("gather").dailyMax * capsMult(boost, "gather"), dexCap: earnRule("dex").dailyMax * capsMult(boost, "dex"), autoCap: AUTO_FISH_DAILY_MAX },
     nodes: { ids: activeNodes(acct, now, new Set(snap.taken)).map((n) => n.id), refreshAt: windowEndsAt(w) },
   };
 }
@@ -108,7 +111,8 @@ async function readSnap(store: ForageStore, acct: string, now: number): Promise<
 }
 
 export async function forageState(acct: string, now = Date.now(), store: ForageStore = getForageStore()): Promise<ForageState> {
-  return toState(acct, await readSnap(store, acct, now), now);
+  const [snap, boost] = await Promise.all([readSnap(store, acct, now), earnBoost(now)]);
+  return toState(acct, snap, now, boost);
 }
 
 /** 처음 등록 보상 지급 (lib/forage/dexReward). 지급이 실패해도 잡은 결과는 그대로 — 쌓인 보상은 도감 창에서 받는다 */
@@ -213,7 +217,7 @@ async function autoResponse(store: ForageStore, acct: string, r: AutoSettled, no
     gear: r.gear,
     ...(r.ended ? { ended: r.ended } : {}),
     ...withDex(dex),
-    state: toState(acct, snap, now),
+    state: toState(acct, snap, now, await earnBoost(now)),
   };
 }
 
@@ -362,7 +366,7 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
   if (!npc) throw new HttpError(400, "INVALID_INPUT", "그런 상인은 없어요.");
   const source = SOURCE_OF_NPC[npc.id];
   const day = kstDay(now);
-  const [snap, acc] = await Promise.all([store.snapshot(acct, day, nodeWindow(now)), getAccounts().get(acct, day, now)]);
+  const [snap, acc, boost] = await Promise.all([store.snapshot(acct, day, nodeWindow(now)), getAccounts().get(acct, day, now), earnBoost(now)]);
   const units: { id: string; price: number }[] = [];
   for (const [id, raw] of Object.entries(want)) {
     const s = speciesById(id);
@@ -371,7 +375,11 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
     for (let i = 0; i < n; i++) units.push({ id, price: s.price });
   }
   if (!units.length) throw new HttpError(409, "NOTHING_TO_SELL", "팔 게 없어요.");
-  let left = Math.min(earnRule(source).dailyMax - snap.day[DAY_FIELD[source]], DAILY_EARN_CAP - acc.todayEarned, BALANCE_CAP - acc.points);
+  // 남은 한도(포인트)를 값 단위로: 포인트 배수 이벤트로 이 항목을 골랐으면 한도는 caps배, 판 값은 points배로 들어온다 (lib/pointEvent)
+  const lim = earnLimits(boost, source);
+  let left = Math.floor(
+    Math.min(earnRule(source).dailyMax * lim.caps - snap.day[DAY_FIELD[source]], lim.total - acc.todayEarned, BALANCE_CAP - acc.points) / lim.points,
+  );
   units.sort((a, b) => b.price - a.price);
   const plan: Record<string, number> = {};
   let value = 0;
@@ -382,18 +390,18 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
     plan[u.id] = (plan[u.id] ?? 0) + 1;
   }
   const capped = value < units.reduce((n, u) => n + u.price, 0);
-  if (!value) return { sold: {}, earned: 0, capped: true, state: toState(acct, snap, now), me: await loadMe(getAccounts(), acct, now) };
+  if (!value) return { sold: {}, earned: 0, capped: true, state: toState(acct, snap, now, boost), me: await loadMe(getAccounts(), acct, now) };
   if (!(await store.remove(acct, plan))) throw new HttpError(409, "BAG_CHANGED", "가방이 바뀌었어요. 다시 골라 주세요.");
-  const { earned, me } = await earnPoints(acct, source, value, ipHash);
-  if (earned < value) {
+  const { earned, paid, me } = await earnPoints(acct, source, value, ipHash, boost);
+  if (paid < value) {
     // 그 사이 다른 적립으로 한도가 줄었다 → 값을 못 받은 만큼(싼 것부터) 가방에 되돌린다
     const soldUnits = Object.entries(plan)
       .flatMap(([id, k]) => Array.from({ length: k }, () => ({ id, price: speciesById(id)!.price })))
       .sort((a, b) => b.price - a.price);
-    let paid = 0;
+    let kept = 0;
     const back: Record<string, number> = {};
     for (const u of soldUnits) {
-      if (paid + u.price <= earned) paid += u.price;
+      if (kept + u.price <= paid) kept += u.price;
       else back[u.id] = (back[u.id] ?? 0) + 1;
     }
     for (const [id, k] of Object.entries(back)) {
@@ -403,7 +411,7 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
     if (Object.keys(back).length) await store.restore(acct, back, STACK_MAX);
   }
   if (earned > 0) await store.addDay(acct, day, DAY_FIELD[source], earned);
-  return { sold: plan, earned, capped: capped || earned < value, state: await forageState(acct, now, store), me };
+  return { sold: plan, earned, capped: capped || paid < value, state: await forageState(acct, now, store), me };
 }
 
 // ── 도감 ──

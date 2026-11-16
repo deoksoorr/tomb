@@ -960,15 +960,15 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── 표 (모든 관리자 표 공통): 머리줄 고정 · 줄무늬 · 숫자는 .num으로 오른쪽 ── */
+/* ── 표 (모든 관리자 표 공통): 줄무늬 · 숫자는 .num으로 오른쪽 ──
+   11/16 표 안에서 따로 위아래로 스크롤하지 않고 본문(.main)과 같이 쭉 내려간다 (예전엔 화면 72% 높이에서 표 안 스크롤이 잡혔다).
+   칸이 많아 넓은 표만 옆으로 밀어 본다. 표 상자가 옆 스크롤을 맡으면 머리줄 고정이 본문을 따르지 않아 머리줄은 고정하지 않는다 */
 
 .tableWrap {
-  max-height: min(72vh, 760px);
-  overflow: auto;
+  overflow-x: auto;
   border: 1px solid var(--ad-line);
   border-radius: var(--ad-radius);
   background: var(--ad-surface);
-  overscroll-behavior: contain;
 }
 
 .table {
@@ -988,9 +988,6 @@
 }
 
 .table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   background: var(--ad-surface-2);
   color: var(--ad-muted);
   font-size: 12px;
@@ -1370,9 +1367,6 @@ a.kpiBig:hover {
 
 /* 좁은 화면에서 표를 카드로 (td에 data-label을 단 표만): 한 줄 = 카드 하나, 칸 = "이름표 · 값" */
 @media (max-width: 640px) {
-  .tableWrap:has(.stackTable) {
-    max-height: none;
-  }
 
   /* 카드로 바꾸지 않는 표는 칸이 찌그러지지 않게 최소 폭을 두고 가로로 밀어 본다 */
   .tableWrap > .table:not(.stackTable) {

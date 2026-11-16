@@ -75,22 +75,34 @@ export async function ensureDexSettled(store: ForageStore, acct: string, pay: De
   return (await store.settleDex(acct, kstDay(now))) !== null;
 }
 
-/** 받을 도감 보상에서 max까지 꺼내 지갑에 넣는다. 못 들어간 만큼은 되돌린다 */
-async function payFrom(store: ForageStore, acct: string, cat: DexCat, max: number, ip: string | undefined, now: number): Promise<{ taken: number; earned: number; me: Me | null }> {
+/**
+ * 받을 도감 보상에서 max까지 꺼내 지갑에 넣는다. 못 들어간 만큼은 되돌린다.
+ * earned = 지갑에 들어간 포인트, paid = 그게 받을 보상으로 얼마어치인지 (포인트 배수 이벤트로 도감을 골랐으면 earned보다 적다, 아니면 같다)
+ */
+async function payFrom(
+  store: ForageStore,
+  acct: string,
+  cat: DexCat,
+  max: number,
+  ip: string | undefined,
+  now: number,
+): Promise<{ taken: number; earned: number; paid: number; me: Me | null }> {
   const taken = await store.takeDexPending(acct, cat, max);
-  if (taken <= 0) return { taken: 0, earned: 0, me: null };
+  if (taken <= 0) return { taken: 0, earned: 0, paid: 0, me: null };
   let earned = 0;
+  let paid = 0;
   let me: Me | null = null;
   try {
     const r = await earnPoints(acct, "dex", taken, ip);
     earned = r.earned;
+    paid = r.paid;
     me = r.me;
   } finally {
-    // 적립이 실패해도 꺼낸 것은 받을 보상으로 되돌린다
-    await store.dexPaid(acct, cat, taken, earned);
+    // 적립이 실패해도 꺼낸 것은 받을 보상으로 되돌린다 (받은 기록은 보상 값 단위로)
+    await store.dexPaid(acct, cat, taken, paid);
   }
   if (earned > 0) await store.addDay(acct, kstDay(now), "dexP", earned);
-  return { taken, earned, me };
+  return { taken, earned, paid, me };
 }
 
 /**
@@ -115,11 +127,13 @@ export async function payNewDex(
   }
   let points = 0;
   let earned = 0;
+  let paid = 0;
   let me: Me | null = null;
   for (const [cat, n] of byCat) {
     points += n;
     const r = await payFrom(store, acct, cat, n, ip, now);
     earned += r.earned;
+    paid += r.paid;
     me = r.me ?? me;
   }
   // 새로 닿은 칭호: 이번 등록 전 도감으로는 못 닿았고, 예전 단계 보상·붙은 표시로도 없던 것
@@ -133,7 +147,7 @@ export async function payNewDex(
     .filter((k) => !held.has(k))
     .map(titleName)
     .filter((t): t is string => !!t);
-  return { points, earned, pending: points - earned, titles, ...(me && earned > 0 ? { me } : {}) };
+  return { points, earned, pending: points - paid, titles, ...(me && earned > 0 ? { me } : {}) };
 }
 
 /** 도감 창의 [도감 보상 받기]: 그 칸의 받을 보상을 한도 안에서 받는다 (동시에 눌러도 꺼내기가 원자적이라 한 번만) */
@@ -145,6 +159,6 @@ export async function claimPendingDex(
   now: number,
 ): Promise<{ earned: number; left: number; me: Me | null }> {
   const r = await payFrom(store, acct, cat, Number.MAX_SAFE_INTEGER, ip, now);
-  return { earned: r.earned, left: r.taken - r.earned, me: r.me };
+  return { earned: r.earned, left: r.taken - r.paid, me: r.me };
 }
 

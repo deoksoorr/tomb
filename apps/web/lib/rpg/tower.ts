@@ -515,6 +515,8 @@ export type TowerVerdict =
        * 층·초월 EXP·상자·포인트는 그대로 주고 랭킹·주간 기록·서버 최초·최고층 기록 보유자에서만 뺀다 (사유 목록 — 운영 로그용)
        */
       suspect?: string[];
+      /** 11/16 몬스터 도감에 더할 처치 수 (의심 판이 아닐 때만 — 몬스터마다 출현 상한 안) */
+      mobs?: Partial<Record<MonsterId, number>>;
     }
   /** why = 운영 로그용 자세한 사유 (화면에는 안 보인다) */
   | { ok: false; code: string; message: string; why?: string };
@@ -664,7 +666,8 @@ export function evalTower(
     floorMs,
     kills: total,
     points: k * TOWER_FLOOR_POINTS,
-    ...(suspect.length ? { suspect } : {}),
+    // 11/16 몬스터 도감: 의심 판이 아닐 때만 (몬스터마다 출현 상한 안이라는 게 확인된 처치 수)
+    ...(suspect.length ? { suspect } : total > 0 ? { mobs: { ...r.kills } } : {}),
   };
 }
 

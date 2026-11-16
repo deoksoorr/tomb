@@ -9,7 +9,7 @@ const post = (body: unknown): RequestInit => ({ method: "POST", headers: { "cont
 
 export const socialAdminApi = {
   gifts: () => request<{ gifts: GiftLogEntry[] }>("/api/admin/gifts", { cache: "no-store" }),
-  sendGift: (input: Partial<GiftSendInput> & { target: string; note: string }) => request<{ gift: GiftRecord }>("/api/admin/gifts", post(input)),
+  sendGift: (input: Partial<GiftSendInput> & { note: string }) => request<{ gift: GiftRecord }>("/api/admin/gifts", post(input)),
   megaphones: () => request<{ entries: AdminMegaphoneRow[] }>("/api/admin/megaphone", { cache: "no-store" }),
   hideMegaphone: (id: string, hidden: boolean) => request<{ ok: true }>("/api/admin/megaphone", post({ id, hidden })),
 };

@@ -5,13 +5,13 @@ import { BALANCE_CAP } from "./economy";
 import { getAccounts, getGifts } from "./store";
 import { kstDay } from "./store/accounts";
 import { GIFT_KEEP_MS, type GiftRecord } from "./store/gifts";
-import { GIFT_MAX_COUNT, GIFT_MAX_ITEMS, giftHasTerm, isGiftTerm, type GiftItem, type GiftTerm } from "./types";
+import { GIFT_MAX_COUNT, GIFT_MAX_ITEMS, GIFT_MAX_TARGETS, giftHasTerm, isGiftTerm, type GiftItem, type GiftTerm } from "./types";
 
 // 11번 관리자 선물: 보내기 검증과 발송 (라우트·다른 기능 공용 — 예: 고정 색상 염색권을 선물함으로 보낼 때 sendGift를 부르면 된다)
 
 /** 선물에 넣을 수 있는 아이템: 상점 카탈로그(@tomb/protocol ITEMS)에 있는 것 */
 export const isGiftItem = (id: string) => !!itemById(id);
-export { GIFT_MAX_COUNT, GIFT_MAX_ITEMS, giftHasTerm };
+export { GIFT_MAX_COUNT, GIFT_MAX_ITEMS, GIFT_MAX_TARGETS, giftHasTerm };
 export const GIFT_NOTE_MAX = 200;
 export const GIFT_FROM_DEFAULT = "마을 관리인";
 
@@ -30,11 +30,22 @@ const giftItem = z
   // 기간 선물은 개수 대신 기간이다 (1개로 맞춘다)
   .transform((v): GiftItem => (v.term ? { itemId: v.itemId, count: 1, term: v.term } : { itemId: v.itemId, count: v.count }));
 
-/** POST /api/admin/gifts: 대상(all 또는 계정 id) + 쪽지 + 포인트·아이템 (둘 중 하나는 있어야 한다) */
+const accountId = z.string().regex(/^[A-Za-z0-9_-]{21}$/, "계정 id 형식이 올바르지 않아요.");
+const giftTarget = z.object({ id: accountId, name: z.string().max(20).nullish() });
+/** 골라 보낸 받는 사람 한 명 (name = 그때의 닉네임, 관리자 기록 표시용) */
+export type GiftTarget = { id: string; name: string | null };
+
+/**
+ * POST /api/admin/gifts: 대상 + 쪽지 + 포인트·아이템 (포인트·아이템 둘 중 하나는 있어야 한다).
+ * 대상은 target("all" 또는 계정 id) 또는 targets(여러 계정, 같은 id는 한 번만). 둘 다 오면 target 계정을 맨 앞에 합친다.
+ * 결과: 한 명이면 target = 그 id, 두 명 이상이면 targets에 모두 (target·targetName은 첫 사람)
+ */
 export const GiftSendSchema = z
   .object({
-    target: z.union([z.literal("all"), z.string().regex(/^[A-Za-z0-9_-]{21}$/, "계정 id 형식이 올바르지 않아요.")]),
+    target: z.union([z.literal("all"), accountId]).nullish(),
     targetName: z.string().max(20).nullish(),
+    // 중복을 빼기 전이라 넉넉히 받고, 뺀 뒤 GIFT_MAX_TARGETS명이 넘으면 거절한다
+    targets: z.array(giftTarget).max(GIFT_MAX_TARGETS * 2, `한 번에 ${GIFT_MAX_TARGETS}명까지 보낼 수 있어요.`).nullish(),
     from: z.string().trim().max(20, "보내는 이는 20자까지").nullish(),
     note: z.string().trim().min(1, "쪽지를 적어 주세요.").max(GIFT_NOTE_MAX, `쪽지는 ${GIFT_NOTE_MAX}자까지 적을 수 있어요.`),
     points: z.number().int("정수로 적어 주세요.").min(0).max(BALANCE_CAP).default(0),
@@ -53,11 +64,41 @@ export const GiftSendSchema = z
         return [...m.values()];
       }),
   })
-  .refine((v) => v.points > 0 || v.items.length > 0, "포인트나 아이템 중 하나는 넣어 주세요.");
-export type GiftSendInput = z.output<typeof GiftSendSchema>;
+  .refine((v) => v.points > 0 || v.items.length > 0, "포인트나 아이템 중 하나는 넣어 주세요.")
+  .refine((v) => !(v.target === "all" && v.targets?.length), "전체에 보낼 때는 계정을 따로 고르지 않아요.")
+  .transform((v, ctx) => {
+    const { targets: picked, ...rest } = v;
+    if (v.target === "all") return { ...rest, target: "all", targetName: null };
+    const seen = new Map<string, GiftTarget>();
+    const list = [...(v.target ? [{ id: v.target, name: v.targetName }] : []), ...(picked ?? [])];
+    for (const t of list) if (!seen.has(t.id)) seen.set(t.id, { id: t.id, name: t.name ?? null });
+    const targets = [...seen.values()];
+    if (!targets.length) {
+      ctx.addIssue({ code: "custom", message: "받는 사람을 골라 주세요." });
+      return z.NEVER;
+    }
+    if (targets.length > GIFT_MAX_TARGETS) {
+      ctx.addIssue({ code: "custom", message: `한 번에 ${GIFT_MAX_TARGETS}명까지 보낼 수 있어요.` });
+      return z.NEVER;
+    }
+    const [first] = targets;
+    return { ...rest, target: first.id, targetName: first.name, ...(targets.length > 1 ? { targets } : {}) };
+  });
+/** 보내기 입력 (검증 뒤). targets는 두 명 이상일 때만 (한 명·전체는 target 하나로) */
+export type GiftSendInput = {
+  target: "all" | string;
+  targetName?: string | null;
+  targets?: GiftTarget[] | null;
+  from?: string | null;
+  note: string;
+  points: number;
+  items: GiftItem[];
+};
 
 /** 선물 보내기 (발송 기록에도 남는다). 받지 않으면 GIFT_KEEP_DAYS일 뒤 사라진다 */
 export async function sendGift(input: GiftSendInput, now = Date.now()): Promise<GiftRecord> {
+  // 여러 계정: 받는 계정 id 전부를 남기고 (저장소가 계정마다 선물함에 넣는다, 발송 기록은 한 줄) 기록 표시는 첫 사람 이름으로
+  const many = input.target !== "all" && input.targets && input.targets.length > 1 ? input.targets : null;
   const gift: GiftRecord = {
     id: nanoid(12),
     from: input.from || GIFT_FROM_DEFAULT,
@@ -66,8 +107,9 @@ export async function sendGift(input: GiftSendInput, now = Date.now()): Promise<
     items: input.items,
     createdAt: now,
     expiresAt: now + GIFT_KEEP_MS,
-    target: input.target,
-    targetName: input.target === "all" ? null : (input.targetName ?? null),
+    target: many ? many[0].id : input.target,
+    targetName: many ? many[0].name : input.target === "all" ? null : (input.targetName ?? null),
+    ...(many ? { targets: many.map((t) => t.id), targetNames: many.map((t) => t.name ?? null) } : {}),
   };
   await getGifts().send(gift);
   return gift;

@@ -35,6 +35,8 @@ import {
   type QueueStatus,
   type Sid,
   type WelcomeMsg,
+  type WhisperMsg,
+  WHO_ON_MAX,
 } from "@tomb/protocol";
 import type { AppearanceChange } from "../sprites/avatar";
 import { readChatLog, type IncomingChatLine } from "../logic/chatLog";
@@ -46,6 +48,7 @@ import { LookPacer } from "./lookPacer";
 import { isPermanentJoinError, JoinLimiter, reusableToken, utf8Bytes, type CachedToken } from "./joinPolicy";
 import { MoveThrottle, type NetPose } from "./sendThrottle";
 import { bodyFromWsUrl, SYNC_EVERY_MS, SyncPolicy } from "./syncPolicy";
+import { deviceHeaders } from "@/lib/deviceMark";
 
 // 실시간 연결 (명세 3-2, 4-1).
 //  - (재)연결마다 POST /api/join 으로 새 토큰을 받는다 (토큰 60초 유효). 같은 채널로 돌아가면 서버 유예(20초) 안에서 sid·좌석 유지
@@ -462,6 +465,18 @@ export class RealtimeClient {
     this.send({ t: "chat", text });
   }
 
+  /** 11/16 귓속말 (정리된 글). 서버가 받는 사람을 다시 맞추고 받는 사람과 나에게 whisper로 돌려준다 → 그때 채팅창에 */
+  whisper(to: string, text: string): void {
+    if (this.online) this.send({ t: "whisper", to, text });
+    else bridge.emit("chat:line", { name: "", text: "지금은 귓속말을 보낼 수 없어요.", mine: true, w: "fail" });
+  }
+
+  /** 11/16 최근 귓속말 상대가 지금 이 채널에 있는지 묻기 (서버가 whoOn으로 답한다 → whisper:online) */
+  whoOn(names: string[]): void {
+    const asked = names.slice(0, WHO_ON_MAX);
+    if (asked.length) this.send({ t: "whoOn", names: asked });
+  }
+
   /** 24번 벤치 상태 ("" = 풀기). 앉아 있을 때만 서버가 받는다 */
   mood(m: SeatMood | ""): void {
     this.send({ t: "mood", m });
@@ -558,10 +573,12 @@ export class RealtimeClient {
     this.joinLimiter.record(Date.now());
     const body: JoinRequest = { channel, name: this.opts.name, color: this.opts.color };
     if (this.opts.body) body.body = this.opts.body;
+    // 같은 사람 판정용 기기 표시·브라우저 환경 머리글 (lib/deviceMark)
+    const dev = await deviceHeaders();
     const post = () =>
       fetch("/api/join", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...dev },
         body: JSON.stringify(body),
         credentials: "same-origin",
         cache: "no-store",
@@ -569,7 +586,7 @@ export class RealtimeClient {
     let r = await post();
     if (r.status === 401) {
       // 방문자 쿠키가 없거나 만료 → 세션을 받고 한 번 더
-      await fetch("/api/session", { method: "POST", credentials: "same-origin" }).catch(() => null);
+      await fetch("/api/session", { method: "POST", credentials: "same-origin", headers: dev }).catch(() => null);
       this.joinLimiter.record(Date.now());
       r = await post();
     }
@@ -633,6 +650,25 @@ export class RealtimeClient {
     ws.onerror = () => {
       // close가 뒤따라 온다
     };
+  }
+
+  /** 11/16 귓속말 한 줄 → 채팅창 (내가 보낸 것이면 받는 사람 이름, 받은 것이면 보낸 사람 이름) */
+  private onWhisper(m: WhisperMsg): void {
+    if (typeof m.text !== "string" || typeof m.id !== "string") return;
+    const out = m.from === this.mySid;
+    if (!out && m.to !== this.mySid) return;
+    const name = String((out ? m.toName : m.fromName) ?? "").slice(0, 40);
+    const staff = out ? m.toStaff : m.staff;
+    const mgr = out ? m.toMgr : m.mgr;
+    bridge.emit("chat:line", {
+      name,
+      text: m.text.slice(0, CHAT_MAX * 2),
+      mine: out,
+      key: m.id,
+      w: out ? "out" : "in",
+      ...(staff === true ? { staff: true as const } : {}),
+      ...(mgr === true ? { mgr: true as const } : {}),
+    });
   }
 
   private onMessage(data: unknown): void {
@@ -713,6 +749,21 @@ export class RealtimeClient {
           break;
         case "chatLog":
           this.h.onChatLog?.(readChatLog(m.now, m.lines, Date.now()));
+          break;
+        // ── 11/16 귓속말: 맵 상관없이 채팅창에만 (말풍선 없음, 이 화면 기록에만) ──
+        case "whisper":
+          this.onWhisper(m);
+          break;
+        case "whoOn":
+          if (Array.isArray(m.on) && Array.isArray(m.off)) bridge.emit("whisper:online", { on: m.on.filter((n) => typeof n === "string"), off: m.off.filter((n) => typeof n === "string") });
+          break;
+        case "whisperFail":
+          bridge.emit("chat:line", {
+            name: "",
+            text: m.why === "self" ? "나에게는 귓속말을 보낼 수 없어요." : `${String(m.to ?? "").slice(0, 40)}님은 이 채널에 없어요.`,
+            mine: true,
+            w: "fail",
+          });
           break;
         case "mood":
           if (m.m === "" || isSeatMood(m.m)) this.h.onMood?.(m.sid, m.m);

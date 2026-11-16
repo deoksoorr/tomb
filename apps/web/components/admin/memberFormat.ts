@@ -1,6 +1,6 @@
 import type { MemberStatus } from "@/lib/adminMembers";
 
-// 회원 제재 탭 표시 도우미 (화면 전용 — lib/adminMembers.ts는 서버 코드라 값은 가져오지 않는다)
+// 회원 목록 탭 표시 도우미 (화면 전용 — lib/adminMembers.ts는 서버 코드라 값은 가져오지 않는다)
 
 export const STATUS_LABEL: Record<MemberStatus, string> = {
   normal: "정상",

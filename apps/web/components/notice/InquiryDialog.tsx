@@ -11,10 +11,11 @@ import ui from "../ui/ui.module.css";
 import { INQUIRY_LIMITS, validateInquiry } from "./notices";
 import styles from "./notice.module.css";
 
-// 문의 접수 가능 여부·공개 저장소 여부 (탭에서 한 번만 묻는다)
-let infoRequest: Promise<InquiryInfoResponse | null> | null = null;
+// 문의 접수 가능 여부·GitHub으로도 보내는 저장소가 공개인지 (탭에서 한 번만 묻는다).
+// 묻지 못해도 문의는 보낼 수 있으니 공개로 보고 안내만 띄운다 (서버가 저장소 조회에 실패했을 때와 같은 쪽)
+let infoRequest: Promise<InquiryInfoResponse> | null = null;
 function loadInquiryInfo() {
-  infoRequest ??= api.inquiryInfo().catch(() => null);
+  infoRequest ??= api.inquiryInfo().catch(() => ({ enabled: true, public: true }));
   return infoRequest;
 }
 
@@ -32,7 +33,7 @@ function useInquiryInfo(): InquiryInfoResponse | null {
   return info;
 }
 
-/** 가이드·내 정보에 두는 [문의하기]. 운영자가 아직 연결하지 않았으면 "준비 중" */
+/** 가이드·내 정보에 두는 [문의하기]. enabled가 false면(예전 서버) "준비 중" */
 export function InquiryButton({ className }: { className?: string }) {
   const info = useInquiryInfo();
   const [open, setOpen] = useState(false);

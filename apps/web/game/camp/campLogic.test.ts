@@ -36,11 +36,14 @@ describe("캠핑장 NPC 말 걸기 (campTalk)", () => {
     expect(campLines("clerk", 0)[0]).toBe("중고로 올라온 장비가 반이에요.");
     expect(campLines("granny", 0)[0]).toBe("물고기는 서두르면 안 와.");
   });
-  it("처음 도착 안내: 인사 + 텐트·요리·별 세 문장 (텐트·요리는 곧 열린다고)", () => {
+  it("처음 도착 안내: 인사 + 텐트·바베큐장·전망대 세 문장 (곧 열린다는 건 텐트만, 요리 약속은 없다)", () => {
     expect(CAMP_WELCOME).toHaveLength(4);
     expect(CAMP_WELCOME.slice(1).join(" ")).toMatch(/데크.*곧/);
-    expect(CAMP_WELCOME.slice(1).join(" ")).toMatch(/모닥불.*곧/);
+    expect(CAMP_WELCOME.slice(1).join(" ")).toMatch(/바베큐장/);
+    expect(CAMP_WELCOME.join(" ")).not.toMatch(/요리/);
     expect(CAMP_WELCOME.slice(1).join(" ")).toMatch(/전망대/);
+    // 전망대 망원경은 캠핑장을 내려다보는 것 — 별자리 잇기(마을 별 보기 언덕)와 헷갈리게 "별은 전망대에서"라고 하지 않는다
+    expect(CAMP_WELCOME.join(" ")).not.toMatch(/별은/);
   });
   it("별지기는 밤, 기타 캠퍼는 밤 9~11시, 나머지는 늘", () => {
     expect(campNpcAround("stargazer", 12)).toBe(false);

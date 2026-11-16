@@ -1263,6 +1263,12 @@ const GC = {
   rock: [0x9c968a, 0x86817a, 0xb4ae9e, 0x7a8a4a] as const,
   water: { deep: 0x3a7a8e, mid: 0x4a92a4, shallow: 0x6cb4c0, light: 0xa8dce0, foam: 0xe8f6f4 },
 };
+/**
+ * 11/16 바닥 낙엽 색: 낮에 낙엽 점이 너무 쨍해서 눈이 아프다(사용자 — 밤엔 괜찮았다) → 풀색에 섞어 채도·밝기를 낮춘다.
+ * 가장 밝은 노랑(0xffe07a)은 바닥에서 뺀다 (나무·낙엽 더미 그림은 LEAF_COLORS 그대로)
+ */
+const GROUND_LEAF: readonly Color[] = LEAF_COLORS.slice(0, 4).map((c) => mix(c, GC.grass[0], 0.4));
+
 
 function put(d: Uint8ClampedArray, i: number, c: Color, a = 255): void {
   d[i] = (c >> 16) & 255;
@@ -1313,7 +1319,7 @@ function groundColor(x: number, y: number, k: CampGround, nearPath: boolean): Co
       if (crack) return GC.rock[1];
       if (hashU(x >> 2, y >> 2, 43) < 0.1) return GC.rock[3]; // 이끼
       // 낙엽이 바위 틈에 조금
-      if (hashU(x >> 1, y >> 1, 45) < 0.04) return LEAF_COLORS[Math.floor(hashU(x, y, 46) * LEAF_COLORS.length)];
+      if (hashU(x >> 1, y >> 1, 45) < 0.04) return GROUND_LEAF[Math.floor(hashU(x, y, 46) * GROUND_LEAF.length)];
       return n < 0.15 ? GC.rock[1] : n > 0.85 ? GC.rock[2] : GC.rock[0];
     }
     case "plaza": {
@@ -1328,7 +1334,7 @@ function groundColor(x: number, y: number, k: CampGround, nearPath: boolean): Co
       return n < 0.14 ? GC.plaza[1] : n > 0.88 ? GC.plaza[2] : hashU(x >> 1, y >> 1, 53) < 0.03 ? 0xd8a840 : GC.plaza[0];
     }
     case "path": {
-      if (hashU(x >> 1, y >> 1, 61) < 0.1) return LEAF_COLORS[Math.floor(hashU(x, y, 62) * LEAF_COLORS.length)];
+      if (hashU(x >> 1, y >> 1, 61) < 0.08) return GROUND_LEAF[Math.floor(hashU(x, y, 62) * GROUND_LEAF.length)];
       if (hashU(x, y, 63) > 0.97) return 0xc8b89a; // 자갈
       return n < 0.16 ? GC.path[1] : n > 0.86 ? GC.path[2] : GC.path[0];
     }
@@ -1336,12 +1342,15 @@ function groundColor(x: number, y: number, k: CampGround, nearPath: boolean): Co
     case "grass":
     default: {
       // 낙엽 깔린 풀: 군데군데 잎이 수북한 곳 (큰 얼룩) + 흩어진 잎
-      const pile = hashU(x >> 4, y >> 4, 71);
-      // 11/15 더 촘촘하게 (사용자: 낙엽 점을 늘려 달라)
-      const rate = 0.22 + (pile > 0.65 ? 0.24 : 0) + (nearPath ? 0.08 : 0);
-      if (hashU(x >> 1, y >> 1, 72) < rate) {
-        const li = Math.floor(hashU(x >> 1, y >> 1, 73) * LEAF_COLORS.length);
-        return n < 0.25 ? darken(LEAF_COLORS[li], 0.12) : LEAF_COLORS[li];
+      // 11/15 더 촘촘하게 (사용자: 낙엽 점을 늘려 달라) → 11/16 낮에 지글거려 눈이 아프다: 흩어진 점은 줄이고 수북한 곳에 모은다.
+      // 수북한 곳은 4px 덩어리 (2px 점이 화면 가득 흩어지면 낮에 지글거려 보인다), 색은 풀에 섞은 GROUND_LEAF
+      const inPile = hashU(x >> 4, y >> 4, 71) > 0.65;
+      const rate = inPile ? 0.46 : 0.1 + (nearPath ? 0.06 : 0);
+      const gx = inPile ? x >> 2 : x >> 1;
+      const gy = inPile ? y >> 2 : y >> 1;
+      if (hashU(gx, gy, 72) < rate) {
+        const li = Math.floor(hashU(gx, gy, 73) * GROUND_LEAF.length);
+        return n < 0.25 ? darken(GROUND_LEAF[li], 0.08) : GROUND_LEAF[li];
       }
       if (n > 0.95) return GC.blade;
       const g0 = n < 0.18 ? GC.grass[1] : n > 0.86 ? GC.grass[2] : GC.grass[0];

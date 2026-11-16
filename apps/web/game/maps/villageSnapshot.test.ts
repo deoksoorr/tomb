@@ -15,6 +15,14 @@ import { BUS_STOP, FISH_DECOR } from "../world/fishZone";
 //   입구 상호작용, 구경 벤치 bV·bW를 마당 위쪽으로, 마당 바닥 돌 포장, 구역 이름 「범퍼카장」)
 //   — 바뀐 소품·충돌·좌석·상호작용·바닥·걷기 격자·미니맵은 옛 묘역(x 48~432, y 288~544)과 범퍼카장 마당(x 592~864, y 784~1008) 안뿐이다.
 //     둘레에 흩뿌린 나무는 한 그루도 바뀌지 않았다 (예전 철책·문·소품 자리를 흩뿌릴 때만 그대로 비운다 — layout.ts OLD_B_*)
+// 고친 기록: 행운권 판매대(유령 잡화점 동쪽 풀밭, world/lotteryKiosk.ts) — 판매대 충돌 하나와 앞쪽 상호작용 하나만 더했다
+//   — 바뀐 충돌·상호작용·걷기 격자는 판매대 둘레(x 668~700, y 147~181) 안뿐이다 (소품·좌석·미니맵은 그대로)
+// 고친 기록: 11/16 남쪽 개편 — "범퍼카장·오리배 자리가 좁다". 오리 연못 248×144 → 264×196(오솔길 아래 ~ 아래 담 앞, 선착장·오리배 세 척 자리를 위로),
+//   범퍼카 링크 192×148 → 284×180(마당 x 608~912, 입구 x 762, 타이어 둘 더함, 구경 벤치 bV·bW는 오솔길 북쪽 강둑으로), 벤치 bS를 연못 북동쪽 둑으로,
+//   호박밭 허수아비·호박을 모닥불 아래로, 범퍼카장 귀퉁이 나무 둘 뺌(버드나무는 연못 남동쪽 둑), 호숫가 단풍·은행 하나씩, 강둑 흩뿌림 10 → 13그루,
+//   흩뿌린 나무는 간판 앞·링크 귀퉁이 ↔ 강둑 틈(호박밭 가는 길)을 비운다(bumperLayout BUMPER_KEEPOUT), 오솔길 동쪽 끝을 입구까지
+//   — 바뀐 것은 남쪽 띠(x 300~1120, y 740~1008)와 호숫가 나무 두 그루뿐이다. 흩뿌린 나무 자리가 바뀌어 지문·걷기 격자·미니맵 모두 새로 찍었다.
+//   (MAP_VERSION을 올리면 첫 지문은 그 숫자 때문에 또 바뀐다 — 올린 뒤 다시 찍을 것)
 
 function fnv(s: string): string {
   let h = 0x811c9dc5;
@@ -51,13 +59,14 @@ const layoutPrint = () =>
 
 describe("마을 지문 (캠핑장이 생겨도 그대로)", () => {
   it("배치·좌석·상호작용·충돌·소품", () => {
-    expect(layoutPrint()).toBe("2227817b");
+    // 11/16 MAP_VERSION 12 → 13 (행운권 판매대·범퍼카장/오리 연못 넓힘)으로 다시 찍음 (예전 값 cf1f8667), 정류장 이름 「언젠가 버스 정류장」으로 다시 (3aa43fe6)
+    expect(layoutPrint()).toBe("6da629a4");
   });
   it("걷기 격자", () => {
     const g = walkableGrid(8);
-    expect(fnv(Array.from(g.cells as ArrayLike<number>).join(""))).toBe("54397820");
+    expect(fnv(Array.from(g.cells as ArrayLike<number>).join(""))).toBe("bb5ee238");
   });
   it("미니맵 바탕", () => {
-    expect(fnv(Array.from(minimapPixels()).join(","))).toBe("2b5ea05a");
+    expect(fnv(Array.from(minimapPixels()).join(","))).toBe("092dccbd");
   });
 });

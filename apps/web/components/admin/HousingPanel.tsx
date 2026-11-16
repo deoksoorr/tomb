@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ApiRequestError, errorMessage } from "@/lib/api";
-import { tierById } from "@/lib/housing/catalog";
+import { RECLAIM_DAYS, RECLAIM_WARN_DAYS, tierById } from "@/lib/housing/catalog";
 import type { AdminHouse } from "@/lib/housing/types";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
@@ -12,7 +12,7 @@ import styles from "./Admin.module.css";
 import { Empty, Loading } from "./PanelState";
 
 type Props = { toast: (message: string) => void; onAuthLost: () => void };
-type Filter = "all" | "reported" | "hidden";
+type Filter = "all" | "reported" | "hidden" | "away";
 type Confirm = { label: string; run: () => Promise<unknown> } | null;
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -22,6 +22,17 @@ function formatDate(ms: number): string {
 }
 const DONE: Record<ModAction, string> = { hide: "숨겼어요.", unhide: "다시 보이게 했어요.", delete: "삭제했어요." };
 
+const DAY_MS = 86_400_000;
+/** 주인이 들어오지 않은 날수 (기록이 없으면 null) */
+const awayDays = (h: AdminHouse, now: number): number | null => (h.lastSeenAt > 0 && now > 0 ? Math.floor((now - h.lastSeenAt) / DAY_MS) : null);
+/** 정리까지 남은 날 (올림, 0 이하 = 다음 정리 때. 비우지 않는 집은 null). 규칙을 켠 시각 전 접속은 서버가 그 시각으로 센 reclaimAt을 쓴다 */
+const daysLeft = (h: AdminHouse, now: number): number | null => (h.reclaimAt > 0 && now > 0 ? Math.ceil((h.reclaimAt - now) / DAY_MS) : null);
+/** 오래 비운 집 정리 대상이 가까운 집 (운영자 집은 빼고, 정리 기준으로 RECLAIM_WARN_DAYS일 이상 비움) */
+const nearReclaim = (h: AdminHouse, now: number) => {
+  const left = daysLeft(h, now);
+  return left !== null && left <= RECLAIM_DAYS - RECLAIM_WARN_DAYS;
+};
+
 /** 하우징 탭: 집 목록(점수·좋아요·숨김)과 신고된 방명록 글 (숨김·해제·삭제) */
 export default function HousingPanel({ toast, onAuthLost }: Props) {
   const [houses, setHouses] = useState<AdminHouse[] | null>(null);
@@ -30,11 +41,17 @@ export default function HousingPanel({ toast, onAuthLost }: Props) {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<Confirm>(null);
+  /** 목록을 받은 시각 (마지막 접속 날수 계산용) */
+  const [now, setNow] = useState(0);
 
   useEffect(() => {
     let alive = true;
     adminApi.houses().then(
-      ({ houses }) => alive && setHouses(houses),
+      ({ houses }) => {
+        if (!alive) return;
+        setHouses(houses);
+        setNow(Date.now());
+      },
       (e: unknown) => {
         if (!alive) return;
         if (e instanceof ApiRequestError && e.status === 401) onAuthLost();
@@ -46,11 +63,11 @@ export default function HousingPanel({ toast, onAuthLost }: Props) {
     };
   }, [version, toast, onAuthLost]);
 
-  const act = async (run: () => Promise<unknown>, done: string) => {
+  const act = async (run: () => Promise<unknown>, done: string | (() => string)) => {
     setBusy(true);
     try {
       await run();
-      toast(done);
+      toast(typeof done === "string" ? done : done());
       setVersion((v) => v + 1);
     } catch (e) {
       if (e instanceof ApiRequestError && e.status === 401) onAuthLost();
@@ -68,11 +85,29 @@ export default function HousingPanel({ toast, onAuthLost }: Props) {
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (houses ?? [])
-      .filter((h) => filter === "all" || (filter === "hidden" ? h.hidden : h.reportedEntries.length > 0))
+      .filter(
+        (h) =>
+          filter === "all" || (filter === "hidden" ? h.hidden : filter === "away" ? nearReclaim(h, now) : h.reportedEntries.length > 0),
+      )
       .filter((h) => !q || h.name.toLowerCase().includes(q) || h.ownerName.toLowerCase().includes(q));
-  }, [houses, filter, query]);
+  }, [houses, filter, query, now]);
 
   const reported = (houses ?? []).filter((h) => h.reportedEntries.length > 0).length;
+  const away = (houses ?? []).filter((h) => nearReclaim(h, now)).length;
+
+  /** 오래 비운 집 지금 정리하기 */
+  const reclaimNow = () => {
+    if (!window.confirm(`주인이 ${RECLAIM_DAYS}일 넘게 들어오지 않은 집을 지금 비울까요? 낸 포인트는 주인이 돌아오면 선물함으로 가고 가구는 가방에 남아요.`)) return;
+    let msg = "지금 비울 집이 없어요.";
+    void act(
+      async () => {
+        const r = await adminApi.reclaimHouses();
+        const sum = r.reclaimed.reduce((n, d) => n + d.points, 0);
+        if (r.reclaimed.length) msg = `${r.reclaimed.length}채를 철거했어요. 돌려줄 포인트는 모두 ${sum.toLocaleString("ko-KR")}P예요.`;
+      },
+      () => msg,
+    );
+  };
 
   return (
     <section className={styles.notices} aria-label="하우징">
@@ -83,6 +118,7 @@ export default function HousingPanel({ toast, onAuthLost }: Props) {
               ["all", `전체 ${houses?.length ?? ""}`],
               ["reported", `신고 글 ${reported}`],
               ["hidden", "숨김"],
+              ["away", `곧 철거 ${away}`],
             ] as const
           ).map(([value, label]) => (
             <button key={value} type="button" className={ui.button} aria-pressed={filter === value} onClick={() => setFilter(value)}>
@@ -98,7 +134,13 @@ export default function HousingPanel({ toast, onAuthLost }: Props) {
           onChange={(e) => setQuery(e.target.value)}
           aria-label="집 이름·주인 검색"
         />
+        <button type="button" className={ui.button} disabled={busy} onClick={reclaimNow}>
+          지금 정리하기
+        </button>
       </div>
+      <p className={styles.meta}>
+        주인이 {RECLAIM_DAYS}일 넘게 들어오지 않은 집은 몇 시간 안에 저절로 비워져요. 낸 포인트는 주인이 돌아오면 선물함으로 가고 가구는 가방에 남아요. 운영자 집은 비우지 않아요.
+      </p>
 
       {houses === null && <Loading />}
       {houses && !visible.length && <Empty>조건에 맞는 집이 없어요.</Empty>}
@@ -116,6 +158,7 @@ export default function HousingPanel({ toast, onAuthLost }: Props) {
             <span className={styles.meta}>
               점수 {h.score} · 좋아요 {h.likes} · 물건 {h.items}개
             </span>
+            <AwayLine h={h} now={now} />
             <div className={styles.actions}>
               <button
                 type="button"
@@ -213,5 +256,22 @@ export default function HousingPanel({ toast, onAuthLost }: Props) {
         </Dialog>
       )}
     </section>
+  );
+}
+
+/** 주인의 마지막 접속과 오래 비운 집 정리까지 남은 날 */
+function AwayLine({ h, now }: { h: AdminHouse; now: number }) {
+  const days = awayDays(h, now);
+  const left = daysLeft(h, now);
+  const seen = days === null ? "마지막 접속 기록이 없어요." : days === 0 ? "오늘 접속했어요." : `${days}일 전에 접속했어요.`;
+  if (h.staff) return <span className={styles.meta}>{seen} 운영자 집이라 철거하지 않아요.</span>;
+  const refund = `철거하면 ${h.refund.toLocaleString("ko-KR")}P를 돌려줘요${h.refundEstimated ? ". 낸 포인트 기록이 없어 지금 가격표로 셌어요." : "."}`;
+  return (
+    <span className={styles.meta}>
+      {seen}{" "}
+      {left !== null && left <= 0 && <span className={styles.alert}>다음 정리 때 철거돼요. </span>}
+      {left !== null && left > 0 && nearReclaim(h, now) && <span className={styles.alert}>{left}일 안에 철거돼요. </span>}
+      {refund}
+    </span>
   );
 }

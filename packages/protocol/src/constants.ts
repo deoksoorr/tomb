@@ -103,7 +103,9 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 34 = 캠핑장 이동 답이 늦으면 두 번 더 보내 봄(내리자마자 마을로 돌아오던 문의) — 모두 한 번 새로고침 (11/16)
 // 35 = 같은 채널이면 마을·캠핑장 채팅이 서로 보임(다른 맵 줄 앞에 [캠핑장]·[마을]), 지난 채팅 기록도 채널 하나 — 모두 한 번 새로고침 (11/16)
 // 36 = 캠핑장 의자에 앉은 다른 사람이 의자 뒤에 보이던 것·정류장 벤치 뒷벽 가림 고침, 커지면 운영자 낫·소품도 같이 커짐, 2배 넘게 커지면 캠핑카 문간·정류장 벤치에 못 앉음 — 모두 한 번 새로고침 (11/16)
-export const CLIENT_VERSION = 36;
+// 37 = 귓속말·행운권 판매대·창 단축키·운영자 포인트 현황·추천 코드·몬스터 도감·범퍼카장/오리 연못 넓힘·오리배 아무 둑에서 내리기·1위 배지 「지난주」 — 모두 한 번 새로고침 (11/16)
+// 38 = 귓속말 최근 상대 칩·/답 답장·접속 확인(whoOn), 포인트 이벤트 공지·즉시 반영, 레이스 창 표준 크기, 랭킹 창 넓힘 — 모두 한 번 새로고침 (11/16)
+export const CLIENT_VERSION = 38;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */
@@ -397,7 +399,7 @@ export function dexBadgeCats(v: number | undefined): DexBadgeCat[] {
 
 /**
  * 주간 랭킹 1위(챔피언) 표시: 랭킹별 비트 (입장 토큰·PeerInfo의 champ). 지난주(월요일 새벽 5시 한국 시간 마감) 1위만 Vercel이 넣는다.
- * 이름표 위 작은 배지("이번 주 포인트왕")와 몸 둘레 1위 오라로 그린다. 옛 클라이언트는 모르는 필드라 무시한다
+ * 이름표 위 작은 배지("지난주 포인트왕")와 몸 둘레 1위 오라로 그린다. 옛 클라이언트는 모르는 필드라 무시한다
  */
 export const CHAMP_BOARDS = ["points", "huntKills", "fish"] as const;
 export type ChampBoard = (typeof CHAMP_BOARDS)[number];
@@ -443,9 +445,9 @@ export function champBitsOf(boards: readonly ChampBoard[], auraOff = false): num
   const n = boards.reduce((v, b) => v | (1 << CHAMP_BOARDS.indexOf(b)), 0);
   return n && auraOff ? n | CHAMP_AURA_OFF : n;
 }
-/** 배지 글자: 하나면 "이번 주 포인트왕", 둘·셋이면 "이번 주 2관왕"·"이번 주 3관왕" (없으면 "") */
+/** 배지 글자: 하나면 "지난주 포인트왕", 둘·셋이면 "지난주 2관왕"·"지난주 3관왕" (없으면 ""). 11/16 지난주 레이스 1위가 이번 주에 다는 배지라 "지난주" */
 export function champBadgeText(v: number | undefined): string {
   const b = champBoards(v);
   if (!b.length) return "";
-  return b.length === 1 ? `이번 주 ${CHAMP_TITLE[b[0]]}` : `이번 주 ${b.length}관왕`;
+  return b.length === 1 ? `지난주 ${CHAMP_TITLE[b[0]]}` : `지난주 ${b.length}관왕`;
 }

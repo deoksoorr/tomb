@@ -22,6 +22,50 @@
   flex: none;
 }
 
+/* 11/16 [귓]: 최근 귓속말 상대 칩 줄 열기 (입력칸 왼쪽 작은 버튼, 귓속말 분홍) */
+.whisperBtn {
+  flex: none;
+  min-width: 0;
+  padding-inline: 8px;
+  color: #f4b6c8;
+}
+
+/* 11/16 최근 귓속말 상대 칩: 입력칸 위 한 줄 (넘치면 줄바꿈). 이 채널에 없는 사람은 흐리게 (그래도 누를 수 있다) */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chip {
+  padding: 2px 8px;
+  border: 0;
+  background: rgba(244, 182, 200, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(244, 182, 200, 0.45);
+  color: #f4b6c8;
+  font: inherit;
+  font-family: var(--font-chat);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chip:hover,
+.chip:focus-visible,
+.chipPicked {
+  background: rgba(244, 182, 200, 0.32);
+  box-shadow: inset 0 0 0 1px #f4b6c8;
+  color: #fff0f4;
+}
+
+.chipOff {
+  opacity: 0.45;
+}
+
+.chipsEmpty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .meta {
   display: flex;
   justify-content: space-between;

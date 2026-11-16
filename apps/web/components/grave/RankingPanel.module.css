@@ -12,19 +12,20 @@
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
-  width: min(300px, calc(100vw - var(--safe-left) - var(--safe-right)));
+  /* 11/16 칸 9개가 한 줄에 들어가게 넓혔다 (300px에선 두 줄로 감겼다 — 화면이 좁으면 여전히 감긴다) */
+  width: min(440px, calc(100vw - var(--safe-left) - var(--safe-right)));
   max-height: min(480px, calc(100dvh - var(--safe-top) - 260px));
   display: flex;
   flex-direction: column;
   animation: slideIn 0.2s ease-out both;
 }
 
+/* 11/16 칸이 9개라 좁은 창에서 옆으로 숨던 칸(접속 시간)이 안 보였다 → 창을 넓혀 한 줄, 그래도 모자라면 두 줄로 감는다 */
 .tabs {
   display: flex;
   flex: none;
-  overflow-x: auto;
+  flex-wrap: wrap;
   border-bottom: 2px solid var(--line);
-  scrollbar-width: none;
 }
 
 .tab {
@@ -240,4 +241,20 @@ li:nth-child(-n + 3) .rank {
     opacity: 0;
     transform: translateX(8px);
   }
+}
+
+/* 11/16 단축키 표시 (아래 바로 가기 줄 [표현] T와 같은 모양, 좁은 화면에서는 숨긴다) */
+@media (max-width: 1279px) {
+  .key {
+    display: none;
+  }
+}
+
+.key {
+  margin-left: 2px;
+  padding: 0 3px;
+  background: var(--line);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 14px;
 }

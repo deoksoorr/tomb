@@ -86,9 +86,10 @@ export default function ChampRewardsTab({
           </div>
         </section>
       )}
-      {bits > 0 && !staff && (
+      {/* 11/16 운영자가 1위 자격을 가져도 1위 칸을 보여 준다 (테스트 서버 시험 1위 확인용). 켜고 끄기는 위 운영자 오라 줄 하나로 */}
+      {bits > 0 && (
         <section className={styles.champNow} aria-label="지금 전용 오라">
-          <ChampAuraToggle />
+          {!staff && <ChampAuraToggle />}
           <div className={styles.champNowBody}>
             <AuraPreview bits={bits & CHAMP_ALL} look={[]} label="내 전용 오라 미리보기" />
             <div className={styles.champNowText}>
@@ -97,6 +98,7 @@ export default function ChampRewardsTab({
                 {boards.map((b) => CHAMP_TITLE[b]).join("·")} 자격 · {boards.length > 1 ? (boards.length === 3 ? "무지개 오라" : "두 색이 섞인 오라") : CHAMP_AURA_NAME[boards[0]]}
               </span>
               <span className={styles.meta}>{until ? `${whenText(until)}까지 (그때 다음 1위로 넘어가요)` : "다음 발표까지"}</span>
+              {staff && <span className={styles.meta}>운영자 계정은 게임에서 운영자 오라가 먼저 보여요. 배지와 전용 모자는 그대로 붙어요.</span>}
             </div>
           </div>
         </section>

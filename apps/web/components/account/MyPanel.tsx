@@ -23,6 +23,7 @@ import styles from "./MyPanel.module.css";
 import MyHouseLine from "../housing/MyHouseLine";
 import { isOnline, useFriends } from "@/lib/hooks/useFriends";
 import PixelIcon from "../ui/PixelIcon";
+import ReferralSection from "./ReferralSection";
 import type { PublicHouse } from "@/lib/housing/types";
 
 type Props = {
@@ -143,6 +144,8 @@ export default function MyPanel({
         </section>
 
         {onOpenFriends && <FriendsLine onOpen={onOpenFriends} />}
+
+        <ReferralSection />
 
         <CodeSection me={me} buttonId={codeButtonId} />
 

@@ -125,6 +125,49 @@
   background: var(--candle);
 }
 
+/* 오래 비운 집 정리 안내 (components/entry/Google.module.css .warn과 같은 촛불색 테두리 상자) */
+.warn {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  background: rgba(224, 195, 106, 0.1);
+  color: var(--bone);
+  font-size: 12px;
+  line-height: 1.6;
+  box-shadow:
+    0 -2px 0 0 var(--candle),
+    0 2px 0 0 var(--candle),
+    -2px 0 0 0 var(--candle),
+    2px 0 0 0 var(--candle);
+}
+
+.warn strong {
+  color: var(--candle);
+  font-size: 13px;
+}
+
+.warn p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.warnTag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 4px;
+  background: var(--candle);
+  color: var(--bg-deep);
+  font-size: 11px;
+}
+
+/* 분양받기 단추 바로 위 한 줄 */
+.warnLine {
+  margin: 0;
+  color: var(--candle);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .notice {
   min-height: 1.6em;
   color: var(--candle);

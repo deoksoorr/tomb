@@ -93,6 +93,10 @@ export interface BanStore {
   accountIps(accountId: string, now: number): Promise<SeenIp[]>;
   /** 이 IP로 최근 접속한 계정 (최근 먼저) */
   ipAccounts(ipHash: string, now: number): Promise<SeenAccount[]>;
+  /** 여러 계정의 최근 접속 IP를 한 번에 (ids 순서, Redis는 파이프라인 한 번 — 회원 목록 한 페이지·같은 사람 판정) */
+  accountIpsMany(accountIds: readonly string[], now: number): Promise<SeenIp[][]>;
+  /** 여러 IP로 최근 접속한 계정을 한 번에 (hashes 순서) */
+  ipAccountsMany(ipHashes: readonly string[], now: number): Promise<SeenAccount[][]>;
   isOperatorIp(ipHash: string): Promise<boolean>;
 }
 
@@ -159,6 +163,12 @@ export class MemoryBans implements BanStore {
       .filter(([, at]) => at > now - SEEN_TTL_SEC * 1000)
       .sort((a, b) => b[1] - a[1])
       .map(([accountId, lastAt]) => ({ accountId, lastAt }));
+  }
+  async accountIpsMany(ids: readonly string[], now: number): Promise<SeenIp[][]> {
+    return Promise.all(ids.map((id) => this.accountIps(id, now)));
+  }
+  async ipAccountsMany(hashes: readonly string[], now: number): Promise<SeenAccount[][]> {
+    return Promise.all(hashes.map((h) => this.ipAccounts(h, now)));
   }
   async isOperatorIp(ipHash: string): Promise<boolean> {
     return this.opIps.has(ipHash);
@@ -257,6 +267,23 @@ export class RedisBans implements BanStore {
   }
   async ipAccounts(ipHash: string, now: number): Promise<SeenAccount[]> {
     return (await this.recent(BK.ipAcct(ipHash), now)).map(([accountId, lastAt]) => ({ accountId, lastAt }));
+  }
+  private async recentMany(keys: readonly string[], now: number): Promise<[string, number][][]> {
+    if (!keys.length) return [];
+    const p = this.redis.pipeline();
+    for (const k of keys) p.zrange(k, "+inf", now - SEEN_TTL_SEC * 1000, { byScore: true, rev: true, withScores: true });
+    return (await p.exec<unknown[]>()).map((raw) => {
+      const a = Array.isArray(raw) ? raw : [];
+      const out: [string, number][] = [];
+      for (let i = 0; i + 1 < a.length; i += 2) out.push([String(a[i]), Number(a[i + 1])]);
+      return out;
+    });
+  }
+  async accountIpsMany(ids: readonly string[], now: number): Promise<SeenIp[][]> {
+    return (await this.recentMany(ids.map((id) => BK.ips(id)), now)).map((r) => r.map(([ipHash, lastAt]) => ({ ipHash, lastAt })));
+  }
+  async ipAccountsMany(hashes: readonly string[], now: number): Promise<SeenAccount[][]> {
+    return (await this.recentMany(hashes.map((h) => BK.ipAcct(h)), now)).map((r) => r.map(([accountId, lastAt]) => ({ accountId, lastAt })));
   }
   async isOperatorIp(ipHash: string): Promise<boolean> {
     return (await this.redis.sismember(BK.opIp, ipHash)) === 1;

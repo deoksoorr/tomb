@@ -1,4 +1,7 @@
 import type { AdminNameReindexResponse } from "@/app/api/admin/accounts/names/route";
+import type { AdminStayFillResponse } from "@/app/api/admin/accounts/stay/route";
+import type { AdminActivitySeedResponse } from "@/app/api/admin/activity/seed/route";
+import type { UserActivityReport } from "@/lib/userActivity";
 import type { AdminChampResponse } from "@/app/api/admin/champ/route";
 import type { AdminChampTestResponse } from "@/app/api/admin/champ/test/route";
 import type { AdminRankFillResponse } from "@/app/api/admin/rank/fill/route";
@@ -8,6 +11,8 @@ import type { AdminManagersResponse } from "@/app/api/admin/managers/route";
 import type { AdminStaffResponse } from "@/app/api/admin/staff/route";
 import type { AnalyticsRange, AnalyticsReport } from "@/lib/analyticsReport";
 import { request } from "@/lib/api";
+import type { EarnSource } from "@/lib/economy";
+import type { PointEventResponse } from "@/lib/pointEvent";
 import type { ResidentSettings } from "@/lib/residents";
 
 // 47번 방문 분석 · 31번 운영자 계정 · 운영 점검 관리자 API (adminApi.ts와 따로 둔다)
@@ -33,11 +38,32 @@ export const opsAdminApi = {
   residents: () => request<ResidentSettings>("/api/admin/residents", { cache: "no-store" }),
   setResidents: (s: ResidentSettings) =>
     request<ResidentSettings>("/api/admin/residents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(s) }),
+  /** 포인트 배수 이벤트 (켜기·끄기·끝나는 시각·늘릴 항목·배수) */
+  pointEvent: () => request<PointEventResponse>("/api/admin/point-event", { cache: "no-store" }),
+  setPointEvent: (input: { on: boolean; endAt?: number | null; sources?: EarnSource[]; mult?: number }) =>
+    request<PointEventResponse>("/api/admin/point-event", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) }),
   /** 운영 점검: 저장소 쓰기·읽기·삭제를 실제로 해 본다 */
   health: () => request<AdminHealthReport>("/api/admin/health", { cache: "no-store" }),
   /** 닉네임 색인 채우기 한 번 (next가 "0"이 될 때까지 이어서 부른다) */
   reindexNames: (cursor: string, count = 200) =>
     request<AdminNameReindexResponse>("/api/admin/accounts/names", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cursor, count }),
+    }),
+  /** 총 접속 시간 채우기 한 번 (next가 "0"이 될 때까지 이어서 부른다, 여러 번 돌려도 두 번 세지 않는다) */
+  fillStay: (cursor: string, count = 200) =>
+    request<AdminStayFillResponse>("/api/admin/accounts/stay", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cursor, count }),
+    }),
+  /** 유저 활동 보고서 (staff = 운영자 계정도 세기, fresh = 5분 기억을 버리고 다시 세기) */
+  activity: (staff: boolean, fresh = false) =>
+    request<UserActivityReport>(`/api/admin/activity?${new URLSearchParams({ ...(staff ? { staff: "1" } : {}), ...(fresh ? { fresh: "1" } : {}) })}`, { cache: "no-store" }),
+  /** 기록 전 활동 채우기 한 번 (next가 "0"이 될 때까지 이어서 부른다) */
+  seedActivity: (cursor: string, count = 200) =>
+    request<AdminActivitySeedResponse>("/api/admin/activity/seed", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ cursor, count }),

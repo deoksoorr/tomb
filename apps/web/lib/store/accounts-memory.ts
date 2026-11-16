@@ -2,13 +2,16 @@ import { CHAMP_ITEM_IDS, itemById, nameKey, PERMANENT_UNTIL, type CosmeticSlot }
 import { tierUntil } from "../attendTiers";
 import { legacyAttendDays, type AttendClaim, type CalendarMonthRecord } from "../calendar";
 import { earnedBySource } from "../earnGauge";
-import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, DAILY_EARN_CAP, earnRule, type EarnSource } from "../economy";
+import { ATTEND_ACCOUNTS_PER_IP, BALANCE_CAP, earnRule, type EarnSource } from "../economy";
+import { earnLimits, NO_BOOST } from "../pointEvent";
 import { staffAccountIdNow } from "../staff";
 import { stayBonusSum, stayBonusTiers } from "../stayBonus";
+import { STAY_TICK_MINUTES, stayFillDays } from "../stayTime";
 import type { ActivityItem, GiftItem, Grave, GraveDecor } from "../types";
 import { kstDay, weekOfDay } from "./accounts";
 import { giftTermUntil } from "./gifts";
 import type { MemoryStore } from "./memory";
+import { earnBoost } from "./pointEvent";
 import {
 
   ACTIVITY_KEEP,
@@ -41,6 +44,8 @@ type Acct = {
   presenceAt: number;
   /** 직전 머무르기 기록을 보낸 화면 (몰아서 정산 판정) */
   presenceSid?: string;
+  /** 총 접속 시간 (분). 예전(HMR 전) 계정에는 없을 수 있다 */
+  stayMin?: number;
   ledger: { at: number; amount: number; reason: string }[];
   activity: ActivityItem[];
   activitySeen: number;
@@ -160,10 +165,13 @@ export class MemoryAccounts implements AccountStore {
     const rule = earnRule(source);
     const got = a.earned.get(source) ?? 0;
     const total = a.earned.get("_total") ?? 0;
+    // 포인트 배수 이벤트: 고른 항목이면 적립·항목 한도·같은 IP 한도가 배수, 하루 전체 한도는 늘어난 몫만큼 (지갑 상한은 그대로, lib/pointEvent)
+    const lim = earnLimits(opts.boost ?? NO_BOOST, source);
+    const dailyMax = rule.dailyMax * lim.caps;
     const ipKey = opts.ipHash ? `${opts.ipHash}:${day}:${source}` : null;
-    const ipLeft = ipKey ? rule.dailyMax * ATTEND_ACCOUNTS_PER_IP - (this.ipEarned.get(ipKey) ?? 0) : Infinity;
+    const ipLeft = ipKey ? dailyMax * ATTEND_ACCOUNTS_PER_IP - (this.ipEarned.get(ipKey) ?? 0) : Infinity;
     // capless: 출석 달력 보상은 하루 전체 한도에 막히지 않는다 (accounts-redis.ts CLAIM_LUA와 같은 규칙)
-    const amount = Math.min(opts.amount ?? rule.points, rule.dailyMax - got, capless ? Infinity : DAILY_EARN_CAP - total, BALANCE_CAP - a.points, ipLeft);
+    const amount = Math.min((opts.amount ?? rule.points) * lim.points, dailyMax - got, capless ? Infinity : lim.total - total, BALANCE_CAP - a.points, ipLeft);
     if (!(amount > 0)) return 0;
     a.earned.set(source, got + amount);
     // 접속 보너스는 하루 전체 한도와 별개라 _total에 더하지 않는다 (accounts-redis.ts credit의 outsideTotal)
@@ -254,8 +262,9 @@ export class MemoryAccounts implements AccountStore {
     return { name: a.name, color: a.color ?? null, body: a.body ?? null, equipped: [...a.look.values()].filter((e) => e.until > now) };
   }
 
-  async earn(id: string, source: EarnSource, day: string, opts?: EarnOptions): Promise<number> {
-    return this.credit(this.acct(id), source, day, opts);
+  async earn(id: string, source: EarnSource, day: string, opts: EarnOptions = {}): Promise<number> {
+    const boost = opts.boost ?? (await earnBoost());
+    return this.credit(this.acct(id), source, day, { ...opts, boost });
   }
 
   async spend(id: string, amount: number, reason: string, now: number): Promise<number | null> {
@@ -282,6 +291,7 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async presenceTick(id: string, day: string, now: number, sid = ""): Promise<PresenceTick | null> {
+    const boost = await earnBoost(now);
     const a = this.acct(id);
     // 몰아서 정산 규칙은 accounts-redis.ts PRESENCE_LUA와 같다 (presenceCatchup)
     const c = presenceCatchup(a.presenceAt ?? 0, now, !!sid && a.presenceSid === sid);
@@ -291,7 +301,9 @@ export class MemoryAccounts implements AccountStore {
     // 10번: 머문 기록은 포인트 한도와 상관없이 센다 (출석 도장 조건)
     this.today(a, day);
     a.earned.set("_stay", (a.earned.get("_stay") ?? 0) + c.ticks);
-    const earned = this.credit(a, "presence", day, { amount: earnRule("presence").points * c.ticks });
+    // 총 접속 시간 (accounts-redis.ts PRESENCE_LUA의 stayMin과 같다)
+    a.stayMin = (a.stayMin ?? 0) + c.ticks * STAY_TICK_MINUTES;
+    const earned = this.credit(a, "presence", day, { amount: earnRule("presence").points * c.ticks, boost });
     return {
       earned,
       ticks: c.ticks,
@@ -303,6 +315,7 @@ export class MemoryAccounts implements AccountStore {
   }
 
   async claimStayBonus(id: string, day: string): Promise<{ earned: number; count: number } | null> {
+    const boost = await earnBoost();
     const a = this.acct(id);
     this.today(a, day);
     const tiers = stayBonusTiers(a.earned.get("_stay") ?? 0);
@@ -310,7 +323,7 @@ export class MemoryAccounts implements AccountStore {
     if (tiers <= claimed) return null;
     a.earned.set("_bonus", tiers);
     // 하루 전체 한도(800)와 별개: 자기 하루 상한(145P)·지갑 상한만 본다
-    return { earned: this.credit(a, "stayBonus", day, { amount: stayBonusSum(claimed, tiers) }, true, true), count: tiers - claimed };
+    return { earned: this.credit(a, "stayBonus", day, { amount: stayBonusSum(claimed, tiers), boost }, true, true), count: tiers - claimed };
   }
 
   /** value가 null인 계정은 순위에서 뺀다. asc면 작을수록 위. tie = 같은 값일 때 먼저 달성한 순번 (작을수록 위, 주간 랭킹) */
@@ -336,6 +349,36 @@ export class MemoryAccounts implements AccountStore {
       false,
       week ? (a) => a.weeksAt?.get(week) ?? 0 : undefined,
     );
+  }
+
+  async stayRank(limit: number, me: string | null): Promise<{ rows: RankEntry[]; mine: RankEntry | null }> {
+    return this.board(limit, me, (a) => (a.stayMin ? a.stayMin : null));
+  }
+
+  async stayTicksOn(ids: readonly string[], days: readonly string[]): Promise<number[][]> {
+    return ids.map((id) => {
+      const a = this.accts.get(id);
+      return days.map((d) => (a && a.earnDay === d ? (a.earned.get("_stay") ?? 0) : 0));
+    });
+  }
+
+  /** accounts-redis.ts STAY_FILL_LUA와 같은 규칙 (메모리는 오늘 적립 기록 하루치만 들고 있다) */
+  async backfillStay(cursor: string, count: number, now: number): Promise<{ next: string; raised: number; minutes: number }> {
+    const all = [...this.accts];
+    const start = Number(cursor) || 0;
+    const end = start + Math.max(1, count);
+    const days = stayFillDays(now);
+    let raised = 0;
+    let minutes = 0;
+    for (const [, a] of all.slice(start, end)) {
+      const want = (a.earnDay && days.includes(a.earnDay) ? (a.earned.get("_stay") ?? 0) : 0) * STAY_TICK_MINUTES;
+      const cur = a.stayMin ?? 0;
+      if (want <= cur) continue;
+      a.stayMin = want;
+      raised++;
+      minutes += want - cur;
+    }
+    return { next: end >= all.length ? "0" : String(end), raised, minutes };
   }
 
   async recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string, weekly = true): Promise<void> {
@@ -985,5 +1028,7 @@ function summaryOf(accountId: string, a: Acct): AccountSummary {
     points: a.points,
     renameRequired: !!a.renameRequired,
     hasCode: !!a.codeHash,
+    stayMinutes: a.stayMin ?? 0,
+    lifetimePoints: a.lifetime ?? a.points,
   };
 }

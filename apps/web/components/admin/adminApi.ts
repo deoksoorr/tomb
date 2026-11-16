@@ -6,9 +6,10 @@ import type {
   AdminGraveSettings,
   AdminPassedResponse,
 } from "@/lib/admin";
-import type { AdminMembersResponse, CodeReissueLogResponse, CodeReissueResponse } from "@/lib/adminMembers";
+import type { AdminMembersResponse, CodeReissueLogResponse, CodeReissueResponse, MemberSort } from "@/lib/adminMembers";
 import { request } from "@/lib/api";
 import type { RunReward } from "@/lib/rpg/types";
+import type { ReclaimReport } from "@/lib/housing/reclaim";
 import type { AdminHouse } from "@/lib/housing/types";
 import type { AdminAccountRow } from "@/app/api/admin/accounts/search/route";
 import type { EconomyResponse, Notice, NoticeInput, NoticeListResponse } from "@/lib/types";
@@ -39,6 +40,8 @@ export const adminApi = {
   houseAction: (id: string, action: ModAction) => request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}`, post({ action })),
   /** 11/15 같은 채널 안에서 번지 옮기기 (빈 번지만) */
   moveHouse: (id: string, lot: number) => request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}`, post({ action: "move", lot })),
+  /** 오래 비운 집 지금 정리하기 (잠금과 상관없이 바로) */
+  reclaimHouses: () => request<ReclaimReport>("/api/admin/housing/reclaim", post({})),
   guestAction: (id: string, entryId: string, action: ModAction) =>
     request<{ ok: true }>(`/api/admin/housing/${encodeURIComponent(id)}/guestbook/${encodeURIComponent(entryId)}`, post({ action })),
   errors: (days: number) => request<AdminErrorsResponse>(`/api/admin/errors?days=${days}`, { cache: "no-store" }),
@@ -49,10 +52,10 @@ export const adminApi = {
     request<{ ok: true; reward: RunReward }>("/api/admin/rpg/tower-grant", post(b)),
   searchAccounts: (name: string) =>
     request<{ accounts: AdminAccountRow[] }>(`/api/admin/accounts/search?${new URLSearchParams({ name })}`, { cache: "no-store" }),
-  /** 회원 전체 목록 (최근 접속 순 50명씩, next를 cursor로) */
-  members: (q: string, cursor: string | null, fresh = false) =>
+  /** 회원 전체 목록 (최근 접속 순 또는 총 접속 시간 순 50명씩, next를 cursor로) */
+  members: (q: string, cursor: string | null, fresh = false, sort: MemberSort = "recent") =>
     request<AdminMembersResponse>(
-      `/api/admin/accounts/list?${new URLSearchParams({ ...(q ? { q } : {}), ...(cursor ? { cursor } : {}), ...(fresh ? { fresh: "1" } : {}) })}`,
+      `/api/admin/accounts/list?${new URLSearchParams({ ...(q ? { q } : {}), ...(cursor ? { cursor } : {}), ...(sort === "stay" ? { sort } : {}), ...(fresh ? { fresh: "1" } : {}) })}`,
       { cache: "no-store" },
     ),
   /** 접속 코드 재발급 (이전 코드는 무효, 새 코드는 이 응답에서 한 번만. 운영자 계정은 막힌다) */

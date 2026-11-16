@@ -1,5 +1,6 @@
 import {
   BRIDGES,
+  BUMPER_GATE,
   CAMPFIRES,
   DOCK_DECK,
   DUCK_DOCK,
@@ -62,7 +63,8 @@ import { SKY_KEEPOUT, skyColliders, skyInteractables } from "./skyMath";
 import { zooColliders, zooGround, ZOOKEEPER_SPOT } from "./zoo/zooLayout";
 import { HAUNT_HOUSE, hauntColliders, hauntInteractables } from "../haunt/hauntLayout";
 import { TOWER, towerColliders, towerInteractables } from "../tower/towerLayout";
-import { BUMPER_LANDMARK, bumperColliders, bumperGround, bumperInteractables, inBumperYardTiles } from "../bumper/bumperLayout";
+import { BUMPER_KEEPOUT, BUMPER_LANDMARK, bumperColliders, bumperGround, bumperInteractables, inBumperYardTiles } from "../bumper/bumperLayout";
+import { lotteryColliders, lotteryInteractables } from "./lotteryKiosk";
 
 // 정적 맵 배치 (순수 데이터). 좌석·스폰·특별한 장소·강·연못·필지·묘역 좌표는 packages/protocol/src/world.ts가 원본이고,
 // 여기서는 그 사이를 채우는 나무·석등·오래된 묘비·철책·촛불·안개·종루·납골당 등 소품과 바닥 종류, 물(강·호수·연못), 물살, 충돌, 상호작용 대상을 정한다.
@@ -513,27 +515,27 @@ const HAND_PROPS: readonly PropDef[] = [
   // 남쪽 둑
   P("reeds", 330, 726, 1),
   P("reeds", 516, 740, 0),
-  P("reeds", 840, 754, 1),
+  P("reeds", 874, 752, 1), // 11/16 구경 벤치 bW가 오면서 동쪽으로
   // ── 동물원 (예전 버드나무 묘역 자리) ── 울타리·우리·장식·사육사는 zoo/ZooView (배치는 zoo/zooLayout.ts)
   // ── 범퍼카장 (예전 다리 건너 묘역 자리) ── 링크·매표소·간판·조명은 bumper/BumperRide (배치는 bumper/bumperLayout.ts)
-  // 아래 귀퉁이 나무 둘은 예전 자리 그대로 (둘레 흩뿌린 나무 자리가 바뀌지 않게)
-  P("deadTree", 612, 990, 1),
-  P("willow", 840, 990, 0),
+  // 11/16 링크가 마당 아래 귀퉁이까지 넓어져 귀퉁이 나무 둘은 뺐다 (버드나무는 연못 남동쪽 둑으로)
+  P("willow", 592, 990, 0),
   // ── 안개 숲 · 오리 연못 (11/15: 안개 연못을 넓혔다 — 물 위 안개는 걷고 선착장 석등. 팻말·배는 BoatRide) ──
+  // 11/16 연못을 위아래로 더 넓혀 둑 갈대를 새 물가로 옮겼다
   P("hammock", HAMMOCKS[3].x, HAMMOCKS[3].y),
   P("mist", 516, 998, 0),
   P("reeds", 338, 934, 0),
-  P("reeds", 590, 914, 1),
-  P("reeds", 366, 852, 1),
+  P("reeds", 600, 940, 1),
+  P("reeds", 354, 846, 1),
   P("lantern", DUCK_DOCK_DECK.x + DUCK_DOCK_DECK.w + 10, DUCK_DOCK_DECK.y + 4),
   P("mushroom", 326, 980, 0),
   P("mushroom", 584, 830, 1),
-  // ── 호박밭 (남동쪽 풀밭) ──
-  P("scarecrow", 900, 950),
-  P("pumpkin", 884, 972, 0),
-  P("pumpkin", 916, 976, 1),
-  P("pumpkin", 900, 994, 1),
-  P("pumpkin", 932, 990, 0),
+  // ── 호박밭 (남동쪽 풀밭) ── 11/16 범퍼카장이 동쪽으로 넓어져 허수아비·호박을 모닥불 아래로 옮겼다
+  P("scarecrow", 936, 960),
+  P("pumpkin", 926, 986, 0),
+  P("pumpkin", 950, 996, 1),
+  P("pumpkin", 974, 984, 1),
+  P("pumpkin", 938, 1004, 0),
   P("swing", SWINGS[2].x, SWINGS[2].y),
   P("lantern", 1092, 920),
   P("jar", 1066, 990),
@@ -543,6 +545,9 @@ const HAND_PROPS: readonly PropDef[] = [
   P("reeds", 1150, 850, 1),
   P("reeds", 1214, 994, 1),
   P("mist", 1300, 940, 1),
+  // 11/16 오리 연못·범퍼카장이 넓어져 숲·호박밭에서 줄어든 나무 몫 (매달릴 수 있는 단풍·은행)
+  P("maple", 1384, 836, 1),
+  P("ginkgo", 1136, 986, 0),
 ];
 
 /** 사각형 안 결정적 산포 */
@@ -598,6 +603,7 @@ function freeForProp(placed: readonly PropDef[], x: number, y: number, gap: numb
   for (const k of SKY_KEEPOUT) if (Math.hypot(k.x - x, k.y - y) < k.r) return false; // 관람차·열기구 출발장 (skyRides.ts)
   for (const p of [SHOP, HOUSING_OFFICE, HUNT_SIGN, SHRINE, TELESCOPE, TELESCOPE_2, FERRY_DOCK, DUCK_DOCK, WISH_FOUNTAIN]) if (Math.hypot(p.x - x, p.y - y) < 44) return false;
   if (Math.hypot(HUNT_GATE.x - x, HUNT_GATE.y - y) < 50) return false;
+  for (const r of BUMPER_KEEPOUT) if (inRect(r, x, y)) return false; // 11/16 범퍼카장 간판 앞 · 호박밭 가는 틈
   return true;
 }
 
@@ -613,17 +619,17 @@ function treeKind(u: number): PropKind {
 
 function buildProps(): PropDef[] {
   const out: PropDef[] = [];
-  // 안개 숲 (오리 연못 둘레): 빽빽하고 으스스하게
-  scatter(out, { x: 308, y: 790, w: 288, h: 214 }, 18, 21, forestKind, 22);
+  // 안개 숲 (오리 연못 둘레): 빽빽하고 으스스하게 (11/16 연못이 넓어져 둑 둘레만 남는다)
+  scatter(out, { x: 308, y: 790, w: 296, h: 214 }, 18, 21, forestKind, 22);
   // 언덕 위 (서리 내린 대지)
   scatter(out, { x: 48, y: 48, w: 300, h: 176 }, 6, 41, (u) => (u < 0.45 ? "pine" : u < 0.75 ? "deadTree" : "bush"), 30);
   // 까마귀 연못 둘레 ~ 동쪽 담
   scatter(out, { x: 1000, y: 40, w: 400, h: 130 }, 10, 43, treeKind, 30);
   // 강변 (북쪽 둑)·남쪽 둑
   scatter(out, { x: 40, y: 560, w: 470, h: 90 }, 9, 31, meadowKind, 30);
-  scatter(out, { x: 40, y: 742, w: 880, h: 38 }, 10, 33, treeKind, 30);
-  // 호박밭·호숫가
-  scatter(out, { x: 864, y: 860, w: 240, h: 146 }, 7, 37, meadowKind, 32);
+  scatter(out, { x: 40, y: 742, w: 880, h: 38 }, 13, 33, treeKind, 30); // 11/16 연못·범퍼카장이 넓어져 숲·호박밭에서 줄어든 나무를 강둑에 (10 → 13)
+  // 호박밭·호숫가 (11/16 범퍼카장이 넓어져 호박밭은 x 916부터)
+  scatter(out, { x: 916, y: 860, w: 188, h: 146 }, 7, 37, meadowKind, 32);
   scatter(out, { x: 1100, y: 786, w: 300, h: 30 }, 3, 39, treeKind, 34);
   // 광장 ↔ 주거 구역 사이, 정문 둘레
   scatter(out, { x: 930, y: 220, w: 42, h: 520 }, 6, 47, treeKind, 34);
@@ -800,6 +806,7 @@ export function staticColliders(): Rect[] {
   out.push(...hauntColliders()); // 귀신의집 건물 몸체 (haunt/hauntLayout.ts)
   out.push(...towerColliders()); // 11/15 야근 빌딩 로비·몸체 (tower/towerLayout.ts)
   out.push(...bumperColliders()); // 11/16 범퍼카장 고무 테두리·입구 막대·매표소 (bumper/bumperLayout.ts)
+  out.push(...lotteryColliders()); // 행운권 판매대 (lotteryKiosk.ts)
   return out;
 }
 
@@ -894,6 +901,8 @@ const NORTH_ROAD_TY = [11, 12];
 const PROMENADE_TY = 41;
 /** 강 건너 오솔길 (동물원 정문 → 범퍼카장 입구) */
 const SOUTH_PATH_TY = 48;
+/** 오솔길 동쪽 끝 (11/16 넓어진 범퍼카장 입구 앞까지 — 가운데 길에서 조금 더 동쪽) */
+const SOUTH_PATH_TX1 = T(BUMPER_GATE.x);
 const HOUSE_TX0 = T(HOUSE_GRID.x) - 2;
 const HOUSE_TX1 = MAP_COLS - 3;
 /** 집 앞 골목 (필지 줄마다 아래로 두 줄 — 11/15 없앤 번지가 있어도 격자 줄은 그대로) */
@@ -923,8 +932,8 @@ const EAST_GATE_TY = (() => {
   const g = GRAVE_GATES.find((q) => q.area === "A" && q.side === "right")!;
   return T((g.a + g.b) / 2);
 })();
-/** 범퍼카장 동쪽 → 호박밭 흙길 (예전 다리 건너 묘역 동문 길과 같은 타일) */
-const YARD_EAST_TRAIL = { ty: 54, tx0: 53, tx1: 57 } as const;
+/** 범퍼카장 동쪽 → 호박밭 모닥불 흙길 (11/16 마당이 넓어져 마당 오른쪽 끝부터 세 칸) */
+const YARD_EAST_TRAIL = { ty: 54, tx0: 57, tx1: 59 } as const;
 
 function graveGround(t: AreaTiles, tx: number, ty: number): GroundKind {
   if (between(tx, t.aisle0, t.aisle1)) return "gravel";
@@ -994,8 +1003,8 @@ export function groundKind(tx: number, ty: number): GroundKind {
   const st = T(STEP_STONES[0].x);
   if (tx === st && (between(ty, PROMENADE_TY, T(STEP_STONES[0].y - 8)) || between(ty, T(STEP_STONES[STEP_STONES.length - 1].y + 8), SOUTH_PATH_TY))) return "dirt";
   // ── 강 건너 오솔길 (동물원 정문 → 범퍼카장 입구) ──
-  if (ty === SOUTH_PATH_TY && between(tx, T(BRIDGES[0].x) - 1, MID_TX)) return "dirt";
-  // 동물원 동문 → 안개 숲은 zooGround, 범퍼카장 동쪽 → 호박밭 모닥불 (예전 다리 건너 묘역 동문 길 그대로)
+  if (ty === SOUTH_PATH_TY && between(tx, T(BRIDGES[0].x) - 1, SOUTH_PATH_TX1)) return "dirt";
+  // 동물원 동문 → 안개 숲은 zooGround, 범퍼카장 동쪽 → 호박밭 모닥불
   if (ty === YARD_EAST_TRAIL.ty && between(tx, YARD_EAST_TRAIL.tx0, YARD_EAST_TRAIL.tx1)) return "dirt";
   // 호수: 나루터 선착장 길 (마지막 골목에서), 낚시 잔교 길 (호박밭에서)
   if (between(tx, T(DOCK_DECK.x), T(DOCK_DECK.x + DOCK_DECK.w) - 1) && between(ty, LAST_STREET_TY + 1, T(DOCK_DECK.y))) return "dirt";
@@ -1007,7 +1016,7 @@ export function groundKind(tx: number, ty: number): GroundKind {
 
 // ── 상호작용 오브젝트 (E/탭) ── WorldScene이 가장 가까운 것을 골라 안내 문구를 띄우고 상호작용한다.
 export type InteractKind = "tree" | "swing" | "hammock" | "bell" | "well" | "water" | "portal" | "door" | "lot" | "dock" | "wish" | "seesaw" | "trampoline" | "carousel" | "telescope" | "mat" | "forage" | "zoo" | "ferris" | "balloon" | "bus" | "bumper";
-export type PortalKind = "hunt" | "housing" | "shrine" | "haunt" | "tower";
+export type PortalKind = "hunt" | "housing" | "shrine" | "haunt" | "tower" | "lottery";
 export type Interactable = {
   id: string;
   kind: InteractKind;
@@ -1037,7 +1046,7 @@ const PORTALS: readonly Interactable[] = [
   { id: "dock:duck", kind: "dock", x: DUCK_DOCK.x, y: DUCK_DOCK.y, r: 14, ax: DUCK_DOCK.x, ay: DUCK_DOCK.y, label: "오리배 타기" },
   // 11/15 주말 버스 정류장 (버스 정류장 마당). E → 캠핑장 버스 (운영에서 닫혀 있으면 안내만).
   // 승강장·정차 칸 앞 어디서든 되게 넓게 (예전 r 20은 지붕 바로 앞 한 점이라 잘 안 잡혔다). 지붕 아래 벤치 바로 앞은 앉기가 더 가깝다
-  { id: "bus:camp", kind: "bus", x: BUS_STOP.x - 6, y: BUS_STOP.y + 22, r: BUS_E_RADIUS, ax: BUS_STOP.x - 6, ay: BUS_STOP.y + 22, label: "주말 버스 정류장" },
+  { id: "bus:camp", kind: "bus", x: BUS_STOP.x - 6, y: BUS_STOP.y + 22, r: BUS_E_RADIUS, ax: BUS_STOP.x - 6, ay: BUS_STOP.y + 22, label: "언젠가 버스 정류장" },
   // 동물원 사육사 (노점 앞) → 펫 분양 창
   { id: "zoo:keeper", kind: "zoo", x: ZOOKEEPER_SPOT.x, y: ZOOKEEPER_SPOT.y, r: 20, ax: ZOOKEEPER_SPOT.x, ay: ZOOKEEPER_SPOT.y, label: "사육사에게 펫 분양 받기" },
 ];
@@ -1081,6 +1090,7 @@ export function interactables(): Interactable[] {
     out.push(...hauntInteractables()); // 귀신의집 문 (haunt/hauntLayout.ts)
     out.push(...towerInteractables()); // 11/15 야근 빌딩 회전문 (tower/towerLayout.ts)
     out.push(...bumperInteractables()); // 11/16 범퍼카장 입구 (bumper/bumperLayout.ts)
+    out.push(...lotteryInteractables()); // 행운권 판매대 (lotteryKiosk.ts)
     fixedItems = out;
   }
   return fixedItems.slice();

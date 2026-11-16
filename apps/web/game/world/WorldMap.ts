@@ -38,6 +38,7 @@ import { ZOO_LIGHTS } from "./zoo/zooLayout";
 import { HAUNT_LIGHTS } from "../haunt/hauntLayout";
 import { TOWER_LIGHTS } from "../tower/towerLayout";
 import { BUMPER_LIGHTS } from "../bumper/bumperLayout";
+import { KIOSK_ART_H, KIOSK_ART_W, KIOSK_LIGHTS, LOTTERY_KIOSK, lotteryColliders, lotteryKioskArt } from "./lotteryKiosk";
 import {
   allDeckRails,
   allProps,
@@ -86,6 +87,8 @@ const SWING_BEHIND = 8;
 const FLAT = new Set<PropDef["kind"]>(["flowers", "mushroom", "leaves", "mat"]);
 /** 14번: 작은 모닥불 그림 배율 (돌 고리·불꽃. 충돌·둘레 자리 좌표는 그대로) */
 const CAMPFIRE_ART_SCALE = 1.2;
+/** 행운권 판매대 그림 (처음 맵을 만들 때 한 번 굽는다) */
+const TEX_KIOSK = "world-lottery-kiosk";
 
 type Culled = Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
 
@@ -202,9 +205,21 @@ export class WorldMap {
     this.staticLights.push(...TOWER_LIGHTS);
     // 11/16 범퍼카장 조명 기둥·간판·매표소 창 (그림은 bumper/BumperRide)
     this.staticLights.push(...BUMPER_LIGHTS);
+    this.addLotteryKiosk();
 
     // 아래 담 (맵 맨 아래 줄은 바닥 타일이 담 면으로 그린다)
     this.applyBounds();
+  }
+
+  /** 행운권 판매대 (잡화점 동쪽 풀밭): 판매대 그림(등불이 번갈아 반짝이는 두 장)·충돌·밤 빛·이름표 (game/world/lotteryKiosk) */
+  private addLotteryKiosk(): void {
+    const S = LOTTERY_KIOSK;
+    addCanvasTexture(this.scene, TEX_KIOSK, { canvas: lotteryKioskArt(), frameW: KIOSK_ART_W, frameH: KIOSK_ART_H });
+    const img = this.scene.add.image(S.x, S.y + 2, TEX_KIOSK, 0).setOrigin(0.5, 1).setDepth(S.y);
+    if (!this.reduced) this.scene.time.addEvent({ delay: 700, loop: true, callback: () => img.setFrame(img.frame.name === "0" ? 1 : 0) });
+    for (const r of lotteryColliders()) this.addCollider(this.colliders, r);
+    this.staticLights.push(...KIOSK_LIGHTS);
+    this.addLabel(S.x, S.y - KIOSK_ART_H + 1, "행운권", 0xffe0a8, 1);
   }
 
   /** 묘역 철책 (가로 칸·세로 칸·모서리 돌기둥) + 묘역 문 아치와 이름 팻말 (F1·F4) */
@@ -753,7 +768,8 @@ const ZONE_LABEL_AT: Partial<Record<string, { x: number; y: number }>> = {
   "호수": { x: 1236, y: 962 },
   "달빛 연못": { x: PONDS[0].x, y: PONDS[0].y + PONDS[0].ry + 26 },
   "까마귀 연못": { x: PONDS[1].x - 40, y: PONDS[1].y - 8 },
-  "오리 연못": { x: PONDS[2].x, y: PONDS[2].y + PONDS[2].ry + 16 },
-  "안개 숲": { x: 560, y: 796 },
+  // 11/16 오리 연못이 아래 담 앞까지 넓어져 이름표는 물 위 아래쪽, 안개 숲은 남서쪽 귀퉁이(동물원 울타리 옆)로
+  "오리 연못": { x: PONDS[2].x, y: PONDS[2].y + PONDS[2].ry - 12 },
+  "안개 숲": { x: 334, y: 1000 },
   "호박밭": { x: 990, y: 1000 },
 };

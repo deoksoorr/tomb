@@ -63,6 +63,8 @@ export const EARN_RULES: readonly EarnRule[] = [
 
 /** 하루 전체 합계에 들어가지 않는 항목 (출석 달력 보상·접속 시간 보너스 — 각자 따로 정산) */
 const OUTSIDE_TOTAL: ReadonlySet<EarnSource> = new Set<EarnSource>(["attend", "streak", "monthly", "stayBonus"]);
+/** 하루 전체 합계(DAILY_EARN_CAP)에 드는 항목인지 */
+export const inDailyTotal = (s: EarnSource) => !OUTSIDE_TOTAL.has(s);
 
 /**
  * 하루에 쌓을 수 있는 전체 포인트 = 위 항목 한도의 합 (출석 달력·접속 시간 보너스 빼고).

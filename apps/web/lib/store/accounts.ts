@@ -6,9 +6,11 @@ import { CODE_ALPHABET, type EarnSource } from "../economy";
 import { gameDay, gameWeek, gameYesterday, weekOfDay } from "../gameDay";
 import { NAME_CHANGE_COOLDOWN_DAYS, NAME_CHANGE_PRICE, type Me } from "../types";
 import { isManager } from "../managers";
+import { isBoosted } from "../pointEvent";
 import { staffAccountId, topUpIfStaff } from "../staff";
 import { champWireFor } from "./champ";
 import { K } from "./keys";
+import { earnBoost } from "./pointEvent";
 import { getStyleStore } from "./style";
 import type { AccountRecord, AccountStore } from "./types";
 
@@ -85,7 +87,8 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
   // 주간 1위 값 (지난주 1위면 비트, 오라를 껐으면 끔 표시까지) → 착용 증서에 실려 다른 사람 화면의 배지·오라도 맞춘다
   // 31번 운영자는 운영자 오라를 끈 것도 같은 값으로 (CHAMP_AURA_OFF)
   // 11/16 매니저 (관리자가 임명 — 전용 칭호. 착용 증서에 실려 다른 사람 화면에도)
-  const [a, style, champ, manager] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId), champWireFor(accountId, staff, now).catch(() => 0), isManager(accountId, now)]);
+  // 포인트 배수 이벤트 (오늘 포인트 게이지의 항목·전체 한도, 인스턴스 캐시라 저장소를 거의 묻지 않는다)
+  const [a, style, champ, manager, boost] = await Promise.all([accounts.get(accountId, day, now), getStyleStore(accounts).get(accountId), champWireFor(accountId, staff, now).catch(() => 0), isManager(accountId, now), earnBoost(now)]);
   return {
     ...toMe(accountId, a, day, now),
     body: shownBody(a.body, staff),
@@ -94,6 +97,7 @@ export async function loadMe(accounts: AccountStore, accountId: string, now = Da
     ...(style.bodies?.length ? { bodies: style.bodies } : {}),
     ...(champ ? { champ } : {}),
     ...(manager ? { manager: true as const } : {}),
+    ...(isBoosted(boost) ? { earnBoost: boost } : {}),
   };
 }
 

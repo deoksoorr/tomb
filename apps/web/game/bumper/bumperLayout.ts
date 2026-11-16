@@ -6,18 +6,22 @@ import type { Interactable, Rect } from "../world/layout";
 // 그림은 bumper/bumperArt.ts + bumper/BumperView.ts, 타기·운전은 bumper/BumperRide.ts + logic/bumper.ts.
 // 충돌은 layout.staticColliders()에 들어가 걷기 격자·고양이 길찾기·새로고침 복원 판정이 모두 같은 상자를 본다.
 //
-//   y=784 ━━━━━━━━━━━━━━━━━━[가운데 길]━━━━━━━━━━━━━━━━━━━━┓
-//         [구경 벤치]        ┃ 「유령 범퍼카」 간판 ┃  [매표소] [구경 벤치]
-//   y=844 ┏━━━━━━━ 고무 테두리 ━━━[입구 막대]━━━━━━━━━━━━━┓
-//         ┃  ▣ ▣ ▣ ▣ ▣ ▣ ▣ ▣  (세워 둔 범퍼카 8대)            ┃
-//         ┃          ◎ 타이어        ● 가운데 기둥            ┃ → 호박밭 흙길
-//         ┃     ◎ 타이어                                        ┃
-//   y=992 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-//   y=1008 (아래 담)
+// 11/16 "좁다"는 요청으로 링크를 192×148 → 284×180 (달리는 바닥 약 1.9배), 타이어를 둘 더했다.
+//
+//   y=768 ━━━━━━━━━━━━━━━━━[강 건너 오솔길 → 입구까지]━━━━━━━━━━━━━━━  ╲ 강 남쪽 둑
+//         [구경 벤치]        ┃ 「유령 범퍼카」 간판 ┃  [매표소] [구경 벤치]  ╲
+//   y=816 ┏━━━━━━━━━━ 고무 테두리 ━━━━[입구 막대]━━━━━━━━━━━━━━━━┓  ← 귀퉁이와 둑 사이 틈 = 호박밭 가는 길
+//         ┃    ▣ ▣ ▣ ▣ ▣ ▣ ▣ ▣  (세워 둔 범퍼카 8대)                 ┃
+//         ┃   ◎ 타이어                          ◎ 타이어            ┃ → 호박밭 흙길
+//         ┃                  ● 가운데 기둥                          ┃
+//         ┃      ◎ 타이어                          ◎ 타이어          ┃
+//   y=996 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+//   y=1008 (아래 담 — 아래 테두리 밖에도 내려설 한 줄이 남는다)
+//   x=608 (오리 연못 동쪽 둑)                                   x=912 (호박밭)
 
 const T = (px: number) => Math.floor(px / 16);
 
-/** 마당 바닥 타일 (예전 다리 건너 묘역과 같은 칸 — 둘레 흩뿌린 나무 자리가 그대로이게) */
+/** 마당 바닥 타일 (BUMPER_YARD 칸. 강 남쪽 둑에 걸친 오른쪽 위 귀퉁이는 물 그림이 덮는다) */
 export const YARD_TILES = { tx0: T(BUMPER_YARD.x), tx1: T(BUMPER_YARD.x + BUMPER_YARD.w) - 1, ty0: T(BUMPER_YARD.y), ty1: T(BUMPER_YARD.y + BUMPER_YARD.h) - 1 } as const;
 
 export function inBumperYardTiles(tx: number, ty: number): boolean {
@@ -37,12 +41,14 @@ export const RINK_INNER = {
   h: BUMPER_RINK.h - 2 * BUMPER_RIM,
 } as const;
 
-/** 링크 안 장애물 (동그라미, 받침 가운데). 혼자 타도 부딪힐 거리: 가운데 기둥 + 쌓은 타이어 둘 */
+/** 링크 안 장애물 (동그라미, 받침 가운데). 혼자 타도 부딪힐 거리: 가운데 기둥 + 쌓은 타이어 넷 (11/16 링크가 넓어져 둘 더) — 세워 둔 차 줄 앞은 비운다 */
 export type BumperPost = { kind: "pillar" | "tyre"; x: number; y: number; r: number };
 export const BUMPER_POSTS: readonly BumperPost[] = [
-  { kind: "pillar", x: 720, y: 918, r: 9 },
-  { kind: "tyre", x: 664, y: 950, r: 7 },
-  { kind: "tyre", x: 784, y: 898, r: 7 },
+  { kind: "pillar", x: 762, y: 918, r: 9 },
+  { kind: "tyre", x: 686, y: 884, r: 7 },
+  { kind: "tyre", x: 842, y: 878, r: 7 },
+  { kind: "tyre", x: 696, y: 958, r: 7 },
+  { kind: "tyre", x: 834, y: 952, r: 7 },
 ];
 
 /** 입구 앞 (E로 타고, 내리면 여기 선다) */
@@ -53,13 +59,22 @@ export const BUMPER_EXIT_R = 46;
 export const BUMPER_EXIT_AT = { x: BUMPER_GATE.x, y: RINK_INNER.y + 8 } as const;
 
 /** 매표소 (받침 가운데) · 간판 아치 기둥 · 링크 네 귀퉁이 조명 기둥 */
-export const BUMPER_BOOTH = { x: 770, y: 834 } as const;
+export const BUMPER_BOOTH = { x: BUMPER_GATE.x + 50, y: BUMPER_GATE.y - 10 } as const;
 export const BUMPER_ARCH = { x: BUMPER_GATE.x, y: BUMPER_GATE.y, half: 20 } as const;
 export const BUMPER_POLES: readonly { x: number; y: number }[] = [
   { x: BUMPER_RINK.x + 2, y: BUMPER_RINK.y + 3 },
   { x: BUMPER_RINK.x + BUMPER_RINK.w - 2, y: BUMPER_RINK.y + 3 },
   { x: BUMPER_RINK.x + 2, y: BUMPER_RINK.y + BUMPER_RINK.h },
   { x: BUMPER_RINK.x + BUMPER_RINK.w - 2, y: BUMPER_RINK.y + BUMPER_RINK.h },
+];
+
+/**
+ * 흩뿌리는 나무를 두지 않는 곳 (11/16): 입구 앞 간판 둘레(오솔길 끝 ~ 링크 위 테두리)와
+ * 링크 오른쪽 위 귀퉁이 ↔ 강 남쪽 둑 사이 틈(호박밭 가는 길 — 나무 한 그루면 막힌다)
+ */
+export const BUMPER_KEEPOUT: readonly Rect[] = [
+  { x: BUMPER_GATE.x - 56, y: BUMPER_YARD.y - 30, w: 112, h: 30 },
+  { x: BUMPER_RINK.x + BUMPER_RINK.w - 8, y: BUMPER_YARD.y - 8, w: 60, h: 104 },
 ];
 
 /** 미니맵·안내 장소 표시 자리 (링크 가운데) */

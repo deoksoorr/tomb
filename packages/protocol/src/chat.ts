@@ -5,6 +5,8 @@
 // - 서버가 가려서(maskChat) 내보낸다. 클라이언트도 같은 함수로 내 화면 미리보기를 가린다
 // - 도배 제한: 토큰 버킷 (최대 CHAT_BURST개 저장, CHAT_REFILL_MS마다 1개 충전 — 짧은 대답 몇 번은 연달아 쳐도 된다)
 
+import { NAME_MAX, nameKey } from "./names";
+
 /** 한 번에 보낼 수 있는 글자 수 (코드 포인트 기준) */
 export const CHAT_MAX = 60;
 /** 말풍선이 떠 있는 시간 */
@@ -44,6 +46,29 @@ export function normalizeChat(raw: unknown): string | null {
   const s = raw.normalize("NFC").replace(INVISIBLE_RE, "").replace(CONTROL_RE, " ").replace(/\s+/g, " ").trim();
   if (!s) return null;
   return [...s].length <= CHAT_MAX ? s : null;
+}
+
+// ── 귓속말 받는 사람 맞추기 ──
+
+/**
+ * 11/16 귓속말 "닉네임 할 말"에서 받는 사람을 고른다 (클라이언트·실시간 서버 공용). 이름에 공백이 들 수 있어
+ * 앞에서부터 낱말을 늘려 가며 이름 키(nameKey — 공백·_·대소문자 무시)가 같은 후보를 찾고, 가장 긴 이름을 고른다.
+ * 남은 글이 없으면 못 고른 것으로 본다. body는 공백이 한 칸씩인 정리된 글
+ */
+export function matchWhisperTarget<T>(body: string, candidates: Iterable<T>, nameOf: (c: T) => string): { target: T; text: string } | null {
+  const byKey = new Map<string, T>();
+  for (const c of candidates) {
+    const k = nameKey(nameOf(c));
+    if (k && !byKey.has(k)) byKey.set(k, c);
+  }
+  const words = body.split(" ").filter(Boolean);
+  for (let i = words.length - 1; i >= 1; i--) {
+    const k = nameKey(words.slice(0, i).join(" "));
+    if ([...k].length > NAME_MAX) continue;
+    const hit = byKey.get(k);
+    if (hit !== undefined) return { target: hit, text: words.slice(i).join(" ") };
+  }
+  return null;
 }
 
 // ── 도배 제한 (토큰 버킷) ──

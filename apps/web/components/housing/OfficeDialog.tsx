@@ -9,6 +9,7 @@ import {
   lotLabel,
   nextTier,
   plotCost,
+  RECLAIM_DAYS,
   SORT_LABELS,
   SORTS,
   tierById,
@@ -77,6 +78,13 @@ export default function OfficeDialog({
           <button type="button" className={cx(ui.button, ui.primary)} onClick={() => (inVillage ? onClose() : onVillage(null))} disabled={busy}>
             {inVillage ? "마을로 돌아가기" : "주거 구역 보기"}
           </button>
+        </div>
+        <div className={styles.warn} role="note">
+          <strong>
+            <span className={styles.warnTag}>주의</span>
+            {RECLAIM_DAYS}일 동안 접속하지 않으면 집이 철거돼요
+          </strong>
+          <p>집 가격은 100% 선물함으로 돌려드리고, 가구는 그대로 저장돼요. 철거된 자리는 다른 사람이 분양받을 수 있어요.</p>
         </div>
         <div className={styles.tabs} role="tablist" aria-label="분양 사무소">
           {(["mine", "browse"] as const).map((t) => (
@@ -229,6 +237,7 @@ function MyPlot({
           </select>
         </label>
       )}
+      {withLot && <p className={styles.warnLine}>{RECLAIM_DAYS}일 동안 접속하지 않으면 집이 철거돼요. 집 가격은 100% 돌려드리고 가구는 그대로 저장돼요.</p>}
       <button type="submit" className={cx(ui.button, ui.primary)} disabled={pending || busy || !name.trim()}>
         {pending ? "처리 중…" : submit}
       </button>
@@ -238,6 +247,8 @@ function MyPlot({
   const h = my.house;
   if (!h) {
     const short = my.points < cost;
+    // 오래 비워 정리된 예전 집의 가구 (가방에 남아 있다)
+    const kept = Object.values(my.inventory).reduce((n, c) => n + c, 0);
     return (
       <div className={styles.stack}>
         <div className={styles.card}>
@@ -245,6 +256,7 @@ function MyPlot({
           <p className={styles.muted}>
             주거 구역에 내 터를 드려요. 큰 터를 바로 살 수도 있고, 작은 터로 시작해 나중에 넓혀도 돼요. 가구와 소품으로 꾸미면 꾸밈 점수가 올라요. 놀러 온 사람들이 좋아요와 방명록을 남겨 줘요.
           </p>
+          {kept > 0 && <p className={styles.tag}>예전 집의 가구 {kept}개가 그대로 저장돼 있어요. 새 집을 분양받으면 다시 놓을 수 있어요.</p>}
           <TierPicker value={pick} onChange={setPick} points={my.points} disabled={pending || busy} />
           <p className={styles.points}>
             {plot.name} 분양가 <strong>{fmt(cost)}P</strong> · 내 포인트 <strong>{fmt(my.points)}P</strong>

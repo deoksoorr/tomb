@@ -2,30 +2,45 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { bridge } from "@/game/bridge";
-import { useBridgeEvent } from "@/lib/hooks/useBridge";
+import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
 import { errorMessage } from "@/lib/api";
 import { showToast } from "@/lib/hooks/useToasts";
 import { friendsApi, friendsStore } from "@/lib/hooks/useFriends";
 import { reportStore, submitReport, useReportTarget, type ReportTarget } from "@/lib/reportClient";
+import { CHAT_LOG_TTL_MS } from "@/game/logic/chatLog";
+import { whisperPrefill } from "@/game/logic/whisper";
 import { REPORT_MEMO_MAX, USER_REPORT_REASON_LABELS, USER_REPORT_REASONS, type UserReportReason } from "@/lib/reports";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "../ui/ui.module.css";
+import { chatStore } from "./chatLines";
+import StaffEarnDialog from "./StaffEarnDialog";
 import styles from "./ReportLayer.module.css";
 
 type Menu = { sid: number; name: string; ch?: number; room?: string; chat?: string; x: number; y: number };
 const MENU_W = 180;
-const MENU_H = 172;
+const MENU_H = 208;
+
+/** 11/16 그 사람이 최근 5분 안에 나에게 보낸 마지막 귓속말 (머리 위 말풍선이 없을 때 신고에 붙인다) */
+function lastWhisperFrom(name: string): string | undefined {
+  const now = Date.now();
+  const line = chatStore.get().findLast((l) => l.w === "in" && l.name === name && now - l.at < CHAT_LOG_TTL_MS);
+  return line ? `[귓속말] ${line.text}` : undefined;
+}
 
 /**
- * 47번 게임 안 신고: 다른 사람 캐릭터(이름표)를 누르면 누른 자리 옆에 작은 메뉴 → "친구 신청" / "도감 보기" / "신고하기"(사유 + 메모 100자).
- * 확성기 창의 신고 버튼도 같은 신고 창을 연다 (reportStore.open)
+ * 47번 게임 안 신고: 다른 사람 캐릭터(이름표)를 누르면 누른 자리 옆에 작은 메뉴 → "귓속말"(11/16) / "친구 신청" / "도감 보기" / "신고하기"(사유 + 메모 100자).
+ * 확성기 창의 신고 버튼도 같은 신고 창을 연다 (reportStore.open).
+ * 운영자 계정이 누르면 "친구 신청" 자리에 "포인트 현황" (그 사람이 오늘 한도를 얼마나 채웠는지, StaffEarnDialog)
  */
 export default function ReportLayer() {
   const [menu, setMenu] = useState<Menu | null>(null);
   const pointer = useRef({ x: 0, y: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const target = useReportTarget();
+  // 운영자 계정은 친구를 맺을 수 없다 → [친구 신청] 대신 그 사람의 [포인트 현황]
+  const iAmStaff = useBridgeValue("me:staff")?.on === true;
+  const [earnOf, setEarnOf] = useState<string | null>(null);
 
   // 게임은 월드 좌표만 알려 주므로, 누른 화면 위치는 마지막 포인터 위치로 잡는다
   useEffect(() => {
@@ -66,20 +81,47 @@ export default function ReportLayer() {
             role="menuitem"
             className={cx(ui.button, styles.menuItem)}
             onClick={() => {
-              // 친구 신청: 계정은 서버가 채널·방 + sid로 푼다. 상대가 먼저 신청해 뒀으면 바로 친구
-              const { name, sid, room, ch } = menu;
+              // 11/16 채팅 입력칸에 "/w 닉네임 "을 채우고 연다 (GameShell·ChatInput)
               setMenu(null);
-              friendsApi
-                .request({ sid, ...(room ? { room } : { ch }) })
-                .then((r) => {
-                  showToast(r.result === "accepted" ? `${r.name}님과 친구가 됐어요!` : `${r.name}님에게 친구 신청을 보냈어요.`);
-                  void friendsStore.refresh();
-                })
-                .catch((e: unknown) => showToast(errorMessage(e) || `${name}님에게 신청하지 못했어요.`));
+              bridge.emit("chat:prefill", { text: whisperPrefill(menu.name) });
             }}
           >
-            친구 신청
+            귓속말
           </button>
+          {iAmStaff && (
+            <button
+              type="button"
+              role="menuitem"
+              className={cx(ui.button, styles.menuItem)}
+              onClick={() => {
+                setEarnOf(menu.name);
+                setMenu(null);
+              }}
+            >
+              포인트 현황
+            </button>
+          )}
+          {!iAmStaff && (
+            <button
+              type="button"
+              role="menuitem"
+              className={cx(ui.button, styles.menuItem)}
+              onClick={() => {
+                // 친구 신청: 계정은 서버가 채널·방 + sid로 푼다. 상대가 먼저 신청해 뒀으면 바로 친구
+                const { name, sid, room, ch } = menu;
+                setMenu(null);
+                friendsApi
+                  .request({ sid, ...(room ? { room } : { ch }) })
+                  .then((r) => {
+                    showToast(r.result === "accepted" ? `${r.name}님과 친구가 됐어요!` : `${r.name}님에게 친구 신청을 보냈어요.`);
+                    void friendsStore.refresh();
+                  })
+                  .catch((e: unknown) => showToast(errorMessage(e) || `${name}님에게 신청하지 못했어요.`));
+              }}
+            >
+              친구 신청
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -97,8 +139,10 @@ export default function ReportLayer() {
             role="menuitem"
             className={cx(ui.button, styles.menuItem)}
             onClick={() => {
-              // 그 사람 머리 위에 떠 있던 자유 채팅은 이 신고에만 붙여 보낸다 (채팅은 따로 저장하지 않는다)
-              reportStore.open({ type: "user", name: menu.name, sid: menu.sid, ch: menu.ch, room: menu.room, ...(menu.chat ? { chat: menu.chat } : {}) });
+              // 그 사람 머리 위에 떠 있던 자유 채팅은 이 신고에만 붙여 보낸다 (채팅은 따로 저장하지 않는다).
+              // 11/16 말풍선이 없으면 최근 5분 안에 나에게 보낸 귓속말을 붙인다 (귓속말도 서버에 남지 않는다)
+              const chat = menu.chat ?? lastWhisperFrom(menu.name);
+              reportStore.open({ type: "user", name: menu.name, sid: menu.sid, ch: menu.ch, room: menu.room, ...(chat ? { chat } : {}) });
               setMenu(null);
             }}
           >
@@ -110,6 +154,7 @@ export default function ReportLayer() {
         </div>
       )}
       {target && <ReportDialog target={target} onDone={showToast} />}
+      {earnOf && iAmStaff && <StaffEarnDialog only={earnOf} onClose={() => setEarnOf(null)} />}
     </>
   );
 }
@@ -144,7 +189,7 @@ function ReportDialog({ target, onDone }: { target: ReportTarget; onDone: (messa
         <p className={styles.who}>
           <strong>{target.name}</strong>
           {target.type === "megaphone" && <span className={styles.quote}>「{target.text}」</span>}
-          {target.type === "user" && target.chat && <span className={styles.quote}>「{target.chat}」 (이 말풍선이 신고와 함께 전달돼요)</span>}
+          {target.type === "user" && target.chat && <span className={styles.quote}>「{target.chat}」 (이 말이 신고와 함께 전달돼요)</span>}
         </p>
         <fieldset className={styles.reasons}>
           <legend className={ui.hint}>신고 사유</legend>

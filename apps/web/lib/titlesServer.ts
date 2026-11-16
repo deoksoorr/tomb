@@ -19,6 +19,7 @@ import { getChamp, type ChampWeek } from "./store/champ";
 import { K } from "./store/keys";
 import { getStyleStore, styleKey } from "./store/style";
 import { getTitleMarks, type TitleMarks } from "./store/titleMarks";
+import { getReferrals } from "./store/referrals";
 import { getTitleStats } from "./store/titleStats";
 import type { EquippedItem } from "./store/types";
 import { earnedTitleIds, titleDef, titlePerk, type TitleFacts, type TitleMetric } from "./titles";
@@ -32,7 +33,7 @@ import { earnedTitleIds, titleDef, titlePerk, type TitleFacts, type TitleMetric 
 //    칭호를 달거나 빼고, 알림·본 기록을 남기면 그 계정 기억을 지운다 (forgetTitles). 도감 등록·1위 지급 결과는 길어야 FACTS_TTL_MS 늦게 보인다.
 //  - 명예의 전당(주간 1위 기록)은 모든 계정이 같이 쓰므로 HALL_TTL_MS 동안 한 번만 읽는다.
 //  - 계정 기록은 필요한 칸만 (연속 출석·몸·착용·염색 — 3명령), 사냥 처치·어려움/지옥 완주는 점수 하나씩만 (3명령).
-//  - 한 번 새로 읽기 = 도감 3 + 집 2 + 사냥 캐릭터 1 + 계정 3 + 사냥 기록 3 + 접속 시간 1 + 알림 기록 2 ≈ 15명령 (예전 약 46).
+//  - 한 번 새로 읽기 = 도감 3 + 집 2 + 사냥 캐릭터 1 + 계정 3 + 사냥 기록 3 + 접속 시간 1 + 추천 1 + 알림 기록 2 ≈ 16명령 (예전 약 46).
 
 /** 명예의 전당에서 훑는 주 수 (10년) */
 const HALL_WEEKS = 520;
@@ -142,7 +143,7 @@ async function light(accountId: string, now: number): Promise<Light> {
 /** 칭호 사실 새로 읽기 (기억 없이) */
 async function readFacts(accountId: string, now: number): Promise<{ facts: TitleFacts; equipped: string | null }> {
   const safe = <T,>(p: Promise<T>, fb: T) => p.catch(() => fb);
-  const [forage, champ, house, rpg, sup, l, stats, holders] = await Promise.all([
+  const [forage, champ, house, rpg, sup, l, stats, holders, refs] = await Promise.all([
     safe(getForageStore().dex(accountId), null),
     safe(
       Promise.all([hall(now), testServerEnv() ? getChamp().test(accountId, now) : Promise.resolve(null)]).then(([weeks, test]) => {
@@ -164,6 +165,8 @@ async function readFacts(accountId: string, now: number): Promise<{ facts: Title
     safe(light(accountId, now), null),
     safe(getTitleStats().get(accountId), { stay: 0, quests: 0, qking: 0, urgKing: 0, urgLast: 0 }),
     safe(towerHolders(now), new Map<string, string>()),
+    // 추천 코드 칭호: 데려온 이웃 중 조건을 넘긴 수 (ZSCORE 1명령)
+    safe(getReferrals().credited(accountId), 0),
   ]);
   const dex = forage?.dex ?? {};
   const has = (id: string) => (dex[id]?.n ?? 0) > 0;
@@ -194,6 +197,7 @@ async function readFacts(accountId: string, now: number): Promise<{ facts: Title
     look: l ? lookScore({ equipped: l.equipped, body: l.body, dye: l.dye }, now) : 0,
     champ: champ.count,
     house: house ? house.score : 0,
+    refs,
   };
   for (const cat of DEX_CATS) metrics[`dex_${cat}`] = dexIdsOf(cat).filter(has).length;
   return {

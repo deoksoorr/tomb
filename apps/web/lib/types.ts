@@ -2,6 +2,7 @@
 
 import { itemById, type AvatarDye, type ChampBoard } from "@tomb/protocol";
 import type { EarnSource } from "./economy";
+import type { EarnBoost } from "./pointEvent";
 
 export const CAUSE_TAGS = [
   "time",
@@ -236,6 +237,8 @@ export type Me = {
   champ?: number;
   /** 11/16 매니저 (관리자가 임명 — 전용 칭호·채팅 딱지뿐). 아니면 없음 */
   manager?: true;
+  /** 포인트 배수 이벤트 (lib/pointEvent — on = 지금 적립이 mult배인 항목, caps = 오늘 한도가 mult배인 항목). 이벤트와 상관없는 날이면 없음 */
+  earnBoost?: EarnBoost;
 };
 
 /** 휴면 계정이 돌아왔을 때 (입장 화면 안내·입장 거절 문구) */
@@ -339,12 +342,13 @@ export const INQUIRY_CATEGORIES = [
 export type InquiryCategory = (typeof INQUIRY_CATEGORIES)[number]["id"];
 
 /**
- * POST /api/inquiry (세션 필요) → 운영자의 GitHub 저장소(GITHUB_INQUIRY_REPO)에 이슈로 등록된다.
+ * POST /api/inquiry (세션 필요) → 우리 문의함(관리자 문의 탭)에 저장된다. GitHub 설정(GITHUB_INQUIRY_REPO)이 있으면 이슈로도 보낸다.
  * message 10~1000자, contact(답장 받을 이메일 등)는 선택 100자.
- * 저장소가 공개면 문의 내용이 공개되므로 UI는 `GET /api/inquiry` → { enabled, public }을 보고 안내한다.
+ * GitHub 저장소가 공개면 문의 내용이 공개되므로 UI는 `GET /api/inquiry` → { enabled, public }을 보고 안내한다.
  */
-export type InquiryInput = { category: InquiryCategory; message: string; contact?: string; /** 문의 당시 채널 (이슈에 표시) */ channel?: number };
+export type InquiryInput = { category: InquiryCategory; message: string; contact?: string; /** 문의 당시 채널 (관리자 문의 탭·이슈에 표시) */ channel?: number };
 export type InquiryResponse = { ok: true };
+/** enabled는 이제 늘 true (예전 클라이언트용으로 남긴다). public = GitHub으로도 보내고 그 저장소가 공개일 때만 true */
 export type InquiryInfoResponse = { enabled: boolean; public: boolean };
 
 // ── v3: 성황당·포인트 랭킹·머무르기 ──
@@ -450,7 +454,7 @@ export type MyGraveStatusResponse = { active: PublicGrave | null; passDays: numb
 /** look = 외형 꾸미기 점수 (지금 착용 중인 코디 파츠 가격대 점수 합, 기간 구분 없음 — lib/lookScore.ts) */
 /** huntLevel = 사냥터 캐릭터 레벨 (같으면 경험치, 기간 구분 없음 — lib/huntLevelRank.ts) */
 /** tower = 11/15 야근 빌딩 최고 층 (이번 주·전체, 층 높은 순 → 빨리 오른 순. value = 층, sub = 그 층을 깬 시각 — lib/towerRank.ts) */
-export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish", "look", "huntLevel", "tower"] as const;
+export const RANK_BOARDS = ["points", "huntKills", "huntBest", "house", "fish", "look", "huntLevel", "tower", "stay"] as const;
 export type RankBoard = (typeof RANK_BOARDS)[number];
 /** week = 이번 주(월요일 새벽 5시부터, lib/gameDay), all = 전체 */
 export type RankPeriod = "week" | "all";
@@ -571,6 +575,8 @@ export const giftHasTerm = (id: string) => {
 /** 한 선물에 넣는 아이템 종류 수·개수 상한 (관리자 화면과 서버 검증 공용) */
 export const GIFT_MAX_ITEMS = 10;
 export const GIFT_MAX_COUNT = 99;
+/** 여러 계정에 한 번에 보낼 때 최대 계정 수 (접속 중 알림 notifyMe도 한 번에 50명까지) */
+export const GIFT_MAX_TARGETS = 50;
 
 /** 선물 아이템 (카탈로그 아이템 id × 개수). term = 기간 (꾸미기만, 이때 개수는 1) — 옛 선물엔 없다 */
 export type GiftItem = { itemId: string; count: number; term?: GiftTerm };
@@ -586,7 +592,8 @@ export type GiftEntry = {
   claimedAt: number | null;
 };
 /** GET /api/gifts → 내 선물함 (최신 먼저). unclaimed = 아직 안 받은 선물 수 (빨간 점) */
-export type GiftListResponse = { gifts: GiftEntry[]; unclaimed: number };
+/** notice = 이번 응답에서 한 번만 띄울 알림 (오래 비운 집을 정리해 낸 포인트를 선물로 넣었을 때) */
+export type GiftListResponse = { gifts: GiftEntry[]; unclaimed: number; notice?: string };
 /** POST /api/gifts/{id} → 받기 (한 번만). DELETE /api/gifts/{id} → 지우기 (안 받은 선물을 지우면 버려진다) */
 export type GiftClaimResponse = { gift: GiftEntry; me: Me; points: number };
 

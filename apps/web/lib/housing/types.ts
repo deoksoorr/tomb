@@ -66,8 +66,21 @@ export type HouseListResponse = { sort: HouseSort; houses: HouseSummary[]; gener
 export type HouseLikeResponse = { likes: number; score: number; earnedOwner: number };
 export type GuestbookResponse = { entries: GuestEntryView[] };
 
-/** 관리자 목록 */
-export type AdminHouse = HouseSummary & { hidden: boolean; ownerTail: string; reportedEntries: (GuestEntry & { reports: number; hidden: boolean })[] };
+/**
+ * 관리자 목록. lastSeenAt = 주인의 마지막 접속 (0 = 기록 없음), staff = 운영자 집 (비우지 않는다),
+ * reclaimAt = 이때부터 정리 대상 (규칙을 켠 시각 전 접속은 그 시각으로 센다. 0 = 비우지 않음 — 운영자·기록 없음),
+ * refund = 오래 비워 정리하면 돌려줄 포인트, refundEstimated = 낸 포인트 기록이 없어 지금 가격표로 센 값
+ */
+export type AdminHouse = HouseSummary & {
+  hidden: boolean;
+  ownerTail: string;
+  reportedEntries: (GuestEntry & { reports: number; hidden: boolean })[];
+  lastSeenAt: number;
+  staff: boolean;
+  reclaimAt: number;
+  refund: number;
+  refundEstimated: boolean;
+};
 
 /** 마을에 서 있는 집 하나 (외관·문패) */
 export type VillageHouse = HouseSummary & { exterior: HouseExterior };

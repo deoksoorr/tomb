@@ -7,6 +7,7 @@ import { DECKS, inWater, inWaterBody, type Rect } from "../world/layout";
 //  - 내리기: 가까운 뭍(둑·나루터·잔교)에 설 자리가 있을 때만
 //  - 11/15 오리배(kind "duck"): 오리 연못 안에서만, 물살 없음, 조금 느리고 더 미끄러지듯(가속·감속이 느리다).
 //    자리는 나란히 (왼쪽 = 조종, 오른쪽 = DUCK_SIDE_SEAT). 두 오리배가 닿으면 살짝 튕겨 나간다 (duckBump, 각자 자기 배만)
+//  - 11/16 오리배는 연못 어느 둑에서든 내린다 (duckShoreRing): 둑 가까이면 E로 바로, 한가운데서 E면 가장 가까운 둑으로 저절로 저어 가서 내린다
 
 /** 노 저을 때 최고 속도 (px/초). 걷기(56)보다 조금 느리다 */
 export const ROW_SPEED = 46;
@@ -19,7 +20,7 @@ export const DUCK_SPEED = 36;
 export const DUCK_ACCEL = 1.3;
 /** 오리배 몸통 반폭·위아래 여유 (두 자리 가운데 기준) — 연못 둑에 몸통이 올라가지 않게 */
 export const DUCK_HULL_HALF = 18;
-const DUCK_HULL_PAD_Y = 9;
+export const DUCK_HULL_PAD_Y = 9;
 /** 오리배끼리 닿는 타원 (두 배의 왼쪽 자리 사이 거리, 가로·세로 반지름) */
 export const DUCK_BUMP_RX = 36;
 export const DUCK_BUMP_RY = 18;
@@ -246,4 +247,91 @@ export function pickBoatSeat(
     }
   }
   return best;
+}
+
+// ── 11/16 오리배: 아무 둑에서나 내리기 ──
+
+/** 오리배에서 바로 내릴 수 있는 거리 (내 발 ↔ 내려설 둑). 몸통이 넓어(반폭 DUCK_HULL_HALF) 조각배(SHORE_REACH)보다 넉넉히 */
+export const DUCK_SHORE_REACH = 44;
+/** 연못 둘레 내려설 후보 각도 수 */
+export const DUCK_RING_N = 96;
+/** 둑 위 내려설 자리를 찾는 거리 (연못 가장자리 바깥으로, 가까운 순) */
+const DUCK_LAND_OFF: readonly number[] = [5, 8, 11, 14, 18, 22, 26];
+
+/** 둑 한 곳: land = 내려설 뭍(발 위치), boat = 거기 대려고 오리배(왼쪽 자리)가 갈 물 위 자리 */
+export type DuckLanding = { land: { x: number; y: number }; boat: { x: number; y: number } };
+
+/**
+ * 오리 연못 둘레의 내려설 자리 (각도마다 하나). ok = 내려서도 되는 뭍 (부르는 쪽이 충돌·물·걷기 격자를 본다).
+ * 둑이 막힌 각도(나무·울타리·마당 테두리)와 배를 바짝 댈 수 없는 각도(선착장 판자 옆)는 빠진다. 맵이 고정이라 한 번 만들어 둔다
+ */
+export function duckShoreRing(ok: (x: number, y: number) => boolean, n = DUCK_RING_N): DuckLanding[] {
+  const p = DUCK_POND;
+  const out: DuckLanding[] = [];
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    let land: { x: number; y: number } | null = null;
+    for (const off of DUCK_LAND_OFF) {
+      const x = Math.round(p.x + (p.rx + off) * c);
+      const y = Math.round(p.y + (p.ry + off) * s);
+      if (ok(x, y)) {
+        land = { x, y };
+        break;
+      }
+    }
+    if (!land) continue;
+    // 배: 같은 각도로 몸통이 둑에 닿지 않는 가장 바깥 물 위 (판자 옆이면 안쪽으로 당긴다)
+    let boat: { x: number; y: number } | null = null;
+    for (let t = 1; t >= 0.3; t -= 0.02) {
+      const x = Math.round(p.x + (p.rx - DUCK_HULL_HALF) * c * t - DUCK_SIDE_SEAT / 2);
+      const y = Math.round(p.y + (p.ry - DUCK_HULL_PAD_Y) * s * t);
+      if (duckWater(x, y)) {
+        boat = { x, y };
+        break;
+      }
+    }
+    if (!boat || Math.hypot(land.x - boat.x, land.y - boat.y) > DUCK_SHORE_REACH) continue;
+    out.push({ land, boat });
+  }
+  return out;
+}
+
+/** 지금 자리(내 발 x,y)에서 바로 내릴 둑: reach 안에서 가장 가까운 내려설 자리. 없으면 null */
+export function duckLandNear(x: number, y: number, ring: readonly DuckLanding[], reach = DUCK_SHORE_REACH): { x: number; y: number } | null {
+  let best: { x: number; y: number } | null = null;
+  let bd = reach;
+  for (const r of ring) {
+    const d = Math.hypot(r.land.x - x, r.land.y - y);
+    if (d <= bd) {
+      bd = d;
+      best = r.land;
+    }
+  }
+  return best;
+}
+
+/** 연못 한가운데에서 E: 배(왼쪽 자리 x,y)에서 가장 가까이 댈 수 있는 둑. 없으면 null */
+export function nearestDuckLanding(x: number, y: number, ring: readonly DuckLanding[]): DuckLanding | null {
+  let best: DuckLanding | null = null;
+  let bd = Infinity;
+  for (const r of ring) {
+    const d = Math.hypot(r.boat.x - x, r.boat.y - y);
+    if (d < bd) {
+      bd = d;
+      best = r;
+    }
+  }
+  return best;
+}
+
+/** 저절로 저어 가기: (x,y)에서 (tx,ty)로 향하는 입력 (−1..1). 다 와 가면 살살 (DUCK_SPEED × 세기) */
+export function steerToward(x: number, y: number, tx: number, ty: number): { ax: number; ay: number } {
+  const dx = tx - x;
+  const dy = ty - y;
+  const d = Math.hypot(dx, dy);
+  if (d < 2) return { ax: 0, ay: 0 };
+  const k = Math.max(0.35, Math.min(1, d / 28));
+  return { ax: (dx / d) * k, ay: (dy / d) * k };
 }

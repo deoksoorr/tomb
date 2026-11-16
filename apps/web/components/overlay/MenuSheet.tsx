@@ -32,7 +32,9 @@ export type MenuTarget =
   // 10·11번
   | "calendar"
   | "gifts"
-  | "friends";
+  | "friends"
+  /** 운영자 전용 포인트 현황 */
+  | "staffEarn";
 
 type Props = {
   canBury: boolean;
@@ -50,7 +52,7 @@ type Props = {
   friendIncoming?: number;
   /** 가방 [칭호]에서 아직 안 본 새 칭호가 있다 (가방 타일에 점) */
   titleNew?: boolean;
-  /** 운영자 계정: 친구 기능을 쓸 수 없어 친구 타일을 뺀다 */
+  /** 운영자 계정: 친구 기능을 쓸 수 없어 친구 타일 대신 포인트 현황 타일 */
   noFriends?: boolean;
   onPick: (target: MenuTarget) => void;
   onClose: () => void;
@@ -99,41 +101,41 @@ export default function MenuSheet({
   const entries: Entry[] = [
     { target: "say", icon: "chat", label: "표현 (T)", desc: "말풍선·이모티콘으로 인사하기" },
     { target: "favs", icon: "spark", label: "즐겨찾기 표현 (Y)", desc: "별 표시한 표현을 바로 보내기" },
-    { target: "bag", icon: "bag", label: "가방", desc: titleNew ? "새 칭호를 얻었어요!" : "꾸미기·폭죽·잡은 것 꺼내기", badge: bagCount ? String(bagCount) : undefined, dot: titleNew },
+    { target: "bag", icon: "bag", label: "가방 (I)", desc: titleNew ? "새 칭호를 얻었어요!" : "꾸미기·폭죽·잡은 것 꺼내기", badge: bagCount ? String(bagCount) : undefined, dot: titleNew },
     { target: "hunt", icon: "sword", label: "사냥터", desc: "몬스터를 잡고 포인트 모으기" },
     { target: "dex", icon: "book", label: "도감", desc: "물고기·곤충·약초 모으기" },
     { target: "housing", icon: "house", label: "집·분양 마을", desc: "내 집 분양받고 꾸미기" },
     ...(fireworkCount > 0
-      ? [{ target: "fireworks" as const, icon: "spark" as const, label: "폭죽 쏘기", desc: "채널 하늘에 불꽃 한 발", badge: countLabel(fireworkCount) }]
+      ? [{ target: "fireworks" as const, icon: "spark" as const, label: "폭죽 쏘기 (G)", desc: "채널 하늘에 불꽃 한 발", badge: countLabel(fireworkCount) }]
       : []),
     ...(staff
       ? []
-      : [{ target: "calendar" as const, icon: "calendar" as const, label: "출석 달력", desc: calendarReady ? "오늘 출석 도장을 찍을 수 있어요!" : `${ATTEND_STAY_TEXT} 머물면 오늘 출석 도장`, redDot: calendarReady }]),
+      : [{ target: "calendar" as const, icon: "calendar" as const, label: "출석 달력 (B)", desc: calendarReady ? "오늘 출석 도장을 찍을 수 있어요!" : `${ATTEND_STAY_TEXT} 머물면 오늘 출석 도장`, redDot: calendarReady }]),
     {
       target: "gifts",
       icon: "gift",
-      label: "선물함",
+      label: "선물함 (M)",
       desc: giftCount > 0 ? `안 받은 선물 ${giftCount}개` : "마을 관리인이 보낸 선물",
       badge: giftCount ? String(giftCount) : undefined,
       redDot: giftCount > 0,
     },
     ...(noFriends
-      ? []
+      ? [{ target: "staffEarn" as const, icon: "list" as const, label: "포인트 현황", desc: "사람들이 오늘 한도를 얼마나 채웠는지 보기" }]
       : [
           {
             target: "friends" as const,
             icon: "friends" as const,
-            label: "친구",
+            label: "친구 (O)",
             desc: friendIncoming > 0 ? `받은 친구 신청 ${friendIncoming}개` : "친구가 어디 있는지 보고 찾아가기",
             badge: friendIncoming ? String(friendIncoming) : undefined,
             redDot: friendIncoming > 0,
           },
         ]),
     { target: "activity", icon: "heart", label: "내 소식", desc: "헌화·방명록·좋아요 소식", badge: activityUnread ? String(activityUnread) : undefined },
-    { target: "race", icon: "trophy", label: "이번 주 레이스", desc: "이번 주 1위를 겨뤄요" },
-    { target: "ranking", icon: "list", label: "랭킹", desc: "포인트·사냥·집·헌화 순위" },
-    { target: "notices", icon: "bell", label: "공지", desc: unreadNotice ? "새 공지가 있어요" : "업데이트·점검 소식", dot: unreadNotice },
-    { target: "me", icon: "user", label: "내 정보", desc: "닉네임·개인 코드·내 집", badge: points !== null ? `${points.toLocaleString("ko-KR")}P` : undefined },
+    { target: "race", icon: "trophy", label: "이번 주 레이스 (U)", desc: "이번 주 1위를 겨뤄요" },
+    { target: "ranking", icon: "list", label: "랭킹 (L)", desc: "포인트·사냥·집·헌화 순위" },
+    { target: "notices", icon: "bell", label: "공지 (N)", desc: unreadNotice ? "새 공지가 있어요" : "업데이트·점검 소식", dot: unreadNotice },
+    { target: "me", icon: "user", label: "내 정보 (P)", desc: "닉네임·개인 코드·내 집", badge: points !== null ? `${points.toLocaleString("ko-KR")}P` : undefined },
     { target: "guide", icon: "info", label: "안내", desc: "조작법·포인트 규칙·문의" },
   ];
   const graveEntries: Entry[] = [
