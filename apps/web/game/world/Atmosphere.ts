@@ -270,8 +270,9 @@ export class Atmosphere {
     const rain = this.indoor ? 0 : L.rain;
     const snow = this.indoor ? 0 : L.snow;
     const rainSpeed = this.reduced ? 0.35 : 1;
-    this.rainFar.setAlpha(rain * (this.reduced ? 0.3 : 0.45)).setVisible(rain > 0.01);
-    this.rainNear.setAlpha(this.reduced ? 0 : rain * 0.6).setVisible(!this.reduced && rain > 0.15);
+    // 11/16 사람이 잘 안 보인다는 문의로 빗줄기를 옅게 (먼 줄 0.45→0.26, 가까운 줄 0.6→0.3, 가까운 줄은 꽤 올 때만)
+    this.rainFar.setAlpha(rain * (this.reduced ? 0.2 : 0.26)).setVisible(rain > 0.01);
+    this.rainNear.setAlpha(this.reduced ? 0 : rain * 0.3).setVisible(!this.reduced && rain > 0.35);
     if (rain > 0.01) {
       this.rainFar.tilePositionY -= dt * 0.22 * rainSpeed;
       this.rainFar.tilePositionX += dt * 0.073 * rainSpeed;
@@ -395,7 +396,7 @@ export class Atmosphere {
     }
     if (this.reduced || rain < 0.05) return;
     // 비 세기에 비례한 물튐. 화면에 보이는 바닥에 무작위로 떨어진다
-    this.splashAcc += (dt / 1000) * rain * 40;
+    this.splashAcc += (dt / 1000) * rain * 24;
     while (this.splashAcc >= 1) {
       this.splashAcc -= 1;
       let sp: Splash | null = null;
