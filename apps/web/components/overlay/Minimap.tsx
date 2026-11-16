@@ -73,11 +73,15 @@ function heart(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, l
 
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+/** 11/16 처음엔 폰(터치)은 접어 둔다 (화면을 가린다). 한 번 펴거나 접으면 그 뒤로는 이 브라우저가 기억한다 */
+const firstOpen = () => !(typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches);
+
 function readOpen(): boolean {
   try {
-    return localStorage.getItem(STORE_KEY) !== "0";
+    const v = localStorage.getItem(STORE_KEY);
+    return v === null ? firstOpen() : v !== "0";
   } catch {
-    return true;
+    return firstOpen();
   }
 }
 

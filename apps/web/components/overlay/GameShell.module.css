@@ -17,10 +17,10 @@
 }
 
 /* 터치: 아래 가운데 안내 줄·새 버전 안내·낚시 창·관람차 안내가 놓이는 높이 (--hud-bottom).
-   세로 폰은 조이스틱(120px) 위 확성기 버튼 줄(≈30px) 위, 확성기 기록을 펼치면 그 기록(≤120px) 위까지 */
+   세로 폰은 조이스틱(120px) 위 채팅 줄(최근 몇 줄 ≈100px) 위 (11/16 확성기는 위쪽 [메뉴] 아래로 옮겼다) */
 @media (pointer: coarse) {
   .shell {
-    --hud-bottom: calc(var(--safe-bottom) + 168px);
+    --hud-bottom: calc(var(--safe-bottom) + 236px);
     /* 길게 누르거나 끌 때 글자 선택·확대경·길게 누르기 메뉴가 터치를 가져가 조이스틱·버튼이 멈추지 않게 */
     user-select: none;
     -webkit-user-select: none;
@@ -34,15 +34,11 @@
     -webkit-touch-callout: default;
   }
 
-  .shell:has([data-megaphone-open]) {
-    --hud-bottom: calc(var(--safe-bottom) + 296px);
-  }
 }
 
 /* 가로 폰처럼 낮은 터치 화면: 조이스틱과 행동 버튼 사이 맨 아래 (확성기 창은 조이스틱 위 왼쪽이라 닿지 않는다) */
 @media (pointer: coarse) and (max-height: 520px) {
-  .shell,
-  .shell:has([data-megaphone-open]) {
+  .shell {
     --hud-bottom: var(--safe-bottom);
   }
 }
