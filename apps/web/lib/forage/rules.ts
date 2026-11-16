@@ -46,6 +46,14 @@ export function pickWeighted(list: readonly Species[], rand: number, mult?: (s: 
   return list[list.length - 1];
 }
 
+/**
+ * 11/16 바다 낚시 만조 덤: 물 높이가 이 위(만조 앞뒤 약 30분)면 큰 놈 확률(크기 한 번 더 굴리기)을 더 얹는다.
+ * 낚시 갈래 칭호 확률과 겹치면 둘 중 하나라도 걸리면 (1 − (1−a)(1−b))
+ */
+export const SEA_HIGH_TIDE_LEVEL = 0.75;
+export const SEA_HIGH_TIDE_BIG = 0.3;
+export const withHighTide = (chance: number, level: number): number => (level >= SEA_HIGH_TIDE_LEVEL ? 1 - (1 - chance) * (1 - SEA_HIGH_TIDE_BIG) : chance);
+
 /** 크기 (0.1cm 단위 정수 = cm×10). 큰 것일수록 드물다. 크기를 재지 않는 것은 0 */
 export function rollSize10(s: Species, rand: number): number {
   if (!s.size) return 0;
@@ -117,7 +125,8 @@ export const REEL_MAX_MS = 60_000;
 /** 채집 지점이 다시 피는 단위. 같은 창(15분) 안에서는 한 번 캔 자리가 비어 있다 */
 export const NODE_WINDOW_MS = 15 * 60_000;
 /** 창마다 지점이 피어 있을 확률 (사람마다 따로 굴린다) */
-export const NODE_DENSITY: Record<NodeKind, number> = { herb: 0.6, ore: 0.5, dig: 0.4, bug: 0.55 };
+// 11/16 갯벌 구멍(clam)은 물이 빠진 동안만 캘 수 있어서 조금 더 자주 피어요
+export const NODE_DENSITY: Record<NodeKind, number> = { herb: 0.6, ore: 0.5, dig: 0.4, bug: 0.55, clam: 0.6 };
 export const nodeWindow = (now: number) => Math.floor(now / NODE_WINDOW_MS);
 export const windowEndsAt = (w: number) => (w + 1) * NODE_WINDOW_MS;
 
@@ -149,12 +158,12 @@ export function activeNodes(acct: string, now: number, taken: ReadonlySet<string
 }
 
 /** 게이지 시간 (ms) */
-export const GATHER_MS: Record<Exclude<NodeKind, "bug">, number> = { herb: 2_600, ore: 3_800, dig: 4_800 };
+export const GATHER_MS: Record<Exclude<NodeKind, "bug">, number> = { herb: 2_600, ore: 3_800, dig: 4_800, clam: 4_200 };
 export const GATHER_SLACK_MS = 400;
 /** 게이지를 시작하고 이 시간 안에 끝내야 한다 */
 export const GATHER_TTL_SEC = 90;
 
-/** 게이지 채집 한 번에 나오는 것: 대부분 1개, 가끔 같은 것 2개 (광석·약초) */
+/** 게이지 채집 한 번에 나오는 것: 대부분 1개, 가끔 같은 것 2개 (광석·약초·11/16 갯벌) */
 export function gatherCount(kind: NodeKind, rand: number): number {
   return kind !== "dig" && rand < 0.18 ? 2 : 1;
 }

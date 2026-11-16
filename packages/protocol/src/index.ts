@@ -6,6 +6,7 @@ export * from "./token";
 export * from "./world";
 export * from "./camp";
 export * from "./sea";
+export * from "./seaForage";
 export * from "./bbq";
 export * from "./lobby";
 export * from "./names";

@@ -51,6 +51,8 @@ export type ForageDeps = {
   zone?: ForageZone;
   /** 11/16 지금 이 자리에서 낚을 수 없는 까닭 (바닷가: 물이 빠져 찌 자리가 마름). null이면 낚을 수 있어요 */
   blocked?: (spot: FishingSpot) => string | null;
+  /** 11/16 이 채집 지점을 지금 못 쓰는 까닭 (바닷가 갯벌 구멍: 물이 덮음). 있으면 그림·빛을 숨기고 E엔 안내만 */
+  nodeBlocked?: (n: GatherNode) => string | null;
 };
 
 /** 낚시 자리 표시 (마을 FishZoneView · 캠핑장 game/camp/campForage) */
@@ -75,6 +77,8 @@ type NodeView = { node: GatherNode; img: Phaser.GameObjects.Image; aura: NodeAur
 const NODE_BLINK_MS = 10_000;
 /** "뿅" 소리가 들리는 거리 (새로 핀 지점이 이 안에 있을 때만) */
 const NODE_HEAR = 260;
+/** 마을에 서 있는 NPC (11/16 포구 시장 좌판은 바닷가 game/sea/seaMarket에서 연다) */
+const VILLAGE_NPCS = NPCS.filter((n) => !n.map);
 
 export class Foraging {
   private readonly scene: Phaser.Scene;
@@ -131,7 +135,7 @@ export class Foraging {
     this.spots = this.mapId === "camp" ? CAMP_FISHING_SPOTS : this.mapId === "sea" ? SEA_FISHING_SPOTS : FISHING_SPOTS;
     this.zone = d.zone ?? new FishZoneView({ scene, atlas: d.atlas, reduced: d.reduced, addCollider: (x, y, w, h) => this.addCollider(x, y, w, h) });
     // 어부 영감·수집가 유령은 마을에만 (캠핑장에서 잡은 것도 마을에서 판다)
-    for (const npc of this.mapId === "village" ? NPCS : []) {
+    for (const npc of this.mapId === "village" ? VILLAGE_NPCS : []) {
       const img = scene.add.image(npc.x, npc.y + 1, FTEX.npc(npc.id, 0)).setOrigin(0.5, 1).setDepth(npc.y);
       const stall = npc.id === "fishmonger" ? { dx: -22, dy: 2 } : { dx: -20, dy: 6 }; // 어부 노점은 호수 낚시 잔교 서쪽 끝 (catalog NPCS)
       scene.add.image(npc.x + stall.dx, npc.y + stall.dy, FTEX.stall(npc.id)).setOrigin(0.5, 1).setDepth(npc.y + stall.dy);
@@ -186,7 +190,7 @@ export class Foraging {
       if (this.fishing?.id === s.id) continue;
       items.push({ id: `forage:fish:${s.id}`, kind: "forage", forage: `fish:${s.id}`, x: s.x, y: s.y, r: 16, ax: s.x, ay: s.y, label: "낚시하기" });
     }
-    for (const n of this.mapId === "village" ? NPCS : [])
+    for (const n of this.mapId === "village" ? VILLAGE_NPCS : [])
       items.push({ id: `forage:npc:${n.id}`, kind: "forage", forage: `npc:${n.id}`, x: n.x, y: n.y + 10, r: 20, ax: n.x, ay: n.y + 10, label: `${n.name}에게 팔기` });
     // 11/15 버스 정류장 마당 의뢰 게시판 (앞에서 E → 수집 의뢰판)
     if (this.mapId === "village") items.push({ id: "forage:board", kind: "forage", forage: "board:quest", x: WHARF_BOARD.x, y: WHARF_BOARD.y + 12, r: 22, ax: WHARF_BOARD.x, ay: WHARF_BOARD.y + 12, label: "의뢰 게시판 보기" });
@@ -233,9 +237,10 @@ export class Foraging {
         img.setScale(0.2);
         this.scene.tweens.add({ targets: img, scale: 1, duration: 260, delay: this.nodesLoaded ? 120 : 0, ease: "Back.easeOut" });
       }
-      // 새로 필 때: 빛 기둥·반짝이·먼지 (첫 목록도 빛 기둥은 보여 준다 — "저기 뭔가 있다")
-      spawnFx(this.scene, node.x, node.y, node.kind, this.d.reduced);
-      if (Math.hypot(node.x - pl.x, node.y - pl.y) < NODE_HEAR) heard = true;
+      // 새로 필 때: 빛 기둥·반짝이·먼지 (첫 목록도 빛 기둥은 보여 준다 — "저기 뭔가 있다"). 11/16 물에 잠긴 갯벌 구멍은 조용히
+      const hidden = !!this.d.nodeBlocked?.(node);
+      if (!hidden) spawnFx(this.scene, node.x, node.y, node.kind, this.d.reduced);
+      if (!hidden && Math.hypot(node.x - pl.x, node.y - pl.y) < NODE_HEAR) heard = true;
       this.nodes.set(id, { node, img, aura: makeAura(this.scene, node.x, node.y, node.kind) });
     }
     if (this.nodesLoaded && heard) this.sfx.play("spawn", 0.7);
@@ -275,6 +280,11 @@ export class Foraging {
     if (kind === "node") {
       const n = gatherNodeById(id);
       if (!n || this.gauge) return;
+      const why = this.d.nodeBlocked?.(n);
+      if (why) {
+        this.d.toast(why);
+        return;
+      }
       this.usedNode = { id: n.id, at: now };
       if (pl.sitting) pl.stand(now, null);
       pl.faceTo(n.x, n.y - 4, now);
@@ -810,6 +820,14 @@ export class Foraging {
     const pl = this.d.player();
     for (const v of this.nodes.values()) {
       if (this.gauge?.node === v.node.id) continue;
+      // 11/16 물에 잠긴 갯벌 구멍: 그림·빛을 숨긴다 (물이 빠지면 다시 보인다)
+      const hide = !!this.d.nodeBlocked?.(v.node);
+      if (v.img.visible === hide) {
+        v.img.setVisible(!hide);
+        v.aura.glow.setVisible(!hide);
+        v.aura.star.setVisible(!hide);
+      }
+      if (hide) continue;
       const d = Math.hypot(v.node.x - pl.x, v.node.y - pl.y);
       const near = d < 64 ? 1 - d / 64 : 0;
       const a = updateAura(v.aura, now, near, blink, this.d.reduced);
@@ -819,7 +837,7 @@ export class Foraging {
 
   /** 밤: 피어 있는 지점마다 작은 빛 구멍 (발밑 빛·물건이 어둠에 묻히지 않게) */
   addLights(lit: Lighting): void {
-    for (const v of this.nodes.values()) lit.add(v.node.x, v.node.y - 4, 22, 0.55 * v.img.alpha);
+    for (const v of this.nodes.values()) if (v.img.visible) lit.add(v.node.x, v.node.y - 4, 22, 0.55 * v.img.alpha);
   }
 
   destroy(): void {

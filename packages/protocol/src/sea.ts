@@ -34,8 +34,9 @@ export const SEA_HEIGHT = SEA_ROWS * 16; // 960
  * 4 = 11/16 갯바위 낚시 자리·발판 (물이 차도 마른 자리) · 오두막 벤치를 조금 아래로, 두 자리 간격 20
  * 5 = 11/16 쉴거리 (백사장 벤치 4·선베드 6·파라솔 돗자리 2·돗자리 3·끝 걸터앉기 2) — 벤치·파라솔 기둥이 막아요
  * 6 = 11/16 백사장을 선베드·파라솔·선베드 한 벌 여섯으로 나란히 (선베드 12), 벤치는 산책로 아래로, 파라솔 돗자리는 빼고 돗자리 둘
+ * 7 = 11/16 돗자리를 빼고 앞줄 선베드 10 (모두 22), 선베드는 막혀요 (누우면 올라가고 일어나면 발치로)
  */
-export const SEA_MAP_VERSION = 6;
+export const SEA_MAP_VERSION = 7;
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Pt = { x: number; y: number };
@@ -85,8 +86,10 @@ export const TIDE_OPEN_TO_MIN = 120;
 /** 만조로 치는 앞뒤 (분) — HUD 「만조」 */
 export const TIDE_HIGH_SPAN_MIN = 10;
 /** 물가 선: 만조(level 1)면 백사장 끝, 간조(level 0)면 먼바다 바로 위 */
-export const TIDE_HIGH_Y = SEA_FLAT_Y0;
-export const TIDE_LOW_Y = 880;
+/** 11/16 만조 물가를 갯벌 끝보다 50px 아래로 (보통 파도는 앞줄 선베드 발치까지, 드문 큰 파도만 선베드 둘레를 적셔요) */
+export const TIDE_HIGH_Y = SEA_FLAT_Y0 + 50;
+/** 11/16 사용자 "간조에 바다가 거의 안 보여요" → 880에서 760으로: 갯벌 위쪽 60%쯤만 드러나고 아래 40%와 먼바다는 늘 물이에요 */
+export const TIDE_LOW_Y = 760;
 const KST_OFFSET_MS = 9 * 3_600_000;
 
 /** 한 바퀴 안의 분 (0 ≤ t < 180, 0 = 만조). 한국 자정에 만조로 맞춰요 (3시간은 하루를 나누어떨어지게 해요) */
@@ -325,16 +328,26 @@ export const SEA_TIDE_POOLS: readonly { x: number; y: number; rx: number; ry: nu
 export const SEA_BEACH_UNITS: readonly number[] = [160, 280, 400, 780, 900, 1020];
 /** 선베드 받침 y (머리는 위, 발은 바다 쪽) */
 export const SEA_LOUNGER_Y = 500;
+/** 11/16 앞줄 선베드 받침 y (뒷줄 발치에서 8px 띄워 — 갯벌 바로 위) */
+export const SEA_LOUNGER_FRONT_Y = 552;
+/** 선베드 막는 상자 (받침 x·y 기준 — 등받이부터 발치 위까지, 눕기 안내는 발치 쪽에서) */
+export function seaLoungerCollider(l: Pt): { x: number; y: number; w: number; h: number } {
+  return { x: l.x - 10, y: l.y - 40, w: 20, h: 37 };
+}
 /** 바다 보기 벤치 x (선베드 한 벌 사이 틈) */
 export const SEA_BEACH_BENCH_X: readonly number[] = [220, 340, 840, 960];
 export const SEA_SPOTS = {
   /** 바다 보기 벤치 4 — 11/16 사용자: 선베드 줄 뒤(산책로 바로 아래)로, 선베드 사이 틈에서 바다를 봐요 */
   benches: SEA_BEACH_BENCH_X.map((x) => ({ x, y: 432, facing: DIR.down })),
   /** 선베드 12 — 11/16 사용자 "리조트 해변처럼": 선베드·파라솔·선베드 한 벌을 백사장에 나란히 (바다를 봐요). 받침 y */
-  loungers: SEA_BEACH_UNITS.flatMap((c) => [
-    { x: c - 24, y: SEA_LOUNGER_Y },
-    { x: c + 24, y: SEA_LOUNGER_Y },
-  ]),
+  loungers: [
+    ...SEA_BEACH_UNITS.flatMap((c) => [
+      { x: c - 24, y: SEA_LOUNGER_Y },
+      { x: c + 24, y: SEA_LOUNGER_Y },
+    ]),
+    // 11/16 사용자 "돗자리 빼고 앞 백사장도 선베드로": 앞줄은 뒷줄 사이 틈마다 (뒷줄 선베드 발치로 가는 길이 남아요)
+    ...SEA_BEACH_UNITS.flatMap((c, i) => [c, ...(SEA_BEACH_UNITS[i + 1] !== undefined && SEA_BEACH_UNITS[i + 1] - c <= 120 ? [c + 60] : [])]).map((x) => ({ x, y: SEA_LOUNGER_FRONT_Y })),
+  ],
   /** 파라솔 6 (선베드 한 벌 가운데 — 갓이 두 선베드 머리 쪽을 덮어요) */
   parasols: SEA_BEACH_UNITS.map((c) => ({ x: c, y: SEA_LOUNGER_Y - 12 })),
   /** 야자수 해먹 (나무 둘 사이) · 해변 그네 */
@@ -356,7 +369,7 @@ export const SEA_SPOTS = {
 } as const;
 /**
  * 11/16 갯바위 낚시 자리 (마을 낚시와 같은 1인 자리 — SPOT_KINDS.fish, 서버 좌석). 큰 갯바위 앞 (바다 쪽)과 선착장 끝 데크.
- * 바닷물고기 도감이 아직 없어서 물 종류는 호수(lake) 물고기로 둬요 (다음 차수에 바다 물고기를 더하면 "sea"로).
+ * 물 종류는 바다(sea) — 11/16 2차: 바닷물고기 10종이 잡혀요 (web lib/forage/catalog SEA_FISH).
  * id = "f_x_y" (마을·캠핑장 낚시 자리 id와 겹치지 않아요 — sea.test가 봐요). 앉아 있는 동안은 물이 차도 그대로 앉아 있어요
  */
 const rockSpot = (i: number, dx = 0): FishingSpot => {
@@ -364,7 +377,7 @@ const rockSpot = (i: number, dx = 0): FishingSpot => {
   const x = Math.round(r.x + dx);
   // 바위 그림 밑동 바로 앞 (사람이 바위 앞에 그려지고, 일어서도 바위에 걸리지 않게)
   const y = Math.round(r.y + r.ry * 0.7 + 4);
-  return { id: `f_${x}_${y}`, water: "lake", x, y, facing: DIR.down };
+  return { id: `f_${x}_${y}`, water: "sea", x, y, facing: DIR.down };
 };
 export const SEA_FISHING_SPOTS: readonly FishingSpot[] = [
   // 왼쪽 갯바위
@@ -377,8 +390,8 @@ export const SEA_FISHING_SPOTS: readonly FishingSpot[] = [
   // 물가 사이 바위
   rockSpot(15),
   // 선착장 끝 데크 (가운데 걸터앉기 자리 양옆)
-  { id: "f_604_930", water: "lake", x: 604, y: 930, facing: DIR.down },
-  { id: "f_636_930", water: "lake", x: 636, y: 930, facing: DIR.down },
+  { id: "f_604_930", water: "sea", x: 604, y: 930, facing: DIR.down },
+  { id: "f_636_930", water: "sea", x: 636, y: 930, facing: DIR.down },
 ];
 /** 갯바위 낚시 자리 발판 (바위 앞 넓적한 바위 턱 — 물이 차도 올라서 있어요, 선착장처럼 마른 자리) */
 export const SEA_FISHING_LEDGES: readonly Rect[] = SEA_FISHING_SPOTS.filter((f) => !onSeaDeckBase(f.x, f.y)).map((f) => ({ x: f.x - 15, y: f.y - 6, w: 30, h: 14 }));
@@ -427,19 +440,20 @@ export function seaFishDryAt(spot: FishingSpot, nowMs: number): number {
   return nowMs + ahead * 60_000;
 }
 /** 갯벌 구멍 (다음 차수 캐기 자리 — 물이 빠지면 드러나요) */
+// 11/16 간조 물가를 760으로 올리면서, 갯벌이 열려 있는 동안(물 높이 0.25 아래 → 물가 710 아래) 늘 드러나도록 모두 y 700 위로 옮겼어요
 export const SEA_DIG_HOLES: readonly Pt[] = [
   { x: 300, y: 640 },
-  { x: 380, y: 700 },
-  { x: 268, y: 760 },
+  { x: 380, y: 690 },
+  { x: 260, y: 680 },
   { x: 470, y: 620 },
   { x: 720, y: 640 },
-  { x: 800, y: 720 },
+  { x: 820, y: 680 },
   { x: 880, y: 630 },
-  { x: 960, y: 790 },
-  { x: 680, y: 800 },
-  { x: 430, y: 830 },
-  { x: 1030, y: 700 },
-  { x: 540, y: 760 },
+  { x: 980, y: 650 },
+  { x: 690, y: 690 },
+  { x: 440, y: 670 },
+  { x: 1030, y: 690 },
+  { x: 540, y: 690 },
 ];
 /** 갈매기가 내려앉는 말뚝 (선착장 양옆·방파제 위) */
 export const SEA_GULL_PERCHES: readonly Pt[] = [
@@ -485,11 +499,8 @@ export const SEA_SEATS: readonly Seat[] = SEA_FURNITURE.flatMap((f) =>
  */
 export type SeaRestKind = "lounger" | "parasol" | "mat";
 export type SeaRestSeat = { id: string; group: string; kind: SeaRestKind; x: number; y: number; facing: DirId; state: StateId };
-/** 11/16 돗자리 둘 (선베드 줄 앞, 선착장 머리 양옆 — 구덩이·길·벤치를 비켜서) */
-export const SEA_MATS: readonly Pt[] = [
-  { x: 552, y: 540 },
-  { x: 712, y: 540 },
-];
+/** 11/16 돗자리 (사용자: 모두 빼고 앞줄 선베드로 — 자리 목록은 남겨 둬요, 지금은 비어 있어요) */
+export const SEA_MATS: readonly Pt[] = [];
 /** 선베드에 누운 사람 발 위치 (선베드 그림 받침에서 위로) */
 export const SEA_LOUNGER_LIE_DY = -8;
 export const SEA_REST_SEATS: readonly SeaRestSeat[] = [

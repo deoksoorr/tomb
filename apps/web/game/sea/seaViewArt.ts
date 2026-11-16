@@ -134,6 +134,30 @@ export function loungerFoot(): Grid {
   return g;
 }
 
+/** 11/16 뒤에서 본 선베드 (벤치에서 앞줄을 볼 때 — 비스듬히 선 흰 등받이와 걸친 수건, 짧은 다리). 26 × 24, 원점 가운데 아래 */
+export function loungerBackArt(): Grid {
+  const g = new Grid(26, 24);
+  for (let y = 2; y < 18; y++) {
+    const inset = Math.round((18 - y) * 0.18);
+    for (let x = 3 + inset; x < 23 - inset; x++) g.set(x, y, (y - 2) % 4 === 3 ? RAMP.wall[2] : RAMP.wall[0]);
+  }
+  // 걸친 수건 (등받이 위)
+  for (let y = 2; y < 7; y++) for (let x = 7; x < 19; x++) g.set(x, y, y === 2 ? RAMP.towel[0] : RAMP.towel[1]);
+  for (let x = 8; x < 19; x += 2) g.set(x, 7, RAMP.towel[2]);
+  // 다리
+  g.rect(5, 18, 2, 4, RAMP.wood[4]);
+  g.rect(19, 18, 2, 4, RAMP.wood[4]);
+  soft(g);
+  return g;
+}
+/** 누운 사람 머리 (등받이 위로 살짝) 8 × 6 */
+export function lyingHead(): Grid {
+  const g = new Grid(8, 6);
+  g.ellipse(4, 3, 3.2, 2.6, 0x3a3440);
+  g.set(3, 1, 0x5a5464);
+  return g;
+}
+
 /** 선착장 끝 데크 (화면 아래 띠 — 가로 판자, 끝 테, 못) */
 export function deckBand(w: number): Grid {
   const h = 26;

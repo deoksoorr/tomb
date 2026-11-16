@@ -1,4 +1,5 @@
 import type { Season, TimePhase, Weather } from "../ambience";
+import { SEA_DIG_HOLES, SEA_MARKET_STALLS } from "@tomb/protocol";
 import { CONSTELLATIONS } from "../rpg/constellations";
 // 11/16 도감 몬스터 칸 (사는 곳·희귀도 — lib/forage/mobDex)
 import { isMobId, MOB_DEX_IDS, mobRarity } from "./mobDex";
@@ -12,8 +13,8 @@ export type LifeCat = "fish" | "bug" | "herb" | "ore" | "dig";
 export const LIFE_CATS: readonly LifeCat[] = ["fish", "bug", "herb", "ore", "dig"];
 export const CAT_LABEL: Record<LifeCat, string> = { fish: "물고기", bug: "곤충", herb: "약초·버섯", ore: "광석", dig: "발굴품" };
 
-/** 어디서: 물고기는 물(호수·강), 채집물은 채집 지점이 있는 구역 */
-export type Where = "lake" | "river" | "forest" | "meadow" | "hill" | "cave" | "lakeside";
+/** 어디서: 물고기는 물(호수·강·11/16 바다), 채집물은 채집 지점이 있는 구역 (11/16 바닷가 갯벌 flat) */
+export type Where = "lake" | "river" | "forest" | "meadow" | "hill" | "cave" | "lakeside" | "sea" | "flat";
 export const WHERE_LABEL: Record<Where, string> = {
   lake: "호수",
   river: "강",
@@ -22,6 +23,8 @@ export const WHERE_LABEL: Record<Where, string> = {
   hill: "별 보기 언덕",
   cave: "사냥터 동굴 앞",
   lakeside: "호숫가",
+  sea: "바다",
+  flat: "갯벌",
 };
 export const PHASE_LABEL: Record<TimePhase, string> = { dawn: "새벽", day: "낮", dusk: "해질녘", night: "밤" };
 export const WEATHER_LABEL: Record<Weather, string> = { clear: "맑음", cloudy: "흐림", fog: "안개", rain: "비", snow: "눈" };
@@ -100,6 +103,21 @@ const FISH: Species[] = [
   { id: "f_huchen", cat: "fish", name: "자치", rarity: 4, price: 36, where: W.R, time: ["dawn", "day"], weather: ["snow"], season: ["winter"], size: [60, 120], desc: "눈 내리는 겨울 강의 은둔자. 사라졌다고들 했다." },
   { id: "f_ghostcarp", cat: "fish", name: "묘역 유령 잉어", rarity: 4, price: 34, where: W.L, time: ["dusk", "night"], weather: ["cloudy", "rain"], season: ["autumn"], size: [40, 90], desc: "비늘 너머가 비쳐 보인다. 끝내지 못한 낚시가 있었나 보다." },
   { id: "f_dragon", cat: "fish", name: "승진 용잉어", rarity: 5, price: 80, where: W.L, time: ["dawn"], weather: ["snow"], season: ["winter"], size: [80, 140], desc: "전설. 등용문을 넘은 잉어. 눈 오는 겨울 새벽에만 비늘을 보인다." },
+];
+
+// ── 11/16 바닷물고기 (10) ── 달물결 포구 갯바위·선착장 끝에서만 (where "sea"). 도감은 물고기 칸에 같이 들어가요 (물고기 50종).
+// 만조 앞뒤엔 큰 놈이 더 잘 물어요 (lib/forage/service castLine — 크기 한 번 더 굴리기)
+const SEA_FISH: Species[] = [
+  { id: "f_mackerel", cat: "fish", name: "고등어", rarity: 1, price: 3, where: ["sea"], size: [20, 42], desc: "등이 새파랗다. 월요일 아침 출근길 얼굴빛." },
+  { id: "f_horsemack", cat: "fish", name: "전갱이", rarity: 1, price: 3, where: ["sea"], time: ["day", "dusk", "night"], size: [15, 35], desc: "떼 지어 몰려다닌다. 점심시간 구내식당 줄처럼." },
+  { id: "f_rockfish", cat: "fish", name: "우럭", rarity: 2, price: 6, where: ["sea"], time: ["dusk", "night", "dawn"], size: [20, 50], desc: "바위 틈에 숨어 입만 크다. 회의 때 목소리만 큰 사람 같다." },
+  { id: "f_flounder", cat: "fish", name: "광어", rarity: 2, price: 7, where: ["sea"], time: ["dawn", "day"], size: [30, 80], desc: "두 눈이 한쪽에 몰려 있다. 모니터 두 대를 한 번에 본다." },
+  { id: "f_mullet", cat: "fish", name: "숭어", rarity: 2, price: 6, where: ["sea"], size: [30, 70], desc: "툭하면 물 위로 뛰어오른다. 금요일 오후의 기분." },
+  { id: "f_redbream", cat: "fish", name: "참돔", rarity: 3, price: 15, where: ["sea"], time: ["dawn", "dusk"], weather: ["clear", "cloudy"], size: [30, 90], desc: "분홍 비늘에 파란 점. 회식 자리 상석은 늘 이 녀석 차지." },
+  { id: "f_cuttle", cat: "fish", name: "갑오징어", rarity: 3, price: 14, where: ["sea"], time: ["dusk", "night"], size: [15, 35], desc: "놀라면 먹물을 뿜고 사라진다. 결재 서류에 커피를 쏟은 날처럼." },
+  { id: "f_octopus", cat: "fish", name: "문어", rarity: 3, price: 16, where: ["sea"], weather: ["cloudy", "fog", "rain"], size: [40, 150], desc: "팔이 여덟 개. 여덟 가지 일을 한꺼번에 해낸다." },
+  { id: "f_yellowtail", cat: "fish", name: "대방어", rarity: 4, price: 34, where: ["sea"], time: ["dawn", "day"], season: ["autumn", "winter"], size: [70, 120], desc: "찬 바다의 주인. 연말 보너스처럼 기름이 잔뜩 올랐다." },
+  { id: "f_whalescale", cat: "fish", name: "유령 고래 비늘", rarity: 5, price: 80, where: ["sea"], time: ["night"], weather: ["fog"], desc: "전설. 안개 낀 밤 먼바다에서 떠오른 커다란 은빛 비늘. 고래를 본 사람은 아직 없다." },
 ];
 
 // ── 곤충 (30) ── 수풀에서 벌레 잡기 미니게임으로 (낮: 나비·잠자리 / 밤: 반딧불이)
@@ -224,18 +242,36 @@ const DIGS: Species[] = [
   { id: "d_goldkey", cat: "dig", name: "정년퇴임 황금 열쇠", rarity: 5, price: 80, where: ["meadow", "lakeside"], time: ["dawn"], weather: ["snow"], desc: "전설. 30년 근속의 증표. 눈 오는 새벽에만 반짝 보인다." },
 ];
 
-export const SPECIES: readonly Species[] = [...FISH, ...BUGS, ...HERBS, ...ORES, ...DIGS];
+// ── 11/16 갯벌 (10) ── 달물결 포구 갯벌 구멍에서 물이 빠졌을 때만 캐요 (where "flat"). 도감은 발굴품 칸에 같이 들어가요 (발굴품 34종).
+// 갯벌은 한 물때(3시간)에 한 시간만 열려서 새벽(5~7시)엔 열리지 않아요 → 새벽 조건을 두지 않아요
+const FLAT_DIGS: Species[] = [
+  { id: "d_clam", cat: "dig", name: "바지락", rarity: 1, price: 3, where: ["flat"], desc: "호미질 한 번에 우르르. 갯벌의 기본급." },
+  { id: "d_mudcrab", cat: "dig", name: "칠게", rarity: 1, price: 2, where: ["flat"], desc: "구멍 사이를 옆으로 바쁘게 다닌다. 외근 나가는 길." },
+  { id: "d_whelk", cat: "dig", name: "고둥", rarity: 1, price: 3, where: ["flat"], desc: "느릿느릿 줄을 그으며 간다. 그래도 정시에 도착한다." },
+  { id: "d_razor", cat: "dig", name: "맛조개", rarity: 2, price: 6, where: ["flat"], desc: "구멍에 소금을 뿌리면 쏙 올라온다. 칭찬에 약하다." },
+  { id: "d_fiddler", cat: "dig", name: "농게", rarity: 2, price: 6, where: ["flat"], season: ["spring", "summer", "autumn"], desc: "빨간 집게 하나를 번쩍 든다. 회의 때 손 드는 사람." },
+  { id: "d_turban", cat: "dig", name: "소라", rarity: 2, price: 7, where: ["flat"], desc: "귀에 대면 파도 소리가 난다. 퇴근길 이어폰 대신." },
+  { id: "d_seacuc", cat: "dig", name: "해삼", rarity: 3, price: 14, where: ["flat"], season: ["autumn", "winter", "spring"], desc: "여름엔 잠만 잔다. 휴가 쓰는 법을 아는 녀석." },
+  { id: "d_nakji", cat: "dig", name: "낙지", rarity: 3, price: 16, where: ["flat"], time: ["dusk", "night"], desc: "해가 지면 펄 속에서 슬그머니. 야근 끝난 사람처럼 축 늘어져 있다." },
+  { id: "d_penshell", cat: "dig", name: "키조개", rarity: 4, price: 34, where: ["flat"], time: ["day"], weather: ["clear", "cloudy"], desc: "부채만 한 껍데기. 깊이 박혀 있어 한참을 파야 한다." },
+  { id: "d_goldclam", cat: "dig", name: "금빛 바지락", rarity: 5, price: 80, where: ["flat"], time: ["day"], weather: ["clear"], desc: "전설. 맑은 날 갯벌에서 금빛으로 반짝인다. 월급날 통장 같은 빛." },
+];
+
+export const SPECIES: readonly Species[] = [...FISH, ...SEA_FISH, ...BUGS, ...HERBS, ...ORES, ...DIGS, ...FLAT_DIGS];
 const BY_ID = new Map(SPECIES.map((s) => [s.id, s]));
 export const speciesById = (id: string): Species | undefined => BY_ID.get(id);
 export const speciesOf = (cat: LifeCat): Species[] => SPECIES.filter((s) => s.cat === cat);
 export const isSpeciesId = (id: unknown): id is string => typeof id === "string" && BY_ID.has(id);
+/** 11/16 바닷가에서만 나오는 것 (바닷물고기·갯벌). 수집 의뢰·긴급 의뢰 상자는 예전처럼 마을·캠핑장 것만 낸다 */
+export const isSeasideSpecies = (s: Species): boolean => s.where.includes("sea") || s.where.includes("flat");
 
 // ── 채집 지점 ── 맵 곳곳의 고정 후보 자리. 지금 피어 있는지는 사람마다 따로(lib/forage/rules nodeActive)
-export type NodeKind = "herb" | "ore" | "dig" | "bug";
-export const NODE_LABEL: Record<NodeKind, string> = { herb: "약초 캐기", ore: "광석 캐기", dig: "땅 파 보기", bug: "수풀에서 곤충 잡기" };
-export const NODE_CAT: Record<NodeKind, LifeCat> = { herb: "herb", ore: "ore", dig: "dig", bug: "bug" };
-/** map = 11/15 캠핑장 지점이면 "camp" (좌표는 캠핑장 맵). 없으면 마을 */
-export type GatherNode = { id: string; kind: NodeKind; where: Where; x: number; y: number; map?: "camp" };
+// 11/16 clam = 바닷가 갯벌 구멍 (캐는 것은 발굴품 칸 — 물이 빠졌을 때만, protocol seaDigOpen)
+export type NodeKind = "herb" | "ore" | "dig" | "bug" | "clam";
+export const NODE_LABEL: Record<NodeKind, string> = { herb: "약초 캐기", ore: "광석 캐기", dig: "땅 파 보기", bug: "수풀에서 곤충 잡기", clam: "갯벌 캐기" };
+export const NODE_CAT: Record<NodeKind, LifeCat> = { herb: "herb", ore: "ore", dig: "dig", bug: "bug", clam: "dig" };
+/** map = 11/15 캠핑장 지점이면 "camp", 11/16 바닷가면 "sea" (좌표는 그 맵). 없으면 마을 */
+export type GatherNode = { id: string; kind: NodeKind; where: Where; x: number; y: number; map?: "camp" | "sea" };
 
 const node = (kind: NodeKind, where: Where, x: number, y: number): GatherNode => ({ id: `${kind[0]}${x}_${y}`, kind, where, x, y });
 /** 캠핑장 지점: id 앞에 q (마을 지점 id와 겹치지 않게 — 캠핑장 좌석 id와 같은 규칙) */
@@ -275,6 +311,11 @@ export const CAMP_GATHER_NODES: readonly GatherNode[] = [
   campNode("dig", "forest", 1190, 600),
   campNode("dig", "forest", 880, 770),
 ];
+
+/**
+ * 11/16 바닷가 갯벌 구멍 (protocol SEA_DIG_HOLES 자리 그대로, id 앞에 s). 물이 빠져 구멍이 드러났을 때만 캔다 (서버 lib/forage/service startGather)
+ */
+export const SEA_GATHER_NODES: readonly GatherNode[] = SEA_DIG_HOLES.map((h) => ({ id: `sc${h.x}_${h.y}`, kind: "clam", where: "flat", x: h.x, y: h.y, map: "sea" }));
 
 /** lib/forage/forage.test.ts가 서 있을 수 있는 자리·물 밖·소품/좌석과 떨어짐을 검사한다 */
 export const GATHER_NODES: readonly GatherNode[] = [
@@ -323,6 +364,8 @@ export const GATHER_NODES: readonly GatherNode[] = [
   node("bug", "lakeside", 1290, 1000),
   // 11/15 캠핑장 (map: "camp")
   ...CAMP_GATHER_NODES,
+  // 11/16 바닷가 갯벌 (map: "sea")
+  ...SEA_GATHER_NODES,
 ];
 /** 그 맵의 채집 지점인지 (마을 지점은 map이 없다) */
 export const nodeOnMap = (n: GatherNode, map: "village" | "camp" | "sea"): boolean => (n.map ?? "village") === map;
@@ -330,8 +373,9 @@ const NODE_BY_ID = new Map(GATHER_NODES.map((n) => [n.id, n]));
 export const gatherNodeById = (id: string): GatherNode | undefined => NODE_BY_ID.get(id);
 
 // ── NPC ── 물고기는 어부, 나머지는 수집가에게 판다 (NPC 앞에서만 — UI가 NPC 창에서만 판매를 연다)
-export type NpcId = "fishmonger" | "collector";
-export type Npc = { id: NpcId; name: string; title: string; x: number; y: number; buys: readonly LifeCat[]; hello: string };
+// 11/16 포구 시장 좌판 둘 (map "sea"): 생선 좌판 = 물고기 전부, 갯벌 좌판 = 갯벌에서 캔 것만 (where). 같은 판매 API·같은 하루 한도
+export type NpcId = "fishmonger" | "collector" | "harborFish" | "harborFlat";
+export type Npc = { id: NpcId; name: string; title: string; x: number; y: number; buys: readonly LifeCat[]; hello: string; map?: "sea"; where?: Where };
 export const NPCS: readonly Npc[] = [
   {
     id: "fishmonger",
@@ -354,10 +398,33 @@ export const NPCS: readonly Npc[] = [
     buys: ["bug", "herb", "ore", "dig"],
     hello: "남들이 지나친 것도 누군가에겐 보물이지요. 약초, 광석, 발굴품, 곤충 다 삽니다.",
   },
+  {
+    id: "harborFish",
+    name: "포구 생선 좌판",
+    title: "생선 삽니다",
+    x: SEA_MARKET_STALLS[0].x,
+    y: SEA_MARKET_STALLS[0].y,
+    buys: ["fish"],
+    hello: "바다 고기든 민물 고기든 다 받아요. 싱싱할 때 넘겨요.",
+    map: "sea",
+  },
+  {
+    id: "harborFlat",
+    name: "갯벌 좌판",
+    title: "갯것 삽니다",
+    x: SEA_MARKET_STALLS[2].x,
+    y: SEA_MARKET_STALLS[2].y,
+    buys: ["dig"],
+    hello: "갯벌에서 캔 건 여기 두고 가요. 바지락 한 줌도 값 쳐줘요.",
+    map: "sea",
+    where: "flat",
+  },
 ];
+/** 이 NPC가 이 종을 사는지 (11/16 갯벌 좌판은 갯벌에서 캔 것만) */
+export const npcBuys = (npc: Npc, s: Species): boolean => npc.buys.includes(s.cat) && (!npc.where || s.where.includes(npc.where));
 export const npcById = (id: string): Npc | undefined => NPCS.find((n) => n.id === id);
-/** 이 품목을 사는 NPC */
-export const buyerOf = (cat: LifeCat): Npc => NPCS.find((n) => n.buys.includes(cat))!;
+/** 이 품목을 사는 마을 NPC (가방·도감에 적는 이름) */
+export const buyerOf = (cat: LifeCat): Npc => NPCS.find((n) => !n.map && n.buys.includes(cat))!;
 
 // ── 숫자 ──
 /** 한 칸(종류)에 쌓을 수 있는 수 */

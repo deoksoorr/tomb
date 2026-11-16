@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { anyFishingWaterOf, seaFishDryAt, seaFishingSpotById, seaFishWet, SEA_TIDE_OUT_MSG } from "@tomb/protocol";
+import { anyFishingWaterOf, SEA_DIG_CLOSED_MSG, seaDigOpen, seaFishDryAt, seaFishingSpotById, seaFishWet, SEA_TIDE_OUT_MSG, tideLevel } from "@tomb/protocol";
 import { BALANCE_CAP, earnRule, type EarnSource } from "../economy";
 import { env } from "../env";
 import { peerOf } from "../ban";
@@ -10,7 +10,7 @@ import { kstDay, kstWeek, loadMe } from "../store/accounts";
 import { capsMult, earnLimits, NO_BOOST, type EarnBoost } from "../pointEvent";
 import { earnBoost } from "../store/pointEvent";
 import type { BugsResult } from "../rpg/types";
-import { DAILY_CATCH_MAX, dexBadgeBits, dexIdsOf, gatherNodeById, NODE_CAT, npcById, speciesById, STACK_MAX, type DexCat, type NpcId } from "./catalog";
+import { DAILY_CATCH_MAX, dexBadgeBits, dexIdsOf, gatherNodeById, NODE_CAT, npcBuys, npcById, speciesById, STACK_MAX, type DexCat, type NpcId } from "./catalog";
 import { claimPendingDex, ensureDexSettled, payNewDex, reachedTitleKeys, rewardState, titlesOf } from "./dexReward";
 import {
   activeNodes,
@@ -38,6 +38,7 @@ import {
   verifyBugs,
   insectPoints,
   windowEndsAt,
+  withHighTide,
 } from "./rules";
 import { AUTO_FISH_DAILY_MAX, newAutoSession } from "./auto";
 import { autoStatus, settleAuto, type AutoSettled } from "./autoSettle";
@@ -81,7 +82,8 @@ function rand(): number {
 }
 const newSeed = () => Math.floor(rand() * 0x7fffffff);
 
-const SOURCE_OF_NPC: Record<NpcId, Extract<EarnSource, "fish" | "gather">> = { fishmonger: "fish", collector: "gather" };
+// 11/16 포구 시장 좌판도 같은 항목 한도 (생선 = 낚시 판매, 갯벌 = 채집 판매) — 새 포인트 항목이 없다
+const SOURCE_OF_NPC: Record<NpcId, Extract<EarnSource, "fish" | "gather">> = { fishmonger: "fish", collector: "gather", harborFish: "fish", harborFlat: "gather" };
 const DAY_FIELD = { fish: "fishP", gather: "gatherP", dex: "dexP" } as const;
 
 /** boost = 포인트 배수 이벤트 (lib/pointEvent) — 고른 항목이면 팔기·도감 한도 표시가 늘어난 값 */
@@ -180,7 +182,8 @@ export async function castLine(acct: string, spotId: string, now = Date.now(), i
   const [fest, perk] = await Promise.all([festivalOn(now), wornPerk(acct, now)]);
   const s = pickWeighted(candidates("fish", water, cond), rand(), (x) => festWeight(x.rarity, fest));
   if (!s) throw new HttpError(409, "NO_FISH", "지금은 아무것도 물지 않아요.");
-  const size = rollFishSize10(s, rand, perk.bigFish);
+  // 11/16 바다 낚시: 만조 앞뒤엔 큰 놈 확률을 더 얹는다 (rules withHighTide — 시각만으로 계산, 저장소 명령 없음)
+  const size = rollFishSize10(s, rand, water === "sea" ? withHighTide(perk.bigFish, tideLevel(now)) : perk.bigFish);
   const power = fishPower(s, size);
   const bite = now + biteDelayMs(rand(), cond);
   const nonce = nanoid(16);
@@ -302,6 +305,8 @@ export async function startGather(acct: string, nodeId: string, now = Date.now()
   const store = getForageStore();
   const n = gatherNodeById(nodeId);
   if (!n) throw new HttpError(400, "INVALID_INPUT", "여기서는 캘 게 없어요.");
+  // 11/16 갯벌 구멍: 물이 빠져 구멍이 드러났을 때만 (protocol seaDigOpen — 화면과 같은 계산, 저장소를 읽기 전에 막는다)
+  if (n.kind === "clam" && !seaDigOpen(n, now)) throw new HttpError(409, "TIDE_IN", SEA_DIG_CLOSED_MSG);
   const w = nodeWindow(now);
   // 오늘 기록·이번 창에 캔 지점만 (명령 2개)
   const snap = await store.today(acct, kstDay(now), w);
@@ -396,7 +401,7 @@ export async function sellTo(acct: string, npcId: NpcId, want: Record<string, nu
   const units: { id: string; price: number }[] = [];
   for (const [id, raw] of Object.entries(want)) {
     const s = speciesById(id);
-    if (!s || !npc.buys.includes(s.cat)) throw new HttpError(400, "INVALID_INPUT", `${npc.name}은(는) 그건 안 사요.`);
+    if (!s || !npcBuys(npc, s)) throw new HttpError(400, "INVALID_INPUT", `${npc.name}은(는) 그건 안 사요.`);
     const n = Math.min(Math.max(0, Math.floor(raw)), snap.bag[id] ?? 0);
     for (let i = 0; i < n; i++) units.push({ id, price: s.price });
   }

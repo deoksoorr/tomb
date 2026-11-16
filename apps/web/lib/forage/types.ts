@@ -1,3 +1,4 @@
+import type { FishWater } from "@tomb/protocol";
 import type { TimePhase } from "../ambience";
 import type { Me } from "../types";
 import type { DexCat, DexTier, LifeCat, NodeKind, NpcId } from "./catalog";
@@ -58,7 +59,7 @@ export type SunkenCatch = { id: string; name: string; kept: boolean; instead?: s
 /** 자동 낚시 상태 (켜져 있을 때) */
 export type AutoFishStatus = {
   spot: string;
-  water: "lake" | "river";
+  water: FishWater;
   startedAt: number;
   /** 이 시각이 지나면 더 낚지 않는다 (한 세션 최대 길이) */
   endsAt: number;

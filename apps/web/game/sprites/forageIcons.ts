@@ -546,6 +546,17 @@ const DIG_ART: Record<string, () => Grid> = {
   d_letter: () => art(["############", "#w#wwwwww#w#", "#ww#wwww#ww#", "#www#ww#www#", "#wwww##wwww#", "#wwwwwwwwrr#", "#wwwwwwwwrr#", "############"], { "#": 0x9a8a70, w: 0xf6f0e0, r: 0xd84a3a }),
   d_mirror: () => art(["...####...", ".##bbbb##.", ".#bggbbb#.", "#bbg##gbb#", "#bb#kk#bb#", "#bb#kk#bb#", "#bbg##gbb#", ".#bbbggb#.", ".##bbbb##.", "...####..."], { "#": 0x6a4a2a, b: 0xb8864a, g: 0x5aa08a, k: 0xf0c060 }),
   d_shoes: () => art(["......####..", ".....#yyyy#.", "....#yydyy#.", "#####yyyyyy#", "#yydyyydyyy#", "#yyyyyyyyyy#", "############", ".#.#.#.#.#.."], { "#": 0x8a6020, y: 0xe8b040, d: 0xa87020 }),
+  // 11/16 갯벌 (발굴품 칸)
+  d_clam: () => art(["...llll...", ".lllmllll.", "lmllllmlll", "llmllmllml", "lllmlllmll", "mllllmllll", ".llmllllm.", "..mmmmmm.."], { l: 0xc8b8a0, m: 0x7a6a5a }),
+  d_mudcrab: () => art(["..e......e..", "..s......s..", "cc.bbbbbb.cc", "c.bbbbbbbb.c", "..bbbbbbbb..", ".l.l.ll.l.l.", "l..l....l..l"], { b: 0x7a6a4a, c: 0x8a7a5a, e: 0x101014, s: 0x5a4a32, l: 0x5a4a32 }),
+  d_whelk: () => art(["....d....", "...ddl...", "..dlldd..", ".ddlldld.", "dlldllddl", "ddlddllld", ".dllldddd", "..ddddd.."], { d: 0x6a5038, l: 0xc8a878 }),
+  d_razor: () => art(["sssssssssss..", "slllllllllsff", "slllllllllsff", "sssssssssss.."], { s: 0xa89060, l: 0xe8d8a8, f: 0xf0c8a0 }),
+  d_fiddler: () => art(["..e....e....", "..s....s....", "..bbbbbb.RRR", ".bbbbbbbbRR.", ".bbbbbbbbR..", "l.l.ll.l.l..", ".l.l..l.l..."], { b: 0x4a5a52, e: 0x101014, s: 0x3a4a42, R: 0xe0402a, l: 0x3a4a42 }),
+  d_turban: () => art([".k..k..k..", "kddddddddk", ".dlldllld.", "kdlddllddk", ".ddlllldd.", "..dddlldd.", "...ddlll..", "....dddd.."], { d: 0x8a5a3a, l: 0xe8c098, k: 0x6a4028 }),
+  d_seacuc: () => art(["..k...k...k...", ".dddddddddddd.", "dkddkddkddkddd", "dddddddddddddd", ".dddddddddddd.", "..k...k...k..."], { d: 0x4a3a32, k: 0x7a5a48 }),
+  d_nakji: () => art(["...hhhh.....", "..hhwehh....", "..hhhhhh....", "...hhhh.....", ".l.l.ll.l...", "l..l.l..l.l.", "l.l...l..l.l", ".l...l..l..l"], { h: 0xb87a6a, w: 0xffffff, e: 0x101014, l: 0xd8988a }),
+  d_penshell: () => art(["...........d", ".........ddl", ".......ddlld", ".....ddlldld", "...ddlldldld", ".ddlldldldld", "ddlldldldldl", ".ddddddddddd"], { d: 0x3a3028, l: 0x8a7a6a }),
+  d_goldclam: () => art(["...llll..k", ".lllmllll.", "lmllkllmll", "llmllmllml", "lllmlllmll", "mllllmllll", ".llmllllm.", "..mmmmmm.."], { l: 0xffd060, m: 0xc8902a, k: 0xffffff }),
   d_goldkey: () => art([".yyyy........", "yhhhhy.......", "yh..hyyyyyyyy", "yh..hyhhhhhhy", "yhhhhy...y.y.", ".yyyy....y.y.", "rr.rr........", ".rrr........."], { y: 0xffd060, h: 0xc8902a, r: 0xd83a3a }),
 };
 
@@ -611,10 +622,44 @@ const FISH_SPECS: Record<string, FishSpec> = {
   f_huchen: { shape: "torpedo", body: 0x8a5a4a, belly: 0xd8c0b0, pattern: "spots", mark: 0x3a2020, fin: 0xa04a3a },
   f_ghostcarp: { shape: "big", body: 0xb8dce8, belly: 0xe8f6fa, fin: 0x8ab8c8, ghost: true },
   f_dragon: { shape: "big", body: 0xd83a2a, belly: 0xffd060, fin: 0xffd060, pattern: "shine", whiskers: true },
+  // 11/16 바닷물고기 (갑오징어·문어·고래 비늘은 SEA_ART)
+  f_mackerel: { shape: "slim", body: 0x3a6a9a, belly: 0xe8eef0, pattern: "stripes", mark: 0x1a3050 },
+  f_horsemack: { shape: "slim", body: 0x9ab0b8, belly: 0xeef4f4, pattern: "band", mark: 0xd8c050 },
+  f_rockfish: { shape: "round", body: 0x5a5048, belly: 0x9a8a7a, pattern: "spots", mark: 0x2a2420, fin: 0x3a3430 },
+  f_flounder: { shape: "deep", body: 0x8a7a5a, belly: 0x9a8a6a, pattern: "spots", mark: 0x4a3a28 },
+  f_mullet: { shape: "torpedo", body: 0x7a8a9a, belly: 0xe8eef2, pattern: "stripes", mark: 0x5a6a7a },
+  f_redbream: { shape: "deep", body: 0xe87a8a, belly: 0xf8d0d0, pattern: "spots", mark: 0x4ab0e8, fin: 0xd05a6a },
+  f_yellowtail: { shape: "torpedo", body: 0x4a6a98, belly: 0xeef2f4, pattern: "band", mark: 0xf0c840, fin: 0xd8b840 },
+};
+
+// 11/16 바다에서 낚는 물고기 아닌 것 (물고기 칸)
+const SEA_ART: Record<string, () => Grid> = {
+  f_cuttle: () =>
+    art(["..ffffffff....", ".fbbdbbdbbf...", "fbdbbdbbdbbe.t", "fbbbbbbbbbbbtt", "fbdbbdbbdbbe.t", ".fbbdbbdbbf...", "..ffffffff...."], {
+      f: 0xe8d0b0,
+      b: 0xc89a6a,
+      d: 0x8a5a3a,
+      e: 0x101014,
+      t: 0xd8a878,
+    }),
+  f_octopus: () =>
+    art(["...rrrrrr...", "..rrrrrrrr..", ".rrrrrrrrrr.", ".rrwerrwerr.", ".rrrrrrrrrr.", "..rrrrrrrr..", ".rr.rr.rr.r.", "r.r.rr.r.r.r", "r..r..r..r.r", ".rr..rr.rr.."], {
+      r: 0xc84a5a,
+      w: 0xffffff,
+      e: 0x101014,
+    }),
+  f_whalescale: () =>
+    art(["...ssss...", "..swwwws..", ".swwbbkws.", "swwbbbbwws", "swbbbbbbws", "swbbbkbbws", "swbbbbbbws", ".swbbbbws.", "..swbbws..", "...swws...", "....ss...."], {
+      s: 0x8ab8d8,
+      w: 0xe8f6ff,
+      b: 0xb8dcf0,
+      k: 0xffffff,
+    }),
 };
 
 function draw(id: string): Grid | null {
   if (FISH_SPECS[id]) return fish(FISH_SPECS[id]);
+  if (SEA_ART[id]) return SEA_ART[id]();
   if (JUNK_ART[id]) return JUNK_ART[id]();
   if (DIG_ART[id]) return DIG_ART[id]();
   if (HERB_ART[id]) return HERB_ART[id]();

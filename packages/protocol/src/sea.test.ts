@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAMP_SEATS, MAP_TAG, SEATS, SEA_ARRIVE, SEA_BOARD, SEA_SEATS, inMapBounds, isAwayMap, mapAllowed, mapOf, mapSpawn, seaColliders, seatSlotIn, SEA_HEIGHT, SEA_WIDTH, SEA_LOTS, SEA_SPOTS, SPAWN, seaWet, tideLineY, SEA_GHOST_BERTH, SEA_PIER_END, SEA_FISHING_SPOTS, SEA_REST_SEATS, seaViewOfSeat, seaSeatGroup, seaSeatById, STATE, seaFishingSpotById, seaFishMinLevel, seaFishWet, seaFishWetAt, seaFishDryAt, tideMinute, FISHING_SPOTS, CAMP_FISHING_SPOTS, anyFishingWaterOf, SEA_BUOYS, SEA_ROCKS, onSeaRoad, SEA_ROAD, SEA_BUS_STOP, TIDE_HIGH_Y, TIDE_LOW_Y, SEA_DEEP_Y } from "./index";
+import { CAMP_SEATS, MAP_TAG, SEATS, SEA_ARRIVE, SEA_BOARD, SEA_SEATS, inMapBounds, isAwayMap, mapAllowed, mapOf, mapSpawn, seaColliders, seatSlotIn, SEA_HEIGHT, SEA_WIDTH, SEA_LOTS, SEA_SPOTS, SPAWN, seaWet, tideLineY, SEA_GHOST_BERTH, SEA_PIER_END, SEA_FISHING_SPOTS, SEA_REST_SEATS, seaViewOfSeat, seaSeatGroup, seaSeatById, STATE, seaFishingSpotById, seaFishMinLevel, seaFishWet, seaFishWetAt, seaFishDryAt, seaFishBobber, SEA_FISH_WET_MARGIN, tideMinute, FISHING_SPOTS, CAMP_FISHING_SPOTS, anyFishingWaterOf, SEA_BUOYS, SEA_ROCKS, onSeaRoad, SEA_ROAD, SEA_BUS_STOP, TIDE_HIGH_Y, TIDE_LOW_Y, SEA_DEEP_Y, SEA_FLAT_Y0, SEA_DIG_HOLES, TIDE_OPEN_LEVEL } from "./index";
 
 // 11/16 달물결 포구: 세 번째 맵 (protocol sea.ts). 맵 id·허락·좌석·충돌 기본 규칙
 
@@ -66,6 +66,18 @@ describe("sea map (protocol)", () => {
     }
     expect(SEA_FISHING_SPOTS.length).toBeGreaterThanOrEqual(6);
   });
+  it("11/16 간조에도 바다가 넉넉히: 갯벌 아래 35% 넘게는 늘 물, 갯벌 캐기 구멍은 갯벌이 열린 동안 늘 드러나요", () => {
+    expect((SEA_DEEP_Y - TIDE_LOW_Y) / (SEA_DEEP_Y - SEA_FLAT_Y0)).toBeGreaterThanOrEqual(0.35);
+    expect(TIDE_HIGH_Y).toBeGreaterThan(SEA_FLAT_Y0);
+    // 갯벌이 열린 동안 물 높이는 TIDE_OPEN_LEVEL 아래 → 물가는 그보다 아래
+    const openLine = tideLineY(TIDE_OPEN_LEVEL);
+    for (const h of SEA_DIG_HOLES) {
+      expect(h.y, `${h.x},${h.y}`).toBeLessThan(openLine - 6);
+      expect(h.y, `${h.x},${h.y}`).toBeGreaterThan(SEA_FLAT_Y0);
+    }
+    // 유령선 자리는 간조에도 깊은 물
+    expect(SEA_GHOST_BERTH.clear.y + 20).toBeGreaterThan(TIDE_LOW_Y);
+  });
   it("11/16 갯바위 낚시 물때: 만조엔 물속, 썰물 중 정해진 분에 마르고, 밀물에 다시 물속. 선착장 끝은 늘 물속", () => {
     // 한국 자정 = 물때 0분 (만조)
     const base = Date.UTC(2026, 10, 15, 15, 0, 0);
@@ -73,32 +85,35 @@ describe("sea map (protocol)", () => {
     expect(tideMinute(at(0))).toBeCloseTo(0);
     const rock = seaFishingSpotById("f_1092_614")!;
     expect(rock).toBeDefined();
-    // 찌 자리 y 638, 여유 6 → 물 높이 0.775 이상이어야 물속 → 썰물 28.3분째에 말라요
-    expect(seaFishMinLevel(rock)).toBeCloseTo(0.775, 3);
+    // 11/16 물가 만조 610 · 간조 760 (간조에도 바다가 넉넉히 보이게). 찌 자리 y 638, 여유 6 → 물 높이 0.853 이상이어야 물속 → 썰물 22.5분째에 말라요
+    expect(TIDE_HIGH_Y).toBe(610);
+    expect(TIDE_LOW_Y).toBe(760);
+    expect(seaFishMinLevel(rock)).toBeCloseTo(0.8533, 3);
     expect(seaFishWet(rock, at(0))).toBe(true);
-    expect(seaFishWet(rock, at(28))).toBe(true);
-    expect(seaFishWet(rock, at(29))).toBe(false);
+    expect(seaFishWet(rock, at(22))).toBe(true);
+    expect(seaFishWet(rock, at(23))).toBe(false);
     expect(seaFishWet(rock, at(90))).toBe(false);
-    expect(seaFishWet(rock, at(151))).toBe(false);
-    expect(seaFishWet(rock, at(152))).toBe(true);
-    expect((seaFishDryAt(rock, at(20)) - at(0)) / 60_000).toBeCloseTo(28.32, 1);
+    expect(seaFishWet(rock, at(157))).toBe(false);
+    expect(seaFishWet(rock, at(158))).toBe(true);
+    expect((seaFishDryAt(rock, at(20)) - at(0)) / 60_000).toBeCloseTo(22.51, 1);
     expect(seaFishDryAt(rock, at(60))).toBe(at(60));
-    // 밀물로 다시 물속이 된 뒤에는 다음 썰물에 말라요 (한 바퀴 180분 + 28.3분)
-    expect((seaFishDryAt(rock, at(170)) - at(0)) / 60_000).toBeCloseTo(208.32, 1);
-    // 갯바위 자리는 모두 만조엔 물속, 간조엔 말라요
+    // 밀물로 다시 물속이 된 뒤에는 다음 썰물에 말라요 (한 바퀴 180분 + 22.5분)
+    expect((seaFishDryAt(rock, at(170)) - at(0)) / 60_000).toBeCloseTo(202.51, 1);
+    // 갯바위 자리는 모두 만조엔 물속. 간조엔 찌 자리가 간조 물가보다 위인 자리만 말라요 (깊은 바위 앞과 선착장 끝은 늘 물속)
     for (const f of SEA_FISHING_SPOTS) {
       expect(seaFishWetAt(f, 1), f.id).toBe(true);
       const pier = f.y > SEA_PIER_END.y;
-      expect(seaFishWetAt(f, 0), f.id).toBe(pier);
+      expect(seaFishWetAt(f, 0), f.id).toBe(pier || seaFishBobber(f).y - SEA_FISH_WET_MARGIN >= TIDE_LOW_Y);
       if (pier) for (let m = 0; m < 180; m += 7) expect(seaFishWet(f, at(m))).toBe(true);
       if (pier) expect(seaFishDryAt(f, at(50))).toBe(Infinity);
     }
   });
   it("11/16 쉴거리 자리: 선베드는 눕기(lie), 돗자리·파라솔은 바닥 앉기, 벤치·끝 걸터앉기는 의자 — 모두 바닷가 좌석이에요", () => {
     // 11/16 리조트 해변: 선베드·파라솔·선베드 한 벌 여섯 → 선베드 12, 파라솔 돗자리는 없어요, 돗자리 둘 (자리 넷)
-    expect(SEA_REST_SEATS.filter((r) => r.kind === "lounger")).toHaveLength(12);
+    // 11/16 돗자리도 빼고 앞줄 선베드 10 → 선베드 22
+    expect(SEA_REST_SEATS.filter((r) => r.kind === "lounger")).toHaveLength(22);
     expect(SEA_REST_SEATS.filter((r) => r.kind === "parasol")).toHaveLength(0);
-    expect(SEA_REST_SEATS.filter((r) => r.kind === "mat")).toHaveLength(4);
+    expect(SEA_REST_SEATS.filter((r) => r.kind === "mat")).toHaveLength(0);
     for (const r of SEA_REST_SEATS) {
       expect(seatSlotIn("sea", r.id)).toMatchObject({ kind: "seat", state: r.kind === "lounger" ? STATE.lie : STATE.sitGround, furnitureId: r.group });
       expect(seatSlotIn("village", r.id)).toBeUndefined();
@@ -110,7 +125,7 @@ describe("sea map (protocol)", () => {
     expect(seaViewOfSeat("pE2")).toBe("breakwater");
     expect(seaViewOfSeat("pB-0")).toBeNull();
     expect(seaViewOfSeat("pL-1")).toBeNull();
-    expect(seaSeatGroup("pM2-1")).toBe("pM2");
+    expect(seaSeatGroup("pZ13")).toBe("pZ13");
     expect(seaSeatGroup("pS3-1")).toBe("pS3");
     // 끝 걸터앉기는 일어서면 데크 쪽(뒤)으로
     expect(seaSeatById("pE1")?.standDy).toBeLessThan(0);
@@ -128,6 +143,6 @@ describe("sea map (protocol)", () => {
     expect(SEA_LOTS).toHaveLength(6);
     expect(SEA_SPOTS.sandcastles).toHaveLength(3);
     expect(SEA_SPOTS.benches).toHaveLength(4);
-    expect(SEA_SPOTS.loungers).toHaveLength(12); // 11/16 선베드 한 벌 여섯
+    expect(SEA_SPOTS.loungers).toHaveLength(22); // 11/16 선베드 한 벌 여섯 (12) + 앞줄 10
   });
 });

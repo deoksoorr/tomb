@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FISHING_SPOTS, fishingSpotById, seatSlot, SEATS, spotKindOfState, STATE, DIR } from "@tomb/protocol";
+import { FISHING_SPOTS, fishingSpotById, seatSlot, SEATS, SEA_FISHING_SPOTS, spotKindOfState, STATE, DIR } from "@tomb/protocol";
 import { forageIconGrid, isForageIcon } from "@/game/sprites/forageIcons";
 import { spotOf } from "@/game/logic/spots";
 import { allProps, inWater, nearWater, standable } from "@/game/world/layout";
@@ -63,7 +63,7 @@ const REAL_CONDS: Cond[] = (() => {
 
 /** 종류마다 나올 수 있는 곳 (물고기 = 낚시 자리의 물, 나머지 = 그 채집 지점이 있는 구역) */
 function wheresOf(cat: string): Set<Where> {
-  if (cat === "fish") return new Set(FISHING_SPOTS.map((s) => s.water as Where));
+  if (cat === "fish") return new Set([...FISHING_SPOTS, ...SEA_FISHING_SPOTS].map((s) => s.water as Where));
   return new Set(GATHER_NODES.filter((n) => NODE_CAT[n.kind] === cat).map((n) => n.where));
 }
 
@@ -91,7 +91,7 @@ describe("카탈로그", () => {
   });
 
   it("모든 종은 언젠가(시간·날씨·계절 중 어떤 조합에서) 어딘가에서 잡힌다", () => {
-    const fishWheres = new Set(FISHING_SPOTS.map((s) => s.water as Where));
+    const fishWheres = new Set([...FISHING_SPOTS, ...SEA_FISHING_SPOTS].map((s) => s.water as Where));
     const nodeWheres = new Map<string, Set<Where>>();
     for (const n of GATHER_NODES) {
       const cat = NODE_CAT[n.kind];
@@ -107,7 +107,7 @@ describe("카탈로그", () => {
 
   it("어떤 조건에서도 낚시 자리마다 걸릴 물고기가 있고, 채집 지점마다 나올 것이 있다", () => {
     for (const c of ALL_CONDS) {
-      for (const w of ["lake", "river"] as const) expect(candidates("fish", w, c).length, `${w} ${JSON.stringify(c)}`).toBeGreaterThan(0);
+      for (const w of ["lake", "river", "sea"] as const) expect(candidates("fish", w, c).length, `${w} ${JSON.stringify(c)}`).toBeGreaterThan(0);
       for (const n of GATHER_NODES) expect(candidates(NODE_CAT[n.kind], n.where, c).length, `${n.id} ${JSON.stringify(c)}`).toBeGreaterThan(0);
     }
   });
@@ -132,8 +132,8 @@ describe("카탈로그", () => {
     expect(FIRST_IDS).toHaveLength(78);
     const ids = new Set(SPECIES.map((s) => s.id));
     for (const id of FIRST_IDS) expect(ids.has(id), id).toBe(true);
-    // 2차: 물고기 40 · 곤충 30 · 약초 28 · 광석 20 · 발굴품 24
-    expect(LIFE_CATS.map((c) => speciesOf(c).length)).toEqual([40, 30, 28, 20, 24]);
+    // 2차: 물고기 40 · 곤충 30 · 약초 28 · 광석 20 · 발굴품 24. 11/16 바닷가: 바닷물고기 10 → 물고기 50, 갯벌 10 → 발굴품 34
+    expect(LIFE_CATS.map((c) => speciesOf(c).length)).toEqual([50, 30, 28, 20, 34]);
   });
 
   it("실제 한 해의 하늘(시간대·날씨·계절)에서 모든 종이 잡힐 때가 있다", () => {
@@ -168,7 +168,7 @@ describe("카탈로그", () => {
 
   it("물고기마다: 그 조건에서 직접·자동 낚시 후보에 들고, 자동 낚시로도 걸릴 수 있다. 꾸미기 대체는 희귀(★3 이상)만", () => {
     for (const s of speciesOf("fish")) {
-      const hit = (["lake", "river"] as const).flatMap((w) => REAL_CONDS.filter((c) => fits(s, w, c)).map((c) => ({ w, c })));
+      const hit = (["lake", "river", "sea"] as const).flatMap((w) => REAL_CONDS.filter((c) => fits(s, w, c)).map((c) => ({ w, c })));
       expect(hit.length, s.id).toBeGreaterThan(0);
       const { w, c } = hit[0];
       const list = candidates("fish", w, c);
@@ -203,11 +203,12 @@ describe("카탈로그", () => {
     // 표에 모든 칸이 한 번씩
     expect(DEX_REWARD_TABLE).toHaveLength(DEX_CATS.reduce((n, c) => n + dexIdsOf(c).length, 0));
     expect(new Set(DEX_REWARD_TABLE.map((r) => r.id)).size).toBe(DEX_REWARD_TABLE.length);
-    // 칸별 총합은 예전 단계 보상 합(290P)과 비슷한 크기 (전체 합은 예전의 1.5배를 넘지 않게)
+    // 칸별 총합은 예전 단계 보상 합(290P)과 비슷한 크기 (전체 합은 예전의 1.5배를 넘지 않게).
+    // 11/16 바닷가 20종(바닷물고기·갯벌, +261P)이 더해져 1.6배까지 (하루 도감 한도는 그대로라 하루에 나가는 양은 같다)
     const legacy = Object.values(DEX_REWARD).reduce((a, b) => a + b, 0);
     expect(legacy).toBe(290);
     const total = DEX_REWARD_TABLE.reduce((n, r) => n + r.pts, 0);
-    expect(total).toBeLessThanOrEqual(legacy * DEX_CATS.length * 1.5);
+    expect(total).toBeLessThanOrEqual(legacy * DEX_CATS.length * 1.6);
     for (const c of DEX_CATS) {
       expect(DEX_TITLES[c][50]).toBeTruthy();
       expect(DEX_TITLES[c][100]).toBeTruthy();

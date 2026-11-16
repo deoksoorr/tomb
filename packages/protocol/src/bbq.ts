@@ -12,7 +12,25 @@
 
 export type BbqKind = "grow" | "speed" | "drunk" | "sober";
 export type BbqCat = "food" | "drink";
-export type BbqItemId = "wholepork" | "tomahawk" | "pork" | "sausage" | "marsh" | "hotteok" | "zap" | "coffee" | "beer" | "soju" | "makgeolli" | "hangover";
+export type BbqItemId =
+  | "wholepork"
+  | "tomahawk"
+  | "pork"
+  | "sausage"
+  | "marsh"
+  | "hotteok"
+  | "zap"
+  | "coffee"
+  | "beer"
+  | "soju"
+  | "makgeolli"
+  | "hangover"
+  // 11/16 바닷가 매점 (뒤에만 더해요 — id는 바꾸지 않아요)
+  | "squid"
+  | "highball"
+  | "sunset"
+  | "sikhye"
+  | "cola";
 export type BbqItem = {
   id: BbqItemId;
   name: string;
@@ -35,6 +53,8 @@ export type BbqItem = {
   bite: string;
   /** 메뉴 창 한 줄 소개 (해요체, 맛 이야기만 — 효과·시간은 창이 덧붙인다) */
   note: string;
+  /** 11/16 파는 곳 (없으면 먹거리는 그릴·마실 거리는 자판기 — bbqStands) */
+  stands?: readonly BbqStand[];
 };
 
 const MIN = 60_000;
@@ -49,16 +69,27 @@ export const BBQ_MENU: readonly BbqItem[] = [
   { id: "zap", name: "번개 닭꼬치", cat: "food", kind: "speed", price: 18, scale: 1, speed: 1.35, tint: 0x6ad8ff, ms: 4 * MIN, trail: true, bite: "한 입! 찌릿찌릿", note: "혀가 찌릿한 번개 양념 꼬치예요." },
   // ── 마실 거리 ──
   { id: "coffee", name: "캠핑 커피", cat: "drink", kind: "speed", price: 8, scale: 1, speed: 1.2, tint: 0xc89060, ms: 10 * MIN, bite: "후~ 정신이 번쩍", note: "버너로 내린 커피예요." },
-  { id: "beer", name: "맥주", cat: "drink", kind: "drunk", price: 12, scale: 1, speed: 1, tint: 0xf0c040, ms: 0, bite: "캬~ 시원해요", note: "시원한 캔맥주예요." },
-  { id: "soju", name: "소주", cat: "drink", kind: "drunk", price: 15, scale: 1, speed: 1, tint: 0x9ad8c0, ms: 0, bite: "캬~ 쓰다", note: "초록 병 한 잔이에요." },
+  { id: "beer", name: "맥주", cat: "drink", kind: "drunk", price: 12, scale: 1, speed: 1, tint: 0xf0c040, ms: 0, bite: "캬~ 시원해요", note: "시원한 캔맥주예요.", stands: ["vending", "kiosk"] },
+  { id: "soju", name: "소주", cat: "drink", kind: "drunk", price: 15, scale: 1, speed: 1, tint: 0x9ad8c0, ms: 0, bite: "캬~ 쓰다", note: "초록 병 한 잔이에요.", stands: ["vending", "kiosk"] },
   { id: "makgeolli", name: "막걸리", cat: "drink", kind: "drunk", price: 14, scale: 1, speed: 1, tint: 0xf0ead8, ms: 0, bite: "캬~ 걸쭉해요", note: "사발에 따른 막걸리예요." },
-  { id: "hangover", name: "컨디숑", cat: "drink", kind: "sober", price: 10, scale: 1, speed: 1, tint: 0x8ac04a, ms: 0, bite: "크으~ 살 것 같아요", note: "술 깨는 작은 병 음료예요." },
+  { id: "hangover", name: "컨디숑", cat: "drink", kind: "sober", price: 10, scale: 1, speed: 1, tint: 0x8ac04a, ms: 0, bite: "크으~ 살 것 같아요", note: "술 깨는 작은 병 음료예요.", stands: ["vending", "kiosk"] },
+  // ── 11/16 바닷가 매점 (달물결 포구) ── 맥주·소주·컨디숑도 같이 팔아요
+  { id: "squid", name: "오징어구이", cat: "food", kind: "grow", price: 12, scale: 1.3, speed: 1, tint: 0xd8905a, ms: 4 * MIN, bite: "한 입! 쫄깃쫄깃", note: "바닷바람에 말려 구운 오징어예요.", stands: ["kiosk"] },
+  { id: "highball", name: "하이볼", cat: "drink", kind: "drunk", price: 16, scale: 1, speed: 1, tint: 0xe8e0a0, ms: 0, bite: "캬~ 톡 쏘네요", note: "얼음 가득 탄산 섞은 술이에요.", stands: ["kiosk"] },
+  { id: "sunset", name: "달물결 선셋", cat: "drink", kind: "drunk", price: 20, scale: 1, speed: 1, tint: 0xff8a7a, ms: 0, bite: "캬~ 노을 맛이에요", note: "주황에서 분홍으로 물드는 칵테일이에요.", stands: ["kiosk"] },
+  { id: "sikhye", name: "식혜", cat: "drink", kind: "speed", price: 8, scale: 1, speed: 1.1, tint: 0xf4e6c0, ms: 6 * MIN, bite: "후~ 시원달달", note: "살얼음 동동 뜬 식혜예요.", stands: ["kiosk"] },
+  { id: "cola", name: "콜라", cat: "drink", kind: "speed", price: 8, scale: 1, speed: 1.15, tint: 0x8a3a2a, ms: 4 * MIN, bite: "크~ 톡톡 튀어요", note: "얼음 컵에 따른 콜라예요.", stands: ["kiosk"] },
 ];
-/** 파는 곳: 바베큐 그릴(먹거리)·음료 자판기(마실 거리) */
-export type BbqStand = "grill" | "vending";
-export const BBQ_STANDS: readonly BbqStand[] = ["grill", "vending"];
+/** 파는 곳: 바베큐 그릴(먹거리)·음료 자판기(마실 거리)·11/16 바닷가 매점(술·음료·오징어구이) */
+export type BbqStand = "grill" | "vending" | "kiosk";
+export const BBQ_STANDS: readonly BbqStand[] = ["grill", "vending", "kiosk"];
+/** 캠핑장 기본 파는 곳 (먹거리 그릴·마실 거리 자판기) */
 export function bbqStand(m: BbqItem): BbqStand {
   return m.cat === "drink" ? "vending" : "grill";
+}
+/** 11/16 이 메뉴를 파는 곳 모두 (stands가 없으면 캠핑장 기본 한 곳) */
+export function bbqStands(m: BbqItem): readonly BbqStand[] {
+  return m.stands ?? [bbqStand(m)];
 }
 
 /** 같은 사람이 연달아 먹는 최소 간격 (서버 중계) */

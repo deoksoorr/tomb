@@ -94,6 +94,41 @@ function collector(frame: number): HTMLCanvasElement {
   return g.toCanvas();
 }
 
+/** 11/16 포구 시장 좌판 사람: 생선 좌판 = 고무 앞치마·머릿수건 아주머니 유령, 갯벌 좌판 = 챙 넓은 밀짚모자·호미. 24×26 (판매 창 얼굴) */
+function harborVendor(flat: boolean): HTMLCanvasElement {
+  const g = new Grid(24, 26);
+  const ox = 4;
+  const oy = 7;
+  ghostBody(g, ox, oy, 0xece6dc, 0);
+  // 고무 앞치마 (생선 = 주황, 갯벌 = 초록)
+  const apron = flat ? 0x4a8a5a : 0xe07a3a;
+  g.rect(ox + 4, oy + 10, 9, 7, apron);
+  g.vline(ox + 5, oy + 8, oy + 10, apron);
+  g.vline(ox + 11, oy + 8, oy + 10, apron);
+  if (flat) {
+    // 밀짚모자
+    const hat = 0xe8c878;
+    g.rect(ox + 4, oy - 2, 9, 4, hat);
+    g.hline(ox, ox + 16, oy + 2, darken(hat, 0.15));
+    g.hline(ox + 4, ox + 12, oy + 1, 0xc84a3a);
+    // 호미 (오른쪽)
+    g.vline(ox + 16, oy + 8, oy + 13, 0x8a5a32);
+    g.hline(ox + 16, ox + 18, oy + 8, 0x9aa4ae);
+  } else {
+    // 머릿수건 (꽃무늬)
+    const scarf = 0x5a8ad0;
+    g.rect(ox + 3, oy - 1, 11, 4, scarf);
+    g.set(ox + 5, oy, 0xf4f4ee);
+    g.set(ox + 9, oy + 1, 0xf4f4ee);
+    g.set(ox + 12, oy, 0xf4f4ee);
+    // 손에 든 고등어
+    g.ellipse(ox + 17.5, oy + 11, 2.8, 1.3, 0x3a6a9a);
+    g.set(ox + 16, oy + 10, 0x101014);
+  }
+  g.outline(OUT);
+  return g.toCanvas();
+}
+
 /** 생선 노점: 얼음 위 생선이 놓인 나무 상자 + "생선" 팻말. 26×18 */
 function fishStall(): HTMLCanvasElement {
   const g = new Grid(26, 18);
@@ -180,6 +215,24 @@ function nodeArt(kind: string, f: number, night: boolean): HTMLCanvasElement {
       g.outline(OUT, false, 160);
       return g.toCanvas();
     }
+    case "clam": {
+      // 11/16 갯벌 구멍: 젖은 펄 둔덕에 숨구멍 둘·조개 끝·뽀글 거품
+      const g = new Grid(16, 10);
+      g.ellipse(8, 7, 6.5, 2.6, 0x5a4a3c);
+      g.recolor((x, y) => y <= 5, 0x6e5c4a);
+      g.set(5, 6, 0x261e18);
+      g.set(10, 7, 0x261e18);
+      g.set(11, 7, 0x261e18);
+      g.ellipse(7.5, 5, 1.6, 1, 0xd8ccb4);
+      g.set(7, 5, 0x9a8a72);
+      // 거품 (프레임마다 오르내린다)
+      const by = f ? 2 : 3;
+      g.set(5, by, 0xdcecf4);
+      g.set(11, by + 1, 0xdcecf4);
+      g.set(12, by - 1, 0xf4fbff);
+      g.outline(OUT, false, 160);
+      return g.toCanvas();
+    }
     default: {
       // 곤충 수풀: 동그란 덤불 + 낮엔 나비, 밤엔 반딧불
       const g = new Grid(18, 16);
@@ -228,7 +281,7 @@ function bang(): HTMLCanvasElement {
   return g.toCanvas();
 }
 
-export const NODE_KINDS = ["herb", "ore", "dig", "bug"] as const;
+export const NODE_KINDS = ["herb", "ore", "dig", "bug", "clam"] as const;
 
 export function ensureForageTextures(scene: Phaser.Scene, night: boolean): void {
   const tx = scene.textures;
@@ -253,11 +306,11 @@ export function ensureForageTextures(scene: Phaser.Scene, night: boolean): void 
 
 const portraits = new Map<string, string>();
 /** NPC 얼굴 그림 dataURL (판매 창, 2배). 브라우저에서만 */
-export function npcPortraitUrl(id: "fishmonger" | "collector", scale = 2): string {
+export function npcPortraitUrl(id: "fishmonger" | "collector" | "harborFish" | "harborFlat", scale = 2): string {
   const key = `${id}|${scale}`;
   const hit = portraits.get(key);
   if (hit) return hit;
-  const src = id === "fishmonger" ? fishmonger(0) : collector(0);
+  const src = id === "fishmonger" ? fishmonger(0) : id === "collector" ? collector(0) : harborVendor(id === "harborFlat");
   const out = document.createElement("canvas");
   out.width = src.width * scale;
   out.height = src.height * scale;

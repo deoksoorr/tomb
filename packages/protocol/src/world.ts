@@ -348,7 +348,9 @@ export const PIERS: readonly { x: number; y: number; w: number; h: number }[] = 
 // ── 낚시 자리 (4번·F13) ── 연못·호수 둑과 잔교·강 양쪽 둑. 자리마다 1인(SPOT_KINDS.fish, 서버 좌석 — 정해진 자리만).
 // 앵커(x,y) = 앉는 발 위치(물가 뭍 또는 잔교), facing = 물 쪽. 자리 id = spotSeatId("fish", x, y) — 예 "f_456_158".
 // 무엇이 잡히는지(호수/강)는 water로 웹 서버(apps/web/lib/forage)가 정한다 (연못은 호수와 같은 물). 실시간 서버는 점유만 판정한다.
-export type FishingSpot = { id: string; water: "lake" | "river"; x: number; y: number; facing: DirId };
+/** 11/16 바닷가 낚시 자리는 "sea" (바닷물고기) */
+export type FishWater = "lake" | "river" | "sea";
+export type FishingSpot = { id: string; water: FishWater; x: number; y: number; facing: DirId };
 const fishSpot = (water: FishingSpot["water"], x: number, y: number, facing: DirId): FishingSpot => ({ id: `f_${x}_${y}`, water, x, y, facing });
 /** 강 북쪽 둑(아래를 본다)·남쪽 둑(위를 본다) 낚시 자리 — 가운데 줄에서 27px */
 const riverSpot = (x: number, north: boolean) => fishSpot("river", x, Math.round(riverYAt(x) + (north ? -27 : 27)), north ? DIR.down : DIR.up);
@@ -391,7 +393,7 @@ export function fishingSpotById(id: string): FishingSpot | undefined {
  */
 export const BOAT_FISHING_SPOTS = { "boat:river": "river", "boat:lake": "lake" } as const satisfies Record<string, FishingSpot["water"]>;
 export type BoatFishingSpotId = keyof typeof BOAT_FISHING_SPOTS;
-export function boatFishingSpotId(water: FishingSpot["water"]): BoatFishingSpotId {
+export function boatFishingSpotId(water: "lake" | "river"): BoatFishingSpotId {
   return water === "lake" ? "boat:lake" : "boat:river";
 }
 /** 낚시 자리 id(정해진 자리 또는 배 위 가상 자리) → 물 종류. 모르는 id면 null */

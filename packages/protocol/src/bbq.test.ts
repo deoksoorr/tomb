@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { BBQ_MENU, BBQ_THUD_SCALE, bbqActive, bbqBig, bbqItem, bbqStand, soberOne, bbqSpeed, drinkOne, DRUNK_MAX, DRUNK_STEP_MS, drunkLevel, drunkUntil, isBbqEffect, isDrunkState } from "./bbq";
+import { BBQ_MENU, BBQ_THUD_SCALE, bbqActive, bbqBig, bbqItem, bbqStand, bbqStands, soberOne, bbqSpeed, drinkOne, DRUNK_MAX, DRUNK_STEP_MS, drunkLevel, drunkUntil, isBbqEffect, isDrunkState } from "./bbq";
 import { parseC2S } from "./events";
 import { signGrant, verifyGrant } from "./grants";
 
 // 11/15 캠핑장 야외 바베큐: 싸게 사 먹고 잠깐 커진다 (재미용)
 describe("바베큐 메뉴 (먹거리·마실 거리)", () => {
   it("먹거리·마실 거리 두 칸, 값은 8~30P, 커지기 3~5분·빨라지기 3~10분, 메뉴마다 색이 다르다", () => {
-    expect(BBQ_MENU.filter((m) => m.cat === "food").map((m) => m.id)).toEqual(["wholepork", "tomahawk", "pork", "sausage", "marsh", "hotteok", "zap"]);
-    expect(BBQ_MENU.filter((m) => m.cat === "drink").map((m) => m.id)).toEqual(["coffee", "beer", "soju", "makgeolli", "hangover"]);
-    // 파는 곳: 먹거리는 그릴, 마실 거리는 자판기
+    expect(BBQ_MENU.filter((m) => m.cat === "food").map((m) => m.id)).toEqual(["wholepork", "tomahawk", "pork", "sausage", "marsh", "hotteok", "zap", "squid"]);
+    expect(BBQ_MENU.filter((m) => m.cat === "drink").map((m) => m.id)).toEqual(["coffee", "beer", "soju", "makgeolli", "hangover", "highball", "sunset", "sikhye", "cola"]);
+    // 파는 곳: 캠핑장 먹거리는 그릴, 마실 거리는 자판기 (11/16 바닷가 매점 메뉴는 매점에서만)
     for (const m of BBQ_MENU) expect(bbqStand(m)).toBe(m.cat === "food" ? "grill" : "vending");
+    const at = (s: string) => BBQ_MENU.filter((m) => bbqStands(m).includes(s as "kiosk")).map((m) => m.id);
+    expect(at("grill")).toEqual(["wholepork", "tomahawk", "pork", "sausage", "marsh", "hotteok", "zap"]);
+    expect(at("vending")).toEqual(["coffee", "beer", "soju", "makgeolli", "hangover"]);
+    expect(at("kiosk")).toEqual(["beer", "soju", "hangover", "squid", "highball", "sunset", "sikhye", "cola"]);
     for (const m of BBQ_MENU) {
       expect(m.price).toBeGreaterThanOrEqual(8);
       expect(m.price).toBeLessThanOrEqual(30);

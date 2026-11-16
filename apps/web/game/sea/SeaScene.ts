@@ -20,6 +20,10 @@ import {
   seaSeatById,
   SEA_REST_SEATS,
   SEA_SEATS,
+  SEA_LOUNGER_LIE_DY,
+  SEA_LOUNGER_Y,
+  SEA_FURNITURE,
+  SEA_SPOTS,
   seaSeatGroup,
   seaViewOfSeat,
   seaWet,
@@ -67,12 +71,20 @@ import { SeaMap } from "./SeaMap";
 import { duskWeight, SeaToneTint } from "./seaTone";
 import { SEA_SCENE, type SeaFriend, type SeaHost, type SeaSceneData } from "./seaHost";
 import { seaNeighborSeat, seaPickSeat, SEA_MULTI_SEAT } from "./seaSit";
-import { BIG_SEAT_MAX, BIG_SEAT_TOAST, myBig } from "../camp/foodState";
+import { BIG_SEAT_MAX, BIG_SEAT_TOAST, foodOfPeer, myBig, RIDING_EAT_TOAST } from "../camp/foodState";
+import { FoodFx } from "../camp/foodFx";
 import { SeaForage } from "./seaForage";
-import { SeaView, type SeaViewSitter } from "./seaView";
+import { openSeaMarket } from "./seaMarket";
+
+import { SeaView, type SeaViewFore, type SeaViewSitter } from "./seaView";
 import { avatarFrame } from "../assets/manifest";
 import type { SeaInteractable } from "./seaTypes";
 import { tideNow, tideNowLevel, tideWarnNow } from "./tideClock";
+
+/** 11/16 선베드에 누운 사람 depth (누운 자리 y + 이만큼 — 선베드 받침 − 4보다 앞) */
+const LOUNGER_LIE_FRONT = 10;
+/** 일어날 때 선베드 받침에서 이만큼 아래(발치 앞)로 */
+const LOUNGER_STAND_DY = 8;
 
 // 11/16 달물결 포구 장면 (캠핑장 CampScene과 같은 틀). 월드(마을)와 같은 채널 연결을 빌려 써요 (CampTrip이 net.divert로 소식을 넘겨줘요).
 // 그리는 것: 바닷가 맵(SeaMap — 물때 따라 오르내리는 물가·물거품·젖은 모래·배·부표·갈매기) · 내 캐릭터 · 같은 바닷가 사람 · 분위기(한국 시간 색조·날씨) · 어둠과 빛.
@@ -111,6 +123,8 @@ export class SeaScene extends Phaser.Scene {
   private riding!: Riding;
   /** 11/16 갯바위 낚시 (마을 낚시를 바닷가로) */
   private forage!: SeaForage;
+  /** 11/16 매점 먹거리·마실 거리 효과 (캠핑장 바베큐 효과 그대로 — game/camp/foodFx) */
+  private food!: FoodFx;
   /** 11/16 쉴거리 자리 (선베드 눕기·돗자리 바닥 앉기 — 의자 좌석 체계 밖, 서버 좌석은 같아요) */
   private rest: SeaRestSeat | null = null;
   /** 거절된 쉴거리 자리를 한 번 더 청했는지 */
@@ -260,6 +274,7 @@ export class SeaScene extends Phaser.Scene {
       act: (kind) => this.doAct(kind),
     });
     this.riding = new Riding({ player: () => this.player, net: () => h.net, remotes: () => this.remotes, toast: (m) => this.toast(m) });
+    this.food = new FoodFx({ scene: this, reduced: h.reduced, sfx: h.sfx, player: () => this.player, remotes: () => this.remotes });
     this.seaView = new SeaView(this.game, h.reduced);
     this.seaView.onGullCall = (vol, pan) => this.host.sfx.gull(vol, pan);
     // 지도의 갈매기가 날아오르며 울면: 가까울수록 크게, 내 쪽 좌우로
@@ -471,7 +486,8 @@ export class SeaScene extends Phaser.Scene {
       onGoblin: () => undefined,
       onGoblinGone: () => undefined,
       onGoblinCaught: () => undefined,
-      onBbq: () => undefined,
+      // 11/16 바닷가 매점 술·음료·오징어구이 효과 (캠핑장 바베큐와 같은 효과 — 같은 바닷가 사람에게)
+      onBbq: (sid, item, until, lv, at) => this.food.onBbq(sid, sid === this.host.net.mySid, item, until, lv, at),
       onMapped: (map, peers, seats) => {
         if (map !== "sea") return this.host.bail();
         this.clearRemotes();
@@ -553,6 +569,7 @@ export class SeaScene extends Phaser.Scene {
     const r = new RemoteAvatar(this, this.host.atlas, p.sid, p.name, avatarColorSpec(p.color, sanitizeDye(p.dye)), p, performance.now(), p.look ?? [], isAvatarBody(p.body) ? p.body : "hood");
     r.map = "sea"; // 좌석 id를 바닷가 자리로 풀어요 (앉은 사람을 벤치 앞에 고정)
     r.view.lieCover = "towel"; // 11/16 바닷가에서 눕는 곳은 선베드뿐 → 이불 대신 하늘빛 수건
+    r.lieFront = LOUNGER_LIE_FRONT; // 선베드(받침 − 4 depth) 앞에 누워요
     r.view.setDexBadge(p.dex);
     r.view.setChamp(p.champ);
     r.view.setStaff(p.staff === true);
@@ -587,6 +604,7 @@ export class SeaScene extends Phaser.Scene {
       r.view.setMood(p.mood ?? null);
       this.riding.applyPeer(r, p);
       r.setAway(p.away === true, now);
+      r.applyFood(foodOfPeer(p)); // 11/16 매점 효과 (커지기·빨라지기·취기)
       const last = r.interp.latest;
       if (!last || Math.hypot(last.x - p.x, last.y - p.y) > TELEPORT_DIST / 2) r.push(now, p.x, p.y, p.state, p.dir);
     }
@@ -618,6 +636,14 @@ export class SeaScene extends Phaser.Scene {
     on.push(bridge.on("input:ride", () => !this.locked && this.riding.toggle()));
     // 11/16 바다 보기 켜기·끄기 (「바다 보기」 버튼·V)
     on.push(bridge.on("sea:view", () => this.toggleView()));
+    // 11/16 매점에서 샀어요: 증서를 실시간 서버로 보내고 먹어요
+    on.push(
+      bridge.on("camp:bbq:eat", ({ item, until, grant, lv, at, stand }) => {
+        if (this.cleaned || stand !== "kiosk") return;
+        this.host.net.bbq(grant);
+        this.food.eat(item, until, lv, at);
+      }),
+    );
     on.push(
       bridge.on("input:act", ({ kind }) => {
         if ((kind === "wave" || kind === "cheer") && !this.covered && !this.locked) this.doAct(kind);
@@ -778,7 +804,7 @@ export class SeaScene extends Phaser.Scene {
   /** 11/16 쉴거리 자리에: 선베드는 누워요(lie), 돗자리는 바닥에 앉아요 (서버 좌석을 잡아요) */
   private useRest(r: SeaRestSeat, now: number): void {
     const pl = this.player;
-    if (r.kind === "lounger") pl.attach("lie", r.x, r.y, r.y + 2, now, this.seatReq, r.id);
+    if (r.kind === "lounger") pl.attach("lie", r.x, r.y, r.y + LOUNGER_LIE_FRONT, now, this.seatReq, r.id);
     else {
       pl.warp(r.x, r.y, now, this.seatReq);
       pl.dir = r.facing;
@@ -796,8 +822,11 @@ export class SeaScene extends Phaser.Scene {
     if (!r) return;
     this.rest = null;
     const pl = this.player;
-    if (r.kind === "lounger") pl.leaveAnchor(now);
-    else if (pl.sitting) pl.stand(now, null);
+    if (r.kind === "lounger") {
+      // 11/16 선베드는 막혀 있어요 → 일어나면 발치 앞으로 내려서요
+      pl.leaveAnchor(now);
+      pl.warp(r.x, r.y - SEA_LOUNGER_LIE_DY + LOUNGER_STAND_DY, now, null);
+    } else if (pl.sitting) pl.stand(now, null);
   }
 
   /** 지금 앉은 자리에서 볼 수 있는 바다 장면 (없으면 null) */
@@ -827,7 +856,8 @@ export class SeaScene extends Phaser.Scene {
     if (!sv) return;
     if (this.viewOn && v) {
       const fade = this.host.reduced ? 1 : Math.min(1, (now - this.viewAt) / 600);
-      sv.frame({ now, dt, levels: this.atmos.levels, hour: this.hour, dusk, tide: this.tide, fade, sitters: this.viewSitters(v.group) });
+      const lying = this.viewFore?.ids.map((id) => this.seats.has(id));
+      sv.frame({ now, dt, levels: this.atmos.levels, hour: this.hour, dusk, tide: this.tide, fade, sitters: this.viewSitters(v.group), lying });
       this.cameras.main.setVisible(!(sv.opaque && fade >= 1));
     } else sv.idle(dt);
   }
@@ -852,6 +882,23 @@ export class SeaScene extends Phaser.Scene {
     for (let i = 0; i < n; i++) this.time.delayedCall(i * (260 + Math.random() * 380), () => !this.cleaned && this.host.sfx.gull(vol * (1 - i * 0.12), pan));
   }
 
+  /** 11/16 벤치 바다 보기: 벤치 바로 앞 선베드 줄과 파라솔 (벤치 x에서 ±170px 안) */
+  private viewFore: { spec: SeaViewFore; ids: string[] } | null = null;
+  private benchFore(group: string): { spec: SeaViewFore; ids: string[] } | null {
+    const f = SEA_FURNITURE.find((q) => q.id === group);
+    if (!f) return null;
+    const near = (x: number) => Math.abs(x - f.x) < 170;
+    const ids: string[] = [];
+    const loungers: { dx: number; row: number }[] = [];
+    SEA_SPOTS.loungers.forEach((l, i) => {
+      if (!near(l.x) || l.y < f.y) return;
+      loungers.push({ dx: l.x - f.x, row: l.y > SEA_LOUNGER_Y ? 1 : 0 });
+      ids.push(`pZ${i + 1}`);
+    });
+    const parasols = SEA_SPOTS.parasols.map((p, i) => ({ dx: p.x - f.x, v: i % 2, x: p.x })).filter((p) => near(p.x)).map(({ dx, v }) => ({ dx, v }));
+    return { spec: { parasols, loungers }, ids };
+  }
+
   /** 「바다 보기」 켜기·끄기 (React 버튼·V) */
   private toggleView(): void {
     if (this.cleaned || this.covered || this.locked) return;
@@ -859,7 +906,8 @@ export class SeaScene extends Phaser.Scene {
     if (!v || this.viewOn) return this.leaveView();
     this.viewOn = true;
     this.viewAt = this.time.now;
-    this.seaView?.begin(v.kind, v.variant, v.mat);
+    this.viewFore = v.kind === "beach" ? this.benchFore(v.group) : null;
+    this.seaView?.begin(v.kind, v.variant, v.mat, this.viewFore?.spec ?? null);
     bridge.emit("view:mode", { mode: "sea" });
   }
 
@@ -927,10 +975,20 @@ export class SeaScene extends Phaser.Scene {
         this.toast("포구 부동산은 오두막 분양 준비로 바빠요. 곧 문을 열어요.");
         break;
       case "market":
-        this.toast("포구 시장은 장 설 준비 중이에요. 갯벌에서 캔 것을 곧 여기서 팔 수 있어요.");
+        // 11/16 2차: 포구 시장 판매 창 (game/sea/seaMarket — 생선 좌판·갯벌 좌판)
+        if (this.rest) this.leaveRest(now);
+        openSeaMarket(pl, o, now, () => pl.stand(now, this.seatReq));
         break;
       case "kiosk":
-        this.toast("매점 셔터가 내려가 있어요. 곧 문을 열어요.");
+        // 11/16 포구 매점: 맥주·소주·하이볼·달물결 선셋·식혜·콜라·오징어구이 (캠핑장 바베큐 창 — 사면 camp:bbq:eat으로 돌아와요)
+        if (this.riding.on) {
+          this.toast(RIDING_EAT_TOAST);
+          break;
+        }
+        if (this.rest) this.leaveRest(this.time.now);
+        if (this.player.sitting) this.player.stand(this.time.now, this.seatReq);
+        this.player.faceTo(o.x, o.y - 10, this.time.now);
+        bridge.emit("camp:bbq:open", { stand: "kiosk" });
         break;
       case "lighthouse":
         this.toast("등대 문이 잠겨 있어요. 등대지기가 곧 돌아와요.");
@@ -1117,7 +1175,12 @@ export class SeaScene extends Phaser.Scene {
     this.map.update(now, dt, view, { hour: this.hour, darkness: L.darkness, rain: L.rain, fog: L.fog, tide: this.tide, trend: this.trend, actors: this.actors, dusk });
     this.riding.update();
     // 11/16 쉴거리 자리: 자세가 풀리면(움직임·일어남) 놓아요
-    if (this.rest && (this.rest.kind === "lounger" ? pl.state !== "lie" : pl.state !== "sitGround" || Math.hypot(pl.x - this.rest.x, pl.y - this.rest.y) > 3)) this.rest = null;
+    if (this.rest && (this.rest.kind === "lounger" ? pl.state !== "lie" : pl.state !== "sitGround" || Math.hypot(pl.x - this.rest.x, pl.y - this.rest.y) > 3)) {
+      const r = this.rest;
+      this.rest = null;
+      // 움직여서 일어났으면(선베드 위 앵커에서 풀림) 막는 상자 밖 발치로
+      if (r.kind === "lounger" && pl.state !== "lie") pl.warp(r.x, r.y - SEA_LOUNGER_LIE_DY + LOUNGER_STAND_DY, now, null);
+    }
     this.updateSeaView(now, dt, dusk);
     this.forage.f.update(dt, view, s);
     for (const r of this.remotes.values()) r.update(pnow, view, s);
@@ -1192,12 +1255,12 @@ export class SeaScene extends Phaser.Scene {
     let other = obj && objOd <= objSd ? { x: obj.x, y: obj.y + 2, text: `${this.seatHint.prefix}${obj.label}` } : null;
     // 쉴거리 자리 안내는 자리 위에 (라벨 depth라 파라솔 갓보다 위에 그려져요)
     if (!other && restNear) other = { x: rest!.x, y: rest!.y - 4, text: `${this.seatHint.prefix}${rest!.kind === "lounger" ? "눕기" : "앉기"}` };
-    // 11/16 갯바위 낚시 자리 안내 ("E 낚시하기")
+    // 11/16 갯바위 낚시 자리·갯벌 구멍 안내 ("E 낚시하기" · "E 갯벌 캐기", 물때로 못 쓰면 그 까닭 — seaForage tideHint)
     const fo = !pl.sitting && !this.locked ? this.forage.nearest(pl.x, pl.y) : null;
-    if (fo && Math.hypot(fo.x - pl.x, fo.y - pl.y) <= Math.min(objSd, objOd))
-      other = { x: fo.x, y: fo.y + 2, text: this.forage.isDry(fo) ? "물이 빠져서 지금은 낚시할 수 없어요" : `${this.seatHint.prefix}${fo.label}` };
-    // 11/16 물속: 잠수·떠오르기 안내 (마을과 같은 글)
-    if (pl.state === "swim" || pl.state === "dive") other = { x: pl.x, y: pl.y + 2, text: `${this.seatHint.prefix}${pl.state === "swim" ? "잠수" : "떠오르기"}` };
+    const foHint = fo ? this.forage.tideHint(fo) : null;
+    if (fo && Math.hypot(fo.x - pl.x, fo.y - pl.y) <= Math.min(objSd, objOd)) other = { x: fo.x, y: fo.y + 2, text: foHint ?? `${this.seatHint.prefix}${fo.label}` };
+    // 11/16 물속: 잠수·떠오르기 안내 (마을과 같은 글). 물에 잠긴 갯벌 구멍 위에선 그 안내를 먼저
+    if ((pl.state === "swim" || pl.state === "dive") && !foHint) other = { x: pl.x, y: pl.y + 2, text: `${this.seatHint.prefix}${pl.state === "swim" ? "잠수" : "떠오르기"}` };
     const bench = pl.state === "sitChair" && pl.seat && SEA_MULTI_SEAT.has(pl.seat.furnitureId);
     const keys = this.seatHint.prefix === "E ";
     const standText = bench ? (keys ? "←→ 옆자리 · ↑↓ 일어나기 · T 벤치 상태" : "좌우로 옆자리 · 위아래로 일어나기") : pl.state === "sitChair" && keys ? "이동하면 일어나요 · T 상태 고르기" : null;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { FishWater } from "@tomb/protocol";
 import { bridge, type ForageUse } from "@/game/bridge";
 import { meadowTone } from "@/game/rpg/meadowLayout";
 import type { TimePhase } from "@/lib/ambience";
@@ -67,7 +68,7 @@ function insectPlay(seed: number, timeLimitSec: number, night: boolean, phase?: 
 }
 
 export default function ForageLayer() {
-  const [fishing, setFishing] = useState<{ spot: string; water: "lake" | "river" } | null>(null);
+  const [fishing, setFishing] = useState<{ spot: string; water: FishWater } | null>(null);
   const [npc, setNpc] = useState<NpcId | null>(null);
   /** 11/15 버스 정류장 마당 의뢰 게시판 (수집 의뢰판만 — NPC 창의 [의뢰] 칸과 같은 QuestBoard) */
   const [board, setBoard] = useState(false);
@@ -297,7 +298,7 @@ function GatherDock({ gather, onCancel }: { gather: Gather; onCancel: () => void
     };
   }, [gather, onCancel]);
   const n = gatherNodeById(gather.node);
-  const verb = n?.kind === "ore" ? "광석 캐는 중…" : n?.kind === "dig" ? "땅 파는 중…" : "약초 캐는 중…";
+  const verb = n?.kind === "ore" ? "광석 캐는 중…" : n?.kind === "dig" ? "땅 파는 중…" : n?.kind === "clam" ? "갯벌 캐는 중…" : "약초 캐는 중…";
   return (
     <div className={s.dock} role="region" aria-label={n ? NODE_LABEL[n.kind] : "채집"}>
       <p className={s.status} role="status">

@@ -149,11 +149,12 @@ describe("sea map (11/16 달물결 포구)", () => {
     expect(core.peer(1)).toMatchObject({ seatId: l.id, state: STATE.lie });
     core.message(a, move(l.x, l.y + 12, STATE.walk), 300);
     expect(core.peer(1)?.seatId ?? null).toBeNull();
-    const m = SEA_REST_SEATS.find((r) => r.kind === "mat")!;
+    // 11/16 돗자리를 뺐어요 → 두 번째 사람은 다른 선베드에
+    const m = SEA_REST_SEATS.filter((r) => r.kind === "lounger")[1];
     const b = join("b", { sea: true, map: "sea", spawn: { x: m.x, y: m.y + 4 } });
     core.message(b, send({ t: "sit", seatId: m.id }), 0);
-    expect(core.peer(2)).toMatchObject({ seatId: m.id, state: STATE.sitGround });
-    core.message(b, move(m.x, m.y, STATE.sitGround), 50);
+    expect(core.peer(2)).toMatchObject({ seatId: m.id, state: STATE.lie });
+    core.message(b, move(m.x, m.y, STATE.lie), 50);
     expect(core.peer(2)?.seatId).toBe(m.id);
     // 마을 사람은 바닷가 쉴거리 자리에 앉을 수 없어요
     const v = join("v", { spawn: { x: m.x, y: m.y } });

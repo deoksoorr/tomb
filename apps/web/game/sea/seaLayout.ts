@@ -39,6 +39,7 @@ import {
   SEA_SPOTS,
   SEA_MATS,
   SEA_EDGE_SEATS,
+  seaLoungerCollider,
   SEA_TIDE_POOLS,
   SEA_WIDTH,
   seaColliders,
@@ -333,7 +334,12 @@ export function seaFurnitureCollider(f: Furniture): Rect {
 }
 /** 11/16 끝 걸터앉기는 그림·충돌이 없어요 (데크 끝). 파라솔은 기둥만 막아요 (선베드·돗자리는 낮아서 지나가요) */
 export function seaFurnitureColliders(): Rect[] {
-  return [...SEA_FURNITURE.filter((f) => !SEA_EDGE_SEATS.includes(f.id)).map(seaFurnitureCollider), ...SEA_SPOTS.parasols.map((p) => ({ x: p.x - 2, y: p.y - 3, w: 4, h: 3 }))];
+  // 11/16 선베드도 막아요 (사용자: 선베드 위를 걸어 지나가요 — 눕기로만 올라가요)
+  return [
+    ...SEA_FURNITURE.filter((f) => !SEA_EDGE_SEATS.includes(f.id)).map(seaFurnitureCollider),
+    ...SEA_SPOTS.parasols.map((p) => ({ x: p.x - 2, y: p.y - 3, w: 4, h: 3 })),
+    ...SEA_SPOTS.loungers.map(seaLoungerCollider),
+  ];
 }
 
 let standRects: Rect[] | null = null;
@@ -382,6 +388,9 @@ export const SEA_INTERACTABLES: readonly SeaInteractable[] = [
   }),
   { id: "realty", kind: "realty", x: SEA_REALTY_DOOR.x, y: SEA_REALTY_DOOR.y + 4, r: 22, label: "포구 부동산" },
   { id: "market", kind: "market", x: SEA_MARKET.x, y: SEA_MARKET_STALLS[1].y, r: 34, label: "포구 시장" },
+  // 11/16 2차: 양쪽 좌판 앞에서도 판매 창 (왼쪽 생선 좌판·오른쪽 갯벌 좌판 칸부터 — game/sea/seaMarket)
+  { id: "market:fish", kind: "market", x: SEA_MARKET_STALLS[0].x, y: SEA_MARKET_STALLS[0].y, r: 30, label: "생선 좌판" },
+  { id: "market:flat", kind: "market", x: SEA_MARKET_STALLS[2].x, y: SEA_MARKET_STALLS[2].y, r: 30, label: "갯벌 좌판" },
   { id: "kiosk", kind: "kiosk", x: SEA_KIOSK.x, y: SEA_KIOSK.y + 12, r: 20, label: "매점" },
   { id: "lighthouse", kind: "lighthouse", x: SEA_LIGHTHOUSE_DOOR.x, y: SEA_LIGHTHOUSE_DOOR.y + 6, r: 18, label: "등대" },
   { id: "boat", kind: "boat", x: SEA_PIER_END.x + SEA_PIER_END.w - 8, y: SEA_BOAT.y, r: 20, label: "낚싯배" },
@@ -421,7 +430,6 @@ export function zoneLabelAt(name: string): Pt | undefined {
 /** 해먹 자리 등 다음 차수 쉴거리 자리는 비어 있어야 해요 (테스트용) */
 // 11/16 벤치·파라솔은 이제 진짜 자리 (막는 상자가 있어요) → 앉는 자리는 SEA_REST_SEATS·SEA_SEATS 테스트에서
 export const SEA_FUTURE_SPOTS: readonly Pt[] = [
-  ...SEA_SPOTS.loungers,
   SEA_SPOTS.swing,
   SEA_SPOTS.bonfire,
   ...SEA_SPOTS.sandcastles,

@@ -10,9 +10,11 @@ import {
   SEA_DEEP_Y,
   SEA_FLAT_Y0,
   SEA_FOOTBATH,
+  BBQ_MENU,
   SEA_FURNITURE,
   SEA_EDGE_SEATS,
   SEA_SPOTS,
+  SEA_LOUNGER_FRONT_Y,
   SEA_MATS,
   SEA_FISHING_LEDGES,
   SEA_GHOST_BERTH,
@@ -36,6 +38,7 @@ import {
   tideLineY,
 } from "@tomb/protocol";
 import { addCanvasTexture } from "../assets/manifest";
+import { bbqPlateArt, CAMP_TEX } from "../camp/campArt";
 import { DEPTH } from "../config";
 import { makeCanvas, mix } from "../sprites/pixel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
@@ -202,6 +205,8 @@ export class SeaMap implements SeaMapApi {
   /** 11/16 갈매기가 날아오르며 울 때 (월드 좌표, 놀라서인지) */
   onGullCall: ((x: number, y: number, scared: boolean) => void) | null = null;
   private readonly rockFoams: { img: Phaser.GameObjects.Image; y: number; phase: number }[] = [];
+  /** 11/16 앞줄 선베드 (큰 파도가 발치를 적시면 물보라 — at = 다음에 튈 수 있는 때) */
+  private readonly frontLoungers = SEA_SPOTS.loungers.filter((l) => l.y === SEA_LOUNGER_FRONT_Y).map((l) => ({ x: l.x, y: l.y, at: 0 }));
   private readonly crabs: { img: Phaser.GameObjects.Image; x: number; y: number }[] = [];
   private beacon: Phaser.GameObjects.Image | null = null;
   private lit = -1;
@@ -377,9 +382,14 @@ export class SeaMap implements SeaMapApi {
     this.prop(T.timetable, SEA_BUS_TIMETABLE.x, SEA_BUS_TIMETABLE.y);
     for (const f of SEA_FURNITURE) if (!SEA_EDGE_SEATS.includes(f.id)) this.prop(T.bench, f.x, f.y, f.y);
     // 11/16 쉴거리: 선베드(누운 사람이 위에 그려지게 받침보다 조금 뒤 depth) · 파라솔 돗자리(돗자리는 바닥, 갓은 앉은 사람 위) · 돗자리
-    for (const l of SEA_SPOTS.loungers) this.prop(T.lounger, l.x, l.y, l.y - 20);
-    // 11/16 파라솔은 선베드 한 벌 가운데 (갓이 선베드 둘의 머리 쪽 위로)
-    SEA_SPOTS.parasols.forEach((p, i) => this.prop(T.parasol(i % 2), p.x, p.y, p.y + 12));
+    // 11/16 선베드 depth는 받침 − 4 (옆에 선 사람과 바르게 겹치게 — 누운 사람은 그보다 앞, SeaScene LOUNGER_LIE_FRONT)
+    for (const l of SEA_SPOTS.loungers) this.prop(T.lounger, l.x, l.y, l.y - 4);
+    // 11/16 파라솔은 선베드 한 벌 가운데. 기둥은 기둥 밑 y로 (앞에 선 사람이 기둥에 가리지 않게 — 사용자),
+    // 갓은 그 아래에 선 사람 머리 위로 덮이게 기둥 밑보다 조금 앞 depth (갓 아래로 사람이 지나가는 건 기둥 뒤쪽뿐이에요)
+    SEA_SPOTS.parasols.forEach((p, i) => {
+      this.prop(T.parasol(i % 2), p.x, p.y, p.y).setCrop(0, Art.PARASOL_CANOPY_H, Art.PARASOL_W, Art.PARASOL_H - Art.PARASOL_CANOPY_H);
+      this.prop(T.parasol(i % 2), p.x, p.y, p.y + 12).setCrop(0, 0, Art.PARASOL_W, Art.PARASOL_CANOPY_H);
+    });
     SEA_MATS.forEach((m, i) => this.prop(T.mat(i % 3 === 1 ? 1 : i % 3 === 2 ? 2 : 0), m.x, m.y + 8, FLAT + m.y, 2));
     // 시장·부동산·매점 (현판 글씨는 판 크기에 맞춰 월드 크기 그대로)
     // 11/16 간판 글씨는 판 위에 뜨는 이름표로 (사용자: "간판 글씨가 안 읽혀요" — 늘 같은 화면 크기, 진한 판에 밝은 글씨)
@@ -879,6 +889,15 @@ export class SeaMap implements SeaMapApi {
         if (at) for (let k = 0; k < n; k++) this.spawnSpray(time + k * (40 + Math.random() * 90), at.x + (Math.random() - 0.5) * 14, at.y + (Math.random() - 0.5) * 6, 5 + Math.random() * 14, view);
       }
     }
+    // 11/16 만조에 드문 큰 파도가 앞줄 선베드 발치까지 오면 발치에 작은 물보라 (선베드마다 2초에 한 번까지)
+    if (!this.reduced)
+      for (const l of this.frontLoungers) {
+        const i = Math.max(0, Math.min(RN - 1, Math.round(l.x / RSTEP)));
+        const edge = st.lineY - this.pSurge[i];
+        if (edge > l.y + 2 || time < l.at) continue;
+        l.at = time + 2000;
+        for (let k = 0; k < 3; k++) this.spawnSpray(time + k * 90, l.x + (Math.random() - 0.5) * 18, l.y + 2, 4 + Math.random() * 8, view);
+      }
     const big = this.waves.bigPeak(time, this.lastBig);
     if (big) {
       this.lastBig = big.id;
@@ -1187,6 +1206,8 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   for (let v = 0; v < 3; v++) tex(T.mat(v), () => Art.matArt(v));
   for (let v = 0; v < 2; v++) tex(T.parasol(v), () => Art.parasolArt(v));
   tex(T.lounger, Art.loungerArt);
+  // 11/16 매점 먹거리·마실 거리 그림 (먹을 때 머리 위에 뜨는 접시·잔 — 캠핑장과 같은 그림, 바닷가에서 바로 들어오면 아직 없어요)
+  for (const m of BBQ_MENU) tex(CAMP_TEX.bbqPlate(m.id), () => bbqPlateArt(m.id));
   tex(T.lotSign, Art.lotSignArt);
   tex(T.pier, Art.pierArt);
   tex(T.pierEnd, Art.pierEndArt);

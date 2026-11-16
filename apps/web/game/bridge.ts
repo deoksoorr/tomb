@@ -1,4 +1,5 @@
-import type { AvatarDye, AwayMapId, BbqItemId, BbqStand, GraveEventKind, MapId, QueueStatus } from "@tomb/protocol";
+import type { AvatarDye, AwayMapId, BbqItemId, BbqStand, FishWater, GraveEventKind, MapId, QueueStatus } from "@tomb/protocol";
+import type { NpcId } from "@/lib/forage/catalog";
 import type { PublicGrave } from "@/lib/types";
 import type { HouseEditState, HouseTool } from "@/game/housing/events";
 import type { PublicHouse, VillageResponse } from "@/lib/housing/types";
@@ -397,8 +398,8 @@ export type UiEvents = {
 };
 
 export type ForageUse =
-  | { kind: "fish"; spot: string; water: "lake" | "river" }
-  | { kind: "npc"; npc: "fishmonger" | "collector" }
+  | { kind: "fish"; spot: string; water: FishWater }
+  | { kind: "npc"; npc: NpcId }
   | { kind: "node"; node: string }
   /** 11/15 버스 정류장 마당 의뢰 게시판 → 수집 의뢰판 */
   | { kind: "board" };

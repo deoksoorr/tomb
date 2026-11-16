@@ -136,6 +136,21 @@ describe("POST /api/camp/bbq", () => {
     expect((await buy("pork", "grill")).status).toBe(200);
   });
 
+  it("11/16 바닷가 매점: 술·음료·오징어구이는 매점에서만, 맥주·소주·컨디숑은 자판기와 매점 둘 다", async () => {
+    const v = await newVisitor();
+    await getAccounts().earn(v.visitorId, "hunt", kstDay(), { amount: 300 });
+    const buy = (item: string, stand: string) => bbq.POST(call("/api/camp/bbq", v, "POST", { item, stand }));
+    expect((await buy("highball", "kiosk")).status).toBe(200);
+    expect((await buy("sunset", "vending")).status).toBe(400);
+    expect((await buy("squid", "grill")).status).toBe(400);
+    expect((await buy("squid", "kiosk")).status).toBe(200);
+    expect((await buy("beer", "kiosk")).status).toBe(200);
+    expect((await buy("pork", "kiosk")).status).toBe(400);
+    // 하이볼·맥주 두 잔 → 취기 2
+    const st = (await (await bbq.GET(call("/api/camp/bbq", v, "GET"))).json()) as BbqStatusResponse;
+    expect(st.drunk).toBe(2);
+  });
+
   it("캠핑장이 닫힌 운영 서버에서는 없는 경로 (CAMP_ENABLED=1이면 열린다)", async () => {
     const v = await newVisitor();
     vi.stubEnv("VERCEL_ENV", "production");

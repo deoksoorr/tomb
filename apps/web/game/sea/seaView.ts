@@ -17,6 +17,8 @@ import { noise1, shoreDelay, shoreReach, WaveTrain } from "./seaWaves";
 //  - 덮는 동안 월드 카메라는 쉬어요 (opaque) — SeaScene이 메인 카메라를 숨겨요
 
 export type SeaViewSitter = { key: string; frame: number; slot: number; of: number };
+/** 11/16 벤치 앞 줄 (벤치에서 본 파라솔·선베드 — 벤치 x에서 월드 px만큼 옆, row 0 = 바로 앞 줄, 1 = 그 앞 줄) */
+export type SeaViewFore = { parasols: readonly { dx: number; v: number }[]; loungers: readonly { dx: number; row: number }[] };
 export type SeaViewFrame = {
   now: number;
   dt: number;
@@ -30,6 +32,8 @@ export type SeaViewFrame = {
   /** 0 = 검은 화면 … 1 = 다 보임 */
   fade: number;
   sitters: readonly SeaViewSitter[];
+  /** 벤치 앞 선베드마다 누운 사람이 있는지 (begin의 fore.loungers 차례) */
+  lying?: readonly boolean[];
 };
 
 const P = "seav-";
@@ -60,6 +64,8 @@ export class SeaView {
   private kind: SeaViewKind | null = null;
   private variant = 0;
   private mat = 0;
+  private foreSpec: SeaViewFore | null = null;
+  private foreLoungers: { img: Phaser.GameObjects.Image; head: Phaser.GameObjects.Image }[] = [];
   private built = false;
   private dirty = false;
   private objs: Phaser.GameObjects.GameObject[] = [];
@@ -134,12 +140,13 @@ export class SeaView {
   }
 
   /** 장면 시작 (variant = 파라솔 갓 색, mat = 돗자리 색) */
-  begin(kind: SeaViewKind, variant: number, mat: number): void {
-    if (this.kind === kind && this.variant === variant && this.mat === mat) return;
+  begin(kind: SeaViewKind, variant: number, mat: number, fore: SeaViewFore | null = null): void {
+    if (this.kind === kind && this.variant === variant && this.mat === mat && this.foreSpec === fore) return;
     this.clear();
     this.kind = kind;
     this.variant = variant;
     this.mat = mat;
+    this.foreSpec = fore;
     this.cover = 0;
   }
 
@@ -255,6 +262,31 @@ export class SeaView {
       if (kind === "mat" || kind === "parasol") this.fore.push(this.add(sc.add.image(0, VH, this.tex(`${P}matEdge-${VW}-${this.mat}`, () => V.matEdge(VW, this.mat))).setOrigin(0, 1).setDepth(30)));
       if (kind === "parasol") this.fore.push(this.add(sc.add.image(0, 0, this.tex(`${P}fringe-${VW}-${this.variant}`, () => V.parasolFringe(VW, this.variant))).setOrigin(0, 0).setDepth(31)));
       if (kind === "lounger") this.fore.push(this.add(sc.add.image(Math.round(VW / 2), VH + 2, this.tex(P + "loungerFoot", () => V.loungerFoot())).setOrigin(0.5, 1).setDepth(30)));
+      // 11/16 벤치: 바로 앞 선베드 줄과 파라솔이 장면 앞쪽에 (가까운 줄이 크고 아래, 그 앞 줄은 조금 작고 위)
+      const fs = this.foreSpec;
+      this.foreLoungers = [];
+      if (fs) {
+        const K = 1.7;
+        const backY = Math.round(VH * 0.93);
+        const frontY = Math.round(VH * 0.83);
+        const lbKey = this.tex(P + "loungerBack", () => V.loungerBackArt());
+        const headKey = this.tex(P + "head", () => V.lyingHead());
+        for (const l of fs.loungers) {
+          const near = l.row === 0;
+          const sc2 = near ? 2.2 : 1.5;
+          const x = Math.round(VW / 2 + l.dx * K * (near ? 1 : 0.8));
+          const y = near ? backY : frontY;
+          const img = this.add(sc.add.image(x, y, lbKey).setOrigin(0.5, 1).setScale(sc2).setDepth(near ? 16 : 14));
+          const head = this.add(sc.add.image(x, y - 22 * sc2, headKey).setOrigin(0.5, 1).setScale(sc2).setDepth(near ? 16.5 : 14.5).setVisible(false));
+          this.fore.push(img);
+          this.foreLoungers.push({ img, head });
+        }
+        for (const p of fs.parasols) {
+          const x = Math.round(VW / 2 + p.dx * K);
+          // 갓이 화면 위를 다 덮지 않게 조금 작게 (선베드 줄 뒤에서 보는 크기)
+          this.fore.push(this.add(sc.add.image(x, backY - 6, Art.SEA_TEX.parasol(p.v)).setOrigin(0.5, 1).setScale(1.8).setDepth(17)));
+        }
+      }
     } else if (kind === "pier") {
       this.moored = this.add(sc.add.image(Math.round(VW * 0.86), Math.round(VH * 0.8), Art.SEA_TEX.boat).setOrigin(0.5, 1).setDepth(13).setScale(2));
       this.buoy = this.add(sc.add.image(Math.round(VW * 0.18), Math.round(hz + (VH - hz) * 0.35), Art.SEA_TEX.buoy).setOrigin(0.5, 1).setDepth(13).setScale(2));
@@ -307,6 +339,7 @@ export class SeaView {
     this.sitters = [];
     this.moored = this.buoy = this.lighthouse = this.beam = null;
     this.rain = this.snow = this.fog = null;
+    this.foreLoungers = [];
     this.skyKey = this.seaKey = "";
   }
 
@@ -319,10 +352,12 @@ export class SeaView {
       const k = this.kind;
       const v = this.variant;
       const m = this.mat;
+      const fs = this.foreSpec;
       this.clear();
       this.kind = k;
       this.variant = v;
       this.mat = m;
+      this.foreSpec = fs;
       this.build();
     }
     this.scene.cameras.main.setVisible(true);
@@ -390,6 +425,7 @@ export class SeaView {
     this.updateFore(f, shade, night);
     this.updateGulls(now, night, L.rain, shade);
     this.updateSitters(f.sitters, night);
+    this.foreLoungers.forEach((l, i) => l.head.setVisible(!!f.lying?.[i]).setTint(mixRgb(0xffffff, 0x2a3050, night * 0.5)));
     // 날씨
     if (this.rain) {
       this.rain.setVisible(L.rain > 0.02).setAlpha(clamp01(L.rain) * 0.85);

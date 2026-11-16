@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BOAT_FISHING_SPOTS, CAMP_FISHING_SPOTS, FISHING_SPOTS, SEA_FISHING_SPOTS } from "@tomb/protocol";
-import { DEX_CATS, GATHER_NODES, NPCS, SPECIES, type DexCat } from "./catalog";
+import { DEX_CATS, GATHER_NODES, NPCS, SPECIES, type DexCat, type NpcId } from "./catalog";
 
 // 낚시·채집·판매·도감 API 입력 검증 (zod)
 
@@ -34,7 +34,7 @@ const bugsResult = z.object({
 });
 export const GatherFinishSchema = z.object({ ticket, result: bugsResult.optional() });
 export const SellSchema = z.object({
-  npc: z.enum(NPCS.map((n) => n.id) as ["fishmonger", "collector"]),
+  npc: z.enum(NPCS.map((n) => n.id) as [NpcId, ...NpcId[]]),
   items: z.partialRecord(speciesId, z.number().int().min(1).max(999)).refine((o) => Object.keys(o).length > 0 && Object.keys(o).length <= 80, "팔 것을 골라 주세요."),
 });
 /** [도감 보상 받기]: 그 칸에 쌓인 받을 보상 */

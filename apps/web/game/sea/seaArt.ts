@@ -524,6 +524,8 @@ export function matArt(v: number): Grid {
 /** 파라솔 (줄무늬 갓 + 기둥). 갓과 기둥 아래를 따로 그려요 (사람 위로 갓이 덮이게). 원점 = 기둥 밑 */
 export const PARASOL_W = 52;
 export const PARASOL_H = 46;
+/** 갓 그림 높이 (이 아래는 기둥 — SeaMap이 갓·기둥을 다른 depth로 나눠 그려요) */
+export const PARASOL_CANOPY_H = 19;
 export function parasolArt(v: number): Grid {
   const g = new Grid(PARASOL_W, PARASOL_H);
   const cx = PARASOL_W / 2;
