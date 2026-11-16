@@ -284,3 +284,15 @@ export const housingChannelOf = (raw: unknown): number => {
 };
 /** "3채널 5번지" */
 export const lotLabel = (ch: number, lot: number) => `${ch}채널 ${lot}번지`;
+
+/** 주인이 이만큼 들어오지 않으면 집을 비우고 낸 포인트를 돌려준다 (lib/housing/reclaim.ts) */
+export const RECLAIM_DAYS = 7;
+/** 관리자 화면에서 「곧 비워져요」로 보여 줄 날수 */
+export const RECLAIM_WARN_DAYS = 5;
+/**
+ * 정리 규칙을 켠 시각 = 2026-11-16 05:00 KST. 그 전 접속은 이 시각에 들어온 것으로 센다 (규칙을 모르고 떠난 집이 배포 날 한꺼번에 비워지지 않게)
+ * → 가장 이른 정리는 2026-11-23 05:00 KST
+ */
+export const RECLAIM_SINCE = Date.UTC(2026, 10, 15, 20, 0, 0);
+/** 정리 기준이 되는 마지막 접속: 실제 마지막 접속과 RECLAIM_SINCE 중 늦은 것 (0 = 기록 없음 → 비우지 않는다) */
+export const reclaimLastSeen = (lastSeenAt: number, since: number = RECLAIM_SINCE): number => (lastSeenAt > 0 ? Math.max(lastSeenAt, since) : 0);

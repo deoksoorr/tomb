@@ -69,7 +69,17 @@ export type StarsDone = { group: number; id: string; perfect: boolean };
 
 export type Verdict =
   /** hunt = 사냥터 랭킹 기록 (검증을 통과한 처치 수, 쓰러지지 않고 모든 웨이브를 깼으면 걸린 시간 ms) */
-  | { ok: true; score: number; exp: number; points: number; drops: Drop[]; hunt?: { kills: number; clearMs: number | null }; stars?: StarsDone[] }
+  | {
+      ok: true;
+      score: number;
+      exp: number;
+      points: number;
+      drops: Drop[];
+      hunt?: { kills: number; clearMs: number | null };
+      stars?: StarsDone[];
+      /** 11/16 몬스터 도감에 더할 처치 수 (몬스터마다 출현 상한 검사를 통과한 값 — 사냥 판만) */
+      mobs?: Partial<Record<MonsterId, number>>;
+    }
   | { ok: false; code: string; message: string };
 
 const reject = (code: string, message: string): Verdict => ({ ok: false, code, message });
@@ -141,6 +151,7 @@ function evalHunt(t: TicketInfo, r: HuntResult, eff: number): Verdict {
     points: Math.round(points),
     drops,
     hunt: { kills: total, clearMs: cleared && !r.died ? Math.round(eff) : null },
+    ...(total > 0 ? { mobs: { ...r.kills } } : {}),
   };
 }
 

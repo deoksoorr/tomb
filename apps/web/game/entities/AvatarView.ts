@@ -159,7 +159,7 @@ export class AvatarView {
   /** 24번 벤치 상태 (머리 위 작은 아이콘 + 손 소품) — 처음 고를 때 만든다 */
   private moodFx: MoodView | null = null;
   /**
-   * 31번 운영자 표시 (낫·안개·배지). 몸·색·염색은 건드리지 않는다 — 가방·상점·사냥 장비창에 보이는 내 모습과 마을·사냥터·다른 사람 화면이 같게
+   * 31번 운영자 표시 (안개·배지 — 11/16 낫은 뺐다). 몸·색·염색은 건드리지 않는다 — 가방·상점·사냥 장비창에 보이는 내 모습과 마을·사냥터·다른 사람 화면이 같게
    * (예전엔 염색 안 한 운영자의 몸 색을 검은 망토색으로 덮어, 가방의 연보라 유령이 마을에서는 검은 저승사자처럼 보였다)
    */
   private staffFx: StaffFxView | null = null;
@@ -1027,7 +1027,7 @@ export class AvatarView {
           moving: st === "walk" || st === "run",
           hidden: st === "dive" || st === "swim" || st === "hammock" || st === "hang" || st === "lie" || st === "bath" || st === "swing",
           reduced: this.reduced,
-          // 11/16 바베큐로 커지면 낫·발밑 안개도 몸과 같이 (손 자리도 커진 몸 기준)
+          // 11/16 바베큐로 커지면 발밑 안개도 몸과 같이 (손 자리도 커진 몸 기준)
           scale: this.big,
         },
         vis,

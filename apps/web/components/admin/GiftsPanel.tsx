@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ITEMS, itemById, itemName, type ItemDef } from "@tomb/protocol";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { BALANCE_CAP } from "@/lib/economy";
@@ -28,7 +28,13 @@ import { socialAdminApi } from "./socialAdminApi";
 import { Empty, Loading } from "./PanelState";
 import { usePanelData } from "./usePanelData";
 
-type Props = { toast: (message: string) => void; onAuthLost: () => void };
+type Props = {
+  toast: (message: string) => void;
+  onAuthLost: () => void;
+  /** 다른 탭(추천)에서 고른 계정을 담은 채 연다 (열고 나면 onPresetUsed) */
+  preset?: AdminAccountRow[] | null;
+  onPresetUsed?: () => void;
+};
 /** 고른 아이템 한 줄 (아이템마다 한 줄). term 없음 = 기본 (가방 이용권 count개) */
 type Line = { itemId: string; count: number; term?: GiftTerm };
 
@@ -62,7 +68,7 @@ const GROUPS: { key: string; label: string }[] = [
 const TERM_KEYS = Object.keys(GIFT_TERMS).filter(isGiftTerm);
 
 /** 11번 선물 탭: 대상 → 쪽지 → 포인트 → 아이템 고르기 → 확인하고 보내기, 아래에 발송 기록 */
-export default function GiftsPanel({ toast, onAuthLost }: Props) {
+export default function GiftsPanel({ toast, onAuthLost, preset, onPresetUsed }: Props) {
   const [version, setVersion] = useState(0);
   const log = usePanelData(
     () => socialAdminApi.gifts(),
@@ -74,7 +80,10 @@ export default function GiftsPanel({ toast, onAuthLost }: Props) {
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<AdminAccountRow[] | null>(null);
   /** 고른 계정 (고른 순서, 같은 계정은 한 번만, 최대 GIFT_MAX_TARGETS명) */
-  const [picked, setPicked] = useState<AdminAccountRow[]>([]);
+  const [picked, setPicked] = useState<AdminAccountRow[]>(() => (preset ?? []).slice(0, GIFT_MAX_TARGETS));
+  useEffect(() => {
+    if (preset) onPresetUsed?.();
+  }, [preset, onPresetUsed]);
   const [from, setFrom] = useState("");
   const [note, setNote] = useState("");
   const [points, setPoints] = useState(0);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { showToast } from "@/lib/hooks/useToasts";
 import { socialApi } from "@/lib/socialApi";
 import type { GiftEntry } from "@/lib/types";
 
@@ -28,7 +29,10 @@ class GiftsStore {
 
   async refresh(): Promise<void> {
     try {
-      this.set((await socialApi.gifts()).gifts);
+      const r = await socialApi.gifts();
+      this.set(r.gifts);
+      // 오래 비운 집 정리 알림 (서버가 선물을 넣은 그 응답에만 온다)
+      if (r.notice) showToast(r.notice, 12_000);
     } catch {
       // 다음 갱신 때 다시
     }

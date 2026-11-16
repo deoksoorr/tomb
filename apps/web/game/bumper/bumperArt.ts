@@ -43,8 +43,8 @@ export const CAR_SEAT_LIFT = 1;
 /** 위아래 눌림 (기울여 위에서 본 각도) */
 const SQ = 0.72;
 
-/** 전구 줄 한 줄에 다는 전구 수 · 줄 처짐 */
-export const STRING_BULBS = 13;
+/** 전구 줄 한 줄에 다는 전구 수 (링크 폭에 맞춰 약 15px 간격 — 11/16 링크가 넓어져 13 → 20) · 줄 처짐 */
+export const STRING_BULBS = Math.max(13, Math.round((BUMPER_RINK.w - 5) / 15) + 1);
 /** 조명 기둥 높이 (받침에서 등까지) */
 export const POLE_H = 30;
 /** 전구 색 (돌아가며) */

@@ -235,6 +235,8 @@ describe("결과 검증 (층마다)", () => {
       floorMs: 270_000,
       kills: Object.values(r.kills).reduce((a, b) => a + (b ?? 0), 0),
       points: 6 * TOWER_FLOOR_POINTS,
+      // 11/16 의심 판이 아니면 몬스터 도감에 더할 처치 수
+      mobs: r.kills,
     });
     // 지금 층에서 잡은 몬스터도 나올 수 있었던 만큼은 된다
     const cur = towerPlan(1234, 7, 1)[0].monsters[0];

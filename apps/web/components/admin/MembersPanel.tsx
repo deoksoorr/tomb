@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import type { AdminMemberRow, AdminMembersResponse } from "@/lib/adminMembers";
+import type { AdminMemberRow, AdminMembersResponse, MemberSort } from "@/lib/adminMembers";
 import { ApiRequestError, errorMessage } from "@/lib/api";
+import { stayText } from "@/lib/stayTime";
 import { cx } from "../ui/cx";
 import Dialog from "../ui/Dialog";
 import ui from "./AdminUi.module.css";
@@ -10,6 +11,7 @@ import { adminApi } from "./adminApi";
 import { BanDialog, KickButton, type BanTarget } from "./BanPanel";
 import { fullTime, joinDate, relativeTime, STATUS_LABEL } from "./memberFormat";
 import styles from "./Admin.module.css";
+import LinkedNames, { hasLinks } from "./LinkedNames";
 import mm from "./Members.module.css";
 import m from "./Moderation.module.css";
 import { Empty, Loading } from "./PanelState";
@@ -20,25 +22,35 @@ type Props = {
   /** 47번 신고 탭의 "정지로 이동": 이 대상으로 정지 창을 바로 연다 (열고 나면 onBanPresetUsed) */
   banPreset?: BanTarget | null;
   onBanPresetUsed?: () => void;
+  /** 문의 탭에서 이름을 누르면: 이 값(계정 id)으로 찾은 목록을 연다 (열고 나면 onSearchPresetUsed) */
+  searchPreset?: string | null;
+  onSearchPresetUsed?: () => void;
 };
 
 type Issued = { accountId: string; name: string | null; code: string };
 
 /**
- * 회원 제재: 회원 전체 목록(최근 접속 순 50명씩, 이름 검색) — 줄마다 [코드 재발급]·[지금 내보내기]·[정지].
+ * 회원 목록 (11/16 「회원 제재」에서 이름을 바꿨다): 회원 전체 목록(최근 접속 순 또는 총 접속 시간 순 50명씩, 이름 검색) — 줄마다 [코드 재발급]·[지금 내보내기]·[정지].
  * 정지·차단 목록과 IP로 바로 차단은 '정지·차단 기록', 재발급 기록은 '코드 재발급 기록' 메뉴에 있다.
  * 포인트 지급은 '선물' 메뉴에서 한다 (여기서는 뺐다).
  */
-export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPresetUsed }: Props) {
+export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPresetUsed, searchPreset, onSearchPresetUsed }: Props) {
   // 신고 탭에서 넘어오면 이 탭이 새로 열리므로 처음 값으로 정지 창을 연다
   const [banTarget, setBanTarget] = useState<BanTarget | null>(() => banPreset ?? null);
   useEffect(() => {
     if (banPreset) onBanPresetUsed?.();
   }, [banPreset, onBanPresetUsed]);
 
-  const [query, setQuery] = useState("");
+  // 문의 탭에서 넘어오면 이 탭이 새로 열리므로 처음 값으로 찾는다
+  const [initialQuery] = useState(() => searchPreset?.trim() ?? "");
+  useEffect(() => {
+    if (searchPreset) onSearchPresetUsed?.();
+  }, [searchPreset, onSearchPresetUsed]);
+  const [query, setQuery] = useState(initialQuery);
   /** 지금 목록의 검색어 (입력 중인 값과 따로) */
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQuery);
+  /** 목록 순서 (접속 시간 순은 운영자도 포함) */
+  const [sort, setSort] = useState<MemberSort>("recent");
   /** 페이지마다 그 페이지를 부른 커서 (첫 페이지 = null) */
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const [data, setData] = useState<AdminMembersResponse | null>(null);
@@ -57,10 +69,10 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
   );
 
   const load = useCallback(
-    async (search: string, cursor: string | null, fresh = false) => {
+    async (search: string, cursor: string | null, fresh = false, by: MemberSort = sort) => {
       setLoading(true);
       try {
-        const r = await adminApi.members(search, cursor, fresh);
+        const r = await adminApi.members(search, cursor, fresh, by);
         setData(r);
         setNow(Date.now());
         return true;
@@ -71,13 +83,13 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
         setLoading(false);
       }
     },
-    [fail],
+    [fail, sort],
   );
 
   // 처음 열 때 첫 페이지
   useEffect(() => {
     let alive = true;
-    adminApi.members("", null).then(
+    adminApi.members(initialQuery, null).then(
       (r) => {
         if (!alive) return;
         setData(r);
@@ -88,7 +100,7 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
     return () => {
       alive = false;
     };
-  }, [fail]);
+  }, [fail, initialQuery]);
 
   const page = cursors.length - 1;
   const search = async (e: FormEvent) => {
@@ -110,6 +122,20 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
     if (await load(q, before[before.length - 1])) setCursors(before);
   };
   const refresh = () => void load(q, cursors[page], true);
+  /** 같은 IP·같은 기기 이름을 누르면 그 계정 id로 찾는다 */
+  const find = (accountId: string) => {
+    setQuery(accountId);
+    void load(accountId, null).then((ok) => {
+      if (!ok) return;
+      setQ(accountId);
+      setCursors([null]);
+    });
+  };
+  const changeSort = (by: MemberSort) => {
+    setSort(by);
+    setCursors([null]);
+    void load(q, null, false, by);
+  };
 
   const reissue = async (row: AdminMemberRow) => {
     setReissuing(true);
@@ -136,7 +162,7 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
   const members = data?.members ?? [];
 
   return (
-    <section className={styles.notices} aria-label="회원 제재">
+    <section className={styles.notices} aria-label="회원 목록">
       <div className={mm.head}>
         <form className={mm.search} onSubmit={(e) => void search(e)} role="search" aria-label="회원 찾기">
           <input
@@ -152,6 +178,10 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
             찾기
           </button>
         </form>
+        <select className={cx(ui.input, mm.sort)} value={sort} onChange={(e) => changeSort(e.target.value as MemberSort)} disabled={loading} aria-label="정렬">
+          <option value="recent">최근 접속 순</option>
+          <option value="stay">접속 시간 순</option>
+        </select>
         <button type="button" className={cx(ui.button, ui.quiet)} onClick={refresh} disabled={loading}>
           목록 새로 훑기
         </button>
@@ -159,7 +189,7 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
 
       <p className={styles.meta} aria-live="polite">
         {data
-          ? `${q ? `"${q}" 검색 결과 ` : "전체 회원 "}${data.total.toLocaleString("ko-KR")}명 · 최근 접속 순 · ${page + 1}페이지` +
+          ? `${q ? `"${q}" 검색 결과 ` : "전체 회원 "}${data.total.toLocaleString("ko-KR")}명 · ${sort === "stay" ? "접속 시간 순" : "최근 접속 순"} · ${page + 1}페이지` +
             ` · ${relativeTime(data.scannedAt, now)} 기준${data.partial ? " · 회원이 너무 많아 일부만 훑었어요" : ""}`
           : "불러오는 중…"}
       </p>
@@ -179,6 +209,9 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
                 <th scope="col" className={styles.num}>
                   포인트
                 </th>
+                <th scope="col" className={styles.num}>
+                  접속 시간
+                </th>
                 <th scope="col">상태</th>
                 <th scope="col" className={styles.num}>
                   사냥 레벨
@@ -188,9 +221,9 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
                 </th>
               </tr>
             </thead>
-            <tbody>
-              {members.map((r) => (
-                <tr key={r.accountId}>
+            {members.map((r) => (
+              <tbody key={r.accountId} className={mm.group}>
+                <tr>
                   <td className={mm.nameCell}>
                     {r.name ?? "이름 없음"}
                     <span className={mm.id}>{r.accountId}</span>
@@ -203,6 +236,9 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
                   </td>
                   <td className={styles.num} data-label="포인트">
                     {r.points.toLocaleString("ko-KR")}
+                  </td>
+                  <td className={cx(styles.num, styles.nowrap)} data-label="접속 시간">
+                    {r.stayMinutes ? stayText(r.stayMinutes) : "—"}
                   </td>
                   <td data-label="상태">
                     <span
@@ -233,8 +269,16 @@ export default function MembersPanel({ toast, onAuthLost, banPreset, onBanPreset
                     </div>
                   </td>
                 </tr>
-              ))}
-            </tbody>
+                {/* 같은 IP·같은 기기로 들어온 다른 계정 전부 (없으면 줄을 그리지 않는다) */}
+                {hasLinks(r.links) && (
+                  <tr className={mm.linkRow}>
+                    <td colSpan={8}>
+                      <LinkedNames links={r.links} onFind={find} />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            ))}
           </table>
         </div>
       )}

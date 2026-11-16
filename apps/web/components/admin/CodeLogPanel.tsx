@@ -16,7 +16,7 @@ export default function CodeLogPanel({ toast, onAuthLost, version }: Props) {
 
   return (
     <section className={styles.notices} aria-label="코드 재발급 기록">
-      <p className={ui.hint}>재발급은 「회원 제재」 목록의 [코드 재발급]으로 해요. 새 코드 원문은 어디에도 남기지 않고, 처리자·대상만 기록해요.</p>
+      <p className={ui.hint}>재발급은 「회원 목록」의 [코드 재발급]으로 해요. 새 코드 원문은 어디에도 남기지 않고, 처리자·대상만 기록해요.</p>
       <LoadState {...load} />
       {log && log.length === 0 && <Empty>아직 재발급한 적이 없어요.</Empty>}
       {log && log.length > 0 && (

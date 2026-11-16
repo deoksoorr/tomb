@@ -31,7 +31,7 @@ export const TITLE_PERKS: Readonly<Record<TitleGrade, { speed: number; discount:
   manager: { speed: 1, discount: 0 },
 };
 
-export type TitleGroup = "dex" | "hunt" | "life" | "fish" | "look" | "champ" | "house";
+export type TitleGroup = "dex" | "hunt" | "life" | "fish" | "look" | "champ" | "house" | "town";
 export const TITLE_GROUP_NAMES: Record<TitleGroup, string> = {
   dex: "도감",
   hunt: "사냥",
@@ -40,8 +40,9 @@ export const TITLE_GROUP_NAMES: Record<TitleGroup, string> = {
   look: "꾸미기",
   champ: "주간 1위",
   house: "내 집",
+  town: "이웃",
 };
-export const TITLE_GROUPS: readonly TitleGroup[] = ["dex", "hunt", "fish", "life", "look", "champ", "house"];
+export const TITLE_GROUPS: readonly TitleGroup[] = ["dex", "hunt", "fish", "life", "look", "champ", "house", "town"];
 
 /**
  * 진행 수치 (서버 lib/titlesServer가 센다). 단위: 레벨·마리·종·일·점, stay = 머문 기록 수(10분씩), big = 가장 큰 물고기 mm,
@@ -74,6 +75,8 @@ export type TitleMetric =
   // 11/15 수집 의뢰: 끝낸 의뢰 수 · 수집가 유령 외형 받음(1/0)
   | "quests"
   | "qking"
+  // 추천 코드로 데려온 이웃 중 조건을 넘긴 수 (같은 곳 가입은 세지 않는다 — lib/referralService)
+  | "refs"
   | `dex_${DexCat}`;
 
 export type TitleDef = {
@@ -114,6 +117,9 @@ const DEX_OF: Record<string, [DexCat, DexTitleTier, TitleGrade]> = {
   t_dig100: ["dig", 100, "gold"],
   t_star50: ["star", 50, "silver"],
   t_star100: ["star", 100, "legend"],
+  // 11/16 몬스터 도감 (사냥터·야근 빌딩 몬스터 전부라 별자리처럼 전설)
+  t_mob50: ["mob", 50, "silver"],
+  t_mob100: ["mob", 100, "legend"],
 };
 const CHAMP_OF: Record<string, ChampBoard> = { t_champ_points: "points", t_champ_hunt: "huntKills", t_champ_fish: "fish" };
 const CHAMP_HOW: Record<ChampBoard, string> = { points: "포인트", huntKills: "사냥 처치", fish: "낚시(가장 큰 물고기)" };
@@ -182,6 +188,9 @@ const STEP_ROWS: readonly StepRow[] = [
     ["t_quest1k", "의뢰 해결사", "gold", "수집 의뢰 1,000개", "quests", 1000, "fish"],
     ["t_quest2500", "전설의 납품왕", "legend", "수집 의뢰 2,500개", "quests", 2500, "fish"],
     ["t_qking", "수집왕", "gold", "도장 교환소에서 수집가 유령 외형을 받으면", "qking", 1, "fish"],
+    // 추천 코드: 데려온 이웃이 조건(3시간·3일)을 넘기면 한 명으로 센다 (lib/referralRules)
+    ["t_ref3", "마을 안내인", "silver", "추천 코드로 데려온 이웃 3명이 마을에 자리 잡으면", "refs", 3, "town"],
+    ["t_ref10", "마을의 마당발", "gold", "추천 코드로 데려온 이웃 10명이 마을에 자리 잡으면", "refs", 10, "town"],
 ];
 const STEP_OF = new Map(STEP_ROWS.map((r) => [r[0], r]));
 
@@ -318,6 +327,7 @@ export function progressText(t: TitleDef, value: number): string {
   if (t.metric === "qking") return value > 0 ? "받음" : "아직";
   if (t.metric === "sgOvertime" || t.metric === "sgApproval" || t.metric === "sgMeeting" || t.metric === "sgTrip") return value > 0 ? "완성" : "아직";
   if (t.metric === "enh") return `+${Math.min(value, t.need)} / +${t.need}`;
+  if (t.metric === "refs") return `${v}명 / ${t.need}명`;
   return `${v.toLocaleString("ko-KR")} / ${t.need.toLocaleString("ko-KR")}`;
 }
 

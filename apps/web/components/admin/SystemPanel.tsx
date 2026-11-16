@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ApiRequestError, errorMessage } from "@/lib/api";
+import { stayText } from "@/lib/stayTime";
 import { cx } from "../ui/cx";
 import ui from "./AdminUi.module.css";
 import styles from "./Admin.module.css";
@@ -24,7 +25,8 @@ const STEP_LABEL: Record<string, string> = {
 
 /**
  * 운영 점검: ① 저장소 점검(임시 묘비를 실제로 쓰고·읽고·지워 어느 단계에서 막히는지) ② 닉네임 색인 채우기(옛 계정 이름을 색인에 넣기)
- * ③ 선물·1위 보상 포인트 랭킹에서 빼기(한 번) ④ 사냥 레벨·꾸미기 랭킹 다시 채우기(기존 캐릭터·착용을 랭킹에 다시 적기). 모두 누를 때만 돈다 (화면을 연다고 저절로 돌지 않는다)
+ * ③ 선물·1위 보상 포인트 랭킹에서 빼기(한 번) ④ 사냥 레벨·꾸미기 랭킹 다시 채우기(기존 캐릭터·착용을 랭킹에 다시 적기)
+ * ⑤ 접속 시간 채우기(기록 전 머문 시간을 남은 날짜별 기록으로). 모두 누를 때만 돈다 (화면을 연다고 저절로 돌지 않는다)
  */
 export default function SystemPanel({ toast, onAuthLost }: Props) {
   const [health, setHealth] = useState<AdminHealthReport | null>(null);
@@ -158,7 +160,55 @@ export default function SystemPanel({ toast, onAuthLost }: Props) {
         toast={toast}
         fail={fail}
       />
+      <StayFillCard toast={toast} fail={fail} />
     </section>
+  );
+}
+
+/** 총 접속 시간 채우기 (커서가 "0"으로 돌아올 때까지 200개씩). 서버가 큰 쪽만 남기므로 여러 번 눌러도 두 번 세지 않는다 */
+function StayFillCard({ toast, fail }: { toast: (message: string) => void; fail: (e: unknown) => void }) {
+  const [state, setState] = useState<{ raised: number; minutes: number; rounds: number; done: boolean } | null>(null);
+  const [running, setRunning] = useState(false);
+
+  const run = async () => {
+    setRunning(true);
+    let cursor = "0";
+    let total = { raised: 0, minutes: 0, rounds: 0, done: false };
+    setState(total);
+    try {
+      do {
+        const r = await opsAdminApi.fillStay(cursor);
+        cursor = r.next;
+        total = { raised: total.raised + r.raised, minutes: total.minutes + r.minutes, rounds: total.rounds + 1, done: r.next === "0" };
+        setState(total);
+      } while (cursor !== "0" && total.rounds < 500);
+      toast(`접속 시간을 채웠어요. ${total.raised.toLocaleString("ko-KR")}명에게 ${stayText(total.minutes)}을 더했어요.`);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardHead}>
+        <h2 className={styles.cardTitle}>접속 시간 채우기</h2>
+        <button type="button" className={ui.button} onClick={() => void run()} disabled={running}>
+          {running ? "채우는 중…" : "채우기"}
+        </button>
+      </div>
+      <p className={ui.hint}>
+        계정을 200개씩 훑어 아직 남은 최근 3일치 머무르기 기록으로 접속 시간을 채워요. 이미 센 시간보다 클 때만 올리니 여러 번 눌러도 두 번 세지 않아요. 날짜별 기록은 2일이 지나면
+        사라지니 접속 시간 랭킹을 올린 날 바로 한 번 눌러 주세요.
+      </p>
+      {state && (
+        <p className={styles.meta} aria-live="polite">
+          {state.rounds}번 훑어 {state.raised.toLocaleString("ko-KR")}명의 접속 시간을 올렸어요. 더한 시간은 {stayText(state.minutes)}이에요.
+          {state.done ? " 끝까지 훑었어요." : running ? " 계속 훑는 중이에요." : " 중간에 멈췄어요."}
+        </p>
+      )}
+    </div>
   );
 }
 

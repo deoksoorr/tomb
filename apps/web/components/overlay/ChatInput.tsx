@@ -3,9 +3,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { CHAT_MAX, CHAT_STORE_MAX, maskChat, newChatBucket, normalizeChat, takeChatToken } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
+import { isWhisperCommand, parseWhisper } from "@/game/logic/whisper";
+import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
-import { useChatLines } from "./chatLines";
+import { chatStore, useChatLines } from "./chatLines";
 import ChatScroll from "./ChatScroll";
 import styles from "./ChatInput.module.css";
 import logStyles from "./ChatLog.module.css";
@@ -17,6 +19,22 @@ import logStyles from "./ChatLog.module.css";
 const bucket = newChatBucket();
 /** "천천히" 표시 시간 */
 const SLOW_MS = 1500;
+/** 11/16 귓속말 입력칸 글자 수: "/귓 " + 이름(공백 포함) + 할 말 CHAT_MAX자 */
+const WHISPER_INPUT_MAX = CHAT_MAX + 30;
+/** 캐릭터 메뉴 [귓속말]이 채운 글을 막 열린 입력칸(폰 한 줄 입력칸)이 가져갈 수 있는 시간 */
+const PREFILL_MS = 2_000;
+
+// 11/16 캐릭터 메뉴 [귓속말] → "/귓 닉네임 ". 이미 떠 있는 입력칸은 이벤트로 바로 받고, 이어서 열리는 입력칸은 처음 값으로 가져간다
+let prefill: { text: string; at: number } | null = null;
+if (typeof window !== "undefined") bridge.on("chat:prefill", ({ text }) => void (prefill = { text, at: Date.now() }));
+const takePrefill = (): string => {
+  const p = prefill;
+  prefill = null;
+  return p && Date.now() - p.at < PREFILL_MS ? p.text : "";
+};
+
+/** 귓속말 이름 맞추기용: 채팅창에 보인 다른 사람 이름들 (서버가 접속자 이름으로 다시 맞춘다) */
+const knownNames = (): string[] => [...new Set(chatStore.get().flatMap((l) => (l.w === "fail" || (l.mine && !l.w) || !l.name ? [] : [l.name])))];
 
 type Props = {
   /** 보낸 뒤 (데스크톱 막대는 닫고, 표현 창도 닫는다) */
@@ -31,15 +49,28 @@ type Props = {
 };
 
 export default function ChatInput({ onSent, onCancel, autoFocus = false, className, id, placeholder = "머리 위 말풍선으로 한마디" }: Props) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(takePrefill);
   const [slow, setSlow] = useState(false);
+  /** 11/16 귓속말을 못 보낸 까닭 (이름·할 말이 없음 등). 글을 고치면 지운다 */
+  const [whisperHint, setWhisperHint] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 레이아웃 효과로 커밋 중에 바로 포커스: 폰 [채팅] 버튼이 flushSync로 열면 탭 처리 안이라 iOS도 키보드를 띄운다
   useLayoutEffect(() => {
-    if (autoFocus) ref.current?.focus({ preventScroll: true });
+    const el = ref.current;
+    if (!autoFocus || !el) return;
+    el.focus({ preventScroll: true });
+    // 채워진 글(귓속말 "/귓 닉네임 ")이 있으면 커서를 끝으로
+    el.setSelectionRange(el.value.length, el.value.length);
   }, [autoFocus]);
+  // 이미 떠 있는 입력칸(데스크톱 채팅창 등)은 캐릭터 메뉴 [귓속말]을 바로 받는다 (포커스는 GameShell이 준다)
+  useBridgeEvent("chat:prefill", ({ text: t }) => {
+    prefill = null;
+    setText(t);
+    setWhisperHint(null);
+    requestAnimationFrame(() => ref.current?.setSelectionRange(t.length, t.length));
+  });
   // 닫힐 때(보내기·바깥 누르기) 포커스를 먼저 놓는다: iOS(WebKit)는 포커스된 입력칸이 그냥 사라지면 focusout을 안 보내
   // 게임 입력 잠금(ui:blockKeys)이 안 풀려 조이스틱·버튼이 전부 멈춘 채로 남는다
   useLayoutEffect(() => {
@@ -55,22 +86,36 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
     [],
   );
 
-  const clean = normalizeChat(text);
-  const masked = clean !== null && maskChat(clean) !== clean;
+  // 11/16 "/귓 닉네임 할 말": 글자 수·가림 안내는 할 말만 본다
+  const whisper = isWhisperCommand(text);
+  const draft = whisper ? parseWhisper(text, knownNames()) : null;
+  const clean = whisper ? (text.trim() ? text : null) : normalizeChat(text);
+  const said = draft?.kind === "send" ? draft.text : whisper ? "" : (clean ?? "");
+  const masked = said !== "" && maskChat(said) !== said;
+  const count = draft?.kind === "long" ? draft.size : [...(whisper ? said : text)].length;
+
+  /** 도배 제한: 너무 빨리 쳤으면 조용히 막고 작은 표시만 (글은 그대로 둔다). 보내도 되면 true */
+  function takeToken(): boolean {
+    if (takeChatToken(bucket, performance.now())) return true;
+    setSlow(true);
+    if (slowTimer.current) clearTimeout(slowTimer.current);
+    slowTimer.current = setTimeout(() => setSlow(false), SLOW_MS);
+    return false;
+  }
 
   function send() {
     if (!clean) {
       onCancel?.();
       return;
     }
-    if (!takeChatToken(bucket, performance.now())) {
-      // 너무 빨리 쳤다: 조용히 막고 작은 표시만 (글은 그대로 둔다)
-      setSlow(true);
-      if (slowTimer.current) clearTimeout(slowTimer.current);
-      slowTimer.current = setTimeout(() => setSlow(false), SLOW_MS);
+    // 11/16 귓속말: 이름·할 말이 덜 됐으면 안내만 (글은 그대로). 채팅과 같은 도배 제한
+    if (whisper && draft?.kind !== "send") {
+      setWhisperHint(draft?.kind === "long" ? `할 말은 ${CHAT_MAX}자까지 보낼 수 있어요` : "닉네임 뒤에 할 말을 적어 주세요");
       return;
     }
-    bridge.emit("input:chat", { text: clean });
+    if (!takeToken()) return;
+    if (draft?.kind === "send") bridge.emit("input:whisper", { to: draft.to, text: draft.text });
+    else bridge.emit("input:chat", { text: clean });
     setText("");
     setSlow(false);
     onSent?.();
@@ -106,11 +151,14 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
           type="text"
           enterKeyHint="send"
           autoComplete="off"
-          maxLength={CHAT_MAX}
+          maxLength={whisper ? WHISPER_INPUT_MAX : CHAT_MAX}
           value={text}
           placeholder={placeholder}
-          aria-label={`채팅 (${CHAT_MAX}자까지, 같은 채널 최근 ${CHAT_STORE_MAX}줄은 하루 동안 남아요)`}
-          onChange={(e) => setText(e.target.value)}
+          aria-label={`채팅 (${CHAT_MAX}자까지, 같은 채널 최근 ${CHAT_STORE_MAX}줄은 하루 동안 남아요. /귓 닉네임 할 말로 귓속말)`}
+          onChange={(e) => {
+            setText(e.target.value);
+            setWhisperHint(null);
+          }}
           onKeyDown={onKeyDown}
         />
         <button
@@ -126,13 +174,17 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
       <p className={styles.meta} aria-live="polite">
         {slow ? (
           <span className={styles.slow}>너무 빨리 치면 잠깐 막혀요</span>
+        ) : whisperHint ? (
+          <span className={styles.slow}>{whisperHint}</span>
         ) : masked ? (
           <span>일부 낱말·주소는 ***로 가려져요</span>
+        ) : whisper ? (
+          <span>귓속말은 받는 사람에게만 보이고 남지 않아요</span>
         ) : (
           <span>같은 채널에 보이고, 최근 {CHAT_STORE_MAX}줄은 하루 동안 남아요</span>
         )}
         <span className={styles.count}>
-          {[...text].length}/{CHAT_MAX}
+          {count}/{CHAT_MAX}
         </span>
       </p>
     </form>

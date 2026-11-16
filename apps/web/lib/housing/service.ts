@@ -59,7 +59,7 @@ const noHouse = () => new HttpError(409, "NO_HOUSE", "먼저 분양 사무소에
 // 11/15: 집주인 이름은 운영자 집도 저장된 닉네임 그대로 (예전처럼 "대장"으로 바꾸지 않는다)
 export function toPublicHouse(r: HouseRecord): PublicHouse {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { owner, hidden, items, ...pub } = r;
+  const { owner, hidden, items, paid, ...pub } = r;
   return pub;
 }
 
@@ -138,7 +138,8 @@ export async function buyPlot(
   if (lot !== null && !isOpenLot(lot)) throw new HttpError(400, "INVALID_INPUT", "그 번지는 이제 분양하지 않아요. 다른 번지를 골라 주세요.");
   if (lot !== null && (await store.village(ch)).some((h) => h.lot === lot)) throw lotTaken();
   await spend(accountId, cost, tier.id === PLOT_TIERS[0].id ? "plot" : `plot:${tier.id}`);
-  const r = await store.create({ id, owner: accountId, name, intro, ownerName, tier: tier.id, ch, lot, now: Date.now() });
+  // 낸 포인트를 집에 남긴다 (오래 비워 정리할 때 그대로 돌려준다, reclaim.ts)
+  const r = await store.create({ id, owner: accountId, name, intro, ownerName, tier: tier.id, ch, lot, now: Date.now(), paid: cost });
   if (r === "exists") await refundAndThrow(accountId, cost, new HttpError(409, "ALREADY_OWNED", "이미 내 집이 있어요."));
   if (r === "lot_taken") await refundAndThrow(accountId, cost, lotTaken());
   if (r === "full") await refundAndThrow(accountId, cost, new HttpError(409, "VILLAGE_FULL", "마을에 빈 번지가 없어요."));
@@ -189,7 +190,7 @@ export async function upgradePlot(store: HouseStore, accountId: string, to: Plot
   const next = nextTier(h.tier);
   if (!next || next.id !== to) throw new HttpError(409, "BAD_TIER", "지금 터에서 바로 올릴 수 있는 크기가 아니에요.");
   await spend(accountId, next.price, `upgrade:${to}`);
-  if (!(await store.upgrade(h.id, h.tier, to, Date.now())))
+  if (!(await store.upgrade(h.id, h.tier, to, Date.now(), next.price)))
     await refundAndThrow(accountId, next.price, new HttpError(409, "CONFLICT", "터 크기가 이미 바뀌었어요. 다시 확인해 주세요."));
   return myHouse(store, accountId);
 }

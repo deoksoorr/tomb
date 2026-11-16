@@ -32,7 +32,7 @@ export const WALL_THICKNESS = 2 * TILE;
  * (11/16 묘역 하나로 합침·범퍼카장 — 배포 때 12로 올릴 것: 묘비 줄·링크 테두리 자리에 옛 기록이 끼지 않게)
  * 12 = 묘역 하나로 합침(옛 묘역 8×4), 다리 건너 묘역 자리에 범퍼카장 — 새 충돌 자리에 옛 기록이 끼지 않게
  */
-export const MAP_VERSION = 12;
+export const MAP_VERSION = 13; // 13 = 행운권 판매대 충돌 · 범퍼카장 링크/오리 연못 넓힘 (11/16)
 
 const CX = MAP_WIDTH / 2; // 720
 
@@ -63,14 +63,14 @@ export const ZONES: readonly Zone[] = [
   { id: "lake", name: "호수", x: 1120, y: 820, w: 272, h: 168 },
   { id: "pond", name: "달빛 연못", x: 398, y: 74, w: 116, h: 76 },
   { id: "pond", name: "까마귀 연못", x: 1108, y: 62, w: 232, h: 92 },
-  { id: "forest", name: "안개 숲", x: 304, y: 784, w: 296, h: 224 },
-  // 11/15 오리 연못 (안개 숲 가운데, 오리배 선착장). DUCK_POND와 같은 타원을 두르는 사각형
-  { id: "pond", name: "오리 연못", x: 338, y: 828, w: 248, h: 144 },
-  // 11/16 범퍼카장 (예전 다리 건너 묘역 자리 — 묘비 자리는 옛 묘역 하나로 합쳤다). BUMPER_YARD와 같은 사각형
-  { id: "bumper", name: "범퍼카장", x: 600, y: 784, w: 256, h: 224 },
+  { id: "forest", name: "안개 숲", x: 304, y: 784, w: 304, h: 224 },
+  // 11/15 오리 연못 (안개 숲 가운데, 오리배 선착장). DUCK_POND와 같은 타원을 두르는 사각형 (11/16 위아래로 넓혔다)
+  { id: "pond", name: "오리 연못", x: 342, y: 800, w: 264, h: 196 },
+  // 11/16 범퍼카장 (예전 다리 건너 묘역 자리 — 묘비 자리는 옛 묘역 하나로 합쳤다). BUMPER_YARD와 같은 사각형 (11/16 링크를 넓히며 호박밭 쪽으로)
+  { id: "bumper", name: "범퍼카장", x: 608, y: 784, w: 304, h: 224 },
   // 동물원 (예전 버드나무 묘역 자리, 사용자 요청: 펫은 사육사에게서). ZOO와 같은 사각형
   { id: "zoo", name: "동물원", x: 48, y: 784, w: 256, h: 224 },
-  { id: "meadow", name: "호박밭", x: 864, y: 864, w: 240, h: 144 },
+  { id: "meadow", name: "호박밭", x: 912, y: 864, w: 192, h: 144 },
   // 11/15 버스 정류장 마당 (없앤 11·12번지 자리 — 의뢰 게시판·긴급 의뢰 현판·주말 버스 정류장). 납품 부두(낚시 잔교·어부 노점)는 없앴다. WHARF_YARD와 같은 사각형
   { id: "busyard", name: "버스 정류장 마당", x: 1144, y: 640, w: 256, h: 112 },
 ];
@@ -289,7 +289,8 @@ export const PONDS: readonly Pond[] = [
   { id: "pondNE", name: "까마귀 연못", x: 1224, y: 108, rx: 116, ry: 46 },
   // 11/15: 안개 연못을 넓혀 오리 연못으로 (오리배 선착장, 낚시는 하지 않는다 — 둑 낚시 자리를 뺐다).
   // 동물원을 줄인 자리(x 304~400)까지 서쪽으로 넓혔다 — 오리배 세 척이 돌아다닐 만큼 (예전 안개 연못의 약 4배, 처음 오리 연못의 약 2배)
-  { id: "pondS", name: "오리 연못", x: 462, y: 900, rx: 124, ry: 72 },
+  // 11/16 "오리배 자리가 좁다" → 강 건너 오솔길 바로 아래부터 아래 담 앞까지 위아래로 늘리고 동쪽으로 조금 (248×144 → 264×196, 넓이 약 1.45배)
+  { id: "pondS", name: "오리 연못", x: 474, y: 898, rx: 132, ry: 98 },
 ];
 /** 오리 연못 (PONDS "pondS"). 오리배는 이 연못 안에서만 다닌다 */
 export const DUCK_POND: Pond = PONDS.find((p) => p.id === "pondS")!;
@@ -409,17 +410,17 @@ export const BOATS: readonly Boat[] = [
   { id: "boatA", x: 1206, y: 850, seats: 1, facing: DIR.left },
   { id: "boatB", x: 1282, y: 850, seats: 1, facing: DIR.right },
   { id: "boatC", x: 1250, y: 884, seats: 2, facing: DIR.right },
-  { id: "duckA", x: 422, y: 852, seats: 2, facing: DIR.left, kind: "duck" },
-  { id: "duckB", x: 488, y: 852, seats: 2, facing: DIR.right, kind: "duck" },
-  { id: "duckC", x: 456, y: 884, seats: 2, facing: DIR.right, kind: "duck" },
+  { id: "duckA", x: 418, y: 826, seats: 2, facing: DIR.left, kind: "duck" },
+  { id: "duckB", x: 494, y: 826, seats: 2, facing: DIR.right, kind: "duck" },
+  { id: "duckC", x: 456, y: 860, seats: 2, facing: DIR.right, kind: "duck" },
 ];
 /** 배 종류 (없으면 조각배) */
 export function boatKind(b: Boat): BoatKind {
   return b.kind ?? "row";
 }
-/** 오리배 선착장 판자 (오리 연못 북쪽 둑에서 물로) · 타는 자리(판자 끝) */
-export const DUCK_DOCK_DECK = { x: 452, y: 812, w: 20, h: 40 } as const;
-export const DUCK_DOCK = { x: 462, y: 846 } as const;
+/** 오리배 선착장 판자 (오리 연못 북쪽 둑에서 물로) · 타는 자리(판자 끝). 11/16 연못이 위로 넓어져 오솔길 바로 아래에서 시작한다 */
+export const DUCK_DOCK_DECK = { x: 452, y: 788, w: 20, h: 40 } as const;
+export const DUCK_DOCK = { x: 462, y: 822 } as const;
 /** 2인승 뒷자리: 앞자리(노 젓는 자리)에서 뱃머리 반대쪽으로 이만큼 */
 export const BOAT_BACK_SEAT = 11;
 /** 오리배 옆자리: 왼쪽 자리(조종)에서 화면 오른쪽으로 이만큼 */
@@ -516,18 +517,20 @@ export function balloonSeatById(id: string): BalloonSeat | undefined {
 // 고무 테두리를 두른 네모난 링크 + 위쪽 가운데 입구(문 앞에서 E → 빈 범퍼카에 탄다). 차는 BUMPER_CARS대, 차마다 1인(SPOT_KINDS.bumper, 서버 좌석).
 // 앵커 = 링크 위쪽에 한 줄로 세워 둔 자리. 타면 위치는 클라이언트가 링크 안에서 움직이고(서버는 mobile 자리라 따라간다),
 // 내리면 빈 차는 잠시 뒤 제자리로 돌아온다 (클라이언트 연출). 부딪힘은 저마다 자기 차에만 적용한다 (서버 물리 없음, 네트워크 추가 없음).
+// 11/16 "범퍼카장이 좁다" → 링크를 192×148 → 284×180으로 (달리는 바닥 약 1.9배). 오리 연못이 동쪽을 조금 쓰고, 링크는 호박밭 쪽(동쪽)과 아래로 넓혔다.
+// 링크 오른쪽 위 귀퉁이는 강 남쪽 둑과 걸어서 지날 틈(호박밭 가는 길)을 남긴다 — 그래서 더 동쪽·위로는 못 넓힌다
 /** 범퍼카장 마당 (ZONES "범퍼카장"과 같은 사각형) */
-export const BUMPER_YARD = { x: 600, y: 784, w: 256, h: 224 } as const;
-/** 링크 바깥 사각형 (고무 테두리 바깥선). 안쪽 달리는 바닥은 BUMPER_RIM만큼 안으로 */
-export const BUMPER_RINK = { x: 624, y: 844, w: 192, h: 148 } as const;
+export const BUMPER_YARD = { x: 608, y: 784, w: 304, h: 224 } as const;
+/** 링크 바깥 사각형 (고무 테두리 바깥선). 안쪽 달리는 바닥은 BUMPER_RIM만큼 안으로. 아래 테두리 밖에 내려설 한 줄(발 상자)을 남긴다 */
+export const BUMPER_RINK = { x: 620, y: 816, w: 284, h: 180 } as const;
 export const BUMPER_RIM = 6;
 /** 입구 (위 테두리 가운데 틈 x0..x1). 걷는 사람은 틈의 막대에 막히고, 문 앞(BUMPER_GATE.x, y − 8)에서 E로 탄다 */
-export const BUMPER_GATE = { x: 720, y: 844, x0: 704, x1: 736 } as const;
+export const BUMPER_GATE = { x: 762, y: 816, x0: 746, x1: 778 } as const;
 export const BUMPER_CARS = 8;
 export type BumperSeat = { id: string; car: number; x: number; y: number };
-/** 범퍼카 자리 전부 (차 c 하나에 한 자리). 링크 위쪽 테두리 안에 한 줄로 세워 둔다. id = spotSeatId("bumper", x, y) — 예 "v_643_858" */
+/** 범퍼카 자리 전부 (차 c 하나에 한 자리). 링크 위쪽 테두리 안에 한 줄로 세워 둔다 (입구를 가운데로 26px 간격). id = spotSeatId("bumper", x, y) — 예 "v_671_838" */
 export const BUMPER_SEATS: readonly BumperSeat[] = Array.from({ length: BUMPER_CARS }, (_, car) => {
-  const x = BUMPER_GATE.x - 77 + car * 22;
+  const x = BUMPER_GATE.x - 91 + car * 26;
   const y = BUMPER_RINK.y + BUMPER_RIM + 16;
   return { id: `v_${x}_${y}`, car, x, y };
 });
@@ -661,13 +664,14 @@ export const FURNITURE: readonly Furniture[] = [
   { id: "bE", kind: "bench", x: 1330, y: 716, facing: DIR.down, seatOffsets: two }, // 주말 버스 정류장 지붕 아래 (game/world/fishZone.ts BUS_STOP)
   // ── 사냥터 동굴 앞 ──
   { id: "bQ", kind: "bench", x: 912, y: 112, facing: DIR.down, seatOffsets: two },
-  // ── 범퍼카장 ── 링크를 내려다보는 구경 벤치 (예전 다리 건너 묘역 벤치를 옮겼다, id 그대로)
-  { id: "bV", kind: "bench", x: 644, y: 812, facing: DIR.down, seatOffsets: two },
-  { id: "bW", kind: "bench", x: 816, y: 812, facing: DIR.down, seatOffsets: two },
+  // ── 범퍼카장 ── 링크를 내려다보는 구경 벤치 (예전 다리 건너 묘역 벤치를 옮겼다, id 그대로).
+  // 11/16 링크가 넓어져 입구 앞 마당이 좁아졌다 → 강 건너 오솔길 북쪽 강둑에서 길 너머 링크를 내려다본다
+  { id: "bV", kind: "bench", x: 668, y: 764, facing: DIR.down, seatOffsets: two },
+  { id: "bW", kind: "bench", x: 836, y: 764, facing: DIR.down, seatOffsets: two },
   // ── 동물원 ── 큰 개 놀이터 옆 쉼터 벤치 (예전 버드나무 묘역 벤치를 옮겼다, id 그대로)
   { id: "bX", kind: "bench", x: 354, y: 990, facing: DIR.up, seatOffsets: two },
   // ── 오리 연못(옛 안개 연못) · 호박밭 ──
-  { id: "bS", kind: "bench", x: 540, y: 808, facing: DIR.down, seatOffsets: two }, // 11/15 오리 연못 북쪽 둑 (연못을 바라본다)
+  { id: "bS", kind: "bench", x: 584, y: 800, facing: DIR.down, seatOffsets: two }, // 11/15 오리 연못 북쪽 둑 (연못을 바라본다). 11/16 연못이 넓어져 북동쪽 둑으로
   { id: "cE", kind: "chair", x: 1010, y: 960, facing: DIR.right, seatOffsets: [0] },
   { id: "cF", kind: "chair", x: 1050, y: 960, facing: DIR.left, seatOffsets: [0] },
   // 모닥불 둘레 (통나무 2인 + 그루터기)

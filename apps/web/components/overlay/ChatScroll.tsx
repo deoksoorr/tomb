@@ -20,18 +20,39 @@ export function ChatLineItem({ line, opacity, ago }: { line: ChatLine; opacity?:
   const status = useBridgeValue("net:status");
   const scene = useBridgeValue("scene:changed")?.scene;
   const here = !scene || scene === "world" ? (status?.map === "camp" ? "camp" : "village") : null;
-  const place = chatPlaceTag(line, here);
+  const place = line.w ? null : chatPlaceTag(line, here);
+  const name = (
+    <b className={cx(styles.name, line.staff && styles.staff)}>
+      {/* 운영자 이름은 금색 그대로 (닉네임 꾸미기를 입혀 헷갈리지 않게) + 11/15 "운영자" 딱지 (이름은 닉네임 그대로라) */}
+      {line.staff && <span className={styles.staffTag}>운영자</span>}
+      {/* 11/16 매니저 딱지 (운영자가 아닐 때만 — 실시간 서버가 붙인 mgr 표시) */}
+      {line.mgr && !line.staff && <span className={styles.mgrTag}>매니저</span>}
+      {line.staff ? line.name : <StyledName name={line.name} look={line.ns} />}
+    </b>
+  );
+  // 11/16 귓속말: "[귓속말] 나 → 진순: …" / "[귓속말] 진순 → 나: …" (name = 상대). 못 보낸 안내는 글만
+  const me = <b className={styles.name}>나</b>;
+  const arrow = <span className={styles.sep}> → </span>;
   return (
     <li className={cx(styles.line, styles[chatLineTone(line)])} style={opacity === undefined ? undefined : { opacity }}>
       {place && <span className={styles.place}>{place} </span>}
-      <b className={cx(styles.name, line.staff && styles.staff)}>
-        {/* 운영자 이름은 금색 그대로 (닉네임 꾸미기를 입혀 헷갈리지 않게) + 11/15 "운영자" 딱지 (이름은 닉네임 그대로라) */}
-        {line.staff && <span className={styles.staffTag}>운영자</span>}
-        {/* 11/16 매니저 딱지 (운영자가 아닐 때만 — 실시간 서버가 붙인 mgr 표시) */}
-        {line.mgr && !line.staff && <span className={styles.mgrTag}>매니저</span>}
-        {line.staff ? line.name : <StyledName name={line.name} look={line.ns} />}
-      </b>
-      <span className={styles.sep}>: </span>
+      {line.w && <span className={styles.whisperTag}>[귓속말] </span>}
+      {line.w === "out" ? (
+        <>
+          {me}
+          {arrow}
+          {name}
+        </>
+      ) : line.w === "in" ? (
+        <>
+          {name}
+          {arrow}
+          {me}
+        </>
+      ) : line.w ? null : (
+        name
+      )}
+      {line.w !== "fail" && <span className={styles.sep}>: </span>}
       <span className={styles.text}>{line.text}</span>
       {ago && <span className={styles.ago}> · {ago}</span>}
     </li>

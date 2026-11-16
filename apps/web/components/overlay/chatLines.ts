@@ -20,9 +20,9 @@ const EMPTY: ChatLine[] = [];
 
 export const chatStore = {
   /** 새 줄이면 true */
-  push(name: string, text: string, mine: boolean, key?: string, staff?: true, ns?: string[], mgr?: true, m?: "camp"): boolean {
+  push(name: string, text: string, mine: boolean, key?: string, staff?: true, ns?: string[], mgr?: true, m?: "camp", w?: ChatLine["w"]): boolean {
     if (key && lines.some((l) => l.key === key)) return false; // chatLog로 이미 받은 줄
-    lines = addChatLine(lines, { id: ++seq, name, text, mine, at: Date.now(), ...(key ? { key } : {}), ...(staff ? { staff } : {}), ...(mgr ? { mgr } : {}), ...(ns ? { ns } : {}), ...(m ? { m } : {}) });
+    lines = addChatLine(lines, { id: ++seq, name, text, mine, at: Date.now(), ...(key ? { key } : {}), ...(staff ? { staff } : {}), ...(mgr ? { mgr } : {}), ...(ns ? { ns } : {}), ...(m ? { m } : {}), ...(w ? { w } : {}) });
     notify();
     return true;
   },
@@ -66,8 +66,8 @@ export function useChatLines(): ChatLine[] {
 
 // 화면이 아직 안 떴어도(입장 직후 welcome·chatLog가 먼저 올 수 있다) 받은 줄을 모은다 — 모듈에서 한 번만 구독
 if (typeof window !== "undefined") {
-  bridge.on("chat:line", ({ name, text, mine, key, staff, ns, mgr, m }) => {
-    const added = chatStore.push(name, text, mine, key, staff, ns, mgr, m);
+  bridge.on("chat:line", ({ name, text, mine, key, staff, ns, mgr, m, w }) => {
+    const added = chatStore.push(name, text, mine, key, staff, ns, mgr, m, w);
     // 실시간으로 새로 온 다른 사람 채팅에만 작은 알림음 (지난 기록 chat:log에는 울리지 않는다)
     chimeForChat({ mine, added, shown: shownNow, enabled: chatChime.getSnapshot() }, Date.now());
   });

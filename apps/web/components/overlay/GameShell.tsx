@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import dynamic from "next/dynamic";
 import { bridge, type GameStartOptions } from "@/game/bridge";
 import { api } from "@/lib/api";
@@ -66,6 +67,7 @@ import ForageLayer from "@/components/forage/ForageLayer";
 import RideButton from "@/components/zoo/RideButton";
 import ZooLayer from "@/components/zoo/ZooLayer";
 import WishDialog from "@/components/plaza/WishDialog";
+import LotteryDialog from "@/components/plaza/LotteryDialog";
 import SkyHud from "@/components/sky/SkyHud";
 import UrgentHud from "@/components/forage/UrgentHud";
 import FoodGauge from "@/components/camp/FoodGauge";
@@ -80,6 +82,7 @@ import CalendarDialog from "../account/CalendarDialog";
 import GiftsDialog from "../account/GiftsDialog";
 // 친구 (목록·신청·위치·접속 알림)
 import FriendsDialog from "../account/FriendsDialog";
+import StaffEarnDialog from "./StaffEarnDialog";
 import { useFriendPresence } from "./useFriendPresence";
 import FriendNotice from "./FriendNotice";
 import CampTalk from "../camp/CampTalk";
@@ -214,7 +217,25 @@ type Panel =
   | "gifts"
   | "friends"
   | "haunt"
-  | "tower";
+  | "tower"
+  | "lottery"
+  /** 운영자 전용 포인트 현황 */
+  | "staffEarn";
+
+/**
+ * 11/16 창 단축키 (데스크톱): 마을·사냥·미니게임·집 어디에서도 쓰지 않는 글자만 골랐다 (B·G·L·M·N·O·P·U).
+ * 같은 키로 다시 누르면 닫는다. L(랭킹)은 창이 아니라 오른쪽 접이식이라 따로 (rankOpen)
+ */
+const PANEL_KEYS: Readonly<Record<string, Panel>> = {
+  KeyG: "fireworks",
+  KeyP: "me",
+  KeyO: "friends",
+  KeyU: "race",
+  KeyB: "calendar",
+  KeyN: "notices",
+  KeyM: "gifts",
+};
+const RANK_KEY = "KeyL";
 
 /** 다른 담당이 만드는 장소 창 (사냥터·분양 사무소). 컴포넌트가 들어오기 전까지 자리만 */
 type Props = {
@@ -243,6 +264,8 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
   const [openGraveId, setOpenGraveId] = useState<string | null>(null);
   const [bury, setBury] = useState<BuryMode | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
+  /** 오른쪽 접이식 랭킹 (L 키로도 열고 닫는다) */
+  const [rankOpen, setRankOpen] = useState(false);
   /** 표현 창(T: 말풍선·이모티콘·벤치 상태)과 즐겨찾기 원형 목록(Y). 집·마을 HUD(panel "housing") 위에서도 열리게 panel과 따로 둔다 */
   const [sayOpen, setSayOpen] = useState(false);
   const [radial, setRadial] = useState(false);
@@ -320,6 +343,13 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     setSayOpen(false);
     setRadial(true);
   };
+  // 11/16 캐릭터 메뉴 [귓속말]: 입력칸이 "/귓 닉네임 "을 받는다 (ChatInput). 데스크톱은 채팅창 입력칸에 포커스, 터치는 한 줄 입력칸을 연다
+  // (iOS는 탭 처리 안에서 포커스해야 키보드를 띄운다 → flushSync로 바로 그린다)
+  useBridgeEvent("chat:prefill", () => {
+    if (!canRadial || bridge.last("bus:state")?.riding) return;
+    setRadial(false);
+    if (coarse || !focusChatLog()) flushSync(() => setChatOpen(true));
+  });
 
   // 데스크톱 T 키: 표현 창, Y 키: 즐겨찾기 원형 목록, I 키: 가방 (입력칸·열린 창이 없을 때만)
   // 마을·집 안(panel "housing" — 위쪽 HUD만 떠 있다)에서도 T·U는 된다
@@ -329,8 +359,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     if (!ready || (!quiet && !roomQuiet)) return;
     const onKey = (e: KeyboardEvent) => {
       const enter = e.code === "Enter" || e.code === "NumpadEnter";
-      if ((e.code !== "KeyT" && e.code !== "KeyI" && e.code !== "KeyY" && !enter) || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
-      if (roomQuiet && e.code === "KeyI") return;
+      const panelKey = e.code in PANEL_KEYS || e.code === RANK_KEY;
+      if ((e.code !== "KeyT" && e.code !== "KeyI" && e.code !== "KeyY" && !enter && !panelKey) || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+      if (roomQuiet && (e.code === "KeyI" || panelKey)) return;
       const el = document.activeElement;
       if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]")) return;
       // 하우징 안의 방명록·분양 사무소 같은 창이 떠 있으면 그 창 몫
@@ -351,26 +382,31 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
         setRadial(true);
         return;
       }
+      // 운영자 계정은 출석 달력·친구 버튼이 없다 → 단축키도 없다
+      const target = PANEL_KEYS[e.code];
+      if ((target === "calendar" || target === "friends") && iAmStaff) return;
       e.preventDefault();
       setRadial(false);
-      if (e.code === "KeyI") setPanel("bag");
+      if (e.code === RANK_KEY) setRankOpen((v) => !v);
+      else if (target) setPanel(target);
+      else if (e.code === "KeyI") setPanel("bag");
       else setSayOpen(true);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [ready, quiet, roomQuiet, canRadial, chatOpen, coarse]);
+  }, [ready, quiet, roomQuiet, canRadial, chatOpen, coarse, iAmStaff]);
 
-  // 11/15: 단축키로 연 창은 같은 단축키로 닫는다 (I = 가방, T = 표현 창. Y 원형 목록은 ExprRadial이 직접 닫는다)
-  const bagOpen = panel === "bag";
+  // 11/15: 단축키로 연 창은 같은 단축키로 닫는다 (I = 가방, T = 표현 창, 11/16 PANEL_KEYS 창들. Y 원형 목록은 ExprRadial이 직접 닫는다)
+  const keyPanel = panel === "bag" ? "KeyI" : (Object.keys(PANEL_KEYS).find((k) => PANEL_KEYS[k] === panel) ?? null);
   useEffect(() => {
-    if (!bagOpen && !sayOpen) return;
+    if (!keyPanel && !sayOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.code !== "KeyI" && e.code !== "KeyT") || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+      if ((e.code !== keyPanel && e.code !== "KeyT") || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
       const el = document.activeElement;
       if (el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]")) return;
-      // 가방 위에 다른 창(염색·확인 등)이 겹쳐 있으면 그 창 몫
+      // 창 위에 다른 창(염색·확인 등)이 겹쳐 있으면 그 창 몫
       if (document.querySelectorAll("dialog[open]").length > 1) return;
-      if (e.code === "KeyI" && bagOpen) {
+      if (e.code === keyPanel) {
         e.preventDefault();
         setPanel(null);
       } else if (e.code === "KeyT" && sayOpen) {
@@ -380,7 +416,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [bagOpen, sayOpen]);
+  }, [keyPanel, sayOpen]);
 
   // 게임이 맵에 내 묘비를 표시한다 (sticky)
   const myGraveIds = me?.graves;
@@ -574,7 +610,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                     className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
                     onClick={() => setPanel("calendar")}
                     aria-label={calendarReady ? "출석 달력 (오늘 출석 도장을 찍을 수 있어요)" : "출석 달력"}
-                    title="출석 달력"
+                    title="출석 달력 (B)"
                   >
                     <PixelIcon name="calendar" />
                     {calendarReady && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
@@ -585,7 +621,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                   className={cx(ui.button, ui.icon, ui.top, styles.topButton)}
                   onClick={() => setPanel("gifts")}
                   aria-label={giftCount ? `선물함 (안 받은 선물 ${giftCount}개)` : "선물함"}
-                  title="선물함"
+                  title="선물함 (M)"
                 >
                   <PixelIcon name="gift" />
                   {giftCount > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
@@ -597,11 +633,18 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                     className={cx(ui.button, ui.top, styles.topButton)}
                     onClick={() => setPanel("friends")}
                     aria-label={friendIncoming ? `친구 (받은 신청 ${friendIncoming}개)` : "친구"}
-                    title="친구"
+                    title="친구 (O)"
                   >
                     <PixelIcon name="heart" />
                     친구
                     {friendIncoming > 0 && <span className={cx(styles.dot, styles.redDot)} aria-hidden="true" />}
+                  </button>
+                )}
+                {/* 운영자 계정은 친구 버튼 자리에 「포인트 현황」 (사람들이 오늘 포인트 한도를 얼마나 채웠는지) */}
+                {iAmStaff && (
+                  <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => setPanel("staffEarn")}>
+                    <PixelIcon name="list" />
+                    포인트 현황
                   </button>
                 )}
                 <button
@@ -612,18 +655,18 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
                 >
                   <PixelIcon name="info" />
                 </button>
-                <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => setPanel("me")}>
+                <button type="button" className={cx(ui.button, ui.top, styles.topButton)} onClick={() => setPanel("me")} title="내 정보 (P)">
                   <PixelIcon name="user" />
                   {/* 포인트는 내 정보 창 안에서 보여 준다 (위쪽 단추는 이름만) */}
                   <span className={styles.meLabel}>내 정보</span>
                 </button>
                 {/* 주간 랭킹 1위 레이스 (시상대·마감·내 순위·명예의 전당): 랭킹 옆 따로.
                     위쪽 줄이 가운데 채널 칸과 겹칠 만큼 좁은 화면에선 숨기고 [메뉴] 시트의 「이번 주 레이스」로 연다 */}
-                <button type="button" className={cx(ui.button, ui.top, styles.topButton, styles.raceTop)} onClick={() => setPanel("race")} title="이번 주 레이스">
+                <button type="button" className={cx(ui.button, ui.top, styles.topButton, styles.raceTop)} onClick={() => setPanel("race")} title="이번 주 레이스 (U)">
                   <PixelIcon name="trophy" />
                   레이스
                 </button>
-                <RankingPanel graves={graves.graves} onPick={lookAtGrave} />
+                <RankingPanel graves={graves.graves} onPick={lookAtGrave} open={rankOpen} onOpenChange={setRankOpen} />
               </div>
             </>
           )}
@@ -844,6 +887,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {/* 11/15 마을의 야근 빌딩 (사냥 레벨 50 전이면 창 없이 경비원 한마디) */}
       {panel === "tower" && <HuntLobby mode="tower" onClose={closePanel} onTaunt={() => showToast(towerTaunt(), 5_000)} avatar={{ color: options.color, body: options.body }} />}
       {panel === "wish" && <WishDialog onClose={closePanel} />}
+      {panel === "lottery" && <LotteryDialog onClose={closePanel} />}
       {panel === "telescope" && <Telescope onClose={closePanel} />}
       {panel === "haunt" && <HauntDialog onClose={closePanel} />}
       <GoblinClaim />
@@ -853,6 +897,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {panel === "calendar" && <CalendarDialog onClose={closePanel} />}
       {panel === "gifts" && <GiftsDialog onClose={closePanel} onOpenCalendar={() => setPanel("calendar")} />}
       {panel === "friends" && <FriendsDialog onClose={closePanel} />}
+      {panel === "staffEarn" && iAmStaff && <StaffEarnDialog onClose={closePanel} />}
       <MegaphoneLayer channel={channel} onOpenShop={() => setPanel("shop")} />
       {panel === "shop" && <ShopDialog onClose={closePanel} avatar={{ color: options.color, body: options.body }} />}
     </div>

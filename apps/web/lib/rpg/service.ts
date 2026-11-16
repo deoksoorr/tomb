@@ -3,6 +3,8 @@ import { itemById } from "@tomb/protocol";
 import { recordEvent } from "../analyticsService";
 import { earnPoints, getAccounts, refundPoints, spendPoints } from "../store";
 import { kstDay, kstWeek } from "../store/accounts";
+import { capsMult } from "../pointEvent";
+import { earnBoost } from "../store/pointEvent";
 import { forgetTitles, forgetTowerTitles } from "../titlesServer";
 import { earnRule } from "../economy";
 import { env } from "../env";
@@ -61,6 +63,7 @@ import { evaluate, FINISH_GRACE_SEC, type StarsDone } from "./rewards";
 import { CHEST_COSMETICS, cosTierOf, crossesTen, gearPower, nextPity, PROT_PER_WEEK } from "./setGearRoll";
 import { grantSgDrops } from "./enhance";
 import { payNewDex } from "../forage/dexReward";
+import { mobKillItems } from "../forage/mobDex";
 import { getForageStore } from "../forage/store";
 import type { DexGain } from "../forage/types";
 import { STARRY_NIGHT_BONUS, starSkyAt } from "../stargaze";
@@ -121,12 +124,15 @@ export const forgetEndgameLaunch = () => void delete eg.__tombEndgameLaunch;
 export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now = Date.now(), state?: CharacterState): Promise<RpgView> {
   const day = kstDay(now);
   const sup = await isSuperHunter(acct);
-  const [loaded, daily, me, runs] = await Promise.all([
+  const [loaded, daily, me, runs, boost] = await Promise.all([
     state ?? loadChar(acct, store, sup),
     store.daily(acct, day),
     getAccounts().get(acct, day, now),
     store.runsThisHour(acct, hourBucket(now)),
+    earnBoost(now),
   ]);
+  // 포인트 배수 이벤트로 사냥터를 고른 날은 사냥 한도도 늘어난 값으로 보여 준다 (lib/pointEvent)
+  const huntCap = HUNT_CAP * capsMult(boost, "hunt");
   const stored = fitAll(loaded, sup);
   // 슈퍼 계정: 화면에는 최대 레벨·넉넉한 스킬·능력치 포인트로 보인다 (저장값은 그대로)
   const character = sup
@@ -144,7 +150,7 @@ export async function rpgView(acct: string, store: RpgStore = getRpgStore(), now
     derived: derive(character.level, character.stats, character.equip),
     expToNext: Number.isFinite(expToNext(character.level)) ? expToNext(character.level) : 0,
     points: me.points,
-    today: { huntPoints: Math.min(daily.points, HUNT_CAP), cap: HUNT_CAP, runs: daily.runs, runsPerHour: RUNS_PER_HOUR - runs, runsHourMax: RUNS_PER_HOUR },
+    today: { huntPoints: Math.min(daily.points, huntCap), cap: huntCap, runs: daily.runs, runsPerHour: RUNS_PER_HOUR - runs, runsHourMax: RUNS_PER_HOUR },
     respecCost: respecCost(stored.level),
     statResetCost: respecCost(stored.level),
     ...(sup ? { superHunter: true } : {}),
@@ -260,12 +266,13 @@ export async function shopAction(acct: string, a: z.input<typeof ShopActionSchem
   // 3) 드롭 장비·포션 되팔기는 사냥 수입이다 → 사냥 포인트 하루 한도 안에서만 (원자적으로 한도까지만 적립)
   const want = result.drop * result.unit;
   if (want > 0) {
-    const { earned } = await earnPoints(acct, "hunt", want, ipHash);
-    capped = earned < want;
+    // paid = 받은 포인트가 판 값으로 얼마어치인지 (포인트 배수 이벤트면 earned보다 적다, lib/pointEvent)
+    const { earned, paid } = await earnPoints(acct, "hunt", want, ipHash);
+    capped = paid < want;
     value += earned;
     if (earned > 0) await store.addDaily(acct, kstDay(), { points: earned });
     // 한도에 막혀 값을 한 푼도 못 받은 만큼은 가방에 되돌린다 (일부만 받은 1개는 판 것으로 친다)
-    unsold = Math.min(result.drop, Math.floor((want - earned) / result.unit));
+    unsold = Math.min(result.drop, Math.floor((want - paid) / result.unit));
     if (unsold > 0) state = (await http(store.update(acct, (s) => ({ state: returnUnsold(s, result.code, unsold), result: null })))).state;
   }
   return { ...(await rpgView(acct, store, Date.now(), state)), sold: { value, capped, count: count - unsold } };
@@ -464,6 +471,38 @@ async function registerStars(
   }
 }
 
+/**
+ * 11/16 몬스터 도감: 서버가 받아들인 판(사냥·야근 빌딩 — 거절·의심 판은 부르지 않는다)의 검증된 처치 수를 계정 도감에 더한다 (저장 한 번, 원자적).
+ * 처음 쓰러뜨린 몬스터는 등록되고 도감 보상(lib/forage/dexReward)을 그 자리에서 받는다. 운영자도 기록한다 (도감 랭킹은 없다).
+ * 저장·지급이 실패해도 판 보상은 그대로 (도감만 빠진다)
+ */
+export async function recordMobKills(
+  acct: string,
+  kills: Partial<Record<string, number>>,
+  now: number,
+  ip: string,
+): Promise<{ fresh: string[]; dex?: DexGain }> {
+  const items = mobKillItems(kills);
+  if (!items.length) return { fresh: [] };
+  try {
+    const store = getForageStore();
+    const isNew = await store.addKills(acct, kstDay(now), items);
+    const granted = items.map((it, i) => ({ id: it.id, isNew: isNew[i] ?? false }));
+    const fresh = granted.filter((g) => g.isNew).map((g) => g.id);
+    let dex: DexGain | undefined;
+    try {
+      dex = await payNewDex(store, acct, granted, ip, now);
+    } catch (e) {
+      // 못 준 보상은 받을 도감 보상에 남아 도감 창에서 받는다
+      console.error("[rpg] 몬스터 도감 보상 지급 실패", e);
+    }
+    return { fresh, ...(dex ? { dex } : {}) };
+  } catch (e) {
+    console.error("[rpg] 몬스터 도감 기록 실패", e);
+    return { fresh: [] };
+  }
+}
+
 export async function finishRun(acct: string, token: string, result: RunResult, ipHash: string, now = Date.now()): Promise<RunFinishResponse> {
   const store = getRpgStore();
   const t = await verifyTicket(env.sessionSecret(), token);
@@ -530,6 +569,9 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   const drops = await grantCosmetics(acct, vDrops, now);
   const stars = v.stars ? await registerStars(acct, v.stars, now, ipHash) : undefined;
   const constellations = stars?.list;
+  // 11/16 몬스터 도감 (사냥 판만 mobs가 있다)
+  const mobs = v.mobs ? await recordMobKills(acct, v.mobs, now, ipHash) : undefined;
+  const dexReward = stars?.dex ?? mobs?.dex;
   const pointsRaw = nightBonus ? Math.round(v.points * STARRY_NIGHT_BONUS) : v.points;
   // 사냥은 사냥 한도, 곤충·별자리는 미니게임 한도 (사냥 화면의 오늘 사냥 포인트(daily.points)에는 사냥 몫만)
   const earned = pointsRaw > 0 ? (await earnPoints(acct, t.g, pointsRaw, ipHash)).earned : 0;
@@ -549,7 +591,8 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
       capped: earned < pointsRaw,
       ...(nightBonus ? { nightBonus: true } : {}),
       ...(constellations?.length ? { constellations } : {}),
-      ...(stars?.dex ? { dexReward: stars.dex } : {}),
+      ...(dexReward ? { dexReward } : {}),
+      ...(mobs?.fresh.length ? { newMobs: mobs.fresh } : {}),
       drops,
       levelsGained: applied.levelsGained,
       newLevel: state.level,
@@ -740,6 +783,8 @@ async function settleTowerRun(
   }
   const drops = await grantCosmetics(acct, done.result.drops, now);
   const earned = v.points > 0 ? (await earnPoints(acct, "hunt", v.points, ipHash)).earned : 0;
+  // 11/16 몬스터 도감: 의심 판이 아닐 때만 evalTower가 mobs를 싣는다 (관리자 대신 정산 grantTowerRun은 처치 기록이 없다)
+  const mobs = v.mobs && !suspect ? await recordMobKills(acct, v.mobs, now, ipHash) : undefined;
   await store.addDaily(acct, day, { points: earned, runs: 1 });
   await recordEvent("hunt", now);
   // 처치 수는 주간 사냥 레이스에 그대로 (지옥, 레벨 50 콘텐츠라 늘 레이스에 든다)
@@ -756,6 +801,8 @@ async function settleTowerRun(
       levelsGained: 0,
       newLevel: state.level,
       lostDrops: done.result.lost,
+      ...(mobs?.dex ? { dexReward: mobs.dex } : {}),
+      ...(mobs?.fresh.length ? { newMobs: mobs.fresh } : {}),
       transcend: { exp: st.tExp, tier: lastTier, levelsGained: done.result.levels, tLevel: state.tLevel },
       tower: { start, floors: v.floors, best: st.best, newBest: st.newBest, newWeek: st.newWeek, runs: st.runs, chests: st.chests, emptyChests: st.emptyChests, titles, ...(suspect ? { suspect: true } : {}) },
       ...(pioneer ? { pioneer } : {}),

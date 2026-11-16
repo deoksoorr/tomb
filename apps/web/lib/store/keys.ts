@@ -24,6 +24,15 @@ export const K = {
   rankPoints: "rank:points",
   /** ZSET 계정 id → 그 주(KST 월요일 YYYYMMDD)에 모은 포인트. 3주 TTL */
   rankPointsWeek: (week: string) => `rank:points:w:${week}`,
+  /** ZSET 계정 id → 총 접속 시간(분). 계정 해시 `stayMin`과 같은 값 (머무르기 기록 수 × 기록 길이, 운영자도 기록한다) */
+  rankStay: "rank:stay",
+  // ── 유저 활동 (lib/store/userActivity.ts, 관리자 「유저 활동」) ──
+  /** SET 그 게임 날짜(YYYYMMDD)에 활동한 계정 (입장·그날 첫 머무르기). 120일 TTL */
+  actDay: (day: string) => `act:d:${day}`,
+  /** HASH 계정 id → 활동한 날 수 (기록을 시작한 뒤, 날마다 한 번) */
+  actDays: "act:days",
+  /** STRING 활동 기록이 있는 가장 이른 날 (이 날 전 칸은 「기록 없음」) */
+  actSince: "act:since",
   /** ZSET 계정 id → 사냥터 처치 수 합계 (전체 / 그 주) */
   rankHuntKills: "rank:hunt:kills",
   rankHuntKillsWeek: (week: string) => `rank:hunt:kills:w:${week}`,
@@ -106,6 +115,37 @@ export const K = {
 
   // ── 50번 소원 분수 (lib/store/wishDay.ts) ──
   wishDay: (id: string, day: string) => `wish:day:${day}:${id}`, // STRING NX EX 계정별 그날(KST) 한 번
+  // ── 주간 행운권 추첨 (lib/store/lottery.ts). 회차 id = 추첨하는 토요일 YYYYMMDD ──
+  lotTickets: (round: string) => `lot:t:${round}`, // HASH 계정 → 산 시각 (회차마다 한 장)
+  lotClosed: (round: string) => `lot:closed:${round}`, // STRING 판매 마감 표시 (추첨이 표를 읽기 전에 건다)
+  lotSubsidy: (round: string) => `lot:sub:${round}`, // STRING 정수 관리자 지원금 합계
+  lotResult: (id: string) => `lot:r:${id}`, // STRING 추첨 결과 JSON (처음 것만 — 한 번만)
+  lotHistory: "lot:hist", // LIST 결과 id, 최신 먼저
+  lotCarry: "lot:carry", // STRING 정수 다음 추첨으로 넘어가는 상금
+  lotLast: "lot:last", // STRING 마지막으로 추첨을 마친 회차 (정식 회차만)
+  lotPaid: (id: string) => `lot:paid:${id}`, // HASH 등수·"notice" → 지급·공지 표시
+  lotLock: (round: string) => `lot:lock:${round}`, // STRING NX EX 추첨 잠금
+  // ── 추천 코드 (lib/store/referrals.ts). 공개 추천 코드라 개인 코드(code:{해시})와 따로 둔다 ──
+  refCode: "ref:code", // HASH 추천 코드 → 계정 id
+  refMine: "ref:mine", // HASH 계정 id → 추천 코드 (처음 볼 때 만든다)
+  refRec: (refereeId: string) => `ref:r:${refereeId}`, // HASH by(추천인)·at·via(signup|later)·ip(가입 IP 해시)·same(같은 사람 1/0)·rs(판정 이유)·hold·q(조건 달성 ms, 0 = 아직)·rr·er(추천인·새 이웃 보상 1/0)·gb(추천인의 추천인)·gr(2단계 보상 paid|cap|skip:이유)
+  refOf: (referrerId: string) => `ref:of:${referrerId}`, // ZSET 데려온 이웃 → 정한 시각
+  refRecent: "ref:recent", // ZSET 데려온 이웃 → 정한 시각 (관리자 최근 목록)
+  refJoined: "ref:joined", // ZSET 추천인 → 가입 수
+  refQual: "ref:qual", // ZSET 추천인 → 조건 달성 수
+  refCredit: "ref:credit", // ZSET 추천인 → 칭호에 세는 수 (조건 달성 중 같은 곳 가입이 아닌 것)
+  refPaid: "ref:paid", // ZSET 추천인 → 포인트를 받은 수
+  refMonth: (month: string) => `ref:mon:${month}`, // HASH 추천인 → 그달(KST YYYYMM) 받은 수. 70일 TTL
+  refStats: "ref:stats", // HASH entered·qualified·paidReferrer·paidReferee·same → 전체 합계
+  refCfg: "ref:cfg", // HASH mode → review(모두 확인, 없을 때 기본) | auto(점수로 자동) | off(기록만). 예전 auto = "0"은 off로 읽는다
+  refGJoined: "ref:gjoined", // ZSET 추천인의 추천인 → 친구가 데려온 이웃 수 (2단계, 칭호와 무관)
+  refGPaid: "ref:gpaid", // ZSET 추천인의 추천인 → 2단계 보상을 받은 수
+  refGMonth: (month: string) => `ref:gmon:${month}`, // HASH 추천인의 추천인 → 그달(KST) 2단계 보상 받은 수. 70일 TTL
+  refHeld: "ref:held", // ZSET 확인 기다리는 새 이웃 → 조건 달성 시각 (관리자 확인 목록, 오래된 것 먼저)
+  // ── 같은 사람 신호 (lib/store/signals.ts). kind = dev(기기 표시) · fp(브라우저 환경) · net(IP 대역). 값은 모두 서버 비밀값 HMAC ──
+  sig: (kind: string, hash: string) => `sig:${kind}:${hash}`, // ZSET 계정 → 마지막으로 본 시각. 90일 TTL
+  sigOf: (kind: string, accountId: string) => `sig:${kind}:a:${accountId}`, // ZSET 해시 → 마지막으로 본 시각. 90일 TTL
+
   // ── 11/15 캠핑장 바베큐 (lib/store/bbqDay.ts) ──
   // 하루 접시·잔 한도는 없앴다 (예전 camp:bbq:{day}:{id} 키는 2일 뒤 저절로 사라진다)
   campDrunk: (id: string) => `camp:drunk:${id}`, // STRING JSON {lv, at} EX 다 깨는 시각까지(+10분) 계정별 지금 취기

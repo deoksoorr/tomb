@@ -1,12 +1,13 @@
 import { styleItemId } from "@tomb/protocol";
 import { nanoid } from "nanoid";
 import { deleteImage } from "../blob";
-import type { EarnSource } from "../economy";
+import { earnRule, type EarnSource } from "../economy";
 import { env } from "../env";
 import { HttpError, notFound } from "../http";
 import { PASSED_RECENT_MS, type ActivityItem, type Grave, type GraveListResponse, type Me, type PublicGrave } from "../types";
 import { kstDay, loadMe } from "./accounts";
 import { isGraveId } from "../validate";
+import { paidOf, pointsMult, type EarnBoost } from "../pointEvent";
 import { MemoryAccounts } from "./accounts-memory";
 import { RedisAccounts } from "./accounts-redis";
 import { MemoryStore } from "./memory";
@@ -16,8 +17,10 @@ import { MemoryGifts, RedisGifts, type GiftStore } from "./gifts";
 import { MemoryFriends, RedisFriends, type FriendStore } from "./friends";
 import { MemoryMegaphone, RedisMegaphone, type MegaphoneStore } from "./megaphone";
 import { MemoryNotices, RedisNotices, type NoticeStore } from "./notices";
+import { earnBoost } from "./pointEvent";
 import { MemoryWishDay, RedisWishDay, type WishDayStore } from "./wishDay";
 import { MemoryBbqDay, RedisBbqDay, type BbqDayStore } from "./bbqDay";
+import { MemoryLottery, RedisLottery, type LotteryStore } from "./lottery";
 import { RedisStore } from "./redis";
 import { passAtOf } from "./passing";
 import type { AccountStore, GraveRecord, GraveSettings, GraveStore } from "./types";
@@ -34,6 +37,7 @@ const g = globalThis as typeof globalThis & {
   __tombMegaphone?: MegaphoneStore;
   __tombWishDay?: WishDayStore;
   __tombBbqDay?: BbqDayStore;
+  __tombLottery?: LotteryStore;
   __tombFriends?: FriendStore;
 };
 
@@ -72,17 +76,21 @@ export function getAccounts(): AccountStore {
  * amount를 주지 않으면 항목 기본 점수. ip(= session.ts ipHash(req))를 주면 같은 IP의 그 항목 하루 합계도
  * 항목 한도 × ATTEND_ACCOUNTS_PER_IP로 막는다 (계정 여러 개로 농사 방지).
  * 모은 포인트(lifetimePoints)·포인트 랭킹도 같이 오른다. earned = 실제로 쌓인 점수 (한도면 0).
+ * 포인트 배수 이벤트 중(그 항목을 골랐을 때)이면 earned는 늘어난 점수다. paid = 그게 amount로 얼마어치인지 (이벤트가 아니면 earned와 같다) —
+ * 값 단위로 한도를 계산해 못 받은 만큼을 되돌리는 쪽(낚시·채집 팔기 등)은 paid를 쓴다. 그런 쪽은 미리 읽은 boost를 넘겨 같은 배수로 맞춘다
  */
 export async function earnPoints(
   accountId: string,
   source: EarnSource,
   amount?: number,
   ip?: string,
-): Promise<{ earned: number; me: Me }> {
+  boost?: EarnBoost,
+): Promise<{ earned: number; paid: number; me: Me }> {
   const accounts = getAccounts();
   const now = Date.now();
-  const earned = await accounts.earn(accountId, source, kstDay(now), { amount, ipHash: ip });
-  return { earned, me: await loadMe(accounts, accountId, now) };
+  const b = boost ?? (await earnBoost(now));
+  const earned = await accounts.earn(accountId, source, kstDay(now), { amount, ipHash: ip, boost: b });
+  return { earned, paid: paidOf(earned, amount ?? earnRule(source).points, pointsMult(b, source)), me: await loadMe(accounts, accountId, now) };
 }
 
 /**
@@ -197,6 +205,16 @@ export function getBbqDay(): BbqDayStore {
   getStore();
   if (cur instanceof MemoryBbqDay) return cur;
   return (g.__tombBbqDay = cur ? Object.assign(new MemoryBbqDay(), cur) : new MemoryBbqDay());
+}
+
+/** 주간 행운권 추첨 (묘비 저장소와 같은 백엔드) */
+export function getLottery(): LotteryStore {
+  const cur = g.__tombLottery;
+  const conn = env.redis();
+  if (conn) return cur instanceof RedisLottery ? cur : (g.__tombLottery = new RedisLottery(conn));
+  getStore();
+  if (cur instanceof MemoryLottery) return cur;
+  return (g.__tombLottery = cur ? Object.assign(new MemoryLottery(), cur) : new MemoryLottery());
 }
 
 /** 공지사항 저장소 (묘비 저장소와 같은 백엔드) */

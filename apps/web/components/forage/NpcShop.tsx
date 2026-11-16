@@ -6,6 +6,7 @@ import { bridge } from "@/game/bridge";
 import { npcPortraitUrl } from "@/game/world/forage/art";
 import { errorMessage } from "@/lib/api";
 import { DAILY_EARN_CAP } from "@/lib/economy";
+import { boostedTotalCap } from "@/lib/pointEvent";
 import { CAT_LABEL, LIFE_CATS, npcById, RARITY_LABEL, speciesById, type NpcId } from "@/lib/forage/catalog";
 import { forageApi } from "@/lib/forage/client";
 import { meStore, useMe } from "@/lib/hooks/useMe";
@@ -90,7 +91,7 @@ export default function NpcShop({ npcId, onClose }: { npcId: NpcId; onClose: () 
               오늘 판 값 <strong>{soldToday}</strong> / {cap}P
             </span>
             <span>
-              오늘 모은 포인트 <strong>{me?.todayEarned ?? 0}</strong> / {DAILY_EARN_CAP}P
+              오늘 모은 포인트 <strong>{me?.todayEarned ?? 0}</strong> / {me?.earnBoost ? boostedTotalCap(me.earnBoost) : DAILY_EARN_CAP}P
             </span>
             <span>사는 것: {npc.buys.map((c) => CAT_LABEL[c]).join("·")}</span>
           </div>

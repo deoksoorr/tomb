@@ -4,6 +4,7 @@ import { itemName } from "@tomb/protocol";
 import { useEffect, useId, useRef, useState } from "react";
 import { bridge } from "@/game/bridge";
 import { errorMessage } from "@/lib/api";
+import { dexGainText } from "../forage/autoToast";
 import { useBridgeEvent } from "@/lib/hooks/useBridge";
 import { useBlockingLayer } from "@/lib/hooks/useKeyBlock";
 import { meStore, useMe } from "@/lib/hooks/useMe";
@@ -656,6 +657,13 @@ function ResultView({ outcome, view }: { outcome: Outcome; view: RpgView | null 
             <p className={s.levelUp} role="status">
               레벨 업! Lv.{r.newLevel}. 능력치 포인트와 스킬 포인트를 받았어요.
               <LevelUpSound level={r.newLevel} />
+            </p>
+          )}
+          {/* 11/16 몬스터 도감에 처음 등록한 몬스터 (받아들인 판만) */}
+          {r.newMobs && r.newMobs.length > 0 && (
+            <p className={ui.hint} role="status">
+              새 몬스터 {r.newMobs.length}종을 도감에 올렸어요 ({r.newMobs.map((id) => MONSTERS[id as MonsterId]?.name ?? id).join(", ")}).{" "}
+              {dexGainText(r.dexReward)}
             </p>
           )}
         </>

@@ -265,4 +265,35 @@ export function contract(make: () => ForageStore, cleanup?: (ids: string[]) => P
     expect(s.bag).toEqual({});
     expect(s.day).toMatchObject({ fish: 0, gather: 0 });
   });
+
+  it("11/16 몬스터 처치: 한 번에 수를 더하고 처음만 새로·처음 날, 0 이하·정수 아님은 건드리지 않는다, 가방·오늘 잡은 수는 그대로", async () => {
+    const a = acct();
+    expect(await store.addKills(a, DAY, [])).toEqual([]);
+    expect(await store.addKills(a, DAY, [{ id: "scope_creep", n: 7 }, { id: "prod_dragon", n: 1 }, { id: "req_change", n: 0 }, { id: "endless_meeting", n: 1.5 }])).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+    expect(await store.addKills(a, "20261113", [{ id: "scope_creep", n: 93 }, { id: "req_change", n: 2 }])).toEqual([false, true]);
+    const s = await store.snapshot(a, DAY, 1);
+    expect(s.dex).toEqual({
+      scope_creep: { n: 100, max: 0, first: DAY },
+      prod_dragon: { n: 1, max: 0, first: DAY },
+      req_change: { n: 2, max: 0, first: "20261113" },
+    });
+    expect(s.bag).toEqual({});
+    expect(s.day).toMatchObject({ fish: 0, gather: 0 });
+    // 정산 전 계정은 받을 보상을 쌓지 않는다 (정산이 한꺼번에 센다)
+    expect((await store.dexPay(a)).pending).toEqual({});
+  });
+
+  it("11/16 몬스터 처치: 정산한 계정은 처음 쓰러뜨린 몬스터 보상만 p:mob에 쌓인다 (동시에 와도 한 번)", async () => {
+    const a = acct();
+    await store.settleDex(a, DAY);
+    await Promise.all([store.addKills(a, DAY, [{ id: "prod_dragon", n: 1 }]), store.addKills(a, DAY, [{ id: "prod_dragon", n: 2 }])]);
+    await store.addKills(a, DAY, [{ id: "scope_creep", n: 3 }, { id: "prod_dragon", n: 1 }]);
+    expect((await store.dexPay(a)).pending).toEqual({ mob: dexRewardOf("prod_dragon") + dexRewardOf("scope_creep") });
+    expect((await store.dex(a)).dex.prod_dragon.n).toBe(4);
+  });
 }

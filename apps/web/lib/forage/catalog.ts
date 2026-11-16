@@ -1,5 +1,7 @@
 import type { Season, TimePhase, Weather } from "../ambience";
 import { CONSTELLATIONS } from "../rpg/constellations";
+// 11/16 도감 몬스터 칸 (사는 곳·희귀도 — lib/forage/mobDex)
+import { isMobId, MOB_DEX_IDS, mobRarity } from "./mobDex";
 
 // 낚시·채집·도감 (NEXT.md 4·32·51) 카탈로그 — 서버(lib/forage/service)와 UI·게임이 같은 표를 쓴다 (순수 데이터).
 // 값(가격·확률)은 서버만 믿는다. 잡는 순간 무엇이 걸렸는지는 서버가 굴려 저장해 두고, 끝낼 때 확인한다.
@@ -277,14 +279,14 @@ export const CAMP_GATHER_NODES: readonly GatherNode[] = [
 /** lib/forage/forage.test.ts가 서 있을 수 있는 자리·물 밖·소품/좌석과 떨어짐을 검사한다 */
 export const GATHER_NODES: readonly GatherNode[] = [
   // 약초 (14)
-  node("herb", "forest", 398, 812), // 11/15 오리 연못이 넓어져 둑 위로 옮김 (아래 숲 지점들도)
-  node("herb", "forest", 588, 940),
+  node("herb", "forest", 396, 794), // 11/15 오리 연못이 넓어져 둑 위로 옮김 (아래 숲 지점들도). 11/16 연못·범퍼카장이 또 넓어져 물·마당에 든 지점을 둑으로
+  node("herb", "forest", 596, 966),
   node("herb", "forest", 498, 796),
   node("herb", "forest", 536, 1002),
   node("herb", "forest", 60, 640),
   node("herb", "forest", 412, 1000),
-  node("herb", "forest", 588, 846),
-  node("herb", "meadow", 880, 870),
+  node("herb", "forest", 324, 826),
+  node("herb", "meadow", 956, 860),
   node("herb", "meadow", 1050, 906),
   node("herb", "meadow", 1110, 962),
   node("herb", "meadow", 990, 998),
@@ -303,19 +305,19 @@ export const GATHER_NODES: readonly GatherNode[] = [
   // 발굴 (8)
   node("dig", "meadow", 1000, 872),
   node("dig", "meadow", 1080, 942),
-  node("dig", "meadow", 1046, 1004),
-  node("dig", "meadow", 870, 920),
-  node("dig", "forest", 380, 972),
-  node("dig", "forest", 560, 960),
+  node("dig", "meadow", 1060, 1004), // 11/16 호박밭 나무 자리가 바뀌어 조금 동쪽으로
+  node("dig", "meadow", 928, 940),
+  node("dig", "forest", 392, 992),
+  node("dig", "forest", 316, 946),
   node("dig", "hill", 250, 120),
   node("dig", "lakeside", 1390, 1000),
   // 곤충 수풀 (9)
   node("bug", "forest", 450, 780),
-  node("bug", "forest", 590, 800),
+  node("bug", "forest", 546, 794),
   node("bug", "forest", 322, 920),
   node("bug", "meadow", 930, 868),
   node("bug", "meadow", 1120, 1000),
-  node("bug", "meadow", 872, 1004),
+  node("bug", "meadow", 1016, 1000),
   node("bug", "meadow", 960, 962),
   node("bug", "lakeside", 1390, 940),
   node("bug", "lakeside", 1290, 1000),
@@ -363,13 +365,14 @@ export const STACK_MAX = 99;
 /** 하루에 잡을·캘 수 있는 수 (자동화 방지. 포인트는 따로 EARN_RULES 한도) */
 export const DAILY_CATCH_MAX = { fish: 150, gather: 200 } as const;
 
-// ── 도감 칸 ── 잡는 것(LifeCat) + 별자리. 별자리는 망원경 별자리 잇기로 모으는 도감 표시용 칸이라
+// ── 도감 칸 ── 잡는 것(LifeCat) + 별자리 + 11/16 몬스터. 별자리·몬스터는 별자리 잇기·사냥으로 모으는 도감 표시용 칸이라
 // 가방·NPC 판매·상점 값과는 상관없다 (LifeCat을 넓히지 않는다 — 판매·가방 코드는 LifeCat·SPECIES만 본다).
-export type DexCat = LifeCat | "star";
-export const DEX_CATS: readonly DexCat[] = [...LIFE_CATS, "star"];
-export const DEX_CAT_LABEL: Record<DexCat, string> = { ...CAT_LABEL, star: "별자리" };
+export type DexCat = LifeCat | "star" | "mob";
+export const DEX_CATS: readonly DexCat[] = [...LIFE_CATS, "star", "mob"];
+export const DEX_CAT_LABEL: Record<DexCat, string> = { ...CAT_LABEL, star: "별자리", mob: "몬스터" };
 /** 그 도감 칸의 항목 id (채우는 비율·보상 계산) */
-export const dexIdsOf = (cat: DexCat): string[] => (cat === "star" ? CONSTELLATIONS.map((c) => c.id) : speciesOf(cat).map((s) => s.id));
+export const dexIdsOf = (cat: DexCat): string[] =>
+  cat === "star" ? CONSTELLATIONS.map((c) => c.id) : cat === "mob" ? [...MOB_DEX_IDS] : speciesOf(cat).map((s) => s.id);
 
 /**
  * 예전 도감 달성 보상 (종류마다 25·50·75·100%, 11/14 종 하나마다 보상으로 바뀌며 새로 주지 않는다).
@@ -386,6 +389,7 @@ export const DEX_TITLES: Record<DexCat, Partial<Record<DexTier, string>>> = {
   ore: { 50: "초보 광부", 100: "보석 감정사" },
   dig: { 50: "보물 사냥꾼", 100: "고고학자" },
   star: { 50: "별지기", 100: "밤하늘 지도 제작자" },
+  mob: { 50: "몬스터 관찰자", 100: "몬스터 박사" },
 };
 export const dexClaimKey = (cat: DexCat, tier: DexTier) => `${cat}:${tier}`;
 
@@ -400,19 +404,21 @@ export const dexTitleNeed = (cat: DexCat, tier: DexTitleTier): number => {
 
 /**
  * 도감 처음 등록 보상 (종 하나마다 한 번, 포인트는 EarnSource "dex"). 희귀도별 — 잡동사니는 ★1로 친다.
- * 별자리도 같은 표 (흔함·보통·희귀·전설 = ★1·★2·★3·★5)
+ * 별자리도 같은 표 (흔함·보통·희귀·전설 = ★1·★2·★3·★5). 11/16 몬스터는 자리·나오는 곳으로 정한다 (lib/forage/mobDex mobRarity)
  */
 export const DEX_NEW_REWARD: Record<Rarity, number> = { 1: 3, 2: 6, 3: 12, 4: 25, 5: 50 };
 const STAR_BY_ID = new Map(CONSTELLATIONS.map((c) => [c.id, c]));
 /** 도감 칸 id → 어느 칸 (모르는 id면 null) */
 export function dexCatOf(id: string): DexCat | null {
   if (STAR_BY_ID.has(id)) return "star";
+  if (isMobId(id)) return "mob";
   return BY_ID.get(id)?.cat ?? null;
 }
 /** 보상 계산용 희귀도 (잡동사니 ★1, 모르는 id면 null) */
 export function dexRarityOf(id: string): Rarity | null {
   const c = STAR_BY_ID.get(id);
   if (c) return c.rarity;
+  if (isMobId(id)) return mobRarity(id);
   const s = BY_ID.get(id);
   if (!s) return null;
   return s.junk ? 1 : s.rarity;

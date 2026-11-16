@@ -23,6 +23,7 @@ import { meStore } from "@/lib/hooks/useMe";
 import { useNameTaken } from "@/lib/hooks/useNameTaken";
 import { useNotices } from "@/lib/hooks/useNotices";
 import type { GoogleResult } from "@/lib/googleResult";
+import { clearStoredRef, readStoredRef, referralApi } from "@/lib/referralClient";
 import { readItem, saveMyCode, writeItem } from "@/lib/storage";
 import { DORMANT_RENAME_MESSAGE, LS, type Me } from "@/lib/types";
 import { bgm } from "../bgm/engine";
@@ -37,6 +38,7 @@ import CodeStart from "./CodeStart";
 import EntryMusic, { entryMusic } from "./EntryMusic";
 import { GoogleDoneStep, GoogleNewStep, GoogleStartButton, type GoogleDone } from "./GoogleEntry";
 import LiveBackground from "./LiveBackground";
+import ReferralField from "./ReferralField";
 import NightSky from "./NightSky";
 import styles from "./EntryScreen.module.css";
 
@@ -239,6 +241,7 @@ function EntryFlow({ start, google, focusGraveId, onEnter }: Omit<Props, "enteri
         <NameStep
           draft={step.draft}
           takenName={step.takenName}
+          referral={step.path.kind === "new"}
           onBack={back}
           onNext={(draft) => setStep({ kind: "look", path: step.path, draft })}
         />
@@ -327,7 +330,7 @@ function StepHeader({
 type DraftProps = { draft: Look; onNext: (look: Look) => void };
 
 /** 새로 시작 ① 이름 */
-function NameStep({ draft, takenName, onBack, onNext }: DraftProps & { takenName?: string; onBack: () => void }) {
+function NameStep({ draft, takenName, referral, onBack, onNext }: DraftProps & { takenName?: string; referral?: boolean; onBack: () => void }) {
   const [name, setName] = useState(draft.name);
   const [touched, setTouched] = useState(false);
   const nameId = useId();
@@ -387,6 +390,8 @@ function NameStep({ draft, takenName, onBack, onNext }: DraftProps & { takenName
           {nameError ?? "2~12자로 지어요. 한글, 영문, 숫자, 공백, _를 쓸 수 있어요."}
         </p>
       </div>
+      {/* 추천 코드: 새로 시작에서만 (선택, 계정을 만든 뒤 채널 단계에서 보낸다) */}
+      {referral && <ReferralField />}
       <button type="submit" className={cx(ui.button, ui.primary, styles.enter)} disabled={checking}>
         {checking ? "이름 확인 중" : "다음"}
       </button>
@@ -675,6 +680,12 @@ function ChannelStep({ path, look, custom, sharedChannel, onBack, onEnter, onNam
         if (err instanceof ApiRequestError && err.code === "NAME_ALREADY_SET") return;
         throw err;
       });
+      // 추천인 코드 (이름 단계에서 넣었으면): 실패해도 입장은 그대로. 서버가 거절한 코드는 지우고, 연결 실패면 남겨 내 정보에서 다시 넣게 한다
+      const ref = path.kind === "new" ? readStoredRef() : "";
+      if (ref)
+        await referralApi.enter(ref, "signup").then(clearStoredRef, (err: unknown) => {
+          if (err instanceof ApiRequestError && err.status > 0) clearStoredRef();
+        });
       if (path.kind === "new" && path.google) {
         // 새 계정에 방금 확인한 구글을 연결한다 (개인 코드가 없으면 서버가 만들어 한 번만 준다). 실패해도 계정은 그대로 쓴다
         let done: GoogleDone;

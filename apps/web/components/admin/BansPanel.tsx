@@ -20,7 +20,7 @@ export default function BansPanel({ toast, onAuthLost, version, onChanged }: Pro
   return (
     <section className={styles.notices} aria-label="정지·차단 기록">
       <div className={styles.noticesHead}>
-        <p className={ui.hint}>계정 정지는 「회원 제재」 목록이나 「신고」의 [정지로 이동]에서 걸어요. 기간이 지나면 자동으로 풀려요.</p>
+        <p className={ui.hint}>계정 정지는 「회원 목록」이나 「신고」의 [정지로 이동]에서 걸어요. 기간이 지나면 자동으로 풀려요.</p>
         <button type="button" className={cx(ui.button, ui.danger)} onClick={() => setIpOnly(true)}>
           IP로 바로 차단
         </button>

@@ -1,62 +1,14 @@
 import * as Phaser from "phaser";
-import { DIR, type DirId } from "@tomb/protocol";
-import { addCanvasTexture, TEX } from "../assets/manifest";
-import { makeCanvas } from "../sprites/pixel";
+import type { DirId } from "@tomb/protocol";
+import { TEX } from "../assets/manifest";
 import type { CfxDepth } from "./CosmeticFxView";
 import { markCharTint } from "../world/charTint";
 
-// 31번 운영자 계정의 저승사자 차림: 손에 든 낫 + 발밑에 은은한 안개. 몸·색·염색은 그 사람이 고른 그대로 (가방·상점에 보이는 모습과 같게).
+// 31번 운영자 계정의 저승사자 차림: 발밑에 은은한 안개. 몸·색·염색은 그 사람이 고른 그대로 (가방·상점에 보이는 모습과 같게).
+// 11/16 손에 들던 낫은 거추장스러워서 뺐다 (손 자리 hand는 다시 무언가를 쥐게 될 때를 위해 받아만 둔다).
 // 검은 저승사자 모습을 원하면 운영자 전용 몸(저승사자, STAFF_BODIES)을 고른다.
 // 이름표는 일반 유저와 같다 (11/15: 장식 판은 칭호와 겹쳐 과해서 뺐다). 머리 위 「운영자」 칭호는 TitleView가 그린다.
 // 운영자 표시는 실시간 서버가 입장 토큰(Vercel 서명)에서 받은 것만 오므로 흉내 낼 수 없다.
-
-// 낫 그림 (오른쪽을 보고 든 모습). L 외곽선, S 날, H 날 반짝임, W 자루, w 자루 그늘
-const SCYTHE = [
-  "....LLLLL....",
-  "...LHHHSSLL..",
-  "..LWSSSSSSSL.",
-  "..LWLLLLSSSSL",
-  "..LWL...LLSSL",
-  "..LWL.....LSL",
-  "..LWL......LL",
-  "..LwL........",
-  "..LWL........",
-  "..LWL........",
-  "..LwL........",
-  "..LWL........",
-  "..LWL........",
-  "..LwL........",
-  "..LWL........",
-  "..LWL........",
-  "..LwL........",
-  "..LWL........",
-  "..LWL........",
-  "..LwL........",
-  "...L.........",
-];
-const PAL: Record<string, string> = { L: "#1b1822", S: "#b7bccb", H: "#eef1f8", W: "#6e5238", w: "#4e3a28" };
-const SCYTHE_W = SCYTHE[0].length;
-const SCYTHE_H = SCYTHE.length;
-/** 쥐는 자리 (그림 안 픽셀) */
-const GRIP_X = 3.5;
-const GRIP_Y = 12;
-const SCYTHE_KEY = "staff-scythe";
-
-function ensureScythe(scene: Phaser.Scene): string {
-  if (!scene.textures.exists(SCYTHE_KEY)) {
-    const { canvas, ctx } = makeCanvas(SCYTHE_W, SCYTHE_H);
-    SCYTHE.forEach((row, y) =>
-      [...row].forEach((ch, x) => {
-        const c = PAL[ch];
-        if (!c) return;
-        ctx.fillStyle = c;
-        ctx.fillRect(x, y, 1, 1);
-      }),
-    );
-    addCanvasTexture(scene, SCYTHE_KEY, { canvas });
-  }
-  return SCYTHE_KEY;
-}
 
 export type StaffSync = {
   now: number;
@@ -71,18 +23,16 @@ export type StaffSync = {
   /** 물속·해먹·눕기처럼 손이 안 보이는 자세 */
   hidden: boolean;
   reduced: boolean;
-  /** 11/16 바베큐로 커진 배율 (없으면 1): 낫·손 자리·발밑 안개를 발밑 기준으로 같이 키운다 */
+  /** 11/16 바베큐로 커진 배율 (없으면 1): 발밑 안개를 발밑 기준으로 같이 키운다 */
   scale?: number;
 };
 
 export class StaffFxView {
-  private readonly scythe: Phaser.GameObjects.Image;
   private readonly fog: Phaser.GameObjects.Image[] = [];
   /** 사냥 화면(scene.data "cfxDepth".staffSoft): 안개를 모두 몸 뒤로 보내고 투명도에 이 값을 곱한다. 마을·집은 1 (그대로) */
   private readonly soft: number | null;
   constructor(scene: Phaser.Scene) {
     this.soft = (scene.data?.get("cfxDepth") as CfxDepth | undefined)?.staffSoft ?? null;
-    this.scythe = markCharTint(scene.add.image(0, 0, ensureScythe(scene)));
     for (let i = 0; i < 4; i++)
       this.fog.push(
         markCharTint(scene.add.image(0, 0, TEX.glow))
@@ -93,19 +43,7 @@ export class StaffFxView {
   }
 
   sync(s: StaffSync, vis: boolean): void {
-    const side = s.dir === DIR.left || s.dir === DIR.right;
-    const flip = s.dir === DIR.left;
-    const bob = s.moving && !s.reduced ? Math.round(Math.sin(s.now / 110)) : 0;
     const k = s.scale ?? 1;
-    if (this.scythe.scaleX !== k) this.scythe.setScale(k);
-    this.scythe
-      .setFlipX(flip)
-      .setOrigin((flip ? SCYTHE_W - GRIP_X : GRIP_X) / SCYTHE_W, GRIP_Y / SCYTHE_H)
-      .setPosition(Math.round(s.x + s.hand.dx * k), Math.round(s.y - s.hand.up * k + bob))
-      // 뒷모습이면 몸 뒤, 나머지는 앞 (옆모습은 손이 앞에 있다)
-      .setDepth(s.dir === DIR.up ? s.depth - 0.06 : s.depth + (side ? 0.06 : 0.04))
-      .setVisible(vis && !s.hidden);
-
     for (let i = 0; i < this.fog.length; i++) {
       const a = s.now / 2100 + i * 1.7;
       const dark = i % 2 === 0;
@@ -121,12 +59,10 @@ export class StaffFxView {
   }
 
   setVisible(v: boolean): void {
-    this.scythe.setVisible(v);
     for (const f of this.fog) f.setVisible(v);
   }
 
   destroy(): void {
-    this.scythe.destroy();
     for (const f of this.fog) f.destroy();
   }
 }

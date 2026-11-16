@@ -95,3 +95,27 @@ export function anchorAt<T extends { kind: string; ax: number; ay: number }>(lis
   for (const o of list) if (o.kind === kind && Math.abs(o.ax - x) <= 2 && Math.abs(o.ay - y) <= 2) return o;
   return null;
 }
+
+/** 새로고침 복원 자리 판정에 쓰는 땅 정보 (WorldScene이 layout·walkReach로 넘긴다) */
+export type ResumeGround = {
+  /** 충돌 밖 (발 상자) */
+  standable: (x: number, y: number) => boolean;
+  inWater: (x: number, y: number) => boolean;
+  /** 스폰에서 걸어서 이어지는 땅 */
+  reachable: (x: number, y: number) => boolean;
+  /** 가까운 안전한 땅 (없으면 null) */
+  nearest: (x: number, y: number) => { x: number; y: number } | null;
+};
+
+/**
+ * 11/16 새로고침 복원 자리 (맵 개편 뒤 막힌 곳·갇힌 곳에 서지 않게). 돌려준 자리에서 시작하고, null이면 입구(SPAWN)에서.
+ *  - 서 있기·바닥 앉기: 설 수 있고 걸어서 이어지는 땅이면 그대로, 물속이면 그대로(헤엄쳐 나온다).
+ *    막혔거나 갇힌 곳(넓어진 범퍼카 링크 안·우리 안 등)이면 가까운 안전한 땅으로, 그것도 없으면 null
+ *  - 그 밖의 자세(그네·나무·해먹·배·시소…): 예전처럼 설 수 있는지만 본다 (앵커·배 자리는 welcome에서 다시 맞춘다)
+ */
+export function resumeSpot(pos: { x: number; y: number }, pose: string, g: ResumeGround): { x: number; y: number } | null {
+  const free = g.standable(pos.x, pos.y);
+  if (pose !== "idle" && pose !== "sitGround") return free ? pos : null;
+  if (free && (g.inWater(pos.x, pos.y) || g.reachable(pos.x, pos.y))) return pos;
+  return g.nearest(pos.x, pos.y);
+}

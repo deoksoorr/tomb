@@ -93,6 +93,60 @@ export function restable(g: WalkGrid, x: number, y: number): boolean {
   return !nearWater(x, y, 14);
 }
 
+/** 마을의 가장 큰 이어진 걷기 영역 (격자마다 한 번만) — 동물원 우리 안처럼 갇힌 칸은 빠진다 */
+const mainCache = new WeakMap<WalkGrid, Uint8Array>();
+function mainArea(g: WalkGrid): Uint8Array {
+  const hit = mainCache.get(g);
+  if (hit) return hit;
+  const n = g.cols * g.rows;
+  const label = new Int32Array(n).fill(-1);
+  const q = new Int32Array(n);
+  let best = -1;
+  let bestSize = 0;
+  for (let i = 0, id = 0; i < n; i++) {
+    if (label[i] >= 0 || g.blocked(i % g.cols, Math.floor(i / g.cols))) continue;
+    let head = 0;
+    let tail = 0;
+    q[tail++] = i;
+    label[i] = id;
+    while (head < tail) {
+      const c = q[head++];
+      const cx = c % g.cols;
+      const cy = Math.floor(c / g.cols);
+      for (const [dx, dy] of NEIGH) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        const j = ny * g.cols + nx;
+        if (g.blocked(nx, ny) || label[j] >= 0) continue;
+        label[j] = id;
+        q[tail++] = j;
+      }
+    }
+    if (tail > bestSize) {
+      bestSize = tail;
+      best = id;
+    }
+    id++;
+  }
+  const out = new Uint8Array(n);
+  for (let i = 0; i < n; i++) if (label[i] === best) out[i] = 1;
+  mainCache.set(g, out);
+  return out;
+}
+const NEIGH: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+/** 이 점에서 마을 큰 길로 걸어 나갈 수 있는지 (갇힌 칸이면 그 자리로 가는 길이 없어 순간이동처럼 보인다) */
+export function reachable(g: WalkGrid, x: number, y: number): boolean {
+  const cx = Math.floor(x / g.cell);
+  const cy = Math.floor(y / g.cell);
+  return cx >= 0 && cy >= 0 && cx < g.cols && cy < g.rows && mainArea(g)[cy * g.cols + cx] === 1;
+}
+
 const FURN = new Map(FURNITURE.map((f) => [f.id, f]));
 
 /**
@@ -126,7 +180,7 @@ export function restSpots(def: CritterDef, g: WalkGrid = critterGrid()): RestSpo
     const d = def.home.r * Math.sqrt(r());
     const x = Math.round(def.home.x + Math.cos(a) * d);
     const y = Math.round(def.home.y + Math.sin(a) * d * 0.8);
-    if (!restable(g, x, y)) continue;
+    if (!restable(g, x, y) || !reachable(g, x, y)) continue; // 11/16 갇힌 칸(범퍼카 링크 안·우리 안)은 쉼 자리가 아니다
     if (out.some((o) => Math.hypot(o.x - x, o.y - y) < 28)) continue;
     out.push({ x, y, perch: null });
     added++;

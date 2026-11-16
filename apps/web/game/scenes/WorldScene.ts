@@ -19,7 +19,7 @@ import type { KeyAction } from "../input/Keyboard";
 import { escape, overlaps, type Box } from "../logic/jump";
 import { DEADZONE_ENTER, type MoveInput } from "../logic/movement";
 import { nearestObject, pickInteraction } from "../logic/interact";
-import { anchorAt, nudgeSpot, restoreAfterDenied, spotVerdict, standBesideSpot } from "../logic/restore";
+import { anchorAt, nudgeSpot, restoreAfterDenied, resumeSpot, spotVerdict, standBesideSpot } from "../logic/restore";
 import { besideFriend, FRIEND_ARRIVED } from "../logic/friendSpot";
 import { doorFront } from "../logic/doorSpot";
 import { SPOT_TAKEN_HINT, SPOT_TAKEN_TOAST, spotOf, spotTaken } from "../logic/spots";
@@ -38,6 +38,7 @@ import { graveChannelFor } from "../world/graveChannel";
 import { declutter, type LabelBox } from "../world/labels";
 import { graveAt, nearestGrave, standSpot, type GravePlacement, type NearResult } from "../world/graveLayout";
 import { inWater, nearShopDoor, nearWater, standable, waterCurrent, type Interactable } from "../world/layout";
+import { nearestSafeGround, walkReachable } from "../world/walkReach";
 import { WorldHouses } from "../world/WorldHouses";
 import { NearTracker } from "../world/nearTracker";
 import { Lighting, playerLightRadius } from "../world/Lighting";
@@ -276,10 +277,15 @@ export class WorldScene extends Phaser.Scene {
       const r = this.resume;
       const seat = r.pose === "sitChair" && r.seatId ? seatById(r.seatId) : undefined;
       spawn = seat ? standPoint(seat) : { x: r.x, y: r.y };
-      // 맵이 바뀌어 저장된 자리가 이제 막힌 곳(집·나무·절벽·담 밖)이면 입구에서 시작한다 (물속은 괜찮다)
-      if (!seat && !standable(spawn.x, spawn.y)) {
+      // 맵이 바뀌어 저장된 자리가 이제 막힌 곳(집·나무·절벽·담 밖)이면 입구에서 시작한다 (물속은 괜찮다).
+      // 11/16 서 있던 자리가 갇힌 곳(넓어진 범퍼카 링크 안 등 — 걸어서 이어지지 않는 땅)이면 가까운 바깥 땅으로 (logic/restore resumeSpot)
+      const at = seat ? spawn : resumeSpot(spawn, r.pose, { standable, inWater, reachable: walkReachable, nearest: nearestSafeGround });
+      if (!at) {
         spawn = SPAWN;
         this.resume = { ...r, x: SPAWN.x, y: SPAWN.y, pose: "idle", seatId: null };
+      } else if (at !== spawn) {
+        spawn = at;
+        this.resume = { ...r, x: at.x, y: at.y, pose: "idle", seatId: null };
       }
       openOnStart = null;
       this.pendingFocus = null;
@@ -853,6 +859,8 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("input:say", ({ id }) => !this.awayScene && !this.trip.away && this.doSay(id)));
     on.push(bridge.on("input:emo", ({ id }) => !this.cleaned && !this.inShop && !this.awayScene && !this.trip.away && this.expr.emo(id, this.time.now)));
     on.push(bridge.on("input:chat", ({ text }) => !this.cleaned && !this.inShop && !this.awayScene && !this.trip.away && this.expr.chat(text, this.time.now)));
+    // 11/16 귓속말은 월드 채널 연결로 (마을·캠핑장·실내 어디서든 — 받는 사람은 같은 채널 누구나)
+    on.push(bridge.on("input:whisper", ({ to, text }) => !this.cleaned && this.net.whisper(to, text)));
     on.push(bridge.on("input:mood", ({ mood }) => !this.cleaned && !this.trip.away && this.expr.setMood(mood)));
     on.push(bridge.on("input:ride", () => !this.cleaned && !this.inShop && !this.trip.away && !this.tripLock && this.riding.toggle()));
     on.push(bridge.on("guide:point", ({ target, label }) => !this.trip.away && this.guide.set(target ? this.resolveGuide(target, label) : null)));
@@ -1154,8 +1162,8 @@ export class WorldScene extends Phaser.Scene {
     if (a === "interact" && pl.inBoat && !this.boats.nearShore()) {
       const at = this.boats.fishingSpot();
       if (at) this.forage.fishFromBoat(at);
-      // 11/15 오리배: E는 내리기 전용 (꽥은 Space만). 물가가 멀면 안내만
-      else this.toast("물가 가까이 가면 E로 내릴 수 있어요");
+      // 11/15 오리배: E는 내리기 전용 (꽥은 Space만). 11/16 조종하는 사람은 가장 가까운 둑으로 저절로 저어 가서 내린다 (옆자리는 안내만)
+      else if (!this.boats.goAshore()) this.toast("둑 가까이 가면 E로 내릴 수 있어요");
       return;
     }
     // 조각배 위: E = 물가에서 내리기, 앉기·점프 없음

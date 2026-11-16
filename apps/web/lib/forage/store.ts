@@ -10,6 +10,7 @@ import type { DexEntry, LifeDay } from "./types";
 //  - forage:{a}:bag         HASH  종류 id → 개수 (0이 되면 지운다)
 //  - forage:{a}:dex         HASH  n:{id} 잡은 수 · max:{id} 가장 큰 크기(cm×10) · first:{id} 처음 잡은 날(YYYYMMDD)
 //                                별자리(c_*)는 n = 완성 횟수 · pf:{id} 완벽으로만 이은 횟수 (가방에는 들어가지 않는다)
+//                                11/16 몬스터(lib/rpg/catalog id)는 n = 처치 수 · first = 처음 쓰러뜨린 날 (가방에는 들어가지 않는다)
 //  - forage:{a}:claims      HASH  `${cat}:${tier}` → 받은 날 (예전 25·50·75·100% 단계 보상. 지금은 새로 쓰지 않고 전환 정산 근거·칭호로만 읽는다)
 //  - forage:{a}:dexpay      HASH  종마다 처음 등록 보상 (lib/forage/dexReward): settled = 전환 정산한 날(계정당 한 번) ·
 //                                p:{cat} 받을 도감 보상(한도에 걸려 못 받은 것) · g:{cat} 새 방식으로 받은 포인트 · t:{cat}:{50|100} 붙은 칭호 표시
@@ -25,6 +26,8 @@ export type ClaimResult = { status: "ok"; payload: string } | { status: "reused"
 export type GrantItem = { id: string; size: number };
 /** 별자리 도감 등록 한 건 */
 export type StarDexItem = { id: string; perfect: boolean };
+/** 11/16 몬스터 도감에 더할 처치 한 건 (id = 몬스터, n = 이번 판 처치 수) */
+export type MobKillItem = { id: string; n: number };
 export type Granted = { id: string; size: number; kept: boolean; isNew: boolean; record: boolean };
 /** 도감 보상 장부 (forage:{a}:dexpay). marks = 붙은 칭호 표시 (`${cat}:${50|100}`) */
 export type DexPay = {
@@ -98,6 +101,11 @@ export interface ForageStore {
    * 돌려주는 값은 항목마다 처음 등록인지
    */
   addStars(acct: string, day: string, items: StarDexItem[]): Promise<boolean[]>;
+  /**
+   * 11/16 몬스터 도감에 한 판 처치 수 더하기 (원자적, 한 번에): 항목마다 n:{id} += n, 처음이면 그날을 남기고 정산한 계정이면 p:mob에 보상을 쌓는다.
+   * 돌려주는 값은 항목마다 처음 등록인지
+   */
+  addKills(acct: string, day: string, items: MobKillItem[]): Promise<boolean[]>;
   /** 자동 낚시 세션 (없으면 null) */
   autoGet(acct: string): Promise<string | null>;
   /** 비교 후 교체 (원자적): 지금 값이 expected(null = 없음)와 같을 때만 next(null = 지움)로 바꾸고 true */
@@ -388,6 +396,21 @@ export class MemoryForageStore implements ForageStore {
     });
   }
 
+  async addKills(acct: string, day: string, items: MobKillItem[]) {
+    const a = this.acct(acct);
+    return items.map(({ id, n: add }) => {
+      if (!Number.isInteger(add) || add <= 0) return false;
+      const before = Number(a.dex.get(`n:${id}`) ?? 0);
+      a.dex.set(`n:${id}`, String(before + add));
+      const isNew = before === 0;
+      if (isNew) {
+        a.dex.set(`first:${id}`, day);
+        this.credit(a, id);
+      }
+      return isNew;
+    });
+  }
+
   async autoGet(acct: string) {
     return this.autos.get(acct) ?? null;
   }
@@ -602,6 +625,26 @@ end
 return out
 `;
 
+// KEYS: dex, dexpay  ARGV: day, (id, 처치 수, 보상)...  돌려주는 값: 항목마다 처음 등록이면 1, 아니면 0
+// 11/16 몬스터 도감: 처치 수를 한 번에 더하고, 처음 등록이면 정산한 계정만 p:mob에 보상을 쌓는다
+export const KILLS_LUA = `
+local settled = redis.call('HEXISTS', KEYS[2], 'settled') == 1
+local out = {}
+for i = 2, #ARGV, 3 do
+  local id = ARGV[i]
+  local add = tonumber(ARGV[i + 1])
+  local n = redis.call('HINCRBY', KEYS[1], 'n:' .. id, add)
+  local isNew = add > 0 and n == add
+  if isNew then
+    redis.call('HSET', KEYS[1], 'first:' .. id, ARGV[1])
+    local pts = tonumber(ARGV[i + 2])
+    if settled and pts > 0 then redis.call('HINCRBY', KEYS[2], 'p:mob', pts) end
+  end
+  out[#out + 1] = isNew and 1 or 0
+end
+return out
+`;
+
 // KEYS: dex, claims, dexpay  ARGV: day, 단계 수 k, (claims 키, cat, 포인트) × k, (id, cat, 보상)...
 // 전환 정산 (계정당 한 번): 칸마다 등록된 종의 보상 합 − 받은 예전 단계 보상 합. 양수만 p:{cat}에 더한다.
 // 돌려주는 값: 이미 정산했으면 'done', 아니면 [cat, 더한 값(음수는 0), ...]
@@ -795,6 +838,15 @@ export class RedisForageStore implements ForageStore {
     const argv = [day, ...items.flatMap((it) => [it.id, it.perfect ? "1" : "0", String(dexRewardOf(it.id))])];
     const r = await this.redis.eval<string[], unknown>(STARS_LUA, [lk.dex(acct), lk.pay(acct)], argv);
     return items.map((_, i) => Array.isArray(r) && Number(r[i]) === 1);
+  }
+
+  async addKills(acct: string, day: string, items: MobKillItem[]) {
+    const list = items.filter((it) => Number.isInteger(it.n) && it.n > 0);
+    if (!list.length) return items.map(() => false);
+    const argv = [day, ...list.flatMap((it) => [it.id, String(it.n), String(dexRewardOf(it.id))])];
+    const r = await this.redis.eval<string[], unknown>(KILLS_LUA, [lk.dex(acct), lk.pay(acct)], argv);
+    let k = 0;
+    return items.map((it) => (Number.isInteger(it.n) && it.n > 0 ? Array.isArray(r) && Number(r[k++]) === 1 : false));
   }
 
   async autoGet(acct: string) {

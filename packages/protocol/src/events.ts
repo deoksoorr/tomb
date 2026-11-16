@@ -1,5 +1,6 @@
 import { ACT_KINDS, MAX_MESSAGE_BYTES, isEmoId, isPhraseId, isSeatMood, type ActKind, type EmoId, type PhraseId, type SeatMood } from "./constants";
 import { normalizeChat, type ChatLogLine } from "./chat";
+import { NAME_MAX, normalizeName } from "./names";
 import { MAX_GRANT_LEN } from "./grants";
 import type { MegaphoneScope } from "./items";
 import { GOBLIN_ID_RE, type GoblinInfo } from "./npc";
@@ -61,6 +62,12 @@ export type C2S =
   | { t: "away"; on: boolean; /** 친구: 어느 실내인지 (옛 클라이언트는 없다) */ p?: AwayPlace; /** 집 안이면 그 집 id (친구가 따라 들어간다) */ h?: string }
   /** 말풍선 자유 채팅 (CHAT_MAX자). 서버가 토큰 버킷으로 도배를 막고 가려서(maskChat) 같은 채널·방에만 중계한다. 저장하지 않는다 */
   | { t: "chat"; text: string }
+  /**
+   * 11/16 귓속말: 같은 채널(마을·캠핑장) 접속자 한 사람에게만. to = 받는 사람 이름(클라이언트가 고른 것), text = 할 말 (CHAT_MAX자).
+   * 서버는 "to text"를 접속자 이름으로 다시 맞춰(matchWhisperTarget, 가장 긴 이름) 받는 사람과 보낸 사람에게만 whisper로 보낸다.
+   * 채팅과 같은 도배 제한·가리기, 기록에는 남기지 않는다. 월드 채널만 (방은 버린다). 옛 서버는 모르는 t라 버린다
+   */
+  | { t: "whisper"; to: string; text: string }
   /**
    * 11/15 맵 옮기기 (버스): 같은 채널 연결 그대로 마을 ↔ 캠핑장. x,y = 새 맵에서 설 자리.
    * 서버는 입장 토큰에 캠핑장 허락(camp)이 있을 때만 캠핑장으로 보내고, 결과를 mapped로 알린다. 옛 서버는 모르는 t라 버린다
@@ -145,6 +152,13 @@ export type S2C =
   /** 말풍선 자유 채팅 (보낸 사람 빼고, 서버가 가린 글. 옛 클라이언트는 모르는 t라 버린다). id = 줄 id(chatLog와 중복 제거), at = 서버 시각 */
   /** 11/16 채팅은 채널 전체(마을·캠핑장)로 간다: name·staff·mgr = 다른 맵이라 화면에 없는 사람도 채팅창에 이름을 쓰게, m = 쓴 사람의 맵(캠핑장이면 "camp") */
   | { t: "chat"; sid: Sid; text: string; id?: string; at?: number; name?: string; staff?: true; mgr?: true; m?: "camp" }
+  /**
+   * 11/16 귓속말 (받는 사람과 보낸 사람에게만, 서버가 가린 글. 기록에 남기지 않는다). from·fromName = 보낸 사람, to·toName = 받는 사람,
+   * staff·mgr = 보낸 사람 딱지, toStaff·toMgr = 받는 사람 딱지. 옛 클라이언트는 모르는 t라 버린다
+   */
+  | WhisperMsg
+  /** 보낸 사람에게만: 11/16 귓속말을 못 보냈다. absent = 그 이름이 이 채널에 없다(to = 보낸 이름 그대로), self = 나에게 보냈다 */
+  | { t: "whisperFail"; to: string; why: "absent" | "self" }
   /** 받는 사람에게만: 방에 들어올 때(입장·재접속·실내에서 복귀) 이 방의 최근 1분 채팅. now = 서버 시각 (옛 클라이언트는 모르는 t라 버린다) */
   | { t: "chatLog"; now: number; lines: ChatLogLine[] }
   /** 받는 사람에게만: 친구가 들어왔다(on)·나갔다 (key = 친구 창의 그 친구 키, 옛 클라이언트는 모르는 t라 버린다) */
@@ -167,6 +181,22 @@ export type S2C =
 /** replaces = 이 줄로 바꿔 끼울 앞 공지 id (긴급 의뢰가 끝나면 시작 공지를 끝 공지로) */
 /** mgr = 11/16 매니저 계정이 외친 것 (Vercel이 증서에 넣은 것만 → "매니저" 딱지. 옛 클라이언트는 무시한다) */
 export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number; staff?: true; system?: true; replaces?: string; mgr?: true };
+
+/** 11/16 귓속말 한 줄 (S2C) */
+export type WhisperMsg = {
+  t: "whisper";
+  id: string;
+  at: number;
+  from: Sid;
+  fromName: string;
+  to: Sid;
+  toName: string;
+  text: string;
+  staff?: true;
+  mgr?: true;
+  toStaff?: true;
+  toMgr?: true;
+};
 
 export function encodeEvent(msg: C2S | S2C): string {
   return JSON.stringify(msg);
@@ -268,6 +298,12 @@ export function parseC2S(text: string): C2S | null {
     case "chat": {
       const text = normalizeChat(m.text);
       return text ? { t: "chat", text } : null;
+    }
+    case "whisper": {
+      // 받는 사람 이름은 공백이 든 이름까지 (닉네임 12자 + 공백 여유). 실제 이름 맞추기는 서버가 접속자 목록으로 한다
+      const to = typeof m.to === "string" && m.to.length <= NAME_MAX * 3 ? normalizeName(m.to) : "";
+      const text = normalizeChat(m.text);
+      return to && text ? { t: "whisper", to, text } : null;
     }
     case "hunt": {
       const h = parseHuntAct(m);

@@ -42,6 +42,30 @@
   color: var(--muted);
 }
 
+/* 포인트 배수 이벤트 안내 띠 (PointEventBadge): 채널 줄 아래 가운데, 촛불 색 글자 */
+.event {
+  max-width: 100%;
+  margin: 0;
+  color: var(--candle);
+  pointer-events: none;
+}
+
+/* 터치 화면: 위 가장자리 바 바로 아래 가운데 (바의 배치에 끼지 않게 띄운다). 좁으면 두 줄 */
+.eventCompact {
+  position: absolute;
+  top: calc(var(--top-h) + 6px);
+  left: 50%;
+  max-width: calc(100% - 16px);
+  height: auto;
+  min-height: 0;
+  padding-block: 4px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+  text-align: center;
+}
+
 .banner {
   display: grid;
   justify-items: center;

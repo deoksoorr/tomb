@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BUMPER_GATE, BUMPER_RIM, BUMPER_RINK, BUMPER_SEATS, BUMPER_YARD, DIR, SPOT_KINDS, type Sid } from "@tomb/protocol";
-import { BUMPER_DOOR, BUMPER_EXIT_AT, BUMPER_POSTS, bumperColliders, bumperGround, inBumperYardTiles, RINK_INNER } from "../bumper/bumperLayout";
-import { inWater, interactables, standable, staticColliders, walkableGrid, WALK } from "../world/layout";
+import { BUMPER_GATE, BUMPER_RIM, BUMPER_RINK, BUMPER_SEATS, BUMPER_YARD, CAMPFIRE_STUMP_DX, CAMPFIRES, DIR, SPOT_KINDS, type Sid } from "@tomb/protocol";
+import { BUMPER_BOOTH, BUMPER_DOOR, BUMPER_EXIT_AT, BUMPER_POSTS, bumperColliders, bumperGround, inBumperYardTiles, RINK_INNER } from "../bumper/bumperLayout";
+import { inWater, inWaterBody, interactables, standable, staticColliders, walkableGrid, WALK } from "../world/layout";
 import {
   BUMP_BIG_POWER,
   BUMP_COUNT_POWER,
@@ -216,8 +216,8 @@ describe("범퍼카 방향·고르기·내리기", () => {
   it("닿아 있는지: 테두리·기둥·다른 차 바로 옆만 (한가운데 빈 곳은 아니다)", () => {
     expect(touching(CAR_BOUNDS.x0 + 1, 930, [])).toBe(true);
     expect(touching(BUMPER_POSTS[0].x + BUMPER_POSTS[0].r + CAR_R + 2, BUMPER_POSTS[0].y, [])).toBe(true);
-    expect(touching(700, 960, [{ x: 716, y: 960 }])).toBe(true);
-    expect(touching(700, 960, [{ x: 760, y: 960 }])).toBe(false);
+    expect(touching(764, 970, [{ x: 780, y: 970 }])).toBe(true);
+    expect(touching(764, 970, [{ x: 824, y: 970 }])).toBe(false);
   });
 
   it("다른 사람 차의 부딪힘: 속도가 확 꺾이면 알아채고, 부드럽게 도는 건 아니다", () => {
@@ -310,9 +310,49 @@ describe("범퍼카장 배치", () => {
     }
     // 매표소 앞(위 테두리 오른쪽)은 막혀 있어 옆으로 비킨다
     expect(moved).toBeGreaterThan(0);
-    const booth = exitSpot(770, CAR_BOUNDS.y0, ok);
+    const booth = exitSpot(BUMPER_BOOTH.x, CAR_BOUNDS.y0, ok);
     expect(booth.y).toBe(R.y - EXIT_OUT);
-    expect(Math.abs(booth.x - 770)).toBeGreaterThanOrEqual(14);
+    expect(Math.abs(booth.x - BUMPER_BOOTH.x)).toBeGreaterThanOrEqual(14);
+  });
+
+  it("11/16 넓어진 링크: 달리는 바닥이 예전(180×136)의 1.8배 넘고, 마당 안·물 밖이며, 귀퉁이와 강둑 사이로 호박밭까지 걸어간다", () => {
+    expect(RINK_INNER.w * RINK_INNER.h).toBeGreaterThan(180 * 136 * 1.8);
+    expect(RINK_INNER.w).toBeGreaterThanOrEqual(260);
+    expect(RINK_INNER.h).toBeGreaterThanOrEqual(160);
+    expect(BUMPER_POSTS.length).toBeGreaterThanOrEqual(5);
+    const R = BUMPER_RINK;
+    expect(R.x).toBeGreaterThanOrEqual(BUMPER_YARD.x);
+    expect(R.x + R.w).toBeLessThanOrEqual(BUMPER_YARD.x + BUMPER_YARD.w);
+    expect(R.y).toBeGreaterThanOrEqual(BUMPER_YARD.y);
+    // 아래 테두리 밖에도 내려설 한 줄이 남는다
+    expect(standable(R.x + R.w / 2, R.y + R.h + EXIT_OUT)).toBe(true);
+    // 링크 둘레 어디에도 물(연못·강)이 걸치지 않는다
+    for (let x = R.x; x <= R.x + R.w; x += 4)
+      for (const y of [R.y, R.y + R.h]) expect(inWaterBody(x, y, 2), `${x},${y}`).toBe(false);
+    for (let y = R.y; y <= R.y + R.h; y += 4) for (const x of [R.x, R.x + R.w]) expect(inWaterBody(x, y, 2), `${x},${y}`).toBe(false);
+    // 입구 앞에서 마당 오른쪽 위 틈(링크 귀퉁이 ↔ 강 남쪽 둑)으로 호박밭 모닥불까지 — 호수 쪽으로 돌아가지 않고 (x < 1010 안에서만)
+    const g = walkableGrid(8);
+    const seen = new Uint8Array(g.cols * g.rows);
+    const start = Math.floor(BUMPER_DOOR.y / 8) * g.cols + Math.floor(BUMPER_DOOR.x / 8);
+    const q = [start];
+    seen[start] = 1;
+    while (q.length) {
+      const i = q.pop()!;
+      const cx = i % g.cols;
+      const cy = (i - cx) / g.cols;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (nx * 8 > 1010 || ny < 0 || ny >= g.rows) continue;
+        const j = ny * g.cols + nx;
+        if (seen[j] || g.cells[j] !== WALK.open) continue;
+        seen[j] = 1;
+        q.push(j);
+      }
+    }
+    const fire = CAMPFIRES.find((c) => c.id === "fireS")!;
+    const near = (x: number, y: number) => [-1, 0, 1].some((dy) => [-1, 0, 1].some((dx) => seen[(Math.floor(y / 8) + dy) * g.cols + Math.floor(x / 8) + dx] === 1));
+    expect(near(fire.x - CAMPFIRE_STUMP_DX - 12, fire.y + 3)).toBe(true);
   });
 
   it("마당 바닥은 예전 다리 건너 묘역과 같은 타일 (돌 포장)", () => {

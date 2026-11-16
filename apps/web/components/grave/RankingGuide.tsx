@@ -1,4 +1,5 @@
 import { DYE_SPECIAL_BONUS, LOOK_SCORE_DIVISOR } from "@/lib/lookScore";
+import { STAY_TICK_MINUTES } from "@/lib/stayTime";
 import { InfoCard, InfoGrid, TipList } from "../ui/InfoBlocks";
 
 /** 랭킹 창 아래: 탭마다 순위를 어떻게 매기는지와 올리는 방법 */
@@ -22,6 +23,9 @@ export default function RankingGuide() {
             </>,
             <>
               <b>집 꾸미기</b>는 꾸밈 점수로 매겨요. 안팎에 놓은 물건 점수에 좋아요 × 3을 더해요.
+            </>,
+            <>
+              <b>접속 시간</b>은 지금까지 마을에 머문 시간을 모두 더한 값이에요. {STAY_TICK_MINUTES}분 머물 때마다 늘어요.
             </>,
             <>
               <b>헌화</b>는 지금 채널 묘비 중 꽃을 많이 받은 순서예요. 누르면 그 묘비를 비춰요.

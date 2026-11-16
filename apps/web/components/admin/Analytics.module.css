@@ -233,8 +233,6 @@
 }
 
 .table th {
-  position: sticky;
-  top: 0;
   background: var(--ad-surface-2);
   color: var(--ad-muted);
   font-weight: 600;
@@ -244,10 +242,10 @@
   background: var(--ad-zebra);
 }
 
+/* 11/16 표 안 위아래 스크롤 없이 본문과 같이 내려간다 (넓으면 옆으로만) */
 .tableWrap {
-  max-height: 420px;
   margin-top: 8px;
-  overflow: auto;
+  overflow-x: auto;
   border: 1px solid var(--ad-line);
   border-radius: var(--ad-radius);
   background: var(--ad-surface);

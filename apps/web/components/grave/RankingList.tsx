@@ -5,6 +5,7 @@ import { api, errorMessage } from "@/lib/api";
 import { lookPartName } from "@/lib/lookScore";
 import { speciesOf } from "@/lib/forage/catalog";
 import { DIFFICULTIES, gearById, ZONES, type Difficulty } from "@/lib/rpg/catalog";
+import { stayText } from "@/lib/stayTime";
 import type { PublicGrave, RankBoard, RankPeriod, RankResponse } from "@/lib/types";
 import RpgIcon from "../rpg/RpgIcon";
 import ItemIcon from "../ui/ItemIcon";
@@ -13,7 +14,7 @@ import styles from "./RankingPanel.module.css";
 
 // 49번: 랭킹은 포인트·사냥 중심. 묘비(헌화 순)는 작은 탭 하나로만 남긴다 (살려주세요 순위는 없어졌다).
 
-type Tab = "points" | "hunt" | "level" | "tower" | "fish" | "look" | "house" | "flower";
+type Tab = "points" | "hunt" | "level" | "tower" | "fish" | "look" | "house" | "stay" | "flower";
 type HuntMode = "huntKills" | "huntBest";
 
 const TABS: { id: Tab; label: string }[] = [
@@ -24,8 +25,11 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "fish", label: "낚시" },
   { id: "look", label: "꾸미기" },
   { id: "house", label: "집 꾸미기" },
+  { id: "stay", label: "접속 시간" },
   { id: "flower", label: "헌화" },
 ];
+/** 탭 → 서버 랭킹 (사냥은 처치 수·최단 클리어 중 고른 것, 없으면 포인트) */
+const TAB_BOARD: Partial<Record<Tab, RankBoard>> = { house: "house", fish: "fish", look: "look", level: "huntLevel", tower: "tower", stay: "stay" };
 const PERIODS: { id: RankPeriod; label: string }[] = [
   { id: "week", label: "이번 주" },
   { id: "all", label: "전체" },
@@ -39,6 +43,7 @@ const EMPTY: Record<RankBoard, string> = {
   look: "아직 코디를 입은 사람이 없어요. 상점에서 꾸미기를 골라 입어 보세요.",
   huntLevel: "아직 사냥터에 다녀온 사람이 없어요.",
   tower: "아직 야근 빌딩을 오른 사람이 없어요. 사냥 레벨 50부터 들어갈 수 있어요.",
+  stay: "아직 마을에 머문 기록이 없어요.",
 };
 /** 최대어 랭킹 물고기 고르기 (크기가 있는 물고기만) */
 const FISH_OPTIONS = speciesOf("fish").filter((sp) => sp.size);
@@ -62,6 +67,7 @@ export function rankValue(board: RankBoard, value: number): string {
   if (board === "huntKills") return `${value.toLocaleString("ko-KR")}마리`;
   if (board === "house" || board === "look") return `${value.toLocaleString("ko-KR")}점`;
   if (board === "fish") return `${(value / 10).toFixed(1)}cm`;
+  if (board === "stay") return stayText(value);
   return `${value.toLocaleString("ko-KR")}P`;
 }
 
@@ -72,7 +78,7 @@ type Props = {
   onPick: (graveId: string) => void;
 };
 
-/** 탭 8개: 포인트(이번 주·전체) · 사냥(처치 수·사냥터별 최단 클리어) · 사냥 레벨(같으면 경험치) · 야근 빌딩(11/15 최고 층, 이번 주·전체) · 낚시(물고기별·전체 최대어) · 꾸미기(지금 입은 코디 점수) · 집 꾸미기(F11 꾸밈 점수) · 헌화(지금 채널 묘비) */
+/** 탭 9개: 포인트(이번 주·전체) · 사냥(처치 수·사냥터별 최단 클리어) · 사냥 레벨(같으면 경험치) · 야근 빌딩(11/15 최고 층, 이번 주·전체) · 낚시(물고기별·전체 최대어) · 꾸미기(지금 입은 코디 점수) · 집 꾸미기(F11 꾸밈 점수) · 접속 시간(총 머문 시간) · 헌화(지금 채널 묘비) */
 export default function RankingList({ graves, onPick }: Props) {
   const [tab, setTab] = useState<Tab>("points");
   const [period, setPeriod] = useState<RankPeriod>("week");
@@ -84,8 +90,9 @@ export default function RankingList({ graves, onPick }: Props) {
     () => (tab === "flower" ? graves.filter((g) => g.flowers > 0).sort((a, b) => b.flowers - a.flowers).slice(0, LIMIT) : []),
     [graves, tab],
   );
-  const board: RankBoard =
-    tab === "hunt" ? hunt : tab === "house" ? "house" : tab === "fish" ? "fish" : tab === "look" ? "look" : tab === "level" ? "huntLevel" : tab === "tower" ? "tower" : "points";
+  const board: RankBoard = tab === "hunt" ? hunt : (TAB_BOARD[tab] ?? "points");
+  /** 기간 없이 전체만 있는 판 */
+  const allOnly = board === "look" || board === "huntLevel" || board === "stay";
 
   return (
     <>
@@ -115,7 +122,12 @@ export default function RankingList({ graves, onPick }: Props) {
           <span className={styles.hint}>레벨이 높은 순이에요. 같으면 경험치가 많은 순이에요.</span>
         </div>
       )}
-      {tab !== "flower" && tab !== "look" && tab !== "level" && (
+      {tab === "stay" && (
+        <div className={styles.filters}>
+          <span className={styles.hint}>마을에 머문 시간을 모두 더했어요. 오래 머문 순이에요.</span>
+        </div>
+      )}
+      {tab !== "flower" && tab !== "look" && tab !== "level" && tab !== "stay" && (
         <div className={styles.filters}>
           <div className={styles.chips} role="group" aria-label="기간">
             {PERIODS.map((p) => (
@@ -179,9 +191,9 @@ export default function RankingList({ graves, onPick }: Props) {
           )
         ) : (
           <BoardRanking
-            key={`${board}-${board === "look" || board === "huntLevel" ? "all" : period}-${board === "huntBest" ? zone : board === "fish" ? fish : ""}`}
+            key={`${board}-${allOnly ? "all" : period}-${board === "huntBest" ? zone : board === "fish" ? fish : ""}`}
             board={board}
-            period={board === "look" || board === "huntLevel" ? "all" : period}
+            period={allOnly ? "all" : period}
             zone={zone}
             fish={fish}
           />

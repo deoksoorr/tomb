@@ -1,0 +1,113 @@
+/* 도감 몬스터 칸: 사냥터·야근 빌딩 묶음 + 몬스터 픽셀 그림 (등록 전은 forage.module.css의 검은 실루엣) */
+
+.guide {
+  margin-bottom: 12px;
+}
+
+.group + .group {
+  margin-top: 12px;
+}
+
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--bone);
+}
+
+.diff {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.count[data-full="true"] {
+  color: var(--status-ok);
+}
+
+.pic {
+  display: block;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+.cell[data-known="true"][data-role="boss"] {
+  box-shadow:
+    0 0 0 1px var(--danger),
+    0 0 6px rgba(208, 138, 118, 0.3);
+}
+
+.cell[data-known="true"][data-role="elite"],
+.cell[data-known="true"][data-role="mid"] {
+  box-shadow: 0 0 0 1px var(--enh);
+}
+
+.cell[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--candle);
+}
+
+/* 우두머리 표시 (등록 전에도 보인다 — 어디에 우두머리가 있는지는 힌트) */
+.boss {
+  position: absolute;
+  right: 3px;
+  top: 1px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--danger);
+}
+
+/* 가장 높이 닿은 처치 표시 (100 · 1천 · 1만) */
+.mark {
+  position: absolute;
+  left: 3px;
+  bottom: 2px;
+  font-size: 9px;
+  color: var(--moss);
+}
+
+.detail {
+  margin-top: 8px;
+}
+
+.detail > img {
+  align-self: start;
+}
+
+.marks {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.markTag {
+  padding: 0 5px;
+  font-size: 10px;
+  color: var(--faint);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.markTag[data-on="true"] {
+  color: var(--moss);
+  box-shadow: 0 0 0 1px var(--moss-deep);
+}
+
+.next {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}

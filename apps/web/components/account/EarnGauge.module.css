@@ -84,6 +84,13 @@
   font-size: 10px;
 }
 
+/* 포인트 배수 이벤트로 한도가 늘어난 항목 */
+.boosted {
+  color: var(--candle);
+  font-family: var(--font-small);
+  font-size: 10px;
+}
+
 .nums {
   color: var(--muted);
   font-family: var(--font-small);

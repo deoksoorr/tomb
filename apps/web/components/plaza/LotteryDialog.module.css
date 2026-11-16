@@ -1,0 +1,169 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 위: 행운권 그림 + 설명 */
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.art {
+  flex: none;
+  max-width: 40%;
+  height: auto;
+}
+
+.heroText {
+  display: grid;
+  gap: 8px;
+}
+
+.lead {
+  margin: 0;
+  line-height: 1.55;
+  color: var(--text-dim, #c9c2b0);
+}
+
+.count {
+  margin: 0;
+  color: var(--candle);
+  font-size: 12px;
+}
+
+/* 이번 주 상금 */
+.pool {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 12px;
+  background: linear-gradient(180deg, rgba(60, 110, 60, 0.45), rgba(30, 60, 36, 0.45));
+  box-shadow: var(--px-border);
+}
+
+.poolLabel {
+  color: #c8f0b8;
+  font-family: var(--font-small);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.poolValue {
+  color: #ffe066;
+  font-size: 1.6rem;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 8px rgba(255, 200, 80, 0.5);
+}
+
+.parts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+}
+
+/* 등수별 당첨금 */
+.prizes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prizes li {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  background: var(--bg-deep);
+  box-shadow: var(--px-border);
+}
+
+.prizes b {
+  color: #f0d070;
+}
+
+.rank {
+  color: #ffd9a0;
+  font-weight: 700;
+}
+
+.sold {
+  margin: 0;
+  min-height: 1.2em;
+  text-align: center;
+  color: var(--candle);
+  font-size: 12px;
+}
+
+.buy {
+  width: 100%;
+}
+
+.bought {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(140, 220, 120, 0.45);
+  background: rgba(140, 220, 120, 0.08);
+  color: #c8f0b8;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.note {
+  margin: 0;
+  color: #ffb070;
+  font-size: 12px;
+  text-align: center;
+}
+
+.won {
+  margin: 0 0 8px;
+  color: #9fdc9a;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.winners {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.winners li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.winners b {
+  color: #f0d070;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-small);
+  font-size: 11px;
+}

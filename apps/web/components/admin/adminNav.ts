@@ -4,14 +4,17 @@ export type PanelId =
   | "dashboard"
   | "economy"
   | "analytics"
+  | "activity"
   | "members"
   | "codes"
   | "staff"
   | "managers"
+  | "referrals"
   | "reports"
   | "bans"
   | "megaphone"
   | "notices"
+  | "inquiries"
   | "gifts"
   | "dye"
   | "graves"
@@ -19,6 +22,8 @@ export type PanelId =
   | "housing"
   | "towerGrant"
   | "residents"
+  | "pointEvent"
+  | "lottery"
   | "graveRules"
   | "errors"
   | "system";
@@ -38,15 +43,17 @@ export const NAV: NavGroup[] = [
       { id: "dashboard", label: "대시보드", desc: "지금 접속·오늘 방문·처리할 일과 최근 기록을 한눈에 봐요." },
       { id: "economy", label: "경제", desc: "날짜별 포인트 적립·사용과 항목별 합계, 지갑 잔액이에요." },
       { id: "analytics", label: "유입 분석", desc: "기간별 방문·가입·체류 추이와 유입 경로·기기·국가예요. 원본 IP 없이 90일만 보관해요." },
+      { id: "activity", label: "유저 활동", desc: "계정 기준 DAU와 리텐션, 자주 오는 유저와 VIP, 휴면과 떠난 단골을 봐요." },
     ],
   },
   {
     title: "회원",
     items: [
-      { id: "members", label: "회원 제재", desc: "회원 목록에서 코드 재발급·지금 내보내기·정지를 바로 해요." },
+      { id: "members", label: "회원 목록", desc: "전체 회원을 최근 접속 순이나 접속 시간 순으로 보고 이름으로 찾아요. 줄마다 코드 재발급, 지금 내보내기, 정지도 바로 해요." },
       { id: "codes", label: "코드 재발급 기록", desc: "누가 언제 누구의 접속 코드를 다시 만들었는지 남겨 둔 기록이에요." },
       { id: "staff", label: "운영자 지정", desc: "게임 안 운영자 계정(저승사자 차림·운영자 배지)을 한 명 지정해요." },
       { id: "managers", label: "매니저 임명", desc: "매니저를 여러 명 임명하고 해제해요. 매니저는 전용 칭호와 채팅 딱지만 받아요." },
+      { id: "referrals", label: "추천", desc: "추천 코드로 온 이웃과 조건 달성, 보상 지급을 보고 자동 보상을 켜고 꺼요." },
     ],
   },
   {
@@ -61,6 +68,7 @@ export const NAV: NavGroup[] = [
     title: "소통",
     items: [
       { id: "notices", label: "공지", desc: "게임 공지를 쓰고 고치고 맨 위에 고정해요." },
+      { id: "inquiries", label: "문의", desc: "유저가 [문의하기]로 보낸 문의를 읽고 처리했는지와 메모를 남겨요. 최근 500건만 보관해요." },
       { id: "gifts", label: "선물", desc: "포인트·아이템을 쪽지와 함께 특정 계정이나 전체 선물함으로 보내요." },
       { id: "dye", label: "염색권", desc: "정한 색만 쓸 수 있는 고정 색 염색권을 만들어 선물함으로 보내요." },
     ],
@@ -78,6 +86,8 @@ export const NAV: NavGroup[] = [
     title: "마을 설정",
     items: [
       { id: "residents", label: "마을 주민", desc: "돌아다니는 마을 주민(NPC)을 켜고 끄고 수를 정해요." },
+      { id: "pointEvent", label: "포인트 2배 이벤트", desc: "고른 항목의 적립과 하루 한도를 늘리는 이벤트를 켜고 꺼요. 끝나는 시각을 정하면 저절로 꺼져요." },
+      { id: "lottery", label: "행운권 추첨", desc: "이번 주 행운권 판매와 상금을 보고 지원금을 더해요. 최근 추첨 결과도 여기 있어요." },
       { id: "graveRules", label: "묘역 규칙", desc: "묘비가 성불하기까지의 기간과 채널마다 묘역 정원이에요." },
     ],
   },

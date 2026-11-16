@@ -212,8 +212,10 @@ export type RunReward = {
    * later = 처음 완성했지만 한 판 새 등록 한도(STARS_NEW_PER_RUN)를 넘어 이번엔 등록하지 않음 — 다음 판에)
    */
   constellations?: { id: string; isNew: boolean; perfect: boolean; later?: boolean }[];
-  /** 별자리를 도감에 처음 등록해서 받은 도감 보상 (lib/forage/dexReward) */
+  /** 별자리·11/16 몬스터를 도감에 처음 등록해서 받은 도감 보상 (lib/forage/dexReward) */
   dexReward?: DexGain;
+  /** 11/16 이번 판에 몬스터 도감에 처음 등록된 몬스터 id (사냥·야근 빌딩, 받아들인 판만) */
+  newMobs?: string[];
   /** 11/15 초월 판: 받은 초월 EXP·그 판의 구간·오른 초월 레벨·지금 초월 레벨 */
   transcend?: { exp: number; tier: RunTier; levelsGained: number; tLevel: number };
   /**

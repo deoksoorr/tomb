@@ -45,6 +45,7 @@ import type {
 } from "./types";
 import type { ReportReason } from "./reports";
 import { reportClientError } from "./hooks/errorReporting";
+import { deviceHeaders } from "./deviceMark";
 
 // 브라우저 → Next API 호출. 서버가 준 한국어 메시지를 그대로 사용자에게 보여 준다.
 
@@ -102,8 +103,9 @@ const ownerHeaders = (ownerToken: string | null): Record<string, string> =>
 
 export const api = {
   /** fresh: 이 기기의 기존 계정을 버리고 새 계정으로 ("새로 시작") */
-  startSession: (fresh = false) =>
-    request<SessionResponse>("/api/session", fresh ? jsonInit("POST", { fresh: true }) : { method: "POST" }),
+  // 같은 사람 판정용 기기 표시·브라우저 환경 머리글을 같이 보낸다 (lib/deviceMark)
+  startSession: async (fresh = false) =>
+    request<SessionResponse>("/api/session", fresh ? jsonInit("POST", { fresh: true }, await deviceHeaders()) : { method: "POST", headers: await deviceHeaders() }),
   logout: () => request<unknown>("/api/me/logout", { method: "POST" }),
   /** 채널마다 묘지가 따로다 */
   listGraves: (channel: number, signal?: AbortSignal) =>

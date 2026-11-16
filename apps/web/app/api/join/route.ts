@@ -11,9 +11,13 @@ import { isManager } from "@/lib/managers";
 import { isStaff } from "@/lib/staff";
 import { getAccounts } from "@/lib/store";
 import { getStyleStore } from "@/lib/store/style";
+import { recordActive } from "@/lib/store/userActivity";
+import { recordSignals } from "@/lib/sameUser";
 import { champWireFor } from "@/lib/store/champ";
 import { ensureChampSettled } from "@/lib/weeklyChamp";
-import { lookOf } from "@/lib/store/accounts";
+import { runAfter } from "@/lib/analyticsService";
+import { ensureLotterySettled } from "@/lib/lotteryService";
+import { kstDay, lookOf } from "@/lib/store/accounts";
 import { DORMANT_RENAME_MESSAGE, type JoinResponse } from "@/lib/types";
 import { JoinRequestSchema, readBody } from "@/lib/validate";
 
@@ -29,12 +33,18 @@ export const POST = handler(async (req) => {
   await assertNotBanned(req, visitorId, true);
   const now = Date.now();
   await recordSeen(req, visitorId, now);
+  // 같은 사람 판정: 기기 표시·브라우저 환경·IP 대역 해시 (응답 뒤에, 같은 값은 10분에 한 번)
+  runAfter(() => recordSignals(req, visitorId, now));
   const accounts = getAccounts();
   // 닉네임 중복 금지: 휴면(90일)에서 돌아왔으면 닉네임을 다시 정해야 들어온다 (입장 화면이 먼저 안내한다)
   const { renameRequired } = await accounts.visit(visitorId, now, true);
   if (renameRequired) throw new HttpError(409, "RENAME_REQUIRED", DORMANT_RENAME_MESSAGE);
+  // 유저 활동: 그날 처음 들어오면 그날 활동한 계정으로 (날마다 한 번만 센다)
+  await recordActive(visitorId, kstDay(now));
   // 주간 1위: 월요일 0시가 지나 처음 들어오는 요청이 지난주 1위를 정리·지급한다 (한 번만, 끝난 주는 기억해 건너뛴다)
   await ensureChampSettled(now);
+  // 행운권: 토요일 저녁 8시가 지나 처음 들어오는 요청이 추첨한다 (응답 뒤에 — 입장을 늦추지 않게, 한 번만)
+  runAfter(() => ensureLotterySettled(now));
   // 계정 전체(get = 명령 9개) 대신 이름·몸·착용만 (2개)
   const [account, style, staff, dex, champ, mgr] = await Promise.all([
     accounts.appearance(visitorId, now),

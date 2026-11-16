@@ -79,6 +79,18 @@ describe("채팅 기록창", () => {
     expect(lines.at(-1)).toMatchObject({ mine: true, text: "글2" });
     expect(lines.map(chatLineTone)).toEqual(["other", "mine"]);
   });
+
+  it("11/16 귓속말 줄은 보냄·받음·못 보냄 모두 분홍색, 서버 기록을 합칠 때 내 채팅 줄로 오인하지 않는다", () => {
+    const whispers: ChatLine[] = [
+      { ...line(1, 0, true), w: "out", key: "w1" },
+      { ...line(2, 10), w: "in", key: "w2" },
+      { ...line(3, 20, true), w: "fail" },
+    ];
+    expect(whispers.map(chatLineTone)).toEqual(["whisper", "whisper", "whisper"]);
+    const merged = mergeChatLines(whispers, [{ key: "s.0", name: "나", text: "글3", mine: true, at: 25 }], 100, () => 9);
+    expect(merged.find((l) => l.id === 3)?.key).toBeUndefined();
+    expect(merged.map((l) => l.id)).toEqual([1, 2, 3, 9]);
+  });
 });
 
 describe("채팅 기록창: 서버 최근 기록(chatLog) 합치기", () => {

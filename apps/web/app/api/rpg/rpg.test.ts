@@ -90,7 +90,8 @@ describe("사냥터 API", () => {
     expect((await board("board=huntBest&zone=easy&period=all")).mine?.value).toBe(100_000);
     expect((await board("board=huntBest&zone=hard")).mine).toBeNull();
     expect((await board("board=huntKills&period=week")).mine?.value).toBe(kills);
-    expect((await board("board=points&period=week")).mine?.value).toBe(20);
+    // 11/16 처음 쓰러뜨린 몬스터의 도감 보상(dex 적립)도 주간 포인트에 든다
+    expect((await board("board=points&period=week")).mine?.value).toBe(20 + (body.reward.dexReward?.earned ?? 0));
     const again = await finish.POST(call("/api/rpg/run/finish", v, { ticket: s.ticket, result: clearAll(s.seed) }));
     expect(again.status).toBe(409);
     expect(await errCode(again)).toBe("TICKET_USED");

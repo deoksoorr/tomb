@@ -1,8 +1,11 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildIssue, fenced } from "@/lib/inquiry";
+import { getInquiries, INQUIRY_MEMO_MAX, type InquiryRow } from "@/lib/store/inquiries";
 import type { ApiError, InquiryInfoResponse, Notice, NoticeListResponse } from "@/lib/types";
 import * as adminNotice from "./admin/notices/[id]/route";
+import * as adminInquiry from "./admin/inquiries/[id]/route";
+import * as adminInquiries from "./admin/inquiries/route";
 import * as adminNotices from "./admin/notices/route";
 import * as inquiry from "./inquiry/route";
 import * as notices from "./notices/route";
@@ -88,7 +91,7 @@ describe("공지사항", () => {
   });
 });
 
-describe("문의 → GitHub 이슈", () => {
+describe("문의 → 문의함 (+ GitHub 이슈는 덤)", () => {
   const enable = (repo = "owner/inquiries") => {
     vi.stubEnv("GITHUB_TOKEN", "ghp_secret_token");
     vi.stubEnv("GITHUB_INQUIRY_REPO", repo);
@@ -97,10 +100,27 @@ describe("문의 → GitHub 이슈", () => {
     inquiry.POST(call("/api/inquiry", { visitor: v, body, headers }));
   const valid = { category: "bug", message: "입장 버튼이 안 눌려요. 확인 부탁해요." };
 
-  it("설정이 없으면 꺼져 있고 보내면 503", async () => {
-    expect(await bodyOf<InquiryInfoResponse>(inquiry.GET(call("/api/inquiry")))).toEqual({ enabled: false, public: false });
-    const res = await send(await newVisitor(), valid);
-    expect(await errorOf(res)).toEqual({ code: "INQUIRY_DISABLED", message: "문의 기능을 준비하고 있어요. 조금 뒤에 다시 찾아와 주세요." });
+  const mine = async (accountId: string) => (await getInquiries().list()).filter((r) => r.accountId === accountId);
+
+  it("GitHub 설정이 없어도 문의함에 저장해 접수한다 (공개 안내 없음, GitHub 호출 없음)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    expect(await bodyOf<InquiryInfoResponse>(inquiry.GET(call("/api/inquiry")))).toEqual({ enabled: true, public: false });
+    const v = await newVisitor();
+    const res = await send(v, { category: "account", message: "포인트가 갑자기\n사라졌어요 <b>확인</b>", contact: " me@example.com ", channel: 2 }, { "user-agent": "TestBrowser/1.0" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const [row] = await mine(v.visitorId);
+    expect(row).toMatchObject({
+      category: "account",
+      message: "포인트가 갑자기\n사라졌어요 <b>확인</b>",
+      contact: "me@example.com",
+      channel: 2,
+      name: null,
+      userAgent: "TestBrowser/1.0",
+      status: "new",
+    });
+    expect(row.id).toMatch(/^[\w-]{12}$/);
   });
 
   it("저장소 공개 여부를 GitHub에서 읽어 10분 캐시, 조회에 실패하면 공개로 본다", async () => {
@@ -155,7 +175,7 @@ describe("문의 → GitHub 이슈", () => {
     expect(issue.body).toContain(fenced("me@example.com"));
   });
 
-  it("라벨을 못 붙이면(422) 라벨 없이 다시 만들고, GitHub이 실패하면 502", async () => {
+  it("라벨을 못 붙이면(422) 라벨 없이 다시 만들고, GitHub이 실패해도 문의함에 남아 접수된다", async () => {
     enable();
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
@@ -166,10 +186,15 @@ describe("문의 → GitHub 이슈", () => {
     expect(JSON.parse(String((fetchSpy.mock.calls[1][1] as RequestInit).body))).not.toHaveProperty("labels");
 
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("boom", { status: 500 }));
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    const res = await send(await newVisitor(), valid);
-    expect(res.status).toBe(502);
-    expect((await errorOf(res)).code).toBe("INQUIRY_FAILED");
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const v = await newVisitor();
+    expect((await send(v, valid)).status).toBe(200);
+    expect(logged).toHaveBeenCalledWith("[inquiry] GitHub 이슈 생성 실패", 500);
+    expect(await mine(v.visitorId)).toHaveLength(1);
+
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("down"));
+    expect((await send(v, valid)).status).toBe(200);
+    expect(await mine(v.visitorId)).toHaveLength(2);
   });
 
   it("하루 3번까지", async () => {
@@ -185,5 +210,52 @@ describe("문의 → GitHub 이슈", () => {
   it("buildIssue: 제목은 본문 앞 40자 한 줄", () => {
     const { title } = buildIssue({ category: "idea", message: "가".repeat(50) + "\n다음 줄", accountId: "abcdef123", userAgent: null });
     expect(title).toBe(`[문의·제안] ${"가".repeat(40)}`);
+  });
+});
+
+describe("관리자 문의 탭", () => {
+  const list = (query = "", headers: Record<string, string> = KEY) => adminInquiries.GET(call(`/api/admin/inquiries${query}`, { headers }));
+  const patch = (id: string, body: object, headers: Record<string, string> = KEY) =>
+    adminInquiry.PATCH(call(`/api/admin/inquiries/${id}`, { method: "PATCH", body, headers }), ctx(id));
+  type Listed = { inquiries: InquiryRow[]; newCount: number };
+
+  it("관리자만, 최신 순·상태로 거르고 처리 여부·메모를 바꾼다", async () => {
+    expect((await list()).status).toBe(200);
+    expect((await list("", {})).status).toBe(401);
+    expect((await patch("x", { status: "done" }, {})).status).toBe(401);
+
+    const v = await newVisitor();
+    const send = (message: string) => inquiry.POST(call("/api/inquiry", { visitor: v, body: { category: "idea", message } }));
+    expect((await send("첫 번째 제안이에요. 고마워요.")).status).toBe(200);
+    await new Promise((r) => setTimeout(r, 2));
+    expect((await send("두 번째 제안이에요. 고마워요.")).status).toBe(200);
+
+    const before = await bodyOf<Listed>(list("?status=new"));
+    const ours = before.inquiries.filter((r) => r.accountId === v.visitorId);
+    expect(ours.map((r) => r.message)).toEqual(["두 번째 제안이에요. 고마워요.", "첫 번째 제안이에요. 고마워요."]);
+    const [second, first] = ours;
+
+    const done = await bodyOf<{ inquiry: InquiryRow }>(patch(first.id, { status: "done", memo: "  다음 판에 넣을게요\n둘째 줄 " }));
+    expect(done.inquiry).toMatchObject({ id: first.id, status: "done", memo: "다음 판에 넣을게요\n둘째 줄" });
+    expect(done.inquiry.doneAt).toBeGreaterThan(0);
+
+    const after = await bodyOf<Listed>(list("?status=new"));
+    expect(after.newCount).toBe(before.newCount - 1);
+    expect(after.inquiries.some((r) => r.id === first.id)).toBe(false);
+    expect((await bodyOf<Listed>(list("?status=done"))).inquiries.map((r) => r.id)).toContain(first.id);
+    const all = (await bodyOf<Listed>(list())).inquiries.map((r) => r.id);
+    expect(all.indexOf(second.id)).toBeLessThan(all.indexOf(first.id));
+    expect((await bodyOf<Listed>(list("?limit=1"))).inquiries).toHaveLength(1);
+
+    // 메모만 지우기 → 처리 여부는 그대로
+    expect((await bodyOf<{ inquiry: InquiryRow }>(patch(first.id, { memo: "" }))).inquiry).not.toHaveProperty("memo");
+    expect((await bodyOf<{ inquiry: InquiryRow }>(patch(first.id, { status: "new" }))).inquiry.status).toBe("new");
+  });
+
+  it("검증: 바꿀 것이 없으면 400, 메모 길이 제한, 없는 문의는 404", async () => {
+    expect((await patch("nope", {})).status).toBe(400);
+    expect((await patch("nope", { status: "later" })).status).toBe(400);
+    expect((await errorOf(await patch("nope", { memo: "가".repeat(INQUIRY_MEMO_MAX + 1) }))).message).toBe(`메모는 ${INQUIRY_MEMO_MAX}자까지 적을 수 있어요.`);
+    expect((await patch("nope", { status: "done" })).status).toBe(404);
   });
 });

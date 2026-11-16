@@ -1,5 +1,6 @@
 import { handler, HttpError, json } from "@/lib/http";
 import { VillageQuerySchema } from "@/lib/housing/schemas";
+import { sweepReclaimIfDue } from "@/lib/housing/reclaim";
 import { getHouseStore, village } from "@/lib/housing/service";
 import type { VillageResponse } from "@/lib/housing/types";
 
@@ -29,7 +30,13 @@ export const GET = handler(async (req) => {
   const raw = req.nextUrl.searchParams.get("ch");
   const parsed = VillageQuerySchema.safeParse(raw ?? 1);
   if (!parsed.success) throw new HttpError(400, "INVALID_INPUT", "채널 번호가 올바르지 않아요.");
-  return json<VillageResponse>(await cachedVillage(parsed.data, req.nextUrl.searchParams.has("t")), {
+  // 오래 비운 집 정리 (인스턴스 메모리 + 잠금으로 3시간에 한 번. 비운 집이 있으면 이번 응답부터 빈 번지로)
+  const swept = await sweepReclaimIfDue(getHouseStore()).catch((e: unknown) => {
+    console.error("[housing] 오래 비운 집 정리 실패", e);
+    return null;
+  });
+  const fresh = req.nextUrl.searchParams.has("t") || !!swept?.reclaimed.length;
+  return json<VillageResponse>(await cachedVillage(parsed.data, fresh), {
     headers: { "Vercel-CDN-Cache-Control": "max-age=15, stale-while-revalidate=86400", "Cache-Control": "no-store" },
   });
 });

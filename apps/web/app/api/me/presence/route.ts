@@ -8,6 +8,9 @@ import { staffAccountId } from "@/lib/staff";
 import { getAccounts } from "@/lib/store";
 import { kstDay, loadMe } from "@/lib/store/accounts";
 import { getTitleStats } from "@/lib/store/titleStats";
+import { recordActive } from "@/lib/store/userActivity";
+import { referralOnPresence } from "@/lib/referralService";
+import { ensureLotterySettled } from "@/lib/lotteryService";
 import { STAY_TICK_MINUTES } from "@/lib/attendStay";
 import type { PresenceResponse } from "@/lib/types";
 
@@ -33,9 +36,15 @@ export const POST = handler(async (req) => {
   await beatAutoFish(visitorId, now).catch((e) => console.error("[forage] 자동 낚시 신호 실패", e));
   // 47번: 누군가 머무는 동안 동시 접속을 1분에 한 번씩 찍어 둔다 (cron 없이)
   runAfter(() => sampleConcurrency());
+  // 행운권: 토요일 저녁 8시가 지나면 접속해 있는 화면의 머무르기 기록이 추첨을 시작한다 (끝난 회차는 프로세스가 기억해 건너뛴다)
+  runAfter(() => ensureLotterySettled());
   // 칭호용 누적 접속 시간 (받아 준 기록만, 처음이면 오늘 머문 기록부터. 몰아서 센 만큼). 실패해도 머무르기는 그대로
   // 몰아서 센 기록도 한 번에 (Redis 2명령)
   if (tick && tick.ticks > 0) await getTitleStats().addStay(visitorId, tick.ticks, tick.stayTicks).catch((e) => console.error("[titles] 접속 시간 기록 실패", e));
+  // 유저 활동: 그날 첫 머무르기 기록일 때만 (새벽 5시를 넘겨 머무는 화면도 새 날 활동으로. 입장에서도 남긴다)
+  if (tick && tick.stayTicks === tick.ticks) await recordActive(visitorId, kstDay(now));
+  // 추천 코드: 추천인을 정한 새 이웃이 조건(총 3시간·3일)을 넘겼는지 응답 뒤에 본다 (해당 없는 계정은 인스턴스가 30분 기억해 건너뛴다)
+  if (tick && tick.ticks > 0) runAfter(() => referralOnPresence(visitorId, now));
   const lite = req.nextUrl.searchParams.get("lite") === "1" && (await staffAccountId()) !== visitorId;
   if (lite) {
     return json<PresenceResponse>(

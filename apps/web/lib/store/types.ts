@@ -1,6 +1,7 @@
 import type { CosmeticSlot } from "@tomb/protocol";
 import type { AttendClaim, CalendarMonthRecord } from "../calendar";
 import type { EarnSource } from "../economy";
+import type { EarnBoost } from "../pointEvent";
 import { msUntilDayReset } from "../gameDay";
 import type { ReportLogEntry, ReportReason } from "../reports";
 import { PRESENCE_HIDDEN_INTERVAL_MS, SHRINE_KEEP_DAYS, type ActivityItem, type Grave, type GraveDecor, type PassReason } from "../types";
@@ -137,8 +138,11 @@ export function presenceCatchup(last: number, now: number, sameSid: boolean): { 
   return { ticks, nextAt: Math.min(now, last + ticks * PRESENCE_TICK_MS) };
 }
 
-/** 적립 선택값: amount(없으면 항목 기본 점수), ipHash(주면 같은 IP 합계도 항목 한도 × ATTEND_ACCOUNTS_PER_IP로 막는다) */
-export type EarnOptions = { amount?: number; ipHash?: string };
+/**
+ * 적립 선택값: amount(없으면 항목 기본 점수), ipHash(주면 같은 IP 합계도 항목 한도 × ATTEND_ACCOUNTS_PER_IP로 막는다),
+ * boost(포인트 배수 이벤트 — 고른 항목이면 적립·항목 한도·같은 IP 한도가 배수, 하루 전체 한도는 늘어난 몫만큼. 없으면 저장소가 지금 설정을 읽는다, lib/pointEvent earnLimits)
+ */
+export type EarnOptions = { amount?: number; ipHash?: string; boost?: EarnBoost };
 export type Profile = { name?: string | null; color?: string | null; body?: string | null };
 export type RankEntry = { accountId: string; name: string | null; points: number; rank: number };
 
@@ -215,7 +219,7 @@ export type PresenceTick = {
 
 export interface AccountStore {
   get(id: string, day: string, now: number): Promise<AccountRecord>;
-  /** 항목별 하루 한도·하루 전체 한도·지갑 한도 안에서 적립하고 실제 쌓인 점수를 돌려준다 (0 = 한도) */
+  /** 항목별 하루 한도·하루 전체 한도·지갑 한도 안에서 적립하고 실제 쌓인 점수를 돌려준다 (0 = 한도). 포인트 배수 이벤트로 고른 항목이면 늘어난 점수·한도로 */
   earn(id: string, source: EarnSource, day: string, opts?: EarnOptions): Promise<number>;
   /** 원자적 차감. 잔액이 모자라면 null, 아니면 남은 잔액. reason은 계정의 최근 사용 기록(최대 100개)에 남는다 */
   spend(id: string, amount: number, reason: string, now: number): Promise<number | null>;
@@ -243,6 +247,16 @@ export interface AccountStore {
    * RankEntry.points = 순위 값
    */
   pointRank(limit: number, me: string | null, week?: string): Promise<{ rows: RankEntry[]; mine: RankEntry | null }>;
+  /** 총 접속 시간 상위 limit명 + me의 순위. RankEntry.points = 분 (머무르기 기록이 쌓일 때 presenceTick이 같이 올린다) */
+  stayRank(limit: number, me: string | null): Promise<{ rows: RankEntry[]; mine: RankEntry | null }>;
+  /**
+   * 관리자 일괄: 총 접속 시간 기록 전의 머문 시간 채우기. cursor부터 계정 몇 개를 훑어 아직 남은 날짜별 머무르기 기록(오늘 적립 해시 `_stay`,
+   * 2일 TTL이라 now 기준 최근 3일치까지)을 더한 값이 지금 총 접속 시간보다 크면 그 값으로 올린다 (더하지 않고 큰 쪽 → 두 번 돌려도 그대로,
+   * 배포 뒤 이미 센 기록도 남은 기록 안에 있으니 두 번 세지 않는다). raised = 올린 계정 수, minutes = 올린 분 합계. next = "0"이면 끝
+   */
+  backfillStay(cursor: string, count: number, now: number): Promise<{ next: string; raised: number; minutes: number }>;
+  /** 계정마다 날짜별 머무르기 기록 수 (오늘 적립 해시 `_stay`, 2일 TTL이라 남은 날짜만). [계정][날짜] 순서. 유저 활동 기록 채우기용 */
+  stayTicksOn(ids: readonly string[], days: readonly string[]): Promise<number[][]>;
   /**
    * 사냥터 한 판 기록 (49번 랭킹): 처치 수 합계(전체·그 주)를 올리고, 클리어했으면(clearMs) 그 사냥터의
    * 최단 기록(전체·그 주)을 더 짧을 때만 바꾼다. 원자적.
@@ -415,6 +429,10 @@ export type AccountSummary = {
   /** 휴면에서 돌아와 닉네임을 다시 정해야 한다 */
   renameRequired: boolean;
   hasCode: boolean;
+  /** 총 접속 시간 (분, 기록 전 옛 계정은 채우기 전까지 0) */
+  stayMinutes: number;
+  /** 모은 포인트 (써도 줄지 않는다, 개편 전 계정은 지금 잔액) */
+  lifetimePoints: number;
 };
 
 /** 포인트 사용 사유 → 경제 통계 분류 (사유 앞부분으로 나눈다) */
@@ -424,5 +442,6 @@ export function spendCategory(reason: string): string {
   if (reason.startsWith("name")) return "name";
   if (reason.startsWith("shop")) return "shop";
   if (reason.startsWith("admin")) return "admin";
+  if (reason.startsWith("lottery")) return "lottery";
   return "other";
 }

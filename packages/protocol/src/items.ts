@@ -583,7 +583,7 @@ export function nameStyleOfLook(look: readonly string[] | null | undefined): { c
 // 옛 실시간 서버·옛 화면은 이 id를 몰라 버리거나 무시한다 (깨지지 않는다). id는 증서 길이 때문에 짧게.
 
 export const TITLE_IDS = [
-  // 도감 칸 절반(50)·전부(100): 물고기·곤충·약초버섯·광석·발굴품·별자리
+  // 도감 칸 절반(50)·전부(100): 물고기·곤충·약초버섯·광석·발굴품·별자리 (몬스터는 아래 11/16)
   "t_fish50",
   "t_fish100",
   "t_bug50",
@@ -596,6 +596,9 @@ export const TITLE_IDS = [
   "t_dig100",
   "t_star50",
   "t_star100",
+  // 11/16 몬스터 도감 절반·전부
+  "t_mob50",
+  "t_mob100",
   // 주간 랭킹 1위 (한 번이라도)
   "t_champ_points",
   "t_champ_hunt",
@@ -685,6 +688,9 @@ export const TITLE_IDS = [
   "t_quest1k",
   "t_quest2500",
   "t_qking",
+  // 추천 코드로 데려온 이웃이 조건을 넘긴 수 3·10 (web lib/referralRules)
+  "t_ref3",
+  "t_ref10",
   // 11/15 긴급 의뢰 (받은 뒤 하루만): 가장 많이 낸 사람 · 마지막 1분에 100%를 채운 사람
   "t_urgKing",
   "t_urgLast",

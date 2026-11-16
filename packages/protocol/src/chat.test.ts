@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHAT_BURST, CHAT_MAX, CHAT_REFILL_MS, maskChat, newChatBucket, normalizeChat, takeChatToken } from "./chat";
+import { CHAT_BURST, CHAT_MAX, CHAT_REFILL_MS, maskChat, matchWhisperTarget, newChatBucket, normalizeChat, takeChatToken } from "./chat";
 import { encodeEvent, parseC2S } from "./events";
 
 describe("말풍선 채팅: 정리·검증", () => {
@@ -75,5 +75,33 @@ describe("말풍선 채팅: 욕설·주소·전화번호 가리기", () => {
     expect(maskChat("010-1234-5678 연락")).toBe("*** 연락");
     expect(maskChat("01012345678")).toBe("***");
     expect(maskChat("010 1234 5678")).toBe("***");
+  });
+});
+
+describe("귓속말: 받는 사람 맞추기", () => {
+  const pick = (body: string, names: string[]) => {
+    const hit = matchWhisperTarget(body, names, (n) => n);
+    return hit && { to: hit.target, text: hit.text };
+  };
+
+  it("가장 긴 이름을 고르고, 공백·_·대소문자는 이름 키로 같게 본다", () => {
+    expect(pick("진 순 안녕", ["진", "진 순"])).toEqual({ to: "진 순", text: "안녕" });
+    expect(pick("진순 안녕", ["진 순"])).toEqual({ to: "진 순", text: "안녕" });
+    expect(pick("ABC_d 하이", ["abc d"])).toEqual({ to: "abc d", text: "하이" });
+    expect(pick("진 순", ["진", "진 순"])).toEqual({ to: "진", text: "순" });
+  });
+
+  it("남은 글이 없거나 맞는 이름이 없으면 null", () => {
+    expect(pick("진순", ["진순"])).toBeNull();
+    expect(pick("누구 안녕", ["진순"])).toBeNull();
+    expect(pick("", ["진순"])).toBeNull();
+  });
+
+  it("parseC2S: whisper는 이름·글을 정리하고, 빈 이름·빈 글은 null", () => {
+    expect(parseC2S(encodeEvent({ t: "whisper", to: " 진  순 ", text: " 안녕 " }))).toEqual({ t: "whisper", to: "진 순", text: "안녕" });
+    expect(parseC2S('{"t":"whisper","to":"","text":"안녕"}')).toBeNull();
+    expect(parseC2S('{"t":"whisper","to":"진순","text":"  "}')).toBeNull();
+    expect(parseC2S(JSON.stringify({ t: "whisper", to: "진순", text: "a".repeat(61) }))).toBeNull();
+    expect(parseC2S('{"t":"whisper","to":1,"text":"안녕"}')).toBeNull();
   });
 });

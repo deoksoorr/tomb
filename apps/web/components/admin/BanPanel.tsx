@@ -12,7 +12,7 @@ import m from "./Moderation.module.css";
 import { Empty, Loading } from "./PanelState";
 import { expelledText, moderationApi } from "./moderationApi";
 
-// 47번 회원 제재 탭: 지금 내보내기(강퇴) · 정지(계정 / IP / 둘 다) · 정지·차단 목록(기간 수정·조기 해제·처리 기록)
+// 47번 회원 목록 탭: 지금 내보내기(강퇴) · 정지(계정 / IP / 둘 다) · 정지·차단 목록(기간 수정·조기 해제·처리 기록)
 
 type Common = { toast: (message: string) => void; onAuthLost: () => void };
 /** 정지 대상. 계정 없이 IP만 막을 때는 accountId가 없다. reportKey = 신고 탭에서 넘어온 신고 */

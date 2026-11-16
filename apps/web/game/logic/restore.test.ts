@@ -1,6 +1,6 @@
 import { seatById } from "@tomb/protocol";
 import { describe, expect, it } from "vitest";
-import { anchorAt, fallbackSeat, nudgeSpot, OVERLAP_DIST, restoreAfterDenied } from "./restore";
+import { anchorAt, fallbackSeat, nudgeSpot, OVERLAP_DIST, restoreAfterDenied, resumeSpot, type ResumeGround } from "./restore";
 import { standPoint } from "./sit";
 
 const kWn0 = seatById("kWn-0")!;
@@ -86,5 +86,31 @@ describe("자리 복원 — 나무·그네도 서버 좌석으로 (39)", () => {
     expect(ids.length).toBeGreaterThan(10);
     expect(new Set(ids.map((x) => x.id)).size).toBe(ids.length);
     for (const x of ids) expect(seatSlot(x.id)?.kind).toBe(x.kind);
+  });
+});
+
+describe("11/16 새로고침 복원 자리 (resumeSpot) — 막힌 곳·갇힌 곳에 서지 않게", () => {
+  // 가짜 땅: x < 0 는 담(막힘), 0..100 은 갇힌 주머니(링크 안처럼 걸어서 못 감), 100..200 은 물, 200 이상은 이어진 땅
+  const g: ResumeGround = {
+    standable: (x) => x >= 0,
+    inWater: (x) => x >= 100 && x < 200,
+    reachable: (x) => x >= 200,
+    nearest: (x, y) => (x > -50 ? { x: 204, y } : null),
+  };
+  it("서 있기·바닥 앉기: 이어진 땅·물속은 그대로, 갇힌 곳은 가까운 바깥 땅, 막혔는데 둘레에 땅이 없으면 null(입구)", () => {
+    const land = { x: 250, y: 10 };
+    expect(resumeSpot(land, "idle", g)).toBe(land);
+    const water = { x: 150, y: 10 };
+    expect(resumeSpot(water, "idle", g)).toBe(water);
+    expect(resumeSpot({ x: 50, y: 10 }, "idle", g)).toEqual({ x: 204, y: 10 });
+    expect(resumeSpot({ x: 50, y: 10 }, "sitGround", g)).toEqual({ x: 204, y: 10 });
+    expect(resumeSpot({ x: -10, y: 10 }, "idle", g)).toEqual({ x: 204, y: 10 });
+    expect(resumeSpot({ x: -80, y: 10 }, "idle", g)).toBeNull();
+  });
+  it("그네·나무·배 같은 자세는 예전처럼 설 수 있는지만 본다 (앵커·배 자리는 welcome에서)", () => {
+    const pocket = { x: 50, y: 10 };
+    expect(resumeSpot(pocket, "swing", g)).toBe(pocket);
+    expect(resumeSpot({ x: 150, y: 10 }, "boat", g)).toEqual({ x: 150, y: 10 });
+    expect(resumeSpot({ x: -10, y: 10 }, "hang", g)).toBeNull();
   });
 });
