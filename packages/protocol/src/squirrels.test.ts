@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSquirrelRainChat, SQUIRREL_RAIN_COOLDOWN_MS, squirrelRainLeftMs, squirrelRainReady, squirrelWaitText } from "./squirrels";
+import { isSquirrelRainChat, SQUIRREL_RAIN_COOLDOWN_MS, squirrelRainLeftMs, squirrelRainNotice, squirrelRainReady, squirrelWaitText } from "./squirrels";
 
 describe("다람쥐를 뿌려라 (이스터에그 문구)", () => {
   it.each([
@@ -47,5 +47,10 @@ describe("다람쥐를 뿌려라 (이스터에그 문구)", () => {
     expect(squirrelRainLeftMs(0, 60_000)).toBe(SQUIRREL_RAIN_COOLDOWN_MS - 60_000);
     expect(squirrelWaitText(372_000)).toBe("다람쥐 쿨타임이 6분 12초 남았어요. (운영자에게만 보여요)");
     expect(squirrelWaitText(9_200)).toBe("다람쥐 쿨타임이 10초 남았어요. (운영자에게만 보여요)");
+  });
+
+  it("11/17 쏟아질 때 안내에 외친 사람 이름", () => {
+    expect(squirrelRainNotice("뿌림396")).toBe("뿌림396님이 뿌리래서 뿌렸어요,,,예에,,,");
+    expect(squirrelRainNotice("")).toBe("원하시는대로 다람쥐를 뿌렸어요!");
   });
 });

@@ -11,6 +11,12 @@ export const SQUIRREL_RAIN_MS = 5_200;
 /** 다람쥐를 뿌린 뒤 띄우는 안내 */
 export const SQUIRREL_RAIN_NOTICE = "원하시는대로 다람쥐를 뿌렸어요!";
 
+/** 11/17 쏟아질 때 안내: 외친 사람 이름을 넣는다 (이름이 없으면 예전 문구) */
+export function squirrelRainNotice(by: string): string {
+  const name = by.trim();
+  return name ? `${name}님이 뿌리래서 뿌렸어요,,,예에,,,` : SQUIRREL_RAIN_NOTICE;
+}
+
 // 지울 것: 공백·보이지 않는 글자
 const GAP_RE = new RegExp("[\\s\\u00ad\\u200b-\\u200f\\u2060-\\u206f\\ufeff]+", "g");
 // 문구 뒤에 붙어도 되는 것: 문장부호·기호·이모지·한글 낱자(ㅋㅋ·ㅎㅎ·ㅠㅠ)·이모지 꾸밈 글자

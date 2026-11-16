@@ -1,5 +1,5 @@
 import type * as Phaser from "phaser";
-import { SQUIRREL_RAIN_NOTICE } from "@tomb/protocol";
+import { squirrelRainNotice } from "@tomb/protocol";
 import { releaseOnEnd } from "@/lib/sharedAudio";
 import { addCanvasTexture } from "../assets/manifest";
 import { bridge } from "../bridge";
@@ -290,7 +290,7 @@ function visibleScene(game: Phaser.Game): Phaser.Scene | null {
 export function installSquirrelRain(game: Phaser.Game): () => void {
   return bridge.on("fx:squirrels", (m) => {
     try {
-      bridge.emit("toast", { message: SQUIRREL_RAIN_NOTICE });
+      bridge.emit("toast", { message: squirrelRainNotice(m.by) });
       const scene = visibleScene(game);
       if (scene) playSquirrelRain(scene, m.seed);
     } catch (e) {
