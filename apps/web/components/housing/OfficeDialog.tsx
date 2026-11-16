@@ -289,7 +289,7 @@ function MyPlot({
   const h = my.house;
   if (!h) {
     const short = my.points < cost;
-    // 오래 비워 정리된 예전 집의 가구 (가방에 남아 있다)
+    // 가방에 남은 가구: 오래 비워 정리된 예전 집 것 + 11/16 다른 집과 함께 쓰는 공용 가방 (다른 집에 놓인 건 빼고)
     const kept = Object.values(my.inventory).reduce((n, c) => n + c, 0);
     return (
       <div className={styles.stack}>
@@ -305,7 +305,7 @@ function MyPlot({
               {villa === null ? "값을 확인하는 중…" : villa ? `마을 집이 있어서 별장 값이에요 (마을 집 값의 ${SEA_VILLA_RATE}배).` : `마을 집 값의 ${SEA_COTTAGE_RATE}배예요. 마을 집이 있으면 별장이라 ${SEA_VILLA_RATE}배예요.`}
             </p>
           )}
-          {kept > 0 && <p className={styles.tag}>예전 집의 가구 {kept}개가 그대로 저장돼 있어요. 새 집을 분양받으면 다시 놓을 수 있어요.</p>}
+          {kept > 0 && <p className={styles.tag}>가방에 가구 {kept}개가 있어요. 분양받으면 바로 놓을 수 있어요.</p>}
           <TierPicker
             value={pick}
             onChange={setPick}

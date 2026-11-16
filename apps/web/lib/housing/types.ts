@@ -61,8 +61,10 @@ export type GuestEntryView = GuestEntry & { mine: boolean };
 
 export type MyHouseResponse = {
   house: PublicHouse | null;
-  /** 가진 물건: id → 개수 (놓은 것 포함) */
+  /** 이 집에 쓸 수 있는 물건: id → 개수 (이 집에 놓은 것 포함). 11/16 가구는 두 집 공용 가방에서 다른 집에 놓인 것을 뺀 수 */
   inventory: Record<string, number>;
+  /** 11/16 공용 가방 가구 중 다른 집에 놓여 있어 여기서 못 쓰는 개수 (치우면 여기 놓을 수 있다). 가진 수 = inventory + away */
+  away?: Record<string, number>;
   points: number;
 };
 

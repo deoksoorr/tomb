@@ -29,6 +29,7 @@ import {
   buyPlot,
   getHouseStore,
   houseIdFor,
+  housePair,
   houseRank,
   kstWeekStart,
   likeHouse,
@@ -39,7 +40,10 @@ import {
   upgradePlot,
   village,
 } from "./service";
-import { MemoryHouseStore, type HouseStore } from "./store";
+import { MemoryHouseStore, type HousePair, type HouseStore } from "./store";
+
+/** 오두막 없는 집 하나 (공용 가방 = 이 집 id) */
+const solo = (id: string): HousePair => ({ village: id, sea: `${id}-sea` });
 import { HK, RedisHouseStore } from "./store-redis";
 import { checkGuestText, checkHouseName, checkIntro, hasBanned } from "./text";
 import type { HouseLayout, Placed } from "./types";
@@ -194,19 +198,19 @@ describe.each(kits)("HouseStore (%s)", (_name, make) => {
   it("가방 상한, 놓인 물건은 되팔 수 없다, 배치 저장은 가진 개수를 원자적으로 확인한다", async () => {
     const id = await fresh();
     const s = kit.store;
-    expect(await s.addItem(id, "pot", 2)).toBe("ok");
-    expect(await s.addItem(id, "pot", 2)).toBe("ok");
-    expect(await s.addItem(id, "pot", 2)).toBe("max");
-    expect(await s.addItem("nohouse_xxxx", "pot", 2)).toBe("no_house");
+    expect(await s.addItem(solo(id), "village", "pot", 2)).toBe("ok");
+    expect(await s.addItem(solo(id), "village", "pot", 2)).toBe("ok");
+    expect(await s.addItem(solo(id), "village", "pot", 2)).toBe("max");
+    expect(await s.addItem(solo("nohouse_xxxx"), "village", "pot", 2)).toBe("no_house");
     const l = lay([p("a", "pot", 0, 0), p("b", "pot", 1, 0)]);
-    expect(await s.saveDesign(id, "small", l, null, { pot: 2 }, 4, 1)).toBe("ok");
-    expect(await s.takeItem(id, "pot")).toBe("placed");
-    expect(await s.takeItem(id, "desk")).toBe("none");
-    expect(await s.saveDesign(id, "small", l, null, { pot: 3 }, 6, 2)).toBe("not_owned");
-    expect(await s.saveDesign(id, "wide", l, null, { pot: 2 }, 4, 2)).toBe("tier");
-    expect(await s.saveDesign(id, "small", lay([p("a", "pot", 0, 0)]), null, { pot: 1 }, 2, 3)).toBe("ok");
-    expect(await s.takeItem(id, "pot")).toBe("ok");
-    expect(await s.inventory(id)).toEqual({ pot: 1 });
+    expect(await s.saveDesign(solo(id), "village", "small", l, null, { pot: 2 }, 4, 1)).toBe("ok");
+    expect(await s.takeItem(solo(id), "village", "pot")).toBe("placed");
+    expect(await s.takeItem(solo(id), "village", "desk")).toBe("none");
+    expect(await s.saveDesign(solo(id), "village", "small", l, null, { pot: 3 }, 6, 2)).toBe("not_owned");
+    expect(await s.saveDesign(solo(id), "village", "wide", l, null, { pot: 2 }, 4, 2)).toBe("tier");
+    expect(await s.saveDesign(solo(id), "village", "small", lay([p("a", "pot", 0, 0)]), null, { pot: 1 }, 2, 3)).toBe("ok");
+    expect(await s.takeItem(solo(id), "village", "pot")).toBe("ok");
+    expect((await s.inventory(solo(id), "village")).have).toEqual({ pot: 1 });
     const h = await s.get(id);
     expect(h).toMatchObject({ placedScore: 2, score: 2, items: 1 });
     expect(h!.layout.items).toHaveLength(1);
@@ -216,8 +220,8 @@ describe.each(kits)("HouseStore (%s)", (_name, make) => {
     const a = await fresh();
     const b = await fresh();
     const s = kit.store;
-    await s.addItem(a, "pot", 5);
-    await s.saveDesign(a, "small", lay([p("a", "pot", 0, 0)]), null, { pot: 1 }, 2, 1);
+    await s.addItem(solo(a), "village", "pot", 5);
+    await s.saveDesign(solo(a), "village", "small", lay([p("a", "pot", 0, 0)]), null, { pot: 1 }, 2, 1);
     expect(await s.like(b, "v1", "20261109")).toEqual({ likes: 1, score: LIKE_WEIGHT });
     expect(await s.like(b, "v1", "20261109")).toBe("already");
     expect(await s.likedToday(b, "v1", "20261109")).toBe(true);
@@ -277,16 +281,16 @@ describe.each(kits)("HouseStore (%s)", (_name, make) => {
     const id = await fresh();
     const s = kit.store;
     expect((await s.get(id))!.exterior).toEqual(defaultExterior());
-    await s.addItem(id, "roof_red", 5);
-    await s.addItem(id, "pot", 5);
-    await s.saveDesign(id, "small", lay([p("a", "pot", 0, 0)]), null, { pot: 1 }, 2, 1);
+    await s.addItem(solo(id), "village", "roof_red", 5);
+    await s.addItem(solo(id), "village", "pot", 5);
+    await s.saveDesign(solo(id), "village", "small", lay([p("a", "pot", 0, 0)]), null, { pot: 1 }, 2, 1);
     const ext = { ...defaultExterior(), roof: "roof_red" };
-    expect(await s.saveDesign(id, "small", null, ext, { pot: 1, roof_red: 1 }, 10, 2)).toBe("ok");
+    expect(await s.saveDesign(solo(id), "village", "small", null, ext, { pot: 1, roof_red: 1 }, 10, 2)).toBe("ok");
     const h = (await s.get(id))!;
     expect(h.exterior.roof).toBe("roof_red");
     expect(h.layout.items).toHaveLength(1);
     expect(h.placedScore).toBe(10);
-    expect(await s.takeItem(id, "roof_red")).toBe("placed");
+    expect(await s.takeItem(solo(id), "village", "roof_red")).toBe("placed");
   });
 
   it(`방명록은 최근 ${GUEST_KEEP}개만 남긴다`, async () => {
@@ -372,7 +376,7 @@ describe.skipIf(!!conn)("하우징 서비스 (포인트 연동)", () => {
     const results = await Promise.allSettled(Array.from({ length: 5 }, () => buyFurniture(store, id, "stone_lantern")));
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(2);
     expect(await points(id)).toBe(0);
-    expect((await store.inventory(houseIdFor(id))).stone_lantern).toBe(2);
+    expect((await store.inventory(housePair(id), "village")).have.stone_lantern).toBe(2);
   });
 
   it("가방 상한을 넘으면 포인트를 쓰지 않는다", async () => {
@@ -480,7 +484,7 @@ describe("꾸밈 점수 랭킹 (houseRank)", () => {
   const mk = async (store: MemoryHouseStore, owner: string, name: string, score: number, now: number) => {
     const id = houseIdFor(owner);
     await store.create({ id, owner, name, intro: "", ownerName: `${name} 주인`, tier: "small", lot: null, now });
-    expect(await store.saveDesign(id, "small", null, null, {}, score, now)).toBe("ok");
+    expect(await store.saveDesign(solo(id), "village", "small", null, null, {}, score, now)).toBe("ok");
     return id;
   };
 

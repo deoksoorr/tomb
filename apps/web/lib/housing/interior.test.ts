@@ -5,9 +5,12 @@ import { FURNITURE, furnitureById, PLOT_TIERS, tierById } from "./catalog";
 import { findFreeSpot, validateLayout } from "./layout";
 import { GROW_MS, plantStage, WATER_COOLDOWN_MS, waterWait, watered } from "./plants";
 import { doorwayTiles, partitionViolation, roomPlan } from "./rooms";
-import { MemoryHouseStore } from "./store";
+import { MemoryHouseStore, type HousePair } from "./store";
 import { housePlants, waterPlant } from "./service";
 import type { HouseLayout, Placed } from "./types";
+
+/** 오두막 없는 집 하나 (공용 가방 = 이 집 id) */
+const solo = (id: string): HousePair => ({ village: id, sea: `${id}-sea` });
 
 // 3번 집 안 개편: 방 구조·칸막이 규칙·가구 자리·화분 자람
 
@@ -146,9 +149,9 @@ describe("화분 물 주기 → 자람", () => {
     const store = new MemoryHouseStore();
     const id = "abcdefghijkl";
     await store.create({ id, owner: "own", name: "집", intro: "", ownerName: "주인", tier: "small", lot: null, now: 1 });
-    await store.addItem(id, "pot", 20);
+    await store.addItem(solo(id), "village", "pot", 20);
     const layout = lay([{ u: "p1", i: "pot", x: 1, y: 1, r: 0 }]);
-    await store.saveDesign(id, "small", layout, null, { pot: 1 }, 2, 2);
+    await store.saveDesign(solo(id), "village", "small", layout, null, { pot: 1 }, 2, 2);
     await expect(waterPlant(store, id, "nope", 10)).rejects.toMatchObject({ status: 404 });
     const r = await waterPlant(store, id, "p1", 10);
     expect(r.plants.p1).toEqual({ n: 1, at: 10 });

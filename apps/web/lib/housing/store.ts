@@ -1,6 +1,7 @@
 import { isOpenLot } from "@tomb/protocol";
 import {
   defaultExterior,
+  furnitureById,
   GUEST_KEEP,
   GUEST_PER_DAY,
   GUEST_REPORT_HIDE,
@@ -9,6 +10,7 @@ import {
   LIKE_WEIGHT,
   reclaimLastSeen,
   SEA_LOT_COUNT,
+  SEA_STARTER,
   VILLAGE_MAX_LOTS,
   type CottageStyleId,
   type HouseSort,
@@ -51,9 +53,81 @@ export type NewHouse = {
   layout?: HouseLayout;
   placed?: Record<string, number>;
   placedScore?: number;
-  /** 함께 주는 가구 (그 집 가방에 +1씩, 한 집 id에 한 번만 — 철거 뒤 다시 분양받아도 또 주지 않는다) */
+  /** 함께 주는 가구 (그 집 몫 가방에 +1씩 — 공용 가방이 아니다. 한 집 id에 한 번만 — 철거 뒤 다시 분양받아도 또 주지 않는다) */
   starter?: readonly string[];
 };
+
+/**
+ * 11/16 공용 가구 가방: 한 계정의 두 집 id (마을 집·포구 오두막, service housePair).
+ * 가구는 마을 집 id에 붙은 공용 가방 하나에 모이고 (마을 집이 없어도 같은 자리), 두 집이 나눠 놓는다 — N개를 가지면 두 집 합쳐 N개까지.
+ * 바닥·벽지·외관(isHouseOwnItem)과 오두막 시작 가구는 그 집 몫 (집 가방 inv에 남는다)
+ */
+export type HousePair = { village: string; sea: string };
+
+/** 그 집의 id와 다른 집 id */
+export const pairIds = (pair: HousePair, zone: HouseZone | undefined) =>
+  zone === "sea" ? { self: pair.sea, other: pair.village } : { self: pair.village, other: pair.sea };
+
+/** 집에 딸린 물건 (바닥·벽지·외관): 공용 가방에 넣지 않고 산 집 가방에 */
+export const isHouseOwnItem = (itemId: string) => {
+  const d = furnitureById(itemId);
+  return !!(d?.skin || d?.ext);
+};
+
+/** 오두막 시작 가구 중 가구 (오두막 몫으로 1개씩 남긴다 — 옛 가방을 옮길 때도) */
+export const SEA_STARTER_KEEP: readonly string[] = SEA_STARTER.filter((i) => !isHouseOwnItem(i));
+
+/**
+ * 한 집에서 본 가방. have = 이 집에 놓을 수 있는 개수 (이 집 몫 + 공용 − 다른 집이 공용에서 꺼내 놓은 것),
+ * away = 다른 집에 놓여 있어 여기서 못 쓰는 공용 개수 (치우면 여기 놓을 수 있다)
+ */
+export type InvView = { have: Record<string, number>; away: Record<string, number> };
+
+/** 다른 집이 공용 가방에서 꺼내 놓은 개수 (그 집 몫을 넘게 놓은 만큼) */
+const overOwn = (placed: Record<string, number>, own: Record<string, number>, it: string) => Math.max(0, (placed[it] ?? 0) - (own[it] ?? 0));
+
+/** 두 저장소가 같은 규칙으로 센다 */
+export function invView(pool: Record<string, number>, own: Record<string, number>, otherOwn: Record<string, number>, otherPlaced: Record<string, number>): InvView {
+  const have: Record<string, number> = {};
+  const away: Record<string, number> = {};
+  for (const it of new Set([...Object.keys(pool), ...Object.keys(own)])) {
+    const out = overOwn(otherPlaced, otherOwn, it);
+    const n = Math.max(0, (own[it] ?? 0) + (pool[it] ?? 0) - out);
+    if (n > 0) have[it] = n;
+    const a = Math.min(out, pool[it] ?? 0);
+    if (a > 0) away[it] = a;
+  }
+  return { have, away };
+}
+
+/**
+ * 공용 가방 규칙으로 counts(이 집에 놓을 개수)를 놓을 수 있나: 물건마다 (이 집이 몫을 넘게 놓은 수) + (다른 집이 몫을 넘게 놓은 수) ≤ 공용 개수.
+ * Redis SAVE_LUA와 같은 규칙
+ */
+export function fitsPool(counts: Record<string, number>, pool: Record<string, number>, own: Record<string, number>, otherOwn: Record<string, number>, otherPlaced: Record<string, number>): boolean {
+  return Object.entries(counts).every(([it, n]) => Math.max(0, n - (own[it] ?? 0)) + overOwn(otherPlaced, otherOwn, it) <= (pool[it] ?? 0));
+}
+
+/**
+ * 되팔기 1개를 어디서 뺄지: 공용에 놓이지 않은 것이 있으면 공용에서, 아니면 이 집 몫에서 (안 놓인 것만).
+ * none = 이 집에서 쓸 수 있는 게 없음, placed = 모두 이 집에 놓임, away = 남은 건 다른 집에 놓임. Redis TAKE_ITEM_LUA와 같은 규칙
+ */
+export function takeFrom(
+  it: string,
+  pool: Record<string, number>,
+  own: Record<string, number>,
+  placed: Record<string, number>,
+  otherOwn: Record<string, number>,
+  otherPlaced: Record<string, number>,
+): "pool" | "own" | "none" | "placed" | "away" {
+  const o = own[it] ?? 0;
+  const p = pool[it] ?? 0;
+  if (o + p < 1) return "none";
+  const out = overOwn(otherPlaced, otherOwn, it);
+  if (p - overOwn(placed, own, it) - out >= 1) return "pool";
+  if (o - (placed[it] ?? 0) >= 1) return "own";
+  return out > 0 && (placed[it] ?? 0) === 0 ? "away" : "placed";
+}
 
 /** 번지 수 상한 (마을·포구) */
 export const zoneMaxLots = (zone: HouseZone | undefined) => (zone === "sea" ? SEA_LOT_COUNT : VILLAGE_MAX_LOTS);
@@ -95,8 +169,13 @@ export const GUEST_REPORT_TTL_SEC = 30 * 86_400;
 
 export interface HouseStore {
   get(id: string): Promise<HouseRecord | null>;
-  /** 가진 물건 (놓은 것 포함) */
-  inventory(id: string): Promise<Record<string, number>>;
+  /**
+   * 11/16 그 집에서 본 가방 (공용 가방 + 그 집 몫, 다른 집에 놓인 공용 몫은 away).
+   * Redis는 처음 읽을 때 옛 집마다 가방을 공용 가방으로 옮긴다 (한 번만, 같은 Lua 안에서)
+   */
+  inventory(pair: HousePair, zone: HouseZone): Promise<InvView>;
+  /** 그 집 몫 가방만 (바닥·벽지·외관·시작 가구. 공용 가방은 빼고) */
+  ownItems(id: string): Promise<Record<string, number>>;
   /** 11/16 이 집 id에 시작 가구를 이미 준 적이 있는지 (오두막) */
   hasStarter(id: string): Promise<boolean>;
   /** 집 만들기와 번지 배정을 한 번에 (같은 채널의 같은 번지를 두 집이 받지 않는다. 채널이 다르면 같은 번지도 따로) */
@@ -107,11 +186,11 @@ export interface HouseStore {
   village(ch?: number, zone?: HouseZone): Promise<HouseRecord[]>;
   /** 오두막 겉모습 바꾸기 (오두막이 아니거나 없으면 false) */
   setStyle(id: string, style: CottageStyleId, now: number): Promise<boolean>;
-  /** 집과 딸린 키를 모두 지운다 (분양 결제 실패 보상·관리자 삭제) */
+  /** 집과 딸린 키를 모두 지운다 (분양 결제 실패 보상·관리자 삭제). 공용 가구 가방은 남긴다 (다른 집이 쓴다) */
   remove(id: string): Promise<void>;
   /**
    * 오래 비운 집을 비운다: 주인·터 크기가 그대로이고 주인이 cutoff 뒤로 들어오지 않았을 때만, 한 번에(Redis는 Lua 하나).
-   * 집·배치·방명록·번지 칸을 지우고 가방(inv)은 남긴다 (놓은 개수는 0으로 → 새로 분양받으면 다시 놓을 수 있다).
+   * 집·배치·방명록·번지 칸을 지우고 가방(inv, 그 집 몫)은 남긴다. 놓은 개수는 0으로 → 그 집에 놓였던 공용 가구는 공용 가방으로 돌아가 다른 집에 놓을 수 있다.
    * 같은 단계에서 돌려줄 포인트를 정리 기록(pendingReclaims)에 남긴다 → 두 번 비우거나 두 번 돌려주지 않는다
    */
   reclaim(id: string, r: ReclaimInput): Promise<ReclaimResult>;
@@ -126,16 +205,17 @@ export interface HouseStore {
   setProfile(id: string, name: string, intro: string, now: number): Promise<boolean>;
   /** tier가 from일 때만 to로 바꾼다. price = 넓히기 값 (낸 포인트 기록 paid가 있으면 더한다) */
   upgrade(id: string, from: PlotTierId, to: PlotTierId, now: number, price?: number): Promise<boolean>;
-  /** 가방에 1개 (max 초과면 "max") */
-  addItem(id: string, itemId: string, max: number): Promise<"ok" | "max" | "no_house">;
-  /** 놓지 않은 1개를 뺀다 (되팔기). 전부 놓여 있으면 "placed", 없으면 "none" */
-  takeItem(id: string, itemId: string): Promise<"ok" | "placed" | "none">;
+  /** 가방에 1개: 가구는 공용 가방, 바닥·벽지·외관은 그 집 가방 (그 가방에서 max 이상이면 "max", 그 집이 없으면 "no_house") */
+  addItem(pair: HousePair, zone: HouseZone, itemId: string, max: number): Promise<"ok" | "max" | "no_house">;
+  /** 두 집 어디에도 놓이지 않은 1개를 뺀다 (되팔기, takeFrom). 이 집에 다 놓였으면 "placed", 남은 게 다른 집에 놓였으면 "away", 없으면 "none" */
+  takeItem(pair: HousePair, zone: HouseZone, itemId: string): Promise<"ok" | "placed" | "away" | "none">;
   /**
-   * 배치·외관 저장 (null인 쪽은 그대로). tier가 그대로이고 counts(안+밖 전체)가 가진 개수 안일 때만.
+   * 배치·외관 저장 (null인 쪽은 그대로). tier가 그대로이고 counts(안+밖 전체)가 공용 가방 규칙(fitsPool, 다른 집에 놓인 것까지)에 맞을 때만 — 한 번에.
    * 검증·점수 계산은 호출자가 먼저 한다. 배치가 바뀌면 같은 단계에서 치우거나 옮긴 가구의 상태·없어진 화분 기록을 지운다
    */
   saveDesign(
-    id: string,
+    pair: HousePair,
+    zone: HouseZone,
     tier: PlotTierId,
     layout: HouseLayout | null,
     exterior: HouseExterior | null,
@@ -176,6 +256,7 @@ export const scoreOf = (placed: number, likes: number) => placed + likes * LIKE_
 
 type MemHouse = {
   rec: Omit<HouseRecord, "score" | "items">;
+  /** 그 집 몫 가방 (바닥·벽지·외관·시작 가구) */
   inv: Map<string, number>;
   placed: Map<string, number>;
   guests: StoredGuest[];
@@ -191,6 +272,8 @@ export class MemoryHouseStore implements HouseStore {
   private stateMap = new Map<string, Record<string, HouseState>>();
   /** 비운 집의 가방 (집이 없어도 남는다. 다시 분양받으면 그 집 가방이 된다) */
   private keptInv = new Map<string, Map<string, number>>();
+  /** 11/16 공용 가구 가방 (마을 집 id → 물건 → 개수) */
+  private pools = new Map<string, Map<string, number>>();
   private pending = new Map<string, PendingReclaim[]>();
   private reclaimLockUntil = 0;
   /** 시작 가구를 이미 준 집 id */
@@ -247,8 +330,27 @@ export class MemoryHouseStore implements HouseStore {
     return this.starterGiven_.has(id);
   }
 
-  async inventory(id: string) {
+  private own(id: string): Record<string, number> {
     return Object.fromEntries(this.houses.get(id)?.inv ?? this.keptInv.get(id) ?? []);
+  }
+
+  private placedOf(id: string): Record<string, number> {
+    return Object.fromEntries(this.houses.get(id)?.placed ?? []);
+  }
+
+  private pool(pair: HousePair): Map<string, number> {
+    let m = this.pools.get(pair.village);
+    if (!m) this.pools.set(pair.village, (m = new Map()));
+    return m;
+  }
+
+  async inventory(pair: HousePair, zone: HouseZone) {
+    const { self, other } = pairIds(pair, zone);
+    return invView(Object.fromEntries(this.pool(pair)), this.own(self), this.own(other), this.placedOf(other));
+  }
+
+  async ownItems(id: string) {
+    return this.own(id);
   }
 
   /** 채널마다 번지 → 집 (메모리는 집 기록에서 바로 센다. 채널이 없는 예전 기록은 1채널로 본다) */
@@ -392,27 +494,32 @@ export class MemoryHouseStore implements HouseStore {
     return true;
   }
 
-  async addItem(id: string, itemId: string, max: number) {
-    const h = this.houses.get(id);
+  async addItem(pair: HousePair, zone: HouseZone, itemId: string, max: number) {
+    const h = this.houses.get(pairIds(pair, zone).self);
     if (!h) return "no_house" as const;
-    const n = h.inv.get(itemId) ?? 0;
+    const bag = isHouseOwnItem(itemId) ? h.inv : this.pool(pair);
+    const n = bag.get(itemId) ?? 0;
     if (n >= max) return "max" as const;
-    h.inv.set(itemId, n + 1);
+    bag.set(itemId, n + 1);
     return "ok" as const;
   }
 
-  async takeItem(id: string, itemId: string) {
-    const h = this.houses.get(id);
-    const n = h?.inv.get(itemId) ?? 0;
-    if (!h || n < 1) return "none" as const;
-    if (n - (h.placed.get(itemId) ?? 0) < 1) return "placed" as const;
-    if (n === 1) h.inv.delete(itemId);
-    else h.inv.set(itemId, n - 1);
+  async takeItem(pair: HousePair, zone: HouseZone, itemId: string) {
+    const { self, other } = pairIds(pair, zone);
+    const pool = this.pool(pair);
+    const from = takeFrom(itemId, Object.fromEntries(pool), this.own(self), this.placedOf(self), this.own(other), this.placedOf(other));
+    if (from === "none" || from === "placed" || from === "away") return from;
+    const bag = from === "pool" ? pool : (this.houses.get(self)?.inv ?? this.keptInv.get(self));
+    const n = bag?.get(itemId) ?? 0;
+    if (!bag || n < 1) return "none" as const;
+    if (n === 1) bag.delete(itemId);
+    else bag.set(itemId, n - 1);
     return "ok" as const;
   }
 
   async saveDesign(
-    id: string,
+    pair: HousePair,
+    zone: HouseZone,
     tier: PlotTierId,
     layout: HouseLayout | null,
     exterior: HouseExterior | null,
@@ -420,10 +527,11 @@ export class MemoryHouseStore implements HouseStore {
     placedScore: number,
     now: number,
   ) {
+    const { self: id, other } = pairIds(pair, zone);
     const h = this.houses.get(id);
     if (!h) return "no_house" as const;
     if (h.rec.tier !== tier) return "tier" as const;
-    for (const [item, n] of Object.entries(counts)) if ((h.inv.get(item) ?? 0) < n) return "not_owned" as const;
+    if (!fitsPool(counts, Object.fromEntries(this.pool(pair)), this.own(id), this.own(other), this.placedOf(other))) return "not_owned" as const;
     h.placed = new Map(Object.entries(counts));
     if (layout) {
       h.rec.layout = structuredClone(layout);

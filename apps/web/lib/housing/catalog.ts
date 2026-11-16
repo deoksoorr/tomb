@@ -218,6 +218,9 @@ export const sellPrice = (def: FurnitureDef) => Math.floor(def.price * SELL_BACK
 /** 한 종류를 이만큼까지 가질 수 있다 */
 export const MAX_OWN_PER_ITEM = 20;
 
+/** 11/16 가구는 마을 집·오두막 공용 가방: 가진 것이 모두 다른 집에 놓여 있을 때 (가방·상점·저장 오류가 같은 말) */
+export const AWAY_MSG = "다른 집에 놓여 있어요. 거기서 치우면 여기 놓을 수 있어요.";
+
 /** 꾸밈 점수 = 놓은 물건 점수 합 + 좋아요 × LIKE_WEIGHT */
 export const LIKE_WEIGHT = 3;
 /** 좋아요를 받으면 주인이 받는 포인트 (lib/economy.ts의 houseLike 규칙과 같은 값) */
