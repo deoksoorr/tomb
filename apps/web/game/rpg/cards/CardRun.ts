@@ -185,6 +185,8 @@ export class CardRun<M extends CardMon> {
   private temp: { key: string; v: number; until: number } = { key: "", v: 0, until: 0 };
   private leaveUntil = 0;
   private leaveUsed = false;
+  /** 11/17 지난 프레임에 체력이 30% 이상이었나 — 연차는 30% 위에서 아래로 「떨어지는 순간」에만 (이미 아래인 채로 층을 깨거나 부활 직후면 안 터진다) */
+  private leaveAbove = true;
   private halfReady = true;
   private seenCleared = 0;
   private spAt = 0;
@@ -1134,6 +1136,8 @@ export class CardRun<M extends CardMon> {
   revive(): boolean {
     if (!this.s.revive || this.reviveUsed) return false;
     this.reviveUsed = true;
+    // 11/17 쓰러졌다 일어난 것은 「30% 아래로 떨어진 순간」이 아니다 (부활 체력이 반올림으로 30%에 살짝 못 미쳐도 연차가 바로 터지지 않게)
+    this.leaveAbove = false;
     const p = this.h.player();
     this.h.ring(p.x, p.y, 0xffd84a, 60);
     this.burst(p.x, p.y - 10, 0xffd84a, 24);
@@ -1159,7 +1163,10 @@ export class CardRun<M extends CardMon> {
       this.spAt = now + 1000;
       this.h.addSp(s.spRegen);
     }
-    if (s.leave && !this.leaveUsed && this.h.hp() > 0 && this.h.hp() < this.h.maxHp() * 0.3) {
+    const low = this.h.hp() < this.h.maxHp() * 0.3;
+    const crossed = this.leaveAbove && low;
+    this.leaveAbove = !low;
+    if (s.leave && !this.leaveUsed && crossed && this.h.hp() > 0) {
       this.leaveUsed = true;
       this.leaveUntil = now + 5000;
       this.buffMask |= 2;

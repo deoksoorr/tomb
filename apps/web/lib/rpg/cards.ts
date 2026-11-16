@@ -163,14 +163,14 @@ export const CARDS: Record<CardId, CardDef> = {
   resign: c("resign", "퇴사 각", "unique", 1, "내 체력이 적을수록 세게 쳐요. 내 체력이 거의 바닥이면 피해가 60% 올라요.", 0xd84a4a, 0xf2ead3),
   chainline: c("chainline", "결재 라인", "unique", 1, "번개가 다섯 번 옮겨 가고 더 세져요. 급한 호출이 없어도 번개가 나가요.", 0x6a6ae8, 0xfff06a),
   wfh: c("wfh", "재택근무", "unique", 2, "가만히 서 있으면 받는 피해가 15% 줄어요.", 0x7ac8a8, 0xe8d8b0),
-  politics: c("politics", "사내 정치", "unique", 1, "내가 때린 적이 가끔 옆에 있는 적을 대신 때려요.", 0xb86ad8, 0xffd84a),
+  politics: c("politics", "사내 정치", "unique", 1, "내가 때린 적이 15% 확률로 옆에 있는 적을 대신 때려요.", 0xb86ad8, 0xffd84a),
   bonus: c("bonus", "성과급", "unique", 2, "우두머리와 정예에게 주는 피해가 30% 올라요.", 0x5ad08a, 0xffd84a),
   // ── 전설 ──
   oneshot: c("oneshot", "원샷 결재", "legend", 1, "내 공격이 5% 확률로 일반 몬스터를 한 번에 잡아요.", 0xffd84a, 0xa83c3c),
   overtime: c("overtime", "무한 야근", "legend", 1, "내가 쓰러져도 한 번은 체력 30%로 다시 일어나요.", 0xe8dcff, 0xffd84a),
   promote: c("promote", "팀장 승진", "legend", 1, "다른 카드의 수치가 모두 50% 더 세져요.", 0x3a3a5a, 0xffd84a),
   corpcard: c("corpcard", "법인카드", "legend", 1, "내가 적을 잡으면 가끔 5초 동안 공격력, 공격 속도, 이동 속도 중 하나가 올라요.", 0x2a2a3a, 0xd8b84a),
-  leave: c("leave", "연차 몰아 쓰기", "legend", 1, "내 체력이 30% 아래로 떨어지면 3초 동안 무적이 되고 공격 속도가 50% 올라요. 층마다 한 번이에요.", 0x7ad0f0, 0xf2ead3),
+  leave: c("leave", "연차 몰아 쓰기", "legend", 1, "내 체력이 30% 아래로 떨어지면 3초 동안 무적이 되고, 5초 동안 공격 속도가 50% 올라요. 층마다 한 번이에요.", 0x7ad0f0, 0xf2ead3),
 };
 
 export const CARD_LIST: readonly CardDef[] = CARD_IDS.map((id) => CARDS[id]);
@@ -301,12 +301,14 @@ export function cardPromoLine(id: CardId, n: number, owned: CardCounts | undefin
         return down("서 있을 때 받는 피해", 15);
       case "bonus":
         return up("우두머리·정예 피해", 30);
+      case "politics":
+        return "대신 때리는 피해 +50% (확률은 15% 그대로)";
       case "oneshot":
         return `원샷 확률 ${fmt(5 * k)}%`;
       case "overtime":
         return `다시 일어날 때 체력 ${fmt(30 * k)}%`;
       case "leave":
-        return `공격 속도 +${fmt(50 * k)}%`;
+        return `5초 동안 공격 속도 +${fmt(50 * k)}%`;
       default:
         return null;
     }
@@ -641,7 +643,8 @@ export function cardStats(o: CardCounts): CardStats {
     xpMul: 1 + 0.15 * k * n("minutes"),
     explode: n("afterparty") > 0 ? 0.6 * k : 0,
     resign: n("resign") > 0 ? 0.6 * k : 0,
-    politics: n("politics") > 0 ? 0.15 * k : 0,
+    // 11/17 확률은 15% 그대로 — 팀장 승진은 대신 때리는 피해(CardRun quarrel 0.6 × effMul)에만
+    politics: n("politics") > 0 ? 0.15 : 0,
     bossDmg: 0.3 * k * n("bonus"),
     effMul: k,
     coffeeHeal: 0.4 * k,
@@ -678,7 +681,7 @@ export function cardPower(o: CardCounts): number {
   if (s.oneshot) p *= 1 + 3 * s.oneshotP;
   p *= 1 + s.explode;
   p *= 1 + s.resign;
-  p *= 1 + s.politics * 1.5;
+  p *= 1 + s.politics * 1.5 * s.effMul;
   p *= 1 + s.bossDmg * 0.5;
   if (s.corpcard) p *= 1 + 0.25 * s.effMul;
   if (s.leave) p *= 1 + 0.1 * s.leaveAspd;

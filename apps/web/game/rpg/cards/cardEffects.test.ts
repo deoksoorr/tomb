@@ -56,7 +56,8 @@ const mon = (id: MonsterId, o: Partial<Mon> = {}): Mon =>
   }) as unknown as Mon;
 
 /** 가짜 판: 시각·체력·깬 층을 손으로 움직이고, 카드가 부른 회복·SP·무적·능력치 다시 계산을 센다 */
-function harness(style = "swing") {
+function harness(style = "swing", mons: Mon[] = []) {
+  const hits: { m: Mon; mult: number }[] = [];
   const w = {
     now: 0,
     hp: 1000,
@@ -73,11 +74,11 @@ function harness(style = "swing") {
     now: () => w.now,
     player: () => ({ x: 0, y: 0 }),
     face: () => ({ x: 0, y: 1 }),
-    mons: () => [],
+    mons: () => mons,
     size: () => 10,
     style: () => ({ id: style }),
     area: () => ({ range: 20, arcDeg: 90 }),
-    strike: () => {},
+    strike: (m: Mon, mult: number) => hits.push({ m, mult }),
     dot: () => {},
     meleeArc: () => {},
     ink: () => {},
@@ -92,7 +93,7 @@ function harness(style = "swing") {
       w.healed += n;
       w.hp = Math.min(w.maxHp, w.hp + n);
     },
-    later: () => {},
+    later: (_ms: number, fn: () => void) => fn(),
     hold: () => {},
     canPick: () => true,
     floorsCleared: () => w.cleared,
@@ -111,7 +112,7 @@ function harness(style = "swing") {
     for (let i = 0; i < n; i++)
       (run as unknown as { apply(id: CardId): void }).apply(id);
   };
-  return { w, run, give };
+  return { w, run, give, hits };
 }
 
 const BASE: Derived = {
@@ -205,7 +206,8 @@ const TABLE: Record<CardId, Row> = {
       s.chainMult > cardStats({ urgent: 1 }).chainMult,
   },
   wfh: { text: ["15%"], per: [[pct("stillTaken"), 0.15]], stacks: true },
-  politics: { per: [[pct("politics"), 0.15]], stacks: false },
+  // 11/17 확률은 15% 고정 (팀장 승진은 대신 때리는 피해에만 — 아래 따로)
+  politics: { text: ["15%"], flag: (s) => s.politics === 0.15 },
   bonus: {
     text: ["30%"],
     per: [[pct("bonusDmg" as keyof CardStats), 0]],
@@ -229,7 +231,7 @@ const TABLE: Record<CardId, Row> = {
   },
   corpcard: { text: ["5초"], flag: (s) => s.corpcard > 0 },
   leave: {
-    text: ["30%", "3초", "50%"],
+    text: ["30%", "3초", "5초", "50%"],
     per: [[pct("leaveAspd"), 0.5]],
     stacks: false,
     flag: (s) => s.leave,
@@ -498,6 +500,7 @@ describe("11/17 팀장 승진 (다른 카드 수치 ×1.5)", () => {
         b.halfday,
         b.revive,
         b.leave,
+        b.politics,
       ]).toEqual([
         a.extra,
         a.front,
@@ -515,6 +518,7 @@ describe("11/17 팀장 승진 (다른 카드 수치 ×1.5)", () => {
         a.halfday,
         a.revive,
         a.leave,
+        a.politics,
       ]);
       // 참조 추가의 한 번 피해 −10%는 깎는 값이라 승진이 키우지 않는다
       expect(b.hitMul).toBe(a.hitMul);
@@ -549,7 +553,7 @@ describe("11/17 팀장 승진 (다른 카드 수치 ×1.5)", () => {
     }
   });
 
-  it("연차 몰아 쓰기: 체력 30% 아래로 떨어지면 무적 3초 + 공격 속도 +50% (승진 +75%), 층마다 한 번", () => {
+  it("연차 몰아 쓰기: 체력 30% 아래로 떨어지면 무적 3초 + 5초 동안 공격 속도 +50% (승진 +75%), 층마다 한 번", () => {
     const { run, give, w } = harness();
     give("leave");
     w.hp = 299;
@@ -562,15 +566,101 @@ describe("11/17 팀장 승진 (다른 카드 수치 ×1.5)", () => {
     w.now = 6000;
     run.update(0.016);
     expect(run.derive(BASE).aspd).toBeCloseTo(2);
+    // 다음 층: 다시 쓸 수 있지만, 30% 위로 올라왔다가 다시 떨어져야 터진다
+    w.invuln = 0;
     w.cleared = 1;
     run.update(0.016);
+    expect(w.invuln).toBe(0);
+    w.hp = 500;
+    run.update(0.016);
+    w.hp = 250;
+    run.update(0.016);
     expect(w.invuln).toBe(3000);
+    expect(cardPromoLine("leave", 1, { promote: 1 })).toBe(
+      "팀장 승진으로 5초 동안 공격 속도 +75%",
+    );
     const p = harness();
     p.give("leave");
     p.give("promote");
     p.w.hp = 100;
     p.run.update(0.016);
     expect(p.run.derive(BASE).aspd).toBeCloseTo(3.5);
+  });
+
+  it("연차 몰아 쓰기는 「떨어지는 순간」만: 이미 30% 아래인 채로 층을 깨거나, 부활 직후 30%에 살짝 못 미쳐도 바로 안 터진다", () => {
+    // 이미 30% 아래로 층을 깸 → 엘리베이터 안에서 터지지 않는다
+    const a = harness();
+    a.give("leave");
+    a.w.hp = 250;
+    a.run.update(0.016);
+    expect(a.w.invuln).toBe(3000);
+    a.w.invuln = 0;
+    a.w.cleared = 1;
+    for (let i = 0; i < 5; i++) a.run.update(0.016);
+    expect(a.w.invuln).toBe(0);
+    expect(a.run.spare.leave).toBe(true);
+    // 부활 직후: 체력 30%가 반올림으로 살짝 모자라도 (지난 프레임엔 30% 위였어도) 안 터진다
+    const b = harness();
+    b.give("leave");
+    b.give("overtime");
+    b.w.maxHp = 1001;
+    b.w.hp = 900;
+    b.run.update(0.016);
+    expect(b.run.revive()).toBe(true);
+    b.w.hp = Math.round(1001 * b.run.reviveHp); // 300 < 300.3
+    b.run.update(0.016);
+    expect(b.w.invuln).toBe(0);
+    expect(b.run.spare.leave).toBe(true);
+    // 그 뒤 30% 위로 올라왔다가 다시 떨어지면 터진다
+    b.w.hp = 400;
+    b.run.update(0.016);
+    b.w.hp = 200;
+    b.run.update(0.016);
+    expect(b.w.invuln).toBe(3000);
+    // 30% 아래일 때 카드를 고르면, 다시 올라왔다 떨어질 때까지 안 터진다
+    const c = harness();
+    c.w.hp = 100;
+    c.run.update(0.016);
+    c.give("leave");
+    c.run.update(0.016);
+    expect(c.w.invuln).toBe(0);
+  });
+
+  it("사내 정치: 확률은 15% 그대로, 팀장 승진은 대신 때리는 피해에만 (0.6 → 0.9)", () => {
+    const hit = mon("scope_creep" as MonsterId);
+    const near = mon("scope_creep" as MonsterId, { x: 20 });
+    expect(cardStats({ politics: 1 }).politics).toBe(0.15);
+    expect(cardStats({ politics: 1, promote: 1 }).politics).toBe(0.15);
+    expect(CARDS.politics.desc).toContain("15%");
+    expect(cardPromoLine("politics", 1, { promote: 1 })).toBe(
+      "팀장 승진으로 대신 때리는 피해 +50% (확률은 15% 그대로)",
+    );
+    for (const [promo, want] of [
+      [false, 0.6],
+      [true, 0.9],
+    ] as const) {
+      const h = harness("swing", [hit, near]);
+      h.give("politics");
+      if (promo) h.give("promote");
+      // 확률 15%: 0.149면 터지고 0.151이면 안 터진다 (승진이 있어도 같다)
+      vi.spyOn(Math, "random").mockReturnValue(0.151);
+      h.run.onBasicHit(hit);
+      expect(h.hits.length).toBe(0);
+      vi.spyOn(Math, "random").mockReturnValue(0.149);
+      h.run.onBasicHit(hit);
+      expect(h.hits).toHaveLength(1);
+      expect(h.hits[0].m).toBe(near);
+      expect(h.hits[0].mult).toBeCloseTo(want);
+    }
+    // 서버 처치 속도 상한은 예전(확률 ×1.5로 셈)과 같은 몫: 사내 정치 몫 = 1 + 0.15 × 1.5 × 1.5 (스킬 피해 몫은 따로)
+    const skill = (o: CardCounts) => 1 + 0.5 * cardStats(o).skillDmg;
+    expect(
+      cardPower({ politics: 1, promote: 1 }) /
+        skill({ politics: 1, promote: 1 }),
+    ).toBeCloseTo(
+      (cardPower({ promote: 1 }) / skill({ promote: 1 })) *
+        (1 + 0.15 * 1.5 * 1.5),
+    );
   });
 
   it("법인카드·연차가 겹쳐도 먼저 끝난 혜택은 제때 빠진다 (능력치를 바로 다시 계산)", () => {
