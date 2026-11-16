@@ -34,7 +34,7 @@ import { earnedTitleIds, titleDef, titlePerk, type TitleFacts, type TitleMetric 
 //    칭호를 달거나 빼고, 알림·본 기록을 남기면 그 계정 기억을 지운다 (forgetTitles). 도감 등록·1위 지급 결과는 길어야 FACTS_TTL_MS 늦게 보인다.
 //  - 명예의 전당(주간 1위 기록)은 모든 계정이 같이 쓰므로 HALL_TTL_MS 동안 한 번만 읽는다.
 //  - 계정 기록은 필요한 칸만 (연속 출석·몸·착용·염색 — 3명령), 사냥 처치·어려움/지옥 완주는 점수 하나씩만 (3명령).
-//  - 한 번 새로 읽기 = 도감 3 + 집 2 + 사냥 캐릭터 1 + 계정 3 + 사냥 기록 3 + 접속 시간 1 + 추천 1 + 알림 기록 2 ≈ 16명령 (예전 약 46).
+//  - 한 번 새로 읽기 = 도감 3 + 집 2 + 사냥 캐릭터 1 + 계정 3 + 사냥 기록 5 + 접속 시간 1 + 추천 1 + 알림 기록 2 ≈ 18명령 (예전 약 46. 11/16 사냥터별 랭킹으로 완주 판 +2).
 
 /** 명예의 전당에서 훑는 주 수 (10년) */
 const HALL_WEEKS = 520;
@@ -90,7 +90,7 @@ async function hall(now: number): Promise<ChampWeek[]> {
   return h;
 }
 
-/** 계정 기록에서 칭호에 필요한 칸만 + 사냥 기록 점수 (Redis면 파이프라인 6명령, 메모리면 저장소 함수) */
+/** 계정 기록에서 칭호에 필요한 칸만 + 사냥 기록 점수 (Redis면 파이프라인 8명령, 메모리면 저장소 함수) */
 async function light(accountId: string, now: number): Promise<Light> {
   const conn = env.redis();
   if (!conn) {
@@ -99,21 +99,25 @@ async function light(accountId: string, now: number): Promise<Light> {
       accounts.get(accountId, kstDay(now), now),
       getStyleStore(accounts).get(accountId),
       accounts.huntRank("kills", 1, accountId, {}).then((r) => r.mine?.points ?? 0),
-      accounts.huntRank("best", 1, accountId, { zone: "hard" }).then((r) => (r.mine ? 1 : 0)),
-      accounts.huntRank("best", 1, accountId, { zone: "hell" }).then((r) => (r.mine ? 1 : 0)),
+      accounts.huntCleared(accountId, "hard").then((x) => (x ? 1 : 0)),
+      accounts.huntCleared(accountId, "hell").then((x) => (x ? 1 : 0)),
     ]);
     return { streak: a.streak, body: a.body, equipped: a.equipped, dye: style.dye, kills, hard, hell };
   }
   const redis = (g.__tombTitleRedis ??= redisClient(conn, "titlesServer"));
-  const [acct, look, style, kills, hard, hell] = (await redis
+  // 11/16 어려움·지옥 완주: 옛 난이도 판 + 사냥터별로 바뀐 뒤의 난이도 판 (lib/store/huntBoards)
+  const [acct, look, style, kills, hardOld, hardNew, hellOld, hellNew] = (await redis
     .pipeline()
     .hmget(K.acct(accountId), "streak", "body")
     .hgetall(K.look(accountId))
     .hgetall(styleKey(accountId))
     .zscore(K.rankHuntKills, accountId)
     .zscore(K.rankHuntBest("hard"), accountId)
+    .zscore(K.rankHuntClear("hard"), accountId)
     .zscore(K.rankHuntBest("hell"), accountId)
+    .zscore(K.rankHuntClear("hell"), accountId)
     .exec()) as unknown[];
+  const has = (...xs: unknown[]) => (xs.some((x) => x !== null && x !== undefined) ? 1 : 0);
   const pairs = (raw: unknown): [string, string][] => {
     if (Array.isArray(raw)) {
       const out: [string, string][] = [];
@@ -136,8 +140,8 @@ async function light(accountId: string, now: number): Promise<Light> {
     equipped,
     dye,
     kills: Math.floor(Number(kills) || 0),
-    hard: hard === null || hard === undefined ? 0 : 1,
-    hell: hell === null || hell === undefined ? 0 : 1,
+    hard: has(hardOld, hardNew),
+    hell: has(hellOld, hellNew),
   };
 }
 

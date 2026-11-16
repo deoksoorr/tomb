@@ -83,6 +83,8 @@
 }
 
 .zone {
+  /* 11/16 사냥터 이름이 길어도 (12곳) 좁은 화면에서 줄을 넘치지 않게 */
+  max-width: 100%;
   min-height: 28px;
   padding: 2px 6px;
   border: 0;

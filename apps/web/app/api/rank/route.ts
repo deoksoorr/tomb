@@ -1,6 +1,6 @@
 import { speciesById } from "@/lib/forage/catalog";
 import { getFishRank, type FishRankEntry } from "@/lib/forage/fishRank";
-import { DIFFICULTIES } from "@/lib/rpg/catalog";
+import { DIFFICULTIES, isZoneId, ZONE_IDS, ZONES, type Difficulty, type ZoneId } from "@/lib/rpg/catalog";
 import { handler, HttpError, json } from "@/lib/http";
 import { getHouseStore, houseRank } from "@/lib/housing/service";
 import { huntLevelRank } from "@/lib/huntLevelRank";
@@ -21,10 +21,11 @@ import { RANK_BOARDS, type RankBoard, type RankPeriod, type RankResponse, type R
 const RANK_SIZE = 50;
 
 /**
- * 랭킹 (49번: 포인트·사냥 중심). `?board=points|huntKills|huntBest|house&period=week|all&zone=easy|normal|hard|hell`
+ * 랭킹 (49번: 포인트·사냥 중심). `?board=points|huntKills|huntBest|house&period=week|all&zone=<사냥터 id>`
  *  - points: 모은 포인트 (전체 = 쓰더라도 줄지 않는 합계, 주간 = 이번 주 월요일 새벽 5시부터 모은 포인트)
  *  - huntKills: 사냥터 처치 수 합계
- *  - huntBest: 그 사냥터를 쓰러지지 않고 끝까지 깬 가장 짧은 시간 (value = ms)
+ *  - huntBest: 그 사냥터를 쓰러지지 않고 끝까지 깬 가장 짧은 시간 (value = ms). 11/16 zone = 사냥터 id (12곳, 기본 = 쉬움 첫 사냥터).
+ *    예전 화면처럼 난이도 id(easy|normal|hard|hell)로 물으면 그 난이도 첫 사냥터 판 (옛 난이도 기록이 합쳐진 판)
  *  - house: 하우징 꾸밈 점수 (F11. 전체 = 모든 집, 주간 = 이번 주에 꾸민 집. name = 집 이름, sub = 번지 · 주인)
  *  - fish: 최대어 `&fish=<물고기 id>|all` (value = 크기 cm×10. all이면 sub = 그 물고기 이름)
  *  - huntLevel: 사냥 캐릭터 레벨 (같으면 경험치. 기간 없음. value = 레벨, sub = 경험치, gear = 장착 무기. 정지 계정 제외)
@@ -41,9 +42,8 @@ export const GET = handler(async (req) => {
   const board = (params.get("board") ?? "points") as RankBoard;
   if (!RANK_BOARDS.includes(board)) throw new HttpError(400, "INVALID_INPUT", "모르는 랭킹이에요.");
   const period: RankPeriod = board !== "stay" && params.get("period") === "week" ? "week" : "all";
-  const zone = params.get("zone") ?? DIFFICULTIES[0];
-  if (board === "huntBest" && !(DIFFICULTIES as readonly string[]).includes(zone))
-    throw new HttpError(400, "INVALID_INPUT", "모르는 사냥터예요.");
+  const zone = huntZoneParam(params.get("zone"));
+  if (board === "huntBest" && !zone) throw new HttpError(400, "INVALID_INPUT", "모르는 사냥터예요.");
   const personal = params.get("me") === "1";
   const me = personal ? await getVisitorId(req) : null;
   const week = period === "week" ? kstWeek() : undefined;
@@ -94,24 +94,31 @@ export const GET = handler(async (req) => {
       ? accounts.pointRank(n, who, week)
       : board === "stay"
         ? accounts.stayRank(n, who)
-        : accounts.huntRank(board === "huntKills" ? "kills" : "best", n, who, { zone, week });
+        : accounts.huntRank(board === "huntKills" ? "kills" : "best", n, who, { zone: zone ?? undefined, week });
   const row = (r: RankEntry & { ns?: string[] }): RankRow => ({ rank: r.rank, name: r.name ?? NO_NAME, value: r.points, me: r.accountId === me, ...(r.ns ? { ns: r.ns } : {}) });
   if (memoOn()) {
     const key = `${board}|${period}|${week ?? ""}|${board === "huntBest" ? zone : ""}|${staffId ?? ""}`;
     const r = await rankWithoutStaff(memoTopFetch(key, fetch, staffId), RANK_SIZE, me, staffId);
     const styled = await styleMine(r.rows, r.mine);
     return json<RankResponse>(
-      { board, period, ...(board === "huntBest" ? { zone } : {}), rows: r.rows.map(row), mine: styled ? row(styled) : null, ...staff },
+      { board, period, ...(board === "huntBest" && zone ? { zone } : {}), rows: r.rows.map(row), mine: styled ? row(styled) : null, ...staff },
       { headers: cacheHeaders(personal) },
     );
   }
   const { rows, mine } = await rankWithoutStaff(fetch, RANK_SIZE, me, staffId);
   const { rows: styledRows, mine: styledMine } = await boardWithNameStyles(rows, mine);
   return json<RankResponse>(
-    { board, period, ...(board === "huntBest" ? { zone } : {}), rows: styledRows.map(row), mine: styledMine ? row(styledMine) : null, ...staff },
+    { board, period, ...(board === "huntBest" && zone ? { zone } : {}), rows: styledRows.map(row), mine: styledMine ? row(styledMine) : null, ...staff },
     { headers: cacheHeaders(personal) },
   );
 });
+
+/** 11/16 사냥터 고르기: 사냥터 id 그대로, 난이도 id(예전 화면)는 그 난이도 첫 사냥터, 없으면 쉬움 첫 사냥터. 모르는 값이면 null */
+function huntZoneParam(raw: string | null): ZoneId | null {
+  if (raw === null) return ZONE_IDS[0];
+  if (isZoneId(raw)) return raw;
+  return (DIFFICULTIES as readonly string[]).includes(raw) ? ZONES[raw as Difficulty].id : null;
+}
 
 /**
  * 운영(Redis)에서는 상위 줄을 인스턴스마다 30초 기억하고 내 줄만 새로 읽는다 (lib/rankMemo — 요청마다 150개 남짓 → 5개 남짓).

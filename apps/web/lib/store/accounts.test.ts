@@ -887,36 +887,80 @@ function contract(make: () => Kit) {
     const b = newId();
     const week = weekOfDay(DAY);
     const nextWeek = weekOfDay("20261116");
-    await accounts.recordHunt(a, "easy", { kills: 30, clearMs: 90_000 }, week);
-    await accounts.recordHunt(a, "easy", { kills: 12, clearMs: 120_000 }, week); // 더 느림 → 그대로
-    await accounts.recordHunt(a, "easy", { kills: 5, clearMs: null }, nextWeek); // 클리어 못 함
-    await accounts.recordHunt(b, "easy", { kills: 40, clearMs: 80_000 }, week);
-    await accounts.recordHunt(b, "hard", { kills: 3, clearMs: 200_000 }, nextWeek);
+    await accounts.recordHunt(a, "subway", { kills: 30, clearMs: 90_000 }, week);
+    await accounts.recordHunt(a, "subway", { kills: 12, clearMs: 120_000 }, week); // 더 느림 → 그대로
+    await accounts.recordHunt(a, "subway", { kills: 5, clearMs: null }, nextWeek); // 클리어 못 함
+    await accounts.recordHunt(b, "subway", { kills: 40, clearMs: 80_000 }, week);
+    await accounts.recordHunt(b, "homework-desert", { kills: 3, clearMs: 200_000 }, nextWeek);
 
     expect((await accounts.huntRank("kills", 10_000, a, {})).mine?.points).toBe(47);
     expect((await accounts.huntRank("kills", 10_000, a, { week })).mine?.points).toBe(42);
     expect((await accounts.huntRank("kills", 10_000, a, { week: nextWeek })).mine?.points).toBe(5);
-    expect((await accounts.huntRank("best", 10_000, a, { zone: "easy" })).mine?.points).toBe(90_000);
-    expect((await accounts.huntRank("best", 10_000, a, { zone: "easy", week: nextWeek })).mine).toBeNull();
-    expect((await accounts.huntRank("best", 10_000, b, { zone: "hard" })).mine?.points).toBe(200_000);
-    expect((await accounts.huntRank("best", 10_000, a, { zone: "hard" })).mine).toBeNull();
+    expect((await accounts.huntRank("best", 10_000, a, { zone: "subway" })).mine?.points).toBe(90_000);
+    expect((await accounts.huntRank("best", 10_000, a, { zone: "subway", week: nextWeek })).mine).toBeNull();
+    expect((await accounts.huntRank("best", 10_000, b, { zone: "homework-desert" })).mine?.points).toBe(200_000);
+    expect((await accounts.huntRank("best", 10_000, a, { zone: "homework-desert" })).mine).toBeNull();
     // 최단 기록은 작을수록 위
-    const best = await accounts.huntRank("best", 10_000, null, { zone: "easy", week });
+    const best = await accounts.huntRank("best", 10_000, null, { zone: "subway", week });
     const ra = best.rows.find((r) => r.accountId === a)!;
     const rb = best.rows.find((r) => r.accountId === b)!;
     expect(rb.rank).toBeLessThan(ra.rank);
     expect(rb.points).toBe(80_000);
   });
 
+  it("11/16 사냥터별 최단 클리어: 같은 난이도 다른 사냥터와 섞이지 않고, 옛 난이도 판은 그 난이도 첫 사냥터에 합쳐 보인다", async () => {
+    const [a, b, c] = [newId(), newId(), newId()];
+    const week = weekOfDay(DAY);
+    // 옛 기록 (사냥터별로 나누기 전: 난이도 판)
+    await accounts.recordHunt(a, "easy", { kills: 3, clearMs: 70_000 }, week);
+    await accounts.recordHunt(b, "easy", { kills: 3, clearMs: 95_000 }, week);
+    // 새 기록: 첫 사냥터(월요일 회의실)에 a는 더 느리게, b는 더 빠르게. c는 다른 쉬움 사냥터(지하철)만
+    await accounts.recordHunt(a, "meeting-room", { kills: 3, clearMs: 85_000 }, week);
+    await accounts.recordHunt(b, "meeting-room", { kills: 3, clearMs: 60_000 }, week);
+    await accounts.recordHunt(c, "subway", { kills: 3, clearMs: 50_000 }, week);
+
+    for (const opts of [{}, { week }]) {
+      const first = await accounts.huntRank("best", 10_000, a, { zone: "meeting-room", ...opts });
+      expect(first.mine?.points).toBe(70_000); // 옛 기록이 더 짧다
+      expect(first.rows.find((r) => r.accountId === b)?.points).toBe(60_000); // 새 기록이 더 짧다
+      expect(first.rows.some((r) => r.accountId === c)).toBe(false);
+      // 두 번 읽어도 같다 (합치기는 몇 번 해도 같다)
+      expect((await accounts.huntRank("best", 10_000, a, { zone: "meeting-room", ...opts })).mine?.points).toBe(70_000);
+      const subway = await accounts.huntRank("best", 10_000, c, { zone: "subway", ...opts });
+      expect(subway.mine?.points).toBe(50_000);
+      expect(subway.rows.some((r) => r.accountId === a || r.accountId === b)).toBe(false);
+    }
+    // 첫 사냥터가 아닌 곳은 옛 판을 합치지 않는다
+    expect((await accounts.huntRank("best", 10_000, a, { zone: "subway" })).mine).toBeNull();
+    // 기본 사냥터 = 쉬움 첫 사냥터
+    expect((await accounts.huntRank("best", 10_000, a, {})).mine?.points).toBe(70_000);
+    // 처치 수 판은 사냥터와 상관없이 합계 그대로
+    expect((await accounts.huntRank("kills", 10_000, c, {})).mine?.points).toBe(3);
+  });
+
+  it("11/16 난이도 완주(칭호): 옛 난이도 판이나 그 난이도의 어느 사냥터든 깼으면", async () => {
+    const [a, b, c, d] = [newId(), newId(), newId(), newId()];
+    const week = weekOfDay(DAY);
+    await accounts.recordHunt(a, "hard", { kills: 1, clearMs: 200_000 }, week); // 옛 기록
+    await accounts.recordHunt(b, "homework-desert", { kills: 1, clearMs: 200_000 }, week); // 어려움 둘째 사냥터
+    await accounts.recordHunt(c, "homework-desert", { kills: 9, clearMs: null }, week); // 못 깸
+    await accounts.recordHunt(d, "layoff-day", { kills: 1, clearMs: 230_000 }, week, false); // 지옥 (주간 제외여도 전체 기록)
+    expect(await accounts.huntCleared(a, "hard")).toBe(true);
+    expect(await accounts.huntCleared(b, "hard")).toBe(true);
+    expect(await accounts.huntCleared(c, "hard")).toBe(false);
+    expect(await accounts.huntCleared(b, "hell")).toBe(false);
+    expect(await accounts.huntCleared(d, "hell")).toBe(true);
+  });
+
   it("사냥 기록 weekly=false (자기 레벨보다 한참 쉬운 사냥터): 전체 기록만 오르고 주간 레이스 기록은 그대로", async () => {
     const a = newId();
     const week = weekOfDay(DAY);
-    await accounts.recordHunt(a, "easy", { kills: 10, clearMs: 100_000 }, week);
-    await accounts.recordHunt(a, "easy", { kills: 50, clearMs: 30_000 }, week, false);
+    await accounts.recordHunt(a, "gym", { kills: 10, clearMs: 100_000 }, week);
+    await accounts.recordHunt(a, "gym", { kills: 50, clearMs: 30_000 }, week, false);
     expect((await accounts.huntRank("kills", 10_000, a, {})).mine?.points).toBe(60);
     expect((await accounts.huntRank("kills", 10_000, a, { week })).mine?.points).toBe(10);
-    expect((await accounts.huntRank("best", 10_000, a, { zone: "easy" })).mine?.points).toBe(30_000);
-    expect((await accounts.huntRank("best", 10_000, a, { zone: "easy", week })).mine?.points).toBe(100_000);
+    expect((await accounts.huntRank("best", 10_000, a, { zone: "gym" })).mine?.points).toBe(30_000);
+    expect((await accounts.huntRank("best", 10_000, a, { zone: "gym", week })).mine?.points).toBe(100_000);
   });
 }
 

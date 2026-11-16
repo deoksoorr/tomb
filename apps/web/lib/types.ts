@@ -469,7 +469,7 @@ export type RankRow = { rank: number; name: string; value: number; me: boolean; 
 export type RankResponse = {
   board: RankBoard;
   period: RankPeriod;
-  /** huntBest의 사냥터 (난이도 id) */
+  /** huntBest의 사냥터 id (11/16 사냥터별 — 난이도 id로 물어도 그 난이도 첫 사냥터 id로 돌려준다) */
   zone?: string;
   /** fish(최대어)의 물고기 id, 모든 물고기면 "all" */
   fish?: string;

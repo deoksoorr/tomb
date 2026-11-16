@@ -261,15 +261,22 @@ export interface AccountStore {
    * 사냥터 한 판 기록 (49번 랭킹): 처치 수 합계(전체·그 주)를 올리고, 클리어했으면(clearMs) 그 사냥터의
    * 최단 기록(전체·그 주)을 더 짧을 때만 바꾼다. 원자적.
    * weekly = false: 그 주 기록(주간 레이스 사냥 처치·주간 최단)은 건너뛰고 전체 기록만 (자기 레벨보다 한참 쉬운 사냥터)
+   * 11/16 zone = 사냥터 id (ZONE_IDS). 깬 기록은 그 난이도 칭호용 판(rank:hunt:clear:{난이도})에도 남긴다.
+   * 처치 수만 올릴 때(clearMs = null)는 zone이 최단 기록에 쓰이지 않는다 (야근 빌딩은 "hell")
    */
   recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string, weekly?: boolean): Promise<void>;
-  /** 사냥 랭킹: kills = 처치 수 많은 순, best = 그 사냥터 최단 클리어 순(ms, 작을수록 위). week가 없으면 전체 */
+  /**
+   * 사냥 랭킹: kills = 처치 수 많은 순, best = 그 사냥터 최단 클리어 순(ms, 작을수록 위). week가 없으면 전체.
+   * 11/16 zone = 사냥터 id (없으면 쉬움 첫 사냥터). 난이도 첫 사냥터면 옛 난이도 판 기록도 합쳐 보인다 (lib/store/huntBoards)
+   */
   huntRank(
     board: "kills" | "best",
     limit: number,
     me: string | null,
     opts: { zone?: string; week?: string },
   ): Promise<{ rows: RankEntry[]; mine: RankEntry | null }>;
+  /** 11/16 그 난이도의 사냥터를 하나라도 끝까지 깬 적이 있는지 (옛 난이도 판 포함 — 칭호 「어려움·지옥 완주」) */
+  huntCleared(id: string, difficulty: string): Promise<boolean>;
   /**
    * 입장 기록: 이름·색·몸 모양은 계정에 아직 값이 없을 때만 저장한다 (코드로 시작·이어서 들어온 기기의 다른 값이
    * 덮어쓰지 않게). 이름은 이름 색인과 함께 등록하고, 다른 계정이 쓰는 이름이면 저장하지 않는다.

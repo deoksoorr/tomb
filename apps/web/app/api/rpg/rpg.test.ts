@@ -86,8 +86,13 @@ describe("사냥터 API", () => {
     // 49번 랭킹: 그 사냥터의 최단 클리어(서버가 잰 시간과 결과 중 짧은 쪽)와 처치 수
     const board = async (q: string) => (await (await rank.GET(call(`/api/rank?${q}&me=1`, v))).json()) as RankResponse;
     const kills = Object.values(clearAll(s.seed).kills).reduce((n, k) => n + k, 0);
-    expect((await board("board=huntBest&zone=easy&period=week")).mine).toMatchObject({ value: 100_000, me: true });
-    expect((await board("board=huntBest&zone=easy&period=all")).mine?.value).toBe(100_000);
+    // 11/16 사냥터별: 사냥터 없이 시작한 쉬움 판 = 월요일 회의실. 예전 화면의 난이도 id(easy)는 그 난이도 첫 사냥터로 읽는다
+    expect((await board("board=huntBest&zone=meeting-room&period=week")).mine).toMatchObject({ value: 100_000, me: true });
+    expect((await board("board=huntBest&zone=meeting-room&period=all")).mine?.value).toBe(100_000);
+    const compat = await board("board=huntBest&zone=easy&period=all");
+    expect(compat).toMatchObject({ zone: "meeting-room", mine: { value: 100_000, me: true } });
+    expect((await board("board=huntBest&period=all")).zone).toBe("meeting-room");
+    expect((await board("board=huntBest&zone=subway")).mine).toBeNull();
     expect((await board("board=huntBest&zone=hard")).mine).toBeNull();
     expect((await board("board=huntKills&period=week")).mine?.value).toBe(kills);
     // 11/16 처음 쓰러뜨린 몬스터의 도감 보상(dex 적립)도 주간 포인트에 든다
@@ -390,7 +395,7 @@ describe("운영자 계정은 순위에 들지 않는다", () => {
       vi.restoreAllMocks();
       expect(res.status).toBe(200);
       expect((await getAccounts().huntRank("kills", 1, op.id, {})).mine).toBeNull();
-      expect((await getAccounts().huntRank("best", 1, op.id, { zone: "easy" })).mine).toBeNull();
+      expect((await getAccounts().huntRank("best", 1, op.id, { zone: "meeting-room" })).mine).toBeNull();
       // 포인트는 기록 쪽(지급)에서 막지 않으므로 읽을 때 거른다
       expect((await getAccounts().pointRank(500, op.id, kstWeek())).mine).not.toBeNull();
       const board = async (q: string, v: Visitor) => (await (await rank.GET(call(`/api/rank?${q}&me=1`, v))).json()) as RankResponse;
@@ -406,6 +411,26 @@ describe("운영자 계정은 순위에 들지 않는다", () => {
     } finally {
       await setStaff(null);
     }
+  });
+});
+
+describe("11/16 사냥터별 최단 클리어 랭킹", () => {
+  it("옛 난이도 기록은 그 난이도 첫 사냥터 판에 합쳐 보이고, 난이도 id·사냥터 id 둘 다 받는다", async () => {
+    const [a, b] = [await newVisitor(), await newVisitor()];
+    await getAccounts().recordHunt(a.id, "normal", { kills: 5, clearMs: 140_000 }, kstWeek()); // 옛 기록 (난이도 판)
+    await getAccounts().recordHunt(b.id, "legacy-forest", { kills: 5, clearMs: 150_000 }, kstWeek());
+    await getAccounts().recordHunt(b.id, "library", { kills: 5, clearMs: 120_000 }, kstWeek());
+    const board = async (q: string, v: Visitor) => (await (await rank.GET(call(`/api/rank?board=huntBest&${q}&me=1`, v))).json()) as RankResponse;
+    for (const q of ["zone=normal", "zone=legacy-forest", "zone=legacy-forest&period=week"]) {
+      const r = await board(q, a);
+      expect(r.zone).toBe("legacy-forest");
+      expect(r.mine).toMatchObject({ value: 140_000, me: true });
+      expect(r.rows.find((x) => !x.me && x.value === 150_000)).toBeTruthy();
+    }
+    expect((await board("zone=library", b)).mine?.value).toBe(120_000);
+    expect((await board("zone=library", a)).mine).toBeNull();
+    expect((await rank.GET(call("/api/rank?board=huntBest&zone=server-room"))).status).toBe(400); // 야근 빌딩 테마는 판이 없다
+    expect((await rank.GET(call("/api/rank?board=huntBest&zone=moon"))).status).toBe(400);
   });
 });
 
@@ -436,6 +461,11 @@ describe("40번 테마 사냥터 API", () => {
     const body = (await res.json()) as RunFinishResponse;
     // 헬스장은 쉬움 중 세 번째 곳: 기본(20P)보다 조금 더
     expect(body.reward.points).toBe(23);
+    // 11/16 최단 클리어는 헬스장 판에만 (같은 난이도 첫 사냥터 판에는 없다)
+    const best = async (zone: string) => (await (await rank.GET(call(`/api/rank?board=huntBest&zone=${zone}&period=all&me=1`, v))).json()) as RankResponse;
+    expect((await best("gym")).mine?.value).toBe(100_000);
+    expect((await best("meeting-room")).mine).toBeNull();
+    expect((await best("easy")).mine).toBeNull();
     vi.restoreAllMocks();
   });
 });

@@ -9,6 +9,7 @@ import { STAY_BONUS_AMOUNTS, STAY_BONUS_EVERY_TICKS } from "../stayBonus";
 import { STAY_TICK_MINUTES, stayFillDays } from "../stayTime";
 import type { ActivityItem, Grave, GraveDecor } from "../types";
 import { econKeyFor, kstDay, rankValue, WEEK_RANK_TTL_SEC, WEEK_TIE_SCALE, weekOfDay } from "./accounts";
+import { huntDiffOf, DEFAULT_HUNT_ZONE, legacyHuntBoard } from "./huntBoards";
 import { chKeys, DECOR, K } from "./keys";
 import { earnBoost } from "./pointEvent";
 import { earnLimits } from "../pointEvent";
@@ -673,9 +674,27 @@ if ARGV[3] ~= '' then
     if not cur or tonumber(ARGV[3]) < tonumber(cur) then redis.call('ZADD', KEYS[i], ARGV[3], ARGV[1]) end
   end
   if weekly then redis.call('EXPIRE', KEYS[4], ARGV[4]) end
+  -- 11/16 칭호용 난이도 판 (그 난이도 어느 사냥터든)
+  if ARGV[7] == '1' then
+    local cur = redis.call('ZSCORE', KEYS[5], ARGV[1])
+    if not cur or tonumber(ARGV[3]) < tonumber(cur) then redis.call('ZADD', KEYS[5], ARGV[3], ARGV[1]) end
+  end
 end
 return 1
 `;
+
+/**
+ * 11/16 옛 난이도 최단 클리어 판(얼린 판)을 그 난이도 첫 사냥터 판에 합친다 (계정마다 더 짧은 기록. 몇 번 합쳐도 같다).
+ * KEYS[1] = 사냥터 판, KEYS[2] = 옛 판. ARGV[1] = 주간 판이면 TTL(초), 아니면 ''
+ */
+const HUNT_LEGACY_LUA = `
+if redis.call('EXISTS', KEYS[2]) == 0 then return 0 end
+redis.call('ZUNIONSTORE', KEYS[1], 2, KEYS[1], KEYS[2], 'AGGREGATE', 'MIN')
+if ARGV[1] ~= '' then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+return 1
+`;
+/** 11/16 이 인스턴스에서 이미 옛 판을 합친 사냥터 판 키 (한 번만 — 옛 판은 더 바뀌지 않는다) */
+const huntLegacyDone = () => ((globalThis as typeof globalThis & { __tombHuntLegacy?: Set<string> }).__tombHuntLegacy ??= new Set());
 
 function pairs(flat: string[] | null): Map<string, string> {
   const m = new Map<string, string>();
@@ -906,22 +925,51 @@ export class RedisAccounts implements AccountStore {
   }
 
   async recordHunt(id: string, zone: string, run: { kills: number; clearMs: number | null }, week: string, weekly = true): Promise<void> {
+    const diff = huntDiffOf(zone);
     await this.redis.eval<string[], number>(
       HUNT_LUA,
-      [K.rankHuntKills, K.rankHuntKillsWeek(week), K.rankHuntBest(zone), K.rankHuntBestWeek(zone, week)],
-      [id, String(Math.max(0, Math.floor(run.kills))), run.clearMs === null ? "" : String(Math.round(run.clearMs)), String(WEEK_RANK_TTL_SEC), String(Date.now()), weekly ? "1" : "0"],
+      [K.rankHuntKills, K.rankHuntKillsWeek(week), K.rankHuntBest(zone), K.rankHuntBestWeek(zone, week), K.rankHuntClear(diff ?? zone)],
+      [
+        id,
+        String(Math.max(0, Math.floor(run.kills))),
+        run.clearMs === null ? "" : String(Math.round(run.clearMs)),
+        String(WEEK_RANK_TTL_SEC),
+        String(Date.now()),
+        weekly ? "1" : "0",
+        diff ? "1" : "0",
+      ],
     );
   }
 
-  huntRank(
+  async huntRank(
     board: "kills" | "best",
     limit: number,
     me: string | null,
     opts: { zone?: string; week?: string },
   ): Promise<{ rows: RankEntry[]; mine: RankEntry | null }> {
     if (board === "kills") return this.board(opts.week ? K.rankHuntKillsWeek(opts.week) : K.rankHuntKills, limit, me);
-    const zone = opts.zone ?? "easy";
-    return this.board(opts.week ? K.rankHuntBestWeek(zone, opts.week) : K.rankHuntBest(zone), limit, me, true);
+    const zone = opts.zone ?? DEFAULT_HUNT_ZONE;
+    const key = opts.week ? K.rankHuntBestWeek(zone, opts.week) : K.rankHuntBest(zone);
+    // 11/16 난이도 첫 사냥터: 옛 난이도 판을 (인스턴스마다 한 번) 합쳐 둔다. 실패해도 판은 읽는다 (다음에 다시)
+    const legacy = legacyHuntBoard(zone);
+    if (legacy && !huntLegacyDone().has(key)) {
+      try {
+        await this.redis.eval<string[], number>(
+          HUNT_LEGACY_LUA,
+          [key, opts.week ? K.rankHuntBestWeek(legacy, opts.week) : K.rankHuntBest(legacy)],
+          [opts.week ? String(WEEK_RANK_TTL_SEC) : ""],
+        );
+        huntLegacyDone().add(key);
+      } catch (e) {
+        console.warn("[rank] 옛 사냥 최단 기록 합치기 실패", e);
+      }
+    }
+    return this.board(key, limit, me, true);
+  }
+
+  async huntCleared(id: string, difficulty: string): Promise<boolean> {
+    const [legacy, now] = (await this.redis.pipeline().zscore(K.rankHuntBest(difficulty), id).zscore(K.rankHuntClear(difficulty), id).exec()) as unknown[];
+    return (legacy !== null && legacy !== undefined) || (now !== null && now !== undefined);
   }
 
   async enter(id: string, profile: Profile, now: number): Promise<void> {

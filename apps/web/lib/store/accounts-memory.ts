@@ -11,6 +11,7 @@ import { STAY_TICK_MINUTES, stayFillDays } from "../stayTime";
 import type { ActivityItem, GiftItem, Grave, GraveDecor } from "../types";
 import { kstDay, weekOfDay } from "./accounts";
 import { giftTermUntil } from "./gifts";
+import { DEFAULT_HUNT_ZONE, huntDiffOf, legacyHuntBoard } from "./huntBoards";
 import type { MemoryStore } from "./memory";
 import { earnBoost } from "./pointEvent";
 import {
@@ -400,6 +401,10 @@ export class MemoryAccounts implements AccountStore {
     const wk = `${zone}|${week}`;
     if (ms < (h.best.get(zone) ?? Infinity)) h.best.set(zone, ms);
     if (weekly && ms < (h.bestWeek.get(wk) ?? Infinity)) h.bestWeek.set(wk, ms);
+    // 11/16 칭호용 난이도 판 (그 난이도 어느 사냥터든 — Redis rank:hunt:clear:{난이도})
+    const diff = huntDiffOf(zone);
+    const ck = `clear:${diff}`;
+    if (diff && ms < (h.best.get(ck) ?? Infinity)) h.best.set(ck, ms);
   }
 
   async huntRank(
@@ -420,8 +425,24 @@ export class MemoryAccounts implements AccountStore {
         false,
         week ? (a) => a.hunt?.killsWeekAt?.get(week) ?? 0 : undefined,
       );
-    const zone = opts.zone ?? "easy";
-    return this.board(limit, me, (a) => (week ? a.hunt?.bestWeek.get(`${zone}|${week}`) : a.hunt?.best.get(zone)) ?? null, true);
+    const zone = opts.zone ?? DEFAULT_HUNT_ZONE;
+    // 11/16 난이도 첫 사냥터면 옛 난이도 판 기록도 합친다 (더 짧은 쪽 — Redis는 옛 판을 그 사냥터 판에 합쳐 둔다)
+    const legacy = legacyHuntBoard(zone);
+    const of = (a: Acct, z: string) => (week ? a.hunt?.bestWeek.get(`${z}|${week}`) : a.hunt?.best.get(z)) ?? Infinity;
+    return this.board(
+      limit,
+      me,
+      (a) => {
+        const v = Math.min(of(a, zone), legacy ? of(a, legacy) : Infinity);
+        return v === Infinity ? null : v;
+      },
+      true,
+    );
+  }
+
+  async huntCleared(id: string, difficulty: string): Promise<boolean> {
+    const best = this.accts.get(id)?.hunt?.best;
+    return !!best && (best.has(difficulty) || best.has(`clear:${difficulty}`));
   }
 
   async enter(id: string, profile: Profile, now: number): Promise<void> {

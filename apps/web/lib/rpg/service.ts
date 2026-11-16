@@ -584,8 +584,10 @@ export async function finishRun(acct: string, token: string, result: RunResult, 
   // 49번 랭킹: 사냥터별 최단 클리어·처치 수 (난이도 = 사냥터). 운영자 계정은 순위에 남기지 않는다.
   // 11/15: 자기 레벨이 그 사냥터가 열리는 레벨(티켓의 사냥터 t.z)보다 10 넘게 높으면 랭킹에 아예 넣지 않는다 —
   // 주간 레이스뿐 아니라 전체 처치 수·최단 기록도 (사용자 요청 "다 적정 레벨만 세게"). 지나간 기록은 그대로
-  if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null) && !staff && countsForRace(t.lv, t.d, zoneFor(t.d, t.z)))
-    await getAccounts().recordHunt(acct, t.d, v.hunt, kstWeek(now), true);
+  // 11/16 최단 클리어는 사냥터(t.z — 없던 옛 티켓은 그 난이도 첫 사냥터)별로 남긴다
+  const runZone = zoneFor(t.d, t.z);
+  if (v.hunt && (v.hunt.kills > 0 || v.hunt.clearMs !== null) && !staff && countsForRace(t.lv, t.d, runZone))
+    await getAccounts().recordHunt(acct, runZone.id, v.hunt, kstWeek(now), true);
   return {
     reward: {
       score: v.score,

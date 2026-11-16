@@ -36,9 +36,14 @@ export const K = {
   /** ZSET 계정 id → 사냥터 처치 수 합계 (전체 / 그 주) */
   rankHuntKills: "rank:hunt:kills",
   rankHuntKillsWeek: (week: string) => `rank:hunt:kills:w:${week}`,
-  /** ZSET 계정 id → 그 사냥터(난이도) 최단 클리어 ms (작을수록 위, 전체 / 그 주) */
+  /**
+   * ZSET 계정 id → 그 사냥터 최단 클리어 ms (작을수록 위, 전체 / 그 주).
+   * 11/16 사냥터 id별로 기록한다. 난이도 id(easy·normal·hard·hell) 판은 예전 기록 (더 쓰지 않음 — lib/store/huntBoards)
+   */
   rankHuntBest: (zone: string) => `rank:hunt:best:${zone}`,
   rankHuntBestWeek: (zone: string, week: string) => `rank:hunt:best:${zone}:w:${week}`,
+  /** ZSET 계정 id → 11/16 그 난이도의 어느 사냥터든 깬 가장 짧은 ms (칭호 「어려움·지옥 완주」용, 전체만) */
+  rankHuntClear: (difficulty: string) => `rank:hunt:clear:${difficulty}`,
 
   // ── 49번 성불 ──
   /** HASH 성불한 묘비 id → 보관 JSON (묘비·채널·반응 수·숨김·꾸미기·성불 시각·이유) */
