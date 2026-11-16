@@ -182,4 +182,24 @@ describe("귓속말", () => {
     expect(events(a)).toEqual([]);
     expect(events(b)).toEqual([]);
   });
+
+  it("whoOn: 물어본 이름 중 지금 이 채널(마을·캠핑장)에 있는 사람만 on, 간격 안의 다시 묻기·방은 버린다", () => {
+    const { core, join } = setup();
+    const a = join("a");
+    join("b", { name: "진 순" });
+    join("c", { name: "캠퍼", map: "camp" });
+    const gone = join("g", { name: "떠난이" });
+    core.disconnect(gone, 1006, 0);
+    clear(a);
+    core.message(a, send({ t: "whoOn", names: ["진순", "캠퍼", "떠난이", "없는이"] }), 1_000);
+    expect(events(a).filter((e) => e.t === "whoOn")).toEqual([{ t: "whoOn", on: ["진순", "캠퍼"], off: ["떠난이", "없는이"] }]);
+    clear(a);
+    core.message(a, send({ t: "whoOn", names: ["진순"] }), 1_500);
+    expect(events(a)).toEqual([]);
+    const room = setup(true);
+    const r = room.join("r");
+    clear(r);
+    room.core.message(r, send({ t: "whoOn", names: ["r"] }), 0);
+    expect(events(r)).toEqual([]);
+  });
 });

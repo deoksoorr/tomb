@@ -132,7 +132,9 @@ export type GameEvents = {
   /** 47번: 다른 사람 캐릭터(또는 이름표)를 눌렀다 → UI가 작은 메뉴(신고하기)를 띄운다. ch = 월드 채널, room = 방 id */
   "peer:menu": { sid: number; name: string; ch?: number; room?: string; /** 그 사람 머리 위에 지금 떠 있는 자유 채팅 (신고에 붙인다) */ chat?: string };
   /** 채팅 기록창 한 줄: 같은 채널·방에서 받은 자유 채팅(가린 글) 또는 내가 보낸 글. 화면 메모리에만 1분. key = 서버 줄 id(중복 제거) */
-  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true; /** 11/16 매니저(실시간 서버가 알린 mgr) → "매니저" 딱지 */ mgr?: true; /** 닉네임 꾸미기 id (lib/nameStyle nameStyleIds) */ ns?: string[]; /** 11/16 쓴 사람이 캠핑장에 있었다 */ m?: "camp"; /** 11/16 귓속말 줄 (chatLog.ts ChatLine.w) */ w?: "out" | "in" | "fail" };
+  "chat:line": { name: string; text: string; mine: boolean; key?: string; /** 운영자(실시간 서버가 알린 staff) → 이름 금색 */ staff?: true; /** 11/16 매니저(실시간 서버가 알린 mgr) → "매니저" 딱지 */ mgr?: true; /** 닉네임 꾸미기 id (lib/nameStyle nameStyleIds) */ ns?: string[]; /** 11/16 쓴 사람이 캠핑장에 있었다 */ m?: "camp"; /** 11/16 귓속말 줄 (chatLog.ts ChatLine.w) */ w?: "out" | "in" | "fail" | "note" };
+  /** 11/16 최근 귓속말 상대가 지금 이 채널에 있는지 (input:whoOn의 답, 서버가 준 그대로). on = 있음, off = 없음 (sticky) */
+  "whisper:online": { on: string[]; off: string[] };
   /** 방에 들어올 때 서버가 보낸 이 방의 최근 1분 채팅 (이 기기 시계로 옮긴 줄). ch = 월드 채널이면 그 번호 (방이면 없음) */
   /** ch = 이 기록의 공간 (월드 채널 번호, 11/15 캠핑장은 "3c"처럼 c를 붙인다 — 맵마다 채팅이 따로) */
   "chat:log": { lines: IncomingChatLine[]; ch?: number | string };
@@ -254,6 +256,8 @@ export type UiEvents = {
   "input:whisper": { to: string; text: string };
   /** 11/16 채팅 입력칸을 이 글로 채우고 연다 (캐릭터 메뉴 [귓속말] → "/귓 닉네임 ") */
   "chat:prefill": { text: string };
+  /** 11/16 이 이름들이 지금 이 채널에 있는지 서버에 묻는다 (최근 귓속말 상대 칩을 흐리게 할지) → whisper:online */
+  "input:whoOn": { names: string[] };
   /** 24번 벤치 상태 고르기 (SEAT_MOODS id, "" = 풀기). 앉아 있을 때만 */
   "input:mood": { mood: string };
   /** 첫 방문 안내: 월드의 한 지점을 화살표로 가리킨다 (null이면 지움). target이 있으면 게임이 그 대상의 좌표를 찾는다 */
@@ -408,6 +412,7 @@ const STICKY = new Set<keyof AllEvents>([
   "forage:nodes",
   "me:staff",
   "me:dex",
+  "whisper:online",
   "mood:state",
   "audio:mix",
   "ride:state",

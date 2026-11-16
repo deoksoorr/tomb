@@ -69,6 +69,11 @@ export type C2S =
    */
   | { t: "whisper"; to: string; text: string }
   /**
+   * 11/16 최근 귓속말 상대가 지금 이 채널(마을·캠핑장)에 있는지 묻기 (WHO_ON_MAX명까지, 내가 아는 이름만 → 접속자 목록을 통째로 주지 않는다).
+   * 서버가 WHO_ON_INTERVAL_MS 간격으로 whoOn으로 답한다. 월드 채널만. 옛 서버는 모르는 t라 버린다 (그러면 아무도 흐리게 하지 않는다)
+   */
+  | { t: "whoOn"; names: string[] }
+  /**
    * 11/15 맵 옮기기 (버스): 같은 채널 연결 그대로 마을 ↔ 캠핑장. x,y = 새 맵에서 설 자리.
    * 서버는 입장 토큰에 캠핑장 허락(camp)이 있을 때만 캠핑장으로 보내고, 결과를 mapped로 알린다. 옛 서버는 모르는 t라 버린다
    */
@@ -159,6 +164,8 @@ export type S2C =
   | WhisperMsg
   /** 보낸 사람에게만: 11/16 귓속말을 못 보냈다. absent = 그 이름이 이 채널에 없다(to = 보낸 이름 그대로), self = 나에게 보냈다 */
   | { t: "whisperFail"; to: string; why: "absent" | "self" }
+  /** 받는 사람에게만: 11/16 whoOn 답. on = 지금 이 채널에 있는 이름, off = 없는 이름 (물어본 이름 그대로) */
+  | { t: "whoOn"; on: string[]; off: string[] }
   /** 받는 사람에게만: 방에 들어올 때(입장·재접속·실내에서 복귀) 이 방의 최근 1분 채팅. now = 서버 시각 (옛 클라이언트는 모르는 t라 버린다) */
   | { t: "chatLog"; now: number; lines: ChatLogLine[] }
   /** 받는 사람에게만: 친구가 들어왔다(on)·나갔다 (key = 친구 창의 그 친구 키, 옛 클라이언트는 모르는 t라 버린다) */
@@ -181,6 +188,11 @@ export type S2C =
 /** replaces = 이 줄로 바꿔 끼울 앞 공지 id (긴급 의뢰가 끝나면 시작 공지를 끝 공지로) */
 /** mgr = 11/16 매니저 계정이 외친 것 (Vercel이 증서에 넣은 것만 → "매니저" 딱지. 옛 클라이언트는 무시한다) */
 export type MegaphoneMsg = { t: "megaphone"; id: string; name: string; text: string; scope: MegaphoneScope; ch: number; at: number; staff?: true; system?: true; replaces?: string; mgr?: true };
+
+/** 11/16 whoOn 한 번에 물어볼 수 있는 이름 수 (최근 귓속말 상대 수와 같다) */
+export const WHO_ON_MAX = 8;
+/** 11/16 whoOn 연결당 최소 간격 */
+export const WHO_ON_INTERVAL_MS = 2_000;
 
 /** 11/16 귓속말 한 줄 (S2C) */
 export type WhisperMsg = {
@@ -304,6 +316,11 @@ export function parseC2S(text: string): C2S | null {
       const to = typeof m.to === "string" && m.to.length <= NAME_MAX * 3 ? normalizeName(m.to) : "";
       const text = normalizeChat(m.text);
       return to && text ? { t: "whisper", to, text } : null;
+    }
+    case "whoOn": {
+      if (!Array.isArray(m.names) || m.names.length === 0 || m.names.length > WHO_ON_MAX) return null;
+      const names = m.names.map((n) => (typeof n === "string" && n.length <= NAME_MAX * 3 ? normalizeName(n) : ""));
+      return names.every(Boolean) ? { t: "whoOn", names } : null;
     }
     case "hunt": {
       const h = parseHuntAct(m);

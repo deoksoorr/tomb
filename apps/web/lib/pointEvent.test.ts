@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { earnGaugeRows } from "./earnGauge";
 import { DAILY_EARN_CAP, earnRule, type EarnSource } from "./economy";
 import { dayStartMs, gameDay } from "./gameDay";
@@ -23,6 +23,9 @@ import { kstDay } from "./store/accounts";
 import { MemoryAccounts } from "./store/accounts-memory";
 import { MemoryStore } from "./store/memory";
 import { cachedPointEvent, earnBoost, setPointEvent } from "./store/pointEvent";
+
+// 끝난 이벤트를 읽으면 끝 공지가 나간다 → 실시간 서버로 보내는 부분만 가짜로
+vi.mock("./ban", async (importOriginal) => ({ ...(await importOriginal<typeof import("./ban")>()), sayAll: vi.fn(async () => 1) }));
 
 const H = 3_600_000;
 const M = POINT_EVENT_MULT;

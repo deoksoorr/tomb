@@ -869,8 +869,9 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           <RankingGuide />
         </Dialog>
       )}
+      {/* 11/16 높이를 내용만큼(fitHeight) 두면 어떤 브라우저에서 창이 머리말만 남고 납작하게 접혔다 → 표준 창 크기 (본문만 스크롤) */}
       {panel === "race" && (
-        <Dialog title="이번 주 레이스" onClose={closePanel} fitHeight>
+        <Dialog title="이번 주 레이스" onClose={closePanel}>
           <WeeklyRace />
         </Dialog>
       )}

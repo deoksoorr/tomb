@@ -104,4 +104,12 @@ describe("귓속말: 받는 사람 맞추기", () => {
     expect(parseC2S(JSON.stringify({ t: "whisper", to: "진순", text: "a".repeat(61) }))).toBeNull();
     expect(parseC2S('{"t":"whisper","to":1,"text":"안녕"}')).toBeNull();
   });
+
+  it("parseC2S: whoOn은 1~8개 이름만", () => {
+    expect(parseC2S(encodeEvent({ t: "whoOn", names: [" 진  순 ", "캠퍼"] }))).toEqual({ t: "whoOn", names: ["진 순", "캠퍼"] });
+    expect(parseC2S('{"t":"whoOn","names":[]}')).toBeNull();
+    expect(parseC2S(JSON.stringify({ t: "whoOn", names: Array.from({ length: 9 }, (_, i) => `n${i}`) }))).toBeNull();
+    expect(parseC2S('{"t":"whoOn","names":["진순",""]}')).toBeNull();
+    expect(parseC2S('{"t":"whoOn","names":[1]}')).toBeNull();
+  });
 });

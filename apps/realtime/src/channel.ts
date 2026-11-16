@@ -12,6 +12,8 @@ import {
   encodeSnapshot,
   maskChat,
   matchWhisperTarget,
+  nameKey,
+  WHO_ON_INTERVAL_MS,
   newChatBucket,
   takeChatToken,
   type ChatBucket,
@@ -310,6 +312,8 @@ type Peer<C> = PeerRecord & {
   lastHuntAt?: number;
   /** 11/15 맵 옮기기 (없으면 아직 안 씀) */
   lastMapAt?: number;
+  /** 11/16 귓속말 상대 접속 확인 (없으면 아직 안 씀) */
+  lastWhoOnAt?: number;
   /** 말풍선 채팅 도배 제한 (토큰 버킷). 재접속해도 피어에 남겨 다시 채워지지 않게 한다 */
   chatBucket?: ChatBucket;
   /** 마지막으로 메시지를 받은 시각 (입장·복원 시각으로 시작). 유령 연결 판정에 ping 시각과 함께 쓴다 */
@@ -937,6 +941,13 @@ export class ChannelCore<C extends object> {
       }
       case "whisper":
         return this.onWhisper(p, m.to, m.text, now);
+      case "whoOn": {
+        // 11/16 최근 귓속말 상대가 지금 이 채널에 있는지 (물어본 이름만 답한다)
+        if (this.cfg.room || now - (p.lastWhoOnAt ?? -Infinity) < WHO_ON_INTERVAL_MS) return;
+        p.lastWhoOnAt = now;
+        const here = new Set([...this.peers.values()].filter((q) => q.conn).map((q) => nameKey(q.name)));
+        return this.sendTo(p, { t: "whoOn", on: m.names.filter((n) => here.has(nameKey(n))), off: m.names.filter((n) => !here.has(nameKey(n))) });
+      }
       case "goblin":
         return this.onGoblinClaim(p, m.id, now);
       case "megaphone":

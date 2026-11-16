@@ -861,6 +861,7 @@ export class WorldScene extends Phaser.Scene {
     on.push(bridge.on("input:chat", ({ text }) => !this.cleaned && !this.inShop && !this.awayScene && !this.trip.away && this.expr.chat(text, this.time.now)));
     // 11/16 귓속말은 월드 채널 연결로 (마을·캠핑장·실내 어디서든 — 받는 사람은 같은 채널 누구나)
     on.push(bridge.on("input:whisper", ({ to, text }) => !this.cleaned && this.net.whisper(to, text)));
+    on.push(bridge.on("input:whoOn", ({ names }) => !this.cleaned && this.net.whoOn(names)));
     on.push(bridge.on("input:mood", ({ mood }) => !this.cleaned && !this.trip.away && this.expr.setMood(mood)));
     on.push(bridge.on("input:ride", () => !this.cleaned && !this.inShop && !this.trip.away && !this.tripLock && this.riding.toggle()));
     on.push(bridge.on("guide:point", ({ target, label }) => !this.trip.away && this.guide.set(target ? this.resolveGuide(target, label) : null)));

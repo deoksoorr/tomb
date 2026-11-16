@@ -36,6 +36,7 @@ import {
   type Sid,
   type WelcomeMsg,
   type WhisperMsg,
+  WHO_ON_MAX,
 } from "@tomb/protocol";
 import type { AppearanceChange } from "../sprites/avatar";
 import { readChatLog, type IncomingChatLine } from "../logic/chatLog";
@@ -470,6 +471,12 @@ export class RealtimeClient {
     else bridge.emit("chat:line", { name: "", text: "지금은 귓속말을 보낼 수 없어요.", mine: true, w: "fail" });
   }
 
+  /** 11/16 최근 귓속말 상대가 지금 이 채널에 있는지 묻기 (서버가 whoOn으로 답한다 → whisper:online) */
+  whoOn(names: string[]): void {
+    const asked = names.slice(0, WHO_ON_MAX);
+    if (asked.length) this.send({ t: "whoOn", names: asked });
+  }
+
   /** 24번 벤치 상태 ("" = 풀기). 앉아 있을 때만 서버가 받는다 */
   mood(m: SeatMood | ""): void {
     this.send({ t: "mood", m });
@@ -746,6 +753,9 @@ export class RealtimeClient {
         // ── 11/16 귓속말: 맵 상관없이 채팅창에만 (말풍선 없음, 이 화면 기록에만) ──
         case "whisper":
           this.onWhisper(m);
+          break;
+        case "whoOn":
+          if (Array.isArray(m.on) && Array.isArray(m.off)) bridge.emit("whisper:online", { on: m.on.filter((n) => typeof n === "string"), off: m.off.filter((n) => typeof n === "string") });
           break;
         case "whisperFail":
           bridge.emit("chat:line", {

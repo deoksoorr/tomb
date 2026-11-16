@@ -30,7 +30,7 @@ export function ChatLineItem({ line, opacity, ago }: { line: ChatLine; opacity?:
       {line.staff ? line.name : <StyledName name={line.name} look={line.ns} />}
     </b>
   );
-  // 11/16 귓속말: "[귓속말] 나 → 진순: …" / "[귓속말] 진순 → 나: …" (name = 상대). 못 보낸 안내는 글만
+  // 11/16 귓속말: "[귓속말] 나 → 진순: …" / "[귓속말] 진순 → 나: …" (name = 상대). 못 보냄·쓰는 법 안내는 글만
   const me = <b className={styles.name}>나</b>;
   const arrow = <span className={styles.sep}> → </span>;
   return (
@@ -52,7 +52,7 @@ export function ChatLineItem({ line, opacity, ago }: { line: ChatLine; opacity?:
       ) : line.w ? null : (
         name
       )}
-      {line.w !== "fail" && <span className={styles.sep}>: </span>}
+      {line.w !== "fail" && line.w !== "note" && <span className={styles.sep}>: </span>}
       <span className={styles.text}>{line.text}</span>
       {ago && <span className={styles.ago}> · {ago}</span>}
     </li>

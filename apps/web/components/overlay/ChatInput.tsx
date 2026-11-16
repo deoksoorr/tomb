@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import { CHAT_MAX, CHAT_STORE_MAX, maskChat, newChatBucket, normalizeChat, takeChatToken } from "@tomb/protocol";
+import { CHAT_MAX, CHAT_STORE_MAX, maskChat, nameKey, newChatBucket, normalizeChat, takeChatToken } from "@tomb/protocol";
 import { bridge } from "@/game/bridge";
-import { isWhisperCommand, parseWhisper } from "@/game/logic/whisper";
-import { useBridgeEvent } from "@/lib/hooks/useBridge";
+import { isReplyCommand, isWhisperCommand, parseWhisper, whisperChips, whisperPrefill } from "@/game/logic/whisper";
+import { useBridgeEvent, useBridgeValue } from "@/lib/hooks/useBridge";
+import { useWhisperPartners, whisperPartners } from "@/lib/whisperPartners";
 import { cx } from "../ui/cx";
 import ui from "../ui/ui.module.css";
 import { chatStore, useChatLines } from "./chatLines";
@@ -17,6 +18,8 @@ import logStyles from "./ChatLog.module.css";
 
 /** 화면 쪽 토큰 버킷 (입력칸이 여럿이어도 하나를 같이 쓴다) */
 const bucket = newChatBucket();
+/** 지금 한 번 보내도 되면 토큰을 쓰고 true */
+const takeToken = () => takeChatToken(bucket, performance.now());
 /** "천천히" 표시 시간 */
 const SLOW_MS = 1500;
 /** 11/16 귓속말 입력칸 글자 수: "/귓 " + 이름(공백 포함) + 할 말 CHAT_MAX자 */
@@ -33,8 +36,18 @@ const takePrefill = (): string => {
   return p && Date.now() - p.at < PREFILL_MS ? p.text : "";
 };
 
-/** 귓속말 이름 맞추기용: 채팅창에 보인 다른 사람 이름들 (서버가 접속자 이름으로 다시 맞춘다) */
-const knownNames = (): string[] => [...new Set(chatStore.get().flatMap((l) => (l.w === "fail" || (l.mine && !l.w) || !l.name ? [] : [l.name])))];
+/** 귓속말 이름 맞추기용: 최근 귓속말 상대와 채팅창에 보인 다른 사람 이름들 (서버가 접속자 이름으로 다시 맞춘다) */
+const knownNames = (partners: readonly string[]): string[] => [
+  ...new Set([...partners, ...chatStore.get().flatMap((l) => (l.w === "fail" || l.w === "note" || (l.mine && !l.w) || !l.name ? [] : [l.name]))]),
+];
+/** 이름 칩을 띄울 때 접속 여부를 다시 묻는 최소 간격 (서버는 2초에 한 번만 답한다) */
+const WHO_ON_ASK_MS = 5_000;
+let whoOnAskedAt = -Infinity;
+const askWhoOn = (names: readonly string[]) => {
+  if (performance.now() - whoOnAskedAt < WHO_ON_ASK_MS) return;
+  whoOnAskedAt = performance.now();
+  bridge.emit("input:whoOn", { names: [...names] });
+};
 
 type Props = {
   /** 보낸 뒤 (데스크톱 막대는 닫고, 표현 창도 닫는다) */
@@ -53,6 +66,11 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
   const [slow, setSlow] = useState(false);
   /** 11/16 귓속말을 못 보낸 까닭 (이름·할 말이 없음 등). 글을 고치면 지운다 */
   const [whisperHint, setWhisperHint] = useState<string | null>(null);
+  /** 11/16 [귓] 버튼으로 연 최근 상대 칩 줄, 방향키로 고른 칩 */
+  const [chipsOpen, setChipsOpen] = useState(false);
+  const [pick, setPick] = useState(-1);
+  const partners = useWhisperPartners();
+  const online = useBridgeValue("whisper:online");
   const ref = useRef<HTMLInputElement>(null);
   const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -88,15 +106,38 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
 
   // 11/16 "/귓 닉네임 할 말": 글자 수·가림 안내는 할 말만 본다
   const whisper = isWhisperCommand(text);
-  const draft = whisper ? parseWhisper(text, knownNames()) : null;
+  const replyTo = whisperPartners.replyTo();
+  const draft = whisper ? parseWhisper(text, knownNames(partners), replyTo) : null;
   const clean = whisper ? (text.trim() ? text : null) : normalizeChat(text);
   const said = draft?.kind === "send" ? draft.text : whisper ? "" : (clean ?? "");
   const masked = said !== "" && maskChat(said) !== said;
   const count = draft?.kind === "long" ? draft.size : [...(whisper ? said : text)].length;
+  // 11/16 이름 칩: "/귓 " 뒤에 이름을 쓰는 중이면 그 앞부분에 맞는 상대(방향키로 고른다), 아니면 [귓] 버튼으로 연 전체 목록
+  const inline = whisperChips(text, partners);
+  const chips = inline ?? (chipsOpen ? partners : null);
+  const picked = inline && pick >= 0 && pick < inline.length ? pick : -1;
+  const offline = new Set((online?.off ?? []).map(nameKey));
+  const chipsShown = chips !== null && (chips.length > 0 || chipsOpen);
+  // 칩이 뜨면 그 사람들이 지금 이 채널에 있는지 서버에 묻는다 (없는 사람은 흐리게. 그래도 보낼 수는 있다)
+  useEffect(() => {
+    if (chipsShown && partners.length > 0) askWhoOn(partners);
+  }, [chipsShown, partners]);
+
+  /** 칩 고르기: "/귓 이름 "을 채우고 입력칸으로 */
+  function choose(name: string) {
+    const t = whisperPrefill(name);
+    setText(t);
+    setChipsOpen(false);
+    setPick(-1);
+    setWhisperHint(null);
+    const el = ref.current;
+    el?.focus({ preventScroll: true });
+    requestAnimationFrame(() => el?.setSelectionRange(t.length, t.length));
+  }
 
   /** 도배 제한: 너무 빨리 쳤으면 조용히 막고 작은 표시만 (글은 그대로 둔다). 보내도 되면 true */
-  function takeToken(): boolean {
-    if (takeChatToken(bucket, performance.now())) return true;
+  function allowSend(): boolean {
+    if (takeToken()) return true;
     setSlow(true);
     if (slowTimer.current) clearTimeout(slowTimer.current);
     slowTimer.current = setTimeout(() => setSlow(false), SLOW_MS);
@@ -110,10 +151,12 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
     }
     // 11/16 귓속말: 이름·할 말이 덜 됐으면 안내만 (글은 그대로). 채팅과 같은 도배 제한
     if (whisper && draft?.kind !== "send") {
-      setWhisperHint(draft?.kind === "long" ? `할 말은 ${CHAT_MAX}자까지 보낼 수 있어요` : "닉네임 뒤에 할 말을 적어 주세요");
+      setWhisperHint(
+        draft?.kind === "long" ? `할 말은 ${CHAT_MAX}자까지 보낼 수 있어요` : draft?.kind === "noReply" ? "아직 답장할 귓속말이 없어요" : "닉네임 뒤에 할 말을 적어 주세요",
+      );
       return;
     }
-    if (!takeToken()) return;
+    if (!allowSend()) return;
     if (draft?.kind === "send") bridge.emit("input:whisper", { to: draft.to, text: draft.text });
     else bridge.emit("input:chat", { text: clean });
     setText("");
@@ -124,6 +167,26 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     // 한글 조합 중 Enter는 글자 확정용이다
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    // 11/16 "/귓 " 뒤 이름 칩: ↑·↓로 고르고 Enter로 넣는다
+    if (inline && inline.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      e.stopPropagation();
+      const n = inline.length;
+      setPick(picked < 0 ? (e.key === "ArrowDown" ? 0 : n - 1) : (picked + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+      return;
+    }
+    if (e.key === "Enter" && inline && picked >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      choose(inline[picked]);
+      return;
+    }
+    if (e.key === "Escape" && chipsOpen) {
+      e.preventDefault();
+      e.stopPropagation();
+      setChipsOpen(false);
+      return;
+    }
     if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
@@ -143,7 +206,46 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
         send();
       }}
     >
+      {chipsShown && (
+        <div className={styles.chips} data-chips role="group" aria-label="최근 귓속말 상대">
+          {chips.length === 0 ? (
+            <span className={styles.chipsEmpty}>아직 귓속말한 사람이 없어요</span>
+          ) : (
+            chips.map((n, i) => {
+              const off = offline.has(nameKey(n));
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  aria-current={inline !== null && i === picked ? true : undefined}
+                  className={cx(styles.chip, inline !== null && i === picked && styles.chipPicked, off && styles.chipOff)}
+                  title={off ? "지금 이 채널에 없어요" : undefined}
+                  // 눌러도 입력칸 포커스를 지킨다 (폰 키보드가 내려가지 않게)
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => choose(n)}
+                >
+                  {n}
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
       <div className={styles.row}>
+        <button
+          type="button"
+          className={cx(ui.button, styles.whisperBtn)}
+          aria-label="최근 귓속말 상대"
+          aria-expanded={chipsOpen}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            setChipsOpen((o) => !o);
+            // 데스크톱 채팅창은 입력칸에 포커스가 있을 때만 칩 줄을 보인다
+            ref.current?.focus({ preventScroll: true });
+          }}
+        >
+          귓
+        </button>
         <input
           ref={ref}
           id={id}
@@ -158,6 +260,7 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
           onChange={(e) => {
             setText(e.target.value);
             setWhisperHint(null);
+            setPick(-1);
           }}
           onKeyDown={onKeyDown}
         />
@@ -178,6 +281,8 @@ export default function ChatInput({ onSent, onCancel, autoFocus = false, classNa
           <span className={styles.slow}>{whisperHint}</span>
         ) : masked ? (
           <span>일부 낱말·주소는 ***로 가려져요</span>
+        ) : whisper && replyTo && isReplyCommand(text) ? (
+          <span>{replyTo}님에게 답장해요</span>
         ) : whisper ? (
           <span>귓속말은 받는 사람에게만 보이고 남지 않아요</span>
         ) : (

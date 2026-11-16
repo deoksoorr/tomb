@@ -123,5 +123,27 @@ export function pointEventBanner(ev: PointEvent, now: number): string {
   return ev.endAt === null ? head : `${head} ${pointEventEndText(ev.endAt, now)}까지`;
 }
 
+// ── 마을 전체 공지 (lib/pointEventNotice가 보낸다) ──
+
+/** 이벤트 공지 줄 id 앞부분. 게임 화면이 이 공지를 들으면 안내 띠·내 정보를 바로 다시 읽는다 (PointEventBadge) */
+export const POINT_EVENT_NOTICE_PREFIX = "pev-";
+
+/** "모든 포인트가 2배예요. 월요일 새벽 5시까지예요." / "… 끝날 때 다시 알려 드려요." */
+function noticeBody(ev: PointEvent, now: number): string {
+  const what = allSources(ev.sources) ? "모든 포인트" : pointEventWhat(ev.sources);
+  const end = ev.endAt === null ? "끝날 때 다시 알려 드려요." : `${pointEventEndText(ev.endAt, now)}까지예요.`;
+  return `${what}가 ${ev.mult}배예요. ${end}`;
+}
+
+/** 시작 공지: "🎉 포인트 2배 이벤트가 시작됐어요! 사냥터와 별자리 잇기 포인트가 2배예요. 월요일 새벽 5시까지예요." */
+export const pointEventStartNotice = (ev: PointEvent, now: number) => `🎉 포인트 ${ev.mult}배 이벤트가 시작됐어요! ${noticeBody(ev, now)}`;
+/** 켜진 채로 항목·배수·끝나는 시각을 바꿨을 때 */
+export const pointEventChangeNotice = (ev: PointEvent, now: number) => `포인트 이벤트가 바뀌었어요. ${noticeBody(ev, now)}`;
+/** 끝 공지 (관리자가 끄거나 정해 둔 시각이 지났을 때, 이벤트마다 한 번) */
+export const pointEventEndNotice = (ev: PointEvent) => `포인트 ${ev.mult}배 이벤트가 끝났어요. 함께해 줘서 고마워요.`;
+
+/** 켜진 이벤트의 설정이 바뀌었는지 (같으면 바뀜 공지를 보내지 않는다) */
+export const pointEventChanged = (a: PointEvent, b: PointEvent) => a.endAt !== b.endAt || a.mult !== b.mult || a.sources.join() !== b.sources.join();
+
 /** GET /api/point-event (게임 화면 안내 띠, CDN 캐시) · GET/POST /api/admin/point-event 응답. 공개 쪽은 오늘과 상관없는 이벤트면 null */
 export type PointEventResponse = { event: PointEvent | null };

@@ -12,14 +12,15 @@
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
-  width: min(300px, calc(100vw - var(--safe-left) - var(--safe-right)));
+  /* 11/16 칸 9개가 한 줄에 들어가게 넓혔다 (300px에선 두 줄로 감겼다 — 화면이 좁으면 여전히 감긴다) */
+  width: min(440px, calc(100vw - var(--safe-left) - var(--safe-right)));
   max-height: min(480px, calc(100dvh - var(--safe-top) - 260px));
   display: flex;
   flex-direction: column;
   animation: slideIn 0.2s ease-out both;
 }
 
-/* 11/16 칸이 9개라 좁은 창에서 옆으로 숨던 칸(접속 시간)이 안 보였다 → 두 줄로 감는다 */
+/* 11/16 칸이 9개라 좁은 창에서 옆으로 숨던 칸(접속 시간)이 안 보였다 → 창을 넓혀 한 줄, 그래도 모자라면 두 줄로 감는다 */
 .tabs {
   display: flex;
   flex: none;

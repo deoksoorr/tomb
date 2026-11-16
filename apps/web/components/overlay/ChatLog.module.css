@@ -116,7 +116,8 @@
 }
 
 /* 입력칸 아래 안내 줄은 쓰는 중에만 */
-.input:not(:focus-within) > p {
+.input:not(:focus-within) > p,
+.input:not(:focus-within) > [data-chips] {
   display: none;
 }
 
