@@ -145,3 +145,27 @@
 .legal a {
   color: var(--muted);
 }
+
+/* 11/16 추천으로 받는 포인트 표 */
+.refTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.refTable th,
+.refTable td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.refTable th {
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.refTable td:nth-child(2) {
+  color: var(--candle);
+}
