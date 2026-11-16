@@ -11,7 +11,7 @@ import type { InputHub } from "../input/InputHub";
 import type { GlyphAtlas } from "../text/GlyphAtlas";
 import type { Atmosphere } from "../world/Atmosphere";
 import { clampChars, DOOR_NAME_MAX } from "../text/fitLabel";
-import { PLATE_MINT, PLATE_WOOD, SignPlate } from "../world/SignPlate";
+import { PLATE_LOT_FREE, PLATE_LOT_HOUSE, SignPlate } from "../world/SignPlate";
 import { COTTAGE_RISE, cottageBox, cottageCanvas } from "./seaCottageArt";
 import { seaHousingHost } from "./seaHousingHost";
 import { lampApi, lampHourOf, SeaLamp } from "./seaLamp";
@@ -185,7 +185,8 @@ export class SeaHousing {
     if (old?.__t === text) return;
     old?.destroy();
     const sg = seaLotSign(l);
-    const p = new SignPlate(this.d.scene, this.d.atlas, sg.x, sg.y, text, h || hiddenTaken ? PLATE_WOOD : PLATE_MINT) as SignPlate & { __t?: string };
+    // 11/16 r16 마을 빈 집터·집 이름표와 같은 글씨만 (판 없이)
+    const p = new SignPlate(this.d.scene, this.d.atlas, sg.x, sg.y, text, h || hiddenTaken ? PLATE_LOT_HOUSE : PLATE_LOT_FREE) as SignPlate & { __t?: string };
     p.__t = text;
     p.setScale(this.plateScale);
     this.plates.set(l.n, p);

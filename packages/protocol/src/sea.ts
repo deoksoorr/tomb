@@ -182,8 +182,9 @@ export const SEA_BUS_FROM_LEFT = false;
 
 // ── 포구 부동산 (가운데) ── 별장 분양 사무소 (분양은 다음 차수). 문은 앞 가운데
 export const SEA_REALTY = { x: 852, y: 300 } as const;
-export const SEA_REALTY_W = 128;
-export const SEA_REALTY_H = 100;
+// 11/16 r16 사용자 "부동산이 다른 게임 같아요" → 마을 분양 사무소와 같은 크기·모양 (60 × 54)
+export const SEA_REALTY_W = 60;
+export const SEA_REALTY_H = 54;
 export const SEA_REALTY_DOOR = { x: SEA_REALTY.x, y: SEA_REALTY.y + 8 } as const;
 
 // ── 별장 터 6 ── 11/16 r11 사용자 "한 단지가 아니라 따로 떨어진 별장처럼": 뭍 곳곳에 흩어 놓았어요 (왼쪽 언덕·위쪽 풀밭·시장 자리·방파제 쪽).
@@ -720,7 +721,7 @@ export function seaColliders(): Rect[] {
     { x: SEA_BUS_TIMETABLE.x - 6, y: SEA_BUS_TIMETABLE.y - 4, w: 12, h: 4 },
     // 부동산·매점: 11/16 r14 사용자 "부동산 문 앞에서 건물 안으로 걸어 들어가요" → 몸통 전체를 막아요 (앞벽 밑동까지, 뒤는 지붕 밑까지).
     // 문은 안내(E)만 — 문 앞(SEA_REALTY_DOOR)에서 눌러요
-    { x: SEA_REALTY.x - SEA_REALTY_W / 2 + 4, y: SEA_REALTY.y - 66, w: SEA_REALTY_W - 8, h: 66 },
+    { x: SEA_REALTY.x - SEA_REALTY_W / 2 + 2, y: SEA_REALTY.y - 30, w: SEA_REALTY_W - 4, h: 30 },
     { x: SEA_KIOSK.x - SEA_KIOSK_W / 2 + 2, y: SEA_KIOSK.y - 40, w: SEA_KIOSK_W - 4, h: 40 },
     // 오두막 터 울타리
     ...SEA_LOTS.flatMap(seaLotFences),

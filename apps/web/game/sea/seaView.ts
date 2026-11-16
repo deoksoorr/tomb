@@ -334,8 +334,7 @@ export class SeaView {
       this.beam = this.add(sc.add.image(Math.round(VW / 2), VH - 10, this.tex(P + "beam", () => V.beamWedge())).setOrigin(0, 0.5).setDepth(8).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
     } else if (kind === "pier") {
       // 11/16 묶인 낚싯배는 선착장 끝 동쪽 → 바다를 보면 왼쪽, 부표는 서쪽 → 오른쪽
-      // 11/16 r13 낚싯배 대신 데크 동쪽(장면 왼쪽)에 매어 둔 제트스키
-      this.moored = this.add(sc.add.image(Math.round(VW * 0.14), Math.round(VH * 0.8), Art.SEA_TEX.jetski("side", 0)).setOrigin(0.5, 1).setDepth(13).setScale(3).setFlipX(true));
+      // 11/16 r16 사용자: 바다 보기 장면엔 제트스키를 그리지 않아요 (탁 트인 바다)
       this.buoy = this.add(sc.add.image(Math.round(VW * 0.82), Math.round(hz + (VH - hz) * 0.35), Art.SEA_TEX.buoy).setOrigin(0.5, 1).setDepth(13).setScale(2));
       this.fore.push(this.add(sc.add.image(0, VH, this.tex(`${P}deck-${VW}`, () => V.deckBand(VW))).setOrigin(0, 1).setDepth(20)));
     } else {
@@ -343,10 +342,9 @@ export class SeaView {
       // 밤엔 뒤에서 도는 등대 불빛이 하늘·바다 위를 옅게 훑어요 (등불은 화면 밖 위쪽 뒤)
       this.lamp = { x: Math.round(VW * 0.5), y: -Math.round(VH * 0.1) };
       this.beam = this.add(sc.add.image(this.lamp.x, this.lamp.y, this.tex(P + "beam", () => V.beamWedge())).setOrigin(0, 0.5).setDepth(3).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
-      for (let x = 40, i = 0; x < VW + 8; x += 26 + (i % 2) * 6, i++) {
-        const img = this.add(sc.add.image(x, VH + 6 - (i % 2) * 8, Art.SEA_TEX.tetra(i % 3)).setOrigin(0, 1).setDepth(20 + (i % 2)).setScale(2.4));
-        this.tetras.push(img);
-      }
+      // 11/16 r16 사용자: 지도엔 걸터앉기 앞에 테트라포드가 없어요 → 방파제 끝 돌 데크 가장자리만 (물보라는 그 가장자리에 부서져요)
+      const edge = this.add(sc.add.image(0, VH, this.tex(`${P}stoneEdge-${VW}`, () => V.stoneEdge(VW))).setOrigin(0, 1).setDepth(20));
+      this.tetras.push(edge);
       for (let i = 0; i < (this.reduced ? 4 : 16); i++)
         this.puffs.push({ img: this.add(sc.add.image(0, 0, this.tex(P + "puff", () => V.splashPuff())).setOrigin(0.5, 1).setDepth(21).setVisible(false)), x: 0, y: 0, vy: 0, t0: 0, life: 0, on: false });
       this.nextSpray = sc.time.now + 500;
@@ -695,13 +693,14 @@ export class SeaView {
       }
       for (let b = 0; b < burst; b++) {
         const p = this.puffs.find((q) => !q.on);
-        const t = this.tetras[Math.floor(Math.random() * this.tetras.length)];
+        const t = this.tetras[0];
         if (!p || !t) break;
         p.on = true;
         p.t0 = now + b * (40 + Math.random() * 120);
         p.life = 700 + Math.random() * 600;
-        p.x = t.x + 10 + Math.random() * 30;
-        p.y = t.y - 26 - Math.random() * 10;
+        // 돌 가장자리 바로 앞 물에서 튀어 올라요
+        p.x = 10 + Math.random() * (this.VW - 20);
+        p.y = this.VH - V.STONE_EDGE_H + 2 - Math.random() * 4;
         p.vy = 20 + Math.random() * 30;
       }
       for (const p of this.puffs) {

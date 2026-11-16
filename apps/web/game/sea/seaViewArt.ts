@@ -470,3 +470,23 @@ export function farShip(kind: FarShipKind): Grid {
   }
   return g;
 }
+
+/** 11/16 r16 방파제 끝 돌 데크 가장자리 (앉은 자리 바로 앞 — 지도와 같은 콘크리트 블록 + 젖은 아랫단). 원점 왼쪽 아래 */
+export const STONE_EDGE_H = 22;
+export function stoneEdge(w: number): Grid {
+  const h = STONE_EDGE_H;
+  const g = new Grid(w, h);
+  const C = { hi: 0xe8eaee, mid: 0xcfd4dc, lo: 0xa9b2be, line: 0x8a94a2 };
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (y < 12) {
+        const row = Math.floor(y / 6);
+        const off = row % 2 ? 9 : 0;
+        const mortar = y % 6 === 5 || (x + off) % 18 === 0;
+        g.set(x, y, mortar ? C.line : y === 0 ? C.hi : hashU((x + off) / 18 | 0, row, 41) < 0.4 ? C.lo : C.mid);
+      } else if (y < 16) g.set(x, y, y === 12 ? C.line : C.lo);
+      else g.set(x, y, hashU(x >> 1, y, 43) < 0.3 ? 0x8ec8c8 : 0xa4b4c4);
+    }
+  g.hline(0, w - 1, 0, 0x3a2820);
+  return g;
+}

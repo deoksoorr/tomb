@@ -328,9 +328,7 @@ export const SEA_DECOR: readonly SeaDecor[] = buildDecor();
 /** 부동산 앞 꽃밭 (protocol 몸통 앞 그림 자리) */
 export function seaFrontColliders(): Rect[] {
   return [
-    // 부동산 앞 꽃밭 (문 계단은 비워요)
-    { x: SEA_REALTY.x - SEA_REALTY_W / 2 + 4, y: SEA_REALTY.y - 6, w: 44, h: 5 },
-    { x: SEA_REALTY.x + SEA_REALTY_W / 2 - 48, y: SEA_REALTY.y - 6, w: 44, h: 5 },
+    // r16 부동산은 마을 분양 사무소 모양 (앞 꽃밭 없이 — 몸통은 protocol이 막아요)
   ];
 }
 

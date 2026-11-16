@@ -86,8 +86,9 @@ export function fbm(x: number, y: number, px = 0): number {
   return vnoise(x, y, px) * 0.6 + vnoise(x * 2, y * 2.1, px * 2) * 0.3 + vnoise(x * 4, y * 4.3, px * 4) * 0.1;
 }
 /** 물체 둘레 연한 테 색·불투명도 (뒷배경을 따뜻한 갈색 쪽으로 48%) */
-const SOFT_EDGE = 0x5c4a42;
-const SOFT_EDGE_A = 122;
+// 11/16 r16 사용자 톤 맞추기: 캠핑장·마을처럼 짙은 따뜻한 갈색 1px 테 (반투명 말고 또렷하게) — 색상은 그대로
+const SOFT_EDGE = 0x3a2820;
+const SOFT_EDGE_A = 255;
 function softOutline(g: Grid): void {
   g.outline(SOFT_EDGE, false, SOFT_EDGE_A);
 }
@@ -215,7 +216,8 @@ function shadow(g: Grid, cx: number, cy: number, rx: number, ry: number, a = 64)
     for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
       const dx = (x + 0.5 - cx) / rx;
       const dy = (y + 0.5 - cy) / ry;
-      if (dx * dx + dy * dy <= 1 && !g.filled(x, y)) g.set(x, y, 0x464e6e, Math.round(a * 0.75 * (1 - (dx * dx + dy * dy) * 0.6)));
+      // r16 바닥에 닿은 그림자를 조금 더 진하게 (물건이 땅에 앉아 보이게)
+      if (dx * dx + dy * dy <= 1 && !g.filled(x, y)) g.set(x, y, 0x3e4060, Math.min(170, Math.round(a * 1.15 * (1 - (dx * dx + dy * dy) * 0.5))));
     }
 }
 
@@ -253,7 +255,6 @@ const ROOF_BLUE: Pal4 = { hi: RAMP.roofM[0], mid: RAMP.roofM[1], lo: RAMP.roofM[
 /** 11/16 파스텔 지붕 (복숭아·라일락·버터) */
 // 11/16 시안: 작은 집(부동산)은 민트 지붕, 큰 집(시장)은 코럴 지붕
 const ROOF_PEACH: Pal4 = { hi: RAMP.roofM[0], mid: RAMP.roofM[1], lo: RAMP.roofM[2], deep: RAMP.roofM[3] };
-const ROOF_LILAC: Pal4 = { hi: RAMP.roofC[0], mid: RAMP.roofC[1], lo: RAMP.roofC[2], deep: RAMP.roofC[3] };
 const CONCRETE: Pal3 & { line: Color } = { hi: RAMP.rock[0], mid: RAMP.rock[1], lo: RAMP.rock[2], line: RAMP.rock[3] };
 const BASALT: Pal4 = { hi: RAMP.rock[1], mid: RAMP.rock[2], lo: RAMP.rock[3], deep: RAMP.rock[4] };
 
@@ -620,68 +621,52 @@ export function keeperArt(): Grid {
 }
 
 // ── 포구 부동산 ── 작은 나무 사무소. 받침 = 문 앞 계단 (SEA_REALTY.y)
-export const REALTY_ART_W = 132;
-export const REALTY_ART_H = 104;
+export const REALTY_ART_W = 60; // r16 마을 분양 사무소와 같은 크기
+export const REALTY_ART_H = 54;
 export const REALTY_SIGN = { dx: 0, dy: -50 } as const;
+/**
+ * 11/16 r16 사용자 "바닷가 부동산이 다른 게임 같아요" → 마을 분양 사무소(sprites/worldProps officeHut)와 같은 그림·크기·문·간판 (60 × 54).
+ * 바닷가 느낌은 지붕 색만 바다빛 (짙은 청록). 테두리는 마을과 같은 짙은 1px
+ */
 export function realtyArt(): Grid {
   const W = REALTY_ART_W;
   const H = REALTY_ART_H;
   const g = new Grid(W, H);
-  const base = H - 3;
-  const wallBot = base - 6;
-  const wallTop = 42;
-  // 벽 (가로 판자, 연한 민트)
-  for (let y = wallTop; y <= wallBot; y++) {
-    const k = (y - wallTop) % 5;
-    g.hline(6, W - 7, y, k === 0 ? RAMP.wall[0] : k === 4 ? RAMP.wall[3] : RAMP.wall[1]);
+  const OUTV = 0x1f1d1a;
+  const wall = { hi: 0xd9d0bc, mid: 0xc2b89f, lo: 0x9e957f };
+  const roof = { hi: 0x4f8478, mid: 0x3d6a62, lo: 0x2c4f4a };
+  g.rect(6, 24, 48, 26, wall.mid);
+  g.rect(6, 24, 48, 2, wall.hi);
+  g.rect(50, 24, 4, 26, wall.lo);
+  g.rect(6, 47, 48, 3, 0x7a705c);
+  for (let y = 0; y < 12; y++) {
+    const inset = Math.max(0, 10 - y);
+    g.hline(2 + inset, 57 - inset, 12 + y, y < 3 ? roof.hi : y < 9 ? roof.mid : roof.lo);
   }
-  siding(g, { x0: 6, y0: wallTop, x1: W - 7, y1: wallBot }, 5);
-  // 박공지붕 (붉은 기와)
-  const peak = 6;
-  for (let y = peak; y < wallTop + 3; y++) {
-    const half = Math.round(((y - peak) / (wallTop + 3 - peak)) * (W / 2 + 2)) + 6;
-    for (let x = W / 2 - half; x < W / 2 + half; x++) {
-      const row = Math.floor((y - peak) / 4);
-      const c = (y - peak) % 4 === 3 ? ROOF_PEACH.deep : (x + row * 3) % 9 === 0 ? ROOF_PEACH.lo : row % 2 ? ROOF_PEACH.mid : lighten(ROOF_PEACH.mid, 0.06);
-      g.set(x, y, c);
-    }
+  for (let x = 6; x < 56; x += 5) g.vline(x, 15, 22, roof.lo);
+  // 간판 (작은 집 셋 — 분양 사무소처럼)
+  g.rect(16, 4, 28, 9, 0x2f3a44);
+  g.rect(17, 5, 26, 7, 0x3e4c58);
+  for (const x of [20, 25, 30, 35]) g.rect(x, 7, 3, 3, 0xe8e0c8);
+  g.vline(18, 13, 14, 0x2f3a44);
+  g.vline(41, 13, 14, 0x2f3a44);
+  // 문
+  g.rect(25, 33, 10, 17, 0x6e5238);
+  g.rect(26, 34, 8, 15, 0x8e6e4e);
+  g.rect(28, 36, 4, 4, 0xbfdde8);
+  g.set(33, 42, 0xf3d36b);
+  // 창 (불빛)
+  for (const x of [11, 40]) {
+    g.rect(x, 30, 9, 8, 0x52402c);
+    g.rect(x + 1, 31, 7, 6, 0xffd98a);
+    g.vline(x + 4, 31, 36, 0x52402c);
+    g.hline(x + 1, x + 7, 33, 0x52402c);
   }
-  g.hline(0, W - 1, wallTop + 2, ROOF_PEACH.deep);
-  // 현판 (문 위 — 11/16 글씨는 위에 뜨는 이름표, 판에는 작은 집 셋)
-  g.rect(W / 2 - 40, wallTop + 4, 80, 12, 0xfff8ee);
-  for (let k = 0; k < 3; k++) houseIcon(g, W / 2 - 22 + k * 16, wallTop + 6, [ROOF_PEACH.lo, ROOF_LILAC.lo, ROOF_BLUE.lo][k], 0xf2eadc);
-  frame(g, W / 2 - 41, wallTop + 3, 82, 14, PAINT.line);
-  // 문 (가운데) + 계단
-  const dx = W / 2 - 9;
-  g.rect(dx, wallBot - 30, 18, 30, 0x4e6e86);
-  frame(g, dx - 1, wallBot - 31, 20, 31, PAINT.line);
-  g.rect(dx + 3, wallBot - 26, 12, 8, 0xffe8b0);
-  frame(g, dx + 3, wallBot - 26, 12, 8, PAINT.line);
-  g.set(dx + 14, wallBot - 14, 0xe8c070);
-  g.rect(dx - 4, wallBot + 1, 26, 3, CONCRETE.mid);
-  g.rect(dx - 2, wallBot + 4, 22, 2, CONCRETE.lo);
-  // 창 (왼쪽, 분양 안내 종이 · 오른쪽, 오두막 그림)
-  for (const wx of [14, W - 42]) {
-    g.rect(wx, wallBot - 30, 28, 18, RAMP.glass[1]);
-    frame(g, wx - 1, wallBot - 31, 30, 20, PAINT.line);
-    g.vline(wx + 14, wallBot - 30, wallBot - 13, PAINT.line);
-  }
-  g.rect(18, wallBot - 27, 8, 10, 0xf8f4ea);
-  g.hline(19, 24, wallBot - 24, 0xc04a3a);
-  g.rect(W - 36, wallBot - 26, 9, 6, 0x6a8ab0); // 오두막 그림
-  // 11/16 r14 재질 결: 기와 줄
-  roofRows(g, { x0: 0, y0: peak, x1: W - 1, y1: wallTop + 1 }, 4, 9);
-  g.rect(W - 37, wallBot - 28, 11, 2, 0xb24e36);
-  // 꽃밭 (양옆)
-  for (const fx of [8, W - 50]) {
-    g.rect(fx, wallBot + 1, 42, 4, 0xc8a890);
-    for (let x = fx + 2; x < fx + 40; x += 4) {
-      g.set(x, wallBot, 0x5a8a44);
-      g.set(x + 1, wallBot - 1, [0xf0a0b8, 0xf8e8a0, 0xe86a8a][(x >> 2) % 3]);
-    }
-  }
-  softOutline(g);
-  shadow(g, W / 2, base + 1, W / 2 - 6, 2, 56);
+  // 우편함
+  g.rect(52, 40, 4, 4, 0xb85a4a);
+  g.vline(54, 44, 49, 0x6e5238);
+  g.outline(OUTV);
+  shadow(g, 30, 51.5, 27, 1.6, 70);
   return g;
 }
 
@@ -1168,39 +1153,148 @@ export function buoyArt(): Grid {
 }
 
 // ── 갯바위 (따개비·미역) ──
-export function rockArt(i: number): Grid {
+/**
+ * 11/16 r16 사용자 "갯바위가 다 비슷해요 — 훨씬 다양하게": 바위마다(번호로 정해지는 씨앗) 모양 종류가 달라요.
+ *  둥근 바위(boulder) · 높은 바위 기둥(stack) · 넓적한 판바위(slab) · 뾰족한 바위(jagged) · 틈이 갈라진 무더기(cluster)
+ *  그 위에 물때 젖은 띠(아래쪽 짙게) · 따개비 · 삿갓조개 · 미역 · 금 · 둘레 자갈. 색은 지금 바닷가 단계(RAMP.rock) 그대로.
+ *  r16 사용자 "바위가 잘려요": 그림 높이를 모양에 맞춰 넉넉히 (위가 잘리지 않게)
+ */
+export type RockKind = "boulder" | "stack" | "slab" | "jagged" | "cluster";
+export function rockKindOf(i: number): RockKind {
   const R = SEA_ROCKS[i];
-  const W = Math.ceil(R.rx * 2) + 10;
-  const H = Math.ceil(R.ry * 2) + 22;
-  const g = new Grid(W, H);
-  const r = rng(1300 + i * 17);
-  const cx = W / 2;
-  const base = H - 5;
-  // 11/16 시안 rock: 둥근 덩어리 둘셋을 빛(왼쪽 위)으로 단계 나눔, 테는 연하게
-  const rr = Math.min(R.rx, R.ry * 1.6);
-  const circles: [number, number, number][] = [
-    [cx - R.rx * 0.2, base - rr * 0.9, rr * 0.95],
-    [cx + R.rx * 0.45, base - rr * 0.7, rr * 0.72],
-    [cx - R.rx * 0.65, base - rr * 0.55, rr * 0.55],
-  ];
-  if (r() < 0.6) circles.push([cx + R.rx * 0.1, base - rr * 1.3, rr * 0.55]);
-  blobPaint(g, circles, RAMP.rock, true, i * 13);
-  // 11/16 따개비 (물에 잠기는 아래쪽에 작은 점 무리) · 미역 몇 가닥
-  for (let k = 0; k < Math.round(R.rx * 0.35); k++) {
-    const x = Math.round(cx + (r() - 0.5) * R.rx * 1.5);
-    const y = Math.round(base - 4 - r() * rr * 0.5);
-    if (g.filled(x, y) && g.filled(x + 1, y)) {
-      g.set(x, y, RAMP.rock[0]);
-      g.set(x + 1, y, RAMP.rock[1]);
+  const h = hashU(i, 7, 5);
+  if (R.small) return h < 0.4 ? "boulder" : h < 0.7 ? "cluster" : "slab";
+  return h < 0.24 ? "boulder" : h < 0.42 ? "stack" : h < 0.6 ? "slab" : h < 0.8 ? "jagged" : "cluster";
+}
+/** 열 높이 그림 (뾰족·판바위): top(x) 위로 빛은 왼쪽 위 */
+function profilePaint(g: Grid, x0: number, x1: number, base: number, top: (x: number) => number, salt: number): void {
+  const w = Math.max(1, x1 - x0);
+  for (let x = Math.floor(x0); x <= x1; x++) {
+    const t = top(x);
+    if (t >= base) continue;
+    const u = (x - x0) / w;
+    for (let y = Math.floor(t); y <= base; y++) {
+      const v = (y - t) / Math.max(1, base - t);
+      // 면 나눔: 몇 칸마다 세로 결 (각진 면)
+      const facet = hashU(Math.floor((x + salt) / 5), 0, 91 + salt) * 0.25;
+      let light = 0.18 + u * 0.45 + v * 0.25 + facet + (fbm(x * 0.3 + salt, y * 0.3) - 0.5) * 0.3;
+      if (y - t < 1.2) light -= 0.18; // 윗면 빛
+      g.set(x, y, pick(RAMP.rock, Math.max(0, Math.min(1, light)), x, y));
     }
   }
-  for (let k = 0; k < Math.round(R.rx / 10); k++) {
-    const x = Math.round(cx + (r() - 0.5) * R.rx * 1.2);
-    for (let j = 0; j < 3; j++) if (g.filled(x, base - j)) g.set(x + (j === 1 ? 1 : 0), base - j, RAMP.leaf[3]);
+}
+export function rockArt(i: number): Grid {
+  const R = SEA_ROCKS[i];
+  const kind = rockKindOf(i);
+  const r = rng(1300 + i * 17);
+  const rr = Math.min(R.rx, R.ry * 1.6);
+  const tall = kind === "stack" ? rr * 2.2 : kind === "jagged" ? rr * 1.7 : kind === "slab" ? R.ry * 1.4 : kind === "cluster" ? rr * 1.5 : rr * 2;
+  const W = Math.ceil(R.rx * 2) + 14;
+  const H = Math.ceil(Math.max(R.ry * 2 + 22, tall + 14));
+  const g = new Grid(W, H);
+  const cx = W / 2;
+  const base = H - 5;
+  if (kind === "boulder") {
+    const circles: [number, number, number][] = [
+      [cx - R.rx * 0.2, base - rr * 0.9, rr * 0.95],
+      [cx + R.rx * 0.45, base - rr * 0.7, rr * 0.72],
+      [cx - R.rx * 0.65, base - rr * 0.55, rr * 0.55],
+    ];
+    if (r() < 0.6) circles.push([cx + R.rx * 0.1, base - rr * 1.3, rr * 0.55]);
+    blobPaint(g, circles, RAMP.rock, true, i * 13);
+  } else if (kind === "stack") {
+    // 높이 선 바위 기둥: 각진 기둥(층층이 턱진 윗면) + 밑동 곁 바위 — 둥근 덩어리를 쌓지 않아요
+    const ledges = [0.62 + r() * 0.1, 0.8 + r() * 0.1, 1];
+    profilePaint(g, cx - R.rx * 0.75, cx + R.rx * 0.75, base, (x) => {
+      const u = (x - cx) / (R.rx * 0.75);
+      const a = Math.abs(u + 0.1);
+      const step = a < 0.3 ? ledges[2] : a < 0.6 ? ledges[1] : ledges[0];
+      const fall = a > 0.85 ? (a - 0.85) / 0.15 : 0;
+      return base - tall * step * (1 - fall * 0.8) + (hashU(x >> 1, 3, 87 + i) < 0.3 ? 1 : 0);
+    }, i * 5);
+    blobPaint(g, [[cx + R.rx * 0.7, base - rr * 0.3, rr * 0.38]], RAMP.rock, true, i * 13);
+  } else if (kind === "slab") {
+    // 넓적한 판바위: 낮고 평평한 윗면, 비스듬한 옆
+    const h0 = R.ry * (1 + r() * 0.35);
+    const tilt = (r() - 0.5) * 0.25;
+    profilePaint(g, cx - R.rx, cx + R.rx, base, (x) => {
+      const u = (x - cx) / R.rx;
+      const edge = Math.max(0, Math.abs(u) - 0.7) / 0.3;
+      return base - h0 * (1 - edge * edge) + u * tilt * h0 + (hashU(x >> 2, 1, 77 + i) < 0.2 ? 1 : 0);
+    }, i * 7);
+  } else if (kind === "jagged") {
+    // 뾰족한 바위: 봉우리 둘셋 + 잔 톱니
+    const peaks = [[-0.35, 0.75 + r() * 0.2], [0.15, 1], [0.55, 0.6 + r() * 0.2]] as const;
+    profilePaint(g, cx - R.rx, cx + R.rx, base, (x) => {
+      const u = (x - cx) / R.rx;
+      let h = 0;
+      // 봉우리 어깨를 넓게 (텐트처럼 뾰족하지 않게), 잔 톱니는 작게
+      for (const [pu, ph] of peaks) h = Math.max(h, ph * Math.max(0, 1 - Math.abs(u - pu) * 1.15) ** 0.8);
+      h = Math.max(h, 0.3 * (1 - Math.abs(u)));
+      const teeth = (hashU(x >> 1, 2, 79 + i) - 0.5) * 2;
+      return base - Math.max(0, h) * tall + teeth;
+    }, i * 11);
+  } else {
+    // 무더기: 작은 덩어리 여럿, 사이사이 틈 (갈라진 곳은 짙게)
+    const n = 4 + Math.floor(r() * 3);
+    const circles: [number, number, number][] = [];
+    for (let k = 0; k < n; k++) {
+      const u = -0.8 + (1.6 * k) / Math.max(1, n - 1) + (r() - 0.5) * 0.2;
+      const rad = rr * (0.32 + r() * 0.28);
+      circles.push([cx + u * R.rx * 0.9, base - rad * (0.8 + r() * 0.5), rad]);
+    }
+    blobPaint(g, circles, RAMP.rock, true, i * 13);
+    for (let k = 1; k < n; k++) {
+      const x = Math.round((circles[k - 1][0] + circles[k][0]) / 2);
+      for (let y = base - Math.round(rr * 0.9); y <= base; y++) if (g.filled(x, y) && hashU(x, y, 81) < 0.8) g.set(x, y, RAMP.rock[4]);
+    }
   }
-  // 젖은 아래 끝 (물이끼 대신 옅은 민트 몇 점)
-  for (let x = 0; x < W; x++) for (let y = base - 3; y <= base; y++) if (g.filled(x, y) && hashU(x, y, i + 3) < 0.25) g.set(x, y, RAMP.roofM[2]);
+  // 금 (짙은 가는 선 둘셋 — 위에서 아래로 비틀비틀)
+  for (let k = 0; k < 2 + Math.floor(r() * 2); k++) {
+    let x = Math.round(cx + (r() - 0.5) * R.rx * 1.2);
+    let y = Math.round(base - tall * (0.3 + r() * 0.5));
+    for (let j = 0; j < 6 + r() * 8; j++) {
+      if (g.filled(x, y) && g.filled(x - 1, y) && g.filled(x + 1, y)) g.set(x, y, RAMP.rock[4]);
+      y += 1;
+      x += r() < 0.3 ? -1 : r() < 0.6 ? 1 : 0;
+    }
+  }
+  // 물때 젖은 띠 (아래 6줄은 짙고 축축하게) · 따개비(흰 점 무리) · 삿갓조개(작은 고깔)
+  const band = 6 + Math.floor(r() * 3);
+  for (let y = base - band; y <= base; y++)
+    for (let x = 0; x < W; x++) {
+      if (!g.filled(x, y)) continue;
+      const c = g.get(x, y) >>> 8;
+      g.set(x, y, mix(c, 0x4a5868, 0.18 + ((y - (base - band)) / band) * 0.12));
+      if (hashU(x >> 1, y >> 1, 85 + i) < 0.09 && y < base - 1) g.set(x, y, RAMP.rock[0]);
+    }
+  for (let k = 0; k < Math.round(R.rx / 8); k++) {
+    const x = Math.round(cx + (r() - 0.5) * R.rx * 1.4);
+    const y = base - 2 - Math.floor(r() * band);
+    if (g.filled(x, y) && g.filled(x + 2, y + 1)) {
+      g.set(x + 1, y - 1, RAMP.rock[1]);
+      g.set(x, y, RAMP.rock[2]);
+      g.set(x + 1, y, RAMP.rock[1]);
+      g.set(x + 2, y, RAMP.rock[3]);
+    }
+  }
+  // 미역·파래 (밑동 몇 가닥)
+  for (let k = 0; k < Math.max(1, Math.round(R.rx / 9)); k++) {
+    const x = Math.round(cx + (r() - 0.5) * R.rx * 1.4);
+    const len = 2 + Math.floor(r() * 3);
+    for (let j = 0; j < len; j++) if (g.filled(x, base - j)) g.set(x + (j % 2), base - j, j === len - 1 ? RAMP.leaf[2] : RAMP.leaf[3]);
+  }
+  // 젖은 아래 끝 (옅은 민트 몇 점)
+  for (let x = 0; x < W; x++) for (let y = base - 3; y <= base; y++) if (g.filled(x, y) && hashU(x, y, i + 3) < 0.2) g.set(x, y, RAMP.roofM[2]);
   softOutline(g);
+  // 둘레 자갈 (바위 밖 모래·갯벌 위 작은 돌 몇 알)
+  for (let k = 0; k < 3 + Math.floor(r() * 4); k++) {
+    const x = Math.round(cx + (r() < 0.5 ? -1 : 1) * (R.rx * (0.9 + r() * 0.3)));
+    const y = base - 1 + Math.floor(r() * 3);
+    if (x < 1 || x >= W - 2 || g.filled(x, y)) continue;
+    g.set(x, y, RAMP.rock[1]);
+    g.set(x + 1, y, RAMP.rock[3]);
+  }
   shadow(g, cx + 2, base + 1, R.rx + 2, 3, 60);
   return g;
 }
@@ -1673,7 +1767,7 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
     case "path": {
       // 11/16 r14 밟혀 다져진 흙길: 가운데는 밝게, 가장자리는 한 단계 진하게 + 가장자리 자갈 몇 알
       const e = pathEdgeDist(x, y); // 0 = 가장자리, 음수 = 안쪽
-      let t = 0.3 + fbm(x * 0.02, y * 0.02) * 0.45 + (e > -2.5 ? 0.22 : e < -6 ? -0.08 : 0);
+      let t = 0.42 + fbm(x * 0.02, y * 0.02) * 0.4 + (e > -2.5 ? 0.22 : e < -6 ? -0.08 : 0); // r16 흙길 한 톤 깊게
       if (e > -3.5 && hashU(x >> 1, y >> 1, 41) < 0.03) return (x + y) & 1 ? mix(RAMP.rock[1], RAMP.sand[2], 0.45) : mix(RAMP.rock[3], RAMP.sand[4], 0.5);
       if (hashU(x, y, 43) < 0.03) t += 0.18;
       return pick(RAMP.sand, speck(t, x, y, 3), x, y);
@@ -1745,7 +1839,8 @@ function groundColor(x: number, y: number, k: SeaGround): Color {
       const sandy = Math.max(0, (y - (SEA_BOARDWALK.y - 58)) / 60); // 11/16 r11 산책로에서 재요
       if (sandy > 0 && fbm(x * 0.03, y * 0.03) < sandy * 0.6) return pick(RAMP.sand, 0.4, x, y);
       // 11/16 r14 결: 울타리 바깥 그늘(AO) · 풀 포기(3px 짙은 잎 + 밝은 끝) · 토끼풀 무리(잡음 자리) · 작은 들꽃 · 잔 알갱이
-      let t = 0.15 + fbm(x * 0.015, y * 0.0225) * 0.75 + (y > SEA_BOARDWALK.y - 6 ? 0.2 : 0);
+      // r16 풀밭은 한 톤 깊게 (마을·캠핑장 땅 밝기에 가깝게 — 같은 풀빛 단계 안에서)
+      let t = 0.27 + fbm(x * 0.015, y * 0.0225) * 0.7 + (y > SEA_BOARDWALK.y - 6 ? 0.2 : 0);
       for (const l of SEA_LOTS) {
         const dx = Math.max(l.x - x, 0, x - (l.x + l.w));
         const dy = Math.max(l.y - y, 0, y - (l.y + l.h));
@@ -2011,7 +2106,7 @@ export function detailPass(g: Grid, o: DetailOpts = {}): Grid {
   const W = g.w;
   const H = g.h;
   const src = g.px.slice();
-  const rim = o.rim ?? 0.12;
+  const rim = o.rim ?? 0.2; // r16 그늘 쪽을 한두 단계 더 깊게
   const grain = o.grain ?? 0.05;
   const salt = o.salt ?? 0;
   const solid = (x: number, y: number): boolean => {

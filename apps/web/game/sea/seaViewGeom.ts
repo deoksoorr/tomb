@@ -1,4 +1,4 @@
-import { SEA_JETSKIS, SEA_BREAKWATER, SEA_BREAKWATER_TIP, SEA_LIGHTHOUSE, SEA_PIER, SEA_PIER_END, SEA_ROCKS, SEA_SPOTS } from "@tomb/protocol";
+import { SEA_BREAKWATER, SEA_BREAKWATER_TIP, SEA_LIGHTHOUSE, SEA_PIER, SEA_PIER_END, SEA_ROCKS, SEA_SPOTS } from "@tomb/protocol";
 import { SEA_TEX } from "./seaArt";
 
 // 11/16 바다 보기 장면의 원근 계산 (순수 — Phaser 없음, seaViewGeom.test).
@@ -71,8 +71,6 @@ export function seaViewLandmarks(sx: number, sy: number): SeaViewLandmarks {
     if (inCone(dx, d) && d > 20) sprites.push({ key, dx, d, scale });
   };
   sprite(SEA_TEX.lighthouse, SEA_LIGHTHOUSE.x, SEA_LIGHTHOUSE.y, 0.9);
-  // 11/16 r13 낚싯배 대신 선착장 끝에 매어 둔 제트스키
-  SEA_JETSKIS.forEach((j, i) => sprite(SEA_TEX.jetski("front", i), j.x, j.y, 0.8));
   SEA_ROCKS.forEach((r, i) => {
     if (!r.small) sprite(SEA_TEX.rock(i), r.x, r.y + r.ry * 0.7, 0.9);
   });

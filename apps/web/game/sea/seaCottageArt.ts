@@ -45,8 +45,9 @@ const PAL = {
   stripe: hexes(["#f7b5a8", "#ec9a8d", "#dc8176", "#c86d64"]),
   stone: hexes(["#e5e3dc", "#d2cfc6", "#bdb9ae", "#a7a297"]),
 } as const;
-const EDGE = 0x5c4a42;
-const EDGE_A = 122;
+// 11/16 r16 톤 맞추기: 캠핑장·마을처럼 짙은 따뜻한 갈색 1px 테
+const EDGE = 0x3a2820;
+const EDGE_A = 255;
 const WARM = 0xffd890;
 const WARM_HI = 0xfff2c4;
 
@@ -132,7 +133,8 @@ function roofAt(g: Grid, x0: number, x1: number, top: number, eave: number, ramp
         else if ((x - a) % 3 === 1) v -= 0.08;
       } else if ((y - top) % 4 === 3) v += 0.16;
       else if ((y - top) % 4 === 0) v -= 0.08;
-      g.set(x, y, pick(ramp, cl(v), x, y));
+      // r16 지붕 명암 대비를 조금 더 (마을 집처럼 지붕·벽·테가 또렷하게)
+      g.set(x, y, pick(ramp, cl(0.5 + (v - 0.5) * 1.3), x, y));
     }
     // 용마루 (맨 위 한 줄은 밝게) · 처마 끝 (진하게)
     if (y === top) for (let x = a; x <= b; x++) g.set(x, y, ramp[0]);

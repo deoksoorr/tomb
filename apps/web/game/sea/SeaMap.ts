@@ -48,7 +48,7 @@ import { campfireRing, campfireSheet, FIRE_FRAMES, FIRE_H, FIRE_W, hammock as ha
 import { DEPTH } from "../config";
 import { makeCanvas, mix } from "../sprites/pixel";
 import { FONT_KEY, FONT_PX, type GlyphAtlas } from "../text/GlyphAtlas";
-import { PLATE_MINT, PLATE_WOOD, SignPlate } from "../world/SignPlate";
+import { PLATE_LABEL, PLATE_LOT_FREE, SignPlate } from "../world/SignPlate";
 import { worldTintOf } from "../world/worldTint";
 import * as Art from "./seaArt";
 import { noise1, shoreDelay, shoreReach, WaveTrain } from "./seaWaves";
@@ -408,8 +408,9 @@ export class SeaMap implements SeaMapApi {
     SEA_MATS.forEach((m, i) => this.prop(T.mat(i % 3 === 1 ? 1 : i % 3 === 2 ? 2 : 0), m.x, m.y + 8, FLAT + m.y, 2));
     // 시장·부동산·매점 (현판 글씨는 판 크기에 맞춰 월드 크기 그대로)
     // 11/16 간판 글씨는 판 위에 뜨는 이름표로 (사용자: "간판 글씨가 안 읽혀요" — 늘 같은 화면 크기, 진한 판에 밝은 글씨)
-    this.prop(T.realty, SEA_REALTY.x, SEA_REALTY.y, SEA_REALTY.y, 3);
-    this.plate(SEA_REALTY.x, SEA_REALTY.y - 55, "포구 부동산"); // 문 위 현판(작은 집 그림) 위
+    // 11/16 r16 마을 분양 사무소와 같은 건물·이름표 (지붕 바로 위 글씨만)
+    this.prop(T.realty, SEA_REALTY.x, SEA_REALTY.y, SEA_REALTY.y, 2);
+    this.plate(SEA_REALTY.x, SEA_REALTY.y - Art.REALTY_ART_H + 6, "포구 부동산");
     this.prop(T.kiosk, SEA_KIOSK.x, SEA_KIOSK.y, SEA_KIOSK.y, 3);
     this.plate(SEA_KIOSK.x, SEA_KIOSK.y - 58, "매점");
     // 오두막 터 6: 뒤·옆 울타리는 터 뒤 depth, 앞 울타리는 터 앞 depth로 (터 안에 선 사람이 울타리 사이에 보이게)
@@ -422,7 +423,7 @@ export class SeaMap implements SeaMapApi {
       this.cull(l.x + l.w / 2, l.y + l.h, s.add.image(x, y, key).setOrigin(0, 0).setDepth(l.y + l.h).setCrop(0, sz.front, sz.w, sz.h - sz.front));
       const sg = seaLotSign(l);
       // 11/16 「분양 준비 중」은 땅에 꽂은 작은 민트 칠 판 하나로 (예전 팻말 그림 + 두꺼운 판은 뺐어요). 터 번호는 출입구 기둥 패에
-      this.lotPlates.set(l.n, this.plate(sg.x, sg.y, "분양 준비 중", PLATE_MINT));
+      this.lotPlates.set(l.n, this.plate(sg.x, sg.y, "분양 준비 중", PLATE_LOT_FREE));
     }
     // 11/16 오두막 단지 우편함·등불 기둥 (골목 옆)
     this.prop(T.mailbox, SEA_LOT_MAILBOX.x, SEA_LOT_MAILBOX.y);
@@ -571,7 +572,8 @@ export class SeaMap implements SeaMapApi {
   }
 
   /** 11/16 간판 이름표 (판 아랫변 = y). 화면에서 늘 같은 크기라 멀리서도 읽혀요 */
-  private plate(x: number, y: number, text: string, style = PLATE_WOOD): SignPlate {
+  /** r16 마을 이름표와 같은 글씨만 (판 없이) */
+  private plate(x: number, y: number, text: string, style = PLATE_LABEL): SignPlate {
     const p = new SignPlate(this.scene, this.atlas, x, y, text, style);
     this.keep(p.text);
     this.keep(p.bg);
@@ -1317,7 +1319,7 @@ export function forEachSeaTexture(tex: (key: string, build: SeaTexBuild, linear?
   tex(T.busSign, () => Art.withDetail(Art.busSignArt(), {}));
   tex(T.timetable, () => Art.withDetail(Art.timetableArt(), {}));
   tex(T.bench, () => Art.withDetail(Art.benchArt(), { wood: true }));
-  tex(T.realty, () => Art.withDetail(Art.realtyArt(), {}));
+  tex(T.realty, Art.realtyArt);
   tex(T.kiosk, () => Art.withDetail(Art.kioskArt(), {}));
   for (const l of SEA_LOTS) tex(T.lot(l.n), () => Art.withDetail(Art.lotArt(l), { wood: true }));
   tex(T.mailbox, () => Art.withDetail(Art.mailboxArt(), {}));

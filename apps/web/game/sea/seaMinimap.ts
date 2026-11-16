@@ -68,7 +68,7 @@ export function* seaMinimapSteps(): Generator<void, void> {
   if (pixels) return;
   const out = new Uint8ClampedArray(SEA_MINIMAP_W * SEA_MINIMAP_H * 4);
   const trees = new Set(SEA_TREES.filter((t) => t.kind !== "bush").map((t) => Math.floor((t.y - 8) / SEA_MINIMAP_CELL) * SEA_MINIMAP_W + Math.floor(t.x / SEA_MINIMAP_CELL)));
-  const realty = { x: SEA_REALTY.x - SEA_REALTY_W / 2, y: SEA_REALTY.y - 56, w: SEA_REALTY_W, h: 50 };
+  const realty = { x: SEA_REALTY.x - SEA_REALTY_W / 2, y: SEA_REALTY.y - SEA_REALTY_W / 2 - 10, w: SEA_REALTY_W, h: SEA_REALTY_W / 2 + 8 };
   const kiosk = { x: SEA_KIOSK.x - SEA_KIOSK_W / 2, y: SEA_KIOSK.y - SEA_KIOSK_H / 2, w: SEA_KIOSK_W, h: SEA_KIOSK_H / 2 };
   const shelter = { x: SEA_BUS_STOP.x - 32, y: SEA_BUS_STOP.y - 26, w: 64, h: 26 };
   for (let y = 0; y < SEA_MINIMAP_H; y++) {
