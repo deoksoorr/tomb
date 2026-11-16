@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { bridge } from "../bridge";
 import { DEPTH } from "../config";
 import { isTouchUi } from "../input/keyHint";
 import { Grid } from "../sprites/pixel";
@@ -21,6 +22,8 @@ const LENS_SCALE = 3;
 const DEPTH_LENS = DEPTH.tooltip + 10;
 const PUFFS = 4;
 const PUFF_MS = 2600;
+/** 내려놓은 뒤 카메라가 원래 자리로 돌아오는 시간 (이 동안도 단축키를 막아요) */
+const BUSY_TAIL_MS = 600;
 
 export type LookoutScopeOptions = {
   rig: CameraRig;
@@ -43,9 +46,21 @@ export class LookoutScope {
   private fx: TentFx[] = [];
   private readonly tripod: Phaser.GameObjects.Image;
   private openedAt = 0;
+  private offExit: (() => void) | null = null;
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.code === "Escape" && this.opened) this.close();
   };
+  /** 11/16 r19 내려놓은 뒤 카메라가 돌아오는 동안까지 단축키를 막아요 (view:busy) */
+  private busyTimer: ReturnType<typeof setTimeout> | null = null;
+  private setBusy(on: boolean): void {
+    if (this.busyTimer) clearTimeout(this.busyTimer);
+    this.busyTimer = null;
+    if (on) bridge.emit("view:busy", { on: true });
+    else this.busyTimer = setTimeout(() => {
+      this.busyTimer = null;
+      bridge.emit("view:busy", { on: false });
+    }, this.o.reduced ? 0 : BUSY_TAIL_MS);
+  }
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -75,6 +90,9 @@ export class LookoutScope {
     this.buildTents();
     this.o.rig.cinematic({ x: this.aim.x, y: this.aim.y, zoom: SCOPE_ZOOM }, this.o.reduced);
     window.addEventListener("keydown", this.onKey);
+    this.setBusy(true);
+    // 11/16 r19 바라보는 동안 Esc는 단축키 거르개가 view:exit로도 알려요
+    this.offExit ??= bridge.on("view:exit", () => this.close());
     this.layout();
   }
 
@@ -83,6 +101,9 @@ export class LookoutScope {
     if (!this.opened) return;
     this.opened = false;
     window.removeEventListener("keydown", this.onKey);
+    this.offExit?.();
+    this.offExit = null;
+    this.setBusy(false);
     this.o.rig.cinematic(null, this.o.reduced);
     this.dropOverlay();
     this.o.onClose?.();
@@ -137,6 +158,11 @@ export class LookoutScope {
       window.removeEventListener("keydown", this.onKey);
       this.dropOverlay();
     }
+    this.offExit?.();
+    this.offExit = null;
+    if (this.busyTimer) clearTimeout(this.busyTimer);
+    this.busyTimer = null;
+    if (bridge.last("view:busy")?.on) bridge.emit("view:busy", { on: false });
     this.tripod.destroy();
     if (this.scene.textures.exists(TEX.tripod)) this.scene.textures.remove(TEX.tripod);
   }

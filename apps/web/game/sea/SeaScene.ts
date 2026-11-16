@@ -169,6 +169,8 @@ export class SeaScene extends Phaser.Scene {
   private viewOn = false;
   private viewAt = 0;
   private viewHud = "";
+  /** 11/16 r19 바라보는 장면이 켜져 있거나 켜지고 꺼지는 중이라고 알렸는지 (view:busy — 단축키 막기) */
+  private viewBusy = false;
   private meScreen!: MeScreen;
   /** 11/16 잠수할 때 물 튀김 (마을 Effects 그대로) */
   private fx!: Effects;
@@ -750,6 +752,8 @@ export class SeaScene extends Phaser.Scene {
     on.push(bridge.on("player:stand", () => standForGate(this.player, this.time.now, this.seatReq)));
     // 11/16 바다 보기 켜기·끄기 (「바다 보기」 버튼·V)
     on.push(bridge.on("sea:view", () => this.toggleView()));
+    // 11/16 r19 바라보는 장면에서 Esc (lib/viewKeyGuard)
+    on.push(bridge.on("view:exit", () => this.leaveView()));
     // 11/16 매점에서 샀어요: 증서를 실시간 서버로 보내고 먹어요
     on.push(
       bridge.on("camp:bbq:eat", ({ item, until, grant, lv, at, stand }) => {
@@ -999,6 +1003,12 @@ export class SeaScene extends Phaser.Scene {
       sv.frame({ now, dt, levels: L, hour: this.hour, dusk, tide: this.tide, fade, sitters: this.viewSitters(v.group), lying, ghost: ghostShipNight(Date.now()), fogLamp: Math.min(1, L.fog * 1.2) * 0.8 });
       this.cameras.main.setVisible(!(sv.opaque && fade >= 1));
     } else sv.idle(dt);
+    // 11/16 r19 켜져 있는 동안 + 검은 막이 걷히는 동안까지 단축키를 막아요
+    const busy = this.viewOn || sv.busy;
+    if (busy !== this.viewBusy) {
+      this.viewBusy = busy;
+      bridge.emit("view:busy", { on: busy });
+    }
   }
 
   /**
@@ -1592,6 +1602,8 @@ export class SeaScene extends Phaser.Scene {
     this.seaView?.destroy();
     this.seaView = null;
     bridge.emit("sea:hud", null);
+    if (this.viewBusy) bridge.emit("view:busy", { on: false });
+    this.viewBusy = false;
     this.forage?.f.destroy();
     this.life?.destroy();
     this.life = null;

@@ -97,6 +97,7 @@ import CampBgm from "../camp/CampBgm";
 import CampBbq from "../camp/CampBbq";
 import MegaphoneLayer from "./MegaphoneDialog";
 import MegaphoneFeed from "./MegaphoneFeed";
+import { installViewKeyGuard } from "@/lib/viewKeyGuard";
 import { useSocial } from "./useSocial";
 // 창 빈자리 채우기: 묘비·랭킹 안내, 채널 기록
 import GraveGuide from "../account/GraveGuide";
@@ -442,6 +443,10 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
     if (myGraveIds) bridge.emit("graves:mine", { ids: myGraveIds });
   }, [myGraveIds]);
 
+  // 11/16 r19 바라보는 장면(바다 보기·등대·동전 망원경·캠핑장 전망대 망원경) 동안 게임 단축키를 한곳에서 막아요 (채팅·V·Esc·움직이는 키만)
+  useEffect(() => installViewKeyGuard(), []);
+  const viewing = useBridgeValue("view:busy")?.on === true;
+
   // ?debug=1 QA용: 콘솔·자동화 스크립트에서 브리지 이벤트를 흉내 낼 수 있게
   useEffect(() => {
     if (!options.debug) return;
@@ -607,7 +612,7 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
       {ready && <UrgentHud />}
 
       {ready && (
-        <div className={cx(styles.overlay, (away || riding) && styles.away, campfire && styles.campfire)}>
+        <div className={cx(styles.overlay, (away || riding) && styles.away, campfire && styles.campfire, viewing && styles.viewing)}>
           {coarse ? (
             // 터치: 위 가장자리 바(메뉴 · 음악 · 채널·날씨) + 아래 조이스틱(그 위 확성기)·행동 버튼. 바로 가기 줄은 없고 모두 메뉴 시트에
             <div className={styles.touchBar}>
@@ -802,12 +807,16 @@ export default function GameShell({ options, ready, onLeave, onLoggedOut }: Prop
           {/* 타는 펫 타기·내리기: 데스크톱은 오른쪽 아래 확대·축소 버튼 왼쪽, 터치는 행동 버튼 묶음 안(MobileControls) */}
           {!coarse && <RideButton variant="desktop" className={ui.button} />}
           {coarse && (
-            <MobileControls
-              onSay={() => setSayOpen(true)}
-              onRadial={openRadial}
-              onChat={canRadial ? () => setChatOpen(true) : undefined}
-              chatOpen={chatOpen && canRadial && !sayOpen}
-            />
+            // 11/16 r19 바라보는 장면 동안에도 남아요 (조이스틱 = 움직여 나가기, [채팅]만 — 다른 행동 버튼은 숨어요)
+            <div className={styles.viewKeep} data-view-keep="">
+              <MobileControls
+                onSay={() => setSayOpen(true)}
+                onRadial={openRadial}
+                onChat={canRadial ? () => setChatOpen(true) : undefined}
+                chatOpen={chatOpen && canRadial && !sayOpen}
+                viewing={viewing}
+              />
+            </div>
           )}
           {/* 접속 시간 보너스: 사냥·귀신의 집·실내에서도 서버 기록은 쌓이고, 창은 마을에서만 띄운다 */}
           {(!scene || scene === "world") && <StayBonus />}

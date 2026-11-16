@@ -132,3 +132,8 @@
   background: rgba(47, 66, 52, 0.85);
   box-shadow: inset 0 0 0 2px var(--moss);
 }
+
+/* 11/16 r19 바라보는 장면 중: [채팅]만 남겨요 */
+.actions[data-viewing] > :not(.chat) {
+  visibility: hidden;
+}

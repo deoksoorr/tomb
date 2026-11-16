@@ -77,6 +77,15 @@
   display: none;
 }
 
+/* 11/16 r19 바라보는 장면(바다 보기·망원경) 동안: 채팅·바다 보기 버튼(오버레이 밖)과 조이스틱·[채팅](viewKeep)만 남기고 숨겨요 */
+.viewing > :not([data-view-keep]) {
+  visibility: hidden;
+}
+
+.viewKeep {
+  display: contents;
+}
+
 .overlay :where(button, a, input, select, label) {
   pointer-events: auto;
 }

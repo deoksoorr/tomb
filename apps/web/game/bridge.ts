@@ -98,6 +98,13 @@ export type GameEvents = {
   /** 화면 연출 모드 (sticky). campfire = 모닥불에 앉아 카메라가 불멍 구도로 바뀐 상태 → UI는 HUD를 은은하게 줄인다 */
   "view:mode": { mode: "normal" | "campfire" | "sky" | "sea" };
   /**
+   * 11/16 r19 바라보는 장면(바닷가 바다 보기·등대·동전 망원경, 캠핑장 전망대 망원경)이 켜져 있거나 켜지고 꺼지는 중 (sticky).
+   * 이 동안 게임 단축키는 채팅·V·Esc·움직이는 키만 가요 (lib/viewKeyGuard), 터치 버튼도 채팅·바다 보기만 남겨요
+   */
+  "view:busy": { on: boolean };
+  /** 11/16 r19 바라보는 장면에서 Esc: 장면이 나가요 */
+  "view:exit": undefined;
+  /**
    * 11/16 바닷가 바다 보기 (sticky, null = 숨김): 바다를 볼 수 있는 자리(백사장 벤치·선베드·돗자리·선착장 끝·방파제 끝)에 앉아 있으면
    * UI가 「바다 보기」(on이면 「돌아가기」) 버튼과 V 단축키를 띄워요
    */
@@ -439,6 +446,7 @@ const STICKY = new Set<keyof AllEvents>([
   "graves:mine",
   "seat:near",
   "view:mode",
+  "view:busy",
   "sea:hud",
   "audio:settings",
   "queue:status",
