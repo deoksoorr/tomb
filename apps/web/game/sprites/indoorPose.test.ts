@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { AVATAR_BODIES } from "@tomb/protocol";
 import { AV_H, AV_W } from "./avatar";
-import { INDOOR_POSE_FRAMES, indoorPoseSheet } from "./indoorPose";
+import { hammockLieKey } from "./hammockArt";
+import { INDOOR_POSE_FRAMES, indoorPoseKey, indoorPoseSheet } from "./indoorPose";
 
 // 욕조 물: 네모 블록이 아니라 욕조 물 타원 안에서만 (프레임 아래쪽·양 끝은 비워 욕조 그림이 보이게)
 describe("bath pose water", () => {
@@ -22,5 +23,16 @@ describe("bath pose water", () => {
           expect(head, body).toBeGreaterThan(20);
         }
       }
+  });
+});
+
+// 11/16 운영 버그: 해먹 누운 텍스처 키("-lie")가 침대 자세 키와 같아, 해먹에 한 번 누운 화면에서는 침대에 누워도 해먹 그림이 나왔다.
+// Phaser 텍스처는 씬끼리 같이 쓰므로 생김새 하나에서 나오는 자세 텍스처 키는 모두 달라야 한다.
+describe("pose texture keys never collide", () => {
+  it("hammock, bed, read, bath each get their own key", () => {
+    const av = "avatar-e8d9b0";
+    const keys = [hammockLieKey(av), indoorPoseKey(av, "lie"), indoorPoseKey(av, "read"), indoorPoseKey(av, "bath")];
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const k of keys) expect(k).not.toBe(av);
   });
 });

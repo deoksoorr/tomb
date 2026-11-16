@@ -157,5 +157,9 @@ export function hammockLieSheet(body: string, color: string, look: readonly stri
   return { grid: sheet, top };
 }
 
-/** 누운 사람 텍스처 키 (아바타 시트 키 + 접미사) */
-export const hammockLieKey = (avatarKey: string) => `${avatarKey}-lie`;
+/**
+ * 누운 사람 텍스처 키 (아바타 시트 키 + 접미사).
+ * 11/16 "-hammock": 예전 "-lie"는 집 침대 자세(indoorPoseKey(key, "lie"))와 키가 같아, 해먹에 한 번 누운(또는 해먹에 누운 같은 생김새를 본)
+ * 화면에서는 침대에 누워도 이미 만든 해먹 그림이 그대로 쓰였다 (텍스처는 씬끼리 같이 쓴다)
+ */
+export const hammockLieKey = (avatarKey: string) => `${avatarKey}-hammock`;
