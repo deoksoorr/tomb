@@ -281,8 +281,19 @@ export default function FishingPanel({
 
   // 키보드 (월드 키는 막혀 있다)
   useEffect(() => {
+    // 11/16 채팅 입력칸에 쓰는 중이면 낚시 키로 받지 않는다 (Space·E·WASD가 찌 던지기·일어나기로 새던 것)
+    const typing = () => {
+      const el = document.activeElement;
+      return el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]");
+    };
     const down = (e: KeyboardEvent) => {
-      if (document.querySelector("dialog[open]")) return;
+      if (document.querySelector("dialog[open]") || typing()) return;
+      // 11/16 자동 낚시 중 Enter는 채팅 입력칸을 연다 (손으로 낚을 때는 그대로 낚시 키)
+      if (e.code === "Enter" && autoRef.current) {
+        e.preventDefault();
+        bridge.emit("chat:prefill", { text: "" });
+        return;
+      }
       if (e.code === "Escape" || e.code === "ArrowUp" || e.code === "ArrowDown" || e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "KeyW" || e.code === "KeyA" || e.code === "KeyS" || e.code === "KeyD") {
         // 줄다리기 중에는 실수로 일어나지 않게 Esc만
         if (phaseRef.current === "reel" && e.code !== "Escape") return;
@@ -296,7 +307,7 @@ export default function FishingPanel({
       press();
     };
     const up = (e: KeyboardEvent) => {
-      if (KEYS.has(e.code)) release();
+      if (KEYS.has(e.code) && !typing()) release();
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
