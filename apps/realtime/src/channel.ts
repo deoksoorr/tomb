@@ -16,6 +16,8 @@ import {
   WHO_ON_INTERVAL_MS,
   newChatBucket,
   takeChatToken,
+  isSquirrelRainChat,
+  squirrelRainReady,
   type ChatBucket,
   inMapBounds,
   isAwayMap,
@@ -370,6 +372,8 @@ export class ChannelCore<C extends object> {
   private chats: ChatRecent | null = null;
   /** 11/16 귓속말 줄 id 번호 (클라이언트가 중복을 거른다) */
   private whisperSeq = 0;
+  /** 11/16 「다람쥐를 뿌려라」가 마지막으로 쏟아진 시각 (채널 쿨다운, 메모리에만) */
+  private squirrelAt = -Infinity;
 
   private chatLog(now: number): ChatRecent {
     if (!this.chats) {
@@ -971,7 +975,8 @@ export class ChannelCore<C extends object> {
         const tags = { ...(p.staff ? { staff: true as const } : {}), ...(p.mgr ? { mgr: true as const } : {}) };
         const c = this.chatLog(now).push({ sid: p.sid, visitorId: p.visitorId, name: p.name, text: maskChat(m.text), ...tags, ...camp }, now);
         this.host.chatsChanged?.("village");
-        return this.broadcast(encodeEvent({ t: "chat", sid: p.sid, text: c.text, id: c.id, at: c.at, name: p.name, ...tags, ...camp }), p.sid);
+        this.broadcast(encodeEvent({ t: "chat", sid: p.sid, text: c.text, id: c.id, at: c.at, name: p.name, ...tags, ...camp }), p.sid);
+        return this.maybeSquirrels(p, c.text, now);
       }
       case "whisper":
         return this.onWhisper(p, m.to, m.text, now);
@@ -994,6 +999,17 @@ export class ChannelCore<C extends object> {
         p.lastMapAt = now;
         return this.onMap(p, m.m, { x: m.x, y: m.y }, now);
     }
+  }
+
+  /**
+   * 11/16 이스터에그 「다람쥐를 뿌려라」: 중계된 (가린) 채팅 줄이 주문이면, 채널 쿨다운이 지났을 때 채널 전체(모든 맵, 실내 포함 — 보낸 사람도)에 squirrels.
+   * 쿨다운은 DO 메모리에만 (잠들었다 깨면 처음부터 — 괜찮다). 방(집·사냥터)에서 친 줄은 보지 않는다
+   */
+  private maybeSquirrels(p: Peer<C>, text: string, now: number): void {
+    if (this.cfg.room || !isSquirrelRainChat(text) || !squirrelRainReady(this.squirrelAt, now)) return;
+    this.squirrelAt = now;
+    const seed = Math.floor((this.host.random ? this.host.random() : Math.random()) * 0x7fffffff);
+    this.broadcast(encodeEvent({ t: "squirrels", by: p.name, seed, at: now }));
   }
 
   /**

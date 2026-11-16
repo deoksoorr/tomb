@@ -130,7 +130,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 61 = 바다→마을 버스 멈춤 고침(망원경 정리 예외로 게임 루프 정지) — 모두 한 번 새로고침 (11/16)
 // 62 = 비·안개·눈·구름 그림자 반복 무늬 없앰(바람·빗발 노이즈, 안개 조각) — 모두 한 번 새로고침 (11/16)
 // 63 = 바다에서 다른 사람·다른 사람이 탄 것과도 튕기기, 포인트 부족 금액 표시, 몬스터 도감 번호 잘림 — 모두 한 번 새로고침 (11/16)
-export const CLIENT_VERSION = 63;
+// 64 = 이스터에그 「다람쥐를 뿌려라」(채널 10분 쿨, 하늘에서 다람쥐 와다다) — 모두 한 번 새로고침 (11/16)
+export const CLIENT_VERSION = 64;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */

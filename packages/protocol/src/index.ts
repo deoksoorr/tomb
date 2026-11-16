@@ -18,3 +18,4 @@ export * from "./dye";
 export * from "./internal";
 export * from "./chat";
 export * from "./friends";
+export * from "./squirrels";
