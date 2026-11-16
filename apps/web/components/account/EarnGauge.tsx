@@ -37,7 +37,7 @@ export default function EarnGauge({ me }: { me: Me }) {
       </div>
       <Bar g={total} big label="오늘 받은 포인트" />
       <p className={styles.note}>
-        {boost.caps.length > 0 ? `포인트 ${boost.mult}배 이벤트로 표시한 항목은 오늘 한도도 ${boost.mult}배예요. ` : ""}
+        {boost.caps.length > 0 ? `포인트 ${boost.mult}배 이벤트 중에는 표시한 항목의 한도도 ${boost.mult}배예요. ` : ""}
         {total.full ? "오늘 한도를 다 채웠어요. " : ""}한도는 한국 시간 {DAY_RESET_TEXT}에 새로 시작해요. 다음 초기화까지 <span className={styles.nowrap}>{resetLeftText(msUntilDayReset(now))}</span> 남았어요.
       </p>
 

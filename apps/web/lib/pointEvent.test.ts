@@ -77,13 +77,11 @@ describe("포인트 배수 이벤트 규칙 (lib/pointEvent)", () => {
     expect(boostedTotalCap(earnBoostAt(ev({ sources: ["stayBonus"] }), SAT_NOON))).toBe(DAILY_EARN_CAP);
   });
 
-  it("도중에 끝나면 적립은 바로 그대로, 한도는 그날 새벽 5시까지 늘어난 채로", () => {
+  it("도중에 끝나면 적립과 한도 모두 그 자리에서 원래대로", () => {
     const e = ev({ sources: ["hunt"], endAt: SAT_NOON + H });
-    const b = earnBoostAt(e, SAT_NOON + 2 * H);
-    expect(earnLimits(b, "hunt")).toMatchObject({ points: 1, caps: M });
-    const sun5 = dayStartMs(gameDay(SAT_NOON)) + 24 * H;
-    expect(earnBoostAt(e, sun5 - 1).caps).toEqual(["hunt"]);
-    expect(earnBoostAt(e, sun5)).toEqual(NO_BOOST);
+    expect(earnLimits(earnBoostAt(e, SAT_NOON + H - 1), "hunt")).toMatchObject({ points: M, caps: M });
+    expect(earnBoostAt(e, SAT_NOON + H)).toEqual(NO_BOOST);
+    expect(earnBoostAt(e, SAT_NOON + 2 * H)).toEqual(NO_BOOST);
   });
 
   it("새벽 5시에 딱 끝나면 그 뒤 하루는 원래 한도", () => {
@@ -182,11 +180,10 @@ describe("포인트 배수 이벤트 적립 (메모리 저장소)", () => {
     expect((await accounts.get("b2", day, Date.now())).todayEarned).toBe(DAILY_EARN_CAP * M);
   });
 
-  it("이벤트가 끝나도 그날은 늘어난 한도가 남고, 적립은 원래대로", async () => {
+  it("이벤트가 끝나면 한도와 적립 모두 원래대로", async () => {
     const now = Date.now();
-    if (now - 2000 <= dayStartMs(gameDay(now))) return; // 새벽 5시 직후면 건너뛴다
     await setPointEvent({ startAt: now - 2000, endAt: now - 1000, sources: ["flower"], mult: M });
-    expect(await earnBoost()).toEqual({ mult: M, on: [], caps: ["flower"] });
+    expect(await earnBoost()).toEqual(NO_BOOST);
     expect(await fresh().earn("c", "flower", kstDay())).toBe(earnRule("flower").points);
   });
 

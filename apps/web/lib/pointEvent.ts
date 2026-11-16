@@ -6,7 +6,6 @@
 // 클라이언트·서버 공용 (화면의 안내 띠·오늘 포인트 게이지가 같은 계산을 쓴다)
 
 import { DAILY_EARN_CAP, EARN_RULES, earnRule, inDailyTotal, type EarnSource } from "./economy";
-import { dayStartMs, gameDay } from "./gameDay";
 
 /** 고를 수 있는 배수 (기본 2배). 정수만 — Redis Lua가 정수로 더한다 */
 export const POINT_EVENT_MULTS = [2, 3] as const;
@@ -44,12 +43,13 @@ export const earnLimits = (b: EarnBoost, s: EarnSource) => ({ points: pointsMult
 /** 지금 적립이 늘어나는 중인지 */
 export const pointEventOn = (ev: PointEvent | null, now: number): boolean => !!ev && ev.startAt <= now && (ev.endAt === null || now < ev.endAt);
 
-/** now의 적립 배수. 한도는 이벤트가 오늘(게임 날) 한 번이라도 켜져 있었으면 */
+/**
+ * now의 적립·한도 배수. 11/16 이벤트가 꺼지면 적립과 한도 모두 그 자리에서 원래대로 (예전엔 한도를 그날 새벽 5시까지 남겨 뒀는데,
+ * 끄고 나서도 게이지에 「2배」가 남아 꺼지지 않은 것처럼 보였다). 이미 받은 포인트는 그대로다
+ */
 export function earnBoostAt(ev: PointEvent | null, now: number): EarnBoost {
-  if (!ev || ev.startAt > now) return NO_BOOST;
-  const touched = ev.endAt === null || ev.endAt > dayStartMs(gameDay(now));
-  if (!touched) return NO_BOOST;
-  return { mult: ev.mult, on: pointEventOn(ev, now) ? [...ev.sources] : [], caps: [...ev.sources] };
+  if (!ev || !pointEventOn(ev, now)) return NO_BOOST;
+  return { mult: ev.mult, on: [...ev.sources], caps: [...ev.sources] };
 }
 
 /**
