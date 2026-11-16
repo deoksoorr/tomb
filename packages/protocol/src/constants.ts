@@ -127,7 +127,8 @@ export type CloseCode = (typeof CLOSE)[keyof typeof CLOSE];
 // 58 = 바닷가 망원경 바다 보기를 쌍안경 전용 장면으로 (방파제 대신 먼바다) — 모두 한 번 새로고침 (11/16)
 // 59 = 바라보는 장면(바다 보기·등대·망원경·캠핑장 전망대) 동안 단축키 막기, 채팅·V·Esc만 — 모두 한 번 새로고침 (11/16)
 // 60 = 오징어잡이배·등대 불빛 아주 밝게, 지나가는 배에 부딪히면 튕김·뱃머리 물결, 비 옅게 — 모두 한 번 새로고침 (11/16)
-export const CLIENT_VERSION = 60;
+// 61 = 바다→마을 버스 멈춤 고침(망원경 정리 예외로 게임 루프 정지) — 모두 한 번 새로고침 (11/16)
+export const CLIENT_VERSION = 61;
 /** 실시간 서버가 받는 최소 클라이언트 버전. 따로 올리지 않는다 — 언제나 이 빌드의 CLIENT_VERSION */
 export const MIN_CLIENT_VERSION = CLIENT_VERSION;
 /** v 파라미터가 없는 옛 클라이언트(버전을 보내기 전 빌드)는 1로 본다. 1과 프로토콜이 같다 */

@@ -190,3 +190,84 @@ describe("RealtimeClient 맵 옮기기 (11/15 캠핑장)", () => {
     expect(c.map).toBe("camp");
   });
 });
+
+// 11/16 바닷가 버스도 캠핑장과 똑같은 길이에요: CampTrip(DEST 표)이 두 맵 모두 net.switchMap 하나로 옮겨요 (따로 만든 복사본 없음).
+// 운영에서 사람이 많을 때만 보이던 "내리자마자 마을로 돌아옴"이 다시 나지 않게, 늦은 답·잃어버린 답·메인 스레드 멈춤을 두 맵 모두로 봐요.
+describe("맵 옮기기 답이 늦어도 되돌아가지 않아요 (캠핑장·바닷가 같은 길)", () => {
+  beforeEach(() => {
+    FakeWs.last = null;
+    vi.stubGlobal("WebSocket", FakeWs);
+    vi.stubGlobal("document", { hidden: false, addEventListener: () => undefined, removeEventListener: () => undefined });
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ...joinRes, seaOpen: true }) })));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  /** away로 가는 길(village → away) 또는 돌아오는 길(away → village)을 시작해요. 돌아오는 길은 먼저 away에 가 있어요 */
+  async function begin(away: "camp" | "sea", leg: "go" | "back") {
+    const log: string[] = [];
+    FakeWs.last = null;
+    const c = new RealtimeClient({ name: "가람", color: "#e8d9b0", channel: 3 }, callbacks(log, "w"));
+    const ws = await online(c);
+    vi.useFakeTimers();
+    if (leg === "back") {
+      c.switchMap(away, 156, 758);
+      ws.recv({ t: "mapped", m: away, peers: [], seats: {} });
+      log.length = 0;
+    }
+    const from = leg === "go" ? "village" : away;
+    const to = leg === "go" ? away : "village";
+    c.switchMap(to, 156, 758);
+    const reply = () => ws.recv({ t: "mapped", m: to, peers: [], seats: {} });
+    const mapped = () => log.filter((l) => l.includes(":mapped:"));
+    return { c, ws, from, to, reply, mapped };
+  }
+
+  for (const away of ["camp", "sea"] as const)
+    for (const leg of ["go", "back"] as const) {
+      const name = `${away} ${leg === "go" ? "마을 → " + away : away + " → 마을"}`;
+
+      it(`${name}: 답이 5초·9초 늦게 와도 그 맵으로 (처음 맵으로 되돌리지 않아요)`, async () => {
+        for (const late of [5000, 9000]) {
+          const t = await begin(away, leg);
+          vi.advanceTimersByTime(late);
+          expect(t.c.map).toBe(t.to);
+          t.reply();
+          vi.advanceTimersByTime(20_000);
+          expect(t.c.map).toBe(t.to);
+          expect(t.mapped()).toEqual([`w:mapped:${t.to}:`]);
+          t.c.stop();
+          vi.useRealTimers();
+        }
+      });
+
+      it(`${name}: 첫 답을 잃어버려도 다시 보낸 요청의 답으로 그 맵으로`, async () => {
+        const t = await begin(away, leg);
+        const maps = () => t.ws.sent.filter((d) => typeof d === "string" && d.includes('"t":"map"') && d.includes(`"m":"${t.to}"`)).length;
+        vi.advanceTimersByTime(4100);
+        expect(maps()).toBe(2);
+        vi.advanceTimersByTime(3000);
+        t.reply();
+        vi.advanceTimersByTime(20_000);
+        expect(maps()).toBe(2);
+        expect(t.c.map).toBe(t.to);
+        expect(t.mapped()).toEqual([`w:mapped:${t.to}:`]);
+        t.c.stop();
+      });
+
+      it(`${name}: 떠나는 순간 메인 스레드가 10초 멈춰 타이머가 몰려 돌아도 되돌아가지 않아요`, async () => {
+        const t = await begin(away, leg);
+        // 멈춘 동안 답은 이미 도착해 큐에 있었지만 늦게 돈 타이머가 먼저 돌아요 → 다시 보낼 뿐 처음 맵으로 돌리지 않아요
+        vi.advanceTimersByTime(10_000);
+        expect(t.c.map).toBe(t.to);
+        t.reply();
+        vi.advanceTimersByTime(20_000);
+        expect(t.c.map).toBe(t.to);
+        expect(t.mapped()).toEqual([`w:mapped:${t.to}:`]);
+        expect(t.mapped().some((l) => l.endsWith(`:${t.from}:`))).toBe(false);
+        t.c.stop();
+      });
+    }
+});

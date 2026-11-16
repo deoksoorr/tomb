@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { CAMP_ARRIVE, DIR, MAP_NAME, SEA_ARRIVE, type AwayMapId } from "@tomb/protocol";
 import { ambienceAt, parseAmbienceOverride } from "@/lib/ambience";
 import type { ResumeState } from "@/lib/resume";
+import { reportClientError } from "@/lib/hooks/errorReporting";
 import { bridge } from "../bridge";
 import type { Player } from "../entities/Player";
 import type { InputHub } from "../input/InputHub";
@@ -609,7 +610,13 @@ export class CampTrip {
     this.campLaunched = false;
     const sm = this.game.scene;
     const key = this.dest.scene;
-    if (sm.isActive(key) || sm.isPaused(key) || sm.isSleeping(key)) sm.stop(key);
+    if (!(sm.isActive(key) || sm.isPaused(key) || sm.isSleeping(key))) return;
+    // 11/16 장면 정리 중 예외가 나도 게임 루프(다음 프레임 예약)가 죽지 않게 — 창밖 연출이 그대로 멈췄어요. 오류 기록만 남겨요
+    try {
+      sm.stop(key);
+    } catch (e) {
+      reportClientError("error", e);
+    }
   }
 
   private campScene(): (Phaser.Scene & { unpark(): void }) | null {
