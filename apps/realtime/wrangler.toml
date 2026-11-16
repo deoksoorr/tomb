@@ -67,7 +67,8 @@ name = "LOBBY"
 class_name = "LobbyDO"
 
 [env.staging.vars]
-CHANNEL_CAPACITY = "40"
+# 11/16 테스트 서버만 60명 (렌더 최적화 뒤 부하 실험: 60명이 예전 40명보다 가벼움). 운영은 위 [vars]의 40 그대로
+CHANNEL_CAPACITY = "60"
 MAX_CHANNELS = "10"
 BASE_CHANNELS = "2"
 AUTO_OPEN_THRESHOLD = "0.8"
